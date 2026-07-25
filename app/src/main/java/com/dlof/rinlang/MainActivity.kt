@@ -5,6 +5,7 @@ import android.os.Bundle
 import android.provider.OpenableColumns
 import android.widget.Button
 import android.widget.EditText
+import android.widget.ImageButton
 import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
@@ -81,7 +82,7 @@ class MainActivity : AppCompatActivity() {
         val btnFindNext: Button = findViewById(R.id.btnFindNext)
         val btnReplaceOne: Button = findViewById(R.id.btnReplaceOne)
         val btnReplaceAll: Button = findViewById(R.id.btnReplaceAll)
-        val btnFindClose: Button = findViewById(R.id.btnFindClose)
+        val btnFindClose: ImageButton = findViewById(R.id.btnFindClose)
         val btnClearConsole: Button = findViewById(R.id.btnClearConsole)
 
         if (savedInstanceState == null) {
