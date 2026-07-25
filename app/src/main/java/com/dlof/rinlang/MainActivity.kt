@@ -72,6 +72,7 @@ class MainActivity : AppCompatActivity() {
         txtFind = findViewById(R.id.txtFind)
         txtReplace = findViewById(R.id.txtReplace)
 
+        val btnPipeline: Button = findViewById(R.id.btnPipeline)
         val btnRun: Button = findViewById(R.id.btnRun)
         val btnClear: Button = findViewById(R.id.btnClear)
         val btnOpen: Button = findViewById(R.id.btnOpen)
@@ -115,6 +116,13 @@ class MainActivity : AppCompatActivity() {
         btnRun.setOnClickListener {
             val source = editCode.text.toString()
             RinJobScheduler.submit(source)
+        }
+
+        btnPipeline.setOnClickListener {
+            val source = editCode.text.toString()
+            val intent = android.content.Intent(this, PipelineRunnerActivity::class.java)
+            intent.putExtra(PipelineRunnerActivity.EXTRA_CODE, source)
+            startActivity(intent)
         }
 
         btnClear.setOnClickListener {
