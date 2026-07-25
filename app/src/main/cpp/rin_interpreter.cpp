@@ -8,6 +8,10 @@
 #include <algorithm>
 #include <cctype>
 #include <cstdlib>
+#include <ctime>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <errno.h>
 
 namespace rin {
 
@@ -191,6 +195,122 @@ static std::string containerIcon(ContainerKind k) {
         case ContainerKind::IMPORT: return "📦⬅️";
         default: return "📦";
     }
+}
+
+// ================= تسلسل القيم (serialization) لأجل save/installation الحقيقيَّين =================
+// يحوّل رقماً إلى نص Rin قابل لإعادة التحليل مباشرة (بدون ترميز علمي e/E غير مدعوم في scanNumber).
+static std::string numberLiteral(double n) {
+    if (std::isnan(n) || std::isinf(n)) return "0";
+    bool neg = n < 0.0;
+    double absN = std::fabs(n);
+    std::ostringstream oss;
+    if (absN == std::floor(absN) && absN < 1e15) {
+        oss << static_cast<long long>(absN);
+    } else {
+        oss.setf(std::ios::fixed);
+        oss.precision(10);
+        oss << absN;
+        std::string s = oss.str();
+        size_t dot = s.find('.');
+        if (dot != std::string::npos) {
+            size_t last = s.find_last_not_of('0');
+            if (last == dot) last++; // خانة صفر واحدة بعد الفاصلة على الأقل
+            s = s.substr(0, last + 1);
+        }
+        return (neg ? "-" : "") + s;
+    }
+    return (neg ? "-" : "") + oss.str();
+}
+
+// يهرّب نصاً ليكون قابلاً لإعادة القراءة داخل علامتي تنصيص Rin (يعتمد على دعم \" \\ \n \t في scanString).
+static std::string escapeStringLiteral(const std::string& s) {
+    std::string out;
+    out.reserve(s.size() + 2);
+    for (char c : s) {
+        switch (c) {
+            case '"': out += "\\\""; break;
+            case '\\': out += "\\\\"; break;
+            case '\n': out += "\\n"; break;
+            case '\r': out += "\\r"; break;
+            case '\t': out += "\\t"; break;
+            default: out += c; break;
+        }
+    }
+    return out;
+}
+
+static bool looksLikeIdentifier(const std::string& s) {
+    if (s.empty() || (!std::isalpha(static_cast<unsigned char>(s[0])) && s[0] != '_')) return false;
+    for (char c : s) {
+        if (!std::isalnum(static_cast<unsigned char>(c)) && c != '_') return false;
+    }
+    return true;
+}
+
+// يحوّل Value إلى نص حرفي (literal) صالح لإعادة التحليل: أرقام/نصوص/منطقية/مصفوفات/قواميس متداخلة.
+// الدوال (FUNCTION) لا يمكن تمثيلها كقيمة حرفية فتُستبدَل بـ nil مع تعليق توضيحي من المستدعي.
+static std::string serializeValueLiteral(const Value& v) {
+    switch (v.type) {
+        case Value::Type::NIL: return "nil";
+        case Value::Type::NUMBER: return numberLiteral(v.number);
+        case Value::Type::BOOL: return v.boolean ? "true" : "false";
+        case Value::Type::STRING: return "\"" + escapeStringLiteral(v.str) + "\"";
+        case Value::Type::FUNCTION: return "nil";
+        case Value::Type::ARRAY: {
+            std::string out = "[";
+            if (v.array) {
+                for (size_t i = 0; i < v.array->size(); i++) {
+                    if (i) out += ", ";
+                    out += serializeValueLiteral((*v.array)[i]);
+                }
+            }
+            out += "]";
+            return out;
+        }
+        case Value::Type::MAP: {
+            std::string out = "{";
+            if (v.map) {
+                for (size_t i = 0; i < v.map->size(); i++) {
+                    if (i) out += ", ";
+                    const auto& kv = (*v.map)[i];
+                    std::string keyStr = (kv.first.type == Value::Type::STRING && looksLikeIdentifier(kv.first.str))
+                                          ? kv.first.str
+                                          : serializeValueLiteral(kv.first);
+                    out += keyStr + ": " + serializeValueLiteral(kv.second);
+                }
+            }
+            out += "}";
+            return out;
+        }
+    }
+    return "nil";
+}
+
+// يبني جسم الحاوية (كل متغيراتها المباشرة: text للنصوص، let لغير ذلك) كنص Rin. الترتيب أبجدي
+// لضمان مخرجات ثابتة (deterministic) عند كل حفظ بغضّ النظر عن ترتيب unordered_map الداخلي.
+static std::string serializeEnvBody(const EnvPtr& env, bool simplified) {
+    std::vector<std::string> names;
+    names.reserve(env->values.size());
+    for (auto& kv : env->values) names.push_back(kv.first);
+    std::sort(names.begin(), names.end());
+
+    std::ostringstream out;
+    int skippedFunctions = 0;
+    for (auto& name : names) {
+        const Value& v = env->values[name];
+        if (v.type == Value::Type::FUNCTION) { skippedFunctions++; continue; }
+        std::string kw = (v.type == Value::Type::STRING) ? "text" : "let";
+        if (simplified) {
+            out << kw << " " << name << "=" << serializeValueLiteral(v) << ";";
+        } else {
+            out << "    " << kw << " " << name << " = " << serializeValueLiteral(v) << ";\n";
+        }
+    }
+    if (!simplified && skippedFunctions > 0) {
+        out << "    // ملاحظة: تم تجاهل " << skippedFunctions
+            << " دالة/دوال عند الحفظ (الدوال لا يمكن تمثيلها كقيمة محفوظة حالياً)\n";
+    }
+    return out.str();
 }
 
 void Interpreter::registerNatives() {
@@ -564,9 +684,180 @@ void Interpreter::registerNatives() {
         }
         return Value::boolean_(false);
     };
+
+    // ---- ملفات حقيقية على القرص (تُبنى فوق basePath عبر resolvePath) ----
+    natives["writeFile"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("writeFile", a, 2, line);
+        std::string path = asString(a[0], "writeFile", line);
+        std::string content = a[1].type == Value::Type::STRING ? a[1].str : a[1].toDisplayString();
+        writeRealFile(path, content, line, "writeFile");
+        return Value::boolean_(true);
+    };
+    natives["appendFile"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("appendFile", a, 2, line);
+        std::string path = asString(a[0], "appendFile", line);
+        std::string content = a[1].type == Value::Type::STRING ? a[1].str : a[1].toDisplayString();
+        std::string fullPath = resolvePath(path);
+        ensureParentDir(fullPath);
+        std::ofstream out(fullPath, std::ios::binary | std::ios::app);
+        if (!out) throw RinError("appendFile: تعذّر فتح الملف '" + path + "' للإضافة إليه", line);
+        out << content;
+        return Value::boolean_(true);
+    };
+    natives["readFile"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("readFile", a, 1, line);
+        std::string path = asString(a[0], "readFile", line);
+        std::ifstream in(resolvePath(path), std::ios::binary);
+        if (!in) throw RinError("readFile: تعذّر فتح الملف '" + path + "' للقراءة (غير موجود؟)", line);
+        std::ostringstream buf;
+        buf << in.rdbuf();
+        return Value::string(buf.str());
+    };
+    natives["fileExists"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("fileExists", a, 1, line);
+        std::string path = asString(a[0], "fileExists", line);
+        struct stat st{};
+        return Value::boolean_(::stat(resolvePath(path).c_str(), &st) == 0);
+    };
+    natives["deleteFile"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("deleteFile", a, 1, line);
+        std::string path = asString(a[0], "deleteFile", line);
+        return Value::boolean_(::remove(resolvePath(path).c_str()) == 0);
+    };
+
+    // ---- تثبيتات حقيقية ومستمرة (installation) ----
+    natives["isInstalled"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("isInstalled", a, 1, line);
+        std::string name = asString(a[0], "isInstalled", line);
+        return Value::boolean_(installedNames.count(name) > 0);
+    };
+    natives["listInstalled"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("listInstalled", a, 0, line);
+        std::vector<std::string> names(installedNames.begin(), installedNames.end());
+        std::sort(names.begin(), names.end());
+        auto result = std::make_shared<ArrayData>();
+        for (auto& n : names) result->push_back(Value::string(n));
+        return Value::makeArray(result);
+    };
+    // loadInstalled(name) -> يقرأ نسخة حاوية مثبَّتة فعلياً من rin_installed/ وينفّذها (يعيد تسجيلها كحاوية عاملة)،
+    // ويُرجع true/false حسب نجاح العثور عليها وتحميلها. يفضّل النسخة الكاملة (.rin) على المبسّطة (.min.rin) إن وُجدت الاثنتان.
+    natives["loadInstalled"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("loadInstalled", a, 1, line);
+        std::string name = asString(a[0], "loadInstalled", line);
+        std::string fullVariant = resolvePath("rin_installed/" + name + ".rin");
+        std::string minVariant = resolvePath("rin_installed/" + name + ".min.rin");
+        std::string chosen;
+        { std::ifstream t(fullVariant, std::ios::binary); if (t.good()) chosen = fullVariant; }
+        if (chosen.empty()) { std::ifstream t(minVariant, std::ios::binary); if (t.good()) chosen = minVariant; }
+        if (chosen.empty()) return Value::boolean_(false);
+        std::ifstream in(chosen, std::ios::binary);
+        std::ostringstream buf;
+        buf << in.rdbuf();
+        std::string src = buf.str();
+        try {
+            Lexer lex(src);
+            auto toks = lex.scanTokens();
+            Parser p(toks);
+            auto stmts = p.parse();
+            executeBlock(stmts, globals);
+        } catch (RinError& e) {
+            throw RinError("loadInstalled('" + name + "'): خطأ داخل الملف المحمّل فعلياً من القرص (سطر " +
+                            std::to_string(e.line) + "): " + e.message, line);
+        }
+        installedNames.insert(name);
+        return Value::boolean_(true);
+    };
+}
+
+// ================= تخزين حقيقي على القرص (save/file/installation) =================
+
+std::string Interpreter::resolvePath(const std::string& rawPath) const {
+    if (rawPath.empty()) return rawPath;
+    if (basePath.empty()) return rawPath;
+    if (!rawPath.empty() && rawPath.front() == '/') return rawPath; // مسار مطلق: لا يُدمج مع basePath
+    std::string base = basePath;
+    if (!base.empty() && base.back() != '/') base += '/';
+    return base + rawPath;
+}
+
+void Interpreter::ensureParentDir(const std::string& fullPath) const {
+    size_t pos = fullPath.find_last_of('/');
+    if (pos == std::string::npos) return; // لا يوجد مجلد أب (ملف في المجلد الحالي)
+    std::string dir = fullPath.substr(0, pos);
+    if (dir.empty()) return;
+    // ينشئ المجلدات تدريجياً (يعادل mkdir -p) دون الاعتماد على <filesystem> لضمان توافق أوسع (NDK/g++ القديم).
+    std::string partial;
+    size_t start = 0;
+    if (dir.front() == '/') { partial = "/"; start = 1; }
+    while (start <= dir.size()) {
+        size_t slash = dir.find('/', start);
+        std::string segment = (slash == std::string::npos) ? dir.substr(start) : dir.substr(start, slash - start);
+        if (!segment.empty()) {
+            partial += segment;
+            if (::mkdir(partial.c_str(), 0755) != 0 && errno != EEXIST) {
+                // تُترك بصمت: محاولة الكتابة اللاحقة (ofstream) سترمي خطأ واضحاً إن كان هذا هو السبب الفعلي للفشل.
+            }
+            partial += "/";
+        }
+        if (slash == std::string::npos) break;
+        start = slash + 1;
+    }
+}
+
+std::string Interpreter::buildSaveDocument(const std::string& key, const EnvPtr& containerEnv,
+                                            ContainerKind kind, bool simplified) const {
+    std::string tag = containerTagName(kind);
+    std::string body = serializeEnvBody(containerEnv, simplified);
+    std::ostringstream doc;
+    if (simplified) {
+        doc << "@" << tag << "=" << key << " " << body << " .end/" << tag;
+    } else {
+        doc << "// تم توليد هذا الملف تلقائياً بواسطة Rin (save/installation) - قابل لإعادة الاستيراد عبر container.import أو loadInstalled()\n";
+        doc << "@" << tag << "=" << key << "\n";
+        doc << body;
+        doc << ".end/" << tag << "\n";
+    }
+    return doc.str();
+}
+
+void Interpreter::writeRealFile(const std::string& relPath, const std::string& content, int line, const std::string& who) const {
+    std::string fullPath = resolvePath(relPath);
+    ensureParentDir(fullPath);
+    std::ofstream out(fullPath, std::ios::binary | std::ios::trunc);
+    if (!out) {
+        throw RinError(who + ": تعذّر فتح/إنشاء الملف '" + relPath + "' للكتابة الفعلية على القرص", line);
+    }
+    out << content;
+    if (!out.good()) {
+        throw RinError(who + ": حدث خطأ أثناء الكتابة الفعلية إلى '" + relPath + "'", line);
+    }
+}
+
+void Interpreter::loadInstalledIndex() {
+    if (installedIndexLoaded) return;
+    installedIndexLoaded = true;
+    std::string fullPath = resolvePath("rin_installed/index.rininstall");
+    std::ifstream in(fullPath, std::ios::binary);
+    if (!in) return; // لا يوجد فهرس بعد؛ أول تشغيل، لا مشكلة
+    std::string line;
+    while (std::getline(in, line)) {
+        if (line.empty()) continue;
+        size_t tab = line.find('\t');
+        std::string name = (tab == std::string::npos) ? line : line.substr(0, tab);
+        if (!name.empty()) installedNames.insert(name);
+    }
+}
+
+void Interpreter::appendInstalledIndex(const std::string& name, const std::string& relPath, bool simplified) const {
+    std::string fullPath = resolvePath("rin_installed/index.rininstall");
+    ensureParentDir(fullPath);
+    std::ofstream out(fullPath, std::ios::binary | std::ios::app);
+    if (!out) return; // فشل تسجيل الفهرس لا يجب أن يوقف تنفيذ البرنامج بأكمله
+    out << name << "\t" << relPath << "\t" << (simplified ? "1" : "0") << "\t" << static_cast<long long>(std::time(nullptr)) << "\n";
 }
 
 std::string Interpreter::run(const std::vector<StmtPtr>& statements) {
+    loadInstalledIndex(); // يحمّل أسماء أي تثبيتات فعلية سابقة على نفس basePath (استمرارية عبر التشغيلات)
     // First pass: hoist function declarations so they can be called
     // regardless of source order (and support simple recursion).
     for (const auto& s : statements) {
@@ -667,6 +958,7 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
         output << icon << " " << tag << (s->name.empty() ? "" : (" = " + s->name)) << "\n";
         std::string containerKey = s->name.empty() ? ("#" + std::to_string(containers.size())) : s->name;
         containers[containerKey] = containerEnv;
+        containerKinds[containerKey] = s->kind;
         if (!groupStack.empty()) {
             groupMembers[groupStack.back()].push_back(containerKey);
         }
@@ -681,7 +973,7 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
             if (currentFilePath.empty()) {
                 throw RinError("container.import يتطلب 'file path=\"...\";' بداخله لتحديد الملف المطلوب استيراده", s->line);
             }
-            std::ifstream in(currentFilePath, std::ios::binary);
+            std::ifstream in(resolvePath(currentFilePath), std::ios::binary);
             if (!in) {
                 throw RinError("container.import: تعذّر فتح الملف '" + currentFilePath + "' للاستيراد", s->line);
             }
@@ -792,17 +1084,51 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
 
     if (auto s = std::dynamic_pointer_cast<InstallationStmt>(stmt)) {
         installedNames.insert(s->target);
-        output << "⚙️ installation" << (s->simplified ? " (simplified)" : "") << ": " << s->target << "\n";
+        bool isContainer = containers.count(s->target) > 0;
+        bool isGroup = !isContainer && groupMembers.count(s->target) > 0;
+        std::string relPath;
+        if (isContainer) {
+            ContainerKind kind = containerKinds.count(s->target) ? containerKinds[s->target] : ContainerKind::PLAIN;
+            std::string doc = buildSaveDocument(s->target, containers[s->target], kind, s->simplified);
+            relPath = "rin_installed/" + s->target + (s->simplified ? ".min.rin" : ".rin");
+            writeRealFile(relPath, doc, s->line, "installation");
+        } else if (isGroup) {
+            std::vector<std::string> members;
+            collectGroupContainerNames(groupMembers, s->target, members);
+            std::ostringstream doc;
+            for (auto& m : members) {
+                if (!containers.count(m)) continue;
+                ContainerKind kind = containerKinds.count(m) ? containerKinds[m] : ContainerKind::PLAIN;
+                doc << buildSaveDocument(m, containers[m], kind, s->simplified);
+                if (!s->simplified) doc << "\n";
+            }
+            relPath = "rin_installed/" + s->target + (s->simplified ? ".min.rin" : ".rin");
+            writeRealFile(relPath, doc.str(), s->line, "installation");
+        }
+        appendInstalledIndex(s->target, relPath, s->simplified);
+        output << "⚙️ installation" << (s->simplified ? " (simplified)" : "") << ": " << s->target;
+        if (!relPath.empty()) output << " -> " << relPath << " (تم الحفظ فعلياً على القرص، قابل للتحميل لاحقاً عبر loadInstalled(\"" << s->target << "\"))";
+        else output << " (تسجيل اسم فقط، بلا بيانات حاوية مرتبطة به)";
+        output << "\n";
         return;
     }
 
     if (auto s = std::dynamic_pointer_cast<SaveStmt>(stmt)) {
-        std::string p;
-        if (s->path) p = evaluate(s->path, env).toDisplayString();
-        output << "💾 save" << (s->simplified ? " (simplified)" : "");
-        if (!p.empty()) output << " -> " << p;
-        else if (!currentFilePath.empty()) output << " -> " << currentFilePath;
-        output << "\n";
+        if (containerStack.empty() || !containers.count(containerStack.back())) {
+            throw RinError("'save' يجب أن تُستخدم داخل حاوية (container) حالية لحفظ متغيراتها فعلياً", s->line);
+        }
+        std::string key = containerStack.back();
+        std::string rawPath;
+        if (s->path) rawPath = evaluate(s->path, env).toDisplayString();
+        else if (!currentFilePath.empty()) rawPath = currentFilePath;
+        else rawPath = key + (s->simplified ? ".min.rin" : ".rin"); // مسار افتراضي معتمد على اسم الحاوية
+
+        ContainerKind kind = containerKinds.count(key) ? containerKinds[key] : ContainerKind::PLAIN;
+        std::string doc = buildSaveDocument(key, containers[key], kind, s->simplified);
+        writeRealFile(rawPath, doc, s->line, "save");
+
+        output << "💾 save" << (s->simplified ? " (simplified)" : "") << " -> " << rawPath
+               << " (تم الحفظ فعلياً على القرص، " << doc.size() << " بايت)\n";
         return;
     }
 
