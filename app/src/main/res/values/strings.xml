@@ -19,6 +19,7 @@
     <string name="pipeline_action_run">Run</string>
     <string name="pipeline_action_stop">Stop</string>
     <string name="pipeline_action_configure">Configure</string>
+    <string name="pipeline_action_load_sample">Load Example Pipeline</string>
     <string name="pipeline_configure_title">Pipeline</string>
     <string name="pipeline_configure_message">Container: %1$s\nStages: %2$d\nTimeout: %3$d s\n\nEach value shown in the diagram is produced by actually re-running your code through the native Rin engine, truncated at each stage of the pipe expression — nothing here is simulated.</string>
     <string name="action_clear">Clear</string>
