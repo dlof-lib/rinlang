@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Rin Lang</string>
+    <string name="app_editor_title">Rin Editor</string>
+    <string name="action_run">Run ▶</string>
+    <string name="action_clear">Clear</string>
+    <string name="action_open">Open 📂</string>
+    <string name="action_save">Save 💾</string>
+    <string name="console_title">Console</string>
+    <string name="editor_hint">Write Rin code here…</string>
+    <string name="file_unsaved">untitled.rin</string>
+    <string name="file_open_error">Could not open file</string>
+    <string name="file_save_error">Could not save file</string>
+    <string name="file_saved_toast">Saved: %1$s</string>
+    <string name="file_opened_toast">Opened: %1$s</string>
+    <string name="sample_program">// Welcome to the Rin programming language!
+fun fib(n) {
+    if (n &lt; 2) { return n; }
+    return fib(n - 1) + fib(n - 2);
+}
+
+let i = 0;
+while (i &lt; 10) {
+    print \"fib(\" + i + \") = \" + fib(i);
+    i = i + 1;
+}
+
+let name = \"world\";
+print \"Hello, \" + name + \"!\";
+</string>
+</resources>
