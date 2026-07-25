@@ -56,6 +56,9 @@ private:
     StmtPtr fileStatement();
     StmtPtr routeStatement();     // route method=... path=... status=... body=...;  (داخل container.api)
     StmtPtr simplifiedStatement(); // "simplified" متبوعة بـ installation أو save
+    StmtPtr rowStatement();       // row cells=[...];              (مفهوم الجدول: container.table / table)
+    StmtPtr styleStatement();     // style value="style://theme";  (مفهوم الجدول: container.table / table)
+    std::string readOptionalFormatAttr(); // يقرأ "format=IDENT" اختيارياً (لـ save/installation)، أو "" إن لم توجد
 
     // expressions (precedence climbing)
     ExprPtr expression();
