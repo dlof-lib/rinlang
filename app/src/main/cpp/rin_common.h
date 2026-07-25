@@ -27,6 +27,7 @@ enum class TokenType {
     SAVE,            // save
     FILE_KW,         // file
     END,             // end (تُستخدم داخل .end/...)
+    PIPE_KW,         // pipe  (جزء من container.pipe -> خط أنابيب بيانات/إحصاء)
     // single/double char tokens
     PLUS, MINUS, STAR, SLASH, PERCENT,
     EQUAL, EQUAL_EQUAL, BANG, BANG_EQUAL,
@@ -35,8 +36,9 @@ enum class TokenType {
     LBRACKET, RBRACKET, // [ ]  (مصفوفات وفهرسة arr[i])
     COLON,              // :    (فواصل key:value في القواميس maps)
     COMMA, SEMICOLON,
-    AT,              // @  (بداية كتلة container/Containers.Group/Volume)
-    DOT,             // .  (تُستخدم في وسم الإغلاق .end/...)
+    AT,              // @  (بداية كتلة container/container.pipe/Containers.Group/Volume)
+    DOT,             // .  (تُستخدم في وسم الإغلاق .end/... وفي container.pipe)
+    PIPE,            // |>   (مُشغّل الأنابيب: يمرر القيمة اليسرى كأول وسيط للنداء اليمين)
     END_OF_FILE, ERROR
 };
 
