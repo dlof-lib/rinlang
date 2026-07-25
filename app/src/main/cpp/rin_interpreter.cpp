@@ -13,6 +13,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <errno.h>
+#include <cstdint>
 
 namespace rin {
 
@@ -184,6 +185,9 @@ static std::string containerTagName(ContainerKind k) {
         case ContainerKind::DATA: return "container.data";
         case ContainerKind::API: return "container.api";
         case ContainerKind::IMPORT: return "container.import";
+        // ملاحظة: سواء فُتحت بصيغة "@container.table=" (مدمجة) أو "@table=" (مستقلة)، تُحفَظ
+        // دائماً بنفس الوسم الموحَّد "container.table" لضمان إعادة قراءة واحدة لا لبس فيها.
+        case ContainerKind::TABLE: return "container.table";
         default: return "container";
     }
 }
@@ -194,6 +198,7 @@ static std::string containerIcon(ContainerKind k) {
         case ContainerKind::DATA: return "🗂️";
         case ContainerKind::API: return "🌐";
         case ContainerKind::IMPORT: return "📦⬅️";
+        case ContainerKind::TABLE: return "📊";
         default: return "📦";
     }
 }
@@ -805,10 +810,264 @@ void Interpreter::ensureParentDir(const std::string& fullPath) const {
     }
 }
 
+// ================= PNG خفيف الوزن (بلا اعتماديات خارجية) — لأجل table.save/png =================
+// لا يوجد داخل هذا المفسّر محرّك خطوط، فلا يمكن رسم نص حقيقي داخل الصورة. لذا فإن table.save/png
+// يرسم "خريطة فسيفسائية" (mosaic) حقيقية وصالحة تماماً كملف PNG: كل خلية من الجدول تُلوَّن بلون
+// مُشتق ثابت من قيمتها (نفس القيمة => نفس اللون دائماً)، مفصولة بخطوط شبكة تتبع الثيم المختار
+// عبر 'style' (مثال: "style://dark").
+namespace pngutil {
+
+static uint32_t crc32(const unsigned char* data, size_t len) {
+    static uint32_t table[256];
+    static bool made = false;
+    if (!made) {
+        for (uint32_t n = 0; n < 256; n++) {
+            uint32_t c = n;
+            for (int k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320u ^ (c >> 1)) : (c >> 1);
+            table[n] = c;
+        }
+        made = true;
+    }
+    uint32_t c = 0xFFFFFFFFu;
+    for (size_t i = 0; i < len; i++) c = table[(c ^ data[i]) & 0xFFu] ^ (c >> 8);
+    return c ^ 0xFFFFFFFFu;
+}
+
+static uint32_t adler32(const unsigned char* data, size_t len) {
+    uint32_t a = 1, b = 0;
+    const uint32_t MOD = 65521;
+    for (size_t i = 0; i < len; i++) { a = (a + data[i]) % MOD; b = (b + a) % MOD; }
+    return (b << 16) | a;
+}
+
+static void putU32BE(std::string& out, uint32_t v) {
+    out += static_cast<char>((v >> 24) & 0xFF);
+    out += static_cast<char>((v >> 16) & 0xFF);
+    out += static_cast<char>((v >> 8) & 0xFF);
+    out += static_cast<char>(v & 0xFF);
+}
+
+static void putChunk(std::string& out, const char tag[4], const std::string& data) {
+    putU32BE(out, static_cast<uint32_t>(data.size()));
+    std::string typeAndData(tag, 4);
+    typeAndData += data;
+    out += typeAndData;
+    putU32BE(out, crc32(reinterpret_cast<const unsigned char*>(typeAndData.data()), typeAndData.size()));
+}
+
+// تيار zlib يحتوي 'raw' داخل كتل deflate من نوع "stored" (بلا ضغط فعلي) — صالح تماماً حسب
+// RFC 1950/1951، ويُقسَّم كتلاً ≤ 65535 بايت عند الحاجة.
+static std::string zlibStored(const std::string& raw) {
+    std::string out;
+    out += static_cast<char>(0x78);
+    out += static_cast<char>(0x01);
+    size_t pos = 0;
+    const size_t maxBlock = 65535;
+    if (raw.empty()) {
+        out += static_cast<char>(1);
+        out += static_cast<char>(0); out += static_cast<char>(0);
+        out += static_cast<char>(0xFF); out += static_cast<char>(0xFF);
+    }
+    while (pos < raw.size()) {
+        size_t remaining = raw.size() - pos;
+        size_t blockLen = std::min(remaining, maxBlock);
+        bool isLast = (pos + blockLen) >= raw.size();
+        out += static_cast<char>(isLast ? 1 : 0);
+        auto len = static_cast<uint16_t>(blockLen);
+        auto nlen = static_cast<uint16_t>(~len);
+        out += static_cast<char>(len & 0xFF); out += static_cast<char>((len >> 8) & 0xFF);
+        out += static_cast<char>(nlen & 0xFF); out += static_cast<char>((nlen >> 8) & 0xFF);
+        out.append(raw, pos, blockLen);
+        pos += blockLen;
+    }
+    putU32BE(out, adler32(reinterpret_cast<const unsigned char*>(raw.data()), raw.size()));
+    return out;
+}
+
+// يبني ملف PNG كامل من مصفوفة بكسلات RGB (3 بايت للبكسل) بأبعاد width x height.
+static std::string encodeRgbPng(int width, int height, const std::vector<unsigned char>& rgb) {
+    std::string out;
+    static const unsigned char sig[8] = {137, 80, 78, 71, 13, 10, 26, 10};
+    out.append(reinterpret_cast<const char*>(sig), 8);
+
+    std::string ihdr;
+    putU32BE(ihdr, static_cast<uint32_t>(width));
+    putU32BE(ihdr, static_cast<uint32_t>(height));
+    ihdr += static_cast<char>(8); ihdr += static_cast<char>(2);
+    ihdr += static_cast<char>(0); ihdr += static_cast<char>(0); ihdr += static_cast<char>(0);
+    putChunk(out, "IHDR", ihdr);
+
+    std::string raw;
+    raw.reserve(static_cast<size_t>(height) * (1 + static_cast<size_t>(width) * 3));
+    for (int y = 0; y < height; y++) {
+        raw += static_cast<char>(0); // فلتر "none" لكل سطر
+        raw.append(reinterpret_cast<const char*>(&rgb[static_cast<size_t>(y) * width * 3]),
+                    static_cast<size_t>(width) * 3);
+    }
+    putChunk(out, "IDAT", zlibStored(raw));
+    putChunk(out, "IEND", "");
+    return out;
+}
+
+} // namespace pngutil
+
+// لون ثابت مُشتق من نص الخلية (تجزئة FNV-1a بسيطة): نفس القيمة تُعطي دائماً نفس اللون.
+static void cellColor(const std::string& text, unsigned char& r, unsigned char& g, unsigned char& b) {
+    uint32_t h = 2166136261u;
+    for (unsigned char c : text) { h ^= c; h *= 16777619u; }
+    r = static_cast<unsigned char>(120 + (h & 0x7Fu));
+    g = static_cast<unsigned char>(120 + ((h >> 8) & 0x7Fu));
+    b = static_cast<unsigned char>(120 + ((h >> 16) & 0x7Fu));
+}
+
+// ================= ZIP خفيف الوزن (تخزين stored بلا ضغط) — لأجل save/installation عند format=zip =================
+// يبني أرشيف .zip صالحاً قياسياً (يُفتح بأي أداة zip عادية)، كل عنصر بلا ضغط (STORED)، وهو كافٍ
+// تماماً هنا لأن المحتويات أصلاً نصوص/صور صغيرة، بلا حاجة لربط مكتبة ضغط خارجية (zlib) بالمشروع.
+static std::string buildZipArchive(const std::vector<std::pair<std::string, std::string>>& entries) {
+    auto putU16 = [](std::string& s, uint16_t v) { s += static_cast<char>(v & 0xFF); s += static_cast<char>((v >> 8) & 0xFF); };
+    auto putU32 = [](std::string& s, uint32_t v) {
+        s += static_cast<char>(v & 0xFF); s += static_cast<char>((v >> 8) & 0xFF);
+        s += static_cast<char>((v >> 16) & 0xFF); s += static_cast<char>((v >> 24) & 0xFF);
+    };
+
+    std::string out;
+    std::vector<std::string> centralDir;
+    for (auto& entry : entries) {
+        const std::string& name = entry.first;
+        const std::string& data = entry.second;
+        uint32_t crc = pngutil::crc32(reinterpret_cast<const unsigned char*>(data.data()), data.size());
+        uint32_t offset = static_cast<uint32_t>(out.size());
+
+        std::string local;
+        putU32(local, 0x04034b50);
+        putU16(local, 20); putU16(local, 0); putU16(local, 0); putU16(local, 0); putU16(local, 0);
+        putU32(local, crc);
+        putU32(local, static_cast<uint32_t>(data.size()));
+        putU32(local, static_cast<uint32_t>(data.size()));
+        putU16(local, static_cast<uint16_t>(name.size())); putU16(local, 0);
+        local += name; local += data;
+        out += local;
+
+        std::string central;
+        putU32(central, 0x02014b50);
+        putU16(central, 20); putU16(central, 20);
+        putU16(central, 0); putU16(central, 0); putU16(central, 0); putU16(central, 0);
+        putU32(central, crc);
+        putU32(central, static_cast<uint32_t>(data.size()));
+        putU32(central, static_cast<uint32_t>(data.size()));
+        putU16(central, static_cast<uint16_t>(name.size()));
+        putU16(central, 0); putU16(central, 0); putU16(central, 0); putU16(central, 0);
+        putU32(central, 0);
+        putU32(central, offset);
+        central += name;
+        centralDir.push_back(central);
+    }
+
+    auto centralStart = static_cast<uint32_t>(out.size());
+    uint32_t centralSize = 0;
+    for (auto& c : centralDir) { out += c; centralSize += static_cast<uint32_t>(c.size()); }
+
+    std::string end;
+    putU32(end, 0x06054b50);
+    putU16(end, 0); putU16(end, 0);
+    putU16(end, static_cast<uint16_t>(entries.size()));
+    putU16(end, static_cast<uint16_t>(entries.size()));
+    putU32(end, centralSize);
+    putU32(end, centralStart);
+    putU16(end, 0);
+    out += end;
+    return out;
+}
+
+// يرسم الجدول (صفوفه المسجَّلة عبر row + نمطه المسجَّل عبر style إن وُجد) كصورة PNG حقيقية.
+std::string Interpreter::buildTablePng(const std::string& key) const {
+    auto rowsIt = tableRows.find(key);
+    const std::vector<Value>* rows = (rowsIt != tableRows.end()) ? &rowsIt->second : nullptr;
+
+    size_t rowCount = rows ? rows->size() : 0;
+    size_t colCount = 1;
+    if (rows) {
+        for (auto& row : *rows) {
+            if (row.type == Value::Type::ARRAY && row.array) colCount = std::max(colCount, row.array->size());
+        }
+    }
+    if (rowCount == 0) rowCount = 1;
+
+    std::string style;
+    auto styleIt = tableStyles.find(key);
+    if (styleIt != tableStyles.end()) style = styleIt->second;
+    bool dark = (style.find("dark") != std::string::npos);
+    unsigned char gridShade = dark ? 235 : 45;
+
+    const int cellW = 80, cellH = 32, gridPx = 2;
+    int width = static_cast<int>(colCount) * cellW + gridPx;
+    int height = static_cast<int>(rowCount) * cellH + gridPx;
+
+    unsigned char bg = dark ? 25 : 250;
+    std::vector<unsigned char> rgb(static_cast<size_t>(width) * static_cast<size_t>(height) * 3, bg);
+
+    auto setPixel = [&](int x, int y, unsigned char r, unsigned char g, unsigned char b) {
+        if (x < 0 || y < 0 || x >= width || y >= height) return;
+        size_t idx = (static_cast<size_t>(y) * width + x) * 3;
+        rgb[idx] = r; rgb[idx + 1] = g; rgb[idx + 2] = b;
+    };
+
+    for (size_t ry = 0; ry < rowCount; ry++) {
+        const Value* rowVal = (rows && ry < rows->size()) ? &(*rows)[ry] : nullptr;
+        for (size_t cx = 0; cx < colCount; cx++) {
+            std::string text;
+            if (rowVal && rowVal->type == Value::Type::ARRAY && rowVal->array && cx < rowVal->array->size()) {
+                text = (*rowVal->array)[cx].toDisplayString();
+            }
+            unsigned char r, g, b;
+            cellColor(text.empty() ? ("#" + std::to_string(ry) + "," + std::to_string(cx)) : text, r, g, b);
+            int x0 = static_cast<int>(cx) * cellW + gridPx;
+            int y0 = static_cast<int>(ry) * cellH + gridPx;
+            for (int yy = y0; yy < y0 + cellH - gridPx; yy++)
+                for (int xx = x0; xx < x0 + cellW - gridPx; xx++)
+                    setPixel(xx, yy, r, g, b);
+        }
+    }
+    for (size_t cx = 0; cx <= colCount; cx++) {
+        int x0 = static_cast<int>(cx) * cellW;
+        for (int yy = 0; yy < height; yy++)
+            for (int t = 0; t < gridPx; t++) setPixel(x0 + t, yy, gridShade, gridShade, gridShade);
+    }
+    for (size_t ry = 0; ry <= rowCount; ry++) {
+        int y0 = static_cast<int>(ry) * cellH;
+        for (int xx = 0; xx < width; xx++)
+            for (int t = 0; t < gridPx; t++) setPixel(xx, y0 + t, gridShade, gridShade, gridShade);
+    }
+
+    return pngutil::encodeRgbPng(width, height, rgb);
+}
+
 std::string Interpreter::buildSaveDocument(const std::string& key, const EnvPtr& containerEnv,
                                             ContainerKind kind, bool simplified) const {
     std::string tag = containerTagName(kind);
     std::string body = serializeEnvBody(containerEnv, simplified);
+
+    // متغيرات env تكفي لأي حاوية عادية، لكن الجدول (TABLE) يخزّن صفوفه ونمطه في بنى منفصلة داخل
+    // المفسّر (tableRows/tableStyles) لا داخل بيئته، فيجب إلحاقها هنا نصياً حتى يبقى الملف المحفوظ
+    // قابلاً لإعادة القراءة كاملاً عبر container.import/loadInstalled (تُعاد صفوفه إلى tableRows تلقائياً
+    // عند إعادة تنفيذ عبارات row/style بداخله).
+    if (kind == ContainerKind::TABLE) {
+        auto rowsIt = tableRows.find(key);
+        if (rowsIt != tableRows.end()) {
+            for (auto& row : rowsIt->second) {
+                std::string cellsLit = serializeValueLiteral(row);
+                body += simplified ? ("row cells=" + cellsLit + ";")
+                                    : ("    row cells=" + cellsLit + ";\n");
+            }
+        }
+        auto styleIt = tableStyles.find(key);
+        if (styleIt != tableStyles.end()) {
+            std::string styleLit = "\"" + escapeStringLiteral(styleIt->second) + "\"";
+            body += simplified ? ("style value=" + styleLit + ";")
+                                : ("    style value=" + styleLit + ";\n");
+        }
+    }
+
     std::ostringstream doc;
     if (simplified) {
         doc << "@" << tag << "=" << key << " " << body << " .end/" << tag;
@@ -1162,6 +1421,35 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
         bool isContainer = containers.count(s->target) > 0;
         bool isGroup = !isContainer && groupMembers.count(s->target) > 0;
         std::string relPath;
+
+        // installation name format=zip; -> أرشيف zip حقيقي، يعمل لكل المفاهيم: حاوية مفردة (عنصر
+        // واحد بداخله)، أو مجموعة كاملة (Containers.Group) حيث تُغلَّف كل حاوية عضو بصيغتها
+        // المناسبة (جداول -> .png ، وأي نوع آخر -> .rin). هذا هو "Container.group/Table.zip".
+        if (s->format == "zip" && (isContainer || isGroup)) {
+            std::vector<std::pair<std::string, std::string>> entries;
+            if (isContainer) {
+                ContainerKind kind = containerKinds.count(s->target) ? containerKinds[s->target] : ContainerKind::PLAIN;
+                if (kind == ContainerKind::TABLE) entries.push_back({s->target + ".png", buildTablePng(s->target)});
+                else entries.push_back({s->target + ".rin", buildSaveDocument(s->target, containers[s->target], kind, s->simplified)});
+            } else {
+                std::vector<std::string> members;
+                collectGroupContainerNames(groupMembers, s->target, members);
+                for (auto& m : members) {
+                    if (!containers.count(m)) continue;
+                    ContainerKind kind = containerKinds.count(m) ? containerKinds[m] : ContainerKind::PLAIN;
+                    if (kind == ContainerKind::TABLE) entries.push_back({m + ".png", buildTablePng(m)});
+                    else entries.push_back({m + ".rin", buildSaveDocument(m, containers[m], kind, s->simplified)});
+                }
+            }
+            relPath = "rin_installed/" + s->target + ".zip";
+            std::string zip = buildZipArchive(entries);
+            writeRealFile(relPath, zip, s->line, "installation (zip)");
+            appendInstalledIndex(s->target, relPath, s->simplified);
+            output << "🗜️ installation (zip): " << s->target << " -> " << relPath
+                   << " (" << zip.size() << " بايت، " << entries.size() << " عنصر)\n";
+            return;
+        }
+
         if (isContainer) {
             ContainerKind kind = containerKinds.count(s->target) ? containerKinds[s->target] : ContainerKind::PLAIN;
             std::string doc = buildSaveDocument(s->target, containers[s->target], kind, s->simplified);
@@ -1193,12 +1481,47 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
             throw RinError("'save' يجب أن تُستخدم داخل حاوية (container) حالية لحفظ متغيراتها فعلياً", s->line);
         }
         std::string key = containerStack.back();
+        ContainerKind kind = containerKinds.count(key) ? containerKinds[key] : ContainerKind::PLAIN;
+
+        // table.save/png : تصدير حقيقي لصورة PNG تمثّل الجدول، متاح فقط لحاويات الجدول
+        // (@container.table أو @table)، ويعمل بغضّ النظر عن الشكل الذي فُتحت به.
+        if (s->format == "png") {
+            if (kind != ContainerKind::TABLE) {
+                throw RinError("save format=png متاحة فقط لحاوية جدول (@container.table أو @table)، وليس لـ '" +
+                                containerTagName(kind) + "'", s->line);
+            }
+            std::string rawPath;
+            if (s->path) rawPath = evaluate(s->path, env).toDisplayString();
+            else if (!currentFilePath.empty()) rawPath = currentFilePath;
+            else rawPath = key + ".png";
+            std::string png = buildTablePng(key);
+            writeRealFile(rawPath, png, s->line, "save (png)");
+            output << "🖼️ save (png) -> " << rawPath << " (" << png.size() << " بايت)\n";
+            return;
+        }
+
+        // save format=zip : يعمل لجميع المفاهيم (أي نوع حاوية)، ويُغلِّف نسخة حاوية واحدة كأرشيف zip.
+        if (s->format == "zip") {
+            std::string rawPath;
+            if (s->path) rawPath = evaluate(s->path, env).toDisplayString();
+            else rawPath = key + ".zip";
+            std::vector<std::pair<std::string, std::string>> entries;
+            if (kind == ContainerKind::TABLE) {
+                entries.push_back({key + ".png", buildTablePng(key)});
+            } else {
+                entries.push_back({key + ".rin", buildSaveDocument(key, containers[key], kind, s->simplified)});
+            }
+            std::string zip = buildZipArchive(entries);
+            writeRealFile(rawPath, zip, s->line, "save (zip)");
+            output << "🗜️ save (zip) -> " << rawPath << " (" << zip.size() << " بايت، " << entries.size() << " عنصر)\n";
+            return;
+        }
+
         std::string rawPath;
         if (s->path) rawPath = evaluate(s->path, env).toDisplayString();
         else if (!currentFilePath.empty()) rawPath = currentFilePath;
         else rawPath = key + (s->simplified ? ".min.rin" : ".rin"); // مسار افتراضي معتمد على اسم الحاوية
 
-        ContainerKind kind = containerKinds.count(key) ? containerKinds[key] : ContainerKind::PLAIN;
         std::string doc = buildSaveDocument(key, containers[key], kind, s->simplified);
         writeRealFile(rawPath, doc, s->line, "save");
 
@@ -1239,6 +1562,32 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
         apiRoutes[containerStack.back()].push_back(route);
 
         output << "🌐 route [" << route.method << " " << route.path << "] -> " << statusVal.toDisplayString() << "\n";
+        return;
+    }
+
+    if (auto s = std::dynamic_pointer_cast<RowStmt>(stmt)) {
+        if (containerStack.empty() || containerKinds[containerStack.back()] != ContainerKind::TABLE) {
+            throw RinError("عبارة 'row' يجب أن تُستخدم داخل @container.table أو @table", s->line);
+        }
+        Value cells = evaluate(s->cells, env);
+        if (cells.type != Value::Type::ARRAY) {
+            throw RinError("row: قيمة 'cells' يجب أن تكون مصفوفة (مثال: row cells=[1, 2, 3];)", s->line);
+        }
+        tableRows[containerStack.back()].push_back(cells);
+        output << "▦ row -> " << cells.toDisplayString() << "\n";
+        return;
+    }
+
+    if (auto s = std::dynamic_pointer_cast<StyleStmt>(stmt)) {
+        if (containerStack.empty() || containerKinds[containerStack.back()] != ContainerKind::TABLE) {
+            throw RinError("عبارة 'style' يجب أن تُستخدم داخل @container.table أو @table", s->line);
+        }
+        Value v = evaluate(s->value, env);
+        if (v.type != Value::Type::STRING) {
+            throw RinError("style: قيمة 'value' يجب أن تكون نصاً (مثال: style value=\"style://dark\";)", s->line);
+        }
+        tableStyles[containerStack.back()] = v.str;
+        output << "🎨 style -> " << v.str << "\n";
         return;
     }
 }
