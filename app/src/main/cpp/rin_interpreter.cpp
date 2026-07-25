@@ -149,6 +149,22 @@ static std::vector<double> asNumberArray(const Value& v, const std::string& fn, 
     return out;
 }
 
+// يجمع أسماء الحاويات (containers) الفعلية داخل مجموعة (Containers.Group)، متفرّعاً بشكل متكرر
+// عبر أي مجموعات فرعية متداخلة بداخلها، ومحافظاً على ترتيب الإدخال.
+static void collectGroupContainerNames(const std::unordered_map<std::string, std::vector<std::string>>& groupMembers,
+                                        const std::string& groupKey,
+                                        std::vector<std::string>& out) {
+    auto it = groupMembers.find(groupKey);
+    if (it == groupMembers.end()) return;
+    for (auto& memberName : it->second) {
+        if (groupMembers.count(memberName)) {
+            collectGroupContainerNames(groupMembers, memberName, out); // عضو هو مجموعة فرعية -> تفرّع
+        } else {
+            out.push_back(memberName); // عضو هو حاوية فعلية
+        }
+    }
+}
+
 void Interpreter::registerNatives() {
     // ---- رياضيات (math) ----
     natives["abs"] = [](std::vector<Value>& a, int line) {
@@ -426,6 +442,29 @@ void Interpreter::registerNatives() {
         return Value::makeArray(result);
     };
 
+    // ---- Containers.Group: استعلام عن أعضاء المجموعة ----
+    natives["groupContainers"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("groupContainers", a, 1, line);
+        std::string name = asString(a[0], "groupContainers", line);
+        auto result = std::make_shared<ArrayData>();
+        if (groupMembers.count(name)) {
+            std::vector<std::string> flat;
+            collectGroupContainerNames(groupMembers, name, flat);
+            for (auto& n : flat) result->push_back(Value::string(n));
+        }
+        return Value::makeArray(result);
+    };
+    natives["groupMembers"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("groupMembers", a, 1, line);
+        std::string name = asString(a[0], "groupMembers", line);
+        auto result = std::make_shared<ArrayData>();
+        auto it = groupMembers.find(name);
+        if (it != groupMembers.end()) {
+            for (auto& n : it->second) result->push_back(Value::string(n));
+        }
+        return Value::makeArray(result);
+    };
+
     // ---- مصفوفات وقواميس (arrays & maps) ----
     natives["push"] = [](std::vector<Value>& a, int line) -> Value {
         expectArgs("push", a, 2, line);
@@ -580,7 +619,11 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
         std::string tag = s->isPipe ? "container.pipe" : "container";
         std::string icon = s->isPipe ? "🧵" : "📦";
         output << icon << " " << tag << (s->name.empty() ? "" : (" = " + s->name)) << "\n";
-        containers[s->name.empty() ? ("#" + std::to_string(containers.size())) : s->name] = containerEnv;
+        std::string containerKey = s->name.empty() ? ("#" + std::to_string(containers.size())) : s->name;
+        containers[containerKey] = containerEnv;
+        if (!groupStack.empty()) {
+            groupMembers[groupStack.back()].push_back(containerKey);
+        }
         containerStack.push_back(s->name);
         executeBlock(s->body, containerEnv);
         containerStack.pop_back();
@@ -589,9 +632,33 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
     }
 
     if (auto s = std::dynamic_pointer_cast<ContainerGroupStmt>(stmt)) {
+        // مفتاح داخلي للمجموعات المجهولة الاسم، بنفس أسلوب الحاويات المجهولة.
+        std::string groupKey = s->name.empty() ? ("#group" + std::to_string(groupEnvs.size())) : s->name;
+        auto groupEnv = std::make_shared<Environment>(env); // نطاق خاص بالمجموعة (بدل التنفيذ المباشر داخل البيئة الأب)
+        groupEnvs[groupKey] = groupEnv;
+        groupMembers.emplace(groupKey, std::vector<std::string>{}); // تضمن وجود مُدخَل حتى لو بقيت فارغة
+
+        // مجموعة متداخلة داخل مجموعة أخرى: سجّلها كعضو في المجموعة الأب أيضاً.
+        if (!groupStack.empty()) {
+            groupMembers[groupStack.back()].push_back(groupKey);
+        }
+
         output << "🗂️ Containers.Group" << (s->name.empty() ? "" : (" = " + s->name)) << "\n";
-        executeBlock(s->body, env);
-        output << "✅ .end/Containers.Group" << (s->name.empty() ? "" : (" (" + s->name + ")")) << "\n";
+        groupStack.push_back(groupKey);
+        executeBlock(s->body, groupEnv);
+        groupStack.pop_back();
+
+        auto& members = groupMembers[groupKey];
+        output << "✅ .end/Containers.Group" << (s->name.empty() ? "" : (" (" + s->name + ")"));
+        if (!members.empty()) {
+            output << " [تحتوي: ";
+            for (size_t i = 0; i < members.size(); i++) {
+                if (i) output << ", ";
+                output << members[i];
+            }
+            output << "]";
+        }
+        output << "\n";
         return;
     }
 
@@ -624,36 +691,24 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
     }
 
     if (auto s = std::dynamic_pointer_cast<LinkStmt>(stmt)) {
-        if (!containers.count(s->target)) {
-            throw RinError("لا يمكن تنفيذ link: الحاوية '" + s->target + "' غير معرَّفة", s->line);
+        bool isContainer = containers.count(s->target) > 0;
+        bool isGroup = groupMembers.count(s->target) > 0;
+        if (!isContainer && !isGroup) {
+            throw RinError("لا يمكن تنفيذ link: '" + s->target + "' غير معرَّف كحاوية أو كمجموعة (Containers.Group)", s->line);
         }
-        output << "🔗 link -> " << s->target << "\n";
+        output << "🔗 link -> " << s->target << (isGroup ? " (Containers.Group)" : "") << "\n";
         return;
     }
 
     if (auto s = std::dynamic_pointer_cast<TyingStmt>(stmt)) {
-        if (!containers.count(s->target)) {
-            throw RinError("لا يمكن تنفيذ tying: الحاوية '" + s->target + "' غير معرَّفة", s->line);
-        }
-        if (!containerStack.empty() && containers.count(containerStack.back())) {
-            auto currentEnv = containers[containerStack.back()];
-            auto otherEnv = containers[s->target];
-            for (auto& kv : otherEnv->values) currentEnv->values[kv.first] = kv.second;
-        }
-        output << "🪢 tying <-> " << s->target << "\n";
+        bool isGroup = copyTargetIntoCurrentContainer(s->target, s->line);
+        output << "🪢 tying <-> " << s->target << (isGroup ? " (Containers.Group)" : "") << "\n";
         return;
     }
 
     if (auto s = std::dynamic_pointer_cast<MergeStmt>(stmt)) {
-        if (!containers.count(s->target)) {
-            throw RinError("لا يمكن تنفيذ merge: الحاوية '" + s->target + "' غير معرَّفة", s->line);
-        }
-        if (!containerStack.empty() && containers.count(containerStack.back())) {
-            auto currentEnv = containers[containerStack.back()];
-            auto otherEnv = containers[s->target];
-            for (auto& kv : otherEnv->values) currentEnv->values[kv.first] = kv.second;
-        }
-        output << "🧬 merge <- " << s->target << "\n";
+        bool isGroup = copyTargetIntoCurrentContainer(s->target, s->line);
+        output << "🧬 merge <- " << s->target << (isGroup ? " (Containers.Group)" : "") << "\n";
         return;
     }
 
@@ -678,6 +733,33 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
         output << "📄 file path = \"" << currentFilePath << "\"\n";
         return;
     }
+}
+
+bool Interpreter::copyTargetIntoCurrentContainer(const std::string& target, int line) {
+    bool isContainer = containers.count(target) > 0;
+    bool isGroup = groupMembers.count(target) > 0;
+    if (!isContainer && !isGroup) {
+        throw RinError("لا يمكن تنفيذ tying/merge: '" + target + "' غير معرَّف كحاوية أو كمجموعة (Containers.Group)", line);
+    }
+    if (containerStack.empty() || !containers.count(containerStack.back())) {
+        return isGroup; // لا توجد حاوية حالية لنسخ المتغيرات إليها (نادراً ما يحدث هذا خارج أي container)
+    }
+    auto currentEnv = containers[containerStack.back()];
+    if (isContainer) {
+        auto otherEnv = containers[target];
+        for (auto& kv : otherEnv->values) currentEnv->values[kv.first] = kv.second;
+        return false;
+    }
+    // target مجموعة (Containers.Group): انسخ متغيرات كل الحاويات الأعضاء بداخلها،
+    // بما فيها أعضاء أي مجموعات فرعية متداخلة، بترتيب الإدخال.
+    std::vector<std::string> memberContainers;
+    collectGroupContainerNames(groupMembers, target, memberContainers);
+    for (auto& memberName : memberContainers) {
+        if (!containers.count(memberName)) continue;
+        auto otherEnv = containers[memberName];
+        for (auto& kv : otherEnv->values) currentEnv->values[kv.first] = kv.second;
+    }
+    return true;
 }
 
 Value Interpreter::callFunction(const std::shared_ptr<Callable>& fn, std::vector<Value>& args, int line) {
