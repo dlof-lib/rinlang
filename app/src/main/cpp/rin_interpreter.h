@@ -115,6 +115,7 @@ private:
     std::vector<std::string> containerStack;                 // مفتاح الحاوية الحالية (لأجل link/tying/merge/save/route/call)
     std::string currentFilePath;                              // آخر مسار مُعرَّف عبر file
     std::unordered_map<std::string, std::vector<ApiRoute>> apiRoutes; // مفتاح container.api -> نقاطها المسجَّلة عبر route
+    std::unordered_set<std::string> importedPaths;            // مسارات @import المُنفَّذة فعلاً في هذا التشغيل (لمنع الاستيراد المكرَّر)
 
     // ---- تخزين حقيقي على القرص (save/file/installation) ----
     std::string basePath;                                     // جذر حقيقي اختياري لكل عمليات الملفات
