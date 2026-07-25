@@ -27,7 +27,10 @@ enum class TokenType {
     SAVE,            // save
     FILE_KW,         // file
     END,             // end (تُستخدم داخل .end/...)
-    PIPE_KW,         // pipe  (جزء من container.pipe -> خط أنابيب بيانات/إحصاء)
+    PIPE_KW,         // pipe    (جزء من container.pipe -> خط أنابيب بيانات/إحصاء؛ كلمة محجوزة تاريخياً)
+    // ملاحظة: "data" / "api" / "import" / "route" ليست أنواع Token مستقلة عمداً؛ تُقرأ كمعرّفات
+    // (IDENT) عادية ويُتعرَّف عليها سياقياً في المحلل النحوي فقط (بعد 'container.' أو كبداية عبارة)
+    // حتى لا تتحوّل إلى كلمات محجوزة عالمياً تتعارض مع أسماء متغيرات شائعة مثل 'data'.
     // single/double char tokens
     PLUS, MINUS, STAR, SLASH, PERCENT,
     EQUAL, EQUAL_EQUAL, BANG, BANG_EQUAL,
