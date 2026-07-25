@@ -193,4 +193,14 @@ struct RouteStmt : Stmt {
     ExprPtr body;
 };
 
+// @import "lib/data.og.rin";           -> يدمج كل عبارات المكتبة مباشرة داخل النطاق الحالي (بلا حاوية)
+// @import "lib/data.og.rin" as data;   -> يسجّل الاستيراد كحاوية باسم 'data' (نفس آلية container.import)
+//                                          بحيث يمكن لاحقاً ربطها بـ link/tying/merge كأي حاوية عادية.
+// يُحلَّل المسار أولاً ضمن سجل المكتبات المدمجة داخل المفسّر (rin_stdlib_libs.h)، وإن لم يوجد
+// يُقرأ كملف فعلي على القرص (نسبةً إلى basePath) — تماماً كبقية عمليات الملفات في اللغة.
+struct ImportStmt : Stmt {
+    ExprPtr path;      // مسار/اسم المكتبة (نص)
+    std::string alias; // فارغ = دمج مباشر في النطاق الحالي
+};
+
 } // namespace rin
