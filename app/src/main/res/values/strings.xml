@@ -2,10 +2,10 @@
 <resources>
     <string name="app_name">Rin Lang</string>
     <string name="app_editor_title">Rin Editor</string>
-    <string name="action_run">Run ▶</string>
+    <string name="action_run">Run</string>
     <string name="action_clear">Clear</string>
-    <string name="action_open">Open 📂</string>
-    <string name="action_save">Save 💾</string>
+    <string name="action_open">Open</string>
+    <string name="action_save">Save</string>
     <string name="editor_hint">Write Rin code here…</string>
     <string name="file_unsaved">untitled.rin</string>
     <string name="file_open_error">Could not open file</string>
@@ -14,9 +14,9 @@
     <string name="file_opened_toast">Opened: %1$s</string>
 
     <!-- المحرر: تراجع/إعادة وبحث واستبدال -->
-    <string name="action_undo">Undo ↺</string>
-    <string name="action_redo">Redo ↻</string>
-    <string name="action_find">Find 🔍</string>
+    <string name="action_undo">Undo</string>
+    <string name="action_redo">Redo</string>
+    <string name="action_find">Find</string>
     <string name="find_hint">Find…</string>
     <string name="replace_hint">Replace with…</string>
     <string name="btn_find_next">Next</string>
@@ -24,11 +24,12 @@
     <string name="btn_replace_all">All</string>
     <string name="find_not_found_toast">"Not found: %1$s"</string>
     <string name="replaced_count_toast">Replaced %1$d occurrence(s)</string>
+    <string name="find_close_desc">Close find bar</string>
 
     <!-- قائمة التشغيل المجدولة (job queue) وسجل التنفيذ -->
     <string name="console_title">Run Queue</string>
     <string name="action_clear_console">Clear history</string>
-    <string name="no_jobs_yet">No runs yet — press Run ▶ to execute your Rin program.</string>
+    <string name="no_jobs_yet">No runs yet — press Run to execute your Rin program.</string>
     <string name="job_title_fmt">Run #%1$d</string>
     <string name="job_status_queued">QUEUED</string>
     <string name="job_status_running">RUNNING…</string>
