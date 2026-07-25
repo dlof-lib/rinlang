@@ -57,7 +57,7 @@ class PipelineRunnerActivity : AppCompatActivity() {
     private lateinit var txtCode: TextView
     private lateinit var flowContainer: LinearLayout
     private lateinit var statusBanner: LinearLayout
-    private lateinit var txtStatusIcon: TextView
+    private lateinit var txtStatusIcon: android.widget.ImageView
     private lateinit var txtStatus: TextView
     private lateinit var txtDetails: TextView
     private lateinit var btnRun: android.widget.Button
@@ -113,7 +113,7 @@ class PipelineRunnerActivity : AppCompatActivity() {
     private fun runPipeline() {
         btnRun.isEnabled = false
         btnStop.isEnabled = true
-        setStatus("⏳", getString(R.string.pipeline_status_running), R.drawable.bg_pipeline_status_neutral, R.color.pipeline_text_primary)
+        setStatus(R.drawable.ic_status_running, getString(R.string.pipeline_status_running), R.drawable.bg_pipeline_status_neutral, R.color.pipeline_text_primary)
         txtDetails.visibility = View.GONE
         btnLoadSample.visibility = View.GONE
         flowContainer.removeAllViews()
@@ -141,7 +141,7 @@ class PipelineRunnerActivity : AppCompatActivity() {
         runningFuture?.cancel(true)
         btnRun.isEnabled = true
         btnStop.isEnabled = false
-        setStatus("⏹", getString(R.string.pipeline_status_stopped), R.drawable.bg_pipeline_status_neutral, R.color.pipeline_text_primary)
+        setStatus(R.drawable.ic_status_stopped, getString(R.string.pipeline_status_stopped), R.drawable.bg_pipeline_status_neutral, R.color.pipeline_text_primary)
     }
 
     private fun onTraceReady(trace: PipelineTracer.PipelineTrace?) {
@@ -154,7 +154,7 @@ class PipelineRunnerActivity : AppCompatActivity() {
             // لا نستبدل كوده بصمت بمثال جاهز؛ نُخبره بوضوح ونترك له خيار تحميل مثال.
             flowContainer.removeAllViews()
             txtContainerName.text = ""
-            setStatus("⚠️", getString(R.string.pipeline_status_error), R.drawable.bg_pipeline_status_error, R.color.pipeline_red_light_text)
+            setStatus(R.drawable.ic_status_warning, getString(R.string.pipeline_status_error), R.drawable.bg_pipeline_status_error, R.color.pipeline_red_light_text)
             txtDetails.text = getString(R.string.pipeline_no_block_found)
             txtDetails.visibility = View.VISIBLE
             btnLoadSample.visibility = View.VISIBLE
@@ -166,10 +166,10 @@ class PipelineRunnerActivity : AppCompatActivity() {
         buildFlowDiagram(trace)
 
         if (trace.success) {
-            setStatus("✅", getString(R.string.pipeline_status_success), R.drawable.bg_pipeline_status_success, R.color.pipeline_green_light_text)
+            setStatus(R.drawable.ic_status_success, getString(R.string.pipeline_status_success), R.drawable.bg_pipeline_status_success, R.color.pipeline_green_light_text)
             txtDetails.visibility = View.GONE
         } else {
-            setStatus("❌", getString(R.string.pipeline_status_error), R.drawable.bg_pipeline_status_error, R.color.pipeline_red_light_text)
+            setStatus(R.drawable.ic_status_error, getString(R.string.pipeline_status_error), R.drawable.bg_pipeline_status_error, R.color.pipeline_red_light_text)
             txtDetails.text = trace.errorMessage ?: trace.rawEngineOutput
             txtDetails.visibility = View.VISIBLE
         }
@@ -183,11 +183,13 @@ class PipelineRunnerActivity : AppCompatActivity() {
         runPipeline()
     }
 
-    private fun setStatus(icon: String, text: String, bg: Int, textColor: Int) {
-        txtStatusIcon.text = icon
+    private fun setStatus(iconRes: Int, text: String, bg: Int, textColor: Int) {
+        txtStatusIcon.setImageResource(iconRes)
+        val color = ContextCompat.getColor(this, textColor)
+        txtStatusIcon.imageTintList = android.content.res.ColorStateList.valueOf(color)
         txtStatus.text = text
         statusBanner.setBackgroundResource(bg)
-        txtStatus.setTextColor(ContextCompat.getColor(this, textColor))
+        txtStatus.setTextColor(color)
     }
 
     // ---- diagram building ----
@@ -197,7 +199,7 @@ class PipelineRunnerActivity : AppCompatActivity() {
         if (trace.sourceExpr.isEmpty()) return
 
         addNode(
-            icon = "📥",
+            icon = R.drawable.ic_node_source,
             title = getString(R.string.pipeline_node_source),
             subtitle = trace.sourceExpr,
             valueText = trace.sourceValueText,
@@ -217,7 +219,7 @@ class PipelineRunnerActivity : AppCompatActivity() {
 
         addArrow()
         addNode(
-            icon = if (trace.success) "✅" else "❌",
+            icon = if (trace.success) R.drawable.ic_status_success else R.drawable.ic_status_error,
             title = getString(R.string.pipeline_node_output),
             subtitle = "print",
             valueText = if (trace.success) trace.finalValueText else "—",
@@ -225,17 +227,18 @@ class PipelineRunnerActivity : AppCompatActivity() {
         )
     }
 
-    private fun iconForStage(name: String): String {
+    private fun iconForStage(name: String): Int {
         val n = name.lowercase()
         return when {
-            "aggregat" in n || "mean" in n || "sum" in n || "reduce" in n || "total" in n || "count" in n -> "Σ"
-            "sort" in n -> "↕"
-            "filter" in n -> "▽"
-            else -> "⚙"
+            "aggregat" in n || "mean" in n || "sum" in n || "reduce" in n || "total" in n || "count" in n
+                || "median" in n || "variance" in n || "stddev" in n || "mode" in n -> R.drawable.ic_node_aggregate
+            "sort" in n -> R.drawable.ic_node_sort
+            "filter" in n -> R.drawable.ic_node_filter
+            else -> R.drawable.ic_node_transform
         }
     }
 
-    private fun addNode(icon: String, title: String, subtitle: String, valueText: String, ok: Boolean) {
+    private fun addNode(icon: Int, title: String, subtitle: String, valueText: String, ok: Boolean) {
         val dp = resources.displayMetrics.density
         val column = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -246,11 +249,13 @@ class PipelineRunnerActivity : AppCompatActivity() {
             ).apply { gravity = Gravity.CENTER_HORIZONTAL }
         }
 
-        val circle = TextView(this).apply {
-            text = icon
-            textSize = 22f
-            gravity = Gravity.CENTER
+        val circle = android.widget.ImageView(this).apply {
+            setImageResource(icon)
+            scaleType = android.widget.ImageView.ScaleType.CENTER
             setBackgroundResource(if (ok) R.drawable.bg_pipeline_node_circle else R.drawable.bg_pipeline_node_circle_error)
+            imageTintList = android.content.res.ColorStateList.valueOf(
+                ContextCompat.getColor(context, if (ok) R.color.pipeline_green else R.color.pipeline_red)
+            )
             layoutParams = LinearLayout.LayoutParams((64 * dp).toInt(), (64 * dp).toInt())
         }
         column.addView(circle)
