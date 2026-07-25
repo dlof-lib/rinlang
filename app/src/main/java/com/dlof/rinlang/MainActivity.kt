@@ -108,7 +108,9 @@ class MainActivity : AppCompatActivity() {
         val btnReplaceAll: Button = findViewById(R.id.btnReplaceAll)
         val btnFindClose: ImageButton = findViewById(R.id.btnFindClose)
         val btnClearConsole: Button = findViewById(R.id.btnClearConsole)
-        val btnProjects: Button = findViewById(R.id.btnProjects)
+        // قد لا يكون هذا الزر مضافاً بعد يدوياً داخل activity_main.xml (انظر INTEGRATION_NOTES.md)،
+        // لذا نبحث عنه بأمان (nullable) بدل افتراض وجوده، فلا يتعطّل التطبيق أو البناء إن غاب.
+        val btnProjects: Button? = findViewById(R.id.btnProjects)
 
         if (savedInstanceState == null) {
             val project = currentProject
@@ -168,7 +170,7 @@ class MainActivity : AppCompatActivity() {
             RinJobScheduler.clear()
         }
 
-        btnProjects.setOnClickListener {
+        btnProjects?.setOnClickListener {
             startActivity(android.content.Intent(this, ProjectsActivity::class.java))
         }
 
