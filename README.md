@@ -24,6 +24,7 @@ RinLang/
 │   │   └── res/                      # XML: تخطيطات، ألوان، نصوص، أيقونة
 ├── tools/test_main.cpp               # تشغيل المحرّك خارج أندرويد لأغراض الاختبار
 ├── tools/test_containers.cpp         # اختبار مفاهيم لغة الحاويات (container, Section, link, merge...)
+├── tools/test_pipeline.cpp           # اختبار container.pipe والمُشغّل |> والدوال الإحصائية
 ├── .github/workflows/build-apk.yml   # بناء APK تلقائي عبر GitHub Actions
 ├── build.gradle / settings.gradle / gradle.properties
 └── README.md
@@ -103,6 +104,7 @@ remove(m, "lang");     // يحذف المفتاح
 | نصوص | `len` `upper` `lower` `trim` `substr` `split` `join` `indexOf` `replace` `contains` `charAt` `toString` `toNumber` |
 | مصفوفات | `len` `push` `pop` `sort` `contains` `join` |
 | قواميس | `keys` `values` `has` `remove` `len` |
+| إحصاء (statistics) | `sum` `mean` `median` `variance` `stddev` `mode` `minOf` `maxOf` (تجميع/Aggregation) — `normalize` `scale` `shift` (تحويل/Transformation) |
 
 يمكنك تجربة كل هذا عبر:
 
@@ -131,6 +133,7 @@ g++ -std=c++17 -o rin_stdlib_test \
 | المفهوم | الصياغة | الوصف |
 |---|---|---|
 | `container` | `@container=name ... .end/container` | حاوية بيانات مستقلة، لها بيئة متغيرات خاصة بها. |
+| `container.pipe` | `@container.pipe=name ... .end/container.pipe` | نفس `container` لكن مخصّصة لخطوط أنابيب البيانات/الإحصاء (انظر القسم التالي). |
 | `Containers.Group` | `@Containers.Group=name ... .end/Containers.Group` | مجموعة تضم عدة حاويات (`@container=...`) معاً. |
 | `Volume` | `@Volume=name ... .end/Volume` | مستوى تنظيم أعلى يضمّ مجموعات أو حاويات (كـ"مجلد/جزء"). |
 | `Section` | `Section=name ... .end/Section` | قسم داخلي لتقسيم بيانات الحاوية إلى أجزاء منطقية. |
@@ -216,6 +219,70 @@ g++ -std=c++17 -o rin_container_test \
 - `text` تفرض أن تكون القيمة المُسندة نصية فعلاً، وإلا يرمي المفسّر خطأً واضحاً بدلاً من قبول أي نوع.
 - `link`/`tying`/`merge` تتطلّب أن تكون الحاوية الهدف معرَّفة مسبقاً في البرنامج (تُنفَّذ الحاويات بالترتيب من الأعلى للأسفل).
 - بما أن هذا محرّك تعليمي (Lexer + Parser + Interpreter) يعمل داخل الذاكرة فقط، فإن `file`/`save`/`installation` لا تكتب فعلياً على نظام الملفات؛ إنما تُسجَّل وتُطبَع كرسائل توضّح ما "كان سيحدث"، وهي نقطة انطلاق جاهزة لربطها لاحقاً بتخزين حقيقي (كما هو مقترح أصلاً في قسم "أفكار للتوسعة").
+
+## خط الأنابيب (Pipeline) والبيانات الإحصائية
+
+فوق `container` العادية، تضيف اللغة **`container.pipe`** ومُشغّل الأنابيب **`|>`** لبناء خطوط معالجة بيانات على شكل: **بيانات مُدخَلة (Input) → تحويل (Transformation) → تجميع (Aggregation) → نتيجة نهائية (Final Output)** — بنفس الترتيب في المخطّط الآتي:
+
+```
+[Input Data] -> [Step 1 (Transformation)] -> [Step 2 (Aggregation)] -> [Final Output]
+```
+
+### مُشغّل الأنابيب `|>`
+
+يمرّر القيمة الموجودة على يسار `|>` كأول وسيط (argument) للنداء الموجود على يمينه، فتصبح سلسلة من التحويلات قابلة للقراءة من اليسار إلى اليمين بدل تعشيش الأقواس:
+
+```rin
+let data = [10, 20, 30, 40, 50];
+
+// data |> normalize() |> mean();  يُكافئ تماماً  mean(normalize(data))
+let result = data |> normalize() |> mean();
+print result;
+```
+
+يمكن أيضاً تمرير وسائط إضافية بعد القيمة المنقولة: `data |> scale(2)` تعادل `scale(data, 2)`. كما يمكن كتابة اسم الدالة بدون أقواس إن لم تحتَج وسائط إضافية: `data |> mean`.
+
+### الدوال الإحصائية الجاهزة
+
+| النوع | الدوال | الاستخدام النموذجي |
+|---|---|---|
+| تجميع (Aggregation) | `sum(arr)` `mean(arr)` `median(arr)` `variance(arr)` `stddev(arr)` `mode(arr)` `minOf(arr)` `maxOf(arr)` | نهاية الأنبوب: تُلخّص المصفوفة إلى قيمة واحدة |
+| تحويل (Transformation) | `normalize(arr)` `scale(arr, factor)` `shift(arr, delta)` | منتصف الأنبوب: تُنتج مصفوفة جديدة بنفس الحجم |
+
+جميعها تتوقّع مصفوفة أرقام (array of numbers) وتَرمي خطأً واضحاً لو كانت فارغة أو تحتوي عناصر غير رقمية.
+
+### `container.pipe`
+
+هي نفس `@container=name ... .end/container` تماماً في آلية العمل (بيئة متغيرات خاصة، تدعم `link`/`tying`/`merge`)، لكنها تُستخدم لتنظيم خطوط الأنابيب صراحةً، وتُطبع بشكل مختلف (`🧵 container.pipe` بدل `📦 container`) لتمييزها بصرياً في المخرجات:
+
+```rin
+@container.pipe=sales_pipeline
+    let raw = [10, 20, 30, 40, 50];   // Input Data
+
+    fun transform(data) {             // Step 1 (Transformation)
+        return normalize(data);
+    }
+
+    fun aggregate(data) {             // Step 2 (Aggregation)
+        return mean(data);
+    }
+
+    let final_output = raw |> transform() |> aggregate();  // Final Output
+    print final_output;
+.end/container.pipe
+```
+
+يمكنك تجربة هذا كاملاً عبر:
+
+```bash
+g++ -std=c++17 -o rin_pipeline_test \
+  tools/test_pipeline.cpp \
+  app/src/main/cpp/rin_lexer.cpp \
+  app/src/main/cpp/rin_parser.cpp \
+  app/src/main/cpp/rin_interpreter.cpp \
+  -I app/src/main/cpp
+./rin_pipeline_test
+```
 
 ## البناء محلياً
 
