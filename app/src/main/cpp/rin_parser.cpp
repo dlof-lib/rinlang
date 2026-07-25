@@ -10,6 +10,12 @@ const Token& Parser::previous() const { return tokens[current - 1]; }
 const Token& Parser::advance() { if (!isAtEnd()) current++; return previous(); }
 bool Parser::check(TokenType type) const { return !isAtEnd() && peek().type == type; }
 
+bool Parser::checkNext(TokenType type) const {
+    if (isAtEnd()) return false;
+    if (current + 1 >= tokens.size()) return false;
+    return tokens[current + 1].type == type;
+}
+
 bool Parser::match(std::initializer_list<TokenType> types) {
     for (auto t : types) {
         if (check(t)) { advance(); return true; }
@@ -158,6 +164,13 @@ std::string Parser::readTagKeyword() {
         consume(TokenType::DOT, "Expected '.' after 'Containers'");
         consume(TokenType::GROUP, "Expected 'Group' after 'Containers.'");
         tag = "Containers.Group";
+    } else if (first.type == TokenType::CONTAINER && check(TokenType::DOT) && checkNext(TokenType::PIPE_KW)) {
+        // container.pipe -> خط أنابيب بيانات/إحصاء (اختياري بعد 'container')
+        // ملاحظة: لا نستهلك '.' إلا إذا كانت متبوعة مباشرة بـ 'pipe'، وإلا فقد تكون
+        // في الحقيقة بداية وسم إغلاق آخر مجاور مثل '.end/container' تلاه '.end/Containers.Group'
+        advance(); // consume '.'
+        advance(); // consume 'pipe'
+        tag = "container.pipe";
     }
     return tag;
 }
@@ -203,8 +216,8 @@ StmtPtr Parser::textDeclaration() {
 StmtPtr Parser::atBlock() {
     Token atTok = previous(); // '@'
     std::string tag = readTagKeyword();
-    if (tag != "container" && tag != "Containers.Group" && tag != "Volume") {
-        throw RinError("Unsupported block '@" + tag + "'; expected container, Containers.Group, or Volume",
+    if (tag != "container" && tag != "container.pipe" && tag != "Containers.Group" && tag != "Volume") {
+        throw RinError("Unsupported block '@" + tag + "'; expected container, container.pipe, Containers.Group, or Volume",
                         atTok.line);
     }
     std::string name = readOptionalName();
@@ -212,9 +225,10 @@ StmtPtr Parser::atBlock() {
     while (!checkClosingTag() && !isAtEnd()) body.push_back(declaration());
     consumeEndTag(tag);
 
-    if (tag == "container") {
+    if (tag == "container" || tag == "container.pipe") {
         auto s = std::make_shared<ContainerStmt>();
         s->name = name; s->body = body; s->line = atTok.line;
+        s->isPipe = (tag == "container.pipe");
         return s;
     }
     if (tag == "Containers.Group") {
@@ -354,7 +368,7 @@ StmtPtr Parser::simplifiedStatement() {
 ExprPtr Parser::expression() { return assignment(); }
 
 ExprPtr Parser::assignment() {
-    auto expr = logicOr();
+    auto expr = pipeline();
     if (match({TokenType::EQUAL})) {
         Token eq = previous();
         auto value = assignment();
@@ -374,6 +388,37 @@ ExprPtr Parser::assignment() {
             return set;
         }
         throw RinError("Invalid assignment target", eq.line);
+    }
+    return expr;
+}
+
+// مُشغّل الأنابيب |> : يسمح ببناء خطوط أنابيب بيانات/إحصاء بشكل قابل للقراءة
+//   input |> step1() |> step2(arg)   يُكافئ   step2(step1(input), arg)
+// القيمة الموجودة على يسار |> تُمرَّر دائماً كأول وسيط للنداء الموجود على اليمين.
+// يمكن كتابة اسم دالة بدون أقواس على يمين |> فتُعامل كنداء بلا وسائط إضافية: data |> mean
+ExprPtr Parser::pipeline() {
+    auto expr = logicOr();
+    while (match({TokenType::PIPE})) {
+        Token opTok = previous();
+        auto rhs = logicOr();
+
+        std::shared_ptr<CallExpr> callExpr = std::dynamic_pointer_cast<CallExpr>(rhs);
+        if (!callExpr) {
+            if (auto var = std::dynamic_pointer_cast<VariableExpr>(rhs)) {
+                callExpr = std::make_shared<CallExpr>();
+                callExpr->callee = var->name;
+                callExpr->line = var->line;
+            } else {
+                throw RinError("Expected a function call (e.g. 'step()') after '|>'", opTok.line);
+            }
+        }
+
+        auto piped = std::make_shared<CallExpr>();
+        piped->callee = callExpr->callee;
+        piped->line = opTok.line;
+        piped->args.push_back(expr); // القيمة القادمة من يسار |> تصبح أول وسيط
+        for (auto& a : callExpr->args) piped->args.push_back(a);
+        expr = piped;
     }
     return expr;
 }
