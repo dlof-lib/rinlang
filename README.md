@@ -26,6 +26,7 @@ RinLang/
 ├── tools/test_containers.cpp         # اختبار مفاهيم لغة الحاويات (container, Section, link, merge...)
 ├── tools/test_groups.cpp             # اختبار Containers.Group المُقوّاة (تتبّع الأعضاء، التداخل، tying/merge على مستوى مجموعة)
 ├── tools/test_pipeline.cpp           # اختبار container.pipe والمُشغّل |> والدوال الإحصائية
+├── tools/test_persistence.cpp        # اختبار استمرارية save/installation فعلياً عبر تشغيلين منفصلين (Interpreter جديد في كل مرة)
 ├── .github/workflows/build-apk.yml   # بناء APK تلقائي عبر GitHub Actions
 ├── build.gradle / settings.gradle / gradle.properties
 └── README.md
@@ -145,9 +146,9 @@ g++ -std=c++17 -o rin_stdlib_test \
 | `tying` | `tying with=name;` | ربط وثيق: ينسخ متغيرات حاوية أخرى — **أو كل حاويات مجموعة (Containers.Group) كاملة دفعة واحدة** — إلى الحاوية الحالية. |
 | `merge` | `merge with=name;` | دمج كامل لمتغيرات حاوية أخرى — **أو مجموعة كاملة** — داخل الحاوية الحالية. |
 | `translation` / `Translations` | `Translations translation lang="ar" text="..."; .end/Translations` | كتلة `Translations` تجمّع عدّة أسطر `translation` (لغة + نص) لدعم تعدد اللغات. |
-| `installation` | `installation name;` | "تثبيت"/تسجيل حاوية أو اسم لجعله معروفاً ومتاحاً للمفسّر. |
-| `simplified` | `simplified installation ...;` / `simplified save ...;` | مُعدِّل (modifier) يسبق `installation` أو `save` لطلب نسخة مبسّطة/مصغّرة. |
-| `save` | `save;` / `save path="...";` | حفظ الحاوية الحالية، مع تحديد مسار اختياري. |
+| `installation` | `installation name;` | يحفظ الحاوية (أو مجموعة Containers.Group كاملة) **فعلياً على القرص** داخل `rin_installed/`، ويسجّلها في فهرس مستمر يبقى محفوظاً بين التشغيلات المختلفة. |
+| `simplified` | `simplified installation ...;` / `simplified save ...;` | مُعدِّل (modifier) يسبق `installation` أو `save` لطلب نسخة مبسّطة/مصغّرة (سطر واحد مضغوط، امتداد `.min.rin`). |
+| `save` | `save;` / `save path="...";` | يكتب متغيرات الحاوية الحالية **فعلياً** كملف `.rin` قابل لإعادة القراءة، بمسار صريح أو افتراضي باسم الحاوية. |
 | `file` | `file path="...";` | تعريف/تسجيل مسار ملف مرتبط بالحاوية الحالية. |
 | `path` | `path="..."` | سمة (attribute) تُستخدم مع `file` و`save` لتحديد المسار. |
 
@@ -219,7 +220,7 @@ g++ -std=c++17 -o rin_container_test \
 - وسم الإغلاق `.end/الكلمة` يجب أن يطابق نوع الكتلة المفتوحة تماماً (مثلاً `@container=x ... .end/Section` يُعتبر خطأً نحوياً صريحاً).
 - `text` تفرض أن تكون القيمة المُسندة نصية فعلاً، وإلا يرمي المفسّر خطأً واضحاً بدلاً من قبول أي نوع.
 - `link`/`tying`/`merge` تتطلّب أن يكون الهدف (حاوية **أو مجموعة Containers.Group**) معرَّفاً مسبقاً في البرنامج (تُنفَّذ الحاويات والمجموعات بالترتيب من الأعلى للأسفل).
-- بما أن هذا محرّك تعليمي (Lexer + Parser + Interpreter) يعمل داخل الذاكرة فقط، فإن `file`/`save`/`installation` لا تكتب فعلياً على نظام الملفات؛ إنما تُسجَّل وتُطبَع كرسائل توضّح ما "كان سيحدث"، وهي نقطة انطلاق جاهزة لربطها لاحقاً بتخزين حقيقي (كما هو مقترح أصلاً في قسم "أفكار للتوسعة").
+- **`file`/`save`/`installation` تعمل فعلياً على القرص** (وليست رسائل توضيحية فقط): راجع قسم "التخزين الحقيقي على القرص" أدناه للتفاصيل الكاملة.
 
 ## Containers.Group بالتفصيل
 
@@ -267,6 +268,85 @@ g++ -std=c++17 -o rin_groups_test \
   app/src/main/cpp/rin_interpreter.cpp \
   -I app/src/main/cpp
 ./rin_groups_test
+```
+
+## التخزين الحقيقي على القرص (save / installation / file)
+
+`file`، `save`، و`installation` تنفّذ **قراءة/كتابة فعلية على القرص**، وليست رسائل توضيحية فقط. كل مسار نسبي يُبنى فوق جذر اختياري (`basePath`) يحدَّده المُضيف:
+
+- **على أندرويد**: `RinEngine.init(context)` (استُدعيت تلقائياً من `MainActivity`/`PipelineRunnerActivity`) تمرّر `filesDir` الخاص بالتطبيق — تخزين معزول لا يحتاج أي إذن (permission).
+- **خارج أندرويد (`tools/test_*.cpp`)**: `interpreter.setBasePath("...")`، أو تُترَك فارغة فتُستخدَم المسارات كما هي بالنسبة للمجلد الحالي (CWD).
+
+### `save` — حفظ حاوية كملف `.rin` قابل لإعادة القراءة
+
+```rin
+@container=my_data
+    text title = "بيانات ريـن";
+    let count = 3;
+    save;                          // يكتب my_data.rin (الاسم الافتراضي = اسم الحاوية)
+    save path="exports/data.rin";  // أو مساراً صريحاً (تُنشأ المجلدات الوسيطة تلقائياً)
+    simplified save path="exports/data.min.rin"; // نسخة مضغوطة بسطر واحد
+.end/container
+```
+
+يُسلسِل `save` كل متغيرات الحاوية المباشرة (`text`/`let`، وليس ما بداخل `Section` الفرعية) إلى نص Rin صالح — بما فيه المصفوفات والقواميس المتداخلة — بحيث يمكن إعادة تحميل الملف لاحقاً عبر `@container.import=... file path="...";` أو عبر `loadInstalled()`. الدوال (functions) لا يمكن تمثيلها كقيمة محفوظة فتُتجاهَل مع تنبيه في النسخة الكاملة (غير المبسّطة).
+
+### `installation` — تثبيت مستمر عبر التشغيلات المختلفة
+
+```rin
+@container=profile
+    text name = "Droy";
+    let level = 7;
+    installation profile;   // يكتب rin_installed/profile.rin ويُسجَّل في فهرس دائم
+.end/container
+```
+
+كل `installation` تكتب نسخة فعلية من الحاوية (أو من **كل** حاويات مجموعة `Containers.Group` كاملة إن كان الهدف مجموعة) داخل `rin_installed/`، وتضيف سطراً في فهرس `rin_installed/index.rininstall`. هذا الفهرس **يُقرأ تلقائياً في بداية أي تشغيل لاحق** يستخدم نفس `basePath` — أي أن `isInstalled(...)` تعرف عن تثبيتات حصلت في عملية/تشغيل سابق تماماً، وليس فقط ضمن نفس التشغيل الحالي.
+
+### الوصول للتثبيتات والملفات من كود Rin
+
+| الدالة | الوصف |
+|---|---|
+| `isInstalled(name)` | هل هذا الاسم مثبَّت فعلياً (بما فيها تثبيتات من تشغيلات سابقة)؟ |
+| `listInstalled()` | مصفوفة بكل الأسماء المثبَّتة حالياً. |
+| `loadInstalled(name)` | يقرأ نسخة الحاوية المحفوظة فعلياً من `rin_installed/` وينفّذها (تعود متاحة للـ `tying`/`merge` بنفس اسمها). يُرجع `true`/`false`. |
+| `writeFile(path, content)` / `readFile(path)` | كتابة/قراءة ملف نصي عام فعلي على القرص. |
+| `appendFile(path, content)` | إضافة محتوى لنهاية ملف موجود (أو إنشاؤه إن لم يوجد). |
+| `fileExists(path)` / `deleteFile(path)` | فحص وجود ملف، أو حذفه فعلياً. |
+
+```rin
+let ok = loadInstalled("profile");
+if (ok) {
+    @container=check
+        tying with=profile;   // نسخ متغيرات profile المحمَّلة فعلياً من القرص
+        print name;
+        print level;
+    .end/container
+}
+
+writeFile("logs/run.txt", "started\n");
+appendFile("logs/run.txt", "step 1 done\n");
+print readFile("logs/run.txt");
+```
+
+يمكنك تجربة استمرارية التثبيت عبر تشغيلين منفصلين تماماً (Interpreter جديد في كل مرة، تماماً كتشغيلين مختلفين للتطبيق) عبر:
+
+```bash
+g++ -std=c++17 -o rin_persist_test \
+  tools/test_persistence.cpp \
+  app/src/main/cpp/rin_lexer.cpp \
+  app/src/main/cpp/rin_parser.cpp \
+  app/src/main/cpp/rin_interpreter.cpp \
+  -I app/src/main/cpp
+./rin_persist_test
+```
+
+### تهريب النصوص (string escapes)
+
+لدعم حفظ/إعادة قراءة أي نص فعلياً (بما فيه نصوص تحتوي علامات تنصيص أو أسطر جديدة)، تدعم النصوص الآن: `\"` `\\` `\n` `\t` `\r`.
+
+```rin
+print "قال: \"مرحباً\"\nسطر ثانٍ";
 ```
 
 ## خط الأنابيب (Pipeline) والبيانات الإحصائية
@@ -371,4 +451,5 @@ g++ -std=c++17 -o rin_test \
 - دوال بأكثر من قيمة تُرجَع (multiple return / tuples).
 - حلقة `for` مخصّصة للتكرار على المصفوفات والقواميس.
 - تراجع/إعادة (undo/redo) في المحرر، وترقيم للأسطر.
-- تنفيذ فعلي لـ `save`/`file`/`installation` داخل لغة الحاويات على تخزين الجهاز (حالياً تُسجَّل وتُطبَع فقط كما هو موضّح أعلاه).
+- ترتيب المتغيرات المحفوظة حسب ترتيب التعريف الفعلي بدل الترتيب الأبجدي (يتطلب تحويل `Environment::values` من `unordered_map` إلى بنية تحافظ على الترتيب).
+- واجهة داخل التطبيق لتصفّح/حذف/تصدير محتويات `rin_installed/` مباشرة (حالياً تُدار فقط عبر كود Rin أو يدوياً على الجهاز).
