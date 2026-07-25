@@ -58,6 +58,15 @@ struct Value {
 // مقارنة تركيبية (structural) بين قيمتين، تُستخدم في == != وفهرسة القواميس بالمفتاح.
 bool valuesEqual(const Value& a, const Value& b);
 
+// نقطة API واحدة مُسجَّلة داخل @container.api عبر عبارة route؛ يُستخدَم لمطابقة استدعاءات call()/callApi()
+// بأسلوب "API حقيقي قابل للاختبار" (mock/stub) دون الحاجة لاتصال شبكة فعلي.
+struct ApiRoute {
+    std::string method;
+    std::string path;
+    double status = 200;
+    Value body;
+};
+
 struct Environment : std::enable_shared_from_this<Environment> {
     std::unordered_map<std::string, Value> values;
     EnvPtr parent;
@@ -98,8 +107,11 @@ private:
     std::vector<std::string> groupStack;                      // المجموعة الحالية المفتوحة (لتسجيل الأعضاء أثناء التنفيذ)
     std::unordered_map<std::string, std::string> translations; // lang -> text (آخر ترجمة مسجّلة لكل لغة)
     std::unordered_set<std::string> installedNames;          // ما تم "تثبيته" عبر installation
-    std::vector<std::string> containerStack;                 // الحاوية الحالية (لأجل link/tying/merge/save)
+    std::vector<std::string> containerStack;                 // مفتاح الحاوية الحالية (لأجل link/tying/merge/save/route/call)
     std::string currentFilePath;                              // آخر مسار مُعرَّف عبر file
+    std::unordered_map<std::string, std::vector<ApiRoute>> apiRoutes; // مفتاح container.api -> نقاطها المسجَّلة عبر route
+
+    Value performApiCall(const std::string& containerKey, const std::string& method, const std::string& path, int line);
 
     // المكتبة القياسية (stdlib): دوال رياضية، معالجة نصوص، مصفوفات وقواميس.
     using NativeFn = std::function<Value(std::vector<Value>&, int)>;
