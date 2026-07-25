@@ -75,6 +75,7 @@ class PipelineRunnerActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_pipeline_runner)
+        RinEngine.init(applicationContext)
 
         txtContainerName = findViewById(R.id.txtPipelineContainerName)
         txtCode = findViewById(R.id.txtPipelineCode)
