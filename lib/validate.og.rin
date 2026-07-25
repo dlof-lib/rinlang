@@ -1,0 +1,87 @@
+// ============================================================================
+//  lib/validate.og.rin — دوال تحقّق (validation) شائعة الاستخدام
+//  ملاحظة: لغة Rin لا تملك try/catch، لذا كل دالة هنا "آمنة" (لا ترمي أخطاء) وتُعيد true/false دائماً.
+//  استيراد:
+//    @import "lib/validate.og.rin";
+//    @import "lib/validate.og.rin" as validate;
+// ============================================================================
+
+// هل القيمة فارغة (nil, أو نص فارغ/مسافات فقط, أو مصفوفة/قاموس بلا عناصر)؟
+fun isEmpty(v) {
+    if (v == nil) { return true; }
+    if (v == "") { return true; }
+    return false;
+}
+
+// هل النص فارغ أو مسافات فقط؟
+fun isBlankStr(s) {
+    return trim(s) == "";
+}
+
+// هل s يمثّل رقماً صالحاً بالكامل (يقبل علامة سالبة في البداية وفاصلة عشرية واحدة)؟
+fun isNumeric(s) {
+    if (len(s) == 0) { return false; }
+    let digits = "0123456789";
+    let i = 0;
+    let dotSeen = false;
+    let digitSeen = false;
+    while (i < len(s)) {
+        let c = charAt(s, i);
+        if (c == "-" and i == 0) {
+            // إشارة سالبة مسموحة فقط في أول النص
+        } else if (c == "." and !dotSeen) {
+            dotSeen = true;
+        } else if (contains(digits, c)) {
+            digitSeen = true;
+        } else {
+            return false;
+        }
+        i = i + 1;
+    }
+    return digitSeen;
+}
+
+// فحص بسيط وعملي لصيغة بريد إلكتروني (وليس تحققاً كاملاً وفق معيار RFC)
+fun isEmail(s) {
+    if (isBlankStr(s)) { return false; }
+    if (!contains(s, "@")) { return false; }
+    if (!contains(s, ".")) { return false; }
+    let atIndex = indexOf(s, "@");
+    if (atIndex <= 0) { return false; }
+    if (atIndex == len(s) - 1) { return false; }
+    let afterAt = substr(s, atIndex + 1);
+    if (!contains(afterAt, ".")) { return false; }
+    return true;
+}
+
+// هل طول s بين min و max ضمناً؟
+fun lengthBetween(s, minLen, maxLen) {
+    return len(s) >= minLen and len(s) <= maxLen;
+}
+
+// هل x رقم يقع بين lo و hi ضمناً؟
+fun isInRange(x, lo, hi) {
+    return x >= lo and x <= hi;
+}
+
+// هل s يحتوي حرفاً واحداً على الأقل من كل نوع: حرف، رقم؟ (فحص أساسي لقوة كلمة مرور بلا رموز خاصة)
+fun hasLetterAndDigit(s) {
+    let letters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    let digits = "0123456789";
+    let hasLetter = false;
+    let hasDigit = false;
+    let i = 0;
+    while (i < len(s)) {
+        let c = charAt(s, i);
+        if (contains(letters, c)) { hasLetter = true; }
+        if (contains(digits, c)) { hasDigit = true; }
+        i = i + 1;
+    }
+    return hasLetter and hasDigit;
+}
+
+// يتحقق من كلمة مرور بحد أدنى للطول وشرط وجود حرف ورقم معاً
+fun isStrongPassword(s, minLen) {
+    if (len(s) < minLen) { return false; }
+    return hasLetterAndDigit(s);
+}
