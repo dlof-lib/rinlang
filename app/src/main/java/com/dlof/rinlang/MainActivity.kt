@@ -61,6 +61,7 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+        RinEngine.init(applicationContext) // يفعّل save/installation/file الحقيقية على تخزين التطبيق الخاص
 
         editCode = findViewById(R.id.editCode)
         txtLineNumbers = findViewById(R.id.txtLineNumbers)
