@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="rin_background">#1E1E1E</color>
+    <color name="rin_toolbar">#2D2D30</color>
+    <color name="rin_on_toolbar">#FFFFFF</color>
+    <color name="rin_accent">#6200EE</color>
+    <color name="rin_editor_bg">#1E1E1E</color>
+    <color name="rin_editor_text">#D4D4D4</color>
+    <color name="rin_editor_hint">#6A6A6A</color>
+    <color name="rin_divider">#3C3C3C</color>
+    <color name="rin_console_header">#252526</color>
+    <color name="rin_console_bg">#0C0C0C</color>
+    <color name="rin_console_text">#4EC9B0</color>
+
+    <!-- تلوين الصيغة النحوية (syntax highlighting) في المحرر -->
+    <color name="syntax_keyword">#569CD6</color>
+    <color name="syntax_container_keyword">#4EC9B0</color>
+    <color name="syntax_string">#CE9178</color>
+    <color name="syntax_number">#B5CEA8</color>
+    <color name="syntax_comment">#6A9955</color>
+    <color name="syntax_builtin">#DCDCAA</color>
+    <color name="syntax_tag">#D7BA7D</color>
+</resources>
