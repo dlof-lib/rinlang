@@ -1,4 +1,5 @@
 #include "rin_parser.h"
+#include <algorithm>
 
 namespace rin {
 
@@ -51,6 +52,9 @@ StmtPtr Parser::declaration() {
     if (match({TokenType::INSTALLATION})) return installationStatement(false);
     if (match({TokenType::SAVE})) return saveStatement(false);
     if (match({TokenType::FILE_KW})) return fileStatement();
+    // 'route' كلمة سياقية غير محجوزة عالمياً: تُعامَل كعبارة route فقط عند ظهورها أول عبارة،
+    // وإلا فهي مجرّد معرّف (IDENT) عادي كأي اسم متغير آخر.
+    if (check(TokenType::IDENT) && peek().lexeme == "route") { advance(); return routeStatement(); }
 
     return statement();
 }
@@ -164,13 +168,23 @@ std::string Parser::readTagKeyword() {
         consume(TokenType::DOT, "Expected '.' after 'Containers'");
         consume(TokenType::GROUP, "Expected 'Group' after 'Containers.'");
         tag = "Containers.Group";
-    } else if (first.type == TokenType::CONTAINER && check(TokenType::DOT) && checkNext(TokenType::PIPE_KW)) {
-        // container.pipe -> خط أنابيب بيانات/إحصاء (اختياري بعد 'container')
-        // ملاحظة: لا نستهلك '.' إلا إذا كانت متبوعة مباشرة بـ 'pipe'، وإلا فقد تكون
-        // في الحقيقة بداية وسم إغلاق آخر مجاور مثل '.end/container' تلاه '.end/Containers.Group'
-        advance(); // consume '.'
-        advance(); // consume 'pipe'
-        tag = "container.pipe";
+    } else if (first.type == TokenType::CONTAINER && check(TokenType::DOT)) {
+        // بعد 'container.' قد تأتي 'pipe' (كلمة محجوزة عالمياً تاريخياً) أو إحدى الكلمات السياقية
+        // غير المحجوزة: data / api / import (تُقرأ كمعرّف IDENT عادي، ولا تتعارض مع متغيرات
+        // المستخدم في أي مكان آخر من البرنامج، تماماً كما تُقرأ 'to'/'with' في link/tying/merge).
+        bool nextIsPipe = checkNext(TokenType::PIPE_KW);
+        bool nextIsContextualWord = false;
+        if (!nextIsPipe && current + 1 < tokens.size() && tokens[current + 1].type == TokenType::IDENT) {
+            const std::string& w = tokens[current + 1].lexeme;
+            nextIsContextualWord = (w == "data" || w == "api" || w == "import");
+        }
+        // لا نستهلك '.' إلا إذا كانت متبوعة مباشرة بإحدى هذه الكلمات، وإلا فقد تكون في الحقيقة
+        // بداية وسم إغلاق آخر مجاور مثل '.end/container' تلاه '.end/Containers.Group'
+        if (nextIsPipe || nextIsContextualWord) {
+            advance(); // consume '.'
+            Token sub = advance(); // consume 'pipe' / 'data' / 'api' / 'import'
+            tag = "container." + sub.lexeme;
+        }
     }
     return tag;
 }
@@ -216,19 +230,29 @@ StmtPtr Parser::textDeclaration() {
 StmtPtr Parser::atBlock() {
     Token atTok = previous(); // '@'
     std::string tag = readTagKeyword();
-    if (tag != "container" && tag != "container.pipe" && tag != "Containers.Group" && tag != "Volume") {
-        throw RinError("Unsupported block '@" + tag + "'; expected container, container.pipe, Containers.Group, or Volume",
-                        atTok.line);
+    static const std::vector<std::string> validTags = {
+        "container", "container.pipe", "container.data", "container.api", "container.import",
+        "Containers.Group", "Volume"
+    };
+    if (std::find(validTags.begin(), validTags.end(), tag) == validTags.end()) {
+        throw RinError("Unsupported block '@" + tag + "'; expected container, container.pipe, container.data, "
+                        "container.api, container.import, Containers.Group, or Volume", atTok.line);
     }
     std::string name = readOptionalName();
     std::vector<StmtPtr> body;
     while (!checkClosingTag() && !isAtEnd()) body.push_back(declaration());
     consumeEndTag(tag);
 
-    if (tag == "container" || tag == "container.pipe") {
+    if (tag == "container" || tag == "container.pipe" || tag == "container.data" ||
+        tag == "container.api" || tag == "container.import") {
+        if (tag == "container.data") validateDataContainerBody(body);
         auto s = std::make_shared<ContainerStmt>();
         s->name = name; s->body = body; s->line = atTok.line;
-        s->isPipe = (tag == "container.pipe");
+        if (tag == "container.pipe") s->kind = ContainerKind::PIPE;
+        else if (tag == "container.data") s->kind = ContainerKind::DATA;
+        else if (tag == "container.api") s->kind = ContainerKind::API;
+        else if (tag == "container.import") s->kind = ContainerKind::IMPORT;
+        else s->kind = ContainerKind::PLAIN;
         return s;
     }
     if (tag == "Containers.Group") {
@@ -239,6 +263,24 @@ StmtPtr Parser::atBlock() {
     auto s = std::make_shared<VolumeStmt>();
     s->name = name; s->body = body; s->line = atTok.line;
     return s;
+}
+
+// container.data يجب أن تبقى "بيانات نقية": بلا تعريف دوال وبلا حاويات/مجموعات/أحجام متداخلة،
+// وبلا route (المخصصة لـ container.api فقط) — ما يضمن أن أي حاوية بيانات تبقى قابلة للتسلسل
+// (serializable) بسهولة ولا تحمل منطقاً إجرائياً مخفياً بداخلها.
+void Parser::validateDataContainerBody(const std::vector<StmtPtr>& body) {
+    for (auto& st : body) {
+        if (std::dynamic_pointer_cast<FunctionStmt>(st)) {
+            throw RinError("container.data لا يسمح بتعريف دوال (fun) بداخله؛ استخدم container أو container.pipe لذلك", st->line);
+        }
+        if (std::dynamic_pointer_cast<ContainerStmt>(st) || std::dynamic_pointer_cast<ContainerGroupStmt>(st) ||
+            std::dynamic_pointer_cast<VolumeStmt>(st)) {
+            throw RinError("container.data لا يسمح بحاويات/مجموعات/أحجام متداخلة بداخله", st->line);
+        }
+        if (std::dynamic_pointer_cast<RouteStmt>(st)) {
+            throw RinError("عبارة 'route' مخصصة لـ container.api فقط، ولا يمكن استخدامها داخل container.data", st->line);
+        }
+    }
 }
 
 StmtPtr Parser::sectionBlock() {
@@ -353,6 +395,26 @@ StmtPtr Parser::fileStatement() {
     consume(TokenType::SEMICOLON, "Expected ';' after file statement");
     auto s = std::make_shared<FileStmt>();
     s->path = pathExpr; s->line = tok.line;
+    return s;
+}
+
+StmtPtr Parser::routeStatement() {
+    Token tok = previous();
+    auto attr = [&](const std::string& expected) -> ExprPtr {
+        Token key = consume(TokenType::IDENT, "Expected '" + expected + "' attribute in route statement");
+        if (key.lexeme != expected) {
+            throw RinError("Expected '" + expected + "' attribute in route statement", key.line);
+        }
+        consume(TokenType::EQUAL, "Expected '=' after '" + expected + "'");
+        return expression();
+    };
+    ExprPtr method = attr("method");
+    ExprPtr path = attr("path");
+    ExprPtr status = attr("status");
+    ExprPtr body = attr("body");
+    consume(TokenType::SEMICOLON, "Expected ';' after route statement");
+    auto s = std::make_shared<RouteStmt>();
+    s->method = method; s->path = path; s->status = status; s->body = body; s->line = tok.line;
     return s;
 }
 
