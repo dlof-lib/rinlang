@@ -43,6 +43,7 @@ private:
 
     StmtPtr textDeclaration();
     StmtPtr atBlock();                 // @container / @container.pipe / @container.data / @container.api / @container.import / @Containers.Group / @Volume
+    StmtPtr importStatement();         // @import "path"; / @import "path" as alias;   (يُستدعى بعد استهلاك '@' و'import')
     void validateDataContainerBody(const std::vector<StmtPtr>& body); // يمنع تعريف الدوال أو الحاويات المتداخلة داخل container.data
     StmtPtr sectionBlock();
     StmtPtr translationsBlock();
