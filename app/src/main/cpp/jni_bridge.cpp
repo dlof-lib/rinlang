@@ -7,11 +7,22 @@
 #include "rin_parser.h"
 #include "rin_interpreter.h"
 
+// runSourceNative(source, baseDir) -> baseDir هو جذر حقيقي على القرص (عادة filesDir الخاص بالتطبيق
+// على أندرويد) تُبنى فوقه كل عمليات save/file/installation/writeFile/readFile الحقيقية. RinEngine.kt
+// يمرّر هذا الباراميتر تلقائياً (فارغ إن لم يُستدعَ RinEngine.init(context) بعد)، لذا لا حاجة لتغيير
+// أي كود Kotlin قديم يستدعي RinEngine.runSource(source) بباراميتر واحد.
 extern "C" JNIEXPORT jstring JNICALL
-Java_com_dlof_rinlang_RinEngine_runSource(JNIEnv* env, jobject /* this */, jstring sourceJStr) {
+Java_com_dlof_rinlang_RinEngine_runSourceNative(JNIEnv* env, jobject /* this */, jstring sourceJStr, jstring baseDirJStr) {
     const char* cSource = env->GetStringUTFChars(sourceJStr, nullptr);
     std::string source(cSource ? cSource : "");
     env->ReleaseStringUTFChars(sourceJStr, cSource);
+
+    std::string baseDir;
+    if (baseDirJStr != nullptr) {
+        const char* cBaseDir = env->GetStringUTFChars(baseDirJStr, nullptr);
+        baseDir = cBaseDir ? cBaseDir : "";
+        env->ReleaseStringUTFChars(baseDirJStr, cBaseDir);
+    }
 
     std::string result;
     try {
@@ -20,6 +31,9 @@ Java_com_dlof_rinlang_RinEngine_runSource(JNIEnv* env, jobject /* this */, jstri
         rin::Parser parser(tokens);
         auto statements = parser.parse();
         rin::Interpreter interpreter;
+        if (!baseDir.empty()) {
+            interpreter.setBasePath(baseDir);
+        }
         result = interpreter.run(statements);
         if (result.empty()) {
             result = "(no output)";
@@ -37,5 +51,5 @@ Java_com_dlof_rinlang_RinEngine_runSource(JNIEnv* env, jobject /* this */, jstri
 
 extern "C" JNIEXPORT jstring JNICALL
 Java_com_dlof_rinlang_RinEngine_engineVersion(JNIEnv* env, jobject /* this */) {
-    return env->NewStringUTF("Rin Engine 1.0 (C++17)");
+    return env->NewStringUTF("Rin Engine 1.1 (C++17) — save/file/installation حقيقية على القرص");
 }
