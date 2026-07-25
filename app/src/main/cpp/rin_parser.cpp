@@ -41,6 +41,15 @@ StmtPtr Parser::declaration() {
 
     // مفاهيم لغة الحاويات/البيانات
     if (match({TokenType::TEXT})) return textDeclaration();
+    // '@import "..."' هو عبارة مستقلة وأبسط من كتل '@container...': نتحقق من الشكل قبل تفويض
+    // الأمر لـ atBlock() (الذي يتعامل حصراً مع container/Containers.Group/Volume). 'import' هنا
+    // كلمة سياقية غير محجوزة (تُقرأ IDENT عادي)، فنميّزها بالنظر خطوتين للأمام: '@' ثم IDENT("import").
+    if (check(TokenType::AT) && checkNext(TokenType::IDENT) &&
+        current + 1 < tokens.size() && tokens[current + 1].lexeme == "import") {
+        advance(); // '@'
+        advance(); // 'import'
+        return importStatement();
+    }
     if (match({TokenType::AT})) return atBlock();
     if (match({TokenType::SECTION})) return sectionBlock();
     if (match({TokenType::TRANSLATIONS})) return translationsBlock();
@@ -262,6 +271,32 @@ StmtPtr Parser::atBlock() {
     }
     auto s = std::make_shared<VolumeStmt>();
     s->name = name; s->body = body; s->line = atTok.line;
+    return s;
+}
+
+// @import "lib/data.og.rin";          -> يستدعيها declaration() بعد استهلاك '@' و'import' مسبقاً
+// @import "lib/data.og.rin" as data;  -> 'as' كلمة سياقية غير محجوزة أيضاً، تُقرأ يدوياً هنا فقط.
+StmtPtr Parser::importStatement() {
+    Token kw = previous(); // 'import' (للحصول على رقم السطر)
+    Token pathTok = consume(TokenType::STRING,
+        "Expected a string path after '@import', e.g. @import \"lib/data.og.rin\";");
+    auto pathExpr = std::make_shared<LiteralExpr>();
+    pathExpr->kind = LiteralExpr::Kind::STRING;
+    pathExpr->str = pathTok.lexeme;
+    pathExpr->line = pathTok.line;
+
+    std::string alias;
+    if (check(TokenType::IDENT) && peek().lexeme == "as") {
+        advance(); // 'as'
+        Token aliasTok = consume(TokenType::IDENT, "Expected an alias name after 'as'");
+        alias = aliasTok.lexeme;
+    }
+    consume(TokenType::SEMICOLON, "Expected ';' after @import statement");
+
+    auto s = std::make_shared<ImportStmt>();
+    s->path = pathExpr;
+    s->alias = alias;
+    s->line = kw.line;
     return s;
 }
 
