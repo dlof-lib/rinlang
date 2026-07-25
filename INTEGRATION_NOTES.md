@@ -20,7 +20,14 @@
 - `MainActivity.kt`: يقبل الآن `EXTRA_PROJECT_NAME`/`EXTRA_FILE_NAME` (يفتح ملف مشروع مباشرة، ويحفظ التغييرات فيه بدل حوار SAF)، وأضفت زر تنقّل `btnProjects` (يحتاج إضافته لـ `activity_main.xml` — انظر أدناه).
 - `RinEngine.kt`: زيادة تحميل زائد (overload) لـ `init(context, projectBasePath)` لتخصيص جذر save/installation لكل مشروع على حدة.
 
-## خطوات الدمج المطلوبة منك يدوياً
+## تصحيح خطأ بناء فعلي (من لوق GitHub Actions)
+
+بناءً على لوق بناء فعلي أرسلته (فشل `compileDebugKotlin`)، كانت هناك مشكلتان حقيقيتان في التحديث السابق، وتم تصحيحهما الآن:
+
+1. **نصوص عامة ناقصة**: `R.string.create` و`R.string.cancel` و`R.string.rename` و`R.string.delete` كانت مُستخدَمة في `ProjectsActivity.kt`/`FilesActivity.kt` لكن غير مُعرَّفة في `strings_projects_files.xml` → أُضيفت الآن.
+2. **`R.id.btnProjects` غير موجود**: لأن الزر لم يُضَف بعد يدوياً إلى `activity_main.xml` (خطوة موثّقة أعلاه لكن لم تُنفَّذ بعد). أضفت `res/values/ids.xml` يُعرِّف هذا الـ id بشكل مستقل عن أي layout، وجعلت البحث عنه في `MainActivity.kt` بصيغة nullable (`Button?`) بحيث **يُبنى ويعمل التطبيق حتى قبل** إضافة الزر فعلياً للـ layout — بمجرد إضافته لاحقاً بنفس المُعرِّف `btnProjects` سيعمل تلقائياً دون أي تعديل كود إضافي.
+
+
 
 1. **`AndroidManifest.xml`** (في مستودعك الحقيقي): أضف هاتين النشاطين:
    ```xml
