@@ -93,6 +93,9 @@ private:
 
     // حالة لغة الحاويات/البيانات (container / Containers.Group / Volume / link / tying / merge ...)
     std::unordered_map<std::string, EnvPtr> containers;      // اسم الحاوية -> بيئة متغيراتها
+    std::unordered_map<std::string, EnvPtr> groupEnvs;       // اسم المجموعة -> بيئتها الخاصة (متغيرات مُعلَنة مباشرة داخلها)
+    std::unordered_map<std::string, std::vector<std::string>> groupMembers; // اسم المجموعة -> أسماء الحاويات/المجموعات الفرعية المباشرة بداخلها (بالترتيب)
+    std::vector<std::string> groupStack;                      // المجموعة الحالية المفتوحة (لتسجيل الأعضاء أثناء التنفيذ)
     std::unordered_map<std::string, std::string> translations; // lang -> text (آخر ترجمة مسجّلة لكل لغة)
     std::unordered_set<std::string> installedNames;          // ما تم "تثبيته" عبر installation
     std::vector<std::string> containerStack;                 // الحاوية الحالية (لأجل link/tying/merge/save)
@@ -107,6 +110,10 @@ private:
     void executeBlock(const std::vector<StmtPtr>& statements, EnvPtr env);
     Value evaluate(const ExprPtr& expr, EnvPtr env);
     Value callFunction(const std::shared_ptr<Callable>& fn, std::vector<Value>& args, int line);
+
+    // ينسخ متغيرات هدف tying/merge (حاوية مفردة أو Containers.Group كاملة) داخل بيئة الحاوية الحالية.
+    // يُرجع true إن كان الهدف مجموعة (Containers.Group)، أو false إن كان حاوية مفردة.
+    bool copyTargetIntoCurrentContainer(const std::string& target, int line);
 };
 
 } // namespace rin
