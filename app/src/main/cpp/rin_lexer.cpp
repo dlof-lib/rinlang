@@ -67,7 +67,25 @@ void Lexer::addToken(TokenType type, const std::string& lexeme) {
 void Lexer::scanString() {
     std::string value;
     while (peek() != '"' && !isAtEnd()) {
-        if (peek() == '\n') line++;
+        char c = peek();
+        if (c == '\n') { line++; value += advance(); continue; }
+        // دعم التهريب (escape sequences): \" \\ \n \t \r  -> ضروري لجعل النصوص المحفوظة
+        // فعلياً عبر save/installation (والتي قد تحتوي أقواس تنصيص أو أسطر جديدة) قابلة لإعادة القراءة.
+        if (c == '\\') {
+            advance(); // استهلاك '\'
+            if (isAtEnd()) break;
+            char esc = advance();
+            switch (esc) {
+                case 'n': value += '\n'; break;
+                case 't': value += '\t'; break;
+                case 'r': value += '\r'; break;
+                case '"': value += '"'; break;
+                case '\\': value += '\\'; break;
+                case '\n': line++; break; // backslash قبل سطر جديد: يُتجاهل (متابعة سطر)
+                default: value += esc; break; // تسلسل غير معروف: يُبقي الحرف كما هو حرفياً
+            }
+            continue;
+        }
         value += advance();
     }
     if (isAtEnd()) throw RinError("String not terminated", line);
