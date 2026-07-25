@@ -29,6 +29,7 @@ static const std::unordered_map<std::string, TokenType> keywords = {
     {"save", TokenType::SAVE},
     {"file", TokenType::FILE_KW},
     {"end", TokenType::END},
+    {"pipe", TokenType::PIPE_KW}, // container.pipe -> خط أنابيب بيانات/إحصاء
 };
 
 Lexer::Lexer(std::string source) : src(std::move(source)) {}
@@ -120,6 +121,13 @@ void Lexer::scanToken() {
         case '%': addToken(TokenType::PERCENT); break;
         case '@': addToken(TokenType::AT); break;
         case '.': addToken(TokenType::DOT); break;
+        case '|':
+            if (match('>')) {
+                addToken(TokenType::PIPE);
+            } else {
+                throw RinError("Unexpected character '|': did you mean the pipe operator '|>' ?", line);
+            }
+            break;
         case '/':
             if (match('/')) {
                 while (peek() != '\n' && !isAtEnd()) advance();
