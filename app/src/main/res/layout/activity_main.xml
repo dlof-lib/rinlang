@@ -94,6 +94,18 @@
                 android:layout_weight="1" />
 
             <Button
+                android:id="@+id/btnPipeline"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="6dp"
+                android:text="@string/action_pipeline"
+                android:textAllCaps="false"
+                android:drawableStart="@drawable/ic_pipeline"
+                android:drawablePadding="6dp"
+                android:backgroundTint="@color/pipeline_green"
+                android:textColor="@android:color/white" />
+
+            <Button
                 android:id="@+id/btnRun"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
