@@ -25,6 +25,36 @@
     <string name="action_clear">Clear</string>
     <string name="action_open">Open</string>
     <string name="action_save">Save</string>
+
+    <!-- شريط القوائم العلوي المضغوط (File / Edit / View / Run) — قوائم منسدلة بأسلوب
+         تطبيقات الكمبيوتر، لكن مصمَّمة لمس على الموبايل بدل شريط أزرار طويل -->
+    <string name="menu_file">File</string>
+    <string name="menu_edit">Edit</string>
+    <string name="menu_view">View</string>
+    <string name="menu_run">Run</string>
+    <string name="menu_file_new">New file</string>
+    <string name="menu_file_open">Open…</string>
+    <string name="menu_file_save">Save</string>
+    <string name="menu_file_projects">Projects</string>
+    <string name="menu_edit_undo">Undo</string>
+    <string name="menu_edit_redo">Redo</string>
+    <string name="menu_edit_find">Find &amp; Replace</string>
+    <string name="menu_edit_select_all">Select all</string>
+    <string name="menu_edit_clear_all">Clear editor</string>
+    <string name="menu_view_zoom_in">Increase font size</string>
+    <string name="menu_view_zoom_out">Decrease font size</string>
+    <string name="menu_view_toggle_lines">Toggle line numbers</string>
+    <string name="menu_view_clear_console">Clear run history</string>
+    <string name="menu_run_run">Run program</string>
+    <string name="menu_run_pipeline">Open Pipeline view</string>
+    <string name="new_file_name">untitled.rin</string>
+    <string name="new_file_toast">New file</string>
+    <string name="desc_menu_file">File menu</string>
+    <string name="desc_menu_edit">Edit menu</string>
+    <string name="desc_menu_view">View menu</string>
+    <string name="desc_run_quick">Run</string>
+    <string name="desc_pipeline_quick">Pipeline</string>
+    <string name="desc_projects_quick">Projects</string>
     <string name="editor_hint">Write Rin code here…</string>
     <string name="file_unsaved">untitled.rin</string>
     <string name="file_open_error">Could not open file</string>
