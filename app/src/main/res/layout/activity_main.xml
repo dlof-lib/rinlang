@@ -58,6 +58,8 @@
                 android:textAllCaps="false"
                 android:textSize="13sp"
                 android:layout_marginEnd="4dp"
+                android:drawableStart="@drawable/ic_open"
+                android:drawablePadding="6dp"
                 style="?android:attr/borderlessButtonStyle"
                 android:textColor="@color/rin_on_toolbar" />
 
@@ -69,6 +71,8 @@
                 android:textAllCaps="false"
                 android:textSize="13sp"
                 android:layout_marginEnd="4dp"
+                android:drawableStart="@drawable/ic_save"
+                android:drawablePadding="6dp"
                 style="?android:attr/borderlessButtonStyle"
                 android:textColor="@color/rin_on_toolbar" />
 
@@ -79,6 +83,8 @@
                 android:text="@string/action_clear"
                 android:textAllCaps="false"
                 android:textSize="13sp"
+                android:drawableStart="@drawable/ic_clear"
+                android:drawablePadding="6dp"
                 style="?android:attr/borderlessButtonStyle"
                 android:textColor="@color/rin_on_toolbar" />
 
@@ -93,6 +99,8 @@
                 android:layout_height="wrap_content"
                 android:text="@string/action_run"
                 android:textAllCaps="false"
+                android:drawableStart="@drawable/ic_run"
+                android:drawablePadding="6dp"
                 android:backgroundTint="@color/rin_accent"
                 android:textColor="@android:color/white" />
         </LinearLayout>
@@ -113,6 +121,8 @@
                 android:textAllCaps="false"
                 android:textSize="13sp"
                 android:layout_marginEnd="4dp"
+                android:drawableStart="@drawable/ic_undo"
+                android:drawablePadding="6dp"
                 style="?android:attr/borderlessButtonStyle"
                 android:textColor="@color/rin_on_toolbar" />
 
@@ -124,6 +134,8 @@
                 android:textAllCaps="false"
                 android:textSize="13sp"
                 android:layout_marginEnd="4dp"
+                android:drawableStart="@drawable/ic_redo"
+                android:drawablePadding="6dp"
                 style="?android:attr/borderlessButtonStyle"
                 android:textColor="@color/rin_on_toolbar" />
 
@@ -134,6 +146,8 @@
                 android:text="@string/action_find"
                 android:textAllCaps="false"
                 android:textSize="13sp"
+                android:drawableStart="@drawable/ic_find"
+                android:drawablePadding="6dp"
                 style="?android:attr/borderlessButtonStyle"
                 android:textColor="@color/rin_on_toolbar" />
 
@@ -214,15 +228,14 @@
                 style="?android:attr/borderlessButtonStyle"
                 android:textColor="@color/rin_on_toolbar" />
 
-            <Button
+            <ImageButton
                 android:id="@+id/btnFindClose"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="✕"
-                android:textAllCaps="false"
-                android:textSize="12sp"
-                style="?android:attr/borderlessButtonStyle"
-                android:textColor="@color/rin_on_toolbar" />
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:padding="7dp"
+                android:src="@drawable/ic_close"
+                android:contentDescription="@string/find_close_desc"
+                android:background="?android:attr/selectableItemBackgroundBorderless" />
         </LinearLayout>
     </LinearLayout>
 
@@ -314,6 +327,8 @@
             android:text="@string/action_clear_console"
             android:textAllCaps="false"
             android:textSize="11sp"
+            android:drawableStart="@drawable/ic_delete"
+            android:drawablePadding="5dp"
             style="?android:attr/borderlessButtonStyle"
             android:textColor="@color/rin_editor_hint" />
     </LinearLayout>
