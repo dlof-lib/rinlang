@@ -130,6 +130,25 @@ static void expectArgs(const std::string& fn, std::vector<Value>& args, size_t c
     }
 }
 
+// يحوّل قيمة من نوع array إلى مصفوفة أرقام C++ لاستخدامها في الدوال الإحصائية.
+static std::vector<double> asNumberArray(const Value& v, const std::string& fn, int line) {
+    if (v.type != Value::Type::ARRAY) {
+        throw RinError("'" + fn + "' expects an array of numbers but got " + v.typeName(), line);
+    }
+    std::vector<double> out;
+    out.reserve(v.array->size());
+    for (auto& item : *v.array) {
+        if (item.type != Value::Type::NUMBER) {
+            throw RinError("'" + fn + "' expects an array of numbers, found a " + item.typeName() + " element", line);
+        }
+        out.push_back(item.number);
+    }
+    if (out.empty()) {
+        throw RinError("'" + fn + "' لا يقبل مصفوفة فارغة (empty array)", line);
+    }
+    return out;
+}
+
 void Interpreter::registerNatives() {
     // ---- رياضيات (math) ----
     natives["abs"] = [](std::vector<Value>& a, int line) {
@@ -307,6 +326,106 @@ void Interpreter::registerNatives() {
         }
     };
 
+    // ---- إحصاء (statistics) - مصمّمة للعمل مع خطوط الأنابيب |> و container.pipe ----
+    // مرحلة "تجميع" (Aggregation): تُلخّص مصفوفة أرقام إلى قيمة واحدة.
+    natives["sum"] = [](std::vector<Value>& a, int line) {
+        expectArgs("sum", a, 1, line);
+        auto nums = asNumberArray(a[0], "sum", line);
+        double total = 0.0;
+        for (double n : nums) total += n;
+        return Value::num(total);
+    };
+    natives["mean"] = [](std::vector<Value>& a, int line) {
+        expectArgs("mean", a, 1, line);
+        auto nums = asNumberArray(a[0], "mean", line);
+        double total = 0.0;
+        for (double n : nums) total += n;
+        return Value::num(total / static_cast<double>(nums.size()));
+    };
+    natives["median"] = [](std::vector<Value>& a, int line) {
+        expectArgs("median", a, 1, line);
+        auto nums = asNumberArray(a[0], "median", line);
+        std::sort(nums.begin(), nums.end());
+        size_t n = nums.size();
+        if (n % 2 == 1) return Value::num(nums[n / 2]);
+        return Value::num((nums[n / 2 - 1] + nums[n / 2]) / 2.0);
+    };
+    natives["variance"] = [](std::vector<Value>& a, int line) {
+        expectArgs("variance", a, 1, line);
+        auto nums = asNumberArray(a[0], "variance", line);
+        double m = 0.0;
+        for (double n : nums) m += n;
+        m /= static_cast<double>(nums.size());
+        double sq = 0.0;
+        for (double n : nums) sq += (n - m) * (n - m);
+        return Value::num(sq / static_cast<double>(nums.size()));
+    };
+    natives["stddev"] = [](std::vector<Value>& a, int line) {
+        expectArgs("stddev", a, 1, line);
+        auto nums = asNumberArray(a[0], "stddev", line);
+        double m = 0.0;
+        for (double n : nums) m += n;
+        m /= static_cast<double>(nums.size());
+        double sq = 0.0;
+        for (double n : nums) sq += (n - m) * (n - m);
+        return Value::num(std::sqrt(sq / static_cast<double>(nums.size())));
+    };
+    natives["mode"] = [](std::vector<Value>& a, int line) {
+        expectArgs("mode", a, 1, line);
+        auto nums = asNumberArray(a[0], "mode", line);
+        double best = nums[0];
+        int bestCount = 0;
+        for (double candidate : nums) {
+            int count = 0;
+            for (double n : nums) if (n == candidate) count++;
+            if (count > bestCount) { bestCount = count; best = candidate; }
+        }
+        return Value::num(best);
+    };
+    natives["minOf"] = [](std::vector<Value>& a, int line) {
+        expectArgs("minOf", a, 1, line);
+        auto nums = asNumberArray(a[0], "minOf", line);
+        return Value::num(*std::min_element(nums.begin(), nums.end()));
+    };
+    natives["maxOf"] = [](std::vector<Value>& a, int line) {
+        expectArgs("maxOf", a, 1, line);
+        auto nums = asNumberArray(a[0], "maxOf", line);
+        return Value::num(*std::max_element(nums.begin(), nums.end()));
+    };
+
+    // مرحلة "تحويل" (Transformation): تُنتج مصفوفة جديدة بنفس الحجم.
+    natives["normalize"] = [](std::vector<Value>& a, int line) {
+        expectArgs("normalize", a, 1, line);
+        auto nums = asNumberArray(a[0], "normalize", line);
+        double lo = *std::min_element(nums.begin(), nums.end());
+        double hi = *std::max_element(nums.begin(), nums.end());
+        auto result = std::make_shared<ArrayData>();
+        result->reserve(nums.size());
+        for (double n : nums) {
+            double normalized = (hi == lo) ? 0.0 : (n - lo) / (hi - lo);
+            result->push_back(Value::num(normalized));
+        }
+        return Value::makeArray(result);
+    };
+    natives["scale"] = [](std::vector<Value>& a, int line) {
+        expectArgs("scale", a, 2, line);
+        auto nums = asNumberArray(a[0], "scale", line);
+        double factor = asNumber(a[1], "scale", line);
+        auto result = std::make_shared<ArrayData>();
+        result->reserve(nums.size());
+        for (double n : nums) result->push_back(Value::num(n * factor));
+        return Value::makeArray(result);
+    };
+    natives["shift"] = [](std::vector<Value>& a, int line) {
+        expectArgs("shift", a, 2, line);
+        auto nums = asNumberArray(a[0], "shift", line);
+        double delta = asNumber(a[1], "shift", line);
+        auto result = std::make_shared<ArrayData>();
+        result->reserve(nums.size());
+        for (double n : nums) result->push_back(Value::num(n + delta));
+        return Value::makeArray(result);
+    };
+
     // ---- مصفوفات وقواميس (arrays & maps) ----
     natives["push"] = [](std::vector<Value>& a, int line) -> Value {
         expectArgs("push", a, 2, line);
@@ -458,12 +577,14 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
 
     if (auto s = std::dynamic_pointer_cast<ContainerStmt>(stmt)) {
         auto containerEnv = std::make_shared<Environment>(env);
-        output << "📦 container" << (s->name.empty() ? "" : (" = " + s->name)) << "\n";
+        std::string tag = s->isPipe ? "container.pipe" : "container";
+        std::string icon = s->isPipe ? "🧵" : "📦";
+        output << icon << " " << tag << (s->name.empty() ? "" : (" = " + s->name)) << "\n";
         containers[s->name.empty() ? ("#" + std::to_string(containers.size())) : s->name] = containerEnv;
         containerStack.push_back(s->name);
         executeBlock(s->body, containerEnv);
         containerStack.pop_back();
-        output << "✅ .end/container" << (s->name.empty() ? "" : (" (" + s->name + ")")) << "\n";
+        output << "✅ .end/" << tag << (s->name.empty() ? "" : (" (" + s->name + ")")) << "\n";
         return;
     }
 
