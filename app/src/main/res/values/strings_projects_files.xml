@@ -6,6 +6,12 @@
   يدمج كل ملفات values/*.xml تلقائياً طالما لا تتكرر أسماء العناصر).
 -->
 <resources>
+    <!-- أزرار عامة تستخدمها حوارات المشاريع/الملفات (كانت ناقصة وتسبّبت بخطأ بناء فعلي) -->
+    <string name="create">إنشاء</string>
+    <string name="cancel">إلغاء</string>
+    <string name="rename">إعادة تسمية</string>
+    <string name="delete">حذف</string>
+
     <!-- شاشة المشاريع -->
     <string name="new_project_title">مشروع جديد</string>
     <string name="rename_project_title">إعادة تسمية المشروع</string>
