@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  يعرّف مُعرِّفات (ids) تُستخدَم من كود Kotlin قبل أن تُضاف فعلياً إلى layout معيّن.
+  هذا يمنع خطأ "Unresolved reference" وقت الترجمة (كما حدث في بناء GitHub Actions)
+  حتى لو لم يُضَف الزر بعد يدوياً داخل activity_main.xml — إضافته لاحقاً بنفس
+  هذا الـ id يجعله يعمل فوراً دون أي تعديل آخر على الكود.
+-->
+<resources>
+    <item name="btnProjects" type="id"/>
+</resources>
