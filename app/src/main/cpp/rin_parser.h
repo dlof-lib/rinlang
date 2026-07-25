@@ -19,6 +19,7 @@ private:
     const Token& previous() const;
     const Token& advance();
     bool check(TokenType type) const;
+    bool checkNext(TokenType type) const; // ينظر إلى التوكن التالي (current+1) دون استهلاكه
     bool match(std::initializer_list<TokenType> types);
     const Token& consume(TokenType type, const std::string& message);
 
@@ -56,6 +57,7 @@ private:
     // expressions (precedence climbing)
     ExprPtr expression();
     ExprPtr assignment();
+    ExprPtr pipeline();   // a |> f(b, c)  =>  f(a, b, c)  (خط الأنابيب: للتحويل/التجميع الإحصائي)
     ExprPtr logicOr();
     ExprPtr logicAnd();
     ExprPtr equality();
