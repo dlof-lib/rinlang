@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.RinLang" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/rin_accent</item>
+        <item name="colorPrimaryDark">@color/rin_toolbar</item>
+        <item name="colorAccent">@color/rin_accent</item>
+        <item name="android:windowBackground">@color/rin_background</item>
+        <item name="android:statusBarColor">@color/rin_toolbar</item>
+    </style>
+</resources>
