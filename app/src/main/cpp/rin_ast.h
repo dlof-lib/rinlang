@@ -116,7 +116,10 @@ struct TextStmt : Stmt {
 // @container.data=name  <body>  .end/container.data    -> حاوية بيانات نقية (لا دوال ولا حاويات متداخلة)
 // @container.api=name   <body>  .end/container.api     -> حاوية تُعرِّف نقاط API وهمية (route ...) ويمكن استدعاؤها عبر call()
 // @container.import=name  file path="..."; .end/container.import -> يستورد فعليًا محتوى ملف .rin آخر وينفّذه
-enum class ContainerKind { PLAIN, PIPE, DATA, API, IMPORT };
+// @container.table=name  <body>  .end/container.table   -> حاوية جدول (مدمجة داخل container): صفوف row + style اختياري
+// @table=name             <body>  .end/table              -> نفس مفهوم الجدول، لكن بشكل مستقل (بلا بادئة container.)
+//                                                             كلا الشكلين ينتجان نفس ContainerKind::TABLE
+enum class ContainerKind { PLAIN, PIPE, DATA, API, IMPORT, TABLE };
 
 struct ContainerStmt : Stmt {
     std::string name; // قد تكون فارغة إن لم يُحدَّد اسم
@@ -168,16 +171,29 @@ struct MergeStmt : Stmt {
     std::string target;
 };
 
-// installation name; / simplified installation name;
+// installation name; / simplified installation name; / installation name format=zip;
 struct InstallationStmt : Stmt {
     std::string target;
     bool simplified = false;
+    std::string format; // فارغ = الصيغة النصية الافتراضية (.rin) ؛ "zip" = أرشيف zip حقيقي على القرص
 };
 
-// save; / save path="..."; / simplified save path="...";
+// save; / save path="..."; / simplified save path="..."; / save format=png; / save path="..." format=zip;
 struct SaveStmt : Stmt {
     ExprPtr path; // قد تكون فارغة (nullptr)
     bool simplified = false;
+    std::string format; // فارغ = ".rin" نصي افتراضي ؛ "png" (حصراً لـ container.table/table) ؛ "zip"
+};
+
+// row cells=[v1, v2, ...];  -> يُضيف صفاً واحداً إلى الجدول الحالي (داخل container.table أو table فقط)
+struct RowStmt : Stmt {
+    ExprPtr cells; // يُتوقَّع أن يكون تعبير مصفوفة (ArrayExpr) لكن أي تعبير يُقيَّم إلى Value::ARRAY مقبول
+};
+
+// style value="style://<theme>";  -> يضبط نمط عرض الجدول الحالي (داخل container.table أو table فقط)
+// الصيغة تتبع مخطط شبيه بالـ URI: "style://dark" / "style://light" / "style://grid" ...
+struct StyleStmt : Stmt {
+    ExprPtr value;
 };
 
 // file path="...";
