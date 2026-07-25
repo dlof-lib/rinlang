@@ -24,6 +24,7 @@ RinLang/
 │   │   └── res/                      # XML: تخطيطات، ألوان، نصوص، أيقونة
 ├── tools/test_main.cpp               # تشغيل المحرّك خارج أندرويد لأغراض الاختبار
 ├── tools/test_containers.cpp         # اختبار مفاهيم لغة الحاويات (container, Section, link, merge...)
+├── tools/test_groups.cpp             # اختبار Containers.Group المُقوّاة (تتبّع الأعضاء، التداخل، tying/merge على مستوى مجموعة)
 ├── tools/test_pipeline.cpp           # اختبار container.pipe والمُشغّل |> والدوال الإحصائية
 ├── .github/workflows/build-apk.yml   # بناء APK تلقائي عبر GitHub Actions
 ├── build.gradle / settings.gradle / gradle.properties
@@ -134,15 +135,15 @@ g++ -std=c++17 -o rin_stdlib_test \
 |---|---|---|
 | `container` | `@container=name ... .end/container` | حاوية بيانات مستقلة، لها بيئة متغيرات خاصة بها. |
 | `container.pipe` | `@container.pipe=name ... .end/container.pipe` | نفس `container` لكن مخصّصة لخطوط أنابيب البيانات/الإحصاء (انظر القسم التالي). |
-| `Containers.Group` | `@Containers.Group=name ... .end/Containers.Group` | مجموعة تضم عدة حاويات (`@container=...`) معاً. |
+| `Containers.Group` | `@Containers.Group=name ... .end/Containers.Group` | مجموعة تضم عدة حاويات (`@container=...`) و/أو مجموعات فرعية متداخلة، ولها بيئة متغيرات خاصة بها، وتُتبِّع أعضاءها (انظر القسم التالي). |
 | `Volume` | `@Volume=name ... .end/Volume` | مستوى تنظيم أعلى يضمّ مجموعات أو حاويات (كـ"مجلد/جزء"). |
 | `Section` | `Section=name ... .end/Section` | قسم داخلي لتقسيم بيانات الحاوية إلى أجزاء منطقية. |
 | `text` | `text name = "قيمة";` | إعلان قيمة **نصية** (يتحقق المفسّر أن القيمة نص فعلاً). |
 | `print` | `print expr;` | طباعة/عرض أي قيمة أو نص. |
 | `Addition` / `Subtraction` / `Multiplication` / `Equal` | `Addition(a, b)` … | دوال مدمجة بأسمائها الصريحة للعمليات الحسابية والمقارنة، تُستخدم مثل أي نداء دالة. |
-| `link` | `link to=name;` | يربط الحاوية الحالية بحاوية أخرى موجودة (دون نسخ بياناتها). |
-| `tying` | `tying with=name;` | ربط وثيق: ينسخ متغيرات الحاوية الأخرى إلى الحاوية الحالية. |
-| `merge` | `merge with=name;` | دمج كامل لمتغيرات حاوية أخرى داخل الحاوية الحالية. |
+| `link` | `link to=name;` | يربط الحاوية الحالية بحاوية **أو مجموعة (Containers.Group)** أخرى موجودة (دون نسخ بياناتها). |
+| `tying` | `tying with=name;` | ربط وثيق: ينسخ متغيرات حاوية أخرى — **أو كل حاويات مجموعة (Containers.Group) كاملة دفعة واحدة** — إلى الحاوية الحالية. |
+| `merge` | `merge with=name;` | دمج كامل لمتغيرات حاوية أخرى — **أو مجموعة كاملة** — داخل الحاوية الحالية. |
 | `translation` / `Translations` | `Translations translation lang="ar" text="..."; .end/Translations` | كتلة `Translations` تجمّع عدّة أسطر `translation` (لغة + نص) لدعم تعدد اللغات. |
 | `installation` | `installation name;` | "تثبيت"/تسجيل حاوية أو اسم لجعله معروفاً ومتاحاً للمفسّر. |
 | `simplified` | `simplified installation ...;` / `simplified save ...;` | مُعدِّل (modifier) يسبق `installation` أو `save` لطلب نسخة مبسّطة/مصغّرة. |
@@ -217,8 +218,56 @@ g++ -std=c++17 -o rin_container_test \
 - الكلمات المفتاحية لهذه اللغة **حساسة لحالة الأحرف**: `container` (صغيرة) للحاوية نفسها، بينما `Section`، `Volume`، `Translations`، و`Containers.Group` تبدأ بحرف كبير لأنها كتل هيكلية.
 - وسم الإغلاق `.end/الكلمة` يجب أن يطابق نوع الكتلة المفتوحة تماماً (مثلاً `@container=x ... .end/Section` يُعتبر خطأً نحوياً صريحاً).
 - `text` تفرض أن تكون القيمة المُسندة نصية فعلاً، وإلا يرمي المفسّر خطأً واضحاً بدلاً من قبول أي نوع.
-- `link`/`tying`/`merge` تتطلّب أن تكون الحاوية الهدف معرَّفة مسبقاً في البرنامج (تُنفَّذ الحاويات بالترتيب من الأعلى للأسفل).
+- `link`/`tying`/`merge` تتطلّب أن يكون الهدف (حاوية **أو مجموعة Containers.Group**) معرَّفاً مسبقاً في البرنامج (تُنفَّذ الحاويات والمجموعات بالترتيب من الأعلى للأسفل).
 - بما أن هذا محرّك تعليمي (Lexer + Parser + Interpreter) يعمل داخل الذاكرة فقط، فإن `file`/`save`/`installation` لا تكتب فعلياً على نظام الملفات؛ إنما تُسجَّل وتُطبَع كرسائل توضّح ما "كان سيحدث"، وهي نقطة انطلاق جاهزة لربطها لاحقاً بتخزين حقيقي (كما هو مقترح أصلاً في قسم "أفكار للتوسعة").
+
+## Containers.Group بالتفصيل
+
+`Containers.Group` ليست مجرد وسم زخرفي حول عدّة `container` — لها الآن سلوك حقيقي:
+
+- **بيئة متغيرات خاصة بها**: أي `let`/`text` مُعلَن مباشرة داخل المجموعة (خارج أي `container` بداخلها) يبقى داخل نطاقها ولا يتسرّب للخارج، تماماً مثل `container` و`Section`.
+- **تتبُّع الأعضاء تلقائياً**: كل `@container=...` (أو `@Containers.Group=...` متداخلة) داخلها تُسجَّل كعضو بالترتيب، وتظهر عند وسم الإغلاق: `✅ .end/Containers.Group (my_group) [تحتوي: g1, g2]`.
+- **مجموعات متداخلة**: مجموعة داخل مجموعة تُسجَّل كعضو في الأب أيضاً، وتُفَكّ (تُفلطَح) تلقائياً عند الاستعلام عن كل الحاويات الفعلية بداخلها.
+- **`link` / `tying` / `merge` تقبل اسم مجموعة كاملة**، وليس فقط اسم حاوية مفردة:
+  - `link to=my_group;` — تحقّق فقط من وجود المجموعة، دون نسخ.
+  - `tying with=my_group;` / `merge with=my_group;` — تنسخ متغيرات **كل** الحاويات الأعضاء داخل المجموعة (بما فيها المجموعات الفرعية المتداخلة) إلى الحاوية الحالية، بالترتيب؛ عند تعارض اسم متغير بين عضوين، يفوز آخر عضو تم نسخه.
+- **دالتان جاهزتان للاستعلام البرمجي** عن أعضاء أي مجموعة:
+
+| الدالة | الوصف |
+|---|---|
+| `groupMembers(name)` | أسماء الأعضاء **المباشرين** فقط (حاويات أو مجموعات فرعية) كما ظهروا داخل المجموعة. |
+| `groupContainers(name)` | كل أسماء **الحاويات الفعلية** داخل المجموعة، مع تفكيك أي مجموعات فرعية متداخلة بالكامل. |
+
+```rin
+@Containers.Group=team_alpha
+    @container=alpha_1
+        text label = "أول";
+    .end/container
+    @container=alpha_2
+        text label = "ثاني";
+    .end/container
+.end/Containers.Group
+
+print groupMembers("team_alpha");    // ["alpha_1", "alpha_2"]
+print groupContainers("team_alpha"); // ["alpha_1", "alpha_2"]
+
+@container=summary
+    tying with=team_alpha; // ينسخ label من alpha_1 ثم من alpha_2
+    print label;           // "ثاني" (آخر عضو نُسخ يفوز عند تعارض الاسم)
+.end/container
+```
+
+يمكنك تجربة هذا كاملاً عبر:
+
+```bash
+g++ -std=c++17 -o rin_groups_test \
+  tools/test_groups.cpp \
+  app/src/main/cpp/rin_lexer.cpp \
+  app/src/main/cpp/rin_parser.cpp \
+  app/src/main/cpp/rin_interpreter.cpp \
+  -I app/src/main/cpp
+./rin_groups_test
+```
 
 ## خط الأنابيب (Pipeline) والبيانات الإحصائية
 
