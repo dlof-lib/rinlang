@@ -26,6 +26,14 @@ object RinEngine {
         baseDir = context.filesDir.absolutePath
     }
 
+    /**
+     * نفس [init] لكن مع تجاوز الجذر بمسار مشروع محدد (انظر [ProjectManager])، بحيث تعمل
+     * save/installation/file لهذا المشروع فقط داخل مجلده الخاص بدل filesDir العام للتطبيق.
+     */
+    fun init(context: Context, projectBasePath: String) {
+        baseDir = projectBasePath
+    }
+
     /** Lexes, parses and interprets [source]; returns everything the program printed. */
     fun runSource(source: String): String = runSourceNative(source, baseDir)
 
