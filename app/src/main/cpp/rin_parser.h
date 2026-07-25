@@ -42,7 +42,8 @@ private:
     void consumeEndTag(const std::string& expectedTag); // يستهلك ويتحقق من ".end/<expectedTag>"
 
     StmtPtr textDeclaration();
-    StmtPtr atBlock();                 // @container / @Containers.Group / @Volume
+    StmtPtr atBlock();                 // @container / @container.pipe / @container.data / @container.api / @container.import / @Containers.Group / @Volume
+    void validateDataContainerBody(const std::vector<StmtPtr>& body); // يمنع تعريف الدوال أو الحاويات المتداخلة داخل container.data
     StmtPtr sectionBlock();
     StmtPtr translationsBlock();
     StmtPtr translationStatement();
@@ -52,6 +53,7 @@ private:
     StmtPtr installationStatement(bool simplifiedFlag);
     StmtPtr saveStatement(bool simplifiedFlag);
     StmtPtr fileStatement();
+    StmtPtr routeStatement();     // route method=... path=... status=... body=...;  (داخل container.api)
     StmtPtr simplifiedStatement(); // "simplified" متبوعة بـ installation أو save
 
     // expressions (precedence climbing)
