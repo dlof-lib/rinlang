@@ -112,13 +112,16 @@ struct TextStmt : Stmt {
 };
 
 // @container=name  <body>  .end/container
-// @container.pipe=name  <body>  .end/container.pipe
-//   -> نفس الحاوية، لكن isPipe=true تُشير إلى أنها "خط أنابيب" بيانات/إحصاء
-//      (تُستخدم عادة مع مُشغّل الأنابيب |> لتمرير قيمة عبر سلسلة تحويل/تجميع)
+// @container.pipe=name  <body>  .end/container.pipe   -> خط أنابيب بيانات/إحصاء
+// @container.data=name  <body>  .end/container.data    -> حاوية بيانات نقية (لا دوال ولا حاويات متداخلة)
+// @container.api=name   <body>  .end/container.api     -> حاوية تُعرِّف نقاط API وهمية (route ...) ويمكن استدعاؤها عبر call()
+// @container.import=name  file path="..."; .end/container.import -> يستورد فعليًا محتوى ملف .rin آخر وينفّذه
+enum class ContainerKind { PLAIN, PIPE, DATA, API, IMPORT };
+
 struct ContainerStmt : Stmt {
     std::string name; // قد تكون فارغة إن لم يُحدَّد اسم
     std::vector<StmtPtr> body;
-    bool isPipe = false;
+    ContainerKind kind = ContainerKind::PLAIN;
 };
 
 // @Containers.Group=name  <body>  .end/Containers.Group
@@ -180,6 +183,14 @@ struct SaveStmt : Stmt {
 // file path="...";
 struct FileStmt : Stmt {
     ExprPtr path;
+};
+
+// route method="GET" path="/users/1" status=200 body={...};  -> تُستخدم فقط داخل @container.api
+struct RouteStmt : Stmt {
+    ExprPtr method;
+    ExprPtr path;
+    ExprPtr status;
+    ExprPtr body;
 };
 
 } // namespace rin
