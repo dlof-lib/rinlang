@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- شارة شعار "rin" صغيرة تُعرض قبل عنوان المحرر في الشريط العلوي -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="@color/rin_logo_badge_bg" />
+    <corners android:radius="7dp" />
+</shape>
