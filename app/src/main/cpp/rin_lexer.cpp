@@ -29,7 +29,9 @@ static const std::unordered_map<std::string, TokenType> keywords = {
     {"save", TokenType::SAVE},
     {"file", TokenType::FILE_KW},
     {"end", TokenType::END},
-    {"pipe", TokenType::PIPE_KW}, // container.pipe -> خط أنابيب بيانات/إحصاء
+    {"pipe", TokenType::PIPE_KW}, // container.pipe -> خط أنابيب بيانات/إحصاء (كلمة محجوزة تاريخياً)
+    // "data" / "api" / "import" / "route" ليست هنا عمداً: تُقرأ كـ IDENT عادي، ويُتعامل معها
+    // سياقياً فقط في المحلل النحوي، حتى لا تصبح كلمات محجوزة تتعارض مع أسماء متغيرات المستخدم.
 };
 
 Lexer::Lexer(std::string source) : src(std::move(source)) {}
