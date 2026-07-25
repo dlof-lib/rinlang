@@ -63,6 +63,7 @@ class PipelineRunnerActivity : AppCompatActivity() {
     private lateinit var btnRun: android.widget.Button
     private lateinit var btnStop: android.widget.Button
     private lateinit var btnConfigure: android.widget.Button
+    private lateinit var btnLoadSample: android.widget.Button
 
     private val queueExecutor = Executors.newSingleThreadExecutor()
     private val workerPool = Executors.newCachedThreadPool()
@@ -85,6 +86,7 @@ class PipelineRunnerActivity : AppCompatActivity() {
         btnRun = findViewById(R.id.btnPipelineRun)
         btnStop = findViewById(R.id.btnPipelineStop)
         btnConfigure = findViewById(R.id.btnPipelineConfigure)
+        btnLoadSample = findViewById(R.id.btnPipelineLoadSample)
         val btnClose: ImageButton = findViewById(R.id.btnPipelineClose)
 
         sourceCode = intent.getStringExtra(EXTRA_CODE) ?: ""
@@ -94,6 +96,7 @@ class PipelineRunnerActivity : AppCompatActivity() {
         btnRun.setOnClickListener { runPipeline() }
         btnStop.setOnClickListener { stopPipeline() }
         btnConfigure.setOnClickListener { showConfigureDialog() }
+        btnLoadSample.setOnClickListener { loadSample() }
 
         runPipeline()
     }
@@ -112,6 +115,7 @@ class PipelineRunnerActivity : AppCompatActivity() {
         btnStop.isEnabled = true
         setStatus("⏳", getString(R.string.pipeline_status_running), R.drawable.bg_pipeline_status_neutral, R.color.pipeline_text_primary)
         txtDetails.visibility = View.GONE
+        btnLoadSample.visibility = View.GONE
         flowContainer.removeAllViews()
 
         runningFuture = queueExecutor.submit {
@@ -146,18 +150,18 @@ class PipelineRunnerActivity : AppCompatActivity() {
         lastTrace = trace
 
         if (trace == null) {
-            sourceCode = SAMPLE_PIPELINE
-            txtCode.text = highlightSource(sourceCode)
-            val fallback = try { PipelineTracer.findPipeline(sourceCode) } catch (t: Throwable) { null }
-            if (fallback != null) {
-                onTraceReady(fallback)
-            } else {
-                setStatus("⚠️", getString(R.string.pipeline_no_block_found), R.drawable.bg_pipeline_status_error, R.color.pipeline_red_light_text)
-                txtContainerName.text = ""
-            }
+            // لم يتم التعرّف على أي `@container.pipe` داخل كود المستخدم الفعلي.
+            // لا نستبدل كوده بصمت بمثال جاهز؛ نُخبره بوضوح ونترك له خيار تحميل مثال.
+            flowContainer.removeAllViews()
+            txtContainerName.text = ""
+            setStatus("⚠️", getString(R.string.pipeline_status_error), R.drawable.bg_pipeline_status_error, R.color.pipeline_red_light_text)
+            txtDetails.text = getString(R.string.pipeline_no_block_found)
+            txtDetails.visibility = View.VISIBLE
+            btnLoadSample.visibility = View.VISIBLE
             return
         }
 
+        btnLoadSample.visibility = if (trace.success) View.GONE else View.VISIBLE
         txtContainerName.text = "@container.pipe = ${trace.containerName}"
         buildFlowDiagram(trace)
 
@@ -169,6 +173,14 @@ class PipelineRunnerActivity : AppCompatActivity() {
             txtDetails.text = trace.errorMessage ?: trace.rawEngineOutput
             txtDetails.visibility = View.VISIBLE
         }
+    }
+
+    /** يُستدعى فقط عند طلب المستخدم صراحةً مثالاً توضيحياً — لا يُستدعى تلقائياً أبداً. */
+    private fun loadSample() {
+        sourceCode = SAMPLE_PIPELINE
+        txtCode.text = highlightSource(sourceCode)
+        btnLoadSample.visibility = View.GONE
+        runPipeline()
     }
 
     private fun setStatus(icon: String, text: String, bg: Int, textColor: Int) {
