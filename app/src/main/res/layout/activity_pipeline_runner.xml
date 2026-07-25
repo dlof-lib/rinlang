@@ -201,6 +201,19 @@
                     android:background="@drawable/bg_pipeline_btn_outline" />
             </LinearLayout>
 
+            <!-- يظهر فقط عندما لا يتم التعرّف على أي @container.pipe حقيقي في كود المستخدم؛
+                 لا يُستبدل كود المستخدم تلقائياً أبداً — هذا الزر هو الطريقة الوحيدة لتحميل المثال. -->
+            <Button
+                android:id="@+id/btnPipelineLoadSample"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="@string/pipeline_action_load_sample"
+                android:textAllCaps="false"
+                android:textColor="@color/pipeline_green"
+                android:background="@drawable/bg_pipeline_btn_outline"
+                android:visibility="gone" />
+
         </LinearLayout>
     </ScrollView>
 
