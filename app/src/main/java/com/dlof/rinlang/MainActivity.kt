@@ -3,10 +3,12 @@ package com.dlof.rinlang
 import android.net.Uri
 import android.os.Bundle
 import android.provider.OpenableColumns
+import android.view.ContextThemeWrapper
 import android.widget.Button
 import android.widget.EditText
 import android.widget.ImageButton
 import android.widget.LinearLayout
+import android.widget.PopupMenu
 import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
@@ -14,6 +16,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.google.android.material.R as MaterialR
 import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.io.OutputStreamWriter
@@ -95,22 +98,23 @@ class MainActivity : AppCompatActivity() {
         txtFind = findViewById(R.id.txtFind)
         txtReplace = findViewById(R.id.txtReplace)
 
-        val btnPipeline: Button = findViewById(R.id.btnPipeline)
-        val btnRun: Button = findViewById(R.id.btnRun)
-        val btnClear: Button = findViewById(R.id.btnClear)
-        val btnOpen: Button = findViewById(R.id.btnOpen)
-        val btnSave: Button = findViewById(R.id.btnSave)
-        val btnUndo: Button = findViewById(R.id.btnUndo)
-        val btnRedo: Button = findViewById(R.id.btnRedo)
-        val btnFind: Button = findViewById(R.id.btnFind)
+        // أزرار الوصول السريع (أيقونة فقط، صغيرة جداً) في الصف الأول من الشريط العلوي
+        val btnPipeline: ImageButton = findViewById(R.id.btnPipeline)
+        val btnRun: ImageButton = findViewById(R.id.btnRun)
+        val btnProjects: ImageButton = findViewById(R.id.btnProjects)
+
+        // شريط البحث والاستبدال (يُفتح من قائمة Edit)
         val btnFindNext: Button = findViewById(R.id.btnFindNext)
         val btnReplaceOne: Button = findViewById(R.id.btnReplaceOne)
         val btnReplaceAll: Button = findViewById(R.id.btnReplaceAll)
         val btnFindClose: ImageButton = findViewById(R.id.btnFindClose)
         val btnClearConsole: Button = findViewById(R.id.btnClearConsole)
-        // قد لا يكون هذا الزر مضافاً بعد يدوياً داخل activity_main.xml (انظر INTEGRATION_NOTES.md)،
-        // لذا نبحث عنه بأمان (nullable) بدل افتراض وجوده، فلا يتعطّل التطبيق أو البناء إن غاب.
-        val btnProjects: Button? = findViewById(R.id.btnProjects)
+
+        // شريط القوائم المصغّر بأسلوب الكمبيوتر: File / Edit / View / Run
+        val btnMenuFile: Button = findViewById(R.id.btnMenuFile)
+        val btnMenuEdit: Button = findViewById(R.id.btnMenuEdit)
+        val btnMenuView: Button = findViewById(R.id.btnMenuView)
+        val btnMenuRun: Button = findViewById(R.id.btnMenuRun)
 
         if (savedInstanceState == null) {
             val project = currentProject
@@ -150,38 +154,16 @@ class MainActivity : AppCompatActivity() {
             "engine unavailable"
         }
 
-        btnRun.setOnClickListener {
-            val source = editCode.text.toString()
-            RinJobScheduler.submit(source)
-        }
-
-        btnPipeline.setOnClickListener {
-            val source = editCode.text.toString()
-            val intent = android.content.Intent(this, PipelineRunnerActivity::class.java)
-            intent.putExtra(PipelineRunnerActivity.EXTRA_CODE, source)
-            startActivity(intent)
-        }
-
-        btnClear.setOnClickListener {
-            editCode.setText("")
-        }
-
-        btnClearConsole.setOnClickListener {
-            RinJobScheduler.clear()
-        }
-
-        btnProjects?.setOnClickListener {
+        // ----- أزرار الوصول السريع (الصف الأول) -----
+        btnRun.setOnClickListener { runProgram() }
+        btnPipeline.setOnClickListener { openPipeline() }
+        btnProjects.setOnClickListener {
             startActivity(android.content.Intent(this, ProjectsActivity::class.java))
         }
 
-        btnUndo.setOnClickListener { editorController.undo() }
-        btnRedo.setOnClickListener { editorController.redo() }
+        btnClearConsole.setOnClickListener { RinJobScheduler.clear() }
 
-        btnFind.setOnClickListener {
-            findBar.visibility =
-                if (findBar.visibility == android.view.View.VISIBLE) android.view.View.GONE
-                else android.view.View.VISIBLE
-        }
+        // ----- شريط البحث والاستبدال -----
         btnFindClose.setOnClickListener { findBar.visibility = android.view.View.GONE }
         btnFindNext.setOnClickListener {
             val found = editorController.findNext(txtFind.text.toString())
@@ -197,21 +179,142 @@ class MainActivity : AppCompatActivity() {
             Toast.makeText(this, getString(R.string.replaced_count_toast, count), Toast.LENGTH_SHORT).show()
         }
 
-        btnOpen.setOnClickListener {
-            // نقبل .rin كامتداد، لكن نسمح أيضاً بأي نص عادي لأن أندرويد لا يربط
-            // MIME type رسمياً بامتداد .rin غير المعروف لديه.
-            openDocumentLauncher.launch(arrayOf("text/plain", "application/octet-stream", "*/*"))
-        }
+        // ----- شريط القوائم المصغّر: File / Edit / View / Run -----
+        // كل زر صغير جداً يفتح PopupMenu بأسلوب قوائم الكمبيوتر (File/Edit/View/Run)،
+        // فيتوفّر عدد أكبر من الخيارات دون تكديس عشرات الأزرار على شاشة الموبايل.
+        btnMenuFile.setOnClickListener { showFileMenu(it) }
+        btnMenuEdit.setOnClickListener { showEditMenu(it) }
+        btnMenuView.setOnClickListener { showViewMenu(it) }
+        btnMenuRun.setOnClickListener { showRunMenu(it) }
+    }
 
-        btnSave.setOnClickListener {
-            val projectFile = currentProjectFile
-            val existingUri = currentUri
-            when {
-                projectFile != null -> saveToProjectFile(projectFile)
-                existingUri != null -> writeToUri(existingUri)
-                else -> createDocumentLauncher.launch(suggestedFileName())
+    /** يبني PopupMenu بمظهر داكن يتناسق مع بقية التطبيق. */
+    private fun darkPopupMenu(anchor: android.view.View): PopupMenu {
+        val themedContext = ContextThemeWrapper(this, MaterialR.style.ThemeOverlay_MaterialComponents_Dark)
+        return PopupMenu(themedContext, anchor)
+    }
+
+    private fun showFileMenu(anchor: android.view.View) {
+        val popup = darkPopupMenu(anchor)
+        popup.menu.add(0, 1, 0, R.string.menu_file_new)
+        popup.menu.add(0, 2, 1, R.string.menu_file_open)
+        popup.menu.add(0, 3, 2, R.string.menu_file_save)
+        popup.menu.add(0, 4, 3, R.string.menu_file_projects)
+        popup.setOnMenuItemClickListener { item ->
+            when (item.itemId) {
+                1 -> newFile()
+                2 -> openDocumentLauncher.launch(arrayOf("text/plain", "application/octet-stream", "*/*"))
+                3 -> saveFile()
+                4 -> startActivity(android.content.Intent(this, ProjectsActivity::class.java))
             }
+            true
         }
+        popup.show()
+    }
+
+    private fun showEditMenu(anchor: android.view.View) {
+        val popup = darkPopupMenu(anchor)
+        popup.menu.add(0, 1, 0, R.string.menu_edit_undo)
+        popup.menu.add(0, 2, 1, R.string.menu_edit_redo)
+        popup.menu.add(0, 3, 2, R.string.menu_edit_find)
+        popup.menu.add(0, 4, 3, R.string.menu_edit_select_all)
+        popup.menu.add(0, 5, 4, R.string.menu_edit_clear_all)
+        popup.setOnMenuItemClickListener { item ->
+            when (item.itemId) {
+                1 -> editorController.undo()
+                2 -> editorController.redo()
+                3 -> toggleFindBar()
+                4 -> editCode.selectAll()
+                5 -> editCode.setText("")
+            }
+            true
+        }
+        popup.show()
+    }
+
+    private fun showViewMenu(anchor: android.view.View) {
+        val popup = darkPopupMenu(anchor)
+        popup.menu.add(0, 1, 0, R.string.menu_view_zoom_in)
+        popup.menu.add(0, 2, 1, R.string.menu_view_zoom_out)
+        popup.menu.add(0, 3, 2, R.string.menu_view_toggle_lines)
+        popup.menu.add(0, 4, 3, R.string.menu_view_clear_console)
+        popup.setOnMenuItemClickListener { item ->
+            when (item.itemId) {
+                1 -> changeEditorFontSize(1f)
+                2 -> changeEditorFontSize(-1f)
+                3 -> toggleLineNumbers()
+                4 -> RinJobScheduler.clear()
+            }
+            true
+        }
+        popup.show()
+    }
+
+    private fun showRunMenu(anchor: android.view.View) {
+        val popup = darkPopupMenu(anchor)
+        popup.menu.add(0, 1, 0, R.string.menu_run_run)
+        popup.menu.add(0, 2, 1, R.string.menu_run_pipeline)
+        popup.setOnMenuItemClickListener { item ->
+            when (item.itemId) {
+                1 -> runProgram()
+                2 -> openPipeline()
+            }
+            true
+        }
+        popup.show()
+    }
+
+    private fun runProgram() {
+        val source = editCode.text.toString()
+        RinJobScheduler.submit(source)
+    }
+
+    private fun openPipeline() {
+        val source = editCode.text.toString()
+        val intent = android.content.Intent(this, PipelineRunnerActivity::class.java)
+        intent.putExtra(PipelineRunnerActivity.EXTRA_CODE, source)
+        startActivity(intent)
+    }
+
+    private fun newFile() {
+        editCode.setText("")
+        currentUri = null
+        currentProjectFile = null
+        txtFileName.text = getString(R.string.new_file_name)
+        Toast.makeText(this, getString(R.string.new_file_toast), Toast.LENGTH_SHORT).show()
+    }
+
+    private fun saveFile() {
+        val projectFile = currentProjectFile
+        val existingUri = currentUri
+        when {
+            projectFile != null -> saveToProjectFile(projectFile)
+            existingUri != null -> writeToUri(existingUri)
+            else -> createDocumentLauncher.launch(suggestedFileName())
+        }
+    }
+
+    private fun toggleFindBar() {
+        findBar.visibility =
+            if (findBar.visibility == android.view.View.VISIBLE) android.view.View.GONE
+            else android.view.View.VISIBLE
+    }
+
+    private var lineNumbersVisible = true
+
+    private fun toggleLineNumbers() {
+        lineNumbersVisible = !lineNumbersVisible
+        txtLineNumbers.visibility = if (lineNumbersVisible) android.view.View.VISIBLE else android.view.View.GONE
+    }
+
+    private val minEditorTextSizeSp = 10f
+    private val maxEditorTextSizeSp = 22f
+
+    private fun changeEditorFontSize(deltaSp: Float) {
+        val currentSp = editCode.textSize / resources.displayMetrics.scaledDensity
+        val newSp = (currentSp + deltaSp).coerceIn(minEditorTextSizeSp, maxEditorTextSizeSp)
+        editCode.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, newSp)
+        txtLineNumbers.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, newSp)
     }
 
     /** يحفظ محتوى المحرر مباشرة داخل ملف المشروع الحالي (بدون المرور بحوار SAF). */
