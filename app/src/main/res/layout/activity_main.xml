@@ -6,24 +6,28 @@
     android:orientation="vertical"
     android:background="@color/rin_background">
 
-    <!-- ===== الشريط العلوي: شعار + عنوان + اسم الملف، ثم صفّا أزرار ===== -->
+    <!-- ===== الشريط العلوي الاحترافي المضغوط =====
+         صف 1: شعار + عنوان + اسم الملف + أزرار وصول سريع صغيرة جداً (تشغيل/أنابيب/مشاريع).
+         صف 2: شريط قوائم مصغّر بأسلوب الكمبيوتر (File / Edit / View / Run)، كل قائمة
+         تفتح PopupMenu فيها خيارات كثيرة، بدل حشو الشاشة بعشرات الأزرار الكبيرة. -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:paddingTop="12dp"
-        android:paddingStart="14dp"
-        android:paddingEnd="10dp"
+        android:paddingTop="8dp"
+        android:paddingStart="10dp"
+        android:paddingEnd="8dp"
         android:paddingBottom="4dp"
         android:background="@color/rin_toolbar"
         android:elevation="3dp">
 
+        <!-- الصف الأول: هوية المحرر + وصول سريع -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
             android:gravity="center_vertical"
-            android:paddingBottom="10dp">
+            android:paddingBottom="6dp">
 
             <TextView
                 android:layout_width="wrap_content"
@@ -31,235 +35,173 @@
                 android:text="rin"
                 android:textColor="@android:color/white"
                 android:textStyle="bold"
-                android:textSize="13sp"
+                android:textSize="11sp"
                 android:letterSpacing="0.02"
                 android:background="@drawable/bg_toolbar_logo_badge"
-                android:paddingStart="9dp"
-                android:paddingEnd="9dp"
-                android:paddingTop="5dp"
-                android:paddingBottom="5dp" />
-
-            <TextView
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:layout_marginStart="10dp"
-                android:text="@string/app_editor_title"
-                android:textColor="@color/rin_on_toolbar"
-                android:textSize="17sp"
-                android:textStyle="bold" />
+                android:paddingStart="7dp"
+                android:paddingEnd="7dp"
+                android:paddingTop="4dp"
+                android:paddingBottom="4dp" />
 
             <TextView
                 android:id="@+id/txtFileName"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/file_unsaved"
-                android:textColor="@color/rin_on_toolbar_dim"
-                android:textSize="12sp"
-                android:ellipsize="start"
-                android:singleLine="true"
-                android:maxWidth="150dp" />
-        </LinearLayout>
-
-        <!-- الصف الأول: عمليات الملف + التشغيل -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:paddingBottom="8dp"
-            android:gravity="center_vertical">
-
-            <Button
-                android:id="@+id/btnOpen"
-                android:layout_width="wrap_content"
-                android:layout_height="36dp"
-                android:minWidth="0dp"
-                android:minHeight="0dp"
-                android:insetTop="0dp"
-                android:insetBottom="0dp"
-                android:text="@string/action_open"
-                android:textAllCaps="false"
-                android:textSize="13sp"
-                android:paddingStart="8dp"
-                android:paddingEnd="10dp"
-                android:layout_marginEnd="2dp"
-                android:drawableStart="@drawable/ic_open"
-                android:drawablePadding="6dp"
-                android:background="@drawable/bg_toolbar_btn_ghost"
-                android:textColor="@color/rin_on_toolbar" />
-
-            <Button
-                android:id="@+id/btnSave"
-                android:layout_width="wrap_content"
-                android:layout_height="36dp"
-                android:minWidth="0dp"
-                android:minHeight="0dp"
-                android:insetTop="0dp"
-                android:insetBottom="0dp"
-                android:text="@string/action_save"
-                android:textAllCaps="false"
-                android:textSize="13sp"
-                android:paddingStart="8dp"
-                android:paddingEnd="10dp"
-                android:layout_marginEnd="2dp"
-                android:drawableStart="@drawable/ic_save"
-                android:drawablePadding="6dp"
-                android:background="@drawable/bg_toolbar_btn_ghost"
-                android:textColor="@color/rin_on_toolbar" />
-
-            <Button
-                android:id="@+id/btnClear"
-                android:layout_width="wrap_content"
-                android:layout_height="36dp"
-                android:minWidth="0dp"
-                android:minHeight="0dp"
-                android:insetTop="0dp"
-                android:insetBottom="0dp"
-                android:text="@string/action_clear"
-                android:textAllCaps="false"
-                android:textSize="13sp"
-                android:paddingStart="8dp"
-                android:paddingEnd="10dp"
-                android:drawableStart="@drawable/ic_clear"
-                android:drawablePadding="6dp"
-                android:background="@drawable/bg_toolbar_btn_ghost"
-                android:textColor="@color/rin_on_toolbar" />
-
-            <View
                 android:layout_width="0dp"
-                android:layout_height="1dp"
-                android:layout_weight="1" />
-
-            <Button
-                android:id="@+id/btnPipeline"
-                android:layout_width="wrap_content"
-                android:layout_height="38dp"
-                android:minWidth="0dp"
-                android:minHeight="0dp"
-                android:insetTop="0dp"
-                android:insetBottom="0dp"
-                android:layout_marginEnd="8dp"
-                android:text="@string/action_pipeline"
-                android:textAllCaps="false"
-                android:textSize="13sp"
-                android:paddingStart="14dp"
-                android:paddingEnd="14dp"
-                android:drawableStart="@drawable/ic_pipeline"
-                android:drawablePadding="6dp"
-                android:background="@drawable/bg_toolbar_btn_pipeline"
-                android:textColor="@android:color/white" />
-
-            <Button
-                android:id="@+id/btnRun"
-                android:layout_width="wrap_content"
-                android:layout_height="38dp"
-                android:minWidth="0dp"
-                android:minHeight="0dp"
-                android:insetTop="0dp"
-                android:insetBottom="0dp"
-                android:text="@string/action_run"
-                android:textAllCaps="false"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginStart="8dp"
+                android:text="@string/file_unsaved"
+                android:textColor="@color/rin_on_toolbar"
                 android:textSize="13sp"
                 android:textStyle="bold"
-                android:paddingStart="16dp"
-                android:paddingEnd="16dp"
-                android:drawableStart="@drawable/ic_run"
-                android:drawablePadding="6dp"
-                android:background="@drawable/bg_toolbar_btn_primary"
-                android:textColor="@android:color/white" />
-        </LinearLayout>
-
-        <!-- الصف الثاني: أدوات المحرر (تراجع/إعادة/بحث) -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:paddingBottom="8dp"
-            android:gravity="center_vertical">
-
-            <Button
-                android:id="@+id/btnUndo"
-                android:layout_width="wrap_content"
-                android:layout_height="34dp"
-                android:minWidth="0dp"
-                android:minHeight="0dp"
-                android:insetTop="0dp"
-                android:insetBottom="0dp"
-                android:text="@string/action_undo"
-                android:textAllCaps="false"
-                android:textSize="12.5sp"
-                android:paddingStart="8dp"
-                android:paddingEnd="10dp"
-                android:layout_marginEnd="2dp"
-                android:drawableStart="@drawable/ic_undo"
-                android:drawablePadding="5dp"
-                android:background="@drawable/bg_toolbar_btn_ghost"
-                android:textColor="@color/rin_on_toolbar_dim" />
-
-            <Button
-                android:id="@+id/btnRedo"
-                android:layout_width="wrap_content"
-                android:layout_height="34dp"
-                android:minWidth="0dp"
-                android:minHeight="0dp"
-                android:insetTop="0dp"
-                android:insetBottom="0dp"
-                android:text="@string/action_redo"
-                android:textAllCaps="false"
-                android:textSize="12.5sp"
-                android:paddingStart="8dp"
-                android:paddingEnd="10dp"
-                android:layout_marginEnd="2dp"
-                android:drawableStart="@drawable/ic_redo"
-                android:drawablePadding="5dp"
-                android:background="@drawable/bg_toolbar_btn_ghost"
-                android:textColor="@color/rin_on_toolbar_dim" />
-
-            <Button
-                android:id="@+id/btnFind"
-                android:layout_width="wrap_content"
-                android:layout_height="34dp"
-                android:minWidth="0dp"
-                android:minHeight="0dp"
-                android:insetTop="0dp"
-                android:insetBottom="0dp"
-                android:text="@string/action_find"
-                android:textAllCaps="false"
-                android:textSize="12.5sp"
-                android:paddingStart="8dp"
-                android:paddingEnd="10dp"
-                android:drawableStart="@drawable/ic_find"
-                android:drawablePadding="5dp"
-                android:background="@drawable/bg_toolbar_btn_ghost"
-                android:textColor="@color/rin_on_toolbar_dim" />
-
-            <View
-                android:layout_width="0dp"
-                android:layout_height="1dp"
-                android:layout_weight="1" />
+                android:ellipsize="middle"
+                android:singleLine="true" />
 
             <ProgressBar
                 android:id="@+id/progressRunning"
                 style="?android:attr/progressBarStyleSmall"
-                android:layout_width="18dp"
-                android:layout_height="18dp"
+                android:layout_width="16dp"
+                android:layout_height="16dp"
+                android:layout_marginEnd="6dp"
                 android:visibility="gone" />
+
+            <ImageButton
+                android:id="@+id/btnProjects"
+                android:layout_width="28dp"
+                android:layout_height="28dp"
+                android:padding="6dp"
+                android:layout_marginEnd="4dp"
+                android:src="@drawable/ic_projects"
+                android:contentDescription="@string/desc_projects_quick"
+                android:background="@drawable/bg_icon_btn" />
+
+            <ImageButton
+                android:id="@+id/btnPipeline"
+                android:layout_width="28dp"
+                android:layout_height="28dp"
+                android:padding="6dp"
+                android:layout_marginEnd="4dp"
+                android:src="@drawable/ic_pipeline"
+                android:contentDescription="@string/desc_pipeline_quick"
+                android:background="@drawable/bg_icon_btn_pipeline" />
+
+            <ImageButton
+                android:id="@+id/btnRun"
+                android:layout_width="28dp"
+                android:layout_height="28dp"
+                android:padding="6dp"
+                android:src="@drawable/ic_run"
+                android:contentDescription="@string/desc_run_quick"
+                android:background="@drawable/bg_icon_btn_accent" />
         </LinearLayout>
 
-        <!-- شريط البحث والاستبدال، مخفي افتراضياً -->
+        <!-- الصف الثاني: شريط قوائم مصغّر (File / Edit / View) — كل زر صغير جداً
+             ويفتح قائمة منسدلة فيها خيارات إضافية، تماماً كقوائم تطبيقات الكمبيوتر. -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:paddingBottom="6dp"
+            android:gravity="center_vertical">
+
+            <Button
+                android:id="@+id/btnMenuFile"
+                android:layout_width="wrap_content"
+                android:layout_height="26dp"
+                android:minWidth="0dp"
+                android:minHeight="0dp"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                android:text="@string/menu_file"
+                android:textAllCaps="false"
+                android:textSize="11.5sp"
+                android:paddingStart="8dp"
+                android:paddingEnd="6dp"
+                android:drawableEnd="@drawable/ic_dropdown"
+                android:drawablePadding="3dp"
+                android:background="@drawable/bg_menubar_btn"
+                android:textColor="@color/rin_on_toolbar" />
+
+            <Button
+                android:id="@+id/btnMenuEdit"
+                android:layout_width="wrap_content"
+                android:layout_height="26dp"
+                android:minWidth="0dp"
+                android:minHeight="0dp"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                android:text="@string/menu_edit"
+                android:textAllCaps="false"
+                android:textSize="11.5sp"
+                android:paddingStart="8dp"
+                android:paddingEnd="6dp"
+                android:drawableEnd="@drawable/ic_dropdown"
+                android:drawablePadding="3dp"
+                android:background="@drawable/bg_menubar_btn"
+                android:textColor="@color/rin_on_toolbar" />
+
+            <Button
+                android:id="@+id/btnMenuView"
+                android:layout_width="wrap_content"
+                android:layout_height="26dp"
+                android:minWidth="0dp"
+                android:minHeight="0dp"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                android:text="@string/menu_view"
+                android:textAllCaps="false"
+                android:textSize="11.5sp"
+                android:paddingStart="8dp"
+                android:paddingEnd="6dp"
+                android:drawableEnd="@drawable/ic_dropdown"
+                android:drawablePadding="3dp"
+                android:background="@drawable/bg_menubar_btn"
+                android:textColor="@color/rin_on_toolbar" />
+
+            <Button
+                android:id="@+id/btnMenuRun"
+                android:layout_width="wrap_content"
+                android:layout_height="26dp"
+                android:minWidth="0dp"
+                android:minHeight="0dp"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                android:text="@string/menu_run"
+                android:textAllCaps="false"
+                android:textSize="11.5sp"
+                android:paddingStart="8dp"
+                android:paddingEnd="6dp"
+                android:drawableEnd="@drawable/ic_dropdown"
+                android:drawablePadding="3dp"
+                android:background="@drawable/bg_menubar_btn"
+                android:textColor="@color/rin_on_toolbar" />
+
+            <View
+                android:layout_width="0dp"
+                android:layout_height="1dp"
+                android:layout_weight="1" />
+
+            <TextView
+                android:id="@+id/txtEngineVersion"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textColor="@color/rin_editor_hint"
+                android:textSize="10sp" />
+        </LinearLayout>
+
+        <!-- شريط البحث والاستبدال، مخفي افتراضياً، يُفتح من قائمة Edit -->
         <LinearLayout
             android:id="@+id/findBar"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
-            android:paddingBottom="8dp"
+            android:paddingBottom="6dp"
             android:gravity="center_vertical"
             android:visibility="gone">
 
             <EditText
                 android:id="@+id/txtFind"
                 android:layout_width="0dp"
-                android:layout_height="36dp"
+                android:layout_height="32dp"
                 android:layout_weight="1"
                 android:background="@drawable/bg_toolbar_btn_ghost"
                 android:paddingStart="10dp"
@@ -267,14 +209,14 @@
                 android:hint="@string/find_hint"
                 android:textColorHint="@color/rin_editor_hint"
                 android:textColor="@color/rin_on_toolbar"
-                android:textSize="13sp"
+                android:textSize="12.5sp"
                 android:singleLine="true"
                 android:layout_marginEnd="4dp" />
 
             <EditText
                 android:id="@+id/txtReplace"
                 android:layout_width="0dp"
-                android:layout_height="36dp"
+                android:layout_height="32dp"
                 android:layout_weight="1"
                 android:background="@drawable/bg_toolbar_btn_ghost"
                 android:paddingStart="10dp"
@@ -282,64 +224,64 @@
                 android:hint="@string/replace_hint"
                 android:textColorHint="@color/rin_editor_hint"
                 android:textColor="@color/rin_on_toolbar"
-                android:textSize="13sp"
+                android:textSize="12.5sp"
                 android:singleLine="true"
                 android:layout_marginEnd="4dp" />
 
             <Button
                 android:id="@+id/btnFindNext"
                 android:layout_width="wrap_content"
-                android:layout_height="34dp"
+                android:layout_height="30dp"
                 android:minWidth="0dp"
                 android:minHeight="0dp"
                 android:insetTop="0dp"
                 android:insetBottom="0dp"
                 android:text="@string/btn_find_next"
                 android:textAllCaps="false"
-                android:textSize="12sp"
-                android:paddingStart="8dp"
-                android:paddingEnd="8dp"
+                android:textSize="11sp"
+                android:paddingStart="7dp"
+                android:paddingEnd="7dp"
                 android:background="@drawable/bg_toolbar_btn_ghost"
                 android:textColor="@color/rin_on_toolbar" />
 
             <Button
                 android:id="@+id/btnReplaceOne"
                 android:layout_width="wrap_content"
-                android:layout_height="34dp"
+                android:layout_height="30dp"
                 android:minWidth="0dp"
                 android:minHeight="0dp"
                 android:insetTop="0dp"
                 android:insetBottom="0dp"
                 android:text="@string/btn_replace_one"
                 android:textAllCaps="false"
-                android:textSize="12sp"
-                android:paddingStart="8dp"
-                android:paddingEnd="8dp"
+                android:textSize="11sp"
+                android:paddingStart="7dp"
+                android:paddingEnd="7dp"
                 android:background="@drawable/bg_toolbar_btn_ghost"
                 android:textColor="@color/rin_on_toolbar" />
 
             <Button
                 android:id="@+id/btnReplaceAll"
                 android:layout_width="wrap_content"
-                android:layout_height="34dp"
+                android:layout_height="30dp"
                 android:minWidth="0dp"
                 android:minHeight="0dp"
                 android:insetTop="0dp"
                 android:insetBottom="0dp"
                 android:text="@string/btn_replace_all"
                 android:textAllCaps="false"
-                android:textSize="12sp"
-                android:paddingStart="8dp"
-                android:paddingEnd="8dp"
+                android:textSize="11sp"
+                android:paddingStart="7dp"
+                android:paddingEnd="7dp"
                 android:background="@drawable/bg_toolbar_btn_ghost"
                 android:textColor="@color/rin_on_toolbar" />
 
             <ImageButton
                 android:id="@+id/btnFindClose"
-                android:layout_width="32dp"
-                android:layout_height="32dp"
+                android:layout_width="28dp"
+                android:layout_height="28dp"
                 android:layout_marginStart="2dp"
-                android:padding="7dp"
+                android:padding="6dp"
                 android:src="@drawable/ic_close"
                 android:contentDescription="@string/find_close_desc"
                 android:background="@drawable/bg_toolbar_btn_ghost" />
@@ -443,19 +385,10 @@
             android:letterSpacing="0.02"
             android:textStyle="bold" />
 
-        <TextView
-            android:id="@+id/txtEngineVersion"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:textColor="@color/rin_editor_hint"
-            android:textSize="11sp"
-            android:layout_gravity="center_vertical"
-            android:layout_marginEnd="8dp" />
-
         <Button
             android:id="@+id/btnClearConsole"
             android:layout_width="wrap_content"
-            android:layout_height="32dp"
+            android:layout_height="28dp"
             android:minWidth="0dp"
             android:minHeight="0dp"
             android:insetTop="0dp"
