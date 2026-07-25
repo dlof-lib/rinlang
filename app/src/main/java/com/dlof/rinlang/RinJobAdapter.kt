@@ -51,6 +51,14 @@ class RinJobAdapter(private val context: Context) : RecyclerView.Adapter<RinJobA
             statusText.setTextColor(color)
             dot.backgroundTintList = android.content.res.ColorStateList.valueOf(color)
 
+            val pillColor = android.graphics.Color.argb(
+                40,
+                android.graphics.Color.red(color),
+                android.graphics.Color.green(color),
+                android.graphics.Color.blue(color)
+            )
+            statusText.backgroundTintList = android.content.res.ColorStateList.valueOf(pillColor)
+
             duration.text = if (job.startedAt == 0L) "" else
                 context.getString(R.string.job_duration_fmt, job.durationMs())
 
