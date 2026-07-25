@@ -20,7 +20,7 @@ object PipelineTracer {
         """@container\.pipe\s*=\s*([A-Za-z_][A-Za-z0-9_]*)([\s\S]*?)\.end/container\.pipe"""
     )
     private val pipeAssignRegex = Regex(
-        """let\s+[A-Za-z_][A-Za-z0-9_]*\s*=\s*([A-Za-z_][A-Za-z0-9_]*(?:\s*\|>\s*[A-Za-z_][A-Za-z0-9_]*\s*\([^)]*\))+)\s*;"""
+        """let\s+[A-Za-z_][A-Za-z0-9_]*\s*=\s*([A-Za-z_][A-Za-z0-9_]*(?:\s*\|>\s*[A-Za-z_][A-Za-z0-9_]*(?:\s*\([^)]*\))?)+)\s*;"""
     )
     private val callNameRegex = Regex("""^([A-Za-z_][A-Za-z0-9_]*)\s*\(""")
 
