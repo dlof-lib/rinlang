@@ -1,0 +1,102 @@
+// ============================================================================
+//  lib/math.og.rin — امتدادات رياضية فوق stdlib الأساسية (abs/sqrt/pow/min/max/random/PI/E)
+//  استيراد:
+//    @import "lib/math.og.rin";              // دمج مباشر في النطاق الحالي
+//    @import "lib/math.og.rin" as mathx;      // كحاوية باسم مستعار (tying/merge لاحقاً)
+// ============================================================================
+
+// n! — المضروب (0! = 1)
+fun factorial(n) {
+    if (n < 0) { print "factorial: n يجب أن يكون >= 0"; return nil; }
+    if (n < 2) { return 1; }
+    return n * factorial(n - 1);
+}
+
+// القاسم المشترك الأكبر (خوارزمية إقليدس)
+fun gcd(a, b) {
+    if (a < 0) { a = -a; }
+    if (b < 0) { b = -b; }
+    while (b != 0) {
+        let t = b;
+        b = a % b;
+        a = t;
+    }
+    return a;
+}
+
+// المضاعف المشترك الأصغر
+fun lcm(a, b) {
+    let g = gcd(a, b);
+    if (g == 0) { return 0; }
+    let result = (a / g) * b;
+    if (result < 0) { result = -result; }
+    return result;
+}
+
+// هل n عدد أوّلي؟
+fun isPrime(n) {
+    if (n < 2) { return false; }
+    if (n < 4) { return true; }
+    if (n % 2 == 0) { return false; }
+    let i = 3;
+    while (i * i <= n) {
+        if (n % i == 0) { return false; }
+        i = i + 2;
+    }
+    return true;
+}
+
+// يحصر x بين lo و hi
+fun clamp(x, lo, hi) {
+    if (x < lo) { return lo; }
+    if (x > hi) { return hi; }
+    return x;
+}
+
+// استيفاء خطي (linear interpolation) بين a و b عند النسبة t (0..1)
+fun lerp(a, b, t) {
+    return a + (b - a) * t;
+}
+
+// إشارة الرقم: 1 موجب، -1 سالب، 0 صفر
+fun sign(x) {
+    if (x > 0) { return 1; }
+    if (x < 0) { return -1; }
+    return 0;
+}
+
+// الحد رقم n من متتالية فيبوناتشي (تكراري، بلا استدعاء ذاتي بطيء)
+fun fibonacci(n) {
+    let a = 0;
+    let b = 1;
+    let i = 0;
+    while (i < n) {
+        let next = a + b;
+        a = b;
+        b = next;
+        i = i + 1;
+    }
+    return a;
+}
+
+// متوسط مصفوفة أرقام (اسم بديل مريح لـ mean الأصلية)
+fun average(arr) {
+    return mean(arr);
+}
+
+// تقريب x إلى عدد محدد من الخانات العشرية
+fun roundTo(x, decimals) {
+    let factor = pow(10, decimals);
+    return round(x * factor) / factor;
+}
+
+// هل x بين lo و hi ضمناً (inclusive)؟
+fun inRange(x, lo, hi) {
+    return x >= lo and x <= hi;
+}
+
+// النسبة المئوية لـ part من total
+fun percentOf(part, total) {
+    if (total == 0) { return 0; }
+    return (part / total) * 100;
+}
