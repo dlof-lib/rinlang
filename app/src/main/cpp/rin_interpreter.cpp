@@ -1,6 +1,9 @@
 #include "rin_interpreter.h"
+#include "rin_lexer.h"
+#include "rin_parser.h"
 #include <cmath>
 #include <sstream>
+#include <fstream>
 #include <unordered_set>
 #include <algorithm>
 #include <cctype>
@@ -162,6 +165,31 @@ static void collectGroupContainerNames(const std::unordered_map<std::string, std
         } else {
             out.push_back(memberName); // عضو هو حاوية فعلية
         }
+    }
+}
+
+static std::string toUpperAscii(std::string s) {
+    for (auto& c : s) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+    return s;
+}
+
+static std::string containerTagName(ContainerKind k) {
+    switch (k) {
+        case ContainerKind::PIPE: return "container.pipe";
+        case ContainerKind::DATA: return "container.data";
+        case ContainerKind::API: return "container.api";
+        case ContainerKind::IMPORT: return "container.import";
+        default: return "container";
+    }
+}
+
+static std::string containerIcon(ContainerKind k) {
+    switch (k) {
+        case ContainerKind::PIPE: return "🧵";
+        case ContainerKind::DATA: return "🗂️";
+        case ContainerKind::API: return "🌐";
+        case ContainerKind::IMPORT: return "📦⬅️";
+        default: return "📦";
     }
 }
 
@@ -465,6 +493,24 @@ void Interpreter::registerNatives() {
         return Value::makeArray(result);
     };
 
+    // ---- container.api: استدعاء نقاط API الوهمية المسجَّلة عبر route (حقيقي بالكامل، بلا شبكة) ----
+    // call(method, path) -> يبحث داخل container.api الحالي (الذي نُنفَّذ بداخله الآن)
+    natives["call"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("call", a, 2, line);
+        std::string method = asString(a[0], "call", line);
+        std::string path = asString(a[1], "call", line);
+        std::string key = containerStack.empty() ? "" : containerStack.back();
+        return performApiCall(key, method, path, line);
+    };
+    // callApi(apiContainerName, method, path) -> يستدعي أي container.api باسمه من أي مكان في البرنامج
+    natives["callApi"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("callApi", a, 3, line);
+        std::string key = asString(a[0], "callApi", line);
+        std::string method = asString(a[1], "callApi", line);
+        std::string path = asString(a[2], "callApi", line);
+        return performApiCall(key, method, path, line);
+    };
+
     // ---- مصفوفات وقواميس (arrays & maps) ----
     natives["push"] = [](std::vector<Value>& a, int line) -> Value {
         expectArgs("push", a, 2, line);
@@ -616,17 +662,49 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
 
     if (auto s = std::dynamic_pointer_cast<ContainerStmt>(stmt)) {
         auto containerEnv = std::make_shared<Environment>(env);
-        std::string tag = s->isPipe ? "container.pipe" : "container";
-        std::string icon = s->isPipe ? "🧵" : "📦";
+        std::string tag = containerTagName(s->kind);
+        std::string icon = containerIcon(s->kind);
         output << icon << " " << tag << (s->name.empty() ? "" : (" = " + s->name)) << "\n";
         std::string containerKey = s->name.empty() ? ("#" + std::to_string(containers.size())) : s->name;
         containers[containerKey] = containerEnv;
         if (!groupStack.empty()) {
             groupMembers[groupStack.back()].push_back(containerKey);
         }
-        containerStack.push_back(s->name);
+        std::string savedFilePath = currentFilePath;
+        currentFilePath.clear(); // كل حاوية تبدأ بمسار ملف نظيف حتى لا يرث container.import مساراً من حاوية سابقة
+        containerStack.push_back(containerKey);
         executeBlock(s->body, containerEnv);
         containerStack.pop_back();
+
+        if (s->kind == ContainerKind::IMPORT) {
+            // ---- استيراد حقيقي: قراءة ملف .rin آخر من القرص، تحليله، وتنفيذه فعلياً ----
+            if (currentFilePath.empty()) {
+                throw RinError("container.import يتطلب 'file path=\"...\";' بداخله لتحديد الملف المطلوب استيراده", s->line);
+            }
+            std::ifstream in(currentFilePath, std::ios::binary);
+            if (!in) {
+                throw RinError("container.import: تعذّر فتح الملف '" + currentFilePath + "' للاستيراد", s->line);
+            }
+            std::ostringstream buf;
+            buf << in.rdbuf();
+            std::string importedSource = buf.str();
+            try {
+                Lexer importedLexer(importedSource);
+                auto importedTokens = importedLexer.scanTokens();
+                Parser importedParser(importedTokens);
+                auto importedStatements = importedParser.parse();
+                // تُنفَّذ عبارات الملف المستورد داخل بيئة حاوية الاستيراد نفسها؛ أي @container بداخله
+                // يُسجَّل عالمياً (متاح لاحقاً عبر link/tying/merge)، وأي let/text أعلى المستوى فيه
+                // يصبح متغيراً داخل حاوية container.import هذه.
+                executeBlock(importedStatements, containerEnv);
+            } catch (RinError& e) {
+                throw RinError("container.import: خطأ داخل الملف المستورد \"" + currentFilePath +
+                                "\" (سطر " + std::to_string(e.line) + "): " + e.message, s->line);
+            }
+            output << "📥 container.import: تم استيراد \"" << currentFilePath << "\" وتنفيذه بنجاح\n";
+        }
+        currentFilePath = savedFilePath;
+
         output << "✅ .end/" << tag << (s->name.empty() ? "" : (" (" + s->name + ")")) << "\n";
         return;
     }
@@ -731,6 +809,35 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
     if (auto s = std::dynamic_pointer_cast<FileStmt>(stmt)) {
         currentFilePath = evaluate(s->path, env).toDisplayString();
         output << "📄 file path = \"" << currentFilePath << "\"\n";
+        return;
+    }
+
+    if (auto s = std::dynamic_pointer_cast<RouteStmt>(stmt)) {
+        if (containerStack.empty()) {
+            throw RinError("عبارة 'route' يجب أن تُستخدم داخل @container.api", s->line);
+        }
+        Value methodVal = evaluate(s->method, env);
+        if (methodVal.type != Value::Type::STRING) {
+            throw RinError("route: قيمة 'method' يجب أن تكون نصاً (مثال: \"GET\")", s->line);
+        }
+        Value pathVal = evaluate(s->path, env);
+        if (pathVal.type != Value::Type::STRING) {
+            throw RinError("route: قيمة 'path' يجب أن تكون نصاً (مثال: \"/users/1\")", s->line);
+        }
+        Value statusVal = evaluate(s->status, env);
+        if (statusVal.type != Value::Type::NUMBER) {
+            throw RinError("route: قيمة 'status' يجب أن تكون رقماً (مثال: 200)", s->line);
+        }
+        Value bodyVal = evaluate(s->body, env);
+
+        ApiRoute route;
+        route.method = toUpperAscii(methodVal.str);
+        route.path = pathVal.str;
+        route.status = statusVal.number;
+        route.body = bodyVal;
+        apiRoutes[containerStack.back()].push_back(route);
+
+        output << "🌐 route [" << route.method << " " << route.path << "] -> " << statusVal.toDisplayString() << "\n";
         return;
     }
 }
@@ -970,6 +1077,35 @@ Value Interpreter::evaluate(const ExprPtr& expr, EnvPtr env) {
         throw RinError("لا يمكن التعديل على قيمة من نوع " + obj.typeName() + " عبر []", e->line);
     }
     return Value::nil();
+}
+
+// يبحث عن أول route مطابق (method + path) مسجَّل داخل container.api صاحب المفتاح المُعطى، ويُعيد
+// قيمة map حقيقية {status, ok, body}. إن لم يوجد تطابق، يُعيد {status: 404, ok: false, error: ...}
+// دون رمي استثناء — تماماً كما يتصرف عميل HTTP حقيقي أمام رد 404.
+Value Interpreter::performApiCall(const std::string& containerKey, const std::string& method,
+                                   const std::string& path, int line) {
+    (void)line;
+    std::string wantMethod = toUpperAscii(method);
+    auto it = apiRoutes.find(containerKey);
+    if (it != apiRoutes.end()) {
+        for (auto& route : it->second) {
+            if (route.method == wantMethod && route.path == path) {
+                auto result = std::make_shared<MapData>();
+                result->push_back({Value::string("status"), Value::num(route.status)});
+                result->push_back({Value::string("ok"), Value::boolean_(route.status >= 200 && route.status < 300)});
+                result->push_back({Value::string("body"), route.body});
+                return Value::makeMap(result);
+            }
+        }
+    }
+    auto result = std::make_shared<MapData>();
+    result->push_back({Value::string("status"), Value::num(404)});
+    result->push_back({Value::string("ok"), Value::boolean_(false)});
+    result->push_back({Value::string("body"), Value::nil()});
+    result->push_back({Value::string("error"),
+                        Value::string("لا يوجد route مطابق لـ " + wantMethod + " " + path +
+                                      " داخل container.api = " + containerKey)});
+    return Value::makeMap(result);
 }
 
 } // namespace rin
