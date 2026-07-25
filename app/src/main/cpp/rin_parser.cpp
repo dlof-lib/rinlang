@@ -64,6 +64,10 @@ StmtPtr Parser::declaration() {
     // 'route' كلمة سياقية غير محجوزة عالمياً: تُعامَل كعبارة route فقط عند ظهورها أول عبارة،
     // وإلا فهي مجرّد معرّف (IDENT) عادي كأي اسم متغير آخر.
     if (check(TokenType::IDENT) && peek().lexeme == "route") { advance(); return routeStatement(); }
+    // 'row' / 'style' كلمتان سياقيتان غير محجوزتان أيضاً (مفهوم الجدول: container.table / table)،
+    // بنفس أسلوب 'route' أعلاه: لا تتحوّلان إلى عبارة خاصة إلا عند ظهورهما أول عبارة.
+    if (check(TokenType::IDENT) && peek().lexeme == "row") { advance(); return rowStatement(); }
+    if (check(TokenType::IDENT) && peek().lexeme == "style") { advance(); return styleStatement(); }
 
     return statement();
 }
@@ -185,7 +189,7 @@ std::string Parser::readTagKeyword() {
         bool nextIsContextualWord = false;
         if (!nextIsPipe && current + 1 < tokens.size() && tokens[current + 1].type == TokenType::IDENT) {
             const std::string& w = tokens[current + 1].lexeme;
-            nextIsContextualWord = (w == "data" || w == "api" || w == "import");
+            nextIsContextualWord = (w == "data" || w == "api" || w == "import" || w == "table");
         }
         // لا نستهلك '.' إلا إذا كانت متبوعة مباشرة بإحدى هذه الكلمات، وإلا فقد تكون في الحقيقة
         // بداية وسم إغلاق آخر مجاور مثل '.end/container' تلاه '.end/Containers.Group'
@@ -240,12 +244,12 @@ StmtPtr Parser::atBlock() {
     Token atTok = previous(); // '@'
     std::string tag = readTagKeyword();
     static const std::vector<std::string> validTags = {
-        "container", "container.pipe", "container.data", "container.api", "container.import",
-        "Containers.Group", "Volume"
+        "container", "container.pipe", "container.data", "container.api", "container.import", "container.table",
+        "Containers.Group", "Volume", "table"
     };
     if (std::find(validTags.begin(), validTags.end(), tag) == validTags.end()) {
         throw RinError("Unsupported block '@" + tag + "'; expected container, container.pipe, container.data, "
-                        "container.api, container.import, Containers.Group, or Volume", atTok.line);
+                        "container.api, container.import, container.table, table, Containers.Group, or Volume", atTok.line);
     }
     std::string name = readOptionalName();
     std::vector<StmtPtr> body;
@@ -253,14 +257,18 @@ StmtPtr Parser::atBlock() {
     consumeEndTag(tag);
 
     if (tag == "container" || tag == "container.pipe" || tag == "container.data" ||
-        tag == "container.api" || tag == "container.import") {
-        if (tag == "container.data") validateDataContainerBody(body);
+        tag == "container.api" || tag == "container.import" ||
+        tag == "container.table" || tag == "table") {
+        // container.table (مدمجة داخل container) و table (مستقلة) يشتركان في نفس القيود: بيانات
+        // نقية (صفوف row + نمط style اختياري)، بلا دوال ولا حاويات متداخلة ولا route.
+        if (tag == "container.data" || tag == "container.table" || tag == "table") validateDataContainerBody(body);
         auto s = std::make_shared<ContainerStmt>();
         s->name = name; s->body = body; s->line = atTok.line;
         if (tag == "container.pipe") s->kind = ContainerKind::PIPE;
         else if (tag == "container.data") s->kind = ContainerKind::DATA;
         else if (tag == "container.api") s->kind = ContainerKind::API;
         else if (tag == "container.import") s->kind = ContainerKind::IMPORT;
+        else if (tag == "container.table" || tag == "table") s->kind = ContainerKind::TABLE;
         else s->kind = ContainerKind::PLAIN;
         return s;
     }
@@ -300,20 +308,20 @@ StmtPtr Parser::importStatement() {
     return s;
 }
 
-// container.data يجب أن تبقى "بيانات نقية": بلا تعريف دوال وبلا حاويات/مجموعات/أحجام متداخلة،
-// وبلا route (المخصصة لـ container.api فقط) — ما يضمن أن أي حاوية بيانات تبقى قابلة للتسلسل
-// (serializable) بسهولة ولا تحمل منطقاً إجرائياً مخفياً بداخلها.
+// container.data / container.table / table يجب أن تبقى "بيانات نقية": بلا تعريف دوال وبلا حاويات/مجموعات/أحجام
+// متداخلة، وبلا route (المخصصة لـ container.api فقط) — ما يضمن أن أي حاوية بيانات (أو جدول) تبقى قابلة
+// للتسلسل (serializable) بسهولة ولا تحمل منطقاً إجرائياً مخفياً بداخلها.
 void Parser::validateDataContainerBody(const std::vector<StmtPtr>& body) {
     for (auto& st : body) {
         if (std::dynamic_pointer_cast<FunctionStmt>(st)) {
-            throw RinError("container.data لا يسمح بتعريف دوال (fun) بداخله؛ استخدم container أو container.pipe لذلك", st->line);
+            throw RinError("لا يُسمح بتعريف دوال (fun) داخل container.data/container.table/table؛ استخدم container أو container.pipe لذلك", st->line);
         }
         if (std::dynamic_pointer_cast<ContainerStmt>(st) || std::dynamic_pointer_cast<ContainerGroupStmt>(st) ||
             std::dynamic_pointer_cast<VolumeStmt>(st)) {
-            throw RinError("container.data لا يسمح بحاويات/مجموعات/أحجام متداخلة بداخله", st->line);
+            throw RinError("لا يُسمح بحاويات/مجموعات/أحجام متداخلة داخل container.data/container.table/table", st->line);
         }
         if (std::dynamic_pointer_cast<RouteStmt>(st)) {
-            throw RinError("عبارة 'route' مخصصة لـ container.api فقط، ولا يمكن استخدامها داخل container.data", st->line);
+            throw RinError("عبارة 'route' مخصصة لـ container.api فقط", st->line);
         }
     }
 }
@@ -396,14 +404,26 @@ StmtPtr Parser::mergeStatement() {
     return s;
 }
 
+// يقرأ "format=IDENT" اختيارياً (مثال: format=png; أو format=zip;) — تُستخدم من save/installation.
+// القيمة تُقرأ كمعرّف (IDENT) لا كنص، تماشياً مع بقية أسماء الصيغ في اللغة (pipe/data/api/import).
+// تُرجع سلسلة فارغة إن لم يظهر 'format' إطلاقاً (الصيغة النصية .rin الافتراضية تبقى كما هي).
+std::string Parser::readOptionalFormatAttr() {
+    if (!(check(TokenType::IDENT) && peek().lexeme == "format")) return "";
+    advance(); // 'format'
+    consume(TokenType::EQUAL, "Expected '=' after 'format'");
+    if (!check(TokenType::IDENT)) throw RinError("Expected a format name after 'format=' (e.g. png, zip)", peek().line);
+    return advance().lexeme;
+}
+
 StmtPtr Parser::installationStatement(bool simplifiedFlag) {
     Token tok = previous();
     if (!check(TokenType::IDENT) && !check(TokenType::STRING))
         throw RinError("Expected a name after 'installation'", peek().line);
     std::string target = advance().lexeme;
+    std::string format = readOptionalFormatAttr();
     consume(TokenType::SEMICOLON, "Expected ';' after installation statement");
     auto s = std::make_shared<InstallationStmt>();
-    s->target = target; s->simplified = simplifiedFlag; s->line = tok.line;
+    s->target = target; s->simplified = simplifiedFlag; s->format = format; s->line = tok.line;
     return s;
 }
 
@@ -415,9 +435,36 @@ StmtPtr Parser::saveStatement(bool simplifiedFlag) {
         consume(TokenType::EQUAL, "Expected '=' after 'path'");
         pathExpr = expression();
     }
+    std::string format = readOptionalFormatAttr();
     consume(TokenType::SEMICOLON, "Expected ';' after save statement");
     auto s = std::make_shared<SaveStmt>();
-    s->path = pathExpr; s->simplified = simplifiedFlag; s->line = tok.line;
+    s->path = pathExpr; s->simplified = simplifiedFlag; s->format = format; s->line = tok.line;
+    return s;
+}
+
+// row cells=[v1, v2, ...];  -> صف واحد داخل الجدول الحالي (container.table / table)
+StmtPtr Parser::rowStatement() {
+    Token tok = previous(); // 'row'
+    Token key = consume(TokenType::IDENT, "Expected 'cells' after 'row'");
+    if (key.lexeme != "cells") throw RinError("Expected 'cells' attribute after 'row' (e.g. row cells=[1, 2, 3];)", key.line);
+    consume(TokenType::EQUAL, "Expected '=' after 'cells'");
+    ExprPtr cellsExpr = expression();
+    consume(TokenType::SEMICOLON, "Expected ';' after row statement");
+    auto s = std::make_shared<RowStmt>();
+    s->cells = cellsExpr; s->line = tok.line;
+    return s;
+}
+
+// style value="style://theme";  -> نمط عرض الجدول الحالي (container.table / table)
+StmtPtr Parser::styleStatement() {
+    Token tok = previous(); // 'style'
+    Token key = consume(TokenType::IDENT, "Expected 'value' after 'style'");
+    if (key.lexeme != "value") throw RinError("Expected 'value' attribute after 'style' (e.g. style value=\"style://dark\";)", key.line);
+    consume(TokenType::EQUAL, "Expected '=' after 'value'");
+    ExprPtr valueExpr = expression();
+    consume(TokenType::SEMICOLON, "Expected ';' after style statement");
+    auto s = std::make_shared<StyleStmt>();
+    s->value = valueExpr; s->line = tok.line;
     return s;
 }
 
