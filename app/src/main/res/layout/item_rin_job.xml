@@ -4,11 +4,11 @@
     android:layout_height="wrap_content"
     android:orientation="vertical"
     android:background="@drawable/shape_job_card"
-    android:layout_marginStart="10dp"
-    android:layout_marginEnd="10dp"
+    android:layout_marginStart="12dp"
+    android:layout_marginEnd="12dp"
     android:layout_marginTop="6dp"
     android:layout_marginBottom="6dp"
-    android:padding="10dp">
+    android:padding="12dp">
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -18,8 +18,8 @@
 
         <View
             android:id="@+id/viewStatusDot"
-            android:layout_width="9dp"
-            android:layout_height="9dp"
+            android:layout_width="8dp"
+            android:layout_height="8dp"
             android:layout_marginEnd="8dp"
             android:background="@drawable/shape_status_dot" />
 
@@ -39,7 +39,12 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginStart="6dp"
-            android:textSize="11sp"
+            android:background="@drawable/bg_status_pill"
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp"
+            android:paddingTop="2dp"
+            android:paddingBottom="2dp"
+            android:textSize="10.5sp"
             android:textStyle="bold" />
 
         <TextView
@@ -55,7 +60,7 @@
         android:id="@+id/txtJobOutput"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="6dp"
+        android:layout_marginTop="8dp"
         android:fontFamily="monospace"
         android:textColor="@color/rin_console_text"
         android:textSize="12.5sp"
