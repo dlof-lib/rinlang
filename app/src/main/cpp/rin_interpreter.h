@@ -117,6 +117,11 @@ private:
     std::unordered_map<std::string, std::vector<ApiRoute>> apiRoutes; // مفتاح container.api -> نقاطها المسجَّلة عبر route
     std::unordered_set<std::string> importedPaths;            // مسارات @import المُنفَّذة فعلاً في هذا التشغيل (لمنع الاستيراد المكرَّر)
 
+    // ---- مفهوم الجدول (container.table / table المستقلة) ----
+    std::unordered_map<std::string, std::vector<Value>> tableRows;  // مفتاح الحاوية -> صفوفها (كل صف Value::ARRAY)
+    std::unordered_map<std::string, std::string> tableStyles;       // مفتاح الحاوية -> آخر "style value=" مسجَّل (مثال: "style://dark")
+    std::string buildTablePng(const std::string& key) const;        // يرسم الجدول كصورة PNG حقيقية (شبكة خلايا ملوّنة)
+
     // ---- تخزين حقيقي على القرص (save/file/installation) ----
     std::string basePath;                                     // جذر حقيقي اختياري لكل عمليات الملفات
     bool installedIndexLoaded = false;
