@@ -7,4 +7,14 @@
         <item name="android:windowBackground">@color/rin_background</item>
         <item name="android:statusBarColor">@color/rin_toolbar</item>
     </style>
+
+    <!-- Light theme dedicated to the Pipeline Runner screen: dark navy header,
+         light body, green accents — independent from the IDE's dark theme. -->
+    <style name="Theme.RinLang.Pipeline" parent="Theme.MaterialComponents.Light.NoActionBar">
+        <item name="colorPrimary">@color/pipeline_green</item>
+        <item name="colorPrimaryDark">@color/pipeline_header_bg</item>
+        <item name="colorAccent">@color/pipeline_green</item>
+        <item name="android:windowBackground">@color/pipeline_screen_bg</item>
+        <item name="android:statusBarColor">@color/pipeline_header_bg</item>
+    </style>
 </resources>
