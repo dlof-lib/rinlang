@@ -96,20 +96,36 @@ public:
     // Runs a full program, returns everything printed (or a formatted error).
     std::string run(const std::vector<StmtPtr>& statements);
 
+    // يحدّد جذر حقيقي على القرص تُبنى فوقه كل مسارات file/save/installation/writeFile/readFile...
+    // (مثلاً مجلد التطبيق الخاص على أندرويد عبر context.filesDir). فارغ = المجلد الحالي (CWD).
+    void setBasePath(const std::string& path) { basePath = path; }
+
 private:
     EnvPtr globals;
     std::ostringstream output;
 
     // حالة لغة الحاويات/البيانات (container / Containers.Group / Volume / link / tying / merge ...)
     std::unordered_map<std::string, EnvPtr> containers;      // اسم الحاوية -> بيئة متغيراتها
+    std::unordered_map<std::string, ContainerKind> containerKinds; // اسم الحاوية -> نوعها (لإعادة بنائها بشكل صحيح عند الحفظ)
     std::unordered_map<std::string, EnvPtr> groupEnvs;       // اسم المجموعة -> بيئتها الخاصة (متغيرات مُعلَنة مباشرة داخلها)
     std::unordered_map<std::string, std::vector<std::string>> groupMembers; // اسم المجموعة -> أسماء الحاويات/المجموعات الفرعية المباشرة بداخلها (بالترتيب)
     std::vector<std::string> groupStack;                      // المجموعة الحالية المفتوحة (لتسجيل الأعضاء أثناء التنفيذ)
     std::unordered_map<std::string, std::string> translations; // lang -> text (آخر ترجمة مسجّلة لكل لغة)
-    std::unordered_set<std::string> installedNames;          // ما تم "تثبيته" عبر installation
+    std::unordered_set<std::string> installedNames;          // ما تم "تثبيته" عبر installation (بما فيها ما حُمِّل من فهرس سابق فعلي على القرص)
     std::vector<std::string> containerStack;                 // مفتاح الحاوية الحالية (لأجل link/tying/merge/save/route/call)
     std::string currentFilePath;                              // آخر مسار مُعرَّف عبر file
     std::unordered_map<std::string, std::vector<ApiRoute>> apiRoutes; // مفتاح container.api -> نقاطها المسجَّلة عبر route
+
+    // ---- تخزين حقيقي على القرص (save/file/installation) ----
+    std::string basePath;                                     // جذر حقيقي اختياري لكل عمليات الملفات
+    bool installedIndexLoaded = false;
+    std::string resolvePath(const std::string& rawPath) const;          // يدمج basePath مع مسار نسبي
+    void ensureParentDir(const std::string& fullPath) const;            // ينشئ مجلدات الأب إن لزم (mkdir -p يدوياً)
+    std::string buildSaveDocument(const std::string& key, const EnvPtr& containerEnv,
+                                   ContainerKind kind, bool simplified) const; // يبني نص .rin قابل لإعادة القراءة من متغيرات حاوية
+    void writeRealFile(const std::string& relPath, const std::string& content, int line, const std::string& who) const; // كتابة فعلية + رسائل خطأ واضحة
+    void loadInstalledIndex();                                          // يحمّل فهرس rin_installed/index.rininstall عند بداية run()
+    void appendInstalledIndex(const std::string& name, const std::string& relPath, bool simplified) const;
 
     Value performApiCall(const std::string& containerKey, const std::string& method, const std::string& path, int line);
 
