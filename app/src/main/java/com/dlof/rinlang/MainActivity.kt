@@ -30,6 +30,17 @@ import java.io.OutputStreamWriter
  */
 class MainActivity : AppCompatActivity() {
 
+    companion object {
+        /** اسم مشروع (اختياري) جاء من شاشة الملفات/المشاريع؛ يحدّد basePath خاصاً بهذا المشروع. */
+        const val EXTRA_PROJECT_NAME = "extra_project_name"
+        /** اسم ملف .rin (اختياري) داخل ذلك المشروع، يُفتَح تلقائياً في المحرر. */
+        const val EXTRA_FILE_NAME = "extra_file_name"
+    }
+
+    /** المشروع الحالي إن جاء التطبيق من شاشة الملفات، وإلا null (وضع الملف الحر عبر SAF كما كان سابقاً). */
+    private var currentProject: Project? = null
+    private var currentProjectFile: RinFile? = null
+
     private lateinit var editCode: EditText
     private lateinit var txtLineNumbers: TextView
     private lateinit var txtEngineVersion: TextView
@@ -63,6 +74,17 @@ class MainActivity : AppCompatActivity() {
         setContentView(R.layout.activity_main)
         RinEngine.init(applicationContext) // يفعّل save/installation/file الحقيقية على تخزين التطبيق الخاص
 
+        // إن جاء التطبيق من شاشة الملفات/المشاريع، اربط RinEngine بمجلد ذلك المشروع تحديداً
+        // (basePath مستقل لكل مشروع)، حتى لا تتشارك مشاريع مختلفة نفس rin_installed/.
+        val projectName = intent.getStringExtra(EXTRA_PROJECT_NAME)
+        if (projectName != null) {
+            val project = ProjectManager.listProjects(this).find { it.name == projectName }
+            if (project != null) {
+                currentProject = project
+                RinEngine.init(applicationContext, project.dir.absolutePath)
+            }
+        }
+
         editCode = findViewById(R.id.editCode)
         txtLineNumbers = findViewById(R.id.txtLineNumbers)
         txtEngineVersion = findViewById(R.id.txtEngineVersion)
@@ -86,9 +108,21 @@ class MainActivity : AppCompatActivity() {
         val btnReplaceAll: Button = findViewById(R.id.btnReplaceAll)
         val btnFindClose: ImageButton = findViewById(R.id.btnFindClose)
         val btnClearConsole: Button = findViewById(R.id.btnClearConsole)
+        val btnProjects: Button = findViewById(R.id.btnProjects)
 
         if (savedInstanceState == null) {
-            editCode.setText(getString(R.string.sample_program))
+            val project = currentProject
+            val fileName = intent.getStringExtra(EXTRA_FILE_NAME)
+            val fileToOpen = if (project != null && fileName != null) {
+                ProjectManager.listFiles(project).find { it.name == fileName }
+            } else null
+            if (fileToOpen != null) {
+                currentProjectFile = fileToOpen
+                editCode.setText(ProjectManager.readFile(fileToOpen))
+                txtFileName.text = fileToOpen.name
+            } else {
+                editCode.setText(getString(R.string.sample_program))
+            }
         }
 
         // تلوين الصيغة النحوية (syntax highlighting) أثناء الكتابة
@@ -134,6 +168,10 @@ class MainActivity : AppCompatActivity() {
             RinJobScheduler.clear()
         }
 
+        btnProjects.setOnClickListener {
+            startActivity(android.content.Intent(this, ProjectsActivity::class.java))
+        }
+
         btnUndo.setOnClickListener { editorController.undo() }
         btnRedo.setOnClickListener { editorController.redo() }
 
@@ -164,12 +202,25 @@ class MainActivity : AppCompatActivity() {
         }
 
         btnSave.setOnClickListener {
-            val existing = currentUri
-            if (existing != null) {
-                writeToUri(existing)
-            } else {
-                createDocumentLauncher.launch(suggestedFileName())
+            val projectFile = currentProjectFile
+            val existingUri = currentUri
+            when {
+                projectFile != null -> saveToProjectFile(projectFile)
+                existingUri != null -> writeToUri(existingUri)
+                else -> createDocumentLauncher.launch(suggestedFileName())
             }
+        }
+    }
+
+    /** يحفظ محتوى المحرر مباشرة داخل ملف المشروع الحالي (بدون المرور بحوار SAF). */
+    private fun saveToProjectFile(file: RinFile) {
+        val project = currentProject ?: return
+        try {
+            val updated = ProjectManager.writeFile(project, file.name, editCode.text.toString())
+            currentProjectFile = updated
+            Toast.makeText(this, getString(R.string.file_saved_toast, updated.name), Toast.LENGTH_SHORT).show()
+        } catch (t: Throwable) {
+            Toast.makeText(this, "${getString(R.string.file_save_error)}: ${t.message}", Toast.LENGTH_LONG).show()
         }
     }
 
