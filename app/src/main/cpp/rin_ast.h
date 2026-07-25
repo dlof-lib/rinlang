@@ -112,9 +112,13 @@ struct TextStmt : Stmt {
 };
 
 // @container=name  <body>  .end/container
+// @container.pipe=name  <body>  .end/container.pipe
+//   -> نفس الحاوية، لكن isPipe=true تُشير إلى أنها "خط أنابيب" بيانات/إحصاء
+//      (تُستخدم عادة مع مُشغّل الأنابيب |> لتمرير قيمة عبر سلسلة تحويل/تجميع)
 struct ContainerStmt : Stmt {
     std::string name; // قد تكون فارغة إن لم يُحدَّد اسم
     std::vector<StmtPtr> body;
+    bool isPipe = false;
 };
 
 // @Containers.Group=name  <body>  .end/Containers.Group
