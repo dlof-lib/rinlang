@@ -16,17 +16,25 @@ RinLang/
 │   │   │   ├── rin_ast.h             # عقد شجرة البرنامج (AST)
 │   │   │   ├── rin_parser.h/.cpp     # المحلّل النحوي (Parser)
 │   │   │   ├── rin_interpreter.h/.cpp# المفسّر (Interpreter)
+│   │   │   ├── rin_stdlib_libs.h     # سجل المكتبات المدمجة (embedded) لعبارة @import — نسخة من lib/*.rin
 │   │   │   ├── jni_bridge.cpp        # جسر JNI بين C++ و Kotlin
 │   │   │   └── CMakeLists.txt
 │   │   ├── java/com/dlof/rinlang/
 │   │   │   ├── RinEngine.kt          # واجهة Kotlin تستدعي C++ عبر JNI
 │   │   │   └── MainActivity.kt       # محرر الأكواد + زر التشغيل + الكونسول
 │   │   └── res/                      # XML: تخطيطات، ألوان، نصوص، أيقونة
+├── lib/                               # مكتبات/حزم Rin جاهزة قابلة للاستيراد عبر @import "lib/...og.rin"
+│   ├── math.og.rin                   # دوال رياضية إضافية
+│   ├── strings.og.rin                # دوال نصوص إضافية
+│   ├── data.og.rin                   # دوال مصفوفات/قواميس إضافية
+│   ├── validate.og.rin               # دوال تحقّق (validation) آمنة (لا ترمي أخطاء)
+│   └── functional.og.rin             # دوال ترتيبية عليا (map/filter/reduce...) على المصفوفات
 ├── tools/test_main.cpp               # تشغيل المحرّك خارج أندرويد لأغراض الاختبار
 ├── tools/test_containers.cpp         # اختبار مفاهيم لغة الحاويات (container, Section, link, merge...)
 ├── tools/test_groups.cpp             # اختبار Containers.Group المُقوّاة (تتبّع الأعضاء، التداخل، tying/merge على مستوى مجموعة)
 ├── tools/test_pipeline.cpp           # اختبار container.pipe والمُشغّل |> والدوال الإحصائية
 ├── tools/test_persistence.cpp        # اختبار استمرارية save/installation فعلياً عبر تشغيلين منفصلين (Interpreter جديد في كل مرة)
+├── tools/test_import.cpp             # اختبار @import: المكتبات المدمجة الخمس + الدمج المباشر + الاستيراد باسم مستعار
 ├── .github/workflows/build-apk.yml   # بناء APK تلقائي عبر GitHub Actions
 ├── build.gradle / settings.gradle / gradle.properties
 └── README.md
@@ -412,6 +420,77 @@ g++ -std=c++17 -o rin_pipeline_test \
   -I app/src/main/cpp
 ./rin_pipeline_test
 ```
+
+## نظام المكتبات (@import) والمكتبات الجاهزة
+
+فوق كل ما سبق، تدعم اللغة عبارة **`@import`** لاستيراد مكتبات/حزم Rin جاهزة (أو ملفاتك الخاصة) واستخدام
+دوالها مباشرة، دون الحاجة لتكرار كتابتها في كل مشروع.
+
+### الصياغة
+
+```rin
+@import "lib/data.og.rin";            // دمج مباشر: كل fun/let/text أعلى مستوى في المكتبة
+                                       // تصبح متاحة فوراً في النطاق الحالي (تماماً كـ #include)
+
+@import "lib/data.og.rin" as data;    // استيراد باسم مستعار: يُسجَّل كحاوية باسم 'data'،
+                                       // فيمكن لاحقاً ربطها بـ link/tying/merge كأي حاوية أخرى
+                                       // دون تلويث النطاق الحالي بأسماء المكتبة مباشرة.
+```
+
+```rin
+@import "lib/math.og.rin";
+print factorial(5);      // 120
+print isPrime(17);       // true
+
+@import "lib/math.og.rin" as mathx;
+@container=viewer
+    tying with=mathx;    // ينسخ كل دوال/متغيرات mathx إلى viewer
+    print gcd(48, 18);   // 6
+.end/container
+```
+
+### من أين تُقرأ المكتبة؟
+
+عند تنفيذ `@import "المسار"`, يبحث المفسّر بالترتيب:
+
+1. **سجل المكتبات المدمجة (embedded)** داخل ثنائي المفسّر نفسه (`app/src/main/cpp/rin_stdlib_libs.h`) —
+   هذا ما يجعل استيراد المكتبات القياسية الخمس أدناه يعمل فوراً على أي منصة (بما فيها أندرويد) دون
+   الحاجة لنسخ أي ملف `.rin` إضافي إلى تخزين التطبيق.
+2. **ملف فعلي على القرص** (نسبةً إلى `basePath`، بنفس آلية `file`/`save`/`installation`) إن لم يكن
+   المسار موجوداً في السجل المدمج — وهذا ما يتيح لك كتابة مكتباتك ومشاريعك الخاصة واستيرادها بنفس
+   العبارة تماماً، مثلاً `@import "utils/my_helpers.rin";`.
+
+استيراد نفس المسار (بنفس أسلوب الاستيراد: مباشر أو بنفس الاسم المستعار) أكثر من مرة في نفس التشغيل
+يُتجاهَل تلقائياً بلا خطأ (تماماً كأنظمة الوحدات/modules المعتادة).
+
+### المكتبات الخمس الجاهزة (`lib/*.og.rin`)
+
+| المكتبة | تحتوي على |
+|---|---|
+| `lib/math.og.rin` | `factorial` `gcd` `lcm` `isPrime` `clamp` `lerp` `sign` `fibonacci` `average` `roundTo` `inRange` `percentOf` |
+| `lib/strings.og.rin` | `capitalize` `reverseStr` `startsWith` `endsWith` `padLeft` `padRight` `repeatStr` `titleCase` `isBlank` `countOccurrences` `stripSpaces` `splitTrim` |
+| `lib/data.og.rin` | `range` `rangeFrom` `unique` `chunk` `zip` `first` `last` `take` `drop` `reverseArr` `mapGet` `mapMerge` `countOf` |
+| `lib/validate.og.rin` | `isEmpty` `isBlankStr` `isNumeric` `isEmail` `lengthBetween` `isInRange` `hasLetterAndDigit` `isStrongPassword` |
+| `lib/functional.og.rin` | `mapArr` `filterArr` `reduceArr` `forEachArr` `findArr` `findIndexArr` `everyArr` `someArr` `timesRun` `composeApply` `isEven` `isOdd` `isPositive` `isNegative` |
+
+`lib/functional.og.rin` يوظّف كون الدوال في Rin **قيماً من الدرجة الأولى (first-class)**: يمكن تمرير
+اسم أي دالة `fun` كوسيط عادي (مثل `mapArr([1,2,3], double)`)، وتُستدعى بداخل الدالة المستقبِلة تماماً
+كأي متغير آخر يحمل دالة.
+
+يمكنك تجربة كل هذا عبر:
+
+```bash
+g++ -std=c++17 -o rin_import_test \
+  tools/test_import.cpp \
+  app/src/main/cpp/rin_lexer.cpp \
+  app/src/main/cpp/rin_parser.cpp \
+  app/src/main/cpp/rin_interpreter.cpp \
+  -I app/src/main/cpp
+./rin_import_test
+```
+
+**ملاحظة:** لا تملك Rin عبارة `try`/`catch`، لذا مكتبة `validate.og.rin` مصمَّمة بحيث لا ترمي أي دالة
+فيها خطأً أبداً — كل دالة تحقّق تُعيد `true`/`false` دائماً مهما كانت المدخلات.
 
 ## البناء محلياً
 
