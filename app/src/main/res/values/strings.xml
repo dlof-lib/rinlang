@@ -3,6 +3,24 @@
     <string name="app_name">Rin Lang</string>
     <string name="app_editor_title">Rin Editor</string>
     <string name="action_run">Run</string>
+    <string name="action_pipeline">Pipeline</string>
+
+    <!-- شاشة Pipeline Runner: تصوّر مرئي حقيقي لتنفيذ @container.pipe -->
+    <string name="pipeline_runner_title">Pipeline Runner</string>
+    <string name="pipeline_source_label">Source</string>
+    <string name="pipeline_node_source">Source</string>
+    <string name="pipeline_node_output">Final Output</string>
+    <string name="pipeline_status_running">Execution Status: Running…</string>
+    <string name="pipeline_status_success">Execution Status: [Completed] Successfully</string>
+    <string name="pipeline_status_error">Execution Status: [Failed]</string>
+    <string name="pipeline_status_idle">Execution Status: Not run yet</string>
+    <string name="pipeline_status_stopped">Execution Status: Stopped</string>
+    <string name="pipeline_no_block_found">No @container.pipe block was found in the code. Add one and open Pipeline again.</string>
+    <string name="pipeline_action_run">Run</string>
+    <string name="pipeline_action_stop">Stop</string>
+    <string name="pipeline_action_configure">Configure</string>
+    <string name="pipeline_configure_title">Pipeline</string>
+    <string name="pipeline_configure_message">Container: %1$s\nStages: %2$d\nTimeout: %3$d s\n\nEach value shown in the diagram is produced by actually re-running your code through the native Rin engine, truncated at each stage of the pipe expression — nothing here is simulated.</string>
     <string name="action_clear">Clear</string>
     <string name="action_open">Open</string>
     <string name="action_save">Save</string>
