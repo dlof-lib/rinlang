@@ -3,25 +3,27 @@
     <string name="app_name">Rin Lang</string>
     <string name="app_editor_title">Rin Editor</string>
     <string name="action_run">Run</string>
-    <string name="action_pipeline">Pipeline</string>
 
-    <!-- شاشة Pipeline Runner: تصوّر مرئي حقيقي لتنفيذ @container.pipe -->
-    <string name="pipeline_runner_title">Pipeline Runner</string>
+    <!-- RinFlow: الاسم الرسمي لميزة رِن لتصوير وتنفيذ الأنابيب (@container.pipe) بشكل مرئي حي -->
+    <string name="pipeline_runner_title">RinFlow</string>
     <string name="pipeline_source_label">Source</string>
     <string name="pipeline_node_source">Source</string>
     <string name="pipeline_node_output">Final Output</string>
-    <string name="pipeline_status_running">Execution Status: Running…</string>
-    <string name="pipeline_status_success">Execution Status: [Completed] Successfully</string>
-    <string name="pipeline_status_error">Execution Status: [Failed]</string>
-    <string name="pipeline_status_idle">Execution Status: Not run yet</string>
-    <string name="pipeline_status_stopped">Execution Status: Stopped</string>
-    <string name="pipeline_no_block_found">No @container.pipe block was found in the code. Add one and open Pipeline again.</string>
+    <string name="pipeline_status_running">RinFlow: Running…</string>
+    <string name="pipeline_status_success">RinFlow: Completed Successfully</string>
+    <string name="pipeline_status_error">RinFlow: Failed</string>
+    <string name="pipeline_status_idle">RinFlow: Not run yet</string>
+    <string name="pipeline_status_stopped">RinFlow: Stopped</string>
+    <string name="pipeline_no_block_found">This file is empty — write some Rin code (any container, pipe, table, or plain statements) and press Run again.</string>
     <string name="pipeline_action_run">Run</string>
     <string name="pipeline_action_stop">Stop</string>
     <string name="pipeline_action_configure">Configure</string>
     <string name="pipeline_action_load_sample">Load Example Pipeline</string>
-    <string name="pipeline_configure_title">Pipeline</string>
+    <string name="pipeline_configure_title">RinFlow</string>
     <string name="pipeline_configure_message">Container: %1$s\nStages: %2$d\nTimeout: %3$d s\n\nEach value shown in the diagram is produced by actually re-running your code through the native Rin engine, truncated at each stage of the pipe expression — nothing here is simulated.</string>
+    <!-- يظهر بعد الضغط على Run عندما يحتوي الكود الحالي على كتلة @container.pipe حقيقية -->
+    <string name="rinflow_detected_snackbar">RinFlow pipeline detected in this run</string>
+    <string name="rinflow_open_action">Open RinFlow</string>
     <string name="action_clear">Clear</string>
     <string name="action_open">Open</string>
     <string name="action_save">Save</string>
@@ -46,14 +48,12 @@
     <string name="menu_view_toggle_lines">Toggle line numbers</string>
     <string name="menu_view_clear_console">Clear run history</string>
     <string name="menu_run_run">Run program</string>
-    <string name="menu_run_pipeline">Open Pipeline view</string>
     <string name="new_file_name">untitled.rin</string>
     <string name="new_file_toast">New file</string>
     <string name="desc_menu_file">File menu</string>
     <string name="desc_menu_edit">Edit menu</string>
     <string name="desc_menu_view">View menu</string>
     <string name="desc_run_quick">Run</string>
-    <string name="desc_pipeline_quick">Pipeline</string>
     <string name="desc_projects_quick">Projects</string>
     <string name="editor_hint">Write Rin code here…</string>
     <string name="file_unsaved">untitled.rin</string>
