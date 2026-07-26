@@ -3,7 +3,7 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="vertical"
-    android:background="@drawable/bg_pipeline_code_card"
+    android:background="@drawable/bg_list_card"
     android:layout_margin="4dp"
     android:padding="12dp">
 
@@ -39,9 +39,10 @@
             android:id="@+id/btnDeleteLibrary"
             android:layout_width="36dp"
             android:layout_height="36dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
+            android:padding="9dp"
+            android:background="@drawable/bg_icon_btn"
             android:contentDescription="@string/delete_library_title"
-            android:src="@android:drawable/ic_menu_delete" />
+            android:src="@drawable/ic_trash_red" />
     </LinearLayout>
 
     <LinearLayout
