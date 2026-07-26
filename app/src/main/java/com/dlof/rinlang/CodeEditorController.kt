@@ -328,7 +328,7 @@ class CodeEditorController(
     fun insertAtCursor(text: String) {
         val start = editText.selectionStart.coerceAtLeast(0)
         val end = editText.selectionEnd.coerceAtLeast(start)
-        editText.text.replace(start, end, text)
+        editText.text?.replace(start, end, text)
         editText.setSelection(start + text.length)
     }
 
@@ -550,8 +550,8 @@ class CodeEditorController(
         if (query.isEmpty()) return
         val start = editText.selectionStart
         val end = editText.selectionEnd
-        if (start in 0 until end && normalize(editText.text.substring(start, end)) == normalize(query)) {
-            editText.text.replace(start, end, replacement)
+        if (start in 0 until end && normalize(editText.text?.substring(start, end).orEmpty()) == normalize(query)) {
+            editText.text?.replace(start, end, replacement)
             editText.setSelection(start + replacement.length)
         }
         findNext(query)
