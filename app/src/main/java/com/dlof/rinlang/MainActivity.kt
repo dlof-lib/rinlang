@@ -121,6 +121,8 @@ class MainActivity : AppCompatActivity() {
         txtFindCount = findViewById(R.id.txtFindCount)
         scrollEditor = findViewById(R.id.scrollEditor)
 
+        applyStoredEditorSettings()
+
         // أزرار الوصول السريع (أيقونة فقط، صغيرة جداً) في الصف الأول من الشريط العلوي
         val btnRun: ImageButton = findViewById(R.id.btnRun)
         val btnProjects: ImageButton = findViewById(R.id.btnProjects)
@@ -461,19 +463,28 @@ class MainActivity : AppCompatActivity() {
 
     private var lineNumbersVisible = true
 
-    private fun toggleLineNumbers() {
-        lineNumbersVisible = !lineNumbersVisible
+    /** يقرأ إعدادات المحرر المحفوظة من شاشة "الإعدادات" (حجم الخط، أرقام الأسطر) ويطبّقها فور فتح المحرر. */
+    private fun applyStoredEditorSettings() {
+        val savedSp = AppSettings.getEditorFontSizeSp(this)
+        editCode.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, savedSp)
+        txtLineNumbers.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, savedSp)
+
+        lineNumbersVisible = AppSettings.getShowLineNumbers(this)
         txtLineNumbers.visibility = if (lineNumbersVisible) android.view.View.VISIBLE else android.view.View.GONE
     }
 
-    private val minEditorTextSizeSp = 10f
-    private val maxEditorTextSizeSp = 22f
+    private fun toggleLineNumbers() {
+        lineNumbersVisible = !lineNumbersVisible
+        txtLineNumbers.visibility = if (lineNumbersVisible) android.view.View.VISIBLE else android.view.View.GONE
+        AppSettings.setShowLineNumbers(this, lineNumbersVisible)
+    }
 
     private fun changeEditorFontSize(deltaSp: Float) {
         val currentSp = editCode.textSize / resources.displayMetrics.scaledDensity
-        val newSp = (currentSp + deltaSp).coerceIn(minEditorTextSizeSp, maxEditorTextSizeSp)
+        val newSp = (currentSp + deltaSp).coerceIn(AppSettings.MIN_FONT_SIZE_SP, AppSettings.MAX_FONT_SIZE_SP)
         editCode.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, newSp)
         txtLineNumbers.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, newSp)
+        AppSettings.setEditorFontSizeSp(this, newSp)
     }
 
     /** يحفظ محتوى المحرر مباشرة داخل ملف المشروع الحالي (بدون المرور بحوار SAF). */
