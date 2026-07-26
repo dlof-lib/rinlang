@@ -1,6 +1,8 @@
 plugins {
     id 'com.android.application'
     id 'org.jetbrains.kotlin.android'
+    // يجب أن يبقى هذا آخر سطر بلوجنات لكي يقرأ google-services.json بشكل صحيح
+    id 'com.google.gms.google-services'
 }
 
 android {
@@ -60,4 +62,10 @@ dependencies {
     implementation 'com.google.android.material:material:1.12.0'
     implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
     implementation 'androidx.recyclerview:recyclerview:1.3.2'
+
+    // Firebase — Realtime Database + Authentication (Email/Password) فقط، وكلاهما ضمن
+    // خطة Spark المجانية بدون بطاقة دفع. لا نستخدم Cloud Functions ولا Storage المدفوع.
+    implementation platform('com.google.firebase:firebase-bom:33.1.2')
+    implementation 'com.google.firebase:firebase-auth-ktx'
+    implementation 'com.google.firebase:firebase-database-ktx'
 }
