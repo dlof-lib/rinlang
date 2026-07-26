@@ -51,6 +51,16 @@ class LibrariesActivity : AppCompatActivity() {
             if (uri != null) uploadLibrary(uri)
         }
 
+    /** يستقبل سطر @import من متجر Rin فور التثبيت، ويمرّره فوراً للمحرر (بضغطة تثبيت واحدة
+     *  بدل تثبيت ثم عودة لهذه الشاشة لاختيار "إدراج" يدوياً). */
+    private val rinStoreLauncher =
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+            val importStatement = result.data?.getStringExtra(RinStoreActivity.EXTRA_IMPORT_STATEMENT)
+            if (result.resultCode == RESULT_OK && importStatement != null) {
+                finishWithImport(importStatement)
+            }
+        }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_libraries)
@@ -107,13 +117,16 @@ class LibrariesActivity : AppCompatActivity() {
         fabNewLibrary.setOnClickListener { showCreateLibraryDialog() }
 
         findViewById<View>(R.id.btnBrowseStore).setOnClickListener {
-            startActivity(
+            rinStoreLauncher.launch(
                 Intent(this, RinStoreActivity::class.java)
                     .putExtra(RinStoreActivity.EXTRA_PROJECT_NAME, project.name)
             )
         }
         findViewById<View>(R.id.btnMyAccount).setOnClickListener {
             startActivity(Intent(this, AccountActivity::class.java))
+        }
+        findViewById<View>(R.id.btnSettings).setOnClickListener {
+            startActivity(Intent(this, SettingsActivity::class.java))
         }
     }
 
