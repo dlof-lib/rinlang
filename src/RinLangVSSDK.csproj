@@ -63,6 +63,12 @@
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
+    <!-- KnownImageIds.vsct ships inside Microsoft.VSSDK.BuildTools, but VSGlobals.vsct does not —
+         it is only distributed by this community package, which adds it to the VSCT include path. -->
+    <PackageReference Include="Community.VisualStudio.VSCT" Version="16.0.29.6">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
   </ItemGroup>
 
   <ItemGroup>
