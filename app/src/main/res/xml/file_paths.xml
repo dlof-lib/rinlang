@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- يحدّد المسارات التي يُسمح لـ FileProvider بمشاركتها كـ content:// Uri آمن،
+     مطلوب لفتح الملف المنزَّل (ACTION_VIEW) على أندرويد 9 وأقدم بدون FileUriExposedException. -->
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+    <external-path name="downloads" path="Download/" />
+</paths>
