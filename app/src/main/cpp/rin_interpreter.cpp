@@ -139,6 +139,16 @@ static void expectArgs(const std::string& fn, std::vector<Value>& args, size_t c
     }
 }
 
+// يتحقّق أن طرفَي عملية حسابية/مقارنة (غير + التي تدعم النصوص أيضاً) هما رقمان فعلاً، بدلاً من الاعتماد
+// الصامت على Value::number الذي يساوي 0.0 افتراضياً لأي نوع آخر (نص/مصفوفة/قاموس/nil) — وهو ما كان
+// يجعل عبارة مثل "abc" - 5 تُحسَب بصمت كـ 0 - 5 بدل رمي خطأ واضح.
+static void requireNumbers(const Value& left, const Value& right, const std::string& op, int line) {
+    if (left.type != Value::Type::NUMBER || right.type != Value::Type::NUMBER) {
+        const Value& bad = (left.type != Value::Type::NUMBER) ? left : right;
+        throw RinError("العملية '" + op + "' تتطلّب رقمين، لكن وُجد نوع " + bad.typeName(), line);
+    }
+}
+
 // يحوّل قيمة من نوع array إلى مصفوفة أرقام C++ لاستخدامها في الدوال الإحصائية.
 static std::vector<double> asNumberArray(const Value& v, const std::string& fn, int line) {
     if (v.type != Value::Type::ARRAY) {
@@ -856,7 +866,7 @@ void Interpreter::registerNatives() {
         expectArgs("appendFile", a, 2, line);
         std::string path = asString(a[0], "appendFile", line);
         std::string content = a[1].type == Value::Type::STRING ? a[1].str : a[1].toDisplayString();
-        std::string fullPath = resolvePath(path);
+        std::string fullPath = resolvePath(path, line);
         ensureParentDir(fullPath);
         std::ofstream out(fullPath, std::ios::binary | std::ios::app);
         if (!out) throw RinError("appendFile: تعذّر فتح الملف '" + path + "' للإضافة إليه", line);
@@ -866,7 +876,7 @@ void Interpreter::registerNatives() {
     natives["readFile"] = [this](std::vector<Value>& a, int line) -> Value {
         expectArgs("readFile", a, 1, line);
         std::string path = asString(a[0], "readFile", line);
-        std::ifstream in(resolvePath(path), std::ios::binary);
+        std::ifstream in(resolvePath(path, line), std::ios::binary);
         if (!in) throw RinError("readFile: تعذّر فتح الملف '" + path + "' للقراءة (غير موجود؟)", line);
         std::ostringstream buf;
         buf << in.rdbuf();
@@ -876,12 +886,12 @@ void Interpreter::registerNatives() {
         expectArgs("fileExists", a, 1, line);
         std::string path = asString(a[0], "fileExists", line);
         struct stat st{};
-        return Value::boolean_(::stat(resolvePath(path).c_str(), &st) == 0);
+        return Value::boolean_(::stat(resolvePath(path, line).c_str(), &st) == 0);
     };
     natives["deleteFile"] = [this](std::vector<Value>& a, int line) -> Value {
         expectArgs("deleteFile", a, 1, line);
         std::string path = asString(a[0], "deleteFile", line);
-        return Value::boolean_(::remove(resolvePath(path).c_str()) == 0);
+        return Value::boolean_(::remove(resolvePath(path, line).c_str()) == 0);
     };
 
     // ---- تثبيتات حقيقية ومستمرة (installation) ----
@@ -930,13 +940,40 @@ void Interpreter::registerNatives() {
 
 // ================= تخزين حقيقي على القرص (save/file/installation) =================
 
-std::string Interpreter::resolvePath(const std::string& rawPath) const {
+std::string Interpreter::resolvePath(const std::string& rawPath, int line) const {
     if (rawPath.empty()) return rawPath;
-    if (basePath.empty()) return rawPath;
-    if (!rawPath.empty() && rawPath.front() == '/') return rawPath; // مسار مطلق: لا يُدمج مع basePath
+    if (basePath.empty()) return rawPath; // بدون basePath لا يوجد "معزول" للخروج منه أصلاً (استخدام مباشر خارج أندرويد)
+
+    // كل المسارات (نسبية أو مطلقة) تُطبَّع بتفكيكها إلى مقاطع وحلّ "." و".." يدوياً، بدل تمريرها كما هي:
+    // مسار مطلق صريح (يبدأ بـ '/') كان سابقاً يتجاوز basePath كلياً، و"../" متكررة كانت تصعد فوق جذر
+    // basePath بلا أي رادع — كلاهما يسمح لكود Rin (مثلاً مكتبة @import من مصدر غير موثوق) بقراءة/كتابة
+    // ملفات عشوائية خارج مجلد المشروع المعزول. الآن أي محاولة صعود فوق basePath نفسه تُرفَض بخطأ واضح.
+    std::vector<std::string> segments;
+    size_t i = 0;
+    while (i <= rawPath.size()) {
+        size_t slash = rawPath.find('/', i);
+        std::string seg = (slash == std::string::npos) ? rawPath.substr(i) : rawPath.substr(i, slash - i);
+        if (seg.empty() || seg == ".") {
+            // تجاهل: فاصل مكرر أو "المجلد الحالي"
+        } else if (seg == "..") {
+            if (segments.empty()) {
+                throw RinError("مسار غير مسموح به (يحاول الخروج خارج مجلد المشروع المعزول): '" + rawPath + "'", line);
+            }
+            segments.pop_back();
+        } else {
+            segments.push_back(seg);
+        }
+        if (slash == std::string::npos) break;
+        i = slash + 1;
+    }
     std::string base = basePath;
     if (!base.empty() && base.back() != '/') base += '/';
-    return base + rawPath;
+    std::string result = base;
+    for (size_t idx = 0; idx < segments.size(); idx++) {
+        result += segments[idx];
+        if (idx + 1 < segments.size()) result += '/';
+    }
+    return result;
 }
 
 void Interpreter::ensureParentDir(const std::string& fullPath) const {
@@ -1246,7 +1283,7 @@ std::string Interpreter::buildSaveDocument(const std::string& key, const EnvPtr&
 }
 
 void Interpreter::writeRealFile(const std::string& relPath, const std::string& content, int line, const std::string& who) const {
-    std::string fullPath = resolvePath(relPath);
+    std::string fullPath = resolvePath(relPath, line);
     ensureParentDir(fullPath);
     std::ofstream out(fullPath, std::ios::binary | std::ios::trunc);
     if (!out) {
@@ -1284,6 +1321,7 @@ void Interpreter::appendInstalledIndex(const std::string& name, const std::strin
 std::string Interpreter::run(const std::vector<StmtPtr>& statements) {
     loadInstalledIndex(); // يحمّل أسماء أي تثبيتات فعلية سابقة على نفس basePath (استمرارية عبر التشغيلات)
     importedPaths.clear(); // كل تشغيل جديد يبدأ بسجل @import نظيف (لا يرث استيرادات تشغيل سابق)
+    callDepth = 0; // كل تشغيل جديد يبدأ بعدّاد عمق استدعاء نظيف (احتياطاً عند إعادة استخدام نفس الكائن)
     // First pass: hoist function declarations so they can be called
     // regardless of source order (and support simple recursion).
     for (const auto& s : statements) {
@@ -1829,6 +1867,20 @@ Value Interpreter::callFunction(const std::shared_ptr<Callable>& fn, std::vector
         throw RinError("Expected " + std::to_string(fn->declaration->params.size()) +
                         " argument(s) but got " + std::to_string(args.size()), line);
     }
+    // حارس عمق الاستدعاء: بلا هذا الفحص، دالة تتكرّر ذاتياً بلا حالة توقّف (نسيان شرط الإنهاء —
+    // خطأ برمجي شائع جداً، وليس فقط سيناريو هجوم) تُسبِّب Stack Overflow حقيقياً في مكدّس C++ الأصلي
+    // (segmentation fault لا يمكن لأي try/catch اعتراضه)، فيُسقِط التطبيق كاملاً. الآن يُحوَّل هذا إلى
+    // RinError عادي وقابل للعرض في الكونسول، تماماً كأي خطأ Rin آخر.
+    if (callDepth >= kMaxCallDepth) {
+        throw RinError("تجاوز الحد الأقصى لعمق استدعاء الدوال (" + std::to_string(kMaxCallDepth) +
+                        ") — على الأغلب تكرار ذاتي بلا حالة توقّف (missing base case)", line);
+    }
+    callDepth++;
+    struct DepthGuard {
+        int& depth;
+        ~DepthGuard() { depth--; }
+    } guard{callDepth};
+
     auto callEnv = std::make_shared<Environment>(fn->closure);
     for (size_t i = 0; i < args.size(); i++) {
         callEnv->define(fn->declaration->params[i], args[i]);
@@ -1894,19 +1946,31 @@ Value Interpreter::evaluate(const ExprPtr& expr, EnvPtr env) {
                     return Value::num(left.number + right.number);
                 throw RinError("Operands must be numbers or strings", e->line);
             case TokenType::MINUS:
+                requireNumbers(left, right, "-", e->line);
                 return Value::num(left.number - right.number);
             case TokenType::STAR:
+                requireNumbers(left, right, "*", e->line);
                 return Value::num(left.number * right.number);
             case TokenType::SLASH:
+                requireNumbers(left, right, "/", e->line);
                 if (right.number == 0) throw RinError("Division by zero", e->line);
                 return Value::num(left.number / right.number);
             case TokenType::PERCENT:
+                requireNumbers(left, right, "%", e->line);
                 if (right.number == 0) throw RinError("Division by zero", e->line);
                 return Value::num(std::fmod(left.number, right.number));
-            case TokenType::GREATER: return Value::boolean_(left.number > right.number);
-            case TokenType::GREATER_EQUAL: return Value::boolean_(left.number >= right.number);
-            case TokenType::LESS: return Value::boolean_(left.number < right.number);
-            case TokenType::LESS_EQUAL: return Value::boolean_(left.number <= right.number);
+            case TokenType::GREATER:
+                requireNumbers(left, right, ">", e->line);
+                return Value::boolean_(left.number > right.number);
+            case TokenType::GREATER_EQUAL:
+                requireNumbers(left, right, ">=", e->line);
+                return Value::boolean_(left.number >= right.number);
+            case TokenType::LESS:
+                requireNumbers(left, right, "<", e->line);
+                return Value::boolean_(left.number < right.number);
+            case TokenType::LESS_EQUAL:
+                requireNumbers(left, right, "<=", e->line);
+                return Value::boolean_(left.number <= right.number);
             case TokenType::EQUAL_EQUAL:
                 return Value::boolean_(valuesEqual(left, right));
             case TokenType::BANG_EQUAL:
