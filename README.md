@@ -1,22 +1,35 @@
 <div align="center">
 
-<img src="app/src/main/res/mipmap-xxxhdpi/ic_launcher.png" width="104" alt="Rin logo" />
+<img src="app/src/main/res/mipmap-xxxhdpi/ic_launcher.png" width="112" alt="Rin logo" />
 
 # Rin
 
-### لغة برمجة صغيرة لهيكلة البيانات، مبنية بـ C++17 ومدمَجة في IDE أندرويد بـ Kotlin
+### لغة برمجة صغيرة لهيكلة البيانات — محرّكها C++17، ومدمَجة في IDE أندرويد كامل بـ Kotlin
 
-[![Rin](https://img.shields.io/badge/Language-Rin-7C5CFF?style=for-the-badge&logo=data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABwAAAAcCAYAAAByDd+UAAAEeElEQVR4nKWWb2hVZRjAf89zzj27u9vunLKRa2NaJjLmTLMMIVagpgukLxbRh1L6QybU5yLoe9CHhASDkvpQmpIlZk1XbiE4LUrRTQxz6aYNcvNuDm33nPfpw737d/9ssx44cM55z/P83ufP+zxHmEUaWhriw2WVj2NuM45Hwe4DSYKJGcMCvSZ0Id6hkogfBo6eHZ3JnhRd2dIYzB/xnjPYgdkqVBQDzApbMQPkDLCrLFn+ad+XJ2/PGVi1aflyHDvFo8UMcAUg08TAABVEBHN2Usy9MdjWfWpWYNXGplaEPSJabZErvKVC/CmeiwpmlgJ5Zej7c/uKAqs2NrWCfAFUYDZTwAuAbfqzCBj/gL0w1HZ+bx6wan1zE547jsgC3BxghaC5+RXBjBG1aP3g0Z4uAAVg45ISxH0oqncHy5VcPTNEqHDoruqWxvIJ4DxX8qz4+phFroghmbzuigg4QzxdmS7RrQBSt6WudDRVeQJPV05U41S9QpDc0M0UVgMTAbOLYvFH/NFUsgVhxeyl/z8kU4BL4c4mRXQzKjrjx1lJhyHpMJ2zPkeoCIY97YNbi+XzzAxnhpnhqZIO0zyxai3OOTrPnMJTxbJHwVMvo+Nc1naRNBhrFGNRbtzNjCAWUD1vPkvrF6OqJMsqSCbKGRsbA6CyPEl9TS33zK8mcg5zRrwyQaw0wMbTk5dbq/NBkhggxni1pNMhq5c189bz2xkcSXGx7zJtpzrY1voMh04c48ffTvLu1jfxTKivrWP7e28zcOsGizc0c6t/iP6u37HICkRcfJ2g5OSiNIjTe72PHe+/Q/elixz/tYv9Hd+STJQThSHliTI+OLCH3utXWVRTS3VzPQuW1rLw4ftJ1i3AFTlivhnDIiQn3M6GX1Tw1GdoJMX+ziM8+EAjq5etoCKeYEndYjBQVVQ91Pe40tlDaVmCW/1DDF0aQH1vig/ZtmdEvgh/IrJ8Io8Gnqf80X+FrzqPEAQBAA0199L/1zUMaKhZyOdtB/n75g0OdnxH77U+gtI4V3+6gJmhMS+/egUM65d5Gxo/EtWXcs+hM0foIgI/A0yHacIoxIDAj+GcI+b5pKMQXz1Up1T6tD4+ObpwdkAx+QaXP1VVlMCLZcvZiPk+pUGcRBDHV4/AjyEiBH5sZti0W/taS/B+MDg/a5+cywG3Ap8Zmfbo7LJTOawDR8+OGrozO7/+m1gh2OQLUcFUdg23dQ8qQEVl2WcWRadRnVC+GxAUh6GCha5HLb4bpsyF5Lqm1SrWjkgSszmNxPx95dBFALttTlpT7eePw/gABoaPnfvZmXsZsTuZRsusV56rUxdEQCw04/Vx2DRgBtqzT8y9CDaMztXHAjHN6N62yF5NHev+ZKpG3pgYauvZqy56EnO/iEo26EV8zHVXBPEU4JwJT6Xaez7OtV/UjeqWxvJ0YNsweQ2RZRM/uwU6yGSF2yVBdrsxf3eq48zNQnZnjVvVuocqkTubDDaDrcGoB2LZ5dCgX1ROA4eiKDo80n7hxkz2/gX6FhHTlKjPLgAAAABJRU5ErkJggg==&logoColor=white)](#لغة-rin--دليل-سريع)
-[![Engine](https://img.shields.io/badge/Engine-C%2B%2B17-00599C?style=for-the-badge&logo=cplusplus&logoColor=white)](app/src/main/cpp)
-[![UI](https://img.shields.io/badge/UI-Kotlin-7F52FF?style=for-the-badge&logo=kotlin&logoColor=white)](app/src/main/java/com/dlof/rinlang)
-[![Platform](https://img.shields.io/badge/Platform-Android-3DDC84?style=for-the-badge&logo=android&logoColor=white)](app/build.gradle)
+<p>
+<a href="#لغة-rin--دليل-سريع"><img alt="Rin" src="https://img.shields.io/badge/Rin-Programming%20Language-7C5CFF?style=for-the-badge&logo=data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABwAAAAcCAYAAAByDd+UAAAEeElEQVR4nKWWb2hVZRjAf89zzj27u9vunLKRa2NaJjLmTLMMIVagpgukLxbRh1L6QybU5yLoe9CHhASDkvpQmpIlZk1XbiE4LUrRTQxz6aYNcvNuDm33nPfpw737d/9ssx44cM55z/P83ufP+zxHmEUaWhriw2WVj2NuM45Hwe4DSYKJGcMCvSZ0Id6hkogfBo6eHZ3JnhRd2dIYzB/xnjPYgdkqVBQDzApbMQPkDLCrLFn+ad+XJ2/PGVi1aflyHDvFo8UMcAUg08TAABVEBHN2Usy9MdjWfWpWYNXGplaEPSJabZErvKVC/CmeiwpmlgJ5Zej7c/uKAqs2NrWCfAFUYDZTwAuAbfqzCBj/gL0w1HZ+bx6wan1zE547jsgC3BxghaC5+RXBjBG1aP3g0Z4uAAVg45ISxH0oqncHy5VcPTNEqHDoruqWxvIJ4DxX8qz4+phFroghmbzuigg4QzxdmS7RrQBSt6WudDRVeQJPV05U41S9QpDc0M0UVgMTAbOLYvFH/NFUsgVhxeyl/z8kU4BL4c4mRXQzKjrjx1lJhyHpMJ2zPkeoCIY97YNbi+XzzAxnhpnhqZIO0zyxai3OOTrPnMJTxbJHwVMvo+Nc1naRNBhrFGNRbtzNjCAWUD1vPkvrF6OqJMsqSCbKGRsbA6CyPEl9TS33zK8mcg5zRrwyQaw0wMbTk5dbq/NBkhggxni1pNMhq5c189bz2xkcSXGx7zJtpzrY1voMh04c48ffTvLu1jfxTKivrWP7e28zcOsGizc0c6t/iP6u37HICkRcfJ2g5OSiNIjTe72PHe+/Q/elixz/tYv9Hd+STJQThSHliTI+OLCH3utXWVRTS3VzPQuW1rLw4ftJ1i3AFTlivhnDIiQn3M6GX1Tw1GdoJMX+ziM8+EAjq5etoCKeYEndYjBQVVQ91Pe40tlDaVmCW/1DDF0aQH1vig/ZtmdEvgh/IrJ8Io8Gnqf80X+FrzqPEAQBAA0199L/1zUMaKhZyOdtB/n75g0OdnxH77U+gtI4V3+6gJmhMS+/egUM65d5Gxo/EtWXcs+hM0foIgI/A0yHacIoxIDAj+GcI+b5pKMQXz1Up1T6tD4+ObpwdkAx+QaXP1VVlMCLZcvZiPk+pUGcRBDHV4/AjyEiBH5sZti0W/taS/B+MDg/a5+cywG3Ap8Zmfbo7LJTOawDR8+OGrozO7/+m1gh2OQLUcFUdg23dQ8qQEVl2WcWRadRnVC+GxAUh6GCha5HLb4bpsyF5Lqm1SrWjkgSszmNxPx95dBFALttTlpT7eePw/gABoaPnfvZmXsZsTuZRsusV56rUxdEQCw04/Vx2DRgBtqzT8y9CDaMztXHAjHN6N62yF5NHev+ZKpG3pgYauvZqy56EnO/iEo26EV8zHVXBPEU4JwJT6Xaez7OtV/UjeqWxvJ0YNsweQ2RZRM/uwU6yGSF2yVBdrsxf3eq48zNQnZnjVvVuocqkTubDDaDrcGoB2LZ5dCgX1ROA4eiKDo80n7hxkz2/gX6FhHTlKjPLgAAAABJRU5ErkJggg==&logoColor=white&labelColor=15161A" /></a>
+</p>
 
-[![Build](https://img.shields.io/github/actions/workflow/status/OWNER/REPO/build-apk.yml?branch=main&style=for-the-badge&logo=githubactions&logoColor=white&label=Build)](../../actions)
-[![Version](https://img.shields.io/badge/version-1.0.0-orange?style=for-the-badge)](app/build.gradle)
-[![License](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge)](LICENSE)
-[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen?style=for-the-badge&logo=git&logoColor=white)](#المساهمة)
+<p>
+<img alt="Engine" src="https://img.shields.io/badge/Engine-C%2B%2B17-00599C?style=for-the-badge&logo=cplusplus&logoColor=white" />
+<img alt="UI" src="https://img.shields.io/badge/UI-Kotlin-7F52FF?style=for-the-badge&logo=kotlin&logoColor=white" />
+<img alt="Platform" src="https://img.shields.io/badge/Platform-Android-3DDC84?style=for-the-badge&logo=android&logoColor=white" />
+<img alt="NDK" src="https://img.shields.io/badge/Native-JNI%2FNDK-4E4E4E?style=for-the-badge&logo=cmake&logoColor=white" />
+</p>
 
-<sub>⚠️ استبدل <code>OWNER/REPO</code> في وسام Build باسم مستودعك على GitHub بعد الرفع كي يعمل مباشرة.</sub>
+<p>
+<a href="https://github.com/dlof-lib/rinlang/actions/workflows/build-apk.yml"><img alt="Build" src="https://img.shields.io/github/actions/workflow/status/dlof-lib/rinlang/build-apk.yml?branch=main&style=for-the-badge&logo=githubactions&logoColor=white&label=Build" /></a>
+<a href="https://github.com/dlof-lib/rinlang/commits/main"><img alt="Last commit" src="https://img.shields.io/github/last-commit/dlof-lib/rinlang?style=for-the-badge&color=informational&label=Last%20Commit" /></a>
+<a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/License-MIT-blue?style=for-the-badge" /></a>
+<img alt="Version" src="https://img.shields.io/badge/version-1.0.0-orange?style=for-the-badge" />
+</p>
+
+<p>
+<a href="https://github.com/dlof-lib/rinlang/stargazers"><img alt="Stars" src="https://img.shields.io/github/stars/dlof-lib/rinlang?style=for-the-badge&color=FFD21E&logo=github&logoColor=white" /></a>
+<a href="https://github.com/dlof-lib/rinlang/issues"><img alt="Issues" src="https://img.shields.io/github/issues/dlof-lib/rinlang?style=for-the-badge&color=F14C4C" /></a>
+<img alt="Repo size" src="https://img.shields.io/github/repo-size/dlof-lib/rinlang?style=for-the-badge&color=57D6B8" />
+<a href="#المساهمة"><img alt="PRs Welcome" src="https://img.shields.io/badge/PRs-welcome-4EC9B0?style=for-the-badge&logo=git&logoColor=white" /></a>
+</p>
 
 </div>
 
@@ -45,7 +58,7 @@
 
 ```bash
 # 1) استنسخ المستودع
-git clone https://github.com/OWNER/REPO.git && cd REPO
+git clone https://github.com/dlof-lib/rinlang.git && cd rinlang
 
 # 2) ابنِ التطبيق (يحتاج Android Studio + NDK + CMake من SDK Manager)
 ./gradlew assembleDebug
@@ -739,7 +752,7 @@ g++ -std=c++17 -o rin_test \
 3. إن أضفت ميزة للغة نفسها، أضف اختباراً مقابلاً في `tools/test_*.cpp`.
 4. افتح Pull Request مع وصف واضح للتغيير وسببه.
 
-للمشاكل والاقتراحات، افتح [Issue جديد](../../issues).
+للمشاكل والاقتراحات، افتح [Issue جديد](https://github.com/dlof-lib/rinlang/issues).
 
 ## الرخصة
 
