@@ -24,7 +24,20 @@
     <Deterministic>true</Deterministic>
     <LangVersion>latest</LangVersion>
     <EnableDefaultItems>false</EnableDefaultItems>
+    <!-- We ship our own Properties\AssemblyInfo.cs; without this the SDK also
+         generates one in obj\, producing duplicate-attribute (CS0579) errors. -->
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
   </PropertyGroup>
+
+  <ItemGroup>
+    <!-- SDK-style net472 projects don't reference these classic framework
+         assemblies by default; MEF's [Export]/[Import] attributes live here. -->
+    <Reference Include="System.ComponentModel.Composition" />
+    <Reference Include="System.Windows.Forms" />
+    <Reference Include="PresentationCore" />
+    <Reference Include="PresentationFramework" />
+    <Reference Include="WindowsBase" />
+  </ItemGroup>
 
   <ItemGroup>
     <!-- Core VS SDK: MEF editor contracts, shell interop, package infrastructure -->
