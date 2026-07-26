@@ -1434,21 +1434,38 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
         }
         const std::string& rawPath = pathVal.str;
 
+        // ---- تقوية مفهوم lib/*.og.rin: اسم مكتبة "عارٍ" بلا مسار ولا امتداد (مثل @import "math";
+        //      أو @import "myhelpers";) يُفهم تلقائياً على أنه lib/<name>.og.rin — سواء كانت مكتبة
+        //      مدمجة قياسية أو مكتبة مستخدم حقيقية أنشأها/رفعها المستخدم من قسم "المكتبات" في المحرر
+        //      (تُحفَظ داخل مجلد lib/ الخاص بمشروعه). المسارات الصريحة (تحتوي على '/') تبقى تماماً كما
+        //      كُتبت لضمان التوافق الكامل مع أي شيفرة سابقة تستخدم @import "lib/xxx.og.rin" مباشرة.
+        std::string libPath = rawPath;
+        if (libPath.find('/') == std::string::npos) {
+            static const std::string kLibExt = ".og.rin";
+            bool hasExt = libPath.size() >= kLibExt.size() &&
+                          libPath.compare(libPath.size() - kLibExt.size(), kLibExt.size(), kLibExt) == 0;
+            if (!hasExt) libPath += kLibExt;
+            libPath = "lib/" + libPath;
+        }
+
         // 1) أولاً: هل هذا اسم مكتبة مدمجة داخل المفسّر نفسه (مثل lib/data.og.rin)؟
         //    هذا يجعل @import يعمل مباشرة على أي منصة (بما فيها أندرويد) دون أي ملفات إضافية على القرص.
         const auto& embedded = embeddedRinLibraries();
-        auto libIt = embedded.find(rawPath);
+        auto libIt = embedded.find(libPath);
         bool fromEmbedded = (libIt != embedded.end());
 
         std::string source;
         if (fromEmbedded) {
             source = libIt->second;
         } else {
-            // 2) وإلا: مكتبة/ملف فعلي على القرص (نسبةً إلى basePath)، بنفس أسلوب container.import.
-            std::ifstream in(resolvePath(rawPath), std::ios::binary);
+            // 2) وإلا: مكتبة/ملف فعلي على القرص (نسبةً إلى basePath، أي مجلد المشروع الحالي)،
+            //    بنفس أسلوب container.import. هذا هو نفس المسار الذي يكتب فيه قسم "المكتبات" في
+            //    المحرر أي مكتبة ينشئها أو يرفعها المستخدم، فتُستورَد بنفس عبارة @import مباشرة.
+            std::ifstream in(resolvePath(libPath), std::ios::binary);
             if (!in) {
-                throw RinError("@import: تعذّر إيجاد المكتبة \"" + rawPath +
-                                "\" (لا هي من المكتبات المدمجة، ولا ملف موجود فعلياً على القرص)", s->line);
+                throw RinError("@import: تعذّر إيجاد المكتبة \"" + rawPath + "\" (بُحث عنها باسم \"" +
+                                libPath + "\" ضمن المكتبات المدمجة وضمن مجلد lib/ الخاص بالمشروع ولم "
+                                "تُوجد. ارفعها أو أنشئها أولاً من قسم \"المكتبات\" في المحرر)", s->line);
             }
             std::ostringstream buf;
             buf << in.rdbuf();
@@ -1457,9 +1474,9 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
 
         // منع إعادة استيراد نفس المكتبة بنفس أسلوب الاستيراد (مباشر أو باسم مستعار) أكثر من مرة
         // في نفس التشغيل، تماماً كأنظمة الوحدات (modules) المعتادة.
-        std::string importKey = rawPath + (s->alias.empty() ? "" : ("#as:" + s->alias));
+        std::string importKey = libPath + (s->alias.empty() ? "" : ("#as:" + s->alias));
         if (importedPaths.count(importKey)) {
-            output << "↺ @import: \"" << rawPath << "\" مستورَدة مسبقاً بالفعل (تم تجاهل التكرار)\n";
+            output << "↺ @import: \"" << libPath << "\" مستورَدة مسبقاً بالفعل (تم تجاهل التكرار)\n";
             return;
         }
 
@@ -1470,7 +1487,7 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
             Parser importedParser(importedTokens);
             importedStatements = importedParser.parse();
         } catch (RinError& e) {
-            throw RinError("@import: خطأ في تحليل المكتبة \"" + rawPath + "\" (سطر " +
+            throw RinError("@import: خطأ في تحليل المكتبة \"" + libPath + "\" (سطر " +
                             std::to_string(e.line) + "): " + e.message, s->line);
         }
 
@@ -1489,12 +1506,12 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
                 if (!groupStack.empty()) groupMembers[groupStack.back()].push_back(s->alias);
             }
         } catch (RinError& e) {
-            throw RinError("@import: خطأ داخل المكتبة \"" + rawPath + "\" (سطر " +
+            throw RinError("@import: خطأ داخل المكتبة \"" + libPath + "\" (سطر " +
                             std::to_string(e.line) + "): " + e.message, s->line);
         }
 
         importedPaths.insert(importKey);
-        output << (fromEmbedded ? "📦" : "📥") << " @import: تم استيراد \"" << rawPath << "\""
+        output << (fromEmbedded ? "📦" : "📥") << " @import: تم استيراد \"" << libPath << "\""
                << (s->alias.empty() ? "" : (" باسم '" + s->alias + "'"))
                << (fromEmbedded ? " (مكتبة مدمجة)" : " (من القرص)") << "\n";
         return;
