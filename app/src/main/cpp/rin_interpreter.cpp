@@ -508,6 +508,38 @@ void Interpreter::registerNatives() {
             throw RinError("'toNumber': \"" + s + "\" ليست رقماً صالحاً", line);
         }
     };
+    // toBool(value) -> يحوّل صراحةً إلى Boolean:
+    //   - BOOL تُعاد كما هي.
+    //   - NUMBER: 0 -> false، أي رقم آخر -> true (نفس قاعدة isTruthy لكن بشكل صريح ومقروء بالكود).
+    //   - STRING: فقط "true"/"false" (بأي حالة أحرف) مقبولتان؛ أي نص آخر خطأ صريح بدل تخمين صامت.
+    //   - NIL: false.
+    //   - ARRAY/MAP/FUNCTION: خطأ صريح، لأن "صدق" هذه الأنواع غامض المعنى ولا ينبغي تحويله تلقائياً.
+    natives["toBool"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("toBool", a, 1, line);
+        const Value& v = a[0];
+        switch (v.type) {
+            case Value::Type::BOOL:
+                return v;
+            case Value::Type::NUMBER:
+                return Value::boolean_(v.number != 0.0);
+            case Value::Type::NIL:
+                return Value::boolean_(false);
+            case Value::Type::STRING: {
+                std::string lower = v.str;
+                for (char& c : lower) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+                if (lower == "true") return Value::boolean_(true);
+                if (lower == "false") return Value::boolean_(false);
+                throw RinError("'toBool': \"" + v.str + "\" ليست true/false صالحة", line);
+            }
+            default:
+                throw RinError("'toBool' لا يدعم تحويل نوع " + v.typeName() + " إلى Boolean", line);
+        }
+    };
+    // isBool(value) -> true فقط إن كانت القيمة من نوع Boolean فعلياً (وليس أي قيمة "صادقة" عبر isTruthy).
+    natives["isBool"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("isBool", a, 1, line);
+        return Value::boolean_(a[0].type == Value::Type::BOOL);
+    };
 
     // ---- إحصاء (statistics) - مصمّمة للعمل مع خطوط الأنابيب |> و container.pipe ----
     // مرحلة "تجميع" (Aggregation): تُلخّص مصفوفة أرقام إلى قيمة واحدة.
