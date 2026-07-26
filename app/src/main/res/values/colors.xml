@@ -28,6 +28,12 @@
     <color name="rin_run_gradient_start">#8F72FF</color>
     <color name="rin_run_gradient_end">#6A47E8</color>
 
+    <!-- مساعدات المحرر: تظليل السطر الحالي، تظليل الأقواس المتطابقة، وتحذير الأقواس غير المتوازنة -->
+    <color name="rin_current_line_bg">#1FFFFFFF</color>
+    <color name="rin_bracket_match_bg">#5F7C5CFF</color>
+    <color name="rin_bracket_error_bg">#5FF14C4C</color>
+    <color name="rin_find_match_bg">#5FD7BA7D</color>
+
     <!-- تلوين الصيغة النحوية (syntax highlighting) في المحرر -->
     <color name="syntax_keyword">#569CD6</color>
     <color name="syntax_container_keyword">#4EC9B0</color>
