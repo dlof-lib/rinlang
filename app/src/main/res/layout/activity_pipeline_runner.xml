@@ -108,7 +108,7 @@
                 android:orientation="vertical"
                 android:gravity="center_horizontal"
                 android:background="@drawable/bg_pipeline_panel_card"
-                android:padding="20dp"
+                android:padding="14dp"
                 android:layout_marginTop="16dp">
 
                 <LinearLayout
@@ -138,6 +138,15 @@
                     android:src="@drawable/ic_status_running"
                     android:layout_marginEnd="10dp"
                     android:contentDescription="@null" />
+
+                <ProgressBar
+                    android:id="@+id/progressPipelineRunning"
+                    style="?android:attr/progressBarStyleSmall"
+                    android:layout_width="16dp"
+                    android:layout_height="16dp"
+                    android:layout_marginEnd="10dp"
+                    android:indeterminateTint="@color/pipeline_green"
+                    android:visibility="gone" />
 
                 <TextView
                     android:id="@+id/txtPipelineStatus"
