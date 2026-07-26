@@ -90,6 +90,71 @@
                 android:layout_marginBottom="4dp"
                 android:background="@color/rin_divider" />
 
+            <!-- قسم "متجر Rin": تصفّح حزم منشورة من مستخدمين آخرين، أو فتح صفحة الحساب -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:layout_marginBottom="8dp"
+                android:orientation="vertical"
+                android:background="@drawable/bg_list_card"
+                android:padding="12dp">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/store_section_title"
+                    android:textColor="@color/rin_on_toolbar"
+                    android:textStyle="bold"
+                    android:textSize="15sp" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:layout_marginBottom="10dp"
+                    android:text="@string/store_section_hint"
+                    android:textColor="@color/rin_editor_hint"
+                    android:textSize="12sp" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal">
+
+                    <Button
+                        android:id="@+id/btnBrowseStore"
+                        android:layout_width="0dp"
+                        android:layout_height="38dp"
+                        android:layout_weight="1"
+                        android:layout_marginEnd="6dp"
+                        android:minWidth="0dp"
+                        android:minHeight="0dp"
+                        android:insetTop="0dp"
+                        android:insetBottom="0dp"
+                        android:text="@string/action_browse_store"
+                        android:textAllCaps="false"
+                        android:textSize="12sp"
+                        android:background="@drawable/bg_toolbar_btn_primary"
+                        android:textColor="@android:color/white" />
+
+                    <Button
+                        android:id="@+id/btnMyAccount"
+                        android:layout_width="0dp"
+                        android:layout_height="38dp"
+                        android:layout_weight="1"
+                        android:minWidth="0dp"
+                        android:minHeight="0dp"
+                        android:insetTop="0dp"
+                        android:insetBottom="0dp"
+                        android:text="@string/action_my_account"
+                        android:textAllCaps="false"
+                        android:textSize="12sp"
+                        android:background="@drawable/bg_toolbar_btn_ghost"
+                        android:textColor="@color/rin_on_toolbar" />
+                </LinearLayout>
+            </LinearLayout>
+
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
