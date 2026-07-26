@@ -17,6 +17,8 @@ enum class LogKind(@DrawableRes val icon: Int?, @ColorRes val colorRes: Int) {
     GRID(R.drawable.ic_log_grid, R.color.log_kind_data),
     STYLE(R.drawable.ic_log_palette, R.color.log_kind_style),
     NETWORK(R.drawable.ic_log_globe, R.color.log_kind_network),
+    DOC_INSERT(R.drawable.ic_new_file, R.color.log_kind_success),   // 🧾 إدراج مستند NoSQL جديد
+    DOC_UPDATE(R.drawable.ic_redo, R.color.log_kind_import),        // 🔄 تحديث مستند NoSQL موجود
     ERROR(R.drawable.ic_status_error, R.color.log_kind_error),
     PLAIN(null, R.color.log_kind_plain)
 }
@@ -71,7 +73,9 @@ object RinConsoleFormatter {
         "🪢" to LogKind.LINK,
         "🧬" to LogKind.LINK,
         "▦" to LogKind.GRID,
-        "🎨" to LogKind.STYLE
+        "🎨" to LogKind.STYLE,
+        "🧾" to LogKind.DOC_INSERT,
+        "🔄" to LogKind.DOC_UPDATE
     )
 
     private val RE_SAVE_PNG = Regex("""^🖼️\s*save\s*\(png\)\s*->\s*(.+?)\s*\(""")
@@ -81,13 +85,16 @@ object RinConsoleFormatter {
     private val RE_INSTALL_RIN = Regex("""^⚙️\s*installation(?:\s*\(simplified\))?:\s*\S+\s*->\s*(.+?)\s*\(""")
 
     /**
-     * Matches only the two runtime-error formats rin_interpreter.cpp actually emits:
-     *   "[Error line N]: <message>"  and  "[Error]: <message>"
+     * Matches every genuine error format the engine/scheduler actually emit:
+     *   "[Error line N]: <message>"   (rin_interpreter.cpp — runtime error)
+     *   "[Error]: <message>"          (rin_interpreter.cpp — e.g. 'return' outside a function)
+     *   "[Timeout]: <message>"        (RinJobScheduler.kt — execution exceeded the time limit)
+     *   "[Fatal error]: <message>"    (RinJobScheduler.kt — uncaught exception in the job runner)
      * Anchored and specific on purpose — a plain print of a JSON array/object (e.g. `["a","b"]`
      * from docIds/allDocs/queryDocs, or `[]`) also starts with '[' but is NOT an error, and must
      * never be misclassified as one.
      */
-    private val RE_RUNTIME_ERROR = Regex("""^\[Error(?:\s+line\s+\d+)?]:""")
+    private val RE_RUNTIME_ERROR = Regex("""^\[(?:Error(?:\s+line\s+\d+)?|Timeout|Fatal error)]:""")
 
     /** True only for a genuine interpreter error line, never for ordinary array/object output. */
     private fun isErrorLine(trimmedStart: String): Boolean = RE_RUNTIME_ERROR.containsMatchIn(trimmedStart)
