@@ -268,6 +268,40 @@
                 android:singleLine="true"
                 android:layout_marginEnd="4dp" />
 
+            <TextView
+                android:id="@+id/txtFindCount"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="4dp"
+                android:textSize="10.5sp"
+                android:textColor="@color/rin_editor_hint" />
+
+            <ImageButton
+                android:id="@+id/btnFindCase"
+                android:layout_width="28dp"
+                android:layout_height="28dp"
+                android:layout_marginEnd="2dp"
+                android:padding="5dp"
+                android:src="@drawable/ic_menu_edit"
+                android:contentDescription="@string/find_case_sensitive_desc"
+                android:background="@drawable/bg_toolbar_btn_ghost" />
+
+            <Button
+                android:id="@+id/btnFindPrev"
+                android:layout_width="wrap_content"
+                android:layout_height="30dp"
+                android:minWidth="0dp"
+                android:minHeight="0dp"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                android:text="@string/btn_find_prev"
+                android:textAllCaps="false"
+                android:textSize="11sp"
+                android:paddingStart="7dp"
+                android:paddingEnd="7dp"
+                android:background="@drawable/bg_toolbar_btn_ghost"
+                android:textColor="@color/rin_on_toolbar" />
+
             <Button
                 android:id="@+id/btnFindNext"
                 android:layout_width="wrap_content"
@@ -344,6 +378,7 @@
         android:layout_marginEnd="0dp">
 
         <ScrollView
+            android:id="@+id/scrollEditor"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:scrollbars="vertical"
@@ -383,7 +418,7 @@
                     android:scrollbars="horizontal"
                     android:overScrollMode="never">
 
-                    <EditText
+                    <com.dlof.rinlang.RinEditText
                         android:id="@+id/editCode"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
