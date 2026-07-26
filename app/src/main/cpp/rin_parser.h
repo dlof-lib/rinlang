@@ -58,6 +58,7 @@ private:
     StmtPtr simplifiedStatement(); // "simplified" متبوعة بـ installation أو save
     StmtPtr rowStatement();       // row cells=[...];              (مفهوم الجدول: container.table / table)
     StmtPtr styleStatement();     // style value="style://theme";  (مفهوم الجدول: container.table / table)
+    StmtPtr documentStatement();  // document id="..." fields={...};  (قاعدة بيانات NoSQL: container.doc / doc)
     std::string readOptionalFormatAttr(); // يقرأ "format=IDENT" اختيارياً (لـ save/installation)، أو "" إن لم توجد
 
     // expressions (precedence climbing)
