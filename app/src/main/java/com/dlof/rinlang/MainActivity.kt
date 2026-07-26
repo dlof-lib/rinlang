@@ -3,6 +3,8 @@ package com.dlof.rinlang
 import android.net.Uri
 import android.os.Bundle
 import android.provider.OpenableColumns
+import android.text.Editable
+import android.text.TextWatcher
 import android.view.ContextThemeWrapper
 import android.widget.Button
 import android.widget.EditText
@@ -10,9 +12,11 @@ import android.widget.ImageButton
 import android.widget.LinearLayout
 import android.widget.PopupMenu
 import android.widget.ProgressBar
+import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -49,7 +53,7 @@ class MainActivity : AppCompatActivity() {
     /** غير null فقط عندما يكون المحرر مفتوحاً على مكتبة lib/ *.og.rin بدل ملف .rin عادي. */
     private var currentProjectLibrary: RinLibrary? = null
 
-    private lateinit var editCode: EditText
+    private lateinit var editCode: RinEditText
     private lateinit var txtLineNumbers: TextView
     private lateinit var txtEngineVersion: TextView
     private lateinit var txtFileName: TextView
@@ -58,6 +62,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var findBar: LinearLayout
     private lateinit var txtFind: EditText
     private lateinit var txtReplace: EditText
+    private lateinit var txtFindCount: TextView
+    private lateinit var scrollEditor: ScrollView
 
     private lateinit var editorController: CodeEditorController
     private lateinit var jobAdapter: RinJobAdapter
@@ -112,13 +118,17 @@ class MainActivity : AppCompatActivity() {
         findBar = findViewById(R.id.findBar)
         txtFind = findViewById(R.id.txtFind)
         txtReplace = findViewById(R.id.txtReplace)
+        txtFindCount = findViewById(R.id.txtFindCount)
+        scrollEditor = findViewById(R.id.scrollEditor)
 
         // أزرار الوصول السريع (أيقونة فقط، صغيرة جداً) في الصف الأول من الشريط العلوي
         val btnRun: ImageButton = findViewById(R.id.btnRun)
         val btnProjects: ImageButton = findViewById(R.id.btnProjects)
 
         // شريط البحث والاستبدال (يُفتح من قائمة Edit)
+        val btnFindPrev: Button = findViewById(R.id.btnFindPrev)
         val btnFindNext: Button = findViewById(R.id.btnFindNext)
+        val btnFindCase: ImageButton = findViewById(R.id.btnFindCase)
         val btnReplaceOne: Button = findViewById(R.id.btnReplaceOne)
         val btnReplaceAll: Button = findViewById(R.id.btnReplaceAll)
         val btnFindClose: ImageButton = findViewById(R.id.btnFindClose)
@@ -158,8 +168,8 @@ class MainActivity : AppCompatActivity() {
 
         // تلوين الصيغة النحوية (syntax highlighting) أثناء الكتابة
         RinSyntaxHighlighter.attach(this, editCode)
-        // أرقام الأسطر + تراجع/إعادة + مسافة بادئة تلقائية
-        editorController = CodeEditorController(editCode, txtLineNumbers)
+        // أرقام الأسطر + تراجع/إعادة + مسافة بادئة تلقائية + أقواس مغلقة تلقائياً + تظليل الأقواس/السطر الحالي
+        editorController = CodeEditorController(this, editCode, txtLineNumbers, scrollEditor)
 
         // قائمة التشغيل المجدولة (job queue): كل عملية Run بطاقة مستقلة
         jobAdapter = RinJobAdapter(this)
@@ -188,20 +198,49 @@ class MainActivity : AppCompatActivity() {
         btnClearConsole.setOnClickListener { RinJobScheduler.clear() }
 
         // ----- شريط البحث والاستبدال -----
-        btnFindClose.setOnClickListener { findBar.visibility = android.view.View.GONE }
+        btnFindClose.setOnClickListener {
+            findBar.visibility = android.view.View.GONE
+            editorController.clearMatchHighlights()
+        }
+        btnFindPrev.setOnClickListener {
+            val found = editorController.findPrevious(txtFind.text.toString())
+            if (!found) {
+                Toast.makeText(this, getString(R.string.find_not_found_toast, txtFind.text.toString()), Toast.LENGTH_SHORT).show()
+            }
+            updateFindCount()
+        }
         btnFindNext.setOnClickListener {
             val found = editorController.findNext(txtFind.text.toString())
             if (!found) {
                 Toast.makeText(this, getString(R.string.find_not_found_toast, txtFind.text.toString()), Toast.LENGTH_SHORT).show()
             }
+            updateFindCount()
+        }
+        btnFindCase.setOnClickListener {
+            editorController.caseSensitiveSearch = !editorController.caseSensitiveSearch
+            val msg = if (editorController.caseSensitiveSearch) R.string.find_case_sensitive_on_toast else R.string.find_case_sensitive_off_toast
+            Toast.makeText(this, getString(msg), Toast.LENGTH_SHORT).show()
+            editorController.highlightMatches(txtFind.text.toString())
+            updateFindCount()
         }
         btnReplaceOne.setOnClickListener {
             editorController.replaceOne(txtFind.text.toString(), txtReplace.text.toString())
+            updateFindCount()
         }
         btnReplaceAll.setOnClickListener {
             val count = editorController.replaceAll(txtFind.text.toString(), txtReplace.text.toString())
             Toast.makeText(this, getString(R.string.replaced_count_toast, count), Toast.LENGTH_SHORT).show()
+            editorController.highlightMatches(txtFind.text.toString())
+            updateFindCount()
         }
+        txtFind.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+            override fun afterTextChanged(s: Editable?) {
+                editorController.highlightMatches(s?.toString().orEmpty())
+                updateFindCount()
+            }
+        })
 
         // ----- شريط القوائم المصغّر: File / Edit / View / Run -----
         // كل زر صغير جداً يفتح PopupMenu بأسلوب قوائم الكمبيوتر (File/Edit/View/Run)،
@@ -263,6 +302,13 @@ class MainActivity : AppCompatActivity() {
         popup.menu.add(0, 3, 2, R.string.menu_edit_find)
         popup.menu.add(0, 4, 3, R.string.menu_edit_select_all)
         popup.menu.add(0, 5, 4, R.string.menu_edit_clear_all)
+        popup.menu.add(0, 6, 5, R.string.menu_edit_toggle_comment)
+        popup.menu.add(0, 7, 6, R.string.menu_edit_duplicate_line)
+        popup.menu.add(0, 8, 7, R.string.menu_edit_delete_line)
+        popup.menu.add(0, 9, 8, R.string.menu_edit_move_line_up)
+        popup.menu.add(0, 10, 9, R.string.menu_edit_move_line_down)
+        popup.menu.add(0, 11, 10, R.string.menu_edit_indent)
+        popup.menu.add(0, 12, 11, R.string.menu_edit_unindent)
         popup.setOnMenuItemClickListener { item ->
             when (item.itemId) {
                 1 -> editorController.undo()
@@ -270,6 +316,16 @@ class MainActivity : AppCompatActivity() {
                 3 -> toggleFindBar()
                 4 -> editCode.selectAll()
                 5 -> editCode.setText("")
+                6 -> editorController.toggleLineComment()
+                7 -> editorController.duplicateCurrentLine()
+                8 -> {
+                    editorController.deleteCurrentLine()
+                    Toast.makeText(this, getString(R.string.line_deleted_toast), Toast.LENGTH_SHORT).show()
+                }
+                9 -> editorController.moveLineUp()
+                10 -> editorController.moveLineDown()
+                11 -> editorController.indentSelection()
+                12 -> editorController.unindentSelection()
             }
             true
         }
@@ -282,12 +338,14 @@ class MainActivity : AppCompatActivity() {
         popup.menu.add(0, 2, 1, R.string.menu_view_zoom_out)
         popup.menu.add(0, 3, 2, R.string.menu_view_toggle_lines)
         popup.menu.add(0, 4, 3, R.string.menu_view_clear_console)
+        popup.menu.add(0, 5, 4, R.string.menu_view_go_to_line)
         popup.setOnMenuItemClickListener { item ->
             when (item.itemId) {
                 1 -> changeEditorFontSize(1f)
                 2 -> changeEditorFontSize(-1f)
                 3 -> toggleLineNumbers()
                 4 -> RinJobScheduler.clear()
+                5 -> showGoToLineDialog()
             }
             true
         }
@@ -297,9 +355,11 @@ class MainActivity : AppCompatActivity() {
     private fun showRunMenu(anchor: android.view.View) {
         val popup = darkPopupMenu(anchor)
         popup.menu.add(0, 1, 0, R.string.menu_run_run)
+        popup.menu.add(0, 2, 1, R.string.menu_run_check_brackets)
         popup.setOnMenuItemClickListener { item ->
             when (item.itemId) {
                 1 -> runProgram()
+                2 -> checkBrackets()
             }
             true
         }
@@ -350,9 +410,53 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun toggleFindBar() {
-        findBar.visibility =
-            if (findBar.visibility == android.view.View.VISIBLE) android.view.View.GONE
-            else android.view.View.VISIBLE
+        val showing = findBar.visibility != android.view.View.VISIBLE
+        findBar.visibility = if (showing) android.view.View.VISIBLE else android.view.View.GONE
+        if (!showing) editorController.clearMatchHighlights()
+    }
+
+    /** يحدّث شارة "N/M" بجانب حقل البحث حسب مطابقات النص الحالي وموضع المؤشر. */
+    private fun updateFindCount() {
+        val (current, total) = editorController.matchInfo(txtFind.text.toString())
+        txtFindCount.text = if (total == 0) getString(R.string.find_count_none)
+        else getString(R.string.find_count_format, current, total)
+    }
+
+    /** يفتح حواراً بسيطاً لإدخال رقم سطر والقفز إليه مباشرة، مع تمرير المحرر لإظهاره. */
+    private fun showGoToLineDialog() {
+        val input = EditText(this).apply {
+            inputType = android.text.InputType.TYPE_CLASS_NUMBER
+            hint = getString(R.string.go_to_line_hint)
+            setTextColor(ContextCompat.getColor(this@MainActivity, R.color.rin_on_toolbar))
+            setHintTextColor(ContextCompat.getColor(this@MainActivity, R.color.rin_editor_hint))
+            setPadding(48, 24, 48, 24)
+        }
+        val themedContext = ContextThemeWrapper(this, MaterialR.style.ThemeOverlay_MaterialComponents_Dark)
+        AlertDialog.Builder(themedContext)
+            .setTitle(R.string.go_to_line_title)
+            .setView(input)
+            .setPositiveButton(R.string.go_to_line_action) { dialog, _ ->
+                val line = input.text.toString().toIntOrNull()
+                if (line == null) {
+                    Toast.makeText(this, getString(R.string.go_to_line_invalid_toast), Toast.LENGTH_SHORT).show()
+                } else {
+                    editorController.goToLine(line)
+                }
+                dialog.dismiss()
+            }
+            .setNegativeButton(R.string.go_to_line_cancel) { dialog, _ -> dialog.dismiss() }
+            .show()
+    }
+
+    /** يتحقق من توازن الأقواس في كامل الكود، ويعرض النتيجة كرسالة سريعة. */
+    private fun checkBrackets() {
+        val problemLine = editorController.checkBracketBalance()
+        if (problemLine == null) {
+            Toast.makeText(this, getString(R.string.brackets_balanced_toast), Toast.LENGTH_SHORT).show()
+        } else {
+            Toast.makeText(this, getString(R.string.brackets_unbalanced_toast, problemLine), Toast.LENGTH_LONG).show()
+            editorController.goToLine(problemLine)
+        }
     }
 
     private var lineNumbersVisible = true
