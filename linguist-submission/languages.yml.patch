@@ -1,0 +1,12 @@
+# أضف هذا المُدخل أبجدياً داخل lib/linguist/languages.yml في مستودع github-linguist/linguist
+# (بين اللغات التي تبدأ بحرف قريب من "Rin" أبجدياً)
+
+Rin:
+  type: programming
+  color: "#7C5CFF"
+  extensions:
+  - ".rin"
+  tm_scope: source.rin
+  ace_mode: text
+  language_id: 999999999   # ⚠️ استبدله برقم فريد غير مستخدم — راجع أعلى قيمة id حالياً في languages.yml
+                             #    وزِد عليها 1 (فريق Linguist يطلب هذا صراحة في الـ PR template)
