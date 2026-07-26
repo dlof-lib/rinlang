@@ -76,7 +76,7 @@ object PackagingUtils {
         Base64.encodeToString(file.readBytes(), Base64.NO_WRAP)
 
     /**
-     * يفكّ ضغط [pkg] (بعد فك ترميز base64) ويثبّت ملف lib/*.og.rin الموجود بداخله في
+     * يفكّ ضغط [pkg] (بعد فك ترميز base64) ويثبّت ملف .og.rin واحد موجود داخل lib/ بداخله في
      * lib/ الخاص بـ [project]، ويرجع المكتبة المثبَّتة الجاهزة للاستيراد.
      */
     fun installPackage(context: Context, project: Project, pkg: RinPackage): RinLibrary {
