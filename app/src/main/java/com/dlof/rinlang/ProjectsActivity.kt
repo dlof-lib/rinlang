@@ -21,12 +21,15 @@ import androidx.recyclerview.widget.RecyclerView
 class ProjectsActivity : AppCompatActivity() {
 
     private lateinit var rvProjects: RecyclerView
-    private lateinit var txtEmpty: TextView
+    private lateinit var txtEmpty: View
     private lateinit var adapter: ProjectsAdapter
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_projects)
+
+        findViewById<TextView>(R.id.txtToolbarTitle).text = getString(R.string.projects_screen_title)
+        findViewById<View>(R.id.btnToolbarBack).setOnClickListener { finish() }
 
         rvProjects = findViewById(R.id.rvProjects)
         txtEmpty = findViewById(R.id.txtEmptyProjects)
