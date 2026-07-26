@@ -35,7 +35,7 @@ class FilesActivity : AppCompatActivity() {
 
     private lateinit var project: Project
     private lateinit var rvFiles: RecyclerView
-    private lateinit var txtEmpty: TextView
+    private lateinit var txtEmpty: View
     private lateinit var adapter: FilesAdapter
 
     private val importFileLauncher =
@@ -56,6 +56,13 @@ class FilesActivity : AppCompatActivity() {
             }
         project = existing
         title = project.name
+
+        findViewById<TextView>(R.id.txtToolbarTitle).text = getString(R.string.files_screen_title)
+        findViewById<TextView>(R.id.txtToolbarSubtitle).apply {
+            text = project.name
+            visibility = View.VISIBLE
+        }
+        findViewById<View>(R.id.btnToolbarBack).setOnClickListener { finish() }
 
         rvFiles = findViewById(R.id.rvFiles)
         txtEmpty = findViewById(R.id.txtEmptyFiles)
