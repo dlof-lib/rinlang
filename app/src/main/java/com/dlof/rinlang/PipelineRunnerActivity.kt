@@ -1,7 +1,10 @@
 package com.dlof.rinlang
 
+import android.Manifest
 import android.app.AlertDialog
+import android.content.pm.PackageManager
 import android.graphics.Typeface
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -12,9 +15,13 @@ import android.text.style.StyleSpan
 import android.view.Gravity
 import android.view.View
 import android.widget.ImageButton
+import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.ProgressBar
 import android.widget.TextView
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import java.util.concurrent.Callable
 import java.util.concurrent.Executors
@@ -24,11 +31,14 @@ import java.util.concurrent.TimeoutException
 import java.util.regex.Pattern
 
 /**
- * Visual "Pipeline Runner" screen for a single `@container.pipe` block.
+ * RinFlow — Rin's official live execution visualizer, integrated with every concept the
+ * language has (pipes, tables, data/api containers, groups, volumes, sections, translations,
+ * imports/links, style/row statements, and save/installation — whose real output files can be
+ * downloaded straight from this screen).
  *
- * Every value shown on screen comes from [PipelineTracer], which really runs
- * the source through the native Rin engine — this screen is only responsible
- * for laying the result out as a flow diagram.
+ * Every value shown on screen comes from [RinFlowTracer], which really runs the source through
+ * the native Rin engine — this screen is only responsible for laying the result out as a flow
+ * diagram.
  */
 class PipelineRunnerActivity : AppCompatActivity() {
 
@@ -58,6 +68,7 @@ class PipelineRunnerActivity : AppCompatActivity() {
     private lateinit var flowContainer: LinearLayout
     private lateinit var statusBanner: LinearLayout
     private lateinit var txtStatusIcon: android.widget.ImageView
+    private lateinit var progressStatusRunning: ProgressBar
     private lateinit var txtStatus: TextView
     private lateinit var txtDetails: TextView
     private lateinit var btnRun: android.widget.Button
@@ -69,7 +80,7 @@ class PipelineRunnerActivity : AppCompatActivity() {
     private val workerPool = Executors.newCachedThreadPool()
     private val mainHandler = Handler(Looper.getMainLooper())
     private var runningFuture: Future<*>? = null
-    private var lastTrace: PipelineTracer.PipelineTrace? = null
+    private var lastResult: RinFlowResult? = null
     private var sourceCode: String = ""
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -82,6 +93,7 @@ class PipelineRunnerActivity : AppCompatActivity() {
         flowContainer = findViewById(R.id.flowContainer)
         statusBanner = findViewById(R.id.statusBanner)
         txtStatusIcon = findViewById(R.id.txtPipelineStatusIcon)
+        progressStatusRunning = findViewById(R.id.progressPipelineRunning)
         txtStatus = findViewById(R.id.txtPipelineStatus)
         txtDetails = findViewById(R.id.txtPipelineDetails)
         btnRun = findViewById(R.id.btnPipelineRun)
@@ -114,27 +126,34 @@ class PipelineRunnerActivity : AppCompatActivity() {
     private fun runPipeline() {
         btnRun.isEnabled = false
         btnStop.isEnabled = true
-        setStatus(R.drawable.ic_status_running, getString(R.string.pipeline_status_running), R.drawable.bg_pipeline_status_neutral, R.color.pipeline_text_primary)
+        setStatus(
+            R.drawable.ic_status_running,
+            getString(R.string.pipeline_status_running),
+            R.drawable.bg_pipeline_status_neutral,
+            R.color.pipeline_text_primary,
+            running = true
+        )
         txtDetails.visibility = View.GONE
         btnLoadSample.visibility = View.GONE
         flowContainer.removeAllViews()
 
         runningFuture = queueExecutor.submit {
-            val future = workerPool.submit(Callable { PipelineTracer.findPipeline(sourceCode) })
-            val trace = try {
+            val future = workerPool.submit(Callable { RinFlowTracer.trace(sourceCode) })
+            val result = try {
                 future.get(TIMEOUT_MS, TimeUnit.MILLISECONDS)
             } catch (e: TimeoutException) {
                 future.cancel(true)
-                PipelineTracer.PipelineTrace(
+                RinFlowResult(
+                    kindLabel = "",
                     containerName = "",
-                    sourceExpr = "",
+                    nodes = emptyList(),
                     success = false,
                     errorMessage = "[Timeout]: execution exceeded ${TIMEOUT_MS / 1000} seconds"
                 )
             } catch (t: Throwable) {
                 null
             }
-            mainHandler.post { onTraceReady(trace) }
+            mainHandler.post { onTraceReady(result) }
         }
     }
 
@@ -145,14 +164,13 @@ class PipelineRunnerActivity : AppCompatActivity() {
         setStatus(R.drawable.ic_status_stopped, getString(R.string.pipeline_status_stopped), R.drawable.bg_pipeline_status_neutral, R.color.pipeline_text_primary)
     }
 
-    private fun onTraceReady(trace: PipelineTracer.PipelineTrace?) {
+    private fun onTraceReady(result: RinFlowResult?) {
         btnRun.isEnabled = true
         btnStop.isEnabled = false
-        lastTrace = trace
+        lastResult = result
 
-        if (trace == null) {
-            // لم يتم التعرّف على أي `@container.pipe` داخل كود المستخدم الفعلي.
-            // لا نستبدل كوده بصمت بمثال جاهز؛ نُخبره بوضوح ونترك له خيار تحميل مثال.
+        if (result == null) {
+            // كود فارغ أو لم يُعِد المحرّك أي نتيجة قابلة للعرض.
             flowContainer.removeAllViews()
             txtContainerName.text = ""
             setStatus(R.drawable.ic_status_warning, getString(R.string.pipeline_status_error), R.drawable.bg_pipeline_status_error, R.color.pipeline_red_light_text)
@@ -162,16 +180,18 @@ class PipelineRunnerActivity : AppCompatActivity() {
             return
         }
 
-        btnLoadSample.visibility = if (trace.success) View.GONE else View.VISIBLE
-        txtContainerName.text = "@container.pipe = ${trace.containerName}"
-        buildFlowDiagram(trace)
+        btnLoadSample.visibility = if (result.success) View.GONE else View.VISIBLE
+        txtContainerName.text = if (result.containerName.isNotBlank())
+            "@${result.kindLabel} = ${result.containerName}"
+        else if (result.kindLabel.isNotBlank()) result.kindLabel else ""
+        buildFlowDiagram(result)
 
-        if (trace.success) {
+        if (result.success) {
             setStatus(R.drawable.ic_status_success, getString(R.string.pipeline_status_success), R.drawable.bg_pipeline_status_success, R.color.pipeline_green_light_text)
             txtDetails.visibility = View.GONE
         } else {
             setStatus(R.drawable.ic_status_error, getString(R.string.pipeline_status_error), R.drawable.bg_pipeline_status_error, R.color.pipeline_red_light_text)
-            txtDetails.text = trace.errorMessage ?: trace.rawEngineOutput
+            txtDetails.text = result.errorMessage ?: result.rawEngineOutput
             txtDetails.visibility = View.VISIBLE
         }
     }
@@ -184,7 +204,9 @@ class PipelineRunnerActivity : AppCompatActivity() {
         runPipeline()
     }
 
-    private fun setStatus(iconRes: Int, text: String, bg: Int, textColor: Int) {
+    private fun setStatus(iconRes: Int, text: String, bg: Int, textColor: Int, running: Boolean = false) {
+        txtStatusIcon.visibility = if (running) View.GONE else View.VISIBLE
+        progressStatusRunning.visibility = if (running) View.VISIBLE else View.GONE
         txtStatusIcon.setImageResource(iconRes)
         val color = ContextCompat.getColor(this, textColor)
         txtStatusIcon.imageTintList = android.content.res.ColorStateList.valueOf(color)
@@ -195,51 +217,15 @@ class PipelineRunnerActivity : AppCompatActivity() {
 
     // ---- diagram building ----
 
-    private fun buildFlowDiagram(trace: PipelineTracer.PipelineTrace) {
+    private fun buildFlowDiagram(result: RinFlowResult) {
         flowContainer.removeAllViews()
-        if (trace.sourceExpr.isEmpty()) return
-
-        addNode(
-            icon = R.drawable.ic_node_source,
-            title = getString(R.string.pipeline_node_source),
-            subtitle = trace.sourceExpr,
-            valueText = trace.sourceValueText,
-            ok = true
-        )
-
-        for (stage in trace.stages) {
-            addArrow()
-            addNode(
-                icon = iconForStage(stage.label),
-                title = stage.label,
-                subtitle = stage.call,
-                valueText = stage.valueText,
-                ok = trace.success
-            )
-        }
-
-        addArrow()
-        addNode(
-            icon = if (trace.success) R.drawable.ic_status_success else R.drawable.ic_status_error,
-            title = getString(R.string.pipeline_node_output),
-            subtitle = "print",
-            valueText = if (trace.success) trace.finalValueText else "—",
-            ok = trace.success
-        )
-    }
-
-    private fun iconForStage(name: String): Int {
-        val n = name.lowercase()
-        return when {
-            "aggregat" in n || "mean" in n || "sum" in n || "reduce" in n || "total" in n || "count" in n
-                || "median" in n || "variance" in n || "stddev" in n || "mode" in n -> R.drawable.ic_node_aggregate
-            "sort" in n -> R.drawable.ic_node_sort
-            "filter" in n -> R.drawable.ic_node_filter
-            else -> R.drawable.ic_node_transform
+        result.nodes.forEachIndexed { index, node ->
+            if (index > 0) addArrow()
+            addNode(node)
         }
     }
 
-    private fun addNode(icon: Int, title: String, subtitle: String, valueText: String, ok: Boolean) {
+    private fun addNode(node: FlowNode) {
         val dp = resources.displayMetrics.density
         val column = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -250,31 +236,31 @@ class PipelineRunnerActivity : AppCompatActivity() {
             ).apply { gravity = Gravity.CENTER_HORIZONTAL }
         }
 
-        val circle = android.widget.ImageView(this).apply {
-            setImageResource(icon)
-            scaleType = android.widget.ImageView.ScaleType.CENTER
-            setBackgroundResource(if (ok) R.drawable.bg_pipeline_node_circle else R.drawable.bg_pipeline_node_circle_error)
+        val circle = ImageView(this).apply {
+            if (node.icon != null) setImageResource(node.icon)
+            scaleType = ImageView.ScaleType.CENTER
+            setBackgroundResource(if (node.ok) R.drawable.bg_pipeline_node_circle else R.drawable.bg_pipeline_node_circle_error)
             imageTintList = android.content.res.ColorStateList.valueOf(
-                ContextCompat.getColor(context, if (ok) R.color.pipeline_green else R.color.pipeline_red)
+                ContextCompat.getColor(context, node.colorRes)
             )
-            layoutParams = LinearLayout.LayoutParams((64 * dp).toInt(), (64 * dp).toInt())
+            layoutParams = LinearLayout.LayoutParams((44 * dp).toInt(), (44 * dp).toInt())
         }
         column.addView(circle)
 
         val titleView = TextView(this).apply {
-            text = title
-            textSize = 14f
+            text = node.title
+            textSize = 12.5f
             setTypeface(typeface, Typeface.BOLD)
             setTextColor(ContextCompat.getColor(context, R.color.pipeline_text_primary))
             gravity = Gravity.CENTER
-            setPadding(0, (6 * dp).toInt(), 0, 0)
+            setPadding(0, (4 * dp).toInt(), 0, 0)
         }
         column.addView(titleView)
 
-        if (subtitle.isNotBlank()) {
+        if (node.subtitle.isNotBlank()) {
             val subtitleView = TextView(this).apply {
-                text = subtitle
-                textSize = 11f
+                text = node.subtitle
+                textSize = 10f
                 setTextColor(ContextCompat.getColor(context, R.color.pipeline_text_muted))
                 gravity = Gravity.CENTER
                 setPadding(0, (1 * dp).toInt(), 0, 0)
@@ -283,25 +269,101 @@ class PipelineRunnerActivity : AppCompatActivity() {
         }
 
         val valueChip = TextView(this).apply {
-            text = valueText.ifBlank { "…" }
-            textSize = 12f
+            text = node.valueText.ifBlank { "…" }
+            textSize = 11f
             typeface = Typeface.MONOSPACE
             gravity = Gravity.CENTER
             setBackgroundResource(R.drawable.bg_pipeline_value_chip)
-            setTextColor(ContextCompat.getColor(context, if (ok) R.color.pipeline_green_light_text else R.color.pipeline_red_light_text))
-            setPadding((10 * dp).toInt(), (6 * dp).toInt(), (10 * dp).toInt(), (6 * dp).toInt())
+            setTextColor(ContextCompat.getColor(context, if (node.ok) R.color.pipeline_green_light_text else R.color.pipeline_red_light_text))
+            setPadding((8 * dp).toInt(), (5 * dp).toInt(), (8 * dp).toInt(), (5 * dp).toInt())
             val maxW = (resources.displayMetrics.widthPixels * 0.7).toInt()
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT
             ).apply {
-                topMargin = (6 * dp).toInt()
+                topMargin = (4 * dp).toInt()
             }
             maxWidth = maxW
         }
         column.addView(valueChip)
 
+        // عقدة أنتجت فعلياً ملفاً على القرص (save/installation) — قابلة للتنزيل الحقيقي من هنا مباشرةً.
+        val artifact = node.artifact
+        if (artifact != null) {
+            column.addView(buildDownloadBadge(artifact))
+        }
+
         flowContainer.addView(column)
+    }
+
+    /** شارة صغيرة قابلة للنقر أسفل عقدة الحفظ/التثبيت، تُنزّل الملف الفعلي إلى Downloads بشريط تقدّم حقيقي. */
+    private fun buildDownloadBadge(artifact: RinArtifact): View {
+        val dp = resources.displayMetrics.density
+        val badge = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setBackgroundResource(R.drawable.bg_download_chip)
+            setPadding((8 * dp).toInt(), (5 * dp).toInt(), (8 * dp).toInt(), (5 * dp).toInt())
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { topMargin = (6 * dp).toInt() }
+            isClickable = true
+            isFocusable = true
+        }
+        val icon = ImageView(this).apply {
+            setImageResource(R.drawable.ic_log_download)
+            imageTintList = android.content.res.ColorStateList.valueOf(
+                ContextCompat.getColor(context, R.color.pipeline_green)
+            )
+            layoutParams = LinearLayout.LayoutParams((14 * dp).toInt(), (14 * dp).toInt()).apply {
+                marginEnd = (6 * dp).toInt()
+            }
+        }
+        val label = TextView(this).apply {
+            text = "${artifact.displayName} · ${RinConsoleFormatter.formatBytes(artifact.sizeBytes)}"
+            textSize = 10.5f
+            typeface = Typeface.MONOSPACE
+            setTextColor(ContextCompat.getColor(context, R.color.pipeline_text_primary))
+        }
+        badge.addView(icon)
+        badge.addView(label)
+        badge.setOnClickListener { downloadArtifact(artifact) }
+        return badge
+    }
+
+    /** نفس تجربة التنزيل الحقيقي المستخدمة في قائمة التشغيل (RinDownloadManager)، لكن من داخل RinFlow مباشرة. */
+    private fun downloadArtifact(artifact: RinArtifact) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+            val granted = ContextCompat.checkSelfPermission(
+                this, Manifest.permission.WRITE_EXTERNAL_STORAGE
+            ) == PackageManager.PERMISSION_GRANTED
+            if (!granted) {
+                ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.WRITE_EXTERNAL_STORAGE), 4202)
+                Toast.makeText(this, getString(R.string.download_permission_needed_toast), Toast.LENGTH_LONG).show()
+                return
+            }
+        }
+
+        val progressDialog = RinDownloadProgressDialog(this, artifact.displayName)
+        progressDialog.show()
+        RinDownloadManager.downloadToPublicDownloads(
+            activity = this,
+            artifact = artifact,
+            onProgress = { copied, total -> progressDialog.updateProgress(copied, total) },
+            onDone = { uri, error ->
+                if (error != null || uri == null) {
+                    progressDialog.finishError(getString(R.string.download_error_toast, error?.message ?: "?"))
+                    Handler(Looper.getMainLooper()).postDelayed({ progressDialog.dismiss() }, 1400)
+                    return@downloadToPublicDownloads
+                }
+                progressDialog.finishSuccess(getString(R.string.download_status_done))
+                Toast.makeText(this, getString(R.string.download_done_toast, artifact.displayName), Toast.LENGTH_SHORT).show()
+                Handler(Looper.getMainLooper()).postDelayed({
+                    progressDialog.dismiss()
+                    RinDownloadManager.openDownloadedFile(this, uri, artifact.kind.mime)
+                }, 500)
+            }
+        )
     }
 
     private fun addArrow() {
@@ -318,12 +380,12 @@ class PipelineRunnerActivity : AppCompatActivity() {
     // ---- misc ----
 
     private fun showConfigureDialog() {
-        val trace = lastTrace
-        val containerName = trace?.containerName ?: "-"
-        val stageCount = trace?.stages?.size ?: 0
+        val result = lastResult
+        val containerName = result?.containerName?.ifBlank { "-" } ?: "-"
+        val stepCount = result?.nodes?.size ?: 0
         AlertDialog.Builder(this)
             .setTitle(R.string.pipeline_configure_title)
-            .setMessage(getString(R.string.pipeline_configure_message, containerName, stageCount, TIMEOUT_MS / 1000))
+            .setMessage(getString(R.string.pipeline_configure_message, containerName, stepCount, TIMEOUT_MS / 1000))
             .setPositiveButton(android.R.string.ok, null)
             .show()
     }
