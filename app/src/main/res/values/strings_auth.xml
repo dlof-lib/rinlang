@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  نصوص "حساب Rin" — المرحلة الأولى من متجر Rin: تسجيل الدخول، إنشاء حساب، كود التحقق.
+  ملف منفصل بنفس أسلوب strings_libraries.xml.
+-->
+<resources>
+    <!-- تسجيل الدخول -->
+    <string name="login_title">تسجيل الدخول</string>
+    <string name="login_subtitle">سجّل دخولك لنشر مكتباتك في متجر Rin</string>
+    <string name="hint_email">البريد الإلكتروني</string>
+    <string name="hint_password">كلمة السر</string>
+    <string name="action_login">تسجيل الدخول</string>
+    <string name="login_no_account">ليس لديك حساب؟</string>
+    <string name="action_create_account">إنشاء حساب</string>
+
+    <!-- إنشاء حساب -->
+    <string name="register_title">إنشاء حساب</string>
+    <string name="register_subtitle">انضم إلى متجر Rin وانشر مكتباتك للجميع</string>
+    <string name="hint_full_name">الاسم الكامل</string>
+    <string name="hint_username">اسم المستخدم</string>
+    <string name="action_create_account_submit">إنشاء الحساب</string>
+    <string name="register_have_account">لديك حساب بالفعل؟</string>
+
+    <!-- كود التحقق -->
+    <string name="verify_title">التحقق من الحساب</string>
+    <string name="verify_subtitle_format">أرسلنا كود تحقق من 5 أرقام إلى %1$s</string>
+    <string name="hint_verification_code">أدخل الكود المكوّن من 5 أرقام</string>
+    <string name="action_verify">تأكيد</string>
+    <string name="action_resend_code">إعادة إرسال الكود</string>
+    <string name="verify_success">تم إنشاء الحساب بنجاح ✓</string>
+    <string name="code_resent">تم إرسال كود جديد إلى بريدك</string>
+
+    <!-- أخطاء عامة -->
+    <string name="error_required_fields">فضلاً املأ جميع الحقول</string>
+    <string name="error_username_taken">اسم المستخدم هذا محجوز، جرّب اسماً آخر</string>
+    <string name="error_email_invalid">أدخل بريداً إلكترونياً صحيحاً</string>
+    <string name="error_password_short">كلمة السر يجب أن تكون 6 أحرف على الأقل</string>
+</resources>
