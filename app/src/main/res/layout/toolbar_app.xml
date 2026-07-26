@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- شريط علوي موحّد لكل الشاشات الفرعية (المشاريع / الملفات / المكتبات):
+     زر رجوع + شارة "rin" + عنوان الشاشة + عنوان فرعي اختياري (مثلاً اسم المشروع الحالي).
+     بنفس هوية الشريط العلوي في المحرر الرئيسي (MainActivity) لضمان مظهر موحّد واحترافي
+     عبر التطبيق كله، بدل شاشات بلا عنوان أو زر رجوع كما كانت سابقاً. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal"
+    android:gravity="center_vertical"
+    android:background="@color/rin_toolbar"
+    android:elevation="3dp"
+    android:paddingStart="4dp"
+    android:paddingEnd="14dp"
+    android:paddingTop="8dp"
+    android:paddingBottom="8dp">
+
+    <ImageButton
+        android:id="@+id/btnToolbarBack"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:padding="10dp"
+        android:src="@drawable/ic_back"
+        android:background="@drawable/bg_icon_btn"
+        android:contentDescription="@string/action_back" />
+
+    <TextView
+        android:id="@+id/txtToolbarBadge"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="2dp"
+        android:text="rin"
+        android:textColor="@android:color/white"
+        android:textStyle="bold"
+        android:textSize="11sp"
+        android:letterSpacing="0.02"
+        android:background="@drawable/bg_toolbar_logo_badge"
+        android:paddingStart="7dp"
+        android:paddingEnd="7dp"
+        android:paddingTop="4dp"
+        android:paddingBottom="4dp" />
+
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:orientation="vertical"
+        android:layout_marginStart="10dp">
+
+        <TextView
+            android:id="@+id/txtToolbarTitle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="@color/rin_on_toolbar"
+            android:textSize="16sp"
+            android:textStyle="bold"
+            android:ellipsize="end"
+            android:singleLine="true"
+            tools:text="المشاريع" />
+
+        <TextView
+            android:id="@+id/txtToolbarSubtitle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="@color/rin_on_toolbar_dim"
+            android:textSize="11.5sp"
+            android:ellipsize="end"
+            android:singleLine="true"
+            android:visibility="gone"
+            tools:text="my_project"
+            tools:visibility="visible" />
+    </LinearLayout>
+
+</LinearLayout>
