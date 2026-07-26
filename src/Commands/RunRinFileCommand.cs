@@ -71,7 +71,7 @@ namespace RinLang.VSSDK.Commands
         {
             _output.WriteLine($"[Rin] تشغيل: \"{rinCliPath}\" \"{rinFilePath}\"");
 
-            var psi = new ProcessStartInfo
+            var psi = new System.Diagnostics.ProcessStartInfo
             {
                 FileName = rinCliPath,
                 Arguments = $"\"{rinFilePath}\"",
@@ -84,7 +84,7 @@ namespace RinLang.VSSDK.Commands
 
             try
             {
-                using (var process = Process.Start(psi))
+                using (var process = System.Diagnostics.Process.Start(psi))
                 {
                     string stdout = await process.StandardOutput.ReadToEndAsync();
                     string stderr = await process.StandardError.ReadToEndAsync();
