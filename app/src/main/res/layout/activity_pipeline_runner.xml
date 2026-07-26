@@ -101,23 +101,109 @@
                 android:textColor="@color/pipeline_text_primary"
                 tools:text="@container.pipe=sales_pipeline" />
 
-            <!-- Flow diagram -->
+            <!-- Flow diagram: بطاقات أفقية متصلة بأسهم، بأسلوب لوحات CI/CD الاحترافية،
+                 بدل العمود الرأسي البسيط السابق -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="vertical"
-                android:gravity="center_horizontal"
                 android:background="@drawable/bg_pipeline_panel_card"
                 android:elevation="1dp"
                 android:padding="14dp"
                 android:layout_marginTop="16dp">
 
-                <LinearLayout
-                    android:id="@+id/flowContainer"
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/pipeline_flow_label"
+                    android:textColor="@color/pipeline_text_muted"
+                    android:textSize="11sp"
+                    android:textStyle="bold"
+                    android:letterSpacing="0.04"
+                    android:layout_marginBottom="10dp" />
+
+                <HorizontalScrollView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:gravity="center_horizontal" />
+                    android:scrollbars="none"
+                    android:overScrollMode="ifContentScrolls"
+                    android:clipToPadding="false"
+                    android:paddingBottom="2dp">
+
+                    <LinearLayout
+                        android:id="@+id/flowContainer"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical"
+                        android:paddingStart="2dp"
+                        android:paddingEnd="10dp" />
+
+                </HorizontalScrollView>
+
+                <!-- Legend: يشرح ألوان/رموز البطاقات أعلاه، بنفس أسلوب شريط legend
+                     في لوحات CI/CD الاحترافية (RinLang IDE, image reference) -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:background="@drawable/bg_pipeline_legend_bar"
+                    android:layout_marginTop="12dp"
+                    android:paddingStart="12dp"
+                    android:paddingEnd="12dp"
+                    android:paddingTop="9dp"
+                    android:paddingBottom="9dp">
+
+                    <ImageView
+                        android:layout_width="14dp"
+                        android:layout_height="14dp"
+                        android:src="@drawable/ic_status_success"
+                        app:tint="@color/pipeline_green"
+                        android:contentDescription="@null" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/pipeline_legend_success"
+                        android:textColor="@color/pipeline_text_muted"
+                        android:textSize="11sp"
+                        android:layout_marginStart="5dp"
+                        android:layout_marginEnd="16dp" />
+
+                    <ImageView
+                        android:layout_width="14dp"
+                        android:layout_height="14dp"
+                        android:src="@drawable/ic_status_error"
+                        app:tint="@color/pipeline_red"
+                        android:contentDescription="@null" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/pipeline_legend_failed"
+                        android:textColor="@color/pipeline_text_muted"
+                        android:textSize="11sp"
+                        android:layout_marginStart="5dp"
+                        android:layout_marginEnd="16dp" />
+
+                    <ImageView
+                        android:layout_width="16dp"
+                        android:layout_height="16dp"
+                        android:src="@drawable/ic_rinflow_logo"
+                        android:contentDescription="@null" />
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/pipeline_legend_node"
+                        android:textColor="@color/pipeline_text_muted"
+                        android:textSize="11sp"
+                        android:ellipsize="end"
+                        android:singleLine="true"
+                        android:layout_marginStart="5dp" />
+                </LinearLayout>
 
             </LinearLayout>
 
