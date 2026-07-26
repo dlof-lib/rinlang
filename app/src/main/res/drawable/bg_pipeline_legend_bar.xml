@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- شريط الأسفل الذي يشرح رموز/ألوان بطاقات RinFlow، بنفس روح legend bar
+     في لوحات CI/CD الاحترافية -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="@color/pipeline_neutral_bg" />
+    <corners android:radius="8dp" />
+</shape>
