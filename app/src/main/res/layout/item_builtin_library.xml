@@ -8,6 +8,15 @@
     android:layout_margin="4dp"
     android:padding="12dp">
 
+    <!-- أيقونة "rin+" المكدّسة، تمثّل مكتبة مدمجة (builtin) -->
+    <ImageView
+        android:layout_width="30dp"
+        android:layout_height="30dp"
+        android:layout_marginEnd="10dp"
+        android:scaleType="fitCenter"
+        android:src="@drawable/ic_rin_stack"
+        android:contentDescription="@null" />
+
     <LinearLayout
         android:layout_width="0dp"
         android:layout_height="wrap_content"
