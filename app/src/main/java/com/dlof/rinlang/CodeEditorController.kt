@@ -95,6 +95,20 @@ class CodeEditorController(
         autoIndenting = false
     }
 
+    // --- Programmatic insertion (used by the "Libraries" section: inserting an @import line) ---
+
+    /**
+     * Inserts [text] at the current cursor position (or replacing the current selection),
+     * then moves the cursor to just after the inserted text. Goes through the normal
+     * [Editable], so undo/redo history, line numbers and syntax highlighting all update as usual.
+     */
+    fun insertAtCursor(text: String) {
+        val start = editText.selectionStart.coerceAtLeast(0)
+        val end = editText.selectionEnd.coerceAtLeast(start)
+        editText.text.replace(start, end, text)
+        editText.setSelection(start + text.length)
+    }
+
     // --- Line numbers ----------------------------------------------------
 
     private fun updateLineNumbers(text: String) {
