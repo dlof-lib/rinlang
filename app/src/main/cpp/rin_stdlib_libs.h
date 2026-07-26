@@ -624,6 +624,149 @@ fun isNegative(x) {
 }
 )FUNCTIONALOGRIN";
 
+static const char* kLib_oglang_og_rin = R"OGLANGOGRIN(
+// ============================================================================
+//  lib/oglang.og.rin — أداة صناعة الحزم (packages) واللغات المصغّرة (mini-languages) فوق Rin
+//  استيراد:
+//    @import "lib/oglang.og.rin";
+//    @import "lib/oglang.og.rin" as og;
+//
+//  هذه المكتبة قسمان مستقلّان، ولا تحتاج أي تعديل في مترجم Rin نفسه (C++) لتعمل:
+//
+//  1) توصيف حزمة .og.rin (pkgInfo / pkgHeader / describePkg):
+//     أدوات صغيرة لتوليد نفس ترويسة التعليق القياسية المستخدمة في lib/*.og.rin، ولوصف
+//     حزمة (اسم/إصدار/وصف/exports) بشكل مقروء — تساعدك عند إنشاء حزمة/مكتبة جديدة خاصة بك.
+//
+//  2) محرّك لغة مصغّرة عام (rule / langNew / runLine / runProgram):
+//     تُعرّف "لغتك المصغّرة" الخاصة كقائمة قواعد — كل قاعدة = كلمة أولى (أمر) + دالة تُنفَّذ
+//     عند مطابقتها — ثم تُشغّل "برنامجاً" كاملاً (مصفوفة أسطر نصية) عبر هذه القواعد. بهذا
+//     تبني DSL/لغة مصغّرة كاملة (لغة أوامر، لغة تهيئة، لغة قواعد...) فوق Rin مباشرة، دون
+//     الحاجة لكتابة محلّل (lexer/parser) جديد بلغة C++.
+//
+//  مثال سريع (لغة أوامر بأمرين "add" و"greet"):
+//    fun onAdd(line, tokens) { return toNumber(tokens[1]) + toNumber(tokens[2]); }
+//    fun onGreet(line, tokens) { return "أهلاً يا " + tokens[1]; }
+//    fun onUnknown(line, tokens) { return "?? أمر غير معروف: " + line; }
+//
+//    let myLang = langNew("cmd", [rule("add", onAdd), rule("greet", onGreet)], onUnknown);
+//    print runProgram(myLang, ["add 2 3", "greet رنين", "foo bar"]);
+//    // -> [5, "أهلاً يا رنين", "?? أمر غير معروف: foo bar"]
+// ============================================================================
+
+// ---- الجزء 1: توصيف الحزم (packages) ---------------------------------------
+
+// يبني معلومات حزمة واحدة: الاسم (بلا امتداد، مثل "math")، الإصدار، وصف مختصر،
+// ومصفوفة أسماء الدوال المصدَّرة (exports) التي يراها مستورِد الحزمة
+fun pkgInfo(name, version, description, exportsArr) {
+    return { name: name, version: version, description: description, exports: exportsArr };
+}
+
+// يبني نص ترويسة قياسية (تعليق) بنفس أسلوب lib/*.og.rin الحالية، جاهزة للصق أعلى ملف جديد
+fun pkgHeader(info) {
+    let name = info["name"];
+    let lines = [];
+    push(lines, "// ============================================================================");
+    push(lines, "//  lib/" + name + ".og.rin — " + info["description"]);
+    push(lines, "//  الإصدار: " + info["version"]);
+    push(lines, "//  استيراد:");
+    push(lines, "//    @import \"lib/" + name + ".og.rin\";");
+    push(lines, "//    @import \"lib/" + name + ".og.rin\" as " + name + ";");
+    push(lines, "// ============================================================================");
+    return join(lines, "\n");
+}
+
+// وصف مقروء لحزمة (شبيه بمخرجات "npm info")، جاهز للطباعة مباشرة عبر print
+fun describePkg(info) {
+    let lines = [];
+    push(lines, "📦 " + info["name"] + "  (v" + info["version"] + ")");
+    push(lines, "   " + info["description"]);
+    let exp = info["exports"];
+    push(lines, "   exports (" + len(exp) + "):");
+    let i = 0;
+    while (i < len(exp)) {
+        push(lines, "     - " + exp[i]);
+        i = i + 1;
+    }
+    return join(lines, "\n");
+}
+
+// ---- الجزء 2: محرّك لغة مصغّرة (mini-language engine) -----------------------
+
+// قاعدة واحدة: كلمة أولى (أمر) تُطابقها + دالة تُنفَّذ عند المطابقة، بتوقيع action(line, tokens)
+fun rule(matchWord, action) {
+    return { match: matchWord, action: action };
+}
+
+// لغة مصغّرة كاملة: اسم + مصفوفة قواعد (تُفحص بالترتيب، أول تطابق يفوز) + دالة احتياطية
+// fallback(line, tokens) تُستدعى عندما لا تطابق أي قاعدة أمر السطر
+fun langNew(name, rulesArr, fallback) {
+    return { name: name, rules: rulesArr, fallback: fallback };
+}
+
+// دالة احتياطية جاهزة تُعيد رسالة خطأ نصية عند عدم التعرّف على الأمر؛ مفيدة كقيمة افتراضية لـ langNew
+fun unknownCommand(line, tokens) {
+    return "?? أمر غير معروف: " + line;
+}
+
+// يقسّم سطراً إلى كلمات (tokens)، متجاهلاً الفراغات الزائدة والعناصر الفارغة الناتجة عنها
+fun tokenize(line) {
+    let raw = split(trim(line), " ");
+    let result = [];
+    let i = 0;
+    while (i < len(raw)) {
+        if (trim(raw[i]) != "") {
+            push(result, raw[i]);
+        }
+        i = i + 1;
+    }
+    return result;
+}
+
+// الكلمة الأولى (اسم الأمر) من سطر، أو "" إن كان السطر فارغاً/مسافات فقط
+fun commandOf(line) {
+    let toks = tokenize(line);
+    if (len(toks) == 0) { return ""; }
+    return toks[0];
+}
+
+// ينفّذ سطراً واحداً عبر لغة lang: يبحث عن أول قاعدة تُطابق أمر السطر وينفّذها،
+// وإلا يستدعي fallback(line, tokens) المسجَّلة في اللغة
+fun runLine(lang, line) {
+    let cmd = commandOf(line);
+    let rules = lang["rules"];
+    let toks = tokenize(line);
+    let i = 0;
+    while (i < len(rules)) {
+        if (rules[i]["match"] == cmd) {
+            let action = rules[i]["action"];
+            return action(line, toks);
+        }
+        i = i + 1;
+    }
+    let fb = lang["fallback"];
+    return fb(line, toks);
+}
+
+// ينفّذ "برنامجاً" كاملاً (مصفوفة أسطر نصية) عبر لغة lang، ويتجاهل الأسطر الفارغة تماماً؛
+// يُعيد مصفوفة نتائج بنفس ترتيب الأسطر غير الفارغة المُدخَلة
+fun runProgram(lang, lines) {
+    let results = [];
+    let i = 0;
+    while (i < len(lines)) {
+        if (trim(lines[i]) != "") {
+            push(results, runLine(lang, lines[i]));
+        }
+        i = i + 1;
+    }
+    return results;
+}
+
+// عدد القواعد المسجَّلة في لغة lang (مفيد للتشخيص أو الطباعة عند وصف اللغة المصغّرة)
+fun ruleCount(lang) {
+    return len(lang["rules"]);
+}
+)OGLANGOGRIN";
+
 inline const std::unordered_map<std::string, std::string>& embeddedRinLibraries() {
     static const std::unordered_map<std::string, std::string> libs = {
         {"lib/math.og.rin", kLib_math_og_rin},
@@ -631,6 +774,7 @@ inline const std::unordered_map<std::string, std::string>& embeddedRinLibraries(
         {"lib/data.og.rin", kLib_data_og_rin},
         {"lib/validate.og.rin", kLib_validate_og_rin},
         {"lib/functional.og.rin", kLib_functional_og_rin},
+        {"lib/oglang.og.rin", kLib_oglang_og_rin},
     };
     return libs;
 }
