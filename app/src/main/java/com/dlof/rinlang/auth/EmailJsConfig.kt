@@ -16,9 +16,9 @@ package com.dlof.rinlang.auth
  *  6) الصق القيم الثلاث أدناه بدل النصوص التوضيحية.
  */
 object EmailJsConfig {
-    const val SERVICE_ID = "PASTE_YOUR_EMAILJS_SERVICE_ID"
-    const val TEMPLATE_ID = "PASTE_YOUR_EMAILJS_TEMPLATE_ID"
-    const val PUBLIC_KEY = "PASTE_YOUR_EMAILJS_PUBLIC_KEY"
+    const val SERVICE_ID = "service_4dwcmjq"
+    const val TEMPLATE_ID = "rinlang"
+    const val PUBLIC_KEY = "WnA9H4LCFGRTc3Bcv"
 
     /** يصبح true تلقائياً بمجرد استبدال القيم الثلاث أعلاه بقيمك الحقيقية. */
     val isConfigured: Boolean
