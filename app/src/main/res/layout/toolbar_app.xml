@@ -9,12 +9,12 @@
     android:layout_height="wrap_content"
     android:orientation="horizontal"
     android:gravity="center_vertical"
-    android:background="@color/rin_toolbar"
+    android:background="@drawable/bg_toolbar_gradient"
     android:elevation="3dp"
     android:paddingStart="4dp"
     android:paddingEnd="14dp"
-    android:paddingTop="8dp"
-    android:paddingBottom="8dp">
+    android:paddingTop="9dp"
+    android:paddingBottom="9dp">
 
     <ImageButton
         android:id="@+id/btnToolbarBack"
@@ -25,21 +25,21 @@
         android:background="@drawable/bg_icon_btn"
         android:contentDescription="@string/action_back" />
 
-    <TextView
-        android:id="@+id/txtToolbarBadge"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginStart="2dp"
-        android:text="rin"
-        android:textColor="@android:color/white"
-        android:textStyle="bold"
-        android:textSize="11sp"
-        android:letterSpacing="0.02"
-        android:background="@drawable/bg_toolbar_logo_badge"
-        android:paddingStart="7dp"
-        android:paddingEnd="7dp"
-        android:paddingTop="4dp"
-        android:paddingBottom="4dp" />
+    <!-- أيقونة التطبيق الحقيقية (mipmap/ic_launcher) داخل إطار أنيق، بديلاً عن شارة النص "rin" -->
+    <FrameLayout
+        android:layout_width="30dp"
+        android:layout_height="30dp"
+        android:layout_marginStart="4dp"
+        android:background="@drawable/bg_app_icon_frame">
+
+        <ImageView
+            android:id="@+id/imgToolbarAppIcon"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:padding="2dp"
+            android:src="@mipmap/ic_launcher_round"
+            android:contentDescription="@string/app_name" />
+    </FrameLayout>
 
     <LinearLayout
         android:layout_width="0dp"
