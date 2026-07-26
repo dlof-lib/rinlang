@@ -1,0 +1,23 @@
+{
+  "rules": {
+    "users": {
+      ".indexOn": ["username"],
+      ".read": "auth != null",
+      "$uid": {
+        ".write": "auth != null && auth.uid === $uid"
+      }
+    },
+    "verification_codes": {
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid",
+        ".write": "auth != null && auth.uid === $uid"
+      }
+    },
+    "packages": {
+      ".read": true,
+      "$packageId": {
+        ".write": "auth != null && (!data.exists() || data.child('publisherUid').val() === auth.uid)"
+      }
+    }
+  }
+}
