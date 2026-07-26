@@ -664,6 +664,44 @@ void Interpreter::registerNatives() {
         return Value::makeArray(result);
     };
 
+    // ---- Section: استعلام عن حالة قسم بعد إغلاقه (يحوّل Section من زخرفية بحتة إلى شيء يمكن
+    // قراءته وبناء منطق فوقه، بنفس روح groupContainers/groupMembers أعلاه) ----
+
+    // sectionVars(name) -> map بمتغيرات القسم المباشرة (بالاسم name فقط، إن كان له وُجِد)، أو map
+    // فارغ إن لم يُنفَّذ أي قسم بهذا الاسم بعد. المفاتيح مرتّبة أبجدياً لمخرجات ثابتة (نفس مبدأ
+    // serializeEnvBody أعلاه)، والدوال (FUNCTION) تُستبعَد لأنها لا تُمثَّل كقيمة Rin عادية.
+    natives["sectionVars"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("sectionVars", a, 1, line);
+        std::string name = asString(a[0], "sectionVars", line);
+        auto result = std::make_shared<MapData>();
+        auto it = sectionEnvs.find(name);
+        if (it != sectionEnvs.end()) {
+            std::vector<std::string> keys;
+            keys.reserve(it->second->values.size());
+            for (auto& kv : it->second->values) keys.push_back(kv.first);
+            std::sort(keys.begin(), keys.end());
+            for (auto& k : keys) {
+                const Value& v = it->second->values[k];
+                if (v.type == Value::Type::FUNCTION) continue;
+                result->push_back({Value::string(k), v});
+            }
+        }
+        return Value::makeMap(result);
+    };
+    // sectionNames() -> مصفوفة أسماء كل الأقسام المُسمّاة التي نُفِّذت حتى الآن، بترتيب أول ظهور.
+    natives["sectionNames"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("sectionNames", a, 0, line);
+        auto result = std::make_shared<ArrayData>();
+        for (auto& n : sectionOrder) result->push_back(Value::string(n));
+        return Value::makeArray(result);
+    };
+    // hasSection(name) -> true إن نُفِّذ قسم بهذا الاسم مرة واحدة على الأقل حتى الآن.
+    natives["hasSection"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("hasSection", a, 1, line);
+        std::string name = asString(a[0], "hasSection", line);
+        return Value::boolean_(sectionEnvs.count(name) > 0);
+    };
+
     // ---- container.doc / doc: قاعدة بيانات لاعلاقية (NoSQL) بمستندات ----
     // container = "مجموعة مستندات" (collection)، و Containers.Group التي تضمّها = "قاعدة بيانات"
     // (database) كاملة (استخدم groupContainers(dbName) لسرد مجموعات مستنداتها). الإدراج الوصفي عبر
@@ -1649,6 +1687,13 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
         output << "🔹 Section" << (s->name.empty() ? "" : (" = " + s->name)) << "\n";
         executeBlock(s->body, sectionEnv);
         output << "◽ .end/Section" << (s->name.empty() ? "" : (" (" + s->name + ")")) << "\n";
+        // يُحفَظ فقط إن كان للقسم اسم (الأقسام المجهولة تبقى زخرفية كالسابق، لا شيء يمكن الرجوع
+        // إليه باسمها). إعادة تنفيذ نفس الاسم (مثلاً داخل حلقة) يستبدل بيئته المحفوظة بأحدث تنفيذ،
+        // لكن لا يُكرَّر اسمه في sectionOrder.
+        if (!s->name.empty()) {
+            if (!sectionEnvs.count(s->name)) sectionOrder.push_back(s->name);
+            sectionEnvs[s->name] = sectionEnv;
+        }
         return;
     }
 
