@@ -162,6 +162,8 @@ object RinFlowTracer {
         LogKind.GRID -> "Row"
         LogKind.STYLE -> "Style"
         LogKind.NETWORK -> "Network"
+        LogKind.DOC_INSERT -> "Insert"
+        LogKind.DOC_UPDATE -> "Update"
         LogKind.ERROR -> "Error"
         LogKind.PLAIN -> "Output"
     }
