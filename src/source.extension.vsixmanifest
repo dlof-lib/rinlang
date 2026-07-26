@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PackageManifest Version="2.0.0" xmlns="http://schemas.microsoft.com/developer/vsx-schema/2011" xmlns:d="http://schemas.microsoft.com/developer/vsx-schema-design/2011">
+  <Metadata>
+    <Identity Id="RinLang.VSSDK.9f3a2b7c-11e4-4d6e-9c2a-6b1f4e2d5a90" Version="1.0.0" Language="en-US" Publisher="rinlang" />
+    <DisplayName>Rin Language Support (Visual Studio)</DisplayName>
+    <Description xml:space="preserve">دعم كامل للغة Rin داخل Visual Studio: تلوين نحوي (Classifier)، مقتطفات كود، وأمر تشغيل الملف الحالي عبر rin_cli. حزمة VSSDK حقيقية (وليست حزمة VS Code) لعرضها على Visual Studio Marketplace ضمن فئة أدوات المحرر لـ Visual Studio نفسه.</Description>
+    <MoreInfo>https://github.com/dlof-lib/rinlang</MoreInfo>
+    <License>extension\LICENSE.txt</License>
+    <GettingStartedGuide>https://github.com/dlof-lib/rinlang</GettingStartedGuide>
+    <Icon>Resources\icon.png</Icon>
+    <PreviewImage>Resources\icon.png</PreviewImage>
+    <Tags>rin, rinlang, dlof, syntax highlighting, language service, editor</Tags>
+  </Metadata>
+  <Installation>
+    <!-- This is the piece that was missing/wrong before: a real Visual Studio (Pro/Community/
+         Enterprise) InstallationTarget, not Microsoft.VisualStudio.Code. VS Code extensions and
+         classic Visual Studio extensions are two different products with two different upload
+         pipelines on marketplace.visualstudio.com; uploading one as the other is what produced
+         the "Value cannot be null. Parameter name: v1" error in the New Extension wizard. -->
+    <InstallationTarget Id="Microsoft.VisualStudio.Community" Version="[17.0,19.0)" />
+    <InstallationTarget Id="Microsoft.VisualStudio.Pro" Version="[17.0,19.0)" />
+    <InstallationTarget Id="Microsoft.VisualStudio.Enterprise" Version="[17.0,19.0)" />
+  </Installation>
+  <Dependencies>
+    <Dependency Id="Microsoft.Framework.NDP" DisplayName="Microsoft .NET Framework" d:Source="Manual" Version="[4.7.2,)" />
+  </Dependencies>
+  <Prerequisites>
+    <Prerequisite Id="Microsoft.VisualStudio.Component.CoreEditor" Version="[17.0,19.0)" DisplayName="Visual Studio core editor" />
+  </Prerequisites>
+  <Assets>
+    <Asset Type="Microsoft.VisualStudio.MefComponent" d:Source="Project" d:ProjectName="%CurrentProject%" Path="|%CurrentProject%|" />
+    <Asset Type="Microsoft.VisualStudio.VsPackage" d:Source="Project" d:ProjectName="%CurrentProject%" Path="|%CurrentProject%;PkgdefProjectOutputGroup|" />
+  </Assets>
+</PackageManifest>
