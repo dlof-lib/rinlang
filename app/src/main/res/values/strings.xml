@@ -11,6 +11,7 @@
     <string name="pipeline_node_output">Final Output</string>
     <string name="pipeline_status_running">RinFlow: Running…</string>
     <string name="pipeline_status_success">RinFlow: Completed Successfully</string>
+    <string name="pipeline_status_success_timed">RinFlow: Completed in %1$d ms (real engine time)</string>
     <string name="pipeline_status_error">RinFlow: Failed</string>
     <string name="pipeline_status_idle">RinFlow: Not run yet</string>
     <string name="pipeline_status_stopped">RinFlow: Stopped</string>
