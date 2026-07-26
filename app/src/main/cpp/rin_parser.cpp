@@ -68,6 +68,8 @@ StmtPtr Parser::declaration() {
     // بنفس أسلوب 'route' أعلاه: لا تتحوّلان إلى عبارة خاصة إلا عند ظهورهما أول عبارة.
     if (check(TokenType::IDENT) && peek().lexeme == "row") { advance(); return rowStatement(); }
     if (check(TokenType::IDENT) && peek().lexeme == "style") { advance(); return styleStatement(); }
+    // 'document' كلمة سياقية غير محجوزة أيضاً (مفهوم قاعدة البيانات اللاعلاقية: container.doc / doc)
+    if (check(TokenType::IDENT) && peek().lexeme == "document") { advance(); return documentStatement(); }
 
     return statement();
 }
@@ -189,7 +191,7 @@ std::string Parser::readTagKeyword() {
         bool nextIsContextualWord = false;
         if (!nextIsPipe && current + 1 < tokens.size() && tokens[current + 1].type == TokenType::IDENT) {
             const std::string& w = tokens[current + 1].lexeme;
-            nextIsContextualWord = (w == "data" || w == "api" || w == "import" || w == "table");
+            nextIsContextualWord = (w == "data" || w == "api" || w == "import" || w == "table" || w == "doc");
         }
         // لا نستهلك '.' إلا إذا كانت متبوعة مباشرة بإحدى هذه الكلمات، وإلا فقد تكون في الحقيقة
         // بداية وسم إغلاق آخر مجاور مثل '.end/container' تلاه '.end/Containers.Group'
@@ -245,11 +247,11 @@ StmtPtr Parser::atBlock() {
     std::string tag = readTagKeyword();
     static const std::vector<std::string> validTags = {
         "container", "container.pipe", "container.data", "container.api", "container.import", "container.table",
-        "Containers.Group", "Volume", "table"
+        "container.doc", "Containers.Group", "Volume", "table", "doc"
     };
     if (std::find(validTags.begin(), validTags.end(), tag) == validTags.end()) {
         throw RinError("Unsupported block '@" + tag + "'; expected container, container.pipe, container.data, "
-                        "container.api, container.import, container.table, table, Containers.Group, or Volume", atTok.line);
+                        "container.api, container.import, container.table, table, container.doc, doc, Containers.Group, or Volume", atTok.line);
     }
     std::string name = readOptionalName();
     std::vector<StmtPtr> body;
@@ -258,10 +260,12 @@ StmtPtr Parser::atBlock() {
 
     if (tag == "container" || tag == "container.pipe" || tag == "container.data" ||
         tag == "container.api" || tag == "container.import" ||
-        tag == "container.table" || tag == "table") {
-        // container.table (مدمجة داخل container) و table (مستقلة) يشتركان في نفس القيود: بيانات
-        // نقية (صفوف row + نمط style اختياري)، بلا دوال ولا حاويات متداخلة ولا route.
-        if (tag == "container.data" || tag == "container.table" || tag == "table") validateDataContainerBody(body);
+        tag == "container.table" || tag == "table" ||
+        tag == "container.doc" || tag == "doc") {
+        // container.table/table (صفوف row + نمط style) و container.doc/doc (مستندات document) يشتركان
+        // في نفس القيود: بيانات نقية، بلا دوال ولا حاويات متداخلة ولا route.
+        if (tag == "container.data" || tag == "container.table" || tag == "table" ||
+            tag == "container.doc" || tag == "doc") validateDataContainerBody(body);
         auto s = std::make_shared<ContainerStmt>();
         s->name = name; s->body = body; s->line = atTok.line;
         if (tag == "container.pipe") s->kind = ContainerKind::PIPE;
@@ -269,6 +273,7 @@ StmtPtr Parser::atBlock() {
         else if (tag == "container.api") s->kind = ContainerKind::API;
         else if (tag == "container.import") s->kind = ContainerKind::IMPORT;
         else if (tag == "container.table" || tag == "table") s->kind = ContainerKind::TABLE;
+        else if (tag == "container.doc" || tag == "doc") s->kind = ContainerKind::DOC;
         else s->kind = ContainerKind::PLAIN;
         return s;
     }
@@ -465,6 +470,23 @@ StmtPtr Parser::styleStatement() {
     consume(TokenType::SEMICOLON, "Expected ';' after style statement");
     auto s = std::make_shared<StyleStmt>();
     s->value = valueExpr; s->line = tok.line;
+    return s;
+}
+
+// document id="u1" fields={ name: "Ali", age: 30 };  -> مستند واحد داخل حاوية NoSQL الحالية (container.doc / doc)
+StmtPtr Parser::documentStatement() {
+    Token tok = previous(); // 'document'
+    Token idKey = consume(TokenType::IDENT, "Expected 'id' after 'document'");
+    if (idKey.lexeme != "id") throw RinError("Expected 'id' attribute after 'document' (e.g. document id=\"u1\" fields={...};)", idKey.line);
+    consume(TokenType::EQUAL, "Expected '=' after 'id'");
+    ExprPtr idExpr = expression();
+    Token fieldsKey = consume(TokenType::IDENT, "Expected 'fields' after 'document id=...'");
+    if (fieldsKey.lexeme != "fields") throw RinError("Expected 'fields' attribute after 'document id=...' (e.g. document id=\"u1\" fields={...};)", fieldsKey.line);
+    consume(TokenType::EQUAL, "Expected '=' after 'fields'");
+    ExprPtr fieldsExpr = expression();
+    consume(TokenType::SEMICOLON, "Expected ';' after document statement");
+    auto s = std::make_shared<DocumentStmt>();
+    s->id = idExpr; s->fields = fieldsExpr; s->line = tok.line;
     return s;
 }
 
