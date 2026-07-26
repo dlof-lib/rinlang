@@ -39,11 +39,15 @@ class MainActivity : AppCompatActivity() {
         const val EXTRA_PROJECT_NAME = "extra_project_name"
         /** اسم ملف .rin (اختياري) داخل ذلك المشروع، يُفتَح تلقائياً في المحرر. */
         const val EXTRA_FILE_NAME = "extra_file_name"
+        /** اسم مكتبة .og.rin (اختياري) داخل lib/ الخاصة بذلك المشروع، تُفتَح للتعديل في نفس المحرر. */
+        const val EXTRA_LIBRARY_NAME = "extra_library_name"
     }
 
     /** المشروع الحالي إن جاء التطبيق من شاشة الملفات، وإلا null (وضع الملف الحر عبر SAF كما كان سابقاً). */
     private var currentProject: Project? = null
     private var currentProjectFile: RinFile? = null
+    /** غير null فقط عندما يكون المحرر مفتوحاً على مكتبة lib/*.og.rin بدل ملف .rin عادي. */
+    private var currentProjectLibrary: RinLibrary? = null
 
     private lateinit var editCode: EditText
     private lateinit var txtLineNumbers: TextView
@@ -71,6 +75,16 @@ class MainActivity : AppCompatActivity() {
     private val createDocumentLauncher =
         registerForActivityResult(ActivityResultContracts.CreateDocument("text/plain")) { uri ->
             if (uri != null) writeToUri(uri)
+        }
+
+    /** تستقبل سطر @import الذي اختاره المستخدم من شاشة "المكتبات" وتُدرجه عند مكان المؤشر في الكود. */
+    private val librariesLauncher =
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+            val importStatement = result.data?.getStringExtra(LibrariesActivity.EXTRA_IMPORT_STATEMENT)
+            if (result.resultCode == RESULT_OK && importStatement != null) {
+                editorController.insertAtCursor("$importStatement\n")
+                Toast.makeText(this, getString(R.string.library_import_inserted_toast), Toast.LENGTH_SHORT).show()
+            }
         }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -115,19 +129,30 @@ class MainActivity : AppCompatActivity() {
         val btnMenuEdit: Button = findViewById(R.id.btnMenuEdit)
         val btnMenuView: Button = findViewById(R.id.btnMenuView)
         val btnMenuRun: Button = findViewById(R.id.btnMenuRun)
+        val btnMenuLibraries: Button = findViewById(R.id.btnMenuLibraries)
 
         if (savedInstanceState == null) {
             val project = currentProject
+            val libraryName = intent.getStringExtra(EXTRA_LIBRARY_NAME)
             val fileName = intent.getStringExtra(EXTRA_FILE_NAME)
-            val fileToOpen = if (project != null && fileName != null) {
+            val libraryToOpen = if (project != null && libraryName != null) {
+                ProjectManager.listLibraries(project).find { it.name == libraryName }
+            } else null
+            val fileToOpen = if (libraryToOpen == null && project != null && fileName != null) {
                 ProjectManager.listFiles(project).find { it.name == fileName }
             } else null
-            if (fileToOpen != null) {
-                currentProjectFile = fileToOpen
-                editCode.setText(ProjectManager.readFile(fileToOpen))
-                txtFileName.text = fileToOpen.name
-            } else {
-                editCode.setText(getString(R.string.sample_program))
+            when {
+                libraryToOpen != null -> {
+                    currentProjectLibrary = libraryToOpen
+                    editCode.setText(ProjectManager.readLibrary(libraryToOpen))
+                    txtFileName.text = getString(R.string.library_file_name_format, libraryToOpen.name)
+                }
+                fileToOpen != null -> {
+                    currentProjectFile = fileToOpen
+                    editCode.setText(ProjectManager.readFile(fileToOpen))
+                    txtFileName.text = fileToOpen.name
+                }
+                else -> editCode.setText(getString(R.string.sample_program))
             }
         }
 
@@ -185,6 +210,7 @@ class MainActivity : AppCompatActivity() {
         btnMenuEdit.setOnClickListener { showEditMenu(it) }
         btnMenuView.setOnClickListener { showViewMenu(it) }
         btnMenuRun.setOnClickListener { showRunMenu(it) }
+        btnMenuLibraries.setOnClickListener { openLibrariesScreen() }
     }
 
     /** يبني PopupMenu بمظهر داكن يتناسق مع بقية التطبيق. */
@@ -199,16 +225,35 @@ class MainActivity : AppCompatActivity() {
         popup.menu.add(0, 2, 1, R.string.menu_file_open)
         popup.menu.add(0, 3, 2, R.string.menu_file_save)
         popup.menu.add(0, 4, 3, R.string.menu_file_projects)
+        popup.menu.add(0, 5, 4, R.string.menu_file_libraries)
         popup.setOnMenuItemClickListener { item ->
             when (item.itemId) {
                 1 -> newFile()
                 2 -> openDocumentLauncher.launch(arrayOf("text/plain", "application/octet-stream", "*/*"))
                 3 -> saveFile()
                 4 -> startActivity(android.content.Intent(this, ProjectsActivity::class.java))
+                5 -> openLibrariesScreen()
             }
             true
         }
         popup.show()
+    }
+
+    /**
+     * يفتح شاشة "المكتبات" (رفع/إنشاء/تعديل مكتبات lib/*.og.rin + إدراج @import في الكود).
+     * تحتاج مكتبات المستخدم مشروعاً حقيقياً (basePath) تُحفَظ أسفله، لذا تُطلَب أولاً هنا لو لم
+     * يكن المحرر مفتوحاً من داخل مشروع بعد (وضع "فتح ملف حر" عبر SAF).
+     */
+    private fun openLibrariesScreen() {
+        val project = currentProject
+        if (project == null) {
+            Toast.makeText(this, getString(R.string.libraries_need_project_toast), Toast.LENGTH_LONG).show()
+            startActivity(android.content.Intent(this, ProjectsActivity::class.java))
+            return
+        }
+        val intent = android.content.Intent(this, LibrariesActivity::class.java)
+        intent.putExtra(LibrariesActivity.EXTRA_PROJECT_NAME, project.name)
+        librariesLauncher.launch(intent)
     }
 
     private fun showEditMenu(anchor: android.view.View) {
@@ -287,14 +332,17 @@ class MainActivity : AppCompatActivity() {
         editCode.setText("")
         currentUri = null
         currentProjectFile = null
+        currentProjectLibrary = null
         txtFileName.text = getString(R.string.new_file_name)
         Toast.makeText(this, getString(R.string.new_file_toast), Toast.LENGTH_SHORT).show()
     }
 
     private fun saveFile() {
+        val projectLibrary = currentProjectLibrary
         val projectFile = currentProjectFile
         val existingUri = currentUri
         when {
+            projectLibrary != null -> saveToProjectLibrary(projectLibrary)
             projectFile != null -> saveToProjectFile(projectFile)
             existingUri != null -> writeToUri(existingUri)
             else -> createDocumentLauncher.launch(suggestedFileName())
@@ -336,6 +384,18 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /** يحفظ محتوى المحرر مباشرة داخل ملف المكتبة الحالي (lib/*.og.rin) بدون المرور بحوار SAF. */
+    private fun saveToProjectLibrary(library: RinLibrary) {
+        val project = currentProject ?: return
+        try {
+            val updated = ProjectManager.writeLibrary(project, library, editCode.text.toString())
+            currentProjectLibrary = updated
+            Toast.makeText(this, getString(R.string.file_saved_toast, updated.name), Toast.LENGTH_SHORT).show()
+        } catch (t: Throwable) {
+            Toast.makeText(this, "${getString(R.string.file_save_error)}: ${t.message}", Toast.LENGTH_LONG).show()
+        }
+    }
+
     private fun suggestedFileName(): String = "program.rin"
 
     private fun openFile(uri: Uri) {
@@ -347,6 +407,8 @@ class MainActivity : AppCompatActivity() {
                 }
             }
             currentUri = uri
+            currentProjectFile = null
+            currentProjectLibrary = null
             val name = queryDisplayName(uri) ?: uri.lastPathSegment ?: "opened.rin"
             txtFileName.text = name
             Toast.makeText(this, getString(R.string.file_opened_toast, name), Toast.LENGTH_SHORT).show()
