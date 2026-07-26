@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <PackageManifest Version="2.0.0" xmlns="http://schemas.microsoft.com/developer/vsx-schema/2011" xmlns:d="http://schemas.microsoft.com/developer/vsx-schema-design/2011">
   <Metadata>
-    <Identity Id="RinLang.VSSDK.9f3a2b7c-11e4-4d6e-9c2a-6b1f4e2d5a90" Version="1.0.0" Language="en-US" Publisher="rinlang" />
+    <Identity Id="RinLang.VSSDK.9f3a2b7c-11e4-4d6e-9c2a-6b1f4e2d5a90" Version="1.0.0" Language="en-US" Publisher="rinlang-dlof" />
     <DisplayName>Rin Language Support (Visual Studio)</DisplayName>
     <Description xml:space="preserve">دعم كامل للغة Rin داخل Visual Studio: تلوين نحوي (Classifier)، مقتطفات كود، وأمر تشغيل الملف الحالي عبر rin_cli. حزمة VSSDK حقيقية (وليست حزمة VS Code) لعرضها على Visual Studio Marketplace ضمن فئة أدوات المحرر لـ Visual Studio نفسه.</Description>
     <MoreInfo>https://github.com/dlof-lib/rinlang</MoreInfo>
