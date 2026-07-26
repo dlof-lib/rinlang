@@ -15,6 +15,9 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.dlof.rinlang.store.AccountActivity
+import com.dlof.rinlang.store.PublishPackageActivity
+import com.dlof.rinlang.store.RinStoreActivity
 import java.text.DateFormat
 import java.util.Date
 
@@ -78,7 +81,14 @@ class LibrariesActivity : AppCompatActivity() {
         userAdapter = UserLibraryAdapter(
             onEdit = { lib -> openLibraryInEditor(lib) },
             onDelete = { lib -> showDeleteConfirm(lib) },
-            onInsert = { lib -> finishWithImport("@import \"${ProjectManagerLibPrefix}${lib.name}\";") }
+            onInsert = { lib -> finishWithImport("@import \"${ProjectManagerLibPrefix}${lib.name}\";") },
+            onPublish = { lib ->
+                startActivity(
+                    Intent(this, PublishPackageActivity::class.java)
+                        .putExtra(PublishPackageActivity.EXTRA_PROJECT_NAME, project.name)
+                        .putExtra(PublishPackageActivity.EXTRA_LIBRARY_NAME, lib.name)
+                )
+            }
         )
         rvUserLibraries.layoutManager = LinearLayoutManager(this)
         rvUserLibraries.adapter = userAdapter
@@ -95,6 +105,16 @@ class LibrariesActivity : AppCompatActivity() {
             importLibraryLauncher.launch(arrayOf("text/plain", "application/octet-stream", "*/*"))
         }
         fabNewLibrary.setOnClickListener { showCreateLibraryDialog() }
+
+        findViewById<View>(R.id.btnBrowseStore).setOnClickListener {
+            startActivity(
+                Intent(this, RinStoreActivity::class.java)
+                    .putExtra(RinStoreActivity.EXTRA_PROJECT_NAME, project.name)
+            )
+        }
+        findViewById<View>(R.id.btnMyAccount).setOnClickListener {
+            startActivity(Intent(this, AccountActivity::class.java))
+        }
     }
 
     override fun onResume() {
@@ -175,7 +195,8 @@ private const val ProjectManagerLibPrefix = "lib/"
 private class UserLibraryAdapter(
     val onEdit: (RinLibrary) -> Unit,
     val onDelete: (RinLibrary) -> Unit,
-    val onInsert: (RinLibrary) -> Unit
+    val onInsert: (RinLibrary) -> Unit,
+    val onPublish: (RinLibrary) -> Unit
 ) : RecyclerView.Adapter<UserLibraryAdapter.VH>() {
 
     private var items: List<RinLibrary> = emptyList()
@@ -192,6 +213,7 @@ private class UserLibraryAdapter(
         val btnDelete: View = view.findViewById(R.id.btnDeleteLibrary)
         val btnEdit: View = view.findViewById(R.id.btnEditLibrary)
         val btnInsert: View = view.findViewById(R.id.btnInsertLibrary)
+        val btnPublish: View = view.findViewById(R.id.btnPublishLibrary)
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH {
@@ -210,6 +232,7 @@ private class UserLibraryAdapter(
         holder.btnEdit.setOnClickListener { onEdit(lib) }
         holder.btnDelete.setOnClickListener { onDelete(lib) }
         holder.btnInsert.setOnClickListener { onInsert(lib) }
+        holder.btnPublish.setOnClickListener { onPublish(lib) }
     }
 
     override fun getItemCount(): Int = items.size
