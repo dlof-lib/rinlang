@@ -46,7 +46,7 @@ class MainActivity : AppCompatActivity() {
     /** المشروع الحالي إن جاء التطبيق من شاشة الملفات، وإلا null (وضع الملف الحر عبر SAF كما كان سابقاً). */
     private var currentProject: Project? = null
     private var currentProjectFile: RinFile? = null
-    /** غير null فقط عندما يكون المحرر مفتوحاً على مكتبة lib/*.og.rin بدل ملف .rin عادي. */
+    /** غير null فقط عندما يكون المحرر مفتوحاً على مكتبة lib/ *.og.rin بدل ملف .rin عادي. */
     private var currentProjectLibrary: RinLibrary? = null
 
     private lateinit var editCode: EditText
@@ -240,7 +240,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * يفتح شاشة "المكتبات" (رفع/إنشاء/تعديل مكتبات lib/*.og.rin + إدراج @import في الكود).
+     * يفتح شاشة "المكتبات" (رفع/إنشاء/تعديل مكتبات lib/ *.og.rin + إدراج @import في الكود).
      * تحتاج مكتبات المستخدم مشروعاً حقيقياً (basePath) تُحفَظ أسفله، لذا تُطلَب أولاً هنا لو لم
      * يكن المحرر مفتوحاً من داخل مشروع بعد (وضع "فتح ملف حر" عبر SAF).
      */
@@ -384,7 +384,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    /** يحفظ محتوى المحرر مباشرة داخل ملف المكتبة الحالي (lib/*.og.rin) بدون المرور بحوار SAF. */
+    /** يحفظ محتوى المحرر مباشرة داخل ملف المكتبة الحالي (lib/ *.og.rin) بدون المرور بحوار SAF. */
     private fun saveToProjectLibrary(library: RinLibrary) {
         val project = currentProject ?: return
         try {
