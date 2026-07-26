@@ -39,7 +39,10 @@ object PipelineTracer {
         var finalValueText: String = "",
         var success: Boolean = true,
         var errorMessage: String? = null,
-        var rawEngineOutput: String = ""
+        var rawEngineOutput: String = "",
+        /** الزمن الحقيقي (ملي ثانية) الذي استغرقه محرك Rin فعلاً لتنفيذ هذا الـ probe —
+         *  مقاس بـ System.nanoTime حول الاستدعاء الفعلي، وليس رقماً وهمياً أو تقديرياً. */
+        var totalDurationMs: Long = 0
     )
 
     /** Cheap static check (no engine execution) used by the editor to offer a "view in RinFlow" prompt. */
@@ -85,11 +88,13 @@ object PipelineTracer {
         }
         probe.append(".end/container.pipe\n")
 
+        val startNs = System.nanoTime()
         val engineOutput = try {
             RinEngine.runSource(probe.toString())
         } catch (t: Throwable) {
             "[Internal error]: ${t.message}"
         }
+        trace.totalDurationMs = (System.nanoTime() - startNs) / 1_000_000
         trace.rawEngineOutput = engineOutput
 
         if (engineOutput.startsWith("[")) {
