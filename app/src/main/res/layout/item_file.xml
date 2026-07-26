@@ -4,36 +4,60 @@
     android:layout_height="wrap_content"
     android:orientation="horizontal"
     android:gravity="center_vertical"
-    android:background="?attr/selectableItemBackground"
-    android:padding="16dp">
+    android:background="@drawable/bg_list_card"
+    android:layout_marginStart="4dp"
+    android:layout_marginEnd="4dp"
+    android:layout_marginTop="5dp"
+    android:layout_marginBottom="5dp"
+    android:padding="12dp">
+
+    <FrameLayout
+        android:layout_width="42dp"
+        android:layout_height="42dp"
+        android:background="@drawable/bg_icon_badge_blue">
+
+        <ImageView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:src="@drawable/ic_file_solid"
+            android:contentDescription="@null" />
+    </FrameLayout>
 
     <LinearLayout
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_weight="1"
+        android:layout_marginStart="12dp"
         android:orientation="vertical">
 
         <TextView
             android:id="@+id/txtFileNameItem"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:textSize="17sp"
-            android:textStyle="bold" />
+            android:textSize="15.5sp"
+            android:textStyle="bold"
+            android:fontFamily="monospace"
+            android:textColor="@color/rin_on_toolbar"
+            android:ellipsize="end"
+            android:maxLines="1" />
 
         <TextView
             android:id="@+id/txtFileMeta"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:textSize="13sp"
-            android:alpha="0.7" />
+            android:layout_marginTop="2dp"
+            android:textSize="12.5sp"
+            android:textColor="@color/rin_editor_hint" />
     </LinearLayout>
 
     <ImageButton
         android:id="@+id/btnDeleteFile"
-        android:layout_width="40dp"
-        android:layout_height="40dp"
-        android:background="?attr/selectableItemBackgroundBorderless"
+        android:layout_width="38dp"
+        android:layout_height="38dp"
+        android:padding="10dp"
+        android:background="@drawable/bg_icon_btn"
         android:contentDescription="@string/delete_file_title"
-        android:src="@android:drawable/ic_menu_delete" />
+        android:src="@drawable/ic_trash_red" />
 
 </LinearLayout>
