@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <PackageManifest Version="2.0.0" xmlns="http://schemas.microsoft.com/developer/vsx-schema/2011" xmlns:d="http://schemas.microsoft.com/developer/vsx-schema-design/2011">
   <Metadata>
-    <Identity Id="RinLang.VSSDK.9f3a2b7c-11e4-4d6e-9c2a-6b1f4e2d5a90" Version="1.0.0" Language="en-US" Publisher="rinlang-dlof" />
+    <Identity Id="RinLang.VSSDK.07ebeb71-80b7-4b0e-98d8-07fcaa2c493b" Version="1.0.1" Language="en-US" Publisher="rinlang-dlof" />
     <DisplayName>Rin Language Support (Visual Studio)</DisplayName>
     <Description xml:space="preserve">Full support for the Rin language in Visual Studio: syntax classifier, code snippets, and a "Run current file" command via rin_cli. A real VSSDK package (not a VS Code package), built for the Visual Studio Marketplace.</Description>
     <MoreInfo>https://github.com/dlof-lib/rinlang</MoreInfo>
@@ -12,11 +12,6 @@
     <Tags>rin, rinlang, dlof, syntax highlighting, language service, editor</Tags>
   </Metadata>
   <Installation>
-    <!-- This is the piece that was missing/wrong before: a real Visual Studio (Pro/Community/
-         Enterprise) InstallationTarget, not Microsoft.VisualStudio.Code. VS Code extensions and
-         classic Visual Studio extensions are two different products with two different upload
-         pipelines on marketplace.visualstudio.com; uploading one as the other is what produced
-         the "Value cannot be null. Parameter name: v1" error in the New Extension wizard. -->
     <InstallationTarget Id="Microsoft.VisualStudio.Community" Version="[17.0,19.0)">
       <ProductArchitecture>amd64</ProductArchitecture>
     </InstallationTarget>
