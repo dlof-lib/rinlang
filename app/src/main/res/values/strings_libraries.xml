@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  نصوص شاشة "المكتبات" الجديدة (LibrariesActivity) وتكاملها مع المحرر (MainActivity).
+  ملف إضافي منفصل، بنفس أسلوب strings_projects_files.xml — أندرويد يدمج كل ملفات
+  values/*.xml تلقائياً طالما لا تتكرر أسماء العناصر.
+-->
+<resources>
+    <!-- عنصر قائمة File الجديد داخل المحرر -->
+    <string name="menu_file_libraries">المكتبات</string>
+
+    <!-- شاشة المكتبات: العنوان والأقسام -->
+    <string name="libraries_title_format">مكتبات: %1$s</string>
+    <string name="libraries_section_mine">مكتباتي</string>
+    <string name="libraries_section_mine_hint">مكتبات lib/*.og.rin التي أنشأتها أو رفعتها لهذا المشروع</string>
+    <string name="no_libraries_yet">لا توجد مكتبات بعد. أنشئ مكتبة جديدة أو ارفع ملف .og.rin من جهازك.</string>
+    <string name="libraries_section_builtin">مكتبات جاهزة (مدمجة)</string>
+    <string name="libraries_section_builtin_hint">تعمل فوراً في أي مشروع عبر @import بلا رفع</string>
+
+    <!-- أزرار وحوارات الرفع/الإنشاء/الحذف -->
+    <string name="upload_library">رفع مكتبة</string>
+    <string name="library_uploaded_toast">تم رفع المكتبة: %1$s</string>
+    <string name="new_library_title">مكتبة جديدة</string>
+    <string name="library_name_hint">اسم المكتبة (مثال: mylib)</string>
+    <string name="delete_library_title">حذف المكتبة</string>
+    <string name="delete_library_confirm">هل تريد حذف المكتبة \"%1$s\"؟ أي @import لها في كودك سيتوقف عن العمل.</string>
+
+    <!-- أزرار عنصر المكتبة في القائمة -->
+    <string name="action_edit_library">تعديل</string>
+    <string name="action_insert_import">إدراج في الكود</string>
+
+    <!-- اسم الملف المعروض أعلى المحرر عند تعديل مكتبة بدل ملف .rin عادي -->
+    <string name="library_file_name_format">📚 %1$s</string>
+
+    <!-- رسائل داخل المحرر بعد العودة من شاشة المكتبات -->
+    <string name="library_import_inserted_toast">تم إدراج سطر @import عند موضع المؤشر</string>
+    <string name="libraries_need_project_toast">افتح مشروعاً أولاً حتى تُحفَظ مكتباتك بداخله ويعمل @import عليها</string>
+</resources>
