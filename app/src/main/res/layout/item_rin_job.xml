@@ -56,6 +56,8 @@
             android:textSize="11sp" />
     </LinearLayout>
 
+    <!-- يُستخدم فقط كنسخة احتياطية نصّية بسيطة (مثلاً حالة RUNNING/الخطأ الفادح)؛ الناتج الطبيعي
+         يُعرض بالأسلوب الاحترافي أدناه (llJobOutputLines) بدل هذا النص الخام -->
     <TextView
         android:id="@+id/txtJobOutput"
         android:layout_width="match_parent"
@@ -65,5 +67,22 @@
         android:textColor="@color/rin_console_text"
         android:textSize="12.5sp"
         android:textIsSelectable="true" />
+
+    <!-- ناتج التشغيل بأسلوب احترافي: سطر لكل عملية بأيقونة ملوّنة بدل الإيموجي -->
+    <LinearLayout
+        android:id="@+id/llJobOutputLines"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:orientation="vertical" />
+
+    <!-- شرائح الملفات الفعلية التي أنتجها save/installation، قابلة للتنزيل الحقيقي إلى Downloads -->
+    <LinearLayout
+        android:id="@+id/llJobArtifacts"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:orientation="vertical"
+        android:visibility="gone" />
 
 </LinearLayout>
