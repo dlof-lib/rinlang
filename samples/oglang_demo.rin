@@ -1,0 +1,50 @@
+// samples/oglang_demo.rin — مثال على بناء "لغة مصغّرة" (mini-language) كاملة فوق Rin
+// عبر lib/oglang.og.rin، بلا أي محلّل C++ إضافي: مجرّد قواعد (أمر -> دالة).
+
+@import "oglang";
+
+// كل معالج يستقبل (line, tokens) ويُعيد النتيجة المقابلة لتنفيذ ذلك السطر
+fun onAdd(line, tokens) {
+    return toNumber(tokens[1]) + toNumber(tokens[2]);
+}
+
+fun onGreet(line, tokens) {
+    return "أهلاً يا " + tokens[1] + "!";
+}
+
+fun onRepeat(line, tokens) {
+    return repeatWord(tokens[1], toNumber(tokens[2]));
+}
+
+fun repeatWord(word, times) {
+    let result = "";
+    let i = 0;
+    while (i < times) {
+        result = result + word + " ";
+        i = i + 1;
+    }
+    return trim(result);
+}
+
+// تعريف اللغة المصغّرة: اسمها + قواعدها الثلاث + دالة احتياطية جاهزة (unknownCommand)
+let calcLang = langNew("mini-calc", [
+    rule("add", onAdd),
+    rule("greet", onGreet),
+    rule("repeat", onRepeat)
+], unknownCommand);
+
+// "برنامج" مكتوب بلغتنا المصغّرة: مجرّد مصفوفة أسطر نصية
+let program = [
+    "add 4 5",
+    "greet رنين",
+    "repeat rin 3",
+    "foo bar baz"
+];
+
+print "=== تشغيل لغة " + calcLang["name"] + " (" + ruleCount(calcLang) + " قواعد) ===";
+let results = runProgram(calcLang, program);
+let i = 0;
+while (i < len(results)) {
+    print (i + 1) + ") " + results[i];
+    i = i + 1;
+}
