@@ -79,7 +79,7 @@ object AuthRepository {
 
                 usersRef().child(uid).setValue(profile)
                     .addOnSuccessListener {
-                        sendNewCode(uid, email, name) { }
+                        sendNewCode(uid, email, name) { _, _ -> }
                         callback(RegisterResult.NeedsVerification(uid, email, name))
                     }
                     .addOnFailureListener { e ->
