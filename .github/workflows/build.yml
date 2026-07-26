@@ -1,0 +1,56 @@
+name: Build Rin VSSDK Extension
+
+# يبني هذا الـ workflow ملف RinLangVSSDK.vsix تلقائياً على خادم Windows فيه
+# Visual Studio مثبّت مسبقاً (windows-2022 runner)، دون الحاجة لتثبيت أي شيء
+# على جهازك. النتيجة تظهر كـ "Artifact" قابل للتنزيل في تبويب Actions.
+#
+# طريقة الاستخدام:
+#   1) ارفع هذا المستودع (بما فيه هذا الملف) إلى GitHub.
+#   2) اذهب لتبويب "Actions" في المستودع، شغّل الـ workflow (أو انتظره يعمل تلقائياً
+#      بعد أي push).
+#   3) بعد اكتمال التشغيل بنجاح (علامة صح خضراء)، افتح التشغيل ← قسم "Artifacts"
+#      بالأسفل ← نزّل "RinLangVSSDK-vsix"، ستجد بداخله RinLangVSSDK.vsix جاهزاً
+#      للرفع مباشرة على marketplace.visualstudio.com.
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch: {}
+
+jobs:
+  build:
+    runs-on: windows-2022
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Setup NuGet
+        uses: NuGet/setup-nuget@v2
+
+      - name: Restore NuGet packages
+        run: nuget restore RinLangVSSDK.sln
+
+      - name: Build (Release)
+        run: msbuild RinLangVSSDK.sln /p:Configuration=Release /p:DeployExtension=false /verbosity:minimal
+
+      - name: Locate VSIX
+        id: find_vsix
+        shell: pwsh
+        run: |
+          $vsix = Get-ChildItem -Path . -Recurse -Filter "RinLangVSSDK.vsix" | Select-Object -First 1
+          if (-not $vsix) {
+            Write-Error "لم يُعثر على RinLangVSSDK.vsix بعد البناء — راجع سجل خطوة Build أعلاه."
+            exit 1
+          }
+          echo "vsix_path=$($vsix.FullName)" >> $env:GITHUB_OUTPUT
+
+      - name: Upload VSIX artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: RinLangVSSDK-vsix
+          path: ${{ steps.find_vsix.outputs.vsix_path }}
+          if-no-files-found: error
