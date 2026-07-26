@@ -34,6 +34,13 @@ object RinEngine {
         baseDir = projectBasePath
     }
 
+    /**
+     * الجذر الحقيقي على القرص الذي تُبنى فوقه كل مسارات save/installation/file النسبية
+     * (نفس المسار الممرَّر لـ runSourceNative). يُستخدم لتحديد موقع الملفات الفعلية
+     * التي أنتجها آخر تشغيل حتى يمكن تنزيلها إلى مجلد Downloads العام بالجهاز.
+     */
+    fun currentBaseDir(): String = baseDir
+
     /** Lexes, parses and interprets [source]; returns everything the program printed. */
     fun runSource(source: String): String = runSourceNative(source, baseDir)
 
