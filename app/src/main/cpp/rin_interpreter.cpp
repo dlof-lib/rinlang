@@ -188,6 +188,8 @@ static std::string containerTagName(ContainerKind k) {
         // ملاحظة: سواء فُتحت بصيغة "@container.table=" (مدمجة) أو "@table=" (مستقلة)، تُحفَظ
         // دائماً بنفس الوسم الموحَّد "container.table" لضمان إعادة قراءة واحدة لا لبس فيها.
         case ContainerKind::TABLE: return "container.table";
+        // نفس المبدأ لـ "@container.doc=" / "@doc=" -> دائماً "container.doc" موحَّدة.
+        case ContainerKind::DOC: return "container.doc";
         default: return "container";
     }
 }
@@ -199,6 +201,7 @@ static std::string containerIcon(ContainerKind k) {
         case ContainerKind::API: return "🌐";
         case ContainerKind::IMPORT: return "📦⬅️";
         case ContainerKind::TABLE: return "📊";
+        case ContainerKind::DOC: return "🧾";
         default: return "📦";
     }
 }
@@ -617,6 +620,156 @@ void Interpreter::registerNatives() {
             for (auto& n : it->second) result->push_back(Value::string(n));
         }
         return Value::makeArray(result);
+    };
+
+    // ---- container.doc / doc: قاعدة بيانات لاعلاقية (NoSQL) بمستندات ----
+    // container = "مجموعة مستندات" (collection)، و Containers.Group التي تضمّها = "قاعدة بيانات"
+    // (database) كاملة (استخدم groupContainers(dbName) لسرد مجموعات مستنداتها). الإدراج الوصفي عبر
+    // 'document id=... fields=...;' داخل @container.doc، أو الإدراج/التحديث الحيّ عبر insertDoc/updateDoc أدناه.
+
+    // insertDoc(collection, id, fields) -> true إن كان إدراجاً جديداً، false إن استبدل مستنداً موجوداً (upsert كامل)
+    natives["insertDoc"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("insertDoc", a, 3, line);
+        std::string container = asString(a[0], "insertDoc", line);
+        std::string id = asString(a[1], "insertDoc", line);
+        if (a[2].type != Value::Type::MAP) {
+            throw RinError("'insertDoc' يتوقّع كائناً/قاموساً (map) كوسيط ثالث لحقول المستند", line);
+        }
+        if (!containerKinds.count(container) || containerKinds[container] != ContainerKind::DOC) {
+            throw RinError("'insertDoc': '" + container + "' ليست مجموعة مستندات NoSQL (container.doc / doc)", line);
+        }
+        auto& docs = docStore[container];
+        for (auto& entry : docs) {
+            if (entry.first == id) { entry.second = a[2]; return Value::boolean_(false); }
+        }
+        docs.push_back({id, a[2]});
+        return Value::boolean_(true);
+    };
+
+    // updateDoc(collection, id, partialFields) -> true إن وُجد ودُمجت الحقول الجديدة (تحديث جزئي/patch)، false إن لم يوجد
+    natives["updateDoc"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("updateDoc", a, 3, line);
+        std::string container = asString(a[0], "updateDoc", line);
+        std::string id = asString(a[1], "updateDoc", line);
+        if (a[2].type != Value::Type::MAP) {
+            throw RinError("'updateDoc' يتوقّع كائناً/قاموساً (map) كوسيط ثالث للحقول الجديدة", line);
+        }
+        auto it = docStore.find(container);
+        if (it == docStore.end()) return Value::boolean_(false);
+        for (auto& entry : it->second) {
+            if (entry.first != id) continue;
+            if (entry.second.type != Value::Type::MAP || !entry.second.map) {
+                entry.second = Value::makeMap(std::make_shared<MapData>());
+            }
+            for (auto& kv : *a[2].map) {
+                bool found = false;
+                for (auto& existing : *entry.second.map) {
+                    if (valuesEqual(existing.first, kv.first)) { existing.second = kv.second; found = true; break; }
+                }
+                if (!found) entry.second.map->push_back(kv);
+            }
+            return Value::boolean_(true);
+        }
+        return Value::boolean_(false);
+    };
+
+    // deleteDoc(collection, id) -> true إن حُذف فعلاً، false إن لم يوجد أصلاً
+    natives["deleteDoc"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("deleteDoc", a, 2, line);
+        std::string container = asString(a[0], "deleteDoc", line);
+        std::string id = asString(a[1], "deleteDoc", line);
+        auto it = docStore.find(container);
+        if (it != docStore.end()) {
+            auto& vec = it->second;
+            for (size_t i = 0; i < vec.size(); i++) {
+                if (vec[i].first == id) { vec.erase(vec.begin() + i); return Value::boolean_(true); }
+            }
+        }
+        return Value::boolean_(false);
+    };
+
+    // findDoc(collection, id) -> حقول المستند (map) أو nil إن لم يوجد
+    natives["findDoc"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("findDoc", a, 2, line);
+        std::string container = asString(a[0], "findDoc", line);
+        std::string id = asString(a[1], "findDoc", line);
+        auto it = docStore.find(container);
+        if (it != docStore.end()) {
+            for (auto& entry : it->second) if (entry.first == id) return entry.second;
+        }
+        return Value::nil();
+    };
+
+    // queryDocs(collection, field, value) -> مصفوفة كل المستندات (map) التي يساوي فيها field القيمة المعطاة
+    natives["queryDocs"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("queryDocs", a, 3, line);
+        std::string container = asString(a[0], "queryDocs", line);
+        std::string field = asString(a[1], "queryDocs", line);
+        Value target = a[2];
+        auto result = std::make_shared<ArrayData>();
+        auto it = docStore.find(container);
+        if (it != docStore.end()) {
+            for (auto& entry : it->second) {
+                const Value& doc = entry.second;
+                if (doc.type != Value::Type::MAP || !doc.map) continue;
+                for (auto& kv : *doc.map) {
+                    if (kv.first.type == Value::Type::STRING && kv.first.str == field && valuesEqual(kv.second, target)) {
+                        result->push_back(doc);
+                        break;
+                    }
+                }
+            }
+        }
+        return Value::makeArray(result);
+    };
+
+    // queryOneDoc(collection, field, value) -> أول مستند مطابق (map) أو nil
+    natives["queryOneDoc"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("queryOneDoc", a, 3, line);
+        std::string container = asString(a[0], "queryOneDoc", line);
+        std::string field = asString(a[1], "queryOneDoc", line);
+        Value target = a[2];
+        auto it = docStore.find(container);
+        if (it != docStore.end()) {
+            for (auto& entry : it->second) {
+                const Value& doc = entry.second;
+                if (doc.type != Value::Type::MAP || !doc.map) continue;
+                for (auto& kv : *doc.map) {
+                    if (kv.first.type == Value::Type::STRING && kv.first.str == field && valuesEqual(kv.second, target)) {
+                        return doc;
+                    }
+                }
+            }
+        }
+        return Value::nil();
+    };
+
+    // docIds(collection) -> مصفوفة أسماء (ids) كل المستندات بترتيب الإدخال
+    natives["docIds"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("docIds", a, 1, line);
+        std::string container = asString(a[0], "docIds", line);
+        auto result = std::make_shared<ArrayData>();
+        auto it = docStore.find(container);
+        if (it != docStore.end()) for (auto& entry : it->second) result->push_back(Value::string(entry.first));
+        return Value::makeArray(result);
+    };
+
+    // allDocs(collection) -> مصفوفة كل المستندات (كل عنصر map) بترتيب الإدخال
+    natives["allDocs"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("allDocs", a, 1, line);
+        std::string container = asString(a[0], "allDocs", line);
+        auto result = std::make_shared<ArrayData>();
+        auto it = docStore.find(container);
+        if (it != docStore.end()) for (auto& entry : it->second) result->push_back(entry.second);
+        return Value::makeArray(result);
+    };
+
+    // countDocs(collection) -> عدد المستندات
+    natives["countDocs"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("countDocs", a, 1, line);
+        std::string container = asString(a[0], "countDocs", line);
+        auto it = docStore.find(container);
+        return Value::num(it != docStore.end() ? static_cast<double>(it->second.size()) : 0.0);
     };
 
     // ---- container.api: استدعاء نقاط API الوهمية المسجَّلة عبر route (حقيقي بالكامل، بلا شبكة) ----
@@ -1065,6 +1218,18 @@ std::string Interpreter::buildSaveDocument(const std::string& key, const EnvPtr&
             std::string styleLit = "\"" + escapeStringLiteral(styleIt->second) + "\"";
             body += simplified ? ("style value=" + styleLit + ";")
                                 : ("    style value=" + styleLit + ";\n");
+        }
+    } else if (kind == ContainerKind::DOC) {
+        // نفس المبدأ: مستندات container.doc/doc مخزَّنة في docStore داخل المفسّر، لا في بيئة الحاوية،
+        // فتُلحَق هنا نصياً كسلسلة عبارات 'document id=... fields=...;' قابلة لإعادة القراءة كاملة.
+        auto docsIt = docStore.find(key);
+        if (docsIt != docStore.end()) {
+            for (auto& entry : docsIt->second) {
+                std::string idLit = "\"" + escapeStringLiteral(entry.first) + "\"";
+                std::string fieldsLit = serializeValueLiteral(entry.second);
+                body += simplified ? ("document id=" + idLit + " fields=" + fieldsLit + ";")
+                                    : ("    document id=" + idLit + " fields=" + fieldsLit + ";\n");
+            }
         }
     }
 
@@ -1588,6 +1753,29 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
         }
         tableStyles[containerStack.back()] = v.str;
         output << "🎨 style -> " << v.str << "\n";
+        return;
+    }
+
+    if (auto s = std::dynamic_pointer_cast<DocumentStmt>(stmt)) {
+        if (containerStack.empty() || containerKinds[containerStack.back()] != ContainerKind::DOC) {
+            throw RinError("عبارة 'document' يجب أن تُستخدم داخل @container.doc أو @doc", s->line);
+        }
+        Value idVal = evaluate(s->id, env);
+        if (idVal.type != Value::Type::STRING) {
+            throw RinError("document: قيمة 'id' يجب أن تكون نصاً (مثال: document id=\"u1\" fields={...};)", s->line);
+        }
+        Value fieldsVal = evaluate(s->fields, env);
+        if (fieldsVal.type != Value::Type::MAP) {
+            throw RinError("document: قيمة 'fields' يجب أن تكون كائناً/قاموساً (مثال: fields={ name: \"Ali\" };)", s->line);
+        }
+        auto& docs = docStore[containerStack.back()];
+        bool updated = false;
+        for (auto& entry : docs) {
+            if (entry.first == idVal.str) { entry.second = fieldsVal; updated = true; break; }
+        }
+        if (!updated) docs.push_back({idVal.str, fieldsVal});
+        output << (updated ? "🔄 document (تحديث) -> " : "🧾 document (إدراج) -> ")
+               << idVal.str << " = " << fieldsVal.toDisplayString() << "\n";
         return;
     }
 }
