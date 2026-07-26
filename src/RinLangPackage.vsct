@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<CommandTable xmlns="http://schemas.microsoft.com/VisualStudio/2005-10-18/CommandTable" xmlns:xs="http://www.w3.org/2001/XMLSchema">
+
+  <Extern href="stdidcmd.h" />
+  <Extern href="vsshlids.h" />
+  <Extern href="KnownImageIds.h" />
+  <Extern href="VSGlobals.h" />
+
+  <Commands package="guidRinLangPackage">
+    <Groups>
+      <Group guid="guidRinCommandSet" id="RinToolbarGroup" priority="0x0600">
+        <Parent guid="guidSHLMainMenu" id="IDM_VS_MENU_TOOLS" />
+      </Group>
+    </Groups>
+
+    <Buttons>
+      <Button guid="guidRinCommandSet" id="RunRinFileCommandId" priority="0x0100" type="Button">
+        <Parent guid="guidRinCommandSet" id="RinToolbarGroup" />
+        <Icon guid="guidImages" id="bmpRinCommand" />
+        <Strings>
+          <ButtonText>Rin: تشغيل الملف الحالي (Run Rin File)</ButtonText>
+          <LocCanonicalName>.RinLang.RunFile</LocCanonicalName>
+        </Strings>
+      </Button>
+    </Buttons>
+
+    <Bitmaps>
+      <Bitmap guid="guidImages" href="Resources\RinCommand.png" usedList="bmpRinCommand" />
+    </Bitmaps>
+  </Commands>
+
+  <Symbols>
+    <GuidSymbol name="guidRinLangPackage" value="{04db0285-87e6-4ba8-8adf-9f58ab989a15}" />
+
+    <GuidSymbol name="guidRinCommandSet" value="{abdbacfa-5434-418b-8cba-4130edcff327}">
+      <IDSymbol name="RinToolbarGroup" value="0x1020" />
+      <IDSymbol name="RunRinFileCommandId" value="0x0100" />
+    </GuidSymbol>
+
+    <GuidSymbol name="guidImages" value="{c9c7e2c4-6c1e-4e2a-9a3a-1b2c3d4e5f60}">
+      <IDSymbol name="bmpRinCommand" value="1" />
+    </GuidSymbol>
+  </Symbols>
+</CommandTable>
