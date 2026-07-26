@@ -19,6 +19,15 @@
     <color name="rin_ghost_pressed_bg">#14FFFFFF</color>
     <color name="rin_logo_badge_bg">#7C5CFF</color>
 
+    <!-- الشريط العلوي المطوَّر: تدرّج + إطار أيقونة التطبيق + فاصل ظل -->
+    <color name="rin_toolbar_gradient_top">#24262D</color>
+    <color name="rin_toolbar_gradient_bottom">#1B1D22</color>
+    <color name="rin_app_icon_border">#33FFFFFF</color>
+    <color name="rin_toolbar_shadow">#33000000</color>
+    <color name="rin_menubar_divider">#20FFFFFF</color>
+    <color name="rin_run_gradient_start">#8F72FF</color>
+    <color name="rin_run_gradient_end">#6A47E8</color>
+
     <!-- تلوين الصيغة النحوية (syntax highlighting) في المحرر -->
     <color name="syntax_keyword">#569CD6</color>
     <color name="syntax_container_keyword">#4EC9B0</color>
