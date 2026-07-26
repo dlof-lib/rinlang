@@ -118,7 +118,7 @@ object ProjectManager {
     private fun sanitizeFileName(name: String): String =
         name.replace(Regex("[^A-Za-z0-9_\\-.\\u0600-\\u06FF]"), "_")
 
-    // ---- مكتبات المشروع (lib/*.og.rin) ----
+    // ---- مكتبات المشروع (lib/ *.og.rin) ----
     //
     // كل مشروع يملك مجلداً فرعياً lib/ (أسفل basePath الممرَّر لـ RinEngine)، وأي ملف
     // بداخله بامتداد .og.rin هو "مكتبة" يمكن لأي كود في هذا المشروع استيرادها مباشرة عبر
@@ -141,7 +141,7 @@ object ProjectManager {
         return base.isNotEmpty() && base.matches(Regex("^[A-Za-z0-9_\\-]{1,64}$"))
     }
 
-    /** كل مكتبات المشروع (ملفات lib/*.og.rin)، الأحدث تعديلاً أولاً. */
+    /** كل مكتبات المشروع (ملفات lib/ *.og.rin)، الأحدث تعديلاً أولاً. */
     fun listLibraries(project: Project): List<RinLibrary> {
         return (libDir(project).listFiles { f -> f.isFile && f.name.endsWith(LIB_EXTENSION) } ?: emptyArray())
             .map { RinLibrary(it.name, it, it.length(), it.lastModified()) }
