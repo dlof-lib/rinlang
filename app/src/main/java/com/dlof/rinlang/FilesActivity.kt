@@ -4,6 +4,8 @@ import android.app.AlertDialog
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -43,6 +45,11 @@ class FilesActivity : AppCompatActivity() {
             if (uri != null) importFile(uri)
         }
 
+    private val importZipLauncher =
+        registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+            if (uri != null) importZip(uri)
+        }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_files)
@@ -68,6 +75,7 @@ class FilesActivity : AppCompatActivity() {
         txtEmpty = findViewById(R.id.txtEmptyFiles)
         val fabAddFile: View = findViewById(R.id.fabAddFile)
         val fabUploadFile: View = findViewById(R.id.fabUploadFile)
+        val fabZipTools: View = findViewById(R.id.fabZipTools)
 
         adapter = FilesAdapter(
             onOpen = { file -> openInEditor(file) },
@@ -81,6 +89,85 @@ class FilesActivity : AppCompatActivity() {
             // نقبل .rin أو أي نص عادي، لأن أندرويد لا يربط MIME type رسمياً بامتداد .rin.
             importFileLauncher.launch(arrayOf("text/plain", "application/octet-stream", "*/*"))
         }
+        fabZipTools.setOnClickListener { showZipToolsDialog() }
+    }
+
+    /** يعرض خيارَي "رفع أرشيف ZIP وفك ضغطه" و"تنزيل المشروع كأرشيف ZIP" في حوار واحد. */
+    private fun showZipToolsDialog() {
+        val options = arrayOf(
+            getString(R.string.zip_upload_extract),
+            getString(R.string.zip_download_project)
+        )
+        AlertDialog.Builder(this)
+            .setTitle(R.string.zip_tools_title)
+            .setItems(options) { _, which ->
+                when (which) {
+                    0 -> importZipLauncher.launch(
+                        arrayOf("application/zip", "application/x-zip-compressed", "*/*")
+                    )
+                    1 -> downloadProjectAsZip()
+                }
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
+
+    /** يفكّ ضغط أرشيف ZIP المختار داخل مجلد المشروع الحالي، ثم يحدّث القائمة. */
+    private fun importZip(uri: Uri) {
+        try {
+            val count = ProjectManager.importZipFromUri(this, project, uri)
+            refresh()
+            Toast.makeText(this, getString(R.string.zip_extracted_toast, count), Toast.LENGTH_SHORT).show()
+        } catch (t: Throwable) {
+            Toast.makeText(this, "${getString(R.string.zip_extract_error)}: ${t.message}", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    /** يضغط ملفات المشروع الحالي كأرشيف واحد وينزّله لمجلد التنزيلات العام على الجهاز. */
+    private fun downloadProjectAsZip() {
+        val mainHandler = Handler(Looper.getMainLooper())
+        val progressDialog = RinDownloadProgressDialog(this, "${project.name}.zip")
+        progressDialog.show()
+
+        Thread {
+            try {
+                val zipFile = ProjectManager.exportProjectAsZip(this, project)
+                val artifact = RinArtifact(
+                    kind = ArtifactKind.ARCHIVE_ZIP,
+                    relPath = zipFile.name,
+                    absoluteFile = zipFile,
+                    sizeBytes = zipFile.length()
+                )
+                mainHandler.post {
+                    RinDownloadManager.downloadToPublicDownloads(
+                        activity = this,
+                        artifact = artifact,
+                        onProgress = { copied, total -> progressDialog.updateProgress(copied, total) },
+                        onDone = { uri, error ->
+                            if (error != null || uri == null) {
+                                progressDialog.finishError(
+                                    getString(R.string.download_error_toast, error?.message ?: "?")
+                                )
+                                mainHandler.postDelayed({ progressDialog.dismiss() }, 1400)
+                                return@downloadToPublicDownloads
+                            }
+                            progressDialog.finishSuccess(getString(R.string.download_status_done))
+                            Toast.makeText(
+                                this,
+                                getString(R.string.download_done_toast, artifact.displayName),
+                                Toast.LENGTH_SHORT
+                            ).show()
+                            mainHandler.postDelayed({ progressDialog.dismiss() }, 800)
+                        }
+                    )
+                }
+            } catch (t: Throwable) {
+                mainHandler.post {
+                    progressDialog.finishError(getString(R.string.download_error_toast, t.message ?: "?"))
+                    mainHandler.postDelayed({ progressDialog.dismiss() }, 1400)
+                }
+            }
+        }.start()
     }
 
     override fun onResume() {
