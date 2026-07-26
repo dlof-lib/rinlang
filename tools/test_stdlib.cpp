@@ -58,6 +58,23 @@ int main() {
         print toString(42);
         print toNumber("3.14");
 
+        // Boolean: تحويل صريح وفحص نوع
+        print toBool("true");
+        print toBool("FALSE");
+        print toBool(0);
+        print toBool(5);
+        print toBool(nil);
+        print isBool(true);
+        print isBool(1);
+        print isBool(toBool("true"));
+
+        // Boolean: عمليات منطقية أساسية (موجودة أصلاً في اللغة)
+        print true and false;
+        print true or false;
+        print !true;
+        print 3 > 2;
+        print 3 == 3;
+
         // فهرسة النص
         print "abc"[1];
 
