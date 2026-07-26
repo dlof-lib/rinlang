@@ -7,6 +7,10 @@
         android:name="android.permission.WRITE_EXTERNAL_STORAGE"
         android:maxSdkVersion="28" />
 
+    <!-- مطلوب لتسجيل الدخول/إنشاء الحساب عبر Firebase Auth، وإرسال كود التحقق عبر EmailJS -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
     <application
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
@@ -44,6 +48,38 @@
             android:name=".LibrariesActivity"
             android:exported="false"
             android:windowSoftInputMode="adjustResize" />
+
+        <!-- ===== مرحلة 1 من "متجر Rin": تسجيل الدخول / إنشاء الحساب / كود التحقق (5 أرقام) =====
+             Firebase Auth (Email/Password) لبيانات الدخول + Realtime Database لبيانات الحساب
+             (الاسم، اسم المستخدم، حالة التحقق) وكود التحقق المؤقت. الإرسال الفعلي للبريد عبر EmailJS. -->
+        <activity
+            android:name=".auth.LoginActivity"
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize" />
+
+        <activity
+            android:name=".auth.RegisterActivity"
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize" />
+
+        <activity
+            android:name=".auth.VerifyCodeActivity"
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize" />
+
+        <!-- ===== مرحلة 2 من "متجر Rin": تصفّح الحزم / نشر مكتبة كحزمة / حسابي ===== -->
+        <activity
+            android:name=".store.RinStoreActivity"
+            android:exported="false" />
+
+        <activity
+            android:name=".store.PublishPackageActivity"
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize" />
+
+        <activity
+            android:name=".store.AccountActivity"
+            android:exported="false" />
 
         <!-- يمنح روابط content:// آمنة للملف المنزَّل قبل فتحه بـ ACTION_VIEW على أندرويد 9 وأقدم
              (على أندرويد 10+ نستخدم MediaStore أصلاً فيعطينا content:// Uri تلقائياً). -->
