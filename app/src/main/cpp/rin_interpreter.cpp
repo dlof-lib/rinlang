@@ -1390,8 +1390,27 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
         return;
     }
     if (auto s = std::dynamic_pointer_cast<PrintStmt>(stmt)) {
-        Value v = evaluate(s->expr, env);
-        output << v.toDisplayString() << "\n";
+        std::string sep = " ";
+        if (s->sep) {
+            Value sepVal = evaluate(s->sep, env);
+            if (sepVal.type != Value::Type::STRING) {
+                throw RinError("'print': 'sep' يجب أن يكون نصاً (string)، لكن وُجد نوع " + sepVal.typeName(), stmt->line);
+            }
+            sep = sepVal.str;
+        }
+        std::string end = "\n";
+        if (s->end) {
+            Value endVal = evaluate(s->end, env);
+            if (endVal.type != Value::Type::STRING) {
+                throw RinError("'print': 'end' يجب أن يكون نصاً (string)، لكن وُجد نوع " + endVal.typeName(), stmt->line);
+            }
+            end = endVal.str;
+        }
+        for (size_t i = 0; i < s->exprs.size(); i++) {
+            if (i > 0) output << sep;
+            output << evaluate(s->exprs[i], env).toDisplayString();
+        }
+        output << end;
         return;
     }
     if (auto s = std::dynamic_pointer_cast<LetStmt>(stmt)) {
