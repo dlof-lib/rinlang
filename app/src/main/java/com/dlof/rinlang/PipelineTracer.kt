@@ -42,6 +42,9 @@ object PipelineTracer {
         var rawEngineOutput: String = ""
     )
 
+    /** Cheap static check (no engine execution) used by the editor to offer a "view in RinFlow" prompt. */
+    fun containsPipeline(source: String): Boolean = blockRegex.containsMatchIn(source)
+
     /** Returns null if [source] contains no `@container.pipe` block. */
     fun findPipeline(source: String): PipelineTrace? {
         val block = blockRegex.find(source) ?: return null
