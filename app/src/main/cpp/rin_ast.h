@@ -82,7 +82,20 @@ struct Stmt {
 using StmtPtr = std::shared_ptr<Stmt>;
 
 struct ExpressionStmt : Stmt { ExprPtr expr; };
-struct PrintStmt : Stmt { ExprPtr expr; };
+// print expr1, expr2, ... [sep=expr] [end=expr];
+// السلوك الافتراضي (قيمة واحدة، بلا sep/end) مطابق تماماً للسابق: قيمة واحدة + سطر جديد "\n".
+// 3 ميزات جديدة أضيفت فوق ذلك:
+//   1) exprs: أكثر من قيمة مفصولة بفواصل في نفس أمر print الواحد (مثال: print "x=", x;)
+//   2) sep: فاصل مخصص يُطبع بين كل قيمتين متتاليتين عند تعدّد القيم (افتراضياً مسافة واحدة " ")
+//   3) end: ما يُطبع في نهاية السطر بدل "\n" الافتراضي — end="" يمنع السطر الجديد تماماً، فيسمح
+//      بعدّة أوامر print متتالية تكمل بعضها على نفس السطر (مفيد لعدّادات/أشرطة تقدّم console)
+// sep/end يُقيَّمان كتعبيرين عاديين (وليس حصراً حرفاً نصياً) لكن يجب أن يُقيَّما إلى STRING وقت
+// التنفيذ، وإلا خطأ صريح؛ تماماً كبقية سمات key=value الأخرى في اللغة (document/row/route/save).
+struct PrintStmt : Stmt {
+    std::vector<ExprPtr> exprs;
+    ExprPtr sep; // nullptr = افتراضي " "
+    ExprPtr end; // nullptr = افتراضي "\n"
+};
 struct LetStmt : Stmt { std::string name; ExprPtr initializer; };
 struct BlockStmt : Stmt { std::vector<StmtPtr> statements; };
 struct IfStmt : Stmt {
