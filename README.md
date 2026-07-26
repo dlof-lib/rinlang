@@ -121,7 +121,8 @@ RinLang/
 │   ├── strings.og.rin                # دوال نصوص إضافية
 │   ├── data.og.rin                   # دوال مصفوفات/قواميس إضافية
 │   ├── validate.og.rin               # دوال تحقّق (validation) آمنة (لا ترمي أخطاء)
-│   └── functional.og.rin             # دوال ترتيبية عليا (map/filter/reduce...) على المصفوفات
+│   ├── functional.og.rin             # دوال ترتيبية عليا (map/filter/reduce...) على المصفوفات
+│   └── oglang.og.rin                 # صناعة حزم .og.rin ومحرّك لغات مصغّرة (mini-languages)
 ├── tools/test_main.cpp               # تشغيل المحرّك خارج أندرويد لأغراض الاختبار
 ├── tools/test_containers.cpp         # اختبار مفاهيم لغة الحاويات (container, Section, link, merge...)
 ├── tools/test_groups.cpp             # اختبار Containers.Group المُقوّاة (تتبّع الأعضاء، التداخل، tying/merge على مستوى مجموعة)
@@ -652,7 +653,7 @@ print isPrime(17);       // true
 عند تنفيذ `@import "المسار"`, يبحث المفسّر بالترتيب:
 
 1. **سجل المكتبات المدمجة (embedded)** داخل ثنائي المفسّر نفسه (`app/src/main/cpp/rin_stdlib_libs.h`) —
-   هذا ما يجعل استيراد المكتبات القياسية الخمس أدناه يعمل فوراً على أي منصة (بما فيها أندرويد) دون
+   هذا ما يجعل استيراد المكتبات القياسية الست أدناه يعمل فوراً على أي منصة (بما فيها أندرويد) دون
    الحاجة لنسخ أي ملف `.rin` إضافي إلى تخزين التطبيق.
 2. **ملف فعلي على القرص** (نسبةً إلى `basePath`، بنفس آلية `file`/`save`/`installation`) إن لم يكن
    المسار موجوداً في السجل المدمج — وهذا ما يتيح لك كتابة مكتباتك ومشاريعك الخاصة واستيرادها بنفس
@@ -661,7 +662,7 @@ print isPrime(17);       // true
 استيراد نفس المسار (بنفس أسلوب الاستيراد: مباشر أو بنفس الاسم المستعار) أكثر من مرة في نفس التشغيل
 يُتجاهَل تلقائياً بلا خطأ (تماماً كأنظمة الوحدات/modules المعتادة).
 
-### المكتبات الخمس الجاهزة (`lib/*.og.rin`)
+### المكتبات الست الجاهزة (`lib/*.og.rin`)
 
 | المكتبة | تحتوي على |
 |---|---|
@@ -670,10 +671,17 @@ print isPrime(17);       // true
 | `lib/data.og.rin` | `range` `rangeFrom` `unique` `chunk` `zip` `first` `last` `take` `drop` `reverseArr` `mapGet` `mapMerge` `countOf` |
 | `lib/validate.og.rin` | `isEmpty` `isBlankStr` `isNumeric` `isEmail` `lengthBetween` `isInRange` `hasLetterAndDigit` `isStrongPassword` |
 | `lib/functional.og.rin` | `mapArr` `filterArr` `reduceArr` `forEachArr` `findArr` `findIndexArr` `everyArr` `someArr` `timesRun` `composeApply` `isEven` `isOdd` `isPositive` `isNegative` |
+| `lib/oglang.og.rin` | `pkgInfo` `pkgHeader` `describePkg` `rule` `langNew` `unknownCommand` `tokenize` `commandOf` `runLine` `runProgram` `ruleCount` |
 
 `lib/functional.og.rin` يوظّف كون الدوال في Rin **قيماً من الدرجة الأولى (first-class)**: يمكن تمرير
 اسم أي دالة `fun` كوسيط عادي (مثل `mapArr([1,2,3], double)`)، وتُستدعى بداخل الدالة المستقبِلة تماماً
 كأي متغير آخر يحمل دالة.
+
+`lib/oglang.og.rin` هي أداة صناعة **الحزم واللغات المصغّرة**: قسم أول (`pkgInfo`/`pkgHeader`/
+`describePkg`) لتوصيف حزمة `.og.rin` جديدة (اسم/إصدار/وصف/exports) وتوليد ترويستها القياسية تلقائياً،
+وقسم ثانٍ (`rule`/`langNew`/`runLine`/`runProgram`) هو محرّك لغة مصغّرة عام: تُعرَّف "لغتك" كقائمة
+قواعد (كلمة أولى + دالة معالجة)، ثم تُشغَّل عبرها أسطر برنامج كامل — أي بناء DSL كامل فوق Rin دون
+كتابة محلّل C++ جديد. مثال كامل جاهز في [`samples/oglang_demo.rin`](samples/oglang_demo.rin).
 
 يمكنك تجربة كل هذا عبر:
 
