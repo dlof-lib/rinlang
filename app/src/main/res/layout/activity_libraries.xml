@@ -4,11 +4,19 @@
        للتعديل والحذف والإدراج (@import) مباشرة داخل كود المحرر.
      - قسم "مكتبات جاهزة": المكتبات القياسية الخمس المدمجة داخل محرّك Rin نفسه، تعمل فوراً
        بلا رفع، مع إمكانية إدراج سطر @import الخاص بها بضغطة واحدة. -->
-<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+    android:orientation="vertical"
     android:background="@color/rin_background">
+
+    <include layout="@layout/toolbar_app" />
+
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1">
 
     <androidx.core.widget.NestedScrollView
         android:layout_width="match_parent"
@@ -47,16 +55,33 @@
                 android:layout_height="wrap_content"
                 android:nestedScrollingEnabled="false" />
 
-            <TextView
+            <LinearLayout
                 android:id="@+id/txtEmptyLibraries"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_margin="16dp"
-                android:gravity="center"
-                android:text="@string/no_libraries_yet"
-                android:textColor="@color/rin_editor_hint"
-                android:textSize="13sp"
-                android:visibility="gone" />
+                android:layout_marginTop="8dp"
+                android:layout_marginBottom="8dp"
+                android:orientation="vertical"
+                android:gravity="center_horizontal"
+                android:visibility="gone">
+
+                <ImageView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:src="@drawable/ic_empty_library"
+                    android:contentDescription="@null" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:layout_marginStart="32dp"
+                    android:layout_marginEnd="32dp"
+                    android:gravity="center"
+                    android:text="@string/no_libraries_yet"
+                    android:textColor="@color/rin_editor_hint"
+                    android:textSize="13sp" />
+            </LinearLayout>
 
             <View
                 android:layout_width="match_parent"
@@ -97,7 +122,7 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="bottom|end"
-        android:layout_margin="16dp"
+        android:layout_margin="18dp"
         android:orientation="vertical">
 
         <com.google.android.material.floatingactionbutton.FloatingActionButton
@@ -106,6 +131,10 @@
             android:layout_height="wrap_content"
             android:layout_marginBottom="12dp"
             android:contentDescription="@string/upload_library"
+            app:backgroundTint="@color/rin_toolbar_bottom"
+            app:tint="@android:color/white"
+            app:rippleColor="@color/rin_ghost_ripple"
+            app:fabSize="mini"
             app:srcCompat="@android:drawable/ic_menu_upload" />
 
         <com.google.android.material.floatingactionbutton.FloatingActionButton
@@ -113,8 +142,13 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:contentDescription="@string/new_library_title"
+            app:backgroundTint="@color/rin_accent"
+            app:tint="@android:color/white"
+            app:rippleColor="@color/rin_accent_pressed"
             app:srcCompat="@android:drawable/ic_input_add" />
 
     </LinearLayout>
 
-</FrameLayout>
+    </FrameLayout>
+
+</LinearLayout>
