@@ -1,5 +1,6 @@
 package com.dlof.rinlang.store
 
+import android.content.Intent
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -21,6 +22,8 @@ class RinStoreActivity : AppCompatActivity() {
 
     companion object {
         const val EXTRA_PROJECT_NAME = "extra_project_name"
+        /** النتيجة المُعادة عند التثبيت: سطر @import الجاهز، لتُدرَج مباشرة في المحرر بضغطة واحدة. */
+        const val EXTRA_IMPORT_STATEMENT = "extra_import_statement"
     }
 
     private lateinit var project: Project
@@ -58,9 +61,14 @@ class RinStoreActivity : AppCompatActivity() {
 
     private fun installPackage(pkg: RinPackage) {
         try {
-            PackagingUtils.installPackage(this, project, pkg)
+            val library = PackagingUtils.installPackage(this, project, pkg)
             PackageRepository.incrementDownloadCount(pkg.id)
-            Toast.makeText(this, R.string.package_installed_toast, Toast.LENGTH_SHORT).show()
+            val importStatement = "@import \"lib/${library.name}\";"
+            Toast.makeText(this, getString(R.string.package_installed_import_toast, library.name), Toast.LENGTH_SHORT).show()
+            val result = Intent()
+            result.putExtra(EXTRA_IMPORT_STATEMENT, importStatement)
+            setResult(RESULT_OK, result)
+            finish()
         } catch (t: Throwable) {
             Toast.makeText(this, t.message ?: "فشل التثبيت", Toast.LENGTH_LONG).show()
         }
