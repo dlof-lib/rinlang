@@ -77,6 +77,22 @@
             android:textColor="@color/rin_on_toolbar" />
 
         <Button
+            android:id="@+id/btnPublishLibrary"
+            android:layout_width="0dp"
+            android:layout_height="34dp"
+            android:layout_weight="1"
+            android:layout_marginEnd="6dp"
+            android:minWidth="0dp"
+            android:minHeight="0dp"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            android:text="@string/action_publish_library"
+            android:textAllCaps="false"
+            android:textSize="12sp"
+            android:background="@drawable/bg_toolbar_btn_ghost"
+            android:textColor="@color/rin_accent" />
+
+        <Button
             android:id="@+id/btnInsertLibrary"
             android:layout_width="0dp"
             android:layout_height="34dp"
