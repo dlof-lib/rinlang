@@ -79,6 +79,7 @@
     <color name="pipeline_arrow">#9AA7B0</color>
     <color name="pipeline_node_border">#1E7A4C</color>
     <color name="pipeline_node_bg">#FFFFFF</color>
+    <color name="pipeline_neutral_bg">#E7EBED</color>
     <color name="pipeline_btn_outline_border">#C6CDD2</color>
     <color name="pipeline_btn_outline_text">#3C4650</color>
 
