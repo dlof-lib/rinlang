@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- شريط ظل رفيع جداً يُرسم أسفل الشريط العلوي مباشرة، يعطي إحساساً بالارتفاع (elevation)
+     الحقيقي بدل الاعتماد فقط على خاصية elevation التي لا تظهر بوضوح على بعض الأجهزة -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <gradient
+        android:angle="90"
+        android:startColor="@color/rin_toolbar_shadow"
+        android:endColor="@android:color/transparent" />
+</shape>
