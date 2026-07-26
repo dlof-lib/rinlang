@@ -1,0 +1,80 @@
+// المتغيرات والدوال الأساسية
+let x = 10;
+let name = "Rin";
+
+print "Hello, " + name + "!";
+
+if (x > 5) {
+    print "big";
+} else {
+    print "small";
+}
+
+let i = 0;
+while (i < 5) {
+    print i;
+    i = i + 1;
+}
+
+fun fib(n) {
+    if (n < 2) { return n; }
+    return fib(n - 1) + fib(n - 2);
+}
+print fib(10);
+
+// مصفوفات وقواميس
+let arr = [1, 2, 3];
+push(arr, 4);
+print pop(arr);
+print sort([3, 1, 2]);
+
+let m = {name: "Rin", age: 2};
+print m["name"];
+print keys(m);
+
+// لغة الحاويات
+@container=my_data
+    text title = "بيانات رين";
+    print title;
+
+    Section=numbers
+        let a = 10;
+        let b = 4;
+        print Addition(a, b);
+        print Equal(a, b);
+    .end/Section
+
+    Translations
+        translation lang="ar" text="مرحبا";
+        translation lang="en" text="Hello";
+    .end/Translations
+
+    file path="data/output.rin";
+    installation my_data;
+    simplified save path="data/output.min.rin";
+.end/container
+
+@Containers.Group=my_group
+    @container=g1
+        text label = "عنصر";
+    .end/container
+.end/Containers.Group
+
+// قاعدة بيانات NoSQL
+@container.doc=users
+    document id="u1" fields={ name: "سارة", age: 28 };
+.end/container.doc
+
+print insertDoc("users", "u3", { name: "منى" });
+print queryDocs("users", "city", "الرياض");
+
+// خط الأنابيب
+@container.pipe=sales_pipeline
+    let raw = [1, 2, 3, 4, 5];
+    let result = raw |> normalize() |> mean();
+    print result;
+.end/container.pipe
+
+// المكتبات
+@import "lib/math.og.rin";
+@import "lib/data.og.rin" as data;
