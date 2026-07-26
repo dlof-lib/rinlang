@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  نصوص "متجر Rin": تصفح الحزم، حسابي، ونشر مكتبة كحزمة (.og.rinsdk).
+  ملف منفصل بنفس أسلوب strings_libraries.xml و strings_auth.xml.
+-->
+<resources>
+    <!-- قسم المتجر داخل شاشة المكتبات -->
+    <string name="store_section_title">متجر Rin</string>
+    <string name="store_section_hint">تصفّح حزم نشرها مستخدمون آخرون، أو انشر مكتبتك ليستخدمها الجميع</string>
+    <string name="action_browse_store">تصفّح المتجر</string>
+    <string name="action_my_account">حسابي</string>
+    <string name="action_publish_library">نشر</string>
+
+    <!-- شاشة المتجر -->
+    <string name="rin_store_title">متجر Rin</string>
+    <string name="store_empty">لا توجد حزم منشورة بعد. كن أول من ينشر!</string>
+    <string name="action_install">تثبيت/إدراج</string>
+    <string name="store_item_meta_format">%1$s • %2$s • %3$d تنزيل</string>
+    <string name="package_installed_toast">تم تثبيت الحزمة وإضافتها لمكتبات هذا المشروع</string>
+
+    <!-- شاشة النشر -->
+    <string name="publish_title">نشر مكتبة</string>
+    <string name="publish_subtitle">سيُولَّد ملف README.md و LICENSE (MIT) تلقائياً، وتُضغط كل الملفات في حزمة واحدة</string>
+    <string name="hint_package_name">اسم الحزمة</string>
+    <string name="hint_package_version">رقم الإصدار</string>
+    <string name="hint_package_description">وصف قصير للمكتبة (اختياري)</string>
+    <string name="action_pick_assets">إضافة صور/أيقونات (اختياري)</string>
+    <string name="assets_selected_format">%1$d ملف مُختار</string>
+    <string name="action_publish_submit">نشر الحزمة</string>
+    <string name="publish_success">تم نشر الحزمة في متجر Rin ✓</string>
+    <string name="publish_requires_login">سجّل الدخول أولاً لتتمكن من النشر</string>
+
+    <!-- شاشة حسابي -->
+    <string name="account_title">حسابي</string>
+    <string name="account_not_logged_in">لم تسجّل الدخول بعد</string>
+    <string name="action_logout">تسجيل الخروج</string>
+    <string name="account_field_name">الاسم</string>
+    <string name="account_field_username">اسم المستخدم</string>
+    <string name="account_field_email">البريد الإلكتروني</string>
+</resources>
