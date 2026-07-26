@@ -1,6 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <!-- مطلوب فقط على أندرويد 9 وأقدم لكتابة الملفات الحقيقية داخل مجلد Downloads العام؛
+         على أندرويد 10+ (API 29+) يُستخدم MediaStore بدلاً منه ولا يحتاج أي إذن. -->
+    <uses-permission
+        android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="28" />
+
     <application
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
@@ -24,6 +30,18 @@
             android:exported="false"
             android:theme="@style/Theme.RinLang.Pipeline"
             android:windowSoftInputMode="adjustResize" />
+
+        <!-- يمنح روابط content:// آمنة للملف المنزَّل قبل فتحه بـ ACTION_VIEW على أندرويد 9 وأقدم
+             (على أندرويد 10+ نستخدم MediaStore أصلاً فيعطينا content:// Uri تلقائياً). -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
     </application>
 
 </manifest>
