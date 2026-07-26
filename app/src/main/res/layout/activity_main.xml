@@ -75,16 +75,6 @@
                 android:background="@drawable/bg_icon_btn" />
 
             <ImageButton
-                android:id="@+id/btnPipeline"
-                android:layout_width="28dp"
-                android:layout_height="28dp"
-                android:padding="6dp"
-                android:layout_marginEnd="4dp"
-                android:src="@drawable/ic_pipeline"
-                android:contentDescription="@string/desc_pipeline_quick"
-                android:background="@drawable/bg_icon_btn_pipeline" />
-
-            <ImageButton
                 android:id="@+id/btnRun"
                 android:layout_width="28dp"
                 android:layout_height="28dp"
