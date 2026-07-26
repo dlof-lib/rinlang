@@ -88,6 +88,18 @@
     <string name="job_status_cancelled">CANCELLED</string>
     <string name="job_duration_fmt">%1$d ms</string>
     <string name="job_timeout_message">"[Timeout]: execution exceeded %1$d seconds and was abandoned"</string>
+
+    <!-- تنزيل الملفات الفعلية التي أنتجها save/installation إلى مجلد Downloads بالجهاز -->
+    <string name="download_results_label">النتائج الجاهزة للتنزيل</string>
+    <string name="download_button_fmt">%1$s · %2$s</string>
+    <string name="download_dialog_title">جارٍ التنزيل إلى الجهاز…</string>
+    <string name="download_status_copying">جارٍ نسخ البيانات فعلياً…</string>
+    <string name="download_status_done">تم التنزيل بنجاح ✓</string>
+    <string name="download_done_toast">تم حفظ %1$s في مجلد Downloads</string>
+    <string name="download_error_toast">تعذّر التنزيل: %1$s</string>
+    <string name="download_no_app_toast">لا يوجد تطبيق مناسب لفتح هذا النوع من الملفات</string>
+    <string name="download_permission_needed_toast">التطبيق يحتاج إذن التخزين لحفظ الملف في Downloads</string>
+    <string name="download_open_action">فتح</string>
     <string name="sample_program">// Welcome to the Rin programming language!
 fun fib(n) {
     if (n &lt; 2) { return n; }
