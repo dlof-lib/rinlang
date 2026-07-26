@@ -258,7 +258,11 @@ class PipelineRunnerActivity : AppCompatActivity() {
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT
-            ).apply { gravity = Gravity.CENTER_HORIZONTAL }
+            ).apply {
+                gravity = Gravity.CENTER_HORIZONTAL
+                topMargin = (2 * dp).toInt()
+                bottomMargin = (2 * dp).toInt()
+            }
         }
 
         val circle = android.widget.ImageView(this).apply {
@@ -269,6 +273,7 @@ class PipelineRunnerActivity : AppCompatActivity() {
                 ContextCompat.getColor(context, if (ok) R.color.pipeline_green else R.color.pipeline_red)
             )
             layoutParams = LinearLayout.LayoutParams((44 * dp).toInt(), (44 * dp).toInt())
+            elevation = 3 * dp
         }
         column.addView(circle)
 
@@ -298,7 +303,7 @@ class PipelineRunnerActivity : AppCompatActivity() {
             textSize = 11f
             typeface = Typeface.MONOSPACE
             gravity = Gravity.CENTER
-            setBackgroundResource(R.drawable.bg_pipeline_value_chip)
+            setBackgroundResource(if (ok) R.drawable.bg_pipeline_value_chip else R.drawable.bg_pipeline_value_chip_error)
             setTextColor(ContextCompat.getColor(context, if (ok) R.color.pipeline_green_light_text else R.color.pipeline_red_light_text))
             setPadding((8 * dp).toInt(), (5 * dp).toInt(), (8 * dp).toInt(), (5 * dp).toInt())
             val maxW = (resources.displayMetrics.widthPixels * 0.7).toInt()
