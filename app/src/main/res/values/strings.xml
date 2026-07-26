@@ -43,11 +43,20 @@
     <string name="menu_edit_find">Find &amp; Replace</string>
     <string name="menu_edit_select_all">Select all</string>
     <string name="menu_edit_clear_all">Clear editor</string>
+    <string name="menu_edit_toggle_comment">Toggle line comment</string>
+    <string name="menu_edit_duplicate_line">Duplicate line</string>
+    <string name="menu_edit_delete_line">Delete line</string>
+    <string name="menu_edit_move_line_up">Move line up</string>
+    <string name="menu_edit_move_line_down">Move line down</string>
+    <string name="menu_edit_indent">Indent selection</string>
+    <string name="menu_edit_unindent">Unindent selection</string>
     <string name="menu_view_zoom_in">Increase font size</string>
     <string name="menu_view_zoom_out">Decrease font size</string>
     <string name="menu_view_toggle_lines">Toggle line numbers</string>
     <string name="menu_view_clear_console">Clear run history</string>
+    <string name="menu_view_go_to_line">Go to line…</string>
     <string name="menu_run_run">Run program</string>
+    <string name="menu_run_check_brackets">Check brackets</string>
     <string name="new_file_name">untitled.rin</string>
     <string name="new_file_toast">New file</string>
     <string name="desc_menu_file">File menu</string>
@@ -69,11 +78,25 @@
     <string name="find_hint">Find…</string>
     <string name="replace_hint">Replace with…</string>
     <string name="btn_find_next">Next</string>
+    <string name="btn_find_prev">Prev</string>
     <string name="btn_replace_one">Replace</string>
     <string name="btn_replace_all">All</string>
     <string name="find_not_found_toast">"Not found: %1$s"</string>
     <string name="replaced_count_toast">Replaced %1$d occurrence(s)</string>
     <string name="find_close_desc">Close find bar</string>
+    <string name="find_case_sensitive_desc">Toggle case-sensitive search</string>
+    <string name="find_case_sensitive_on_toast">Case-sensitive search: on</string>
+    <string name="find_case_sensitive_off_toast">Case-sensitive search: off</string>
+    <string name="find_count_format">%1$d/%2$d</string>
+    <string name="find_count_none">0/0</string>
+    <string name="go_to_line_title">Go to line</string>
+    <string name="go_to_line_hint">Line number</string>
+    <string name="go_to_line_action">Go</string>
+    <string name="go_to_line_cancel">Cancel</string>
+    <string name="go_to_line_invalid_toast">Enter a valid line number</string>
+    <string name="brackets_balanced_toast">Brackets are balanced ✓</string>
+    <string name="brackets_unbalanced_toast">Unbalanced brackets near line %1$d</string>
+    <string name="line_deleted_toast">Line deleted</string>
 
     <!-- قائمة التشغيل المجدولة (job queue) وسجل التنفيذ -->
     <string name="console_title">Run Queue</string>
