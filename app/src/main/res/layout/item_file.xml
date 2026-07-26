@@ -11,18 +11,13 @@
     android:layout_marginBottom="5dp"
     android:padding="12dp">
 
-    <FrameLayout
+    <!-- أيقونة ملف "rin" الرسمية بدل الشارة الزرقاء العامة السابقة -->
+    <ImageView
         android:layout_width="42dp"
         android:layout_height="42dp"
-        android:background="@drawable/bg_icon_badge_blue">
-
-        <ImageView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_gravity="center"
-            android:src="@drawable/ic_file_solid"
-            android:contentDescription="@null" />
-    </FrameLayout>
+        android:scaleType="fitCenter"
+        android:src="@drawable/ic_rin_file"
+        android:contentDescription="@null" />
 
     <LinearLayout
         android:layout_width="0dp"
