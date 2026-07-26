@@ -1,0 +1,163 @@
+// ============================================================================
+//  lib/data.og.rin — أدوات مصفوفات وقواميس (arrays/maps) فوق stdlib الأساسية
+//  استيراد:
+//    @import "lib/data.og.rin";
+//    @import "lib/data.og.rin" as data;
+// ============================================================================
+
+// مصفوفة [0, 1, ..., n-1]
+fun range(n) {
+    let result = [];
+    let i = 0;
+    while (i < n) {
+        push(result, i);
+        i = i + 1;
+    }
+    return result;
+}
+
+// مصفوفة [start, start+1, ..., endExclusive-1]
+fun rangeFrom(start, endExclusive) {
+    let result = [];
+    let i = start;
+    while (i < endExclusive) {
+        push(result, i);
+        i = i + 1;
+    }
+    return result;
+}
+
+// عناصر فريدة من arr (يحافظ على أول ظهور لكل عنصر بالترتيب)
+fun unique(arr) {
+    let result = [];
+    let i = 0;
+    while (i < len(arr)) {
+        if (!contains(result, arr[i])) {
+            push(result, arr[i]);
+        }
+        i = i + 1;
+    }
+    return result;
+}
+
+// يقسّم arr إلى مصفوفات فرعية بحجم size (الأخيرة قد تكون أقصر)
+fun chunk(arr, size) {
+    let result = [];
+    let current = [];
+    let i = 0;
+    while (i < len(arr)) {
+        push(current, arr[i]);
+        if (len(current) == size) {
+            push(result, current);
+            current = [];
+        }
+        i = i + 1;
+    }
+    if (len(current) > 0) {
+        push(result, current);
+    }
+    return result;
+}
+
+// يدمج a و b عنصراً بعنصر إلى مصفوفة أزواج [a[i], b[i]] (بطول أقصر المصفوفتين)
+fun zip(a, b) {
+    let result = [];
+    let n = len(a);
+    if (len(b) < n) { n = len(b); }
+    let i = 0;
+    while (i < n) {
+        push(result, [a[i], b[i]]);
+        i = i + 1;
+    }
+    return result;
+}
+
+// أول عنصر (أو nil إن كانت المصفوفة فارغة)
+fun first(arr) {
+    if (len(arr) == 0) { return nil; }
+    return arr[0];
+}
+
+// آخر عنصر (أو nil إن كانت المصفوفة فارغة)
+fun last(arr) {
+    if (len(arr) == 0) { return nil; }
+    return arr[len(arr) - 1];
+}
+
+// أول n عنصر من arr
+fun take(arr, n) {
+    let result = [];
+    let i = 0;
+    while (i < n) {
+        if (i >= len(arr)) { return result; }
+        push(result, arr[i]);
+        i = i + 1;
+    }
+    return result;
+}
+
+// arr بعد إسقاط أول n عنصر
+fun drop(arr, n) {
+    let result = [];
+    let i = n;
+    while (i < len(arr)) {
+        push(result, arr[i]);
+        i = i + 1;
+    }
+    return result;
+}
+
+// arr بترتيب معكوس (بدون تعديل الأصل)
+fun reverseArr(arr) {
+    let result = [];
+    let i = len(arr) - 1;
+    while (i >= 0) {
+        push(result, arr[i]);
+        i = i - 1;
+    }
+    return result;
+}
+
+// قيمة المفتاح key من m، أو defaultValue إن لم يكن موجوداً
+fun mapGet(m, key, defaultValue) {
+    if (has(m, key)) {
+        return m[key];
+    }
+    return defaultValue;
+}
+
+// قاموس جديد يدمج m1 و m2 (عند تعارض مفتاح يفوز m2)
+fun mapMerge(m1, m2) {
+    let result = {};
+    let k1 = keys(m1);
+    let i = 0;
+    while (i < len(k1)) {
+        result[k1[i]] = m1[k1[i]];
+        i = i + 1;
+    }
+    let k2 = keys(m2);
+    i = 0;
+    while (i < len(k2)) {
+        result[k2[i]] = m2[k2[i]];
+        i = i + 1;
+    }
+    return result;
+}
+
+// عدد مرات ظهور value داخل arr
+fun countOf(arr, value) {
+    let count = 0;
+    let i = 0;
+    while (i < len(arr)) {
+        if (valuesMatch(arr[i], value)) {
+            count = count + 1;
+        }
+        i = i + 1;
+    }
+    return count;
+}
+
+// مقارنة قيمتين (تدعم الأرقام/النصوص/المنطقية مباشرة)؛ دالة مساعدة داخلية لـ countOf
+fun valuesMatch(a, b) {
+    return a == b;
+}
