@@ -119,7 +119,13 @@ struct TextStmt : Stmt {
 // @container.table=name  <body>  .end/container.table   -> حاوية جدول (مدمجة داخل container): صفوف row + style اختياري
 // @table=name             <body>  .end/table              -> نفس مفهوم الجدول، لكن بشكل مستقل (بلا بادئة container.)
 //                                                             كلا الشكلين ينتجان نفس ContainerKind::TABLE
-enum class ContainerKind { PLAIN, PIPE, DATA, API, IMPORT, TABLE };
+// @container.doc=name    <body>  .end/container.doc      -> حاوية NoSQL (مدمجة داخل container): مستندات document
+// @doc=name               <body>  .end/doc                 -> نفس مفهوم قاعدة البيانات اللاعلاقية، بشكل مستقل
+//                                                             كلا الشكلين ينتجان نفس ContainerKind::DOC.
+//                                                             container هنا يمثّل "مجموعة مستندات" (collection)،
+//                                                             و Containers.Group التي تحتويها تمثّل "قاعدة بيانات" (database)
+//                                                             كاملة من عدّة مجموعات مستندات.
+enum class ContainerKind { PLAIN, PIPE, DATA, API, IMPORT, TABLE, DOC };
 
 struct ContainerStmt : Stmt {
     std::string name; // قد تكون فارغة إن لم يُحدَّد اسم
@@ -194,6 +200,14 @@ struct RowStmt : Stmt {
 // الصيغة تتبع مخطط شبيه بالـ URI: "style://dark" / "style://light" / "style://grid" ...
 struct StyleStmt : Stmt {
     ExprPtr value;
+};
+
+// document id="u1" fields={ name: "Ali", age: 30 };  -> يُدرج (أو يُحدّث إن كان الـ id موجوداً مسبقاً)
+// مستنداً واحداً داخل حاوية NoSQL الحالية (container.doc أو doc فقط). 'fields' كائن/قاموس حر البنية
+// (schema-less)، تماماً كمستندات JSON في قواعد البيانات اللاعلاقية.
+struct DocumentStmt : Stmt {
+    ExprPtr id;     // معرِّف المستند (نص)
+    ExprPtr fields; // حقول المستند (map)
 };
 
 // file path="...";
