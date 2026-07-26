@@ -21,6 +21,14 @@
     <string name="pipeline_action_load_sample">Load Example Pipeline</string>
     <string name="pipeline_configure_title">RinFlow</string>
     <string name="pipeline_configure_message">Container: %1$s\nStages: %2$d\nTimeout: %3$d s\n\nEach value shown in the diagram is produced by actually re-running your code through the native Rin engine, truncated at each stage of the pipe expression — nothing here is simulated.</string>
+
+    <!-- تصميم RinFlow الجديد: تدفق أفقي + شريط legend، بأسلوب لوحات CI/CD الاحترافية -->
+    <string name="pipeline_flow_label">PIPELINE FLOW</string>
+    <string name="pipeline_legend_success">Passed</string>
+    <string name="pipeline_legend_failed">Failed</string>
+    <string name="pipeline_legend_node">RinFlow node</string>
+    <string name="pipeline_node_status_ok">Passed</string>
+    <string name="pipeline_node_status_error">Failed</string>
     <!-- يظهر بعد الضغط على Run عندما يحتوي الكود الحالي على كتلة @container.pipe حقيقية -->
     <string name="rinflow_detected_snackbar">RinFlow pipeline detected in this run</string>
     <string name="rinflow_open_action">Open RinFlow</string>
