@@ -5,7 +5,7 @@
     <DisplayName>Rin Language Support (Visual Studio)</DisplayName>
     <Description xml:space="preserve">دعم كامل للغة Rin داخل Visual Studio: تلوين نحوي (Classifier)، مقتطفات كود، وأمر تشغيل الملف الحالي عبر rin_cli. حزمة VSSDK حقيقية (وليست حزمة VS Code) لعرضها على Visual Studio Marketplace ضمن فئة أدوات المحرر لـ Visual Studio نفسه.</Description>
     <MoreInfo>https://github.com/dlof-lib/rinlang</MoreInfo>
-    <License>extension\LICENSE.txt</License>
+    <License>LICENSE.txt</License>
     <GettingStartedGuide>https://github.com/dlof-lib/rinlang</GettingStartedGuide>
     <Icon>Resources\icon.png</Icon>
     <PreviewImage>Resources\icon.png</PreviewImage>
