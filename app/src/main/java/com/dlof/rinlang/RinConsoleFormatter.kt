@@ -80,6 +80,18 @@ object RinConsoleFormatter {
     private val RE_INSTALL_ZIP = Regex("""^🗜️\s*installation\s*\(zip\):\s*\S+\s*->\s*(.+?)\s*\(""")
     private val RE_INSTALL_RIN = Regex("""^⚙️\s*installation(?:\s*\(simplified\))?:\s*\S+\s*->\s*(.+?)\s*\(""")
 
+    /**
+     * Matches only the two runtime-error formats rin_interpreter.cpp actually emits:
+     *   "[Error line N]: <message>"  and  "[Error]: <message>"
+     * Anchored and specific on purpose — a plain print of a JSON array/object (e.g. `["a","b"]`
+     * from docIds/allDocs/queryDocs, or `[]`) also starts with '[' but is NOT an error, and must
+     * never be misclassified as one.
+     */
+    private val RE_RUNTIME_ERROR = Regex("""^\[Error(?:\s+line\s+\d+)?]:""")
+
+    /** True only for a genuine interpreter error line, never for ordinary array/object output. */
+    private fun isErrorLine(trimmedStart: String): Boolean = RE_RUNTIME_ERROR.containsMatchIn(trimmedStart)
+
     /** Splits raw native output into styled lines (strips the leading emoji glyph itself). */
     fun formatLines(rawOutput: String): List<RinLogLine> {
         if (rawOutput.isBlank()) return emptyList()
@@ -88,7 +100,7 @@ object RinConsoleFormatter {
             .map { rawLine ->
                 val line = rawLine.trimEnd()
                 val trimmedStart = line.trimStart()
-                if (trimmedStart.startsWith("[Error")) {
+                if (isErrorLine(trimmedStart)) {
                     RinLogLine(LogKind.ERROR, trimmedStart)
                 } else {
                     val match = PREFIX_ORDER.firstOrNull { (prefix, _) -> trimmedStart.startsWith(prefix) }
