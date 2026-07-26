@@ -41,6 +41,22 @@
     <!-- لون خلفية حبّة الحالة (status pill) داخل بطاقة المهمة -->
     <color name="rin_job_card_bg_hover">#1C1C20</color>
 
+    <!-- ألوان تصنيف أسطر ناتج التشغيل (استبدال الإيموجي بأيقونات ملوّنة حسب نوع العملية) -->
+    <color name="log_kind_structure">#569CD6</color>   <!-- فتح/إغلاق حاويات: جدول، حزمة، مجلد -->
+    <color name="log_kind_success">#4EC9B0</color>      <!-- إغلاق ناجح ✅ -->
+    <color name="log_kind_import">#8A7CFF</color>      <!-- استيراد/ربط/دمج -->
+    <color name="log_kind_export">#C88CFF</color>      <!-- حفظ/تثبيت فعلي على القرص -->
+    <color name="log_kind_data">#D7BA7D</color>         <!-- صفوف بيانات، مسار ملف -->
+    <color name="log_kind_style">#F2A65A</color>        <!-- تنسيق/ستايل -->
+    <color name="log_kind_network">#5FD0E0</color>      <!-- API/شبكة/ترجمة -->
+    <color name="log_kind_error">#F14C4C</color>
+    <color name="log_kind_plain">#AEB4BD</color>
+
+    <!-- بطاقة/زر تنزيل النتائج الفعلية إلى Downloads -->
+    <color name="rin_download_chip_bg">#20232B</color>
+    <color name="rin_download_chip_border">#3A3E48</color>
+    <color name="rin_download_progress_track">#2A2D34</color>
+
     <!-- شاشة "Pipeline Runner": تصميم فاتح مطابق لمخطط تدفق الأنابيب المرئي -->
     <color name="pipeline_header_bg">#0F2A3D</color>
     <color name="pipeline_header_bg_end">#12303F</color>
