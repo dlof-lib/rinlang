@@ -60,6 +60,18 @@
             android:orientation="vertical">
 
             <com.google.android.material.floatingactionbutton.FloatingActionButton
+                android:id="@+id/fabZipTools"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="12dp"
+                android:contentDescription="@string/zip_tools_title"
+                app:backgroundTint="@color/rin_toolbar_bottom"
+                app:tint="@android:color/white"
+                app:rippleColor="@color/rin_ghost_ripple"
+                app:fabSize="mini"
+                app:srcCompat="@drawable/ic_log_archive" />
+
+            <com.google.android.material.floatingactionbutton.FloatingActionButton
                 android:id="@+id/fabUploadFile"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
