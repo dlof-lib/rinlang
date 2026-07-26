@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- أيقونة ملف كود مملوءة، تُستخدم داخل شارة بطاقة "ملف .rin" في شاشة الملفات -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="20dp"
+    android:height="20dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M6,3 H14 L19,8 V20 C19,20.55 18.55,21 18,21 H6 C5.45,21 5,20.55 5,20 V4 C5,3.45 5.45,3 6,3 Z" />
+    <path
+        android:fillColor="#00000055"
+        android:pathData="M14,3 V8 H19 Z" />
+    <path
+        android:strokeColor="#7C5CFF"
+        android:strokeWidth="1.4"
+        android:strokeLineCap="round"
+        android:pathData="M8,13 H16 M8,16.5 H13" />
+</vector>
