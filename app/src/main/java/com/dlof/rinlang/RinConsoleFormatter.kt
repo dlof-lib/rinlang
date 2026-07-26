@@ -88,7 +88,7 @@ object RinConsoleFormatter {
             .map { rawLine ->
                 val line = rawLine.trimEnd()
                 val trimmedStart = line.trimStart()
-                if (trimmedStart.startsWith("[")) {
+                if (trimmedStart.startsWith("[Error")) {
                     RinLogLine(LogKind.ERROR, trimmedStart)
                 } else {
                     val match = PREFIX_ORDER.firstOrNull { (prefix, _) -> trimmedStart.startsWith(prefix) }
