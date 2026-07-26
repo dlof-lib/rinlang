@@ -20,6 +20,10 @@
     <VSSDKTargetPlatformRegRootSuffix>Exp</VSSDKTargetPlatformRegRootSuffix>
     <UseCommonOutputDirectory>true</UseCommonOutputDirectory>
     <CreateVsixContainer>true</CreateVsixContainer>
+    <!-- Lets Microsoft.VSSDK.BuildTools infer the rest of the VSIX wiring for an
+         SDK-style project (equivalent to the old non-SDK project's implicit setup). -->
+    <VSSDKBuildToolsAutoSetup>true</VSSDKBuildToolsAutoSetup>
+    <VsixDeployOnDebug>true</VsixDeployOnDebug>
     <DeployExtension>true</DeployExtension>
     <Deterministic>true</Deterministic>
     <LangVersion>latest</LangVersion>
@@ -28,6 +32,14 @@
          generates one in obj\, producing duplicate-attribute (CS0579) errors. -->
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
   </PropertyGroup>
+
+  <ItemGroup>
+    <!-- THIS is what actually turns on VSIX packaging for an SDK-style project —
+         the CreateVsixContainer *property* above is not enough by itself. Without
+         this capability, MSBuild happily compiles the DLL and simply skips VSIX
+         packaging with no error, which is exactly what happened in CI. -->
+    <ProjectCapability Include="CreateVsixContainer" />
+  </ItemGroup>
 
   <ItemGroup>
     <!-- SDK-style net472 projects don't reference these classic framework
@@ -43,7 +55,7 @@
   <ItemGroup>
     <!-- Core VS SDK: MEF editor contracts, shell interop, package infrastructure -->
     <PackageReference Include="Microsoft.VisualStudio.SDK" Version="17.6.36389" ExcludeAssets="runtime" />
-    <PackageReference Include="Microsoft.VSSDK.BuildTools" Version="17.6.2179">
+    <PackageReference Include="Microsoft.VSSDK.BuildTools" Version="18.5.38461">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
