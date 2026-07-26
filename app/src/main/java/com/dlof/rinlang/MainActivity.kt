@@ -14,6 +14,7 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.R as MaterialR
@@ -99,7 +100,6 @@ class MainActivity : AppCompatActivity() {
         txtReplace = findViewById(R.id.txtReplace)
 
         // أزرار الوصول السريع (أيقونة فقط، صغيرة جداً) في الصف الأول من الشريط العلوي
-        val btnPipeline: ImageButton = findViewById(R.id.btnPipeline)
         val btnRun: ImageButton = findViewById(R.id.btnRun)
         val btnProjects: ImageButton = findViewById(R.id.btnProjects)
 
@@ -156,7 +156,6 @@ class MainActivity : AppCompatActivity() {
 
         // ----- أزرار الوصول السريع (الصف الأول) -----
         btnRun.setOnClickListener { runProgram() }
-        btnPipeline.setOnClickListener { openPipeline() }
         btnProjects.setOnClickListener {
             startActivity(android.content.Intent(this, ProjectsActivity::class.java))
         }
@@ -253,11 +252,9 @@ class MainActivity : AppCompatActivity() {
     private fun showRunMenu(anchor: android.view.View) {
         val popup = darkPopupMenu(anchor)
         popup.menu.add(0, 1, 0, R.string.menu_run_run)
-        popup.menu.add(0, 2, 1, R.string.menu_run_pipeline)
         popup.setOnMenuItemClickListener { item ->
             when (item.itemId) {
                 1 -> runProgram()
-                2 -> openPipeline()
             }
             true
         }
@@ -267,6 +264,16 @@ class MainActivity : AppCompatActivity() {
     private fun runProgram() {
         val source = editCode.text.toString()
         RinJobScheduler.submit(source)
+
+        // لا نشغّل الأنبوب فعلياً هنا (ذلك يحدث داخل شاشة RinFlow نفسها عبر PipelineTracer)؛
+        // فقط نتحقّق بسرعة هل يحتوي الكود على كتلة @container.pipe لنعرض خيار الانتقال إليها.
+        if (RinFlowTracer.looksTraceable(source)) {
+            com.google.android.material.snackbar.Snackbar
+                .make(rvJobs, getString(R.string.rinflow_detected_snackbar), com.google.android.material.snackbar.Snackbar.LENGTH_LONG)
+                .setAction(getString(R.string.rinflow_open_action)) { openPipeline() }
+                .setActionTextColor(ContextCompat.getColor(this, R.color.rin_accent))
+                .show()
+        }
     }
 
     private fun openPipeline() {
