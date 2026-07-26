@@ -118,6 +118,97 @@ object ProjectManager {
     private fun sanitizeFileName(name: String): String =
         name.replace(Regex("[^A-Za-z0-9_\\-.\\u0600-\\u06FF]"), "_")
 
+    // ---- مكتبات المشروع (lib/*.og.rin) ----
+    //
+    // كل مشروع يملك مجلداً فرعياً lib/ (أسفل basePath الممرَّر لـ RinEngine)، وأي ملف
+    // بداخله بامتداد .og.rin هو "مكتبة" يمكن لأي كود في هذا المشروع استيرادها مباشرة عبر
+    // @import "lib/<name>.og.rin"; بالضبط بنفس آلية المكتبات القياسية الخمس المدمجة —
+    // فرق المستخدم الوحيد هو أنّ مكتباته توجد فعلياً على القرص بدل أن تكون مدمجة في الثنائي.
+
+    private const val LIB_DIR = "lib"
+    private const val LIB_EXTENSION = ".og.rin"
+
+    /** مجلد lib/ الخاص بالمشروع، يُنشأ تلقائياً إن لم يكن موجوداً. */
+    fun libDir(project: Project): File {
+        val dir = File(project.dir, LIB_DIR)
+        if (!dir.exists()) dir.mkdirs()
+        return dir
+    }
+
+    /** اسم مكتبة صالح: حروف/أرقام/شرطة/شرطة سفلية فقط (قبل امتداد .og.rin)، لتفادي مشاكل مسارات الاستيراد. */
+    fun isValidLibraryName(name: String): Boolean {
+        val base = name.trim().removeSuffix(LIB_EXTENSION)
+        return base.isNotEmpty() && base.matches(Regex("^[A-Za-z0-9_\\-]{1,64}$"))
+    }
+
+    /** كل مكتبات المشروع (ملفات lib/*.og.rin)، الأحدث تعديلاً أولاً. */
+    fun listLibraries(project: Project): List<RinLibrary> {
+        return (libDir(project).listFiles { f -> f.isFile && f.name.endsWith(LIB_EXTENSION) } ?: emptyArray())
+            .map { RinLibrary(it.name, it, it.length(), it.lastModified()) }
+            .sortedByDescending { it.lastModified }
+    }
+
+    fun readLibrary(library: RinLibrary): String = library.file.readText()
+
+    /** يُنشئ مكتبة جديدة (فارغة أو بمحتوى بدائي جاهز) داخل lib/ الخاص بالمشروع. */
+    fun createLibrary(project: Project, name: String): RinLibrary {
+        val trimmed = name.trim()
+        require(isValidLibraryName(trimmed)) { "اسم المكتبة غير صالح (حروف/أرقام/شرطة فقط)" }
+        val safeName = ensureLibExtension(trimmed)
+        val target = File(libDir(project), safeName)
+        require(!target.exists()) { "توجد مكتبة بهذا الاسم بالفعل" }
+        val libId = safeName.removeSuffix(LIB_EXTENSION)
+        target.writeText(
+            "// ============================================================================\n" +
+                "//  lib/$safeName — مكتبتك الخاصة\n" +
+                "//  استيراد:\n" +
+                "//    @import \"lib/$safeName\";\n" +
+                "//    @import \"lib/$safeName\" as $libId;\n" +
+                "// ============================================================================\n\n" +
+                "fun hello() {\n" +
+                "    return \"مرحباً من مكتبة $libId\";\n" +
+                "}\n"
+        )
+        return RinLibrary(safeName, target, target.length(), target.lastModified())
+    }
+
+    fun writeLibrary(project: Project, library: RinLibrary, content: String): RinLibrary {
+        val target = File(libDir(project), library.name)
+        target.writeText(content)
+        return RinLibrary(library.name, target, target.length(), target.lastModified())
+    }
+
+    fun deleteLibrary(library: RinLibrary): Boolean = library.file.delete()
+
+    private fun ensureLibExtension(name: String): String =
+        if (name.endsWith(LIB_EXTENSION)) name else "$name$LIB_EXTENSION"
+
+    /**
+     * "رفع" مكتبة من الجهاز (أو أي مزوّد SAF) إلى داخل lib/ الخاص بالمشروع، مثل
+     * [importFileFromUri] تماماً لكن للمكتبات: يضمن امتداد .og.rin دوماً حتى لو كان
+     * اسم الملف الأصلي على الجهاز مختلفاً (مثل mylib.rin أو mylib.txt).
+     */
+    fun importLibraryFromUri(context: Context, project: Project, uri: Uri): RinLibrary {
+        val resolver: ContentResolver = context.contentResolver
+        val displayName = queryDisplayName(resolver, uri) ?: uri.lastPathSegment ?: "imported"
+        val text = resolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
+            ?: throw IllegalStateException("تعذّرت قراءة المكتبة المحددة")
+
+        val baseName = sanitizeFileName(displayName)
+            .removeSuffix(".rin").removeSuffix(LIB_EXTENSION).removeSuffix(".txt")
+        var safeName = ensureLibExtension(baseName.ifBlank { "library" })
+        var target = File(libDir(project), safeName)
+        var counter = 1
+        while (target.exists()) {
+            val base = safeName.removeSuffix(LIB_EXTENSION)
+            safeName = "${base}_$counter$LIB_EXTENSION"
+            target = File(libDir(project), safeName)
+            counter++
+        }
+        target.writeText(text)
+        return RinLibrary(safeName, target, target.length(), target.lastModified())
+    }
+
     private fun queryDisplayName(resolver: ContentResolver, uri: Uri): String? {
         return try {
             resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
