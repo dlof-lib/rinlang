@@ -9,6 +9,7 @@
     <string name="menu_file_libraries">المكتبات</string>
 
     <!-- شاشة المكتبات: العنوان والأقسام -->
+    <string name="libraries_screen_title">المكتبات</string>
     <string name="libraries_title_format">مكتبات: %1$s</string>
     <string name="libraries_section_mine">مكتباتي</string>
     <string name="libraries_section_mine_hint">مكتبات lib/*.og.rin التي أنشأتها أو رفعتها لهذا المشروع</string>
