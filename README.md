@@ -4,7 +4,7 @@
 
 # Rin
 
-### لغة برمجة صغيرة لهيكلة البيانات — محرّكها C++17، ومدمَجة في IDE أندرويد كامل بـ Kotlin
+### لغة برمجة صغيرة تكتبها وتشغّلها من جوالك — بمحرّك C++17 حقيقي وIDE أندرويد كامل بـ Kotlin
 
 <p>
 <a href="#لغة-rin--دليل-سريع"><img alt="Rin" src="https://img.shields.io/badge/Rin-Programming%20Language-7C5CFF?style=for-the-badge&logo=data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABwAAAAcCAYAAAByDd+UAAAEeElEQVR4nKWWb2hVZRjAf89zzj27u9vunLKRa2NaJjLmTLMMIVagpgukLxbRh1L6QybU5yLoe9CHhASDkvpQmpIlZk1XbiE4LUrRTQxz6aYNcvNuDm33nPfpw737d/9ssx44cM55z/P83ufP+zxHmEUaWhriw2WVj2NuM45Hwe4DSYKJGcMCvSZ0Id6hkogfBo6eHZ3JnhRd2dIYzB/xnjPYgdkqVBQDzApbMQPkDLCrLFn+ad+XJ2/PGVi1aflyHDvFo8UMcAUg08TAABVEBHN2Usy9MdjWfWpWYNXGplaEPSJabZErvKVC/CmeiwpmlgJ5Zej7c/uKAqs2NrWCfAFUYDZTwAuAbfqzCBj/gL0w1HZ+bx6wan1zE547jsgC3BxghaC5+RXBjBG1aP3g0Z4uAAVg45ISxH0oqncHy5VcPTNEqHDoruqWxvIJ4DxX8qz4+phFroghmbzuigg4QzxdmS7RrQBSt6WudDRVeQJPV05U41S9QpDc0M0UVgMTAbOLYvFH/NFUsgVhxeyl/z8kU4BL4c4mRXQzKjrjx1lJhyHpMJ2zPkeoCIY97YNbi+XzzAxnhpnhqZIO0zyxai3OOTrPnMJTxbJHwVMvo+Nc1naRNBhrFGNRbtzNjCAWUD1vPkvrF6OqJMsqSCbKGRsbA6CyPEl9TS33zK8mcg5zRrwyQaw0wMbTk5dbq/NBkhggxni1pNMhq5c189bz2xkcSXGx7zJtpzrY1voMh04c48ffTvLu1jfxTKivrWP7e28zcOsGizc0c6t/iP6u37HICkRcfJ2g5OSiNIjTe72PHe+/Q/elixz/tYv9Hd+STJQThSHliTI+OLCH3utXWVRTS3VzPQuW1rLw4ftJ1i3AFTlivhnDIiQn3M6GX1Tw1GdoJMX+ziM8+EAjq5etoCKeYEndYjBQVVQ91Pe40tlDaVmCW/1DDF0aQH1vig/ZtmdEvgh/IrJ8Io8Gnqf80X+FrzqPEAQBAA0199L/1zUMaKhZyOdtB/n75g0OdnxH77U+gtI4V3+6gJmhMS+/egUM65d5Gxo/EtWXcs+hM0foIgI/A0yHacIoxIDAj+GcI+b5pKMQXz1Up1T6tD4+ObpwdkAx+QaXP1VVlMCLZcvZiPk+pUGcRBDHV4/AjyEiBH5sZti0W/taS/B+MDg/a5+cywG3Ap8Zmfbo7LJTOawDR8+OGrozO7/+m1gh2OQLUcFUdg23dQ8qQEVl2WcWRadRnVC+GxAUh6GCha5HLb4bpsyF5Lqm1SrWjkgSszmNxPx95dBFALttTlpT7eePw/gABoaPnfvZmXsZsTuZRsusV56rUxdEQCw04/Vx2DRgBtqzT8y9CDaMztXHAjHN6N62yF5NHev+ZKpG3pgYauvZqy56EnO/iEo26EV8zHVXBPEU4JwJT6Xaez7OtV/UjeqWxvJ0YNsweQ2RZRM/uwU6yGSF2yVBdrsxf3eq48zNQnZnjVvVuocqkTubDDaDrcGoB2LZ5dCgX1ROA4eiKDo80n7hxkz2/gX6FhHTlKjPLgAAAABJRU5ErkJggg==&logoColor=white&labelColor=15161A" /></a>
@@ -37,11 +37,13 @@
 
 ## نظرة عامة
 
-**Rin** لغة برمجة كاملة صغيرة، محرّكها (Lexer + Parser + Interpreter) مكتوب بالكامل بلغة **C++17**، ومُدمَج داخل تطبيق أندرويد مكتوب بـ **Kotlin** عبر **JNI/NDK**. التطبيق نفسه محرر أكواد (IDE مصغّر) لكتابة وتشغيل برامج Rin مباشرة على الهاتف، مزوَّد بشريط علوي احترافي، قوائم File/Edit/View/Run، وكونسول تشغيل مجدول. هناك أيضاً **GitHub Action** يبني ملف **APK** تلقائياً عند كل `push`.
+مرحباً بك 👋 — **Rin** لغة برمجة صغيرة وكاملة، صمّمناها لتمنحك تجربة كتابة وتشغيل أكواد حقيقية من جوالك مباشرة، بلا حاجة لحاسوب أو بيئة تطوير معقّدة. تفتح التطبيق، تكتب كودك، تضغط زر التشغيل، وتشاهد النتيجة فوراً في كونسول مُنظَّم — بهذه البساطة.
 
-فوق الأساس العام للغة (متغيرات، شروط، حلقات، دوال، مصفوفات، قواميس)، تضيف Rin طبقة فريدة لتنظيم **البيانات** على شكل حاويات (`container`) قابلة للربط والدمج والحفظ الفعلي على القرص، وصولاً إلى قاعدة بيانات NoSQL كاملة وخط أنابيب إحصائي (`|>`) — كل هذا موثّق بالتفصيل أدناه.
+خلف الكواليس، ستجد محرّكاً حقيقياً (Lexer + Parser + Interpreter) مكتوباً بالكامل بلغة **C++17**، مُدمَجاً داخل تطبيق أندرويد بـ **Kotlin** عبر **JNI/NDK**، ومحرر أكواد كامل بشريط علوي احترافي وقوائم File/Edit/View/Run تُشعرك أنك تستخدم IDE حقيقياً وليس تجربة مصغّرة. وإن كنت تفضّل عدم البناء بنفسك، فهناك **GitHub Action** يجهّز لك ملف **APK** جاهزاً للتحميل عند كل تحديث.
 
-### ✨ أبرز الميزات
+وإن كنت تبحث عن أكثر من مجرد لغة برمجة عامة: فوق الأساس المعتاد (متغيرات، شروط، حلقات، دوال، مصفوفات، قواميس)، ستجد في Rin طبقة فريدة لتنظيم **بياناتك** على شكل حاويات (`container`) قابلة للربط والدمج والحفظ الفعلي على القرص، وصولاً إلى قاعدة بيانات NoSQL كاملة وخط أنابيب إحصائي (`|>`) — كل هذا بانتظارك بالتفصيل في الأقسام أدناه.
+
+### ✨ ماذا ستجد هنا؟
 
 | | |
 |---|---|
@@ -54,7 +56,7 @@
 | 📚 **نظام مكتبات `@import`** | 5 مكتبات قياسية مدمجة + استيراد ملفاتك الخاصة بنفس الصياغة |
 | ⚙️ **بناء تلقائي (CI)** | GitHub Actions يبني APK قابل للتحميل عند كل push |
 
-## البدء السريع (Quick Start)
+## جرّبها بنفسك (Quick Start)
 
 ```bash
 # 1) استنسخ المستودع
@@ -88,7 +90,7 @@ g++ -std=c++17 -o rin_test tools/test_main.cpp \
 - [ميزات المحرر (IDE)](#ميزات-المحرر-ide)
 - [شاشات المشاريع والملفات (Projects / Files)](#شاشات-المشاريع-والملفات-projects-files)
 - [استدعاء Rin من لغات برمجة أخرى](#استدعاء-rin-من-لغات-برمجة-أخرى)
-- [أفكار للتوسعة لاحقاً](#أفكار-للتوسعة-لاحقاً)
+- [خارطة الطريق (Roadmap)](#خارطة-الطريق-roadmap)
 
 ## هيكل المشروع
 
@@ -140,7 +142,12 @@ RinLang/
 
 ## لغة Rin — دليل سريع
 
-```rin
+<details>
+<summary><b>👁️ اضغط للعرض/الإخفاء — لغة Rin — دليل سريع</b></summary>
+
+<sub>💡 لا يملك GitHub حتى الآن تلوين صياغة (syntax highlighting) رسمي مخصّص للغة Rin، لذا تُعرض أكواد Rin في هذا الملف بوسم <code>kotlin</code> لأنه الأقرب بصرياً (`fun`, `//` تعليقات, `true/false`, `@` للحاويات) — الكود نفسه Rin أصلي 100%، والتلوين تقريبي فقط لتحسين القراءة.</sub>
+
+```kotlin
 // المتغيرات
 let x = 10;
 let name = "Rin";
@@ -175,7 +182,7 @@ print fib(10);
 
 ### مصفوفات (Arrays) وقواميس (Maps)
 
-```rin
+```kotlin
 // مصفوفات
 let arr = [1, 2, 3];
 print arr[0];        // 1
@@ -220,11 +227,16 @@ g++ -std=c++17 -o rin_stdlib_test \
 ./rin_stdlib_test
 ```
 
+</details>
+
 ## لغة الحاويات/البيانات (Data Container Language)
+
+<details>
+<summary><b>👁️ اضغط للعرض/الإخفاء — لغة الحاويات/البيانات (Data Container Language)</b></summary>
 
 فوق أساس Rin العام، تدعم اللغة أيضاً مجموعة مفاهيم مخصّصة لتنظيم وهيكلة **البيانات** على شكل حاويات (containers) قابلة للتضمين، الربط، الدمج، الترجمة، والحفظ. كل كتلة تبدأ بكلمة مفتاحية وتُغلق بوسم `.end/الكلمة`، تماماً مثل:
 
-```rin
+```kotlin
 @container=my_data
 
 .end/container
@@ -254,7 +266,7 @@ g++ -std=c++17 -o rin_stdlib_test \
 
 ### مثال كامل
 
-```rin
+```kotlin
 @container=my_data
     text title = "بيانات ريـن";
     print title;
@@ -322,7 +334,12 @@ g++ -std=c++17 -o rin_container_test \
 - `link`/`tying`/`merge` تتطلّب أن يكون الهدف (حاوية **أو مجموعة Containers.Group**) معرَّفاً مسبقاً في البرنامج (تُنفَّذ الحاويات والمجموعات بالترتيب من الأعلى للأسفل).
 - **`file`/`save`/`installation` تعمل فعلياً على القرص** (وليست رسائل توضيحية فقط): راجع قسم "التخزين الحقيقي على القرص" أدناه للتفاصيل الكاملة.
 
+</details>
+
 ## Containers.Group بالتفصيل
+
+<details>
+<summary><b>👁️ اضغط للعرض/الإخفاء — Containers.Group بالتفصيل</b></summary>
 
 `Containers.Group` ليست مجرد وسم زخرفي حول عدّة `container` — لها الآن سلوك حقيقي:
 
@@ -339,7 +356,7 @@ g++ -std=c++17 -o rin_container_test \
 | `groupMembers(name)` | أسماء الأعضاء **المباشرين** فقط (حاويات أو مجموعات فرعية) كما ظهروا داخل المجموعة. |
 | `groupContainers(name)` | كل أسماء **الحاويات الفعلية** داخل المجموعة، مع تفكيك أي مجموعات فرعية متداخلة بالكامل. |
 
-```rin
+```kotlin
 @Containers.Group=team_alpha
     @container=alpha_1
         text label = "أول";
@@ -370,7 +387,12 @@ g++ -std=c++17 -o rin_groups_test \
 ./rin_groups_test
 ```
 
+</details>
+
 ## قاعدة البيانات اللاعلاقية (NoSQL) — `container.doc` / `doc`
+
+<details>
+<summary><b>👁️ اضغط للعرض/الإخفاء — قاعدة البيانات اللاعلاقية (NoSQL) — `container.doc` / `doc`</b></summary>
 
 فوق `container` و`Containers.Group`، تضيف اللغة مفهوم **قاعدة بيانات لاعلاقية (NoSQL) حقيقية بالكامل**، بنفس فلسفة `container.table`: بيانات مُدارة داخل المفسّر نفسه (لا داخل بيئة متغيرات الحاوية)، قابلة للحفظ والاستعادة والاستعلام برمجياً.
 
@@ -382,7 +404,7 @@ g++ -std=c++17 -o rin_groups_test \
 | مجموعة مستندات (collection) | `@container.doc=name ... .end/container.doc` (أو `@doc=name ... .end/doc` بشكل مستقل) |
 | مستند (document) | `document id="..." fields={ ... };` — كائن حر البنية (schema-less) بلا شكل ثابت |
 
-```rin
+```kotlin
 @Containers.Group=shop_db
     @container.doc=users
         document id="u1" fields={ name: "سارة", age: 28, city: "الرياض" };
@@ -416,7 +438,7 @@ print groupContainers("shop_db"); // ["users", "orders"] -> كل مجموعات 
 | `allDocs(collection)` | مصفوفة كل المستندات (كل عنصر map) بترتيب الإدخال. |
 | `countDocs(collection)` | عدد المستندات داخل المجموعة. |
 
-```rin
+```kotlin
 print insertDoc("users", "u3", { name: "منى", city: "الرياض" }); // true
 print updateDoc("users", "u1", { city: "مكة" });                  // true (تحديث جزئي، بقية حقول u1 كما هي)
 print queryDocs("users", "city", "الرياض");                       // كل مستندات users في الرياض
@@ -439,7 +461,12 @@ g++ -std=c++17 -o rin_nosql_test \
 ./rin_nosql_test
 ```
 
+</details>
+
 ## التخزين الحقيقي على القرص (save / installation / file)
+
+<details>
+<summary><b>👁️ اضغط للعرض/الإخفاء — التخزين الحقيقي على القرص (save / installation / file)</b></summary>
 
 `file`، `save`، و`installation` تنفّذ **قراءة/كتابة فعلية على القرص**، وليست رسائل توضيحية فقط. كل مسار نسبي يُبنى فوق جذر اختياري (`basePath`) يحدَّده المُضيف:
 
@@ -448,7 +475,7 @@ g++ -std=c++17 -o rin_nosql_test \
 
 ### `save` — حفظ حاوية كملف `.rin` قابل لإعادة القراءة
 
-```rin
+```kotlin
 @container=my_data
     text title = "بيانات ريـن";
     let count = 3;
@@ -462,7 +489,7 @@ g++ -std=c++17 -o rin_nosql_test \
 
 ### `installation` — تثبيت مستمر عبر التشغيلات المختلفة
 
-```rin
+```kotlin
 @container=profile
     text name = "Droy";
     let level = 7;
@@ -483,7 +510,7 @@ g++ -std=c++17 -o rin_nosql_test \
 | `appendFile(path, content)` | إضافة محتوى لنهاية ملف موجود (أو إنشاؤه إن لم يوجد). |
 | `fileExists(path)` / `deleteFile(path)` | فحص وجود ملف، أو حذفه فعلياً. |
 
-```rin
+```kotlin
 let ok = loadInstalled("profile");
 if (ok) {
     @container=check
@@ -514,11 +541,16 @@ g++ -std=c++17 -o rin_persist_test \
 
 لدعم حفظ/إعادة قراءة أي نص فعلياً (بما فيه نصوص تحتوي علامات تنصيص أو أسطر جديدة)، تدعم النصوص الآن: `\"` `\\` `\n` `\t` `\r`.
 
-```rin
+```kotlin
 print "قال: \"مرحباً\"\nسطر ثانٍ";
 ```
 
+</details>
+
 ## خط الأنابيب (Pipeline) والبيانات الإحصائية
+
+<details>
+<summary><b>👁️ اضغط للعرض/الإخفاء — خط الأنابيب (Pipeline) والبيانات الإحصائية</b></summary>
 
 فوق `container` العادية، تضيف اللغة **`container.pipe`** ومُشغّل الأنابيب **`|>`** لبناء خطوط معالجة بيانات على شكل: **بيانات مُدخَلة (Input) → تحويل (Transformation) → تجميع (Aggregation) → نتيجة نهائية (Final Output)** — بنفس الترتيب في المخطّط الآتي:
 
@@ -530,7 +562,7 @@ print "قال: \"مرحباً\"\nسطر ثانٍ";
 
 يمرّر القيمة الموجودة على يسار `|>` كأول وسيط (argument) للنداء الموجود على يمينه، فتصبح سلسلة من التحويلات قابلة للقراءة من اليسار إلى اليمين بدل تعشيش الأقواس:
 
-```rin
+```kotlin
 let data = [10, 20, 30, 40, 50];
 
 // data |> normalize() |> mean();  يُكافئ تماماً  mean(normalize(data))
@@ -553,7 +585,7 @@ print result;
 
 هي نفس `@container=name ... .end/container` تماماً في آلية العمل (بيئة متغيرات خاصة، تدعم `link`/`tying`/`merge`)، لكنها تُستخدم لتنظيم خطوط الأنابيب صراحةً، وتُطبع بشكل مختلف (`🧵 container.pipe` بدل `📦 container`) لتمييزها بصرياً في المخرجات:
 
-```rin
+```kotlin
 @container.pipe=sales_pipeline
     let raw = [10, 20, 30, 40, 50];   // Input Data
 
@@ -582,14 +614,19 @@ g++ -std=c++17 -o rin_pipeline_test \
 ./rin_pipeline_test
 ```
 
+</details>
+
 ## نظام المكتبات (@import) والمكتبات الجاهزة
+
+<details>
+<summary><b>👁️ اضغط للعرض/الإخفاء — نظام المكتبات (@import) والمكتبات الجاهزة</b></summary>
 
 فوق كل ما سبق، تدعم اللغة عبارة **`@import`** لاستيراد مكتبات/حزم Rin جاهزة (أو ملفاتك الخاصة) واستخدام
 دوالها مباشرة، دون الحاجة لتكرار كتابتها في كل مشروع.
 
 ### الصياغة
 
-```rin
+```kotlin
 @import "lib/data.og.rin";            // دمج مباشر: كل fun/let/text أعلى مستوى في المكتبة
                                        // تصبح متاحة فوراً في النطاق الحالي (تماماً كـ #include)
 
@@ -598,7 +635,7 @@ g++ -std=c++17 -o rin_pipeline_test \
                                        // دون تلويث النطاق الحالي بأسماء المكتبة مباشرة.
 ```
 
-```rin
+```kotlin
 @import "lib/math.og.rin";
 print factorial(5);      // 120
 print isPrime(17);       // true
@@ -659,7 +696,7 @@ g++ -std=c++17 -o rin_import_test \
 ولا امتداد، ويحوّله تلقائياً إلى `lib/<name>.og.rin` قبل البحث عنها (في المكتبات المدمجة أولاً، ثم
 على القرص):
 
-```rin
+```kotlin
 @import "math";          // بالضبط مثل @import "lib/math.og.rin";
 @import "myhelpers";      // بالضبط مثل @import "lib/myhelpers.og.rin";
 ```
@@ -684,6 +721,8 @@ g++ -std=c++17 -o rin_import_test \
 (`filesDir/projects/<project>/lib/<name>.og.rin` — انظر `ProjectManager.kt` و`LibrariesActivity.kt`)،
 وهو نفس `basePath` الممرَّر لمحرّك C++، فتعمل عبارة `@import "lib/<name>.og.rin";` عليها مباشرة بنفس
 الآلية الموضّحة أعلاه، بلا أي فرق عن المكتبات القياسية الخمس من منظور الشيفرة.
+
+</details>
 
 ## البناء محلياً
 
@@ -734,14 +773,20 @@ g++ -std=c++17 -o rin_test \
 
 بالإضافة لدمج Rin داخل Kotlin عبر JNI، يمكن الآن استدعاء نفس محرّك C++ من **أي لغة برمجة** (بايثون، Node.js، C/C++، ولاحقاً أي لغة تدعم FFI) عبر واجهة C مسطّحة (`app/src/main/cpp/rin_c_api.h`) تُبنى كمكتبة مشتركة عامة مستقلة عن أندرويد. انظر مجلد `bindings/` لأمثلة جاهزة وتفاصيل البناء.
 
-## أفكار للتوسعة لاحقاً
+## خارطة الطريق (Roadmap)
 
-- دوال بأكثر من قيمة تُرجَع (multiple return / tuples).
-- حلقة `for` مخصّصة للتكرار على المصفوفات والقواميس.
-- تراجع/إعادة (undo/redo) في المحرر، وترقيم للأسطر.
-- ترتيب المتغيرات المحفوظة حسب ترتيب التعريف الفعلي بدل الترتيب الأبجدي (يتطلب تحويل `Environment::values` من `unordered_map` إلى بنية تحافظ على الترتيب).
-- واجهة داخل التطبيق لتصفّح/حذف/تصدير محتويات `rin_installed/` مباشرة (حالياً تُدار فقط عبر كود Rin أو يدوياً على الجهاز).
+جدولة تقريبية لما هو قادم، حسب الأولوية:
 
+| # | الميزة | الوصف | الحالة |
+|---|---|---|---|
+| 1 | دوال بقيم مُرجَعة متعددة | دعم `multiple return / tuples` | 🔜 مخطَّط لها |
+| 2 | حلقة `for` مخصّصة | تكرار مباشر على المصفوفات والقواميس | 🔜 مخطَّط لها |
+| 3 | تراجع/إعادة في المحرر | `undo/redo` + ترقيم أسطر أدق | 🔜 مخطَّط لها |
+| 4 | ترتيب المتغيرات حسب التعريف | تحويل `Environment::values` من `unordered_map` إلى بنية تحافظ على الترتيب | 🧪 قيد الدراسة |
+| 5 | واجهة لإدارة `rin_installed/` | تصفّح/حذف/تصدير التثبيتات من داخل التطبيق مباشرة | 🧪 قيد الدراسة |
+| 6 | قواعد تلوين رسمية للغة | TextMate grammar / Linguist لتلوين دقيق في GitHub وVS Code | 💡 فكرة مستقبلية |
+
+> 💬 لديك اقتراح أو تريد المساهمة في أحد هذه البنود؟ افتح [Issue جديد](https://github.com/dlof-lib/rinlang/issues) أو اطّلع على قسم [المساهمة](#المساهمة) أدناه.
 
 ## المساهمة
 
