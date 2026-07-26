@@ -49,6 +49,11 @@
             android:exported="false"
             android:windowSoftInputMode="adjustResize" />
 
+        <!-- شاشة "الإعدادات" العامة (حجم الخط، أرقام الأسطر) — منفصلة عمداً عن ".store.AccountActivity" -->
+        <activity
+            android:name=".SettingsActivity"
+            android:exported="false" />
+
         <!-- ===== مرحلة 1 من "متجر Rin": تسجيل الدخول / إنشاء الحساب / كود التحقق (5 أرقام) =====
              Firebase Auth (Email/Password) لبيانات الدخول + Realtime Database لبيانات الحساب
              (الاسم، اسم المستخدم، حالة التحقق) وكود التحقق المؤقت. الإرسال الفعلي للبريد عبر EmailJS. -->
