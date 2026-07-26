@@ -14,7 +14,7 @@
     <string name="pipeline_status_error">RinFlow: Failed</string>
     <string name="pipeline_status_idle">RinFlow: Not run yet</string>
     <string name="pipeline_status_stopped">RinFlow: Stopped</string>
-    <string name="pipeline_no_block_found">This file is empty — write some Rin code (any container, pipe, table, or plain statements) and press Run again.</string>
+    <string name="pipeline_no_block_found">No @container.pipe block was found in this code. Add one, then press Run again.</string>
     <string name="pipeline_action_run">Run</string>
     <string name="pipeline_action_stop">Stop</string>
     <string name="pipeline_action_configure">Configure</string>
