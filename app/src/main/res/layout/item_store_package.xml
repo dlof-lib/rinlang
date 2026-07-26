@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:background="@drawable/bg_list_card"
+    android:layout_margin="4dp"
+    android:padding="12dp">
+
+    <TextView
+        android:id="@+id/txtPackageName"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:textSize="15sp"
+        android:textStyle="bold"
+        android:textColor="@color/rin_on_toolbar" />
+
+    <TextView
+        android:id="@+id/txtPackageMeta"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="2dp"
+        android:textSize="12sp"
+        android:textColor="@color/rin_editor_hint" />
+
+    <TextView
+        android:id="@+id/txtPackageDescription"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:textSize="12.5sp"
+        android:textColor="@color/rin_editor_text"
+        android:maxLines="3"
+        android:ellipsize="end" />
+
+    <Button
+        android:id="@+id/btnInstallPackage"
+        android:layout_width="match_parent"
+        android:layout_height="36dp"
+        android:layout_marginTop="10dp"
+        android:minWidth="0dp"
+        android:minHeight="0dp"
+        android:insetTop="0dp"
+        android:insetBottom="0dp"
+        android:text="@string/action_install"
+        android:textAllCaps="false"
+        android:textSize="12.5sp"
+        android:background="@drawable/bg_toolbar_btn_primary"
+        android:textColor="@android:color/white" />
+
+</LinearLayout>
