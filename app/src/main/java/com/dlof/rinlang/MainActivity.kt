@@ -267,7 +267,7 @@ class MainActivity : AppCompatActivity() {
 
         // لا نشغّل الأنبوب فعلياً هنا (ذلك يحدث داخل شاشة RinFlow نفسها عبر PipelineTracer)؛
         // فقط نتحقّق بسرعة هل يحتوي الكود على كتلة @container.pipe لنعرض خيار الانتقال إليها.
-        if (RinFlowTracer.looksTraceable(source)) {
+        if (PipelineTracer.containsPipeline(source)) {
             com.google.android.material.snackbar.Snackbar
                 .make(rvJobs, getString(R.string.rinflow_detected_snackbar), com.google.android.material.snackbar.Snackbar.LENGTH_LONG)
                 .setAction(getString(R.string.rinflow_open_action)) { openPipeline() }
