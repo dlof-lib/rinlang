@@ -122,6 +122,12 @@ private:
     std::unordered_map<std::string, std::string> tableStyles;       // مفتاح الحاوية -> آخر "style value=" مسجَّل (مثال: "style://dark")
     std::string buildTablePng(const std::string& key) const;        // يرسم الجدول كصورة PNG حقيقية (شبكة خلايا ملوّنة)
 
+    // ---- قاعدة بيانات لاعلاقية / NoSQL (container.doc / doc المستقلة) ----
+    // container = "مجموعة مستندات" (collection)، وتُخزَّن مستنداتها هنا بترتيب الإدخال؛ id عربون
+    // فريد داخل نفس المجموعة (إدراج بنفس id موجود = تحديث/upsert). Containers.Group التي تضم عدّة
+    // container.doc تصبح فعلياً "قاعدة بيانات" (database) كاملة من عدّة مجموعات مستندات مرتّبة.
+    std::unordered_map<std::string, std::vector<std::pair<std::string, Value>>> docStore;
+
     // ---- تخزين حقيقي على القرص (save/file/installation) ----
     std::string basePath;                                     // جذر حقيقي اختياري لكل عمليات الملفات
     bool installedIndexLoaded = false;
