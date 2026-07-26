@@ -35,6 +35,7 @@ RinLang/
 ├── tools/test_pipeline.cpp           # اختبار container.pipe والمُشغّل |> والدوال الإحصائية
 ├── tools/test_persistence.cpp        # اختبار استمرارية save/installation فعلياً عبر تشغيلين منفصلين (Interpreter جديد في كل مرة)
 ├── tools/test_import.cpp             # اختبار @import: المكتبات المدمجة الخمس + الدمج المباشر + الاستيراد باسم مستعار
+├── tools/test_nosql.cpp              # اختبار قاعدة البيانات اللاعلاقية (container.doc/doc, document, insertDoc/updateDoc/queryDocs...)
 ├── .github/workflows/build-apk.yml   # بناء APK تلقائي عبر GitHub Actions
 ├── build.gradle / settings.gradle / gradle.properties
 └── README.md
@@ -276,6 +277,75 @@ g++ -std=c++17 -o rin_groups_test \
   app/src/main/cpp/rin_interpreter.cpp \
   -I app/src/main/cpp
 ./rin_groups_test
+```
+
+## قاعدة البيانات اللاعلاقية (NoSQL) — `container.doc` / `doc`
+
+فوق `container` و`Containers.Group`، تضيف اللغة مفهوم **قاعدة بيانات لاعلاقية (NoSQL) حقيقية بالكامل**، بنفس فلسفة `container.table`: بيانات مُدارة داخل المفسّر نفسه (لا داخل بيئة متغيرات الحاوية)، قابلة للحفظ والاستعادة والاستعلام برمجياً.
+
+**المصطلحات:**
+
+| مفهوم NoSQL | يُمثَّل في Rin بـ |
+|---|---|
+| قاعدة بيانات (database) | `Containers.Group` |
+| مجموعة مستندات (collection) | `@container.doc=name ... .end/container.doc` (أو `@doc=name ... .end/doc` بشكل مستقل) |
+| مستند (document) | `document id="..." fields={ ... };` — كائن حر البنية (schema-less) بلا شكل ثابت |
+
+```rin
+@Containers.Group=shop_db
+    @container.doc=users
+        document id="u1" fields={ name: "سارة", age: 28, city: "الرياض" };
+        document id="u2" fields={ name: "أحمد", age: 35, city: "جدة" };
+    .end/container.doc
+
+    @container.doc=orders
+        document id="o1" fields={ user: "u1", total: 120 };
+    .end/container.doc
+.end/Containers.Group
+
+print groupContainers("shop_db"); // ["users", "orders"] -> كل مجموعات المستندات داخل قاعدة البيانات
+```
+
+- `document id=EXPR fields=EXPR;` يعمل كـ **upsert**: إن كان `id` موجوداً مسبقاً داخل نفس المجموعة يُستبدَل مستنده بالكامل، وإلا يُضاف كمستند جديد بترتيب الإدخال.
+- `container.doc`/`doc` (تماماً كـ `container.table`/`table`) لا تسمح بدوال أو حاويات/مجموعات متداخلة أو `route` بداخلها — تبقى "بيانات نقية" قابلة للتسلسل.
+
+### الاستعلام والتعديل وقت التشغيل (Runtime CRUD)
+
+بالإضافة إلى `document` الوصفي، تتوفّر دوال جاهزة يمكن استدعاؤها من أي مكان في البرنامج:
+
+| الدالة | الوصف |
+|---|---|
+| `insertDoc(collection, id, fields)` | إدراج/استبدال كامل لمستند (upsert حيّ). تُرجع `true` إن كان إدراجاً جديداً، `false` إن استبدل مستنداً موجوداً. |
+| `updateDoc(collection, id, partialFields)` | تحديث جزئي (patch): يدمج الحقول الجديدة فقط مع المستند الموجود دون حذف بقية حقوله. تُرجع `false` إن لم يوجد المستند. |
+| `deleteDoc(collection, id)` | يحذف مستنداً بمعرّفه. تُرجع `true`/`false` حسب وجوده. |
+| `findDoc(collection, id)` | يُرجع حقول المستند (map) أو `nil` إن لم يوجد. |
+| `queryDocs(collection, field, value)` | يُرجع مصفوفة كل المستندات التي يساوي فيها الحقل `field` القيمة `value`. |
+| `queryOneDoc(collection, field, value)` | نفس الشيء لكن يُرجع أول مطابقة فقط (أو `nil`). |
+| `docIds(collection)` | مصفوفة كل معرِّفات (ids) المستندات بترتيب الإدخال. |
+| `allDocs(collection)` | مصفوفة كل المستندات (كل عنصر map) بترتيب الإدخال. |
+| `countDocs(collection)` | عدد المستندات داخل المجموعة. |
+
+```rin
+print insertDoc("users", "u3", { name: "منى", city: "الرياض" }); // true
+print updateDoc("users", "u1", { city: "مكة" });                  // true (تحديث جزئي، بقية حقول u1 كما هي)
+print queryDocs("users", "city", "الرياض");                       // كل مستندات users في الرياض
+print deleteDoc("orders", "o1");                                  // true
+```
+
+### الحفظ والاستعادة
+
+`save` و`installation` تعملان مع `container.doc`/`doc` تماماً كأي حاوية أخرى: تُكتب كل مستنداتها كسلسلة عبارات `document id=... fields=...;` داخل الملف الناتج، بحيث تُعاد قراءتها بالكامل لاحقاً عبر `container.import` أو `loadInstalled()`.
+
+يمكنك تجربة هذا كاملاً عبر:
+
+```bash
+g++ -std=c++17 -o rin_nosql_test \
+  tools/test_nosql.cpp \
+  app/src/main/cpp/rin_lexer.cpp \
+  app/src/main/cpp/rin_parser.cpp \
+  app/src/main/cpp/rin_interpreter.cpp \
+  -I app/src/main/cpp
+./rin_nosql_test
 ```
 
 ## التخزين الحقيقي على القرص (save / installation / file)
