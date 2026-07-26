@@ -176,7 +176,12 @@ class PipelineRunnerActivity : AppCompatActivity() {
         buildFlowDiagram(trace)
 
         if (trace.success) {
-            setStatus(R.drawable.ic_status_success, getString(R.string.pipeline_status_success), R.drawable.bg_pipeline_status_success, R.color.pipeline_green_light_text)
+            setStatus(
+                R.drawable.ic_status_success,
+                getString(R.string.pipeline_status_success_timed, trace.totalDurationMs),
+                R.drawable.bg_pipeline_status_success,
+                R.color.pipeline_green_light_text
+            )
             txtDetails.visibility = View.GONE
         } else {
             setStatus(R.drawable.ic_status_error, getString(R.string.pipeline_status_error), R.drawable.bg_pipeline_status_error, R.color.pipeline_red_light_text)
@@ -233,7 +238,7 @@ class PipelineRunnerActivity : AppCompatActivity() {
         addNode(
             icon = if (trace.success) R.drawable.ic_status_success else R.drawable.ic_status_error,
             title = getString(R.string.pipeline_node_output),
-            subtitle = "print",
+            subtitle = if (trace.success) "print • ${trace.totalDurationMs}ms" else "print",
             valueText = if (trace.success) trace.finalValueText else "—",
             ok = trace.success
         )
