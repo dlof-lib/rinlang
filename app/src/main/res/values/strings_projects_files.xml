@@ -12,6 +12,11 @@
     <string name="rename">إعادة تسمية</string>
     <string name="delete">حذف</string>
 
+    <!-- الشريط العلوي الموحّد للشاشات الفرعية -->
+    <string name="action_back">رجوع</string>
+    <string name="projects_screen_title">المشاريع</string>
+    <string name="files_screen_title">الملفات</string>
+
     <!-- شاشة المشاريع -->
     <string name="new_project_title">مشروع جديد</string>
     <string name="rename_project_title">إعادة تسمية المشروع</string>
