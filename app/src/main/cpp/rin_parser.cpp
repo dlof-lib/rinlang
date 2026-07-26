@@ -115,11 +115,34 @@ StmtPtr Parser::statement() {
     return expressionStatement();
 }
 
+// print expr1, expr2, ... [sep=expr] [end=expr];
 StmtPtr Parser::printStatement() {
-    auto expr = expression();
-    consume(TokenType::SEMICOLON, "Expected ';' after print statement");
+    Token tok = previous(); // 'print'
     auto stmt = std::make_shared<PrintStmt>();
-    stmt->expr = expr;
+    stmt->exprs.push_back(expression());
+    while (match({TokenType::COMMA})) {
+        stmt->exprs.push_back(expression());
+    }
+    // sep=/end= اختياريان، كل واحدة مرة واحدة على الأكثر، بأي ترتيب بينهما.
+    // ملاحظة: 'end' كلمة محجوزة في اللغة (TokenType::END، تُستخدم في .end/container...)، فتحقّقها
+    // هنا يكون عبر نوع التوكن END وليس IDENT كما مع 'sep' (وبقية سمات key=value في اللغة).
+    bool sawSep = false, sawEnd = false;
+    while ((check(TokenType::IDENT) && peek().lexeme == "sep") || check(TokenType::END)) {
+        std::string attr = advance().lexeme;
+        consume(TokenType::EQUAL, "Expected '=' after '" + attr + "' in print statement");
+        ExprPtr value = expression();
+        if (attr == "sep") {
+            if (sawSep) throw RinError("'print': 'sep' attribute repeated", tok.line);
+            stmt->sep = value;
+            sawSep = true;
+        } else {
+            if (sawEnd) throw RinError("'print': 'end' attribute repeated", tok.line);
+            stmt->end = value;
+            sawEnd = true;
+        }
+    }
+    consume(TokenType::SEMICOLON, "Expected ';' after print statement");
+    stmt->line = tok.line;
     return stmt;
 }
 
