@@ -7,5 +7,5 @@ package com.dlof.rinlang.auth
  * الصقه كاملاً هنا تماماً كما يظهر، بدون أي حرف زائد.
  */
 object FirebaseDbConfig {
-    const val DATABASE_URL = "PASTE_YOUR_REALTIME_DATABASE_URL_HERE"
+    const val DATABASE_URL = "https://dlof-massage-default-rtdb.firebaseio.com/"
 }
