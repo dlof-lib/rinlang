@@ -131,7 +131,10 @@ private:
     // ---- تخزين حقيقي على القرص (save/file/installation) ----
     std::string basePath;                                     // جذر حقيقي اختياري لكل عمليات الملفات
     bool installedIndexLoaded = false;
-    std::string resolvePath(const std::string& rawPath) const;          // يدمج basePath مع مسار نسبي
+    // يدمج basePath مع مسار نسبي، ويطبّع المسار (يحلّ "." و".." ويرفض أي محاولة هروب خارج basePath
+    // نفسه، سواء عبر "../" متكررة أو مسار مطلق صريح) لمنع أي كود Rin (خصوصاً مكتبة مستوردة من مصدر
+    // غير موثوق) من الوصول لملفات خارج مجلد المشروع المعزول. line اختياري لرسالة خطأ أوضح إن توفّر.
+    std::string resolvePath(const std::string& rawPath, int line = -1) const;
     void ensureParentDir(const std::string& fullPath) const;            // ينشئ مجلدات الأب إن لزم (mkdir -p يدوياً)
     std::string buildSaveDocument(const std::string& key, const EnvPtr& containerEnv,
                                    ContainerKind kind, bool simplified) const; // يبني نص .rin قابل لإعادة القراءة من متغيرات حاوية
@@ -150,6 +153,15 @@ private:
     void executeBlock(const std::vector<StmtPtr>& statements, EnvPtr env);
     Value evaluate(const ExprPtr& expr, EnvPtr env);
     Value callFunction(const std::shared_ptr<Callable>& fn, std::vector<Value>& args, int line);
+
+    // ---- حارس عمق الاستدعاء (call depth guard) ----
+    // بلا هذا الحارس، دالة Rin تتكرّر ذاتياً بلا حالة توقّف (خطأ شائع من المستخدم، وليس فقط هجوماً
+    // متعمَّداً) تُسبِّب Stack Overflow حقيقياً في مكدّس C++ الأصلي — وهذا segmentation fault لا يمكن
+    // لأي try/catch اعتراضه أبداً (على خلاف RinError)، فيُسقِط التطبيق بالكامل (أو عملية الاختبار
+    // خارج أندرويد) بدل رسالة خطأ Rin واضحة وقابلة للاستمرار. الحد أدناه محافظ (يعمل بأمان حتى مع
+    // مكدّسات صغيرة نسبياً كما في بعض خيوط أندرويد)، ويكفي لأي تكرار عملي (fibonacci، إلخ).
+    static constexpr int kMaxCallDepth = 300;
+    int callDepth = 0;
 
     // ينسخ متغيرات هدف tying/merge (حاوية مفردة أو Containers.Group كاملة) داخل بيئة الحاوية الحالية.
     // يُرجع true إن كان الهدف مجموعة (Containers.Group)، أو false إن كان حاوية مفردة.
