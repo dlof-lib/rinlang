@@ -37,6 +37,13 @@
     <string name="file_uploaded_toast">تم رفع الملف: %1$s</string>
     <string name="file_meta_format">%1$s • %2$s</string>
 
+    <!-- أدوات الأرشيف المضغوط (ZIP): رفع وفك ضغط، أو تنزيل المشروع كأرشيف -->
+    <string name="zip_tools_title">أرشيف ZIP</string>
+    <string name="zip_upload_extract">رفع أرشيف مضغوط وفك ضغطه هنا</string>
+    <string name="zip_download_project">تنزيل المشروع كأرشيف ZIP</string>
+    <string name="zip_extracted_toast">تم فك ضغط %1$d ملف داخل المشروع</string>
+    <string name="zip_extract_error">تعذّر فك ضغط الأرشيف</string>
+
     <!-- زر التنقل الجديد داخل المحرر (MainActivity) -->
     <string name="btn_projects">المشاريع</string>
 </resources>
