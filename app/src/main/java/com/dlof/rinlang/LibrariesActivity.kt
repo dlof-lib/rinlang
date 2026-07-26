@@ -40,7 +40,7 @@ class LibrariesActivity : AppCompatActivity() {
     private lateinit var project: Project
     private lateinit var rvUserLibraries: RecyclerView
     private lateinit var rvBuiltinLibraries: RecyclerView
-    private lateinit var txtEmpty: TextView
+    private lateinit var txtEmpty: View
     private lateinit var userAdapter: UserLibraryAdapter
 
     private val importLibraryLauncher =
@@ -61,6 +61,13 @@ class LibrariesActivity : AppCompatActivity() {
             }
         project = existing
         title = getString(R.string.libraries_title_format, project.name)
+
+        findViewById<TextView>(R.id.txtToolbarTitle).text = getString(R.string.libraries_screen_title)
+        findViewById<TextView>(R.id.txtToolbarSubtitle).apply {
+            text = project.name
+            visibility = View.VISIBLE
+        }
+        findViewById<View>(R.id.btnToolbarBack).setOnClickListener { finish() }
 
         rvUserLibraries = findViewById(R.id.rvUserLibraries)
         rvBuiltinLibraries = findViewById(R.id.rvBuiltinLibraries)
