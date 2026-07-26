@@ -17,6 +17,7 @@
     <string name="action_install">تثبيت/إدراج</string>
     <string name="store_item_meta_format">%1$s • %2$s • %3$d تنزيل</string>
     <string name="package_installed_toast">تم تثبيت الحزمة وإضافتها لمكتبات هذا المشروع</string>
+    <string name="package_installed_import_toast">تم تثبيت %1$s وإدراج @import في الكود مباشرة ✓</string>
 
     <!-- شاشة النشر -->
     <string name="publish_title">نشر مكتبة</string>
