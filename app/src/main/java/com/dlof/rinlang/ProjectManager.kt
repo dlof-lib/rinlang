@@ -4,7 +4,12 @@ import android.content.ContentResolver
 import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
+import java.io.BufferedOutputStream
 import java.io.File
+import java.io.FileOutputStream
+import java.util.zip.ZipEntry
+import java.util.zip.ZipInputStream
+import java.util.zip.ZipOutputStream
 
 /**
  * يدير مشاريع Rin على تخزين التطبيق الخاص (filesDir/projects/<name>/...).
@@ -207,6 +212,76 @@ object ProjectManager {
         }
         target.writeText(text)
         return RinLibrary(safeName, target, target.length(), target.lastModified())
+    }
+
+    // ---- رفع أرشيف مضغوط (ZIP) وفك ضغطه داخل المشروع، وتنزيل المشروع كأرشيف ----
+    //
+    // "رفع مضغوط": يقرأ ملف .zip من [uri] عبر ContentResolver ويفكّ ضغطه مباشرة داخل
+    // مجلد المشروع، محافظاً على بنية المجلدات الداخلية للأرشيف (مثل lib/mylib.og.rin).
+    // نتحقق من كل مسار داخل الأرشيف حتى لا يخرج ("Zip Slip") إلى خارج مجلد المشروع.
+
+    /** يفكّ ضغط أرشيف ZIP من [uri] داخل مجلد المشروع، ويرجع عدد الملفات المستخرجة. */
+    fun importZipFromUri(context: Context, project: Project, uri: Uri): Int {
+        val resolver: ContentResolver = context.contentResolver
+        val projectRoot = project.dir.canonicalFile
+        var extractedCount = 0
+
+        val input = resolver.openInputStream(uri)
+            ?: throw IllegalStateException("تعذّرت قراءة الأرشيف المحدد")
+        ZipInputStream(input).use { zip ->
+            var entry: ZipEntry? = zip.nextEntry
+            while (entry != null) {
+                val safeRelPath = sanitizeZipEntryPath(entry.name)
+                if (safeRelPath != null) {
+                    val outFile = File(projectRoot, safeRelPath)
+                    // تأكيد إضافي أن المسار الناتج ما زال داخل مجلد المشروع فعلياً.
+                    if (outFile.canonicalFile.path.startsWith(projectRoot.path + File.separator)) {
+                        if (entry.isDirectory) {
+                            outFile.mkdirs()
+                        } else {
+                            outFile.parentFile?.mkdirs()
+                            BufferedOutputStream(FileOutputStream(outFile)).use { out ->
+                                zip.copyTo(out)
+                            }
+                            extractedCount++
+                        }
+                    }
+                }
+                zip.closeEntry()
+                entry = zip.nextEntry
+            }
+        }
+        return extractedCount
+    }
+
+    /** ينظّف مسار عنصر داخل الأرشيف ويرفض أي محاولة خروج خارج مجلد المشروع (../، مسار مطلق). */
+    private fun sanitizeZipEntryPath(rawName: String): String? {
+        val normalized = rawName.replace('\\', '/').trim('/')
+        if (normalized.isEmpty()) return null
+        val segments = normalized.split('/').filter { it.isNotEmpty() && it != "." }
+        if (segments.any { it == ".." }) return null
+        return segments.joinToString(File.separator)
+    }
+
+    /**
+     * يضغط كل ملفات مجلد المشروع (بما فيها lib/) داخل أرشيف ZIP واحد في cacheDir، تمهيداً
+     * لتنزيله عبر [RinDownloadManager]. يرجع الملف الناتج مع اسم عرض مناسب.
+     */
+    fun exportProjectAsZip(context: Context, project: Project): File {
+        val cacheDir = File(context.cacheDir, "project_exports").apply { mkdirs() }
+        val zipFile = File(cacheDir, "${project.name}.zip")
+        if (zipFile.exists()) zipFile.delete()
+
+        ZipOutputStream(BufferedOutputStream(FileOutputStream(zipFile))).use { zipOut ->
+            val root = project.dir
+            root.walkTopDown().filter { it.isFile }.forEach { file ->
+                val relPath = file.relativeTo(root).path.replace(File.separatorChar, '/')
+                zipOut.putNextEntry(ZipEntry(relPath))
+                file.inputStream().use { it.copyTo(zipOut) }
+                zipOut.closeEntry()
+            }
+        }
+        return zipFile
     }
 
     private fun queryDisplayName(resolver: ContentResolver, uri: Uri): String? {
