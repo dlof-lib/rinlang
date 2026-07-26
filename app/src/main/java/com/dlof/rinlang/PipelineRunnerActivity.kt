@@ -250,83 +250,131 @@ class PipelineRunnerActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * بطاقة عقدة RinFlow بأسلوب لوحات CI/CD الاحترافية: شريحة لون حالة على الحافة اليسرى،
+     * عنوان مع أيقونة، سطر الكود الفرعي، شريحة القيمة الفعلية، ثم سطر حالة سفلي
+     * (✓ Passed / ✕ Failed) — بدل الدائرة البسيطة المعزولة في التصميم القديم.
+     */
     private fun addNode(icon: Int, title: String, subtitle: String, valueText: String, ok: Boolean) {
         val dp = resources.displayMetrics.density
-        val column = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER_HORIZONTAL
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-            ).apply {
-                gravity = Gravity.CENTER_HORIZONTAL
-                topMargin = (2 * dp).toInt()
-                bottomMargin = (2 * dp).toInt()
+        val accentColor = ContextCompat.getColor(this, if (ok) R.color.pipeline_green else R.color.pipeline_red)
+
+        val card = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            background = ContextCompat.getDrawable(context, R.drawable.bg_pipeline_node_card)
+            elevation = 2 * dp
+            layoutParams = LinearLayout.LayoutParams((188 * dp).toInt(), LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                gravity = Gravity.CENTER_VERTICAL
             }
         }
 
-        val circle = android.widget.ImageView(this).apply {
-            setImageResource(icon)
-            scaleType = android.widget.ImageView.ScaleType.CENTER
-            setBackgroundResource(if (ok) R.drawable.bg_pipeline_node_circle else R.drawable.bg_pipeline_node_circle_error)
-            imageTintList = android.content.res.ColorStateList.valueOf(
-                ContextCompat.getColor(context, if (ok) R.color.pipeline_green else R.color.pipeline_red)
-            )
-            layoutParams = LinearLayout.LayoutParams((44 * dp).toInt(), (44 * dp).toInt())
-            elevation = 3 * dp
+        val stripe = View(this).apply {
+            setBackgroundColor(accentColor)
+            layoutParams = LinearLayout.LayoutParams((4 * dp).toInt(), LinearLayout.LayoutParams.MATCH_PARENT)
         }
-        column.addView(circle)
+        card.addView(stripe)
 
+        val content = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding((10 * dp).toInt(), (10 * dp).toInt(), (10 * dp).toInt(), (10 * dp).toInt())
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+        }
+
+        val titleRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        val titleIcon = android.widget.ImageView(this).apply {
+            setImageResource(icon)
+            imageTintList = android.content.res.ColorStateList.valueOf(accentColor)
+            layoutParams = LinearLayout.LayoutParams((16 * dp).toInt(), (16 * dp).toInt()).apply {
+                marginEnd = (6 * dp).toInt()
+            }
+        }
+        titleRow.addView(titleIcon)
         val titleView = TextView(this).apply {
             text = title
             textSize = 12.5f
             setTypeface(typeface, Typeface.BOLD)
             setTextColor(ContextCompat.getColor(context, R.color.pipeline_text_primary))
-            gravity = Gravity.CENTER
-            setPadding(0, (4 * dp).toInt(), 0, 0)
+            maxLines = 1
+            ellipsize = android.text.TextUtils.TruncateAt.END
         }
-        column.addView(titleView)
+        titleRow.addView(titleView)
+        content.addView(titleRow)
 
         if (subtitle.isNotBlank()) {
             val subtitleView = TextView(this).apply {
                 text = subtitle
                 textSize = 10f
+                typeface = Typeface.MONOSPACE
                 setTextColor(ContextCompat.getColor(context, R.color.pipeline_text_muted))
-                gravity = Gravity.CENTER
-                setPadding(0, (1 * dp).toInt(), 0, 0)
+                maxLines = 2
+                ellipsize = android.text.TextUtils.TruncateAt.END
+                setPadding(0, (5 * dp).toInt(), 0, 0)
             }
-            column.addView(subtitleView)
+            content.addView(subtitleView)
         }
 
         val valueChip = TextView(this).apply {
             text = valueText.ifBlank { "…" }
             textSize = 11f
             typeface = Typeface.MONOSPACE
-            gravity = Gravity.CENTER
             setBackgroundResource(if (ok) R.drawable.bg_pipeline_value_chip else R.drawable.bg_pipeline_value_chip_error)
             setTextColor(ContextCompat.getColor(context, if (ok) R.color.pipeline_green_light_text else R.color.pipeline_red_light_text))
-            setPadding((8 * dp).toInt(), (5 * dp).toInt(), (8 * dp).toInt(), (5 * dp).toInt())
-            val maxW = (resources.displayMetrics.widthPixels * 0.7).toInt()
+            setPadding((7 * dp).toInt(), (4 * dp).toInt(), (7 * dp).toInt(), (4 * dp).toInt())
+            maxLines = 2
+            ellipsize = android.text.TextUtils.TruncateAt.END
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT
-            ).apply {
-                topMargin = (4 * dp).toInt()
-            }
-            maxWidth = maxW
+            ).apply { topMargin = (7 * dp).toInt() }
         }
-        column.addView(valueChip)
+        content.addView(valueChip)
 
-        flowContainer.addView(column)
+        val statusRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { topMargin = (8 * dp).toInt() }
+        }
+        val statusIcon = android.widget.ImageView(this).apply {
+            setImageResource(if (ok) R.drawable.ic_status_success else R.drawable.ic_status_error)
+            imageTintList = android.content.res.ColorStateList.valueOf(accentColor)
+            layoutParams = LinearLayout.LayoutParams((11 * dp).toInt(), (11 * dp).toInt()).apply {
+                marginEnd = (5 * dp).toInt()
+            }
+        }
+        statusRow.addView(statusIcon)
+        val statusText = TextView(this).apply {
+            text = getString(if (ok) R.string.pipeline_node_status_ok else R.string.pipeline_node_status_error)
+            textSize = 10.5f
+            setTypeface(typeface, Typeface.BOLD)
+            setTextColor(accentColor)
+        }
+        statusRow.addView(statusText)
+        content.addView(statusRow)
+
+        card.addView(content)
+        flowContainer.addView(card)
     }
 
+    /** سهم أفقي يصل بين بطاقتين متتاليتين في التدفق (بدل السهم الرأسي في التصميم القديم). */
     private fun addArrow() {
+        val dp = resources.displayMetrics.density
         val arrow = android.widget.ImageView(this).apply {
             setImageResource(R.drawable.ic_pipeline_arrow_down)
+            rotation = -90f
             layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-            ).apply { gravity = Gravity.CENTER_HORIZONTAL }
+                (20 * dp).toInt(),
+                (14 * dp).toInt()
+            ).apply {
+                gravity = Gravity.CENTER_VERTICAL
+                leftMargin = (6 * dp).toInt()
+                rightMargin = (6 * dp).toInt()
+            }
         }
         flowContainer.addView(arrow)
     }
