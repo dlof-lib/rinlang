@@ -14,6 +14,7 @@
         android:orientation="horizontal"
         android:gravity="center_vertical"
         android:background="@color/pipeline_header_bg"
+        android:elevation="3dp"
         android:paddingStart="16dp"
         android:paddingEnd="12dp"
         android:paddingTop="16dp"
@@ -54,6 +55,8 @@
                 android:textColor="@color/pipeline_header_subtext"
                 android:textSize="12sp"
                 android:layout_marginTop="1dp"
+                android:ellipsize="end"
+                android:singleLine="true"
                 tools:text="@container.pipe = sales_pipeline" />
         </LinearLayout>
 
@@ -98,6 +101,7 @@
                 android:textSize="12sp"
                 android:padding="12dp"
                 android:background="@drawable/bg_pipeline_code_card"
+                android:elevation="1dp"
                 android:textColor="@color/pipeline_text_primary"
                 tools:text="@container.pipe=sales_pipeline" />
 
@@ -108,6 +112,7 @@
                 android:orientation="vertical"
                 android:gravity="center_horizontal"
                 android:background="@drawable/bg_pipeline_panel_card"
+                android:elevation="1dp"
                 android:padding="14dp"
                 android:layout_marginTop="16dp">
 
@@ -128,6 +133,7 @@
                 android:orientation="horizontal"
                 android:gravity="center_vertical"
                 android:background="@drawable/bg_pipeline_status_neutral"
+                android:elevation="1dp"
                 android:padding="14dp"
                 android:layout_marginTop="16dp">
 
