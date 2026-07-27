@@ -195,6 +195,52 @@ object AuthRepository {
             .addOnFailureListener { callback(false) }
     }
 
+    // ---------------------------------------------------------------------
+    // الانتساب لناشر (متابعة حساب، وليس متابعة حزمة بعينها) — تُخزَّن تحت
+    // users/{publisherUid}/subscribers/{subscriberUid} بنفس أسلوب "الإعجاب" في
+    // PackageRepository.toggleLike، مع عدّاد subscriberCount على مستوى صاحب الحساب.
+    // ---------------------------------------------------------------------
+
+    /** يجلب هل [subscriberUid] منتسِب حالياً لناشر [publisherUid] أم لا. */
+    fun fetchSubscriptionState(publisherUid: String, subscriberUid: String, callback: (subscribed: Boolean) -> Unit) {
+        usersRef().child(publisherUid).child("subscribers").child(subscriberUid)
+            .addListenerForSingleValueEvent(object : ValueEventListener {
+                override fun onDataChange(snapshot: DataSnapshot) = callback(snapshot.exists())
+                override fun onCancelled(error: DatabaseError) = callback(false)
+            })
+    }
+
+    /**
+     * يبدّل انتساب [subscriberUid] لناشر [publisherUid]: يزيل الانتساب وينقص subscriberCount
+     * إن كان منتسِباً مسبقاً، أو يسجّله ويزيد subscriberCount إن لم يكن. يُعيد عبر [callback]
+     * الحالة الجديدة (subscribed) ونجاح العملية، لتحديث الواجهة تفاؤلياً ثم التراجع عند الفشل.
+     */
+    fun toggleSubscription(publisherUid: String, subscriberUid: String, callback: (subscribed: Boolean, success: Boolean) -> Unit) {
+        val subRef = usersRef().child(publisherUid).child("subscribers").child(subscriberUid)
+        subRef.addListenerForSingleValueEvent(object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                val alreadySubscribed = snapshot.exists()
+                val newState = !alreadySubscribed
+                val writeTask = if (newState) subRef.setValue(true) else subRef.removeValue()
+                writeTask
+                    .addOnSuccessListener {
+                        val countRef = usersRef().child(publisherUid).child("subscriberCount")
+                        countRef.addListenerForSingleValueEvent(object : ValueEventListener {
+                            override fun onDataChange(countSnap: DataSnapshot) {
+                                val current = countSnap.getValue(Long::class.java) ?: 0L
+                                val updated = if (newState) current + 1 else (current - 1).coerceAtLeast(0L)
+                                countRef.setValue(updated)
+                                callback(newState, true)
+                            }
+                            override fun onCancelled(error: DatabaseError) = callback(alreadySubscribed, false)
+                        })
+                    }
+                    .addOnFailureListener { callback(alreadySubscribed, false) }
+            }
+            override fun onCancelled(error: DatabaseError) = callback(false, false)
+        })
+    }
+
     private fun mapFirebaseError(raw: String?): String {
         val text = raw ?: return "حدث خطأ غير متوقع"
         return when {
