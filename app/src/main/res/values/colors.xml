@@ -6,6 +6,7 @@
     <color name="rin_on_toolbar">#F3F4F6</color>
     <color name="rin_on_toolbar_dim">#9198A3</color>
     <color name="rin_accent">#7C5CFF</color>
+    <color name="rin_accent_border_subtle">#4D7C5CFF</color>
     <color name="rin_accent_pressed">#6A47E8</color>
     <color name="rin_editor_bg">#1B1D22</color>
     <color name="rin_editor_surface_border">#2A2D34</color>
