@@ -10,7 +10,7 @@ import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.appcompat.app.AppCompatActivity
+import com.dlof.rinlang.network.BaseConnectivityActivity
 import com.dlof.rinlang.ProjectManager
 import com.dlof.rinlang.R
 import com.dlof.rinlang.auth.AuthRepository
@@ -18,7 +18,7 @@ import com.dlof.rinlang.auth.LoginActivity
 import com.google.android.material.chip.Chip
 import com.google.android.material.chip.ChipGroup
 
-class PublishPackageActivity : AppCompatActivity() {
+class PublishPackageActivity : BaseConnectivityActivity() {
 
     companion object {
         const val EXTRA_PROJECT_NAME = "extra_project_name"
@@ -147,6 +147,7 @@ class PublishPackageActivity : AppCompatActivity() {
                 Toast.makeText(this, R.string.error_required_fields, Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
+            if (!isOnline()) { showOfflineOverlay(); return@setOnClickListener }
 
             val dependencies = parseDependencies(edtDependencies.text.toString())
 
