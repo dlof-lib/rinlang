@@ -234,4 +234,7 @@
             </LinearLayout>
         </LinearLayout>
     </androidx.core.widget.NestedScrollView>
+
+    <include layout="@layout/bottom_nav_bar" />
+
 </LinearLayout>
