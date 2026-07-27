@@ -1,5 +1,6 @@
 package com.dlof.rinlang.store
 
+import android.app.AlertDialog
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
@@ -152,18 +153,110 @@ class PublishPackageActivity : BaseConnectivityActivity() {
 
             val dependencies = parseDependencies(edtDependencies.text.toString())
 
+            // سياسات النشر التي لا تحتاج شبكة (اسم/وصف/إصدار/تبعيات) تُتحقَّق محلياً فوراً،
+            // قبل أي اتصال، حتى لا نُتعب الشبكة أو المستخدم بخطوات لاحقة ستُرفض أصلاً.
+            var denied = false
+            denyOrElse(PublishPolicy.validateName(name)) { denied = true }
+            if (!denied) denyOrElse(PublishPolicy.validateDescription(description)) { denied = true }
+            if (!denied) denyOrElse(PublishPolicy.validateVersionFormat(version)) { denied = true }
+            if (!denied) denyOrElse(PublishPolicy.validateDependencies(name, dependencies)) { denied = true }
+            if (denied) return@setOnClickListener
+
             setLoading(true)
-            // منع تشابه الأسماء بين كل المستخدمين (وليس فقط تكرار حرفي): يُتحقَّق قبل حتى تجهيز
-            // ملف الحزمة، حتى لا نُضيّع وقت المستخدم في ضغط/ترميز حزمة سيُرفض نشرها لاحقاً.
-            PackageRepository.isNameAvailable(name) { available ->
-                if (!available) {
+            runNetworkPolicyChecksThenPublish(uid, name, version, description, license, dependencies)
+        }
+    }
+
+    /**
+     * يعرض رسالة [result] ويستدعي [onDenied] إن كانت مرفوضة، وإلا لا يفعل شيئاً. تُستخدَم لتقصير
+     * سلسلة "تحقّق ثم أوقف عند أول رفض" في [btnPublish] دون تكرار نفس الشرط لكل سياسة.
+     */
+    private inline fun denyOrElse(result: PublishPolicy.PolicyResult, onDenied: () -> Unit) {
+        if (result is PublishPolicy.PolicyResult.Denied) {
+            Toast.makeText(this, result.message, Toast.LENGTH_LONG).show()
+            onDenied()
+        }
+    }
+
+    /**
+     * يسلسل بقية سياسات النشر التي تحتاج قراءة من الشبكة، بالترتيب التالي:
+     * توفّر الاسم → ترقّي الإصدار (مقابل كل الإصدارات السابقة بنفس الاسم) → تحذير تشابه الأسماء
+     * مع حزم شهيرة (تحذير غير حاجز) → تحديد معدّل النشر (rate limiting) حسب ثقة الناشر. أي رفض
+     * في أي خطوة يوقف السلسلة فوراً ويعرض رسالته.
+     */
+    private fun runNetworkPolicyChecksThenPublish(
+        uid: String,
+        name: String,
+        version: String,
+        description: String,
+        license: String,
+        dependencies: Map<String, String>
+    ) {
+        PackageRepository.isNameAvailable(name) { available ->
+            if (!available) {
+                setLoading(false)
+                Toast.makeText(this, R.string.error_package_name_taken, Toast.LENGTH_LONG).show()
+                return@isNameAvailable
+            }
+            PackageRepository.fetchExistingVersions(name) { existingVersions ->
+                val progression = PublishPolicy.validateVersionProgression(version, existingVersions)
+                if (progression is PublishPolicy.PolicyResult.Denied) {
                     setLoading(false)
-                    Toast.makeText(this, R.string.error_package_name_taken, Toast.LENGTH_LONG).show()
-                    return@isNameAvailable
+                    Toast.makeText(this, progression.message, Toast.LENGTH_LONG).show()
+                    return@fetchExistingVersions
                 }
-                publishNow(uid, name, version, description, license, dependencies)
+                PackageRepository.fetchAllPackages { allPackages ->
+                    val similarNames = PublishPolicy.findSimilarPopularNames(name, allPackages)
+                    if (similarNames.isNotEmpty()) {
+                        setLoading(false)
+                        confirmSimilarNameThenContinue(similarNames) {
+                            setLoading(true)
+                            checkRateLimitThenPublish(uid, name, version, description, license, dependencies)
+                        }
+                    } else {
+                        checkRateLimitThenPublish(uid, name, version, description, license, dependencies)
+                    }
+                }
             }
         }
+    }
+
+    /** يتحقق من حصّة النشر خلال 24 ساعة حسب مستوى ثقة الناشر (راجع [PublisherBadgeUtils])، ثم ينشر إن كانت النتيجة مسموحة. */
+    private fun checkRateLimitThenPublish(
+        uid: String,
+        name: String,
+        version: String,
+        description: String,
+        license: String,
+        dependencies: Map<String, String>
+    ) {
+        PackageRepository.fetchUserPackages(uid) { ownPackages ->
+            val rateLimit = PublishPolicy.checkRateLimit(
+                recentPublishTimestamps = ownPackages.map { it.createdAt },
+                isVerifiedPublisher = PublisherBadgeUtils.isEligible(ownPackages)
+            )
+            if (rateLimit is PublishPolicy.PolicyResult.Denied) {
+                setLoading(false)
+                Toast.makeText(this, rateLimit.message, Toast.LENGTH_LONG).show()
+                return@fetchUserPackages
+            }
+            publishNow(uid, name, version, description, license, dependencies)
+        }
+    }
+
+    /**
+     * يحذّر الناشر أن الاسم الذي اختاره قريب جداً (خوارزمية Levenshtein) من حزمة شهيرة موجودة
+     * فعلاً، ويطلب تأكيداً صريحاً قبل المتابعة — تحذير وقائي ضد انتحال الأسماء (typosquatting)،
+     * وليس رفضاً تلقائياً، فقد يكون الاسم مشروعاً تماماً.
+     */
+    private fun confirmSimilarNameThenContinue(similarNames: List<String>, onConfirmed: () -> Unit) {
+        val namesList = similarNames.joinToString("، ")
+        AlertDialog.Builder(this)
+            .setTitle(R.string.similar_name_warning_title)
+            .setMessage(getString(R.string.similar_name_warning_message, namesList))
+            .setPositiveButton(R.string.action_publish_submit) { _, _ -> onConfirmed() }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
     }
 
     private fun publishNow(
@@ -190,6 +283,14 @@ class PublishPackageActivity : BaseConnectivityActivity() {
                         customReadmeUri = selectedReadmeUri,
                         customLicenseUri = selectedLicenseUri
                     )
+
+                    val sizeCheck = PublishPolicy.validateSize(zip.length())
+                    if (sizeCheck is PublishPolicy.PolicyResult.Denied) {
+                        setLoading(false)
+                        Toast.makeText(this, sizeCheck.message, Toast.LENGTH_LONG).show()
+                        return@fetchProfile
+                    }
+
                     val base64 = PackagingUtils.encodeFileToBase64(zip)
                     val fileName = "$name.${PackagingUtils.PACKAGE_EXTENSION}"
 
