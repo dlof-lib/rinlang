@@ -19,5 +19,19 @@ data class RinPackage(
     val sizeBytes: Long = 0L,
     val downloadCount: Long = 0L,
     val createdAt: Long = 0L,
-    val base64Data: String = ""
-)
+    val base64Data: String = "",
+    /** تصنيف الحزمة لعرضها ضمن فلاتر المتجر (مثال: "رياضيات"، "نصوص"، "بيانات"). */
+    val category: String = "عام",
+    /** مجموع كل تقييمات المستخدمين (1-5) وعددها، لحساب المتوسط: ratingSum / ratingCount. */
+    val ratingSum: Long = 0L,
+    val ratingCount: Long = 0L,
+    /**
+     * تبعيات الحزمة: اسم الحزمة المطلوبة -> شرط الإصدار (مثال: "^1.2.0"، ">=2.0.0"، "1.0.0").
+     * تُتحقَّق هذه الشروط عند التثبيت مقابل المكتبات المثبَّتة فعلياً في مشروع المستخدم.
+     */
+    val dependencies: Map<String, String> = emptyMap()
+) {
+    /** متوسط التقييم من 0 إلى 5، أو 0 إن لم يقيّمه أحد بعد. */
+    val averageRating: Double
+        get() = if (ratingCount <= 0L) 0.0 else ratingSum.toDouble() / ratingCount.toDouble()
+}
