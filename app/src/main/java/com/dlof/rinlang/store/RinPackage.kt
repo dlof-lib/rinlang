@@ -6,6 +6,10 @@ package com.dlof.rinlang.store
  * اختارها الناشر) مُرمَّز base64 داخل حقل نصي واحد — بلا Firebase Storage مدفوع.
  *
  * constructor بلا معاملات مطلوب لإعادة البناء التلقائي عبر DataSnapshot.getValue(...).
+ *
+ * تُنفِّذ java.io.Serializable (بدل Parcelable) لتفادي إضافة plugin kotlin-parcelize؛ يُستخدم
+ * هذا فقط لتمرير الحزمة كاملة من شاشة المتجر إلى شاشة تفاصيل الحزمة (PackageDetailActivity)
+ * عبر Intent، دون أي أثر على التخزين في Realtime Database.
  */
 data class RinPackage(
     val id: String = "",
@@ -32,7 +36,7 @@ data class RinPackage(
      * تُتحقَّق هذه الشروط عند التثبيت مقابل المكتبات المثبَّتة فعلياً في مشروع المستخدم.
      */
     val dependencies: Map<String, String> = emptyMap()
-) {
+) : java.io.Serializable {
     /** متوسط التقييم من 0 إلى 5، أو 0 إن لم يقيّمه أحد بعد. */
     val averageRating: Double
         get() = if (ratingCount <= 0L) 0.0 else ratingSum.toDouble() / ratingCount.toDouble()
