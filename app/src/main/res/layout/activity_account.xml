@@ -133,6 +133,39 @@
                         android:textSize="14sp" />
                 </LinearLayout>
 
+                <!-- قسم "حزمي المنشورة": قائمة حزم المستخدم في متجر Rin مع زر حذف لكل حزمة -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:layout_marginTop="14dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="8dp"
+                        android:text="@string/account_my_packages_title"
+                        android:textColor="@color/rin_on_toolbar"
+                        android:textSize="14sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/txtMyPackagesEmpty"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="8dp"
+                        android:text="@string/account_my_packages_empty"
+                        android:textColor="@color/rin_editor_hint"
+                        android:textSize="13sp"
+                        android:visibility="gone" />
+
+                    <LinearLayout
+                        android:id="@+id/containerMyPackages"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical" />
+                </LinearLayout>
+
                 <Button
                     android:id="@+id/btnLogout"
                     android:layout_width="match_parent"
