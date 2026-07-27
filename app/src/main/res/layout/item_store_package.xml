@@ -1,12 +1,24 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  بطاقة حزمة داخل متجر Rin — نسخة مطوَّرة بصرياً:
+  • شريط تمييز متدرّج على الحافة البادئة للبطاقة (bg_store_package_card)
+  • شارة حرف أول متدرّجة بدل اللون المسطّح
+  • شريحة تصنيف بلون التمييز بدل الشريحة الرمادية المحايدة
+  • سطر تبعيات على هيئة وسم (tag) واضح بدل نص عادي
+  • زر تثبيت بتدرّج بنفسجي (نفس هوية زر "تشغيل" الرئيسي) + أيقونة
+  كل معرّفات (id) العناصر المرتبطة بالكود (PackageAdapter.VH) بقيت كما هي بلا أي تغيير.
+-->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/rootPackageCard"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="vertical"
-    android:background="@drawable/bg_list_card"
-    android:layout_margin="4dp"
-    android:padding="12dp"
+    android:background="@drawable/bg_store_package_card"
+    android:layout_margin="5dp"
+    android:paddingStart="16dp"
+    android:paddingEnd="14dp"
+    android:paddingTop="14dp"
+    android:paddingBottom="14dp"
     android:clickable="true"
     android:focusable="true">
 
@@ -14,19 +26,19 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
-        android:gravity="center_vertical">
+        android:gravity="top">
 
-        <!-- شارة بأول حرف من اسم الحزمة، بديل بصري خفيف الوزن عن أيقونة مخصصة لكل ناشر -->
+        <!-- شارة بأول حرف من اسم الحزمة، بخلفية متدرّجة تمنحها طابعاً أكثر احترافية -->
         <TextView
             android:id="@+id/txtPackageInitial"
-            android:layout_width="32dp"
-            android:layout_height="32dp"
-            android:layout_marginEnd="10dp"
-            android:background="@drawable/bg_icon_badge_accent"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:layout_marginEnd="12dp"
+            android:background="@drawable/bg_package_icon_gradient"
             android:gravity="center"
             android:textColor="@android:color/white"
             android:textStyle="bold"
-            android:textSize="14sp" />
+            android:textSize="16sp" />
 
         <LinearLayout
             android:layout_width="0dp"
@@ -42,20 +54,20 @@
 
                 <TextView
                     android:id="@+id/txtPackageName"
-                    android:layout_width="wrap_content"
+                    android:layout_width="0dp"
+                    android:layout_weight="1"
                     android:layout_height="wrap_content"
-                    android:maxWidth="220dp"
                     android:ellipsize="end"
                     android:singleLine="true"
-                    android:textSize="15sp"
+                    android:textSize="15.5sp"
                     android:textStyle="bold"
                     android:textColor="@color/rin_on_toolbar" />
 
                 <ImageView
                     android:id="@+id/imgPackageVerifiedBadge"
-                    android:layout_width="14dp"
-                    android:layout_height="14dp"
-                    android:layout_marginStart="4dp"
+                    android:layout_width="15dp"
+                    android:layout_height="15dp"
+                    android:layout_marginStart="5dp"
                     android:src="@drawable/ic_verified_badge"
                     android:visibility="gone"
                     android:contentDescription="@string/verified_publisher_badge_description" />
@@ -65,7 +77,7 @@
                 android:id="@+id/txtPackageMeta"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="2dp"
+                android:layout_marginTop="3dp"
                 android:textSize="12sp"
                 android:textColor="@color/rin_editor_hint" />
         </LinearLayout>
@@ -74,32 +86,44 @@
             android:id="@+id/txtPackageCategory"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:background="@drawable/bg_download_chip"
-            android:paddingHorizontal="8dp"
-            android:paddingVertical="3dp"
+            android:layout_marginStart="8dp"
+            android:background="@drawable/bg_category_chip"
+            android:paddingHorizontal="10dp"
+            android:paddingVertical="4dp"
             android:textSize="10.5sp"
-            android:textColor="@color/rin_on_toolbar_dim" />
+            android:textStyle="bold"
+            android:textColor="@color/rin_accent" />
     </LinearLayout>
 
     <TextView
         android:id="@+id/txtPackageDescription"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="6dp"
+        android:layout_marginTop="10dp"
         android:textSize="12.5sp"
+        android:lineSpacingExtra="2dp"
         android:textColor="@color/rin_editor_text"
         android:maxLines="3"
         android:ellipsize="end" />
 
     <TextView
         android:id="@+id/txtPackageDependencies"
-        android:layout_width="match_parent"
+        android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginTop="4dp"
-        android:textSize="11sp"
+        android:layout_marginTop="8dp"
+        android:background="@drawable/bg_dependency_chip"
+        android:paddingHorizontal="9dp"
+        android:paddingVertical="4dp"
+        android:textSize="10.5sp"
         android:fontFamily="monospace"
         android:textColor="@color/syntax_tag"
         android:visibility="gone" />
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:layout_marginTop="12dp"
+        android:background="@color/rin_divider" />
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -144,13 +168,13 @@
         <Button
             android:id="@+id/btnRatePackage"
             android:layout_width="wrap_content"
-            android:layout_height="32dp"
+            android:layout_height="34dp"
             android:layout_marginStart="8dp"
             android:minWidth="0dp"
             android:minHeight="0dp"
             android:insetTop="0dp"
             android:insetBottom="0dp"
-            android:paddingHorizontal="12dp"
+            android:paddingHorizontal="13dp"
             android:text="@string/action_rate_package"
             android:textAllCaps="false"
             android:textSize="11.5sp"
@@ -160,8 +184,8 @@
 
         <ImageButton
             android:id="@+id/btnReportPackage"
-            android:layout_width="32dp"
-            android:layout_height="32dp"
+            android:layout_width="34dp"
+            android:layout_height="34dp"
             android:layout_marginStart="6dp"
             android:background="@drawable/bg_toolbar_btn_ghost"
             android:src="@drawable/ic_report_flag"
@@ -173,16 +197,19 @@
     <Button
         android:id="@+id/btnInstallPackage"
         android:layout_width="match_parent"
-        android:layout_height="36dp"
-        android:layout_marginTop="8dp"
+        android:layout_height="40dp"
+        android:layout_marginTop="10dp"
         android:minWidth="0dp"
         android:minHeight="0dp"
         android:insetTop="0dp"
         android:insetBottom="0dp"
+        android:drawableStart="@drawable/ic_log_download"
+        android:drawablePadding="8dp"
         android:text="@string/action_install"
         android:textAllCaps="false"
-        android:textSize="12.5sp"
-        android:background="@drawable/bg_toolbar_btn_primary"
+        android:textSize="13sp"
+        android:textStyle="bold"
+        android:background="@drawable/bg_install_button_premium"
         android:textColor="@android:color/white" />
 
 </LinearLayout>
