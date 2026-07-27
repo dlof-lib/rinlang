@@ -127,6 +127,26 @@
                 android:textColorHint="@color/rin_editor_hint"
                 android:textSize="13sp" />
 
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:text="@string/hint_package_license"
+                android:textColor="@color/rin_on_toolbar"
+                android:textSize="12sp"
+                android:layout_marginBottom="4dp" />
+
+            <EditText
+                android:id="@+id/edtPackageLicense"
+                android:layout_width="match_parent"
+                android:layout_height="52dp"
+                android:background="@drawable/bg_input_field"
+                android:paddingHorizontal="16dp"
+                android:textColor="@color/rin_editor_text"
+                android:textColorHint="@color/rin_editor_hint"
+                android:textSize="14sp"
+                android:singleLine="true" />
+
             <Button
                 android:id="@+id/btnPickAssets"
                 android:layout_width="match_parent"
@@ -146,6 +166,56 @@
                 android:gravity="center"
                 android:textColor="@color/rin_editor_hint"
                 android:textSize="12sp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:text="@string/hint_package_custom_docs"
+                android:textColor="@color/rin_editor_hint"
+                android:textSize="11.5sp" />
+
+            <Button
+                android:id="@+id/btnPickReadme"
+                android:layout_width="match_parent"
+                android:layout_height="44dp"
+                android:layout_marginTop="8dp"
+                android:background="@drawable/bg_toolbar_btn_ghost"
+                android:text="@string/action_pick_readme"
+                android:textAllCaps="false"
+                android:textColor="@color/rin_on_toolbar"
+                android:textSize="13sp" />
+
+            <TextView
+                android:id="@+id/txtReadmeSelected"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:gravity="center"
+                android:textColor="@color/rin_accent"
+                android:textSize="12sp"
+                android:visibility="gone" />
+
+            <Button
+                android:id="@+id/btnPickLicense"
+                android:layout_width="match_parent"
+                android:layout_height="44dp"
+                android:layout_marginTop="10dp"
+                android:background="@drawable/bg_toolbar_btn_ghost"
+                android:text="@string/action_pick_license"
+                android:textAllCaps="false"
+                android:textColor="@color/rin_on_toolbar"
+                android:textSize="13sp" />
+
+            <TextView
+                android:id="@+id/txtLicenseSelected"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:gravity="center"
+                android:textColor="@color/rin_accent"
+                android:textSize="12sp"
+                android:visibility="gone" />
 
             <Button
                 android:id="@+id/btnPublish"
