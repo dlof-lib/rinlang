@@ -20,14 +20,20 @@
         android:supportsRtl="true">
 
         <activity
-            android:name=".MainActivity"
+            android:name=".SplashActivity"
             android:exported="true"
-            android:windowSoftInputMode="adjustResize">
+            android:theme="@style/Theme.RinLang.Splash">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="false"
+            android:launchMode="singleTop"
+            android:windowSoftInputMode="adjustResize" />
 
         <activity
             android:name=".PipelineRunnerActivity"
@@ -37,11 +43,17 @@
 
         <activity
             android:name=".ProjectsActivity"
-            android:exported="false" />
+            android:exported="false"
+            android:launchMode="singleTop" />
 
         <activity
             android:name=".FilesActivity"
             android:exported="false" />
+
+        <activity
+            android:name=".MoreActivity"
+            android:exported="false"
+            android:launchMode="singleTop" />
 
         <!-- شاشة "المكتبات" الجديدة: رفع/إنشاء/تعديل مكتبات lib/*.og.rin واستدعاؤها من المحرر -->
         <activity
@@ -75,7 +87,8 @@
         <!-- ===== مرحلة 2 من "متجر Rin": تصفّح الحزم / نشر مكتبة كحزمة / حسابي ===== -->
         <activity
             android:name=".store.RinStoreActivity"
-            android:exported="false" />
+            android:exported="false"
+            android:launchMode="singleTop" />
 
         <activity
             android:name=".store.PackageDetailActivity"
@@ -88,7 +101,8 @@
 
         <activity
             android:name=".store.AccountActivity"
-            android:exported="false" />
+            android:exported="false"
+            android:launchMode="singleTop" />
 
         <!-- ===== "Rin Extensions Marketplace": متجر رسمي منفصل للإضافات والأدوات ===== -->
         <activity
