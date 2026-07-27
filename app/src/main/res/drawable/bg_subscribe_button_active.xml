@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- خلفية زر "تم الانتساب" (مُنتسِب فعلاً): تعبئة كاملة بلون العلامة، تمييزاً واضحاً عن الحالة
+     الأولى (bg_subscribe_button.xml). الضغط عليها مجدداً يُلغي الانتساب. -->
+<ripple xmlns:android="http://schemas.android.com/apk/res/android"
+    android:color="@color/rin_ghost_ripple">
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="@color/rin_accent" />
+            <corners android:radius="8dp" />
+        </shape>
+    </item>
+</ripple>
