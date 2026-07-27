@@ -16,6 +16,8 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
+import com.dlof.rinlang.BottomNavHelper
+import com.dlof.rinlang.BottomNavTab
 import com.dlof.rinlang.network.BaseConnectivityActivity
 import com.dlof.rinlang.R
 import com.dlof.rinlang.auth.AuthRepository
@@ -46,6 +48,7 @@ class AccountActivity : BaseConnectivityActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_account)
+        BottomNavHelper.setup(this, BottomNavTab.PROFILE)
 
         findViewById<TextView>(R.id.txtToolbarTitle).text = getString(R.string.account_title)
         findViewById<View>(R.id.btnToolbarBack).setOnClickListener { finish() }
