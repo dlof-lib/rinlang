@@ -27,6 +27,8 @@ object PackageRepository {
         publisherName: String,
         fileName: String,
         base64Data: String,
+        category: String = "عام",
+        dependencies: Map<String, String> = emptyMap(),
         callback: (success: Boolean, error: String?) -> Unit
     ) {
         val ref = packagesRef().push()
@@ -44,7 +46,11 @@ object PackageRepository {
             "sizeBytes" to (base64Data.length * 3L / 4),
             "downloadCount" to 0L,
             "createdAt" to System.currentTimeMillis(),
-            "base64Data" to base64Data
+            "base64Data" to base64Data,
+            "category" to category.ifBlank { "عام" },
+            "ratingSum" to 0L,
+            "ratingCount" to 0L,
+            "dependencies" to dependencies
         )
 
         ref.setValue(payload)
@@ -74,6 +80,55 @@ object PackageRepository {
             }
 
             override fun onCancelled(error: DatabaseError) {}
+        })
+    }
+
+    /** يجلب تقييم [uid] الحالي لهذه الحزمة (1-5)، أو null إن لم يقيّمها بعد. */
+    fun fetchUserRating(packageId: String, uid: String, callback: (Int?) -> Unit) {
+        packagesRef().child(packageId).child("ratings").child(uid)
+            .addListenerForSingleValueEvent(object : ValueEventListener {
+                override fun onDataChange(snapshot: DataSnapshot) =
+                    callback(snapshot.getValue(Long::class.java)?.toInt())
+
+                override fun onCancelled(error: DatabaseError) = callback(null)
+            })
+    }
+
+    /**
+     * يسجّل/يحدّث تقييم [uid] لحزمة [packageId] بقيمة [value] (1-5)، ويعدّل مجموع/عدد
+     * التقييمات على مستوى الحزمة عبر transaction (يعوّض تقييماً سابقاً لنفس المستخدم إن وُجد
+     * بدل مضاعفته في المجموع).
+     */
+    fun submitRating(packageId: String, uid: String, value: Int, callback: (Boolean) -> Unit) {
+        val ratingRef = packagesRef().child(packageId).child("ratings").child(uid)
+        ratingRef.addListenerForSingleValueEvent(object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                val previous = snapshot.getValue(Long::class.java)?.toInt()
+                ratingRef.setValue(value)
+                    .addOnSuccessListener {
+                        val pkgRef = packagesRef().child(packageId)
+                        pkgRef.child("ratingSum").addListenerForSingleValueEvent(object : ValueEventListener {
+                            override fun onDataChange(sumSnap: DataSnapshot) {
+                                val currentSum = sumSnap.getValue(Long::class.java) ?: 0L
+                                val newSum = currentSum - (previous ?: 0) + value
+                                pkgRef.child("ratingSum").setValue(newSum)
+                                if (previous == null) {
+                                    pkgRef.child("ratingCount").addListenerForSingleValueEvent(object : ValueEventListener {
+                                        override fun onDataChange(countSnap: DataSnapshot) {
+                                            val currentCount = countSnap.getValue(Long::class.java) ?: 0L
+                                            pkgRef.child("ratingCount").setValue(currentCount + 1)
+                                        }
+                                        override fun onCancelled(error: DatabaseError) {}
+                                    })
+                                }
+                                callback(true)
+                            }
+                            override fun onCancelled(error: DatabaseError) = callback(false)
+                        })
+                    }
+                    .addOnFailureListener { callback(false) }
+            }
+            override fun onCancelled(error: DatabaseError) = callback(false)
         })
     }
 }
