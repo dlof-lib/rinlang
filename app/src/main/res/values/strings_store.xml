@@ -85,6 +85,17 @@
         <item>سبب آخر</item>
     </string-array>
 
+    <!-- صفحة تفاصيل الحزمة (شبيهة بصفحة مستودع على GitHub): README + الترخيص + قائمة الملفات -->
+    <string name="package_detail_section_readme">README.md</string>
+    <string name="package_detail_section_license">الترخيص</string>
+    <string name="package_detail_section_files">ملفات الحزمة</string>
+    <string name="package_detail_no_readme">لا يوجد ملف README.md في هذه الحزمة.</string>
+    <string name="package_detail_no_license">لا يوجد ملف ترخيص في هذه الحزمة.</string>
+    <string name="package_detail_meta_format">%1$s • %2$s • %3$d تنزيل • ★ %4$.1f (%5$d تقييم)</string>
+
+    <!-- شارة "ناشر موثّق": تُمنح تلقائياً لمن لديه حزمة تجاوزت 1000 تنزيل بتقييم 4 نجوم فأكثر -->
+    <string name="verified_publisher_badge_description">ناشر موثّق</string>
+
     <!-- شاشة حسابي -->
     <string name="account_title">حسابي</string>
     <string name="account_not_logged_in">لم تسجّل الدخول بعد</string>
