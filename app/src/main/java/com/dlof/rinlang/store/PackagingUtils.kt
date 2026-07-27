@@ -36,7 +36,11 @@ object PackagingUtils {
         publisherName: String,
         license: String,
         extraAssetUris: List<Uri>,
-        dependencies: Map<String, String> = emptyMap()
+        dependencies: Map<String, String> = emptyMap(),
+        /** ملف README.md اختاره الناشر عبر SAF؛ إن كان null يُولَّد ملف تلقائياً. */
+        customReadmeUri: Uri? = null,
+        /** ملف ترخيص (LICENSE/LICENSE.txt...) اختاره الناشر عبر SAF؛ إن كان null يُولَّد قالب MIT تلقائياً. */
+        customLicenseUri: Uri? = null
     ): File {
         val cacheDir = File(context.cacheDir, "store_publish").apply { mkdirs() }
         val zipFile = File(cacheDir, "$packageName.zip")
@@ -48,14 +52,17 @@ object PackagingUtils {
             libraryFile.inputStream().use { it.copyTo(zipOut) }
             zipOut.closeEntry()
 
-            // 2) README.md — يُولَّد تلقائياً بالكامل من اسم المكتبة والناشر والوصف
-            val readme = buildReadme(packageName, version, publisherName, license, description, libraryFile.name, dependencies)
+            // 2) README.md — يُستخدَم ملف الناشر إن رفع واحداً، وإلا يُولَّد تلقائياً من اسم
+            // المكتبة والناشر والوصف
+            val readme = readTextUriOrNull(context, customReadmeUri)
+                ?: buildReadme(packageName, version, publisherName, license, description, libraryFile.name, dependencies)
             zipOut.putNextEntry(ZipEntry("README.md"))
             zipOut.write(readme.toByteArray(Charsets.UTF_8))
             zipOut.closeEntry()
 
-            // 3) LICENSE — قالب MIT تلقائي باسم الناشر والسنة الحالية
-            val licenseText = buildLicense(publisherName)
+            // 3) LICENSE — يُستخدَم ملف الناشر إن رفع واحداً، وإلا يُولَّد قالب MIT تلقائي
+            // باسم الناشر والسنة الحالية
+            val licenseText = readTextUriOrNull(context, customLicenseUri) ?: buildLicense(publisherName)
             zipOut.putNextEntry(ZipEntry("LICENSE"))
             zipOut.write(licenseText.toByteArray(Charsets.UTF_8))
             zipOut.closeEntry()
@@ -156,6 +163,16 @@ object PackagingUtils {
             |OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
             |SOFTWARE.
         """.trimMargin()
+    }
+
+    /** يقرأ محتوى [uri] كنص UTF-8، أو يرجع null إن كان [uri] فارغاً أو تعذّرت قراءته. */
+    private fun readTextUriOrNull(context: Context, uri: Uri?): String? {
+        if (uri == null) return null
+        return try {
+            context.contentResolver.openInputStream(uri)?.use { it.readBytes().toString(Charsets.UTF_8) }
+        } catch (t: Throwable) {
+            null
+        }
     }
 
     private fun queryDisplayName(context: Context, uri: Uri): String? = try {
