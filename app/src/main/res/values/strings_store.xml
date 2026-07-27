@@ -96,6 +96,11 @@
     <!-- شارة "ناشر موثّق": تُمنح تلقائياً لمن لديه حزمة تجاوزت 1000 تنزيل بتقييم 4 نجوم فأكثر -->
     <string name="verified_publisher_badge_description">ناشر موثّق</string>
 
+    <!-- زر الإعجاب في صفحة تفاصيل الحزمة -->
+    <string name="action_like_package">إعجاب</string>
+    <string name="like_package_login_required">سجّل الدخول أولاً حتى تتمكن من الإعجاب بالحزمة</string>
+    <string name="like_count_format">%1$d</string>
+
     <!-- شاشة حسابي -->
     <string name="account_title">حسابي</string>
     <string name="account_not_logged_in">لم تسجّل الدخول بعد</string>
