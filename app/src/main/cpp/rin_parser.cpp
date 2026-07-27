@@ -214,7 +214,8 @@ std::string Parser::readTagKeyword() {
         bool nextIsContextualWord = false;
         if (!nextIsPipe && current + 1 < tokens.size() && tokens[current + 1].type == TokenType::IDENT) {
             const std::string& w = tokens[current + 1].lexeme;
-            nextIsContextualWord = (w == "data" || w == "api" || w == "import" || w == "table" || w == "doc");
+            nextIsContextualWord = (w == "data" || w == "api" || w == "import" || w == "table" || w == "doc" ||
+                                     w == "object" || w == "portal" || w == "block");
         }
         // لا نستهلك '.' إلا إذا كانت متبوعة مباشرة بإحدى هذه الكلمات، وإلا فقد تكون في الحقيقة
         // بداية وسم إغلاق آخر مجاور مثل '.end/container' تلاه '.end/Containers.Group'
@@ -270,11 +271,14 @@ StmtPtr Parser::atBlock() {
     std::string tag = readTagKeyword();
     static const std::vector<std::string> validTags = {
         "container", "container.pipe", "container.data", "container.api", "container.import", "container.table",
-        "container.doc", "Containers.Group", "Volume", "table", "doc"
+        "container.doc", "Containers.Group", "Volume", "table", "doc",
+        // مفاهيم التنسيق والستايل: كائن (Object) / بوابة تنسيق (portal) / كتلة واجهة جاهزة (block)
+        "container.object", "Object", "container.portal", "portal", "container.block", "block"
     };
     if (std::find(validTags.begin(), validTags.end(), tag) == validTags.end()) {
         throw RinError("Unsupported block '@" + tag + "'; expected container, container.pipe, container.data, "
-                        "container.api, container.import, container.table, table, container.doc, doc, Containers.Group, or Volume", atTok.line);
+                        "container.api, container.import, container.table, table, container.doc, doc, "
+                        "container.object, Object, container.portal, portal, container.block, block, Containers.Group, or Volume", atTok.line);
     }
     std::string name = readOptionalName();
     std::vector<StmtPtr> body;
@@ -284,11 +288,19 @@ StmtPtr Parser::atBlock() {
     if (tag == "container" || tag == "container.pipe" || tag == "container.data" ||
         tag == "container.api" || tag == "container.import" ||
         tag == "container.table" || tag == "table" ||
-        tag == "container.doc" || tag == "doc") {
-        // container.table/table (صفوف row + نمط style) و container.doc/doc (مستندات document) يشتركان
-        // في نفس القيود: بيانات نقية، بلا دوال ولا حاويات متداخلة ولا route.
+        tag == "container.doc" || tag == "doc" ||
+        tag == "container.object" || tag == "Object" ||
+        tag == "container.portal" || tag == "portal" ||
+        tag == "container.block" || tag == "block") {
+        // container.table/table (صفوف row + نمط style)، container.doc/doc (مستندات document)، وكذلك
+        // container.object/Object، container.portal/portal، container.block/block الجديدة، تشترك جميعاً
+        // في نفس القيود: بيانات نقية، بلا دوال ولا حاويات متداخلة ولا route. عبارة 'style' مسموحة
+        // بداخل أيٍّ منها (وليس فقط container.table) لضبط نمط العرض (مفهوم التنسيق/الستايل).
         if (tag == "container.data" || tag == "container.table" || tag == "table" ||
-            tag == "container.doc" || tag == "doc") validateDataContainerBody(body);
+            tag == "container.doc" || tag == "doc" ||
+            tag == "container.object" || tag == "Object" ||
+            tag == "container.portal" || tag == "portal" ||
+            tag == "container.block" || tag == "block") validateDataContainerBody(body);
         auto s = std::make_shared<ContainerStmt>();
         s->name = name; s->body = body; s->line = atTok.line;
         if (tag == "container.pipe") s->kind = ContainerKind::PIPE;
@@ -297,6 +309,9 @@ StmtPtr Parser::atBlock() {
         else if (tag == "container.import") s->kind = ContainerKind::IMPORT;
         else if (tag == "container.table" || tag == "table") s->kind = ContainerKind::TABLE;
         else if (tag == "container.doc" || tag == "doc") s->kind = ContainerKind::DOC;
+        else if (tag == "container.object" || tag == "Object") s->kind = ContainerKind::OBJECT;
+        else if (tag == "container.portal" || tag == "portal") s->kind = ContainerKind::PORTAL;
+        else if (tag == "container.block" || tag == "block") s->kind = ContainerKind::BLOCK;
         else s->kind = ContainerKind::PLAIN;
         return s;
     }
