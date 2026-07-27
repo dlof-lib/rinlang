@@ -105,6 +105,10 @@
     <string name="like_package_login_required">سجّل الدخول أولاً حتى تتمكن من الإعجاب بالحزمة</string>
     <string name="like_count_format">%1$d</string>
 
+    <!-- زر الانتساب لناشر داخل صفحة تفاصيل الحزمة (متابعة ناشر، وليس متابعة الحزمة نفسها) -->
+    <string name="action_subscribe_publisher">انتساب</string>
+    <string name="action_subscribed_publisher">تم الانتساب</string>
+
     <!-- شاشة حسابي -->
     <string name="account_title">حسابي</string>
     <string name="account_not_logged_in">لم تسجّل الدخول بعد</string>
