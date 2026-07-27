@@ -1,0 +1,189 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@color/rin_background">
+
+    <include layout="@layout/toolbar_app" />
+
+    <androidx.core.widget.NestedScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:fillViewport="true">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="16dp">
+
+            <!-- رأس الحزمة: اسمها + إصدارها + وصفها + زر تثبيت -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:background="@drawable/bg_list_card"
+                android:padding="16dp">
+
+                <TextView
+                    android:id="@+id/txtDetailPackageName"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:textSize="19sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/rin_on_toolbar"
+                    tools:text="mathlib" />
+
+                <TextView
+                    android:id="@+id/txtDetailDescription"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:textSize="13sp"
+                    android:textColor="@color/rin_editor_text" />
+
+                <!-- صف الناشر: صورة دائرية + اسم + شارة توثيق (تظهر فقط للناشرين المؤهلين) -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="14dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <FrameLayout
+                        android:layout_width="34dp"
+                        android:layout_height="34dp">
+
+                        <ImageView
+                            android:id="@+id/imgDetailPublisherAvatar"
+                            android:layout_width="34dp"
+                            android:layout_height="34dp"
+                            android:background="@drawable/bg_avatar_circle"
+                            android:scaleType="centerCrop"
+                            android:contentDescription="@null" />
+
+                        <TextView
+                            android:id="@+id/txtDetailPublisherInitial"
+                            android:layout_width="34dp"
+                            android:layout_height="34dp"
+                            android:gravity="center"
+                            android:textColor="@android:color/white"
+                            android:textStyle="bold"
+                            android:textSize="14sp" />
+                    </FrameLayout>
+
+                    <TextView
+                        android:id="@+id/txtDetailPublisherName"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="10dp"
+                        android:textSize="13.5sp"
+                        android:textStyle="bold"
+                        android:textColor="@color/rin_on_toolbar" />
+
+                    <ImageView
+                        android:id="@+id/imgDetailVerifiedBadge"
+                        android:layout_width="16dp"
+                        android:layout_height="16dp"
+                        android:layout_marginStart="5dp"
+                        android:src="@drawable/ic_verified_badge"
+                        android:visibility="gone"
+                        android:contentDescription="@string/verified_publisher_badge_description" />
+                </LinearLayout>
+
+                <!-- بيانات: إصدار / ترخيص / تنزيلات / تقييم -->
+                <TextView
+                    android:id="@+id/txtDetailMeta"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:textSize="12sp"
+                    android:textColor="@color/rin_editor_hint" />
+
+                <Button
+                    android:id="@+id/btnDetailInstall"
+                    android:layout_width="match_parent"
+                    android:layout_height="40dp"
+                    android:layout_marginTop="14dp"
+                    android:minWidth="0dp"
+                    android:minHeight="0dp"
+                    android:insetTop="0dp"
+                    android:insetBottom="0dp"
+                    android:text="@string/action_install"
+                    android:textAllCaps="false"
+                    android:textSize="13sp"
+                    android:background="@drawable/bg_toolbar_btn_primary"
+                    android:textColor="@android:color/white" />
+            </LinearLayout>
+
+            <!-- قسم README.md -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="18dp"
+                android:layout_marginBottom="8dp"
+                android:text="@string/package_detail_section_readme"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:textColor="@color/rin_on_toolbar" />
+
+            <TextView
+                android:id="@+id/txtDetailReadme"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@drawable/bg_list_card"
+                android:padding="14dp"
+                android:textSize="13sp"
+                android:lineSpacingExtra="2dp"
+                android:textColor="@color/rin_editor_text"
+                android:textColorLink="@color/rin_accent"
+                android:autoLink="web" />
+
+            <!-- قسم الترخيص -->
+            <TextView
+                android:id="@+id/txtDetailLicenseTitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="18dp"
+                android:layout_marginBottom="8dp"
+                android:text="@string/package_detail_section_license"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:textColor="@color/rin_on_toolbar" />
+
+            <TextView
+                android:id="@+id/txtDetailLicense"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@drawable/bg_list_card"
+                android:padding="14dp"
+                android:fontFamily="monospace"
+                android:textSize="11.5sp"
+                android:lineSpacingExtra="2dp"
+                android:textColor="@color/rin_editor_hint" />
+
+            <!-- قسم ملفات الحزمة -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="18dp"
+                android:layout_marginBottom="8dp"
+                android:text="@string/package_detail_section_files"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:textColor="@color/rin_on_toolbar" />
+
+            <LinearLayout
+                android:id="@+id/containerDetailFiles"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:background="@drawable/bg_list_card" />
+
+        </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
+
+</LinearLayout>
