@@ -15,8 +15,15 @@
     },
     "packages": {
       ".read": true,
+      ".indexOn": ["category", "createdAt"],
       "$packageId": {
-        ".write": "auth != null && (!data.exists() || data.child('publisherUid').val() === auth.uid)"
+        ".write": "auth != null && (!data.exists() || data.child('publisherUid').val() === auth.uid)",
+        "downloadCount": { ".write": "auth != null" },
+        "ratingSum": { ".write": "auth != null" },
+        "ratingCount": { ".write": "auth != null" },
+        "ratings": {
+          "$uid": { ".write": "auth != null && auth.uid === $uid" }
+        }
       }
     }
   }
