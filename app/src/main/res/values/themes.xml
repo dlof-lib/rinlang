@@ -8,6 +8,16 @@
         <item name="android:statusBarColor">@color/rin_toolbar</item>
     </style>
 
+    <!-- شاشة البداية (Splash): بلا شريط أدوات، خلفية متدرّجة بهوية التطبيق، تختفي تلقائياً
+         بعد لحظات قصيرة إلى MainActivity (انظر SplashActivity.kt). -->
+    <style name="Theme.RinLang.Splash" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="android:windowBackground">@drawable/bg_splash_background</item>
+        <item name="android:statusBarColor">@color/rin_background</item>
+        <item name="android:navigationBarColor">@color/rin_background</item>
+        <item name="colorPrimary">@color/rin_accent</item>
+        <item name="colorAccent">@color/rin_accent</item>
+    </style>
+
     <!-- Light theme dedicated to the Pipeline Runner screen: dark navy header,
          light body, green accents — independent from the IDE's dark theme. -->
     <style name="Theme.RinLang.Pipeline" parent="Theme.MaterialComponents.Light.NoActionBar">
