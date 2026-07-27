@@ -241,25 +241,39 @@ class RinStoreActivity : AppCompatActivity() {
             Toast.makeText(this, R.string.rate_package_login_required, Toast.LENGTH_SHORT).show()
             return
         }
-        val dialogRatingBar = RatingBar(this).apply {
-            numStars = 5
-            stepSize = 1f
-            rating = 4f
+
+        val view = LayoutInflater.from(this).inflate(R.layout.dialog_rate_package, null)
+        val ratingBar = view.findViewById<RatingBar>(R.id.ratingBarDialog)
+        val txtLabel = view.findViewById<TextView>(R.id.txtRateDialogLabel)
+        view.findViewById<TextView>(R.id.txtRateDialogTitle).text =
+            getString(R.string.rate_package_title, pkg.name)
+
+        // يعرض تسمية جودة (ضعيف/مقبول/جيد/جيد جداً/ممتاز) تتحدّث فوراً مع كل نجمة يختارها المستخدم
+        val labels = resources.getStringArray(R.array.rate_quality_labels)
+        fun updateLabel(stars: Int) {
+            val index = stars.coerceIn(1, 5) - 1
+            txtLabel.text = labels[index]
         }
-        AlertDialog.Builder(this)
-            .setTitle(getString(R.string.rate_package_title, pkg.name))
-            .setView(dialogRatingBar)
-            .setPositiveButton(R.string.action_rate_package) { _, _ ->
-                val value = dialogRatingBar.rating.toInt().coerceIn(1, 5)
-                PackageRepository.submitRating(pkg.id, uid, value) { success ->
-                    if (success) {
-                        Toast.makeText(this, R.string.rate_package_submitted, Toast.LENGTH_SHORT).show()
-                        loadPackages()
-                    }
+        updateLabel(ratingBar.rating.toInt())
+        ratingBar.setOnRatingBarChangeListener { _, rating, _ -> updateLabel(rating.toInt()) }
+
+        val dialog = AlertDialog.Builder(this)
+            .setView(view)
+            .create()
+        dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
+
+        view.findViewById<View>(R.id.btnRateDialogCancel).setOnClickListener { dialog.dismiss() }
+        view.findViewById<View>(R.id.btnRateDialogSubmit).setOnClickListener {
+            val value = ratingBar.rating.toInt().coerceIn(1, 5)
+            PackageRepository.submitRating(pkg.id, uid, value) { success ->
+                if (success) {
+                    Toast.makeText(this, R.string.rate_package_submitted, Toast.LENGTH_SHORT).show()
+                    loadPackages()
                 }
             }
-            .setNegativeButton(R.string.cancel, null)
-            .show()
+            dialog.dismiss()
+        }
+        dialog.show()
     }
 
     /** يعرض قائمة أسباب جاهزة، ويرسل البلاغ المختار عبر [PackageRepository.submitReport]. */
