@@ -1,0 +1,155 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- الصفحة الرئيسية لـ "Rin Extensions Marketplace": بحث + تصنيفات (أنواع الإضافات) + قائمة
+     الإضافات + شريط أوامر طرفية اختياري (rin ext ...). بنفس هوية activity_rin_store.xml. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@color/rin_background">
+
+    <include layout="@layout/toolbar_app" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:background="@drawable/bg_store_section_card"
+        android:layout_margin="10dp"
+        android:padding="6dp">
+
+        <EditText
+            android:id="@+id/edtExtSearch"
+            android:layout_width="0dp"
+            android:layout_height="46dp"
+            android:layout_weight="1"
+            android:layout_marginEnd="6dp"
+            android:background="@drawable/bg_input_field"
+            android:drawableStart="@android:drawable/ic_menu_search"
+            android:drawablePadding="8dp"
+            android:paddingHorizontal="12dp"
+            android:singleLine="true"
+            android:hint="@string/ext_search_hint"
+            android:textColor="@color/rin_editor_text"
+            android:textColorHint="@color/rin_editor_hint"
+            android:textSize="13.5sp" />
+
+        <ImageButton
+            android:id="@+id/btnExtCli"
+            android:layout_width="46dp"
+            android:layout_height="46dp"
+            android:padding="11dp"
+            android:background="@drawable/bg_icon_btn_accent"
+            android:src="@android:drawable/ic_menu_edit"
+            app:tint="@color/rin_accent"
+            android:contentDescription="@string/ext_cli_title" />
+    </LinearLayout>
+
+    <HorizontalScrollView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:scrollbars="none"
+        android:paddingBottom="4dp">
+
+        <com.google.android.material.chip.ChipGroup
+            android:id="@+id/chipGroupExtType"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:paddingStart="10dp"
+            android:paddingEnd="10dp"
+            app:singleSelection="true"
+            app:chipSpacingHorizontal="6dp" />
+    </HorizontalScrollView>
+
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1">
+
+        <com.dlof.rinlang.widgets.ShimmerLayout
+            android:id="@+id/shimmerExtSkeleton"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:visibility="gone" />
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/rvExtensions"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:clipToPadding="false"
+            android:paddingBottom="12dp" />
+
+        <TextView
+            android:id="@+id/txtExtEmpty"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:text="@string/ext_store_empty"
+            android:textColor="@color/rin_editor_hint"
+            android:textSize="13sp"
+            android:visibility="gone"
+            android:gravity="center"
+            android:paddingHorizontal="32dp" />
+    </FrameLayout>
+
+    <!-- شريط أوامر "rin ext ..." الطرفية — مخفي افتراضياً، يُظهره زر ⌘ في شريط البحث -->
+    <LinearLayout
+        android:id="@+id/layoutExtCli"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:background="@color/rin_console_bg"
+        android:padding="8dp"
+        android:visibility="gone">
+
+        <TextView
+            android:id="@+id/txtExtCliOutput"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:maxHeight="160dp"
+            android:scrollbars="vertical"
+            android:fontFamily="monospace"
+            android:textColor="@color/rin_console_text"
+            android:textSize="11.5sp"
+            android:text="@string/ext_cli_hint" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:orientation="horizontal">
+
+            <EditText
+                android:id="@+id/edtExtCliCommand"
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:layout_height="42dp"
+                android:background="@drawable/bg_input_field"
+                android:fontFamily="monospace"
+                android:hint="rin ext list"
+                android:imeOptions="actionGo"
+                android:inputType="text"
+                android:paddingHorizontal="10dp"
+                android:singleLine="true"
+                android:textColor="@color/rin_editor_text"
+                android:textColorHint="@color/rin_editor_hint"
+                android:textSize="12.5sp" />
+
+            <Button
+                android:id="@+id/btnExtCliRun"
+                android:layout_width="wrap_content"
+                android:layout_height="42dp"
+                android:layout_marginStart="6dp"
+                android:minWidth="0dp"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                android:paddingHorizontal="14dp"
+                android:text="@string/ext_cli_run"
+                android:textAllCaps="false"
+                android:textSize="12.5sp"
+                android:background="@drawable/bg_toolbar_btn_primary"
+                android:textColor="@android:color/white" />
+        </LinearLayout>
+    </LinearLayout>
+</LinearLayout>
