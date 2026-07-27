@@ -15,7 +15,7 @@
     },
     "packages": {
       ".read": true,
-      ".indexOn": ["category", "createdAt"],
+      ".indexOn": ["category", "createdAt", "publisherUid"],
       "$packageId": {
         ".write": "auth != null && (!data.exists() || data.child('publisherUid').val() === auth.uid)",
         "downloadCount": { ".write": "auth != null" },
