@@ -152,4 +152,23 @@ while (i &lt; 10) {
 let name = \"world\";
 print \"Hello, \" + name + \"!\";
 </string>
+
+    <!-- ===== شريط التنقل السفلي الموحّد ===== -->
+    <string name="nav_editor">المحرر</string>
+    <string name="nav_projects">المشاريع</string>
+    <string name="nav_store">المتجر</string>
+    <string name="nav_profile">حسابي</string>
+    <string name="nav_more">المزيد</string>
+
+    <!-- ===== شاشة "المزيد" (باقي الأقسام) ===== -->
+    <string name="more_screen_title">المزيد</string>
+    <string name="more_row_files_subtitle">تصفح ملفات المشروع</string>
+    <string name="more_row_libraries_subtitle">مكتبات lib/*.og.rin الخاصة بالمشروع</string>
+    <string name="more_row_pipeline_subtitle">تتبّع تنفيذ الأنابيب خطوة بخطوة</string>
+    <string name="more_row_extensions_subtitle">إضافات وأدوات رسمية للمحرر</string>
+    <string name="more_row_settings_subtitle">حجم الخط، أرقام الأسطر، وخيارات أخرى</string>
+    <string name="more_row_needs_project_toast">اختر مشروعاً أولاً</string>
+
+    <!-- ===== شاشة البداية (Splash) ===== -->
+    <string name="splash_tagline">لغة برمجة خفيفة وسريعة</string>
 </resources>
