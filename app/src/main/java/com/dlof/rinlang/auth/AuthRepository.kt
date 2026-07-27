@@ -180,6 +180,21 @@ object AuthRepository {
 
     fun logout() = auth.signOut()
 
+    /** يحدّث صورة الملف الشخصي (base64 جاهزة مسبقاً بعد التصغير والضغط) لحساب [uid]. */
+    fun updateAvatar(uid: String, avatarBase64: String, callback: (Boolean) -> Unit) {
+        usersRef().child(uid).child("avatarBase64").setValue(avatarBase64)
+            .addOnSuccessListener { callback(true) }
+            .addOnFailureListener { callback(false) }
+    }
+
+    /** يحدّث الاسم الظاهر والنبذة القصيرة لحساب [uid]. */
+    fun updateProfile(uid: String, name: String, bio: String, callback: (Boolean) -> Unit) {
+        val updates = mapOf<String, Any>("name" to name, "bio" to bio)
+        usersRef().child(uid).updateChildren(updates)
+            .addOnSuccessListener { callback(true) }
+            .addOnFailureListener { callback(false) }
+    }
+
     private fun mapFirebaseError(raw: String?): String {
         val text = raw ?: return "حدث خطأ غير متوقع"
         return when {
