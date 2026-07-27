@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- خط فاصل رفيع بارتفاع صريح (1dp)، يُستخدم كـ divider بين صفوف قائمة ملفات الحزمة -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="@color/rin_divider" />
+    <size android:height="1dp" />
+</shape>
