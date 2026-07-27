@@ -16,7 +16,7 @@ Linguist لا يخزّن ملفات الگرامر بنفسه، بل يربط ك
 ## 2) Fork مستودع linguist وتجهيز البيئة
 
 ```bash
-git clone --recursive https://github.com/<your-username>/linguist.git
+git clone --recursive https://github.com/dlof-lib/linguist.git
 cd linguist
 bundle install   # يتطلب Ruby
 ```
