@@ -18,6 +18,8 @@
       ".indexOn": ["category", "createdAt", "publisherUid"],
       "$packageId": {
         ".write": "auth != null && (!data.exists() || data.child('publisherUid').val() === auth.uid)",
+        "name": { ".validate": "newData.isString() && newData.val().length <= 40" },
+        "base64Data": { ".validate": "newData.isString() && newData.val().length <= 8000000" },
         "downloadCount": { ".write": "auth != null" },
         "ratingSum": { ".write": "auth != null" },
         "ratingCount": { ".write": "auth != null" },
