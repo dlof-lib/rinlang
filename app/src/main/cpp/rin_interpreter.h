@@ -123,7 +123,10 @@ private:
 
     // ---- مفهوم الجدول (container.table / table المستقلة) ----
     std::unordered_map<std::string, std::vector<Value>> tableRows;  // مفتاح الحاوية -> صفوفها (كل صف Value::ARRAY)
-    std::unordered_map<std::string, std::string> tableStyles;       // مفتاح الحاوية -> آخر "style value=" مسجَّل (مثال: "style://dark")
+    // مفتاح الحاوية -> آخر "style value=" مسجَّل (مثال: "style://dark"). كانت خاصة بالجداول فقط،
+    // وعُمِّمت الآن لتُستخدم أيضاً داخل container.object/Object، container.portal/portal،
+    // container.block/block (مفاهيم التنسيق والستايل)، وليس container.table/table حصراً.
+    std::unordered_map<std::string, std::string> containerStyles;
     std::string buildTablePng(const std::string& key) const;        // يرسم الجدول كصورة PNG حقيقية (شبكة خلايا ملوّنة)
 
     // ---- قاعدة بيانات لاعلاقية / NoSQL (container.doc / doc المستقلة) ----
