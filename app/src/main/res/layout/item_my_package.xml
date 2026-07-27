@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- صف حزمة واحدة ضمن قسم "حزمي" بشاشة الحساب: اسم الحزمة + معلومات مختصرة + زر حذف. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal"
+    android:gravity="center_vertical"
+    android:background="@drawable/bg_list_card"
+    android:layout_marginBottom="8dp"
+    android:padding="12dp">
+
+    <TextView
+        android:id="@+id/txtMyPackageInitial"
+        android:layout_width="32dp"
+        android:layout_height="32dp"
+        android:layout_marginEnd="10dp"
+        android:background="@drawable/bg_icon_badge_accent"
+        android:gravity="center"
+        android:textColor="@android:color/white"
+        android:textStyle="bold"
+        android:textSize="14sp" />
+
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/txtMyPackageName"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textSize="15sp"
+            android:textStyle="bold"
+            android:textColor="@color/rin_on_toolbar" />
+
+        <TextView
+            android:id="@+id/txtMyPackageMeta"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:textSize="12sp"
+            android:textColor="@color/rin_editor_hint" />
+    </LinearLayout>
+
+    <ImageButton
+        android:id="@+id/btnDeleteMyPackage"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:layout_marginStart="8dp"
+        android:background="@drawable/bg_toolbar_btn_ghost"
+        android:src="@drawable/ic_trash_red"
+        android:scaleType="center"
+        android:padding="8dp"
+        android:contentDescription="@string/action_delete_package" />
+
+</LinearLayout>
