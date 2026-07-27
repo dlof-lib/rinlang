@@ -48,6 +48,9 @@
     <color name="rin_star_gold_dim">#4DFFC94D</color>
     <color name="rin_star_track">#333640</color>
 
+    <!-- لون القلب عند "أُعجِب به" في صفحة تفاصيل الحزمة (زر الإعجاب) -->
+    <color name="rin_like_active">#FF4D6D</color>
+
     <!-- شارة "ناشر موثّق" في متجر Rin (تحميلات + تقييم عاليان)، منفصلة عن ألوان الحالة الأخرى -->
     <color name="rin_verified_badge">#3B9EFF</color>
 
