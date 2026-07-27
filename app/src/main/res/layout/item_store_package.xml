@@ -7,21 +7,57 @@
     android:layout_margin="4dp"
     android:padding="12dp">
 
-    <TextView
-        android:id="@+id/txtPackageName"
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:textSize="15sp"
-        android:textStyle="bold"
-        android:textColor="@color/rin_on_toolbar" />
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
 
-    <TextView
-        android:id="@+id/txtPackageMeta"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="2dp"
-        android:textSize="12sp"
-        android:textColor="@color/rin_editor_hint" />
+        <!-- شارة بأول حرف من اسم الحزمة، بديل بصري خفيف الوزن عن أيقونة مخصصة لكل ناشر -->
+        <TextView
+            android:id="@+id/txtPackageInitial"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:layout_marginEnd="10dp"
+            android:background="@drawable/bg_icon_badge_accent"
+            android:gravity="center"
+            android:textColor="@android:color/white"
+            android:textStyle="bold"
+            android:textSize="14sp" />
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/txtPackageName"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textSize="15sp"
+                android:textStyle="bold"
+                android:textColor="@color/rin_on_toolbar" />
+
+            <TextView
+                android:id="@+id/txtPackageMeta"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:textSize="12sp"
+                android:textColor="@color/rin_editor_hint" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/txtPackageCategory"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="@drawable/bg_download_chip"
+            android:paddingHorizontal="8dp"
+            android:paddingVertical="3dp"
+            android:textSize="10.5sp"
+            android:textColor="@color/rin_on_toolbar_dim" />
+    </LinearLayout>
 
     <TextView
         android:id="@+id/txtPackageDescription"
@@ -33,11 +69,62 @@
         android:maxLines="3"
         android:ellipsize="end" />
 
+    <TextView
+        android:id="@+id/txtPackageDependencies"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:textSize="11sp"
+        android:fontFamily="monospace"
+        android:textColor="@color/syntax_tag"
+        android:visibility="gone" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <RatingBar
+            android:id="@+id/ratingBarPackage"
+            style="?android:attr/ratingBarStyleSmall"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:isIndicator="true"
+            android:numStars="5"
+            android:stepSize="0.1" />
+
+        <TextView
+            android:id="@+id/txtPackageRating"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginStart="6dp"
+            android:textSize="11.5sp"
+            android:textColor="@color/rin_editor_hint" />
+
+        <Button
+            android:id="@+id/btnRatePackage"
+            android:layout_width="wrap_content"
+            android:layout_height="30dp"
+            android:minWidth="0dp"
+            android:minHeight="0dp"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            android:paddingHorizontal="10dp"
+            android:text="@string/action_rate_package"
+            android:textAllCaps="false"
+            android:textSize="11.5sp"
+            android:background="@drawable/bg_toolbar_btn_ghost"
+            android:textColor="@color/rin_accent" />
+    </LinearLayout>
+
     <Button
         android:id="@+id/btnInstallPackage"
         android:layout_width="match_parent"
         android:layout_height="36dp"
-        android:layout_marginTop="10dp"
+        android:layout_marginTop="8dp"
         android:minWidth="0dp"
         android:minHeight="0dp"
         android:insetTop="0dp"
