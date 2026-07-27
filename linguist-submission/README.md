@@ -1,9 +1,33 @@
-# إضافة لغة Rin إلى GitHub Linguist (تلوين .rin على صفحات GitHub)
+<div align="center">
+
+# 🎨 إضافة لغة Rin إلى GitHub Linguist
+
+### تلوين ملفات `.rin` نحوياً تلقائياً على صفحات github.com
+
+<p>
+<img alt="Linguist" src="https://img.shields.io/badge/GitHub-Linguist-181717?style=for-the-badge&logo=github&logoColor=white" />
+<img alt="Grammar" src="https://img.shields.io/badge/Grammar-TextMate-orange?style=for-the-badge" />
+<img alt="Status" src="https://img.shields.io/badge/Status-Submission%20Guide-informational?style=for-the-badge" />
+</p>
+
+</div>
+
+---
 
 تلوين GitHub لأي لغة (الشكل الذي تراه في الملفات على github.com) يعتمد على مشروع
 [`github-linguist/linguist`](https://github.com/github-linguist/linguist)، وهو **منفصل تماماً**
 عن VS Code. لا يمكن "تفعيله" من داخل مستودعك مباشرة — يتطلب **Pull Request مقبول** في مستودع
-linguist نفسه. هذه هي الخطوات الرسمية:
+linguist نفسه. هذه هي الخطوات الرسمية، خطوة بخطوة:
+
+| الخطوة | ماذا تفعل |
+|---|---|
+| 1 | تجهيز مستودع عام لملف الگرامر |
+| 2 | Fork مستودع linguist وتجهيز البيئة |
+| 3 | إضافة الگرامر إلى `grammars.yml` |
+| 4 | إضافة اللغة إلى `languages.yml` |
+| 5 | إضافة عيّنات كود (`samples/`) |
+| 6 | تشغيل الاختبارات محلياً |
+| 7 | فتح Pull Request |
 
 ## 1) تجهيز مستودع عام (public) لملف الگرامر
 
