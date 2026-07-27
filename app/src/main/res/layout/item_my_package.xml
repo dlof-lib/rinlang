@@ -5,16 +5,16 @@
     android:layout_height="wrap_content"
     android:orientation="horizontal"
     android:gravity="center_vertical"
-    android:background="@drawable/bg_list_card"
+    android:background="@drawable/bg_detail_section_card"
     android:layout_marginBottom="8dp"
     android:padding="12dp">
 
     <TextView
         android:id="@+id/txtMyPackageInitial"
-        android:layout_width="32dp"
-        android:layout_height="32dp"
+        android:layout_width="36dp"
+        android:layout_height="36dp"
         android:layout_marginEnd="10dp"
-        android:background="@drawable/bg_icon_badge_accent"
+        android:background="@drawable/bg_package_icon_gradient"
         android:gravity="center"
         android:textColor="@android:color/white"
         android:textStyle="bold"
