@@ -41,23 +41,25 @@
                         android:orientation="vertical"
                         android:gravity="center_horizontal">
 
-                        <!-- بانر الخلفية -->
+                        <!-- بانر الخلفية: يمتد الآن ليغطي الصورة الرمزية والاسم واسم المستخدم أيضاً،
+                             وليس فقط الشريط العلوي، عبر جعله خلفية للحاوية بأكملها بدل شريط ثابت الارتفاع -->
                         <FrameLayout
                             android:layout_width="match_parent"
-                            android:layout_height="100dp">
+                            android:layout_height="wrap_content">
 
                             <ImageView
                                 android:layout_width="match_parent"
-                                android:layout_height="match_parent"
+                                android:layout_height="230dp"
+                                android:layout_gravity="top"
                                 android:scaleType="centerCrop"
                                 android:src="@drawable/img_hex_banner"
                                 android:contentDescription="@null" />
 
                             <View
                                 android:layout_width="match_parent"
-                                android:layout_height="match_parent"
+                                android:layout_height="230dp"
+                                android:layout_gravity="top"
                                 android:background="@drawable/bg_banner_scrim" />
-                        </FrameLayout>
 
                         <LinearLayout
                             android:layout_width="match_parent"
@@ -65,18 +67,21 @@
                             android:orientation="vertical"
                             android:gravity="center_horizontal"
                             android:paddingHorizontal="24dp"
+                            android:paddingTop="60dp"
                             android:paddingBottom="24dp">
 
                             <FrameLayout
                                 android:layout_width="96dp"
                                 android:layout_height="96dp"
-                                android:layout_marginTop="-40dp">
+                                android:layout_marginTop="-40dp"
+                                android:elevation="6dp"
+                                android:translationZ="6dp">
 
                                 <ImageView
                                     android:id="@+id/imgAvatar"
                                     android:layout_width="96dp"
                                     android:layout_height="96dp"
-                                    android:background="@drawable/bg_avatar_circle"
+                                    android:background="@drawable/bg_avatar_ring"
                                     android:scaleType="centerCrop"
                                     android:contentDescription="@string/account_title" />
 
@@ -155,6 +160,7 @@
                                 android:textColor="@color/rin_on_toolbar"
                                 android:textSize="13sp" />
                         </LinearLayout>
+                        </FrameLayout>
                     </LinearLayout>
                 </FrameLayout>
 
