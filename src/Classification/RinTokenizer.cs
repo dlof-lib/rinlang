@@ -60,14 +60,17 @@ namespace RinLang.VSSDK.Classification
                 // @import [as]
                 (new Regex(@"@import\b(\s+as\b)?", o), RinClassificationTypes.ImportKeyword),
 
-                // @container / @container.pipe|data|api|import|table|doc, @Containers.Group, @Volume
-                (new Regex(@"@(container(\.(pipe|data|api|import|table|doc))?|Containers\.Group|Volume)\b", o), RinClassificationTypes.ContainerKeyword),
+                // @container / @container.pipe|data|api|import|table|doc|object|portal|block, @Containers.Group, @Volume
+                (new Regex(@"@(container(\.(pipe|data|api|import|table|doc|object|portal|block))?|Containers\.Group|Volume)\b", o), RinClassificationTypes.ContainerKeyword),
+
+                // مفاهيم التنسيق والستايل المستقلة (بلا بادئة container.): @Object / @portal / @block
+                (new Regex(@"@(Object|portal|block)\b", o), RinClassificationTypes.ContainerKeyword),
 
                 // Section / Translations headers.
                 (new Regex(@"\b(Section|Translations)\b", o), RinClassificationTypes.ContainerKeyword),
 
-                // document / route / table keywords.
-                (new Regex(@"\b(document|route|table)\b", o), RinClassificationTypes.RelationKeyword),
+                // document / route / table / style keywords.
+                (new Regex(@"\b(document|route|table|style)\b", o), RinClassificationTypes.RelationKeyword),
 
                 // Bare @ annotation marker not already matched above.
                 (new Regex(@"@", o), RinClassificationTypes.Annotation),
