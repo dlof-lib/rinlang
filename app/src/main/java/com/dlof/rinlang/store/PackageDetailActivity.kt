@@ -11,6 +11,7 @@ import android.view.View
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
+import android.widget.Toast
 import com.dlof.rinlang.R
 import com.dlof.rinlang.auth.AuthRepository
 import com.dlof.rinlang.network.BaseConnectivityActivity
@@ -34,6 +35,10 @@ class PackageDetailActivity : BaseConnectivityActivity() {
 
     private lateinit var pkg: RinPackage
 
+    /** حالة الإعجاب المحلية (متفائلة): تُحدَّث فوراً عند الضغط قبل استلام تأكيد Firebase. */
+    private var isLiked = false
+    private var likeCount = 0L
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_package_detail)
@@ -50,6 +55,7 @@ class PackageDetailActivity : BaseConnectivityActivity() {
         bindPublisher()
         bindReadmeAndLicense()
         bindFiles()
+        bindLike()
 
         // لا مشروع محدَّد داخل هذه الشاشة (شاشة استعراض فقط)؛ التثبيت الفعلي (مع التحقق من
         // التبعيات) يبقى مسؤولية شاشة المتجر التي فتحت هذه الشاشة، فقط نُعيد معرّف الحزمة إليها.
@@ -118,6 +124,62 @@ class PackageDetailActivity : BaseConnectivityActivity() {
         }
     }
 
+    /**
+     * يهيّئ زر الإعجاب (قلب): يعرض عدد الإعجابات الحالي فوراً من [pkg] المُمرَّرة أصلاً (بلا أي
+     * طلب شبكة)، ثم يجلب هل المستخدم الحالي (إن سجّل الدخول) أعجب بها مسبقاً ليضبط شكل القلب
+     * (مملوء/مفرَّغ) بدقة. الضغط يبدّل الحالة محلياً فوراً (تفاؤلي) ثم يُزامنها مع Firebase،
+     * ويتراجع عن التغيير المحلي إن فشلت المزامنة.
+     */
+    private fun bindLike() {
+        likeCount = pkg.likeCount
+        renderLikeState()
+
+        val uid = AuthRepository.currentUid()
+        if (uid != null) {
+            PackageRepository.fetchLikeState(pkg.id, uid) { liked ->
+                isLiked = liked
+                renderLikeState()
+            }
+        }
+
+        findViewById<View>(R.id.btnDetailLike).setOnClickListener {
+            if (!isOnline()) { showOfflineOverlay(); return@setOnClickListener }
+            val currentUid = AuthRepository.currentUid()
+            if (currentUid == null) {
+                Toast.makeText(this, R.string.like_package_login_required, Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+
+            // تحديث متفائل فوري: الواجهة تستجيب لحظياً، ثم تتراجع إن رجعت Firebase بفشل
+            val previousLiked = isLiked
+            val previousCount = likeCount
+            isLiked = !isLiked
+            likeCount = if (isLiked) likeCount + 1 else (likeCount - 1).coerceAtLeast(0L)
+            renderLikeState()
+
+            PackageRepository.toggleLike(pkg.id, currentUid) { liked, success ->
+                if (!success) {
+                    isLiked = previousLiked
+                    likeCount = previousCount
+                } else {
+                    isLiked = liked
+                }
+                renderLikeState()
+            }
+        }
+    }
+
+    /** يعكس [isLiked] و[likeCount] الحاليَين على أيقونة القلب ولونها ونص العدّاد. */
+    private fun renderLikeState() {
+        val imgIcon = findViewById<ImageView>(R.id.imgDetailLikeIcon)
+        val txtCount = findViewById<TextView>(R.id.txtDetailLikeCount)
+        val tint = if (isLiked) getColor(R.color.rin_like_active) else getColor(R.color.rin_editor_hint)
+        imgIcon.setImageResource(if (isLiked) R.drawable.ic_heart_filled else R.drawable.ic_heart_outline)
+        imgIcon.imageTintList = android.content.res.ColorStateList.valueOf(tint)
+        txtCount.setTextColor(tint)
+        txtCount.text = getString(R.string.like_count_format, likeCount)
+    }
+
     private fun bindReadmeAndLicense() {
         val contents = PackagingUtils.readContents(pkg)
 
@@ -155,6 +217,7 @@ class PackageDetailActivity : BaseConnectivityActivity() {
         val inflater = LayoutInflater.from(this)
         for (file in contents.files) {
             val row = inflater.inflate(R.layout.item_package_file, container, false)
+            row.findViewById<ImageView>(R.id.imgFileIcon).setImageResource(PackagingUtils.iconResFor(file.name))
             row.findViewById<TextView>(R.id.txtFileName).text = file.name
             row.findViewById<TextView>(R.id.txtFileSize).text = formatSize(file.sizeBytes)
             container.addView(row)
