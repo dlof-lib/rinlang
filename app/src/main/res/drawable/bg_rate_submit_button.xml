@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- خلفية زر "إرسال التقييم": تدرّج ذهبي جذّاب متناسق مع لون النجوم، بنفس أسلوب
+     bg_run_button_premium (حالات ضغط/تعطيل واضحة) -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_enabled="false">
+        <shape android:shape="rectangle">
+            <solid android:color="#3A3550" />
+            <corners android:radius="10dp" />
+        </shape>
+    </item>
+    <item android:state_pressed="true">
+        <shape android:shape="rectangle">
+            <solid android:color="#E0A835" />
+            <corners android:radius="10dp" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="rectangle" android:angle="45">
+            <gradient
+                android:type="linear"
+                android:angle="45"
+                android:startColor="#FFD873"
+                android:endColor="#F2A93C" />
+            <corners android:radius="10dp" />
+        </shape>
+    </item>
+</selector>
