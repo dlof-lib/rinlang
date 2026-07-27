@@ -71,6 +71,10 @@
     <string name="publish_requires_login">سجّل الدخول أولاً لتتمكن من النشر</string>
     <string name="error_package_name_taken">هذا الاسم (أو اسم مشابه له) مُستخدَم بالفعل لحزمة أخرى في متجر Rin، اختر اسماً مختلفاً</string>
 
+    <!-- تحذير تشابه الاسم مع حزمة شهيرة (حماية من انتحال الأسماء) قبل تأكيد النشر -->
+    <string name="similar_name_warning_title">اسم قريب جداً من حزمة معروفة</string>
+    <string name="similar_name_warning_message">اسم حزمتك قريب جداً من اسم حزمة شهيرة موجودة بالفعل في المتجر (%1$s)، وقد يُربك المستخدمين بينها وبين حزمتك. هل تريد المتابعة بهذا الاسم على أي حال؟</string>
+
     <!-- الإبلاغ عن حزمة -->
     <string name="action_report_package">إبلاغ</string>
     <string name="report_package_title">الإبلاغ عن %1$s</string>
