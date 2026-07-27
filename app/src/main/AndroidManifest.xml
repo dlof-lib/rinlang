@@ -78,6 +78,10 @@
             android:exported="false" />
 
         <activity
+            android:name=".store.PackageDetailActivity"
+            android:exported="false" />
+
+        <activity
             android:name=".store.PublishPackageActivity"
             android:exported="false"
             android:windowSoftInputMode="adjustResize" />
