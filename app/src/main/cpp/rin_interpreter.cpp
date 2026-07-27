@@ -200,6 +200,11 @@ static std::string containerTagName(ContainerKind k) {
         case ContainerKind::TABLE: return "container.table";
         // نفس المبدأ لـ "@container.doc=" / "@doc=" -> دائماً "container.doc" موحَّدة.
         case ContainerKind::DOC: return "container.doc";
+        // نفس المبدأ لمفاهيم التنسيق/الستايل الجديدة: "@Object="/"@portal="/"@block=" توحَّد دائماً
+        // إلى "container.object"/"container.portal"/"container.block" عند الحفظ وإعادة القراءة.
+        case ContainerKind::OBJECT: return "container.object";
+        case ContainerKind::PORTAL: return "container.portal";
+        case ContainerKind::BLOCK: return "container.block";
         default: return "container";
     }
 }
@@ -212,6 +217,9 @@ static std::string containerIcon(ContainerKind k) {
         case ContainerKind::IMPORT: return "📦⬅️";
         case ContainerKind::TABLE: return "📊";
         case ContainerKind::DOC: return "🧾";
+        case ContainerKind::OBJECT: return "🧩";
+        case ContainerKind::PORTAL: return "🎨";
+        case ContainerKind::BLOCK: return "🧱";
         default: return "📦";
     }
 }
@@ -1254,8 +1262,8 @@ std::string Interpreter::buildTablePng(const std::string& key) const {
     if (rowCount == 0) rowCount = 1;
 
     std::string style;
-    auto styleIt = tableStyles.find(key);
-    if (styleIt != tableStyles.end()) style = styleIt->second;
+    auto styleIt = containerStyles.find(key);
+    if (styleIt != containerStyles.end()) style = styleIt->second;
     bool dark = (style.find("dark") != std::string::npos);
     unsigned char gridShade = dark ? 235 : 45;
 
@@ -1308,7 +1316,7 @@ std::string Interpreter::buildSaveDocument(const std::string& key, const EnvPtr&
     std::string body = serializeEnvBody(containerEnv, simplified);
 
     // متغيرات env تكفي لأي حاوية عادية، لكن الجدول (TABLE) يخزّن صفوفه ونمطه في بنى منفصلة داخل
-    // المفسّر (tableRows/tableStyles) لا داخل بيئته، فيجب إلحاقها هنا نصياً حتى يبقى الملف المحفوظ
+    // المفسّر (tableRows/containerStyles) لا داخل بيئته، فيجب إلحاقها هنا نصياً حتى يبقى الملف المحفوظ
     // قابلاً لإعادة القراءة كاملاً عبر container.import/loadInstalled (تُعاد صفوفه إلى tableRows تلقائياً
     // عند إعادة تنفيذ عبارات row/style بداخله).
     if (kind == ContainerKind::TABLE) {
@@ -1319,12 +1327,6 @@ std::string Interpreter::buildSaveDocument(const std::string& key, const EnvPtr&
                 body += simplified ? ("row cells=" + cellsLit + ";")
                                     : ("    row cells=" + cellsLit + ";\n");
             }
-        }
-        auto styleIt = tableStyles.find(key);
-        if (styleIt != tableStyles.end()) {
-            std::string styleLit = "\"" + escapeStringLiteral(styleIt->second) + "\"";
-            body += simplified ? ("style value=" + styleLit + ";")
-                                : ("    style value=" + styleLit + ";\n");
         }
     } else if (kind == ContainerKind::DOC) {
         // نفس المبدأ: مستندات container.doc/doc مخزَّنة في docStore داخل المفسّر، لا في بيئة الحاوية،
@@ -1338,6 +1340,16 @@ std::string Interpreter::buildSaveDocument(const std::string& key, const EnvPtr&
                                     : ("    document id=" + idLit + " fields=" + fieldsLit + ";\n");
             }
         }
+    }
+
+    // 'style' متاحة الآن داخل أي حاوية من هذه الأنواع (وليس container.table/table حصراً)، وهي مخزَّنة
+    // في containerStyles داخل المفسّر لا في بيئة الحاوية، فتُلحَق هنا نصياً حتى يبقى الملف المحفوظ
+    // قابلاً لإعادة القراءة كاملاً (تُعاد إلى containerStyles تلقائياً عند إعادة تنفيذ عبارة style بداخله).
+    auto styleIt = containerStyles.find(key);
+    if (styleIt != containerStyles.end()) {
+        std::string styleLit = "\"" + escapeStringLiteral(styleIt->second) + "\"";
+        body += simplified ? ("style value=" + styleLit + ";")
+                            : ("    style value=" + styleLit + ";\n");
     }
 
     std::ostringstream doc;
@@ -1895,14 +1907,22 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
     }
 
     if (auto s = std::dynamic_pointer_cast<StyleStmt>(stmt)) {
-        if (containerStack.empty() || containerKinds[containerStack.back()] != ContainerKind::TABLE) {
-            throw RinError("عبارة 'style' يجب أن تُستخدم داخل @container.table أو @table", s->line);
+        // 'style' كانت خاصة بالجدول (container.table/table) فقط، وعُمِّمت الآن (مفاهيم التنسيق
+        // والستايل) لتعمل أيضاً داخل container.object/Object، container.portal/portal، و
+        // container.block/block.
+        ContainerKind currentKind = containerStack.empty() ? ContainerKind::PLAIN
+                                                            : containerKinds[containerStack.back()];
+        bool allowed = currentKind == ContainerKind::TABLE || currentKind == ContainerKind::OBJECT ||
+                        currentKind == ContainerKind::PORTAL || currentKind == ContainerKind::BLOCK;
+        if (containerStack.empty() || !allowed) {
+            throw RinError("عبارة 'style' يجب أن تُستخدم داخل @container.table/@table أو "
+                            "@container.object/@Object أو @container.portal/@portal أو @container.block/@block", s->line);
         }
         Value v = evaluate(s->value, env);
         if (v.type != Value::Type::STRING) {
             throw RinError("style: قيمة 'value' يجب أن تكون نصاً (مثال: style value=\"style://dark\";)", s->line);
         }
-        tableStyles[containerStack.back()] = v.str;
+        containerStyles[containerStack.back()] = v.str;
         output << "🎨 style -> " << v.str << "\n";
         return;
     }
