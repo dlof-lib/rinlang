@@ -1,4 +1,19 @@
-# استدعاء Rin من لغات برمجة أخرى (Language Bindings)
+<div align="center">
+
+# 🔗 استدعاء Rin من لغات برمجة أخرى
+
+### Language Bindings — نفس محرّك C++17، من أي لغة تدعم FFI
+
+<p>
+<img alt="ABI" src="https://img.shields.io/badge/C%20ABI-rin__c__api.h-00599C?style=for-the-badge&logo=cplusplus&logoColor=white" />
+<img alt="Python" src="https://img.shields.io/badge/Python-ctypes-3776AB?style=for-the-badge&logo=python&logoColor=white" />
+<img alt="Node.js" src="https://img.shields.io/badge/Node.js-ffi--napi-339933?style=for-the-badge&logo=node.js&logoColor=white" />
+<img alt="Platform" src="https://img.shields.io/badge/Platform-Linux%20%7C%20macOS%20%7C%20Windows-4E4E4E?style=for-the-badge" />
+</p>
+
+</div>
+
+---
 
 هذا المجلد يجعل محرّك Rin (Lexer + Parser + Interpreter) قابلاً للاستدعاء من **أي لغة برمجة**، وليس فقط من Kotlin عبر JNI داخل التطبيق. الفكرة: بناء المحرّك كمكتبة مشتركة عامة (`librin.so` / `librin.dylib` / `rin.dll`) تُصدِّر واجهة C بسيطة (`rin_c_api.h` في `app/src/main/cpp/`)، ثم ربط أي لغة بها عبر آلية استدعاء C ABI القياسية في تلك اللغة.
 
@@ -6,9 +21,11 @@
 [كود Rin كنص] --> [python/rin.py أو node/rin.js أو ...] --> [librin.so] --> [نفس محرّك C++]
 ```
 
-هذا **نفس المحرّك بالضبط** المستخدم داخل تطبيق أندرويد — لا يوجد تكرار للمنطق، فقط طبقة C رقيقة (`rin_c_api.cpp`) تُغلِّف نفس تسلسل `lex -> parse -> interpret` الموجود في `jni_bridge.cpp`.
+> ✅ هذا **نفس المحرّك بالضبط** المستخدم داخل تطبيق أندرويد — لا يوجد تكرار للمنطق، فقط طبقة C رقيقة (`rin_c_api.cpp`) تُغلِّف نفس تسلسل `lex -> parse -> interpret` الموجود في `jni_bridge.cpp`.
 
-## 1) ابنِ المكتبة المشتركة مرة واحدة
+## الخطوات
+
+### 1) ابنِ المكتبة المشتركة مرة واحدة
 
 ```bash
 cd bindings
@@ -18,7 +35,7 @@ cmake --build build --config Release
 
 الناتج حسب نظام التشغيل: `build/librin.so` (لينكس)، `build/librin.dylib` (macOS)، `build/rin.dll` (ويندوز).
 
-## 2) استدعِ Rin من لغتك
+### 2) استدعِ Rin من لغتك
 
 | اللغة | الملف | طريقة الربط |
 |---|---|---|
@@ -45,7 +62,7 @@ const rin = new Rin("../build/librin.so");
 console.log(rin.run('print "Hello from Rin!";'));
 ```
 
-## 3) واجهة C المتاحة (`rin_c_api.h`)
+### 3) واجهة C المتاحة (`rin_c_api.h`)
 
 | الدالة | الوصف |
 |---|---|
