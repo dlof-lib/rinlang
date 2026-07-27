@@ -19,6 +19,7 @@
             android:background="@drawable/bg_section_icon_circle" />
 
         <ImageView
+            android:id="@+id/imgFileIcon"
             android:layout_width="13dp"
             android:layout_height="13dp"
             android:layout_gravity="center"
