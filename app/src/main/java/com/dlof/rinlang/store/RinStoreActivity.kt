@@ -16,6 +16,8 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.dlof.rinlang.BottomNavHelper
+import com.dlof.rinlang.BottomNavTab
 import com.dlof.rinlang.Project
 import com.dlof.rinlang.ProjectManager
 import com.dlof.rinlang.R
@@ -67,6 +69,7 @@ class RinStoreActivity : BaseConnectivityActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_rin_store)
+        BottomNavHelper.setup(this, BottomNavTab.STORE)
 
         val projectName = intent.getStringExtra(EXTRA_PROJECT_NAME) ?: run { finish(); return }
         project = ProjectManager.listProjects(this).find { it.name == projectName }
