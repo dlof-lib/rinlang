@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- إطار رأس صفحة "تفاصيل الحزمة": نفس مظهر bg_detail_hero_card (حدّ بنفسجي خافت + توهّج)
+     لكن كحاوية خارجية تُقص إليها صورة البانر العلوية (clipToOutline) بدل خلفية مباشرة،
+     منفصلة عمداً عن bg_detail_hero_card التي ما زالت تُستخدم في dialog_rate_package. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="@color/rin_job_card_bg" />
+            <stroke android:width="1dp" android:color="@color/rin_accent_border_subtle" />
+            <corners android:radius="18dp" />
+        </shape>
+    </item>
+</layer-list>
