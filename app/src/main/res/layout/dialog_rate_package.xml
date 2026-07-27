@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:background="@drawable/bg_list_card"
+    android:padding="24dp">
+
+    <TextView
+        android:id="@+id/txtRateDialogTitle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:textColor="@color/rin_on_toolbar"
+        android:textSize="17sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:gravity="center"
+        android:text="@string/rate_package_subtitle"
+        android:textColor="@color/rin_editor_hint"
+        android:textSize="12.5sp" />
+
+    <RatingBar
+        android:id="@+id/ratingBarDialog"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center_horizontal"
+        android:layout_marginTop="20dp"
+        android:numStars="5"
+        android:stepSize="1"
+        android:rating="4"
+        android:scaleX="1.55"
+        android:scaleY="1.55"
+        android:progressTint="@color/rin_star_gold"
+        android:progressBackgroundTint="@color/rin_star_track"
+        android:secondaryProgressTint="@color/rin_star_track" />
+
+    <TextView
+        android:id="@+id/txtRateDialogLabel"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="22dp"
+        android:gravity="center"
+        android:textColor="@color/rin_star_gold"
+        android:textSize="14sp"
+        android:textStyle="bold" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="22dp"
+        android:orientation="horizontal">
+
+        <Button
+            android:id="@+id/btnRateDialogCancel"
+            android:layout_width="0dp"
+            android:layout_height="46dp"
+            android:layout_weight="1"
+            android:layout_marginEnd="8dp"
+            android:background="@drawable/bg_toolbar_btn_ghost"
+            android:text="@string/cancel"
+            android:textAllCaps="false"
+            android:textColor="@color/rin_on_toolbar"
+            android:textSize="13.5sp" />
+
+        <Button
+            android:id="@+id/btnRateDialogSubmit"
+            android:layout_width="0dp"
+            android:layout_height="46dp"
+            android:layout_weight="1"
+            android:background="@drawable/bg_rate_submit_button"
+            android:text="@string/action_rate_package"
+            android:textAllCaps="false"
+            android:textColor="#241705"
+            android:textStyle="bold"
+            android:textSize="13.5sp"
+            android:elevation="0dp" />
+    </LinearLayout>
+
+</LinearLayout>
