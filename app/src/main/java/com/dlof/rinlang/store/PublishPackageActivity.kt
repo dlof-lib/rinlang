@@ -28,6 +28,7 @@ class PublishPackageActivity : BaseConnectivityActivity() {
         val CATEGORIES = listOf("عام", "رياضيات", "نصوص وسلاسل", "بيانات", "شبكة", "أدوات مساعدة")
     }
 
+    private lateinit var library: com.dlof.rinlang.RinLibrary
     private var selectedAssetUris: List<Uri> = emptyList()
     private var selectedCategory: String = CATEGORIES.first()
     /** ملف README.md اختاره الناشر يدوياً؛ null يعني توليده تلقائياً عند النشر. */
@@ -87,7 +88,7 @@ class PublishPackageActivity : BaseConnectivityActivity() {
         val libraryName = intent.getStringExtra(EXTRA_LIBRARY_NAME) ?: run { finish(); return }
         val project = ProjectManager.listProjects(this).find { it.name == projectName }
             ?: run { finish(); return }
-        val library = ProjectManager.listLibraries(project).find { it.name == libraryName }
+        library = ProjectManager.listLibraries(project).find { it.name == libraryName }
             ?: run { finish(); return }
 
         findViewById<TextView>(R.id.txtToolbarTitle).text = getString(R.string.publish_title)
@@ -152,6 +153,27 @@ class PublishPackageActivity : BaseConnectivityActivity() {
             val dependencies = parseDependencies(edtDependencies.text.toString())
 
             setLoading(true)
+            // منع تشابه الأسماء بين كل المستخدمين (وليس فقط تكرار حرفي): يُتحقَّق قبل حتى تجهيز
+            // ملف الحزمة، حتى لا نُضيّع وقت المستخدم في ضغط/ترميز حزمة سيُرفض نشرها لاحقاً.
+            PackageRepository.isNameAvailable(name) { available ->
+                if (!available) {
+                    setLoading(false)
+                    Toast.makeText(this, R.string.error_package_name_taken, Toast.LENGTH_LONG).show()
+                    return@isNameAvailable
+                }
+                publishNow(uid, name, version, description, license, dependencies)
+            }
+        }
+    }
+
+    private fun publishNow(
+        uid: String,
+        name: String,
+        version: String,
+        description: String,
+        license: String,
+        dependencies: Map<String, String>
+    ) {
             AuthRepository.fetchProfile(uid) { profile ->
                 val publisherName = profile?.name?.ifBlank { profile.username } ?: "مستخدم Rin"
                 try {
@@ -196,7 +218,6 @@ class PublishPackageActivity : BaseConnectivityActivity() {
                     Toast.makeText(this, t.message ?: "فشل تجهيز الحزمة", Toast.LENGTH_LONG).show()
                 }
             }
-        }
     }
 
     private fun setLoading(loading: Boolean) {
