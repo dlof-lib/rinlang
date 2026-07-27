@@ -30,13 +30,20 @@ class PublishPackageActivity : AppCompatActivity() {
 
     private var selectedAssetUris: List<Uri> = emptyList()
     private var selectedCategory: String = CATEGORIES.first()
+    /** ملف README.md اختاره الناشر يدوياً؛ null يعني توليده تلقائياً عند النشر. */
+    private var selectedReadmeUri: Uri? = null
+    /** ملف ترخيص اختاره الناشر يدوياً؛ null يعني توليد قالب MIT تلقائياً عند النشر. */
+    private var selectedLicenseUri: Uri? = null
 
     private lateinit var edtName: EditText
     private lateinit var edtVersion: EditText
     private lateinit var edtDescription: EditText
     private lateinit var edtDependencies: EditText
+    private lateinit var edtLicense: EditText
     private lateinit var chipGroupCategory: ChipGroup
     private lateinit var txtAssetsSelected: TextView
+    private lateinit var txtReadmeSelected: TextView
+    private lateinit var txtLicenseSelected: TextView
     private lateinit var btnPublish: Button
     private lateinit var progress: ProgressBar
 
@@ -44,6 +51,22 @@ class PublishPackageActivity : AppCompatActivity() {
         registerForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
             selectedAssetUris = uris
             txtAssetsSelected.text = getString(R.string.assets_selected_format, uris.size)
+        }
+
+    private val pickReadmeLauncher =
+        registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+            if (uri == null) return@registerForActivityResult
+            selectedReadmeUri = uri
+            txtReadmeSelected.text = fileDisplayName(uri) ?: getString(R.string.file_selected_generic)
+            txtReadmeSelected.visibility = View.VISIBLE
+        }
+
+    private val pickLicenseLauncher =
+        registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+            if (uri == null) return@registerForActivityResult
+            selectedLicenseUri = uri
+            txtLicenseSelected.text = fileDisplayName(uri) ?: getString(R.string.file_selected_generic)
+            txtLicenseSelected.visibility = View.VISIBLE
         }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -74,13 +97,17 @@ class PublishPackageActivity : AppCompatActivity() {
         edtVersion = findViewById(R.id.edtPackageVersion)
         edtDescription = findViewById(R.id.edtPackageDescription)
         edtDependencies = findViewById(R.id.edtPackageDependencies)
+        edtLicense = findViewById(R.id.edtPackageLicense)
         chipGroupCategory = findViewById(R.id.chipGroupCategory)
         txtAssetsSelected = findViewById(R.id.txtAssetsSelected)
+        txtReadmeSelected = findViewById(R.id.txtReadmeSelected)
+        txtLicenseSelected = findViewById(R.id.txtLicenseSelected)
         btnPublish = findViewById(R.id.btnPublish)
         progress = findViewById(R.id.progressPublish)
 
         edtName.setText(library.name.removeSuffix(".og.rin"))
         edtVersion.setText("1.0.0")
+        edtLicense.setText("MIT")
 
         CATEGORIES.forEach { category ->
             val chip = Chip(this).apply {
@@ -102,10 +129,19 @@ class PublishPackageActivity : AppCompatActivity() {
             pickAssetsLauncher.launch(arrayOf("image/*"))
         }
 
+        findViewById<View>(R.id.btnPickReadme).setOnClickListener {
+            pickReadmeLauncher.launch(arrayOf("text/markdown", "text/plain", "text/*"))
+        }
+
+        findViewById<View>(R.id.btnPickLicense).setOnClickListener {
+            pickLicenseLauncher.launch(arrayOf("text/plain", "text/*", "application/octet-stream"))
+        }
+
         btnPublish.setOnClickListener {
             val name = edtName.text.toString().trim()
             val version = edtVersion.text.toString().trim().ifBlank { "1.0.0" }
             val description = edtDescription.text.toString().trim()
+            val license = edtLicense.text.toString().trim().ifBlank { "MIT" }
 
             if (name.isEmpty()) {
                 Toast.makeText(this, R.string.error_required_fields, Toast.LENGTH_SHORT).show()
@@ -125,9 +161,11 @@ class PublishPackageActivity : AppCompatActivity() {
                         version = version,
                         description = description,
                         publisherName = publisherName,
-                        license = "MIT",
+                        license = license,
                         extraAssetUris = selectedAssetUris,
-                        dependencies = dependencies
+                        dependencies = dependencies,
+                        customReadmeUri = selectedReadmeUri,
+                        customLicenseUri = selectedLicenseUri
                     )
                     val base64 = PackagingUtils.encodeFileToBase64(zip)
                     val fileName = "$name.${PackagingUtils.PACKAGE_EXTENSION}"
@@ -136,7 +174,7 @@ class PublishPackageActivity : AppCompatActivity() {
                         name = name,
                         version = version,
                         description = description,
-                        license = "MIT",
+                        license = license,
                         publisherUid = uid,
                         publisherName = publisherName,
                         fileName = fileName,
@@ -163,6 +201,19 @@ class PublishPackageActivity : AppCompatActivity() {
     private fun setLoading(loading: Boolean) {
         progress.visibility = if (loading) View.VISIBLE else View.GONE
         btnPublish.isEnabled = !loading
+    }
+
+    /** اسم عرض الملف المُختار عبر SAF (لعرض اسم README/LICENSE بعد اختياره)، أو null إن تعذّر ذلك. */
+    private fun fileDisplayName(uri: Uri): String? = try {
+        contentResolver.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)
+            ?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val idx = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                    if (idx >= 0) cursor.getString(idx) else null
+                } else null
+            }
+    } catch (t: Throwable) {
+        null
     }
 
     /** يحوّل "name:^1.0.0, other:2.0.0" إلى خريطة تبعيات، متجاهلاً المدخلات الفارغة/الخاطئة. */
