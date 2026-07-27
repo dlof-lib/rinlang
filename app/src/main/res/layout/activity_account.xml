@@ -7,106 +7,182 @@
 
     <include layout="@layout/toolbar_app" />
 
-    <LinearLayout
+    <androidx.core.widget.NestedScrollView
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:padding="24dp">
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:fillViewport="true">
 
-        <!-- حالة مسجّل الدخول -->
         <LinearLayout
-            android:id="@+id/groupLoggedIn"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:background="@drawable/bg_list_card"
-            android:padding="16dp"
-            android:visibility="gone">
+            android:padding="20dp">
 
-            <TextView
+            <!-- حالة مسجّل الدخول: بطاقة ملف شخصي احترافية -->
+            <LinearLayout
+                android:id="@+id/groupLoggedIn"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="@string/account_field_name"
-                android:textColor="@color/rin_editor_hint"
-                android:textSize="11sp" />
+                android:orientation="vertical"
+                android:visibility="gone">
 
-            <TextView
-                android:id="@+id/txtAccountName"
+                <!-- رأس الملف الشخصي: صورة دائرية + زر تغيير الصورة + الاسم + اسم المستخدم -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:gravity="center_horizontal"
+                    android:background="@drawable/bg_list_card"
+                    android:padding="24dp">
+
+                    <FrameLayout
+                        android:layout_width="96dp"
+                        android:layout_height="96dp">
+
+                        <ImageView
+                            android:id="@+id/imgAvatar"
+                            android:layout_width="96dp"
+                            android:layout_height="96dp"
+                            android:background="@drawable/bg_avatar_circle"
+                            android:scaleType="centerCrop"
+                            android:contentDescription="@string/account_title" />
+
+                        <TextView
+                            android:id="@+id/txtAvatarInitial"
+                            android:layout_width="96dp"
+                            android:layout_height="96dp"
+                            android:gravity="center"
+                            android:textColor="@android:color/white"
+                            android:textSize="34sp"
+                            android:textStyle="bold" />
+
+                        <ImageButton
+                            android:id="@+id/btnChangeAvatar"
+                            android:layout_width="30dp"
+                            android:layout_height="30dp"
+                            android:layout_gravity="bottom|end"
+                            android:background="@drawable/bg_avatar_edit_badge"
+                            android:src="@drawable/ic_camera"
+                            android:scaleType="center"
+                            android:padding="0dp"
+                            android:contentDescription="@string/action_change_avatar" />
+                    </FrameLayout>
+
+                    <TextView
+                        android:id="@+id/txtAccountName"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="14dp"
+                        android:textColor="@color/rin_on_toolbar"
+                        android:textSize="19sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/txtAccountUsername"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:textColor="@color/rin_accent"
+                        android:textSize="13.5sp" />
+
+                    <TextView
+                        android:id="@+id/txtAccountBio"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:gravity="center"
+                        android:textColor="@color/rin_editor_hint"
+                        android:textSize="13sp"
+                        android:lineSpacingExtra="2dp" />
+
+                    <Button
+                        android:id="@+id/btnEditProfile"
+                        android:layout_width="match_parent"
+                        android:layout_height="42dp"
+                        android:layout_marginTop="16dp"
+                        android:background="@drawable/bg_toolbar_btn_ghost"
+                        android:text="@string/action_edit_profile"
+                        android:textAllCaps="false"
+                        android:textColor="@color/rin_on_toolbar"
+                        android:textSize="13sp" />
+                </LinearLayout>
+
+                <!-- بطاقة معلومات الحساب -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:layout_marginTop="14dp"
+                    android:background="@drawable/bg_list_card"
+                    android:padding="16dp">
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/account_field_email"
+                        android:textColor="@color/rin_editor_hint"
+                        android:textSize="11sp" />
+
+                    <TextView
+                        android:id="@+id/txtAccountEmail"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:textColor="@color/rin_on_toolbar"
+                        android:textSize="14sp" />
+                </LinearLayout>
+
+                <Button
+                    android:id="@+id/btnLogout"
+                    android:layout_width="match_parent"
+                    android:layout_height="46dp"
+                    android:layout_marginTop="14dp"
+                    android:background="@drawable/bg_toolbar_btn_ghost"
+                    android:text="@string/action_logout"
+                    android:textAllCaps="false"
+                    android:textColor="@color/status_error" />
+            </LinearLayout>
+
+            <!-- حالة غير مسجّل الدخول -->
+            <LinearLayout
+                android:id="@+id/groupLoggedOut"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginBottom="12dp"
-                android:textColor="@color/rin_on_toolbar"
-                android:textSize="16sp"
-                android:textStyle="bold" />
+                android:orientation="vertical"
+                android:gravity="center_horizontal"
+                android:padding="24dp"
+                android:visibility="gone">
 
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="@string/account_field_username"
-                android:textColor="@color/rin_editor_hint"
-                android:textSize="11sp" />
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/account_not_logged_in"
+                    android:textColor="@color/rin_on_toolbar"
+                    android:textSize="16sp"
+                    android:textStyle="bold"
+                    android:layout_marginBottom="6dp" />
 
-            <TextView
-                android:id="@+id/txtAccountUsername"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="12dp"
-                android:textColor="@color/rin_on_toolbar"
-                android:textSize="14sp" />
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/account_not_logged_in_hint"
+                    android:textColor="@color/rin_editor_hint"
+                    android:textSize="13sp"
+                    android:gravity="center"
+                    android:layout_marginBottom="20dp" />
 
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="@string/account_field_email"
-                android:textColor="@color/rin_editor_hint"
-                android:textSize="11sp" />
-
-            <TextView
-                android:id="@+id/txtAccountEmail"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="20dp"
-                android:textColor="@color/rin_on_toolbar"
-                android:textSize="14sp" />
-
-            <Button
-                android:id="@+id/btnLogout"
-                android:layout_width="match_parent"
-                android:layout_height="46dp"
-                android:background="@drawable/bg_toolbar_btn_ghost"
-                android:text="@string/action_logout"
-                android:textAllCaps="false"
-                android:textColor="@color/status_error" />
+                <Button
+                    android:id="@+id/btnGoLogin"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:background="@drawable/bg_run_button_premium"
+                    android:text="@string/action_login"
+                    android:textAllCaps="false"
+                    android:textColor="@android:color/white"
+                    android:textStyle="bold"
+                    android:elevation="0dp" />
+            </LinearLayout>
         </LinearLayout>
-
-        <!-- حالة غير مسجّل الدخول -->
-        <LinearLayout
-            android:id="@+id/groupLoggedOut"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:gravity="center_horizontal"
-            android:padding="24dp"
-            android:visibility="gone">
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/account_not_logged_in"
-                android:textColor="@color/rin_editor_hint"
-                android:textSize="14sp"
-                android:layout_marginBottom="16dp" />
-
-            <Button
-                android:id="@+id/btnGoLogin"
-                android:layout_width="match_parent"
-                android:layout_height="48dp"
-                android:background="@drawable/bg_run_button_premium"
-                android:text="@string/action_login"
-                android:textAllCaps="false"
-                android:textColor="@android:color/white"
-                android:textStyle="bold"
-                android:elevation="0dp" />
-        </LinearLayout>
-    </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
 </LinearLayout>
