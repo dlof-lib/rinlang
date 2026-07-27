@@ -111,6 +111,43 @@ object PackagingUtils {
         return result
     }
 
+    /**
+     * يفكّ ضغط [pkg] (بعد فك ترميز base64) ويستخرج محتوى README.md ونص الترخيص وقائمة كل
+     * الملفات داخل الأرشيف (بالاسم والحجم)، لعرضها في صفحة تفاصيل الحزمة بشكل شبيه بصفحة
+     * مستودع على GitHub، دون تثبيت أي شيء فعلياً في مشروع المستخدم.
+     */
+    fun readContents(pkg: RinPackage): PackageContents {
+        val bytes = try {
+            Base64.decode(pkg.base64Data, Base64.NO_WRAP)
+        } catch (t: Throwable) {
+            return PackageContents(readme = null, license = null, files = emptyList())
+        }
+
+        var readme: String? = null
+        var license: String? = null
+        val files = mutableListOf<PackageFileEntry>()
+
+        ZipInputStream(bytes.inputStream()).use { zip ->
+            var entry: ZipEntry? = zip.nextEntry
+            while (entry != null) {
+                if (!entry.isDirectory) {
+                    val content = zip.readBytes()
+                    files.add(PackageFileEntry(name = entry.name, sizeBytes = content.size.toLong()))
+                    when {
+                        entry.name.equals("README.md", ignoreCase = true) ->
+                            readme = content.toString(Charsets.UTF_8)
+                        entry.name.equals("LICENSE", ignoreCase = true) ||
+                            entry.name.equals("LICENSE.txt", ignoreCase = true) ->
+                            license = content.toString(Charsets.UTF_8)
+                    }
+                }
+                zip.closeEntry()
+                entry = zip.nextEntry
+            }
+        }
+        return PackageContents(readme, license, files.sortedBy { it.name })
+    }
+
     private fun buildReadme(
         name: String,
         version: String,
@@ -187,3 +224,13 @@ object PackagingUtils {
         null
     }
 }
+
+/** ملف واحد داخل أرشيف الحزمة: مساره الكامل داخل الـ zip (مثال: "lib/mylib.og.rin") وحجمه. */
+data class PackageFileEntry(val name: String, val sizeBytes: Long)
+
+/** محتوى حزمة مُستخرَج من أرشيفها، جاهز للعرض في صفحة تفاصيل شبيهة بصفحة مستودع GitHub. */
+data class PackageContents(
+    val readme: String?,
+    val license: String?,
+    val files: List<PackageFileEntry>
+)
