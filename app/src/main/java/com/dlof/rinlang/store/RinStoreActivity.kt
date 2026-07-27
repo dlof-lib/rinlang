@@ -37,6 +37,7 @@ class RinStoreActivity : BaseConnectivityActivity() {
         /** النتيجة المُعادة عند التثبيت: سطر (أو أسطر) @import الجاهزة، لتُدرَج مباشرة في المحرر. */
         const val EXTRA_IMPORT_STATEMENT = "extra_import_statement"
         private const val CATEGORY_ALL = "__all__"
+        private const val REQUEST_PACKAGE_DETAIL = 4171
     }
 
     private enum class SortMode(val labelRes: Int) {
@@ -56,6 +57,8 @@ class RinStoreActivity : BaseConnectivityActivity() {
     private lateinit var btnSort: ImageButton
 
     private var allPackages: List<RinPackage> = emptyList()
+    /** ناشرون مؤهَّلون لشارة التوثيق (يُعاد حسابها بعد كل تحميل لقائمة المتجر، دون طلب شبكة إضافي). */
+    private var verifiedPublisherUids: Set<String> = emptySet()
     private var selectedCategory: String = CATEGORY_ALL
     private var sortMode: SortMode = SortMode.NEWEST
     /** تجنّب تثبيت نفس الحزمة أكثر من مرة أثناء حلّ التبعيات المتشابكة. */
@@ -80,6 +83,8 @@ class RinStoreActivity : BaseConnectivityActivity() {
         btnSort = findViewById(R.id.btnStoreSort)
 
         adapter = PackageAdapter(
+            isVerified = { pkg -> pkg.publisherUid in verifiedPublisherUids },
+            onOpenDetail = { pkg -> openPackageDetail(pkg) },
             onInstall = { pkg -> confirmAndInstall(pkg) },
             onRate = { pkg, ratingBar -> showRateDialog(pkg, ratingBar) },
             onReport = { pkg -> showReportDialog(pkg) }
@@ -108,6 +113,7 @@ class RinStoreActivity : BaseConnectivityActivity() {
         PackageRepository.fetchAllPackages { packages ->
             hideSkeleton()
             allPackages = packages
+            verifiedPublisherUids = PublisherBadgeUtils.eligiblePublisherUids(packages)
             rebuildCategoryChips()
             applyFilters()
         }
@@ -175,6 +181,23 @@ class RinStoreActivity : BaseConnectivityActivity() {
         }
         adapter.submit(result)
         txtEmpty.visibility = if (result.isEmpty()) View.VISIBLE else View.GONE
+    }
+
+    /** يفتح صفحة تفاصيل الحزمة (شبيهة بصفحة مستودع GitHub)؛ ضغط "تثبيت" هناك يُعيد معرّف الحزمة هنا. */
+    private fun openPackageDetail(pkg: RinPackage) {
+        val intent = Intent(this, PackageDetailActivity::class.java)
+        intent.putExtra(PackageDetailActivity.EXTRA_PACKAGE, pkg)
+        intent.putExtra(PackageDetailActivity.EXTRA_PUBLISHER_VERIFIED, pkg.publisherUid in verifiedPublisherUids)
+        startActivityForResult(intent, REQUEST_PACKAGE_DETAIL)
+    }
+
+    @Deprecated("Deprecated in Java")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode != REQUEST_PACKAGE_DETAIL || resultCode != RESULT_OK) return
+        val packageId = data?.getStringExtra(PackageDetailActivity.EXTRA_SELECTED_PACKAGE_ID) ?: return
+        val pkg = allPackages.find { it.id == packageId } ?: return
+        confirmAndInstall(pkg)
     }
 
     /** يتحقّق من تبعيات الحزمة أولاً؛ فقط عند الرضا التام أو موافقة المستخدم يُثبِّت فعلياً. */
@@ -326,6 +349,8 @@ class RinStoreActivity : BaseConnectivityActivity() {
 }
 
 private class PackageAdapter(
+    val isVerified: (RinPackage) -> Boolean,
+    val onOpenDetail: (RinPackage) -> Unit,
     val onInstall: (RinPackage) -> Unit,
     val onRate: (RinPackage, RatingBar) -> Unit,
     val onReport: (RinPackage) -> Unit
@@ -339,8 +364,10 @@ private class PackageAdapter(
     }
 
     class VH(view: View) : RecyclerView.ViewHolder(view) {
+        val root: View = view.findViewById(R.id.rootPackageCard)
         val txtInitial: TextView = view.findViewById(R.id.txtPackageInitial)
         val txtName: TextView = view.findViewById(R.id.txtPackageName)
+        val imgVerifiedBadge: View = view.findViewById(R.id.imgPackageVerifiedBadge)
         val txtMeta: TextView = view.findViewById(R.id.txtPackageMeta)
         val txtCategory: TextView = view.findViewById(R.id.txtPackageCategory)
         val txtDescription: TextView = view.findViewById(R.id.txtPackageDescription)
@@ -362,6 +389,7 @@ private class PackageAdapter(
         val context = holder.itemView.context
         holder.txtInitial.text = pkg.name.take(1).uppercase()
         holder.txtName.text = "${pkg.name} — ${pkg.publisherName}"
+        holder.imgVerifiedBadge.visibility = if (isVerified(pkg)) View.VISIBLE else View.GONE
         holder.txtMeta.text = context.getString(
             R.string.store_item_meta_format, pkg.version, pkg.license, pkg.downloadCount
         )
@@ -387,6 +415,7 @@ private class PackageAdapter(
         holder.btnInstall.setOnClickListener { onInstall(pkg) }
         holder.btnRate.setOnClickListener { onRate(pkg, holder.ratingBar) }
         holder.btnReport.setOnClickListener { onReport(pkg) }
+        holder.root.setOnClickListener { onOpenDetail(pkg) }
     }
 
     override fun getItemCount(): Int = items.size
