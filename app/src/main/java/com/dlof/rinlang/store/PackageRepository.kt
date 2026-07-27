@@ -123,6 +123,7 @@ object PackageRepository {
             "category" to category.ifBlank { "عام" },
             "ratingSum" to 0L,
             "ratingCount" to 0L,
+            "likeCount" to 0L,
             "dependencies" to dependencies
         )
 
@@ -238,6 +239,46 @@ object PackageRepository {
                     .addOnFailureListener { callback(false) }
             }
             override fun onCancelled(error: DatabaseError) = callback(false)
+        })
+    }
+
+    /** يجلب هل أعجب [uid] بحزمة [packageId] مسبقاً أم لا (لضبط شكل زر القلب عند فتح الشاشة). */
+    fun fetchLikeState(packageId: String, uid: String, callback: (liked: Boolean) -> Unit) {
+        packagesRef().child(packageId).child("likes").child(uid)
+            .addListenerForSingleValueEvent(object : ValueEventListener {
+                override fun onDataChange(snapshot: DataSnapshot) = callback(snapshot.exists())
+                override fun onCancelled(error: DatabaseError) = callback(false)
+            })
+    }
+
+    /**
+     * يبدّل إعجاب [uid] بحزمة [packageId]: يزيل الإعجاب وينقص likeCount إن كان معجَباً بها
+     * مسبقاً، أو يسجّله ويزيد likeCount إن لم يكن. يُعيد عبر [callback] الحالة الجديدة (liked)
+     * ونجاح العملية من عدمه، حتى تُحدَّث الواجهة فوراً بشكل متفائل (optimistic) أو تتراجع عند الفشل.
+     */
+    fun toggleLike(packageId: String, uid: String, callback: (liked: Boolean, success: Boolean) -> Unit) {
+        val likeRef = packagesRef().child(packageId).child("likes").child(uid)
+        likeRef.addListenerForSingleValueEvent(object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                val alreadyLiked = snapshot.exists()
+                val newState = !alreadyLiked
+                val writeTask = if (newState) likeRef.setValue(true) else likeRef.removeValue()
+                writeTask
+                    .addOnSuccessListener {
+                        val countRef = packagesRef().child(packageId).child("likeCount")
+                        countRef.addListenerForSingleValueEvent(object : ValueEventListener {
+                            override fun onDataChange(countSnap: DataSnapshot) {
+                                val current = countSnap.getValue(Long::class.java) ?: 0L
+                                val updated = if (newState) current + 1 else (current - 1).coerceAtLeast(0L)
+                                countRef.setValue(updated)
+                                callback(newState, true)
+                            }
+                            override fun onCancelled(error: DatabaseError) = callback(alreadyLiked, false)
+                        })
+                    }
+                    .addOnFailureListener { callback(alreadyLiked, false) }
+            }
+            override fun onCancelled(error: DatabaseError) = callback(false, false)
         })
     }
 }
