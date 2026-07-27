@@ -14,7 +14,7 @@ data class InstalledPackageRecord(
 
 /**
  * يتتبّع أي حزم متجر Rin مثبَّتة فعلياً داخل كل مشروع، عبر ملف صغير مخفي
- * "lib/.rin_store_manifest.json" — ضروري لأن ملفات lib/*.og.rin نفسها لا تحمل رقم إصدار،
+ * "lib/.rin_store_manifest.json" — ضروري لأن ملفات lib/ *.og.rin نفسها لا تحمل رقم إصدار،
  * فهذا هو المصدر الوحيد لمعرفة "ما الإصدار المثبَّت حالياً؟" عند التحقق من التبعيات.
  */
 object PackageManifest {
