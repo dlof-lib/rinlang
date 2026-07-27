@@ -138,7 +138,30 @@ struct TextStmt : Stmt {
 //                                                             container هنا يمثّل "مجموعة مستندات" (collection)،
 //                                                             و Containers.Group التي تحتويها تمثّل "قاعدة بيانات" (database)
 //                                                             كاملة من عدّة مجموعات مستندات.
-enum class ContainerKind { PLAIN, PIPE, DATA, API, IMPORT, TABLE, DOC };
+//
+// ---- مفاهيم التنسيق والستايل (formatting/style) ----
+// الفكرة: كائن مسمّى بحقول حرة (name/color/re/...) عبر text/let عادية، ونمط عرض اختياري عبر
+// عبارة 'style' (المشتركة أصلاً مع container.table)، مع كتل واجهة جاهزة (شريط علوي/سفلي/زر).
+//
+// @container.object=name  <body>  .end/container.object   -> "كائن" ببيانات نقية (حقول حرة + style اختياري)
+// @Object=name            <body>  .end/Object              -> نفس الشيء، بشكل مستقل (بلا بادئة container.)
+//                                                              كلا الشكلين ينتجان نفس ContainerKind::OBJECT.
+//                                                              مثال حقول الكائن: text name = "..."; text color = "#3498db";
+//
+// @container.portal=name  <body>  .end/container.portal    -> "بوابة/حاوية تنسيق" غرضها حمل نمط (style) عام
+// @portal=name             <body>  .end/portal               -> نفس الشيء، بشكل مستقل. كلاهما ContainerKind::PORTAL.
+//                                                               مثال: @portal=theme  style value="style://dark";  .end/portal
+//
+// @container.block=name    <body>  .end/container.block     -> كتلة واجهة جاهزة (شريط علوي/سفلي/زر...)
+// @block=name              <body>  .end/block                -> نفس الشيء، بشكل مستقل. كلاهما ContainerKind::BLOCK.
+//                                                               الاسم يحدّد نوع الكتلة، مثال:
+//                                                               @block="top.bar"     ... .end/block
+//                                                               @block="bottom.bar"  ... .end/block
+//                                                               @block="btn"         ... .end/block
+//
+// object/portal/block الثلاثة تخضع لنفس قيود "البيانات النقية" الخاصة بـ container.data/container.table
+// (بلا دوال وبلا حاويات متداخلة)، ويجوز استخدام عبارة 'style' بداخل أيٍّ منها (وليس فقط container.table).
+enum class ContainerKind { PLAIN, PIPE, DATA, API, IMPORT, TABLE, DOC, OBJECT, PORTAL, BLOCK };
 
 struct ContainerStmt : Stmt {
     std::string name; // قد تكون فارغة إن لم يُحدَّد اسم
