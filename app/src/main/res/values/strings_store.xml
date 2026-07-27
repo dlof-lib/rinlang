@@ -44,24 +44,54 @@
 
     <!-- شاشة النشر -->
     <string name="publish_title">نشر مكتبة</string>
-    <string name="publish_subtitle">سيُولَّد ملف README.md و LICENSE (MIT) تلقائياً، وتُضغط كل الملفات في حزمة واحدة</string>
+    <string name="publish_subtitle">يُولَّد ملف README.md و LICENSE تلقائياً إن لم ترفع ملفاتك الخاصة، وتُضغط كل الملفات في حزمة واحدة</string>
     <string name="hint_package_name">اسم الحزمة</string>
     <string name="hint_package_version">رقم الإصدار</string>
     <string name="hint_package_description">وصف قصير للمكتبة (اختياري)</string>
     <string name="hint_package_category">تصنيف الحزمة</string>
     <string name="hint_package_dependencies">التبعيات (اختياري)</string>
     <string name="hint_package_dependencies_example">مثال:\nmathlib:^1.0.0\nstrings:2.0.0</string>
+    <string name="hint_package_license">الترخيص</string>
+    <string name="hint_package_custom_docs">اختياري: ارفع ملف README.md وملف ترخيص خاصّين بك بدل التوليد التلقائي</string>
     <string name="action_pick_assets">إضافة صور/أيقونات (اختياري)</string>
+    <string name="action_pick_readme">رفع ملف README.md خاص بي</string>
+    <string name="action_pick_license">رفع ملف ترخيص خاص بي</string>
+    <string name="file_selected_generic">تم اختيار الملف ✓</string>
     <string name="assets_selected_format">%1$d ملف مُختار</string>
     <string name="action_publish_submit">نشر الحزمة</string>
     <string name="publish_success">تم نشر الحزمة في متجر Rin ✓</string>
     <string name="publish_requires_login">سجّل الدخول أولاً لتتمكن من النشر</string>
 
+    <!-- الإبلاغ عن حزمة -->
+    <string name="action_report_package">إبلاغ</string>
+    <string name="report_package_title">الإبلاغ عن %1$s</string>
+    <string name="report_package_message">اختر سبب الإبلاغ عن هذه الحزمة:</string>
+    <string name="report_package_login_required">سجّل الدخول أولاً حتى تتمكن من الإبلاغ</string>
+    <string name="report_package_submitted">تم إرسال بلاغك، شكراً لمساعدتك في حماية المتجر ✓</string>
+    <string-array name="report_reasons">
+        <item>محتوى مسيء أو غير لائق</item>
+        <item>كود خبيث أو ضار</item>
+        <item>انتهاك حقوق ملكية/ترخيص</item>
+        <item>معلومات مضلِّلة (وصف أو اسم مزيَّف)</item>
+        <item>سبب آخر</item>
+    </string-array>
+
     <!-- شاشة حسابي -->
     <string name="account_title">حسابي</string>
     <string name="account_not_logged_in">لم تسجّل الدخول بعد</string>
+    <string name="account_not_logged_in_hint">سجّل الدخول للوصول إلى ملفك الشخصي، ونشر الحزم، وتقييمها</string>
     <string name="action_logout">تسجيل الخروج</string>
     <string name="account_field_name">الاسم</string>
     <string name="account_field_username">اسم المستخدم</string>
     <string name="account_field_email">البريد الإلكتروني</string>
+    <string name="account_bio_placeholder">لا توجد نبذة بعد. اضغط \"تعديل الملف الشخصي\" لإضافة واحدة.</string>
+    <string name="action_edit_profile">تعديل الملف الشخصي</string>
+    <string name="action_change_avatar">تغيير صورة الملف الشخصي</string>
+    <string name="edit_profile_title">تعديل الملف الشخصي</string>
+    <string name="edit_profile_name_hint">الاسم الظاهر</string>
+    <string name="edit_profile_bio_hint">نبذة قصيرة عنك (اختياري)</string>
+    <string name="action_save">حفظ</string>
+    <string name="profile_updated">تم تحديث الملف الشخصي ✓</string>
+    <string name="avatar_updated">تم تحديث صورة الملف الشخصي ✓</string>
+    <string name="avatar_update_failed">تعذّر تحديث الصورة، حاول مرة أخرى</string>
 </resources>
