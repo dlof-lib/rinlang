@@ -9,10 +9,10 @@ import android.widget.EditText
 import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
-import androidx.appcompat.app.AppCompatActivity
+import com.dlof.rinlang.network.BaseConnectivityActivity
 import com.dlof.rinlang.R
 
-class RegisterActivity : AppCompatActivity() {
+class RegisterActivity : BaseConnectivityActivity() {
 
     private lateinit var edtName: EditText
     private lateinit var edtUsername: EditText
@@ -57,6 +57,7 @@ class RegisterActivity : AppCompatActivity() {
             Toast.makeText(this, R.string.error_password_short, Toast.LENGTH_SHORT).show()
             return
         }
+        if (!isOnline()) { showOfflineOverlay(); return }
 
         setLoading(true)
         AuthRepository.checkUsernameAvailable(username) { available ->
