@@ -27,6 +27,10 @@
         "reportCount": { ".write": "auth != null" },
         "reports": {
           "$uid": { ".write": "auth != null && auth.uid === $uid" }
+        },
+        "likeCount": { ".write": "auth != null" },
+        "likes": {
+          "$uid": { ".write": "auth != null && auth.uid === $uid" }
         }
       }
     }
