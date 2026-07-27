@@ -14,13 +14,14 @@ import android.widget.PopupMenu
 import android.widget.RatingBar
 import android.widget.TextView
 import android.widget.Toast
-import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.dlof.rinlang.Project
 import com.dlof.rinlang.ProjectManager
 import com.dlof.rinlang.R
 import com.dlof.rinlang.auth.AuthRepository
+import com.dlof.rinlang.network.BaseConnectivityActivity
+import com.dlof.rinlang.widgets.ShimmerLayout
 import com.google.android.material.chip.Chip
 import com.google.android.material.chip.ChipGroup
 
@@ -29,7 +30,7 @@ import com.google.android.material.chip.ChipGroup
  * دخول)، بحث + تصنيفات + فرز، وتثبيت أي حزمة داخل lib/ الخاص بالمشروع الحالي بضغطة واحدة
  * (مع التحقق من تبعياتها المعلَنة أولاً).
  */
-class RinStoreActivity : AppCompatActivity() {
+class RinStoreActivity : BaseConnectivityActivity() {
 
     companion object {
         const val EXTRA_PROJECT_NAME = "extra_project_name"
@@ -47,6 +48,7 @@ class RinStoreActivity : AppCompatActivity() {
 
     private lateinit var project: Project
     private lateinit var rvPackages: RecyclerView
+    private lateinit var shimmerSkeleton: ShimmerLayout
     private lateinit var txtEmpty: View
     private lateinit var adapter: PackageAdapter
     private lateinit var edtSearch: EditText
@@ -71,6 +73,7 @@ class RinStoreActivity : AppCompatActivity() {
         findViewById<View>(R.id.btnToolbarBack).setOnClickListener { finish() }
 
         rvPackages = findViewById(R.id.rvPackages)
+        shimmerSkeleton = findViewById(R.id.shimmerStoreSkeleton)
         txtEmpty = findViewById(R.id.txtEmptyStore)
         edtSearch = findViewById(R.id.edtStoreSearch)
         chipGroupCategory = findViewById(R.id.chipGroupStoreCategory)
@@ -92,15 +95,35 @@ class RinStoreActivity : AppCompatActivity() {
 
         btnSort.setOnClickListener { showSortMenu() }
 
+        runIfOnline { loadPackages() }
+    }
+
+    /** يُستدعى تلقائياً عند عودة الاتصال بعد انقطاعه أثناء وجود المستخدم في شاشة المتجر. */
+    override fun onConnectionRestored() {
         loadPackages()
     }
 
     private fun loadPackages() {
+        showSkeleton()
         PackageRepository.fetchAllPackages { packages ->
+            hideSkeleton()
             allPackages = packages
             rebuildCategoryChips()
             applyFilters()
         }
+    }
+
+    private fun showSkeleton() {
+        shimmerSkeleton.visibility = View.VISIBLE
+        shimmerSkeleton.startShimmer()
+        rvPackages.visibility = View.GONE
+        txtEmpty.visibility = View.GONE
+    }
+
+    private fun hideSkeleton() {
+        shimmerSkeleton.stopShimmer()
+        shimmerSkeleton.visibility = View.GONE
+        rvPackages.visibility = View.VISIBLE
     }
 
     private fun rebuildCategoryChips() {
@@ -156,6 +179,7 @@ class RinStoreActivity : AppCompatActivity() {
 
     /** يتحقّق من تبعيات الحزمة أولاً؛ فقط عند الرضا التام أو موافقة المستخدم يُثبِّت فعلياً. */
     private fun confirmAndInstall(pkg: RinPackage) {
+        if (!isOnline()) { showOfflineOverlay(); return }
         val check = DependencyResolver.check(project, pkg)
         if (check.isSatisfied) {
             installPackage(pkg)
@@ -236,6 +260,7 @@ class RinStoreActivity : AppCompatActivity() {
     }
 
     private fun showRateDialog(pkg: RinPackage, anchorRatingBar: RatingBar) {
+        if (!isOnline()) { showOfflineOverlay(); return }
         val uid = AuthRepository.currentUid()
         if (uid == null) {
             Toast.makeText(this, R.string.rate_package_login_required, Toast.LENGTH_SHORT).show()
@@ -278,6 +303,7 @@ class RinStoreActivity : AppCompatActivity() {
 
     /** يعرض قائمة أسباب جاهزة، ويرسل البلاغ المختار عبر [PackageRepository.submitReport]. */
     private fun showReportDialog(pkg: RinPackage) {
+        if (!isOnline()) { showOfflineOverlay(); return }
         val uid = AuthRepository.currentUid()
         if (uid == null) {
             Toast.makeText(this, R.string.report_package_login_required, Toast.LENGTH_SHORT).show()
