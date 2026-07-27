@@ -118,6 +118,24 @@
             android:textSize="11.5sp"
             android:background="@drawable/bg_toolbar_btn_ghost"
             android:textColor="@color/rin_accent" />
+
+        <Button
+            android:id="@+id/btnReportPackage"
+            android:layout_width="wrap_content"
+            android:layout_height="30dp"
+            android:layout_marginStart="6dp"
+            android:minWidth="0dp"
+            android:minHeight="0dp"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            android:paddingHorizontal="10dp"
+            android:drawableStart="@drawable/ic_report_flag"
+            android:drawablePadding="4dp"
+            android:text="@string/action_report_package"
+            android:textAllCaps="false"
+            android:textSize="11.5sp"
+            android:background="@drawable/bg_toolbar_btn_ghost"
+            android:textColor="@color/status_error" />
     </LinearLayout>
 
     <Button
