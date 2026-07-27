@@ -96,6 +96,7 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+        BottomNavHelper.setup(this, BottomNavTab.EDITOR)
         RinEngine.init(applicationContext) // يفعّل save/installation/file الحقيقية على تخزين التطبيق الخاص
 
         // إن جاء التطبيق من شاشة الملفات/المشاريع، اربط RinEngine بمجلد ذلك المشروع تحديداً
