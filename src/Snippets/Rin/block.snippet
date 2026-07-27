@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<CodeSnippets xmlns="http://schemas.microsoft.com/VisualStudio/2005/CodeSnippet">
+  <CodeSnippet Format="1.0.0">
+    <Header>
+      <Title>block</Title>
+      <Shortcut>block</Shortcut>
+      <Description>كتلة واجهة جاهزة (top.bar / bottom.bar / btn) مع نمط اختياري</Description>
+      <SnippetTypes>
+        <SnippetType>Expansion</SnippetType>
+      </SnippetTypes>
+    </Header>
+    <Snippet>
+      <Declarations>
+        <Literal>
+          <ID>p1</ID>
+          <ToolTip>p1: top.bar / bottom.bar / btn</ToolTip>
+          <Default>top.bar</Default>
+        </Literal>
+        <Literal>
+          <ID>p2</ID>
+          <ToolTip>p2</ToolTip>
+          <Default>Title</Default>
+        </Literal>
+        <Literal>
+          <ID>p3</ID>
+          <ToolTip>p3</ToolTip>
+          <Default>style://dark</Default>
+        </Literal>
+      </Declarations>
+      <Code Language="Rin"><![CDATA[@block="$p1$"
+	text name = "$p2$";
+	style value="$p3$";
+	$end$
+.end/block]]></Code>
+    </Snippet>
+  </CodeSnippet>
+</CodeSnippets>
