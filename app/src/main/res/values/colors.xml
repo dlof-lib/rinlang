@@ -72,6 +72,10 @@
     <color name="log_kind_error">#F14C4C</color>
     <color name="log_kind_plain">#AEB4BD</color>
 
+    <!-- تحميل هيكلي (skeleton loading) + شاشة انقطاع الاتصال -->
+    <color name="rin_skeleton_base">#22252C</color>
+    <color name="rin_skeleton_highlight">#31353F</color>
+
     <!-- بطاقة/زر تنزيل النتائج الفعلية إلى Downloads -->
     <color name="rin_download_chip_bg">#20232B</color>
     <color name="rin_download_chip_border">#3A3E48</color>
