@@ -1,11 +1,66 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
     android:background="@color/rin_background">
 
     <include layout="@layout/toolbar_app" />
+
+    <!-- شريط البحث + زر الفرز، ثابت أعلى القائمة -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingStart="8dp"
+        android:paddingEnd="8dp"
+        android:paddingTop="8dp">
+
+        <EditText
+            android:id="@+id/edtStoreSearch"
+            android:layout_width="0dp"
+            android:layout_height="46dp"
+            android:layout_weight="1"
+            android:layout_marginEnd="6dp"
+            android:background="@drawable/bg_input_field"
+            android:drawableStart="@android:drawable/ic_menu_search"
+            android:drawablePadding="8dp"
+            android:paddingHorizontal="12dp"
+            android:singleLine="true"
+            android:hint="@string/store_search_hint"
+            android:textColor="@color/rin_editor_text"
+            android:textColorHint="@color/rin_editor_hint"
+            android:textSize="13.5sp" />
+
+        <ImageButton
+            android:id="@+id/btnStoreSort"
+            android:layout_width="46dp"
+            android:layout_height="46dp"
+            android:padding="11dp"
+            android:background="@drawable/bg_icon_btn"
+            android:src="@android:drawable/ic_menu_sort_by_size"
+            app:tint="@color/rin_on_toolbar"
+            android:contentDescription="@string/store_sort_newest" />
+    </LinearLayout>
+
+    <!-- تصنيفات المتجر: تُبنى ديناميكياً من الحزم المُحمَّلة -->
+    <HorizontalScrollView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:scrollbars="none"
+        android:paddingTop="6dp">
+
+        <com.google.android.material.chip.ChipGroup
+            android:id="@+id/chipGroupStoreCategory"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp"
+            app:singleSelection="true"
+            app:chipSpacingHorizontal="6dp" />
+    </HorizontalScrollView>
 
     <androidx.core.widget.NestedScrollView
         android:layout_width="match_parent"
