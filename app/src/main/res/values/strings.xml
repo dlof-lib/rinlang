@@ -169,6 +169,11 @@ print \"Hello, \" + name + \"!\";
     <string name="more_row_settings_subtitle">حجم الخط، أرقام الأسطر، وخيارات أخرى</string>
     <string name="more_row_needs_project_toast">اختر مشروعاً أولاً</string>
 
+    <!-- ===== اختيار الصورة الرمزية (أيقونة من مكتبة أو رفع من الاستوديو) ===== -->
+    <string name="avatar_picker_title">اختر صورتك الرمزية</string>
+    <string name="avatar_picker_subtitle">اختر أيقونة من المكتبة، أو ارفع صورة من الاستوديو</string>
+    <string name="avatar_picker_upload_studio">رفع صورة من الاستوديو</string>
+
     <!-- ===== شاشة البداية (Splash) ===== -->
     <string name="splash_tagline">لغة برمجة خفيفة وسريعة</string>
 </resources>
