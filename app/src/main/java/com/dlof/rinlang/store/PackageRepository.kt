@@ -91,6 +91,28 @@ object PackageRepository {
         })
     }
 
+    /**
+     * يجلب كل الإصدارات المنشورة سابقاً باسم مطابق لـ [name] بعد التطبيع (راجع [normalizeName])،
+     * بغضّ النظر عن ناشرها — تُستخدَم لتطبيق سياسة [PublishPolicy.validateVersionProgression]
+     * (يجب أن يكون كل إصدار جديد أحدث من كل ما نُشر سابقاً بهذا الاسم). قراءة واحدة فقط على
+     * كامل packages/، بنفس تكلفة [isNameAvailable] تقريباً.
+     */
+    fun fetchExistingVersions(name: String, callback: (List<String>) -> Unit) {
+        val target = normalizeName(name)
+        if (target.isEmpty()) { callback(emptyList()); return }
+        packagesRef().addListenerForSingleValueEvent(object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                val versions = snapshot.children.mapNotNull { child ->
+                    val pkg = child.getValue(RinPackage::class.java) ?: return@mapNotNull null
+                    if (normalizeName(pkg.name) == target) pkg.version else null
+                }
+                callback(versions)
+            }
+
+            override fun onCancelled(error: DatabaseError) = callback(emptyList())
+        })
+    }
+
     fun publishPackage(
         name: String,
         version: String,
