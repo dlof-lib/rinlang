@@ -1,0 +1,121 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- شاشة الأمان المعروضة قبل تثبيت أي إضافة: المطوّر، التوقيع الرقمي، الأذونات المطلوبة،
+     والملفات التي ستصل إليها الإضافة — قبل أن يضغط المستخدم "متابعة التثبيت". -->
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@color/rin_editor_bg">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="18dp">
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/ext_security_title"
+            android:textColor="@color/rin_on_toolbar"
+            android:textStyle="bold"
+            android:textSize="16sp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:layout_marginBottom="14dp"
+            android:text="@string/ext_security_subtitle"
+            android:textColor="@color/rin_editor_hint"
+            android:textSize="12.5sp" />
+
+        <!-- المطوّر -->
+        <TextView
+            android:id="@+id/txtSecurityDeveloperLabel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/ext_security_developer_label"
+            android:textColor="@color/rin_editor_hint"
+            android:textSize="11.5sp" />
+
+        <TextView
+            android:id="@+id/txtSecurityDeveloper"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="12dp"
+            android:textColor="@color/rin_editor_text"
+            android:textSize="14sp"
+            android:textStyle="bold" />
+
+        <!-- التوقيع الرقمي -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/ext_security_signature_label"
+            android:textColor="@color/rin_editor_hint"
+            android:textSize="11.5sp" />
+
+        <TextView
+            android:id="@+id/txtSecuritySignature"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="4dp"
+            android:fontFamily="monospace"
+            android:textColor="@color/rin_editor_text"
+            android:textSize="12.5sp" />
+
+        <TextView
+            android:id="@+id/txtSecuritySignatureState"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="12dp"
+            android:textSize="12sp"
+            android:textStyle="bold" />
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="@color/rin_divider"
+            android:layout_marginBottom="12dp" />
+
+        <!-- الأذونات المطلوبة -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/ext_security_permissions_label"
+            android:textColor="@color/rin_on_toolbar"
+            android:textStyle="bold"
+            android:textSize="13.5sp"
+            android:layout_marginBottom="8dp" />
+
+        <LinearLayout
+            android:id="@+id/containerSecurityPermissions"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical" />
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="@color/rin_divider"
+            android:layout_marginTop="8dp"
+            android:layout_marginBottom="12dp" />
+
+        <!-- الملفات التي ستصل إليها الإضافة -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/ext_security_files_label"
+            android:textColor="@color/rin_on_toolbar"
+            android:textStyle="bold"
+            android:textSize="13.5sp"
+            android:layout_marginBottom="6dp" />
+
+        <TextView
+            android:id="@+id/txtSecurityFileAccess"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textColor="@color/rin_editor_text"
+            android:textSize="12.5sp" />
+    </LinearLayout>
+</ScrollView>
