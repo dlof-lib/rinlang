@@ -98,7 +98,6 @@
     <string name="edit_profile_title">تعديل الملف الشخصي</string>
     <string name="edit_profile_name_hint">الاسم الظاهر</string>
     <string name="edit_profile_bio_hint">نبذة قصيرة عنك (اختياري)</string>
-    <string name="action_save">حفظ</string>
     <string name="profile_updated">تم تحديث الملف الشخصي ✓</string>
     <string name="avatar_updated">تم تحديث صورة الملف الشخصي ✓</string>
     <string name="avatar_update_failed">تعذّر تحديث الصورة، حاول مرة أخرى</string>
