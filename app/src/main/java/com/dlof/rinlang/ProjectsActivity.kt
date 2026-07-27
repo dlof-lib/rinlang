@@ -27,6 +27,7 @@ class ProjectsActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_projects)
+        BottomNavHelper.setup(this, BottomNavTab.PROJECTS)
 
         findViewById<TextView>(R.id.txtToolbarTitle).text = getString(R.string.projects_screen_title)
         findViewById<View>(R.id.btnToolbarBack).setOnClickListener { finish() }
