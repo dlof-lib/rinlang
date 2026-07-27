@@ -35,6 +35,11 @@
     <string name="rinflow_open_action">Open RinFlow</string>
     <string name="action_clear">Clear</string>
     <string name="action_open">Open</string>
+
+    <!-- شاشة انقطاع الاتصال بالإنترنت (تظهر تلقائياً في أي شاشة تحتاج شبكة) -->
+    <string name="no_connection_title">لا يوجد اتصال بالإنترنت</string>
+    <string name="no_connection_message">تحقّق من اتصال الواي فاي أو بيانات الجوال ثم أعد المحاولة</string>
+    <string name="action_retry">إعادة المحاولة</string>
     <string name="action_save">Save</string>
 
     <!-- شريط القوائم العلوي المضغوط (File / Edit / View / Run) — قوائم منسدلة بأسلوب
