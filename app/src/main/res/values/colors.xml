@@ -48,6 +48,9 @@
     <color name="rin_star_gold_dim">#4DFFC94D</color>
     <color name="rin_star_track">#333640</color>
 
+    <!-- شارة "ناشر موثّق" في متجر Rin (تحميلات + تقييم عاليان)، منفصلة عن ألوان الحالة الأخرى -->
+    <color name="rin_verified_badge">#3B9EFF</color>
+
     <!-- ألوان قائمة التشغيل المجدولة (job queue / execution history), مثل بطاقات الحاويات -->
     <color name="rin_job_card_bg">#17171A</color>
     <color name="rin_job_card_border">#2D2D30</color>
