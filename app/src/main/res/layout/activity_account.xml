@@ -27,102 +27,136 @@
                 android:orientation="vertical"
                 android:visibility="gone">
 
-                <!-- رأس الملف الشخصي: صورة دائرية + زر تغيير الصورة + الاسم + اسم المستخدم -->
-                <LinearLayout
+                <!-- رأس الملف الشخصي: بطاقة بها بانر خلفية علوي (خلايا سداسية/أرقام ثنائية) + صورة
+                     دائرية تتداخل مع حافته السفلية + زر تغيير الصورة + الاسم + اسم المستخدم -->
+                <FrameLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:gravity="center_horizontal"
-                    android:background="@drawable/bg_list_card"
-                    android:padding="24dp">
-
-                    <FrameLayout
-                        android:layout_width="96dp"
-                        android:layout_height="96dp">
-
-                        <ImageView
-                            android:id="@+id/imgAvatar"
-                            android:layout_width="96dp"
-                            android:layout_height="96dp"
-                            android:background="@drawable/bg_avatar_circle"
-                            android:scaleType="centerCrop"
-                            android:contentDescription="@string/account_title" />
-
-                        <TextView
-                            android:id="@+id/txtAvatarInitial"
-                            android:layout_width="96dp"
-                            android:layout_height="96dp"
-                            android:gravity="center"
-                            android:textColor="@android:color/white"
-                            android:textSize="34sp"
-                            android:textStyle="bold" />
-
-                        <ImageButton
-                            android:id="@+id/btnChangeAvatar"
-                            android:layout_width="30dp"
-                            android:layout_height="30dp"
-                            android:layout_gravity="bottom|end"
-                            android:background="@drawable/bg_avatar_edit_badge"
-                            android:src="@drawable/ic_camera"
-                            android:scaleType="center"
-                            android:padding="0dp"
-                            android:contentDescription="@string/action_change_avatar" />
-                    </FrameLayout>
+                    android:background="@drawable/bg_profile_card_frame"
+                    android:clipToOutline="true">
 
                     <LinearLayout
-                        android:layout_width="wrap_content"
+                        android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="14dp"
-                        android:orientation="horizontal"
-                        android:gravity="center_vertical">
+                        android:orientation="vertical"
+                        android:gravity="center_horizontal">
 
-                        <TextView
-                            android:id="@+id/txtAccountName"
-                            android:layout_width="wrap_content"
+                        <!-- بانر الخلفية -->
+                        <FrameLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="100dp">
+
+                            <ImageView
+                                android:layout_width="match_parent"
+                                android:layout_height="match_parent"
+                                android:scaleType="centerCrop"
+                                android:src="@drawable/img_hex_banner"
+                                android:contentDescription="@null" />
+
+                            <View
+                                android:layout_width="match_parent"
+                                android:layout_height="match_parent"
+                                android:background="@drawable/bg_banner_scrim" />
+                        </FrameLayout>
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:textColor="@color/rin_on_toolbar"
-                            android:textSize="19sp"
-                            android:textStyle="bold" />
+                            android:orientation="vertical"
+                            android:gravity="center_horizontal"
+                            android:paddingHorizontal="24dp"
+                            android:paddingBottom="24dp">
 
-                        <ImageView
-                            android:id="@+id/imgAccountVerifiedBadge"
-                            android:layout_width="17dp"
-                            android:layout_height="17dp"
-                            android:layout_marginStart="6dp"
-                            android:src="@drawable/ic_verified_badge"
-                            android:visibility="gone"
-                            android:contentDescription="@string/verified_publisher_badge_description" />
+                            <FrameLayout
+                                android:layout_width="96dp"
+                                android:layout_height="96dp"
+                                android:layout_marginTop="-40dp">
+
+                                <ImageView
+                                    android:id="@+id/imgAvatar"
+                                    android:layout_width="96dp"
+                                    android:layout_height="96dp"
+                                    android:background="@drawable/bg_avatar_circle"
+                                    android:scaleType="centerCrop"
+                                    android:contentDescription="@string/account_title" />
+
+                                <TextView
+                                    android:id="@+id/txtAvatarInitial"
+                                    android:layout_width="96dp"
+                                    android:layout_height="96dp"
+                                    android:gravity="center"
+                                    android:textColor="@android:color/white"
+                                    android:textSize="34sp"
+                                    android:textStyle="bold" />
+
+                                <ImageButton
+                                    android:id="@+id/btnChangeAvatar"
+                                    android:layout_width="30dp"
+                                    android:layout_height="30dp"
+                                    android:layout_gravity="bottom|end"
+                                    android:background="@drawable/bg_avatar_edit_badge"
+                                    android:src="@drawable/ic_camera"
+                                    android:scaleType="center"
+                                    android:padding="0dp"
+                                    android:contentDescription="@string/action_change_avatar" />
+                            </FrameLayout>
+
+                            <LinearLayout
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="14dp"
+                                android:orientation="horizontal"
+                                android:gravity="center_vertical">
+
+                                <TextView
+                                    android:id="@+id/txtAccountName"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:textColor="@color/rin_on_toolbar"
+                                    android:textSize="19sp"
+                                    android:textStyle="bold" />
+
+                                <ImageView
+                                    android:id="@+id/imgAccountVerifiedBadge"
+                                    android:layout_width="17dp"
+                                    android:layout_height="17dp"
+                                    android:layout_marginStart="6dp"
+                                    android:src="@drawable/ic_verified_badge"
+                                    android:visibility="gone"
+                                    android:contentDescription="@string/verified_publisher_badge_description" />
+                            </LinearLayout>
+
+                            <TextView
+                                android:id="@+id/txtAccountUsername"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="2dp"
+                                android:textColor="@color/rin_accent"
+                                android:textSize="13.5sp" />
+
+                            <TextView
+                                android:id="@+id/txtAccountBio"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="12dp"
+                                android:gravity="center"
+                                android:textColor="@color/rin_editor_hint"
+                                android:textSize="13sp"
+                                android:lineSpacingExtra="2dp" />
+
+                            <Button
+                                android:id="@+id/btnEditProfile"
+                                android:layout_width="match_parent"
+                                android:layout_height="42dp"
+                                android:layout_marginTop="16dp"
+                                android:background="@drawable/bg_toolbar_btn_ghost"
+                                android:text="@string/action_edit_profile"
+                                android:textAllCaps="false"
+                                android:textColor="@color/rin_on_toolbar"
+                                android:textSize="13sp" />
+                        </LinearLayout>
                     </LinearLayout>
-
-                    <TextView
-                        android:id="@+id/txtAccountUsername"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="2dp"
-                        android:textColor="@color/rin_accent"
-                        android:textSize="13.5sp" />
-
-                    <TextView
-                        android:id="@+id/txtAccountBio"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="12dp"
-                        android:gravity="center"
-                        android:textColor="@color/rin_editor_hint"
-                        android:textSize="13sp"
-                        android:lineSpacingExtra="2dp" />
-
-                    <Button
-                        android:id="@+id/btnEditProfile"
-                        android:layout_width="match_parent"
-                        android:layout_height="42dp"
-                        android:layout_marginTop="16dp"
-                        android:background="@drawable/bg_toolbar_btn_ghost"
-                        android:text="@string/action_edit_profile"
-                        android:textAllCaps="false"
-                        android:textColor="@color/rin_on_toolbar"
-                        android:textSize="13sp" />
-                </LinearLayout>
+                </FrameLayout>
 
                 <!-- بطاقة معلومات الحساب -->
                 <LinearLayout
