@@ -13,11 +13,34 @@
 
     <!-- شاشة المتجر -->
     <string name="rin_store_title">متجر Rin</string>
-    <string name="store_empty">لا توجد حزم منشورة بعد. كن أول من ينشر!</string>
+    <string name="store_empty">لا توجد حزم تطابق بحثك. جرّب كلمة أخرى أو امسح الفلتر.</string>
     <string name="action_install">تثبيت/إدراج</string>
     <string name="store_item_meta_format">%1$s • %2$s • %3$d تنزيل</string>
     <string name="package_installed_toast">تم تثبيت الحزمة وإضافتها لمكتبات هذا المشروع</string>
-    <string name="package_installed_import_toast">تم تثبيت %1$s وإدراج @import في الكود مباشرة ✓</string>
+    <string name="package_installed_import_toast">تم تثبيت %1$s حزمة وإدراج أسطر @import في الكود مباشرة ✓</string>
+
+    <!-- بحث وفرز وتصنيف داخل المتجر -->
+    <string name="store_search_hint">ابحث باسم الحزمة أو وصفها…</string>
+    <string name="store_category_all">الكل</string>
+    <string name="store_sort_newest">الأحدث</string>
+    <string name="store_sort_rating">الأعلى تقييماً</string>
+    <string name="store_sort_downloads">الأكثر تحميلاً</string>
+    <string name="store_sort_name">الاسم (أ-ي)</string>
+    <string name="store_rating_format">%1$.1f (%2$d)</string>
+    <string name="store_rating_none">لا يوجد تقييم بعد</string>
+    <string name="action_rate_package">قيّم</string>
+    <string name="rate_package_title">قيّم %1$s</string>
+    <string name="rate_package_login_required">سجّل الدخول أولاً حتى تتمكن من التقييم</string>
+    <string name="rate_package_submitted">شكراً لتقييمك ✓</string>
+    <string name="store_dependencies_format">يتطلب: %1$s</string>
+
+    <!-- تحذير التبعيات عند التثبيت -->
+    <string name="dependency_check_title">تبعيات هذه الحزمة</string>
+    <string name="dependency_missing_line">• %1$s (%2$s) — غير مثبَّتة</string>
+    <string name="dependency_mismatch_line">• %1$s (المطلوب %2$s، المثبَّت %3$s)</string>
+    <string name="dependency_check_message_prefix">قبل التثبيت، لاحظ أن هذه الحزمة تعتمد على:\n\n</string>
+    <string name="action_install_anyway">تثبيت على أي حال</string>
+    <string name="action_install_with_dependencies">تثبيت مع التبعيات المتوفرة</string>
 
     <!-- شاشة النشر -->
     <string name="publish_title">نشر مكتبة</string>
@@ -25,6 +48,9 @@
     <string name="hint_package_name">اسم الحزمة</string>
     <string name="hint_package_version">رقم الإصدار</string>
     <string name="hint_package_description">وصف قصير للمكتبة (اختياري)</string>
+    <string name="hint_package_category">تصنيف الحزمة</string>
+    <string name="hint_package_dependencies">التبعيات (اختياري)</string>
+    <string name="hint_package_dependencies_example">مثال:\nmathlib:^1.0.0\nstrings:2.0.0</string>
     <string name="action_pick_assets">إضافة صور/أيقونات (اختياري)</string>
     <string name="assets_selected_format">%1$d ملف مُختار</string>
     <string name="action_publish_submit">نشر الحزمة</string>
