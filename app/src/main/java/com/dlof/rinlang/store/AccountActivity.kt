@@ -10,7 +10,9 @@ import android.util.Base64
 import android.view.LayoutInflater
 import android.view.View
 import android.widget.EditText
+import android.widget.ImageButton
 import android.widget.ImageView
+import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
@@ -77,6 +79,8 @@ class AccountActivity : BaseConnectivityActivity() {
             currentProfile = profile
             bindProfile(profile)
         }
+
+        loadMyPackages(uid)
 
         findViewById<View>(R.id.btnChangeAvatar).setOnClickListener {
             pickAvatarLauncher.launch("image/*")
@@ -186,6 +190,59 @@ class AccountActivity : BaseConnectivityActivity() {
         val newWidth = (width * scale).toInt().coerceAtLeast(1)
         val newHeight = (height * scale).toInt().coerceAtLeast(1)
         return Bitmap.createScaledBitmap(source, newWidth, newHeight, true)
+    }
+
+    /** يجلب حزم المستخدم [uid] المنشورة في متجر Rin ويعرضها ضمن قسم "حزمي المنشورة". */
+    private fun loadMyPackages(uid: String) {
+        PackageRepository.fetchUserPackages(uid) { packages ->
+            renderMyPackages(uid, packages)
+        }
+    }
+
+    /** يبني صفوف حزم المستخدم داخل [R.id.containerMyPackages]، أو يعرض رسالة "لا توجد حزم" إن كانت فارغة. */
+    private fun renderMyPackages(uid: String, packages: List<RinPackage>) {
+        val container = findViewById<LinearLayout>(R.id.containerMyPackages)
+        val txtEmpty = findViewById<TextView>(R.id.txtMyPackagesEmpty)
+        container.removeAllViews()
+
+        if (packages.isEmpty()) {
+            txtEmpty.visibility = View.VISIBLE
+            return
+        }
+        txtEmpty.visibility = View.GONE
+
+        val inflater = LayoutInflater.from(this)
+        for (pkg in packages) {
+            val row = inflater.inflate(R.layout.item_my_package, container, false)
+            row.findViewById<TextView>(R.id.txtMyPackageInitial).text = pkg.name.take(1).uppercase()
+            row.findViewById<TextView>(R.id.txtMyPackageName).text = pkg.name
+            row.findViewById<TextView>(R.id.txtMyPackageMeta).text =
+                getString(R.string.my_package_meta_format, pkg.version, pkg.downloadCount)
+            row.findViewById<ImageButton>(R.id.btnDeleteMyPackage).setOnClickListener {
+                confirmDeletePackage(uid, pkg)
+            }
+            container.addView(row)
+        }
+    }
+
+    /** يعرض تأكيداً قبل حذف [pkg] نهائياً (لا يمكن التراجع)، ثم يحذفها ويحدّث القائمة عند النجاح. */
+    private fun confirmDeletePackage(uid: String, pkg: RinPackage) {
+        AlertDialog.Builder(this)
+            .setTitle(R.string.delete_package_confirm_title)
+            .setMessage(getString(R.string.delete_package_confirm_message, pkg.name))
+            .setPositiveButton(R.string.action_delete_package) { _, _ ->
+                if (!isOnline()) { showOfflineOverlay(); return@setPositiveButton }
+                PackageRepository.deletePackage(pkg.id, uid) { success, error ->
+                    if (success) {
+                        Toast.makeText(this, R.string.package_deleted_toast, Toast.LENGTH_SHORT).show()
+                        loadMyPackages(uid)
+                    } else {
+                        Toast.makeText(this, error ?: getString(R.string.package_delete_failed), Toast.LENGTH_LONG).show()
+                    }
+                }
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
     }
 
     private fun showEditProfileDialog(uid: String) {
