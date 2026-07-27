@@ -69,6 +69,7 @@
     <string name="action_publish_submit">نشر الحزمة</string>
     <string name="publish_success">تم نشر الحزمة في متجر Rin ✓</string>
     <string name="publish_requires_login">سجّل الدخول أولاً لتتمكن من النشر</string>
+    <string name="error_package_name_taken">هذا الاسم (أو اسم مشابه له) مُستخدَم بالفعل لحزمة أخرى في متجر Rin، اختر اسماً مختلفاً</string>
 
     <!-- الإبلاغ عن حزمة -->
     <string name="action_report_package">إبلاغ</string>
@@ -101,4 +102,14 @@
     <string name="profile_updated">تم تحديث الملف الشخصي ✓</string>
     <string name="avatar_updated">تم تحديث صورة الملف الشخصي ✓</string>
     <string name="avatar_update_failed">تعذّر تحديث الصورة، حاول مرة أخرى</string>
+
+    <!-- قسم "حزمي" داخل شاشة الحساب: عرض حزم المستخدم المنشورة وحذفها -->
+    <string name="account_my_packages_title">حزمي المنشورة</string>
+    <string name="account_my_packages_empty">لم تنشر أي حزمة بعد. انشر مكتبة من شاشة المكتبات لتظهر هنا.</string>
+    <string name="my_package_meta_format">%1$s • %2$d تنزيل</string>
+    <string name="action_delete_package">حذف</string>
+    <string name="delete_package_confirm_title">حذف الحزمة</string>
+    <string name="delete_package_confirm_message">هل تريد حذف حزمة \"%1$s\" نهائياً من متجر Rin؟ لا يمكن التراجع عن هذا الإجراء.</string>
+    <string name="package_deleted_toast">تم حذف الحزمة ✓</string>
+    <string name="package_delete_failed">تعذّر حذف الحزمة، حاول مرة أخرى</string>
 </resources>
