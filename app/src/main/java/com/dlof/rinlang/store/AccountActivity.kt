@@ -192,9 +192,11 @@ class AccountActivity : BaseConnectivityActivity() {
         return Bitmap.createScaledBitmap(source, newWidth, newHeight, true)
     }
 
-    /** يجلب حزم المستخدم [uid] المنشورة في متجر Rin ويعرضها ضمن قسم "حزمي المنشورة". */
+    /** يجلب حزم المستخدم [uid] المنشورة في متجر Rin ويعرضها ضمن قسم "حزمي المنشورة"، ويحسب شارة التوثيق منها. */
     private fun loadMyPackages(uid: String) {
         PackageRepository.fetchUserPackages(uid) { packages ->
+            findViewById<View>(R.id.imgAccountVerifiedBadge).visibility =
+                if (PublisherBadgeUtils.isEligible(packages)) View.VISIBLE else View.GONE
             renderMyPackages(uid, packages)
         }
     }
