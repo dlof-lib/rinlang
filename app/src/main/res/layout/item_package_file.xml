@@ -1,17 +1,31 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="horizontal"
     android:gravity="center_vertical"
+    android:background="@drawable/bg_toolbar_btn_ghost"
     android:paddingHorizontal="14dp"
-    android:paddingVertical="10dp">
+    android:paddingVertical="11dp">
 
-    <ImageView
-        android:layout_width="16dp"
-        android:layout_height="16dp"
-        android:src="@drawable/ic_file_solid"
-        android:contentDescription="@null" />
+    <FrameLayout
+        android:layout_width="26dp"
+        android:layout_height="26dp">
+
+        <View
+            android:layout_width="26dp"
+            android:layout_height="26dp"
+            android:background="@drawable/bg_section_icon_circle" />
+
+        <ImageView
+            android:layout_width="13dp"
+            android:layout_height="13dp"
+            android:layout_gravity="center"
+            android:src="@drawable/ic_file_solid"
+            app:tint="@color/rin_accent"
+            android:contentDescription="@null" />
+    </FrameLayout>
 
     <TextView
         android:id="@+id/txtFileName"
@@ -30,7 +44,10 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginStart="8dp"
-        android:textSize="11sp"
+        android:background="@drawable/bg_stat_pill"
+        android:paddingHorizontal="8dp"
+        android:paddingVertical="3dp"
+        android:textSize="10.5sp"
         android:textColor="@color/rin_editor_hint" />
 
 </LinearLayout>
