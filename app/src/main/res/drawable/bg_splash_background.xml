@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- خلفية شاشة البداية: تدرّج هادئ من لون الواجهة الأساسي نحو الأسود، بلمسة بنفسجية خفيفة
+     في المنتصف تعكس لون هوية التطبيق (rin_accent) بدون أن تكون صاخبة. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape android:shape="rectangle">
+            <gradient
+                android:type="radial"
+                android:gradientRadius="480dp"
+                android:centerX="0.5"
+                android:centerY="0.42"
+                android:startColor="#2A2140"
+                android:centerColor="#1A1B20"
+                android:endColor="#131417" />
+        </shape>
+    </item>
+</layer-list>
