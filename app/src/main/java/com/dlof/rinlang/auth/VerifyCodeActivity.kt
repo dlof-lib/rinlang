@@ -7,10 +7,10 @@ import android.widget.EditText
 import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
-import androidx.appcompat.app.AppCompatActivity
+import com.dlof.rinlang.network.BaseConnectivityActivity
 import com.dlof.rinlang.R
 
-class VerifyCodeActivity : AppCompatActivity() {
+class VerifyCodeActivity : BaseConnectivityActivity() {
 
     companion object {
         const val EXTRA_UID = "extra_uid"
@@ -53,6 +53,7 @@ class VerifyCodeActivity : AppCompatActivity() {
             Toast.makeText(this, R.string.hint_verification_code, Toast.LENGTH_SHORT).show()
             return
         }
+        if (!isOnline()) { showOfflineOverlay(); return }
 
         setLoading(true)
         AuthRepository.verifyCode(uid, code) { result ->
@@ -72,6 +73,7 @@ class VerifyCodeActivity : AppCompatActivity() {
     }
 
     private fun resendCode() {
+        if (!isOnline()) { showOfflineOverlay(); return }
         setLoading(true)
         AuthRepository.sendNewCode(uid, email, name) { success, error ->
             setLoading(false)
