@@ -73,10 +73,23 @@
             android:orientation="vertical"
             android:padding="8dp">
 
+            <com.dlof.rinlang.widgets.ShimmerLayout
+                android:id="@+id/shimmerStoreSkeleton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:visibility="visible">
+
+                <include layout="@layout/layout_skeleton_store_package" />
+                <include layout="@layout/layout_skeleton_store_package" />
+                <include layout="@layout/layout_skeleton_store_package" />
+            </com.dlof.rinlang.widgets.ShimmerLayout>
+
             <androidx.recyclerview.widget.RecyclerView
                 android:id="@+id/rvPackages"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:visibility="gone"
                 android:nestedScrollingEnabled="false" />
 
             <LinearLayout
