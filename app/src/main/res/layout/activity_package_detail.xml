@@ -1,5 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  صفحة "تفاصيل الحزمة" — نسخة مطوَّرة بصرياً: رأس (hero) بخلفية متدرّجة خفيفة يجمع الاسم
+  والوصف والناشر وشريط إحصائيات + زر تثبيت بارز، تليه بطاقات أقسام (README / الترخيص /
+  الملفات) موحّدة الشكل بعناوين مرفقة بأيقونة. كل معرّفات العناصر المرتبطة بـ
+  PackageDetailActivity.kt بقيت كما هي بلا أي تغيير.
+-->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
@@ -18,21 +25,21 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:padding="16dp">
+            android:padding="14dp">
 
-            <!-- رأس الحزمة: اسمها + إصدارها + وصفها + زر تثبيت -->
+            <!-- رأس الحزمة (Hero): اسمها + وصفها + صف الناشر + شريط إحصائيات + زر تثبيت -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="vertical"
-                android:background="@drawable/bg_list_card"
-                android:padding="16dp">
+                android:background="@drawable/bg_detail_hero_card"
+                android:padding="18dp">
 
                 <TextView
                     android:id="@+id/txtDetailPackageName"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:textSize="19sp"
+                    android:textSize="21sp"
                     android:textStyle="bold"
                     android:textColor="@color/rin_on_toolbar"
                     tools:text="mathlib" />
@@ -42,33 +49,34 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="6dp"
-                    android:textSize="13sp"
+                    android:textSize="13.5sp"
+                    android:lineSpacingExtra="2dp"
                     android:textColor="@color/rin_editor_text" />
 
                 <!-- صف الناشر: صورة دائرية + اسم + شارة توثيق (تظهر فقط للناشرين المؤهلين) -->
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="14dp"
+                    android:layout_marginTop="16dp"
                     android:gravity="center_vertical"
                     android:orientation="horizontal">
 
                     <FrameLayout
-                        android:layout_width="34dp"
-                        android:layout_height="34dp">
+                        android:layout_width="36dp"
+                        android:layout_height="36dp">
 
                         <ImageView
                             android:id="@+id/imgDetailPublisherAvatar"
-                            android:layout_width="34dp"
-                            android:layout_height="34dp"
+                            android:layout_width="36dp"
+                            android:layout_height="36dp"
                             android:background="@drawable/bg_avatar_circle"
                             android:scaleType="centerCrop"
                             android:contentDescription="@null" />
 
                         <TextView
                             android:id="@+id/txtDetailPublisherInitial"
-                            android:layout_width="34dp"
-                            android:layout_height="34dp"
+                            android:layout_width="36dp"
+                            android:layout_height="36dp"
                             android:gravity="center"
                             android:textColor="@android:color/white"
                             android:textStyle="bold"
@@ -94,28 +102,35 @@
                         android:contentDescription="@string/verified_publisher_badge_description" />
                 </LinearLayout>
 
-                <!-- بيانات: إصدار / ترخيص / تنزيلات / تقييم -->
+                <!-- شريط إحصائيات: إصدار / ترخيص / تنزيلات / تقييم، ضمن حبّة موحّدة -->
                 <TextView
                     android:id="@+id/txtDetailMeta"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="12dp"
+                    android:layout_marginTop="14dp"
+                    android:background="@drawable/bg_stat_pill"
+                    android:paddingHorizontal="12dp"
+                    android:paddingVertical="9dp"
                     android:textSize="12sp"
+                    android:textStyle="bold"
                     android:textColor="@color/rin_editor_hint" />
 
                 <Button
                     android:id="@+id/btnDetailInstall"
                     android:layout_width="match_parent"
-                    android:layout_height="40dp"
+                    android:layout_height="44dp"
                     android:layout_marginTop="14dp"
                     android:minWidth="0dp"
                     android:minHeight="0dp"
                     android:insetTop="0dp"
                     android:insetBottom="0dp"
+                    android:drawableStart="@drawable/ic_log_download"
+                    android:drawablePadding="8dp"
                     android:text="@string/action_install"
                     android:textAllCaps="false"
-                    android:textSize="13sp"
-                    android:background="@drawable/bg_toolbar_btn_primary"
+                    android:textSize="13.5sp"
+                    android:textStyle="bold"
+                    android:background="@drawable/bg_install_button_premium"
                     android:textColor="@android:color/white" />
             </LinearLayout>
 
@@ -123,8 +138,11 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="18dp"
+                android:layout_marginTop="20dp"
                 android:layout_marginBottom="8dp"
+                android:drawableStart="@drawable/ic_readme_doc"
+                android:drawablePadding="8dp"
+                android:gravity="center_vertical"
                 android:text="@string/package_detail_section_readme"
                 android:textSize="14sp"
                 android:textStyle="bold"
@@ -134,10 +152,10 @@
                 android:id="@+id/txtDetailReadme"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:background="@drawable/bg_list_card"
-                android:padding="14dp"
+                android:background="@drawable/bg_detail_section_card"
+                android:padding="15dp"
                 android:textSize="13sp"
-                android:lineSpacingExtra="2dp"
+                android:lineSpacingExtra="3dp"
                 android:textColor="@color/rin_editor_text"
                 android:textColorLink="@color/rin_accent"
                 android:autoLink="web" />
@@ -147,8 +165,11 @@
                 android:id="@+id/txtDetailLicenseTitle"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="18dp"
+                android:layout_marginTop="20dp"
                 android:layout_marginBottom="8dp"
+                android:drawableStart="@drawable/ic_license_shield"
+                android:drawablePadding="8dp"
+                android:gravity="center_vertical"
                 android:text="@string/package_detail_section_license"
                 android:textSize="14sp"
                 android:textStyle="bold"
@@ -158,19 +179,22 @@
                 android:id="@+id/txtDetailLicense"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:background="@drawable/bg_list_card"
-                android:padding="14dp"
+                android:background="@drawable/bg_detail_section_card"
+                android:padding="15dp"
                 android:fontFamily="monospace"
                 android:textSize="11.5sp"
-                android:lineSpacingExtra="2dp"
+                android:lineSpacingExtra="3dp"
                 android:textColor="@color/rin_editor_hint" />
 
             <!-- قسم ملفات الحزمة -->
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="18dp"
+                android:layout_marginTop="20dp"
                 android:layout_marginBottom="8dp"
+                android:drawableStart="@drawable/ic_files_stack"
+                android:drawablePadding="8dp"
+                android:gravity="center_vertical"
                 android:text="@string/package_detail_section_files"
                 android:textSize="14sp"
                 android:textStyle="bold"
@@ -181,7 +205,9 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="vertical"
-                android:background="@drawable/bg_list_card" />
+                android:background="@drawable/bg_detail_section_card"
+                android:divider="@drawable/divider_hairline"
+                android:showDividers="middle" />
 
         </LinearLayout>
     </androidx.core.widget.NestedScrollView>
