@@ -39,6 +39,9 @@ class PackageDetailActivity : BaseConnectivityActivity() {
     private var isLiked = false
     private var likeCount = 0L
 
+    /** حالة الانتساب لناشر الحزمة (متفائلة أيضاً، بنفس أسلوب [isLiked]). */
+    private var isSubscribed = false
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_package_detail)
@@ -56,6 +59,7 @@ class PackageDetailActivity : BaseConnectivityActivity() {
         bindReadmeAndLicense()
         bindFiles()
         bindLike()
+        bindSubscribe()
 
         // لا مشروع محدَّد داخل هذه الشاشة (شاشة استعراض فقط)؛ التثبيت الفعلي (مع التحقق من
         // التبعيات) يبقى مسؤولية شاشة المتجر التي فتحت هذه الشاشة، فقط نُعيد معرّف الحزمة إليها.
@@ -178,6 +182,53 @@ class PackageDetailActivity : BaseConnectivityActivity() {
         imgIcon.imageTintList = android.content.res.ColorStateList.valueOf(tint)
         txtCount.setTextColor(tint)
         txtCount.text = getString(R.string.like_count_format, likeCount)
+    }
+
+    /**
+     * يهيّئ زر "الانتساب" لناشر الحزمة: يبقى مخفياً إن لم يكن هناك مستخدم مسجَّل دخوله بعد أو
+     * كان المستخدم الحالي هو ناشر الحزمة نفسه (لا معنى للانتساب للنفس)، ثم يجلب حالة الانتساب
+     * الحالية ليضبط نص الزر (انتساب / تم الانتساب). الضغط يبدّل الحالة محلياً فوراً (تفاؤلي)
+     * ثم يُزامنها مع Firebase، ويتراجع عن التغيير المحلي إن فشلت المزامنة — بنفس أسلوب [bindLike].
+     */
+    private fun bindSubscribe() {
+        val btn = findViewById<TextView>(R.id.btnDetailSubscribe)
+        val uid = AuthRepository.currentUid()
+
+        if (uid == null || uid == pkg.publisherUid) {
+            btn.visibility = View.GONE
+            return
+        }
+
+        btn.visibility = View.VISIBLE
+        AuthRepository.fetchSubscriptionState(pkg.publisherUid, uid) { subscribed ->
+            isSubscribed = subscribed
+            renderSubscribeState()
+        }
+
+        btn.setOnClickListener {
+            if (!isOnline()) { showOfflineOverlay(); return@setOnClickListener }
+
+            val previousSubscribed = isSubscribed
+            isSubscribed = !isSubscribed
+            renderSubscribeState()
+
+            AuthRepository.toggleSubscription(pkg.publisherUid, uid) { subscribed, success ->
+                isSubscribed = if (success) subscribed else previousSubscribed
+                renderSubscribeState()
+            }
+        }
+    }
+
+    /** يعكس [isSubscribed] الحالية على نص زر الانتساب وخلفيته ولون نصه. */
+    private fun renderSubscribeState() {
+        val btn = findViewById<TextView>(R.id.btnDetailSubscribe)
+        btn.text = getString(
+            if (isSubscribed) R.string.action_subscribed_publisher else R.string.action_subscribe_publisher
+        )
+        btn.setBackgroundResource(
+            if (isSubscribed) R.drawable.bg_subscribe_button_active else R.drawable.bg_subscribe_button
+        )
+        btn.setTextColor(getColor(if (isSubscribed) android.R.color.white else R.color.rin_accent))
     }
 
     private fun bindReadmeAndLicense() {
