@@ -128,6 +128,30 @@
                         android:src="@drawable/ic_verified_badge"
                         android:visibility="gone"
                         android:contentDescription="@string/verified_publisher_badge_description" />
+
+                    <View
+                        android:layout_width="0dp"
+                        android:layout_height="0dp"
+                        android:layout_weight="1" />
+
+                    <!-- زر الانتساب لهذا الناشر: يتبدّل نصه/شكله بين "انتساب" و"تم الانتساب".
+                         مخفي افتراضياً (View.GONE) حتى تُحدَّد هوية الناشر مقابل المستخدم الحالي
+                         داخل bindSubscribe() في PackageDetailActivity.kt (لا يظهر لناشر الحزمة نفسه). -->
+                    <TextView
+                        android:id="@+id/btnDetailSubscribe"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:background="@drawable/bg_subscribe_button"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:paddingHorizontal="14dp"
+                        android:paddingVertical="7dp"
+                        android:textSize="12sp"
+                        android:textStyle="bold"
+                        android:textColor="@color/rin_accent"
+                        android:text="@string/action_subscribe_publisher"
+                        android:visibility="gone" />
                 </LinearLayout>
 
                 <!-- شريط إحصائيات: إصدار / ترخيص / تنزيلات / تقييم + زر الإعجاب (قلب) بجانبه -->
