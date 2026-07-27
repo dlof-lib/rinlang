@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- دائرة صغيرة بلون التمييز الخافت تحتضن أيقونة عنوان القسم (README/الترخيص/الملفات) -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="oval">
+    <solid android:color="@color/rin_accent_border_subtle" />
+</shape>
