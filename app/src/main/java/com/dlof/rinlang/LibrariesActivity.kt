@@ -125,6 +125,9 @@ class LibrariesActivity : AppCompatActivity() {
         findViewById<View>(R.id.btnMyAccount).setOnClickListener {
             startActivity(Intent(this, AccountActivity::class.java))
         }
+        findViewById<View>(R.id.btnRinExtensions).setOnClickListener {
+            startActivity(Intent(this, com.dlof.rinlang.store.extensions.RinExtensionsMarketplaceActivity::class.java))
+        }
         findViewById<View>(R.id.btnSettings).setOnClickListener {
             startActivity(Intent(this, SettingsActivity::class.java))
         }
