@@ -18,6 +18,79 @@ object PackageRepository {
 
     private fun packagesRef() = db.getReference("packages")
 
+    /**
+     * يجلب حزم المستخدم [uid] فقط (التي نشرها بنفسه)، الأحدث أولاً، عبر استعلام
+     * على publisherUid بدل قراءة كل الحزم وتصفيتها محلياً (أخف على القراءة من Realtime Database).
+     */
+    fun fetchUserPackages(uid: String, callback: (List<RinPackage>) -> Unit) {
+        packagesRef().orderByChild("publisherUid").equalTo(uid)
+            .addListenerForSingleValueEvent(object : ValueEventListener {
+                override fun onDataChange(snapshot: DataSnapshot) {
+                    val list = snapshot.children.mapNotNull { it.getValue(RinPackage::class.java) }
+                        .sortedByDescending { it.createdAt }
+                    callback(list)
+                }
+
+                override fun onCancelled(error: DatabaseError) = callback(emptyList())
+            })
+    }
+
+    /**
+     * يحذف حزمة [packageId] نهائياً من المتجر. يتحقق أولاً أن [uid] هو ناشرها الفعلي قبل محاولة
+     * الحذف (بالإضافة إلى قاعدة الأمان المطابقة على مستوى Firebase نفسها في database.rules.json،
+     * التي تمنع أي حذف/تعديل لا يقوم به صاحب الحزمة أصلاً).
+     */
+    fun deletePackage(packageId: String, uid: String, callback: (success: Boolean, error: String?) -> Unit) {
+        val ref = packagesRef().child(packageId)
+        ref.addListenerForSingleValueEvent(object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                val pkg = snapshot.getValue(RinPackage::class.java)
+                if (pkg == null) {
+                    callback(false, "الحزمة غير موجودة")
+                    return
+                }
+                if (pkg.publisherUid != uid) {
+                    callback(false, "لا يمكنك حذف حزمة لا تخصّك")
+                    return
+                }
+                ref.removeValue()
+                    .addOnSuccessListener { callback(true, null) }
+                    .addOnFailureListener { e -> callback(false, e.message) }
+            }
+
+            override fun onCancelled(error: DatabaseError) = callback(false, error.message)
+        })
+    }
+
+    /**
+     * يطبِّع اسم الحزمة لمقارنة "تشابه" لا مطابقة حرفية فقط: يُهمَل حجم الأحرف والمسافات
+     * والشرطات (-) والشرطات السفلية (_) والنقاط (.)، بحيث تُعتبر "My Lib" و"my-lib" و"MY_LIB"
+     * نفس الاسم فعلياً ويُمنع تكرارها.
+     */
+    private fun normalizeName(name: String): String =
+        name.trim().lowercase().replace(Regex("[\\s\\-_.]+"), "")
+
+    /**
+     * يتحقق أن اسم الحزمة [name] غير مستخدَم من قِبل أي ناشر آخر في متجر Rin بالكامل (وليس فقط
+     * حزم المستخدم الحالي)، لمنع تشابه الأسماء بين كل المستخدمين. [excludePackageId] يُستخدم عند
+     * تعديل حزمة موجودة مسبقاً حتى لا تُقارَن الحزمة بنفسها.
+     */
+    fun isNameAvailable(name: String, excludePackageId: String? = null, callback: (Boolean) -> Unit) {
+        val target = normalizeName(name)
+        if (target.isEmpty()) { callback(false); return }
+        packagesRef().addListenerForSingleValueEvent(object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                val taken = snapshot.children.any { child ->
+                    val pkg = child.getValue(RinPackage::class.java) ?: return@any false
+                    pkg.id != excludePackageId && normalizeName(pkg.name) == target
+                }
+                callback(!taken)
+            }
+
+            override fun onCancelled(error: DatabaseError) = callback(true) // تعذّر التحقق: لا نمنع النشر بسبب خطأ شبكة
+        })
+    }
+
     fun publishPackage(
         name: String,
         version: String,
