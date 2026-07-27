@@ -23,6 +23,10 @@
         "ratingCount": { ".write": "auth != null" },
         "ratings": {
           "$uid": { ".write": "auth != null && auth.uid === $uid" }
+        },
+        "reportCount": { ".write": "auth != null" },
+        "reports": {
+          "$uid": { ".write": "auth != null && auth.uid === $uid" }
         }
       }
     }
