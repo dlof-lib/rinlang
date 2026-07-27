@@ -14,7 +14,7 @@ import android.widget.ImageView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.appcompat.app.AppCompatActivity
+import com.dlof.rinlang.network.BaseConnectivityActivity
 import com.dlof.rinlang.R
 import com.dlof.rinlang.auth.AuthRepository
 import com.dlof.rinlang.auth.LoginActivity
@@ -26,7 +26,7 @@ import java.io.ByteArrayOutputStream
  * تغيير صورة الملف الشخصي (تُصغَّر وتُضغط ثم تُرمَّز base64 — بلا Firebase Storage مدفوع، بنفس
  * أسلوب حزم متجر Rin)، أو تسجيل الخروج.
  */
-class AccountActivity : AppCompatActivity() {
+class AccountActivity : BaseConnectivityActivity() {
 
     companion object {
         /** أقصى بُعد (طول/عرض) للصورة بعد التصغير قبل الترميز، لإبقاء حجمها معقولاً داخل Realtime Database. */
@@ -48,6 +48,11 @@ class AccountActivity : AppCompatActivity() {
         findViewById<TextView>(R.id.txtToolbarTitle).text = getString(R.string.account_title)
         findViewById<View>(R.id.btnToolbarBack).setOnClickListener { finish() }
 
+        refresh()
+    }
+
+    /** يُستدعى تلقائياً عند عودة الاتصال بعد انقطاعه أثناء وجود المستخدم في شاشة الحساب. */
+    override fun onConnectionRestored() {
         refresh()
     }
 
@@ -147,6 +152,7 @@ class AccountActivity : AppCompatActivity() {
     /** يقرأ الصورة المُختارة، يصغّرها إلى [AVATAR_MAX_DIMENSION] كحد أقصى، يضغطها JPEG، ثم يرفعها كـ base64. */
     private fun handlePickedAvatar(uri: Uri) {
         val uid = AuthRepository.currentUid() ?: return
+        if (!isOnline()) { showOfflineOverlay(); return }
         try {
             val input = contentResolver.openInputStream(uri) ?: return
             val original = input.use { BitmapFactory.decodeStream(it) } ?: run {
@@ -193,6 +199,7 @@ class AccountActivity : AppCompatActivity() {
             .setTitle(R.string.edit_profile_title)
             .setView(view)
             .setPositiveButton(R.string.action_save) { _, _ ->
+                if (!isOnline()) { showOfflineOverlay(); return@setPositiveButton }
                 val name = edtName.text.toString().trim()
                 val bio = edtBio.text.toString().trim()
                 AuthRepository.updateProfile(uid, name, bio) { success ->
