@@ -8,10 +8,10 @@ import android.widget.EditText
 import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
-import androidx.appcompat.app.AppCompatActivity
+import com.dlof.rinlang.network.BaseConnectivityActivity
 import com.dlof.rinlang.R
 
-class LoginActivity : AppCompatActivity() {
+class LoginActivity : BaseConnectivityActivity() {
 
     private lateinit var edtEmail: EditText
     private lateinit var edtPassword: EditText
@@ -44,6 +44,7 @@ class LoginActivity : AppCompatActivity() {
             Toast.makeText(this, R.string.error_required_fields, Toast.LENGTH_SHORT).show()
             return
         }
+        if (!isOnline()) { showOfflineOverlay(); return }
 
         setLoading(true)
         AuthRepository.login(email, password) { result ->
