@@ -10,6 +10,7 @@ import android.util.Base64
 import android.view.LayoutInflater
 import android.view.View
 import android.widget.EditText
+import android.widget.GridLayout
 import android.widget.ImageButton
 import android.widget.ImageView
 import android.widget.LinearLayout
@@ -36,6 +37,28 @@ class AccountActivity : BaseConnectivityActivity() {
         /** أقصى بُعد (طول/عرض) للصورة بعد التصغير قبل الترميز، لإبقاء حجمها معقولاً داخل Realtime Database. */
         private const val AVATAR_MAX_DIMENSION = 512
         private const val AVATAR_JPEG_QUALITY = 82
+
+        /** مكتبة الأيقونات الجاهزة (نار / سحابة / قطرة ماء) المتاحة كصورة رمزية بديلة عن رفع صورة. */
+        private val AVATAR_LIBRARY_ICONS = listOf(
+            R.drawable.ic_avatar_fire_sunset,
+            R.drawable.ic_avatar_fire_gold,
+            R.drawable.ic_avatar_fire_amber,
+            R.drawable.ic_avatar_fire_bronze,
+            R.drawable.ic_avatar_fire_red,
+            R.drawable.ic_avatar_cloud_green_glossy,
+            R.drawable.ic_avatar_cloud_purple_glossy,
+            R.drawable.ic_avatar_cloud_orange_glossy,
+            R.drawable.ic_avatar_cloud_purple_flat,
+            R.drawable.ic_avatar_cloud_yellow_flat,
+            R.drawable.ic_avatar_cloud_green_flat,
+            R.drawable.ic_avatar_cloud_teal_swirl,
+            R.drawable.ic_avatar_cloud_gold_glossy,
+            R.drawable.ic_avatar_water_indigo,
+            R.drawable.ic_avatar_water_teal,
+            R.drawable.ic_avatar_water_seafoam,
+            R.drawable.ic_avatar_water_sky,
+            R.drawable.ic_avatar_water_ocean
+        )
     }
 
     private var currentProfile: RinUser? = null
@@ -86,7 +109,7 @@ class AccountActivity : BaseConnectivityActivity() {
         loadMyPackages(uid)
 
         findViewById<View>(R.id.btnChangeAvatar).setOnClickListener {
-            pickAvatarLauncher.launch("image/*")
+            showAvatarPickerDialog()
         }
 
         findViewById<View>(R.id.btnEditProfile).setOnClickListener {
@@ -156,7 +179,64 @@ class AccountActivity : BaseConnectivityActivity() {
         }
     }
 
-    /** يقرأ الصورة المُختارة، يصغّرها إلى [AVATAR_MAX_DIMENSION] كحد أقصى، يضغطها JPEG، ثم يرفعها كـ base64. */
+    /** يعرض نافذة اختيار الصورة الرمزية: شبكة أيقونات جاهزة + خيار رفع صورة من الاستوديو. */
+    private fun showAvatarPickerDialog() {
+        val view = LayoutInflater.from(this).inflate(R.layout.dialog_avatar_library, null)
+        val dialog = AlertDialog.Builder(this)
+            .setView(view)
+            .create()
+
+        val grid = view.findViewById<GridLayout>(R.id.gridAvatarLibrary)
+        val tileSize = (resources.displayMetrics.density * 68).toInt()
+        val tileMargin = (resources.displayMetrics.density * 6).toInt()
+
+        for (resId in AVATAR_LIBRARY_ICONS) {
+            val tile = ImageView(this)
+            tile.setImageResource(resId)
+            tile.scaleType = ImageView.ScaleType.CENTER_CROP
+            tile.background = androidx.core.content.ContextCompat.getDrawable(this, R.drawable.bg_avatar_circle)
+            tile.clipToOutline = true
+            tile.outlineProvider = object : android.view.ViewOutlineProvider() {
+                override fun getOutline(v: View, outline: android.graphics.Outline) {
+                    outline.setOval(0, 0, v.width, v.height)
+                }
+            }
+            val params = GridLayout.LayoutParams()
+            params.width = tileSize
+            params.height = tileSize
+            params.setMargins(tileMargin, tileMargin, tileMargin, tileMargin)
+            tile.layoutParams = params
+            tile.setOnClickListener {
+                dialog.dismiss()
+                selectLibraryAvatar(resId)
+            }
+            grid.addView(tile)
+        }
+
+        view.findViewById<View>(R.id.btnUploadFromStudio).setOnClickListener {
+            dialog.dismiss()
+            pickAvatarLauncher.launch("image/*")
+        }
+
+        dialog.show()
+    }
+
+    /** يحوّل أيقونة من مكتبة الأيقونات إلى Bitmap ثم يرفعها بنفس مسار رفع صورة المستخدم. */
+    private fun selectLibraryAvatar(resId: Int) {
+        val uid = AuthRepository.currentUid() ?: return
+        if (!isOnline()) { showOfflineOverlay(); return }
+        try {
+            val bitmap = BitmapFactory.decodeResource(resources, resId) ?: run {
+                Toast.makeText(this, R.string.avatar_update_failed, Toast.LENGTH_SHORT).show()
+                return
+            }
+            uploadAvatarBitmap(uid, bitmap)
+        } catch (t: Throwable) {
+            Toast.makeText(this, R.string.avatar_update_failed, Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    /** يقرأ الصورة المُختارة من الاستوديو (المعرض)، يصغّرها، ثم يرفعها بنفس مسار مكتبة الأيقونات. */
     private fun handlePickedAvatar(uri: Uri) {
         val uid = AuthRepository.currentUid() ?: return
         if (!isOnline()) { showOfflineOverlay(); return }
@@ -166,21 +246,27 @@ class AccountActivity : BaseConnectivityActivity() {
                 Toast.makeText(this, R.string.avatar_update_failed, Toast.LENGTH_SHORT).show()
                 return
             }
-            val resized = resizeBitmap(original, AVATAR_MAX_DIMENSION)
-            val outputStream = ByteArrayOutputStream()
-            resized.compress(Bitmap.CompressFormat.JPEG, AVATAR_JPEG_QUALITY, outputStream)
-            val base64 = Base64.encodeToString(outputStream.toByteArray(), Base64.NO_WRAP)
-
-            AuthRepository.updateAvatar(uid, base64) { success ->
-                if (success) {
-                    Toast.makeText(this, R.string.avatar_updated, Toast.LENGTH_SHORT).show()
-                    refresh()
-                } else {
-                    Toast.makeText(this, R.string.avatar_update_failed, Toast.LENGTH_SHORT).show()
-                }
-            }
+            uploadAvatarBitmap(uid, original)
         } catch (t: Throwable) {
             Toast.makeText(this, R.string.avatar_update_failed, Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    /** يصغّر [source] إلى [AVATAR_MAX_DIMENSION]، يضغطه JPEG، ويرمّزه base64 ثم يرفعه لملف [uid]. مسار مشترك
+     *  سواء كانت الصورة من مكتبة الأيقونات الجاهزة أو من صورة رفعها المستخدم من الاستوديو. */
+    private fun uploadAvatarBitmap(uid: String, source: Bitmap) {
+        val resized = resizeBitmap(source, AVATAR_MAX_DIMENSION)
+        val outputStream = ByteArrayOutputStream()
+        resized.compress(Bitmap.CompressFormat.JPEG, AVATAR_JPEG_QUALITY, outputStream)
+        val base64 = Base64.encodeToString(outputStream.toByteArray(), Base64.NO_WRAP)
+
+        AuthRepository.updateAvatar(uid, base64) { success ->
+            if (success) {
+                Toast.makeText(this, R.string.avatar_updated, Toast.LENGTH_SHORT).show()
+                refresh()
+            } else {
+                Toast.makeText(this, R.string.avatar_update_failed, Toast.LENGTH_SHORT).show()
+            }
         }
     }
 
