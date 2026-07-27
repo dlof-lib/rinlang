@@ -5,6 +5,7 @@ import android.net.Uri
 import android.util.Base64
 import com.dlof.rinlang.Project
 import com.dlof.rinlang.ProjectManager
+import com.dlof.rinlang.R
 import com.dlof.rinlang.RinLibrary
 import java.io.BufferedOutputStream
 import java.io.File
@@ -46,16 +47,22 @@ object PackagingUtils {
         val zipFile = File(cacheDir, "$packageName.zip")
         if (zipFile.exists()) zipFile.delete()
 
+        // أسماء الأصول الاختيارية (صور/أيقونات) تُحسَب مسبقاً حتى تظهر ضمن قائمة "محتويات
+        // الحزمة" في README.md المُولَّد تلقائياً، بنفس الأسماء التي ستُكتَب فعلياً في الأرشيف.
+        val assetNames = extraAssetUris.mapIndexed { index, uri ->
+            queryDisplayName(context, uri) ?: "asset_$index"
+        }
+
         ZipOutputStream(BufferedOutputStream(FileOutputStream(zipFile))).use { zipOut ->
             // 1) ملف المكتبة نفسه، بنفس بنية lib/ المستخدمة داخل المشاريع
             zipOut.putNextEntry(ZipEntry("lib/${libraryFile.name}"))
             libraryFile.inputStream().use { it.copyTo(zipOut) }
             zipOut.closeEntry()
 
-            // 2) README.md — يُستخدَم ملف الناشر إن رفع واحداً، وإلا يُولَّد تلقائياً من اسم
-            // المكتبة والناشر والوصف
+            // 2) README.md — يُستخدَم ملف الناشر إن رفع واحداً، وإلا يُولَّد تلقائياً بتصميم
+            // احترافي كامل (رأس، معلومات، تبعيات، محتويات الحزمة بأيقونات حسب نوع كل ملف)
             val readme = readTextUriOrNull(context, customReadmeUri)
-                ?: buildReadme(packageName, version, publisherName, license, description, libraryFile.name, dependencies)
+                ?: buildReadme(packageName, version, publisherName, license, description, libraryFile.name, dependencies, assetNames)
             zipOut.putNextEntry(ZipEntry("README.md"))
             zipOut.write(readme.toByteArray(Charsets.UTF_8))
             zipOut.closeEntry()
@@ -69,7 +76,7 @@ object PackagingUtils {
 
             // 4) الصور/الأيقونات الاختيارية
             extraAssetUris.forEachIndexed { index, uri ->
-                val displayName = queryDisplayName(context, uri) ?: "asset_$index"
+                val displayName = assetNames[index]
                 context.contentResolver.openInputStream(uri)?.use { input ->
                     zipOut.putNextEntry(ZipEntry("assets/$displayName"))
                     input.copyTo(zipOut)
@@ -148,6 +155,14 @@ object PackagingUtils {
         return PackageContents(readme, license, files.sortedBy { it.name })
     }
 
+    /**
+     * يُولِّد README.md احترافياً كاملاً لحزمة لم يرفع ناشرها ملف README خاصاً بها: رأس جذّاب،
+     * قسم معلومات، وصف، تبعيات (إن وُجدت)، طريقة الاستخدام، ثم قائمة "محتويات الحزمة" الكاملة
+     * (المكتبة + README + LICENSE + كل الأصول). النص خالٍ تماماً من الإيموجي — التنظيم يعتمد على
+     * عناوين ونقاط وتشديد فقط (كل ما يدعمه [MarkdownLite]: عناوين، **تشديد**، `كود`، قوائم،
+     * ```كتل كود```، ---). أيقونات الملفات الفعلية (الرسومات الحقيقية) تُعرَض بدلاً من ذلك في
+     * قائمة "ملفات الحزمة" الأصلية داخل شاشة تفاصيل الحزمة عبر [iconResFor].
+     */
     private fun buildReadme(
         name: String,
         version: String,
@@ -155,25 +170,93 @@ object PackagingUtils {
         license: String,
         description: String,
         libraryFileName: String,
-        dependencies: Map<String, String> = emptyMap()
-    ): String = """
+        dependencies: Map<String, String> = emptyMap(),
+        assetFileNames: List<String> = emptyList()
+    ): String {
+        val year = Calendar.getInstance().get(Calendar.YEAR)
+        val cleanDescription = description.ifBlank { "حزمة Rin جاهزة للاستيراد والاستخدام مباشرة في مشروعك." }
+
+        val dependenciesSection = if (dependencies.isEmpty()) "" else buildString {
+            append("\n## التبعيات\n\n")
+            append("تحتاج هذه الحزمة قبل تثبيتها إلى توفّر الحزم التالية:\n\n")
+            dependencies.entries.forEach { (depName, depVersion) ->
+                append("- **$depName** — الإصدار `$depVersion`\n")
+            }
+        }
+
+        // قائمة "محتويات الحزمة": ملف المكتبة نفسه أولاً، ثم README وLICENSE، ثم كل الأصول
+        // الاختيارية. أيقونات هذه الملفات الحقيقية تظهر لاحقاً في قائمة الملفات الأصلية بالتطبيق.
+        val contentsSection = buildString {
+            append("\n## محتويات الحزمة\n\n")
+            append("- `lib/$libraryFileName` — الكود المصدري للمكتبة\n")
+            append("- `README.md` — هذا الملف\n")
+            append("- `LICENSE` — نص الترخيص\n")
+            assetFileNames.forEach { assetName ->
+                append("- `assets/$assetName`\n")
+            }
+        }
+
+        return """
         |# $name
         |
-        |**الإصدار:** $version
-        |**الناشر:** $publisherName
-        |**الترخيص:** $license
+        |**$cleanDescription**
+        |
+        |---
+        |
+        |## معلومات الحزمة
+        |
+        |- **الاسم:** `$name`
+        |- **الإصدار:** `$version`
+        |- **الناشر:** $publisherName
+        |- **الترخيص:** $license
+        |- **سنة النشر:** $year
         |
         |## الوصف
-        |${description.ifBlank { "لا يوجد وصف." }}
-        |${if (dependencies.isEmpty()) "" else "\n## التبعيات\n" + dependencies.entries.joinToString("\n") { "- ${it.key} ${it.value}" } + "\n"}
+        |
+        |$cleanDescription
+        |$dependenciesSection
         |## طريقة الاستخدام
+        |
+        |أضف سطر الاستيراد التالي في أعلى ملف Rin الخاص بك:
+        |
         |```
         |@import "lib/$libraryFileName";
         |```
         |
+        |بعد ذلك، يمكنك مباشرة استخدام كل ما تُصدِّره هذه المكتبة من دوال وعناصر داخل كودك.
+        |$contentsSection
         |---
-        |تم نشر هذه الحزمة عبر متجر Rin (Rin Store).
+        |
+        |### عن هذه الحزمة
+        |
+        |تم إعداد هذا الملف تلقائياً ونشر الحزمة عبر **متجر Rin (Rin Store)** — تصفّح وثبّت
+        |وشارك حزم مجتمع Rin مباشرة من داخل التطبيق، بلا حاجة لأي أداة خارجية.
     """.trimMargin()
+    }
+
+    /**
+     * يختار أيقونة الرسم الشعاعي (vector drawable) الحقيقية من موارد التطبيق نفسه لتمثيل نوع
+     * الملف [fileName] بالاعتماد على امتداده — تُستخدَم في قائمة "ملفات الحزمة" داخل شاشة تفاصيل
+     * الحزمة ([PackageDetailActivity]) بدلاً من أي إيموجي.
+     */
+    fun iconResFor(fileName: String): Int {
+        val lower = fileName.lowercase()
+        return when {
+            lower == "license" || lower == "license.txt" -> R.drawable.ic_license_shield
+            lower.endsWith(".og.rin") || lower.endsWith(".rin") -> R.drawable.ic_file_solid
+            lower.endsWith(".png") || lower.endsWith(".jpg") || lower.endsWith(".jpeg") ||
+                lower.endsWith(".webp") || lower.endsWith(".gif") || lower.endsWith(".bmp") -> R.drawable.ic_log_image
+            lower.endsWith(".svg") -> R.drawable.ic_log_palette
+            lower.endsWith(".json") -> R.drawable.ic_log_grid
+            lower.endsWith(".md") -> R.drawable.ic_readme_doc
+            lower.endsWith(".txt") -> R.drawable.ic_log_file
+            lower.endsWith(".zip") || lower.endsWith(".rinsdk") -> R.drawable.ic_log_archive
+            lower.endsWith(".mp3") || lower.endsWith(".wav") || lower.endsWith(".ogg") -> R.drawable.ic_log_audio
+            lower.endsWith(".mp4") || lower.endsWith(".webm") -> R.drawable.ic_log_video
+            lower.endsWith(".ttf") || lower.endsWith(".otf") -> R.drawable.ic_log_font
+            else -> R.drawable.ic_file_solid
+        }
+    }
 
     private fun buildLicense(publisherName: String): String {
         val year = Calendar.getInstance().get(Calendar.YEAR)
