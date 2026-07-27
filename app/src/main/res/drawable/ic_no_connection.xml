@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp"
+    android:height="48dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+
+    <!-- ثلاث أقواس إشارة، بشفافية متدرّجة -->
+    <path
+        android:pathData="M2,8.5 C7,4.2 17,4.2 22,8.5"
+        android:strokeColor="@color/rin_on_toolbar_dim"
+        android:strokeWidth="1.7"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000"
+        android:strokeAlpha="0.55" />
+    <path
+        android:pathData="M5.3,12.2 C9,9.1 15,9.1 18.7,12.2"
+        android:strokeColor="@color/rin_on_toolbar_dim"
+        android:strokeWidth="1.7"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000"
+        android:strokeAlpha="0.75" />
+    <path
+        android:pathData="M8.8,15.8 C10.4,14.5 13.6,14.5 15.2,15.8"
+        android:strokeColor="@color/rin_on_toolbar_dim"
+        android:strokeWidth="1.7"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000" />
+
+    <!-- نقطة الإشارة السفلية -->
+    <path
+        android:pathData="M12,17.3 m-1.5,0 a1.5,1.5 0 1,0 3,0 a1.5,1.5 0 1,0 -3,0"
+        android:fillColor="@color/rin_on_toolbar_dim" />
+
+    <!-- الخط القطري الأحمر: يدل على الانقطاع -->
+    <path
+        android:pathData="M3.5,3.5 L20.5,20.5"
+        android:strokeColor="@color/status_error"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000" />
+</vector>
