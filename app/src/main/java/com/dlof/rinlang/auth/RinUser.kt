@@ -14,5 +14,13 @@ data class RinUser(
     val username: String = "",
     val email: String = "",
     val verified: Boolean = false,
-    val createdAt: Long = 0L
+    val createdAt: Long = 0L,
+    /** نبذة قصيرة يعرضها المستخدم في ملفه الشخصي (اختياري). */
+    val bio: String = "",
+    /**
+     * صورة الملف الشخصي مُرمَّزة base64 (JPEG مصغّرة إلى 512×512 كحد أقصى قبل الترميز)،
+     * تُخزَّن كنص واحد داخل Realtime Database بنفس أسلوب [com.dlof.rinlang.store.RinPackage.base64Data]
+     * — بلا Firebase Storage مدفوع. فارغة يعني عدم وجود صورة، وتُعرض شارة بحرف الاسم الأول بدلاً منها.
+     */
+    val avatarBase64: String = ""
 )
