@@ -131,4 +131,40 @@ object PackageRepository {
             override fun onCancelled(error: DatabaseError) = callback(false)
         })
     }
+
+    /**
+     * يبلّغ [uid] عن حزمة [packageId] بسبب [reason] (بلاغ واحد لكل مستخدم لكل حزمة —
+     * يستبدل بلاغه السابق إن كرّر الإبلاغ بدل مضاعفة العدّاد). يُزاد reportCount فقط
+     * عند أول بلاغ من هذا المستخدم لهذه الحزمة.
+     */
+    fun submitReport(packageId: String, uid: String, reason: String, callback: (Boolean) -> Unit) {
+        val reportRef = packagesRef().child(packageId).child("reports").child(uid)
+        reportRef.addListenerForSingleValueEvent(object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                val alreadyReported = snapshot.exists()
+                val payload = mapOf(
+                    "reason" to reason,
+                    "reportedAt" to System.currentTimeMillis()
+                )
+                reportRef.setValue(payload)
+                    .addOnSuccessListener {
+                        if (alreadyReported) {
+                            callback(true)
+                            return@addOnSuccessListener
+                        }
+                        val countRef = packagesRef().child(packageId).child("reportCount")
+                        countRef.addListenerForSingleValueEvent(object : ValueEventListener {
+                            override fun onDataChange(countSnap: DataSnapshot) {
+                                val current = countSnap.getValue(Long::class.java) ?: 0L
+                                countRef.setValue(current + 1)
+                                callback(true)
+                            }
+                            override fun onCancelled(error: DatabaseError) = callback(true)
+                        })
+                    }
+                    .addOnFailureListener { callback(false) }
+            }
+            override fun onCancelled(error: DatabaseError) = callback(false)
+        })
+    }
 }
