@@ -1,13 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- نسخة هيكلية (placeholder) من item_store_package.xml، بلا أي نص حقيقي، تُستخدم داخل
-     ShimmerLayout أثناء تحميل قائمة المتجر لأول مرة. -->
+<!-- نسخة هيكلية (placeholder) من item_store_package.xml المطوَّرة، بلا أي نص حقيقي، تُستخدم
+     داخل ShimmerLayout أثناء تحميل قائمة المتجر لأول مرة. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="vertical"
-    android:background="@drawable/bg_list_card"
-    android:layout_margin="4dp"
-    android:padding="12dp">
+    android:background="@drawable/bg_store_package_card"
+    android:layout_margin="5dp"
+    android:paddingStart="16dp"
+    android:paddingEnd="14dp"
+    android:paddingTop="14dp"
+    android:paddingBottom="14dp">
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -16,9 +19,9 @@
         android:gravity="center_vertical">
 
         <View
-            android:layout_width="32dp"
-            android:layout_height="32dp"
-            android:layout_marginEnd="10dp"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:layout_marginEnd="12dp"
             android:background="@drawable/bg_skeleton_circle" />
 
         <LinearLayout
@@ -35,20 +38,20 @@
             <View
                 android:layout_width="100dp"
                 android:layout_height="10dp"
-                android:layout_marginTop="6dp"
+                android:layout_marginTop="7dp"
                 android:background="@drawable/bg_skeleton_block" />
         </LinearLayout>
 
         <View
-            android:layout_width="52dp"
-            android:layout_height="18dp"
+            android:layout_width="56dp"
+            android:layout_height="20dp"
             android:background="@drawable/bg_skeleton_block" />
     </LinearLayout>
 
     <View
         android:layout_width="match_parent"
         android:layout_height="11dp"
-        android:layout_marginTop="10dp"
+        android:layout_marginTop="12dp"
         android:background="@drawable/bg_skeleton_block" />
 
     <View
@@ -59,8 +62,20 @@
 
     <View
         android:layout_width="match_parent"
-        android:layout_height="36dp"
+        android:layout_height="1dp"
         android:layout_marginTop="12dp"
+        android:background="@color/rin_divider" />
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="34dp"
+        android:layout_marginTop="10dp"
+        android:background="@drawable/bg_skeleton_block" />
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="40dp"
+        android:layout_marginTop="10dp"
         android:background="@drawable/bg_skeleton_block" />
 
 </LinearLayout>
