@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  نصوص "Rin Extensions Marketplace": متجر رسمي منفصل عن متجر المكتبات (strings_store.xml)،
+  مخصَّص لإضافات/أدوات محرّر ولغة Rin (إضافات، مكتبات، سمات، عناصر واجهة، أدوات تصحيح،
+  أدوات AI، وقوالب). ملف منفصل بنفس أسلوب strings_store.xml و strings_libraries.xml.
+-->
+<resources>
+    <!-- نقطة الدخول من شاشة المكتبات -->
+    <string name="ext_entry_button">Rin Extensions</string>
+
+    <!-- الصفحة الرئيسية للمتجر -->
+    <string name="ext_marketplace_title">Rin Extensions Marketplace</string>
+    <string name="ext_search_hint">ابحث باسم الإضافة أو وصفها أو المطوّر…</string>
+    <string name="ext_store_empty">لا توجد إضافات تطابق بحثك. جرّب كلمة أخرى أو امسح الفلتر.</string>
+    <string name="ext_item_meta_format">%1$s • %2$s • %3$d تنزيل</string>
+    <string name="ext_action_open">إدارة</string>
+
+    <!-- أنواع الإضافات -->
+    <string name="ext_type_extension">إضافة</string>
+    <string name="ext_type_library">مكتبة</string>
+    <string name="ext_type_theme">سمة</string>
+    <string name="ext_type_ui_component">عنصر واجهة</string>
+    <string name="ext_type_debug_tool">أداة تصحيح</string>
+    <string name="ext_type_ai_tool">أداة ذكاء اصطناعي</string>
+    <string name="ext_type_template">قالب</string>
+
+    <!-- شريط أوامر "rin ext ..." الطرفية -->
+    <string name="ext_cli_title">أوامر rin ext</string>
+    <string name="ext_cli_run">تنفيذ</string>
+    <string name="ext_cli_hint">$ rin ext list\n$ rin ext search &lt;اسم&gt;\n$ rin ext install &lt;اسم&gt;\n$ rin ext update &lt;اسم&gt;\n$ rin ext remove &lt;اسم&gt;</string>
+
+    <!-- صفحة تفاصيل الإضافة -->
+    <string name="ext_detail_developer_format">بواسطة %1$s</string>
+    <string name="ext_detail_developer_unknown">مطوّر غير معروف</string>
+    <string name="ext_detail_languages_format">اللغات المستخدَمة: %1$s</string>
+    <string name="ext_detail_meta_format">%1$s • %2$s • صدرت في %3$s • %4$d تنزيل • %5$s</string>
+    <string name="ext_detail_screenshots">لقطات الشاشة</string>
+    <string name="ext_detail_changelog">سجل التحديثات</string>
+    <string name="ext_detail_no_changelog">لا يوجد سجل تحديثات لهذه الإضافة بعد.</string>
+    <string name="ext_changelog_entry_format">الإصدار %1$s — %2$s\n%3$s</string>
+
+    <!-- أزرار الإدارة -->
+    <string name="ext_action_update">تحديث</string>
+    <string name="ext_action_uninstall">إزالة</string>
+    <string name="ext_action_enable">تمكين</string>
+    <string name="ext_action_disable">تعطيل</string>
+    <string name="ext_action_cancel">إلغاء</string>
+
+    <!-- شريط تقدّم التثبيت -->
+    <string name="ext_install_progress_installing">جارٍ تثبيت %1$s…</string>
+    <string name="ext_install_progress_updating">جارٍ تحديث %1$s…</string>
+
+    <!-- رسائل النجاح/الفشل -->
+    <string name="ext_installed_toast">تم تثبيت %1$s بنجاح ✓</string>
+    <string name="ext_updated_toast">تم تحديث %1$s بنجاح ✓</string>
+    <string name="ext_install_failed_toast">فشلت العملية: %1$s</string>
+    <string name="ext_enabled_toast">تم تمكين %1$s</string>
+    <string name="ext_disabled_toast">تم تعطيل %1$s</string>
+    <string name="ext_uninstalled_toast">تمت إزالة %1$s</string>
+    <string name="ext_uninstall_confirm_title">إزالة الإضافة</string>
+    <string name="ext_uninstall_confirm_message">هل تريد إزالة %1$s من جهازك؟ يمكنك تثبيتها مرة أخرى لاحقاً من المتجر.</string>
+
+    <!-- شاشة الأمان قبل التثبيت -->
+    <string name="ext_security_title">قبل المتابعة</string>
+    <string name="ext_security_subtitle">راجع المطوّر والأذونات والملفات التي ستصل إليها هذه الإضافة قبل تثبيتها.</string>
+    <string name="ext_security_developer_label">المطوّر</string>
+    <string name="ext_security_signature_label">التوقيع الرقمي (بصمة سلامة المحتوى)</string>
+    <string name="ext_security_signature_missing">لا يوجد توقيع مُعلَن لهذه الإضافة</string>
+    <string name="ext_security_signature_missing_state">⚠ غير موقَّعة</string>
+    <string name="ext_security_signature_valid">✓ التوقيع مطابق لمحتوى الإضافة</string>
+    <string name="ext_security_signature_invalid">✗ التوقيع غير مطابق — قد يكون المحتوى تالفاً</string>
+    <string name="ext_security_signature_invalid_toast">تعذّر المتابعة: التوقيع الرقمي لا يطابق محتوى الإضافة</string>
+    <string name="ext_security_permissions_label">الأذونات المطلوبة</string>
+    <string name="ext_security_no_permissions">لا تطلب هذه الإضافة أي أذونات خاصة.</string>
+    <string name="ext_security_files_label">الملفات التي ستصل إليها</string>
+    <string name="ext_security_proceed_format">متابعة %1$s</string>
+</resources>
