@@ -26,12 +26,20 @@
     <string name="store_sort_rating">الأعلى تقييماً</string>
     <string name="store_sort_downloads">الأكثر تحميلاً</string>
     <string name="store_sort_name">الاسم (أ-ي)</string>
-    <string name="store_rating_format">%1$.1f (%2$d)</string>
-    <string name="store_rating_none">لا يوجد تقييم بعد</string>
+    <string name="store_rating_format">★ %1$.1f (%2$d)</string>
+    <string name="store_rating_none">★ لا يوجد تقييم بعد</string>
     <string name="action_rate_package">قيّم</string>
-    <string name="rate_package_title">قيّم %1$s</string>
+    <string name="rate_package_title">%1$s</string>
+    <string name="rate_package_subtitle">كيف تقيّم هذه الحزمة؟ اختر عدد النجوم</string>
     <string name="rate_package_login_required">سجّل الدخول أولاً حتى تتمكن من التقييم</string>
     <string name="rate_package_submitted">شكراً لتقييمك ✓</string>
+    <string-array name="rate_quality_labels">
+        <item>⭐ ضعيف</item>
+        <item>⭐⭐ مقبول</item>
+        <item>⭐⭐⭐ جيد</item>
+        <item>⭐⭐⭐⭐ جيد جداً</item>
+        <item>⭐⭐⭐⭐⭐ ممتاز</item>
+    </string-array>
     <string name="store_dependencies_format">يتطلب: %1$s</string>
 
     <!-- تحذير التبعيات عند التثبيت -->
