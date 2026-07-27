@@ -78,7 +78,8 @@ class RinStoreActivity : AppCompatActivity() {
 
         adapter = PackageAdapter(
             onInstall = { pkg -> confirmAndInstall(pkg) },
-            onRate = { pkg, ratingBar -> showRateDialog(pkg, ratingBar) }
+            onRate = { pkg, ratingBar -> showRateDialog(pkg, ratingBar) },
+            onReport = { pkg -> showReportDialog(pkg) }
         )
         rvPackages.layoutManager = LinearLayoutManager(this)
         rvPackages.adapter = adapter
@@ -260,11 +261,34 @@ class RinStoreActivity : AppCompatActivity() {
             .setNegativeButton(R.string.cancel, null)
             .show()
     }
+
+    /** يعرض قائمة أسباب جاهزة، ويرسل البلاغ المختار عبر [PackageRepository.submitReport]. */
+    private fun showReportDialog(pkg: RinPackage) {
+        val uid = AuthRepository.currentUid()
+        if (uid == null) {
+            Toast.makeText(this, R.string.report_package_login_required, Toast.LENGTH_SHORT).show()
+            return
+        }
+        val reasons = resources.getStringArray(R.array.report_reasons)
+        AlertDialog.Builder(this)
+            .setTitle(getString(R.string.report_package_title, pkg.name))
+            .setMessage(R.string.report_package_message)
+            .setItems(reasons) { _, index ->
+                PackageRepository.submitReport(pkg.id, uid, reasons[index]) { success ->
+                    if (success) {
+                        Toast.makeText(this, R.string.report_package_submitted, Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
 }
 
 private class PackageAdapter(
     val onInstall: (RinPackage) -> Unit,
-    val onRate: (RinPackage, RatingBar) -> Unit
+    val onRate: (RinPackage, RatingBar) -> Unit,
+    val onReport: (RinPackage) -> Unit
 ) : RecyclerView.Adapter<PackageAdapter.VH>() {
 
     private var items: List<RinPackage> = emptyList()
@@ -284,6 +308,7 @@ private class PackageAdapter(
         val ratingBar: RatingBar = view.findViewById(R.id.ratingBarPackage)
         val txtRating: TextView = view.findViewById(R.id.txtPackageRating)
         val btnRate: View = view.findViewById(R.id.btnRatePackage)
+        val btnReport: View = view.findViewById(R.id.btnReportPackage)
         val btnInstall: View = view.findViewById(R.id.btnInstallPackage)
     }
 
@@ -321,6 +346,7 @@ private class PackageAdapter(
 
         holder.btnInstall.setOnClickListener { onInstall(pkg) }
         holder.btnRate.setOnClickListener { onRate(pkg, holder.ratingBar) }
+        holder.btnReport.setOnClickListener { onReport(pkg) }
     }
 
     override fun getItemCount(): Int = items.size
