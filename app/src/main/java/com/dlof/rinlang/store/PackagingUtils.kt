@@ -35,7 +35,8 @@ object PackagingUtils {
         description: String,
         publisherName: String,
         license: String,
-        extraAssetUris: List<Uri>
+        extraAssetUris: List<Uri>,
+        dependencies: Map<String, String> = emptyMap()
     ): File {
         val cacheDir = File(context.cacheDir, "store_publish").apply { mkdirs() }
         val zipFile = File(cacheDir, "$packageName.zip")
@@ -48,7 +49,7 @@ object PackagingUtils {
             zipOut.closeEntry()
 
             // 2) README.md — يُولَّد تلقائياً بالكامل من اسم المكتبة والناشر والوصف
-            val readme = buildReadme(packageName, version, publisherName, license, description, libraryFile.name)
+            val readme = buildReadme(packageName, version, publisherName, license, description, libraryFile.name, dependencies)
             zipOut.putNextEntry(ZipEntry("README.md"))
             zipOut.write(readme.toByteArray(Charsets.UTF_8))
             zipOut.closeEntry()
@@ -98,7 +99,9 @@ object PackagingUtils {
                 entry = zip.nextEntry
             }
         }
-        return installed ?: throw IllegalStateException("لم يتم العثور على ملف مكتبة صالح داخل الحزمة")
+        val result = installed ?: throw IllegalStateException("لم يتم العثور على ملف مكتبة صالح داخل الحزمة")
+        PackageManifest.recordInstalled(project, pkg.name, pkg.version, result.name)
+        return result
     }
 
     private fun buildReadme(
@@ -107,7 +110,8 @@ object PackagingUtils {
         publisherName: String,
         license: String,
         description: String,
-        libraryFileName: String
+        libraryFileName: String,
+        dependencies: Map<String, String> = emptyMap()
     ): String = """
         |# $name
         |
@@ -117,7 +121,7 @@ object PackagingUtils {
         |
         |## الوصف
         |${description.ifBlank { "لا يوجد وصف." }}
-        |
+        |${if (dependencies.isEmpty()) "" else "\n## التبعيات\n" + dependencies.entries.joinToString("\n") { "- ${it.key} ${it.value}" } + "\n"}
         |## طريقة الاستخدام
         |```
         |@import "lib/$libraryFileName";
