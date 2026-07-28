@@ -120,6 +120,13 @@ class AccountActivity : BaseConnectivityActivity() {
             AuthRepository.logout()
             refresh()
         }
+
+        findViewById<View>(R.id.rowAccountSubscribers).setOnClickListener {
+            UserListActivity.start(this, uid, UserListActivity.Mode.SUBSCRIBERS)
+        }
+        findViewById<View>(R.id.rowAccountSubscriptions).setOnClickListener {
+            UserListActivity.start(this, uid, UserListActivity.Mode.SUBSCRIPTIONS)
+        }
     }
 
     private fun bindProfile(profile: RinUser?) {
@@ -136,6 +143,9 @@ class AccountActivity : BaseConnectivityActivity() {
             txtBio.text = profile?.bio
             txtBio.alpha = 1f
         }
+
+        findViewById<TextView>(R.id.txtAccountSubscriberCount).text = (profile?.subscriberCount ?: 0L).toString()
+        findViewById<TextView>(R.id.txtAccountSubscriptionsCount).text = (profile?.subscriptionsCount ?: 0L).toString()
 
         renderAvatar(profile, displayName)
     }
