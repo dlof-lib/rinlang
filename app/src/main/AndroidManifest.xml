@@ -104,6 +104,16 @@
             android:exported="false"
             android:launchMode="singleTop" />
 
+        <!-- الملف الشخصي العام: عرض ملف أي مستخدم آخر (وليس حسابي فقط)، مع زر الانتساب -->
+        <activity
+            android:name=".store.PublicProfileActivity"
+            android:exported="false" />
+
+        <!-- قائمة "المنتسبين" أو "الانتسابات" لحساب ما -->
+        <activity
+            android:name=".store.UserListActivity"
+            android:exported="false" />
+
         <!-- ===== "Rin Extensions Marketplace": متجر رسمي منفصل للإضافات والأدوات ===== -->
         <activity
             android:name=".store.extensions.RinExtensionsMarketplaceActivity"
