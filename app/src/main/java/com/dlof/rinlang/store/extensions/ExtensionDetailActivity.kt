@@ -15,6 +15,8 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.dlof.rinlang.R
+import com.dlof.rinlang.auth.AuthRepository
+import com.dlof.rinlang.network.NetworkMonitor
 import com.dlof.rinlang.store.VersionUtils
 import java.text.DateFormat
 import java.util.Date
@@ -45,6 +47,8 @@ class ExtensionDetailActivity : AppCompatActivity() {
     private lateinit var btnUpdate: android.widget.Button
     private lateinit var btnEnableDisable: android.widget.Button
     private lateinit var btnUninstall: android.widget.Button
+    private lateinit var btnExportRinex: android.widget.Button
+    private lateinit var btnDeleteExtension: android.widget.Button
     private lateinit var containerChangelog: LinearLayout
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -70,6 +74,8 @@ class ExtensionDetailActivity : AppCompatActivity() {
         btnUpdate = findViewById(R.id.btnDetailUpdate)
         btnEnableDisable = findViewById(R.id.btnDetailEnableDisable)
         btnUninstall = findViewById(R.id.btnDetailUninstall)
+        btnExportRinex = findViewById(R.id.btnDetailExportRinex)
+        btnDeleteExtension = findViewById(R.id.btnDetailDeleteExtension)
         containerChangelog = findViewById(R.id.containerChangelog)
 
         txtName.text = ext.name
@@ -87,6 +93,12 @@ class ExtensionDetailActivity : AppCompatActivity() {
         btnUpdate.setOnClickListener { showSecurityDialogThenInstall(isUpdate = true) }
         btnEnableDisable.setOnClickListener { toggleEnabled() }
         btnUninstall.setOnClickListener { confirmUninstall() }
+        btnExportRinex.setOnClickListener { exportAsRinex() }
+        btnDeleteExtension.setOnClickListener { confirmDeleteExtension() }
+
+        // زر الحذف النهائي من المتجر يظهر فقط لصاحب الإضافة (developerUid) — وليس لكل من ثبَّتها.
+        btnDeleteExtension.visibility =
+            if (ext.developerUid.isNotBlank() && ext.developerUid == AuthRepository.currentUid()) View.VISIBLE else View.GONE
     }
 
     override fun onResume() {
@@ -294,6 +306,62 @@ class ExtensionDetailActivity : AppCompatActivity() {
                 ExtensionManager.uninstall(this, ext.id)
                 Toast.makeText(this, getString(R.string.ext_uninstalled_toast, ext.name), Toast.LENGTH_SHORT).show()
                 refreshMetaAndButtons()
+            }
+            .show()
+    }
+
+    /**
+     * يصدِّر الإضافة الحالية كملف مستقل بصيغة Rin Extensions الخاصة (.rinex) إلى مجلد Downloads
+     * العام على الجهاز، عبر [RinexPackager]. الملف الناتج يحتوي محتوى الإضافة كاملاً + وصفها
+     * (extension.rinext) في أرشيف واحد، ويمكن مشاركته أو استيراده لاحقاً بلا اتصال بالإنترنت.
+     */
+    private fun exportAsRinex() {
+        btnExportRinex.isEnabled = false
+        RinexPackager.exportToDownloads(this, ext) { uri, error ->
+            btnExportRinex.isEnabled = true
+            if (uri != null) {
+                Toast.makeText(this, getString(R.string.ext_export_rinex_success, ext.name), Toast.LENGTH_LONG).show()
+            } else {
+                Toast.makeText(
+                    this,
+                    getString(R.string.ext_export_rinex_failed, error?.message ?: ""),
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+        }
+    }
+
+    /**
+     * يعرض تأكيداً قبل حذف الإضافة نهائياً من "Rin Extensions Marketplace" (وليس فقط من هذا
+     * الجهاز). متاح فقط لمطوّرها صاحب الإضافة — راجع [ExtensionRepository.deleteExtension].
+     */
+    private fun confirmDeleteExtension() {
+        val uid = AuthRepository.currentUid()
+        if (uid == null || uid != ext.developerUid) return
+
+        AlertDialog.Builder(this)
+            .setTitle(getString(R.string.ext_delete_confirm_title))
+            .setMessage(getString(R.string.ext_delete_confirm_message, ext.name))
+            .setNegativeButton(R.string.ext_action_cancel, null)
+            .setPositiveButton(R.string.ext_action_delete) { _, _ ->
+                if (!NetworkMonitor.isOnline(this)) {
+                    Toast.makeText(this, R.string.ext_delete_requires_connection, Toast.LENGTH_LONG).show()
+                    return@setPositiveButton
+                }
+                btnDeleteExtension.isEnabled = false
+                ExtensionRepository.deleteExtension(ext.id, uid) { success, error ->
+                    btnDeleteExtension.isEnabled = true
+                    if (success) {
+                        Toast.makeText(this, getString(R.string.ext_deleted_toast, ext.name), Toast.LENGTH_SHORT).show()
+                        finish()
+                    } else {
+                        Toast.makeText(
+                            this,
+                            error ?: getString(R.string.ext_delete_failed),
+                            Toast.LENGTH_LONG
+                        ).show()
+                    }
+                }
             }
             .show()
     }
