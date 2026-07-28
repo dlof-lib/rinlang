@@ -96,6 +96,7 @@ class PackageDetailActivity : BaseConnectivityActivity() {
         findViewById<View>(R.id.rowDetailPublisher).setOnClickListener {
             PublicProfileActivity.start(this, pkg.publisherUid)
         }
+        clipToCircle(imgAvatar)
 
         txtName.text = pkg.publisherName
         txtInitial.text = pkg.publisherName.take(1).uppercase()
@@ -128,6 +129,16 @@ class PackageDetailActivity : BaseConnectivityActivity() {
                 }
             } catch (t: Throwable) {
                 txtInitial.visibility = View.VISIBLE
+            }
+        }
+    }
+
+    /** يقصّ [view] إلى دائرة كاملة، لعرض صورة الملف الشخصي كشارة دائرية بدل مربّع خام. */
+    private fun clipToCircle(view: ImageView) {
+        view.clipToOutline = true
+        view.outlineProvider = object : android.view.ViewOutlineProvider() {
+            override fun getOutline(v: View, outline: android.graphics.Outline) {
+                outline.setOval(0, 0, v.width, v.height)
             }
         }
     }
