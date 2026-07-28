@@ -93,6 +93,10 @@ class PackageDetailActivity : BaseConnectivityActivity() {
         val imgAvatar = findViewById<ImageView>(R.id.imgDetailPublisherAvatar)
         val imgBadge = findViewById<ImageView>(R.id.imgDetailVerifiedBadge)
 
+        findViewById<View>(R.id.rowDetailPublisher).setOnClickListener {
+            PublicProfileActivity.start(this, pkg.publisherUid)
+        }
+
         txtName.text = pkg.publisherName
         txtInitial.text = pkg.publisherName.take(1).uppercase()
 
