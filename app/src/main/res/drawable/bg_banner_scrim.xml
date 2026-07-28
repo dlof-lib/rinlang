@@ -1,12 +1,22 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- تدرّج شفاف فوق صورة البانر: يبدأ شفافاً من الأعلى وينتهي بلون بطاقة داكن في الأسفل،
-     ليندمج البانر بسلاسة مع محتوى البطاقة تحته بدل حافة حادة. -->
-<shape xmlns:android="http://schemas.android.com/apk/res/android"
-    android:shape="rectangle">
-    <gradient
-        android:type="linear"
-        android:angle="90"
-        android:startColor="#00000000"
-        android:centerColor="#33000000"
-        android:endColor="@color/rin_job_card_bg" />
-</shape>
+<!-- تراكب فوق صورة البانر: طبقة سوداء خفيفة شبه شفافة موحّدة فوق كامل البانر لتحسين وضوح
+     النص والصورة الرمزية فوقه (بدل اعتمادهما مباشرة على سطوع خلفية الخلايا السداسية)، مع
+     تدرّج إضافي فوقها يبدأ شفافاً وينتهي بلون بطاقة داكن، ليندمج البانر بسلاسة مع محتوى
+     البطاقة تحته بدل حافة حادة. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="#3D000000" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="rectangle">
+            <gradient
+                android:type="linear"
+                android:angle="90"
+                android:startColor="#00000000"
+                android:centerColor="#40000000"
+                android:endColor="@color/rin_job_card_bg" />
+        </shape>
+    </item>
+</layer-list>
