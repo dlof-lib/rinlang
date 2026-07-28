@@ -77,6 +77,35 @@ object ExtensionRepository {
             .addOnFailureListener { e -> callback(false, e.message, null) }
     }
 
+    /**
+     * يحذف إضافة [extensionId] نهائياً من "Rin Extensions Marketplace". يتحقق أولاً أن [uid]
+     * هو مطوّرها الفعلي (developerUid) قبل محاولة الحذف — بالإضافة إلى قاعدة الأمان المطابقة على
+     * مستوى Firebase نفسها في firebase/database.rules.json التي تمنع أصلاً أي كتابة/حذف لا يقوم
+     * بها صاحب الإضافة. هذا الحذف يزيل الإضافة من المتجر فقط، ولا يمسّ نسخها المثبَّتة محلياً على
+     * أجهزة من ثبّتوها من قبل (راجع [ExtensionManager.uninstall] لذلك).
+     */
+    fun deleteExtension(extensionId: String, uid: String, callback: (success: Boolean, error: String?) -> Unit) {
+        val ref = extensionsRef().child(extensionId)
+        ref.addListenerForSingleValueEvent(object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                val ext = snapshot.getValue(RinExtension::class.java)
+                if (ext == null) {
+                    callback(false, "الإضافة غير موجودة")
+                    return
+                }
+                if (ext.developerUid != uid) {
+                    callback(false, "لا يمكنك حذف إضافة لا تخصّك")
+                    return
+                }
+                ref.removeValue()
+                    .addOnSuccessListener { callback(true, null) }
+                    .addOnFailureListener { e -> callback(false, e.message) }
+            }
+
+            override fun onCancelled(error: DatabaseError) = callback(false, error.message)
+        })
+    }
+
     fun incrementDownloadCount(extensionId: String) {
         val ref = extensionsRef().child(extensionId).child("downloadCount")
         ref.addListenerForSingleValueEvent(object : ValueEventListener {
