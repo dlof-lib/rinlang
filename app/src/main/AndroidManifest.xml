@@ -123,6 +123,11 @@
             android:name=".store.extensions.ExtensionDetailActivity"
             android:exported="false" />
 
+        <!-- شاشة "انشر إضافتك": يفتحها أي مستخدم مسجَّل دخوله لنشر إضافة/مكتبة/سمة خاصة به -->
+        <activity
+            android:name=".store.extensions.PublishExtensionActivity"
+            android:exported="false" />
+
         <!-- يمنح روابط content:// آمنة للملف المنزَّل قبل فتحه بـ ACTION_VIEW على أندرويد 9 وأقدم
              (على أندرويد 10+ نستخدم MediaStore أصلاً فيعطينا content:// Uri تلقائياً). -->
         <provider
