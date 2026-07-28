@@ -69,6 +69,7 @@ class PublicProfileActivity : BaseConnectivityActivity() {
         PackageRepository.fetchUserPackages(profileUid) { packages ->
             findViewById<ImageView>(R.id.imgProfileVerifiedBadge).visibility =
                 if (PublisherBadgeUtils.isEligible(packages)) View.VISIBLE else View.GONE
+            bindAggregateStats(packages)
         }
         bindSubscribe()
     }
@@ -93,6 +94,20 @@ class PublicProfileActivity : BaseConnectivityActivity() {
             (profile?.subscriptionsCount ?: 0L).toString()
 
         renderAvatar(profile, displayName)
+    }
+
+    /**
+     * يحسب ويعرض إحصائيات "الحزم" و"التنزيلات" و"الإعجابات" في صفّ البطاقات الجديد — بيانات
+     * حقيقية مُجمَّعة من نفس قائمة [packages] التي وصلت أصلاً من [PackageRepository.fetchUserPackages]
+     * (لا طلب شبكة إضافي ولا بيانات وهمية): عدد الحزم = حجم القائمة، والتنزيلات/الإعجابات =
+     * مجموع [RinPackage.downloadCount] و[RinPackage.likeCount] عبر كل حزم هذا الناشر.
+     */
+    private fun bindAggregateStats(packages: List<RinPackage>) {
+        findViewById<TextView>(R.id.txtProfilePackagesCount).text = packages.size.toString()
+        findViewById<TextView>(R.id.txtProfileDownloadsCount).text =
+            packages.sumOf { it.downloadCount }.toString()
+        findViewById<TextView>(R.id.txtProfileLikesCount).text =
+            packages.sumOf { it.likeCount }.toString()
     }
 
     /** يعرض صورة الملف الشخصي إن وُجدت (فكّ base64 وعرضها)، وإلا يعرض شارة بحرف الاسم الأول. */
