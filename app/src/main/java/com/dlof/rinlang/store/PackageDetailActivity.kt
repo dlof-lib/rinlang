@@ -75,14 +75,22 @@ class PackageDetailActivity : BaseConnectivityActivity() {
 
     private fun bindHeader() {
         findViewById<TextView>(R.id.txtDetailPackageName).text = pkg.name
+        findViewById<TextView>(R.id.txtDetailPackageIcon).text = pkg.name.take(1).uppercase()
+
         val txtDescription = findViewById<TextView>(R.id.txtDetailDescription)
         txtDescription.text = pkg.description
         txtDescription.visibility = if (pkg.description.isBlank()) View.GONE else View.VISIBLE
 
-        findViewById<TextView>(R.id.txtDetailMeta).text = getString(
-            R.string.package_detail_meta_format,
-            pkg.version, pkg.license, pkg.downloadCount, pkg.averageRating, pkg.ratingCount
-        )
+        // صفّ الإحصائيات المقسَّم إلى بطاقات مفردة (بدل نص واحد مدموج package_detail_meta_format
+        // سابقاً) — نفس القيم بالضبط (pkg.version / pkg.downloadCount / pkg.averageRating و
+        // pkg.ratingCount)، فقط معروضة في ثلاث حبّات منفصلة لتحسين وضوح القراءة. الترخيص
+        // (pkg.license) بقي معروضاً فقط في قسمه المخصَّص أسفل الصفحة (txtDetailLicense).
+        findViewById<TextView>(R.id.txtDetailStatVersion).text =
+            getString(R.string.package_detail_stat_version_format, pkg.version)
+        findViewById<TextView>(R.id.txtDetailStatDownloads).text =
+            getString(R.string.package_detail_stat_downloads_format, pkg.downloadCount)
+        findViewById<TextView>(R.id.txtDetailStatRating).text =
+            getString(R.string.package_detail_stat_rating_format, pkg.averageRating, pkg.ratingCount)
     }
 
     private fun bindPublisher() {
