@@ -92,7 +92,9 @@
                     android:orientation="horizontal"
                     android:clickable="true"
                     android:focusable="true"
-                    android:background="@drawable/bg_icon_btn">
+                    android:background="@drawable/bg_icon_btn"
+                    android:paddingHorizontal="8dp"
+                    android:paddingVertical="8dp">
 
                     <FrameLayout
                         android:layout_width="36dp"
@@ -103,7 +105,8 @@
                             android:layout_width="36dp"
                             android:layout_height="36dp"
                             android:background="@drawable/bg_avatar_circle"
-                            android:scaleType="centerCrop"
+                            android:padding="5dp"
+                            android:scaleType="fitCenter"
                             android:contentDescription="@null" />
 
                         <TextView
