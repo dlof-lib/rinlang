@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- صف مستخدم واحد ضمن قائمة "المنتسبين" أو "الانتسابات": صورة دائرية (أو حرف الاسم الأول
+     كبديل) + الاسم + شارة توثيق إن كان ناشراً موثّقاً + اسم المستخدم. الصف كامل قابل للضغط
+     لفتح الملف الشخصي العام لهذا المستخدم. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal"
+    android:gravity="center_vertical"
+    android:background="@drawable/bg_detail_section_card"
+    android:layout_marginBottom="8dp"
+    android:clickable="true"
+    android:focusable="true"
+    android:padding="12dp">
+
+    <FrameLayout
+        android:layout_width="42dp"
+        android:layout_height="42dp">
+
+        <ImageView
+            android:id="@+id/imgUserRowAvatar"
+            android:layout_width="42dp"
+            android:layout_height="42dp"
+            android:background="@drawable/bg_avatar_circle"
+            android:scaleType="centerCrop"
+            android:contentDescription="@null" />
+
+        <TextView
+            android:id="@+id/txtUserRowInitial"
+            android:layout_width="42dp"
+            android:layout_height="42dp"
+            android:gravity="center"
+            android:textColor="@android:color/white"
+            android:textStyle="bold"
+            android:textSize="15sp" />
+    </FrameLayout>
+
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:layout_marginStart="10dp"
+        android:orientation="vertical">
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+            <TextView
+                android:id="@+id/txtUserRowName"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textSize="14.5sp"
+                android:textStyle="bold"
+                android:textColor="@color/rin_on_toolbar" />
+
+            <ImageView
+                android:id="@+id/imgUserRowVerifiedBadge"
+                android:layout_width="14dp"
+                android:layout_height="14dp"
+                android:layout_marginStart="5dp"
+                android:src="@drawable/ic_verified_badge"
+                android:visibility="gone"
+                android:contentDescription="@string/verified_publisher_badge_description" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/txtUserRowUsername"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="1dp"
+            android:textSize="12sp"
+            android:textColor="@color/rin_editor_hint" />
+    </LinearLayout>
+
+</LinearLayout>
