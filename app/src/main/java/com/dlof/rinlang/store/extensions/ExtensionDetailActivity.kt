@@ -111,7 +111,8 @@ class ExtensionDetailActivity : AppCompatActivity() {
             ext.version, formatBytes(ext.sizeBytes), dateStr, ext.downloadCount,
             if (ext.ratingCount > 0) getString(R.string.store_rating_format, ext.averageRating, ext.ratingCount)
             else getString(R.string.store_rating_none)
-        )
+        ) + if (ext.downloadCount >= 20L || (ext.ratingCount >= 3L && ext.averageRating >= 4.5))
+            "  •  " + getString(R.string.ext_badge_featured) else ""
 
         if (installed == null) {
             btnInstall.visibility = View.VISIBLE
