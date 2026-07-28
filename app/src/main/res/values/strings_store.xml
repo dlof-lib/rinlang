@@ -97,6 +97,11 @@
     <string name="package_detail_no_license">لا يوجد ملف ترخيص في هذه الحزمة.</string>
     <string name="package_detail_meta_format">%1$s • %2$s • %3$d تنزيل • ★ %4$.1f (%5$d تقييم)</string>
 
+    <!-- إحصائيات صفحة تفاصيل الحزمة كحبّات مفردة (بدل نص واحد مدموج package_detail_meta_format) -->
+    <string name="package_detail_stat_version_format">الإصدار %1$s</string>
+    <string name="package_detail_stat_downloads_format">%1$d تنزيل</string>
+    <string name="package_detail_stat_rating_format">★ %1$.1f (%2$d)</string>
+
     <!-- شارة "ناشر موثّق": تُمنح تلقائياً لمن لديه حزمة تجاوزت 1000 تنزيل بتقييم 4 نجوم فأكثر -->
     <string name="verified_publisher_badge_description">ناشر موثّق</string>
 
@@ -133,6 +138,12 @@
     <string name="public_profile_bio_empty">لا توجد نبذة بعد.</string>
     <string name="subscriber_count_label">المنتسبين</string>
     <string name="subscriptions_count_label">الانتسابات</string>
+    <!-- إحصائيات إضافية في بطاقة الملف الشخصي: مجموع الحزم/التنزيلات/الإعجابات لكل حزم هذا
+         الناشر — بيانات حقيقية محسوبة من نفس قائمة الحزم التي تُجلب أصلاً لتحديد شارة التوثيق
+         (PackageRepository.fetchUserPackages)، وليست بيانات وهمية. -->
+    <string name="packages_count_label">الحزم</string>
+    <string name="downloads_count_label">التنزيلات</string>
+    <string name="likes_count_label">الإعجابات</string>
     <string name="subscribe_login_required">سجّل الدخول أولاً حتى تتمكن من الانتساب</string>
     <string name="subscribe_action_failed">تعذّر تنفيذ الطلب، حاول مرة أخرى</string>
 
