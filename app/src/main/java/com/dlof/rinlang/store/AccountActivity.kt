@@ -107,6 +107,7 @@ class AccountActivity : BaseConnectivityActivity() {
         }
 
         loadMyPackages(uid)
+        loadMyExtensions(uid)
 
         findViewById<View>(R.id.btnChangeAvatar).setOnClickListener {
             showAvatarPickerDialog()
@@ -339,6 +340,59 @@ class AccountActivity : BaseConnectivityActivity() {
                         loadMyPackages(uid)
                     } else {
                         Toast.makeText(this, error ?: getString(R.string.package_delete_failed), Toast.LENGTH_LONG).show()
+                    }
+                }
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
+
+    /** يجلب إضافات المستخدم [uid] المنشورة في Rin Extensions Marketplace ويعرضها ضمن قسم "إضافاتي المنشورة". */
+    private fun loadMyExtensions(uid: String) {
+        com.dlof.rinlang.store.extensions.ExtensionRepository.fetchByDeveloper(uid) { extensions ->
+            renderMyExtensions(uid, extensions)
+        }
+    }
+
+    /** يبني صفوف إضافات المستخدم داخل [R.id.containerMyExtensions]، أو يعرض رسالة "لا توجد إضافات" إن كانت فارغة. */
+    private fun renderMyExtensions(uid: String, extensions: List<com.dlof.rinlang.store.extensions.RinExtension>) {
+        val container = findViewById<LinearLayout>(R.id.containerMyExtensions)
+        val txtEmpty = findViewById<TextView>(R.id.txtMyExtensionsEmpty)
+        container.removeAllViews()
+
+        if (extensions.isEmpty()) {
+            txtEmpty.visibility = View.VISIBLE
+            return
+        }
+        txtEmpty.visibility = View.GONE
+
+        val inflater = LayoutInflater.from(this)
+        for (ext in extensions) {
+            val row = inflater.inflate(R.layout.item_my_extension, container, false)
+            row.findViewById<TextView>(R.id.txtMyExtensionInitial).text = ext.name.take(1).uppercase()
+            row.findViewById<TextView>(R.id.txtMyExtensionName).text = ext.name
+            row.findViewById<TextView>(R.id.txtMyExtensionMeta).text =
+                getString(R.string.my_extension_meta_format, ext.version, ext.downloadCount)
+            row.findViewById<ImageButton>(R.id.btnDeleteMyExtension).setOnClickListener {
+                confirmDeleteExtension(uid, ext)
+            }
+            container.addView(row)
+        }
+    }
+
+    /** يعرض تأكيداً قبل حذف [ext] نهائياً من متجر Rin Extensions (لا يمكن التراجع)، ثم يحذفها ويحدّث القائمة عند النجاح. */
+    private fun confirmDeleteExtension(uid: String, ext: com.dlof.rinlang.store.extensions.RinExtension) {
+        AlertDialog.Builder(this)
+            .setTitle(R.string.ext_delete_confirm_title)
+            .setMessage(getString(R.string.ext_delete_confirm_message, ext.name))
+            .setPositiveButton(R.string.ext_action_delete) { _, _ ->
+                if (!isOnline()) { showOfflineOverlay(); return@setPositiveButton }
+                com.dlof.rinlang.store.extensions.ExtensionRepository.deleteExtension(ext.id, uid) { success, error ->
+                    if (success) {
+                        Toast.makeText(this, R.string.ext_deleted_toast, Toast.LENGTH_SHORT).show()
+                        loadMyExtensions(uid)
+                    } else {
+                        Toast.makeText(this, error ?: getString(R.string.ext_delete_failed), Toast.LENGTH_LONG).show()
                     }
                 }
             }
