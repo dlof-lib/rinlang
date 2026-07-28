@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
@@ -148,6 +149,74 @@
                                 android:textColor="@color/rin_editor_hint"
                                 android:textSize="13sp"
                                 android:lineSpacingExtra="2dp" />
+
+                            <!-- صفّ العدّادات: عدد المنتسبين + عدد الانتسابات لحسابي، كل منهما
+                                 قابل للضغط لفتح قائمة أصحابه (UserListActivity) — يجعل الملف
+                                 الشخصي "مرئياً" لبقية المستخدمين عبر متابعة من ينتسب إليّ ومن أتابع -->
+                            <LinearLayout
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="16dp"
+                                android:orientation="horizontal"
+                                android:gravity="center_vertical">
+
+                                <LinearLayout
+                                    android:id="@+id/rowAccountSubscribers"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:orientation="vertical"
+                                    android:gravity="center_horizontal"
+                                    android:clickable="true"
+                                    android:focusable="true"
+                                    android:background="@drawable/bg_icon_btn"
+                                    android:paddingHorizontal="18dp"
+                                    android:paddingVertical="6dp">
+
+                                    <TextView
+                                        android:id="@+id/txtAccountSubscriberCount"
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:textColor="@color/rin_on_toolbar"
+                                        android:textSize="15sp"
+                                        android:textStyle="bold"
+                                        tools:text="0" />
+
+                                    <TextView
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:text="@string/subscriber_count_label"
+                                        android:textColor="@color/rin_editor_hint"
+                                        android:textSize="11.5sp" />
+                                </LinearLayout>
+
+                                <LinearLayout
+                                    android:id="@+id/rowAccountSubscriptions"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:orientation="vertical"
+                                    android:gravity="center_horizontal"
+                                    android:clickable="true"
+                                    android:focusable="true"
+                                    android:background="@drawable/bg_icon_btn"
+                                    android:paddingHorizontal="18dp"
+                                    android:paddingVertical="6dp">
+
+                                    <TextView
+                                        android:id="@+id/txtAccountSubscriptionsCount"
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:textColor="@color/rin_on_toolbar"
+                                        android:textSize="15sp"
+                                        android:textStyle="bold" />
+
+                                    <TextView
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:text="@string/subscriptions_count_label"
+                                        android:textColor="@color/rin_editor_hint"
+                                        android:textSize="11.5sp" />
+                                </LinearLayout>
+                            </LinearLayout>
 
                             <Button
                                 android:id="@+id/btnEditProfile"
