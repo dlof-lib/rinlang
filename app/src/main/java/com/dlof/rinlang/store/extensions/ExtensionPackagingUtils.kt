@@ -24,12 +24,14 @@ object ExtensionPackagingUtils {
     private const val SCREENSHOT_MAX_DIMENSION = 1080
 
     /**
-     * يضغط كل ملفات [contentUris] (بأسمائها الأصلية، في جذر الأرشيف) داخل zip واحد في cacheDir
-     * ويرجع الملف الناتج، جاهزاً لترميزه base64 عبر [encodeFileToBase64].
+     * يضغط كل ملفات [contentUris] (بأسمائها الأصلية، في جذر الأرشيف) داخل أرشيف واحد بصيغة
+     * Rin Extensions الخاصة (.rinex) في cacheDir، ويرجع الملف الناتج، جاهزاً لترميزه base64 عبر
+     * [encodeFileToBase64]. هذا هو محتوى الإضافة الخام فقط؛ [RinexPackager] يضيف لاحقاً وصف
+     * الإضافة (extension.rinext) عند التصدير كملف .rinex مستقل قابل للمشاركة بلا إنترنت.
      */
     fun buildExtensionZip(context: Context, extensionName: String, contentUris: List<Uri>): File {
         val cacheDir = File(context.cacheDir, "extension_publish").apply { mkdirs() }
-        val zipFile = File(cacheDir, "$extensionName.zip")
+        val zipFile = File(cacheDir, "$extensionName.${RinexPackager.FILE_EXTENSION}")
         if (zipFile.exists()) zipFile.delete()
 
         val usedNames = mutableSetOf<String>()
