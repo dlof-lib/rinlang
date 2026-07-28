@@ -1,147 +1,169 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- شريط التنقل السفلي الموحّد: يظهر في كل الأقسام الرئيسية الأربعة
-     (المحرر، المشاريع، المتجر، الملف الشخصي) للتنقل السريع بينها من أي شاشة. -->
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<!-- شريط التنقل السفلي الموحّد — إعادة تصميم Material 3: حبّة (pill) عائمة متحرّكة خلف
+     التبويب المُحدَّد (bgBottomNavIndicator)، أيقونات أكبر (24dp بدل 20dp)، وارتفاع أكبر
+     قليلاً (64dp) لتحسين مساحة اللمس. الموقع/العرض الفعلي للحبّة يُحسَب ويُحرَّك برمجياً في
+     BottomNavHelper.kt (animateIndicatorTo) بعد أول تخطيط للشريط، لأن كل تبويب weight="1"
+     وعرضه الحقيقي غير معروف إلا بعد القياس. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/bottomNavBar"
     android:layout_width="match_parent"
-    android:layout_height="60dp"
-    android:orientation="horizontal"
+    android:layout_height="64dp"
     android:background="@color/rin_toolbar_bottom"
-    android:elevation="6dp">
+    android:elevation="8dp">
+
+    <!-- الحبّة المتحرّكة: تبدأ بعرض/موقع صفريَين وتُضبَط فعلياً من الكود عند أول تخطيط -->
+    <View
+        android:id="@+id/bottomNavIndicator"
+        android:layout_width="0dp"
+        android:layout_height="40dp"
+        android:layout_gravity="center_vertical|start"
+        android:layout_marginStart="8dp"
+        android:background="@drawable/bg_bottom_nav_pill" />
 
     <LinearLayout
-        android:id="@+id/navEditor"
-        android:layout_width="0dp"
+        android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:layout_weight="1"
-        android:orientation="vertical"
-        android:gravity="center"
-        android:background="@drawable/bg_bottom_nav_item"
-        android:clickable="true"
-        android:focusable="true">
+        android:orientation="horizontal">
 
-        <ImageView
-            android:id="@+id/navEditorIcon"
-            android:layout_width="20dp"
-            android:layout_height="20dp"
-            android:src="@drawable/ic_nav_editor"
-            android:contentDescription="@string/nav_editor" />
+        <LinearLayout
+            android:id="@+id/navEditor"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:background="@drawable/bg_bottom_nav_item"
+            android:clickable="true"
+            android:focusable="true"
+            android:minWidth="48dp">
 
-        <TextView
-            android:id="@+id/navEditorText"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
-            android:text="@string/nav_editor"
-            android:textSize="10sp" />
+            <ImageView
+                android:id="@+id/navEditorIcon"
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:src="@drawable/ic_nav_editor"
+                android:contentDescription="@string/nav_editor" />
+
+            <TextView
+                android:id="@+id/navEditorText"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="@string/nav_editor"
+                android:textSize="10sp" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/navProjects"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:background="@drawable/bg_bottom_nav_item"
+            android:clickable="true"
+            android:focusable="true"
+            android:minWidth="48dp">
+
+            <ImageView
+                android:id="@+id/navProjectsIcon"
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:src="@drawable/ic_projects"
+                android:contentDescription="@string/nav_projects" />
+
+            <TextView
+                android:id="@+id/navProjectsText"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="@string/nav_projects"
+                android:textSize="10sp" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/navStore"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:background="@drawable/bg_bottom_nav_item"
+            android:clickable="true"
+            android:focusable="true"
+            android:minWidth="48dp">
+
+            <ImageView
+                android:id="@+id/navStoreIcon"
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:src="@drawable/ic_nav_store"
+                android:contentDescription="@string/nav_store" />
+
+            <TextView
+                android:id="@+id/navStoreText"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="@string/nav_store"
+                android:textSize="10sp" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/navProfile"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:background="@drawable/bg_bottom_nav_item"
+            android:clickable="true"
+            android:focusable="true"
+            android:minWidth="48dp">
+
+            <ImageView
+                android:id="@+id/navProfileIcon"
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:src="@drawable/ic_nav_profile"
+                android:contentDescription="@string/nav_profile" />
+
+            <TextView
+                android:id="@+id/navProfileText"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="@string/nav_profile"
+                android:textSize="10sp" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/navMore"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:background="@drawable/bg_bottom_nav_item"
+            android:clickable="true"
+            android:focusable="true"
+            android:minWidth="48dp">
+
+            <ImageView
+                android:id="@+id/navMoreIcon"
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:src="@drawable/ic_nav_more"
+                android:contentDescription="@string/nav_more" />
+
+            <TextView
+                android:id="@+id/navMoreText"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="@string/nav_more"
+                android:textSize="10sp" />
+        </LinearLayout>
+
     </LinearLayout>
-
-    <LinearLayout
-        android:id="@+id/navProjects"
-        android:layout_width="0dp"
-        android:layout_height="match_parent"
-        android:layout_weight="1"
-        android:orientation="vertical"
-        android:gravity="center"
-        android:background="@drawable/bg_bottom_nav_item"
-        android:clickable="true"
-        android:focusable="true">
-
-        <ImageView
-            android:id="@+id/navProjectsIcon"
-            android:layout_width="20dp"
-            android:layout_height="20dp"
-            android:src="@drawable/ic_projects"
-            android:contentDescription="@string/nav_projects" />
-
-        <TextView
-            android:id="@+id/navProjectsText"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
-            android:text="@string/nav_projects"
-            android:textSize="10sp" />
-    </LinearLayout>
-
-    <LinearLayout
-        android:id="@+id/navStore"
-        android:layout_width="0dp"
-        android:layout_height="match_parent"
-        android:layout_weight="1"
-        android:orientation="vertical"
-        android:gravity="center"
-        android:background="@drawable/bg_bottom_nav_item"
-        android:clickable="true"
-        android:focusable="true">
-
-        <ImageView
-            android:id="@+id/navStoreIcon"
-            android:layout_width="20dp"
-            android:layout_height="20dp"
-            android:src="@drawable/ic_nav_store"
-            android:contentDescription="@string/nav_store" />
-
-        <TextView
-            android:id="@+id/navStoreText"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
-            android:text="@string/nav_store"
-            android:textSize="10sp" />
-    </LinearLayout>
-
-    <LinearLayout
-        android:id="@+id/navProfile"
-        android:layout_width="0dp"
-        android:layout_height="match_parent"
-        android:layout_weight="1"
-        android:orientation="vertical"
-        android:gravity="center"
-        android:background="@drawable/bg_bottom_nav_item"
-        android:clickable="true"
-        android:focusable="true">
-
-        <ImageView
-            android:id="@+id/navProfileIcon"
-            android:layout_width="20dp"
-            android:layout_height="20dp"
-            android:src="@drawable/ic_nav_profile"
-            android:contentDescription="@string/nav_profile" />
-
-        <TextView
-            android:id="@+id/navProfileText"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
-            android:text="@string/nav_profile"
-            android:textSize="10sp" />
-    </LinearLayout>
-
-    <LinearLayout
-        android:id="@+id/navMore"
-        android:layout_width="0dp"
-        android:layout_height="match_parent"
-        android:layout_weight="1"
-        android:orientation="vertical"
-        android:gravity="center"
-        android:background="@drawable/bg_bottom_nav_item"
-        android:clickable="true"
-        android:focusable="true">
-
-        <ImageView
-            android:id="@+id/navMoreIcon"
-            android:layout_width="20dp"
-            android:layout_height="20dp"
-            android:src="@drawable/ic_nav_more"
-            android:contentDescription="@string/nav_more" />
-
-        <TextView
-            android:id="@+id/navMoreText"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
-            android:text="@string/nav_more"
-            android:textSize="10sp" />
-    </LinearLayout>
-
-</LinearLayout>
+</FrameLayout>
