@@ -127,6 +127,21 @@
     <string name="avatar_updated">تم تحديث صورة الملف الشخصي ✓</string>
     <string name="avatar_update_failed">تعذّر تحديث الصورة، حاول مرة أخرى</string>
 
+    <!-- الملف الشخصي العام: عرض ملف أي مستخدم آخر (وليس حسابي فقط)، مع عدّاد المنتسبين
+         والانتسابات وزر الانتساب، تُفتح من صف الناشر داخل تفاصيل الحزمة ومن قوائم المنتسبين/الانتسابات -->
+    <string name="public_profile_title">الملف الشخصي</string>
+    <string name="public_profile_bio_empty">لا توجد نبذة بعد.</string>
+    <string name="subscriber_count_label">المنتسبين</string>
+    <string name="subscriptions_count_label">الانتسابات</string>
+    <string name="subscribe_login_required">سجّل الدخول أولاً حتى تتمكن من الانتساب</string>
+    <string name="subscribe_action_failed">تعذّر تنفيذ الطلب، حاول مرة أخرى</string>
+
+    <!-- شاشة قائمة المستخدمين (المنتسبين لحساب ما، أو الحسابات التي ينتسب إليها) -->
+    <string name="user_list_title_subscribers">المنتسبين</string>
+    <string name="user_list_title_subscriptions">الانتسابات</string>
+    <string name="user_list_empty_subscribers">لا يوجد منتسبون بعد</string>
+    <string name="user_list_empty_subscriptions">لا توجد انتسابات بعد</string>
+
     <!-- قسم "حزمي" داخل شاشة الحساب: عرض حزم المستخدم المنشورة وحذفها -->
     <string name="account_my_packages_title">حزمي المنشورة</string>
     <string name="account_my_packages_empty">لم تنشر أي حزمة بعد. انشر مكتبة من شاشة المكتبات لتظهر هنا.</string>
