@@ -46,6 +46,40 @@
             android:contentDescription="@string/ext_cli_title" />
     </LinearLayout>
 
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:background="@drawable/bg_store_section_card"
+        android:layout_marginHorizontal="10dp"
+        android:layout_marginBottom="8dp"
+        android:padding="10dp">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="wrap_content"
+            android:text="@string/ext_publish_subtitle"
+            android:textColor="@color/rin_editor_hint"
+            android:textSize="11.5sp"
+            android:layout_marginEnd="10dp" />
+
+        <Button
+            android:id="@+id/btnExtOpenPublish"
+            android:layout_width="wrap_content"
+            android:layout_height="40dp"
+            android:minWidth="0dp"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            android:paddingHorizontal="16dp"
+            android:text="@string/ext_entry_publish_button"
+            android:textAllCaps="false"
+            android:textSize="12.5sp"
+            android:background="@drawable/bg_toolbar_btn_primary"
+            android:textColor="@android:color/white" />
+    </LinearLayout>
+
     <HorizontalScrollView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -54,6 +88,22 @@
 
         <com.google.android.material.chip.ChipGroup
             android:id="@+id/chipGroupExtType"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:paddingStart="10dp"
+            android:paddingEnd="10dp"
+            app:singleSelection="true"
+            app:chipSpacingHorizontal="6dp" />
+    </HorizontalScrollView>
+
+    <HorizontalScrollView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:scrollbars="none"
+        android:paddingBottom="6dp">
+
+        <com.google.android.material.chip.ChipGroup
+            android:id="@+id/chipGroupExtSort"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:paddingStart="10dp"
