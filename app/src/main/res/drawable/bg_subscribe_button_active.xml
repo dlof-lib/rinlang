@@ -1,12 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- خلفية زر "تم الانتساب" (مُنتسِب فعلاً): تعبئة كاملة بلون العلامة، تمييزاً واضحاً عن الحالة
-     الأولى (bg_subscribe_button.xml). الضغط عليها مجدداً يُلغي الانتساب. -->
+<!-- خلفية زر "تم الانتساب ✓" (مُنتسِب فعلاً): تدرّج بنفسجي إلى أخضر بدل تعبئة بنفسجية مسطّحة —
+     يربط لحظة "التأكيد" بالهوية الخضراء الثانية للتطبيق (Purple + Green)، مع بقاء نفس معرّف
+     الملف وسلوك الضغط (يُلغي الانتساب) كما في PublicProfileActivity.kt / PackageDetailActivity.kt. -->
 <ripple xmlns:android="http://schemas.android.com/apk/res/android"
     android:color="@color/rin_ghost_ripple">
     <item>
-        <shape android:shape="rectangle">
-            <solid android:color="@color/rin_accent" />
-            <corners android:radius="8dp" />
+        <shape android:shape="rectangle" android:angle="0">
+            <gradient
+                android:type="linear"
+                android:angle="0"
+                android:startColor="@color/rin_accent"
+                android:endColor="@color/rin_accent_green" />
+            <corners android:radius="14dp" />
         </shape>
     </item>
 </ripple>
