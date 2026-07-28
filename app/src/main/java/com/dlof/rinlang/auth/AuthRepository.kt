@@ -214,6 +214,10 @@ object AuthRepository {
      * يبدّل انتساب [subscriberUid] لناشر [publisherUid]: يزيل الانتساب وينقص subscriberCount
      * إن كان منتسِباً مسبقاً، أو يسجّله ويزيد subscriberCount إن لم يكن. يُعيد عبر [callback]
      * الحالة الجديدة (subscribed) ونجاح العملية، لتحديث الواجهة تفاؤلياً ثم التراجع عند الفشل.
+     *
+     * إضافة إلى users/{publisherUid}/subscribers/{subscriberUid} (المستخدم من أجل "هل أنا منتسِب؟")
+     * يكتب أيضاً فهرساً عكسياً على حساب المنتسِب نفسه: users/{subscriberUid}/subscriptions/{publisherUid}،
+     * ليتسنى عرض "الانتسابات" (من أتابع) لأي حساب دون فحص subscribers لكل مستخدمين النظام.
      */
     fun toggleSubscription(publisherUid: String, subscriberUid: String, callback: (subscribed: Boolean, success: Boolean) -> Unit) {
         val subRef = usersRef().child(publisherUid).child("subscribers").child(subscriberUid)
@@ -224,21 +228,68 @@ object AuthRepository {
                 val writeTask = if (newState) subRef.setValue(true) else subRef.removeValue()
                 writeTask
                     .addOnSuccessListener {
-                        val countRef = usersRef().child(publisherUid).child("subscriberCount")
-                        countRef.addListenerForSingleValueEvent(object : ValueEventListener {
-                            override fun onDataChange(countSnap: DataSnapshot) {
-                                val current = countSnap.getValue(Long::class.java) ?: 0L
-                                val updated = if (newState) current + 1 else (current - 1).coerceAtLeast(0L)
-                                countRef.setValue(updated)
-                                callback(newState, true)
-                            }
-                            override fun onCancelled(error: DatabaseError) = callback(alreadySubscribed, false)
-                        })
+                        // فهرس عكسي على حساب المنتسِب (uid الخاص به، مسموح له الكتابة فيه دوماً)
+                        val subscriptionsRef = usersRef().child(subscriberUid).child("subscriptions").child(publisherUid)
+                        if (newState) subscriptionsRef.setValue(true) else subscriptionsRef.removeValue()
+
+                        bumpCounter(usersRef().child(publisherUid).child("subscriberCount"), newState)
+                        bumpCounter(usersRef().child(subscriberUid).child("subscriptionsCount"), newState)
+                        callback(newState, true)
                     }
                     .addOnFailureListener { callback(alreadySubscribed, false) }
             }
             override fun onCancelled(error: DatabaseError) = callback(false, false)
         })
+    }
+
+    /** يزيد [countRef] بمقدار 1 إن كانت [increment] صحيحة، أو ينقصها (بحد أدنى صفر) إن لم تكن. */
+    private fun bumpCounter(countRef: com.google.firebase.database.DatabaseReference, increment: Boolean) {
+        countRef.addListenerForSingleValueEvent(object : ValueEventListener {
+            override fun onDataChange(countSnap: DataSnapshot) {
+                val current = countSnap.getValue(Long::class.java) ?: 0L
+                val updated = if (increment) current + 1 else (current - 1).coerceAtLeast(0L)
+                countRef.setValue(updated)
+            }
+            override fun onCancelled(error: DatabaseError) = Unit
+        })
+    }
+
+    /** يجلب قائمة "المنتسبين" (المتابعين) لحساب [uid]: كل ملفات RinUser الموجودة تحت subscribers. */
+    fun fetchSubscribers(uid: String, callback: (List<RinUser>) -> Unit) {
+        usersRef().child(uid).child("subscribers")
+            .addListenerForSingleValueEvent(object : ValueEventListener {
+                override fun onDataChange(snapshot: DataSnapshot) {
+                    val uids = snapshot.children.mapNotNull { it.key }
+                    fetchProfiles(uids, callback)
+                }
+                override fun onCancelled(error: DatabaseError) = callback(emptyList())
+            })
+    }
+
+    /** يجلب قائمة "الانتسابات" (الحسابات التي يتابعها) حساب [uid]، عبر الفهرس العكسي subscriptions. */
+    fun fetchSubscriptions(uid: String, callback: (List<RinUser>) -> Unit) {
+        usersRef().child(uid).child("subscriptions")
+            .addListenerForSingleValueEvent(object : ValueEventListener {
+                override fun onDataChange(snapshot: DataSnapshot) {
+                    val uids = snapshot.children.mapNotNull { it.key }
+                    fetchProfiles(uids, callback)
+                }
+                override fun onCancelled(error: DatabaseError) = callback(emptyList())
+            })
+    }
+
+    /** يجلب ملفات [uids] الشخصية دفعة واحدة، ويُعيدها عبر [callback] بعد اكتمال آخر طلب. */
+    private fun fetchProfiles(uids: List<String>, callback: (List<RinUser>) -> Unit) {
+        if (uids.isEmpty()) { callback(emptyList()); return }
+        val results = arrayOfNulls<RinUser>(uids.size)
+        var remaining = uids.size
+        uids.forEachIndexed { index, id ->
+            fetchProfile(id) { profile ->
+                results[index] = profile
+                remaining--
+                if (remaining == 0) callback(results.filterNotNull())
+            }
+        }
     }
 
     private fun mapFirebaseError(raw: String?): String {
