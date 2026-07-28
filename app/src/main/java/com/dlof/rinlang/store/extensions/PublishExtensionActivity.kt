@@ -210,7 +210,7 @@ class PublishExtensionActivity : BaseConnectivityActivity() {
                     permissions = selectedPermissionIds.toList(),
                     languages = languages,
                     screenshots = screenshots,
-                    fileName = "$name.rinext",
+                    fileName = "$name.rinex",
                     base64Data = base64
                 )
 
