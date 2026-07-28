@@ -80,7 +80,38 @@
             android:textColor="@android:color/white" />
     </LinearLayout>
 
+    <!-- تبويبان: تصفّح متجر Rin Extensions عبر الإنترنت، أو إدارة الإضافات المثبَّتة فعلياً على
+         هذا الجهاز (تعمل بلا إنترنت — تُقرأ مباشرة من ExtensionManager). زر استيراد ملف .rinex
+         محلي إلى جانبهما، لتثبيت إضافة من ملف بلا حاجة لأي اتصال بالمتجر. -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:layout_marginHorizontal="10dp"
+        android:layout_marginBottom="8dp">
+
+        <com.google.android.material.chip.ChipGroup
+            android:id="@+id/chipGroupExtTab"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="wrap_content"
+            app:singleSelection="true"
+            app:chipSpacingHorizontal="6dp" />
+
+        <ImageButton
+            android:id="@+id/btnExtImportRinex"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:padding="9dp"
+            android:background="@drawable/bg_icon_btn_accent"
+            android:src="@android:drawable/ic_input_get"
+            app:tint="@color/rin_accent"
+            android:contentDescription="@string/ext_action_import_rinex" />
+    </LinearLayout>
+
     <HorizontalScrollView
+        android:id="@+id/scrollExtFilters"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:scrollbars="none"
@@ -97,6 +128,7 @@
     </HorizontalScrollView>
 
     <HorizontalScrollView
+        android:id="@+id/scrollExtSort"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:scrollbars="none"
