@@ -54,15 +54,17 @@ object ExtensionPackagingUtils {
      * يقرأ صورة [uri]، يعيد تحجيمها إن كانت أكبر من [SCREENSHOT_MAX_DIMENSION] (حفاظاً على حجم
      * معقول داخل Realtime Database)، ويرجعها كنص base64 مضغوط JPEG، أو null إن تعذّرت القراءة.
      */
-    fun encodeScreenshot(context: Context, uri: Uri): String? = try {
-        val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: return null
-        val original = BitmapFactory.decodeByteArray(bytes, 0, bytes.size) ?: return null
-        val scaled = downscaleIfNeeded(original)
-        val out = ByteArrayOutputStream()
-        scaled.compress(Bitmap.CompressFormat.JPEG, 82, out)
-        Base64.encodeToString(out.toByteArray(), Base64.NO_WRAP)
-    } catch (t: Throwable) {
-        null
+    fun encodeScreenshot(context: Context, uri: Uri): String? {
+        return try {
+            val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: return null
+            val original = BitmapFactory.decodeByteArray(bytes, 0, bytes.size) ?: return null
+            val scaled = downscaleIfNeeded(original)
+            val out = ByteArrayOutputStream()
+            scaled.compress(Bitmap.CompressFormat.JPEG, 82, out)
+            Base64.encodeToString(out.toByteArray(), Base64.NO_WRAP)
+        } catch (t: Throwable) {
+            null
+        }
     }
 
     private fun downscaleIfNeeded(bitmap: Bitmap): Bitmap {
