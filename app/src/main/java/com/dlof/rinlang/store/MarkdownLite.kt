@@ -107,7 +107,7 @@ object MarkdownLite {
         return out
     }
 
-    /** يضيف نص عنوان بحجم [scale] النسبي وتشديد كامل، مع تطبيق **تشديد**/`كود` الداخلي إن وُجد. */
+    /** يضيف نص عنوان بحجم [scale] النسبي وتشديد كامل، مع تطبيق تشديد أو كود داخلي إن وُجد. */
     private fun appendHeading(out: SpannableStringBuilder, text: String, scale: Float) {
         val start = out.length
         appendInline(out, text)
