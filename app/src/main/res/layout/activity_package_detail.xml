@@ -63,20 +63,43 @@
                 android:orientation="vertical"
                 android:padding="18dp">
 
-                <TextView
-                    android:id="@+id/txtDetailPackageName"
+                <!-- أيقونة الحزمة (حرفها الأول على شارة متدرّجة) + الاسم في صفّ واحد، بدل اسم
+                     مجرَّد بلا هوية بصرية مميّزة — نفس تدرّج bg_package_icon_gradient المستخدم
+                     في بطاقات المتجر، لتوحيد الهوية بين شاشة القائمة وشاشة التفاصيل. -->
+                <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:textSize="21sp"
-                    android:textStyle="bold"
-                    android:textColor="@color/rin_on_toolbar"
-                    tools:text="mathlib" />
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
+
+                    <TextView
+                        android:id="@+id/txtDetailPackageIcon"
+                        android:layout_width="44dp"
+                        android:layout_height="44dp"
+                        android:background="@drawable/bg_package_icon_gradient"
+                        android:gravity="center"
+                        android:textColor="@android:color/white"
+                        android:textSize="18sp"
+                        android:textStyle="bold"
+                        tools:text="M" />
+
+                    <TextView
+                        android:id="@+id/txtDetailPackageName"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:layout_marginStart="12dp"
+                        android:textSize="21sp"
+                        android:textStyle="bold"
+                        android:textColor="@color/rin_on_toolbar"
+                        tools:text="mathlib" />
+                </LinearLayout>
 
                 <TextView
                     android:id="@+id/txtDetailDescription"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="6dp"
+                    android:layout_marginTop="10dp"
                     android:textSize="13.5sp"
                     android:lineSpacingExtra="2dp"
                     android:textColor="@color/rin_editor_text" />
@@ -162,7 +185,10 @@
                         android:visibility="gone" />
                 </LinearLayout>
 
-                <!-- شريط إحصائيات: إصدار / ترخيص / تنزيلات / تقييم + زر الإعجاب (قلب) بجانبه -->
+                <!-- صفّ إحصائيات مقسَّم إلى بطاقات مفردة (بدل حبّة واحدة مدموجة): الإصدار /
+                     التنزيلات / التقييم، ثم زر الإعجاب (قلب) منفصلاً بلون مميَّز عند التفعيل.
+                     الترخيص انتقل إلى قسمه المخصَّص أسفل الصفحة (نص txtDetailLicense) فلا داعي
+                     لتكراره هنا. القيم الفعلية لكل حبّة تُضبط في PackageDetailActivity.bindHeader(). -->
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -171,28 +197,57 @@
                     android:orientation="horizontal">
 
                     <TextView
-                        android:id="@+id/txtDetailMeta"
+                        android:id="@+id/txtDetailStatVersion"
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
-                        android:background="@drawable/bg_stat_pill"
-                        android:paddingHorizontal="12dp"
-                        android:paddingVertical="9dp"
-                        android:textSize="12sp"
+                        android:layout_marginEnd="6dp"
+                        android:background="@drawable/bg_detail_stat_chip"
+                        android:gravity="center"
+                        android:paddingVertical="10dp"
+                        android:textSize="11.5sp"
                         android:textStyle="bold"
-                        android:textColor="@color/rin_editor_hint" />
+                        android:textColor="@color/rin_editor_hint"
+                        tools:text="الإصدار 1.0.0" />
+
+                    <TextView
+                        android:id="@+id/txtDetailStatDownloads"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:layout_marginEnd="6dp"
+                        android:background="@drawable/bg_detail_stat_chip"
+                        android:gravity="center"
+                        android:paddingVertical="10dp"
+                        android:textSize="11.5sp"
+                        android:textStyle="bold"
+                        android:textColor="@color/rin_accent_green"
+                        tools:text="120 تنزيل" />
+
+                    <TextView
+                        android:id="@+id/txtDetailStatRating"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:layout_marginEnd="6dp"
+                        android:background="@drawable/bg_detail_stat_chip"
+                        android:gravity="center"
+                        android:paddingVertical="10dp"
+                        android:textSize="11.5sp"
+                        android:textStyle="bold"
+                        android:textColor="@color/rin_star_gold"
+                        tools:text="★ 4.5 (12)" />
 
                     <LinearLayout
                         android:id="@+id/btnDetailLike"
-                        android:layout_width="wrap_content"
+                        android:layout_width="0dp"
                         android:layout_height="match_parent"
-                        android:layout_marginStart="8dp"
-                        android:background="@drawable/bg_like_button"
+                        android:layout_weight="1"
+                        android:background="@drawable/bg_detail_stat_chip"
                         android:clickable="true"
                         android:focusable="true"
                         android:gravity="center"
                         android:orientation="horizontal"
-                        android:paddingHorizontal="14dp"
                         android:contentDescription="@string/action_like_package">
 
                         <ImageView
@@ -208,7 +263,7 @@
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:layout_marginStart="6dp"
-                            android:textSize="12sp"
+                            android:textSize="11.5sp"
                             android:textStyle="bold"
                             android:textColor="@color/rin_editor_hint" />
                     </LinearLayout>
@@ -217,8 +272,8 @@
                 <Button
                     android:id="@+id/btnDetailInstall"
                     android:layout_width="match_parent"
-                    android:layout_height="44dp"
-                    android:layout_marginTop="14dp"
+                    android:layout_height="48dp"
+                    android:layout_marginTop="16dp"
                     android:minWidth="0dp"
                     android:minHeight="0dp"
                     android:insetTop="0dp"
