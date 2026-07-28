@@ -63,28 +63,31 @@
                             android:paddingBottom="24dp">
 
                             <FrameLayout
-                                android:layout_width="96dp"
-                                android:layout_height="96dp"
-                                android:layout_marginTop="-40dp"
-                                android:elevation="6dp"
-                                android:translationZ="6dp">
+                                android:layout_width="104dp"
+                                android:layout_height="104dp"
+                                android:layout_marginTop="-44dp"
+                                android:elevation="8dp"
+                                android:translationZ="8dp"
+                                android:background="@drawable/bg_avatar_shadow">
 
                                 <ImageView
                                     android:id="@+id/imgProfileAvatar"
-                                    android:layout_width="96dp"
-                                    android:layout_height="96dp"
+                                    android:layout_width="104dp"
+                                    android:layout_height="104dp"
                                     android:background="@drawable/bg_avatar_ring"
-                                    android:padding="13dp"
-                                    android:scaleType="fitCenter"
+                                    android:padding="3dp"
+                                    android:scaleType="centerCrop"
                                     android:contentDescription="@string/public_profile_title" />
 
                                 <TextView
                                     android:id="@+id/txtProfileAvatarInitial"
-                                    android:layout_width="96dp"
-                                    android:layout_height="96dp"
+                                    android:layout_width="98dp"
+                                    android:layout_height="98dp"
+                                    android:layout_gravity="center"
+                                    android:background="@drawable/bg_avatar_initial_fallback"
                                     android:gravity="center"
                                     android:textColor="@android:color/white"
-                                    android:textSize="34sp"
+                                    android:textSize="36sp"
                                     android:textStyle="bold" />
                             </FrameLayout>
 
