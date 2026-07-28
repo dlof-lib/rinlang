@@ -294,6 +294,39 @@
                         android:orientation="vertical" />
                 </LinearLayout>
 
+                <!-- قسم "إضافاتي المنشورة": قائمة إضافات المستخدم في Rin Extensions Marketplace مع زر حذف لكل إضافة -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:layout_marginTop="14dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="8dp"
+                        android:text="@string/account_my_extensions_title"
+                        android:textColor="@color/rin_on_toolbar"
+                        android:textSize="14sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/txtMyExtensionsEmpty"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="8dp"
+                        android:text="@string/account_my_extensions_empty"
+                        android:textColor="@color/rin_editor_hint"
+                        android:textSize="13sp"
+                        android:visibility="gone" />
+
+                    <LinearLayout
+                        android:id="@+id/containerMyExtensions"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical" />
+                </LinearLayout>
+
                 <Button
                     android:id="@+id/btnLogout"
                     android:layout_width="match_parent"
