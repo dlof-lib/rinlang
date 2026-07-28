@@ -37,8 +37,10 @@ data class ExtensionChangelogEntry(
  * في Realtime Database، بنفس فلسفة [com.dlof.rinlang.store.RinPackage]: قراءة عامة، وكتابة
  * مقصورة على المطوّر صاحب الإضافة فقط (راجع firebase/database.rules.json).
  *
- * [base64Data] هو أرشيف zip كامل لمحتوى الإضافة (extension.rinext + الملفات المصاحبة)
- * مُرمَّز base64 داخل حقل نصي واحد، بلا Firebase Storage مدفوع — تماماً كما تفعل [RinPackage].
+ * [base64Data] هو أرشيف zip كامل لملفات محتوى الإضافة مُرمَّز base64 داخل حقل نصي واحد، بلا
+ * Firebase Storage مدفوع — تماماً كما تفعل [RinPackage]. عند التصدير عبر [RinexPackager] يُغلَّف
+ * هذا المحتوى مع وصف الإضافة (extension.rinext) داخل ملف واحد مستقل بامتداد **.rinex** — تنسيق
+ * Rin Extensions الخاص، القابل للمشاركة والتثبيت بلا اتصال إنترنت.
  *
  * constructor بلا معاملات مطلوب لإعادة البناء التلقائي عبر DataSnapshot.getValue(...).
  */
@@ -57,7 +59,7 @@ data class RinExtension(
     val changelog: List<ExtensionChangelogEntry> = emptyList(),
     val releaseDate: Long = 0L,
     val sizeBytes: Long = 0L,
-    val fileName: String = "extension.rinext",
+    val fileName: String = "extension.rinex",
     val base64Data: String = "",
     /**
      * بصمة تكامل (SHA-256) لمحتوى [base64Data]، تُحسَب عند النشر وتُعرَض للمستخدم كـ"توقيع رقمي"
