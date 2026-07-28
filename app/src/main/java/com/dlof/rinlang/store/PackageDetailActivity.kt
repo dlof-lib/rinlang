@@ -2,9 +2,7 @@ package com.dlof.rinlang.store
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
-import android.os.Build
 import android.os.Bundle
-import android.text.Html
 import android.util.Base64
 import android.view.LayoutInflater
 import android.view.View
@@ -254,13 +252,7 @@ class PackageDetailActivity : BaseConnectivityActivity() {
         if (readme.isNullOrBlank()) {
             txtReadme.text = getString(R.string.package_detail_no_readme)
         } else {
-            val html = MarkdownLite.toHtml(readme)
-            txtReadme.text = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                Html.fromHtml(html, Html.FROM_HTML_MODE_COMPACT)
-            } else {
-                @Suppress("DEPRECATION")
-                Html.fromHtml(html)
-            }
+            txtReadme.text = MarkdownLite.toSpannable(readme)
         }
 
         val txtLicenseTitle = findViewById<TextView>(R.id.txtDetailLicenseTitle)
