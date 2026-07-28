@@ -46,6 +46,20 @@
     <color name="syntax_builtin">#DCDCAA</color>
     <color name="syntax_tag">#D7BA7D</color>
 
+    <!-- الهوية الثانية "أخضر" — تُستخدم إلى جانب البنفسجي في: مؤشر التبويب السفلي، حالة
+         "تم الانتساب"، حبّات إحصائيات التنزيلات/التثبيت، وأيقونة "موثّق" — بلا استبدال
+         البنفسجي كلون أساسي، فقط كطبقة تمييز ثانية (Purple + Green identity). -->
+    <color name="rin_accent_green">#22C88E</color>
+    <color name="rin_accent_green_dim">#4D22C88E</color>
+    <color name="rin_accent_green_pressed">#1CA877</color>
+    <color name="rin_gradient_green_start">#2FE0A0</color>
+    <color name="rin_gradient_green_end">#1AA377</color>
+
+    <!-- بطاقات الإحصائيات القابلة للضغط في الملف الشخصي وصفحة تفاصيل الحزمة -->
+    <color name="rin_stat_card_bg">#1B1D22</color>
+    <color name="rin_stat_card_border">#2A2D34</color>
+    <color name="rin_stat_card_pressed">#22252C</color>
+
     <color name="rin_star_gold">#FFC94D</color>
     <color name="rin_star_gold_dim">#4DFFC94D</color>
     <color name="rin_star_track">#333640</color>
