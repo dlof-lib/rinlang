@@ -1,0 +1,224 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- الملف الشخصي العام: نفس هوية بطاقة "حسابي" (بانر + صورة دائرية + اسم + اسم مستخدم + نبذة)
+     لكن للاطّلاع فقط (بلا تعديل/تسجيل خروج)، مع زر انتساب وصفّ عدّادات (المنتسبين/الانتسابات)
+     قابل للضغط لفتح UserListActivity. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@color/rin_background">
+
+    <include layout="@layout/toolbar_app" />
+
+    <androidx.core.widget.NestedScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:fillViewport="true">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="20dp">
+
+            <FrameLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@drawable/bg_profile_card_frame"
+                android:clipToOutline="true">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:gravity="center_horizontal">
+
+                    <FrameLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content">
+
+                        <ImageView
+                            android:layout_width="match_parent"
+                            android:layout_height="230dp"
+                            android:layout_gravity="top"
+                            android:scaleType="centerCrop"
+                            android:src="@drawable/img_hex_banner"
+                            android:contentDescription="@null" />
+
+                        <View
+                            android:layout_width="match_parent"
+                            android:layout_height="230dp"
+                            android:layout_gravity="top"
+                            android:background="@drawable/bg_banner_scrim" />
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="vertical"
+                            android:gravity="center_horizontal"
+                            android:paddingHorizontal="24dp"
+                            android:paddingTop="60dp"
+                            android:paddingBottom="24dp">
+
+                            <FrameLayout
+                                android:layout_width="96dp"
+                                android:layout_height="96dp"
+                                android:layout_marginTop="-40dp"
+                                android:elevation="6dp"
+                                android:translationZ="6dp">
+
+                                <ImageView
+                                    android:id="@+id/imgProfileAvatar"
+                                    android:layout_width="96dp"
+                                    android:layout_height="96dp"
+                                    android:background="@drawable/bg_avatar_ring"
+                                    android:scaleType="centerCrop"
+                                    android:contentDescription="@string/public_profile_title" />
+
+                                <TextView
+                                    android:id="@+id/txtProfileAvatarInitial"
+                                    android:layout_width="96dp"
+                                    android:layout_height="96dp"
+                                    android:gravity="center"
+                                    android:textColor="@android:color/white"
+                                    android:textSize="34sp"
+                                    android:textStyle="bold" />
+                            </FrameLayout>
+
+                            <LinearLayout
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="14dp"
+                                android:orientation="horizontal"
+                                android:gravity="center_vertical">
+
+                                <TextView
+                                    android:id="@+id/txtProfileName"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:textColor="@color/rin_on_toolbar"
+                                    android:textSize="19sp"
+                                    android:textStyle="bold" />
+
+                                <ImageView
+                                    android:id="@+id/imgProfileVerifiedBadge"
+                                    android:layout_width="17dp"
+                                    android:layout_height="17dp"
+                                    android:layout_marginStart="6dp"
+                                    android:src="@drawable/ic_verified_badge"
+                                    android:visibility="gone"
+                                    android:contentDescription="@string/verified_publisher_badge_description" />
+                            </LinearLayout>
+
+                            <TextView
+                                android:id="@+id/txtProfileUsername"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="2dp"
+                                android:textColor="@color/rin_accent"
+                                android:textSize="13.5sp" />
+
+                            <TextView
+                                android:id="@+id/txtProfileBio"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="12dp"
+                                android:gravity="center"
+                                android:textColor="@color/rin_editor_hint"
+                                android:textSize="13sp"
+                                android:lineSpacingExtra="2dp" />
+
+                            <!-- صفّ العدّادات: عدد المنتسبين + عدد الانتسابات، كل منهما قابل
+                                 للضغط لفتح قائمة أصحابه (UserListActivity) -->
+                            <LinearLayout
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="16dp"
+                                android:orientation="horizontal"
+                                android:gravity="center_vertical">
+
+                                <LinearLayout
+                                    android:id="@+id/rowProfileSubscribers"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:orientation="vertical"
+                                    android:gravity="center_horizontal"
+                                    android:clickable="true"
+                                    android:focusable="true"
+                                    android:background="@drawable/bg_icon_btn"
+                                    android:paddingHorizontal="18dp"
+                                    android:paddingVertical="6dp">
+
+                                    <TextView
+                                        android:id="@+id/txtProfileSubscriberCount"
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:textColor="@color/rin_on_toolbar"
+                                        android:textSize="15sp"
+                                        android:textStyle="bold"
+                                        tools:text="0" />
+
+                                    <TextView
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:text="@string/subscriber_count_label"
+                                        android:textColor="@color/rin_editor_hint"
+                                        android:textSize="11.5sp" />
+                                </LinearLayout>
+
+                                <LinearLayout
+                                    android:id="@+id/rowProfileSubscriptions"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:orientation="vertical"
+                                    android:gravity="center_horizontal"
+                                    android:clickable="true"
+                                    android:focusable="true"
+                                    android:background="@drawable/bg_icon_btn"
+                                    android:paddingHorizontal="18dp"
+                                    android:paddingVertical="6dp">
+
+                                    <TextView
+                                        android:id="@+id/txtProfileSubscriptionsCount"
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:textColor="@color/rin_on_toolbar"
+                                        android:textSize="15sp"
+                                        android:textStyle="bold" />
+
+                                    <TextView
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:text="@string/subscriptions_count_label"
+                                        android:textColor="@color/rin_editor_hint"
+                                        android:textSize="11.5sp" />
+                                </LinearLayout>
+                            </LinearLayout>
+
+                            <!-- زر "الانتساب": يتبدّل بين انتساب/تم الانتساب، ومخفي إن كانت هذه
+                                 صفحتي الشخصية أنا (لا معنى للانتساب للنفس) أو لم أسجّل الدخول بعد -->
+                            <TextView
+                                android:id="@+id/btnProfileSubscribe"
+                                android:layout_width="match_parent"
+                                android:layout_height="42dp"
+                                android:layout_marginTop="16dp"
+                                android:background="@drawable/bg_subscribe_button"
+                                android:clickable="true"
+                                android:focusable="true"
+                                android:gravity="center"
+                                android:textColor="@color/rin_accent"
+                                android:textSize="13.5sp"
+                                android:textStyle="bold"
+                                android:text="@string/action_subscribe_publisher"
+                                android:visibility="gone" />
+                        </LinearLayout>
+                    </FrameLayout>
+                </LinearLayout>
+            </FrameLayout>
+
+        </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
+
+</LinearLayout>
