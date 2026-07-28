@@ -56,6 +56,20 @@
                     android:textColor="@color/rin_on_toolbar" />
 
                 <TextView
+                    android:id="@+id/badgeExtFeatured"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="6dp"
+                    android:background="@drawable/bg_extension_featured_badge"
+                    android:paddingHorizontal="7dp"
+                    android:paddingVertical="2dp"
+                    android:text="@string/ext_badge_featured"
+                    android:textColor="@color/rin_star_gold"
+                    android:textSize="10sp"
+                    android:textStyle="bold"
+                    android:visibility="gone" />
+
+                <TextView
                     android:id="@+id/chipExtType"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
