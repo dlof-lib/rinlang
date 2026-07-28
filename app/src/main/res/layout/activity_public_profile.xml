@@ -1,7 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- الملف الشخصي العام: نفس هوية بطاقة "حسابي" (بانر + صورة دائرية + اسم + اسم مستخدم + نبذة)
-     لكن للاطّلاع فقط (بلا تعديل/تسجيل خروج)، مع زر انتساب وصفّ عدّادات (المنتسبين/الانتسابات)
-     قابل للضغط لفتح UserListActivity. -->
+<!--
+  الملف الشخصي العام — إعادة تصميم: نفس بنية بطاقة "حسابي" (بانر + صورة دائرية + اسم + اسم
+  مستخدم + نبذة) لكن للاطّلاع فقط، مع:
+    • صفّ خمس بطاقات إحصائية عائمة قابلة للضغط: المنتسبين / الانتسابات (سلوكهما الأصلي محفوظ
+      بالكامل — نفس المعرّفات rowProfileSubscribers/rowProfileSubscriptions) + الحزم / التنزيلات /
+      الإعجابات (بيانات حقيقية مُجمَّعة من حزم هذا الناشر في PublicProfileActivity.kt).
+    • زر انتساب أكبر بحواف 14dp موحّدة، بتدرّج بنفسجي إلى أخضر في حالة "تم الانتساب ✓".
+    • نظام تباعد 8dp ونصف قطر زوايا موحّد (16-24dp) عبر كامل الشاشة.
+  كل معرّفات العناصر المرتبطة أصلاً بـ PublicProfileActivity.kt بقيت كما هي بلا أي تغيير.
+-->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
@@ -21,7 +28,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:padding="20dp">
+            android:padding="16dp">
 
             <FrameLayout
                 android:layout_width="match_parent"
@@ -39,9 +46,10 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content">
 
+                        <!-- بانر علوي أكبر (240dp بدل 230dp) لإحساس أكثر انغماساً (immersive) -->
                         <ImageView
                             android:layout_width="match_parent"
-                            android:layout_height="230dp"
+                            android:layout_height="240dp"
                             android:layout_gravity="top"
                             android:scaleType="centerCrop"
                             android:src="@drawable/img_hex_banner"
@@ -49,7 +57,7 @@
 
                         <View
                             android:layout_width="match_parent"
-                            android:layout_height="230dp"
+                            android:layout_height="240dp"
                             android:layout_gravity="top"
                             android:background="@drawable/bg_banner_scrim" />
 
@@ -59,21 +67,21 @@
                             android:orientation="vertical"
                             android:gravity="center_horizontal"
                             android:paddingHorizontal="24dp"
-                            android:paddingTop="60dp"
+                            android:paddingTop="64dp"
                             android:paddingBottom="24dp">
 
                             <FrameLayout
-                                android:layout_width="104dp"
-                                android:layout_height="104dp"
-                                android:layout_marginTop="-44dp"
-                                android:elevation="8dp"
-                                android:translationZ="8dp"
+                                android:layout_width="112dp"
+                                android:layout_height="112dp"
+                                android:layout_marginTop="-48dp"
+                                android:elevation="10dp"
+                                android:translationZ="10dp"
                                 android:background="@drawable/bg_avatar_shadow">
 
                                 <ImageView
                                     android:id="@+id/imgProfileAvatar"
-                                    android:layout_width="104dp"
-                                    android:layout_height="104dp"
+                                    android:layout_width="112dp"
+                                    android:layout_height="112dp"
                                     android:background="@drawable/bg_avatar_ring"
                                     android:padding="3dp"
                                     android:scaleType="centerCrop"
@@ -81,20 +89,21 @@
 
                                 <TextView
                                     android:id="@+id/txtProfileAvatarInitial"
-                                    android:layout_width="98dp"
-                                    android:layout_height="98dp"
+                                    android:layout_width="106dp"
+                                    android:layout_height="106dp"
                                     android:layout_gravity="center"
                                     android:background="@drawable/bg_avatar_initial_fallback"
                                     android:gravity="center"
                                     android:textColor="@android:color/white"
-                                    android:textSize="36sp"
+                                    android:textSize="38sp"
                                     android:textStyle="bold" />
                             </FrameLayout>
 
+                            <!-- الاسم + شارة التوثيق -->
                             <LinearLayout
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:layout_marginTop="14dp"
+                                android:layout_marginTop="16dp"
                                 android:orientation="horizontal"
                                 android:gravity="center_vertical">
 
@@ -103,13 +112,13 @@
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
                                     android:textColor="@color/rin_on_toolbar"
-                                    android:textSize="19sp"
+                                    android:textSize="20sp"
                                     android:textStyle="bold" />
 
                                 <ImageView
                                     android:id="@+id/imgProfileVerifiedBadge"
-                                    android:layout_width="17dp"
-                                    android:layout_height="17dp"
+                                    android:layout_width="18dp"
+                                    android:layout_height="18dp"
                                     android:layout_marginStart="6dp"
                                     android:src="@drawable/ic_verified_badge"
                                     android:visibility="gone"
@@ -120,7 +129,7 @@
                                 android:id="@+id/txtProfileUsername"
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:layout_marginTop="3dp"
+                                android:layout_marginTop="4dp"
                                 android:letterSpacing="0.02"
                                 android:textColor="@color/rin_accent"
                                 android:textSize="13.5sp" />
@@ -136,26 +145,30 @@
                                 android:textSize="13sp"
                                 android:lineSpacingExtra="4dp" />
 
-                            <!-- صفّ العدّادات: عدد المنتسبين + عدد الانتسابات، كل منهما قابل
-                                 للضغط لفتح قائمة أصحابه (UserListActivity) -->
+                            <!-- صفّ الإحصائيات الخمس: كل بطاقة عائمة قابلة للضغط بذاتها.
+                                 المنتسبين/الانتسابات تحتفظان بنفس المعرّفات وسلوك الضغط الأصلي
+                                 (فتح UserListActivity)؛ الحزم/التنزيلات/الإعجابات معروضة فقط
+                                 (بيانات حقيقية محسوبة، بلا شاشة قائمة مخصّصة بعد). -->
                             <LinearLayout
-                                android:layout_width="wrap_content"
+                                android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
-                                android:layout_marginTop="16dp"
+                                android:layout_marginTop="20dp"
                                 android:orientation="horizontal"
-                                android:gravity="center_vertical">
+                                android:weightSum="5">
 
                                 <LinearLayout
                                     android:id="@+id/rowProfileSubscribers"
-                                    android:layout_width="wrap_content"
+                                    android:layout_width="0dp"
                                     android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:layout_marginEnd="4dp"
                                     android:orientation="vertical"
                                     android:gravity="center_horizontal"
                                     android:clickable="true"
                                     android:focusable="true"
-                                    android:background="@drawable/bg_icon_btn"
-                                    android:paddingHorizontal="18dp"
-                                    android:paddingVertical="6dp">
+                                    android:background="@drawable/bg_stat_card"
+                                    android:paddingVertical="12dp"
+                                    android:paddingHorizontal="4dp">
 
                                     <TextView
                                         android:id="@+id/txtProfileSubscriberCount"
@@ -169,22 +182,26 @@
                                     <TextView
                                         android:layout_width="wrap_content"
                                         android:layout_height="wrap_content"
+                                        android:layout_marginTop="2dp"
                                         android:text="@string/subscriber_count_label"
                                         android:textColor="@color/rin_editor_hint"
-                                        android:textSize="11.5sp" />
+                                        android:textSize="10.5sp"
+                                        android:maxLines="1" />
                                 </LinearLayout>
 
                                 <LinearLayout
                                     android:id="@+id/rowProfileSubscriptions"
-                                    android:layout_width="wrap_content"
+                                    android:layout_width="0dp"
                                     android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:layout_marginHorizontal="4dp"
                                     android:orientation="vertical"
                                     android:gravity="center_horizontal"
                                     android:clickable="true"
                                     android:focusable="true"
-                                    android:background="@drawable/bg_icon_btn"
-                                    android:paddingHorizontal="18dp"
-                                    android:paddingVertical="6dp">
+                                    android:background="@drawable/bg_stat_card"
+                                    android:paddingVertical="12dp"
+                                    android:paddingHorizontal="4dp">
 
                                     <TextView
                                         android:id="@+id/txtProfileSubscriptionsCount"
@@ -197,25 +214,121 @@
                                     <TextView
                                         android:layout_width="wrap_content"
                                         android:layout_height="wrap_content"
+                                        android:layout_marginTop="2dp"
                                         android:text="@string/subscriptions_count_label"
                                         android:textColor="@color/rin_editor_hint"
-                                        android:textSize="11.5sp" />
+                                        android:textSize="10.5sp"
+                                        android:maxLines="1" />
+                                </LinearLayout>
+
+                                <LinearLayout
+                                    android:id="@+id/rowProfilePackages"
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:layout_marginHorizontal="4dp"
+                                    android:orientation="vertical"
+                                    android:gravity="center_horizontal"
+                                    android:background="@drawable/bg_stat_card"
+                                    android:paddingVertical="12dp"
+                                    android:paddingHorizontal="4dp">
+
+                                    <TextView
+                                        android:id="@+id/txtProfilePackagesCount"
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:textColor="@color/rin_on_toolbar"
+                                        android:textSize="15sp"
+                                        android:textStyle="bold"
+                                        tools:text="0" />
+
+                                    <TextView
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:layout_marginTop="2dp"
+                                        android:text="@string/packages_count_label"
+                                        android:textColor="@color/rin_editor_hint"
+                                        android:textSize="10.5sp"
+                                        android:maxLines="1" />
+                                </LinearLayout>
+
+                                <LinearLayout
+                                    android:id="@+id/rowProfileDownloads"
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:layout_marginHorizontal="4dp"
+                                    android:orientation="vertical"
+                                    android:gravity="center_horizontal"
+                                    android:background="@drawable/bg_stat_card"
+                                    android:paddingVertical="12dp"
+                                    android:paddingHorizontal="4dp">
+
+                                    <TextView
+                                        android:id="@+id/txtProfileDownloadsCount"
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:textColor="@color/rin_accent_green"
+                                        android:textSize="15sp"
+                                        android:textStyle="bold"
+                                        tools:text="0" />
+
+                                    <TextView
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:layout_marginTop="2dp"
+                                        android:text="@string/downloads_count_label"
+                                        android:textColor="@color/rin_editor_hint"
+                                        android:textSize="10.5sp"
+                                        android:maxLines="1" />
+                                </LinearLayout>
+
+                                <LinearLayout
+                                    android:id="@+id/rowProfileLikes"
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:layout_marginStart="4dp"
+                                    android:orientation="vertical"
+                                    android:gravity="center_horizontal"
+                                    android:background="@drawable/bg_stat_card"
+                                    android:paddingVertical="12dp"
+                                    android:paddingHorizontal="4dp">
+
+                                    <TextView
+                                        android:id="@+id/txtProfileLikesCount"
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:textColor="@color/rin_accent_green"
+                                        android:textSize="15sp"
+                                        android:textStyle="bold"
+                                        tools:text="0" />
+
+                                    <TextView
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:layout_marginTop="2dp"
+                                        android:text="@string/likes_count_label"
+                                        android:textColor="@color/rin_editor_hint"
+                                        android:textSize="10.5sp"
+                                        android:maxLines="1" />
                                 </LinearLayout>
                             </LinearLayout>
 
-                            <!-- زر "الانتساب": يتبدّل بين انتساب/تم الانتساب، ومخفي إن كانت هذه
-                                 صفحتي الشخصية أنا (لا معنى للانتساب للنفس) أو لم أسجّل الدخول بعد -->
+                            <!-- زر "الانتساب": ارتفاع أكبر (48dp) وزوايا 14dp موحّدة. يتبدّل بين
+                                 انتساب/تم الانتساب، ومخفي إن كانت هذه صفحتي الشخصية أنا أو لم
+                                 أسجّل الدخول بعد (منطق PublicProfileActivity.kt بلا تغيير). -->
                             <TextView
                                 android:id="@+id/btnProfileSubscribe"
                                 android:layout_width="match_parent"
-                                android:layout_height="42dp"
+                                android:layout_height="48dp"
                                 android:layout_marginTop="16dp"
                                 android:background="@drawable/bg_subscribe_button"
                                 android:clickable="true"
                                 android:focusable="true"
                                 android:gravity="center"
                                 android:textColor="@color/rin_accent"
-                                android:textSize="13.5sp"
+                                android:textSize="14sp"
                                 android:textStyle="bold"
                                 android:text="@string/action_subscribe_publisher"
                                 android:visibility="gone" />
