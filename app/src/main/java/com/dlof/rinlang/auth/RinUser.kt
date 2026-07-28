@@ -22,5 +22,16 @@ data class RinUser(
      * تُخزَّن كنص واحد داخل Realtime Database بنفس أسلوب [com.dlof.rinlang.store.RinPackage.base64Data]
      * — بلا Firebase Storage مدفوع. فارغة يعني عدم وجود صورة، وتُعرض شارة بحرف الاسم الأول بدلاً منها.
      */
-    val avatarBase64: String = ""
+    val avatarBase64: String = "",
+    /**
+     * عدد "المنتسبين" (المتابعين) لهذا الحساب — عدّاد مُجمَّع (denormalized) يُحدَّث من
+     * [com.dlof.rinlang.auth.AuthRepository.toggleSubscription] عند كل انتساب/إلغاء انتساب،
+     * لتفادي عدّ عناصر subscribers بالكامل في كل مرة يُعرض فيها الملف الشخصي.
+     */
+    val subscriberCount: Long = 0L,
+    /**
+     * عدد "الانتسابات" (الحسابات التي يتابعها هذا الحساب) — عدّاد مُجمَّع بنفس أسلوب
+     * [subscriberCount]، يُحدَّث على حساب المُنتسِب نفسه (وليس المنتسَب إليه) عند كل تبديل.
+     */
+    val subscriptionsCount: Long = 0L
 )
