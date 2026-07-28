@@ -81,13 +81,18 @@
                     android:lineSpacingExtra="2dp"
                     android:textColor="@color/rin_editor_text" />
 
-                <!-- صف الناشر: صورة دائرية + اسم + شارة توثيق (تظهر فقط للناشرين المؤهلين) -->
+                <!-- صف الناشر: صورة دائرية + اسم + شارة توثيق (تظهر فقط للناشرين المؤهلين) —
+                     الصف كامل قابل للضغط لفتح الملف الشخصي العام لهذا الناشر -->
                 <LinearLayout
+                    android:id="@+id/rowDetailPublisher"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="16dp"
                     android:gravity="center_vertical"
-                    android:orientation="horizontal">
+                    android:orientation="horizontal"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:background="@drawable/bg_icon_btn">
 
                     <FrameLayout
                         android:layout_width="36dp"
