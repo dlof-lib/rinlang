@@ -29,6 +29,17 @@
     <string name="ext_cli_run">تنفيذ</string>
     <string name="ext_cli_hint">$ rin ext list\n$ rin ext search &lt;اسم&gt;\n$ rin ext install &lt;اسم&gt;\n$ rin ext update &lt;اسم&gt;\n$ rin ext remove &lt;اسم&gt;</string>
 
+    <!-- ترتيب قائمة الإضافات -->
+    <string name="ext_sort_newest">الأحدث</string>
+    <string name="ext_sort_downloads">الأكثر تنزيلاً</string>
+    <string name="ext_sort_rating">الأعلى تقييماً</string>
+
+    <!-- شارة "مميزة" تُعرَض على الإضافات الأكثر تنزيلاً أو الأعلى تقييماً -->
+    <string name="ext_badge_featured">⭐ مميزة</string>
+
+    <!-- زر نشر إضافة جديدة، متاح لأي مستخدم مسجَّل دخوله -->
+    <string name="ext_entry_publish_button">انشر إضافتك</string>
+
     <!-- صفحة تفاصيل الإضافة -->
     <string name="ext_detail_developer_format">بواسطة %1$s</string>
     <string name="ext_detail_developer_unknown">مطوّر غير معروف</string>
@@ -74,4 +85,26 @@
     <string name="ext_security_no_permissions">لا تطلب هذه الإضافة أي أذونات خاصة.</string>
     <string name="ext_security_files_label">الملفات التي ستصل إليها</string>
     <string name="ext_security_proceed_format">متابعة %1$s</string>
+
+    <!-- شاشة "انشر إضافتك" -->
+    <string name="ext_publish_title">انشر إضافتك</string>
+    <string name="ext_publish_subtitle">انشر إضافتك أو مكتبتك أو سمتك الخاصة في Rin Extensions Marketplace ليستخدمها كل مجتمع Rin — النشر متاح فوراً لأي حساب موثَّق، بلا مراجعة يدوية.</string>
+    <string name="ext_publish_hint_name">اسم الإضافة</string>
+    <string name="ext_publish_hint_version">رقم الإصدار</string>
+    <string name="ext_publish_hint_description">الوصف</string>
+    <string name="ext_publish_hint_languages">اللغات المستخدَمة (اختياري)</string>
+    <string name="ext_publish_languages_example">مثال: Rin, Kotlin</string>
+    <string name="ext_publish_hint_type">نوع الإضافة</string>
+    <string name="ext_publish_hint_permissions">الأذونات التي تطلبها إضافتك</string>
+    <string name="ext_publish_hint_permissions_note">حدّد فقط ما تحتاجه إضافتك فعلياً — ستُعرَض هذه الأذونات لكل مستخدم في شاشة أمان قبل التثبيت.</string>
+    <string name="ext_publish_hint_content_files">ملفات محتوى الإضافة</string>
+    <string name="ext_publish_action_pick_files">اختيار ملفات الإضافة</string>
+    <string name="ext_publish_files_selected_format">%1$d ملف مُختار</string>
+    <string name="ext_publish_hint_screenshots">لقطات شاشة اختيارية (حتى 5) تُعرَض في صفحة تفاصيل الإضافة</string>
+    <string name="ext_publish_action_pick_screenshots">اختيار لقطات شاشة</string>
+    <string name="ext_publish_screenshots_selected_format">%1$d لقطة مُختارة</string>
+    <string name="ext_publish_action_submit">نشر الإضافة</string>
+    <string name="ext_publish_content_required">اختر ملف واحداً على الأقل لمحتوى الإضافة</string>
+    <string name="ext_publish_success">تم نشر إضافتك في Rin Extensions Marketplace ✓</string>
+    <string name="ext_publish_failed">فشل نشر الإضافة</string>
 </resources>
