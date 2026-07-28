@@ -28,18 +28,27 @@ class RinExtensionsMarketplaceActivity : BaseConnectivityActivity() {
         private const val CATEGORY_ALL = "__all__"
     }
 
+    /** خيارات ترتيب قائمة الإضافات المعروضة. */
+    private enum class SortOption { NEWEST, DOWNLOADS, RATING }
+
+    /** حدّ أدنى بسيط لعدّ إضافة "مميزة" (شارة ⭐): إما شعبية بالتنزيلات أو موثوقة بالتقييم. */
+    private fun isFeatured(ext: RinExtension): Boolean =
+        ext.downloadCount >= 20L || (ext.ratingCount >= 3L && ext.averageRating >= 4.5)
+
     private lateinit var rvExtensions: RecyclerView
     private lateinit var shimmerSkeleton: ShimmerLayout
     private lateinit var txtEmpty: View
     private lateinit var adapter: ExtensionAdapter
     private lateinit var edtSearch: EditText
     private lateinit var chipGroupType: ChipGroup
+    private lateinit var chipGroupSort: ChipGroup
     private lateinit var layoutCli: View
     private lateinit var txtCliOutput: TextView
     private lateinit var edtCliCommand: EditText
 
     private var allExtensions: List<RinExtension> = emptyList()
     private var selectedType: String = CATEGORY_ALL
+    private var selectedSort: SortOption = SortOption.NEWEST
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -53,6 +62,7 @@ class RinExtensionsMarketplaceActivity : BaseConnectivityActivity() {
         txtEmpty = findViewById(R.id.txtExtEmpty)
         edtSearch = findViewById(R.id.edtExtSearch)
         chipGroupType = findViewById(R.id.chipGroupExtType)
+        chipGroupSort = findViewById(R.id.chipGroupExtSort)
         layoutCli = findViewById(R.id.layoutExtCli)
         txtCliOutput = findViewById(R.id.txtExtCliOutput)
         edtCliCommand = findViewById(R.id.edtExtCliCommand)
@@ -71,6 +81,12 @@ class RinExtensionsMarketplaceActivity : BaseConnectivityActivity() {
             override fun afterTextChanged(s: Editable?) = applyFilters()
         })
 
+        buildSortChips()
+
+        findViewById<View>(R.id.btnExtOpenPublish).setOnClickListener {
+            PublishExtensionActivity.start(this)
+        }
+
         findViewById<View>(R.id.btnExtCli).setOnClickListener {
             layoutCli.visibility = if (layoutCli.visibility == View.VISIBLE) View.GONE else View.VISIBLE
         }
@@ -78,6 +94,31 @@ class RinExtensionsMarketplaceActivity : BaseConnectivityActivity() {
         edtCliCommand.setOnEditorActionListener { _, _, _ -> runCliCommand(); true }
 
         runIfOnline { loadExtensions() }
+    }
+
+    /** يبني شرائح ترتيب القائمة (الأحدث/الأكثر تنزيلاً/الأعلى تقييماً)، الأحدث مفعَّلة افتراضياً. */
+    private fun buildSortChips() {
+        val options = listOf(
+            SortOption.NEWEST to getString(R.string.ext_sort_newest),
+            SortOption.DOWNLOADS to getString(R.string.ext_sort_downloads),
+            SortOption.RATING to getString(R.string.ext_sort_rating)
+        )
+        options.forEach { (option, label) ->
+            val chip = Chip(this).apply {
+                text = label
+                isCheckable = true
+                isChecked = option == selectedSort
+                setOnClickListener {
+                    selectedSort = option
+                    for (i in 0 until chipGroupSort.childCount) {
+                        (chipGroupSort.getChildAt(i) as? Chip)?.isChecked = false
+                    }
+                    isChecked = true
+                    applyFilters()
+                }
+            }
+            chipGroupSort.addView(chip)
+        }
     }
 
     override fun onResume() {
@@ -169,8 +210,15 @@ class RinExtensionsMarketplaceActivity : BaseConnectivityActivity() {
                     ext.description.contains(query, ignoreCase = true) ||
                     ext.developer.contains(query, ignoreCase = true))
         }
-        adapter.submit(result)
-        txtEmpty.visibility = if (result.isEmpty()) View.VISIBLE else View.GONE
+        val sorted = when (selectedSort) {
+            SortOption.NEWEST -> result.sortedByDescending { it.releaseDate }
+            SortOption.DOWNLOADS -> result.sortedByDescending { it.downloadCount }
+            SortOption.RATING -> result.sortedWith(
+                compareByDescending<RinExtension> { it.averageRating }.thenByDescending { it.ratingCount }
+            )
+        }
+        adapter.submit(sorted)
+        txtEmpty.visibility = if (sorted.isEmpty()) View.VISIBLE else View.GONE
     }
 
     private fun openDetail(ext: RinExtension) {
@@ -208,6 +256,7 @@ class RinExtensionsMarketplaceActivity : BaseConnectivityActivity() {
             holder.txtRating.text = if (ext.ratingCount > 0)
                 getString(R.string.store_rating_format, ext.averageRating, ext.ratingCount)
             else getString(R.string.store_rating_none)
+            holder.badgeFeatured.visibility = if (isFeatured(ext)) View.VISIBLE else View.GONE
 
             holder.btnAction.text = if (isInstalled(ext)) getString(R.string.ext_action_open) else getString(R.string.action_install)
             holder.btnAction.setOnClickListener { onQuickAction(ext) }
@@ -222,6 +271,7 @@ class RinExtensionsMarketplaceActivity : BaseConnectivityActivity() {
             val txtMeta: TextView = view.findViewById(R.id.txtExtMeta)
             val txtDescription: TextView = view.findViewById(R.id.txtExtDescription)
             val txtRating: TextView = view.findViewById(R.id.txtExtRating)
+            val badgeFeatured: TextView = view.findViewById(R.id.badgeExtFeatured)
             val btnAction: android.widget.Button = view.findViewById(R.id.btnExtAction)
         }
     }
