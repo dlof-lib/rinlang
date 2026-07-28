@@ -1,14 +1,19 @@
 package com.dlof.rinlang.store.extensions
 
 import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
+import android.provider.OpenableColumns
 import android.text.Editable
 import android.text.TextWatcher
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.EditText
+import android.widget.ImageButton
 import android.widget.TextView
+import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.dlof.rinlang.R
@@ -16,6 +21,7 @@ import com.dlof.rinlang.network.BaseConnectivityActivity
 import com.dlof.rinlang.widgets.ShimmerLayout
 import com.google.android.material.chip.Chip
 import com.google.android.material.chip.ChipGroup
+import java.io.File
 
 /**
  * الصفحة الرئيسية لـ "Rin Extensions Marketplace": متجر رسمي منفصل عن متجر المكتبات
@@ -31,17 +37,28 @@ class RinExtensionsMarketplaceActivity : BaseConnectivityActivity() {
     /** خيارات ترتيب قائمة الإضافات المعروضة. */
     private enum class SortOption { NEWEST, DOWNLOADS, RATING }
 
+    /**
+     * تبويبا الشاشة: STORE يتصفّح متجر Rin Extensions عبر الإنترنت (كما كان)، وINSTALLED يعرض
+     * فقط ما هو مثبَّت فعلياً على هذا الجهاز — مقروءاً مباشرة من [ExtensionManager]، بلا حاجة
+     * لأي اتصال، وهو ما "يربط" فعلياً الإضافات المثبَّتة بالتطبيق بدل بقائها مجرد سجل تنزيل.
+     */
+    private enum class MarketTab { STORE, INSTALLED }
+
     /** حدّ أدنى بسيط لعدّ إضافة "مميزة" (شارة ⭐): إما شعبية بالتنزيلات أو موثوقة بالتقييم. */
     private fun isFeatured(ext: RinExtension): Boolean =
         ext.downloadCount >= 20L || (ext.ratingCount >= 3L && ext.averageRating >= 4.5)
 
     private lateinit var rvExtensions: RecyclerView
     private lateinit var shimmerSkeleton: ShimmerLayout
-    private lateinit var txtEmpty: View
+    private lateinit var txtEmpty: TextView
     private lateinit var adapter: ExtensionAdapter
     private lateinit var edtSearch: EditText
     private lateinit var chipGroupType: ChipGroup
     private lateinit var chipGroupSort: ChipGroup
+    private lateinit var chipGroupTab: ChipGroup
+    private lateinit var scrollFilters: View
+    private lateinit var scrollSort: View
+    private lateinit var btnImportRinex: ImageButton
     private lateinit var layoutCli: View
     private lateinit var txtCliOutput: TextView
     private lateinit var edtCliCommand: EditText
@@ -49,6 +66,13 @@ class RinExtensionsMarketplaceActivity : BaseConnectivityActivity() {
     private var allExtensions: List<RinExtension> = emptyList()
     private var selectedType: String = CATEGORY_ALL
     private var selectedSort: SortOption = SortOption.NEWEST
+    private var selectedTab: MarketTab = MarketTab.STORE
+
+    /** يفتح منتقي ملفات لاختيار ملف .rinex محلي، ويستوردّه عبر [RinexPackager] عند اختياره. */
+    private val pickRinexLauncher =
+        registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+            if (uri != null) importRinexFile(uri)
+        }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -63,6 +87,10 @@ class RinExtensionsMarketplaceActivity : BaseConnectivityActivity() {
         edtSearch = findViewById(R.id.edtExtSearch)
         chipGroupType = findViewById(R.id.chipGroupExtType)
         chipGroupSort = findViewById(R.id.chipGroupExtSort)
+        chipGroupTab = findViewById(R.id.chipGroupExtTab)
+        scrollFilters = findViewById(R.id.scrollExtFilters)
+        scrollSort = findViewById(R.id.scrollExtSort)
+        btnImportRinex = findViewById(R.id.btnExtImportRinex)
         layoutCli = findViewById(R.id.layoutExtCli)
         txtCliOutput = findViewById(R.id.txtExtCliOutput)
         edtCliCommand = findViewById(R.id.edtExtCliCommand)
@@ -82,10 +110,13 @@ class RinExtensionsMarketplaceActivity : BaseConnectivityActivity() {
         })
 
         buildSortChips()
+        buildTabChips()
 
         findViewById<View>(R.id.btnExtOpenPublish).setOnClickListener {
             PublishExtensionActivity.start(this)
         }
+
+        btnImportRinex.setOnClickListener { pickRinexLauncher.launch(arrayOf("*/*")) }
 
         findViewById<View>(R.id.btnExtCli).setOnClickListener {
             layoutCli.visibility = if (layoutCli.visibility == View.VISIBLE) View.GONE else View.VISIBLE
@@ -94,6 +125,91 @@ class RinExtensionsMarketplaceActivity : BaseConnectivityActivity() {
         edtCliCommand.setOnEditorActionListener { _, _, _ -> runCliCommand(); true }
 
         runIfOnline { loadExtensions() }
+    }
+
+    /** يبني شريحتَي التبويب (المتجر / المثبَّتة لديّ)، المتجر مفعَّل افتراضياً. */
+    private fun buildTabChips() {
+        val options = listOf(
+            MarketTab.STORE to getString(R.string.ext_tab_store),
+            MarketTab.INSTALLED to getString(R.string.ext_tab_installed)
+        )
+        options.forEach { (tab, label) ->
+            val chip = Chip(this).apply {
+                text = label
+                isCheckable = true
+                isChecked = tab == selectedTab
+                setOnClickListener {
+                    selectedTab = tab
+                    for (i in 0 until chipGroupTab.childCount) {
+                        (chipGroupTab.getChildAt(i) as? Chip)?.isChecked = false
+                    }
+                    isChecked = true
+                    onTabChanged()
+                }
+            }
+            chipGroupTab.addView(chip)
+        }
+    }
+
+    private fun onTabChanged() {
+        when (selectedTab) {
+            MarketTab.STORE -> {
+                scrollFilters.visibility = View.VISIBLE
+                scrollSort.visibility = View.VISIBLE
+                txtEmpty.text = getString(R.string.ext_store_empty)
+                applyFilters()
+            }
+            MarketTab.INSTALLED -> {
+                scrollFilters.visibility = View.GONE
+                scrollSort.visibility = View.GONE
+                txtEmpty.text = getString(R.string.ext_installed_empty)
+                loadInstalledExtensions()
+            }
+        }
+    }
+
+    /**
+     * يعرض الإضافات المثبَّتة فعلياً على هذا الجهاز — مقروءة مباشرة من extension.rinext في مجلد
+     * كل إضافة عبر [ExtensionManifestFile.read]، بلا أي اتصال بالإنترنت. هذا يجعل الإضافات
+     * المثبَّتة عنصراً حقيقياً من التطبيق نفسه، لا مجرد سطر في متجر بعيد.
+     */
+    private fun loadInstalledExtensions() {
+        hideSkeleton()
+        val installed = ExtensionManager.listInstalled(this)
+        val items = installed.map { record ->
+            val dir = File(ExtensionManager.extensionsRoot(this), record.id)
+            ExtensionManifestFile.read(dir) ?: RinExtension(
+                id = record.id,
+                name = record.name,
+                version = record.version,
+                developer = record.developer,
+                type = record.type
+            )
+        }
+        adapter.submit(items)
+        txtEmpty.visibility = if (items.isEmpty()) View.VISIBLE else View.GONE
+    }
+
+    /** يستورد ملف .rinex اختاره المستخدم، ويفتح شاشة التفاصيل عليه (نفس مسار التثبيت المعتاد). */
+    private fun importRinexFile(uri: Uri) {
+        val displayName = queryDisplayName(uri)
+        val imported = RinexPackager.importFromUri(this, uri, displayName)
+        if (imported == null) {
+            Toast.makeText(this, R.string.ext_import_rinex_invalid, Toast.LENGTH_LONG).show()
+            return
+        }
+        openDetail(imported)
+    }
+
+    private fun queryDisplayName(uri: Uri): String? = try {
+        contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
+            if (cursor.moveToFirst()) {
+                val idx = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                if (idx >= 0) cursor.getString(idx) else null
+            } else null
+        }
+    } catch (t: Throwable) {
+        null
     }
 
     /** يبني شرائح ترتيب القائمة (الأحدث/الأكثر تنزيلاً/الأعلى تقييماً)، الأحدث مفعَّلة افتراضياً. */
@@ -123,7 +239,11 @@ class RinExtensionsMarketplaceActivity : BaseConnectivityActivity() {
 
     override fun onResume() {
         super.onResume()
-        adapter.notifyDataSetChanged() // يعكس أي تثبيت/إزالة تمّت في شاشة التفاصيل
+        if (selectedTab == MarketTab.INSTALLED) {
+            loadInstalledExtensions() // يعكس أي تثبيت/إزالة/تفعيل تمّ في شاشة التفاصيل
+        } else {
+            adapter.notifyDataSetChanged()
+        }
     }
 
     override fun onConnectionRestored() {
