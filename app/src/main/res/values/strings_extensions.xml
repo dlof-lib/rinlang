@@ -107,4 +107,31 @@
     <string name="ext_publish_content_required">اختر ملف واحداً على الأقل لمحتوى الإضافة</string>
     <string name="ext_publish_success">تم نشر إضافتك في Rin Extensions Marketplace ✓</string>
     <string name="ext_publish_failed">فشل نشر الإضافة</string>
+
+    <!-- تصدير/استيراد بصيغة .rinex الخاصة بـ Rin Extensions (ملف مستقل بلا حاجة لاتصال إنترنت) -->
+    <string name="ext_action_export_rinex">تصدير كملف .rinex</string>
+    <string name="ext_export_rinex_success">تم حفظ %1$s كملف .rinex في مجلد Downloads ✓</string>
+    <string name="ext_export_rinex_failed">تعذّر التصدير: %1$s</string>
+    <string name="ext_action_import_rinex">استيراد ملف .rinex</string>
+    <string name="ext_import_rinex_invalid">هذا الملف ليس بصيغة Rin Extensions (.rinex) صالحة</string>
+    <string name="ext_import_rinex_success">تم استيراد وتثبيت %1$s من الملف المحلي ✓</string>
+    <string name="ext_import_rinex_failed">تعذّر استيراد الملف: %1$s</string>
+
+    <!-- حذف إضافة نهائياً من المتجر — متاح فقط لمطوّرها صاحب الإضافة -->
+    <string name="ext_action_delete">حذف الإضافة</string>
+    <string name="ext_delete_confirm_title">حذف الإضافة نهائياً</string>
+    <string name="ext_delete_confirm_message">هل تريد حذف \"%1$s\" نهائياً من Rin Extensions Marketplace؟ لن تظهر بعدها لأي مستخدم جديد، ولا يمكن التراجع عن هذا الإجراء.\nملاحظة: من ثبّتها من قبل ستبقى نسخته المثبَّتة تعمل على جهازه.</string>
+    <string name="ext_deleted_toast">تم حذف الإضافة نهائياً من المتجر ✓</string>
+    <string name="ext_delete_failed">تعذّر حذف الإضافة، حاول مرة أخرى</string>
+    <string name="ext_delete_requires_connection">يلزم اتصال بالإنترنت لحذف الإضافة من المتجر</string>
+
+    <!-- علامتا تبويب أعلى المتجر: تصفّح المتجر، أو الإضافات المثبَّتة فعلياً على هذا الجهاز -->
+    <string name="ext_tab_store">المتجر</string>
+    <string name="ext_tab_installed">المثبَّتة لديّ</string>
+    <string name="ext_installed_empty">لا توجد إضافات مثبَّتة على هذا الجهاز بعد. ثبِّت واحدة من تبويب المتجر، أو استورد ملف .rinex.</string>
+
+    <!-- قسم "إضافاتي المنشورة" داخل شاشة الحساب -->
+    <string name="account_my_extensions_title">إضافاتي المنشورة</string>
+    <string name="account_my_extensions_empty">لم تنشر أي إضافة بعد. انشر إضافة من متجر Rin Extensions لتظهر هنا.</string>
+    <string name="my_extension_meta_format">%1$s • %2$d تنزيل</string>
 </resources>
