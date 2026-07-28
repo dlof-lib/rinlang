@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- إطار بطاقة رأس الملف الشخصي: نفس أسلوب بطاقات القوائم (bg_list_card) لكن بلا تأثير موجي،
-     لأنها الآن حاوية تُقص إليها صورة البانر (clipToOutline) وليست عنصراً قابلاً للّمس. -->
+<!-- إطار بطاقة رأس الملف الشخصي: زوايا 22dp (نظام الاستدارة الموحّد 16-24dp)، حدّ بنفسجي خافت
+     ليمنحها إحساس "عائم" فوق خلفية الشاشة الداكنة بدل حدّ محايد مسطّح. -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android"
     android:shape="rectangle">
     <solid android:color="@color/rin_job_card_bg" />
-    <stroke android:width="1dp" android:color="@color/rin_job_card_border" />
-    <corners android:radius="18dp" />
+    <stroke android:width="1dp" android:color="@color/rin_accent_border_subtle" />
+    <corners android:radius="22dp" />
 </shape>
