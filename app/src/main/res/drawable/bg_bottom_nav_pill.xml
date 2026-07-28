@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- الحبّة (pill) العائمة خلف التبويب المُحدَّد في الشريط السفلي — تدرّج بنفسجي إلى أخضر
+     خفيف جداً (شفافية عالية) بحدّ بنفسجي ناعم، تتحرّك أفقياً برمجياً بين التبويبات
+     (انظر BottomNavHelper.kt / animateIndicatorTo). -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <gradient
+        android:type="linear"
+        android:angle="0"
+        android:startColor="@color/rin_accent_border_subtle"
+        android:endColor="@color/rin_accent_green_dim" />
+    <corners android:radius="20dp" />
+</shape>
