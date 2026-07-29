@@ -71,6 +71,25 @@ StmtPtr Parser::declaration() {
     // 'document' كلمة سياقية غير محجوزة أيضاً (مفهوم قاعدة البيانات اللاعلاقية: container.doc / doc)
     if (check(TokenType::IDENT) && peek().lexeme == "document") { advance(); return documentStatement(); }
 
+    // حقول تنسيق/ستايل إضافية خاصة بالكائن (@container.object/@Object فقط): txt/img/Fonts/background/css3
+    // كلمات سياقية غير محجوزة (بنفس أسلوب row/style/document أعلاه)، تُميَّز فقط عند ظهورها أول عبارة.
+    if (check(TokenType::IDENT) && peek().lexeme == "txt") { advance(); return objectStyleFieldDeclaration(ObjectStyleFieldKind::TXT); }
+    if (check(TokenType::IDENT) && peek().lexeme == "img") { advance(); return objectStyleFieldDeclaration(ObjectStyleFieldKind::IMG); }
+    if (check(TokenType::IDENT) && peek().lexeme == "Fonts") { advance(); return objectStyleFieldDeclaration(ObjectStyleFieldKind::FONTS); }
+    if (check(TokenType::IDENT) && peek().lexeme == "background") { advance(); return objectStyleFieldDeclaration(ObjectStyleFieldKind::BACKGROUND); }
+    if (check(TokenType::IDENT) && peek().lexeme == "css3") { advance(); return objectStyleFieldDeclaration(ObjectStyleFieldKind::CSS3); }
+    // "object.file" (وليس "file" وحدها) لتفادي التعارض مع الكلمة المحجوزة 'file' الخاصة بـ container.import.
+    // نميّزها فقط عند ظهور التسلسل الدقيق: IDENT("object") '.' IDENT("file") كأول عبارة.
+    if (check(TokenType::IDENT) && peek().lexeme == "object" && checkNext(TokenType::DOT) &&
+        current + 2 < tokens.size() &&
+        (tokens[current + 2].type == TokenType::IDENT || tokens[current + 2].type == TokenType::FILE_KW) &&
+        tokens[current + 2].lexeme == "file") {
+        advance(); // 'object'
+        advance(); // '.'
+        advance(); // 'file'
+        return objectStyleFieldDeclaration(ObjectStyleFieldKind::OBJECT_FILE);
+    }
+
     return statement();
 }
 
@@ -260,6 +279,22 @@ StmtPtr Parser::textDeclaration() {
     ExprPtr init = expression();
     consume(TokenType::SEMICOLON, "Expected ';' after text declaration");
     auto s = std::make_shared<TextStmt>();
+    s->name = name.lexeme;
+    s->initializer = init;
+    s->line = tok.line;
+    return s;
+}
+
+// txt/img/object.file/Fonts/background/css3 name = "..."; -> نفس شكل 'text' تماماً، لكن بنوع حقل
+// مخصّص لمفاهيم الستايل، ومسموح استخدامها حصراً داخل @container.object/@Object (يتحقق من ذلك المفسّر).
+StmtPtr Parser::objectStyleFieldDeclaration(ObjectStyleFieldKind kind) {
+    Token tok = previous(); // آخر توكن من الكلمة المفتاحية (txt/img/Fonts/background/css3/file)
+    Token name = consume(TokenType::IDENT, "Expected a field name after the style keyword");
+    consume(TokenType::EQUAL, "Expected '=' after the field name");
+    ExprPtr init = expression();
+    consume(TokenType::SEMICOLON, "Expected ';' after the style field declaration");
+    auto s = std::make_shared<ObjectStyleFieldStmt>();
+    s->kind = kind;
     s->name = name.lexeme;
     s->initializer = init;
     s->line = tok.line;
