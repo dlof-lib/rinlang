@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="action_settings">Ajustes</string>
+    <string name="settings_title">Ajustes</string>
+
+    <string name="settings_editor_section_title">Editor</string>
+    <string name="settings_font_size_label">Tamaño de fuente: %1$.0f</string>
+    <string name="settings_show_line_numbers">Mostrar números de línea</string>
+    <string name="settings_show_line_numbers_hint">Desactívalo para dar más espacio al código</string>
+    <string name="action_reset_defaults">Restaurar valores predeterminados</string>
+    <string name="settings_reset_toast">Se restauraron los valores predeterminados</string>
+
+    <!-- Sección de idioma de la app -->
+    <string name="settings_language_section_title">Idioma</string>
+    <string name="settings_language_hint">Elige el idioma de la interfaz de la app</string>
+    <string name="lang_name_ar">العربية</string>
+    <string name="lang_name_en">English</string>
+    <string name="lang_name_es">Español</string>
+    <string name="settings_language_changed_toast">Idioma actualizado</string>
+</resources>
