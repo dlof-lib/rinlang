@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Nuevo elemento del menú Archivo dentro del editor -->
+    <string name="menu_file_libraries">Bibliotecas</string>
+
+    <!-- Pantalla de Bibliotecas: título y secciones -->
+    <string name="libraries_screen_title">Bibliotecas</string>
+    <string name="libraries_title_format">Bibliotecas: %1$s</string>
+    <string name="libraries_section_mine">Mis bibliotecas</string>
+    <string name="libraries_section_mine_hint">Las bibliotecas lib/*.og.rin que creaste o subiste para este proyecto</string>
+    <string name="no_libraries_yet">Aún no hay bibliotecas. Crea una nueva o sube un archivo .og.rin desde tu dispositivo.</string>
+    <string name="libraries_section_builtin">Bibliotecas integradas</string>
+    <string name="libraries_section_builtin_hint">Funcionan al instante en cualquier proyecto mediante @import, sin necesidad de subirlas</string>
+
+    <!-- Botones y diálogos de subir/crear/eliminar -->
+    <string name="upload_library">Subir biblioteca</string>
+    <string name="library_uploaded_toast">Biblioteca subida: %1$s</string>
+    <string name="new_library_title">Nueva biblioteca</string>
+    <string name="library_name_hint">Nombre de la biblioteca (ej.: mylib)</string>
+    <string name="delete_library_title">Eliminar biblioteca</string>
+    <string name="delete_library_confirm">¿Eliminar la biblioteca \"%1$s\"? Cualquier @import que la referencie en tu código dejará de funcionar.</string>
+
+    <!-- Botones del elemento de biblioteca -->
+    <string name="action_edit_library">Editar</string>
+    <string name="action_insert_import">Insertar en el código</string>
+
+    <!-- Nombre de archivo mostrado sobre el editor al editar una biblioteca en vez de un archivo .rin normal -->
+    <string name="library_file_name_format">📚 %1$s</string>
+
+    <!-- Mensajes del editor al volver de la pantalla de Bibliotecas -->
+    <string name="library_import_inserted_toast">Línea @import insertada en la posición del cursor</string>
+    <string name="libraries_need_project_toast">Abre un proyecto primero para que tus bibliotecas se guarden dentro de él y @import funcione</string>
+</resources>
