@@ -1,0 +1,167 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Sección de la tienda dentro de la pantalla de Bibliotecas -->
+    <string name="store_section_title">Tienda Rin</string>
+    <string name="store_section_hint">Explora paquetes publicados por otros usuarios, o publica tu biblioteca para que todos la usen</string>
+    <string name="action_browse_store">Explorar tienda</string>
+    <string name="action_my_account">Mi cuenta</string>
+    <string name="action_publish_library">Publicar</string>
+
+    <!-- Pantalla de la tienda -->
+    <string name="rin_store_title">Tienda Rin</string>
+    <string name="store_empty">Ningún paquete coincide con tu búsqueda. Prueba otra palabra o borra el filtro.</string>
+    <string name="action_install">Instalar/Insertar</string>
+    <string name="store_item_meta_format">%1$s • %2$s • %3$d descargas</string>
+    <string name="package_installed_toast">Paquete instalado y añadido a las bibliotecas de este proyecto</string>
+    <string name="package_installed_import_toast">%1$s paquete(s) instalado(s) y líneas @import insertadas directamente en el código ✓</string>
+
+    <!-- Búsqueda, orden y filtro por categoría dentro de la tienda -->
+    <string name="store_search_hint">Buscar por nombre o descripción del paquete…</string>
+    <string name="store_category_all">Todo</string>
+    <string name="store_sort_newest">Más recientes</string>
+    <string name="store_sort_rating">Mejor valorados</string>
+    <string name="store_sort_downloads">Más descargados</string>
+    <string name="store_sort_name">Nombre (A-Z)</string>
+    <string name="store_rating_format">★ %1$.1f (%2$d)</string>
+    <string name="store_rating_none">★ Aún sin valoraciones</string>
+    <string name="action_rate_package">Valorar</string>
+    <string name="rate_package_title">%1$s</string>
+    <string name="rate_package_subtitle">¿Cómo valorarías este paquete? Elige un número de estrellas</string>
+    <string name="rate_package_login_required">Inicia sesión primero para valorar este paquete</string>
+    <string name="rate_package_submitted">Gracias por tu valoración ✓</string>
+    <string-array name="rate_quality_labels">
+        <item>⭐ Deficiente</item>
+        <item>⭐⭐ Aceptable</item>
+        <item>⭐⭐⭐ Bueno</item>
+        <item>⭐⭐⭐⭐ Muy bueno</item>
+        <item>⭐⭐⭐⭐⭐ Excelente</item>
+    </string-array>
+    <string name="store_dependencies_format">Requiere: %1$s</string>
+
+    <!-- Advertencia de dependencias al instalar -->
+    <string name="dependency_check_title">Dependencias de este paquete</string>
+    <string name="dependency_missing_line">• %1$s (%2$s) — no instalada</string>
+    <string name="dependency_mismatch_line">• %1$s (requiere %2$s, instalada %3$s)</string>
+    <string name="dependency_check_message_prefix">Antes de instalar, ten en cuenta que este paquete depende de:\n\n</string>
+    <string name="action_install_anyway">Instalar de todos modos</string>
+    <string name="action_install_with_dependencies">Instalar con las dependencias disponibles</string>
+
+    <!-- Pantalla de publicación -->
+    <string name="publish_title">Publicar una biblioteca</string>
+    <string name="publish_subtitle">Se generan automáticamente un archivo README.md y LICENSE si no subes los tuyos propios, y todos los archivos se empaquetan en un solo archivo comprimido</string>
+    <string name="hint_package_name">Nombre del paquete</string>
+    <string name="hint_package_version">Número de versión</string>
+    <string name="hint_package_description">Breve descripción de la biblioteca (opcional)</string>
+    <string name="hint_package_category">Categoría del paquete</string>
+    <string name="hint_package_dependencies">Dependencias (opcional)</string>
+    <string name="hint_package_dependencies_example">Ejemplo:\nmathlib:^1.0.0\nstrings:2.0.0</string>
+    <string name="hint_package_license">Licencia</string>
+    <string name="hint_package_custom_docs">Opcional: sube tu propio archivo README.md y de licencia en lugar de la generación automática</string>
+    <string name="action_pick_assets">Añadir imágenes/iconos (opcional)</string>
+    <string name="action_pick_readme">Subir mi propio README.md</string>
+    <string name="action_pick_license">Subir mi propio archivo de licencia</string>
+    <string name="file_selected_generic">Archivo seleccionado ✓</string>
+    <string name="assets_selected_format">%1$d archivo(s) seleccionado(s)</string>
+    <string name="label_package_visual_identity">Identidad visual del paquete (opcional)</string>
+    <string name="label_package_icon">Icono del paquete</string>
+    <string name="label_package_thumbnail">Miniatura del paquete</string>
+    <string name="error_image_decode_failed">No se pudo abrir esta imagen, prueba con otra</string>
+    <string name="action_publish_submit">Publicar paquete</string>
+    <string name="publish_success">Paquete publicado en la Tienda Rin ✓</string>
+    <string name="publish_requires_login">Inicia sesión primero para poder publicar</string>
+    <string name="error_package_name_taken">Este nombre (o uno similar) ya lo usa otro paquete en la Tienda Rin, elige un nombre diferente</string>
+
+    <!-- Advertencia por un nombre demasiado similar a un paquete conocido (protección contra suplantación) antes de confirmar la publicación -->
+    <string name="similar_name_warning_title">Nombre muy similar a un paquete conocido</string>
+    <string name="similar_name_warning_message">El nombre de tu paquete es muy parecido al de un paquete conocido que ya existe (%1$s), lo que puede confundir a los usuarios. ¿Deseas continuar de todos modos con este nombre?</string>
+
+    <!-- Reportar un paquete -->
+    <string name="action_report_package">Reportar</string>
+    <string name="report_package_title">Reportar %1$s</string>
+    <string name="report_package_message">Elige un motivo para reportar este paquete:</string>
+    <string name="report_package_login_required">Inicia sesión primero para poder reportar</string>
+    <string name="report_package_submitted">Tu reporte fue enviado, gracias por ayudar a mantener la tienda segura ✓</string>
+    <string-array name="report_reasons">
+        <item>Contenido ofensivo o inapropiado</item>
+        <item>Código malicioso o dañino</item>
+        <item>Violación de derechos de autor/licencia</item>
+        <item>Información engañosa (descripción o nombre falso)</item>
+        <item>Otro motivo</item>
+    </string-array>
+
+    <!-- Página de detalle del paquete (similar a un repositorio de GitHub): README + licencia + lista de archivos -->
+    <string name="package_detail_section_readme">README.md</string>
+    <string name="package_detail_section_license">Licencia</string>
+    <string name="package_detail_section_files">Archivos del paquete</string>
+    <string name="package_detail_no_readme">Este paquete no tiene archivo README.md.</string>
+    <string name="package_detail_no_license">Este paquete no tiene archivo de licencia.</string>
+    <string name="package_detail_meta_format">%1$s • %2$s • %3$d descargas • ★ %4$.1f (%5$d valoraciones)</string>
+
+    <!-- Estadísticas de la página de detalle como chips individuales (en vez de un solo texto combinado, package_detail_meta_format) -->
+    <string name="package_detail_stat_version_format">Versión %1$s</string>
+    <string name="package_detail_stat_downloads_format">%1$d descargas</string>
+    <string name="package_detail_stat_rating_format">★ %1$.1f (%2$d)</string>
+
+    <!-- Insignia "Publicador verificado": otorgada automáticamente a quien tenga un paquete con más de 1000 descargas y una valoración de 4 estrellas o más -->
+    <string name="verified_publisher_badge_description">Publicador verificado</string>
+
+    <!-- Botón de me gusta en la página de detalle del paquete -->
+    <string name="action_like_package">Me gusta</string>
+    <string name="like_package_login_required">Inicia sesión primero para dar me gusta a este paquete</string>
+    <string name="like_count_format">%1$d</string>
+
+    <!-- Botón de seguir a un publicador dentro del detalle del paquete (seguir a un publicador, no al paquete en sí) -->
+    <string name="action_subscribe_publisher">Seguir</string>
+    <string name="action_subscribed_publisher">Siguiendo</string>
+
+    <!-- Pantalla de mi cuenta -->
+    <string name="account_title">Mi cuenta</string>
+    <string name="account_not_logged_in">Aún no has iniciado sesión</string>
+    <string name="account_not_logged_in_hint">Inicia sesión para acceder a tu perfil, publicar paquetes y valorarlos</string>
+    <string name="action_logout">Cerrar sesión</string>
+    <string name="account_field_name">Nombre</string>
+    <string name="account_field_username">Nombre de usuario</string>
+    <string name="account_field_email">Correo electrónico</string>
+    <string name="account_bio_placeholder">Aún no hay una biografía. Toca \"Editar perfil\" para añadir una.</string>
+    <string name="action_edit_profile">Editar perfil</string>
+    <string name="action_change_avatar">Cambiar foto de perfil</string>
+    <string name="edit_profile_title">Editar perfil</string>
+    <string name="edit_profile_name_hint">Nombre visible</string>
+    <string name="edit_profile_bio_hint">Una breve biografía sobre ti (opcional)</string>
+    <string name="profile_updated">Perfil actualizado ✓</string>
+    <string name="avatar_updated">Foto de perfil actualizada ✓</string>
+    <string name="avatar_update_failed">No se pudo actualizar la foto, inténtalo de nuevo</string>
+
+    <!-- Perfil público: ver el perfil de cualquier otro usuario (no solo el tuyo), con contadores
+         de seguidores/seguidos y un botón de seguir, se abre desde la fila del publicador en el
+         detalle del paquete y desde las listas de seguidores/seguidos -->
+    <string name="public_profile_title">Perfil</string>
+    <string name="public_profile_bio_empty">Aún no hay biografía.</string>
+    <string name="subscriber_count_label">Seguidores</string>
+    <string name="subscriptions_count_label">Siguiendo</string>
+    <!-- Estadísticas adicionales en la tarjeta de perfil: total de paquetes/descargas/me gusta de
+         todos los paquetes de este publicador — datos reales calculados a partir de la misma lista
+         de paquetes que ya se obtiene para determinar la insignia de verificado
+         (PackageRepository.fetchUserPackages), no son datos ficticios. -->
+    <string name="packages_count_label">Paquetes</string>
+    <string name="downloads_count_label">Descargas</string>
+    <string name="likes_count_label">Me gusta</string>
+    <string name="subscribe_login_required">Inicia sesión primero para poder seguir</string>
+    <string name="subscribe_action_failed">No se pudo completar la solicitud, inténtalo de nuevo</string>
+
+    <!-- Pantalla de lista de usuarios (seguidores de una cuenta, o cuentas que sigue) -->
+    <string name="user_list_title_subscribers">Seguidores</string>
+    <string name="user_list_title_subscriptions">Siguiendo</string>
+    <string name="user_list_empty_subscribers">Aún no hay seguidores</string>
+    <string name="user_list_empty_subscriptions">Aún no sigues a nadie</string>
+
+    <!-- Sección "Mis paquetes" dentro de la pantalla de cuenta: ver y eliminar paquetes publicados -->
+    <string name="account_my_packages_title">Mis paquetes publicados</string>
+    <string name="account_my_packages_empty">Aún no has publicado ningún paquete. Publica una biblioteca desde la pantalla de Bibliotecas para verla aquí.</string>
+    <string name="my_package_meta_format">%1$s • %2$d descargas</string>
+    <string name="action_delete_package">Eliminar</string>
+    <string name="delete_package_confirm_title">Eliminar paquete</string>
+    <string name="delete_package_confirm_message">¿Eliminar permanentemente el paquete \"%1$s\" de la Tienda Rin? Esta acción no se puede deshacer.</string>
+    <string name="package_deleted_toast">Paquete eliminado ✓</string>
+    <string name="package_delete_failed">No se pudo eliminar el paquete, inténtalo de nuevo</string>
+</resources>
