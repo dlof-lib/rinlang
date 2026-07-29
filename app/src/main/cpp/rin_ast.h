@@ -124,6 +124,25 @@ struct TextStmt : Stmt {
     ExprPtr initializer;
 };
 
+// ---- حقول تنسيق/ستايل إضافية خاصة بالكائن (@container.object / @Object فقط) ----
+// نفس فكرة 'text' (حقل حر باسم + قيمة نصية) لكن بستة أسماء مخصّصة لمفاهيم الستايل الشائعة:
+//   txt        name = "...";  -> نص عرض (Text style)
+//   img        name = "...";  -> مسار/رابط صورة (Image style)
+//   object.file name = "...";  -> مسار ملف مرتبط بالكائن (Object File style) — بصيغة "object.file"
+//                                  (وليس "file" وحدها) لتفادي التعارض مع الكلمة المحجوزة 'file'
+//                                  الخاصة أصلاً بعبارة "file path=...;" داخل @container.import
+//   Fonts      name = "...";  -> اسم/عائلة خط (Font style)
+//   background name = "...";  -> قيمة خلفية: لون/تدرّج/مسار صورة (Background style)
+//   css3       name = "...";  -> مقتطف CSS3 خام يُطبَّق على الكائن (CSS3 style)
+// الحقول الستّة أعلاه مسموحة حصراً داخل @container.object/@Object (ليست عامة كـ 'style')، وتُخزَّن
+// كبيانات حرة على الكائن تماماً كحقول 'text' العادية (يجب أن تكون قيمتها نصاً).
+enum class ObjectStyleFieldKind { TXT, IMG, OBJECT_FILE, FONTS, BACKGROUND, CSS3 };
+struct ObjectStyleFieldStmt : Stmt {
+    ObjectStyleFieldKind kind;
+    std::string name;
+    ExprPtr initializer;
+};
+
 // @container=name  <body>  .end/container
 // @container.pipe=name  <body>  .end/container.pipe   -> خط أنابيب بيانات/إحصاء
 // @container.data=name  <body>  .end/container.data    -> حاوية بيانات نقية (لا دوال ولا حاويات متداخلة)
