@@ -1,0 +1,179 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Rin Lang</string>
+    <string name="app_editor_title">Rin Editor</string>
+    <string name="action_run">Run</string>
+
+    <!-- RinFlow: the official name for Rin's live pipeline (@container.pipe) visualizer -->
+    <string name="pipeline_runner_title">RinFlow</string>
+    <string name="pipeline_source_label">Source</string>
+    <string name="pipeline_node_source">Source</string>
+    <string name="pipeline_node_output">Final Output</string>
+    <string name="pipeline_status_running">RinFlow: Running…</string>
+    <string name="pipeline_status_success">RinFlow: Completed Successfully</string>
+    <string name="pipeline_status_success_timed">RinFlow: Completed in %1$d ms (real engine time)</string>
+    <string name="pipeline_status_error">RinFlow: Failed</string>
+    <string name="pipeline_status_idle">RinFlow: Not run yet</string>
+    <string name="pipeline_status_stopped">RinFlow: Stopped</string>
+    <string name="pipeline_no_block_found">No @container.pipe block was found in this code. Add one, then press Run again.</string>
+    <string name="pipeline_action_run">Run</string>
+    <string name="pipeline_action_stop">Stop</string>
+    <string name="pipeline_action_configure">Configure</string>
+    <string name="pipeline_action_load_sample">Load Example Pipeline</string>
+    <string name="pipeline_configure_title">RinFlow</string>
+    <string name="pipeline_configure_message">Container: %1$s\nStages: %2$d\nTimeout: %3$d s\n\nEach value shown in the diagram is produced by actually re-running your code through the native Rin engine, truncated at each stage of the pipe expression — nothing here is simulated.</string>
+
+    <!-- New RinFlow design: horizontal flow + legend bar, styled like professional CI/CD dashboards -->
+    <string name="pipeline_flow_label">PIPELINE FLOW</string>
+    <string name="pipeline_legend_success">Passed</string>
+    <string name="pipeline_legend_failed">Failed</string>
+    <string name="pipeline_legend_node">RinFlow node</string>
+    <string name="pipeline_node_status_ok">Passed</string>
+    <string name="pipeline_node_status_error">Failed</string>
+    <!-- Shown after pressing Run when the current code contains a real @container.pipe block -->
+    <string name="rinflow_detected_snackbar">RinFlow pipeline detected in this run</string>
+    <string name="rinflow_open_action">Open RinFlow</string>
+    <string name="action_clear">Clear</string>
+    <string name="action_open">Open</string>
+
+    <!-- No internet connection screen (shown automatically on any screen that needs network) -->
+    <string name="no_connection_title">No Internet Connection</string>
+    <string name="no_connection_message">Check your Wi-Fi or mobile data connection, then try again</string>
+    <string name="action_retry">Retry</string>
+    <string name="action_save">Save</string>
+
+    <!-- Compact top menu bar (File / Edit / View / Run) — desktop-style dropdown menus,
+         but designed for touch on mobile instead of a long button bar -->
+    <string name="menu_file">File</string>
+    <string name="menu_edit">Edit</string>
+    <string name="menu_view">View</string>
+    <string name="menu_run">Run</string>
+    <string name="menu_file_new">New file</string>
+    <string name="menu_file_open">Open…</string>
+    <string name="menu_file_save">Save</string>
+    <string name="menu_file_projects">Projects</string>
+    <string name="menu_edit_undo">Undo</string>
+    <string name="menu_edit_redo">Redo</string>
+    <string name="menu_edit_find">Find &amp; Replace</string>
+    <string name="menu_edit_select_all">Select all</string>
+    <string name="menu_edit_clear_all">Clear editor</string>
+    <string name="menu_edit_toggle_comment">Toggle line comment</string>
+    <string name="menu_edit_duplicate_line">Duplicate line</string>
+    <string name="menu_edit_delete_line">Delete line</string>
+    <string name="menu_edit_move_line_up">Move line up</string>
+    <string name="menu_edit_move_line_down">Move line down</string>
+    <string name="menu_edit_indent">Indent selection</string>
+    <string name="menu_edit_unindent">Unindent selection</string>
+    <string name="menu_view_zoom_in">Increase font size</string>
+    <string name="menu_view_zoom_out">Decrease font size</string>
+    <string name="menu_view_toggle_lines">Toggle line numbers</string>
+    <string name="menu_view_clear_console">Clear run history</string>
+    <string name="menu_view_go_to_line">Go to line…</string>
+    <string name="menu_run_run">Run program</string>
+    <string name="menu_run_check_brackets">Check brackets</string>
+    <string name="new_file_name">untitled.rin</string>
+    <string name="new_file_toast">New file</string>
+    <string name="desc_menu_file">File menu</string>
+    <string name="desc_menu_edit">Edit menu</string>
+    <string name="desc_menu_view">View menu</string>
+    <string name="desc_run_quick">Run</string>
+    <string name="desc_projects_quick">Projects</string>
+    <string name="editor_hint">Write Rin code here…</string>
+    <string name="file_unsaved">untitled.rin</string>
+    <string name="file_open_error">Could not open file</string>
+    <string name="file_save_error">Could not save file</string>
+    <string name="file_saved_toast">Saved: %1$s</string>
+    <string name="file_opened_toast">Opened: %1$s</string>
+
+    <!-- Editor: undo/redo and find &amp; replace -->
+    <string name="action_undo">Undo</string>
+    <string name="action_redo">Redo</string>
+    <string name="action_find">Find</string>
+    <string name="find_hint">Find…</string>
+    <string name="replace_hint">Replace with…</string>
+    <string name="btn_find_next">Next</string>
+    <string name="btn_find_prev">Prev</string>
+    <string name="btn_replace_one">Replace</string>
+    <string name="btn_replace_all">All</string>
+    <string name="find_not_found_toast">"Not found: %1$s"</string>
+    <string name="replaced_count_toast">Replaced %1$d occurrence(s)</string>
+    <string name="find_close_desc">Close find bar</string>
+    <string name="find_case_sensitive_desc">Toggle case-sensitive search</string>
+    <string name="find_case_sensitive_on_toast">Case-sensitive search: on</string>
+    <string name="find_case_sensitive_off_toast">Case-sensitive search: off</string>
+    <string name="find_count_format">%1$d/%2$d</string>
+    <string name="find_count_none">0/0</string>
+    <string name="go_to_line_title">Go to line</string>
+    <string name="go_to_line_hint">Line number</string>
+    <string name="go_to_line_action">Go</string>
+    <string name="go_to_line_cancel">Cancel</string>
+    <string name="go_to_line_invalid_toast">Enter a valid line number</string>
+    <string name="brackets_balanced_toast">Brackets are balanced ✓</string>
+    <string name="brackets_unbalanced_toast">Unbalanced brackets near line %1$d</string>
+    <string name="line_deleted_toast">Line deleted</string>
+
+    <!-- Scheduled run queue and execution history -->
+    <string name="console_title">Run Queue</string>
+    <string name="action_clear_console">Clear history</string>
+    <string name="no_jobs_yet">No runs yet — press Run to execute your Rin program.</string>
+    <string name="job_title_fmt">Run #%1$d</string>
+    <string name="job_status_queued">QUEUED</string>
+    <string name="job_status_running">RUNNING…</string>
+    <string name="job_status_success">SUCCESS</string>
+    <string name="job_status_error">ERROR</string>
+    <string name="job_status_timeout">TIMEOUT</string>
+    <string name="job_status_cancelled">CANCELLED</string>
+    <string name="job_duration_fmt">%1$d ms</string>
+    <string name="job_timeout_message">"[Timeout]: execution exceeded %1$d seconds and was abandoned"</string>
+
+    <!-- Downloading files actually produced by save/installation to the device Downloads folder -->
+    <string name="download_results_label">Results ready to download</string>
+    <string name="download_button_fmt">%1$s · %2$s</string>
+    <string name="download_dialog_title">Downloading to device…</string>
+    <string name="download_status_copying">Copying data…</string>
+    <string name="download_status_done">Downloaded successfully ✓</string>
+    <string name="download_done_toast">%1$s saved to the Downloads folder</string>
+    <string name="download_error_toast">Download failed: %1$s</string>
+    <string name="download_no_app_toast">No suitable app found to open this file type</string>
+    <string name="download_permission_needed_toast">The app needs storage permission to save the file to Downloads</string>
+    <string name="download_open_action">Open</string>
+    <string name="sample_program">// Welcome to the Rin programming language!
+fun fib(n) {
+    if (n &lt; 2) { return n; }
+    return fib(n - 1) + fib(n - 2);
+}
+
+let i = 0;
+while (i &lt; 10) {
+    print \"fib(\" + i + \") = \" + fib(i);
+    i = i + 1;
+}
+
+let name = \"world\";
+print \"Hello, \" + name + \"!\";
+</string>
+
+    <!-- ===== Unified bottom navigation bar ===== -->
+    <string name="nav_editor">Editor</string>
+    <string name="nav_projects">Projects</string>
+    <string name="nav_store">Store</string>
+    <string name="nav_profile">Profile</string>
+    <string name="nav_more">More</string>
+
+    <!-- ===== "More" screen (remaining sections) ===== -->
+    <string name="more_screen_title">More</string>
+    <string name="more_row_files_subtitle">Browse project files</string>
+    <string name="more_row_libraries_subtitle">This project\'s lib/*.og.rin libraries</string>
+    <string name="more_row_pipeline_subtitle">Track pipeline execution step by step</string>
+    <string name="more_row_extensions_subtitle">Official editor add-ons and tools</string>
+    <string name="more_row_settings_subtitle">Font size, line numbers, and other options</string>
+    <string name="more_row_needs_project_toast">Choose a project first</string>
+
+    <!-- ===== Avatar picker (library icon or upload from studio) ===== -->
+    <string name="avatar_picker_title">Choose your avatar</string>
+    <string name="avatar_picker_subtitle">Pick an icon from the library, or upload a photo from your studio</string>
+    <string name="avatar_picker_upload_studio">Upload photo from studio</string>
+
+    <!-- ===== Splash screen ===== -->
+    <string name="splash_tagline">A light and fast programming language</string>
+</resources>
