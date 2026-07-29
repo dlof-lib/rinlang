@@ -1,6 +1,5 @@
 package com.dlof.rinlang.store
 
-import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.os.Bundle
 import android.util.Base64
@@ -75,7 +74,35 @@ class PackageDetailActivity : BaseConnectivityActivity() {
 
     private fun bindHeader() {
         findViewById<TextView>(R.id.txtDetailPackageName).text = pkg.name
-        findViewById<TextView>(R.id.txtDetailPackageIcon).text = pkg.name.take(1).uppercase()
+
+        // أيقونة الحزمة: تُعرَض صورة الأيقونة الحقيقية إن رفعها الناشر عند النشر (pkg.iconBase64)،
+        // وإلا يبقى الحرف الأول من اسم الحزمة كبديل (بنفس الشارة المتدرّجة السابقة).
+        val txtIcon = findViewById<TextView>(R.id.txtDetailPackageIcon)
+        val imgIcon = findViewById<ImageView>(R.id.imgDetailPackageIcon)
+        txtIcon.text = pkg.name.take(1).uppercase()
+        val iconBitmap = AvatarUtils.decodeCircularAvatar(pkg.iconBase64)
+        if (iconBitmap != null) {
+            imgIcon.setImageBitmap(iconBitmap)
+            imgIcon.visibility = View.VISIBLE
+            txtIcon.visibility = View.INVISIBLE
+        } else {
+            imgIcon.visibility = View.GONE
+            txtIcon.visibility = View.VISIBLE
+        }
+
+        // الصورة المصغّرة (thumbnail): تحلّ محل بانر الخلايا السداسية الافتراضي في رأس الصفحة
+        // إن رفعها الناشر، لتمييز كل حزمة بصرياً عن غيرها.
+        if (!pkg.thumbnailBase64.isBlank()) {
+            try {
+                val bytes = Base64.decode(pkg.thumbnailBase64, Base64.NO_WRAP)
+                val thumb = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                if (thumb != null) {
+                    findViewById<ImageView>(R.id.imgDetailHeroBanner).setImageBitmap(thumb)
+                }
+            } catch (t: Throwable) {
+                // يبقى البانر الافتراضي إن تعذّر فكّ الصورة المصغّرة
+            }
+        }
 
         val txtDescription = findViewById<TextView>(R.id.txtDetailDescription)
         txtDescription.text = pkg.description
@@ -102,7 +129,6 @@ class PackageDetailActivity : BaseConnectivityActivity() {
         findViewById<View>(R.id.rowDetailPublisher).setOnClickListener {
             PublicProfileActivity.start(this, pkg.publisherUid)
         }
-        clipToCircle(imgAvatar)
 
         txtName.text = pkg.publisherName
         txtInitial.text = pkg.publisherName.take(1).uppercase()
@@ -117,35 +143,10 @@ class PackageDetailActivity : BaseConnectivityActivity() {
             }
         }
 
+        // القصّ الدائري يتم على مستوى الـ Bitmap نفسه عبر AvatarUtils.renderAvatar، لضمان ظهور
+        // صورة الناشر كاملة ودائرية دائماً بلا أي قطع جزئي.
         AuthRepository.fetchProfile(pkg.publisherUid) { profile ->
-            val avatarBase64 = profile?.avatarBase64
-            if (avatarBase64.isNullOrBlank()) {
-                imgAvatar.setImageDrawable(null)
-                txtInitial.visibility = View.VISIBLE
-                return@fetchProfile
-            }
-            try {
-                val bytes = Base64.decode(avatarBase64, Base64.NO_WRAP)
-                val bitmap: Bitmap? = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-                if (bitmap != null) {
-                    imgAvatar.setImageBitmap(bitmap)
-                    txtInitial.visibility = View.GONE
-                } else {
-                    txtInitial.visibility = View.VISIBLE
-                }
-            } catch (t: Throwable) {
-                txtInitial.visibility = View.VISIBLE
-            }
-        }
-    }
-
-    /** يقصّ [view] إلى دائرة كاملة، لعرض صورة الملف الشخصي كشارة دائرية بدل مربّع خام. */
-    private fun clipToCircle(view: ImageView) {
-        view.clipToOutline = true
-        view.outlineProvider = object : android.view.ViewOutlineProvider() {
-            override fun getOutline(v: View, outline: android.graphics.Outline) {
-                outline.setOval(0, 0, v.width, v.height)
-            }
+            AvatarUtils.renderAvatar(imgAvatar, txtInitial, profile?.avatarBase64, pkg.publisherName)
         }
     }
 
@@ -281,14 +282,34 @@ class PackageDetailActivity : BaseConnectivityActivity() {
         container.removeAllViews()
         val contents = PackagingUtils.readContents(pkg)
         val inflater = LayoutInflater.from(this)
-        for (file in contents.files) {
+        for ((index, file) in contents.files.withIndex()) {
             val row = inflater.inflate(R.layout.item_package_file, container, false)
-            row.findViewById<ImageView>(R.id.imgFileIcon).setImageResource(PackagingUtils.iconResFor(file.name))
+            val tint = getColor(PackagingUtils.iconColorResFor(file.name))
+            row.findViewById<ImageView>(R.id.imgFileIcon).apply {
+                setImageResource(PackagingUtils.iconResFor(file.name))
+                imageTintList = android.content.res.ColorStateList.valueOf(tint)
+            }
+            row.findViewById<View>(R.id.bgFileIconCircle).backgroundTintList =
+                android.content.res.ColorStateList.valueOf(withAlpha(tint, 38))
             row.findViewById<TextView>(R.id.txtFileName).text = file.name
             row.findViewById<TextView>(R.id.txtFileSize).text = formatSize(file.sizeBytes)
+            // تباين خفيف بين الصفوف الزوجية/الفردية بدل خلفية واحدة موحّدة مسطّحة، لتحسين قابلية
+            // المسح البصري (scannability) في القوائم الطويلة.
+            if (index % 2 == 1) {
+                row.setBackgroundColor(withAlpha(getColor(R.color.rin_on_toolbar), 8))
+            }
             container.addView(row)
         }
     }
+
+    /** يُرجع [color] بنفس قيمة الشفافية [alpha] (0-255) بدل ألفا اللون الأصلية، لخلفيات خفيفة متّسقة. */
+    private fun withAlpha(color: Int, alpha: Int): Int =
+        android.graphics.Color.argb(
+            alpha,
+            android.graphics.Color.red(color),
+            android.graphics.Color.green(color),
+            android.graphics.Color.blue(color)
+        )
 
     private fun formatSize(bytes: Long): String = when {
         bytes < 1024 -> "$bytes B"
