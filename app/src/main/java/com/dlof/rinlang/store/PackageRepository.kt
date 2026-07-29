@@ -124,6 +124,10 @@ object PackageRepository {
         base64Data: String,
         category: String = "عام",
         dependencies: Map<String, String> = emptyMap(),
+        /** أيقونة الحزمة (اختيارية) مصغَّرة ومرمَّزة base64 مسبقاً — راجع [RinPackage.iconBase64]. */
+        iconBase64: String = "",
+        /** صورة مصغّرة للحزمة (اختيارية) — راجع [RinPackage.thumbnailBase64]. */
+        thumbnailBase64: String = "",
         callback: (success: Boolean, error: String?) -> Unit
     ) {
         val ref = packagesRef().push()
@@ -146,7 +150,9 @@ object PackageRepository {
             "ratingSum" to 0L,
             "ratingCount" to 0L,
             "likeCount" to 0L,
-            "dependencies" to dependencies
+            "dependencies" to dependencies,
+            "iconBase64" to iconBase64,
+            "thumbnailBase64" to thumbnailBase64
         )
 
         ref.setValue(payload)
