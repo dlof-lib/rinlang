@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- New File menu item inside the editor -->
+    <string name="menu_file_libraries">Libraries</string>
+
+    <!-- Libraries screen: title and sections -->
+    <string name="libraries_screen_title">Libraries</string>
+    <string name="libraries_title_format">Libraries: %1$s</string>
+    <string name="libraries_section_mine">My Libraries</string>
+    <string name="libraries_section_mine_hint">The lib/*.og.rin libraries you created or uploaded for this project</string>
+    <string name="no_libraries_yet">No libraries yet. Create a new library or upload an .og.rin file from your device.</string>
+    <string name="libraries_section_builtin">Built-in Libraries</string>
+    <string name="libraries_section_builtin_hint">Work instantly in any project via @import, no upload needed</string>
+
+    <!-- Upload/create/delete buttons and dialogs -->
+    <string name="upload_library">Upload Library</string>
+    <string name="library_uploaded_toast">Library uploaded: %1$s</string>
+    <string name="new_library_title">New Library</string>
+    <string name="library_name_hint">Library name (e.g. mylib)</string>
+    <string name="delete_library_title">Delete Library</string>
+    <string name="delete_library_confirm">Delete the library \"%1$s\"? Any @import referencing it in your code will stop working.</string>
+
+    <!-- Library item buttons -->
+    <string name="action_edit_library">Edit</string>
+    <string name="action_insert_import">Insert into Code</string>
+
+    <!-- File name shown above the editor when editing a library instead of a regular .rin file -->
+    <string name="library_file_name_format">📚 %1$s</string>
+
+    <!-- Editor messages after returning from the Libraries screen -->
+    <string name="library_import_inserted_toast">@import line inserted at cursor position</string>
+    <string name="libraries_need_project_toast">Open a project first so your libraries are saved inside it and @import works</string>
+</resources>
