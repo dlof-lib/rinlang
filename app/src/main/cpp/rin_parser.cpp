@@ -71,25 +71,6 @@ StmtPtr Parser::declaration() {
     // 'document' كلمة سياقية غير محجوزة أيضاً (مفهوم قاعدة البيانات اللاعلاقية: container.doc / doc)
     if (check(TokenType::IDENT) && peek().lexeme == "document") { advance(); return documentStatement(); }
 
-    // حقول تنسيق/ستايل إضافية خاصة بالكائن (@container.object/@Object فقط): txt/img/Fonts/background/css3
-    // كلمات سياقية غير محجوزة (بنفس أسلوب row/style/document أعلاه)، تُميَّز فقط عند ظهورها أول عبارة.
-    if (check(TokenType::IDENT) && peek().lexeme == "txt") { advance(); return objectStyleFieldDeclaration(ObjectStyleFieldKind::TXT); }
-    if (check(TokenType::IDENT) && peek().lexeme == "img") { advance(); return objectStyleFieldDeclaration(ObjectStyleFieldKind::IMG); }
-    if (check(TokenType::IDENT) && peek().lexeme == "Fonts") { advance(); return objectStyleFieldDeclaration(ObjectStyleFieldKind::FONTS); }
-    if (check(TokenType::IDENT) && peek().lexeme == "background") { advance(); return objectStyleFieldDeclaration(ObjectStyleFieldKind::BACKGROUND); }
-    if (check(TokenType::IDENT) && peek().lexeme == "css3") { advance(); return objectStyleFieldDeclaration(ObjectStyleFieldKind::CSS3); }
-    // "object.file" (وليس "file" وحدها) لتفادي التعارض مع الكلمة المحجوزة 'file' الخاصة بـ container.import.
-    // نميّزها فقط عند ظهور التسلسل الدقيق: IDENT("object") '.' IDENT("file") كأول عبارة.
-    if (check(TokenType::IDENT) && peek().lexeme == "object" && checkNext(TokenType::DOT) &&
-        current + 2 < tokens.size() &&
-        (tokens[current + 2].type == TokenType::IDENT || tokens[current + 2].type == TokenType::FILE_KW) &&
-        tokens[current + 2].lexeme == "file") {
-        advance(); // 'object'
-        advance(); // '.'
-        advance(); // 'file'
-        return objectStyleFieldDeclaration(ObjectStyleFieldKind::OBJECT_FILE);
-    }
-
     return statement();
 }
 
@@ -285,22 +266,6 @@ StmtPtr Parser::textDeclaration() {
     return s;
 }
 
-// txt/img/object.file/Fonts/background/css3 name = "..."; -> نفس شكل 'text' تماماً، لكن بنوع حقل
-// مخصّص لمفاهيم الستايل، ومسموح استخدامها حصراً داخل @container.object/@Object (يتحقق من ذلك المفسّر).
-StmtPtr Parser::objectStyleFieldDeclaration(ObjectStyleFieldKind kind) {
-    Token tok = previous(); // آخر توكن من الكلمة المفتاحية (txt/img/Fonts/background/css3/file)
-    Token name = consume(TokenType::IDENT, "Expected a field name after the style keyword");
-    consume(TokenType::EQUAL, "Expected '=' after the field name");
-    ExprPtr init = expression();
-    consume(TokenType::SEMICOLON, "Expected ';' after the style field declaration");
-    auto s = std::make_shared<ObjectStyleFieldStmt>();
-    s->kind = kind;
-    s->name = name.lexeme;
-    s->initializer = init;
-    s->line = tok.line;
-    return s;
-}
-
 StmtPtr Parser::atBlock() {
     Token atTok = previous(); // '@'
     std::string tag = readTagKeyword();
@@ -308,12 +273,14 @@ StmtPtr Parser::atBlock() {
         "container", "container.pipe", "container.data", "container.api", "container.import", "container.table",
         "container.doc", "Containers.Group", "Volume", "table", "doc",
         // مفاهيم التنسيق والستايل: كائن (Object) / بوابة تنسيق (portal) / كتلة واجهة جاهزة (block)
-        "container.object", "Object", "container.portal", "portal", "container.block", "block"
+        "container.object", "Object", "container.portal", "portal", "container.block", "block",
+        "container.sticker", "sticker"
     };
     if (std::find(validTags.begin(), validTags.end(), tag) == validTags.end()) {
         throw RinError("Unsupported block '@" + tag + "'; expected container, container.pipe, container.data, "
                         "container.api, container.import, container.table, table, container.doc, doc, "
-                        "container.object, Object, container.portal, portal, container.block, block, Containers.Group, or Volume", atTok.line);
+                        "container.object, Object, container.portal, portal, container.block, block, "
+                        "container.sticker, sticker, Containers.Group, or Volume", atTok.line);
     }
     std::string name = readOptionalName();
     std::vector<StmtPtr> body;
@@ -326,16 +293,20 @@ StmtPtr Parser::atBlock() {
         tag == "container.doc" || tag == "doc" ||
         tag == "container.object" || tag == "Object" ||
         tag == "container.portal" || tag == "portal" ||
-        tag == "container.block" || tag == "block") {
+        tag == "container.block" || tag == "block" ||
+        tag == "container.sticker" || tag == "sticker") {
         // container.table/table (صفوف row + نمط style)، container.doc/doc (مستندات document)، وكذلك
-        // container.object/Object، container.portal/portal، container.block/block الجديدة، تشترك جميعاً
+        // container.object/Object، container.portal/portal، container.block/block، وأخيراً
+        // container.sticker/sticker (بطاقة هوية بصرية جاهزة: أيقونة/ألوان/حواف/خلفية...) تشترك جميعاً
         // في نفس القيود: بيانات نقية، بلا دوال ولا حاويات متداخلة ولا route. عبارة 'style' مسموحة
-        // بداخل أيٍّ منها (وليس فقط container.table) لضبط نمط العرض (مفهوم التنسيق/الستايل).
+        // بداخل أيٍّ منها (وليس فقط container.table) لضبط نمط العرض (مفهوم التنسيق/الستايل)، وكذلك
+        // 'link'/'file' تعملان بداخلها بلا أي قيد إضافي (روابط links() وملف انتقال transition.file).
         if (tag == "container.data" || tag == "container.table" || tag == "table" ||
             tag == "container.doc" || tag == "doc" ||
             tag == "container.object" || tag == "Object" ||
             tag == "container.portal" || tag == "portal" ||
-            tag == "container.block" || tag == "block") validateDataContainerBody(body);
+            tag == "container.block" || tag == "block" ||
+            tag == "container.sticker" || tag == "sticker") validateDataContainerBody(body);
         auto s = std::make_shared<ContainerStmt>();
         s->name = name; s->body = body; s->line = atTok.line;
         if (tag == "container.pipe") s->kind = ContainerKind::PIPE;
@@ -347,6 +318,7 @@ StmtPtr Parser::atBlock() {
         else if (tag == "container.object" || tag == "Object") s->kind = ContainerKind::OBJECT;
         else if (tag == "container.portal" || tag == "portal") s->kind = ContainerKind::PORTAL;
         else if (tag == "container.block" || tag == "block") s->kind = ContainerKind::BLOCK;
+        else if (tag == "container.sticker" || tag == "sticker") s->kind = ContainerKind::STICKER;
         else s->kind = ContainerKind::PLAIN;
         return s;
     }
