@@ -29,7 +29,10 @@ object RinSyntaxHighlighter {
     private val containerKeywords = listOf(
         "text", "container", "Containers", "Group", "Volume", "Section",
         "Translations", "translation", "link", "tying", "merge",
-        "installation", "simplified", "save", "file", "end"
+        "installation", "simplified", "save", "file", "end",
+        // حقول الستايل الخاصة بـ @container.object/@Object فقط: txt/img/object.file/Fonts/background/css3
+        // ("object" هنا مطلوبة لتلوين بداية عبارة "object.file"؛ "file" مذكورة أعلاه بالفعل)
+        "txt", "img", "object", "Fonts", "background", "css3"
     )
 
     // أسماء دوال المكتبة القياسية (stdlib) والعمليات المدمجة
