@@ -83,8 +83,8 @@
                                     android:layout_width="96dp"
                                     android:layout_height="96dp"
                                     android:background="@drawable/bg_avatar_ring"
-                                    android:padding="13dp"
-                                    android:scaleType="fitCenter"
+                                    android:padding="3dp"
+                                    android:scaleType="centerCrop"
                                     android:contentDescription="@string/account_title" />
 
                                 <TextView
