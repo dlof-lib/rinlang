@@ -6,7 +6,6 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Bundle
-import android.util.Base64
 import android.view.LayoutInflater
 import android.view.View
 import android.widget.EditText
@@ -24,7 +23,6 @@ import com.dlof.rinlang.R
 import com.dlof.rinlang.auth.AuthRepository
 import com.dlof.rinlang.auth.LoginActivity
 import com.dlof.rinlang.auth.RinUser
-import java.io.ByteArrayOutputStream
 
 /**
  * شاشة "حسابي": ملف شخصي احترافي (صورة دائرية + اسم + اسم مستخدم + نبذة)، تعديل الاسم/النبذة،
@@ -36,7 +34,6 @@ class AccountActivity : BaseConnectivityActivity() {
     companion object {
         /** أقصى بُعد (طول/عرض) للصورة بعد التصغير قبل الترميز، لإبقاء حجمها معقولاً داخل Realtime Database. */
         private const val AVATAR_MAX_DIMENSION = 512
-        private const val AVATAR_JPEG_QUALITY = 82
 
         /** مكتبة الأيقونات الجاهزة (نار / سحابة / قطرة ماء) المتاحة كصورة رمزية بديلة عن رفع صورة. */
         private val AVATAR_LIBRARY_ICONS = listOf(
@@ -151,43 +148,16 @@ class AccountActivity : BaseConnectivityActivity() {
         renderAvatar(profile, displayName)
     }
 
-    /** يعرض صورة الملف الشخصي إن وُجدت (فكّ base64 وعرضها)، وإلا يعرض شارة بحرف الاسم الأول. */
+    /**
+     * يعرض صورة الملف الشخصي إن وُجدت، وإلا يعرض شارة بحرف الاسم الأول. القصّ الدائري يتم على
+     * مستوى الـ Bitmap نفسه عبر [AvatarUtils.renderAvatar] (وليس على مستوى الـ View فقط)، لضمان
+     * ظهور الصورة كاملة ودائرية دائماً بلا أي قطع جزئي (كانت المشكلة سابقاً أن الاعتماد فقط على
+     * قصّ الـ View عبر outlineProvider مع صور غير مربّعة الشكل يجعل جزءاً من الدائرة فارغاً).
+     */
     private fun renderAvatar(profile: RinUser?, displayName: String) {
         val imgAvatar = findViewById<ImageView>(R.id.imgAvatar)
         val txtInitial = findViewById<TextView>(R.id.txtAvatarInitial)
-
-        clipToCircle(imgAvatar)
-
-        val avatarBase64 = profile?.avatarBase64
-        if (avatarBase64.isNullOrBlank()) {
-            imgAvatar.setImageDrawable(null)
-            txtInitial.text = displayName.take(1).uppercase()
-            txtInitial.visibility = View.VISIBLE
-        } else {
-            try {
-                val bytes = Base64.decode(avatarBase64, Base64.NO_WRAP)
-                val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-                if (bitmap != null) {
-                    imgAvatar.setImageBitmap(bitmap)
-                    txtInitial.visibility = View.GONE
-                } else {
-                    txtInitial.text = displayName.take(1).uppercase()
-                    txtInitial.visibility = View.VISIBLE
-                }
-            } catch (t: Throwable) {
-                txtInitial.text = displayName.take(1).uppercase()
-                txtInitial.visibility = View.VISIBLE
-            }
-        }
-    }
-
-    private fun clipToCircle(view: ImageView) {
-        view.clipToOutline = true
-        view.outlineProvider = object : android.view.ViewOutlineProvider() {
-            override fun getOutline(v: View, outline: android.graphics.Outline) {
-                outline.setOval(0, 0, v.width, v.height)
-            }
-        }
+        AvatarUtils.renderAvatar(imgAvatar, txtInitial, profile?.avatarBase64, displayName)
     }
 
     /** يعرض نافذة اختيار الصورة الرمزية: شبكة أيقونات جاهزة + خيار رفع صورة من الاستوديو. */
@@ -266,10 +236,7 @@ class AccountActivity : BaseConnectivityActivity() {
     /** يصغّر [source] إلى [AVATAR_MAX_DIMENSION]، يضغطه JPEG، ويرمّزه base64 ثم يرفعه لملف [uid]. مسار مشترك
      *  سواء كانت الصورة من مكتبة الأيقونات الجاهزة أو من صورة رفعها المستخدم من الاستوديو. */
     private fun uploadAvatarBitmap(uid: String, source: Bitmap) {
-        val resized = resizeBitmap(source, AVATAR_MAX_DIMENSION)
-        val outputStream = ByteArrayOutputStream()
-        resized.compress(Bitmap.CompressFormat.JPEG, AVATAR_JPEG_QUALITY, outputStream)
-        val base64 = Base64.encodeToString(outputStream.toByteArray(), Base64.NO_WRAP)
+        val base64 = AvatarUtils.resizeAndEncodeToBase64(source, AVATAR_MAX_DIMENSION)
 
         AuthRepository.updateAvatar(uid, base64) { success ->
             if (success) {
@@ -279,17 +246,6 @@ class AccountActivity : BaseConnectivityActivity() {
                 Toast.makeText(this, R.string.avatar_update_failed, Toast.LENGTH_SHORT).show()
             }
         }
-    }
-
-    /** يصغّر [source] بحيث لا يتجاوز أي بُعد [maxDimension]، مع الحفاظ على النسبة. */
-    private fun resizeBitmap(source: Bitmap, maxDimension: Int): Bitmap {
-        val width = source.width
-        val height = source.height
-        if (width <= maxDimension && height <= maxDimension) return source
-        val scale = maxDimension.toFloat() / maxOf(width, height)
-        val newWidth = (width * scale).toInt().coerceAtLeast(1)
-        val newHeight = (height * scale).toInt().coerceAtLeast(1)
-        return Bitmap.createScaledBitmap(source, newWidth, newHeight, true)
     }
 
     /** يجلب حزم المستخدم [uid] المنشورة في متجر Rin ويعرضها ضمن قسم "حزمي المنشورة"، ويحسب شارة التوثيق منها. */
