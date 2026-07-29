@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
@@ -85,6 +86,121 @@
                     android:id="@+id/switchLineNumbers"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- قسم لغة التطبيق: ثلاثة خيارات (عربي/إنجليزي/إسباني) بنفس أسلوب بطاقة قسم المحرر أعلاه -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="@drawable/bg_list_card"
+            android:padding="16dp"
+            android:layout_marginTop="16dp">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/settings_language_section_title"
+                android:textColor="@color/rin_on_toolbar"
+                android:textStyle="bold"
+                android:textSize="15sp"
+                android:layout_marginBottom="4dp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/settings_language_hint"
+                android:textColor="@color/rin_editor_hint"
+                android:textSize="11.5sp"
+                android:layout_marginBottom="14dp" />
+
+            <LinearLayout
+                android:id="@+id/rowLangAr"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:clickable="true"
+                android:focusable="true"
+                android:background="@drawable/bg_lang_option_selected"
+                android:padding="14dp"
+                android:layout_marginBottom="10dp">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/lang_name_ar"
+                    android:textColor="@color/rin_on_toolbar"
+                    android:textSize="14sp" />
+
+                <ImageView
+                    android:id="@+id/checkLangAr"
+                    android:layout_width="18dp"
+                    android:layout_height="18dp"
+                    android:src="@android:drawable/checkbox_on_background"
+                    app:tint="@color/rin_accent"
+                    android:contentDescription="@null" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/rowLangEn"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:clickable="true"
+                android:focusable="true"
+                android:background="@drawable/bg_list_card"
+                android:padding="14dp"
+                android:layout_marginBottom="10dp">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/lang_name_en"
+                    android:textColor="@color/rin_on_toolbar"
+                    android:textSize="14sp" />
+
+                <ImageView
+                    android:id="@+id/checkLangEn"
+                    android:layout_width="18dp"
+                    android:layout_height="18dp"
+                    android:src="@android:drawable/checkbox_on_background"
+                    app:tint="@color/rin_accent"
+                    android:visibility="invisible"
+                    android:contentDescription="@null" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/rowLangEs"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:clickable="true"
+                android:focusable="true"
+                android:background="@drawable/bg_list_card"
+                android:padding="14dp">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/lang_name_es"
+                    android:textColor="@color/rin_on_toolbar"
+                    android:textSize="14sp" />
+
+                <ImageView
+                    android:id="@+id/checkLangEs"
+                    android:layout_width="18dp"
+                    android:layout_height="18dp"
+                    android:src="@android:drawable/checkbox_on_background"
+                    app:tint="@color/rin_accent"
+                    android:visibility="invisible"
+                    android:contentDescription="@null" />
             </LinearLayout>
         </LinearLayout>
 
