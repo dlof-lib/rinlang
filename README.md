@@ -82,6 +82,7 @@ g++ -std=c++17 -o rin_test tools/test_main.cpp \
 - [لغة الحاويات/البيانات (Data Container Language)](#لغة-الحاوياتالبيانات-data-container-language)
 - [Containers.Group بالتفصيل](#containersgroup-بالتفصيل)
 - [قاعدة البيانات اللاعلاقية (NoSQL) — `container.doc` / `doc`](#قاعدة-البيانات-اللاعلاقية-nosql-containerdoc-doc)
+- [كائنات الستايل — `txt`/`img`/`object.file`/`Fonts`/`background`/`css3` داخل `@Object`](#كائنات-الستايل--txtimgobjectfilefontsbackgroundcss3-داخل-object)
 - [التخزين الحقيقي على القرص (save / installation / file)](#التخزين-الحقيقي-على-القرص-save-installation-file)
 - [خط الأنابيب (Pipeline) والبيانات الإحصائية](#خط-الأنابيب-pipeline-والبيانات-الإحصائية)
 - [نظام المكتبات (@import) والمكتبات الجاهزة](#نظام-المكتبات-import-والمكتبات-الجاهزة)
@@ -462,6 +463,54 @@ g++ -std=c++17 -o rin_nosql_test \
   app/src/main/cpp/rin_interpreter.cpp \
   -I app/src/main/cpp
 ./rin_nosql_test
+```
+
+</details>
+
+## كائنات الستايل — `txt`/`img`/`object.file`/`Fonts`/`background`/`css3` داخل `@Object`
+
+<details>
+<summary><b>👁️ اضغط للعرض/الإخفاء — كائنات الستايل داخل @Object</b></summary>
+
+فوق حقول `text`/`let` الحرّة العادية داخل `@container.object`/`@Object` (انظر [لغة الحاويات/البيانات](#لغة-الحاوياتالبيانات-data-container-language))، تضيف اللغة **ستة حقول مخصّصة لمفاهيم الستايل الشائعة**، بنفس شكل `text name = "...";` تماماً لكن بكلمة مفتاحية مختلفة لكل نوع:
+
+| الحقل | الغرض | مثال |
+|---|---|---|
+| `txt` | نص عرض (Text style) | `txt title = "عنوان البطاقة";` |
+| `img` | مسار/رابط صورة (Image style) | `img cover = "assets/cover.png";` |
+| `object.file` | مسار ملف مرتبط بالكائن (Object File style) | `object.file data = "assets/card.json";` |
+| `Fonts` | اسم/عائلة خط (Font style) | `Fonts family = "Cairo";` |
+| `background` | قيمة خلفية: لون/تدرّج/مسار صورة (Background style) | `background bg = "linear-gradient(#111, #333)";` |
+| `css3` | مقتطف CSS3 خام يُطبَّق على الكائن (CSS3 style) | `css3 extra = "border-radius: 12px;";` |
+
+> **ملاحظة:** استُخدمت صيغة `object.file` (وليس `file` وحدها) لتفادي التعارض مع الكلمة المحجوزة `file` الخاصة أصلاً بعبارة `file path="...";` داخل `@container.import`.
+
+```kotlin
+@Object=card
+    text name = "بطاقة";
+    txt title = "عنوان البطاقة";
+    img cover = "assets/cover.png";
+    object.file data = "assets/card.json";
+    Fonts family = "Cairo";
+    background bg = "linear-gradient(#111, #333)";
+    css3 extra = "border-radius: 12px;";
+    style value="style://dark";
+.end/Object
+```
+
+- الحقول الستة أعلاه مسموحة **حصراً** داخل `@container.object`/`@Object` (استخدامها داخل `container.table`/`portal`/`block` أو خارج أي حاوية يُنتج خطأ تنفيذ واضحاً)، بخلاف عبارة `style value="...";` العامة المتاحة أيضاً داخل `portal`/`block`/`table`.
+- كل حقل يجب أن تكون قيمته نصاً (string)، ويُعامَل بعدها كأي متغير حرّ عادي داخل بيئة الكائن (قابل للقراءة، والدمج عبر `tying`/`merge`، والحفظ عبر `save`/`installation`).
+
+يمكنك تجربة هذا كاملاً عبر:
+
+```bash
+g++ -std=c++17 -o rin_object_style_test \
+  tools/test_object_style.cpp \
+  app/src/main/cpp/rin_lexer.cpp \
+  app/src/main/cpp/rin_parser.cpp \
+  app/src/main/cpp/rin_interpreter.cpp \
+  -I app/src/main/cpp
+./rin_object_style_test
 ```
 
 </details>
