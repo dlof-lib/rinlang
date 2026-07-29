@@ -1,27 +1,33 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  صفّ ملف واحد داخل قائمة "ملفات الحزمة" — نسخة مطوَّرة بصرياً: دائرة أيقونة أكبر بلون خلفية
+  خفيف مطابق لنوع الملف (PackagingUtils.iconColorResFor)، بدل لون تمييز واحد ثابت للجميع، مع
+  تباين خفيف بين الصفوف الزوجية/الفردية (مضبوط من الكود في PackageDetailActivity.bindFiles)
+  لتحسين قابلية المسح البصري في القوائم الطويلة.
+-->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="horizontal"
     android:gravity="center_vertical"
-    android:background="@drawable/bg_toolbar_btn_ghost"
     android:paddingHorizontal="14dp"
-    android:paddingVertical="11dp">
+    android:paddingVertical="12dp">
 
     <FrameLayout
-        android:layout_width="26dp"
-        android:layout_height="26dp">
+        android:layout_width="30dp"
+        android:layout_height="30dp">
 
         <View
-            android:layout_width="26dp"
-            android:layout_height="26dp"
+            android:id="@+id/bgFileIconCircle"
+            android:layout_width="30dp"
+            android:layout_height="30dp"
             android:background="@drawable/bg_section_icon_circle" />
 
         <ImageView
             android:id="@+id/imgFileIcon"
-            android:layout_width="13dp"
-            android:layout_height="13dp"
+            android:layout_width="15dp"
+            android:layout_height="15dp"
             android:layout_gravity="center"
             android:src="@drawable/ic_file_solid"
             app:tint="@color/rin_accent"
@@ -33,7 +39,7 @@
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_weight="1"
-        android:layout_marginStart="10dp"
+        android:layout_marginStart="12dp"
         android:fontFamily="monospace"
         android:textSize="12.5sp"
         android:textColor="@color/rin_editor_text"
