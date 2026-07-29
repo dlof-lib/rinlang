@@ -1,0 +1,132 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Entry point from the Libraries screen -->
+    <string name="ext_entry_button">Rin Extensions</string>
+
+    <!-- Marketplace home page -->
+    <string name="ext_marketplace_title">Rin Extensions Marketplace</string>
+    <string name="ext_search_hint">Search by extension name, description, or developer…</string>
+    <string name="ext_store_empty">No extensions match your search. Try another word or clear the filter.</string>
+    <string name="ext_item_meta_format">%1$s • %2$s • %3$d downloads</string>
+    <string name="ext_action_open">Manage</string>
+
+    <!-- Extension types -->
+    <string name="ext_type_extension">Extension</string>
+    <string name="ext_type_library">Library</string>
+    <string name="ext_type_theme">Theme</string>
+    <string name="ext_type_ui_component">UI Component</string>
+    <string name="ext_type_debug_tool">Debug Tool</string>
+    <string name="ext_type_ai_tool">AI Tool</string>
+    <string name="ext_type_template">Template</string>
+
+    <!-- "rin ext ..." terminal command bar -->
+    <string name="ext_cli_title">rin ext commands</string>
+    <string name="ext_cli_run">Run</string>
+    <string name="ext_cli_hint">$ rin ext list\n$ rin ext search &lt;name&gt;\n$ rin ext install &lt;name&gt;\n$ rin ext update &lt;name&gt;\n$ rin ext remove &lt;name&gt;</string>
+
+    <!-- Extension list sorting -->
+    <string name="ext_sort_newest">Newest</string>
+    <string name="ext_sort_downloads">Most Downloaded</string>
+    <string name="ext_sort_rating">Top Rated</string>
+
+    <!-- "Featured" badge shown on the most downloaded or highest rated extensions -->
+    <string name="ext_badge_featured">⭐ Featured</string>
+
+    <!-- Publish a new extension button, available to any signed-in user -->
+    <string name="ext_entry_publish_button">Publish Your Extension</string>
+
+    <!-- Extension detail page -->
+    <string name="ext_detail_developer_format">by %1$s</string>
+    <string name="ext_detail_developer_unknown">Unknown developer</string>
+    <string name="ext_detail_languages_format">Languages used: %1$s</string>
+    <string name="ext_detail_meta_format">%1$s • %2$s • released %3$s • %4$d downloads • %5$s</string>
+    <string name="ext_detail_screenshots">Screenshots</string>
+    <string name="ext_detail_changelog">Changelog</string>
+    <string name="ext_detail_no_changelog">This extension has no changelog yet.</string>
+    <string name="ext_changelog_entry_format">Version %1$s — %2$s\n%3$s</string>
+
+    <!-- Management buttons -->
+    <string name="ext_action_update">Update</string>
+    <string name="ext_action_uninstall">Uninstall</string>
+    <string name="ext_action_enable">Enable</string>
+    <string name="ext_action_disable">Disable</string>
+    <string name="ext_action_cancel">Cancel</string>
+
+    <!-- Install progress bar -->
+    <string name="ext_install_progress_installing">Installing %1$s…</string>
+    <string name="ext_install_progress_updating">Updating %1$s…</string>
+
+    <!-- Success/failure messages -->
+    <string name="ext_installed_toast">%1$s installed successfully ✓</string>
+    <string name="ext_updated_toast">%1$s updated successfully ✓</string>
+    <string name="ext_install_failed_toast">Operation failed: %1$s</string>
+    <string name="ext_enabled_toast">%1$s enabled</string>
+    <string name="ext_disabled_toast">%1$s disabled</string>
+    <string name="ext_uninstalled_toast">%1$s removed</string>
+    <string name="ext_uninstall_confirm_title">Remove Extension</string>
+    <string name="ext_uninstall_confirm_message">Remove %1$s from your device? You can install it again later from the Marketplace.</string>
+
+    <!-- Pre-install security screen -->
+    <string name="ext_security_title">Before You Continue</string>
+    <string name="ext_security_subtitle">Review the developer, permissions, and files this extension will access before installing it.</string>
+    <string name="ext_security_developer_label">Developer</string>
+    <string name="ext_security_signature_label">Digital Signature (content integrity fingerprint)</string>
+    <string name="ext_security_signature_missing">No signature declared for this extension</string>
+    <string name="ext_security_signature_missing_state">⚠ Unsigned</string>
+    <string name="ext_security_signature_valid">✓ Signature matches the extension content</string>
+    <string name="ext_security_signature_invalid">✗ Signature mismatch — content may be corrupted</string>
+    <string name="ext_security_signature_invalid_toast">Cannot continue: digital signature does not match the extension content</string>
+    <string name="ext_security_permissions_label">Required Permissions</string>
+    <string name="ext_security_no_permissions">This extension does not request any special permissions.</string>
+    <string name="ext_security_files_label">Files it will access</string>
+    <string name="ext_security_proceed_format">Continue %1$s</string>
+
+    <!-- Publish extension screen -->
+    <string name="ext_publish_title">Publish Your Extension</string>
+    <string name="ext_publish_subtitle">Publish your extension, library, or theme to the Rin Extensions Marketplace for the whole Rin community to use — publishing is instant for any verified account, with no manual review.</string>
+    <string name="ext_publish_hint_name">Extension name</string>
+    <string name="ext_publish_hint_version">Version number</string>
+    <string name="ext_publish_hint_description">Description</string>
+    <string name="ext_publish_hint_languages">Languages used (optional)</string>
+    <string name="ext_publish_languages_example">Example: Rin, Kotlin</string>
+    <string name="ext_publish_hint_type">Extension type</string>
+    <string name="ext_publish_hint_permissions">Permissions your extension requests</string>
+    <string name="ext_publish_hint_permissions_note">Only select what your extension actually needs — these permissions will be shown to every user on the pre-install security screen.</string>
+    <string name="ext_publish_hint_content_files">Extension content files</string>
+    <string name="ext_publish_action_pick_files">Choose extension files</string>
+    <string name="ext_publish_files_selected_format">%1$d file(s) selected</string>
+    <string name="ext_publish_hint_screenshots">Optional screenshots (up to 5) shown on the extension detail page</string>
+    <string name="ext_publish_action_pick_screenshots">Choose screenshots</string>
+    <string name="ext_publish_screenshots_selected_format">%1$d screenshot(s) selected</string>
+    <string name="ext_publish_action_submit">Publish Extension</string>
+    <string name="ext_publish_content_required">Choose at least one file for the extension content</string>
+    <string name="ext_publish_success">Your extension was published to the Rin Extensions Marketplace ✓</string>
+    <string name="ext_publish_failed">Failed to publish the extension</string>
+
+    <!-- Export/import as .rinex for Rin Extensions (standalone file, no internet required) -->
+    <string name="ext_action_export_rinex">Export as .rinex</string>
+    <string name="ext_export_rinex_success">%1$s saved as a .rinex file in the Downloads folder ✓</string>
+    <string name="ext_export_rinex_failed">Export failed: %1$s</string>
+    <string name="ext_action_import_rinex">Import .rinex file</string>
+    <string name="ext_import_rinex_invalid">This file is not a valid Rin Extensions (.rinex) file</string>
+    <string name="ext_import_rinex_success">%1$s imported and installed from the local file ✓</string>
+    <string name="ext_import_rinex_failed">Failed to import the file: %1$s</string>
+
+    <!-- Permanently delete an extension from the store — only available to its own developer -->
+    <string name="ext_action_delete">Delete Extension</string>
+    <string name="ext_delete_confirm_title">Permanently Delete Extension</string>
+    <string name="ext_delete_confirm_message">Permanently delete \"%1$s\" from the Rin Extensions Marketplace? It will no longer be visible to new users, and this action cannot be undone.\nNote: users who already installed it will keep their installed copy working.</string>
+    <string name="ext_deleted_toast">Extension permanently deleted from the marketplace ✓</string>
+    <string name="ext_delete_failed">Failed to delete the extension, try again</string>
+    <string name="ext_delete_requires_connection">An internet connection is required to delete an extension from the marketplace</string>
+
+    <!-- The two tabs at the top of the store: browse the marketplace, or extensions actually installed on this device -->
+    <string name="ext_tab_store">Store</string>
+    <string name="ext_tab_installed">Installed</string>
+    <string name="ext_installed_empty">No extensions installed on this device yet. Install one from the Store tab, or import a .rinex file.</string>
+
+    <!-- "My Published Extensions" section inside the Account screen -->
+    <string name="account_my_extensions_title">My Published Extensions</string>
+    <string name="account_my_extensions_empty">You haven\'t published any extension yet. Publish one from the Rin Extensions Marketplace to see it here.</string>
+    <string name="my_extension_meta_format">%1$s • %2$d downloads</string>
+</resources>
