@@ -44,7 +44,10 @@
                     android:layout_width="match_parent"
                     android:layout_height="84dp">
 
+                    <!-- يُستبدَل هذا البانر الافتراضي بصورة مصغّرة (thumbnail) حقيقية للحزمة عبر
+                         PackageDetailActivity.kt إن رفعها الناشر عند النشر، وإلا يبقى كما هو. -->
                     <ImageView
+                        android:id="@+id/imgDetailHeroBanner"
                         android:layout_width="match_parent"
                         android:layout_height="match_parent"
                         android:scaleType="centerCrop"
@@ -72,16 +75,31 @@
                     android:orientation="horizontal"
                     android:gravity="center_vertical">
 
-                    <TextView
-                        android:id="@+id/txtDetailPackageIcon"
+                    <FrameLayout
                         android:layout_width="44dp"
-                        android:layout_height="44dp"
-                        android:background="@drawable/bg_package_icon_gradient"
-                        android:gravity="center"
-                        android:textColor="@android:color/white"
-                        android:textSize="18sp"
-                        android:textStyle="bold"
-                        tools:text="M" />
+                        android:layout_height="44dp">
+
+                        <TextView
+                            android:id="@+id/txtDetailPackageIcon"
+                            android:layout_width="44dp"
+                            android:layout_height="44dp"
+                            android:background="@drawable/bg_package_icon_gradient"
+                            android:gravity="center"
+                            android:textColor="@android:color/white"
+                            android:textSize="18sp"
+                            android:textStyle="bold"
+                            tools:text="M" />
+
+                        <!-- أيقونة الحزمة الحقيقية (إن رفعها الناشر عبر شاشة النشر)، تحلّ محل شارة
+                             الحرف الأول أعلاه — دائرية مسبقاً (AvatarUtils) فلا حاجة لأي قصّ إضافي هنا. -->
+                        <ImageView
+                            android:id="@+id/imgDetailPackageIcon"
+                            android:layout_width="44dp"
+                            android:layout_height="44dp"
+                            android:scaleType="fitCenter"
+                            android:visibility="gone"
+                            android:contentDescription="@null" />
+                    </FrameLayout>
 
                     <TextView
                         android:id="@+id/txtDetailPackageName"
@@ -128,8 +146,7 @@
                             android:layout_width="36dp"
                             android:layout_height="36dp"
                             android:background="@drawable/bg_avatar_circle"
-                            android:padding="5dp"
-                            android:scaleType="fitCenter"
+                            android:scaleType="centerCrop"
                             android:contentDescription="@null" />
 
                         <TextView
