@@ -2,11 +2,13 @@ package com.dlof.rinlang.store
 
 import android.app.AlertDialog
 import android.content.Intent
+import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Bundle
 import android.view.View
 import android.widget.Button
 import android.widget.EditText
+import android.widget.ImageView
 import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
@@ -27,6 +29,9 @@ class PublishPackageActivity : BaseConnectivityActivity() {
 
         /** تصنيفات جاهزة يختار الناشر منها واحداً عند نشر حزمة. */
         val CATEGORIES = listOf("عام", "رياضيات", "نصوص وسلاسل", "بيانات", "شبكة", "أدوات مساعدة")
+
+        /** أقصى بُعد للصورة المصغّرة (thumbnail) المرفوعة — أكبر من الأيقونة لأنها بانر عريض. */
+        private const val THUMBNAIL_MAX_DIMENSION = 800
     }
 
     private lateinit var library: com.dlof.rinlang.RinLibrary
@@ -36,6 +41,10 @@ class PublishPackageActivity : BaseConnectivityActivity() {
     private var selectedReadmeUri: Uri? = null
     /** ملف ترخيص اختاره الناشر يدوياً؛ null يعني توليد قالب MIT تلقائياً عند النشر. */
     private var selectedLicenseUri: Uri? = null
+    /** أيقونة الحزمة (اختيارية) بعد تصغيرها وترميزها base64 — فارغة يعني: بلا أيقونة مخصّصة. */
+    private var iconBase64: String = ""
+    /** الصورة المصغّرة للحزمة (اختيارية) بعد تصغيرها وترميزها base64 — فارغة يعني: بلا صورة مصغّرة. */
+    private var thumbnailBase64: String = ""
 
     private lateinit var edtName: EditText
     private lateinit var edtVersion: EditText
@@ -46,6 +55,8 @@ class PublishPackageActivity : BaseConnectivityActivity() {
     private lateinit var txtAssetsSelected: TextView
     private lateinit var txtReadmeSelected: TextView
     private lateinit var txtLicenseSelected: TextView
+    private lateinit var imgIconPreview: ImageView
+    private lateinit var imgThumbnailPreview: ImageView
     private lateinit var btnPublish: Button
     private lateinit var progress: ProgressBar
 
@@ -69,6 +80,32 @@ class PublishPackageActivity : BaseConnectivityActivity() {
             selectedLicenseUri = uri
             txtLicenseSelected.text = fileDisplayName(uri) ?: getString(R.string.file_selected_generic)
             txtLicenseSelected.visibility = View.VISIBLE
+        }
+
+    /** أيقونة الحزمة: صورة مربّعة صغيرة، تُقصّ دائرياً للمعاينة عبر [AvatarUtils] فوراً بعد اختيارها. */
+    private val pickIconLauncher =
+        registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+            if (uri == null) return@registerForActivityResult
+            val bitmap = decodeBitmapFromUri(uri) ?: run {
+                Toast.makeText(this, R.string.error_image_decode_failed, Toast.LENGTH_SHORT).show()
+                return@registerForActivityResult
+            }
+            iconBase64 = AvatarUtils.resizeAndEncodeToBase64(bitmap, AvatarUtils.AVATAR_MAX_DIMENSION)
+            imgIconPreview.setImageBitmap(AvatarUtils.decodeCircularAvatar(iconBase64))
+            imgIconPreview.visibility = View.VISIBLE
+        }
+
+    /** الصورة المصغّرة (thumbnail): بانر عريض غير مقصوص دائرياً، تُعرَض كما هي كمعاينة مستطيلة. */
+    private val pickThumbnailLauncher =
+        registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+            if (uri == null) return@registerForActivityResult
+            val bitmap = decodeBitmapFromUri(uri) ?: run {
+                Toast.makeText(this, R.string.error_image_decode_failed, Toast.LENGTH_SHORT).show()
+                return@registerForActivityResult
+            }
+            thumbnailBase64 = AvatarUtils.resizeAndEncodeToBase64(bitmap, THUMBNAIL_MAX_DIMENSION)
+            imgThumbnailPreview.setImageBitmap(bitmap)
+            imgThumbnailPreview.visibility = View.VISIBLE
         }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -104,6 +141,8 @@ class PublishPackageActivity : BaseConnectivityActivity() {
         txtAssetsSelected = findViewById(R.id.txtAssetsSelected)
         txtReadmeSelected = findViewById(R.id.txtReadmeSelected)
         txtLicenseSelected = findViewById(R.id.txtLicenseSelected)
+        imgIconPreview = findViewById(R.id.imgPackageIconPreview)
+        imgThumbnailPreview = findViewById(R.id.imgPackageThumbnailPreview)
         btnPublish = findViewById(R.id.btnPublish)
         progress = findViewById(R.id.progressPublish)
 
@@ -137,6 +176,14 @@ class PublishPackageActivity : BaseConnectivityActivity() {
 
         findViewById<View>(R.id.btnPickLicense).setOnClickListener {
             pickLicenseLauncher.launch(arrayOf("text/plain", "text/*", "application/octet-stream"))
+        }
+
+        findViewById<View>(R.id.btnPickIcon).setOnClickListener {
+            pickIconLauncher.launch("image/*")
+        }
+
+        findViewById<View>(R.id.btnPickThumbnail).setOnClickListener {
+            pickThumbnailLauncher.launch("image/*")
         }
 
         btnPublish.setOnClickListener {
@@ -304,7 +351,9 @@ class PublishPackageActivity : BaseConnectivityActivity() {
                         fileName = fileName,
                         base64Data = base64,
                         category = selectedCategory,
-                        dependencies = dependencies
+                        dependencies = dependencies,
+                        iconBase64 = iconBase64,
+                        thumbnailBase64 = thumbnailBase64
                     ) { success, error ->
                         setLoading(false)
                         if (success) {
@@ -324,6 +373,13 @@ class PublishPackageActivity : BaseConnectivityActivity() {
     private fun setLoading(loading: Boolean) {
         progress.visibility = if (loading) View.VISIBLE else View.GONE
         btnPublish.isEnabled = !loading
+    }
+
+    /** يفكّ [uri] (نتيجة منتقي الصور) إلى Bitmap، أو null إن تعذّر ذلك. */
+    private fun decodeBitmapFromUri(uri: Uri): android.graphics.Bitmap? = try {
+        contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it) }
+    } catch (t: Throwable) {
+        null
     }
 
     /** اسم عرض الملف المُختار عبر SAF (لعرض اسم README/LICENSE بعد اختياره)، أو null إن تعذّر ذلك. */
