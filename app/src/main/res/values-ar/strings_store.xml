@@ -1,0 +1,169 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  نصوص "متجر Rin": تصفح الحزم، حسابي، ونشر مكتبة كحزمة (.og.rinsdk).
+  ملف منفصل بنفس أسلوب strings_libraries.xml و strings_auth.xml.
+-->
+<resources>
+    <!-- قسم المتجر داخل شاشة المكتبات -->
+    <string name="store_section_title">متجر Rin</string>
+    <string name="store_section_hint">تصفّح حزم نشرها مستخدمون آخرون، أو انشر مكتبتك ليستخدمها الجميع</string>
+    <string name="action_browse_store">تصفّح المتجر</string>
+    <string name="action_my_account">حسابي</string>
+    <string name="action_publish_library">نشر</string>
+
+    <!-- شاشة المتجر -->
+    <string name="rin_store_title">متجر Rin</string>
+    <string name="store_empty">لا توجد حزم تطابق بحثك. جرّب كلمة أخرى أو امسح الفلتر.</string>
+    <string name="action_install">تثبيت/إدراج</string>
+    <string name="store_item_meta_format">%1$s • %2$s • %3$d تنزيل</string>
+    <string name="package_installed_toast">تم تثبيت الحزمة وإضافتها لمكتبات هذا المشروع</string>
+    <string name="package_installed_import_toast">تم تثبيت %1$s حزمة وإدراج أسطر @import في الكود مباشرة ✓</string>
+
+    <!-- بحث وفرز وتصنيف داخل المتجر -->
+    <string name="store_search_hint">ابحث باسم الحزمة أو وصفها…</string>
+    <string name="store_category_all">الكل</string>
+    <string name="store_sort_newest">الأحدث</string>
+    <string name="store_sort_rating">الأعلى تقييماً</string>
+    <string name="store_sort_downloads">الأكثر تحميلاً</string>
+    <string name="store_sort_name">الاسم (أ-ي)</string>
+    <string name="store_rating_format">★ %1$.1f (%2$d)</string>
+    <string name="store_rating_none">★ لا يوجد تقييم بعد</string>
+    <string name="action_rate_package">قيّم</string>
+    <string name="rate_package_title">%1$s</string>
+    <string name="rate_package_subtitle">كيف تقيّم هذه الحزمة؟ اختر عدد النجوم</string>
+    <string name="rate_package_login_required">سجّل الدخول أولاً حتى تتمكن من التقييم</string>
+    <string name="rate_package_submitted">شكراً لتقييمك ✓</string>
+    <string-array name="rate_quality_labels">
+        <item>⭐ ضعيف</item>
+        <item>⭐⭐ مقبول</item>
+        <item>⭐⭐⭐ جيد</item>
+        <item>⭐⭐⭐⭐ جيد جداً</item>
+        <item>⭐⭐⭐⭐⭐ ممتاز</item>
+    </string-array>
+    <string name="store_dependencies_format">يتطلب: %1$s</string>
+
+    <!-- تحذير التبعيات عند التثبيت -->
+    <string name="dependency_check_title">تبعيات هذه الحزمة</string>
+    <string name="dependency_missing_line">• %1$s (%2$s) — غير مثبَّتة</string>
+    <string name="dependency_mismatch_line">• %1$s (المطلوب %2$s، المثبَّت %3$s)</string>
+    <string name="dependency_check_message_prefix">قبل التثبيت، لاحظ أن هذه الحزمة تعتمد على:\n\n</string>
+    <string name="action_install_anyway">تثبيت على أي حال</string>
+    <string name="action_install_with_dependencies">تثبيت مع التبعيات المتوفرة</string>
+
+    <!-- شاشة النشر -->
+    <string name="publish_title">نشر مكتبة</string>
+    <string name="publish_subtitle">يُولَّد ملف README.md و LICENSE تلقائياً إن لم ترفع ملفاتك الخاصة، وتُضغط كل الملفات في حزمة واحدة</string>
+    <string name="hint_package_name">اسم الحزمة</string>
+    <string name="hint_package_version">رقم الإصدار</string>
+    <string name="hint_package_description">وصف قصير للمكتبة (اختياري)</string>
+    <string name="hint_package_category">تصنيف الحزمة</string>
+    <string name="hint_package_dependencies">التبعيات (اختياري)</string>
+    <string name="hint_package_dependencies_example">مثال:\nmathlib:^1.0.0\nstrings:2.0.0</string>
+    <string name="hint_package_license">الترخيص</string>
+    <string name="hint_package_custom_docs">اختياري: ارفع ملف README.md وملف ترخيص خاصّين بك بدل التوليد التلقائي</string>
+    <string name="action_pick_assets">إضافة صور/أيقونات (اختياري)</string>
+    <string name="action_pick_readme">رفع ملف README.md خاص بي</string>
+    <string name="action_pick_license">رفع ملف ترخيص خاص بي</string>
+    <string name="file_selected_generic">تم اختيار الملف ✓</string>
+    <string name="assets_selected_format">%1$d ملف مُختار</string>
+    <string name="label_package_visual_identity">هوية الحزمة البصرية (اختياري)</string>
+    <string name="label_package_icon">أيقونة الحزمة</string>
+    <string name="label_package_thumbnail">صورة مصغّرة للحزمة</string>
+    <string name="error_image_decode_failed">تعذّر فتح هذه الصورة، جرّب صورة أخرى</string>
+    <string name="action_publish_submit">نشر الحزمة</string>
+    <string name="publish_success">تم نشر الحزمة في متجر Rin ✓</string>
+    <string name="publish_requires_login">سجّل الدخول أولاً لتتمكن من النشر</string>
+    <string name="error_package_name_taken">هذا الاسم (أو اسم مشابه له) مُستخدَم بالفعل لحزمة أخرى في متجر Rin، اختر اسماً مختلفاً</string>
+
+    <!-- تحذير تشابه الاسم مع حزمة شهيرة (حماية من انتحال الأسماء) قبل تأكيد النشر -->
+    <string name="similar_name_warning_title">اسم قريب جداً من حزمة معروفة</string>
+    <string name="similar_name_warning_message">اسم حزمتك قريب جداً من اسم حزمة شهيرة موجودة بالفعل في المتجر (%1$s)، وقد يُربك المستخدمين بينها وبين حزمتك. هل تريد المتابعة بهذا الاسم على أي حال؟</string>
+
+    <!-- الإبلاغ عن حزمة -->
+    <string name="action_report_package">إبلاغ</string>
+    <string name="report_package_title">الإبلاغ عن %1$s</string>
+    <string name="report_package_message">اختر سبب الإبلاغ عن هذه الحزمة:</string>
+    <string name="report_package_login_required">سجّل الدخول أولاً حتى تتمكن من الإبلاغ</string>
+    <string name="report_package_submitted">تم إرسال بلاغك، شكراً لمساعدتك في حماية المتجر ✓</string>
+    <string-array name="report_reasons">
+        <item>محتوى مسيء أو غير لائق</item>
+        <item>كود خبيث أو ضار</item>
+        <item>انتهاك حقوق ملكية/ترخيص</item>
+        <item>معلومات مضلِّلة (وصف أو اسم مزيَّف)</item>
+        <item>سبب آخر</item>
+    </string-array>
+
+    <!-- صفحة تفاصيل الحزمة (شبيهة بصفحة مستودع على GitHub): README + الترخيص + قائمة الملفات -->
+    <string name="package_detail_section_readme">README.md</string>
+    <string name="package_detail_section_license">الترخيص</string>
+    <string name="package_detail_section_files">ملفات الحزمة</string>
+    <string name="package_detail_no_readme">لا يوجد ملف README.md في هذه الحزمة.</string>
+    <string name="package_detail_no_license">لا يوجد ملف ترخيص في هذه الحزمة.</string>
+    <string name="package_detail_meta_format">%1$s • %2$s • %3$d تنزيل • ★ %4$.1f (%5$d تقييم)</string>
+
+    <!-- إحصائيات صفحة تفاصيل الحزمة كحبّات مفردة (بدل نص واحد مدموج package_detail_meta_format) -->
+    <string name="package_detail_stat_version_format">الإصدار %1$s</string>
+    <string name="package_detail_stat_downloads_format">%1$d تنزيل</string>
+    <string name="package_detail_stat_rating_format">★ %1$.1f (%2$d)</string>
+
+    <!-- شارة "ناشر موثّق": تُمنح تلقائياً لمن لديه حزمة تجاوزت 1000 تنزيل بتقييم 4 نجوم فأكثر -->
+    <string name="verified_publisher_badge_description">ناشر موثّق</string>
+
+    <!-- زر الإعجاب في صفحة تفاصيل الحزمة -->
+    <string name="action_like_package">إعجاب</string>
+    <string name="like_package_login_required">سجّل الدخول أولاً حتى تتمكن من الإعجاب بالحزمة</string>
+    <string name="like_count_format">%1$d</string>
+
+    <!-- زر الانتساب لناشر داخل صفحة تفاصيل الحزمة (متابعة ناشر، وليس متابعة الحزمة نفسها) -->
+    <string name="action_subscribe_publisher">انتساب</string>
+    <string name="action_subscribed_publisher">تم الانتساب</string>
+
+    <!-- شاشة حسابي -->
+    <string name="account_title">حسابي</string>
+    <string name="account_not_logged_in">لم تسجّل الدخول بعد</string>
+    <string name="account_not_logged_in_hint">سجّل الدخول للوصول إلى ملفك الشخصي، ونشر الحزم، وتقييمها</string>
+    <string name="action_logout">تسجيل الخروج</string>
+    <string name="account_field_name">الاسم</string>
+    <string name="account_field_username">اسم المستخدم</string>
+    <string name="account_field_email">البريد الإلكتروني</string>
+    <string name="account_bio_placeholder">لا توجد نبذة بعد. اضغط \"تعديل الملف الشخصي\" لإضافة واحدة.</string>
+    <string name="action_edit_profile">تعديل الملف الشخصي</string>
+    <string name="action_change_avatar">تغيير صورة الملف الشخصي</string>
+    <string name="edit_profile_title">تعديل الملف الشخصي</string>
+    <string name="edit_profile_name_hint">الاسم الظاهر</string>
+    <string name="edit_profile_bio_hint">نبذة قصيرة عنك (اختياري)</string>
+    <string name="profile_updated">تم تحديث الملف الشخصي ✓</string>
+    <string name="avatar_updated">تم تحديث صورة الملف الشخصي ✓</string>
+    <string name="avatar_update_failed">تعذّر تحديث الصورة، حاول مرة أخرى</string>
+
+    <!-- الملف الشخصي العام: عرض ملف أي مستخدم آخر (وليس حسابي فقط)، مع عدّاد المنتسبين
+         والانتسابات وزر الانتساب، تُفتح من صف الناشر داخل تفاصيل الحزمة ومن قوائم المنتسبين/الانتسابات -->
+    <string name="public_profile_title">الملف الشخصي</string>
+    <string name="public_profile_bio_empty">لا توجد نبذة بعد.</string>
+    <string name="subscriber_count_label">المنتسبين</string>
+    <string name="subscriptions_count_label">الانتسابات</string>
+    <!-- إحصائيات إضافية في بطاقة الملف الشخصي: مجموع الحزم/التنزيلات/الإعجابات لكل حزم هذا
+         الناشر — بيانات حقيقية محسوبة من نفس قائمة الحزم التي تُجلب أصلاً لتحديد شارة التوثيق
+         (PackageRepository.fetchUserPackages)، وليست بيانات وهمية. -->
+    <string name="packages_count_label">الحزم</string>
+    <string name="downloads_count_label">التنزيلات</string>
+    <string name="likes_count_label">الإعجابات</string>
+    <string name="subscribe_login_required">سجّل الدخول أولاً حتى تتمكن من الانتساب</string>
+    <string name="subscribe_action_failed">تعذّر تنفيذ الطلب، حاول مرة أخرى</string>
+
+    <!-- شاشة قائمة المستخدمين (المنتسبين لحساب ما، أو الحسابات التي ينتسب إليها) -->
+    <string name="user_list_title_subscribers">المنتسبين</string>
+    <string name="user_list_title_subscriptions">الانتسابات</string>
+    <string name="user_list_empty_subscribers">لا يوجد منتسبون بعد</string>
+    <string name="user_list_empty_subscriptions">لا توجد انتسابات بعد</string>
+
+    <!-- قسم "حزمي" داخل شاشة الحساب: عرض حزم المستخدم المنشورة وحذفها -->
+    <string name="account_my_packages_title">حزمي المنشورة</string>
+    <string name="account_my_packages_empty">لم تنشر أي حزمة بعد. انشر مكتبة من شاشة المكتبات لتظهر هنا.</string>
+    <string name="my_package_meta_format">%1$s • %2$d تنزيل</string>
+    <string name="action_delete_package">حذف</string>
+    <string name="delete_package_confirm_title">حذف الحزمة</string>
+    <string name="delete_package_confirm_message">هل تريد حذف حزمة \"%1$s\" نهائياً من متجر Rin؟ لا يمكن التراجع عن هذا الإجراء.</string>
+    <string name="package_deleted_toast">تم حذف الحزمة ✓</string>
+    <string name="package_delete_failed">تعذّر حذف الحزمة، حاول مرة أخرى</string>
+</resources>
