@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Common buttons used by the projects/files dialogs -->
+    <string name="create">Create</string>
+    <string name="cancel">Cancel</string>
+    <string name="rename">Rename</string>
+    <string name="delete">Delete</string>
+
+    <!-- Unified top bar for sub-screens -->
+    <string name="action_back">Back</string>
+    <string name="projects_screen_title">Projects</string>
+    <string name="files_screen_title">Files</string>
+
+    <!-- Projects screen -->
+    <string name="new_project_title">New Project</string>
+    <string name="rename_project_title">Rename Project</string>
+    <string name="delete_project_title">Delete Project</string>
+    <string name="delete_project_confirm">Delete the project \"%1$s\" and all its files?</string>
+    <string name="project_name_hint">Project name</string>
+    <string name="no_projects_yet">No projects yet. Tap + to create your first project.</string>
+    <string name="project_not_found">Project not found</string>
+    <string name="project_meta_format">%1$d files</string>
+
+    <!-- Files screen -->
+    <string name="new_file_title">New File</string>
+    <string name="upload_file">Upload File</string>
+    <string name="delete_file_title">Delete File</string>
+    <string name="delete_file_confirm">Delete the file \"%1$s\"?</string>
+    <string name="file_name_hint">File name (e.g. main.rin)</string>
+    <string name="no_files_yet">No files yet. Create a new file or upload one from your device.</string>
+    <string name="file_uploaded_toast">File uploaded: %1$s</string>
+    <string name="file_meta_format">%1$s • %2$s</string>
+
+    <!-- ZIP archive tools: upload and extract, or download the project as an archive -->
+    <string name="zip_tools_title">ZIP Archive</string>
+    <string name="zip_upload_extract">Upload an archive and extract it here</string>
+    <string name="zip_download_project">Download project as a ZIP archive</string>
+    <string name="zip_extracted_toast">Extracted %1$d file(s) into the project</string>
+    <string name="zip_extract_error">Failed to extract the archive</string>
+
+    <!-- New navigation button inside the editor (MainActivity) -->
+    <string name="btn_projects">Projects</string>
+</resources>
