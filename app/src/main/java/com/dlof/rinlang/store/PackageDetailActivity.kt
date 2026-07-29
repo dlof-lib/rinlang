@@ -261,7 +261,7 @@ class PackageDetailActivity : BaseConnectivityActivity() {
         if (readme.isNullOrBlank()) {
             txtReadme.text = getString(R.string.package_detail_no_readme)
         } else {
-            txtReadme.text = MarkdownLite.toSpannable(readme)
+            MarkdownLite.applyTo(txtReadme, readme)
         }
 
         val txtLicenseTitle = findViewById<TextView>(R.id.txtDetailLicenseTitle)
