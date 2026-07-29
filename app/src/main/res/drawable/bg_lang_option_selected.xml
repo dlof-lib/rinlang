@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- خلفية خيار اللغة المُختار حالياً داخل شاشة الإعدادات: نفس نصف قطر زوايا بطاقات
+     التطبيق (bg_list_card) لكن بإطار بلون الهوية البنفسجي وخلفية شفافة خفيفة منه،
+     لتمييزه فوراً عن باقي الخيارات غير المُختارة. -->
+<ripple xmlns:android="http://schemas.android.com/apk/res/android"
+    android:color="@color/rin_ghost_ripple">
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="@color/rin_accent_border_subtle" />
+            <stroke android:width="1.5dp" android:color="@color/rin_accent" />
+            <corners android:radius="14dp" />
+        </shape>
+    </item>
+</ripple>
