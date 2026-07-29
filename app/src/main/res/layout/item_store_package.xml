@@ -28,17 +28,31 @@
         android:orientation="horizontal"
         android:gravity="top">
 
-        <!-- شارة بأول حرف من اسم الحزمة، بخلفية متدرّجة تمنحها طابعاً أكثر احترافية -->
-        <TextView
-            android:id="@+id/txtPackageInitial"
+        <!-- شارة بأول حرف من اسم الحزمة (خلفية متدرّجة)، تُستبدَل بأيقونة الحزمة الحقيقية إن
+             رفعها الناشر عند النشر (raw.iconBase64) — راجع PackageAdapter.onBindViewHolder. -->
+        <FrameLayout
             android:layout_width="40dp"
             android:layout_height="40dp"
-            android:layout_marginEnd="12dp"
-            android:background="@drawable/bg_package_icon_gradient"
-            android:gravity="center"
-            android:textColor="@android:color/white"
-            android:textStyle="bold"
-            android:textSize="16sp" />
+            android:layout_marginEnd="12dp">
+
+            <TextView
+                android:id="@+id/txtPackageInitial"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:background="@drawable/bg_package_icon_gradient"
+                android:gravity="center"
+                android:textColor="@android:color/white"
+                android:textStyle="bold"
+                android:textSize="16sp" />
+
+            <ImageView
+                android:id="@+id/imgPackageIcon"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:scaleType="fitCenter"
+                android:visibility="gone"
+                android:contentDescription="@null" />
+        </FrameLayout>
 
         <LinearLayout
             android:layout_width="0dp"
