@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<CodeSnippets xmlns="http://schemas.microsoft.com/VisualStudio/2005/CodeSnippet">
+  <CodeSnippet Format="1.0.0">
+    <Header>
+      <Title>Object Style</Title>
+      <Shortcut>ObjectStyle</Shortcut>
+      <Description>كائن ستايل بحقول txt/img/object.file/Fonts/background/css3 (خاصة بـ @Object/@container.object فقط)</Description>
+      <SnippetTypes>
+        <SnippetType>Expansion</SnippetType>
+      </SnippetTypes>
+    </Header>
+    <Snippet>
+      <Declarations>
+        <Literal>
+          <ID>p1</ID>
+          <ToolTip>اسم الكائن</ToolTip>
+          <Default>name</Default>
+        </Literal>
+        <Literal>
+          <ID>p2</ID>
+          <ToolTip>نص العرض (txt)</ToolTip>
+          <Default>Title</Default>
+        </Literal>
+        <Literal>
+          <ID>p3</ID>
+          <ToolTip>مسار/رابط الصورة (img)</ToolTip>
+          <Default>assets/cover.png</Default>
+        </Literal>
+        <Literal>
+          <ID>p4</ID>
+          <ToolTip>مسار الملف المرتبط (object.file)</ToolTip>
+          <Default>assets/data.json</Default>
+        </Literal>
+        <Literal>
+          <ID>p5</ID>
+          <ToolTip>اسم/عائلة الخط (Fonts)</ToolTip>
+          <Default>Cairo</Default>
+        </Literal>
+        <Literal>
+          <ID>p6</ID>
+          <ToolTip>قيمة الخلفية (background)</ToolTip>
+          <Default>#3498db</Default>
+        </Literal>
+        <Literal>
+          <ID>p7</ID>
+          <ToolTip>مقتطف CSS3 خام (css3)</ToolTip>
+          <Default>border-radius: 12px;</Default>
+        </Literal>
+      </Declarations>
+      <Code Language="Rin"><![CDATA[@Object=$p1$
+	txt title = "$p2$";
+	img cover = "$p3$";
+	object.file data = "$p4$";
+	Fonts family = "$p5$";
+	background bg = "$p6$";
+	css3 extra = "$p7$";
+	$end$
+.end/Object]]></Code>
+    </Snippet>
+  </CodeSnippet>
+</CodeSnippets>
