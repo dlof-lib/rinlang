@@ -40,6 +40,9 @@
     <!-- تلوين الصيغة النحوية (syntax highlighting) في المحرر -->
     <color name="syntax_keyword">#569CD6</color>
     <color name="syntax_container_keyword">#4EC9B0</color>
+    <!-- حقول تنسيق/ستايل الكائن (txt/img/object.file/Fonts/background/css3): نفس هوية "الستايل"
+         اللونية المستخدمة في كونسول التشغيل (log_kind_style) لتمييزها بصرياً عن بقية كلمات الحاويات -->
+    <color name="syntax_style_keyword">#F2A65A</color>
     <color name="syntax_string">#CE9178</color>
     <color name="syntax_number">#B5CEA8</color>
     <color name="syntax_comment">#6A9955</color>
