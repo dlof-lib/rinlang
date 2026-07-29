@@ -2,10 +2,7 @@ package com.dlof.rinlang.store
 
 import android.content.Context
 import android.content.Intent
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import android.os.Bundle
-import android.util.Base64
 import android.view.View
 import android.widget.ImageView
 import android.widget.TextView
@@ -110,43 +107,14 @@ class PublicProfileActivity : BaseConnectivityActivity() {
             packages.sumOf { it.likeCount }.toString()
     }
 
-    /** يعرض صورة الملف الشخصي إن وُجدت (فكّ base64 وعرضها)، وإلا يعرض شارة بحرف الاسم الأول. */
+    /**
+     * يعرض صورة الملف الشخصي إن وُجدت، وإلا يعرض شارة بحرف الاسم الأول، عبر [AvatarUtils.renderAvatar]
+     * الذي يقصّ الصورة دائرياً على مستوى الـ Bitmap نفسه (يضمن ظهورها كاملة دون أي قطع جزئي).
+     */
     private fun renderAvatar(profile: RinUser?, displayName: String) {
         val imgAvatar = findViewById<ImageView>(R.id.imgProfileAvatar)
         val txtInitial = findViewById<TextView>(R.id.txtProfileAvatarInitial)
-
-        clipToCircle(imgAvatar)
-
-        val avatarBase64 = profile?.avatarBase64
-        if (avatarBase64.isNullOrBlank()) {
-            imgAvatar.setImageDrawable(null)
-            txtInitial.text = displayName.take(1).uppercase()
-            txtInitial.visibility = View.VISIBLE
-        } else {
-            try {
-                val bytes = Base64.decode(avatarBase64, Base64.NO_WRAP)
-                val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-                if (bitmap != null) {
-                    imgAvatar.setImageBitmap(bitmap)
-                    txtInitial.visibility = View.GONE
-                } else {
-                    txtInitial.text = displayName.take(1).uppercase()
-                    txtInitial.visibility = View.VISIBLE
-                }
-            } catch (t: Throwable) {
-                txtInitial.text = displayName.take(1).uppercase()
-                txtInitial.visibility = View.VISIBLE
-            }
-        }
-    }
-
-    private fun clipToCircle(view: ImageView) {
-        view.clipToOutline = true
-        view.outlineProvider = object : android.view.ViewOutlineProvider() {
-            override fun getOutline(v: View, outline: android.graphics.Outline) {
-                outline.setOval(0, 0, v.width, v.height)
-            }
-        }
+        AvatarUtils.renderAvatar(imgAvatar, txtInitial, profile?.avatarBase64, displayName)
     }
 
     /**
