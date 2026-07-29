@@ -1,0 +1,179 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Rin Lang</string>
+    <string name="app_editor_title">Editor Rin</string>
+    <string name="action_run">Ejecutar</string>
+
+    <!-- RinFlow: nombre oficial del visualizador en vivo de canalizaciones (@container.pipe) de Rin -->
+    <string name="pipeline_runner_title">RinFlow</string>
+    <string name="pipeline_source_label">Origen</string>
+    <string name="pipeline_node_source">Origen</string>
+    <string name="pipeline_node_output">Salida final</string>
+    <string name="pipeline_status_running">RinFlow: Ejecutando…</string>
+    <string name="pipeline_status_success">RinFlow: Completado con éxito</string>
+    <string name="pipeline_status_success_timed">RinFlow: Completado en %1$d ms (tiempo real del motor)</string>
+    <string name="pipeline_status_error">RinFlow: Falló</string>
+    <string name="pipeline_status_idle">RinFlow: Aún no se ha ejecutado</string>
+    <string name="pipeline_status_stopped">RinFlow: Detenido</string>
+    <string name="pipeline_no_block_found">No se encontró ningún bloque @container.pipe en este código. Agrega uno y vuelve a presionar Ejecutar.</string>
+    <string name="pipeline_action_run">Ejecutar</string>
+    <string name="pipeline_action_stop">Detener</string>
+    <string name="pipeline_action_configure">Configurar</string>
+    <string name="pipeline_action_load_sample">Cargar canalización de ejemplo</string>
+    <string name="pipeline_configure_title">RinFlow</string>
+    <string name="pipeline_configure_message">Contenedor: %1$s\nEtapas: %2$d\nTiempo límite: %3$d s\n\nCada valor mostrado en el diagrama se produce ejecutando realmente tu código a través del motor nativo de Rin, truncado en cada etapa de la expresión pipe — nada aquí está simulado.</string>
+
+    <!-- Nuevo diseño de RinFlow: flujo horizontal + barra de leyenda, al estilo de paneles CI/CD profesionales -->
+    <string name="pipeline_flow_label">FLUJO DE CANALIZACIÓN</string>
+    <string name="pipeline_legend_success">Correcto</string>
+    <string name="pipeline_legend_failed">Fallido</string>
+    <string name="pipeline_legend_node">Nodo RinFlow</string>
+    <string name="pipeline_node_status_ok">Correcto</string>
+    <string name="pipeline_node_status_error">Fallido</string>
+    <!-- Aparece tras presionar Ejecutar cuando el código actual contiene un bloque @container.pipe real -->
+    <string name="rinflow_detected_snackbar">Se detectó una canalización RinFlow en esta ejecución</string>
+    <string name="rinflow_open_action">Abrir RinFlow</string>
+    <string name="action_clear">Borrar</string>
+    <string name="action_open">Abrir</string>
+
+    <!-- Pantalla de sin conexión a internet (aparece automáticamente en cualquier pantalla que necesite red) -->
+    <string name="no_connection_title">Sin conexión a internet</string>
+    <string name="no_connection_message">Verifica tu conexión Wi-Fi o de datos móviles e inténtalo de nuevo</string>
+    <string name="action_retry">Reintentar</string>
+    <string name="action_save">Guardar</string>
+
+    <!-- Barra de menú superior compacta (Archivo / Editar / Ver / Ejecutar) — menús desplegables
+         al estilo de escritorio, pero diseñados para pantallas táctiles en lugar de una barra larga de botones -->
+    <string name="menu_file">Archivo</string>
+    <string name="menu_edit">Editar</string>
+    <string name="menu_view">Ver</string>
+    <string name="menu_run">Ejecutar</string>
+    <string name="menu_file_new">Nuevo archivo</string>
+    <string name="menu_file_open">Abrir…</string>
+    <string name="menu_file_save">Guardar</string>
+    <string name="menu_file_projects">Proyectos</string>
+    <string name="menu_edit_undo">Deshacer</string>
+    <string name="menu_edit_redo">Rehacer</string>
+    <string name="menu_edit_find">Buscar y reemplazar</string>
+    <string name="menu_edit_select_all">Seleccionar todo</string>
+    <string name="menu_edit_clear_all">Vaciar editor</string>
+    <string name="menu_edit_toggle_comment">Alternar comentario de línea</string>
+    <string name="menu_edit_duplicate_line">Duplicar línea</string>
+    <string name="menu_edit_delete_line">Eliminar línea</string>
+    <string name="menu_edit_move_line_up">Mover línea arriba</string>
+    <string name="menu_edit_move_line_down">Mover línea abajo</string>
+    <string name="menu_edit_indent">Aumentar sangría</string>
+    <string name="menu_edit_unindent">Reducir sangría</string>
+    <string name="menu_view_zoom_in">Aumentar tamaño de fuente</string>
+    <string name="menu_view_zoom_out">Reducir tamaño de fuente</string>
+    <string name="menu_view_toggle_lines">Alternar números de línea</string>
+    <string name="menu_view_clear_console">Borrar historial de ejecuciones</string>
+    <string name="menu_view_go_to_line">Ir a la línea…</string>
+    <string name="menu_run_run">Ejecutar programa</string>
+    <string name="menu_run_check_brackets">Comprobar paréntesis</string>
+    <string name="new_file_name">sin_titulo.rin</string>
+    <string name="new_file_toast">Nuevo archivo</string>
+    <string name="desc_menu_file">Menú Archivo</string>
+    <string name="desc_menu_edit">Menú Editar</string>
+    <string name="desc_menu_view">Menú Ver</string>
+    <string name="desc_run_quick">Ejecutar</string>
+    <string name="desc_projects_quick">Proyectos</string>
+    <string name="editor_hint">Escribe tu código Rin aquí…</string>
+    <string name="file_unsaved">sin_titulo.rin</string>
+    <string name="file_open_error">No se pudo abrir el archivo</string>
+    <string name="file_save_error">No se pudo guardar el archivo</string>
+    <string name="file_saved_toast">Guardado: %1$s</string>
+    <string name="file_opened_toast">Abierto: %1$s</string>
+
+    <!-- Editor: deshacer/rehacer y buscar y reemplazar -->
+    <string name="action_undo">Deshacer</string>
+    <string name="action_redo">Rehacer</string>
+    <string name="action_find">Buscar</string>
+    <string name="find_hint">Buscar…</string>
+    <string name="replace_hint">Reemplazar con…</string>
+    <string name="btn_find_next">Siguiente</string>
+    <string name="btn_find_prev">Anterior</string>
+    <string name="btn_replace_one">Reemplazar</string>
+    <string name="btn_replace_all">Todo</string>
+    <string name="find_not_found_toast">"No encontrado: %1$s"</string>
+    <string name="replaced_count_toast">%1$d coincidencia(s) reemplazada(s)</string>
+    <string name="find_close_desc">Cerrar barra de búsqueda</string>
+    <string name="find_case_sensitive_desc">Alternar búsqueda sensible a mayúsculas</string>
+    <string name="find_case_sensitive_on_toast">Sensible a mayúsculas: activado</string>
+    <string name="find_case_sensitive_off_toast">Sensible a mayúsculas: desactivado</string>
+    <string name="find_count_format">%1$d/%2$d</string>
+    <string name="find_count_none">0/0</string>
+    <string name="go_to_line_title">Ir a la línea</string>
+    <string name="go_to_line_hint">Número de línea</string>
+    <string name="go_to_line_action">Ir</string>
+    <string name="go_to_line_cancel">Cancelar</string>
+    <string name="go_to_line_invalid_toast">Introduce un número de línea válido</string>
+    <string name="brackets_balanced_toast">Los paréntesis están balanceados ✓</string>
+    <string name="brackets_unbalanced_toast">Paréntesis desbalanceados cerca de la línea %1$d</string>
+    <string name="line_deleted_toast">Línea eliminada</string>
+
+    <!-- Cola de ejecuciones programadas e historial -->
+    <string name="console_title">Cola de ejecución</string>
+    <string name="action_clear_console">Borrar historial</string>
+    <string name="no_jobs_yet">Aún no hay ejecuciones — presiona Ejecutar para correr tu programa Rin.</string>
+    <string name="job_title_fmt">Ejecución n.º %1$d</string>
+    <string name="job_status_queued">EN COLA</string>
+    <string name="job_status_running">EJECUTANDO…</string>
+    <string name="job_status_success">ÉXITO</string>
+    <string name="job_status_error">ERROR</string>
+    <string name="job_status_timeout">TIEMPO AGOTADO</string>
+    <string name="job_status_cancelled">CANCELADO</string>
+    <string name="job_duration_fmt">%1$d ms</string>
+    <string name="job_timeout_message">"[Tiempo agotado]: la ejecución superó %1$d segundos y fue abandonada"</string>
+
+    <!-- Descargar los archivos reales generados por save/installation a la carpeta Descargas del dispositivo -->
+    <string name="download_results_label">Resultados listos para descargar</string>
+    <string name="download_button_fmt">%1$s · %2$s</string>
+    <string name="download_dialog_title">Descargando al dispositivo…</string>
+    <string name="download_status_copying">Copiando datos…</string>
+    <string name="download_status_done">Descarga completada ✓</string>
+    <string name="download_done_toast">%1$s guardado en la carpeta Descargas</string>
+    <string name="download_error_toast">No se pudo descargar: %1$s</string>
+    <string name="download_no_app_toast">No hay una aplicación adecuada para abrir este tipo de archivo</string>
+    <string name="download_permission_needed_toast">La app necesita permiso de almacenamiento para guardar el archivo en Descargas</string>
+    <string name="download_open_action">Abrir</string>
+    <string name="sample_program">// ¡Bienvenido al lenguaje de programación Rin!
+fun fib(n) {
+    if (n &lt; 2) { return n; }
+    return fib(n - 1) + fib(n - 2);
+}
+
+let i = 0;
+while (i &lt; 10) {
+    print \"fib(\" + i + \") = \" + fib(i);
+    i = i + 1;
+}
+
+let name = \"world\";
+print \"Hello, \" + name + \"!\";
+</string>
+
+    <!-- ===== Barra de navegación inferior unificada ===== -->
+    <string name="nav_editor">Editor</string>
+    <string name="nav_projects">Proyectos</string>
+    <string name="nav_store">Tienda</string>
+    <string name="nav_profile">Perfil</string>
+    <string name="nav_more">Más</string>
+
+    <!-- ===== Pantalla "Más" (resto de secciones) ===== -->
+    <string name="more_screen_title">Más</string>
+    <string name="more_row_files_subtitle">Explorar archivos del proyecto</string>
+    <string name="more_row_libraries_subtitle">Bibliotecas lib/*.og.rin de este proyecto</string>
+    <string name="more_row_pipeline_subtitle">Seguir la ejecución de la canalización paso a paso</string>
+    <string name="more_row_extensions_subtitle">Extensiones y herramientas oficiales del editor</string>
+    <string name="more_row_settings_subtitle">Tamaño de fuente, números de línea y otras opciones</string>
+    <string name="more_row_needs_project_toast">Elige un proyecto primero</string>
+
+    <!-- ===== Selector de avatar (icono de biblioteca o subida desde el estudio) ===== -->
+    <string name="avatar_picker_title">Elige tu avatar</string>
+    <string name="avatar_picker_subtitle">Elige un icono de la biblioteca, o sube una foto desde tu estudio</string>
+    <string name="avatar_picker_upload_studio">Subir foto desde el estudio</string>
+
+    <!-- ===== Pantalla de bienvenida (Splash) ===== -->
+    <string name="splash_tagline">Un lenguaje de programación ligero y rápido</string>
+</resources>
