@@ -2,10 +2,7 @@ package com.dlof.rinlang.store
 
 import android.content.Context
 import android.content.Intent
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import android.os.Bundle
-import android.util.Base64
 import android.view.LayoutInflater
 import android.view.View
 import android.widget.ImageView
@@ -106,36 +103,6 @@ class UserListActivity : BaseConnectivityActivity() {
 
         val imgAvatar = row.findViewById<ImageView>(R.id.imgUserRowAvatar)
         val txtInitial = row.findViewById<TextView>(R.id.txtUserRowInitial)
-        clipToCircle(imgAvatar)
-
-        if (user.avatarBase64.isBlank()) {
-            imgAvatar.setImageDrawable(null)
-            txtInitial.text = displayName.take(1).uppercase()
-            txtInitial.visibility = View.VISIBLE
-            return
-        }
-        try {
-            val bytes = Base64.decode(user.avatarBase64, Base64.NO_WRAP)
-            val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-            if (bitmap != null) {
-                imgAvatar.setImageBitmap(bitmap)
-                txtInitial.visibility = View.GONE
-            } else {
-                txtInitial.text = displayName.take(1).uppercase()
-                txtInitial.visibility = View.VISIBLE
-            }
-        } catch (t: Throwable) {
-            txtInitial.text = displayName.take(1).uppercase()
-            txtInitial.visibility = View.VISIBLE
-        }
-    }
-
-    private fun clipToCircle(view: ImageView) {
-        view.clipToOutline = true
-        view.outlineProvider = object : android.view.ViewOutlineProvider() {
-            override fun getOutline(v: View, outline: android.graphics.Outline) {
-                outline.setOval(0, 0, v.width, v.height)
-            }
-        }
+        AvatarUtils.renderAvatar(imgAvatar, txtInitial, user.avatarBase64, displayName)
     }
 }
