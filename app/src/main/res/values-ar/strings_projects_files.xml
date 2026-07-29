@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  نصوص شاشتَي المشاريع والملفات الجديدتين. مشروعك الأصلي (خارج هذا الرفع) فيه
+  على الأرجح res/values/strings.xml موجود بالفعل بنصوص MainActivity — لا تستبدله
+  بهذا الملف، بل انسخ العناصر أدناه بداخله (أو أبقِ هذا الملف كما هو، فأندرويد
+  يدمج كل ملفات values/*.xml تلقائياً طالما لا تتكرر أسماء العناصر).
+-->
+<resources>
+    <!-- أزرار عامة تستخدمها حوارات المشاريع/الملفات (كانت ناقصة وتسبّبت بخطأ بناء فعلي) -->
+    <string name="create">إنشاء</string>
+    <string name="cancel">إلغاء</string>
+    <string name="rename">إعادة تسمية</string>
+    <string name="delete">حذف</string>
+
+    <!-- الشريط العلوي الموحّد للشاشات الفرعية -->
+    <string name="action_back">رجوع</string>
+    <string name="projects_screen_title">المشاريع</string>
+    <string name="files_screen_title">الملفات</string>
+
+    <!-- شاشة المشاريع -->
+    <string name="new_project_title">مشروع جديد</string>
+    <string name="rename_project_title">إعادة تسمية المشروع</string>
+    <string name="delete_project_title">حذف المشروع</string>
+    <string name="delete_project_confirm">هل تريد حذف المشروع \"%1$s\" وكل ملفاته؟</string>
+    <string name="project_name_hint">اسم المشروع</string>
+    <string name="no_projects_yet">لا توجد مشاريع بعد. اضغط + لإنشاء أول مشروع.</string>
+    <string name="project_not_found">تعذّر العثور على المشروع</string>
+    <string name="project_meta_format">%1$d ملف</string>
+
+    <!-- شاشة الملفات -->
+    <string name="new_file_title">ملف جديد</string>
+    <string name="upload_file">رفع ملف</string>
+    <string name="delete_file_title">حذف الملف</string>
+    <string name="delete_file_confirm">هل تريد حذف الملف \"%1$s\"؟</string>
+    <string name="file_name_hint">اسم الملف (مثال: main.rin)</string>
+    <string name="no_files_yet">لا توجد ملفات بعد. أنشئ ملفاً جديداً أو ارفع ملفاً من جهازك.</string>
+    <string name="file_uploaded_toast">تم رفع الملف: %1$s</string>
+    <string name="file_meta_format">%1$s • %2$s</string>
+
+    <!-- أدوات الأرشيف المضغوط (ZIP): رفع وفك ضغط، أو تنزيل المشروع كأرشيف -->
+    <string name="zip_tools_title">أرشيف ZIP</string>
+    <string name="zip_upload_extract">رفع أرشيف مضغوط وفك ضغطه هنا</string>
+    <string name="zip_download_project">تنزيل المشروع كأرشيف ZIP</string>
+    <string name="zip_extracted_toast">تم فك ضغط %1$d ملف داخل المشروع</string>
+    <string name="zip_extract_error">تعذّر فك ضغط الأرشيف</string>
+
+    <!-- زر التنقل الجديد داخل المحرر (MainActivity) -->
+    <string name="btn_projects">المشاريع</string>
+</resources>
