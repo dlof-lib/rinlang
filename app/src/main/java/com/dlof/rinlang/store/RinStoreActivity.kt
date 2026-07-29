@@ -10,6 +10,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.EditText
 import android.widget.ImageButton
+import android.widget.ImageView
 import android.widget.PopupMenu
 import android.widget.RatingBar
 import android.widget.TextView
@@ -369,6 +370,7 @@ private class PackageAdapter(
     class VH(view: View) : RecyclerView.ViewHolder(view) {
         val root: View = view.findViewById(R.id.rootPackageCard)
         val txtInitial: TextView = view.findViewById(R.id.txtPackageInitial)
+        val imgIcon: ImageView = view.findViewById(R.id.imgPackageIcon)
         val txtName: TextView = view.findViewById(R.id.txtPackageName)
         val imgVerifiedBadge: View = view.findViewById(R.id.imgPackageVerifiedBadge)
         val txtMeta: TextView = view.findViewById(R.id.txtPackageMeta)
@@ -391,6 +393,17 @@ private class PackageAdapter(
         val pkg = items[position]
         val context = holder.itemView.context
         holder.txtInitial.text = pkg.name.take(1).uppercase()
+        // أيقونة الحزمة الحقيقية (إن رفعها الناشر عند النشر) تحلّ محل شارة الحرف الأول، دائرية
+        // مسبقاً وجاهزة للعرض المباشر عبر AvatarUtils.decodeCircularAvatar.
+        val iconBitmap = AvatarUtils.decodeCircularAvatar(pkg.iconBase64)
+        if (iconBitmap != null) {
+            holder.imgIcon.setImageBitmap(iconBitmap)
+            holder.imgIcon.visibility = View.VISIBLE
+            holder.txtInitial.visibility = View.INVISIBLE
+        } else {
+            holder.imgIcon.visibility = View.GONE
+            holder.txtInitial.visibility = View.VISIBLE
+        }
         holder.txtName.text = "${pkg.name} — ${pkg.publisherName}"
         holder.imgVerifiedBadge.visibility = if (isVerified(pkg)) View.VISIBLE else View.GONE
         holder.txtMeta.text = context.getString(
