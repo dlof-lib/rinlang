@@ -66,6 +66,10 @@
     <string name="action_pick_license">رفع ملف ترخيص خاص بي</string>
     <string name="file_selected_generic">تم اختيار الملف ✓</string>
     <string name="assets_selected_format">%1$d ملف مُختار</string>
+    <string name="label_package_visual_identity">هوية الحزمة البصرية (اختياري)</string>
+    <string name="label_package_icon">أيقونة الحزمة</string>
+    <string name="label_package_thumbnail">صورة مصغّرة للحزمة</string>
+    <string name="error_image_decode_failed">تعذّر فتح هذه الصورة، جرّب صورة أخرى</string>
     <string name="action_publish_submit">نشر الحزمة</string>
     <string name="publish_success">تم نشر الحزمة في متجر Rin ✓</string>
     <string name="publish_requires_login">سجّل الدخول أولاً لتتمكن من النشر</string>
