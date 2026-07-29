@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  نصوص شاشة "الإعدادات" المستقلة عن شاشة "حسابي" (AccountActivity): إعدادات عامة
+  للمحرر لا علاقة لها بالحساب، بنفس أسلوب strings_store.xml و strings_libraries.xml.
+-->
+<resources>
+    <string name="action_settings">الإعدادات</string>
+    <string name="settings_title">الإعدادات</string>
+
+    <string name="settings_editor_section_title">المحرر</string>
+    <string name="settings_font_size_label">حجم الخط: %1$.0f</string>
+    <string name="settings_show_line_numbers">إظهار أرقام الأسطر</string>
+    <string name="settings_show_line_numbers_hint">يمكن إخفاؤها لتوفير مساحة أكبر للكود</string>
+    <string name="action_reset_defaults">استعادة الإعدادات الافتراضية</string>
+    <string name="settings_reset_toast">تمت استعادة الإعدادات الافتراضية</string>
+
+    <!-- قسم لغة التطبيق -->
+    <string name="settings_language_section_title">اللغة</string>
+    <string name="settings_language_hint">اختر لغة واجهة التطبيق</string>
+    <string name="lang_name_ar">العربية</string>
+    <string name="lang_name_en">English</string>
+    <string name="lang_name_es">Español</string>
+    <string name="settings_language_changed_toast">تم تحديث اللغة</string>
+</resources>
