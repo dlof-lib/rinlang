@@ -1,0 +1,165 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Store section inside the Libraries screen -->
+    <string name="store_section_title">Rin Store</string>
+    <string name="store_section_hint">Browse packages published by other users, or publish your library for everyone</string>
+    <string name="action_browse_store">Browse Store</string>
+    <string name="action_my_account">My Account</string>
+    <string name="action_publish_library">Publish</string>
+
+    <!-- Store screen -->
+    <string name="rin_store_title">Rin Store</string>
+    <string name="store_empty">No packages match your search. Try another word or clear the filter.</string>
+    <string name="action_install">Install/Insert</string>
+    <string name="store_item_meta_format">%1$s • %2$s • %3$d downloads</string>
+    <string name="package_installed_toast">Package installed and added to this project\'s libraries</string>
+    <string name="package_installed_import_toast">%1$s package(s) installed and @import lines inserted directly into the code ✓</string>
+
+    <!-- Search, sort, and category filtering inside the store -->
+    <string name="store_search_hint">Search by package name or description…</string>
+    <string name="store_category_all">All</string>
+    <string name="store_sort_newest">Newest</string>
+    <string name="store_sort_rating">Top Rated</string>
+    <string name="store_sort_downloads">Most Downloaded</string>
+    <string name="store_sort_name">Name (A-Z)</string>
+    <string name="store_rating_format">★ %1$.1f (%2$d)</string>
+    <string name="store_rating_none">★ No ratings yet</string>
+    <string name="action_rate_package">Rate</string>
+    <string name="rate_package_title">%1$s</string>
+    <string name="rate_package_subtitle">How would you rate this package? Choose a number of stars</string>
+    <string name="rate_package_login_required">Sign in first to rate this package</string>
+    <string name="rate_package_submitted">Thanks for your rating ✓</string>
+    <string-array name="rate_quality_labels">
+        <item>⭐ Poor</item>
+        <item>⭐⭐ Fair</item>
+        <item>⭐⭐⭐ Good</item>
+        <item>⭐⭐⭐⭐ Very Good</item>
+        <item>⭐⭐⭐⭐⭐ Excellent</item>
+    </string-array>
+    <string name="store_dependencies_format">Requires: %1$s</string>
+
+    <!-- Dependency warning during install -->
+    <string name="dependency_check_title">This Package\'s Dependencies</string>
+    <string name="dependency_missing_line">• %1$s (%2$s) — not installed</string>
+    <string name="dependency_mismatch_line">• %1$s (requires %2$s, installed %3$s)</string>
+    <string name="dependency_check_message_prefix">Before installing, note that this package depends on:\n\n</string>
+    <string name="action_install_anyway">Install Anyway</string>
+    <string name="action_install_with_dependencies">Install with Available Dependencies</string>
+
+    <!-- Publish screen -->
+    <string name="publish_title">Publish a Library</string>
+    <string name="publish_subtitle">A README.md and LICENSE file are generated automatically if you don\'t upload your own, and all files are packaged into a single archive</string>
+    <string name="hint_package_name">Package name</string>
+    <string name="hint_package_version">Version number</string>
+    <string name="hint_package_description">Short library description (optional)</string>
+    <string name="hint_package_category">Package category</string>
+    <string name="hint_package_dependencies">Dependencies (optional)</string>
+    <string name="hint_package_dependencies_example">Example:\nmathlib:^1.0.0\nstrings:2.0.0</string>
+    <string name="hint_package_license">License</string>
+    <string name="hint_package_custom_docs">Optional: upload your own README.md and license file instead of auto-generation</string>
+    <string name="action_pick_assets">Add images/icons (optional)</string>
+    <string name="action_pick_readme">Upload my own README.md</string>
+    <string name="action_pick_license">Upload my own license file</string>
+    <string name="file_selected_generic">File selected ✓</string>
+    <string name="assets_selected_format">%1$d file(s) selected</string>
+    <string name="label_package_visual_identity">Package visual identity (optional)</string>
+    <string name="label_package_icon">Package icon</string>
+    <string name="label_package_thumbnail">Package thumbnail</string>
+    <string name="error_image_decode_failed">Could not open this image, try another one</string>
+    <string name="action_publish_submit">Publish Package</string>
+    <string name="publish_success">Package published to the Rin Store ✓</string>
+    <string name="publish_requires_login">Sign in first to be able to publish</string>
+    <string name="error_package_name_taken">This name (or a similar one) is already used by another package in the Rin Store, choose a different name</string>
+
+    <!-- Warning for a name too similar to a well-known package (impersonation protection) before publish confirmation -->
+    <string name="similar_name_warning_title">Name Too Similar to a Known Package</string>
+    <string name="similar_name_warning_message">Your package name is very close to an already existing well-known package (%1$s), which may confuse users. Do you still want to continue with this name?</string>
+
+    <!-- Report a package -->
+    <string name="action_report_package">Report</string>
+    <string name="report_package_title">Report %1$s</string>
+    <string name="report_package_message">Choose a reason to report this package:</string>
+    <string name="report_package_login_required">Sign in first to be able to report</string>
+    <string name="report_package_submitted">Your report was submitted, thanks for helping keep the store safe ✓</string>
+    <string-array name="report_reasons">
+        <item>Offensive or inappropriate content</item>
+        <item>Malicious or harmful code</item>
+        <item>Copyright/license violation</item>
+        <item>Misleading information (fake description or name)</item>
+        <item>Other reason</item>
+    </string-array>
+
+    <!-- Package detail page (similar to a GitHub repository page): README + license + file list -->
+    <string name="package_detail_section_readme">README.md</string>
+    <string name="package_detail_section_license">License</string>
+    <string name="package_detail_section_files">Package Files</string>
+    <string name="package_detail_no_readme">This package has no README.md file.</string>
+    <string name="package_detail_no_license">This package has no license file.</string>
+    <string name="package_detail_meta_format">%1$s • %2$s • %3$d downloads • ★ %4$.1f (%5$d ratings)</string>
+
+    <!-- Package detail page stats as individual chips (instead of one merged string, package_detail_meta_format) -->
+    <string name="package_detail_stat_version_format">Version %1$s</string>
+    <string name="package_detail_stat_downloads_format">%1$d downloads</string>
+    <string name="package_detail_stat_rating_format">★ %1$.1f (%2$d)</string>
+
+    <!-- "Verified Publisher" badge: automatically granted to anyone with a package that has surpassed 1000 downloads with a 4-star rating or higher -->
+    <string name="verified_publisher_badge_description">Verified Publisher</string>
+
+    <!-- Like button on the package detail page -->
+    <string name="action_like_package">Like</string>
+    <string name="like_package_login_required">Sign in first to like this package</string>
+    <string name="like_count_format">%1$d</string>
+
+    <!-- Follow button for a publisher inside the package detail page (following a publisher, not the package itself) -->
+    <string name="action_subscribe_publisher">Follow</string>
+    <string name="action_subscribed_publisher">Following</string>
+
+    <!-- My Account screen -->
+    <string name="account_title">My Account</string>
+    <string name="account_not_logged_in">You are not signed in yet</string>
+    <string name="account_not_logged_in_hint">Sign in to access your profile, publish packages, and rate them</string>
+    <string name="action_logout">Sign Out</string>
+    <string name="account_field_name">Name</string>
+    <string name="account_field_username">Username</string>
+    <string name="account_field_email">Email</string>
+    <string name="account_bio_placeholder">No bio yet. Tap \"Edit Profile\" to add one.</string>
+    <string name="action_edit_profile">Edit Profile</string>
+    <string name="action_change_avatar">Change Profile Picture</string>
+    <string name="edit_profile_title">Edit Profile</string>
+    <string name="edit_profile_name_hint">Display name</string>
+    <string name="edit_profile_bio_hint">A short bio about you (optional)</string>
+    <string name="profile_updated">Profile updated ✓</string>
+    <string name="avatar_updated">Profile picture updated ✓</string>
+    <string name="avatar_update_failed">Could not update the picture, try again</string>
+
+    <!-- Public profile: view any other user's profile (not just your own), with follower/following
+         counts and a follow button, opened from the publisher row in package detail and follower/following lists -->
+    <string name="public_profile_title">Profile</string>
+    <string name="public_profile_bio_empty">No bio yet.</string>
+    <string name="subscriber_count_label">Followers</string>
+    <string name="subscriptions_count_label">Following</string>
+    <!-- Additional stats on the profile card: total packages/downloads/likes across this
+         publisher's packages — real data computed from the same package list already fetched
+         to determine the verified badge (PackageRepository.fetchUserPackages), not placeholder data. -->
+    <string name="packages_count_label">Packages</string>
+    <string name="downloads_count_label">Downloads</string>
+    <string name="likes_count_label">Likes</string>
+    <string name="subscribe_login_required">Sign in first to be able to follow</string>
+    <string name="subscribe_action_failed">Could not complete the request, try again</string>
+
+    <!-- User list screen (followers of an account, or accounts it follows) -->
+    <string name="user_list_title_subscribers">Followers</string>
+    <string name="user_list_title_subscriptions">Following</string>
+    <string name="user_list_empty_subscribers">No followers yet</string>
+    <string name="user_list_empty_subscriptions">Not following anyone yet</string>
+
+    <!-- "My Packages" section inside the Account screen: view and delete published packages -->
+    <string name="account_my_packages_title">My Published Packages</string>
+    <string name="account_my_packages_empty">You haven\'t published any package yet. Publish a library from the Libraries screen to see it here.</string>
+    <string name="my_package_meta_format">%1$s • %2$d downloads</string>
+    <string name="action_delete_package">Delete</string>
+    <string name="delete_package_confirm_title">Delete Package</string>
+    <string name="delete_package_confirm_message">Permanently delete the package \"%1$s\" from the Rin Store? This action cannot be undone.</string>
+    <string name="package_deleted_toast">Package deleted ✓</string>
+    <string name="package_delete_failed">Could not delete the package, try again</string>
+</resources>
