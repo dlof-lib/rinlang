@@ -1516,6 +1516,34 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
         return;
     }
 
+    if (auto s = std::dynamic_pointer_cast<ObjectStyleFieldStmt>(stmt)) {
+        // txt/img/object.file/Fonts/background/css3: حقول ستايل حرة، مسموحة حصراً داخل
+        // @container.object/@Object (بخلاف 'style value=...' المتاحة في object/portal/block/table).
+        if (containerStack.empty() || containerKinds[containerStack.back()] != ContainerKind::OBJECT) {
+            throw RinError("حقول الستايل (txt/img/object.file/Fonts/background/css3) مسموحة حصراً داخل "
+                            "@container.object/@Object", s->line);
+        }
+        Value v = Value::nil();
+        if (s->initializer) v = evaluate(s->initializer, env);
+        static const std::unordered_map<ObjectStyleFieldKind, std::string> kindNames = {
+            {ObjectStyleFieldKind::TXT, "txt"}, {ObjectStyleFieldKind::IMG, "img"},
+            {ObjectStyleFieldKind::OBJECT_FILE, "object.file"}, {ObjectStyleFieldKind::FONTS, "Fonts"},
+            {ObjectStyleFieldKind::BACKGROUND, "background"}, {ObjectStyleFieldKind::CSS3, "css3"}
+        };
+        static const std::unordered_map<ObjectStyleFieldKind, std::string> kindIcons = {
+            {ObjectStyleFieldKind::TXT, "📝"}, {ObjectStyleFieldKind::IMG, "🖼️"},
+            {ObjectStyleFieldKind::OBJECT_FILE, "📄"}, {ObjectStyleFieldKind::FONTS, "🔤"},
+            {ObjectStyleFieldKind::BACKGROUND, "🎨"}, {ObjectStyleFieldKind::CSS3, "🧾"}
+        };
+        const std::string& kindName = kindNames.at(s->kind);
+        if (v.type != Value::Type::STRING) {
+            throw RinError("'" + s->name + "' من نوع " + kindName + " ويجب أن تكون قيمته نصاً (string)", s->line);
+        }
+        env->define(s->name, v);
+        output << kindIcons.at(s->kind) << " " << kindName << " " << s->name << " -> " << v.str << "\n";
+        return;
+    }
+
     if (auto s = std::dynamic_pointer_cast<ContainerStmt>(stmt)) {
         auto containerEnv = std::make_shared<Environment>(env);
         std::string tag = containerTagName(s->kind);
