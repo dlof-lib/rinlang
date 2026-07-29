@@ -258,6 +258,31 @@ object PackagingUtils {
         }
     }
 
+    /**
+     * يختار لون تمييز مناسباً لنوع الملف [fileName] (نفس تصنيف [iconResFor])، يُستخدَم لتلوين
+     * أيقونة الملف وخلفيتها الدائرية الخفيفة في قائمة "ملفات الحزمة"، بدل لون تمييز واحد ثابت
+     * لكل أنواع الملفات — لتمييزها بصرياً بسرعة (كود المكتبة بلون التمييز الأساسي، الترخيص
+     * بالأخضر، الصور بالوردي، الصوت/الفيديو بالبرتقالي... إلخ).
+     */
+    fun iconColorResFor(fileName: String): Int {
+        val lower = fileName.lowercase()
+        return when {
+            lower == "license" || lower == "license.txt" -> R.color.rin_accent_green
+            lower.endsWith(".og.rin") || lower.endsWith(".rin") -> R.color.rin_accent
+            lower.endsWith(".png") || lower.endsWith(".jpg") || lower.endsWith(".jpeg") ||
+                lower.endsWith(".webp") || lower.endsWith(".gif") || lower.endsWith(".bmp") -> R.color.rin_like_active
+            lower.endsWith(".svg") -> R.color.rin_star_gold
+            lower.endsWith(".json") -> R.color.syntax_tag
+            lower.endsWith(".md") -> R.color.rin_accent
+            lower.endsWith(".txt") -> R.color.rin_editor_hint
+            lower.endsWith(".zip") || lower.endsWith(".rinsdk") -> R.color.rin_star_gold
+            lower.endsWith(".mp3") || lower.endsWith(".wav") || lower.endsWith(".ogg") -> R.color.rin_accent_green
+            lower.endsWith(".mp4") || lower.endsWith(".webm") -> R.color.rin_like_active
+            lower.endsWith(".ttf") || lower.endsWith(".otf") -> R.color.syntax_tag
+            else -> R.color.rin_accent
+        }
+    }
+
     private fun buildLicense(publisherName: String): String {
         val year = Calendar.getInstance().get(Calendar.YEAR)
         return """
