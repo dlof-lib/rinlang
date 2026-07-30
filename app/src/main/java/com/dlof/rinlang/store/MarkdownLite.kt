@@ -2,6 +2,7 @@ package com.dlof.rinlang.store
 
 import android.graphics.Canvas
 import android.graphics.Paint
+import android.graphics.Path
 import android.graphics.RectF
 import android.graphics.Typeface
 import android.text.SpannableStringBuilder
@@ -45,6 +46,14 @@ import android.widget.TextView
  * - **جديد: "ستيكر Rin"** — بادج/شارة ملوَّنة حقيقية الشكل (خلفية بزوايا مدوَّرة) عبر صياغة
  *   `[[نص]]` أو `[[نص|لون]]`، بالألوان: accent (افتراضي)، green، gold، danger، info، like —
  *   نفس هوية التطبيق البصرية (بنفسجي+أخضر) المستخدمة في شارات "موثّق" وبطاقات الإحصاءات.
+ * - **جديد: مظهر احترافي بأسلوب README على GitHub** — العنوان الأول `#` يظهر كـ"عنوان بطولي"
+ *   أكبر حجماً مع خط تحته بلون هوية التطبيق (accent)، والعنوان الثاني `##` يحصل على خط أنحف
+ *   بلون محايد، لفصل بصري واضح بين الأقسام تماماً كمعاينات README الاحترافية.
+ * - **جديد: بطاقات بزوايا مدوَّرة حقيقية** — كتل الكود، الاقتباسات، والجداول لم تعد تُرسم كمستطيل
+ *   خام بحواف حادة، بل كبطاقة مدوَّرة الزوايا فعلياً عبر [RoundedCardSpan] (يُرسم بـ[Path] لا
+ *   [RectF] مباشرة)، بحدّ خفيف حول البطاقة، فتبدو أقرب لمكوّن Material Design من نص خام.
+ * - **جديد: اقتباسات بعلامة تنصيص** — كل كتلة `>` تبدأ الآن بعلامة اقتباس مزخرفة كبيرة بلون
+ *   الشريط الجانبي، لتمييزها بصرياً كـ"مقتطف مُقتبَس" لا مجرّد سطر مائل.
  *
  * الاستخدام المباشر: `textView.text = MarkdownLite.toSpannable(md)`.
  * الاستخدام الموصى به عند وجود روابط قابلة للنقر: `MarkdownLite.applyTo(textView, md)`.
@@ -58,6 +67,7 @@ object MarkdownLite {
     private val BULLET_DEPTH_COLORS = intArrayOf(COLOR_BULLET, COLOR_BULLET_L2, COLOR_BULLET_L3)
 
     private const val COLOR_RULE = 0xFF2D2D30.toInt()            // rin_job_card_border
+    private const val COLOR_CARD_BORDER = 0x26FFFFFF             // حدّ خفيف موحّد لبطاقات الكود/الاقتباس/الجدول
     private const val COLOR_CODE_TEXT = 0xFFE3E5E8.toInt()       // rin_editor_text
     private const val COLOR_CODE_BLOCK_BG = 0x26FFFFFF           // خلفية محايدة خفيفة لكتلة الكود
     private const val COLOR_INLINE_CODE_BG = 0x33FFFFFF          // أغمق قليلاً لتمييز الكود المضمَّن عن السطر
@@ -145,7 +155,10 @@ object MarkdownLite {
             out.setSpan(RelativeSizeSpan(0.9f), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
             out.setSpan(ForegroundColorSpan(COLOR_CODE_TEXT), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
             out.setSpan(LeadingMarginSpan.Standard(18), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-            out.setSpan(codeBlockBackgroundSpan(), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            out.setSpan(
+                RoundedCardSpan(COLOR_CODE_BLOCK_BG, COLOR_CARD_BORDER, start, end),
+                start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+            )
             codeBuffer.clear()
             codeLang = ""
             lastWasListItem = false
@@ -193,15 +206,27 @@ object MarkdownLite {
                     }
                     blockGap()
                     val start = out.length
+                    val glyphStart = out.length
+                    out.append("\u201C ") // علامة تنصيص مزخرفة لتمييز المقتطف المُقتبَس بصرياً
+                    val glyphEnd = out.length
+                    out.setSpan(RelativeSizeSpan(1.3f), glyphStart, glyphEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                    out.setSpan(StyleSpan(Typeface.BOLD), glyphStart, glyphEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                    out.setSpan(ForegroundColorSpan(COLOR_QUOTE_BAR), glyphStart, glyphEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                    val textStart = out.length
                     quoteLines.forEachIndexed { idx, ql ->
                         if (idx > 0) out.append("\n")
                         appendInline(out, ql)
                     }
                     val end = out.length
+                    // نطاقات منفصلة غير متداخلة (بدل نطاق واحد شامل) حتى لا يطغى لون النص العام
+                    // على لون علامة التنصيص المميّزة أعلاه عند تطبيق الـSpans بالترتيب.
                     out.setSpan(QuoteBarSpan(COLOR_QUOTE_BAR), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-                    out.setSpan(BackgroundColorSpan(COLOR_QUOTE_BG), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-                    out.setSpan(ForegroundColorSpan(COLOR_QUOTE_TEXT), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-                    out.setSpan(StyleSpan(Typeface.ITALIC), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                    out.setSpan(
+                        RoundedCardSpan(COLOR_QUOTE_BG, COLOR_CARD_BORDER, start, end),
+                        start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                    )
+                    out.setSpan(ForegroundColorSpan(COLOR_QUOTE_TEXT), textStart, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                    out.setSpan(StyleSpan(Typeface.ITALIC), textStart, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
                     lastWasListItem = false
                     i = j
                 }
@@ -221,22 +246,22 @@ object MarkdownLite {
                 }
 
                 trimmed.startsWith("###### ") -> {
-                    blockGap(); appendHeading(out, trimmed.removePrefix("###### "), 0.85f, dim = true); lastWasListItem = false; i++
+                    blockGap(); appendHeading(out, trimmed.removePrefix("###### "), 0.85f, level = 6, dim = true); lastWasListItem = false; i++
                 }
                 trimmed.startsWith("##### ") -> {
-                    blockGap(); appendHeading(out, trimmed.removePrefix("##### "), 0.95f, dim = true); lastWasListItem = false; i++
+                    blockGap(); appendHeading(out, trimmed.removePrefix("##### "), 0.95f, level = 5, dim = true); lastWasListItem = false; i++
                 }
                 trimmed.startsWith("#### ") -> {
-                    blockGap(); appendHeading(out, trimmed.removePrefix("#### "), 1.05f); lastWasListItem = false; i++
+                    blockGap(); appendHeading(out, trimmed.removePrefix("#### "), 1.05f, level = 4); lastWasListItem = false; i++
                 }
                 trimmed.startsWith("### ") -> {
-                    blockGap(); appendHeading(out, trimmed.removePrefix("### "), 1.15f); lastWasListItem = false; i++
+                    blockGap(); appendHeading(out, trimmed.removePrefix("### "), 1.15f, level = 3); lastWasListItem = false; i++
                 }
                 trimmed.startsWith("## ") -> {
-                    blockGap(); appendHeading(out, trimmed.removePrefix("## "), 1.28f); lastWasListItem = false; i++
+                    blockGap(); appendHeading(out, trimmed.removePrefix("## "), 1.28f, level = 2); lastWasListItem = false; i++
                 }
                 trimmed.startsWith("# ") -> {
-                    blockGap(); appendHeading(out, trimmed.removePrefix("# "), 1.45f); lastWasListItem = false; i++
+                    blockGap(); appendHeading(out, trimmed.removePrefix("# "), 1.6f, level = 1); lastWasListItem = false; i++
                 }
 
                 taskListRegex.matches(trimmed) -> {
@@ -330,14 +355,28 @@ object MarkdownLite {
         textView.highlightColor = COLOR_HIGHLIGHT_BG
     }
 
-    /** يضيف نص عنوان بحجم [scale] النسبي وتشديد كامل، مع تطبيق تشديد أو كود داخلي إن وُجد. */
-    private fun appendHeading(out: SpannableStringBuilder, text: String, scale: Float, dim: Boolean = false) {
+    /**
+     * يضيف نص عنوان بحجم [scale] النسبي وتشديد كامل، مع تطبيق تشديد أو كود داخلي إن وُجد.
+     * العنوانان الأول والثاني ([level] 1 أو 2) يحصلان إضافياً على خط فاصل تحتهما — تماماً كأسلوب
+     * عرض README الاحترافي على GitHub — لفصل الأقسام بصرياً بدل الاعتماد على المسافة فقط.
+     */
+    private fun appendHeading(out: SpannableStringBuilder, text: String, scale: Float, level: Int, dim: Boolean = false) {
         val start = out.length
         appendInline(out, text)
         val end = out.length
         out.setSpan(StyleSpan(Typeface.BOLD), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
         out.setSpan(RelativeSizeSpan(scale), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
         if (dim) out.setSpan(ForegroundColorSpan(COLOR_H_DIM), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+
+        if (level == 1 || level == 2) {
+            out.append("\n")
+            val ruleStart = out.length
+            out.append("\u00A0")
+            val ruleEnd = out.length
+            val ruleColor = if (level == 1) COLOR_BULLET else COLOR_RULE
+            val thickness = if (level == 1) 3f else 1.5f
+            out.setSpan(RuleSpan(ruleColor, thickness), ruleStart, ruleEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        }
     }
 
     /**
@@ -490,23 +529,78 @@ object MarkdownLite {
         out.setSpan(TypefaceSpan("monospace"), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
         out.setSpan(RelativeSizeSpan(0.82f), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
         out.setSpan(ForegroundColorSpan(COLOR_TABLE_TEXT), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-        out.setSpan(codeBlockBackgroundSpan(COLOR_TABLE_BG), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        out.setSpan(
+            RoundedCardSpan(COLOR_TABLE_BG, COLOR_CARD_BORDER, start, end),
+            start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+        )
         out.setSpan(ForegroundColorSpan(COLOR_TABLE_BORDER), start, headerLineStart, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
         out.setSpan(ForegroundColorSpan(COLOR_TABLE_HEADER), headerLineStart, headerLineEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
         out.setSpan(StyleSpan(Typeface.BOLD), headerLineStart, headerLineEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
     }
 
-    /** خلفية تمتد بعرض السطر كاملاً خلف كل سطر من كتلة الكود، بدل خلفية بعرض النص فقط. */
-    private fun codeBlockBackgroundSpan(color: Int = COLOR_CODE_BLOCK_BG): LineBackgroundSpan =
-        LineBackgroundSpan { canvas, paint, left, right, top, _, bottom, _, _, _, _ ->
-            val savedColor = paint.color
-            paint.color = color
-            canvas.drawRect(left.toFloat(), (top - 2).toFloat(), right.toFloat(), (bottom + 2).toFloat(), paint)
-            paint.color = savedColor
-        }
+    /**
+     * بطاقة خلفية بزوايا مدوَّرة حقيقية (لا مستطيل خام) تمتد بعرض السطر خلف كل كتلة (كود/اقتباس/
+     * جدول)، مع حدّ خفيف حول كامل البطاقة — التقويس يظهر فقط عند السطر الأول والسطر الأخير من
+     * الكتلة (يُكتشَفان بمقارنة نطاق كل سطر مُمرَّر من [drawBackground] بحدود الـSpan نفسه
+     * [spanStart]/[spanEnd])، أما الأسطر الوسطى فتبقى بحواف مستقيمة لتتّصل بصرياً بسلاسة.
+     */
+    private class RoundedCardSpan(
+        private val bgColor: Int,
+        private val borderColor: Int,
+        private val spanStart: Int,
+        private val spanEnd: Int,
+        private val cornerRadius: Float = 16f,
+        private val insetTop: Float = 3f,
+        private val insetBottom: Float = 3f,
+        private val borderWidth: Float = 2f
+    ) : LineBackgroundSpan {
+        override fun drawBackground(
+            canvas: Canvas, paint: Paint,
+            left: Int, right: Int, top: Int, baseline: Int, bottom: Int,
+            text: CharSequence, start: Int, end: Int, lnum: Int
+        ) {
+            val isFirst = start <= spanStart
+            val isLast = end >= spanEnd
+            val rect = RectF(left.toFloat(), top - insetTop, right.toFloat(), bottom + insetBottom)
+            val corner = cornerRadius
+            val radii = floatArrayOf(
+                if (isFirst) corner else 0f, if (isFirst) corner else 0f, // أعلى-يسار
+                if (isFirst) corner else 0f, if (isFirst) corner else 0f, // أعلى-يمين
+                if (isLast) corner else 0f, if (isLast) corner else 0f,   // أسفل-يمين
+                if (isLast) corner else 0f, if (isLast) corner else 0f    // أسفل-يسار
+            )
+            val path = Path().apply { addRoundRect(rect, radii, Path.Direction.CW) }
 
-    /** خط أفقي فاصل حقيقي (---) يُرسم بعرض السطر كاملاً، بدل الاعتماد على سلسلة شرطات نصّية. */
-    private class RuleSpan : ReplacementSpan() {
+            val savedColor = paint.color
+            val savedStyle = paint.style
+            val savedAA = paint.isAntiAlias
+            paint.isAntiAlias = true
+
+            paint.style = Paint.Style.FILL
+            paint.color = bgColor
+            canvas.drawPath(path, paint)
+
+            if (isFirst || isLast) {
+                paint.style = Paint.Style.STROKE
+                paint.strokeWidth = borderWidth
+                paint.color = borderColor
+                canvas.drawPath(path, paint)
+            }
+
+            paint.color = savedColor
+            paint.style = savedStyle
+            paint.isAntiAlias = savedAA
+        }
+    }
+
+    /**
+     * خط أفقي فاصل حقيقي يُرسم بعرض السطر كاملاً، بدل الاعتماد على سلسلة شرطات نصّية. يُعاد
+     * استخدامه أيضاً كخط تحت العناوين H1/H2 (بلون وسُمك مختلفَين) لأسلوب README احترافي.
+     */
+    private class RuleSpan(
+        private val color: Int = COLOR_RULE,
+        private val thickness: Float = 2f
+    ) : ReplacementSpan() {
         override fun getSize(paint: Paint, text: CharSequence, start: Int, end: Int, fm: Paint.FontMetricsInt?): Int = 0
 
         override fun draw(
@@ -515,12 +609,15 @@ object MarkdownLite {
         ) {
             val savedColor = paint.color
             val savedWidth = paint.strokeWidth
-            paint.color = COLOR_RULE
-            paint.strokeWidth = 2f
+            val savedCap = paint.strokeCap
+            paint.color = color
+            paint.strokeWidth = thickness
+            paint.strokeCap = Paint.Cap.ROUND
             val middle = (top + bottom) / 2f
             canvas.drawLine(0f, middle, canvas.width.toFloat(), middle, paint)
             paint.color = savedColor
             paint.strokeWidth = savedWidth
+            paint.strokeCap = savedCap
         }
     }
 
