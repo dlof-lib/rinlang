@@ -31,10 +31,32 @@ android {
         }
     }
 
+    // توقيع الإصدار الاحترافي (release) عبر متغيّرات بيئة، بدل قيم ثابتة في الملف أو Secrets يجب
+    // ضبطها يدوياً في GitHub. سير عمل build_apk.yml يُولِّد keystore وكلمتَي مرور عشوائيتين بنفسه
+    // في كل تشغيل ويمرّرهما هنا كمتغيّرات بيئة — فلا حاجة لأي إعداد يدوي على GitHub إطلاقاً.
+    // عند البناء المحلي بدون هذه المتغيّرات، يقع release تلقائياً على توقيع debug القياسي حتى
+    // لا يفشل `gradle assembleRelease` محلياً بسبب غياب keystore.
+    def rinKeystorePath = System.getenv("RIN_KEYSTORE_PATH")
+    def hasReleaseSigning = rinKeystorePath != null && file(rinKeystorePath).exists()
+
+    signingConfigs {
+        if (hasReleaseSigning) {
+            release {
+                storeFile file(rinKeystorePath)
+                storePassword System.getenv("RIN_KEYSTORE_PASSWORD")
+                keyAlias System.getenv("RIN_KEY_ALIAS") ?: "rin"
+                keyPassword System.getenv("RIN_KEY_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            if (hasReleaseSigning) {
+                signingConfig signingConfigs.release
+            }
         }
         debug {
             debuggable true
