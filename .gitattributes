@@ -1,0 +1,5 @@
+# Ensure keystore is always treated as binary and not converted (prevent CRLF issues)
+signing/release.keystore -text
+signing/*.keystore binary
+# Keep credentials as LF only
+signing/keystore-credentials.txt text eol=lf
