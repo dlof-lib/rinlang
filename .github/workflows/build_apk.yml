@@ -1,0 +1,155 @@
+name: Build Signed Release APK (Rin Lang)
+
+# نسخة احترافية من بناء الـ APK: تُنتج ملف release *موقَّعاً* رقمياً (لا debug)، وتُولِّد أسرار
+# التوقيع (keystore + كلمتا مرور) بنفسها تلقائياً — لا حاجة لإضافة أي GitHub Secret يدوياً مسبقاً.
+#
+# **مفتاح توقيع واحد دائم، يُولَّد مرّة واحدة فقط في تاريخ المستودع كله:**
+# أول تشغيل يُولِّد ملفَي signing/release.keystore و signing/keystore-credentials.txt، ثم يحفظهما
+# بـ commit مباشر على نفس الفرع (main/master) — بلا أي فرع Git إضافي. كل تشغيل تالٍ يجدهما موجودَين
+# أصلاً ضمن الملفات التي يسحبها actions/checkout، فيستخدمهما كما هما فوراً دون توليد شيء جديد.
+# الـ commit يحمل وسم [skip ci] حتى لا يُشغِّل نفسه من جديد عند الدفع.
+#
+# ⚠️ تنبيه أمني مهم: ملف keystore-credentials.txt يُحفَظ داخل المستودع نفسه بنص صريح. أي شخص
+# يملك صلاحية قراءة على هذا المستودع (git clone/fetch) يرى كلمتَي المرور ويقدر يوقّع بنفس
+# المفتاح. هذا مقبول تماماً لمستودع خاص (Private) — وهو الوضع الموصى به بشدة هنا — أمّا لو كان
+# المستودع عاماً (Public) فتوقيع تطبيقك يصبح قابلاً للانتحال من أي أحد يطّلع على الكود. لو
+# مستودعك عام، إمّا حوّله خاصاً، أو استخدم مفتاح توقيع حقيقي عبر GitHub Secrets يدوياً بدل هذا.
+#
+# طريقة الاستخدام:
+#   1) ارفع المستودع (بما فيه هذا الملف) إلى GitHub، ويُفضَّل أن يكون Private (راجع التنبيه فوق).
+#   2) Settings ← Actions ← General ← Workflow permissions ← اختر "Read and write permissions"
+#      (مطلوبة مرّة واحدة فقط حتى يقدر الـ workflow يحفظ ملفَي التوقيع في أول تشغيل).
+#   3) شغّل "Build Signed Release APK (Rin Lang)" (أو انتظر push تلقائياً على main/master).
+#   4) بعد الاكتمال: Artifacts ← نزّل "rin-lang-release-apk" وهو APK الموقَّع جاهزاً للتثبيت.
+#      ملفَا التوقيع نفسهما يبقيان محفوظين ضمن المستودع تحت مجلد signing/ للاستخدام الدائم.
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  workflow_dispatch:
+    inputs:
+      package_name:
+        description: "الاسم الظاهر لملف الـ APK الناتج (بدون .apk)"
+        required: false
+        default: "RinLang-release"
+
+permissions:
+  contents: write   # لازمة فقط لحفظ ملفَي التوقيع داخل المستودع في أول تشغيل
+
+jobs:
+  build-signed-release:
+    name: Build & sign release APK
+    runs-on: ubuntu-latest
+    # يمنع تشغيل الـ workflow على الـ commit الذي يحفظ ملفَي التوقيع نفسه (رغم وجود [skip ci]
+    # كطبقة حماية أولى، هذا الشرط طبقة إضافية تمنع أي حلقة تكرار غير متوقّعة).
+    if: "!contains(github.event.head_commit.message, '[skip ci]')"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install NDK & CMake
+        run: |
+          yes | sdkmanager --licenses > /dev/null || true
+          sdkmanager --install "ndk;26.1.10909125" "cmake;3.22.1"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Grant execute permission (if wrapper is present)
+        run: chmod +x ./gradlew || true
+
+      # يتحقّق أولاً هل ملفَا التوقيع موجودان أصلاً ضمن المستودع (من تشغيل سابق) — إن كانا
+      # موجودَين لا يُولَّد شيء جديد إطلاقاً. لا يُولَّد keystore جديد إلا في المرة الأولى
+      # على الإطلاق في تاريخ المستودع كله، بمفتاح RSA 4096-بت وكلمتَي مرور عشوائيتين (32 بايت
+      # لكل منها)، ولا تُطبع أيّ منها في السجلّ إطلاقاً.
+      - name: Generate the permanent signing keystore (only if it never existed)
+        id: keystore
+        run: |
+          set -e
+          mkdir -p signing
+          if [ -f signing/release.keystore ] && [ -f signing/keystore-credentials.txt ]; then
+            echo "لا حاجة للتوليد — keystore دائم موجود مسبقاً من تشغيل سابق."
+            echo "generated=false" >> "$GITHUB_OUTPUT"
+          else
+            STORE_PASS="$(openssl rand -base64 32 | tr -d '\n/+=' | cut -c1-40)"
+            KEY_PASS="$(openssl rand -base64 32 | tr -d '\n/+=' | cut -c1-40)"
+            KEY_ALIAS="rinlang"
+
+            keytool -genkeypair -v \
+              -keystore signing/release.keystore \
+              -alias "$KEY_ALIAS" \
+              -keyalg RSA -keysize 4096 -validity 36500 \
+              -storepass "$STORE_PASS" -keypass "$KEY_PASS" \
+              -dname "CN=RinLang, OU=RinLang App, O=DLoF, L=NA, S=NA, C=SA"
+
+            {
+              echo "keystore_password=$STORE_PASS"
+              echo "key_alias=$KEY_ALIAS"
+              echo "key_password=$KEY_PASS"
+            } > signing/keystore-credentials.txt
+
+            echo "generated=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # تُقرأ كلمات المرور من ملف signing/keystore-credentials.txt (سواء وُلِّد للتو أو كان
+      # محفوظاً مسبقاً في المستودع) وتُصدَّر كمتغيّرات بيئة لخطوة البناء، مع تقنيعها بالسجلّ.
+      - name: Load signing credentials into environment
+        run: |
+          set -e
+          source <(sed 's/^/export /' signing/keystore-credentials.txt)
+          echo "::add-mask::$keystore_password"
+          echo "::add-mask::$key_password"
+          {
+            echo "RIN_KEYSTORE_PATH=$(pwd)/signing/release.keystore"
+            echo "RIN_KEY_ALIAS=$key_alias"
+            echo "RIN_KEYSTORE_PASSWORD=$keystore_password"
+            echo "RIN_KEY_PASSWORD=$key_password"
+          } >> "$GITHUB_ENV"
+
+      - name: Build signed release APK
+        run: gradle assembleRelease --no-daemon --stacktrace
+
+      - name: Rename output APK
+        id: rename
+        run: |
+          name="${{ github.event.inputs.package_name }}"
+          if [ -z "$name" ]; then name="RinLang-release"; fi
+          src=$(find app/build/outputs/apk/release -maxdepth 1 -name "*.apk" | head -n1)
+          if [ -z "$src" ]; then
+            echo "لم يُعثر على APK ناتج — راجع سجلّ خطوة البناء أعلاه."
+            exit 1
+          fi
+          dest="app/build/outputs/apk/release/${name}.apk"
+          mv "$src" "$dest"
+          echo "apk_path=$dest" >> "$GITHUB_OUTPUT"
+
+      - name: Upload signed APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rin-lang-release-apk
+          path: ${{ steps.rename.outputs.apk_path }}
+          if-no-files-found: error
+
+      # يُحفَظ ملفَا التوقيع داخل المستودع نفسه (نفس الفرع) بـ commit *مرّة واحدة فقط* — أول
+      # تشغيل ناجح على الإطلاق. الوسم [skip ci] يمنع هذا الدفع من تشغيل الـ workflow من جديد.
+      # كل تشغيل تالٍ يجد signing/release.keystore موجوداً أصلاً عبر actions/checkout العادي،
+      # فلا حاجة لأي commit إضافي بعد ذلك — مصدر الحقيقة الدائم هو المستودع نفسه.
+      - name: Commit the permanent keystore to the repo (only the first time ever)
+        if: steps.keystore.outputs.generated == 'true'
+        run: |
+          set -e
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -f signing/release.keystore signing/keystore-credentials.txt
+          git commit -m "chore: store permanent auto-generated release signing keystore [skip ci]"
+          git push origin "HEAD:${{ github.ref_name }}"
