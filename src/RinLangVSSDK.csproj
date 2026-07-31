@@ -82,6 +82,9 @@
     <Compile Include="Classification\RinClassifier.cs" />
     <Compile Include="Classification\RinClassifierProvider.cs" />
     <Compile Include="Commands\RunRinFileCommand.cs" />
+    <Compile Include="Commands\RinBuildUtil.cs" />
+    <Compile Include="Commands\BuildRinEngineCommand.cs" />
+    <Compile Include="Commands\InsertRinImportCommand.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
 
