@@ -48,4 +48,16 @@ object RinEngine {
 
     /** Returns a human readable version string for the native engine. */
     external fun engineVersion(): String
+
+    /**
+     * Loomtime rendering engine: parses a `@view.<Kind>=name ... .end/view` root out of [source],
+     * lays it out at [rootWidth] px via the native Loom engine, and returns a JSON dump of the
+     * Fabric (kind/name/source line/geometry/resolved attributes, recursively) for a Compose/
+     * Canvas layer to draw. On a parse/semantic error, returns {"error": "...", "line": N}
+     * instead of throwing — callers should keep showing their last-good frame in that case
+     * (see the Snag containment model in the Loomtime architecture doc).
+     */
+    fun renderView(source: String, rootWidth: Int = 390): String = renderViewNative(source, rootWidth)
+
+    private external fun renderViewNative(source: String, rootWidth: Int): String
 }
