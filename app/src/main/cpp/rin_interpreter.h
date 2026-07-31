@@ -100,6 +100,33 @@ public:
     // (مثلاً مجلد التطبيق الخاص على أندرويد عبر context.filesDir). فارغ = المجلد الحالي (CWD).
     void setBasePath(const std::string& path) { basePath = path; }
 
+    // ---- Loomtime bridge (see loom/rin_loom_needle.h) ----
+    // Calls a top-level RIN function by name using the *real* interpreter -- full language
+    // semantics (loops, recursion, stdlib) included -- so a Warp-bound `onTap` handler can
+    // genuinely mutate state instead of being limited to the read-only attribute evaluator in
+    // rin_loom_eval.h (which only captures `onTap=increment(count);` as a string, never runs it).
+    //
+    // `program` supplies every top-level statement so the callee's own `fun` declaration (and any
+    // others it calls) hoist exactly like a normal run(). `args` are already-evaluated argument
+    // values in call order; `paramAliases[i]` (same length as args, entries may be "") names the
+    // Warp cell that argument literally came from in the call expression -- e.g. for
+    // `onTap=increment(count);`, args[0] is count's current value and paramAliases[0]=="count".
+    // A parameter shadows a same-named global inside the function body, so if the body reassigns
+    // that parameter (`fun increment(count){ count = count + 1; }`) the new value only exists in
+    // the call frame; after the call returns, this writes it back into `globalsInOut["count"]` via
+    // the alias so the caller can push it back into the Warp cell. `globalsInOut` also seeds every
+    // current Warp cell as a plain global (so a zero-arg handler like
+    // `fun increment(){ count = count + 1; }` works too, by direct global mutation) and is updated
+    // in place with the post-call value of every name it originally contained. Returns false
+    // (globalsInOut left untouched) if no such function exists in `program`, or if it does but
+    // fails at runtime (arity mismatch, a RinError raised inside it, etc.) -- `errorOut` explains why.
+    bool callTopLevelFunction(const std::vector<StmtPtr>& program,
+                               const std::string& fnName,
+                               std::vector<Value>& args,
+                               const std::vector<std::string>& paramAliases,
+                               std::unordered_map<std::string, Value>& globalsInOut,
+                               std::string& errorOut);
+
 private:
     EnvPtr globals;
     std::ostringstream output;
