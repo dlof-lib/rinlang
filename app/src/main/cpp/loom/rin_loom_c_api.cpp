@@ -1,9 +1,11 @@
 // loom/rin_loom_c_api.cpp
 #include "rin_loom_c_api.h"
 #include "rin_loom_pipeline.h"
+#include "rin_loom_needle.h"
 #include <cstring>
 #include <cstdlib>
 #include <sstream>
+#include <unordered_map>
 
 namespace {
 char* dupToC(const std::string& s) {
@@ -11,6 +13,40 @@ char* dupToC(const std::string& s) {
     if (!out) return nullptr;
     std::memcpy(out, s.c_str(), s.size() + 1);
     return out;
+}
+
+// ---- Loomtime session state ----
+struct LoomSession {
+    loom::PipelineResult state;
+    loom::Loom loomEngine;
+    std::unordered_map<loom::StrandId, loom::StrandPtr> index; // rebuilt after any structural change
+    int rootWidth = 390;
+};
+
+void relayout(LoomSession* sess) {
+    if (!sess->state.ok || !sess->state.fabric) return;
+    sess->loomEngine = loom::Loom{}; // fresh stats per call; Tension caching lives on the Strands themselves
+    sess->loomEngine.layout(sess->state.fabric, loom::Constraints{0, (double)sess->rootWidth, 0, 1e9}, 0, 0);
+}
+void rebuildIndex(LoomSession* sess) {
+    sess->index.clear();
+    if (sess->state.ok && sess->state.fabric) loom::buildIndex(sess->state.fabric, sess->index);
+}
+// Envelopes the session's current Fabric + stats as JSON, with room for extra caller-supplied
+// fields (already-serialized, comma-prefixed) spliced in before "fabric".
+std::string fabricEnvelope(LoomSession* sess, const std::string& extraFields) {
+    std::ostringstream os;
+    os << "{\"ok\":true" << extraFields
+       << ",\"strandsMeasured\":" << sess->loomEngine.stats.strandsMeasured
+       << ",\"cacheHits\":" << sess->loomEngine.stats.cacheHits
+       << ",\"fabric\":" << loom::fabricToJsonString(sess->state.fabric) << "}";
+    return os.str();
+}
+std::string sessionErrorJson(LoomSession* sess) {
+    std::ostringstream os;
+    os << "{\"ok\":false,\"error\":\"" << loom::jsonEscape(sess ? sess->state.errorMessage : "null session")
+       << "\",\"line\":" << (sess ? sess->state.errorLine : 0) << "}";
+    return os.str();
 }
 }
 
@@ -35,6 +71,81 @@ RIN_API char* rin_loom_render_json(const char* source, int rootWidth) {
        << ",\"cacheHits\":" << loomEngine.stats.cacheHits
        << ",\"fabric\":" << loom::fabricToJsonString(r.fabric) << "}";
     return dupToC(os.str());
+}
+
+RIN_API void* rin_loom_session_create(const char* source, int rootWidth) {
+    auto* sess = new (std::nothrow) LoomSession();
+    if (!sess) return nullptr;
+    sess->rootWidth = rootWidth > 0 ? rootWidth : 390;
+    sess->state = loom::runColdPipeline(source ? source : "");
+    if (sess->state.ok) { relayout(sess); rebuildIndex(sess); }
+    return sess;
+}
+
+RIN_API char* rin_loom_session_render_json(void* sessionPtr) {
+    auto* sess = static_cast<LoomSession*>(sessionPtr);
+    if (!sess || !sess->state.ok) return dupToC(sessionErrorJson(sess));
+    return dupToC(fabricEnvelope(sess, ""));
+}
+
+RIN_API char* rin_loom_session_tap(void* sessionPtr, double x, double y) {
+    auto* sess = static_cast<LoomSession*>(sessionPtr);
+    if (!sess || !sess->state.ok) return dupToC(sessionErrorJson(sess));
+
+    loom::TapResult tap = loom::dispatchTap(sess->state.fabric, sess->state.warp, sess->state.program, x, y);
+
+    if (!tap.changedWarpNames.empty()) {
+        loom::Shuttle shuttle;
+        for (auto& name : tap.changedWarpNames) {
+            shuttle.applyWarpChange(name, sess->state.warp, sess->state.subs, sess->index);
+        }
+        relayout(sess); // an attribute change (e.g. a longer counter string) may resize its Strand
+    }
+
+    std::ostringstream extra;
+    extra << ",\"handled\":" << (tap.handled ? "true" : "false")
+          << ",\"targetId\":" << tap.targetId
+          << ",\"handler\":\"" << loom::jsonEscape(tap.handlerDescription) << "\""
+          << ",\"changed\":[";
+    for (size_t i = 0; i < tap.changedWarpNames.size(); i++) {
+        if (i) extra << ",";
+        extra << "\"" << loom::jsonEscape(tap.changedWarpNames[i]) << "\"";
+    }
+    extra << "]";
+    if (!tap.error.empty()) extra << ",\"error\":\"" << loom::jsonEscape(tap.error) << "\"";
+
+    return dupToC(fabricEnvelope(sess, extra.str()));
+}
+
+RIN_API char* rin_loom_session_update_source(void* sessionPtr, const char* newSource) {
+    auto* sess = static_cast<LoomSession*>(sessionPtr);
+    if (!sess) return dupToC("{\"ok\":false,\"error\":\"null session\"}");
+    std::string src = newSource ? newSource : "";
+
+    if (!sess->state.ok) {
+        // Never had a good Fabric to diff against -- just retry the cold pipeline outright.
+        sess->state = loom::runColdPipeline(src);
+        if (sess->state.ok) { relayout(sess); rebuildIndex(sess); return dupToC(fabricEnvelope(sess, ",\"handled\":false,\"changed\":[]")); }
+        return dupToC(sessionErrorJson(sess));
+    }
+
+    std::string err; int errLine = 0;
+    loom::runHotPipeline(sess->state, src, err, errLine);
+    // runHotPipeline leaves the previous Fabric completely untouched on error (Snag containment),
+    // so sess->state.fabric below is either the freshly-diffed tree or still the last-good one.
+    rebuildIndex(sess);
+    relayout(sess);
+
+    std::ostringstream extra;
+    extra << ",\"handled\":false,\"changed\":[]";
+    if (!err.empty()) {
+        extra << ",\"error\":\"" << loom::jsonEscape(err) << "\",\"line\":" << errLine << ",\"snag\":true";
+    }
+    return dupToC(fabricEnvelope(sess, extra.str()));
+}
+
+RIN_API void rin_loom_session_free(void* sessionPtr) {
+    delete static_cast<LoomSession*>(sessionPtr);
 }
 
 } // extern "C"
