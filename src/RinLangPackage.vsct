@@ -22,6 +22,24 @@
           <LocCanonicalName>.RinLang.RunFile</LocCanonicalName>
         </Strings>
       </Button>
+
+      <Button guid="guidRinCommandSet" id="BuildRinEngineCommandId" priority="0x0101" type="Button">
+        <Parent guid="guidRinCommandSet" id="RinToolbarGroup" />
+        <Icon guid="guidImages" id="bmpRinCommand" />
+        <Strings>
+          <ButtonText>Rin: بناء المحرّك (Build Rin Engine)</ButtonText>
+          <LocCanonicalName>.RinLang.BuildEngine</LocCanonicalName>
+        </Strings>
+      </Button>
+
+      <Button guid="guidRinCommandSet" id="InsertLibraryCommandId" priority="0x0102" type="Button">
+        <Parent guid="guidRinCommandSet" id="RinToolbarGroup" />
+        <Icon guid="guidImages" id="bmpRinCommand" />
+        <Strings>
+          <ButtonText>Rin: إدراج مكتبة (Insert Library)</ButtonText>
+          <LocCanonicalName>.RinLang.InsertLibrary</LocCanonicalName>
+        </Strings>
+      </Button>
     </Buttons>
 
     <Bitmaps>
@@ -35,6 +53,8 @@
     <GuidSymbol name="guidRinCommandSet" value="{abdbacfa-5434-418b-8cba-4130edcff327}">
       <IDSymbol name="RinToolbarGroup" value="0x1020" />
       <IDSymbol name="RunRinFileCommandId" value="0x0100" />
+      <IDSymbol name="BuildRinEngineCommandId" value="0x0101" />
+      <IDSymbol name="InsertLibraryCommandId" value="0x0102" />
     </GuidSymbol>
 
     <GuidSymbol name="guidImages" value="{c9c7e2c4-6c1e-4e2a-9a3a-1b2c3d4e5f60}">
