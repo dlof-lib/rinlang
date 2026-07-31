@@ -6,6 +6,7 @@
 #include "rin_lexer.h"
 #include "rin_parser.h"
 #include "rin_interpreter.h"
+#include "loom/rin_loom_c_api.h"
 
 // runSourceNative(source, baseDir) -> baseDir هو جذر حقيقي على القرص (عادة filesDir الخاص بالتطبيق
 // على أندرويد) تُبنى فوقه كل عمليات save/file/installation/writeFile/readFile الحقيقية. RinEngine.kt
@@ -52,4 +53,20 @@ Java_com_dlof_rinlang_RinEngine_runSourceNative(JNIEnv* env, jobject /* this */,
 extern "C" JNIEXPORT jstring JNICALL
 Java_com_dlof_rinlang_RinEngine_engineVersion(JNIEnv* env, jobject /* this */) {
     return env->NewStringUTF("Rin Engine 1.1 (C++17) — save/file/installation حقيقية على القرص");
+}
+
+// renderViewNative(source, rootWidth) -> Loomtime: يحلّل @view.<Kind>=name، يبني الـ Fabric،
+// يُخطِّطه (Loom) عند العرض rootWidth (بالبكسل)، ويُعيد تفريغ JSON كامل (kind/name/سطر المصدر/
+// هندسة/سمات مُحلَّلة، تكرارياً) يستهلكه جانب Kotlin/Canvas لرسم الواجهة فعلياً. عند فشل التحليل
+// يُعاد JSON بالشكل {"error": "...", "line": N} بدل رمي استثناء عبر حدود JNI.
+extern "C" JNIEXPORT jstring JNICALL
+Java_com_dlof_rinlang_RinEngine_renderViewNative(JNIEnv* env, jobject /* this */, jstring sourceJStr, jint rootWidth) {
+    const char* cSource = env->GetStringUTFChars(sourceJStr, nullptr);
+    std::string source(cSource ? cSource : "");
+    env->ReleaseStringUTFChars(sourceJStr, cSource);
+
+    char* json = rin_loom_render_json(source.c_str(), (int)rootWidth);
+    jstring result = env->NewStringUTF(json ? json : "{\"error\":\"null result\",\"line\":0}");
+    rin_free_string(json);
+    return result;
 }
