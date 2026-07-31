@@ -1403,6 +1403,73 @@ void Interpreter::appendInstalledIndex(const std::string& name, const std::strin
     out << name << "\t" << relPath << "\t" << (simplified ? "1" : "0") << "\t" << static_cast<long long>(std::time(nullptr)) << "\n";
 }
 
+bool Interpreter::callTopLevelFunction(const std::vector<StmtPtr>& program,
+                                        const std::string& fnName,
+                                        std::vector<Value>& args,
+                                        const std::vector<std::string>& paramAliases,
+                                        std::unordered_map<std::string, Value>& globalsInOut,
+                                        std::string& errorOut) {
+    callDepth = 0;
+
+    // Hoist every top-level function first (mirrors run()'s hoist pass) so the callee -- and
+    // anything it calls in turn -- resolves regardless of source order, and simple recursion works.
+    for (const auto& s : program) {
+        if (auto fn = std::dynamic_pointer_cast<FunctionStmt>(s)) {
+            auto callable = std::make_shared<Callable>();
+            callable->declaration = fn;
+            callable->closure = globals;
+            Value v;
+            v.type = Value::Type::FUNCTION;
+            v.function = callable;
+            globals->define(fn->name, v);
+        }
+    }
+    // Seed every known Warp cell as a plain global, so a zero-arg handler that mutates a
+    // same-named global directly (rather than via a parameter) also works.
+    for (auto& kv : globalsInOut) globals->define(kv.first, kv.second);
+
+    Value target;
+    if (!globals->get(fnName, target) || target.type != Value::Type::FUNCTION) {
+        errorOut = "no top-level function named '" + fnName + "'";
+        return false;
+    }
+    auto& params = target.function->declaration->params;
+    if (args.size() != params.size()) {
+        errorOut = "'" + fnName + "' expects " + std::to_string(params.size()) +
+                   " argument(s) but got " + std::to_string(args.size());
+        return false;
+    }
+
+    auto callEnv = std::make_shared<Environment>(target.function->closure);
+    for (size_t i = 0; i < args.size(); i++) callEnv->define(params[i], args[i]);
+
+    try {
+        executeBlock(target.function->declaration->body->statements, callEnv);
+    } catch (ReturnSignal&) {
+        // a bare `return;`/`return expr;` inside an onTap handler is fine -- the value isn't used,
+        // any state it already mutated (Warp cells, params) stands as-is.
+    } catch (RinError& e) {
+        errorOut = e.message;
+        return false;
+    }
+
+    // Write back: for every originally-seeded name, prefer its final value from an aliased
+    // parameter (a parameter shadows a same-named global inside callEnv, so plain global
+    // reassignment never reaches it in that case); otherwise read the (possibly reassigned) global.
+    for (auto& kv : globalsInOut) {
+        bool viaParam = false;
+        for (size_t i = 0; i < paramAliases.size() && i < params.size(); i++) {
+            if (paramAliases[i] == kv.first) {
+                auto it = callEnv->values.find(params[i]);
+                if (it != callEnv->values.end()) { kv.second = it->second; viaParam = true; }
+                break;
+            }
+        }
+        if (!viaParam) globals->get(kv.first, kv.second);
+    }
+    return true;
+}
+
 std::string Interpreter::run(const std::vector<StmtPtr>& statements) {
     loadInstalledIndex(); // يحمّل أسماء أي تثبيتات فعلية سابقة على نفس basePath (استمرارية عبر التشغيلات)
     importedPaths.clear(); // كل تشغيل جديد يبدأ بسجل @import نظيف (لا يرث استيرادات تشغيل سابق)
