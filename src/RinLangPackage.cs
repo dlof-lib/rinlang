@@ -15,7 +15,7 @@ namespace RinLang.VSSDK
     /// so it auto-loads whenever a solution is present.
     /// </summary>
     [PackageRegistration(UseManagedResourcesOnly = false, AllowsBackgroundLoading = true)]
-    [InstalledProductRegistration("Rin Language Support (VSSDK)", "Syntax classification, snippets, and a Run-File command for the Rin language.", "1.0.0")]
+    [InstalledProductRegistration("Rin Language Support (VSSDK)", "Syntax classification, snippets, a real-engine Run/Build command, and a library (@import) inserter for the Rin language.", "1.1.0")]
     [ProvideMenuResource("Menus.ctmenu", 1)]
     [Guid(PackageGuids.PackageGuidString)]
     [ProvideAutoLoad(Microsoft.VisualStudio.Shell.Interop.UIContextGuids80.SolutionExists, PackageAutoLoadFlags.BackgroundLoad)]
@@ -38,6 +38,8 @@ namespace RinLang.VSSDK
         {
             await base.InitializeAsync(cancellationToken, progress);
             await RunRinFileCommand.InitializeAsync(this);
+            await BuildRinEngineCommand.InitializeAsync(this);
+            await InsertRinImportCommand.InitializeAsync(this);
         }
     }
 }
