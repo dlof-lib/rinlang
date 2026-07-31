@@ -22,6 +22,7 @@ add_library(rin SHARED
     ${RIN_CPP_DIR}/rin_parser.cpp
     ${RIN_CPP_DIR}/rin_interpreter.cpp
     ${RIN_CPP_DIR}/rin_c_api.cpp
+    ${RIN_CPP_DIR}/loom/rin_loom_c_api.cpp
 )
 
 target_include_directories(rin PUBLIC ${RIN_CPP_DIR})
