@@ -62,6 +62,10 @@ private:
     StmtPtr documentStatement();  // document id="..." fields={...};  (قاعدة بيانات NoSQL: container.doc / doc)
     std::string readOptionalFormatAttr(); // يقرأ "format=IDENT" اختيارياً (لـ save/installation)، أو "" إن لم توجد
 
+    // Loomtime rendering engine (view strands / reactive state) — امتداد إضافي
+    std::shared_ptr<ViewStmt> viewDeclaration(); // @view.<Kind>=name ... .end/view  (يُستدعى بعد استهلاك '@' و'view')
+    StmtPtr warpDeclaration();                    // warp name = expr;              (يُستدعى بعد استهلاك 'warp')
+
     // expressions (precedence climbing)
     ExprPtr expression();
     ExprPtr assignment();
