@@ -50,6 +50,14 @@ StmtPtr Parser::declaration() {
         advance(); // 'import'
         return importStatement();
     }
+    // '@view.<Kind>=name ... .end/view' -> Loomtime rendering engine (امتداد إضافي، نفس أسلوب
+    // '@import' أعلاه بالضبط: نتحقق من الشكل قبل تفويض الأمر لـ atBlock() العام).
+    if (check(TokenType::AT) && checkNext(TokenType::IDENT) &&
+        current + 1 < tokens.size() && tokens[current + 1].lexeme == "view") {
+        advance(); // '@'
+        advance(); // 'view'
+        return viewDeclaration();
+    }
     if (match({TokenType::AT})) return atBlock();
     if (match({TokenType::SECTION})) return sectionBlock();
     if (match({TokenType::TRANSLATIONS})) return translationsBlock();
@@ -70,6 +78,8 @@ StmtPtr Parser::declaration() {
     if (check(TokenType::IDENT) && peek().lexeme == "style") { advance(); return styleStatement(); }
     // 'document' كلمة سياقية غير محجوزة أيضاً (مفهوم قاعدة البيانات اللاعلاقية: container.doc / doc)
     if (check(TokenType::IDENT) && peek().lexeme == "document") { advance(); return documentStatement(); }
+    // 'warp' كلمة سياقية غير محجوزة أيضاً (Loomtime: خلية حالة تفاعلية يستخدمها محرّك العرض)
+    if (check(TokenType::IDENT) && peek().lexeme == "warp") { advance(); return warpDeclaration(); }
 
     return statement();
 }
@@ -260,6 +270,68 @@ StmtPtr Parser::textDeclaration() {
     ExprPtr init = expression();
     consume(TokenType::SEMICOLON, "Expected ';' after text declaration");
     auto s = std::make_shared<TextStmt>();
+    s->name = name.lexeme;
+    s->initializer = init;
+    s->line = tok.line;
+    return s;
+}
+
+// Loomtime rendering engine: view strands + reactive state -----------------------------
+// @view.<Kind>=name  key=expr; ...  [<@view متداخلة>]  .end/view
+// يُستدعى بعد أن يكون المستدعي (declaration()) قد استهلك بالفعل '@' و'view'، تماماً كما
+// يفعل مع '@import'. نعيد استخدام readOptionalName()/checkClosingTag()/consumeEndTag()
+// الموجودة أصلاً — readTagKeyword() تتعامل مع 'view' تلقائياً عبر مسارها العام (IDENT عادي)
+// فتُرجع "view" كما هي، فتعمل consumeEndTag("view") بلا أي تعديل إضافي عليها.
+std::shared_ptr<ViewStmt> Parser::viewDeclaration() {
+    Token viewTok = previous(); // 'view'
+    consume(TokenType::DOT, "Expected '.' after '@view' (did you mean '@view.Column=...'?)");
+    Token kindTok = consume(TokenType::IDENT, "Expected a strand kind after '@view.' (e.g. Column, Text, Button)");
+    std::string name = readOptionalName();
+
+    auto s = std::make_shared<ViewStmt>();
+    s->name = name;
+    s->kindTag = kindTok.lexeme;
+    s->line = viewTok.line;
+
+    while (!checkClosingTag() && !isAtEnd()) {
+        // كتلة @view متداخلة -> ابن Strand
+        if (check(TokenType::AT) && checkNext(TokenType::IDENT) &&
+            current + 1 < tokens.size() && tokens[current + 1].lexeme == "view") {
+            advance(); // '@'
+            advance(); // 'view'
+            s->children.push_back(viewDeclaration());
+            continue;
+        }
+        // سمة key=expr;  — المفتاح قد يكون IDENT عادياً أو أحد الكلمات المحجوزة في اللغة (مثل
+        // 'text' أو 'file') التي تتصادف كونها اسم سمة طبيعياً هنا؛ لذا نعتمد على النظر للأمام
+        // (وجود '=' مباشرة بعده) بدل اشتراط IDENT فقط — كما لا يوجد أي غموض مع كتلة متداخلة
+        // (تبدأ بـ '@') أو وسم الإغلاق (يبدأ بـ '.'، مُستبعَد أصلاً عبر checkClosingTag أعلاه).
+        if (!check(TokenType::AT) && checkNext(TokenType::EQUAL)) {
+            Token key = advance();
+            consume(TokenType::EQUAL, "Expected '=' after attribute key '" + key.lexeme +
+                                       "' inside @view." + s->kindTag);
+            ExprPtr val = expression(); // أي تعبير RIN عادي: نص/رقم/متغيّر warp/عملية/نداء دالة
+            consume(TokenType::SEMICOLON, "Expected ';' after value for attribute '" + key.lexeme + "'");
+            ViewAttr a;
+            a.key = key.lexeme; a.value = val; a.line = key.line;
+            s->attrs.push_back(a);
+            continue;
+        }
+        throw RinError("Expected an attribute (key=value;), a nested '@view...', or '.end/view' inside "
+                        "@view." + s->kindTag, peek().line);
+    }
+    consumeEndTag("view");
+    return s;
+}
+
+// warp name = expr;
+StmtPtr Parser::warpDeclaration() {
+    Token tok = previous(); // 'warp'
+    Token name = consume(TokenType::IDENT, "Expected a name after 'warp'");
+    consume(TokenType::EQUAL, "Expected '=' after warp name");
+    ExprPtr init = expression();
+    consume(TokenType::SEMICOLON, "Expected ';' after warp declaration");
+    auto s = std::make_shared<WarpStmt>();
     s->name = name.lexeme;
     s->initializer = init;
     s->line = tok.line;
