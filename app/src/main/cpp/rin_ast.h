@@ -289,4 +289,40 @@ struct ImportStmt : Stmt {
     std::string alias; // فارغ = دمج مباشر في النطاق الحالي
 };
 
+// ---- Loomtime rendering engine: view strands + reactive state (Warp) ----
+// هذا امتداد إضافي بحت (additive) فوق لغة الحاويات أعلاه — لا يُعدِّل أي عقدة موجودة.
+// يمنح RIN مفردات واجهة كاملة (Text/Image/Button/Card/Column/Row/Stack/...) بجانب
+// container.object/portal/block/sticker الموجودة أصلاً (والتي تبقى صالحة تماماً كما هي).
+//
+// @view.<Kind>=name   key=expr; ...   [<@view... متداخلة>]   .end/view
+//   مثال:
+//     @view.Column=root
+//       gap=16; padding=20;
+//       @view.Text=title text="Welcome to Rin"; size=22; .end/view
+//     .end/view
+//
+// warp name = expr;   -> خلية حالة تفاعلية (reactive state cell)، يُعاد تقييم أي وصلة
+//   Strand تقرأ منها تلقائياً عبر محرّك Shuttle (انظر loom/rin_loom_shuttle.h) كلما تغيّرت،
+//   سواء كان التغيير من محرِّر المستخدم (Hot Reload) أو وقت التشغيل (نقرة زر مثلاً).
+
+// key=expr;  سمة واحدة داخل كتلة @view (القيمة أي تعبير RIN عادي: نص/رقم/متغيّر warp/نداء دالة)
+struct ViewAttr {
+    std::string key;
+    ExprPtr value;
+    int line = 0;
+};
+
+struct ViewStmt : Stmt {
+    std::string name;                          // قد يكون فارغاً (Strand مجهول الاسم)
+    std::string kindTag;                       // "Column" / "Text" / "Button" / ... أو وسم مخصَّص (Bolt plugin)
+    std::vector<ViewAttr> attrs;
+    std::vector<std::shared_ptr<ViewStmt>> children;
+};
+
+// warp name = expr;
+struct WarpStmt : Stmt {
+    std::string name;
+    ExprPtr initializer;
+};
+
 } // namespace rin
