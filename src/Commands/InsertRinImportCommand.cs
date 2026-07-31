@@ -31,6 +31,7 @@ namespace RinLang.VSSDK.Commands
             ("validate.og.rin", "دوال تحقّق آمنة (لا ترمي أخطاء): isEmail, isNumeric, isInRange..."),
             ("functional.og.rin", "دوال ترتيبية عليا: mapArr, filterArr, reduceArr, composeApply..."),
             ("oglang.og.rin", "صناعة حزم .og.rin ولغات مصغّرة: pkgInfo, rule, langNew, runProgram..."),
+            ("ringo.og.rin", "لغة ترميز [tag] (Ringo): ringoToHtml, ringoToPlain, ringoTokenize..."),
         };
 
         private readonly AsyncPackage _package;
