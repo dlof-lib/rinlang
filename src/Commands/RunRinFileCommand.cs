@@ -12,9 +12,12 @@ namespace RinLang.VSSDK.Commands
 {
     /// <summary>
     /// Implements Tools &gt; "Rin: تشغيل الملف الحالي (Run Rin File)".
-    /// Locates rin_cli (built from engine/rin_cli.cpp in the Rin repo) next to the
-    /// solution, or on PATH, runs it against the active .rin document, and streams
-    /// stdout/stderr to a dedicated "Rin" Output window pane.
+    /// Locates the real Rin engine binary — built from tools/rin_run.cpp against
+    /// the same rin_lexer/rin_parser/rin_interpreter sources the Android app embeds
+    /// via JNI (see RinBuildUtil.EngineSources) — next to the solution, or on PATH,
+    /// runs it against the active .rin document, and streams stdout/stderr to a
+    /// dedicated "Rin" Output window pane. This always executes the genuine C++17
+    /// engine; nothing here is simulated or reimplemented in C#.
     /// </summary>
     internal sealed class RunRinFileCommand
     {
@@ -57,14 +60,14 @@ namespace RinLang.VSSDK.Commands
 
             _dte.ActiveDocument.Save();
 
-            string rinCliPath = LocateRinCli(filePath);
-            if (rinCliPath == null)
+            string enginePath = LocateRinEngine(filePath);
+            if (enginePath == null)
             {
-                _output.WriteLine("[Rin] تعذّر العثور على rin_cli. ابنِ المحرّك من engine/rin_cli.cpp (انظر tools/ في مستودع rinlang) وضع الملف التنفيذي في PATH أو بجانب ملف الحل.");
+                _output.WriteLine("[Rin] تعذّر العثور على محرّك Rin (rin_run). استخدم \"Rin: بناء المحرّك (Build Rin Engine)\" من قائمة Tools لبنائه تلقائياً من tools/rin_run.cpp، أو ضع ملفاً تنفيذياً باسم rin_run في PATH أو بجانب ملف الحل.");
                 return;
             }
 
-            RunProcessAsync(rinCliPath, filePath).FileAndForget("RinLang/RunFile");
+            RunProcessAsync(enginePath, filePath).FileAndForget("RinLang/RunFile");
         }
 
         private async Task RunProcessAsync(string rinCliPath, string rinFilePath)
@@ -111,12 +114,17 @@ namespace RinLang.VSSDK.Commands
         }
 
         /// <summary>
-        /// Looks for rin_cli(.exe) next to the solution, in a conventional
-        /// build\ / out\ / bin\ subfolder, or on PATH — in that order.
+        /// Looks for the compiled engine binary next to the solution, in a
+        /// conventional build\ / out\ / bin\ subfolder, or on PATH — in that order.
+        /// "rin_run" is the real name (tools/rin_run.cpp); "rin_cli" is kept as a
+        /// legacy alias for anyone who already built under the old name.
         /// </summary>
-        private string LocateRinCli(string rinFilePath)
+        private string LocateRinEngine(string rinFilePath)
         {
-            string exeName = Environment.OSVersion.Platform == PlatformID.Win32NT ? "rin_cli.exe" : "rin_cli";
+            bool isWindows = Environment.OSVersion.Platform == PlatformID.Win32NT;
+            string[] candidateNames = isWindows
+                ? new[] { "rin_run.exe", "rin_cli.exe" }
+                : new[] { "rin_run", "rin_cli" };
 
             string solutionDir = Path.GetDirectoryName(_dte?.Solution?.FullName ?? string.Empty);
             string[] candidateDirs =
@@ -134,19 +142,25 @@ namespace RinLang.VSSDK.Commands
                 {
                     continue;
                 }
-                string candidate = Path.Combine(dir, exeName);
-                if (File.Exists(candidate))
+                foreach (var name in candidateNames)
                 {
-                    return candidate;
+                    string candidate = Path.Combine(dir, name);
+                    if (File.Exists(candidate))
+                    {
+                        return candidate;
+                    }
                 }
             }
 
             foreach (var pathDir in (Environment.GetEnvironmentVariable("PATH") ?? string.Empty).Split(Path.PathSeparator))
             {
-                string candidate = Path.Combine(pathDir, exeName);
-                if (File.Exists(candidate))
+                foreach (var name in candidateNames)
                 {
-                    return candidate;
+                    string candidate = Path.Combine(pathDir, name);
+                    if (File.Exists(candidate))
+                    {
+                        return candidate;
+                    }
                 }
             }
 
