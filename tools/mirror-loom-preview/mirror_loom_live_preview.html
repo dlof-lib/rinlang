@@ -1,0 +1,862 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Mirror Loom — RIN Live Preview</title>
+<style>
+  @font-face { font-family: 'UIMono'; src: local('JetBrains Mono'), local('Menlo'), local('Consolas'); }
+  :root{
+    --bg:        #14141c;
+    --panel:     #1a1a24;
+    --panel-2:   #20202c;
+    --line:      #2b2b3a;
+    --text:      #e7e5f0;
+    --muted:     #8b899c;
+    --thread:    #d4a24c;   /* gold thread — primary accent */
+    --thread-dim:#8a6a2e;
+    --weft:      #4ec9b0;   /* teal — structural / grid accent */
+    --danger:    #e0607a;
+    --insert:    #5fd07a;
+    --update:    #d4a24c;
+    --remove:    #e0607a;
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;margin:0;background:var(--bg);color:var(--text);
+    font-family:-apple-system,'Inter',Segoe UI,Helvetica,Arial,sans-serif;overflow:hidden;}
+  .app{display:grid;grid-template-rows:44px 1fr 26px;height:100vh;}
+
+  /* ---- top bar ---- */
+  .topbar{display:flex;align-items:center;gap:14px;padding:0 14px;background:var(--panel);
+    border-bottom:1px solid var(--line);}
+  .brand{display:flex;align-items:center;gap:8px;font-weight:600;letter-spacing:.2px;font-size:13px;}
+  .brand .mark{width:16px;height:16px;border-radius:3px;
+    background:repeating-linear-gradient(45deg,var(--thread) 0 2px,#2a2a38 2px 4px);}
+  .brand .sub{color:var(--muted);font-weight:400;}
+  .sep{width:1px;height:20px;background:var(--line);}
+  .toolgroup{display:flex;align-items:center;gap:6px;}
+  .toolgroup label{font-size:11px;color:var(--muted);margin-right:2px;}
+  select,button.tbtn{background:var(--panel-2);color:var(--text);border:1px solid var(--line);
+    border-radius:6px;padding:5px 9px;font-size:12px;cursor:pointer;}
+  button.tbtn.active{border-color:var(--thread);color:var(--thread);}
+  button.tbtn:hover{border-color:#40405a;}
+  .zoomrow{display:flex;align-items:center;gap:6px;}
+  input[type=range]{accent-color:var(--thread);width:90px;}
+  .spacer{flex:1;}
+  .restart-btn{background:var(--thread);color:#1a1305;border:none;font-weight:600;}
+  .restart-btn:hover{filter:brightness(1.08);}
+
+  /* ---- main grid ---- */
+  .main{display:grid;grid-template-columns:38% 1fr 260px;height:100%;overflow:hidden;}
+  .pane{display:flex;flex-direction:column;min-height:0;border-right:1px solid var(--line);}
+  .pane:last-child{border-right:none;}
+  .pane-head{padding:8px 12px;font-size:11px;text-transform:uppercase;letter-spacing:.6px;
+    color:var(--muted);background:var(--panel);border-bottom:1px solid var(--line);
+    display:flex;justify-content:space-between;align-items:center;}
+
+  /* ---- editor ---- */
+  .editor-wrap{flex:1;display:flex;min-height:0;background:#101018;position:relative;}
+  .gutter{width:40px;padding:10px 6px 10px 0;text-align:right;color:#4a4a5e;font:12px/1.6 'UIMono',monospace;
+    background:#101018;user-select:none;border-right:1px solid var(--line);white-space:pre;overflow:hidden;}
+  .gutter .snagline{color:var(--danger);font-weight:700;}
+  textarea{flex:1;resize:none;border:none;outline:none;background:transparent;color:var(--text);
+    font:13px/1.6 'UIMono',monospace;padding:10px 12px;white-space:pre;overflow:auto;tab-size:2;}
+  .snag-banner{position:absolute;left:40px;right:0;bottom:0;background:#2a1620;color:#ffb3c2;
+    border-top:1px solid var(--danger);font:12px/1.5 'UIMono',monospace;padding:8px 12px;display:none;}
+  .snag-banner.show{display:block;}
+  .eventlog{height:130px;border-top:1px solid var(--line);background:#101018;overflow-y:auto;
+    font:11px/1.6 'UIMono',monospace;padding:6px 10px;}
+  .eventlog .ev{margin-bottom:2px;}
+  .ev.warp{color:var(--weft);} .ev.shuttle{color:var(--thread);} .ev.err{color:var(--danger);}
+
+  /* ---- preview ---- */
+  .preview-body{flex:1;overflow:auto;background:
+      radial-gradient(circle at 1px 1px, #23232f 1px, transparent 0) 0 0/16px 16px, #16161f;
+    display:flex;align-items:flex-start;justify-content:center;padding:26px;gap:20px;}
+  .device{display:flex;flex-direction:column;align-items:center;gap:8px;}
+  .device .label{font-size:11px;color:var(--muted);}
+  .canvas-stack{position:relative;box-shadow:0 12px 40px rgba(0,0,0,.5);border-radius:4px;overflow:hidden;}
+  canvas{display:block;}
+  .flash{position:absolute;inset:0;pointer-events:none;}
+
+  /* ---- inspector (Loupe) ---- */
+  .loupe{flex:1;overflow-y:auto;font-size:12px;}
+  .tree{padding:8px 10px;font:12px/1.7 'UIMono',monospace;}
+  .tree .node{padding:1px 4px;border-radius:4px;cursor:pointer;white-space:nowrap;}
+  .tree .node:hover{background:#242433;}
+  .tree .node.selected{background:#3a2c14;color:var(--thread);}
+  .tree .kind{color:var(--weft);}
+  .tree .name{color:#c9c6dd;}
+  .props{padding:10px 12px;border-top:1px solid var(--line);}
+  .props h4{margin:0 0 6px;font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);}
+  .props .row{display:flex;justify-content:space-between;font:12px/1.8 'UIMono',monospace;color:#c9c6dd;}
+  .props .row b{color:var(--text);font-weight:600;}
+  .overlay-toggles{padding:10px 12px;border-top:1px solid var(--line);display:flex;flex-direction:column;gap:6px;}
+  .overlay-toggles label{display:flex;align-items:center;gap:8px;font-size:12px;color:#c9c6dd;cursor:pointer;}
+  input[type=checkbox]{accent-color:var(--weft);}
+
+  /* ---- status bar ---- */
+  .statusbar{display:flex;align-items:center;gap:18px;padding:0 14px;background:#0d0d13;
+    border-top:1px solid var(--line);font:11px/1 'UIMono',monospace;color:var(--muted);}
+  .statusbar b{color:var(--text);}
+  .dot{width:6px;height:6px;border-radius:50%;background:var(--insert);display:inline-block;margin-right:4px;}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <div class="topbar">
+    <div class="brand"><span class="mark"></span>Mirror Loom <span class="sub">— RIN Live Preview</span></div>
+    <div class="sep"></div>
+    <div class="toolgroup">
+      <label>Devices</label>
+      <button class="tbtn active" data-mode="single">Single</button>
+      <button class="tbtn" data-mode="multi">Multi-device</button>
+    </div>
+    <div class="toolgroup" id="deviceSelectWrap">
+      <select id="deviceSelect">
+        <option value="phone">Phone · 375</option>
+        <option value="tablet">Tablet · 560</option>
+        <option value="desktop">Desktop · 760</option>
+      </select>
+    </div>
+    <div class="sep"></div>
+    <div class="zoomrow"><label>Zoom</label><input type="range" id="zoom" min="50" max="200" value="100"><span id="zoomVal">100%</span></div>
+    <div class="sep"></div>
+    <div class="toolgroup">
+      <button class="tbtn" id="toggleGrid">Grid</button>
+      <button class="tbtn" id="toggleGuides">Guidelines</button>
+      <button class="tbtn" id="toggleSafe">Safe Area</button>
+    </div>
+    <div class="spacer"></div>
+    <button class="tbtn restart-btn" id="hotRestart">⟳ Hot Restart</button>
+  </div>
+
+  <div class="main">
+    <!-- EDITOR -->
+    <div class="pane" style="min-width:0;">
+      <div class="pane-head"><span>home.rin</span><span id="parseState" style="color:var(--insert);">● cold pipeline ready</span></div>
+      <div class="editor-wrap">
+        <div class="gutter" id="gutter"></div>
+        <textarea id="src" spellcheck="false"></textarea>
+        <div class="snag-banner" id="snagBanner"></div>
+      </div>
+      <div class="eventlog" id="eventlog"></div>
+    </div>
+
+    <!-- PREVIEW -->
+    <div class="pane" style="min-width:0;">
+      <div class="pane-head"><span>Mirror Loom</span><span id="fabricCount" style="color:var(--muted);"></span></div>
+      <div class="preview-body" id="previewBody"></div>
+    </div>
+
+    <!-- INSPECTOR -->
+    <div class="pane">
+      <div class="pane-head"><span>Loupe · Inspector</span></div>
+      <div class="loupe">
+        <div class="tree" id="tree"></div>
+        <div class="props" id="props"><h4>Selection</h4><div class="row"><span>—</span></div></div>
+        <div class="overlay-toggles">
+          <label><input type="checkbox" id="cbGrid"> Grid</label>
+          <label><input type="checkbox" id="cbGuides"> Guidelines</label>
+          <label><input type="checkbox" id="cbSafe"> Safe area</label>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="statusbar">
+    <span><span class="dot" id="fpsDot"></span><b id="fps">120</b> fps</span>
+    <span>mem <b id="mem">0.0</b> MB</span>
+    <span>layout <b id="layoutMs">0.00</b> ms</span>
+    <span>paint <b id="paintMs">0.00</b> ms</span>
+    <span>strands measured <b id="measured">0</b></span>
+    <span>tension cache hits <b id="cacheHits">0</b></span>
+    <span class="spacer"></span>
+    <span id="pipelineMode">mode: hot reload</span>
+  </div>
+</div>
+
+<script>
+/* =========================================================================================
+   MIRROR LOOM — in-browser Loomtime pipeline: Lexer -> Parser -> AST -> Fabric (Renderer
+   Engine) -> Loom (layout) -> Dye (paint) -> Canvas, plus Shuttle (diff/incremental),
+   Warp (runtime state), Needle (hit-test/selection), Loupe (inspector), Tension (perf).
+   ========================================================================================= */
+
+// ---------------------------------------------------------------- Lexer -------------------
+function tokenize(src){
+  const toks=[]; let i=0, line=1;
+  const isAlpha=c=>/[A-Za-z_]/.test(c), isAlnum=c=>/[A-Za-z0-9_]/.test(c), isDigit=c=>/[0-9]/.test(c);
+  while(i<src.length){
+    let c=src[i];
+    if(c==='\n'){line++;i++;continue;}
+    if(/\s/.test(c)){i++;continue;}
+    if(c==='/'&&src[i+1]==='/'){ while(i<src.length&&src[i]!=='\n') i++; continue; }
+    if(c==='@'){toks.push({t:'AT',v:'@',line});i++;continue;}
+    if(c==='.'){toks.push({t:'DOT',v:'.',line});i++;continue;}
+    if(c==='/'){toks.push({t:'SLASH',v:'/',line});i++;continue;}
+    if(c==='='){toks.push({t:'EQUAL',v:'=',line});i++;continue;}
+    if(c===';'){toks.push({t:'SEMI',v:';',line});i++;continue;}
+    if(c==='"'){ let j=i+1,s=''; const ln=line; while(j<src.length&&src[j]!=='"'){s+=src[j];j++;} toks.push({t:'STRING',v:s,line:ln}); i=j+1; continue; }
+    if(isDigit(c)){ let j=i,s=''; while(j<src.length&&(isDigit(src[j])||src[j]==='.')){s+=src[j];j++;} toks.push({t:'NUMBER',v:parseFloat(s),line}); i=j; continue; }
+    if(isAlpha(c)){ let j=i,s=''; while(j<src.length&&isAlnum(src[j])){s+=src[j];j++;}
+      let type='IDENT'; if(s==='end')type='END'; if(s==='view')type='VIEW'; if(s==='warp')type='WARP';
+      toks.push({t:type,v:s,line}); i=j; continue; }
+    i++; // skip unknown
+  }
+  toks.push({t:'EOF',v:'',line});
+  return toks;
+}
+
+// ---------------------------------------------------------------- Parser ------------------
+class RinError extends Error{ constructor(msg,line){ super(msg); this.line=line; } }
+
+function parseProgram(src){
+  const toks=tokenize(src);
+  let p=0;
+  const cur=()=>toks[p];
+  const at=t=>cur().t===t;
+  const expect=(t,what)=>{ if(!at(t)) throw new RinError(`expected ${what}, got '${cur().v}'`, cur().line); return toks[p++]; };
+
+  const warps={};
+  let root=null;
+
+  function parseAttr(){
+    const key=expect('IDENT','attribute key').v;
+    expect('EQUAL',"'=' after '"+key+"'");
+    let val;
+    if(at('STRING')) val={raw:toks[p++].v, isNum:false};
+    else if(at('NUMBER')) val={raw:String(toks[p++].v), isNum:true};
+    else throw new RinError(`expected value for '${key}'`, cur().line);
+    expect('SEMI',"';'");
+    return {key, ...val};
+  }
+
+  function parseView(){
+    const atLine=cur().line;
+    expect('AT',"'@'"); expect('VIEW','view'); expect('DOT',"'.'");
+    const kindTok=expect('IDENT','strand kind');
+    expect('EQUAL',"'='");
+    const nameTok=expect('IDENT','strand name');
+    const node={name:nameTok.v, kind:kindTok.v, attrs:[], children:[], line:atLine};
+    while(at('IDENT')) node.attrs.push(parseAttr());
+    while(at('AT')) node.children.push(parseView());
+    expect('DOT',"'.' of '.end/view'"); expect('END',"'end'"); expect('SLASH',"'/'"); expect('VIEW',"'view'");
+    return node;
+  }
+
+  while(!at('EOF')){
+    if(at('WARP')){
+      const ln=cur().line; p++;
+      const name=expect('IDENT','warp name').v;
+      expect('EQUAL',"'='");
+      let init=0;
+      if(at('NUMBER')) init=toks[p++].v; else if(at('STRING')) init=toks[p++].v; else throw new RinError('expected warp initializer', cur().line);
+      expect('SEMI',"';'");
+      warps[name]={value:init, line:ln};
+    } else if(at('AT')){
+      if(root) throw new RinError('only one root @view is supported in this preview', cur().line);
+      root=parseView();
+    } else {
+      throw new RinError(`unexpected token '${cur().v}'`, cur().line);
+    }
+  }
+  if(!root) throw new RinError('no @view root found', 1);
+  return {root, warps};
+}
+
+// ---------------------------------------------------------------- Fabric ------------------
+let idCounter=1;
+function fnv1a(str,h){ h = h || 0x811c9dc5; for(let i=0;i<str.length;i++){ h ^= str.charCodeAt(i); h = Math.imul(h,0x01000193); } return h>>>0; }
+
+function resolveText(raw, warpState){
+  // "{{name}}" substitution — this is Loomtime's Warp-binding resolution step.
+  return raw.replace(/\{\{(\w+)\}\}/g, (_,name)=> (warpState[name]!==undefined? warpState[name] : `{{${name}}}`));
+}
+
+function buildFabric(node, warpState, parentPath, idx){
+  const myPath = parentPath+'/'+(node.name||('#'+idx));
+  const attrs = node.attrs.map(a=>({key:a.key, raw:a.raw, isNum:a.isNum,
+    resolved: a.isNum? parseFloat(a.raw) : resolveText(a.raw, warpState)}));
+  const strand = {
+    id: fnv1a(myPath+':'+node.kind),
+    kind: node.kind, name: node.name, sourceLine: node.line,
+    attrs, children: [],
+    geometry:{x:0,y:0,w:0,h:0}, lastConstraints:null, lastContentHash:null,
+  };
+  let childHashAcc=0, i=0;
+  for(const c of node.children){
+    const child = buildFabric(c, warpState, myPath, i++);
+    childHashAcc = fnv1a(String(child.contentHash), childHashAcc);
+    strand.children.push(child);
+  }
+  const attrHash = fnv1a(attrs.map(a=>a.key+'='+a.resolved).join('|'));
+  strand.contentHash = fnv1a(node.kind, fnv1a(String(childHashAcc), attrHash));
+  return strand;
+}
+function attrOf(s,k,def){
+  const a=s.attrs.find(a=>a.key===k);
+  if(!a) return def;
+  if(typeof def==='number' && typeof a.resolved==='string'){
+    const n=parseFloat(a.resolved);
+    return Number.isFinite(n) ? n : def;
+  }
+  return a.resolved;
+}
+
+function dumpTree(container, root, selectedId, onSelect){
+  container.innerHTML='';
+  function row(s, depth){
+    const div=document.createElement('div');
+    div.className='node'+(s.id===selectedId?' selected':'');
+    div.style.paddingLeft=(depth*14)+'px';
+    div.innerHTML=`<span class="kind">${s.kind}</span> <span class="name">${s.name||''}</span>`;
+    div.onclick=()=>onSelect(s);
+    container.appendChild(div);
+    s.children.forEach(c=>row(c, depth+1));
+  }
+  row(root,0);
+}
+
+// ---------------------------------------------------------------- Loom (layout) -----------
+const LoomStats = { measured:0, cacheHits:0 };
+function measureTextW(text, size){ return text.length*size*0.56; }
+
+function layout(s, c, ox, oy){
+  const same = s.lastConstraints && s.lastConstraints.maxW===c.maxW && s.lastConstraints.maxH===c.maxH;
+  const sameContent = s.lastContentHash===s.contentHash;
+  if(same && sameContent && s.geometry.w>0){
+    LoomStats.cacheHits++;
+    const dx = ox - s.geometry.x, dy = oy - s.geometry.y;
+    if(dx!==0 || dy!==0) translateSubtree(s, dx, dy); // unchanged content, but parent may have moved
+    return s.geometry;
+  }
+  LoomStats.measured++;
+  s.lastConstraints=c; s.lastContentHash=s.contentHash;
+
+  let size;
+  switch(s.kind){
+    case 'Text':   size=measureText(s,c); break;
+    case 'Image':  size=measureImage(s,c); break;
+    case 'Button': size=measureButton(s,c); break;
+    case 'Divider':size={w:c.maxW, h:1}; break;
+    case 'Card':   size=layoutBox(s,c, attrOf(s,'padding',12), ox, oy); break;
+    case 'Column': size=layoutLinear(s,c,'y', ox, oy); break;
+    case 'Row':    size=layoutLinear(s,c,'x', ox, oy); break;
+    case 'Stack':  size=layoutStack(s,c, ox, oy); break;
+    default:       size=layoutLinear(s,c,'y', ox, oy); break;
+  }
+  s.geometry={x:ox,y:oy,w:Math.max(size.w,c.minW||0),h:Math.max(size.h,c.minH||0)};
+  return s.geometry;
+}
+function translateSubtree(s, dx, dy){
+  s.geometry.x+=dx; s.geometry.y+=dy;
+  s.children.forEach(c=>translateSubtree(c, dx, dy));
+}
+function measureText(s,c){
+  const text=attrOf(s,'text',''), size=attrOf(s,'size',16);
+  return {w:Math.min(measureTextW(text,size), c.maxW), h:Math.min(size*1.4, c.maxH)};
+}
+function measureImage(s,c){ return {w:Math.min(attrOf(s,'width',96),c.maxW), h:Math.min(attrOf(s,'height',96),c.maxH)}; }
+function measureButton(s,c){ const label=attrOf(s,'label',''); return {w:Math.min(measureTextW(label,16)+32,c.maxW), h:Math.min(44,c.maxH)}; }
+function layoutBox(s,c,pad, ox, oy){
+  const innerMaxW=Math.max(0,c.maxW-pad*2), innerMaxH=Math.max(0,c.maxH-pad*2);
+  let w=0,h=0;
+  for(const child of s.children){
+    const r=layout(child,{minW:0,maxW:innerMaxW,minH:0,maxH:innerMaxH}, ox+pad, oy+pad+h);
+    w=Math.max(w,r.w); h+=r.h+8;
+  }
+  if(s.children.length) h-=8;
+  return {w:Math.min(w+pad*2,c.maxW), h:Math.min(h+pad*2,c.maxH)};
+}
+function layoutLinear(s,c,axis, ox, oy){
+  const gap=attrOf(s,'gap',0), pad=attrOf(s,'padding',0);
+  const innerMaxW=Math.max(0,c.maxW-pad*2), innerMaxH=Math.max(0,c.maxH-pad*2);
+  let cursor=pad, mainUsed=0, crossMax=0;
+  for(const child of s.children){
+    const cc={minW:0,maxW:innerMaxW,minH:0,maxH:innerMaxH};
+    const localX=axis==='y'?pad:cursor, localY=axis==='y'?cursor:pad;
+    const r=layout(child,cc, ox+localX, oy+localY);
+    const mainSize=axis==='y'?r.h:r.w, crossSize=axis==='y'?r.w:r.h;
+    cursor+=mainSize+gap; mainUsed+=mainSize+gap; crossMax=Math.max(crossMax,crossSize);
+  }
+  if(s.children.length) mainUsed-=gap;
+  const w=axis==='y'? Math.min(crossMax+pad*2,c.maxW) : Math.min(mainUsed+pad*2,c.maxW);
+  const h=axis==='y'? Math.min(mainUsed+pad*2,c.maxH) : Math.min(crossMax+pad*2,c.maxH);
+  return {w,h};
+}
+function layoutStack(s,c, ox, oy){
+  let w=0,h=0;
+  for(const child of s.children){ const r=layout(child,{minW:0,maxW:c.maxW,minH:0,maxH:c.maxH},ox,oy); w=Math.max(w,r.w); h=Math.max(h,r.h); }
+  return {w:Math.min(w,c.maxW), h:Math.min(h,c.maxH)};
+}
+
+// ---------------------------------------------------------------- Dye (paint) -------------
+const PALETTE = {
+  Card:'#242432', Button:'#7c5cff', Text:'#e7e5f0', Image:'#39394a',
+  Column:'transparent', Row:'transparent', Stack:'transparent', Divider:'#33333f'
+};
+function resolveColor(s){
+  const c = attrOf(s,'color', null);
+  if(c) return c;
+  return PALETTE[s.kind] || '#555';
+}
+function paintStrand(ctx, s, dirtySet){
+  ctx.save();
+  const grad = attrOf(s,'gradient', null);
+  const blur = attrOf(s,'blur', null);
+  const shadow = attrOf(s,'shadow', null);
+  if(blur) ctx.filter = `blur(${blur}px)`;
+  if(shadow){ ctx.shadowColor='rgba(0,0,0,.45)'; ctx.shadowBlur=parseFloat(shadow); ctx.shadowOffsetY=parseFloat(shadow)/2; }
+
+  if(s.kind!=='Text' && s.kind!=='Column' && s.kind!=='Row' && s.kind!=='Stack'){
+    if(grad){
+      const [c1,c2]=grad.split(',');
+      const g=ctx.createLinearGradient(s.geometry.x,s.geometry.y,s.geometry.x,s.geometry.y+s.geometry.h);
+      g.addColorStop(0,c1.trim()); g.addColorStop(1,c2.trim());
+      ctx.fillStyle=g;
+    } else ctx.fillStyle = resolveColor(s);
+    const r=6;
+    roundRect(ctx, s.geometry.x, s.geometry.y, s.geometry.w, s.geometry.h, s.kind==='Divider'?0:r);
+    ctx.fill();
+  }
+  ctx.restore();
+
+  if(s.kind==='Text'){
+    ctx.fillStyle = resolveColor(s);
+    ctx.font = `${attrOf(s,'size',16)}px 'UIMono', monospace`;
+    ctx.textBaseline='middle';
+    ctx.fillText(attrOf(s,'text',''), s.geometry.x, s.geometry.y+s.geometry.h/2);
+  }
+  if(s.kind==='Button'){
+    ctx.fillStyle='#fff'; ctx.font=`600 14px -apple-system, sans-serif`; ctx.textBaseline='middle'; ctx.textAlign='center';
+    ctx.fillText(attrOf(s,'label',''), s.geometry.x+s.geometry.w/2, s.geometry.y+s.geometry.h/2);
+    ctx.textAlign='left';
+  }
+  if(s.kind==='Image'){
+    ctx.fillStyle='#6a6a80'; ctx.font='11px sans-serif';
+    ctx.fillText('IMG · '+(attrOf(s,'src','')||'?'), s.geometry.x+6, s.geometry.y+s.geometry.h/2);
+  }
+
+  for(const c of s.children) paintStrand(ctx, c, dirtySet);
+
+  if(dirtySet && dirtySet.has(s.id)){
+    ctx.save();
+    ctx.strokeStyle='#ffd479'; ctx.lineWidth=2;
+    ctx.strokeRect(s.geometry.x+1, s.geometry.y+1, s.geometry.w-2, s.geometry.h-2);
+    ctx.restore();
+  }
+}
+function roundRect(ctx,x,y,w,h,r){
+  ctx.beginPath();
+  ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r);
+  ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath();
+}
+
+// ---------------------------------------------------------------- Shuttle (diff) ----------
+function shuttleDiff(oldStrand, newNode, warpState, parentPath, idx, patches, dirty){
+  if(oldStrand.kind !== newNode.kind){
+    const fresh = buildFabric(newNode, warpState, parentPath, idx);
+    Object.keys(oldStrand).forEach(k=>delete oldStrand[k]);
+    Object.assign(oldStrand, fresh);
+    patches.push({kind:'Replace', id:oldStrand.id, name:oldStrand.name});
+    dirty.add(oldStrand.id);
+    return;
+  }
+  const changed=[];
+  const newAttrs = newNode.attrs.map(a=>({key:a.key, raw:a.raw, isNum:a.isNum,
+    resolved: a.isNum? parseFloat(a.raw): resolveText(a.raw, warpState)}));
+  for(const na of newAttrs){
+    const oa = oldStrand.attrs.find(a=>a.key===na.key);
+    if(!oa || oa.resolved !== na.resolved) changed.push(na.key);
+  }
+  if(changed.length){
+    oldStrand.attrs = newAttrs;
+    patches.push({kind:'UpdateAttrs', id:oldStrand.id, name:oldStrand.name, changed});
+    dirty.add(oldStrand.id);
+  }
+  const myPath = parentPath+'/'+(newNode.name||('#'+idx));
+  const oldByKey={};
+  oldStrand.children.forEach((c,i)=>{ oldByKey[c.name||('#'+i)] = c; });
+  const newChildren=[];
+  newNode.children.forEach((nc,i)=>{
+    const key = nc.name||('#'+i);
+    if(oldByKey[key]){
+      shuttleDiff(oldByKey[key], nc, warpState, myPath, i, patches, dirty);
+      newChildren.push(oldByKey[key]);
+      delete oldByKey[key];
+    } else {
+      const fresh = buildFabric(nc, warpState, myPath, i);
+      patches.push({kind:'Insert', id:fresh.id, name:fresh.name});
+      dirty.add(fresh.id);
+      newChildren.push(fresh);
+    }
+  });
+  Object.values(oldByKey).forEach(removed=>{ patches.push({kind:'Remove', id:removed.id, name:removed.name}); });
+  oldStrand.children = newChildren;
+  let childHashAcc=0; oldStrand.children.forEach(c=>{childHashAcc=fnv1a(String(c.contentHash),childHashAcc);});
+  const attrHash = fnv1a(oldStrand.attrs.map(a=>a.key+'='+a.resolved).join('|'));
+  oldStrand.contentHash = fnv1a(oldStrand.kind, fnv1a(String(childHashAcc), attrHash));
+  if(dirty.has(oldStrand.id)===false){
+    // propagate dirtiness upward if any descendant changed (content hash differs from cache anyway,
+    // Loom's own cache check handles the skip/recompute decision at layout time).
+  }
+}
+
+// ---------------------------------------------------------------- Needle (hit test) --------
+function hitTest(root, x, y){
+  let found=null;
+  function walk(s){
+    if(x>=s.geometry.x && x<=s.geometry.x+s.geometry.w && y>=s.geometry.y && y<=s.geometry.y+s.geometry.h) found=s;
+    s.children.forEach(walk);
+  }
+  walk(root);
+  return found;
+}
+function recomputeHashes(s){
+  let childHashAcc=0;
+  for(const c of s.children){ recomputeHashes(c); childHashAcc = fnv1a(String(c.contentHash), childHashAcc); }
+  const attrHash = fnv1a(s.attrs.map(a=>a.key+'='+a.resolved).join('|'));
+  s.contentHash = fnv1a(s.kind, fnv1a(String(childHashAcc), attrHash));
+}
+function findAny(root, pred){
+  if(pred(root)) return root;
+  for(const c of root.children){ const r=findAny(c,pred); if(r) return r; }
+  return null;
+}
+function collectSubscribers(root, warpName){
+  const out=[];
+  function walk(s){
+    const t = s.attrs.find(a=>a.key==='text' && !a.isNum && a.raw.includes('{{'+warpName+'}}'));
+    if(t) out.push(s);
+    s.children.forEach(walk);
+  }
+  walk(root);
+  return out;
+}
+
+// =========================================================================================
+// Application state & wiring
+// =========================================================================================
+const DEFAULT_SOURCE =
+`warp count = 0;
+
+@view.Column=root
+  gap=16; padding=20;
+
+  @view.Card=header
+    padding=16; shadow=10;
+    @view.Text=title text="Welcome to Rin"; size=22; .end/view
+    @view.Text=subtitle text="Loomtime rendering engine"; size=14; color="#8b899c"; .end/view
+  .end/view
+
+  @view.Row=actions
+    gap=12;
+    @view.Button=cta label="Continue"; .end/view
+    @view.Button=incBtn label="Tap to increment"; onTap="increment(count)"; .end/view
+  .end/view
+
+  @view.Card=counter
+    padding=16; gradient="#2c2140,#241a30";
+    @view.Text=countText text="Count: {{count}}"; size=18; .end/view
+  .end/view
+
+  @view.Row=media
+    gap=10;
+    @view.Image=thumb src="poster.png"; width=120; height=72; .end/view
+    @view.Card=blurCard
+      padding=14; blur=0;
+      @view.Text=blurLabel text="Effects: blur / shadow / gradient"; size=12; color="#c9c6dd"; .end/view
+    .end/view
+  .end/view
+.end/view
+`;
+
+const DEVICE_PROFILES = { phone:{w:375,label:'Phone · 375'}, tablet:{w:560,label:'Tablet · 560'}, desktop:{w:760,label:'Desktop · 760'} };
+
+const state = {
+  ast:null, fabric:null, warpState:{},
+  mode:'single', device:'phone', zoom:1,
+  showGrid:false, showGuides:false, showSafe:false,
+  selectedId:null,
+};
+
+const els = {
+  src: document.getElementById('src'), gutter: document.getElementById('gutter'),
+  previewBody: document.getElementById('previewBody'), tree: document.getElementById('tree'),
+  props: document.getElementById('props'), snagBanner: document.getElementById('snagBanner'),
+  parseState: document.getElementById('parseState'), eventlog: document.getElementById('eventlog'),
+  fabricCount: document.getElementById('fabricCount'),
+  fps: document.getElementById('fps'), mem: document.getElementById('mem'),
+  layoutMs: document.getElementById('layoutMs'), paintMs: document.getElementById('paintMs'),
+  measured: document.getElementById('measured'), cacheHits: document.getElementById('cacheHits'),
+  pipelineMode: document.getElementById('pipelineMode'),
+};
+
+els.src.value = DEFAULT_SOURCE;
+
+function log(cls, msg){
+  const d=document.createElement('div'); d.className='ev '+cls; d.textContent=msg;
+  els.eventlog.appendChild(d); els.eventlog.scrollTop = els.eventlog.scrollHeight;
+}
+
+function updateGutter(){
+  const n = els.src.value.split('\n').length;
+  let lines=[]; for(let i=1;i<=n;i++) lines.push(i);
+  els.gutter.textContent = lines.join('\n');
+}
+
+function countStrands(s){ let n=1; s.children.forEach(c=>n+=countStrands(c)); return n; }
+
+function classifyStructural(patches){
+  // Structural (Hot Restart) vs cosmetic (Hot Reload) classification (see §15.4 of the design doc)
+  return patches.some(p=>p.kind==='Replace');
+}
+
+function coldBuild(){
+  try{
+    const parsed = parseProgram(els.src.value);
+    state.ast = parsed.root;
+    state.warpState = {}; for(const k in parsed.warps) state.warpState[k]=parsed.warps[k].value;
+    state.fabric = buildFabric(state.ast, state.warpState, '', 0);
+    els.snagBanner.classList.remove('show');
+    els.parseState.textContent='● cold pipeline ready'; els.parseState.style.color='var(--insert)';
+    log('shuttle', `[cold] parsed ${countStrands(state.fabric)} strand(s), ${Object.keys(state.warpState).length} warp cell(s)`);
+    renderAll(true);
+  }catch(e){
+    showSnag(e);
+  }
+}
+
+function showSnag(e){
+  els.snagBanner.classList.add('show');
+  els.snagBanner.textContent = `Snag · line ${e.line ?? '?'} — ${e.message}`;
+  els.parseState.textContent='● snag — last good preview kept'; els.parseState.style.color='var(--danger)';
+  log('err', `[snag] line ${e.line ?? '?'}: ${e.message}`);
+}
+
+let debounceTimer=null;
+els.src.addEventListener('input', ()=>{
+  updateGutter();
+  clearTimeout(debounceTimer);
+  debounceTimer = setTimeout(hotUpdate, 140); // simulates "instant while typing" without thrashing on every keystroke
+});
+
+function hotUpdate(){
+  if(!state.fabric){ coldBuild(); return; }
+  let parsed;
+  try{ parsed = parseProgram(els.src.value); }
+  catch(e){ showSnag(e); return; } // keep last-good Fabric alive — no destructive patches applied
+  els.snagBanner.classList.remove('show');
+  els.parseState.textContent='● cold pipeline ready'; els.parseState.style.color='var(--insert)';
+
+  const t0 = performance.now();
+  const patches=[]; const dirty=new Set();
+  // merge any new/changed warp initial values that were literally edited in source
+  for(const k in parsed.warps){ if(!(k in state.warpState)) state.warpState[k]=parsed.warps[k].value; }
+  shuttleDiff(state.fabric, parsed.root, state.warpState, '', 0, patches, dirty);
+  const t1 = performance.now();
+
+  if(patches.length===0) return;
+  const structural = classifyStructural(patches);
+  els.pipelineMode.textContent = 'mode: ' + (structural? 'hot restart (structural change)' : 'hot reload');
+  log('shuttle', `[shuttle] ${patches.length} patch(es) in ${(t1-t0).toFixed(3)}ms — ` +
+      patches.slice(0,4).map(p=>`${p.kind}(${p.name||p.id})`).join(', ') + (patches.length>4?' …':''));
+  renderAll(false, dirty);
+}
+
+// Runtime (Warp) interaction — proves edit-time and run-time updates share one pipeline
+function warpIncrement(name){
+  state.warpState[name] = (state.warpState[name]||0) + 1;
+  const subs = collectSubscribers(state.fabric, name);
+  const dirty = new Set();
+  subs.forEach(s=>{
+    const a = s.attrs.find(a=>a.key==='text');
+    a.resolved = resolveText(a.raw, state.warpState);
+    dirty.add(s.id);
+  });
+  recomputeHashes(state.fabric); // propagate the change up so ancestor Tension caches invalidate correctly
+  log('warp', `[warp] ${name} -> ${state.warpState[name]} (${subs.length} subscriber Strand(s) patched, 0 re-parsed)`);
+  renderAll(false, dirty);
+}
+
+// ---------------------------------------------------------------- render orchestration -----
+function renderAll(full, dirtySet){
+  LoomStats.measured=0; LoomStats.cacheHits=0;
+  const t0=performance.now();
+  buildPreviewDOM();
+  const layouts = runLayoutForAllDevices();
+  const t1=performance.now();
+  paintAllDevices(layouts, dirtySet);
+  const t2=performance.now();
+
+  els.layoutMs.textContent=(t1-t0).toFixed(2);
+  els.paintMs.textContent=(t2-t1).toFixed(2);
+  els.measured.textContent=LoomStats.measured;
+  els.cacheHits.textContent=LoomStats.cacheHits;
+  els.fabricCount.textContent = countStrands(state.fabric)+' strands';
+  els.mem.textContent = (countStrands(state.fabric)*2.1/1024).toFixed(3); // rough KB->MB heuristic, labeled as estimate
+
+  dumpTree(els.tree, state.fabric, state.selectedId, onSelectStrand);
+  if(state.selectedId) renderProps(findAny(state.fabric, s=>s.id===state.selectedId));
+}
+
+let deviceCanvases={};
+function buildPreviewDOM(){
+  els.previewBody.innerHTML='';
+  deviceCanvases={};
+  const devices = state.mode==='multi' ? Object.keys(DEVICE_PROFILES) : [state.device];
+  devices.forEach(key=>{
+    const prof = DEVICE_PROFILES[key];
+    const wrap=document.createElement('div'); wrap.className='device';
+    const lbl=document.createElement('div'); lbl.className='label'; lbl.textContent=prof.label;
+    const stackDiv=document.createElement('div'); stackDiv.className='canvas-stack';
+    stackDiv.style.transform=`scale(${state.zoom})`; stackDiv.style.transformOrigin='top center';
+    const canvas=document.createElement('canvas'); canvas.width=prof.w; canvas.height=560;
+    const overlay=document.createElement('canvas'); overlay.width=prof.w; overlay.height=560; overlay.className='flash';
+    stackDiv.appendChild(canvas); stackDiv.appendChild(overlay);
+    wrap.appendChild(lbl); wrap.appendChild(stackDiv);
+    els.previewBody.appendChild(wrap);
+    deviceCanvases[key]={canvas, overlay, width:prof.w};
+    canvas.addEventListener('click', ev=>{
+      const rect=canvas.getBoundingClientRect();
+      const scaleX = canvas.width/rect.width, scaleY=canvas.height/rect.height;
+      const x=(ev.clientX-rect.left)*scaleX, y=(ev.clientY-rect.top)*scaleY;
+      const hit = hitTest(state.fabric, x, y);
+      if(hit) onSelectStrand(hit);
+    });
+  });
+}
+
+function runLayoutForAllDevices(){
+  const devices = state.mode==='multi' ? Object.keys(DEVICE_PROFILES) : [state.device];
+  const results={};
+  devices.forEach(key=>{
+    const prof=DEVICE_PROFILES[key];
+    // NOTE: re-running layout for each device profile against the SAME shared Fabric —
+    // this is the "N parallel Loom passes over one Fabric" multi-device model.
+    layout(state.fabric, {minW:0,maxW:prof.w,minH:0,maxH:1e9}, 0, 0);
+    results[key] = state.fabric.geometry.h;
+  });
+  return results;
+}
+
+function paintAllDevices(heights, dirtySet){
+  Object.keys(deviceCanvases).forEach(key=>{
+    const {canvas, overlay} = deviceCanvases[key];
+    const h = Math.max(heights[key]||560, 200);
+    canvas.height = h; overlay.height = h;
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    ctx.fillStyle='#16161f'; ctx.fillRect(0,0,canvas.width,canvas.height);
+    // re-layout for THIS device's width (geometry differs per profile) then paint
+    layout(state.fabric, {minW:0,maxW:canvas.width,minH:0,maxH:1e9}, 0, 0);
+    paintStrand(ctx, state.fabric, dirtySet);
+    drawOverlay(deviceCanvases[key].overlay);
+  });
+}
+
+function drawOverlay(overlay){
+  const ctx=overlay.getContext('2d');
+  ctx.clearRect(0,0,overlay.width,overlay.height);
+  if(state.showGrid){
+    ctx.strokeStyle='rgba(78,201,176,.18)'; ctx.lineWidth=1;
+    for(let x=0;x<overlay.width;x+=8){ ctx.beginPath(); ctx.moveTo(x+.5,0); ctx.lineTo(x+.5,overlay.height); ctx.stroke(); }
+    for(let y=0;y<overlay.height;y+=8){ ctx.beginPath(); ctx.moveTo(0,y+.5); ctx.lineTo(overlay.width,y+.5); ctx.stroke(); }
+  }
+  if(state.showGuides){
+    ctx.strokeStyle='rgba(212,162,76,.5)'; ctx.setLineDash([4,4]); ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(overlay.width/2,0); ctx.lineTo(overlay.width/2,overlay.height); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(overlay.width,0); ctx.stroke();
+    ctx.setLineDash([]);
+  }
+  if(state.showSafe){
+    ctx.strokeStyle='rgba(224,96,122,.7)'; ctx.lineWidth=1.5;
+    ctx.strokeRect(8.5,28.5, overlay.width-17, overlay.height-52);
+  }
+  if(state.selectedId){
+    const s = findAny(state.fabric, x=>x.id===state.selectedId);
+    if(s){ ctx.strokeStyle='#ffd479'; ctx.lineWidth=1.5; ctx.setLineDash([3,2]);
+      ctx.strokeRect(s.geometry.x-2, s.geometry.y-2, s.geometry.w+4, s.geometry.h+4); ctx.setLineDash([]); }
+  }
+}
+
+function onSelectStrand(s){
+  state.selectedId=s.id;
+  // scroll editor to source line
+  const lines = els.src.value.split('\n');
+  let idx=0, charCount=0;
+  for(let i=0;i<lines.length;i++){ if(i+1===s.sourceLine){ idx=charCount; break;} charCount+=lines[i].length+1; }
+  els.src.focus(); els.src.setSelectionRange(idx, idx+lines[s.sourceLine-1]?.length||0);
+  dumpTree(els.tree, state.fabric, state.selectedId, onSelectStrand);
+  renderProps(s);
+  Object.values(deviceCanvases).forEach(({overlay})=>drawOverlay(overlay));
+
+  // handle onTap for Button strands directly from the preview (Needle dispatch)
+  const onTap = s.attrs.find(a=>a.key==='onTap');
+  if(onTap){
+    const m = onTap.raw.match(/increment\((\w+)\)/);
+    if(m) warpIncrement(m[1]);
+  }
+}
+
+function renderProps(s){
+  if(!s){ els.props.innerHTML='<h4>Selection</h4><div class="row"><span>—</span></div>'; return; }
+  const rows = [
+    ['kind', s.kind], ['name', s.name||'(anonymous)'], ['source line', s.sourceLine],
+    ['x', s.geometry.x.toFixed(1)], ['y', s.geometry.y.toFixed(1)],
+    ['w', s.geometry.w.toFixed(1)], ['h', s.geometry.h.toFixed(1)],
+    ['resolved color', resolveColor(s)],
+  ];
+  els.props.innerHTML = '<h4>Selection</h4>' + rows.map(([k,v])=>`<div class="row"><span>${k}</span><b>${v}</b></div>`).join('')
+    + '<h4 style="margin-top:10px;">Attributes</h4>' + s.attrs.map(a=>`<div class="row"><span>${a.key}</span><b>${a.resolved}</b></div>`).join('');
+}
+
+// ---------------------------------------------------------------- toolbar wiring -----------
+document.querySelectorAll('[data-mode]').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('[data-mode]').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active'); state.mode=btn.dataset.mode;
+    document.getElementById('deviceSelectWrap').style.display = state.mode==='single'?'flex':'none';
+    renderAll(false, new Set());
+  });
+});
+document.getElementById('deviceSelect').addEventListener('change', e=>{ state.device=e.target.value; renderAll(false,new Set()); });
+document.getElementById('zoom').addEventListener('input', e=>{
+  state.zoom = parseInt(e.target.value)/100; document.getElementById('zoomVal').textContent=e.target.value+'%';
+  document.querySelectorAll('.canvas-stack').forEach(el=>el.style.transform=`scale(${state.zoom})`);
+});
+function wireToggle(btnId, cbId, key){
+  const btn=document.getElementById(btnId), cb=document.getElementById(cbId);
+  const sync=()=>{ state[key]=cb.checked; btn.classList.toggle('active', cb.checked);
+    Object.values(deviceCanvases).forEach(({overlay})=>drawOverlay(overlay)); };
+  btn.addEventListener('click', ()=>{ cb.checked=!cb.checked; sync(); });
+  cb.addEventListener('change', sync);
+}
+wireToggle('toggleGrid','cbGrid','showGrid');
+wireToggle('toggleGuides','cbGuides','showGuides');
+wireToggle('toggleSafe','cbSafe','showSafe');
+document.getElementById('hotRestart').addEventListener('click', ()=>{
+  log('shuttle', '[hot restart] discarding Fabric + Warp scope, re-running cold pipeline');
+  state.fabric=null; state.warpState={}; state.selectedId=null;
+  coldBuild();
+});
+
+// ---------------------------------------------------------------- FPS / mem loop -----------
+let lastT=performance.now(), frames=0;
+function fpsLoop(t){
+  frames++;
+  if(t-lastT>500){
+    els.fps.textContent = Math.round(frames*1000/(t-lastT));
+    frames=0; lastT=t;
+  }
+  requestAnimationFrame(fpsLoop);
+}
+requestAnimationFrame(fpsLoop);
+
+// ---------------------------------------------------------------- boot ---------------------
+updateGutter();
+coldBuild();
+</script>
+</body>
+</html>
