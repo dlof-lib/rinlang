@@ -70,3 +70,50 @@ Java_com_dlof_rinlang_RinEngine_renderViewNative(JNIEnv* env, jobject /* this */
     rin_free_string(json);
     return result;
 }
+
+// ---- Loomtime session (Needle): a persistent Fabric+Warp session so a live-preview tap can
+// actually run its onTap handler (real fun/while loop or a built-in Warp op) and see the result,
+// instead of renderViewNative's stateless one-shot render. The native session pointer is boxed as
+// a jlong handle on the Kotlin side (see RinEngine.kt's LoomSession wrapper) -- standard JNI
+// pattern for opaque native resources that must outlive a single call.
+
+extern "C" JNIEXPORT jlong JNICALL
+Java_com_dlof_rinlang_RinEngine_loomSessionCreateNative(JNIEnv* env, jobject /* this */, jstring sourceJStr, jint rootWidth) {
+    const char* cSource = env->GetStringUTFChars(sourceJStr, nullptr);
+    std::string source(cSource ? cSource : "");
+    env->ReleaseStringUTFChars(sourceJStr, cSource);
+    void* session = rin_loom_session_create(source.c_str(), (int)rootWidth);
+    return reinterpret_cast<jlong>(session);
+}
+
+extern "C" JNIEXPORT jstring JNICALL
+Java_com_dlof_rinlang_RinEngine_loomSessionRenderJsonNative(JNIEnv* env, jobject /* this */, jlong handle) {
+    char* json = rin_loom_session_render_json(reinterpret_cast<void*>(handle));
+    jstring result = env->NewStringUTF(json ? json : "{\"ok\":false,\"error\":\"null result\"}");
+    rin_free_string(json);
+    return result;
+}
+
+extern "C" JNIEXPORT jstring JNICALL
+Java_com_dlof_rinlang_RinEngine_loomSessionTapNative(JNIEnv* env, jobject /* this */, jlong handle, jdouble x, jdouble y) {
+    char* json = rin_loom_session_tap(reinterpret_cast<void*>(handle), (double)x, (double)y);
+    jstring result = env->NewStringUTF(json ? json : "{\"ok\":false,\"error\":\"null result\"}");
+    rin_free_string(json);
+    return result;
+}
+
+extern "C" JNIEXPORT jstring JNICALL
+Java_com_dlof_rinlang_RinEngine_loomSessionUpdateSourceNative(JNIEnv* env, jobject /* this */, jlong handle, jstring newSourceJStr) {
+    const char* cSource = env->GetStringUTFChars(newSourceJStr, nullptr);
+    std::string source(cSource ? cSource : "");
+    env->ReleaseStringUTFChars(newSourceJStr, cSource);
+    char* json = rin_loom_session_update_source(reinterpret_cast<void*>(handle), source.c_str());
+    jstring result = env->NewStringUTF(json ? json : "{\"ok\":false,\"error\":\"null result\"}");
+    rin_free_string(json);
+    return result;
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_com_dlof_rinlang_RinEngine_loomSessionFreeNative(JNIEnv* /* env */, jobject /* this */, jlong handle) {
+    rin_loom_session_free(reinterpret_cast<void*>(handle));
+}
