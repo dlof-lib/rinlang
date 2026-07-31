@@ -15,6 +15,12 @@ struct PipelineResult {
     WarpScope warp;
     WarpSubscriptions subs;
     std::shared_ptr<rin::ViewStmt> viewAst; // kept for Shuttle re-diffing on the next hot edit
+    // Every top-level statement from the last successful parse -- kept (not just the warp/view
+    // roots the pipeline itself cares about) so Needle (rin_loom_needle.h) can find a top-level
+    // `fun` declaration by name when dispatching an `onTap` handler and actually run it, loops and
+    // all, through rin::Interpreter::callTopLevelFunction instead of the read-only attribute
+    // evaluator in rin_loom_eval.h.
+    std::vector<rin::StmtPtr> program;
     bool ok = false;
     std::string errorMessage;
     int errorLine = 0;
@@ -44,6 +50,7 @@ inline PipelineResult runColdPipeline(const std::string& source) {
         if (!root) throw rin::RinError("no top-level '@view...=name' root found", 1);
 
         result.viewAst = root;
+        result.program = program;
         result.fabric = buildFabric(root, result.warp, result.subs, "", 0);
         result.ok = true;
     } catch (rin::RinError& e) {
@@ -82,6 +89,7 @@ inline std::vector<Patch> runHotPipeline(PipelineResult& state, const std::strin
         Shuttle shuttle;
         shuttle.diff(state.fabric, root, state.warp, state.subs, "", 0);
         state.viewAst = root;
+        state.program = program;
         return shuttle.patches;
     } catch (rin::RinError& e) {
         errorMessage = e.message; errorLine = e.line;
