@@ -32,7 +32,7 @@ data class BuiltinLibraryInfo(
 
 /**
  * سجل مرجعي (يطابق `embeddedRinLibraries()` في rin_stdlib_libs.h) بالمكتبات القياسية
- * الخمس المدمجة داخل المفسّر نفسه، وتعمل @import عليها فوراً على أي جهاز دون رفعها.
+ * السبع المدمجة داخل المفسّر نفسه، وتعمل @import عليها فوراً على أي جهاز دون رفعها.
  * هذا السجل نصي فقط (للعرض والإدراج السريع في المحرر)، ولا يكرر شيفرة المكتبات نفسها.
  */
 object BuiltinLibraries {
@@ -61,6 +61,16 @@ object BuiltinLibraries {
             "lib/functional.og.rin", "functional",
             "دوال ترتيبية عليا (map/filter/reduce) على المصفوفات",
             "mapArr • filterArr • reduceArr • forEachArr • findArr • composeApply"
+        ),
+        BuiltinLibraryInfo(
+            "lib/oglang.og.rin", "oglang",
+            "صناعة حزم .og.rin ومحرّك لغات مصغّرة (mini-languages) فوق Rin",
+            "pkgInfo • describePkg • rule • langNew • runLine • runProgram"
+        ),
+        BuiltinLibraryInfo(
+            "lib/ringo.og.rin", "ringo",
+            "لغة ترميز خفيفة بوسوم [tag] (Ringo)، تُصيَّر إلى HTML أو نص عادي",
+            "ringoToHtml • ringoToPlain • ringoTokenize • ringoInfo"
         )
     )
 }
