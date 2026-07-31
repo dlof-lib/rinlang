@@ -723,6 +723,7 @@ print isPrime(17);       // true
 | `lib/validate.og.rin` | `isEmpty` `isBlankStr` `isNumeric` `isEmail` `lengthBetween` `isInRange` `hasLetterAndDigit` `isStrongPassword` |
 | `lib/functional.og.rin` | `mapArr` `filterArr` `reduceArr` `forEachArr` `findArr` `findIndexArr` `everyArr` `someArr` `timesRun` `composeApply` `isEven` `isOdd` `isPositive` `isNegative` |
 | `lib/oglang.og.rin` | `pkgInfo` `pkgHeader` `describePkg` `rule` `langNew` `unknownCommand` `tokenize` `commandOf` `runLine` `runProgram` `ruleCount` |
+| `lib/ringo.og.rin` | `ringoTokenize` `ringoToHtml` `ringoToPlain` `ringoHtmlOpenTag` `ringoHtmlCloseTag` `ringoEscapeHtml` `ringoInfo` |
 
 `lib/functional.og.rin` يوظّف كون الدوال في Rin **قيماً من الدرجة الأولى (first-class)**: يمكن تمرير
 اسم أي دالة `fun` كوسيط عادي (مثل `mapArr([1,2,3], double)`)، وتُستدعى بداخل الدالة المستقبِلة تماماً
@@ -733,6 +734,13 @@ print isPrime(17);       // true
 وقسم ثانٍ (`rule`/`langNew`/`runLine`/`runProgram`) هو محرّك لغة مصغّرة عام: تُعرَّف "لغتك" كقائمة
 قواعد (كلمة أولى + دالة معالجة)، ثم تُشغَّل عبرها أسطر برنامج كامل — أي بناء DSL كامل فوق Rin دون
 كتابة محلّل C++ جديد. مثال كامل جاهز في [`samples/oglang_demo.rin`](samples/oglang_demo.rin).
+
+`lib/ringo.og.rin` هي **Ringo**: لغة ترميز خفيفة بوسوم `[tag]` على طراز BBCode (`[b]` `[i]` `[u]`
+`[s]` `[code]` `[quote]` `[h1]`..`[h3]` `[color=...]` `[link=...]` `[list]`/`[*]` `[br]` `[hr]`)،
+تُصيَّر عبر `ringoToHtml` إلى HTML جاهز للعرض (مثلاً داخل WebView)، أو عبر `ringoToPlain` إلى نص
+عادي بلا وسوم. مبنيّة بالكامل بلغة Rin نفسها (بلا أي تعديل في مترجم C++)، وتعمل فوراً عبر `@import`
+لأنها مكتبة مدمجة (embedded) داخل ثنائي المحرّك — تماماً كباقي مكتبات `lib/*.og.rin`، بلا أي خطوة
+تثبيت إضافية على أي جهاز.
 
 يمكنك تجربة كل هذا عبر:
 
