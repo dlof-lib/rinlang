@@ -31,6 +31,46 @@ inline double measureTextWidth(const std::string& text, double fontSize) {
     return utf8Length(text) * fontSize * 0.72 + 2.0;
 }
 
+// Word-wraps `text` into lines that each fit within `maxWidth` (estimated via measureTextWidth).
+// UTF-8 safe: words are split on the ASCII space byte (0x20), which is always a standalone byte
+// in UTF-8 (never a continuation byte), so this is safe for Arabic and any other multi-byte text.
+// A single word wider than maxWidth is kept on its own line rather than dropped/clipped — the
+// paint layer is responsible for the final real-font ellipsis if it still overflows its box.
+inline std::vector<std::string> wrapText(const std::string& text, double fontSize, double maxWidth) {
+    std::vector<std::string> lines;
+    if (text.empty()) { lines.push_back(""); return lines; }
+    if (maxWidth <= 0) { lines.push_back(text); return lines; }
+
+    std::vector<std::string> words;
+    std::string cur;
+    for (size_t i = 0; i < text.size(); ) {
+        if (text[i] == ' ') {
+            if (!cur.empty()) { words.push_back(cur); cur.clear(); }
+            i++;
+        } else {
+            unsigned char c = static_cast<unsigned char>(text[i]);
+            size_t len = (c < 0x80) ? 1 : ((c >> 5) == 0x6) ? 2 : ((c >> 4) == 0xE) ? 3 : ((c >> 3) == 0x1E) ? 4 : 1;
+            cur += text.substr(i, len);
+            i += len;
+        }
+    }
+    if (!cur.empty()) words.push_back(cur);
+    if (words.empty()) { lines.push_back(""); return lines; }
+
+    std::string lineBuf;
+    for (auto& w : words) {
+        std::string candidate = lineBuf.empty() ? w : (lineBuf + " " + w);
+        if (lineBuf.empty() || measureTextWidth(candidate, fontSize) <= maxWidth) {
+            lineBuf = candidate;
+        } else {
+            lines.push_back(lineBuf);
+            lineBuf = w;
+        }
+    }
+    if (!lineBuf.empty() || lines.empty()) lines.push_back(lineBuf);
+    return lines;
+}
+
 struct LoomStats { int strandsMeasured = 0; int cacheHits = 0; };
 
 struct Loom {
@@ -50,17 +90,25 @@ struct Loom {
         s->lastConstraints = c; s->hasLastConstraints = true;
         s->lastContentHash = s->contentHash; s->hasLastContentHash = true;
 
+        // Explicit width/height (real sizing, not just an estimate hint): if the .rin source sets
+        // width=/height= on ANY strand kind, that becomes a hard min==max constraint for it — the
+        // same "box model" every real UI toolkit uses — clamped so it never exceeds what the
+        // parent actually offered (a Card can't demand more room than its Column gave it).
+        Constraints c2 = c;
+        if (s->attr("width"))  { double w = std::max(0.0, std::min(s->attrNum("width", c.maxW), c.maxW));  c2.minW = w; c2.maxW = w; }
+        if (s->attr("height")) { double h = std::max(0.0, std::min(s->attrNum("height", c.maxH), c.maxH)); c2.minH = h; c2.maxH = h; }
+
         Rect size;
         switch (s->kind) {
-            case StrandKind::TEXT:    size = measureText(s, c); break;
-            case StrandKind::IMAGE:   size = measureImage(s, c); break;
-            case StrandKind::BUTTON:  size = measureButton(s, c); break;
-            case StrandKind::DIVIDER: size = {0,0, c.maxW, 1}; break;
-            case StrandKind::CARD:    size = layoutSingleChildBox(s, c, s->attrNum("padding", 12), originX, originY); break;
-            case StrandKind::COLUMN:  size = layoutLinear(s, c, Axis::Y, originX, originY); break;
-            case StrandKind::ROW:     size = layoutLinear(s, c, Axis::X, originX, originY); break;
-            case StrandKind::STACK:   size = layoutStack(s, c, originX, originY); break;
-            default:                  size = layoutLinear(s, c, Axis::Y, originX, originY); break; // Bolt fallback
+            case StrandKind::TEXT:    size = measureText(s, c2); break;
+            case StrandKind::IMAGE:   size = measureImage(s, c2); break;
+            case StrandKind::BUTTON:  size = measureButton(s, c2); break;
+            case StrandKind::DIVIDER: size = {0,0, c2.maxW, std::max(1.0, c2.minH)}; break;
+            case StrandKind::CARD:    size = layoutSingleChildBox(s, c2, s->attrNum("padding", 12) + s->attrNum("border", 0), originX, originY); break;
+            case StrandKind::COLUMN:  size = layoutLinear(s, c2, Axis::Y, originX, originY); break;
+            case StrandKind::ROW:     size = layoutLinear(s, c2, Axis::X, originX, originY); break;
+            case StrandKind::STACK:   size = layoutStack(s, c2, originX, originY); break;
+            default:                  size = layoutLinear(s, c2, Axis::Y, originX, originY); break; // Bolt fallback
         }
         size.x = originX; size.y = originY;
         s->geometry = size;
@@ -72,11 +120,31 @@ struct Loom {
         for (auto& c : s->children) translate(c, dx, dy);
     }
 
+    // Real multi-line measurement: text now wraps against the actual available width instead of
+    // always being sized (and later ellipsized in paint) as if it were one line — that mismatch
+    // is what produced boxes too short for their wrapped content and a screen full of "…".
+    // `maxLines=` on the Strand caps how many lines are kept; an explicit height= (baked into
+    // c.maxH by layout()) caps it the same way, based on how many lines actually fit.
     Rect measureText(StrandPtr s, Constraints c) {
         std::string text = s->attrStr("text", "");
         double fontSize = s->attrNum("size", 16);
-        double w = std::min(measureTextWidth(text, fontSize), c.maxW);
-        double h = std::min(fontSize * 1.4, c.maxH);
+        double lineHeight = fontSize * 1.4;
+
+        std::vector<std::string> lines = wrapText(text, fontSize, c.maxW);
+
+        double maxLinesAttr = s->attrNum("maxLines", 0);
+        if (maxLinesAttr > 0 && lines.size() > (size_t)maxLinesAttr)
+            lines.resize((size_t)maxLinesAttr);
+
+        if (c.maxH < 1e9) {
+            size_t fitLines = std::max((size_t)1, (size_t)(c.maxH / lineHeight));
+            if (lines.size() > fitLines) lines.resize(fitLines);
+        }
+
+        double w = 0;
+        for (auto& l : lines) w = std::max(w, measureTextWidth(l, fontSize));
+        w = std::min(w, c.maxW);
+        double h = std::min(lineHeight * (double)std::max((size_t)1, lines.size()), c.maxH);
         return {0,0, std::max(w, c.minW), std::max(h, c.minH)};
     }
     Rect measureImage(StrandPtr s, Constraints c) {
@@ -101,7 +169,7 @@ struct Loom {
         return {0,0, std::min(contentW + pad*2, c.maxW), std::min(contentH + pad*2, c.maxH)};
     }
     Rect layoutLinear(StrandPtr s, Constraints c, Axis axis, double originX, double originY) {
-        double gap = s->attrNum("gap", 0), padding = s->attrNum("padding", 0);
+        double gap = s->attrNum("gap", 0), padding = s->attrNum("padding", 0) + s->attrNum("border", 0);
         double mainUsed=0, crossMax=0, cursorMain=padding;
         double innerMaxW = std::max(0.0, c.maxW - padding*2), innerMaxH = std::max(0.0, c.maxH - padding*2);
         for (auto& child : s->children) {
