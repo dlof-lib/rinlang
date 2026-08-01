@@ -10,6 +10,7 @@ enum class TokenType {
     NUMBER, STRING, IDENT,
     // core keywords
     LET, PRINT, IF, ELSE, WHILE, FUN, RETURN, TRUE, FALSE, NIL, AND, OR,
+    BREAK, CONTINUE, // break / continue -> التحكّم المبكّر داخل حلقات while
     // data-container language keywords (لغة الحاويات/البيانات)
     TEXT,            // text  -> إعلان قيمة نصية
     CONTAINER,       // container
