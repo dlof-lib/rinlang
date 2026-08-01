@@ -62,7 +62,7 @@
       "patterns": [
         {
           "name": "keyword.control.rin",
-          "match": "\\b(if|else|while|return|and|or)\\b"
+          "match": "\\b(if|else|while|return|break|continue|and|or)\\b"
         },
         {
           "name": "keyword.other.rin",
