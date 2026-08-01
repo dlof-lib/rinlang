@@ -181,7 +181,26 @@ struct TextStmt : Stmt {
 
 enum class ObjectStyleFieldKind { Text, Image, File, Fonts, Background, Css3 };
 
-enum class ContainerKind { PLAIN, PIPE, DATA, API, IMPORT, TABLE, DOC, OBJECT, PORTAL, BLOCK, STICKER };
+enum class ContainerKind { PLAIN, PIPE, DATA, API, IMPORT, TABLE, DOC, OBJECT, PORTAL, BLOCK, STICKER, AUKT };
+
+// ---- AUKT: Automated Knowledge Tables (جداول المعرفة الآلية) ----
+// @container.aukt=name  <body>  .end/container.aukt
+// @AUKT=name             <body>  .end/AUKT
+//   كلا الشكلين ينتجان نفس ContainerKind::AUKT. على عكس container.table/doc/object/portal/block/
+//   sticker، فإن AUKT حاوية "مُجمِّعة" (composite) — لا تخضع لقيود validateDataContainerBody،
+//   أي يُسمح بالتعشيش الكامل بداخلها تماماً كـ container العادية/Containers.Group. الغرض منها هو
+//   تجميع عدة مفاهيم موجودة أصلاً معاً تحت مظلّة واحدة باسم/امتداد ملف مميّزين (.aak.rin):
+//     - جدول(جداول) معرفة:      @table=... / @container.table=...   (row cells=[...]; style ...)
+//     - قاموس/قواميس (NoSQL):   @doc=... / @container.doc=...        (document id=... fields={...})
+//     - نمط عرض عام:            @portal=theme  style value="style://dark";  .end/portal
+//     - مكتبة خطوط:             @Object=fonts  text family="Cairo"; text fallback="sans-serif"; .end/Object
+//     - أيقونات:                @sticker=icons  text icon="table.png"; text colors="#3498db"; .end/sticker
+//     - شريط أدوات قابل للتخصيص: @block="toolbar"  text items="new,delete,sort,filter,export"; .end/block
+//   أي عدد وأي ترتيب من هذه الكتل الفرعية مقبول بداخل AUKT واحدة؛ 'style' مباشرة بداخل AUKT (خارج أي
+//   جدول فرعي) تضبط النمط العام الافتراضي لكل الجداول/القواميس التابعة لها ما لم تُخصَّص محلياً.
+//   الامتداد الموصى به لحفظ/تصدير حاوية AUKT هو "name.aak.rin" (بدل "name.rin" الافتراضي)؛ الترميز/
+//   البنية الداخلية للملف تبقى نص Rin عادياً تماماً (لا صيغة ثنائية جديدة) — فقط الامتداد يُميِّزه
+//   بصرياً وللتطبيق (يفتحه محرِّر AUKT المخصص تلقائياً بدل المحرِّر النصي العادي).
 
 struct ContainerStmt : Stmt {
     std::string name; // قد تكون فارغة إن لم يُحدَّد اسم
