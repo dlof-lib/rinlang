@@ -186,7 +186,7 @@ class LoomFabricView @JvmOverloads constructor(
             Kind.IMAGE -> drawImagePlaceholder(canvas, rect, attrs)
             Kind.BUTTON -> {
                 drawBox(canvas, rect, attrs, defaultButton, defaultRadius = 10f)
-                drawText(canvas, rect, attrs, attrs.optString("label"), Color.WHITE, centered = true, boldHint = true)
+                drawText(canvas, rect, attrs, attrs.optString("label"), Color.WHITE, centered = true, boldHint = true, singleLine = true)
             }
             Kind.CARD -> drawBox(canvas, rect, attrs, defaultCard, defaultRadius = 14f)
             else -> drawBox(canvas, rect, attrs, defaultContainer, defaultRadius = 0f) // Column/Row/Stack/Custom
@@ -223,25 +223,89 @@ class LoomFabricView @JvmOverloads constructor(
         }
 
         canvas.drawRoundRect(rect, radius, radius, fillPaint)
+
+        // border= / borderColor=: a real stroked edge, inset by half its own width so it's drawn
+        // fully inside the box's bounds (matches the border-box inset the native layout already
+        // reserved for children — see loom::layoutSingleChildBox / layoutLinear).
+        val borderWidthPx = attrs.optString("border").toFloatOrNull()
+        if (borderWidthPx != null && borderWidthPx > 0f && rect.width() > 1f && rect.height() > 1f) {
+            val strokeW = borderWidthPx * density
+            strokePaint.color = parseHexColor(attrs.optString("borderColor").ifBlank { null }, Color.WHITE)
+            strokePaint.strokeWidth = strokeW
+            val inset = strokeW / 2f
+            val strokeRect = RectF(rect.left + inset, rect.top + inset, rect.right - inset, rect.bottom - inset)
+            val strokeRadius = max(0f, radius - inset)
+            canvas.drawRoundRect(strokeRect, strokeRadius, strokeRadius, strokePaint)
+        }
+    }
+
+    /**
+     * Greedy word-wrap using REAL measured glyph widths (mirrors `loom::wrapText` in
+     * rin_loom_layout.h, which only has a rough per-codepoint estimate to size the box before
+     * paint). Matching algorithms means the line count — and therefore the box height the native
+     * layout already committed to — lines up with what actually gets drawn here.
+     */
+    private fun wrapLines(text: String, paint: TextPaint, maxWidth: Float): List<String> {
+        if (text.isEmpty()) return listOf("")
+        if (maxWidth <= 0f) return listOf(text)
+        val words = text.split(" ").filter { it.isNotEmpty() }
+        if (words.isEmpty()) return listOf("")
+        val lines = mutableListOf<String>()
+        var line = ""
+        for (w in words) {
+            val candidate = if (line.isEmpty()) w else "$line $w"
+            line = if (line.isEmpty() || paint.measureText(candidate) <= maxWidth) candidate
+            else { lines.add(line); w }
+        }
+        if (line.isNotEmpty() || lines.isEmpty()) lines.add(line)
+        return lines
     }
 
     private fun drawText(
         canvas: Canvas, rect: RectF, attrs: JSONObject, text: String,
-        fallbackColor: Int, centered: Boolean = false, boldHint: Boolean = false
+        fallbackColor: Int, centered: Boolean = false, boldHint: Boolean = false, singleLine: Boolean = false
     ) {
-        if (text.isEmpty() || rect.width() <= 0f) return
+        if (text.isEmpty() || rect.width() <= 0f || rect.height() <= 0f) return
         val sizeSp = attrs.optString("size").toFloatOrNull() ?: 14f
         textPaint.color = parseHexColor(attrs.optString("color").ifBlank { null }, fallbackColor)
         textPaint.textSize = sizeSp * density
         textPaint.isFakeBoldText = boldHint
         textPaint.isAntiAlias = true
 
-        val available = max(4f, rect.width() - 8f)
-        val truncated = TextUtils.ellipsize(text, textPaint, available, TextUtils.TruncateAt.END)
-        val textWidth = textPaint.measureText(truncated, 0, truncated.length)
-        val startX = if (centered) rect.left + (rect.width() - textWidth) / 2f else rect.left + 4f
-        val baseline = rect.top + rect.height() / 2f - (textPaint.descent() + textPaint.ascent()) / 2f
-        canvas.drawText(truncated, 0, truncated.length, startX, baseline, textPaint)
+        val hPad = 4f
+        val available = max(4f, rect.width() - hPad * 2f)
+
+        if (singleLine) {
+            val truncated = TextUtils.ellipsize(text, textPaint, available, TextUtils.TruncateAt.END)
+            val textWidth = textPaint.measureText(truncated, 0, truncated.length)
+            val startX = if (centered) rect.left + (rect.width() - textWidth) / 2f else rect.left + hPad
+            val baseline = rect.top + rect.height() / 2f - (textPaint.descent() + textPaint.ascent()) / 2f
+            canvas.drawText(truncated, 0, truncated.length, startX, baseline, textPaint)
+            return
+        }
+
+        // Real multi-line body text: wrap, then draw one line per row filling the box top-down —
+        // the box's height was sized by loom::measureText for exactly this many lines * lineHeight,
+        // so no vertical centering of the whole block is needed (it already fills the box).
+        val lineHeight = textPaint.textSize * 1.4f
+        var maxLines = max(1, (rect.height() / lineHeight).toInt())
+        attrs.optString("maxLines").toIntOrNull()?.let { if (it > 0) maxLines = min(maxLines, it) }
+
+        var lines = wrapLines(text, textPaint, available)
+        val overflowed = lines.size > maxLines
+        if (overflowed) lines = lines.subList(0, maxLines)
+
+        var baseline = rect.top - textPaint.ascent()
+        for ((i, rawLine) in lines.withIndex()) {
+            val isLastVisible = i == lines.lastIndex
+            val line = if (overflowed && isLastVisible)
+                TextUtils.ellipsize(rawLine, textPaint, available, TextUtils.TruncateAt.END).toString()
+            else rawLine
+            val lineWidth = textPaint.measureText(line)
+            val startX = if (centered) rect.left + (rect.width() - lineWidth) / 2f else rect.left + hPad
+            canvas.drawText(line, startX, baseline, textPaint)
+            baseline += lineHeight
+        }
     }
 
     private fun drawDivider(canvas: Canvas, rect: RectF, attrs: JSONObject) {
@@ -275,7 +339,7 @@ class LoomFabricView @JvmOverloads constructor(
         }
 
         val label = attrs.optString("src").ifBlank { null }
-        if (label != null) drawText(canvas, RectF(rect.left, rect.bottom - 16f * density, rect.right, rect.bottom), attrs, label, Color.argb(210, 255, 255, 255))
+        if (label != null) drawText(canvas, RectF(rect.left, rect.bottom - 16f * density, rect.right, rect.bottom), attrs, label, Color.argb(210, 255, 255, 255), singleLine = true)
     }
 
     private fun drawGrid(canvas: Canvas) {
