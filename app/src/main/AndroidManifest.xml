@@ -54,6 +54,12 @@
             android:windowSoftInputMode="adjustResize" />
 
         <activity
+            android:name=".LoomPreviewActivity"
+            android:exported="false"
+            android:launchMode="singleTask"
+            android:theme="@style/Theme.RinLang" />
+
+        <activity
             android:name=".ProjectsActivity"
             android:exported="false"
             android:launchMode="singleTop" />
