@@ -174,6 +174,26 @@ class MainActivity : AppCompatActivity() {
         // أرقام الأسطر + تراجع/إعادة + مسافة بادئة تلقائية + أقواس مغلقة تلقائياً + تظليل الأقواس/السطر الحالي
         editorController = CodeEditorController(this, editCode, txtLineNumbers, scrollEditor)
 
+        // كل تعديل في المحرر يُدفع مباشرةً (بعد تهدئة/debounce قصيرة) إلى جلسة المعاينة الحية
+        // إن كانت مفتوحة — نفس فكرة "on each keystroke... updateSource(newSource)" الموثّقة في
+        // RinEngine.LoomSession، لكن مُطلَقة من هنا بدل زر Run حتى تصبح المعاينة حيّة فعلاً.
+        editCode.addTextChangedListener(object : TextWatcher {
+            private val handler = android.os.Handler(android.os.Looper.getMainLooper())
+            private var pending: Runnable? = null
+
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+
+            override fun afterTextChanged(s: Editable?) {
+                if (!LoomPreviewManager.isRunning) return
+                pending?.let { handler.removeCallbacks(it) }
+                val src = s?.toString().orEmpty()
+                val task = Runnable { LoomPreviewManager.pushLiveEdit(src) }
+                pending = task
+                handler.postDelayed(task, 200L)
+            }
+        })
+
         // قائمة التشغيل المجدولة (job queue): كل عملية Run بطاقة مستقلة
         jobAdapter = RinJobAdapter(this)
         rvJobs.layoutManager = LinearLayoutManager(this)
@@ -359,10 +379,12 @@ class MainActivity : AppCompatActivity() {
         val popup = darkPopupMenu(anchor)
         popup.menu.add(0, 1, 0, R.string.menu_run_run)
         popup.menu.add(0, 2, 1, R.string.menu_run_check_brackets)
+        popup.menu.add(0, 3, 2, R.string.menu_run_live_preview)
         popup.setOnMenuItemClickListener { item ->
             when (item.itemId) {
                 1 -> runProgram()
                 2 -> checkBrackets()
+                3 -> openLivePreviewManually()
             }
             true
         }
@@ -382,6 +404,35 @@ class MainActivity : AppCompatActivity() {
                 .setActionTextColor(ContextCompat.getColor(this, R.color.rin_accent))
                 .show()
         }
+
+        // وبالمثل: أي @view.<Kind>=name حقيقي في الكود يفتح شاشة "المعاينة الحية" مباشرةً —
+        // كل تشغيل (Run) هو إعادة تنفيذ كاملة عمداً (تماماً كبطاقة عمل جديدة في قائمة RinJobScheduler)،
+        // بينما التعديلات اللاحقة أثناء الكتابة تُحدَّث حيّاً عبر LoomPreviewManager.pushLiveEdit
+        // دون فقدان حالة Warp (كعدّاد ضُغط عليه).
+        if (LoomViewTracer.containsView(source)) {
+            openLivePreview(source)
+        }
+    }
+
+    /** يفتح المعاينة الحية ويبدأ/يعيد تشغيل جلستها بالكود الحالي للمحرر. */
+    private fun openLivePreview(source: String) {
+        // نترك LoomPreviewActivity نفسها تستدعي LoomPreviewManager.start() (في onCreate أو
+        // onNewIntent حسب الحال) — فهي التي تعرف عرض الجهاز (rootWidth) الحالي المختار هناك؛
+        // استدعاؤه هنا أيضاً كان سيعيد التشغيل مرتين بلا داعٍ.
+        val intent = android.content.Intent(this, LoomPreviewActivity::class.java)
+        intent.putExtra(LoomPreviewActivity.EXTRA_CODE, source)
+        intent.addFlags(android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP)
+        startActivity(intent)
+    }
+
+    /** فتح يدوي من قائمة التشغيل (زر "معاينة حية"): يتحقق أولاً من وجود @view.، وإلا ينبّه المستخدم. */
+    private fun openLivePreviewManually() {
+        val source = editCode.text.toString()
+        if (!LoomViewTracer.containsView(source)) {
+            Toast.makeText(this, getString(R.string.loom_no_view_toast), Toast.LENGTH_SHORT).show()
+            return
+        }
+        openLivePreview(source)
     }
 
     private fun openPipeline() {
