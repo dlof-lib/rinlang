@@ -1877,7 +1877,13 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
     }
     if (auto s = std::dynamic_pointer_cast<WhileStmt>(stmt)) {
         while (evaluate(s->condition, env).isTruthy()) {
-            execute(s->body, env);
+            try {
+                execute(s->body, env);
+            } catch (BreakSignal&) {
+                break;
+            } catch (ContinueSignal&) {
+                continue;
+            }
         }
         return;
     }
@@ -1895,6 +1901,12 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
         Value v = Value::nil();
         if (s->value) v = evaluate(s->value, env);
         throw ReturnSignal{v};
+    }
+    if (std::dynamic_pointer_cast<BreakStmt>(stmt)) {
+        throw BreakSignal{};
+    }
+    if (std::dynamic_pointer_cast<ContinueStmt>(stmt)) {
+        throw ContinueSignal{};
     }
 
     // ---- لغة الحاويات/البيانات ----
