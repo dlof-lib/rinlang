@@ -14,6 +14,7 @@
 #include <sys/types.h>
 #include <errno.h>
 #include <cstdint>
+#include <unordered_map>
 
 // ---- توافق ويندوز/POSIX لـ stat()/mkdir() ----------------------------------
 // على أندرويد NDK/لينكس/macOS: stat()/mkdir(path, mode) القياسيتان بتوقيعهما
@@ -223,18 +224,8 @@ static std::string containerTagName(ContainerKind k) {
         case ContainerKind::BLOCK: return "container.block";
         // "@sticker="/"@container.sticker=" توحَّد دائماً إلى "container.sticker" عند الحفظ وإعادة القراءة.
         case ContainerKind::STICKER: return "container.sticker";
-        // "@AUKT="/"@container.aukt=" توحَّد دائماً إلى "container.aukt" عند الحفظ وإعادة القراءة.
-        case ContainerKind::AUKT: return "container.aukt";
         default: return "container";
     }
-}
-
-// الامتداد الافتراضي عند عدم تحديد 'path' صراحةً: حاويات AUKT تُحفَظ كـ "name.aak.rin" (أو
-// "name.min.aak.rin" مبسّطة) بدل "name.rin"/"name.min.rin" العامة، لتمييزها بصرياً وفتحها تلقائياً
-// بمحرِّر AUKT المخصَّص في التطبيق. البنية الداخلية للملف تبقى نص Rin عادياً تماماً في الحالتين.
-static std::string defaultRinExtension(ContainerKind k, bool simplified) {
-    if (k == ContainerKind::AUKT) return simplified ? ".min.aak.rin" : ".aak.rin";
-    return simplified ? ".min.rin" : ".rin";
 }
 
 static std::string containerIcon(ContainerKind k) {
@@ -249,7 +240,6 @@ static std::string containerIcon(ContainerKind k) {
         case ContainerKind::PORTAL: return "🎨";
         case ContainerKind::BLOCK: return "🧱";
         case ContainerKind::STICKER: return "🏷️";
-        case ContainerKind::AUKT: return "📚";
         default: return "📦";
     }
 }
@@ -1109,10 +1099,14 @@ void Interpreter::ensureParentDir(const std::string& fullPath) const {
 }
 
 // ================= PNG خفيف الوزن (بلا اعتماديات خارجية) — لأجل table.save/png =================
-// لا يوجد داخل هذا المفسّر محرّك خطوط، فلا يمكن رسم نص حقيقي داخل الصورة. لذا فإن table.save/png
-// يرسم "خريطة فسيفسائية" (mosaic) حقيقية وصالحة تماماً كملف PNG: كل خلية من الجدول تُلوَّن بلون
-// مُشتق ثابت من قيمتها (نفس القيمة => نفس اللون دائماً)، مفصولة بخطوط شبكة تتبع الثيم المختار
-// عبر 'style' (مثال: "style://dark").
+// table.save/png يرسم صورة PNG حقيقية للجدول تُظهر محتوى الخلايا الفعلي كنص مرسوم بخط
+// متجهي (vector-stroke) مُضمَّن بالكامل في هذا الملف — بلا أي مكتبة خطوط خارجية ولا محرّك
+// تشكيل (shaping engine). يغطي هذا الخط: الأرقام 0-9، الحروف اللاتينية A-Z/a-z، علامات
+// ترقيم شائعة، وأشكال مبسَّطة (منفصلة/غير مُشكَّلة) لحروف الأبجدية العربية الأساسية.
+// أمانة واجبة: الحروف العربية هنا أشكال "استنسل" هندسية تقريبية بخطوط مستقيمة لكل حرف على
+// حدة (لتمييزه بصرياً عن غيره) وليست خطاً عربياً حقيقياً — فلا رَبْط بين الحروف (ligatures) ولا
+// أشكال سياقية (ابتدائي/وسطي/نهائي)، لأن ذلك يتطلب محرّك تشكيل كامل غير متوفر هنا. اتجاه النص
+// العام (RTL للعربية) مطبَّق فعلياً عبر ترتيب "runs" (مقاطع عربية/لاتينية) بصرياً بشكل صحيح.
 namespace pngutil {
 
 static uint32_t crc32(const unsigned char* data, size_t len) {
@@ -1209,14 +1203,245 @@ static std::string encodeRgbPng(int width, int height, const std::vector<unsigne
 
 } // namespace pngutil
 
-// لون ثابت مُشتق من نص الخلية (تجزئة FNV-1a بسيطة): نفس القيمة تُعطي دائماً نفس اللون.
-static void cellColor(const std::string& text, unsigned char& r, unsigned char& g, unsigned char& b) {
-    uint32_t h = 2166136261u;
-    for (unsigned char c : text) { h ^= c; h *= 16777619u; }
-    r = static_cast<unsigned char>(120 + (h & 0x7Fu));
-    g = static_cast<unsigned char>(120 + ((h >> 8) & 0x7Fu));
-    b = static_cast<unsigned char>(120 + ((h >> 16) & 0x7Fu));
+// ================= خط متجهي مُضمَّن (vector-stroke font) — لرسم نص حقيقي داخل صورة الجدول =================
+// كل حرف مُعرَّف كقائمة "أضلاع" (segments) على شبكة تصميم ثابتة GW×GH (7×10 وحدة)، تُرسَم
+// كخطوط مستقيمة بعد تحجيمها (scale) وإزاحتها إلى موضع الحرف الفعلي داخل الصورة. هذا يكفي
+// لرسم أرقام/حروف لاتينية واضحة تماماً (نفس أسلوب خطوط "stencil/plotter" التقليدية)، ولإعطاء
+// كل حرف عربي شكلاً مميزاً خاصاً به بدل تلوين الخلية كاملة بلون واحد.
+namespace rinfont {
+
+struct Seg { int x0, y0, x1, y1; };
+constexpr int GW = 7;  // عرض شبكة التصميم (وحدات)
+constexpr int GH = 10; // ارتفاع شبكة التصميم (وحدات)
+
+using GlyphList = std::vector<Seg>;
+using GlyphMap = std::unordered_map<char32_t, GlyphList>;
+
+// فك ترميز UTF-8 إلى نقاط كود (code points) — يتعامل بأمان مع أي بايتات غير صالحة بتجاهلها.
+static std::vector<char32_t> utf8Decode(const std::string& s) {
+    std::vector<char32_t> out;
+    size_t i = 0, n = s.size();
+    while (i < n) {
+        unsigned char c0 = static_cast<unsigned char>(s[i]);
+        char32_t cp; int len;
+        if ((c0 & 0x80u) == 0) { cp = c0; len = 1; }
+        else if ((c0 & 0xE0u) == 0xC0u) { cp = c0 & 0x1Fu; len = 2; }
+        else if ((c0 & 0xF0u) == 0xE0u) { cp = c0 & 0x0Fu; len = 3; }
+        else if ((c0 & 0xF8u) == 0xF0u) { cp = c0 & 0x07u; len = 4; }
+        else { i++; continue; } // بايت غير صالح كبداية تسلسل: تجاهله
+        if (i + static_cast<size_t>(len) > n) { i++; continue; }
+        bool ok = true;
+        char32_t acc = cp;
+        for (int k = 1; k < len; k++) {
+            unsigned char cx = static_cast<unsigned char>(s[i + k]);
+            if ((cx & 0xC0u) != 0x80u) { ok = false; break; }
+            acc = (acc << 6) | (cx & 0x3Fu);
+        }
+        if (!ok) { i++; continue; }
+        out.push_back(acc);
+        i += static_cast<size_t>(len);
+    }
+    return out;
 }
+
+static bool isArabicCp(char32_t cp) {
+    return (cp >= 0x0600 && cp <= 0x06FF) || (cp >= 0x0750 && cp <= 0x077F);
+}
+
+// ---- بناء جدول الحروف (يُبنى مرّة واحدة فقط) ----
+static const GlyphMap& glyphTable() {
+    static GlyphMap g = [] {
+        GlyphMap m;
+        // نقاط مرجعية مشتركة: يسار=1، يمين=5، وسط=3 على المحور x؛ أعلى=0، منتصف=4، أسفل=9 على y.
+        // -------- الأرقام (تخطيط 7-segment قياسي) --------
+        m[U'0'] = { {1,0,5,0},{5,0,5,4},{5,4,5,9},{1,9,5,9},{1,4,1,9},{1,0,1,4} };
+        m[U'1'] = { {5,0,5,4},{5,4,5,9} };
+        m[U'2'] = { {1,0,5,0},{5,0,5,4},{1,4,5,4},{1,4,1,9},{1,9,5,9} };
+        m[U'3'] = { {1,0,5,0},{5,0,5,4},{1,4,5,4},{5,4,5,9},{1,9,5,9} };
+        m[U'4'] = { {1,0,1,4},{1,4,5,4},{5,0,5,4},{5,4,5,9} };
+        m[U'5'] = { {1,0,5,0},{1,0,1,4},{1,4,5,4},{5,4,5,9},{1,9,5,9} };
+        m[U'6'] = { {1,0,5,0},{1,0,1,4},{1,4,5,4},{1,4,1,9},{1,9,5,9},{5,4,5,9} };
+        m[U'7'] = { {1,0,5,0},{5,0,5,4},{5,4,5,9} };
+        m[U'8'] = { {1,0,5,0},{5,0,5,4},{5,4,5,9},{1,9,5,9},{1,4,1,9},{1,0,1,4},{1,4,5,4} };
+        m[U'9'] = { {1,0,5,0},{5,0,5,4},{5,4,5,9},{1,9,5,9},{1,0,1,4},{1,4,5,4} };
+        // -------- الحروف اللاتينية الكبيرة (تُستخدَم أيضاً للصغيرة) --------
+        m[U'A'] = { {1,9,1,3},{1,3,3,0},{3,0,5,3},{5,3,5,9},{1,6,5,6} };
+        m[U'B'] = { {1,0,1,9},{1,0,4,0},{4,0,4,4},{1,4,4,4},{4,4,4,9},{1,9,4,9} };
+        m[U'C'] = { {5,0,1,0},{1,0,1,9},{1,9,5,9} };
+        m[U'D'] = { {1,0,4,0},{4,0,4,9},{4,9,1,9},{1,9,1,0} };
+        m[U'E'] = { {1,0,1,9},{1,0,4,0},{1,4,4,4},{1,9,4,9} };
+        m[U'F'] = { {1,0,1,9},{1,0,4,0},{1,4,4,4} };
+        m[U'G'] = { {5,0,1,0},{1,0,1,9},{1,9,5,9},{5,9,5,4},{5,4,3,4} };
+        m[U'H'] = { {1,0,1,9},{5,0,5,9},{1,4,5,4} };
+        m[U'I'] = { {1,0,5,0},{3,0,3,9},{1,9,5,9} };
+        m[U'J'] = { {4,0,4,7},{4,7,2,9},{2,9,1,7} };
+        m[U'K'] = { {1,0,1,9},{1,4,4,0},{1,4,4,9} };
+        m[U'L'] = { {1,0,1,9},{1,9,4,9} };
+        m[U'M'] = { {1,0,1,9},{1,0,3,5},{3,5,5,0},{5,0,5,9} };
+        m[U'N'] = { {1,0,1,9},{1,0,5,9},{5,0,5,9} };
+        m[U'O'] = { {1,0,4,0},{4,0,4,9},{4,9,1,9},{1,9,1,0} };
+        m[U'P'] = { {1,0,1,9},{1,0,4,0},{4,0,4,4},{1,4,4,4} };
+        m[U'Q'] = { {1,0,4,0},{4,0,4,9},{4,9,1,9},{1,9,1,0},{3,6,5,9} };
+        m[U'R'] = { {1,0,1,9},{1,0,4,0},{4,0,4,4},{1,4,4,4},{1,4,4,9} };
+        m[U'S'] = { {4,0,1,0},{1,0,1,4},{1,4,4,4},{4,4,4,9},{4,9,1,9} };
+        m[U'T'] = { {1,0,5,0},{3,0,3,9} };
+        m[U'U'] = { {1,0,1,9},{1,9,4,9},{4,0,4,9} };
+        m[U'V'] = { {1,0,3,9},{3,9,5,0} };
+        m[U'W'] = { {1,0,2,9},{2,9,3,3},{3,3,4,9},{4,9,5,0} };
+        m[U'X'] = { {1,0,5,9},{5,0,1,9} };
+        m[U'Y'] = { {1,0,3,5},{5,0,3,5},{3,5,3,9} };
+        m[U'Z'] = { {1,0,5,0},{5,0,1,9},{1,9,5,9} };
+        // -------- علامات ترقيم/رموز شائعة --------
+        m[U'.'] = { {3,8,3,9} };
+        m[U','] = { {3,8,2,9} };
+        m[U':'] = { {3,3,3,4},{3,6,3,7} };
+        m[U';'] = { {3,3,3,4},{3,6,2,7} };
+        m[U'-'] = { {1,4,5,4} };
+        m[U'_'] = { {1,9,5,9} };
+        m[U'+'] = { {1,4,5,4},{3,1,3,7} };
+        m[U'/'] = { {1,9,5,0} };
+        m[U'\\'] = { {1,0,5,9} };
+        m[U'('] = { {3,0,2,2},{2,2,2,7},{2,7,3,9} };
+        m[U')'] = { {3,0,4,2},{4,2,4,7},{4,7,3,9} };
+        m[U'['] = { {2,0,2,9},{2,0,4,0},{2,9,4,9} };
+        m[U']'] = { {4,0,4,9},{2,0,4,0},{2,9,4,9} };
+        m[U'{'] = m[U'('];
+        m[U'}'] = m[U')'];
+        m[U'='] = { {1,3,5,3},{1,6,5,6} };
+        m[U'*'] = { {2,3,4,6},{4,3,2,6},{3,2,3,7} };
+        m[U'#'] = { {2,0,2,9},{4,0,4,9},{1,3,5,3},{1,6,5,6} };
+        m[U'@'] = { {1,0,4,0},{4,0,4,9},{4,9,1,9},{1,9,1,0},{3,4,3,5} };
+        m[U'!'] = { {3,0,3,6},{3,8,3,9} };
+        m[U'?'] = { {2,0,4,0},{4,0,4,3},{4,3,3,4},{3,4,3,5},{3,8,3,9} };
+        m[U'\''] = { {3,0,3,2} };
+        m[U'"'] = { {2,0,2,2},{4,0,4,2} };
+        m[U'<'] = { {4,0,1,4},{1,4,4,9} };
+        m[U'>'] = { {1,0,4,4},{4,4,1,9} };
+        m[U'|'] = { {3,0,3,9} };
+        m[U'~'] = { {1,5,3,3},{3,3,5,5} };
+        m[U'^'] = { {1,3,3,0},{3,0,5,3} };
+        m[U'$'] = { {4,0,1,0},{1,0,1,4},{1,4,4,4},{4,4,4,9},{4,9,1,9},{3,0,3,9} };
+        // lowercase تُعامَل كـ uppercase (تبسيط مقصود لخط شبكي أحادي الحجم)
+        for (char32_t c = U'a'; c <= U'z'; c++) m[c] = m[U'A' + (c - U'a')];
+        // -------- حروف عربية مبسَّطة (أشكال منفصلة/غير مُشكَّلة — راجع الملاحظة أعلى الملف) --------
+        m[U'ا'] = { {3,0,3,9} };
+        m[U'أ'] = { {3,1,3,9},{4,0,4,1} };
+        m[U'إ'] = { {3,0,3,8},{2,9,3,9} };
+        m[U'آ'] = { {3,0,3,9},{2,0,4,0} };
+        m[U'ب'] = { {1,6,5,6},{3,8,3,9} };
+        m[U'ت'] = { {1,6,5,6},{2,3,2,4},{4,3,4,4} };
+        m[U'ث'] = { {1,6,5,6},{2,3,2,4},{4,3,4,4},{3,1,3,2} };
+        m[U'ج'] = { {1,4,4,4},{4,4,3,7},{3,7,1,7},{2,9,3,9} };
+        m[U'ح'] = { {1,4,4,4},{4,4,3,7},{3,7,1,7} };
+        m[U'خ'] = { {1,4,4,4},{4,4,3,7},{3,7,1,7},{2,1,3,1} };
+        m[U'د'] = { {4,1,2,1},{2,1,2,6},{2,6,4,7} };
+        m[U'ذ'] = { {4,1,2,1},{2,1,2,6},{2,6,4,7},{2,0,3,0} };
+        m[U'ر'] = { {3,2,3,5},{3,5,4,8} };
+        m[U'ز'] = { {3,2,3,5},{3,5,4,8},{3,0,4,0} };
+        m[U'س'] = { {1,7,5,7},{1,5,1,7},{3,5,3,7},{5,5,5,7} };
+        m[U'ش'] = { {1,7,5,7},{1,5,1,7},{3,5,3,7},{5,5,5,7},{2,3,4,3} };
+        m[U'ص'] = { {1,5,4,5},{4,5,4,8},{4,8,1,8},{1,8,1,5},{4,5,5,3} };
+        m[U'ض'] = { {1,5,4,5},{4,5,4,8},{4,8,1,8},{1,8,1,5},{4,5,5,3},{2,2,3,2} };
+        m[U'ط'] = { {3,1,3,8},{1,6,4,6},{4,6,4,8},{4,8,1,8},{1,8,1,6} };
+        m[U'ظ'] = { {3,1,3,8},{1,6,4,6},{4,6,4,8},{4,8,1,8},{1,8,1,6},{2,0,3,0} };
+        m[U'ع'] = { {4,2,2,3},{2,3,2,6},{2,6,4,8} };
+        m[U'غ'] = { {4,2,2,3},{2,3,2,6},{2,6,4,8},{3,0,4,0} };
+        m[U'ف'] = { {2,4,4,4},{4,4,4,6},{4,6,2,6},{2,6,2,4},{3,1,3,2} };
+        m[U'ق'] = { {2,4,4,4},{4,4,4,6},{4,6,2,6},{2,6,2,4},{2,1,4,1},{3,6,3,9} };
+        m[U'ك'] = { {2,1,2,8},{2,1,4,1},{2,5,4,5},{3,5,4,7} };
+        m[U'ل'] = { {3,0,3,7},{3,7,1,8} };
+        m[U'م'] = { {2,3,4,3},{4,3,4,5},{4,5,2,5},{2,5,2,3},{3,5,3,9} };
+        m[U'ن'] = { {1,7,2,6},{2,6,4,6},{4,6,5,7},{3,3,3,4} };
+        m[U'ه'] = { {3,4,4,5},{4,5,3,6},{3,6,2,5},{2,5,3,4} };
+        m[U'و'] = { {2,2,4,2},{4,2,4,4},{4,4,2,4},{2,4,2,2},{3,4,3,8} };
+        m[U'ؤ'] = { {2,2,4,2},{4,2,4,4},{4,4,2,4},{2,4,2,2},{3,4,3,8},{4,1,5,1} };
+        m[U'ي'] = { {1,6,3,7},{3,7,5,6},{2,9,3,9} };
+        m[U'ئ'] = { {1,6,3,7},{3,7,5,6},{2,9,3,9},{3,5,4,5} };
+        m[U'ى'] = { {1,6,3,7},{3,7,5,6} };
+        m[U'ء'] = { {3,3,4,4} };
+        m[U'ة'] = { {2,5,4,5},{4,5,4,7},{4,7,2,7},{2,7,2,5},{2,3,2,4},{4,3,4,4} };
+        m[U'ّ']  = { {2,0,4,1} }; // شدّة (تُعامَل كحرف مستقل مبسَّط، بلا وضع فوق الحرف السابق فعلياً)
+        return m;
+    }();
+    return g;
+}
+
+// رسم خط مستقيم بسماكة (thickness) داخل مخزن RGB بأبعاد width×height.
+static void drawLine(std::vector<unsigned char>& rgb, int width, int height,
+                      int x0, int y0, int x1, int y1, int thickness,
+                      unsigned char r, unsigned char g, unsigned char b) {
+    auto plot = [&](int px, int py) {
+        for (int dy = -(thickness / 2); dy <= thickness / 2; dy++) {
+            for (int dx = -(thickness / 2); dx <= thickness / 2; dx++) {
+                int x = px + dx, y = py + dy;
+                if (x < 0 || y < 0 || x >= width || y >= height) continue;
+                size_t idx = (static_cast<size_t>(y) * width + x) * 3;
+                rgb[idx] = r; rgb[idx + 1] = g; rgb[idx + 2] = b;
+            }
+        }
+    };
+    int dx = std::abs(x1 - x0), sx = x0 < x1 ? 1 : -1;
+    int dy = -std::abs(y1 - y0), sy = y0 < y1 ? 1 : -1;
+    int err = dx + dy;
+    int x = x0, y = y0;
+    while (true) {
+        plot(x, y);
+        if (x == x1 && y == y1) break;
+        int e2 = 2 * err;
+        if (e2 >= dy) { err += dy; x += sx; }
+        if (e2 <= dx) { err += dx; y += sy; }
+    }
+}
+
+// رسم حرف واحد (cp) بحيث تقع زاويته العلوية اليسرى عند (x0px,y0px)، بتحجيم scale وسماكة خط ثابتة.
+static void drawGlyph(std::vector<unsigned char>& rgb, int width, int height,
+                      int x0px, int y0px, int scale, char32_t cp,
+                      unsigned char r, unsigned char g, unsigned char b) {
+    if (cp == U' ' || cp == U'\t') return;
+    int thickness = std::max(1, scale / 2 + 1);
+    const auto& table = glyphTable();
+    auto it = table.find(cp);
+    if (it == table.end()) {
+        // رمز غير معروف: مربع صغير كإشارة صريحة "حرف غير مدعوم" (بدل تجاهله أو تلوينه اعتباطاً).
+        drawLine(rgb, width, height, x0px + 2 * scale, y0px + 4 * scale, x0px + 4 * scale, y0px + 4 * scale, thickness, r, g, b);
+        drawLine(rgb, width, height, x0px + 4 * scale, y0px + 4 * scale, x0px + 4 * scale, y0px + 6 * scale, thickness, r, g, b);
+        drawLine(rgb, width, height, x0px + 4 * scale, y0px + 6 * scale, x0px + 2 * scale, y0px + 6 * scale, thickness, r, g, b);
+        drawLine(rgb, width, height, x0px + 2 * scale, y0px + 6 * scale, x0px + 2 * scale, y0px + 4 * scale, thickness, r, g, b);
+        return;
+    }
+    for (const Seg& seg : it->second) {
+        drawLine(rgb, width, height,
+                  x0px + seg.x0 * scale, y0px + seg.y0 * scale,
+                  x0px + seg.x1 * scale, y0px + seg.y1 * scale,
+                  thickness, r, g, b);
+    }
+}
+
+// إعادة ترتيب نقاط الكود بصرياً (تقريب مبسَّط لخوارزمية bidi): مقاطع عربية متتالية تُعكَس
+// داخلياً وتُبدَّل مواضعها مع مقاطع لاتينية/أرقام متتالية بحيث يظهر النص الناتج بالاتجاه
+// الصحيح تقريبياً حين يحوي السطر مزيجاً من عربي ولاتيني (كما في "مطوّر (Kotlin)" مثلاً).
+static std::vector<char32_t> visualOrder(const std::vector<char32_t>& cps, bool& outHasArabic) {
+    outHasArabic = false;
+    for (char32_t c : cps) if (isArabicCp(c)) { outHasArabic = true; break; }
+    if (!outHasArabic) return cps;
+
+    struct Run { bool arabic; std::vector<char32_t> chars; };
+    std::vector<Run> runs;
+    for (char32_t c : cps) {
+        bool arabic = isArabicCp(c);
+        if (c == U' ' && !runs.empty()) { runs.back().chars.push_back(c); continue; }
+        if (runs.empty() || runs.back().arabic != arabic) runs.push_back({arabic, {}});
+        runs.back().chars.push_back(c);
+    }
+    std::vector<char32_t> out;
+    for (auto it = runs.rbegin(); it != runs.rend(); ++it) {
+        if (it->arabic) out.insert(out.end(), it->chars.rbegin(), it->chars.rend());
+        else out.insert(out.end(), it->chars.begin(), it->chars.end());
+    }
+    return out;
+}
+
+} // namespace rinfont
 
 // ================= ZIP خفيف الوزن (تخزين stored بلا ضغط) — لأجل save/installation عند format=zip =================
 // يبني أرشيف .zip صالحاً قياسياً (يُفتح بأي أداة zip عادية)، كل عنصر بلا ضغط (STORED)، وهو كافٍ
@@ -1277,7 +1502,8 @@ static std::string buildZipArchive(const std::vector<std::pair<std::string, std:
     return out;
 }
 
-// يرسم الجدول (صفوفه المسجَّلة عبر row + نمطه المسجَّل عبر style إن وُجد) كصورة PNG حقيقية.
+// يرسم الجدول (صفوفه المسجَّلة عبر row + نمطه المسجَّل عبر style إن وُجد) كصورة PNG حقيقية
+// تُظهر نص كل خلية فعلياً (عبر rinfont)، وليس مجرد تلوين اعتباطي للخلايا.
 std::string Interpreter::buildTablePng(const std::string& key) const {
     auto rowsIt = tableRows.find(key);
     const std::vector<Value>* rows = (rowsIt != tableRows.end()) ? &rowsIt->second : nullptr;
@@ -1295,21 +1521,10 @@ std::string Interpreter::buildTablePng(const std::string& key) const {
     auto styleIt = containerStyles.find(key);
     if (styleIt != containerStyles.end()) style = styleIt->second;
     bool dark = (style.find("dark") != std::string::npos);
-    unsigned char gridShade = dark ? 235 : 45;
 
-    const int cellW = 80, cellH = 32, gridPx = 2;
-    int width = static_cast<int>(colCount) * cellW + gridPx;
-    int height = static_cast<int>(rowCount) * cellH + gridPx;
-
-    unsigned char bg = dark ? 25 : 250;
-    std::vector<unsigned char> rgb(static_cast<size_t>(width) * static_cast<size_t>(height) * 3, bg);
-
-    auto setPixel = [&](int x, int y, unsigned char r, unsigned char g, unsigned char b) {
-        if (x < 0 || y < 0 || x >= width || y >= height) return;
-        size_t idx = (static_cast<size_t>(y) * width + x) * 3;
-        rgb[idx] = r; rgb[idx + 1] = g; rgb[idx + 2] = b;
-    };
-
+    // نص كل خلية (بالفهرسة [صف][عمود])، مُفكَّكاً مسبقاً إلى نقاط كود بترتيبها البصري الصحيح.
+    struct CellText { std::vector<char32_t> order; bool rtl; };
+    std::vector<std::vector<CellText>> cells(rowCount, std::vector<CellText>(colCount, CellText{{}, false}));
     for (size_t ry = 0; ry < rowCount; ry++) {
         const Value* rowVal = (rows && ry < rows->size()) ? &(*rows)[ry] : nullptr;
         for (size_t cx = 0; cx < colCount; cx++) {
@@ -1317,24 +1532,105 @@ std::string Interpreter::buildTablePng(const std::string& key) const {
             if (rowVal && rowVal->type == Value::Type::ARRAY && rowVal->array && cx < rowVal->array->size()) {
                 text = (*rowVal->array)[cx].toDisplayString();
             }
-            unsigned char r, g, b;
-            cellColor(text.empty() ? ("#" + std::to_string(ry) + "," + std::to_string(cx)) : text, r, g, b);
-            int x0 = static_cast<int>(cx) * cellW + gridPx;
-            int y0 = static_cast<int>(ry) * cellH + gridPx;
-            for (int yy = y0; yy < y0 + cellH - gridPx; yy++)
-                for (int xx = x0; xx < x0 + cellW - gridPx; xx++)
-                    setPixel(xx, yy, r, g, b);
+            auto cps = rinfont::utf8Decode(text);
+            bool rtl = false;
+            cells[ry][cx].order = rinfont::visualOrder(cps, rtl);
+            cells[ry][cx].rtl = rtl;
         }
     }
+
+    // ---- أبعاد الخط والخلايا ----
+    const int scale = 2;                              // تحجيم شبكة التصميم (rinfont::GW×GH) إلى بكسل
+    const int glyphAdvance = (rinfont::GW + 1) * scale; // تقدّم أفقي أحادي (monospace) لكل حرف
+    const int glyphHeightPx = rinfont::GH * scale;
+    const int hPad = 8, vPad = 6, gridPx = 2;
+    const int minColWidth = 3 * glyphAdvance + 2 * hPad;
+    const int rowHeight = glyphHeightPx + 2 * vPad;
+
+    std::vector<int> colWidth(colCount, minColWidth);
+    for (size_t ry = 0; ry < rowCount; ry++) {
+        for (size_t cx = 0; cx < colCount; cx++) {
+            int need = static_cast<int>(cells[ry][cx].order.size()) * glyphAdvance + 2 * hPad;
+            colWidth[cx] = std::max(colWidth[cx], need);
+        }
+    }
+
+    int width = gridPx;
+    std::vector<int> colX(colCount + 1, 0);
+    for (size_t cx = 0; cx < colCount; cx++) { colX[cx] = width; width += colWidth[cx] + gridPx; }
+    colX[colCount] = width;
+    int height = static_cast<int>(rowCount) * rowHeight + gridPx;
+
+    // ---- ألوان الثيم ----
+    unsigned char bg = dark ? 22 : 250;
+    unsigned char rowA = dark ? 30 : 250;    // صفوف زوجية
+    unsigned char rowB = dark ? 25 : 242;    // صفوف فردية (تخطيط "zebra" خفيف)
+    unsigned char headerBg = dark ? 55 : 210;
+    unsigned char gridShade = dark ? 70 : 200;
+    unsigned char textR = dark ? 235 : 20, textG = dark ? 235 : 20, textB = dark ? 235 : 20;
+    unsigned char headerTextR = dark ? 255 : 10, headerTextG = dark ? 255 : 10, headerTextB = dark ? 255 : 10;
+
+    std::vector<unsigned char> rgb(static_cast<size_t>(width) * static_cast<size_t>(height) * 3, bg);
+
+    auto fillRect = [&](int x0, int y0, int x1, int y1, unsigned char r, unsigned char g, unsigned char b) {
+        for (int yy = std::max(0, y0); yy < std::min(height, y1); yy++)
+            for (int xx = std::max(0, x0); xx < std::min(width, x1); xx++) {
+                size_t idx = (static_cast<size_t>(yy) * width + xx) * 3;
+                rgb[idx] = r; rgb[idx + 1] = g; rgb[idx + 2] = b;
+            }
+    };
+
+    for (size_t ry = 0; ry < rowCount; ry++) {
+        int y0 = static_cast<int>(ry) * rowHeight + gridPx;
+        int y1 = y0 + rowHeight - gridPx;
+        unsigned char cr, cg, cb;
+        bool isHeader = (ry == 0);
+        if (isHeader) { cr = cg = cb = headerBg; }
+        else { cr = cg = cb = (ry % 2 == 0) ? rowA : rowB; }
+        for (size_t cx = 0; cx < colCount; cx++) {
+            fillRect(colX[cx], y0, colX[cx] + colWidth[cx], y1, cr, cg, cb);
+            unsigned char tr = isHeader ? headerTextR : textR;
+            unsigned char tg = isHeader ? headerTextG : textG;
+            unsigned char tb = isHeader ? headerTextB : textB;
+            const CellText& ct = cells[ry][cx];
+            int textW = static_cast<int>(ct.order.size()) * glyphAdvance;
+            int startX = ct.rtl ? (colX[cx] + colWidth[cx] - hPad - textW) : (colX[cx] + hPad);
+            int startY = y0 + vPad;
+            int cursor = startX;
+            for (char32_t cp : ct.order) {
+                rinfont::drawGlyph(rgb, width, height, cursor, startY, scale, cp, tr, tg, tb);
+                cursor += glyphAdvance;
+            }
+            if (isHeader) { // تأثير شبه-عريض بسيط للعناوين: إعادة رسم بإزاحة بكسل واحد
+                cursor = startX + 1;
+                for (char32_t cp : ct.order) {
+                    rinfont::drawGlyph(rgb, width, height, cursor, startY, scale, cp, tr, tg, tb);
+                    cursor += glyphAdvance;
+                }
+            }
+        }
+    }
+
+    // خطوط الشبكة (رأسية بين الأعمدة + أفقية بين الصفوف) + إطار خارجي.
     for (size_t cx = 0; cx <= colCount; cx++) {
-        int x0 = static_cast<int>(cx) * cellW;
+        int x0 = colX[cx] - gridPx;
         for (int yy = 0; yy < height; yy++)
-            for (int t = 0; t < gridPx; t++) setPixel(x0 + t, yy, gridShade, gridShade, gridShade);
+            for (int t = 0; t < gridPx; t++) {
+                int xx = x0 + t;
+                if (xx < 0 || xx >= width) continue;
+                size_t idx = (static_cast<size_t>(yy) * width + xx) * 3;
+                rgb[idx] = gridShade; rgb[idx + 1] = gridShade; rgb[idx + 2] = gridShade;
+            }
     }
     for (size_t ry = 0; ry <= rowCount; ry++) {
-        int y0 = static_cast<int>(ry) * cellH;
+        int y0 = static_cast<int>(ry) * rowHeight;
         for (int xx = 0; xx < width; xx++)
-            for (int t = 0; t < gridPx; t++) setPixel(xx, y0 + t, gridShade, gridShade, gridShade);
+            for (int t = 0; t < gridPx; t++) {
+                int yy = y0 + t;
+                if (yy < 0 || yy >= height) continue;
+                size_t idx = (static_cast<size_t>(yy) * width + xx) * 3;
+                rgb[idx] = gridShade; rgb[idx + 1] = gridShade; rgb[idx + 2] = gridShade;
+            }
     }
 
     return pngutil::encodeRgbPng(width, height, rgb);
@@ -1878,7 +2174,7 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
         if (isContainer) {
             ContainerKind kind = containerKinds.count(s->target) ? containerKinds[s->target] : ContainerKind::PLAIN;
             std::string doc = buildSaveDocument(s->target, containers[s->target], kind, s->simplified);
-            relPath = "rin_installed/" + s->target + defaultRinExtension(kind, s->simplified);
+            relPath = "rin_installed/" + s->target + (s->simplified ? ".min.rin" : ".rin");
             writeRealFile(relPath, doc, s->line, "installation");
         } else if (isGroup) {
             std::vector<std::string> members;
@@ -1945,7 +2241,7 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
         std::string rawPath;
         if (s->path) rawPath = evaluate(s->path, env).toDisplayString();
         else if (!currentFilePath.empty()) rawPath = currentFilePath;
-        else rawPath = key + defaultRinExtension(kind, s->simplified); // مسار افتراضي معتمد على اسم الحاوية ونوعها
+        else rawPath = key + (s->simplified ? ".min.rin" : ".rin"); // مسار افتراضي معتمد على اسم الحاوية
 
         std::string doc = buildSaveDocument(key, containers[key], kind, s->simplified);
         writeRealFile(rawPath, doc, s->line, "save");
@@ -2011,11 +2307,11 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
                                                             : containerKinds[containerStack.back()];
         bool allowed = currentKind == ContainerKind::TABLE || currentKind == ContainerKind::OBJECT ||
                         currentKind == ContainerKind::PORTAL || currentKind == ContainerKind::BLOCK ||
-                        currentKind == ContainerKind::STICKER || currentKind == ContainerKind::AUKT;
+                        currentKind == ContainerKind::STICKER;
         if (containerStack.empty() || !allowed) {
             throw RinError("عبارة 'style' يجب أن تُستخدم داخل @container.table/@table أو "
                             "@container.object/@Object أو @container.portal/@portal أو @container.block/@block "
-                            "أو @container.sticker/@sticker أو @container.aukt/@AUKT", s->line);
+                            "أو @container.sticker/@sticker", s->line);
         }
         Value v = evaluate(s->value, env);
         if (v.type != Value::Type::STRING) {
