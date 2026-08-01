@@ -2115,13 +2115,30 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
         return;
     }
 
+    if (auto s = std::dynamic_pointer_cast<LinkIdDeclStmt>(stmt)) {
+        if (containerStack.empty())
+            throw RinError("لا يمكن استخدام 'link.id=' خارج جسم حاوية (container)", s->line);
+        const std::string& cur = containerStack.back();
+        linkIdToContainer[s->id] = cur;
+        output << "🏷️ link.id=\"" << s->id << "\" -> " << cur << "\n";
+        return;
+    }
+
     if (auto s = std::dynamic_pointer_cast<LinkStmt>(stmt)) {
-        bool isContainer = containers.count(s->target) > 0;
-        bool isGroup = groupMembers.count(s->target) > 0;
-        if (!isContainer && !isGroup) {
-            throw RinError("لا يمكن تنفيذ link: '" + s->target + "' غير معرَّف كحاوية أو كمجموعة (Containers.Group)", s->line);
+        std::string target = s->target;
+        bool byId = !s->byId.empty();
+        if (byId) {
+            auto it = linkIdToContainer.find(s->byId);
+            if (it == linkIdToContainer.end())
+                throw RinError("لا يمكن تنفيذ link id=\"" + s->byId + "\": لا توجد حاوية مسجَّلة بهذا المعرّف عبر 'link.id='", s->line);
+            target = it->second;
         }
-        output << "🔗 link -> " << s->target << (isGroup ? " (Containers.Group)" : "") << "\n";
+        bool isContainer = containers.count(target) > 0;
+        bool isGroup = groupMembers.count(target) > 0;
+        if (!isContainer && !isGroup) {
+            throw RinError("لا يمكن تنفيذ link: '" + target + "' غير معرَّف كحاوية أو كمجموعة (Containers.Group)", s->line);
+        }
+        output << "🔗 link -> " << target << (byId ? (" (id=\"" + s->byId + "\")") : "") << (isGroup ? " (Containers.Group)" : "") << "\n";
         return;
     }
 
