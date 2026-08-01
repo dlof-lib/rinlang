@@ -237,9 +237,21 @@ struct TranslationStmt : Stmt {
     std::string text;
 };
 
-// link to=name;
+// link to=name;               -> ربط بلا نسخ عبر اسم الحاوية (كما كان)
+// link id="X";                -> نفس الشيء، لكن الهدف يُحلّ عبر معرّف ربط عام (link.id) بدل الاسم؛
+//                                 هذا هو الشكل الذي يجعل الربط يعمل عبر الملفات (rin/html/js/cpp)
+//                                 لأن المعرّف "X" يبقى ثابتاً حتى لو اختلف اسم الحاوية من ملف لآخر.
 struct LinkStmt : Stmt {
-    std::string target;
+    std::string target; // فارغ إن استُخدم byId
+    std::string byId;   // فارغ إن استُخدم target (link to=)
+};
+
+// link.id="X";  (بداخل جسم حاوية) -> يسجّل "X" كـ"معرّف ربط" عام (container.link.id) لهذه الحاوية،
+// بحيث يمكن لاحقاً استهدافها من أي مكان عبر 'link id="X";' بدل تكرار اسمها، ويمكن لملفات خارج
+// Rin (html/js/cpp) أن تُشير لنفس "X" عبر اتفاقية بسيطة (انظر tools/rin_link_index.py) لتُعتبر
+// "مرتبطة" منطقياً بنفس الحاوية دون أن ينفّذها مفسّر Rin مباشرة.
+struct LinkIdDeclStmt : Stmt {
+    std::string id;
 };
 
 // tying with=name;
