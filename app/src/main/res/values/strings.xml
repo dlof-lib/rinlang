@@ -176,4 +176,32 @@ print \"Hello, \" + name + \"!\";
 
     <!-- ===== شاشة البداية (Splash) ===== -->
     <string name="splash_tagline">لغة برمجة خفيفة وسريعة</string>
+
+    <!-- ===== Live Preview (Loomtime rendering engine / "Mirror Loom") ===== -->
+    <string name="loom_preview_title">Live Preview</string>
+    <string name="loom_live_label">LIVE</string>
+    <string name="loom_close">Close</string>
+    <string name="loom_device_default">390px</string>
+    <string name="loom_device_width_format">%1$dpx</string>
+    <string name="loom_toggle_grid">Toggle alignment grid</string>
+    <string name="loom_zoom_in">Zoom in</string>
+    <string name="loom_zoom_out">Zoom out</string>
+    <string name="loom_zoom_100">100%</string>
+    <string name="loom_zoom_percent_format">%1$d%%</string>
+    <string name="loom_restart_session">Restart session</string>
+    <string name="loom_session_restarted_toast">Live Preview session restarted</string>
+    <string name="loom_device_changed_toast">Device width changed to %1$dpx — session restarted</string>
+    <string name="loom_internal_error">The preview received an unreadable result from the engine.</string>
+    <string name="loom_unknown_error">Unknown error</string>
+    <string name="loom_error_format">Error: %1$s</string>
+    <string name="loom_error_line_format">Snag on line %1$d: %2$s — still showing the last good frame</string>
+    <string name="loom_stats_error_only">No good frame yet — fix the error above and keep typing.</string>
+    <string name="loom_stats_idle">Waiting for the first render…</string>
+    <string name="loom_stats_format">%1$d strands · rendered in %2$dms · cache hits %3$d · long-press an element to inspect it</string>
+    <string name="loom_inspector_title_format">%1$s · %2$s (line %3$d)</string>
+    <!-- يظهر بعد الضغط على Run عندما يحتوي الكود الحالي على @view.&lt;Kind&gt;=name حقيقي -->
+    <string name="loom_view_detected_snackbar">Loom view detected — opening Live Preview</string>
+    <string name="loom_open_action">Open</string>
+    <string name="menu_run_live_preview">Live Preview</string>
+    <string name="loom_no_view_toast">No @view.&lt;Kind&gt;=name block found in this code yet.</string>
 </resources>
