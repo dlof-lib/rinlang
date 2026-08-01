@@ -80,6 +80,7 @@ struct RincError {
 enum class Tok {
     NUMBER, STRING, IDENT,
     LET, PRINT, IF, ELSE, WHILE, FUN, RETURN, TRUE_, FALSE_, NIL, AND, OR,
+    BREAK, CONTINUE, // break / continue -> التحكّم المبكّر داخل حلقات while
     PLUS, MINUS, STAR, SLASH, PERCENT,
     EQUAL, EQUAL_EQUAL, BANG, BANG_EQUAL,
     LESS, LESS_EQUAL, GREATER, GREATER_EQUAL,
@@ -179,6 +180,7 @@ private:
             {"while", Tok::WHILE}, {"fun", Tok::FUN}, {"return", Tok::RETURN},
             {"true", Tok::TRUE_}, {"false", Tok::FALSE_}, {"nil", Tok::NIL},
             {"and", Tok::AND}, {"or", Tok::OR},
+            {"break", Tok::BREAK}, {"continue", Tok::CONTINUE},
         };
         auto it = kw.find(text);
         addToken(it != kw.end() ? it->second : Tok::IDENT, text);
@@ -257,6 +259,9 @@ struct IfStmt : Stmt { ExprPtr condition; StmtPtr thenBranch; StmtPtr elseBranch
 struct WhileStmt : Stmt { ExprPtr condition; StmtPtr body; };
 struct FunctionStmt : Stmt { std::string name; std::vector<std::string> params; std::shared_ptr<BlockStmt> body; };
 struct ReturnStmt : Stmt { ExprPtr value; };
+// break; / continue; -> يُترجمان مباشرة إلى break;/continue; في C المولَّد (تطابق دلالي كامل).
+struct BreakStmt : Stmt {};
+struct ContinueStmt : Stmt {};
 
 // ============================================================================
 // 4) المحلل النحوي (Parser) — نفس قواعد نحو Rin الأساسية
@@ -272,8 +277,8 @@ public:
     }
 
 private:
-    std::vector<Token> tokens;
-    size_t current = 0;
+    std::vector<Token> tokens;    size_t current = 0;
+    int loopDepth = 0; // >0 داخل جسم حلقة while؛ للتحقق من صحة break/continue وقت التحليل
 
     bool isAtEnd() const { return peek().type == Tok::END_OF_FILE; }
     const Token& peek() const { return tokens[current]; }
@@ -343,7 +348,10 @@ private:
         }
         consume(Tok::RPAREN, "Expected ')' after parameters");
         consume(Tok::LBRACE, "Expected '{' before function body");
+        int savedLoopDepth = loopDepth;
+        loopDepth = 0; // جسم الدالة يبدأ سياق حلقة جديداً من الصفر (نفس منطق المفسّر)
         auto body = block();
+        loopDepth = savedLoopDepth;
         auto fn = std::make_shared<FunctionStmt>();
         fn->name = name.lexeme; fn->params = params; fn->body = body; fn->line = name.line;
         return fn;
@@ -354,6 +362,8 @@ private:
         if (match({Tok::IF})) return ifStatement();
         if (match({Tok::WHILE})) return whileStatement();
         if (match({Tok::RETURN})) return returnStatement();
+        if (match({Tok::BREAK})) return breakStatement();
+        if (match({Tok::CONTINUE})) return continueStatement();
         if (check(Tok::LBRACE)) { advance(); return block(); }
         return expressionStatement();
     }
@@ -397,7 +407,9 @@ private:
         consume(Tok::LPAREN, "Expected '(' after 'while'");
         auto cond = expression();
         consume(Tok::RPAREN, "Expected ')' after while condition");
+        loopDepth++;
         auto body = statement();
+        loopDepth--;
         auto s = std::make_shared<WhileStmt>(); s->condition = cond; s->body = body; s->line = cond->line;
         return s;
     }
@@ -408,6 +420,22 @@ private:
         if (!check(Tok::SEMICOLON)) value = expression();
         consume(Tok::SEMICOLON, "Expected ';' after return value");
         auto s = std::make_shared<ReturnStmt>(); s->value = value; s->line = kw.line;
+        return s;
+    }
+
+    StmtPtr breakStatement() {
+        Token kw = previous();
+        if (loopDepth == 0) throw RincError("'break' used outside of a loop", kw.line);
+        consume(Tok::SEMICOLON, "Expected ';' after 'break'");
+        auto s = std::make_shared<BreakStmt>(); s->line = kw.line;
+        return s;
+    }
+
+    StmtPtr continueStatement() {
+        Token kw = previous();
+        if (loopDepth == 0) throw RincError("'continue' used outside of a loop", kw.line);
+        consume(Tok::SEMICOLON, "Expected ';' after 'continue'");
+        auto s = std::make_shared<ContinueStmt>(); s->line = kw.line;
         return s;
     }
 
@@ -717,6 +745,14 @@ private:
         }
         if (auto s = std::dynamic_pointer_cast<ReturnStmt>(stmt)) {
             pad(); out << "return " << (s->value ? exprStr(s->value, sc) : "rt_nil()") << ";\n";
+            return;
+        }
+        if (std::dynamic_pointer_cast<BreakStmt>(stmt)) {
+            pad(); out << "break;\n";
+            return;
+        }
+        if (std::dynamic_pointer_cast<ContinueStmt>(stmt)) {
+            pad(); out << "continue;\n";
             return;
         }
         if (std::dynamic_pointer_cast<FunctionStmt>(stmt)) return; // مُولَّدة مسبقاً كدالة C مستقلة
