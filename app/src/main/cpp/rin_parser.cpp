@@ -488,15 +488,38 @@ StmtPtr Parser::translationStatement() {
 
 StmtPtr Parser::linkStatement() {
     Token tok = previous();
-    Token key = consume(TokenType::IDENT, "Expected 'to' after 'link'");
-    if (key.lexeme != "to") throw RinError("Expected 'to' attribute after 'link'", key.line);
-    consume(TokenType::EQUAL, "Expected '=' after 'to'");
-    if (!check(TokenType::IDENT) && !check(TokenType::STRING))
-        throw RinError("Expected a container name after 'to='", peek().line);
-    std::string target = advance().lexeme;
-    consume(TokenType::SEMICOLON, "Expected ';' after link statement");
+
+    // link.id="X";  -> تسجيل معرّف ربط عام (container.link.id) للحاوية الحالية
+    if (check(TokenType::DOT)) {
+        advance(); // '.'
+        Token idKw = consume(TokenType::IDENT, "Expected 'id' after 'link.'");
+        if (idKw.lexeme != "id") throw RinError("Unknown 'link." + idKw.lexeme + "': did you mean 'link.id='?", idKw.line);
+        consume(TokenType::EQUAL, "Expected '=' after 'link.id'");
+        Token val = consume(TokenType::STRING, "Expected a text value after 'link.id='");
+        consume(TokenType::SEMICOLON, "Expected ';' after link.id statement");
+        auto s = std::make_shared<LinkIdDeclStmt>();
+        s->id = val.lexeme; s->line = tok.line;
+        return s;
+    }
+
+    Token key = consume(TokenType::IDENT, "Expected 'to' or 'id' after 'link'");
+    if (key.lexeme != "to" && key.lexeme != "id")
+        throw RinError("Expected 'to' or 'id' attribute after 'link'", key.line);
+    consume(TokenType::EQUAL, "Expected '=' after '" + key.lexeme + "'");
+
     auto s = std::make_shared<LinkStmt>();
-    s->target = target; s->line = tok.line;
+    s->line = tok.line;
+    if (key.lexeme == "id") {
+        // link id="X";  -> ربط بمعرّف عام بدل اسم الحاوية (يعمل عبر الملفات)
+        Token val = consume(TokenType::STRING, "Expected a text value after 'id='");
+        s->byId = val.lexeme;
+    } else {
+        // link to=name;  -> ربط باسم الحاوية (كما كان)
+        if (!check(TokenType::IDENT) && !check(TokenType::STRING))
+            throw RinError("Expected a container name after 'to='", peek().line);
+        s->target = advance().lexeme;
+    }
+    consume(TokenType::SEMICOLON, "Expected ';' after link statement");
     return s;
 }
 
