@@ -1,5 +1,15 @@
-# أضف هذا المُدخل أبجدياً داخل lib/linguist/languages.yml في مستودع github-linguist/linguist
-# (بين اللغات التي تبدأ بحرف قريب من "Rin" أبجدياً)
+# Add this entry, alphabetically, inside lib/linguist/languages.yml in the
+# github-linguist/linguist repo (between whichever two neighboring entries
+# come right before/after "Rin" alphabetically — capitals sort before
+# lowercase, per the file's own header comment).
+#
+# IMPORTANT — this reflects the *current* (2026) contribution process, not
+# the older "pick your own numeric id" convention:
+#   - Per CONTRIBUTING.md → "Adding a language", you must OMIT `language_id`
+#     entirely at this stage. It is generated for you later by running
+#     `script/update-ids` (a repo-maintained script), never hand-picked.
+#   - `tm_scope` must match the scope your grammar actually declares
+#     (see syntaxes/rin.tmLanguage.json → "scopeName": "source.rin").
 
 Rin:
   type: programming
@@ -8,5 +18,3 @@ Rin:
   - ".rin"
   tm_scope: source.rin
   ace_mode: text
-  language_id: 999999999   # ⚠️ استبدله برقم فريد غير مستخدم — راجع أعلى قيمة id حالياً في languages.yml
-                             #    وزِد عليها 1 (فريق Linguist يطلب هذا صراحة في الـ PR template)
