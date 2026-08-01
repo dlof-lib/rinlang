@@ -225,7 +225,7 @@ std::string Parser::readTagKeyword() {
         if (!nextIsPipe && current + 1 < tokens.size() && tokens[current + 1].type == TokenType::IDENT) {
             const std::string& w = tokens[current + 1].lexeme;
             nextIsContextualWord = (w == "data" || w == "api" || w == "import" || w == "table" || w == "doc" ||
-                                     w == "object" || w == "portal" || w == "block");
+                                     w == "object" || w == "portal" || w == "block" || w == "aukt");
         }
         // لا نستهلك '.' إلا إذا كانت متبوعة مباشرة بإحدى هذه الكلمات، وإلا فقد تكون في الحقيقة
         // بداية وسم إغلاق آخر مجاور مثل '.end/container' تلاه '.end/Containers.Group'
@@ -346,13 +346,13 @@ StmtPtr Parser::atBlock() {
         "container.doc", "Containers.Group", "Volume", "table", "doc",
         // مفاهيم التنسيق والستايل: كائن (Object) / بوابة تنسيق (portal) / كتلة واجهة جاهزة (block)
         "container.object", "Object", "container.portal", "portal", "container.block", "block",
-        "container.sticker", "sticker"
+        "container.sticker", "sticker", "container.aukt", "AUKT"
     };
     if (std::find(validTags.begin(), validTags.end(), tag) == validTags.end()) {
         throw RinError("Unsupported block '@" + tag + "'; expected container, container.pipe, container.data, "
                         "container.api, container.import, container.table, table, container.doc, doc, "
                         "container.object, Object, container.portal, portal, container.block, block, "
-                        "container.sticker, sticker, Containers.Group, or Volume", atTok.line);
+                        "container.sticker, sticker, container.aukt, AUKT, Containers.Group, or Volume", atTok.line);
     }
     std::string name = readOptionalName();
     std::vector<StmtPtr> body;
@@ -366,7 +366,8 @@ StmtPtr Parser::atBlock() {
         tag == "container.object" || tag == "Object" ||
         tag == "container.portal" || tag == "portal" ||
         tag == "container.block" || tag == "block" ||
-        tag == "container.sticker" || tag == "sticker") {
+        tag == "container.sticker" || tag == "sticker" ||
+        tag == "container.aukt" || tag == "AUKT") {
         // container.table/table (صفوف row + نمط style)، container.doc/doc (مستندات document)، وكذلك
         // container.object/Object، container.portal/portal، container.block/block، وأخيراً
         // container.sticker/sticker (بطاقة هوية بصرية جاهزة: أيقونة/ألوان/حواف/خلفية...) تشترك جميعاً
@@ -391,6 +392,7 @@ StmtPtr Parser::atBlock() {
         else if (tag == "container.portal" || tag == "portal") s->kind = ContainerKind::PORTAL;
         else if (tag == "container.block" || tag == "block") s->kind = ContainerKind::BLOCK;
         else if (tag == "container.sticker" || tag == "sticker") s->kind = ContainerKind::STICKER;
+        else if (tag == "container.aukt" || tag == "AUKT") s->kind = ContainerKind::AUKT;
         else s->kind = ContainerKind::PLAIN;
         return s;
     }
