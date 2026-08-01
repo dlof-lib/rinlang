@@ -43,7 +43,7 @@ object RinSyntaxHighlighter {
 
     // كلمات لغة Rin الأساسية (تحكّم بالتدفّق، تعريف متغيرات ودوال)
     private val coreKeywords = listOf(
-        "let", "print", "if", "else", "while", "fun", "return",
+        "let", "print", "if", "else", "while", "fun", "return", "break", "continue",
         "true", "false", "nil", "and", "or"
     )
 
