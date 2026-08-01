@@ -1,0 +1,112 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Rin",
+  "scopeName": "source.rin",
+  "fileTypes": ["rin"],
+  "patterns": [
+    { "include": "#comments" },
+    { "include": "#strings" },
+    { "include": "#numbers" },
+    { "include": "#block-tags" },
+    { "include": "#keywords" },
+    { "include": "#constants" },
+    { "include": "#operators" },
+    { "include": "#functions" }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.double-slash.rin",
+          "match": "//.*$"
+        }
+      ]
+    },
+    "strings": {
+      "name": "string.quoted.double.rin",
+      "begin": "\"",
+      "end": "\"",
+      "patterns": [
+        {
+          "name": "constant.character.escape.rin",
+          "match": "\\\\(n|t|r|\\\\|\")"
+        }
+      ]
+    },
+    "numbers": {
+      "name": "constant.numeric.rin",
+      "match": "\\b\\d+(\\.\\d+)?\\b"
+    },
+    "block-tags": {
+      "comment": "@Kind=name ... .end/Kind blocks used by @view/@import/@Object/Containers.Group/etc.",
+      "patterns": [
+        {
+          "match": "(@)([A-Za-z][A-Za-z0-9_.]*)(=)?",
+          "captures": {
+            "1": { "name": "punctuation.definition.tag.rin" },
+            "2": { "name": "entity.name.tag.rin" },
+            "3": { "name": "keyword.operator.assignment.rin" }
+          }
+        },
+        {
+          "match": "(\\.end)(/)([A-Za-z][A-Za-z0-9_.]*)",
+          "captures": {
+            "1": { "name": "punctuation.definition.tag.end.rin" },
+            "2": { "name": "punctuation.separator.rin" },
+            "3": { "name": "entity.name.tag.rin" }
+          }
+        }
+      ]
+    },
+    "keywords": {
+      "patterns": [
+        {
+          "name": "keyword.control.rin",
+          "match": "\\b(if|else|while|return|and|or)\\b"
+        },
+        {
+          "name": "keyword.other.rin",
+          "match": "\\b(let|fun|print|end|save|file|link|tying|merge|installation|simplified|pipe)\\b"
+        },
+        {
+          "name": "storage.type.rin",
+          "match": "\\b(container|Containers|Group|Volume|Section|Translations|translation|text)\\b"
+        }
+      ]
+    },
+    "constants": {
+      "name": "constant.language.rin",
+      "match": "\\b(true|false|nil)\\b"
+    },
+    "operators": {
+      "patterns": [
+        {
+          "comment": "Rin's statistics/data pipeline operator",
+          "name": "keyword.operator.pipeline.rin",
+          "match": "\\|>"
+        },
+        {
+          "name": "keyword.operator.rin",
+          "match": "(==|!=|<=|>=|=|\\+|-|\\*|/|<|>|!)"
+        }
+      ]
+    },
+    "functions": {
+      "patterns": [
+        {
+          "comment": "function name right after 'fun'",
+          "match": "\\b(fun)\\s+([A-Za-z_][A-Za-z0-9_]*)",
+          "captures": {
+            "1": { "name": "keyword.other.rin" },
+            "2": { "name": "entity.name.function.rin" }
+          }
+        },
+        {
+          "comment": "generic call site: name(",
+          "match": "\\b([A-Za-z_][A-Za-z0-9_]*)\\s*(?=\\()",
+          "name": "entity.name.function.rin"
+        }
+      ]
+    }
+  }
+}
