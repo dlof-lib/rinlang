@@ -100,6 +100,11 @@ public:
     // (مثلاً مجلد التطبيق الخاص على أندرويد عبر context.filesDir). فارغ = المجلد الحالي (CWD).
     void setBasePath(const std::string& path) { basePath = path; }
 
+    // كل معرّفات الربط العامة (container.link.id) المسجَّلة أثناء هذا التشغيل، ومقابل كل واحد اسم
+    // الحاوية التي سجّلته. تُستخدم من طرف التطبيق/الأدوات الخارجية (مثلاً tools/rin_link_index.py)
+    // لبناء فهرس ربط شامل بين ملفات rin. و.html/.js/.cpp عبر نفس المعرّف (انظر rin_ast.h: LinkIdDeclStmt).
+    const std::unordered_map<std::string, std::string>& getLinkIds() const { return linkIdToContainer; }
+
     // ---- Loomtime bridge (see loom/rin_loom_needle.h) ----
     // Calls a top-level RIN function by name using the *real* interpreter -- full language
     // semantics (loops, recursion, stdlib) included -- so a Warp-bound `onTap` handler can
@@ -147,6 +152,7 @@ private:
     std::string currentFilePath;                              // آخر مسار مُعرَّف عبر file
     std::unordered_map<std::string, std::vector<ApiRoute>> apiRoutes; // مفتاح container.api -> نقاطها المسجَّلة عبر route
     std::unordered_set<std::string> importedPaths;            // مسارات @import المُنفَّذة فعلاً في هذا التشغيل (لمنع الاستيراد المكرَّر)
+    std::unordered_map<std::string, std::string> linkIdToContainer; // معرّف الربط العام (container.link.id) -> اسم الحاوية المسجَّلة به
 
     // ---- مفهوم الجدول (container.table / table المستقلة) ----
     std::unordered_map<std::string, std::vector<Value>> tableRows;  // مفتاح الحاوية -> صفوفها (كل صف Value::ARRAY)
