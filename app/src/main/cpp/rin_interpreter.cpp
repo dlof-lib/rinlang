@@ -15,6 +15,22 @@
 #include <errno.h>
 #include <cstdint>
 
+// ---- توافق ويندوز/POSIX لـ stat()/mkdir() ----------------------------------
+// على أندرويد NDK/لينكس/macOS: stat()/mkdir(path, mode) القياسيتان بتوقيعهما
+// المعروف. على ويندوز (MSVC أو MinGW): الاسمان المتاحان بلا بادئة تحته سفلي هما
+// _stat()/_mkdir(path) (بلا وسيط mode)، ولا يمكن استدعاء mkdir بوسيطين هناك.
+// هذا القسم فقط يوحّد الاسم المُستخدَم أدناه؛ لا يغيّر أي سلوك على المنصات الأخرى.
+#ifdef _WIN32
+    #include <direct.h>
+    using rin_stat_t = struct _stat;
+    #define RIN_STAT(pathCStr, stPtr) ::_stat((pathCStr), (stPtr))
+    #define RIN_MKDIR(pathCStr) ::_mkdir(pathCStr)
+#else
+    using rin_stat_t = struct stat;
+    #define RIN_STAT(pathCStr, stPtr) ::stat((pathCStr), (stPtr))
+    #define RIN_MKDIR(pathCStr) ::mkdir((pathCStr), 0755)
+#endif
+
 namespace rin {
 
 // تمثيل "متداخل" لقيمة (يُستخدم داخل عناصر المصفوفات/القواميس عند الطباعة): النصوص توضع بين علامتي تنصيص.
@@ -966,8 +982,8 @@ void Interpreter::registerNatives() {
     natives["fileExists"] = [this](std::vector<Value>& a, int line) -> Value {
         expectArgs("fileExists", a, 1, line);
         std::string path = asString(a[0], "fileExists", line);
-        struct stat st{};
-        return Value::boolean_(::stat(resolvePath(path, line).c_str(), &st) == 0);
+        rin_stat_t rst{};
+        return Value::boolean_(RIN_STAT(resolvePath(path, line).c_str(), &rst) == 0);
     };
     natives["deleteFile"] = [this](std::vector<Value>& a, int line) -> Value {
         expectArgs("deleteFile", a, 1, line);
@@ -1071,7 +1087,7 @@ void Interpreter::ensureParentDir(const std::string& fullPath) const {
         std::string segment = (slash == std::string::npos) ? dir.substr(start) : dir.substr(start, slash - start);
         if (!segment.empty()) {
             partial += segment;
-            if (::mkdir(partial.c_str(), 0755) != 0 && errno != EEXIST) {
+            if (RIN_MKDIR(partial.c_str()) != 0 && errno != EEXIST) {
                 // تُترك بصمت: محاولة الكتابة اللاحقة (ofstream) سترمي خطأ واضحاً إن كان هذا هو السبب الفعلي للفشل.
             }
             partial += "/";
