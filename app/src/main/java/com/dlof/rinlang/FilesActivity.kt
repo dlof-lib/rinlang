@@ -86,8 +86,16 @@ class FilesActivity : AppCompatActivity() {
 
         fabAddFile.setOnClickListener { showCreateFileDialog() }
         fabUploadFile.setOnClickListener {
-            // نقبل .rin أو أي نص عادي، لأن أندرويد لا يربط MIME type رسمياً بامتداد .rin.
-            importFileLauncher.launch(arrayOf("text/plain", "application/octet-stream", "*/*"))
+            // نقبل .rin/أي نص عادي، وأيضاً صراحةً صور/فيديو/خطوط وملفات لغات برمجية أخرى
+            // (html/js/cpp/py/...)؛ "*/*" وحدها تكفي تقنياً لكن نذكر الأنواع الشائعة صراحةً
+            // ليعرضها بعض منتقيات الملفات (SAF) كفئات مقترحة بدل قائمة واحدة مبهمة.
+            importFileLauncher.launch(
+                arrayOf(
+                    "text/plain", "application/octet-stream",
+                    "image/*", "video/*", "font/*",
+                    "*/*"
+                )
+            )
         }
         fabZipTools.setOnClickListener { showZipToolsDialog() }
     }
@@ -242,6 +250,7 @@ private class FilesAdapter(
     }
 
     class VH(view: View) : RecyclerView.ViewHolder(view) {
+        val imgIcon: android.widget.ImageView = view.findViewById(R.id.imgFileIcon)
         val txtName: TextView = view.findViewById(R.id.txtFileNameItem)
         val txtMeta: TextView = view.findViewById(R.id.txtFileMeta)
         val btnDelete: View = view.findViewById(R.id.btnDeleteFile)
@@ -260,6 +269,7 @@ private class FilesAdapter(
             formatSize(file.sizeBytes),
             dateFormat.format(Date(file.lastModified))
         )
+        FileIconResolver.load(holder.imgIcon, file.file)
         holder.itemView.setOnClickListener { onOpen(file) }
         holder.btnDelete.setOnClickListener { onDelete(file) }
     }
