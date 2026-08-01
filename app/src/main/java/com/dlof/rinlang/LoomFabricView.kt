@@ -37,7 +37,24 @@ class LoomFabricView @JvmOverloads constructor(
         const val TEXT = "Text"; const val IMAGE = "Image"; const val BUTTON = "Button"
         const val CARD = "Card"; const val COLUMN = "Column"; const val ROW = "Row"
         const val STACK = "Stack"; const val DIVIDER = "Divider"
+        // New: app chrome, media, and table — mirror the StrandKind additions noted in
+        // rin_loom_layout.h (HEADER/TOPBAR/BOTTOMBAR/DRAWER/MENU/MENUITEM/TABLE/TABLEROW/
+        // VIDEO/AUDIO/WEBVIEW/SCAFFOLD/SPLASH). These are *design-time placeholders*: the real
+        // video/audio/web playback and the real page-navigation-on-tap-or-timer are wired up by
+        // the host app/runtime, not drawn here — same relationship Image already has with a
+        // real <img>.
+        const val HEADER = "Header"; const val TOPBAR = "TopBar"; const val BOTTOMBAR = "BottomBar"
+        const val DRAWER = "Drawer"; const val MENU = "Menu"; const val MENUITEM = "MenuItem"
+        const val TABLE = "Table"; const val TABLEROW = "TableRow"
+        const val VIDEO = "Video"; const val AUDIO = "Audio"; const val WEBVIEW = "WebView"
+        const val SCAFFOLD = "Scaffold"; const val SPLASH = "Splash"
     }
+
+    private val defaultBar = Color.rgb(30, 31, 40)
+    private val defaultDrawer = Color.rgb(22, 23, 30)
+    private val defaultMedia = Color.rgb(18, 18, 26)
+    private val defaultTableLine = Color.argb(60, 255, 255, 255)
+    private val defaultTableHeaderBg = Color.rgb(34, 36, 48)
 
     // ---- default palette — must match loom::colorForKind() in rin_loom_paint.h exactly ----
     private val defaultCard = Color.rgb(40, 42, 54)
@@ -72,6 +89,28 @@ class LoomFabricView @JvmOverloads constructor(
     /** Fired on long-press with the deepest Fabric node under the finger (or null if none) — Inspector. */
     var onInspect: ((node: JSONObject?) -> Unit)? = null
 
+    /**
+     * New: page navigation, e.g. going from `main.rin` to `mu.rin`.
+     * Fired with the target filename whenever:
+     *  (a) the tapped node (or an ancestor) has an attr `onTap="navigate:mu.rin"`, or
+     *  (b) [duration] ms elapse after [setFabric] on a page whose root has `navigate="mu.rin"`
+     *      (a splash/loading screen that auto-advances — see `duration=`).
+     * The actual file switch (loading/parsing/rendering "mu.rin") is the host app's job; this
+     * view only detects *when* to navigate and *where* to.
+     */
+    var onNavigate: ((target: String) -> Unit)? = null
+
+    private val navHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private var pendingAutoNavigate: Runnable? = null
+
+    /** Walks up from the hit node to find the nearest `onTap="navigate:...."` instruction. */
+    private fun navigateTargetForTap(node: JSONObject?): String? {
+        val attrs = node?.optJSONObject("attrs") ?: return null
+        val onTap = attrs.optString("onTap")
+        if (onTap.startsWith("navigate:")) return onTap.removePrefix("navigate:").trim()
+        return null
+    }
+
     private val density = resources.displayMetrics.density
 
     private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
@@ -105,6 +144,8 @@ class LoomFabricView @JvmOverloads constructor(
         override fun onSingleTapUp(e: MotionEvent): Boolean {
             val (rx, ry) = viewToRoot(e.x, e.y)
             onTap?.invoke(rx, ry)
+            val hit = fabric?.let { hitTest(it, rx.toFloat(), ry.toFloat()) }
+            navigateTargetForTap(hit)?.let { onNavigate?.invoke(it) }
             return true
         }
 
@@ -141,8 +182,28 @@ class LoomFabricView @JvmOverloads constructor(
         fabric = node
         rootWidthPx = max(1, rootW)
         rootHeightPx = max(1, rootH)
+
+        // New: splash/loading pages — root attrs `duration="2000" navigate="mu.rin"` mean "auto
+        // advance to mu.rin after 2000ms". Re-armed on every setFabric so switching pages cancels
+        // whatever timer belonged to the previous page.
+        pendingAutoNavigate?.let { navHandler.removeCallbacks(it) }
+        pendingAutoNavigate = null
+        val rootAttrs = node?.optJSONObject("attrs")
+        val navigateTarget = rootAttrs?.optString("navigate")?.takeIf { it.isNotBlank() }
+        val durationMs = rootAttrs?.optString("duration")?.toLongOrNull()
+        if (navigateTarget != null && durationMs != null && durationMs >= 0) {
+            val r = Runnable { onNavigate?.invoke(navigateTarget) }
+            pendingAutoNavigate = r
+            navHandler.postDelayed(r, durationMs)
+        }
+
         requestLayout()
         invalidate()
+    }
+
+    override fun onDetachedFromWindow() {
+        super.onDetachedFromWindow()
+        pendingAutoNavigate?.let { navHandler.removeCallbacks(it) }
     }
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
@@ -189,14 +250,108 @@ class LoomFabricView @JvmOverloads constructor(
                 drawText(canvas, rect, attrs, attrs.optString("label"), Color.WHITE, centered = true, boldHint = true, singleLine = true)
             }
             Kind.CARD -> drawBox(canvas, rect, attrs, defaultCard, defaultRadius = 14f)
+
+            // ---- new kinds ----
+            Kind.HEADER, Kind.TOPBAR, Kind.BOTTOMBAR -> drawBox(canvas, rect, attrs, defaultBar, defaultRadius = 0f)
+            Kind.DRAWER -> {
+                if (rect.width() > 0f) {
+                    drawBox(canvas, rect, attrs, defaultDrawer, defaultRadius = 0f)
+                    // subtle edge shadow so an open drawer reads as "above" the content behind it
+                    fillPaint.shader = null; fillPaint.clearShadowLayer()
+                    fillPaint.color = Color.argb(70, 0, 0, 0)
+                    canvas.drawRect(rect.right, rect.top, rect.right + 6f * density, rect.bottom, fillPaint)
+                }
+            }
+            Kind.MENU -> if (rect.width() > 0f) drawBox(canvas, rect, attrs, defaultCard, defaultRadius = 10f)
+            Kind.MENUITEM -> {
+                drawBox(canvas, rect, attrs, defaultCard, defaultRadius = 0f)
+                drawText(canvas, rect, attrs, attrs.optString("label").ifBlank { attrs.optString("text") }, defaultText, singleLine = true)
+            }
+            Kind.TABLE -> drawTable(canvas, rect, node, attrs)
+            Kind.TABLEROW -> { /* cells are children; the header/grid lines are drawn by Table itself */ }
+            Kind.VIDEO -> drawMediaPlaceholder(canvas, rect, attrs, "▶", attrs.optString("src"))
+            Kind.AUDIO -> drawMediaPlaceholder(canvas, rect, attrs, "♪", attrs.optString("src"))
+            Kind.WEBVIEW -> drawMediaPlaceholder(canvas, rect, attrs, "🌐", attrs.optString("src"))
+            Kind.SCAFFOLD -> { /* pure layout container: TopBar/Content/BottomBar/Drawer children draw themselves */ }
+            Kind.SPLASH -> drawBox(canvas, rect, attrs, defaultContainer, defaultRadius = 0f)
+
             else -> drawBox(canvas, rect, attrs, defaultContainer, defaultRadius = 0f) // Column/Row/Stack/Custom
         }
+
+        // Table draws its own header + cell children explicitly (needs column geometry), so it
+        // walks its rows itself below and must not also be recursed into generically.
+        if (kind == Kind.TABLE) return
 
         val children = node.optJSONArray("children")
         if (children != null) {
             for (i in 0 until children.length()) {
                 drawNode(canvas, children.optJSONObject(i) ?: continue)
             }
+        }
+    }
+
+    /**
+     * New: renders a `<Table columns="A,B,C">` — shaded header row using the column labels, thin
+     * grid lines, then each TableRow's cell children drawn at the geometry the native Loom already
+     * computed for them (see `layoutTable` in rin_loom_layout.h). This is the render backing
+     * "printing"/displaying tables; exporting that same grid to an actual printer/PDF is a
+     * host-app feature layered on top (e.g. via Android's PrintManager) using this same geometry.
+     */
+    private fun drawTable(canvas: Canvas, rect: RectF, node: JSONObject, attrs: JSONObject) {
+        if (rect.width() <= 0f || rect.height() <= 0f) return
+        val fontSize = attrs.optString("size").toFloatOrNull() ?: 14f
+        val rowH = (fontSize * 1.4f + 12f) * density
+        val columns = attrs.optString("columns").split(',').map { it.trim() }.filter { it.isNotEmpty() }
+
+        fillPaint.shader = null; fillPaint.clearShadowLayer()
+
+        var headerBottom = rect.top
+        if (columns.isNotEmpty()) {
+            val headerRect = RectF(rect.left, rect.top, rect.right, rect.top + rowH)
+            fillPaint.color = defaultTableHeaderBg
+            canvas.drawRect(headerRect, fillPaint)
+            val perColW = rect.width() / columns.size
+            for ((i, label) in columns.withIndex()) {
+                val cellRect = RectF(rect.left + i * perColW, headerRect.top, rect.left + (i + 1) * perColW, headerRect.bottom)
+                drawText(canvas, cellRect, attrs, label, defaultText, boldHint = true, singleLine = true)
+            }
+            headerBottom = headerRect.bottom
+            strokePaint.color = defaultTableLine
+            strokePaint.strokeWidth = 1f
+            canvas.drawLine(rect.left, headerBottom, rect.right, headerBottom, strokePaint)
+        }
+
+        // Row separators + each row's own cells (the cells are real Fabric children with their
+        // own geometry, so just recurse into them normally after drawing the separator line).
+        val children = node.optJSONArray("children") ?: return
+        for (i in 0 until children.length()) {
+            val row = children.optJSONObject(i) ?: continue
+            val ry = row.optDouble("y", 0.0).toFloat()
+            strokePaint.color = defaultTableLine
+            canvas.drawLine(rect.left, ry, rect.right, ry, strokePaint)
+            drawNode(canvas, row)
+        }
+    }
+
+    /** New: shared placeholder for Video/Audio/WebView(incl. YouTube links) — a dark box with a
+     * play/link glyph and the src URL/label, matching how Image already previews as a placeholder
+     * rather than a decoded bitmap (the real player/embed is a host-app runtime concern). */
+    private fun drawMediaPlaceholder(canvas: Canvas, rect: RectF, attrs: JSONObject, glyph: String, src: String) {
+        if (rect.width() <= 0f || rect.height() <= 0f) return
+        fillPaint.shader = null; fillPaint.clearShadowLayer()
+        fillPaint.color = defaultMedia
+        val radius = 8f * density
+        canvas.drawRoundRect(rect, radius, radius, fillPaint)
+
+        textPaint.color = Color.argb(220, 255, 255, 255)
+        textPaint.textSize = min(rect.height() * 0.35f, 28f * density)
+        textPaint.isFakeBoldText = false
+        val gw = textPaint.measureText(glyph)
+        canvas.drawText(glyph, rect.left + (rect.width() - gw) / 2f, rect.top + rect.height() / 2f - (textPaint.descent() + textPaint.ascent()) / 2f, textPaint)
+
+        if (src.isNotBlank()) {
+            drawText(canvas, RectF(rect.left + 6f * density, rect.bottom - 18f * density, rect.right - 6f * density, rect.bottom - 2f * density),
+                attrs, src, Color.argb(200, 255, 255, 255), singleLine = true)
         }
     }
 
