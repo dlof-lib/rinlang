@@ -115,6 +115,10 @@ struct FunctionStmt : Stmt {
 struct ReturnStmt : Stmt {
     ExprPtr value; // may be null
 };
+// break; -> يخرج فوراً من أقرب حلقة while محيطة
+struct BreakStmt : Stmt {};
+// continue; -> يقفز مباشرة إلى فحص شرط أقرب حلقة while محيطة (يتجاوز باقي جسم الحلقة)
+struct ContinueStmt : Stmt {};
 
 // ---- Data-container language statements (container / Containers.Group / Volume / Section ...) ----
 
