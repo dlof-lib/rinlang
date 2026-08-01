@@ -107,7 +107,12 @@ StmtPtr Parser::functionDeclaration() {
     }
     consume(TokenType::RPAREN, "Expected ')' after parameters");
     consume(TokenType::LBRACE, "Expected '{' before function body");
+    // جسم الدالة يبدأ سياق "حلقة" جديداً من الصفر: break/continue داخل دالة معرَّفة نصياً داخل
+    // حلقة while خارجية لا يجب أن تُعتبر صالحة إلا إذا كانت هناك حلقة while أخرى داخل الدالة نفسها.
+    int savedLoopDepth = loopDepth;
+    loopDepth = 0;
     auto body = block();
+    loopDepth = savedLoopDepth;
     auto fn = std::make_shared<FunctionStmt>();
     fn->name = name.lexeme;
     fn->params = params;
@@ -121,6 +126,8 @@ StmtPtr Parser::statement() {
     if (match({TokenType::IF})) return ifStatement();
     if (match({TokenType::WHILE})) return whileStatement();
     if (match({TokenType::RETURN})) return returnStatement();
+    if (match({TokenType::BREAK})) return breakStatement();
+    if (match({TokenType::CONTINUE})) return continueStatement();
     if (check(TokenType::LBRACE)) { advance(); return block(); }
     return expressionStatement();
 }
@@ -174,7 +181,9 @@ StmtPtr Parser::whileStatement() {
     consume(TokenType::LPAREN, "Expected '(' after 'while'");
     auto condition = expression();
     consume(TokenType::RPAREN, "Expected ')' after while condition");
+    loopDepth++;
     auto body = statement();
+    loopDepth--;
     auto stmt = std::make_shared<WhileStmt>();
     stmt->condition = condition;
     stmt->body = body;
@@ -187,6 +196,27 @@ StmtPtr Parser::returnStatement() {
     consume(TokenType::SEMICOLON, "Expected ';' after return value");
     auto stmt = std::make_shared<ReturnStmt>();
     stmt->value = value;
+    return stmt;
+}
+
+// break; -> يجب أن تظهر فقط داخل جسم حلقة while (مباشرة أو متداخلة عبر if/block)؛
+// وإلا فهي خطأ وقت التحليل (رسالة واضحة بدل فشل صامت وقت التنفيذ).
+StmtPtr Parser::breakStatement() {
+    Token tok = previous();
+    if (loopDepth == 0) throw RinError("'break' used outside of a loop", tok.line);
+    consume(TokenType::SEMICOLON, "Expected ';' after 'break'");
+    auto stmt = std::make_shared<BreakStmt>();
+    stmt->line = tok.line;
+    return stmt;
+}
+
+// continue; -> نفس قيد break: صالحة فقط داخل جسم حلقة while.
+StmtPtr Parser::continueStatement() {
+    Token tok = previous();
+    if (loopDepth == 0) throw RinError("'continue' used outside of a loop", tok.line);
+    consume(TokenType::SEMICOLON, "Expected ';' after 'continue'");
+    auto stmt = std::make_shared<ContinueStmt>();
+    stmt->line = tok.line;
     return stmt;
 }
 
