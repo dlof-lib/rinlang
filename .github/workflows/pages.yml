@@ -1,0 +1,65 @@
+name: Build Rin site & Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - "site.rin"
+      - "app/src/main/cpp/rin_lexer.*"
+      - "app/src/main/cpp/rin_parser.*"
+      - "app/src/main/cpp/rin_interpreter.*"
+      - "tools/rin_run.cpp"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build the official Rin interpreter (rin_run)
+        run: |
+          g++ -O2 -std=c++17 -o rin_run \
+            tools/rin_run.cpp \
+            app/src/main/cpp/rin_lexer.cpp \
+            app/src/main/cpp/rin_parser.cpp \
+            app/src/main/cpp/rin_interpreter.cpp \
+            -I app/src/main/cpp
+
+      - name: Run site.rin through the official interpreter
+        run: ./rin_run site.rin
+
+      - name: Verify dist/index.html was generated
+        run: |
+          test -f dist/index.html
+          echo "Generated dist/index.html ($(wc -c < dist/index.html) bytes)"
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
