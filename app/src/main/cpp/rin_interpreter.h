@@ -89,6 +89,9 @@ struct Environment : std::enable_shared_from_this<Environment> {
 
 // Internal control-flow signal used to unwind the stack on `return`.
 struct ReturnSignal { Value value; };
+// Internal control-flow signals used to unwind the stack on `break` / `continue` inside `while`.
+struct BreakSignal {};
+struct ContinueSignal {};
 
 class Interpreter {
 public:
