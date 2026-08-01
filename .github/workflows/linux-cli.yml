@@ -1,0 +1,46 @@
+name: Linux CLI
+
+# يبني rin (المفسِّر كسطر أوامر) على ubuntu-latest عند أي تعديل يمسّ محرّك
+# اللغة نفسه أو مجلد الـCLI، ويرفعه كـ Artifact جاهز للتنزيل.
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'cli/linux/**'
+      - 'app/src/main/cpp/rin_lexer.*'
+      - 'app/src/main/cpp/rin_parser.*'
+      - 'app/src/main/cpp/rin_interpreter.*'
+      - 'app/src/main/cpp/rin_ast.h'
+      - 'app/src/main/cpp/rin_common.h'
+      - 'app/src/main/cpp/rin_stdlib_libs.h'
+      - '.github/workflows/linux-cli.yml'
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch: {}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure (CMake)
+        run: cmake -B cli/linux/build -S cli/linux -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build cli/linux/build -- -j"$(nproc)"
+
+      - name: Collect rin
+        run: |
+          mkdir -p dist
+          cp cli/linux/build/rin dist/rin
+          cp cli/linux/README.md dist/README.md
+          chmod +x dist/rin
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rin-linux-x64
+          path: dist/
