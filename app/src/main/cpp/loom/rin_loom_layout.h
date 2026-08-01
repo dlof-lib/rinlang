@@ -417,15 +417,26 @@ struct Loom {
         if (bottombar) { Rect probe = layout(bottombar, {c.maxW, c.maxW, 0, c.maxH}, originX, originY); bottomH = probe.h; }
         double contentH = std::max(0.0, c.maxH - topH - bottomH);
         double cy = originY + topH;
-        for (auto& ch : content) { Rect r = layout(ch, {c.maxW, c.maxW, 0, contentH}, originX, cy); }
-        if (bottombar) layout(bottombar, {c.maxW, c.maxW, bottomH, bottomH}, originX, originY + topH + contentH);
+        // FIX: track the content's own *measured* height instead of assuming it fills the full
+        // (often effectively unbounded, c.maxH == 1e9 from the root call) contentH budget. A
+        // Scaffold used to always report back {c.maxW, c.maxH} verbatim as its own size, which at
+        // the root meant a Fabric height of ~1e9 px — LoomFabricView.setFabric() then tried to
+        // measure/allocate a view that tall and nothing drew (fully black preview). The Scaffold's
+        // true height is topH + however much vertical space its content actually used + bottomH.
+        double contentUsedH = 0;
+        for (auto& ch : content) {
+            Rect r = layout(ch, {c.maxW, c.maxW, 0, contentH}, originX, cy);
+            contentUsedH = std::max(contentUsedH, r.h);
+        }
+        if (bottombar) layout(bottombar, {c.maxW, c.maxW, bottomH, bottomH}, originX, originY + topH + contentUsedH);
         if (drawer) {
             bool isOpen = drawer->attrStr("open", "false") == "true";
             double dw = drawer->attr("width") ? drawer->attrNum("width", 280) : 280.0;
             double dx = isOpen ? originX : originX - dw; // off-canvas to the left when closed
             layout(drawer, {isOpen ? dw : 0, isOpen ? dw : 0, c.maxH, c.maxH}, dx, originY);
         }
-        return {0,0, c.maxW, c.maxH};
+        double totalH = topH + contentUsedH + bottomH;
+        return {0,0, c.maxW, std::min(totalH, c.maxH)};
     }
 };
 
