@@ -223,8 +223,18 @@ static std::string containerTagName(ContainerKind k) {
         case ContainerKind::BLOCK: return "container.block";
         // "@sticker="/"@container.sticker=" توحَّد دائماً إلى "container.sticker" عند الحفظ وإعادة القراءة.
         case ContainerKind::STICKER: return "container.sticker";
+        // "@AUKT="/"@container.aukt=" توحَّد دائماً إلى "container.aukt" عند الحفظ وإعادة القراءة.
+        case ContainerKind::AUKT: return "container.aukt";
         default: return "container";
     }
+}
+
+// الامتداد الافتراضي عند عدم تحديد 'path' صراحةً: حاويات AUKT تُحفَظ كـ "name.aak.rin" (أو
+// "name.min.aak.rin" مبسّطة) بدل "name.rin"/"name.min.rin" العامة، لتمييزها بصرياً وفتحها تلقائياً
+// بمحرِّر AUKT المخصَّص في التطبيق. البنية الداخلية للملف تبقى نص Rin عادياً تماماً في الحالتين.
+static std::string defaultRinExtension(ContainerKind k, bool simplified) {
+    if (k == ContainerKind::AUKT) return simplified ? ".min.aak.rin" : ".aak.rin";
+    return simplified ? ".min.rin" : ".rin";
 }
 
 static std::string containerIcon(ContainerKind k) {
@@ -239,6 +249,7 @@ static std::string containerIcon(ContainerKind k) {
         case ContainerKind::PORTAL: return "🎨";
         case ContainerKind::BLOCK: return "🧱";
         case ContainerKind::STICKER: return "🏷️";
+        case ContainerKind::AUKT: return "📚";
         default: return "📦";
     }
 }
@@ -1867,7 +1878,7 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
         if (isContainer) {
             ContainerKind kind = containerKinds.count(s->target) ? containerKinds[s->target] : ContainerKind::PLAIN;
             std::string doc = buildSaveDocument(s->target, containers[s->target], kind, s->simplified);
-            relPath = "rin_installed/" + s->target + (s->simplified ? ".min.rin" : ".rin");
+            relPath = "rin_installed/" + s->target + defaultRinExtension(kind, s->simplified);
             writeRealFile(relPath, doc, s->line, "installation");
         } else if (isGroup) {
             std::vector<std::string> members;
@@ -1934,7 +1945,7 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
         std::string rawPath;
         if (s->path) rawPath = evaluate(s->path, env).toDisplayString();
         else if (!currentFilePath.empty()) rawPath = currentFilePath;
-        else rawPath = key + (s->simplified ? ".min.rin" : ".rin"); // مسار افتراضي معتمد على اسم الحاوية
+        else rawPath = key + defaultRinExtension(kind, s->simplified); // مسار افتراضي معتمد على اسم الحاوية ونوعها
 
         std::string doc = buildSaveDocument(key, containers[key], kind, s->simplified);
         writeRealFile(rawPath, doc, s->line, "save");
@@ -2000,11 +2011,11 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
                                                             : containerKinds[containerStack.back()];
         bool allowed = currentKind == ContainerKind::TABLE || currentKind == ContainerKind::OBJECT ||
                         currentKind == ContainerKind::PORTAL || currentKind == ContainerKind::BLOCK ||
-                        currentKind == ContainerKind::STICKER;
+                        currentKind == ContainerKind::STICKER || currentKind == ContainerKind::AUKT;
         if (containerStack.empty() || !allowed) {
             throw RinError("عبارة 'style' يجب أن تُستخدم داخل @container.table/@table أو "
                             "@container.object/@Object أو @container.portal/@portal أو @container.block/@block "
-                            "أو @container.sticker/@sticker", s->line);
+                            "أو @container.sticker/@sticker أو @container.aukt/@AUKT", s->line);
         }
         Value v = evaluate(s->value, env);
         if (v.type != Value::Type::STRING) {
