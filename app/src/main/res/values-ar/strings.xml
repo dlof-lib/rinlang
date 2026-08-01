@@ -176,4 +176,31 @@ print \"Hello, \" + name + \"!\";
 
     <!-- ===== شاشة البداية (Splash) ===== -->
     <string name="splash_tagline">لغة برمجة خفيفة وسريعة</string>
+
+    <!-- ===== المعاينة الحية (محرّك Loomtime / "Mirror Loom") ===== -->
+    <string name="loom_preview_title">معاينة حية</string>
+    <string name="loom_live_label">مباشر</string>
+    <string name="loom_close">إغلاق</string>
+    <string name="loom_device_default">390px</string>
+    <string name="loom_device_width_format">%1$dpx</string>
+    <string name="loom_toggle_grid">إظهار/إخفاء شبكة المحاذاة</string>
+    <string name="loom_zoom_in">تكبير</string>
+    <string name="loom_zoom_out">تصغير</string>
+    <string name="loom_zoom_100">100%</string>
+    <string name="loom_zoom_percent_format">%1$d%%</string>
+    <string name="loom_restart_session">إعادة تشغيل الجلسة</string>
+    <string name="loom_session_restarted_toast">تمت إعادة تشغيل جلسة المعاينة الحية</string>
+    <string name="loom_device_changed_toast">تم تغيير عرض الجهاز إلى %1$dpx — أُعيد تشغيل الجلسة</string>
+    <string name="loom_internal_error">وصلت نتيجة غير قابلة للقراءة من المحرّك.</string>
+    <string name="loom_unknown_error">خطأ غير معروف</string>
+    <string name="loom_error_format">خطأ: %1$s</string>
+    <string name="loom_error_line_format">خلل (Snag) في السطر %1$d: %2$s — ما زال يُعرض آخر إطار سليم</string>
+    <string name="loom_stats_error_only">لا يوجد إطار سليم بعد — أصلح الخطأ أعلاه وتابع الكتابة.</string>
+    <string name="loom_stats_idle">في انتظار أول عرض…</string>
+    <string name="loom_stats_format">%1$d عنصر · تم العرض خلال %2$d مللي ثانية · إصابات الذاكرة المؤقتة %3$d · اضغط مطوّلاً على أي عنصر لفحصه</string>
+    <string name="loom_inspector_title_format">%1$s · %2$s (السطر %3$d)</string>
+    <string name="loom_view_detected_snackbar">تم اكتشاف واجهة Loom — يتم فتح المعاينة الحية</string>
+    <string name="loom_open_action">فتح</string>
+    <string name="menu_run_live_preview">معاينة حية</string>
+    <string name="loom_no_view_toast">لا يوجد أي مقطع @view.&lt;Kind&gt;=name في هذا الكود بعد.</string>
 </resources>
