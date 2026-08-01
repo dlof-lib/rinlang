@@ -12,17 +12,39 @@
 namespace loom {
 
 enum class StrandKind {
-    TEXT, IMAGE, BUTTON, CARD, COLUMN, ROW, STACK, DIVIDER, CUSTOM
+    TEXT, IMAGE, BUTTON, CARD, COLUMN, ROW, STACK, DIVIDER,
+
+    // Extended UI kinds required by rin_loom_layout.h
+    HEADER, TOPBAR, BOTTOMBAR, DRAWER, MENU, MENUITEM, TABLE, TABLEROW,
+    VIDEO, AUDIO, WEBVIEW, SCAFFOLD, SPLASH,
+
+    CUSTOM
 };
 inline StrandKind strandKindFromTag(const std::string& tag) {
-    if (tag == "Text") return StrandKind::TEXT;
-    if (tag == "Image") return StrandKind::IMAGE;
-    if (tag == "Button") return StrandKind::BUTTON;
-    if (tag == "Card") return StrandKind::CARD;
-    if (tag == "Column") return StrandKind::COLUMN;
-    if (tag == "Row") return StrandKind::ROW;
-    if (tag == "Stack") return StrandKind::STACK;
-    if (tag == "Divider") return StrandKind::DIVIDER;
+    if (tag == "Text" || tag == "text") return StrandKind::TEXT;
+    if (tag == "Image" || tag == "image") return StrandKind::IMAGE;
+    if (tag == "Button" || tag == "button") return StrandKind::BUTTON;
+    if (tag == "Card" || tag == "card") return StrandKind::CARD;
+    if (tag == "Column" || tag == "column") return StrandKind::COLUMN;
+    if (tag == "Row" || tag == "row") return StrandKind::ROW;
+    if (tag == "Stack" || tag == "stack") return StrandKind::STACK;
+    if (tag == "Divider" || tag == "divider") return StrandKind::DIVIDER;
+
+    // Extended tags
+    if (tag == "Header" || tag == "header") return StrandKind::HEADER;
+    if (tag == "TopBar" || tag == "topbar" || tag == "topBar") return StrandKind::TOPBAR;
+    if (tag == "BottomBar" || tag == "bottombar" || tag == "bottomBar") return StrandKind::BOTTOMBAR;
+    if (tag == "Drawer" || tag == "drawer") return StrandKind::DRAWER;
+    if (tag == "Menu" || tag == "menu") return StrandKind::MENU;
+    if (tag == "MenuItem" || tag == "menuitem" || tag == "menuItem") return StrandKind::MENUITEM;
+    if (tag == "Table" || tag == "table") return StrandKind::TABLE;
+    if (tag == "TableRow" || tag == "tablerow" || tag == "tableRow") return StrandKind::TABLEROW;
+    if (tag == "Video" || tag == "video") return StrandKind::VIDEO;
+    if (tag == "Audio" || tag == "audio") return StrandKind::AUDIO;
+    if (tag == "WebView" || tag == "webview" || tag == "webView") return StrandKind::WEBVIEW;
+    if (tag == "Scaffold" || tag == "scaffold") return StrandKind::SCAFFOLD;
+    if (tag == "Splash" || tag == "splash") return StrandKind::SPLASH;
+
     return StrandKind::CUSTOM; // resolved via Bolt (plugin) registry — see architecture doc §18
 }
 inline std::string strandKindName(StrandKind k) {
@@ -31,6 +53,22 @@ inline std::string strandKindName(StrandKind k) {
         case StrandKind::BUTTON: return "Button"; case StrandKind::CARD: return "Card";
         case StrandKind::COLUMN: return "Column"; case StrandKind::ROW: return "Row";
         case StrandKind::STACK: return "Stack"; case StrandKind::DIVIDER: return "Divider";
+
+        // Extended names
+        case StrandKind::HEADER: return "Header";
+        case StrandKind::TOPBAR: return "TopBar";
+        case StrandKind::BOTTOMBAR: return "BottomBar";
+        case StrandKind::DRAWER: return "Drawer";
+        case StrandKind::MENU: return "Menu";
+        case StrandKind::MENUITEM: return "MenuItem";
+        case StrandKind::TABLE: return "Table";
+        case StrandKind::TABLEROW: return "TableRow";
+        case StrandKind::VIDEO: return "Video";
+        case StrandKind::AUDIO: return "Audio";
+        case StrandKind::WEBVIEW: return "WebView";
+        case StrandKind::SCAFFOLD: return "Scaffold";
+        case StrandKind::SPLASH: return "Splash";
+
         default: return "Custom";
     }
 }
