@@ -7,7 +7,29 @@
 namespace loom {
 
 enum class Axis { X, Y };
-inline double measureTextWidth(const std::string& text, double fontSize) { return text.size() * fontSize * 0.58; }
+
+// Counts Unicode codepoints in a UTF-8 string (not bytes) — text.size() was counting bytes,
+// which silently under-measured any multi-byte text (e.g. Arabic labels/attrs).
+inline size_t utf8Length(const std::string& text) {
+    size_t count = 0;
+    for (size_t i = 0; i < text.size(); ) {
+        unsigned char c = static_cast<unsigned char>(text[i]);
+        size_t len = (c < 0x80) ? 1 : ((c >> 5) == 0x6) ? 2 : ((c >> 4) == 0xE) ? 3 : ((c >> 3) == 0x1E) ? 4 : 1;
+        i += len;
+        count++;
+    }
+    return count;
+}
+
+// Rough proportional-font width estimate used only to size a Strand *before* paint. The real
+// text is later measured/ellipsized against this box with Android's actual font metrics
+// (LoomFabricView.drawText), so if this estimate runs narrow, correctly-sized text gets
+// truncated even though there was room for it on screen. 0.58 was too tight for real UI fonts
+// (bold labels, uppercase-heavy titles, digits); 0.72 plus a small fixed pad biases the box
+// slightly *wide* instead — a little extra breathing room beats a clipped "…".
+inline double measureTextWidth(const std::string& text, double fontSize) {
+    return utf8Length(text) * fontSize * 0.72 + 2.0;
+}
 
 struct LoomStats { int strandsMeasured = 0; int cacheHits = 0; };
 
@@ -83,7 +105,10 @@ struct Loom {
         double mainUsed=0, crossMax=0, cursorMain=padding;
         double innerMaxW = std::max(0.0, c.maxW - padding*2), innerMaxH = std::max(0.0, c.maxH - padding*2);
         for (auto& child : s->children) {
-            Constraints cc{0, innerMaxW, 0, innerMaxH};
+            double remainingMain = std::max(0.0, (axis==Axis::Y ? innerMaxH : innerMaxW) - cursorMain);
+            double childMaxW = (axis==Axis::Y) ? innerMaxW : remainingMain;
+            double childMaxH = (axis==Axis::Y) ? remainingMain : innerMaxH;
+            Constraints cc{0, childMaxW, 0, childMaxH};
             double localX = (axis==Axis::Y) ? padding : cursorMain;
             double localY = (axis==Axis::Y) ? cursorMain : padding;
             Rect r = layout(child, cc, originX + localX, originY + localY);
