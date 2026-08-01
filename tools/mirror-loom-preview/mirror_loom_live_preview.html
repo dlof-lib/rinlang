@@ -320,7 +320,10 @@ function dumpTree(container, root, selectedId, onSelect){
 
 // ---------------------------------------------------------------- Loom (layout) -----------
 const LoomStats = { measured:0, cacheHits:0 };
-function measureTextW(text, size){ return text.length*size*0.56; }
+// Biased slightly wide on purpose — see rin_loom_layout.h::measureTextWidth. A narrow estimate
+// here sizes the box smaller than the text actually needs, and the real renderer then has to
+// ellipsize it even though there was room on screen.
+function measureTextW(text, size){ return [...text].length*size*0.72+2; }
 
 function layout(s, c, ox, oy){
   const same = s.lastConstraints && s.lastConstraints.maxW===c.maxW && s.lastConstraints.maxH===c.maxH;
@@ -374,7 +377,10 @@ function layoutLinear(s,c,axis, ox, oy){
   const innerMaxW=Math.max(0,c.maxW-pad*2), innerMaxH=Math.max(0,c.maxH-pad*2);
   let cursor=pad, mainUsed=0, crossMax=0;
   for(const child of s.children){
-    const cc={minW:0,maxW:innerMaxW,minH:0,maxH:innerMaxH};
+    const remainingMain=Math.max(0,(axis==='y'?innerMaxH:innerMaxW)-cursor);
+    const childMaxW=axis==='y'?innerMaxW:remainingMain;
+    const childMaxH=axis==='y'?remainingMain:innerMaxH;
+    const cc={minW:0,maxW:childMaxW,minH:0,maxH:childMaxH};
     const localX=axis==='y'?pad:cursor, localY=axis==='y'?cursor:pad;
     const r=layout(child,cc, ox+localX, oy+localY);
     const mainSize=axis==='y'?r.h:r.w, crossSize=axis==='y'?r.w:r.h;
