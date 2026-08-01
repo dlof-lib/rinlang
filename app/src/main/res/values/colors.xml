@@ -139,4 +139,20 @@
     <color name="pipeline_syntax_number">#0E7A6B</color>
     <color name="pipeline_syntax_comment">#8A97A0</color>
     <color name="pipeline_syntax_tag">#8A5A1F</color>
+
+    <!-- شاشة "المعاينة الحية" (Live Preview / Loomtime): إطار جهاز داكن على خلفية أغمق قليلاً
+         من بقية التطبيق حتى يبرز إطار الهاتف بوضوح، مع شارة "Live" خضراء ولوحة أخطاء Snag حمراء. -->
+    <color name="loom_canvas_bg">#101115</color>
+    <color name="loom_device_frame_bg">#0B0C0F</color>
+    <color name="loom_device_frame_border">#33FFFFFF</color>
+    <color name="loom_device_notch_bg">#000000</color>
+    <color name="loom_live_dot">#22C88E</color>
+    <color name="loom_error_bg">#3A1518</color>
+    <color name="loom_error_border">#F14C4C</color>
+    <color name="loom_error_text">#FFB4AC</color>
+    <color name="loom_footer_text">#9198A3</color>
+    <color name="loom_inspector_bg">#1B1D22</color>
+    <color name="loom_inspector_border">#2A2D34</color>
+    <color name="loom_inspector_key">#9198A3</color>
+    <color name="loom_inspector_value">#E3E5E8</color>
 </resources>
