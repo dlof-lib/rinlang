@@ -82,7 +82,7 @@ namespace RinLang.VSSDK.Classification
                 (new Regex(@"\b(let|fun|text)\b", o), RinClassificationTypes.Storage),
 
                 // Control keywords / logical operators / print.
-                (new Regex(@"\b(if|else|while|return|and|or|print)\b", o), RinClassificationTypes.Keyword),
+                (new Regex(@"\b(if|else|while|return|break|continue|and|or|print)\b", o), RinClassificationTypes.Keyword),
 
                 // Boolean / nil constants.
                 (new Regex(@"\b(true|false|nil)\b", o), RinClassificationTypes.BooleanNil),
