@@ -259,7 +259,7 @@ class LoomFabricView @JvmOverloads constructor(
                     // subtle edge shadow so an open drawer reads as "above" the content behind it
                     fillPaint.shader = null; fillPaint.clearShadowLayer()
                     fillPaint.color = Color.argb(70, 0, 0, 0)
-                    canvas.drawRect(rect.right, rect.top, rect.right + 6f * density, rect.bottom, fillPaint)
+                    canvas.drawRect(rect.right, rect.top, rect.right + 6f, rect.bottom, fillPaint)
                 }
             }
             Kind.MENU -> if (rect.width() > 0f) drawBox(canvas, rect, attrs, defaultCard, defaultRadius = 10f)
@@ -300,7 +300,7 @@ class LoomFabricView @JvmOverloads constructor(
     private fun drawTable(canvas: Canvas, rect: RectF, node: JSONObject, attrs: JSONObject) {
         if (rect.width() <= 0f || rect.height() <= 0f) return
         val fontSize = attrs.optString("size").toFloatOrNull() ?: 14f
-        val rowH = (fontSize * 1.4f + 12f) * density
+        val rowH = fontSize * 1.4f + 12f
         val columns = attrs.optString("columns").split(',').map { it.trim() }.filter { it.isNotEmpty() }
 
         fillPaint.shader = null; fillPaint.clearShadowLayer()
@@ -340,24 +340,24 @@ class LoomFabricView @JvmOverloads constructor(
         if (rect.width() <= 0f || rect.height() <= 0f) return
         fillPaint.shader = null; fillPaint.clearShadowLayer()
         fillPaint.color = defaultMedia
-        val radius = 8f * density
+        val radius = 8f
         canvas.drawRoundRect(rect, radius, radius, fillPaint)
 
         textPaint.color = Color.argb(220, 255, 255, 255)
-        textPaint.textSize = min(rect.height() * 0.35f, 28f * density)
+        textPaint.textSize = min(rect.height() * 0.35f, 28f)
         textPaint.isFakeBoldText = false
         val gw = textPaint.measureText(glyph)
         canvas.drawText(glyph, rect.left + (rect.width() - gw) / 2f, rect.top + rect.height() / 2f - (textPaint.descent() + textPaint.ascent()) / 2f, textPaint)
 
         if (src.isNotBlank()) {
-            drawText(canvas, RectF(rect.left + 6f * density, rect.bottom - 18f * density, rect.right - 6f * density, rect.bottom - 2f * density),
+            drawText(canvas, RectF(rect.left + 6f, rect.bottom - 18f, rect.right - 6f, rect.bottom - 2f),
                 attrs, src, Color.argb(200, 255, 255, 255), singleLine = true)
         }
     }
 
     private fun drawBox(canvas: Canvas, rect: RectF, attrs: JSONObject, fallback: Int, defaultRadius: Float) {
         if (rect.width() <= 0f || rect.height() <= 0f) return
-        val radius = attrs.optString("radius").toFloatOrNull()?.times(density) ?: (defaultRadius * density)
+        val radius = attrs.optString("radius").toFloatOrNull() ?: defaultRadius
         val shadow = attrs.optString("shadow").toFloatOrNull()
         val gradient = attrs.optString("gradient").takeIf { it.contains(',') }
 
@@ -384,7 +384,7 @@ class LoomFabricView @JvmOverloads constructor(
         // reserved for children — see loom::layoutSingleChildBox / layoutLinear).
         val borderWidthPx = attrs.optString("border").toFloatOrNull()
         if (borderWidthPx != null && borderWidthPx > 0f && rect.width() > 1f && rect.height() > 1f) {
-            val strokeW = borderWidthPx * density
+            val strokeW = borderWidthPx
             strokePaint.color = parseHexColor(attrs.optString("borderColor").ifBlank { null }, Color.WHITE)
             strokePaint.strokeWidth = strokeW
             val inset = strokeW / 2f
@@ -423,7 +423,7 @@ class LoomFabricView @JvmOverloads constructor(
         if (text.isEmpty() || rect.width() <= 0f || rect.height() <= 0f) return
         val sizeSp = attrs.optString("size").toFloatOrNull() ?: 14f
         textPaint.color = parseHexColor(attrs.optString("color").ifBlank { null }, fallbackColor)
-        textPaint.textSize = sizeSp * density
+        textPaint.textSize = sizeSp
         textPaint.isFakeBoldText = boldHint
         textPaint.isAntiAlias = true
 
@@ -475,7 +475,7 @@ class LoomFabricView @JvmOverloads constructor(
         fillPaint.shader = null
         fillPaint.clearShadowLayer()
         fillPaint.color = defaultImage
-        val radius = 8f * density
+        val radius = 8f
         canvas.drawRoundRect(rect, radius, radius, fillPaint)
 
         // simple "picture" glyph (mountain + dot) so an <Image> reads as an image, not a blank card
@@ -494,7 +494,7 @@ class LoomFabricView @JvmOverloads constructor(
         }
 
         val label = attrs.optString("src").ifBlank { null }
-        if (label != null) drawText(canvas, RectF(rect.left, rect.bottom - 16f * density, rect.right, rect.bottom), attrs, label, Color.argb(210, 255, 255, 255), singleLine = true)
+        if (label != null) drawText(canvas, RectF(rect.left, rect.bottom - 16f, rect.right, rect.bottom), attrs, label, Color.argb(210, 255, 255, 255), singleLine = true)
     }
 
     private fun drawGrid(canvas: Canvas) {
