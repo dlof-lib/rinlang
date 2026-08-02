@@ -40,6 +40,11 @@ class MoreActivity : AppCompatActivity() {
             startActivity(Intent(this, PipelineRunnerActivity::class.java))
         }
 
+        // 3.5 تصدير APK
+        findViewById<View>(R.id.rowApkExport).setOnClickListener {
+            openProjectScoped(ApkExportActivity::class.java, ApkExportActivity.EXTRA_PROJECT_NAME)
+        }
+
         // 4. متجر الإضافات
         findViewById<View>(R.id.rowExtensions).setOnClickListener {
             startActivity(Intent(this, RinExtensionsMarketplaceActivity::class.java))
