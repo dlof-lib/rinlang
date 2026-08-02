@@ -75,6 +75,7 @@ jobs:
             -s EXPORTED_RUNTIME_METHODS='["ccall","FS"]' \
             -s EXPORTED_FUNCTIONS='["_rin_run_source","_malloc","_free"]' \
             -s ALLOW_MEMORY_GROWTH=1 \
+            -s STACK_SIZE=8388608 \
             -s ENVIRONMENT=web \
             -o dist/rin.js
 
