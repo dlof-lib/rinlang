@@ -183,6 +183,7 @@ print \"Hello, \" + name + \"!\";
     <string name="loom_close">إغلاق</string>
     <string name="loom_device_default">390px</string>
     <string name="loom_device_width_format">%1$dpx</string>
+    <string name="loom_device_fit_screen">ملء الشاشة (العرض الكامل)</string>
     <string name="loom_toggle_grid">إظهار/إخفاء شبكة المحاذاة</string>
     <string name="loom_zoom_in">تكبير</string>
     <string name="loom_zoom_out">تصغير</string>
@@ -199,8 +200,6 @@ print \"Hello, \" + name + \"!\";
     <string name="loom_stats_idle">في انتظار أول عرض…</string>
     <string name="loom_stats_format">%1$d عنصر · تم العرض خلال %2$d مللي ثانية · إصابات الذاكرة المؤقتة %3$d · اضغط مطوّلاً على أي عنصر لفحصه</string>
     <string name="loom_inspector_title_format">%1$s · %2$s (السطر %3$d)</string>
-    <string name="loom_busy_hint">جارٍ العمل…</string>
-    <string name="loom_busy_network_hint">بانتظار رد شبكة حقيقي…</string>
     <string name="loom_view_detected_snackbar">تم اكتشاف واجهة Loom — يتم فتح المعاينة الحية</string>
     <string name="loom_open_action">فتح</string>
     <string name="menu_run_live_preview">معاينة حية</string>
