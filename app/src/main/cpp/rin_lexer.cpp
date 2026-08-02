@@ -99,10 +99,10 @@ void Lexer::scanString() {
 }
 
 void Lexer::scanNumber() {
-    while (isdigit(peek())) advance();
-    if (peek() == '.' && isdigit(peekNext())) {
+    while (isdigit((unsigned char)peek())) advance();
+    if (peek() == '.' && isdigit((unsigned char)peekNext())) {
         advance();
-        while (isdigit(peek())) advance();
+        while (isdigit((unsigned char)peek())) advance();
     }
     std::string text = src.substr(start, current - start);
     Token t;
@@ -114,7 +114,7 @@ void Lexer::scanNumber() {
 }
 
 void Lexer::scanIdentifier() {
-    while (isalnum(peek()) || peek() == '_') advance();
+    while (isalnum((unsigned char)peek()) || peek() == '_') advance();
     std::string text = src.substr(start, current - start);
     auto it = keywords.find(text);
     if (it != keywords.end()) {
@@ -179,9 +179,9 @@ void Lexer::scanToken() {
             scanString();
             break;
         default:
-            if (isdigit(c)) {
+            if (isdigit((unsigned char)c)) {
                 scanNumber();
-            } else if (isalpha(c) || c == '_') {
+            } else if (isalpha((unsigned char)c) || c == '_') {
                 scanIdentifier();
             } else {
                 throw RinError(std::string("Unexpected character '") + c + "'", line);
