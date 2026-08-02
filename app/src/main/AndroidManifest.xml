@@ -68,6 +68,11 @@
             android:name=".FilesActivity"
             android:exported="false" />
 
+        <!-- معاينة صورة/فيديو مرفوعة داخل مشروع، بدل فتحها في المحرر النصّي أو تطبيق خارجي -->
+        <activity
+            android:name=".MediaPreviewActivity"
+            android:exported="false" />
+
         <activity
             android:name=".MoreActivity"
             android:exported="false"
