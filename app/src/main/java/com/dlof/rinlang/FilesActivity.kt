@@ -1,6 +1,7 @@
 package com.dlof.rinlang
 
 import android.app.AlertDialog
+import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
@@ -9,11 +10,14 @@ import android.os.Looper
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.webkit.MimeTypeMap
 import android.widget.EditText
 import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.FileProvider
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import java.io.File
@@ -21,12 +25,15 @@ import java.text.DateFormat
 import java.util.Date
 
 /**
- * شاشة "الملفات" الخاصة بمشروع واحد: تعرض كل ملفات .rin داخل مجلده،
- * وتتيح:
- *  - "إضافة/رفع ملف" (upload): استيراد ملف .rin موجود بالفعل على الجهاز
- *    (تخزين محلي، Google Drive، إلخ) عبر SAF، فيُنسخ داخل المشروع.
- *  - إنشاء ملف جديد فارغ بالاسم المطلوب.
- *  - فتح ملف في المحرر ([MainActivity]) للتعديل والتشغيل.
+ * شاشة "الملفات" الخاصة بمشروع واحد: تعرض كل ملفات المشروع (ملفات .rin بالإضافة إلى أي ملف آخر
+ * رُفع لاحقاً: صور، فيديو، صوت، خطوط، ملفات لغات برمجة أخرى...) داخل مجلده، وتتيح:
+ *  - "رفع ملف" (upload): استيراد أي ملف موجود بالفعل على الجهاز (تخزين محلي، Google Drive، إلخ)
+ *    عبر SAF بامتداده الأصلي كما هو (لم يعد يُجبَر على .rin)، فيُنسخ داخل المشروع.
+ *  - "رفع وسائط" (upload media): اختيار صورة أو فيديو مباشرة من معرض الجهاز عبر منتقي الوسائط
+ *    الحديث (Photo Picker)، وهو أسرع وأبسط من SAF لهذا الغرض تحديداً ولا يحتاج صلاحيات تخزين.
+ *  - إنشاء ملف .rin جديد فارغ بالاسم المطلوب.
+ *  - فتح ملف: .rin أو أي ملف نصّي آخر في المحرر ([MainActivity])، صورة/فيديو في معاينة داخلية
+ *    ([MediaPreviewActivity])، وأي نوع ثنائي آخر (pdf/صوت/أرشيف...) بتطبيق خارجي مناسب.
  *  - حذف ملف.
  */
 class FilesActivity : AppCompatActivity() {
@@ -48,6 +55,12 @@ class FilesActivity : AppCompatActivity() {
     private val importZipLauncher =
         registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
             if (uri != null) importZip(uri)
+        }
+
+    /** منتقي الوسائط الحديث (Photo Picker): صور أو فيديو مباشرة من المعرض، بلا أي صلاحية تخزين. */
+    private val importMediaLauncher =
+        registerForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+            if (uri != null) importFile(uri)
         }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -75,10 +88,11 @@ class FilesActivity : AppCompatActivity() {
         txtEmpty = findViewById(R.id.txtEmptyFiles)
         val fabAddFile: View = findViewById(R.id.fabAddFile)
         val fabUploadFile: View = findViewById(R.id.fabUploadFile)
+        val fabUploadMedia: View = findViewById(R.id.fabUploadMedia)
         val fabZipTools: View = findViewById(R.id.fabZipTools)
 
         adapter = FilesAdapter(
-            onOpen = { file -> openInEditor(file) },
+            onOpen = { file -> handleOpen(file) },
             onDelete = { file -> showDeleteConfirm(file) }
         )
         rvFiles.layoutManager = LinearLayoutManager(this)
@@ -86,18 +100,62 @@ class FilesActivity : AppCompatActivity() {
 
         fabAddFile.setOnClickListener { showCreateFileDialog() }
         fabUploadFile.setOnClickListener {
-            // نقبل .rin/أي نص عادي، وأيضاً صراحةً صور/فيديو/خطوط وملفات لغات برمجية أخرى
-            // (html/js/cpp/py/...)؛ "*/*" وحدها تكفي تقنياً لكن نذكر الأنواع الشائعة صراحةً
-            // ليعرضها بعض منتقيات الملفات (SAF) كفئات مقترحة بدل قائمة واحدة مبهمة.
+            // نقبل .rin/أي نص عادي، وأيضاً صراحةً صور/فيديو/صوت/خطوط وملفات لغات برمجية أخرى
+            // (html/js/cpp/py/...) ومستندات (pdf)؛ "*/*" وحدها تكفي تقنياً لكن نذكر الأنواع
+            // الشائعة صراحةً ليعرضها بعض منتقيات الملفات (SAF) كفئات مقترحة بدل قائمة واحدة مبهمة.
+            // الملف يُحفَظ بامتداده الأصلي كما هو (لا يُجبَر على .rin بعد الآن).
             importFileLauncher.launch(
                 arrayOf(
                     "text/plain", "application/octet-stream",
-                    "image/*", "video/*", "font/*",
+                    "image/*", "video/*", "audio/*", "font/*", "application/pdf",
                     "*/*"
                 )
             )
         }
+        // "رفع وسائط": منتقي صور/فيديو حديث (Photo Picker) مباشرة من المعرض، أسرع وأبسط
+        // من SAF لهذا الغرض ولا يحتاج طلب أي صلاحية تخزين على أندرويد الحديث.
+        fabUploadMedia.setOnClickListener {
+            importMediaLauncher.launch(
+                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)
+            )
+        }
         fabZipTools.setOnClickListener { showZipToolsDialog() }
+    }
+
+    /** يوجّه فتح الملف حسب نوعه: .rin/نص عادي -> المحرر، صورة/فيديو -> معاينة داخلية، غير ذلك -> تطبيق خارجي. */
+    private fun handleOpen(file: RinFile) {
+        when {
+            ProjectManager.isImageFile(file.name) || ProjectManager.isVideoFile(file.name) ->
+                openInMediaPreview(file)
+            ProjectManager.isBinaryFile(file.name) -> openExternally(file)
+            else -> openInEditor(file)
+        }
+    }
+
+    /** يفتح صورة أو فيديو في معاينة داخل التطبيق نفسه، بدون الحاجة لتطبيق خارجي. */
+    private fun openInMediaPreview(file: RinFile) {
+        val intent = Intent(this, MediaPreviewActivity::class.java)
+        intent.putExtra(MediaPreviewActivity.EXTRA_FILE_PATH, file.file.absolutePath)
+        intent.putExtra(MediaPreviewActivity.EXTRA_FILE_NAME, file.name)
+        startActivity(intent)
+    }
+
+    /** يفتح ملفاً ثنائياً (pdf/صوت/أرشيف/خط...) بأي تطبيق خارجي مناسب مثبَّت على الجهاز عبر FileProvider. */
+    private fun openExternally(file: RinFile) {
+        try {
+            val uri: Uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", file.file)
+            val ext = file.name.substringAfterLast('.', "")
+            val mime = MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext) ?: "*/*"
+            val intent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, mime)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            startActivity(intent)
+        } catch (e: ActivityNotFoundException) {
+            Toast.makeText(this, R.string.no_app_to_open_file, Toast.LENGTH_SHORT).show()
+        } catch (t: Throwable) {
+            Toast.makeText(this, "${getString(R.string.file_open_error)}: ${t.message}", Toast.LENGTH_LONG).show()
+        }
     }
 
     /** يعرض خيارَي "رفع أرشيف ZIP وفك ضغطه" و"تنزيل المشروع كأرشيف ZIP" في حوار واحد. */
