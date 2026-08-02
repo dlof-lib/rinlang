@@ -20,21 +20,21 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.FileProvider
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
-import java.io.File
 import java.text.DateFormat
 import java.util.Date
 
 /**
- * شاشة "الملفات" الخاصة بمشروع واحد: تعرض كل ملفات المشروع (ملفات .rin بالإضافة إلى أي ملف آخر
- * رُفع لاحقاً: صور، فيديو، صوت، خطوط، ملفات لغات برمجة أخرى...) داخل مجلده، وتتيح:
+ * شاشة "الملفات" الخاصة بمشروع واحد: تعرض مجلدات وملفات المشروع مستوى بمستوى (يمكن التنقل داخل
+ * مجلد فرعي والعودة منه)، وتتيح:
  *  - "رفع ملف" (upload): استيراد أي ملف موجود بالفعل على الجهاز (تخزين محلي، Google Drive، إلخ)
- *    عبر SAF بامتداده الأصلي كما هو (لم يعد يُجبَر على .rin)، فيُنسخ داخل المشروع.
- *  - "رفع وسائط" (upload media): اختيار صورة أو فيديو مباشرة من معرض الجهاز عبر منتقي الوسائط
- *    الحديث (Photo Picker)، وهو أسرع وأبسط من SAF لهذا الغرض تحديداً ولا يحتاج صلاحيات تخزين.
- *  - إنشاء ملف .rin جديد فارغ بالاسم المطلوب.
- *  - فتح ملف: .rin أو أي ملف نصّي آخر في المحرر ([MainActivity])، صورة/فيديو في معاينة داخلية
- *    ([MediaPreviewActivity])، وأي نوع ثنائي آخر (pdf/صوت/أرشيف...) بتطبيق خارجي مناسب.
- *  - حذف ملف.
+ *    عبر SAF بامتداده الأصلي كما هو، فيُنسخ داخل المجلد الحالي.
+ *  - "رفع وسائط" (upload media): اختيار صورة أو فيديو مباشرة من معرض الجهاز.
+ *  - إنشاء ملف .rin جديد فارغ بالاسم المطلوب داخل المجلد الحالي. كتابة اسم يحوي "/" (مثل
+ *    "ui/home.rin") تُنشئ المجلدات الفرعية اللازمة تلقائياً ثم الملف بداخلها.
+ *  - إنشاء مجلد فرعي جديد بالاسم المطلوب (زر مخصّص منفصل).
+ *  - إعادة تسمية أي ملف أو مجلد (زر قلم على كل صف).
+ *  - فتح ملف، أو الدخول إلى مجلد فرعي.
+ *  - حذف ملف أو مجلد (مع كل محتوياته).
  */
 class FilesActivity : AppCompatActivity() {
 
@@ -47,6 +47,9 @@ class FilesActivity : AppCompatActivity() {
     private lateinit var txtEmpty: View
     private lateinit var adapter: FilesAdapter
 
+    /** المسار النسبي الحالي من جذر المشروع (فواصل "/")، فارغ يعني أننا في جذر المشروع. */
+    private var currentRelDir: String = ""
+
     private val importFileLauncher =
         registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
             if (uri != null) importFile(uri)
@@ -57,7 +60,6 @@ class FilesActivity : AppCompatActivity() {
             if (uri != null) importZip(uri)
         }
 
-    /** منتقي الوسائط الحديث (Photo Picker): صور أو فيديو مباشرة من المعرض، بلا أي صلاحية تخزين. */
     private val importMediaLauncher =
         registerForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
             if (uri != null) importFile(uri)
@@ -79,31 +81,32 @@ class FilesActivity : AppCompatActivity() {
 
         findViewById<TextView>(R.id.txtToolbarTitle).text = getString(R.string.files_screen_title)
         findViewById<TextView>(R.id.txtToolbarSubtitle).apply {
-            text = project.name
             visibility = View.VISIBLE
         }
-        findViewById<View>(R.id.btnToolbarBack).setOnClickListener { finish() }
+        findViewById<View>(R.id.btnToolbarBack).setOnClickListener { handleBack() }
 
         rvFiles = findViewById(R.id.rvFiles)
         txtEmpty = findViewById(R.id.txtEmptyFiles)
         val fabAddFile: View = findViewById(R.id.fabAddFile)
+        val fabNewFolder: View = findViewById(R.id.fabNewFolder)
         val fabUploadFile: View = findViewById(R.id.fabUploadFile)
         val fabUploadMedia: View = findViewById(R.id.fabUploadMedia)
         val fabZipTools: View = findViewById(R.id.fabZipTools)
 
         adapter = FilesAdapter(
-            onOpen = { file -> handleOpen(file) },
-            onDelete = { file -> showDeleteConfirm(file) }
+            onOpenFile = { file -> handleOpen(file) },
+            onOpenFolder = { folder -> enterFolder(folder) },
+            onRenameFile = { file -> showRenameFileDialog(file) },
+            onRenameFolder = { folder -> showRenameFolderDialog(folder) },
+            onDeleteFile = { file -> showDeleteFileConfirm(file) },
+            onDeleteFolder = { folder -> showDeleteFolderConfirm(folder) }
         )
         rvFiles.layoutManager = LinearLayoutManager(this)
         rvFiles.adapter = adapter
 
         fabAddFile.setOnClickListener { showCreateFileDialog() }
+        fabNewFolder.setOnClickListener { showCreateFolderDialog() }
         fabUploadFile.setOnClickListener {
-            // نقبل .rin/أي نص عادي، وأيضاً صراحةً صور/فيديو/صوت/خطوط وملفات لغات برمجية أخرى
-            // (html/js/cpp/py/...) ومستندات (pdf)؛ "*/*" وحدها تكفي تقنياً لكن نذكر الأنواع
-            // الشائعة صراحةً ليعرضها بعض منتقيات الملفات (SAF) كفئات مقترحة بدل قائمة واحدة مبهمة.
-            // الملف يُحفَظ بامتداده الأصلي كما هو (لا يُجبَر على .rin بعد الآن).
             importFileLauncher.launch(
                 arrayOf(
                     "text/plain", "application/octet-stream",
@@ -112,8 +115,6 @@ class FilesActivity : AppCompatActivity() {
                 )
             )
         }
-        // "رفع وسائط": منتقي صور/فيديو حديث (Photo Picker) مباشرة من المعرض، أسرع وأبسط
-        // من SAF لهذا الغرض ولا يحتاج طلب أي صلاحية تخزين على أندرويد الحديث.
         fabUploadMedia.setOnClickListener {
             importMediaLauncher.launch(
                 PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)
@@ -122,7 +123,28 @@ class FilesActivity : AppCompatActivity() {
         fabZipTools.setOnClickListener { showZipToolsDialog() }
     }
 
-    /** يوجّه فتح الملف حسب نوعه: .rin/نص عادي -> المحرر، صورة/فيديو -> معاينة داخلية، غير ذلك -> تطبيق خارجي. */
+    private fun handleBack() {
+        if (currentRelDir.isBlank()) {
+            finish()
+        } else {
+            currentRelDir = currentRelDir.substringBeforeLast('/', "")
+            refresh()
+        }
+    }
+
+    override fun onBackPressed() {
+        if (currentRelDir.isBlank()) {
+            super.onBackPressed()
+        } else {
+            handleBack()
+        }
+    }
+
+    private fun enterFolder(folder: RinFolder) {
+        currentRelDir = folder.relPath
+        refresh()
+    }
+
     private fun handleOpen(file: RinFile) {
         when {
             ProjectManager.isImageFile(file.name) || ProjectManager.isVideoFile(file.name) ->
@@ -132,7 +154,6 @@ class FilesActivity : AppCompatActivity() {
         }
     }
 
-    /** يفتح صورة أو فيديو في معاينة داخل التطبيق نفسه، بدون الحاجة لتطبيق خارجي. */
     private fun openInMediaPreview(file: RinFile) {
         val intent = Intent(this, MediaPreviewActivity::class.java)
         intent.putExtra(MediaPreviewActivity.EXTRA_FILE_PATH, file.file.absolutePath)
@@ -140,7 +161,6 @@ class FilesActivity : AppCompatActivity() {
         startActivity(intent)
     }
 
-    /** يفتح ملفاً ثنائياً (pdf/صوت/أرشيف/خط...) بأي تطبيق خارجي مناسب مثبَّت على الجهاز عبر FileProvider. */
     private fun openExternally(file: RinFile) {
         try {
             val uri: Uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", file.file)
@@ -158,7 +178,6 @@ class FilesActivity : AppCompatActivity() {
         }
     }
 
-    /** يعرض خيارَي "رفع أرشيف ZIP وفك ضغطه" و"تنزيل المشروع كأرشيف ZIP" في حوار واحد. */
     private fun showZipToolsDialog() {
         val options = arrayOf(
             getString(R.string.zip_upload_extract),
@@ -178,7 +197,6 @@ class FilesActivity : AppCompatActivity() {
             .show()
     }
 
-    /** يفكّ ضغط أرشيف ZIP المختار داخل مجلد المشروع الحالي، ثم يحدّث القائمة. */
     private fun importZip(uri: Uri) {
         try {
             val count = ProjectManager.importZipFromUri(this, project, uri)
@@ -189,7 +207,6 @@ class FilesActivity : AppCompatActivity() {
         }
     }
 
-    /** يضغط ملفات المشروع الحالي كأرشيف واحد وينزّله لمجلد التنزيلات العام على الجهاز. */
     private fun downloadProjectAsZip() {
         val mainHandler = Handler(Looper.getMainLooper())
         val progressDialog = RinDownloadProgressDialog(this, "${project.name}.zip")
@@ -242,9 +259,12 @@ class FilesActivity : AppCompatActivity() {
     }
 
     private fun refresh() {
-        val files = ProjectManager.listFiles(project)
-        adapter.submit(files)
-        txtEmpty.visibility = if (files.isEmpty()) View.VISIBLE else View.GONE
+        val (folders, files) = ProjectManager.listEntries(project, currentRelDir)
+        adapter.submit(folders, files)
+        txtEmpty.visibility = if (folders.isEmpty() && files.isEmpty()) View.VISIBLE else View.GONE
+
+        findViewById<TextView>(R.id.txtToolbarSubtitle).text =
+            if (currentRelDir.isBlank()) project.name else "${project.name} / $currentRelDir"
     }
 
     private fun importFile(uri: Uri) {
@@ -266,20 +286,99 @@ class FilesActivity : AppCompatActivity() {
             .setPositiveButton(R.string.create) { _, _ ->
                 val name = input.text.toString().trim()
                 if (name.isEmpty()) return@setPositiveButton
-                val file = ProjectManager.writeFile(project, name, "")
-                refresh()
-                openInEditor(file)
+                try {
+                    val file = ProjectManager.writeFile(project, currentRelDir, name, "")
+                    refresh()
+                    openInEditor(file)
+                } catch (t: Throwable) {
+                    Toast.makeText(this, "${getString(R.string.file_save_error)}: ${t.message}", Toast.LENGTH_LONG).show()
+                }
             }
             .setNegativeButton(R.string.cancel, null)
             .show()
     }
 
-    private fun showDeleteConfirm(file: RinFile) {
+    private fun showCreateFolderDialog() {
+        val input = EditText(this)
+        input.hint = getString(R.string.folder_name_hint)
+        AlertDialog.Builder(this)
+            .setTitle(R.string.new_folder_title)
+            .setView(input)
+            .setPositiveButton(R.string.create) { _, _ ->
+                val name = input.text.toString().trim()
+                if (name.isEmpty()) return@setPositiveButton
+                try {
+                    ProjectManager.createFolder(project, currentRelDir, name)
+                    refresh()
+                } catch (t: Throwable) {
+                    Toast.makeText(this, "${t.message}", Toast.LENGTH_LONG).show()
+                }
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
+
+    private fun showRenameFileDialog(file: RinFile) {
+        val input = EditText(this)
+        input.setText(file.name)
+        input.setSelection(0, file.name.lastIndexOf('.').let { if (it > 0) it else file.name.length })
+        AlertDialog.Builder(this)
+            .setTitle(R.string.rename_file_title)
+            .setView(input)
+            .setPositiveButton(R.string.rename) { _, _ ->
+                val newName = input.text.toString().trim()
+                if (newName.isEmpty() || newName == file.name) return@setPositiveButton
+                try {
+                    ProjectManager.renameFile(project, file, newName)
+                    refresh()
+                    Toast.makeText(this, getString(R.string.file_renamed_toast, newName), Toast.LENGTH_SHORT).show()
+                } catch (t: Throwable) {
+                    Toast.makeText(this, "${t.message}", Toast.LENGTH_LONG).show()
+                }
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
+
+    private fun showRenameFolderDialog(folder: RinFolder) {
+        val input = EditText(this)
+        input.setText(folder.name)
+        AlertDialog.Builder(this)
+            .setTitle(R.string.rename_folder_title)
+            .setView(input)
+            .setPositiveButton(R.string.rename) { _, _ ->
+                val newName = input.text.toString().trim()
+                if (newName.isEmpty() || newName == folder.name) return@setPositiveButton
+                try {
+                    ProjectManager.renameFolder(folder, newName)
+                    refresh()
+                    Toast.makeText(this, getString(R.string.folder_renamed_toast, newName), Toast.LENGTH_SHORT).show()
+                } catch (t: Throwable) {
+                    Toast.makeText(this, "${t.message}", Toast.LENGTH_LONG).show()
+                }
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
+
+    private fun showDeleteFileConfirm(file: RinFile) {
         AlertDialog.Builder(this)
             .setTitle(R.string.delete_file_title)
             .setMessage(getString(R.string.delete_file_confirm, file.name))
             .setPositiveButton(R.string.delete) { _, _ ->
                 ProjectManager.deleteFile(file)
+                refresh()
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
+
+    private fun showDeleteFolderConfirm(folder: RinFolder) {
+        AlertDialog.Builder(this)
+            .setTitle(R.string.delete_folder_title)
+            .setMessage(getString(R.string.delete_folder_confirm, folder.name))
+            .setPositiveButton(R.string.delete) { _, _ ->
+                ProjectManager.deleteFolder(folder)
                 refresh()
             }
             .setNegativeButton(R.string.cancel, null)
@@ -294,42 +393,90 @@ class FilesActivity : AppCompatActivity() {
     }
 }
 
-private class FilesAdapter(
-    val onOpen: (RinFile) -> Unit,
-    val onDelete: (RinFile) -> Unit
-) : RecyclerView.Adapter<FilesAdapter.VH>() {
+private sealed class FileRow {
+    data class FolderRow(val folder: RinFolder) : FileRow()
+    data class FileRowItem(val file: RinFile) : FileRow()
+}
 
-    private var items: List<RinFile> = emptyList()
+private class FilesAdapter(
+    val onOpenFile: (RinFile) -> Unit,
+    val onOpenFolder: (RinFolder) -> Unit,
+    val onRenameFile: (RinFile) -> Unit,
+    val onRenameFolder: (RinFolder) -> Unit,
+    val onDeleteFile: (RinFile) -> Unit,
+    val onDeleteFolder: (RinFolder) -> Unit
+) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
+
+    private companion object {
+        const val TYPE_FOLDER = 0
+        const val TYPE_FILE = 1
+    }
+
+    private var items: List<FileRow> = emptyList()
     private val dateFormat = DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT)
 
-    fun submit(newItems: List<RinFile>) {
-        items = newItems
+    fun submit(folders: List<RinFolder>, files: List<RinFile>) {
+        items = folders.map { FileRow.FolderRow(it) } + files.map { FileRow.FileRowItem(it) }
         notifyDataSetChanged()
     }
 
-    class VH(view: View) : RecyclerView.ViewHolder(view) {
+    class FolderVH(view: View) : RecyclerView.ViewHolder(view) {
+        val txtName: TextView = view.findViewById(R.id.txtFolderNameItem)
+        val txtMeta: TextView = view.findViewById(R.id.txtFolderMeta)
+        val btnRename: View = view.findViewById(R.id.btnRenameFolder)
+        val btnDelete: View = view.findViewById(R.id.btnDeleteFolder)
+    }
+
+    class FileVH(view: View) : RecyclerView.ViewHolder(view) {
         val imgIcon: android.widget.ImageView = view.findViewById(R.id.imgFileIcon)
         val txtName: TextView = view.findViewById(R.id.txtFileNameItem)
         val txtMeta: TextView = view.findViewById(R.id.txtFileMeta)
+        val btnRename: View = view.findViewById(R.id.btnRenameFile)
         val btnDelete: View = view.findViewById(R.id.btnDeleteFile)
     }
 
-    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH {
-        val view = LayoutInflater.from(parent.context).inflate(R.layout.item_file, parent, false)
-        return VH(view)
+    override fun getItemViewType(position: Int): Int = when (items[position]) {
+        is FileRow.FolderRow -> TYPE_FOLDER
+        is FileRow.FileRowItem -> TYPE_FILE
     }
 
-    override fun onBindViewHolder(holder: VH, position: Int) {
-        val file = items[position]
-        holder.txtName.text = file.name
-        holder.txtMeta.text = holder.itemView.context.getString(
-            R.string.file_meta_format,
-            formatSize(file.sizeBytes),
-            dateFormat.format(Date(file.lastModified))
-        )
-        FileIconResolver.load(holder.imgIcon, file.file)
-        holder.itemView.setOnClickListener { onOpen(file) }
-        holder.btnDelete.setOnClickListener { onDelete(file) }
+    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
+        return if (viewType == TYPE_FOLDER) {
+            FolderVH(LayoutInflater.from(parent.context).inflate(R.layout.item_folder, parent, false))
+        } else {
+            FileVH(LayoutInflater.from(parent.context).inflate(R.layout.item_file, parent, false))
+        }
+    }
+
+    override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
+        when (val row = items[position]) {
+            is FileRow.FolderRow -> {
+                val folder = row.folder
+                holder as FolderVH
+                holder.txtName.text = folder.name
+                holder.txtMeta.text = holder.itemView.context.getString(
+                    R.string.folder_meta_format,
+                    dateFormat.format(Date(folder.lastModified))
+                )
+                holder.itemView.setOnClickListener { onOpenFolder(folder) }
+                holder.btnRename.setOnClickListener { onRenameFolder(folder) }
+                holder.btnDelete.setOnClickListener { onDeleteFolder(folder) }
+            }
+            is FileRow.FileRowItem -> {
+                val file = row.file
+                holder as FileVH
+                holder.txtName.text = file.name
+                holder.txtMeta.text = holder.itemView.context.getString(
+                    R.string.file_meta_format,
+                    formatSize(file.sizeBytes),
+                    dateFormat.format(Date(file.lastModified))
+                )
+                FileIconResolver.load(holder.imgIcon, file.file)
+                holder.itemView.setOnClickListener { onOpenFile(file) }
+                holder.btnRename.setOnClickListener { onRenameFile(file) }
+                holder.btnDelete.setOnClickListener { onDeleteFile(file) }
+            }
+        }
     }
 
     override fun getItemCount(): Int = items.size
