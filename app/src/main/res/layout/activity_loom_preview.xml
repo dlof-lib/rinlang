@@ -165,8 +165,11 @@
             tools:text="Snag on line 12: unexpected token — still showing the last good frame" />
     </LinearLayout>
 
-    <!-- ===== سطح المعاينة: إطار جهاز داكن قابل للتمرير أفقياً وعمودياً حول LoomFabricView ===== -->
+    <!-- ===== سطح المعاينة: LoomFabricView يملأ العرض والطول كاملاً (لا إطار جهاز مصغّر ولا حشوة
+         زائدة)؛ يبقى قابلاً للتمرير أفقياً/عمودياً فقط إذا زاد التكبير أو ارتفاع المحتوى الفعلي
+         عن المساحة المتاحة ===== -->
     <HorizontalScrollView
+        android:id="@+id/loomHScroll"
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
@@ -174,38 +177,16 @@
         android:fillViewport="true">
 
         <ScrollView
+            android:id="@+id/loomVScroll"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:fillViewport="true">
 
-            <FrameLayout
+            <com.dlof.rinlang.LoomFabricView
+                android:id="@+id/loomFabricView"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
-                android:padding="24dp">
-
-                <LinearLayout
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_gravity="center"
-                    android:orientation="vertical"
-                    android:background="@drawable/bg_loom_device_frame"
-                    android:padding="10dp">
-
-                    <!-- شريط علوي بسيط يحاكي شريط حالة الهاتف، ليعطي المعاينة طابع "جهاز حقيقي" -->
-                    <View
-                        android:layout_width="72dp"
-                        android:layout_height="6dp"
-                        android:layout_gravity="center_horizontal"
-                        android:layout_marginBottom="8dp"
-                        android:background="@drawable/shape_status_dot"
-                        android:backgroundTint="@color/loom_device_notch_bg" />
-
-                    <com.dlof.rinlang.LoomFabricView
-                        android:id="@+id/loomFabricView"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content" />
-                </LinearLayout>
-            </FrameLayout>
+                android:background="@color/loom_canvas_bg" />
         </ScrollView>
     </HorizontalScrollView>
 
