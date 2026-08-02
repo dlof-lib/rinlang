@@ -11,6 +11,12 @@ add_library(
         rin_lexer.cpp
         rin_parser.cpp
         rin_interpreter.cpp
+        # rin_http.cpp: عميل HTTP حقيقي (natives httpGet/apiCall/...، انظر registerNatives() في
+        # rin_interpreter.cpp). على أندرويد تنفيذها الفعلي داخل هذا الملف يمرّ بالكامل عبر
+        # rin::http::setAndroidBridge (يُسجَّله jni_bridge.cpp من JNI_OnLoad) الذي يستدعي فعلياً
+        # RinHttpBridge.kt عبر JNI؛ لا حاجة لأي مكتبة TLS/curl إضافية هنا على أندرويد تحديداً.
+        # rin_json.h مستخدَم داخل rin_interpreter.cpp مباشرة (header-only) فلا يحتاج سطراً هنا.
+        rin_http.cpp
         # rin_c_api.cpp + loom/: محرّك العرض Loomtime (rendering engine) — إضافي بحت فوق
         # مفسّر اللغة أعلاه؛ يحوّل جذور @view.<Kind>=name إلى Fabric (شجرة عرض) مُخطَّطة
         # ومرسومة عبر Loom/Dye، ويُعرَّض إلى Kotlin عبر jni_bridge.cpp -> RinEngine.kt.
