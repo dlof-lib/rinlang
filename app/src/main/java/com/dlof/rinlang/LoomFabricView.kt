@@ -131,6 +131,21 @@ class LoomFabricView @JvmOverloads constructor(
         strokeWidth = 2.5f
         color = Color.rgb(255, 196, 77)
     }
+    private val bitmapPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { isFilterBitmap = true }
+
+    // ---- real image loading: `<Image src="...">` now decodes an actual file instead of only
+    // ever drawing the placeholder glyph. `src` resolves relative to the *same* project root
+    // save/installation/file already write to (RinEngine.currentBaseDir()) — so an image a Rin
+    // program just saved or that was imported into the project shows up for real here. Absolute
+    // paths and file:// URIs work too. Falls back to the old placeholder when nothing decodable
+    // is found, so unresolved/mistyped src= still reads clearly as "image, not yet there" rather
+    // than a blank box or a crash. ----
+    private val bitmapCache = object : android.util.LruCache<String, android.graphics.Bitmap>(24) {
+        override fun entryRemoved(evicted: Boolean, key: String, oldValue: android.graphics.Bitmap, newValue: android.graphics.Bitmap?) {
+            if (evicted && oldValue !== newValue) oldValue.recycle()
+        }
+    }
+    private val missingSrc = HashSet<String>()
 
     /** Node currently highlighted by the Inspector (long-press), drawn on top after the tree. */
     private var inspectedNode: JSONObject? = null
@@ -265,7 +280,7 @@ class LoomFabricView @JvmOverloads constructor(
         when (kind) {
             Kind.TEXT -> drawText(canvas, rect, attrs, attrs.optString("text"), defaultText)
             Kind.DIVIDER -> drawDivider(canvas, rect, attrs)
-            Kind.IMAGE -> drawImagePlaceholder(canvas, rect, attrs)
+            Kind.IMAGE -> drawImage(canvas, rect, attrs)
             Kind.BUTTON -> {
                 drawBox(canvas, rect, attrs, defaultButton, defaultRadius = 10f)
                 drawText(canvas, rect, attrs, attrs.optString("label"), Color.WHITE, centered = true, boldHint = true, singleLine = true)
@@ -489,6 +504,72 @@ class LoomFabricView @JvmOverloads constructor(
         fillPaint.clearShadowLayer()
         fillPaint.color = parseHexColor(attrs.optString("color").ifBlank { null }, defaultDivider)
         canvas.drawRect(rect, fillPaint)
+    }
+
+    /** Resolves `src=` to a real file: relative paths are relative to the current project's root
+     * (same root save/installation/file already use — [RinEngine.currentBaseDir]); absolute paths
+     * and `file://` URIs are used as-is. Null if nothing exists there. */
+    private fun resolveImageFile(src: String): java.io.File? {
+        if (src.isBlank() || src.contains("://") && !src.startsWith("file://")) return null // http(s) etc. not fetched here
+        val stripped = src.removePrefix("file://")
+        val direct = java.io.File(stripped)
+        if (direct.isAbsolute) return if (direct.isFile) direct else null
+        val base = RinEngine.currentBaseDir()
+        if (base.isBlank()) return null
+        val relative = java.io.File(base, stripped)
+        return if (relative.isFile) relative else null
+    }
+
+    /** Decodes (and caches, downsampled to roughly [targetW]x[targetH] to keep memory sane) the
+     * bitmap for [src], or null if it can't be resolved/decoded — cached too, so a bad src isn't
+     * re-stat'd on every single frame while the preview is live. */
+    private fun loadBitmapForRect(src: String, targetW: Int, targetH: Int): android.graphics.Bitmap? {
+        if (src.isBlank() || targetW <= 0 || targetH <= 0) return null
+        val cacheKey = "$src|$targetW|$targetH"
+        bitmapCache.get(cacheKey)?.let { return it }
+        if (cacheKey in missingSrc) return null
+
+        val file = resolveImageFile(src)
+        if (file == null) { missingSrc.add(cacheKey); return null }
+        return try {
+            val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            android.graphics.BitmapFactory.decodeFile(file.absolutePath, bounds)
+            var sample = 1
+            while (bounds.outWidth / (sample * 2) >= targetW && bounds.outHeight / (sample * 2) >= targetH) sample *= 2
+            val opts = android.graphics.BitmapFactory.Options().apply { inSampleSize = sample }
+            val bmp = android.graphics.BitmapFactory.decodeFile(file.absolutePath, opts)
+            if (bmp != null) bitmapCache.put(cacheKey, bmp) else missingSrc.add(cacheKey)
+            bmp
+        } catch (t: Throwable) {
+            missingSrc.add(cacheKey)
+            null
+        }
+    }
+
+    /** Real `<Image src="...">`: draws the actual decoded bitmap, cropped/rounded to the box the
+     * native layout already computed. `fit="contain"` letterboxes instead of the default
+     * cover-and-crop. Falls back to [drawImagePlaceholder] when src is blank/unresolvable. */
+    private fun drawImage(canvas: Canvas, rect: RectF, attrs: JSONObject) {
+        if (rect.width() <= 0f || rect.height() <= 0f) return
+        val src = attrs.optString("src")
+        val bmp = loadBitmapForRect(src, rect.width().toInt(), rect.height().toInt())
+        if (bmp == null) { drawImagePlaceholder(canvas, rect, attrs); return }
+
+        val radius = attrs.optString("radius").toFloatOrNull() ?: 8f
+        canvas.save()
+        val clip = android.graphics.Path().apply { addRoundRect(rect, radius, radius, android.graphics.Path.Direction.CW) }
+        canvas.clipPath(clip)
+
+        val bw = bmp.width.toFloat()
+        val bh = bmp.height.toFloat()
+        val scale = if (attrs.optString("fit") == "contain") min(rect.width() / bw, rect.height() / bh)
+        else max(rect.width() / bw, rect.height() / bh)
+        val dw = bw * scale
+        val dh = bh * scale
+        val dstLeft = rect.left + (rect.width() - dw) / 2f
+        val dstTop = rect.top + (rect.height() - dh) / 2f
+        canvas.drawBitmap(bmp, null, RectF(dstLeft, dstTop, dstLeft + dw, dstTop + dh), bitmapPaint)
+        canvas.restore()
     }
 
     private fun drawImagePlaceholder(canvas: Canvas, rect: RectF, attrs: JSONObject) {
