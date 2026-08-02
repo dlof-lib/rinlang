@@ -20,7 +20,14 @@ class SplashActivity : AppCompatActivity() {
     private val handler = Handler(Looper.getMainLooper())
     private val goToEditor = Runnable {
         if (isFinishing || isDestroyed) return@Runnable
-        startActivity(Intent(this, MainActivity::class.java))
+        // إن كانت هذه حزمة APK ناتجة عن ميزة "تصدير APK" (تحتوي assets/rin_export_manifest.json)،
+        // نفتح شاشة تشغيل المشروع مباشرة بدل المحرر — فتبدو الحزمة تطبيقاً مستقلاً بمشروعه.
+        val target = if (ExportedRunActivity.hasExportedProject(this)) {
+            ExportedRunActivity::class.java
+        } else {
+            MainActivity::class.java
+        }
+        startActivity(Intent(this, target))
         finish()
         overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out)
     }
