@@ -205,4 +205,5 @@ print \"Hello, \" + name + \"!\";
     <string name="loom_open_action">Open</string>
     <string name="menu_run_live_preview">Live Preview</string>
     <string name="loom_no_view_toast">No @view.&lt;Kind&gt;=name block found in this code yet.</string>
+    <string name="loom_navigate_missing_toast">Page not found: %1$s</string>
 </resources>
