@@ -33,6 +33,17 @@
     <string name="file_meta_format">%1$s • %2$s</string>
     <string name="no_app_to_open_file">No app installed that can open this file type</string>
 
+    <!-- Subfolders and renaming -->
+    <string name="new_folder_title">New Folder</string>
+    <string name="folder_name_hint">Folder name</string>
+    <string name="folder_meta_format">Folder • %1$s</string>
+    <string name="delete_folder_title">Delete Folder</string>
+    <string name="delete_folder_confirm">Delete the folder \"%1$s\" and everything inside it?</string>
+    <string name="rename_file_title">Rename File</string>
+    <string name="rename_folder_title">Rename Folder</string>
+    <string name="file_renamed_toast">Renamed to: %1$s</string>
+    <string name="folder_renamed_toast">Renamed to: %1$s</string>
+
     <!-- ZIP archive tools: upload and extract, or download the project as an archive -->
     <string name="zip_tools_title">ZIP Archive</string>
     <string name="zip_upload_extract">Upload an archive and extract it here</string>
