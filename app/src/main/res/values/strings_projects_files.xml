@@ -30,12 +30,14 @@
     <!-- شاشة الملفات -->
     <string name="new_file_title">ملف جديد</string>
     <string name="upload_file">رفع ملف</string>
+    <string name="upload_media">رفع وسائط</string>
     <string name="delete_file_title">حذف الملف</string>
     <string name="delete_file_confirm">هل تريد حذف الملف \"%1$s\"؟</string>
     <string name="file_name_hint">اسم الملف (مثال: main.rin)</string>
-    <string name="no_files_yet">لا توجد ملفات بعد. أنشئ ملفاً جديداً أو ارفع ملفاً من جهازك.</string>
+    <string name="no_files_yet">لا توجد ملفات بعد. أنشئ ملفاً جديداً أو ارفع ملفاً أو وسائط من جهازك.</string>
     <string name="file_uploaded_toast">تم رفع الملف: %1$s</string>
     <string name="file_meta_format">%1$s • %2$s</string>
+    <string name="no_app_to_open_file">لا يوجد تطبيق مثبَّت لفتح هذا النوع من الملفات</string>
 
     <!-- أدوات الأرشيف المضغوط (ZIP): رفع وفك ضغط، أو تنزيل المشروع كأرشيف -->
     <string name="zip_tools_title">أرشيف ZIP</string>
