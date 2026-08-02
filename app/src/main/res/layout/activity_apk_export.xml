@@ -1,0 +1,279 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@color/pipeline_screen_bg">
+
+    <!-- ===== Header (نفس أسلوب رأس RinFlow) ===== -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:background="@color/pipeline_header_bg"
+        android:elevation="3dp"
+        android:paddingStart="16dp"
+        android:paddingEnd="12dp"
+        android:paddingTop="16dp"
+        android:paddingBottom="16dp">
+
+        <ImageView
+            android:layout_width="34dp"
+            android:layout_height="34dp"
+            android:scaleType="fitCenter"
+            android:src="@drawable/ic_log_export"
+            app:tint="@color/pipeline_terminal_green"
+            android:contentDescription="@string/apk_export_screen_title" />
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical"
+            android:layout_marginStart="12dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/apk_export_screen_title"
+                android:textColor="@color/pipeline_header_text"
+                android:textSize="18sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/txtApkExportProjectName"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textColor="@color/pipeline_header_subtext"
+                android:textSize="12sp"
+                android:layout_marginTop="1dp"
+                android:ellipsize="end"
+                android:singleLine="true"
+                tools:text="project: sales_app" />
+        </LinearLayout>
+
+        <ImageButton
+            android:id="@+id/btnApkExportClose"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:src="@drawable/ic_close"
+            android:contentDescription="@string/find_close_desc"
+            app:tint="@android:color/white" />
+    </LinearLayout>
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:fillViewport="true">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="16dp">
+
+            <!-- اسم التطبيق -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/apk_export_field_name_label"
+                android:textColor="@color/pipeline_text_muted"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                android:layout_marginBottom="6dp" />
+
+            <EditText
+                android:id="@+id/edtApkExportAppName"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:inputType="text"
+                android:maxLines="1"
+                android:hint="@string/apk_export_field_name_hint"
+                android:padding="12dp"
+                android:background="@drawable/bg_pipeline_code_card"
+                android:textColor="@color/pipeline_text_primary"
+                android:textColorHint="@color/pipeline_text_muted"
+                android:textSize="14sp" />
+
+            <!-- ملف البداية -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/apk_export_field_entry_label"
+                android:textColor="@color/pipeline_text_muted"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                android:layout_marginTop="14dp"
+                android:layout_marginBottom="6dp" />
+
+            <Spinner
+                android:id="@+id/spinnerApkExportEntry"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:padding="10dp"
+                android:background="@drawable/bg_pipeline_code_card" />
+
+            <!-- ملاحظة الحدود المعروفة -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:text="@string/apk_export_note_limitation"
+                android:textColor="@color/pipeline_text_muted"
+                android:textSize="11sp"
+                android:lineSpacingExtra="2dp" />
+
+            <!-- Build terminal: نفس نافذة الطرفية المستخدمة في RinFlow لعرض خطوات البناء/التوقيع -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:background="@drawable/bg_pipeline_terminal_window"
+                android:layout_marginTop="16dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:background="@drawable/bg_pipeline_terminal_header"
+                    android:paddingStart="12dp"
+                    android:paddingEnd="12dp"
+                    android:paddingTop="9dp"
+                    android:paddingBottom="9dp">
+
+                    <View
+                        android:layout_width="10dp"
+                        android:layout_height="10dp"
+                        android:background="@drawable/bg_terminal_dot_red"
+                        android:layout_marginEnd="6dp" />
+
+                    <View
+                        android:layout_width="10dp"
+                        android:layout_height="10dp"
+                        android:background="@drawable/bg_terminal_dot_yellow"
+                        android:layout_marginEnd="6dp" />
+
+                    <View
+                        android:layout_width="10dp"
+                        android:layout_height="10dp"
+                        android:background="@drawable/bg_terminal_dot_green"
+                        android:layout_marginEnd="10dp" />
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/apk_export_terminal_label"
+                        android:textColor="@color/pipeline_terminal_dim"
+                        android:fontFamily="monospace"
+                        android:textSize="11sp"
+                        android:ellipsize="end"
+                        android:singleLine="true" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/apkExportLog"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:paddingStart="14dp"
+                    android:paddingEnd="14dp"
+                    android:paddingTop="12dp"
+                    android:paddingBottom="14dp" />
+
+            </LinearLayout>
+
+            <!-- Status -->
+            <LinearLayout
+                android:id="@+id/apkExportStatusBanner"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:background="@drawable/bg_pipeline_status_neutral"
+                android:elevation="1dp"
+                android:padding="14dp"
+                android:layout_marginTop="16dp">
+
+                <ProgressBar
+                    android:id="@+id/progressApkExport"
+                    style="?android:attr/progressBarStyleSmall"
+                    android:layout_width="16dp"
+                    android:layout_height="16dp"
+                    android:layout_marginEnd="10dp"
+                    android:indeterminateTint="@color/pipeline_green"
+                    android:visibility="gone" />
+
+                <TextView
+                    android:id="@+id/txtApkExportStatus"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/apk_export_status_idle"
+                    android:textColor="@color/pipeline_text_primary"
+                    android:textSize="13sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
+            <!-- Controls -->
+            <Button
+                android:id="@+id/btnApkExportBuild"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:text="@string/apk_export_action_build"
+                android:textAllCaps="false"
+                android:textColor="@android:color/white"
+                android:background="@drawable/bg_pipeline_btn_primary" />
+
+            <LinearLayout
+                android:id="@+id/rowApkExportResultActions"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:layout_marginTop="8dp"
+                android:visibility="gone">
+
+                <Button
+                    android:id="@+id/btnApkExportInstall"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:layout_marginEnd="8dp"
+                    android:text="@string/apk_export_action_install"
+                    android:textAllCaps="false"
+                    android:textColor="@android:color/white"
+                    android:background="@drawable/bg_pipeline_btn_primary" />
+
+                <Button
+                    android:id="@+id/btnApkExportSave"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:layout_marginEnd="8dp"
+                    android:text="@string/apk_export_action_save"
+                    android:textAllCaps="false"
+                    android:textColor="@color/pipeline_btn_outline_text"
+                    android:background="@drawable/bg_pipeline_btn_outline" />
+
+                <Button
+                    android:id="@+id/btnApkExportShare"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/apk_export_action_share"
+                    android:textAllCaps="false"
+                    android:textColor="@color/pipeline_btn_outline_text"
+                    android:background="@drawable/bg_pipeline_btn_outline" />
+            </LinearLayout>
+
+        </LinearLayout>
+    </ScrollView>
+
+</LinearLayout>
