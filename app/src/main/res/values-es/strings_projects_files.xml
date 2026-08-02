@@ -24,12 +24,14 @@
     <!-- Pantalla de archivos -->
     <string name="new_file_title">Nuevo archivo</string>
     <string name="upload_file">Subir archivo</string>
+    <string name="upload_media">Subir multimedia</string>
     <string name="delete_file_title">Eliminar archivo</string>
     <string name="delete_file_confirm">¿Eliminar el archivo \"%1$s\"?</string>
     <string name="file_name_hint">Nombre del archivo (ej.: main.rin)</string>
-    <string name="no_files_yet">Aún no hay archivos. Crea uno nuevo o sube uno desde tu dispositivo.</string>
+    <string name="no_files_yet">Aún no hay archivos. Crea uno nuevo, o sube un archivo o multimedia desde tu dispositivo.</string>
     <string name="file_uploaded_toast">Archivo subido: %1$s</string>
     <string name="file_meta_format">%1$s • %2$s</string>
+    <string name="no_app_to_open_file">No hay ninguna app instalada que pueda abrir este tipo de archivo</string>
 
     <!-- Herramientas de archivo ZIP: subir y extraer, o descargar el proyecto como archivo -->
     <string name="zip_tools_title">Archivo ZIP</string>
