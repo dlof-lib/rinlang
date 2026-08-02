@@ -80,6 +80,51 @@ class LoomFabricView @JvmOverloads constructor(
     var showSafeArea: Boolean = false
         set(value) { field = value; invalidate() }
 
+    /**
+     * True while [LoomPreviewManager] has a native call in flight long enough to be worth showing
+     * (see its debounce) — draws a small spinner badge pinned to the top-right of the *view*
+     * (screen space, independent of [zoom]) so it stays fixed size and doesn't fight the Fabric's
+     * own layout. Driven by [LoomPreviewActivity.onBusyChanged].
+     */
+    var isBusy: Boolean = false
+        set(value) {
+            if (field == value) return
+            field = value
+            if (value) postOnAnimation(busyTickRunnable) else invalidate()
+        }
+
+    /**
+     * True once the current busy operation has run long enough to almost certainly be a real
+     * network call (apiCall/httpGet/...) rather than local computation — swaps the badge's label
+     * to say so. Reset alongside [isBusy] going false. Driven by [LoomPreviewActivity.onSlowOperation].
+     */
+    var isWaitingOnNetwork: Boolean = false
+        set(value) { field = value; invalidate() }
+
+    private val busyTickRunnable = object : Runnable {
+        override fun run() {
+            if (isBusy) {
+                invalidate()
+                postOnAnimation(this)
+            }
+        }
+    }
+
+    private val busyPillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.FILL
+        color = Color.argb(215, 24, 25, 32)
+    }
+    private val busyArcPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeCap = Paint.Cap.ROUND
+    }
+    private val busyLabelPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.rgb(230, 230, 240)
+    }
+
+    private val busyWorkingLabel: String by lazy { context.getString(R.string.loom_busy_hint) }
+    private val busyNetworkLabel: String by lazy { context.getString(R.string.loom_busy_network_hint) }
+
     /** The Fabric root node (the object under the top-level `"fabric"` key), or null while empty/erroring. */
     private var fabric: JSONObject? = null
 
@@ -228,6 +273,41 @@ class LoomFabricView @JvmOverloads constructor(
         inspectedNode?.let { drawInspectHighlight(canvas, it) }
 
         canvas.restore()
+
+        // Outside the restore() above deliberately: this badge is pinned to the view's own top-right
+        // corner in real screen pixels, so it stays a fixed size and position regardless of zoom.
+        if (isBusy) drawBusyIndicator(canvas)
+    }
+
+    /** Small pill badge + rotating arc, top-right corner, screen space. See [isBusy]. */
+    private fun drawBusyIndicator(canvas: Canvas) {
+        val d = density
+        val radius = 8f * d
+        val cy = 18f * d
+        val cx = width - 18f * d
+
+        val label = if (isWaitingOnNetwork) busyNetworkLabel else busyWorkingLabel
+        busyLabelPaint.textSize = 11f * d
+        val textWidth = busyLabelPaint.measureText(label)
+        val gap = 6f * d
+        val hPad = 10f * d
+
+        val pillRight = cx + radius + hPad
+        val pillLeft = cx - radius - gap - textWidth - hPad
+        val pillTop = cy - radius - 6f * d
+        val pillBottom = cy + radius + 6f * d
+        val pillRect = RectF(max(0f, pillLeft), pillTop, pillRight, pillBottom)
+        val pillRadius = (pillBottom - pillTop) / 2f
+        canvas.drawRoundRect(pillRect, pillRadius, pillRadius, busyPillPaint)
+
+        busyArcPaint.strokeWidth = 2.5f * d
+        busyArcPaint.color = if (isWaitingOnNetwork) Color.rgb(255, 196, 77) else Color.rgb(124, 92, 255)
+        val angle = (System.currentTimeMillis() % 1000L) / 1000f * 360f
+        val arcRect = RectF(cx - radius, cy - radius, cx + radius, cy + radius)
+        canvas.drawArc(arcRect, angle, 270f, false, busyArcPaint)
+
+        val baseline = cy - (busyLabelPaint.descent() + busyLabelPaint.ascent()) / 2f
+        canvas.drawText(label, pillRect.left + hPad, baseline, busyLabelPaint)
     }
 
     // ---- tree walk ----
