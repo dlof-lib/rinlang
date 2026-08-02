@@ -90,4 +90,10 @@ dependencies {
     implementation platform('com.google.firebase:firebase-bom:33.1.2')
     implementation 'com.google.firebase:firebase-auth-ktx'
     implementation 'com.google.firebase:firebase-database-ktx'
+
+    // مكتبة Google الرسمية لتوقيع حزم APK (نفس المكتبة التي تستخدمها أداة `apksigner` في
+    // Android SDK) — تُستخدم من ميزة "تصدير APK" (انظر RinApkExporter) لتوقيع مشاريع Rin
+    // المُصدَّرة بتوقيع Android رسمي فعلي (Signature Scheme v1 + v2 + v3)، بلا اعتماد على
+    // أدوات بناء خارجية أو خادم بعيد. لا تعتمد على أي API داخلي في OpenJDK فتعمل على أندرويد.
+    implementation 'com.android.tools.build:apksig:8.5.2'
 }
