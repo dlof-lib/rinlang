@@ -199,6 +199,8 @@ print \"Hello, \" + name + \"!\";
     <string name="loom_stats_idle">Waiting for the first render…</string>
     <string name="loom_stats_format">%1$d strands · rendered in %2$dms · cache hits %3$d · long-press an element to inspect it</string>
     <string name="loom_inspector_title_format">%1$s · %2$s (line %3$d)</string>
+    <string name="loom_busy_hint">Working…</string>
+    <string name="loom_busy_network_hint">Waiting for a real network reply…</string>
     <string name="loom_view_detected_snackbar">Loom view detected — opening Live Preview</string>
     <string name="loom_open_action">Open</string>
     <string name="menu_run_live_preview">Live Preview</string>
