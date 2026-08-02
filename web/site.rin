@@ -1,0 +1,556 @@
+// =============================================================================
+// site.rin — الصفحة الرسمية للغة Rin
+// -----------------------------------------------------------------------------
+// هذا الملف مكتوب بالكامل بلغة Rin (وليس HTML)، ويُنفَّذ بالمفسّر الرسمي للغة
+// (rin_lexer.cpp + rin_parser.cpp + rin_interpreter.cpp من هذا المستودع بالذات،
+// عبر tools/rin_run.cpp على الخادوم، أو عبر web/rin_wasm_bridge.cpp داخل متصفح
+// الزائر مباشرة). البرنامج يبني صفحة HTML كاملة كسلسلة نصية، ثم يكتبها فعلياً
+// عبر الدالة المدمجة writeFile() — لا يوجد أي قالب HTML مكتوب يدوياً خارج Rin.
+//
+// الفرق عن النسخة السابقة: محتوى الواجهة (روابط التنقّل، بطاقات المميزات،
+// خطوات البدء السريع، وسوم المنظومة، روابط الفوتر) لم يعد مصفوفات حرفية مكتوبة
+// داخل كل دالة بناء — أصبح مُخزَّناً فعلياً كـ"مستندات" (documents) داخل مجموعات
+// NoSQL حقيقية (@container.doc) توفّرها اللغة نفسها (انظر قسم "قاعدة البيانات
+// اللاعلاقية" في README.md)، ثم تُقرَأ وقت التشغيل عبر allDocs()/findDoc()
+// وتُحوَّل إلى HTML بدوال عرض (render*) عامة صغيرة. أي إضافة/تعديل لاحق لمحتوى
+// الصفحة يتم بإضافة/تعديل document واحد، لا بتعديل شيفرة البناء نفسها.
+// =============================================================================
+
+let siteTitle = "Rin — لغة برمجة صغيرة حقيقية تكتبها من جوالك";
+let siteDesc  = "Rin: لغة برمجة كاملة بمحرّك C++17 حقيقي (Lexer/Parser/Interpreter)، مع IDE أندرويد بـ Kotlin، ولغة حاويات بيانات، وقاعدة NoSQL مدمجة، وخط أنابيب إحصائي.";
+let repoUrl   = "https://github.com/dlof-lib/rinlang";
+
+// =============================================================================
+// محتوى الواجهة كبيانات حقيقية — قاعدة بيانات NoSQL واحدة (Containers.Group)
+// تضم خمس مجموعات مستندات (container.doc)، كل مجموعة تمثّل جزءاً من الصفحة.
+// هذا استخدام فعلي لمفهوم "قاعدة بيانات = Containers.Group" و
+// "مجموعة مستندات = container.doc" و"مستند = document" الموثّق في اللغة.
+// =============================================================================
+@Containers.Group=site_content
+
+    // ---- روابط شريط التنقّل العلوي ----
+    @container.doc=nav_links
+        document id="n1" fields={ label: "المميزات",     href: "#features" };
+        document id="n2" fields={ label: "الكود",         href: "#code" };
+        document id="n3" fields={ label: "البدء السريع",  href: "#quickstart" };
+        document id="n4" fields={ label: "المنظومة",      href: "#ecosystem" };
+        document id="n5" fields={ label: "GitHub",         href: repoUrl };
+    .end/container.doc
+
+    // ---- بطاقات مميزات اللغة ----
+    @container.doc=features
+        document id="f1" fields={
+            icon: "🧠", title: "مفسّر C++17 مستقل",
+            desc: "Lexer وParser وInterpreter كاملة بلغة C++ نقية، تعمل على أي جهاز فيه g++ بمعزل تام عن أندرويد."
+        };
+        document id="f2" fields={
+            icon: "📱", title: "IDE أندرويد كامل",
+            desc: "محرر أكواد بتلوين نحوي، حفظ وفتح عبر SAF، مشاريع متعددة، وقوائم File/Edit/View/Run احترافية."
+        };
+        document id="f3" fields={
+            icon: "📦", title: "لغة حاويات بيانات",
+            desc: "container وContainers.Group وVolume وSection، مع link وtying وmerge لربط ودمج البيانات."
+        };
+        document id="f4" fields={
+            icon: "🗄️", title: "قاعدة بيانات NoSQL",
+            desc: "container.doc وdoc مع عمليات CRUD كاملة: insertDoc وupdateDoc وdeleteDoc وqueryDocs — هذه الصفحة نفسها بياناتها مخزَّنة هكذا."
+        };
+        document id="f5" fields={
+            icon: "🔀", title: "خط أنابيب وإحصاء",
+            desc: "مُشغّل |> مع دوال إحصائية جاهزة: mean وstddev وnormalize وscale وغيرها."
+        };
+        document id="f6" fields={
+            icon: "💾", title: "تخزين حقيقي على القرص",
+            desc: "save وinstallation وwriteFile تكتب وتقرأ ملفات فعلية، مستمرة بين مرات التشغيل — هذه الصفحة نفسها ناتج writeFile()."
+        };
+    .end/container.doc
+
+    // ---- خطوات البدء السريع ----
+    @container.doc=steps
+        document id="s1" fields={
+            num: "1", title: "استنسخ المستودع",
+            desc: "احصل على الشيفرة المصدرية الكاملة للغة والمفسّر.",
+            code: "git clone " + repoUrl + ".git"
+        };
+        document id="s2" fields={
+            num: "2", title: "ابنِ المفسّر الرسمي",
+            desc: "بناء واحد بسيط باستخدام g++ لتفعيل rin_run.",
+            code: "g++ -O2 -std=c++17 -o rin_run tools/rin_run.cpp app/src/main/cpp/rin_lexer.cpp app/src/main/cpp/rin_parser.cpp app/src/main/cpp/rin_interpreter.cpp -I app/src/main/cpp"
+        };
+        document id="s3" fields={
+            num: "3", title: "شغّل أي ملف Rin",
+            desc: "نفّذ برنامجك مباشرة عبر سطر الأوامر.",
+            code: "./rin_run your_program.rin"
+        };
+    .end/container.doc
+
+    // ---- وسوم منظومة اللغة (Ecosystem pills) ----
+    @container.doc=ecosystem
+        document id="e1" fields={ label: "🧩 نظام مكتبات @import" };
+        document id="e2" fields={ label: "🛍️ متجر حزم داخل التطبيق" };
+        document id="e3" fields={ label: "🗄️ محتوى هذه الصفحة نفسه NoSQL (container.doc)" };
+        document id="e4" fields={ label: "🌐 container.api و route" };
+        document id="e5" fields={ label: "🧵 محرّك واجهات Loomtime" };
+        document id="e6" fields={ label: "⚙️ بناء ونشر تلقائي عبر GitHub Actions (native + WASM)" };
+        document id="e7" fields={ label: "🖥️ إضافة Visual Studio لتلوين الصياغة" };
+        document id="e8" fields={ label: "🔤 ربط مع C / Node.js / Python" };
+    .end/container.doc
+
+    // ---- روابط الفوتر ----
+    @container.doc=footer_links
+        document id="fl1" fields={ label: "GitHub",             href: repoUrl };
+        document id="fl2" fields={ label: "الإبلاغ عن مشكلة",   href: repoUrl + "/issues" };
+        document id="fl3" fields={ label: "الرخصة (MIT)",       href: repoUrl + "/blob/main/LICENSE" };
+    .end/container.doc
+
+.end/Containers.Group
+
+// ------------------------------- <head> -------------------------------------
+fun buildHead() {
+    return "<head>\n" +
+"<meta charset='UTF-8'/>\n" +
+"<meta name='viewport' content='width=device-width, initial-scale=1.0'/>\n" +
+"<title>" + siteTitle + "</title>\n" +
+"<meta name='description' content='" + siteDesc + "'/>\n" +
+"<meta property='og:title' content='Rin — لغة برمجة صغيرة حقيقية'/>\n" +
+"<meta property='og:description' content='" + siteDesc + "'/>\n" +
+"<meta property='og:type' content='website'/>\n" +
+"<link rel='icon' href=\"data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%237C5CFF'/><text x='50' y='68' font-size='58' font-family='Arial' font-weight='700' fill='white' text-anchor='middle'>ر</text></svg>\"/>\n" +
+"<link rel='preconnect' href='https://fonts.googleapis.com'/>\n" +
+"<link rel='preconnect' href='https://fonts.gstatic.com' crossorigin/>\n" +
+"<link href='https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&family=JetBrains+Mono:wght@400;600&display=swap' rel='stylesheet'/>\n" +
+"<style>\n" + buildCss() + "\n</style>\n" +
+"</head>\n";
+}
+
+// -------------------------------- CSS ----------------------------------------
+fun buildCss() {
+    return
+":root{" +
+  "--bg:#0a0a10;--bg-soft:#101018;--card:#14141f;--card-hover:#191926;" +
+  "--border:#232336;--text:#eceef7;--muted:#9a9ab0;" +
+  "--accent:#7c5cff;--accent2:#00d4ff;--accent3:#ff5ca8;" +
+  "--radius:16px;--maxw:1120px;" +
+"}\n" +
+"*{box-sizing:border-box;margin:0;padding:0}\n" +
+"html{scroll-behavior:smooth}\n" +
+"body{" +
+  "font-family:'Cairo',system-ui,sans-serif;background:var(--bg);color:var(--text);" +
+  "line-height:1.8;overflow-x:hidden;" +
+"}\n" +
+"body::before{" +
+  "content:'';position:fixed;inset:0;z-index:-1;" +
+  "background:" +
+    "radial-gradient(700px circle at 15% -10%, rgba(124,92,255,.28), transparent 60%)," +
+    "radial-gradient(700px circle at 110% 10%, rgba(0,212,255,.18), transparent 55%)," +
+    "var(--bg);" +
+"}\n" +
+"a{color:inherit;text-decoration:none}\n" +
+"img{max-width:100%;display:block}\n" +
+".wrap{max-width:var(--maxw);margin:0 auto;padding:0 24px}\n" +
+"code,pre,.mono{font-family:'JetBrains Mono',ui-monospace,Consolas,monospace}\n" +
+
+//  ---- navbar ---- 
+"header.nav{" +
+  "position:sticky;top:0;z-index:50;backdrop-filter:blur(14px);" +
+  "background:rgba(10,10,16,.72);border-bottom:1px solid var(--border);" +
+"}\n" +
+"header.nav .wrap{display:flex;align-items:center;justify-content:space-between;height:68px}\n" +
+".brand{display:flex;align-items:center;gap:10px;font-weight:900;font-size:20px}\n" +
+".brand .logo{" +
+  "width:34px;height:34px;border-radius:10px;display:grid;place-items:center;" +
+  "background:linear-gradient(135deg,var(--accent),var(--accent2));" +
+  "color:#0a0a10;font-weight:900;font-size:18px;" +
+"}\n" +
+"nav.links{display:flex;gap:28px;font-weight:600;color:var(--muted)}\n" +
+"nav.links a:hover{color:var(--text)}\n" +
+".nav-cta{display:flex;align-items:center;gap:12px}\n" +
+"#navToggle{display:none;background:none;border:1px solid var(--border);color:var(--text);" +
+  "border-radius:10px;width:40px;height:40px;font-size:18px;cursor:pointer}\n" +
+
+//  ---- buttons ---- 
+".btn{" +
+  "display:inline-flex;align-items:center;gap:8px;padding:12px 22px;border-radius:12px;" +
+  "font-weight:700;font-size:15px;border:1px solid transparent;cursor:pointer;" +
+  "transition:transform .15s ease, box-shadow .15s ease, background .15s ease;" +
+"}\n" +
+".btn:hover{transform:translateY(-2px)}\n" +
+".btn-primary{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#08080d;" +
+  "box-shadow:0 10px 30px -10px rgba(124,92,255,.55)}\n" +
+".btn-ghost{background:rgba(255,255,255,.03);border-color:var(--border);color:var(--text)}\n" +
+".btn-ghost:hover{background:rgba(255,255,255,.07)}\n" +
+".btn-sm{padding:8px 14px;font-size:13px;border-radius:9px}\n" +
+
+//  ---- hero ---- 
+".hero{padding:96px 0 60px;text-align:center;position:relative}\n" +
+".badge{" +
+  "display:inline-flex;align-items:center;gap:8px;padding:7px 16px;border-radius:999px;" +
+  "background:rgba(124,92,255,.12);border:1px solid rgba(124,92,255,.35);" +
+  "color:#c9bfff;font-weight:700;font-size:13px;margin-bottom:26px;" +
+"}\n" +
+".badge .dot{width:7px;height:7px;border-radius:50%;background:var(--accent2);" +
+  "box-shadow:0 0 10px var(--accent2)}\n" +
+".hero h1{" +
+  "font-size:clamp(34px,6vw,64px);font-weight:900;line-height:1.25;letter-spacing:-.5px;" +
+  "background:linear-gradient(135deg,#fff 30%,#c9bfff 65%,var(--accent2));" +
+  "-webkit-background-clip:text;background-clip:text;color:transparent;" +
+  "max-width:900px;margin:0 auto 22px;" +
+"}\n" +
+".hero p.lead{color:var(--muted);font-size:19px;max-width:680px;margin:0 auto 36px}\n" +
+".hero .cta-row{display:flex;gap:14px;justify-content:center;flex-wrap:wrap;margin-bottom:56px}\n" +
+".stats{display:flex;gap:0;justify-content:center;flex-wrap:wrap;color:var(--muted);font-size:14px;gap:34px}\n" +
+".stats b{display:block;color:var(--text);font-size:22px;font-weight:900}\n" +
+
+//  ---- hero code preview ---- 
+".hero-code{" +
+  "max-width:760px;margin:56px auto 0;text-align:left;direction:ltr;border-radius:var(--radius);" +
+  "background:var(--card);border:1px solid var(--border);overflow:hidden;" +
+  "box-shadow:0 40px 80px -30px rgba(0,0,0,.7);" +
+"}\n" +
+".hero-code .tb{display:flex;align-items:center;gap:8px;padding:12px 16px;" +
+  "border-bottom:1px solid var(--border);background:rgba(255,255,255,.02)}\n" +
+".hero-code .tb span{width:11px;height:11px;border-radius:50%;display:inline-block}\n" +
+".hero-code .tb .r{background:#ff5f57}.hero-code .tb .y{background:#febc2e}.hero-code .tb .g{background:#28c840}\n" +
+".hero-code .tb .fname{margin-inline-start:10px;color:var(--muted);font-size:13px}\n" +
+".hero-code pre{padding:22px 20px;font-size:14px;overflow-x:auto;color:#d7d9ea}\n" +
+".tok-kw{color:#ff79c6;font-weight:600}.tok-str{color:#7ee787}.tok-com{color:#6a7280;font-style:italic}\n" +
+".tok-fn{color:#79c0ff}.tok-num{color:#ffab70}\n" +
+
+//  ---- section heading ---- 
+".section{padding:88px 0}\n" +
+".section-head{text-align:center;max-width:640px;margin:0 auto 52px}\n" +
+".eyebrow{color:var(--accent2);font-weight:800;font-size:13px;letter-spacing:1.5px;" +
+  "text-transform:uppercase;margin-bottom:12px;display:block}\n" +
+".section-head h2{font-size:clamp(26px,4vw,38px);font-weight:900;margin-bottom:14px}\n" +
+".section-head p{color:var(--muted);font-size:16px}\n" +
+
+//  ---- features grid ---- 
+".grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}\n" +
+".card{" +
+  "background:var(--card);border:1px solid var(--border);border-radius:var(--radius);" +
+  "padding:28px;transition:transform .2s ease,border-color .2s ease,background .2s ease;" +
+"}\n" +
+".card:hover{transform:translateY(-4px);border-color:rgba(124,92,255,.5);background:var(--card-hover)}\n" +
+".card .ic{" +
+  "width:46px;height:46px;border-radius:12px;display:grid;place-items:center;font-size:22px;" +
+  "background:linear-gradient(135deg,rgba(124,92,255,.25),rgba(0,212,255,.18));margin-bottom:18px;" +
+"}\n" +
+".card h3{font-size:18px;font-weight:800;margin-bottom:10px}\n" +
+".card p{color:var(--muted);font-size:14.5px}\n" +
+
+//  ---- code showcase ---- 
+".code-block{" +
+  "direction:ltr;text-align:left;background:var(--card);border:1px solid var(--border);" +
+  "border-radius:var(--radius);overflow:hidden;position:relative;" +
+"}\n" +
+".code-block .tb{display:flex;align-items:center;justify-content:space-between;" +
+  "padding:12px 18px;border-bottom:1px solid var(--border);background:rgba(255,255,255,.02)}\n" +
+".code-block .tb .fname{color:var(--muted);font-size:13px}\n" +
+".copy-btn{" +
+  "background:rgba(255,255,255,.05);border:1px solid var(--border);color:var(--muted);" +
+  "font-size:12px;padding:6px 12px;border-radius:8px;cursor:pointer;font-family:inherit;" +
+"}\n" +
+".copy-btn:hover{color:var(--text);border-color:var(--accent)}\n" +
+".code-block pre{padding:24px;overflow-x:auto;font-size:14px;color:#d7d9ea}\n" +
+
+//  ---- steps ---- 
+".steps{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;margin-top:10px}\n" +
+".step{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:26px}\n" +
+".step .num{" +
+  "width:34px;height:34px;border-radius:10px;background:rgba(124,92,255,.15);color:#c9bfff;" +
+  "display:grid;place-items:center;font-weight:900;margin-bottom:16px;" +
+"}\n" +
+".step h4{font-weight:800;margin-bottom:8px;font-size:16px}\n" +
+".step p{color:var(--muted);font-size:14px;margin-bottom:12px}\n" +
+".step code.inline{" +
+  "direction:ltr;display:block;background:#0d0d15;border:1px solid var(--border);" +
+  "border-radius:8px;padding:10px 12px;font-size:12.5px;color:#7ee787;overflow-x:auto;" +
+"}\n" +
+
+//  ---- ecosystem strip ---- 
+".pill-row{display:flex;flex-wrap:wrap;gap:10px;justify-content:center}\n" +
+".pill{" +
+  "background:var(--card);border:1px solid var(--border);border-radius:999px;" +
+  "padding:9px 18px;font-size:13.5px;color:var(--muted);font-weight:600;" +
+"}\n" +
+
+//  ---- final cta ---- 
+".final-cta{" +
+  "text-align:center;padding:70px 40px;border-radius:24px;margin:0 auto;max-width:1000px;" +
+  "background:linear-gradient(135deg,rgba(124,92,255,.18),rgba(0,212,255,.10));" +
+  "border:1px solid rgba(124,92,255,.35);" +
+"}\n" +
+".final-cta h2{font-size:clamp(24px,4vw,34px);font-weight:900;margin-bottom:14px}\n" +
+".final-cta p{color:var(--muted);margin-bottom:28px}\n" +
+
+//  ---- footer ---- 
+"footer{border-top:1px solid var(--border);padding:44px 0;margin-top:40px}\n" +
+"footer .wrap{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:16px}\n" +
+"footer .fmuted{color:var(--muted);font-size:13.5px}\n" +
+"footer .flinks{display:flex;gap:22px;color:var(--muted);font-size:14px;font-weight:600}\n" +
+"footer .flinks a:hover{color:var(--text)}\n" +
+
+//  ---- responsive ---- 
+"@media(max-width:860px){" +
+  ".grid{grid-template-columns:repeat(2,1fr)}" +
+  ".steps{grid-template-columns:1fr}" +
+"}\n" +
+"@media(max-width:640px){" +
+  "nav.links{position:fixed;inset:68px 0 0 0;background:var(--bg-soft);flex-direction:column;" +
+    "padding:28px 24px;gap:22px;font-size:18px;transform:translateY(-120%);" +
+    "transition:transform .25s ease;border-top:1px solid var(--border);z-index:40;}" +
+  "nav.links.open{transform:translateY(0)}" +
+  "#navToggle{display:block}" +
+  ".grid{grid-template-columns:1fr}" +
+  ".hero{padding:64px 0 40px}" +
+  "footer .wrap{flex-direction:column;text-align:center}" +
+"}\n";
+}
+
+// =============================================================================
+// دوال عرض عامة (render*) — كل واحدة تحوّل "مستنداً" واحداً (map حقوله) إلى
+// شذرة HTML. هذه هي الوصلة الوحيدة بين بيانات NoSQL (container.doc) والـHTML؛
+// بنية الصفحة نفسها لا تعرف تفاصيل كل رابط/بطاقة، فقط تستدعي allDocs() وتُمرّر
+// كل مستند لدالة render المناسبة.
+// =============================================================================
+fun renderNavLink(doc) {
+    return "<a href='" + doc["href"] + "'>" + doc["label"] + "</a>\n";
+}
+
+fun renderFeatureCard(doc) {
+    return
+"<div class='card'>\n" +
+"  <div class='ic'>" + doc["icon"] + "</div>\n" +
+"  <h3>" + doc["title"] + "</h3>\n" +
+"  <p>" + doc["desc"] + "</p>\n" +
+"</div>\n";
+}
+
+fun renderStep(doc) {
+    return
+"<div class='step'>\n" +
+"  <div class='num'>" + doc["num"] + "</div>\n" +
+"  <h4>" + doc["title"] + "</h4>\n" +
+"  <p>" + doc["desc"] + "</p>\n" +
+"  <code class='inline'>" + doc["code"] + "</code>\n" +
+"</div>\n";
+}
+
+fun renderPill(doc) {
+    return "<span class='pill'>" + doc["label"] + "</span>\n";
+}
+
+fun renderFooterLink(doc) {
+    return "<a href='" + doc["href"] + "' target='_blank' rel='noopener'>" + doc["label"] + "</a>\n";
+}
+
+// دالة عامة واحدة: تجلب كل مستندات مجموعة عبر allDocs()، وتُطبِّق دالة render
+// المُمرَّرة كوسيط على كل واحد، وتدمج النتائج. تُستخدَم في كل الأقسام أدناه
+// بدل تكرار نفس حلقة while في كل دالة buildX على حدة.
+fun renderCollection(collectionName, renderFn) {
+    let docs = allDocs(collectionName);
+    let out = "";
+    let i = 0;
+    while (i < len(docs)) {
+        out = out + renderFn(docs[i]);
+        i = i + 1;
+    }
+    return out;
+}
+
+// ------------------------------- navbar --------------------------------------
+fun buildNav() {
+    return
+"<header class='nav'>\n" +
+"  <div class='wrap'>\n" +
+"    <a href='#top' class='brand'><span class='logo'>ر</span> Rin</a>\n" +
+"    <nav class='links' id='navLinks'>\n" +
+renderCollection("nav_links", renderNavLink) +
+"    </nav>\n" +
+"    <div class='nav-cta'>\n" +
+"      <a class='btn btn-primary btn-sm' href='" + repoUrl + "' target='_blank' rel='noopener'>⭐ ابدأ الآن</a>\n" +
+"      <button id='navToggle' aria-label='القائمة'>☰</button>\n" +
+"    </div>\n" +
+"  </div>\n" +
+"</header>\n";
+}
+
+// -------------------------------- hero ----------------------------------------
+fun buildHero() {
+    return
+"<section class='hero' id='top'>\n" +
+"  <div class='wrap'>\n" +
+"    <span class='badge'><span class='dot'></span> محرّك C++17 حقيقي + IDE أندرويد بالكامل</span>\n" +
+"    <h1>لغة برمجة صغيرة… تكتبها وتشغّلها من جوالك مباشرة</h1>\n" +
+"    <p class='lead'>" + siteDesc + "</p>\n" +
+"    <div class='cta-row'>\n" +
+"      <a class='btn btn-primary' href='#quickstart'>🚀 جرّب Rin الآن</a>\n" +
+"      <a class='btn btn-ghost' href='" + repoUrl + "' target='_blank' rel='noopener'>عرض الشيفرة المصدرية</a>\n" +
+"    </div>\n" +
+"    <div class='stats'>\n" +
+"      <div><b>C++17</b>محرّك المفسّر</div>\n" +
+"      <div><b>Kotlin</b>واجهة أندرويد</div>\n" +
+"      <div><b>NoSQL</b>قاعدة بيانات مدمجة</div>\n" +
+"      <div><b>MIT</b>رخصة مفتوحة</div>\n" +
+"    </div>\n" +
+"    " + buildHeroCode() + "\n" +
+"  </div>\n" +
+"</section>\n";
+}
+
+fun buildHeroCode() {
+    return
+"<div class='hero-code'>\n" +
+"  <div class='tb'><span class='r'></span><span class='y'></span><span class='g'></span>" +
+"<span class='fname'>fib.rin</span></div>\n" +
+"  <pre><code>" +
+"<span class='tok-com'>// دالة فيبوناتشي تكرارية بلغة Rin</span>\n" +
+"<span class='tok-kw'>fun</span> <span class='tok-fn'>fib</span>(n) {\n" +
+"    <span class='tok-kw'>if</span> (n &lt; <span class='tok-num'>2</span>) { <span class='tok-kw'>return</span> n; }\n" +
+"    <span class='tok-kw'>return</span> fib(n - <span class='tok-num'>1</span>) + fib(n - <span class='tok-num'>2</span>);\n" +
+"}\n\n" +
+"<span class='tok-kw'>let</span> i = <span class='tok-num'>0</span>;\n" +
+"<span class='tok-kw'>while</span> (i &lt; <span class='tok-num'>10</span>) {\n" +
+"    <span class='tok-fn'>print</span> <span class='tok-str'>\"fib(\"</span> + i + <span class='tok-str'>\") = \"</span> + fib(i);\n" +
+"    i = i + <span class='tok-num'>1</span>;\n" +
+"}</code></pre>\n" +
+"</div>\n";
+}
+
+// ------------------------------- features -------------------------------------
+fun buildFeatures() {
+    return
+"<section class='section' id='features'>\n" +
+"  <div class='wrap'>\n" +
+"    <div class='section-head'>\n" +
+"      <span class='eyebrow'>لماذا Rin</span>\n" +
+"      <h2>أكثر من مجرّد لغة برمجة عامة</h2>\n" +
+"      <p>فوق الأساس المعتاد من متغيرات وشروط وحلقات ودوال، تضيف Rin طبقة كاملة لتنظيم البيانات والواجهات.</p>\n" +
+"    </div>\n" +
+"    <div class='grid'>\n" + renderCollection("features", renderFeatureCard) + "</div>\n" +
+"  </div>\n" +
+"</section>\n";
+}
+
+// ------------------------------ code showcase ----------------------------------
+fun buildCodeShowcase() {
+    return
+"<section class='section' id='code'>\n" +
+"  <div class='wrap'>\n" +
+"    <div class='section-head'>\n" +
+"      <span class='eyebrow'>معاينة حية</span>\n" +
+"      <h2>هذه الصفحة نفسها مكتوبة بلغة Rin</h2>\n" +
+"      <p>لا يوجد HTML مكتوب يدوياً — كل عنصر في هذه الصفحة هو ناتج تنفيذ site.rin عبر المفسّر الرسمي، ومحتواه مُخزَّن كمستندات NoSQL حقيقية داخل نفس الملف.</p>\n" +
+"    </div>\n" +
+"    <div class='code-block'>\n" +
+"      <div class='tb'><span class='fname'>site.rin — مقتطف حقيقي من هذه الصفحة</span>" +
+"<button class='copy-btn' onclick='copyCode(this)'>نسخ</button></div>\n" +
+"      <pre id='snippet'><code>" +
+"<span class='tok-com'>// كل بطاقة مميزة هي \"مستند\" NoSQL حقيقي، لا سطر مصفوفة ثابت</span>\n" +
+"<span class='tok-kw'>document</span> id=<span class='tok-str'>\"f4\"</span> fields={\n" +
+"    icon: <span class='tok-str'>\"🗄️\"</span>, title: <span class='tok-str'>\"قاعدة بيانات NoSQL\"</span>,\n" +
+"    desc: <span class='tok-str'>\"container.doc مع CRUD كامل...\"</span>\n" +
+"};\n\n" +
+"<span class='tok-com'>// دالة عرض عامة واحدة تُطبَّق على كل مستند تُرجعه allDocs()</span>\n" +
+"<span class='tok-kw'>fun</span> <span class='tok-fn'>renderFeatureCard</span>(doc) {\n" +
+"    <span class='tok-kw'>return</span> <span class='tok-str'>\"&lt;div class='card'&gt;\"</span> + doc[<span class='tok-str'>\"icon\"</span>] + doc[<span class='tok-str'>\"title\"</span>] + doc[<span class='tok-str'>\"desc\"</span>] + <span class='tok-str'>\"&lt;/div&gt;\"</span>;\n" +
+"}\n\n" +
+"<span class='tok-com'>// ...بناء الصفحة بالكامل من كل مجموعات المستندات، ثم كتابتها فعلياً على القرص</span>\n" +
+"<span class='tok-fn'>writeFile</span>(<span class='tok-str'>\"dist/index.html\"</span>, buildPage());</code></pre>\n" +
+"    </div>\n" +
+"  </div>\n" +
+"</section>\n";
+}
+
+// -------------------------------- quickstart ------------------------------------
+fun buildQuickstart() {
+    return
+"<section class='section' id='quickstart'>\n" +
+"  <div class='wrap'>\n" +
+"    <div class='section-head'>\n" +
+"      <span class='eyebrow'>ابدأ الآن</span>\n" +
+"      <h2>ثلاث خطوات فقط لتشغيل Rin</h2>\n" +
+"      <p>بدون أي بيئة تطوير معقّدة — كل ما تحتاجه مترجم g++ عادي (أو WASM لتشغيله في المتصفح مباشرة).</p>\n" +
+"    </div>\n" +
+"    <div class='steps'>\n" + renderCollection("steps", renderStep) + "</div>\n" +
+"  </div>\n" +
+"</section>\n";
+}
+
+// -------------------------------- ecosystem -------------------------------------
+fun buildEcosystem() {
+    return
+"<section class='section' id='ecosystem'>\n" +
+"  <div class='wrap'>\n" +
+"    <div class='section-head'>\n" +
+"      <span class='eyebrow'>منظومة اللغة</span>\n" +
+"      <h2>مبنية كمنصّة كاملة، لا لغة معزولة</h2>\n" +
+"    </div>\n" +
+"    <div class='pill-row'>\n" + renderCollection("ecosystem", renderPill) + "</div>\n" +
+"    <div class='final-cta' style='margin-top:60px'>\n" +
+"      <h2>جاهز تكتب أول برنامج Rin؟</h2>\n" +
+"      <p>الشيفرة المصدرية كاملة، موثّقة، ومفتوحة تحت رخصة MIT.</p>\n" +
+"      <a class='btn btn-primary' href='" + repoUrl + "' target='_blank' rel='noopener'>افتح المستودع على GitHub</a>\n" +
+"    </div>\n" +
+"  </div>\n" +
+"</section>\n";
+}
+
+// --------------------------------- footer ---------------------------------------
+fun buildFooter() {
+    return
+"<footer>\n" +
+"  <div class='wrap'>\n" +
+"    <div class='fmuted'>© 2026 Rin — مبنية ومنشورة تلقائياً بلغة Rin عبر GitHub Actions.</div>\n" +
+"    <div class='flinks'>\n" + renderCollection("footer_links", renderFooterLink) + "</div>\n" +
+"  </div>\n" +
+"</footer>\n";
+}
+
+// ----------------------------------- JS -------------------------------------------
+fun buildScript() {
+    return
+"<script>\n" +
+"(function(){\n" +
+"  var t = document.getElementById('navToggle');\n" +
+"  var n = document.getElementById('navLinks');\n" +
+"  if (t) { t.addEventListener('click', function(){ n.classList.toggle('open'); }); }\n" +
+"  n.querySelectorAll('a').forEach(function(a){\n" +
+"    a.addEventListener('click', function(){ n.classList.remove('open'); });\n" +
+"  });\n" +
+"})();\n" +
+"function copyCode(btn){\n" +
+"  var pre = document.getElementById('snippet');\n" +
+"  var text = pre.innerText;\n" +
+"  navigator.clipboard.writeText(text).then(function(){\n" +
+"    var old = btn.textContent;\n" +
+"    btn.textContent = 'تم النسخ ✓';\n" +
+"    setTimeout(function(){ btn.textContent = old; }, 1600);\n" +
+"  });\n" +
+"}\n" +
+"</script>\n";
+}
+
+// ------------------------------- تجميع الصفحة كاملة --------------------------------
+fun buildPage() {
+    return
+"<!DOCTYPE html>\n" +
+"<html lang='ar' dir='rtl'>\n" +
+buildHead() +
+"<body>\n" +
+buildNav() +
+buildHero() +
+buildFeatures() +
+buildCodeShowcase() +
+buildQuickstart() +
+buildEcosystem() +
+buildFooter() +
+buildScript() +
+"</body>\n" +
+"</html>\n";
+}
+
+// ------------------------------------ التنفيذ ---------------------------------------
+let page = buildPage();
+writeFile("dist/index.html", page);
+print "✅ تم توليد dist/index.html (" + len(page) + " حرف) بنجاح عبر المفسّر الرسمي للغة Rin، من " + len(groupContainers("site_content")) + " مجموعات بيانات NoSQL.";
