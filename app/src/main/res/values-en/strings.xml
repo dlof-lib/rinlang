@@ -21,11 +21,7 @@
     <string name="pipeline_action_configure">Configure</string>
     <string name="pipeline_action_load_sample">Load Example Pipeline</string>
     <string name="pipeline_configure_title">RinFlow</string>
-    <string name="pipeline_configure_message">Container: %1$s
-Stages: %2$d
-Timeout: %3$d s
-
-Each value shown in the diagram is produced by actually re-running your code through the native Rin [...]</string>
+    <string name="pipeline_configure_message">Container: %1$s\nStages: %2$d\nTimeout: %3$d s\n\nEach value shown in the diagram is produced by actually re-running your code through the native Rin engine, truncated at each stage of the pipe expression — nothing here is simulated.</string>
 
     <!-- New RinFlow design: horizontal flow + legend bar, styled like professional CI/CD dashboards -->
     <string name="pipeline_flow_label">rinflow — pipeline.trace</string>
@@ -150,12 +146,12 @@ fun fib(n) {
 
 let i = 0;
 while (i &lt; 10) {
-    print "fib(" + i + ") = " + fib(i);
+    print \"fib(\" + i + \") = \" + fib(i);
     i = i + 1;
 }
 
-let name = "world";
-print "Hello, " + name + "!";
+let name = \"world\";
+print \"Hello, \" + name + \"!\";
 </string>
 
     <!-- ===== Unified bottom navigation bar ===== -->
@@ -180,8 +176,7 @@ print "Hello, " + name + "!";
     <string name="apk_export_field_name_label">Displayed app name</string>
     <string name="apk_export_field_name_hint">e.g. Sales App</string>
     <string name="apk_export_field_entry_label">Entry file</string>
--    <string name="apk_export_action_build">Build & sign APK</string>
-+    <string name="apk_export_action_build">Build &amp; sign APK</string>
+    <string name="apk_export_action_build">Build &amp; sign APK</string>
     <string name="apk_export_action_install">Install</string>
     <string name="apk_export_action_share">Share</string>
     <string name="apk_export_action_save">Save to Downloads</string>
@@ -190,7 +185,7 @@ print "Hello, " + name + "!";
     <string name="apk_export_status_success">Built and signed successfully</string>
     <string name="apk_export_status_failed">Export failed</string>
     <string name="apk_export_no_entry_error">This project has no .rin files</string>
-    <string name="apk_export_note_limitation">Note: the resulting package’s home-screen app name and icon stay RinLang’s own — your project’s real identity shows up inside its run screen [...]</string>
+    <string name="apk_export_note_limitation">Note: the resulting package’s home-screen app name and icon stay RinLang’s own — your project’s real identity shows up inside its run screen after opening it.</string>
     <string name="exported_run_loading">Running project…</string>
     <string name="exported_run_error_prefix">Error while running:</string>
     <string name="exported_run_restart">Restart</string>
