@@ -24,7 +24,8 @@
     <string name="pipeline_configure_message">Contenedor: %1$s\nEtapas: %2$d\nTiempo límite: %3$d s\n\nCada valor mostrado en el diagrama se produce ejecutando realmente tu código a través del motor nativo de Rin, truncado en cada etapa de la expresión pipe — nada aquí está simulado.</string>
 
     <!-- Nuevo diseño de RinFlow: flujo horizontal + barra de leyenda, al estilo de paneles CI/CD profesionales -->
-    <string name="pipeline_flow_label">FLUJO DE CANALIZACIÓN</string>
+    <string name="pipeline_flow_label">rinflow — pipeline.trace</string>
+    <string name="pipeline_terminal_legend">✓ correcto   ✗ error</string>
     <string name="pipeline_legend_success">Correcto</string>
     <string name="pipeline_legend_failed">Fallido</string>
     <string name="pipeline_legend_node">Nodo RinFlow</string>
@@ -168,6 +169,26 @@ print \"Hello, \" + name + \"!\";
     <string name="more_row_extensions_subtitle">Extensiones y herramientas oficiales del editor</string>
     <string name="more_row_settings_subtitle">Tamaño de fuente, números de línea y otras opciones</string>
     <string name="more_row_needs_project_toast">Elige un proyecto primero</string>
+    <string name="more_row_apk_export_subtitle">Exporta tu proyecto como un APK firmado e instalable</string>
+
+    <string name="apk_export_screen_title">Exportar APK</string>
+    <string name="apk_export_terminal_label">rinlang — apk.export</string>
+    <string name="apk_export_field_name_label">Nombre visible de la app</string>
+    <string name="apk_export_field_name_hint">p. ej. App de Ventas</string>
+    <string name="apk_export_field_entry_label">Archivo de entrada</string>
+    <string name="apk_export_action_build">Compilar y firmar APK</string>
+    <string name="apk_export_action_install">Instalar</string>
+    <string name="apk_export_action_share">Compartir</string>
+    <string name="apk_export_action_save">Guardar en Descargas</string>
+    <string name="apk_export_status_idle">Listo para exportar</string>
+    <string name="apk_export_status_building">Compilando…</string>
+    <string name="apk_export_status_success">Compilado y firmado con éxito</string>
+    <string name="apk_export_status_failed">Error al exportar</string>
+    <string name="apk_export_no_entry_error">Este proyecto no tiene archivos .rin</string>
+    <string name="apk_export_note_limitation">Nota: el nombre e icono del paquete resultante en la pantalla de inicio siguen siendo los de RinLang; la identidad real de tu proyecto aparece dentro de su pantalla de ejecución al abrirlo.</string>
+    <string name="exported_run_loading">Ejecutando proyecto…</string>
+    <string name="exported_run_error_prefix">Error durante la ejecución:</string>
+    <string name="exported_run_restart">Reiniciar</string>
 
     <!-- ===== Selector de avatar (icono de biblioteca o subida desde el estudio) ===== -->
     <string name="avatar_picker_title">Elige tu avatar</string>
