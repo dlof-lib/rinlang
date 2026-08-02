@@ -6,4 +6,7 @@
     <!-- ملفات المشاريع (filesDir/projects/...): مطلوب لفتح ملف ثنائي مرفوع (pdf/صوت/أرشيف...)
          بتطبيق خارجي (ACTION_VIEW) من شاشة "الملفات" ([FilesActivity]). -->
     <files-path name="projects" path="projects/" />
+    <!-- حزم APK الناتجة عن ميزة "تصدير APK" ([RinApkExporter]) تُبنى داخل cacheDir/apk_export/؛
+         هذا المسار مطلوب لتثبيت/مشاركة الحزمة عبر content:// Uri آمن. -->
+    <cache-path name="apk_export" path="apk_export/" />
 </paths>
