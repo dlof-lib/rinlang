@@ -183,6 +183,7 @@ print \"Hello, \" + name + \"!\";
     <string name="loom_close">Close</string>
     <string name="loom_device_default">390px</string>
     <string name="loom_device_width_format">%1$dpx</string>
+    <string name="loom_device_fit_screen">Fit screen (full width)</string>
     <string name="loom_toggle_grid">Toggle alignment grid</string>
     <string name="loom_zoom_in">Zoom in</string>
     <string name="loom_zoom_out">Zoom out</string>
@@ -199,12 +200,6 @@ print \"Hello, \" + name + \"!\";
     <string name="loom_stats_idle">Waiting for the first render…</string>
     <string name="loom_stats_format">%1$d strands · rendered in %2$dms · cache hits %3$d · long-press an element to inspect it</string>
     <string name="loom_inspector_title_format">%1$s · %2$s (line %3$d)</string>
-    <!-- Shown as a small badge over the preview canvas while a tap/edit is still being handled
-         natively (debounced — only appears once the op has taken a moment). If it runs long enough
-         to almost certainly be a real network call (apiCall/httpGet/...), the wording switches to
-         loom_busy_network_hint. See LoomPreviewManager.Listener.onBusyChanged/onSlowOperation. -->
-    <string name="loom_busy_hint">Working…</string>
-    <string name="loom_busy_network_hint">Waiting for a real network reply…</string>
     <!-- يظهر بعد الضغط على Run عندما يحتوي الكود الحالي على @view.&lt;Kind&gt;=name حقيقي -->
     <string name="loom_view_detected_snackbar">Loom view detected — opening Live Preview</string>
     <string name="loom_open_action">Open</string>
