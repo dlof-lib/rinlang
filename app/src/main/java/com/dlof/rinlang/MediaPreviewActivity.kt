@@ -1,7 +1,7 @@
 package com.dlof.rinlang
 
 import android.graphics.BitmapFactory
-import android.media.MediaController
+import android.widget.MediaController
 import android.net.Uri
 import android.os.Bundle
 import android.view.View
