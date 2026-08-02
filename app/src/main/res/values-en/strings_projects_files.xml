@@ -24,12 +24,14 @@
     <!-- Files screen -->
     <string name="new_file_title">New File</string>
     <string name="upload_file">Upload File</string>
+    <string name="upload_media">Upload Media</string>
     <string name="delete_file_title">Delete File</string>
     <string name="delete_file_confirm">Delete the file \"%1$s\"?</string>
     <string name="file_name_hint">File name (e.g. main.rin)</string>
-    <string name="no_files_yet">No files yet. Create a new file or upload one from your device.</string>
+    <string name="no_files_yet">No files yet. Create a new file, or upload a file or media from your device.</string>
     <string name="file_uploaded_toast">File uploaded: %1$s</string>
     <string name="file_meta_format">%1$s • %2$s</string>
+    <string name="no_app_to_open_file">No app installed that can open this file type</string>
 
     <!-- ZIP archive tools: upload and extract, or download the project as an archive -->
     <string name="zip_tools_title">ZIP Archive</string>
