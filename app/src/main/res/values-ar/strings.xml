@@ -204,4 +204,5 @@ print \"Hello, \" + name + \"!\";
     <string name="loom_open_action">فتح</string>
     <string name="menu_run_live_preview">معاينة حية</string>
     <string name="loom_no_view_toast">لا يوجد أي مقطع @view.&lt;Kind&gt;=name في هذا الكود بعد.</string>
+    <string name="loom_navigate_missing_toast">الصفحة غير موجودة: %1$s</string>
 </resources>
