@@ -126,6 +126,17 @@ class LoomPreviewActivity : AppCompatActivity(), LoomPreviewManager.Listener {
         renderResult(resultJson, elapsedMs)
     }
 
+    /** A tap/edit is taking long enough to be worth a loading badge — see [LoomPreviewManager]. */
+    override fun onBusyChanged(busy: Boolean) {
+        fabricView.isBusy = busy
+        if (!busy) fabricView.isWaitingOnNetwork = false
+    }
+
+    /** The current op has run long enough to almost certainly be a real network call. */
+    override fun onSlowOperation() {
+        fabricView.isWaitingOnNetwork = true
+    }
+
     // ---- rendering the engine's result JSON ----
 
     private fun renderResult(resultJson: String, elapsedMs: Long) {
