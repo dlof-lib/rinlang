@@ -132,6 +132,23 @@
     <color name="pipeline_btn_outline_border">#C6CDD2</color>
     <color name="pipeline_btn_outline_text">#3C4650</color>
 
+    <!-- أسلوب الطرفية (Terminal) الجديد لعرض خطوات @container.pipe في RinFlow،
+         بدل بطاقات CI/CD الأفقية: نافذة داكنة بسطور نصية أحادية المسافة. -->
+    <color name="pipeline_terminal_bg">#0B0E14</color>
+    <color name="pipeline_terminal_header_bg">#161B22</color>
+    <color name="pipeline_terminal_border">#2A313C</color>
+    <color name="pipeline_terminal_dot_red">#FF5F56</color>
+    <color name="pipeline_terminal_dot_yellow">#FFBD2E</color>
+    <color name="pipeline_terminal_dot_green">#27C93F</color>
+    <color name="pipeline_terminal_prompt">#5FD3FF</color>
+    <color name="pipeline_terminal_text">#E6EDF3</color>
+    <color name="pipeline_terminal_dim">#7D8590</color>
+    <color name="pipeline_terminal_green">#3FE07D</color>
+    <color name="pipeline_terminal_red">#FF6B6B</color>
+    <color name="pipeline_terminal_amber">#FFC163</color>
+    <color name="pipeline_terminal_cyan">#5FD3FF</color>
+    <color name="pipeline_terminal_cursor">#3FE07D</color>
+
     <!-- ألوان الصيغة النحوية داخل بطاقة الكود الفاتحة على شاشة Pipeline Runner -->
     <color name="pipeline_syntax_keyword">#1857A4</color>
     <color name="pipeline_syntax_container">#1E7A4C</color>
