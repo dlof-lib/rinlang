@@ -28,12 +28,16 @@ class LoomPreviewActivity : AppCompatActivity(), LoomPreviewManager.Listener {
     companion object {
         /** Rin source to render — a fresh "Run" always restarts the session with this. */
         const val EXTRA_CODE = "loom_preview_code"
+        /** Optional: the project-relative file name [EXTRA_CODE] came from (defaults to
+         * "main.rin"). Used as the starting point for real page navigation below. */
+        const val EXTRA_FILE_NAME = "loom_preview_file_name"
         private val DEVICE_WIDTHS = listOf(360, 390, 414, 428, 768)
         /** القيمة الافتراضية قبل أن نقيس عرض سطح المعاينة الفعلي على الشاشة (أول تخطيط فقط). */
         private const val DEFAULT_DEVICE_WIDTH = 390
     }
 
     private lateinit var fabricView: LoomFabricView
+    private lateinit var txtTitle: TextView
     private lateinit var previewSurface: View
     private lateinit var errorBanner: View
     private lateinit var txtError: TextView
@@ -47,6 +51,14 @@ class LoomPreviewActivity : AppCompatActivity(), LoomPreviewManager.Listener {
 
     private var currentDeviceWidth = DEFAULT_DEVICE_WIDTH
 
+    /** Real page-to-page navigation: the file name currently loaded, and the stack of (name,
+     * source) pairs to return to on system Back — see [navigateTo]/[navigateBack]. Reading the
+     * target straight off disk under [RinEngine.currentBaseDir] (same root save/installation/file
+     * already use) is what makes `onTap="navigate:mu.rin"` and a splash's `navigate=`/`duration=`
+     * actually switch pages instead of [LoomFabricView.onNavigate] firing into nothing. */
+    private var currentPageName: String = "main.rin"
+    private val pageStack = ArrayDeque<Pair<String, String>>()
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_loom_preview)
@@ -55,6 +67,7 @@ class LoomPreviewActivity : AppCompatActivity(), LoomPreviewManager.Listener {
         // المشترك في العملية؛ استدعاء init مجدداً هنا قد يعيده خطأً إلى الجذر العام في منتصف الجلسة.
 
         fabricView = findViewById(R.id.loomFabricView)
+        txtTitle = findViewById(R.id.txtLoomTitle)
         previewSurface = findViewById(R.id.loomHScroll)
         errorBanner = findViewById(R.id.loomErrorBanner)
         txtError = findViewById(R.id.txtLoomError)
@@ -92,6 +105,10 @@ class LoomPreviewActivity : AppCompatActivity(), LoomPreviewManager.Listener {
 
         fabricView.onTap = { x, y -> LoomPreviewManager.tap(x, y) }
         fabricView.onInspect = { node -> showInspector(node) }
+        fabricView.onNavigate = { target -> navigateTo(target) }
+
+        currentPageName = intent.getStringExtra(EXTRA_FILE_NAME)?.takeIf { it.isNotBlank() } ?: currentPageName
+        txtTitle.text = currentPageName
 
         // نسجّل كمستمع أولاً — قبل أي start() — حتى لا نفوّت أول إطار (سباق مع خيط الجلسة بالخلفية).
         LoomPreviewManager.attach(this)
@@ -134,9 +151,57 @@ class LoomPreviewActivity : AppCompatActivity(), LoomPreviewManager.Listener {
         super.onNewIntent(intent)
         setIntent(intent)
         val code = intent.getStringExtra(EXTRA_CODE) ?: return
+        // A fresh "Run" from the editor restarts at the root page — any pages navigated into
+        // during the previous session no longer apply.
+        pageStack.clear()
+        currentPageName = intent.getStringExtra(EXTRA_FILE_NAME)?.takeIf { it.isNotBlank() } ?: "main.rin"
+        txtTitle.text = currentPageName
         inspectorPanel.visibility = View.GONE
         fabricView.clearInspection()
         LoomPreviewManager.start(code, currentDeviceWidth)
+    }
+
+    /** Real page navigation: reads [target] off disk under the current project's root (same root
+     * save/installation/file already write to) and switches the live session to it, pushing the
+     * page we came from onto [pageStack] for system Back. Fired by [LoomFabricView.onNavigate] —
+     * either a tapped `onTap="navigate:...".` or a splash's timed `navigate=`/`duration=`. */
+    private fun navigateTo(target: String) {
+        val base = RinEngine.currentBaseDir()
+        if (base.isBlank()) return
+        var file = java.io.File(base, target)
+        if (!file.isFile && !target.endsWith(".rin")) file = java.io.File(base, "$target.rin")
+        val newSource = if (file.isFile) {
+            try { file.readText() } catch (t: Throwable) { null }
+        } else null
+
+        if (newSource == null) {
+            Toast.makeText(this, getString(R.string.loom_navigate_missing_toast, target), Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        pageStack.addLast(currentPageName to LoomPreviewManager.lastSource)
+        currentPageName = file.name
+        txtTitle.text = currentPageName
+        inspectorPanel.visibility = View.GONE
+        fabricView.clearInspection()
+        LoomPreviewManager.start(newSource, currentDeviceWidth)
+    }
+
+    /** Pops [pageStack] back to the previous page, if any. Returns false (does nothing) once the
+     * stack is empty, so the caller can fall back to the normal system-Back behavior (closing). */
+    private fun navigateBack(): Boolean {
+        val (name, source) = pageStack.removeLastOrNull() ?: return false
+        currentPageName = name
+        txtTitle.text = currentPageName
+        inspectorPanel.visibility = View.GONE
+        fabricView.clearInspection()
+        LoomPreviewManager.start(source, currentDeviceWidth)
+        return true
+    }
+
+    @Suppress("DEPRECATION")
+    override fun onBackPressed() {
+        if (!navigateBack()) super.onBackPressed()
     }
 
     override fun onDestroy() {
