@@ -73,9 +73,38 @@ object ProjectManager {
 
     // ---- ملفات داخل مشروع ----
 
-    /** كل ملفات .rin مباشرة داخل مجلد المشروع (بدون تنقيب في مجلدات فرعية مثل rin_installed/). */
+    /**
+     * أنواع الملفات "غير النصية" التي لا يصحّ فتحها/تعديلها كنص عادي في المحرر (صور/فيديو/صوت/خطوط/
+     * أرشيفات/مستندات ثنائية...). أي امتداد آخر (بما فيه .rin وكل لغات البرمجة الأخرى) يُعامَل كملف
+     * نصّي قابل للفتح في [MainActivity] كما كان الحال دائماً.
+     */
+    private val imageExtensions = setOf("jpg", "jpeg", "png", "webp", "gif", "bmp", "heic", "heif")
+    private val videoExtensions = setOf("mp4", "mkv", "webm", "3gp", "mov", "avi", "m4v")
+    private val audioExtensions = setOf("mp3", "wav", "ogg", "m4a", "flac", "aac", "opus")
+    private val otherBinaryExtensions = setOf(
+        "ttf", "otf", "woff", "woff2",
+        "zip", "rar", "7z", "apk", "jar",
+        "pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx"
+    )
+
+    private fun extensionOf(name: String): String = name.substringAfterLast('.', "").lowercase()
+
+    fun isImageFile(name: String): Boolean = extensionOf(name) in imageExtensions
+    fun isVideoFile(name: String): Boolean = extensionOf(name) in videoExtensions
+    fun isAudioFile(name: String): Boolean = extensionOf(name) in audioExtensions
+    fun isMediaFile(name: String): Boolean = isImageFile(name) || isVideoFile(name) || isAudioFile(name)
+
+    /** true لأي ملف يُفضَّل فتحه بتطبيق خارجي (ACTION_VIEW) بدل معاينته داخل التطبيق أو فتحه كنص. */
+    fun isBinaryFile(name: String): Boolean =
+        isImageFile(name) || isVideoFile(name) || isAudioFile(name) || extensionOf(name) in otherBinaryExtensions
+
+    /**
+     * كل ملفات المشروع مباشرة داخل مجلده (بدون تنقيب في مجلدات فرعية مثل lib/ أو rin_installed/):
+     * ملفات .rin كما كان الحال دائماً، بالإضافة إلى أي ملف آخر (صور/فيديو/صوت/خطوط/ملفات لغات
+     * برمجة أخرى...) رُفع عبر "رفع ملف" أو "رفع وسائط".
+     */
     fun listFiles(project: Project): List<RinFile> {
-        return (project.dir.listFiles { f -> f.isFile && f.name.endsWith(RIN_EXTENSION) } ?: emptyArray())
+        return (project.dir.listFiles { f -> f.isFile } ?: emptyArray())
             .map { RinFile(it.name, it, it.length(), it.lastModified()) }
             .sortedByDescending { it.lastModified }
     }
@@ -97,26 +126,38 @@ object ProjectManager {
     }
 
     /**
-     * "رفع" ملف من الجهاز (أو أي مزوّد SAF: تخزين محلي، Google Drive...) إلى داخل المشروع.
-     * يقرأ محتوى [uri] عبر ContentResolver وينسخه كملف جديد داخل مجلد المشروع.
+     * "رفع" ملف من الجهاز (أو أي مزوّد SAF: تخزين محلي، Google Drive، معرض الصور/الفيديو...) إلى
+     * داخل المشروع. يحتفظ بامتداد الملف الأصلي كما هو (لم يعد يُجبَر على .rin، حتى تُقبل أنواع
+     * أخرى: صور، فيديو، صوت، خطوط، ملفات لغات برمجة أخرى...)، وينسخ المحتوى بايتاً بايت (لا كنص
+     * UTF-8) حتى لا تتلف الملفات الثنائية (صور/فيديو/صوت) عند الاستيراد.
      */
     fun importFileFromUri(context: Context, project: Project, uri: Uri): RinFile {
         val resolver: ContentResolver = context.contentResolver
         val displayName = queryDisplayName(resolver, uri) ?: uri.lastPathSegment ?: "imported"
-        val text = resolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
-            ?: throw IllegalStateException("تعذّرت قراءة الملف المحدد")
 
-        var safeName = ensureRinExtension(sanitizeFileName(displayName))
+        var safeName = sanitizeFileName(displayName)
+        if (safeName.isBlank()) safeName = "imported"
         var target = File(project.dir, safeName)
         var counter = 1
-        // تفادي الكتابة فوق ملف موجود بنفس الاسم: أضف رقماً متسلسلاً.
+        // تفادي الكتابة فوق ملف موجود بنفس الاسم: أضف رقماً متسلسلاً قبل الامتداد (إن وجد).
         while (target.exists()) {
-            val base = safeName.removeSuffix(RIN_EXTENSION)
-            safeName = "${base}_$counter$RIN_EXTENSION"
+            val dot = safeName.lastIndexOf('.')
+            safeName = if (dot > 0) {
+                "${safeName.substring(0, dot)}_$counter${safeName.substring(dot)}"
+            } else {
+                "${safeName}_$counter"
+            }
             target = File(project.dir, safeName)
             counter++
         }
-        target.writeText(text)
+
+        val input = resolver.openInputStream(uri)
+            ?: throw IllegalStateException("تعذّرت قراءة الملف المحدد")
+        input.use { streamIn ->
+            BufferedOutputStream(FileOutputStream(target)).use { streamOut ->
+                streamIn.copyTo(streamOut)
+            }
+        }
         return RinFile(safeName, target, target.length(), target.lastModified())
     }
 
