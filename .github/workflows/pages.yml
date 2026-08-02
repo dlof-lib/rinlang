@@ -1,13 +1,15 @@
-name: Build Rin site & Deploy to GitHub Pages
+name: Build Rin site (native check + WASM) & Deploy to GitHub Pages
 
 on:
   push:
     branches: [ "main" ]
     paths:
       - "site.rin"
+      - "web/**"
       - "app/src/main/cpp/rin_lexer.*"
       - "app/src/main/cpp/rin_parser.*"
       - "app/src/main/cpp/rin_interpreter.*"
+      - "app/src/main/cpp/rin_http.*"
       - "tools/rin_run.cpp"
       - ".github/workflows/pages.yml"
   workflow_dispatch: {}
@@ -28,22 +30,69 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Build the official Rin interpreter (rin_run)
+      # ------------------------------------------------------------------
+      # 1) فحص سلامة سريع بالمفسّر الأصلي (native). هذا لا يُنشر — غايته
+      #    فقط إيقاف الـ workflow مبكراً بخطأ واضح إن كان site.rin نفسه
+      #    فيه خطأ لغوي، قبل إضاعة وقت في بناء WASM لصفحة مكسورة.
+      # ------------------------------------------------------------------
+      - name: Sanity-check site.rin with the native official interpreter
         run: |
-          g++ -O2 -std=c++17 -o rin_run \
+          g++ -O2 -std=c++17 -o rin_run_native_check \
             tools/rin_run.cpp \
             app/src/main/cpp/rin_lexer.cpp \
             app/src/main/cpp/rin_parser.cpp \
             app/src/main/cpp/rin_interpreter.cpp \
+            app/src/main/cpp/rin_http.cpp \
             -I app/src/main/cpp
+          rm -rf dist
+          ./rin_run_native_check site.rin
+          test -f dist/index.html
+          echo "Native check OK: $(wc -c < dist/index.html) bytes"
+          rm -rf dist rin_run_native_check
 
-      - name: Run site.rin through the official interpreter
-        run: ./rin_run site.rin
+      # ------------------------------------------------------------------
+      # 2) البناء الحقيقي الذي يُنشر: المفسّر الرسمي (نفس ثلاث ملفات
+      #    الـ lexer/parser/interpreter بلا أي تعديل) مُصرَّف إلى
+      #    WebAssembly، ليُنفَّذ site.rin فعلياً داخل متصفح الزائر نفسه.
+      # ------------------------------------------------------------------
+      - name: Set up Emscripten
+        uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: 3.1.61
 
-      - name: Verify dist/index.html was generated
+      - name: Compile the official Rin engine to WebAssembly
+        run: |
+          mkdir -p dist
+          em++ -O2 -std=c++17 \
+            -I app/src/main/cpp \
+            app/src/main/cpp/rin_lexer.cpp \
+            app/src/main/cpp/rin_parser.cpp \
+            app/src/main/cpp/rin_interpreter.cpp \
+            web/rin_http_wasm_stub.cpp \
+            web/rin_wasm_bridge.cpp \
+            -s MODULARIZE=1 \
+            -s EXPORT_NAME=RinModule \
+            -s EXPORTED_RUNTIME_METHODS='["ccall","FS"]' \
+            -s EXPORTED_FUNCTIONS='["_rin_run_source","_malloc","_free"]' \
+            -s ALLOW_MEMORY_GROWTH=1 \
+            -s ENVIRONMENT=web \
+            -o dist/rin.js
+
+      - name: Assemble the Pages bundle
+        run: |
+          # site.rin يُنسخ كما هو حرفياً — هو المصدر الوحيد لمحتوى الصفحة.
+          cp site.rin dist/site.rin
+          # المحمّل العام (bootloader) الذي يشغّل rin.wasm ويعرض ناتجه.
+          cp web/index.html dist/index.html
+
+      - name: Verify bundle
         run: |
           test -f dist/index.html
-          echo "Generated dist/index.html ($(wc -c < dist/index.html) bytes)"
+          test -f dist/site.rin
+          test -f dist/rin.wasm
+          test -f dist/rin.js
+          echo "Bundle contents:"
+          ls -la dist
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
