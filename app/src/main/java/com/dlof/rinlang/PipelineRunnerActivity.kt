@@ -9,7 +9,6 @@ import android.text.SpannableStringBuilder
 import android.text.Spanned
 import android.text.style.ForegroundColorSpan
 import android.text.style.StyleSpan
-import android.view.Gravity
 import android.view.View
 import android.widget.ImageButton
 import android.widget.LinearLayout
@@ -107,6 +106,7 @@ class PipelineRunnerActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        stopCursorBlink()
         runningFuture?.cancel(true)
         queueExecutor.shutdownNow()
         workerPool.shutdownNow()
@@ -126,6 +126,7 @@ class PipelineRunnerActivity : AppCompatActivity() {
         )
         txtDetails.visibility = View.GONE
         btnLoadSample.visibility = View.GONE
+        stopCursorBlink()
         flowContainer.removeAllViews()
 
         runningFuture = queueExecutor.submit {
@@ -213,175 +214,147 @@ class PipelineRunnerActivity : AppCompatActivity() {
 
     private fun buildFlowDiagram(trace: PipelineTracer.PipelineTrace) {
         flowContainer.removeAllViews()
+        stopCursorBlink()
         if (trace.sourceExpr.isEmpty()) return
 
-        addNode(
-            icon = R.drawable.ic_node_source,
-            title = getString(R.string.pipeline_node_source),
-            subtitle = trace.sourceExpr,
+        addTerminalPrompt("run @container.pipe = ${trace.containerName}")
+
+        addTerminalStep(
+            prefix = "▸",
+            label = getString(R.string.pipeline_node_source),
+            detail = trace.sourceExpr,
             valueText = trace.sourceValueText,
             ok = true
         )
 
         for (stage in trace.stages) {
-            addArrow()
-            addNode(
-                icon = iconForStage(stage.label),
-                title = stage.label,
-                subtitle = stage.call,
+            addTerminalStep(
+                prefix = if (trace.success) "▸" else "✗",
+                label = stage.label,
+                detail = stage.call,
                 valueText = stage.valueText,
                 ok = trace.success
             )
         }
 
-        addArrow()
-        addNode(
-            icon = if (trace.success) R.drawable.ic_status_success else R.drawable.ic_status_error,
-            title = getString(R.string.pipeline_node_output),
-            subtitle = if (trace.success) "print • ${trace.totalDurationMs}ms" else "print",
+        addTerminalStep(
+            prefix = if (trace.success) "✓" else "✗",
+            label = getString(R.string.pipeline_node_output),
+            detail = if (trace.success) "print • ${trace.totalDurationMs}ms" else "print",
             valueText = if (trace.success) trace.finalValueText else "—",
-            ok = trace.success
+            ok = trace.success,
+            isFinal = true
         )
+
+        addTerminalCursor()
+        startCursorBlink()
     }
 
-    private fun iconForStage(name: String): Int {
-        val n = name.lowercase()
-        return when {
-            "aggregat" in n || "mean" in n || "sum" in n || "reduce" in n || "total" in n || "count" in n
-                || "median" in n || "variance" in n || "stddev" in n || "mode" in n -> R.drawable.ic_node_aggregate
-            "sort" in n -> R.drawable.ic_node_sort
-            "filter" in n -> R.drawable.ic_node_filter
-            else -> R.drawable.ic_node_transform
+    // ---- terminal-style line rendering (new RinFlow pipe presentation) ----
+
+    /** سطر أمر بأسلوب طرفية حقيقية: موجّه `$` سماوي ثم نص الأمر بلون فاتح محايد. */
+    private fun addTerminalPrompt(command: String) {
+        val dp = resources.displayMetrics.density
+        val line = TextView(this).apply {
+            typeface = Typeface.MONOSPACE
+            textSize = 12.5f
+            setPadding(0, 0, 0, (8 * dp).toInt())
         }
+        val sb = SpannableStringBuilder()
+        appendColored(sb, "$ ", R.color.pipeline_terminal_prompt, bold = true)
+        appendColored(sb, command, R.color.pipeline_terminal_text, bold = false)
+        line.text = sb
+        flowContainer.addView(line)
     }
 
     /**
-     * بطاقة عقدة RinFlow بأسلوب لوحات CI/CD الاحترافية: شريحة لون حالة على الحافة اليسرى،
-     * عنوان مع أيقونة، سطر الكود الفرعي، شريحة القيمة الفعلية، ثم سطر حالة سفلي
-     * (✓ Passed / ✕ Failed) — بدل الدائرة البسيطة المعزولة في التصميم القديم.
+     * خطوة أنبوب واحدة بأسلوب مخرجات طرفية: سطر رمز الحالة + اسم الخطوة + تفاصيلها،
+     * يتبعه سطر مُزاح للداخل بالقيمة الفعلية `⇒ ...` — بدل بطاقة CI/CD المعزولة سابقاً.
      */
-    private fun addNode(icon: Int, title: String, subtitle: String, valueText: String, ok: Boolean) {
+    private fun addTerminalStep(
+        prefix: String,
+        label: String,
+        detail: String,
+        valueText: String,
+        ok: Boolean,
+        isFinal: Boolean = false
+    ) {
         val dp = resources.displayMetrics.density
-        val accentColor = ContextCompat.getColor(this, if (ok) R.color.pipeline_green else R.color.pipeline_red)
+        val statusColor = if (ok) R.color.pipeline_terminal_green else R.color.pipeline_terminal_red
 
-        val card = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            background = ContextCompat.getDrawable(context, R.drawable.bg_pipeline_node_card)
-            elevation = 2 * dp
-            layoutParams = LinearLayout.LayoutParams((188 * dp).toInt(), LinearLayout.LayoutParams.WRAP_CONTENT).apply {
-                gravity = Gravity.CENTER_VERTICAL
-            }
-        }
-
-        val stripe = View(this).apply {
-            setBackgroundColor(accentColor)
-            layoutParams = LinearLayout.LayoutParams((4 * dp).toInt(), LinearLayout.LayoutParams.MATCH_PARENT)
-        }
-        card.addView(stripe)
-
-        val content = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding((10 * dp).toInt(), (10 * dp).toInt(), (10 * dp).toInt(), (10 * dp).toInt())
-            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
-        }
-
-        val titleRow = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-        }
-        val titleIcon = android.widget.ImageView(this).apply {
-            setImageResource(icon)
-            imageTintList = android.content.res.ColorStateList.valueOf(accentColor)
-            layoutParams = LinearLayout.LayoutParams((16 * dp).toInt(), (16 * dp).toInt()).apply {
-                marginEnd = (6 * dp).toInt()
-            }
-        }
-        titleRow.addView(titleIcon)
-        val titleView = TextView(this).apply {
-            text = title
-            textSize = 12.5f
-            setTypeface(typeface, Typeface.BOLD)
-            setTextColor(ContextCompat.getColor(context, R.color.pipeline_text_primary))
-            maxLines = 1
-            ellipsize = android.text.TextUtils.TruncateAt.END
-        }
-        titleRow.addView(titleView)
-        content.addView(titleRow)
-
-        if (subtitle.isNotBlank()) {
-            val subtitleView = TextView(this).apply {
-                text = subtitle
-                textSize = 10f
-                typeface = Typeface.MONOSPACE
-                setTextColor(ContextCompat.getColor(context, R.color.pipeline_text_muted))
-                maxLines = 2
-                ellipsize = android.text.TextUtils.TruncateAt.END
-                setPadding(0, (5 * dp).toInt(), 0, 0)
-            }
-            content.addView(subtitleView)
-        }
-
-        val valueChip = TextView(this).apply {
-            text = valueText.ifBlank { "…" }
-            textSize = 11f
+        val headerLine = TextView(this).apply {
             typeface = Typeface.MONOSPACE
-            setBackgroundResource(if (ok) R.drawable.bg_pipeline_value_chip else R.drawable.bg_pipeline_value_chip_error)
-            setTextColor(ContextCompat.getColor(context, if (ok) R.color.pipeline_green_light_text else R.color.pipeline_red_light_text))
-            setPadding((7 * dp).toInt(), (4 * dp).toInt(), (7 * dp).toInt(), (4 * dp).toInt())
-            maxLines = 2
-            ellipsize = android.text.TextUtils.TruncateAt.END
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-            ).apply { topMargin = (7 * dp).toInt() }
+            textSize = 12.5f
+            setPadding(0, (2 * dp).toInt(), 0, 0)
         }
-        content.addView(valueChip)
+        val hsb = SpannableStringBuilder()
+        appendColored(hsb, "  $prefix ", statusColor, bold = true)
+        appendColored(hsb, label, R.color.pipeline_terminal_cyan, bold = true)
+        if (detail.isNotBlank()) {
+            appendColored(hsb, "  $detail", R.color.pipeline_terminal_dim, bold = false)
+        }
+        headerLine.text = hsb
+        flowContainer.addView(headerLine)
 
-        val statusRow = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-            ).apply { topMargin = (8 * dp).toInt() }
-        }
-        val statusIcon = android.widget.ImageView(this).apply {
-            setImageResource(if (ok) R.drawable.ic_status_success else R.drawable.ic_status_error)
-            imageTintList = android.content.res.ColorStateList.valueOf(accentColor)
-            layoutParams = LinearLayout.LayoutParams((11 * dp).toInt(), (11 * dp).toInt()).apply {
-                marginEnd = (5 * dp).toInt()
+        if (valueText.isNotBlank()) {
+            val valueLine = TextView(this).apply {
+                typeface = Typeface.MONOSPACE
+                textSize = 12.5f
+                setPadding((30 * dp).toInt(), (1 * dp).toInt(), 0, (8 * dp).toInt())
+                ellipsize = android.text.TextUtils.TruncateAt.END
+                maxLines = 3
             }
+            val vsb = SpannableStringBuilder()
+            appendColored(vsb, "⇒ ", statusColor, bold = true)
+            appendColored(
+                vsb,
+                valueText,
+                if (isFinal) statusColor else R.color.pipeline_terminal_amber,
+                bold = isFinal
+            )
+            valueLine.text = vsb
+            flowContainer.addView(valueLine)
         }
-        statusRow.addView(statusIcon)
-        val statusText = TextView(this).apply {
-            text = getString(if (ok) R.string.pipeline_node_status_ok else R.string.pipeline_node_status_error)
-            textSize = 10.5f
-            setTypeface(typeface, Typeface.BOLD)
-            setTextColor(accentColor)
-        }
-        statusRow.addView(statusText)
-        content.addView(statusRow)
-
-        card.addView(content)
-        flowContainer.addView(card)
     }
 
-    /** سهم أفقي يصل بين بطاقتين متتاليتين في التدفق (بدل السهم الرأسي في التصميم القديم). */
-    private fun addArrow() {
+    /** مؤشر إدخال وامض في نهاية التتبّع، يعطي الشعور بطرفية حيّة بانتظار الأمر التالي. */
+    private fun addTerminalCursor() {
         val dp = resources.displayMetrics.density
-        val arrow = android.widget.ImageView(this).apply {
-            setImageResource(R.drawable.ic_pipeline_arrow_down)
-            rotation = -90f
-            layoutParams = LinearLayout.LayoutParams(
-                (20 * dp).toInt(),
-                (14 * dp).toInt()
-            ).apply {
-                gravity = Gravity.CENTER_VERTICAL
-                leftMargin = (6 * dp).toInt()
-                rightMargin = (6 * dp).toInt()
-            }
+        val line = TextView(this).apply {
+            typeface = Typeface.MONOSPACE
+            textSize = 12.5f
+            setPadding(0, (4 * dp).toInt(), 0, 0)
         }
-        flowContainer.addView(arrow)
+        val sb = SpannableStringBuilder()
+        appendColored(sb, "$ ", R.color.pipeline_terminal_prompt, bold = true)
+        appendColored(sb, "█", R.color.pipeline_terminal_cursor, bold = false)
+        line.text = sb
+        flowContainer.addView(line)
+        cursorLine = line
+    }
+
+    private fun appendColored(sb: SpannableStringBuilder, text: String, colorRes: Int, bold: Boolean) {
+        val start = sb.length
+        sb.append(text)
+        sb.setSpan(ForegroundColorSpan(ContextCompat.getColor(this, colorRes)), start, sb.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        if (bold) sb.setSpan(StyleSpan(Typeface.BOLD), start, sb.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+    }
+
+    private var cursorLine: TextView? = null
+    private val cursorBlinkRunnable = object : Runnable {
+        override fun run() {
+            cursorLine?.let { it.visibility = if (it.visibility == View.VISIBLE) View.INVISIBLE else View.VISIBLE }
+            mainHandler.postDelayed(this, 500)
+        }
+    }
+
+    private fun startCursorBlink() {
+        mainHandler.postDelayed(cursorBlinkRunnable, 500)
+    }
+
+    private fun stopCursorBlink() {
+        mainHandler.removeCallbacks(cursorBlinkRunnable)
+        cursorLine = null
     }
 
     // ---- misc ----
