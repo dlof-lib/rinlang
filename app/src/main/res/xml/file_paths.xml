@@ -3,4 +3,7 @@
      مطلوب لفتح الملف المنزَّل (ACTION_VIEW) على أندرويد 9 وأقدم بدون FileUriExposedException. -->
 <paths xmlns:android="http://schemas.android.com/apk/res/android">
     <external-path name="downloads" path="Download/" />
+    <!-- ملفات المشاريع (filesDir/projects/...): مطلوب لفتح ملف ثنائي مرفوع (pdf/صوت/أرشيف...)
+         بتطبيق خارجي (ACTION_VIEW) من شاشة "الملفات" ([FilesActivity]). -->
+    <files-path name="projects" path="projects/" />
 </paths>
