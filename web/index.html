@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<!--
+  هذا الملف هو "محمّل" (bootloader) عام فقط — لا يحتوي على أي محتوى خاص بصفحة
+  Rin نفسها (لا عنوان، لا أقسام، لا تنسيق للموقع). دوره الوحيد والعام: تحميل
+  محرّك Rin الرسمي المُصرَّف إلى WebAssembly، ثم جلب site.rin كنص خام وتنفيذه
+  فعلياً بهذا المحرّك داخل المتصفح، ثم عرض الناتج.
+
+  المصدر الحقيقي للصفحة بالكامل هو site.rin. هذا الملف يعادل وظيفياً ما يفعله
+  نظام تشغيل عند تشغيل ملف تنفيذي: بنية عامة لازمة تقنياً (المتصفح لا يفهم
+  إلا HTML/JS/WASM)، لكنها لا "تكتب" أي جزء من الصفحة نفسها.
+-->
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Rin</title>
+<style>
+  html,body{margin:0;height:100%;background:#0a0a10;color:#eceef7;
+    font-family:system-ui,sans-serif;display:flex;align-items:center;justify-content:center}
+  #boot{text-align:center;opacity:.85}
+  #boot .dot{width:10px;height:10px;border-radius:50%;background:#7c5cff;
+    display:inline-block;margin:0 3px;animation:p 1s infinite ease-in-out}
+  #boot .dot:nth-child(2){animation-delay:.15s}
+  #boot .dot:nth-child(3){animation-delay:.3s}
+  @keyframes p{0%,80%,100%{opacity:.25}40%{opacity:1}}
+  #boot p{margin-top:14px;font-size:13px;color:#9a9ab0;direction:ltr;font-family:monospace}
+  #bootErr{white-space:pre-wrap;text-align:left;direction:ltr;font-family:monospace;
+    font-size:13px;color:#ff8a8a;max-width:720px;margin:16px auto 0;display:none}
+</style>
+</head>
+<body>
+  <div id="boot">
+    <div><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
+    <p id="bootMsg">loading rin engine (wasm)…</p>
+    <pre id="bootErr"></pre>
+  </div>
+
+  <script src="rin.js"></script>
+  <script>
+  (async function boot() {
+    const msg = document.getElementById('bootMsg');
+    const errBox = document.getElementById('bootErr');
+
+    function fail(title, detail) {
+      msg.textContent = title;
+      errBox.textContent = detail || '';
+      errBox.style.display = 'block';
+    }
+
+    try {
+      // rin.js (المُولَّد بـ MODULARIZE=1, EXPORT_NAME=RinModule) يوفّر دالة
+      // مصنع (factory) عامة اسمها RinModule تُعيد Promise لنسخة المحرّك.
+      if (typeof RinModule !== 'function') {
+        throw new Error('rin.js لم يُحمَّل بشكل صحيح (تأكد أن rin.js و rin.wasm منشورَين بجانب هذا الملف).');
+      }
+      const Module = await RinModule();
+
+      msg.textContent = 'fetching site.rin…';
+      const res = await fetch('site.rin', { cache: 'no-store' });
+      if (!res.ok) throw new Error('تعذّر جلب site.rin (HTTP ' + res.status + ')');
+      const source = await res.text();
+
+      msg.textContent = 'executing site.rin via the official rin engine…';
+      const runResult = Module.ccall('rin_run_source', 'string', ['string'], [source]);
+
+      if (typeof runResult === 'string' && runResult.startsWith('__RIN_ERROR__:')) {
+        const rest = runResult.slice('__RIN_ERROR__:'.length);
+        const sep = rest.indexOf(':');
+        const line = sep === -1 ? '?' : rest.slice(0, sep);
+        const message = sep === -1 ? rest : rest.slice(sep + 1);
+        throw new Error('Rin runtime error at line ' + line + ': ' + message);
+      }
+
+      // site.rin يكتب الصفحة فعلياً عبر writeFile("dist/index.html", ...) —
+      // هذا هو المسار الوحيد لإخراج HTML؛ نقرأه هنا من نظام ملفات WASM الوهمي.
+      let html;
+      try {
+        html = Module.FS.readFile('dist/index.html', { encoding: 'utf8' });
+      } catch (e) {
+        throw new Error('نُفِّذ site.rin بنجاح لكن لم يُنتج dist/index.html — تأكد أن الملف ينتهي بـ writeFile("dist/index.html", ...).');
+      }
+
+      document.open();
+      document.write(html);
+      document.close();
+    } catch (e) {
+      console.error(e);
+      fail('تعذّر تشغيل site.rin في المتصفح:', String(e && e.message ? e.message : e));
+    }
+  })();
+  </script>
+</body>
+</html>
