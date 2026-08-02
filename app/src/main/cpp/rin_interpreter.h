@@ -67,6 +67,15 @@ struct ApiRoute {
     Value body;
 };
 
+// نقطة API حقيقية وفعلية (تختلف تماماً عن ApiRoute أعلاه، والتي تبقى صالحة كما هي لأجل
+// المحاكاة/الاختبار بلا شبكة عبر route/call): يُسجِّلها المبرمج بنفسه عبر apiRegister(name, baseUrl)
+// ويمكنه إضافة ترويساتها الخاصة (مفتاح API، Authorization...) عبر apiHeader(name, key, value)، ثم
+// استدعاؤها فعلياً بطلب شبكة حقيقي عبر apiGet/apiPost/apiPut/apiPatch/apiDelete/apiCall.
+struct ApiEndpoint {
+    std::string baseUrl;
+    std::vector<std::pair<std::string, std::string>> headers; // بترتيب التسجيل؛ نفس المفتاح المُعاد تسجيله يُحدَّث مكانه
+};
+
 struct Environment : std::enable_shared_from_this<Environment> {
     std::unordered_map<std::string, Value> values;
     EnvPtr parent;
@@ -154,6 +163,8 @@ private:
     std::vector<std::string> containerStack;                 // مفتاح الحاوية الحالية (لأجل link/tying/merge/save/route/call)
     std::string currentFilePath;                              // آخر مسار مُعرَّف عبر file
     std::unordered_map<std::string, std::vector<ApiRoute>> apiRoutes; // مفتاح container.api -> نقاطها المسجَّلة عبر route
+    std::unordered_map<std::string, ApiEndpoint> apiEndpoints; // اسم -> نقطة API حقيقية مسجَّلة عبر apiRegister/apiHeader
+    int defaultHttpTimeoutMs = 15000; // مهلة افتراضية لكل طلب HTTP حقيقي (قابلة للتعديل عبر httpSetTimeout)
     std::unordered_set<std::string> importedPaths;            // مسارات @import المُنفَّذة فعلاً في هذا التشغيل (لمنع الاستيراد المكرَّر)
     std::unordered_map<std::string, std::string> linkIdToContainer; // معرّف الربط العام (container.link.id) -> اسم الحاوية المسجَّلة به
 
@@ -186,6 +197,11 @@ private:
     void appendInstalledIndex(const std::string& name, const std::string& relPath, bool simplified) const;
 
     Value performApiCall(const std::string& containerKey, const std::string& method, const std::string& path, int line);
+
+    // API حقيقية مسجَّلة عبر apiRegister/apiHeader: يبني baseUrl+path مع ترويسات النقطة، يُجري طلب
+    // شبكة حقيقياً فعلياً (rin_http.h)، ويُعيد Value(map) بنتيجته (انظر httpResultToValue في .cpp).
+    Value performRealApiCall(const std::string& endpointName, const std::string& method,
+                              const std::string& path, const Value& bodyValue, int line);
 
     // المكتبة القياسية (stdlib): دوال رياضية، معالجة نصوص، مصفوفات وقواميس.
     using NativeFn = std::function<Value(std::vector<Value>&, int)>;
