@@ -421,6 +421,7 @@ class MainActivity : AppCompatActivity() {
         // استدعاؤه هنا أيضاً كان سيعيد التشغيل مرتين بلا داعٍ.
         val intent = android.content.Intent(this, LoomPreviewActivity::class.java)
         intent.putExtra(LoomPreviewActivity.EXTRA_CODE, source)
+        intent.putExtra(LoomPreviewActivity.EXTRA_FILE_NAME, currentProjectFile?.name ?: "main.rin")
         intent.addFlags(android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP)
         startActivity(intent)
     }
