@@ -2,6 +2,8 @@
 #include "rin_lexer.h"
 #include "rin_parser.h"
 #include "rin_stdlib_libs.h"
+#include "rin_http.h"
+#include "rin_json.h"
 #include <cmath>
 #include <sstream>
 #include <fstream>
@@ -33,6 +35,14 @@
 #endif
 
 namespace rin {
+
+// تصريحات أمامية (forward declarations): تُستخدَم هذه الدوال داخل registerNatives() أدناه
+// (natives["httpRequest"]... إلخ) قبل تعريفها الفعلي في نهاية الملف (قسم "أدوات HTTP الحقيقي")،
+// وبلا هذه التصريحات لن يُبنى الملف (استخدام قبل التعريف). عرّفها هنا فقط، اترك التعريف الفعلي
+// في مكانه الأصلي بالأسفل.
+static http::HeaderList headersFromValue(const Value& v, const std::string& fn, int line);
+static std::string bodyToString(const Value& v, http::HeaderList& headers);
+static Value httpResultToValue(const http::HttpResult& r);
 
 // تمثيل "متداخل" لقيمة (يُستخدم داخل عناصر المصفوفات/القواميس عند الطباعة): النصوص توضع بين علامتي تنصيص.
 static std::string reprValue(const Value& v) {
@@ -896,6 +906,129 @@ void Interpreter::registerNatives() {
         std::string method = asString(a[1], "callApi", line);
         std::string path = asString(a[2], "callApi", line);
         return performApiCall(key, method, path, line);
+    };
+
+    // ================= HTTP حقيقي وفعلي (اتصال شبكة حقيقي) =================
+    // على عكس container.api/route/call أعلاه (محاكاة صرفة بلا شبكة، جيدة للاختبار)، كل ما يلي
+    // يُجري طلب شبكة حقيقياً فعلياً: على أندرويد عبر java.net.HttpURLConnection حقيقي (انظر
+    // RinHttpBridge.kt + jni_bridge.cpp)، وعلى أدوات سطر الأوامر عبر curl حقيقي (rin_http.cpp).
+    natives["httpSetTimeout"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("httpSetTimeout", a, 1, line);
+        defaultHttpTimeoutMs = (int)asNumber(a[0], "httpSetTimeout", line);
+        return Value::nil();
+    };
+    natives["jsonEncode"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("jsonEncode", a, 1, line);
+        return Value::string(json::encode(a[0]));
+    };
+    natives["jsonDecode"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("jsonDecode", a, 1, line);
+        return json::decodeOrRaw(asString(a[0], "jsonDecode", line));
+    };
+
+    natives["httpRequest"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("httpRequest", a, 4, line);
+        std::string method = asString(a[0], "httpRequest", line);
+        std::string url = asString(a[1], "httpRequest", line);
+        auto headers = headersFromValue(a[2], "httpRequest", line);
+        std::string body = bodyToString(a[3], headers);
+        auto result = http::performRequest(method, url, headers, body, defaultHttpTimeoutMs);
+        return httpResultToValue(result);
+    };
+    natives["httpGet"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("httpGet", a, 1, line);
+        std::string url = asString(a[0], "httpGet", line);
+        auto result = http::performRequest("GET", url, {}, "", defaultHttpTimeoutMs);
+        return httpResultToValue(result);
+    };
+    natives["httpPost"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("httpPost", a, 2, line);
+        std::string url = asString(a[0], "httpPost", line);
+        http::HeaderList headers;
+        std::string body = bodyToString(a[1], headers);
+        auto result = http::performRequest("POST", url, headers, body, defaultHttpTimeoutMs);
+        return httpResultToValue(result);
+    };
+    natives["httpPut"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("httpPut", a, 2, line);
+        std::string url = asString(a[0], "httpPut", line);
+        http::HeaderList headers;
+        std::string body = bodyToString(a[1], headers);
+        auto result = http::performRequest("PUT", url, headers, body, defaultHttpTimeoutMs);
+        return httpResultToValue(result);
+    };
+    natives["httpPatch"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("httpPatch", a, 2, line);
+        std::string url = asString(a[0], "httpPatch", line);
+        http::HeaderList headers;
+        std::string body = bodyToString(a[1], headers);
+        auto result = http::performRequest("PATCH", url, headers, body, defaultHttpTimeoutMs);
+        return httpResultToValue(result);
+    };
+    natives["httpDelete"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("httpDelete", a, 1, line);
+        std::string url = asString(a[0], "httpDelete", line);
+        auto result = http::performRequest("DELETE", url, {}, "", defaultHttpTimeoutMs);
+        return httpResultToValue(result);
+    };
+
+    // ---- apiRegister/apiHeader: يسجّل المبرمج API خاصته الحقيقي (اسم + baseUrl + ترويساته
+    // الخاصة كمفتاح API/Authorization)، ثم يستدعيه لاحقاً باسمه من أي مكان في البرنامج ----
+    natives["apiRegister"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("apiRegister", a, 2, line);
+        std::string name = asString(a[0], "apiRegister", line);
+        std::string baseUrl = asString(a[1], "apiRegister", line);
+        apiEndpoints[name].baseUrl = baseUrl; // يحافظ على أي ترويسات مسجَّلة له مسبقاً إن أُعيد التسجيل
+        return Value::boolean_(true);
+    };
+    natives["apiHeader"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("apiHeader", a, 3, line);
+        std::string name = asString(a[0], "apiHeader", line);
+        std::string key = asString(a[1], "apiHeader", line);
+        std::string value = asString(a[2], "apiHeader", line);
+        auto it = apiEndpoints.find(name);
+        if (it == apiEndpoints.end()) throw RinError("apiHeader: لا وجود لـ API باسم '" + name + "' — سجِّله أولاً عبر apiRegister(name, baseUrl)", line);
+        auto& hs = it->second.headers;
+        for (auto& kv : hs) if (kv.first == key) { kv.second = value; return Value::boolean_(true); }
+        hs.push_back({key, value});
+        return Value::boolean_(true);
+    };
+    natives["apiCall"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("apiCall", a, 4, line);
+        std::string name = asString(a[0], "apiCall", line);
+        std::string method = asString(a[1], "apiCall", line);
+        std::string path = asString(a[2], "apiCall", line);
+        return performRealApiCall(name, method, path, a[3], line);
+    };
+    natives["apiGet"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("apiGet", a, 2, line);
+        std::string name = asString(a[0], "apiGet", line);
+        std::string path = asString(a[1], "apiGet", line);
+        return performRealApiCall(name, "GET", path, Value::nil(), line);
+    };
+    natives["apiPost"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("apiPost", a, 3, line);
+        std::string name = asString(a[0], "apiPost", line);
+        std::string path = asString(a[1], "apiPost", line);
+        return performRealApiCall(name, "POST", path, a[2], line);
+    };
+    natives["apiPut"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("apiPut", a, 3, line);
+        std::string name = asString(a[0], "apiPut", line);
+        std::string path = asString(a[1], "apiPut", line);
+        return performRealApiCall(name, "PUT", path, a[2], line);
+    };
+    natives["apiPatch"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("apiPatch", a, 3, line);
+        std::string name = asString(a[0], "apiPatch", line);
+        std::string path = asString(a[1], "apiPatch", line);
+        return performRealApiCall(name, "PATCH", path, a[2], line);
+    };
+    natives["apiDelete"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("apiDelete", a, 2, line);
+        std::string name = asString(a[0], "apiDelete", line);
+        std::string path = asString(a[1], "apiDelete", line);
+        return performRealApiCall(name, "DELETE", path, Value::nil(), line);
     };
 
     // ---- مصفوفات وقواميس (arrays & maps) ----
@@ -2665,6 +2798,65 @@ Value Interpreter::performApiCall(const std::string& containerKey, const std::st
                         Value::string("لا يوجد route مطابق لـ " + wantMethod + " " + path +
                                       " داخل container.api = " + containerKey)});
     return Value::makeMap(result);
+}
+
+// ================= أدوات HTTP الحقيقي: تحويل Value <-> نوع الشبكة الفعلي =================
+
+// map (نص -> نص) قادم من كود Rin -> قائمة ترويسات HTTP حقيقية. nil = بلا ترويسات إضافية.
+static http::HeaderList headersFromValue(const Value& v, const std::string& fn, int line) {
+    http::HeaderList out;
+    if (v.type == Value::Type::NIL) return out;
+    if (v.type != Value::Type::MAP) throw RinError("'" + fn + "' يتوقّع الترويسات كقاموس {مفتاح: قيمة} أو nil", line);
+    for (auto& kv : *v.map) out.push_back({kv.first.toDisplayString(), kv.second.toDisplayString()});
+    return out;
+}
+
+// جسم الطلب: نص يُرسَل كما هو حرفياً؛ أي نوع آخر (map/array/رقم/bool) يُرمَّز تلقائياً JSON حقيقياً
+// (ergonomics: apiPost(name, path, { title: "x" }) يعمل مباشرة بلا jsonEncode يدوي)، ويُضاف
+// Content-Type: application/json تلقائياً حين لا توجد ترويسة Content-Type مذكورة أصلاً.
+static std::string bodyToString(const Value& v, http::HeaderList& headers) {
+    if (v.type == Value::Type::NIL) return "";
+    if (v.type == Value::Type::STRING) return v.str;
+    bool hasContentType = false;
+    for (auto& h : headers) if (toUpperAscii(h.first) == "CONTENT-TYPE") { hasContentType = true; break; }
+    if (!hasContentType) headers.push_back({"Content-Type", "application/json"});
+    return json::encode(v);
+}
+
+// رد HTTP حقيقي (rin_http.h) -> Value(map) يستهلكه برنامج Rin مباشرة:
+// { ok, status, body (نص خام), json (مُحلَّل تلقائياً إن كان JSON صالحاً، وإلا نفس body)، error }
+static Value httpResultToValue(const http::HttpResult& r) {
+    auto m = std::make_shared<MapData>();
+    m->push_back({Value::string("ok"), Value::boolean_(r.ok)});
+    m->push_back({Value::string("status"), Value::num((double)r.status)});
+    m->push_back({Value::string("body"), Value::string(r.body)});
+    m->push_back({Value::string("json"), json::decodeOrRaw(r.body)});
+    m->push_back({Value::string("error"), Value::string(r.error)});
+    return Value::makeMap(m);
+}
+
+// يستدعي API حقيقياً مسجَّلاً بالاسم [endpointName] (عبر apiRegister/apiHeader): يبني الرابط
+// الكامل (baseUrl + path)، يدمج ترويسات النقطة المسجَّلة (مفتاح API الخاص بالمبرمج ضمنها)، ويُجري
+// طلب شبكة حقيقياً فعلياً. يرمي RinError واضحاً إن لم يُسجَّل API بهذا الاسم أصلاً.
+Value Interpreter::performRealApiCall(const std::string& endpointName, const std::string& method,
+                                       const std::string& path, const Value& bodyValue, int line) {
+    auto it = apiEndpoints.find(endpointName);
+    if (it == apiEndpoints.end()) {
+        throw RinError("لا يوجد API حقيقي مسجَّل باسم '" + endpointName +
+                        "' — سجِّله أولاً: apiRegister(\"" + endpointName + "\", \"https://...\");", line);
+    }
+    std::string url = it->second.baseUrl;
+    if (!path.empty()) {
+        bool baseEndsSlash = !url.empty() && url.back() == '/';
+        bool pathStartsSlash = !path.empty() && path.front() == '/';
+        if (baseEndsSlash && pathStartsSlash) url += path.substr(1);
+        else if (!baseEndsSlash && !pathStartsSlash) url += "/" + path;
+        else url += path;
+    }
+    http::HeaderList headers = it->second.headers; // نسخة: bodyToString قد تضيف Content-Type محلياً فقط لهذا الطلب
+    std::string body = bodyToString(bodyValue, headers);
+    auto result = http::performRequest(toUpperAscii(method), url, headers, body, defaultHttpTimeoutMs);
+    return httpResultToValue(result);
 }
 
 } // namespace rin
