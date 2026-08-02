@@ -96,6 +96,18 @@
                 app:srcCompat="@android:drawable/ic_menu_upload" />
 
             <com.google.android.material.floatingactionbutton.FloatingActionButton
+                android:id="@+id/fabNewFolder"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="12dp"
+                android:contentDescription="@string/new_folder_title"
+                app:backgroundTint="@color/rin_toolbar_bottom"
+                app:tint="@android:color/white"
+                app:rippleColor="@color/rin_ghost_ripple"
+                app:fabSize="mini"
+                app:srcCompat="@drawable/ic_rin_folder" />
+
+            <com.google.android.material.floatingactionbutton.FloatingActionButton
                 android:id="@+id/fabAddFile"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
