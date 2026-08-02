@@ -103,22 +103,116 @@ object ProjectManager {
      * ملفات .rin كما كان الحال دائماً، بالإضافة إلى أي ملف آخر (صور/فيديو/صوت/خطوط/ملفات لغات
      * برمجة أخرى...) رُفع عبر "رفع ملف" أو "رفع وسائط".
      */
-    fun listFiles(project: Project): List<RinFile> {
-        return (project.dir.listFiles { f -> f.isFile } ?: emptyArray())
-            .map { RinFile(it.name, it, it.length(), it.lastModified()) }
+    fun listFiles(project: Project): List<RinFile> = listEntries(project, "").second
+
+    /** حل مجلد نسبي [relDir] (فواصل "/"، فارغ = جذر المشروع) إلى [File] فعلي داخل مجلد المشروع. */
+    fun resolveDir(project: Project, relDir: String): File {
+        if (relDir.isBlank()) return project.dir
+        var dir = project.dir
+        for (segment in relDir.split('/').filter { it.isNotBlank() }) dir = File(dir, segment)
+        return dir
+    }
+
+    /**
+     * المجلدات والملفات الموجودة مباشرة (مستوى واحد فقط) داخل [relDir] (فارغ = جذر المشروع)،
+     * لدعم التصفّح داخل مجلدات فرعية تُنشأ يدوياً أو عبر "/" في اسم ملف جديد أو فك أرشيف ZIP.
+     */
+    fun listEntries(project: Project, relDir: String): Pair<List<RinFolder>, List<RinFile>> {
+        val dir = resolveDir(project, relDir)
+        val prefix = if (relDir.isBlank()) "" else "${relDir.trim('/')}/"
+        val children = dir.listFiles() ?: emptyArray()
+        val folders = children.filter { it.isDirectory }
+            .map { RinFolder(it.name, "$prefix${it.name}", it, it.lastModified()) }
             .sortedByDescending { it.lastModified }
+        val files = children.filter { it.isFile }
+            .map { RinFile(it.name, it, it.length(), it.lastModified(), "$prefix${it.name}") }
+            .sortedByDescending { it.lastModified }
+        return folders to files
     }
 
     fun readFile(rinFile: RinFile): String = rinFile.file.readText()
 
-    fun writeFile(project: Project, fileName: String, content: String): RinFile {
-        val safeName = ensureRinExtension(fileName)
-        val target = File(project.dir, safeName)
+    /**
+     * ينشئ ملفاً جديداً داخل [relDir] (فارغ = جذر المشروع). يقبل [fileName] بفواصل "/" لإنشاء
+     * مجلدات فرعية تلقائياً قبل الملف (مثل "ui/screens/home.rin")، تماماً كما لو ضُغط زر
+     * "مجلد جديد" لكل مستوى ثم أُنشئ الملف بداخله.
+     */
+    fun writeFile(project: Project, relDir: String, fileName: String, content: String): RinFile {
+        val segments = fileName.trim().split('/').filter { it.isNotBlank() }
+        require(segments.isNotEmpty()) { "اسم الملف غير صالح" }
+        var dir = resolveDir(project, relDir)
+        for (segment in segments.dropLast(1)) {
+            dir = File(dir, segment)
+            dir.mkdirs()
+        }
+        val safeName = ensureRinExtension(segments.last())
+        val target = File(dir, safeName)
         target.writeText(content)
-        return RinFile(safeName, target, target.length(), target.lastModified())
+        val prefix = if (relDir.isBlank()) "" else "${relDir.trim('/')}/"
+        val subDirPrefix = segments.dropLast(1).joinToString("") { "$it/" }
+        return RinFile(safeName, target, target.length(), target.lastModified(), "$prefix$subDirPrefix$safeName")
     }
 
+    /** إبقاءً على التوافق مع أي استدعاء قديم بلا [relDir] (يُنشئ الملف في جذر المشروع مباشرة). */
+    fun writeFile(project: Project, fileName: String, content: String): RinFile =
+        writeFile(project, "", fileName, content)
+
     fun deleteFile(rinFile: RinFile): Boolean = rinFile.file.delete()
+
+    /** اسم مجلد/ملف صالح لمقطع مسار واحد: حروف/أرقام/شرطة/شرطة سفلية/عربي فقط. */
+    fun isValidPathSegment(name: String): Boolean {
+        val trimmed = name.trim()
+        return trimmed.isNotEmpty() && trimmed.matches(Regex("^[A-Za-z0-9_\\-.\\u0600-\\u06FF ]{1,64}$"))
+    }
+
+    /** ينشئ مجلداً فرعياً جديداً داخل [relDir] (فارغ = جذر المشروع). */
+    fun createFolder(project: Project, relDir: String, name: String): RinFolder {
+        val trimmed = name.trim()
+        require(isValidPathSegment(trimmed)) { "اسم المجلد غير صالح" }
+        val parent = resolveDir(project, relDir)
+        val target = File(parent, trimmed)
+        require(!target.exists()) { "يوجد ملف أو مجلد بهذا الاسم بالفعل" }
+        target.mkdirs()
+        val prefix = if (relDir.isBlank()) "" else "${relDir.trim('/')}/"
+        return RinFolder(trimmed, "$prefix$trimmed", target, target.lastModified())
+    }
+
+    fun deleteFolder(folder: RinFolder): Boolean = folder.dir.deleteRecursively()
+
+    /**
+     * يعيد تسمية ملف داخل مجلده الحالي (لا ينقله بين مجلدات). إن كتب المستخدم اسماً بلا امتداد
+     * (مثل "notes" بدل "notes.rin")، يُبقي على الامتداد الأصلي للملف تلقائياً.
+     */
+    fun renameFile(project: Project, rinFile: RinFile, newName: String): RinFile {
+        val trimmed = newName.trim()
+        require(isValidPathSegment(trimmed)) { "اسم الملف غير صالح" }
+        val finalName = if ('.' in trimmed) trimmed else {
+            val dot = rinFile.name.lastIndexOf('.')
+            if (dot > 0) "$trimmed${rinFile.name.substring(dot)}" else trimmed
+        }
+        val parentDir = rinFile.file.parentFile ?: project.dir
+        val target = File(parentDir, finalName)
+        require(!target.exists()) { "يوجد ملف بهذا الاسم بالفعل" }
+        val ok = rinFile.file.renameTo(target)
+        require(ok) { "تعذّر إعادة تسمية الملف" }
+        val parentRelPath = rinFile.relPath.substringBeforeLast('/', "")
+        val newRelPath = if (parentRelPath.isEmpty()) finalName else "$parentRelPath/$finalName"
+        return RinFile(finalName, target, target.length(), target.lastModified(), newRelPath)
+    }
+
+    /** يعيد تسمية مجلد فرعي داخل مكانه الحالي (لا ينقله). */
+    fun renameFolder(folder: RinFolder, newName: String): RinFolder {
+        val trimmed = newName.trim()
+        require(isValidPathSegment(trimmed)) { "اسم المجلد غير صالح" }
+        val parentDir = folder.dir.parentFile ?: return folder
+        val target = File(parentDir, trimmed)
+        require(!target.exists()) { "يوجد ملف أو مجلد بهذا الاسم بالفعل" }
+        val ok = folder.dir.renameTo(target)
+        require(ok) { "تعذّر إعادة تسمية المجلد" }
+        val parentRelPath = folder.relPath.substringBeforeLast('/', "")
+        val newRelPath = if (parentRelPath.isEmpty()) trimmed else "$parentRelPath/$trimmed"
+        return RinFolder(trimmed, newRelPath, target, target.lastModified())
+    }
 
     private fun ensureRinExtension(name: String): String {
         val trimmed = name.trim()
@@ -225,6 +319,18 @@ object ProjectManager {
     }
 
     fun deleteLibrary(library: RinLibrary): Boolean = library.file.delete()
+
+    /** يعيد تسمية مكتبة lib/ *.og.rin، مع فرض امتداد .og.rin دوماً على الاسم الجديد. */
+    fun renameLibrary(project: Project, library: RinLibrary, newName: String): RinLibrary {
+        val trimmed = newName.trim().removeSuffix(LIB_EXTENSION)
+        require(isValidLibraryName(trimmed)) { "اسم المكتبة غير صالح (حروف/أرقام/شرطة فقط)" }
+        val safeName = ensureLibExtension(trimmed)
+        val target = File(libDir(project), safeName)
+        require(!target.exists()) { "توجد مكتبة بهذا الاسم بالفعل" }
+        val ok = library.file.renameTo(target)
+        require(ok) { "تعذّر إعادة تسمية المكتبة" }
+        return RinLibrary(safeName, target, target.length(), target.lastModified())
+    }
 
     private fun ensureLibExtension(name: String): String =
         if (name.endsWith(LIB_EXTENSION)) name else "$name$LIB_EXTENSION"
