@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- شاشة "الملفات" الخاصة بمشروع واحد: شريط علوي موحّد (يعرض اسم المشروع) + قائمة ملفات .rin
-     على شكل بطاقات + زرّي "ملف جديد" و"رفع ملف" -->
+<!-- شاشة "الملفات" الخاصة بمشروع واحد: شريط علوي موحّد (يعرض اسم المشروع) + قائمة ملفات المشروع
+     (بما فيها الوسائط والملفات غير .rin) على شكل بطاقات + أزرار "ملف جديد" و"رفع ملف" و"رفع وسائط" -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
@@ -70,6 +70,18 @@
                 app:rippleColor="@color/rin_ghost_ripple"
                 app:fabSize="mini"
                 app:srcCompat="@drawable/ic_log_archive" />
+
+            <com.google.android.material.floatingactionbutton.FloatingActionButton
+                android:id="@+id/fabUploadMedia"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="12dp"
+                android:contentDescription="@string/upload_media"
+                app:backgroundTint="@color/rin_toolbar_bottom"
+                app:tint="@android:color/white"
+                app:rippleColor="@color/rin_ghost_ripple"
+                app:fabSize="mini"
+                app:srcCompat="@drawable/ic_camera" />
 
             <com.google.android.material.floatingactionbutton.FloatingActionButton
                 android:id="@+id/fabUploadFile"
