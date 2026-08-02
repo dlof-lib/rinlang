@@ -29,10 +29,12 @@ class LoomPreviewActivity : AppCompatActivity(), LoomPreviewManager.Listener {
         /** Rin source to render — a fresh "Run" always restarts the session with this. */
         const val EXTRA_CODE = "loom_preview_code"
         private val DEVICE_WIDTHS = listOf(360, 390, 414, 428, 768)
+        /** القيمة الافتراضية قبل أن نقيس عرض سطح المعاينة الفعلي على الشاشة (أول تخطيط فقط). */
         private const val DEFAULT_DEVICE_WIDTH = 390
     }
 
     private lateinit var fabricView: LoomFabricView
+    private lateinit var previewSurface: View
     private lateinit var errorBanner: View
     private lateinit var txtError: TextView
     private lateinit var inspectorPanel: View
@@ -53,6 +55,7 @@ class LoomPreviewActivity : AppCompatActivity(), LoomPreviewManager.Listener {
         // المشترك في العملية؛ استدعاء init مجدداً هنا قد يعيده خطأً إلى الجذر العام في منتصف الجلسة.
 
         fabricView = findViewById(R.id.loomFabricView)
+        previewSurface = findViewById(R.id.loomHScroll)
         errorBanner = findViewById(R.id.loomErrorBanner)
         txtError = findViewById(R.id.txtLoomError)
         inspectorPanel = findViewById(R.id.loomInspectorPanel)
@@ -102,9 +105,28 @@ class LoomPreviewActivity : AppCompatActivity(), LoomPreviewManager.Listener {
         if (savedInstanceState == null) {
             val incomingCode = intent.getStringExtra(EXTRA_CODE)
             if (incomingCode != null) {
-                LoomPreviewManager.start(incomingCode, currentDeviceWidth)
+                if (LoomPreviewManager.isRunning) {
+                    LoomPreviewManager.start(incomingCode, currentDeviceWidth)
+                } else {
+                    // جلسة جديدة تماماً: ننتظر أول تخطيط لسطح المعاينة لنقيس عرضه الفعلي على
+                    // الشاشة (بالـ dp) ونبدأ الجلسة بهذا العرض، بدل عرض جهاز افتراضي ثابت (390) قد
+                    // يترك فراغاً على الجانبين أو يفيض عن الشاشة — فتملأ المعاينة العرض كاملاً فعلياً.
+                    previewSurface.post {
+                        currentDeviceWidth = fitDeviceWidth()
+                        btnDevice.text = getString(R.string.loom_device_width_format, currentDeviceWidth)
+                        LoomPreviewManager.start(incomingCode, currentDeviceWidth)
+                    }
+                }
             }
         }
+    }
+
+    /** يحوّل عرض سطح المعاينة الحالي (بكسل فعلي) إلى dp — هذا هو "عرض الجهاز" الذي يملأ الشاشة تماماً. */
+    private fun fitDeviceWidth(): Int {
+        val widthPx = previewSurface.width
+        if (widthPx <= 0) return DEFAULT_DEVICE_WIDTH
+        val density = resources.displayMetrics.density
+        return (widthPx / density).toInt().coerceAtLeast(200)
     }
 
     /** يُستدعى عند ضغط "تشغيل" مجدداً من المحرر بينما هذه الشاشة (singleTask) ما تزال في المهمّة. */
@@ -124,17 +146,6 @@ class LoomPreviewActivity : AppCompatActivity(), LoomPreviewManager.Listener {
 
     override fun onFabricUpdated(resultJson: String, elapsedMs: Long) {
         renderResult(resultJson, elapsedMs)
-    }
-
-    /** A tap/edit is taking long enough to be worth a loading badge — see [LoomPreviewManager]. */
-    override fun onBusyChanged(busy: Boolean) {
-        fabricView.isBusy = busy
-        if (!busy) fabricView.isWaitingOnNetwork = false
-    }
-
-    /** The current op has run long enough to almost certainly be a real network call. */
-    override fun onSlowOperation() {
-        fabricView.isWaitingOnNetwork = true
     }
 
     // ---- rendering the engine's result JSON ----
@@ -239,11 +250,12 @@ class LoomPreviewActivity : AppCompatActivity(), LoomPreviewManager.Listener {
     private fun showDeviceMenu(anchor: View) {
         val themedContext = ContextThemeWrapper(this, MaterialR.style.ThemeOverlay_MaterialComponents_Dark)
         val popup = PopupMenu(themedContext, anchor)
+        popup.menu.add(0, -1, 0, getString(R.string.loom_device_fit_screen))
         DEVICE_WIDTHS.forEachIndexed { index, width ->
-            popup.menu.add(0, index, index, getString(R.string.loom_device_width_format, width))
+            popup.menu.add(0, index, index + 1, getString(R.string.loom_device_width_format, width))
         }
         popup.setOnMenuItemClickListener { item ->
-            val width = DEVICE_WIDTHS.getOrNull(item.itemId)
+            val width = if (item.itemId == -1) fitDeviceWidth() else DEVICE_WIDTHS.getOrNull(item.itemId)
             if (width != null && width != currentDeviceWidth) {
                 currentDeviceWidth = width
                 btnDevice.text = getString(R.string.loom_device_width_format, width)
