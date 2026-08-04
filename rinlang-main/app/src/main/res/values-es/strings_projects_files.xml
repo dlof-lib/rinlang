@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Botones comunes usados por los diálogos de proyectos/archivos -->
+    <string name="create">Crear</string>
+    <string name="cancel">Cancelar</string>
+    <string name="rename">Renombrar</string>
+    <string name="delete">Eliminar</string>
+
+    <!-- Barra superior unificada para las subpantallas -->
+    <string name="action_back">Atrás</string>
+    <string name="projects_screen_title">Proyectos</string>
+    <string name="files_screen_title">Archivos</string>
+
+    <!-- Pantalla de proyectos -->
+    <string name="new_project_title">Nuevo proyecto</string>
+    <string name="rename_project_title">Renombrar proyecto</string>
+    <string name="delete_project_title">Eliminar proyecto</string>
+    <string name="delete_project_confirm">¿Eliminar el proyecto \"%1$s\" y todos sus archivos?</string>
+    <string name="project_name_hint">Nombre del proyecto</string>
+    <string name="no_projects_yet">Aún no hay proyectos. Toca + para crear tu primer proyecto.</string>
+    <string name="project_not_found">Proyecto no encontrado</string>
+    <string name="project_meta_format">%1$d archivos</string>
+
+    <!-- Pantalla de archivos -->
+    <string name="new_file_title">Nuevo archivo</string>
+    <string name="upload_file">Subir archivo</string>
+    <string name="upload_media">Subir multimedia</string>
+    <string name="delete_file_title">Eliminar archivo</string>
+    <string name="delete_file_confirm">¿Eliminar el archivo \"%1$s\"?</string>
+    <string name="file_name_hint">Nombre del archivo (ej.: main.rin)</string>
+    <string name="no_files_yet">Aún no hay archivos. Crea uno nuevo, o sube un archivo o multimedia desde tu dispositivo.</string>
+    <string name="file_uploaded_toast">Archivo subido: %1$s</string>
+    <string name="file_meta_format">%1$s • %2$s</string>
+    <string name="no_app_to_open_file">No hay ninguna app instalada que pueda abrir este tipo de archivo</string>
+
+    <!-- Subcarpetas y renombrado -->
+    <string name="new_folder_title">Nueva carpeta</string>
+    <string name="folder_name_hint">Nombre de la carpeta</string>
+    <string name="folder_meta_format">Carpeta • %1$s</string>
+    <string name="delete_folder_title">Eliminar carpeta</string>
+    <string name="delete_folder_confirm">¿Eliminar la carpeta \"%1$s\" y todo su contenido?</string>
+    <string name="rename_file_title">Renombrar archivo</string>
+    <string name="rename_folder_title">Renombrar carpeta</string>
+    <string name="file_renamed_toast">Renombrado a: %1$s</string>
+    <string name="folder_renamed_toast">Renombrado a: %1$s</string>
+
+    <!-- Herramientas de archivo ZIP: subir y extraer, o descargar el proyecto como archivo -->
+    <string name="zip_tools_title">Archivo ZIP</string>
+    <string name="zip_upload_extract">Sube un archivo comprimido y extráelo aquí</string>
+    <string name="zip_download_project">Descargar proyecto como archivo ZIP</string>
+    <string name="zip_extracted_toast">Se extrajeron %1$d archivo(s) en el proyecto</string>
+    <string name="zip_extract_error">No se pudo extraer el archivo</string>
+
+    <!-- Nuevo botón de navegación dentro del editor (MainActivity) -->
+    <string name="btn_projects">Proyectos</string>
+
+    <!-- ===== Galería de proyectos Rin ===== -->
+    <string name="more_row_project_gallery_subtitle">Explora los proyectos de la comunidad Rin o publica el tuyo</string>
+
+    <string name="project_gallery_title">Galería de proyectos Rin</string>
+    <string name="project_gallery_search_hint">Buscar por nombre, descripción o editor…</string>
+    <string name="project_gallery_publish_hint">Comparte uno de tus proyectos locales con toda la comunidad Rin — sin requisito de seguidores.</string>
+    <string name="project_gallery_publish_button">Publica tu proyecto</string>
+    <string name="project_gallery_empty">Ningún proyecto coincide con tu búsqueda. Prueba otra palabra o borra el filtro.</string>
+    <string name="project_gallery_item_meta_format">%1$d archivos • %2$d descargas</string>
+    <string name="project_gallery_detail_format">Editor: %1$s
+Categoría: %2$s
+Archivos: %3$d
+Descargas: %4$d
+
+%5$s</string>
+    <string name="project_gallery_no_description">Sin descripción</string>
+    <string name="project_gallery_action_download">Descargar como copia local</string>
+    <string name="project_gallery_download_title">Descargar proyecto</string>
+    <string name="project_gallery_download_message">Elige un nombre para la nueva copia local de este proyecto:</string>
+    <string name="project_gallery_download_success">Proyecto descargado como "%1$s"</string>
+    <string name="project_gallery_download_failed">Error al descargar el proyecto</string>
+
+    <string name="project_publish_title">Publica tu proyecto</string>
+    <string name="project_publish_subtitle">Publica uno de tus proyectos locales en la Galería de proyectos Rin para que toda la comunidad Rin lo explore y descargue — sin requisito de seguidores. La miniatura se genera automáticamente a partir del código real de tu proyecto.</string>
+    <string name="project_publish_no_local_projects">Todavía no tienes ningún proyecto local. Crea uno primero desde la pantalla de proyectos.</string>
+    <string name="project_publish_hint_choose_project">Elige el proyecto a publicar</string>
+    <string name="project_publish_hint_thumbnail">Vista previa de la miniatura (de tu código real)</string>
+    <string name="project_publish_thumbnail_none">No se pudo generar una miniatura — este proyecto aún no tiene ningún archivo .rin</string>
+    <string name="project_publish_thumbnail_source_format">Del archivo: %1$s</string>
+    <string name="project_publish_hint_description">Descripción breve del proyecto (opcional)</string>
+    <string name="project_publish_hint_category">Categoría</string>
+    <string name="project_publish_action_submit">Publicar proyecto en la galería</string>
+    <string name="project_publish_success">Tu proyecto se publicó correctamente en la galería</string>
+    <string name="project_publish_failed">Error al publicar el proyecto</string>
+</resources>
