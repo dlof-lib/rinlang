@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal"
+    android:gravity="center_vertical"
+    android:background="@drawable/bg_list_card"
+    android:layout_marginStart="4dp"
+    android:layout_marginEnd="4dp"
+    android:layout_marginTop="5dp"
+    android:layout_marginBottom="5dp"
+    android:padding="12dp">
+
+    <!-- أيقونة "rin+" الرسمية للمشروع/المجلد بدل الشارة العامة السابقة -->
+    <ImageView
+        android:layout_width="42dp"
+        android:layout_height="42dp"
+        android:scaleType="fitCenter"
+        android:src="@drawable/ic_rin_folder"
+        android:contentDescription="@null" />
+
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:layout_marginStart="12dp"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/txtProjectName"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textSize="15.5sp"
+            android:textStyle="bold"
+            android:textColor="@color/rin_on_toolbar"
+            android:ellipsize="end"
+            android:maxLines="1" />
+
+        <TextView
+            android:id="@+id/txtProjectMeta"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:textSize="12.5sp"
+            android:textColor="@color/rin_editor_hint" />
+    </LinearLayout>
+
+    <ImageButton
+        android:id="@+id/btnPublishProject"
+        android:layout_width="38dp"
+        android:layout_height="38dp"
+        android:padding="10dp"
+        android:background="@drawable/bg_icon_btn"
+        android:contentDescription="@string/project_publish_title"
+        android:src="@drawable/ic_upload_cloud" />
+
+    <ImageButton
+        android:id="@+id/btnRenameProject"
+        android:layout_width="38dp"
+        android:layout_height="38dp"
+        android:padding="10dp"
+        android:background="@drawable/bg_icon_btn"
+        android:contentDescription="@string/rename_project_title"
+        android:src="@drawable/ic_edit_pencil" />
+
+    <ImageButton
+        android:id="@+id/btnDeleteProject"
+        android:layout_width="38dp"
+        android:layout_height="38dp"
+        android:layout_marginStart="2dp"
+        android:padding="10dp"
+        android:background="@drawable/bg_icon_btn"
+        android:contentDescription="@string/delete_project_title"
+        android:src="@drawable/ic_trash_red" />
+
+</LinearLayout>
