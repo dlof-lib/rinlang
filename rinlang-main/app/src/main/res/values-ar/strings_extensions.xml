@@ -1,0 +1,138 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  نصوص "Rin Extensions Marketplace": متجر رسمي منفصل عن متجر المكتبات (strings_store.xml)،
+  مخصَّص لإضافات/أدوات محرّر ولغة Rin (إضافات، مكتبات، سمات، عناصر واجهة، أدوات تصحيح،
+  أدوات AI، وقوالب). ملف منفصل بنفس أسلوب strings_store.xml و strings_libraries.xml.
+-->
+<resources>
+    <!-- نقطة الدخول من شاشة المكتبات -->
+    <string name="ext_entry_button">Rin Extensions</string>
+
+    <!-- الصفحة الرئيسية للمتجر -->
+    <string name="ext_marketplace_title">Rin Extensions Marketplace</string>
+    <string name="ext_search_hint">ابحث باسم الإضافة أو وصفها أو المطوّر…</string>
+    <string name="ext_store_empty">لا توجد إضافات تطابق بحثك. جرّب كلمة أخرى أو امسح الفلتر.</string>
+    <string name="ext_item_meta_format">%1$s • %2$s • %3$d تنزيل</string>
+    <string name="ext_action_open">إدارة</string>
+
+    <!-- أنواع الإضافات -->
+    <string name="ext_type_extension">إضافة</string>
+    <string name="ext_type_library">مكتبة</string>
+    <string name="ext_type_theme">سمة</string>
+    <string name="ext_type_ui_component">عنصر واجهة</string>
+    <string name="ext_type_debug_tool">أداة تصحيح</string>
+    <string name="ext_type_ai_tool">أداة ذكاء اصطناعي</string>
+    <string name="ext_type_template">قالب</string>
+
+    <!-- شريط أوامر "rin ext ..." الطرفية -->
+    <string name="ext_cli_title">أوامر rin ext</string>
+    <string name="ext_cli_run">تنفيذ</string>
+    <string name="ext_cli_hint">$ rin ext list\n$ rin ext search &lt;اسم&gt;\n$ rin ext install &lt;اسم&gt;\n$ rin ext update &lt;اسم&gt;\n$ rin ext remove &lt;اسم&gt;</string>
+
+    <!-- ترتيب قائمة الإضافات -->
+    <string name="ext_sort_newest">الأحدث</string>
+    <string name="ext_sort_downloads">الأكثر تنزيلاً</string>
+    <string name="ext_sort_rating">الأعلى تقييماً</string>
+
+    <!-- شارة "مميزة" تُعرَض على الإضافات الأكثر تنزيلاً أو الأعلى تقييماً -->
+    <string name="ext_badge_featured">⭐ مميزة</string>
+
+    <!-- زر نشر إضافة جديدة، متاح لأي مستخدم مسجَّل دخوله -->
+    <string name="ext_entry_publish_button">انشر إضافتك</string>
+
+    <!-- صفحة تفاصيل الإضافة -->
+    <string name="ext_detail_developer_format">بواسطة %1$s</string>
+    <string name="ext_detail_developer_unknown">مطوّر غير معروف</string>
+    <string name="ext_detail_languages_format">اللغات المستخدَمة: %1$s</string>
+    <string name="ext_detail_meta_format">%1$s • %2$s • صدرت في %3$s • %4$d تنزيل • %5$s</string>
+    <string name="ext_detail_screenshots">لقطات الشاشة</string>
+    <string name="ext_detail_changelog">سجل التحديثات</string>
+    <string name="ext_detail_no_changelog">لا يوجد سجل تحديثات لهذه الإضافة بعد.</string>
+    <string name="ext_changelog_entry_format">الإصدار %1$s — %2$s\n%3$s</string>
+
+    <!-- أزرار الإدارة -->
+    <string name="ext_action_update">تحديث</string>
+    <string name="ext_action_uninstall">إزالة</string>
+    <string name="ext_action_enable">تمكين</string>
+    <string name="ext_action_disable">تعطيل</string>
+    <string name="ext_action_cancel">إلغاء</string>
+
+    <!-- شريط تقدّم التثبيت -->
+    <string name="ext_install_progress_installing">جارٍ تثبيت %1$s…</string>
+    <string name="ext_install_progress_updating">جارٍ تحديث %1$s…</string>
+
+    <!-- رسائل النجاح/الفشل -->
+    <string name="ext_installed_toast">تم تثبيت %1$s بنجاح ✓</string>
+    <string name="ext_updated_toast">تم تحديث %1$s بنجاح ✓</string>
+    <string name="ext_install_failed_toast">فشلت العملية: %1$s</string>
+    <string name="ext_enabled_toast">تم تمكين %1$s</string>
+    <string name="ext_disabled_toast">تم تعطيل %1$s</string>
+    <string name="ext_uninstalled_toast">تمت إزالة %1$s</string>
+    <string name="ext_uninstall_confirm_title">إزالة الإضافة</string>
+    <string name="ext_uninstall_confirm_message">هل تريد إزالة %1$s من جهازك؟ يمكنك تثبيتها مرة أخرى لاحقاً من المتجر.</string>
+
+    <!-- شاشة الأمان قبل التثبيت -->
+    <string name="ext_security_title">قبل المتابعة</string>
+    <string name="ext_security_subtitle">راجع المطوّر والأذونات والملفات التي ستصل إليها هذه الإضافة قبل تثبيتها.</string>
+    <string name="ext_security_developer_label">المطوّر</string>
+    <string name="ext_security_signature_label">التوقيع الرقمي (بصمة سلامة المحتوى)</string>
+    <string name="ext_security_signature_missing">لا يوجد توقيع مُعلَن لهذه الإضافة</string>
+    <string name="ext_security_signature_missing_state">⚠ غير موقَّعة</string>
+    <string name="ext_security_signature_valid">✓ التوقيع مطابق لمحتوى الإضافة</string>
+    <string name="ext_security_signature_invalid">✗ التوقيع غير مطابق — قد يكون المحتوى تالفاً</string>
+    <string name="ext_security_signature_invalid_toast">تعذّر المتابعة: التوقيع الرقمي لا يطابق محتوى الإضافة</string>
+    <string name="ext_security_permissions_label">الأذونات المطلوبة</string>
+    <string name="ext_security_no_permissions">لا تطلب هذه الإضافة أي أذونات خاصة.</string>
+    <string name="ext_security_files_label">الملفات التي ستصل إليها</string>
+    <string name="ext_security_proceed_format">متابعة %1$s</string>
+
+    <!-- شاشة "انشر إضافتك" -->
+    <string name="ext_publish_title">انشر إضافتك</string>
+    <string name="ext_publish_locked_title">النشر مقفل حالياً</string>
+    <string name="ext_publish_subtitle">انشر إضافتك أو مكتبتك أو سمتك الخاصة في Rin Extensions Marketplace ليستخدمها كل مجتمع Rin — النشر متاح فوراً لأي حساب موثَّق، بلا مراجعة يدوية.</string>
+    <string name="ext_publish_hint_name">اسم الإضافة</string>
+    <string name="ext_publish_hint_version">رقم الإصدار</string>
+    <string name="ext_publish_hint_description">الوصف</string>
+    <string name="ext_publish_hint_languages">اللغات المستخدَمة (اختياري)</string>
+    <string name="ext_publish_languages_example">مثال: Rin, Kotlin</string>
+    <string name="ext_publish_hint_type">نوع الإضافة</string>
+    <string name="ext_publish_hint_permissions">الأذونات التي تطلبها إضافتك</string>
+    <string name="ext_publish_hint_permissions_note">حدّد فقط ما تحتاجه إضافتك فعلياً — ستُعرَض هذه الأذونات لكل مستخدم في شاشة أمان قبل التثبيت.</string>
+    <string name="ext_publish_hint_content_files">ملفات محتوى الإضافة</string>
+    <string name="ext_publish_action_pick_files">اختيار ملفات الإضافة</string>
+    <string name="ext_publish_files_selected_format">%1$d ملف مُختار</string>
+    <string name="ext_publish_hint_screenshots">لقطات شاشة اختيارية (حتى 5) تُعرَض في صفحة تفاصيل الإضافة</string>
+    <string name="ext_publish_action_pick_screenshots">اختيار لقطات شاشة</string>
+    <string name="ext_publish_screenshots_selected_format">%1$d لقطة مُختارة</string>
+    <string name="ext_publish_action_submit">نشر الإضافة</string>
+    <string name="ext_publish_content_required">اختر ملف واحداً على الأقل لمحتوى الإضافة</string>
+    <string name="ext_publish_success">تم نشر إضافتك في Rin Extensions Marketplace ✓</string>
+    <string name="ext_publish_failed">فشل نشر الإضافة</string>
+
+    <!-- تصدير/استيراد بصيغة .rinex الخاصة بـ Rin Extensions (ملف مستقل بلا حاجة لاتصال إنترنت) -->
+    <string name="ext_action_export_rinex">تصدير كملف .rinex</string>
+    <string name="ext_export_rinex_success">تم حفظ %1$s كملف .rinex في مجلد Downloads ✓</string>
+    <string name="ext_export_rinex_failed">تعذّر التصدير: %1$s</string>
+    <string name="ext_action_import_rinex">استيراد ملف .rinex</string>
+    <string name="ext_import_rinex_invalid">هذا الملف ليس بصيغة Rin Extensions (.rinex) صالحة</string>
+    <string name="ext_import_rinex_success">تم استيراد وتثبيت %1$s من الملف المحلي ✓</string>
+    <string name="ext_import_rinex_failed">تعذّر استيراد الملف: %1$s</string>
+
+    <!-- حذف إضافة نهائياً من المتجر — متاح فقط لمطوّرها صاحب الإضافة -->
+    <string name="ext_action_delete">حذف الإضافة</string>
+    <string name="ext_delete_confirm_title">حذف الإضافة نهائياً</string>
+    <string name="ext_delete_confirm_message">هل تريد حذف \"%1$s\" نهائياً من Rin Extensions Marketplace؟ لن تظهر بعدها لأي مستخدم جديد، ولا يمكن التراجع عن هذا الإجراء.\nملاحظة: من ثبّتها من قبل ستبقى نسخته المثبَّتة تعمل على جهازه.</string>
+    <string name="ext_deleted_toast">تم حذف الإضافة نهائياً من المتجر ✓</string>
+    <string name="ext_delete_failed">تعذّر حذف الإضافة، حاول مرة أخرى</string>
+    <string name="ext_delete_requires_connection">يلزم اتصال بالإنترنت لحذف الإضافة من المتجر</string>
+
+    <!-- علامتا تبويب أعلى المتجر: تصفّح المتجر، أو الإضافات المثبَّتة فعلياً على هذا الجهاز -->
+    <string name="ext_tab_store">المتجر</string>
+    <string name="ext_tab_installed">المثبَّتة لديّ</string>
+    <string name="ext_installed_empty">لا توجد إضافات مثبَّتة على هذا الجهاز بعد. ثبِّت واحدة من تبويب المتجر، أو استورد ملف .rinex.</string>
+
+    <!-- قسم "إضافاتي المنشورة" داخل شاشة الحساب -->
+    <string name="account_my_extensions_title">إضافاتي المنشورة</string>
+    <string name="account_my_extensions_empty">لم تنشر أي إضافة بعد. انشر إضافة من متجر Rin Extensions لتظهر هنا.</string>
+    <string name="my_extension_meta_format">%1$s • %2$d تنزيل</string>
+</resources>
