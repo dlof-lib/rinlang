@@ -1,0 +1,158 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- شاشة "انشر مشروعك": اختيار مشروع محلي + معاينة صورة مصغّرة مُولَّدة من كوده الحقيقي +
+     وصف وتصنيف، بنفس هوية activity_publish_extension.xml. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@color/rin_background">
+
+    <include layout="@layout/toolbar_app" />
+
+    <androidx.core.widget.NestedScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:fillViewport="true">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="20dp">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/project_publish_subtitle"
+                android:textColor="@color/rin_editor_hint"
+                android:textSize="12.5sp"
+                android:layout_marginBottom="16dp" />
+
+            <TextView
+                android:id="@+id/txtPublishProjectNone"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/project_publish_no_local_projects"
+                android:textColor="@color/rin_editor_hint"
+                android:textSize="13sp"
+                android:gravity="center"
+                android:padding="12dp"
+                android:background="@drawable/bg_store_section_card"
+                android:layout_marginBottom="16dp"
+                android:visibility="gone" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/project_publish_hint_choose_project"
+                android:textColor="@color/rin_on_toolbar"
+                android:textSize="12sp"
+                android:layout_marginBottom="6dp" />
+
+            <HorizontalScrollView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:scrollbars="none">
+
+                <com.google.android.material.chip.ChipGroup
+                    android:id="@+id/chipGroupPublishProjectPicker"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    app:singleSelection="true"
+                    app:chipSpacingHorizontal="6dp" />
+            </HorizontalScrollView>
+
+            <!-- معاينة الصورة المصغّرة المُولَّدة تلقائياً من الكود الحقيقي للمشروع المختار -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:text="@string/project_publish_hint_thumbnail"
+                android:textColor="@color/rin_on_toolbar"
+                android:textSize="12sp"
+                android:layout_marginBottom="6dp" />
+
+            <FrameLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@drawable/bg_store_section_card"
+                android:padding="1dp">
+
+                <ImageView
+                    android:id="@+id/imgPublishProjectThumbnail"
+                    android:layout_width="match_parent"
+                    android:layout_height="170dp"
+                    android:scaleType="centerCrop"
+                    android:contentDescription="@null" />
+            </FrameLayout>
+
+            <TextView
+                android:id="@+id/txtPublishProjectThumbnailSource"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:gravity="center"
+                android:textColor="@color/rin_editor_hint"
+                android:textSize="11.5sp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:text="@string/project_publish_hint_description"
+                android:textColor="@color/rin_on_toolbar"
+                android:textSize="12sp"
+                android:layout_marginBottom="4dp" />
+
+            <EditText
+                android:id="@+id/edtPublishProjectDescription"
+                android:layout_width="match_parent"
+                android:layout_height="100dp"
+                android:background="@drawable/bg_input_field"
+                android:padding="16dp"
+                android:gravity="top|start"
+                android:inputType="textMultiLine"
+                android:textColor="@color/rin_editor_text"
+                android:textColorHint="@color/rin_editor_hint"
+                android:textSize="14sp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:text="@string/project_publish_hint_category"
+                android:textColor="@color/rin_on_toolbar"
+                android:textSize="12sp"
+                android:layout_marginBottom="6dp" />
+
+            <com.google.android.material.chip.ChipGroup
+                android:id="@+id/chipGroupPublishProjectCategory"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                app:singleSelection="true"
+                app:chipSpacingHorizontal="6dp" />
+
+            <Button
+                android:id="@+id/btnPublishProject"
+                android:layout_width="match_parent"
+                android:layout_height="52dp"
+                android:layout_marginTop="22dp"
+                android:background="@drawable/bg_run_button_premium"
+                android:text="@string/project_publish_action_submit"
+                android:textAllCaps="false"
+                android:textColor="@android:color/white"
+                android:textStyle="bold"
+                android:elevation="0dp" />
+
+            <ProgressBar
+                android:id="@+id/progressPublishProject"
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:layout_marginTop="16dp"
+                android:layout_gravity="center"
+                android:visibility="gone" />
+        </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
+</LinearLayout>
