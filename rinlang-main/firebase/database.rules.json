@@ -1,0 +1,79 @@
+{
+  "rules": {
+    "users": {
+      ".indexOn": ["username"],
+      ".read": "auth != null",
+      "$uid": {
+        ".write": "auth != null && auth.uid === $uid",
+        "subscribers": {
+          "$subscriberUid": { ".write": "auth != null && auth.uid === $subscriberUid" }
+        },
+        "subscriberCount": { ".write": "auth != null" }
+      }
+    },
+    "verification_codes": {
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid",
+        ".write": "auth != null && auth.uid === $uid"
+      }
+    },
+    "packages": {
+      ".read": true,
+      ".indexOn": ["category", "createdAt", "publisherUid"],
+      "$packageId": {
+        ".write": "auth != null && (!data.exists() || data.child('publisherUid').val() === auth.uid)",
+        "name": { ".validate": "newData.isString() && newData.val().length <= 40" },
+        "base64Data": { ".validate": "newData.isString() && newData.val().length <= 8000000" },
+        "downloadCount": { ".write": "auth != null" },
+        "ratingSum": { ".write": "auth != null" },
+        "ratingCount": { ".write": "auth != null" },
+        "ratings": {
+          "$uid": { ".write": "auth != null && auth.uid === $uid" }
+        },
+        "reportCount": { ".write": "auth != null" },
+        "reports": {
+          "$uid": { ".write": "auth != null && auth.uid === $uid" }
+        },
+        "likeCount": { ".write": "auth != null" },
+        "likes": {
+          "$uid": { ".write": "auth != null && auth.uid === $uid" }
+        }
+      }
+    },
+    "rin_projects": {
+      ".read": true,
+      ".indexOn": ["category", "createdAt", "publisherUid"],
+      "$projectId": {
+        ".write": "auth != null && (!data.exists() || data.child('publisherUid').val() === auth.uid)",
+        "name": { ".validate": "newData.isString() && newData.val().length <= 64" },
+        "zipBase64": { ".validate": "newData.isString() && newData.val().length <= 8000000" },
+        "downloadCount": { ".write": "auth != null" },
+        "likeCount": { ".write": "auth != null" },
+        "likes": {
+          "$uid": { ".write": "auth != null && auth.uid === $uid" }
+        }
+      }
+    },
+    "extensions": {
+      ".read": true,
+      ".indexOn": ["type", "releaseDate", "developerUid"],
+      "$extensionId": {
+        ".write": "auth != null && (!data.exists() || data.child('developerUid').val() === auth.uid)",
+        "downloadCount": { ".write": "auth != null" },
+        "ratingSum": { ".write": "auth != null" },
+        "ratingCount": { ".write": "auth != null" },
+        "ratings": {
+          "$uid": { ".write": "auth != null && auth.uid === $uid" }
+        },
+        "reportCount": { ".write": "auth != null" },
+        "reports": {
+          "$uid": { ".write": "auth != null && auth.uid === $uid" }
+        },
+        "likeCount": { ".write": "auth != null" },
+        "likes": {
+          "$uid": { ".write": "auth != null && auth.uid === $uid" }
+        }
+      }
+    }
+  }
+}
