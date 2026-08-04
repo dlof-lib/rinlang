@@ -1,0 +1,133 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Punto de entrada desde la pantalla de Bibliotecas -->
+    <string name="ext_entry_button">Extensiones Rin</string>
+
+    <!-- Página principal del mercado -->
+    <string name="ext_marketplace_title">Mercado de Extensiones Rin</string>
+    <string name="ext_search_hint">Buscar por nombre, descripción o desarrollador…</string>
+    <string name="ext_store_empty">Ninguna extensión coincide con tu búsqueda. Prueba otra palabra o borra el filtro.</string>
+    <string name="ext_item_meta_format">%1$s • %2$s • %3$d descargas</string>
+    <string name="ext_action_open">Gestionar</string>
+
+    <!-- Tipos de extensión -->
+    <string name="ext_type_extension">Extensión</string>
+    <string name="ext_type_library">Biblioteca</string>
+    <string name="ext_type_theme">Tema</string>
+    <string name="ext_type_ui_component">Componente de interfaz</string>
+    <string name="ext_type_debug_tool">Herramienta de depuración</string>
+    <string name="ext_type_ai_tool">Herramienta de IA</string>
+    <string name="ext_type_template">Plantilla</string>
+
+    <!-- Barra de comandos de terminal "rin ext ..." -->
+    <string name="ext_cli_title">Comandos rin ext</string>
+    <string name="ext_cli_run">Ejecutar</string>
+    <string name="ext_cli_hint">$ rin ext list\n$ rin ext search &lt;nombre&gt;\n$ rin ext install &lt;nombre&gt;\n$ rin ext update &lt;nombre&gt;\n$ rin ext remove &lt;nombre&gt;</string>
+
+    <!-- Orden de la lista de extensiones -->
+    <string name="ext_sort_newest">Más recientes</string>
+    <string name="ext_sort_downloads">Más descargadas</string>
+    <string name="ext_sort_rating">Mejor valoradas</string>
+
+    <!-- Insignia "Destacada" mostrada en las extensiones más descargadas o mejor valoradas -->
+    <string name="ext_badge_featured">⭐ Destacada</string>
+
+    <!-- Botón para publicar una nueva extensión, disponible para cualquier usuario con sesión iniciada -->
+    <string name="ext_entry_publish_button">Publica tu extensión</string>
+
+    <!-- Página de detalle de la extensión -->
+    <string name="ext_detail_developer_format">por %1$s</string>
+    <string name="ext_detail_developer_unknown">Desarrollador desconocido</string>
+    <string name="ext_detail_languages_format">Lenguajes usados: %1$s</string>
+    <string name="ext_detail_meta_format">%1$s • %2$s • publicada el %3$s • %4$d descargas • %5$s</string>
+    <string name="ext_detail_screenshots">Capturas de pantalla</string>
+    <string name="ext_detail_changelog">Registro de cambios</string>
+    <string name="ext_detail_no_changelog">Esta extensión aún no tiene registro de cambios.</string>
+    <string name="ext_changelog_entry_format">Versión %1$s — %2$s\n%3$s</string>
+
+    <!-- Botones de gestión -->
+    <string name="ext_action_update">Actualizar</string>
+    <string name="ext_action_uninstall">Desinstalar</string>
+    <string name="ext_action_enable">Habilitar</string>
+    <string name="ext_action_disable">Deshabilitar</string>
+    <string name="ext_action_cancel">Cancelar</string>
+
+    <!-- Barra de progreso de instalación -->
+    <string name="ext_install_progress_installing">Instalando %1$s…</string>
+    <string name="ext_install_progress_updating">Actualizando %1$s…</string>
+
+    <!-- Mensajes de éxito/fallo -->
+    <string name="ext_installed_toast">%1$s instalada correctamente ✓</string>
+    <string name="ext_updated_toast">%1$s actualizada correctamente ✓</string>
+    <string name="ext_install_failed_toast">Operación fallida: %1$s</string>
+    <string name="ext_enabled_toast">%1$s habilitada</string>
+    <string name="ext_disabled_toast">%1$s deshabilitada</string>
+    <string name="ext_uninstalled_toast">%1$s eliminada</string>
+    <string name="ext_uninstall_confirm_title">Eliminar extensión</string>
+    <string name="ext_uninstall_confirm_message">¿Eliminar %1$s de tu dispositivo? Puedes instalarla de nuevo más tarde desde el Mercado.</string>
+
+    <!-- Pantalla de seguridad previa a la instalación -->
+    <string name="ext_security_title">Antes de continuar</string>
+    <string name="ext_security_subtitle">Revisa el desarrollador, los permisos y los archivos a los que accederá esta extensión antes de instalarla.</string>
+    <string name="ext_security_developer_label">Desarrollador</string>
+    <string name="ext_security_signature_label">Firma digital (huella de integridad del contenido)</string>
+    <string name="ext_security_signature_missing">No se declaró ninguna firma para esta extensión</string>
+    <string name="ext_security_signature_missing_state">⚠ Sin firmar</string>
+    <string name="ext_security_signature_valid">✓ La firma coincide con el contenido de la extensión</string>
+    <string name="ext_security_signature_invalid">✗ La firma no coincide — el contenido podría estar dañado</string>
+    <string name="ext_security_signature_invalid_toast">No se puede continuar: la firma digital no coincide con el contenido de la extensión</string>
+    <string name="ext_security_permissions_label">Permisos requeridos</string>
+    <string name="ext_security_no_permissions">Esta extensión no solicita ningún permiso especial.</string>
+    <string name="ext_security_files_label">Archivos a los que accederá</string>
+    <string name="ext_security_proceed_format">Continuar con %1$s</string>
+
+    <!-- Pantalla "Publica tu extensión" -->
+    <string name="ext_publish_title">Publica tu extensión</string>
+    <string name="ext_publish_locked_title">La publicación está bloqueada</string>
+    <string name="ext_publish_subtitle">Publica tu extensión, biblioteca o tema en el Mercado de Extensiones Rin para que toda la comunidad Rin la use — la publicación es inmediata para cualquier cuenta verificada, sin revisión manual.</string>
+    <string name="ext_publish_hint_name">Nombre de la extensión</string>
+    <string name="ext_publish_hint_version">Número de versión</string>
+    <string name="ext_publish_hint_description">Descripción</string>
+    <string name="ext_publish_hint_languages">Lenguajes usados (opcional)</string>
+    <string name="ext_publish_languages_example">Ejemplo: Rin, Kotlin</string>
+    <string name="ext_publish_hint_type">Tipo de extensión</string>
+    <string name="ext_publish_hint_permissions">Permisos que solicita tu extensión</string>
+    <string name="ext_publish_hint_permissions_note">Selecciona solo lo que tu extensión realmente necesita — estos permisos se mostrarán a cada usuario en la pantalla de seguridad previa a la instalación.</string>
+    <string name="ext_publish_hint_content_files">Archivos de contenido de la extensión</string>
+    <string name="ext_publish_action_pick_files">Elegir archivos de la extensión</string>
+    <string name="ext_publish_files_selected_format">%1$d archivo(s) seleccionado(s)</string>
+    <string name="ext_publish_hint_screenshots">Capturas de pantalla opcionales (hasta 5) mostradas en la página de detalle</string>
+    <string name="ext_publish_action_pick_screenshots">Elegir capturas de pantalla</string>
+    <string name="ext_publish_screenshots_selected_format">%1$d captura(s) seleccionada(s)</string>
+    <string name="ext_publish_action_submit">Publicar extensión</string>
+    <string name="ext_publish_content_required">Elige al menos un archivo para el contenido de la extensión</string>
+    <string name="ext_publish_success">Tu extensión se publicó en el Mercado de Extensiones Rin ✓</string>
+    <string name="ext_publish_failed">No se pudo publicar la extensión</string>
+
+    <!-- Exportar/importar como .rinex para Rin Extensions (archivo independiente, sin necesidad de internet) -->
+    <string name="ext_action_export_rinex">Exportar como .rinex</string>
+    <string name="ext_export_rinex_success">%1$s guardado como archivo .rinex en la carpeta Descargas ✓</string>
+    <string name="ext_export_rinex_failed">No se pudo exportar: %1$s</string>
+    <string name="ext_action_import_rinex">Importar archivo .rinex</string>
+    <string name="ext_import_rinex_invalid">Este archivo no es un archivo Rin Extensions (.rinex) válido</string>
+    <string name="ext_import_rinex_success">%1$s importada e instalada desde el archivo local ✓</string>
+    <string name="ext_import_rinex_failed">No se pudo importar el archivo: %1$s</string>
+
+    <!-- Eliminar una extensión permanentemente de la tienda — solo disponible para su propio desarrollador -->
+    <string name="ext_action_delete">Eliminar extensión</string>
+    <string name="ext_delete_confirm_title">Eliminar extensión permanentemente</string>
+    <string name="ext_delete_confirm_message">¿Eliminar \"%1$s\" permanentemente del Mercado de Extensiones Rin? Ya no será visible para nuevos usuarios y esta acción no se puede deshacer.\nNota: quienes ya la instalaron conservarán su copia instalada funcionando.</string>
+    <string name="ext_deleted_toast">Extensión eliminada permanentemente del mercado ✓</string>
+    <string name="ext_delete_failed">No se pudo eliminar la extensión, inténtalo de nuevo</string>
+    <string name="ext_delete_requires_connection">Se requiere conexión a internet para eliminar una extensión del mercado</string>
+
+    <!-- Las dos pestañas superiores de la tienda: explorar el mercado, o las extensiones instaladas en este dispositivo -->
+    <string name="ext_tab_store">Tienda</string>
+    <string name="ext_tab_installed">Instaladas</string>
+    <string name="ext_installed_empty">Aún no hay extensiones instaladas en este dispositivo. Instala una desde la pestaña Tienda, o importa un archivo .rinex.</string>
+
+    <!-- Sección "Mis extensiones publicadas" dentro de la pantalla de cuenta -->
+    <string name="account_my_extensions_title">Mis extensiones publicadas</string>
+    <string name="account_my_extensions_empty">Aún no has publicado ninguna extensión. Publica una desde el Mercado de Extensiones Rin para verla aquí.</string>
+    <string name="my_extension_meta_format">%1$s • %2$d descargas</string>
+</resources>
