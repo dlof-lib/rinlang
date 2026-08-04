@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Common buttons used by the projects/files dialogs -->
+    <string name="create">Create</string>
+    <string name="cancel">Cancel</string>
+    <string name="rename">Rename</string>
+    <string name="delete">Delete</string>
+
+    <!-- Unified top bar for sub-screens -->
+    <string name="action_back">Back</string>
+    <string name="projects_screen_title">Projects</string>
+    <string name="files_screen_title">Files</string>
+
+    <!-- Projects screen -->
+    <string name="new_project_title">New Project</string>
+    <string name="rename_project_title">Rename Project</string>
+    <string name="delete_project_title">Delete Project</string>
+    <string name="delete_project_confirm">Delete the project \"%1$s\" and all its files?</string>
+    <string name="project_name_hint">Project name</string>
+    <string name="no_projects_yet">No projects yet. Tap + to create your first project.</string>
+    <string name="project_not_found">Project not found</string>
+    <string name="project_meta_format">%1$d files</string>
+
+    <!-- Files screen -->
+    <string name="new_file_title">New File</string>
+    <string name="upload_file">Upload File</string>
+    <string name="upload_media">Upload Media</string>
+    <string name="delete_file_title">Delete File</string>
+    <string name="delete_file_confirm">Delete the file \"%1$s\"?</string>
+    <string name="file_name_hint">File name (e.g. main.rin)</string>
+    <string name="no_files_yet">No files yet. Create a new file, or upload a file or media from your device.</string>
+    <string name="file_uploaded_toast">File uploaded: %1$s</string>
+    <string name="file_meta_format">%1$s • %2$s</string>
+    <string name="no_app_to_open_file">No app installed that can open this file type</string>
+
+    <!-- Subfolders and renaming -->
+    <string name="new_folder_title">New Folder</string>
+    <string name="folder_name_hint">Folder name</string>
+    <string name="folder_meta_format">Folder • %1$s</string>
+    <string name="delete_folder_title">Delete Folder</string>
+    <string name="delete_folder_confirm">Delete the folder \"%1$s\" and everything inside it?</string>
+    <string name="rename_file_title">Rename File</string>
+    <string name="rename_folder_title">Rename Folder</string>
+    <string name="file_renamed_toast">Renamed to: %1$s</string>
+    <string name="folder_renamed_toast">Renamed to: %1$s</string>
+
+    <!-- ZIP archive tools: upload and extract, or download the project as an archive -->
+    <string name="zip_tools_title">ZIP Archive</string>
+    <string name="zip_upload_extract">Upload an archive and extract it here</string>
+    <string name="zip_download_project">Download project as a ZIP archive</string>
+    <string name="zip_extracted_toast">Extracted %1$d file(s) into the project</string>
+    <string name="zip_extract_error">Failed to extract the archive</string>
+
+    <!-- New navigation button inside the editor (MainActivity) -->
+    <string name="btn_projects">Projects</string>
+
+    <!-- ===== Rin Projects Gallery ===== -->
+    <string name="more_row_project_gallery_subtitle">Browse the Rin community's projects or publish yours</string>
+
+    <string name="project_gallery_title">Rin Projects Gallery</string>
+    <string name="project_gallery_search_hint">Search by name, description, or publisher…</string>
+    <string name="project_gallery_publish_hint">Share one of your local projects with the whole Rin community — no follower requirement.</string>
+    <string name="project_gallery_publish_button">Publish Your Project</string>
+    <string name="project_gallery_empty">No projects match your search. Try another word or clear the filter.</string>
+    <string name="project_gallery_item_meta_format">%1$d files • %2$d downloads</string>
+    <string name="project_gallery_detail_format">Publisher: %1$s
+Category: %2$s
+Files: %3$d
+Downloads: %4$d
+
+%5$s</string>
+    <string name="project_gallery_no_description">No description</string>
+    <string name="project_gallery_action_download">Download as local copy</string>
+    <string name="project_gallery_download_title">Download Project</string>
+    <string name="project_gallery_download_message">Choose a name for the new local copy of this project:</string>
+    <string name="project_gallery_download_success">Downloaded project as "%1$s"</string>
+    <string name="project_gallery_download_failed">Failed to download the project</string>
+
+    <string name="project_publish_title">Publish Your Project</string>
+    <string name="project_publish_subtitle">Publish one of your local projects to the Rin Projects Gallery for the whole Rin community to browse and download — no follower requirement. The thumbnail is generated automatically from your project's real code.</string>
+    <string name="project_publish_no_local_projects">You don't have any local project yet. Create one first from the Projects screen.</string>
+    <string name="project_publish_hint_choose_project">Choose the project to publish</string>
+    <string name="project_publish_hint_thumbnail">Thumbnail preview (from your real code)</string>
+    <string name="project_publish_thumbnail_none">Couldn't generate a thumbnail — this project has no .rin file yet</string>
+    <string name="project_publish_thumbnail_source_format">From file: %1$s</string>
+    <string name="project_publish_hint_description">Short project description (optional)</string>
+    <string name="project_publish_hint_category">Category</string>
+    <string name="project_publish_action_submit">Publish Project to Gallery</string>
+    <string name="project_publish_success">Your project was published to the gallery successfully</string>
+    <string name="project_publish_failed">Failed to publish the project</string>
+</resources>
