@@ -578,6 +578,79 @@ void Interpreter::registerNatives() {
         }
         return Value::string(std::string(1, s[static_cast<size_t>(i)]));
     };
+    // chr(n) -> يحوّل رقماً صحيحاً (0..255) إلى نص من بايت واحد (عكس ord).
+    // يسمح ببناء بيانات ثنائية خام (مثل ملفات PNG) داخل سكربتات Rin نفسها.
+    natives["chr"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("chr", a, 1, line);
+        double n = asNumber(a[0], "chr", line);
+        long i = static_cast<long>(n);
+        if (i < 0 || i > 255) {
+            throw RinError("'chr': القيمة يجب أن تكون بين 0 و255 (تلقّت " + std::to_string(i) + ")", line);
+        }
+        return Value::string(std::string(1, static_cast<char>(static_cast<unsigned char>(i))));
+    };
+    // ord(s) -> يحوّل أول بايت من نص إلى رقمه (0..255)، عكس chr.
+    natives["ord"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("ord", a, 1, line);
+        std::string s = asString(a[0], "ord", line);
+        if (s.empty()) throw RinError("'ord': النص فارغ", line);
+        return Value::num(static_cast<double>(static_cast<unsigned char>(s[0])));
+    };
+    // bytesFromArray(arr) -> يحوّل مصفوفة أرقام (كل عنصر 0..255) إلى نص بايتات واحد دفعة
+    // واحدة (أسرع من استدعاء chr() داخل حلقة وتجميع النتيجة بـ +).
+    natives["bytesFromArray"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("bytesFromArray", a, 1, line);
+        if (a[0].type != Value::Type::ARRAY) {
+            throw RinError("'bytesFromArray' expects an array but got " + a[0].typeName(), line);
+        }
+        std::string out;
+        out.reserve(a[0].array->size());
+        for (auto& item : *a[0].array) {
+            double n = asNumber(item, "bytesFromArray", line);
+            long i = static_cast<long>(n);
+            if (i < 0 || i > 255) {
+                throw RinError("'bytesFromArray': كل عنصر يجب أن يكون بين 0 و255 (وُجد " + std::to_string(i) + ")", line);
+            }
+            out.push_back(static_cast<char>(static_cast<unsigned char>(i)));
+        }
+        return Value::string(out);
+    };
+    // crc32(s) -> يحسب CRC-32 (نفس خوارزمية zlib/PNG/gzip) لنص بايتات خام، ويعيده كرقم غير سالب.
+    // لازم لبناء أي chunk في ملف PNG صالح (IHDR, IDAT, IEND...) من داخل Rin بدون C++.
+    natives["crc32"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("crc32", a, 1, line);
+        std::string s = asString(a[0], "crc32", line);
+        static uint32_t table[256];
+        static bool tableInit = false;
+        if (!tableInit) {
+            for (uint32_t n = 0; n < 256; n++) {
+                uint32_t c = n;
+                for (int k = 0; k < 8; k++) {
+                    c = (c & 1) ? (0xEDB88320u ^ (c >> 1)) : (c >> 1);
+                }
+                table[n] = c;
+            }
+            tableInit = true;
+        }
+        uint32_t crc = 0xFFFFFFFFu;
+        for (unsigned char ch : s) {
+            crc = table[(crc ^ ch) & 0xFF] ^ (crc >> 8);
+        }
+        crc ^= 0xFFFFFFFFu;
+        return Value::num(static_cast<double>(crc));
+    };
+    // adler32(s) -> يحسب Adler-32 (المطلوب في نهاية كل تدفّق zlib، بما فيها بيانات IDAT في PNG).
+    natives["adler32"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("adler32", a, 1, line);
+        std::string s = asString(a[0], "adler32", line);
+        const uint32_t MOD_ADLER = 65521u;
+        uint32_t a32 = 1, b32 = 0;
+        for (unsigned char ch : s) {
+            a32 = (a32 + ch) % MOD_ADLER;
+            b32 = (b32 + a32) % MOD_ADLER;
+        }
+        return Value::num(static_cast<double>((b32 << 16) | a32));
+    };
     natives["toString"] = [](std::vector<Value>& a, int line) {
         expectArgs("toString", a, 1, line);
         return Value::string(a[0].toDisplayString());
