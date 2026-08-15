@@ -72,6 +72,9 @@ namespace RinLang.VSSDK.Classification
                 // document / route / table / style keywords.
                 (new Regex(@"\b(document|route|table|style)\b", o), RinClassificationTypes.RelationKeyword),
 
+                // plus.condition (condition) { .. } / { .. } -> شرط ثلاثي عام (statement-level ternary)
+                (new Regex(@"\bplus\.condition\b", o), RinClassificationTypes.Keyword),
+
                 // Bare @ annotation marker not already matched above.
                 (new Regex(@"@", o), RinClassificationTypes.Annotation),
 
@@ -82,7 +85,7 @@ namespace RinLang.VSSDK.Classification
                 (new Regex(@"\b(let|fun|text)\b", o), RinClassificationTypes.Storage),
 
                 // Control keywords / logical operators / print.
-                (new Regex(@"\b(if|else|while|return|break|continue|and|or|print)\b", o), RinClassificationTypes.Keyword),
+                (new Regex(@"\b(if|else|while|for|return|break|continue|and|or|print)\b", o), RinClassificationTypes.Keyword),
 
                 // Boolean / nil constants.
                 (new Regex(@"\b(true|false|nil)\b", o), RinClassificationTypes.BooleanNil),
