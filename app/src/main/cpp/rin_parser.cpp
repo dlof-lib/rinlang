@@ -1,5 +1,6 @@
 #include "rin_parser.h"
 #include <algorithm>
+#include <unordered_set>
 
 namespace rin {
 
@@ -146,31 +147,59 @@ StmtPtr Parser::statement() {
     return expressionStatement();
 }
 
-// print expr1, expr2, ... [sep=expr] [end=expr];
+// print expr1, expr2, ... [sep=expr] [end=expr] [if=expr] [level=expr] [label=expr]
+//       [repeat=expr] [pretty=expr] [upper=expr] [lower=expr] [width=expr] [align=expr];
+// كل السمات اختيارية، بأي ترتيب بينها، كل واحدة مرة واحدة على الأكثر (تكرار نفس السمة خطأ صريح).
+// ملاحظتان عن نوع التوكن:
+//   - 'end' و'if' كلمتان محجوزتان في اللغة (TokenType::END / TokenType::IF)، فتحقّقهما هنا يكون
+//     عبر نوع التوكن مباشرة، وليس عبر IDENT كبقية السمات (سلوك موروث من end، طُبِّق أيضاً على if).
+//   - بقية السمات (sep/level/label/repeat/pretty/upper/lower/width/align) أسماء عادية غير محجوزة،
+//     تُقرأ كـ IDENT ويُطابَق نصّها ضمن printAttrs أدناه، تماماً كسمات key=value الأخرى في اللغة.
 StmtPtr Parser::printStatement() {
     Token tok = previous(); // 'print'
     auto stmt = std::make_shared<PrintStmt>();
-    stmt->exprs.push_back(expression());
+    // ملاحظة مهمة: القيم المفصولة بفواصل تُقرأ عبر pipeline() (مستوى أسفل assignment() مباشرة في
+    // ترتيب الأسبقية)، وليس عبر expression() الكاملة. السبب: expression() تسمح بتعبير إسناد كامل
+    // (IDENT = value)، وبما أن كل سمات print (sep=/end=/level=/... إلخ) هي بالضبط بصيغة
+    // "IDENT = value"، فلو استُخدمت expression() هنا لَقرأ الحلقة "sep=\"-\"" كتعبير إسناد كامل
+    // ضمن قائمة القيم بدل تركه للحلقة اللاحقة التي تتعرّف على سمات print — فتُبتلع السمة بأكملها
+    // كقيمة يُحاول تنفيذها وقت التشغيل (وتفشل: "Undefined variable 'sep'"), ولا تصل أبداً لتُفعَّل
+    // كسمة فعلية. إسناد صريح كقيمة print ما زال ممكناً عبر أقواس: print (x = 5);
+    stmt->exprs.push_back(pipeline());
     while (match({TokenType::COMMA})) {
-        stmt->exprs.push_back(expression());
+        stmt->exprs.push_back(pipeline());
     }
-    // sep=/end= اختياريان، كل واحدة مرة واحدة على الأكثر، بأي ترتيب بينهما.
-    // ملاحظة: 'end' كلمة محجوزة في اللغة (TokenType::END، تُستخدم في .end/container...)، فتحقّقها
-    // هنا يكون عبر نوع التوكن END وليس IDENT كما مع 'sep' (وبقية سمات key=value في اللغة).
-    bool sawSep = false, sawEnd = false;
-    while ((check(TokenType::IDENT) && peek().lexeme == "sep") || check(TokenType::END)) {
-        std::string attr = advance().lexeme;
+    static const std::unordered_set<std::string> printAttrs = {
+        "sep", "level", "label", "repeat", "pretty", "upper", "lower", "width", "align"
+    };
+    std::unordered_set<std::string> seen;
+    for (;;) {
+        std::string attr;
+        if (check(TokenType::END)) {
+            attr = "end";
+        } else if (check(TokenType::IF)) {
+            attr = "if";
+        } else if (check(TokenType::IDENT) && printAttrs.count(peek().lexeme)) {
+            attr = peek().lexeme;
+        } else {
+            break;
+        }
+        advance(); // استهلاك توكن اسم السمة
+        if (seen.count(attr)) throw RinError("'print': '" + attr + "' attribute repeated", tok.line);
+        seen.insert(attr);
         consume(TokenType::EQUAL, "Expected '=' after '" + attr + "' in print statement");
         ExprPtr value = expression();
-        if (attr == "sep") {
-            if (sawSep) throw RinError("'print': 'sep' attribute repeated", tok.line);
-            stmt->sep = value;
-            sawSep = true;
-        } else {
-            if (sawEnd) throw RinError("'print': 'end' attribute repeated", tok.line);
-            stmt->end = value;
-            sawEnd = true;
-        }
+        if (attr == "sep") stmt->sep = value;
+        else if (attr == "end") stmt->end = value;
+        else if (attr == "if") stmt->ifCond = value;
+        else if (attr == "level") stmt->level = value;
+        else if (attr == "label") stmt->label = value;
+        else if (attr == "repeat") stmt->repeatN = value;
+        else if (attr == "pretty") stmt->pretty = value;
+        else if (attr == "upper") stmt->upper = value;
+        else if (attr == "lower") stmt->lower = value;
+        else if (attr == "width") stmt->width = value;
+        else if (attr == "align") stmt->align = value;
     }
     consume(TokenType::SEMICOLON, "Expected ';' after print statement");
     stmt->line = tok.line;
