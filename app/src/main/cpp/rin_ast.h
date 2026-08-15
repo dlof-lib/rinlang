@@ -82,19 +82,46 @@ struct Stmt {
 using StmtPtr = std::shared_ptr<Stmt>;
 
 struct ExpressionStmt : Stmt { ExprPtr expr; };
-// print expr1, expr2, ... [sep=expr] [end=expr];
-// السلوك الافتراضي (قيمة واحدة، بلا sep/end) مطابق تماماً للسابق: قيمة واحدة + سطر جديد "\n".
-// 3 ميزات جديدة أضيفت فوق ذلك:
-//   1) exprs: أكثر من قيمة مفصولة بفواصل في نفس أمر print الواحد (مثال: print "x=", x;)
-//   2) sep: فاصل مخصص يُطبع بين كل قيمتين متتاليتين عند تعدّد القيم (افتراضياً مسافة واحدة " ")
-//   3) end: ما يُطبع في نهاية السطر بدل "\n" الافتراضي — end="" يمنع السطر الجديد تماماً، فيسمح
-//      بعدّة أوامر print متتالية تكمل بعضها على نفس السطر (مفيد لعدّادات/أشرطة تقدّم console)
-// sep/end يُقيَّمان كتعبيرين عاديين (وليس حصراً حرفاً نصياً) لكن يجب أن يُقيَّما إلى STRING وقت
-// التنفيذ، وإلا خطأ صريح؛ تماماً كبقية سمات key=value الأخرى في اللغة (document/row/route/save).
+// print expr1, expr2, ... [sep=expr] [end=expr] [if=expr] [level=expr] [label=expr]
+//       [repeat=expr] [pretty=expr] [upper=expr] [lower=expr] [width=expr] [align=expr];
+// السلوك الافتراضي (قيمة واحدة، بلا أي سمة) مطابق تماماً للسابق: قيمة واحدة + سطر جديد "\n".
+// كل السمات أدناه اختيارية وإضافية بحتة (additive)، بأي ترتيب بينها، كل واحدة مرة واحدة على
+// الأكثر، وتُقيَّم كتعبيرات عادية (وليست حصراً حرفاً حرفياً) لكن يجب أن تُقيَّم إلى النوع المتوقَّع
+// وقت التنفيذ وإلا خطأ صريح — تماماً كبقية سمات key=value الأخرى في اللغة (document/row/route/save):
+//   1) exprs : أكثر من قيمة مفصولة بفواصل في نفس أمر print الواحد (مثال: print "x=", x;)
+//   2) sep   : فاصل مخصص يُطبع بين كل قيمتين متتاليتين عند تعدّد القيم (افتراضياً مسافة واحدة " ")
+//   3) end   : ما يُطبع في نهاية السطر بدل "\n" الافتراضي — end="" يمنع السطر الجديد تماماً، فيسمح
+//              بعدّة أوامر print متتالية تكمل بعضها على نفس السطر (عدّادات/أشرطة تقدّم console)
+//   4) if    : بوابة تنفيذ (guard) — عند تقييمها إلى قيمة زائفة (falsy) يصبح أمر print بأكمله
+//              no-op تماماً: لا تُقيَّم exprs ولا أي سمة أخرى إطلاقاً (مفيد لسجلّات verbose/debug
+//              بلا الحاجة لتغليف print بجملة if{} منفصلة، ودون أي أثر جانبي غير مرغوب)
+//   5) level : "info" | "success" | "warn" | "error" | "debug" — يضيف رمزاً مميّزاً في بداية السطر
+//              يلتقطه RinConsoleFormatter.kt (تطبيق أندرويد) لتلوين/تصنيف السطر بصرياً في الكونسول
+//   6) label : وسم نصي مخصّص يُطبع كـ "[LABEL] " بعد رمز level (أو في البداية إن غاب level) —
+//              مفيد لتمييز مصدر رسالة التتبّع (مثال: label="AUTH")
+//   7) repeat: عدد صحيح غير سالب n — يُعيد طباعة نفس السطر كاملاً (البادئة + المحتوى + end) n مرة؛
+//              n=0 لا يطبع شيئاً إطلاقاً (فواصل/بانرات console: print "-", repeat=40, end="";)
+//   8) pretty: عند true، أي قيمة من نوع مصفوفة (array) أو قاموس (map) ضمن exprs تُطبع بتهيئة
+//              متعددة الأسطر بمسافات بادئة (2 لكل مستوى) بدل التمثيل المضغوط سطر واحد المعتاد —
+//              مفيد لتفقّد بيانات متداخلة أثناء التطوير
+//   9) upper/lower: يحوّل النص النهائي المُجمَّع (بعد pretty وقبل width) بالكامل لأحرف كبيرة/صغيرة؛
+//              استخدام الاثنين معاً في نفس أمر print خطأ صريح
+//   10) width/align: يحشو (بمسافات) النص النهائي المُجمَّع لعرض لا يقل عن width حرفاً — align
+//              يحدّد جهة الحشو: "left" (افتراضي) | "right" | "center"؛ align بلا width خطأ صريح
+//              (محاذاة بلا عرض هدف لا معنى لها)؛ لا يُقصَّر المحتوى أبداً إن كان أطول من width.
 struct PrintStmt : Stmt {
     std::vector<ExprPtr> exprs;
     ExprPtr sep; // nullptr = افتراضي " "
     ExprPtr end; // nullptr = افتراضي "\n"
+    ExprPtr ifCond;  // nullptr = يُطبع دائماً (بلا بوابة شرط)
+    ExprPtr level;   // nullptr = بلا رمز تصنيف
+    ExprPtr label;   // nullptr = بلا وسم
+    ExprPtr repeatN; // nullptr = افتراضي 1 (مرة واحدة)
+    ExprPtr pretty;  // nullptr = افتراضي false (تمثيل مضغوط سطر واحد)
+    ExprPtr upper;   // nullptr = افتراضي false
+    ExprPtr lower;   // nullptr = افتراضي false
+    ExprPtr width;   // nullptr = بلا حشو
+    ExprPtr align;   // nullptr = افتراضي "left" (فقط له معنى مع width)
 };
 struct LetStmt : Stmt { std::string name; ExprPtr initializer; };
 struct BlockStmt : Stmt { std::vector<StmtPtr> statements; };
