@@ -80,6 +80,19 @@ StmtPtr Parser::declaration() {
     if (check(TokenType::IDENT) && peek().lexeme == "document") { advance(); return documentStatement(); }
     // 'warp' كلمة سياقية غير محجوزة أيضاً (Loomtime: خلية حالة تفاعلية يستخدمها محرّك العرض)
     if (check(TokenType::IDENT) && peek().lexeme == "warp") { advance(); return warpDeclaration(); }
+    // 'plus.condition' كلمة مفتاحية مركّبة سياقية (شرط ثلاثي عام: plus.condition(cond) {..} / {..}).
+    // تُفحَص هنا (declaration()) وليس في statement() حتى تعمل بنفس المستوى فوق أي إعلان حاوية
+    // (@container...) بداخل كتلتيها، تماماً كأسلوب فحص '@import'/'@view' أعلاه: ننظر 3 خطوات
+    // للأمام (IDENT("plus") ثم DOT ثم IDENT("condition")) قبل الاستهلاك.
+    if (check(TokenType::IDENT) && peek().lexeme == "plus" &&
+        checkNext(TokenType::DOT) &&
+        current + 2 < tokens.size() && tokens[current + 2].type == TokenType::IDENT &&
+        tokens[current + 2].lexeme == "condition") {
+        advance(); // 'plus'
+        advance(); // '.'
+        advance(); // 'condition'
+        return plusConditionStatement();
+    }
 
     return statement();
 }
@@ -125,6 +138,7 @@ StmtPtr Parser::statement() {
     if (match({TokenType::PRINT})) return printStatement();
     if (match({TokenType::IF})) return ifStatement();
     if (match({TokenType::WHILE})) return whileStatement();
+    if (match({TokenType::FOR})) return forStatement();
     if (match({TokenType::RETURN})) return returnStatement();
     if (match({TokenType::BREAK})) return breakStatement();
     if (match({TokenType::CONTINUE})) return continueStatement();
@@ -187,6 +201,72 @@ StmtPtr Parser::whileStatement() {
     auto stmt = std::make_shared<WhileStmt>();
     stmt->condition = condition;
     stmt->body = body;
+    return stmt;
+}
+
+// for (initializer; condition; increment) body
+// الأجزاء الثلاثة اختيارية تماماً كما في C:
+//   - initializer: 'let x = ...;' أو 'x = ...;' (عبارة تعبير) أو فارغة (';' فقط)
+//   - condition: تعبير منطقي؛ إن غاب يُعتبر true دائماً
+//   - increment: تعبير عادي (يُنفَّذ بعد كل تكرار، حتى بعد continue)؛ اختياري
+// desugaring داخلياً: نبني ForStmt مستقلة (بدل تحويلها فوراً إلى WhileStmt) حتى يبقى initializer
+// محصوراً ضمن بيئة (Environment) خاصة بالحلقة كلها، تماماً كسلوك for القياسي في اللغات المشابهة.
+StmtPtr Parser::forStatement() {
+    Token forTok = previous(); // 'for'
+    consume(TokenType::LPAREN, "Expected '(' after 'for'");
+
+    StmtPtr initializer = nullptr;
+    if (match({TokenType::SEMICOLON})) {
+        initializer = nullptr; // for (;;) -> لا مُهيّئ
+    } else if (match({TokenType::LET})) {
+        initializer = letDeclaration(); // letDeclaration() يستهلك ';' بنفسه
+    } else {
+        initializer = expressionStatement(); // يستهلك ';' بنفسه أيضاً
+    }
+
+    ExprPtr condition = nullptr;
+    if (!check(TokenType::SEMICOLON)) condition = expression();
+    consume(TokenType::SEMICOLON, "Expected ';' after 'for' loop condition");
+
+    ExprPtr increment = nullptr;
+    if (!check(TokenType::RPAREN)) increment = expression();
+    consume(TokenType::RPAREN, "Expected ')' after 'for' clauses");
+
+    loopDepth++;
+    auto body = statement();
+    loopDepth--;
+
+    auto stmt = std::make_shared<ForStmt>();
+    stmt->initializer = initializer;
+    stmt->condition = condition;
+    stmt->increment = increment;
+    stmt->body = body;
+    stmt->line = forTok.line;
+    return stmt;
+}
+
+// plus.condition (condition) { trueBranch } / { falseBranch }
+// كلتا الكتلتين إلزاميتان (بخلاف else الاختيارية في if) — إن غابت إحداهما فهو خطأ نحوي صريح.
+// يُستدعى بعد أن يكون declaration() قد استهلك بالفعل 'plus' '.' 'condition'.
+StmtPtr Parser::plusConditionStatement() {
+    Token tok = previous(); // آخر توكن مُستهلَك ('condition')
+    consume(TokenType::LPAREN, "Expected '(' after 'plus.condition'");
+    auto condition = expression();
+    consume(TokenType::RPAREN, "Expected ')' after 'plus.condition' condition");
+
+    consume(TokenType::LBRACE, "Expected '{' to start 'plus.condition' true-branch");
+    auto trueBranch = block(); // يستهلك '}' المطابقة بنفسه
+
+    consume(TokenType::SLASH, "Expected '/' between 'plus.condition' true-branch and false-branch");
+
+    consume(TokenType::LBRACE, "Expected '{' to start 'plus.condition' false-branch");
+    auto falseBranch = block();
+
+    auto stmt = std::make_shared<PlusConditionStmt>();
+    stmt->condition = condition;
+    stmt->trueBranch = trueBranch;
+    stmt->falseBranch = falseBranch;
+    stmt->line = tok.line;
     return stmt;
 }
 
