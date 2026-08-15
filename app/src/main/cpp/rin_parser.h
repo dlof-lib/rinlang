@@ -44,7 +44,7 @@ private:
     std::string readTagKeyword();      // يقرأ "container" أو "Volume" أو "Containers.Group" ...
     std::string readOptionalName();    // يقرأ "=name" اختياريًا بعد كلمة مفتاحية
     bool checkClosingTag() const;      // هل التوكن الحالي بداية ".end/..."
-    void consumeEndTag(const std::string& expectedTag); // يستهلك ويتحقق من ".end/<expectedTag>"
+    void consumeEndTag(const std::string& expectedTag, int openLine, const std::string& openName = ""); // يستهلك ويتحقق من ".end/<expectedTag>" أو اختصارها ".end;"
 
     StmtPtr textDeclaration();
     StmtPtr objectStyleFieldDeclaration(ObjectStyleFieldKind kind); // txt/img/object.file/Fonts/background/css3 name=...; (حصراً داخل @Object)
