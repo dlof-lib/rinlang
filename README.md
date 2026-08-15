@@ -182,6 +182,58 @@ while (n < 10) {
     print n;
 }
 
+// حلقة for على طراز C: for (تهيئة؛ شرط؛ زيادة) { ... }
+for (let i = 0; i < 5; i = i + 1) {
+    print i;
+}
+
+// الأجزاء الثلاثة اختيارية تماماً كما في C — تُنتج نفس معنى while:
+let j = 0;
+for (; j < 3;) {
+    print j;
+    j = j + 1;
+}
+
+// break/continue تعمل بنفس الشكل داخل for، والزيادة (increment) تُنفَّذ دائماً
+// بعد كل تكرار، حتى بعد continue:
+let sum = 0;
+for (let k = 0; k < 10; k = k + 1) {
+    if (k % 2 == 0) { continue; }
+    if (k > 7) { break; }
+    sum = sum + k;
+}
+print sum; // 16
+
+// المتغيّر المُعلَن في تهيئة for (let i = ...) محصور ضمن نطاق الحلقة، ولا يتسرّب للخارج
+// ولا يتعارض مع متغيّر بنفس الاسم خارجها:
+let i = "outside";
+for (let i = 100; i < 101; i = i + 1) {
+    print i; // 100
+}
+print i; // "outside"
+
+// plus.condition (condition) { .. } / { .. } -> "شرط ثلاثي" على مستوى العبارات (statement-level
+// ternary). الفرق عن if/else: كلتا الكتلتين إلزاميتان دائماً (لا يوجد نسخة بلا false-branch)،
+// والفاصل بينهما هو '/' بدل كلمة else. تعمل مع أي عبارة عادية (print, let, ...):
+let x = 7;
+plus.condition (x > 5) {
+    print "big";
+} / {
+    print "small";
+}
+
+// وتعمل أيضاً مع أي إعلان حاوية بداخل كتلتيها، لأنها تُبنى بنفس آلية أي كتلة {} أخرى في اللغة
+// (تشمل @container/@Containers.Group/... تماماً كجسم دالة أو حلقة):
+plus.condition (x > 5) {
+    @container=result
+        text mode = "big-mode";
+    .end/container
+} / {
+    @container=result
+        text mode = "small-mode";
+    .end/container
+}
+
 // الدوال (تدعم الاستدعاء الذاتي/التكرار)
 fun fib(n) {
     if (n < 2) { return n; }
