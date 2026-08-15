@@ -43,7 +43,7 @@ object RinSyntaxHighlighter {
 
     // كلمات لغة Rin الأساسية (تحكّم بالتدفّق، تعريف متغيرات ودوال)
     private val coreKeywords = listOf(
-        "let", "print", "if", "else", "while", "fun", "return", "break", "continue",
+        "let", "print", "if", "else", "while", "for", "fun", "return", "break", "continue",
         "true", "false", "nil", "and", "or"
     )
 
@@ -58,7 +58,10 @@ object RinSyntaxHighlighter {
         "Translations", "translation", "link", "tying", "merge",
         "installation", "simplified", "save", "file", "end",
         "row", "style", "document", "route",
-        "data", "api", "import", "table", "doc", "portal", "block", "pipe"
+        "data", "api", "import", "table", "doc", "portal", "block", "pipe",
+        // plus.condition (condition) { .. } / { .. } -> شرط ثلاثي عام؛ "plus"/"condition" كلمتان
+        // سياقيتان (يُقرأ كل منهما IDENT عادي، ويجتمعان بفاصل نقطة فقط عند ظهورهما أول عبارة).
+        "plus", "condition"
     )
 
     // حقول تنسيق/ستايل خاصة حصراً بـ @container.object/@Object: txt/img/object.file/Fonts/
