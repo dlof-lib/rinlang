@@ -2020,6 +2020,37 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
         }
         return;
     }
+    // for (initializer; condition; increment) body -> حلقة for على طراز C (إضافة جديدة additive بحتة)
+    // initializer يُنفَّذ مرة واحدة داخل بيئة (Environment) جديدة خاصة بالحلقة كلها، بحيث يبقى أي
+    // متغيّر يُعلَن فيها (let i = 0) محصوراً ضمن نطاق الحلقة تماماً كسلوك for المعتاد. condition
+    // الغائب يُعامل كـ true دائماً. increment يُنفَّذ بعد كل تكرار، بما في ذلك بعد continue.
+    if (auto s = std::dynamic_pointer_cast<ForStmt>(stmt)) {
+        auto forEnv = std::make_shared<Environment>(env);
+        if (s->initializer) execute(s->initializer, forEnv);
+        while (!s->condition || evaluate(s->condition, forEnv).isTruthy()) {
+            try {
+                execute(s->body, forEnv);
+            } catch (BreakSignal&) {
+                break;
+            } catch (ContinueSignal&) {
+                // لا شيء إضافي هنا: increment أدناه ينفَّذ دائماً بعد الـ catch، سواء بـ continue أو
+                // بانتهاء الجسم طبيعياً، تماماً كسلوك for القياسي.
+            }
+            if (s->increment) evaluate(s->increment, forEnv);
+        }
+        return;
+    }
+    // plus.condition (condition) { trueBranch } / { falseBranch } -> شرط ثلاثي عام: يقيّم condition
+    // مرة واحدة، وينفّذ إحدى الكتلتين (كل كتلة تنفَّذ عبر execute(BlockStmt) العادية، أي تحصل على
+    // بيئة/نطاق (Environment) خاص بها تماماً كأي كتلة {} أخرى في اللغة).
+    if (auto s = std::dynamic_pointer_cast<PlusConditionStmt>(stmt)) {
+        if (evaluate(s->condition, env).isTruthy()) {
+            execute(s->trueBranch, env);
+        } else {
+            execute(s->falseBranch, env);
+        }
+        return;
+    }
     if (auto s = std::dynamic_pointer_cast<FunctionStmt>(stmt)) {
         auto callable = std::make_shared<Callable>();
         callable->declaration = s;
