@@ -166,5 +166,8 @@ object RinFlowTracer {
         LogKind.DOC_UPDATE -> "Update"
         LogKind.ERROR -> "Error"
         LogKind.PLAIN -> "Output"
+        LogKind.INFO -> "Info"
+        LogKind.WARNING -> "Warning"
+        LogKind.DEBUG -> "Debug"
     }
 }
