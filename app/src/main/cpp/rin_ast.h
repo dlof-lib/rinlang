@@ -107,6 +107,35 @@ struct WhileStmt : Stmt {
     ExprPtr condition;
     StmtPtr body;
 };
+// for (initializer; condition; increment) body -> حلقة for على طراز C (إضافة جديدة additive بحتة،
+// نفس روح إضافة AUKT: لا تغيير على أي عقدة/سلوك موجود مسبقاً). الثلاثة أجزاء اختيارية تماماً كـ C:
+//   - initializer: قد تكون 'let x = ...;' أو عبارة تعبير (expression;) أو فارغة (';' فقط)
+//   - condition: تعبير منطقي يُقيَّم قبل كل تكرار؛ فارغ يعني true دائماً (حلقة لا نهائية إلا بـ break)
+//   - increment: تعبير يُنفَّذ بعد كل تكرار (حتى بعد continue)؛ فارغ يعني لا شيء
+// break/continue تعمل بالضبط كما في while (تُحسب ضمن loopDepth في المحلل النحوي).
+struct ForStmt : Stmt {
+    StmtPtr initializer; // may be null
+    ExprPtr condition;   // may be null -> يُعامل كـ true
+    ExprPtr increment;   // may be null
+    StmtPtr body;
+};
+// plus.condition (condition) { trueBranch } / { falseBranch } -> "شرط ثلاثي" عام على مستوى
+// العبارات (statement-level ternary)، إضافة جديدة additive بحتة فوق if/else الموجودة أصلاً.
+// الفرق الجوهري عن if/else:
+//   1) الكتلتان (true/false) **إلزاميتان دائماً** (بخلاف else الاختيارية في IfStmt) — لأن الفكرة
+//      تعبيرية/ثلاثية بطبيعتها: يجب أن يكون هناك مسار واضح لكل من الحالتين.
+//   2) الكلمة المفتاحية "plus.condition" (مثل "container.pipe") كلمة مركّبة سياقية غير محجوزة
+//      عالمياً — لا تتعارض مع أي متغيّر موجود اسمه "plus" إلا إذا ظهر تماماً بصيغة plus.condition
+//      في بداية عبارة (نفس أسلوب route/row/style/document/warp).
+//   3) عام تماماً: تُبنى كتلتاه عبر block()، أي تدعم أي عبارة عادية (print, let, ...) وأيضاً أي
+//      إعلان حاوية (@container, @Containers.Group, ...) بداخلها، تماماً كجسم أي دالة أو حلقة.
+// الفاصل بين الكتلتين هو '/' (يُعاد استخدام توكن SLASH الموجود أصلاً لعامل القسمة — لا حاجة لتوكن
+// جديد، ولا تعارض لأن '/' هنا يظهر حصراً بين '}' الأولى و'{' الثانية داخل بنية plus.condition).
+struct PlusConditionStmt : Stmt {
+    ExprPtr condition;
+    std::shared_ptr<BlockStmt> trueBranch;  // ينفَّذ إذا كان condition صحيحاً (truthy)
+    std::shared_ptr<BlockStmt> falseBranch; // ينفَّذ إذا كان condition خاطئاً
+};
 struct FunctionStmt : Stmt {
     std::string name;
     std::vector<std::string> params;
