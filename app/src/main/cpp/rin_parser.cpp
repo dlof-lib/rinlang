@@ -390,15 +390,45 @@ bool Parser::checkClosingTag() const {
     return tokens[current + 1].type == TokenType::END;
 }
 
-void Parser::consumeEndTag(const std::string& expectedTag) {
-    consume(TokenType::DOT, "Expected '.' to start a closing tag like '.end/" + expectedTag + "'");
-    consume(TokenType::END, "Expected 'end' after '.' in closing tag");
-    consume(TokenType::SLASH, "Expected '/' after 'end' in closing tag");
-    Token before = peek();
+void Parser::consumeEndTag(const std::string& expectedTag, int openLine, const std::string& openName) {
+    // كل رسائل الخطأ أدناه تذكر صراحةً السطر الذي فُتحت فيه الكتلة (openLine)، حتى في ملف كبير
+    // بتعشيش عميق يعرف المبرمج فوراً أي '@' بالضبط لم يُغلق أو أُغلق بوسم خاطئ، بدل الاضطرار للبحث
+    // يدوياً بين عشرات أسطر '.end/...' المتشابهة.
+    consume(TokenType::DOT, "Expected '.' to start a closing tag like '.end/" + expectedTag +
+                             "' (matches '@" + expectedTag + "' opened at line " + std::to_string(openLine) + ")");
+    consume(TokenType::END, "Expected 'end' after '.' in closing tag (matches '@" + expectedTag +
+                             "' opened at line " + std::to_string(openLine) + ")");
+    // اختصار '.end;' : يغلق الكتلة الحالية أياً كان نوعها/اسمها دون الحاجة لتكرار كتابة الاثنين —
+    // مفيد خصوصاً عند تعشيش عميق (container داخل Containers.Group داخل Volume...) حيث تكرار
+    // '.end/container.pipe' في كل مستوى متعب ومصدر أخطاء نسخ/لصق شائع. الصحة البنيوية (أي كتلة
+    // تُغلق فعلياً هي الصحيحة) مضمونة بالكامل بمعزل عن هذا الاختصار، لأن ترتيب الإغلاق يحدّده هيكل
+    // النزول التكراري (recursive descent) نفسه في المحلل النحوي وليس ما يكتبه المبرمج بعد '.end'.
+    if (match({TokenType::SEMICOLON})) return;
+    consume(TokenType::SLASH, "Expected '/' after 'end' in closing tag (or ';' for the short form '.end;'), "
+                               "matching '@" + expectedTag + "' opened at line " + std::to_string(openLine));
+    Token beforeTag = peek();
     std::string closingTag = readTagKeyword();
     if (closingTag != expectedTag) {
-        throw RinError("Closing tag '.end/" + closingTag + "' does not match the opening '" + expectedTag + "'",
-                        before.line);
+        throw RinError("Closing tag '.end/" + closingTag + "' does not match the opening '@" + expectedTag +
+                        "' opened at line " + std::to_string(openLine), beforeTag.line);
+    }
+    // تحقق اختياري من الاسم: '.end/tag=name' — إن كُتب، يجب أن يطابق حرفياً اسم الفتح '@tag=name'
+    // (مفيد كوسيلة أمان إضافية اختيارية في الحاويات المتداخلة الكبيرة، تماماً كتعليق
+    // '} // namespace Foo' في لغات أخرى، لكن هنا يُتحقَّق منه فعلياً وقت التحليل النحوي بدل أن يكون
+    // مجرد تعليق يمكن أن يفوت المبرمج تحديثه). كتابته اختيارية بالكامل ولا تُغيّر أي سلوك قديم.
+    Token afterTag = peek();
+    std::string closingName = readOptionalName();
+    if (!closingName.empty()) {
+        if (openName.empty()) {
+            throw RinError("Closing tag '.end/" + expectedTag + "=" + closingName + "' specifies a name, but the "
+                            "opening '@" + expectedTag + "' (line " + std::to_string(openLine) + ") has none",
+                            afterTag.line);
+        }
+        if (closingName != openName) {
+            throw RinError("Closing tag '.end/" + expectedTag + "=" + closingName + "' does not match the opening "
+                            "name '" + openName + "' of '@" + expectedTag + "' (line " + std::to_string(openLine) + ")",
+                            afterTag.line);
+        }
     }
 }
 
@@ -459,7 +489,7 @@ std::shared_ptr<ViewStmt> Parser::viewDeclaration() {
         throw RinError("Expected an attribute (key=value;), a nested '@view...', or '.end/view' inside "
                         "@view." + s->kindTag, peek().line);
     }
-    consumeEndTag("view");
+    consumeEndTag("view", viewTok.line, name);
     return s;
 }
 
@@ -496,7 +526,7 @@ StmtPtr Parser::atBlock() {
     std::string name = readOptionalName();
     std::vector<StmtPtr> body;
     while (!checkClosingTag() && !isAtEnd()) body.push_back(declaration());
-    consumeEndTag(tag);
+    consumeEndTag(tag, atTok.line, name);
 
     if (tag == "container" || tag == "container.pipe" || tag == "container.data" ||
         tag == "container.api" || tag == "container.import" ||
@@ -594,7 +624,7 @@ StmtPtr Parser::sectionBlock() {
     std::string name = readOptionalName();
     std::vector<StmtPtr> body;
     while (!checkClosingTag() && !isAtEnd()) body.push_back(declaration());
-    consumeEndTag("Section");
+    consumeEndTag("Section", secTok.line, name);
     auto s = std::make_shared<SectionStmt>();
     s->name = name; s->body = body; s->line = secTok.line;
     return s;
@@ -604,7 +634,7 @@ StmtPtr Parser::translationsBlock() {
     Token tTok = previous();
     std::vector<StmtPtr> body;
     while (!checkClosingTag() && !isAtEnd()) body.push_back(declaration());
-    consumeEndTag("Translations");
+    consumeEndTag("Translations", tTok.line, "");
     auto s = std::make_shared<TranslationsStmt>();
     s->body = body; s->line = tTok.line;
     return s;
