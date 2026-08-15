@@ -20,6 +20,13 @@ enum class LogKind(@DrawableRes val icon: Int?, @ColorRes val colorRes: Int) {
     DOC_INSERT(R.drawable.ic_new_file, R.color.log_kind_success),   // 🧾 إدراج مستند NoSQL جديد
     DOC_UPDATE(R.drawable.ic_redo, R.color.log_kind_import),        // 🔄 تحديث مستند NoSQL موجود
     ERROR(R.drawable.ic_status_error, R.color.log_kind_error),
+    // الثلاثة أدناه خاصة حصراً بسمة print level="..." الجديدة (انظر PrintStmt في rin_ast.h ورمز
+    // level في rin_interpreter.cpp) — success/error التابعتان لـ print level="success"/"error"
+    // تُصنَّفان أعلاه ضمن SUCCESS/ERROR الموجودتين أصلاً (نفس الهوية اللونية منطقياً)، أما
+    // info/warn/debug فتصنيفات جديدة بالكامل لا نظير سابق لها.
+    INFO(R.drawable.ic_log_info, R.color.log_kind_info),
+    WARNING(R.drawable.ic_status_warning, R.color.log_kind_warning),
+    DEBUG(R.drawable.ic_log_debug, R.color.log_kind_debug),
     PLAIN(null, R.color.log_kind_plain)
 }
 
