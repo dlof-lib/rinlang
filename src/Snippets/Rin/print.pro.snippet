@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<CodeSnippets xmlns="http://schemas.microsoft.com/VisualStudio/2005/CodeSnippet">
+  <CodeSnippet Format="1.0.0">
+    <Header>
+      <Title>Print (احترافي)</Title>
+      <Shortcut>print.pro</Shortcut>
+      <Description>طباعة مع كل الخيارات الاحترافية: level/label/if/repeat/pretty/upper/lower/width/align</Description>
+      <SnippetTypes>
+        <SnippetType>Expansion</SnippetType>
+      </SnippetTypes>
+    </Header>
+    <Snippet>
+      <Declarations>
+        <Literal>
+          <ID>p1</ID>
+          <ToolTip>القيمة/القيم المراد طباعتها (يمكن فصل أكثر من قيمة بفاصلة)</ToolTip>
+          <Default>expr</Default>
+        </Literal>
+        <Literal>
+          <ID>lvl</ID>
+          <ToolTip>info | success | warn | error | debug</ToolTip>
+          <Default>info</Default>
+        </Literal>
+        <Literal>
+          <ID>lbl</ID>
+          <ToolTip>وسم مخصص يظهر كـ [TAG]</ToolTip>
+          <Default>TAG</Default>
+        </Literal>
+      </Declarations>
+      <Code Language="Rin"><![CDATA[print $p1$ level="$lvl$" label="$lbl$";]]></Code>
+    </Snippet>
+  </CodeSnippet>
+</CodeSnippets>
