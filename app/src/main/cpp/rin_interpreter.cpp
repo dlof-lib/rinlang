@@ -50,6 +50,54 @@ static std::string reprValue(const Value& v) {
     return v.toDisplayString();
 }
 
+// تهيئة متعددة الأسطر (multi-line, indented) لمصفوفة/قاموس — تُستخدم حصرياً عبر print pretty=true
+// (انظر PrintStmt في rin_ast.h). كل مستوى تعشيش يُزاح بمسافتين إضافيتين؛ العناصر/القيم غير
+// المُركَّبة (رقم/نص/منطقي/nil/دالة) تُطبع عبر reprValue تماماً كالتمثيل المضغوط المعتاد، فقط
+// الحاويات (array/map) نفسها هي ما يتمدد على عدة أسطر. مصفوفة/قاموس فارغان يبقيان "[]"/"{}"
+// على سطر واحد بلا تمدد (لا فائدة من تعدد أسطر لعنصر فارغ).
+static std::string prettyPrintValue(const Value& v, int indent) {
+    std::string ind(static_cast<size_t>(indent) * 2, ' ');
+    std::string indInner(static_cast<size_t>(indent + 1) * 2, ' ');
+    if (v.type == Value::Type::ARRAY) {
+        if (v.array->empty()) return "[]";
+        std::ostringstream ss;
+        ss << "[\n";
+        for (size_t i = 0; i < v.array->size(); i++) {
+            const Value& item = (*v.array)[i];
+            ss << indInner;
+            if (item.type == Value::Type::ARRAY || item.type == Value::Type::MAP) {
+                ss << prettyPrintValue(item, indent + 1);
+            } else {
+                ss << reprValue(item);
+            }
+            if (i + 1 < v.array->size()) ss << ",";
+            ss << "\n";
+        }
+        ss << ind << "]";
+        return ss.str();
+    }
+    if (v.type == Value::Type::MAP) {
+        if (v.map->empty()) return "{}";
+        std::ostringstream ss;
+        ss << "{\n";
+        for (size_t i = 0; i < v.map->size(); i++) {
+            const Value& key = (*v.map)[i].first;
+            const Value& val = (*v.map)[i].second;
+            ss << indInner << reprValue(key) << ": ";
+            if (val.type == Value::Type::ARRAY || val.type == Value::Type::MAP) {
+                ss << prettyPrintValue(val, indent + 1);
+            } else {
+                ss << reprValue(val);
+            }
+            if (i + 1 < v.map->size()) ss << ",";
+            ss << "\n";
+        }
+        ss << ind << "}";
+        return ss.str();
+    }
+    return reprValue(v);
+}
+
 bool valuesEqual(const Value& a, const Value& b) {
     if (a.type != b.type) return false;
     switch (a.type) {
@@ -1966,6 +2014,13 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
         return;
     }
     if (auto s = std::dynamic_pointer_cast<PrintStmt>(stmt)) {
+        // if= : بوابة تنفيذ كاملة — عند falsy، لا يُقيَّم أي شيء آخر إطلاقاً (لا exprs ولا أي سمة
+        // أخرى)، فيبقى أمر print معطَّلاً تماماً بلا أي أثر جانبي، تماماً كأنه لم يُكتب أصلاً.
+        if (s->ifCond) {
+            Value condVal = evaluate(s->ifCond, env);
+            if (!condVal.isTruthy()) return;
+        }
+
         std::string sep = " ";
         if (s->sep) {
             Value sepVal = evaluate(s->sep, env);
@@ -1982,11 +2037,107 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
             }
             end = endVal.str;
         }
+        bool prettyOn = false;
+        if (s->pretty) prettyOn = evaluate(s->pretty, env).isTruthy();
+
+        // بناء المحتوى الأساسي (القيم مفصولة بـ sep؛ pretty= يوسّع أي array/map متداخلة).
+        std::ostringstream body;
         for (size_t i = 0; i < s->exprs.size(); i++) {
-            if (i > 0) output << sep;
-            output << evaluate(s->exprs[i], env).toDisplayString();
+            if (i > 0) body << sep;
+            Value v = evaluate(s->exprs[i], env);
+            if (prettyOn && (v.type == Value::Type::ARRAY || v.type == Value::Type::MAP)) {
+                body << prettyPrintValue(v, 0);
+            } else {
+                body << v.toDisplayString();
+            }
         }
-        output << end;
+        std::string content = body.str();
+
+        // upper=/lower= : تحويل حالة الأحرف على المحتوى المُجمَّع بالكامل؛ الاثنان معاً خطأ صريح.
+        bool upperOn = s->upper && evaluate(s->upper, env).isTruthy();
+        bool lowerOn = s->lower && evaluate(s->lower, env).isTruthy();
+        if (upperOn && lowerOn) {
+            throw RinError("'print': لا يمكن استخدام 'upper' و'lower' معاً في نفس الأمر", stmt->line);
+        }
+        if (upperOn) {
+            std::transform(content.begin(), content.end(), content.begin(),
+                            [](unsigned char c) { return std::toupper(c); });
+        } else if (lowerOn) {
+            std::transform(content.begin(), content.end(), content.begin(),
+                            [](unsigned char c) { return std::tolower(c); });
+        }
+
+        // width=/align= : حشو المحتوى بمسافات لعرض أدنى؛ align بلا width خطأ صريح (لا هدف للمحاذاة).
+        if (s->width) {
+            Value wv = evaluate(s->width, env);
+            if (wv.type != Value::Type::NUMBER) {
+                throw RinError("'print': 'width' يجب أن يكون رقماً، لكن وُجد نوع " + wv.typeName(), stmt->line);
+            }
+            std::string alignMode = "left";
+            if (s->align) {
+                Value av = evaluate(s->align, env);
+                if (av.type != Value::Type::STRING) {
+                    throw RinError("'print': 'align' يجب أن يكون نصاً، لكن وُجد نوع " + av.typeName(), stmt->line);
+                }
+                if (av.str != "left" && av.str != "right" && av.str != "center") {
+                    throw RinError("'print': 'align' يجب أن يكون \"left\" أو \"right\" أو \"center\"، لكن وُجد \"" + av.str + "\"", stmt->line);
+                }
+                alignMode = av.str;
+            }
+            int w = static_cast<int>(wv.number);
+            int pad = w - static_cast<int>(content.size());
+            if (pad > 0) {
+                if (alignMode == "left") {
+                    content += std::string(static_cast<size_t>(pad), ' ');
+                } else if (alignMode == "right") {
+                    content = std::string(static_cast<size_t>(pad), ' ') + content;
+                } else { // center
+                    int leftPad = pad / 2, rightPad = pad - leftPad;
+                    content = std::string(static_cast<size_t>(leftPad), ' ') + content + std::string(static_cast<size_t>(rightPad), ' ');
+                }
+            }
+        } else if (s->align) {
+            throw RinError("'print': 'align' يتطلّب تحديد 'width' معه", stmt->line);
+        }
+
+        // level= : رمز تصنيف في بداية السطر (يلتقطه RinConsoleFormatter.kt لتلوين الكونسول).
+        std::string prefix;
+        if (s->level) {
+            Value lvv = evaluate(s->level, env);
+            if (lvv.type != Value::Type::STRING) {
+                throw RinError("'print': 'level' يجب أن يكون نصاً، لكن وُجد نوع " + lvv.typeName(), stmt->line);
+            }
+            if (lvv.str == "info") prefix = "\u2139\uFE0F ";
+            else if (lvv.str == "success") prefix = "\u2705 ";
+            else if (lvv.str == "warn" || lvv.str == "warning") prefix = "\u26A0\uFE0F ";
+            else if (lvv.str == "error") prefix = "\u274C ";
+            else if (lvv.str == "debug") prefix = "\U0001F41E ";
+            else throw RinError("'print': 'level' غير معروف \"" + lvv.str + "\" (المتاح: info, success, warn, error, debug)", stmt->line);
+        }
+        // label= : وسم مخصص "[TAG] " يُضاف بعد رمز level (أو في البداية إن غاب level).
+        if (s->label) {
+            Value lbv = evaluate(s->label, env);
+            if (lbv.type != Value::Type::STRING) {
+                throw RinError("'print': 'label' يجب أن يكون نصاً، لكن وُجد نوع " + lbv.typeName(), stmt->line);
+            }
+            prefix += "[" + lbv.str + "] ";
+        }
+
+        // repeat= : يكرر السطر كاملاً (بادئة + محتوى + end) n مرة؛ n=0 لا يطبع شيئاً إطلاقاً.
+        long long times = 1;
+        if (s->repeatN) {
+            Value rv = evaluate(s->repeatN, env);
+            if (rv.type != Value::Type::NUMBER) {
+                throw RinError("'print': 'repeat' يجب أن يكون رقماً، لكن وُجد نوع " + rv.typeName(), stmt->line);
+            }
+            if (rv.number < 0) {
+                throw RinError("'print': 'repeat' يجب ألا يكون سالباً", stmt->line);
+            }
+            times = static_cast<long long>(rv.number);
+        }
+        for (long long i = 0; i < times; i++) {
+            output << prefix << content << end;
+        }
         return;
     }
     if (auto s = std::dynamic_pointer_cast<LetStmt>(stmt)) {
