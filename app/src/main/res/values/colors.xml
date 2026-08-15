@@ -96,6 +96,12 @@
     <color name="log_kind_network">#5FD0E0</color>      <!-- API/شبكة/ترجمة -->
     <color name="log_kind_error">#F14C4C</color>
     <color name="log_kind_plain">#AEB4BD</color>
+    <!-- ثلاث هويات جديدة خاصة بـ print level=... (info/warn/debug) — success وerror فوق تُعادان
+         استخدامهما كما هما (نفس اللون) لأن level="success"/level="error" منطقياً نفس تصنيف
+         ✅ إغلاق ناجح و❌ خطأ تشغيل الفعليين -->
+    <color name="log_kind_info">#5C9DFF</color>
+    <color name="log_kind_warning">#E8B23D</color>
+    <color name="log_kind_debug">#B98CFF</color>
 
     <!-- تحميل هيكلي (skeleton loading) + شاشة انقطاع الاتصال -->
     <color name="rin_skeleton_base">#22252C</color>
