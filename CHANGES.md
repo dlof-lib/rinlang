@@ -54,3 +54,49 @@
    - `res/values{,​-en,-ar}/strings.xml`: نصوص `loom_busy_hint` و `loom_busy_network_hint`
      (لم تُضَف لـ values-es لأنها أصلاً لا تحتوي مفاتيح loom_ الأخرى — تتساقط تلقائياً إلى
      values الافتراضية).
+
+---
+
+## ✅ تطوير وتقوية مفهوم `print` (احترافي، مع خيارات كثيرة جديدة)
+
+### ملفات مُعدَّلة (المحرّك الأساسي — C++)
+- `app/src/main/cpp/rin_ast.h` — `PrintStmt` وُسِّعت بحقول اختيارية جديدة: `ifCond`, `level`,
+  `label`, `repeatN`, `pretty`, `upper`, `lower`, `width`, `align` (فوق `exprs`/`sep`/`end`
+  الموجودة أصلاً)، مع تعليق توثيقي كامل لكل سمة أعلى البنية.
+- `app/src/main/cpp/rin_parser.cpp` — `Parser::printStatement()` يقرأ الآن كل السمات الجديدة
+  (`key=value`، بأي ترتيب، كل واحدة مرة واحدة على الأكثر وإلا خطأ صريح "attribute repeated").
+  **إصلاح جذري مصاحب**: قائمة القيم المفصولة بفواصل كانت تُقرأ عبر `expression()` الكاملة (تشمل
+  الإسناد)، فكانت تبتلع أي `attr=value` كتعبير إسناد كامل قبل أن تصل حلقة اكتشاف السمات إليه —
+  هذا كان يجعل `sep=`/`end=` الأصليتين **غير قابلتين للاستخدام إطلاقاً** (خطأ تحليل نحوي أو
+  "Undefined variable" وقت التشغيل، بحسب الحالة). صُحِّح باستخدام `pipeline()` (مستوى أسفل
+  `assignment()` مباشرة) لقراءة القيم، فأصبحت `sep=`/`end=` (وكل السمات الجديدة) تعمل فعلياً كما
+  كانت مُوثَّقة دائماً.
+- `app/src/main/cpp/rin_interpreter.cpp`:
+  - دالة جديدة `prettyPrintValue(const Value&, int indent)` — تهيئة متعددة الأسطر لمصفوفة/قاموس.
+  - إعادة كتابة كاملة لتنفيذ `PrintStmt` في `Interpreter::execute()` لتفعيل كل السمات الجديدة:
+    بوابة `if=`، رمز `level=` (info/success/warn/error/debug)، وسم `label=`، تكرار `repeat=`،
+    تهيئة `pretty=`، تحويل حالة أحرف `upper=`/`lower=`، وحشو/محاذاة `width=`/`align=`.
+  - **اختُبر فعلياً** ببناء g++ مستقل (lexer→parser→interpreter كاملاً، بلا JNI/أندرويد) على كل
+    سمة على حدة: القيم الافتراضية، الأخطاء الصريحة (سمة مكررة، `level` غير معروف، `upper`+`lower`
+    معاً، `align` بلا `width`، `repeat` سالب)، وتأكيد أن `if=false` يمنع تقييم القيم بالكامل
+    (بلا أي أثر جانبي، بما فيها متغيرات غير معرَّفة داخل القيم المطبوعة).
+
+### ملفات كونسول أندرويد (لتلوين/تصنيف مخرجات `level=` تلقائياً)
+- `app/src/main/res/drawable/ic_log_info.xml` **(جديد)** — أيقونة `level="info"`.
+- `app/src/main/res/drawable/ic_log_debug.xml` **(جديد)** — أيقونة `level="debug"`.
+- `app/src/main/res/values/colors.xml` — ألوان جديدة: `log_kind_info`, `log_kind_warning`,
+  `log_kind_debug`.
+- `app/src/main/java/com/dlof/rinlang/RinConsoleFormatter.kt` — تصنيفات `LogKind` جديدة
+  `INFO`/`WARNING`/`DEBUG` (تُعيد استخدام أيقونة `ic_status_warning.xml` الموجودة أصلاً
+  لـ`WARNING`)، مسجَّلة ضمن `PREFIX_ORDER` لتلتقط رموز ℹ️/⚠️/🐞 التي يطبعها المحرّك؛ `level="success"`
+  و`level="error"` تُصنَّفان تلقائياً ضمن `SUCCESS`/`ERROR` الموجودتين أصلاً (نفس الرمزين ✅/❌).
+
+### أدوات المطوّر
+- `src/Snippets/Rin/print.pro.snippet` **(جديد)** — قصاصة VS تُدرج `print` بكل السمات
+  الاحترافية (level/label) جاهزة للتعديل، إلى جانب `print.snippet` البسيطة الموجودة أصلاً (بلا
+  أي تغيير عليها).
+
+### توثيق
+- `README.md` — قسم جديد كامل "### `print` — دليل كامل" (أمثلة مُختبَرة فعلياً لكل سمة + جدول
+  مرجعي بالسمة/النوع المتوقَّع/الافتراضي/الوصف)، وتحديث سطر `print` في جدول لغة الحاويات ليُشير
+  إليه.
