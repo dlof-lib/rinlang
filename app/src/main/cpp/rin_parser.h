@@ -31,6 +31,8 @@ private:
     StmtPtr printStatement();
     StmtPtr ifStatement();
     StmtPtr whileStatement();
+    StmtPtr forStatement(); // for (init; condition; increment) body  -> حلقة for على طراز C
+    StmtPtr plusConditionStatement(); // plus.condition(cond) { .. } / { .. } -> شرط ثلاثي عام
     StmtPtr returnStatement();
     StmtPtr breakStatement();
     StmtPtr continueStatement();
