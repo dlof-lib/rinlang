@@ -64,6 +64,7 @@ object ExtensionPermissions {
         ExtensionType.DEBUG_TOOL -> "ناتج التشغيل (Console) وسجلات التنفيذ فقط."
         ExtensionType.AI_TOOL -> "محتوى الكود الحالي، وقد تتصل بالإنترنت إن مُنحت إذن network.access."
         ExtensionType.TEMPLATE -> "تُستخدم فقط عند إنشاء مشروع جديد، ولا تصل لمشاريعك الحالية."
+        ExtensionType.LANGUAGE -> "ملفات لغة البرمجة المخصّصة (Lexer/Parser/Interpreter/CodeGen) فقط، ولا تصل لملفات مشاريعك الأخرى."
     }
 
     /**
