@@ -46,6 +46,7 @@ object ExtensionManifestFile {
         put("sizeBytes", ext.sizeBytes)
         put("fileName", ext.fileName)
         put("signature", ext.signature)
+        put("isOfficial", ext.isOfficial)
     }
 
     /** يقرأ extension.rinext من نص JSON خام، ويدمجه مع [base64Data] الممرَّر بشكل منفصل. */
@@ -85,7 +86,8 @@ object ExtensionManifestFile {
             sizeBytes = json.optLong("sizeBytes"),
             fileName = json.optString("fileName", MANIFEST_FILE_NAME),
             base64Data = base64Data,
-            signature = json.optString("signature")
+            signature = json.optString("signature"),
+            isOfficial = json.optBoolean("isOfficial", false)
         )
     }
 
