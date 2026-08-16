@@ -1,0 +1,97 @@
+// ============================================================================
+//  lib/iterkit.og.rin — مكرِّرات (iterators) بنمط hasNext/next فوق المصفوفات
+//  استيراد:
+//    @import "lib/iterkit.og.rin";
+//    @import "lib/iterkit.og.rin" as iter;
+//
+//  المكرِّر هنا خريطة عادية { data: array, pos: number }. ولأن الخرائط في Rin قيم
+//  مُشتركة بالمرجع (على عكس الأرقام/النصوص التي تُنسخ بالقيمة)، فإن تعديل it["pos"]
+//  بداخل أي دالة من هذه المكتبة يبقى مرئياً لدى المستدعي مباشرة، دون الحاجة لإعادة
+//  الخريطة وإعادة إسنادها يدوياً (كما تفعل lib/langkit.og.rin مع مؤشر pos الخام).
+//
+//  مثال سريع:
+//    let it = iterNew([10, 20, 30]);
+//    while (iterHasNext(it)) {
+//        print iterNext(it);   // 10 ثم 20 ثم 30
+//    }
+// ============================================================================
+
+// يبني مكرّراً جديداً يبدأ من أول عنصر في arr
+fun iterNew(arr) {
+    return { data: arr, pos: 0 };
+}
+
+// هل تبقّى عنصر واحد على الأقل لم يُزَر بعد؟
+fun iterHasNext(it) {
+    return it["pos"] < len(it["data"]);
+}
+
+// يُعيد العنصر الحالي بلا تقدّم (أو nil إن انتهى المكرّر)
+fun iterPeek(it) {
+    if (iterHasNext(it) == false) { return nil; }
+    return it["data"][it["pos"]];
+}
+
+// يُعيد العنصر الحالي ويُقدّم المكرّر خطوة واحدة (يُعدّل it مباشرة بالمرجع)
+fun iterNext(it) {
+    let value = iterPeek(it);
+    if (iterHasNext(it)) {
+        it["pos"] = it["pos"] + 1;
+    }
+    return value;
+}
+
+// عدد العناصر المتبقية التي لم تُزَر بعد
+fun iterRemaining(it) {
+    let left = len(it["data"]) - it["pos"];
+    if (left < 0) { return 0; }
+    return left;
+}
+
+// يُعيد المكرّر إلى بدايته من جديد (يُعدّل it مباشرة)
+fun iterReset(it) {
+    it["pos"] = 0;
+    return it;
+}
+
+// يتخطّى n عنصر دفعة واحدة (يتوقف عند نهاية البيانات دون خطأ إن كان n أكبر من المتبقي)
+fun iterSkip(it, n) {
+    let target = it["pos"] + n;
+    let dataLen = len(it["data"]);
+    if (target > dataLen) { target = dataLen; }
+    if (target < it["pos"]) { target = it["pos"]; }
+    it["pos"] = target;
+    return it;
+}
+
+// يستهلك كل ما تبقّى من المكرّر ويُعيده كمصفوفة عادية (المكرّر يصبح فارغاً بعدها)
+fun iterToArray(it) {
+    let result = [];
+    while (iterHasNext(it)) {
+        push(result, iterNext(it));
+    }
+    return result;
+}
+
+// يستهلك كل ما تبقّى مستدعياً fn(value, index) على كل عنصر (index يبدأ من 0 لكل استدعاء)
+fun iterForEach(it, fn) {
+    let i = 0;
+    while (iterHasNext(it)) {
+        fn(iterNext(it), i);
+        i = i + 1;
+    }
+    return nil;
+}
+
+// يبني مكرّراً جديداً (مستقلاً) يمرّ فقط على العناصر التي تحقق fn(element) == true من it
+// الحالي فصاعداً — يستهلك it الأصلي بالكامل في هذه العملية
+fun iterFilterToArray(it, fn) {
+    let result = [];
+    while (iterHasNext(it)) {
+        let value = iterNext(it);
+        if (fn(value)) {
+            push(result, value);
+        }
+    }
+    return result;
+}
