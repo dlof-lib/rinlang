@@ -983,6 +983,241 @@ fun ringoInfo() {
 }
 )RINGOOGRIN";
 
+static const char* kLib_langkit_og_rin = R"LANGKITOGRIN(
+// ============================================================================
+//  lib/langkit.og.rin — عدّة صناعة اللغات (Language Toolkit) فوق Rin
+//  استيراد:
+//    @import "lib/langkit.og.rin";
+//    @import "lib/langkit.og.rin" as lk;
+//
+//  هذه المكتبة هي الأخ الأكبر لـ lib/oglang.og.rin: بينما oglang.og.rin يبني "لغات أوامر"
+//  مصغّرة (سطر = أمر واحد، بلا محلّل حقيقي)، توفّر langkit.og.rin اللبنات الأساسية لبناء
+//  لغة برمجة حقيقية كاملة بثلاث مراحل كلاسيكية منفصلة، بنفس مفاهيم أي لغة برمجة حقيقية:
+//
+//    المصدر (نص) --[Lexer]--> tokens --[Parser]--> AST --[Interpreter/CodeGen]--> نتيجة/كود
+//
+//  لا تحتاج أي تعديل في مترجم Rin نفسه (C++): كل شيء هنا دوال Rin عادية فوق stdlib الحالية
+//  (charAt/substr/len/push/keys/contains...). الاستخدام المُوصى به هو داخل "مشروع لغة" —
+//  مجلد يحوي عدة ملفات .rin منفصلة (وليس ملفاً واحداً): Lexer.rin / Parser.rin /
+//  Interpreter.rin / CodeGen.rin (اختياري) / manifest.json / syntax.rinsyntax.json / run.rin.
+//  راجع templates/customlang/ لقالب جاهز، وexamples/customlang/calc/ لمثال كامل يعمل فعلياً.
+// ============================================================================
+
+// ---- الجزء 1: تصنيف المحارف (Character classification) ---------------------
+// تُستخدم داخل حلقة Lexer الخاصة بلغتك لفحص كل محرف من المصدر.
+
+fun isDigitChar(ch) {
+    let code = ord(ch);
+    return code >= ord("0") and code <= ord("9");
+}
+
+fun isAlphaChar(ch) {
+    let code = ord(ch);
+    let isLower = code >= ord("a") and code <= ord("z");
+    let isUpper = code >= ord("A") and code <= ord("Z");
+    return isLower or isUpper or ch == "_";
+}
+
+fun isAlnumChar(ch) {
+    return isAlphaChar(ch) or isDigitChar(ch);
+}
+
+fun isSpaceChar(ch) {
+    return ch == " " or ch == "	" or ch == "";
+}
+
+fun isNewlineChar(ch) {
+    return ch == "
+";
+}
+
+// ---- الجزء 2: الرموز (Tokens) ------------------------------------------------
+// tok = { type: "NUMBER"|"IDENT"|"STRING"|"OP"|"KEYWORD"|"EOF"|..., value: "...", line: N }
+
+fun makeToken(type, value, line) {
+    return { type: type, value: value, line: line };
+}
+
+fun eofToken(line) {
+    return makeToken("EOF", "", line);
+}
+
+fun tokIs(tok, type) {
+    return tok["type"] == type;
+}
+
+fun tokIsValue(tok, type, value) {
+    return tok["type"] == type and tok["value"] == value;
+}
+
+// تمثيل نصي لمصفوفة tokens، مفيد أثناء تطوير/تصحيح Lexer.rin الخاص بلغتك
+fun formatTokens(tokens) {
+    let lines = [];
+    let i = 0;
+    while (i < len(tokens)) {
+        let t = tokens[i];
+        push(lines, "[" + toString(t["line"]) + "] " + t["type"] + " '" + toString(t["value"]) + "'");
+        i = i + 1;
+    }
+    return join(lines, "
+");
+}
+
+// ---- الجزء 3: عقد الشجرة التركيبية (AST nodes) ------------------------------
+// node = { kind: "BinaryExpr"|"NumberLit"|..., line: N, ...حقول خاصة بالعقدة }
+// props هي خريطة الحقول الإضافية الخاصة بنوع العقدة (مثال: {left:..., op:"+", right:...})
+
+fun astNode(kind, line, props) {
+    let node = { kind: kind, line: line };
+    let ks = keys(props);
+    let i = 0;
+    while (i < len(ks)) {
+        node[ks[i]] = props[ks[i]];
+        i = i + 1;
+    }
+    return node;
+}
+
+fun nodeIs(node, kind) {
+    return node["kind"] == kind;
+}
+
+// طباعة شجرة AST بشكل هرمي مقروء لأغراض التصحيح (لا تفترض شكلاً معيناً للحقول،
+// فقط تطبع كل مفتاح في العقدة؛ العقد الفرعية المتداخلة تُمرَّر يدوياً عبر childKeys)
+fun formatAstShallow(node) {
+    let ks = keys(node);
+    let lines = [];
+    push(lines, "(" + node["kind"] + ")");
+    let i = 0;
+    while (i < len(ks)) {
+        if (ks[i] != "kind") {
+            push(lines, "  ." + ks[i] + " = " + toString(node[ks[i]]));
+        }
+        i = i + 1;
+    }
+    return join(lines, "
+");
+}
+
+// ---- الجزء 4: أخطاء موحّدة عبر مراحل اللغة (Lexer/Parser/Interpreter) -------
+// بدلاً من كل مرحلة تخترع صيغة خطأ خاصة بها، عقدة/قيمة خطأ موحّدة تفهمها كل مرحلة تالية
+
+fun langError(stage, message, line) {
+    return { kind: "LangError", stage: stage, message: message, line: line };
+}
+
+fun isLangError(value) {
+    if (value == nil) { return false; }
+    if (has(value, "kind") == false) { return false; }
+    return value["kind"] == "LangError";
+}
+
+fun formatLangError(err) {
+    return "[" + err["stage"] + " error][line " + toString(err["line"]) + "] " + err["message"];
+}
+
+// ---- الجزء 4.1: قيمة نتيجة آمنة (Result) — بديل isLangError على قيم غير خرائط -----
+// has()/keys() في Rin يفشلان إن مُرِّرت لهما قيمة ليست خريطة (رقم/نص/منطقي)، وقيم
+// evalExpr/genExpr الناجحة غالباً أرقام أو نصوص خام، لا خرائط. لذا كل دالة قد تفشل
+// (evalExpr, genExpr, execStatement...) يجب أن تُعيد دوماً خريطة Result عبر ok()/err()
+// بدل قيمة خام مباشرة، حتى يبقى فحص النجاح آمناً دوماً عبر isOk() بلا استثناء أبداً.
+
+fun ok(value) {
+    return { ok: true, value: value };
+}
+
+fun err(langErrorObj) {
+    return { ok: false, error: langErrorObj };
+}
+
+fun isOk(result) {
+    return result["ok"];
+}
+
+// يستخرج langError الجاهز للطباعة من نتيجة فاشلة (isOk(result) == false)
+fun resultError(result) {
+    return result["error"];
+}
+
+// ---- الجزء 5: مؤشّر أسطر عام لمحلّل نازل بالتكرار (Parser cursor helpers) ---
+// لأن Rin يمرّر القيم بالقيمة، تُعيد هذه الدوال دوماً خريطة {value: ..., pos: ...}
+// كي يحدّث المستدعي متغيّر pos الخاص به يدوياً: let r = pAdvance(toks,pos); pos = r["pos"];
+
+fun pAtEnd(tokens, pos) {
+    return pos >= len(tokens) or tokIs(tokens[pos], "EOF");
+}
+
+fun pPeek(tokens, pos) {
+    if (pos >= len(tokens)) { return eofToken(0); }
+    return tokens[pos];
+}
+
+fun pCheck(tokens, pos, type) {
+    if (pAtEnd(tokens, pos)) { return false; }
+    return tokIs(pPeek(tokens, pos), type);
+}
+
+fun pCheckValue(tokens, pos, type, value) {
+    if (pAtEnd(tokens, pos)) { return false; }
+    return tokIsValue(pPeek(tokens, pos), type, value);
+}
+
+// يستهلك الرمز الحالي بلا شرط، ويُعيد {tok: الرمز المستهلَك, pos: الموضع التالي}
+fun pAdvance(tokens, pos) {
+    let t = pPeek(tokens, pos);
+    if (pAtEnd(tokens, pos)) { return { tok: t, pos: pos }; }
+    return { tok: t, pos: pos + 1 };
+}
+
+// إن طابق الرمز الحالي type يستهلكه (match)، وإلا يبني langError عبر expect()
+fun pExpect(tokens, pos, type, stage) {
+    if (pCheck(tokens, pos, type)) {
+        return pAdvance(tokens, pos);
+    }
+    let got = pPeek(tokens, pos);
+    return {
+        tok: langError(stage, "متوقَّع '" + type + "' لكن وُجد '" + got["type"] + " (" + toString(got["value"]) + ")'", got["line"]),
+        pos: pos
+    };
+}
+
+// ---- الجزء 6: تفريغ/تحميل مانِفست مشروع لغة (manifest.json) ----------------
+// manifest.json لأي مشروع لغة مخصصة يصف: id/name/version/developer/fileExtension/
+// entry (أسماء ملفات Lexer/Parser/Interpreter/CodeGen)/description/official
+
+fun loadLanguageManifest(projectDir) {
+    let raw = readFile(projectDir + "/manifest.json");
+    return jsonDecode(raw);
+}
+
+fun manifestField(manifest, key, defaultValue) {
+    if (has(manifest, key)) { return manifest[key]; }
+    return defaultValue;
+}
+
+// ---- الجزء 7: توصيف لغة (نفس روح pkgInfo في oglang.og.rin) -----------------
+
+fun languageInfo(id, name, version, developer, fileExtension, description) {
+    return {
+        id: id,
+        name: name,
+        version: version,
+        developer: developer,
+        fileExtension: fileExtension,
+        description: description
+    };
+}
+
+fun describeLanguage(info) {
+    let lines = [];
+    push(lines, "🧩 " + info["name"] + "  (." + info["fileExtension"] + ")  v" + info["version"]);
+    push(lines, "   " + info["description"]);
+    push(lines, "   المطوّر: " + info["developer"]);
+    return join(lines, "
+");
+}
+)LANGKITOGRIN";
+
 inline const std::unordered_map<std::string, std::string>& embeddedRinLibraries() {
     static const std::unordered_map<std::string, std::string> libs = {
         {"lib/math.og.rin", kLib_math_og_rin},
@@ -992,6 +1227,7 @@ inline const std::unordered_map<std::string, std::string>& embeddedRinLibraries(
         {"lib/functional.og.rin", kLib_functional_og_rin},
         {"lib/oglang.og.rin", kLib_oglang_og_rin},
         {"lib/ringo.og.rin", kLib_ringo_og_rin},
+        {"lib/langkit.og.rin", kLib_langkit_og_rin},
     };
     return libs;
 }
