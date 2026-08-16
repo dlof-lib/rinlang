@@ -23,6 +23,7 @@
     <string name="ext_type_debug_tool">أداة تصحيح</string>
     <string name="ext_type_ai_tool">أداة ذكاء اصطناعي</string>
     <string name="ext_type_template">قالب</string>
+    <string name="ext_type_language">لغة برمجة</string>
 
     <!-- شريط أوامر "rin ext ..." الطرفية -->
     <string name="ext_cli_title">أوامر rin ext</string>
