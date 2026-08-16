@@ -1,0 +1,138 @@
+// ============================================================================
+//  lib/lexkit.og.rin — لبنات محرّك Lexer عام قابل لإعادة الاستخدام لصناعة لغتك
+//  استيراد:
+//    @import "lib/lexkit.og.rin";
+//    @import "lib/lexkit.og.rin" as lex;
+//
+//  تُكمّل lib/langkit.og.rin (التي توفّر تصنيف محارف مفردة + بناء tok واحد) بأدوات على
+//  مستوى "مصدر اللغة كاملاً": جدول كلمات مفتاحية (لتمييز IDENT عن KEYWORD)، جدول
+//  عمليات (operators) مع مطابقة أطول تطابق (longest match) بحيث "==" لا تُقرأ كعلامتي
+//  "=" منفصلتين، ومؤشر عام على نص المصدر (source cursor) لتخطّي الفراغات والتعليقات.
+//  يُستخدم عادة مع lib/langkit.og.rin داخل حلقة lexer الرئيسية لملف Lexer.rin الخاص بلغتك.
+//
+//  مثال سريع:
+//    let kw = newKeywordTable(["let", "if", "else", "while", "fun"]);
+//    print classifyWord("if", kw);      // "KEYWORD"
+//    print classifyWord("total", kw);   // "IDENT"
+//
+//    let ops = newOperatorTable(["==", "!=", "<=", ">=", "+", "-", "*", "/", "=", "<", ">"]);
+//    print matchLongestOp("== 3", 0, ops); // { matched: "==", length: 2 }
+// ============================================================================
+
+// ---- جدول الكلمات المفتاحية -------------------------------------------------
+
+// يبني جدول كلمات مفتاحية من مصفوفة نصوص، كل كلمة تُصبح مفتاحاً بقيمة true
+fun newKeywordTable(words) {
+    let table = {};
+    let i = 0;
+    while (i < len(words)) {
+        table[words[i]] = true;
+        i = i + 1;
+    }
+    return table;
+}
+
+// يُعيد "KEYWORD" إن كانت word موجودة في الجدول، وإلا identType (عادة "IDENT")
+fun classifyWord(word, table, identType) {
+    if (has(table, word)) { return "KEYWORD"; }
+    return identType;
+}
+
+// ---- جدول العمليات (operators) مع مطابقة أطول تطابق -------------------------
+
+// يبني جدول عمليات من مصفوفة رموز نصية (["==", "!=", "+", ...]) ويُرتّبها من الأطول
+// إلى الأقصر داخلياً كي تُختبر "==" قبل "=" عند المطابقة (وإلا ستُقتطع خطأً كعامل مفرد)
+fun newOperatorTable(symbols) {
+    let sorted = [];
+    let i = 0;
+    while (i < len(symbols)) {
+        push(sorted, symbols[i]);
+        i = i + 1;
+    }
+    // فرز إدراج تنازلي حسب الطول (الأطول أولاً)؛ الجداول عادة قصيرة فلا مشكلة أداء
+    let a = 1;
+    while (a < len(sorted)) {
+        let current = sorted[a];
+        let b = a - 1;
+        while (b >= 0 and len(sorted[b]) < len(current)) {
+            sorted[b + 1] = sorted[b];
+            b = b - 1;
+        }
+        sorted[b + 1] = current;
+        a = a + 1;
+    }
+    return sorted;
+}
+
+// يبحث عن أطول رمز عملية من opTable يطابق بداية source ابتداءً من pos، ويُعيد
+// { matched: الرمز المطابَق, length: طوله } أو { matched: "", length: 0 } إن لم يطابق شيء
+fun matchLongestOp(source, pos, opTable) {
+    let i = 0;
+    while (i < len(opTable)) {
+        let symbol = opTable[i];
+        let symLen = len(symbol);
+        if (pos + symLen <= len(source)) {
+            if (substr(source, pos, symLen) == symbol) {
+                return { matched: symbol, length: symLen };
+            }
+        }
+        i = i + 1;
+    }
+    return { matched: "", length: 0 };
+}
+
+// ---- مؤشّر مصدر عام (source cursor) -----------------------------------------
+// عكس pAdvance في langkit (الذي يتحرك فوق tokens جاهزة)، هذه الدوال تتحرك فوق نص
+// المصدر الخام قبل أي تقطيع إلى tokens
+
+// هل وصل pos لنهاية source؟
+fun sAtEnd(source, pos) {
+    return pos >= len(source);
+}
+
+// المحرف الحالي بلا تقدّم، أو "" إن انتهى المصدر
+fun sPeek(source, pos) {
+    if (sAtEnd(source, pos)) { return ""; }
+    return charAt(source, pos);
+}
+
+// نظرة على المحرف التالي (lookahead بمقدار 1)، أو "" إن لم يوجد
+fun sPeekNext(source, pos) {
+    if (pos + 1 >= len(source)) { return ""; }
+    return charAt(source, pos + 1);
+}
+
+// يتخطّى الفراغات (مسافة/تبويب/سطر جديد) والتعليقات أحادية السطر التي تبدأ بـ
+// lineCommentStart (مثل "//")، ويُعيد الموضع الجديد بعد كل ما تمّ تخطّيه
+fun skipWhitespaceAndComments(source, pos, lineCommentStart) {
+    let p = pos;
+    let commentLen = len(lineCommentStart);
+    let continueSkip = true;
+    while (continueSkip) {
+        continueSkip = false;
+        while (sAtEnd(source, p) == false and (sPeek(source, p) == " " or sPeek(source, p) == "\t" or sPeek(source, p) == "\r" or sPeek(source, p) == "\n")) {
+            p = p + 1;
+        }
+        if (commentLen > 0 and p + commentLen <= len(source)) {
+            if (substr(source, p, commentLen) == lineCommentStart) {
+                while (sAtEnd(source, p) == false and sPeek(source, p) != "\n") {
+                    p = p + 1;
+                }
+                continueSkip = true;
+            }
+        }
+    }
+    return p;
+}
+
+// يستهلك كل المحارف المتتالية التي تحقق fn(ch) == true بدءاً من pos، ويُعيد
+// { matched: النص المُستهلَك, pos: الموضع بعده } (يُستخدم لقراءة أرقام/معرّفات كاملة
+// بالاعتماد على isDigitChar/isAlnumChar من lib/langkit.og.rin كدالة fn)
+fun consumeWhile(source, pos, fn) {
+    let start = pos;
+    let p = pos;
+    while (sAtEnd(source, p) == false and fn(sPeek(source, p))) {
+        p = p + 1;
+    }
+    return { matched: substr(source, start, p - start), pos: p };
+}
