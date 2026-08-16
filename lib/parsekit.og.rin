@@ -1,0 +1,96 @@
+// ============================================================================
+//  lib/parsekit.og.rin — لبنات محلِّل (Parser) بأسلوب أسبقية العمليات (precedence climbing)
+//  استيراد:
+//    @import "lib/parsekit.og.rin";
+//    @import "lib/parsekit.og.rin" as parse;
+//
+//  تُكمّل lib/langkit.og.rin (التي توفّر مؤشّر tokens: pPeek/pAdvance/pExpect...) بأدوات
+//  خاصة بتحليل التعبيرات (expressions) ذات أولويات عمليات مختلفة (مثال: * قبل +). توفّر
+//  جدول أسبقية قابلاً للتخصيص، ومُنشِئات عقد AST قياسية لتعبيرات ثنائية/أحادية/تجميعية،
+//  ودالة "طيّ" (fold) تحوّل نتائج حلقة تحليل مسطّحة (عامل، معامل، عامل، معامل...) إلى
+//  شجرة تعبير يسارية الترابط (left-associative) بلا حاجة لاستدعاء متكرر معقّد.
+//
+//  مثال سريع (طيّ 1 + 2 * لاحقاً... عادة يُبنى الطرف الأيمن بأسبقية أعلى قبل الطيّ):
+//    let ops = precTable([["+", 1], ["-", 1], ["*", 2], ["/", 2]]);
+//    print precOf(ops, "*", 0);   // 2
+//    print precOf(ops, "?", 0);   // 0  (عملية غير معروفة -> الافتراضي)
+//
+//    let tree = foldBinaryLeft(1, [{ op: "+", right: 2 }, { op: "+", right: 3 }]);
+//    // يكافئ (1 + 2) + 3 كشجرة AST متداخلة
+// ============================================================================
+
+// ---- جدول أسبقية العمليات (precedence table) --------------------------------
+
+// يبني جدول أسبقية من مصفوفة أزواج [رمز_العملية, رتبة_الأسبقية] (رتبة أعلى = تُنفَّذ أولاً)
+fun precTable(pairs) {
+    let table = {};
+    let i = 0;
+    while (i < len(pairs)) {
+        table[pairs[i][0]] = pairs[i][1];
+        i = i + 1;
+    }
+    return table;
+}
+
+// رتبة أسبقية op في الجدول، أو defaultPrec إن لم تكن op معرَّفة فيه
+fun precOf(table, op, defaultPrec) {
+    if (has(table, op)) { return table[op]; }
+    return defaultPrec;
+}
+
+// ---- مُنشِئات عقد AST لتعبيرات (expression nodes) ----------------------------
+// نفس روح astNode في langkit لكن بحقول جاهزة خاصة بأنواع تعبير شائعة، بلا حاجة لتمرير
+// خريطة props في كل استدعاء
+
+fun litNode(value, line) {
+    return { kind: "Literal", value: value, line: line };
+}
+
+fun identNode(name, line) {
+    return { kind: "Identifier", name: name, line: line };
+}
+
+fun unaryNode(op, operand, line) {
+    return { kind: "UnaryExpr", op: op, operand: operand, line: line };
+}
+
+fun binNode(op, left, right, line) {
+    return { kind: "BinaryExpr", op: op, left: left, right: right, line: line };
+}
+
+fun groupNode(inner, line) {
+    return { kind: "GroupExpr", inner: inner, line: line };
+}
+
+fun callNode(callee, args, line) {
+    return { kind: "CallExpr", callee: callee, args: args, line: line };
+}
+
+// ---- طيّ نتائج حلقة تحليل مسطّحة إلى شجرة يسارية الترابط -------------------
+// نمط شائع جداً عند تحليل تعبير بعمليات ثنائية بنفس الأسبقية داخل حلقة while واحدة:
+// تُحلَّل أول عامل (firstOperand)، ثم تُجمَع أزواج {op, right} تباعاً أثناء حلقة while
+// طالما رمز العملية التالي معروفاً، ثم تُطوى النتيجة أخيراً بهذه الدالة إلى شجرة واحدة
+// نظير: ((( firstOperand op1 right1 ) op2 right2 ) op3 right3 ) ...
+fun foldBinaryLeft(firstOperand, opRightPairs) {
+    let tree = firstOperand;
+    let i = 0;
+    while (i < len(opRightPairs)) {
+        let pair = opRightPairs[i];
+        tree = binNode(pair["op"], tree, pair["right"], 0);
+        i = i + 1;
+    }
+    return tree;
+}
+
+// نفس foldBinaryLeft لكن يسمح بتمرير رقم سطر لكل عقدة (بدل 0 دوماً)، لرسائل خطأ أدقّ.
+// opRightPairs كل عنصر فيها {op, right, line}
+fun foldBinaryLeftWithLines(firstOperand, opRightPairs) {
+    let tree = firstOperand;
+    let i = 0;
+    while (i < len(opRightPairs)) {
+        let pair = opRightPairs[i];
+        tree = binNode(pair["op"], tree, pair["right"], pair["line"]);
+        i = i + 1;
+    }
+    return tree;
+}
