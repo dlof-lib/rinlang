@@ -1,0 +1,110 @@
+// ============================================================================
+//  lib/envkit.og.rin — بيئة تنفيذ (Environment / نطاقات متداخلة) لمفسّر لغتك
+//  استيراد:
+//    @import "lib/envkit.og.rin";
+//    @import "lib/envkit.og.rin" as envkit;
+//
+//  أي مفسّر (Interpreter.rin) للغة حقيقية يحتاج نطاقات متغيّرات متداخلة: نطاق برنامج
+//  عام (global scope)، ونطاق فرعي جديد لكل استدعاء دالة أو كتلة { ... } يبحث أولاً في
+//  نفسه ثم يصعد لأبيه إن لم يجد المتغيّر. لأن الخرائط في Rin قيم مُشتركة بالمرجع، فإن
+//  envDefine/envSet تُعدّلان النطاق مباشرة دون حاجة لإعادته وإعادة إسناده يدوياً.
+//
+//  مثال سريع:
+//    let global = envNew(nil);
+//    envDefine(global, "x", 10);
+//    let local = envChild(global);
+//    envDefine(local, "y", 20);
+//    print envGet(local, "x");   // 10 (وُجدت في نطاق الأب)
+//    envSet(local, "x", 99);     // يُعدّل x في نطاق الأب لأنها معرَّفة هناك، لا في local
+//    print envGet(global, "x");  // 99
+// ============================================================================
+
+// يبني نطاقاً جديداً؛ parentEnv هو النطاق الأب أو nil للنطاق العام الجذري
+fun envNew(parentEnv) {
+    return { vars: {}, parent: parentEnv };
+}
+
+// يبني نطاقاً فرعياً أبوه parentEnv (اختصار لـ envNew(parentEnv))، يُستخدم عند دخول
+// كتلة { ... } جديدة أو تنفيذ جسم دالة
+fun envChild(parentEnv) {
+    return envNew(parentEnv);
+}
+
+// يُعرّف متغيّراً جديداً باسم name وقيمة value في نطاق env نفسه تحديداً (بلا صعود للأب)،
+// حتى لو كان متغيّر بنفس الاسم معرَّفاً بالفعل في نطاق أب (يُظلّله shadowing، كما let عادية)
+fun envDefine(env, name, value) {
+    env["vars"][name] = value;
+    return value;
+}
+
+// هل name معرَّف في env نفسه تحديداً (بلا صعود للأب)؟
+fun envHasOwn(env, name) {
+    return has(env["vars"], name);
+}
+
+// هل name معرَّف في env أو أي نطاق أب له (صعوداً حتى الجذر)؟
+fun envHas(env, name) {
+    let current = env;
+    while (current != nil) {
+        if (envHasOwn(current, name)) { return true; }
+        current = current["parent"];
+    }
+    return false;
+}
+
+// يقرأ قيمة name بالبحث في env ثم الصعود للآباء عند اللزوم. يُعيد خريطة نتيجة بأسلوب
+// langkit ({ok:true,value:...} أو {ok:false,error:...}) بدل توقّف بخطأ غامض عند عدم الوجود
+fun envGet(env, name) {
+    let current = env;
+    while (current != nil) {
+        if (envHasOwn(current, name)) {
+            return { ok: true, value: current["vars"][name] };
+        }
+        current = current["parent"];
+    }
+    return { ok: false, error: "envGet: المتغيّر غير معرَّف: " + name };
+}
+
+// يحدّث قيمة name الموجودة مسبقاً في env أو أحد آبائه (يُعدّل أقرب نطاق يملكها فعلياً).
+// إن لم يكن name معرَّفاً في أي نطاق، لا يُنشئه تلقائياً بل يُعيد false (استخدم envDefine
+// للإنشاء الصريح، تماماً كفارق "x = 5" عن "let x = 5" في Rin نفسها)
+fun envSet(env, name, value) {
+    let current = env;
+    while (current != nil) {
+        if (envHasOwn(current, name)) {
+            current["vars"][name] = value;
+            return true;
+        }
+        current = current["parent"];
+    }
+    return false;
+}
+
+// عمق النطاق الحالي عن الجذر (0 للنطاق العام نفسه، 1 لأول نطاق فرعي، وهكذا)
+fun envDepth(env) {
+    let depth = 0;
+    let current = env["parent"];
+    while (current != nil) {
+        depth = depth + 1;
+        current = current["parent"];
+    }
+    return depth;
+}
+
+// أسماء كل المتغيّرات المرئية من env (نطاقه + كل آبائه)، بلا تكرار، الأقرب أولاً
+fun envVisibleNames(env) {
+    let result = [];
+    let current = env;
+    while (current != nil) {
+        let names = keys(current["vars"]);
+        let i = 0;
+        while (i < len(names)) {
+            if (contains(result, names[i]) == false) {
+                push(result, names[i]);
+            }
+            i = i + 1;
+        }
+        current = current["parent"];
+    }
+    return result;
+}
