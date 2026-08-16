@@ -18,6 +18,7 @@
     <string name="ext_type_debug_tool">Herramienta de depuración</string>
     <string name="ext_type_ai_tool">Herramienta de IA</string>
     <string name="ext_type_template">Plantilla</string>
+    <string name="ext_type_language">Lenguaje</string>
 
     <!-- Barra de comandos de terminal "rin ext ..." -->
     <string name="ext_cli_title">Comandos rin ext</string>
