@@ -292,6 +292,7 @@ class RinExtensionsMarketplaceActivity : BaseConnectivityActivity() {
         ExtensionType.DEBUG_TOOL -> getString(R.string.ext_type_debug_tool)
         ExtensionType.AI_TOOL -> getString(R.string.ext_type_ai_tool)
         ExtensionType.TEMPLATE -> getString(R.string.ext_type_template)
+        ExtensionType.LANGUAGE -> getString(R.string.ext_type_language)
     }
 
     private fun rebuildTypeChips() {
