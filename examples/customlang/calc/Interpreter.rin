@@ -1,0 +1,95 @@
+// ============================================================================
+//  Interpreter.rin — المرحلة الثالثة من لغة "CalcLang": تنفيذ شجرة AST مباشرة
+//  (بديل CodeGen.rin الذي يولّد كوداً بدل تنفيذه فوراً — يمكن استخدام الاثنين معاً)
+//
+//  ملاحظة تصميم مهمة: has()/keys() في Rin يفشلان إن مُرِّرت لهما قيمة ليست خريطة، وقيمة
+//  تعبير ناجح (evalExpr) غالباً رقم أو نص خام — لذا evalExpr/execStatement/execBlock كلها
+//  تُعيد دوماً Result عبر ok(value)/err(langErrorObj) من langkit.og.rin (خريطة دوماً، آمنة
+//  لفحص isOk() دون أي احتمال فشل)، لا القيمة الخام مباشرة ولا isLangError على نتيجتها.
+// ============================================================================
+
+@import "./Parser.rin";
+
+// ينفّذ برنامجاً كاملاً (نتيجة parse())، ويُعيد نص المخرجات المُجمَّع من كل "print"
+fun interpret(program) {
+    if (isLangError(program)) { return formatLangError(program); }
+    let env = {};
+    let output = [];
+    let r = execBlock(program["body"], env, output);
+    if (isOk(r) == false) { return formatLangError(resultError(r)); }
+    return join(output, "\n");
+}
+
+// ينفّذ قائمة statements بالترتيب فوق env، ويضيف نواتج "print" إلى output
+fun execBlock(statements, env, output) {
+    let i = 0;
+    while (i < len(statements)) {
+        let r = execStatement(statements[i], env, output);
+        if (isOk(r) == false) { return r; }
+        i = i + 1;
+    }
+    return ok(env);
+}
+
+fun execStatement(node, env, output) {
+    if (nodeIs(node, "Let")) {
+        let v = evalExpr(node["value"], env);
+        if (isOk(v) == false) { return v; }
+        env[node["name"]] = v["value"];
+        return ok(env);
+    }
+    if (nodeIs(node, "Print")) {
+        let v = evalExpr(node["value"], env);
+        if (isOk(v) == false) { return v; }
+        push(output, toString(v["value"]));
+        return ok(env);
+    }
+    if (nodeIs(node, "If")) {
+        let c = evalExpr(node["cond"], env);
+        if (isOk(c) == false) { return c; }
+        if (toBool(c["value"])) {
+            return execBlock(node["thenBody"], env, output);
+        } else {
+            return execBlock(node["elseBody"], env, output);
+        }
+    }
+    // تعبير بمفرده كـstatement (مثال: نداء مستقبلي بلا قيمة راجعة تُستخدم)
+    let v = evalExpr(node, env);
+    if (isOk(v) == false) { return v; }
+    return ok(env);
+}
+
+// يُعيد دوماً ok(قيمة) أو err(langError) — راجع ملاحظة التصميم أعلى الملف
+fun evalExpr(node, env) {
+    if (nodeIs(node, "NumberLit")) { return ok(node["value"]); }
+    if (nodeIs(node, "StringLit")) { return ok(node["value"]); }
+    if (nodeIs(node, "Ident")) {
+        if (has(env, node["name"]) == false) {
+            return err(langError("Interpreter", "متغيّر غير معرَّف: " + node["name"], node["line"]));
+        }
+        return ok(env[node["name"]]);
+    }
+    if (nodeIs(node, "Unary")) {
+        let v = evalExpr(node["operand"], env);
+        if (isOk(v) == false) { return v; }
+        return ok(0 - v["value"]);
+    }
+    if (nodeIs(node, "Binary")) {
+        let l = evalExpr(node["left"], env);
+        if (isOk(l) == false) { return l; }
+        let r = evalExpr(node["right"], env);
+        if (isOk(r) == false) { return r; }
+        let lv = l["value"];
+        let rv = r["value"];
+        let op = node["op"];
+        if (op == "+") { return ok(lv + rv); }
+        if (op == "-") { return ok(lv - rv); }
+        if (op == "*") { return ok(lv * rv); }
+        if (op == "/") { return ok(lv / rv); }
+        if (op == "==") { return ok(lv == rv); }
+        if (op == "<") { return ok(lv < rv); }
+        if (op == ">") { return ok(lv > rv); }
+        return err(langError("Interpreter", "عامل غير معروف: " + op, node["line"]));
+    }
+    return err(langError("Interpreter", "نوع عقدة غير مدعوم: " + node["kind"], node["line"]));
+}
