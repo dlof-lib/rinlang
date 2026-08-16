@@ -1,0 +1,48 @@
+// ============================================================================
+//  run.rin — نقطة الدخول الكاملة للغة "CalcLang": هذا هو "المترجم/المفسّر" الفعلي
+//  الذي يشغّله المستخدم. يوصل السلسلة الكاملة: مصدر .{{calc}} -> tokens -> AST
+//  -> تنفيذ فوري (Interpreter) و/أو توليد كود Rin (CodeGen).
+//
+//  الاستخدام من سطر أوامر Rin (rinc/rin_run) أو من داخل IDE أندرويد:
+//    rin run.rin --  path/to/program.calc
+//  أو عدّل SOURCE_PATH أدناه مباشرة أثناء التطوير داخل المحرر.
+// ============================================================================
+
+@import "./Interpreter.rin";
+@import "./CodeGen.rin";
+
+// عدّل هذا المسار عند التطوير المباشر داخل IDE (أو مرّره من واجهة "تشغيل اللغة المخصصة")
+let SOURCE_PATH = "examples/hello.calc";
+
+fun runFile(path) {
+    let source = readFile(path);
+    let tokens = lex(source);
+
+    // إن احتوت tokens على خطأ لفظي، أوقف قبل حتى محاولة التحليل التركيبي
+    let i = 0;
+    while (i < len(tokens)) {
+        if (isLangError(tokens[i])) {
+            print formatLangError(tokens[i]);
+            return nil;
+        }
+        i = i + 1;
+    }
+
+    let ast = parse(tokens);
+    if (isLangError(ast)) {
+        print formatLangError(ast);
+        return nil;
+    }
+
+    print "── تنفيذ مباشر (Interpreter) ──";
+    print interpret(ast);
+
+    print "── كود Rin مُولَّد (CodeGen) ──";
+    let generated = generate(ast);
+    print generated;
+    // اختياري: احفظ الكود المُولَّد وشغّله لاحقاً بأي مفسّر Rin عادي
+    // writeFile("build/output.rin", generated);
+    return nil;
+}
+
+runFile(SOURCE_PATH);
