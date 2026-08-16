@@ -1,0 +1,116 @@
+// ============================================================================
+//  lib/loopkit.og.rin — تحكّم عام بالحلقات (loop control primitives) فوق while/for
+//  استيراد:
+//    @import "lib/loopkit.og.rin";
+//    @import "lib/loopkit.og.rin" as loop;
+//
+//  دوال جاهزة لأنماط حلقات متكررة: تكرار بعدد ثابت، تكرار بشرط توقف مع حدّ أقصى أمان
+//  (لمنع حلقة لا نهائية)، إعادة محاولة حتى النجاح، حلقة تنازلية، وحلقة بخطوة مخصّصة.
+//  كل الدوال هنا تأخذ دالة fn كوسيط (Rin يدعم الدوال كقيم من الدرجة الأولى) وتُطبّقها
+//  داخل حلقة while واحدة، بدل تكرار نفس صيغة "let i = 0; while (...) { ... i = i+1; }"
+//  يدوياً في كل مكان من برنامجك.
+//
+//  مثال سريع:
+//    fun printIt(i) { print "خطوة " + toString(i); }
+//    repeatTimes(3, printIt);           // خطوة 0 / خطوة 1 / خطوة 2
+//    print stepLoopCollect(0, 10, 2, printIt); // [0,2,4,6,8] (طبعت كل قيمة أيضاً)
+// ============================================================================
+
+// ينفّذ fn(i) بالضبط n مرة، من i=0 حتى n-1 (بلا قيمة مُرجعة، للتأثير الجانبي فقط)
+fun repeatTimes(n, fn) {
+    let i = 0;
+    while (i < n) {
+        fn(i);
+        i = i + 1;
+    }
+    return nil;
+}
+
+// حلقة تنازلية: ينفّذ fn(i) بدءاً من "from" نزولاً حتى 1 شاملة (from, from-1, ..., 1)
+fun countdown(from, fn) {
+    let i = from;
+    while (i >= 1) {
+        fn(i);
+        i = i - 1;
+    }
+    return nil;
+}
+
+// حلقة بخطوة مخصّصة (تعمّم حلقة for الكلاسيكية): ينفّذ fn(i) لأجل
+// i = start, start+step, ... طالما (step > 0 و i < endExclusive) أو (step < 0 و i > endExclusive)
+// step يجب ألا يساوي صفراً وإلا تُعاد قيمة خطأ نصية بدل الدخول بحلقة لا نهائية
+fun stepLoop(start, endExclusive, step, fn) {
+    if (step == 0) { return "stepLoop: step لا يجوز أن يساوي صفراً"; }
+    let i = start;
+    if (step > 0) {
+        while (i < endExclusive) {
+            fn(i);
+            i = i + step;
+        }
+    } else {
+        while (i > endExclusive) {
+            fn(i);
+            i = i + step;
+        }
+    }
+    return nil;
+}
+
+// نفس stepLoop لكن يجمع نتائج fn(i) في مصفوفة ويُعيدها (مفيد عند إرادة القيم لا فقط التأثير)
+fun stepLoopCollect(start, endExclusive, step, fn) {
+    let result = [];
+    if (step == 0) { return result; }
+    let i = start;
+    if (step > 0) {
+        while (i < endExclusive) {
+            push(result, fn(i));
+            i = i + step;
+        }
+    } else {
+        while (i > endExclusive) {
+            push(result, fn(i));
+            i = i + step;
+        }
+    }
+    return result;
+}
+
+// حلقة "حتى تحقق الشرط" مع حدّ أقصى آمن للتكرارات: تستدعي fn(attempt) بدءاً من attempt=0
+// وتتوقف حين تُعيد fn قيمة true، أو عند بلوغ maxIters (أيهما أولاً). تُعيد خريطة توضّح
+// النتيجة، بعكس حلقة while عادية قد لا تتوقف أبداً لو نُسي تحديث شرطها
+fun loopUntil(fn, maxIters) {
+    let i = 0;
+    while (i < maxIters) {
+        if (fn(i)) {
+            return { done: true, iterations: i + 1 };
+        }
+        i = i + 1;
+    }
+    return { done: false, iterations: maxIters };
+}
+
+// إعادة محاولة عملية قد تفشل حتى maxAttempts مرة: fn(attempt) يجب أن تُعيد خريطة نتيجة
+// بأسلوب langkit ({ok:true,value:...} أو {ok:false,error:...})، وتتوقف retryUntil عند
+// أول نجاح أو بعد استنفاد المحاولات (وعندها تُعيد آخر نتيجة فاشلة كما هي)
+fun retryUntil(fn, maxAttempts) {
+    let attempt = 0;
+    let lastResult = { ok: false, error: "retryUntil: لم تُنفَّذ أي محاولة (maxAttempts <= 0)" };
+    while (attempt < maxAttempts) {
+        lastResult = fn(attempt);
+        if (lastResult["ok"]) {
+            return lastResult;
+        }
+        attempt = attempt + 1;
+    }
+    return lastResult;
+}
+
+// حلقة while عامة: تستدعي condFn() قبل كل دورة، وطالما أعادت true تستدعي bodyFn()
+// وتجمع ناتجها في مصفوفة تُعيدها في النهاية. يفصل شرط التوقف عن جسم الحلقة بدل خلطهما
+fun whileCollect(condFn, bodyFn) {
+    let result = [];
+    while (condFn()) {
+        push(result, bodyFn());
+    }
+    return result;
+}
