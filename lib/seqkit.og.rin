@@ -1,0 +1,104 @@
+// ============================================================================
+//  lib/seqkit.og.rin — توليد متتاليات جاهزة كمدخلات لحلقات for/while
+//  استيراد:
+//    @import "lib/seqkit.og.rin";
+//    @import "lib/seqkit.og.rin" as seq;
+//
+//  lib/data.og.rin توفّر range(n)/rangeFrom(start,end) بخطوة ثابتة تساوي 1 فقط. هذه
+//  المكتبة تكمّلها بمتتاليات بخطوة مخصّصة (موجبة أو سالبة)، متتاليات هندسية، وتكرار/
+//  تدوير مصفوفة بأكملها — مفيدة كمصدر بيانات جاهز تُمرَّر إلى حلقة for أو forEachArr.
+//
+//  مثال سريع:
+//    print rangeStep(0, 10, 2);      // [0,2,4,6,8]
+//    print rangeStep(10, 0, -2);     // [10,8,6,4,2]
+//    print linspace(0, 1, 5);        // [0, 0.25, 0.5, 0.75, 1]
+// ============================================================================
+
+// مصفوفة [start, start+step, ...] طالما (step>0 و القيمة < endExclusive) أو
+// (step<0 و القيمة > endExclusive). step=0 يُعيد مصفوفة فارغة بدل حلقة لا نهائية
+fun rangeStep(start, endExclusive, step) {
+    let result = [];
+    if (step == 0) { return result; }
+    let i = start;
+    if (step > 0) {
+        while (i < endExclusive) {
+            push(result, i);
+            i = i + step;
+        }
+    } else {
+        while (i > endExclusive) {
+            push(result, i);
+            i = i + step;
+        }
+    }
+    return result;
+}
+
+// n قيمة موزّعة بانتظام بين start وend شاملَين الطرفين (يشمل fromValue وtoValue معاً).
+// عند n<=1 تُعيد [start] فقط
+fun linspace(start, endValue, n) {
+    let result = [];
+    if (n <= 1) {
+        push(result, start);
+        return result;
+    }
+    let step = (endValue - start) / (n - 1);
+    let i = 0;
+    while (i < n) {
+        push(result, start + (step * i));
+        i = i + 1;
+    }
+    return result;
+}
+
+// متتالية هندسية: n حداً بدءاً من "first" وكل حد يساوي السابق × ratio
+fun geometricSeq(first, ratio, n) {
+    let result = [];
+    let current = first;
+    let i = 0;
+    while (i < n) {
+        push(result, current);
+        current = current * ratio;
+        i = i + 1;
+    }
+    return result;
+}
+
+// مصفوفة من n نسخة من نفس القيمة (مفيد كقيمة ابتدائية لتراكم في حلقة)
+fun repeatValue(value, n) {
+    let result = [];
+    let i = 0;
+    while (i < n) {
+        push(result, value);
+        i = i + 1;
+    }
+    return result;
+}
+
+// يُكرّر محتوى arr بأكمله times مرة متتالية: cycleArr([1,2],3) -> [1,2,1,2,1,2]
+fun cycleArr(arr, times) {
+    let result = [];
+    let t = 0;
+    while (t < times) {
+        let i = 0;
+        while (i < len(arr)) {
+            push(result, arr[i]);
+            i = i + 1;
+        }
+        t = t + 1;
+    }
+    return result;
+}
+
+// يمدّد أو يقتطع arr إلى طول targetLen بالضبط: يُكرّر عناصره إن كان أقصر، أو يقتطعه
+// إن كان أطول (مفيد لمزامنة طول مصفوفتين قبل حلقة تُعالجهما معاً عنصراً بعنصر)
+fun cycleToLength(arr, targetLen) {
+    let result = [];
+    if (len(arr) == 0) { return result; }
+    let i = 0;
+    while (len(result) < targetLen) {
+        push(result, arr[i % len(arr)]);
+        i = i + 1;
+    }
+    return result;
+}
