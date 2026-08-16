@@ -1,0 +1,195 @@
+// ============================================================================
+//  Parser.rin — المرحلة الثانية من لغة "__LANG_NAME__": tokens -> شجرة AST
+//  محلّل نازل بالتكرار (recursive descent) بسيط. يبني عقد عبر astNode() من langkit.
+//  قواعد النحو المضمّنة هنا كمثال (عدّلها لتناسب لغتك):
+//    program    -> statement* EOF
+//    statement  -> "let" IDENT "=" expr ";"
+//                | "print" expr ";"
+//                | "if" "(" expr ")" "{" statement* "}" ("else" "{" statement* "}")?
+//                | expr ";"
+//    expr       -> comparison
+//    comparison -> term (("==" | "<" | ">") term)*
+//    term       -> factor (("+" | "-") factor)*
+//    factor     -> unary (("*" | "/") unary)*
+//    unary      -> "-" unary | primary
+//    primary    -> NUMBER | STRING | IDENT | "(" expr ")"
+// ============================================================================
+
+@import "./Lexer.rin";
+
+// نقطة الدخول: مصفوفة tokens -> { program: [statements...] } أو langError واحد
+fun parse(tokens) {
+    let pos = 0;
+    let statements = [];
+    while (pAtEnd(tokens, pos) == false) {
+        let r = parseStatement(tokens, pos);
+        if (isLangError(r["node"])) { return r["node"]; }
+        push(statements, r["node"]);
+        pos = r["pos"];
+    }
+    return astNode("Program", 0, { body: statements });
+}
+
+fun parseStatement(tokens, pos) {
+    if (pCheckValue(tokens, pos, "KEYWORD", "let")) { return parseLet(tokens, pos); }
+    if (pCheckValue(tokens, pos, "KEYWORD", "print")) { return parsePrint(tokens, pos); }
+    if (pCheckValue(tokens, pos, "KEYWORD", "if")) { return parseIf(tokens, pos); }
+    return parseExprStatement(tokens, pos);
+}
+
+fun parseLet(tokens, pos) {
+    let line = pPeek(tokens, pos)["line"];
+    let a1 = pAdvance(tokens, pos); pos = a1["pos"]; // استهلاك 'let'
+    let nameTok = pPeek(tokens, pos);
+    let a2 = pExpect(tokens, pos, "IDENT", "Parser");
+    if (isLangError(a2["tok"])) { return { node: a2["tok"], pos: pos }; }
+    pos = a2["pos"];
+    let a3 = pExpect(tokens, pos, "OP", "Parser"); // '='
+    if (isLangError(a3["tok"])) { return { node: a3["tok"], pos: pos }; }
+    pos = a3["pos"];
+    let r = parseExpr(tokens, pos);
+    if (isLangError(r["node"])) { return r; }
+    pos = r["pos"];
+    let a4 = pExpect(tokens, pos, "OP", "Parser"); // ';'
+    pos = a4["pos"];
+    return { node: astNode("Let", line, { name: nameTok["value"], value: r["node"] }), pos: pos };
+}
+
+fun parsePrint(tokens, pos) {
+    let line = pPeek(tokens, pos)["line"];
+    let a1 = pAdvance(tokens, pos); pos = a1["pos"]; // استهلاك 'print'
+    let r = parseExpr(tokens, pos);
+    if (isLangError(r["node"])) { return r; }
+    pos = r["pos"];
+    let a2 = pExpect(tokens, pos, "OP", "Parser"); // ';'
+    pos = a2["pos"];
+    return { node: astNode("Print", line, { value: r["node"] }), pos: pos };
+}
+
+fun parseIf(tokens, pos) {
+    let line = pPeek(tokens, pos)["line"];
+    let a1 = pAdvance(tokens, pos); pos = a1["pos"]; // 'if'
+    let a2 = pAdvance(tokens, pos); pos = a2["pos"]; // '('
+    let cond = parseExpr(tokens, pos);
+    if (isLangError(cond["node"])) { return cond; }
+    pos = cond["pos"];
+    let a3 = pAdvance(tokens, pos); pos = a3["pos"]; // ')'
+    let a4 = pAdvance(tokens, pos); pos = a4["pos"]; // '{'
+    let thenBody = [];
+    while (pCheckValue(tokens, pos, "OP", "}") == false and pAtEnd(tokens, pos) == false) {
+        let s = parseStatement(tokens, pos);
+        if (isLangError(s["node"])) { return s; }
+        push(thenBody, s["node"]);
+        pos = s["pos"];
+    }
+    let a5 = pAdvance(tokens, pos); pos = a5["pos"]; // '}'
+
+    let elseBody = [];
+    if (pCheckValue(tokens, pos, "KEYWORD", "else")) {
+        let a6 = pAdvance(tokens, pos); pos = a6["pos"]; // 'else'
+        let a7 = pAdvance(tokens, pos); pos = a7["pos"]; // '{'
+        while (pCheckValue(tokens, pos, "OP", "}") == false and pAtEnd(tokens, pos) == false) {
+            let s = parseStatement(tokens, pos);
+            if (isLangError(s["node"])) { return s; }
+            push(elseBody, s["node"]);
+            pos = s["pos"];
+        }
+        let a8 = pAdvance(tokens, pos); pos = a8["pos"]; // '}'
+    }
+
+    return { node: astNode("If", line, { cond: cond["node"], thenBody: thenBody, elseBody: elseBody }), pos: pos };
+}
+
+fun parseExprStatement(tokens, pos) {
+    let r = parseExpr(tokens, pos);
+    if (isLangError(r["node"])) { return r; }
+    pos = r["pos"];
+    let a = pExpect(tokens, pos, "OP", "Parser"); // ';'
+    pos = a["pos"];
+    return { node: r["node"], pos: pos };
+}
+
+fun parseExpr(tokens, pos) { return parseComparison(tokens, pos); }
+
+fun parseComparison(tokens, pos) {
+    let left = parseTerm(tokens, pos);
+    if (isLangError(left["node"])) { return left; }
+    pos = left["pos"];
+    let node = left["node"];
+    while (pCheckValue(tokens, pos, "OP", "==") or pCheckValue(tokens, pos, "OP", "<") or pCheckValue(tokens, pos, "OP", ">")) {
+        let opTok = pPeek(tokens, pos);
+        let a = pAdvance(tokens, pos); pos = a["pos"];
+        let right = parseTerm(tokens, pos);
+        if (isLangError(right["node"])) { return right; }
+        pos = right["pos"];
+        node = astNode("Binary", opTok["line"], { op: opTok["value"], left: node, right: right["node"] });
+    }
+    return { node: node, pos: pos };
+}
+
+fun parseTerm(tokens, pos) {
+    let left = parseFactor(tokens, pos);
+    if (isLangError(left["node"])) { return left; }
+    pos = left["pos"];
+    let node = left["node"];
+    while (pCheckValue(tokens, pos, "OP", "+") or pCheckValue(tokens, pos, "OP", "-")) {
+        let opTok = pPeek(tokens, pos);
+        let a = pAdvance(tokens, pos); pos = a["pos"];
+        let right = parseFactor(tokens, pos);
+        if (isLangError(right["node"])) { return right; }
+        pos = right["pos"];
+        node = astNode("Binary", opTok["line"], { op: opTok["value"], left: node, right: right["node"] });
+    }
+    return { node: node, pos: pos };
+}
+
+fun parseFactor(tokens, pos) {
+    let left = parseUnary(tokens, pos);
+    if (isLangError(left["node"])) { return left; }
+    pos = left["pos"];
+    let node = left["node"];
+    while (pCheckValue(tokens, pos, "OP", "*") or pCheckValue(tokens, pos, "OP", "/")) {
+        let opTok = pPeek(tokens, pos);
+        let a = pAdvance(tokens, pos); pos = a["pos"];
+        let right = parseUnary(tokens, pos);
+        if (isLangError(right["node"])) { return right; }
+        pos = right["pos"];
+        node = astNode("Binary", opTok["line"], { op: opTok["value"], left: node, right: right["node"] });
+    }
+    return { node: node, pos: pos };
+}
+
+fun parseUnary(tokens, pos) {
+    if (pCheckValue(tokens, pos, "OP", "-")) {
+        let opTok = pPeek(tokens, pos);
+        let a = pAdvance(tokens, pos); pos = a["pos"];
+        let operand = parseUnary(tokens, pos);
+        if (isLangError(operand["node"])) { return operand; }
+        return { node: astNode("Unary", opTok["line"], { op: "-", operand: operand["node"] }), pos: operand["pos"] };
+    }
+    return parsePrimary(tokens, pos);
+}
+
+fun parsePrimary(tokens, pos) {
+    let tok = pPeek(tokens, pos);
+    if (tokIs(tok, "NUMBER")) {
+        let a = pAdvance(tokens, pos);
+        return { node: astNode("NumberLit", tok["line"], { value: toNumber(tok["value"]) }), pos: a["pos"] };
+    }
+    if (tokIs(tok, "STRING")) {
+        let a = pAdvance(tokens, pos);
+        return { node: astNode("StringLit", tok["line"], { value: tok["value"] }), pos: a["pos"] };
+    }
+    if (tokIs(tok, "IDENT")) {
+        let a = pAdvance(tokens, pos);
+        return { node: astNode("Ident", tok["line"], { name: tok["value"] }), pos: a["pos"] };
+    }
+    if (tokIsValue(tok, "OP", "(")) {
+        let a = pAdvance(tokens, pos);
+        let inner = parseExpr(tokens, a["pos"]);
+        if (isLangError(inner["node"])) { return inner; }
+        let a2 = pAdvance(tokens, inner["pos"]); // ')'
+        return { node: inner["node"], pos: a2["pos"] };
+    }
+    return { node: langError("Parser", "تعبير غير متوقَّع عند '" + toString(tok["value"]) + "'", tok["line"]), pos: pos };
+}
