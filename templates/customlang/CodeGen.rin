@@ -1,0 +1,81 @@
+// ============================================================================
+//  CodeGen.rin — مسار بديل لـ Interpreter.rin: بدل تنفيذ AST مباشرة، يولّد نص كود
+//  Rin حقيقي مكافئ، يمكن حفظه بـ writeFile() ثم تشغيله بأي مفسّر Rin عادي.
+//  هذا يجعل لغتك "__LANG_NAME__" لغة تُترجَم (compiled) وليس فقط تُفسَّر (interpreted).
+//
+//  نفس ملاحظة التصميم في Interpreter.rin: genExpr يُعيد دوماً ok(نص)/err(langError)،
+//  لأن toString(node["value"]) قد يكون نصاً خاماً غير خريطة (has() يفشل على غير الخرائط).
+// ============================================================================
+
+@import "./Parser.rin";
+
+// يولّد نص برنامج Rin كامل من AST؛ يُعيد نصاً جاهزاً للحفظ/التشغيل، أو نص خطأ منسَّق
+fun generate(program) {
+    if (isLangError(program)) { return formatLangError(program); }
+    let lines = [];
+    push(lines, "// ---- مُولَّد تلقائياً من __LANG_NAME__ عبر CodeGen.rin ----");
+    let r = genBlock(program["body"], lines, "");
+    if (isOk(r) == false) { return formatLangError(resultError(r)); }
+    return join(lines, "\n");
+}
+
+fun genBlock(statements, lines, indent) {
+    let i = 0;
+    while (i < len(statements)) {
+        let r = genStatement(statements[i], lines, indent);
+        if (isOk(r) == false) { return r; }
+        i = i + 1;
+    }
+    return ok(true);
+}
+
+fun genStatement(node, lines, indent) {
+    if (nodeIs(node, "Let")) {
+        let e = genExpr(node["value"]);
+        if (isOk(e) == false) { return e; }
+        push(lines, indent + "let " + node["name"] + " = " + e["value"] + ";");
+        return ok(true);
+    }
+    if (nodeIs(node, "Print")) {
+        let e = genExpr(node["value"]);
+        if (isOk(e) == false) { return e; }
+        push(lines, indent + "print " + e["value"] + ";");
+        return ok(true);
+    }
+    if (nodeIs(node, "If")) {
+        let c = genExpr(node["cond"]);
+        if (isOk(c) == false) { return c; }
+        push(lines, indent + "if (" + c["value"] + ") {");
+        let r1 = genBlock(node["thenBody"], lines, indent + "    ");
+        if (isOk(r1) == false) { return r1; }
+        push(lines, indent + "} else {");
+        let r2 = genBlock(node["elseBody"], lines, indent + "    ");
+        if (isOk(r2) == false) { return r2; }
+        push(lines, indent + "}");
+        return ok(true);
+    }
+    let e = genExpr(node);
+    if (isOk(e) == false) { return e; }
+    push(lines, indent + e["value"] + ";");
+    return ok(true);
+}
+
+// يبني تمثيل نص Rin لتعبير واحد (بدون ; ختامية — يُضيفها المستدعي). يُعيد ok(نص)/err(...)
+fun genExpr(node) {
+    if (nodeIs(node, "NumberLit")) { return ok(toString(node["value"])); }
+    if (nodeIs(node, "StringLit")) { return ok("\"" + node["value"] + "\""); }
+    if (nodeIs(node, "Ident")) { return ok(node["name"]); }
+    if (nodeIs(node, "Unary")) {
+        let v = genExpr(node["operand"]);
+        if (isOk(v) == false) { return v; }
+        return ok("(-" + v["value"] + ")");
+    }
+    if (nodeIs(node, "Binary")) {
+        let l = genExpr(node["left"]);
+        if (isOk(l) == false) { return l; }
+        let r = genExpr(node["right"]);
+        if (isOk(r) == false) { return r; }
+        return ok("(" + l["value"] + " " + node["op"] + " " + r["value"] + ")");
+    }
+    return err(langError("CodeGen", "لا يمكن توليد كود لعقدة: " + node["kind"], node["line"]));
+}
