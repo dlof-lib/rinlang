@@ -18,6 +18,7 @@
     <string name="ext_type_debug_tool">Debug Tool</string>
     <string name="ext_type_ai_tool">AI Tool</string>
     <string name="ext_type_template">Template</string>
+    <string name="ext_type_language">Language</string>
 
     <!-- "rin ext ..." terminal command bar -->
     <string name="ext_cli_title">rin ext commands</string>
