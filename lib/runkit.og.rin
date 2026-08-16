@@ -1,0 +1,108 @@
+// ============================================================================
+//  lib/runkit.og.rin — تشغيل ملفات/أسطر لغتك المخصّصة وبناء تقرير REPL موحّد
+//  استيراد:
+//    @import "lib/runkit.og.rin";
+//    @import "lib/runkit.og.rin" as run;
+//
+//  آخر حلقة الفريق (Lexer -> Parser -> Interpreter من lib/langkit.og.rin): تشغيل ملف
+//  اللغة الجديدة فعلياً سطراً بسطر أو دفعة واحدة، وتجميع نتيجة موحّدة (نجاح/فشل لكل سطر)
+//  بدل أن يكتب كل مشروع لغة منطق REPL وتنسيق الأخطاء من الصفر. runFn التي تُمرَّر لدوال
+//  هذه المكتبة هي دالة تشغيل سطر واحد من مشروعك (عادة: Lexer.rin + Parser.rin +
+//  Interpreter.rin مجتمعين)، ويجب أن تُعيد دوماً خريطة نتيجة بأسلوب langkit
+//  ({ok:true,value:...} أو {ok:false,error:langErrorObj}).
+//
+//  مثال سريع:
+//    fun runOneLine(line) { return ok(evalSource(line)); }  // مبسّط، عادة تستدعي lexer/parser
+//    let report = runLines(["1 + 2;", "print x;"], runOneLine);
+//    print formatRunReport(report);
+//
+//  ملاحظة: formatRunReport تستخدم formatLangError() من lib/langkit.og.rin، لذا استورد
+//  lib/langkit.og.rin أيضاً (النتائج التي تُنتجها runFn يجب أن تتبع شكل ok()/err() منها).
+// ============================================================================
+
+// ينفّذ runFn(line) على كل سطر من lines بالترتيب، ويجمع لكل سطر { line, lineNumber,
+// result } في مصفوفة، بلا توقّف عند أول فشل (خلافاً لبرنامج حقيقي، مفيد لتشخيص كل
+// أخطاء ملف اختبار دفعة واحدة بدل تصحيحها خطأً خطأً)
+fun runLines(lines, runFn) {
+    let entries = [];
+    let i = 0;
+    while (i < len(lines)) {
+        let result = runFn(lines[i]);
+        push(entries, { line: lines[i], lineNumber: i + 1, result: result });
+        i = i + 1;
+    }
+    return entries;
+}
+
+// مثل runLines لكن يتوقّف فوراً عند أول سطر فاشل (result["ok"] == false)، ويُعيد
+// خريطة { entries: ما نُفِّذ حتى التوقف, stoppedEarly: true/false }
+fun runLinesUntilError(lines, runFn) {
+    let entries = [];
+    let i = 0;
+    let stoppedEarly = false;
+    while (i < len(lines) and stoppedEarly == false) {
+        let result = runFn(lines[i]);
+        push(entries, { line: lines[i], lineNumber: i + 1, result: result });
+        if (result["ok"] == false) {
+            stoppedEarly = true;
+        }
+        i = i + 1;
+    }
+    return { entries: entries, stoppedEarly: stoppedEarly };
+}
+
+// يقرأ ملف مصدر بالكامل عبر readFile ثم يشغّله سطراً بسطر (تقسيم بالسطر الجديد \n)
+// عبر runLines، مفيد لتشغيل ملف اختبار كامل بمشروع لغة (راجع lib/langkit.og.rin
+// لتحميل manifest.json، وexamples/customlang/calc/ لمثال تشغيل حقيقي)
+fun runFile(path, runFn) {
+    let source = readFile(path);
+    let lines = split(source, "\n");
+    return runLines(lines, runFn);
+}
+
+// عدد الأسطر الناجحة داخل تقرير أنتجته runLines/runLinesUntilError["entries"]
+fun countSucceeded(entries) {
+    let count = 0;
+    let i = 0;
+    while (i < len(entries)) {
+        if (entries[i]["result"]["ok"]) {
+            count = count + 1;
+        }
+        i = i + 1;
+    }
+    return count;
+}
+
+// عدد الأسطر الفاشلة داخل تقرير
+fun countFailed(entries) {
+    return len(entries) - countSucceeded(entries);
+}
+
+// مصفوفة الإدخالات الفاشلة فقط من التقرير (كل عنصر { line, lineNumber, result })
+fun failedEntries(entries) {
+    let result = [];
+    let i = 0;
+    while (i < len(entries)) {
+        if (entries[i]["result"]["ok"] == false) {
+            push(result, entries[i]);
+        }
+        i = i + 1;
+    }
+    return result;
+}
+
+// يبني نصاً موجزاً متعدد الأسطر يلخّص تقرير تشغيل: عدد الناجح/الفاشل، ثم كل خطأ
+// برقم سطره ورسالته (عبر formatLangError من lib/langkit.og.rin على كل result["error"])
+fun formatRunReport(entries) {
+    let lines = [];
+    push(lines, "نجح: " + toString(countSucceeded(entries)) + " / فشل: " + toString(countFailed(entries)) + " / الإجمالي: " + toString(len(entries)));
+    let failed = failedEntries(entries);
+    let i = 0;
+    while (i < len(failed)) {
+        let entry = failed[i];
+        push(lines, "  سطر " + toString(entry["lineNumber"]) + ": " + entry["line"]);
+        push(lines, "    -> " + formatLangError(entry["result"]["error"]));
+        i = i + 1;
+    }
+    return join(lines, "\n");
+}
