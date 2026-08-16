@@ -1,0 +1,126 @@
+// ============================================================================
+//  lib/loopstats.og.rin — تجميع إحصاءات وتقدّم بشكل تدريجي أثناء تنفيذ حلقة
+//  استيراد:
+//    @import "lib/loopstats.og.rin";
+//    @import "lib/loopstats.og.rin" as stats;
+//
+//  دوال math.og.rin (mean/stddev...) تحتاج مصفوفة كاملة جاهزة مسبقاً. هذه المكتبة
+//  بالمقابل مخصّصة لحلقات "تدفّق" (streaming) حيث تصلك القيم واحدة تلو الأخرى ولا تريد
+//  تخزينها كلها أولاً: مُجمِّع إحصاء تراكمي (عدّاد/مجموع/متوسط/أصغر/أكبر يتحدّث مع كل
+//  قيمة جديدة)، عدّاد تكرارات حسب مفتاح (tally/histogram)، وشريط تقدّم نصّي بسيط.
+//
+//  مثال سريع:
+//    let s = runningStatsNew();
+//    let i = 0;
+//    while (i < 5) { runningStatsAdd(s, i * 2); i = i + 1; }
+//    print s;  // { count:5, sum:20, mean:4, min:0, max:8 }
+// ============================================================================
+
+// ---- إحصاء تراكمي (running stats) ------------------------------------------
+
+// يبني مُجمِّعاً تراكمياً فارغاً
+fun runningStatsNew() {
+    return { count: 0, sum: 0, mean: 0, min: nil, max: nil };
+}
+
+// يُضيف قيمة جديدة للمُجمِّع s ويُحدّث count/sum/mean/min/max فوراً (يُعدّل s بالمرجع،
+// ويُعيده أيضاً للراحة عند الاستخدام المتسلسل)
+fun runningStatsAdd(s, value) {
+    s["count"] = s["count"] + 1;
+    s["sum"] = s["sum"] + value;
+    s["mean"] = s["sum"] / s["count"];
+    if (s["min"] == nil or value < s["min"]) { s["min"] = value; }
+    if (s["max"] == nil or value > s["max"]) { s["max"] = value; }
+    return s;
+}
+
+// يُطبّق runningStatsAdd على كل عناصر arr بحلقة واحدة، ويُعيد المُجمِّع النهائي
+fun runningStatsFromArray(arr) {
+    let s = runningStatsNew();
+    let i = 0;
+    while (i < len(arr)) {
+        runningStatsAdd(s, arr[i]);
+        i = i + 1;
+    }
+    return s;
+}
+
+// ---- عدّاد تكرارات حسب مفتاح (tally / histogram) ----------------------------
+
+// يبني عدّاداً فارغاً (خريطة مفتاح -> عدد مرات ظهوره)
+fun tallyNew() {
+    return {};
+}
+
+// يزيد عدّاد key بمقدار واحد (أو ينشئه بقيمة 1 إن لم يكن موجوداً). يُعدّل t بالمرجع
+fun tallyAdd(t, key) {
+    if (has(t, key)) {
+        t[key] = t[key] + 1;
+    } else {
+        t[key] = 1;
+    }
+    return t;
+}
+
+// عدد مرات ظهور key حتى الآن (0 إن لم يظهر بعد)
+fun tallyGet(t, key) {
+    if (has(t, key)) { return t[key]; }
+    return 0;
+}
+
+// يُحوّل العدّاد إلى مصفوفة {key, count} مرتّبة تنازلياً حسب count (الأكثر تكراراً أولاً)
+fun tallyToSortedArray(t) {
+    let ks = keys(t);
+    let entries = [];
+    let i = 0;
+    while (i < len(ks)) {
+        push(entries, { key: ks[i], count: t[ks[i]] });
+        i = i + 1;
+    }
+    // فرز فقاعي بسيط تنازلياً حسب count (المصفوفات صغيرة عادة في هذا الاستخدام)
+    let n = len(entries);
+    let a = 0;
+    while (a < n) {
+        let b = 0;
+        while (b < n - a - 1) {
+            if (entries[b]["count"] < entries[b + 1]["count"]) {
+                let tmp = entries[b];
+                entries[b] = entries[b + 1];
+                entries[b + 1] = tmp;
+            }
+            b = b + 1;
+        }
+        a = a + 1;
+    }
+    return entries;
+}
+
+// المفتاح الأكثر تكراراً حتى الآن، أو nil إن كان العدّاد فارغاً
+fun tallyMostCommon(t) {
+    let sorted = tallyToSortedArray(t);
+    if (len(sorted) == 0) { return nil; }
+    return sorted[0]["key"];
+}
+
+// ---- شريط تقدّم نصّي --------------------------------------------------------
+
+// يبني نصّاً مثل "[####------] 40% (4/10)" يمثّل تقدّم current من أصل total
+fun progressBar(current, total, width) {
+    let ratio = 0;
+    if (total > 0) { ratio = current / total; }
+    if (ratio > 1) { ratio = 1; }
+    if (ratio < 0) { ratio = 0; }
+    let filled = round(ratio * width);
+    let bar = "";
+    let i = 0;
+    while (i < width) {
+        if (i < filled) {
+            bar = bar + "#";
+        } else {
+            bar = bar + "-";
+        }
+        i = i + 1;
+    }
+    let percent = round(ratio * 100);
+    return "[" + bar + "] " + toString(percent) + "% (" + toString(current) + "/" + toString(total) + ")";
+}
