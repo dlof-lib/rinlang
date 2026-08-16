@@ -1,0 +1,146 @@
+// ============================================================================
+//  lib/astwalk.og.rin — طواف وزيارة شجرة AST (visitor pattern) لمفسّر/مولّد كود لغتك
+//  استيراد:
+//    @import "lib/astwalk.og.rin";
+//    @import "lib/astwalk.og.rin" as walk;
+//
+//  lib/langkit.og.rin توفّر formatAstShallow (طباعة عقدة واحدة بلا نزول لأبنائها، لأن
+//  شكل الحقول يختلف حسب kind). هذه المكتبة تضيف نمط "visitor": جدول توزيع (dispatch
+//  table) يربط kind بدالة معالجة خاصة به، ودالة visit() تختار المعالج المناسب تلقائياً
+//  — نفس الفكرة التي يعمل بها أي evalExpr/genExpr حقيقي (switch كبير على node.kind)
+//  لكن بشكل جدول بيانات بدل سلسلة if/else طويلة يدوية.
+//
+//  مثال سريع:
+//    fun onLit(node) { return node["value"]; }
+//    fun onBin(node) { return evalExpr(node["left"]) + evalExpr(node["right"]); } // تبسيط
+//    let handlers = dispatchTable([["Literal", onLit], ["BinaryExpr", onBin]]);
+//    fun onUnknown(node) { return langError("eval", "نوع عقدة غير مدعوم: " + node["kind"], node["line"]); }
+//    print visit(someNode, handlers, onUnknown);
+//
+//    // عدّ/طباعة الشجرة بعمق: مرّر أسماء الحقول التي تحوي عقدة فرعية واحدة (singleKeys)
+//    // منفصلة عن أسماء الحقول التي تحوي مصفوفة عقد (listKeys):
+//    print countNodesDeep(program, ["left", "right", "operand"], ["statements", "args"]);
+//    print formatAstDeep(program, ["left", "right", "operand"], ["statements", "args"]);
+//
+//  ملاحظة: formatAstDeep/formatAstDeepInto تستخدمان repeatStr() من lib/strings.og.rin
+//  لبناء المسافة البادئة، لذا استورد lib/strings.og.rin أيضاً إن أردت استخدامهما.
+// ============================================================================
+
+// يبني جدول توزيع من مصفوفة أزواج [kind, handlerFn]
+fun dispatchTable(pairs) {
+    let table = {};
+    let i = 0;
+    while (i < len(pairs)) {
+        table[pairs[i][0]] = pairs[i][1];
+        i = i + 1;
+    }
+    return table;
+}
+
+// يستدعي المعالج المناسب لـ node["kind"] من table ويُمرّر له node، أو يستدعي
+// fallbackFn(node) إن لم يوجد معالج مسجَّل لهذا النوع (بدل توقّف بخطأ غامض)
+fun visit(node, table, fallbackFn) {
+    let kind = node["kind"];
+    if (has(table, kind)) {
+        let handler = table[kind];
+        return handler(node);
+    }
+    return fallbackFn(node);
+}
+
+// يطبّق visit على كل عقدة من مصفوفة nodes (مفيد لزيارة قائمة statements في جسم دالة/برنامج)
+// ويجمع نتائج كل زيارة في مصفوفة يُعيدها
+fun visitAll(nodes, table, fallbackFn) {
+    let results = [];
+    let i = 0;
+    while (i < len(nodes)) {
+        push(results, visit(nodes[i], table, fallbackFn));
+        i = i + 1;
+    }
+    return results;
+}
+
+// يعدّ العقد داخل شجرة AST بعمق كامل. لأن keys()/has() في Rin يفشلان على قيمة ليست
+// خريطة، ولا توجد دالة isArray/isMap لتمييز شكل حقل فرعي في وقت التشغيل، تفصل هذه
+// الدالة صراحة بين نوعين من الحقول بدل تخمين شكلها:
+//   singleKeys: أسماء حقول تحوي عقدة فرعية واحدة أو nil (مثل "left"/"right"/"operand")
+//   listKeys:   أسماء حقول تحوي مصفوفة عقد فرعية أو nil (مثل "args"/"statements"/"body")
+// يستخدم مكدّساً (stack كمصفوفة) بدل استدعاء متكرر لأن أشكال العقد تختلف بحرّية
+fun countNodesDeep(root, singleKeys, listKeys) {
+    let stack = [root];
+    let count = 0;
+    while (len(stack) > 0) {
+        let node = pop(stack);
+        if (node != nil) {
+            count = count + 1;
+            let i = 0;
+            while (i < len(singleKeys)) {
+                let key = singleKeys[i];
+                if (has(node, key)) {
+                    let child = node[key];
+                    if (child != nil) { push(stack, child); }
+                }
+                i = i + 1;
+            }
+            i = 0;
+            while (i < len(listKeys)) {
+                let key = listKeys[i];
+                if (has(node, key)) {
+                    let childArr = node[key];
+                    if (childArr != nil) {
+                        let j = 0;
+                        while (j < len(childArr)) {
+                            push(stack, childArr[j]);
+                            j = j + 1;
+                        }
+                    }
+                }
+                i = i + 1;
+            }
+        }
+    }
+    return count;
+}
+
+// يطبع شجرة AST كاملة بعمق مع مسافات بادئة تعكس المستوى، بنفس مفهوم singleKeys/listKeys
+// في countNodesDeep. يُعيد نصاً متعدد الأسطر جاهزاً للطباعة (print) أو الحفظ في ملف
+fun formatAstDeep(root, singleKeys, listKeys) {
+    let lines = [];
+    formatAstDeepInto(root, singleKeys, listKeys, 0, lines);
+    return join(lines, "\n");
+}
+
+// دالة مساعدة داخلية لـ formatAstDeep: تملأ lines (مصفوفة) بتمثيل node ثم أبنائه
+// بشكل متكرر (recursion)، بمسافة بادئة تتناسب مع depth
+fun formatAstDeepInto(node, singleKeys, listKeys, depth, lines) {
+    if (node == nil) { return nil; }
+    let indent = repeatStr("  ", depth);
+    push(lines, indent + "(" + node["kind"] + ")");
+    let i = 0;
+    while (i < len(singleKeys)) {
+        let key = singleKeys[i];
+        if (has(node, key)) {
+            let child = node[key];
+            if (child != nil) {
+                formatAstDeepInto(child, singleKeys, listKeys, depth + 1, lines);
+            }
+        }
+        i = i + 1;
+    }
+    i = 0;
+    while (i < len(listKeys)) {
+        let key = listKeys[i];
+        if (has(node, key)) {
+            let childArr = node[key];
+            if (childArr != nil) {
+                let j = 0;
+                while (j < len(childArr)) {
+                    formatAstDeepInto(childArr[j], singleKeys, listKeys, depth + 1, lines);
+                    j = j + 1;
+                }
+            }
+        }
+        i = i + 1;
+    }
+    return nil;
+}
