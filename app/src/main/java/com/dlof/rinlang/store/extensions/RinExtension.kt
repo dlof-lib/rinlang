@@ -11,7 +11,9 @@ enum class ExtensionType(val id: String) {
     UI_COMPONENT("ui_component"),// عناصر واجهة إضافية (لوحات، أزرار، شرائط أدوات)
     DEBUG_TOOL("debug_tool"),    // أدوات تتبّع/تصحيح إضافية
     AI_TOOL("ai_tool"),          // أدوات مبنية على نماذج ذكاء اصطناعي
-    TEMPLATE("template");        // قوالب مشاريع جاهزة
+    TEMPLATE("template"),        // قوالب مشاريع جاهزة
+    LANGUAGE("language");        // لغة برمجة مخصصة كاملة (Lexer/Parser/Interpreter/CodeGen)
+                                  // مبنية بـ lib/langkit.og.rin — راجع CustomLanguageManifest.kt
 
     companion object {
         fun fromId(id: String): ExtensionType =
@@ -70,7 +72,14 @@ data class RinExtension(
     val ratingSum: Long = 0L,
     val ratingCount: Long = 0L,
     val reportCount: Long = 0L,
-    val likeCount: Long = 0L
+    val likeCount: Long = 0L,
+    /**
+     * شارة "رسمية" (Official) — تُفعَّل فقط بمراجعة يدوية من فريق Rin (كتابتها في قاعدة
+     * البيانات مقصورة على حساب الإدارة عبر قاعدة firebase منفصلة، وليس المطوّر صاحب الإضافة
+     * نفسه؛ راجع firebase/database.rules.json و docs/custom-languages.md). حقل إضافي متوافق
+     * خلفياً: قيمته الافتراضية false لأي إضافة/لغة قديمة لم تُراجَع بعد.
+     */
+    val isOfficial: Boolean = false
 ) : java.io.Serializable {
 
     val averageRating: Double
