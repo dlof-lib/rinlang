@@ -32,7 +32,7 @@ data class BuiltinLibraryInfo(
 
 /**
  * سجل مرجعي (يطابق `embeddedRinLibraries()` في rin_stdlib_libs.h) بالمكتبات القياسية
- * السبع المدمجة داخل المفسّر نفسه، وتعمل @import عليها فوراً على أي جهاز دون رفعها.
+ * التسع عشرة المدمجة داخل المفسّر نفسه، وتعمل @import عليها فوراً على أي جهاز دون رفعها.
  * هذا السجل نصي فقط (للعرض والإدراج السريع في المحرر)، ولا يكرر شيفرة المكتبات نفسها.
  */
 object BuiltinLibraries {
@@ -71,6 +71,66 @@ object BuiltinLibraries {
             "lib/ringo.og.rin", "ringo",
             "لغة ترميز خفيفة بوسوم [tag] (Ringo)، تُصيَّر إلى HTML أو نص عادي",
             "ringoToHtml • ringoToPlain • ringoTokenize • ringoInfo"
+        ),
+        BuiltinLibraryInfo(
+            "lib/langkit.og.rin", "langkit",
+            "لبنات جاهزة (tok/tokenNew وتصنيف محارف) لبناء Lexer/Parser/Interpreter للغتك الخاصة",
+            "languageInfo • describeLanguage • classifyWord"
+        ),
+        BuiltinLibraryInfo(
+            "lib/astwalk.og.rin", "astwalk",
+            "طواف وزيارة شجرة AST (visitor pattern) لمفسّر/مولّد كود لغتك",
+            "dispatchTable • visit • visitAll • countNodesDeep • formatAstDeep • formatAstDeepInto"
+        ),
+        BuiltinLibraryInfo(
+            "lib/envkit.og.rin", "envkit",
+            "بيئة تنفيذ (Environment / نطاقات متداخلة) لمفسّر لغتك",
+            "envNew • envChild • envDefine • envHasOwn • envHas • envGet • envSet • envDepth"
+        ),
+        BuiltinLibraryInfo(
+            "lib/gridkit.og.rin", "gridkit",
+            "حلقات متداخلة على شبكات ثنائية الأبعاد (2D grids / matrices)",
+            "makeGrid • gridRows • gridCols • gridInBounds • getCell • setCell • forEachCell • mapGrid"
+        ),
+        BuiltinLibraryInfo(
+            "lib/iterkit.og.rin", "iterkit",
+            "مكرِّرات (iterators) بنمط hasNext/next فوق المصفوفات",
+            "iterNew • iterHasNext • iterPeek • iterNext • iterRemaining • iterReset • iterSkip • iterToArray"
+        ),
+        BuiltinLibraryInfo(
+            "lib/lexkit.og.rin", "lexkit",
+            "لبنات محرّك Lexer عام قابل لإعادة الاستخدام لصناعة لغتك",
+            "newKeywordTable • classifyWord • newOperatorTable • matchLongestOp • sAtEnd • sPeek • sPeekNext"
+        ),
+        BuiltinLibraryInfo(
+            "lib/loopkit.og.rin", "loopkit",
+            "تحكّم عام بالحلقات (loop control primitives) فوق while/for",
+            "repeatTimes • countdown • stepLoop • stepLoopCollect • loopUntil • retryUntil • whileCollect"
+        ),
+        BuiltinLibraryInfo(
+            "lib/loopstats.og.rin", "loopstats",
+            "تجميع إحصاءات وتقدّم بشكل تدريجي أثناء تنفيذ حلقة",
+            "runningStatsNew • runningStatsAdd • runningStatsFromArray • tallyNew • tallyAdd • tallyGet"
+        ),
+        BuiltinLibraryInfo(
+            "lib/parsekit.og.rin", "parsekit",
+            "لبنات محلِّل (Parser) بأسلوب أسبقية العمليات (precedence climbing)",
+            "precTable • precOf • litNode • identNode • unaryNode • binNode • groupNode • callNode"
+        ),
+        BuiltinLibraryInfo(
+            "lib/runkit.og.rin", "runkit",
+            "تشغيل ملفات/أسطر لغتك المخصّصة وبناء تقرير REPL موحّد",
+            "runLines • runLinesUntilError • runFile • countSucceeded • countFailed • formatRunReport"
+        ),
+        BuiltinLibraryInfo(
+            "lib/seqkit.og.rin", "seqkit",
+            "توليد متتاليات جاهزة كمدخلات لحلقات for/while",
+            "rangeStep • linspace • geometricSeq • repeatValue • cycleArr • cycleToLength"
+        ),
+        BuiltinLibraryInfo(
+            "lib/bob.og.rin", "bob",
+            "لغة ترميز خفيفة (Markdown-lite) بأسطر بادئة #/>/- ، تُصيَّر إلى HTML أو نص عادي",
+            "bobTokenize • bobToHtml • bobToPlain • bobEscapeHtml • bobInfo"
         )
     )
 }
