@@ -1023,7 +1023,8 @@ fun isAlnumChar(ch) {
 }
 
 fun isSpaceChar(ch) {
-    return ch == " " or ch == "	" or ch == "";
+    return ch == " " or ch == "	" or ch == "
+";
 }
 
 fun isNewlineChar(ch) {
@@ -1218,6 +1219,1483 @@ fun describeLanguage(info) {
 }
 )LANGKITOGRIN";
 
+
+static const char* kLib_astwalk_og_rin = R"ASTWALKOGRIN(
+// ============================================================================
+//  lib/astwalk.og.rin — طواف وزيارة شجرة AST (visitor pattern) لمفسّر/مولّد كود لغتك
+//  استيراد:
+//    @import "lib/astwalk.og.rin";
+//    @import "lib/astwalk.og.rin" as walk;
+//
+//  lib/langkit.og.rin توفّر formatAstShallow (طباعة عقدة واحدة بلا نزول لأبنائها، لأن
+//  شكل الحقول يختلف حسب kind). هذه المكتبة تضيف نمط "visitor": جدول توزيع (dispatch
+//  table) يربط kind بدالة معالجة خاصة به، ودالة visit() تختار المعالج المناسب تلقائياً
+//  — نفس الفكرة التي يعمل بها أي evalExpr/genExpr حقيقي (switch كبير على node.kind)
+//  لكن بشكل جدول بيانات بدل سلسلة if/else طويلة يدوية.
+//
+//  مثال سريع:
+//    fun onLit(node) { return node["value"]; }
+//    fun onBin(node) { return evalExpr(node["left"]) + evalExpr(node["right"]); } // تبسيط
+//    let handlers = dispatchTable([["Literal", onLit], ["BinaryExpr", onBin]]);
+//    fun onUnknown(node) { return langError("eval", "نوع عقدة غير مدعوم: " + node["kind"], node["line"]); }
+//    print visit(someNode, handlers, onUnknown);
+//
+//    // عدّ/طباعة الشجرة بعمق: مرّر أسماء الحقول التي تحوي عقدة فرعية واحدة (singleKeys)
+//    // منفصلة عن أسماء الحقول التي تحوي مصفوفة عقد (listKeys):
+//    print countNodesDeep(program, ["left", "right", "operand"], ["statements", "args"]);
+//    print formatAstDeep(program, ["left", "right", "operand"], ["statements", "args"]);
+//
+//  ملاحظة: formatAstDeep/formatAstDeepInto تستخدمان repeatStr() من lib/strings.og.rin
+//  لبناء المسافة البادئة، لذا استورد lib/strings.og.rin أيضاً إن أردت استخدامهما.
+// ============================================================================
+
+// يبني جدول توزيع من مصفوفة أزواج [kind, handlerFn]
+fun dispatchTable(pairs) {
+    let table = {};
+    let i = 0;
+    while (i < len(pairs)) {
+        table[pairs[i][0]] = pairs[i][1];
+        i = i + 1;
+    }
+    return table;
+}
+
+// يستدعي المعالج المناسب لـ node["kind"] من table ويُمرّر له node، أو يستدعي
+// fallbackFn(node) إن لم يوجد معالج مسجَّل لهذا النوع (بدل توقّف بخطأ غامض)
+fun visit(node, table, fallbackFn) {
+    let kind = node["kind"];
+    if (has(table, kind)) {
+        let handler = table[kind];
+        return handler(node);
+    }
+    return fallbackFn(node);
+}
+
+// يطبّق visit على كل عقدة من مصفوفة nodes (مفيد لزيارة قائمة statements في جسم دالة/برنامج)
+// ويجمع نتائج كل زيارة في مصفوفة يُعيدها
+fun visitAll(nodes, table, fallbackFn) {
+    let results = [];
+    let i = 0;
+    while (i < len(nodes)) {
+        push(results, visit(nodes[i], table, fallbackFn));
+        i = i + 1;
+    }
+    return results;
+}
+
+// يعدّ العقد داخل شجرة AST بعمق كامل. لأن keys()/has() في Rin يفشلان على قيمة ليست
+// خريطة، ولا توجد دالة isArray/isMap لتمييز شكل حقل فرعي في وقت التشغيل، تفصل هذه
+// الدالة صراحة بين نوعين من الحقول بدل تخمين شكلها:
+//   singleKeys: أسماء حقول تحوي عقدة فرعية واحدة أو nil (مثل "left"/"right"/"operand")
+//   listKeys:   أسماء حقول تحوي مصفوفة عقد فرعية أو nil (مثل "args"/"statements"/"body")
+// يستخدم مكدّساً (stack كمصفوفة) بدل استدعاء متكرر لأن أشكال العقد تختلف بحرّية
+fun countNodesDeep(root, singleKeys, listKeys) {
+    let stack = [root];
+    let count = 0;
+    while (len(stack) > 0) {
+        let node = pop(stack);
+        if (node != nil) {
+            count = count + 1;
+            let i = 0;
+            while (i < len(singleKeys)) {
+                let key = singleKeys[i];
+                if (has(node, key)) {
+                    let child = node[key];
+                    if (child != nil) { push(stack, child); }
+                }
+                i = i + 1;
+            }
+            i = 0;
+            while (i < len(listKeys)) {
+                let key = listKeys[i];
+                if (has(node, key)) {
+                    let childArr = node[key];
+                    if (childArr != nil) {
+                        let j = 0;
+                        while (j < len(childArr)) {
+                            push(stack, childArr[j]);
+                            j = j + 1;
+                        }
+                    }
+                }
+                i = i + 1;
+            }
+        }
+    }
+    return count;
+}
+
+// يطبع شجرة AST كاملة بعمق مع مسافات بادئة تعكس المستوى، بنفس مفهوم singleKeys/listKeys
+// في countNodesDeep. يُعيد نصاً متعدد الأسطر جاهزاً للطباعة (print) أو الحفظ في ملف
+fun formatAstDeep(root, singleKeys, listKeys) {
+    let lines = [];
+    formatAstDeepInto(root, singleKeys, listKeys, 0, lines);
+    return join(lines, "\n");
+}
+
+// دالة مساعدة داخلية لـ formatAstDeep: تملأ lines (مصفوفة) بتمثيل node ثم أبنائه
+// بشكل متكرر (recursion)، بمسافة بادئة تتناسب مع depth
+fun formatAstDeepInto(node, singleKeys, listKeys, depth, lines) {
+    if (node == nil) { return nil; }
+    let indent = repeatStr("  ", depth);
+    push(lines, indent + "(" + node["kind"] + ")");
+    let i = 0;
+    while (i < len(singleKeys)) {
+        let key = singleKeys[i];
+        if (has(node, key)) {
+            let child = node[key];
+            if (child != nil) {
+                formatAstDeepInto(child, singleKeys, listKeys, depth + 1, lines);
+            }
+        }
+        i = i + 1;
+    }
+    i = 0;
+    while (i < len(listKeys)) {
+        let key = listKeys[i];
+        if (has(node, key)) {
+            let childArr = node[key];
+            if (childArr != nil) {
+                let j = 0;
+                while (j < len(childArr)) {
+                    formatAstDeepInto(childArr[j], singleKeys, listKeys, depth + 1, lines);
+                    j = j + 1;
+                }
+            }
+        }
+        i = i + 1;
+    }
+    return nil;
+}
+)ASTWALKOGRIN";
+
+static const char* kLib_envkit_og_rin = R"ENVKITOGRIN(
+// ============================================================================
+//  lib/envkit.og.rin — بيئة تنفيذ (Environment / نطاقات متداخلة) لمفسّر لغتك
+//  استيراد:
+//    @import "lib/envkit.og.rin";
+//    @import "lib/envkit.og.rin" as envkit;
+//
+//  أي مفسّر (Interpreter.rin) للغة حقيقية يحتاج نطاقات متغيّرات متداخلة: نطاق برنامج
+//  عام (global scope)، ونطاق فرعي جديد لكل استدعاء دالة أو كتلة { ... } يبحث أولاً في
+//  نفسه ثم يصعد لأبيه إن لم يجد المتغيّر. لأن الخرائط في Rin قيم مُشتركة بالمرجع، فإن
+//  envDefine/envSet تُعدّلان النطاق مباشرة دون حاجة لإعادته وإعادة إسناده يدوياً.
+//
+//  مثال سريع:
+//    let global = envNew(nil);
+//    envDefine(global, "x", 10);
+//    let local = envChild(global);
+//    envDefine(local, "y", 20);
+//    print envGet(local, "x");   // 10 (وُجدت في نطاق الأب)
+//    envSet(local, "x", 99);     // يُعدّل x في نطاق الأب لأنها معرَّفة هناك، لا في local
+//    print envGet(global, "x");  // 99
+// ============================================================================
+
+// يبني نطاقاً جديداً؛ parentEnv هو النطاق الأب أو nil للنطاق العام الجذري
+fun envNew(parentEnv) {
+    return { vars: {}, parent: parentEnv };
+}
+
+// يبني نطاقاً فرعياً أبوه parentEnv (اختصار لـ envNew(parentEnv))، يُستخدم عند دخول
+// كتلة { ... } جديدة أو تنفيذ جسم دالة
+fun envChild(parentEnv) {
+    return envNew(parentEnv);
+}
+
+// يُعرّف متغيّراً جديداً باسم name وقيمة value في نطاق env نفسه تحديداً (بلا صعود للأب)،
+// حتى لو كان متغيّر بنفس الاسم معرَّفاً بالفعل في نطاق أب (يُظلّله shadowing، كما let عادية)
+fun envDefine(env, name, value) {
+    env["vars"][name] = value;
+    return value;
+}
+
+// هل name معرَّف في env نفسه تحديداً (بلا صعود للأب)؟
+fun envHasOwn(env, name) {
+    return has(env["vars"], name);
+}
+
+// هل name معرَّف في env أو أي نطاق أب له (صعوداً حتى الجذر)؟
+fun envHas(env, name) {
+    let current = env;
+    while (current != nil) {
+        if (envHasOwn(current, name)) { return true; }
+        current = current["parent"];
+    }
+    return false;
+}
+
+// يقرأ قيمة name بالبحث في env ثم الصعود للآباء عند اللزوم. يُعيد خريطة نتيجة بأسلوب
+// langkit ({ok:true,value:...} أو {ok:false,error:...}) بدل توقّف بخطأ غامض عند عدم الوجود
+fun envGet(env, name) {
+    let current = env;
+    while (current != nil) {
+        if (envHasOwn(current, name)) {
+            return { ok: true, value: current["vars"][name] };
+        }
+        current = current["parent"];
+    }
+    return { ok: false, error: "envGet: المتغيّر غير معرَّف: " + name };
+}
+
+// يحدّث قيمة name الموجودة مسبقاً في env أو أحد آبائه (يُعدّل أقرب نطاق يملكها فعلياً).
+// إن لم يكن name معرَّفاً في أي نطاق، لا يُنشئه تلقائياً بل يُعيد false (استخدم envDefine
+// للإنشاء الصريح، تماماً كفارق "x = 5" عن "let x = 5" في Rin نفسها)
+fun envSet(env, name, value) {
+    let current = env;
+    while (current != nil) {
+        if (envHasOwn(current, name)) {
+            current["vars"][name] = value;
+            return true;
+        }
+        current = current["parent"];
+    }
+    return false;
+}
+
+// عمق النطاق الحالي عن الجذر (0 للنطاق العام نفسه، 1 لأول نطاق فرعي، وهكذا)
+fun envDepth(env) {
+    let depth = 0;
+    let current = env["parent"];
+    while (current != nil) {
+        depth = depth + 1;
+        current = current["parent"];
+    }
+    return depth;
+}
+
+// أسماء كل المتغيّرات المرئية من env (نطاقه + كل آبائه)، بلا تكرار، الأقرب أولاً
+fun envVisibleNames(env) {
+    let result = [];
+    let current = env;
+    while (current != nil) {
+        let names = keys(current["vars"]);
+        let i = 0;
+        while (i < len(names)) {
+            if (contains(result, names[i]) == false) {
+                push(result, names[i]);
+            }
+            i = i + 1;
+        }
+        current = current["parent"];
+    }
+    return result;
+}
+)ENVKITOGRIN";
+
+static const char* kLib_gridkit_og_rin = R"GRIDKITOGRIN(
+// ============================================================================
+//  lib/gridkit.og.rin — حلقات متداخلة على شبكات ثنائية الأبعاد (2D grids / matrices)
+//  استيراد:
+//    @import "lib/gridkit.og.rin";
+//    @import "lib/gridkit.og.rin" as grid;
+//
+//  الشبكة هنا مصفوفة صفوف، كل صف مصفوفة قيم: grid[row][col]. تُغلّف هذه المكتبة نمط
+//  الحلقة المزدوجة "while (row) { while (col) { ... } }" المتكرر عند التعامل مع
+//  مصفوفات ثنائية الأبعاد (لوحات ألعاب، مصفوفات رياضية، شاشات نصية...).
+//
+//  مثال سريع:
+//    let g = makeGrid(3, 3, 0);
+//    setCell(g, 1, 1, 9);
+//    fun show(value, r, c) { print toString(r) + "," + toString(c) + " = " + toString(value); }
+//    forEachCell(g, show);
+// ============================================================================
+
+// ينشئ شبكة بحجم rows×cols وكل خلاياها تساوي fillValue
+fun makeGrid(rows, cols, fillValue) {
+    let g = [];
+    let r = 0;
+    while (r < rows) {
+        let row = [];
+        let c = 0;
+        while (c < cols) {
+            push(row, fillValue);
+            c = c + 1;
+        }
+        push(g, row);
+        r = r + 1;
+    }
+    return g;
+}
+
+// عدد الصفوف
+fun gridRows(g) {
+    return len(g);
+}
+
+// عدد الأعمدة (بحسب أول صف؛ يفترض أن كل الصفوف بنفس الطول)
+fun gridCols(g) {
+    if (len(g) == 0) { return 0; }
+    return len(g[0]);
+}
+
+// هل (row, col) داخل حدود الشبكة؟
+fun gridInBounds(g, row, col) {
+    if (row < 0 or row >= gridRows(g)) { return false; }
+    if (col < 0 or col >= gridCols(g)) { return false; }
+    return true;
+}
+
+// قراءة خلية بأمان: تُعيد fallback إن كانت (row, col) خارج الحدود بدل توقف بخطأ
+fun getCell(g, row, col, fallback) {
+    if (gridInBounds(g, row, col) == false) { return fallback; }
+    return g[row][col];
+}
+
+// كتابة خلية بأمان: لا تفعل شيئاً إن كانت (row, col) خارج الحدود، وإلا تُعدّل الشبكة
+// مباشرة بالمرجع (المصفوفات في Rin مُشتركة بالمرجع) وتُعيد true للنجاح
+fun setCell(g, row, col, value) {
+    if (gridInBounds(g, row, col) == false) { return false; }
+    g[row][col] = value;
+    return true;
+}
+
+// يستدعي fn(value, row, col) على كل خلية بترتيب صف فصف من اليسار لليمين (بلا قيمة مُرجعة)
+fun forEachCell(g, fn) {
+    let r = 0;
+    while (r < gridRows(g)) {
+        let c = 0;
+        while (c < gridCols(g)) {
+            fn(g[r][c], r, c);
+            c = c + 1;
+        }
+        r = r + 1;
+    }
+    return nil;
+}
+
+// يبني شبكة جديدة بنفس الأبعاد حيث كل خلية = fn(value, row, col) المطبَّقة على الأصلية
+fun mapGrid(g, fn) {
+    let result = [];
+    let r = 0;
+    while (r < gridRows(g)) {
+        let newRow = [];
+        let c = 0;
+        while (c < gridCols(g)) {
+            push(newRow, fn(g[r][c], r, c));
+            c = c + 1;
+        }
+        push(result, newRow);
+        r = r + 1;
+    }
+    return result;
+}
+
+// ينقل (transpose) الشبكة: يصبح الصف عموداً والعكس
+fun transposeGrid(g) {
+    let rows = gridRows(g);
+    let cols = gridCols(g);
+    let result = makeGrid(cols, rows, nil);
+    let r = 0;
+    while (r < rows) {
+        let c = 0;
+        while (c < cols) {
+            result[c][r] = g[r][c];
+            c = c + 1;
+        }
+        r = r + 1;
+    }
+    return result;
+}
+
+// يُسطّح الشبكة إلى مصفوفة واحدة بُعدية بترتيب صف فصف
+fun flattenGrid(g) {
+    let result = [];
+    let r = 0;
+    while (r < gridRows(g)) {
+        let c = 0;
+        while (c < gridCols(g)) {
+            push(result, g[r][c]);
+            c = c + 1;
+        }
+        r = r + 1;
+    }
+    return result;
+}
+
+// جيران أربعة اتجاهات (فوق/تحت/يسار/يمين) داخل حدود الشبكة فقط، كمصفوفة {row,col}
+fun neighbors4(g, row, col) {
+    let candidates = [
+        { row: row - 1, col: col },
+        { row: row + 1, col: col },
+        { row: row, col: col - 1 },
+        { row: row, col: col + 1 }
+    ];
+    let result = [];
+    let i = 0;
+    while (i < len(candidates)) {
+        let p = candidates[i];
+        if (gridInBounds(g, p["row"], p["col"])) {
+            push(result, p);
+        }
+        i = i + 1;
+    }
+    return result;
+}
+)GRIDKITOGRIN";
+
+static const char* kLib_iterkit_og_rin = R"ITERKITOGRIN(
+// ============================================================================
+//  lib/iterkit.og.rin — مكرِّرات (iterators) بنمط hasNext/next فوق المصفوفات
+//  استيراد:
+//    @import "lib/iterkit.og.rin";
+//    @import "lib/iterkit.og.rin" as iter;
+//
+//  المكرِّر هنا خريطة عادية { data: array, pos: number }. ولأن الخرائط في Rin قيم
+//  مُشتركة بالمرجع (على عكس الأرقام/النصوص التي تُنسخ بالقيمة)، فإن تعديل it["pos"]
+//  بداخل أي دالة من هذه المكتبة يبقى مرئياً لدى المستدعي مباشرة، دون الحاجة لإعادة
+//  الخريطة وإعادة إسنادها يدوياً (كما تفعل lib/langkit.og.rin مع مؤشر pos الخام).
+//
+//  مثال سريع:
+//    let it = iterNew([10, 20, 30]);
+//    while (iterHasNext(it)) {
+//        print iterNext(it);   // 10 ثم 20 ثم 30
+//    }
+// ============================================================================
+
+// يبني مكرّراً جديداً يبدأ من أول عنصر في arr
+fun iterNew(arr) {
+    return { data: arr, pos: 0 };
+}
+
+// هل تبقّى عنصر واحد على الأقل لم يُزَر بعد؟
+fun iterHasNext(it) {
+    return it["pos"] < len(it["data"]);
+}
+
+// يُعيد العنصر الحالي بلا تقدّم (أو nil إن انتهى المكرّر)
+fun iterPeek(it) {
+    if (iterHasNext(it) == false) { return nil; }
+    return it["data"][it["pos"]];
+}
+
+// يُعيد العنصر الحالي ويُقدّم المكرّر خطوة واحدة (يُعدّل it مباشرة بالمرجع)
+fun iterNext(it) {
+    let value = iterPeek(it);
+    if (iterHasNext(it)) {
+        it["pos"] = it["pos"] + 1;
+    }
+    return value;
+}
+
+// عدد العناصر المتبقية التي لم تُزَر بعد
+fun iterRemaining(it) {
+    let left = len(it["data"]) - it["pos"];
+    if (left < 0) { return 0; }
+    return left;
+}
+
+// يُعيد المكرّر إلى بدايته من جديد (يُعدّل it مباشرة)
+fun iterReset(it) {
+    it["pos"] = 0;
+    return it;
+}
+
+// يتخطّى n عنصر دفعة واحدة (يتوقف عند نهاية البيانات دون خطأ إن كان n أكبر من المتبقي)
+fun iterSkip(it, n) {
+    let target = it["pos"] + n;
+    let dataLen = len(it["data"]);
+    if (target > dataLen) { target = dataLen; }
+    if (target < it["pos"]) { target = it["pos"]; }
+    it["pos"] = target;
+    return it;
+}
+
+// يستهلك كل ما تبقّى من المكرّر ويُعيده كمصفوفة عادية (المكرّر يصبح فارغاً بعدها)
+fun iterToArray(it) {
+    let result = [];
+    while (iterHasNext(it)) {
+        push(result, iterNext(it));
+    }
+    return result;
+}
+
+// يستهلك كل ما تبقّى مستدعياً fn(value, index) على كل عنصر (index يبدأ من 0 لكل استدعاء)
+fun iterForEach(it, fn) {
+    let i = 0;
+    while (iterHasNext(it)) {
+        fn(iterNext(it), i);
+        i = i + 1;
+    }
+    return nil;
+}
+
+// يبني مكرّراً جديداً (مستقلاً) يمرّ فقط على العناصر التي تحقق fn(element) == true من it
+// الحالي فصاعداً — يستهلك it الأصلي بالكامل في هذه العملية
+fun iterFilterToArray(it, fn) {
+    let result = [];
+    while (iterHasNext(it)) {
+        let value = iterNext(it);
+        if (fn(value)) {
+            push(result, value);
+        }
+    }
+    return result;
+}
+)ITERKITOGRIN";
+
+static const char* kLib_lexkit_og_rin = R"LEXKITOGRIN(
+// ============================================================================
+//  lib/lexkit.og.rin — لبنات محرّك Lexer عام قابل لإعادة الاستخدام لصناعة لغتك
+//  استيراد:
+//    @import "lib/lexkit.og.rin";
+//    @import "lib/lexkit.og.rin" as lex;
+//
+//  تُكمّل lib/langkit.og.rin (التي توفّر تصنيف محارف مفردة + بناء tok واحد) بأدوات على
+//  مستوى "مصدر اللغة كاملاً": جدول كلمات مفتاحية (لتمييز IDENT عن KEYWORD)، جدول
+//  عمليات (operators) مع مطابقة أطول تطابق (longest match) بحيث "==" لا تُقرأ كعلامتي
+//  "=" منفصلتين، ومؤشر عام على نص المصدر (source cursor) لتخطّي الفراغات والتعليقات.
+//  يُستخدم عادة مع lib/langkit.og.rin داخل حلقة lexer الرئيسية لملف Lexer.rin الخاص بلغتك.
+//
+//  مثال سريع:
+//    let kw = newKeywordTable(["let", "if", "else", "while", "fun"]);
+//    print classifyWord("if", kw);      // "KEYWORD"
+//    print classifyWord("total", kw);   // "IDENT"
+//
+//    let ops = newOperatorTable(["==", "!=", "<=", ">=", "+", "-", "*", "/", "=", "<", ">"]);
+//    print matchLongestOp("== 3", 0, ops); // { matched: "==", length: 2 }
+// ============================================================================
+
+// ---- جدول الكلمات المفتاحية -------------------------------------------------
+
+// يبني جدول كلمات مفتاحية من مصفوفة نصوص، كل كلمة تُصبح مفتاحاً بقيمة true
+fun newKeywordTable(words) {
+    let table = {};
+    let i = 0;
+    while (i < len(words)) {
+        table[words[i]] = true;
+        i = i + 1;
+    }
+    return table;
+}
+
+// يُعيد "KEYWORD" إن كانت word موجودة في الجدول، وإلا identType (عادة "IDENT")
+fun classifyWord(word, table, identType) {
+    if (has(table, word)) { return "KEYWORD"; }
+    return identType;
+}
+
+// ---- جدول العمليات (operators) مع مطابقة أطول تطابق -------------------------
+
+// يبني جدول عمليات من مصفوفة رموز نصية (["==", "!=", "+", ...]) ويُرتّبها من الأطول
+// إلى الأقصر داخلياً كي تُختبر "==" قبل "=" عند المطابقة (وإلا ستُقتطع خطأً كعامل مفرد)
+fun newOperatorTable(symbols) {
+    let sorted = [];
+    let i = 0;
+    while (i < len(symbols)) {
+        push(sorted, symbols[i]);
+        i = i + 1;
+    }
+    // فرز إدراج تنازلي حسب الطول (الأطول أولاً)؛ الجداول عادة قصيرة فلا مشكلة أداء
+    let a = 1;
+    while (a < len(sorted)) {
+        let current = sorted[a];
+        let b = a - 1;
+        while (b >= 0 and len(sorted[b]) < len(current)) {
+            sorted[b + 1] = sorted[b];
+            b = b - 1;
+        }
+        sorted[b + 1] = current;
+        a = a + 1;
+    }
+    return sorted;
+}
+
+// يبحث عن أطول رمز عملية من opTable يطابق بداية source ابتداءً من pos، ويُعيد
+// { matched: الرمز المطابَق, length: طوله } أو { matched: "", length: 0 } إن لم يطابق شيء
+fun matchLongestOp(source, pos, opTable) {
+    let i = 0;
+    while (i < len(opTable)) {
+        let symbol = opTable[i];
+        let symLen = len(symbol);
+        if (pos + symLen <= len(source)) {
+            if (substr(source, pos, symLen) == symbol) {
+                return { matched: symbol, length: symLen };
+            }
+        }
+        i = i + 1;
+    }
+    return { matched: "", length: 0 };
+}
+
+// ---- مؤشّر مصدر عام (source cursor) -----------------------------------------
+// عكس pAdvance في langkit (الذي يتحرك فوق tokens جاهزة)، هذه الدوال تتحرك فوق نص
+// المصدر الخام قبل أي تقطيع إلى tokens
+
+// هل وصل pos لنهاية source؟
+fun sAtEnd(source, pos) {
+    return pos >= len(source);
+}
+
+// المحرف الحالي بلا تقدّم، أو "" إن انتهى المصدر
+fun sPeek(source, pos) {
+    if (sAtEnd(source, pos)) { return ""; }
+    return charAt(source, pos);
+}
+
+// نظرة على المحرف التالي (lookahead بمقدار 1)، أو "" إن لم يوجد
+fun sPeekNext(source, pos) {
+    if (pos + 1 >= len(source)) { return ""; }
+    return charAt(source, pos + 1);
+}
+
+// يتخطّى الفراغات (مسافة/تبويب/سطر جديد) والتعليقات أحادية السطر التي تبدأ بـ
+// lineCommentStart (مثل "//")، ويُعيد الموضع الجديد بعد كل ما تمّ تخطّيه
+fun skipWhitespaceAndComments(source, pos, lineCommentStart) {
+    let p = pos;
+    let commentLen = len(lineCommentStart);
+    let continueSkip = true;
+    while (continueSkip) {
+        continueSkip = false;
+        while (sAtEnd(source, p) == false and (sPeek(source, p) == " " or sPeek(source, p) == "\t" or sPeek(source, p) == "\r" or sPeek(source, p) == "\n")) {
+            p = p + 1;
+        }
+        if (commentLen > 0 and p + commentLen <= len(source)) {
+            if (substr(source, p, commentLen) == lineCommentStart) {
+                while (sAtEnd(source, p) == false and sPeek(source, p) != "\n") {
+                    p = p + 1;
+                }
+                continueSkip = true;
+            }
+        }
+    }
+    return p;
+}
+
+// يستهلك كل المحارف المتتالية التي تحقق fn(ch) == true بدءاً من pos، ويُعيد
+// { matched: النص المُستهلَك, pos: الموضع بعده } (يُستخدم لقراءة أرقام/معرّفات كاملة
+// بالاعتماد على isDigitChar/isAlnumChar من lib/langkit.og.rin كدالة fn)
+fun consumeWhile(source, pos, fn) {
+    let start = pos;
+    let p = pos;
+    while (sAtEnd(source, p) == false and fn(sPeek(source, p))) {
+        p = p + 1;
+    }
+    return { matched: substr(source, start, p - start), pos: p };
+}
+)LEXKITOGRIN";
+
+static const char* kLib_loopkit_og_rin = R"LOOPKITOGRIN(
+// ============================================================================
+//  lib/loopkit.og.rin — تحكّم عام بالحلقات (loop control primitives) فوق while/for
+//  استيراد:
+//    @import "lib/loopkit.og.rin";
+//    @import "lib/loopkit.og.rin" as loop;
+//
+//  دوال جاهزة لأنماط حلقات متكررة: تكرار بعدد ثابت، تكرار بشرط توقف مع حدّ أقصى أمان
+//  (لمنع حلقة لا نهائية)، إعادة محاولة حتى النجاح، حلقة تنازلية، وحلقة بخطوة مخصّصة.
+//  كل الدوال هنا تأخذ دالة fn كوسيط (Rin يدعم الدوال كقيم من الدرجة الأولى) وتُطبّقها
+//  داخل حلقة while واحدة، بدل تكرار نفس صيغة "let i = 0; while (...) { ... i = i+1; }"
+//  يدوياً في كل مكان من برنامجك.
+//
+//  مثال سريع:
+//    fun printIt(i) { print "خطوة " + toString(i); }
+//    repeatTimes(3, printIt);           // خطوة 0 / خطوة 1 / خطوة 2
+//    print stepLoopCollect(0, 10, 2, printIt); // [0,2,4,6,8] (طبعت كل قيمة أيضاً)
+// ============================================================================
+
+// ينفّذ fn(i) بالضبط n مرة، من i=0 حتى n-1 (بلا قيمة مُرجعة، للتأثير الجانبي فقط)
+fun repeatTimes(n, fn) {
+    let i = 0;
+    while (i < n) {
+        fn(i);
+        i = i + 1;
+    }
+    return nil;
+}
+
+// حلقة تنازلية: ينفّذ fn(i) بدءاً من "from" نزولاً حتى 1 شاملة (from, from-1, ..., 1)
+fun countdown(from, fn) {
+    let i = from;
+    while (i >= 1) {
+        fn(i);
+        i = i - 1;
+    }
+    return nil;
+}
+
+// حلقة بخطوة مخصّصة (تعمّم حلقة for الكلاسيكية): ينفّذ fn(i) لأجل
+// i = start, start+step, ... طالما (step > 0 و i < endExclusive) أو (step < 0 و i > endExclusive)
+// step يجب ألا يساوي صفراً وإلا تُعاد قيمة خطأ نصية بدل الدخول بحلقة لا نهائية
+fun stepLoop(start, endExclusive, step, fn) {
+    if (step == 0) { return "stepLoop: step لا يجوز أن يساوي صفراً"; }
+    let i = start;
+    if (step > 0) {
+        while (i < endExclusive) {
+            fn(i);
+            i = i + step;
+        }
+    } else {
+        while (i > endExclusive) {
+            fn(i);
+            i = i + step;
+        }
+    }
+    return nil;
+}
+
+// نفس stepLoop لكن يجمع نتائج fn(i) في مصفوفة ويُعيدها (مفيد عند إرادة القيم لا فقط التأثير)
+fun stepLoopCollect(start, endExclusive, step, fn) {
+    let result = [];
+    if (step == 0) { return result; }
+    let i = start;
+    if (step > 0) {
+        while (i < endExclusive) {
+            push(result, fn(i));
+            i = i + step;
+        }
+    } else {
+        while (i > endExclusive) {
+            push(result, fn(i));
+            i = i + step;
+        }
+    }
+    return result;
+}
+
+// حلقة "حتى تحقق الشرط" مع حدّ أقصى آمن للتكرارات: تستدعي fn(attempt) بدءاً من attempt=0
+// وتتوقف حين تُعيد fn قيمة true، أو عند بلوغ maxIters (أيهما أولاً). تُعيد خريطة توضّح
+// النتيجة، بعكس حلقة while عادية قد لا تتوقف أبداً لو نُسي تحديث شرطها
+fun loopUntil(fn, maxIters) {
+    let i = 0;
+    while (i < maxIters) {
+        if (fn(i)) {
+            return { done: true, iterations: i + 1 };
+        }
+        i = i + 1;
+    }
+    return { done: false, iterations: maxIters };
+}
+
+// إعادة محاولة عملية قد تفشل حتى maxAttempts مرة: fn(attempt) يجب أن تُعيد خريطة نتيجة
+// بأسلوب langkit ({ok:true,value:...} أو {ok:false,error:...})، وتتوقف retryUntil عند
+// أول نجاح أو بعد استنفاد المحاولات (وعندها تُعيد آخر نتيجة فاشلة كما هي)
+fun retryUntil(fn, maxAttempts) {
+    let attempt = 0;
+    let lastResult = { ok: false, error: "retryUntil: لم تُنفَّذ أي محاولة (maxAttempts <= 0)" };
+    while (attempt < maxAttempts) {
+        lastResult = fn(attempt);
+        if (lastResult["ok"]) {
+            return lastResult;
+        }
+        attempt = attempt + 1;
+    }
+    return lastResult;
+}
+
+// حلقة while عامة: تستدعي condFn() قبل كل دورة، وطالما أعادت true تستدعي bodyFn()
+// وتجمع ناتجها في مصفوفة تُعيدها في النهاية. يفصل شرط التوقف عن جسم الحلقة بدل خلطهما
+fun whileCollect(condFn, bodyFn) {
+    let result = [];
+    while (condFn()) {
+        push(result, bodyFn());
+    }
+    return result;
+}
+)LOOPKITOGRIN";
+
+static const char* kLib_loopstats_og_rin = R"LOOPSTATSOGRIN(
+// ============================================================================
+//  lib/loopstats.og.rin — تجميع إحصاءات وتقدّم بشكل تدريجي أثناء تنفيذ حلقة
+//  استيراد:
+//    @import "lib/loopstats.og.rin";
+//    @import "lib/loopstats.og.rin" as stats;
+//
+//  دوال math.og.rin (mean/stddev...) تحتاج مصفوفة كاملة جاهزة مسبقاً. هذه المكتبة
+//  بالمقابل مخصّصة لحلقات "تدفّق" (streaming) حيث تصلك القيم واحدة تلو الأخرى ولا تريد
+//  تخزينها كلها أولاً: مُجمِّع إحصاء تراكمي (عدّاد/مجموع/متوسط/أصغر/أكبر يتحدّث مع كل
+//  قيمة جديدة)، عدّاد تكرارات حسب مفتاح (tally/histogram)، وشريط تقدّم نصّي بسيط.
+//
+//  مثال سريع:
+//    let s = runningStatsNew();
+//    let i = 0;
+//    while (i < 5) { runningStatsAdd(s, i * 2); i = i + 1; }
+//    print s;  // { count:5, sum:20, mean:4, min:0, max:8 }
+// ============================================================================
+
+// ---- إحصاء تراكمي (running stats) ------------------------------------------
+
+// يبني مُجمِّعاً تراكمياً فارغاً
+fun runningStatsNew() {
+    return { count: 0, sum: 0, mean: 0, min: nil, max: nil };
+}
+
+// يُضيف قيمة جديدة للمُجمِّع s ويُحدّث count/sum/mean/min/max فوراً (يُعدّل s بالمرجع،
+// ويُعيده أيضاً للراحة عند الاستخدام المتسلسل)
+fun runningStatsAdd(s, value) {
+    s["count"] = s["count"] + 1;
+    s["sum"] = s["sum"] + value;
+    s["mean"] = s["sum"] / s["count"];
+    if (s["min"] == nil or value < s["min"]) { s["min"] = value; }
+    if (s["max"] == nil or value > s["max"]) { s["max"] = value; }
+    return s;
+}
+
+// يُطبّق runningStatsAdd على كل عناصر arr بحلقة واحدة، ويُعيد المُجمِّع النهائي
+fun runningStatsFromArray(arr) {
+    let s = runningStatsNew();
+    let i = 0;
+    while (i < len(arr)) {
+        runningStatsAdd(s, arr[i]);
+        i = i + 1;
+    }
+    return s;
+}
+
+// ---- عدّاد تكرارات حسب مفتاح (tally / histogram) ----------------------------
+
+// يبني عدّاداً فارغاً (خريطة مفتاح -> عدد مرات ظهوره)
+fun tallyNew() {
+    return {};
+}
+
+// يزيد عدّاد key بمقدار واحد (أو ينشئه بقيمة 1 إن لم يكن موجوداً). يُعدّل t بالمرجع
+fun tallyAdd(t, key) {
+    if (has(t, key)) {
+        t[key] = t[key] + 1;
+    } else {
+        t[key] = 1;
+    }
+    return t;
+}
+
+// عدد مرات ظهور key حتى الآن (0 إن لم يظهر بعد)
+fun tallyGet(t, key) {
+    if (has(t, key)) { return t[key]; }
+    return 0;
+}
+
+// يُحوّل العدّاد إلى مصفوفة {key, count} مرتّبة تنازلياً حسب count (الأكثر تكراراً أولاً)
+fun tallyToSortedArray(t) {
+    let ks = keys(t);
+    let entries = [];
+    let i = 0;
+    while (i < len(ks)) {
+        push(entries, { key: ks[i], count: t[ks[i]] });
+        i = i + 1;
+    }
+    // فرز فقاعي بسيط تنازلياً حسب count (المصفوفات صغيرة عادة في هذا الاستخدام)
+    let n = len(entries);
+    let a = 0;
+    while (a < n) {
+        let b = 0;
+        while (b < n - a - 1) {
+            if (entries[b]["count"] < entries[b + 1]["count"]) {
+                let tmp = entries[b];
+                entries[b] = entries[b + 1];
+                entries[b + 1] = tmp;
+            }
+            b = b + 1;
+        }
+        a = a + 1;
+    }
+    return entries;
+}
+
+// المفتاح الأكثر تكراراً حتى الآن، أو nil إن كان العدّاد فارغاً
+fun tallyMostCommon(t) {
+    let sorted = tallyToSortedArray(t);
+    if (len(sorted) == 0) { return nil; }
+    return sorted[0]["key"];
+}
+
+// ---- شريط تقدّم نصّي --------------------------------------------------------
+
+// يبني نصّاً مثل "[####------] 40% (4/10)" يمثّل تقدّم current من أصل total
+fun progressBar(current, total, width) {
+    let ratio = 0;
+    if (total > 0) { ratio = current / total; }
+    if (ratio > 1) { ratio = 1; }
+    if (ratio < 0) { ratio = 0; }
+    let filled = round(ratio * width);
+    let bar = "";
+    let i = 0;
+    while (i < width) {
+        if (i < filled) {
+            bar = bar + "#";
+        } else {
+            bar = bar + "-";
+        }
+        i = i + 1;
+    }
+    let percent = round(ratio * 100);
+    return "[" + bar + "] " + toString(percent) + "% (" + toString(current) + "/" + toString(total) + ")";
+}
+)LOOPSTATSOGRIN";
+
+static const char* kLib_parsekit_og_rin = R"PARSEKITOGRIN(
+// ============================================================================
+//  lib/parsekit.og.rin — لبنات محلِّل (Parser) بأسلوب أسبقية العمليات (precedence climbing)
+//  استيراد:
+//    @import "lib/parsekit.og.rin";
+//    @import "lib/parsekit.og.rin" as parse;
+//
+//  تُكمّل lib/langkit.og.rin (التي توفّر مؤشّر tokens: pPeek/pAdvance/pExpect...) بأدوات
+//  خاصة بتحليل التعبيرات (expressions) ذات أولويات عمليات مختلفة (مثال: * قبل +). توفّر
+//  جدول أسبقية قابلاً للتخصيص، ومُنشِئات عقد AST قياسية لتعبيرات ثنائية/أحادية/تجميعية،
+//  ودالة "طيّ" (fold) تحوّل نتائج حلقة تحليل مسطّحة (عامل، معامل، عامل، معامل...) إلى
+//  شجرة تعبير يسارية الترابط (left-associative) بلا حاجة لاستدعاء متكرر معقّد.
+//
+//  مثال سريع (طيّ 1 + 2 * لاحقاً... عادة يُبنى الطرف الأيمن بأسبقية أعلى قبل الطيّ):
+//    let ops = precTable([["+", 1], ["-", 1], ["*", 2], ["/", 2]]);
+//    print precOf(ops, "*", 0);   // 2
+//    print precOf(ops, "?", 0);   // 0  (عملية غير معروفة -> الافتراضي)
+//
+//    let tree = foldBinaryLeft(1, [{ op: "+", right: 2 }, { op: "+", right: 3 }]);
+//    // يكافئ (1 + 2) + 3 كشجرة AST متداخلة
+// ============================================================================
+
+// ---- جدول أسبقية العمليات (precedence table) --------------------------------
+
+// يبني جدول أسبقية من مصفوفة أزواج [رمز_العملية, رتبة_الأسبقية] (رتبة أعلى = تُنفَّذ أولاً)
+fun precTable(pairs) {
+    let table = {};
+    let i = 0;
+    while (i < len(pairs)) {
+        table[pairs[i][0]] = pairs[i][1];
+        i = i + 1;
+    }
+    return table;
+}
+
+// رتبة أسبقية op في الجدول، أو defaultPrec إن لم تكن op معرَّفة فيه
+fun precOf(table, op, defaultPrec) {
+    if (has(table, op)) { return table[op]; }
+    return defaultPrec;
+}
+
+// ---- مُنشِئات عقد AST لتعبيرات (expression nodes) ----------------------------
+// نفس روح astNode في langkit لكن بحقول جاهزة خاصة بأنواع تعبير شائعة، بلا حاجة لتمرير
+// خريطة props في كل استدعاء
+
+fun litNode(value, line) {
+    return { kind: "Literal", value: value, line: line };
+}
+
+fun identNode(name, line) {
+    return { kind: "Identifier", name: name, line: line };
+}
+
+fun unaryNode(op, operand, line) {
+    return { kind: "UnaryExpr", op: op, operand: operand, line: line };
+}
+
+fun binNode(op, left, right, line) {
+    return { kind: "BinaryExpr", op: op, left: left, right: right, line: line };
+}
+
+fun groupNode(inner, line) {
+    return { kind: "GroupExpr", inner: inner, line: line };
+}
+
+fun callNode(callee, args, line) {
+    return { kind: "CallExpr", callee: callee, args: args, line: line };
+}
+
+// ---- طيّ نتائج حلقة تحليل مسطّحة إلى شجرة يسارية الترابط -------------------
+// نمط شائع جداً عند تحليل تعبير بعمليات ثنائية بنفس الأسبقية داخل حلقة while واحدة:
+// تُحلَّل أول عامل (firstOperand)، ثم تُجمَع أزواج {op, right} تباعاً أثناء حلقة while
+// طالما رمز العملية التالي معروفاً، ثم تُطوى النتيجة أخيراً بهذه الدالة إلى شجرة واحدة
+// نظير: ((( firstOperand op1 right1 ) op2 right2 ) op3 right3 ) ...
+fun foldBinaryLeft(firstOperand, opRightPairs) {
+    let tree = firstOperand;
+    let i = 0;
+    while (i < len(opRightPairs)) {
+        let pair = opRightPairs[i];
+        tree = binNode(pair["op"], tree, pair["right"], 0);
+        i = i + 1;
+    }
+    return tree;
+}
+
+// نفس foldBinaryLeft لكن يسمح بتمرير رقم سطر لكل عقدة (بدل 0 دوماً)، لرسائل خطأ أدقّ.
+// opRightPairs كل عنصر فيها {op, right, line}
+fun foldBinaryLeftWithLines(firstOperand, opRightPairs) {
+    let tree = firstOperand;
+    let i = 0;
+    while (i < len(opRightPairs)) {
+        let pair = opRightPairs[i];
+        tree = binNode(pair["op"], tree, pair["right"], pair["line"]);
+        i = i + 1;
+    }
+    return tree;
+}
+)PARSEKITOGRIN";
+
+static const char* kLib_runkit_og_rin = R"RUNKITOGRIN(
+// ============================================================================
+//  lib/runkit.og.rin — تشغيل ملفات/أسطر لغتك المخصّصة وبناء تقرير REPL موحّد
+//  استيراد:
+//    @import "lib/runkit.og.rin";
+//    @import "lib/runkit.og.rin" as run;
+//
+//  آخر حلقة الفريق (Lexer -> Parser -> Interpreter من lib/langkit.og.rin): تشغيل ملف
+//  اللغة الجديدة فعلياً سطراً بسطر أو دفعة واحدة، وتجميع نتيجة موحّدة (نجاح/فشل لكل سطر)
+//  بدل أن يكتب كل مشروع لغة منطق REPL وتنسيق الأخطاء من الصفر. runFn التي تُمرَّر لدوال
+//  هذه المكتبة هي دالة تشغيل سطر واحد من مشروعك (عادة: Lexer.rin + Parser.rin +
+//  Interpreter.rin مجتمعين)، ويجب أن تُعيد دوماً خريطة نتيجة بأسلوب langkit
+//  ({ok:true,value:...} أو {ok:false,error:langErrorObj}).
+//
+//  مثال سريع:
+//    fun runOneLine(line) { return ok(evalSource(line)); }  // مبسّط، عادة تستدعي lexer/parser
+//    let report = runLines(["1 + 2;", "print x;"], runOneLine);
+//    print formatRunReport(report);
+//
+//  ملاحظة: formatRunReport تستخدم formatLangError() من lib/langkit.og.rin، لذا استورد
+//  lib/langkit.og.rin أيضاً (النتائج التي تُنتجها runFn يجب أن تتبع شكل ok()/err() منها).
+// ============================================================================
+
+// ينفّذ runFn(line) على كل سطر من lines بالترتيب، ويجمع لكل سطر { line, lineNumber,
+// result } في مصفوفة، بلا توقّف عند أول فشل (خلافاً لبرنامج حقيقي، مفيد لتشخيص كل
+// أخطاء ملف اختبار دفعة واحدة بدل تصحيحها خطأً خطأً)
+fun runLines(lines, runFn) {
+    let entries = [];
+    let i = 0;
+    while (i < len(lines)) {
+        let result = runFn(lines[i]);
+        push(entries, { line: lines[i], lineNumber: i + 1, result: result });
+        i = i + 1;
+    }
+    return entries;
+}
+
+// مثل runLines لكن يتوقّف فوراً عند أول سطر فاشل (result["ok"] == false)، ويُعيد
+// خريطة { entries: ما نُفِّذ حتى التوقف, stoppedEarly: true/false }
+fun runLinesUntilError(lines, runFn) {
+    let entries = [];
+    let i = 0;
+    let stoppedEarly = false;
+    while (i < len(lines) and stoppedEarly == false) {
+        let result = runFn(lines[i]);
+        push(entries, { line: lines[i], lineNumber: i + 1, result: result });
+        if (result["ok"] == false) {
+            stoppedEarly = true;
+        }
+        i = i + 1;
+    }
+    return { entries: entries, stoppedEarly: stoppedEarly };
+}
+
+// يقرأ ملف مصدر بالكامل عبر readFile ثم يشغّله سطراً بسطر (تقسيم بالسطر الجديد \n)
+// عبر runLines، مفيد لتشغيل ملف اختبار كامل بمشروع لغة (راجع lib/langkit.og.rin
+// لتحميل manifest.json، وexamples/customlang/calc/ لمثال تشغيل حقيقي)
+fun runFile(path, runFn) {
+    let source = readFile(path);
+    let lines = split(source, "\n");
+    return runLines(lines, runFn);
+}
+
+// عدد الأسطر الناجحة داخل تقرير أنتجته runLines/runLinesUntilError["entries"]
+fun countSucceeded(entries) {
+    let count = 0;
+    let i = 0;
+    while (i < len(entries)) {
+        if (entries[i]["result"]["ok"]) {
+            count = count + 1;
+        }
+        i = i + 1;
+    }
+    return count;
+}
+
+// عدد الأسطر الفاشلة داخل تقرير
+fun countFailed(entries) {
+    return len(entries) - countSucceeded(entries);
+}
+
+// مصفوفة الإدخالات الفاشلة فقط من التقرير (كل عنصر { line, lineNumber, result })
+fun failedEntries(entries) {
+    let result = [];
+    let i = 0;
+    while (i < len(entries)) {
+        if (entries[i]["result"]["ok"] == false) {
+            push(result, entries[i]);
+        }
+        i = i + 1;
+    }
+    return result;
+}
+
+// يبني نصاً موجزاً متعدد الأسطر يلخّص تقرير تشغيل: عدد الناجح/الفاشل، ثم كل خطأ
+// برقم سطره ورسالته (عبر formatLangError من lib/langkit.og.rin على كل result["error"])
+fun formatRunReport(entries) {
+    let lines = [];
+    push(lines, "نجح: " + toString(countSucceeded(entries)) + " / فشل: " + toString(countFailed(entries)) + " / الإجمالي: " + toString(len(entries)));
+    let failed = failedEntries(entries);
+    let i = 0;
+    while (i < len(failed)) {
+        let entry = failed[i];
+        push(lines, "  سطر " + toString(entry["lineNumber"]) + ": " + entry["line"]);
+        push(lines, "    -> " + formatLangError(entry["result"]["error"]));
+        i = i + 1;
+    }
+    return join(lines, "\n");
+}
+)RUNKITOGRIN";
+
+static const char* kLib_seqkit_og_rin = R"SEQKITOGRIN(
+// ============================================================================
+//  lib/seqkit.og.rin — توليد متتاليات جاهزة كمدخلات لحلقات for/while
+//  استيراد:
+//    @import "lib/seqkit.og.rin";
+//    @import "lib/seqkit.og.rin" as seq;
+//
+//  lib/data.og.rin توفّر range(n)/rangeFrom(start,end) بخطوة ثابتة تساوي 1 فقط. هذه
+//  المكتبة تكمّلها بمتتاليات بخطوة مخصّصة (موجبة أو سالبة)، متتاليات هندسية، وتكرار/
+//  تدوير مصفوفة بأكملها — مفيدة كمصدر بيانات جاهز تُمرَّر إلى حلقة for أو forEachArr.
+//
+//  مثال سريع:
+//    print rangeStep(0, 10, 2);      // [0,2,4,6,8]
+//    print rangeStep(10, 0, -2);     // [10,8,6,4,2]
+//    print linspace(0, 1, 5);        // [0, 0.25, 0.5, 0.75, 1]
+// ============================================================================
+
+// مصفوفة [start, start+step, ...] طالما (step>0 و القيمة < endExclusive) أو
+// (step<0 و القيمة > endExclusive). step=0 يُعيد مصفوفة فارغة بدل حلقة لا نهائية
+fun rangeStep(start, endExclusive, step) {
+    let result = [];
+    if (step == 0) { return result; }
+    let i = start;
+    if (step > 0) {
+        while (i < endExclusive) {
+            push(result, i);
+            i = i + step;
+        }
+    } else {
+        while (i > endExclusive) {
+            push(result, i);
+            i = i + step;
+        }
+    }
+    return result;
+}
+
+// n قيمة موزّعة بانتظام بين start وend شاملَين الطرفين (يشمل fromValue وtoValue معاً).
+// عند n<=1 تُعيد [start] فقط
+fun linspace(start, endValue, n) {
+    let result = [];
+    if (n <= 1) {
+        push(result, start);
+        return result;
+    }
+    let step = (endValue - start) / (n - 1);
+    let i = 0;
+    while (i < n) {
+        push(result, start + (step * i));
+        i = i + 1;
+    }
+    return result;
+}
+
+// متتالية هندسية: n حداً بدءاً من "first" وكل حد يساوي السابق × ratio
+fun geometricSeq(first, ratio, n) {
+    let result = [];
+    let current = first;
+    let i = 0;
+    while (i < n) {
+        push(result, current);
+        current = current * ratio;
+        i = i + 1;
+    }
+    return result;
+}
+
+// مصفوفة من n نسخة من نفس القيمة (مفيد كقيمة ابتدائية لتراكم في حلقة)
+fun repeatValue(value, n) {
+    let result = [];
+    let i = 0;
+    while (i < n) {
+        push(result, value);
+        i = i + 1;
+    }
+    return result;
+}
+
+// يُكرّر محتوى arr بأكمله times مرة متتالية: cycleArr([1,2],3) -> [1,2,1,2,1,2]
+fun cycleArr(arr, times) {
+    let result = [];
+    let t = 0;
+    while (t < times) {
+        let i = 0;
+        while (i < len(arr)) {
+            push(result, arr[i]);
+            i = i + 1;
+        }
+        t = t + 1;
+    }
+    return result;
+}
+
+// يمدّد أو يقتطع arr إلى طول targetLen بالضبط: يُكرّر عناصره إن كان أقصر، أو يقتطعه
+// إن كان أطول (مفيد لمزامنة طول مصفوفتين قبل حلقة تُعالجهما معاً عنصراً بعنصر)
+fun cycleToLength(arr, targetLen) {
+    let result = [];
+    if (len(arr) == 0) { return result; }
+    let i = 0;
+    while (len(result) < targetLen) {
+        push(result, arr[i % len(arr)]);
+        i = i + 1;
+    }
+    return result;
+}
+)SEQKITOGRIN";
+
+static const char* kLib_bob_og_rin = R"BOBOGRIN(
+// ============================================================================
+//  lib/bob.og.rin — Bob: لغة ترميز خفيفة بأسطر بادئة (Markdown-lite)، تُصيَّر إلى HTML أو نص عادي
+//  استيراد:
+//    @import "lib/bob.og.rin";
+//    @import "lib/bob.og.rin" as bob;
+//
+//  مكتبة مدمجة (embedded) داخل ثنائي المحرّك نفسه (راجع rin_stdlib_libs.h) — تعمل عبر
+//  @import فوراً على أي جهاز/منصة دون أي خطوة تثبيت إضافية، تماماً كباقي مكتبات lib/*.og.rin.
+//
+//  صيغة Bob (سطرية على مستوى الكتلة block، ورموز بسيطة على مستوى السطر inline):
+//    # عنوان     -> <h1>       ## عنوان -> <h2>      ### عنوان -> <h3>
+//    > اقتباس    -> <blockquote>
+//    - عنصر      -> <li> (عناصر متتالية تُجمَع تلقائياً داخل <ul> واحدة)
+//    ---         -> <hr>  (سطر يحوي "---" فقط)
+//    سطر عادي    -> <p>
+//    **عريض**    -> <strong>        *مائل*    -> <em>
+//    `كود`       -> <code>          [نص](URL) -> <a href="URL">نص</a>
+//
+//  مثال:
+//    let src = "# عنوان\n" +
+//              "مرحباً يا **رنين**! هذا *مائل* و`كود` وزيارة [الموقع](https://example.com).\n" +
+//              "- أول\n- ثاني\n" +
+//              "> اقتباس قصير\n" +
+//              "---\n";
+//    print bobToHtml(src);
+//    print bobToPlain(src);
+//
+//  ملاحظة (حد معروف v1، بنفس أسلوب توثيق القيود في هذا المشروع): لا تداخل بين رموز
+//  inline من نفس النوع (مثال: **عريض فيه **عريض آخر** بالخطأ**)، ولا قوائم مرقّمة أو
+//  متداخلة بعد؛ كل سطر يُصنَّف ككتلة واحدة فقط حسب بادئته الأولى.
+// ============================================================================
+
+// أدنى مساعد نصي: هل يبدأ s بالسابقة prefix؟ (لا توجد startsWith مدمجة في core Rin)
+fun bobStartsWith(s, prefix) {
+    if (len(s) < len(prefix)) { return false; }
+    return substr(s, 0, len(prefix)) == prefix;
+}
+
+// يهرب أحرف HTML الخاصة داخل نص خام (& أولاً، ثم < > ") حتى لا يُفسَّر كوسم HTML فعلي
+fun bobEscapeHtml(raw) {
+    let out = raw;
+    out = replace(out, "&", "&amp;");
+    out = replace(out, "<", "&lt;");
+    out = replace(out, ">", "&gt;");
+    out = replace(out, "\"", "&quot;");
+    return out;
+}
+
+// يقسّم مصدر Bob إلى مصفوفة "كتل" (blocks) بحسب بادئة كل سطر: عنوان/اقتباس/عنصر
+// قائمة/خط فاصل/فقرة نصية عادية. الأسطر الفارغة تُتجاهَل (تُستخدَم كفواصل فقرات فقط).
+fun bobTokenize(source) {
+    let rawLines = split(source, "\n");
+    let blocks = [];
+    let i = 0;
+
+    while (i < len(rawLines)) {
+        let trimmed = trim(rawLines[i]);
+
+        if (trimmed == "") {
+            // سطر فارغ: فاصل فقرات بلا كتلة خاصة به
+        } else if (trimmed == "---") {
+            push(blocks, { kind: "hr", content: "" });
+        } else if (bobStartsWith(trimmed, "### ")) {
+            push(blocks, { kind: "h3", content: trim(substr(trimmed, 4)) });
+        } else if (bobStartsWith(trimmed, "## ")) {
+            push(blocks, { kind: "h2", content: trim(substr(trimmed, 3)) });
+        } else if (bobStartsWith(trimmed, "# ")) {
+            push(blocks, { kind: "h1", content: trim(substr(trimmed, 2)) });
+        } else if (bobStartsWith(trimmed, "> ")) {
+            push(blocks, { kind: "quote", content: trim(substr(trimmed, 2)) });
+        } else if (bobStartsWith(trimmed, "- ")) {
+            push(blocks, { kind: "item", content: trim(substr(trimmed, 2)) });
+        } else {
+            push(blocks, { kind: "text", content: trimmed });
+        }
+
+        i = i + 1;
+    }
+
+    return blocks;
+}
+
+// يحوّل نص سطر واحد (inline) إلى HTML: **عريض**، *مائل*، `كود`، [نص](URL)؛ أي نص
+// خارج هذه الرموز يُهرَب بأمان عبر bobEscapeHtml حرفاً حرفاً
+fun bobInlineToHtml(ln) {
+    let out = "";
+    let i = 0;
+    let n = len(ln);
+    let boldOpen = false;
+    let italicOpen = false;
+    let codeOpen = false;
+
+    while (i < n) {
+        let c = charAt(ln, i);
+
+        if (c == "`") {
+            if (codeOpen) { out = out + "</code>"; } else { out = out + "<code>"; }
+            codeOpen = !codeOpen;
+            i = i + 1;
+        } else if (c == "*" and i + 1 < n and charAt(ln, i + 1) == "*") {
+            if (boldOpen) { out = out + "</strong>"; } else { out = out + "<strong>"; }
+            boldOpen = !boldOpen;
+            i = i + 2;
+        } else if (c == "*") {
+            if (italicOpen) { out = out + "</em>"; } else { out = out + "<em>"; }
+            italicOpen = !italicOpen;
+            i = i + 1;
+        } else if (c == "[") {
+            let rest = substr(ln, i);
+            let closeBracket = indexOf(rest, "]");
+            let handled = false;
+
+            if (closeBracket != -1) {
+                let afterBracket = i + closeBracket + 1;
+                if (afterBracket < n and charAt(ln, afterBracket) == "(") {
+                    let afterParen = substr(ln, afterBracket + 1);
+                    let closeParen = indexOf(afterParen, ")");
+                    if (closeParen != -1) {
+                        let linkText = substr(ln, i + 1, closeBracket - 1);
+                        let url = substr(afterParen, 0, closeParen);
+                        out = out + "<a href=\"" + bobEscapeHtml(url) + "\">" + bobEscapeHtml(linkText) + "</a>";
+                        i = afterBracket + 1 + closeParen + 1;
+                        handled = true;
+                    }
+                }
+            }
+
+            if (!handled) {
+                out = out + bobEscapeHtml(c);
+                i = i + 1;
+            }
+        } else {
+            out = out + bobEscapeHtml(c);
+            i = i + 1;
+        }
+    }
+
+    return out;
+}
+
+// يحوّل نص سطر واحد (inline) إلى نص عادي: يزيل رموز **/*/` ويحوّل [نص](URL) إلى
+// "نص (URL)"؛ يُستخدم داخلياً في bobToPlain
+fun bobInlineToPlain(ln) {
+    let out = "";
+    let i = 0;
+    let n = len(ln);
+
+    while (i < n) {
+        let c = charAt(ln, i);
+
+        if (c == "`") {
+            i = i + 1;
+        } else if (c == "*" and i + 1 < n and charAt(ln, i + 1) == "*") {
+            i = i + 2;
+        } else if (c == "*") {
+            i = i + 1;
+        } else if (c == "[") {
+            let rest = substr(ln, i);
+            let closeBracket = indexOf(rest, "]");
+            let handled = false;
+
+            if (closeBracket != -1) {
+                let afterBracket = i + closeBracket + 1;
+                if (afterBracket < n and charAt(ln, afterBracket) == "(") {
+                    let afterParen = substr(ln, afterBracket + 1);
+                    let closeParen = indexOf(afterParen, ")");
+                    if (closeParen != -1) {
+                        let linkText = substr(ln, i + 1, closeBracket - 1);
+                        let url = substr(afterParen, 0, closeParen);
+                        out = out + linkText + " (" + url + ")";
+                        i = afterBracket + 1 + closeParen + 1;
+                        handled = true;
+                    }
+                }
+            }
+
+            if (!handled) {
+                out = out + c;
+                i = i + 1;
+            }
+        } else {
+            out = out + c;
+            i = i + 1;
+        }
+    }
+
+    return out;
+}
+
+// يحوّل مصدر Bob كاملاً إلى HTML جاهز للعرض (مثلاً داخل WebView في تطبيق DLoF/RinLang)
+fun bobToHtml(source) {
+    let blocks = bobTokenize(source);
+    let out = "";
+    let listOpen = false;
+    let i = 0;
+
+    while (i < len(blocks)) {
+        let b = blocks[i];
+        let kind = b["kind"];
+
+        if (kind == "item") {
+            if (!listOpen) { out = out + "<ul>\n"; listOpen = true; }
+            out = out + "<li>" + bobInlineToHtml(b["content"]) + "</li>\n";
+        } else {
+            if (listOpen) { out = out + "</ul>\n"; listOpen = false; }
+
+            if (kind == "h1") { out = out + "<h1>" + bobInlineToHtml(b["content"]) + "</h1>\n"; }
+            else if (kind == "h2") { out = out + "<h2>" + bobInlineToHtml(b["content"]) + "</h2>\n"; }
+            else if (kind == "h3") { out = out + "<h3>" + bobInlineToHtml(b["content"]) + "</h3>\n"; }
+            else if (kind == "quote") { out = out + "<blockquote>" + bobInlineToHtml(b["content"]) + "</blockquote>\n"; }
+            else if (kind == "hr") { out = out + "<hr>\n"; }
+            else { out = out + "<p>" + bobInlineToHtml(b["content"]) + "</p>\n"; }
+        }
+
+        i = i + 1;
+    }
+
+    if (listOpen) { out = out + "</ul>\n"; }
+    return out;
+}
+
+// يحوّل مصدر Bob إلى نص عادي (بلا HTML)؛ العناوين تبقى كنص، الاقتباس بادئته "> "،
+// عناصر القائمة بادئتها "- "، والخط الفاصل يصبح سطر شرطات
+fun bobToPlain(source) {
+    let blocks = bobTokenize(source);
+    let out = "";
+    let i = 0;
+
+    while (i < len(blocks)) {
+        let b = blocks[i];
+        let kind = b["kind"];
+        let plainContent = bobInlineToPlain(b["content"]);
+
+        if (kind == "hr") { out = out + "----------\n"; }
+        else if (kind == "item") { out = out + "- " + plainContent + "\n"; }
+        else if (kind == "quote") { out = out + "> " + plainContent + "\n"; }
+        else { out = out + plainContent + "\n"; }
+
+        i = i + 1;
+    }
+
+    return out;
+}
+
+// معلومات وصفية عن المكتبة (اسم/إصدار/وصف/دوال مصدَّرة)، بنفس أسلوب pkgInfo في
+// oglang.og.rin و ringoInfo في ringo.og.rin — جاهزة للطباعة أو للعرض في شاشة "المكتبات"
+fun bobInfo() {
+    return {
+        name: "bob",
+        version: "1.0.0",
+        description: "لغة ترميز خفيفة (Markdown-lite) بأسطر بادئة، تُصيَّر إلى HTML أو نص عادي",
+        exports: ["bobTokenize", "bobToHtml", "bobToPlain", "bobEscapeHtml", "bobInfo"]
+    };
+}
+)BOBOGRIN";
+
 inline const std::unordered_map<std::string, std::string>& embeddedRinLibraries() {
     static const std::unordered_map<std::string, std::string> libs = {
         {"lib/math.og.rin", kLib_math_og_rin},
@@ -1228,6 +2706,17 @@ inline const std::unordered_map<std::string, std::string>& embeddedRinLibraries(
         {"lib/oglang.og.rin", kLib_oglang_og_rin},
         {"lib/ringo.og.rin", kLib_ringo_og_rin},
         {"lib/langkit.og.rin", kLib_langkit_og_rin},
+        {"lib/astwalk.og.rin", kLib_astwalk_og_rin},
+        {"lib/envkit.og.rin", kLib_envkit_og_rin},
+        {"lib/gridkit.og.rin", kLib_gridkit_og_rin},
+        {"lib/iterkit.og.rin", kLib_iterkit_og_rin},
+        {"lib/lexkit.og.rin", kLib_lexkit_og_rin},
+        {"lib/loopkit.og.rin", kLib_loopkit_og_rin},
+        {"lib/loopstats.og.rin", kLib_loopstats_og_rin},
+        {"lib/parsekit.og.rin", kLib_parsekit_og_rin},
+        {"lib/runkit.og.rin", kLib_runkit_og_rin},
+        {"lib/seqkit.og.rin", kLib_seqkit_og_rin},
+        {"lib/bob.og.rin", kLib_bob_og_rin},
     };
     return libs;
 }
