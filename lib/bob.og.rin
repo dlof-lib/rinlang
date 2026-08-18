@@ -1,0 +1,254 @@
+// ============================================================================
+//  lib/bob.og.rin — Bob: لغة ترميز خفيفة بأسطر بادئة (Markdown-lite)، تُصيَّر إلى HTML أو نص عادي
+//  استيراد:
+//    @import "lib/bob.og.rin";
+//    @import "lib/bob.og.rin" as bob;
+//
+//  مكتبة مدمجة (embedded) داخل ثنائي المحرّك نفسه (راجع rin_stdlib_libs.h) — تعمل عبر
+//  @import فوراً على أي جهاز/منصة دون أي خطوة تثبيت إضافية، تماماً كباقي مكتبات lib/*.og.rin.
+//
+//  صيغة Bob (سطرية على مستوى الكتلة block، ورموز بسيطة على مستوى السطر inline):
+//    # عنوان     -> <h1>       ## عنوان -> <h2>      ### عنوان -> <h3>
+//    > اقتباس    -> <blockquote>
+//    - عنصر      -> <li> (عناصر متتالية تُجمَع تلقائياً داخل <ul> واحدة)
+//    ---         -> <hr>  (سطر يحوي "---" فقط)
+//    سطر عادي    -> <p>
+//    **عريض**    -> <strong>        *مائل*    -> <em>
+//    `كود`       -> <code>          [نص](URL) -> <a href="URL">نص</a>
+//
+//  مثال:
+//    let src = "# عنوان\n" +
+//              "مرحباً يا **رنين**! هذا *مائل* و`كود` وزيارة [الموقع](https://example.com).\n" +
+//              "- أول\n- ثاني\n" +
+//              "> اقتباس قصير\n" +
+//              "---\n";
+//    print bobToHtml(src);
+//    print bobToPlain(src);
+//
+//  ملاحظة (حد معروف v1، بنفس أسلوب توثيق القيود في هذا المشروع): لا تداخل بين رموز
+//  inline من نفس النوع (مثال: **عريض فيه **عريض آخر** بالخطأ**)، ولا قوائم مرقّمة أو
+//  متداخلة بعد؛ كل سطر يُصنَّف ككتلة واحدة فقط حسب بادئته الأولى.
+// ============================================================================
+
+// أدنى مساعد نصي: هل يبدأ s بالسابقة prefix؟ (لا توجد startsWith مدمجة في core Rin)
+fun bobStartsWith(s, prefix) {
+    if (len(s) < len(prefix)) { return false; }
+    return substr(s, 0, len(prefix)) == prefix;
+}
+
+// يهرب أحرف HTML الخاصة داخل نص خام (& أولاً، ثم < > ") حتى لا يُفسَّر كوسم HTML فعلي
+fun bobEscapeHtml(raw) {
+    let out = raw;
+    out = replace(out, "&", "&amp;");
+    out = replace(out, "<", "&lt;");
+    out = replace(out, ">", "&gt;");
+    out = replace(out, "\"", "&quot;");
+    return out;
+}
+
+// يقسّم مصدر Bob إلى مصفوفة "كتل" (blocks) بحسب بادئة كل سطر: عنوان/اقتباس/عنصر
+// قائمة/خط فاصل/فقرة نصية عادية. الأسطر الفارغة تُتجاهَل (تُستخدَم كفواصل فقرات فقط).
+fun bobTokenize(source) {
+    let rawLines = split(source, "\n");
+    let blocks = [];
+    let i = 0;
+
+    while (i < len(rawLines)) {
+        let trimmed = trim(rawLines[i]);
+
+        if (trimmed == "") {
+            // سطر فارغ: فاصل فقرات بلا كتلة خاصة به
+        } else if (trimmed == "---") {
+            push(blocks, { kind: "hr", content: "" });
+        } else if (bobStartsWith(trimmed, "### ")) {
+            push(blocks, { kind: "h3", content: trim(substr(trimmed, 4)) });
+        } else if (bobStartsWith(trimmed, "## ")) {
+            push(blocks, { kind: "h2", content: trim(substr(trimmed, 3)) });
+        } else if (bobStartsWith(trimmed, "# ")) {
+            push(blocks, { kind: "h1", content: trim(substr(trimmed, 2)) });
+        } else if (bobStartsWith(trimmed, "> ")) {
+            push(blocks, { kind: "quote", content: trim(substr(trimmed, 2)) });
+        } else if (bobStartsWith(trimmed, "- ")) {
+            push(blocks, { kind: "item", content: trim(substr(trimmed, 2)) });
+        } else {
+            push(blocks, { kind: "text", content: trimmed });
+        }
+
+        i = i + 1;
+    }
+
+    return blocks;
+}
+
+// يحوّل نص سطر واحد (inline) إلى HTML: **عريض**، *مائل*، `كود`، [نص](URL)؛ أي نص
+// خارج هذه الرموز يُهرَب بأمان عبر bobEscapeHtml حرفاً حرفاً
+fun bobInlineToHtml(ln) {
+    let out = "";
+    let i = 0;
+    let n = len(ln);
+    let boldOpen = false;
+    let italicOpen = false;
+    let codeOpen = false;
+
+    while (i < n) {
+        let c = charAt(ln, i);
+
+        if (c == "`") {
+            if (codeOpen) { out = out + "</code>"; } else { out = out + "<code>"; }
+            codeOpen = !codeOpen;
+            i = i + 1;
+        } else if (c == "*" and i + 1 < n and charAt(ln, i + 1) == "*") {
+            if (boldOpen) { out = out + "</strong>"; } else { out = out + "<strong>"; }
+            boldOpen = !boldOpen;
+            i = i + 2;
+        } else if (c == "*") {
+            if (italicOpen) { out = out + "</em>"; } else { out = out + "<em>"; }
+            italicOpen = !italicOpen;
+            i = i + 1;
+        } else if (c == "[") {
+            let rest = substr(ln, i);
+            let closeBracket = indexOf(rest, "]");
+            let handled = false;
+
+            if (closeBracket != -1) {
+                let afterBracket = i + closeBracket + 1;
+                if (afterBracket < n and charAt(ln, afterBracket) == "(") {
+                    let afterParen = substr(ln, afterBracket + 1);
+                    let closeParen = indexOf(afterParen, ")");
+                    if (closeParen != -1) {
+                        let linkText = substr(ln, i + 1, closeBracket - 1);
+                        let url = substr(afterParen, 0, closeParen);
+                        out = out + "<a href=\"" + bobEscapeHtml(url) + "\">" + bobEscapeHtml(linkText) + "</a>";
+                        i = afterBracket + 1 + closeParen + 1;
+                        handled = true;
+                    }
+                }
+            }
+
+            if (!handled) {
+                out = out + bobEscapeHtml(c);
+                i = i + 1;
+            }
+        } else {
+            out = out + bobEscapeHtml(c);
+            i = i + 1;
+        }
+    }
+
+    return out;
+}
+
+// يحوّل نص سطر واحد (inline) إلى نص عادي: يزيل رموز **/*/` ويحوّل [نص](URL) إلى
+// "نص (URL)"؛ يُستخدم داخلياً في bobToPlain
+fun bobInlineToPlain(ln) {
+    let out = "";
+    let i = 0;
+    let n = len(ln);
+
+    while (i < n) {
+        let c = charAt(ln, i);
+
+        if (c == "`") {
+            i = i + 1;
+        } else if (c == "*" and i + 1 < n and charAt(ln, i + 1) == "*") {
+            i = i + 2;
+        } else if (c == "*") {
+            i = i + 1;
+        } else if (c == "[") {
+            let rest = substr(ln, i);
+            let closeBracket = indexOf(rest, "]");
+            let handled = false;
+
+            if (closeBracket != -1) {
+                let afterBracket = i + closeBracket + 1;
+                if (afterBracket < n and charAt(ln, afterBracket) == "(") {
+                    let afterParen = substr(ln, afterBracket + 1);
+                    let closeParen = indexOf(afterParen, ")");
+                    if (closeParen != -1) {
+                        let linkText = substr(ln, i + 1, closeBracket - 1);
+                        let url = substr(afterParen, 0, closeParen);
+                        out = out + linkText + " (" + url + ")";
+                        i = afterBracket + 1 + closeParen + 1;
+                        handled = true;
+                    }
+                }
+            }
+
+            if (!handled) {
+                out = out + c;
+                i = i + 1;
+            }
+        } else {
+            out = out + c;
+            i = i + 1;
+        }
+    }
+
+    return out;
+}
+
+// يحوّل مصدر Bob كاملاً إلى HTML جاهز للعرض (مثلاً داخل WebView في تطبيق DLoF/RinLang)
+fun bobToHtml(source) {
+    let blocks = bobTokenize(source);
+    let out = "";
+    let listOpen = false;
+    let i = 0;
+
+    while (i < len(blocks)) {
+        let b = blocks[i];
+        let kind = b["kind"];
+
+        if (kind == "item") {
+            if (!listOpen) { out = out + "<ul>\n"; listOpen = true; }
+            out = out + "<li>" + bobInlineToHtml(b["content"]) + "</li>\n";
+        } else {
+            if (listOpen) { out = out + "</ul>\n"; listOpen = false; }
+
+            if (kind == "h1") { out = out + "<h1>" + bobInlineToHtml(b["content"]) + "</h1>\n"; }
+            else if (kind == "h2") { out = out + "<h2>" + bobInlineToHtml(b["content"]) + "</h2>\n"; }
+            else if (kind == "h3") { out = out + "<h3>" + bobInlineToHtml(b["content"]) + "</h3>\n"; }
+            else if (kind == "quote") { out = out + "<blockquote>" + bobInlineToHtml(b["content"]) + "</blockquote>\n"; }
+            else if (kind == "hr") { out = out + "<hr>\n"; }
+            else { out = out + "<p>" + bobInlineToHtml(b["content"]) + "</p>\n"; }
+        }
+
+        i = i + 1;
+    }
+
+    if (listOpen) { out = out + "</ul>\n"; }
+    return out;
+}
+
+// يحوّل مصدر Bob إلى نص عادي (بلا HTML)؛ العناوين تبقى كنص، الاقتباس بادئته "> "،
+// عناصر القائمة بادئتها "- "، والخط الفاصل يصبح سطر شرطات
+fun bobToPlain(source) {
+    let blocks = bobTokenize(source);
+    let out = "";
+    let i = 0;
+
+    while (i < len(blocks)) {
+        let b = blocks[i];
+        let kind = b["kind"];
+        let plainContent = bobInlineToPlain(b["content"]);
+
+        if (kind == "hr") { out = out + "----------\n"; }
+        else if (kind == "item") { out = out + "- " + plainContent + "\n"; }
+        else if (kind == "quote") { out = out + "> " + plainContent + "\n"; }
+        else { out = out + plainContent + "\n"; }
+
+        i = i + 1;
+    }
+
+    return out;
+}
+
+// معلومات وصفية عن المكتبة (اسم/إصدار/وصف/دوال مصدَّرة)، بنفس أسلوب pkgInfo في
+// oglang.og.rin و ringoInfo في ringo.og.rin — جاهزة للطباعة أو للعرض في شاشة "المكتبات"
+fun bobInfo() {
+    return {
+        name: "bob",
+        version: "1.0.0",
+        description: "لغة ترميز خفيفة (Markdown-lite) بأسطر بادئة، تُصيَّر إلى HTML أو نص عادي",
+        exports: ["bobTokenize", "bobToHtml", "bobToPlain", "bobEscapeHtml", "bobInfo"]
+    };
+}
