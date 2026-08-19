@@ -32,7 +32,7 @@ data class BuiltinLibraryInfo(
 
 /**
  * سجل مرجعي (يطابق `embeddedRinLibraries()` في rin_stdlib_libs.h) بالمكتبات القياسية
- * التسع عشرة المدمجة داخل المفسّر نفسه، وتعمل @import عليها فوراً على أي جهاز دون رفعها.
+ * الإحدى والعشرين المدمجة داخل المفسّر نفسه، وتعمل @import عليها فوراً على أي جهاز دون رفعها.
  * هذا السجل نصي فقط (للعرض والإدراج السريع في المحرر)، ولا يكرر شيفرة المكتبات نفسها.
  */
 object BuiltinLibraries {
@@ -131,6 +131,16 @@ object BuiltinLibraries {
             "lib/bob.og.rin", "bob",
             "لغة ترميز خفيفة (Markdown-lite) بأسطر بادئة #/>/- ، تُصيَّر إلى HTML أو نص عادي",
             "bobTokenize • bobToHtml • bobToPlain • bobEscapeHtml • bobInfo"
+        ),
+        BuiltinLibraryInfo(
+            "lib/ghpublish.og.rin", "ghpublish",
+            "نشر/تحميل مشاريع GitHub حقيقية: دخول بتوكن (ghp_...)، رفع أرشيف zip وفكّ ضغطه ونشره، وتحميل مستودع كاملاً",
+            "ghpLogin • ghpPublishProject • ghpUploadZip • ghpDownloadRepo • ghpCreateRepo • ghpRepoInfo"
+        ),
+        BuiltinLibraryInfo(
+            "lib/rinxg.og.rin", "rinxg",
+            "لغة تصريحية كاملة (Lexer+Parser+مُصيِّر) لتصميم واجهات الويب فوق Rin، تُترجَم إلى HTML+CSS حقيقي",
+            "rxToHtml • rxParseToAst • rxInfo"
         )
     )
 }
