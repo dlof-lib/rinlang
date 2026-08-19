@@ -2696,6 +2696,718 @@ fun bobInfo() {
 }
 )BOBOGRIN";
 
+static const char* kLib_ghpublish_og_rin = R"GHPUBLISHOGRIN(
+// ============================================================================
+//  lib/ghpublish.og.rin — تطبيق نشر مشاريع GitHub حقيقي (REST API حقيقي فعلي، وليس محاكاة):
+//  تسجيل دخول بـ Personal Access Token (ghp_...)، رفع أرشيف .zip وفكّ ضغطه، نشره كمستودع
+//  GitHub جديد أو تحديث مستودع موجود، وتحميل مستودع كامل محلياً.
+//
+//  استيراد:
+//    @import "lib/ghpublish.og.rin";
+//    @import "lib/ghpublish.og.rin" as ghp;
+//
+//  يعتمد على natives الشبكة الحقيقية (apiRegister/apiGet/apiPost/apiPut، انظر registerNatives()
+//  في rin_interpreter.cpp) وعلى base64Encode/base64Decode وunzipEntries (rin_binutils.h/.cpp) —
+//  كلها اتصالات/عمليات حقيقية فعلية، لا محاكاة: تسجيل دخول فعلي، رفع ملفات فعلي، نشر فعلي.
+//
+//  مثال استخدام كامل (تسجيل دخول -> نشر أرشيف zip كمستودع جديد -> تحميله لاحقاً):
+//    @import "lib/ghpublish.og.rin";
+//
+//    let me = ghpLogin("ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx");
+//    if (!me["ok"]) { print "فشل تسجيل الدخول: " + me["error"]; }
+//    else {
+//        print "مرحباً " + me["login"] + "!";
+//        let result = ghpPublishProject(me["login"], "my-rin-project",
+//                                        "مشروع Rin منشور تلقائياً", false,
+//                                        "myproject.zip", "نشر أولي عبر ghpublish");
+//        if (result["ok"]) { print "نُشر بنجاح: " + result["repoUrl"]; }
+//        else { print "فشل النشر في مرحلة " + result["stage"] + ": " + result["error"]; }
+//
+//        // لاحقاً، تحميل نفس المستودع كاملاً كملفات محلية حقيقية:
+//        let dl = ghpDownloadRepo(me["login"], "my-rin-project", "main", "downloaded_project");
+//        print "حُمِّل " + toString(len(dl["downloaded"])) + " ملفاً";
+//    }
+//
+//  ملاحظات (حدود معروفة v1، بنفس أسلوب توثيق القيود في هذا المشروع):
+//   * "تحميل" هنا يُعيد بناء ملفات المستودع الحقيقية على القرص محلياً (عبر Contents API نصاً
+//     Base64 داخل JSON، آمن تماماً عبر الشبكة)، وليس أرشيف .zip واحداً جاهزاً — تنزيل رابط
+//     zipball الخام مباشرة غير آمن حالياً على أندرويد تحديداً لأن جسر HTTP هناك
+//     (RinHttpBridge.kt) يفترض أن جسم الرد نص UTF-8، وبيانات .zip الخام ثنائية فتُتلَف لو مرّت
+//     منه؛ المسار عبر Contents API (نص/JSON بالكامل) يتفادى هذه المشكلة تماماً على كل المنصات.
+//   * مسارات الملفات ذات المسافات فقط تُرمَّز تلقائياً (%20)؛ رموز خاصة أخرى (#، ?، محارف غير
+//     ASCII في اسم الملف نفسه) قد تحتاج ترميزاً يدوياً إضافياً قبل الاستدعاء.
+//   * لا معالجة لـ pagination عند git/trees الضخمة جداً (git trees API نفسها تُرجِع truncated:true
+//     حينها) — يكفي لمعظم مشاريع Rin العادية.
+// ============================================================================
+
+fun ghpStartsWith(s, prefix) {
+    if (len(s) < len(prefix)) { return false; }
+    return substr(s, 0, len(prefix)) == prefix;
+}
+
+fun ghpEndsWithSlash(s) {
+    if (len(s) == 0) { return false; }
+    return substr(s, len(s) - 1, 1) == "/";
+}
+
+// يرمّز الفراغات فقط داخل مسار ملف لاستخدامه في رابط Contents API (انظر الملاحظات أعلاه)
+fun ghpUrlEncodePath(path) {
+    return replace(path, " ", "%20");
+}
+
+// يبني رسالة خطأ بشرية واضحة من رد apiGet/apiPost/apiPut (يفرّق بين فشل الاتصال نفسه وبين رد
+// GitHub بخطأ منطقي مثل 401/404/422 يحمل حقل "message")
+fun ghpErrorFromResult(res) {
+    if (res["ok"] == false) {
+        return "تعذّر الاتصال بـ GitHub: " + res["error"];
+    }
+    let j = res["json"];
+    if (typeOf(j) == "map" and has(j, "message")) {
+        return "GitHub (" + toString(res["status"]) + "): " + j["message"];
+    }
+    let bodyText = res["body"];
+    if (len(bodyText) > 300) { bodyText = substr(bodyText, 0, 300) + "..."; }
+    return "GitHub (" + toString(res["status"]) + "): " + bodyText;
+}
+
+// تسجيل الدخول: يسجّل API باسم "github" (baseUrl + ترويسة Authorization بالتوكن)، ثم يتحقّق
+// فعلياً من صلاحية التوكن عبر GET /user. يعيد { ok, login, name, id } أو { ok: false, error }
+fun ghpLogin(token) {
+    apiRegister("github", "https://api.github.com");
+    apiHeader("github", "Authorization", "token " + token);
+    apiHeader("github", "Accept", "application/vnd.github+json");
+    apiHeader("github", "User-Agent", "RinLang-GitHub-Publisher");
+
+    let res = apiGet("github", "/user");
+    if (res["ok"] and res["status"] == 200) {
+        let u = res["json"];
+        return { ok: true, login: u["login"], name: u["name"], id: u["id"] };
+    }
+    return { ok: false, error: ghpErrorFromResult(res) };
+}
+
+// ينشئ مستودعاً جديداً على حساب المستخدم المسجَّل دخوله حالياً (يجب استدعاء ghpLogin أولاً)
+fun ghpCreateRepo(name, description, isPrivate) {
+    let body = { name: name, description: description, private: isPrivate, auto_init: true };
+    let res = apiPost("github", "/user/repos", body);
+    if (res["ok"] and res["status"] == 201) {
+        let j = res["json"];
+        return { ok: true, fullName: j["full_name"], htmlUrl: j["html_url"], defaultBranch: j["default_branch"] };
+    }
+    return { ok: false, status: res["status"], error: ghpErrorFromResult(res) };
+}
+
+// يتحقّق هل مستودع owner/repo موجود فعلاً، ويعيد فرعه الافتراضي إن وُجد
+fun ghpRepoInfo(owner, repo) {
+    let res = apiGet("github", "/repos/" + owner + "/" + repo);
+    if (res["ok"] and res["status"] == 200) {
+        let j = res["json"];
+        return { ok: true, exists: true, defaultBranch: j["default_branch"], htmlUrl: j["html_url"] };
+    }
+    if (res["ok"] and res["status"] == 404) {
+        return { ok: true, exists: false };
+    }
+    return { ok: false, error: ghpErrorFromResult(res) };
+}
+
+// يجلب sha الحالي لملف موجود مسبقاً على الفرع (لازم لتحديثه لا لإنشائه)؛ يعيد nil إن لم يوجد
+fun ghpGetFileSha(owner, repo, repoPath, branch) {
+    let path = "/repos/" + owner + "/" + repo + "/contents/" + ghpUrlEncodePath(repoPath) + "?ref=" + branch;
+    let res = apiGet("github", path);
+    if (res["ok"] and res["status"] == 200) {
+        return res["json"]["sha"];
+    }
+    return nil;
+}
+
+// يرفع/يحدّث ملفاً واحداً فعلياً على GitHub عبر Contents API (PUT). rawContent بايتات خام
+// (نص أو ثنائي، مثلاً محتوى من unzipEntries أو readFile) — يُرمَّز Base64 تلقائياً هنا.
+fun ghpUploadFile(owner, repo, branch, repoPath, rawContent, commitMessage) {
+    let sha = ghpGetFileSha(owner, repo, repoPath, branch);
+    let body = { message: commitMessage, content: base64Encode(rawContent), branch: branch };
+    if (sha != nil) { body["sha"] = sha; }
+
+    let path = "/repos/" + owner + "/" + repo + "/contents/" + ghpUrlEncodePath(repoPath);
+    let res = apiPut("github", path, body);
+    if (res["ok"] and (res["status"] == 200 or res["status"] == 201)) {
+        return { ok: true, path: repoPath, sha: res["json"]["content"]["sha"] };
+    }
+    return { ok: false, path: repoPath, error: ghpErrorFromResult(res) };
+}
+
+// إن شارك كل عنصر بادئة مجلد جذر واحدة (حالة شائعة: أرشيف مُصدَّر يحوي "projectName/" كمجلد
+// أب لكل شيء)، يعيدها لتُستخدَم في ghpUploadZip لتجريدها تلقائياً؛ وإلا يعيد ""
+fun ghpCommonRootPrefix(entries) {
+    if (len(entries) == 0) { return ""; }
+    let firstName = entries[0]["name"];
+    let slashIdx = indexOf(firstName, "/");
+    if (slashIdx == -1) { return ""; }
+    let prefix = substr(firstName, 0, slashIdx + 1);
+
+    let i = 0;
+    while (i < len(entries)) {
+        if (!ghpStartsWith(entries[i]["name"], prefix)) { return ""; }
+        i = i + 1;
+    }
+    return prefix;
+}
+
+// يفكّ أرشيف .zip محلي (رفعه المستخدم مسبقاً إلى المشروع) عبر unzipEntries، ثم يرفع كل ملف
+// غير-مجلد بداخله فعلياً كملف على GitHub (تحديث أو إنشاء حسب وجوده مسبقاً). stripRoot=true
+// يجرّد بادئة المجلد الجذر المشتركة تلقائياً إن وُجدت (انظر ghpCommonRootPrefix).
+fun ghpUploadZip(owner, repo, branch, zipPath, commitMessage, stripRoot) {
+    let entries = unzipEntries(zipPath);
+    let prefix = "";
+    if (stripRoot) { prefix = ghpCommonRootPrefix(entries); }
+
+    let uploaded = [];
+    let failed = [];
+    let i = 0;
+    while (i < len(entries)) {
+        let e = entries[i];
+        if (!e["isDir"]) {
+            let repoPath = e["name"];
+            if (prefix != "") { repoPath = substr(repoPath, len(prefix)); }
+            if (repoPath != "") {
+                let r = ghpUploadFile(owner, repo, branch, repoPath, e["content"], commitMessage);
+                if (r["ok"]) { push(uploaded, repoPath); } else { push(failed, r); }
+            }
+        }
+        i = i + 1;
+    }
+    return { ok: len(failed) == 0, uploaded: uploaded, failed: failed };
+}
+
+// التدفّق الكامل بخطوة واحدة: يُنشئ المستودع إن لم يكن موجوداً (أو يستخدم الموجود بفرعه
+// الافتراضي)، ثم يرفع أرشيف .zip كاملاً إليه. استدعِ ghpLogin أولاً.
+fun ghpPublishProject(owner, repoName, description, isPrivate, zipPath, commitMessage) {
+    let info = ghpRepoInfo(owner, repoName);
+    if (!info["ok"]) { return { ok: false, stage: "checkRepo", error: info["error"] }; }
+
+    let branch = "main";
+    if (info["exists"]) {
+        branch = info["defaultBranch"];
+    } else {
+        let created = ghpCreateRepo(repoName, description, isPrivate);
+        if (!created["ok"]) { return { ok: false, stage: "createRepo", error: created["error"] }; }
+        if (created["defaultBranch"] != nil) { branch = created["defaultBranch"]; }
+    }
+
+    let result = ghpUploadZip(owner, repoName, branch, zipPath, commitMessage, true);
+    result["stage"] = "upload";
+    result["repoUrl"] = "https://github.com/" + owner + "/" + repoName;
+    return result;
+}
+
+// يجلب قائمة كل الملفات (blobs) داخل فرع مستودع عبر Git Trees API (استدعاء واحد بحث متكرر
+// recursive=1) — يعيد { ok, files: [مسارات نصية] }
+fun ghpDownloadTree(owner, repo, branch) {
+    let res = apiGet("github", "/repos/" + owner + "/" + repo + "/git/trees/" + branch + "?recursive=1");
+    if (!(res["ok"] and res["status"] == 200)) {
+        return { ok: false, error: ghpErrorFromResult(res) };
+    }
+
+    let tree = res["json"]["tree"];
+    let blobs = [];
+    let i = 0;
+    while (i < len(tree)) {
+        if (tree[i]["type"] == "blob") { push(blobs, tree[i]["path"]); }
+        i = i + 1;
+    }
+    return { ok: true, files: blobs };
+}
+
+// يحمّل ملفاً واحداً فعلياً من GitHub (Contents API، Base64 داخل JSON، آمن عبر أي منصة) ويكتبه
+// محلياً عبر writeFile
+fun ghpDownloadFile(owner, repo, branch, repoPath, localPath) {
+    let path = "/repos/" + owner + "/" + repo + "/contents/" + ghpUrlEncodePath(repoPath) + "?ref=" + branch;
+    let res = apiGet("github", path);
+    if (!(res["ok"] and res["status"] == 200)) {
+        return { ok: false, path: repoPath, error: ghpErrorFromResult(res) };
+    }
+
+    let raw = base64Decode(res["json"]["content"]);
+    writeFile(localPath, raw);
+    return { ok: true, path: repoPath, localPath: localPath };
+}
+
+// يحمّل مستودعاً كاملاً محلياً: يجلب شجرة الملفات ثم يحمّل كل ملف فعلياً تحت destDir (بنفس
+// بنية المجلدات الأصلية). يعيد { ok, downloaded: [مسارات محلية], failed: [...] }
+fun ghpDownloadRepo(owner, repo, branch, destDir) {
+    let treeResult = ghpDownloadTree(owner, repo, branch);
+    if (!treeResult["ok"]) { return treeResult; }
+
+    let dest = destDir;
+    if (!ghpEndsWithSlash(dest)) { dest = dest + "/"; }
+
+    let downloaded = [];
+    let failed = [];
+    let i = 0;
+    while (i < len(treeResult["files"])) {
+        let repoPath = treeResult["files"][i];
+        let r = ghpDownloadFile(owner, repo, branch, repoPath, dest + repoPath);
+        if (r["ok"]) { push(downloaded, r["localPath"]); } else { push(failed, r); }
+        i = i + 1;
+    }
+    return { ok: len(failed) == 0, downloaded: downloaded, failed: failed };
+}
+
+// معلومات وصفية عن المكتبة، بنفس أسلوب bobInfo/ringoInfo/pkgInfo في هذا المشروع
+fun ghpInfo() {
+    return {
+        name: "ghpublish",
+        version: "1.0.0",
+        description: "نشر وتحميل مشاريع GitHub حقيقية: دخول بتوكن (ghp_...)، رفع أرشيف zip وفكّ ضغطه ونشره كمستودع، تحميل مستودع كاملاً",
+        exports: [
+            "ghpLogin", "ghpCreateRepo", "ghpRepoInfo", "ghpUploadFile", "ghpUploadZip",
+            "ghpPublishProject", "ghpDownloadTree", "ghpDownloadFile", "ghpDownloadRepo"
+        ]
+    };
+}
+)GHPUBLISHOGRIN";
+
+static const char* kLib_rinxg_og_rin = R"RINXGOGRIN(
+// ============================================================================
+//  lib/rinxg.og.rin — RinXG: لغة برمجة تصريحية (declarative) لتصميم واجهات الويب فوق Rin.
+//  محرّك لغة كامل مكتوب بالكامل بـ Rin (Lexer+Parser+AST+مُصيِّر HTML/CSS حقيقي)، وليس مجرّد
+//  قوالب نصية — يصف المستخدم الواجهة بصيغة RinXG فتُترجَم إلى صفحة HTML+CSS كاملة جاهزة للعرض
+//  في أي متصفّح أو WebView.
+//
+//  استيراد:
+//    @import "lib/rinxg.og.rin";
+//    @import "lib/rinxg.og.rin" as rinxg;
+//
+//  ---------------------------- صيغة RinXG ----------------------------
+//  page "عنوان الصفحة" {
+//      style {
+//          bg: #f5f5f5;
+//          font: sans-serif;
+//      }
+//
+//      container column gap=16 padding=24 {
+//          heading level=1 color=#222 { "مرحباً بلغة RinXG" }
+//          text color=#666 { "لغة تصميم واجهات ويب تصريحية فوق Rin" }
+//
+//          container row gap=8 {
+//              button bg=#4CAF50 color=#ffffff radius=8 { "ابدأ الآن" }
+//              button bg=#ffffff color=#4CAF50 radius=8 { "تعلّم المزيد" }
+//          }
+//
+//          input placeholder="بريدك الإلكتروني...";
+//          image src="logo.png" width=120;
+//          link href="https://example.com" { "زيارة الموقع" }
+//
+//          list {
+//              item { "عنصر أول" }
+//              item { "عنصر ثانٍ" }
+//          }
+//      }
+//  }
+//
+//  العناصر المدعومة: container (row|column، gap، padding، bg، radius، align، justify) •
+//  heading (level، color) • text (color، size) • button (bg، color، radius) • input
+//  (placeholder، عنصر مغلق بـ ';' بلا محتوى) • image (src، width، عنصر مغلق بـ ';') •
+//  link (href) • list/item. أي وسم غير معروف يُصيَّر كـ <div data-rinxg-tag="..."> بدل أن
+//  يُسقَط بصمت، ليسهل اكتشاف الأخطاء الإملائية في الوسوم.
+//
+//  الاستخدام:
+//    @import "lib/rinxg.og.rin";
+//    let html = rxToHtml(source);   // يعيد صفحة HTML+CSS كاملة جاهزة (<!DOCTYPE html>...)
+//    writeFile("out.html", html);
+//
+//  ملاحظات (حدود معروفة v1، بنفس أسلوب توثيق القيود في هذا المشروع): لا تعبيرات/شروط/حلقات
+//  داخل RinXG نفسها (هي لغة وصف تصميم تصريحية بحتة، لا لغة برمجة عامة) — أي منطق ديناميكي
+//  (توليد عناصر بحلقة، ربط بيانات) يُكتَب بـ Rin نفسها قبل استدعاء rxToHtml عبر بناء نص
+//  RinXG المصدر برمجياً (تسلسل نصوص) ثم تمريره.
+// ============================================================================
+
+// ----------------------------- قارئ محارف (Lexer/Scanner) -----------------------------
+// حالة القراءة تُمرَّر كخريطة (map) بمرجعية مشتركة فتتحوّل كل الدوال أدناه لتُحدّثها في مكانها
+
+fun rxAtEnd(st) { return st["pos"] >= st["len"]; }
+
+fun rxPeek(st) {
+    if (rxAtEnd(st)) { return ""; }
+    return charAt(st["src"], st["pos"]);
+}
+
+fun rxPeekAt(st, offset) {
+    let p = st["pos"] + offset;
+    if (p >= st["len"]) { return ""; }
+    return charAt(st["src"], p);
+}
+
+fun rxAdvance(st) {
+    let c = rxPeek(st);
+    st["pos"] = st["pos"] + 1;
+    return c;
+}
+
+fun rxIsSpace(c) {
+    return c == " " or c == "\n" or c == "\t" or c == "\r";
+}
+
+fun rxSkipWs(st) {
+    while (!rxAtEnd(st)) {
+        let c = rxPeek(st);
+        if (rxIsSpace(c)) {
+            rxAdvance(st);
+        } else if (c == "/" and rxPeekAt(st, 1) == "/") {
+            while (!rxAtEnd(st) and rxPeek(st) != "\n") { rxAdvance(st); }
+        } else {
+            break;
+        }
+    }
+}
+
+// عمليات المقارنة >=/<= في Rin تعمل على الأرقام فقط، لذا تُقارَن المحارف عبر ord() (نفس
+// أسلوب lib/langkit.og.rin: code >= ord("a") and code <= ord("z"))
+fun rxIsIdentStart(c) {
+    if (c == "") { return false; }
+    let code = ord(c);
+    return (code >= ord("a") and code <= ord("z")) or (code >= ord("A") and code <= ord("Z")) or c == "_";
+}
+
+fun rxIsIdentChar(c) {
+    if (c == "") { return false; }
+    let code = ord(c);
+    return rxIsIdentStart(c) or (code >= ord("0") and code <= ord("9")) or c == "-";
+}
+
+fun rxReadIdent(st) {
+    let start = st["pos"];
+    while (!rxAtEnd(st) and rxIsIdentChar(rxPeek(st))) { rxAdvance(st); }
+    return substr(st["src"], start, st["pos"] - start);
+}
+
+fun rxReadString(st) {
+    rxAdvance(st); // يستهلك علامة الاقتباس الافتتاحية
+    let out = "";
+    while (!rxAtEnd(st) and rxPeek(st) != "\"") {
+        let c = rxAdvance(st);
+        if (c == "\\" and !rxAtEnd(st)) {
+            let nc = rxAdvance(st);
+            if (nc == "n") { out = out + "\n"; }
+            else if (nc == "\"") { out = out + "\""; }
+            else if (nc == "\\") { out = out + "\\"; }
+            else { out = out + nc; }
+        } else {
+            out = out + c;
+        }
+    }
+    if (!rxAtEnd(st)) { rxAdvance(st); } // يستهلك علامة الاقتباس الختامية
+    return out;
+}
+
+// قيمة سمة بلا اقتباس (مثال: gap=16 أو bg=#4CAF50): تمتد حتى مسافة أو ; أو { أو } أو =
+fun rxReadBareValue(st) {
+    let start = st["pos"];
+    while (!rxAtEnd(st)) {
+        let c = rxPeek(st);
+        if (rxIsSpace(c) or c == ";" or c == "{" or c == "}" or c == "=") { break; }
+        rxAdvance(st);
+    }
+    return substr(st["src"], start, st["pos"] - start);
+}
+
+// قيمة داخل كتلة style { key: value; } — تمتد حتى ; أو } أو نهاية السطر
+fun rxReadStyleValue(st) {
+    let start = st["pos"];
+    while (!rxAtEnd(st)) {
+        let c = rxPeek(st);
+        if (c == ";" or c == "}" or c == "\n") { break; }
+        rxAdvance(st);
+    }
+    return trim(substr(st["src"], start, st["pos"] - start));
+}
+
+// ----------------------------- المحلِّل (Parser) -----------------------------
+
+fun rxParseAttrs(st) {
+    let attrs = {};
+    while (true) {
+        rxSkipWs(st);
+        if (rxAtEnd(st)) { break; }
+        let c = rxPeek(st);
+        if (c == "{" or c == ";" or c == "}") { break; }
+        if (!rxIsIdentStart(c)) { break; }
+
+        let name = rxReadIdent(st);
+        rxSkipWs(st);
+        if (!rxAtEnd(st) and rxPeek(st) == "=") {
+            rxAdvance(st);
+            rxSkipWs(st);
+            let val = "";
+            if (!rxAtEnd(st) and rxPeek(st) == "\"") { val = rxReadString(st); }
+            else { val = rxReadBareValue(st); }
+            attrs[name] = val;
+        } else {
+            attrs[name] = "true"; // سمة علم بلا قيمة (مثل row أو column)
+        }
+    }
+    return attrs;
+}
+
+// يقرأ عنصراً واحداً: وسم + سمات، ثم إما ';' (عنصر مغلق ذاتياً بلا محتوى) أو '{' نص/عناصر أبناء '}'
+fun rxParseElement(st) {
+    rxSkipWs(st);
+    let tag = rxReadIdent(st);
+    let attrs = rxParseAttrs(st);
+    rxSkipWs(st);
+
+    let node = { "tag": tag, "attrs": attrs, "text": "", "children": [] };
+
+    if (!rxAtEnd(st) and rxPeek(st) == ";") {
+        rxAdvance(st);
+        return node;
+    }
+
+    if (!rxAtEnd(st) and rxPeek(st) == "{") {
+        rxAdvance(st);
+        rxSkipWs(st);
+        if (!rxAtEnd(st) and rxPeek(st) == "\"") {
+            node["text"] = rxReadString(st);
+            rxSkipWs(st);
+        } else {
+            let kids = [];
+            while (true) {
+                rxSkipWs(st);
+                if (rxAtEnd(st)) { break; }
+                if (rxPeek(st) == "}") { break; }
+                push(kids, rxParseElement(st));
+                rxSkipWs(st);
+            }
+            node["children"] = kids;
+        }
+        rxSkipWs(st);
+        if (!rxAtEnd(st) and rxPeek(st) == "}") { rxAdvance(st); }
+    }
+
+    return node;
+}
+
+fun rxParseStyleBlock(st) {
+    let props = {};
+    while (true) {
+        rxSkipWs(st);
+        if (rxAtEnd(st)) { break; }
+        if (rxPeek(st) == "}") { break; }
+
+        let name = rxReadIdent(st);
+        rxSkipWs(st);
+        if (!rxAtEnd(st) and rxPeek(st) == ":") { rxAdvance(st); }
+        rxSkipWs(st);
+
+        let val = "";
+        if (!rxAtEnd(st) and rxPeek(st) == "\"") { val = rxReadString(st); }
+        else { val = rxReadStyleValue(st); }
+        props[name] = val;
+
+        rxSkipWs(st);
+        if (!rxAtEnd(st) and rxPeek(st) == ";") { rxAdvance(st); }
+    }
+    rxSkipWs(st);
+    if (!rxAtEnd(st) and rxPeek(st) == "}") { rxAdvance(st); }
+    return props;
+}
+
+// يحلّل مصدر RinXG كاملاً إلى AST: { title, style: {...}, children: [عناصر] }
+fun rxParse(source) {
+    let st = { "src": source, "pos": 0, "len": len(source) };
+    rxSkipWs(st);
+
+    rxReadIdent(st); // "page" (لا نتحقّق من قيمتها بصرامة؛ أي اسم بديل يُقبَل بنفس المعاملة)
+    rxSkipWs(st);
+
+    let title = "";
+    if (!rxAtEnd(st) and rxPeek(st) == "\"") { title = rxReadString(st); }
+    rxSkipWs(st);
+
+    let styleProps = {};
+    let children = [];
+
+    if (!rxAtEnd(st) and rxPeek(st) == "{") {
+        rxAdvance(st);
+        while (true) {
+            rxSkipWs(st);
+            if (rxAtEnd(st)) { break; }
+            if (rxPeek(st) == "}") { break; }
+
+            let savePos = st["pos"];
+            let ident = rxReadIdent(st);
+            if (ident == "style") {
+                rxSkipWs(st);
+                if (!rxAtEnd(st) and rxPeek(st) == "{") {
+                    rxAdvance(st);
+                    styleProps = rxParseStyleBlock(st);
+                }
+            } else {
+                st["pos"] = savePos; // تراجع ليُعاد تحليله كعنصر عادي بواسطة rxParseElement
+                push(children, rxParseElement(st));
+            }
+            rxSkipWs(st);
+        }
+        if (!rxAtEnd(st) and rxPeek(st) == "}") { rxAdvance(st); }
+    }
+
+    return { "title": title, "style": styleProps, "children": children };
+}
+
+// ----------------------------- أدوات مساعدة للمُصيِّر -----------------------------
+
+fun rxEscapeHtml(raw) {
+    let out = raw;
+    out = replace(out, "&", "&amp;");
+    out = replace(out, "<", "&lt;");
+    out = replace(out, ">", "&gt;");
+    out = replace(out, "\"", "&quot;");
+    return out;
+}
+
+fun rxIsNumeric(s) {
+    if (len(s) == 0) { return false; }
+    let i = 0;
+    if (charAt(s, 0) == "-") { i = 1; }
+    if (i >= len(s)) { return false; }
+    while (i < len(s)) {
+        let c = charAt(s, i);
+        let code = ord(c);
+        if (!((code >= ord("0") and code <= ord("9")) or c == ".")) { return false; }
+        i = i + 1;
+    }
+    return true;
+}
+
+// يضيف "px" تلقائياً للقيم الرقمية الخام (gap=16 -> "16px")؛ يترك القيم الجاهزة (16px، 50%) كما هي
+fun rxPx(s) {
+    if (rxIsNumeric(s)) { return s + "px"; }
+    return s;
+}
+
+// ----------------------------- المُصيِّر (Renderer -> HTML/CSS) -----------------------------
+
+fun rxContainerStyle(attrs) {
+    let css = "display:flex;";
+    if (has(attrs, "row")) { css = css + "flex-direction:row;"; }
+    else { css = css + "flex-direction:column;"; }
+    if (has(attrs, "gap")) { css = css + "gap:" + rxPx(attrs["gap"]) + ";"; }
+    if (has(attrs, "padding")) { css = css + "padding:" + rxPx(attrs["padding"]) + ";"; }
+    if (has(attrs, "bg")) { css = css + "background:" + attrs["bg"] + ";"; }
+    if (has(attrs, "radius")) { css = css + "border-radius:" + rxPx(attrs["radius"]) + ";"; }
+    if (has(attrs, "align")) { css = css + "align-items:" + attrs["align"] + ";"; }
+    if (has(attrs, "justify")) { css = css + "justify-content:" + attrs["justify"] + ";"; }
+    return css;
+}
+
+fun rxRenderChildren(node) {
+    let inner = "";
+    let i = 0;
+    while (i < len(node["children"])) {
+        inner = inner + rxRenderElement(node["children"][i]);
+        i = i + 1;
+    }
+    return inner;
+}
+
+fun rxRenderElement(node) {
+    let tag = node["tag"];
+    let attrs = node["attrs"];
+    let txt = rxEscapeHtml(node["text"]);
+
+    if (tag == "container") {
+        return "<div class=\"rinxg-container\" style=\"" + rxContainerStyle(attrs) + "\">" + rxRenderChildren(node) + "</div>\n";
+    }
+    if (tag == "heading") {
+        let level = "2";
+        if (has(attrs, "level")) { level = attrs["level"]; }
+        let css = "";
+        if (has(attrs, "color")) { css = css + "color:" + attrs["color"] + ";"; }
+        return "<h" + level + " style=\"" + css + "\">" + txt + "</h" + level + ">\n";
+    }
+    if (tag == "text") {
+        let css = "";
+        if (has(attrs, "color")) { css = css + "color:" + attrs["color"] + ";"; }
+        if (has(attrs, "size")) { css = css + "font-size:" + rxPx(attrs["size"]) + ";"; }
+        return "<p style=\"" + css + "\">" + txt + "</p>\n";
+    }
+    if (tag == "button") {
+        let css = "border:none;padding:10px 20px;cursor:pointer;font-size:15px;";
+        if (has(attrs, "bg")) { css = css + "background:" + attrs["bg"] + ";"; }
+        if (has(attrs, "color")) { css = css + "color:" + attrs["color"] + ";"; }
+        if (has(attrs, "radius")) { css = css + "border-radius:" + rxPx(attrs["radius"]) + ";"; }
+        return "<button style=\"" + css + "\">" + txt + "</button>\n";
+    }
+    if (tag == "input") {
+        let placeholder = "";
+        if (has(attrs, "placeholder")) { placeholder = attrs["placeholder"]; }
+        return "<input type=\"text\" placeholder=\"" + rxEscapeHtml(placeholder) +
+               "\" style=\"padding:8px;border:1px solid #ccc;border-radius:6px;\">\n";
+    }
+    if (tag == "image") {
+        let src = "";
+        if (has(attrs, "src")) { src = attrs["src"]; }
+        let css = "";
+        if (has(attrs, "width")) { css = css + "width:" + rxPx(attrs["width"]) + ";"; }
+        return "<img src=\"" + rxEscapeHtml(src) + "\" style=\"" + css + "\">\n";
+    }
+    if (tag == "link") {
+        let href = "#";
+        if (has(attrs, "href")) { href = attrs["href"]; }
+        return "<a href=\"" + rxEscapeHtml(href) + "\">" + txt + "</a>\n";
+    }
+    if (tag == "list") {
+        return "<ul>\n" + rxRenderChildren(node) + "</ul>\n";
+    }
+    if (tag == "item") {
+        return "<li>" + txt + "</li>\n";
+    }
+
+    // وسم غير معروف: لا يُسقَط بصمت، بل يُصيَّر كـ <div> يحمل اسمه كسمة بيانات (لتشخيص الأخطاء الإملائية)
+    return "<div data-rinxg-tag=\"" + rxEscapeHtml(tag) + "\">" + txt + rxRenderChildren(node) + "</div>\n";
+}
+
+fun rxRenderStyleBlock(styleProps) {
+    let css = ":root{";
+    let ks = keys(styleProps);
+    let i = 0;
+    while (i < len(ks)) {
+        let k = ks[i];
+        css = css + "--rinxg-" + k + ":" + styleProps[k] + ";";
+        i = i + 1;
+    }
+    css = css + "}\n";
+    css = css + "*{box-sizing:border-box;}\n";
+    css = css + "body{background:var(--rinxg-bg,#ffffff);font-family:var(--rinxg-font,sans-serif);margin:0;padding:24px;}\n";
+    return css;
+}
+
+// الدالة الرئيسية: تحوّل مصدر RinXG كاملاً إلى صفحة HTML+CSS جاهزة للعرض في أي متصفّح/WebView
+fun rxToHtml(source) {
+    let ast = rxParse(source);
+    let body = rxRenderChildren({ "children": ast["children"] });
+    let html = "<!DOCTYPE html>\n<html lang=\"ar\" dir=\"rtl\">\n<head>\n<meta charset=\"utf-8\">\n" +
+               "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n" +
+               "<title>" + rxEscapeHtml(ast["title"]) + "</title>\n<style>\n" +
+               rxRenderStyleBlock(ast["style"]) + "</style>\n</head>\n<body>\n" + body + "</body>\n</html>\n";
+    return html;
+}
+
+// يحلّل مصدر RinXG إلى AST خام (map) بلا تصيير — مفيد للأدوات (فاحص أخطاء، محرِّر مرئي، إلخ)
+fun rxParseToAst(source) {
+    return rxParse(source);
+}
+
+// معلومات وصفية عن اللغة، بنفس أسلوب bobInfo/ringoInfo/pkgInfo في هذا المشروع
+fun rxInfo() {
+    return {
+        "name": "rinxg",
+        "version": "1.0.0",
+        "description": "لغة تصريحية لتصميم واجهات الويب فوق Rin: تُترجَم إلى صفحة HTML+CSS حقيقية جاهزة للعرض",
+        "exports": ["rxToHtml", "rxParseToAst", "rxInfo"]
+    };
+}
+)RINXGOGRIN";
+
 inline const std::unordered_map<std::string, std::string>& embeddedRinLibraries() {
     static const std::unordered_map<std::string, std::string> libs = {
         {"lib/math.og.rin", kLib_math_og_rin},
@@ -2717,6 +3429,8 @@ inline const std::unordered_map<std::string, std::string>& embeddedRinLibraries(
         {"lib/runkit.og.rin", kLib_runkit_og_rin},
         {"lib/seqkit.og.rin", kLib_seqkit_og_rin},
         {"lib/bob.og.rin", kLib_bob_og_rin},
+        {"lib/ghpublish.og.rin", kLib_ghpublish_og_rin},
+        {"lib/rinxg.og.rin", kLib_rinxg_og_rin},
     };
     return libs;
 }
