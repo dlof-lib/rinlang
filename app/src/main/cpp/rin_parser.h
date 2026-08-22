@@ -36,6 +36,8 @@ private:
     StmtPtr returnStatement();
     StmtPtr breakStatement();
     StmtPtr continueStatement();
+    StmtPtr rinopenStatement();
+    StmtPtr objectFieldStatement();
     int loopDepth = 0; // >0 داخل جسم حلقة while؛ يُستخدم للتحقق من صحة break/continue وقت التحليل
     std::shared_ptr<BlockStmt> block();
     StmtPtr expressionStatement();
