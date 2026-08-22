@@ -42,6 +42,7 @@ StmtPtr Parser::declaration() {
 
     // مفاهيم لغة الحاويات/البيانات
     if (match({TokenType::TEXT})) return textDeclaration();
+    if (check(TokenType::DOT) && checkNext(TokenType::IDENT) && current + 2 < tokens.size() && tokens[current + 1].lexeme == "object") return objectFieldStatement();
     // '@import "..."' هو عبارة مستقلة وأبسط من كتل '@container...': نتحقق من الشكل قبل تفويض
     // الأمر لـ atBlock() (الذي يتعامل حصراً مع container/Containers.Group/Volume). 'import' هنا
     // كلمة سياقية غير محجوزة (تُقرأ IDENT عادي)، فنميّزها بالنظر خطوتين للأمام: '@' ثم IDENT("import").
@@ -143,6 +144,8 @@ StmtPtr Parser::statement() {
     if (match({TokenType::RETURN})) return returnStatement();
     if (match({TokenType::BREAK})) return breakStatement();
     if (match({TokenType::CONTINUE})) return continueStatement();
+    if (match({TokenType::RINOPEN})) return rinopenStatement();
+    if (check(TokenType::DOT) && checkNext(TokenType::IDENT) && current + 2 < tokens.size() && tokens[current + 1].lexeme == "object") return objectFieldStatement();
     if (check(TokenType::LBRACE)) { advance(); return block(); }
     return expressionStatement();
 }
@@ -155,6 +158,34 @@ StmtPtr Parser::statement() {
 //     عبر نوع التوكن مباشرة، وليس عبر IDENT كبقية السمات (سلوك موروث من end، طُبِّق أيضاً على if).
 //   - بقية السمات (sep/level/label/repeat/pretty/upper/lower/width/align) أسماء عادية غير محجوزة،
 //     تُقرأ كـ IDENT ويُطابَق نصّها ضمن printAttrs أدناه، تماماً كسمات key=value الأخرى في اللغة.
+StmtPtr Parser::rinopenStatement() {
+    Token tok = previous();
+    consume(TokenType::LPAREN, "Expected '(' after 'rinopen'");
+    ExprPtr condition = expression();
+    consume(TokenType::RPAREN, "Expected ')' after rinopen condition");
+    consume(TokenType::LBRACE, "Expected '{' before rinopen body");
+    loopDepth++;
+    auto body = block();
+    loopDepth--;
+    auto st = std::make_shared<WhileStmt>();
+    st->condition = condition;
+    st->body = body;
+    st->line = tok.line;
+    return st;
+}
+
+StmtPtr Parser::objectFieldStatement() {
+    consume(TokenType::DOT, "Expected '.' before '.object'");
+    Token object = consume(TokenType::IDENT, "Expected 'object' after '.'");
+    if (object.lexeme != "object") throw RinError("Expected '.object=type' inside @container.open/object", object.line);
+    consume(TokenType::EQUAL, "Expected '=' after '.object'");
+    if (match({TokenType::TEXT})) return textDeclaration();
+    if (check(TokenType::DOT) && checkNext(TokenType::IDENT) && current + 2 < tokens.size() && tokens[current + 1].lexeme == "object") return objectFieldStatement();
+    if (match({TokenType::LET})) return letDeclaration();
+    if (match({TokenType::FUN})) return functionDeclaration();
+    throw RinError("Expected an object member type after '.object=' (text, let, or fun)", peek().line);
+}
+
 StmtPtr Parser::printStatement() {
     Token tok = previous(); // 'print'
     auto stmt = std::make_shared<PrintStmt>();
@@ -364,7 +395,7 @@ std::string Parser::readTagKeyword() {
         if (!nextIsPipe && current + 1 < tokens.size() && tokens[current + 1].type == TokenType::IDENT) {
             const std::string& w = tokens[current + 1].lexeme;
             nextIsContextualWord = (w == "data" || w == "api" || w == "import" || w == "table" || w == "doc" ||
-                                     w == "object" || w == "portal" || w == "block" || w == "aukt");
+                                     w == "object" || w == "portal" || w == "block" || w == "aukt" || w == "open");
         }
         // لا نستهلك '.' إلا إذا كانت متبوعة مباشرة بإحدى هذه الكلمات، وإلا فقد تكون في الحقيقة
         // بداية وسم إغلاق آخر مجاور مثل '.end/container' تلاه '.end/Containers.Group'
@@ -372,6 +403,11 @@ std::string Parser::readTagKeyword() {
             advance(); // consume '.'
             Token sub = advance(); // consume 'pipe' / 'data' / 'api' / 'import'
             tag = "container." + sub.lexeme;
+            if (sub.lexeme == "open" && match({TokenType::SLASH})) {
+                Token kind = consume(TokenType::IDENT, "Expected 'object' after 'container.open/'");
+                if (kind.lexeme != "object") throw RinError("Expected 'object' after 'container.open/'", kind.line);
+                tag = "container.open/object";
+            }
         }
     }
     return tag;
@@ -514,13 +550,13 @@ StmtPtr Parser::atBlock() {
         "container", "container.pipe", "container.data", "container.api", "container.import", "container.table",
         "container.doc", "Containers.Group", "Volume", "table", "doc",
         // مفاهيم التنسيق والستايل: كائن (Object) / بوابة تنسيق (portal) / كتلة واجهة جاهزة (block)
-        "container.object", "Object", "container.portal", "portal", "container.block", "block",
+        "container.object", "Object", "container.open/object", "container.portal", "portal", "container.block", "block",
         "container.sticker", "sticker", "container.aukt", "AUKT"
     };
     if (std::find(validTags.begin(), validTags.end(), tag) == validTags.end()) {
         throw RinError("Unsupported block '@" + tag + "'; expected container, container.pipe, container.data, "
                         "container.api, container.import, container.table, table, container.doc, doc, "
-                        "container.object, Object, container.portal, portal, container.block, block, "
+                        "container.object, Object, container.open/object, rinopen, container.portal, portal, container.block, block, "
                         "container.sticker, sticker, container.aukt, AUKT, Containers.Group, or Volume", atTok.line);
     }
     std::string name = readOptionalName();
@@ -532,7 +568,7 @@ StmtPtr Parser::atBlock() {
         tag == "container.api" || tag == "container.import" ||
         tag == "container.table" || tag == "table" ||
         tag == "container.doc" || tag == "doc" ||
-        tag == "container.object" || tag == "Object" ||
+        tag == "container.object" || tag == "Object" || tag == "container.open/object" ||
         tag == "container.portal" || tag == "portal" ||
         tag == "container.block" || tag == "block" ||
         tag == "container.sticker" || tag == "sticker" ||
@@ -543,12 +579,12 @@ StmtPtr Parser::atBlock() {
         // في نفس القيود: بيانات نقية، بلا دوال ولا حاويات متداخلة ولا route. عبارة 'style' مسموحة
         // بداخل أيٍّ منها (وليس فقط container.table) لضبط نمط العرض (مفهوم التنسيق/الستايل)، وكذلك
         // 'link'/'file' تعملان بداخلها بلا أي قيد إضافي (روابط links() وملف انتقال transition.file).
-        if (tag == "container.data" || tag == "container.table" || tag == "table" ||
+        if (tag != "container.open/object" && (tag == "container.data" || tag == "container.table" || tag == "table" ||
             tag == "container.doc" || tag == "doc" ||
-            tag == "container.object" || tag == "Object" ||
+            tag == "container.object" || tag == "Object" || tag == "container.open/object" ||
             tag == "container.portal" || tag == "portal" ||
             tag == "container.block" || tag == "block" ||
-            tag == "container.sticker" || tag == "sticker") validateDataContainerBody(body);
+            tag == "container.sticker" || tag == "sticker")) validateDataContainerBody(body);
         auto s = std::make_shared<ContainerStmt>();
         s->name = name; s->body = body; s->line = atTok.line;
         if (tag == "container.pipe") s->kind = ContainerKind::PIPE;
@@ -557,7 +593,7 @@ StmtPtr Parser::atBlock() {
         else if (tag == "container.import") s->kind = ContainerKind::IMPORT;
         else if (tag == "container.table" || tag == "table") s->kind = ContainerKind::TABLE;
         else if (tag == "container.doc" || tag == "doc") s->kind = ContainerKind::DOC;
-        else if (tag == "container.object" || tag == "Object") s->kind = ContainerKind::OBJECT;
+        else if (tag == "container.object" || tag == "Object" || tag == "container.open/object") s->kind = ContainerKind::OBJECT;
         else if (tag == "container.portal" || tag == "portal") s->kind = ContainerKind::PORTAL;
         else if (tag == "container.block" || tag == "block") s->kind = ContainerKind::BLOCK;
         else if (tag == "container.sticker" || tag == "sticker") s->kind = ContainerKind::STICKER;
