@@ -1,13 +1,17 @@
 <!DOCTYPE html>
 <!--
-  هذا الملف هو "محمّل" (bootloader) عام فقط — لا يحتوي على أي محتوى خاص بصفحة
-  Rin نفسها (لا عنوان، لا أقسام، لا تنسيق للموقع). دوره الوحيد والعام: تحميل
-  محرّك Rin الرسمي المُصرَّف إلى WebAssembly، ثم جلب site.rin كنص خام وتنفيذه
-  فعلياً بهذا المحرّك داخل المتصفح، ثم عرض الناتج.
+  هذا الملف "محمّل" (bootloader) عام بحت — لا عنوان، لا نص، لا قسم، لا لون خاص
+  بصفحة Rin نفسها مكتوب هنا. دوره الوحيد: تحميل محرّك Rin/Loomtime الرسمي
+  المُصرَّف WebAssembly، تمرير site.rin إليه كنص خام عبر rin_loom_session_create()،
+  ثم رسم أي شجرة Strand (JSON: kind/name/attrs/geometry/children) يُعيدها ذلك
+  المحرّك عبر دالة عرض عامة واحدة (renderStrand) — تلك الدالة تربط "نوع Strand"
+  بعنصر DOM ("Column" -> flex عمودي، "Card" -> صندوق، "Text" -> نص...) ولا تعرف
+  شيئاً عن محتوى *هذه* الصفحة تحديداً؛ هي نفس ما يفعله بالضبط
+  tools/mirror-loom-preview/*.html كمرجع لنفس المحرّك (Fabric نفسها، JSON نفسه).
 
-  المصدر الحقيقي للصفحة بالكامل هو site.rin. هذا الملف يعادل وظيفياً ما يفعله
-  نظام تشغيل عند تشغيل ملف تنفيذي: بنية عامة لازمة تقنياً (المتصفح لا يفهم
-  إلا HTML/JS/WASM)، لكنها لا "تكتب" أي جزء من الصفحة نفسها.
+  المصدر الحقيقي الوحيد لكل كلمة/لون/سلوك في الصفحة هو site.rin. المتصفح لا
+  يفهم إلا HTML/JS/WASM (بنية تشغيل لازمة تقنياً، تماماً كنظام تشغيل يشغّل ملفاً
+  تنفيذياً) — لكنها لا "تكتب" أي جزء من محتوى الصفحة نفسه.
 -->
 <html lang="ar" dir="rtl">
 <head>
@@ -15,9 +19,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>Rin</title>
 <style>
-  html,body{margin:0;height:100%;background:#0a0a10;color:#eceef7;
-    font-family:system-ui,sans-serif;display:flex;align-items:center;justify-content:center}
-  #boot{text-align:center;opacity:.85}
+  /* ---- تنسيق عام للمحمِّل ومسرح الرسم فقط — لا شيء منه خاص بمحتوى site.rin ---- */
+  html,body{margin:0;background:#05050a;color:#eceef7;font-family:system-ui,sans-serif}
+  #boot{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
+    background:#05050a;z-index:999;transition:opacity .25s ease}
+  #boot.hidden{opacity:0;pointer-events:none}
+  #boot .inner{text-align:center;opacity:.85}
   #boot .dot{width:10px;height:10px;border-radius:50%;background:#7c5cff;
     display:inline-block;margin:0 3px;animation:p 1s infinite ease-in-out}
   #boot .dot:nth-child(2){animation-delay:.15s}
@@ -26,67 +33,197 @@
   #boot p{margin-top:14px;font-size:13px;color:#9a9ab0;direction:ltr;font-family:monospace}
   #bootErr{white-space:pre-wrap;text-align:left;direction:ltr;font-family:monospace;
     font-size:13px;color:#ff8a8a;max-width:720px;margin:16px auto 0;display:none}
+
+  #stage-outer{min-height:100vh;display:flex;justify-content:center;background:#05050a;
+    padding:24px 12px}
+  #stage{position:relative;width:100%;max-width:var(--rw,420px);background:#0a0a10;
+    border-radius:20px;overflow:hidden;box-shadow:0 30px 80px -30px rgba(0,0,0,.6)}
+  #backdrop{position:absolute;inset:0;background:rgba(0,0,0,.55);opacity:0;
+    pointer-events:none;transition:opacity .2s ease;z-index:40}
+  #backdrop.show{opacity:1;pointer-events:auto}
+
+  /* ---- تعيين عام (generic) لكل "نوع Strand" — لا يعرف شيئاً عن محتوى الصفحة ---- */
+  .strand{position:absolute;box-sizing:border-box}
+  .k-Text{white-space:pre-wrap;line-height:1.4}
+  .k-Card{transition:transform .15s ease}
+  .k-Button{display:flex;align-items:center;justify-content:center;cursor:pointer;
+    user-select:none;border:none;font-family:inherit;transition:filter .15s ease,transform .1s ease}
+  .k-Button:active{transform:scale(.97)}
+  .k-MenuItem{display:flex;align-items:center;cursor:pointer;user-select:none;border-radius:8px}
+  .k-MenuItem:hover{background:#191926}
+  .k-Divider{}
+  .clickable{cursor:pointer}
+  .clickable:hover{filter:brightness(1.12)}
+  .k-Drawer{transition:left .25s cubic-bezier(.2,.8,.2,1);z-index:50}
+  .k-TopBar{backdrop-filter:blur(10px);position:sticky;top:0;z-index:30}
 </style>
 </head>
 <body>
   <div id="boot">
-    <div><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
-    <p id="bootMsg">loading rin engine (wasm)…</p>
-    <pre id="bootErr"></pre>
+    <div class="inner">
+      <div><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
+      <p id="bootMsg">loading rin engine (wasm)…</p>
+      <pre id="bootErr"></pre>
+    </div>
+  </div>
+
+  <div id="stage-outer">
+    <div id="stage">
+      <div id="backdrop"></div>
+    </div>
   </div>
 
   <script src="rin.js"></script>
   <script>
-  (async function boot() {
-    const msg = document.getElementById('bootMsg');
-    const errBox = document.getElementById('bootErr');
+  (function () {
+    var DESIGN_WIDTH = 420; // rootWidth: عرض التصميم الذي يخطّط عنده محرّك Loom نفسه
+
+    var bootEl = document.getElementById('boot');
+    var bootMsg = document.getElementById('bootMsg');
+    var bootErr = document.getElementById('bootErr');
+    var stage = document.getElementById('stage');
+    var backdrop = document.getElementById('backdrop');
 
     function fail(title, detail) {
-      msg.textContent = title;
-      errBox.textContent = detail || '';
-      errBox.style.display = 'block';
+      bootMsg.textContent = title;
+      bootErr.textContent = detail || '';
+      bootErr.style.display = 'block';
     }
 
-    try {
-      // rin.js (المُولَّد بـ MODULARIZE=1, EXPORT_NAME=RinModule) يوفّر دالة
-      // مصنع (factory) عامة اسمها RinModule تُعيد Promise لنسخة المحرّك.
-      if (typeof RinModule !== 'function') {
-        throw new Error('rin.js لم يُحمَّل بشكل صحيح (تأكد أن rin.js و rin.wasm منشورَين بجانب هذا الملف).');
+    // ------------------------------------------------------------------
+    // renderStrand: الدالة العامة الوحيدة التي تحوّل JSON إلى DOM. تتعامل
+    // فقط مع "kind" و"attrs" العامة — لا تحتوي على أي كلمة أو رقم خاص
+    // بمحتوى site.rin.
+    // ------------------------------------------------------------------
+    function renderFabric(root) {
+      stage.querySelectorAll('.strand').forEach(function (n) { n.remove(); });
+      stage.style.height = root.h + 'px';
+      var frag = document.createDocumentFragment();
+      walk(root, frag);
+      stage.appendChild(frag);
+    }
+
+    function walk(node, parent) {
+      var el = buildElement(node);
+      parent.appendChild(el);
+      for (var i = 0; i < node.children.length; i++) walk(node.children[i], el.childElementCount !== undefined ? el : el);
+    }
+
+    function buildElement(node) {
+      var a = node.attrs || {};
+      var el = document.createElement(node.kind === 'Button' ? 'button' : 'div');
+      el.className = 'strand k-' + node.kind;
+      if (node.name) el.id = node.name;
+      el.style.left = node.x + 'px';
+      el.style.top = node.y + 'px';
+      el.style.width = node.w + 'px';
+      el.style.height = node.h + 'px';
+
+      // ---- سمات عامة يفهمها أي Strand من أي نوع ----
+      if (a.bg) el.style.background = a.bg;
+      if (a.gradient) {
+        var parts = a.gradient.split(',');
+        el.style.background = 'linear-gradient(135deg,' + parts.join(',') + ')';
       }
-      const Module = await RinModule();
+      if (a.radius) el.style.borderRadius = a.radius + 'px';
+      if (a.color) el.style.color = a.color;
+      if (a.weight) el.style.fontWeight = a.weight;
+      if (a.size) el.style.fontSize = a.size + 'px';
+      if (a.mono === 'true') el.style.fontFamily = "'JetBrains Mono', ui-monospace, Consolas, monospace";
+      if (a.shadow) el.style.boxShadow = '0 10px 30px -12px rgba(0,0,0,.5)';
 
-      msg.textContent = 'fetching site.rin…';
-      const res = await fetch('site.rin', { cache: 'no-store' });
-      if (!res.ok) throw new Error('تعذّر جلب site.rin (HTTP ' + res.status + ')');
-      const source = await res.text();
+      // ---- نص العرض بحسب نوع الـ Strand ----
+      if (node.kind === 'Text' || node.kind === 'MenuItem') el.textContent = a.text || a.label || '';
+      if (node.kind === 'Button') el.textContent = a.label || '';
 
-      msg.textContent = 'executing site.rin via the official rin engine…';
-      const runResult = Module.ccall('rin_run_source', 'string', ['string'], [source]);
-
-      if (typeof runResult === 'string' && runResult.startsWith('__RIN_ERROR__:')) {
-        const rest = runResult.slice('__RIN_ERROR__:'.length);
-        const sep = rest.indexOf(':');
-        const line = sep === -1 ? '?' : rest.slice(0, sep);
-        const message = sep === -1 ? rest : rest.slice(sep + 1);
-        throw new Error('Rin runtime error at line ' + line + ': ' + message);
+      // ---- تفاعل عام: أي Strand معه url أو onTap قابل للنقر ----
+      var hasUrl = !!a.url;
+      var hasTap = !!a.onTap;
+      if (hasUrl || hasTap) {
+        el.classList.add('clickable');
+        el.addEventListener('click', function (ev) {
+          ev.stopPropagation();
+          if (a.copyText && navigator.clipboard) {
+            navigator.clipboard.writeText(a.copyText).catch(function () {});
+          }
+          if (hasTap) dispatchTapAt(node.x + node.w / 2, node.y + node.h / 2);
+          if (hasUrl) {
+            if (a.url.charAt(0) === '#') {
+              var target = document.getElementById(a.url.slice(1));
+              if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            } else {
+              window.open(a.url, '_blank', 'noopener');
+            }
+          }
+        });
       }
 
-      // site.rin يكتب الصفحة فعلياً عبر writeFile("dist/index.html", ...) —
-      // هذا هو المسار الوحيد لإخراج HTML؛ نقرأه هنا من نظام ملفات WASM الوهمي.
-      let html;
+      // ---- Drawer: يُموضَع بحسب سمة open (خارج/داخل الشاشة)، ويعرض/يخفي الخلفية ----
+      if (node.kind === 'Drawer') {
+        var isOpen = node.x >= 0;
+        backdrop.classList.toggle('show', isOpen);
+      }
+
+      return el;
+    }
+
+    backdrop.addEventListener('click', function () {
+      var drawer = document.getElementById('mobileMenu');
+      if (!drawer) return;
+      var menuBtn = document.getElementById('menuBtn');
+      if (menuBtn) {
+        var r = menuBtn.getBoundingClientRect(), sr = stage.getBoundingClientRect();
+        dispatchTapAt(r.left - sr.left + r.width / 2, r.top - sr.top + r.height / 2);
+      }
+    });
+
+    // ------------------------------------------------------------------
+    var session = null;
+
+    function dispatchTapAt(x, y) {
+      if (!session) return;
+      var json = Module.ccall('rin_loom_session_tap', 'string',
+        ['number', 'number', 'number'], [session, x, y]);
+      applyFrame(json);
+    }
+
+    function applyFrame(jsonText) {
+      var data;
+      try { data = JSON.parse(jsonText); } catch (e) { fail('تعذّر قراءة ناتج المحرّك (JSON):', String(e)); return; }
+      if (!data.ok) { fail('خطأ في site.rin:', (data.error || 'unknown') + (data.line ? ' (سطر ' + data.line + ')' : '')); return; }
+      renderFabric(data.fabric);
+    }
+
+    var Module;
+    (async function boot() {
       try {
-        html = Module.FS.readFile('dist/index.html', { encoding: 'utf8' });
-      } catch (e) {
-        throw new Error('نُفِّذ site.rin بنجاح لكن لم يُنتج dist/index.html — تأكد أن الملف ينتهي بـ writeFile("dist/index.html", ...).');
-      }
+        if (typeof RinModule !== 'function') {
+          throw new Error('rin.js لم يُحمَّل بشكل صحيح (تأكد أن rin.js وrin.wasm منشوران بجانب هذا الملف).');
+        }
+        Module = await RinModule();
 
-      document.open();
-      document.write(html);
-      document.close();
-    } catch (e) {
-      console.error(e);
-      fail('تعذّر تشغيل site.rin في المتصفح:', String(e && e.message ? e.message : e));
-    }
+        bootMsg.textContent = 'fetching site.rin…';
+        var res = await fetch('site.rin', { cache: 'no-store' });
+        if (!res.ok) throw new Error('تعذّر جلب site.rin (HTTP ' + res.status + ')');
+        var source = await res.text();
+
+        bootMsg.textContent = 'building the @view Fabric via the official Loomtime engine…';
+        session = Module.ccall('rin_loom_session_create', 'number',
+          ['string', 'number'], [source, DESIGN_WIDTH]);
+
+        var json = Module.ccall('rin_loom_session_render_json', 'string', ['number'], [session]);
+        applyFrame(json);
+
+        bootEl.classList.add('hidden');
+      } catch (e) {
+        console.error(e);
+        fail('تعذّر تشغيل site.rin في المتصفح:', String(e && e.message ? e.message : e));
+      }
+    })();
+
+    window.addEventListener('beforeunload', function () {
+      if (session && Module) Module.ccall('rin_loom_session_free', null, ['number'], [session]);
+    });
   })();
   </script>
 </body>
