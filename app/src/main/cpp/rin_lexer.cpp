@@ -11,7 +11,7 @@ static const std::unordered_map<std::string, TokenType> keywords = {
     {"return", TokenType::RETURN}, {"true", TokenType::TRUE},
     {"false", TokenType::FALSE},   {"nil", TokenType::NIL},
     {"and", TokenType::AND},       {"or", TokenType::OR},
-    {"break", TokenType::BREAK},   {"continue", TokenType::CONTINUE},
+    {"break", TokenType::BREAK},   {"continue", TokenType::CONTINUE}, {"rinopen", TokenType::RINOPEN},
     {"for", TokenType::FOR}, // حلقة for على طراز C: for (init; condition; increment) { ... }
 
     // مفاهيم لغة الحاويات/البيانات (data container language) - حساسة لحالة الأحرف
