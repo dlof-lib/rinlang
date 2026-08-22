@@ -10,7 +10,7 @@ enum class TokenType {
     NUMBER, STRING, IDENT,
     // core keywords
     LET, PRINT, IF, ELSE, WHILE, FUN, RETURN, TRUE, FALSE, NIL, AND, OR,
-    BREAK, CONTINUE, // break / continue -> التحكّم المبكّر داخل حلقات while/for
+    BREAK, CONTINUE, RINOPEN, // rinopen = الاسم الموحّد للحلقة
     FOR,             // for (init; condition; increment) { ... } -> حلقة for على طراز C (إضافة جديدة، additive بحتة)
     // data-container language keywords (لغة الحاويات/البيانات)
     TEXT,            // text  -> إعلان قيمة نصية
