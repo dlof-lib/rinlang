@@ -78,5 +78,26 @@ int main() {
         print "import ok";
     )RIN");
 
+    // 6) unified OOP + loop container:
+    // @container.open/object permits members, methods, and all existing loop constructs.
+    // ".object=text" is the compact member declaration, while "rinopen" is the unified loop name.
+    runOk("container.open/object + .object + rinopen", R"RIN(
+        @container.open/object=counter
+            .object=text title = "Rin";
+            let i = 0;
+            fun greet() { print title; }
+            rinopen(i < 3) {
+                print i;
+                i = i + 1;
+            }
+            while (i < 5) {
+                i = i + 1;
+            }
+            for (let j = 0; j < 2; j = j + 1) {
+                print j;
+            }
+        .end/container.open/object
+    )RIN");
+
     return 0;
 }
