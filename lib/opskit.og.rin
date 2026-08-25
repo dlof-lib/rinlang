@@ -1,0 +1,312 @@
+// ============================================================================
+//  lib/opskit.og.rin — عدّة عمليات عامة فوق Rin (ملفات/تجميع/تصويت/فرز/مجموعات)
+//  استيراد:
+//    @import "lib/opskit.og.rin";
+//    @import "lib/opskit.og.rin" as ops;
+//
+//  ملاحظة تصميم مهمة: دوال fun المُعرَّفة داخل @container.open/object في Rin
+//  محصورة داخل نطاق تلك الحاوية نفسها فقط (لا يمكن استدعاؤها من حاوية أخرى ولا
+//  حتى من المستوى الأعلى خارجها). لذلك دوال هذه المكتبة مُعرَّفة هنا كدوال
+//  عامة عادية (بنفس أسلوب كل ملفات lib/*.og.rin الأخرى) لتبقى قابلة للاستدعاء
+//  من أي مكان — بما في ذلك من *داخل* حاوياتك الخاصة، وهذا هو "الربط بالحاوية"
+//  المقصود: استخدام هذه الدوال كأدوات عمل لمنطق حاويتك، تماماً كما تُستدعى
+//  double() من داخل @container.open/object في مثال README نفسه. راجع
+//  examples/opskit_containers_demo.rin لأمثلة كاملة تستخدم كل دالة من *داخل*
+//  حاويات @container.open/object و@Containers.Group حقيقية.
+//
+//  ملاحظة لغوية: لا تملك Rin عامل نفي "!" ولا كلمة "not"؛ النفي دائماً
+//  بمقارنة صريحة x == false (كبقية مكتبات lib/*.og.rin).
+// ============================================================================
+
+// ---- 1) نسخ الملفات (Copying files) ----------------------------------------
+fun copyFile(src, dest) {
+    if (fileExists(src) == false) {
+        return { ok: false, error: "copyFile: الملف غير موجود: " + src };
+    }
+    let content = readFile(src);
+    writeFile(dest, content);
+    return { ok: true, from: src, to: dest };
+}
+
+// pairs = [{from:"a", to:"b"}, ...] — نسخ عدة ملفات دفعة واحدة
+fun copyFiles(pairs) {
+    let results = [];
+    let i = 0;
+    while (i < len(pairs)) {
+        push(results, copyFile(pairs[i]["from"], pairs[i]["to"]));
+        i = i + 1;
+    }
+    return results;
+}
+
+// ---- 2) الدمج (merge) --------------------------------------------------------
+fun mergeArrays(a, b) {
+    let result = [];
+    let i = 0;
+    while (i < len(a)) { push(result, a[i]); i = i + 1; }
+    i = 0;
+    while (i < len(b)) { push(result, b[i]); i = i + 1; }
+    return result;
+}
+
+// مفاتيح b تُطغي على مفاتيح a عند التعارض
+fun mergeMaps(a, b) {
+    let result = {};
+    let ka = keys(a);
+    let i = 0;
+    while (i < len(ka)) { result[ka[i]] = a[ka[i]]; i = i + 1; }
+    let kb = keys(b);
+    i = 0;
+    while (i < len(kb)) { result[kb[i]] = b[kb[i]]; i = i + 1; }
+    return result;
+}
+
+// ---- 3) إنشاء أرشيف ZIP (Create a zip) --------------------------------------
+// يبني ملف ZIP حقيقي (تخزين stored بلا ضغط) من entries=[{name,content}, ...]،
+// بنفس أسلوب examples/make_png.rin (crc32/chr فقط، بلا كود C++ خاص بـ ZIP).
+fun le16(n) {
+    return chr(n % 256) + chr(floor(n / 256) % 256);
+}
+fun le32(n) {
+    let b0 = n % 256;
+    let b1 = floor(n / 256) % 256;
+    let b2 = floor(n / 65536) % 256;
+    let b3 = floor(n / 16777216) % 256;
+    return chr(b0) + chr(b1) + chr(b2) + chr(b3);
+}
+fun createZip(entries, outPath) {
+    let body = "";
+    let central = "";
+    let offset = 0;
+    let i = 0;
+    while (i < len(entries)) {
+        let name = entries[i]["name"];
+        let content = entries[i]["content"];
+        let crc = crc32(content);
+        let size = len(content);
+
+        let localHeader = le32(67324752)
+            + le16(20) + le16(0) + le16(0)
+            + le16(0) + le16(0)
+            + le32(crc)
+            + le32(size) + le32(size)
+            + le16(len(name)) + le16(0)
+            + name;
+
+        body = body + localHeader + content;
+
+        let centralHeader = le32(33639248)
+            + le16(20) + le16(20) + le16(0) + le16(0)
+            + le16(0) + le16(0)
+            + le32(crc)
+            + le32(size) + le32(size)
+            + le16(len(name)) + le16(0) + le16(0)
+            + le16(0) + le16(0) + le32(0)
+            + le32(offset)
+            + name;
+
+        central = central + centralHeader;
+        offset = offset + len(localHeader) + size;
+        i = i + 1;
+    }
+
+    let endRecord = le32(101010256)
+        + le16(0) + le16(0)
+        + le16(len(entries)) + le16(len(entries))
+        + le32(len(central)) + le32(offset)
+        + le16(0);
+
+    writeFile(outPath, body + central + endRecord);
+    return { ok: true, path: outPath, files: len(entries) };
+}
+
+// ---- 4) التنزيل (download) ---------------------------------------------------
+fun download(url, destPath) {
+    let content = httpGet(url);
+    writeFile(destPath, content);
+    return { ok: true, url: url, path: destPath, bytes: len(content) };
+}
+
+// ---- 5) التصويت (vote) -------------------------------------------------------
+// votes = ["A","B","A","C","A","B"] -> {counts:{...}, winner:"A", total:6}
+fun vote(votes) {
+    let counts = {};
+    let i = 0;
+    while (i < len(votes)) {
+        let choice = votes[i];
+        if (has(counts, choice)) {
+            counts[choice] = counts[choice] + 1;
+        } else {
+            counts[choice] = 1;
+        }
+        i = i + 1;
+    }
+    let opts = keys(counts);
+    let winner = nil;
+    let best = -1;
+    i = 0;
+    while (i < len(opts)) {
+        if (counts[opts[i]] > best) {
+            best = counts[opts[i]];
+            winner = opts[i];
+        }
+        i = i + 1;
+    }
+    return { counts: counts, winner: winner, total: len(votes) };
+}
+
+// ---- 6) الاستعادة (restoration) — حاوية مستندات NoSQL حقيقية -----------------
+// "Snapshots" حاوية @container.doc فعلية (لا مجرد map عادي)، بحيث تُستعمل نقاط
+// الاستعادة عبر أدوات اللغة الحقيقية لقواعد البيانات (insertDoc/queryDocs).
+@container.doc=Snapshots
+.end/container.doc
+
+fun snapshotSaveCount() {
+    return len(docIds("Snapshots"));
+}
+
+// يحفظ نسخة جديدة باسم label تحمل الحالة state
+fun snapshot(label, state) {
+    let version = snapshotSaveCount() + 1;
+    let docId = label + "#" + toString(version);
+    insertDoc("Snapshots", docId, { label: label, state: state, version: version });
+    return { ok: true, label: label, version: version };
+}
+
+// يعيد آخر نسخة محفوظة باسم label (الأحدث version)، أو {ok:false} إن لم توجد
+fun restore(label) {
+    let matches = queryDocs("Snapshots", "label", label);
+    if (len(matches) == 0) {
+        return { ok: false, error: "restore: لا توجد نسخة محفوظة باسم: " + label };
+    }
+    let best = matches[0];
+    let i = 1;
+    while (i < len(matches)) {
+        if (matches[i]["version"] > best["version"]) { best = matches[i]; }
+        i = i + 1;
+    }
+    return { ok: true, label: label, version: best["version"], state: best["state"] };
+}
+
+// ---- 7) الفرق (difference) ---------------------------------------------------
+// عناصر موجودة في a وليست في b (بلا تكرار في الناتج)
+fun difference(a, b) {
+    let result = [];
+    let i = 0;
+    while (i < len(a)) {
+        let inB = contains(b, a[i]);
+        let inResult = contains(result, a[i]);
+        if (inB == false and inResult == false) {
+            push(result, a[i]);
+        }
+        i = i + 1;
+    }
+    return result;
+}
+
+// ---- 8) المجموعات A / B / C (Group A / Group B / Group C) -------------------
+// تصنيف حيّ وقت التشغيل: أقل من thresholdAB -> A، وإلا أقل من thresholdBC -> B،
+// وإلا -> C. راجع أيضاً @Containers.Group=Classification في
+// examples/opskit_containers_demo.rin للصيغة التصريحية الرسمية للمجموعات
+// (GroupA/GroupB/GroupC كحاويات فعلية تُستعلَم بـ groupContainers/groupMembers).
+fun classifyIntoGroups(items, scoreFn, thresholdAB, thresholdBC) {
+    let groupA = [];
+    let groupB = [];
+    let groupC = [];
+    let i = 0;
+    while (i < len(items)) {
+        let score = scoreFn(items[i]);
+        if (score < thresholdAB) {
+            push(groupA, items[i]);
+        } else {
+            if (score < thresholdBC) {
+                push(groupB, items[i]);
+            } else {
+                push(groupC, items[i]);
+            }
+        }
+        i = i + 1;
+    }
+    return { A: groupA, B: groupB, C: groupC };
+}
+
+// ---- 9) كتلة الأرقام (number block) ------------------------------------------
+// numberBlocks([1,2,3,4,5,6,7], 3) -> [[1,2,3],[4,5,6],[7]]
+fun numberBlocks(numbers, blockSize) {
+    let blocks = [];
+    let current = [];
+    let i = 0;
+    while (i < len(numbers)) {
+        push(current, numbers[i]);
+        if (len(current) == blockSize) {
+            push(blocks, current);
+            current = [];
+        }
+        i = i + 1;
+    }
+    if (len(current) > 0) { push(blocks, current); }
+    return blocks;
+}
+
+// numberBlockText(1234567) -> "1,234,567"
+fun numberBlockText(n) {
+    let s = toString(floor(abs(n)));
+    let out = "";
+    let count = 0;
+    let i = len(s) - 1;
+    while (i >= 0) {
+        out = charAt(s, i) + out;
+        count = count + 1;
+        if (count % 3 == 0 and i > 0) { out = "," + out; }
+        i = i - 1;
+    }
+    if (n < 0) { out = "-" + out; }
+    return out;
+}
+
+// ---- 10) الفقاعة (bubble) -----------------------------------------------------
+// فرز فقاعي تصاعدي كلاسيكي، يعيد مصفوفة جديدة (لا يعدّل arr الأصلية)
+fun bubble(arr) {
+    let a = mergeArrays(arr, []);
+    let n = len(a);
+    let i = 0;
+    while (i < n) {
+        let j = 0;
+        while (j < n - i - 1) {
+            if (a[j] > a[j + 1]) {
+                let tmp = a[j];
+                a[j] = a[j + 1];
+                a[j + 1] = tmp;
+            }
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    return a;
+}
+
+// ---- 11) ترتيب تنيل (Order of Tenil) -----------------------------------------
+// ترتيب إدراج (insertion sort) مستقر مع مفتاح مقارنة keyFn(item) اختياري
+// (استخدم identityKey للأرقام/النصوص مباشرة). يعيد مصفوفة جديدة.
+// ملاحظة: "تنيل" ليست خوارزمية قياسية موثّقة، فنُفِّذت هنا كترتيب إدراج مستقر
+// عام قابل للتخصيص لاحقاً حسب المقصود الدقيق إن اختلف.
+fun tenilOrder(arr, keyFn) {
+    let a = mergeArrays(arr, []);
+    let i = 1;
+    while (i < len(a)) {
+        let current = a[i];
+        let currentKey = keyFn(current);
+        let j = i - 1;
+        while (j >= 0 and keyFn(a[j]) > currentKey) {
+            a[j + 1] = a[j];
+            j = j - 1;
+        }
+        a[j + 1] = current;
+        i = i + 1;
+    }
+    return a;
+}
+
+fun identityKey(x) {
+    return x;
+}
