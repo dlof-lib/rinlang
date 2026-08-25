@@ -200,6 +200,79 @@ static double asNumber(const Value& v, const std::string& fn, int line) {
     return v.number;
 }
 
+// ---- مفهوم "token": يحوّل TokenType إلى اسمه النصي (للاستخدام في native "tokens" أدناه، التي
+// تكشف تدفّق الرموز اللغوية الفعلي الذي ينتجه محلّل Rin الحقيقي (rin::Lexer) للمستخدم/المبرمج،
+// بدل أن يبقى تفصيلاً داخلياً غير مرئي. مفيد لتعلّم اللغة، تصحيح أخطاء بناء الجملة، أو بناء أدوات
+// تحليل نصوص (مثل lib/lexkit.og.rin) تعتمد على معرفة كيف يُقسَّم مصدر Rin فعلياً إلى tokens.
+static std::string tokenTypeName(TokenType t) {
+    switch (t) {
+        case TokenType::NUMBER: return "NUMBER";
+        case TokenType::STRING: return "STRING";
+        case TokenType::IDENT: return "IDENT";
+        case TokenType::LET: return "LET";
+        case TokenType::PRINT: return "PRINT";
+        case TokenType::IF: return "IF";
+        case TokenType::ELSE: return "ELSE";
+        case TokenType::WHILE: return "WHILE";
+        case TokenType::FUN: return "FUN";
+        case TokenType::RETURN: return "RETURN";
+        case TokenType::TRUE: return "TRUE";
+        case TokenType::FALSE: return "FALSE";
+        case TokenType::NIL: return "NIL";
+        case TokenType::AND: return "AND";
+        case TokenType::OR: return "OR";
+        case TokenType::BREAK: return "BREAK";
+        case TokenType::CONTINUE: return "CONTINUE";
+        case TokenType::RINOPEN: return "RINOPEN";
+        case TokenType::FOR: return "FOR";
+        case TokenType::TEXT: return "TEXT";
+        case TokenType::CONTAINER: return "CONTAINER";
+        case TokenType::CONTAINERS: return "CONTAINERS";
+        case TokenType::GROUP: return "GROUP";
+        case TokenType::VOLUME: return "VOLUME";
+        case TokenType::SECTION: return "SECTION";
+        case TokenType::TRANSLATIONS: return "TRANSLATIONS";
+        case TokenType::TRANSLATION: return "TRANSLATION";
+        case TokenType::LINK: return "LINK";
+        case TokenType::TYING: return "TYING";
+        case TokenType::MERGE: return "MERGE";
+        case TokenType::INSTALLATION: return "INSTALLATION";
+        case TokenType::SIMPLIFIED: return "SIMPLIFIED";
+        case TokenType::SAVE: return "SAVE";
+        case TokenType::FILE_KW: return "FILE";
+        case TokenType::END: return "END";
+        case TokenType::PIPE_KW: return "PIPE_KW";
+        case TokenType::PLUS: return "PLUS";
+        case TokenType::MINUS: return "MINUS";
+        case TokenType::STAR: return "STAR";
+        case TokenType::SLASH: return "SLASH";
+        case TokenType::PERCENT: return "PERCENT";
+        case TokenType::EQUAL: return "EQUAL";
+        case TokenType::EQUAL_EQUAL: return "EQUAL_EQUAL";
+        case TokenType::BANG: return "BANG";
+        case TokenType::BANG_EQUAL: return "BANG_EQUAL";
+        case TokenType::LESS: return "LESS";
+        case TokenType::LESS_EQUAL: return "LESS_EQUAL";
+        case TokenType::GREATER: return "GREATER";
+        case TokenType::GREATER_EQUAL: return "GREATER_EQUAL";
+        case TokenType::LPAREN: return "LPAREN";
+        case TokenType::RPAREN: return "RPAREN";
+        case TokenType::LBRACE: return "LBRACE";
+        case TokenType::RBRACE: return "RBRACE";
+        case TokenType::LBRACKET: return "LBRACKET";
+        case TokenType::RBRACKET: return "RBRACKET";
+        case TokenType::COLON: return "COLON";
+        case TokenType::COMMA: return "COMMA";
+        case TokenType::SEMICOLON: return "SEMICOLON";
+        case TokenType::AT: return "AT";
+        case TokenType::DOT: return "DOT";
+        case TokenType::PIPE: return "PIPE";
+        case TokenType::END_OF_FILE: return "EOF";
+        case TokenType::ERROR: return "ERROR";
+    }
+    return "UNKNOWN";
+}
+
 static std::string asString(const Value& v, const std::string& fn, int line) {
     if (v.type != Value::Type::STRING) {
         throw RinError("'" + fn + "' expects a string but got " + v.typeName(), line);
@@ -1045,6 +1118,52 @@ void Interpreter::registerNatives() {
     natives["jsonDecode"] = [](std::vector<Value>& a, int line) -> Value {
         expectArgs("jsonDecode", a, 1, line);
         return json::decodeOrRaw(asString(a[0], "jsonDecode", line));
+    };
+
+    // tokens(source) -> مصفوفة tokens حقيقية (كل عنصر: {type, lexeme, line}) ناتجة عن تشغيل
+    // rin::Lexer الفعلي على النص source، تماماً كما يراه المحلل النحوي الداخلي بالضبط قبل أي بناء AST.
+    // يكشف مفهوم "token" للمبرمج نفسه (تعلّم/تصحيح أخطاء بناء الجملة/أدوات تحليل)، بدل أن يبقى تفصيلاً
+    // داخلياً غير مرئي. أخطاء اللغة الصريحة (نص غير مُغلَق، محرف غير متوقّع...) تُرمى كـ RinError عادي
+    // بنفس أسلوب باقي اللغة (وليس بصمت كـ token من نوع ERROR)، لأن rin::Lexer::scanTokens() نفسها
+    // تفعل ذلك بالفعل. لا يُنتج أبداً TokenType::ERROR عملياً حالياً؛ يبقى مُعالَجاً في tokenTypeName
+    // فقط للاكتمال في حال أُضيف مستقبلاً.
+    natives["tokens"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("tokens", a, 1, line);
+        std::string source = asString(a[0], "tokens", line);
+        Lexer lexer(source);
+        std::vector<Token> toks;
+        try {
+            toks = lexer.scanTokens();
+        } catch (RinError& e) {
+            throw RinError("'tokens': " + e.message, line);
+        }
+        auto arr = std::make_shared<ArrayData>();
+        arr->reserve(toks.size());
+        for (auto& t : toks) {
+            auto m = std::make_shared<MapData>();
+            m->push_back({Value::string("type"), Value::string(tokenTypeName(t.type))});
+            m->push_back({Value::string("lexeme"), Value::string(t.lexeme)});
+            m->push_back({Value::string("line"), Value::num((double)t.line)});
+            arr->push_back(Value::makeMap(m));
+        }
+        return Value::makeArray(arr);
+    };
+    // tokenType(source) -> نوع أول token فقط (نص)، اختصار مريح عند فحص رمز واحد بدل مصفوفة كاملة
+    // مثلاً: tokenType("let") == "LET"، tokenType("foo") == "IDENT"، tokenType("==") == "EQUAL_EQUAL"
+    natives["tokenType"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("tokenType", a, 1, line);
+        std::string source = asString(a[0], "tokenType", line);
+        Lexer lexer(source);
+        std::vector<Token> toks;
+        try {
+            toks = lexer.scanTokens();
+        } catch (RinError& e) {
+            throw RinError("'tokenType': " + e.message, line);
+        }
+        for (auto& t : toks) {
+            if (t.type != TokenType::END_OF_FILE) return Value::string(tokenTypeName(t.type));
+        }
+        return Value::string("EOF");
     };
 
     natives["httpRequest"] = [this](std::vector<Value>& a, int line) -> Value {
