@@ -133,3 +133,22 @@
 ### توثيق: `README.md`
 قسم جديد "### وسم الإغلاق `.end/...` — دليل كامل" (أمثلة مُختبَرة فعلياً لكل ميزة: رسائل الخطأ
 الحقيقية، `.end;`، والتحقق الاسمي) أعلى جدول "المفاهيم المدعومة" في قسم لغة الحاويات.
+
+## إضافات: opskit.og.rin + الهوية البصرية
+- ملف جديد `lib/opskit.og.rin` يضيف: copyFile/copyFiles، mergeArrays/mergeMaps،
+  createZip، download، vote، snapshot/restore، difference، groupABC، numberBlocks/
+  numberBlockText، bubble، tenilOrder.
+- تم اعتماد `assets/branding/*` كالأيقونات الرسمية للغة، وتوليد أيقونات أندرويد
+  (كل الكثافات)، أيقونة إضافة VS، وfavicon الموقع منها تلقائياً.
+
+## تحديث: ربط دوال opskit بالحاويات
+- أُعيد تنظيم `lib/opskit.og.rin`: كل الدوال تبقى قابلة للاستدعاء من أي مكان
+  (بما أن fun داخل @container.open/object محصورة بنطاق حاويتها ولا تُستدعى من
+  خارجها في Rin)، لكنها مصمَّمة للاستخدام من *داخل* حاوياتك الخاصة.
+- أُضيف `examples/opskit_containers_demo.rin`: يستخدم كل دالة (copyFile، merge،
+  createZip، download، vote، snapshot/restore، difference، classifyIntoGroups،
+  numberBlocks، bubble، tenilOrder) من داخل @container.open/object حقيقية،
+  ويعرض أيضاً Group A/B/C كبنية @Containers.Group رسمية (GroupA/GroupB/GroupC).
+- "Snapshots" (الاستعادة) أصبحت @container.doc حقيقية (NoSQL) بدل map عادي.
+- تم بناء المفسّر واختبار كل دالة فعلياً (g++ -std=c++17، cli/linux) والتحقق
+  من صحة ملف ZIP الناتج عبر Python zipfile (CRC صحيح).
