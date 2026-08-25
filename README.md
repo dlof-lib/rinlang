@@ -1,4 +1,19 @@
+<p align="center">
+  <img src="assets/branding/icon_bands_master.png" alt="RinLang" width="180"/>
+</p>
+
 # التعديلات المضافة على Rin
+
+## الهوية البصرية الرسمية (Official Branding)
+الصور الثلاث في `assets/branding/` هي الآن الأيقونات الرسمية للغة Rin:
+
+| الملف | الاستخدام |
+|---|---|
+| `icon_bands_master.png` | الشعار العام / أيقونة إضافة VS (`src/Resources/icon.png`) / أيقونة موقع الويب (favicon) |
+| `icon_green_master.png` | أيقونة تطبيق أندرويد (`ic_launcher` بكل الكثافات + الطبقة الأمامية التكيّفية) |
+| `icon_black_master.png` | لافتة الشبكات الاجتماعية / بانر README (`social_preview.png`) |
+
+تم توليد كل مقاسات أيقونات أندرويد (mdpi حتى xxxhdpi) وأيقونة الإضافة وfavicon الموقع تلقائياً من هذه الملفات الرسمية.
 
 ## الملف المعدَّل
 `app/src/main/cpp/rin_interpreter.cpp`
