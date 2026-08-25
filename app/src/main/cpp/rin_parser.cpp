@@ -551,11 +551,18 @@ StmtPtr Parser::atBlock() {
         "container.doc", "Containers.Group", "Volume", "table", "doc",
         // مفاهيم التنسيق والستايل: كائن (Object) / بوابة تنسيق (portal) / كتلة واجهة جاهزة (block)
         "container.object", "Object", "container.open/object", "container.portal", "portal", "container.block", "block",
-        "container.sticker", "sticker", "container.aukt", "AUKT"
+        "container.sticker", "sticker", "container.aukt", "AUKT",
+        // اختصارات مستقلة (بلا بادئة container.) لبقية أنواع الحاويات، بنفس مبدأ table/doc/Object/portal/
+        // block/sticker/AUKT أعلاه: @pipe / @data / @api تُنتج بالضبط نفس ContainerKind::PIPE/DATA/API
+        // التي تُنتجها container.pipe/container.data/container.api، بلا أي فرق دلالي — مجرد كتابة أقصر.
+        // container.import استُثنيت عمداً من هذا النمط: '@import' مستقلة أصلاً كعبارة مختلفة تماماً
+        // (استيراد ملف فعلي وتنفيذه فوراً)، فإضافة '@import=name ... .end/import' بنفس المعنى القديم
+        // كانت ستتصادم مع تلك العبارة وتُربك القارئ لا أن تختصر له شيئاً.
+        "pipe", "data", "api"
     };
     if (std::find(validTags.begin(), validTags.end(), tag) == validTags.end()) {
-        throw RinError("Unsupported block '@" + tag + "'; expected container, container.pipe, container.data, "
-                        "container.api, container.import, container.table, table, container.doc, doc, "
+        throw RinError("Unsupported block '@" + tag + "'; expected container, container.pipe, pipe, container.data, "
+                        "data, container.api, api, container.import, container.table, table, container.doc, doc, "
                         "container.object, Object, container.open/object, rinopen, container.portal, portal, container.block, block, "
                         "container.sticker, sticker, container.aukt, AUKT, Containers.Group, or Volume", atTok.line);
     }
@@ -564,8 +571,8 @@ StmtPtr Parser::atBlock() {
     while (!checkClosingTag() && !isAtEnd()) body.push_back(declaration());
     consumeEndTag(tag, atTok.line, name);
 
-    if (tag == "container" || tag == "container.pipe" || tag == "container.data" ||
-        tag == "container.api" || tag == "container.import" ||
+    if (tag == "container" || tag == "container.pipe" || tag == "pipe" || tag == "container.data" || tag == "data" ||
+        tag == "container.api" || tag == "api" || tag == "container.import" ||
         tag == "container.table" || tag == "table" ||
         tag == "container.doc" || tag == "doc" ||
         tag == "container.object" || tag == "Object" || tag == "container.open/object" ||
@@ -579,7 +586,7 @@ StmtPtr Parser::atBlock() {
         // في نفس القيود: بيانات نقية، بلا دوال ولا حاويات متداخلة ولا route. عبارة 'style' مسموحة
         // بداخل أيٍّ منها (وليس فقط container.table) لضبط نمط العرض (مفهوم التنسيق/الستايل)، وكذلك
         // 'link'/'file' تعملان بداخلها بلا أي قيد إضافي (روابط links() وملف انتقال transition.file).
-        if (tag != "container.open/object" && (tag == "container.data" || tag == "container.table" || tag == "table" ||
+        if (tag != "container.open/object" && (tag == "container.data" || tag == "data" || tag == "container.table" || tag == "table" ||
             tag == "container.doc" || tag == "doc" ||
             tag == "container.object" || tag == "Object" || tag == "container.open/object" ||
             tag == "container.portal" || tag == "portal" ||
@@ -587,9 +594,9 @@ StmtPtr Parser::atBlock() {
             tag == "container.sticker" || tag == "sticker")) validateDataContainerBody(body);
         auto s = std::make_shared<ContainerStmt>();
         s->name = name; s->body = body; s->line = atTok.line;
-        if (tag == "container.pipe") s->kind = ContainerKind::PIPE;
-        else if (tag == "container.data") s->kind = ContainerKind::DATA;
-        else if (tag == "container.api") s->kind = ContainerKind::API;
+        if (tag == "container.pipe" || tag == "pipe") s->kind = ContainerKind::PIPE;
+        else if (tag == "container.data" || tag == "data") s->kind = ContainerKind::DATA;
+        else if (tag == "container.api" || tag == "api") s->kind = ContainerKind::API;
         else if (tag == "container.import") s->kind = ContainerKind::IMPORT;
         else if (tag == "container.table" || tag == "table") s->kind = ContainerKind::TABLE;
         else if (tag == "container.doc" || tag == "doc") s->kind = ContainerKind::DOC;
