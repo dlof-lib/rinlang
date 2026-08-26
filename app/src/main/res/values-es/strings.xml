@@ -126,6 +126,8 @@
     <string name="job_status_cancelled">CANCELADO</string>
     <string name="job_duration_fmt">%1$d ms</string>
     <string name="job_timeout_message">"[Tiempo agotado]: la ejecución superó %1$d segundos y fue abandonada"</string>
+    <string name="job_cancel_cta">Cancelar esta ejecución en cola</string>
+    <string name="job_queue_full_toast">Ya hay demasiadas ejecuciones en cola — espera a que termine una</string>
 
     <!-- Descargar los archivos reales generados por save/installation a la carpeta Descargas del dispositivo -->
     <string name="download_results_label">Resultados listos para descargar</string>
