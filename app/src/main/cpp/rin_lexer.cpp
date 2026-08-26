@@ -1,4 +1,5 @@
 #include "rin_lexer.h"
+#include "diagnostics/source_manager.h"
 #include <cctype>
 #include <unordered_map>
 
@@ -36,7 +37,9 @@ static const std::unordered_map<std::string, TokenType> keywords = {
     // سياقياً فقط في المحلل النحوي، حتى لا تصبح كلمات محجوزة تتعارض مع أسماء متغيرات المستخدم.
 };
 
-Lexer::Lexer(std::string source) : src(std::move(source)) {}
+Lexer::Lexer(std::string source, std::string filename) : src(std::move(source)), file(std::move(filename)) {
+    diag::globalSourceManager().addFile(file, src);
+}
 
 bool Lexer::isAtEnd() const { return current >= src.size(); }
 
@@ -63,6 +66,8 @@ void Lexer::addToken(TokenType type, const std::string& lexeme) {
     t.type = type;
     t.lexeme = lexeme;
     t.line = line;
+    t.col = columnOf(start);
+    t.endCol = columnOf(current);
     tokens.push_back(t);
 }
 
@@ -90,12 +95,20 @@ void Lexer::scanString() {
         }
         value += advance();
     }
-    if (isAtEnd()) throw RinError("String not terminated", line);
+    if (isAtEnd()) {
+        diag::Diagnostic d(diag::Code::E0011_UnexpectedToken, "unterminated string literal",
+                            diag::SourceLocation::point(file, line, columnOf(start)));
+        d.withReason("a `\"` was opened here but never closed before the end of the file")
+         .withHint("close the string with a matching `\"`");
+        throw RinError(std::move(d));
+    }
     advance(); // closing quote
     Token t;
     t.type = TokenType::STRING;
     t.lexeme = value;
     t.line = line;
+    t.col = columnOf(start);
+    t.endCol = columnOf(current);
     tokens.push_back(t);
 }
 
@@ -111,6 +124,8 @@ void Lexer::scanNumber() {
     t.lexeme = text;
     t.number = std::stod(text);
     t.line = line;
+    t.col = columnOf(start);
+    t.endCol = columnOf(current);
     tokens.push_back(t);
 }
 
@@ -147,7 +162,11 @@ void Lexer::scanToken() {
             if (match('>')) {
                 addToken(TokenType::PIPE);
             } else {
-                throw RinError("Unexpected character '|': did you mean the pipe operator '|>' ?", line);
+                diag::Diagnostic d(diag::Code::E0011_UnexpectedToken, "unexpected character `|`",
+                                    diag::SourceLocation::point(file, line, columnOf(start)));
+                d.withReason("a lone `|` is not a valid operator in Rin")
+                 .withHint("did you mean the pipe operator `|>` ?");
+                throw RinError(std::move(d));
             }
             break;
         case '/':
@@ -175,6 +194,7 @@ void Lexer::scanToken() {
             break;
         case '\n':
             line++;
+            lineStartOffset = current;
             break;
         case '"':
             scanString();
@@ -185,7 +205,11 @@ void Lexer::scanToken() {
             } else if (isalpha((unsigned char)c) || c == '_') {
                 scanIdentifier();
             } else {
-                throw RinError(std::string("Unexpected character '") + c + "'", line);
+                diag::Diagnostic d(diag::Code::E0011_UnexpectedToken,
+                                    std::string("unexpected character `") + c + "`",
+                                    diag::SourceLocation::point(file, line, columnOf(start)));
+                d.withReason("this character does not start any valid token in Rin");
+                throw RinError(std::move(d));
             }
     }
 }
@@ -198,6 +222,8 @@ std::vector<Token> Lexer::scanTokens() {
     Token eof;
     eof.type = TokenType::END_OF_FILE;
     eof.line = line;
+    eof.col = columnOf(current);
+    eof.endCol = eof.col + 1;
     tokens.push_back(eof);
     return tokens;
 }
