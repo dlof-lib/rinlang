@@ -128,6 +128,17 @@
     <string name="job_timeout_message">"[Tiempo agotado]: la ejecución superó %1$d segundos y fue abandonada"</string>
     <string name="job_cancel_cta">Cancelar esta ejecución en cola</string>
     <string name="job_queue_full_toast">Ya hay demasiadas ejecuciones en cola — espera a que termine una</string>
+    <string name="job_pin_cta">Fijar esta ejecución</string>
+    <string name="job_unpin_cta">Quitar fijado</string>
+    <string name="job_copied_toast">Copiado al portapapeles</string>
+    <string name="job_details_cta">Detalles</string>
+    <string name="job_copy_cta">Copiar</string>
+    <string name="diag_reason_label">motivo</string>
+    <string name="diag_expected_label">esperado</string>
+    <string name="diag_found_label">encontrado</string>
+    <string name="diag_suggestions_label">quisiste decir</string>
+    <string name="diag_hint_label">ayuda</string>
+    <string name="diag_notes_label">nota</string>
 
     <!-- Descargar los archivos reales generados por save/installation a la carpeta Descargas del dispositivo -->
     <string name="download_results_label">Resultados listos para descargar</string>
