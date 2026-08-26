@@ -1,10 +1,12 @@
 #include "rin_parser.h"
+#include "diagnostics/diagnostic_engine.h"
+#include "diagnostics/source_manager.h"
 #include <algorithm>
 #include <unordered_set>
 
 namespace rin {
 
-Parser::Parser(std::vector<Token> toks) : tokens(std::move(toks)) {}
+Parser::Parser(std::vector<Token> toks, std::string filename) : tokens(std::move(toks)), file(std::move(filename)) {}
 
 bool Parser::isAtEnd() const { return peek().type == TokenType::END_OF_FILE; }
 const Token& Parser::peek() const { return tokens[current]; }
@@ -25,9 +27,75 @@ bool Parser::match(std::initializer_list<TokenType> types) {
     return false;
 }
 
+diag::SourceLocation Parser::locOf(const Token& tok) const {
+    int col = tok.col > 0 ? tok.col : 1;
+    int endCol = tok.endCol > col ? tok.endCol
+                 : col + std::max<int>(1, static_cast<int>(tok.lexeme.size()));
+    return diag::SourceLocation(file, tok.line, col, tok.line, endCol);
+}
+
+RinError Parser::err(diag::Code code, const Token& tok, std::string message) const {
+    diag::Diagnostic d(code, message, locOf(tok));
+    return RinError(std::move(d));
+}
+
+RinError Parser::errAtLine(diag::Code code, int line, std::string message) const {
+    diag::Diagnostic d(code, message, diag::SourceLocation::point(file, line, 1));
+    return RinError(std::move(d));
+}
+
+// يستخرج النص بين أول علامتي اقتباس مفردتين من رسائل مثل "Expected ')' after ..." -> ")"
+// لملء الحقل expected: تلقائياً في consume() دون حاجة لإعادة صياغة كل رسالة قديمة يدوياً.
+std::string Parser::extractQuoted(const std::string& message) {
+    auto first = message.find('\'');
+    if (first == std::string::npos) return "";
+    auto second = message.find('\'', first + 1);
+    if (second == std::string::npos) return "";
+    return message.substr(first + 1, second - first - 1);
+}
+
 const Token& Parser::consume(TokenType type, const std::string& message) {
     if (check(type)) return advance();
-    throw RinError(message + " (got '" + peek().lexeme + "')", peek().line);
+    const Token& bad = peek();
+    diag::Diagnostic d(diag::Code::E0012_MissingToken, message, locOf(bad));
+    std::string quoted = extractQuoted(message);
+    if (!quoted.empty()) d.expected = "`" + quoted + "`";
+    d.found = (bad.type == TokenType::END_OF_FILE) ? "end of file" : ("`" + bad.lexeme + "`");
+    d.withReason("the parser reached this point while still expecting the token above");
+    // ملاحظة: حتى في وضع parseCollectingDiagnostics() نرمي دائماً هنا (بدل محاولة "التزييف" بإرجاع
+    // bad كأنه استُهلك بنجاح) — الاسترداد (recovery) يحدث على مستوى العبارة كاملة في
+    // parseCollectingDiagnostics() نفسها عبر synchronize()، ما يتجنّب تسلسل أخطاء وهمية لاحقة
+    // ناتجة عن استخدام توكن لم يُستهلك فعلياً كأنه صحيح.
+    throw RinError(std::move(d));
+}
+
+// نقاط التزامن: ';' / '}' / ')' / بداية '.end/...' — بعدها يُستأنف تحليل عبارات جديدة بأمان.
+// يضمن التقدّم للأمام دائماً (على الأقل توكن واحد يُستهلَك) حتى لو كان checkClosingTag() صحيحاً
+// فوراً (مثل وسم '.end/...' يتيماً بلا '@' مطابق في المستوى الأعلى) — بدون هذا الضمان يستدعي
+// المستوى الأعلى declaration() على نفس التوكنات يتيمة إلى ما لا نهاية (حلقة لا تتقدّم أبداً).
+void Parser::synchronize() {
+    if (!isAtEnd()) advance();
+    while (!isAtEnd()) {
+        if (previous().type == TokenType::SEMICOLON) return;
+        if (check(TokenType::RBRACE) || check(TokenType::RPAREN)) { advance(); return; }
+        if (checkClosingTag()) return;
+        advance();
+    }
+}
+
+std::vector<StmtPtr> Parser::parseCollectingDiagnostics(diag::DiagnosticEngine& engine) {
+    std::vector<StmtPtr> statements;
+    while (!isAtEnd()) {
+        try {
+            statements.push_back(declaration());
+        } catch (RinError& e) {
+            if (e.diagnostic) engine.emit(*e.diagnostic);
+            else engine.emit(diag::Diagnostic(diag::Code::E0010_ParserError, e.message,
+                                               diag::SourceLocation::point(file, e.line, 1)));
+            synchronize();
+        }
+    }
+    return statements;
 }
 
 std::vector<StmtPtr> Parser::parse() {
@@ -177,13 +245,14 @@ StmtPtr Parser::rinopenStatement() {
 StmtPtr Parser::objectFieldStatement() {
     consume(TokenType::DOT, "Expected '.' before '.object'");
     Token object = consume(TokenType::IDENT, "Expected 'object' after '.'");
-    if (object.lexeme != "object") throw RinError("Expected '.object=type' inside @container.open/object", object.line);
+    if (object.lexeme != "object") throw err(diag::Code::E0016_InvalidProperty, object, "expected `.object=type` inside `@container.open/object`");
     consume(TokenType::EQUAL, "Expected '=' after '.object'");
     if (match({TokenType::TEXT})) return textDeclaration();
     if (check(TokenType::DOT) && checkNext(TokenType::IDENT) && current + 2 < tokens.size() && tokens[current + 1].lexeme == "object") return objectFieldStatement();
     if (match({TokenType::LET})) return letDeclaration();
     if (match({TokenType::FUN})) return functionDeclaration();
-    throw RinError("Expected an object member type after '.object=' (text, let, or fun)", peek().line);
+    throw err(diag::Code::E0013_InvalidExpression, peek(),
+              "expected an object member type after `.object=` (`text`, `let`, or `fun`)");
 }
 
 StmtPtr Parser::printStatement() {
@@ -216,7 +285,10 @@ StmtPtr Parser::printStatement() {
             break;
         }
         advance(); // استهلاك توكن اسم السمة
-        if (seen.count(attr)) throw RinError("'print': '" + attr + "' attribute repeated", tok.line);
+        if (seen.count(attr)) {
+            auto d = err(diag::Code::E0016_InvalidProperty, tok, "'print': `" + attr + "` attribute repeated");
+            throw d;
+        }
         seen.insert(attr);
         consume(TokenType::EQUAL, "Expected '=' after '" + attr + "' in print statement");
         ExprPtr value = expression();
@@ -343,7 +415,7 @@ StmtPtr Parser::returnStatement() {
 // وإلا فهي خطأ وقت التحليل (رسالة واضحة بدل فشل صامت وقت التنفيذ).
 StmtPtr Parser::breakStatement() {
     Token tok = previous();
-    if (loopDepth == 0) throw RinError("'break' used outside of a loop", tok.line);
+    if (loopDepth == 0) throw err(diag::Code::E0011_UnexpectedToken, tok, "'break' used outside of a loop");
     consume(TokenType::SEMICOLON, "Expected ';' after 'break'");
     auto stmt = std::make_shared<BreakStmt>();
     stmt->line = tok.line;
@@ -353,7 +425,7 @@ StmtPtr Parser::breakStatement() {
 // continue; -> نفس قيد break: صالحة فقط داخل جسم حلقة while.
 StmtPtr Parser::continueStatement() {
     Token tok = previous();
-    if (loopDepth == 0) throw RinError("'continue' used outside of a loop", tok.line);
+    if (loopDepth == 0) throw err(diag::Code::E0011_UnexpectedToken, tok, "'continue' used outside of a loop");
     consume(TokenType::SEMICOLON, "Expected ';' after 'continue'");
     auto stmt = std::make_shared<ContinueStmt>();
     stmt->line = tok.line;
@@ -405,7 +477,7 @@ std::string Parser::readTagKeyword() {
             tag = "container." + sub.lexeme;
             if (sub.lexeme == "open" && match({TokenType::SLASH})) {
                 Token kind = consume(TokenType::IDENT, "Expected 'object' after 'container.open/'");
-                if (kind.lexeme != "object") throw RinError("Expected 'object' after 'container.open/'", kind.line);
+                if (kind.lexeme != "object") throw err(diag::Code::E0016_InvalidProperty, kind, "expected 'object' after 'container.open/'");
                 tag = "container.open/object";
             }
         }
@@ -416,7 +488,7 @@ std::string Parser::readTagKeyword() {
 std::string Parser::readOptionalName() {
     if (!match({TokenType::EQUAL})) return "";
     if (check(TokenType::IDENT) || check(TokenType::STRING)) return advance().lexeme;
-    throw RinError("Expected a name after '='", peek().line);
+    throw err(diag::Code::E0012_MissingToken, peek(), "expected a name after '='");
 }
 
 bool Parser::checkClosingTag() const {
@@ -445,8 +517,12 @@ void Parser::consumeEndTag(const std::string& expectedTag, int openLine, const s
     Token beforeTag = peek();
     std::string closingTag = readTagKeyword();
     if (closingTag != expectedTag) {
-        throw RinError("Closing tag '.end/" + closingTag + "' does not match the opening '@" + expectedTag +
-                        "' opened at line " + std::to_string(openLine), beforeTag.line);
+        auto d = err(diag::Code::E0011_UnexpectedToken, beforeTag,
+                     "closing tag `.end/" + closingTag + "` does not match the opening `@" + expectedTag + "`");
+        d.diagnostic->withReason("`@" + expectedTag + "` was opened at line " + std::to_string(openLine) +
+                                  " and must be closed with a matching `.end/" + expectedTag + "`")
+         .withHint("replace `.end/" + closingTag + "` with `.end/" + expectedTag + "`");
+        throw d;
     }
     // تحقق اختياري من الاسم: '.end/tag=name' — إن كُتب، يجب أن يطابق حرفياً اسم الفتح '@tag=name'
     // (مفيد كوسيلة أمان إضافية اختيارية في الحاويات المتداخلة الكبيرة، تماماً كتعليق
@@ -456,14 +532,19 @@ void Parser::consumeEndTag(const std::string& expectedTag, int openLine, const s
     std::string closingName = readOptionalName();
     if (!closingName.empty()) {
         if (openName.empty()) {
-            throw RinError("Closing tag '.end/" + expectedTag + "=" + closingName + "' specifies a name, but the "
-                            "opening '@" + expectedTag + "' (line " + std::to_string(openLine) + ") has none",
-                            afterTag.line);
+            auto d = err(diag::Code::E0011_UnexpectedToken, afterTag,
+                         "closing tag `.end/" + expectedTag + "=" + closingName + "` specifies a name, but the "
+                         "opening `@" + expectedTag + "` has none");
+            d.diagnostic->withReason("`@" + expectedTag + "` was opened at line " + std::to_string(openLine) + " with no name")
+             .withHint("remove `=" + closingName + "` from the closing tag, or add a name to the opening `@" + expectedTag + "`");
+            throw d;
         }
         if (closingName != openName) {
-            throw RinError("Closing tag '.end/" + expectedTag + "=" + closingName + "' does not match the opening "
-                            "name '" + openName + "' of '@" + expectedTag + "' (line " + std::to_string(openLine) + ")",
-                            afterTag.line);
+            auto d = err(diag::Code::E0011_UnexpectedToken, afterTag,
+                         "closing tag `.end/" + expectedTag + "=" + closingName + "` does not match the opening name `" + openName + "`");
+            d.diagnostic->withReason("`@" + expectedTag + "=" + openName + "` was opened at line " + std::to_string(openLine))
+             .withHint("use `.end/" + expectedTag + "=" + openName + "` instead");
+            throw d;
         }
     }
 }
@@ -522,8 +603,8 @@ std::shared_ptr<ViewStmt> Parser::viewDeclaration() {
             s->attrs.push_back(a);
             continue;
         }
-        throw RinError("Expected an attribute (key=value;), a nested '@view...', or '.end/view' inside "
-                        "@view." + s->kindTag, peek().line);
+        throw err(diag::Code::E0012_MissingToken, peek(),
+                  "expected an attribute (key=value;), a nested '@view...', or '.end/view' inside @view." + s->kindTag);
     }
     consumeEndTag("view", viewTok.line, name);
     return s;
@@ -561,10 +642,19 @@ StmtPtr Parser::atBlock() {
         "pipe", "data", "api"
     };
     if (std::find(validTags.begin(), validTags.end(), tag) == validTags.end()) {
-        throw RinError("Unsupported block '@" + tag + "'; expected container, container.pipe, pipe, container.data, "
-                        "data, container.api, api, container.import, container.table, table, container.doc, doc, "
-                        "container.object, Object, container.open/object, rinopen, container.portal, portal, container.block, block, "
-                        "container.sticker, sticker, container.aukt, AUKT, Containers.Group, or Volume", atTok.line);
+        auto d = err(diag::Code::E0015_UnknownContainer, atTok, "unsupported block `@" + tag + "`");
+        d.diagnostic->withReason("`" + tag + "` is not a recognized Rin container/block kind");
+        std::string best = diag::bestMatch(tag, validTags, 3);
+        if (!best.empty()) {
+            d.diagnostic->withSuggestion(best);
+            d.diagnostic->withHint("did you mean `@" + best + "`?");
+        } else {
+            d.diagnostic->withHint("expected one of: container, container.pipe, container.data, container.api, "
+                                    "container.import, container.table, container.doc, container.object, "
+                                    "container.portal, container.block, container.sticker, container.aukt, "
+                                    "Containers.Group, or Volume");
+        }
+        throw d;
     }
     std::string name = readOptionalName();
     std::vector<StmtPtr> body;
@@ -650,14 +740,24 @@ StmtPtr Parser::importStatement() {
 void Parser::validateDataContainerBody(const std::vector<StmtPtr>& body) {
     for (auto& st : body) {
         if (std::dynamic_pointer_cast<FunctionStmt>(st)) {
-            throw RinError("لا يُسمح بتعريف دوال (fun) داخل container.data/container.table/table؛ استخدم container أو container.pipe لذلك", st->line);
+            auto d = errAtLine(diag::Code::E0014_InvalidContainer, st->line,
+                               "functions (`fun`) are not allowed inside `container.data`/`container.table`/`table`");
+            d.diagnostic->withReason("`container.data` containers must stay pure data (serializable)")
+             .withHint("use `container` or `container.pipe` for logic instead");
+            throw d;
         }
         if (std::dynamic_pointer_cast<ContainerStmt>(st) || std::dynamic_pointer_cast<ContainerGroupStmt>(st) ||
             std::dynamic_pointer_cast<VolumeStmt>(st)) {
-            throw RinError("لا يُسمح بحاويات/مجموعات/أحجام متداخلة داخل container.data/container.table/table", st->line);
+            auto d = errAtLine(diag::Code::E0014_InvalidContainer, st->line,
+                               "nested containers/groups/volumes are not allowed inside `container.data`/`container.table`/`table`");
+            d.diagnostic->withReason("`object` containers cannot contain `route`, `container`, `Containers.Group`, or `Volume`");
+            throw d;
         }
         if (std::dynamic_pointer_cast<RouteStmt>(st)) {
-            throw RinError("عبارة 'route' مخصصة لـ container.api فقط", st->line);
+            auto d = errAtLine(diag::Code::E0014_InvalidContainer, st->line, "'route' is only valid inside `container.api`");
+            d.diagnostic->withReason("`" + std::string("route") + "` defines an HTTP endpoint and only makes sense inside an API container")
+             .withHint("move this `route` into a `container.api` block");
+            throw d;
         }
     }
 }
@@ -686,7 +786,7 @@ StmtPtr Parser::translationsBlock() {
 StmtPtr Parser::translationStatement() {
     Token tok = previous();
     Token langKey = consume(TokenType::IDENT, "Expected 'lang' after 'translation'");
-    if (langKey.lexeme != "lang") throw RinError("Expected 'lang' attribute after 'translation'", langKey.line);
+    if (langKey.lexeme != "lang") throw err(diag::Code::E0016_InvalidProperty, langKey, "expected 'lang' attribute after 'translation'");
     consume(TokenType::EQUAL, "Expected '=' after 'lang'");
     Token langVal = consume(TokenType::STRING, "Expected a text value for 'lang'");
     consume(TokenType::TEXT, "Expected 'text' attribute after 'lang=\"...\"'");
@@ -705,7 +805,11 @@ StmtPtr Parser::linkStatement() {
     if (check(TokenType::DOT)) {
         advance(); // '.'
         Token idKw = consume(TokenType::IDENT, "Expected 'id' after 'link.'");
-        if (idKw.lexeme != "id") throw RinError("Unknown 'link." + idKw.lexeme + "': did you mean 'link.id='?", idKw.line);
+        if (idKw.lexeme != "id") {
+            auto d = err(diag::Code::E0016_InvalidProperty, idKw, "unknown attribute `link." + idKw.lexeme + "`");
+            d.diagnostic->withSuggestion("id").withHint("did you mean `link.id=`?");
+            throw d;
+        }
         consume(TokenType::EQUAL, "Expected '=' after 'link.id'");
         Token val = consume(TokenType::STRING, "Expected a text value after 'link.id='");
         consume(TokenType::SEMICOLON, "Expected ';' after link.id statement");
@@ -716,7 +820,7 @@ StmtPtr Parser::linkStatement() {
 
     Token key = consume(TokenType::IDENT, "Expected 'to' or 'id' after 'link'");
     if (key.lexeme != "to" && key.lexeme != "id")
-        throw RinError("Expected 'to' or 'id' attribute after 'link'", key.line);
+        throw err(diag::Code::E0016_InvalidProperty, key, "expected 'to' or 'id' attribute after 'link'");
     consume(TokenType::EQUAL, "Expected '=' after '" + key.lexeme + "'");
 
     auto s = std::make_shared<LinkStmt>();
@@ -728,7 +832,7 @@ StmtPtr Parser::linkStatement() {
     } else {
         // link to=name;  -> ربط باسم الحاوية (كما كان)
         if (!check(TokenType::IDENT) && !check(TokenType::STRING))
-            throw RinError("Expected a container name after 'to='", peek().line);
+            throw err(diag::Code::E0012_MissingToken, peek(), "expected a container name after 'to='");
         s->target = advance().lexeme;
     }
     consume(TokenType::SEMICOLON, "Expected ';' after link statement");
@@ -738,10 +842,10 @@ StmtPtr Parser::linkStatement() {
 StmtPtr Parser::tyingStatement() {
     Token tok = previous();
     Token key = consume(TokenType::IDENT, "Expected 'with' after 'tying'");
-    if (key.lexeme != "with") throw RinError("Expected 'with' attribute after 'tying'", key.line);
+    if (key.lexeme != "with") throw err(diag::Code::E0016_InvalidProperty, key, "expected 'with' attribute after 'tying'");
     consume(TokenType::EQUAL, "Expected '=' after 'with'");
     if (!check(TokenType::IDENT) && !check(TokenType::STRING))
-        throw RinError("Expected a container name after 'with='", peek().line);
+        throw err(diag::Code::E0012_MissingToken, peek(), "expected a container name after 'with='");
     std::string target = advance().lexeme;
     consume(TokenType::SEMICOLON, "Expected ';' after tying statement");
     auto s = std::make_shared<TyingStmt>();
@@ -752,10 +856,19 @@ StmtPtr Parser::tyingStatement() {
 StmtPtr Parser::mergeStatement() {
     Token tok = previous();
     Token key = consume(TokenType::IDENT, "Expected 'with' after 'merge'");
-    if (key.lexeme != "with") throw RinError("Expected 'with' attribute after 'merge'", key.line);
+    if (key.lexeme != "with") {
+        auto d = err(diag::Code::E0016_InvalidProperty, key, "invalid attribute `" + key.lexeme + "`");
+        d.diagnostic->withReason("`merge` expects the attribute `with`");
+        if (key.lexeme == "from") {
+            d.diagnostic->withHint("replace `from` with `with`");
+        } else {
+            d.diagnostic->withSuggestion("with").withHint("did you mean `with`?");
+        }
+        throw d;
+    }
     consume(TokenType::EQUAL, "Expected '=' after 'with'");
     if (!check(TokenType::IDENT) && !check(TokenType::STRING))
-        throw RinError("Expected a container name after 'with='", peek().line);
+        throw err(diag::Code::E0012_MissingToken, peek(), "expected a container name after 'with='");
     std::string target = advance().lexeme;
     consume(TokenType::SEMICOLON, "Expected ';' after merge statement");
     auto s = std::make_shared<MergeStmt>();
@@ -770,14 +883,14 @@ std::string Parser::readOptionalFormatAttr() {
     if (!(check(TokenType::IDENT) && peek().lexeme == "format")) return "";
     advance(); // 'format'
     consume(TokenType::EQUAL, "Expected '=' after 'format'");
-    if (!check(TokenType::IDENT)) throw RinError("Expected a format name after 'format=' (e.g. png, zip)", peek().line);
+    if (!check(TokenType::IDENT)) throw err(diag::Code::E0012_MissingToken, peek(), "expected a format name after 'format=' (e.g. png, zip)");
     return advance().lexeme;
 }
 
 StmtPtr Parser::installationStatement(bool simplifiedFlag) {
     Token tok = previous();
     if (!check(TokenType::IDENT) && !check(TokenType::STRING))
-        throw RinError("Expected a name after 'installation'", peek().line);
+        throw err(diag::Code::E0012_MissingToken, peek(), "expected a name after 'installation'");
     std::string target = advance().lexeme;
     std::string format = readOptionalFormatAttr();
     consume(TokenType::SEMICOLON, "Expected ';' after installation statement");
@@ -805,7 +918,7 @@ StmtPtr Parser::saveStatement(bool simplifiedFlag) {
 StmtPtr Parser::rowStatement() {
     Token tok = previous(); // 'row'
     Token key = consume(TokenType::IDENT, "Expected 'cells' after 'row'");
-    if (key.lexeme != "cells") throw RinError("Expected 'cells' attribute after 'row' (e.g. row cells=[1, 2, 3];)", key.line);
+    if (key.lexeme != "cells") throw err(diag::Code::E0016_InvalidProperty, key, "expected 'cells' attribute after 'row' (e.g. row cells=[1, 2, 3];)");
     consume(TokenType::EQUAL, "Expected '=' after 'cells'");
     ExprPtr cellsExpr = expression();
     consume(TokenType::SEMICOLON, "Expected ';' after row statement");
@@ -818,7 +931,7 @@ StmtPtr Parser::rowStatement() {
 StmtPtr Parser::styleStatement() {
     Token tok = previous(); // 'style'
     Token key = consume(TokenType::IDENT, "Expected 'value' after 'style'");
-    if (key.lexeme != "value") throw RinError("Expected 'value' attribute after 'style' (e.g. style value=\"style://dark\";)", key.line);
+    if (key.lexeme != "value") throw err(diag::Code::E0016_InvalidProperty, key, "expected 'value' attribute after 'style' (e.g. style value=\"style://dark\";)");
     consume(TokenType::EQUAL, "Expected '=' after 'value'");
     ExprPtr valueExpr = expression();
     consume(TokenType::SEMICOLON, "Expected ';' after style statement");
@@ -831,11 +944,11 @@ StmtPtr Parser::styleStatement() {
 StmtPtr Parser::documentStatement() {
     Token tok = previous(); // 'document'
     Token idKey = consume(TokenType::IDENT, "Expected 'id' after 'document'");
-    if (idKey.lexeme != "id") throw RinError("Expected 'id' attribute after 'document' (e.g. document id=\"u1\" fields={...};)", idKey.line);
+    if (idKey.lexeme != "id") throw err(diag::Code::E0016_InvalidProperty, idKey, "expected 'id' attribute after 'document' (e.g. document id=\"u1\" fields={...};)");
     consume(TokenType::EQUAL, "Expected '=' after 'id'");
     ExprPtr idExpr = expression();
     Token fieldsKey = consume(TokenType::IDENT, "Expected 'fields' after 'document id=...'");
-    if (fieldsKey.lexeme != "fields") throw RinError("Expected 'fields' attribute after 'document id=...' (e.g. document id=\"u1\" fields={...};)", fieldsKey.line);
+    if (fieldsKey.lexeme != "fields") throw err(diag::Code::E0016_InvalidProperty, fieldsKey, "expected 'fields' attribute after 'document id=...' (e.g. document id=\"u1\" fields={...};)");
     consume(TokenType::EQUAL, "Expected '=' after 'fields'");
     ExprPtr fieldsExpr = expression();
     consume(TokenType::SEMICOLON, "Expected ';' after document statement");
@@ -847,7 +960,7 @@ StmtPtr Parser::documentStatement() {
 StmtPtr Parser::fileStatement() {
     Token tok = previous();
     Token key = consume(TokenType::IDENT, "Expected 'path' after 'file'");
-    if (key.lexeme != "path") throw RinError("Expected 'path' attribute after 'file'", key.line);
+    if (key.lexeme != "path") throw err(diag::Code::E0016_InvalidProperty, key, "expected 'path' attribute after 'file'");
     consume(TokenType::EQUAL, "Expected '=' after 'path'");
     ExprPtr pathExpr = expression();
     consume(TokenType::SEMICOLON, "Expected ';' after file statement");
@@ -861,7 +974,9 @@ StmtPtr Parser::routeStatement() {
     auto attr = [&](const std::string& expected) -> ExprPtr {
         Token key = consume(TokenType::IDENT, "Expected '" + expected + "' attribute in route statement");
         if (key.lexeme != expected) {
-            throw RinError("Expected '" + expected + "' attribute in route statement", key.line);
+            auto d = err(diag::Code::E0016_InvalidProperty, key, "expected '" + expected + "' attribute in route statement, found `" + key.lexeme + "`");
+            d.diagnostic->withSuggestion(expected);
+            throw d;
         }
         consume(TokenType::EQUAL, "Expected '=' after '" + expected + "'");
         return expression();
@@ -880,7 +995,7 @@ StmtPtr Parser::simplifiedStatement() {
     Token tok = previous();
     if (match({TokenType::INSTALLATION})) return installationStatement(true);
     if (match({TokenType::SAVE})) return saveStatement(true);
-    throw RinError("'simplified' must be followed by 'installation' or 'save'", tok.line);
+    throw err(diag::Code::E0011_UnexpectedToken, peek(), "'simplified' must be followed by 'installation' or 'save'");
 }
 
 // ============ التعبيرات (expressions) ============
@@ -907,7 +1022,7 @@ ExprPtr Parser::assignment() {
             set->line = eq.line;
             return set;
         }
-        throw RinError("Invalid assignment target", eq.line);
+        throw err(diag::Code::E0003_InvalidAssignment, eq, "invalid assignment target");
     }
     return expr;
 }
@@ -929,7 +1044,7 @@ ExprPtr Parser::pipeline() {
                 callExpr->callee = var->name;
                 callExpr->line = var->line;
             } else {
-                throw RinError("Expected a function call (e.g. 'step()') after '|>'", opTok.line);
+                throw err(diag::Code::E0013_InvalidExpression, opTok, "expected a function call (e.g. 'step()') after '|>'");
             }
         }
 
@@ -1031,7 +1146,7 @@ ExprPtr Parser::call() {
     for (;;) {
         if (match({TokenType::LPAREN})) {
             auto var = std::dynamic_pointer_cast<VariableExpr>(expr);
-            if (!var) throw RinError("Only functions can be called", previous().line);
+            if (!var) throw err(diag::Code::E0013_InvalidExpression, previous(), "only functions can be called");
             auto c = std::make_shared<CallExpr>();
             c->callee = var->name;
             c->line = previous().line;
@@ -1121,7 +1236,7 @@ ExprPtr Parser::primary() {
                     lit->str = advance().lexeme;
                     keyExpr = lit;
                 } else {
-                    throw RinError("Expected a key (name or string) in map literal", peek().line);
+                    throw err(diag::Code::E0013_InvalidExpression, peek(), "expected a key (name or string) in map literal");
                 }
                 consume(TokenType::COLON, "Expected ':' after map key");
                 auto valueExpr = expression();
@@ -1131,7 +1246,7 @@ ExprPtr Parser::primary() {
         consume(TokenType::RBRACE, "Expected '}' after map entries");
         return map;
     }
-    throw RinError("Expected expression", peek().line);
+    throw err(diag::Code::E0013_InvalidExpression, peek(), "expected expression");
 }
 
 } // namespace rin
