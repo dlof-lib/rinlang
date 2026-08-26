@@ -196,6 +196,7 @@ class MainActivity : AppCompatActivity() {
 
         // قائمة التشغيل المجدولة (job queue): كل عملية Run بطاقة مستقلة
         jobAdapter = RinJobAdapter(this)
+        jobAdapter.onCancelRequested = { number -> RinJobScheduler.cancel(number) }
         rvJobs.layoutManager = LinearLayoutManager(this)
         rvJobs.adapter = jobAdapter
         RinJobScheduler.onJobsChanged = { jobs ->
@@ -393,7 +394,11 @@ class MainActivity : AppCompatActivity() {
 
     private fun runProgram() {
         val source = editCode.text.toString()
-        RinJobScheduler.submit(source)
+        val job = RinJobScheduler.submit(source)
+        if (job == null) {
+            Toast.makeText(this, getString(R.string.job_queue_full_toast), Toast.LENGTH_SHORT).show()
+            return
+        }
 
         // لا نشغّل الأنبوب فعلياً هنا (ذلك يحدث داخل شاشة RinFlow نفسها عبر PipelineTracer)؛
         // فقط نتحقّق بسرعة هل يحتوي الكود على كتلة @container.pipe لنعرض خيار الانتقال إليها.
@@ -612,5 +617,15 @@ class MainActivity : AppCompatActivity() {
         } catch (t: Throwable) {
             null
         }
+    }
+
+    override fun onDestroy() {
+        // RinJobScheduler is a process-wide singleton that outlives this Activity;
+        // without this the lambda above would keep the destroyed Activity reachable
+        // (and every view it holds) for as long as the process stays alive.
+        if (RinJobScheduler.onJobsChanged != null) {
+            RinJobScheduler.detach()
+        }
+        super.onDestroy()
     }
 }
