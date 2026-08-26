@@ -98,26 +98,26 @@ static std::string jsonEscapeLocal(const std::string& s) {
     return out;
 }
 
-extern "C" JNIEXPORT jstring JNICALL
-Java_com_dlof_rinlang_RinEngine_runSourceStructuredNative(JNIEnv* env, jobject /* this */, jstring sourceJStr, jstring baseDirJStr) {
-    const char* cSource = env->GetStringUTFChars(sourceJStr, nullptr);
-    std::string source(cSource ? cSource : "");
-    env->ReleaseStringUTFChars(sourceJStr, cSource);
+namespace {
 
-    std::string baseDir;
-    if (baseDirJStr != nullptr) {
-        const char* cBaseDir = env->GetStringUTFChars(baseDirJStr, nullptr);
-        baseDir = cBaseDir ? cBaseDir : "";
-        env->ReleaseStringUTFChars(baseDirJStr, cBaseDir);
-    }
-
+// نتيجة تنفيذ structured واحدة، قبل تحويلها إلى JSON -- مستخرجة كي يشترك فيها كل من
+// runSourceStructuredNative (بلا بث) وrunSourceStructuredStreamingNative (ببث حي)، بدل تكرار نفس
+// منطق lexer/parser/interpreter/catch مرتين (قسم 28: لا تُنشئ نسخًا مكررة).
+struct StructuredRunOutcome {
     std::string status = "SUCCESS";
     std::string output;
-    std::string diagnosticJson;   // left empty -> emitted as JSON null
-    std::string diagnosticText;   // left empty -> emitted as JSON null
-    std::string errorMessage;     // left empty -> emitted as JSON null
+    std::string diagnosticJson;   // فارغ -> يُصدَّر كـ JSON null
+    std::string diagnosticText;   // فارغ -> يُصدَّر كـ JSON null
+    std::string errorMessage;     // فارغ -> يُصدَّر كـ JSON null
     int errorLine = 0;
+};
 
+// [sink] اختياري: مرَّرها مباشرة كما هي إلى Interpreter::setStreamSink قبل run() (انظر
+// rin_interpreter.h/.cpp). فارغة (nullptr) => نفس سلوك runSourceStructuredNative القديم تمامًا،
+// بلا أي تغيير في التوقيت أو الناتج.
+StructuredRunOutcome runStructuredCore(const std::string& source, const std::string& baseDir,
+                                        rin::Interpreter::StreamSink sink) {
+    StructuredRunOutcome r;
     try {
         rin::Lexer lexer(source);
         auto tokens = lexer.scanTokens();
@@ -127,48 +127,123 @@ Java_com_dlof_rinlang_RinEngine_runSourceStructuredNative(JNIEnv* env, jobject /
         if (!baseDir.empty()) {
             interpreter.setBasePath(baseDir);
         }
-        output = interpreter.run(statements);
+        if (sink) {
+            interpreter.setStreamSink(std::move(sink));
+        }
+        r.output = interpreter.run(statements);
         if (interpreter.hadError()) {
-            status = "ERROR";
+            r.status = "ERROR";
             if (interpreter.lastDiagnostic()) {
-                diagnosticJson = rin::diag::renderJson(*interpreter.lastDiagnostic());
-                diagnosticText = rin::diag::renderPlain(*interpreter.lastDiagnostic(), rin::diag::globalSourceManager());
+                r.diagnosticJson = rin::diag::renderJson(*interpreter.lastDiagnostic());
+                r.diagnosticText = rin::diag::renderPlain(*interpreter.lastDiagnostic(), rin::diag::globalSourceManager());
             }
-            if (interpreter.lastErrorMessage()) errorMessage = *interpreter.lastErrorMessage();
-            errorLine = interpreter.lastErrorLine();
+            if (interpreter.lastErrorMessage()) r.errorMessage = *interpreter.lastErrorMessage();
+            r.errorLine = interpreter.lastErrorLine();
         }
-        if (output.empty() && status == "SUCCESS") output = "(no output)";
+        if (r.output.empty() && r.status == "SUCCESS") r.output = "(no output)";
     } catch (rin::RinError& e) {
-        // Lexer/parser-stage failure: execution never even started.
-        status = "ERROR";
-        errorMessage = e.message;
-        errorLine = e.line;
+        // Lexer/parser-stage failure: execution never even started (no top-level statement loop
+        // ever ran, so no stream events were ever emitted for this run -- consistent with there
+        // being no output at all in this case).
+        r.status = "ERROR";
+        r.errorMessage = e.message;
+        r.errorLine = e.line;
         if (e.diagnostic) {
-            diagnosticJson = rin::diag::renderJson(*e.diagnostic);
-            diagnosticText = rin::diag::renderPlain(*e.diagnostic, rin::diag::globalSourceManager());
+            r.diagnosticJson = rin::diag::renderJson(*e.diagnostic);
+            r.diagnosticText = rin::diag::renderPlain(*e.diagnostic, rin::diag::globalSourceManager());
         }
-        output = "";
+        r.output = "";
     } catch (std::exception& e) {
-        status = "ERROR";
-        errorMessage = std::string("Internal error: ") + e.what();
-        output = "";
+        r.status = "ERROR";
+        r.errorMessage = std::string("Internal error: ") + e.what();
+        r.output = "";
     } catch (...) {
-        status = "ERROR";
-        errorMessage = "Unknown internal error";
-        output = "";
+        r.status = "ERROR";
+        r.errorMessage = "Unknown internal error";
+        r.output = "";
     }
+    return r;
+}
 
+std::string structuredOutcomeToJson(const StructuredRunOutcome& r) {
     std::ostringstream json;
     json << "{"
-         << "\"status\":\"" << status << "\","
-         << "\"output\":\"" << jsonEscapeLocal(output) << "\","
-         << "\"diagnostic\":" << (diagnosticJson.empty() ? "null" : diagnosticJson) << ","
-         << "\"diagnosticText\":" << (diagnosticText.empty() ? "null" : ("\"" + jsonEscapeLocal(diagnosticText) + "\"")) << ","
-         << "\"errorMessage\":" << (errorMessage.empty() ? "null" : ("\"" + jsonEscapeLocal(errorMessage) + "\""))
-         << ",\"errorLine\":" << errorLine
+         << "\"status\":\"" << r.status << "\","
+         << "\"output\":\"" << jsonEscapeLocal(r.output) << "\","
+         << "\"diagnostic\":" << (r.diagnosticJson.empty() ? "null" : r.diagnosticJson) << ","
+         << "\"diagnosticText\":" << (r.diagnosticText.empty() ? "null" : ("\"" + jsonEscapeLocal(r.diagnosticText) + "\"")) << ","
+         << "\"errorMessage\":" << (r.errorMessage.empty() ? "null" : ("\"" + jsonEscapeLocal(r.errorMessage) + "\""))
+         << ",\"errorLine\":" << r.errorLine
          << "}";
+    return json.str();
+}
 
-    return env->NewStringUTF(json.str().c_str());
+// يحوّل jstring/jstring? إلى std::string مرة واحدة (يُستخدم من كلا الدالتين أدناه).
+std::string jstringOrEmpty(JNIEnv* env, jstring s) {
+    if (s == nullptr) return std::string();
+    const char* c = env->GetStringUTFChars(s, nullptr);
+    std::string out(c ? c : "");
+    if (c) env->ReleaseStringUTFChars(s, c);
+    return out;
+}
+
+} // namespace
+
+extern "C" JNIEXPORT jstring JNICALL
+Java_com_dlof_rinlang_RinEngine_runSourceStructuredNative(JNIEnv* env, jobject /* this */, jstring sourceJStr, jstring baseDirJStr) {
+    std::string source = jstringOrEmpty(env, sourceJStr);
+    std::string baseDir = jstringOrEmpty(env, baseDirJStr);
+    StructuredRunOutcome outcome = runStructuredCore(source, baseDir, nullptr);
+    return env->NewStringUTF(structuredOutcomeToJson(outcome).c_str());
+}
+
+// ---------------------------------------------------------------------------
+// runSourceStructuredStreamingNative(source, baseDir, listener) -> نفس JSON الذي تُعيده
+// runSourceStructuredNative أعلاه تمامًا (نتيجة نهائية واحدة، متوافقة مع RinExecutionResult.parse
+// في Kotlin بلا أي تغيير)، لكن مع استدعاء listener.onChunk(sequence, chunk) *أثناء* التنفيذ، مرة
+// واحدة لكل statement علوي أضاف ناتجًا جديدًا (انظر Interpreter::run في rin_interpreter.cpp).
+//
+// أمان الترابط (thread-safety): هذا الاستدعاء *لا* يُنشئ أي ترد (thread) جديد ولا يحتاج
+// AttachCurrentThread/GlobalRef -- استدعاءات onChunk كلها تحدث بشكل متزامن (synchronous)، على
+// نفس الترد ونفس إطار الاستدعاء الذي دخل منه Kotlin إلى JNI أصلاً، قبل أن تعود هذه الدالة. لذا
+// listener (كمرجع محلي/local ref) يبقى صالحًا طوال الوقت بلا حاجة لأي GlobalRef.
+extern "C" JNIEXPORT jstring JNICALL
+Java_com_dlof_rinlang_RinEngine_runSourceStructuredStreamingNative(JNIEnv* env, jobject /* this */,
+                                                                    jstring sourceJStr, jstring baseDirJStr,
+                                                                    jobject listener) {
+    std::string source = jstringOrEmpty(env, sourceJStr);
+    std::string baseDir = jstringOrEmpty(env, baseDirJStr);
+
+    jmethodID onChunkMethod = nullptr;
+    if (listener != nullptr) {
+        jclass listenerClass = env->GetObjectClass(listener);
+        onChunkMethod = env->GetMethodID(listenerClass, "onChunk", "(ILjava/lang/String;)V");
+        env->DeleteLocalRef(listenerClass);
+        if (onChunkMethod == nullptr) {
+            // لا تُسقط الاستثناء الناتج عن GetMethodID الفاشل بصمت خارج هذه الدالة -- امسحه وتابع
+            // بلا بث (يتدهور بأمان إلى سلوك غير-متدفق بدل تعطّل التنفيذ بالكامل).
+            env->ExceptionClear();
+        }
+    }
+
+    int seq = 0;
+    rin::Interpreter::StreamSink sink;
+    if (onChunkMethod != nullptr) {
+        sink = [env, listener, onChunkMethod, &seq](const std::string& chunk) {
+            ++seq;
+            jstring jchunk = env->NewStringUTF(chunk.c_str());
+            env->CallVoidMethod(listener, onChunkMethod, static_cast<jint>(seq), jchunk);
+            env->DeleteLocalRef(jchunk);
+            // خطأ Kotlin/RuntimeException داخل onChunk (مثلاً في مستمع مكتوب بشكل خاطئ) يجب ألا
+            // يُسقط التنفيذ الأصلي للغة Rin نفسها -- امسحه وتابع البث/التنفيذ.
+            if (env->ExceptionCheck()) {
+                env->ExceptionClear();
+            }
+        };
+    }
+
+    StructuredRunOutcome outcome = runStructuredCore(source, baseDir, std::move(sink));
+    return env->NewStringUTF(structuredOutcomeToJson(outcome).c_str());
 }
 
 extern "C" JNIEXPORT jstring JNICALL
