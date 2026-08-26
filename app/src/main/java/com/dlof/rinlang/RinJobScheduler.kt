@@ -9,6 +9,7 @@ import java.util.concurrent.RejectedExecutionException
 import java.util.concurrent.ThreadFactory
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.TimeoutException
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 
 /**
@@ -39,6 +40,10 @@ import java.util.concurrent.atomic.AtomicInteger
 object RinJobScheduler {
 
     private const val TIMEOUT_MS = 15_000L
+
+    /** Live-stream UI updates are coalesced within this window instead of posting to the main
+     *  thread once per top-level statement (section 24: no UI rebuild per event, batch instead). */
+    private const val STREAM_UI_BATCH_MS = 80L
 
     /** Upper bound on finished (terminal) jobs kept in memory/history. */
     private const val MAX_HISTORY = 200
@@ -137,6 +142,17 @@ object RinJobScheduler {
         onJobsChanged = null
     }
 
+    /** Coalesces bursts of [RinEngine.RinStreamListener.onChunk] calls into at most one main-
+     *  thread UI refresh per [STREAM_UI_BATCH_MS] window (section 24) instead of one per event. */
+    private val streamNotifyPending = AtomicBoolean(false)
+
+    /** Upper bound on buffered live lines per job (section 25: Memory Safety) — a program that
+     *  prints without bound (or a TIMEOUT-abandoned native call that keeps streaming forever in
+     *  the background, see [runJob]) must not grow a job's memory footprint unboundedly. Keeps
+     *  only the most recent lines; this is a live in-progress view, not the historical record
+     *  ([job.output] is that record once the run finishes normally). */
+    private const val MAX_LIVE_LINES = 2000
+
     private fun runJob(job: RinJob) {
         // The job may have been cancelled while it was waiting in line.
         synchronized(job) {
@@ -146,7 +162,35 @@ object RinJobScheduler {
         }
         notifyChanged()
 
-        val future = workerPool.submit(Callable { RinEngine.runSourceStructured(job.source) })
+        // Live Output (section 7): classify each incremental chunk through the same
+        // RinConsoleFormatter used for the finished view, and buffer it on the job so the UI can
+        // render it while RUNNING. Runs synchronously inside the native call on this worker
+        // thread (see RinEngine.RinStreamListener kdoc), so this must stay fast and non-blocking.
+        val listener = RinEngine.RinStreamListener { _, chunk ->
+            val stillRunning = synchronized(job) {
+                // Guards against a TIMEOUT-abandoned native call (see the catch block below and
+                // the class kdoc: an interrupted native call has no way to actually stop and is
+                // simply left to finish on its own) still calling this listener in the background
+                // after the job has already moved past RUNNING -- never resurrect a finished job's
+                // live view, and never let it grow forever.
+                if (job.status != JobStatus.RUNNING) {
+                    false
+                } else {
+                    val merged = job.liveLines + RinConsoleFormatter.formatLines(chunk)
+                    job.liveLines = if (merged.size > MAX_LIVE_LINES) merged.takeLast(MAX_LIVE_LINES) else merged
+                    true
+                }
+            }
+            if (!stillRunning) return@RinStreamListener
+            if (streamNotifyPending.compareAndSet(false, true)) {
+                mainHandler.postDelayed({
+                    streamNotifyPending.set(false)
+                    notifyChanged()
+                }, STREAM_UI_BATCH_MS)
+            }
+        }
+
+        val future = workerPool.submit(Callable { RinEngine.runSourceStructuredStreaming(job.source, listener) })
         try {
             val result = future.get(TIMEOUT_MS, TimeUnit.MILLISECONDS)
             synchronized(job) {
@@ -177,7 +221,14 @@ object RinJobScheduler {
                 job.status = JobStatus.ERROR
             }
         }
-        synchronized(job) { job.finishedAt = System.currentTimeMillis() }
+        synchronized(job) {
+            job.finishedAt = System.currentTimeMillis()
+            // Terminal state: the post-run view renders from job.output via RinConsoleFormatter
+            // exactly as before this feature existed, so the buffered live lines are no longer
+            // needed — drop them to keep per-job memory bounded across a long-lived history
+            // (section 25: Memory Safety).
+            job.liveLines = emptyList()
+        }
         notifyChanged()
     }
 
