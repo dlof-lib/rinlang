@@ -152,8 +152,19 @@ class RinJobAdapter(private val context: Context) : RecyclerView.Adapter<RinJobA
                     fallbackOutput.text = ""
                 }
                 JobStatus.RUNNING -> {
-                    fallbackOutput.visibility = View.VISIBLE
-                    fallbackOutput.text = "…"
+                    // Live Output (section 7): render whatever has streamed in so far, exactly
+                    // the same icon+text rows the finished view uses, instead of a static "…"
+                    // placeholder until the whole run completes.
+                    if (job.liveLines.isEmpty()) {
+                        fallbackOutput.visibility = View.VISIBLE
+                        fallbackOutput.text = "…"
+                    } else {
+                        fallbackOutput.visibility = View.GONE
+                        fallbackOutput.text = ""
+                        for (line in job.liveLines) {
+                            outputLines.addView(buildLineRow(line))
+                        }
+                    }
                 }
                 else -> {
                     fallbackOutput.visibility = View.GONE
