@@ -76,6 +76,25 @@ struct ApiEndpoint {
     std::vector<std::pair<std::string, std::string>> headers; // بترتيب التسجيل؛ نفس المفتاح المُعاد تسجيله يُحدَّث مكانه
 };
 
+// ---- relation: علاقة معرَّفة بين مجموعتَي مستندات (شبيهة بمفتاح أجنبي/foreign key بسيط) ----
+// يربط قيمة حقل fromField داخل مستند في fromContainer بكل مستند في toContainer تساوي فيه toField
+// نفس القيمة (انظر relatedDocs). يُعرَّف عبر defineRelation، ويُستعلَم عنه عبر relatedDocs.
+struct RelationDef {
+    std::string fromContainer, fromField, toContainer, toField;
+};
+
+// ---- migration: خطوة ترحيل مُسمّاة (up/down)، كلاهما دالة Rin بلا وسائط (انظر defineMigration) ----
+struct MigrationDef {
+    Value up;   // تُستدعى عند runMigration (يجب أن تكون دالة Rin)
+    Value down; // تُستدعى عند rollbackMigration؛ قد تبقى nil إن لم تُمرَّر (لا رجوع لهذا الترحيل)
+};
+
+// ---- cache: مدخل مخزَّن مؤقّتاً مع مهلة صلاحية اختيارية (TTL) ----
+struct CacheEntry {
+    Value value;
+    long long expiresAt = 0; // 0 أو أقل = بلا انتهاء صلاحية؛ غير ذلك = طابع زمني Unix بالثواني (انظر std::time)
+};
+
 struct Environment : std::enable_shared_from_this<Environment> {
     std::unordered_map<std::string, Value> values;
     EnvPtr parent;
@@ -181,6 +200,52 @@ private:
     // فريد داخل نفس المجموعة (إدراج بنفس id موجود = تحديث/upsert). Containers.Group التي تضم عدّة
     // container.doc تصبح فعلياً "قاعدة بيانات" (database) كاملة من عدّة مجموعات مستندات مرتّبة.
     std::unordered_map<std::string, std::vector<std::pair<std::string, Value>>> docStore;
+
+    // ---- schema: مخطط حقول اختياري لكل مجموعة مستندات (container.doc/doc) ----
+    // container -> [(اسم الحقل، اسم النوع)] بترتيب التعريف عبر defineSchema. أنواع مدعومة:
+    // "string"/"number"/"bool"/"boolean"/"array"/"map"/"object"/"any". حقل مُعرَّف هنا يصبح
+    // إلزامياً: أي إدراج/تحديث لاحق عبر insertDoc/updateDoc/document يُرفَض (RinError) إن غاب
+    // الحقل أو خالف نوعه (انظر schemaErrors أدناه وvalidateDoc في .cpp).
+    std::unordered_map<std::string, std::vector<std::pair<std::string, std::string>>> schemaStore;
+    // يتحقّق من قيمة (map حقول مستند مقترح) مقابل مخطط الحاوية المُعرَّف؛ مصفوفة فارغة = صالح
+    // (أو لا يوجد مخطط أصلاً لهذه الحاوية، فلا قيود). تُستخدم من قِبل الدالة الأصلية validateDoc
+    // ومن insertDoc/updateDoc/DocumentStmt قبل أي التزام فعلي بالتغيير.
+    std::vector<std::string> schemaErrors(const std::string& container, const Value& fields) const;
+
+    // ---- index: فهرسة قيم حقل معيّن داخل مجموعة مستندات (تسريع البحث عبر findByIndex) ----
+    // container -> [(اسم الحقل، جدول: مفتاح القيمة النصي (repr) -> [ids المطابقة بترتيب الإدخال])].
+    // تُعاد بناؤها بالكامل (بدل تحديث تفاضلي) بعد أي إدراج/تحديث/حذف مستند أو rollbackTransaction،
+    // عبر refreshIndexesForContainer -- أبسط وأقل عرضة للأخطاء من الصيانة التفاضلية، ومقبولة الكلفة
+    // لحجم البيانات المتوقَّع في مفسّر Rin.
+    using IndexBuckets = std::unordered_map<std::string, std::vector<std::string>>;
+    std::unordered_map<std::string, std::vector<std::pair<std::string, IndexBuckets>>> indexStore;
+    void refreshIndexesForContainer(const std::string& container);
+
+    // ---- transaction: لقطات (snapshots) عميقة من docStore لدعم commit/rollback حقيقيَّين ----
+    // لقطة عميقة إلزامية (لا يكفي نسخ Value الضحلة) لأن updateDoc يُعدِّل MapData داخل MapPtr
+    // القائم مكانه أحياناً (دمج جزئي/patch)، فيؤثّر ذلك على أي نسخة ضحلة تشارك نفس المؤشّر.
+    std::vector<std::unordered_map<std::string, std::vector<std::pair<std::string, Value>>>> txStack;
+
+    // ---- relation: علاقات معرَّفة بين مجموعتَي مستندات (انظر RelationDef أعلاه) ----
+    std::unordered_map<std::string, RelationDef> relationStore;
+    std::vector<std::string> relationOrder; // أسماء العلاقات بترتيب أول تعريف (listRelations)
+
+    // ---- migration: خطوات ترحيل مُسمّاة، بترتيب تعريفها وبترتيب تطبيقها الفعلي ----
+    std::unordered_map<std::string, MigrationDef> migrationStore;
+    std::vector<std::string> migrationOrder;    // أسماء الترحيلات بترتيب التعريف (defineMigration)
+    std::vector<std::string> appliedMigrations; // أسماء الترحيلات المُطبَّقة فعلاً، بترتيب التطبيق (runMigration)
+
+    // ---- cache: تخزين مؤقّت للقيم بمهلة صلاحية اختيارية (انظر CacheEntry أعلاه) ----
+    std::unordered_map<std::string, CacheEntry> cacheStore;
+
+    // ---- watch/subscribe: دوال Rin مسجَّلة تُستدعى تلقائياً عند حدث ----
+    // watch: اسم مجموعة مستندات -> دوال بتوقيع fun(id, doc, event) تُستدعى بعد كل insertDoc/
+    // updateDoc/deleteDoc/document عليها (event = "insert"/"update"/"delete").
+    std::unordered_map<std::string, std::vector<Value>> docWatchers;
+    // subscribe/publish: قناة أحداث عامة مستقلة عن أي مجموعة مستندات؛ دوال بتوقيع fun(payload).
+    std::unordered_map<std::string, std::vector<Value>> channelSubs;
+    void notifyWatchers(const std::string& container, const std::string& id, const Value& doc,
+                         const std::string& event, int line);
 
     // ---- تخزين حقيقي على القرص (save/file/installation) ----
     std::string basePath;                                     // جذر حقيقي اختياري لكل عمليات الملفات
