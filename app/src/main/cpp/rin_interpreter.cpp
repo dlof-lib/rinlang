@@ -287,6 +287,62 @@ static void expectArgs(const std::string& fn, std::vector<Value>& args, size_t c
     }
 }
 
+// يتحقّق أن عدد الوسائط بين min و max (شاملَين) -- لدوال بوسيط أخير اختياري مثل cacheSet(key,
+// value[, ttlSeconds]) أو defineMigration(name, up[, down]).
+static void expectArgsRange(const std::string& fn, std::vector<Value>& args, size_t minCount, size_t maxCount, int line) {
+    if (args.size() < minCount || args.size() > maxCount) {
+        throw RinError("'" + fn + "' expects " + std::to_string(minCount) + " to " + std::to_string(maxCount) +
+                        " argument(s) but got " + std::to_string(args.size()), line);
+    }
+}
+
+// ---- schema: يتحقّق أن قيمة تطابق اسم نوع مخطط نصي (انظر Interpreter::schemaErrors) ----
+static bool valueMatchesSchemaType(const Value& v, const std::string& type) {
+    if (type == "any") return true;
+    if (type == "string") return v.type == Value::Type::STRING;
+    if (type == "number") return v.type == Value::Type::NUMBER;
+    if (type == "bool" || type == "boolean") return v.type == Value::Type::BOOL;
+    if (type == "array") return v.type == Value::Type::ARRAY;
+    if (type == "map" || type == "object") return v.type == Value::Type::MAP;
+    return true; // اسم نوع غير معروف: يُتجاهَل التحقق منه بدل رفض الإدراج بلا سبب واضح للمستخدم
+}
+
+// يدمج رسائل أخطاء schemaErrors في سطر واحد لرسالة RinError واضحة.
+static std::string joinErrors(const std::vector<std::string>& errs) {
+    std::string out;
+    for (size_t i = 0; i < errs.size(); i++) {
+        if (i) out += "; ";
+        out += errs[i];
+    }
+    return out;
+}
+
+// ---- transaction: نسخ عميق (deep clone) لقيمة Rin -- ضروري للقطات beginTransaction/rollback:
+// نسخ Value وحدها ضحل (ARRAY/MAP يشاركان نفس shared_ptr)، وupdateDoc قد يُعدِّل MapData مكانه
+// (دمج جزئي)، فبلا نسخ عميق حقيقي كانت أي لقطة ستتأثر بتعديلات لاحقة على نفس المستند.
+static Value deepCloneValue(const Value& v) {
+    switch (v.type) {
+        case Value::Type::ARRAY: {
+            auto arr = std::make_shared<ArrayData>();
+            if (v.array) {
+                arr->reserve(v.array->size());
+                for (auto& item : *v.array) arr->push_back(deepCloneValue(item));
+            }
+            return Value::makeArray(arr);
+        }
+        case Value::Type::MAP: {
+            auto m = std::make_shared<MapData>();
+            if (v.map) {
+                m->reserve(v.map->size());
+                for (auto& kv : *v.map) m->push_back({deepCloneValue(kv.first), deepCloneValue(kv.second)});
+            }
+            return Value::makeMap(m);
+        }
+        default:
+            return v; // NUMBER/STRING/BOOL/NIL/FUNCTION: لا حالة مشتركة قابلة للتغيير، النسخ بالقيمة كافٍ
+    }
+}
+
 // يتحقّق أن طرفَي عملية حسابية/مقارنة (غير + التي تدعم النصوص أيضاً) هما رقمان فعلاً، بدلاً من الاعتماد
 // الصامت على Value::number الذي يساوي 0.0 افتراضياً لأي نوع آخر (نص/مصفوفة/قاموس/nil) — وهو ما كان
 // يجعل عبارة مثل "abc" - 5 تُحسَب بصمت كـ 0 - 5 بدل رمي خطأ واضح.
@@ -950,12 +1006,19 @@ void Interpreter::registerNatives() {
         if (!containerKinds.count(container) || containerKinds[container] != ContainerKind::DOC) {
             throw RinError("'insertDoc': '" + container + "' ليست مجموعة مستندات NoSQL (container.doc / doc)", line);
         }
-        auto& docs = docStore[container];
-        for (auto& entry : docs) {
-            if (entry.first == id) { entry.second = a[2]; return Value::boolean_(false); }
+        auto errors = schemaErrors(container, a[2]);
+        if (!errors.empty()) {
+            throw RinError("insertDoc: فشل التحقق من المخطط (schema) لـ '" + container + "': " + joinErrors(errors), line);
         }
-        docs.push_back({id, a[2]});
-        return Value::boolean_(true);
+        auto& docs = docStore[container];
+        bool isUpdate = false;
+        for (auto& entry : docs) {
+            if (entry.first == id) { entry.second = a[2]; isUpdate = true; break; }
+        }
+        if (!isUpdate) docs.push_back({id, a[2]});
+        refreshIndexesForContainer(container);
+        notifyWatchers(container, id, a[2], isUpdate ? "update" : "insert", line);
+        return Value::boolean_(!isUpdate);
     };
 
     // updateDoc(collection, id, partialFields) -> true إن وُجد ودُمجت الحقول الجديدة (تحديث جزئي/patch)، false إن لم يوجد
@@ -970,16 +1033,25 @@ void Interpreter::registerNatives() {
         if (it == docStore.end()) return Value::boolean_(false);
         for (auto& entry : it->second) {
             if (entry.first != id) continue;
-            if (entry.second.type != Value::Type::MAP || !entry.second.map) {
-                entry.second = Value::makeMap(std::make_shared<MapData>());
-            }
+            // يُبنى الدمج في نسخة منفصلة أولاً ويُتحقَّق من المخطط عليها قبل أي التزام فعلي، حتى لا
+            // يُترك المستند بحالة جزئية غير صالحة إن فشل التحقق (schemaErrors) في المنتصف.
+            auto merged = std::make_shared<MapData>();
+            if (entry.second.type == Value::Type::MAP && entry.second.map) *merged = *entry.second.map;
             for (auto& kv : *a[2].map) {
                 bool found = false;
-                for (auto& existing : *entry.second.map) {
+                for (auto& existing : *merged) {
                     if (valuesEqual(existing.first, kv.first)) { existing.second = kv.second; found = true; break; }
                 }
-                if (!found) entry.second.map->push_back(kv);
+                if (!found) merged->push_back(kv);
             }
+            Value mergedVal = Value::makeMap(merged);
+            auto errors = schemaErrors(container, mergedVal);
+            if (!errors.empty()) {
+                throw RinError("updateDoc: فشل التحقق من المخطط (schema) لـ '" + container + "': " + joinErrors(errors), line);
+            }
+            entry.second = mergedVal;
+            refreshIndexesForContainer(container);
+            notifyWatchers(container, id, mergedVal, "update", line);
             return Value::boolean_(true);
         }
         return Value::boolean_(false);
@@ -994,7 +1066,13 @@ void Interpreter::registerNatives() {
         if (it != docStore.end()) {
             auto& vec = it->second;
             for (size_t i = 0; i < vec.size(); i++) {
-                if (vec[i].first == id) { vec.erase(vec.begin() + i); return Value::boolean_(true); }
+                if (vec[i].first == id) {
+                    Value removed = vec[i].second;
+                    vec.erase(vec.begin() + i);
+                    refreshIndexesForContainer(container);
+                    notifyWatchers(container, id, removed, "delete", line);
+                    return Value::boolean_(true);
+                }
             }
         }
         return Value::boolean_(false);
@@ -1082,6 +1160,429 @@ void Interpreter::registerNatives() {
         std::string container = asString(a[0], "countDocs", line);
         auto it = docStore.find(container);
         return Value::num(it != docStore.end() ? static_cast<double>(it->second.size()) : 0.0);
+    };
+
+    // ---- schema: مخطط حقول اختياري لمجموعة مستندات (يُفرَض تلقائياً داخل insertDoc/updateDoc/document) ----
+
+    // defineSchema(collection, {field: "type", ...}) -> true. أنواع مدعومة: string/number/bool
+    // (أو boolean)/array/map (أو object)/any. يستبدل أي مخطط سابق لنفس المجموعة بالكامل.
+    natives["defineSchema"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("defineSchema", a, 2, line);
+        std::string container = asString(a[0], "defineSchema", line);
+        if (a[1].type != Value::Type::MAP) {
+            throw RinError("'defineSchema' يتوقّع كائناً/قاموساً (map) كوسيط ثانٍ: {field: \"type\", ...}", line);
+        }
+        std::vector<std::pair<std::string, std::string>> fields;
+        for (auto& kv : *a[1].map) {
+            if (kv.first.type != Value::Type::STRING || kv.second.type != Value::Type::STRING) {
+                throw RinError("'defineSchema': كل مفتاح/قيمة يجب أن يكونا نصّين (اسم حقل -> اسم نوع)", line);
+            }
+            fields.push_back({kv.first.str, kv.second.str});
+        }
+        schemaStore[container] = std::move(fields);
+        return Value::boolean_(true);
+    };
+
+    // getSchema(collection) -> map {field: "type", ...} أو nil إن لم يُعرَّف مخطط لهذه المجموعة
+    natives["getSchema"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("getSchema", a, 1, line);
+        std::string container = asString(a[0], "getSchema", line);
+        auto it = schemaStore.find(container);
+        if (it == schemaStore.end()) return Value::nil();
+        auto result = std::make_shared<MapData>();
+        for (auto& fieldType : it->second) result->push_back({Value::string(fieldType.first), Value::string(fieldType.second)});
+        return Value::makeMap(result);
+    };
+
+    // dropSchema(collection) -> true إن كان هناك مخطط فحُذف، false إن لم يوجد أصلاً
+    natives["dropSchema"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("dropSchema", a, 1, line);
+        std::string container = asString(a[0], "dropSchema", line);
+        return Value::boolean_(schemaStore.erase(container) > 0);
+    };
+
+    // validateDoc(collection, fields) -> مصفوفة رسائل الأخطاء (فارغة = صالح أو لا يوجد مخطط أصلاً)،
+    // بلا رفض/استثناء -- للاستخدام كفحص مسبق يدوي قبل insertDoc/updateDoc عند الحاجة.
+    natives["validateDoc"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("validateDoc", a, 2, line);
+        std::string container = asString(a[0], "validateDoc", line);
+        if (a[1].type != Value::Type::MAP) {
+            throw RinError("'validateDoc' يتوقّع كائناً/قاموساً (map) كوسيط ثانٍ لحقول المستند", line);
+        }
+        auto errors = schemaErrors(container, a[1]);
+        auto result = std::make_shared<ArrayData>();
+        for (auto& e : errors) result->push_back(Value::string(e));
+        return Value::makeArray(result);
+    };
+
+    // ---- index: فهرسة قيم حقل داخل مجموعة مستندات (تسريع/تسهيل البحث المتساوي عبر findByIndex) ----
+
+    // createIndex(collection, field) -> true إن أُنشئ فهرس جديد، false إن كان موجوداً أصلاً (يُعاد بناؤه بأي حال)
+    natives["createIndex"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("createIndex", a, 2, line);
+        std::string container = asString(a[0], "createIndex", line);
+        std::string field = asString(a[1], "createIndex", line);
+        auto& fields = indexStore[container];
+        bool exists = false;
+        for (auto& fe : fields) if (fe.first == field) { exists = true; break; }
+        if (!exists) fields.push_back({field, IndexBuckets{}});
+        refreshIndexesForContainer(container);
+        return Value::boolean_(!exists);
+    };
+
+    // dropIndex(collection, field) -> true إن حُذف فعلاً، false إن لم يوجد أصلاً
+    natives["dropIndex"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("dropIndex", a, 2, line);
+        std::string container = asString(a[0], "dropIndex", line);
+        std::string field = asString(a[1], "dropIndex", line);
+        auto it = indexStore.find(container);
+        if (it == indexStore.end()) return Value::boolean_(false);
+        auto& fields = it->second;
+        for (size_t i = 0; i < fields.size(); i++) {
+            if (fields[i].first == field) { fields.erase(fields.begin() + i); return Value::boolean_(true); }
+        }
+        return Value::boolean_(false);
+    };
+
+    // listIndexes(collection) -> مصفوفة أسماء الحقول المفهرسة حالياً لهذه المجموعة، بترتيب الإنشاء
+    natives["listIndexes"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("listIndexes", a, 1, line);
+        std::string container = asString(a[0], "listIndexes", line);
+        auto result = std::make_shared<ArrayData>();
+        auto it = indexStore.find(container);
+        if (it != indexStore.end()) for (auto& fe : it->second) result->push_back(Value::string(fe.first));
+        return Value::makeArray(result);
+    };
+
+    // findByIndex(collection, field, value) -> مصفوفة كل المستندات المطابقة (map)، بترتيب الإدخال.
+    // إن لم يوجد فهرس على field بعد، يُنشأ تلقائياً (فهرسة كسولة/lazy) قبل البحث.
+    natives["findByIndex"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("findByIndex", a, 3, line);
+        std::string container = asString(a[0], "findByIndex", line);
+        std::string field = asString(a[1], "findByIndex", line);
+        Value target = a[2];
+        auto& fields = indexStore[container];
+        IndexBuckets* buckets = nullptr;
+        for (auto& fe : fields) if (fe.first == field) { buckets = &fe.second; break; }
+        if (!buckets) {
+            fields.push_back({field, IndexBuckets{}});
+            buckets = &fields.back().second;
+            refreshIndexesForContainer(container);
+        }
+        auto result = std::make_shared<ArrayData>();
+        auto keyIt = buckets->find(reprValue(target));
+        if (keyIt != buckets->end()) {
+            auto docIt = docStore.find(container);
+            if (docIt != docStore.end()) {
+                for (auto& id : keyIt->second) {
+                    for (auto& entry : docIt->second) if (entry.first == id) { result->push_back(entry.second); break; }
+                }
+            }
+        }
+        return Value::makeArray(result);
+    };
+
+    // ---- relation: ربط مجموعتَي مستندات بحقلَي انضمام (join)، شبيه بمفتاح أجنبي بسيط ----
+
+    // defineRelation(name, fromCollection, fromField, toCollection, toField) -> true (يستبدل أي علاقة بنفس الاسم)
+    natives["defineRelation"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("defineRelation", a, 5, line);
+        std::string name = asString(a[0], "defineRelation", line);
+        std::string fromContainer = asString(a[1], "defineRelation", line);
+        std::string fromField = asString(a[2], "defineRelation", line);
+        std::string toContainer = asString(a[3], "defineRelation", line);
+        std::string toField = asString(a[4], "defineRelation", line);
+        if (!relationStore.count(name)) relationOrder.push_back(name);
+        relationStore[name] = RelationDef{fromContainer, fromField, toContainer, toField};
+        return Value::boolean_(true);
+    };
+
+    // relatedDocs(relationName, fromId) -> مصفوفة كل مستندات toCollection التي يساوي فيها toField
+    // قيمة fromField لمستند fromId في fromCollection (مصفوفة فارغة إن لم يوجد fromId أو لا تطابق له)
+    natives["relatedDocs"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("relatedDocs", a, 2, line);
+        std::string name = asString(a[0], "relatedDocs", line);
+        std::string fromId = asString(a[1], "relatedDocs", line);
+        auto result = std::make_shared<ArrayData>();
+        auto relIt = relationStore.find(name);
+        if (relIt == relationStore.end()) {
+            throw RinError("relatedDocs: لا توجد علاقة باسم '" + name + "' (استخدم defineRelation أولاً)", line);
+        }
+        const RelationDef& rel = relIt->second;
+        auto srcIt = docStore.find(rel.fromContainer);
+        if (srcIt == docStore.end()) return Value::makeArray(result);
+        Value joinVal;
+        bool haveJoin = false;
+        for (auto& entry : srcIt->second) {
+            if (entry.first != fromId) continue;
+            if (entry.second.type == Value::Type::MAP && entry.second.map) {
+                for (auto& kv : *entry.second.map) {
+                    if (kv.first.type == Value::Type::STRING && kv.first.str == rel.fromField) { joinVal = kv.second; haveJoin = true; break; }
+                }
+            }
+            break;
+        }
+        if (!haveJoin) return Value::makeArray(result);
+        auto dstIt = docStore.find(rel.toContainer);
+        if (dstIt != docStore.end()) {
+            for (auto& entry : dstIt->second) {
+                const Value& doc = entry.second;
+                if (doc.type != Value::Type::MAP || !doc.map) continue;
+                for (auto& kv : *doc.map) {
+                    if (kv.first.type == Value::Type::STRING && kv.first.str == rel.toField && valuesEqual(kv.second, joinVal)) {
+                        result->push_back(doc);
+                        break;
+                    }
+                }
+            }
+        }
+        return Value::makeArray(result);
+    };
+
+    // listRelations() -> مصفوفة أسماء كل العلاقات المُعرَّفة، بترتيب أول تعريف
+    natives["listRelations"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("listRelations", a, 0, line);
+        auto result = std::make_shared<ArrayData>();
+        for (auto& n : relationOrder) result->push_back(Value::string(n));
+        return Value::makeArray(result);
+    };
+
+    // ---- transaction: commit/rollback حقيقيَّين حول docStore (لقطات عميقة، انظر deepCloneValue) ----
+
+    // beginTransaction() -> true. يدعم التداخل (nested): كل begin يضيف لقطة جديدة فوق مكدّس txStack.
+    natives["beginTransaction"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("beginTransaction", a, 0, line);
+        std::unordered_map<std::string, std::vector<std::pair<std::string, Value>>> snapshot;
+        for (auto& kv : docStore) {
+            std::vector<std::pair<std::string, Value>> docs;
+            docs.reserve(kv.second.size());
+            for (auto& entry : kv.second) docs.push_back({entry.first, deepCloneValue(entry.second)});
+            snapshot[kv.first] = std::move(docs);
+        }
+        txStack.push_back(std::move(snapshot));
+        return Value::boolean_(true);
+    };
+
+    // commitTransaction() -> true إن كانت هناك معاملة مفتوحة فأُغلقت (تُعتمَد التغييرات)، false إن لم توجد
+    natives["commitTransaction"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("commitTransaction", a, 0, line);
+        if (txStack.empty()) return Value::boolean_(false);
+        txStack.pop_back();
+        return Value::boolean_(true);
+    };
+
+    // rollbackTransaction() -> true إن استُعيدت حالة docStore من آخر beginTransaction، false إن لم توجد معاملة مفتوحة
+    natives["rollbackTransaction"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("rollbackTransaction", a, 0, line);
+        if (txStack.empty()) return Value::boolean_(false);
+        docStore = std::move(txStack.back());
+        txStack.pop_back();
+        for (auto& kv : indexStore) refreshIndexesForContainer(kv.first);
+        return Value::boolean_(true);
+    };
+
+    // inTransaction() -> true إن كانت هناك معاملة واحدة مفتوحة على الأقل حالياً
+    natives["inTransaction"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("inTransaction", a, 0, line);
+        return Value::boolean_(!txStack.empty());
+    };
+
+    // ---- migration: خطوات ترحيل مُسمّاة (up/down)، مع تتبّع ما طُبِّق منها فعلاً ----
+
+    // defineMigration(name, upFn[, downFn]) -> true. upFn إلزامية (دالة Rin بلا وسائط)، downFn اختيارية
+    // (لأجل rollbackMigration). تعريف مكرَّر لنفس name يستبدل up/down بلا التأثير على appliedMigrations.
+    natives["defineMigration"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgsRange("defineMigration", a, 2, 3, line);
+        std::string name = asString(a[0], "defineMigration", line);
+        if (a[1].type != Value::Type::FUNCTION) {
+            throw RinError("'defineMigration': الوسيط الثاني (up) يجب أن يكون دالة Rin بلا وسائط", line);
+        }
+        Value down = Value::nil();
+        if (a.size() == 3) {
+            if (a[2].type != Value::Type::NIL && a[2].type != Value::Type::FUNCTION) {
+                throw RinError("'defineMigration': الوسيط الثالث (down) يجب أن يكون دالة Rin أو nil", line);
+            }
+            down = a[2];
+        }
+        if (!migrationStore.count(name)) migrationOrder.push_back(name);
+        migrationStore[name] = MigrationDef{a[1], down};
+        return Value::boolean_(true);
+    };
+
+    // runMigration(name) -> true إن نُفِّذت الآن للمرة الأولى، false إن كانت مُطبَّقة أصلاً (لا تكرار)
+    natives["runMigration"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("runMigration", a, 1, line);
+        std::string name = asString(a[0], "runMigration", line);
+        auto it = migrationStore.find(name);
+        if (it == migrationStore.end()) {
+            throw RinError("runMigration: لا يوجد ترحيل باسم '" + name + "' (استخدم defineMigration أولاً)", line);
+        }
+        for (auto& applied : appliedMigrations) if (applied == name) return Value::boolean_(false);
+        std::vector<Value> noArgs;
+        callFunction(it->second.up.function, noArgs, line);
+        appliedMigrations.push_back(name);
+        return Value::boolean_(true);
+    };
+
+    // rollbackMigration(name) -> true إن كانت مُطبَّقة فأُرجعت (استدعاء down إن وُجدت)، false إن لم تكن مُطبَّقة
+    natives["rollbackMigration"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("rollbackMigration", a, 1, line);
+        std::string name = asString(a[0], "rollbackMigration", line);
+        auto pos = std::find(appliedMigrations.begin(), appliedMigrations.end(), name);
+        if (pos == appliedMigrations.end()) return Value::boolean_(false);
+        auto it = migrationStore.find(name);
+        if (it != migrationStore.end() && it->second.down.type == Value::Type::FUNCTION) {
+            std::vector<Value> noArgs;
+            callFunction(it->second.down.function, noArgs, line);
+        }
+        appliedMigrations.erase(pos);
+        return Value::boolean_(true);
+    };
+
+    // appliedMigrations() -> مصفوفة أسماء الترحيلات المُطبَّقة فعلاً، بترتيب التطبيق
+    natives["appliedMigrations"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("appliedMigrations", a, 0, line);
+        auto result = std::make_shared<ArrayData>();
+        for (auto& n : appliedMigrations) result->push_back(Value::string(n));
+        return Value::makeArray(result);
+    };
+
+    // pendingMigrations() -> مصفوفة أسماء الترحيلات المُعرَّفة ولم تُطبَّق بعد، بترتيب التعريف
+    natives["pendingMigrations"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("pendingMigrations", a, 0, line);
+        auto result = std::make_shared<ArrayData>();
+        for (auto& n : migrationOrder) {
+            bool applied = false;
+            for (auto& app : appliedMigrations) if (app == n) { applied = true; break; }
+            if (!applied) result->push_back(Value::string(n));
+        }
+        return Value::makeArray(result);
+    };
+
+    // ---- cache: تخزين مؤقّت للقيم بمهلة صلاحية اختيارية (TTL بالثواني) ----
+
+    // cacheSet(key, value[, ttlSeconds]) -> true. بلا ttlSeconds = بلا انتهاء صلاحية.
+    natives["cacheSet"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgsRange("cacheSet", a, 2, 3, line);
+        std::string key = asString(a[0], "cacheSet", line);
+        long long expiresAt = 0;
+        if (a.size() == 3) {
+            double ttl = asNumber(a[2], "cacheSet", line);
+            expiresAt = static_cast<long long>(std::time(nullptr)) + static_cast<long long>(ttl);
+        }
+        cacheStore[key] = CacheEntry{a[1], expiresAt};
+        return Value::boolean_(true);
+    };
+
+    // cacheGet(key) -> القيمة المخزَّنة، أو nil إن لم توجد أو انتهت صلاحيتها (تُحذَف حينها تلقائياً)
+    natives["cacheGet"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("cacheGet", a, 1, line);
+        std::string key = asString(a[0], "cacheGet", line);
+        auto it = cacheStore.find(key);
+        if (it == cacheStore.end()) return Value::nil();
+        if (it->second.expiresAt > 0 && it->second.expiresAt <= static_cast<long long>(std::time(nullptr))) {
+            cacheStore.erase(it);
+            return Value::nil();
+        }
+        return it->second.value;
+    };
+
+    // cacheHas(key) -> true/false (بنفس منطق انتهاء الصلاحية اللحظي في cacheGet)
+    natives["cacheHas"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("cacheHas", a, 1, line);
+        std::string key = asString(a[0], "cacheHas", line);
+        auto it = cacheStore.find(key);
+        if (it == cacheStore.end()) return Value::boolean_(false);
+        if (it->second.expiresAt > 0 && it->second.expiresAt <= static_cast<long long>(std::time(nullptr))) {
+            cacheStore.erase(it);
+            return Value::boolean_(false);
+        }
+        return Value::boolean_(true);
+    };
+
+    // cacheDelete(key) -> true إن حُذف فعلاً، false إن لم يوجد أصلاً
+    natives["cacheDelete"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("cacheDelete", a, 1, line);
+        std::string key = asString(a[0], "cacheDelete", line);
+        return Value::boolean_(cacheStore.erase(key) > 0);
+    };
+
+    // cacheClear() -> true (يفرّغ كل التخزين المؤقّت)
+    natives["cacheClear"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("cacheClear", a, 0, line);
+        cacheStore.clear();
+        return Value::boolean_(true);
+    };
+
+    // cacheKeys() -> مصفوفة كل المفاتيح غير منتهية الصلاحية حالياً (تُحذَف أي مفاتيح منتهية أثناء المرور)
+    natives["cacheKeys"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("cacheKeys", a, 0, line);
+        long long now = static_cast<long long>(std::time(nullptr));
+        auto result = std::make_shared<ArrayData>();
+        for (auto it = cacheStore.begin(); it != cacheStore.end();) {
+            if (it->second.expiresAt > 0 && it->second.expiresAt <= now) { it = cacheStore.erase(it); continue; }
+            result->push_back(Value::string(it->first));
+            ++it;
+        }
+        return Value::makeArray(result);
+    };
+
+    // ---- watch: استدعاء دالة Rin تلقائياً عند تغيّر مجموعة مستندات (insertDoc/updateDoc/deleteDoc/document) ----
+
+    // watch(collection, fn) -> true. fn بتوقيع fun(id, doc, event) حيث event = "insert"/"update"/"delete"
+    // (doc = حقول المستند وقت الحدث؛ للحذف: المستند كما كان قبل حذفه مباشرة).
+    natives["watch"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("watch", a, 2, line);
+        std::string container = asString(a[0], "watch", line);
+        if (a[1].type != Value::Type::FUNCTION) {
+            throw RinError("'watch' يتوقّع دالة Rin كوسيط ثانٍ: fun(id, doc, event) { ... }", line);
+        }
+        docWatchers[container].push_back(a[1]);
+        return Value::boolean_(true);
+    };
+
+    // unwatch(collection) -> true إن كان هناك مراقبون فحُذفوا جميعاً، false إن لم يوجد أي مراقب أصلاً
+    natives["unwatch"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("unwatch", a, 1, line);
+        std::string container = asString(a[0], "unwatch", line);
+        return Value::boolean_(docWatchers.erase(container) > 0);
+    };
+
+    // ---- subscribe/publish: قناة أحداث عامة (pub/sub) مستقلة تماماً عن مجموعات المستندات ----
+
+    // subscribe(channel, fn) -> true. fn بتوقيع fun(payload) (payload = ما مرَّره publish كما هو)
+    natives["subscribe"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("subscribe", a, 2, line);
+        std::string channel = asString(a[0], "subscribe", line);
+        if (a[1].type != Value::Type::FUNCTION) {
+            throw RinError("'subscribe' يتوقّع دالة Rin كوسيط ثانٍ: fun(payload) { ... }", line);
+        }
+        channelSubs[channel].push_back(a[1]);
+        return Value::boolean_(true);
+    };
+
+    // unsubscribe(channel) -> true إن كان هناك مشتركون فحُذفوا جميعاً، false إن لم يوجد أي مشترك أصلاً
+    natives["unsubscribe"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("unsubscribe", a, 1, line);
+        std::string channel = asString(a[0], "unsubscribe", line);
+        return Value::boolean_(channelSubs.erase(channel) > 0);
+    };
+
+    // publish(channel, payload) -> عدد المشتركين الذين استُدعيت دوالهم فعلاً (0 إن لم يوجد أي مشترك بالقناة)
+    natives["publish"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("publish", a, 2, line);
+        std::string channel = asString(a[0], "publish", line);
+        int count = 0;
+        auto it = channelSubs.find(channel);
+        if (it != channelSubs.end()) {
+            for (auto& fn : it->second) {
+                if (fn.type != Value::Type::FUNCTION || !fn.function) continue;
+                std::vector<Value> cbArgs{a[1]};
+                callFunction(fn.function, cbArgs, line);
+                count++;
+            }
+        }
+        return Value::num(static_cast<double>(count));
     };
 
     // ---- container.api: استدعاء نقاط API الوهمية المسجَّلة عبر route (حقيقي بالكامل، بلا شبكة) ----
@@ -2870,12 +3371,19 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
         if (fieldsVal.type != Value::Type::MAP) {
             throw RinError("document: قيمة 'fields' يجب أن تكون كائناً/قاموساً (مثال: fields={ name: \"Ali\" };)", s->line);
         }
-        auto& docs = docStore[containerStack.back()];
+        std::string containerName = containerStack.back();
+        auto errors = schemaErrors(containerName, fieldsVal);
+        if (!errors.empty()) {
+            throw RinError("document: فشل التحقق من المخطط (schema) لـ '" + containerName + "': " + joinErrors(errors), s->line);
+        }
+        auto& docs = docStore[containerName];
         bool updated = false;
         for (auto& entry : docs) {
             if (entry.first == idVal.str) { entry.second = fieldsVal; updated = true; break; }
         }
         if (!updated) docs.push_back({idVal.str, fieldsVal});
+        refreshIndexesForContainer(containerName);
+        notifyWatchers(containerName, idVal.str, fieldsVal, updated ? "update" : "insert", s->line);
         output << (updated ? "🔄 document (تحديث) -> " : "🧾 document (إدراج) -> ")
                << idVal.str << " = " << fieldsVal.toDisplayString() << "\n";
         return;
@@ -2907,6 +3415,64 @@ bool Interpreter::copyTargetIntoCurrentContainer(const std::string& target, int 
         for (auto& kv : otherEnv->values) currentEnv->values[kv.first] = kv.second;
     }
     return true;
+}
+
+// انظر إعلانها في rin_interpreter.h (قسم schema) للشرح الكامل.
+std::vector<std::string> Interpreter::schemaErrors(const std::string& container, const Value& fields) const {
+    std::vector<std::string> errors;
+    auto it = schemaStore.find(container);
+    if (it == schemaStore.end()) return errors;
+    for (auto& fieldType : it->second) {
+        const std::string& field = fieldType.first;
+        const std::string& type = fieldType.second;
+        bool found = false;
+        Value val;
+        if (fields.type == Value::Type::MAP && fields.map) {
+            for (auto& kv : *fields.map) {
+                if (kv.first.type == Value::Type::STRING && kv.first.str == field) { found = true; val = kv.second; break; }
+            }
+        }
+        if (!found) { errors.push_back("الحقل '" + field + "' مفقود"); continue; }
+        if (!valueMatchesSchemaType(val, type)) {
+            errors.push_back("الحقل '" + field + "' يجب أن يكون من نوع " + type + " لكنه " + val.typeName());
+        }
+    }
+    return errors;
+}
+
+// انظر إعلانها في rin_interpreter.h (قسم index) للشرح الكامل. تُعاد بناء كل الحقول المفهرسة
+// لهذه الحاوية من الصفر انطلاقاً من docStore الحالي.
+void Interpreter::refreshIndexesForContainer(const std::string& container) {
+    auto cIt = indexStore.find(container);
+    if (cIt == indexStore.end()) return;
+    auto docIt = docStore.find(container);
+    for (auto& fieldEntry : cIt->second) {
+        auto& buckets = fieldEntry.second;
+        buckets.clear();
+        if (docIt == docStore.end()) continue;
+        for (auto& entry : docIt->second) {
+            const Value& doc = entry.second;
+            if (doc.type != Value::Type::MAP || !doc.map) continue;
+            for (auto& kv : *doc.map) {
+                if (kv.first.type == Value::Type::STRING && kv.first.str == fieldEntry.first) {
+                    buckets[reprValue(kv.second)].push_back(entry.first);
+                    break;
+                }
+            }
+        }
+    }
+}
+
+// انظر إعلانها في rin_interpreter.h (قسم watch/subscribe) للشرح الكامل.
+void Interpreter::notifyWatchers(const std::string& container, const std::string& id, const Value& doc,
+                                  const std::string& event, int line) {
+    auto it = docWatchers.find(container);
+    if (it == docWatchers.end()) return;
+    for (auto& fn : it->second) {
+        if (fn.type != Value::Type::FUNCTION || !fn.function) continue;
+        std::vector<Value> cbArgs{Value::string(id), doc, Value::string(event)};
+        callFunction(fn.function, cbArgs, line);
+    }
 }
 
 Value Interpreter::callFunction(const std::shared_ptr<Callable>& fn, std::vector<Value>& args, int line) {
