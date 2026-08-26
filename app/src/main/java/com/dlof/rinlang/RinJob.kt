@@ -14,11 +14,11 @@ enum class JobStatus { QUEUED, RUNNING, SUCCESS, ERROR, TIMEOUT, CANCELLED }
 data class RinJob(
     val number: Int,
     val source: String,
-    var status: JobStatus = JobStatus.QUEUED,
-    var queuedAt: Long = System.currentTimeMillis(),
-    var startedAt: Long = 0L,
-    var finishedAt: Long = 0L,
-    var output: String = ""
+    @Volatile var status: JobStatus = JobStatus.QUEUED,
+    @Volatile var queuedAt: Long = System.currentTimeMillis(),
+    @Volatile var startedAt: Long = 0L,
+    @Volatile var finishedAt: Long = 0L,
+    @Volatile var output: String = ""
 ) {
     /** Wall-clock duration of the run so far, in milliseconds. */
     fun durationMs(): Long {
