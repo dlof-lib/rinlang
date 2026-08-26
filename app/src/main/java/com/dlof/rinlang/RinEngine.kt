@@ -61,6 +61,39 @@ object RinEngine {
 
     private external fun runSourceStructuredNative(source: String, baseDir: String): String
 
+    /**
+     * Receives live output as [runSourceStructuredStreaming] executes. [onChunk] is invoked
+     * synchronously, on the calling thread, once per top-level Rin statement that produced new
+     * output — real incremental delivery straight out of `Interpreter::run`'s execution loop
+     * (see rin_interpreter.cpp), not a replay or a timed animation of an already-finished run.
+     * [sequence] starts at 1 and increases by 1 per call for this run.
+     *
+     * Implementations must be fast and must not block: this callback runs *inside* the native
+     * call, on whatever thread invoked [runSourceStructuredStreaming] — the Rin program's own
+     * execution is paused between statements while [onChunk] runs. Do not touch Android UI
+     * directly from here; hop back to the main thread first (see how [RinJobScheduler] batches
+     * updates before posting to its `mainHandler`).
+     */
+    fun interface RinStreamListener {
+        fun onChunk(sequence: Int, chunk: String)
+    }
+
+    /**
+     * Same lexer/parser/interpreter pipeline and same final [RinExecutionResult] shape as
+     * [runSourceStructured] — [listener] just additionally receives each statement's output the
+     * moment it's produced, instead of only seeing the fully assembled [RinExecutionResult.output]
+     * once the whole program has finished. [runSource] and [runSourceStructured] are both
+     * untouched; this is purely additive.
+     */
+    fun runSourceStructuredStreaming(source: String, listener: RinStreamListener): RinExecutionResult =
+        RinExecutionResult.parse(runSourceStructuredStreamingNative(source, baseDir, listener))
+
+    private external fun runSourceStructuredStreamingNative(
+        source: String,
+        baseDir: String,
+        listener: RinStreamListener
+    ): String
+
     /** Returns a human readable version string for the native engine. */
     external fun engineVersion(): String
 
