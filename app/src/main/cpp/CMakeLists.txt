@@ -11,6 +11,13 @@ add_library(
         rin_lexer.cpp
         rin_parser.cpp
         rin_interpreter.cpp
+        # diagnostics/: نظام Compiler Diagnostics الموحّد (E-codes/W-codes، rendering، suggestion
+        # engine) المستخدَم من rin_lexer.cpp/rin_parser.cpp/rin_interpreter.cpp أعلاه — انظر
+        # docs/ERROR_SYSTEM.md لتوثيق كامل.
+        diagnostics/diagnostic.cpp
+        diagnostics/source_manager.cpp
+        diagnostics/diagnostic_engine.cpp
+        diagnostics/diagnostic_renderer.cpp
         # rin_http.cpp: عميل HTTP حقيقي (natives httpGet/apiCall/...، انظر registerNatives() في
         # rin_interpreter.cpp). على أندرويد تنفيذها الفعلي داخل هذا الملف يمرّ بالكامل عبر
         # rin::http::setAndroidBridge (يُسجَّله jni_bridge.cpp من JNI_OnLoad) الذي يستدعي فعلياً
@@ -34,6 +41,22 @@ add_executable(
         rinc.cpp
 )
 
+# rincheck: أداة `rin check <file> [--format=plain|short|json|lsp]` — تحليل الملف فقط (lex+parse،
+# بدون تنفيذ) مع طباعة كل Diagnostics بالتنسيق المطلوب. هدف مستقل عن rinengine/rinc، انظر
+# tools/rin_check.cpp و docs/ERROR_SYSTEM.md (القسم 26/27).
+add_executable(
+        rincheck
+        ../../../../tools/rin_check.cpp
+        rin_lexer.cpp
+        rin_parser.cpp
+        rin_interpreter.cpp
+        rin_http.cpp
+        diagnostics/diagnostic.cpp
+        diagnostics/source_manager.cpp
+        diagnostics/diagnostic_engine.cpp
+        diagnostics/diagnostic_renderer.cpp
+)
+
 # loomc: أداة سطر أوامر مستقلة لمحرّك العرض Loomtime — نفس فلسفة rinc أعلاه تماماً:
 # هدف مستقل، لا يُربط بـ rinengine ولا يُحزَم داخل APK، للاختبار على جهاز تطوير عادي فقط.
 add_executable(
@@ -41,6 +64,10 @@ add_executable(
         loom/loomc.cpp
         rin_lexer.cpp
         rin_parser.cpp
+        diagnostics/diagnostic.cpp
+        diagnostics/source_manager.cpp
+        diagnostics/diagnostic_engine.cpp
+        diagnostics/diagnostic_renderer.cpp
 )
 
 find_library(log-lib log)
