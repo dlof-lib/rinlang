@@ -128,6 +128,17 @@
     <string name="job_timeout_message">"[Timeout]: execution exceeded %1$d seconds and was abandoned"</string>
     <string name="job_cancel_cta">Cancel this queued run</string>
     <string name="job_queue_full_toast">Too many runs are already queued — wait for one to finish first</string>
+    <string name="job_pin_cta">Pin this run</string>
+    <string name="job_unpin_cta">Unpin this run</string>
+    <string name="job_copied_toast">Copied to clipboard</string>
+    <string name="job_details_cta">Details</string>
+    <string name="job_copy_cta">Copy</string>
+    <string name="diag_reason_label">reason</string>
+    <string name="diag_expected_label">expected</string>
+    <string name="diag_found_label">found</string>
+    <string name="diag_suggestions_label">did you mean</string>
+    <string name="diag_hint_label">help</string>
+    <string name="diag_notes_label">note</string>
 
     <!-- تنزيل الملفات الفعلية التي أنتجها save/installation إلى مجلد Downloads بالجهاز -->
     <string name="download_results_label">النتائج الجاهزة للتنزيل</string>
