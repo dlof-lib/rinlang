@@ -1,0 +1,16 @@
+error[E0012]: Expected ';' after variable declaration
+  --> parser_missing_semicolon.rin:2:1
+
+ 2 | print x;
+   | ^^^^^
+
+reason:
+  the parser reached this point while still expecting the token above
+
+found:
+  `print`
+
+expected:
+  `;`
+
+1 error emitted
