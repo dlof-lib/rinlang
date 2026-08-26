@@ -57,6 +57,17 @@ add_executable(
         diagnostics/diagnostic_renderer.cpp
 )
 
+# rincheck sources live under tools/, while Rin headers (rin_lexer.h,
+# rin_parser.h, etc.) live under this CMake directory.  Clang does not
+# automatically search the target source directories for quoted includes,
+# so explicitly expose the Rin C++ source root (and diagnostics headers).
+target_include_directories(
+        rincheck
+        PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        ${CMAKE_CURRENT_SOURCE_DIR}/diagnostics
+)
+
 # loomc: أداة سطر أوامر مستقلة لمحرّك العرض Loomtime — نفس فلسفة rinc أعلاه تماماً:
 # هدف مستقل، لا يُربط بـ rinengine ولا يُحزَم داخل APK، للاختبار على جهاز تطوير عادي فقط.
 add_executable(
