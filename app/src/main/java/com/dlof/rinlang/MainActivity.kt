@@ -197,6 +197,7 @@ class MainActivity : AppCompatActivity() {
         // قائمة التشغيل المجدولة (job queue): كل عملية Run بطاقة مستقلة
         jobAdapter = RinJobAdapter(this)
         jobAdapter.onCancelRequested = { number -> RinJobScheduler.cancel(number) }
+        jobAdapter.onPinToggleRequested = { number -> RinJobScheduler.togglePin(number) }
         rvJobs.layoutManager = LinearLayoutManager(this)
         rvJobs.adapter = jobAdapter
         RinJobScheduler.onJobsChanged = { jobs ->
