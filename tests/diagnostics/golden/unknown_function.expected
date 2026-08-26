@@ -1,0 +1,10 @@
+
+error[E0006]: `unknownFn` is not a function
+  --> unknown_function.rin:1:1
+
+ 1 | print unknownFn();
+   | ^
+
+reason:
+  no function (built-in or user-defined) named `unknownFn` is callable here
+
