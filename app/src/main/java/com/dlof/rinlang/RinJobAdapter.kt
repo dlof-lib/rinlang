@@ -2,6 +2,9 @@ package com.dlof.rinlang
 
 import android.Manifest
 import android.app.Activity
+import android.app.AlertDialog
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import android.content.pm.PackageManager
 import android.graphics.Typeface
@@ -25,6 +28,9 @@ class RinJobAdapter(private val context: Context) : RecyclerView.Adapter<RinJobA
 
     /** Invoked with a job's [RinJob.number] when the user asks to cancel a still-QUEUED run. */
     var onCancelRequested: ((Int) -> Unit)? = null
+
+    /** Invoked with a job's [RinJob.number] when the user taps the pin toggle. */
+    var onPinToggleRequested: ((Int) -> Unit)? = null
 
     fun submit(newItems: List<RinJob>) {
         items = newItems
@@ -64,8 +70,45 @@ class RinJobAdapter(private val context: Context) : RecyclerView.Adapter<RinJobA
             isFocusable = true
         }.also { (duration.parent as LinearLayout).addView(it) }
 
+        /** Pin toggle (section 9: Pinned Runs) — kept out of history trimming while pinned. */
+        private val pinBtn: TextView = TextView(context).apply {
+            textSize = 13f
+            setPadding((8 * dp).toInt(), 0, (2 * dp).toInt(), 0)
+            isClickable = true
+            isFocusable = true
+        }.also { (duration.parent as LinearLayout).addView(it) }
+
+        private var boundJob: RinJob? = null
+
+        init {
+            // Copy System (section 13): long-press anywhere on a finished run's card copies its
+            // full output — quick access without needing a dedicated button on every row.
+            itemView.setOnLongClickListener {
+                val job = boundJob ?: return@setOnLongClickListener false
+                if (job.status == JobStatus.QUEUED || job.status == JobStatus.RUNNING) return@setOnLongClickListener false
+                copyToClipboard(
+                    label = "Rin Run #${job.number}",
+                    text = job.output,
+                    toastRes = R.string.job_copied_toast
+                )
+                true
+            }
+        }
+
         fun bind(job: RinJob) {
-            title.text = context.getString(R.string.job_title_fmt, job.number)
+            boundJob = job
+            title.text = if (job.pinned) {
+                context.getString(R.string.job_title_fmt, job.number) + " 📌"
+            } else {
+                context.getString(R.string.job_title_fmt, job.number)
+            }
+
+            pinBtn.text = if (job.pinned) "📌" else "📍"
+            pinBtn.alpha = if (job.pinned) 1f else 0.45f
+            pinBtn.contentDescription = context.getString(
+                if (job.pinned) R.string.job_unpin_cta else R.string.job_pin_cta
+            )
+            pinBtn.setOnClickListener { onPinToggleRequested?.invoke(job.number) }
 
             val (label, colorRes) = when (job.status) {
                 JobStatus.QUEUED -> context.getString(R.string.job_status_queued) to R.color.status_queued
@@ -125,6 +168,15 @@ class RinJobAdapter(private val context: Context) : RecyclerView.Adapter<RinJobA
             val lines = RinConsoleFormatter.formatLines(job.output)
             for (line in lines) {
                 outputLines.addView(buildLineRow(line))
+            }
+
+            // Diagnostics (section 5): when the engine reported a real structured diagnostic
+            // (RinDiagnostic — code/line/column/hints, not text scraped back out of the console),
+            // surface "Details" + "Copy" actions for it instead of leaving the person to parse the
+            // rendered error text by eye.
+            val diagnostic = job.diagnostic
+            if (job.status == JobStatus.ERROR && diagnostic != null) {
+                outputLines.addView(buildDiagnosticActionsRow(job, diagnostic))
             }
 
             if (job.status != JobStatus.SUCCESS) return
@@ -244,6 +296,96 @@ class RinJobAdapter(private val context: Context) : RecyclerView.Adapter<RinJobA
 
             chip.setOnClickListener { requestDownload(artifact) }
             return chip
+        }
+
+        /** Small "Details" / "Copy" action row shown under an ERROR job's output, section 5. */
+        private fun buildDiagnosticActionsRow(job: RinJob, diagnostic: RinDiagnostic): View {
+            val row = LinearLayout(context).apply {
+                orientation = LinearLayout.HORIZONTAL
+                setPadding(0, (6 * dp).toInt(), 0, 0)
+            }
+
+            val detailsBtn = TextView(context).apply {
+                text = context.getString(R.string.job_details_cta)
+                textSize = 11.5f
+                setTypeface(typeface, Typeface.BOLD)
+                setTextColor(ContextCompat.getColor(context, R.color.rin_accent))
+                setPadding(0, 0, (16 * dp).toInt(), 0)
+                isClickable = true
+                isFocusable = true
+                setOnClickListener { showDiagnosticDetails(job, diagnostic) }
+            }
+            row.addView(detailsBtn)
+
+            val copyBtn = TextView(context).apply {
+                text = context.getString(R.string.job_copy_cta)
+                textSize = 11.5f
+                setTypeface(typeface, Typeface.BOLD)
+                setTextColor(ContextCompat.getColor(context, R.color.rin_accent))
+                isClickable = true
+                isFocusable = true
+                setOnClickListener {
+                    copyToClipboard(
+                        label = "Rin Diagnostic ${diagnostic.code}",
+                        text = diagnosticAsMarkdown(job, diagnostic),
+                        toastRes = R.string.job_copied_toast
+                    )
+                }
+            }
+            row.addView(copyBtn)
+            return row
+        }
+
+        /** Full-detail dialog for one diagnostic — the "[ Details ]" action from section 5. */
+        private fun showDiagnosticDetails(job: RinJob, d: RinDiagnostic) {
+            val body = buildString {
+                append(context.getString(R.string.job_title_fmt, job.number)).append("\n\n")
+                append(d.severity.uppercase()).append(" [").append(d.code).append("] ").append(d.message).append("\n")
+                append(d.file).append(":").append(d.line).append(":").append(d.column).append("\n")
+                d.reason?.let { append("\n").append(context.getString(R.string.diag_reason_label)).append(": ").append(it).append("\n") }
+                d.expected?.let { append("\n").append(context.getString(R.string.diag_expected_label)).append(": ").append(it).append("\n") }
+                d.found?.let { append(context.getString(R.string.diag_found_label)).append(": ").append(it).append("\n") }
+                if (d.suggestions.isNotEmpty()) {
+                    append("\n").append(context.getString(R.string.diag_suggestions_label)).append(":\n")
+                    d.suggestions.forEach { append("  • ").append(it).append("\n") }
+                }
+                if (d.hints.isNotEmpty()) {
+                    append("\n").append(context.getString(R.string.diag_hint_label)).append(":\n")
+                    d.hints.forEach { append("  ").append(it).append("\n") }
+                }
+                if (d.notes.isNotEmpty()) {
+                    append("\n").append(context.getString(R.string.diag_notes_label)).append(":\n")
+                    d.notes.forEach { append("  ").append(it).append("\n") }
+                }
+            }
+
+            AlertDialog.Builder(context)
+                .setTitle("${d.code} — ${d.codeName}")
+                .setMessage(body)
+                .setPositiveButton(context.getString(R.string.job_copy_cta)) { _, _ ->
+                    copyToClipboard("Rin Diagnostic ${d.code}", body, R.string.job_copied_toast)
+                }
+                .setNegativeButton(android.R.string.cancel, null)
+                .show()
+        }
+
+        /** "Copy as Markdown" body for a diagnostic — section 13. */
+        private fun diagnosticAsMarkdown(job: RinJob, d: RinDiagnostic): String = buildString {
+            append("### Rin Run #${job.number} — ${d.severity} ${d.code}\n\n")
+            append("**${d.message}**\n\n")
+            append("`${d.file}:${d.line}:${d.column}`\n")
+            d.reason?.let { append("\n> reason: $it\n") }
+            if (d.hints.isNotEmpty()) {
+                append("\n**help:**\n")
+                d.hints.forEach { append("- $it\n") }
+            }
+        }
+
+        private fun copyToClipboard(label: String, text: String, toastRes: Int) {
+            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+            if (clipboard == null || text.isEmpty()) return
+            clipboard.setPrimaryClip(ClipData.newPlainText(label, text))
+            Toast.makeText(context, context.getString(toastRes), Toast.LENGTH_SHORT).show()
         }
 
         private fun requestDownload(artifact: RinArtifact) {
