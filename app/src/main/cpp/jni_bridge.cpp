@@ -4,10 +4,12 @@
 #include <jni.h>
 #include <string>
 #include <vector>
+#include <chrono>
 #include "rin_lexer.h"
 #include "rin_parser.h"
 #include "rin_interpreter.h"
 #include "rin_http.h"
+#include "diagnostics/diagnostic_renderer.h"
 #include "loom/rin_loom_c_api.h"
 
 // runSourceNative(source, baseDir) -> baseDir هو جذر حقيقي على القرص (عادة filesDir الخاص بالتطبيق
@@ -50,6 +52,123 @@ Java_com_dlof_rinlang_RinEngine_runSourceNative(JNIEnv* env, jobject /* this */,
     }
 
     return env->NewStringUTF(result.c_str());
+}
+
+// ---------------------------------------------------------------------------
+// runSourceStructuredNative(source, baseDir) -> JSON
+//
+// Additive, backward-compatible sibling of runSourceNative above. Returns a
+// structured result instead of a single opaque string, so the Kotlin side
+// (RinJobScheduler / RinExecutionManager) can tell SUCCESS from ERROR from a
+// *real* execution outcome instead of sniffing whether the printed output
+// happens to start with '[' -- which is wrong whenever a program legitimately
+// prints something like `print ["hello", "world"];`.
+//
+// Shape:
+//   { "status": "SUCCESS" | "ERROR",
+//     "output": "...",                 // everything the program printed, always present
+//     "diagnostic": { ... } | null,    // rich diag::Diagnostic JSON (see diagnostic_renderer.cpp)
+//     "diagnosticText": "..." | null,  // same diagnostic pre-rendered rustc-style, ready to display
+//     "errorMessage": "..." | null,    // plain fallback message when no rich diagnostic exists
+//     "errorLine": N }                 // 0 when there is no error
+//
+// "status" here only ever distinguishes SUCCESS/ERROR for *this* call; TIMEOUT and CANCELLED are
+// scheduler-level outcomes (the native call was never interrupted or never returned) and are
+// decided on the Kotlin side by RinJobScheduler, same as before.
+static std::string jsonEscapeLocal(const std::string& s) {
+    std::string out;
+    out.reserve(s.size() + 8);
+    for (char c : s) {
+        switch (c) {
+            case '"':  out += "\\\""; break;
+            case '\\': out += "\\\\"; break;
+            case '\n': out += "\\n"; break;
+            case '\r': out += "\\r"; break;
+            case '\t': out += "\\t"; break;
+            default:
+                if (static_cast<unsigned char>(c) < 0x20) {
+                    char buf[8];
+                    std::snprintf(buf, sizeof(buf), "\\u%04x", c);
+                    out += buf;
+                } else {
+                    out += c;
+                }
+        }
+    }
+    return out;
+}
+
+extern "C" JNIEXPORT jstring JNICALL
+Java_com_dlof_rinlang_RinEngine_runSourceStructuredNative(JNIEnv* env, jobject /* this */, jstring sourceJStr, jstring baseDirJStr) {
+    const char* cSource = env->GetStringUTFChars(sourceJStr, nullptr);
+    std::string source(cSource ? cSource : "");
+    env->ReleaseStringUTFChars(sourceJStr, cSource);
+
+    std::string baseDir;
+    if (baseDirJStr != nullptr) {
+        const char* cBaseDir = env->GetStringUTFChars(baseDirJStr, nullptr);
+        baseDir = cBaseDir ? cBaseDir : "";
+        env->ReleaseStringUTFChars(baseDirJStr, cBaseDir);
+    }
+
+    std::string status = "SUCCESS";
+    std::string output;
+    std::string diagnosticJson;   // left empty -> emitted as JSON null
+    std::string diagnosticText;   // left empty -> emitted as JSON null
+    std::string errorMessage;     // left empty -> emitted as JSON null
+    int errorLine = 0;
+
+    try {
+        rin::Lexer lexer(source);
+        auto tokens = lexer.scanTokens();
+        rin::Parser parser(tokens);
+        auto statements = parser.parse();
+        rin::Interpreter interpreter;
+        if (!baseDir.empty()) {
+            interpreter.setBasePath(baseDir);
+        }
+        output = interpreter.run(statements);
+        if (interpreter.hadError()) {
+            status = "ERROR";
+            if (interpreter.lastDiagnostic()) {
+                diagnosticJson = rin::diag::renderJson(*interpreter.lastDiagnostic());
+                diagnosticText = rin::diag::renderPlain(*interpreter.lastDiagnostic(), rin::diag::globalSourceManager());
+            }
+            if (interpreter.lastErrorMessage()) errorMessage = *interpreter.lastErrorMessage();
+            errorLine = interpreter.lastErrorLine();
+        }
+        if (output.empty() && status == "SUCCESS") output = "(no output)";
+    } catch (rin::RinError& e) {
+        // Lexer/parser-stage failure: execution never even started.
+        status = "ERROR";
+        errorMessage = e.message;
+        errorLine = e.line;
+        if (e.diagnostic) {
+            diagnosticJson = rin::diag::renderJson(*e.diagnostic);
+            diagnosticText = rin::diag::renderPlain(*e.diagnostic, rin::diag::globalSourceManager());
+        }
+        output = "";
+    } catch (std::exception& e) {
+        status = "ERROR";
+        errorMessage = std::string("Internal error: ") + e.what();
+        output = "";
+    } catch (...) {
+        status = "ERROR";
+        errorMessage = "Unknown internal error";
+        output = "";
+    }
+
+    std::ostringstream json;
+    json << "{"
+         << "\"status\":\"" << status << "\","
+         << "\"output\":\"" << jsonEscapeLocal(output) << "\","
+         << "\"diagnostic\":" << (diagnosticJson.empty() ? "null" : diagnosticJson) << ","
+         << "\"diagnosticText\":" << (diagnosticText.empty() ? "null" : ("\"" + jsonEscapeLocal(diagnosticText) + "\"")) << ","
+         << "\"errorMessage\":" << (errorMessage.empty() ? "null" : ("\"" + jsonEscapeLocal(errorMessage) + "\""))
+         << ",\"errorLine\":" << errorLine
+         << "}";
+
+    return env->NewStringUTF(json.str().c_str());
 }
 
 extern "C" JNIEXPORT jstring JNICALL
