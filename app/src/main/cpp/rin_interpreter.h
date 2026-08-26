@@ -136,6 +136,19 @@ public:
     // Runs a full program, returns everything printed (or a formatted error).
     std::string run(const std::vector<StmtPtr>& statements);
 
+    // ---- Structured result of the last run() call (see run()'s catch block) ----
+    // Set precisely when run() actually caught a RinError (i.e. a real failure occurred),
+    // never inferred from the text of the returned string -- so callers (e.g. the JNI
+    // structured-execution bridge) can report SUCCESS/ERROR correctly even when the program's
+    // own printed output happens to start with '[' (e.g. `print ["a","b"];`).
+    bool hadError() const { return lastDiagnostic_.has_value() || lastErrorMessage_.has_value(); }
+    // Full Diagnostic (code/line/column/hints/...) when the failure was raised through the
+    // diag:: system; absent for the rare paths that still throw a bare RinError(message,line).
+    const std::optional<diag::Diagnostic>& lastDiagnostic() const { return lastDiagnostic_; }
+    // Always populated on failure, diagnostic or not: a plain fallback message + line.
+    const std::optional<std::string>& lastErrorMessage() const { return lastErrorMessage_; }
+    int lastErrorLine() const { return lastErrorLine_; }
+
     // اسم الملف المستخدَم في كل Diagnostic صادر عن هذا الـ Interpreter (نظام Diagnostics — انظر
     // diagnostics/). يُضبَط عادة إلى نفس الاسم الذي مُرِّر إلى Lexer/Parser لنفس الملف.
     void setSourceFile(const std::string& name) { sourceFile = name; }
@@ -180,6 +193,11 @@ private:
     EnvPtr globals;
     std::ostringstream output;
     std::string sourceFile = "<input>"; // نظام Diagnostics — انظر setSourceFile() أعلاه
+
+    // ---- Structured result state for the last run() (see hadError()/lastDiagnostic() above) ----
+    std::optional<diag::Diagnostic> lastDiagnostic_;
+    std::optional<std::string> lastErrorMessage_;
+    int lastErrorLine_ = 0;
 
     // ---- Diagnostics helpers (src/diagnostics) ----
     // يبني RinError غنياً (Diagnostic كامل: كود + موقع من رقم السطر + رسالة) لأي خطأ تشغيل. العمود
