@@ -2760,21 +2760,38 @@ std::string Interpreter::run(const std::vector<StmtPtr>& statements) {
     try {
         for (const auto& s : statements) {
             if (std::dynamic_pointer_cast<FunctionStmt>(s)) continue; // already hoisted
+            // البث الحي (streamSink_): نلتقط موضع الكتابة *قبل* تنفيذ هذا الـ statement العلوي
+            // و*بعده*، ونمرّر الفرق فقط -- تمامًا ما أضافه هذا الـ statement بالذات، لا أكثر ولا
+            // أقل. هذا يمنح دقة "لكل statement علوي" حقيقية بلا أي تعديل على الـ 40+ موضع طباعة
+            // الداخلية المتناثرة في هذا الملف (كل منها ما زال يكتب إلى نفس [output] كما كان دائماً).
+            const bool streaming = static_cast<bool>(streamSink_);
+            std::streamoff before = streaming ? static_cast<std::streamoff>(output.tellp()) : 0;
             execute(s, globals);
+            if (streaming) {
+                std::streamoff after = output.tellp();
+                if (after > before) {
+                    streamSink_(output.str().substr(static_cast<size_t>(before), static_cast<size_t>(after - before)));
+                }
+            }
         }
     } catch (RinError& e) {
+        std::string appended;
         if (e.diagnostic) {
             lastDiagnostic_ = e.diagnostic;
-            output << "\n" << diag::renderPlain(*e.diagnostic, diag::globalSourceManager()) << "\n";
+            appended = "\n" + diag::renderPlain(*e.diagnostic, diag::globalSourceManager()) + "\n";
         } else {
-            output << "\n[Error line " << e.line << "]: " << e.message << "\n";
+            appended = "\n[Error line " + std::to_string(e.line) + "]: " + e.message + "\n";
         }
+        output << appended;
         lastErrorMessage_ = e.message;
         lastErrorLine_ = e.line;
+        if (streamSink_) streamSink_(appended);
     } catch (ReturnSignal&) {
-        output << "\n[Error]: 'return' used outside of a function\n";
+        const char* appended = "\n[Error]: 'return' used outside of a function\n";
+        output << appended;
         lastErrorMessage_ = "'return' used outside of a function";
         lastErrorLine_ = 0;
+        if (streamSink_) streamSink_(appended);
     }
     return output.str();
 }
