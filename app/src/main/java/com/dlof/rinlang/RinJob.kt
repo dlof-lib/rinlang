@@ -18,7 +18,13 @@ data class RinJob(
     @Volatile var queuedAt: Long = System.currentTimeMillis(),
     @Volatile var startedAt: Long = 0L,
     @Volatile var finishedAt: Long = 0L,
-    @Volatile var output: String = ""
+    @Volatile var output: String = "",
+    /** Structured diagnostic for this run's failure, when the engine reported one (see
+     *  [RinEngine.runSourceStructured]); null on success or for errors without a rich diagnostic
+     *  (e.g. a queue-level rejection). Populated by [RinJobScheduler], never inferred from [output]. */
+    @Volatile var diagnostic: RinDiagnostic? = null,
+    /** Pinned runs are exempt from [RinJobScheduler]'s history trimming (see section 9: Pinned Runs). */
+    @Volatile var pinned: Boolean = false
 ) {
     /** Wall-clock duration of the run so far, in milliseconds. */
     fun durationMs(): Long {
