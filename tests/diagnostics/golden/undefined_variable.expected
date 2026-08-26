@@ -1,0 +1,18 @@
+
+error[E0001]: undefined variable `y`
+  --> undefined_variable.rin:2:1
+
+ 2 | print y;
+   | ^
+
+reason:
+  no variable named `y` exists in this scope
+
+possible matches:
+  `E`
+  `x`
+  `PI`
+
+help:
+  did you mean `E`?
+
