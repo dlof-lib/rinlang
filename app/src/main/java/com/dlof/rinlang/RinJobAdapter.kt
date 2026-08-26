@@ -23,6 +23,9 @@ class RinJobAdapter(private val context: Context) : RecyclerView.Adapter<RinJobA
 
     private var items: List<RinJob> = emptyList()
 
+    /** Invoked with a job's [RinJob.number] when the user asks to cancel a still-QUEUED run. */
+    var onCancelRequested: ((Int) -> Unit)? = null
+
     fun submit(newItems: List<RinJob>) {
         items = newItems
         notifyDataSetChanged()
@@ -48,6 +51,18 @@ class RinJobAdapter(private val context: Context) : RecyclerView.Adapter<RinJobA
         private val outputLines: LinearLayout = itemView.findViewById(R.id.llJobOutputLines)
         private val artifactsContainer: LinearLayout = itemView.findViewById(R.id.llJobArtifacts)
         private val dp = itemView.resources.displayMetrics.density
+
+        /** Built once per recycled row and toggled visible only while the job is QUEUED. */
+        private val cancelBtn: TextView = TextView(context).apply {
+            text = "✕"
+            textSize = 13f
+            setTypeface(typeface, Typeface.BOLD)
+            setTextColor(ContextCompat.getColor(context, R.color.rin_editor_hint))
+            setPadding((8 * dp).toInt(), 0, (2 * dp).toInt(), 0)
+            contentDescription = context.getString(R.string.job_cancel_cta)
+            isClickable = true
+            isFocusable = true
+        }.also { (duration.parent as LinearLayout).addView(it) }
 
         fun bind(job: RinJob) {
             title.text = context.getString(R.string.job_title_fmt, job.number)
@@ -75,6 +90,14 @@ class RinJobAdapter(private val context: Context) : RecyclerView.Adapter<RinJobA
 
             duration.text = if (job.startedAt == 0L) "" else
                 context.getString(R.string.job_duration_fmt, job.durationMs())
+
+            if (job.status == JobStatus.QUEUED) {
+                cancelBtn.visibility = View.VISIBLE
+                cancelBtn.setOnClickListener { onCancelRequested?.invoke(job.number) }
+            } else {
+                cancelBtn.visibility = View.GONE
+                cancelBtn.setOnClickListener(null)
+            }
 
             outputLines.removeAllViews()
             artifactsContainer.removeAllViews()
