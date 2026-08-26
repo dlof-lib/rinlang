@@ -4,6 +4,8 @@
 #include "rin_stdlib_libs.h"
 #include "rin_http.h"
 #include "rin_json.h"
+#include "diagnostics/diagnostic_renderer.h"
+#include "diagnostics/source_manager.h"
 #include <cmath>
 #include <sstream>
 #include <fstream>
@@ -35,6 +37,22 @@
 #endif
 
 namespace rin {
+
+// ---- Diagnostics: نظام موحّد (src/diagnostics) ----
+// اسم الملف الحالي المستخدَم في كل Diagnostic صادر عن دوال حرة (utilities) أو lambdas لا تصل إلى
+// Interpreter::sourceFile (asNumber/asString/expectArgs/requireNumbers/معظم natives...).
+// يُضبَط من Interpreter::run()/setSourceFile() قبل أي تنفيذ، ومن قِبل معالجة container.import/@import
+// أثناء الدخول إلى ملف/مكتبة مستوردة، بحيث تشير أخطاء تلك الدوال الحرة إلى الملف الصحيح فعلياً.
+std::string g_diagFile = "<input>";
+
+// يبني RinError غنياً (Diagnostic كامل: كود + موقع من رقم السطر + رسالة) بلا حاجة لِـ `this` —
+// يُستخدم من كل الدوال الحرة و lambdas التي لا تلتقط Interpreter (natives أغلبها [this] فعلاً، لكن
+// استخدام دالة حرة واحدة موحّدة لكل المواقع يبقي الكود بسيطاً ويتجنّب تعارض التقاط this في lambdas).
+RinError diagErr(diag::Code code, int line, std::string message) {
+    diag::Diagnostic d(code, message, diag::SourceLocation::point(g_diagFile, line, 1));
+    return RinError(std::move(d));
+}
+
 
 // تصريحات أمامية (forward declarations): تُستخدَم هذه الدوال داخل registerNatives() أدناه
 // (natives["httpRequest"]... إلخ) قبل تعريفها الفعلي في نهاية الملف (قسم "أدوات HTTP الحقيقي")،
@@ -186,6 +204,48 @@ std::string Value::toDisplayString() const {
     return "nil";
 }
 
+// ---- Diagnostics helpers (src/diagnostics) — انظر تعليقات الإعلان في rin_interpreter.h ----
+
+RinError Interpreter::err(diag::Code code, int line, std::string message) const {
+    diag::Diagnostic d(code, message, diag::SourceLocation::point(sourceFile, line, 1));
+    return RinError(std::move(d));
+}
+
+RinError Interpreter::errWithReason(diag::Code code, int line, std::string message, std::string reason) const {
+    diag::Diagnostic d(code, message, diag::SourceLocation::point(sourceFile, line, 1));
+    d.withReason(std::move(reason));
+    return RinError(std::move(d));
+}
+
+RinError Interpreter::undefinedVariableErr(const std::string& name, int line, const EnvPtr& env) const {
+    diag::Diagnostic d(diag::Code::E0001_UndefinedVariable, "undefined variable `" + name + "`",
+                        diag::SourceLocation::point(sourceFile, line, 1));
+    d.withReason("no variable named `" + name + "` exists in this scope");
+    if (env) {
+        std::unordered_set<std::string> visible;
+        env->collectVisibleNames(visible);
+        std::vector<std::string> candidates(visible.begin(), visible.end());
+        auto matches = diag::nearestMatches(name, candidates, 2, 3);
+        for (auto& m : matches) d.withSuggestion(m);
+        if (!matches.empty()) d.withHint("did you mean `" + matches.front() + "`?");
+        else d.withHint("define the variable before using it: `let " + name + " = ...;`");
+    }
+    return RinError(std::move(d));
+}
+
+RinError Interpreter::unknownFunctionErr(const std::string& name, int line) const {
+    diag::Diagnostic d(diag::Code::E0006_UnknownFunction, "`" + name + "` is not a function",
+                        diag::SourceLocation::point(sourceFile, line, 1));
+    d.withReason("no function (built-in or user-defined) named `" + name + "` is callable here");
+    std::vector<std::string> candidates;
+    candidates.reserve(natives.size());
+    for (auto& kv : natives) candidates.push_back(kv.first);
+    auto matches = diag::nearestMatches(name, candidates, 2, 3);
+    for (auto& m : matches) d.withSuggestion(m);
+    if (!matches.empty()) d.withHint("did you mean `" + matches.front() + "()`?");
+    return RinError(std::move(d));
+}
+
 Interpreter::Interpreter() {
     globals = std::make_shared<Environment>();
     globals->define("PI", Value::num(3.14159265358979323846));
@@ -195,7 +255,7 @@ Interpreter::Interpreter() {
 
 static double asNumber(const Value& v, const std::string& fn, int line) {
     if (v.type != Value::Type::NUMBER) {
-        throw RinError("'" + fn + "' expects a number but got " + v.typeName(), line);
+        throw diagErr(diag::Code::E0004_InvalidType, line, "'" + fn + "' expects a number but got " + v.typeName());
     }
     return v.number;
 }
@@ -275,15 +335,15 @@ static std::string tokenTypeName(TokenType t) {
 
 static std::string asString(const Value& v, const std::string& fn, int line) {
     if (v.type != Value::Type::STRING) {
-        throw RinError("'" + fn + "' expects a string but got " + v.typeName(), line);
+        throw diagErr(diag::Code::E0004_InvalidType, line, "'" + fn + "' expects a string but got " + v.typeName());
     }
     return v.str;
 }
 
 static void expectArgs(const std::string& fn, std::vector<Value>& args, size_t count, int line) {
     if (args.size() != count) {
-        throw RinError("'" + fn + "' expects " + std::to_string(count) +
-                        " argument(s) but got " + std::to_string(args.size()), line);
+        throw diagErr(diag::Code::E0007_InvalidArguments, line, "'" + fn + "' expects " + std::to_string(count) +
+                        " argument(s) but got " + std::to_string(args.size()));
     }
 }
 
@@ -291,8 +351,8 @@ static void expectArgs(const std::string& fn, std::vector<Value>& args, size_t c
 // value[, ttlSeconds]) أو defineMigration(name, up[, down]).
 static void expectArgsRange(const std::string& fn, std::vector<Value>& args, size_t minCount, size_t maxCount, int line) {
     if (args.size() < minCount || args.size() > maxCount) {
-        throw RinError("'" + fn + "' expects " + std::to_string(minCount) + " to " + std::to_string(maxCount) +
-                        " argument(s) but got " + std::to_string(args.size()), line);
+        throw diagErr(diag::Code::E0007_InvalidArguments, line, "'" + fn + "' expects " + std::to_string(minCount) + " to " + std::to_string(maxCount) +
+                        " argument(s) but got " + std::to_string(args.size()));
     }
 }
 
@@ -349,25 +409,25 @@ static Value deepCloneValue(const Value& v) {
 static void requireNumbers(const Value& left, const Value& right, const std::string& op, int line) {
     if (left.type != Value::Type::NUMBER || right.type != Value::Type::NUMBER) {
         const Value& bad = (left.type != Value::Type::NUMBER) ? left : right;
-        throw RinError("العملية '" + op + "' تتطلّب رقمين، لكن وُجد نوع " + bad.typeName(), line);
+        throw diagErr(diag::Code::E0004_InvalidType, line, "operator `" + op + "` requires two numbers, but found a `" + bad.typeName() + "`");
     }
 }
 
 // يحوّل قيمة من نوع array إلى مصفوفة أرقام C++ لاستخدامها في الدوال الإحصائية.
 static std::vector<double> asNumberArray(const Value& v, const std::string& fn, int line) {
     if (v.type != Value::Type::ARRAY) {
-        throw RinError("'" + fn + "' expects an array of numbers but got " + v.typeName(), line);
+        throw diagErr(diag::Code::E0004_InvalidType, line, "'" + fn + "' expects an array of numbers but got " + v.typeName());
     }
     std::vector<double> out;
     out.reserve(v.array->size());
     for (auto& item : *v.array) {
         if (item.type != Value::Type::NUMBER) {
-            throw RinError("'" + fn + "' expects an array of numbers, found a " + item.typeName() + " element", line);
+            throw diagErr(diag::Code::E0004_InvalidType, line, "'" + fn + "' expects an array of numbers, found a " + item.typeName() + " element");
         }
         out.push_back(item.number);
     }
     if (out.empty()) {
-        throw RinError("'" + fn + "' لا يقبل مصفوفة فارغة (empty array)", line);
+        throw diagErr(diag::Code::E0004_InvalidType, line, "'" + fn + "' لا يقبل مصفوفة فارغة (empty array)");
     }
     return out;
 }
@@ -556,7 +616,7 @@ void Interpreter::registerNatives() {
     natives["sqrt"] = [](std::vector<Value>& a, int line) {
         expectArgs("sqrt", a, 1, line);
         double n = asNumber(a[0], "sqrt", line);
-        if (n < 0) throw RinError("'sqrt' لا يقبل عدداً سالباً", line);
+        if (n < 0) throw diagErr(diag::Code::E0004_InvalidType, line, "'sqrt' لا يقبل عدداً سالباً");
         return Value::num(std::sqrt(n));
     };
     natives["pow"] = [](std::vector<Value>& a, int line) {
@@ -594,7 +654,7 @@ void Interpreter::registerNatives() {
         if (a[0].type == Value::Type::STRING) return Value::num(static_cast<double>(a[0].str.size()));
         if (a[0].type == Value::Type::ARRAY) return Value::num(static_cast<double>(a[0].array->size()));
         if (a[0].type == Value::Type::MAP) return Value::num(static_cast<double>(a[0].map->size()));
-        throw RinError("'len' expects a string, array or map but got " + a[0].typeName(), line);
+        throw diagErr(diag::Code::E0004_InvalidType, line, "'len' expects a string, array or map but got " + a[0].typeName());
     };
     natives["upper"] = [](std::vector<Value>& a, int line) {
         expectArgs("upper", a, 1, line);
@@ -618,7 +678,7 @@ void Interpreter::registerNatives() {
     };
     natives["substr"] = [](std::vector<Value>& a, int line) -> Value {
         if (a.size() != 2 && a.size() != 3) {
-            throw RinError("'substr' expects 2 or 3 argument(s) but got " + std::to_string(a.size()), line);
+            throw diagErr(diag::Code::E0007_InvalidArguments, line, "'substr' expects 2 or 3 argument(s) but got " + std::to_string(a.size()));
         }
         std::string s = asString(a[0], "substr", line);
         long start = static_cast<long>(asNumber(a[1], "substr", line));
@@ -653,7 +713,7 @@ void Interpreter::registerNatives() {
     natives["join"] = [](std::vector<Value>& a, int line) -> Value {
         expectArgs("join", a, 2, line);
         if (a[0].type != Value::Type::ARRAY) {
-            throw RinError("'join' expects an array as the first argument", line);
+            throw diagErr(diag::Code::E0004_InvalidType, line, "'join' expects an array as the first argument");
         }
         std::string sep = asString(a[1], "join", line);
         std::ostringstream ss;
@@ -696,14 +756,14 @@ void Interpreter::registerNatives() {
             for (auto& item : *a[0].array) if (valuesEqual(item, a[1])) return Value::boolean_(true);
             return Value::boolean_(false);
         }
-        throw RinError("'contains' expects a string or array as the first argument", line);
+        throw diagErr(diag::Code::E0004_InvalidType, line, "'contains' expects a string or array as the first argument");
     };
     natives["charAt"] = [](std::vector<Value>& a, int line) -> Value {
         expectArgs("charAt", a, 2, line);
         std::string s = asString(a[0], "charAt", line);
         long i = static_cast<long>(asNumber(a[1], "charAt", line));
         if (i < 0 || static_cast<size_t>(i) >= s.size()) {
-            throw RinError("'charAt': index out of range", line);
+            throw diagErr(diag::Code::E0035_RuntimeError, line, "'charAt': index out of range");
         }
         return Value::string(std::string(1, s[static_cast<size_t>(i)]));
     };
@@ -714,7 +774,7 @@ void Interpreter::registerNatives() {
         double n = asNumber(a[0], "chr", line);
         long i = static_cast<long>(n);
         if (i < 0 || i > 255) {
-            throw RinError("'chr': القيمة يجب أن تكون بين 0 و255 (تلقّت " + std::to_string(i) + ")", line);
+            throw diagErr(diag::Code::E0004_InvalidType, line, "'chr': القيمة يجب أن تكون بين 0 و255 (تلقّت " + std::to_string(i) + ")");
         }
         return Value::string(std::string(1, static_cast<char>(static_cast<unsigned char>(i))));
     };
@@ -722,7 +782,7 @@ void Interpreter::registerNatives() {
     natives["ord"] = [](std::vector<Value>& a, int line) -> Value {
         expectArgs("ord", a, 1, line);
         std::string s = asString(a[0], "ord", line);
-        if (s.empty()) throw RinError("'ord': النص فارغ", line);
+        if (s.empty()) throw diagErr(diag::Code::E0004_InvalidType, line, "'ord': النص فارغ");
         return Value::num(static_cast<double>(static_cast<unsigned char>(s[0])));
     };
     // bytesFromArray(arr) -> يحوّل مصفوفة أرقام (كل عنصر 0..255) إلى نص بايتات واحد دفعة
@@ -730,7 +790,7 @@ void Interpreter::registerNatives() {
     natives["bytesFromArray"] = [](std::vector<Value>& a, int line) -> Value {
         expectArgs("bytesFromArray", a, 1, line);
         if (a[0].type != Value::Type::ARRAY) {
-            throw RinError("'bytesFromArray' expects an array but got " + a[0].typeName(), line);
+            throw diagErr(diag::Code::E0004_InvalidType, line, "'bytesFromArray' expects an array but got " + a[0].typeName());
         }
         std::string out;
         out.reserve(a[0].array->size());
@@ -738,7 +798,7 @@ void Interpreter::registerNatives() {
             double n = asNumber(item, "bytesFromArray", line);
             long i = static_cast<long>(n);
             if (i < 0 || i > 255) {
-                throw RinError("'bytesFromArray': كل عنصر يجب أن يكون بين 0 و255 (وُجد " + std::to_string(i) + ")", line);
+                throw diagErr(diag::Code::E0004_InvalidType, line, "'bytesFromArray': كل عنصر يجب أن يكون بين 0 و255 (وُجد " + std::to_string(i) + ")");
             }
             out.push_back(static_cast<char>(static_cast<unsigned char>(i)));
         }
@@ -793,7 +853,7 @@ void Interpreter::registerNatives() {
             double d = std::stod(s, &idx);
             return Value::num(d);
         } catch (...) {
-            throw RinError("'toNumber': \"" + s + "\" ليست رقماً صالحاً", line);
+            throw diagErr(diag::Code::E0035_RuntimeError, line, "'toNumber': \"" + s + "\" ليست رقماً صالحاً");
         }
     };
     // toBool(value) -> يحوّل صراحةً إلى Boolean:
@@ -817,10 +877,10 @@ void Interpreter::registerNatives() {
                 for (char& c : lower) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
                 if (lower == "true") return Value::boolean_(true);
                 if (lower == "false") return Value::boolean_(false);
-                throw RinError("'toBool': \"" + v.str + "\" ليست true/false صالحة", line);
+                throw diagErr(diag::Code::E0035_RuntimeError, line, "'toBool': \"" + v.str + "\" ليست true/false صالحة");
             }
             default:
-                throw RinError("'toBool' لا يدعم تحويل نوع " + v.typeName() + " إلى Boolean", line);
+                throw diagErr(diag::Code::E0035_RuntimeError, line, "'toBool' لا يدعم تحويل نوع " + v.typeName() + " إلى Boolean");
         }
     };
     // isBool(value) -> true فقط إن كانت القيمة من نوع Boolean فعلياً (وليس أي قيمة "صادقة" عبر isTruthy).
@@ -1001,14 +1061,18 @@ void Interpreter::registerNatives() {
         std::string container = asString(a[0], "insertDoc", line);
         std::string id = asString(a[1], "insertDoc", line);
         if (a[2].type != Value::Type::MAP) {
-            throw RinError("'insertDoc' يتوقّع كائناً/قاموساً (map) كوسيط ثالث لحقول المستند", line);
+            throw diagErr(diag::Code::E0020_InvalidDocument, line, "'insertDoc' expects a map as the third argument (document fields)");
         }
         if (!containerKinds.count(container) || containerKinds[container] != ContainerKind::DOC) {
-            throw RinError("'insertDoc': '" + container + "' ليست مجموعة مستندات NoSQL (container.doc / doc)", line);
+            throw errWithReason(diag::Code::E0020_InvalidDocument, line,
+                                 "'" + container + "' is not a NoSQL document collection",
+                                 "expected a `container.doc` / `doc` container, defined with `container.doc`");
         }
         auto errors = schemaErrors(container, a[2]);
         if (!errors.empty()) {
-            throw RinError("insertDoc: فشل التحقق من المخطط (schema) لـ '" + container + "': " + joinErrors(errors), line);
+            auto d = diagErr(diag::Code::E0019_SchemaViolation, line, "schema violation in `" + container + "`");
+            d.diagnostic->withReason(joinErrors(errors));
+            throw d;
         }
         auto& docs = docStore[container];
         bool isUpdate = false;
@@ -1027,7 +1091,7 @@ void Interpreter::registerNatives() {
         std::string container = asString(a[0], "updateDoc", line);
         std::string id = asString(a[1], "updateDoc", line);
         if (a[2].type != Value::Type::MAP) {
-            throw RinError("'updateDoc' يتوقّع كائناً/قاموساً (map) كوسيط ثالث للحقول الجديدة", line);
+            throw diagErr(diag::Code::E0004_InvalidType, line, "'updateDoc' يتوقّع كائناً/قاموساً (map) كوسيط ثالث للحقول الجديدة");
         }
         auto it = docStore.find(container);
         if (it == docStore.end()) return Value::boolean_(false);
@@ -1047,7 +1111,9 @@ void Interpreter::registerNatives() {
             Value mergedVal = Value::makeMap(merged);
             auto errors = schemaErrors(container, mergedVal);
             if (!errors.empty()) {
-                throw RinError("updateDoc: فشل التحقق من المخطط (schema) لـ '" + container + "': " + joinErrors(errors), line);
+                auto d = diagErr(diag::Code::E0019_SchemaViolation, line, "schema violation in `" + container + "`");
+                d.diagnostic->withReason(joinErrors(errors));
+                throw d;
             }
             entry.second = mergedVal;
             refreshIndexesForContainer(container);
@@ -1170,12 +1236,12 @@ void Interpreter::registerNatives() {
         expectArgs("defineSchema", a, 2, line);
         std::string container = asString(a[0], "defineSchema", line);
         if (a[1].type != Value::Type::MAP) {
-            throw RinError("'defineSchema' يتوقّع كائناً/قاموساً (map) كوسيط ثانٍ: {field: \"type\", ...}", line);
+            throw diagErr(diag::Code::E0004_InvalidType, line, "'defineSchema' يتوقّع كائناً/قاموساً (map) كوسيط ثانٍ: {field: \"type\", ...}");
         }
         std::vector<std::pair<std::string, std::string>> fields;
         for (auto& kv : *a[1].map) {
             if (kv.first.type != Value::Type::STRING || kv.second.type != Value::Type::STRING) {
-                throw RinError("'defineSchema': كل مفتاح/قيمة يجب أن يكونا نصّين (اسم حقل -> اسم نوع)", line);
+                throw diagErr(diag::Code::E0004_InvalidType, line, "'defineSchema': كل مفتاح/قيمة يجب أن يكونا نصّين (اسم حقل -> اسم نوع)");
             }
             fields.push_back({kv.first.str, kv.second.str});
         }
@@ -1207,7 +1273,7 @@ void Interpreter::registerNatives() {
         expectArgs("validateDoc", a, 2, line);
         std::string container = asString(a[0], "validateDoc", line);
         if (a[1].type != Value::Type::MAP) {
-            throw RinError("'validateDoc' يتوقّع كائناً/قاموساً (map) كوسيط ثانٍ لحقول المستند", line);
+            throw diagErr(diag::Code::E0004_InvalidType, line, "'validateDoc' يتوقّع كائناً/قاموساً (map) كوسيط ثانٍ لحقول المستند");
         }
         auto errors = schemaErrors(container, a[1]);
         auto result = std::make_shared<ArrayData>();
@@ -1306,7 +1372,10 @@ void Interpreter::registerNatives() {
         auto result = std::make_shared<ArrayData>();
         auto relIt = relationStore.find(name);
         if (relIt == relationStore.end()) {
-            throw RinError("relatedDocs: لا توجد علاقة باسم '" + name + "' (استخدم defineRelation أولاً)", line);
+            auto d = diagErr(diag::Code::E0022_InvalidRelation, line, "no relation named `" + name + "`");
+            d.diagnostic->withReason("`" + name + "` was never registered")
+             .withHint("call `defineRelation(\"" + name + "\", ...)` before using it");
+            throw d;
         }
         const RelationDef& rel = relIt->second;
         auto srcIt = docStore.find(rel.fromContainer);
@@ -1395,12 +1464,12 @@ void Interpreter::registerNatives() {
         expectArgsRange("defineMigration", a, 2, 3, line);
         std::string name = asString(a[0], "defineMigration", line);
         if (a[1].type != Value::Type::FUNCTION) {
-            throw RinError("'defineMigration': الوسيط الثاني (up) يجب أن يكون دالة Rin بلا وسائط", line);
+            throw diagErr(diag::Code::E0024_MigrationError, line, "'defineMigration': the second argument (up) must be a Rin function with no parameters");
         }
         Value down = Value::nil();
         if (a.size() == 3) {
             if (a[2].type != Value::Type::NIL && a[2].type != Value::Type::FUNCTION) {
-                throw RinError("'defineMigration': الوسيط الثالث (down) يجب أن يكون دالة Rin أو nil", line);
+                throw diagErr(diag::Code::E0024_MigrationError, line, "'defineMigration': the third argument (down) must be a Rin function or nil");
             }
             down = a[2];
         }
@@ -1415,7 +1484,10 @@ void Interpreter::registerNatives() {
         std::string name = asString(a[0], "runMigration", line);
         auto it = migrationStore.find(name);
         if (it == migrationStore.end()) {
-            throw RinError("runMigration: لا يوجد ترحيل باسم '" + name + "' (استخدم defineMigration أولاً)", line);
+            auto d = diagErr(diag::Code::E0024_MigrationError, line, "no migration named `" + name + "`");
+            d.diagnostic->withReason("`" + name + "` was never registered")
+             .withHint("call `defineMigration(\"" + name + "\", ...)` before running it");
+            throw d;
         }
         for (auto& applied : appliedMigrations) if (applied == name) return Value::boolean_(false);
         std::vector<Value> noArgs;
@@ -1535,7 +1607,7 @@ void Interpreter::registerNatives() {
         expectArgs("watch", a, 2, line);
         std::string container = asString(a[0], "watch", line);
         if (a[1].type != Value::Type::FUNCTION) {
-            throw RinError("'watch' يتوقّع دالة Rin كوسيط ثانٍ: fun(id, doc, event) { ... }", line);
+            throw diagErr(diag::Code::E0004_InvalidType, line, "'watch' يتوقّع دالة Rin كوسيط ثانٍ: fun(id, doc, event) { ... }");
         }
         docWatchers[container].push_back(a[1]);
         return Value::boolean_(true);
@@ -1555,7 +1627,7 @@ void Interpreter::registerNatives() {
         expectArgs("subscribe", a, 2, line);
         std::string channel = asString(a[0], "subscribe", line);
         if (a[1].type != Value::Type::FUNCTION) {
-            throw RinError("'subscribe' يتوقّع دالة Rin كوسيط ثانٍ: fun(payload) { ... }", line);
+            throw diagErr(diag::Code::E0004_InvalidType, line, "'subscribe' يتوقّع دالة Rin كوسيط ثانٍ: fun(payload) { ... }");
         }
         channelSubs[channel].push_back(a[1]);
         return Value::boolean_(true);
@@ -1636,7 +1708,7 @@ void Interpreter::registerNatives() {
         try {
             toks = lexer.scanTokens();
         } catch (RinError& e) {
-            throw RinError("'tokens': " + e.message, line);
+            throw diagErr(diag::Code::E0035_RuntimeError, line, "'tokens': " + e.message);
         }
         auto arr = std::make_shared<ArrayData>();
         arr->reserve(toks.size());
@@ -1659,7 +1731,7 @@ void Interpreter::registerNatives() {
         try {
             toks = lexer.scanTokens();
         } catch (RinError& e) {
-            throw RinError("'tokenType': " + e.message, line);
+            throw diagErr(diag::Code::E0035_RuntimeError, line, "'tokenType': " + e.message);
         }
         for (auto& t : toks) {
             if (t.type != TokenType::END_OF_FILE) return Value::string(tokenTypeName(t.type));
@@ -1728,7 +1800,7 @@ void Interpreter::registerNatives() {
         std::string key = asString(a[1], "apiHeader", line);
         std::string value = asString(a[2], "apiHeader", line);
         auto it = apiEndpoints.find(name);
-        if (it == apiEndpoints.end()) throw RinError("apiHeader: لا وجود لـ API باسم '" + name + "' — سجِّله أولاً عبر apiRegister(name, baseUrl)", line);
+        if (it == apiEndpoints.end()) throw diagErr(diag::Code::E0037_NetworkError, line, "apiHeader: لا وجود لـ API باسم '" + name + "' — سجِّله أولاً عبر apiRegister(name, baseUrl)");
         auto& hs = it->second.headers;
         for (auto& kv : hs) if (kv.first == key) { kv.second = value; return Value::boolean_(true); }
         hs.push_back({key, value});
@@ -1775,51 +1847,51 @@ void Interpreter::registerNatives() {
     // ---- مصفوفات وقواميس (arrays & maps) ----
     natives["push"] = [](std::vector<Value>& a, int line) -> Value {
         expectArgs("push", a, 2, line);
-        if (a[0].type != Value::Type::ARRAY) throw RinError("'push' expects an array", line);
+        if (a[0].type != Value::Type::ARRAY) throw diagErr(diag::Code::E0004_InvalidType, line, "'push' expects an array");
         a[0].array->push_back(a[1]);
         return Value::num(static_cast<double>(a[0].array->size()));
     };
     natives["pop"] = [](std::vector<Value>& a, int line) -> Value {
         expectArgs("pop", a, 1, line);
-        if (a[0].type != Value::Type::ARRAY) throw RinError("'pop' expects an array", line);
-        if (a[0].array->empty()) throw RinError("'pop': المصفوفة فارغة", line);
+        if (a[0].type != Value::Type::ARRAY) throw diagErr(diag::Code::E0004_InvalidType, line, "'pop' expects an array");
+        if (a[0].array->empty()) throw diagErr(diag::Code::E0004_InvalidType, line, "'pop': المصفوفة فارغة");
         Value v = a[0].array->back();
         a[0].array->pop_back();
         return v;
     };
     natives["sort"] = [](std::vector<Value>& a, int line) -> Value {
         expectArgs("sort", a, 1, line);
-        if (a[0].type != Value::Type::ARRAY) throw RinError("'sort' expects an array", line);
+        if (a[0].type != Value::Type::ARRAY) throw diagErr(diag::Code::E0004_InvalidType, line, "'sort' expects an array");
         std::sort(a[0].array->begin(), a[0].array->end(), [line](const Value& x, const Value& y) {
             if (x.type == Value::Type::NUMBER && y.type == Value::Type::NUMBER) return x.number < y.number;
             if (x.type == Value::Type::STRING && y.type == Value::Type::STRING) return x.str < y.str;
-            throw RinError("'sort' يتطلب أن تكون كل العناصر أرقاماً أو نصوصاً فقط", line);
+            throw diagErr(diag::Code::E0035_RuntimeError, line, "'sort' يتطلب أن تكون كل العناصر أرقاماً أو نصوصاً فقط");
         });
         return a[0];
     };
     natives["keys"] = [](std::vector<Value>& a, int line) -> Value {
         expectArgs("keys", a, 1, line);
-        if (a[0].type != Value::Type::MAP) throw RinError("'keys' expects a map", line);
+        if (a[0].type != Value::Type::MAP) throw diagErr(diag::Code::E0004_InvalidType, line, "'keys' expects a map");
         auto result = std::make_shared<ArrayData>();
         for (auto& kv : *a[0].map) result->push_back(kv.first);
         return Value::makeArray(result);
     };
     natives["values"] = [](std::vector<Value>& a, int line) -> Value {
         expectArgs("values", a, 1, line);
-        if (a[0].type != Value::Type::MAP) throw RinError("'values' expects a map", line);
+        if (a[0].type != Value::Type::MAP) throw diagErr(diag::Code::E0004_InvalidType, line, "'values' expects a map");
         auto result = std::make_shared<ArrayData>();
         for (auto& kv : *a[0].map) result->push_back(kv.second);
         return Value::makeArray(result);
     };
     natives["has"] = [](std::vector<Value>& a, int line) -> Value {
         expectArgs("has", a, 2, line);
-        if (a[0].type != Value::Type::MAP) throw RinError("'has' expects a map", line);
+        if (a[0].type != Value::Type::MAP) throw diagErr(diag::Code::E0004_InvalidType, line, "'has' expects a map");
         for (auto& kv : *a[0].map) if (valuesEqual(kv.first, a[1])) return Value::boolean_(true);
         return Value::boolean_(false);
     };
     natives["remove"] = [](std::vector<Value>& a, int line) -> Value {
         expectArgs("remove", a, 2, line);
-        if (a[0].type != Value::Type::MAP) throw RinError("'remove' expects a map", line);
+        if (a[0].type != Value::Type::MAP) throw diagErr(diag::Code::E0004_InvalidType, line, "'remove' expects a map");
         for (auto it = a[0].map->begin(); it != a[0].map->end(); ++it) {
             if (valuesEqual(it->first, a[1])) { a[0].map->erase(it); return Value::boolean_(true); }
         }
@@ -1841,7 +1913,7 @@ void Interpreter::registerNatives() {
         std::string fullPath = resolvePath(path, line);
         ensureParentDir(fullPath);
         std::ofstream out(fullPath, std::ios::binary | std::ios::app);
-        if (!out) throw RinError("appendFile: تعذّر فتح الملف '" + path + "' للإضافة إليه", line);
+        if (!out) throw diagErr(diag::Code::E0036_IOFailure, line, "appendFile: تعذّر فتح الملف '" + path + "' للإضافة إليه");
         out << content;
         return Value::boolean_(true);
     };
@@ -1849,7 +1921,7 @@ void Interpreter::registerNatives() {
         expectArgs("readFile", a, 1, line);
         std::string path = asString(a[0], "readFile", line);
         std::ifstream in(resolvePath(path, line), std::ios::binary);
-        if (!in) throw RinError("readFile: تعذّر فتح الملف '" + path + "' للقراءة (غير موجود؟)", line);
+        if (!in) throw diagErr(diag::Code::E0036_IOFailure, line, "readFile: تعذّر فتح الملف '" + path + "' للقراءة (غير موجود؟)");
         std::ostringstream buf;
         buf << in.rdbuf();
         return Value::string(buf.str());
@@ -1902,8 +1974,8 @@ void Interpreter::registerNatives() {
             auto stmts = p.parse();
             executeBlock(stmts, globals);
         } catch (RinError& e) {
-            throw RinError("loadInstalled('" + name + "'): خطأ داخل الملف المحمّل فعلياً من القرص (سطر " +
-                            std::to_string(e.line) + "): " + e.message, line);
+            throw diagErr(diag::Code::E0028_ImportError, line, "loadInstalled('" + name + "'): خطأ داخل الملف المحمّل فعلياً من القرص (سطر " +
+                            std::to_string(e.line) + "): " + e.message);
         }
         installedNames.insert(name);
         return Value::boolean_(true);
@@ -1929,7 +2001,7 @@ std::string Interpreter::resolvePath(const std::string& rawPath, int line) const
             // تجاهل: فاصل مكرر أو "المجلد الحالي"
         } else if (seg == "..") {
             if (segments.empty()) {
-                throw RinError("مسار غير مسموح به (يحاول الخروج خارج مجلد المشروع المعزول): '" + rawPath + "'", line);
+                throw diagErr(diag::Code::E0036_IOFailure, line, "مسار غير مسموح به (يحاول الخروج خارج مجلد المشروع المعزول): '" + rawPath + "'");
             }
             segments.pop_back();
         } else {
@@ -2569,11 +2641,11 @@ void Interpreter::writeRealFile(const std::string& relPath, const std::string& c
     ensureParentDir(fullPath);
     std::ofstream out(fullPath, std::ios::binary | std::ios::trunc);
     if (!out) {
-        throw RinError(who + ": تعذّر فتح/إنشاء الملف '" + relPath + "' للكتابة الفعلية على القرص", line);
+        throw diagErr(diag::Code::E0036_IOFailure, line, who + ": تعذّر فتح/إنشاء الملف '" + relPath + "' للكتابة الفعلية على القرص");
     }
     out << content;
     if (!out.good()) {
-        throw RinError(who + ": حدث خطأ أثناء الكتابة الفعلية إلى '" + relPath + "'", line);
+        throw diagErr(diag::Code::E0036_IOFailure, line, who + ": حدث خطأ أثناء الكتابة الفعلية إلى '" + relPath + "'");
     }
 }
 
@@ -2668,6 +2740,7 @@ bool Interpreter::callTopLevelFunction(const std::vector<StmtPtr>& program,
 }
 
 std::string Interpreter::run(const std::vector<StmtPtr>& statements) {
+    g_diagFile = sourceFile; // مزامنة نظام Diagnostics: الدوال الحرة/lambdas تستخدم g_diagFile
     loadInstalledIndex(); // يحمّل أسماء أي تثبيتات فعلية سابقة على نفس basePath (استمرارية عبر التشغيلات)
     importedPaths.clear(); // كل تشغيل جديد يبدأ بسجل @import نظيف (لا يرث استيرادات تشغيل سابق)
     callDepth = 0; // كل تشغيل جديد يبدأ بعدّاد عمق استدعاء نظيف (احتياطاً عند إعادة استخدام نفس الكائن)
@@ -2690,7 +2763,11 @@ std::string Interpreter::run(const std::vector<StmtPtr>& statements) {
             execute(s, globals);
         }
     } catch (RinError& e) {
-        output << "\n[Error line " << e.line << "]: " << e.message << "\n";
+        if (e.diagnostic) {
+            output << "\n" << diag::renderPlain(*e.diagnostic, diag::globalSourceManager()) << "\n";
+        } else {
+            output << "\n[Error line " << e.line << "]: " << e.message << "\n";
+        }
     } catch (ReturnSignal&) {
         output << "\n[Error]: 'return' used outside of a function\n";
     }
@@ -2718,7 +2795,7 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
         if (s->sep) {
             Value sepVal = evaluate(s->sep, env);
             if (sepVal.type != Value::Type::STRING) {
-                throw RinError("'print': 'sep' يجب أن يكون نصاً (string)، لكن وُجد نوع " + sepVal.typeName(), stmt->line);
+                throw diagErr(diag::Code::E0004_InvalidType, stmt->line, "'print': 'sep' يجب أن يكون نصاً (string)، لكن وُجد نوع " + sepVal.typeName());
             }
             sep = sepVal.str;
         }
@@ -2726,7 +2803,7 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
         if (s->end) {
             Value endVal = evaluate(s->end, env);
             if (endVal.type != Value::Type::STRING) {
-                throw RinError("'print': 'end' يجب أن يكون نصاً (string)، لكن وُجد نوع " + endVal.typeName(), stmt->line);
+                throw diagErr(diag::Code::E0004_InvalidType, stmt->line, "'print': 'end' يجب أن يكون نصاً (string)، لكن وُجد نوع " + endVal.typeName());
             }
             end = endVal.str;
         }
@@ -2750,7 +2827,7 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
         bool upperOn = s->upper && evaluate(s->upper, env).isTruthy();
         bool lowerOn = s->lower && evaluate(s->lower, env).isTruthy();
         if (upperOn && lowerOn) {
-            throw RinError("'print': لا يمكن استخدام 'upper' و'lower' معاً في نفس الأمر", stmt->line);
+            throw diagErr(diag::Code::E0035_RuntimeError, stmt->line, "'print': لا يمكن استخدام 'upper' و'lower' معاً في نفس الأمر");
         }
         if (upperOn) {
             std::transform(content.begin(), content.end(), content.begin(),
@@ -2764,16 +2841,16 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
         if (s->width) {
             Value wv = evaluate(s->width, env);
             if (wv.type != Value::Type::NUMBER) {
-                throw RinError("'print': 'width' يجب أن يكون رقماً، لكن وُجد نوع " + wv.typeName(), stmt->line);
+                throw diagErr(diag::Code::E0004_InvalidType, stmt->line, "'print': 'width' يجب أن يكون رقماً، لكن وُجد نوع " + wv.typeName());
             }
             std::string alignMode = "left";
             if (s->align) {
                 Value av = evaluate(s->align, env);
                 if (av.type != Value::Type::STRING) {
-                    throw RinError("'print': 'align' يجب أن يكون نصاً، لكن وُجد نوع " + av.typeName(), stmt->line);
+                    throw diagErr(diag::Code::E0004_InvalidType, stmt->line, "'print': 'align' يجب أن يكون نصاً، لكن وُجد نوع " + av.typeName());
                 }
                 if (av.str != "left" && av.str != "right" && av.str != "center") {
-                    throw RinError("'print': 'align' يجب أن يكون \"left\" أو \"right\" أو \"center\"، لكن وُجد \"" + av.str + "\"", stmt->line);
+                    throw diagErr(diag::Code::E0004_InvalidType, stmt->line, "'print': 'align' يجب أن يكون \"left\" أو \"right\" أو \"center\"، لكن وُجد \"" + av.str + "\"");
                 }
                 alignMode = av.str;
             }
@@ -2790,7 +2867,7 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
                 }
             }
         } else if (s->align) {
-            throw RinError("'print': 'align' يتطلّب تحديد 'width' معه", stmt->line);
+            throw diagErr(diag::Code::E0035_RuntimeError, stmt->line, "'print': 'align' يتطلّب تحديد 'width' معه");
         }
 
         // level= : رمز تصنيف في بداية السطر (يلتقطه RinConsoleFormatter.kt لتلوين الكونسول).
@@ -2798,20 +2875,20 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
         if (s->level) {
             Value lvv = evaluate(s->level, env);
             if (lvv.type != Value::Type::STRING) {
-                throw RinError("'print': 'level' يجب أن يكون نصاً، لكن وُجد نوع " + lvv.typeName(), stmt->line);
+                throw diagErr(diag::Code::E0004_InvalidType, stmt->line, "'print': 'level' يجب أن يكون نصاً، لكن وُجد نوع " + lvv.typeName());
             }
             if (lvv.str == "info") prefix = "\u2139\uFE0F ";
             else if (lvv.str == "success") prefix = "\u2705 ";
             else if (lvv.str == "warn" || lvv.str == "warning") prefix = "\u26A0\uFE0F ";
             else if (lvv.str == "error") prefix = "\u274C ";
             else if (lvv.str == "debug") prefix = "\U0001F41E ";
-            else throw RinError("'print': 'level' غير معروف \"" + lvv.str + "\" (المتاح: info, success, warn, error, debug)", stmt->line);
+            else throw diagErr(diag::Code::E0035_RuntimeError, stmt->line, "'print': 'level' غير معروف \"" + lvv.str + "\" (المتاح: info, success, warn, error, debug)");
         }
         // label= : وسم مخصص "[TAG] " يُضاف بعد رمز level (أو في البداية إن غاب level).
         if (s->label) {
             Value lbv = evaluate(s->label, env);
             if (lbv.type != Value::Type::STRING) {
-                throw RinError("'print': 'label' يجب أن يكون نصاً، لكن وُجد نوع " + lbv.typeName(), stmt->line);
+                throw diagErr(diag::Code::E0004_InvalidType, stmt->line, "'print': 'label' يجب أن يكون نصاً، لكن وُجد نوع " + lbv.typeName());
             }
             prefix += "[" + lbv.str + "] ";
         }
@@ -2821,10 +2898,10 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
         if (s->repeatN) {
             Value rv = evaluate(s->repeatN, env);
             if (rv.type != Value::Type::NUMBER) {
-                throw RinError("'print': 'repeat' يجب أن يكون رقماً، لكن وُجد نوع " + rv.typeName(), stmt->line);
+                throw diagErr(diag::Code::E0004_InvalidType, stmt->line, "'print': 'repeat' يجب أن يكون رقماً، لكن وُجد نوع " + rv.typeName());
             }
             if (rv.number < 0) {
-                throw RinError("'print': 'repeat' يجب ألا يكون سالباً", stmt->line);
+                throw diagErr(diag::Code::E0035_RuntimeError, stmt->line, "'print': 'repeat' يجب ألا يكون سالباً");
             }
             times = static_cast<long long>(rv.number);
         }
@@ -2923,7 +3000,7 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
         Value v = Value::nil();
         if (s->initializer) v = evaluate(s->initializer, env);
         if (v.type != Value::Type::STRING) {
-            throw RinError("'" + s->name + "' من نوع text ويجب أن تكون قيمته نصاً (string)", s->line);
+            throw diagErr(diag::Code::E0004_InvalidType, s->line, "'" + s->name + "' من نوع text ويجب أن تكون قيمته نصاً (string)");
         }
         env->define(s->name, v);
         return;
@@ -2949,27 +3026,33 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
         if (s->kind == ContainerKind::IMPORT) {
             // ---- استيراد حقيقي: قراءة ملف .rin آخر من القرص، تحليله، وتنفيذه فعلياً ----
             if (currentFilePath.empty()) {
-                throw RinError("container.import يتطلب 'file path=\"...\";' بداخله لتحديد الملف المطلوب استيراده", s->line);
+                throw diagErr(diag::Code::E0028_ImportError, s->line,
+                          "'container.import' requires a `file path=\"...\";` inside it to specify what to import");
             }
             std::ifstream in(resolvePath(currentFilePath), std::ios::binary);
             if (!in) {
-                throw RinError("container.import: تعذّر فتح الملف '" + currentFilePath + "' للاستيراد", s->line);
+                throw errWithReason(diag::Code::E0036_IOFailure, s->line,
+                                     "container.import: could not open file `" + currentFilePath + "`",
+                                     "the file does not exist or is not readable at that path");
             }
             std::ostringstream buf;
             buf << in.rdbuf();
             std::string importedSource = buf.str();
             try {
-                Lexer importedLexer(importedSource);
+                Lexer importedLexer(importedSource, currentFilePath);
                 auto importedTokens = importedLexer.scanTokens();
-                Parser importedParser(importedTokens);
+                Parser importedParser(importedTokens, currentFilePath);
                 auto importedStatements = importedParser.parse();
                 // تُنفَّذ عبارات الملف المستورد داخل بيئة حاوية الاستيراد نفسها؛ أي @container بداخله
                 // يُسجَّل عالمياً (متاح لاحقاً عبر link/tying/merge)، وأي let/text أعلى المستوى فيه
                 // يصبح متغيراً داخل حاوية container.import هذه.
                 executeBlock(importedStatements, containerEnv);
             } catch (RinError& e) {
-                throw RinError("container.import: خطأ داخل الملف المستورد \"" + currentFilePath +
-                                "\" (سطر " + std::to_string(e.line) + "): " + e.message, s->line);
+                auto d = diagErr(diag::Code::E0028_ImportError, s->line,
+                             "container.import: error inside imported file \"" + currentFilePath + "\"");
+                d.diagnostic->withReason("line " + std::to_string(e.line) + " of \"" + currentFilePath + "\": " + e.message);
+                if (e.diagnostic) d.diagnostic->withCause(diag::renderShort(*e.diagnostic));
+                throw d;
             }
             output << "📥 container.import: تم استيراد \"" << currentFilePath << "\" وتنفيذه بنجاح\n";
         }
@@ -2982,7 +3065,7 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
     if (auto s = std::dynamic_pointer_cast<ImportStmt>(stmt)) {
         Value pathVal = evaluate(s->path, env);
         if (pathVal.type != Value::Type::STRING) {
-            throw RinError("@import يتطلب مساراً نصياً (string) لاسم/مسار المكتبة المطلوب استيرادها", s->line);
+            throw diagErr(diag::Code::E0028_ImportError, s->line, "'@import' requires a string path/library name");
         }
         const std::string& rawPath = pathVal.str;
 
@@ -3015,9 +3098,11 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
             //    المحرر أي مكتبة ينشئها أو يرفعها المستخدم، فتُستورَد بنفس عبارة @import مباشرة.
             std::ifstream in(resolvePath(libPath), std::ios::binary);
             if (!in) {
-                throw RinError("@import: تعذّر إيجاد المكتبة \"" + rawPath + "\" (بُحث عنها باسم \"" +
-                                libPath + "\" ضمن المكتبات المدمجة وضمن مجلد lib/ الخاص بالمشروع ولم "
-                                "تُوجد. ارفعها أو أنشئها أولاً من قسم \"المكتبات\" في المحرر)", s->line);
+                auto d = diagErr(diag::Code::E0029_ModuleNotFound, s->line, "module not found: `" + rawPath + "`");
+                d.diagnostic->message = "module not found: `" + rawPath + "`";
+                d.diagnostic->withReason("searched for `" + libPath + "` among embedded libraries and the project's lib/ folder")
+                 .withHint("create or upload it first from the \"Libraries\" section of the editor");
+                throw d;
             }
             std::ostringstream buf;
             buf << in.rdbuf();
@@ -3034,13 +3119,15 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
 
         std::vector<StmtPtr> importedStatements;
         try {
-            Lexer importedLexer(source);
+            Lexer importedLexer(source, libPath);
             auto importedTokens = importedLexer.scanTokens();
-            Parser importedParser(importedTokens);
+            Parser importedParser(importedTokens, libPath);
             importedStatements = importedParser.parse();
         } catch (RinError& e) {
-            throw RinError("@import: خطأ في تحليل المكتبة \"" + libPath + "\" (سطر " +
-                            std::to_string(e.line) + "): " + e.message, s->line);
+            auto d = diagErr(diag::Code::E0028_ImportError, s->line, "@import: error parsing library \"" + libPath + "\"");
+            d.diagnostic->withReason("line " + std::to_string(e.line) + " of \"" + libPath + "\": " + e.message);
+            if (e.diagnostic) d.diagnostic->withCause(diag::renderShort(*e.diagnostic));
+            throw d;
         }
 
         try {
@@ -3058,8 +3145,10 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
                 if (!groupStack.empty()) groupMembers[groupStack.back()].push_back(s->alias);
             }
         } catch (RinError& e) {
-            throw RinError("@import: خطأ داخل المكتبة \"" + libPath + "\" (سطر " +
-                            std::to_string(e.line) + "): " + e.message, s->line);
+            auto d = diagErr(diag::Code::E0028_ImportError, s->line, "@import: error inside library \"" + libPath + "\"");
+            d.diagnostic->withReason("line " + std::to_string(e.line) + " of \"" + libPath + "\": " + e.message);
+            if (e.diagnostic) d.diagnostic->withCause(diag::renderShort(*e.diagnostic));
+            throw d;
         }
 
         importedPaths.insert(importKey);
@@ -3137,7 +3226,7 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
 
     if (auto s = std::dynamic_pointer_cast<LinkIdDeclStmt>(stmt)) {
         if (containerStack.empty())
-            throw RinError("لا يمكن استخدام 'link.id=' خارج جسم حاوية (container)", s->line);
+            throw diagErr(diag::Code::E0014_InvalidContainer, s->line, "لا يمكن استخدام 'link.id=' خارج جسم حاوية (container)");
         const std::string& cur = containerStack.back();
         linkIdToContainer[s->id] = cur;
         output << "🏷️ link.id=\"" << s->id << "\" -> " << cur << "\n";
@@ -3150,13 +3239,13 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
         if (byId) {
             auto it = linkIdToContainer.find(s->byId);
             if (it == linkIdToContainer.end())
-                throw RinError("لا يمكن تنفيذ link id=\"" + s->byId + "\": لا توجد حاوية مسجَّلة بهذا المعرّف عبر 'link.id='", s->line);
+                throw diagErr(diag::Code::E0035_RuntimeError, s->line, "لا يمكن تنفيذ link id=\"" + s->byId + "\": لا توجد حاوية مسجَّلة بهذا المعرّف عبر 'link.id='");
             target = it->second;
         }
         bool isContainer = containers.count(target) > 0;
         bool isGroup = groupMembers.count(target) > 0;
         if (!isContainer && !isGroup) {
-            throw RinError("لا يمكن تنفيذ link: '" + target + "' غير معرَّف كحاوية أو كمجموعة (Containers.Group)", s->line);
+            throw diagErr(diag::Code::E0014_InvalidContainer, s->line, "لا يمكن تنفيذ link: '" + target + "' غير معرَّف كحاوية أو كمجموعة (Containers.Group)");
         }
         output << "🔗 link -> " << target << (byId ? (" (id=\"" + s->byId + "\")") : "") << (isGroup ? " (Containers.Group)" : "") << "\n";
         return;
@@ -3236,7 +3325,7 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
 
     if (auto s = std::dynamic_pointer_cast<SaveStmt>(stmt)) {
         if (containerStack.empty() || !containers.count(containerStack.back())) {
-            throw RinError("'save' يجب أن تُستخدم داخل حاوية (container) حالية لحفظ متغيراتها فعلياً", s->line);
+            throw diagErr(diag::Code::E0014_InvalidContainer, s->line, "'save' يجب أن تُستخدم داخل حاوية (container) حالية لحفظ متغيراتها فعلياً");
         }
         std::string key = containerStack.back();
         ContainerKind kind = containerKinds.count(key) ? containerKinds[key] : ContainerKind::PLAIN;
@@ -3245,8 +3334,8 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
         // (@container.table أو @table)، ويعمل بغضّ النظر عن الشكل الذي فُتحت به.
         if (s->format == "png") {
             if (kind != ContainerKind::TABLE) {
-                throw RinError("save format=png متاحة فقط لحاوية جدول (@container.table أو @table)، وليس لـ '" +
-                                containerTagName(kind) + "'", s->line);
+                throw diagErr(diag::Code::E0014_InvalidContainer, s->line, "save format=png متاحة فقط لحاوية جدول (@container.table أو @table)، وليس لـ '" +
+                                containerTagName(kind) + "'");
             }
             std::string rawPath;
             if (s->path) rawPath = evaluate(s->path, env).toDisplayString();
@@ -3296,19 +3385,19 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
 
     if (auto s = std::dynamic_pointer_cast<RouteStmt>(stmt)) {
         if (containerStack.empty()) {
-            throw RinError("عبارة 'route' يجب أن تُستخدم داخل @container.api", s->line);
+            throw diagErr(diag::Code::E0014_InvalidContainer, s->line, "عبارة 'route' يجب أن تُستخدم داخل @container.api");
         }
         Value methodVal = evaluate(s->method, env);
         if (methodVal.type != Value::Type::STRING) {
-            throw RinError("route: قيمة 'method' يجب أن تكون نصاً (مثال: \"GET\")", s->line);
+            throw diagErr(diag::Code::E0004_InvalidType, s->line, "route: قيمة 'method' يجب أن تكون نصاً (مثال: \"GET\")");
         }
         Value pathVal = evaluate(s->path, env);
         if (pathVal.type != Value::Type::STRING) {
-            throw RinError("route: قيمة 'path' يجب أن تكون نصاً (مثال: \"/users/1\")", s->line);
+            throw diagErr(diag::Code::E0004_InvalidType, s->line, "route: قيمة 'path' يجب أن تكون نصاً (مثال: \"/users/1\")");
         }
         Value statusVal = evaluate(s->status, env);
         if (statusVal.type != Value::Type::NUMBER) {
-            throw RinError("route: قيمة 'status' يجب أن تكون رقماً (مثال: 200)", s->line);
+            throw diagErr(diag::Code::E0004_InvalidType, s->line, "route: قيمة 'status' يجب أن تكون رقماً (مثال: 200)");
         }
         Value bodyVal = evaluate(s->body, env);
 
@@ -3325,11 +3414,11 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
 
     if (auto s = std::dynamic_pointer_cast<RowStmt>(stmt)) {
         if (containerStack.empty() || containerKinds[containerStack.back()] != ContainerKind::TABLE) {
-            throw RinError("عبارة 'row' يجب أن تُستخدم داخل @container.table أو @table", s->line);
+            throw diagErr(diag::Code::E0014_InvalidContainer, s->line, "عبارة 'row' يجب أن تُستخدم داخل @container.table أو @table");
         }
         Value cells = evaluate(s->cells, env);
         if (cells.type != Value::Type::ARRAY) {
-            throw RinError("row: قيمة 'cells' يجب أن تكون مصفوفة (مثال: row cells=[1, 2, 3];)", s->line);
+            throw diagErr(diag::Code::E0004_InvalidType, s->line, "row: قيمة 'cells' يجب أن تكون مصفوفة (مثال: row cells=[1, 2, 3];)");
         }
         tableRows[containerStack.back()].push_back(cells);
         output << "▦ row -> " << cells.toDisplayString() << "\n";
@@ -3346,13 +3435,13 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
                         currentKind == ContainerKind::PORTAL || currentKind == ContainerKind::BLOCK ||
                         currentKind == ContainerKind::STICKER;
         if (containerStack.empty() || !allowed) {
-            throw RinError("عبارة 'style' يجب أن تُستخدم داخل @container.table/@table أو "
+            throw diagErr(diag::Code::E0014_InvalidContainer, s->line, "عبارة 'style' يجب أن تُستخدم داخل @container.table/@table أو "
                             "@container.object/@Object أو @container.portal/@portal أو @container.block/@block "
-                            "أو @container.sticker/@sticker", s->line);
+                            "أو @container.sticker/@sticker");
         }
         Value v = evaluate(s->value, env);
         if (v.type != Value::Type::STRING) {
-            throw RinError("style: قيمة 'value' يجب أن تكون نصاً (مثال: style value=\"style://dark\";)", s->line);
+            throw diagErr(diag::Code::E0004_InvalidType, s->line, "style: قيمة 'value' يجب أن تكون نصاً (مثال: style value=\"style://dark\";)");
         }
         containerStyles[containerStack.back()] = v.str;
         output << "🎨 style -> " << v.str << "\n";
@@ -3361,20 +3450,24 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
 
     if (auto s = std::dynamic_pointer_cast<DocumentStmt>(stmt)) {
         if (containerStack.empty() || containerKinds[containerStack.back()] != ContainerKind::DOC) {
-            throw RinError("عبارة 'document' يجب أن تُستخدم داخل @container.doc أو @doc", s->line);
+            throw diagErr(diag::Code::E0014_InvalidContainer, s->line, "عبارة 'document' يجب أن تُستخدم داخل @container.doc أو @doc");
         }
         Value idVal = evaluate(s->id, env);
         if (idVal.type != Value::Type::STRING) {
-            throw RinError("document: قيمة 'id' يجب أن تكون نصاً (مثال: document id=\"u1\" fields={...};)", s->line);
+            throw diagErr(diag::Code::E0004_InvalidType, s->line, "document: قيمة 'id' يجب أن تكون نصاً (مثال: document id=\"u1\" fields={...};)");
         }
         Value fieldsVal = evaluate(s->fields, env);
         if (fieldsVal.type != Value::Type::MAP) {
-            throw RinError("document: قيمة 'fields' يجب أن تكون كائناً/قاموساً (مثال: fields={ name: \"Ali\" };)", s->line);
+            throw diagErr(diag::Code::E0004_InvalidType, s->line, "document: قيمة 'fields' يجب أن تكون كائناً/قاموساً (مثال: fields={ name: \"Ali\" };)");
         }
         std::string containerName = containerStack.back();
         auto errors = schemaErrors(containerName, fieldsVal);
         if (!errors.empty()) {
-            throw RinError("document: فشل التحقق من المخطط (schema) لـ '" + containerName + "': " + joinErrors(errors), s->line);
+            {
+                auto d = diagErr(diag::Code::E0019_SchemaViolation, s->line, "schema violation in `" + containerName + "`");
+                d.diagnostic->withReason(joinErrors(errors));
+                throw d;
+            }
         }
         auto& docs = docStore[containerName];
         bool updated = false;
@@ -3394,7 +3487,7 @@ bool Interpreter::copyTargetIntoCurrentContainer(const std::string& target, int 
     bool isContainer = containers.count(target) > 0;
     bool isGroup = groupMembers.count(target) > 0;
     if (!isContainer && !isGroup) {
-        throw RinError("لا يمكن تنفيذ tying/merge: '" + target + "' غير معرَّف كحاوية أو كمجموعة (Containers.Group)", line);
+        throw diagErr(diag::Code::E0014_InvalidContainer, line, "لا يمكن تنفيذ tying/merge: '" + target + "' غير معرَّف كحاوية أو كمجموعة (Containers.Group)");
     }
     if (containerStack.empty() || !containers.count(containerStack.back())) {
         return isGroup; // لا توجد حاوية حالية لنسخ المتغيرات إليها (نادراً ما يحدث هذا خارج أي container)
@@ -3477,16 +3570,24 @@ void Interpreter::notifyWatchers(const std::string& container, const std::string
 
 Value Interpreter::callFunction(const std::shared_ptr<Callable>& fn, std::vector<Value>& args, int line) {
     if (args.size() != fn->declaration->params.size()) {
-        throw RinError("Expected " + std::to_string(fn->declaration->params.size()) +
-                        " argument(s) but got " + std::to_string(args.size()), line);
+        auto d = diagErr(diag::Code::E0007_InvalidArguments, line,
+                     "invalid number of arguments for `" + fn->declaration->name + "`");
+        d.diagnostic->expected = std::to_string(fn->declaration->params.size()) + " argument(s)";
+        d.diagnostic->found = std::to_string(args.size()) + " argument(s)";
+        d.diagnostic->withReason("function `" + fn->declaration->name + "` expects " +
+                                  std::to_string(fn->declaration->params.size()) + " parameter(s)");
+        throw d;
     }
     // حارس عمق الاستدعاء: بلا هذا الفحص، دالة تتكرّر ذاتياً بلا حالة توقّف (نسيان شرط الإنهاء —
     // خطأ برمجي شائع جداً، وليس فقط سيناريو هجوم) تُسبِّب Stack Overflow حقيقياً في مكدّس C++ الأصلي
     // (segmentation fault لا يمكن لأي try/catch اعتراضه)، فيُسقِط التطبيق كاملاً. الآن يُحوَّل هذا إلى
     // RinError عادي وقابل للعرض في الكونسول، تماماً كأي خطأ Rin آخر.
     if (callDepth >= kMaxCallDepth) {
-        throw RinError("تجاوز الحد الأقصى لعمق استدعاء الدوال (" + std::to_string(kMaxCallDepth) +
-                        ") — على الأغلب تكرار ذاتي بلا حالة توقّف (missing base case)", line);
+        auto d = diagErr(diag::Code::E0035_RuntimeError, line,
+                     "maximum function call depth exceeded (" + std::to_string(kMaxCallDepth) + ")");
+        d.diagnostic->withReason("this is almost always unbounded recursion (a missing base case)")
+         .withHint("check that every recursive path in this function eventually returns without calling itself again");
+        throw d;
     }
     callDepth++;
     struct DepthGuard {
@@ -3518,14 +3619,14 @@ Value Interpreter::evaluate(const ExprPtr& expr, EnvPtr env) {
     if (auto e = std::dynamic_pointer_cast<VariableExpr>(expr)) {
         Value v;
         if (!env->get(e->name, v)) {
-            throw RinError("Undefined variable '" + e->name + "'", e->line);
+            throw undefinedVariableErr(e->name, e->line, env);
         }
         return v;
     }
     if (auto e = std::dynamic_pointer_cast<AssignExpr>(expr)) {
         Value v = evaluate(e->value, env);
         if (!env->assign(e->name, v)) {
-            throw RinError("Undefined variable '" + e->name + "'", e->line);
+            throw undefinedVariableErr(e->name, e->line, env);
         }
         return v;
     }
@@ -3542,7 +3643,7 @@ Value Interpreter::evaluate(const ExprPtr& expr, EnvPtr env) {
         Value right = evaluate(e->right, env);
         if (e->op == TokenType::MINUS) {
             if (right.type != Value::Type::NUMBER)
-                throw RinError("Operand must be a number", e->line);
+                throw diagErr(diag::Code::E0004_InvalidType, e->line, "unary `-` operand must be a number, found `" + right.typeName() + "`");
             return Value::num(-right.number);
         }
         if (e->op == TokenType::BANG) return Value::boolean_(!right.isTruthy());
@@ -3557,7 +3658,8 @@ Value Interpreter::evaluate(const ExprPtr& expr, EnvPtr env) {
                 }
                 if (left.type == Value::Type::NUMBER && right.type == Value::Type::NUMBER)
                     return Value::num(left.number + right.number);
-                throw RinError("Operands must be numbers or strings", e->line);
+                throw diagErr(diag::Code::E0004_InvalidType, e->line,
+                          "`+` operands must be numbers or strings, found `" + left.typeName() + "` and `" + right.typeName() + "`");
             case TokenType::MINUS:
                 requireNumbers(left, right, "-", e->line);
                 return Value::num(left.number - right.number);
@@ -3566,11 +3668,13 @@ Value Interpreter::evaluate(const ExprPtr& expr, EnvPtr env) {
                 return Value::num(left.number * right.number);
             case TokenType::SLASH:
                 requireNumbers(left, right, "/", e->line);
-                if (right.number == 0) throw RinError("Division by zero", e->line);
+                if (right.number == 0) throw errWithReason(diag::Code::E0035_RuntimeError, e->line,
+                                                            "division by zero", "the right-hand side of `/` evaluated to 0");
                 return Value::num(left.number / right.number);
             case TokenType::PERCENT:
                 requireNumbers(left, right, "%", e->line);
-                if (right.number == 0) throw RinError("Division by zero", e->line);
+                if (right.number == 0) throw errWithReason(diag::Code::E0035_RuntimeError, e->line,
+                                                            "division by zero", "the right-hand side of `%` evaluated to 0");
                 return Value::num(std::fmod(left.number, right.number));
             case TokenType::GREATER:
                 requireNumbers(left, right, ">", e->line);
@@ -3598,7 +3702,10 @@ Value Interpreter::evaluate(const ExprPtr& expr, EnvPtr env) {
         };
         if (builtinOps.count(e->callee)) {
             if (e->args.size() != 2) {
-                throw RinError("'" + e->callee + "' تحتاج إلى قيمتين (arguments) بالضبط", e->line);
+                auto d = diagErr(diag::Code::E0007_InvalidArguments, e->line, "`" + e->callee + "` requires exactly 2 arguments");
+                d.diagnostic->expected = "2 argument(s)";
+                d.diagnostic->found = std::to_string(e->args.size()) + " argument(s)";
+                throw d;
             }
             Value a = evaluate(e->args[0], env);
             Value b = evaluate(e->args[1], env);
@@ -3609,7 +3716,7 @@ Value Interpreter::evaluate(const ExprPtr& expr, EnvPtr env) {
                 return Value::string(a.toDisplayString() + b.toDisplayString());
             }
             if (a.type != Value::Type::NUMBER || b.type != Value::Type::NUMBER) {
-                throw RinError("'" + e->callee + "' تحتاج إلى قيمتين رقميتين (numbers)", e->line);
+                throw diagErr(diag::Code::E0004_InvalidType, e->line, "`" + e->callee + "` requires two numbers");
             }
             if (e->callee == "Addition") return Value::num(a.number + b.number);
             if (e->callee == "Subtraction") return Value::num(a.number - b.number);
@@ -3625,7 +3732,7 @@ Value Interpreter::evaluate(const ExprPtr& expr, EnvPtr env) {
 
         Value calleeVal;
         if (!env->get(e->callee, calleeVal) || calleeVal.type != Value::Type::FUNCTION) {
-            throw RinError("'" + e->callee + "' is not a function", e->line);
+            throw unknownFunctionErr(e->callee, e->line);
         }
         std::vector<Value> args;
         for (auto& a : e->args) args.push_back(evaluate(a, env));
@@ -3655,11 +3762,15 @@ Value Interpreter::evaluate(const ExprPtr& expr, EnvPtr env) {
         Value idx = evaluate(e->index, env);
         if (obj.type == Value::Type::ARRAY) {
             if (idx.type != Value::Type::NUMBER) {
-                throw RinError("فهرس المصفوفة يجب أن يكون رقماً", e->line);
+                throw errWithReason(diag::Code::E0021_InvalidIndex, e->line,
+                                     "array index must be a number", "found a `" + idx.typeName() + "` index instead");
             }
             long i = static_cast<long>(idx.number);
             if (i < 0 || static_cast<size_t>(i) >= obj.array->size()) {
-                throw RinError("فهرس خارج الحدود (index out of range): " + std::to_string(i), e->line);
+                auto d = diagErr(diag::Code::E0021_InvalidIndex, e->line, "index out of range: " + std::to_string(i));
+                d.diagnostic->withReason("this array has " + std::to_string(obj.array->size()) + " element(s) (valid indices: 0.." +
+                                          (obj.array->empty() ? std::string("-") : std::to_string(obj.array->size() - 1)) + ")");
+                throw d;
             }
             return (*obj.array)[static_cast<size_t>(i)];
         }
@@ -3671,15 +3782,18 @@ Value Interpreter::evaluate(const ExprPtr& expr, EnvPtr env) {
         }
         if (obj.type == Value::Type::STRING) {
             if (idx.type != Value::Type::NUMBER) {
-                throw RinError("فهرس النص يجب أن يكون رقماً", e->line);
+                throw errWithReason(diag::Code::E0021_InvalidIndex, e->line,
+                                     "string index must be a number", "found a `" + idx.typeName() + "` index instead");
             }
             long i = static_cast<long>(idx.number);
             if (i < 0 || static_cast<size_t>(i) >= obj.str.size()) {
-                throw RinError("فهرس خارج الحدود (index out of range): " + std::to_string(i), e->line);
+                auto d = diagErr(diag::Code::E0021_InvalidIndex, e->line, "index out of range: " + std::to_string(i));
+                d.diagnostic->withReason("this string has " + std::to_string(obj.str.size()) + " character(s)");
+                throw d;
             }
             return Value::string(std::string(1, obj.str[static_cast<size_t>(i)]));
         }
-        throw RinError("لا يمكن فهرسة قيمة من نوع " + obj.typeName(), e->line);
+        throw diagErr(diag::Code::E0004_InvalidType, e->line, "cannot index a value of type `" + obj.typeName() + "`");
     }
     if (auto e = std::dynamic_pointer_cast<IndexSetExpr>(expr)) {
         Value obj = evaluate(e->object, env);
@@ -3687,13 +3801,17 @@ Value Interpreter::evaluate(const ExprPtr& expr, EnvPtr env) {
         Value val = evaluate(e->value, env);
         if (obj.type == Value::Type::ARRAY) {
             if (idx.type != Value::Type::NUMBER) {
-                throw RinError("فهرس المصفوفة يجب أن يكون رقماً", e->line);
+                throw errWithReason(diag::Code::E0021_InvalidIndex, e->line,
+                                     "array index must be a number", "found a `" + idx.typeName() + "` index instead");
             }
             long i = static_cast<long>(idx.number);
             if (i == static_cast<long>(obj.array->size())) {
                 obj.array->push_back(val); // السماح بالتوسّع عبر arr[len(arr)] = value
             } else if (i < 0 || static_cast<size_t>(i) >= obj.array->size()) {
-                throw RinError("فهرس خارج الحدود (index out of range): " + std::to_string(i), e->line);
+                auto d = diagErr(diag::Code::E0021_InvalidIndex, e->line, "index out of range: " + std::to_string(i));
+                d.diagnostic->withReason("this array has " + std::to_string(obj.array->size()) + " element(s)")
+                 .withHint("use `arr[" + std::to_string(obj.array->size()) + "] = value` to append instead");
+                throw d;
             } else {
                 (*obj.array)[static_cast<size_t>(i)] = val;
             }
@@ -3706,7 +3824,7 @@ Value Interpreter::evaluate(const ExprPtr& expr, EnvPtr env) {
             obj.map->push_back({idx, val});
             return val;
         }
-        throw RinError("لا يمكن التعديل على قيمة من نوع " + obj.typeName() + " عبر []", e->line);
+        throw diagErr(diag::Code::E0004_InvalidType, e->line, "cannot assign into a value of type `" + obj.typeName() + "` via `[]`");
     }
     return Value::nil();
 }
@@ -3746,7 +3864,7 @@ Value Interpreter::performApiCall(const std::string& containerKey, const std::st
 static http::HeaderList headersFromValue(const Value& v, const std::string& fn, int line) {
     http::HeaderList out;
     if (v.type == Value::Type::NIL) return out;
-    if (v.type != Value::Type::MAP) throw RinError("'" + fn + "' يتوقّع الترويسات كقاموس {مفتاح: قيمة} أو nil", line);
+    if (v.type != Value::Type::MAP) throw diagErr(diag::Code::E0004_InvalidType, line, "'" + fn + "' يتوقّع الترويسات كقاموس {مفتاح: قيمة} أو nil");
     for (auto& kv : *v.map) out.push_back({kv.first.toDisplayString(), kv.second.toDisplayString()});
     return out;
 }
@@ -3782,8 +3900,8 @@ Value Interpreter::performRealApiCall(const std::string& endpointName, const std
                                        const std::string& path, const Value& bodyValue, int line) {
     auto it = apiEndpoints.find(endpointName);
     if (it == apiEndpoints.end()) {
-        throw RinError("لا يوجد API حقيقي مسجَّل باسم '" + endpointName +
-                        "' — سجِّله أولاً: apiRegister(\"" + endpointName + "\", \"https://...\");", line);
+        throw diagErr(diag::Code::E0037_NetworkError, line, "لا يوجد API حقيقي مسجَّل باسم '" + endpointName +
+                        "' — سجِّله أولاً: apiRegister(\"" + endpointName + "\", \"https://...\");");
     }
     std::string url = it->second.baseUrl;
     if (!path.empty()) {
