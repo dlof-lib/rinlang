@@ -126,6 +126,8 @@
     <string name="job_status_cancelled">CANCELLED</string>
     <string name="job_duration_fmt">%1$d ms</string>
     <string name="job_timeout_message">"[Timeout]: execution exceeded %1$d seconds and was abandoned"</string>
+    <string name="job_cancel_cta">Cancel this queued run</string>
+    <string name="job_queue_full_toast">Too many runs are already queued — wait for one to finish first</string>
 
     <!-- تنزيل الملفات الفعلية التي أنتجها save/installation إلى مجلد Downloads بالجهاز -->
     <string name="download_results_label">النتائج الجاهزة للتنزيل</string>
