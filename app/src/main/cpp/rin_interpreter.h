@@ -157,6 +157,15 @@ public:
     // (مثلاً مجلد التطبيق الخاص على أندرويد عبر context.filesDir). فارغ = المجلد الحالي (CWD).
     void setBasePath(const std::string& path) { basePath = path; }
 
+    // ---- Live streaming (Rin Run Queue + Code Output 2.0 — انظر jni_bridge.cpp) ----
+    // [sink] اختياري، غير مفعّل افتراضياً، لذا [run] يتصرف حرفياً كما كان قبله متى لم يُضبط أي sink
+    // (وهذا هو حال runSourceNative/runSourceStructuredNative القديمتين تماماً — توافق تام). عند
+    // ضبطه، يستدعيه [run] فور انتهاء تنفيذ كل statement علوي (top-level) بالـ *نص الإضافي الجديد
+    // فقط* الذي أضافه ذلك الـ statement إلى [output] — بث حقيقي أثناء التنفيذ الفعلي للمحرك، وليس
+    // إعادة تشغيل مموَّهة أو تجزئة زمنية وهمية لناتج جاهز مسبقاً.
+    using StreamSink = std::function<void(const std::string& incrementalChunk)>;
+    void setStreamSink(StreamSink sink) { streamSink_ = std::move(sink); }
+
     // كل معرّفات الربط العامة (container.link.id) المسجَّلة أثناء هذا التشغيل، ومقابل كل واحد اسم
     // الحاوية التي سجّلته. تُستخدم من طرف التطبيق/الأدوات الخارجية (مثلاً tools/rin_link_index.py)
     // لبناء فهرس ربط شامل بين ملفات rin. و.html/.js/.cpp عبر نفس المعرّف (انظر rin_ast.h: LinkIdDeclStmt).
@@ -198,6 +207,7 @@ private:
     std::optional<diag::Diagnostic> lastDiagnostic_;
     std::optional<std::string> lastErrorMessage_;
     int lastErrorLine_ = 0;
+    StreamSink streamSink_; // انظر setStreamSink() أعلاه — فارغ افتراضياً (no-op)
 
     // ---- Diagnostics helpers (src/diagnostics) ----
     // يبني RinError غنياً (Diagnostic كامل: كود + موقع من رقم السطر + رسالة) لأي خطأ تشغيل. العمود
