@@ -2,6 +2,8 @@
 // Rin Language - common token & value definitions
 #include <string>
 #include <vector>
+#include <optional>
+#include "diagnostics/diagnostic.h"
 
 namespace rin {
 
@@ -52,13 +54,31 @@ struct Token {
     std::string lexeme;
     double number = 0.0;
     int line = 0;
+    int col = 0;     // 1-indexed، عمود أول حرف من الرمز (نظام Diagnostics — انظر diagnostics/)
+    int endCol = 0;  // 1-indexed، حصري النهاية (عمود آخر حرف + 1)
 };
 
 // Thrown by the lexer/parser/interpreter on any language error.
+//
+// .message و.line يبقيان كما كانا (توافقية خلفية كاملة مع كل مستهلكي RinError
+// الحاليين: jni_bridge.cpp، rin_c_api.cpp، web/rin_wasm_bridge.cpp، أدوات CLI...).
+// أي RinError جديد يُبنى عبر throwDiagnostic(...) يحمل أيضاً Diagnostic كامل
+// (كود + موقع دقيق + reason/expected/found/help/suggestions) يستطيع أي مستهلك
+// جديد الاستفادة منه دون كسر أي كود قديم لا يعرف عنه شيئاً.
 struct RinError {
     std::string message;
     int line;
+    std::optional<diag::Diagnostic> diagnostic; // موجود فقط للأخطاء المُصدَرة عبر نظام Diagnostics الجديد
+
     RinError(std::string msg, int ln) : message(std::move(msg)), line(ln) {}
+
+    // يبني RinError من Diagnostic كامل؛ .message/.line يُشتقّان تلقائياً من الحقول
+    // الأساسية (code + message + location.startLine) حتى يبقى كل الكود القديم يعمل كما هو.
+    explicit RinError(diag::Diagnostic d)
+        : message("[" + diag::codeString(d.code) + "] " + d.message +
+                   (d.reason ? (" (" + *d.reason + ")") : "")),
+          line(d.location.startLine),
+          diagnostic(std::move(d)) {}
 };
 
 } // namespace rin
