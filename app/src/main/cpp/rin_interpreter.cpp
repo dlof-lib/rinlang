@@ -2764,12 +2764,17 @@ std::string Interpreter::run(const std::vector<StmtPtr>& statements) {
         }
     } catch (RinError& e) {
         if (e.diagnostic) {
+            lastDiagnostic_ = e.diagnostic;
             output << "\n" << diag::renderPlain(*e.diagnostic, diag::globalSourceManager()) << "\n";
         } else {
             output << "\n[Error line " << e.line << "]: " << e.message << "\n";
         }
+        lastErrorMessage_ = e.message;
+        lastErrorLine_ = e.line;
     } catch (ReturnSignal&) {
         output << "\n[Error]: 'return' used outside of a function\n";
+        lastErrorMessage_ = "'return' used outside of a function";
+        lastErrorLine_ = 0;
     }
     return output.str();
 }
