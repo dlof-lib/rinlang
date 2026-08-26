@@ -1,5 +1,7 @@
 #pragma once
 #include "rin_ast.h"
+#include "diagnostics/diagnostic.h"
+#include "diagnostics/diagnostic_engine.h"
 #include <sstream>
 #include <unordered_map>
 #include <unordered_set>
@@ -113,6 +115,13 @@ struct Environment : std::enable_shared_from_this<Environment> {
         if (parent) return parent->get(name, out);
         return false;
     }
+
+    // يجمع كل أسماء المتغيرات المرئية في هذا النطاق وكل الآباء (بلا تكرار)؛ يُستخدم حصراً لبناء
+    // اقتراحات "did you mean" لأخطاء E0001 (متغير غير معرَّف) — انظر diagnostics/diagnostic_engine.h.
+    void collectVisibleNames(std::unordered_set<std::string>& out) const {
+        for (auto& kv : values) out.insert(kv.first);
+        if (parent) parent->collectVisibleNames(out);
+    }
 };
 
 // Internal control-flow signal used to unwind the stack on `return`.
@@ -126,6 +135,10 @@ public:
     Interpreter();
     // Runs a full program, returns everything printed (or a formatted error).
     std::string run(const std::vector<StmtPtr>& statements);
+
+    // اسم الملف المستخدَم في كل Diagnostic صادر عن هذا الـ Interpreter (نظام Diagnostics — انظر
+    // diagnostics/). يُضبَط عادة إلى نفس الاسم الذي مُرِّر إلى Lexer/Parser لنفس الملف.
+    void setSourceFile(const std::string& name) { sourceFile = name; }
 
     // يحدّد جذر حقيقي على القرص تُبنى فوقه كل مسارات file/save/installation/writeFile/readFile...
     // (مثلاً مجلد التطبيق الخاص على أندرويد عبر context.filesDir). فارغ = المجلد الحالي (CWD).
@@ -166,6 +179,18 @@ public:
 private:
     EnvPtr globals;
     std::ostringstream output;
+    std::string sourceFile = "<input>"; // نظام Diagnostics — انظر setSourceFile() أعلاه
+
+    // ---- Diagnostics helpers (src/diagnostics) ----
+    // يبني RinError غنياً (Diagnostic كامل: كود + موقع من رقم السطر + رسالة) لأي خطأ تشغيل. العمود
+    // يُقارَب بـ 1 لأن AST nodes تحمل .line فقط بلا عمود دقيق (خلافاً لـ Token في مرحلة التحليل).
+    RinError err(diag::Code code, int line, std::string message) const;
+    // نفس err() لكنها تضيف حقل reason: مباشرة (تُستخدم للأخطاء التي تحتاج شرح "لماذا" منفصلاً عن العنوان).
+    RinError errWithReason(diag::Code code, int line, std::string message, std::string reason) const;
+    // undefined variable/property مع اقتراح "did you mean" عبر Levenshtein على الأسماء المرئية فعلياً
+    // في هذا النطاق (env) + أسماء الدوال المدمجة (natives) عند كان يبحث عن دالة.
+    RinError undefinedVariableErr(const std::string& name, int line, const EnvPtr& env) const;
+    RinError unknownFunctionErr(const std::string& name, int line) const;
 
     // حالة لغة الحاويات/البيانات (container / Containers.Group / Volume / link / tying / merge ...)
     std::unordered_map<std::string, EnvPtr> containers;      // اسم الحاوية -> بيئة متغيراتها
