@@ -29,6 +29,11 @@ add_executable(rin
     ${RIN_CORE_DIR}/rin_lexer.cpp
     ${RIN_CORE_DIR}/rin_parser.cpp
     ${RIN_CORE_DIR}/rin_interpreter.cpp
+    ${RIN_CORE_DIR}/rin_http.cpp
+    ${RIN_CORE_DIR}/diagnostics/diagnostic.cpp
+    ${RIN_CORE_DIR}/diagnostics/source_manager.cpp
+    ${RIN_CORE_DIR}/diagnostics/diagnostic_engine.cpp
+    ${RIN_CORE_DIR}/diagnostics/diagnostic_renderer.cpp
 )
 
 target_include_directories(rin PRIVATE ${RIN_CORE_DIR})
