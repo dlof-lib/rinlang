@@ -46,6 +46,21 @@ object RinEngine {
 
     private external fun runSourceNative(source: String, baseDir: String): String
 
+    /**
+     * Structured sibling of [runSource]: same lexer/parser/interpreter pipeline, but the
+     * SUCCESS/ERROR outcome comes from the engine's own execution state (see
+     * `Interpreter::hadError()` in rin_interpreter.h) instead of being guessed from the text of
+     * the output -- so `print ["hello", "world"];` (output starting with '[') is correctly
+     * SUCCESS, and a runtime error that happens after some `print`s have already run is
+     * correctly ERROR even though "[" isn't the first character of the combined output.
+     *
+     * [runSource] is untouched and keeps working exactly as before; this is purely additive.
+     */
+    fun runSourceStructured(source: String): RinExecutionResult =
+        RinExecutionResult.parse(runSourceStructuredNative(source, baseDir))
+
+    private external fun runSourceStructuredNative(source: String, baseDir: String): String
+
     /** Returns a human readable version string for the native engine. */
     external fun engineVersion(): String
 
