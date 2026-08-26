@@ -105,8 +105,28 @@ object RinJobScheduler {
         return cancelled
     }
 
+    /**
+     * Toggles whether the job identified by [number] is pinned. Pinned jobs are never dropped by
+     * the history trimming in [trimHistoryLocked], regardless of age or [MAX_HISTORY]. Returns the
+     * new pinned state, or `null` if no such job exists.
+     */
+    fun togglePin(number: Int): Boolean? {
+        val job = synchronized(jobs) { jobs.find { it.number == number } } ?: return null
+        val newState = synchronized(job) {
+            job.pinned = !job.pinned
+            job.pinned
+        }
+        notifyChanged()
+        return newState
+    }
+
+    /** Clears history. Pinned jobs are kept — same "never drop a pinned run" contract as
+     *  [trimHistoryLocked]; a still-QUEUED/RUNNING job is also kept since clearing history isn't
+     *  cancellation (use [cancel] for that). */
     fun clear() {
-        synchronized(jobs) { jobs.clear() }
+        synchronized(jobs) {
+            jobs.removeAll { it.status != JobStatus.QUEUED && it.status != JobStatus.RUNNING && !it.pinned }
+        }
         notifyChanged()
     }
 
@@ -126,12 +146,24 @@ object RinJobScheduler {
         }
         notifyChanged()
 
-        val future = workerPool.submit(Callable { RinEngine.runSource(job.source) })
+        val future = workerPool.submit(Callable { RinEngine.runSourceStructured(job.source) })
         try {
             val result = future.get(TIMEOUT_MS, TimeUnit.MILLISECONDS)
             synchronized(job) {
-                job.output = result
-                job.status = if (result.startsWith("[")) JobStatus.ERROR else JobStatus.SUCCESS
+                // Runtime errors already have their rustc-style diagnostic text folded into
+                // result.output by Interpreter::run() itself, same as before. A lexer/parser/
+                // internal failure short-circuits before any output is produced, so fall back to
+                // the pre-rendered diagnostic (or the plain message) so the console still shows
+                // something useful instead of going blank.
+                job.output = result.output.ifEmpty {
+                    result.diagnosticText ?: result.errorMessage?.let { "[Error]: $it" } ?: ""
+                }
+                job.diagnostic = result.diagnostic
+                // Real engine-reported outcome (Interpreter::hadError()) -- never inferred from
+                // the text of the output, so `print ["hello","world"];` is correctly SUCCESS even
+                // though its output starts with '[', and a mid-run failure is correctly ERROR even
+                // when earlier prints already appear in the combined output.
+                job.status = if (result.success) JobStatus.SUCCESS else JobStatus.ERROR
             }
         } catch (e: TimeoutException) {
             future.cancel(true)
@@ -149,7 +181,8 @@ object RinJobScheduler {
         notifyChanged()
     }
 
-    /** Drops the oldest *finished* jobs once history exceeds [MAX_HISTORY]; queued/running jobs are never dropped. */
+    /** Drops the oldest *finished, unpinned* jobs once history exceeds [MAX_HISTORY]; queued,
+     *  running, and pinned jobs are never dropped (see section 9: Pinned Runs). */
     private fun trimHistoryLocked() {
         synchronized(jobs) {
             var overflow = jobs.size - MAX_HISTORY
@@ -157,7 +190,10 @@ object RinJobScheduler {
             val iterator = jobs.iterator()
             while (iterator.hasNext() && overflow > 0) {
                 val candidate = iterator.next()
-                if (candidate.status != JobStatus.QUEUED && candidate.status != JobStatus.RUNNING) {
+                val removable = candidate.status != JobStatus.QUEUED &&
+                    candidate.status != JobStatus.RUNNING &&
+                    !candidate.pinned
+                if (removable) {
                     iterator.remove()
                     overflow--
                 }
