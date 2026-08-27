@@ -9,7 +9,15 @@ data class FlowNode(
     val subtitle: String = "",
     val valueText: String = "",
     val ok: Boolean = true,
-    val artifact: RinArtifact? = null
+    val artifact: RinArtifact? = null,
+    /** Real per-node status (section 2) when the underlying trace can distinguish one — e.g. a
+     *  pipeline stage that never ran because an earlier stage failed is SKIPPED, not lumped in
+     *  with the ERROR stage. Defaults to deriving from [ok] for nodes ([fromGenericRun]'s) that
+     *  only ever have a binary real/failed signal from the engine. */
+    val status: FlowNodeStatus = if (ok) FlowNodeStatus.SUCCESS else FlowNodeStatus.ERROR,
+    /** Real diagnostic (line/column/code/message) for this node when [status] is ERROR and the
+     *  engine reported one — see [RinEngine.runSourceStructured]. Null otherwise; never guessed. */
+    val diagnostic: RinDiagnostic? = null
 )
 
 /** The full result RinFlow renders: either a detailed `@container.pipe` stage trace, or a
@@ -20,7 +28,10 @@ data class RinFlowResult(
     val nodes: List<FlowNode>,
     val success: Boolean,
     val errorMessage: String? = null,
-    val rawEngineOutput: String = ""
+    val rawEngineOutput: String = "",
+    /** Real structured diagnostic for the failure (section 8), straight from
+     *  [RinEngine.runSourceStructured] — null on success. */
+    val diagnostic: RinDiagnostic? = null
 )
 
 /**
@@ -60,13 +71,20 @@ object RinFlowTracer {
                 ok = true
             )
             for (stage in trace.stages) {
+                val stageOk = stage.status == FlowNodeStatus.SUCCESS
                 nodes += FlowNode(
                     icon = iconForStage(stage.label),
-                    colorRes = if (trace.success) R.color.pipeline_green else R.color.pipeline_red,
+                    colorRes = when (stage.status) {
+                        FlowNodeStatus.SUCCESS -> R.color.pipeline_green
+                        FlowNodeStatus.SKIPPED -> R.color.pipeline_text_primary
+                        else -> R.color.pipeline_red
+                    },
                     title = stage.label,
                     subtitle = stage.call,
                     valueText = stage.valueText,
-                    ok = trace.success
+                    ok = stageOk,
+                    status = stage.status,
+                    diagnostic = stage.diagnostic
                 )
             }
             nodes += FlowNode(
@@ -84,7 +102,8 @@ object RinFlowTracer {
             nodes = nodes,
             success = trace.success,
             errorMessage = trace.errorMessage ?: (if (!trace.success) trace.rawEngineOutput else null),
-            rawEngineOutput = trace.rawEngineOutput
+            rawEngineOutput = trace.rawEngineOutput,
+            diagnostic = trace.diagnostic
         )
     }
 
@@ -114,12 +133,20 @@ object RinFlowTracer {
         PipelineTracer.containsPipeline(source) || containerOpenRegex.containsMatchIn(source)
 
     private fun fromGenericRun(source: String): RinFlowResult {
-        val engineOutput = try {
-            RinEngine.runSource(source)
+        // Real engine-reported SUCCESS/ERROR (Interpreter::hadError()) instead of sniffing
+        // whether the printed text happens to start with '[' (section 6) -- a plain
+        // `print ["a","b"];` in this generic flow view used to be misreported as a failed run.
+        val result = try {
+            RinEngine.runSourceStructured(source)
         } catch (t: Throwable) {
-            "[Internal error]: ${t.message}"
+            RinExecutionResult(
+                success = false, output = "", diagnostic = null,
+                diagnosticText = null, errorMessage = "[Internal error]: ${t.message}", errorLine = 0
+            )
         }
-        val success = !engineOutput.trimStart().startsWith("[")
+        val engineOutput = result.output.ifEmpty {
+            result.diagnosticText ?: result.errorMessage?.let { "[Error]: $it" } ?: ""
+        }
 
         val baseDir = try { RinEngine.currentBaseDir() } catch (t: Throwable) { "" }
         val artifacts = RinConsoleFormatter.extractArtifacts(engineOutput, baseDir)
@@ -144,9 +171,10 @@ object RinFlowTracer {
             kindLabel = kindLabel,
             containerName = containerName,
             nodes = nodes,
-            success = success,
-            errorMessage = if (!success) engineOutput else null,
-            rawEngineOutput = engineOutput
+            success = result.success,
+            errorMessage = if (!result.success) engineOutput else null,
+            rawEngineOutput = engineOutput,
+            diagnostic = result.diagnostic
         )
     }
 
