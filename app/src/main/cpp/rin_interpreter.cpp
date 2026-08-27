@@ -1813,6 +1813,62 @@ void Interpreter::registerNatives() {
         std::string path = asString(a[2], "apiCall", line);
         return performRealApiCall(name, method, path, a[3], line);
     };
+    // ---- Banner convenience API (see docs/banner.md) ----
+    // Deliberately flat identifiers (bannerSuccess, not banner.success) because Rin's call()
+    // parser only ever accepts a single IDENT followed by '(' -- there is no general member-call
+    // expression ('receiver.method(...)') anywhere in the grammar today (verified: rin_parser.cpp
+    // Parser::call() only special-cases VariableExpr + LPAREN; the handful of existing dotted
+    // forms like container.pipe/link.id/Containers.Group are hand-written *statement*-level
+    // keywords, not a general expression feature). Adding real receiver.method(...) call syntax
+    // is a legitimate, separate, cross-cutting parser+interpreter feature -- not something to
+    // bolt on unsafely here -- so until that lands, this flat naming is the honest, non-breaking
+    // way to expose banner.success("...")-equivalent convenience calls, and it matches the
+    // existing apiGet/apiPost/apiRegister naming convention already used in this file.
+    //
+    // Each call logs the exact BANNER_CREATED / BANNER_SHOWN execution events requested (task
+    // §20), through the interpreter's real `output` stream -- the same sink print/level= already
+    // writes to -- with a real wall-clock HH:MM:SS timestamp, not a placeholder string.
+    auto emitBannerEvent = [this](const std::string& eventName) {
+        std::time_t t = std::time(nullptr);
+        std::tm tmv{};
+#if defined(_WIN32)
+        localtime_s(&tmv, &t);
+#else
+        localtime_r(&t, &tmv);
+#endif
+        char buf[16];
+        std::snprintf(buf, sizeof(buf), "%02d:%02d:%02d", tmv.tm_hour, tmv.tm_min, tmv.tm_sec);
+        output << buf << " " << eventName << "\n";
+    };
+    auto bannerConvenience = [this, emitBannerEvent](const std::string& fnName, const std::string& type) {
+        return [this, emitBannerEvent, fnName, type](std::vector<Value>& a, int line) -> Value {
+            expectArgs(fnName, a, 1, line);
+            std::string text = asString(a[0], fnName, line);
+            emitBannerEvent("BANNER_CREATED");
+            emitBannerEvent("BANNER_SHOWN");
+            // Human-readable line in the Code Output panel (level= reuses the same icons print
+            // already uses for info/success/warn/error so a banner reads consistently next to
+            // ordinary print output).
+            std::string levelKey = (type == "warning") ? "warn" : type;
+            std::string prefix;
+            if (levelKey == "info") prefix = "\u2139\uFE0F ";
+            else if (levelKey == "success") prefix = "\u2705 ";
+            else if (levelKey == "warn") prefix = "\u26A0\uFE0F ";
+            else if (levelKey == "error") prefix = "\u274C ";
+            output << prefix << "[banner:" << type << "] " << text << "\n";
+            return Value::nil();
+        };
+    };
+    natives["bannerSuccess"] = bannerConvenience("bannerSuccess", "success");
+    natives["bannerError"]   = bannerConvenience("bannerError", "error");
+    natives["bannerWarning"] = bannerConvenience("bannerWarning", "warning");
+    natives["bannerInfo"]    = bannerConvenience("bannerInfo", "info");
+    natives["bannerDismiss"] = [this, emitBannerEvent](std::vector<Value>& a, int line) -> Value {
+        expectArgsRange("bannerDismiss", a, 0, 0, line);
+        emitBannerEvent("BANNER_DISMISSED");
+        return Value::nil();
+    };
+
     natives["apiGet"] = [this](std::vector<Value>& a, int line) -> Value {
         expectArgs("apiGet", a, 2, line);
         std::string name = asString(a[0], "apiGet", line);
