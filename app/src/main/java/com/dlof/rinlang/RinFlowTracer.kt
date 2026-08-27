@@ -132,6 +132,38 @@ object RinFlowTracer {
     fun looksTraceable(source: String): Boolean =
         PipelineTracer.containsPipeline(source) || containerOpenRegex.containsMatchIn(source)
 
+    // ---- real RinFlow engine path (section 15): bare `data |> step() |> step();`, with or
+    // without an enclosing @container, executed once through the real native Flow Graph engine
+    // (rin_interpreter.h: namespace rin::flow) instead of [PipelineTracer]'s re-run-per-stage probe
+    // above. Purely additive: nothing here changes [trace]'s existing return shape or behavior, so
+    // every current call site (e.g. PipelineRunnerActivity) keeps working unmodified. New UI that
+    // wants real per-node timing/events/metrics/cancellation/replay (sections 3–14) should call
+    // this instead of [trace].
+    private val barePipeAssignRegex = Regex(
+        """[A-Za-z_][A-Za-z0-9_]*(?:\s*\|>\s*[A-Za-z_][A-Za-z0-9_]*(?:\s*\([^)]*\))?)+\s*;"""
+    )
+
+    /** True if [source] contains at least one `x |> step() |> step();` chain anywhere (inside or
+     *  outside a container) — a cheap static check, no engine execution, mirroring
+     *  [PipelineTracer.containsPipeline]/[looksTraceable] above. */
+    fun containsRealPipeline(source: String): Boolean = barePipeAssignRegex.containsMatchIn(source)
+
+    /**
+     * Runs [source] through [RinEngine.runSourceAsFlow] and returns the real, executed Flow Graph
+     * (section 2–4), or null if [source] contains no `|>` chain at all. Unlike [trace]/[findPipeline]
+     * this only ever runs the engine once, no matter how many pipeline stages there are, and every
+     * [RinFlowGraphNode] reflects the actual moment it ran (real timing, real cancellation/timeout,
+     * real per-node input/output previews) rather than a value re-extracted from N separate runs.
+     */
+    fun traceRealFlow(
+        source: String,
+        timeoutMs: Long = 0L,
+        listener: RinEngine.RinFlowListener? = null
+    ): RinFlowRunResult? {
+        if (!containsRealPipeline(source)) return null
+        return RinEngine.runSourceAsFlow(source, timeoutMs, listener)
+    }
+
     private fun fromGenericRun(source: String): RinFlowResult {
         // Real engine-reported SUCCESS/ERROR (Interpreter::hadError()) instead of sniffing
         // whether the printed text happens to start with '[' (section 6) -- a plain
