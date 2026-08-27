@@ -227,13 +227,22 @@ class PipelineRunnerActivity : AppCompatActivity() {
             ok = true
         )
 
+        // Per-stage status (section 2/8): a stage that never ran because an earlier one failed
+        // is shown distinctly from the stage that actually failed, instead of every stage after
+        // the first error looking identically "✗" the way a single trace.success flag would.
         for (stage in trace.stages) {
+            val prefix = when (stage.status) {
+                FlowNodeStatus.SUCCESS -> "▸"
+                FlowNodeStatus.SKIPPED -> "·"
+                else -> "✗"
+            }
             addTerminalStep(
-                prefix = if (trace.success) "▸" else "✗",
+                prefix = prefix,
                 label = stage.label,
                 detail = stage.call,
                 valueText = stage.valueText,
-                ok = trace.success
+                ok = stage.status == FlowNodeStatus.SUCCESS,
+                skipped = stage.status == FlowNodeStatus.SKIPPED
             )
         }
 
@@ -277,10 +286,15 @@ class PipelineRunnerActivity : AppCompatActivity() {
         detail: String,
         valueText: String,
         ok: Boolean,
-        isFinal: Boolean = false
+        isFinal: Boolean = false,
+        skipped: Boolean = false
     ) {
         val dp = resources.displayMetrics.density
-        val statusColor = if (ok) R.color.pipeline_terminal_green else R.color.pipeline_terminal_red
+        val statusColor = when {
+            skipped -> R.color.pipeline_terminal_dim
+            ok -> R.color.pipeline_terminal_green
+            else -> R.color.pipeline_terminal_red
+        }
 
         val headerLine = TextView(this).apply {
             typeface = Typeface.MONOSPACE
