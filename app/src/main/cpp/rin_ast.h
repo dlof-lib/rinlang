@@ -48,6 +48,23 @@ struct UnaryExpr : Expr {
 struct CallExpr : Expr {
     std::string callee;
     std::vector<ExprPtr> args;
+
+    // ---- RinFlow (see rin_interpreter.h: FlowGraph/FlowNode/PipelineTracer) ----
+    // Set only by Parser::pipeline() when this CallExpr was produced by desugaring a `|>` stage
+    // (never for an ordinary `f(x)` call written directly by the user). This does NOT change what
+    // gets executed -- a piped chain still evaluates as plain nested calls exactly as before -- it
+    // only lets Interpreter::evaluate() *recognize*, after the fact, that a given CallExpr chain
+    // came from `|>` so it can optionally drive it through the Flow engine when a flow session is
+    // active. Nothing reads these fields unless a flow session is armed (see
+    // Interpreter::runProgramAsFlow), so ordinary `rin::Interpreter::run()` behaves identically to
+    // before this field existed.
+    bool isPipelineNode = false;
+    // Set once, on the outermost CallExpr of a whole `a |> b() |> c()` chain (i.e. the Expr that
+    // Parser::pipeline() ultimately returns), never on the intermediate stages nested inside it.
+    bool isPipelineRoot = false;
+    // Number of `|>` stages in the chain rooted at this CallExpr (only meaningful when
+    // isPipelineRoot is true). Does not count the original left-most input expression itself.
+    int pipelineStageCount = 0;
 };
 
 // [1, 2, 3] -> مصفوفة (array)
