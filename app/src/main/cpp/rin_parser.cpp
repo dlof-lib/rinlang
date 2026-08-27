@@ -1033,6 +1033,7 @@ ExprPtr Parser::assignment() {
 // يمكن كتابة اسم دالة بدون أقواس على يمين |> فتُعامل كنداء بلا وسائط إضافية: data |> mean
 ExprPtr Parser::pipeline() {
     auto expr = logicOr();
+    int stageCount = 0; // عدد مراحل |> في هذه السلسلة (لأجل RinFlow -- انظر CallExpr::pipelineStageCount)
     while (match({TokenType::PIPE})) {
         Token opTok = previous();
         auto rhs = logicOr();
@@ -1053,7 +1054,18 @@ ExprPtr Parser::pipeline() {
         piped->line = opTok.line;
         piped->args.push_back(expr); // القيمة القادمة من يسار |> تصبح أول وسيط
         for (auto& a : callExpr->args) piped->args.push_back(a);
+        piped->isPipelineNode = true; // انظر rin_ast.h: CallExpr::isPipelineNode
         expr = piped;
+        stageCount++;
+    }
+    // فقط الحلقة الأخيرة (جذر السلسلة الكاملة) تحمل isPipelineRoot/pipelineStageCount؛ هذا لا يغيّر
+    // شيئاً في التنفيذ العادي (evaluate() العادية تتجاهل هذين الحقلين تماماً)، ويُستخدَم حصراً من
+    // RinFlowEngine عند تشغيل البرنامج كـ Flow (انظر Interpreter::runProgramAsFlow في rin_interpreter.cpp).
+    if (stageCount > 0) {
+        if (auto rootCall = std::dynamic_pointer_cast<CallExpr>(expr)) {
+            rootCall->isPipelineRoot = true;
+            rootCall->pipelineStageCount = stageCount;
+        }
     }
     return expr;
 }
