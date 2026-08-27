@@ -3629,6 +3629,49 @@ Value Interpreter::callFunction(const std::shared_ptr<Callable>& fn, std::vector
     return Value::nil();
 }
 
+// استُخرِجت حرفياً من حالة CallExpr داخل evaluate() القديمة (نفس الترتيب: builtinOps الصريحة، ثم
+// natives، ثم دالة Rin مُعرَّفة) بلا أي تغيير سلوكي، لتُشارَك مع evaluatePipelineFlow (RinFlow) أدناه
+// دون تكرار نفس منطق الفرز/الأخطاء مرتين (قسم 17: توافقية كاملة مع كل الكود القديم الذي يعتمد على
+// هذا الترتيب بالضبط).
+Value Interpreter::invokeCallee(const std::string& callee, std::vector<Value>& args, int line, const EnvPtr& env) {
+    static const std::unordered_set<std::string> builtinOps = {
+        "Addition", "Subtraction", "Multiplication", "Equal"
+    };
+    if (builtinOps.count(callee)) {
+        if (args.size() != 2) {
+            auto d = diagErr(diag::Code::E0007_InvalidArguments, line, "`" + callee + "` requires exactly 2 arguments");
+            d.diagnostic->expected = "2 argument(s)";
+            d.diagnostic->found = std::to_string(args.size()) + " argument(s)";
+            throw d;
+        }
+        Value a = args[0];
+        Value b = args[1];
+        if (callee == "Equal") {
+            return Value::boolean_(valuesEqual(a, b));
+        }
+        if (callee == "Addition" && (a.type == Value::Type::STRING || b.type == Value::Type::STRING)) {
+            return Value::string(a.toDisplayString() + b.toDisplayString());
+        }
+        if (a.type != Value::Type::NUMBER || b.type != Value::Type::NUMBER) {
+            throw diagErr(diag::Code::E0004_InvalidType, line, "`" + callee + "` requires two numbers");
+        }
+        if (callee == "Addition") return Value::num(a.number + b.number);
+        if (callee == "Subtraction") return Value::num(a.number - b.number);
+        if (callee == "Multiplication") return Value::num(a.number * b.number);
+    }
+
+    auto nativeIt = natives.find(callee);
+    if (nativeIt != natives.end()) {
+        return nativeIt->second(args, line);
+    }
+
+    Value calleeVal;
+    if (!env->get(callee, calleeVal) || calleeVal.type != Value::Type::FUNCTION) {
+        throw unknownFunctionErr(callee, line);
+    }
+    return callFunction(calleeVal.function, args, line);
+}
+
 Value Interpreter::evaluate(const ExprPtr& expr, EnvPtr env) {
     if (auto e = std::dynamic_pointer_cast<LiteralExpr>(expr)) {
         switch (e->kind) {
@@ -3718,47 +3761,17 @@ Value Interpreter::evaluate(const ExprPtr& expr, EnvPtr env) {
         }
     }
     if (auto e = std::dynamic_pointer_cast<CallExpr>(expr)) {
-        // دوال العمليات المدمجة بأسمائها الصريحة: Addition/Subtraction/Multiplication/Equal
-        static const std::unordered_set<std::string> builtinOps = {
-            "Addition", "Subtraction", "Multiplication", "Equal"
-        };
-        if (builtinOps.count(e->callee)) {
-            if (e->args.size() != 2) {
-                auto d = diagErr(diag::Code::E0007_InvalidArguments, e->line, "`" + e->callee + "` requires exactly 2 arguments");
-                d.diagnostic->expected = "2 argument(s)";
-                d.diagnostic->found = std::to_string(e->args.size()) + " argument(s)";
-                throw d;
-            }
-            Value a = evaluate(e->args[0], env);
-            Value b = evaluate(e->args[1], env);
-            if (e->callee == "Equal") {
-                return Value::boolean_(valuesEqual(a, b));
-            }
-            if (e->callee == "Addition" && (a.type == Value::Type::STRING || b.type == Value::Type::STRING)) {
-                return Value::string(a.toDisplayString() + b.toDisplayString());
-            }
-            if (a.type != Value::Type::NUMBER || b.type != Value::Type::NUMBER) {
-                throw diagErr(diag::Code::E0004_InvalidType, e->line, "`" + e->callee + "` requires two numbers");
-            }
-            if (e->callee == "Addition") return Value::num(a.number + b.number);
-            if (e->callee == "Subtraction") return Value::num(a.number - b.number);
-            if (e->callee == "Multiplication") return Value::num(a.number * b.number);
+        // RinFlow: سلسلة |> كاملة (جذرها هنا) مع جلسة Flow نشطة فعلاً -> تُنفَّذ عبر محرّك RinFlow
+        // (Flow Graph حقيقي + Execution Events + تتبّع Node بالكامل)، بدل التقييم العادي أدناه. بلا
+        // جلسة نشطة (الحالة الافتراضية دائماً لِـ run() العادي) هذا الفرع لا يُؤخَذ أبداً، فتبقى
+        // نفس السلسلة تُقيَّم بنفس الطريقة العادية تماماً كما كانت قبل RinFlow (توافقية كاملة).
+        if (e->isPipelineRoot && activeFlowSession_) {
+            return evaluatePipelineFlow(e, env);
         }
 
-        auto nativeIt = natives.find(e->callee);
-        if (nativeIt != natives.end()) {
-            std::vector<Value> args;
-            for (auto& a : e->args) args.push_back(evaluate(a, env));
-            return nativeIt->second(args, e->line);
-        }
-
-        Value calleeVal;
-        if (!env->get(e->callee, calleeVal) || calleeVal.type != Value::Type::FUNCTION) {
-            throw unknownFunctionErr(e->callee, e->line);
-        }
         std::vector<Value> args;
         for (auto& a : e->args) args.push_back(evaluate(a, env));
-        return callFunction(calleeVal.function, args, e->line);
+        return invokeCallee(e->callee, args, e->line, env);
     }
     if (auto e = std::dynamic_pointer_cast<ArrayExpr>(expr)) {
         auto arr = std::make_shared<ArrayData>();
@@ -3937,6 +3950,545 @@ Value Interpreter::performRealApiCall(const std::string& endpointName, const std
     std::string body = bodyToString(bodyValue, headers);
     auto result = http::performRequest(toUpperAscii(method), url, headers, body, defaultHttpTimeoutMs);
     return httpResultToValue(result);
+}
+
+// ============================================================================
+// RinFlow — Execution Flow Engine (implementation)
+// ============================================================================
+// انظر التوثيق الكامل عند تعريف الأنواع في rin_interpreter.h (namespace flow) وعند نقطة الدخول
+// evaluate()'s CallExpr branch أعلاه. كل شيء هنا إضافي بحت: run() العادي بلا أي `|>` أو بلا جلسة
+// Flow نشِطة لا يمرّ إطلاقاً من هذا الكود.
+namespace flow {
+
+std::string nodeTypeName(NodeType t) {
+    switch (t) {
+        case NodeType::INPUT: return "INPUT";
+        case NodeType::OUTPUT: return "OUTPUT";
+        case NodeType::FILTER: return "FILTER";
+        case NodeType::MAP: return "MAP";
+        case NodeType::TRANSFORM: return "TRANSFORM";
+        case NodeType::SORT: return "SORT";
+        case NodeType::REDUCE: return "REDUCE";
+        case NodeType::CONTAINER: return "CONTAINER";
+        case NodeType::FILE: return "FILE";
+        case NodeType::NETWORK: return "NETWORK";
+        case NodeType::PIPELINE: return "PIPELINE";
+        case NodeType::CUSTOM: return "CUSTOM";
+    }
+    return "CUSTOM";
+}
+
+std::string nodeStatusName(NodeStatus s) {
+    switch (s) {
+        case NodeStatus::QUEUED: return "QUEUED";
+        case NodeStatus::RUNNING: return "RUNNING";
+        case NodeStatus::SUCCESS: return "SUCCESS";
+        case NodeStatus::ERROR: return "ERROR";
+        case NodeStatus::SKIPPED: return "SKIPPED";
+        case NodeStatus::CANCELLED: return "CANCELLED";
+        case NodeStatus::TIMEOUT: return "TIMEOUT";
+    }
+    return "ERROR";
+}
+
+std::string eventTypeName(EventType t) {
+    switch (t) {
+        case EventType::FLOW_STARTED: return "FLOW_STARTED";
+        case EventType::NODE_QUEUED: return "NODE_QUEUED";
+        case EventType::NODE_STARTED: return "NODE_STARTED";
+        case EventType::NODE_OUTPUT: return "NODE_OUTPUT";
+        case EventType::NODE_FINISHED: return "NODE_FINISHED";
+        case EventType::NODE_ERROR: return "NODE_ERROR";
+        case EventType::FLOW_FINISHED: return "FLOW_FINISHED";
+        case EventType::FLOW_CANCELLED: return "FLOW_CANCELLED";
+        case EventType::FLOW_TIMEOUT: return "FLOW_TIMEOUT";
+    }
+    return "FLOW_FINISHED";
+}
+
+std::string sessionStatusName(SessionStatus s) {
+    switch (s) {
+        case SessionStatus::RUNNING: return "RUNNING";
+        case SessionStatus::SUCCESS: return "SUCCESS";
+        case SessionStatus::ERROR: return "ERROR";
+        case SessionStatus::CANCELLED: return "CANCELLED";
+        case SessionStatus::TIMEOUT: return "TIMEOUT";
+    }
+    return "ERROR";
+}
+
+DataPreview makeDataPreview(const Value& v, int maxPreviewChars, int maxRecordsPreview) {
+    DataPreview p;
+    p.available = true;
+    if (v.type == Value::Type::ARRAY && v.array) {
+        p.recordCount = static_cast<long long>(v.array->size());
+        std::ostringstream os;
+        os << "[";
+        size_t shown = std::min(v.array->size(), static_cast<size_t>(std::max(0, maxRecordsPreview)));
+        for (size_t i = 0; i < shown; ++i) {
+            if (i > 0) os << ", ";
+            os << (*v.array)[i].toDisplayString();
+        }
+        if (v.array->size() > shown) {
+            os << ", ... (+" << (v.array->size() - shown) << " more)";
+            p.truncated = true;
+        }
+        os << "]";
+        p.preview = os.str();
+    } else {
+        p.preview = v.toDisplayString();
+    }
+    if (maxPreviewChars > 0 && static_cast<int>(p.preview.size()) > maxPreviewChars) {
+        p.preview = p.preview.substr(0, static_cast<size_t>(maxPreviewChars)) + "...";
+        p.truncated = true;
+    }
+    return p;
+}
+
+long long PipelineTracer::nowMs() {
+    return std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::system_clock::now().time_since_epoch()).count();
+}
+
+void PipelineTracer::emit(EventType type, int nodeId, const std::string& message, int line,
+                            long long durationMs, std::unordered_map<std::string, std::string> metadata) {
+    FlowEvent ev;
+    ev.sequence = seq_.fetch_add(1, std::memory_order_relaxed) + 1;
+    ev.timestamp = nowMs();
+    ev.flowId = flowId_;
+    ev.nodeId = nodeId;
+    ev.type = type;
+    ev.message = message;
+    ev.line = line;
+    ev.column = 1; // انظر تعليق FlowEvent::column في rin_interpreter.h
+    ev.durationMs = durationMs;
+    ev.metadata = std::move(metadata);
+
+    EventSink sinkCopy;
+    {
+        std::lock_guard<std::mutex> lk(mu_);
+        events_.push_back(ev);
+        if (events_.size() > kMaxEvents) events_.erase(events_.begin()); // قسم 25: لا تراكم بلا حدود
+        sinkCopy = sink_;
+    }
+    if (sinkCopy) sinkCopy(ev); // خارج القفل: sink قد يستدعي كوتلن/JNI (نفس فلسفة StreamSink)
+}
+
+void PipelineTracer::updateMetricsLocked() {
+    FlowMetrics m;
+    m.totalNodes = static_cast<int>(graph_.nodes.size());
+    for (auto& n : graph_.nodes) {
+        switch (n.status) {
+            case NodeStatus::SUCCESS: m.completedNodes++; break;
+            case NodeStatus::ERROR: m.failedNodes++; break;
+            case NodeStatus::SKIPPED: m.skippedNodes++; break;
+            case NodeStatus::CANCELLED: m.cancelledNodes++; break;
+            case NodeStatus::TIMEOUT: m.timeoutNodes++; break;
+            default: break;
+        }
+        m.totalDurationMs += n.durationMs;
+        if (n.input.available && n.input.recordCount >= 0) m.totalInputRecords += n.input.recordCount;
+        if (n.output.available && n.output.recordCount >= 0) m.totalOutputRecords += n.output.recordCount;
+    }
+    metrics_ = m;
+}
+
+int PipelineTracer::queueNode(NodeType type, const std::string& name, int line) {
+    int id;
+    {
+        std::lock_guard<std::mutex> lk(mu_);
+        FlowNode node;
+        node.id = static_cast<int>(graph_.nodes.size());
+        node.type = type;
+        node.name = name;
+        node.status = NodeStatus::QUEUED;
+        node.line = line;
+        if (!graph_.nodes.empty()) graph_.edges.push_back({graph_.nodes.back().id, node.id});
+        id = node.id;
+        graph_.nodes.push_back(std::move(node));
+        updateMetricsLocked();
+    }
+    emit(EventType::NODE_QUEUED, id, name, line, 0);
+    return id;
+}
+
+void PipelineTracer::startNode(int nodeId) {
+    int line = 0;
+    {
+        std::lock_guard<std::mutex> lk(mu_);
+        if (nodeId < 0 || nodeId >= static_cast<int>(graph_.nodes.size())) return;
+        auto& n = graph_.nodes[nodeId];
+        n.status = NodeStatus::RUNNING;
+        n.startedAt = nowMs();
+        line = n.line;
+        updateMetricsLocked();
+    }
+    emit(EventType::NODE_STARTED, nodeId, "", line, 0);
+}
+
+void PipelineTracer::recordInput(int nodeId, const Value& v, int maxPreviewChars, int maxRecordsPreview) {
+    std::lock_guard<std::mutex> lk(mu_);
+    if (nodeId < 0 || nodeId >= static_cast<int>(graph_.nodes.size())) return;
+    graph_.nodes[nodeId].input = makeDataPreview(v, maxPreviewChars, maxRecordsPreview);
+    updateMetricsLocked();
+}
+
+void PipelineTracer::recordOutput(int nodeId, const Value& v, int maxPreviewChars, int maxRecordsPreview) {
+    int line = 0;
+    {
+        std::lock_guard<std::mutex> lk(mu_);
+        if (nodeId < 0 || nodeId >= static_cast<int>(graph_.nodes.size())) return;
+        graph_.nodes[nodeId].output = makeDataPreview(v, maxPreviewChars, maxRecordsPreview);
+        line = graph_.nodes[nodeId].line;
+        updateMetricsLocked();
+    }
+    emit(EventType::NODE_OUTPUT, nodeId, "", line, 0);
+}
+
+void PipelineTracer::finishNode(int nodeId) {
+    long long dur = 0; int line = 0;
+    {
+        std::lock_guard<std::mutex> lk(mu_);
+        if (nodeId < 0 || nodeId >= static_cast<int>(graph_.nodes.size())) return;
+        auto& n = graph_.nodes[nodeId];
+        n.status = NodeStatus::SUCCESS;
+        n.finishedAt = nowMs();
+        n.durationMs = n.startedAt > 0 ? (n.finishedAt - n.startedAt) : 0;
+        dur = n.durationMs; line = n.line;
+        updateMetricsLocked();
+    }
+    emit(EventType::NODE_FINISHED, nodeId, "SUCCESS", line, dur);
+}
+
+void PipelineTracer::failNode(int nodeId, const NodeError& err) {
+    long long dur = 0; int line = err.line;
+    {
+        std::lock_guard<std::mutex> lk(mu_);
+        if (nodeId < 0 || nodeId >= static_cast<int>(graph_.nodes.size())) return;
+        auto& n = graph_.nodes[nodeId];
+        n.status = NodeStatus::ERROR;
+        n.finishedAt = nowMs();
+        n.durationMs = n.startedAt > 0 ? (n.finishedAt - n.startedAt) : 0;
+        n.error = err;
+        dur = n.durationMs;
+        updateMetricsLocked();
+    }
+    std::unordered_map<std::string, std::string> meta = {{"code", err.code}};
+    emit(EventType::NODE_ERROR, nodeId, err.message, line, dur, meta);
+}
+
+void PipelineTracer::skipNode(int nodeId) {
+    int line = 0;
+    {
+        std::lock_guard<std::mutex> lk(mu_);
+        if (nodeId < 0 || nodeId >= static_cast<int>(graph_.nodes.size())) return;
+        graph_.nodes[nodeId].status = NodeStatus::SKIPPED;
+        line = graph_.nodes[nodeId].line;
+        updateMetricsLocked();
+    }
+    emit(EventType::NODE_FINISHED, nodeId, "SKIPPED", line, 0);
+}
+
+void PipelineTracer::cancelNode(int nodeId) {
+    int line = 0;
+    {
+        std::lock_guard<std::mutex> lk(mu_);
+        if (nodeId < 0 || nodeId >= static_cast<int>(graph_.nodes.size())) return;
+        graph_.nodes[nodeId].status = NodeStatus::CANCELLED;
+        graph_.nodes[nodeId].finishedAt = nowMs();
+        line = graph_.nodes[nodeId].line;
+        updateMetricsLocked();
+    }
+    emit(EventType::NODE_FINISHED, nodeId, "CANCELLED", line, 0);
+}
+
+void PipelineTracer::timeoutNode(int nodeId) {
+    int line = 0;
+    {
+        std::lock_guard<std::mutex> lk(mu_);
+        if (nodeId < 0 || nodeId >= static_cast<int>(graph_.nodes.size())) return;
+        graph_.nodes[nodeId].status = NodeStatus::TIMEOUT;
+        graph_.nodes[nodeId].finishedAt = nowMs();
+        line = graph_.nodes[nodeId].line;
+        updateMetricsLocked();
+    }
+    emit(EventType::NODE_FINISHED, nodeId, "TIMEOUT", line, 0);
+}
+
+void PipelineTracer::emitFlowStarted() { emit(EventType::FLOW_STARTED, -1, flowId_, 0, 0); }
+
+void PipelineTracer::emitFlowFinished(SessionStatus status) {
+    long long total = 0;
+    { std::lock_guard<std::mutex> lk(mu_); total = metrics_.totalDurationMs; }
+    EventType t = EventType::FLOW_FINISHED;
+    if (status == SessionStatus::CANCELLED) t = EventType::FLOW_CANCELLED;
+    else if (status == SessionStatus::TIMEOUT) t = EventType::FLOW_TIMEOUT;
+    emit(t, -1, sessionStatusName(status), 0, total);
+}
+
+std::shared_ptr<FlowSession> RinFlowEngine::createSession(const std::string& id) {
+    auto session = std::make_shared<FlowSession>();
+    session->id = id;
+    session->tracer = std::make_shared<PipelineTracer>(id);
+    std::lock_guard<std::mutex> lk(mu_);
+    sessions_[id] = session;
+    order_.push_back(id);
+    while (order_.size() > kMaxSessions) {
+        // لا تحذف جلسات ما تزال RUNNING (قسم 25: لا تفقد جلسة نشطة أثناء التقليم)
+        auto it = sessions_.find(order_.front());
+        if (it != sessions_.end() && it->second->status == SessionStatus::RUNNING) break;
+        sessions_.erase(order_.front());
+        order_.erase(order_.begin());
+    }
+    return session;
+}
+
+std::shared_ptr<FlowSession> RinFlowEngine::getSession(const std::string& id) const {
+    std::lock_guard<std::mutex> lk(mu_);
+    auto it = sessions_.find(id);
+    return it == sessions_.end() ? nullptr : it->second;
+}
+
+bool RinFlowEngine::requestCancel(const std::string& id) {
+    std::shared_ptr<FlowSession> session;
+    {
+        std::lock_guard<std::mutex> lk(mu_);
+        auto it = sessions_.find(id);
+        if (it == sessions_.end()) return false;
+        session = it->second;
+    }
+    if (session->status != SessionStatus::RUNNING) return false;
+    session->cancelFlag->store(true, std::memory_order_relaxed);
+    return true;
+}
+
+std::vector<std::string> RinFlowEngine::listSessionIds() const {
+    std::lock_guard<std::mutex> lk(mu_);
+    return order_;
+}
+
+} // namespace flow
+
+flow::NodeType Interpreter::inferFlowNodeType(const std::string& fnName) const {
+    auto it = flowNodeTypeOverrides_.find(fnName);
+    if (it != flowNodeTypeOverrides_.end()) return it->second;
+    // جدول تخمين افتراضي بأسماء شائعة لمراحل |> -- قابل للتوسع بالكامل عبر
+    // Interpreter::registerFlowNodeType دون الحاجة لتعديل هذا الجدول نفسه (قسم 1).
+    static const std::unordered_map<std::string, flow::NodeType> defaults = {
+        {"filter", flow::NodeType::FILTER},
+        {"map", flow::NodeType::MAP},
+        {"transform", flow::NodeType::TRANSFORM},
+        {"sort", flow::NodeType::SORT},
+        {"sortBy", flow::NodeType::SORT},
+        {"reduce", flow::NodeType::REDUCE},
+        {"fold", flow::NodeType::REDUCE},
+        {"sum", flow::NodeType::REDUCE},
+        {"mean", flow::NodeType::REDUCE},
+        {"output", flow::NodeType::OUTPUT},
+        {"print", flow::NodeType::OUTPUT},
+        {"save", flow::NodeType::CONTAINER},
+        {"insertDoc", flow::NodeType::CONTAINER},
+        {"updateDoc", flow::NodeType::CONTAINER},
+        {"table", flow::NodeType::CONTAINER},
+        {"file", flow::NodeType::FILE},
+        {"readFile", flow::NodeType::FILE},
+        {"writeFile", flow::NodeType::FILE},
+        {"httpGet", flow::NodeType::NETWORK},
+        {"httpPost", flow::NodeType::NETWORK},
+        {"apiCall", flow::NodeType::NETWORK},
+        {"apiGet", flow::NodeType::NETWORK},
+        {"apiPost", flow::NodeType::NETWORK},
+        {"pipe", flow::NodeType::PIPELINE},
+    };
+    auto d = defaults.find(fnName);
+    return d == defaults.end() ? flow::NodeType::CUSTOM : d->second;
+}
+
+void Interpreter::flattenPipelineChain(const std::shared_ptr<CallExpr>& root,
+                                        ExprPtr& outOriginalInput,
+                                        std::vector<std::shared_ptr<CallExpr>>& outStages) const {
+    // كل CallExpr ناتج عن |> يضع الإدخال القادم من يساره في args[0] (انظر Parser::pipeline في
+    // rin_parser.cpp)؛ ننزل بهذا حتى نصل لتعبير ليس CallExpr::isPipelineNode -- وهذا هو الإدخال
+    // الأصلي الحقيقي (قد يكون متغيراً، حرفياً، أو أي تعبير آخر).
+    std::vector<std::shared_ptr<CallExpr>> reversed;
+    std::shared_ptr<CallExpr> cur = root;
+    ExprPtr originalInput;
+    while (cur && cur->isPipelineNode) {
+        reversed.push_back(cur);
+        if (cur->args.empty()) { originalInput = nullptr; break; }
+        auto prevCall = std::dynamic_pointer_cast<CallExpr>(cur->args[0]);
+        if (prevCall && prevCall->isPipelineNode) {
+            cur = prevCall;
+        } else {
+            originalInput = cur->args[0];
+            cur = nullptr;
+        }
+    }
+    outOriginalInput = originalInput;
+    outStages.assign(reversed.rbegin(), reversed.rend());
+}
+
+Value Interpreter::evaluatePipelineFlow(const std::shared_ptr<CallExpr>& root, EnvPtr env) {
+    auto& session = *activeFlowSession_;
+    auto tracer = session.tracer;
+    const auto& opts = activeFlowOptions_;
+
+    // نتذكّر آخر سلسلة/بيئة نُفِّذت في هذه الجلسة (قسم 11: Replay) بلا أي تعديل على الجلسات الأخرى.
+    session.lastRootExpr = root;
+    session.lastEnv = env;
+
+    ExprPtr originalInputExpr;
+    std::vector<std::shared_ptr<CallExpr>> stages;
+    flattenPipelineChain(root, originalInputExpr, stages);
+
+    // إلغاء طُلِب فعلاً *قبل* بدء أي شيء من هذه السلسلة بالذات -> لا تُنشأ أي Node جديدة إطلاقاً
+    // (قسم 9: "لا تستمر Nodes الجديدة بعد الإلغاء" -- يشمل هذا أي سلسلة |> لاحقة في نفس البرنامج).
+    if (session.isCancelled()) return Value::nil();
+    if (session.isTimedOut()) return Value::nil();
+
+    // ---- Node الإدخال (INPUT) ----
+    int inputLine = originalInputExpr ? originalInputExpr->line : root->line;
+    int inputNodeId = tracer->queueNode(flow::NodeType::INPUT, "input", inputLine);
+    tracer->startNode(inputNodeId);
+    Value currentValue = originalInputExpr ? evaluate(originalInputExpr, env) : Value::nil();
+    tracer->recordOutput(inputNodeId, currentValue, opts.maxPreviewChars, opts.maxRecordsPreview);
+    tracer->finishNode(inputNodeId);
+
+    // ---- مراحل |> بالترتيب الحقيقي ----
+    for (size_t i = 0; i < stages.size(); ++i) {
+        auto& stageCall = stages[i];
+        flow::NodeType type = inferFlowNodeType(stageCall->callee);
+        // آخر مرحلة تُسمَّى output صراحة إن لم يكن اسمها نفسه يوحي بنوع أدقّ (مثال: آخر مرحلة اسمها
+        // "save" تبقى CONTAINER لأن هذا أدقّ من OUTPUT العام).
+        if (i + 1 == stages.size() && type == flow::NodeType::CUSTOM) type = flow::NodeType::OUTPUT;
+
+        if (session.isCancelled()) {
+            int nid = tracer->queueNode(type, stageCall->callee, stageCall->line);
+            tracer->cancelNode(nid);
+            for (size_t j = i + 1; j < stages.size(); ++j) {
+                int skipId = tracer->queueNode(inferFlowNodeType(stages[j]->callee), stages[j]->callee, stages[j]->line);
+                tracer->skipNode(skipId);
+            }
+            return Value::nil();
+        }
+        if (session.isTimedOut()) {
+            int nid = tracer->queueNode(type, stageCall->callee, stageCall->line);
+            tracer->timeoutNode(nid);
+            for (size_t j = i + 1; j < stages.size(); ++j) {
+                int skipId = tracer->queueNode(inferFlowNodeType(stages[j]->callee), stages[j]->callee, stages[j]->line);
+                tracer->skipNode(skipId);
+            }
+            return Value::nil();
+        }
+
+        int nodeId = tracer->queueNode(type, stageCall->callee, stageCall->line);
+        tracer->startNode(nodeId);
+        tracer->recordInput(nodeId, currentValue, opts.maxPreviewChars, opts.maxRecordsPreview);
+
+        // args[0] هو تعبير المدخل القادم من السلسلة (لا يُعاد تقييمه -- currentValue هو ناتجه
+        // الفعلي المُحسَب أعلاه بالفعل)؛ باقي args[1..] هي وسائط إضافية حقيقية مكتوبة صراحة في
+        // الكود، كل واحد يُقيَّم في نفس env تماماً كأي CallExpr عادي.
+        std::vector<Value> callArgs;
+        callArgs.push_back(currentValue);
+        for (size_t k = 1; k < stageCall->args.size(); ++k) {
+            callArgs.push_back(evaluate(stageCall->args[k], env));
+        }
+
+        try {
+            currentValue = invokeCallee(stageCall->callee, callArgs, stageCall->line, env);
+        } catch (RinError& e) {
+            flow::NodeError nerr;
+            nerr.line = e.line;
+            nerr.message = e.message;
+            // كود RinFlow داخلي (RIN-Fxxxx) مستقل عن diag::Code اللغوي -- قسم 8: Flow Diagnostics.
+            nerr.code = e.diagnostic ? ("RIN-F-" + diag::codeString(e.diagnostic->code)) : "RIN-F2000";
+            tracer->failNode(nodeId, nerr);
+            for (size_t j = i + 1; j < stages.size(); ++j) {
+                int skipId = tracer->queueNode(inferFlowNodeType(stages[j]->callee), stages[j]->callee, stages[j]->line);
+                tracer->skipNode(skipId);
+            }
+            throw; // نفس RinError يصعد كما كان دائماً؛ run() العادي يعالجه بنفس الطريقة تماماً
+        }
+
+        tracer->recordOutput(nodeId, currentValue, opts.maxPreviewChars, opts.maxRecordsPreview);
+        tracer->finishNode(nodeId);
+    }
+
+    return currentValue;
+}
+
+Interpreter::FlowRunResult Interpreter::runProgramAsFlow(const std::vector<StmtPtr>& statements,
+                                                           const flow::FlowRunOptions& opts,
+                                                           flow::EventSink sink) {
+    static std::atomic<long long> counter{0};
+    std::string sessionId = "flow-" + std::to_string(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count()) + "-" + std::to_string(counter.fetch_add(1));
+    auto session = flowEngine_.createSession(sessionId);
+    if (sink) session->tracer->setSink(std::move(sink));
+    if (opts.timeoutMs > 0) {
+        session->deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(opts.timeoutMs);
+    }
+
+    activeFlowSession_ = session;
+    activeFlowOptions_ = opts;
+    session->tracer->emitFlowStarted();
+
+    FlowRunResult result;
+    result.sessionId = sessionId;
+    result.output = run(statements); // نفس run() العادي بالضبط -- hoisting/output/lastDiagnostic كلها كما هي
+
+    flow::SessionStatus finalStatus;
+    if (session->isCancelled()) finalStatus = flow::SessionStatus::CANCELLED;
+    else if (session->isTimedOut()) finalStatus = flow::SessionStatus::TIMEOUT;
+    else if (hadError()) finalStatus = flow::SessionStatus::ERROR;
+    else finalStatus = flow::SessionStatus::SUCCESS;
+    session->status = finalStatus;
+    session->tracer->emitFlowFinished(finalStatus);
+
+    result.status = finalStatus;
+    result.graph = session->tracer->snapshotGraph();
+    result.metrics = session->tracer->snapshotMetrics();
+
+    activeFlowSession_.reset();
+    return result;
+}
+
+std::optional<Interpreter::FlowRunResult> Interpreter::replayFlow(const std::string& previousSessionId,
+                                                                    const flow::FlowRunOptions& opts,
+                                                                    flow::EventSink sink) {
+    auto previous = flowEngine_.getSession(previousSessionId);
+    if (!previous || !previous->lastRootExpr || !previous->lastEnv) return std::nullopt;
+
+    static std::atomic<long long> counter{0};
+    std::string sessionId = "flow-replay-" + std::to_string(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count()) + "-" + std::to_string(counter.fetch_add(1));
+    auto session = flowEngine_.createSession(sessionId);
+    if (sink) session->tracer->setSink(std::move(sink));
+    if (opts.timeoutMs > 0) {
+        session->deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(opts.timeoutMs);
+    }
+
+    activeFlowSession_ = session;
+    activeFlowOptions_ = opts;
+    session->tracer->emitFlowStarted();
+
+    FlowRunResult result;
+    result.sessionId = sessionId;
+    flow::SessionStatus finalStatus = flow::SessionStatus::SUCCESS;
+    try {
+        evaluatePipelineFlow(previous->lastRootExpr, previous->lastEnv);
+    } catch (RinError&) {
+        finalStatus = flow::SessionStatus::ERROR;
+    }
+    if (session->isCancelled()) finalStatus = flow::SessionStatus::CANCELLED;
+    else if (session->isTimedOut()) finalStatus = flow::SessionStatus::TIMEOUT;
+
+    session->status = finalStatus;
+    session->tracer->emitFlowFinished(finalStatus);
+    result.status = finalStatus;
+    result.graph = session->tracer->snapshotGraph();
+    result.metrics = session->tracer->snapshotMetrics();
+
+    activeFlowSession_.reset();
+    return result;
 }
 
 } // namespace rin
