@@ -18,6 +18,13 @@ enum class StrandKind {
     HEADER, TOPBAR, BOTTOMBAR, DRAWER, MENU, MENUITEM, TABLE, TABLEROW,
     VIDEO, AUDIO, WEBVIEW, SCAFFOLD, SPLASH,
 
+    // Banner: a dismissible, transient-or-persistent notice bar (see docs/banner.md). Deliberately
+    // NOT a new parallel system -- it is just another StrandKind produced by the same
+    // rin::ViewStmt -> buildFabric() pipeline every other kind above goes through (@view.Banner=...),
+    // and it reuses MENU/MENUITEM/DRAWER for its optional popup menu (banner { menu { item ... } }
+    // desugars to a child MENU strand, not a separate menu engine).
+    BANNER,
+
     CUSTOM
 };
 inline StrandKind strandKindFromTag(const std::string& tag) {
@@ -44,6 +51,7 @@ inline StrandKind strandKindFromTag(const std::string& tag) {
     if (tag == "WebView" || tag == "webview" || tag == "webView") return StrandKind::WEBVIEW;
     if (tag == "Scaffold" || tag == "scaffold") return StrandKind::SCAFFOLD;
     if (tag == "Splash" || tag == "splash") return StrandKind::SPLASH;
+    if (tag == "Banner" || tag == "banner") return StrandKind::BANNER;
 
     return StrandKind::CUSTOM; // resolved via Bolt (plugin) registry — see architecture doc §18
 }
@@ -68,6 +76,7 @@ inline std::string strandKindName(StrandKind k) {
         case StrandKind::WEBVIEW: return "WebView";
         case StrandKind::SCAFFOLD: return "Scaffold";
         case StrandKind::SPLASH: return "Splash";
+        case StrandKind::BANNER: return "Banner";
 
         default: return "Custom";
     }
