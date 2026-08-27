@@ -9,7 +9,7 @@ package com.dlof.rinlang
  * stage whose value never got printed before the engine reported an error) and SKIPPED
  * (everything after it) are actually distinguishable today.
  */
-enum class FlowNodeStatus { QUEUED, RUNNING, SUCCESS, ERROR, SKIPPED, CANCELLED }
+enum class FlowNodeStatus { QUEUED, RUNNING, SUCCESS, ERROR, SKIPPED, CANCELLED, TIMEOUT }
 
 /**
  * Turns a `@container.pipe = name ... .end/container.pipe` block into a
