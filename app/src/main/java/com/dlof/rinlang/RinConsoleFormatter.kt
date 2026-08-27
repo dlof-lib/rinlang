@@ -70,6 +70,16 @@ object RinConsoleFormatter {
         "↺" to LogKind.IMPORT,
         "✅" to LogKind.SUCCESS,
         "◽" to LogKind.SUCCESS,
+        // print(level="...") prefixes emitted by rin_interpreter.cpp's PrintStmt handling
+        // (see the exact "\u274C "/"\u26A0\uFE0F "/"\u2139\uFE0F "/"\U0001F41E " literals it
+        // writes). Previously missing here entirely, so an error/warn/info/debug-level print
+        // silently fell through to LogKind.PLAIN -- e.g. print("x", level="error") rendered as
+        // plain text instead of as an error, even though LogKind.ERROR/WARNING/INFO/DEBUG (and
+        // their icons/colors) already existed and were otherwise unreachable dead code.
+        "❌" to LogKind.ERROR,
+        "⚠️" to LogKind.WARNING,
+        "ℹ️" to LogKind.INFO,
+        "🐞" to LogKind.DEBUG,
         "🗂️" to LogKind.STRUCTURE,
         "📊" to LogKind.STRUCTURE,
         "🧵" to LogKind.STRUCTURE,
