@@ -97,6 +97,41 @@ object RinEngine {
     /** Returns a human readable version string for the native engine. */
     external fun engineVersion(): String
 
+    // ---- RinFlow: Execution Flow Engine (see rin_interpreter.h: namespace rin::flow) ----
+    // Turns any top-level `a |> b() |> c()` chain in [source] into a real Flow Graph, executed
+    // once (not re-run per stage like the older [PipelineTracer] probing technique still used for
+    // `@container.pipe` blocks — see that file's kdoc), with live per-node events and a final
+    // graph/metrics snapshot. [timeoutMs] <= 0 means no timeout. [listener], if given, receives
+    // every node/flow event synchronously as they happen (same calling-thread contract as
+    // [RinStreamListener] above — do not touch Android UI directly from it).
+    fun interface RinFlowListener {
+        fun onFlowEvent(eventJson: String)
+    }
+
+    fun runSourceAsFlow(source: String, timeoutMs: Long = 0L, listener: RinFlowListener? = null): RinFlowRunResult =
+        RinFlowRunResult.parse(runFlowNative(source, baseDir, timeoutMs, listener))
+
+    private external fun runFlowNative(source: String, baseDir: String, timeoutMs: Long, listener: RinFlowListener?): String
+
+    /** Requests cooperative cancellation of a still-RUNNING flow session (see
+     *  `rin::flow::FlowSession::cancelFlag`); the flow only actually stops at the next `|>` stage
+     *  boundary — same cooperative model [RinJobScheduler] already documents for whole-program
+     *  timeouts. Returns false if the session id is unknown or already finished. */
+    fun cancelFlow(sessionId: String): Boolean = cancelFlowNative(sessionId)
+
+    private external fun cancelFlowNative(sessionId: String): Boolean
+
+    /** Re-executes the last `|>` chain [previousSessionId] ran, in a brand-new session — the
+     *  original session is never modified (section 11: Replay). Returns a result whose
+     *  [RinFlowRunResult.parseError] is set instead of a graph if [previousSessionId] is unknown
+     *  (already pruned — the engine only keeps a bounded number of recent flow sessions — or never
+     *  ran a `|>` chain at all). */
+    fun replayFlow(previousSessionId: String, timeoutMs: Long = 0L, listener: RinFlowListener? = null): RinFlowRunResult =
+        RinFlowRunResult.parse(replayFlowNative(previousSessionId, timeoutMs, listener))
+
+    private external fun replayFlowNative(previousSessionId: String, timeoutMs: Long, listener: RinFlowListener?): String
+
+
     /**
      * Loomtime rendering engine: parses a `@view.<Kind>=name ... .end/view` root out of [source],
      * lays it out at [rootWidth] px via the native Loom engine, and returns a JSON dump of the
