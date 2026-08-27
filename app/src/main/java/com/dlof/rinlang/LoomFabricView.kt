@@ -48,6 +48,7 @@ class LoomFabricView @JvmOverloads constructor(
         const val TABLE = "Table"; const val TABLEROW = "TableRow"
         const val VIDEO = "Video"; const val AUDIO = "Audio"; const val WEBVIEW = "WebView"
         const val SCAFFOLD = "Scaffold"; const val SPLASH = "Splash"
+        const val BANNER = "Banner"
     }
 
     private val defaultBar = Color.rgb(30, 31, 40)
@@ -63,6 +64,17 @@ class LoomFabricView @JvmOverloads constructor(
     private val defaultImage = Color.rgb(70, 70, 90)
     private val defaultDivider = Color.rgb(51, 51, 63)
     private val defaultContainer = Color.rgb(24, 25, 32) // Column/Row/Stack/Custom root fallback
+    private val defaultBanner = Color.rgb(44, 47, 61) // neutral Banner default; see bannerTypeColor()
+
+    // ---- must match loom::bannerTypeColor() in rin_loom_paint.h exactly ----
+    private fun bannerTypeColor(type: String): Int = when (type) {
+        "success" -> Color.rgb(46, 160, 67)
+        "warning" -> Color.rgb(212, 167, 44)
+        "error" -> Color.rgb(209, 69, 69)
+        "action" -> Color.rgb(124, 92, 255)
+        "progress", "info" -> Color.rgb(58, 110, 196)
+        else -> defaultBanner
+    }
 
     var rootWidthPx: Int = 390
     var rootHeightPx: Int = 640
@@ -310,6 +322,14 @@ class LoomFabricView @JvmOverloads constructor(
             Kind.WEBVIEW -> drawMediaPlaceholder(canvas, rect, attrs, "🌐", attrs.optString("src"))
             Kind.SCAFFOLD -> { /* pure layout container: TopBar/Content/BottomBar/Drawer children draw themselves */ }
             Kind.SPLASH -> drawBox(canvas, rect, attrs, defaultContainer, defaultRadius = 0f)
+            Kind.BANNER -> {
+                // A Banner is a padded box (like Card) whose default fill depends on its `type`
+                // attr (info/success/warning/error/action/progress/custom) rather than one fixed
+                // color; an explicit color= on the strand still wins (handled inside drawBox).
+                if (rect.width() > 0f && rect.height() > 0f) {
+                    drawBox(canvas, rect, attrs, bannerTypeColor(attrs.optString("type")), defaultRadius = 12f)
+                }
+            }
 
             else -> drawBox(canvas, rect, attrs, defaultContainer, defaultRadius = 0f) // Column/Row/Stack/Custom
         }
