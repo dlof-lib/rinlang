@@ -14,8 +14,20 @@ inline Color colorForKind(StrandKind k) {
         case StrandKind::TEXT:   return {230,230,240};
         case StrandKind::IMAGE:  return {70,70,90};
         case StrandKind::DIVIDER:return {51,51,63};
+        case StrandKind::BANNER: return {44,47,61}; // neutral/"custom" default; see bannerTypeColor() below
         default: return {24,25,32};
     }
+}
+// Banner-specific palette for its `type` attr (info/success/warning/error/action/progress/custom),
+// used only when the .rin source didn't already override with an explicit color="#RRGGBB".
+inline Color bannerTypeColor(const std::string& type) {
+    if (type == "success")  return {46,160,67};
+    if (type == "warning")  return {212,167,44};
+    if (type == "error")    return {209,69,69};
+    if (type == "action")   return {124,92,255};
+    if (type == "progress") return {58,110,196};
+    if (type == "info")     return {58,110,196};
+    return colorForKind(StrandKind::BANNER); // "custom" / unset -> neutral
 }
 inline Color parseHexColor(const std::string& hex, Color fallback) {
     if (hex.size() < 7 || hex[0] != '#') return fallback;
@@ -23,10 +35,13 @@ inline Color parseHexColor(const std::string& hex, Color fallback) {
     try { return {hx(1), hx(3), hx(5)}; } catch (...) { return fallback; }
 }
 inline Color resolveColor(const StrandPtr& s) {
+    Color fallback = (s->kind == StrandKind::BANNER)
+        ? bannerTypeColor(s->attrStr("type", ""))
+        : colorForKind(s->kind);
     auto c = s->attr("color");
     if (c && c->kind == Value::Kind::STRING && !c->str.empty() && c->str[0] == '#')
-        return parseHexColor(c->str, colorForKind(s->kind));
-    return colorForKind(s->kind);
+        return parseHexColor(c->str, fallback);
+    return fallback;
 }
 
 enum class DrawOp { FILL_RECT, TEXT_RUN };
