@@ -10,6 +10,10 @@
 #include <functional>
 #include <vector>
 #include <utility>
+#include <chrono>
+#include <mutex>
+#include <atomic>
+#include <optional>
 
 namespace rin {
 
@@ -130,6 +134,219 @@ struct ReturnSignal { Value value; };
 struct BreakSignal {};
 struct ContinueSignal {};
 
+// ============================================================================
+// RinFlow — Execution Flow Engine
+// ============================================================================
+// يحوّل RinFlow من "pipeline tracer" (سجل نصي/تنسيقي فوق تنفيذ عادي) إلى محرّك تنفيذ حقيقي: كل
+// سلسلة `a |> b() |> c()` مكتوبة بلغة Rin (انظر Parser::pipeline() في rin_parser.cpp و
+// CallExpr::isPipelineRoot في rin_ast.h) تُبنى وتُنفَّذ فعلياً عبر Flow Graph من FlowNode، وكل
+// خطوة تصدر Execution Events حقيقية (بداية/نهاية/خطأ) تعكس التنفيذ الفعلي لحظة وقوعه -- وليس
+// إعادة عرض متأخرة أو محاكاة. هذا إضافي بحت فوق rin::Interpreter::run() العادي: برنامج Rin بلا أي
+// `|>` فيه يعمل بالضبط كما كان دائماً (انظر Interpreter::evaluate(): مسار CallExpr العادي لا يتغيّر
+// إطلاقاً ما لم يوجد isPipelineRoot=true *و* جلسة Flow نشِطة في نفس الوقت).
+namespace flow {
+
+// أنواع Node قابلة للتوسع (قسم 1 من الطلب) دون كسر Syntax الحالية: هذا التعداد داخلي فقط،
+// ولا علاقة له بأي كلمة محجوزة في اللغة؛ يُشتقّ من اسم الدالة المُستدعاة في كل مرحلة |> عبر جدول
+// اسم->نوع قابل للتوسّع في وقت التشغيل (انظر Interpreter::registerFlowNodeType أدناه)، وليس عبر
+// افتراض وجود هذه الأسماء كبنية لغوية.
+enum class NodeType {
+    INPUT, OUTPUT, FILTER, MAP, TRANSFORM, SORT, REDUCE,
+    CONTAINER, FILE, NETWORK, PIPELINE, CUSTOM
+};
+std::string nodeTypeName(NodeType t);
+
+enum class NodeStatus { QUEUED, RUNNING, SUCCESS, ERROR, SKIPPED, CANCELLED, TIMEOUT };
+std::string nodeStatusName(NodeStatus s);
+
+enum class EventType {
+    FLOW_STARTED, NODE_QUEUED, NODE_STARTED, NODE_OUTPUT, NODE_FINISHED,
+    NODE_ERROR, FLOW_FINISHED, FLOW_CANCELLED, FLOW_TIMEOUT
+};
+std::string eventTypeName(EventType t);
+
+enum class SessionStatus { RUNNING, SUCCESS, ERROR, CANCELLED, TIMEOUT };
+std::string sessionStatusName(SessionStatus s);
+
+// خطأ مرتبط بـ Node مُحدَّدة (قسم 8: Flow Diagnostics) -- يُبنى فقط من RinError حقيقي مُلتقَط أثناء
+// تنفيذ تلك الـ Node فعلياً؛ لا يُخترَع أبداً.
+struct NodeError {
+    std::string code;    // مثل "RIN-F2003" -- كود RinFlow الداخلي (مستقل عن diag::Code لغوياً)
+    std::string message;
+    int line = 0;
+    int column = 1; // تقريب ثابت لأن AST لا تحمل عموداً دقيقاً هنا (نفس ملاحظة Interpreter::err في rin_interpreter.cpp)
+};
+
+// معاينة بيانات محدودة الحجم (قسم 12: Data Inspector) -- أبداً لا تُخزَّن بلا حدود لتفادي
+// OutOfMemoryError؛ [preview] نص مقتطَع، و[recordCount] العدد الحقيقي الكامل (وليس عدد العناصر
+// المعروضة في preview) عندما تكون القيمة مصفوفة.
+struct DataPreview {
+    bool available = false;   // false = لم تُسجَّل بيانات فعلياً بعد (لا تُعرض قيمة مُختلَقة)
+    std::string preview;      // نص مقتطَع بحدود FlowRunOptions::maxPreviewChars
+    long long recordCount = -1; // -1 = غير قابل للعدّ (ليست مصفوفة)؛ >=0 = طول المصفوفة الحقيقي الكامل
+    bool truncated = false;   // true إن كانت preview أقصر من التمثيل الكامل فعلياً
+};
+
+// يبني DataPreview من قيمة Rin حقيقية فعلياً (لا يخترع بيانات أبداً -- قسم 12). لمصفوفة: يعرض
+// أول [maxRecordsPreview] عنصر كحد أقصى ثم "... (+N more)"، ويحسب [recordCount] الكامل الحقيقي
+// دائماً. لأي قيمة أخرى: toDisplayString() مقتطَعة بحدود [maxPreviewChars] حرف.
+DataPreview makeDataPreview(const Value& v, int maxPreviewChars, int maxRecordsPreview);
+
+// كل Node داخل الـ Flow Graph (قسم 2). id مستقر ضمن نفس الجلسة (تسلسلي بترتيب الإنشاء).
+struct FlowNode {
+    int id = 0;
+    NodeType type = NodeType::CUSTOM;
+    std::string name;    // اسم الدالة/المرحلة كما كُتب في الكود (مثال: "filter")
+    NodeStatus status = NodeStatus::QUEUED;
+    DataPreview input;
+    DataPreview output;
+    long long startedAt = 0;  // epoch ms، 0 = لم تبدأ بعد
+    long long finishedAt = 0; // epoch ms، 0 = لم تنتهِ بعد
+    long long durationMs = 0; // = finishedAt - startedAt بعد الانتهاء فقط
+    int line = 0;
+    int column = 1;
+    std::optional<NodeError> error;
+    std::unordered_map<std::string, std::string> metadata; // حر الشكل (مثال: "condition" لـ FILTER)
+};
+
+// حدث تنفيذ واحد (قسم 4) -- تسلسل [sequence] عام لكل الجلسة، يزداد أحادياً بشكل ذرّي (Thread-safe).
+struct FlowEvent {
+    long long sequence = 0;
+    long long timestamp = 0; // epoch ms
+    std::string flowId;
+    int nodeId = -1; // -1 = حدث على مستوى الـ Flow نفسه (FLOW_STARTED/FLOW_FINISHED/...)، لا Node بعينها
+    EventType type;
+    std::string message;
+    int line = 0;
+    int column = 1;
+    long long durationMs = 0; // مفيد فقط لأحداث *_FINISHED/NODE_ERROR
+    std::unordered_map<std::string, std::string> metadata;
+};
+
+// مقاييس قابلة للقياس فعلياً فقط (قسم 13) -- لا تُعرَض أي قيمة لم تُحسَب من Nodes حقيقية.
+struct FlowMetrics {
+    int totalNodes = 0;
+    int completedNodes = 0; // SUCCESS
+    int failedNodes = 0;    // ERROR
+    int skippedNodes = 0;   // SKIPPED
+    int cancelledNodes = 0; // CANCELLED
+    int timeoutNodes = 0;   // TIMEOUT
+    long long totalDurationMs = 0;
+    long long totalInputRecords = 0;  // مجموع DataPreview::recordCount الحقيقية (>=0 فقط) لكل Node.input
+    long long totalOutputRecords = 0; // نفس الشيء لـ Node.output
+};
+
+struct FlowGraph {
+    std::vector<FlowNode> nodes;
+    // حواف بسيطة (from -> to) بترتيب التنفيذ الفعلي؛ خطّية دائماً اليوم (قسم 14: لا توازي افتراضي)،
+    // لكن التمثيل نفسه (قائمة حواف عامة، لا "next واحد فقط" مُدمَج في FlowNode) يسمح لاحقاً بتفريعات
+    // Graph غير خطية بلا كسر أي مستهلك حالي لهذا الحقل.
+    std::vector<std::pair<int,int>> edges;
+};
+
+using EventSink = std::function<void(const FlowEvent&)>;
+
+// PipelineTracer -- طُوِّر (وليس استُبدِل): هذه واجهة C++ الحقيقية المسؤولة عن كل event حي أثناء
+// تنفيذ Flow (قسم 5)، بديل C++-side لِـ PipelineTracer.kt/RinFlowTracer.kt الحاليَين اللذين يبقيان
+// كما هما في Kotlin ويُستهلَكان الآن من خلال JSON حقيقي صادر عن هذا الكلاس (انظر jni_bridge.cpp).
+// Thread-safe: mutex واحد يحمي graph_/metrics_، وatomic لِـ sequence حتى تبقى start/finish/fail/
+// cancel Node قابلة للاستدعاء بأمان من أكثر من ترد لو احتاج مستقبلاً (اليوم كل الاستدعاءات متزامنة
+// على نفس الترد الذي يُنفِّذ Flow، تماماً كـ Interpreter::StreamSink).
+class PipelineTracer {
+public:
+    explicit PipelineTracer(std::string flowId) : flowId_(std::move(flowId)) {}
+
+    void setSink(EventSink sink) { std::lock_guard<std::mutex> lk(mu_); sink_ = std::move(sink); }
+
+    // ينشئ Node جديدة بحالة QUEUED ويصدر NODE_QUEUED، ويُعيد id الـ Node (لاستخدامه في باقي النداءات).
+    int queueNode(NodeType type, const std::string& name, int line);
+    void startNode(int nodeId);
+    void recordInput(int nodeId, const Value& v, int maxPreviewChars, int maxRecordsPreview);
+    void recordOutput(int nodeId, const Value& v, int maxPreviewChars, int maxRecordsPreview);
+    void finishNode(int nodeId); // SUCCESS
+    void failNode(int nodeId, const NodeError& err);
+    void skipNode(int nodeId);     // لم يبدأ إطلاقاً بسبب فشل/إلغاء/انتهاء مهلة سابق في نفس السلسلة
+    void cancelNode(int nodeId);
+    void timeoutNode(int nodeId);
+
+    void emitFlowStarted();
+    void emitFlowFinished(SessionStatus status);
+
+    FlowGraph snapshotGraph() const { std::lock_guard<std::mutex> lk(mu_); return graph_; }
+    FlowMetrics snapshotMetrics() const { std::lock_guard<std::mutex> lk(mu_); return metrics_; }
+    std::vector<FlowEvent> snapshotEvents() const { std::lock_guard<std::mutex> lk(mu_); return events_; }
+
+    const std::string& flowId() const { return flowId_; }
+
+private:
+    std::string flowId_;
+    mutable std::mutex mu_;
+    std::atomic<long long> seq_{0};
+    FlowGraph graph_;
+    FlowMetrics metrics_;
+    // كل الأحداث (بحد أقصى kMaxEvents الأحدث -- قسم 12/25: لا تراكم بلا حدود) لأجل replay/inspector
+    // بلا الحاجة لإعادة تنفيذ الجلسة، ولأجل rin_c_api/jni_bridge (JSON كامل لكل الجلسة دفعة واحدة).
+    std::vector<FlowEvent> events_;
+    static constexpr size_t kMaxEvents = 5000;
+
+    EventSink sink_;
+    void emit(EventType type, int nodeId, const std::string& message, int line, long long durationMs,
+              std::unordered_map<std::string, std::string> metadata = {});
+    void updateMetricsLocked(); // يُعاد حسابها بالكامل من graph_.nodes في كل مرة (بسيط ومضمون الصحة)
+    static long long nowMs();
+};
+
+// جلسة تنفيذ واحدة لِـ Flow (قسم 3). كل استدعاء لـ Interpreter::runProgramAsFlow ينشئ FlowSession
+// جديدة عبر RinFlowEngine (قسم 11: replay ينشئ جلسة *جديدة* دائماً ولا يمسّ القديمة).
+struct FlowSession {
+    std::string id;
+    std::shared_ptr<PipelineTracer> tracer;
+    SessionStatus status = SessionStatus::RUNNING;
+    std::shared_ptr<std::atomic<bool>> cancelFlag = std::make_shared<std::atomic<bool>>(false);
+    // نقطة زمنية مطلقة (steady_clock) بعدها يُعتبَر الـ Flow TIMEOUT؛ nullopt = بلا مهلة. الفحص
+    // تعاوني (cooperative) بين مراحل |> فقط -- تماماً كملاحظة RinJobScheduler.kt القديمة ("النداء
+    // الأصلي ليس له خُطّاف مقاطعة")، لكن الآن على حبيبية Node واحدة بدل البرنامج كله.
+    std::optional<std::chrono::steady_clock::time_point> deadline;
+
+    // لأجل Replay (قسم 11) فقط: جذر آخر سلسلة |> نُفِّذت في هذه الجلسة + البيئة التي نُفِّذت بها.
+    // يُحدَّث في كل استدعاء لـ evaluatePipelineFlow. shared_ptr آمن لإعادة الاستخدام لاحقاً (الجلسة
+    // القديمة نفسها لا تُعدَّل أبداً عند الـ replay -- فقط تُقرَأ منها هذه المراجع).
+    std::shared_ptr<CallExpr> lastRootExpr;
+    EnvPtr lastEnv;
+
+    bool isCancelled() const { return cancelFlag->load(std::memory_order_relaxed); }
+    bool isTimedOut() const { return deadline.has_value() && std::chrono::steady_clock::now() >= *deadline; }
+};
+
+// خيارات تشغيل Flow واحد (حدود Data Inspector + Timeout -- أقسام 10 و12).
+struct FlowRunOptions {
+    long long timeoutMs = 0;       // <=0 = بلا مهلة
+    int maxPreviewChars = 2000;    // حدّ طول نص المعاينة لكل Node.input/output
+    int maxRecordsPreview = 50;    // حدّ عدد عناصر المصفوفة المعروضة داخل preview (recordCount يبقى الحقيقي الكامل)
+};
+
+// يدير كل جلسات Flow النشطة/المنتهية لِـ Interpreter واحد (قسم 9/11: cancellation + replay).
+// Thread-safe (mutex واحد)؛ يُبقي فقط آخر kMaxSessions جلسة منتهية لتفادي تراكم غير محدود بالذاكرة
+// (نفس فلسفة RinJobScheduler.kt: MAX_HISTORY).
+class RinFlowEngine {
+public:
+    std::shared_ptr<FlowSession> createSession(const std::string& id);
+    std::shared_ptr<FlowSession> getSession(const std::string& id) const;
+    // true فقط إن كانت الجلسة موجودة وما تزال RUNNING؛ يرفع cancelFlag فوراً (يُفحَص قبل كل Node
+    // تالية -- انظر FlowSession::isCancelled أعلاه)، ولا يوقف Node قيد التنفيذ فعلياً هذه اللحظة
+    // (التنفيذ متزامن أحادي الترد، تماماً كملاحظة RinJobScheduler.kt).
+    bool requestCancel(const std::string& id);
+    std::vector<std::string> listSessionIds() const;
+
+private:
+    mutable std::mutex mu_;
+    std::unordered_map<std::string, std::shared_ptr<FlowSession>> sessions_;
+    std::vector<std::string> order_; // ترتيب الإنشاء لأجل تقليم kMaxSessions
+    static constexpr size_t kMaxSessions = 100;
+};
+
+} // namespace flow
+
 class Interpreter {
 public:
     Interpreter();
@@ -197,6 +414,42 @@ public:
                                const std::vector<std::string>& paramAliases,
                                std::unordered_map<std::string, Value>& globalsInOut,
                                std::string& errorOut);
+
+    // ---- RinFlow: Execution Flow Engine (see the `namespace flow` block above) ----
+
+    // نتيجة تشغيل برنامج كامل كـ Flow -- غلاف حول نفس std::string الذي يُعيده run() العادي، زائد
+    // معرّف الجلسة ولقطة الـ Graph/Metrics النهائية (بعد انتهاء التنفيذ بالكامل).
+    struct FlowRunResult {
+        std::string sessionId;
+        std::string output;          // نفس ناتج run() العادي بالضبط (توافقية: نفس التنسيق/الأخطاء)
+        flow::SessionStatus status = flow::SessionStatus::SUCCESS;
+        flow::FlowGraph graph;
+        flow::FlowMetrics metrics;
+    };
+
+    // يشغّل [statements] بالضبط كما يفعل run() (نفس hoisting، نفس output، نفس lastDiagnostic/
+    // lastErrorMessage بعد العودة) لكن مع جلسة Flow مسلَّحة (armed): كل سلسلة top-level من الشكل
+    // `a |> b() |> c()` (انظر CallExpr::isPipelineRoot) تُبنى فعلياً كـ Flow Graph وتُنفَّذ عبر
+    // evaluatePipelineFlow بدل التقييم الفوري المباشر، وتُبَث كل Node/Event حية عبر [sink] (اختياري،
+    // نفس فلسفة setStreamSink -- استدعاءات متزامنة على نفس الترد، بلا thread جديد). لا يوجد أي `|>`
+    // في البرنامج؟ يتصرف تماماً كـ run() العادي (graph فارغة، FLOW_STARTED/FLOW_FINISHED فقط).
+    FlowRunResult runProgramAsFlow(const std::vector<StmtPtr>& statements,
+                                    const flow::FlowRunOptions& opts,
+                                    flow::EventSink sink = nullptr);
+
+    // يعيد تشغيل جلسة Flow سابقة (بنفس السلسلة/البيئة المسجَّلتين في FlowSession::lastRootExpr/
+    // lastEnv) داخل جلسة *جديدة* كلياً؛ لا يُعدَّل أي شيء في الجلسة القديمة (قسم 11: Replay).
+    // يُعيد nullopt إن لم تكن الجلسة موجودة أو لم تُنفِّذ أي سلسلة |> بعد (لا شيء لإعادة تشغيله).
+    std::optional<FlowRunResult> replayFlow(const std::string& previousSessionId,
+                                              const flow::FlowRunOptions& opts,
+                                              flow::EventSink sink = nullptr);
+
+    bool cancelFlow(const std::string& sessionId) { return flowEngine_.requestCancel(sessionId); }
+    std::shared_ptr<flow::FlowSession> getFlowSession(const std::string& id) const { return flowEngine_.getSession(id); }
+
+    // يسجّل/يستبدل تخمين النوع الافتراضي لاسم دالة معيّن عند ظهورها كمرحلة |> (قسم 1: Nodes قابلة
+    // للتوسّع). مثال: registerFlowNodeType("myCustomStage", flow::NodeType::TRANSFORM);
+    void registerFlowNodeType(const std::string& fnName, flow::NodeType type) { flowNodeTypeOverrides_[fnName] = type; }
 
 private:
     EnvPtr globals;
@@ -330,6 +583,30 @@ private:
     void executeBlock(const std::vector<StmtPtr>& statements, EnvPtr env);
     Value evaluate(const ExprPtr& expr, EnvPtr env);
     Value callFunction(const std::shared_ptr<Callable>& fn, std::vector<Value>& args, int line);
+
+    // ---- RinFlow internals ----
+    // يُنفِّذ نداءً واحداً بالاسم (builtinOps الخاصة، ثم natives، ثم دالة Rin مُعرَّفة) بعد أن تكون
+    // [args] قد قُيِّمت مسبقاً بالفعل. استُخرِج من داخل حالة CallExpr في evaluate() (rin_interpreter.cpp)
+    // ليُشارَك حرفياً -- بلا أي فرق سلوكي -- مع evaluatePipelineFlow أدناه، بدل تكرار نفس منطق
+    // الفرز/الأخطاء مرتين. لا يغيّر أي سلوك على المسار العادي (evaluate() تستدعيه الآن بدل تكرار كوده).
+    Value invokeCallee(const std::string& callee, std::vector<Value>& args, int line, const EnvPtr& env);
+
+    flow::RinFlowEngine flowEngine_;
+    // جلسة Flow النشطة حالياً لهذا الـ Interpreter (nullptr خارج runProgramAsFlow) -- تُقرَأ من
+    // evaluate() لمعرفة إن كان يجب توجيه CallExpr::isPipelineRoot عبر evaluatePipelineFlow أو تركه
+    // يُقيَّم بالطريقة العادية تماماً (لا جلسة نشطة = سلوك run() الأصلي حرفياً).
+    std::shared_ptr<flow::FlowSession> activeFlowSession_;
+    flow::FlowRunOptions activeFlowOptions_;
+    std::unordered_map<std::string, flow::NodeType> flowNodeTypeOverrides_;
+    flow::NodeType inferFlowNodeType(const std::string& fnName) const;
+
+    // يُسطِّح سلسلة |> (root -> ... -> الإدخال الأصلي) إلى قائمة مراحل بترتيب التنفيذ الحقيقي
+    // (الإدخال أولاً). كل عنصر هو CallExpr واحد من السلسلة (args[0] هو تعبير المدخل القادم من يسار
+    // |>، وليس قيمة مُقيَّمة بعد). الإدخال الأصلي (ليس CallExpr ناتجاً عن |>) يُعاد بمفرده منفصلاً.
+    void flattenPipelineChain(const std::shared_ptr<CallExpr>& root,
+                                ExprPtr& outOriginalInput,
+                                std::vector<std::shared_ptr<CallExpr>>& outStages) const;
+    Value evaluatePipelineFlow(const std::shared_ptr<CallExpr>& root, EnvPtr env);
 
     // ---- حارس عمق الاستدعاء (call depth guard) ----
     // بلا هذا الحارس، دالة Rin تتكرّر ذاتياً بلا حالة توقّف (خطأ شائع من المستخدم، وليس فقط هجوماً
