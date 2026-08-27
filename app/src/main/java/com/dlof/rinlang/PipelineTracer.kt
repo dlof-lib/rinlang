@@ -1,6 +1,17 @@
 package com.dlof.rinlang
 
 /**
+ * Status of one [PipelineTracer.Stage] (section 2's Flow Node status vocabulary, as far as this
+ * tracer's re-run-per-prefix probing can honestly support it). QUEUED/RUNNING/CANCELLED aren't
+ * reachable from here yet — every stage in a probe resolves synchronously in one
+ * [RinEngine.runSourceStructured] call, so there is no in-between "this exact stage is
+ * currently executing" moment to observe or cancel independently; only SUCCESS, ERROR (the
+ * stage whose value never got printed before the engine reported an error) and SKIPPED
+ * (everything after it) are actually distinguishable today.
+ */
+enum class FlowNodeStatus { QUEUED, RUNNING, SUCCESS, ERROR, SKIPPED, CANCELLED }
+
+/**
  * Turns a `@container.pipe = name ... .end/container.pipe` block into a
  * step-by-step trace of *real* values.
  *
@@ -28,8 +39,16 @@ object PipelineTracer {
         val label: String,       // function name used as the step's title, e.g. "transform"
         val call: String,        // the raw call text, e.g. "transform()"
         var valueText: String = "",
-        var ok: Boolean = true
-    )
+        var status: FlowNodeStatus = FlowNodeStatus.SUCCESS,
+        /** Real diagnostic (severity/code/message/line/column) from the engine when [status] is
+         *  ERROR — see [RinEngine.runSourceStructured]. Null on SUCCESS/SKIPPED; never a guess. */
+        var diagnostic: RinDiagnostic? = null
+    ) {
+        /** @deprecated kept for source compatibility; derive from [status] instead of a separate
+         *  flag that could disagree with it. */
+        @Deprecated("Use status", ReplaceWith("status == FlowNodeStatus.SUCCESS"))
+        val ok: Boolean get() = status == FlowNodeStatus.SUCCESS
+    }
 
     data class PipelineTrace(
         val containerName: String,
@@ -40,6 +59,11 @@ object PipelineTracer {
         var success: Boolean = true,
         var errorMessage: String? = null,
         var rawEngineOutput: String = "",
+        /** Real structured diagnostic for the failure (section 8: Flow Diagnostics needs a real
+         *  Node + Source + Line + Column, not a text blob) — from the same
+         *  [RinEngine.runSourceStructured] call that decided [success], never re-derived by
+         *  sniffing [rawEngineOutput]. Null on success. */
+        var diagnostic: RinDiagnostic? = null,
         /** الزمن الحقيقي (ملي ثانية) الذي استغرقه محرك Rin فعلاً لتنفيذ هذا الـ probe —
          *  مقاس بـ System.nanoTime حول الاستدعاء الفعلي، وليس رقماً وهمياً أو تقديرياً. */
         var totalDurationMs: Long = 0
@@ -89,33 +113,50 @@ object PipelineTracer {
         probe.append(".end/container.pipe\n")
 
         val startNs = System.nanoTime()
-        val engineOutput = try {
-            RinEngine.runSource(probe.toString())
+        // Real engine-reported SUCCESS/ERROR (Interpreter::hadError()), never guessed from the
+        // shape of the printed text (section 6) — a pipeline stage's own value can legitimately
+        // start with '[' (e.g. a stage returning an array), which the old
+        // `engineOutput.startsWith("[")` check would have misclassified as a failed run.
+        val result = try {
+            RinEngine.runSourceStructured(probe.toString())
         } catch (t: Throwable) {
-            "[Internal error]: ${t.message}"
+            RinExecutionResult(
+                success = false, output = "", diagnostic = null,
+                diagnosticText = null, errorMessage = "[Internal error]: ${t.message}", errorLine = 0
+            )
         }
         trace.totalDurationMs = (System.nanoTime() - startNs) / 1_000_000
-        trace.rawEngineOutput = engineOutput
+        trace.rawEngineOutput = result.output
+        trace.diagnostic = result.diagnostic
 
-        if (engineOutput.startsWith("[")) {
+        val values = extractMarkedValues(result.output)
+
+        if (!result.success) {
             trace.success = false
-            trace.errorMessage = engineOutput
-            return trace
-        }
-
-        val lines = engineOutput.split("\n")
-        var i = 0
-        val values = mutableListOf<String>()
-        while (i < lines.size) {
-            val line = lines[i]
-            if (line.contains(MARK)) {
-                // the value is the next non-empty-marker line
-                val value = if (i + 1 < lines.size) lines[i + 1] else ""
-                values.add(value)
-                i += 2
-            } else {
-                i++
+            trace.errorMessage = result.diagnosticText ?: result.errorMessage ?: result.output
+            // Stages whose value was already printed before the engine hit the error keep their
+            // real value and a SUCCESS status; the first stage whose print never completed is
+            // the one the engine actually failed on (real diagnostic attached, not a placeholder
+            // stand-in); everything declared after it never ran at all -> SKIPPED, not a second
+            // ERROR. If the failure happened before the very first probe print even ran (e.g. a
+            // syntax/parse error, or a runtime error earlier in the user's own container body),
+            // `values` is empty and every stage is honestly reported SKIPPED rather than blamed.
+            if (values.isNotEmpty()) trace.sourceValueText = values[0]
+            for ((idx, stage) in stages.withIndex()) {
+                val valueIdx = idx + 1
+                when {
+                    valueIdx < values.size -> {
+                        stage.valueText = values[valueIdx]
+                        stage.status = FlowNodeStatus.SUCCESS
+                    }
+                    valueIdx == values.size -> {
+                        stage.status = FlowNodeStatus.ERROR
+                        stage.diagnostic = result.diagnostic
+                    }
+                    else -> stage.status = FlowNodeStatus.SKIPPED
+                }
             }
+            return trace
         }
 
         if (values.size < stages.size + 1) {
@@ -127,8 +168,27 @@ object PipelineTracer {
         trace.sourceValueText = values[0]
         for ((idx, stage) in stages.withIndex()) {
             stage.valueText = values[idx + 1]
+            stage.status = FlowNodeStatus.SUCCESS
         }
         trace.finalValueText = values.last()
         return trace
+    }
+
+    /** Scans engine output for the `MARK` sentinels this tracer injects and pulls out the value
+     *  printed right after each one. Shared by both the success and failure paths so a run that
+     *  errors partway through still surfaces every value that really did get printed first. */
+    private fun extractMarkedValues(engineOutput: String): List<String> {
+        val lines = engineOutput.split("\n")
+        var i = 0
+        val values = mutableListOf<String>()
+        while (i < lines.size) {
+            if (lines[i].contains(MARK)) {
+                values.add(if (i + 1 < lines.size) lines[i + 1] else "")
+                i += 2
+            } else {
+                i++
+            }
+        }
+        return values
     }
 }
