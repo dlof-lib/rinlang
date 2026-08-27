@@ -192,6 +192,19 @@ struct Loom {
             }
             case StrandKind::MENUITEM: size = measureButton(s, c2); break; // same box rules as Button
 
+            // ---- new: Banner — a full-width notice box (Card-like padded box, not pinned like
+            // TopBar/BottomBar). Height is content-driven unless height= is set; visible=false
+            // collapses it to zero size so it takes no layout space while hidden, same rule as
+            // Drawer/Menu's open=false above. Its children are its content (Text/Button/Menu
+            // strands built from banner.text/banner.action/banner.menu) — Banner does not draw
+            // them itself, it just boxes and pads them like Card does.
+            case StrandKind::BANNER: {
+                bool isVisible = s->attrStr("visible", "true") != "false";
+                if (!isVisible) { size = {0,0,0,0}; break; }
+                size = layoutSingleChildBox(s, c2, s->attrNum("padding", 16) + s->attrNum("border", 0), originX, originY);
+                break;
+            }
+
             // ---- new: table — a header row (columns=) plus TABLEROW children of cells.
             case StrandKind::TABLE: size = layoutTable(s, c2, originX, originY); break;
             case StrandKind::TABLEROW: size = layoutLinear(s, c2, Axis::X, originX, originY); break;
