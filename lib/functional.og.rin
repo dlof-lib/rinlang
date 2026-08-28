@@ -131,3 +131,75 @@ fun isPositive(x) {
 fun isNegative(x) {
     return x < 0;
 }
+
+// يقسّم arr إلى قاموس { yes: [...], no: [...] } حسب fn(element) == true أو false
+fun partitionArr(arr, fn) {
+    let yes = [];
+    let no = [];
+    let i = 0;
+    while (i < len(arr)) {
+        if (fn(arr[i])) {
+            push(yes, arr[i]);
+        } else {
+            push(no, arr[i]);
+        }
+        i = i + 1;
+    }
+    return { yes: yes, no: no };
+}
+
+// يطبّق fn على كل عنصر (وهي تُعيد مصفوفة فرعية لكل عنصر) ويدمج كل النتائج في مصفوفة واحدة مسطّحة
+fun flatMapArr(arr, fn) {
+    let result = [];
+    let i = 0;
+    while (i < len(arr)) {
+        let sub = fn(arr[i]);
+        let j = 0;
+        while (j < len(sub)) {
+            push(result, sub[j]);
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    return result;
+}
+
+// يأخذ عناصر arr من البداية طالما fn(element) == true، ويتوقف عند أول عنصر يفشل الشرط
+fun takeWhileArr(arr, fn) {
+    let result = [];
+    let i = 0;
+    while (i < len(arr)) {
+        if (!fn(arr[i])) { return result; }
+        push(result, arr[i]);
+        i = i + 1;
+    }
+    return result;
+}
+
+// يُسقط عناصر arr من البداية طالما fn(element) == true، ويُعيد الباقي بدءاً من أول عنصر يفشل الشرط
+fun dropWhileArr(arr, fn) {
+    let start = len(arr);
+    let i = 0;
+    while (i < len(arr)) {
+        if (!fn(arr[i])) { start = i; break; }
+        i = i + 1;
+    }
+    let result = [];
+    let j = start;
+    while (j < len(arr)) {
+        push(result, arr[j]);
+        j = j + 1;
+    }
+    return result;
+}
+
+// عدد العناصر التي تحقق fn(element) == true
+fun countArr(arr, fn) {
+    let count = 0;
+    let i = 0;
+    while (i < len(arr)) {
+        if (fn(arr[i])) { count = count + 1; }
+        i = i + 1;
+    }
+    return count;
+}
