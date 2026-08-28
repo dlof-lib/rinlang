@@ -2,16 +2,32 @@
   "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
   "name": "Rin",
   "scopeName": "source.rin",
-  "fileTypes": ["rin"],
+  "fileTypes": ["rin", "aak.rin"],
   "patterns": [
     { "include": "#comments" },
     { "include": "#strings" },
     { "include": "#numbers" },
+    { "include": "#import-statement" },
+    { "include": "#end-tags" },
+    { "include": "#dot-member-tags" },
+    { "include": "#link-id-attribute" },
     { "include": "#block-tags" },
-    { "include": "#keywords" },
+    { "include": "#section-tags" },
+    { "include": "#keywords-control" },
+    { "include": "#keywords-logical" },
+    { "include": "#keywords-storage" },
+    { "include": "#keyword-print" },
+    { "include": "#container-statement-keywords" },
+    { "include": "#relation-keywords" },
+    { "include": "#attribute-keywords" },
+    { "include": "#ternary-keyword" },
     { "include": "#constants" },
+    { "include": "#math-constants" },
+    { "include": "#explicit-math-functions" },
+    { "include": "#builtin-functions" },
+    { "include": "#functions" },
     { "include": "#operators" },
-    { "include": "#functions" }
+    { "include": "#punctuation" }
   ],
   "repository": {
     "comments": {
@@ -22,34 +38,56 @@
         }
       ]
     },
+
     "strings": {
       "name": "string.quoted.double.rin",
       "begin": "\"",
       "end": "\"",
       "patterns": [
         {
+          "comment": "Rin's lexer supports \\n \\t \\r \\\" \\\\ and a backslash-newline continuation; any other escaped char is kept literally, so match generically.",
           "name": "constant.character.escape.rin",
-          "match": "\\\\(n|t|r|\\\\|\")"
+          "match": "\\\\."
         }
       ]
     },
+
     "numbers": {
+      "comment": "Rin numbers are unsigned decimal literals only: \\d+ or \\d+.\\d+ (no hex, no exponents, no leading dot, no digit separators).",
       "name": "constant.numeric.rin",
       "match": "\\b\\d+(\\.\\d+)?\\b"
     },
-    "block-tags": {
-      "comment": "@Kind=name ... .end/Kind blocks used by @view/@import/@Object/Containers.Group/etc.",
+
+    "import-statement": {
+      "comment": "@import \"path\"; and @import \"path\" as alias; -- import/as are contextual, not reserved, but always mean the same thing here.",
       "patterns": [
         {
-          "match": "(@)([A-Za-z][A-Za-z0-9_.]*)(=)?",
+          "match": "(@)(import)\\b",
           "captures": {
             "1": { "name": "punctuation.definition.tag.rin" },
-            "2": { "name": "entity.name.tag.rin" },
-            "3": { "name": "keyword.operator.assignment.rin" }
+            "2": { "name": "keyword.control.import.rin" }
           }
         },
         {
-          "match": "(\\.end)(/)([A-Za-z][A-Za-z0-9_.]*)",
+          "match": "\\bas\\b",
+          "name": "keyword.control.import.rin"
+        }
+      ]
+    },
+
+    "end-tags": {
+      "comment": ".end/Kind closing marker. Slashes can appear inside the kind itself (container.open/object), so the tail is matched greedily.",
+      "patterns": [
+        {
+          "match": "(\\.end)(/)(Containers\\.Group|Volume|Object|portal|block|sticker|AUKT|table|doc|container(?:\\.(?:pipe|data|api|import|table|doc|object|portal|block|sticker|aukt|open))?(?:/object)?|view(?:\\.[A-Za-z][A-Za-z0-9_]*)?|Section|Translations)\\b",
+          "captures": {
+            "1": { "name": "punctuation.definition.tag.end.rin" },
+            "2": { "name": "punctuation.separator.rin" },
+            "3": { "name": "entity.name.tag.container.rin" }
+          }
+        },
+        {
+          "match": "(\\.end)(/)([A-Za-z_][A-Za-z0-9_./]*)",
           "captures": {
             "1": { "name": "punctuation.definition.tag.end.rin" },
             "2": { "name": "punctuation.separator.rin" },
@@ -58,26 +96,162 @@
         }
       ]
     },
-    "keywords": {
+
+    "dot-member-tags": {
+      "comment": "`.object=` is the only member shorthand the parser actually accepts (Parser::objectFieldStatement), used inside @container.open/object: .object=text title = \"Rin\"; / .object=let x = 1; / .object=fun f() {...}",
+      "match": "(\\.)(object)(=)",
+      "captures": {
+        "1": { "name": "punctuation.accessor.rin" },
+        "2": { "name": "entity.other.attribute-name.rin" },
+        "3": { "name": "keyword.operator.assignment.rin" }
+      }
+    },
+
+    "link-id-attribute": {
+      "comment": "link.id=\"X\"; registers a cross-file link id for the current container (Parser::linkIdDeclOrStatement).",
+      "match": "\\b(link)(\\.)(id)\\b(=)?",
+      "captures": {
+        "1": { "name": "keyword.other.container.rin" },
+        "2": { "name": "punctuation.accessor.rin" },
+        "3": { "name": "entity.other.attribute-name.rin" },
+        "4": { "name": "keyword.operator.assignment.rin" }
+      }
+    },
+
+    "block-tags": {
+      "comment": "@Kind=name ... .end/Kind block openers used by @import/@container/@Containers.Group/@Object/@view.*/etc.",
       "patterns": [
         {
-          "name": "keyword.control.rin",
-          "match": "\\b(if|else|while|return|break|continue|and|or)\\b"
+          "comment": "Recognized container/view family tags get their own scope for finer theming.",
+          "match": "(@)(Containers\\.Group|Volume|Object|portal|block|sticker|AUKT|table|doc|container(?:\\.(?:pipe|data|api|import|table|doc|object|portal|block|sticker|aukt|open))?(?:/object)?|view(?:\\.[A-Za-z][A-Za-z0-9_]*)?)\\b(=)?",
+          "captures": {
+            "1": { "name": "punctuation.definition.tag.rin" },
+            "2": { "name": "entity.name.tag.container.rin" },
+            "3": { "name": "keyword.operator.assignment.rin" }
+          }
         },
         {
-          "name": "keyword.other.rin",
-          "match": "\\b(let|fun|print|end|save|file|link|tying|merge|installation|simplified|pipe)\\b"
-        },
-        {
-          "name": "storage.type.rin",
-          "match": "\\b(container|Containers|Group|Volume|Section|Translations|translation|text)\\b"
+          "comment": "Fallback for any other/custom @Tag the interpreter may accept.",
+          "match": "(@)([A-Za-z_][A-Za-z0-9_./]*)(=)?",
+          "captures": {
+            "1": { "name": "punctuation.definition.tag.rin" },
+            "2": { "name": "entity.name.tag.rin" },
+            "3": { "name": "keyword.operator.assignment.rin" }
+          }
         }
       ]
     },
-    "constants": {
-      "name": "constant.language.rin",
-      "match": "\\b(true|false|nil)\\b"
+
+    "section-tags": {
+      "comment": "Section=name and bare Translations blocks nest inside a container without an @ prefix.",
+      "patterns": [
+        {
+          "match": "\\b(Section)\\b(=)?",
+          "captures": {
+            "1": { "name": "entity.name.tag.container.rin" },
+            "2": { "name": "keyword.operator.assignment.rin" }
+          }
+        },
+        {
+          "match": "\\b(Translations)\\b",
+          "name": "entity.name.tag.container.rin"
+        }
+      ]
     },
+
+    "keywords-control": {
+      "name": "keyword.control.rin",
+      "match": "\\b(if|else|while|for|rinopen|return|break|continue)\\b"
+    },
+
+    "keywords-logical": {
+      "name": "keyword.operator.word.rin",
+      "match": "\\b(and|or)\\b"
+    },
+
+    "keywords-storage": {
+      "comment": "warp (Parser::warpDeclaration) is a contextual reactive-state declaration, parsed exactly like `let name = expr;`.",
+      "name": "storage.type.rin",
+      "match": "\\b(let|fun|text|warp)\\b"
+    },
+
+    "keyword-print": {
+      "name": "keyword.other.print.rin",
+      "match": "\\bprint\\b"
+    },
+
+    "container-statement-keywords": {
+      "comment": "Statement-level keywords belonging to Rin's data/container language.",
+      "name": "keyword.other.container.rin",
+      "match": "\\b(save|file|installation|simplified|link|tying|merge|pipe|container|Containers|Group|Volume|translation)\\b"
+    },
+
+    "relation-keywords": {
+      "comment": "Contextual statement keywords for the table/NoSQL/API surface (Parser::statement dispatch on peek().lexeme): document, route, row, style, table. Not reserved in the lexer, but always mean the same thing when they start a statement.",
+      "name": "keyword.other.relation.rin",
+      "match": "\\b(document|route|row|table|style)\\b"
+    },
+
+    "attribute-keywords": {
+      "comment": "The closed, authoritative set of key=value attribute names the parser actually checks for by exact text (rin_parser.cpp): print's sep/level/label/repeat/pretty/upper/lower/width/align/end/if, document's id/fields, file/save/installation's path/format, row's cells, style's value, route's method/path/status/body, link's to/id, tying/merge's with, translation's lang. `end` and `if` are already lexically reserved control keywords and are highlighted by #keywords-control; they are intentionally omitted here to avoid re-tagging them.",
+      "match": "\\b(sep|level|label|repeat|pretty|upper|lower|width|align|id|fields|path|format|cells|value|method|status|body|to|with|lang)\\b(?=\\s*=(?!=))",
+      "name": "entity.other.attribute-name.rin"
+    },
+
+    "ternary-keyword": {
+      "name": "keyword.control.conditional.ternary.rin",
+      "match": "\\bplus\\.condition\\b"
+    },
+
+    "constants": {
+      "patterns": [
+        {
+          "name": "constant.language.boolean.rin",
+          "match": "\\b(true|false)\\b"
+        },
+        {
+          "name": "constant.language.nil.rin",
+          "match": "\\bnil\\b"
+        }
+      ]
+    },
+
+    "math-constants": {
+      "comment": "PI and E from Rin's math library, only when used as bare values (not as part of a longer identifier).",
+      "match": "(?<![\\w.])(PI|E)(?![\\w])",
+      "name": "constant.numeric.math.rin"
+    },
+
+    "explicit-math-functions": {
+      "comment": "Explicit-arithmetic helpers used inside data containers, e.g. print Addition(a, b);",
+      "match": "(?<![\\w.])(Addition|Subtraction|Multiplication|Equal)(?=\\s*\\()",
+      "name": "support.function.math.rin"
+    },
+
+    "builtin-functions": {
+      "comment": "Rin standard-library functions.",
+      "match": "(?<![\\w.])(abs|sqrt|pow|floor|ceil|round|min|max|random|len|upper|lower|trim|substr|split|join|indexOf|replace|contains|charAt|toString|toNumber|toBool|isBool|sum|mean|median|variance|stddev|mode|minOf|maxOf|normalize|scale|shift|groupContainers|groupMembers|sectionVars|sectionNames|hasSection|insertDoc|updateDoc|deleteDoc|findDoc|queryDocs|queryOneDoc|docIds|allDocs|countDocs|call|callApi|push|pop|sort|keys|values|has|remove|writeFile|appendFile|readFile|fileExists|deleteFile|isInstalled|listInstalled|loadInstalled|chr|ord|bytesFromArray|crc32|adler32)(?=\\s*\\()",
+      "name": "support.function.builtin.rin"
+    },
+
+    "functions": {
+      "patterns": [
+        {
+          "comment": "function name right after 'fun'",
+          "match": "\\b(fun)\\s+([A-Za-z_][A-Za-z0-9_]*)",
+          "captures": {
+            "1": { "name": "storage.type.rin" },
+            "2": { "name": "entity.name.function.rin" }
+          }
+        },
+        {
+          "comment": "generic call site: name(",
+          "match": "\\b([A-Za-z_][A-Za-z0-9_]*)\\s*(?=\\()",
+          "name": "entity.name.function.rin"
+        }
+      ]
+    },
+
     "operators": {
       "patterns": [
         {
@@ -86,25 +260,53 @@
           "match": "\\|>"
         },
         {
-          "name": "keyword.operator.rin",
-          "match": "(==|!=|<=|>=|=|\\+|-|\\*|/|<|>|!)"
+          "name": "keyword.operator.comparison.rin",
+          "match": "(==|!=|<=|>=|<|>)"
+        },
+        {
+          "name": "keyword.operator.assignment.rin",
+          "match": "="
+        },
+        {
+          "name": "keyword.operator.arithmetic.rin",
+          "match": "(\\+|-|\\*|/|%)"
+        },
+        {
+          "name": "keyword.operator.logical.rin",
+          "match": "!"
         }
       ]
     },
-    "functions": {
+
+    "punctuation": {
       "patterns": [
         {
-          "comment": "function name right after 'fun'",
-          "match": "\\b(fun)\\s+([A-Za-z_][A-Za-z0-9_]*)",
-          "captures": {
-            "1": { "name": "keyword.other.rin" },
-            "2": { "name": "entity.name.function.rin" }
-          }
+          "name": "punctuation.definition.block.rin",
+          "match": "[{}]"
         },
         {
-          "comment": "generic call site: name(",
-          "match": "\\b([A-Za-z_][A-Za-z0-9_]*)\\s*(?=\\()",
-          "name": "entity.name.function.rin"
+          "name": "punctuation.definition.array.rin",
+          "match": "[\\[\\]]"
+        },
+        {
+          "name": "punctuation.definition.parameters.rin",
+          "match": "[()]"
+        },
+        {
+          "name": "punctuation.separator.comma.rin",
+          "match": ","
+        },
+        {
+          "name": "punctuation.separator.colon.rin",
+          "match": ":"
+        },
+        {
+          "name": "punctuation.terminator.statement.rin",
+          "match": ";"
+        },
+        {
+          "name": "punctuation.accessor.rin",
+          "match": "\\."
         }
       ]
     }
