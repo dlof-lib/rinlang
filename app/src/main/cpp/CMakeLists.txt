@@ -82,8 +82,17 @@ add_executable(
 )
 
 find_library(log-lib log)
+# libz.so + zlib.h جزء أصيل من NDK sysroot على كل ABI (لا حاجة لتحميل/توريد أي مصدر خارجي) —
+# يُستخدَم من natives zlibDeflateRaw/zlibInflateRaw في rin_interpreter.cpp لضغط ZIP الحقيقي.
+find_library(z-lib z)
 
 target_link_libraries(
         rinengine
         ${log-lib}
+        ${z-lib}
+)
+
+target_link_libraries(
+        rincheck
+        ${z-lib}
 )
