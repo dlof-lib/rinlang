@@ -102,3 +102,44 @@ fun cycleToLength(arr, targetLen) {
     }
     return result;
 }
+
+// عدد صحيح عشوائي بين lo وhi ضمناً (يعتمد على random() المبني في اللغة، والذي يُعيد
+// كسراً عشرياً بين 0 و1)
+fun randomInt(lo, hi) {
+    let span = hi - lo + 1;
+    return lo + floor(random() * span);
+}
+
+// يخلط ترتيب عناصر arr عشوائياً (خوارزمية Fisher–Yates) ويُعيد مصفوفة جديدة دون
+// تعديل الأصل
+fun shuffleArr(arr) {
+    let result = [];
+    let i = 0;
+    while (i < len(arr)) {
+        push(result, arr[i]);
+        i = i + 1;
+    }
+    let n = len(result);
+    i = n - 1;
+    while (i > 0) {
+        let j = randomInt(0, i);
+        let tmp = result[i];
+        result[i] = result[j];
+        result[j] = tmp;
+        i = i - 1;
+    }
+    return result;
+}
+
+// يختار n عنصر عشوائي بلا تكرار من arr (n لا يتجاوز طول arr؛ يُقتطع تلقائياً إن كان أكبر)
+fun sampleArr(arr, n) {
+    let shuffled = shuffleArr(arr);
+    if (n > len(shuffled)) { n = len(shuffled); }
+    let result = [];
+    let i = 0;
+    while (i < n) {
+        push(result, shuffled[i]);
+        i = i + 1;
+    }
+    return result;
+}
