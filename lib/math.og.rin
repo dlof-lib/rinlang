@@ -100,3 +100,88 @@ fun percentOf(part, total) {
     if (total == 0) { return 0; }
     return (part / total) * 100;
 }
+
+// القاسم المشترك الأكبر لعناصر مصفوفة كاملة (0 إن كانت فارغة)
+fun gcdArr(arr) {
+    if (len(arr) == 0) { return 0; }
+    let result = arr[0];
+    let i = 1;
+    while (i < len(arr)) {
+        result = gcd(result, arr[i]);
+        i = i + 1;
+    }
+    return result;
+}
+
+// المضاعف المشترك الأصغر لعناصر مصفوفة كاملة (0 إن كانت فارغة)
+fun lcmArr(arr) {
+    if (len(arr) == 0) { return 0; }
+    let result = arr[0];
+    let i = 1;
+    while (i < len(arr)) {
+        result = lcm(result, arr[i]);
+        i = i + 1;
+    }
+    return result;
+}
+
+// الوسيط (median) لمصفوفة أرقام: يفرزها أولاً ثم يأخذ القيمة الوسطى (أو متوسط
+// القيمتين الوسطيتين إن كان العدد زوجياً). nil إن كانت المصفوفة فارغة
+fun median(arr) {
+    let n = len(arr);
+    if (n == 0) { return nil; }
+    let sorted = sort(arr);
+    let mid = n / 2;
+    if (n % 2 == 1) {
+        return sorted[floor(mid)];
+    }
+    let hi = floor(mid);
+    let lo = hi - 1;
+    return (sorted[lo] + sorted[hi]) / 2;
+}
+
+// التباين (variance) لمصفوفة أرقام حول متوسطها الحسابي (0 إن كانت فارغة)
+fun variance(arr) {
+    let n = len(arr);
+    if (n == 0) { return 0; }
+    let m = mean(arr);
+    let total = 0;
+    let i = 0;
+    while (i < n) {
+        let diff = arr[i] - m;
+        total = total + diff * diff;
+        i = i + 1;
+    }
+    return total / n;
+}
+
+// الانحراف المعياري (standard deviation): الجذر التربيعي للتباين
+fun stddev(arr) {
+    return sqrt(variance(arr));
+}
+
+// مجموع مربعات عناصر مصفوفة أرقام
+fun sumOfSquares(arr) {
+    let total = 0;
+    let i = 0;
+    while (i < len(arr)) {
+        total = total + arr[i] * arr[i];
+        i = i + 1;
+    }
+    return total;
+}
+
+// طول الوتر لمثلث قائم بضلعين a وb: sqrt(a^2 + b^2)
+fun hypot(a, b) {
+    return sqrt(a * a + b * b);
+}
+
+// يحوّل زاوية من درجات إلى راديان
+fun degToRad(deg) {
+    return deg * (PI / 180);
+}
+
+// يحوّل زاوية من راديان إلى درجات
+fun radToDeg(rad) {
+    return rad * (180 / PI);
+}
