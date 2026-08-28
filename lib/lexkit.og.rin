@@ -136,3 +136,38 @@ fun consumeWhile(source, pos, fn) {
     }
     return { matched: substr(source, start, p - start), pos: p };
 }
+
+// ---- مساعدات إضافية للمؤشّر العام ------------------------------------------
+
+// يستهلك المحرف الحالي بلا شرط (بنفس روح pAdvance في langkit لكن فوق نص خام)،
+// ويُعيد { ch: المحرف المستهلَك أو "" إن انتهى المصدر, pos: الموضع التالي }
+fun sAdvance(source, pos) {
+    let c = sPeek(source, pos);
+    if (sAtEnd(source, pos)) { return { ch: c, pos: pos }; }
+    return { ch: c, pos: pos + 1 };
+}
+
+// إن كان المحرف الحالي يساوي expected تحديداً يستهلكه، وإلا لا يفعل شيئاً؛ يُعيد
+// { matched: true/false, pos: الموضع الجديد }. مفيد لاستهلاك محرف مفرد اختياري
+// (مثل "!" قبل "=" عند تمييز "!=" عن "!")
+fun sMatch(source, pos, expected) {
+    if (sAtEnd(source, pos)) { return { matched: false, pos: pos }; }
+    if (sPeek(source, pos) == expected) {
+        return { matched: true, pos: pos + 1 };
+    }
+    return { matched: false, pos: pos };
+}
+
+// رقم السطر (1-based) الذي يقع فيه الموضع pos داخل source، بعدّ محارف "\n" السابقة
+// له؛ يُستخدم لملء حقل line في makeToken بدل تتبّع عدّاد سطر يدوي منفصل أثناء اللَكْس
+fun lineAt(source, pos) {
+    let limit = pos;
+    if (limit > len(source)) { limit = len(source); }
+    let line = 1;
+    let i = 0;
+    while (i < limit) {
+        if (charAt(source, i) == "\n") { line = line + 1; }
+        i = i + 1;
+    }
+    return line;
+}
