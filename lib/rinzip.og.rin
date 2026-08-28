@@ -1,0 +1,342 @@
+// ============================================================================
+//  lib/rinzip.og.rin — RINZIP: قراءة وكتابة أرشيفات ZIP حقيقية بلغة Rin خالصة
+//  استيراد:
+//    @import "lib/rinzip.og.rin";
+//    @import "lib/rinzip.og.rin" as rinzip;
+//
+//  مكتبة مستقلة بالكامل (لا تحتاج @import لأي مكتبة أخرى) فوق أربعة natives فقط:
+//  crc32/chr/ord/substr (+readFile/writeFile للقرص). تبني/تحلّل صيغة ZIP الحقيقية
+//  حسب معيارها الرسمي (PKWARE APPNOTE): Local File Header + Central Directory +
+//  End Of Central Directory record — الملفات الناتجة تُفتح مباشرة بأي أداة ZIP
+//  عادية (unzip, 7-Zip, مستكشف الملفات...) والعكس صحيح: تقرأ RINZIP أي أرشيف .zip
+//  حقيقي أُنشئ بأداة أخرى، طالما مدخلاته غير مضغوطة أو "مخزَّنة" (method = 0/Store).
+//
+//  ⚠️ قيد مهم: لا توجد خوارزمية Deflate/Inflate مبنية في Rin (لا native يوفّرها)،
+//  لذا RINZIP يكتب دائماً بطريقة "التخزين" (Store, method=0 — بلا ضغط فعلي، الحجم
+//  المضغوط = الحجم الأصلي تماماً، لكنه أرشيف ZIP صالح 100% بصيغته الرسمية). عند قراءة
+//  أرشيف من مصدر خارجي مضغوط فعلياً (method=8/Deflate)، تكتشف rzExtractEntry ذلك
+//  وتُعيد خطأ صريحاً واضحاً بدل محاولة فك ضغط غير مدعوم أو إعادة بيانات فاسدة.
+//
+//  مثال سريع (إنشاء أرشيف ثم قراءته مباشرة):
+//    let entries = [
+//        rzFileEntry("hello.txt", "أهلاً من RINZIP"),
+//        rzFileEntry("data/notes.txt", "سطر أول\nسطر ثانٍ"),
+//        rzDirEntry("data")
+//    ];
+//    let info = rzSaveArchive(entries, "out.zip");
+//    print info;                              // {ok:true, path:"out.zip", bytes:.., entries:3}
+//
+//    let data = readFile("out.zip");
+//    let listing = rzParseEntries(data);
+//    print rzFormatListing(listing);          // جدول مقروء بالاسم/الحجم/الطريقة/CRC
+//    print rzExtractEntry(data, listing[0]);  // {ok:true, name:"hello.txt", content:"أهلاً من RINZIP"}
+//
+//  أو مباشرة من القرص + استخراج كل شيء إلى مجلد:
+//    let entries2 = rzListArchive("out.zip");
+//    print rzSaveExtracted(readFile("out.zip"), entries2, "extracted");
+// ============================================================================
+
+// ---- الجزء 1: توقيعات ZIP الثابتة (بايتات خام لتمييز كل سجل) ----------------
+fun rzSigLocal()   { return chr(80) + chr(75) + chr(3) + chr(4); }  // "PK\x03\x04"
+fun rzSigCentral()  { return chr(80) + chr(75) + chr(1) + chr(2); } // "PK\x01\x02"
+fun rzSigEocd()     { return chr(80) + chr(75) + chr(5) + chr(6); } // "PK\x05\x06"
+
+// ---- الجزء 2: ترميز/فكّ أعداد صحيحة little-endian (لبنات صيغة ZIP الثنائية) ---
+
+// يُرمّز n كعدد 16-بت little-endian (بايتان خام)
+fun rzLE16(n) {
+    return chr(n % 256) + chr(floor(n / 256) % 256);
+}
+
+// يُرمّز n كعدد 32-بت little-endian (4 بايتات خام)
+fun rzLE32(n) {
+    let b0 = n % 256;
+    let b1 = floor(n / 256) % 256;
+    let b2 = floor(n / 65536) % 256;
+    let b3 = floor(n / 16777216) % 256;
+    return chr(b0) + chr(b1) + chr(b2) + chr(b3);
+}
+
+// يقرأ عدداً 16-بت little-endian من data ابتداءً من الموضع pos
+fun rzReadU16(data, pos) {
+    return ord(charAt(data, pos)) + ord(charAt(data, pos + 1)) * 256;
+}
+
+// يقرأ عدداً 32-بت little-endian من data ابتداءً من الموضع pos
+fun rzReadU32(data, pos) {
+    let b0 = ord(charAt(data, pos));
+    let b1 = ord(charAt(data, pos + 1));
+    let b2 = ord(charAt(data, pos + 2));
+    let b3 = ord(charAt(data, pos + 3));
+    return b0 + b1 * 256 + b2 * 65536 + b3 * 16777216;
+}
+
+// ---- الجزء 3: بناء مُدخَلات (entries) قبل الأرشفة ---------------------------
+// مُدخَل = { name: "مسار/داخل/الأرشيف.ext", content: "محتوى خام", isDir: true/false }
+
+// مُدخَل ملف عادي بمحتواه الخام (نص أو بايتات عبر bytesFromArray مسبقاً)
+fun rzFileEntry(name, content) {
+    return { name: name, content: content, isDir: false };
+}
+
+// مُدخَل مجلد فارغ (بلا محتوى)؛ يضيف "/" لنهاية الاسم تلقائياً إن لم توجد أصلاً،
+// تماماً كما تتوقّع أدوات ZIP القياسية لتمييز إدخالات المجلدات عن الملفات
+fun rzDirEntry(name) {
+    let normalized = name;
+    if (len(normalized) == 0 or charAt(normalized, len(normalized) - 1) != "/") {
+        normalized = normalized + "/";
+    }
+    return { name: normalized, content: "", isDir: true };
+}
+
+// ---- الجزء 4: إنشاء أرشيف (كتابة) -------------------------------------------
+
+// يبني محتوى أرشيف ZIP كامل (بايتات خام كنص) من مصفوفة entries، بطريقة التخزين
+// (Store, method=0) — بلا ضغط فعلي. يُعيد النص الخام مباشرة دون كتابته على القرص؛
+// استخدم rzSaveArchive للكتابة المباشرة إلى ملف
+fun rzCreateArchive(entries) {
+    let body = "";
+    let central = "";
+    let offset = 0;
+    let count = 0;
+    let i = 0;
+    while (i < len(entries)) {
+        let e = entries[i];
+        let name = e["name"];
+        let isDir = has(e, "isDir") and e["isDir"];
+        let content = "";
+        if (isDir == false) { content = e["content"]; }
+        let crc = 0;
+        if (isDir == false) { crc = crc32(content); }
+        let size = len(content);
+
+        let localHeader = rzSigLocal()
+            + rzLE16(20) + rzLE16(0) + rzLE16(0)
+            + rzLE16(0) + rzLE16(0)
+            + rzLE32(crc)
+            + rzLE32(size) + rzLE32(size)
+            + rzLE16(len(name)) + rzLE16(0)
+            + name;
+
+        body = body + localHeader + content;
+
+        let centralHeader = rzSigCentral()
+            + rzLE16(20) + rzLE16(20) + rzLE16(0) + rzLE16(0)
+            + rzLE16(0) + rzLE16(0)
+            + rzLE32(crc)
+            + rzLE32(size) + rzLE32(size)
+            + rzLE16(len(name)) + rzLE16(0) + rzLE16(0)
+            + rzLE16(0) + rzLE16(0) + rzLE32(0)
+            + rzLE32(offset)
+            + name;
+
+        central = central + centralHeader;
+        offset = offset + len(localHeader) + size;
+        count = count + 1;
+        i = i + 1;
+    }
+
+    let endRecord = rzSigEocd()
+        + rzLE16(0) + rzLE16(0)
+        + rzLE16(count) + rzLE16(count)
+        + rzLE32(len(central)) + rzLE32(offset)
+        + rzLE16(0);
+
+    return body + central + endRecord;
+}
+
+// يبني الأرشيف عبر rzCreateArchive ثم يكتبه مباشرة إلى outPath على القرص
+fun rzSaveArchive(entries, outPath) {
+    let bytes = rzCreateArchive(entries);
+    writeFile(outPath, bytes);
+    return { ok: true, path: outPath, bytes: len(bytes), entries: len(entries) };
+}
+
+// ---- الجزء 5: قراءة/تحليل أرشيف (Central Directory + EOCD) -----------------
+
+// يبحث عن موضع سجل "نهاية الدليل المركزي" (EOCD) داخل data بالمسح من آخر الملف
+// إلى الوراء (لأن حقل تعليق الأرشيف اختياري ومتغيّر الطول في آخره)، أو -1 إن لم
+// يُعثر على توقيع EOCD إطلاقاً (أرشيف تالف أو ليس ZIP أصلاً)
+fun rzFindEocd(data) {
+    let n = len(data);
+    if (n < 22) { return -1; }
+    let sig = rzSigEocd();
+    let minPos = n - 22 - 65557; // 65535 (أقصى تعليق) + 22 (حجم السجل الثابت)
+    if (minPos < 0) { minPos = 0; }
+    let pos = n - 22;
+    while (pos >= minPos) {
+        if (substr(data, pos, 4) == sig) { return pos; }
+        pos = pos - 1;
+    }
+    return -1;
+}
+
+// يحلّل الدليل المركزي الكامل لأرشيف ZIP خام (نص data من readFile("x.zip") مثلاً)،
+// ويُعيد مصفوفة مُدخَلات وصفية { name, method, crc, compressedSize, size,
+// localHeaderOffset, isDir }. تُعيد مصفوفة فارغة إن لم يكن data أرشيف ZIP صالحاً
+fun rzParseEntries(data) {
+    let eocdPos = rzFindEocd(data);
+    if (eocdPos == -1) { return []; }
+
+    let totalEntries = rzReadU16(data, eocdPos + 10);
+    let centralOffset = rzReadU32(data, eocdPos + 16);
+    let centralSig = rzSigCentral();
+
+    let entries = [];
+    let pos = centralOffset;
+    let i = 0;
+    while (i < totalEntries) {
+        if (substr(data, pos, 4) != centralSig) {
+            // دليل مركزي غير متّسق (ملف تالف) — نتوقّف بأمان بما جُمع حتى الآن بدل الانهيار
+            i = totalEntries;
+        } else {
+            let method = rzReadU16(data, pos + 10);
+            let crc = rzReadU32(data, pos + 16);
+            let compSize = rzReadU32(data, pos + 20);
+            let uncompSize = rzReadU32(data, pos + 24);
+            let nameLen = rzReadU16(data, pos + 28);
+            let extraLen = rzReadU16(data, pos + 30);
+            let commentLen = rzReadU16(data, pos + 32);
+            let localOffset = rzReadU32(data, pos + 42);
+            let name = substr(data, pos + 46, nameLen);
+            let isDir = len(name) > 0 and charAt(name, len(name) - 1) == "/";
+
+            push(entries, {
+                name: name,
+                method: method,
+                crc: crc,
+                compressedSize: compSize,
+                size: uncompSize,
+                localHeaderOffset: localOffset,
+                isDir: isDir
+            });
+
+            pos = pos + 46 + nameLen + extraLen + commentLen;
+            i = i + 1;
+        }
+    }
+    return entries;
+}
+
+// اختصار مريح: يقرأ ملف .zip من القرص ويُحلّله مباشرة (readFile + rzParseEntries)
+fun rzListArchive(path) {
+    return rzParseEntries(readFile(path));
+}
+
+// هل طريقة ضغط entry مدعومة للاستخراج؟ RINZIP يدعم فقط method=0 (Store/بلا ضغط)
+fun rzIsSupported(entry) {
+    return entry["method"] == 0;
+}
+
+// ---- الجزء 6: استخراج محتوى مُدخَل واحد --------------------------------------
+
+// يستخرج المحتوى الخام لـ entry واحد (من نتائج rzParseEntries) من data الأصلية.
+// يُعيد { ok:true, name, content, isDir } عند النجاح، أو { ok:false, name, error }
+// عند فشل التحقّق (CRC غير مطابق) أو عدم دعم طريقة الضغط (method != 0)
+fun rzExtractEntry(data, entry) {
+    if (entry["isDir"]) {
+        return { ok: true, name: entry["name"], content: "", isDir: true };
+    }
+    if (rzIsSupported(entry) == false) {
+        return {
+            ok: false,
+            name: entry["name"],
+            error: "rzExtractEntry: طريقة ضغط غير مدعومة (method=" + toString(entry["method"]) + "). يدعم RINZIP التخزين غير المضغوط (method=0) فقط."
+        };
+    }
+    let base = entry["localHeaderOffset"];
+    if (substr(data, base, 4) != rzSigLocal()) {
+        return { ok: false, name: entry["name"], error: "rzExtractEntry: توقيع رأس محلي غير صالح عند الإزاحة المحدَّدة (أرشيف تالف؟)" };
+    }
+    let nameLen = rzReadU16(data, base + 26);
+    let extraLen = rzReadU16(data, base + 28);
+    let dataStart = base + 30 + nameLen + extraLen;
+    let content = substr(data, dataStart, entry["compressedSize"]);
+    let actualCrc = crc32(content);
+    if (actualCrc != entry["crc"]) {
+        return { ok: false, name: entry["name"], error: "rzExtractEntry: فشل التحقّق CRC-32 (المحتوى تالف أو موضع القراءة خاطئ)" };
+    }
+    return { ok: true, name: entry["name"], content: content, isDir: false };
+}
+
+// يستخرج كل entries من data ويُعيد مصفوفة نتائج rzExtractEntry بنفس الترتيب
+// (بلا توقّف عند أول فشل، مفيد لتشخيص كل مشاكل أرشيف دفعة واحدة)
+fun rzExtractAll(data, entries) {
+    let results = [];
+    let i = 0;
+    while (i < len(entries)) {
+        push(results, rzExtractEntry(data, entries[i]));
+        i = i + 1;
+    }
+    return results;
+}
+
+// يستخرج كل entries فعلياً إلى القرص تحت destDir (writeFile تُنشئ المجلدات
+// الأب تلقائياً)، ويُعيد ملخّصاً { written: [أسماء نجحت], errors: [نتائج فشلت] }.
+// مُدخَلات المجلدات (isDir) تُتجاهَل بصمت (لا تحتاج إنشاءً صريحاً هنا)
+fun rzSaveExtracted(data, entries, destDir) {
+    let written = [];
+    let errors = [];
+    let i = 0;
+    while (i < len(entries)) {
+        let entry = entries[i];
+        if (entry["isDir"] == false) {
+            let r = rzExtractEntry(data, entry);
+            if (r["ok"]) {
+                writeFile(destDir + "/" + entry["name"], r["content"]);
+                push(written, entry["name"]);
+            } else {
+                push(errors, r);
+            }
+        }
+        i = i + 1;
+    }
+    return { written: written, errors: errors };
+}
+
+// ---- الجزء 7: تحقّق وتقارير مقروءة ------------------------------------------
+
+// يتحقّق من سلامة كل مُدخَل مدعوم داخل الأرشيف (CRC-32 لكل ملف غير مجلد وغير
+// مضغوط فعلياً) دون كتابة أي شيء على القرص؛ يُعيد { ok: لا يوجد أي خطأ إطلاقاً,
+// invalidCount, results: مصفوفة كل rzExtractEntry }
+fun rzValidateArchive(data, entries) {
+    let results = rzExtractAll(data, entries);
+    let invalidCount = 0;
+    let i = 0;
+    while (i < len(results)) {
+        if (results[i]["ok"] == false) { invalidCount = invalidCount + 1; }
+        i = i + 1;
+    }
+    return { ok: invalidCount == 0, invalidCount: invalidCount, results: results };
+}
+
+// جدول نصي مقروء لمصفوفة entries (اسم، حجم، طريقة، CRC)، بنفس روح "unzip -l"،
+// جاهز للطباعة مباشرة عبر print
+fun rzFormatListing(entries) {
+    let lines = [];
+    push(lines, "الاسم                                   الحجم    الطريقة   CRC-32");
+    let i = 0;
+    while (i < len(entries)) {
+        let e = entries[i];
+        let methodLabel = "Store";
+        if (e["method"] != 0) { methodLabel = "#" + toString(e["method"]); }
+        push(lines, e["name"] + "  " + toString(e["size"]) + "  " + methodLabel + "  " + toString(e["crc"]));
+        i = i + 1;
+    }
+    push(lines, "-- المجموع: " + toString(len(entries)) + " مُدخَل --");
+    return join(lines, "\n");
+}
+
+// ---- الجزء 8: معلومات وصفية عن المكتبة (بنفس أسلوب bobInfo/ringoInfo/rxInfo) --
+fun rzInfo() {
+    return {
+        name: "rinzip",
+        version: "1.0.0",
+        description: "قراءة وكتابة أرشيفات ZIP حقيقية (صيغة PKWARE) بلغة Rin خالصة، بطريقة التخزين غير المضغوط (Store)",
+        exports: [
+            "rzFileEntry", "rzDirEntry", "rzCreateArchive", "rzSaveArchive",
+            "rzParseEntries", "rzListArchive", "rzExtractEntry", "rzExtractAll",
+            "rzSaveExtracted", "rzValidateArchive", "rzFormatListing", "rzInfo"
+        ]
+    };
+}
