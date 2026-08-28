@@ -161,3 +161,70 @@ fun countOf(arr, value) {
 fun valuesMatch(a, b) {
     return a == b;
 }
+
+// هل تحتوي arr على value؟ (اختصار مريح فوق countOf، يدعم نفس مقارنة valuesMatch)
+fun includesValue(arr, value) {
+    return countOf(arr, value) > 0;
+}
+
+// مصفوفة جديدة من arr بعد حذف أول ظهور لـ value فقط (بلا تعديل الأصل)؛ تُعيد نسخة
+// كاملة دون تغيير إن لم يكن value موجوداً أصلاً
+fun removeFirst(arr, value) {
+    let result = [];
+    let removed = false;
+    let i = 0;
+    while (i < len(arr)) {
+        if (removed == false and valuesMatch(arr[i], value)) {
+            removed = true;
+        } else {
+            push(result, arr[i]);
+        }
+        i = i + 1;
+    }
+    return result;
+}
+
+// قاموس جديد من m يحتوي فقط على المفاتيح الموجودة في allowedKeys
+fun pickKeys(m, allowedKeys) {
+    let result = {};
+    let i = 0;
+    while (i < len(allowedKeys)) {
+        let k = allowedKeys[i];
+        if (has(m, k)) { result[k] = m[k]; }
+        i = i + 1;
+    }
+    return result;
+}
+
+// قاموس جديد من m بدون المفاتيح الموجودة في excludedKeys
+fun omitKeys(m, excludedKeys) {
+    let result = {};
+    let ks = keys(m);
+    let i = 0;
+    while (i < len(ks)) {
+        let k = ks[i];
+        let skip = false;
+        let j = 0;
+        while (j < len(excludedKeys)) {
+            if (excludedKeys[j] == k) { skip = true; }
+            j = j + 1;
+        }
+        if (!skip) { result[k] = m[k]; }
+        i = i + 1;
+    }
+    return result;
+}
+
+// يجمع arr إلى قاموس مجموعات: المفتاح = keyFn(element)، والقيمة = مصفوفة العناصر
+// المطابقة لهذا المفتاح بترتيب ظهورها
+fun groupBy(arr, keyFn) {
+    let result = {};
+    let i = 0;
+    while (i < len(arr)) {
+        let k = keyFn(arr[i]);
+        if (!has(result, k)) { result[k] = []; }
+        push(result[k], arr[i]);
+        i = i + 1;
+    }
+    return result;
+}
