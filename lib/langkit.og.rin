@@ -226,3 +226,57 @@ fun describeLanguage(info) {
     push(lines, "   المطوّر: " + info["developer"]);
     return join(lines, "\n");
 }
+
+// ---- الجزء 8: تركيب نتائج Result (monadic-style pipeline helpers) ----------
+// evalExpr/genExpr وأي دالة تتبع أسلوب ok()/err() تحتاج غالباً سلسلة خطوات متتالية:
+// كل خطوة تعمل فقط إن نجحت السابقة، وأول فشل يُوقف السلسلة فوراً وتُمرَّر رسالة
+// خطأه كما هي حتى النهاية دون أي تكرار يدوي لفحص isOk() في كل مرحلة.
+
+// إن كانت result ناجحة، يطبّق fn(result["value"]) عليها ويُغلّف الناتج بـ ok() تلقائياً؛
+// وإلا يُعيد result كما هي (الخطأ يمرّ دون تغيير). يعادل map() على Result في اللغات الوظيفية
+fun mapResult(result, fn) {
+    if (isOk(result)) {
+        return ok(fn(result["value"]));
+    }
+    return result;
+}
+
+// إن كانت result ناجحة، يستدعي fn(result["value"]) التي يجب أن تُعيد Result أخرى بنفسها
+// (لا تُغلَّف تلقائياً)؛ مفيد لتسلسل خطوات قد تفشل كل منها بشكل مستقل (evalLeft ثم evalRight...).
+// يعادل andThen/bind على Result في اللغات الوظيفية
+fun andThen(result, fn) {
+    if (isOk(result)) {
+        return fn(result["value"]);
+    }
+    return result;
+}
+
+// يستخرج result["value"] إن كانت ناجحة، وإلا defaultValue عند الفشل (بدل التحقق يدوياً
+// من isOk() ثم resultError() في كل موضع استدعاء)
+fun unwrapOr(result, defaultValue) {
+    if (isOk(result)) { return result["value"]; }
+    return defaultValue;
+}
+
+// ---- الجزء 9: مساعدات إضافية لمؤشّر التوكِنز (Parser cursor) ----------------
+
+// هل نوع الرمز الحالي واحد من مصفوفة types؟ (مفيد لتحليل "أي من عدة عمليات بنفس
+// الأسبقية" دون سلسلة pCheck يدوية طويلة، مثال: pCheckAny(toks,pos,["PLUS","MINUS"]))
+fun pCheckAny(tokens, pos, types) {
+    let i = 0;
+    while (i < len(types)) {
+        if (pCheck(tokens, pos, types[i])) { return true; }
+        i = i + 1;
+    }
+    return false;
+}
+
+// إن طابق الرمز الحالي type يستهلكه، وإلا لا يفعل شيئاً (بعكس pExpect لا يبني خطأ
+// أبداً)؛ يُعيد دوماً {tok: الرمز المستهلَك أو الحالي بلا استهلاك, pos: الموضع الجديد}
+// مفيد لعناصر نحوية اختيارية مثل فاصلة زائدة أخيرة أو ";" اختيارية آخر السطر
+fun pOptional(tokens, pos, type) {
+    if (pCheck(tokens, pos, type)) {
+        return pAdvance(tokens, pos);
+    }
+    return { tok: pPeek(tokens, pos), pos: pos };
+}
