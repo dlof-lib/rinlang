@@ -253,6 +253,20 @@ struct ReturnStmt : Stmt { ExprPtr value; };
 struct BreakStmt : Stmt {};
 struct ContinueStmt : Stmt {};
 
+// @container[=name] <body> .end/container   (أو .end;)
+// @container.data[=name] <body> .end/container.data   (أو .end/data ، أو .end;)
+// دعم حقيقي لنوعين فقط من "لغة الحاويات" (PLAIN و DATA) بنفس قواعد نحو المفسّر الأصلي
+// تماماً (readTagKeyword/readOptionalName/consumeEndTag في rin_parser.cpp) — بلا أقواس {}:
+// الجسم يمتد حتى وسم إغلاق '.end/...' مطابق. كل ما هو أبعد من ذلك (pipe/api/import/table/
+// doc/object/portal/block/sticker/aukt/Containers.Group/Volume/save/link/tying/merge) يبقى
+// مرفوضاً بوضوح كما كان (انظر rejectUnsupported) لأنه غير قابل للترجمة لتنفيذي أصلي بمعنى واضح.
+struct ContainerStmt : Stmt {
+    std::string tag;   // "container" أو "container.data"
+    std::string name;  // قد تكون فارغة
+    std::vector<StmtPtr> body;
+    bool isData = false;
+};
+
 // ============================================================================
 // 4) المحلل النحوي (Parser) — نفس قواعد نحو Rin الأساسية
 // ============================================================================
@@ -287,10 +301,22 @@ private:
 
     void rejectUnsupported() {
         if (check(Tok::AT)) {
+            // مسموح فقط: '@container' و'@container.data'/'@data' (PLAIN/DATA) — يُعالَجان في
+            // declaration() قبل الوصول هنا فعلياً (انظر containerBlockOrNull). أي '@...' آخر
+            // (pipe/api/import/table/doc/object/portal/block/sticker/aukt/Containers.Group/Volume)
+            // يبقى مرفوضاً بوضوح.
+            bool isPlainContainer = checkNext(Tok::IDENT) && tokens[current + 1].lexeme == "container" &&
+                                     !(current + 2 < tokens.size() && tokens[current + 2].type == Tok::DOT);
+            bool isContainerDotData = checkNext(Tok::IDENT) && tokens[current + 1].lexeme == "container" &&
+                                       current + 3 < tokens.size() && tokens[current + 2].type == Tok::DOT &&
+                                       tokens[current + 3].lexeme == "data";
+            bool isDataShort = checkNext(Tok::IDENT) && tokens[current + 1].lexeme == "data";
+            if (isPlainContainer || isContainerDotData || isDataShort) return; // يُعالَج لاحقاً بواسطة containerBlock
             throw RincError(
-                "الميزات المبنية على '@' (container / Containers.Group / Volume / @import ...) "
-                "غير مدعومة في المترجم الأصلي (rinc) — وهي خاصة بمحرّك المفسّر. "
-                "استخدم تطبيق Rin (المفسّر) لتشغيل هذا الملف بدلاً من تجميعه.", peek().line);
+                "الميزات المبنية على '@' (container.pipe/api/import/table/doc/object/portal/block/sticker/"
+                "aukt، Containers.Group، Volume، @import ...) غير مدعومة في المترجم الأصلي (rinc) — "
+                "المدعوم منها هنا فقط: '@container' و'@container.data'/'@data'. "
+                "استخدم تطبيق Rin (المفسّر) لتشغيل باقي الأشكال.", peek().line);
         }
         // ملاحظة مهمة: هذه الكلمات (save/text/link/route/document/...) ليست Token محجوزة في
         // اللغة الأساسية (تُقرأ IDENT عادي)، لذا لا نُخطئها إلا حين يكون *السياق* التالي فعلاً
@@ -314,9 +340,116 @@ private:
 
     StmtPtr declaration() {
         rejectUnsupported();
+        if (check(Tok::AT)) return containerBlock();
         if (match({Tok::LET})) return letDeclaration();
         if (match({Tok::FUN})) return functionDeclaration();
         return statement();
+    }
+
+    // true فقط إن كان الموضع الحالي '.' متبوعاً مباشرة بـ IDENT بلفظ "end" (وسم إغلاق).
+    bool checkContainerClosingTag() const {
+        return check(Tok::DOT) && checkNext(Tok::IDENT) && tokens[current + 1].lexeme == "end";
+    }
+
+    // @container[=name] <body...> .end/container[=name]   أو  .end;
+    // @container.data[=name] / @data[=name] <body...> .end/container.data (أو .end/data) [=name]  أو .end;
+    // نفس قواعد المفسّر الأصلي بالضبط (readTagKeyword/readOptionalName/consumeEndTag في rin_parser.cpp)
+    // لكن محصورة في تاغَين فقط (الباقي مرفوض في rejectUnsupported قبل الوصول هنا).
+    StmtPtr containerBlock() {
+        Token atTok = advance(); // '@'
+        Token first = consume(Tok::IDENT, "Expected 'container' or 'data' after '@'");
+        std::string tag;
+        bool isData = false;
+        if (first.lexeme == "data") {
+            tag = "container.data"; isData = true;
+        } else { // "container"
+            if (check(Tok::DOT) && checkNext(Tok::IDENT) && tokens[current + 1].lexeme == "data") {
+                advance(); advance(); // '.' 'data'
+                tag = "container.data"; isData = true;
+            } else {
+                tag = "container"; isData = false;
+            }
+        }
+
+        std::string name;
+        if (match({Tok::EQUAL})) {
+            if (check(Tok::IDENT) || check(Tok::STRING)) name = advance().lexeme;
+            else throw RincError("Expected a name after '=' in container declaration", peek().line);
+        }
+
+        std::vector<StmtPtr> body;
+        while (!checkContainerClosingTag() && !isAtEnd()) body.push_back(declaration());
+        if (isAtEnd()) {
+            throw RincError("'@" + tag + "' opened at line " + std::to_string(atTok.line) +
+                             " was never closed with a matching '.end/" + tag + "'", atTok.line);
+        }
+
+        if (isData) validateDataContainerBody(body, atTok.line);
+        else validateNoNestedFunctions(body, atTok.line); // انظر السبب في تعليق الدالة
+
+        // --- استهلاك وسم الإغلاق ---
+        consume(Tok::DOT, "Expected '.' to start closing tag");
+        Token endWord = consume(Tok::IDENT, "Expected 'end' in closing tag");
+        if (endWord.lexeme != "end") throw RincError("Expected 'end' in closing tag", endWord.line);
+        if (!match({Tok::SEMICOLON})) { // ليست '.end;' المختصرة
+            consume(Tok::SLASH, "Expected '/' after 'end' (or ';' for the short form '.end;')");
+            Token closeFirst = consume(Tok::IDENT, "Expected closing tag name after '.end/'");
+            std::string closeTag;
+            if (closeFirst.lexeme == "data") closeTag = "container.data";
+            else if (closeFirst.lexeme == "container") {
+                if (check(Tok::DOT) && checkNext(Tok::IDENT) && tokens[current + 1].lexeme == "data") {
+                    advance(); advance();
+                    closeTag = "container.data";
+                } else closeTag = "container";
+            } else {
+                throw RincError("unsupported closing tag '.end/" + closeFirst.lexeme + "'", closeFirst.line);
+            }
+            if (closeTag != tag) {
+                throw RincError("closing tag '.end/" + closeTag + "' does not match opening '@" + tag +
+                                 "' at line " + std::to_string(atTok.line), closeFirst.line);
+            }
+            std::string closeName;
+            if (match({Tok::EQUAL})) {
+                if (check(Tok::IDENT) || check(Tok::STRING)) closeName = advance().lexeme;
+            }
+            if (!closeName.empty() && closeName != name) {
+                throw RincError("closing tag name '=" + closeName + "' does not match opening name" +
+                                 (name.empty() ? " (opening has none)" : (" '=" + name + "'")), atTok.line);
+            }
+        }
+
+        auto s = std::make_shared<ContainerStmt>();
+        s->tag = tag; s->name = name; s->body = body; s->isData = isData; s->line = atTok.line;
+        return s;
+    }
+
+    // مطابق لـ Parser::validateDataContainerBody في rin_parser.cpp: container.data يجب أن يبقى
+    // بيانات نقية — بلا دوال وبلا حاويات متداخلة.
+    void validateDataContainerBody(const std::vector<StmtPtr>& body, int openLine) {
+        for (auto& st : body) {
+            if (std::dynamic_pointer_cast<FunctionStmt>(st)) {
+                throw RincError("functions ('fun') are not allowed inside 'container.data' "
+                                 "(opened at line " + std::to_string(openLine) + ")", st->line);
+            }
+            if (std::dynamic_pointer_cast<ContainerStmt>(st)) {
+                throw RincError("nested containers are not allowed inside 'container.data' "
+                                 "(opened at line " + std::to_string(openLine) + ")", st->line);
+            }
+        }
+    }
+
+    // قيد خاص بـrinc فقط (لا يوجد في المفسّر الأصلي، حيث container العادية تسمح بـfun):
+    // مولّد الكود هنا (collectFunctions) لا يبحث داخل أجسام ContainerStmt عن دوال متداخلة
+    // لرفعها كدوال C مستقلة (نطاق هذه الإضافة محصور بيانات/منطق تسلسلي بسيط)، فبدلاً من توليد
+    // سلوك خاطئ صامت (تجاهل الدالة كأنها لم تُكتب) نرفضه بوضوح هنا وقت التحليل.
+    void validateNoNestedFunctions(const std::vector<StmtPtr>& body, int openLine) {
+        for (auto& st : body) {
+            if (std::dynamic_pointer_cast<FunctionStmt>(st)) {
+                throw RincError("rinc: function declarations ('fun') nested inside '@container' are not "
+                                 "supported yet (container opened at line " + std::to_string(openLine) +
+                                 "). Declare the function at top level instead.", st->line);
+            }
+        }
     }
 
     StmtPtr letDeclaration() {
@@ -743,6 +876,20 @@ private:
         }
         if (std::dynamic_pointer_cast<ContinueStmt>(stmt)) {
             pad(); out << "continue;\n";
+            return;
+        }
+        if (auto s = std::dynamic_pointer_cast<ContainerStmt>(stmt)) {
+            // نفس تنسيق نص المفسّر الأصلي بالضبط (containerTagName/containerIcon +
+            // "✅ .end/tag" في rin_interpreter.cpp) حتى يتطابق ناتج rinc مع ناتج المفسّر حرفياً.
+            std::string icon = s->isData ? "🗂️" : "📦";
+            std::string openLine = icon + " " + s->tag + (s->name.empty() ? "" : (" = " + s->name));
+            pad(); out << "printf(" << cLiteral(openLine + "\n") << ");\n";
+            pad(); out << "{\n"; indent++;
+            for (auto& st : s->body) emitStmt(st, sc);
+            indent--; pad(); out << "}\n";
+            std::string closeLine = std::string("\xE2\x9C\x85 .end/") + s->tag +
+                                     (s->name.empty() ? "" : (" (" + s->name + ")"));
+            pad(); out << "printf(" << cLiteral(closeLine + "\n") << ");\n";
             return;
         }
         if (std::dynamic_pointer_cast<FunctionStmt>(stmt)) return; // مُولَّدة مسبقاً كدالة C مستقلة
@@ -1372,6 +1519,7 @@ int main(int argc, char** argv) {
         else if (a == "--emit-c-only") { emitCOnly = true; }
         else if (a == "--keep-c") { keepC = true; }
         else if (a == "-h" || a == "--help") { printUsage(); return 0; }
+        else if (a == "-v" || a == "--version") { std::cout << "rinc 0.2.0\n"; return 0; }
         else if (!a.empty() && a[0] == '-') { std::cerr << "خيار غير معروف: " << a << "\n"; printUsage(); return 1; }
         else { inputPath = a; }
     }
