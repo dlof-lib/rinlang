@@ -3672,8 +3672,7 @@ fun ghpInfo() {
 }
 )GHPUBLISHOGRIN";
 
-static const char* kLib_rinxg_og_rin = R"RINXGOGRIN(
-// ============================================================================
+static const char* kLib_rinxg_og_rin = R"RINXGOGRIN(// ============================================================================
 //  lib/rinxg.og.rin — RinXG: لغة برمجة تصريحية (declarative) لتصميم واجهات الويب فوق Rin.
 //  محرّك لغة كامل مكتوب بالكامل بـ Rin (Lexer+Parser+AST+مُصيِّر HTML/CSS حقيقي)، وليس مجرّد
 //  قوالب نصية — يصف المستخدم الواجهة بصيغة RinXG فتُترجَم إلى صفحة HTML+CSS كاملة جاهزة للعرض
@@ -3695,8 +3694,13 @@ static const char* kLib_rinxg_og_rin = R"RINXGOGRIN(
 //          text color=#666 { "لغة تصميم واجهات ويب تصريحية فوق Rin" }
 //
 //          container row gap=8 {
-//              button bg=#4CAF50 color=#ffffff radius=8 { "ابدأ الآن" }
-//              button bg=#ffffff color=#4CAF50 radius=8 { "تعلّم المزيد" }
+//              button variant=success size=lg { "ابدأ الآن" }
+//              button variant=outline { "تعلّم المزيد" }
+//          }
+//
+//          banner type=warning title="تنبيه" {
+//              text { "النسخة الحالية قديمة." }
+//              button variant=ghost size=sm { "تحديث" }
 //          }
 //
 //          input placeholder="بريدك الإلكتروني...";
@@ -3710,11 +3714,21 @@ static const char* kLib_rinxg_og_rin = R"RINXGOGRIN(
 //      }
 //  }
 //
-//  العناصر المدعومة: container (row|column، gap، padding، bg، radius، align، justify) •
-//  heading (level، color) • text (color، size) • button (bg، color، radius) • input
-//  (placeholder، عنصر مغلق بـ ';' بلا محتوى) • image (src، width، عنصر مغلق بـ ';') •
-//  link (href) • list/item. أي وسم غير معروف يُصيَّر كـ <div data-rinxg-tag="..."> بدل أن
-//  يُسقَط بصمت، ليسهل اكتشاف الأخطاء الإملائية في الوسوم.
+//  العناصر المدعومة (v1.1 — مكتبة أزرار/حاويات/تنبيهات احترافية):
+//  • container: row|column، wrap، gap، padding، bg أو variant (نفس ألوان الزر)، border+
+//    borderColor، radius، shadow، width، height، align، justify.
+//  • button: variant (primary الافتراضي | secondary | success | danger/error | warning |
+//    info | dark | light | outline | ghost | link)، size (sm|md|lg)، bg=/color= صريحان
+//    يتفوّقان دوماً على variant، radius (رقم أو "pill")، width، block/fullWidth، shadow،
+//    disabled، href (يُصيَّر كرابط <a> بمظهر زر). حالات hover/active/focus/disabled مُعرَّفة
+//    مرة واحدة في <style> عبر class="rinxg-btn" (لا يمكن التعبير عنها بـ style= مضمّن).
+//  • banner: type (info الافتراضي | success | warning | error/danger | action) — يحدّد لوناً
+//    وأيقونة معاً، title= اختياري، ثم إمّا أبناء (text/button/...) أو text= مختصر بلا أبناء؛
+//    اللون يُورَّث للأبناء تلقائياً عبر color على الحاوية (لا حاجة لتكراره بكل عنصر ابن).
+//  • heading (level، color) • text (color، size) • input (placeholder، عنصر مغلق بـ ';' بلا
+//    محتوى) • image (src، width، عنصر مغلق بـ ';') • link (href) • list/item.
+//  أي وسم غير معروف يُصيَّر كـ <div data-rinxg-tag="..."> بدل أن يُسقَط بصمت، ليسهل اكتشاف
+//  الأخطاء الإملائية في الوسوم.
 //
 //  الاستخدام:
 //    @import "lib/rinxg.og.rin";
@@ -3992,17 +4006,156 @@ fun rxPx(s) {
 
 // ----------------------------- المُصيِّر (Renderer -> HTML/CSS) -----------------------------
 
+// لوحة ألوان موحّدة (design tokens) يستخدمها button/container/banner معاً عبر variant=، بدل أن
+// يضطر كل عنصر لتكرار قيم hex خاصة به — هذا ما يجعل الثلاثة "مترابطة" فعلياً في نفس نظام الألوان.
+// fg غير موجود إلا حين يختلف عن الأبيض الافتراضي (warning/light تحتاج نصاً داكناً للتباين).
+fun rxVariantPalette(variant) {
+    if (variant == "secondary") { return { "bg": "#5a5f73", "fg": "#ffffff" }; }
+    if (variant == "success")   { return { "bg": "#2e9f43", "fg": "#ffffff" }; }
+    if (variant == "danger" or variant == "error") { return { "bg": "#d14545", "fg": "#ffffff" }; }
+    if (variant == "warning")   { return { "bg": "#d4a72c", "fg": "#2a2a20" }; }
+    if (variant == "info")      { return { "bg": "#3a6ec4", "fg": "#ffffff" }; }
+    if (variant == "dark")      { return { "bg": "#1e1f26", "fg": "#ffffff" }; }
+    if (variant == "light")     { return { "bg": "#eceef4", "fg": "#20222b" }; }
+    // "primary" (الافتراضي) — وأيضاً القاعدة اللونية لِـ outline/ghost/link ما لم يُحدَّد bg=/color=
+    return { "bg": "#7c5cff", "fg": "#ffffff" };
+}
+
+// أحجام الزر: sm/md(افتراضي)/lg — تضبط الحشو (padding) وحجم الخط معاً حتى لا يبدو الزر
+// "مقصوصاً" (padding ثابت مهما كبر/صغر النص، وهي إحدى مشاكل الحجم/الطول التي وردت في الطلب).
+fun rxButtonSizeMetrics(size) {
+    if (size == "sm" or size == "small") { return { "pad": "6px 14px", "font": "13px" }; }
+    if (size == "lg" or size == "large") { return { "pad": "14px 28px", "font": "18px" }; }
+    return { "pad": "10px 22px", "font": "15px" };
+}
+
+// يبني CSS الزر كاملاً: يبدأ من ألوان الـ variant، ثم شكل المتغيّر (filled/outline/ghost/link)،
+// ثم يسمح لـ bg=/color= الصريحين بتجاوز أي منهما — نفس ترتيب الأولوية الذي توثّقه بقية المكتبة.
+fun rxButtonStyle(attrs) {
+    let variant = "primary";
+    if (has(attrs, "variant")) { variant = attrs["variant"]; }
+    let size = "md";
+    if (has(attrs, "size")) { size = attrs["size"]; }
+    let disabled = has(attrs, "disabled") and attrs["disabled"] == "true";
+
+    let palette = rxVariantPalette(variant);
+    let baseColor = palette["bg"];
+    if (has(attrs, "bg")) { baseColor = attrs["bg"]; }
+
+    // اللون النصّي الافتراضي حسب شكل الـ variant: outline/ghost/link بلا خلفية فتستخدم baseColor
+    // نفسه كنص، وبقية الأشكال (filled) تستخدم لون التباين fg من اللوحة. color= يتفوّق دوماً على
+    // كليهما — يُحسَب مرة واحدة هنا بدل تكرار خاصية color: في الـ CSS الناتج.
+    let textColor = palette["fg"];
+    if (variant == "outline" or variant == "ghost" or variant == "link") { textColor = baseColor; }
+    if (has(attrs, "color")) { textColor = attrs["color"]; }
+
+    let metrics = rxButtonSizeMetrics(size);
+    let css = "display:inline-block;border:2px solid transparent;cursor:pointer;font-weight:600;" +
+              "font-size:" + metrics["font"] + ";padding:" + metrics["pad"] + ";" +
+              "color:" + textColor + ";" +
+              "transition:filter .15s ease, transform .05s ease;";
+
+    if (variant == "outline") {
+        css = css + "background:transparent;border-color:" + baseColor + ";";
+    } else if (variant == "ghost") {
+        css = css + "background:transparent;";
+    } else if (variant == "link") {
+        css = css + "background:transparent;text-decoration:underline;padding:2px 0;border:none;";
+    } else {
+        css = css + "background:" + baseColor + ";border-color:" + baseColor + ";";
+    }
+
+    let radius = "8px";
+    if (has(attrs, "radius")) {
+        if (attrs["radius"] == "pill") { radius = "999px"; }
+        else { radius = rxPx(attrs["radius"]); }
+    }
+    css = css + "border-radius:" + radius + ";";
+
+    if (has(attrs, "width")) { css = css + "width:" + rxPx(attrs["width"]) + ";"; }
+    let full = (has(attrs, "block") and attrs["block"] == "true") or
+               (has(attrs, "fullWidth") and attrs["fullWidth"] == "true");
+    if (full) { css = css + "display:block;width:100%;text-align:center;"; }
+    if (has(attrs, "shadow") and attrs["shadow"] == "true") { css = css + "box-shadow:0 2px 8px rgba(0,0,0,.18);"; }
+    if (disabled) { css = css + "opacity:.5;cursor:not-allowed;pointer-events:none;"; }
+
+    return css;
+}
+
+// نفس نظام variant الخاص بالزر، لكن لصندوق (container/banner): خلفية + حدود اختياريّة + ظل،
+// بدل تكرار سلسلة "bg=#..." يدوياً في كل مكان — وهذا هو الرابط الفعلي بين container والألوان.
 fun rxContainerStyle(attrs) {
     let css = "display:flex;";
     if (has(attrs, "row")) { css = css + "flex-direction:row;"; }
     else { css = css + "flex-direction:column;"; }
+    if (has(attrs, "wrap") and attrs["wrap"] == "true") { css = css + "flex-wrap:wrap;"; }
     if (has(attrs, "gap")) { css = css + "gap:" + rxPx(attrs["gap"]) + ";"; }
     if (has(attrs, "padding")) { css = css + "padding:" + rxPx(attrs["padding"]) + ";"; }
-    if (has(attrs, "bg")) { css = css + "background:" + attrs["bg"] + ";"; }
+
+    let bg = "";
+    if (has(attrs, "variant")) { bg = rxVariantPalette(attrs["variant"])["bg"]; }
+    if (has(attrs, "bg")) { bg = attrs["bg"]; }
+    if (bg != "") { css = css + "background:" + bg + ";"; }
+
     if (has(attrs, "radius")) { css = css + "border-radius:" + rxPx(attrs["radius"]) + ";"; }
+    if (has(attrs, "border")) {
+        let borderColor = "#33333f";
+        if (has(attrs, "borderColor")) { borderColor = attrs["borderColor"]; }
+        css = css + "border:" + rxPx(attrs["border"]) + " solid " + borderColor + ";";
+    }
+    if (has(attrs, "shadow") and attrs["shadow"] == "true") { css = css + "box-shadow:0 2px 10px rgba(0,0,0,.15);"; }
+    if (has(attrs, "width")) { css = css + "width:" + rxPx(attrs["width"]) + ";"; }
+    if (has(attrs, "height")) { css = css + "height:" + rxPx(attrs["height"]) + ";"; }
     if (has(attrs, "align")) { css = css + "align-items:" + attrs["align"] + ";"; }
     if (has(attrs, "justify")) { css = css + "justify-content:" + attrs["justify"] + ";"; }
     return css;
+}
+
+// أيقونة/ألوان Banner حسب type= — نفس الأنواع المستخدمة في محرّك Loom الأصلي (info/success/
+// warning/error/action) حتى تبقى دلالة "type" واحدة عبر المشروع كله لا نظامين مختلفين.
+fun rxBannerIcon(type) {
+    if (type == "success") { return "✔"; }
+    if (type == "warning") { return "⚠"; }
+    if (type == "error" or type == "danger") { return "✕"; }
+    if (type == "action") { return "★"; }
+    return "ℹ"; // info أو غير معروف
+}
+fun rxBannerColors(type) {
+    if (type == "success") { return { "bg": "#173a22", "accent": "#2e9f43", "fg": "#dff5e4" }; }
+    if (type == "warning") { return { "bg": "#3a3115", "accent": "#d4a72c", "fg": "#f7edd0" }; }
+    if (type == "error" or type == "danger") { return { "bg": "#3a1c1c", "accent": "#d14545", "fg": "#f8dcdc" }; }
+    if (type == "action")  { return { "bg": "#241f3a", "accent": "#7c5cff", "fg": "#e6e1ff" }; }
+    return { "bg": "#1c2436", "accent": "#3a6ec4", "fg": "#dbe6f7" }; // info (الافتراضي)
+}
+
+// Banner: شريط تنبيه — إما بشكل مركّب (children من text/button/... مثل Loom تماماً) أو بشكل
+// مختصر مُغلَق ذاتياً (title=/text= بلا أبناء) للاستخدام السريع. اللون يُورَث للأبناء عبر
+// CSS inheritance العادي (color على الحاوية الخارجية) بدل تكراره في كل عنصر ابن يدوياً.
+fun rxRenderBanner(node) {
+    let attrs = node["attrs"];
+    let type = "info";
+    if (has(attrs, "type")) { type = attrs["type"]; }
+    let colors = rxBannerColors(type);
+    let bg = colors["bg"];
+    if (has(attrs, "bg")) { bg = attrs["bg"]; }
+
+    let radius = "10px";
+    if (has(attrs, "radius")) { radius = rxPx(attrs["radius"]); }
+
+    let css = "display:flex;align-items:flex-start;gap:12px;padding:14px 16px;" +
+              "border-radius:" + radius + ";border-right:4px solid " + colors["accent"] + ";" +
+              "background:" + bg + ";color:" + colors["fg"] + ";";
+
+    let inner = "<div style=\"font-size:20px;line-height:1;\">" + rxBannerIcon(type) + "</div>\n";
+    inner = inner + "<div style=\"flex:1;\">";
+    if (has(attrs, "title")) {
+        inner = inner + "<div style=\"font-weight:700;margin-bottom:4px;\">" + rxEscapeHtml(attrs["title"]) + "</div>";
+    }
+    if (len(node["children"]) > 0) { inner = inner + rxRenderChildren(node); }
+    else if (has(attrs, "text")) { inner = inner + "<div>" + rxEscapeHtml(attrs["text"]) + "</div>"; }
+    inner = inner + "</div>\n";
+
+    return "<div class=\"rinxg-banner\" style=\"" + css + "\">" + inner + "</div>\n";
 }
 
 fun rxRenderChildren(node) {
@@ -4023,6 +4176,9 @@ fun rxRenderElement(node) {
     if (tag == "container") {
         return "<div class=\"rinxg-container\" style=\"" + rxContainerStyle(attrs) + "\">" + rxRenderChildren(node) + "</div>\n";
     }
+    if (tag == "banner") {
+        return rxRenderBanner(node);
+    }
     if (tag == "heading") {
         let level = "2";
         if (has(attrs, "level")) { level = attrs["level"]; }
@@ -4037,11 +4193,14 @@ fun rxRenderElement(node) {
         return "<p style=\"" + css + "\">" + txt + "</p>\n";
     }
     if (tag == "button") {
-        let css = "border:none;padding:10px 20px;cursor:pointer;font-size:15px;";
-        if (has(attrs, "bg")) { css = css + "background:" + attrs["bg"] + ";"; }
-        if (has(attrs, "color")) { css = css + "color:" + attrs["color"] + ";"; }
-        if (has(attrs, "radius")) { css = css + "border-radius:" + rxPx(attrs["radius"]) + ";"; }
-        return "<button style=\"" + css + "\">" + txt + "</button>\n";
+        let css = rxButtonStyle(attrs);
+        let disabled = has(attrs, "disabled") and attrs["disabled"] == "true";
+        if (has(attrs, "href") and !disabled) {
+            return "<a class=\"rinxg-btn\" href=\"" + rxEscapeHtml(attrs["href"]) + "\" style=\"" + css + "\">" + txt + "</a>\n";
+        }
+        let disAttr = "";
+        if (disabled) { disAttr = " disabled"; }
+        return "<button class=\"rinxg-btn\" style=\"" + css + "\"" + disAttr + ">" + txt + "</button>\n";
     }
     if (tag == "input") {
         let placeholder = "";
@@ -4084,6 +4243,13 @@ fun rxRenderStyleBlock(styleProps) {
     css = css + "}\n";
     css = css + "*{box-sizing:border-box;}\n";
     css = css + "body{background:var(--rinxg-bg,#ffffff);font-family:var(--rinxg-font,sans-serif);margin:0;padding:24px;}\n";
+    // ستايل أساسي مشترك للأزرار: حالات hover/active/focus/disabled لا يمكن التعبير عنها عبر
+    // style= المضمّن (inline)، فتُعرَّف مرة واحدة هنا وتُطبَّق على كل زر عبر class="rinxg-btn".
+    css = css + ".rinxg-btn{text-decoration:none;}\n";
+    css = css + ".rinxg-btn:hover{filter:brightness(1.1);}\n";
+    css = css + ".rinxg-btn:active{transform:translateY(1px);filter:brightness(0.95);}\n";
+    css = css + ".rinxg-btn:focus-visible{outline:2px solid #7c5cff;outline-offset:2px;}\n";
+    css = css + ".rinxg-btn[disabled]{filter:grayscale(.3);}\n";
     return css;
 }
 
@@ -4107,8 +4273,8 @@ fun rxParseToAst(source) {
 fun rxInfo() {
     return {
         "name": "rinxg",
-        "version": "1.0.0",
-        "description": "لغة تصريحية لتصميم واجهات الويب فوق Rin: تُترجَم إلى صفحة HTML+CSS حقيقية جاهزة للعرض",
+        "version": "1.1.0",
+        "description": "لغة تصريحية لتصميم واجهات الويب فوق Rin: تُترجَم إلى صفحة HTML+CSS حقيقية جاهزة للعرض، مع مكتبة أزرار/حاويات/تنبيهات احترافية (variant/size/radius/disabled/shadow...)",
         "exports": ["rxToHtml", "rxParseToAst", "rxInfo"]
     };
 }
