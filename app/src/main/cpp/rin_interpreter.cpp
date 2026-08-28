@@ -19,6 +19,7 @@
 #include <errno.h>
 #include <cstdint>
 #include <unordered_map>
+#include <zlib.h> // zlibDeflateRaw/zlibInflateRaw (ضغط DEFLATE حقيقي متوافق مع صيغة ZIP method=8)
 
 // ---- توافق ويندوز/POSIX لـ stat()/mkdir() ----------------------------------
 // على أندرويد NDK/لينكس/macOS: stat()/mkdir(path, mode) القياسيتان بتوقيعهما
@@ -839,6 +840,64 @@ void Interpreter::registerNatives() {
             b32 = (b32 + a32) % MOD_ADLER;
         }
         return Value::num(static_cast<double>((b32 << 16) | a32));
+    };
+    // ---- ضغط/فكّ ضغط DEFLATE حقيقي (zlib) — natives خام (raw، بلا رأس zlib/gzip) ----
+    // يُطابق تماماً method=8 في صيغة ZIP الرسمية (PKWARE APPNOTE)، فيُنتج/يقرأ أرشيفات
+    // .zip مضغوطة فعلياً ومتوافقة 100% مع أي أداة ZIP قياسية (unzip, 7-Zip...).
+    // zlibDeflateRaw(s) -> نص بايتات s الخام مضغوطاً بـ DEFLATE خام (بلا أي رأس/تذييل إضافي).
+    natives["zlibDeflateRaw"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("zlibDeflateRaw", a, 1, line);
+        std::string input = asString(a[0], "zlibDeflateRaw", line);
+        z_stream strm{};
+        // windowBits = -15: يطلب من zlib صيغة DEFLATE الخام (RFC 1951) بدل التغليف بصيغة
+        // zlib (RFC 1950) أو gzip — وهذا بالضبط ما يتوقّعه حقل بيانات ملف ZIP لكل entry.
+        if (deflateInit2(&strm, Z_DEFAULT_COMPRESSION, Z_DEFLATED, -15, 8, Z_DEFAULT_STRATEGY) != Z_OK) {
+            throw diagErr(diag::Code::E0035_RuntimeError, line, "zlibDeflateRaw: تعذّر تهيئة الضاغط (deflateInit2 فشل)");
+        }
+        strm.next_in = reinterpret_cast<Bytef*>(const_cast<char*>(input.data()));
+        strm.avail_in = static_cast<uInt>(input.size());
+        std::string out;
+        out.resize(static_cast<size_t>(compressBound(static_cast<uLong>(input.size()))) + 64);
+        strm.next_out = reinterpret_cast<Bytef*>(out.empty() ? nullptr : &out[0]);
+        strm.avail_out = static_cast<uInt>(out.size());
+        int ret = deflate(&strm, Z_FINISH);
+        if (ret != Z_STREAM_END) {
+            deflateEnd(&strm);
+            throw diagErr(diag::Code::E0035_RuntimeError, line, "zlibDeflateRaw: فشل الضغط (deflate لم يُكمل التدفّق)");
+        }
+        out.resize(strm.total_out);
+        deflateEnd(&strm);
+        return Value::string(out);
+    };
+    // zlibInflateRaw(compressed, expectedSize) -> يفكّ ضغط compressed (ناتج DEFLATE خام، مثل
+    // zlibDeflateRaw أو أي entry method=8 داخل ملف ZIP) إلى expectedSize بايت أصلية بالضبط
+    // (الحجم الأصلي محفوظ دائماً صراحة في صيغة ZIP نفسها، فلا حاجة لتخمينه). يرمي خطأً صريحاً
+    // إن كانت البيانات تالفة أو الحجم المتوقّع غير مطابق للتدفّق الفعلي.
+    natives["zlibInflateRaw"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("zlibInflateRaw", a, 2, line);
+        std::string input = asString(a[0], "zlibInflateRaw", line);
+        double expectedD = asNumber(a[1], "zlibInflateRaw", line);
+        if (expectedD < 0) {
+            throw diagErr(diag::Code::E0004_InvalidType, line, "zlibInflateRaw: الحجم المتوقّع يجب أن يكون >= 0");
+        }
+        size_t expected = static_cast<size_t>(expectedD);
+        if (expected == 0) { return Value::string(""); }
+        z_stream strm{};
+        if (inflateInit2(&strm, -15) != Z_OK) {
+            throw diagErr(diag::Code::E0035_RuntimeError, line, "zlibInflateRaw: تعذّر تهيئة فاكّ الضغط (inflateInit2 فشل)");
+        }
+        strm.next_in = reinterpret_cast<Bytef*>(const_cast<char*>(input.data()));
+        strm.avail_in = static_cast<uInt>(input.size());
+        std::string out;
+        out.resize(expected);
+        strm.next_out = reinterpret_cast<Bytef*>(&out[0]);
+        strm.avail_out = static_cast<uInt>(out.size());
+        int ret = inflate(&strm, Z_FINISH);
+        inflateEnd(&strm);
+        if (ret != Z_STREAM_END || strm.total_out != expected) {
+            throw diagErr(diag::Code::E0035_RuntimeError, line, "zlibInflateRaw: فشل فكّ الضغط (بيانات تالفة أو الحجم المتوقّع خاطئ)");
+        }
+        return Value::string(out);
     };
     natives["toString"] = [](std::vector<Value>& a, int line) {
         expectArgs("toString", a, 1, line);
