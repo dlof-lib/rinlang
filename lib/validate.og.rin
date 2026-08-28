@@ -6,11 +6,23 @@
 //    @import "lib/validate.og.rin" as validate;
 // ============================================================================
 
-// هل القيمة فارغة (nil, أو نص فارغ/مسافات فقط, أو مصفوفة/قاموس بلا عناصر)؟
+// هل القيمة فارغة (nil، أو نص فارغ تحديداً "")؟ ملاحظة: هذه الدالة لا تفحص مصفوفات
+// أو قواميس لأن len() ترمي خطأً على الأرقام/nil ولا توجد دالة typeof في Rin للتمييز
+// الآمن بين الأنواع مسبقاً؛ لفحص مصفوفة أو قاموس تحديداً استخدم isEmptyArr/isEmptyMap
 fun isEmpty(v) {
     if (v == nil) { return true; }
     if (v == "") { return true; }
     return false;
+}
+
+// هل arr مصفوفة بلا عناصر؟ (استدعِها فقط على قيمة تعرف أنها مصفوفة فعلاً)
+fun isEmptyArr(arr) {
+    return len(arr) == 0;
+}
+
+// هل m قاموس بلا مفاتيح؟ (استدعِها فقط على قيمة تعرف أنها قاموس فعلاً)
+fun isEmptyMap(m) {
+    return len(keys(m)) == 0;
 }
 
 // هل النص فارغ أو مسافات فقط؟
@@ -84,4 +96,62 @@ fun hasLetterAndDigit(s) {
 fun isStrongPassword(s, minLen) {
     if (len(s) < minLen) { return false; }
     return hasLetterAndDigit(s);
+}
+
+// هل كل أحرف s حروف أبجدية فقط (إنجليزية)، وs غير فارغ؟
+fun isAlpha(s) {
+    if (len(s) == 0) { return false; }
+    let letters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    let i = 0;
+    while (i < len(s)) {
+        if (!contains(letters, charAt(s, i))) { return false; }
+        i = i + 1;
+    }
+    return true;
+}
+
+// هل كل أحرف s حروف أبجدية أو أرقام فقط، وs غير فارغ؟
+fun isAlphaNumeric(s) {
+    if (len(s) == 0) { return false; }
+    let allowed = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    let i = 0;
+    while (i < len(s)) {
+        if (!contains(allowed, charAt(s, i))) { return false; }
+        i = i + 1;
+    }
+    return true;
+}
+
+// هل s يمثّل عدداً صحيحاً بالكامل (بلا فاصلة عشرية، يقبل إشارة سالبة في البداية)؟
+fun isInteger(s) {
+    if (len(s) == 0) { return false; }
+    let digits = "0123456789";
+    let i = 0;
+    let digitSeen = false;
+    while (i < len(s)) {
+        let c = charAt(s, i);
+        if (c == "-" and i == 0) {
+            // إشارة سالبة مسموحة فقط في أول النص
+        } else if (contains(digits, c)) {
+            digitSeen = true;
+        } else {
+            return false;
+        }
+        i = i + 1;
+    }
+    return digitSeen;
+}
+
+// هل url يبدو رابطاً صالحاً بصيغة بسيطة (يبدأ بـ http:// أو https:// ويحتوي نقطة بعدها)؟
+// فحص عملي وليس تحققاً كاملاً وفق معيار RFC
+fun isUrl(url) {
+    let s = trim(url);
+    let scheme = "";
+    if (startsWith(s, "https://")) { scheme = "https://"; }
+    else if (startsWith(s, "http://")) { scheme = "http://"; }
+    else { return false; }
+    let rest = substr(s, len(scheme));
+    if (isBlankStr(rest)) { return false; }
+    if (!contains(rest, ".")) { return false; }
+    return true;
 }
