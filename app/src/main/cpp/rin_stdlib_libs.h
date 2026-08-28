@@ -113,6 +113,91 @@ fun percentOf(part, total) {
     if (total == 0) { return 0; }
     return (part / total) * 100;
 }
+
+// القاسم المشترك الأكبر لعناصر مصفوفة كاملة (0 إن كانت فارغة)
+fun gcdArr(arr) {
+    if (len(arr) == 0) { return 0; }
+    let result = arr[0];
+    let i = 1;
+    while (i < len(arr)) {
+        result = gcd(result, arr[i]);
+        i = i + 1;
+    }
+    return result;
+}
+
+// المضاعف المشترك الأصغر لعناصر مصفوفة كاملة (0 إن كانت فارغة)
+fun lcmArr(arr) {
+    if (len(arr) == 0) { return 0; }
+    let result = arr[0];
+    let i = 1;
+    while (i < len(arr)) {
+        result = lcm(result, arr[i]);
+        i = i + 1;
+    }
+    return result;
+}
+
+// الوسيط (median) لمصفوفة أرقام: يفرزها أولاً ثم يأخذ القيمة الوسطى (أو متوسط
+// القيمتين الوسطيتين إن كان العدد زوجياً). nil إن كانت المصفوفة فارغة
+fun median(arr) {
+    let n = len(arr);
+    if (n == 0) { return nil; }
+    let sorted = sort(arr);
+    let mid = n / 2;
+    if (n % 2 == 1) {
+        return sorted[floor(mid)];
+    }
+    let hi = floor(mid);
+    let lo = hi - 1;
+    return (sorted[lo] + sorted[hi]) / 2;
+}
+
+// التباين (variance) لمصفوفة أرقام حول متوسطها الحسابي (0 إن كانت فارغة)
+fun variance(arr) {
+    let n = len(arr);
+    if (n == 0) { return 0; }
+    let m = mean(arr);
+    let total = 0;
+    let i = 0;
+    while (i < n) {
+        let diff = arr[i] - m;
+        total = total + diff * diff;
+        i = i + 1;
+    }
+    return total / n;
+}
+
+// الانحراف المعياري (standard deviation): الجذر التربيعي للتباين
+fun stddev(arr) {
+    return sqrt(variance(arr));
+}
+
+// مجموع مربعات عناصر مصفوفة أرقام
+fun sumOfSquares(arr) {
+    let total = 0;
+    let i = 0;
+    while (i < len(arr)) {
+        total = total + arr[i] * arr[i];
+        i = i + 1;
+    }
+    return total;
+}
+
+// طول الوتر لمثلث قائم بضلعين a وb: sqrt(a^2 + b^2)
+fun hypot(a, b) {
+    return sqrt(a * a + b * b);
+}
+
+// يحوّل زاوية من درجات إلى راديان
+fun degToRad(deg) {
+    return deg * (PI / 180);
+}
+
+// يحوّل زاوية من راديان إلى درجات
+fun radToDeg(rad) {
+    return rad * (180 / PI);
+}
 )MATHOGRIN";
 
 static const char* kLib_strings_og_rin = R"STRINGSOGRIN(
@@ -228,6 +313,91 @@ fun splitTrim(s, separator) {
         push(result, trim(parts[i]));
         i = i + 1;
     }
+    return result;
+}
+
+// يقتطع s إلى maxLen حرفاً كحد أقصى مضيفاً suffix (مثل "...") عند الاقتطاع الفعلي؛
+// إن كان s أقصر من أو يساوي maxLen يُعاد كما هو دون أي إضافة
+fun truncate(s, maxLen, suffix) {
+    if (len(s) <= maxLen) { return s; }
+    let cut = maxLen - len(suffix);
+    if (cut < 0) { cut = 0; }
+    return substr(s, 0, cut) + suffix;
+}
+
+// عدد الكلمات في s (مفصولة بمسافات، بعد تجاهل الفراغات الزائدة في البداية/النهاية)
+fun wordCount(s) {
+    let t = trim(s);
+    if (t == "") { return 0; }
+    let words = split(t, " ");
+    let count = 0;
+    let i = 0;
+    while (i < len(words)) {
+        if (trim(words[i]) != "") { count = count + 1; }
+        i = i + 1;
+    }
+    return count;
+}
+
+// يحوّل نصاً إلى شكل "slug" مناسب لروابط URL: أحرف صغيرة، الفراغات والفواصل
+// السفلية تتحول إلى "-"، وتُزال أي أحرف ليست حروفاً/أرقاماً/"-"
+fun slugify(s) {
+    let lowered = lower(trim(s));
+    let allowed = "abcdefghijklmnopqrstuvwxyz0123456789-";
+    let result = "";
+    let i = 0;
+    let lastWasDash = false;
+    while (i < len(lowered)) {
+        let c = charAt(lowered, i);
+        if (c == " " or c == "_") { c = "-"; }
+        if (contains(allowed, c)) {
+            if (c == "-") {
+                if (lastWasDash == false and result != "") {
+                    result = result + c;
+                    lastWasDash = true;
+                }
+            } else {
+                result = result + c;
+                lastWasDash = false;
+            }
+        }
+        i = i + 1;
+    }
+    while (endsWith(result, "-")) {
+        result = substr(result, 0, len(result) - 1);
+    }
+    return result;
+}
+
+// هل s يقرأ نفسه بنفس الطريقة من الجهتين (متناظر/palindrome)؟ يتجاهل حالة الأحرف
+fun isPalindrome(s) {
+    let normalized = lower(s);
+    return normalized == reverseStr(normalized);
+}
+
+// يزيل prefix من بداية s إن وُجد فعلاً في البداية، وإلا يُعيد s كما هو
+fun removePrefix(s, prefix) {
+    if (startsWith(s, prefix)) { return substr(s, len(prefix)); }
+    return s;
+}
+
+// يزيل suffix من نهاية s إن وُجد فعلاً في النهاية، وإلا يُعيد s كما هو
+fun removeSuffix(s, suffix) {
+    if (endsWith(s, suffix)) { return substr(s, 0, len(s) - len(suffix)); }
+    return s;
+}
+
+// يحشو s من الجهتين بحرف ch حتى يصل طوله إلى width (الحشو الزائد يوضع يميناً عند العدد الفردي)
+fun center(s, width, ch) {
+    let total = width - len(s);
+    if (total <= 0) { return s; }
+    let leftPad = total / 2;
+    if (leftPad < 0) { leftPad = 0; }
+    let leftCount = floor(leftPad);
+    let result = s;
+    let i = 0;
+    while (i < leftCount) { result = ch + result; i = i + 1; }
+    while (len(result) < width) { result = result + ch; }
     return result;
 }
 )STRINGSOGRIN";
@@ -396,6 +566,73 @@ fun countOf(arr, value) {
 fun valuesMatch(a, b) {
     return a == b;
 }
+
+// هل تحتوي arr على value؟ (اختصار مريح فوق countOf، يدعم نفس مقارنة valuesMatch)
+fun includesValue(arr, value) {
+    return countOf(arr, value) > 0;
+}
+
+// مصفوفة جديدة من arr بعد حذف أول ظهور لـ value فقط (بلا تعديل الأصل)؛ تُعيد نسخة
+// كاملة دون تغيير إن لم يكن value موجوداً أصلاً
+fun removeFirst(arr, value) {
+    let result = [];
+    let removed = false;
+    let i = 0;
+    while (i < len(arr)) {
+        if (removed == false and valuesMatch(arr[i], value)) {
+            removed = true;
+        } else {
+            push(result, arr[i]);
+        }
+        i = i + 1;
+    }
+    return result;
+}
+
+// قاموس جديد من m يحتوي فقط على المفاتيح الموجودة في allowedKeys
+fun pickKeys(m, allowedKeys) {
+    let result = {};
+    let i = 0;
+    while (i < len(allowedKeys)) {
+        let k = allowedKeys[i];
+        if (has(m, k)) { result[k] = m[k]; }
+        i = i + 1;
+    }
+    return result;
+}
+
+// قاموس جديد من m بدون المفاتيح الموجودة في excludedKeys
+fun omitKeys(m, excludedKeys) {
+    let result = {};
+    let ks = keys(m);
+    let i = 0;
+    while (i < len(ks)) {
+        let k = ks[i];
+        let skip = false;
+        let j = 0;
+        while (j < len(excludedKeys)) {
+            if (excludedKeys[j] == k) { skip = true; }
+            j = j + 1;
+        }
+        if (!skip) { result[k] = m[k]; }
+        i = i + 1;
+    }
+    return result;
+}
+
+// يجمع arr إلى قاموس مجموعات: المفتاح = keyFn(element)، والقيمة = مصفوفة العناصر
+// المطابقة لهذا المفتاح بترتيب ظهورها
+fun groupBy(arr, keyFn) {
+    let result = {};
+    let i = 0;
+    while (i < len(arr)) {
+        let k = keyFn(arr[i]);
+        if (!has(result, k)) { result[k] = []; }
+        push(result[k], arr[i]);
+        i = i + 1;
+    }
+    return result;
+}
 )DATAOGRIN";
 
 static const char* kLib_validate_og_rin = R"VALIDATEOGRIN(
@@ -407,11 +644,23 @@ static const char* kLib_validate_og_rin = R"VALIDATEOGRIN(
 //    @import "lib/validate.og.rin" as validate;
 // ============================================================================
 
-// هل القيمة فارغة (nil, أو نص فارغ/مسافات فقط, أو مصفوفة/قاموس بلا عناصر)؟
+// هل القيمة فارغة (nil، أو نص فارغ تحديداً "")؟ ملاحظة: هذه الدالة لا تفحص مصفوفات
+// أو قواميس لأن len() ترمي خطأً على الأرقام/nil ولا توجد دالة typeof في Rin للتمييز
+// الآمن بين الأنواع مسبقاً؛ لفحص مصفوفة أو قاموس تحديداً استخدم isEmptyArr/isEmptyMap
 fun isEmpty(v) {
     if (v == nil) { return true; }
     if (v == "") { return true; }
     return false;
+}
+
+// هل arr مصفوفة بلا عناصر؟ (استدعِها فقط على قيمة تعرف أنها مصفوفة فعلاً)
+fun isEmptyArr(arr) {
+    return len(arr) == 0;
+}
+
+// هل m قاموس بلا مفاتيح؟ (استدعِها فقط على قيمة تعرف أنها قاموس فعلاً)
+fun isEmptyMap(m) {
+    return len(keys(m)) == 0;
 }
 
 // هل النص فارغ أو مسافات فقط؟
@@ -485,6 +734,64 @@ fun hasLetterAndDigit(s) {
 fun isStrongPassword(s, minLen) {
     if (len(s) < minLen) { return false; }
     return hasLetterAndDigit(s);
+}
+
+// هل كل أحرف s حروف أبجدية فقط (إنجليزية)، وs غير فارغ؟
+fun isAlpha(s) {
+    if (len(s) == 0) { return false; }
+    let letters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    let i = 0;
+    while (i < len(s)) {
+        if (!contains(letters, charAt(s, i))) { return false; }
+        i = i + 1;
+    }
+    return true;
+}
+
+// هل كل أحرف s حروف أبجدية أو أرقام فقط، وs غير فارغ؟
+fun isAlphaNumeric(s) {
+    if (len(s) == 0) { return false; }
+    let allowed = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    let i = 0;
+    while (i < len(s)) {
+        if (!contains(allowed, charAt(s, i))) { return false; }
+        i = i + 1;
+    }
+    return true;
+}
+
+// هل s يمثّل عدداً صحيحاً بالكامل (بلا فاصلة عشرية، يقبل إشارة سالبة في البداية)؟
+fun isInteger(s) {
+    if (len(s) == 0) { return false; }
+    let digits = "0123456789";
+    let i = 0;
+    let digitSeen = false;
+    while (i < len(s)) {
+        let c = charAt(s, i);
+        if (c == "-" and i == 0) {
+            // إشارة سالبة مسموحة فقط في أول النص
+        } else if (contains(digits, c)) {
+            digitSeen = true;
+        } else {
+            return false;
+        }
+        i = i + 1;
+    }
+    return digitSeen;
+}
+
+// هل url يبدو رابطاً صالحاً بصيغة بسيطة (يبدأ بـ http:// أو https:// ويحتوي نقطة بعدها)؟
+// فحص عملي وليس تحققاً كاملاً وفق معيار RFC
+fun isUrl(url) {
+    let s = trim(url);
+    let scheme = "";
+    if (startsWith(s, "https://")) { scheme = "https://"; }
+    else if (startsWith(s, "http://")) { scheme = "http://"; }
+    else { return false; }
+    let rest = substr(s, len(scheme));
+    if (isBlankStr(rest)) { return false; }
+    if (!contains(rest, ".")) { return false; }
+    return true;
 }
 )VALIDATEOGRIN";
 
@@ -621,6 +928,78 @@ fun isPositive(x) {
 
 fun isNegative(x) {
     return x < 0;
+}
+
+// يقسّم arr إلى قاموس { yes: [...], no: [...] } حسب fn(element) == true أو false
+fun partitionArr(arr, fn) {
+    let yes = [];
+    let no = [];
+    let i = 0;
+    while (i < len(arr)) {
+        if (fn(arr[i])) {
+            push(yes, arr[i]);
+        } else {
+            push(no, arr[i]);
+        }
+        i = i + 1;
+    }
+    return { yes: yes, no: no };
+}
+
+// يطبّق fn على كل عنصر (وهي تُعيد مصفوفة فرعية لكل عنصر) ويدمج كل النتائج في مصفوفة واحدة مسطّحة
+fun flatMapArr(arr, fn) {
+    let result = [];
+    let i = 0;
+    while (i < len(arr)) {
+        let sub = fn(arr[i]);
+        let j = 0;
+        while (j < len(sub)) {
+            push(result, sub[j]);
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    return result;
+}
+
+// يأخذ عناصر arr من البداية طالما fn(element) == true، ويتوقف عند أول عنصر يفشل الشرط
+fun takeWhileArr(arr, fn) {
+    let result = [];
+    let i = 0;
+    while (i < len(arr)) {
+        if (!fn(arr[i])) { return result; }
+        push(result, arr[i]);
+        i = i + 1;
+    }
+    return result;
+}
+
+// يُسقط عناصر arr من البداية طالما fn(element) == true، ويُعيد الباقي بدءاً من أول عنصر يفشل الشرط
+fun dropWhileArr(arr, fn) {
+    let start = len(arr);
+    let i = 0;
+    while (i < len(arr)) {
+        if (!fn(arr[i])) { start = i; break; }
+        i = i + 1;
+    }
+    let result = [];
+    let j = start;
+    while (j < len(arr)) {
+        push(result, arr[j]);
+        j = j + 1;
+    }
+    return result;
+}
+
+// عدد العناصر التي تحقق fn(element) == true
+fun countArr(arr, fn) {
+    let count = 0;
+    let i = 0;
+    while (i < len(arr)) {
+        if (fn(arr[i])) { count = count + 1; }
+        i = i + 1;
+    }
+    return count;
 }
 )FUNCTIONALOGRIN";
 
@@ -764,6 +1143,38 @@ fun runProgram(lang, lines) {
 // عدد القواعد المسجَّلة في لغة lang (مفيد للتشخيص أو الطباعة عند وصف اللغة المصغّرة)
 fun ruleCount(lang) {
     return len(lang["rules"]);
+}
+
+// مصفوفة أسماء كل الأوامر المسجَّلة في lang بترتيبها (مفيدة لبناء أمر "help" تلقائي)
+fun ruleNames(lang) {
+    let result = [];
+    let rules = lang["rules"];
+    let i = 0;
+    while (i < len(rules)) {
+        push(result, rules[i]["match"]);
+        i = i + 1;
+    }
+    return result;
+}
+
+// هل لغة lang تملك قاعدة مسجَّلة لأمر باسم cmdName تحديداً؟
+fun hasRule(lang, cmdName) {
+    return contains(ruleNames(lang), cmdName);
+}
+
+// يُضيف قاعدة جديدة (matchWord, action) إلى نهاية قواعد lang مباشرة (بما أن الخرائط في
+// Rin قيم مُشتركة بالمرجع، هذا يُعدّل lang فعلياً دون حاجة لإعادة إسناده يدوياً من المستدعي)
+fun addRule(lang, matchWord, action) {
+    push(lang["rules"], rule(matchWord, action));
+    return lang;
+}
+
+// وصف مقروء للغة مصغّرة (اسمها وعدد قواعدها وأسماء أوامرها)، جاهز للطباعة عبر print
+fun describeLang(lang) {
+    let lines = [];
+    push(lines, "🔤 " + lang["name"] + "  (" + toString(ruleCount(lang)) + " أمر)");
+    push(lines, "   الأوامر: " + join(ruleNames(lang), ", "));
+    return join(lines, "\n");
 }
 )OGLANGOGRIN";
 
@@ -1023,13 +1434,11 @@ fun isAlnumChar(ch) {
 }
 
 fun isSpaceChar(ch) {
-    return ch == " " or ch == "	" or ch == "
-";
+    return ch == " " or ch == "\t" or ch == "\r";
 }
 
 fun isNewlineChar(ch) {
-    return ch == "
-";
+    return ch == "\n";
 }
 
 // ---- الجزء 2: الرموز (Tokens) ------------------------------------------------
@@ -1060,8 +1469,7 @@ fun formatTokens(tokens) {
         push(lines, "[" + toString(t["line"]) + "] " + t["type"] + " '" + toString(t["value"]) + "'");
         i = i + 1;
     }
-    return join(lines, "
-");
+    return join(lines, "\n");
 }
 
 // ---- الجزء 3: عقد الشجرة التركيبية (AST nodes) ------------------------------
@@ -1096,8 +1504,7 @@ fun formatAstShallow(node) {
         }
         i = i + 1;
     }
-    return join(lines, "
-");
+    return join(lines, "\n");
 }
 
 // ---- الجزء 4: أخطاء موحّدة عبر مراحل اللغة (Lexer/Parser/Interpreter) -------
@@ -1214,8 +1621,61 @@ fun describeLanguage(info) {
     push(lines, "🧩 " + info["name"] + "  (." + info["fileExtension"] + ")  v" + info["version"]);
     push(lines, "   " + info["description"]);
     push(lines, "   المطوّر: " + info["developer"]);
-    return join(lines, "
-");
+    return join(lines, "\n");
+}
+
+// ---- الجزء 8: تركيب نتائج Result (monadic-style pipeline helpers) ----------
+// evalExpr/genExpr وأي دالة تتبع أسلوب ok()/err() تحتاج غالباً سلسلة خطوات متتالية:
+// كل خطوة تعمل فقط إن نجحت السابقة، وأول فشل يُوقف السلسلة فوراً وتُمرَّر رسالة
+// خطأه كما هي حتى النهاية دون أي تكرار يدوي لفحص isOk() في كل مرحلة.
+
+// إن كانت result ناجحة، يطبّق fn(result["value"]) عليها ويُغلّف الناتج بـ ok() تلقائياً؛
+// وإلا يُعيد result كما هي (الخطأ يمرّ دون تغيير). يعادل map() على Result في اللغات الوظيفية
+fun mapResult(result, fn) {
+    if (isOk(result)) {
+        return ok(fn(result["value"]));
+    }
+    return result;
+}
+
+// إن كانت result ناجحة، يستدعي fn(result["value"]) التي يجب أن تُعيد Result أخرى بنفسها
+// (لا تُغلَّف تلقائياً)؛ مفيد لتسلسل خطوات قد تفشل كل منها بشكل مستقل (evalLeft ثم evalRight...).
+// يعادل andThen/bind على Result في اللغات الوظيفية
+fun andThen(result, fn) {
+    if (isOk(result)) {
+        return fn(result["value"]);
+    }
+    return result;
+}
+
+// يستخرج result["value"] إن كانت ناجحة، وإلا defaultValue عند الفشل (بدل التحقق يدوياً
+// من isOk() ثم resultError() في كل موضع استدعاء)
+fun unwrapOr(result, defaultValue) {
+    if (isOk(result)) { return result["value"]; }
+    return defaultValue;
+}
+
+// ---- الجزء 9: مساعدات إضافية لمؤشّر التوكِنز (Parser cursor) ----------------
+
+// هل نوع الرمز الحالي واحد من مصفوفة types؟ (مفيد لتحليل "أي من عدة عمليات بنفس
+// الأسبقية" دون سلسلة pCheck يدوية طويلة، مثال: pCheckAny(toks,pos,["PLUS","MINUS"]))
+fun pCheckAny(tokens, pos, types) {
+    let i = 0;
+    while (i < len(types)) {
+        if (pCheck(tokens, pos, types[i])) { return true; }
+        i = i + 1;
+    }
+    return false;
+}
+
+// إن طابق الرمز الحالي type يستهلكه، وإلا لا يفعل شيئاً (بعكس pExpect لا يبني خطأ
+// أبداً)؛ يُعيد دوماً {tok: الرمز المستهلَك أو الحالي بلا استهلاك, pos: الموضع الجديد}
+// مفيد لعناصر نحوية اختيارية مثل فاصلة زائدة أخيرة أو ";" اختيارية آخر السطر
+fun pOptional(tokens, pos, type) {
+    if (pCheck(tokens, pos, type)) {
+        return pAdvance(tokens, pos);
+    }
+    return { tok: pPeek(tokens, pos), pos: pos };
 }
 )LANGKITOGRIN";
 
@@ -1281,6 +1741,12 @@ fun visitAll(nodes, table, fallbackFn) {
         i = i + 1;
     }
     return results;
+}
+
+// هل يوجد معالج مسجَّل لنوع kind في جدول التوزيع table؟ (فحص مسبق قبل visit عند
+// الحاجة لتفرّع منطقي مختلف بدل الاعتماد فقط على fallbackFn)
+fun dispatchHas(table, kind) {
+    return has(table, kind);
 }
 
 // يعدّ العقد داخل شجرة AST بعمق كامل. لأن keys()/has() في Rin يفشلان على قيمة ليست
@@ -1366,6 +1832,47 @@ fun formatAstDeepInto(node, singleKeys, listKeys, depth, lines) {
         i = i + 1;
     }
     return nil;
+}
+
+// يجمع كل العقد من النوع kind الموجودة داخل شجرة root في أي عمق (بحث بالعرض عبر
+// مكدّس)، ويُعيدها كمصفوفة بترتيب اكتشافها. مفيد لتحليلات مثل "أعطني كل الاستدعاءات
+// CallExpr في البرنامج" دون كتابة تكرار متخصّص لكل نوع بحث
+fun findNodes(root, kind, singleKeys, listKeys) {
+    let stack = [root];
+    let found = [];
+    while (len(stack) > 0) {
+        let node = pop(stack);
+        if (node != nil) {
+            if (node["kind"] == kind) {
+                push(found, node);
+            }
+            let i = 0;
+            while (i < len(singleKeys)) {
+                let key = singleKeys[i];
+                if (has(node, key)) {
+                    let child = node[key];
+                    if (child != nil) { push(stack, child); }
+                }
+                i = i + 1;
+            }
+            i = 0;
+            while (i < len(listKeys)) {
+                let key = listKeys[i];
+                if (has(node, key)) {
+                    let childArr = node[key];
+                    if (childArr != nil) {
+                        let j = 0;
+                        while (j < len(childArr)) {
+                            push(stack, childArr[j]);
+                            j = j + 1;
+                        }
+                    }
+                }
+                i = i + 1;
+            }
+        }
+    }
+    return found;
 }
 )ASTWALKOGRIN";
 
@@ -1479,6 +1986,28 @@ fun envVisibleNames(env) {
         current = current["parent"];
     }
     return result;
+}
+
+// أسماء المتغيّرات المعرَّفة في env نفسه تحديداً فقط (بلا صعود للآباء)
+fun envOwnNames(env) {
+    return keys(env["vars"]);
+}
+
+// نطاق الجذر (الأب الأبعد بلا parent) الذي ينتمي إليه env — أي النطاق العام الحقيقي
+fun envRoot(env) {
+    let current = env;
+    while (current["parent"] != nil) {
+        current = current["parent"];
+    }
+    return current;
+}
+
+// دلالة الإسناد "=" العادية: يحدّث name في أقرب نطاق يملكها فعلاً عبر envSet، وإن لم
+// تكن معرَّفة في أي نطاق يُعرّفها بدلاً من ذلك في env الحالي نفسه عبر envDefine
+// (بخلاف envSet وحدها التي تُعيد false بصمت دون أي تأثير عند عدم الوجود)
+fun envSetOrDefine(env, name, value) {
+    if (envSet(env, name, value)) { return value; }
+    return envDefine(env, name, value);
 }
 )ENVKITOGRIN";
 
@@ -1731,6 +2260,36 @@ fun iterFilterToArray(it, fn) {
     }
     return result;
 }
+
+// يستهلك حتى n عنصر فقط من it (أو أقل إن انتهى المكرّر أولاً) ويُعيدها كمصفوفة
+fun iterTake(it, n) {
+    let result = [];
+    let i = 0;
+    while (i < n and iterHasNext(it)) {
+        push(result, iterNext(it));
+        i = i + 1;
+    }
+    return result;
+}
+
+// يستهلك كل ما تبقّى من it ويُعيد عدد العناصر التي تحقق fn(element) == true
+fun iterCount(it, fn) {
+    let count = 0;
+    while (iterHasNext(it)) {
+        if (fn(iterNext(it))) { count = count + 1; }
+    }
+    return count;
+}
+
+// يطبّق fn على كل عنصر من العناصر المتبقية في it ويُعيد النتائج كمصفوفة جديدة
+// (لا يُعدّل arr المصدر؛ يستهلك it بالكامل)
+fun iterMapToArray(it, fn) {
+    let result = [];
+    while (iterHasNext(it)) {
+        push(result, fn(iterNext(it)));
+    }
+    return result;
+}
 )ITERKITOGRIN";
 
 static const char* kLib_lexkit_og_rin = R"LEXKITOGRIN(
@@ -1871,6 +2430,41 @@ fun consumeWhile(source, pos, fn) {
         p = p + 1;
     }
     return { matched: substr(source, start, p - start), pos: p };
+}
+
+// ---- مساعدات إضافية للمؤشّر العام ------------------------------------------
+
+// يستهلك المحرف الحالي بلا شرط (بنفس روح pAdvance في langkit لكن فوق نص خام)،
+// ويُعيد { ch: المحرف المستهلَك أو "" إن انتهى المصدر, pos: الموضع التالي }
+fun sAdvance(source, pos) {
+    let c = sPeek(source, pos);
+    if (sAtEnd(source, pos)) { return { ch: c, pos: pos }; }
+    return { ch: c, pos: pos + 1 };
+}
+
+// إن كان المحرف الحالي يساوي expected تحديداً يستهلكه، وإلا لا يفعل شيئاً؛ يُعيد
+// { matched: true/false, pos: الموضع الجديد }. مفيد لاستهلاك محرف مفرد اختياري
+// (مثل "!" قبل "=" عند تمييز "!=" عن "!")
+fun sMatch(source, pos, expected) {
+    if (sAtEnd(source, pos)) { return { matched: false, pos: pos }; }
+    if (sPeek(source, pos) == expected) {
+        return { matched: true, pos: pos + 1 };
+    }
+    return { matched: false, pos: pos };
+}
+
+// رقم السطر (1-based) الذي يقع فيه الموضع pos داخل source، بعدّ محارف "\n" السابقة
+// له؛ يُستخدم لملء حقل line في makeToken بدل تتبّع عدّاد سطر يدوي منفصل أثناء اللَكْس
+fun lineAt(source, pos) {
+    let limit = pos;
+    if (limit > len(source)) { limit = len(source); }
+    let line = 1;
+    let i = 0;
+    while (i < limit) {
+        if (charAt(source, i) == "\n") { line = line + 1; }
+        i = i + 1;
+    }
+    return line;
 }
 )LEXKITOGRIN";
 
@@ -2191,6 +2785,36 @@ fun callNode(callee, args, line) {
     return { kind: "CallExpr", callee: callee, args: args, line: line };
 }
 
+// وصول لخاصية/حقل بنمط obj.prop: object هي عقدة التعبير الأساسي، property اسم نصي
+fun memberNode(object, property, line) {
+    return { kind: "MemberExpr", object: object, property: property, line: line };
+}
+
+// وصول بفهرس بنمط obj[expr]: indexExpr عقدة تعبير كاملة (وليست اسماً نصياً ثابتاً)
+fun indexNode(object, indexExpr, line) {
+    return { kind: "IndexExpr", object: object, index: indexExpr, line: line };
+}
+
+// إسناد بنمط target = value (target عادة عقدة Identifier أو Member/IndexExpr)
+fun assignNode(target, value, line) {
+    return { kind: "AssignExpr", target: target, value: value, line: line };
+}
+
+// تعبير ثلاثي شرطي بنمط cond ? thenExpr : elseExpr
+fun ternaryNode(cond, thenExpr, elseExpr, line) {
+    return { kind: "TernaryExpr", cond: cond, thenBranch: thenExpr, elseBranch: elseExpr, line: line };
+}
+
+// حرفي مصفوفة [e1, e2, ...]: elements مصفوفة عقد تعبير
+fun arrayLitNode(elements, line) {
+    return { kind: "ArrayLit", elements: elements, line: line };
+}
+
+// حرفي قاموس {k1: e1, k2: e2, ...}: pairs مصفوفة أزواج [مفتاح_نصي, عقدة_تعبير]
+fun mapLitNode(pairs, line) {
+    return { kind: "MapLit", pairs: pairs, line: line };
+}
+
 // ---- طيّ نتائج حلقة تحليل مسطّحة إلى شجرة يسارية الترابط -------------------
 // نمط شائع جداً عند تحليل تعبير بعمليات ثنائية بنفس الأسبقية داخل حلقة while واحدة:
 // تُحلَّل أول عامل (firstOperand)، ثم تُجمَع أزواج {op, right} تباعاً أثناء حلقة while
@@ -2330,6 +2954,47 @@ fun formatRunReport(entries) {
     }
     return join(lines, "\n");
 }
+
+// نسبة النجاح المئوية (0 إن كان التقرير فارغاً بدل قسمة على صفر)
+fun successRate(entries) {
+    if (len(entries) == 0) { return 0; }
+    return (countSucceeded(entries) / len(entries)) * 100;
+}
+
+// مصفوفة كل result["value"] للأسطر الناجحة فقط (يتجاهل الفاشلة تماماً بصمت)، مفيدة
+// لتجميع نتائج تقييم برنامج كامل كمصفوفة قيم جاهزة دون التعامل مع خريطة entry الكاملة
+fun succeededValues(entries) {
+    let result = [];
+    let i = 0;
+    while (i < len(entries)) {
+        let r = entries[i]["result"];
+        if (r["ok"]) {
+            push(result, r["value"]);
+        }
+        i = i + 1;
+    }
+    return result;
+}
+
+// نسخة مطوّلة من formatRunReport تطبع كل سطر (ناجحاً كان أو فاشلاً) بدل الفاشل فقط،
+// مفيدة أثناء تطوير مشروع اللغة نفسه لمراجعة كل نتيجة سطراً بسطر
+fun formatRunReportVerbose(entries) {
+    let lines = [];
+    push(lines, "نجح: " + toString(countSucceeded(entries)) + " / فشل: " + toString(countFailed(entries)) + " / الإجمالي: " + toString(len(entries)));
+    let i = 0;
+    while (i < len(entries)) {
+        let entry = entries[i];
+        let r = entry["result"];
+        if (r["ok"]) {
+            push(lines, "  ✅ سطر " + toString(entry["lineNumber"]) + ": " + entry["line"] + " -> " + toString(r["value"]));
+        } else {
+            push(lines, "  ❌ سطر " + toString(entry["lineNumber"]) + ": " + entry["line"]);
+            push(lines, "     -> " + formatLangError(r["error"]));
+        }
+        i = i + 1;
+    }
+    return join(lines, "\n");
+}
 )RUNKITOGRIN";
 
 static const char* kLib_seqkit_og_rin = R"SEQKITOGRIN(
@@ -2433,6 +3098,47 @@ fun cycleToLength(arr, targetLen) {
     let i = 0;
     while (len(result) < targetLen) {
         push(result, arr[i % len(arr)]);
+        i = i + 1;
+    }
+    return result;
+}
+
+// عدد صحيح عشوائي بين lo وhi ضمناً (يعتمد على random() المبني في اللغة، والذي يُعيد
+// كسراً عشرياً بين 0 و1)
+fun randomInt(lo, hi) {
+    let span = hi - lo + 1;
+    return lo + floor(random() * span);
+}
+
+// يخلط ترتيب عناصر arr عشوائياً (خوارزمية Fisher–Yates) ويُعيد مصفوفة جديدة دون
+// تعديل الأصل
+fun shuffleArr(arr) {
+    let result = [];
+    let i = 0;
+    while (i < len(arr)) {
+        push(result, arr[i]);
+        i = i + 1;
+    }
+    let n = len(result);
+    i = n - 1;
+    while (i > 0) {
+        let j = randomInt(0, i);
+        let tmp = result[i];
+        result[i] = result[j];
+        result[j] = tmp;
+        i = i - 1;
+    }
+    return result;
+}
+
+// يختار n عنصر عشوائي بلا تكرار من arr (n لا يتجاوز طول arr؛ يُقتطع تلقائياً إن كان أكبر)
+fun sampleArr(arr, n) {
+    let shuffled = shuffleArr(arr);
+    if (n > len(shuffled)) { n = len(shuffled); }
+    let result = [];
+    let i = 0;
+    while (i < n) {
+        push(result, shuffled[i]);
         i = i + 1;
     }
     return result;
@@ -3408,6 +4114,351 @@ fun rxInfo() {
 }
 )RINXGOGRIN";
 
+static const char* kLib_rinzip_og_rin = R"RINZIPOGRIN(
+// ============================================================================
+//  lib/rinzip.og.rin — RINZIP: قراءة وكتابة أرشيفات ZIP حقيقية بلغة Rin خالصة
+//  استيراد:
+//    @import "lib/rinzip.og.rin";
+//    @import "lib/rinzip.og.rin" as rinzip;
+//
+//  مكتبة مستقلة بالكامل (لا تحتاج @import لأي مكتبة أخرى) فوق أربعة natives فقط:
+//  crc32/chr/ord/substr (+readFile/writeFile للقرص). تبني/تحلّل صيغة ZIP الحقيقية
+//  حسب معيارها الرسمي (PKWARE APPNOTE): Local File Header + Central Directory +
+//  End Of Central Directory record — الملفات الناتجة تُفتح مباشرة بأي أداة ZIP
+//  عادية (unzip, 7-Zip, مستكشف الملفات...) والعكس صحيح: تقرأ RINZIP أي أرشيف .zip
+//  حقيقي أُنشئ بأداة أخرى، طالما مدخلاته غير مضغوطة أو "مخزَّنة" (method = 0/Store).
+//
+//  ⚠️ قيد مهم: لا توجد خوارزمية Deflate/Inflate مبنية في Rin (لا native يوفّرها)،
+//  لذا RINZIP يكتب دائماً بطريقة "التخزين" (Store, method=0 — بلا ضغط فعلي، الحجم
+//  المضغوط = الحجم الأصلي تماماً، لكنه أرشيف ZIP صالح 100% بصيغته الرسمية). عند قراءة
+//  أرشيف من مصدر خارجي مضغوط فعلياً (method=8/Deflate)، تكتشف rzExtractEntry ذلك
+//  وتُعيد خطأ صريحاً واضحاً بدل محاولة فك ضغط غير مدعوم أو إعادة بيانات فاسدة.
+//
+//  مثال سريع (إنشاء أرشيف ثم قراءته مباشرة):
+//    let entries = [
+//        rzFileEntry("hello.txt", "أهلاً من RINZIP"),
+//        rzFileEntry("data/notes.txt", "سطر أول\nسطر ثانٍ"),
+//        rzDirEntry("data")
+//    ];
+//    let info = rzSaveArchive(entries, "out.zip");
+//    print info;                              // {ok:true, path:"out.zip", bytes:.., entries:3}
+//
+//    let data = readFile("out.zip");
+//    let listing = rzParseEntries(data);
+//    print rzFormatListing(listing);          // جدول مقروء بالاسم/الحجم/الطريقة/CRC
+//    print rzExtractEntry(data, listing[0]);  // {ok:true, name:"hello.txt", content:"أهلاً من RINZIP"}
+//
+//  أو مباشرة من القرص + استخراج كل شيء إلى مجلد:
+//    let entries2 = rzListArchive("out.zip");
+//    print rzSaveExtracted(readFile("out.zip"), entries2, "extracted");
+// ============================================================================
+
+// ---- الجزء 1: توقيعات ZIP الثابتة (بايتات خام لتمييز كل سجل) ----------------
+fun rzSigLocal()   { return chr(80) + chr(75) + chr(3) + chr(4); }  // "PK\x03\x04"
+fun rzSigCentral()  { return chr(80) + chr(75) + chr(1) + chr(2); } // "PK\x01\x02"
+fun rzSigEocd()     { return chr(80) + chr(75) + chr(5) + chr(6); } // "PK\x05\x06"
+
+// ---- الجزء 2: ترميز/فكّ أعداد صحيحة little-endian (لبنات صيغة ZIP الثنائية) ---
+
+// يُرمّز n كعدد 16-بت little-endian (بايتان خام)
+fun rzLE16(n) {
+    return chr(n % 256) + chr(floor(n / 256) % 256);
+}
+
+// يُرمّز n كعدد 32-بت little-endian (4 بايتات خام)
+fun rzLE32(n) {
+    let b0 = n % 256;
+    let b1 = floor(n / 256) % 256;
+    let b2 = floor(n / 65536) % 256;
+    let b3 = floor(n / 16777216) % 256;
+    return chr(b0) + chr(b1) + chr(b2) + chr(b3);
+}
+
+// يقرأ عدداً 16-بت little-endian من data ابتداءً من الموضع pos
+fun rzReadU16(data, pos) {
+    return ord(charAt(data, pos)) + ord(charAt(data, pos + 1)) * 256;
+}
+
+// يقرأ عدداً 32-بت little-endian من data ابتداءً من الموضع pos
+fun rzReadU32(data, pos) {
+    let b0 = ord(charAt(data, pos));
+    let b1 = ord(charAt(data, pos + 1));
+    let b2 = ord(charAt(data, pos + 2));
+    let b3 = ord(charAt(data, pos + 3));
+    return b0 + b1 * 256 + b2 * 65536 + b3 * 16777216;
+}
+
+// ---- الجزء 3: بناء مُدخَلات (entries) قبل الأرشفة ---------------------------
+// مُدخَل = { name: "مسار/داخل/الأرشيف.ext", content: "محتوى خام", isDir: true/false }
+
+// مُدخَل ملف عادي بمحتواه الخام (نص أو بايتات عبر bytesFromArray مسبقاً)
+fun rzFileEntry(name, content) {
+    return { name: name, content: content, isDir: false };
+}
+
+// مُدخَل مجلد فارغ (بلا محتوى)؛ يضيف "/" لنهاية الاسم تلقائياً إن لم توجد أصلاً،
+// تماماً كما تتوقّع أدوات ZIP القياسية لتمييز إدخالات المجلدات عن الملفات
+fun rzDirEntry(name) {
+    let normalized = name;
+    if (len(normalized) == 0 or charAt(normalized, len(normalized) - 1) != "/") {
+        normalized = normalized + "/";
+    }
+    return { name: normalized, content: "", isDir: true };
+}
+
+// ---- الجزء 4: إنشاء أرشيف (كتابة) -------------------------------------------
+
+// يبني محتوى أرشيف ZIP كامل (بايتات خام كنص) من مصفوفة entries، بطريقة التخزين
+// (Store, method=0) — بلا ضغط فعلي. يُعيد النص الخام مباشرة دون كتابته على القرص؛
+// استخدم rzSaveArchive للكتابة المباشرة إلى ملف
+fun rzCreateArchive(entries) {
+    let body = "";
+    let central = "";
+    let offset = 0;
+    let count = 0;
+    let i = 0;
+    while (i < len(entries)) {
+        let e = entries[i];
+        let name = e["name"];
+        let isDir = has(e, "isDir") and e["isDir"];
+        let content = "";
+        if (isDir == false) { content = e["content"]; }
+        let crc = 0;
+        if (isDir == false) { crc = crc32(content); }
+        let size = len(content);
+
+        let localHeader = rzSigLocal()
+            + rzLE16(20) + rzLE16(0) + rzLE16(0)
+            + rzLE16(0) + rzLE16(0)
+            + rzLE32(crc)
+            + rzLE32(size) + rzLE32(size)
+            + rzLE16(len(name)) + rzLE16(0)
+            + name;
+
+        body = body + localHeader + content;
+
+        let centralHeader = rzSigCentral()
+            + rzLE16(20) + rzLE16(20) + rzLE16(0) + rzLE16(0)
+            + rzLE16(0) + rzLE16(0)
+            + rzLE32(crc)
+            + rzLE32(size) + rzLE32(size)
+            + rzLE16(len(name)) + rzLE16(0) + rzLE16(0)
+            + rzLE16(0) + rzLE16(0) + rzLE32(0)
+            + rzLE32(offset)
+            + name;
+
+        central = central + centralHeader;
+        offset = offset + len(localHeader) + size;
+        count = count + 1;
+        i = i + 1;
+    }
+
+    let endRecord = rzSigEocd()
+        + rzLE16(0) + rzLE16(0)
+        + rzLE16(count) + rzLE16(count)
+        + rzLE32(len(central)) + rzLE32(offset)
+        + rzLE16(0);
+
+    return body + central + endRecord;
+}
+
+// يبني الأرشيف عبر rzCreateArchive ثم يكتبه مباشرة إلى outPath على القرص
+fun rzSaveArchive(entries, outPath) {
+    let bytes = rzCreateArchive(entries);
+    writeFile(outPath, bytes);
+    return { ok: true, path: outPath, bytes: len(bytes), entries: len(entries) };
+}
+
+// ---- الجزء 5: قراءة/تحليل أرشيف (Central Directory + EOCD) -----------------
+
+// يبحث عن موضع سجل "نهاية الدليل المركزي" (EOCD) داخل data بالمسح من آخر الملف
+// إلى الوراء (لأن حقل تعليق الأرشيف اختياري ومتغيّر الطول في آخره)، أو -1 إن لم
+// يُعثر على توقيع EOCD إطلاقاً (أرشيف تالف أو ليس ZIP أصلاً)
+fun rzFindEocd(data) {
+    let n = len(data);
+    if (n < 22) { return -1; }
+    let sig = rzSigEocd();
+    let minPos = n - 22 - 65557; // 65535 (أقصى تعليق) + 22 (حجم السجل الثابت)
+    if (minPos < 0) { minPos = 0; }
+    let pos = n - 22;
+    while (pos >= minPos) {
+        if (substr(data, pos, 4) == sig) { return pos; }
+        pos = pos - 1;
+    }
+    return -1;
+}
+
+// يحلّل الدليل المركزي الكامل لأرشيف ZIP خام (نص data من readFile("x.zip") مثلاً)،
+// ويُعيد مصفوفة مُدخَلات وصفية { name, method, crc, compressedSize, size,
+// localHeaderOffset, isDir }. تُعيد مصفوفة فارغة إن لم يكن data أرشيف ZIP صالحاً
+fun rzParseEntries(data) {
+    let eocdPos = rzFindEocd(data);
+    if (eocdPos == -1) { return []; }
+
+    let totalEntries = rzReadU16(data, eocdPos + 10);
+    let centralOffset = rzReadU32(data, eocdPos + 16);
+    let centralSig = rzSigCentral();
+
+    let entries = [];
+    let pos = centralOffset;
+    let i = 0;
+    while (i < totalEntries) {
+        if (substr(data, pos, 4) != centralSig) {
+            // دليل مركزي غير متّسق (ملف تالف) — نتوقّف بأمان بما جُمع حتى الآن بدل الانهيار
+            i = totalEntries;
+        } else {
+            let method = rzReadU16(data, pos + 10);
+            let crc = rzReadU32(data, pos + 16);
+            let compSize = rzReadU32(data, pos + 20);
+            let uncompSize = rzReadU32(data, pos + 24);
+            let nameLen = rzReadU16(data, pos + 28);
+            let extraLen = rzReadU16(data, pos + 30);
+            let commentLen = rzReadU16(data, pos + 32);
+            let localOffset = rzReadU32(data, pos + 42);
+            let name = substr(data, pos + 46, nameLen);
+            let isDir = len(name) > 0 and charAt(name, len(name) - 1) == "/";
+
+            push(entries, {
+                name: name,
+                method: method,
+                crc: crc,
+                compressedSize: compSize,
+                size: uncompSize,
+                localHeaderOffset: localOffset,
+                isDir: isDir
+            });
+
+            pos = pos + 46 + nameLen + extraLen + commentLen;
+            i = i + 1;
+        }
+    }
+    return entries;
+}
+
+// اختصار مريح: يقرأ ملف .zip من القرص ويُحلّله مباشرة (readFile + rzParseEntries)
+fun rzListArchive(path) {
+    return rzParseEntries(readFile(path));
+}
+
+// هل طريقة ضغط entry مدعومة للاستخراج؟ RINZIP يدعم فقط method=0 (Store/بلا ضغط)
+fun rzIsSupported(entry) {
+    return entry["method"] == 0;
+}
+
+// ---- الجزء 6: استخراج محتوى مُدخَل واحد --------------------------------------
+
+// يستخرج المحتوى الخام لـ entry واحد (من نتائج rzParseEntries) من data الأصلية.
+// يُعيد { ok:true, name, content, isDir } عند النجاح، أو { ok:false, name, error }
+// عند فشل التحقّق (CRC غير مطابق) أو عدم دعم طريقة الضغط (method != 0)
+fun rzExtractEntry(data, entry) {
+    if (entry["isDir"]) {
+        return { ok: true, name: entry["name"], content: "", isDir: true };
+    }
+    if (rzIsSupported(entry) == false) {
+        return {
+            ok: false,
+            name: entry["name"],
+            error: "rzExtractEntry: طريقة ضغط غير مدعومة (method=" + toString(entry["method"]) + "). يدعم RINZIP التخزين غير المضغوط (method=0) فقط."
+        };
+    }
+    let base = entry["localHeaderOffset"];
+    if (substr(data, base, 4) != rzSigLocal()) {
+        return { ok: false, name: entry["name"], error: "rzExtractEntry: توقيع رأس محلي غير صالح عند الإزاحة المحدَّدة (أرشيف تالف؟)" };
+    }
+    let nameLen = rzReadU16(data, base + 26);
+    let extraLen = rzReadU16(data, base + 28);
+    let dataStart = base + 30 + nameLen + extraLen;
+    let content = substr(data, dataStart, entry["compressedSize"]);
+    let actualCrc = crc32(content);
+    if (actualCrc != entry["crc"]) {
+        return { ok: false, name: entry["name"], error: "rzExtractEntry: فشل التحقّق CRC-32 (المحتوى تالف أو موضع القراءة خاطئ)" };
+    }
+    return { ok: true, name: entry["name"], content: content, isDir: false };
+}
+
+// يستخرج كل entries من data ويُعيد مصفوفة نتائج rzExtractEntry بنفس الترتيب
+// (بلا توقّف عند أول فشل، مفيد لتشخيص كل مشاكل أرشيف دفعة واحدة)
+fun rzExtractAll(data, entries) {
+    let results = [];
+    let i = 0;
+    while (i < len(entries)) {
+        push(results, rzExtractEntry(data, entries[i]));
+        i = i + 1;
+    }
+    return results;
+}
+
+// يستخرج كل entries فعلياً إلى القرص تحت destDir (writeFile تُنشئ المجلدات
+// الأب تلقائياً)، ويُعيد ملخّصاً { written: [أسماء نجحت], errors: [نتائج فشلت] }.
+// مُدخَلات المجلدات (isDir) تُتجاهَل بصمت (لا تحتاج إنشاءً صريحاً هنا)
+fun rzSaveExtracted(data, entries, destDir) {
+    let written = [];
+    let errors = [];
+    let i = 0;
+    while (i < len(entries)) {
+        let entry = entries[i];
+        if (entry["isDir"] == false) {
+            let r = rzExtractEntry(data, entry);
+            if (r["ok"]) {
+                writeFile(destDir + "/" + entry["name"], r["content"]);
+                push(written, entry["name"]);
+            } else {
+                push(errors, r);
+            }
+        }
+        i = i + 1;
+    }
+    return { written: written, errors: errors };
+}
+
+// ---- الجزء 7: تحقّق وتقارير مقروءة ------------------------------------------
+
+// يتحقّق من سلامة كل مُدخَل مدعوم داخل الأرشيف (CRC-32 لكل ملف غير مجلد وغير
+// مضغوط فعلياً) دون كتابة أي شيء على القرص؛ يُعيد { ok: لا يوجد أي خطأ إطلاقاً,
+// invalidCount, results: مصفوفة كل rzExtractEntry }
+fun rzValidateArchive(data, entries) {
+    let results = rzExtractAll(data, entries);
+    let invalidCount = 0;
+    let i = 0;
+    while (i < len(results)) {
+        if (results[i]["ok"] == false) { invalidCount = invalidCount + 1; }
+        i = i + 1;
+    }
+    return { ok: invalidCount == 0, invalidCount: invalidCount, results: results };
+}
+
+// جدول نصي مقروء لمصفوفة entries (اسم، حجم، طريقة، CRC)، بنفس روح "unzip -l"،
+// جاهز للطباعة مباشرة عبر print
+fun rzFormatListing(entries) {
+    let lines = [];
+    push(lines, "الاسم                                   الحجم    الطريقة   CRC-32");
+    let i = 0;
+    while (i < len(entries)) {
+        let e = entries[i];
+        let methodLabel = "Store";
+        if (e["method"] != 0) { methodLabel = "#" + toString(e["method"]); }
+        push(lines, e["name"] + "  " + toString(e["size"]) + "  " + methodLabel + "  " + toString(e["crc"]));
+        i = i + 1;
+    }
+    push(lines, "-- المجموع: " + toString(len(entries)) + " مُدخَل --");
+    return join(lines, "\n");
+}
+
+// ---- الجزء 8: معلومات وصفية عن المكتبة (بنفس أسلوب bobInfo/ringoInfo/rxInfo) --
+fun rzInfo() {
+    return {
+        name: "rinzip",
+        version: "1.0.0",
+        description: "قراءة وكتابة أرشيفات ZIP حقيقية (صيغة PKWARE) بلغة Rin خالصة، بطريقة التخزين غير المضغوط (Store)",
+        exports: [
+            "rzFileEntry", "rzDirEntry", "rzCreateArchive", "rzSaveArchive",
+            "rzParseEntries", "rzListArchive", "rzExtractEntry", "rzExtractAll",
+            "rzSaveExtracted", "rzValidateArchive", "rzFormatListing", "rzInfo"
+        ]
+    };
+}
+)RINZIPOGRIN";
+
 inline const std::unordered_map<std::string, std::string>& embeddedRinLibraries() {
     static const std::unordered_map<std::string, std::string> libs = {
         {"lib/math.og.rin", kLib_math_og_rin},
@@ -3431,6 +4482,7 @@ inline const std::unordered_map<std::string, std::string>& embeddedRinLibraries(
         {"lib/bob.og.rin", kLib_bob_og_rin},
         {"lib/ghpublish.og.rin", kLib_ghpublish_og_rin},
         {"lib/rinxg.og.rin", kLib_rinxg_og_rin},
+        {"lib/rinzip.og.rin", kLib_rinzip_og_rin},
     };
     return libs;
 }
