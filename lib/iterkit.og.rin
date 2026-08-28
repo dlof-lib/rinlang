@@ -95,3 +95,33 @@ fun iterFilterToArray(it, fn) {
     }
     return result;
 }
+
+// يستهلك حتى n عنصر فقط من it (أو أقل إن انتهى المكرّر أولاً) ويُعيدها كمصفوفة
+fun iterTake(it, n) {
+    let result = [];
+    let i = 0;
+    while (i < n and iterHasNext(it)) {
+        push(result, iterNext(it));
+        i = i + 1;
+    }
+    return result;
+}
+
+// يستهلك كل ما تبقّى من it ويُعيد عدد العناصر التي تحقق fn(element) == true
+fun iterCount(it, fn) {
+    let count = 0;
+    while (iterHasNext(it)) {
+        if (fn(iterNext(it))) { count = count + 1; }
+    }
+    return count;
+}
+
+// يطبّق fn على كل عنصر من العناصر المتبقية في it ويُعيد النتائج كمصفوفة جديدة
+// (لا يُعدّل arr المصدر؛ يستهلك it بالكامل)
+fun iterMapToArray(it, fn) {
+    let result = [];
+    while (iterHasNext(it)) {
+        push(result, fn(iterNext(it)));
+    }
+    return result;
+}
