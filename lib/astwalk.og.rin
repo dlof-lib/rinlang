@@ -60,6 +60,12 @@ fun visitAll(nodes, table, fallbackFn) {
     return results;
 }
 
+// هل يوجد معالج مسجَّل لنوع kind في جدول التوزيع table؟ (فحص مسبق قبل visit عند
+// الحاجة لتفرّع منطقي مختلف بدل الاعتماد فقط على fallbackFn)
+fun dispatchHas(table, kind) {
+    return has(table, kind);
+}
+
 // يعدّ العقد داخل شجرة AST بعمق كامل. لأن keys()/has() في Rin يفشلان على قيمة ليست
 // خريطة، ولا توجد دالة isArray/isMap لتمييز شكل حقل فرعي في وقت التشغيل، تفصل هذه
 // الدالة صراحة بين نوعين من الحقول بدل تخمين شكلها:
@@ -143,4 +149,45 @@ fun formatAstDeepInto(node, singleKeys, listKeys, depth, lines) {
         i = i + 1;
     }
     return nil;
+}
+
+// يجمع كل العقد من النوع kind الموجودة داخل شجرة root في أي عمق (بحث بالعرض عبر
+// مكدّس)، ويُعيدها كمصفوفة بترتيب اكتشافها. مفيد لتحليلات مثل "أعطني كل الاستدعاءات
+// CallExpr في البرنامج" دون كتابة تكرار متخصّص لكل نوع بحث
+fun findNodes(root, kind, singleKeys, listKeys) {
+    let stack = [root];
+    let found = [];
+    while (len(stack) > 0) {
+        let node = pop(stack);
+        if (node != nil) {
+            if (node["kind"] == kind) {
+                push(found, node);
+            }
+            let i = 0;
+            while (i < len(singleKeys)) {
+                let key = singleKeys[i];
+                if (has(node, key)) {
+                    let child = node[key];
+                    if (child != nil) { push(stack, child); }
+                }
+                i = i + 1;
+            }
+            i = 0;
+            while (i < len(listKeys)) {
+                let key = listKeys[i];
+                if (has(node, key)) {
+                    let childArr = node[key];
+                    if (childArr != nil) {
+                        let j = 0;
+                        while (j < len(childArr)) {
+                            push(stack, childArr[j]);
+                            j = j + 1;
+                        }
+                    }
+                }
+                i = i + 1;
+            }
+        }
+    }
+    return found;
 }
