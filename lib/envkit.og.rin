@@ -108,3 +108,25 @@ fun envVisibleNames(env) {
     }
     return result;
 }
+
+// أسماء المتغيّرات المعرَّفة في env نفسه تحديداً فقط (بلا صعود للآباء)
+fun envOwnNames(env) {
+    return keys(env["vars"]);
+}
+
+// نطاق الجذر (الأب الأبعد بلا parent) الذي ينتمي إليه env — أي النطاق العام الحقيقي
+fun envRoot(env) {
+    let current = env;
+    while (current["parent"] != nil) {
+        current = current["parent"];
+    }
+    return current;
+}
+
+// دلالة الإسناد "=" العادية: يحدّث name في أقرب نطاق يملكها فعلاً عبر envSet، وإن لم
+// تكن معرَّفة في أي نطاق يُعرّفها بدلاً من ذلك في env الحالي نفسه عبر envDefine
+// (بخلاف envSet وحدها التي تُعيد false بصمت دون أي تأثير عند عدم الوجود)
+fun envSetOrDefine(env, name, value) {
+    if (envSet(env, name, value)) { return value; }
+    return envDefine(env, name, value);
+}
