@@ -17,6 +17,9 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 set(RIN_CPP_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../app/src/main/cpp)
 
+# مطلوبة لـ zlibDeflateRaw/zlibInflateRaw في rin_interpreter.cpp (ضغط ZIP حقيقي).
+find_package(ZLIB REQUIRED)
+
 add_library(rin SHARED
     ${RIN_CPP_DIR}/rin_lexer.cpp
     ${RIN_CPP_DIR}/rin_parser.cpp
@@ -26,6 +29,7 @@ add_library(rin SHARED
 )
 
 target_include_directories(rin PUBLIC ${RIN_CPP_DIR})
+target_link_libraries(rin PRIVATE ZLIB::ZLIB)
 
 set_target_properties(rin PROPERTIES
     OUTPUT_NAME "rin"
