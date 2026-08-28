@@ -66,6 +66,36 @@ fun callNode(callee, args, line) {
     return { kind: "CallExpr", callee: callee, args: args, line: line };
 }
 
+// وصول لخاصية/حقل بنمط obj.prop: object هي عقدة التعبير الأساسي، property اسم نصي
+fun memberNode(object, property, line) {
+    return { kind: "MemberExpr", object: object, property: property, line: line };
+}
+
+// وصول بفهرس بنمط obj[expr]: indexExpr عقدة تعبير كاملة (وليست اسماً نصياً ثابتاً)
+fun indexNode(object, indexExpr, line) {
+    return { kind: "IndexExpr", object: object, index: indexExpr, line: line };
+}
+
+// إسناد بنمط target = value (target عادة عقدة Identifier أو Member/IndexExpr)
+fun assignNode(target, value, line) {
+    return { kind: "AssignExpr", target: target, value: value, line: line };
+}
+
+// تعبير ثلاثي شرطي بنمط cond ? thenExpr : elseExpr
+fun ternaryNode(cond, thenExpr, elseExpr, line) {
+    return { kind: "TernaryExpr", cond: cond, thenBranch: thenExpr, elseBranch: elseExpr, line: line };
+}
+
+// حرفي مصفوفة [e1, e2, ...]: elements مصفوفة عقد تعبير
+fun arrayLitNode(elements, line) {
+    return { kind: "ArrayLit", elements: elements, line: line };
+}
+
+// حرفي قاموس {k1: e1, k2: e2, ...}: pairs مصفوفة أزواج [مفتاح_نصي, عقدة_تعبير]
+fun mapLitNode(pairs, line) {
+    return { kind: "MapLit", pairs: pairs, line: line };
+}
+
 // ---- طيّ نتائج حلقة تحليل مسطّحة إلى شجرة يسارية الترابط -------------------
 // نمط شائع جداً عند تحليل تعبير بعمليات ثنائية بنفس الأسبقية داخل حلقة while واحدة:
 // تُحلَّل أول عامل (firstOperand)، ثم تُجمَع أزواج {op, right} تباعاً أثناء حلقة while
