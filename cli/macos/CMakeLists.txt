@@ -22,6 +22,10 @@ endif()
 # الجهاز الحالي، لتفادي فشل الربط حين لا تتوفر مكتبات كلتا المعماريتين محلياً).
 add_compile_options(-Wall -O2)
 
+# مطلوبة لـ zlibDeflateRaw/zlibInflateRaw في rin_interpreter.cpp (ضغط ZIP حقيقي).
+# libz متوفّرة دائماً كجزء من macOS نفسه (Xcode Command Line Tools) — لا تثبيت إضافي عادةً.
+find_package(ZLIB REQUIRED)
+
 set(RIN_CORE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../../app/src/main/cpp)
 
 add_executable(rin
@@ -37,6 +41,7 @@ add_executable(rin
 )
 
 target_include_directories(rin PRIVATE ${RIN_CORE_DIR})
+target_link_libraries(rin PRIVATE ZLIB::ZLIB)
 
 set_target_properties(rin PROPERTIES OUTPUT_NAME "rin")
 
