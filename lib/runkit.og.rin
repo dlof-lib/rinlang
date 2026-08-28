@@ -106,3 +106,44 @@ fun formatRunReport(entries) {
     }
     return join(lines, "\n");
 }
+
+// نسبة النجاح المئوية (0 إن كان التقرير فارغاً بدل قسمة على صفر)
+fun successRate(entries) {
+    if (len(entries) == 0) { return 0; }
+    return (countSucceeded(entries) / len(entries)) * 100;
+}
+
+// مصفوفة كل result["value"] للأسطر الناجحة فقط (يتجاهل الفاشلة تماماً بصمت)، مفيدة
+// لتجميع نتائج تقييم برنامج كامل كمصفوفة قيم جاهزة دون التعامل مع خريطة entry الكاملة
+fun succeededValues(entries) {
+    let result = [];
+    let i = 0;
+    while (i < len(entries)) {
+        let r = entries[i]["result"];
+        if (r["ok"]) {
+            push(result, r["value"]);
+        }
+        i = i + 1;
+    }
+    return result;
+}
+
+// نسخة مطوّلة من formatRunReport تطبع كل سطر (ناجحاً كان أو فاشلاً) بدل الفاشل فقط،
+// مفيدة أثناء تطوير مشروع اللغة نفسه لمراجعة كل نتيجة سطراً بسطر
+fun formatRunReportVerbose(entries) {
+    let lines = [];
+    push(lines, "نجح: " + toString(countSucceeded(entries)) + " / فشل: " + toString(countFailed(entries)) + " / الإجمالي: " + toString(len(entries)));
+    let i = 0;
+    while (i < len(entries)) {
+        let entry = entries[i];
+        let r = entry["result"];
+        if (r["ok"]) {
+            push(lines, "  ✅ سطر " + toString(entry["lineNumber"]) + ": " + entry["line"] + " -> " + toString(r["value"]));
+        } else {
+            push(lines, "  ❌ سطر " + toString(entry["lineNumber"]) + ": " + entry["line"]);
+            push(lines, "     -> " + formatLangError(r["error"]));
+        }
+        i = i + 1;
+    }
+    return join(lines, "\n");
+}
