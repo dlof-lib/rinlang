@@ -138,3 +138,35 @@ fun runProgram(lang, lines) {
 fun ruleCount(lang) {
     return len(lang["rules"]);
 }
+
+// مصفوفة أسماء كل الأوامر المسجَّلة في lang بترتيبها (مفيدة لبناء أمر "help" تلقائي)
+fun ruleNames(lang) {
+    let result = [];
+    let rules = lang["rules"];
+    let i = 0;
+    while (i < len(rules)) {
+        push(result, rules[i]["match"]);
+        i = i + 1;
+    }
+    return result;
+}
+
+// هل لغة lang تملك قاعدة مسجَّلة لأمر باسم cmdName تحديداً؟
+fun hasRule(lang, cmdName) {
+    return contains(ruleNames(lang), cmdName);
+}
+
+// يُضيف قاعدة جديدة (matchWord, action) إلى نهاية قواعد lang مباشرة (بما أن الخرائط في
+// Rin قيم مُشتركة بالمرجع، هذا يُعدّل lang فعلياً دون حاجة لإعادة إسناده يدوياً من المستدعي)
+fun addRule(lang, matchWord, action) {
+    push(lang["rules"], rule(matchWord, action));
+    return lang;
+}
+
+// وصف مقروء للغة مصغّرة (اسمها وعدد قواعدها وأسماء أوامرها)، جاهز للطباعة عبر print
+fun describeLang(lang) {
+    let lines = [];
+    push(lines, "🔤 " + lang["name"] + "  (" + toString(ruleCount(lang)) + " أمر)");
+    push(lines, "   الأوامر: " + join(ruleNames(lang), ", "));
+    return join(lines, "\n");
+}
