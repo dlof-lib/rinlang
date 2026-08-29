@@ -493,6 +493,15 @@ private:
     std::unordered_set<std::string> importedPaths;            // مسارات @import المُنفَّذة فعلاً في هذا التشغيل (لمنع الاستيراد المكرَّر)
     std::unordered_map<std::string, std::string> linkIdToContainer; // معرّف الربط العام (container.link.id) -> اسم الحاوية المسجَّلة به
 
+    // ---- Rin Loom (@view / warp / @theme) مربوطة الآن فعلياً بالحاوية (container) بدل أن تبقى نظاماً
+    // منفصلاً لا يمر عبر container إطلاقاً: أي @view/warp/@theme يُكتَب داخل جسم أي @container يُسجَّل
+    // هنا باسم تلك الحاوية، بدل أن يُتجاهَل بصمت (execute() لم يكن له أي معالج لها من قبل). انظر
+    // معالجاتها في execute() ودالة loom::runColdPipelineForContainer في loom/rin_loom_pipeline.h التي
+    // تبني Fabric فعلياً من @view المُعرَّف داخل حاوية بعينها بدل جذر البرنامج العلوي فقط.
+    std::unordered_map<std::string, std::shared_ptr<ViewStmt>> containerViews;                 // اسم الحاوية -> جذر @view بداخلها (إن وُجد؛ الأول فقط إن تكرَّر)
+    std::unordered_map<std::string, std::vector<std::shared_ptr<WarpStmt>>> containerWarpDecls; // اسم الحاوية -> إعلانات warp بداخلها بترتيب الظهور
+    std::unordered_map<std::string, std::vector<std::shared_ptr<ThemeStmt>>> containerThemeDecls; // اسم الحاوية -> إعلانات theme بداخلها بترتيب الظهور
+
     // ---- مفهوم الجدول (container.table / table المستقلة) ----
     std::unordered_map<std::string, std::vector<Value>> tableRows;  // مفتاح الحاوية -> صفوفها (كل صف Value::ARRAY)
     // مفتاح الحاوية -> آخر "style value=" مسجَّل (مثال: "style://dark"). كانت خاصة بالجداول فقط،
@@ -567,7 +576,10 @@ private:
     void loadInstalledIndex();                                          // يحمّل فهرس rin_installed/index.rininstall عند بداية run()
     void appendInstalledIndex(const std::string& name, const std::string& relPath, bool simplified) const;
 
-    Value performApiCall(const std::string& containerKey, const std::string& method, const std::string& path, int line);
+    // bodyValue: جسم اختياري (nil افتراضياً) يُرسَل فعلياً عند وجود apiEndpoint حقيقي مسجَّل بنفس اسم
+    // الحاوية (عبر apiRegister بداخلها) — عندها ينفّذ طلب شبكة حقيقياً بدل مطابقة route الوهمية فقط.
+    Value performApiCall(const std::string& containerKey, const std::string& method, const std::string& path,
+                          int line, const Value& bodyValue);
 
     // API حقيقية مسجَّلة عبر apiRegister/apiHeader: يبني baseUrl+path مع ترويسات النقطة، يُجري طلب
     // شبكة حقيقياً فعلياً (rin_http.h)، ويُعيد Value(map) بنتيجته (انظر httpResultToValue في .cpp).
