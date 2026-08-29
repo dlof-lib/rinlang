@@ -208,6 +208,12 @@ struct Loom {
             case StrandKind::TEXT:    size = measureText(s, c2); break;
             case StrandKind::IMAGE:   size = measureImage(s, c2); break;
             case StrandKind::BUTTON:  size = measureButton(s, c2); break;
+            case StrandKind::ICONBUTTON: size = measureButton(s, c2); break; // same box rules as Button (§18/§2)
+            case StrandKind::ICON: {
+                double sz = std::min(s->attrNum("size", 24), std::min(c2.maxW, c2.maxH));
+                size = {0,0, std::max(sz,c2.minW), std::max(sz,c2.minH)};
+                break;
+            }
             case StrandKind::DIVIDER: size = {0,0, c2.maxW, std::max(1.0, c2.minH)}; break;
             case StrandKind::CARD:    size = layoutSingleChildBox(s, c2, resolveSpacing(*s, "padding", 12) + s->attrNum("border", 0), originX, originY); break;
             case StrandKind::COLUMN:  size = layoutLinear(s, c2, Axis::Y, originX, originY); break;
@@ -388,9 +394,16 @@ struct Loom {
     }
     Rect measureButton(StrandPtr s, Constraints c) {
         std::string label = s->attrStr("label", "");
+        // IconButton (§18/§2): the icon glyph takes visual width too, so measurement accounts for
+        // it the same way it accounts for label= -- a one-glyph-wide stand-in ("@ ") prefixed
+        // when icon= is present, whether or not label= is also set. Uses measureTextWidth(), the
+        // same estimator label= already goes through -- no separate icon-measurement code path.
+        std::string measureLabel = label;
+        if (s->kind == StrandKind::ICONBUTTON && !s->attrStr("icon", "").empty())
+            measureLabel = label.empty() ? "@" : ("@ " + label);
         ButtonSizePreset sz = resolveButtonSize(*s);
         double fontSize = resolveFontSize(*s, "labelSize", sz.fontSize); // labelSize= can still override the size-token's font size explicitly
-        double w = std::min(measureTextWidth(label, fontSize) + sz.hPadding * 2, c.maxW);
+        double w = std::min(measureTextWidth(measureLabel, fontSize) + sz.hPadding * 2, c.maxW);
         double h = std::min(sz.height, c.maxH);
         return {0,0, std::max(w,c.minW), std::max(h,c.minH)};
     }
