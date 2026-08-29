@@ -33,6 +33,7 @@
 // ---------------------------------------------------------------------------------------------
 #pragma once
 #include "rin_loom_strand.h"
+#include "rin_loom_tokens.h"
 #include <algorithm>
 #include <sstream>
 
@@ -150,13 +151,30 @@ struct Loom {
         if (s->attr("width"))  { double w = std::max(0.0, std::min(s->attrNum("width", c.maxW), c.maxW));  c2.minW = w; c2.maxW = w; }
         if (s->attr("height")) { double h = std::max(0.0, std::min(s->attrNum("height", c.maxH), c.maxH)); c2.minH = h; c2.maxH = h; }
 
+        // Constraint System (§6): min/max-*, independent of width=/height= above, so e.g. a
+        // content-sized Card can still be given a floor or a ceiling without pinning it exactly.
+        if (s->attr("min_width"))  c2.minW = std::max(c2.minW, s->attrNum("min_width", c2.minW));
+        if (s->attr("max_width"))  c2.maxW = std::min(c2.maxW, s->attrNum("max_width", c2.maxW));
+        if (s->attr("min_height")) c2.minH = std::max(c2.minH, s->attrNum("min_height", c2.minH));
+        if (s->attr("max_height")) c2.maxH = std::min(c2.maxH, s->attrNum("max_height", c2.maxH));
+
+        // Sizing modes (§5): fill/expand claim the parent's full *bounded* extent; fixed defers
+        // to width=/height= above (a no-op here if neither was actually given -- see the scope
+        // note on SizingMode in rin_loom_tokens.h); fit/hug/auto all mean "measure my own
+        // content", which is what every per-kind measure function below already does.
+        SizingMode sizing = resolveSizingMode(*s);
+        if ((sizing == SizingMode::FILL || sizing == SizingMode::EXPAND) && !s->attr("width") && c.maxW < 1e8)
+            { c2.minW = c2.maxW = c.maxW; }
+        if ((sizing == SizingMode::FILL || sizing == SizingMode::EXPAND) && !s->attr("height") && c.maxH < 1e8)
+            { c2.minH = c2.maxH = c.maxH; }
+
         Rect size;
         switch (s->kind) {
             case StrandKind::TEXT:    size = measureText(s, c2); break;
             case StrandKind::IMAGE:   size = measureImage(s, c2); break;
             case StrandKind::BUTTON:  size = measureButton(s, c2); break;
             case StrandKind::DIVIDER: size = {0,0, c2.maxW, std::max(1.0, c2.minH)}; break;
-            case StrandKind::CARD:    size = layoutSingleChildBox(s, c2, s->attrNum("padding", 12) + s->attrNum("border", 0), originX, originY); break;
+            case StrandKind::CARD:    size = layoutSingleChildBox(s, c2, resolveSpacing(*s, "padding", 12) + s->attrNum("border", 0), originX, originY); break;
             case StrandKind::COLUMN:  size = layoutLinear(s, c2, Axis::Y, originX, originY); break;
             case StrandKind::ROW:     size = layoutLinear(s, c2, Axis::X, originX, originY); break;
             case StrandKind::STACK:   size = layoutStack(s, c2, originX, originY); break;
@@ -201,7 +219,7 @@ struct Loom {
             case StrandKind::BANNER: {
                 bool isVisible = s->attrStr("visible", "true") != "false";
                 if (!isVisible) { size = {0,0,0,0}; break; }
-                size = layoutSingleChildBox(s, c2, s->attrNum("padding", 16) + s->attrNum("border", 0), originX, originY);
+                size = layoutSingleChildBox(s, c2, resolveSpacing(*s, "padding", 16) + s->attrNum("border", 0), originX, originY);
                 break;
             }
 
@@ -226,6 +244,13 @@ struct Loom {
 
             default:                  size = layoutLinear(s, c2, Axis::Y, originX, originY); break; // Bolt fallback
         }
+        // fill/expand sizing (§5) is a floor, not just a ceiling: several measure functions above
+        // (layoutSingleChildBox, layoutLinear) return content-sized results even when c2's min
+        // was widened to c.maxW, since they compute min(content, max) without consulting min. This
+        // is the one place that applies to every StrandKind uniformly, so individual measure
+        // functions don't each need their own copy of the same clamp.
+        size.w = std::max(size.w, c2.minW);
+        size.h = std::max(size.h, c2.minH);
         size.x = originX; size.y = originY;
         s->geometry = size;
         return size;
@@ -243,7 +268,7 @@ struct Loom {
     // c.maxH by layout()) caps it the same way, based on how many lines actually fit.
     Rect measureText(StrandPtr s, Constraints c) {
         std::string text = s->attrStr("text", "");
-        double fontSize = s->attrNum("size", 16);
+        double fontSize = resolveFontSize(*s, "size", 16);
         double lineHeight = fontSize * 1.4;
 
         std::vector<std::string> lines = wrapText(text, fontSize, c.maxW);
@@ -270,8 +295,10 @@ struct Loom {
     }
     Rect measureButton(StrandPtr s, Constraints c) {
         std::string label = s->attrStr("label", "");
-        double w = std::min(measureTextWidth(label, 16) + 32, c.maxW);
-        double h = std::min(44.0, c.maxH);
+        ButtonSizePreset sz = resolveButtonSize(*s);
+        double fontSize = resolveFontSize(*s, "labelSize", sz.fontSize); // labelSize= can still override the size-token's font size explicitly
+        double w = std::min(measureTextWidth(label, fontSize) + sz.hPadding * 2, c.maxW);
+        double h = std::min(sz.height, c.maxH);
         return {0,0, std::max(w,c.minW), std::max(h,c.minH)};
     }
     Rect layoutSingleChildBox(StrandPtr s, Constraints c, double pad, double originX, double originY) {
@@ -285,7 +312,7 @@ struct Loom {
         return {0,0, std::min(contentW + pad*2, c.maxW), std::min(contentH + pad*2, c.maxH)};
     }
     Rect layoutLinear(StrandPtr s, Constraints c, Axis axis, double originX, double originY) {
-        double gap = s->attrNum("gap", 0), padding = s->attrNum("padding", 0) + s->attrNum("border", 0);
+        double gap = resolveSpacing(*s, "gap", 0), padding = resolveSpacing(*s, "padding", 0) + s->attrNum("border", 0);
         double mainUsed=0, crossMax=0, cursorMain=padding;
         double innerMaxW = std::max(0.0, c.maxW - padding*2), innerMaxH = std::max(0.0, c.maxH - padding*2);
         // Cross-axis alignment: Column (axis=Y) aligns children horizontally via `align`;
@@ -355,7 +382,7 @@ struct Loom {
     // parent). This is what backs "printing"/rendering a table — actual paper/PDF export is a
     // host-app concern layered on top of this same geometry.
     Rect layoutTable(StrandPtr s, Constraints c, double originX, double originY) {
-        double padding = s->attrNum("padding", 0);
+        double padding = resolveSpacing(*s, "padding", 0);
         double innerMaxW = std::max(0.0, c.maxW - padding*2);
         std::vector<std::string> headers = splitCsv(s->attrStr("columns", ""));
         size_t nCols = headers.size();
@@ -363,7 +390,7 @@ struct Loom {
         if (nCols == 0) return {0,0, std::max(0.0,c.minW), std::max(0.0,c.minH)};
 
         std::vector<double> colW(nCols, 0.0);
-        double fontSize = s->attrNum("size", 14);
+        double fontSize = resolveFontSize(*s, "size", 14);
         for (size_t i = 0; i < headers.size(); i++) colW[i] = std::max(colW[i], measureTextWidth(headers[i], fontSize) + 16);
         for (auto& row : s->children)
             for (size_t i = 0; i < row->children.size(); i++)
