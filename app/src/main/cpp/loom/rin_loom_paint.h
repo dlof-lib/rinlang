@@ -20,6 +20,14 @@ inline Color colorForKind(StrandKind k) {
         case StrandKind::IMAGE:  return {70,70,90};
         case StrandKind::DIVIDER:return themeRegistry().active().border;
         case StrandKind::BANNER: return themeRegistry().active().neutral; // "custom"/unset default; see bannerTypeColor()
+        case StrandKind::BOX:    return themeRegistry().active().surface;
+        case StrandKind::AVATAR: return themeRegistry().active().neutral;
+        case StrandKind::INPUT:
+        case StrandKind::TEXTAREA: return themeRegistry().active().surface;
+        case StrandKind::DIALOG: return themeRegistry().active().surface;
+        case StrandKind::TOOLTIP: return themeRegistry().active().neutral;
+        case StrandKind::PROGRESS: return themeRegistry().active().primary; // filled portion default; track uses border
+        case StrandKind::BADGE:  return themeRegistry().active().primary;
         default: return themeRegistry().active().background;
     }
 }
@@ -72,13 +80,89 @@ struct Dye {
     void paintInto(const StrandPtr& s, DrawList& list) {
         double r = std::min(resolveRadius(*s, 0), std::min(s->geometry.w, s->geometry.h) / 2.0);
 
-        if (s->kind == StrandKind::BUTTON) { paintButton(s, list, r); for (auto& c : s->children) paintInto(c, list); return; }
+        if (s->kind == StrandKind::BUTTON || s->kind == StrandKind::TABITEM) { paintButton(s, list, r); for (auto& c : s->children) paintInto(c, list); return; }
+
+        // Missing-components pass: Spacer never draws anything (it's pure layout space) — same
+        // "skip the generic FILL_RECT" carve-out TEXT already gets below, just with no TEXT_RUN
+        // to replace it with either.
+        if (s->kind == StrandKind::SPACER) { for (auto& c : s->children) paintInto(c, list); return; }
+
+        if (s->kind == StrandKind::BADGE)  { paintBadge(s, list, r); return; } // no children — Badge is a leaf
+        if (s->kind == StrandKind::PROGRESS) { paintProgress(s, list, r); return; }
+        if (s->kind == StrandKind::CHECKBOX) { paintCheckbox(s, list, r); return; }
+        if (s->kind == StrandKind::SWITCH)   { paintSwitch(s, list); return; }
+        if (s->kind == StrandKind::AVATAR)   { paintAvatar(s, list, r); return; }
+        if (s->kind == StrandKind::INPUT || s->kind == StrandKind::TEXTAREA) { paintField(s, list, r); return; }
 
         if (s->kind != StrandKind::TEXT)
             list.push_back({DrawOp::FILL_RECT, s->geometry, resolveColor(s), "", s->id, r, 0});
         if (s->kind == StrandKind::TEXT)
             list.push_back({DrawOp::TEXT_RUN, s->geometry, resolveColor(s), s->attrStr("text"), s->id, 0, 0});
+        if (s->kind == StrandKind::TOOLTIP)
+            list.push_back({DrawOp::TEXT_RUN, s->geometry, themeRegistry().active().background, s->attrStr("text"), s->id, 0, 0});
         for (auto& c : s->children) paintInto(c, list);
+    }
+
+    // ---- Missing-components pass: paint functions for the new leaf-ish StrandKinds. Each
+    // follows paintButton's own pattern above (resolve tone/state first, then draw), so a new
+    // Renderer backend reading the DrawList doesn't need any kind-specific knowledge beyond what
+    // it already needs for Button/Card/Text.
+    void paintBadge(const StrandPtr& s, DrawList& list, double /*radius*/) {
+        Color bg = resolveColor(s);
+        double pillRadius = std::min(s->geometry.w, s->geometry.h) / 2.0;
+        list.push_back({DrawOp::FILL_RECT, s->geometry, bg, "", s->id, pillRadius, 0});
+        list.push_back({DrawOp::TEXT_RUN, s->geometry, themeRegistry().active().background, s->attrStr("text"), s->id, 0, 0});
+    }
+    void paintProgress(const StrandPtr& s, DrawList& list, double radius) {
+        const Theme& th = themeRegistry().active();
+        double pillRadius = std::min(radius, s->geometry.h / 2.0);
+        list.push_back({DrawOp::FILL_RECT, s->geometry, th.border, "", s->id, pillRadius, 0}); // track
+        double value = std::max(0.0, std::min(100.0, s->attrNum("value", 0)));
+        Rect fill = s->geometry; fill.w = s->geometry.w * (value / 100.0);
+        Color tone = resolveColor(s);
+        list.push_back({DrawOp::FILL_RECT, fill, tone, "", s->id, pillRadius, 0}); // filled portion
+    }
+    void paintCheckbox(const StrandPtr& s, DrawList& list, double radius) {
+        const Theme& th = themeRegistry().active();
+        Color tone = resolveColor(s);
+        bool checked = s->attrStr("checked", "false") == "true";
+        double soft = std::min(radius > 0 ? radius : 4.0, s->geometry.h / 2.0);
+        if (checked) {
+            list.push_back({DrawOp::FILL_RECT, s->geometry, tone, "", s->id, soft, 0});
+        } else {
+            list.push_back({DrawOp::FILL_RECT, s->geometry, th.background, "", s->id, soft, 0});
+            list.push_back({DrawOp::STROKE_RECT, s->geometry, th.border, "", s->id, soft, 1.5});
+        }
+    }
+    void paintSwitch(const StrandPtr& s, DrawList& list) {
+        const Theme& th = themeRegistry().active();
+        Color tone = resolveColor(s);
+        bool checked = s->attrStr("checked", "false") == "true";
+        double trackRadius = s->geometry.h / 2.0;
+        list.push_back({DrawOp::FILL_RECT, s->geometry, checked ? tone : th.border, "", s->id, trackRadius, 0});
+        double thumbSize = s->geometry.h - 4;
+        Rect thumb{ checked ? s->geometry.x + s->geometry.w - thumbSize - 2 : s->geometry.x + 2,
+                    s->geometry.y + 2, thumbSize, thumbSize };
+        list.push_back({DrawOp::FILL_RECT, thumb, th.background, "", s->id, thumbSize/2.0, 0});
+    }
+    void paintAvatar(const StrandPtr& s, DrawList& list, double /*radius*/) {
+        double circleRadius = std::min(s->geometry.w, s->geometry.h) / 2.0;
+        list.push_back({DrawOp::FILL_RECT, s->geometry, resolveColor(s), "", s->id, circleRadius, 0});
+        std::string initials = s->attrStr("initials", "");
+        if (!initials.empty())
+            list.push_back({DrawOp::TEXT_RUN, s->geometry, themeRegistry().active().background, initials, s->id, 0, 0});
+    }
+    void paintField(const StrandPtr& s, DrawList& list, double radius) {
+        const Theme& th = themeRegistry().active();
+        StrandState state = resolveState(*s);
+        Color border = (state == StrandState::FOCUSED) ? th.primary : th.border;
+        list.push_back({DrawOp::FILL_RECT, s->geometry, th.surface, "", s->id, radius, 0});
+        list.push_back({DrawOp::STROKE_RECT, s->geometry, border, "", s->id, radius, state == StrandState::FOCUSED ? 2.0 : 1.0});
+        std::string value = s->attrStr("value", "");
+        bool showingPlaceholder = value.empty();
+        list.push_back({DrawOp::TEXT_RUN, s->geometry,
+                         showingPlaceholder ? th.text_muted : th.text,
+                         showingPlaceholder ? s->attrStr("placeholder", "") : value, s->id, 0, 0});
     }
 
     // Button Library (§4): renders the 6 treatments a `variant=` selects, each combined with
