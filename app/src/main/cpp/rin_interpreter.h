@@ -493,15 +493,6 @@ private:
     std::unordered_set<std::string> importedPaths;            // مسارات @import المُنفَّذة فعلاً في هذا التشغيل (لمنع الاستيراد المكرَّر)
     std::unordered_map<std::string, std::string> linkIdToContainer; // معرّف الربط العام (container.link.id) -> اسم الحاوية المسجَّلة به
 
-    // ---- Rin Loom (@view / warp / @theme) مربوطة الآن فعلياً بالحاوية (container) بدل أن تبقى نظاماً
-    // منفصلاً لا يمر عبر container إطلاقاً: أي @view/warp/@theme يُكتَب داخل جسم أي @container يُسجَّل
-    // هنا باسم تلك الحاوية، بدل أن يُتجاهَل بصمت (execute() لم يكن له أي معالج لها من قبل). انظر
-    // معالجاتها في execute() ودالة loom::runColdPipelineForContainer في loom/rin_loom_pipeline.h التي
-    // تبني Fabric فعلياً من @view المُعرَّف داخل حاوية بعينها بدل جذر البرنامج العلوي فقط.
-    std::unordered_map<std::string, std::shared_ptr<ViewStmt>> containerViews;                 // اسم الحاوية -> جذر @view بداخلها (إن وُجد؛ الأول فقط إن تكرَّر)
-    std::unordered_map<std::string, std::vector<std::shared_ptr<WarpStmt>>> containerWarpDecls; // اسم الحاوية -> إعلانات warp بداخلها بترتيب الظهور
-    std::unordered_map<std::string, std::vector<std::shared_ptr<ThemeStmt>>> containerThemeDecls; // اسم الحاوية -> إعلانات theme بداخلها بترتيب الظهور
-
     // ---- مفهوم الجدول (container.table / table المستقلة) ----
     std::unordered_map<std::string, std::vector<Value>> tableRows;  // مفتاح الحاوية -> صفوفها (كل صف Value::ARRAY)
     // مفتاح الحاوية -> آخر "style value=" مسجَّل (مثال: "style://dark"). كانت خاصة بالجداول فقط،
@@ -515,6 +506,16 @@ private:
     // فريد داخل نفس المجموعة (إدراج بنفس id موجود = تحديث/upsert). Containers.Group التي تضم عدّة
     // container.doc تصبح فعلياً "قاعدة بيانات" (database) كاملة من عدّة مجموعات مستندات مرتّبة.
     std::unordered_map<std::string, std::vector<std::pair<std::string, Value>>> docStore;
+
+    // ---- مفهوم روبوت المحادثة (container.chatbot / chatbot المستقلة) ----
+    // كل رسالة = map { role, text, time, kind, meta } بترتيب الإدخال. container -> سجلّها الكامل.
+    // "kind" = "text" (افتراضي) أو "attachment". "meta" = map حرّة (اسم ملف/رابط عند attachment، إلخ).
+    std::unordered_map<std::string, std::vector<Value>> chatHistoryStore;
+    std::unordered_map<std::string, bool> chatTypingState;   // container -> هل يكتب البوت الآن (typing indicator)
+    // container -> [(الحدث "message"/"open"/"close"/"typing", دالة Rin مسجَّلة عبر onChat)]
+    std::unordered_map<std::string, std::vector<std::pair<std::string, Value>>> chatHandlers;
+    // يستدعي كل معالجات (container, event) بترتيب تسجيلها، ويتجاهل بصمت أي حاوية/حدث بلا معالجين.
+    void fireChatEvent(const std::string& container, const std::string& event, std::vector<Value> args, int line);
 
     // ---- schema: مخطط حقول اختياري لكل مجموعة مستندات (container.doc/doc) ----
     // container -> [(اسم الحقل، اسم النوع)] بترتيب التعريف عبر defineSchema. أنواع مدعومة:
@@ -576,10 +577,7 @@ private:
     void loadInstalledIndex();                                          // يحمّل فهرس rin_installed/index.rininstall عند بداية run()
     void appendInstalledIndex(const std::string& name, const std::string& relPath, bool simplified) const;
 
-    // bodyValue: جسم اختياري (nil افتراضياً) يُرسَل فعلياً عند وجود apiEndpoint حقيقي مسجَّل بنفس اسم
-    // الحاوية (عبر apiRegister بداخلها) — عندها ينفّذ طلب شبكة حقيقياً بدل مطابقة route الوهمية فقط.
-    Value performApiCall(const std::string& containerKey, const std::string& method, const std::string& path,
-                          int line, const Value& bodyValue);
+    Value performApiCall(const std::string& containerKey, const std::string& method, const std::string& path, int line);
 
     // API حقيقية مسجَّلة عبر apiRegister/apiHeader: يبني baseUrl+path مع ترويسات النقطة، يُجري طلب
     // شبكة حقيقياً فعلياً (rin_http.h)، ويُعيد Value(map) بنتيجته (انظر httpResultToValue في .cpp).
