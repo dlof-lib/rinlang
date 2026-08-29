@@ -81,9 +81,22 @@ struct TapResult {
 // `exportDye`, if non-null, wires up exportPNG()/screenshot()/exportImage() (spec §21-23) the same
 // optional-pointer way `nav` wires up navigation -- omit it and those three simply report as
 // unrecognized, so existing call sites compile and behave unchanged.
+// `persistentInterp`, if non-null, is used *instead of* a throwaway `rin::Interpreter` for the
+// "real user fun" path below. This is the fix for the gap documented in README_CHATBOT.md: a
+// fresh `rin::Interpreter` per tap has its own empty chatHistoryStore/chatEventHandlers, so
+// sendMessage()/botReply() calls made from inside an onTap handler never accumulated anywhere the
+// next tap (or chatHistory()) could see. Callers that own a long-lived session (see
+// LoomSession::interp in rin_loom_c_api.cpp) pass the same Interpreter instance on every tap, and
+// this function makes sure it is seeded exactly once (its own containers/functions/warp cells
+// registered via a real `run()`) so that instance's chat/container state persists across taps
+// exactly like it already does for two `sendMessage()` calls in the same script. Passing nullptr
+// (the default) preserves the exact old per-tap-fresh-interpreter behavior for every existing
+// call site.
 inline TapResult dispatchTap(const StrandPtr& fabricRoot, WarpScope& warp,
                               const std::vector<rin::StmtPtr>& program, double x, double y,
-                              NavigationManager* nav = nullptr, Dye* exportDye = nullptr) {
+                              NavigationManager* nav = nullptr, Dye* exportDye = nullptr,
+                              rin::Interpreter* persistentInterp = nullptr,
+                              bool* persistentInterpSeeded = nullptr) {
     TapResult result;
     if (!fabricRoot) return result;
 
@@ -152,7 +165,17 @@ inline TapResult dispatchTap(const StrandPtr& fabricRoot, WarpScope& warp,
         std::unordered_map<std::string, rin::Value> globals;
         for (auto& kv : warp.cells) globals[kv.first] = loomValueToRin(kv.second);
 
-        rin::Interpreter interp;
+        // Prefer the caller's persistent Interpreter (keeps container.chatbot/etc. state alive
+        // across taps); fall back to a throwaway one, matching every pre-existing call site.
+        rin::Interpreter localInterp;
+        rin::Interpreter& interp = persistentInterp ? *persistentInterp : localInterp;
+        if (persistentInterp && persistentInterpSeeded && !*persistentInterpSeeded) {
+            // Seed once: a real run() executes every @container.chatbot=/@container.*= block
+            // (registering it in the interpreter's own chatHistoryStore/chatEventHandlers) and
+            // hoists top-level funs, exactly like running the .rin file from the CLI would.
+            interp.run(program);
+            *persistentInterpSeeded = true;
+        }
         std::string err;
         if (interp.callTopLevelFunction(program, callee, args, aliases, globals, err)) {
             for (auto& kv : globals) {
@@ -259,7 +282,9 @@ inline TapResult dispatchTap(const StrandPtr& fabricRoot, WarpScope& warp,
 inline TapResult dispatchTapWithOverlay(const StrandPtr& fabricRoot, WarpScope& warp,
                                          const std::vector<rin::StmtPtr>& program,
                                          OverlayLayer& overlayLayer, double x, double y,
-                                         NavigationManager* nav = nullptr, Dye* exportDye = nullptr) {
+                                         NavigationManager* nav = nullptr, Dye* exportDye = nullptr,
+                                         rin::Interpreter* persistentInterp = nullptr,
+                                         bool* persistentInterpSeeded = nullptr) {
     OverlayHitResult ohit = hitTestOverlayLayer(overlayLayer, x, y);
 
     if (ohit.blocked) {
@@ -285,7 +310,8 @@ inline TapResult dispatchTapWithOverlay(const StrandPtr& fabricRoot, WarpScope& 
     }
 
     const StrandPtr& hitTestRoot = ohit.hit ? ohit.hit : fabricRoot;
-    return dispatchTap(hitTestRoot, warp, program, x, y, nav, exportDye);
+    return dispatchTap(hitTestRoot, warp, program, x, y, nav, exportDye,
+                        persistentInterp, persistentInterpSeeded);
 }
 
 } // namespace loom
