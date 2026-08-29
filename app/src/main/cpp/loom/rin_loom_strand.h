@@ -25,6 +25,26 @@ enum class StrandKind {
     // desugars to a child MENU strand, not a separate menu engine).
     BANNER,
 
+    // ---- Missing-components pass (stdlib §27): Grid/Input/Dialog/Tabs + the rest of the easy
+    // wins that reuse existing measure/paint primitives instead of inventing new machinery.
+    //
+    // BOX resolves the "Container naming collision (still open)" note in
+    // docs/loomtime/RIN_LOOM_TOKENS.md: `Container` already means a data/storage construct in
+    // this codebase (`@container`, `ContainerKind::{...}`), so the spec's layout-Container
+    // primitive is named BOX internally (matching CARD/CARD-style naming already in this enum) —
+    // option (b) from that note. The tag "Container" (and "Panel"/"Frame") is still accepted as
+    // an alias in strandKindFromTag() below so .rin source written against the original spec's
+    // vocabulary parses unchanged; there is no grammar collision with `@container=...` (a
+    // different top-level statement, matched before `@view.` ever runs), only the conceptual one
+    // the note flagged -- so the alias is safe to accept.
+    BOX,
+    GRID, WRAP, SPACER,
+    BADGE, PROGRESS, CHECKBOX, SWITCH, AVATAR,
+    INPUT, TEXTAREA,
+    DIALOG,
+    TABS, TABITEM,
+    TOOLTIP,
+
     CUSTOM
 };
 inline StrandKind strandKindFromTag(const std::string& tag) {
@@ -53,6 +73,25 @@ inline StrandKind strandKindFromTag(const std::string& tag) {
     if (tag == "Splash" || tag == "splash") return StrandKind::SPLASH;
     if (tag == "Banner" || tag == "banner") return StrandKind::BANNER;
 
+    // ---- Missing-components pass ----
+    if (tag == "Box" || tag == "box" || tag == "Container" || tag == "container" ||
+        tag == "Panel" || tag == "panel" || tag == "Frame" || tag == "frame") return StrandKind::BOX;
+    if (tag == "Grid" || tag == "grid") return StrandKind::GRID;
+    if (tag == "Wrap" || tag == "wrap") return StrandKind::WRAP;
+    if (tag == "Spacer" || tag == "spacer") return StrandKind::SPACER;
+    if (tag == "Badge" || tag == "badge") return StrandKind::BADGE;
+    if (tag == "Progress" || tag == "progress") return StrandKind::PROGRESS;
+    if (tag == "Checkbox" || tag == "checkbox") return StrandKind::CHECKBOX;
+    if (tag == "Switch" || tag == "switch") return StrandKind::SWITCH;
+    if (tag == "Avatar" || tag == "avatar") return StrandKind::AVATAR;
+    if (tag == "Input" || tag == "input" || tag == "TextField" || tag == "textfield" || tag == "textField")
+        return StrandKind::INPUT;
+    if (tag == "TextArea" || tag == "textarea" || tag == "textArea") return StrandKind::TEXTAREA;
+    if (tag == "Dialog" || tag == "dialog" || tag == "Modal" || tag == "modal") return StrandKind::DIALOG;
+    if (tag == "Tabs" || tag == "tabs") return StrandKind::TABS;
+    if (tag == "TabItem" || tag == "tabitem" || tag == "tabItem") return StrandKind::TABITEM;
+    if (tag == "Tooltip" || tag == "tooltip") return StrandKind::TOOLTIP;
+
     return StrandKind::CUSTOM; // resolved via Bolt (plugin) registry — see architecture doc §18
 }
 inline std::string strandKindName(StrandKind k) {
@@ -77,6 +116,22 @@ inline std::string strandKindName(StrandKind k) {
         case StrandKind::SCAFFOLD: return "Scaffold";
         case StrandKind::SPLASH: return "Splash";
         case StrandKind::BANNER: return "Banner";
+
+        case StrandKind::BOX: return "Box";
+        case StrandKind::GRID: return "Grid";
+        case StrandKind::WRAP: return "Wrap";
+        case StrandKind::SPACER: return "Spacer";
+        case StrandKind::BADGE: return "Badge";
+        case StrandKind::PROGRESS: return "Progress";
+        case StrandKind::CHECKBOX: return "Checkbox";
+        case StrandKind::SWITCH: return "Switch";
+        case StrandKind::AVATAR: return "Avatar";
+        case StrandKind::INPUT: return "Input";
+        case StrandKind::TEXTAREA: return "TextArea";
+        case StrandKind::DIALOG: return "Dialog";
+        case StrandKind::TABS: return "Tabs";
+        case StrandKind::TABITEM: return "TabItem";
+        case StrandKind::TOOLTIP: return "Tooltip";
 
         default: return "Custom";
     }
