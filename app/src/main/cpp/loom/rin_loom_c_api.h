@@ -25,6 +25,14 @@ RIN_API char* rin_loom_render_json(const char* source, int rootWidth);
 // rin_loom_session_free, even if creation failed to parse (check via rin_loom_session_render_json).
 RIN_API void* rin_loom_session_create(const char* source, int rootWidth);
 
+// Overlay Engine (rin_loom_overlay.h): sets the *viewport* height (the visible screen) used to
+// center an open Dialog / anchor a Tooltip -- a different quantity from rootWidth's paired height,
+// which is left unbounded (1e9) everywhere else in this engine because the rest of the Loom lays
+// out a scrollable design-time canvas, not a fixed screen. Defaults to 844 (a common phone
+// viewport height) if never called. Triggers an immediate re-layout + overlay pass; call again
+// whenever the host's visible area actually changes (e.g. rotation).
+RIN_API void rin_loom_session_set_viewport(void* session, int viewportHeight);
+
 // Current Fabric snapshot, same JSON shape as rin_loom_render_json. Free with rin_free_string().
 RIN_API char* rin_loom_session_render_json(void* session);
 
