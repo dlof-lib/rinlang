@@ -1,0 +1,29 @@
+// loom_banner_demo.rin — Rin Loom's Banner: title=/message= shorthand, nested actions, closable=.
+// Run: ./loomc samples/loom_banner_demo.rin 420
+
+@view.Column=root
+  gap="normal"; padding="comfortable";
+
+  // Shorthand: title=/message= auto-synthesize Text children -- no manual nesting needed.
+  @view.Banner=simple
+    tone="info"; title="Heads up"; message="A new version of Rin is available.";
+  .end/view
+
+  // Full composition still works: nested actions (a Row of Buttons), same as before Loom's
+  // Banner conveniences existed. Combined here with the title=/message= shorthand too.
+  @view.Banner=update
+    tone="success"; title="Update ready"; message="Version 2.4 is ready to install."; closable=true;
+    @view.Row=actions
+      gap="compact";
+      @view.Button=install label="Install now"; tone="success"; .end/view
+      @view.Button=later   label="Later";       tone="neutral"; variant="ghost"; .end/view
+    .end/view
+  .end/view
+
+  // Dismissible with no title/message at all -- just an icon-and-text composed by hand, plus
+  // closable=true doing the rest (auto warp cell + close button + visible= wiring).
+  @view.Banner=cookie
+    tone="neutral"; closable=true;
+    @view.Text=t text="This site uses cookies."; size="body"; .end/view
+  .end/view
+.end/view
