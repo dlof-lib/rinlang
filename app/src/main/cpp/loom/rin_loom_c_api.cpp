@@ -23,6 +23,14 @@ struct LoomSession {
     int rootWidth = 390;
     int viewportHeight = 844; // Overlay Engine: see rin_loom_session_set_viewport's doc comment
     loom::OverlayLayer overlayLayer; // rebuilt every relayout() -- see rin_loom_overlay.h
+
+    // Persistent interpreter for this session's onTap handlers (see dispatchTap's doc comment in
+    // rin_loom_needle.h). Fixes the previously-documented gap where sendMessage()/botReply() etc.
+    // called from an onTap handler never persisted between taps because a brand-new
+    // rin::Interpreter (with its own empty chatHistoryStore) was created every single tap. One
+    // LoomSession == one screen/session == one Interpreter, seeded on first tap.
+    rin::Interpreter interp;
+    bool interpSeeded = false;
 };
 
 void relayout(LoomSession* sess) {
@@ -159,7 +167,9 @@ RIN_API char* rin_loom_session_tap(void* sessionPtr, double x, double y) {
     if (!sess || !sess->state.ok) return dupToC(sessionErrorJson(sess));
 
     loom::TapResult tap = loom::dispatchTapWithOverlay(sess->state.fabric, sess->state.warp,
-                                                        sess->state.program, sess->overlayLayer, x, y);
+                                                        sess->state.program, sess->overlayLayer, x, y,
+                                                        nullptr, nullptr,
+                                                        &sess->interp, &sess->interpSeeded);
 
     if (!tap.changedWarpNames.empty()) {
         loom::Shuttle shuttle;
