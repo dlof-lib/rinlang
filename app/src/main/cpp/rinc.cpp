@@ -79,8 +79,8 @@ struct RincError {
 // ============================================================================
 enum class Tok {
     NUMBER, STRING, IDENT,
-    LET, PRINT, IF, ELSE, WHILE, FUN, RETURN, TRUE_, FALSE_, NIL, AND, OR,
-    BREAK, CONTINUE, // break / continue -> التحكّم المبكّر داخل حلقات while
+    LET, PRINT, IF, ELSE, WHILE, FOR, FUN, RETURN, TRUE_, FALSE_, NIL, AND, OR,
+    BREAK, CONTINUE, RINOPEN, // break / continue / rinopen(cond){..} -> اسم بديل لـ while
     PLUS, MINUS, STAR, SLASH, PERCENT,
     EQUAL, EQUAL_EQUAL, BANG, BANG_EQUAL,
     LESS, LESS_EQUAL, GREATER, GREATER_EQUAL,
@@ -177,10 +177,10 @@ private:
         std::string text = src.substr(start, current - start);
         static const std::unordered_map<std::string, Tok> kw = {
             {"let", Tok::LET}, {"print", Tok::PRINT}, {"if", Tok::IF}, {"else", Tok::ELSE},
-            {"while", Tok::WHILE}, {"fun", Tok::FUN}, {"return", Tok::RETURN},
+            {"while", Tok::WHILE}, {"for", Tok::FOR}, {"fun", Tok::FUN}, {"return", Tok::RETURN},
             {"true", Tok::TRUE_}, {"false", Tok::FALSE_}, {"nil", Tok::NIL},
             {"and", Tok::AND}, {"or", Tok::OR},
-            {"break", Tok::BREAK}, {"continue", Tok::CONTINUE},
+            {"break", Tok::BREAK}, {"continue", Tok::CONTINUE}, {"rinopen", Tok::RINOPEN},
         };
         auto it = kw.find(text);
         addToken(it != kw.end() ? it->second : Tok::IDENT, text);
@@ -257,11 +257,32 @@ struct LetStmt : Stmt { std::string name; ExprPtr initializer; };
 struct BlockStmt : Stmt { std::vector<StmtPtr> statements; };
 struct IfStmt : Stmt { ExprPtr condition; StmtPtr thenBranch; StmtPtr elseBranch; };
 struct WhileStmt : Stmt { ExprPtr condition; StmtPtr body; };
+// for (initializer; condition; increment) body -> حلقة for على طراز C، مطابقة لـ ForStmt في
+// rin_parser.h/rin_interpreter.cpp: الأجزاء الثلاثة اختيارية، initializer إما 'let ...;' أو
+// عبارة تعبير (expression statement)، condition الغائب يُعتبر true دائماً.
+struct ForStmt : Stmt { StmtPtr initializer; ExprPtr condition; ExprPtr increment; StmtPtr body; };
+// plus.condition (condition) { trueBranch } / { falseBranch } -> شرط ثلاثي عام على مستوى
+// العبارات، مطابق لـ PlusConditionStmt في المفسّر الأصلي. كلتا الكتلتين إلزاميتان.
+struct PlusConditionStmt : Stmt { ExprPtr condition; std::shared_ptr<BlockStmt> trueBranch; std::shared_ptr<BlockStmt> falseBranch; };
 struct FunctionStmt : Stmt { std::string name; std::vector<std::string> params; std::shared_ptr<BlockStmt> body; };
 struct ReturnStmt : Stmt { ExprPtr value; };
 // break; / continue; -> يُترجمان مباشرة إلى break;/continue; في C المولَّد (تطابق دلالي كامل).
 struct BreakStmt : Stmt {};
 struct ContinueStmt : Stmt {};
+
+// @container[=name] <body> .end/container   (أو .end;)
+// @container.data[=name] <body> .end/container.data   (أو .end/data ، أو .end;)
+// دعم حقيقي لنوعين فقط من "لغة الحاويات" (PLAIN و DATA) بنفس قواعد نحو المفسّر الأصلي
+// تماماً (readTagKeyword/readOptionalName/consumeEndTag في rin_parser.cpp) — بلا أقواس {}:
+// الجسم يمتد حتى وسم إغلاق '.end/...' مطابق. كل ما هو أبعد من ذلك (pipe/api/import/table/
+// doc/object/portal/block/sticker/aukt/Containers.Group/Volume/save/link/tying/merge) يبقى
+// مرفوضاً بوضوح كما كان (انظر rejectUnsupported) لأنه غير قابل للترجمة لتنفيذي أصلي بمعنى واضح.
+struct ContainerStmt : Stmt {
+    std::string tag;   // "container" أو "container.data"
+    std::string name;  // قد تكون فارغة
+    std::vector<StmtPtr> body;
+    bool isData = false;
+};
 
 // ============================================================================
 // 4) المحلل النحوي (Parser) — نفس قواعد نحو Rin الأساسية
@@ -297,10 +318,22 @@ private:
 
     void rejectUnsupported() {
         if (check(Tok::AT)) {
+            // مسموح فقط: '@container' و'@container.data'/'@data' (PLAIN/DATA) — يُعالَجان في
+            // declaration() قبل الوصول هنا فعلياً (انظر containerBlockOrNull). أي '@...' آخر
+            // (pipe/api/import/table/doc/object/portal/block/sticker/aukt/Containers.Group/Volume)
+            // يبقى مرفوضاً بوضوح.
+            bool isPlainContainer = checkNext(Tok::IDENT) && tokens[current + 1].lexeme == "container" &&
+                                     !(current + 2 < tokens.size() && tokens[current + 2].type == Tok::DOT);
+            bool isContainerDotData = checkNext(Tok::IDENT) && tokens[current + 1].lexeme == "container" &&
+                                       current + 3 < tokens.size() && tokens[current + 2].type == Tok::DOT &&
+                                       tokens[current + 3].lexeme == "data";
+            bool isDataShort = checkNext(Tok::IDENT) && tokens[current + 1].lexeme == "data";
+            if (isPlainContainer || isContainerDotData || isDataShort) return; // يُعالَج لاحقاً بواسطة containerBlock
             throw RincError(
-                "الميزات المبنية على '@' (container / Containers.Group / Volume / @import ...) "
-                "غير مدعومة في المترجم الأصلي (rinc) — وهي خاصة بمحرّك المفسّر. "
-                "استخدم تطبيق Rin (المفسّر) لتشغيل هذا الملف بدلاً من تجميعه.", peek().line);
+                "الميزات المبنية على '@' (container.pipe/api/import/table/doc/object/portal/block/sticker/"
+                "aukt، Containers.Group، Volume، @import ...) غير مدعومة في المترجم الأصلي (rinc) — "
+                "المدعوم منها هنا فقط: '@container' و'@container.data'/'@data'. "
+                "استخدم تطبيق Rin (المفسّر) لتشغيل باقي الأشكال.", peek().line);
         }
         // ملاحظة مهمة: هذه الكلمات (save/text/link/route/document/...) ليست Token محجوزة في
         // اللغة الأساسية (تُقرأ IDENT عادي)، لذا لا نُخطئها إلا حين يكون *السياق* التالي فعلاً
@@ -324,9 +357,129 @@ private:
 
     StmtPtr declaration() {
         rejectUnsupported();
+        if (check(Tok::AT)) return containerBlock();
+        // 'plus.condition' كلمة مفتاحية مركّبة سياقية (شرط ثلاثي عام)، مطابقة لأسلوب فحصها في
+        // rin_parser.cpp::declaration(): تُفحَص هنا فوق مستوى statement() بنفس المنطق، وننظر
+        // 3 خطوات للأمام (IDENT("plus") ثم DOT ثم IDENT("condition")) قبل الاستهلاك، لأن 'plus'
+        // ليست كلمة محجوزة (تبقى IDENT عادياً في أي سياق آخر، فيصح استخدامها كاسم متغير).
+        if (check(Tok::IDENT) && peek().lexeme == "plus" &&
+            checkNext(Tok::DOT) &&
+            current + 2 < tokens.size() && tokens[current + 2].type == Tok::IDENT &&
+            tokens[current + 2].lexeme == "condition") {
+            advance(); // 'plus'
+            advance(); // '.'
+            advance(); // 'condition'
+            return plusConditionStatement();
+        }
         if (match({Tok::LET})) return letDeclaration();
         if (match({Tok::FUN})) return functionDeclaration();
         return statement();
+    }
+
+    // true فقط إن كان الموضع الحالي '.' متبوعاً مباشرة بـ IDENT بلفظ "end" (وسم إغلاق).
+    bool checkContainerClosingTag() const {
+        return check(Tok::DOT) && checkNext(Tok::IDENT) && tokens[current + 1].lexeme == "end";
+    }
+
+    // @container[=name] <body...> .end/container[=name]   أو  .end;
+    // @container.data[=name] / @data[=name] <body...> .end/container.data (أو .end/data) [=name]  أو .end;
+    // نفس قواعد المفسّر الأصلي بالضبط (readTagKeyword/readOptionalName/consumeEndTag في rin_parser.cpp)
+    // لكن محصورة في تاغَين فقط (الباقي مرفوض في rejectUnsupported قبل الوصول هنا).
+    StmtPtr containerBlock() {
+        Token atTok = advance(); // '@'
+        Token first = consume(Tok::IDENT, "Expected 'container' or 'data' after '@'");
+        std::string tag;
+        bool isData = false;
+        if (first.lexeme == "data") {
+            tag = "container.data"; isData = true;
+        } else { // "container"
+            if (check(Tok::DOT) && checkNext(Tok::IDENT) && tokens[current + 1].lexeme == "data") {
+                advance(); advance(); // '.' 'data'
+                tag = "container.data"; isData = true;
+            } else {
+                tag = "container"; isData = false;
+            }
+        }
+
+        std::string name;
+        if (match({Tok::EQUAL})) {
+            if (check(Tok::IDENT) || check(Tok::STRING)) name = advance().lexeme;
+            else throw RincError("Expected a name after '=' in container declaration", peek().line);
+        }
+
+        std::vector<StmtPtr> body;
+        while (!checkContainerClosingTag() && !isAtEnd()) body.push_back(declaration());
+        if (isAtEnd()) {
+            throw RincError("'@" + tag + "' opened at line " + std::to_string(atTok.line) +
+                             " was never closed with a matching '.end/" + tag + "'", atTok.line);
+        }
+
+        if (isData) validateDataContainerBody(body, atTok.line);
+        else validateNoNestedFunctions(body, atTok.line); // انظر السبب في تعليق الدالة
+
+        // --- استهلاك وسم الإغلاق ---
+        consume(Tok::DOT, "Expected '.' to start closing tag");
+        Token endWord = consume(Tok::IDENT, "Expected 'end' in closing tag");
+        if (endWord.lexeme != "end") throw RincError("Expected 'end' in closing tag", endWord.line);
+        if (!match({Tok::SEMICOLON})) { // ليست '.end;' المختصرة
+            consume(Tok::SLASH, "Expected '/' after 'end' (or ';' for the short form '.end;')");
+            Token closeFirst = consume(Tok::IDENT, "Expected closing tag name after '.end/'");
+            std::string closeTag;
+            if (closeFirst.lexeme == "data") closeTag = "container.data";
+            else if (closeFirst.lexeme == "container") {
+                if (check(Tok::DOT) && checkNext(Tok::IDENT) && tokens[current + 1].lexeme == "data") {
+                    advance(); advance();
+                    closeTag = "container.data";
+                } else closeTag = "container";
+            } else {
+                throw RincError("unsupported closing tag '.end/" + closeFirst.lexeme + "'", closeFirst.line);
+            }
+            if (closeTag != tag) {
+                throw RincError("closing tag '.end/" + closeTag + "' does not match opening '@" + tag +
+                                 "' at line " + std::to_string(atTok.line), closeFirst.line);
+            }
+            std::string closeName;
+            if (match({Tok::EQUAL})) {
+                if (check(Tok::IDENT) || check(Tok::STRING)) closeName = advance().lexeme;
+            }
+            if (!closeName.empty() && closeName != name) {
+                throw RincError("closing tag name '=" + closeName + "' does not match opening name" +
+                                 (name.empty() ? " (opening has none)" : (" '=" + name + "'")), atTok.line);
+            }
+        }
+
+        auto s = std::make_shared<ContainerStmt>();
+        s->tag = tag; s->name = name; s->body = body; s->isData = isData; s->line = atTok.line;
+        return s;
+    }
+
+    // مطابق لـ Parser::validateDataContainerBody في rin_parser.cpp: container.data يجب أن يبقى
+    // بيانات نقية — بلا دوال وبلا حاويات متداخلة.
+    void validateDataContainerBody(const std::vector<StmtPtr>& body, int openLine) {
+        for (auto& st : body) {
+            if (std::dynamic_pointer_cast<FunctionStmt>(st)) {
+                throw RincError("functions ('fun') are not allowed inside 'container.data' "
+                                 "(opened at line " + std::to_string(openLine) + ")", st->line);
+            }
+            if (std::dynamic_pointer_cast<ContainerStmt>(st)) {
+                throw RincError("nested containers are not allowed inside 'container.data' "
+                                 "(opened at line " + std::to_string(openLine) + ")", st->line);
+            }
+        }
+    }
+
+    // قيد خاص بـrinc فقط (لا يوجد في المفسّر الأصلي، حيث container العادية تسمح بـfun):
+    // مولّد الكود هنا (collectFunctions) لا يبحث داخل أجسام ContainerStmt عن دوال متداخلة
+    // لرفعها كدوال C مستقلة (نطاق هذه الإضافة محصور بيانات/منطق تسلسلي بسيط)، فبدلاً من توليد
+    // سلوك خاطئ صامت (تجاهل الدالة كأنها لم تُكتب) نرفضه بوضوح هنا وقت التحليل.
+    void validateNoNestedFunctions(const std::vector<StmtPtr>& body, int openLine) {
+        for (auto& st : body) {
+            if (std::dynamic_pointer_cast<FunctionStmt>(st)) {
+                throw RincError("rinc: function declarations ('fun') nested inside '@container' are not "
+                                 "supported yet (container opened at line " + std::to_string(openLine) +
+                                 "). Declare the function at top level instead.", st->line);
+            }
+        }
     }
 
     StmtPtr letDeclaration() {
@@ -361,6 +514,8 @@ private:
         if (match({Tok::PRINT})) return printStatement();
         if (match({Tok::IF})) return ifStatement();
         if (match({Tok::WHILE})) return whileStatement();
+        if (match({Tok::RINOPEN})) return rinopenStatement();
+        if (match({Tok::FOR})) return forStatement();
         if (match({Tok::RETURN})) return returnStatement();
         if (match({Tok::BREAK})) return breakStatement();
         if (match({Tok::CONTINUE})) return continueStatement();
@@ -411,6 +566,77 @@ private:
         auto body = statement();
         loopDepth--;
         auto s = std::make_shared<WhileStmt>(); s->condition = cond; s->body = body; s->line = cond->line;
+        return s;
+    }
+
+    // rinopen (condition) { body } -- اسم بديل لـ while في المفسّر الأصلي (يُبنى فعلياً كـ
+    // WhileStmt عادية عند التحليل هناك، انظر Parser::rinopenStatement في rin_parser.cpp)، بفارق
+    // واحد فقط: الجسم هنا كتلة {} إلزامية دائماً (وليست statement() عام كما في while).
+    StmtPtr rinopenStatement() {
+        Token tok = previous(); // 'rinopen'
+        consume(Tok::LPAREN, "Expected '(' after 'rinopen'");
+        auto cond = expression();
+        consume(Tok::RPAREN, "Expected ')' after rinopen condition");
+        consume(Tok::LBRACE, "Expected '{' before rinopen body");
+        loopDepth++;
+        auto body = block();
+        loopDepth--;
+        auto s = std::make_shared<WhileStmt>(); s->condition = cond; s->body = body; s->line = tok.line;
+        return s;
+    }
+
+    // for (initializer; condition; increment) body -- مطابقة لـ Parser::forStatement في
+    // rin_parser.cpp: initializer إما فارغ (';' فقط) أو 'let x = ...;' أو عبارة تعبير (تستهلك
+    // ';' بنفسها)؛ condition الغائب == true دائماً؛ increment اختياري.
+    StmtPtr forStatement() {
+        Token forTok = previous(); // 'for'
+        consume(Tok::LPAREN, "Expected '(' after 'for'");
+
+        StmtPtr initializer = nullptr;
+        if (match({Tok::SEMICOLON})) {
+            initializer = nullptr; // for (;;) -> لا مُهيّئ
+        } else if (match({Tok::LET})) {
+            initializer = letDeclaration(); // letDeclaration() يستهلك ';' بنفسه
+        } else {
+            initializer = expressionStatement(); // يستهلك ';' بنفسه أيضاً
+        }
+
+        ExprPtr condition = nullptr;
+        if (!check(Tok::SEMICOLON)) condition = expression();
+        consume(Tok::SEMICOLON, "Expected ';' after 'for' loop condition");
+
+        ExprPtr increment = nullptr;
+        if (!check(Tok::RPAREN)) increment = expression();
+        consume(Tok::RPAREN, "Expected ')' after 'for' clauses");
+
+        loopDepth++;
+        auto body = statement();
+        loopDepth--;
+
+        auto s = std::make_shared<ForStmt>();
+        s->initializer = initializer; s->condition = condition; s->increment = increment;
+        s->body = body; s->line = forTok.line;
+        return s;
+    }
+
+    // plus.condition (condition) { trueBranch } / { falseBranch } -- مطابقة لـ
+    // Parser::plusConditionStatement في rin_parser.cpp: كلتا الكتلتين إلزاميتان.
+    StmtPtr plusConditionStatement() {
+        Token tok = previous(); // آخر توكن مُستهلَك ('condition')
+        consume(Tok::LPAREN, "Expected '(' after 'plus.condition'");
+        auto cond = expression();
+        consume(Tok::RPAREN, "Expected ')' after 'plus.condition' condition");
+
+        consume(Tok::LBRACE, "Expected '{' to start 'plus.condition' true-branch");
+        auto trueBranch = block(); // يستهلك '}' المطابقة بنفسه
+
+        consume(Tok::SLASH, "Expected '/' between 'plus.condition' true-branch and false-branch");
+
+        consume(Tok::LBRACE, "Expected '{' to start 'plus.condition' false-branch");
+        auto falseBranch = block();
+
+        auto s = std::make_shared<PlusConditionStmt>();
+        s->condition = cond; s->trueBranch = trueBranch; s->falseBranch = falseBranch; s->line = tok.line;
         return s;
     }
 
@@ -683,6 +909,11 @@ private:
                 collectFunctions(v);
             } else if (auto w = std::dynamic_pointer_cast<WhileStmt>(s)) {
                 std::vector<StmtPtr> v{w->body}; collectFunctions(v);
+            } else if (auto f = std::dynamic_pointer_cast<ForStmt>(s)) {
+                std::vector<StmtPtr> v; if (f->initializer) v.push_back(f->initializer);
+                v.push_back(f->body); collectFunctions(v);
+            } else if (auto pc = std::dynamic_pointer_cast<PlusConditionStmt>(s)) {
+                std::vector<StmtPtr> v{pc->trueBranch, pc->falseBranch}; collectFunctions(v);
             }
         }
     }
@@ -743,6 +974,30 @@ private:
             emitBranch(s->body, sc);
             return;
         }
+        if (auto s = std::dynamic_pointer_cast<ForStmt>(stmt)) {
+            // for (init; cond; incr) body -> يُترجَم مباشرة لـ for C99 حقيقي: نطاق المُهيّئ في C
+            // للـ for-clause يطابق تماماً نطاق forEnv في المفسّر (initializer مرئي في condition/
+            // increment/body فقط)، فلا حاجة لأي تغليف {} إضافي هنا.
+            pad(); out << "for (";
+            if (auto letInit = std::dynamic_pointer_cast<LetStmt>(s->initializer)) {
+                out << "Value " << cname(letInit->name) << " = "
+                    << (letInit->initializer ? exprStr(letInit->initializer, sc) : "rt_nil()");
+            } else if (auto exprInit = std::dynamic_pointer_cast<ExpressionStmt>(s->initializer)) {
+                out << exprStr(exprInit->expr, sc);
+            }
+            out << "; " << (s->condition ? ("rt_truthy(" + exprStr(s->condition, sc) + ")") : "1");
+            out << "; " << (s->increment ? exprStr(s->increment, sc) : "") << ") ";
+            emitBranch(s->body, sc);
+            return;
+        }
+        if (auto s = std::dynamic_pointer_cast<PlusConditionStmt>(stmt)) {
+            // شرط ثلاثي عام على مستوى العبارات: كلتا الكتلتين إلزاميتان دائماً (بخلاف if/else).
+            pad(); out << "if (rt_truthy(" << exprStr(s->condition, sc) << ")) ";
+            emitBlockBody(s->trueBranch, sc);
+            pad(); out << "else ";
+            emitBlockBody(s->falseBranch, sc);
+            return;
+        }
         if (auto s = std::dynamic_pointer_cast<ReturnStmt>(stmt)) {
             pad(); out << "return " << (s->value ? exprStr(s->value, sc) : "rt_nil()") << ";\n";
             return;
@@ -753,6 +1008,20 @@ private:
         }
         if (std::dynamic_pointer_cast<ContinueStmt>(stmt)) {
             pad(); out << "continue;\n";
+            return;
+        }
+        if (auto s = std::dynamic_pointer_cast<ContainerStmt>(stmt)) {
+            // نفس تنسيق نص المفسّر الأصلي بالضبط (containerTagName/containerIcon +
+            // "✅ .end/tag" في rin_interpreter.cpp) حتى يتطابق ناتج rinc مع ناتج المفسّر حرفياً.
+            std::string icon = s->isData ? "🗂️" : "📦";
+            std::string openLine = icon + " " + s->tag + (s->name.empty() ? "" : (" = " + s->name));
+            pad(); out << "printf(" << cLiteral(openLine + "\n") << ");\n";
+            pad(); out << "{\n"; indent++;
+            for (auto& st : s->body) emitStmt(st, sc);
+            indent--; pad(); out << "}\n";
+            std::string closeLine = std::string("\xE2\x9C\x85 .end/") + s->tag +
+                                     (s->name.empty() ? "" : (" (" + s->name + ")"));
+            pad(); out << "printf(" << cLiteral(closeLine + "\n") << ");\n";
             return;
         }
         if (std::dynamic_pointer_cast<FunctionStmt>(stmt)) return; // مُولَّدة مسبقاً كدالة C مستقلة
@@ -865,7 +1134,9 @@ private:
             "len","upper","lower","trim","substr","split","join","indexOf",
             "replace","contains","charAt","toString","toNumber","toBool",
             "sum","mean","push","pop","sort","keys","values","has","remove",
-            "writeFile","readFile","appendFile","fileExists","deleteFile"
+            "writeFile","readFile","appendFile","fileExists","deleteFile",
+            "maxOf","minOf","median","mode","stddev","variance","scale",
+            "normalize","shift","isBool","chr","ord","jsonEncode","jsonDecode"
         };
         if (natives.count(c->callee)) {
             return "rt_native_" + c->callee + "(" + argsArr + ", " + std::to_string(n) + ")";
@@ -902,6 +1173,7 @@ const char* CodeGen::RUNTIME_HEADER = R"RTC(// ---- Auto-generated by rinc (RinL
 #include <math.h>
 #include <time.h>
 #include <ctype.h>
+#include <setjmp.h>
 
 typedef enum { RT_NIL, RT_NUM, RT_STR, RT_BOOL, RT_ARR, RT_MAP } RType;
 typedef struct Value Value;
@@ -1349,6 +1621,260 @@ static Value rt_native_fileExists(Value* a, int n) {
 }
 static Value rt_native_deleteFile(Value* a, int n) { (void)n; return rt_bool(remove(a[0].str) == 0); }
 
+// ---- إحصائيات/مصفوفات رقمية إضافية (maxOf/minOf/median/mode/stddev/variance/scale/normalize/shift) ----
+// مطابقة لـ natives["maxOf"|"minOf"|...] في rin_interpreter.cpp: تعمل على مصفوفة أرقام واحدة.
+static Value rt_native_maxOf(Value* a, int n) {
+    (void)n; double best = a[0].arr->items[0].num;
+    for (int i = 1; i < a[0].arr->len; i++) if (a[0].arr->items[i].num > best) best = a[0].arr->items[i].num;
+    return rt_num(best);
+}
+static Value rt_native_minOf(Value* a, int n) {
+    (void)n; double best = a[0].arr->items[0].num;
+    for (int i = 1; i < a[0].arr->len; i++) if (a[0].arr->items[i].num < best) best = a[0].arr->items[i].num;
+    return rt_num(best);
+}
+static int rt_cmp_num_qsort(const void* pa, const void* pb) {
+    double a = *(const double*)pa, b = *(const double*)pb;
+    return (a > b) - (a < b);
+}
+static Value rt_native_median(Value* a, int n) {
+    (void)n; int len = a[0].arr->len;
+    double* nums = (double*)malloc(sizeof(double) * len);
+    for (int i = 0; i < len; i++) nums[i] = a[0].arr->items[i].num;
+    qsort(nums, len, sizeof(double), rt_cmp_num_qsort);
+    double result = (len % 2 == 1) ? nums[len / 2] : (nums[len / 2 - 1] + nums[len / 2]) / 2.0;
+    free(nums);
+    return rt_num(result);
+}
+static Value rt_native_mode(Value* a, int n) {
+    (void)n; RArray* arr = a[0].arr;
+    double best = arr->items[0].num; int bestCount = 0;
+    for (int i = 0; i < arr->len; i++) {
+        double candidate = arr->items[i].num; int count = 0;
+        for (int j = 0; j < arr->len; j++) if (arr->items[j].num == candidate) count++;
+        if (count > bestCount) { bestCount = count; best = candidate; }
+    }
+    return rt_num(best);
+}
+static Value rt_native_stddev(Value* a, int n) {
+    (void)n; RArray* arr = a[0].arr; int len = arr->len;
+    double m = 0; for (int i = 0; i < len; i++) m += arr->items[i].num; m /= (double)len;
+    double sq = 0; for (int i = 0; i < len; i++) { double d = arr->items[i].num - m; sq += d * d; }
+    return rt_num(sqrt(sq / (double)len));
+}
+static Value rt_native_variance(Value* a, int n) {
+    (void)n; RArray* arr = a[0].arr; int len = arr->len;
+    double m = 0; for (int i = 0; i < len; i++) m += arr->items[i].num; m /= (double)len;
+    double sq = 0; for (int i = 0; i < len; i++) { double d = arr->items[i].num - m; sq += d * d; }
+    return rt_num(sq / (double)len);
+}
+static Value rt_native_scale(Value* a, int n) {
+    (void)n; RArray* arr = a[0].arr; double factor = a[1].num;
+    RArray* out = rt_arr_alloc(arr->len);
+    for (int i = 0; i < arr->len; i++) rt_arr_push(out, rt_num(arr->items[i].num * factor));
+    Value v = rt_nil(); v.t = RT_ARR; v.arr = out; return v;
+}
+static Value rt_native_normalize(Value* a, int n) {
+    (void)n; RArray* arr = a[0].arr;
+    double lo = arr->items[0].num, hi = arr->items[0].num;
+    for (int i = 1; i < arr->len; i++) { if (arr->items[i].num < lo) lo = arr->items[i].num; if (arr->items[i].num > hi) hi = arr->items[i].num; }
+    RArray* out = rt_arr_alloc(arr->len);
+    for (int i = 0; i < arr->len; i++) {
+        double normalized = (hi == lo) ? 0.0 : (arr->items[i].num - lo) / (hi - lo);
+        rt_arr_push(out, rt_num(normalized));
+    }
+    Value v = rt_nil(); v.t = RT_ARR; v.arr = out; return v;
+}
+static Value rt_native_shift(Value* a, int n) {
+    (void)n; RArray* arr = a[0].arr; double delta = a[1].num;
+    RArray* out = rt_arr_alloc(arr->len);
+    for (int i = 0; i < arr->len; i++) rt_arr_push(out, rt_num(arr->items[i].num + delta));
+    Value v = rt_nil(); v.t = RT_ARR; v.arr = out; return v;
+}
+static Value rt_native_isBool(Value* a, int n) { (void)n; return rt_bool(a[0].t == RT_BOOL); }
+static Value rt_native_chr(Value* a, int n) {
+    (void)n; long i = (long)a[0].num;
+    if (i < 0 || i > 255) rt_fatal(0, "'chr': القيمة يجب أن تكون بين 0 و255");
+    char buf[2] = { (char)(unsigned char)i, 0 }; return rt_str(buf);
+}
+static Value rt_native_ord(Value* a, int n) {
+    (void)n; if (a[0].str[0] == 0) rt_fatal(0, "'ord': النص فارغ");
+    return rt_num((double)(unsigned char)a[0].str[0]);
+}
+
+// ---- محوّل JSON حقيقي في الاتجاهين (Value <-> نص JSON)، مطابق لـ rin_json.h ----
+typedef struct { char* buf; size_t len, cap; } RtStrBuf;
+static void rt_sb_init(RtStrBuf* sb) { sb->cap = 64; sb->len = 0; sb->buf = (char*)malloc(sb->cap); sb->buf[0] = 0; }
+static void rt_sb_append_n(RtStrBuf* sb, const char* s, size_t l) {
+    while (sb->len + l + 1 > sb->cap) { sb->cap *= 2; sb->buf = (char*)realloc(sb->buf, sb->cap); }
+    memcpy(sb->buf + sb->len, s, l); sb->len += l; sb->buf[sb->len] = 0;
+}
+static void rt_sb_append(RtStrBuf* sb, const char* s) { rt_sb_append_n(sb, s, strlen(s)); }
+static void rt_sb_append_char(RtStrBuf* sb, char c) { rt_sb_append_n(sb, &c, 1); }
+
+static void rt_json_encode_escaped(RtStrBuf* sb, const char* s) {
+    rt_sb_append_char(sb, '"');
+    for (const unsigned char* p = (const unsigned char*)s; *p; p++) {
+        unsigned char c = *p;
+        switch (c) {
+            case '"': rt_sb_append(sb, "\\\""); break;
+            case '\\': rt_sb_append(sb, "\\\\"); break;
+            case '\n': rt_sb_append(sb, "\\n"); break;
+            case '\r': rt_sb_append(sb, "\\r"); break;
+            case '\t': rt_sb_append(sb, "\\t"); break;
+            default:
+                if (c < 0x20) { char buf[8]; snprintf(buf, sizeof buf, "\\u%04x", c); rt_sb_append(sb, buf); }
+                else rt_sb_append_char(sb, (char)c);
+        }
+    }
+    rt_sb_append_char(sb, '"');
+}
+static void rt_json_encode_value(RtStrBuf* sb, Value v) {
+    switch (v.t) {
+        case RT_NIL: rt_sb_append(sb, "null"); break;
+        case RT_BOOL: rt_sb_append(sb, v.num != 0 ? "true" : "false"); break;
+        case RT_NUM: { char* s = rt_num_to_str(v.num); rt_sb_append(sb, s); free(s); break; }
+        case RT_STR: rt_json_encode_escaped(sb, v.str); break;
+        case RT_ARR: {
+            rt_sb_append_char(sb, '[');
+            for (int i = 0; i < v.arr->len; i++) { if (i) rt_sb_append_char(sb, ','); rt_json_encode_value(sb, v.arr->items[i]); }
+            rt_sb_append_char(sb, ']');
+            break;
+        }
+        case RT_MAP: {
+            rt_sb_append_char(sb, '{');
+            for (int i = 0; i < v.map->len; i++) {
+                if (i) rt_sb_append_char(sb, ',');
+                char* k = rt_to_display(v.map->keys[i]); rt_json_encode_escaped(sb, k); free(k);
+                rt_sb_append_char(sb, ':');
+                rt_json_encode_value(sb, v.map->vals[i]);
+            }
+            rt_sb_append_char(sb, '}');
+            break;
+        }
+    }
+}
+static Value rt_native_jsonEncode(Value* a, int n) {
+    (void)n; RtStrBuf sb; rt_sb_init(&sb); rt_json_encode_value(&sb, a[0]); return rt_str_own(sb.buf);
+}
+
+typedef struct { const char* src; size_t pos, len; jmp_buf err; } RtJsonDecoder;
+static void rt_json_skip_ws(RtJsonDecoder* d) { while (d->pos < d->len && (unsigned char)d->src[d->pos] <= ' ') d->pos++; }
+static void rt_json_expect(RtJsonDecoder* d, char c) { if (d->pos >= d->len || d->src[d->pos] != c) longjmp(d->err, 1); d->pos++; }
+static void rt_json_expect_lit(RtJsonDecoder* d, const char* lit) {
+    size_t n = strlen(lit);
+    if (d->pos + n > d->len || strncmp(d->src + d->pos, lit, n) != 0) longjmp(d->err, 1);
+    d->pos += n;
+}
+static void rt_json_parse_string_raw(RtJsonDecoder* d, RtStrBuf* out) {
+    rt_json_expect(d, '"');
+    for (;;) {
+        if (d->pos >= d->len) longjmp(d->err, 1);
+        char c = d->src[d->pos++];
+        if (c == '"') break;
+        if (c == '\\') {
+            if (d->pos >= d->len) longjmp(d->err, 1);
+            char e = d->src[d->pos++];
+            switch (e) {
+                case '"': rt_sb_append_char(out, '"'); break;
+                case '\\': rt_sb_append_char(out, '\\'); break;
+                case '/': rt_sb_append_char(out, '/'); break;
+                case 'n': rt_sb_append_char(out, '\n'); break;
+                case 't': rt_sb_append_char(out, '\t'); break;
+                case 'r': rt_sb_append_char(out, '\r'); break;
+                case 'b': rt_sb_append_char(out, '\b'); break;
+                case 'f': rt_sb_append_char(out, '\f'); break;
+                case 'u': {
+                    if (d->pos + 4 > d->len) longjmp(d->err, 1);
+                    char hex[5]; memcpy(hex, d->src + d->pos, 4); hex[4] = 0; d->pos += 4;
+                    unsigned code = (unsigned)strtoul(hex, NULL, 16);
+                    if (code < 0x80) rt_sb_append_char(out, (char)code);
+                    else if (code < 0x800) {
+                        rt_sb_append_char(out, (char)(0xC0 | (code >> 6)));
+                        rt_sb_append_char(out, (char)(0x80 | (code & 0x3F)));
+                    } else {
+                        rt_sb_append_char(out, (char)(0xE0 | (code >> 12)));
+                        rt_sb_append_char(out, (char)(0x80 | ((code >> 6) & 0x3F)));
+                        rt_sb_append_char(out, (char)(0x80 | (code & 0x3F)));
+                    }
+                    break;
+                }
+                default: longjmp(d->err, 1);
+            }
+        } else rt_sb_append_char(out, c);
+    }
+}
+static Value rt_json_parse_value(RtJsonDecoder* d);
+static Value rt_json_parse_number(RtJsonDecoder* d) {
+    size_t start = d->pos;
+    if (d->pos < d->len && (d->src[d->pos] == '-' || d->src[d->pos] == '+')) d->pos++;
+    while (d->pos < d->len && (isdigit((unsigned char)d->src[d->pos]) || d->src[d->pos] == '.' ||
+           d->src[d->pos] == 'e' || d->src[d->pos] == 'E' || d->src[d->pos] == '-' || d->src[d->pos] == '+')) d->pos++;
+    if (d->pos == start) longjmp(d->err, 1);
+    char tmp[64]; size_t l = d->pos - start; if (l >= sizeof tmp) longjmp(d->err, 1);
+    memcpy(tmp, d->src + start, l); tmp[l] = 0;
+    char* end; double val = strtod(tmp, &end);
+    if (end == tmp) longjmp(d->err, 1);
+    return rt_num(val);
+}
+static Value rt_json_parse_array(RtJsonDecoder* d) {
+    rt_json_expect(d, '[');
+    RArray* arr = rt_arr_alloc(4);
+    rt_json_skip_ws(d);
+    if (d->pos < d->len && d->src[d->pos] == ']') { d->pos++; Value v = rt_nil(); v.t = RT_ARR; v.arr = arr; return v; }
+    for (;;) {
+        rt_arr_push(arr, rt_json_parse_value(d));
+        rt_json_skip_ws(d);
+        if (d->pos < d->len && d->src[d->pos] == ',') { d->pos++; rt_json_skip_ws(d); continue; }
+        break;
+    }
+    rt_json_skip_ws(d); rt_json_expect(d, ']');
+    Value v = rt_nil(); v.t = RT_ARR; v.arr = arr; return v;
+}
+static Value rt_json_parse_object(RtJsonDecoder* d) {
+    rt_json_expect(d, '{');
+    RMap* m = rt_map_alloc(4);
+    rt_json_skip_ws(d);
+    if (d->pos < d->len && d->src[d->pos] == '}') { d->pos++; Value v = rt_nil(); v.t = RT_MAP; v.map = m; return v; }
+    for (;;) {
+        rt_json_skip_ws(d);
+        RtStrBuf keyBuf; rt_sb_init(&keyBuf); rt_json_parse_string_raw(d, &keyBuf);
+        Value key = rt_str_own(keyBuf.buf);
+        rt_json_skip_ws(d); rt_json_expect(d, ':');
+        Value val = rt_json_parse_value(d);
+        rt_map_set(m, key, val);
+        rt_json_skip_ws(d);
+        if (d->pos < d->len && d->src[d->pos] == ',') { d->pos++; continue; }
+        break;
+    }
+    rt_json_skip_ws(d); rt_json_expect(d, '}');
+    Value v = rt_nil(); v.t = RT_MAP; v.map = m; return v;
+}
+static Value rt_json_parse_value(RtJsonDecoder* d) {
+    rt_json_skip_ws(d);
+    if (d->pos >= d->len) longjmp(d->err, 1);
+    char c = d->src[d->pos];
+    if (c == '{') return rt_json_parse_object(d);
+    if (c == '[') return rt_json_parse_array(d);
+    if (c == '"') { RtStrBuf sb; rt_sb_init(&sb); rt_json_parse_string_raw(d, &sb); return rt_str_own(sb.buf); }
+    if (c == 't') { rt_json_expect_lit(d, "true"); return rt_bool(1); }
+    if (c == 'f') { rt_json_expect_lit(d, "false"); return rt_bool(0); }
+    if (c == 'n') { rt_json_expect_lit(d, "null"); return rt_nil(); }
+    return rt_json_parse_number(d);
+}
+// decodeOrRaw: يحاول تحليل a[0] كـ JSON صالح، وعند أي فشل تركيبي يُعيد النص الخام كما هو (Value
+// نصية)، تماماً كسلوك rin::json::decodeOrRaw في المفسّر الأصلي — لا يرمي خطأً أبداً.
+static Value rt_native_jsonDecode(Value* a, int n) {
+    (void)n;
+    RtJsonDecoder d; d.src = a[0].str; d.pos = 0; d.len = strlen(a[0].str);
+    if (setjmp(d.err) == 0) {
+        Value result = rt_json_parse_value(&d);
+        rt_json_skip_ws(&d);
+        if (d.pos == d.len) return result;
+    }
+    return rt_str(a[0].str);
+}
+
 )RTC";
 
 // ============================================================================
@@ -1382,6 +1908,7 @@ int main(int argc, char** argv) {
         else if (a == "--emit-c-only") { emitCOnly = true; }
         else if (a == "--keep-c") { keepC = true; }
         else if (a == "-h" || a == "--help") { printUsage(); return 0; }
+        else if (a == "-v" || a == "--version") { std::cout << "rinc 0.4.0\n"; return 0; }
         else if (!a.empty() && a[0] == '-') { std::cerr << "خيار غير معروف: " << a << "\n"; printUsage(); return 1; }
         else { inputPath = a; }
     }
