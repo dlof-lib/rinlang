@@ -128,6 +128,14 @@ StmtPtr Parser::declaration() {
         advance(); // 'view'
         return viewDeclaration();
     }
+    // '@theme=Name key=expr; ... .end/theme' -> Rin Loom Theme (Pattern Book) declaration, نفس
+    // أسلوب فحص '@import'/'@view' أعلاه بالضبط.
+    if (check(TokenType::AT) && checkNext(TokenType::IDENT) &&
+        current + 1 < tokens.size() && tokens[current + 1].lexeme == "theme") {
+        advance(); // '@'
+        advance(); // 'theme'
+        return themeDeclaration();
+    }
     if (match({TokenType::AT})) return atBlock();
     if (match({TokenType::SECTION})) return sectionBlock();
     if (match({TokenType::TRANSLATIONS})) return translationsBlock();
@@ -621,6 +629,37 @@ StmtPtr Parser::warpDeclaration() {
     s->name = name.lexeme;
     s->initializer = init;
     s->line = tok.line;
+    return s;
+}
+
+// Rin Loom: Theme (Pattern Book) declaration -------------------------------------------
+// @theme=<Name>  key=expr; ...  .end/theme
+// يُستدعى بعد أن يكون declaration() قد استهلك بالفعل '@' و'theme'، بنفس أسلوب viewDeclaration()
+// أعلاه تماماً لكن بلا كتل متداخلة (Theme مسطّح: أدوار لونية + العلم الاختياري 'active' فقط).
+StmtPtr Parser::themeDeclaration() {
+    Token themeTok = previous(); // 'theme'
+    consume(TokenType::EQUAL, "Expected '=' after '@theme' (e.g. @theme=Midnight ... .end/theme)");
+    Token nameTok = consume(TokenType::IDENT, "Expected a theme name after '@theme='");
+
+    auto s = std::make_shared<ThemeStmt>();
+    s->name = nameTok.lexeme;
+    s->line = themeTok.line;
+
+    while (!checkClosingTag() && !isAtEnd()) {
+        if (!check(TokenType::AT) && checkNext(TokenType::EQUAL)) {
+            Token key = advance();
+            consume(TokenType::EQUAL, "Expected '=' after attribute key '" + key.lexeme +
+                                       "' inside @theme=" + s->name);
+            ExprPtr val = expression();
+            consume(TokenType::SEMICOLON, "Expected ';' after value for attribute '" + key.lexeme + "'");
+            ViewAttr a; a.key = key.lexeme; a.value = val; a.line = key.line;
+            s->attrs.push_back(a);
+            continue;
+        }
+        throw err(diag::Code::E0012_MissingToken, peek(),
+                  "expected an attribute (key=value;) or '.end/theme' inside @theme=" + s->name);
+    }
+    consumeEndTag("theme", themeTok.line, s->name);
     return s;
 }
 
