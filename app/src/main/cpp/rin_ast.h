@@ -433,4 +433,23 @@ struct WarpStmt : Stmt {
     ExprPtr initializer;
 };
 
+// ---- Rin Loom: Theme (Pattern Book) declaration ----
+// @theme=<Name>   key=expr; ...   .end/theme
+//   مثال:
+//     @theme=Midnight
+//       active=true;
+//       primary="#7C5CFF";
+//       danger="#D14545";
+//     .end/theme
+//
+// امتداد إضافي فوق Loomtime تماماً كـ @view/warp أعلاه: لا كتل متداخلة، فقط سمات key=expr
+// مسطّحة. كل مفتاح إما اسم دور لوني دلالي (primary/secondary/success/danger/warning/info/
+// neutral/surface/background/text/text_muted/border) بقيمة نصية "#RRGGBB"، أو المفتاح الخاص
+// "active" (قيمة منطقية) الذي يجعل هذا الـTheme هو النشط فور تسجيله. انظر
+// loom/rin_loom_tokens.h لمنطق التسجيل والتحليل (registerThemesFromProgram).
+struct ThemeStmt : Stmt {
+    std::string name;
+    std::vector<ViewAttr> attrs; // يعاد استخدام ViewAttr (key/value/line) نفسه بدل بنية مكررة
+};
+
 } // namespace rin
