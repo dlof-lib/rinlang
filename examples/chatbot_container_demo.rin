@@ -51,6 +51,14 @@ print "هل البوت يكتب الآن؟", isChatTyping("Support");
 
 attachToChat("Support", "user", "id_card.png", "هذه صورة الهوية المطلوبة");
 
+// ---- تنسيق الرسائل: markdown / code (جديد) ----
+botReplyMarkdown("Support", "بإمكانك تفعيل الحساب من **الإعدادات > الحساب > تفعيل**");
+botReplyCode("Support", "curl -X POST https://api.example.com/activate", "bash");
+
+// ---- ردّ تدريجي (stream=true) (جديد): يضيف فقاعة واحدة ويحدّثها جزءاً فجزء،
+// بدل إضافة فقاعة جديدة لكل جزء -- onChat("message") يُستدعى مع كل تحديث. ----
+streamReply("Support", "هذا ردّ تجريبي يصل حرفاً بعد حرف كأنه يُكتَب الآن", 6);
+
 // ---- تصدير المحادثة (جديد) ----
 exportChat("Support", "text", "support_chat.txt");
 exportChat("Support", "png", "support_chat.png");
