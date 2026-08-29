@@ -81,23 +81,68 @@ component library from §4 — real variants (fill/outline/ghost/link/glass/grad
 tone= roles), sizes (xs/small/medium/large/xl), states (normal/hover/pressed/focused/disabled/
 loading/selected, with disabled/loading gating real Needle tap dispatch, not just paint), and
 Button accessibility (role + accessible name via `a11y_label=`, defaulting to the visible label).
-Still not started: Container/Card as a full named layout primitive (see the naming note above —
-`sizing=`/`min_width=`/etc. work today on any StrandKind, just not under a dedicated "Container"
-name yet), Row/Column/Grid semantics beyond what Loomtime's existing Row/Column already do
-(§15), a Responsive Engine (§7), Animation Engine (§18), and the rest of the `loom.*` standard
-library (§27).
+Still not started: a Responsive Engine (§7), a real Animation/Weft Engine (§18). `Box` (the
+resolved Container naming collision), Grid, and the rest of the missing-components pass are done
+— see "The Container naming collision — resolved: `Box`" and "Missing-components pass" below.
 
-## The Container naming collision (still open)
+## The Container naming collision — resolved: `Box`
 
 `Container` already means a data/storage construct in this codebase (`@container`,
 `ContainerKind::{TABLE, DOC, OBJECT, PORTAL, BLOCK, STICKER, AUKT}` — see `rin_ast.h`). The
 spec's layout Container (§5/§6: padding/spacing/alignment/sizing/constraints, `fit`/`hug`/`fill`/
-`expand`/`fixed`/`auto`) needs a different name in this codebase to avoid a silent semantic
-collision. `Card` already exists in Loomtime and covers much of the same ground (padding, a
-single child box, radius, tone) — the two realistic paths are (a) extend `Card` with the
-sizing-mode vocabulary (`fit`/`hug`/`fill`/`expand`) instead of introducing a new StrandKind, or
-(b) add a new StrandKind under a different name (`Box`, `Frame`, `Panel` all avoid the collision).
-Not decided yet — flagging it here rather than picking silently.
+`expand`/`fixed`/`auto`) needed a different name in this codebase to avoid a silent semantic
+collision.
+
+Resolved as option (b) from the two paths this note used to flag: a new `StrandKind::BOX`
+(`rin_loom_strand.h`), distinct from `Card` (which keeps its own elevation-styled default paint).
+The tags `Container`/`Panel`/`Frame` are all accepted as aliases for `Box` in
+`strandKindFromTag()`, so `.rin` source written against the original spec's own vocabulary
+(`@view.Container=...`) parses unchanged — there's no *grammar* collision with `@container=...`
+(a different top-level statement, matched before `@view.` ever runs), only the conceptual one
+this note originally flagged.
+
+```
+@view.Box=panel               // or @view.Container=panel / @view.Panel=panel / @view.Frame=panel
+  padding="comfortable"; sizing="fill";
+  @view.Text=t text="Plain padded box"; .end/view
+.end/view
+```
+
+Try it: `samples/loom_missing_components_demo.rin`; `tools/test_loom_missing_components.cpp` is
+the regression suite.
+
+## Missing-components pass (§27 stdlib gap)
+
+The rest of the easy, engine-primitive-reusing wins from the stdlib list, added alongside `Box`:
+
+- **Grid** (`columns=`, `gap=`) — fixed-column-count, row-major placement.
+- **Wrap** (`gap=`) — a flow Row that breaks onto a new line instead of overflowing.
+- **Spacer** — defaults to `sizing="expand"` with no attribute needed; claims a *fair share* of
+  the remaining main-axis space in a Row/Column even when siblings follow it (this required
+  turning `layoutLinear`'s single top-to-bottom measuring pass into a real two-pass flex
+  distribution — see the comment on `isMainAxisFlexible`/`layoutLinear` in
+  `rin_loom_layout.h` for why a one-pass version silently starved trailing siblings to zero
+  width).
+- **Badge**, **Progress**, **Checkbox**, **Switch**, **Avatar** — small self-painting leaves with
+  their own `Dye` paint functions (`paintBadge`/`paintProgress`/`paintCheckbox`/`paintSwitch`/
+  `paintAvatar` in `rin_loom_paint.h`).
+- **Input**/**TextArea** — bordered field boxes sized around `value=`/`placeholder=`; design-time
+  box only, same scope as Image/Video/WebView (no real caret/typing model).
+- **Dialog**/**Modal** — collapses to zero size unless `open="true"`, the same rule
+  Drawer/Menu/Banner already use for `open=`/`visible=`. Scope note: lays out in normal document
+  flow at its content size; true screen-centered overlay positioning is a
+  `@view.Stack align="center" valign="center"` composition, the same pattern Stack's own doc
+  comment already recommends for badges/FABs.
+- **Tabs**/**TabItem** — a Row of button-like items. Deliberately reuses Button's existing
+  `StrandState` machinery (`state="selected"`) instead of inventing a separate "active tab"
+  concept — a real per-tab highlight driven by a warp cell is a normal `onTap=` handler (a real
+  `fun`, since switching *multiple* tabs' state needs multi-cell writes Needle's built-in
+  increment/decrement/toggle/set shortcuts don't cover) exactly like any other interactive Strand.
+- **Tooltip** — a small self-contained text bubble, same overlay-positioning scope note as Dialog.
+
+Not in this pass: a Responsive Engine (§7), a real Animation/Weft engine (§18), and Menu/Dropdown
+(already achievable today by composing the existing `Menu`+`Button`+`open=` the same way Banner's
+own `menu { item ... }` composes — see §14 above — so it wasn't treated as a missing primitive).
 
 ## Button component library (§4)
 
