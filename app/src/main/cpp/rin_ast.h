@@ -255,10 +255,30 @@ struct TextStmt : Stmt {
 //                                                                 link to=otherContainer;   // links() -> ربط بلا نسخ
 //                                                                 file path="license.rin";  // transition.file (مثال: ترخيص)
 //                                                               ويقبل 'style' مثل object/portal/block تماماً.
+//
+// @container.chatbot=name  <body>  .end/container.chatbot  -> حاوية "روبوت محادثة" (chatbot). ContainerKind::CHATBOT.
+// @chatbot=name             <body>  .end/chatbot             -> نفس الشيء، بشكل مستقل. كلاهما ContainerKind::CHATBOT.
+//                                                               تسمح بمنطق حقيقي بداخلها (fun/دوال واستدعاءات)،
+//                                                               تماماً كـ container/container.api، وليست مقيَّدة
+//                                                               بقيود "البيانات النقية" (فهي بحاجة لتسجيل معالجات
+//                                                               أحداث عبر onChat() ودوال Rin عادية).
+//                                                               حقول متعارف عليها (عبر text/let عادي، اختيارية):
+//                                                                 text model  = "rin-chat-1"; // اسم المحرّك/النموذج
+//                                                                 text system = "...";        // تعليمات النظام
+//                                                                 warp memory = {};           // سياق/ذاكرة حيّة
+//                                                               دوال native مرتبطة (تعمل من أي مكان بذكر اسم الحاوية):
+//                                                                 sendMessage(name, role, text) / botReply(name, text)
+//                                                                 chatHistory(name) / lastChatMessage(name) / chatMessageCount(name)
+//                                                                 clearChat(name)
+//                                                                 attachToChat(name, role, fileRef, caption)
+//                                                                 setChatTyping(name, true|false) / isChatTyping(name)
+//                                                                 openChat(name) / closeChat(name)
+//                                                                 onChat(name, "message"|"open"|"close"|"typing", fn)
+//                                                               (انظر التوثيق الكامل أعلى دوال هذه الحاوية في .cpp)
 
 enum class ObjectStyleFieldKind { Text, Image, File, Fonts, Background, Css3 };
 
-enum class ContainerKind { PLAIN, PIPE, DATA, API, IMPORT, TABLE, DOC, OBJECT, PORTAL, BLOCK, STICKER, AUKT };
+enum class ContainerKind { PLAIN, PIPE, DATA, API, IMPORT, TABLE, DOC, OBJECT, PORTAL, BLOCK, STICKER, AUKT, CHATBOT };
 
 // ---- AUKT: Automated Knowledge Tables (جداول المعرفة الآلية) ----
 // @container.aukt=name  <body>  .end/container.aukt
