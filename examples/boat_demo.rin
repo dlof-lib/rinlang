@@ -1,0 +1,62 @@
+@import "lib/boat.og.rin";
+
+// yes/no/none
+print yes, no, none;
+print isYes(yes), isNo(no), isNone(none);
+
+// list / ls / groupTm
+let a = list([1, 2, 3]);
+print boatKind(a), listLen(a), listGet(a, 1);
+listPush(a, 4);
+print listToArray(a);
+
+let b = ls(["x", "y"]);
+print boatKind(b), listToArray(b);
+
+let g = groupTm([9, 8]);
+print boatKind(g), listToArray(g);
+
+// tuple
+let t = tuple([10, 20, 30]);
+print boatKind(t), tupleLen(t), tupleGet(t, 2);
+tupleSet(t, 0, 99);
+print tupleToArray(t);
+
+// dict
+let d = dict([["name", "Rin"], ["version", 1]]);
+print boatKind(d), dictGet(d, "name"), dictHas(d, "version");
+dictSet(d, "extra", true);
+print dictKeys(d), dictValues(d);
+
+// set
+let s1 = set([1, 2, 2, 3]);
+print boatKind(s1), setLen(s1), setHas(s1, 2);
+setAdd(s1, 5);
+setRemove(s1, 1);
+print setToList(s1)["value"];
+
+let s2 = set([3, 4, 5]);
+print setUnion(s1, s2)["value"];
+print setIntersect(s1, s2)["value"];
+
+// tmap
+let tm = tmap("Users Table", [["u1", "Ali"], ["u2", "Sara"]]);
+print boatKind(tm), tmapTitle(tm), tmapGet(tm, "u1");
+tmapSet(tm, "u3", "Omar");
+print tmapEntries(tm);
+
+// window / body / link
+let win = window("Home", 1080, 720, "#101018", ["Cairo", "Inter"]);
+print boatKind(win), windowName(win), windowWidth(win), windowLength(win), windowBg(win), windowFonts(win);
+body(win, ["Header", "Content"]);
+bodyAdd(win, "Footer");
+print bodyOf(win);
+windowLink(win, "usersContainer");
+print windowContainer(win);
+
+// group["tm"] two-step call pattern
+let makeList = group["tm"];
+let viaGroup = makeList([7, 7, 8]);
+print boatKind(viaGroup), listToArray(viaGroup);
+
+print "OK - all boat checks passed";
