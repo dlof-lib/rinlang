@@ -14,6 +14,14 @@ extern "C" {
 // Free the result with rin_free_string().
 RIN_API char* rin_loom_render_json(const char* source, int rootWidth);
 
+// Same as rin_loom_render_json, but builds the Fabric from the @view root that lives *inside* a
+// named @container (rather than the top-level program) — the container-scoped counterpart that
+// makes Loomtime actually tied to `container`: every @container carrying its own @view/warp/
+// @theme becomes an independently renderable screen/component, scoped to that container's own
+// warp state. Returns a JSON error object if no container/group/volume with that name exists, or
+// it has no @view root inside it. Free the result with rin_free_string().
+RIN_API char* rin_loom_render_container_json(const char* source, const char* containerName, int rootWidth);
+
 // ---------------------------------------------------------------------
 // Loomtime *session*: unlike rin_loom_render_json (a stateless one-shot render), a session keeps
 // its Fabric + Warp state alive across calls, so a tap can actually mutate state in place (via
@@ -24,6 +32,11 @@ RIN_API char* rin_loom_render_json(const char* source, int rootWidth);
 // Creates a session from `source`, laid out at `rootWidth` px. Always release with
 // rin_loom_session_free, even if creation failed to parse (check via rin_loom_session_render_json).
 RIN_API void* rin_loom_session_create(const char* source, int rootWidth);
+
+// Container-scoped counterpart of rin_loom_session_create: the live session's Fabric/Warp state
+// is seeded from the named @container's own body instead of the top-level program. Always
+// release with rin_loom_session_free, even if creation failed to parse.
+RIN_API void* rin_loom_session_create_for_container(const char* source, const char* containerName, int rootWidth);
 
 // Overlay Engine (rin_loom_overlay.h): sets the *viewport* height (the visible screen) used to
 // center an open Dialog / anchor a Tooltip -- a different quantity from rootWidth's paired height,
