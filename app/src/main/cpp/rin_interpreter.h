@@ -500,6 +500,9 @@ private:
     // container.block/block (مفاهيم التنسيق والستايل)، وليس container.table/table حصراً.
     std::unordered_map<std::string, std::string> containerStyles;
     std::string buildTablePng(const std::string& key) const;        // يرسم الجدول كصورة PNG حقيقية (شبكة خلايا ملوّنة)
+    // يرسم سجلّ محادثة (container.chatbot) كصورة PNG حقيقية: فقاعة واحدة لكل رسالة، بترتيب
+    // الإرسال من الأعلى للأسفل (سطر واحد لكل رسالة، بلا التفاف نص، بنفس منطق buildTablePng).
+    std::string buildChatPng(const std::string& key) const;
 
     // ---- قاعدة بيانات لاعلاقية / NoSQL (container.doc / doc المستقلة) ----
     // container = "مجموعة مستندات" (collection)، وتُخزَّن مستنداتها هنا بترتيب الإدخال؛ id عربون
