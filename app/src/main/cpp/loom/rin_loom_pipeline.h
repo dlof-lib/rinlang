@@ -66,6 +66,71 @@ inline PipelineResult runColdPipeline(const std::string& source) {
     return result;
 }
 
+// Finds the body (statement list) of a named @container / Containers.Group / Volume anywhere in
+// a parsed program, searching nested groups/volumes recursively (a container can sit inside a
+// Containers.Group, which can itself sit inside another Containers.Group, etc.). Returns nullptr
+// if no container/group/volume with that name exists.
+inline const std::vector<rin::StmtPtr>* findContainerBody(const std::vector<rin::StmtPtr>& stmts,
+                                                            const std::string& containerName) {
+    for (auto& stmt : stmts) {
+        if (auto c = std::dynamic_pointer_cast<rin::ContainerStmt>(stmt)) {
+            if (c->name == containerName) return &c->body;
+        } else if (auto g = std::dynamic_pointer_cast<rin::ContainerGroupStmt>(stmt)) {
+            if (g->name == containerName) return &g->body;
+            if (auto found = findContainerBody(g->body, containerName)) return found;
+        } else if (auto v = std::dynamic_pointer_cast<rin::VolumeStmt>(stmt)) {
+            if (v->name == containerName) return &v->body;
+            if (auto found = findContainerBody(v->body, containerName)) return found;
+        }
+    }
+    return nullptr;
+}
+
+// Container-scoped cold pipeline: full source -> Fabric built from the @view root that lives
+// *inside* the named @container (not the top-level program). This is what makes Rin Loom actually
+// tied to `container` rather than being a wholly separate top-level-only system: every container
+// that carries its own @view/warp/@theme becomes an independently addressable screen/component,
+// scoped to that container's own warp state and theme, exactly like runColdPipeline is scoped to
+// the whole program. Warp/theme seeding only looks at the container's direct body (same flat,
+// non-recursive semantics as runColdPipeline's top-level scan) so a container's UI state stays
+// its own and doesn't accidentally pick up an unrelated sibling container's warp/theme.
+inline PipelineResult runColdPipelineForContainer(const std::string& source, const std::string& containerName) {
+    PipelineResult result;
+    try {
+        rin::Lexer lexer(source);
+        auto tokens = lexer.scanTokens();
+        rin::Parser parser(tokens);
+        auto program = parser.parse();
+
+        const std::vector<rin::StmtPtr>* body = findContainerBody(program, containerName);
+        if (!body) throw rin::RinError("no container/group/volume named '" + containerName + "' found", 1);
+
+        for (auto& stmt : *body) {
+            if (auto w = std::dynamic_pointer_cast<rin::WarpStmt>(stmt)) {
+                Value v = evalAttrExpr(w->initializer, result.warp, nullptr);
+                result.warp.set(w->name, v);
+            }
+        }
+        registerThemesFromProgram(*body, result.warp);
+        std::shared_ptr<rin::ViewStmt> root;
+        for (auto& stmt : *body) {
+            if (auto v = std::dynamic_pointer_cast<rin::ViewStmt>(stmt)) { root = v; break; }
+        }
+        if (!root) throw rin::RinError("no '@view...=name' root found inside container '" + containerName + "'", 1);
+
+        result.viewAst = root;
+        result.program = program; // البرنامج الكامل يبقى محفوظاً (Needle قد يحتاج دوال أعلى المستوى)
+        result.fabric = buildFabric(root, result.warp, result.subs, "", 0);
+        applyBannerConveniences(result.fabric, result.warp, result.subs);
+        result.ok = true;
+    } catch (rin::RinError& e) {
+        result.ok = false; result.errorMessage = e.message; result.errorLine = e.line;
+    } catch (std::exception& e) {
+        result.ok = false; result.errorMessage = e.what(); result.errorLine = 0;
+    }
+    return result;
+}
+
 // Hot pipeline (Shuttle-scoped): re-parses the edited source and diffs it against the previous
 // Fabric in place. On a parse/semantic error, the previous Fabric is left completely untouched
 // (Snag containment — see architecture doc §16) and the caller keeps showing the last-good frame.
