@@ -328,6 +328,44 @@ inline StrandPtr findAny(const StrandPtr& s, const std::function<bool(const Stra
     for (auto& c : s->children) { auto r = findAny(c, pred); if (r) return r; }
     return nullptr;
 }
+
+// ---- Container Context helpers (spec item #4: find(id) / findByKind(kind)) ----
+// Thin, crash-safe wrappers over findAny(): both return nullptr (never throw, never assert) when
+// nothing matches or `root` itself is null, matching the "must not crash on missing parent/child"
+// requirement. These operate on a Fabric subtree, so calling find() on any Strand searches that
+// Strand and its descendants only -- pass the Fabric root to search the whole tree.
+inline StrandPtr findById(const StrandPtr& root, const std::string& name) {
+    if (!root) return nullptr;
+    return findAny(root, [&](const StrandPtr& s) { return s->name == name; });
+}
+inline StrandPtr findByKind(const StrandPtr& root, StrandKind kind) {
+    if (!root) return nullptr;
+    return findAny(root, [&](const StrandPtr& s) { return s->kind == kind; });
+}
+inline std::vector<StrandPtr> findAllByKind(const StrandPtr& root, StrandKind kind) {
+    std::vector<StrandPtr> out;
+    if (!root) return out;
+    std::function<void(const StrandPtr&)> walk = [&](const StrandPtr& s) {
+        if (s->kind == kind) out.push_back(s);
+        for (auto& c : s->children) walk(c);
+    };
+    walk(root);
+    return out;
+}
+
+// parent()/root() for a Strand within a subtree: since Strand does not (yet) store a back-pointer
+// to its parent (the Fabric is rebuilt bottom-up, see buildFabric above), these are resolved by
+// walking down from `root` looking for the child -- O(n) per call, fine for the interactive/event
+// use sites (§4's onTap-time parent()/root()) this exists for. Both are crash-safe: a Strand not
+// found under `root`, or a `root` of nullptr, yields nullptr rather than a fault.
+inline StrandPtr findParentOf(const StrandPtr& root, StrandId childId) {
+    if (!root) return nullptr;
+    for (auto& c : root->children) {
+        if (c->id == childId) return root;
+        if (auto p = findParentOf(c, childId)) return p;
+    }
+    return nullptr;
+}
 inline void buildIndex(const StrandPtr& s, std::unordered_map<StrandId, StrandPtr>& out) {
     out[s->id] = s;
     for (auto& c : s->children) buildIndex(c, out);
