@@ -153,6 +153,105 @@ inline StrandPtr buildFabric(const std::shared_ptr<rin::ViewStmt>& node, WarpSco
     return s;
 }
 
+// ---- Banner conveniences (§13/§14): title=/message=/closable= --------------------------------
+// Banner already goes through the exact same buildFabric() above as every other StrandKind (see
+// the comment on StrandKind::BANNER) -- composing a Banner by nesting real @view.Text/@view.Button
+// children already works with zero extra code, and stays the right tool for anything custom
+// (icons via a nested @view.Image, multiple actions, a nested @view.Menu, ...). What's added here
+// is pure shorthand for the common case the spec's own example uses (a title, a message, and a
+// dismiss control) so a Banner doesn't *require* manually nesting two Text strands and wiring a
+// warp cell by hand just to be dismissible.
+//
+// Scope note: this only runs on the cold-pipeline build path (see rin_loom_pipeline.h's
+// runColdPipeline, which calls it right after buildFabric) -- NOT on Shuttle::diff's hot-reload
+// path yet (a source-edit that adds/changes title=/message=/closable= won't re-synthesize until
+// the next cold build) -- and NOT on Shuttle::applyWarpChange, which doesn't need it (the
+// synthesized "visible" attr's rawExpr is a real VariableExpr registered through the same
+// WarpSubscriptions mechanism every other Warp-bound attribute uses, so a later warp.set() on the
+// auto-created cell already re-resolves it generically, with no Banner-specific code involved).
+inline void applyBannerConveniences(const StrandPtr& s, WarpScope& warp, WarpSubscriptions& subs) {
+    if (s->kind == StrandKind::BANNER) {
+        std::vector<StrandPtr> synthesizedChildren;
+
+        std::string title = s->attrStr("title", "");
+        std::string message = s->attrStr("message", "");
+        if (!title.empty()) {
+            auto t = std::make_shared<Strand>();
+            t->kind = StrandKind::TEXT; t->name = s->name + "_title"; t->sourceLine = s->sourceLine;
+            t->id = deriveId(s->name, "title", 0, StrandKind::TEXT);
+            t->attrs.push_back({"text", nullptr, Value::txt(title)});
+            t->attrs.push_back({"size", nullptr, Value::txt("title")});
+            t->attrs.push_back({"tone", nullptr, Value::txt("text")});
+            t->contentHash = fnv1a("banner_title_" + title);
+            synthesizedChildren.push_back(t);
+        }
+        if (!message.empty()) {
+            auto m = std::make_shared<Strand>();
+            m->kind = StrandKind::TEXT; m->name = s->name + "_message"; m->sourceLine = s->sourceLine;
+            m->id = deriveId(s->name, "message", 0, StrandKind::TEXT);
+            m->attrs.push_back({"text", nullptr, Value::txt(message)});
+            m->attrs.push_back({"size", nullptr, Value::txt("body")});
+            m->attrs.push_back({"tone", nullptr, Value::txt("text_muted")});
+            m->contentHash = fnv1a("banner_message_" + message);
+            synthesizedChildren.push_back(m);
+        }
+        // Existing (manually composed) children are kept and rendered after the synthesized
+        // title/message, e.g. a nested @view.Row of action Buttons.
+        for (auto& c : s->children) synthesizedChildren.push_back(c);
+
+        bool closable = s->attrStr("closable", "false") == "true";
+        bool userSetVisible = s->attr("visible") != nullptr;
+        if (closable) {
+            std::string cell = (s->name.empty() ? "banner" : s->name) + "_open";
+            if (!warp.has(cell)) warp.set(cell, Value::txt("true"));
+
+            // Close button: onTap=toggle(<cell>) built the same way buildFabric() would have
+            // built it from real parsed source -- rawExpr is a genuine rin::CallExpr/VariableExpr
+            // pair, evaluated through the same evalAttrExpr() every ordinary attribute uses, so
+            // Needle's dispatchTap() (which pattern-matches on rawExpr, not on any Banner-specific
+            // code) dispatches it exactly like a hand-written onTap=toggle(myCell); would.
+            auto call = std::make_shared<rin::CallExpr>();
+            call->callee = "toggle";
+            auto arg = std::make_shared<rin::VariableExpr>(); arg->name = cell;
+            call->args.push_back(arg);
+
+            auto close = std::make_shared<Strand>();
+            close->kind = StrandKind::BUTTON; close->name = s->name + "_close"; close->sourceLine = s->sourceLine;
+            close->id = deriveId(s->name, "close", 0, StrandKind::BUTTON);
+            close->attrs.push_back({"label", nullptr, Value::txt("\xC3\x97")}); // "×"
+            close->attrs.push_back({"variant", nullptr, Value::txt("ghost")});
+            close->attrs.push_back({"tone", nullptr, Value::txt("neutral")});
+            close->attrs.push_back({"size", nullptr, Value::txt("small")});
+            close->attrs.push_back({"a11y_label", nullptr, Value::txt("Dismiss")});
+            std::vector<std::string> reads;
+            Value onTapVal = evalAttrExpr(call, warp, &reads);
+            for (auto& w : reads) subs.record(w, close->id);
+            close->attrs.push_back({"onTap", call, onTapVal});
+            close->contentHash = fnv1a("banner_close_" + cell);
+            synthesizedChildren.push_back(close);
+
+            // visible= reads the auto-created cell UNLESS the .rin source already set its own
+            // visible=... explicitly -- an explicit value always wins, the same precedence rule
+            // width=/sizing="fill" already uses elsewhere in this engine.
+            if (!userSetVisible) {
+                auto visVar = std::make_shared<rin::VariableExpr>(); visVar->name = cell;
+                std::vector<std::string> visReads;
+                Value visVal = evalAttrExpr(visVar, warp, &visReads);
+                for (auto& w : visReads) subs.record(w, s->id);
+                s->attrs.push_back({"visible", visVar, visVal});
+            }
+        }
+        s->children = synthesizedChildren;
+
+        uint64_t childHashAcc = 0;
+        for (auto& c : s->children) childHashAcc = fnv1a(std::to_string(c->contentHash), childHashAcc);
+        uint64_t attrHash = 1469598103934665603ULL;
+        for (auto& a : s->attrs) attrHash = fnv1a(a.key + "=" + a.value.asString(), attrHash);
+        s->contentHash = fnv1a(strandKindName(s->kind), fnv1a(std::to_string(attrHash), childHashAcc));
+    }
+    for (auto& c : s->children) applyBannerConveniences(c, warp, subs);
+}
+
 // Recomputes contentHash bottom-up for a whole subtree — used after a Warp-driven attribute
 // change (which mutates a leaf's Value directly) so ancestor Tension caches invalidate correctly,
 // exactly mirroring what the Shuttle does automatically after a source-edit diff.
