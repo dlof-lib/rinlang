@@ -6,6 +6,10 @@
 #include <fstream>
 #include <sstream>
 #include <algorithm>
+#include <cstring>
+#include <cmath>
+#include <cstdint>
+#include <zlib.h>
 
 namespace loom {
 
@@ -246,9 +250,14 @@ struct Dye {
     }
 };
 
-inline void rasterizeToPPM(const DrawList& list, int W, int H, const std::string& path) {
-    std::vector<unsigned char> buf(W*H*3, 18);
-    auto setPx = [&](int x,int y, Color c){ if (x<0||y<0||x>=W||y>=H) return; int i=(y*W+x)*3; buf[i]=c.r; buf[i+1]=c.g; buf[i+2]=c.b; };
+// Rasterizes a DrawList into a flat RGB888 pixel buffer (row-major, top-to-bottom). This is the
+// ONE rasterizer in the engine (§21/§36: "لا تنشئ Renderer منفصلاً يكرر منطق Loom") -- both
+// rasterizeToPPM() and writePNG()/exportFabricToPNG() below consume this exact buffer, so a PPM
+// and a PNG of the same Fabric are always pixel-identical; PNG is purely an encoding added on top.
+inline std::vector<unsigned char> rasterizeToBuffer(const DrawList& list, int W, int H) {
+    std::vector<unsigned char> buf((size_t)W*H*3, 18);
+    if (W <= 0 || H <= 0) return buf;
+    auto setPx = [&](int x,int y, Color c){ if (x<0||y<0||x>=W||y>=H) return; size_t i=((size_t)y*W+x)*3; buf[i]=c.r; buf[i+1]=c.g; buf[i+2]=c.b; };
     for (auto& cmd : list) {
         if (cmd.op == DrawOp::FILL_RECT) {
             int x0=(int)cmd.bounds.x, y0=(int)cmd.bounds.y, x1=(int)(cmd.bounds.x+cmd.bounds.w), y1=(int)(cmd.bounds.y+cmd.bounds.h);
@@ -263,9 +272,110 @@ inline void rasterizeToPPM(const DrawList& list, int W, int H, const std::string
             for (size_t i=0;i<cmd.text.size();i++) for (int dx=0; dx<6; dx++) setPx(x0 + (int)i*8 + dx, y, cmd.color);
         }
     }
+    return buf;
+}
+
+inline void rasterizeToPPM(const DrawList& list, int W, int H, const std::string& path) {
+    auto buf = rasterizeToBuffer(list, W, H);
     std::ofstream f(path, std::ios::binary);
     f << "P6\n" << W << " " << H << "\n255\n";
     f.write((char*)buf.data(), buf.size());
+}
+
+// ---- Minimal, dependency-free (beyond zlib, already linked for the diagnostics gzip path) real
+// PNG encoder: standard PNG CRC32 + zlib deflate for IDAT. No stb_image/libpng -- this is the
+// smallest correct implementation of the PNG spec (signature, IHDR, one IDAT, IEND), not a fake
+// "renamed PPM" (see §40: "تستخدم حلولاً وهمية للتنزيل أو PNG" is explicitly forbidden).
+namespace png_detail {
+inline uint32_t crc32(const unsigned char* buf, size_t len) {
+    static uint32_t table[256];
+    static bool init = false;
+    if (!init) {
+        for (uint32_t n = 0; n < 256; n++) {
+            uint32_t c = n;
+            for (int k = 0; k < 8; k++) c = (c & 1) ? (0xedb88320u ^ (c >> 1)) : (c >> 1);
+            table[n] = c;
+        }
+        init = true;
+    }
+    uint32_t c = 0xffffffffu;
+    for (size_t i = 0; i < len; i++) c = table[(c ^ buf[i]) & 0xff] ^ (c >> 8);
+    return c ^ 0xffffffffu;
+}
+inline void putBE32(std::vector<unsigned char>& out, uint32_t v) {
+    out.push_back((unsigned char)((v >> 24) & 0xff));
+    out.push_back((unsigned char)((v >> 16) & 0xff));
+    out.push_back((unsigned char)((v >> 8) & 0xff));
+    out.push_back((unsigned char)(v & 0xff));
+}
+inline void writeChunk(std::ostream& f, const char* type, const unsigned char* data, size_t len) {
+    std::vector<unsigned char> lenBuf; putBE32(lenBuf, (uint32_t)len);
+    f.write((char*)lenBuf.data(), 4);
+    std::vector<unsigned char> crcInput(4 + len);
+    memcpy(crcInput.data(), type, 4);
+    if (len) memcpy(crcInput.data() + 4, data, len);
+    f.write((char*)crcInput.data(), 4 + (std::streamsize)len);
+    std::vector<unsigned char> crcBuf; putBE32(crcBuf, crc32(crcInput.data(), crcInput.size()));
+    f.write((char*)crcBuf.data(), 4);
+}
+} // namespace png_detail
+
+// Encodes an RGB888 buffer (as produced by rasterizeToBuffer) as a real, spec-valid PNG file.
+// Returns false (never throws, never crashes -- §28) if the file can't be opened or W/H are
+// non-positive; callers surface that as a normal [Exxxx] Snag rather than letting it propagate.
+inline bool writePNG(const std::string& path, int W, int H, const std::vector<unsigned char>& rgb) {
+    if (W <= 0 || H <= 0) return false;
+    if (rgb.size() < (size_t)W * H * 3) return false;
+
+    // Build the unfiltered scanline stream: one filter-type byte (0 = None) per row + RGB bytes.
+    std::vector<unsigned char> raw;
+    raw.reserve((size_t)H * (1 + (size_t)W * 3));
+    for (int y = 0; y < H; y++) {
+        raw.push_back(0);
+        const unsigned char* row = rgb.data() + (size_t)y * W * 3;
+        raw.insert(raw.end(), row, row + (size_t)W * 3);
+    }
+
+    uLongf boundLen = compressBound((uLong)raw.size());
+    std::vector<unsigned char> compressed(boundLen);
+    if (compress2(compressed.data(), &boundLen, raw.data(), (uLong)raw.size(), 6) != Z_OK) return false;
+    compressed.resize(boundLen);
+
+    std::ofstream f(path, std::ios::binary);
+    if (!f) return false;
+    const unsigned char sig[8] = {0x89,'P','N','G','\r','\n',0x1a,'\n'};
+    f.write((char*)sig, 8);
+
+    unsigned char ihdr[13];
+    ihdr[0]=(W>>24)&0xff; ihdr[1]=(W>>16)&0xff; ihdr[2]=(W>>8)&0xff; ihdr[3]=W&0xff;
+    ihdr[4]=(H>>24)&0xff; ihdr[5]=(H>>16)&0xff; ihdr[6]=(H>>8)&0xff; ihdr[7]=H&0xff;
+    ihdr[8]=8;   // bit depth
+    ihdr[9]=2;   // color type: truecolor (RGB)
+    ihdr[10]=0; ihdr[11]=0; ihdr[12]=0; // compression, filter, interlace
+    png_detail::writeChunk(f, "IHDR", ihdr, 13);
+    png_detail::writeChunk(f, "IDAT", compressed.data(), compressed.size());
+    png_detail::writeChunk(f, "IEND", nullptr, 0);
+    return f.good();
+}
+
+// §22/§23: screenshot the whole Fabric, or export any subtree (a specific Container by Strand)
+// as its own PNG -- both walk through the *same* Dye::paint() as normal rendering, they don't
+// re-implement painting. For a subtree, geometry is in root-relative coordinates, so every draw
+// command is translated by the subtree's own top-left before rasterizing into a buffer sized to
+// exactly that subtree's bounds -- e.g. exportPNG(profile, "profile.png") is not a full-screen
+// image with the rest blanked out, it is a WxH image that IS the profile Container.
+inline bool exportFabricToPNG(Dye& dye, const StrandPtr& subtreeRoot, const std::string& path) {
+    if (!subtreeRoot) return false;
+    int W = (int)std::ceil(subtreeRoot->geometry.w);
+    int H = (int)std::ceil(subtreeRoot->geometry.h);
+    if (W <= 0 || H <= 0) return false;
+    auto drawList = dye.paint(subtreeRoot);
+    double ox = subtreeRoot->geometry.x, oy = subtreeRoot->geometry.y;
+    if (ox != 0.0 || oy != 0.0) {
+        for (auto& cmd : drawList) { cmd.bounds.x -= ox; cmd.bounds.y -= oy; }
+    }
+    auto buf = rasterizeToBuffer(drawList, W, H);
+    return writePNG(path, W, H, buf);
 }
 
 // JSON serialization of the full Fabric (geometry + resolved attrs) — this is what crosses the
