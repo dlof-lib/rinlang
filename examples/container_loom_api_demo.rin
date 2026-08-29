@@ -1,0 +1,91 @@
+// ============================================================================
+// container_loom_api_demo.rin
+// ----------------------------------------------------------------------------
+// عرض توضيحي كامل لربط مفاهيم Rin بـ container، ولتفعيل ميزات container.api
+// فعلياً (لا محاكاة فقط):
+//
+//   1) شاشة UI كاملة (warp + @theme + @view) مُعرَّفة ومُخزَّنة داخل @container
+//      واحدة، بدل أن تبقى Loomtime نظاماً منفصلاً لا يمر عبر container إطلاقاً.
+//   2) container.api حقيقي: route يبقى توثيقاً/عقداً متوقَّعاً للنقطة، لكن
+//      apiRegister بداخل نفس الحاوية يجعل call() يُجري طلب شبكة حقيقياً فعلياً.
+//   3) container.api بلا apiRegister: يبقى بنفس سلوكه القديم تماماً (محاكاة
+//      صرفة بلا شبكة، جيدة للاختبار بلا اتصال) — التوافق الخلفي كامل.
+//
+// التشغيل:
+//   rin_run examples/container_loom_api_demo.rin
+//   rin_loom_run render examples/container_loom_api_demo.rin        (الشاشة العلوية إن وُجدت)
+//   (عرض شاشة Home وحدها عبر rin_loom_render_container_json / renderContainerView على أندرويد)
+// ============================================================================
+
+// ---------------------------------------------------------------------------
+// 1) شاشة "Home": UI مربوطة بالكامل بحاويتها — warp (حالة) + theme (ألوان) + view (شجرة واجهة)
+// ---------------------------------------------------------------------------
+@container=Home
+    // warp: حالة حية قابلة للقراءة/التعديل من أي كود Rin آخر داخل هذه الحاوية بالضبط كأي متغيّر.
+    warp counter = 0;
+    warp userName = "زائر";
+
+    // theme: لوحة ألوان خاصة بهذه الشاشة تحديداً (لا تتسرّب لأي حاوية أخرى).
+    @theme=Midnight
+        active=true;
+        primary="#7C5CFF";
+        background="#0F0F14";
+        text="#F5F5F7";
+    .end/theme
+
+    // view: شجرة الواجهة الفعلية لهذه الشاشة، مبنية بالكامل داخل حاويتها.
+    @view.Column=Root
+        @view.Text=Title
+            text="مرحباً " + userName;
+        .end/view
+        @view.Text=CounterLabel
+            text="العداد: " + counter;
+        .end/view
+    .end/view
+
+    print "✔ Home جاهزة —", "hasView:", containerHasView("Home"),
+          "view:", containerViewName("Home"),
+          "warps:", containerWarpNames("Home"),
+          "themes:", containerThemeNames("Home");
+.end/container
+
+
+// ---------------------------------------------------------------------------
+// 2) container.api حقيقي: apiRegister بنفس اسم الحاوية => call() ينفّذ طلب شبكة فعلياً
+// ---------------------------------------------------------------------------
+@container.api=Users
+    // يربط هذه الحاوية بنقطة API حقيقية على الشبكة. مطابقة الاسم ("Users") هي ما يفعّل التنفيذ
+    // الحقيقي داخل call()/callApi() بدل مطابقة route الوهمية أدناه.
+    apiRegister("Users", "https://jsonplaceholder.typicode.com");
+    apiHeader("Users", "Accept", "application/json");
+
+    // route يبقى توثيقاً حياً لعقد النقطة المتوقَّع (شكل الاستجابة عند النجاح)، حتى مع التنفيذ الحقيقي.
+    route method="GET" path="/users/1" status=200 body={ id: 1, name: "Leanne Graham" };
+.end/container.api
+
+fun demoRealApiCall() {
+    print "→ استدعاء حقيقي عبر callApi() (يتطلب اتصال شبكة فعلياً على الجهاز)...";
+    // call() (بلا اسم) تستخدم container.api "الحالية" أثناء التنفيذ بداخلها فقط؛ من خارج حاويتها
+    // (كما هنا، من دالة أعلى المستوى) يُستخدَم callApi(name, method, path) بدلاً منها.
+    let res = callApi("Users", "GET", "/users/1"); // بوجود apiRegister أعلاه: طلب HTTP حقيقي فعلياً، لا محاكاة
+    if (res["ok"]) {
+        print "✔ نجح الطلب الحقيقي، status =", res["status"], "json =", res["json"];
+    } else {
+        print "⚠ تعذّر الاتصال الحقيقي (متوقَّع بلا شبكة):", res["error"];
+    }
+}
+demoRealApiCall();
+
+
+// ---------------------------------------------------------------------------
+// 3) container.api وهمي (بلا apiRegister): نفس السلوك القديم تماماً — بلا شبكة إطلاقاً
+// ---------------------------------------------------------------------------
+@container.api=UsersMock
+    route method="GET" path="/users/1" status=200 body={ id: 1, name: "Mock User" };
+.end/container.api
+
+fun demoMockApiCall() {
+    let res = callApi("UsersMock", "GET", "/users/1");
+    print "→ استدعاء وهمي بلا شبكة: status =", res["status"], "body =", res["body"];
+}
+demoMockApiCall();
