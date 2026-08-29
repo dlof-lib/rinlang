@@ -1725,23 +1725,39 @@ void Interpreter::registerNatives() {
     // 'warp memory = {};' بداخل الحاوية، وهو نفس مبدأ warp المستخدم أصلاً لأي حالة حيّة (انظر
     // container_loom_api_demo.rin). ما يلي هو سجلّ الرسائل + مؤشر الكتابة + الأحداث فقط.
 
-    // يبني رسالة واحدة كـ map موحَّد الشكل: role/text/time/kind/meta
+    // يبني رسالة واحدة كـ map موحَّد الشكل: role/text/time/kind/format/meta
+    // format = "text" (افتراضي) | "markdown" | "code" -> يُقرَأ من طبقة العرض (Loom) لتقرير كيفية
+    // رسم فقاعة الرسالة (نص عادي، Markdown مُنسَّق، أو كتلة كود بخط ثابت العرض). لا علاقة له بـ
+    // "kind" (text/attachment/...) الذي يصف نوع المحتوى نفسه لا طريقة عرضه.
     auto makeChatMessageValue = [](const std::string& role, const Value& text,
-                                    const std::string& kind, const Value& meta) -> Value {
+                                    const std::string& kind, const Value& meta,
+                                    const std::string& format = "text") -> Value {
         auto m = std::make_shared<MapData>();
         m->push_back({Value::string("role"), Value::string(role)});
         m->push_back({Value::string("text"), text});
         m->push_back({Value::string("time"), Value::num(static_cast<double>(std::time(nullptr)))});
         m->push_back({Value::string("kind"), Value::string(kind)});
+        m->push_back({Value::string("format"), Value::string(format)});
         m->push_back({Value::string("meta"), meta});
         return Value::makeMap(m);
     };
 
-    // sendMessage(container, role, text) -> يضيف رسالة (role عادةً "user" أو "bot" أو أي اسم آخر)
-    // ويطلق معالجات onChat(container, "message", fn) المسجَّلة (fn بتوقيع fun(msg) { ... }).
+    // يتحقّق من قيمة format مُمرَّرة اختيارياً لدوال الإرسال؛ يرمي خطأ إن كانت غير معروفة.
+    auto validateChatFormat = [this](const std::string& fn, const std::string& format, int line) {
+        static const std::vector<std::string> validFormats = {"text", "markdown", "code"};
+        if (std::find(validFormats.begin(), validFormats.end(), format) == validFormats.end()) {
+            throw errWithReason(diag::Code::E0016_InvalidProperty, line,
+                                 "'" + format + "' is not a recognized chat message format",
+                                 "expected one of: \"text\", \"markdown\", \"code\" (used by `" + fn + "`)");
+        }
+    };
+
+    // sendMessage(container, role, text, format?) -> يضيف رسالة (role عادةً "user" أو "bot" أو أي
+    // اسم آخر) ويطلق معالجات onChat(container, "message", fn) المسجَّلة (fn بتوقيع fun(msg) { ... }).
+    // format اختياري: "text" (افتراضي)/"markdown"/"code" -> يُخزَّن على الرسالة لتفسّره طبقة العرض.
     // يُعيد الرسالة نفسها (map) بعد إضافتها.
-    natives["sendMessage"] = [this, makeChatMessageValue](std::vector<Value>& a, int line) -> Value {
-        expectArgs("sendMessage", a, 3, line);
+    natives["sendMessage"] = [this, makeChatMessageValue, validateChatFormat](std::vector<Value>& a, int line) -> Value {
+        expectArgsRange("sendMessage", a, 3, 4, line);
         std::string container = asString(a[0], "sendMessage", line);
         std::string role = asString(a[1], "sendMessage", line);
         if (!containerKinds.count(container) || containerKinds[container] != ContainerKind::CHATBOT) {
@@ -1749,17 +1765,109 @@ void Interpreter::registerNatives() {
                                  "'" + container + "' is not a chatbot container",
                                  "expected a `container.chatbot` / `chatbot` container, defined with `container.chatbot`");
         }
-        Value msg = makeChatMessageValue(role, a[2], "text", Value::nil());
+        std::string format = a.size() > 3 ? asString(a[3], "sendMessage", line) : "text";
+        validateChatFormat("sendMessage", format, line);
+        Value msg = makeChatMessageValue(role, a[2], "text", Value::nil(), format);
         chatHistoryStore[container].push_back(msg);
         fireChatEvent(container, "message", {msg}, line);
         return msg;
     };
 
-    // botReply(container, text) -> اختصار لِ sendMessage(container, "bot", text)
+    // botReply(container, text, format?) -> اختصار لِ sendMessage(container, "bot", text, format?)
     natives["botReply"] = [this](std::vector<Value>& a, int line) -> Value {
-        expectArgs("botReply", a, 2, line);
+        expectArgsRange("botReply", a, 2, 3, line);
         std::vector<Value> forwarded{a[0], Value::string("bot"), a[1]};
+        if (a.size() > 2) forwarded.push_back(a[2]);
         return natives["sendMessage"](forwarded, line);
+    };
+
+    // botReplyMarkdown(container, text) -> اختصار لِ botReply(container, text, "markdown")
+    natives["botReplyMarkdown"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("botReplyMarkdown", a, 2, line);
+        std::vector<Value> forwarded{a[0], a[1], Value::string("markdown")};
+        return natives["botReply"](forwarded, line);
+    };
+
+    // botReplyCode(container, code, language?) -> اختصار لِ botReply(container, code, "code")،
+    // مع تخزين language (مثال: "cpp"/"python"/"rin") داخل meta.language لتلوين الصياغة اختيارياً
+    // على مستوى طبقة العرض (Loom/Kotlin). language اختياري، الافتراضي "" (بلا تلوين محدَّد).
+    natives["botReplyCode"] = [this, makeChatMessageValue](std::vector<Value>& a, int line) -> Value {
+        expectArgsRange("botReplyCode", a, 2, 3, line);
+        std::string container = asString(a[0], "botReplyCode", line);
+        if (!containerKinds.count(container) || containerKinds[container] != ContainerKind::CHATBOT) {
+            throw errWithReason(diag::Code::E0014_InvalidContainer, line,
+                                 "'" + container + "' is not a chatbot container",
+                                 "expected a `container.chatbot` / `chatbot` container, defined with `container.chatbot`");
+        }
+        std::string language = a.size() > 2 ? asString(a[2], "botReplyCode", line) : "";
+        auto meta = std::make_shared<MapData>();
+        meta->push_back({Value::string("language"), Value::string(language)});
+        Value msg = makeChatMessageValue("bot", a[1], "text", Value::makeMap(meta), "code");
+        chatHistoryStore[container].push_back(msg);
+        fireChatEvent(container, "message", {msg}, line);
+        return msg;
+    };
+
+    // streamReply(container, text, chunkSize?) -> يحاكي ردّاً تدريجياً (stream=true): يضيف رسالة
+    // بوت واحدة فوراً (meta.streaming=true) بأول جزء من النص، ثم يُحدِّث نفس الرسالة (بالمرجع، داخل
+    // chatHistoryStore) جزءاً تلو الآخر حتى اكتمال النص كاملاً (meta.streaming=false في النهاية).
+    // يطلق onChat(container, "message", fn) مع كل جزء (fn تستقبل الرسالة بحالتها الحالية)، فيكفي
+    // لطبقة العرض إعادة رسم آخر رسالة عند كل نداء بدل إضافة فقاعة جديدة في كل مرة -- هذا هو الفرق
+    // الجوهري بين stream=true وبين استدعاء botReply عدة مرات (الذي يُنشئ فقاعة منفصلة كل مرة).
+    // chunkSize اختياري (عدد الأحرف لكل جزء)، الافتراضي 8. يُعيد الرسالة النهائية المكتملة.
+    natives["streamReply"] = [this, makeChatMessageValue](std::vector<Value>& a, int line) -> Value {
+        expectArgsRange("streamReply", a, 2, 3, line);
+        std::string container = asString(a[0], "streamReply", line);
+        std::string fullText = asString(a[1], "streamReply", line);
+        if (!containerKinds.count(container) || containerKinds[container] != ContainerKind::CHATBOT) {
+            throw errWithReason(diag::Code::E0014_InvalidContainer, line,
+                                 "'" + container + "' is not a chatbot container",
+                                 "expected a `container.chatbot` / `chatbot` container, defined with `container.chatbot`");
+        }
+        int chunkSize = 8;
+        if (a.size() > 2) {
+            double n = asNumber(a[2], "streamReply", line);
+            if (n >= 1.0) chunkSize = static_cast<int>(n);
+        }
+        auto meta = std::make_shared<MapData>();
+        meta->push_back({Value::string("streaming"), Value::boolean_(true)});
+        Value msg = makeChatMessageValue("bot", Value::string(""), "text", Value::makeMap(meta), "text");
+        chatHistoryStore[container].push_back(msg);
+        size_t idx = chatHistoryStore[container].size() - 1;
+
+        std::string soFar;
+        for (size_t pos = 0; pos < fullText.size(); pos += static_cast<size_t>(chunkSize)) {
+            soFar += fullText.substr(pos, static_cast<size_t>(chunkSize));
+            bool isLast = (pos + static_cast<size_t>(chunkSize)) >= fullText.size();
+            auto m = std::make_shared<MapData>();
+            m->push_back({Value::string("role"), Value::string("bot")});
+            m->push_back({Value::string("text"), Value::string(soFar)});
+            m->push_back({Value::string("time"), Value::num(static_cast<double>(std::time(nullptr)))});
+            m->push_back({Value::string("kind"), Value::string("text")});
+            m->push_back({Value::string("format"), Value::string("text")});
+            auto stepMeta = std::make_shared<MapData>();
+            stepMeta->push_back({Value::string("streaming"), Value::boolean_(!isLast)});
+            m->push_back({Value::string("meta"), Value::makeMap(stepMeta)});
+            Value stepMsg = Value::makeMap(m);
+            chatHistoryStore[container][idx] = stepMsg;
+            fireChatEvent(container, "message", {stepMsg}, line);
+        }
+        if (fullText.empty()) {
+            // نص فارغ: لا حلقة أعلاه نُفِّذت، فأطلق نداءً أخيراً واحداً بحالة اكتمال فورية.
+            auto stepMeta = std::make_shared<MapData>();
+            stepMeta->push_back({Value::string("streaming"), Value::boolean_(false)});
+            auto m = std::make_shared<MapData>();
+            m->push_back({Value::string("role"), Value::string("bot")});
+            m->push_back({Value::string("text"), Value::string("")});
+            m->push_back({Value::string("time"), Value::num(static_cast<double>(std::time(nullptr)))});
+            m->push_back({Value::string("kind"), Value::string("text")});
+            m->push_back({Value::string("format"), Value::string("text")});
+            m->push_back({Value::string("meta"), Value::makeMap(stepMeta)});
+            Value stepMsg = Value::makeMap(m);
+            chatHistoryStore[container][idx] = stepMsg;
+            fireChatEvent(container, "message", {stepMsg}, line);
+        }
+        return chatHistoryStore[container][idx];
     };
 
     // attachToChat(container, role, fileRef, caption) -> مثل sendMessage لكن kind="attachment"،
@@ -2999,7 +3107,9 @@ std::string Interpreter::buildChatPng(const std::string& key) const {
     }
 
     return pngutil::encodeRgbPng(width, height, rgb);
-}(const std::string& key, const EnvPtr& containerEnv,
+}
+
+std::string Interpreter::buildSaveDocument(const std::string& key, const EnvPtr& containerEnv,
                                             ContainerKind kind, bool simplified) const {
     std::string tag = containerTagName(kind);
     std::string body = serializeEnvBody(containerEnv, simplified);
