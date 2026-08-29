@@ -45,6 +45,13 @@ enum class StrandKind {
     TABS, TABITEM,
     TOOLTIP,
 
+    // §18/§2: Icon System. ICON is a small standalone glyph leaf; ICONBUTTON is a tappable
+    // Button that carries an icon= glyph alongside (or instead of) a label= -- it reuses
+    // measureButton()/paintButton() wholesale (rin_loom_layout.h/rin_loom_paint.h) rather than
+    // being a parallel button implementation, exactly the "don't duplicate the renderer" rule
+    // spec §36/§40 asks for.
+    ICON, ICONBUTTON,
+
     CUSTOM
 };
 inline StrandKind strandKindFromTag(const std::string& tag) {
@@ -91,6 +98,8 @@ inline StrandKind strandKindFromTag(const std::string& tag) {
     if (tag == "Tabs" || tag == "tabs") return StrandKind::TABS;
     if (tag == "TabItem" || tag == "tabitem" || tag == "tabItem") return StrandKind::TABITEM;
     if (tag == "Tooltip" || tag == "tooltip") return StrandKind::TOOLTIP;
+    if (tag == "Icon" || tag == "icon") return StrandKind::ICON;
+    if (tag == "IconButton" || tag == "iconbutton" || tag == "iconButton") return StrandKind::ICONBUTTON;
 
     return StrandKind::CUSTOM; // resolved via Bolt (plugin) registry — see architecture doc §18
 }
@@ -132,6 +141,8 @@ inline std::string strandKindName(StrandKind k) {
         case StrandKind::TABS: return "Tabs";
         case StrandKind::TABITEM: return "TabItem";
         case StrandKind::TOOLTIP: return "Tooltip";
+        case StrandKind::ICON: return "Icon";
+        case StrandKind::ICONBUTTON: return "IconButton";
 
         default: return "Custom";
     }
