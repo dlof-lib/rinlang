@@ -18,6 +18,7 @@
 // loom/rin_loom_c_api.cpp's session API) is what turns that into Patch[]/geometry updates.
 #pragma once
 #include "rin_loom_strand.h"
+#include "rin_loom_tokens.h"
 #include "../rin_interpreter.h"
 #include <vector>
 #include <string>
@@ -75,9 +76,13 @@ inline TapResult dispatchTap(const StrandPtr& fabricRoot, WarpScope& warp,
     if (!hitTestPath(fabricRoot, x, y, path)) return result; // nothing under the tap
 
     // Bubble outward (leaf to root) for the nearest Strand that actually declared onTap=...;
+    // A disabled Strand (state=disabled or disabled=true) is treated as if it had no onTap at
+    // all -- Needle keeps bubbling past it to whatever's underneath, exactly like a real disabled
+    // native button consumes no tap. This is real interaction gating, not just a paint dimming.
     const rin::ExprPtr* onTapExpr = nullptr;
     StrandPtr owner;
     for (auto& s : path) {
+        if (resolveState(*s) == StrandState::DISABLED) continue;
         for (auto& a : s->attrs) {
             if (a.key == "onTap" && a.rawExpr) { onTapExpr = &a.rawExpr; owner = s; break; }
         }
