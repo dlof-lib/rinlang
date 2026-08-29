@@ -475,7 +475,8 @@ std::string Parser::readTagKeyword() {
         if (!nextIsPipe && current + 1 < tokens.size() && tokens[current + 1].type == TokenType::IDENT) {
             const std::string& w = tokens[current + 1].lexeme;
             nextIsContextualWord = (w == "data" || w == "api" || w == "import" || w == "table" || w == "doc" ||
-                                     w == "object" || w == "portal" || w == "block" || w == "aukt" || w == "open");
+                                     w == "object" || w == "portal" || w == "block" || w == "aukt" || w == "open" ||
+                                     w == "chatbot");
         }
         // لا نستهلك '.' إلا إذا كانت متبوعة مباشرة بإحدى هذه الكلمات، وإلا فقد تكون في الحقيقة
         // بداية وسم إغلاق آخر مجاور مثل '.end/container' تلاه '.end/Containers.Group'
@@ -671,7 +672,7 @@ StmtPtr Parser::atBlock() {
         "container.doc", "Containers.Group", "Volume", "table", "doc",
         // مفاهيم التنسيق والستايل: كائن (Object) / بوابة تنسيق (portal) / كتلة واجهة جاهزة (block)
         "container.object", "Object", "container.open/object", "container.portal", "portal", "container.block", "block",
-        "container.sticker", "sticker", "container.aukt", "AUKT",
+        "container.sticker", "sticker", "container.aukt", "AUKT", "container.chatbot", "chatbot",
         // اختصارات مستقلة (بلا بادئة container.) لبقية أنواع الحاويات، بنفس مبدأ table/doc/Object/portal/
         // block/sticker/AUKT أعلاه: @pipe / @data / @api تُنتج بالضبط نفس ContainerKind::PIPE/DATA/API
         // التي تُنتجها container.pipe/container.data/container.api، بلا أي فرق دلالي — مجرد كتابة أقصر.
@@ -691,7 +692,7 @@ StmtPtr Parser::atBlock() {
             d.diagnostic->withHint("expected one of: container, container.pipe, container.data, container.api, "
                                     "container.import, container.table, container.doc, container.object, "
                                     "container.portal, container.block, container.sticker, container.aukt, "
-                                    "Containers.Group, or Volume");
+                                    "container.chatbot, Containers.Group, or Volume");
         }
         throw d;
     }
@@ -708,7 +709,8 @@ StmtPtr Parser::atBlock() {
         tag == "container.portal" || tag == "portal" ||
         tag == "container.block" || tag == "block" ||
         tag == "container.sticker" || tag == "sticker" ||
-        tag == "container.aukt" || tag == "AUKT") {
+        tag == "container.aukt" || tag == "AUKT" ||
+        tag == "container.chatbot" || tag == "chatbot") {
         // container.table/table (صفوف row + نمط style)، container.doc/doc (مستندات document)، وكذلك
         // container.object/Object، container.portal/portal، container.block/block، وأخيراً
         // container.sticker/sticker (بطاقة هوية بصرية جاهزة: أيقونة/ألوان/حواف/خلفية...) تشترك جميعاً
@@ -734,6 +736,7 @@ StmtPtr Parser::atBlock() {
         else if (tag == "container.block" || tag == "block") s->kind = ContainerKind::BLOCK;
         else if (tag == "container.sticker" || tag == "sticker") s->kind = ContainerKind::STICKER;
         else if (tag == "container.aukt" || tag == "AUKT") s->kind = ContainerKind::AUKT;
+        else if (tag == "container.chatbot" || tag == "chatbot") s->kind = ContainerKind::CHATBOT;
         else s->kind = ContainerKind::PLAIN;
         return s;
     }
