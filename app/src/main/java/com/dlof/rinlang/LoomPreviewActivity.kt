@@ -232,7 +232,7 @@ class LoomPreviewActivity : AppCompatActivity(), LoomPreviewManager.Listener {
         }
 
         val h = fabric.optDouble("h", 640.0).toInt().coerceAtLeast(120)
-        fabricView.setFabric(fabric, currentDeviceWidth, h)
+        fabricView.setFabric(fabric, currentDeviceWidth, h, result.optJSONArray("overlays"))
 
         val hasSnag = result.has("snag") || result.has("error")
         if (hasSnag) showError(formatError(result)) else hideError()
