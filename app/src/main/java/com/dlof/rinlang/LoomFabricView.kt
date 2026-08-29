@@ -49,6 +49,9 @@ class LoomFabricView @JvmOverloads constructor(
         const val VIDEO = "Video"; const val AUDIO = "Audio"; const val WEBVIEW = "WebView"
         const val SCAFFOLD = "Scaffold"; const val SPLASH = "Splash"
         const val BANNER = "Banner"
+        // Overlay Engine (rin_loom_overlay.h / rin_loom_paint.h's colorForKind): Dialog paints
+        // like a Card (theme surface role); Tooltip paints like a small neutral chip.
+        const val DIALOG = "Dialog"; const val TOOLTIP = "Tooltip"
     }
 
     private val defaultBar = Color.rgb(30, 31, 40)
@@ -65,6 +68,9 @@ class LoomFabricView @JvmOverloads constructor(
     private val defaultDivider = Color.rgb(51, 51, 63)
     private val defaultContainer = Color.rgb(24, 25, 32) // Column/Row/Stack/Custom root fallback
     private val defaultBanner = Color.rgb(44, 47, 61) // neutral Banner default; see bannerTypeColor()
+    private val defaultDialog = Color.rgb(40, 42, 54) // matches loom::colorForKind()'s Theme::surface for DIALOG
+    private val defaultTooltip = Color.rgb(60, 62, 74) // matches Theme::neutral for TOOLTIP
+    private val scrimColor = Color.argb(140, 0, 0, 0) // ~55% black — matches loom::scrimColor()'s RGB, opacity is this renderer's own convention (see rin_loom_paint.h's SCRIM_RECT comment)
 
     // ---- must match loom::bannerTypeColor() in rin_loom_paint.h exactly ----
     private fun bannerTypeColor(type: String): Int = when (type) {
@@ -94,6 +100,18 @@ class LoomFabricView @JvmOverloads constructor(
 
     /** The Fabric root node (the object under the top-level `"fabric"` key), or null while empty/erroring. */
     private var fabric: JSONObject? = null
+
+    // ---- Overlay Engine (rin_loom_overlay.h) ----
+    //
+    // The top-level result JSON's `"overlays"` array (see overlayLayerJson() in rin_loom_c_api.cpp).
+    // Each entry's `box`/`scrimRect` are already the corrected, viewport-relative coordinates
+    // (buildOverlayLayer() on the native side mutated the Strand's own x/y in place, so the
+    // Fabric tree walked by [drawNode] already has them too) — what this array adds is what a
+    // single node's generic {kind,x,y,w,h,attrs} shape can't carry: *which* nodes are overlays
+    // (so the normal recursive walk skips them and their descendants), their back-to-front
+    // stacking order, and their scrim/modal metadata.
+    private var overlayEntries: List<JSONObject> = emptyList()
+    private var overlayNames: Set<String> = emptySet()
 
     /** Fired with root-px coordinates on a single tap — forwarded straight to [LoomPreviewManager.tap]. */
     var onTap: ((x: Double, y: Double) -> Unit)? = null
@@ -204,11 +222,18 @@ class LoomFabricView @JvmOverloads constructor(
     /**
      * Replaces the drawn Fabric with [node] (pass null to show an empty canvas — e.g. while the
      * very first render is pending). [rootW]/[rootH] size the view's intrinsic content bounds.
+     * [overlays] is the result JSON's top-level `"overlays"` array (see the Overlay Engine note
+     * above) — omit it (or pass null) for a caller that hasn't been updated for the Overlay
+     * Engine yet; every open Dialog/anchored Tooltip then simply draws inline at whatever
+     * position the Fabric tree gives it, exactly as before this feature existed.
      */
-    fun setFabric(node: JSONObject?, rootW: Int, rootH: Int) {
+    fun setFabric(node: JSONObject?, rootW: Int, rootH: Int, overlays: org.json.JSONArray? = null) {
         fabric = node
         rootWidthPx = max(1, rootW)
         rootHeightPx = max(1, rootH)
+
+        overlayEntries = (0 until (overlays?.length() ?: 0)).mapNotNull { overlays?.optJSONObject(it) }
+        overlayNames = overlayEntries.mapNotNull { it.optString("name").takeIf(String::isNotEmpty) }.toSet()
 
         // New: splash/loading pages — root attrs `duration="2000" navigate="mu.rin"` mean "auto
         // advance to mu.rin after 2000ms". Re-armed on every setFabric so switching pages cancels
@@ -271,6 +296,27 @@ class LoomFabricView @JvmOverloads constructor(
             drawNode(canvas, root)
         }
 
+        // Overlay Engine (rin_loom_overlay.h): paint the overlay layer strictly after the main
+        // document, in its own back-to-front order — a real second z-layer, not a hope that the
+        // Fabric's own tree order happened to put Dialog/Tooltip last (see drawNode's own
+        // overlayNames skip below for the other half of this). Each modal entry's scrim is drawn
+        // immediately before that entry's own subtree, matching native paintWithOverlay()'s order.
+        if (root != null) {
+            for (entry in overlayEntries) {
+                if (entry.optBoolean("scrim", false)) {
+                    entry.optJSONObject("scrimRect")?.let { r ->
+                        val rx = r.optDouble("x", 0.0).toFloat(); val ry = r.optDouble("y", 0.0).toFloat()
+                        val rw = r.optDouble("w", 0.0).toFloat(); val rh = r.optDouble("h", 0.0).toFloat()
+                        fillPaint.shader = null; fillPaint.clearShadowLayer()
+                        fillPaint.color = scrimColor
+                        canvas.drawRect(rx, ry, rx + rw, ry + rh, fillPaint)
+                    }
+                }
+                val name = entry.optString("name")
+                findNodeByName(root, name)?.let { overlayNode -> drawNode(canvas, overlayNode, skipOverlays = false) }
+            }
+        }
+
         if (showGrid) drawGrid(canvas)
         if (showSafeArea) drawSafeArea(canvas)
         inspectedNode?.let { drawInspectHighlight(canvas, it) }
@@ -278,9 +324,30 @@ class LoomFabricView @JvmOverloads constructor(
         canvas.restore()
     }
 
+    /** Finds the first node (pre-order) whose `name` equals [target] — mirrors the native side's
+     * findStrandByName() in rin_loom_overlay.h, used the same way: correlating an overlay entry
+     * back to its Fabric node. */
+    private fun findNodeByName(node: JSONObject, target: String): JSONObject? {
+        if (target.isEmpty()) return null
+        if (node.optString("name") == target) return node
+        val children = node.optJSONArray("children") ?: return null
+        for (i in 0 until children.length()) {
+            val child = children.optJSONObject(i) ?: continue
+            findNodeByName(child, target)?.let { return it }
+        }
+        return null
+    }
+
     // ---- tree walk ----
 
-    private fun drawNode(canvas: Canvas, node: JSONObject) {
+    /**
+     * [skipOverlays] is true for the main document walk (so an open Dialog / anchored Tooltip —
+     * named in [overlayNames] — and everything under it is skipped here and drawn only once,
+     * later, by [onDraw]'s explicit overlay pass) and false when [onDraw] calls back into this
+     * function to actually draw that overlay's own subtree.
+     */
+    private fun drawNode(canvas: Canvas, node: JSONObject, skipOverlays: Boolean = true) {
+        if (skipOverlays && overlayNames.contains(node.optString("name"))) return
         val kind = node.optString("kind")
         val x = node.optDouble("x", 0.0).toFloat()
         val y = node.optDouble("y", 0.0).toFloat()
@@ -330,6 +397,22 @@ class LoomFabricView @JvmOverloads constructor(
                     drawBox(canvas, rect, attrs, bannerTypeColor(attrs.optString("type")), defaultRadius = 12f)
                 }
             }
+            Kind.DIALOG -> {
+                // Overlay Engine (rin_loom_overlay.h): when closed, w/h are 0 and this draws
+                // nothing, same as any other zero-size Strand. When open, drawNode is reached
+                // for this node a second time from onDraw's explicit overlay pass (never from
+                // the normal recursive walk, which skips it via overlayNames) at its corrected,
+                // scrim-backed, viewport-centered position.
+                if (rect.width() > 0f && rect.height() > 0f) {
+                    drawBox(canvas, rect, attrs, defaultDialog, defaultRadius = 16f)
+                }
+            }
+            Kind.TOOLTIP -> {
+                if (rect.width() > 0f && rect.height() > 0f) {
+                    drawBox(canvas, rect, attrs, defaultTooltip, defaultRadius = 6f)
+                    drawText(canvas, rect, attrs, attrs.optString("text"), defaultText, centered = true, singleLine = true)
+                }
+            }
 
             else -> drawBox(canvas, rect, attrs, defaultContainer, defaultRadius = 0f) // Column/Row/Stack/Custom
         }
@@ -341,7 +424,7 @@ class LoomFabricView @JvmOverloads constructor(
         val children = node.optJSONArray("children")
         if (children != null) {
             for (i in 0 until children.length()) {
-                drawNode(canvas, children.optJSONObject(i) ?: continue)
+                drawNode(canvas, children.optJSONObject(i) ?: continue, skipOverlays)
             }
         }
     }
