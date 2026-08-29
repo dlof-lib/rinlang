@@ -1,0 +1,291 @@
+// ============================================================================
+//  lib/boat.og.rin — "Boat": مفاهيم أساسية مجمَّعة (دوال، قيم منطقية، حاويات بيانات،
+//  وصفحة/نافذة بسيطة) فوق stdlib الأساسية في Rin.
+//
+//  استيراد:
+//    @import "lib/boat.og.rin";
+//    @import "lib/boat.og.rin" as boat;
+//
+//  هذه المكتبة لا تضيف أنواعاً جديدة لمفسّر C++ نفسه (Value يبقى NIL/NUMBER/
+//  STRING/BOOL/FUNCTION/ARRAY/MAP كما هو)، بل تبني فوق ARRAY وMAP الموجودَين
+//  تمثيلاً موحّداً بحقل "kind" يُميّز كل مفهوم (list/tuple/dict/set/tmap/window)،
+//  بنفس أسلوب باقي مكتبات lib/*.og.rin (دوال Rin عادية فوق natives الأساسية:
+//  push/pop/len/has/keys/values/contains/remove...).
+//
+//  ---------------------------------------------------------------------------
+//  المفاهيم المضمَّنة (Boat):
+//    1) Functions        — انظر boatCall/boatIsFunction أدناه (Rin نفسها تدعم fun
+//                           بشكل أصلي؛ boat تضيف فقط فحص/توصيف).
+//    2) yes / no / none   — أسماء بديلة أوضح لـ true/false/nil.
+//    3) القوائم (list)    — list(items) / ls(items) / group.tm عبر groupTm(items).
+//    4) الصفوف (tuple)    — tuple(items): مثل list لكنها موسومة "ثابتة" منطقياً
+//                           (Rin لا تفرض immutability فعلياً؛ tupleSet ترفض التعديل).
+//    5) القواميس (dict)   — dict(pairs): يبني قاموساً من مصفوفة أزواج [key, value].
+//    6) المجموعات (set)   — set(items): عناصر فريدة + عمليات setAdd/setHas/...
+//    7) tmap              — قاموس "بعنوان": {title, entries}. عنوان الخريطة.
+//    8) window (body)     — صفحة/نافذة: اسم، عرض، طول، خلفية، خطوط، جسم (body)،
+//                           ورَبْط (link) بحاوية (container) موجودة بالاسم.
+//  ---------------------------------------------------------------------------
+// ============================================================================
+
+
+// ============================== 1) Functions ===============================
+// Rin تدعم أصلاً: fun name(a, b) { ... }  و  let f = someExistingFunctionValue;
+// (يمكن استدعاء متغيّر يحمل قيمة دالة عبر اسمه مباشرة: f(x))، أي أن الدوال قيم
+// من الدرجة الأولى (first-class) بلا حاجة لأي غلاف boat. الإضافة العملية الوحيدة
+// هنا هي boatApply: تطبيق دالة على كل عنصر من مصفوفة (map عام بسيط):
+
+// ينفّذ fn (دالة Rin بمعامل واحد) على كل عنصر من items ويُعيد مصفوفة النتائج.
+// (بديل بسيط لعدم وجود "استدعاء ديناميكي عام" في Rin؛ fn يُستقبَل كقيمة دالة).
+fun boatApply(fn, items) {
+    let out = [];
+    let i = 0;
+    while (i < len(items)) {
+        push(out, fn(items[i]));
+        i = i + 1;
+    }
+    return out;
+}
+
+
+// ========================= 2) None / No / Yes ==============================
+// أسماء عربية-لاتينية أوضح لقيم true/false/nil الأساسية في Rin.
+let yes  = true;
+let no   = false;
+let none = nil;
+
+// فحوصات مرافقة (لأن Rin لا توفر isNil/isBool عامة بنفس الوضوح):
+fun isYes(v)  { return v == yes; }
+fun isNo(v)   { return v == no; }
+fun isNone(v) { return v == none; }
+
+
+// ============================== دوال مساعدة داخلية ==========================
+// تبني كائن "boat" موحَّد الشكل: قاموس بحقل "kind" (اسم المفهوم) وحقل "value"
+// (البيانات الفعلية: مصفوفة أو قاموس حسب المفهوم). كل مُنشئ (list/tuple/dict/set/
+// tmap/window) يستخدم هذا الشكل الموحَّد، وboatKind/boatValue يقرآنه بأمان.
+fun boatMake(kind, value) {
+    return {"kind": kind, "value": value};
+}
+
+// اسم مفهوم boat لقيمة v (list/tuple/dict/set/tmap/window)، أو nil إن لم تكن
+// قيمة boat أصلاً (أي قاموس عادي بلا حقل "kind" معروف).
+fun boatKind(v) {
+    if (!has(v, "kind")) { return nil; }
+    return v["kind"];
+}
+
+// المحتوى الداخلي الخام لقيمة boat (المصفوفة أو القاموس وراء list/tuple/dict/...).
+fun boatValue(v) {
+    return v["value"];
+}
+
+
+// ============================ 3) القوائم (list) =============================
+// list(items): يبني قائمة boat من مصفوفة items (نسخة قابلة للتعديل بالكامل:
+// listPush/listPop/listGet/listSet/listLen).
+fun list(items) {
+    return boatMake("list", items);
+}
+
+// اسم بديل مباشر لِـ list(...)
+fun ls(items) {
+    return list(items);
+}
+
+// "group.tm": بما أن Rin لا تدعم استدعاءً عاماً بصيغة a.b(...) على قيمة عادية،
+// تُقدَّم كدالة groupTm(...) مكافئة تماماً لِـ list(...)، بالإضافة إلى كائن
+// النطاق group أدناه لاستخدام أقرب لصيغة "group.tm" (عبر group["tm"]):
+//   let makeList = group["tm"];   // اسحب الدالة إلى متغيّر أولاً
+//   let a = makeList([1, 2, 3]);  // ثم استدعِ المتغيّر (Rin تتطلّب هذه الخطوتين)
+fun groupTm(items) { return list(items); }
+let group = {"tm": groupTm};
+
+fun listLen(l)        { return len(l["value"]); }
+fun listGet(l, i)     { return l["value"][i]; }
+fun listSet(l, i, x)  { l["value"][i] = x; return l; }
+fun listPush(l, x)    { push(l["value"], x); return l; }
+fun listPop(l)        { return pop(l["value"]); }
+fun listToArray(l)    { return l["value"]; }
+
+
+// ============================== 4) الصفوف (tuple) ===========================
+// tuple(items): نفس تمثيل list داخلياً، لكن بوسم "tuple" ودعم قراءة فقط عبر
+// tupleGet؛ tupleSet مرفوضة عمداً (توثيقاً لنيّة "ثابتة" — Rin لا تملك حماية
+// تعديل حقيقية على مستوى المصفوفات، فهذا التزام على مستوى الواجهة لا المفسّر).
+fun tuple(items) {
+    return boatMake("tuple", items);
+}
+
+fun tupleLen(t)    { return len(t["value"]); }
+fun tupleGet(t, i) { return t["value"][i]; }
+fun tupleToArray(t) { return t["value"]; }
+
+// محاولة تعديل صفّ: تُعيد نص خطأ بدل التعديل الفعلي، بدل الفشل الصامت.
+fun tupleSet(t, i, x) {
+    print "tuple ثابتة: لا يمكن استخدام tupleSet لتعديلها — أنشئ صفّاً جديداً بدلاً من ذلك";
+    return t;
+}
+
+
+// ============================== 5) القواميس (dict) ==========================
+// dict(pairs): pairs مصفوفة أزواج [key, value]؛ مثال:
+//   let d = dict([["name", "Rin"], ["age", 1]]);
+fun dict(pairs) {
+    let m = {};
+    let i = 0;
+    while (i < len(pairs)) {
+        m[pairs[i][0]] = pairs[i][1];
+        i = i + 1;
+    }
+    return boatMake("dict", m);
+}
+
+fun dictGet(d, key)        { return d["value"][key]; }
+fun dictSet(d, key, val)   { d["value"][key] = val; return d; }
+fun dictHas(d, key)        { return has(d["value"], key); }
+fun dictKeys(d)            { return keys(d["value"]); }
+fun dictValues(d)          { return values(d["value"]); }
+fun dictToMap(d)           { return d["value"]; }
+
+
+// ============================== 6) المجموعات (set) ===========================
+// set(items): يبني مجموعة من عناصر items بعد إزالة التكرار (يحافظ على أول ظهور).
+fun set(items) {
+    let uniqueItems = [];
+    let i = 0;
+    while (i < len(items)) {
+        if (!contains(uniqueItems, items[i])) {
+            push(uniqueItems, items[i]);
+        }
+        i = i + 1;
+    }
+    return boatMake("set", uniqueItems);
+}
+
+fun setHas(s, x) { return contains(s["value"], x); }
+
+fun setAdd(s, x) {
+    if (!contains(s["value"], x)) { push(s["value"], x); }
+    return s;
+}
+
+// ملاحظة: لا توجد في Rin دالة أصلية لحذف عنصر من مصفوفة بالفهرس/بالقيمة مباشرة
+// (remove() الأصلية تعمل على مفاتيح القواميس فقط)، لذا تُعاد بناء المصفوفة هنا
+// بلا أول ظهور مطابق لـ x فقط (تحافظ على البقية وترتيبها).
+fun setRemove(s, x) {
+    let out = [];
+    let removedOne = no;
+    let i = 0;
+    while (i < len(s["value"])) {
+        if (!removedOne and s["value"][i] == x) {
+            removedOne = yes;
+        } else {
+            push(out, s["value"][i]);
+        }
+        i = i + 1;
+    }
+    s["value"] = out;
+    return s;
+}
+
+fun setLen(s) { return len(s["value"]); }
+fun setToList(s) { return list(s["value"]); }
+
+fun setUnion(a, b) {
+    let combined = [];
+    let i = 0;
+    while (i < len(a["value"])) { push(combined, a["value"][i]); i = i + 1; }
+    i = 0;
+    while (i < len(b["value"])) { push(combined, b["value"][i]); i = i + 1; }
+    return set(combined);
+}
+
+fun setIntersect(a, b) {
+    let result = [];
+    let i = 0;
+    while (i < len(a["value"])) {
+        if (contains(b["value"], a["value"][i])) { push(result, a["value"][i]); }
+        i = i + 1;
+    }
+    return set(result);
+}
+
+
+// ================================ 7) tmap ====================================
+// tmap(title, pairs): "قاموس بعنوان" — قاموس عادي (كما في dict) مع عنوان يوصف
+// محتواه (مثلاً عنوان جدول/خريطة بيانات)، مفيد عند طباعة/عرض القاموس لاحقاً.
+fun tmap(title, pairs) {
+    let m = {};
+    let i = 0;
+    while (i < len(pairs)) {
+        m[pairs[i][0]] = pairs[i][1];
+        i = i + 1;
+    }
+    return boatMake("tmap", {"title": title, "entries": m});
+}
+
+fun tmapTitle(t)         { return t["value"]["title"]; }
+fun tmapEntries(t)       { return t["value"]["entries"]; }
+fun tmapGet(t, key)      { return t["value"]["entries"][key]; }
+fun tmapSet(t, key, val) { t["value"]["entries"][key] = val; return t; }
+
+
+// ========================== 8) window / body / link ==========================
+// window(name, width, length, bg, fonts): يبني كائن نافذة/صفحة بسيط بخصائصه
+// الأساسية. "length" هنا يقصد بها ارتفاع الصفحة (height/طول الجسم)، تمييزاً عن
+// width (العرض)، بنفس التسمية المطلوبة. fonts مصفوفة أسماء خطوط بترتيب الأولوية.
+fun window(name, width, length, bg, fonts) {
+    let w = {
+        "name": name,
+        "width": width,
+        "length": length,
+        "bg": bg,
+        "fonts": fonts,
+        "body": [],       // جسم الصفحة: مصفوفة عناصر/مكوّنات (تُملأ عبر body())
+        "container": none // اسم container مربوط (يُملأ عبر link())
+    };
+    return boatMake("window", w);
+}
+
+// body(win, children): يضبط جسم الصفحة (window body) على مصفوفة children.
+fun body(win, children) {
+    win["value"]["body"] = children;
+    return win;
+}
+
+// bodyAdd(win, child): يضيف عنصراً واحداً لجسم الصفحة دون استبدال البقية.
+fun bodyAdd(win, child) {
+    push(win["value"]["body"], child);
+    return win;
+}
+
+fun bodyOf(win) { return win["value"]["body"]; }
+
+// windowLink(win, containerName): يربط اسم container (نص) بهذه النافذة، بحيث
+// تعرف النافذة أي حاوية بيانات تغذّي محتواها. هذا تسجيل/توثيق للعلاقة على
+// مستوى boat فقط (اسم الحاوية يُخزَّن داخل window["value"]["container"]).
+//
+// ملاحظة: "link" نفسها كلمة محجوزة في Rin (عبارة `link to=name;` /
+// `link id="X";`، انظر rin_ast.h: LinkStmt) تُستخدم للربط/النسخ الفعلي بين
+// الحاويات على مستوى اللغة — لذلك لا تُعرَّف boat دالة باسم link (تعارض نحوي)،
+// بل windowLink كتكملة عملية له على مستوى الصفحة/النافذة فقط. لنسخ متغيّرات
+// container فعلياً إلى النطاق الحالي استخدم `link to=containerName;` أو
+// `tying with=containerName;` الأصليتين (انظر docs/containers.md).
+fun windowLink(win, containerName) {
+    win["value"]["container"] = containerName;
+    return win;
+}
+
+fun windowName(win)      { return win["value"]["name"]; }
+fun windowWidth(win)     { return win["value"]["width"]; }
+fun windowLength(win)    { return win["value"]["length"]; }
+fun windowBg(win)        { return win["value"]["bg"]; }
+fun windowFonts(win)     { return win["value"]["fonts"]; }
+fun windowContainer(win) { return win["value"]["container"]; }
+
+fun windowSetName(win, v)  { win["value"]["name"] = v; return win; }
+fun windowSetWidth(win, v) { win["value"]["width"] = v; return win; }
+fun windowSetLength(win, v){ win["value"]["length"] = v; return win; }
+fun windowSetBg(win, v)    { win["value"]["bg"] = v; return win; }
+fun windowSetFonts(win, v) { win["value"]["fonts"] = v; return win; }
