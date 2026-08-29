@@ -28,6 +28,7 @@
 | `openChat(container)` / `closeChat(container)` | يُطلقان `"open"`/`"close"` |
 | `onChat(container, event, fn)` | تسجيل معالج (`event` ∈ message/open/close/typing)، `fn` مُعرَّفة بـ `fun` مسبقاً |
 | `offChat(container, event)` | إزالة كل معالجات حدث بعينه |
+| `exportChat(container, "text"\|"png", path?)` | تصدير حقيقي إلى ملف: نصّ `role: text` سطراً لكل رسالة، أو صورة PNG بفقاعات محادثة حقيقية (تُبنى بنفس أدوات رسم `container.table` — `rinfont`/`pngutil` — سطر واحد لكل فقاعة، بلا التفاف نص، محاذاة يمين لِـ `role=="user"` ويسار لغيره) |
 
 **الذاكرة (memory)** لا تحتاج دالة خاصة: أعلن `warp memory = {};` بداخل `@container.chatbot`
 مثل أي `warp` عادية (نفس آلية `Home` في `container_loom_api_demo.rin`).
@@ -44,9 +45,18 @@ git apply chatbot_container.patch   # أو patch -p0 < chatbot_container.patch
 
 ## لم يُنفَّذ بعد (خطوات لاحقة، حسب الترتيب اللي حددناه)
 - عناصر Loom للعرض (`@view.Chat`, `@view.ChatInput`, ربط `markdown=true`/`code=true`) — تحتاج
-  تعديل بملفات `loom/*.h` والـ Kotlin (`LoomFabricView.kt` وغيره).
-- `exportChat(container, "png"|"text")` — نفس آلية `save format=png` الموجودة لـ `container.table`،
-  لكن برسم فقاعات محادثة بدل شبكة خلايا.
+  تعديل بملفات `loom/*.h` والـ Kotlin (`LoomFabricView.kt` وغيره). **ملاحظة مهمة:** فحصت
+  `rin_ast.h`/`rin_parser.cpp` ولقيت إن `@view.<AnyKind>=` أصلاً عام تماماً (بلا قائمة مسموحة
+  بالـ parser) — يعني `@view.ChatHistory=` و`@view.ChatInput=` بالفعل يُقرآن بنجاح اليوم بلا أي
+  تعديل، ويصلان لـ `rin_loom_strand.h` كـ `StrandKind::CUSTOM` (نظام Bolt plugin الموجود أصلاً،
+  انظر `strandKindFromTag`). كذلك `Input`/`TextArea` (بما فيها `placeholder=`) و`Button` جاهزان
+  فعلاً كعناصر Loom قياسية — فصندوق الإدخال وزر الإرسال ممكن تركيبهم اليوم بدون أي كود جديد.
+  المتبقي الحقيقي هو: (أ) `StrandKind` جديد مخصَّص لعرض قائمة رسائل تفاعلية مربوطة بـ
+  `chatHistory()`/`onChat` (بدل تركيبها يدوياً)، و(ب) عرض Markdown/كود فعلي داخل الفقاعة على
+  مستوى الـ Kotlin renderer.
+- ~~`exportChat(container, "png"|"text")`~~ ✅ **تم تنفيذها** (نفس آلية `save format=png`
+  الموجودة لـ `container.table`، لكن برسم فقاعات محادثة حقيقية بدل شبكة خلايا — انظر
+  `buildChatPng` في `rin_interpreter.cpp`).
 - `stream=true` (ردّ تدريجي) — يحتاج ربط بطبقة الواجهة لعرض القطع أثناء وصولها، وليس فقط منطق المفسّر.
 
 ⚠️ ملاحظة: لم أستطع بناء (compile) المشروع فعلياً هنا (بيئة بلا Android SDK/NDK ولا اتصال شبكة)،
