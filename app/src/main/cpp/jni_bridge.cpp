@@ -536,6 +536,26 @@ Java_com_dlof_rinlang_RinEngine_renderViewNative(JNIEnv* env, jobject /* this */
     return result;
 }
 
+// renderContainerViewNative(source, containerName, rootWidth) -> نفس renderViewNative أعلاه، لكن
+// يبني الـ Fabric من @view المُعرَّف داخل الحاوية containerName بعينها (وليس جذر البرنامج العلوي)،
+// وهو الوجه الجديد الذي يجعل Loomtime مربوطة فعلياً بـ container: كل @container يحمل @view/warp/
+// @theme خاصة به يصبح شاشة/عنصر واجهة مستقلاً قابلاً للعرض باسمه، مع warp/theme الخاصين بتلك
+// الحاوية فقط. نفس شكل JSON الناتج (أو {"error":"...", "line":N} عند الفشل).
+extern "C" JNIEXPORT jstring JNICALL
+Java_com_dlof_rinlang_RinEngine_renderContainerViewNative(JNIEnv* env, jobject /* this */, jstring sourceJStr, jstring containerNameJStr, jint rootWidth) {
+    const char* cSource = env->GetStringUTFChars(sourceJStr, nullptr);
+    std::string source(cSource ? cSource : "");
+    env->ReleaseStringUTFChars(sourceJStr, cSource);
+    const char* cName = env->GetStringUTFChars(containerNameJStr, nullptr);
+    std::string containerName(cName ? cName : "");
+    env->ReleaseStringUTFChars(containerNameJStr, cName);
+
+    char* json = rin_loom_render_container_json(source.c_str(), containerName.c_str(), (int)rootWidth);
+    jstring result = env->NewStringUTF(json ? json : "{\"error\":\"null result\",\"line\":0}");
+    rin_free_string(json);
+    return result;
+}
+
 // ---- Loomtime session (Needle): a persistent Fabric+Warp session so a live-preview tap can
 // actually run its onTap handler (real fun/while loop or a built-in Warp op) and see the result,
 // instead of renderViewNative's stateless one-shot render. The native session pointer is boxed as
@@ -548,6 +568,21 @@ Java_com_dlof_rinlang_RinEngine_loomSessionCreateNative(JNIEnv* env, jobject /* 
     std::string source(cSource ? cSource : "");
     env->ReleaseStringUTFChars(sourceJStr, cSource);
     void* session = rin_loom_session_create(source.c_str(), (int)rootWidth);
+    return reinterpret_cast<jlong>(session);
+}
+
+// loomSessionCreateForContainerNative(source, containerName, rootWidth) -> نفس الجلسة أعلاه، لكن
+// حالتها (Fabric+Warp) مبنية من @view/warp/@theme داخل الحاوية containerName بعينها، فيمكن لأي
+// tap لاحق (loomSessionTapNative) أن يعمل بشكل طبيعي على warp/onTap الخاصين بتلك الحاوية فقط.
+extern "C" JNIEXPORT jlong JNICALL
+Java_com_dlof_rinlang_RinEngine_loomSessionCreateForContainerNative(JNIEnv* env, jobject /* this */, jstring sourceJStr, jstring containerNameJStr, jint rootWidth) {
+    const char* cSource = env->GetStringUTFChars(sourceJStr, nullptr);
+    std::string source(cSource ? cSource : "");
+    env->ReleaseStringUTFChars(sourceJStr, cSource);
+    const char* cName = env->GetStringUTFChars(containerNameJStr, nullptr);
+    std::string containerName(cName ? cName : "");
+    env->ReleaseStringUTFChars(containerNameJStr, cName);
+    void* session = rin_loom_session_create_for_container(source.c_str(), containerName.c_str(), (int)rootWidth);
     return reinterpret_cast<jlong>(session);
 }
 
