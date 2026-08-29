@@ -1,0 +1,21 @@
+// loom_sizing_demo.rin — Rin Loom's Constraint System: sizing="fill", min_width/max_width.
+// Run: ./loomc samples/loom_sizing_demo.rin 500
+
+@view.Column=root
+  gap="normal"; padding="comfortable";
+
+  @view.Card=hugs
+    padding="compact"; tone_debug="auto (hugs content)";
+    @view.Text=t1 text="I hug my content"; .end/view
+  .end/view
+
+  @view.Card=fills
+    sizing="fill"; padding="compact";
+    @view.Text=t2 text="I fill the full available width"; .end/view
+  .end/view
+
+  @view.Card=floored
+    min_width="300"; padding="compact";
+    @view.Text=t3 text="short"; .end/view
+  .end/view
+.end/view
