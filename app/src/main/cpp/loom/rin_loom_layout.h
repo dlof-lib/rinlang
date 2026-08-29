@@ -124,6 +124,19 @@ inline std::vector<std::string> wrapText(const std::string& text, double fontSiz
     return lines;
 }
 
+// Avatar size (§?): a small named scale (small/medium/large), same dual token-or-number
+// convention every other Loom scale (spacing/radius/typography/button-size) already uses.
+inline double resolveAvatarSize(const Strand& s) {
+    const Value* v = s.attr("size");
+    if (!v) return 40;
+    if (v->kind == Value::Kind::NUMBER) return v->number;
+    if (v->str == "small") return 28;
+    if (v->str == "medium") return 40;
+    if (v->str == "large") return 56;
+    if (v->str == "xl") return 72;
+    return v->asNumber(40);
+}
+
 struct LoomStats { int strandsMeasured = 0; int cacheHits = 0; };
 
 struct Loom {
@@ -163,6 +176,9 @@ struct Loom {
         // note on SizingMode in rin_loom_tokens.h); fit/hug/auto all mean "measure my own
         // content", which is what every per-kind measure function below already does.
         SizingMode sizing = resolveSizingMode(*s);
+        // Spacer (§15) defaults to "expand" without requiring sizing="expand" on every use — an
+        // explicit sizing= (or width=/height=, handled above via c2 already) still overrides it.
+        if (s->kind == StrandKind::SPACER && !s->attr("sizing")) sizing = SizingMode::EXPAND;
         if ((sizing == SizingMode::FILL || sizing == SizingMode::EXPAND) && !s->attr("width") && c.maxW < 1e8)
             { c2.minW = c2.maxW = c.maxW; }
         if ((sizing == SizingMode::FILL || sizing == SizingMode::EXPAND) && !s->attr("height") && c.maxH < 1e8)
@@ -226,6 +242,64 @@ struct Loom {
             // ---- new: table — a header row (columns=) plus TABLEROW children of cells.
             case StrandKind::TABLE: size = layoutTable(s, c2, originX, originY); break;
             case StrandKind::TABLEROW: size = layoutLinear(s, c2, Axis::X, originX, originY); break;
+
+            // ---- Missing-components pass ----
+            // Box (§5/§6, the resolved "Container" naming collision — see the enum comment in
+            // rin_loom_strand.h): the same padded, multi-child, sizing-aware box Card already is,
+            // just without Card's elevation-styled default paint (see colorForKind in paint.h).
+            case StrandKind::BOX: size = layoutSingleChildBox(s, c2, resolveSpacing(*s, "padding", 0) + s->attrNum("border", 0), originX, originY); break;
+
+            case StrandKind::GRID: size = layoutGrid(s, c2, originX, originY); break;
+            case StrandKind::WRAP: size = layoutWrap(s, c2, originX, originY); break;
+
+            // Spacer (§15): sizing defaults to "expand" (fills the parent's remaining main-axis
+            // extent) unless the .rin source overrides sizing= or gives an explicit width=/height=
+            // for a fixed-size gap instead — see the sizing-mode override just above this switch.
+            case StrandKind::SPACER: size = {0,0, c2.minW, c2.minH}; break;
+
+            case StrandKind::BADGE: size = measureBadge(s, c2); break;
+            case StrandKind::PROGRESS: {
+                double h = s->attr("height") ? c2.minH : std::min(8.0, c2.maxH);
+                size = {0,0, c2.maxW, std::max(h, c2.minH)};
+                break;
+            }
+            case StrandKind::CHECKBOX: {
+                double sz = std::min(s->attrNum("size", 22), std::min(c2.maxW, c2.maxH));
+                size = {0,0, std::max(sz,c2.minW), std::max(sz,c2.minH)};
+                break;
+            }
+            case StrandKind::SWITCH: {
+                double w = std::min(s->attrNum("width", 44), c2.maxW);
+                double h = std::min(s->attrNum("height", 24), c2.maxH);
+                size = {0,0, std::max(w,c2.minW), std::max(h,c2.minH)};
+                break;
+            }
+            case StrandKind::AVATAR: {
+                double sz = std::min(resolveAvatarSize(*s), std::min(c2.maxW, c2.maxH));
+                size = {0,0, std::max(sz,c2.minW), std::max(sz,c2.minH)};
+                break;
+            }
+            case StrandKind::INPUT: size = measureField(s, c2, 40); break;
+            case StrandKind::TEXTAREA: size = measureField(s, c2, 96); break;
+
+            // Dialog/Modal (§?): the same collapse-when-closed rule Drawer/Menu/Banner already
+            // use (open=false / visible=false -> zero layout space), and the same padded
+            // single-child box Card/Box use otherwise. Scope note (kept honest rather than
+            // half-faking a real overlay compositor this engine doesn't have): a Dialog lays out
+            // in normal document flow, at whatever size its content needs — true screen-centered
+            // overlay positioning is achieved the same way Stack's own doc comment already
+            // recommends for badges/FABs: wrap it in `@view.Stack align="center" valign="center"`.
+            case StrandKind::DIALOG: {
+                bool isOpen = s->attrStr("open", "false") == "true";
+                if (!isOpen) { size = {0,0,0,0}; break; }
+                size = layoutSingleChildBox(s, c2, resolveSpacing(*s, "padding", 24) + s->attrNum("border", 0), originX, originY);
+                break;
+            }
+
+            case StrandKind::TABS: size = layoutLinear(s, c2, Axis::X, originX, originY); break;
+            case StrandKind::TABITEM: size = measureButton(s, c2); break; // same box rules as Button/MenuItem
+
+            case StrandKind::TOOLTIP: size = measureTooltip(s, c2); break;
 
             // ---- new: media placeholders — sized like an Image (explicit width/height, else a
             // sensible default box). Actual playback happens in the real app, not this preview.
@@ -311,24 +385,65 @@ struct Loom {
         if (!s->children.empty()) contentH -= 8;
         return {0,0, std::min(contentW + pad*2, c.maxW), std::min(contentH + pad*2, c.maxH)};
     }
+    // A child counts as "flexible" on the main axis when its sizing resolves to fill/expand
+    // for that axis and it has no explicit width=/height= pinning it (same precedence
+    // width=/height= already has over sizing= elsewhere — see layout()'s c2 computation).
+    // Spacer (§15) is flexible on the main axis by definition (its own default sizing, applied
+    // in layout() before this runs) even without an explicit sizing= attribute.
+    bool isMainAxisFlexible(const StrandPtr& child, Axis axis) {
+        bool hasExplicitMain = (axis == Axis::Y) ? (child->attr("height") != nullptr) : (child->attr("width") != nullptr);
+        if (hasExplicitMain) return false;
+        SizingMode sm = resolveSizingMode(*child);
+        if (child->kind == StrandKind::SPACER && !child->attr("sizing")) sm = SizingMode::EXPAND;
+        return sm == SizingMode::FILL || sm == SizingMode::EXPAND;
+    }
+
     Rect layoutLinear(StrandPtr s, Constraints c, Axis axis, double originX, double originY) {
         double gap = resolveSpacing(*s, "gap", 0), padding = resolveSpacing(*s, "padding", 0) + s->attrNum("border", 0);
-        double mainUsed=0, crossMax=0, cursorMain=padding;
+        double crossMax=0, cursorMain=padding;
         double innerMaxW = std::max(0.0, c.maxW - padding*2), innerMaxH = std::max(0.0, c.maxH - padding*2);
+        double innerMain = (axis == Axis::Y) ? innerMaxH : innerMaxW;
         // Cross-axis alignment: Column (axis=Y) aligns children horizontally via `align`;
         // Row (axis=X) aligns children vertically via `valign`. Default is left/top (offset 0),
         // matching the previous unaligned behavior exactly, so existing .rin files don't move.
         std::string crossMode = (axis == Axis::Y) ? s->attrStr("align", "left") : s->attrStr("valign", "top");
         double innerCross = (axis == Axis::Y) ? innerMaxW : innerMaxH;
 
+        // Two-pass flex distribution (needed for Spacer/fill children to share the main axis
+        // correctly with siblings placed *after* them — a single top-to-bottom pass would let an
+        // earlier flexible child claim 100% of the remaining space and starve later siblings,
+        // e.g. `Row { Text; Spacer; Button; }` would previously give the trailing Button zero
+        // width). Pass 1 measures every non-flexible child at its natural size (bounded only by
+        // the *unbounded-so-far* main axis, since we don't yet know how much flexible siblings
+        // will need) and sums how much main-axis space they + gaps actually consume. Whatever is
+        // left over (never negative) is split evenly across the flexible children in pass 2.
+        std::vector<bool> flexible(s->children.size());
+        std::vector<double> mainSizeOf(s->children.size(), 0.0);
+        double fixedMainUsed = 0; int flexCount = 0;
+        for (size_t i = 0; i < s->children.size(); i++) {
+            flexible[i] = isMainAxisFlexible(s->children[i], axis);
+            if (flexible[i]) { flexCount++; continue; }
+            Constraints probeC = (axis==Axis::Y) ? Constraints{0, innerMaxW, 0, 1e9} : Constraints{0, 1e9, 0, innerMaxH};
+            Rect probe = layout(s->children[i], probeC, 0, 0);
+            mainSizeOf[i] = (axis==Axis::Y) ? probe.h : probe.w;
+            fixedMainUsed += mainSizeOf[i];
+        }
+        double gapsTotal = s->children.empty() ? 0 : gap * (s->children.size() - 1);
+        double leftover = std::max(0.0, innerMain - fixedMainUsed - gapsTotal);
+        double perFlex = flexCount > 0 ? leftover / flexCount : 0.0;
+
         struct Placed { StrandPtr child; double crossSize; };
         std::vector<Placed> placed;
+        double mainUsed = 0;
 
-        for (auto& child : s->children) {
-            double remainingMain = std::max(0.0, (axis==Axis::Y ? innerMaxH : innerMaxW) - cursorMain);
-            double childMaxW = (axis==Axis::Y) ? innerMaxW : remainingMain;
-            double childMaxH = (axis==Axis::Y) ? remainingMain : innerMaxH;
-            Constraints cc{0, childMaxW, 0, childMaxH};
+        for (size_t i = 0; i < s->children.size(); i++) {
+            auto& child = s->children[i];
+            double mainBudget = flexible[i] ? perFlex : mainSizeOf[i];
+            double childMaxW = (axis==Axis::Y) ? innerMaxW : mainBudget;
+            double childMaxH = (axis==Axis::Y) ? mainBudget : innerMaxH;
+            Constraints cc = flexible[i]
+                ? Constraints{(axis==Axis::Y)?0:mainBudget, childMaxW, (axis==Axis::Y)?mainBudget:0, childMaxH} // flexible: min==max==its share
+                : Constraints{0, childMaxW, 0, childMaxH};
             double localX = (axis==Axis::Y) ? padding : cursorMain;
             double localY = (axis==Axis::Y) ? cursorMain : padding;
             Rect r = layout(child, cc, originX + localX, originY + localY);
@@ -477,6 +592,102 @@ struct Loom {
         }
         double totalH = topH + contentUsedH + bottomH;
         return {0,0, c.maxW, std::min(totalH, c.maxH)};
+    }
+
+    // ---- Missing-components pass: Grid (§15) — `columns=` (default 2) fixed-column-count grid,
+    // row-major placement, `gap=` between both rows and columns (a single spacing token/number
+    // for both axes, matching the level of detail Row/Column's own `gap=` already offers — a
+    // split row_gap=/column_gap= is easy future work if a real .rin author needs it).
+    Rect layoutGrid(StrandPtr s, Constraints c, double originX, double originY) {
+        double padding = resolveSpacing(*s, "padding", 0), gap = resolveSpacing(*s, "gap", 0);
+        int columns = std::max(1, (int)s->attrNum("columns", 2));
+        double innerMaxW = std::max(0.0, c.maxW - padding*2);
+        double cellW = std::max(0.0, (innerMaxW - gap*(columns-1)) / columns);
+
+        double cursorY = padding;
+        double usedW = 0;
+        for (size_t i = 0; i < s->children.size(); i += columns) {
+            double rowH = 0;
+            size_t rowEnd = std::min(s->children.size(), i + (size_t)columns);
+            for (size_t j = i; j < rowEnd; j++) {
+                int col = (int)(j - i);
+                double localX = padding + col * (cellW + gap);
+                Rect r = layout(s->children[j], {cellW, cellW, 0, 1e9}, originX + localX, originY + cursorY);
+                rowH = std::max(rowH, r.h);
+                usedW = std::max(usedW, localX + r.w);
+            }
+            cursorY += rowH + gap;
+        }
+        if (!s->children.empty()) cursorY -= gap;
+        double totalH = cursorY + padding*2;
+        double totalW = innerMaxW + padding*2; // Grid always claims its full offered width, like Row/Column do
+        return {0,0, std::min(totalW,c.maxW), std::max(std::min(totalH,c.maxH), c.minH)};
+    }
+
+    // ---- Missing-components pass: Wrap (§15) — a flow layout: children run left-to-right like
+    // Row, but overflow onto a new line instead of being clipped/overlapping once a line's
+    // accumulated width would exceed the available width. `gap=` applies to both the horizontal
+    // space between items on a line and the vertical space between lines.
+    Rect layoutWrap(StrandPtr s, Constraints c, double originX, double originY) {
+        double padding = resolveSpacing(*s, "padding", 0), gap = resolveSpacing(*s, "gap", 0);
+        double innerMaxW = std::max(0.0, c.maxW - padding*2);
+
+        double cursorX = 0, cursorY = 0, lineH = 0, usedW = 0;
+        bool lineHasItem = false;
+        for (auto& child : s->children) {
+            // Probe the child's natural width first (unbounded height) so we know whether it
+            // fits on the current line before committing to a final position for it.
+            Rect probe = layout(child, {0, innerMaxW, 0, 1e9}, 0, 0);
+            if (lineHasItem && cursorX + probe.w > innerMaxW) {
+                cursorY += lineH + gap; cursorX = 0; lineH = 0; lineHasItem = false;
+            }
+            Rect r = layout(child, {0, innerMaxW, 0, 1e9}, originX + padding + cursorX, originY + padding + cursorY);
+            cursorX += r.w + gap; lineH = std::max(lineH, r.h); lineHasItem = true;
+            usedW = std::max(usedW, originX + padding + cursorX - gap - originX);
+        }
+        double totalH = cursorY + lineH + padding*2;
+        double totalW = innerMaxW + padding*2; // Wrap claims the full offered width, same as Row
+        return {0,0, std::min(totalW,c.maxW), std::max(std::min(totalH,c.maxH), c.minH)};
+    }
+
+    // ---- Missing-components pass: Badge (§?) — a small pill/label, content-sized around its
+    // own `text=` attribute (it is not a Text strand itself, same relationship Button's `label=`
+    // has to the real TEXT strand kind: one self-contained box that draws its own text in Dye).
+    Rect measureBadge(StrandPtr s, Constraints c) {
+        std::string text = s->attrStr("text", "");
+        double fontSize = resolveFontSize(*s, "size", 12);
+        double hPad = 8, vPad = 4;
+        double w = std::min(measureTextWidth(text, fontSize) + hPad*2, c.maxW);
+        double h = std::min(fontSize*1.4 + vPad*2, c.maxH);
+        return {0,0, std::max(w,c.minW), std::max(h,c.minH)};
+    }
+    // Tooltip: same idea as Badge (self-contained text box) but rectangular with soft corners
+    // and slightly larger padding, matching a tooltip bubble's usual proportions rather than a
+    // status pill's. See the DIALOG case above for the same honest scope note this shares: real
+    // anchored positioning next to a target is a `@view.Stack align=/valign=` composition job for
+    // the .rin author, not something Tooltip does for itself.
+    Rect measureTooltip(StrandPtr s, Constraints c) {
+        std::string text = s->attrStr("text", "");
+        double fontSize = resolveFontSize(*s, "size", 12);
+        double pad = resolveSpacing(*s, "padding", 8);
+        double w = std::min(measureTextWidth(text, fontSize) + pad*2, c.maxW);
+        double h = std::min(fontSize*1.4 + pad*2, c.maxH);
+        return {0,0, std::max(w,c.minW), std::max(h,c.minH)};
+    }
+
+    // ---- Missing-components pass: Input/TextArea (§?) — a bordered field box sized around its
+    // `value=`/`placeholder=` text (whichever is longer), with a sensible default height per kind
+    // (`defaultH`: 40 for a single-line Input, 96 for a multi-line TextArea) unless height=
+    // overrides it. There's no real caret/selection/multi-line-wrapping-while-typing model here —
+    // this engine only computes the field's box, exactly the same design-time-preview scope
+    // Image/Video/WebView already have (see measureMedia's doc comment above).
+    Rect measureField(StrandPtr s, Constraints c, double defaultH) {
+        std::string value = s->attrStr("value", ""), placeholder = s->attrStr("placeholder", "");
+        double fontSize = resolveFontSize(*s, "size", 14);
+        double contentW = measureTextWidth(value.empty() ? placeholder : value, fontSize);
+        double w = s->attr("width") ? c.minW : std::min(std::max(120.0, contentW + 24.0), c.maxW);
+        double h = s->attr("height") ? c.minH : std::min(defaultH, c.maxH);
+        return {0,0, std::max(w,c.minW), std::max(h,c.minH)};
     }
 };
 
