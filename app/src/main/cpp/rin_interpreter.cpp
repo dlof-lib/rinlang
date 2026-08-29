@@ -472,6 +472,8 @@ static std::string containerTagName(ContainerKind k) {
         case ContainerKind::BLOCK: return "container.block";
         // "@sticker="/"@container.sticker=" توحَّد دائماً إلى "container.sticker" عند الحفظ وإعادة القراءة.
         case ContainerKind::STICKER: return "container.sticker";
+        // "@chatbot=" أو "@container.chatbot=" -> دائماً "container.chatbot" موحَّدة عند الحفظ وإعادة القراءة.
+        case ContainerKind::CHATBOT: return "container.chatbot";
         default: return "container";
     }
 }
@@ -488,6 +490,7 @@ static std::string containerIcon(ContainerKind k) {
         case ContainerKind::PORTAL: return "🎨";
         case ContainerKind::BLOCK: return "🧱";
         case ContainerKind::STICKER: return "🏷️";
+        case ContainerKind::CHATBOT: return "💬";
         default: return "📦";
     }
 }
@@ -1067,41 +1070,6 @@ void Interpreter::registerNatives() {
         auto it = groupMembers.find(name);
         if (it != groupMembers.end()) {
             for (auto& n : it->second) result->push_back(Value::string(n));
-        }
-        return Value::makeArray(result);
-    };
-
-    // ---- Rin Loom: استعلام عن ربط @view/warp/@theme بحاوية بعينها (بنفس روح groupContainers/
-    // groupMembers أعلاه) — تجعل هذا الربط قابلاً للاستخدام فعلياً من كود Rin نفسه، لا مجرد تخزين صامت ----
-    natives["containerHasView"] = [this](std::vector<Value>& a, int line) -> Value {
-        expectArgs("containerHasView", a, 1, line);
-        std::string name = asString(a[0], "containerHasView", line);
-        return Value::boolean_(containerViews.count(name) > 0);
-    };
-    natives["containerViewName"] = [this](std::vector<Value>& a, int line) -> Value {
-        expectArgs("containerViewName", a, 1, line);
-        std::string name = asString(a[0], "containerViewName", line);
-        auto it = containerViews.find(name);
-        if (it == containerViews.end()) return Value::nil();
-        return Value::string(it->second->name.empty() ? it->second->kindTag : it->second->name);
-    };
-    natives["containerWarpNames"] = [this](std::vector<Value>& a, int line) -> Value {
-        expectArgs("containerWarpNames", a, 1, line);
-        std::string name = asString(a[0], "containerWarpNames", line);
-        auto result = std::make_shared<ArrayData>();
-        auto it = containerWarpDecls.find(name);
-        if (it != containerWarpDecls.end()) {
-            for (auto& w : it->second) result->push_back(Value::string(w->name));
-        }
-        return Value::makeArray(result);
-    };
-    natives["containerThemeNames"] = [this](std::vector<Value>& a, int line) -> Value {
-        expectArgs("containerThemeNames", a, 1, line);
-        std::string name = asString(a[0], "containerThemeNames", line);
-        auto result = std::make_shared<ArrayData>();
-        auto it = containerThemeDecls.find(name);
-        if (it != containerThemeDecls.end()) {
-            for (auto& t : it->second) result->push_back(Value::string(t->name));
         }
         return Value::makeArray(result);
     };
@@ -1751,28 +1719,193 @@ void Interpreter::registerNatives() {
         return Value::num(static_cast<double>(count));
     };
 
-    // ---- container.api: نقاط route المسجَّلة بداخله ----
-    // فُعِّلت الآن فعلياً: إن نادى برنامج Rin apiRegister(name, baseUrl) بنفس اسم الحاوية من داخل
-    // container.api نفسها، يصبح call()/callApi() طلب شبكة حقيقياً فعلياً (نفس محرّك apiGet/apiPost
-    // أدناه)، و route هنا يبقى فقط توثيقاً/عقداً متوقَّعاً للنقطة. بلا apiRegister مطابق، يبقى السلوك
-    // القديم كما هو تماماً: محاكاة صرفة بلا شبكة تطابق route المسجَّلة (جيدة للاختبار بلا اتصال).
-    // call(method, path, body?) -> يبحث داخل container.api الحالي (الذي نُنفَّذ بداخله الآن)
+    // ---- container.chatbot / chatbot: روبوت محادثة (رسائل + سجلّ + ذاكرة + أحداث) ----
+    // الحاوية نفسها ليست مقيَّدة بقيود "البيانات النقية" (تماماً كـ container/container.api): يجوز
+    // أن تحوي fun ودوالاً واستدعاءات عادية. الذاكرة (memory) لا تحتاج دوالاً خاصة: أعلن ببساطة
+    // 'warp memory = {};' بداخل الحاوية، وهو نفس مبدأ warp المستخدم أصلاً لأي حالة حيّة (انظر
+    // container_loom_api_demo.rin). ما يلي هو سجلّ الرسائل + مؤشر الكتابة + الأحداث فقط.
+
+    // يبني رسالة واحدة كـ map موحَّد الشكل: role/text/time/kind/meta
+    auto makeChatMessageValue = [](const std::string& role, const Value& text,
+                                    const std::string& kind, const Value& meta) -> Value {
+        auto m = std::make_shared<MapData>();
+        m->push_back({Value::string("role"), Value::string(role)});
+        m->push_back({Value::string("text"), text});
+        m->push_back({Value::string("time"), Value::num(static_cast<double>(std::time(nullptr)))});
+        m->push_back({Value::string("kind"), Value::string(kind)});
+        m->push_back({Value::string("meta"), meta});
+        return Value::makeMap(m);
+    };
+
+    // sendMessage(container, role, text) -> يضيف رسالة (role عادةً "user" أو "bot" أو أي اسم آخر)
+    // ويطلق معالجات onChat(container, "message", fn) المسجَّلة (fn بتوقيع fun(msg) { ... }).
+    // يُعيد الرسالة نفسها (map) بعد إضافتها.
+    natives["sendMessage"] = [this, makeChatMessageValue](std::vector<Value>& a, int line) -> Value {
+        expectArgs("sendMessage", a, 3, line);
+        std::string container = asString(a[0], "sendMessage", line);
+        std::string role = asString(a[1], "sendMessage", line);
+        if (!containerKinds.count(container) || containerKinds[container] != ContainerKind::CHATBOT) {
+            throw errWithReason(diag::Code::E0014_InvalidContainer, line,
+                                 "'" + container + "' is not a chatbot container",
+                                 "expected a `container.chatbot` / `chatbot` container, defined with `container.chatbot`");
+        }
+        Value msg = makeChatMessageValue(role, a[2], "text", Value::nil());
+        chatHistoryStore[container].push_back(msg);
+        fireChatEvent(container, "message", {msg}, line);
+        return msg;
+    };
+
+    // botReply(container, text) -> اختصار لِ sendMessage(container, "bot", text)
+    natives["botReply"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("botReply", a, 2, line);
+        std::vector<Value> forwarded{a[0], Value::string("bot"), a[1]};
+        return natives["sendMessage"](forwarded, line);
+    };
+
+    // attachToChat(container, role, fileRef, caption) -> مثل sendMessage لكن kind="attachment"،
+    // caption نص الرسالة (قد يكون فارغاً ""), fileRef يُحفَظ داخل meta.file (مسار/رابط/معرّف الملف).
+    natives["attachToChat"] = [this, makeChatMessageValue](std::vector<Value>& a, int line) -> Value {
+        expectArgs("attachToChat", a, 4, line);
+        std::string container = asString(a[0], "attachToChat", line);
+        std::string role = asString(a[1], "attachToChat", line);
+        if (!containerKinds.count(container) || containerKinds[container] != ContainerKind::CHATBOT) {
+            throw errWithReason(diag::Code::E0014_InvalidContainer, line,
+                                 "'" + container + "' is not a chatbot container",
+                                 "expected a `container.chatbot` / `chatbot` container, defined with `container.chatbot`");
+        }
+        auto meta = std::make_shared<MapData>();
+        meta->push_back({Value::string("file"), a[2]});
+        Value msg = makeChatMessageValue(role, a[3], "attachment", Value::makeMap(meta));
+        chatHistoryStore[container].push_back(msg);
+        fireChatEvent(container, "message", {msg}, line);
+        return msg;
+    };
+
+    // chatHistory(container) -> مصفوفة كل الرسائل (map لكل رسالة) بترتيب الإرسال
+    natives["chatHistory"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("chatHistory", a, 1, line);
+        std::string container = asString(a[0], "chatHistory", line);
+        auto result = std::make_shared<ArrayData>();
+        auto it = chatHistoryStore.find(container);
+        if (it != chatHistoryStore.end()) for (auto& m : it->second) result->push_back(m);
+        return Value::makeArray(result);
+    };
+
+    // lastChatMessage(container) -> آخر رسالة (map) أو nil إن كان السجلّ فارغاً/غير موجود
+    natives["lastChatMessage"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("lastChatMessage", a, 1, line);
+        std::string container = asString(a[0], "lastChatMessage", line);
+        auto it = chatHistoryStore.find(container);
+        if (it != chatHistoryStore.end() && !it->second.empty()) return it->second.back();
+        return Value::nil();
+    };
+
+    // chatMessageCount(container) -> عدد الرسائل في السجلّ
+    natives["chatMessageCount"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("chatMessageCount", a, 1, line);
+        std::string container = asString(a[0], "chatMessageCount", line);
+        auto it = chatHistoryStore.find(container);
+        return Value::num(it != chatHistoryStore.end() ? static_cast<double>(it->second.size()) : 0.0);
+    };
+
+    // clearChat(container) -> يمسح كامل سجلّ الرسائل (لا يمسّ الذاكرة/warp ولا المعالجات المسجَّلة).
+    // true إن كان هناك سجلّ فمُسِح، false إن كان فارغاً/غير موجود أصلاً.
+    natives["clearChat"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("clearChat", a, 1, line);
+        std::string container = asString(a[0], "clearChat", line);
+        auto it = chatHistoryStore.find(container);
+        if (it == chatHistoryStore.end() || it->second.empty()) return Value::boolean_(false);
+        it->second.clear();
+        return Value::boolean_(true);
+    };
+
+    // setChatTyping(container, true|false) -> يضبط مؤشر الكتابة، ويطلق onChat(container, "typing", fn)
+    // (fn بتوقيع fun(isTyping) { ... }) في كل مرة تتغيَّر فيها القيمة فعلياً.
+    natives["setChatTyping"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("setChatTyping", a, 2, line);
+        std::string container = asString(a[0], "setChatTyping", line);
+        bool typing = a[1].isTruthy();
+        bool changed = chatTypingState[container] != typing;
+        chatTypingState[container] = typing;
+        if (changed) fireChatEvent(container, "typing", {Value::boolean_(typing)}, line);
+        return Value::boolean_(true);
+    };
+
+    // isChatTyping(container) -> الحالة الحالية لمؤشر الكتابة (false افتراضياً إن لم تُضبَط قط)
+    natives["isChatTyping"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("isChatTyping", a, 1, line);
+        std::string container = asString(a[0], "isChatTyping", line);
+        auto it = chatTypingState.find(container);
+        return Value::boolean_(it != chatTypingState.end() && it->second);
+    };
+
+    // openChat(container) / closeChat(container) -> يطلقان onChat(container, "open"/"close", fn)
+    // (fn بلا وسائط) — تُستدعى من طبقة الواجهة (Loom) عند فتح/إغلاق نافذة المحادثة فعلياً.
+    natives["openChat"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("openChat", a, 1, line);
+        std::string container = asString(a[0], "openChat", line);
+        fireChatEvent(container, "open", {}, line);
+        return Value::boolean_(true);
+    };
+    natives["closeChat"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("closeChat", a, 1, line);
+        std::string container = asString(a[0], "closeChat", line);
+        fireChatEvent(container, "close", {}, line);
+        return Value::boolean_(true);
+    };
+
+    // onChat(container, event, fn) -> يسجّل معالجاً لحدث من: "message"/"open"/"close"/"typing".
+    // نفس روح watch()/subscribe() تماماً: يمكن تسجيل أكثر من معالج لنفس الحدث، وتُستدعى جميعها
+    // بترتيب التسجيل. fn دالة Rin معرَّفة مسبقاً عبر fun (يُمرَّر اسمها كقيمة، لا كنداء).
+    natives["onChat"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("onChat", a, 3, line);
+        std::string container = asString(a[0], "onChat", line);
+        std::string event = asString(a[1], "onChat", line);
+        static const std::vector<std::string> validEvents = {"message", "open", "close", "typing"};
+        if (std::find(validEvents.begin(), validEvents.end(), event) == validEvents.end()) {
+            throw errWithReason(diag::Code::E0016_InvalidProperty, line,
+                                 "'" + event + "' is not a recognized chatbot event",
+                                 "expected one of: \"message\", \"open\", \"close\", \"typing\"");
+        }
+        if (a[2].type != Value::Type::FUNCTION) {
+            throw diagErr(diag::Code::E0004_InvalidType, line,
+                          "'onChat' يتوقّع دالة Rin كوسيط ثالث: fun(...) { ... }");
+        }
+        chatHandlers[container].push_back({event, a[2]});
+        return Value::boolean_(true);
+    };
+
+    // offChat(container, event) -> يحذف كل المعالجات المسجَّلة لحدث بعينه في هذه الحاوية.
+    // true إن حُذف معالج واحد أو أكثر فعلاً، false إن لم يوجد شيء أصلاً.
+    natives["offChat"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("offChat", a, 2, line);
+        std::string container = asString(a[0], "offChat", line);
+        std::string event = asString(a[1], "offChat", line);
+        auto it = chatHandlers.find(container);
+        if (it == chatHandlers.end()) return Value::boolean_(false);
+        size_t before = it->second.size();
+        it->second.erase(std::remove_if(it->second.begin(), it->second.end(),
+                          [&](const std::pair<std::string, Value>& e) { return e.first == event; }),
+                          it->second.end());
+        return Value::boolean_(it->second.size() != before);
+    };
+
+    // ---- container.api: استدعاء نقاط API الوهمية المسجَّلة عبر route (حقيقي بالكامل، بلا شبكة) ----
+    // call(method, path) -> يبحث داخل container.api الحالي (الذي نُنفَّذ بداخله الآن)
     natives["call"] = [this](std::vector<Value>& a, int line) -> Value {
-        expectArgsRange("call", a, 2, 3, line);
+        expectArgs("call", a, 2, line);
         std::string method = asString(a[0], "call", line);
         std::string path = asString(a[1], "call", line);
         std::string key = containerStack.empty() ? "" : containerStack.back();
-        Value body = a.size() > 2 ? a[2] : Value::nil();
-        return performApiCall(key, method, path, line, body);
+        return performApiCall(key, method, path, line);
     };
-    // callApi(apiContainerName, method, path, body?) -> يستدعي أي container.api باسمه من أي مكان في البرنامج
+    // callApi(apiContainerName, method, path) -> يستدعي أي container.api باسمه من أي مكان في البرنامج
     natives["callApi"] = [this](std::vector<Value>& a, int line) -> Value {
-        expectArgsRange("callApi", a, 3, 4, line);
+        expectArgs("callApi", a, 3, line);
         std::string key = asString(a[0], "callApi", line);
         std::string method = asString(a[1], "callApi", line);
         std::string path = asString(a[2], "callApi", line);
-        Value body = a.size() > 3 ? a[3] : Value::nil();
-        return performApiCall(key, method, path, line, body);
+        return performApiCall(key, method, path, line);
     };
 
     // ================= HTTP حقيقي وفعلي (اتصال شبكة حقيقي) =================
@@ -3184,47 +3317,6 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
         return;
     }
 
-    // ---- Rin Loom (@view / warp / @theme) مربوطة الآن فعلياً بالحاوية ----
-    // كانت الأنواع الثلاثة بلا أي معالج هنا إطلاقاً: أي warp/@theme/@view يُكتَب داخل @container كان
-    // يُنفَّذ بصمت تامة بلا أي أثر (لا يُعرَّف كمتغيّر ولا يُسجَّل في أي مكان)، لأن Loomtime كانت تعمل
-    // فقط كخط أنابيب مستقل (loom::runColdPipeline) يفحص جذر البرنامج العلوي وحده. الآن warp تُعرَّف
-    // كمتغيّر حقيقي في بيئة الحاوية الحالية (فيصبح قابلاً للقراءة داخلها كأي متغيّر آخر)، @theme تُعرَّف
-    // كقاموس أدوار لونية حقيقي بنفس اسمها، و@view تُسجَّل كجذر واجهة الحاوية الحالية — وكلاهما (warp/
-    // theme) يُحفَظان أيضاً بترتيبهما في containerWarpDecls/containerThemeDecls ليستخدمهما
-    // loom::runColdPipelineForContainer عند بناء Fabric حقيقي مِن @view هذه الحاوية بالذات.
-    if (auto s = std::dynamic_pointer_cast<WarpStmt>(stmt)) {
-        Value v = Value::nil();
-        if (s->initializer) v = evaluate(s->initializer, env);
-        env->define(s->name, v);
-        if (!containerStack.empty()) {
-            containerWarpDecls[containerStack.back()].push_back(s);
-        }
-        return;
-    }
-    if (auto s = std::dynamic_pointer_cast<ThemeStmt>(stmt)) {
-        auto themeMap = std::make_shared<MapData>();
-        for (auto& attr : s->attrs) {
-            Value v = attr.value ? evaluate(attr.value, env) : Value::nil();
-            themeMap->push_back({Value::string(attr.key), v});
-        }
-        if (!s->name.empty()) env->define(s->name, Value::makeMap(themeMap));
-        if (!containerStack.empty()) {
-            containerThemeDecls[containerStack.back()].push_back(s);
-            output << "🎨 theme" << (s->name.empty() ? "" : (" = " + s->name))
-                   << " مرتبط بالحاوية " << containerStack.back() << "\n";
-        }
-        return;
-    }
-    if (auto s = std::dynamic_pointer_cast<ViewStmt>(stmt)) {
-        if (!containerStack.empty()) {
-            std::string key = containerStack.back();
-            if (!containerViews.count(key)) containerViews[key] = s; // أول @view بداخلها فقط، كنفس مبدأ الجذر العلوي
-            output << "🖼️ view" << (s->name.empty() ? "" : (" = " + s->name))
-                   << " مرتبط بالحاوية " << key << "\n";
-        }
-        return;
-    }
-
     if (auto s = std::dynamic_pointer_cast<ContainerStmt>(stmt)) {
         auto containerEnv = std::make_shared<Environment>(env);
         std::string tag = containerTagName(s->kind);
@@ -3787,6 +3879,19 @@ void Interpreter::notifyWatchers(const std::string& container, const std::string
     }
 }
 
+// انظر إعلانها في rin_interpreter.h (قسم container.chatbot) للشرح الكامل.
+void Interpreter::fireChatEvent(const std::string& container, const std::string& event, std::vector<Value> args, int line) {
+    auto it = chatHandlers.find(container);
+    if (it == chatHandlers.end()) return;
+    for (auto& entry : it->second) {
+        if (entry.first != event) continue;
+        const Value& fn = entry.second;
+        if (fn.type != Value::Type::FUNCTION || !fn.function) continue;
+        std::vector<Value> cbArgs = args; // كل معالج يستقبل نسخته الخاصة (قد تُعدَّل داخل callFunction)
+        callFunction(fn.function, cbArgs, line);
+    }
+}
+
 Value Interpreter::callFunction(const std::shared_ptr<Callable>& fn, std::vector<Value>& args, int line) {
     if (args.size() != fn->declaration->params.size()) {
         auto d = diagErr(diag::Code::E0007_InvalidArguments, line,
@@ -4065,16 +4170,9 @@ Value Interpreter::evaluate(const ExprPtr& expr, EnvPtr env) {
 // قيمة map حقيقية {status, ok, body}. إن لم يوجد تطابق، يُعيد {status: 404, ok: false, error: ...}
 // دون رمي استثناء — تماماً كما يتصرف عميل HTTP حقيقي أمام رد 404.
 Value Interpreter::performApiCall(const std::string& containerKey, const std::string& method,
-                                   const std::string& path, int line, const Value& bodyValue) {
+                                   const std::string& path, int line) {
+    (void)line;
     std::string wantMethod = toUpperAscii(method);
-
-    // ---- تفعيل فعلي: حاوية container.api سجَّلت apiEndpoint حقيقياً بنفس اسمها (عبر apiRegister
-    // بداخلها) -> نفّذ طلب شبكة حقيقياً فعلياً بدل مطابقة route الوهمية. هذا هو ما يجعل container.api
-    // "ميزة فعالة" فعلاً: نفس عبارة route تبقى صالحة كتوثيق/عقد متوقَّع، لكن التنفيذ صار حقيقياً.
-    if (apiEndpoints.count(containerKey)) {
-        return performRealApiCall(containerKey, wantMethod, path, bodyValue, line);
-    }
-
     auto it = apiRoutes.find(containerKey);
     if (it != apiRoutes.end()) {
         for (auto& route : it->second) {
