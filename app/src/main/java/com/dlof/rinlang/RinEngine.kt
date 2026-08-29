@@ -144,6 +144,20 @@ object RinEngine {
 
     private external fun renderViewNative(source: String, rootWidth: Int): String
 
+    /**
+     * Container-scoped counterpart of [renderView]: builds the Fabric from the `@view` root that
+     * lives *inside* the named `@container` (rather than the top-level program). This is the
+     * piece that ties Loomtime to `container`: any `@container` carrying its own `@view`/`warp`/
+     * `@theme` becomes an independently renderable screen/component, scoped to that container's
+     * own warp state, addressable by the container's name. Returns
+     * `{"error": "...", "line": N}` if no container with that name exists, or it has no `@view`
+     * root inside it.
+     */
+    fun renderContainerView(source: String, containerName: String, rootWidth: Int = 390): String =
+        renderContainerViewNative(source, containerName, rootWidth)
+
+    private external fun renderContainerViewNative(source: String, containerName: String, rootWidth: Int): String
+
     // ---- Loomtime session (Needle) ----
     // Unlike [renderView] (a stateless one-shot render), a session keeps its Fabric + Warp state
     // alive natively across calls, so [LoomSession.tap] can run a Strand's `onTap` handler for
@@ -153,6 +167,8 @@ object RinEngine {
     //
     // Usage from whatever draws the preview (Canvas/Compose):
     //   val session = RinEngine.LoomSession(source, rootWidthPx)
+    //   ...or, scoped to one @container's own @view/warp/@theme...
+    //   val session = RinEngine.LoomSession(source, rootWidthPx, containerName = "Home")
     //   ...on each pointer-down at (x, y) in that same pixel space...
     //   val resultJson = session.tap(x, y)   // re-render the canvas from resultJson's "fabric"
     //   ...on each keystroke in the editor...
@@ -160,8 +176,10 @@ object RinEngine {
     //                                                     // tapped counter) across the hot edit
     //   ...when the preview is closed/backgrounded...
     //   session.close()
-    class LoomSession(source: String, rootWidth: Int = 390) {
-        private var handle: Long = loomSessionCreateNative(source, rootWidth)
+    class LoomSession(source: String, rootWidth: Int = 390, containerName: String? = null) {
+        private var handle: Long =
+            if (containerName == null) loomSessionCreateNative(source, rootWidth)
+            else loomSessionCreateForContainerNative(source, containerName, rootWidth)
         private var closed = false
 
         /** Current Fabric snapshot -- same JSON shape [renderView] returns. */
@@ -186,6 +204,7 @@ object RinEngine {
     }
 
     private external fun loomSessionCreateNative(source: String, rootWidth: Int): Long
+    private external fun loomSessionCreateForContainerNative(source: String, containerName: String, rootWidth: Int): Long
     private external fun loomSessionRenderJsonNative(handle: Long): String
     private external fun loomSessionTapNative(handle: Long, x: Double, y: Double): String
     private external fun loomSessionUpdateSourceNative(handle: Long, newSource: String): String
