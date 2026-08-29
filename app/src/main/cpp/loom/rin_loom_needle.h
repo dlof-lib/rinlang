@@ -22,6 +22,7 @@
 #include "rin_loom_overlay.h" // OverlayLayer / hitTestOverlayLayer -- see dispatchTapWithOverlay below
 #include "rin_loom_actions.h" // Action Engine -- built-in Warp-cell verb registry (spec §5/§36)
 #include "rin_loom_navigation.h" // NavigationManager -- navigate()/back()/replace()/reload() (spec §19)
+#include "rin_loom_paint.h"      // Dye + exportFabricToPNG() -- exportPNG()/screenshot()/exportImage() (spec §21-23)
 #include "../rin_interpreter.h"
 #include <vector>
 #include <string>
@@ -68,6 +69,8 @@ struct TapResult {
     std::string error;                     // set only if a handler was found but failed to run
     bool navigated = false;                // true if a navigate()/back()/replace()/reload() ran
     std::string route;                     // the resulting current route when navigated == true
+    bool exported = false;                 // true if an exportPNG()/screenshot()/exportImage() ran
+    std::string exportedPath;              // the file it was written to, when exported == true
 };
 
 // Dispatches a tap at (x, y) against `fabricRoot`. `program` is the last successfully parsed
@@ -75,9 +78,12 @@ struct TapResult {
 // `nav`, if non-null, wires up navigate()/back()/replace()/reload() (spec §19); omitting it (the
 // default) simply means those four calls report as unrecognized, same as any other unknown
 // callee -- existing call sites that don't pass a NavigationManager keep working unchanged.
+// `exportDye`, if non-null, wires up exportPNG()/screenshot()/exportImage() (spec §21-23) the same
+// optional-pointer way `nav` wires up navigation -- omit it and those three simply report as
+// unrecognized, so existing call sites compile and behave unchanged.
 inline TapResult dispatchTap(const StrandPtr& fabricRoot, WarpScope& warp,
                               const std::vector<rin::StmtPtr>& program, double x, double y,
-                              NavigationManager* nav = nullptr) {
+                              NavigationManager* nav = nullptr, Dye* exportDye = nullptr) {
     TapResult result;
     if (!fabricRoot) return result;
 
@@ -185,6 +191,40 @@ inline TapResult dispatchTap(const StrandPtr& fabricRoot, WarpScope& warp,
         return result;
     }
 
+    // exportPNG("screen.png") / screenshot("screen.png") / exportImage("screen.png") export the
+    // whole Fabric; exportPNG(profile, "profile.png") (a leading Strand-name identifier) exports
+    // just that subtree (spec §23). Same PNG encoder either way (rin_loom_paint.h's writePNG),
+    // just a different Strand handed to Dye::paint() -- see exportFabricToPNG().
+    if (callee == "exportPNG" || callee == "screenshot" || callee == "exportImage") {
+        if (!exportDye) {
+            result.error = "'" + callee + "()' requires a Dye (pass one to dispatchTap)";
+            return result;
+        }
+        if (argExprs.empty()) { result.error = callee + "() needs a file path argument"; return result; }
+        StrandPtr target = fabricRoot;
+        std::string path;
+        if (argExprs.size() >= 2) {
+            if (auto v = std::dynamic_pointer_cast<rin::VariableExpr>(argExprs[0])) {
+                target = findById(fabricRoot, v->name);
+                if (!target) {
+                    result.error = "'" + callee + "()': no Strand named '" + v->name + "'";
+                    return result;
+                }
+            }
+            path = evalAttrExpr(argExprs[1], warp, nullptr).asString();
+        } else {
+            path = evalAttrExpr(argExprs[0], warp, nullptr).asString();
+        }
+        if (path.empty()) { result.error = callee + "(): empty file path"; return result; }
+        if (!exportFabricToPNG(*exportDye, target, path)) {
+            result.error = "'" + callee + "()' failed to write '" + path + "'";
+            return result;
+        }
+        result.exported = true;
+        result.exportedPath = path;
+        return result;
+    }
+
     ActionOutcome outcome = ActionRegistry::shared().invoke(callee, argExprs, warp);
     if (outcome.recognized) {
         result.error = outcome.error; // empty on success
@@ -219,7 +259,7 @@ inline TapResult dispatchTap(const StrandPtr& fabricRoot, WarpScope& warp,
 inline TapResult dispatchTapWithOverlay(const StrandPtr& fabricRoot, WarpScope& warp,
                                          const std::vector<rin::StmtPtr>& program,
                                          OverlayLayer& overlayLayer, double x, double y,
-                                         NavigationManager* nav = nullptr) {
+                                         NavigationManager* nav = nullptr, Dye* exportDye = nullptr) {
     OverlayHitResult ohit = hitTestOverlayLayer(overlayLayer, x, y);
 
     if (ohit.blocked) {
@@ -245,7 +285,7 @@ inline TapResult dispatchTapWithOverlay(const StrandPtr& fabricRoot, WarpScope& 
     }
 
     const StrandPtr& hitTestRoot = ohit.hit ? ohit.hit : fabricRoot;
-    return dispatchTap(hitTestRoot, warp, program, x, y, nav);
+    return dispatchTap(hitTestRoot, warp, program, x, y, nav, exportDye);
 }
 
 } // namespace loom
