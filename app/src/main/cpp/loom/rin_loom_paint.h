@@ -2,6 +2,7 @@
 #pragma once
 #include "rin_loom_strand.h"
 #include "rin_loom_tokens.h"
+#include "rin_loom_overlay.h" // OverlayLayer -- see paintWithOverlay() below
 #include <fstream>
 #include <sstream>
 #include <algorithm>
@@ -71,12 +72,38 @@ inline Color resolveColor(const StrandPtr& s) {
     return fallback;
 }
 
-enum class DrawOp { FILL_RECT, STROKE_RECT, TEXT_RUN };
+// SCRIM_RECT (Overlay Engine, rin_loom_overlay.h): visually a FILL_RECT, but distinguished so a
+// renderer applies partial opacity regardless of the RGB it carries -- Color has no alpha channel
+// (see the gradient note below: "no alpha/multi-stop primitive in this toy rasterizer yet"), so a
+// real scrim's translucency is a renderer-side convention keyed on the op, the same way a real
+// GPU/Canvas backend already has to special-case GRADIENT's variant= from the JSON export.
+enum class DrawOp { FILL_RECT, STROKE_RECT, TEXT_RUN, SCRIM_RECT };
 struct DrawCommand { DrawOp op; Rect bounds; Color color; std::string text; StrandId owner; double radius = 0; double strokeWidth = 0; };
 using DrawList = std::vector<DrawCommand>;
 
+// The scrim's RGB (a renderer applies its own opacity on top, per the SCRIM_RECT note above) —
+// a fixed near-black rather than a Theme role, since a scrim dims *whatever theme is active*
+// rather than participating in it the way primary/surface/etc. do.
+inline Color scrimColor() { return {0, 0, 0}; }
+
 struct Dye {
     DrawList paint(const StrandPtr& s) { DrawList list; paintInto(s, list); return list; }
+
+    // Overlay Engine (rin_loom_overlay.h): paints the main document exactly as paint() above
+    // always has, then appends the overlay layer strictly afterward, in its own back-to-front
+    // order (see OverlayLayer's doc comment) -- a real second z-layer, not a hope that tree order
+    // happened to put Dialog/Tooltip last. Each modal entry's scrim is pushed immediately before
+    // that entry's own subtree, so scrim-then-box-then-its-children is the actual paint order for
+    // every entry, exactly like a native overlay compositor draws a dimmed backdrop then its sheet.
+    DrawList paintWithOverlay(const StrandPtr& root, OverlayLayer& layer) {
+        DrawList list;
+        paintInto(root, list);
+        for (auto& entry : layer.entries) {
+            if (entry.scrim) list.push_back({DrawOp::SCRIM_RECT, entry.scrimRect, scrimColor(), "", entry.strand ? entry.strand->id : 0, 0, 0});
+            paintInto(entry.strand, list);
+        }
+        return list;
+    }
     void paintInto(const StrandPtr& s, DrawList& list) {
         double r = std::min(resolveRadius(*s, 0), std::min(s->geometry.w, s->geometry.h) / 2.0);
 
