@@ -107,11 +107,43 @@ RIN_API char* rin_loom_render_json(const char* source, int rootWidth) {
     return dupToC(os.str());
 }
 
+RIN_API char* rin_loom_render_container_json(const char* source, const char* containerName, int rootWidth) {
+    std::string src = source ? source : "";
+    std::string name = containerName ? containerName : "";
+    if (rootWidth <= 0) rootWidth = 390;
+
+    loom::PipelineResult r = loom::runColdPipelineForContainer(src, name);
+    if (!r.ok) {
+        std::ostringstream os;
+        os << "{\"error\":\"" << loom::jsonEscape(r.errorMessage) << "\",\"line\":" << r.errorLine << "}";
+        return dupToC(os.str());
+    }
+
+    loom::Loom loomEngine;
+    loomEngine.layout(r.fabric, loom::Constraints{0, (double)rootWidth, 0, 1e9}, 0, 0);
+
+    std::ostringstream os;
+    os << "{\"ok\":true,\"container\":\"" << loom::jsonEscape(name) << "\""
+       << ",\"strandsMeasured\":" << loomEngine.stats.strandsMeasured
+       << ",\"cacheHits\":" << loomEngine.stats.cacheHits
+       << ",\"fabric\":" << loom::fabricToJsonString(r.fabric) << "}";
+    return dupToC(os.str());
+}
+
 RIN_API void* rin_loom_session_create(const char* source, int rootWidth) {
     auto* sess = new (std::nothrow) LoomSession();
     if (!sess) return nullptr;
     sess->rootWidth = rootWidth > 0 ? rootWidth : 390;
     sess->state = loom::runColdPipeline(source ? source : "");
+    if (sess->state.ok) { relayout(sess); rebuildIndex(sess); }
+    return sess;
+}
+
+RIN_API void* rin_loom_session_create_for_container(const char* source, const char* containerName, int rootWidth) {
+    auto* sess = new (std::nothrow) LoomSession();
+    if (!sess) return nullptr;
+    sess->rootWidth = rootWidth > 0 ? rootWidth : 390;
+    sess->state = loom::runColdPipelineForContainer(source ? source : "", containerName ? containerName : "");
     if (sess->state.ok) { relayout(sess); rebuildIndex(sess); }
     return sess;
 }
