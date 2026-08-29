@@ -357,7 +357,18 @@ class LoomFabricView @JvmOverloads constructor(
         val rect = RectF(x, y, x + w, y + h)
 
         when (kind) {
-            Kind.TEXT -> drawText(canvas, rect, attrs, attrs.optString("text"), defaultText)
+            // `format=` is a plain generic attr (see rin_loom_paint.h's fabricToJson — every
+            // attrs.attrs key/value round-trips as-is, no native change needed) set by
+            // sendMessage()/botReply()/botReplyMarkdown()/botReplyCode() (rin_interpreter.cpp) on
+            // a chat message's `format` field: "text" (default)/"markdown"/"code". A chat-bubble
+            // Text node binds its own `format=` attr to that same field (e.g.
+            // `format = msg["format"];`) so the bubble renders accordingly — no StrandKind change
+            // needed, this is still an ordinary Text node.
+            Kind.TEXT -> when (attrs.optString("format")) {
+                "code" -> drawCodeText(canvas, rect, attrs, attrs.optString("text"), defaultText)
+                "markdown" -> drawMarkdownText(canvas, rect, attrs, attrs.optString("text"), defaultText)
+                else -> drawText(canvas, rect, attrs, attrs.optString("text"), defaultText)
+            }
             Kind.DIVIDER -> drawDivider(canvas, rect, attrs)
             Kind.IMAGE -> drawImage(canvas, rect, attrs)
             Kind.BUTTON -> {
@@ -600,6 +611,118 @@ class LoomFabricView @JvmOverloads constructor(
             canvas.drawText(line, startX, baseline, textPaint)
             baseline += lineHeight
         }
+    }
+
+    // ---- chat message formatting (`format=` on a Text node — see the Kind.TEXT dispatch above)
+    // ----
+
+    private val defaultCodeBg = Color.rgb(18, 19, 26) // dark, distinct from defaultCard/Bubble fill
+    private val defaultCodeText = Color.rgb(180, 230, 180) // faint terminal-green, readable on dark bg
+
+    /** `format="code"`: a monospace block with its own dark rounded background, matching how a
+     * real code fence renders in a chat client. Reuses [drawBox]/[drawText] as-is (no new paint
+     * fields) — only the typeface and the two default colors differ from plain body text. */
+    private fun drawCodeText(canvas: Canvas, rect: RectF, attrs: JSONObject, text: String, fallbackColor: Int) {
+        if (text.isEmpty() || rect.width() <= 0f || rect.height() <= 0f) return
+        drawBox(canvas, rect, JSONObject().apply {
+            // an explicit color= on the Strand still governs the bubble itself (drawBox already
+            // reads attrs.color); the code block only supplies its own fallback background.
+            if (attrs.has("color")) put("color", attrs.optString("color"))
+            if (attrs.has("radius")) put("radius", attrs.optString("radius"))
+        }, defaultCodeBg, defaultRadius = 8f)
+
+        val savedTypeface = textPaint.typeface
+        textPaint.typeface = android.graphics.Typeface.MONOSPACE
+        try {
+            drawText(canvas, rect, attrs, text, if (attrs.has("color")) fallbackColor else defaultCodeText)
+        } finally {
+            textPaint.typeface = savedTypeface // textPaint is a shared field — never leak this elsewhere
+        }
+    }
+
+    /** One word plus whether it should render bold (i.e. it came from inside a `**...**` span). */
+    private data class MdWord(val text: String, val bold: Boolean)
+
+    /** Splits `text` on `**bold**` markers into a flat word list tagged bold/not-bold. Only bold
+     * spans are supported (the one inline style `botReplyMarkdown` callers reach for most, e.g.
+     * "بإمكانك تفعيل الحساب من **الإعدادات > الحساب > تفعيل**" from
+     * examples/chatbot_container_demo.rin) — anything fancier (headings, links, code spans inside
+     * markdown) still shows as plain text with its literal `**`/`` ` ``/`#` markers rather than
+     * silently dropping content, which is the safer failure mode for a chat transcript. */
+    private fun parseMarkdownWords(text: String): List<MdWord> {
+        val words = mutableListOf<MdWord>()
+        var bold = false
+        var i = 0
+        val sb = StringBuilder()
+        fun flushWord() { if (sb.isNotEmpty()) { words.add(MdWord(sb.toString(), bold)); sb.clear() } }
+        while (i < text.length) {
+            val c = text[i]
+            if (c == '*' && i + 1 < text.length && text[i + 1] == '*') {
+                flushWord()
+                bold = !bold
+                i += 2
+                continue
+            }
+            if (c == ' ') { flushWord(); i++; continue }
+            sb.append(c)
+            i++
+        }
+        flushWord()
+        return words
+    }
+
+    /** `format="markdown"`: wraps like plain body text (same `available`/`lineHeight` box the
+     * caller's box was already sized for) but renders `**bold**` spans in real bold, word by
+     * word, instead of drawing the literal asterisks. RTL scripts (Arabic, as in this project's
+     * own chat examples) still lay out left-to-right word-by-word here, same simplification
+     * [wrapLines] already makes for plain text above — a real bidi run reorder is out of scope for
+     * this renderer. */
+    private fun drawMarkdownText(canvas: Canvas, rect: RectF, attrs: JSONObject, text: String, fallbackColor: Int) {
+        if (text.isEmpty() || rect.width() <= 0f || rect.height() <= 0f) return
+        val sizeSp = attrs.optString("size").toFloatOrNull() ?: 14f
+        textPaint.color = parseHexColor(attrs.optString("color").ifBlank { null }, fallbackColor)
+        textPaint.textSize = sizeSp
+        textPaint.isAntiAlias = true
+
+        val hPad = 4f
+        val available = max(4f, rect.width() - hPad * 2f)
+        val spaceWidth = run { textPaint.isFakeBoldText = false; textPaint.measureText(" ") }
+
+        // Greedy word-wrap identical in spirit to wrapLines(), but keeping each word's bold flag
+        // (measuring width for bold words with isFakeBoldText=true, since bold glyphs are wider).
+        val words = parseMarkdownWords(text)
+        val lines = mutableListOf<MutableList<MdWord>>(mutableListOf())
+        var lineWidth = 0f
+        for (w in words) {
+            textPaint.isFakeBoldText = w.bold
+            val wWidth = textPaint.measureText(w.text)
+            val current = lines.last()
+            val candidateWidth = if (current.isEmpty()) wWidth else lineWidth + spaceWidth + wWidth
+            if (current.isNotEmpty() && candidateWidth > available) {
+                lines.add(mutableListOf(w))
+                lineWidth = wWidth
+            } else {
+                current.add(w)
+                lineWidth = candidateWidth
+            }
+        }
+
+        val lineHeight = textPaint.textSize * 1.4f
+        var maxLines = max(1, (rect.height() / lineHeight).toInt())
+        attrs.optString("maxLines").toIntOrNull()?.let { if (it > 0) maxLines = min(maxLines, it) }
+        val visibleLines = if (lines.size > maxLines) lines.subList(0, maxLines) else lines
+
+        var baseline = rect.top - textPaint.ascent()
+        for (line in visibleLines) {
+            var x = rect.left + hPad
+            for (w in line) {
+                textPaint.isFakeBoldText = w.bold
+                canvas.drawText(w.text, x, baseline, textPaint)
+                x += textPaint.measureText(w.text) + spaceWidth
+            }
+            baseline += lineHeight
+        }
+        textPaint.isFakeBoldText = false // textPaint is shared — never leave bold set for the next node
     }
 
     private fun drawDivider(canvas: Canvas, rect: RectF, attrs: JSONObject) {
