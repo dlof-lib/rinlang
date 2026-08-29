@@ -6,6 +6,7 @@
 #include "../rin_lexer.h"
 #include "../rin_parser.h"
 #include "rin_loom.h"
+#include "rin_loom_tokens.h"
 #include <stdexcept>
 
 namespace loom {
@@ -43,6 +44,9 @@ inline PipelineResult runColdPipeline(const std::string& source) {
                 result.warp.set(w->name, v);
             }
         }
+        // Rin Loom: register any @theme=... blocks (Pattern Book) before the Fabric is built,
+        // so Strand colors resolve against the right active theme from the very first paint.
+        registerThemesFromProgram(program, result.warp);
         std::shared_ptr<rin::ViewStmt> root;
         for (auto& stmt : program) {
             if (auto v = std::dynamic_pointer_cast<rin::ViewStmt>(stmt)) { root = v; break; }
@@ -52,6 +56,7 @@ inline PipelineResult runColdPipeline(const std::string& source) {
         result.viewAst = root;
         result.program = program;
         result.fabric = buildFabric(root, result.warp, result.subs, "", 0);
+        applyBannerConveniences(result.fabric, result.warp, result.subs);
         result.ok = true;
     } catch (rin::RinError& e) {
         result.ok = false; result.errorMessage = e.message; result.errorLine = e.line;
@@ -80,6 +85,7 @@ inline std::vector<Patch> runHotPipeline(PipelineResult& state, const std::strin
                 }
             }
         }
+        registerThemesFromProgram(program, state.warp);
         std::shared_ptr<rin::ViewStmt> root;
         for (auto& stmt : program) {
             if (auto v = std::dynamic_pointer_cast<rin::ViewStmt>(stmt)) { root = v; break; }
