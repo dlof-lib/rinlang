@@ -51,6 +51,10 @@ print "هل البوت يكتب الآن؟", isChatTyping("Support");
 
 attachToChat("Support", "user", "id_card.png", "هذه صورة الهوية المطلوبة");
 
+// ---- تصدير المحادثة (جديد) ----
+exportChat("Support", "text", "support_chat.txt");
+exportChat("Support", "png", "support_chat.png");
+
 closeChat("Support");
 clearChat("Support");
 print "بعد المسح، عدد الرسائل:", chatMessageCount("Support");
