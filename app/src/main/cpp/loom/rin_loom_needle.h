@@ -19,6 +19,7 @@
 #pragma once
 #include "rin_loom_strand.h"
 #include "rin_loom_tokens.h"
+#include "rin_loom_overlay.h" // OverlayLayer / hitTestOverlayLayer -- see dispatchTapWithOverlay below
 #include "../rin_interpreter.h"
 #include <vector>
 #include <string>
@@ -186,6 +187,56 @@ inline TapResult dispatchTap(const StrandPtr& fabricRoot, WarpScope& warp,
     result.error = "no top-level function named '" + callee +
                    "' (and it doesn't match a built-in like increment/decrement/toggle/set)";
     return result;
+}
+
+// ---- Overlay-aware dispatch (Overlay Engine, rin_loom_overlay.h) ----
+//
+// Tries the overlay layer BEFORE the normal document hit-test, exactly how a real compositor
+// checks its topmost surface first:
+//   1. A tap that lands on a modal Dialog's scrim (i.e. anywhere in the viewport outside that
+//      Dialog's own box while it's open) is CONSUMED right here. It never reaches hitTestPath
+//      against the main fabric at all -- that is the actual "block input to what's behind it" an
+//      overlay compositor provides, not just a dimmed-looking rectangle drawn on top. If the
+//      Dialog is dismissible (the default), the Warp cell behind its `open=` attribute -- found
+//      the same way dispatchTap above already resolves a bare Warp-cell reference in an onTap
+//      argument -- is set to false, closing it.
+//   2. A tap that lands inside an overlay's own box is dispatched with THAT overlay's subtree as
+//      the hit-test root, not the whole fabric -- so its own onTap-bearing children (Cancel/
+//      Confirm buttons, etc.) stay reachable even though their on-screen geometry may coincide
+//      with content underneath them in the main document, and nothing below the overlay is ever
+//      considered for this tap.
+//   3. Otherwise (no overlay hit at all -- most taps, most of the time) this falls through to the
+//      exact same dispatchTap(fabricRoot, ...) call every session used before the Overlay Engine
+//      existed, so ordinary interaction is completely unaffected by any of this.
+inline TapResult dispatchTapWithOverlay(const StrandPtr& fabricRoot, WarpScope& warp,
+                                         const std::vector<rin::StmtPtr>& program,
+                                         OverlayLayer& overlayLayer, double x, double y) {
+    OverlayHitResult ohit = hitTestOverlayLayer(overlayLayer, x, y);
+
+    if (ohit.blocked) {
+        TapResult result;
+        result.handled = true; // handled by the scrim -- deliberately not "nothing was there"
+        StrandPtr owner = ohit.scrimOwner ? ohit.scrimOwner->strand : nullptr;
+        result.targetId = owner ? owner->id : 0;
+        result.handlerDescription = "scrim";
+
+        if (owner && ohit.scrimOwner->dismissOnScrimTap) {
+            for (auto& a : owner->attrs) {
+                if (a.key != "open") continue;
+                if (auto v = std::dynamic_pointer_cast<rin::VariableExpr>(a.rawExpr)) {
+                    if (warp.has(v->name)) {
+                        warp.set(v->name, Value::txt("false"));
+                        result.changedWarpNames.push_back(v->name);
+                    }
+                }
+                break;
+            }
+        }
+        return result;
+    }
+
+    const StrandPtr& hitTestRoot = ohit.hit ? ohit.hit : fabricRoot;
+    return dispatchTap(hitTestRoot, warp, program, x, y);
 }
 
 } // namespace loom
