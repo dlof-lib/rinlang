@@ -12,6 +12,7 @@ Official documentation structure for the Rin 1.x language and runtime.
 - control-flow.md
 - objects.md
 - containers.md
+- boat.md
 
 ### Runtime
 - standard-library.md
