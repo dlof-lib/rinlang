@@ -1890,6 +1890,55 @@ void Interpreter::registerNatives() {
         return Value::boolean_(it->second.size() != before);
     };
 
+    // exportChat(container, format, path?) -> يصدّر سجلّ محادثة إلى ملف حقيقي على القرص:
+    //   format="text" -> نصّ عادي "role: text" سطراً لكل رسالة (UTF-8)، الامتداد الافتراضي .txt
+    //   format="png"  -> صورة فقاعات محادثة حقيقية (buildChatPng)، الامتداد الافتراضي .png
+    // path اختياري (نفس مبدأ save/writeFile)؛ الافتراضي = اسم الحاوية + الامتداد المناسب.
+    // يُعيد true دائماً عند النجاح (نفس عرف writeFile)، ويرمي خطأ إن كانت الحاوية ليست chatbot
+    // أو كانت format غير مدعومة.
+    natives["exportChat"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgsRange("exportChat", a, 2, 3, line);
+        std::string container = asString(a[0], "exportChat", line);
+        std::string format = asString(a[1], "exportChat", line);
+        if (!containerKinds.count(container) || containerKinds[container] != ContainerKind::CHATBOT) {
+            throw errWithReason(diag::Code::E0014_InvalidContainer, line,
+                                 "'" + container + "' is not a chatbot container",
+                                 "expected a `container.chatbot` / `chatbot` container, defined with `container.chatbot`");
+        }
+        std::string path;
+        if (a.size() > 2 && a[2].type != Value::Type::NIL) path = asString(a[2], "exportChat", line);
+
+        if (format == "text") {
+            std::ostringstream out;
+            auto it = chatHistoryStore.find(container);
+            if (it != chatHistoryStore.end()) {
+                for (auto& msgVal : it->second) {
+                    std::string role, text;
+                    if (msgVal.type == Value::Type::MAP && msgVal.map) {
+                        for (auto& kv : *msgVal.map) {
+                            if (kv.first.type != Value::Type::STRING) continue;
+                            if (kv.first.str == "role") role = kv.second.toDisplayString();
+                            else if (kv.first.str == "text") text = kv.second.toDisplayString();
+                        }
+                    }
+                    out << role << ": " << text << "\n";
+                }
+            }
+            if (path.empty()) path = container + ".txt";
+            writeRealFile(path, out.str(), line, "exportChat (text)");
+            return Value::boolean_(true);
+        }
+        if (format == "png") {
+            if (path.empty()) path = container + ".png";
+            std::string png = buildChatPng(container);
+            writeRealFile(path, png, line, "exportChat (png)");
+            return Value::boolean_(true);
+        }
+        throw errWithReason(diag::Code::E0016_InvalidProperty, line,
+                             "'" + format + "' is not a supported exportChat format",
+                             "expected \"text\" or \"png\"");
+    };
+
     // ---- container.api: استدعاء نقاط API الوهمية المسجَّلة عبر route (حقيقي بالكامل، بلا شبكة) ----
     // call(method, path) -> يبحث داخل container.api الحالي (الذي نُنفَّذ بداخله الآن)
     natives["call"] = [this](std::vector<Value>& a, int line) -> Value {
@@ -2871,7 +2920,86 @@ std::string Interpreter::buildTablePng(const std::string& key) const {
     return pngutil::encodeRgbPng(width, height, rgb);
 }
 
-std::string Interpreter::buildSaveDocument(const std::string& key, const EnvPtr& containerEnv,
+// انظر إعلانها في rin_interpreter.h (بجانب buildTablePng) — نفس أدوات الرسم بالضبط
+// (rinfont::utf8Decode/visualOrder/drawGlyph + pngutil::encodeRgbPng)، مطبَّقة على فقاعات
+// محادثة بدل شبكة جدول: عمود واحد، صفّ واحد لكل رسالة، محاذاة يمين لِـ role=="user" ويسار لغيره.
+std::string Interpreter::buildChatPng(const std::string& key) const {
+    auto histIt = chatHistoryStore.find(key);
+    const std::vector<Value>* msgs = (histIt != chatHistoryStore.end()) ? &histIt->second : nullptr;
+    size_t msgCount = msgs ? msgs->size() : 0;
+    if (msgCount == 0) msgCount = 1; // صف واحد فارغ (مطابقاً لسلوك buildTablePng مع جدول فارغ)
+
+    struct Bubble { std::vector<char32_t> order; bool rtl; bool isUser; };
+    std::vector<Bubble> bubbles(msgCount, Bubble{{}, false, false});
+    for (size_t i = 0; i < msgCount; i++) {
+        std::string role, text;
+        if (msgs && i < msgs->size() && (*msgs)[i].type == Value::Type::MAP && (*msgs)[i].map) {
+            for (auto& kv : *(*msgs)[i].map) {
+                if (kv.first.type != Value::Type::STRING) continue;
+                if (kv.first.str == "role") role = kv.second.toDisplayString();
+                else if (kv.first.str == "text") text = kv.second.toDisplayString();
+                else if (kv.first.str == "kind" && kv.second.toDisplayString() == "attachment") text = "📎 " + text;
+            }
+        }
+        auto cps = rinfont::utf8Decode(role.empty() ? text : (role + ": " + text));
+        bool rtl = false;
+        bubbles[i].order = rinfont::visualOrder(cps, rtl);
+        bubbles[i].rtl = rtl;
+        bubbles[i].isUser = (role == "user");
+    }
+
+    const int scale = 2;
+    const int glyphAdvance = (rinfont::GW + 1) * scale;
+    const int glyphHeightPx = rinfont::GH * scale;
+    const int bubblePadX = 10, bubblePadY = 8;
+    const int outerMargin = 16, bubbleGap = 8;
+
+    int maxBubbleTextW = 0;
+    for (auto& b : bubbles) maxBubbleTextW = std::max(maxBubbleTextW, static_cast<int>(b.order.size()) * glyphAdvance);
+    int maxBubbleW = maxBubbleTextW + 2 * bubblePadX;
+    int width = std::max(360, maxBubbleW + 2 * outerMargin);
+    int bubbleH = glyphHeightPx + 2 * bubblePadY;
+    int height = outerMargin * 2 + static_cast<int>(msgCount) * bubbleH +
+                 static_cast<int>(msgCount > 0 ? msgCount - 1 : 0) * bubbleGap;
+
+    unsigned char bgR = 245, bgG = 245, bgB = 245;
+    unsigned char userR = 220, userG = 248, userB = 198;   // فقاعة المستخدم (أخضر فاتح)
+    unsigned char botR = 255, botG = 255, botB = 255;      // فقاعة الطرف الآخر (أبيض)
+    unsigned char textR = 20, textG = 20, textB = 20;
+
+    std::vector<unsigned char> rgb(static_cast<size_t>(width) * static_cast<size_t>(height) * 3);
+    for (size_t i = 0; i < rgb.size(); i += 3) { rgb[i] = bgR; rgb[i + 1] = bgG; rgb[i + 2] = bgB; }
+
+    auto fillRect = [&](int x0, int y0, int x1, int y1, unsigned char r, unsigned char g, unsigned char b) {
+        for (int yy = std::max(0, y0); yy < std::min(height, y1); yy++)
+            for (int xx = std::max(0, x0); xx < std::min(width, x1); xx++) {
+                size_t idx = (static_cast<size_t>(yy) * width + xx) * 3;
+                rgb[idx] = r; rgb[idx + 1] = g; rgb[idx + 2] = b;
+            }
+    };
+
+    int y = outerMargin;
+    for (size_t i = 0; i < msgCount; i++) {
+        const Bubble& b = bubbles[i];
+        int textW = static_cast<int>(b.order.size()) * glyphAdvance;
+        int bubbleW = textW + 2 * bubblePadX;
+        int x0 = b.isUser ? (width - outerMargin - bubbleW) : outerMargin;
+        int x1 = x0 + bubbleW;
+        int y1 = y + bubbleH;
+        if (b.isUser) fillRect(x0, y, x1, y1, userR, userG, userB);
+        else fillRect(x0, y, x1, y1, botR, botG, botB);
+
+        int textStartX = b.rtl ? (x1 - bubblePadX - textW) : (x0 + bubblePadX);
+        int cursor = textStartX;
+        for (char32_t cp : b.order) {
+            rinfont::drawGlyph(rgb, width, height, cursor, y + bubblePadY, scale, cp, textR, textG, textB);
+            cursor += glyphAdvance;
+        }
+        y = y1 + bubbleGap;
+    }
+
+    return pngutil::encodeRgbPng(width, height, rgb);
+}(const std::string& key, const EnvPtr& containerEnv,
                                             ContainerKind kind, bool simplified) const {
     std::string tag = containerTagName(kind);
     std::string body = serializeEnvBody(containerEnv, simplified);
