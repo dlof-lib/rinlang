@@ -1,0 +1,75 @@
+// loom_missing_components_demo.rin — Grid, Wrap, Spacer, Box (Container), Badge, Progress,
+// Checkbox, Switch, Avatar, Input, TextArea, Dialog, Tabs/TabItem, Tooltip — all composed
+// through the same @view.<Tag> pipeline every other Loom Strand goes through.
+// Run: ./loomc samples/loom_missing_components_demo.rin
+
+warp dialogOpen = false;
+warp activeTab = "home";
+
+@view.Column=root
+  gap="comfortable"; padding="comfortable";
+
+  // Box: the resolved "Container" — a plain padded box (Card without the elevation styling).
+  @view.Box=intro
+    padding="comfortable";
+    @view.Text=hello text="Rin Loom — missing components"; size="title"; .end/view
+  .end/view
+
+  // Row + Spacer: a toolbar with the actions pinned to the far right.
+  @view.Row=toolbar
+    @view.Text=title text="Dashboard"; size="subtitle"; .end/view
+    @view.Spacer=push .end/view
+    @view.Button=openDialog label="New item"; tone="primary"; onTap=toggle(dialogOpen); .end/view
+  .end/view
+
+  // Tabs: a Row of TabItem, highlighted via the same state="selected" every other Strand uses.
+  @view.Tabs=tabs
+    @view.TabItem=tabHome     label="Home";     variant="ghost"; state="selected"; .end/view
+    @view.TabItem=tabSettings label="Settings"; variant="ghost"; .end/view
+  .end/view
+
+  // Grid: a 3-column card grid.
+  @view.Grid=cards
+    columns=3; gap="normal";
+    @view.Box=c1 padding="normal"; @view.Text=t1 text="Card 1"; .end/view .end/view
+    @view.Box=c2 padding="normal"; @view.Text=t2 text="Card 2"; .end/view .end/view
+    @view.Box=c3 padding="normal"; @view.Text=t3 text="Card 3"; .end/view .end/view
+  .end/view
+
+  // Wrap: tags that flow onto new lines instead of overflowing.
+  @view.Wrap=tags
+    gap="compact";
+    @view.Badge=tag1 text="design-system"; tone="primary"; .end/view
+    @view.Badge=tag2 text="loom"; tone="success"; .end/view
+    @view.Badge=tag3 text="rin"; tone="info"; .end/view
+  .end/view
+
+  // Form controls: Input, TextArea, Checkbox, Switch, Progress, Avatar.
+  @view.Column=form
+    gap="normal";
+    @view.Input=name placeholder="Full name"; .end/view
+    @view.TextArea=bio placeholder="Short bio..."; .end/view
+    @view.Row=toggles
+      gap="normal";
+      @view.Checkbox=agree checked=false; onTap=toggle(dialogOpen); .end/view
+      @view.Switch=notify checked=true; .end/view
+      @view.Avatar=me size="medium"; initials="RL"; .end/view
+    .end/view
+    @view.Progress=upload value=62; .end/view
+  .end/view
+
+  @view.Tooltip=hint text="Progress updates automatically."; .end/view
+
+  // Dialog: collapses to zero size until open=true (bound to the same warp cell the
+  // "New item" button toggles above).
+  @view.Dialog=confirm
+    open=dialogOpen;
+    padding="spacious";
+    @view.Text=confirmTitle text="Create new item?"; size="title"; .end/view
+    @view.Row=confirmActions
+      gap="compact";
+      @view.Button=cancel label="Cancel"; variant="ghost"; onTap=toggle(dialogOpen); .end/view
+      @view.Button=confirmBtn label="Create"; tone="primary"; onTap=toggle(dialogOpen); .end/view
+    .end/view
+  .end/view
+.end/view
