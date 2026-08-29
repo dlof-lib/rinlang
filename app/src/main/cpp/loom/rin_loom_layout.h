@@ -49,6 +49,25 @@ inline double alignOffset(double available, double size, const std::string& mode
     return 0.0; // left / top / start / stretch
 }
 
+// Overlay Engine hook (see rin_loom_overlay.h for the full second pass): whether `s` is going to
+// be re-homed onto a separate overlay layer instead of staying in normal document flow. Consulted
+// by layoutLinear() and layoutStack() below, which are the actual places flow-exclusion happens
+// (skipping a Dialog/Tooltip's contribution to their main-axis budget / cross-axis footprint,
+// while still measuring its own content box against the full available space) — NOT inside
+// layout()'s own generic tail. An earlier version of this hook tried exactly that (making
+// layout() itself report {0,0,0,0} for an overlay Strand while still recording its real box) and
+// it silently corrupted layoutLinear's two-pass flex budget: that pass calls layout() on the same
+// child twice (an unconstrained probe, then a real placement call built from the probe's
+// *returned* main-axis size), so a returned 0 fed back in as a maxH=0 constraint on the second,
+// "real" call -- the Dialog's own box came out zeroed instead of merely excluded from its
+// parent's size. Keeping layout() itself honest (always returns the Strand's real measured size)
+// and doing the skip explicitly, once, in each container helper's own bookkeeping avoids that.
+inline bool isOverlayStrand(const Strand& s) {
+    if (s.kind == StrandKind::DIALOG)  return s.attrStr("open", "false") == "true";
+    if (s.kind == StrandKind::TOOLTIP) return !s.attrStr("anchor", "").empty() && s.attrStr("open", "true") == "true";
+    return false;
+}
+
 inline std::vector<std::string> splitCsv(const std::string& s) {
     std::vector<std::string> out;
     std::stringstream ss(s);
@@ -419,8 +438,19 @@ struct Loom {
         // left over (never negative) is split evenly across the flexible children in pass 2.
         std::vector<bool> flexible(s->children.size());
         std::vector<double> mainSizeOf(s->children.size(), 0.0);
-        double fixedMainUsed = 0; int flexCount = 0;
+        double fixedMainUsed = 0; int flexCount = 0; size_t flowChildren = 0;
         for (size_t i = 0; i < s->children.size(); i++) {
+            // Overlay Engine (rin_loom_overlay.h): an open Dialog / anchored Tooltip is excluded
+            // from this container's main-axis budget entirely -- it isn't "flexible" and it isn't
+            // "fixed-size-and-counted" either, it simply isn't part of this flow anymore (like a
+            // real position:fixed/absolute element). It's still measured, just later, against its
+            // own full available box rather than a budget derived from siblings that don't concern
+            // it (see the placement loop below) -- an important distinction: measuring it *here*
+            // against a probe constraint, the way ordinary fixed-size children are, is exactly
+            // what previously corrupted its own box (a stale note in isOverlayStrand's own comment
+            // above explains why that approach was abandoned).
+            if (isOverlayStrand(*s->children[i])) { flexible[i] = false; mainSizeOf[i] = 0; continue; }
+            flowChildren++;
             flexible[i] = isMainAxisFlexible(s->children[i], axis);
             if (flexible[i]) { flexCount++; continue; }
             Constraints probeC = (axis==Axis::Y) ? Constraints{0, innerMaxW, 0, 1e9} : Constraints{0, 1e9, 0, innerMaxH};
@@ -428,7 +458,7 @@ struct Loom {
             mainSizeOf[i] = (axis==Axis::Y) ? probe.h : probe.w;
             fixedMainUsed += mainSizeOf[i];
         }
-        double gapsTotal = s->children.empty() ? 0 : gap * (s->children.size() - 1);
+        double gapsTotal = flowChildren == 0 ? 0 : gap * (flowChildren - 1);
         double leftover = std::max(0.0, innerMain - fixedMainUsed - gapsTotal);
         double perFlex = flexCount > 0 ? leftover / flexCount : 0.0;
 
@@ -438,6 +468,15 @@ struct Loom {
 
         for (size_t i = 0; i < s->children.size(); i++) {
             auto& child = s->children[i];
+            if (isOverlayStrand(*child)) {
+                // Out of flow: measured against the container's own full inner box (not a
+                // cursor-derived budget -- there is no "space left for it" question, it doesn't
+                // share the axis with its siblings at all), so its real content size is correct
+                // and ready for the Overlay Engine's second pass. It advances no cursor, claims no
+                // gap, and isn't considered below for cross-axis alignment.
+                layout(child, {0, innerMaxW, 0, innerMaxH}, originX + padding, originY + padding);
+                continue;
+            }
             double mainBudget = flexible[i] ? perFlex : mainSizeOf[i];
             double childMaxW = (axis==Axis::Y) ? innerMaxW : mainBudget;
             double childMaxH = (axis==Axis::Y) ? mainBudget : innerMaxH;
@@ -451,7 +490,7 @@ struct Loom {
             cursorMain += mainSize + gap; mainUsed += mainSize + gap; crossMax = std::max(crossMax, crossSize);
             placed.push_back({child, crossSize});
         }
-        if (!s->children.empty()) mainUsed -= gap;
+        if (flowChildren > 0) mainUsed -= gap;
 
         // Second pass: nudge each child along the cross axis now that innerCross is finalized.
         // (Doesn't touch main-axis position, so gap/order above is untouched — only left/top vs
@@ -477,11 +516,19 @@ struct Loom {
         std::vector<Rect> rects; rects.reserve(s->children.size());
         for (auto& child : s->children) {
             Rect r = layout(child, {0, c.maxW, 0, c.maxH}, originX, originY);
-            w = std::max(w, r.w); h = std::max(h, r.h);
             rects.push_back(r);
+            // Overlay Engine (rin_loom_overlay.h): an open Dialog / anchored Tooltip is measured
+            // (so its content box is ready) but excluded from the Stack's own footprint below --
+            // the Stack shouldn't grow (or get treated as if it grew) to fit a modal that's about
+            // to be re-homed onto the viewport by the overlay pass, and it's excluded from the
+            // alignment loop just below for the same reason: its final position is the overlay
+            // pass's job now, not this Stack's align=/valign=.
+            if (isOverlayStrand(*child)) continue;
+            w = std::max(w, r.w); h = std::max(h, r.h);
         }
         if ((ha != "left" && ha != "stretch") || (va != "top" && va != "stretch")) {
             for (size_t i = 0; i < s->children.size(); i++) {
+                if (isOverlayStrand(*s->children[i])) continue;
                 double dx = alignOffset(w, rects[i].w, ha);
                 double dy = alignOffset(h, rects[i].h, va);
                 if (dx != 0.0 || dy != 0.0) translate(s->children[i], dx, dy);
