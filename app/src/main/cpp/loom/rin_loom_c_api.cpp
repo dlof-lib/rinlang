@@ -99,6 +99,13 @@ RIN_API char* rin_loom_session_tap(void* sessionPtr, double x, double y) {
         for (auto& name : tap.changedWarpNames) {
             shuttle.applyWarpChange(name, sess->state.warp, sess->state.subs, sess->index);
         }
+        // Tension's cache is keyed on each Strand's contentHash; applyWarpChange() above mutates
+        // a.value directly (by design -- see its own comment) but does not touch contentHash, so
+        // without this, relayout() below can short-circuit on the stale cached geometry for any
+        // Strand whose size actually depends on the changed value (e.g. Text whose text= grew
+        // from a single digit to two digits). Recomputing before layout is what
+        // rin_loom_strand.h's recomputeHashes() itself says it exists for.
+        loom::recomputeHashes(sess->state.fabric);
         relayout(sess); // an attribute change (e.g. a longer counter string) may resize its Strand
     }
 
