@@ -1071,6 +1071,41 @@ void Interpreter::registerNatives() {
         return Value::makeArray(result);
     };
 
+    // ---- Rin Loom: استعلام عن ربط @view/warp/@theme بحاوية بعينها (بنفس روح groupContainers/
+    // groupMembers أعلاه) — تجعل هذا الربط قابلاً للاستخدام فعلياً من كود Rin نفسه، لا مجرد تخزين صامت ----
+    natives["containerHasView"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("containerHasView", a, 1, line);
+        std::string name = asString(a[0], "containerHasView", line);
+        return Value::boolean_(containerViews.count(name) > 0);
+    };
+    natives["containerViewName"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("containerViewName", a, 1, line);
+        std::string name = asString(a[0], "containerViewName", line);
+        auto it = containerViews.find(name);
+        if (it == containerViews.end()) return Value::nil();
+        return Value::string(it->second->name.empty() ? it->second->kindTag : it->second->name);
+    };
+    natives["containerWarpNames"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("containerWarpNames", a, 1, line);
+        std::string name = asString(a[0], "containerWarpNames", line);
+        auto result = std::make_shared<ArrayData>();
+        auto it = containerWarpDecls.find(name);
+        if (it != containerWarpDecls.end()) {
+            for (auto& w : it->second) result->push_back(Value::string(w->name));
+        }
+        return Value::makeArray(result);
+    };
+    natives["containerThemeNames"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("containerThemeNames", a, 1, line);
+        std::string name = asString(a[0], "containerThemeNames", line);
+        auto result = std::make_shared<ArrayData>();
+        auto it = containerThemeDecls.find(name);
+        if (it != containerThemeDecls.end()) {
+            for (auto& t : it->second) result->push_back(Value::string(t->name));
+        }
+        return Value::makeArray(result);
+    };
+
     // ---- Section: استعلام عن حالة قسم بعد إغلاقه (يحوّل Section من زخرفية بحتة إلى شيء يمكن
     // قراءته وبناء منطق فوقه، بنفس روح groupContainers/groupMembers أعلاه) ----
 
@@ -1716,22 +1751,28 @@ void Interpreter::registerNatives() {
         return Value::num(static_cast<double>(count));
     };
 
-    // ---- container.api: استدعاء نقاط API الوهمية المسجَّلة عبر route (حقيقي بالكامل، بلا شبكة) ----
-    // call(method, path) -> يبحث داخل container.api الحالي (الذي نُنفَّذ بداخله الآن)
+    // ---- container.api: نقاط route المسجَّلة بداخله ----
+    // فُعِّلت الآن فعلياً: إن نادى برنامج Rin apiRegister(name, baseUrl) بنفس اسم الحاوية من داخل
+    // container.api نفسها، يصبح call()/callApi() طلب شبكة حقيقياً فعلياً (نفس محرّك apiGet/apiPost
+    // أدناه)، و route هنا يبقى فقط توثيقاً/عقداً متوقَّعاً للنقطة. بلا apiRegister مطابق، يبقى السلوك
+    // القديم كما هو تماماً: محاكاة صرفة بلا شبكة تطابق route المسجَّلة (جيدة للاختبار بلا اتصال).
+    // call(method, path, body?) -> يبحث داخل container.api الحالي (الذي نُنفَّذ بداخله الآن)
     natives["call"] = [this](std::vector<Value>& a, int line) -> Value {
-        expectArgs("call", a, 2, line);
+        expectArgsRange("call", a, 2, 3, line);
         std::string method = asString(a[0], "call", line);
         std::string path = asString(a[1], "call", line);
         std::string key = containerStack.empty() ? "" : containerStack.back();
-        return performApiCall(key, method, path, line);
+        Value body = a.size() > 2 ? a[2] : Value::nil();
+        return performApiCall(key, method, path, line, body);
     };
-    // callApi(apiContainerName, method, path) -> يستدعي أي container.api باسمه من أي مكان في البرنامج
+    // callApi(apiContainerName, method, path, body?) -> يستدعي أي container.api باسمه من أي مكان في البرنامج
     natives["callApi"] = [this](std::vector<Value>& a, int line) -> Value {
-        expectArgs("callApi", a, 3, line);
+        expectArgsRange("callApi", a, 3, 4, line);
         std::string key = asString(a[0], "callApi", line);
         std::string method = asString(a[1], "callApi", line);
         std::string path = asString(a[2], "callApi", line);
-        return performApiCall(key, method, path, line);
+        Value body = a.size() > 3 ? a[3] : Value::nil();
+        return performApiCall(key, method, path, line, body);
     };
 
     // ================= HTTP حقيقي وفعلي (اتصال شبكة حقيقي) =================
@@ -3143,6 +3184,47 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
         return;
     }
 
+    // ---- Rin Loom (@view / warp / @theme) مربوطة الآن فعلياً بالحاوية ----
+    // كانت الأنواع الثلاثة بلا أي معالج هنا إطلاقاً: أي warp/@theme/@view يُكتَب داخل @container كان
+    // يُنفَّذ بصمت تامة بلا أي أثر (لا يُعرَّف كمتغيّر ولا يُسجَّل في أي مكان)، لأن Loomtime كانت تعمل
+    // فقط كخط أنابيب مستقل (loom::runColdPipeline) يفحص جذر البرنامج العلوي وحده. الآن warp تُعرَّف
+    // كمتغيّر حقيقي في بيئة الحاوية الحالية (فيصبح قابلاً للقراءة داخلها كأي متغيّر آخر)، @theme تُعرَّف
+    // كقاموس أدوار لونية حقيقي بنفس اسمها، و@view تُسجَّل كجذر واجهة الحاوية الحالية — وكلاهما (warp/
+    // theme) يُحفَظان أيضاً بترتيبهما في containerWarpDecls/containerThemeDecls ليستخدمهما
+    // loom::runColdPipelineForContainer عند بناء Fabric حقيقي مِن @view هذه الحاوية بالذات.
+    if (auto s = std::dynamic_pointer_cast<WarpStmt>(stmt)) {
+        Value v = Value::nil();
+        if (s->initializer) v = evaluate(s->initializer, env);
+        env->define(s->name, v);
+        if (!containerStack.empty()) {
+            containerWarpDecls[containerStack.back()].push_back(s);
+        }
+        return;
+    }
+    if (auto s = std::dynamic_pointer_cast<ThemeStmt>(stmt)) {
+        auto themeMap = std::make_shared<MapData>();
+        for (auto& attr : s->attrs) {
+            Value v = attr.value ? evaluate(attr.value, env) : Value::nil();
+            themeMap->push_back({Value::string(attr.key), v});
+        }
+        if (!s->name.empty()) env->define(s->name, Value::makeMap(themeMap));
+        if (!containerStack.empty()) {
+            containerThemeDecls[containerStack.back()].push_back(s);
+            output << "🎨 theme" << (s->name.empty() ? "" : (" = " + s->name))
+                   << " مرتبط بالحاوية " << containerStack.back() << "\n";
+        }
+        return;
+    }
+    if (auto s = std::dynamic_pointer_cast<ViewStmt>(stmt)) {
+        if (!containerStack.empty()) {
+            std::string key = containerStack.back();
+            if (!containerViews.count(key)) containerViews[key] = s; // أول @view بداخلها فقط، كنفس مبدأ الجذر العلوي
+            output << "🖼️ view" << (s->name.empty() ? "" : (" = " + s->name))
+                   << " مرتبط بالحاوية " << key << "\n";
+        }
+        return;
+    }
+
     if (auto s = std::dynamic_pointer_cast<ContainerStmt>(stmt)) {
         auto containerEnv = std::make_shared<Environment>(env);
         std::string tag = containerTagName(s->kind);
@@ -3983,9 +4065,16 @@ Value Interpreter::evaluate(const ExprPtr& expr, EnvPtr env) {
 // قيمة map حقيقية {status, ok, body}. إن لم يوجد تطابق، يُعيد {status: 404, ok: false, error: ...}
 // دون رمي استثناء — تماماً كما يتصرف عميل HTTP حقيقي أمام رد 404.
 Value Interpreter::performApiCall(const std::string& containerKey, const std::string& method,
-                                   const std::string& path, int line) {
-    (void)line;
+                                   const std::string& path, int line, const Value& bodyValue) {
     std::string wantMethod = toUpperAscii(method);
+
+    // ---- تفعيل فعلي: حاوية container.api سجَّلت apiEndpoint حقيقياً بنفس اسمها (عبر apiRegister
+    // بداخلها) -> نفّذ طلب شبكة حقيقياً فعلياً بدل مطابقة route الوهمية. هذا هو ما يجعل container.api
+    // "ميزة فعالة" فعلاً: نفس عبارة route تبقى صالحة كتوثيق/عقد متوقَّع، لكن التنفيذ صار حقيقياً.
+    if (apiEndpoints.count(containerKey)) {
+        return performRealApiCall(containerKey, wantMethod, path, bodyValue, line);
+    }
+
     auto it = apiRoutes.find(containerKey);
     if (it != apiRoutes.end()) {
         for (auto& route : it->second) {
