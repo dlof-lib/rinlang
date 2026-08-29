@@ -1,0 +1,56 @@
+// ============================================================================
+// examples/chatbot_container_demo.rin
+// عرض توضيحي لـ container.chatbot الجديدة: تسجيل معالجات أحداث، إرسال رسائل،
+// سجلّ محادثة، مؤشر كتابة، وذاكرة عبر warp (بنفس آلية warp الموجودة أصلاً).
+// ============================================================================
+
+// معالجات الأحداث تُعرَّف كدوال Rin عادية، ثم تُسجَّل عبر onChat(...)
+fun onOpen() {
+    print "✔ تم فتح المحادثة";
+}
+
+fun onUserMessage(msg) {
+    print "📩 رسالة جديدة من", msg["role"], ":", msg["text"];
+    // منطق ردّ بسيط قائم على السياق (memory) — انظر بداخل الحاوية أدناه
+    if (msg["role"] == "user") {
+        setChatTyping("Support", true);
+        botReply("Support", "شكراً لتواصلك! استلمت: " + msg["text"]);
+        setChatTyping("Support", false);
+    }
+}
+
+fun onClose() {
+    print "✖ أُغلقت المحادثة";
+}
+
+@container.chatbot=Support
+    // حقول تعريفية عادية (مجرد متغيّرات داخل الحاوية، بلا حاجة لدوال خاصة)
+    text model  = "rin-chat-1";
+    text system = "أنت مساعد دعم فني ودود ومختصر في ردوده";
+
+    // الذاكرة/السياق: warp عادية، تُقرأ وتُعدَّل من أي كود آخر بنفس اسم الحاوية
+    warp memory = {};
+
+    onChat("Support", "open", onOpen);
+    onChat("Support", "message", onUserMessage);
+    onChat("Support", "close", onClose);
+.end/container.chatbot
+
+// ---- تشغيل تجريبي ----
+openChat("Support");
+
+sendMessage("Support", "user", "أهلاً، محتاج مساعدة في تفعيل الحساب");
+sendMessage("Support", "user", "وشكراً مقدماً 🙏");
+
+print "---- سجلّ المحادثة كامل ----";
+print chatHistory("Support");
+
+print "عدد الرسائل:", chatMessageCount("Support");
+print "آخر رسالة:", lastChatMessage("Support");
+print "هل البوت يكتب الآن؟", isChatTyping("Support");
+
+attachToChat("Support", "user", "id_card.png", "هذه صورة الهوية المطلوبة");
+
+closeChat("Support");
+clearChat("Support");
+print "بعد المسح، عدد الرسائل:", chatMessageCount("Support");
