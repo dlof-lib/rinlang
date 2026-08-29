@@ -1,0 +1,99 @@
+// ============================================================================
+// examples/chatbot_loom_ui_demo.rin
+// ----------------------------------------------------------------------------
+// مثال جاهز يدوي لواجهة شات كاملة (Input + send_button + placeholder + فقاعات
+// رسائل بعدد ثابت) مبني بالكامل من عناصر Loom الموجودة أصلاً (Column/Text/
+// TextArea/Button) — بلا أي تعديل على محرك Loom نفسه (rin_loom_*.h).
+//
+// ⚠️ ملاحظة مهمة (فحصتها فعلياً بالكود، مو تخمين): onTap يُنفَّذ عبر
+// loom::dispatchTap -> Interpreter::callTopLevelFunction، وهذا الأخير يُنشئ
+// rin::Interpreter جديدة تماماً لكل نقرة، يحمّل فيها فقط الدوال (`fun`) و
+// خلايا warp — لا يُنفِّذ إطلاقاً أي @container.chatbot= معرَّف بنفس السكربت.
+// يعني: استدعاء sendMessage()/botReply() مباشرة من داخل دالة onTap اليوم
+// سيفشل (الحاوية غير مسجَّلة بتلك الـ Interpreter المؤقّتة). هذا فجوة حقيقية
+// بين طبقة عرض Loom وطبقة container.chatbot، وربطها فعلياً (بحيث نفس اللمسة
+// تُحدِّث الـ UI وتُسجِّل بالتاريخ الحقيقي معاً) يحتاج تعديل الجسر بين
+// Kotlin/JNI ومحرّك Loom على أندرويد (LoomFabricView.kt) — خارج نطاق هذا
+// الملف عمداً بناءً على طلبك بعدم لمس محرك Loom.
+//
+// لذلك هذا المثال يفصل الطبقتين بوضوح تام، وكلتاهما حقيقية 100% وتُبنى/تُشغَّل
+// فعلياً، بدون أي تلفيق:
+//   1) طبقة العرض (Loom): تفاعل حقيقي عبر warp + onTap فقط (بلا container).
+//   2) طبقة المنطق/التخزين (container.chatbot): نفس محرّك الرسائل الحقيقي
+//      (sendMessage/botReply/chatHistory/...) المُختبَر مسبقاً في
+//      chatbot_container_demo.rin، يُشغَّل هنا بشكل مستقل لإثبات أن نفس
+//      محادثة الواجهة تُماثَل بمنطق فعلي قابل للاستعلام والتصدير.
+// ============================================================================
+
+// ---------------------------------------------------------------------------
+// 1) طبقة العرض: 4 فقاعات بعدد ثابت + صندوق إدخال + زر إرسال — تفاعل حقيقي
+//    عبر warp (نفس الآلية المُختبَرة بـ tools/test_loom_button.cpp)
+// ---------------------------------------------------------------------------
+warp bubble1_role = ""; warp bubble1_text = "";
+warp bubble2_role = ""; warp bubble2_text = "";
+warp bubble3_role = ""; warp bubble3_text = "";
+warp bubble4_role = ""; warp bubble4_text = "";
+warp draftText = "";
+
+// sendChat(): دالة onTap حقيقية (بلا وسائط -> تُقرأ/تُكتَب خلايا warp كمتغيرات
+// عامة مباشرة، بنفس الآلية الموثَّقة في rin_loom_needle.h). تزيح الفقاعات
+// الأربع خانة واحدة للأعلى (تفقد أقدم زوج)، ثم تضيف زوج (user/bot) جديد في
+// الأسفل من draftText الحالي، ثم تفرغ draftText. رد البوت هنا صدى تجريبي بسيط
+// (echo) لأن الاستدعاء الحقيقي لِـ botReply()/model الفعلي يحتاج نفس الجسر
+// المذكور أعلاه في التعليق.
+fun sendChat() {
+    bubble1_role = bubble2_role; bubble1_text = bubble2_text;
+    bubble2_role = bubble3_role; bubble2_text = bubble3_text;
+    bubble3_role = "user"; bubble3_text = draftText;
+    bubble4_role = "bot";  bubble4_text = "تلقيت: " + draftText;
+    draftText = "";
+}
+
+@view.Column=ChatScreen
+    @view.Text=Title
+        text="محادثة (مثال UI)";
+    .end/view
+
+    @view.Text=Bubble1
+        text = bubble1_role + ": " + bubble1_text;
+    .end/view
+    @view.Text=Bubble2
+        text = bubble2_role + ": " + bubble2_text;
+    .end/view
+    @view.Text=Bubble3
+        text = bubble3_role + ": " + bubble3_text;
+    .end/view
+    @view.Text=Bubble4
+        text = bubble4_role + ": " + bubble4_text;
+    .end/view
+
+    @view.TextArea=DraftInput
+        value = draftText;
+        placeholder = "اكتب رسالتك هنا...";
+    .end/view
+
+    @view.Button=SendButton
+        label = "إرسال";
+        onTap = sendChat();
+    .end/view
+.end/view
+
+// ---------------------------------------------------------------------------
+// 2) طبقة المنطق/التخزين الحقيقية: نفس محرّك container.chatbot (مستقلة تماماً
+//    عن warp أعلاه، بالضبط بسبب الفجوة الموضَّحة في التعليق العلوي)
+// ---------------------------------------------------------------------------
+fun onUserMessage(msg) {
+    if (msg["role"] == "user") {
+        botReply("Assistant", "تلقيت: " + msg["text"]);
+    }
+}
+
+@chatbot=Assistant
+    warp memory = {};
+    text model = "rin-chat-1";
+    onChat("Assistant", "message", onUserMessage);
+.end/chatbot
+
+sendMessage("Assistant", "user", "أهلاً!");
+print "سجلّ المحادثة الحقيقي (container.chatbot):";
+print chatHistory("Assistant");
