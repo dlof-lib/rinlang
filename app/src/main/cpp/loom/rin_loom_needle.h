@@ -8,8 +8,8 @@
 //      rin::Interpreter::callTopLevelFunction — full language semantics, including `while` loops,
 //      recursion, etc. This is the fix for onTap handlers that need actual logic, not just a
 //      literal reassignment.
-//   2. Otherwise, a handful of built-in Warp operations (increment/decrement/toggle/set) are
-//      supported directly, so a demo like `onTap=increment(count);` works with no `fun` at all --
+//   2. Otherwise, a handful of built-in Warp operations (increment/decrement/toggle/set/show/hide)
+//      are supported directly, so a demo like `onTap=increment(count);` works with no `fun` at all --
 //      matching the shortcut the Mirror Loom preview already takes (see
 //      tools/mirror-loom-preview/mirror_loom_live_preview.html's onSelectStrand/warpIncrement).
 //
@@ -20,6 +20,8 @@
 #include "rin_loom_strand.h"
 #include "rin_loom_tokens.h"
 #include "rin_loom_overlay.h" // OverlayLayer / hitTestOverlayLayer -- see dispatchTapWithOverlay below
+#include "rin_loom_actions.h" // Action Engine -- built-in Warp-cell verb registry (spec §5/§36)
+#include "rin_loom_navigation.h" // NavigationManager -- navigate()/back()/replace()/reload() (spec §19)
 #include "../rin_interpreter.h"
 #include <vector>
 #include <string>
@@ -64,12 +66,18 @@ struct TapResult {
     std::string handlerDescription;        // e.g. "increment(count)" -- for a Loupe/debug overlay
     std::vector<std::string> changedWarpNames; // Warp cells the handler actually changed
     std::string error;                     // set only if a handler was found but failed to run
+    bool navigated = false;                // true if a navigate()/back()/replace()/reload() ran
+    std::string route;                     // the resulting current route when navigated == true
 };
 
 // Dispatches a tap at (x, y) against `fabricRoot`. `program` is the last successfully parsed
 // top-level statement list (PipelineResult::program) -- used to look up a matching `fun`.
+// `nav`, if non-null, wires up navigate()/back()/replace()/reload() (spec §19); omitting it (the
+// default) simply means those four calls report as unrecognized, same as any other unknown
+// callee -- existing call sites that don't pass a NavigationManager keep working unchanged.
 inline TapResult dispatchTap(const StrandPtr& fabricRoot, WarpScope& warp,
-                              const std::vector<rin::StmtPtr>& program, double x, double y) {
+                              const std::vector<rin::StmtPtr>& program, double x, double y,
+                              NavigationManager* nav = nullptr) {
     TapResult result;
     if (!fabricRoot) return result;
 
@@ -154,38 +162,38 @@ inline TapResult dispatchTap(const StrandPtr& fabricRoot, WarpScope& warp,
         return result;
     }
 
-    // No matching `fun` -- fall back to a few built-in Warp operations so a simple demo works
-    // without writing one, matching the Mirror Loom preview's own onTap shortcut.
-    auto argCellName = [&](size_t i) -> std::string {
-        if (i >= argExprs.size()) return "";
-        auto v = std::dynamic_pointer_cast<rin::VariableExpr>(argExprs[i]);
-        return v ? v->name : "";
-    };
-    auto argNumber = [&](size_t i, double def) -> double {
-        if (i >= argExprs.size()) return def;
-        return evalAttrExpr(argExprs[i], warp, nullptr).asNumber(def);
-    };
-
-    std::string cell = argCellName(0);
-    if (!cell.empty() && warp.has(cell)) {
-        Value cur = warp.get(cell);
-        Value updated = cur;
-        bool recognized = true;
-        if (callee == "increment")      updated = Value::num(cur.asNumber() + argNumber(1, 1));
-        else if (callee == "decrement") updated = Value::num(cur.asNumber() - argNumber(1, 1));
-        else if (callee == "toggle")    updated = Value::txt(cur.asString() == "true" ? "false" : "true");
-        else if (callee == "set" && argExprs.size() >= 2) updated = evalAttrExpr(argExprs[1], warp, nullptr);
-        else recognized = false;
-
-        if (recognized) {
-            warp.set(cell, updated);
-            result.changedWarpNames.push_back(cell);
+    // No matching `fun` -- navigate()/back()/replace()/reload() first (they need `nav`, which the
+    // Action Engine's (argExprs, WarpScope&) signature can't carry), then fall through to the
+    // Action Engine's built-in Warp-cell verb registry (rin_loom_actions.h) for everything else.
+    if (callee == "navigate" || callee == "back" || callee == "replace" || callee == "reload") {
+        if (!nav) {
+            result.error = "'" + callee + "()' requires a NavigationManager (pass one to dispatchTap)";
             return result;
         }
+        if (callee == "navigate") {
+            if (argExprs.empty()) { result.error = "navigate() needs a route argument"; return result; }
+            nav->navigate(evalAttrExpr(argExprs[0], warp, nullptr).asString());
+        } else if (callee == "replace") {
+            if (argExprs.empty()) { result.error = "replace() needs a route argument"; return result; }
+            nav->replace(evalAttrExpr(argExprs[0], warp, nullptr).asString());
+        } else if (callee == "back") {
+            nav->back(); // no-op (never a crash) when there's nothing to go back to
+        }
+        // reload() falls straight through to the shared "report current route" below.
+        result.navigated = true;
+        result.route = nav->current();
+        return result;
+    }
+
+    ActionOutcome outcome = ActionRegistry::shared().invoke(callee, argExprs, warp);
+    if (outcome.recognized) {
+        result.error = outcome.error; // empty on success
+        result.changedWarpNames = outcome.changedWarpNames;
+        return result;
     }
 
     result.error = "no top-level function named '" + callee +
-                   "' (and it doesn't match a built-in like increment/decrement/toggle/set)";
+                   "' (and it doesn't match a built-in Loom action)";
     return result;
 }
 
@@ -210,7 +218,8 @@ inline TapResult dispatchTap(const StrandPtr& fabricRoot, WarpScope& warp,
 //      existed, so ordinary interaction is completely unaffected by any of this.
 inline TapResult dispatchTapWithOverlay(const StrandPtr& fabricRoot, WarpScope& warp,
                                          const std::vector<rin::StmtPtr>& program,
-                                         OverlayLayer& overlayLayer, double x, double y) {
+                                         OverlayLayer& overlayLayer, double x, double y,
+                                         NavigationManager* nav = nullptr) {
     OverlayHitResult ohit = hitTestOverlayLayer(overlayLayer, x, y);
 
     if (ohit.blocked) {
@@ -236,7 +245,7 @@ inline TapResult dispatchTapWithOverlay(const StrandPtr& fabricRoot, WarpScope& 
     }
 
     const StrandPtr& hitTestRoot = ohit.hit ? ohit.hit : fabricRoot;
-    return dispatchTap(hitTestRoot, warp, program, x, y);
+    return dispatchTap(hitTestRoot, warp, program, x, y, nav);
 }
 
 } // namespace loom
