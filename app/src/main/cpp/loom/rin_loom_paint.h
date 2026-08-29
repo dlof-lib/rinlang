@@ -3,6 +3,7 @@
 #include "rin_loom_strand.h"
 #include "rin_loom_tokens.h"
 #include "rin_loom_overlay.h" // OverlayLayer -- see paintWithOverlay() below
+#include "rin_loom_icons.h"   // IconRegistry -- §18
 #include <fstream>
 #include <sstream>
 #include <algorithm>
@@ -33,6 +34,8 @@ inline Color colorForKind(StrandKind k) {
         case StrandKind::TOOLTIP: return themeRegistry().active().neutral;
         case StrandKind::PROGRESS: return themeRegistry().active().primary; // filled portion default; track uses border
         case StrandKind::BADGE:  return themeRegistry().active().primary;
+        case StrandKind::ICON:   return themeRegistry().active().text; // a plain glyph reads as text-toned by default
+        case StrandKind::ICONBUTTON: return themeRegistry().active().primary; // same default as Button
         default: return themeRegistry().active().background;
     }
 }
@@ -112,6 +115,8 @@ struct Dye {
         double r = std::min(resolveRadius(*s, 0), std::min(s->geometry.w, s->geometry.h) / 2.0);
 
         if (s->kind == StrandKind::BUTTON || s->kind == StrandKind::TABITEM) { paintButton(s, list, r); for (auto& c : s->children) paintInto(c, list); return; }
+        if (s->kind == StrandKind::ICONBUTTON) { paintButton(s, list, r); for (auto& c : s->children) paintInto(c, list); return; }
+        if (s->kind == StrandKind::ICON) { paintIcon(s, list); return; }
 
         // Missing-components pass: Spacer never draws anything (it's pure layout space) — same
         // "skip the generic FILL_RECT" carve-out TEXT already gets below, just with no TEXT_RUN
@@ -246,7 +251,27 @@ struct Dye {
                 textColor = tone; // no box at all, ever -- see docs/loomtime/RIN_LOOM_TOKENS.md
                 break;
         }
-        list.push_back({DrawOp::TEXT_RUN, s->geometry, textColor, s->attrStr("label"), s->id, 0, 0});
+        list.push_back({DrawOp::TEXT_RUN, s->geometry, textColor, buttonDisplayLabel(s), s->id, 0, 0});
+    }
+
+    // IconButton (§18/§2): prefixes the resolved icon glyph to whatever text paintButton would
+    // otherwise draw (label=, possibly empty) -- one glyph + one space + label, or just the glyph
+    // alone with no label=. Plain Button keeps drawing label= exactly as before (unaffected).
+    std::string buttonDisplayLabel(const StrandPtr& s) const {
+        std::string label = s->attrStr("label", "");
+        if (s->kind != StrandKind::ICONBUTTON) return label;
+        std::string iconName = s->attrStr("icon", "");
+        if (iconName.empty()) return label; // an IconButton with no icon= just behaves like Button
+        std::string glyph = iconRegistry().resolve(iconName);
+        return label.empty() ? glyph : (glyph + " " + label);
+    }
+
+    // Icon (§18/§2): a small standalone glyph leaf -- resolveColor() already covers ICON via the
+    // default-fallback branch below, so tone=/color= work on it exactly like every other kind.
+    void paintIcon(const StrandPtr& s, DrawList& list) {
+        std::string iconName = s->attrStr("icon", "");
+        std::string glyph = iconRegistry().resolve(iconName);
+        list.push_back({DrawOp::TEXT_RUN, s->geometry, resolveColor(s), glyph, s->id, 0, 0});
     }
 };
 
