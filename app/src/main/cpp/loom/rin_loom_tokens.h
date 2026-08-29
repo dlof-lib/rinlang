@@ -292,15 +292,31 @@ inline std::string accessibleRole(StrandKind k) {
         case StrandKind::TEXT:     return "text";
         case StrandKind::TABLE:    return "table";
         case StrandKind::WEBVIEW:  return "webview";
+        case StrandKind::CHECKBOX: return "checkbox";
+        case StrandKind::SWITCH:   return "switch";
+        case StrandKind::PROGRESS: return "progressbar";
+        case StrandKind::INPUT:    return "textbox";
+        case StrandKind::TEXTAREA: return "textbox";
+        case StrandKind::DIALOG:   return "dialog";
+        case StrandKind::TABS:     return "tablist";
+        case StrandKind::TABITEM:  return "tab";
+        case StrandKind::AVATAR:   return "image";
+        case StrandKind::BADGE:    return "status";
+        case StrandKind::TOOLTIP:  return "tooltip";
         default: return "";
     }
 }
 inline std::string accessibleName(const Strand& s) {
     std::string explicitLabel = s.attrStr("a11y_label", "");
     if (!explicitLabel.empty()) return explicitLabel;
-    std::string visible = (s.kind == StrandKind::BUTTON || s.kind == StrandKind::MENUITEM)
-        ? s.attrStr("label", "") : s.attrStr("text", "");
-    return visible;
+    if (s.kind == StrandKind::BUTTON || s.kind == StrandKind::MENUITEM || s.kind == StrandKind::TABITEM ||
+        s.kind == StrandKind::CHECKBOX || s.kind == StrandKind::SWITCH)
+        return s.attrStr("label", "");
+    if (s.kind == StrandKind::INPUT || s.kind == StrandKind::TEXTAREA) {
+        std::string v = s.attrStr("value", "");
+        return !v.empty() ? v : s.attrStr("placeholder", "");
+    }
+    return s.attrStr("text", "");
 }
 
 // ---- Sizing modes (§5/§6): semantic replacements for scattering width=/height= everywhere --
