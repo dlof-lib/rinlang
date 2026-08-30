@@ -64,21 +64,50 @@ class ProjectsActivity : AppCompatActivity() {
         startActivity(intent)
     }
 
+    /**
+     * حوار "مشروع جديد": اسم المشروع + شبكة 2×2 من شرائح اختيار النوع (Container/Table/UI/
+     * Free Project، انظر [ProjectType]). عند الضغط على "إنشاء" تظهر مراحل الإنشاء
+     * (جاري التحميل.. / يتم التجهيز.. / تم..) عبر [ProjectCreationProgressDialog]، ثم يُفتح
+     * المشروع تلقائياً في [FilesActivity].
+     */
     private fun showCreateDialog() {
-        val input = EditText(this)
-        input.hint = getString(R.string.project_name_hint)
+        val view = LayoutInflater.from(this).inflate(R.layout.dialog_create_project, null)
+        val input: EditText = view.findViewById(R.id.inputProjectName)
+        val chipContainer: TextView = view.findViewById(R.id.chipTypeContainer)
+        val chipTable: TextView = view.findViewById(R.id.chipTypeTable)
+        val chipUi: TextView = view.findViewById(R.id.chipTypeUi)
+        val chipFree: TextView = view.findViewById(R.id.chipTypeFree)
+        val chips = mapOf(
+            chipContainer to ProjectType.CONTAINER,
+            chipTable to ProjectType.TABLE,
+            chipUi to ProjectType.UI,
+            chipFree to ProjectType.FREE
+        )
+
+        var selectedType = ProjectType.FREE
+        fun selectChip(chip: TextView) {
+            selectedType = chips.getValue(chip)
+            chips.keys.forEach { it.isSelected = it === chip }
+        }
+        chips.keys.forEach { chip -> chip.setOnClickListener { selectChip(chip) } }
+        selectChip(chipFree)
+
         AlertDialog.Builder(this)
             .setTitle(R.string.new_project_title)
-            .setView(input)
+            .setView(view)
             .setPositiveButton(R.string.create) { _, _ ->
                 val name = input.text.toString()
-                try {
-                    val project = ProjectManager.createProject(this, name)
-                    refresh()
-                    openProject(project)
-                } catch (e: IllegalArgumentException) {
-                    Toast.makeText(this, e.message, Toast.LENGTH_SHORT).show()
-                }
+                ProjectCreationProgressDialog(this).run(
+                    work = { ProjectManager.createProject(this, name, selectedType) },
+                    onDone = { project, errorMessage ->
+                        if (project != null) {
+                            refresh()
+                            openProject(project)
+                        } else {
+                            Toast.makeText(this, errorMessage ?: getString(R.string.project_name_hint), Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                )
             }
             .setNegativeButton(R.string.cancel, null)
             .show()
@@ -130,6 +159,7 @@ private class ProjectsAdapter(
 
     class VH(view: View) : RecyclerView.ViewHolder(view) {
         val txtName: TextView = view.findViewById(R.id.txtProjectName)
+        val txtType: TextView = view.findViewById(R.id.txtProjectType)
         val txtMeta: TextView = view.findViewById(R.id.txtProjectMeta)
         val btnRename: View = view.findViewById(R.id.btnRenameProject)
         val btnDelete: View = view.findViewById(R.id.btnDeleteProject)
@@ -143,6 +173,7 @@ private class ProjectsAdapter(
     override fun onBindViewHolder(holder: VH, position: Int) {
         val project = items[position]
         holder.txtName.text = project.name
+        holder.txtType.text = typeLabel(holder.itemView.context, project.type)
         val fileCount = ProjectManager.listFiles(project).size
         holder.txtMeta.text = holder.itemView.context.getString(R.string.project_meta_format, fileCount)
         holder.itemView.setOnClickListener { onOpen(project) }
@@ -151,4 +182,12 @@ private class ProjectsAdapter(
     }
 
     override fun getItemCount(): Int = items.size
+
+    /** نص شارة نوع المشروع المعروضة بجانب اسمه في القائمة. */
+    private fun typeLabel(context: android.content.Context, type: ProjectType): String = when (type) {
+        ProjectType.CONTAINER -> context.getString(R.string.project_type_container)
+        ProjectType.TABLE -> context.getString(R.string.project_type_table)
+        ProjectType.UI -> context.getString(R.string.project_type_ui)
+        ProjectType.FREE -> context.getString(R.string.project_type_free)
+    }
 }
