@@ -21,6 +21,19 @@
     <string name="project_not_found">Proyecto no encontrado</string>
     <string name="project_meta_format">%1$d archivos</string>
 
+    <!-- Tipos de proyecto (se eligen al crear, se guardan en project.og.urin) -->
+    <string name="project_type_label">Elegir tipo</string>
+    <string name="project_type_container">Container</string>
+    <string name="project_type_table">Table</string>
+    <string name="project_type_ui">UI</string>
+    <string name="project_type_free">Free Project</string>
+
+    <!-- Etapas de creación de un proyecto nuevo -->
+    <string name="project_creating_title">Creando proyecto</string>
+    <string name="project_stage_loading">Cargando..</string>
+    <string name="project_stage_preparing">Preparando..</string>
+    <string name="project_stage_done">Listo..</string>
+
     <!-- Pantalla de archivos -->
     <string name="new_file_title">Nuevo archivo</string>
     <string name="upload_file">Subir archivo</string>
