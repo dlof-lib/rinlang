@@ -27,6 +27,14 @@ object ProjectManager {
     private const val PROJECTS_DIR = "projects"
     private const val RIN_EXTENSION = ".rin"
 
+    /**
+     * ملف البيانات الوصفية لمشروع واحد، في جذر مجلد المشروع مباشرة. يحفظ حالياً نوع المشروع
+     * (container/table/ui/free) الذي اختاره المستخدم عند الإنشاء، بصيغة "مفتاح=قيمة" بسيطة
+     * سطراً بسطر (أي سطر يبدأ بـ "#" يُعامَل كتعليق ويُتجاهَل). يتنقّل مع المشروع تلقائياً
+     * عند إعادة التسمية لأنه مجرد ملف داخل نفس المجلد.
+     */
+    private const val PROJECT_META_FILE = "project.og.urin"
+
     private fun projectsRoot(context: Context): File {
         val root = File(context.filesDir, PROJECTS_DIR)
         if (!root.exists()) root.mkdirs()
@@ -42,22 +50,86 @@ object ProjectManager {
     fun listProjects(context: Context): List<Project> {
         val root = projectsRoot(context)
         return (root.listFiles { f -> f.isDirectory } ?: emptyArray())
-            .map { Project(it.name, it, it.lastModified()) }
+            .map { Project(it.name, it, it.lastModified(), readProjectType(it)) }
             .sortedByDescending { it.lastModified }
     }
 
-    /** ينشئ مشروعاً جديداً بمجلد فارغ + ملف main.rin ترحيبي، ويرمي IllegalArgumentException لو الاسم مستخدم أو غير صالح. */
-    fun createProject(context: Context, name: String): Project {
+    /** يقرأ نوع المشروع من [PROJECT_META_FILE] داخل [dir]، أو FREE لو الملف غائب/تالف (مشاريع أُنشئت قبل هذه الميزة). */
+    private fun readProjectType(dir: File): ProjectType {
+        val metaFile = File(dir, PROJECT_META_FILE)
+        if (!metaFile.isFile) return ProjectType.FREE
+        val typeId = metaFile.readLines()
+            .map { it.trim() }
+            .firstOrNull { it.startsWith("type=") }
+            ?.removePrefix("type=")
+            ?.trim()
+        return ProjectType.fromId(typeId)
+    }
+
+    /** يكتب/يحدّث [PROJECT_META_FILE] بنوع المشروع الحالي. */
+    private fun writeProjectMeta(dir: File, type: ProjectType) {
+        File(dir, PROJECT_META_FILE).writeText(
+            "# بيانات وصفية لمشروع Rin — يُدار تلقائياً من التطبيق، لا تُعدّله يدوياً\n" +
+                "type=${type.id}\n"
+        )
+    }
+
+    /** القالب الابتدائي لملف main.rin حسب نوع المشروع المختار عند الإنشاء. */
+    private fun mainRinTemplateFor(type: ProjectType, name: String): String = when (type) {
+        ProjectType.CONTAINER ->
+            "// مشروع: $name\n" +
+                "// نوع المشروع: حاوية (@container) — بيانات حية (warp) داخل حاوية مسمّاة.\n\n" +
+                "@container=Main\n" +
+                "    warp counter = 0;\n\n" +
+                "    print \"مرحباً من حاوية مشروع $name\";\n" +
+                "    print \"العداد:\", counter;\n" +
+                ".end/container\n"
+
+        ProjectType.TABLE ->
+            "// مشروع: $name\n" +
+                "// نوع المشروع: جدول بيانات (@table)\n\n" +
+                "@table=main_table\n" +
+                "    row cells=[\"العمود الأول\", \"العمود الثاني\"];\n" +
+                "    row cells=[\"قيمة 1\", \"قيمة 2\"];\n" +
+                ".end/table\n\n" +
+                "print \"جدول مشروع $name جاهز\";\n"
+
+        ProjectType.UI ->
+            "// مشروع: $name\n" +
+                "// نوع المشروع: واجهة مستخدم (Loomtime) — @container يحوي @theme و@view.\n\n" +
+                "@container=Home\n" +
+                "    warp userName = \"زائر\";\n\n" +
+                "    @theme=Midnight\n" +
+                "        active=true;\n" +
+                "        primary=\"#7C5CFF\";\n" +
+                "        background=\"#0F0F14\";\n" +
+                "        text=\"#F5F5F7\";\n" +
+                "    .end/theme\n\n" +
+                "    @view.Column=Root\n" +
+                "        @view.Text=Title\n" +
+                "            text=\"مرحباً من \" + userName + \" — $name\";\n" +
+                "        .end/view\n" +
+                "    .end/view\n" +
+                ".end/container\n"
+
+        ProjectType.FREE ->
+            "// مشروع: $name\n" +
+                "print \"مرحباً من مشروع $name\";\n"
+    }
+
+    /**
+     * ينشئ مشروعاً جديداً بمجلد + ملف main.rin ابتدائي مناسب لـ [type] + ملف بيانات وصفية
+     * يحفظ هذا النوع، ويرمي IllegalArgumentException لو الاسم مستخدم أو غير صالح.
+     */
+    fun createProject(context: Context, name: String, type: ProjectType = ProjectType.FREE): Project {
         val trimmed = name.trim()
         require(isValidProjectName(trimmed)) { "اسم المشروع غير صالح" }
         val dir = File(projectsRoot(context), trimmed)
         require(!dir.exists()) { "يوجد مشروع بهذا الاسم بالفعل" }
         dir.mkdirs()
-        File(dir, "main.rin").writeText(
-            "// مشروع: $trimmed\n" +
-                "print \"مرحباً من مشروع $trimmed\";\n"
-        )
-        return Project(trimmed, dir, dir.lastModified())
+        writeProjectMeta(dir, type)
+        File(dir, "main.rin").writeText(mainRinTemplateFor(type, trimmed))
+        return Project(trimmed, dir, dir.lastModified(), type)
     }
 
     fun deleteProject(project: Project): Boolean = project.dir.deleteRecursively()
@@ -68,7 +140,8 @@ object ProjectManager {
         require(!newDir.exists()) { "يوجد مشروع بهذا الاسم بالفعل" }
         val ok = project.dir.renameTo(newDir)
         require(ok) { "تعذّر إعادة تسمية المشروع" }
-        return Project(newName.trim(), newDir, newDir.lastModified())
+        // ملف project.og.urin ينتقل تلقائياً مع المجلد، فيبقى النوع كما هو بعد إعادة التسمية.
+        return Project(newName.trim(), newDir, newDir.lastModified(), project.type)
     }
 
     // ---- ملفات داخل مشروع ----
