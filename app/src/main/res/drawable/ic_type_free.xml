@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- أيقونة نوع المشروع "Free Project": شرارة/نجمة حرّة (بلا قالب مسبق مثل باقي الأنواع). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="1.6"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M12,3 L14,10 L21,12 L14,14 L12,21 L10,14 L3,12 L10,10 Z" />
+</vector>
