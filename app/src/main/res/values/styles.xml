@@ -1,19 +1,40 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- شريحة اختيار نوع المشروع (Container / Table / UI / Free Project) داخل حوار "مشروع جديد". -->
+    <!-- بطاقة اختيار نوع المشروع (Container / Table / UI / Free Project) داخل حوار "مشروع جديد":
+         أيقونة + عنوان + وصف قصير، بدل شريحة نصية فقط، لمظهر أكثر احترافية. -->
     <style name="ProjectTypeChip">
         <item name="android:layout_width">0dp</item>
         <item name="android:layout_height">wrap_content</item>
         <item name="android:layout_columnWeight">1</item>
-        <item name="android:layout_margin">4dp</item>
-        <item name="android:paddingTop">12dp</item>
-        <item name="android:paddingBottom">12dp</item>
+        <item name="android:layout_margin">5dp</item>
+        <item name="android:orientation">vertical</item>
         <item name="android:gravity">center</item>
-        <item name="android:textSize">13.5sp</item>
-        <item name="android:textStyle">bold</item>
+        <item name="android:paddingTop">14dp</item>
+        <item name="android:paddingBottom">12dp</item>
+        <item name="android:paddingStart">6dp</item>
+        <item name="android:paddingEnd">6dp</item>
         <item name="android:clickable">true</item>
         <item name="android:focusable">true</item>
         <item name="android:background">@drawable/bg_project_type_chip</item>
+    </style>
+
+    <!-- عنوان بطاقة نوع المشروع (اسم النوع نفسه، مثل "Container"). -->
+    <style name="ProjectTypeChipTitle">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">8dp</item>
+        <item name="android:textSize">13.5sp</item>
+        <item name="android:textStyle">bold</item>
         <item name="android:textColor">@color/selector_project_type_chip_text</item>
+    </style>
+
+    <!-- وصف مختصر أسفل عنوان البطاقة (مثل "بيانات حيّة داخل حاوية"). -->
+    <style name="ProjectTypeChipSubtitle">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">2dp</item>
+        <item name="android:textSize">10.5sp</item>
+        <item name="android:gravity">center</item>
+        <item name="android:textColor">@color/rin_editor_hint</item>
     </style>
 </resources>
