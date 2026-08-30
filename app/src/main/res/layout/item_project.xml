@@ -42,16 +42,18 @@
                 android:ellipsize="end"
                 android:maxLines="1" />
 
-            <!-- شارة نوع المشروع (Container/Table/UI/Free Project)، مقروءة من project.og.urin -->
+            <!-- شارة نوع المشروع (Container/Table/UI/Free Project)، مقروءة من project.og.urin.
+                 الأيقونة ولون النص يُضبطان برمجياً حسب النوع (انظر ProjectsAdapter.typeIconAndColor). -->
             <TextView
                 android:id="@+id/txtProjectType"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="8dp"
-                android:paddingStart="7dp"
+                android:paddingStart="6dp"
                 android:paddingEnd="7dp"
                 android:paddingTop="2dp"
                 android:paddingBottom="2dp"
+                android:drawablePadding="4dp"
                 android:background="@drawable/bg_project_type_badge"
                 android:textSize="10.5sp"
                 android:textStyle="bold"
