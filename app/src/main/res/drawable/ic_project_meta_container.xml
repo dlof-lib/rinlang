@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- أيقونة خاصة بملف project.og.urin: يظهر الآن كملف بيانات وصفية "مختوم" داخل حاوية Rin
+     (@container) بدل أيقونة .rin العامة، ليتميّز بصرياً في قائمة الملفات باعتباره ملفاً
+     يُدار تلقائياً وليس ملف كود عادي. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:strokeColor="#4EC9B0"
+        android:strokeWidth="1.6"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M4,7.5 L12,4 L20,7.5 L20,16.5 L12,20 L4,16.5 Z" />
+    <path
+        android:strokeColor="#4EC9B0"
+        android:strokeWidth="1.6"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M4,7.5 L12,11 L20,7.5" />
+    <path
+        android:strokeColor="#4EC9B0"
+        android:strokeWidth="1.6"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M12,11 L12,20" />
+    <!-- ختم صغير (قفل) في وسط الحاوية يرمز إلى أنها بيانات وصفية "مُدارة تلقائياً". -->
+    <path
+        android:fillColor="#4EC9B0"
+        android:pathData="M11,12.6 A1,1 0 1,0 13,12.6 A1,1 0 1,0 11,12.6 Z" />
+</vector>
