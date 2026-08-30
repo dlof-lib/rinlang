@@ -107,8 +107,12 @@ class LoomFabricView @JvmOverloads constructor(
     var zoom: Float = 1f
         set(value) {
             field = value.coerceIn(0.25f, 3f)
+            onZoomChanged?.invoke(field)
             invalidate()
         }
+
+    /** Fired whenever [zoom] changes (toolbar +/- buttons or, in future, a pinch gesture on the canvas). */
+    var onZoomChanged: ((zoom: Float) -> Unit)? = null
 
     var showGrid: Boolean = false
         set(value) { field = value; invalidate() }
