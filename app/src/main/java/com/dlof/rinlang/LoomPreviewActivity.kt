@@ -106,6 +106,9 @@ class LoomPreviewActivity : AppCompatActivity(), LoomPreviewManager.Listener {
         fabricView.onTap = { x, y -> LoomPreviewManager.tap(x, y) }
         fabricView.onInspect = { node -> showInspector(node) }
         fabricView.onNavigate = { target -> navigateTo(target) }
+        // Real pinch-to-zoom on the canvas keeps this label in sync too, not just the toolbar
+        // +/- buttons (setZoom already updates it for those — this covers the gesture path).
+        fabricView.onZoomChanged = { z -> txtZoom.text = getString(R.string.loom_zoom_percent_format, (z * 100).toInt()) }
 
         currentPageName = intent.getStringExtra(EXTRA_FILE_NAME)?.takeIf { it.isNotBlank() } ?: currentPageName
         txtTitle.text = currentPageName
