@@ -332,6 +332,33 @@ class CodeEditorController(
         editText.setSelection(start + text.length)
     }
 
+    /**
+     * يُدرج مقتطف [template] عند المؤشر (مستبدلاً أي تحديد حالي)، تماماً كـ [insertAtCursor]،
+     * لكن إن كان [template] يحتوي على [RinSnippets.CURSOR_MARKER] فإنها تُزال ويُترَك المؤشر
+     * في مكانها بالضبط بدل نهاية النص المُدرَج بالكامل — يُستخدم من قِبل قائمة "مقتطفات Rin"
+     * حتى يبقى المؤشر داخل جسم الحاوية المُدرَجة، لا بعد وسم `.end/...` الخاص بها.
+     */
+    fun insertSnippetAtCursor(template: String) {
+        val markerIndex = template.indexOf(RinSnippets.CURSOR_MARKER)
+        val text = if (markerIndex == -1) template else template.replace(RinSnippets.CURSOR_MARKER, "")
+        val start = editText.selectionStart.coerceAtLeast(0)
+        val end = editText.selectionEnd.coerceAtLeast(start)
+        editText.text?.replace(start, end, text)
+        val cursor = if (markerIndex == -1) start + text.length else start + markerIndex
+        editText.setSelection(cursor)
+        scrollToCursor()
+    }
+
+    /**
+     * يفحص توازن وسوم لغة الحاويات في Rin (`@container=x ... .end/container`, `Section`,
+     * `Translations`, `@view.*`, `@theme`...)، بنفس أسلوب [checkBracketBalance] لكن لوسوم Rin
+     * بدل أقواس `{}`/`[]`/`()`. يُرجع null إن كانت متوازنة، أو رقم أول سطر فيه مشكلة.
+     */
+    fun checkTagBalance(): Int? = RinContainerTags.checkTagBalance(editText.text.toString())
+
+    /** يبني قائمة "بنية الملف" (كل وسوم الحاويات مع أرقام أسطرها وعمق تعشيشها) للتنقّل السريع. */
+    fun buildOutline(): List<RinContainerTags.OutlineEntry> = RinContainerTags.buildOutline(editText.text.toString())
+
     // --- Line-level editing commands ---------------------------------------
 
     private fun lineBounds(text: String, pos: Int): Pair<Int, Int> {
