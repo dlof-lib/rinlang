@@ -80,6 +80,13 @@ object FileIconResolver {
     fun load(imageView: ImageView, file: File) {
         val ext = file.extension.lowercase()
 
+        // 0) project.og.urin: ملف بيانات وصفية خاص (حاوية مختومة)، له أيقونة مميّزة عن أي ملف
+        //    .rin عادي حتى يتضح أنه يُدار تلقائياً وليس كوداً يُعدَّل يدوياً.
+        if (file.name == "project.og.urin") {
+            imageView.setImageResource(R.drawable.ic_project_meta_container)
+            return
+        }
+
         // 1) .rin -> الأيقونة المضمَّنة كما كانت دائماً، بلا أي عمل إضافي.
         if (ext == "rin" || ext.isEmpty()) {
             imageView.setImageResource(R.drawable.ic_rin_file)
