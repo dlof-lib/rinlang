@@ -340,6 +340,7 @@ class MainActivity : AppCompatActivity() {
         popup.menu.add(0, 10, 9, R.string.menu_edit_move_line_down)
         popup.menu.add(0, 11, 10, R.string.menu_edit_indent)
         popup.menu.add(0, 12, 11, R.string.menu_edit_unindent)
+        popup.menu.add(0, 13, 12, R.string.menu_edit_insert_snippet)
         popup.setOnMenuItemClickListener { item ->
             when (item.itemId) {
                 1 -> editorController.undo()
@@ -357,10 +358,29 @@ class MainActivity : AppCompatActivity() {
                 10 -> editorController.moveLineDown()
                 11 -> editorController.indentSelection()
                 12 -> editorController.unindentSelection()
+                13 -> showSnippetsDialog()
             }
             true
         }
         popup.show()
+    }
+
+    /**
+     * يعرض قائمة مقتطفات لغة الحاويات في Rin ([RinSnippets.all])، ويُدرج المقتطف المختار عند
+     * المؤشر مع ترك المؤشر داخل جسم الحاوية مباشرة (انظر [CodeEditorController.insertSnippetAtCursor]).
+     */
+    private fun showSnippetsDialog() {
+        val snippets = RinSnippets.all
+        val titles = snippets.map { it.title }.toTypedArray()
+        val themedContext = ContextThemeWrapper(this, MaterialR.style.ThemeOverlay_MaterialComponents_Dark)
+        AlertDialog.Builder(themedContext)
+            .setTitle(R.string.snippets_dialog_title)
+            .setItems(titles) { dialog, which ->
+                editorController.insertSnippetAtCursor(snippets[which].template)
+                dialog.dismiss()
+            }
+            .setNegativeButton(R.string.go_to_line_cancel) { dialog, _ -> dialog.dismiss() }
+            .show()
     }
 
     private fun showViewMenu(anchor: android.view.View) {
@@ -370,6 +390,7 @@ class MainActivity : AppCompatActivity() {
         popup.menu.add(0, 3, 2, R.string.menu_view_toggle_lines)
         popup.menu.add(0, 4, 3, R.string.menu_view_clear_console)
         popup.menu.add(0, 5, 4, R.string.menu_view_go_to_line)
+        popup.menu.add(0, 6, 5, R.string.menu_view_outline)
         popup.setOnMenuItemClickListener { item ->
             when (item.itemId) {
                 1 -> changeEditorFontSize(1f)
@@ -377,10 +398,36 @@ class MainActivity : AppCompatActivity() {
                 3 -> toggleLineNumbers()
                 4 -> RinJobScheduler.clear()
                 5 -> showGoToLineDialog()
+                6 -> showOutlineDialog()
             }
             true
         }
         popup.show()
+    }
+
+    /**
+     * يعرض "بنية الملف": كل حاويات/أقسام Rin (@container، Section، Translations...) مع رقم
+     * سطرها وعمق تعشيشها (مسافة بادئة نصية)، والنقر على أي عنصر يقفز إليه مباشرة عبر
+     * [CodeEditorController.goToLine] — تنقّل أسرع من التمرير اليدوي في الملفات الطويلة.
+     */
+    private fun showOutlineDialog() {
+        val entries = editorController.buildOutline()
+        if (entries.isEmpty()) {
+            Toast.makeText(this, getString(R.string.outline_empty_toast), Toast.LENGTH_SHORT).show()
+            return
+        }
+        val labels = entries.map { entry ->
+            "    ".repeat(entry.depth) + entry.label + "  (" + getString(R.string.outline_line_format, entry.lineNumber) + ")"
+        }.toTypedArray()
+        val themedContext = ContextThemeWrapper(this, MaterialR.style.ThemeOverlay_MaterialComponents_Dark)
+        AlertDialog.Builder(themedContext)
+            .setTitle(R.string.outline_dialog_title)
+            .setItems(labels) { dialog, which ->
+                editorController.goToLine(entries[which].lineNumber)
+                dialog.dismiss()
+            }
+            .setNegativeButton(R.string.go_to_line_cancel) { dialog, _ -> dialog.dismiss() }
+            .show()
     }
 
     private fun showRunMenu(anchor: android.view.View) {
@@ -388,11 +435,13 @@ class MainActivity : AppCompatActivity() {
         popup.menu.add(0, 1, 0, R.string.menu_run_run)
         popup.menu.add(0, 2, 1, R.string.menu_run_check_brackets)
         popup.menu.add(0, 3, 2, R.string.menu_run_live_preview)
+        popup.menu.add(0, 4, 3, R.string.menu_run_check_tags)
         popup.setOnMenuItemClickListener { item ->
             when (item.itemId) {
                 1 -> runProgram()
                 2 -> checkBrackets()
                 3 -> openLivePreviewManually()
+                4 -> checkContainerTags()
             }
             true
         }
@@ -525,6 +574,21 @@ class MainActivity : AppCompatActivity() {
             Toast.makeText(this, getString(R.string.brackets_balanced_toast), Toast.LENGTH_SHORT).show()
         } else {
             Toast.makeText(this, getString(R.string.brackets_unbalanced_toast, problemLine), Toast.LENGTH_LONG).show()
+            editorController.goToLine(problemLine)
+        }
+    }
+
+    /**
+     * يتحقق من توازن وسوم لغة الحاويات في Rin (`@container=x ... .end/container`, `Section`,
+     * `Translations`, `@view.*`, `@theme`...)، تماماً كـ [checkBrackets] لكن للوسوم النصية بدل
+     * الأقواس — مفيد خاصة في ملفات @container.doc/@container.pipe الطويلة متعددة المستويات.
+     */
+    private fun checkContainerTags() {
+        val problemLine = editorController.checkTagBalance()
+        if (problemLine == null) {
+            Toast.makeText(this, getString(R.string.tags_balanced_toast), Toast.LENGTH_SHORT).show()
+        } else {
+            Toast.makeText(this, getString(R.string.tags_unbalanced_toast, problemLine), Toast.LENGTH_LONG).show()
             editorController.goToLine(problemLine)
         }
     }
