@@ -41,33 +41,101 @@
             android:rowCount="2"
             android:useDefaultMargins="false">
 
-            <TextView
+            <LinearLayout
                 android:id="@+id/chipTypeContainer"
                 style="@style/ProjectTypeChip"
                 android:layout_row="0"
-                android:layout_column="0"
-                android:text="@string/project_type_container" />
+                android:layout_column="0">
 
-            <TextView
+                <ImageView
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:src="@drawable/ic_type_container"
+                    android:tint="@color/selector_project_type_chip_text"
+                    android:duplicateParentState="true"
+                    android:contentDescription="@null" />
+
+                <TextView
+                    style="@style/ProjectTypeChipTitle"
+                    android:duplicateParentState="true"
+                    android:text="@string/project_type_container" />
+
+                <TextView
+                    style="@style/ProjectTypeChipSubtitle"
+                    android:text="@string/project_type_container_desc" />
+            </LinearLayout>
+
+            <LinearLayout
                 android:id="@+id/chipTypeTable"
                 style="@style/ProjectTypeChip"
                 android:layout_row="0"
-                android:layout_column="1"
-                android:text="@string/project_type_table" />
+                android:layout_column="1">
 
-            <TextView
+                <ImageView
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:src="@drawable/ic_type_table"
+                    android:tint="@color/selector_project_type_chip_text"
+                    android:duplicateParentState="true"
+                    android:contentDescription="@null" />
+
+                <TextView
+                    style="@style/ProjectTypeChipTitle"
+                    android:duplicateParentState="true"
+                    android:text="@string/project_type_table" />
+
+                <TextView
+                    style="@style/ProjectTypeChipSubtitle"
+                    android:text="@string/project_type_table_desc" />
+            </LinearLayout>
+
+            <LinearLayout
                 android:id="@+id/chipTypeUi"
                 style="@style/ProjectTypeChip"
                 android:layout_row="1"
-                android:layout_column="0"
-                android:text="@string/project_type_ui" />
+                android:layout_column="0">
 
-            <TextView
+                <ImageView
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:src="@drawable/ic_type_ui"
+                    android:tint="@color/selector_project_type_chip_text"
+                    android:duplicateParentState="true"
+                    android:contentDescription="@null" />
+
+                <TextView
+                    style="@style/ProjectTypeChipTitle"
+                    android:duplicateParentState="true"
+                    android:text="@string/project_type_ui" />
+
+                <TextView
+                    style="@style/ProjectTypeChipSubtitle"
+                    android:text="@string/project_type_ui_desc" />
+            </LinearLayout>
+
+            <LinearLayout
                 android:id="@+id/chipTypeFree"
                 style="@style/ProjectTypeChip"
                 android:layout_row="1"
-                android:layout_column="1"
-                android:text="@string/project_type_free" />
+                android:layout_column="1">
+
+                <ImageView
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:src="@drawable/ic_type_free"
+                    android:tint="@color/selector_project_type_chip_text"
+                    android:duplicateParentState="true"
+                    android:contentDescription="@null" />
+
+                <TextView
+                    style="@style/ProjectTypeChipTitle"
+                    android:duplicateParentState="true"
+                    android:text="@string/project_type_free" />
+
+                <TextView
+                    style="@style/ProjectTypeChipSubtitle"
+                    android:text="@string/project_type_free_desc" />
+            </LinearLayout>
         </GridLayout>
     </LinearLayout>
 </ScrollView>
