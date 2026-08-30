@@ -21,6 +21,19 @@
     <string name="project_not_found">Project not found</string>
     <string name="project_meta_format">%1$d files</string>
 
+    <!-- Project types (chosen at creation, saved in project.og.urin) -->
+    <string name="project_type_label">Choose type</string>
+    <string name="project_type_container">Container</string>
+    <string name="project_type_table">Table</string>
+    <string name="project_type_ui">UI</string>
+    <string name="project_type_free">Free Project</string>
+
+    <!-- New-project creation stages -->
+    <string name="project_creating_title">Creating project</string>
+    <string name="project_stage_loading">Loading..</string>
+    <string name="project_stage_preparing">Preparing..</string>
+    <string name="project_stage_done">Done..</string>
+
     <!-- Files screen -->
     <string name="new_file_title">New File</string>
     <string name="upload_file">Upload File</string>
