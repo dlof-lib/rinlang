@@ -33,6 +33,10 @@
     <string name="project_type_table">Table</string>
     <string name="project_type_ui">UI</string>
     <string name="project_type_free">Free Project</string>
+    <string name="project_type_container_desc">بيانات حيّة داخل حاوية</string>
+    <string name="project_type_table_desc">جدول صفوف وأعمدة</string>
+    <string name="project_type_ui_desc">شاشات وواجهات</string>
+    <string name="project_type_free_desc">ملف كود فارغ</string>
 
     <!-- مراحل إنشاء مشروع جديد -->
     <string name="project_creating_title">إنشاء مشروع</string>
