@@ -29,9 +29,11 @@ object ProjectManager {
 
     /**
      * ملف البيانات الوصفية لمشروع واحد، في جذر مجلد المشروع مباشرة. يحفظ حالياً نوع المشروع
-     * (container/table/ui/free) الذي اختاره المستخدم عند الإنشاء، بصيغة "مفتاح=قيمة" بسيطة
-     * سطراً بسطر (أي سطر يبدأ بـ "#" يُعامَل كتعليق ويُتجاهَل). يتنقّل مع المشروع تلقائياً
-     * عند إعادة التسمية لأنه مجرد ملف داخل نفس المجلد.
+     * (container/table/ui/free) الذي اختاره المستخدم عند الإنشاء، داخل حاوية Rin مصغّرة
+     * (@container ... .end/container) بدل سطر "مفتاح=قيمة" خام — تماشياً مع لغة Rin نفسها
+     * ونفس البنية المستخدمة في main.rin. يتنقّل مع المشروع تلقائياً عند إعادة التسمية لأنه
+     * مجرد ملف داخل نفس المجلد. القراءة تبقى متوافقة مع المشاريع القديمة التي كُتب فيها هذا
+     * الملف بصيغة "type=xxx" الخام قبل هذا التعديل.
      */
     private const val PROJECT_META_FILE = "project.og.urin"
 
@@ -54,23 +56,35 @@ object ProjectManager {
             .sortedByDescending { it.lastModified }
     }
 
-    /** يقرأ نوع المشروع من [PROJECT_META_FILE] داخل [dir]، أو FREE لو الملف غائب/تالف (مشاريع أُنشئت قبل هذه الميزة). */
+    /** يلتقط "type=container" (صيغة قديمة خام) أو "type="container";" (صيغة الحاوية الجديدة) سواء بسواء. */
+    private val TYPE_LINE_REGEX = Regex("type\\s*=\\s*\"?([A-Za-z0-9_]+)\"?")
+
+    /**
+     * يقرأ نوع المشروع من [PROJECT_META_FILE] داخل [dir]، أو FREE لو الملف غائب/تالف (مشاريع
+     * أُنشئت قبل هذه الميزة). يعمل مع الصيغتين: الحاوية الجديدة (@container=ProjectMeta ...
+     * type="container"; ... .end/container) والصيغة الخام القديمة (type=container سطراً بسطر)،
+     * حتى تبقى المشاريع التي أُنشئت قبل التحديث تعمل دون أي هجرة يدوية.
+     */
     private fun readProjectType(dir: File): ProjectType {
         val metaFile = File(dir, PROJECT_META_FILE)
         if (!metaFile.isFile) return ProjectType.FREE
-        val typeId = metaFile.readLines()
-            .map { it.trim() }
-            .firstOrNull { it.startsWith("type=") }
-            ?.removePrefix("type=")
-            ?.trim()
+        val typeId = TYPE_LINE_REGEX.find(metaFile.readText())?.groupValues?.get(1)
         return ProjectType.fromId(typeId)
     }
 
-    /** يكتب/يحدّث [PROJECT_META_FILE] بنوع المشروع الحالي. */
+    /**
+     * يكتب/يحدّث [PROJECT_META_FILE] بنوع المشروع الحالي، بصيغة حاوية Rin مصغّرة (@container)
+     * بدل سطر key=value خام: البيانات الوصفية للمشروع تُخزَّن الآن هي نفسها داخل حاوية، بنفس
+     * منطق main.rin لمشاريع نوع Container.
+     */
     private fun writeProjectMeta(dir: File, type: ProjectType) {
         File(dir, PROJECT_META_FILE).writeText(
             "# بيانات وصفية لمشروع Rin — يُدار تلقائياً من التطبيق، لا تُعدّله يدوياً\n" +
-                "type=${type.id}\n"
+                "// نوع المشروع محفوظ داخل حاوية Rin (@container) وليس سطراً خاماً،\n" +
+                "// تماشياً مع بنية اللغة نفسها.\n" +
+                "@container=ProjectMeta\n" +
+                "    type=\"${type.id}\";\n" +
+                ".end/container\n"
         )
     }
 
