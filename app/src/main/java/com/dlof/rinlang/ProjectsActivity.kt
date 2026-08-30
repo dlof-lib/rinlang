@@ -73,10 +73,12 @@ class ProjectsActivity : AppCompatActivity() {
     private fun showCreateDialog() {
         val view = LayoutInflater.from(this).inflate(R.layout.dialog_create_project, null)
         val input: EditText = view.findViewById(R.id.inputProjectName)
-        val chipContainer: TextView = view.findViewById(R.id.chipTypeContainer)
-        val chipTable: TextView = view.findViewById(R.id.chipTypeTable)
-        val chipUi: TextView = view.findViewById(R.id.chipTypeUi)
-        val chipFree: TextView = view.findViewById(R.id.chipTypeFree)
+        // بطاقات نوع المشروع أصبحت LinearLayout (أيقونة + عنوان + وصف) بدل TextView مفردة،
+        // لكن منطق التحديد (isSelected) نفسه لأن bg_project_type_chip.xml selector يعمل على أي View.
+        val chipContainer: View = view.findViewById(R.id.chipTypeContainer)
+        val chipTable: View = view.findViewById(R.id.chipTypeTable)
+        val chipUi: View = view.findViewById(R.id.chipTypeUi)
+        val chipFree: View = view.findViewById(R.id.chipTypeFree)
         val chips = mapOf(
             chipContainer to ProjectType.CONTAINER,
             chipTable to ProjectType.TABLE,
@@ -85,7 +87,7 @@ class ProjectsActivity : AppCompatActivity() {
         )
 
         var selectedType = ProjectType.FREE
-        fun selectChip(chip: TextView) {
+        fun selectChip(chip: View) {
             selectedType = chips.getValue(chip)
             chips.keys.forEach { it.isSelected = it === chip }
         }
@@ -172,10 +174,21 @@ private class ProjectsAdapter(
 
     override fun onBindViewHolder(holder: VH, position: Int) {
         val project = items[position]
+        val context = holder.itemView.context
         holder.txtName.text = project.name
-        holder.txtType.text = typeLabel(holder.itemView.context, project.type)
+        holder.txtType.text = typeLabel(context, project.type)
+        val (iconRes, colorRes) = typeIconAndColor(project.type)
+        val color = androidx.core.content.ContextCompat.getColor(context, colorRes)
+        holder.txtType.setTextColor(color)
+        // نضبط حجم الأيقونة يدوياً بدل setCompoundDrawablesWithIntrinsicBounds لأن حجمها
+        // الأصلي (24dp) أكبر من ارتفاع شارة صغيرة كهذه.
+        val iconSizePx = (11 * context.resources.displayMetrics.density).toInt()
+        val icon = androidx.core.content.ContextCompat.getDrawable(context, iconRes)?.mutate()
+        icon?.setTint(color)
+        icon?.setBounds(0, 0, iconSizePx, iconSizePx)
+        holder.txtType.setCompoundDrawables(icon, null, null, null)
         val fileCount = ProjectManager.listFiles(project).size
-        holder.txtMeta.text = holder.itemView.context.getString(R.string.project_meta_format, fileCount)
+        holder.txtMeta.text = context.getString(R.string.project_meta_format, fileCount)
         holder.itemView.setOnClickListener { onOpen(project) }
         holder.btnRename.setOnClickListener { onRename(project) }
         holder.btnDelete.setOnClickListener { onDelete(project) }
@@ -189,5 +202,13 @@ private class ProjectsAdapter(
         ProjectType.TABLE -> context.getString(R.string.project_type_table)
         ProjectType.UI -> context.getString(R.string.project_type_ui)
         ProjectType.FREE -> context.getString(R.string.project_type_free)
+    }
+
+    /** أيقونة + لون هوية شارة نوع المشروع، بنفس الأيقونات المستخدمة في حوار "مشروع جديد". */
+    private fun typeIconAndColor(type: ProjectType): Pair<Int, Int> = when (type) {
+        ProjectType.CONTAINER -> R.drawable.ic_type_container to R.color.project_type_container_color
+        ProjectType.TABLE -> R.drawable.ic_type_table to R.color.project_type_table_color
+        ProjectType.UI -> R.drawable.ic_type_ui to R.color.project_type_ui_color
+        ProjectType.FREE -> R.drawable.ic_type_free to R.color.project_type_free_color
     }
 }
