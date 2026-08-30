@@ -63,6 +63,14 @@ struct RincError {
     int line;
     RincError(std::string m, int l) : message(std::move(m)), line(l) {}
 };
+// خطأ فرعي مميَّز عن RincError العام: يُرمى فقط عند ميزة "غير مدعومة عمداً" (لغة
+// حاويات/NoSQL/API/دردشة/إلخ)، لا عند خطأ نحوي حقيقي في كود المستخدم. main() يميّزه
+// خصيصاً ليتحوّل تلقائياً لوضع "تضمين المفسّر" (embed fallback) بدل رفض التجميع كلياً،
+// بينما تبقى الأخطاء النحوية الحقيقية (RincError العام) تفشل فوراً كما هي دائماً —
+// راجع قسم "وضع تضمين المفسّر" في main() أدناه.
+struct RincUnsupportedFeature : RincError {
+    RincUnsupportedFeature(std::string m, int l) : RincError(std::move(m), l) {}
+};
 
 // ============================================================================
 // 2) المحلل اللغوي (Lexer)
@@ -92,6 +100,28 @@ static const std::unordered_set<std::string> kUnsupportedContainerWords = {
     "text", "container", "Containers", "Group", "Volume", "Section",
     "Translations", "translation", "link", "tying", "merge", "installation",
     "simplified", "save", "file", "route", "row", "style", "document"
+};
+
+// أسماء الدوال الأصلية (native) الموجودة في المفسّر الأصلي (rin_interpreter.cpp) وغير المدعومة
+// مباشرةً في `rinc` (مرتبطة عضوياً بمحرّك التطبيق/JNI: NoSQL، HTTP/API، دردشة/بوت، لافتات
+// Loomtime، ذاكرة مؤقتة، إدارة تثبيت/مجموعات، ضغط/تجزئة bytes). عند استدعاء أيٍّ منها،
+// main() يتحوّل تلقائياً لوضع "تضمين المفسّر" (embed fallback) بدل رفض التجميع كلياً — انظر
+// generateEmbedFallback() أدناه. قائمة مطابقة تماماً لتدقيق natives[] في rin_interpreter.cpp.
+static const std::unordered_set<std::string> kInterpreterOnlyNatives = {
+    "adler32","allDocs","apiCall","apiDelete","apiGet","apiHeader","apiPatch","apiPost","apiPut",
+    "apiRegister","appliedMigrations","attachToChat","bannerDismiss","bannerError","bannerInfo",
+    "bannerSuccess","bannerWarning","beginTransaction","botReply","botReplyCode","botReplyMarkdown",
+    "bytesFromArray","cacheClear","cacheDelete","cacheGet","cacheHas","cacheKeys","cacheSet","call",
+    "callApi","chatHistory","chatMessageCount","clearChat","closeChat","commitTransaction",
+    "countDocs","crc32","createIndex","defineMigration","defineRelation","defineSchema","deleteDoc",
+    "docIds","dropIndex","dropSchema","exportChat","findByIndex","findDoc","getSchema",
+    "groupContainers","groupMembers","hasSection","httpDelete","httpGet","httpPatch","httpPost",
+    "httpPut","httpRequest","httpSetTimeout","inTransaction","insertDoc","isChatTyping",
+    "isInstalled","lastChatMessage","listIndexes","listInstalled","listRelations","loadInstalled",
+    "offChat","onChat","openChat","pendingMigrations","publish","queryDocs","queryOneDoc",
+    "relatedDocs","rollbackMigration","rollbackTransaction","runMigration","sectionNames",
+    "sectionVars","sendMessage","setChatTyping","streamReply","subscribe","tokenType","tokens",
+    "unsubscribe","unwatch","updateDoc","validateDoc","watch","zlibDeflateRaw","zlibInflateRaw"
 };
 
 class Lexer {
@@ -319,11 +349,10 @@ private:
                                        tokens[current + 3].lexeme == "data";
             bool isDataShort = checkNext(Tok::IDENT) && tokens[current + 1].lexeme == "data";
             if (isPlainContainer || isContainerDotData || isDataShort) return; // يُعالَج لاحقاً بواسطة containerBlock
-            throw RincError(
+            throw RincUnsupportedFeature(
                 "الميزات المبنية على '@' (container.pipe/api/import/table/doc/object/portal/block/sticker/"
                 "aukt، Containers.Group، Volume، @import ...) غير مدعومة في المترجم الأصلي (rinc) — "
-                "المدعوم منها هنا فقط: '@container' و'@container.data'/'@data'. "
-                "استخدم تطبيق Rin (المفسّر) لتشغيل باقي الأشكال.", peek().line);
+                "المدعوم منها هنا فقط: '@container' و'@container.data'/'@data'.", peek().line);
         }
         // ملاحظة مهمة: هذه الكلمات (save/text/link/route/document/...) ليست Token محجوزة في
         // اللغة الأساسية (تُقرأ IDENT عادي)، لذا لا نُخطئها إلا حين يكون *السياق* التالي فعلاً
@@ -337,10 +366,9 @@ private:
                 checkNext(Tok::STRING) ||           // installation "..."; (نادر لكن ممكن)
                 checkNext(Tok::AT);                 // container.save ... إلخ (نادر)
             if (looksLikeContainerStmt) {
-                throw RincError(
+                throw RincUnsupportedFeature(
                     "الكلمة '" + peek().lexeme + "' جزء من \"لغة الحاويات/البيانات\" (container/table/doc/"
-                    "save/installation/link/tying/merge/...) وهي غير مدعومة في المترجم الأصلي (rinc). "
-                    "استخدم تطبيق Rin (المفسّر) لتشغيل هذا الملف بدلاً من تجميعه.", peek().line);
+                    "save/installation/link/tying/merge/...) وهي غير مدعومة في المترجم الأصلي (rinc).", peek().line);
             }
         }
     }
@@ -850,6 +878,28 @@ private:
 // ============================================================================
 // أسماء المتغيرات/الدوال في Rin تُترجم مباشرة إلى متغيرات/دوال C حقيقية (بادئة
 // rv_/rf_ لتفادي أي تصادم مع كلمات C المحجوزة أو رموز الـ runtime).
+
+// دالة حرة (لا عضو في CodeGen) لتفادي القيد النحوي لـ raw string literals عند تضمين نص Rin
+// الأصلي كاملاً داخل ملف C++ مولَّد (وضع "تضمين المفسّر" أدناه) — يستخدمها أيضاً
+// CodeGen::cLiteral الداخلية لتفادي تكرار منطق الهروب (escaping) مرتين.
+static std::string cLiteralEscape(const std::string& s) {
+    std::string r = "\"";
+    for (unsigned char c : s) {
+        switch (c) {
+            case '"': r += "\\\""; break;
+            case '\\': r += "\\\\"; break;
+            case '\n': r += "\\n"; break;
+            case '\t': r += "\\t"; break;
+            case '\r': r += "\\r"; break;
+            default:
+                if (c < 0x20) { char buf[8]; snprintf(buf, sizeof buf, "\\x%02x", c); r += buf; }
+                else r += (char)c;
+        }
+    }
+    r += "\"";
+    return r;
+}
+
 class CodeGen {
 public:
     std::string generate(const std::vector<StmtPtr>& program) {
@@ -1131,26 +1181,16 @@ private:
         if (natives.count(c->callee)) {
             return "rt_native_" + c->callee + "(" + argsArr + ", " + std::to_string(n) + ")";
         }
+        if (kInterpreterOnlyNatives.count(c->callee)) {
+            throw RincUnsupportedFeature(
+                "الدالة '" + c->callee + "' موجودة في مفسّر Rin لكنها مرتبطة بمحرّك "
+                "NoSQL/HTTP/الدردشة/إلخ، وغير مدعومة مباشرةً في المترجم الأصلي (rinc).",
+                c->line);
+        }
         throw RincError("دالة غير معرَّفة: '" + c->callee + "'", c->line);
     }
 
-    static std::string cLiteral(const std::string& s) {
-        std::string r = "\"";
-        for (unsigned char c : s) {
-            switch (c) {
-                case '"': r += "\\\""; break;
-                case '\\': r += "\\\\"; break;
-                case '\n': r += "\\n"; break;
-                case '\t': r += "\\t"; break;
-                case '\r': r += "\\r"; break;
-                default:
-                    if (c < 0x20) { char buf[8]; snprintf(buf, sizeof buf, "\\x%02x", c); r += buf; }
-                    else r += (char)c;
-            }
-        }
-        r += "\"";
-        return r;
-    }
+    static std::string cLiteral(const std::string& s) { return cLiteralEscape(s); }
 
     // ---- Runtime C مضمَّن في كل ملف مولَّد (قيم ديناميكية + مكتبة قياسية) ----
     static const char* RUNTIME_HEADER;
@@ -1877,28 +1917,100 @@ static std::string readFile(const std::string& path) {
     return ss.str();
 }
 
+// ============================================================================
+// 5.5) وضع "تضمين المفسّر" (interpreter-embed fallback)
+// ============================================================================
+// عند رفض ميزة كـ RincUnsupportedFeature (حاويات/NoSQL/API/دردشة/...)، main() لا يتوقف عن
+// التجميع كلياً — بدلاً من ذلك يولّد ملف C++ (وليس C) يُضمِّن المفسّر الأصلي الحقيقي
+// (rin_lexer/rin_parser/rin_interpreter) وينفّذ نص Rin الأصلي كاملاً عبره وقت التشغيل. الناتج
+// ملف تنفيذي واحد مستقل بلا اعتماد على تطبيق أندرويد، بدلالة مطابقة 100% لتشغيله عبر المفسّر
+// (لأنه *هو* المفسّر فعلياً، لا محاكاة له) — على حساب فقدان مكسب السرعة الذي يوفّره التحويل
+// الحقيقي إلى C للأجزاء الإجرائية. هذا يعني عملياً: كل ملف .rin صالح نحوياً يُنتج تنفيذياً
+// عاملاً عبر rinc الآن، بلا أي رفض للميزات غير القابلة للترجمة المباشرة.
+static bool fileExistsOnDisk(const std::string& path) {
+    std::ifstream f(path);
+    return f.good();
+}
+
+// يبحث عن مجلد المصدر الحقيقي للمفسّر (يحوي rin_lexer.cpp/rin_parser.cpp/rin_interpreter.cpp/
+// rin_http.cpp/diagnostics/) بالترتيب: مسار مُمرَّر صراحةً (--engine-src)، ثم بجوار الملف
+// التنفيذي rinc نفسه (يغطي حالة تشغيل النسخة المتماثلة الموجودة داخل app/src/main/cpp/rinc.cpp
+// من نفس المجلد)، ثم مجلد الأشقاء ../app/src/main/cpp (يغطي حالة تشغيل rinc من compiler/)، ثم
+// نفس المسارين نسبةً لمجلد العمل الحالي (تغطية إضافية عند التشغيل من جذر المستودع).
+static std::string findEngineSrc(const std::string& argv0, const std::string& override) {
+    if (!override.empty()) return override;
+    std::string exeDir = ".";
+    auto slash = argv0.find_last_of("/\\");
+    if (slash != std::string::npos) exeDir = argv0.substr(0, slash);
+    std::vector<std::string> candidates = {
+        exeDir,
+        exeDir + "/../app/src/main/cpp",
+        exeDir + "/../../app/src/main/cpp",
+        "app/src/main/cpp",
+        "../app/src/main/cpp",
+        "."
+    };
+    for (auto& c : candidates) {
+        if (fileExistsOnDisk(c + "/rin_interpreter.cpp") && fileExistsOnDisk(c + "/rin_lexer.cpp") &&
+            fileExistsOnDisk(c + "/rin_parser.cpp")) {
+            return c;
+        }
+    }
+    return "";
+}
+
+static std::string generateEmbedFallback(const std::string& rinSource) {
+    std::ostringstream out;
+    out << "// Auto-generated by rinc (interpreter-embed fallback mode) — do not edit\n"
+        << "// وُلِّد هذا الملف تلقائياً لأن البرنامج يستخدم ميزة غير قابلة للترجمة المباشرة إلى C\n"
+        << "// (حاويات/NoSQL/API/دردشة/إلخ)، فبدل رفض التجميع، يُضمَّن المفسّر الأصلي الحقيقي هنا.\n"
+        << "#include \"rin_lexer.h\"\n#include \"rin_parser.h\"\n#include \"rin_interpreter.h\"\n"
+        << "#include <iostream>\n\nint main() {\n"
+        << "    std::string source = " << cLiteralEscape(rinSource) << ";\n"
+        << "    try {\n"
+        << "        rin::Lexer lexer(source);\n"
+        << "        auto tokens = lexer.scanTokens();\n"
+        << "        rin::Parser parser(tokens);\n"
+        << "        auto statements = parser.parse();\n"
+        << "        rin::Interpreter interp;\n"
+        << "        std::string out = interp.run(statements);\n"
+        << "        std::cout << out;\n"
+        << "    } catch (rin::RinError& e) {\n"
+        << "        std::cerr << \"Parse/Lex error at line \" << e.line << \": \" << e.message << std::endl;\n"
+        << "        return 1;\n"
+        << "    }\n"
+        << "    return 0;\n}\n";
+    return out.str();
+}
+
 static void printUsage() {
     std::cerr <<
         "الاستخدام: rinc <input.rin> [-o output] [--cc=COMPILER] [--emit-c-only] [--keep-c]\n"
-        "  -o output        اسم الملف التنفيذي الناتج (افتراضياً اسم ملف الدخل بلا امتداد)\n"
-        "  --cc=COMPILER    يفرض مترجم C محدد (مثال: --cc=clang) بدل الاكتشاف التلقائي\n"
-        "  --emit-c-only    يكتفي بتوليد ملف .c دون بنائه إلى تنفيذي\n"
-        "  --keep-c         يُبقي ملف .c الوسيط بعد نجاح البناء (يُحذف تلقائياً افتراضياً)\n";
+        "                 [--engine-src=PATH] [--no-embed-fallback]\n"
+        "  -o output            اسم الملف التنفيذي الناتج (افتراضياً اسم ملف الدخل بلا امتداد)\n"
+        "  --cc=COMPILER        يفرض مترجم C/C++ محدد (مثال: --cc=clang) بدل الاكتشاف التلقائي\n"
+        "  --emit-c-only        يكتفي بتوليد ملف .c/.cpp دون بنائه إلى تنفيذي\n"
+        "  --keep-c             يُبقي ملف .c/.cpp الوسيط بعد نجاح البناء (يُحذف تلقائياً افتراضياً)\n"
+        "  --engine-src=PATH    مسار مجلد مصدر المفسّر الأصلي (app/src/main/cpp) لوضع تضمين\n"
+        "                       المفسّر — يُكتشَف تلقائياً عادةً، استخدم هذا فقط إن فشل الاكتشاف\n"
+        "  --no-embed-fallback  يرفض الميزات غير المدعومة بخطأ تجميع بدل تضمين المفسّر تلقائياً\n";
 }
 
 int main(int argc, char** argv) {
     if (argc < 2) { printUsage(); return 1; }
-    std::string inputPath, outputPath, ccOverride;
-    bool emitCOnly = false, keepC = false;
+    std::string inputPath, outputPath, ccOverride, engineSrcOverride;
+    bool emitCOnly = false, keepC = false, noEmbedFallback = false;
 
     for (int i = 1; i < argc; i++) {
         std::string a = argv[i];
         if (a == "-o" && i + 1 < argc) { outputPath = argv[++i]; }
         else if (a.rfind("--cc=", 0) == 0) { ccOverride = a.substr(5); }
+        else if (a.rfind("--engine-src=", 0) == 0) { engineSrcOverride = a.substr(13); }
         else if (a == "--emit-c-only") { emitCOnly = true; }
         else if (a == "--keep-c") { keepC = true; }
+        else if (a == "--no-embed-fallback") { noEmbedFallback = true; }
         else if (a == "-h" || a == "--help") { printUsage(); return 0; }
-        else if (a == "-v" || a == "--version") { std::cout << "rinc 0.4.0\n"; return 0; }
+        else if (a == "-v" || a == "--version") { std::cout << "rinc 0.5.0\n"; return 0; }
         else if (!a.empty() && a[0] == '-') { std::cerr << "خيار غير معروف: " << a << "\n"; printUsage(); return 1; }
         else { inputPath = a; }
     }
@@ -1910,7 +2022,6 @@ int main(int argc, char** argv) {
     auto dot = base.find_last_of('.');
     if (dot != std::string::npos) base = base.substr(0, dot);
     if (outputPath.empty()) outputPath = base;
-    std::string cPath = base + ".c";
 
     std::string source;
     try {
@@ -1920,7 +2031,13 @@ int main(int argc, char** argv) {
         return 1;
     }
 
+    // وضع الترجمة الطبيعي (transpile إلى C) هو المحاولة الأولى دائماً. لا يتحوّل لوضع تضمين
+    // المفسّر إلا عند RincUnsupportedFeature تحديداً (ميزة مرفوضة عمداً)، وليس عند أي RincError
+    // آخر (خطأ نحوي حقيقي في كود المستخدم يبقى يفشل فوراً برسالته الواضحة كما كان دائماً).
     std::string generatedC;
+    bool useEmbedFallback = false;
+    std::string unsupportedReason;
+    int unsupportedLine = 0;
     try {
         Lexer lexer(source);
         auto tokens = lexer.scanTokens();
@@ -1928,11 +2045,75 @@ int main(int argc, char** argv) {
         auto program = parser.parse();
         CodeGen gen;
         generatedC = gen.generate(program);
+    } catch (const RincUnsupportedFeature& e) {
+        useEmbedFallback = true;
+        unsupportedReason = e.message;
+        unsupportedLine = e.line;
     } catch (const RincError& e) {
         std::cerr << "خطأ تجميع (سطر " << e.line << "): " << e.message << "\n";
         return 1;
     }
 
+    if (useEmbedFallback && noEmbedFallback) {
+        std::cerr << "خطأ تجميع (سطر " << unsupportedLine << "): " << unsupportedReason << "\n";
+        return 1;
+    }
+
+    if (useEmbedFallback) {
+        std::string engineSrc = findEngineSrc(argv[0], engineSrcOverride);
+        if (engineSrc.empty()) {
+            std::cerr << "✗ الميزة غير مدعومة مباشرةً في التحويل إلى C (سطر " << unsupportedLine
+                      << "): " << unsupportedReason << "\n"
+                      << "  حاولتُ التحوّل تلقائياً لوضع تضمين المفسّر لكن تعذّر العثور على مجلد\n"
+                      << "  مصدر المفسّر (rin_lexer.cpp/rin_parser.cpp/rin_interpreter.cpp). مرّره\n"
+                      << "  صراحةً عبر --engine-src=PATH (مثال: --engine-src=app/src/main/cpp).\n";
+            return 1;
+        }
+        std::cout << "ℹ الميزة غير مدعومة مباشرةً في التحويل إلى C (سطر " << unsupportedLine
+                  << "): " << unsupportedReason << "\n"
+                  << "  تحويل تلقائي لوضع تضمين المفسّر (engine: " << engineSrc << ")...\n";
+
+        std::string cppPath = base + ".embed.cpp";
+        std::string generatedCpp = generateEmbedFallback(source);
+        { std::ofstream out(cppPath, std::ios::binary); out << generatedCpp; }
+        std::cout << "✓ تم توليد الكود: " << cppPath << "\n";
+        if (emitCOnly) return 0;
+
+        std::vector<std::string> compilers;
+        if (!ccOverride.empty()) compilers.push_back(ccOverride);
+        else { compilers.push_back("c++"); compilers.push_back("g++"); compilers.push_back("clang++"); }
+
+        std::string diagCpp = engineSrc + "/diagnostics";
+        std::string sources = " " + cppPath +
+            " " + engineSrc + "/rin_lexer.cpp" +
+            " " + engineSrc + "/rin_parser.cpp" +
+            " " + engineSrc + "/rin_interpreter.cpp" +
+            " " + engineSrc + "/rin_http.cpp" +
+            " " + diagCpp + "/diagnostic.cpp" +
+            " " + diagCpp + "/diagnostic_engine.cpp" +
+            " " + diagCpp + "/diagnostic_renderer.cpp" +
+            " " + diagCpp + "/source_manager.cpp";
+        std::string includes = " -I" + engineSrc + " -I" + diagCpp;
+
+        bool built = false;
+        for (auto& cc : compilers) {
+            std::string cmd = cc + " -O2 -std=c++17" + includes + " -o " + outputPath + sources +
+                               " -lz 2> " + outputPath + ".build.log";
+            int rc = system(cmd.c_str());
+            if (rc == 0) { built = true; remove((outputPath + ".build.log").c_str()); break; }
+        }
+        if (!built) {
+            std::cerr << "✗ تعذّر العثور على مترجم C++ يعمل (جُرِّب: ";
+            for (size_t i = 0; i < compilers.size(); i++) { if (i) std::cerr << ", "; std::cerr << compilers[i]; }
+            std::cerr << "). تحقّق من سجل الأخطاء في " << outputPath << ".build.log إن وُجد.\n";
+            return 1;
+        }
+        if (!keepC) remove(cppPath.c_str());
+        std::cout << "✓ تم بناء الملف التنفيذي (وضع تضمين المفسّر): ./" << outputPath << "\n";
+        return 0;
+    }
+
+    std::string cPath = base + ".c";
     {
         std::ofstream out(cPath, std::ios::binary);
         out << generatedC;
