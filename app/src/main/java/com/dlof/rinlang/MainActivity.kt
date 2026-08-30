@@ -169,8 +169,14 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // تلوين الصيغة النحوية (syntax highlighting) أثناء الكتابة
-        RinSyntaxHighlighter.attach(this, editCode)
+        // تلوين الصيغة النحوية (syntax highlighting) أثناء الكتابة — يبدأ بالامتداد الصحيح
+        // للملف الذي فُتح فعلاً (rin، og.rin كمكتبة، أو الملف الافتراضي)، بدل افتراض Rin دوماً.
+        val initialExtension = when {
+            currentProjectLibrary != null -> "rin"
+            currentProjectFile != null -> extensionOf(currentProjectFile!!.name)
+            else -> "rin"
+        }
+        RinSyntaxHighlighter.attach(this, editCode, initialExtension)
         // أرقام الأسطر + تراجع/إعادة + مسافة بادئة تلقائية + أقواس مغلقة تلقائياً + تظليل الأقواس/السطر الحالي
         editorController = CodeEditorController(this, editCode, txtLineNumbers, scrollEditor)
 
@@ -455,6 +461,9 @@ class MainActivity : AppCompatActivity() {
         currentProjectFile = null
         currentProjectLibrary = null
         txtFileName.text = getString(R.string.new_file_name)
+        // ملف جديد داخل التطبيق هو دوماً .rin افتراضياً (انظر suggestedFileName)، بصرف النظر
+        // عن لغة الملف السابق المفتوح في نفس المحرر.
+        RinSyntaxHighlighter.setLanguage("rin")
         Toast.makeText(this, getString(R.string.new_file_toast), Toast.LENGTH_SHORT).show()
     }
 
@@ -572,6 +581,12 @@ class MainActivity : AppCompatActivity() {
 
     private fun suggestedFileName(): String = "program.rin"
 
+    /** يستخرج امتداد الملف (بلا نقطة، بحروف صغيرة) من اسمه، أو "rin" إن لم يوجد امتداد. */
+    private fun extensionOf(name: String): String {
+        val ext = name.substringAfterLast('.', "")
+        return ext.ifEmpty { "rin" }.lowercase()
+    }
+
     private fun openFile(uri: Uri) {
         try {
             contentResolver.openInputStream(uri)?.use { input ->
@@ -585,6 +600,9 @@ class MainActivity : AppCompatActivity() {
             currentProjectLibrary = null
             val name = queryDisplayName(uri) ?: uri.lastPathSegment ?: "opened.rin"
             txtFileName.text = name
+            // بدّل قواعد تلوين الصيغة النحوية حسب امتداد الملف المفتوح فعلياً (cpp/kt/py/...)
+            // بدل بقائها عالقة على قواعد Rin أو الملف السابق.
+            RinSyntaxHighlighter.setLanguage(extensionOf(name))
             Toast.makeText(this, getString(R.string.file_opened_toast, name), Toast.LENGTH_SHORT).show()
         } catch (t: Throwable) {
             Toast.makeText(this, "${getString(R.string.file_open_error)}: ${t.message}", Toast.LENGTH_LONG).show()
