@@ -27,6 +27,19 @@
     <string name="project_not_found">تعذّر العثور على المشروع</string>
     <string name="project_meta_format">%1$d ملف</string>
 
+    <!-- أنواع المشاريع (تُختار عند الإنشاء وتُحفظ في project.og.urin) -->
+    <string name="project_type_label">اختيار النوع</string>
+    <string name="project_type_container">Container</string>
+    <string name="project_type_table">Table</string>
+    <string name="project_type_ui">UI</string>
+    <string name="project_type_free">Free Project</string>
+
+    <!-- مراحل إنشاء مشروع جديد -->
+    <string name="project_creating_title">إنشاء مشروع</string>
+    <string name="project_stage_loading">جاري التحميل..</string>
+    <string name="project_stage_preparing">يتم التجهيز..</string>
+    <string name="project_stage_done">تم..</string>
+
     <!-- شاشة الملفات -->
     <string name="new_file_title">ملف جديد</string>
     <string name="upload_file">رفع ملف</string>
