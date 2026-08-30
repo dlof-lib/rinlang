@@ -4,18 +4,14 @@ import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.LinearGradient
-import android.graphics.Matrix
 import android.graphics.Paint
-import android.graphics.RadialGradient
 import android.graphics.RectF
 import android.graphics.Shader
-import android.os.SystemClock
 import android.text.TextPaint
 import android.text.TextUtils
 import android.util.AttributeSet
 import android.view.GestureDetector
 import android.view.MotionEvent
-import android.view.ScaleGestureDetector
 import android.view.View
 import org.json.JSONObject
 import kotlin.math.max
@@ -56,6 +52,10 @@ class LoomFabricView @JvmOverloads constructor(
         // Overlay Engine (rin_loom_overlay.h / rin_loom_paint.h's colorForKind): Dialog paints
         // like a Card (theme surface role); Tooltip paints like a small neutral chip.
         const val DIALOG = "Dialog"; const val TOOLTIP = "Tooltip"
+        // Missing-components pass (rin_loom_layout.h): Badge is a small self-drawn pill+label,
+        // never a plain box. Spacer is a pure layout strand -- an invisible flexible gap -- and
+        // must draw nothing at all, same as the native Dye backend (rin_loom_paint.h) treats it.
+        const val BADGE = "Badge"; const val SPACER = "Spacer"
     }
 
     private val defaultBar = Color.rgb(30, 31, 40)
@@ -63,11 +63,6 @@ class LoomFabricView @JvmOverloads constructor(
     private val defaultMedia = Color.rgb(18, 18, 26)
     private val defaultTableLine = Color.argb(60, 255, 255, 255)
     private val defaultTableHeaderBg = Color.rgb(34, 36, 48)
-
-    // §: default hairline border every box now gets unless it opts out with `border="0"` (or
-    // supplies its own `border=`/`borderColor=`) — see the note above drawBox's border block.
-    private val defaultHairlineBorderPx = 1.2f
-    private val defaultElementBorder = Color.argb(46, 255, 255, 255)
 
     // ---- default palette — must match loom::colorForKind() in rin_loom_paint.h exactly ----
     private val defaultCard = Color.rgb(40, 42, 54)
@@ -91,6 +86,20 @@ class LoomFabricView @JvmOverloads constructor(
         else -> defaultBanner
     }
 
+    // ---- tone= semantic role -> color, same roles rin_loom_paint.h's resolveColor() resolves
+    // against the active Theme (falls back to this project's own @theme=Professional values when
+    // no theme lookup is wired up on this side yet, so Badge/Button tone= isn't just ignored). ----
+    private fun toneColor(tone: String): Int = when (tone) {
+        "primary" -> defaultButton // #7C5CFF
+        "secondary" -> Color.rgb(0x22, 0xC8, 0x8E)
+        "success" -> Color.rgb(0x22, 0xC8, 0x8E)
+        "danger" -> Color.rgb(0xF1, 0x4C, 0x4C)
+        "warning" -> Color.rgb(0xE8, 0xB2, 0x3D)
+        "info" -> Color.rgb(0x5F, 0xD3, 0xFF)
+        "neutral" -> Color.rgb(0x91, 0x98, 0xA3)
+        else -> defaultButton
+    }
+
     var rootWidthPx: Int = 390
     var rootHeightPx: Int = 640
         private set
@@ -100,19 +109,6 @@ class LoomFabricView @JvmOverloads constructor(
             field = value.coerceIn(0.25f, 3f)
             invalidate()
         }
-
-    /** Fired whenever [zoom] changes from a pinch gesture (not from the toolbar +/- buttons,
-     * which the host already updates its own label for directly) — lets [LoomPreviewActivity]
-     * keep its zoom-percentage label in sync with a real two-finger pinch on the canvas. */
-    var onZoomChanged: ((Float) -> Unit)? = null
-
-    private val scaleGestureDetector = ScaleGestureDetector(context, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
-        override fun onScale(detector: ScaleGestureDetector): Boolean {
-            zoom *= detector.scaleFactor
-            onZoomChanged?.invoke(zoom)
-            return true
-        }
-    })
 
     var showGrid: Boolean = false
         set(value) { field = value; invalidate() }
@@ -202,57 +198,6 @@ class LoomFabricView @JvmOverloads constructor(
     /** Node currently highlighted by the Inspector (long-press), drawn on top after the tree. */
     private var inspectedNode: JSONObject? = null
 
-    // ---- real touch press feedback (§: "تأثير الضغط") ----
-    //
-    // A genuine finger-down/finger-up interaction state, independent of GestureDetector's
-    // tap-on-release recognizer above: the instant a finger lands on an interactive node
-    // (Button/MenuItem/any node with onTap=) the box scales in and darkens, and eases back out
-    // on release/cancel — the same "pressed state" feel a real native button gives, driven by
-    // wall-clock time so it plays out smoothly regardless of frame rate.
-    private enum class PressState { NONE, DOWN, RELEASING }
-    private var pressedNode: JSONObject? = null
-    private var pressState = PressState.NONE
-    private var pressChangeAtMs: Long = 0L
-    private val pressInDurationMs = 90f
-    private val pressOutDurationMs = 150f
-
-    /** Set true by any node drawn this frame that still has motion left (an animating gradient,
-     * or a press transition mid-flight) — read at the end of [onDraw] to decide whether to
-     * schedule another frame. Nothing here ever spins forever: once every animated node settles,
-     * the loop naturally stops scheduling itself. */
-    private var frameNeedsAnim = false
-
-    /** Whether [node] can receive a press — mirrors what already accepts taps (Button/MenuItem,
-     * or any node wired to `onTap=`), so the press effect never appears on plain static content. */
-    private fun isInteractive(node: JSONObject?): Boolean {
-        if (node == null) return false
-        val kind = node.optString("kind")
-        if (kind == Kind.BUTTON || kind == Kind.MENUITEM) return true
-        return node.optJSONObject("attrs")?.optString("onTap").orEmpty().isNotBlank()
-    }
-
-    /** Eases [pressedNode]'s scale/darken progress (0f = at rest, 1f = fully pressed-in) from wall
-     * time, flips RELEASING -> NONE once its ease-out finishes, and flags [frameNeedsAnim] while
-     * the transition is still moving so [onDraw] keeps redrawing until it settles. */
-    private fun pressProgressFor(node: JSONObject): Float {
-        if (node !== pressedNode) return 0f
-        val dt = (SystemClock.uptimeMillis() - pressChangeAtMs).toFloat()
-        return when (pressState) {
-            PressState.DOWN -> {
-                val t = (dt / pressInDurationMs).coerceIn(0f, 1f)
-                if (t < 1f) frameNeedsAnim = true
-                // ease-out-quad: fast start, settles into the pressed state
-                1f - (1f - t) * (1f - t)
-            }
-            PressState.RELEASING -> {
-                val t = (dt / pressOutDurationMs).coerceIn(0f, 1f)
-                if (t < 1f) frameNeedsAnim = true else { pressState = PressState.NONE; pressedNode = null }
-                (1f - t) * (1f - t)
-            }
-            PressState.NONE -> 0f
-        }
-    }
-
     init {
         // setShadowLayer() (used for Card `shadow=` attrs) requires a software layer.
         setLayerType(LAYER_TYPE_SOFTWARE, null)
@@ -277,40 +222,6 @@ class LoomFabricView @JvmOverloads constructor(
     })
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
-        scaleGestureDetector.onTouchEvent(event)
-
-        // Real two-finger pinch-to-zoom: while it's actually in progress (or a second finger has
-        // landed), this touch stream is zoom input, not a tap/press on whatever happens to be
-        // under either finger — release any node mid-press so it doesn't stay visually "stuck
-        // down" once the pinch ends, and skip the tap/press recognizers entirely for this event.
-        if (scaleGestureDetector.isInProgress || event.pointerCount > 1) {
-            if (pressedNode != null && pressState == PressState.DOWN) {
-                pressState = PressState.RELEASING
-                pressChangeAtMs = SystemClock.uptimeMillis()
-                invalidate()
-            }
-            return true
-        }
-
-        when (event.actionMasked) {
-            MotionEvent.ACTION_DOWN -> {
-                val (rx, ry) = viewToRoot(event.x, event.y)
-                val hit = fabric?.let { hitTest(it, rx.toFloat(), ry.toFloat()) }
-                if (isInteractive(hit) && hit !== pressedNode) {
-                    pressedNode = hit
-                    pressState = PressState.DOWN
-                    pressChangeAtMs = SystemClock.uptimeMillis()
-                    invalidate()
-                }
-            }
-            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                if (pressedNode != null && pressState == PressState.DOWN) {
-                    pressState = PressState.RELEASING
-                    pressChangeAtMs = SystemClock.uptimeMillis()
-                    invalidate()
-                }
-            }
-        }
         gestureDetector.onTouchEvent(event)
         return true
     }
@@ -395,7 +306,6 @@ class LoomFabricView @JvmOverloads constructor(
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
-        frameNeedsAnim = false // recomputed by whatever animated gradients / press transitions draw below
         canvas.save()
         canvas.scale(density * zoom, density * zoom)
 
@@ -430,12 +340,6 @@ class LoomFabricView @JvmOverloads constructor(
         inspectedNode?.let { drawInspectHighlight(canvas, it) }
 
         canvas.restore()
-
-        // Self-driving animation loop: only keeps scheduling frames while *something* on screen
-        // actually still has motion (an animated gradient, or a press easing in/out) — the loop
-        // stops on its own the instant frameNeedsAnim comes back false, so an idle preview costs
-        // nothing. postOnAnimation ties this to the display's own vsync instead of a fixed timer.
-        if (frameNeedsAnim) postOnAnimation { invalidate() }
     }
 
     /** Finds the first node (pre-order) whose `name` equals [target] — mirrors the native side's
@@ -462,29 +366,6 @@ class LoomFabricView @JvmOverloads constructor(
      */
     private fun drawNode(canvas: Canvas, node: JSONObject, skipOverlays: Boolean = true) {
         if (skipOverlays && overlayNames.contains(node.optString("name"))) return
-
-        // Press effect (§: "تأثير الضغط"): when this exact node is the one currently pressed,
-        // scale its whole subtree in slightly around its own center — a real, visible "pushed
-        // down" feel, not just a color change — and darken its own fill (threaded into the
-        // BUTTON/CARD/MENUITEM drawBox calls below via [pressDarken]). Any node not being pressed
-        // costs nothing extra: pressProgressFor returns 0f immediately for it.
-        val progress = pressProgressFor(node)
-        if (progress > 0f) {
-            val x = node.optDouble("x", 0.0).toFloat()
-            val y = node.optDouble("y", 0.0).toFloat()
-            val w = node.optDouble("w", 0.0).toFloat()
-            val h = node.optDouble("h", 0.0).toFloat()
-            val scale = 1f - 0.045f * progress
-            canvas.save()
-            canvas.scale(scale, scale, x + w / 2f, y + h / 2f)
-            drawNodeBody(canvas, node, skipOverlays, pressDarken = 0.16f * progress)
-            canvas.restore()
-        } else {
-            drawNodeBody(canvas, node, skipOverlays, pressDarken = 0f)
-        }
-    }
-
-    private fun drawNodeBody(canvas: Canvas, node: JSONObject, skipOverlays: Boolean, pressDarken: Float) {
         val kind = node.optString("kind")
         val x = node.optDouble("x", 0.0).toFloat()
         val y = node.optDouble("y", 0.0).toFloat()
@@ -509,10 +390,10 @@ class LoomFabricView @JvmOverloads constructor(
             Kind.DIVIDER -> drawDivider(canvas, rect, attrs)
             Kind.IMAGE -> drawImage(canvas, rect, attrs)
             Kind.BUTTON -> {
-                drawBox(canvas, rect, attrs, defaultButton, defaultRadius = 10f, darken = pressDarken)
+                drawBox(canvas, rect, attrs, defaultButton, defaultRadius = 10f)
                 drawText(canvas, rect, attrs, attrs.optString("label"), Color.WHITE, centered = true, boldHint = true, singleLine = true)
             }
-            Kind.CARD -> drawBox(canvas, rect, attrs, defaultCard, defaultRadius = 14f, darken = pressDarken)
+            Kind.CARD -> drawBox(canvas, rect, attrs, defaultCard, defaultRadius = 14f)
 
             // ---- new kinds ----
             Kind.HEADER, Kind.TOPBAR, Kind.BOTTOMBAR -> drawBox(canvas, rect, attrs, defaultBar, defaultRadius = 0f)
@@ -527,7 +408,7 @@ class LoomFabricView @JvmOverloads constructor(
             }
             Kind.MENU -> if (rect.width() > 0f) drawBox(canvas, rect, attrs, defaultCard, defaultRadius = 10f)
             Kind.MENUITEM -> {
-                drawBox(canvas, rect, attrs, defaultCard, defaultRadius = 0f, darken = pressDarken)
+                drawBox(canvas, rect, attrs, defaultCard, defaultRadius = 0f)
                 drawText(canvas, rect, attrs, attrs.optString("label").ifBlank { attrs.optString("text") }, defaultText, singleLine = true)
             }
             Kind.TABLE -> drawTable(canvas, rect, node, attrs)
@@ -535,15 +416,7 @@ class LoomFabricView @JvmOverloads constructor(
             Kind.VIDEO -> drawMediaPlaceholder(canvas, rect, attrs, "▶", attrs.optString("src"))
             Kind.AUDIO -> drawMediaPlaceholder(canvas, rect, attrs, "♪", attrs.optString("src"))
             Kind.WEBVIEW -> drawMediaPlaceholder(canvas, rect, attrs, "🌐", attrs.optString("src"))
-            // خلفية الجسم (body background): Scaffold used to draw nothing at all here, relying
-            // entirely on whatever TopBar/Content/BottomBar happened to cover — so any gap
-            // (a closed Drawer's sliver, safe-area padding, a Content shorter than the viewport)
-            // fell through to the surrounding canvas's own fixed color instead of the app's own
-            // background. Now the root itself paints a real, controllable body fill first — plain
-            // `color=`, a multi-stop `gradient=`, even an animated one — exactly like Card/Button
-            // already could, and the TopBar/Content/BottomBar/Drawer children still draw on top
-            // of it normally right after.
-            Kind.SCAFFOLD -> drawBox(canvas, rect, attrs, defaultContainer, defaultRadius = 0f)
+            Kind.SCAFFOLD -> { /* pure layout container: TopBar/Content/BottomBar/Drawer children draw themselves */ }
             Kind.SPLASH -> drawBox(canvas, rect, attrs, defaultContainer, defaultRadius = 0f)
             Kind.BANNER -> {
                 // A Banner is a padded box (like Card) whose default fill depends on its `type`
@@ -570,10 +443,25 @@ class LoomFabricView @JvmOverloads constructor(
                 }
             }
 
-            // Column/Row/Stack/Custom: also carries pressDarken so a whole tappable card built out
-            // of a plain container + onTap="navigate:..." gets the same real press feedback a
-            // Button/MenuItem gets, instead of only the recognized interactive kinds.
-            else -> drawBox(canvas, rect, attrs, defaultContainer, defaultRadius = 0f, darken = pressDarken)
+            // Badge (rin_loom_layout.h's measureBadge): a small self-contained pill + label, not
+            // a plain box -- previously had no case here at all, so it silently fell into the
+            // generic else-branch below (a flat, square-cornered, unlabeled box), which is why a
+            // Badge rendered as an empty dark rectangle instead of its "Beta"/"جديد" text.
+            Kind.BADGE -> {
+                if (rect.width() > 0f && rect.height() > 0f) {
+                    val tone = toneColor(attrs.optString("tone").ifBlank { "primary" })
+                    drawBox(canvas, rect, attrs, tone, defaultRadius = rect.height() / 2f)
+                    drawText(canvas, rect, attrs, attrs.optString("text"), Color.WHITE, centered = true, boldHint = true, singleLine = true)
+                }
+            }
+
+            // Spacer: a pure layout strand (flexible empty gap) -- must draw nothing, same as the
+            // native Dye backend. Previously had no case here either, so it fell into the generic
+            // else-branch and painted a solid, visible box exactly where it should have been
+            // blank space (the stray rectangle artifacts inside gradient header/nav rows).
+            Kind.SPACER -> { /* intentionally draws nothing */ }
+
+            else -> drawBox(canvas, rect, attrs, defaultContainer, defaultRadius = 0f) // Column/Row/Stack/Custom
         }
 
         // Table draws its own header + cell children explicitly (needs column geometry), so it
@@ -653,26 +541,22 @@ class LoomFabricView @JvmOverloads constructor(
         }
     }
 
-    /**
-     * [darken] (0f..1f) is the live press-effect strength computed by [drawNodeBody] for this
-     * exact node — 0f the vast majority of the time (nothing pressed), so the ordinary paint path
-     * below is unaffected; only when a finger is actually down on this node does it draw a
-     * translucent black wash over the finished fill, the same way a real native button darkens
-     * when tapped.
-     */
-    private fun drawBox(canvas: Canvas, rect: RectF, attrs: JSONObject, fallback: Int, defaultRadius: Float, darken: Float = 0f) {
+    private fun drawBox(canvas: Canvas, rect: RectF, attrs: JSONObject, fallback: Int, defaultRadius: Float) {
         if (rect.width() <= 0f || rect.height() <= 0f) return
         val radius = attrs.optString("radius").toFloatOrNull() ?: defaultRadius
         val shadow = attrs.optString("shadow").toFloatOrNull()
+        val gradient = attrs.optString("gradient").takeIf { it.contains(',') }
 
         fillPaint.shader = null
         fillPaint.clearShadowLayer()
 
-        val shader = buildGradientShader(rect, attrs, fallback)
-        if (shader != null) {
-            fillPaint.shader = shader
+        if (gradient != null) {
+            val parts = gradient.split(',')
+            val c1 = parseHexColor(parts.getOrNull(0)?.trim(), fallback)
+            val c2 = parseHexColor(parts.getOrNull(1)?.trim(), fallback)
+            fillPaint.shader = LinearGradient(rect.left, rect.top, rect.left, rect.bottom, c1, c2, Shader.TileMode.CLAMP)
         } else {
-            fillPaint.color = parseColorToken(attrs.optString("color").ifBlank { null }, fallback)
+            fillPaint.color = parseHexColor(attrs.optString("color").ifBlank { null }, fallback)
         }
 
         if (shadow != null && shadow > 0f) {
@@ -681,171 +565,18 @@ class LoomFabricView @JvmOverloads constructor(
 
         canvas.drawRoundRect(rect, radius, radius, fillPaint)
 
-        // Press wash — deliberately drawn *after* the fill/shadow, on top of it, rather than
-        // trying to darken the shader itself (a gradient's Shader can't be tinted in place). One
-        // flat rounded-rect at low alpha reads correctly over a solid fill or a gradient/animated
-        // shader alike. Drawn *before* the border below so the border stays crisp on top of it
-        // instead of being dimmed along with the fill.
-        if (darken > 0f) {
-            fillPaint.shader = null
-            fillPaint.clearShadowLayer()
-            fillPaint.color = Color.argb((darken.coerceIn(0f, 1f) * 170f).toInt(), 0, 0, 0)
-            canvas.drawRoundRect(rect, radius, radius, fillPaint)
-        }
-
         // border= / borderColor=: a real stroked edge, inset by half its own width so it's drawn
         // fully inside the box's bounds (matches the border-box inset the native layout already
         // reserved for children — see loom::layoutSingleChildBox / layoutLinear).
-        //
-        // §: "العناصر ليست متسقة ببعض وفوق بعض ضع حدود" — same-colored boxes sitting flush
-        // against each other (or a child sitting directly on its parent's own fill) used to have
-        // no visual seam between them at all once `border=` wasn't explicitly set; every box now
-        // gets a real hairline edge by default so adjacent/stacked elements are always visually
-        // distinguishable, without needing every single Strand in a .rin source to opt in with
-        // its own `border=`. An explicit `border="0"` still turns it off for one node that
-        // genuinely needs to blend seamlessly (e.g. a Content area flush against its Scaffold).
-        val borderWidthPx = attrs.optString("border").toFloatOrNull() ?: defaultHairlineBorderPx
-        if (borderWidthPx > 0f && rect.width() > 1f && rect.height() > 1f) {
+        val borderWidthPx = attrs.optString("border").toFloatOrNull()
+        if (borderWidthPx != null && borderWidthPx > 0f && rect.width() > 1f && rect.height() > 1f) {
             val strokeW = borderWidthPx
-            strokePaint.color = parseColorToken(attrs.optString("borderColor").ifBlank { null }, defaultElementBorder)
+            strokePaint.color = parseHexColor(attrs.optString("borderColor").ifBlank { null }, Color.WHITE)
             strokePaint.strokeWidth = strokeW
             val inset = strokeW / 2f
             val strokeRect = RectF(rect.left + inset, rect.top + inset, rect.right - inset, rect.bottom - inset)
             val strokeRadius = max(0f, radius - inset)
             canvas.drawRoundRect(strokeRect, strokeRadius, strokeRadius, strokePaint)
-        }
-    }
-
-    // ---- real color + gradient system (§: "نظام الألوان" / "تدريج" / "انميشين التدريج") ----
-    //
-    // A single wall-clock reference every animated gradient's phase is computed from, so several
-    // animated boxes on the same page stay in sync with each other instead of each starting its
-    // own clock the first time it happens to be drawn.
-    private val gradientAnimStartMs = SystemClock.uptimeMillis()
-
-    /**
-     * Real color parsing — a genuine superset of the old "#RRGGBB or nothing" check: standard
-     * 6/8-digit hex (`#RRGGBB`, `#AARRGGBB`), CSS-style shorthand (`#RGB`, `#RGBA`), functional
-     * `rgb(r,g,b)` / `rgba(r,g,b,a)`, and any name Android's own [Color.parseColor] already
-     * recognizes ("red", "royalblue", ...). Anything that still doesn't parse falls back to
-     * [fallback] rather than crashing the frame — a mistyped color in a .rin source should never
-     * be worse than "looks like the default", never a dead preview.
-     */
-    private fun parseColorToken(raw: String?, fallback: Int): Int {
-        val token = raw?.trim().orEmpty()
-        if (token.isEmpty()) return fallback
-
-        if (token.startsWith("#")) {
-            val hex = token.substring(1)
-            return try {
-                when (hex.length) {
-                    // New shorthand forms (CSS convention: each digit doubled, alpha — if
-                    // present — comes last). Nothing pre-existing ever used 3/4-digit hex, so
-                    // there's no legacy meaning to preserve here.
-                    3 -> Color.parseColor("#" + hex.map { "$it$it" }.joinToString(""))
-                    4 -> {
-                        val doubled = hex.map { "$it$it" }.joinToString("")
-                        Color.parseColor("#${doubled.substring(6, 8)}${doubled.substring(0, 6)}")
-                    }
-                    // 6/8-digit hex: unchanged from before — passed straight through to
-                    // Color.parseColor, which already treats 8 digits as Android's own
-                    // #AARRGGBB (alpha first). Existing .rin sources keep parsing exactly as
-                    // they did before this change.
-                    6, 8 -> Color.parseColor("#$hex")
-                    else -> fallback
-                }
-            } catch (t: Throwable) { fallback }
-        }
-
-        val fnMatch = Regex("""^rgba?\(\s*([0-9.]+)\s*,\s*([0-9.]+)\s*,\s*([0-9.]+)\s*(?:,\s*([0-9.]+)\s*)?\)$""", RegexOption.IGNORE_CASE)
-            .find(token)
-        if (fnMatch != null) {
-            val (r, g, b) = Triple(
-                fnMatch.groupValues[1].toFloatOrNull() ?: 0f,
-                fnMatch.groupValues[2].toFloatOrNull() ?: 0f,
-                fnMatch.groupValues[3].toFloatOrNull() ?: 0f
-            )
-            val a = fnMatch.groupValues[4].toFloatOrNull() ?: 1f
-            return Color.argb((a.coerceIn(0f, 1f) * 255f).toInt(), r.toInt().coerceIn(0, 255), g.toInt().coerceIn(0, 255), b.toInt().coerceIn(0, 255))
-        }
-
-        return try { Color.parseColor(token) } catch (t: Throwable) { fallback }
-    }
-
-    /** Kept for the handful of call sites (divider/border/text) that only ever dealt with plain
-     * hex before — now just a thin alias over the real parser above so every color-bearing attr
-     * in the file benefits from the same parsing, not only `gradient=`/`color=` on boxes. */
-    private fun parseHexColor(hex: String?, fallback: Int): Int = parseColorToken(hex, fallback)
-
-    /**
-     * Builds a real multi-stop gradient Shader from a Strand's attrs, or null if it has none (the
-     * caller then falls back to a flat `color=`). Recognized attrs:
-     *  - `gradient="#a,#b[,#c,...]"` — two or more stops, evenly spaced.
-     *  - `gradientType="linear"` (default) | `"radial"` | `"sweep"`.
-     *  - `gradientAngle="<degrees>"` — linear direction, 0=left→right, 90=top→bottom, measured
-     *    clockwise; overrides `gradientDirection=` if both are present.
-     *  - `gradientDirection="vertical"(default)|horizontal|diagonal|diagonal-reverse"` — a plainer
-     *    spelling for the common cases when an exact angle isn't needed.
-     *  - `gradientAnimate="true"` — a real, continuously-sliding gradient rather than a static
-     *    paint: the same stops tile past the box (mirrored, so the seam never shows) and slide at
-     *    `gradientSpeed=` px/second (default 40) for as long as this node stays on screen.
-     */
-    private fun buildGradientShader(rect: RectF, attrs: JSONObject, fallback: Int): Shader? {
-        val stops = attrs.optString("gradient").split(',').map { it.trim() }.filter { it.isNotEmpty() }
-        if (stops.size < 2) return null
-        val colors = IntArray(stops.size) { parseColorToken(stops[it], fallback) }
-
-        val animate = attrs.optString("gradientAnimate").equals("true", ignoreCase = true)
-        val speedPxPerSec = attrs.optString("gradientSpeed").toFloatOrNull() ?: 40f
-        val phasePx = if (animate) {
-            frameNeedsAnim = true
-            val elapsedSec = (SystemClock.uptimeMillis() - gradientAnimStartMs) / 1000f
-            elapsedSec * speedPxPerSec
-        } else 0f
-
-        return when (attrs.optString("gradientType").lowercase()) {
-            "radial" -> {
-                val cx = rect.centerX(); val cy = rect.centerY()
-                val radiusMultiplier = attrs.optString("gradientRadius").toFloatOrNull() ?: 1f
-                val radius = (max(rect.width(), rect.height()) / 2f * radiusMultiplier).coerceAtLeast(1f)
-                val shader = RadialGradient(cx, cy, radius, colors, null, Shader.TileMode.CLAMP)
-                if (animate) {
-                    // "breathing" radial: the ring of color slowly rotates its stop order by
-                    // rotating the shader's own matrix around its center — a real animated
-                    // motion, not just a repaint of the same static ring every frame.
-                    val degrees = (phasePx / radius.coerceAtLeast(1f)) * 40f
-                    shader.setLocalMatrix(Matrix().apply { setRotate(degrees % 360f, cx, cy) })
-                }
-                shader
-            }
-            "sweep" -> android.graphics.SweepGradient(rect.centerX(), rect.centerY(), colors, null).also { shader ->
-                if (animate) shader.setLocalMatrix(Matrix().apply { setRotate((phasePx * 6f) % 360f, rect.centerX(), rect.centerY()) })
-            }
-            else -> {
-                val angleDeg = attrs.optString("gradientAngle").toFloatOrNull()
-                    ?: when (attrs.optString("gradientDirection").lowercase()) {
-                        "horizontal" -> 0f
-                        "diagonal" -> 45f
-                        "diagonal-reverse" -> 135f
-                        else -> 90f // vertical, top -> bottom — matches the old fixed behavior
-                    }
-                val rad = Math.toRadians(angleDeg.toDouble())
-                val dx = kotlin.math.cos(rad).toFloat()
-                val dy = kotlin.math.sin(rad).toFloat()
-                // Half-diagonal along the gradient axis, so the line always spans the box
-                // regardless of angle; extended further (x3) when animating so a full tile
-                // repetition is never visible mid-slide, then mirrored so the seam it eventually
-                // does reach reverses smoothly instead of jumping.
-                val half = (kotlin.math.abs(dx) * rect.width() + kotlin.math.abs(dy) * rect.height()) / 2f
-                val span = if (animate) half * 3f else half
-                val cx = rect.centerX(); val cy = rect.centerY()
-                val x0 = cx - dx * span; val y0 = cy - dy * span
-                val x1 = cx + dx * span; val y1 = cy + dy * span
-                val tile = if (animate) Shader.TileMode.MIRROR else Shader.TileMode.CLAMP
-                val shader = LinearGradient(x0, y0, x1, y1, colors, null, tile)
-                if (animate) shader.setLocalMatrix(Matrix().apply { setTranslate(dx * phasePx, dy * phasePx) })
-                shader
-            }
         }
     }
 
@@ -1170,5 +901,10 @@ class LoomFabricView @JvmOverloads constructor(
             }
         }
         return node
+    }
+
+    private fun parseHexColor(hex: String?, fallback: Int): Int {
+        if (hex.isNullOrBlank() || hex.length < 7 || hex[0] != '#') return fallback
+        return try { Color.parseColor(hex) } catch (t: Throwable) { fallback }
     }
 }
