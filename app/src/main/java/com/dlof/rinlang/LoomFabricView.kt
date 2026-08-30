@@ -64,6 +64,11 @@ class LoomFabricView @JvmOverloads constructor(
     private val defaultTableLine = Color.argb(60, 255, 255, 255)
     private val defaultTableHeaderBg = Color.rgb(34, 36, 48)
 
+    // §: default hairline border every box now gets unless it opts out with `border="0"` (or
+    // supplies its own `border=`/`borderColor=`) — see the note above drawBox's border block.
+    private val defaultHairlineBorderPx = 1.2f
+    private val defaultElementBorder = Color.argb(46, 255, 255, 255)
+
     // ---- default palette — must match loom::colorForKind() in rin_loom_paint.h exactly ----
     private val defaultCard = Color.rgb(40, 42, 54)
     private val defaultButton = Color.rgb(124, 92, 255)
@@ -676,29 +681,38 @@ class LoomFabricView @JvmOverloads constructor(
 
         canvas.drawRoundRect(rect, radius, radius, fillPaint)
 
-        // border= / borderColor=: a real stroked edge, inset by half its own width so it's drawn
-        // fully inside the box's bounds (matches the border-box inset the native layout already
-        // reserved for children — see loom::layoutSingleChildBox / layoutLinear).
-        val borderWidthPx = attrs.optString("border").toFloatOrNull()
-        if (borderWidthPx != null && borderWidthPx > 0f && rect.width() > 1f && rect.height() > 1f) {
-            val strokeW = borderWidthPx
-            strokePaint.color = parseColorToken(attrs.optString("borderColor").ifBlank { null }, Color.WHITE)
-            strokePaint.strokeWidth = strokeW
-            val inset = strokeW / 2f
-            val strokeRect = RectF(rect.left + inset, rect.top + inset, rect.right - inset, rect.bottom - inset)
-            val strokeRadius = max(0f, radius - inset)
-            canvas.drawRoundRect(strokeRect, strokeRadius, strokeRadius, strokePaint)
-        }
-
-        // Press wash — deliberately drawn *after* fill/shadow/border, on top of everything,
-        // rather than trying to darken the shader itself (a gradient's Shader can't be tinted in
-        // place). One flat rounded-rect at low alpha reads correctly over a solid fill or a
-        // gradient/animated shader alike.
+        // Press wash — deliberately drawn *after* the fill/shadow, on top of it, rather than
+        // trying to darken the shader itself (a gradient's Shader can't be tinted in place). One
+        // flat rounded-rect at low alpha reads correctly over a solid fill or a gradient/animated
+        // shader alike. Drawn *before* the border below so the border stays crisp on top of it
+        // instead of being dimmed along with the fill.
         if (darken > 0f) {
             fillPaint.shader = null
             fillPaint.clearShadowLayer()
             fillPaint.color = Color.argb((darken.coerceIn(0f, 1f) * 170f).toInt(), 0, 0, 0)
             canvas.drawRoundRect(rect, radius, radius, fillPaint)
+        }
+
+        // border= / borderColor=: a real stroked edge, inset by half its own width so it's drawn
+        // fully inside the box's bounds (matches the border-box inset the native layout already
+        // reserved for children — see loom::layoutSingleChildBox / layoutLinear).
+        //
+        // §: "العناصر ليست متسقة ببعض وفوق بعض ضع حدود" — same-colored boxes sitting flush
+        // against each other (or a child sitting directly on its parent's own fill) used to have
+        // no visual seam between them at all once `border=` wasn't explicitly set; every box now
+        // gets a real hairline edge by default so adjacent/stacked elements are always visually
+        // distinguishable, without needing every single Strand in a .rin source to opt in with
+        // its own `border=`. An explicit `border="0"` still turns it off for one node that
+        // genuinely needs to blend seamlessly (e.g. a Content area flush against its Scaffold).
+        val borderWidthPx = attrs.optString("border").toFloatOrNull() ?: defaultHairlineBorderPx
+        if (borderWidthPx > 0f && rect.width() > 1f && rect.height() > 1f) {
+            val strokeW = borderWidthPx
+            strokePaint.color = parseColorToken(attrs.optString("borderColor").ifBlank { null }, defaultElementBorder)
+            strokePaint.strokeWidth = strokeW
+            val inset = strokeW / 2f
+            val strokeRect = RectF(rect.left + inset, rect.top + inset, rect.right - inset, rect.bottom - inset)
+            val strokeRadius = max(0f, radius - inset)
+            canvas.drawRoundRect(strokeRect, strokeRadius, strokeRadius, strokePaint)
         }
     }
 
