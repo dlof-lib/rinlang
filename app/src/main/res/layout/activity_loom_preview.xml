@@ -165,15 +165,19 @@
             tools:text="Snag on line 12: unexpected token — still showing the last good frame" />
     </LinearLayout>
 
-    <!-- ===== سطح المعاينة: LoomFabricView يملأ العرض والطول كاملاً (لا إطار جهاز مصغّر ولا حشوة
-         زائدة)؛ يبقى قابلاً للتمرير أفقياً/عمودياً فقط إذا زاد التكبير أو ارتفاع المحتوى الفعلي
-         عن المساحة المتاحة ===== -->
+    <!-- ===== سطح المعاينة: LoomFabricView يملأ العرض والطول كاملاً داخل إطار "جهاز" بزوايا دائرية
+         وظل خفيف (bg_loom_device_frame — كان معرّفاً ولم يُستخدم من قبل) بدل مستطيل مسطح بلا حدود؛
+         يبقى قابلاً للتمرير أفقياً/عمودياً فقط إذا زاد التكبير أو ارتفاع المحتوى الفعلي عن المساحة
+         المتاحة ===== -->
     <HorizontalScrollView
         android:id="@+id/loomHScroll"
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
-        android:background="@color/loom_canvas_bg"
+        android:layout_margin="10dp"
+        android:background="@drawable/bg_loom_device_frame"
+        android:elevation="4dp"
+        android:clipToOutline="true"
         android:fillViewport="true">
 
         <ScrollView
