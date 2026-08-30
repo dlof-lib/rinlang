@@ -493,6 +493,23 @@ struct Loom {
             double mainBudget = flexible[i] ? perFlex : mainSizeOf[i];
             double childMaxW = (axis==Axis::Y) ? innerMaxW : mainBudget;
             double childMaxH = (axis==Axis::Y) ? mainBudget : innerMaxH;
+            // An implicit-default Spacer (no explicit sizing= from the .rin source) is only meant
+            // to eat slack along the *main* axis, same as every other flex-box-style engine's
+            // spacer/expander. Left unguarded, the generic FILL/EXPAND handling in layout() also
+            // stretches it across the *cross* axis whenever this container's cross extent happens
+            // to be finite -- which it isn't during the Propose (probe) pass (unbounded, ~1e9) but
+            // IS during this real Settle pass (bounded to whatever budget the parent already
+            // committed to). That Propose/Settle disagreement is exactly what previously let a Row
+            // containing a Spacer measure short during Propose (Spacer contributing 0 to cross
+            // size) and then grow taller during Settle (Spacer now stretched to the row's full
+            // cross budget) -- inflating the row (and any Card/Box stacking it above a sibling)
+            // past the box size its own parent already fixed it to, overflowing into whatever sits
+            // below. Explicit valign="stretch" / align="stretch" on the container still stretches
+            // it on purpose, same as before.
+            bool implicitSpacerExpand = (child->kind == StrandKind::SPACER && !child->attr("sizing"));
+            if (flexible[i] && implicitSpacerExpand && crossMode != "stretch") {
+                if (axis == Axis::Y) childMaxW = 0; else childMaxH = 0;
+            }
             Constraints cc = flexible[i]
                 ? Constraints{(axis==Axis::Y)?0:mainBudget, childMaxW, (axis==Axis::Y)?mainBudget:0, childMaxH} // flexible: min==max==its share
                 : Constraints{0, childMaxW, 0, childMaxH};
