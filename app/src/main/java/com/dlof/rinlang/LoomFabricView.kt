@@ -15,6 +15,7 @@ import android.text.TextUtils
 import android.util.AttributeSet
 import android.view.GestureDetector
 import android.view.MotionEvent
+import android.view.ScaleGestureDetector
 import android.view.View
 import org.json.JSONObject
 import kotlin.math.max
@@ -94,6 +95,19 @@ class LoomFabricView @JvmOverloads constructor(
             field = value.coerceIn(0.25f, 3f)
             invalidate()
         }
+
+    /** Fired whenever [zoom] changes from a pinch gesture (not from the toolbar +/- buttons,
+     * which the host already updates its own label for directly) — lets [LoomPreviewActivity]
+     * keep its zoom-percentage label in sync with a real two-finger pinch on the canvas. */
+    var onZoomChanged: ((Float) -> Unit)? = null
+
+    private val scaleGestureDetector = ScaleGestureDetector(context, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
+        override fun onScale(detector: ScaleGestureDetector): Boolean {
+            zoom *= detector.scaleFactor
+            onZoomChanged?.invoke(zoom)
+            return true
+        }
+    })
 
     var showGrid: Boolean = false
         set(value) { field = value; invalidate() }
@@ -258,6 +272,21 @@ class LoomFabricView @JvmOverloads constructor(
     })
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
+        scaleGestureDetector.onTouchEvent(event)
+
+        // Real two-finger pinch-to-zoom: while it's actually in progress (or a second finger has
+        // landed), this touch stream is zoom input, not a tap/press on whatever happens to be
+        // under either finger — release any node mid-press so it doesn't stay visually "stuck
+        // down" once the pinch ends, and skip the tap/press recognizers entirely for this event.
+        if (scaleGestureDetector.isInProgress || event.pointerCount > 1) {
+            if (pressedNode != null && pressState == PressState.DOWN) {
+                pressState = PressState.RELEASING
+                pressChangeAtMs = SystemClock.uptimeMillis()
+                invalidate()
+            }
+            return true
+        }
+
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 val (rx, ry) = viewToRoot(event.x, event.y)
@@ -501,7 +530,15 @@ class LoomFabricView @JvmOverloads constructor(
             Kind.VIDEO -> drawMediaPlaceholder(canvas, rect, attrs, "▶", attrs.optString("src"))
             Kind.AUDIO -> drawMediaPlaceholder(canvas, rect, attrs, "♪", attrs.optString("src"))
             Kind.WEBVIEW -> drawMediaPlaceholder(canvas, rect, attrs, "🌐", attrs.optString("src"))
-            Kind.SCAFFOLD -> { /* pure layout container: TopBar/Content/BottomBar/Drawer children draw themselves */ }
+            // خلفية الجسم (body background): Scaffold used to draw nothing at all here, relying
+            // entirely on whatever TopBar/Content/BottomBar happened to cover — so any gap
+            // (a closed Drawer's sliver, safe-area padding, a Content shorter than the viewport)
+            // fell through to the surrounding canvas's own fixed color instead of the app's own
+            // background. Now the root itself paints a real, controllable body fill first — plain
+            // `color=`, a multi-stop `gradient=`, even an animated one — exactly like Card/Button
+            // already could, and the TopBar/Content/BottomBar/Drawer children still draw on top
+            // of it normally right after.
+            Kind.SCAFFOLD -> drawBox(canvas, rect, attrs, defaultContainer, defaultRadius = 0f)
             Kind.SPLASH -> drawBox(canvas, rect, attrs, defaultContainer, defaultRadius = 0f)
             Kind.BANNER -> {
                 // A Banner is a padded box (like Card) whose default fill depends on its `type`
