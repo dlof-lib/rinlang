@@ -27,6 +27,10 @@
     <string name="project_type_table">Table</string>
     <string name="project_type_ui">UI</string>
     <string name="project_type_free">Free Project</string>
+    <string name="project_type_container_desc">Live data in a container</string>
+    <string name="project_type_table_desc">Rows and columns</string>
+    <string name="project_type_ui_desc">Screens and views</string>
+    <string name="project_type_free_desc">A blank code file</string>
 
     <!-- New-project creation stages -->
     <string name="project_creating_title">Creating project</string>
