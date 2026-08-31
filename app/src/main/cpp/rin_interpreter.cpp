@@ -902,6 +902,111 @@ void Interpreter::registerNatives() {
         }
         return Value::string(out);
     };
+    // ---- CLC (Rin Compact Library Container، .rcl) — natives خام فوق مكتبة clc:: (clc/) ----
+    // نفس فكرة crc32/zlibDeflateRaw أعلاه بالضبط: هذه natives رقيقة تستدعي مباشرة دوال مكتبة C++
+    // مستقلة (هنا clc::) بلا أي تكرار لمنطقها. انظر clc/clc_container.h ودليل التكامل الأصلي
+    // (docs/RIN_INTEGRATION.md في مستودع rin-clc) لتفاصيل صيغة .rcl والتصميم.
+    // ملاحظة أمان: مسار الحاوية نفسه يمرّ عبر resolvePath() فيُمنَع من الخروج خارج basePath المعزول
+    // (نفس الحماية المطبَّقة على @import/container.import)؛ أما الأمان *داخل* الحاوية (Path
+    // Traversal بين entries، إلخ) فتتكفّل به clc_security.cpp من جهتها. أما ما يحدث *بعد* تنفيذ
+    // ملفات .rin المستوردة (library.import) فيبقى خاضعاً لنفس ثقة @import العادي — استيراد حاوية
+    // من مصدر غير موثوق يبقى غير آمن بنفس القدر تماماً، وهذا ليس تراجعاً جديداً في الحماية.
+
+    // container.open(path) -> handle رقمي (>=1)، أو -1 عند فشل صامت غير متوقَّع لا يُفترض حدوثه هنا
+    // (نرمي خطأً صريحاً بدل ذلك في كل حالة فشل فعلية، فـ -1 غير مُستخدَم عملياً لكنه محفوظ للتوافق مع
+    // ما ورد في التصميم الأصلي).
+    natives["clcContainerOpen"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("clcContainerOpen", a, 1, line);
+        std::string rawPath = asString(a[0], "clcContainerOpen", line);
+        std::string fullPath = resolvePath(rawPath, line);
+        try {
+            auto info = clc::readContainerInfo(fullPath);
+            int handle = clcNextHandle_++;
+            clcOpenContainers_.emplace(handle, std::move(info));
+            clcOpenContainerPaths_.emplace(handle, fullPath);
+            return Value::num(double(handle));
+        } catch (const clc::ClcFormatError& e) {
+            throw errWithReason(diag::Code::E0036_IOFailure, line,
+                                 "container.open: تعذّرت قراءة الحاوية '" + rawPath + "'",
+                                 e.what());
+        } catch (const std::exception& e) {
+            throw errWithReason(diag::Code::E0036_IOFailure, line,
+                                 "container.open: تعذّر فتح '" + rawPath + "'", e.what());
+        }
+    };
+    // container.close(handle) -> بلا قيمة إرجاع مفيدة (يحرر المدخلة من الجدول الداخلي فقط).
+    natives["clcContainerClose"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("clcContainerClose", a, 1, line);
+        int handle = int(asNumber(a[0], "clcContainerClose", line));
+        clcOpenContainers_.erase(handle);
+        clcOpenContainerPaths_.erase(handle);
+        return Value::nil();
+    };
+    // container.fileCount(handle) -> عدد الإدخالات (ملفات + مجلدات) داخل الحاوية.
+    natives["clcContainerFileCount"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("clcContainerFileCount", a, 1, line);
+        int handle = int(asNumber(a[0], "clcContainerFileCount", line));
+        auto it = clcOpenContainers_.find(handle);
+        if (it == clcOpenContainers_.end()) {
+            throw diagErr(diag::Code::E0035_RuntimeError, line, "clcContainerFileCount: handle غير صالح أو مُغلَق بالفعل");
+        }
+        return Value::num(double(it->second.files.size()));
+    };
+    // container.fileName(handle, index) -> المسار النسبي للملف رقم index (0-based) داخل الحاوية.
+    natives["clcContainerFileName"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("clcContainerFileName", a, 2, line);
+        int handle = int(asNumber(a[0], "clcContainerFileName", line));
+        int idx = int(asNumber(a[1], "clcContainerFileName", line));
+        auto it = clcOpenContainers_.find(handle);
+        if (it == clcOpenContainers_.end()) {
+            throw diagErr(diag::Code::E0035_RuntimeError, line, "clcContainerFileName: handle غير صالح أو مُغلَق بالفعل");
+        }
+        if (idx < 0 || size_t(idx) >= it->second.files.size()) {
+            throw diagErr(diag::Code::E0021_InvalidIndex, line, "clcContainerFileName: index خارج حدود ملفات الحاوية");
+        }
+        return Value::string(it->second.files[size_t(idx)].path);
+    };
+    // container.metaName(handle) / container.metaVersion(handle) -> حقول Metadata الأساسية
+    // (name/version) المخزَّنة داخل الحاوية نفسها (تُملأ عند library.export من PackOptions::metadata).
+    natives["clcContainerMetaName"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("clcContainerMetaName", a, 1, line);
+        int handle = int(asNumber(a[0], "clcContainerMetaName", line));
+        auto it = clcOpenContainers_.find(handle);
+        if (it == clcOpenContainers_.end()) {
+            throw diagErr(diag::Code::E0035_RuntimeError, line, "clcContainerMetaName: handle غير صالح أو مُغلَق بالفعل");
+        }
+        return Value::string(it->second.metadata.name);
+    };
+    natives["clcContainerMetaVersion"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("clcContainerMetaVersion", a, 1, line);
+        int handle = int(asNumber(a[0], "clcContainerMetaVersion", line));
+        auto it = clcOpenContainers_.find(handle);
+        if (it == clcOpenContainers_.end()) {
+            throw diagErr(diag::Code::E0035_RuntimeError, line, "clcContainerMetaVersion: handle غير صالح أو مُغلَق بالفعل");
+        }
+        return Value::string(it->second.metadata.version);
+    };
+    // library.export(outPath, sourceDir) -> يبني حاوية .rcl من مجلد مشروع كامل (تغليف
+    // clc::packDirectory مباشرة)، ويُعيد الحجم المضغوط بالبايت. كلا المسارين يمرّان عبر
+    // resolvePath() (نفس عزل المشروع المطبَّق على أي كتابة/قراءة ملف حقيقي في بقية اللغة).
+    natives["libraryExport"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("libraryExport", a, 2, line);
+        std::string outPath = resolvePath(asString(a[0], "libraryExport", line), line);
+        std::string srcDir  = resolvePath(asString(a[1], "libraryExport", line), line);
+        try {
+            clc::PackOptions opts; // القيم الافتراضية (level=L2) كافية هنا؛ يمكن توسيعها لاحقاً بوسائط إضافية
+            auto stats = clc::packDirectory(srcDir, outPath, opts);
+            return Value::num(double(stats.compressedSize));
+        } catch (const clc::ClcFormatError& e) {
+            throw errWithReason(diag::Code::E0035_RuntimeError, line, "library.export: فشل بناء الحاوية", e.what());
+        } catch (const std::exception& e) {
+            throw errWithReason(diag::Code::E0035_RuntimeError, line, "library.export: فشل بناء الحاوية", e.what());
+        }
+    };
+    // library.import(path) نفسها مُسجَّلة *ليست* هنا: تحتاج env (لتدمج @import من ملفات .rin
+    // المستخرَجة في نفس نطاق الاستدعاء) فتُعترَض في Interpreter::invokeCallee() مباشرة قبل خريطة
+    // natives هذه، وتُنفَّذ فعلياً في Interpreter::doLibraryImport() أسفل الملف.
+
     natives["toString"] = [](std::vector<Value>& a, int line) {
         expectArgs("toString", a, 1, line);
         return Value::string(a[0].toDisplayString());
@@ -4360,6 +4465,15 @@ Value Interpreter::invokeCallee(const std::string& callee, std::vector<Value>& a
         if (callee == "Multiplication") return Value::num(a.number * b.number);
     }
 
+    // library.import(path) وحدها بين natives CLC تحتاج env (لتنفّذ كل ملف .rin مُستخرَج من الحاوية
+    // بنفس مسار @import العادي، الذي يدمج التعريفات في نطاق نداء library.import نفسه) — فتُعترَض هنا
+    // صراحة قبل خريطة natives العامة (نفس مكان اعتراض builtinOps أعلاه)، بدل أن تكون NativeFn عادية
+    // (توقيعها الثابت std::function<Value(std::vector<Value>&, int)> لا يحمل env). باقي natives CLC
+    // (container.open/close، library.export) مسجَّلة عادياً في registerNatives() لأنها لا تحتاج env.
+    if (callee == "libraryImport") {
+        return doLibraryImport(args, line, env);
+    }
+
     auto nativeIt = natives.find(callee);
     if (nativeIt != natives.end()) {
         return nativeIt->second(args, line);
@@ -4370,6 +4484,83 @@ Value Interpreter::invokeCallee(const std::string& callee, std::vector<Value>& a
         throw unknownFunctionErr(callee, line);
     }
     return callFunction(calleeVal.function, args, line);
+}
+
+// library.import(path) -> يفتح حاوية .rcl، يستخرج كل ملف .rin بداخلها (واحداً تلو الآخر إلى مجلد
+// مؤقت داخل basePath المعزول ذاته، لا خارجه)، ثم يُنفِّذ كل واحد منها بنفس بالضبط منطق '@import'
+// العادي (Lexer -> Parser -> executeBlock داخل نفس env نطاق نداء library.import) — إعادة استخدام
+// كاملة لمسار التنفيذ الموجود فعلاً بدل تكراره. يُعيد مصفوفة (array) بأسماء ملفات .rin المستورَدة
+// فعلياً، بنفس ترتيب ظهورها داخل الحاوية.
+// انظر ملاحظة الأمان أعلى قسم natives CLC في registerNatives(): هذا يمنح ملفات .rin المستورَدة من
+// حاوية .rcl نفس ثقة أي '@import' عادي (بلا sandbox إضافي على ما تفعله بعد التنفيذ) — وهذا سلوك
+// @import الحالي نفسه، وليس تراجعاً جديداً في الحماية أُدخِل هنا خصيصاً.
+Value Interpreter::doLibraryImport(std::vector<Value>& args, int line, const EnvPtr& env) {
+    expectArgs("libraryImport", args, 1, line);
+    std::string rawPath = asString(args[0], "libraryImport", line);
+    std::string rclPath = resolvePath(rawPath, line);
+
+    clc::ContainerInfo info;
+    try {
+        info = clc::readContainerInfo(rclPath);
+    } catch (const clc::ClcFormatError& e) {
+        throw errWithReason(diag::Code::E0028_ImportError, line,
+                             "library.import: تعذّرت قراءة الحاوية '" + rawPath + "'", e.what());
+    } catch (const std::exception& e) {
+        throw errWithReason(diag::Code::E0028_ImportError, line,
+                             "library.import: تعذّر فتح '" + rawPath + "'", e.what());
+    }
+
+    // مجلد مؤقت فريد لكل نداء (نسبةً إلى basePath نفسه عبر resolvePath -> ما زال داخل عزل المشروع)،
+    // كي لا تتصادم استخراجات نداءات library.import متعددة في نفس التشغيل ببعضها.
+    static int importCounter = 0;
+    std::string tmpDir = resolvePath(".rin_clc_tmp/import_" + std::to_string(line) + "_" + std::to_string(importCounter++), line);
+
+    auto arr = std::make_shared<ArrayData>();
+    for (auto& f : info.files) {
+        if (f.flags & clc::FILE_FLAG_IS_DIR) continue;
+        if (f.path.size() < 4 || f.path.compare(f.path.size() - 4, 4, ".rin") != 0) continue; // .og.rin ينتهي بـ .rin أيضاً فيُغطّى
+
+        std::string extractedPath = tmpDir + "/" + f.path;
+        try {
+            clc::extractOneFile(rclPath, f.path, tmpDir);
+        } catch (const clc::ClcFormatError& e) {
+            throw errWithReason(diag::Code::E0028_ImportError, line,
+                                 "library.import: فشل استخراج '" + f.path + "' من '" + rawPath + "'", e.what());
+        }
+
+        std::ifstream in(extractedPath, std::ios::binary);
+        if (!in) {
+            throw errWithReason(diag::Code::E0036_IOFailure, line,
+                                 "library.import: تعذّرت قراءة الملف المستخرَج '" + f.path + "'",
+                                 "استُخرِج إلى '" + extractedPath + "' لكن تعذّرت إعادة فتحه للقراءة");
+        }
+        std::ostringstream buf;
+        buf << in.rdbuf();
+        std::string source = buf.str();
+        in.close();
+        ::remove(extractedPath.c_str()); // لا حاجة لإبقاء النسخة المؤقتة على القرص بعد قراءتها في الذاكرة
+
+        std::string importedName = rawPath + "::" + f.path;
+        try {
+            Lexer importedLexer(source, importedName);
+            auto importedTokens = importedLexer.scanTokens();
+            Parser importedParser(importedTokens, importedName);
+            auto importedStatements = importedParser.parse();
+            // نفس دلالات '@import' المباشر (بلا alias): تُدمَج كل التعريفات أعلى المستوى داخل env
+            // نطاق نداء library.import نفسه، تماماً كـ #include.
+            executeBlock(importedStatements, env);
+        } catch (RinError& e) {
+            auto d = diagErr(diag::Code::E0028_ImportError, line,
+                              "library.import: error inside \"" + importedName + "\"");
+            d.diagnostic->withReason("line " + std::to_string(e.line) + " of \"" + importedName + "\": " + e.message);
+            if (e.diagnostic) d.diagnostic->withCause(diag::renderShort(*e.diagnostic));
+            throw d;
+        }
+
+        arr->push_back(Value::string(f.path));
+    }
+
+    return Value::makeArray(arr);
 }
 
 Value Interpreter::evaluate(const ExprPtr& expr, EnvPtr env) {
