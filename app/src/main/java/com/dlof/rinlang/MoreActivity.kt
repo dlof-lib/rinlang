@@ -10,7 +10,7 @@ import com.dlof.rinlang.store.extensions.RinExtensionsMarketplaceActivity
 
 /**
  * شاشة "المزيد": تجمع باقي أقسام التطبيق التي لا تظهر مباشرة في الشريط السفلي،
- * مرتّبة كما يلي: الملفات، المكتبات، منفّذ الأنابيب (RinFlow)، متجر الإضافات، الإعدادات.
+ * مرتّبة كما يلي: الملفات، المكتبات، CLC (حاويات .rcl)، منفّذ الأنابيب (RinFlow)، متجر الإضافات، الإعدادات.
  *
  * الملفات والمكتبات مرتبطتان بمشروع محدد (EXTRA_PROJECT_NAME)، لذا عند عدم وجود
  * مشروع مفتوح حالياً يتم توجيه المستخدم إلى شاشة المشاريع أولاً لاختيار واحد.
@@ -33,6 +33,11 @@ class MoreActivity : AppCompatActivity() {
         // 2. المكتبات
         findViewById<View>(R.id.rowLibraries).setOnClickListener {
             openProjectScoped(LibrariesActivity::class.java, LibrariesActivity.EXTRA_PROJECT_NAME)
+        }
+
+        // 2.5 CLC (حاويات .rcl)
+        findViewById<View>(R.id.rowClc).setOnClickListener {
+            openProjectScoped(ClcActivity::class.java, ClcActivity.EXTRA_PROJECT_NAME)
         }
 
         // 3. منفّذ الأنابيب (RinFlow) — لا يحتاج مشروعاً محدداً
