@@ -493,6 +493,12 @@ private:
     std::unordered_set<std::string> importedPaths;            // مسارات @import المُنفَّذة فعلاً في هذا التشغيل (لمنع الاستيراد المكرَّر)
     std::unordered_map<std::string, std::string> linkIdToContainer; // معرّف الربط العام (container.link.id) -> اسم الحاوية المسجَّلة به
 
+    // ---- .object("id") ... container.(); .end/object  (انظر ObjectLiteralStmt في rin_ast.h) ----
+    // معرّف .object("id") -> قيمة الكائن (Value::MAP)، تُسجَّل فقط عند وجود 'container.();' داخل
+    // الجسم، بحيث يمكن الوصول لاحقاً من أي مكان عبر نفس المعرّف (تماماً كـ linkIdToContainer أعلاه
+    // لكن للكائنات نفسها بدل أسماء الحاويات) — تحديداً عبر view.print/object("id").
+    std::unordered_map<std::string, Value> objectRegistry;
+
     // ---- مفهوم الجدول (container.table / table المستقلة) ----
     std::unordered_map<std::string, std::vector<Value>> tableRows;  // مفتاح الحاوية -> صفوفها (كل صف Value::ARRAY)
     // مفتاح الحاوية -> آخر "style value=" مسجَّل (مثال: "style://dark"). كانت خاصة بالجداول فقط،
