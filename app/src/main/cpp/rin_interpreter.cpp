@@ -2466,6 +2466,99 @@ std::string Interpreter::resolvePath(const std::string& rawPath, int line) const
     return result;
 }
 
+// انظر التعليق على الإعلان في rin_interpreter.h. لا يعتمد هذا الكود على أي من رؤوس
+// طبقة pkg/ (لا toml_lite ولا manifest ولا lockfile)؛ فقط قراءة نصية مباشرة وبسيطة
+// لصيغة rin.lock (وهي TOML مبسَّط جداً: [[package]] name="..." version="..." ...)
+// كافية تماماً هنا لأن هذه القراءة للاستهلاك فقط، لا للتحقق من الصحة (ذلك من مسؤولية
+// `rin pkg install` الذي يكتب rin.lock أصلاً).
+namespace {
+bool findLockedPackageVersion(const std::string& lockPath, const std::string& pkgName, std::string& versionOut) {
+    std::ifstream in(lockPath, std::ios::binary);
+    if (!in) return false;
+
+    std::string line, currentName, currentVersion;
+    bool inPackageBlock = false;
+    auto flushIfMatch = [&]() -> bool {
+        return inPackageBlock && currentName == pkgName && !currentVersion.empty();
+    };
+    auto extractQuoted = [](const std::string& s) -> std::string {
+        size_t q1 = s.find('"');
+        if (q1 == std::string::npos) return "";
+        size_t q2 = s.find('"', q1 + 1);
+        if (q2 == std::string::npos) return "";
+        return s.substr(q1 + 1, q2 - q1 - 1);
+    };
+
+    while (std::getline(in, line)) {
+        size_t a = line.find_first_not_of(" \t\r");
+        if (a == std::string::npos) continue;
+        std::string t = line.substr(a);
+
+        if (t.rfind("[[package]]", 0) == 0) {
+            if (flushIfMatch()) { versionOut = currentVersion; return true; }
+            inPackageBlock = true;
+            currentName.clear();
+            currentVersion.clear();
+            continue;
+        }
+        if (!t.empty() && t[0] == '[') {
+            if (flushIfMatch()) { versionOut = currentVersion; return true; }
+            inPackageBlock = false;
+            continue;
+        }
+        if (!inPackageBlock) continue;
+
+        size_t eq = t.find('=');
+        if (eq == std::string::npos) continue;
+        std::string key = t.substr(0, eq);
+        while (!key.empty() && (key.back() == ' ' || key.back() == '\t')) key.pop_back();
+        std::string val = t.substr(eq + 1);
+        if (key == "name") currentName = extractQuoted(val);
+        else if (key == "version") currentVersion = extractQuoted(val);
+    }
+    if (flushIfMatch()) { versionOut = currentVersion; return true; }
+    return false;
+}
+
+// نفس حساب جذر الكاش الفعلي المستخدَم في cli/linux/src/pkg/cache.cpp (defaultCacheRoot)،
+// مكرَّر هنا بإيجاز بدل مشاركة الرأس، للسبب المذكور أعلاه (استقلالية محرك اللغة).
+std::string rinpmCacheRootForImport() {
+    if (const char* explicitHome = std::getenv("RIN_HOME")) if (*explicitHome) return std::string(explicitHome);
+    if (const char* home = std::getenv("HOME")) return std::string(home) + "/.rin";
+    if (const char* profile = std::getenv("USERPROFILE")) return std::string(profile) + "/.rin";
+    return "./.rin";
+}
+} // namespace
+
+bool Interpreter::tryLoadInstalledPackageEntry(const std::string& pkgName, std::string& sourceOut) const {
+    std::string lockPath = resolvePath("rin.lock");
+    std::string version;
+    if (!findLockedPackageVersion(lockPath, pkgName, version)) return false;
+
+    std::string srcDir = rinpmCacheRootForImport() + "/packages/" + pkgName + "/" + version + "/src";
+
+    // اتفاقية نقطة الدخول لحزمة RinPM (موثَّقة في docs/package-manager/packages.md):
+    // يُفضَّل lib.rin (كمكتبة)، ثم main.rin، ثم ملف بنفس اسم الحزمة في جذر src/.
+    static const char* kEntryCandidates[] = {"lib.rin", "main.rin"};
+    for (const char* cand : kEntryCandidates) {
+        std::ifstream in(srcDir + "/" + std::string(cand), std::ios::binary);
+        if (in) {
+            std::ostringstream buf;
+            buf << in.rdbuf();
+            sourceOut = buf.str();
+            return true;
+        }
+    }
+    std::ifstream in2(srcDir + "/" + pkgName + ".rin", std::ios::binary);
+    if (in2) {
+        std::ostringstream buf;
+        buf << in2.rdbuf();
+        sourceOut = buf.str();
+        return true;
+    }
+    return false;
+}
+
 void Interpreter::ensureParentDir(const std::string& fullPath) const {
     size_t pos = fullPath.find_last_of('/');
     if (pos == std::string::npos) return; // لا يوجد مجلد أب (ملف في المجلد الحالي)
@@ -3646,16 +3739,35 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
             //    بنفس أسلوب container.import. هذا هو نفس المسار الذي يكتب فيه قسم "المكتبات" في
             //    المحرر أي مكتبة ينشئها أو يرفعها المستخدم، فتُستورَد بنفس عبارة @import مباشرة.
             std::ifstream in(resolvePath(libPath), std::ios::binary);
-            if (!in) {
-                auto d = diagErr(diag::Code::E0029_ModuleNotFound, s->line, "module not found: `" + rawPath + "`");
-                d.diagnostic->message = "module not found: `" + rawPath + "`";
-                d.diagnostic->withReason("searched for `" + libPath + "` among embedded libraries and the project's lib/ folder")
-                 .withHint("create or upload it first from the \"Libraries\" section of the editor");
-                throw d;
+            if (in) {
+                std::ostringstream buf;
+                buf << in.rdbuf();
+                source = buf.str();
+            } else {
+                // 3) وإلا: اسم "عارٍ" (بلا '/') قد يكون حزمة RinPM مثبَّتة عبر `rin pkg install`.
+                //    البحث فعلياً في: مانيفست المشروع (rin.toml) لمعرفة اسم الحزمة الحقيقي، ثم
+                //    rin.lock لمعرفة الإصدار المحلول بدقة، ثم الكاش العالمي ~/.rin/packages حيث
+                //    تُخزَّن كل الحزم المثبَّتة فعلياً (RinPM لا يخزّن أي تبعية داخل مجلد المشروع).
+                //    هذا هو نفس ترتيب البحث الموصوف في تكامل الاستيراد: مشروع -> كاش محلي -> registry.
+                bool foundAsPackage = false;
+                if (rawPath.find('/') == std::string::npos) {
+                    std::string pkgSource;
+                    if (tryLoadInstalledPackageEntry(rawPath, pkgSource)) {
+                        source = pkgSource;
+                        foundAsPackage = true;
+                    }
+                }
+                if (!foundAsPackage) {
+                    auto d = diagErr(diag::Code::E0029_ModuleNotFound, s->line, "module not found: `" + rawPath + "`");
+                    d.diagnostic->message = "module not found: `" + rawPath + "`";
+                    d.diagnostic->withReason(
+                        "searched for `" + libPath + "` among embedded libraries, the project's lib/ folder, "
+                        "and RinPM packages installed via `rin pkg install`")
+                     .withHint("create/upload it from the \"Libraries\" section of the editor, "
+                               "or run `rin pkg add " + rawPath + "` if it is meant to be a package");
+                    throw d;
+                }
             }
-            std::ostringstream buf;
-            buf << in.rdbuf();
-            source = buf.str();
         }
 
         // منع إعادة استيراد نفس المكتبة بنفس أسلوب الاستيراد (مباشر أو باسم مستعار) أكثر من مرة
