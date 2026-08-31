@@ -41,7 +41,6 @@
     <string name="clc_run_dialog_title_format">Import &amp; run: %1$s</string>
     <string name="clc_run_code_hint">Optional extra Rin code to run after the import — e.g. call a function from the imported library</string>
     <string name="clc_run_code_field_hint">print greet(\"Rin\");</string>
-    <string name="action_run">Run</string>
     <string name="clc_run_success_prefix">✅ Run succeeded. Output:</string>
     <string name="clc_run_error_prefix">⚠️ Run failed:</string>
 </resources>
