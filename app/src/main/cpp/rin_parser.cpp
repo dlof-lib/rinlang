@@ -136,6 +136,18 @@ StmtPtr Parser::declaration() {
         advance(); // 'theme'
         return themeDeclaration();
     }
+    // 'view.print/object(expr);' -> معاينة حيّة لكائن في الكونسول (امتداد إضافي، لا علاقة بـ
+    // '@view.<Kind>' أعلاه رغم تشابه الاسم). كلمة سياقية غير محجوزة: 'view' تُقرأ IDENT عادي، فلا
+    // تتحوّل لعبارة خاصة إلا عند ظهورها بالضبط بصيغة 'view' '.' 'print' في بداية عبارة (نفس أسلوب
+    // فحص route/row/style/document/warp أعلاه) — 'print' نفسها كلمة محجوزة (TokenType::PRINT).
+    if (check(TokenType::IDENT) && peek().lexeme == "view" &&
+        checkNext(TokenType::DOT) &&
+        current + 2 < tokens.size() && tokens[current + 2].type == TokenType::PRINT) {
+        advance(); // 'view'
+        advance(); // '.'
+        advance(); // 'print'
+        return viewPrintObjectStatement();
+    }
     if (match({TokenType::AT})) return atBlock();
     if (match({TokenType::SECTION})) return sectionBlock();
     if (match({TokenType::TRANSLATIONS})) return translationsBlock();
@@ -253,14 +265,74 @@ StmtPtr Parser::rinopenStatement() {
 StmtPtr Parser::objectFieldStatement() {
     consume(TokenType::DOT, "Expected '.' before '.object'");
     Token object = consume(TokenType::IDENT, "Expected 'object' after '.'");
-    if (object.lexeme != "object") throw err(diag::Code::E0016_InvalidProperty, object, "expected `.object=type` inside `@container.open/object`");
+    if (object.lexeme != "object") throw err(diag::Code::E0016_InvalidProperty, object, "expected `.object=type` or `.object(\"id\")`");
+    // '.object("id") ... .end/object' -> شكل جديد بأسلوب استدعاء دوال (انظر ObjectLiteralStmt في
+    // rin_ast.h)؛ يُميَّز عن الشكل القديم '.object=type' بالتوكن التالي مباشرة: '(' هنا مقابل '='.
+    if (check(TokenType::LPAREN)) return objectLiteralStatement(object);
     consume(TokenType::EQUAL, "Expected '=' after '.object'");
     if (match({TokenType::TEXT})) return textDeclaration();
     if (check(TokenType::DOT) && checkNext(TokenType::IDENT) && current + 2 < tokens.size() && tokens[current + 1].lexeme == "object") return objectFieldStatement();
     if (match({TokenType::LET})) return letDeclaration();
     if (match({TokenType::FUN})) return functionDeclaration();
     throw err(diag::Code::E0013_InvalidExpression, peek(),
-              "expected an object member type after `.object=` (`text`, `let`, or `fun`)");
+              "expected an object member type after `.object=` (`text`, `let`, or `fun`), or an id after `.object(`");
+}
+
+// .object("id")
+//     field(value);      -> field:(value);  (typed، مطابق وظيفياً)     field();  (بلا وسيطة => nil)
+//     container.();       -> اختياري: يربط الكائن بسجل عام قابل للوصول من أي مكان عبر نفس المعرّف
+// .end/object
+// يُستدعى بعد أن يكون objectFieldStatement() قد استهلك بالفعل '.' 'object' ورأى '(' التالية (لم
+// تُستهلَك بعد). objectTok هو توكن 'object' نفسه (لتحديد سطر الفتح في رسائل الخطأ/consumeEndTag).
+StmtPtr Parser::objectLiteralStatement(const Token& objectTok) {
+    consume(TokenType::LPAREN, "Expected '(' after '.object'");
+    Token idTok = consume(TokenType::STRING, "Expected a quoted id, e.g. .object(\"user01\")");
+    consume(TokenType::RPAREN, "Expected ')' after the object id");
+    auto stmt = std::make_shared<ObjectLiteralStmt>();
+    stmt->id = idTok.lexeme;
+    stmt->line = objectTok.line;
+    while (!checkClosingTag() && !isAtEnd()) {
+        // container.();  -> يربط الكائن الحالي بسجل عام (لا يُضيف حقلاً باسم "container")
+        if (check(TokenType::CONTAINER) && checkNext(TokenType::DOT) &&
+            current + 2 < tokens.size() && tokens[current + 2].type == TokenType::LPAREN) {
+            advance(); // 'container'
+            advance(); // '.'
+            advance(); // '('
+            consume(TokenType::RPAREN, "Expected ')' after 'container.('");
+            consume(TokenType::SEMICOLON, "Expected ';' after 'container.();'");
+            stmt->linkToContainer = true;
+            continue;
+        }
+        Token fieldTok = consume(TokenType::IDENT,
+            "Expected a field call (e.g. `name(\"...\");`) or `container.();` inside `.object(...)`");
+        ObjectFieldCall field;
+        field.name = fieldTok.lexeme;
+        field.line = fieldTok.line;
+        if (match({TokenType::COLON})) field.typed = true; // field:(value);  -> شكل مُنمَّط اختياري
+        consume(TokenType::LPAREN, "Expected '(' after field name '" + fieldTok.lexeme + "'");
+        if (!check(TokenType::RPAREN)) field.value = expression();
+        consume(TokenType::RPAREN, "Expected ')' after value for field '" + fieldTok.lexeme + "'");
+        consume(TokenType::SEMICOLON, "Expected ';' after field '" + fieldTok.lexeme + "'");
+        stmt->fields.push_back(std::move(field));
+    }
+    consumeEndTag("object", objectTok.line, stmt->id);
+    return stmt;
+}
+
+// view.print/object(expr);  -> انظر ViewPrintObjectStmt في rin_ast.h
+// يُستدعى بعد أن يكون المستدعي (declaration()) قد استهلك بالفعل 'view' '.' 'print'.
+StmtPtr Parser::viewPrintObjectStatement() {
+    Token tok = previous(); // 'print'
+    consume(TokenType::SLASH, "Expected '/' after 'view.print'");
+    Token objTok = consume(TokenType::IDENT, "Expected 'object' after 'view.print/'");
+    if (objTok.lexeme != "object") throw err(diag::Code::E0016_InvalidProperty, objTok, "expected 'object' after 'view.print/'");
+    consume(TokenType::LPAREN, "Expected '(' after 'view.print/object'");
+    auto stmt = std::make_shared<ViewPrintObjectStmt>();
+    stmt->target = expression();
+    stmt->line = tok.line;
+    consume(TokenType::RPAREN, "Expected ')' after 'view.print/object(...)'");
+    consume(TokenType::SEMICOLON, "Expected ';' after 'view.print/object(...)' statement");
+    return stmt;
 }
 
 StmtPtr Parser::printStatement() {
