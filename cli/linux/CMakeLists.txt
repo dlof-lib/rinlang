@@ -35,6 +35,21 @@ add_executable(rin
     ${RIN_CORE_DIR}/diagnostics/source_manager.cpp
     ${RIN_CORE_DIR}/diagnostics/diagnostic_engine.cpp
     ${RIN_CORE_DIR}/diagnostics/diagnostic_renderer.cpp
+    # RinPM — Rin Package Manager (src/pkg/*). طبقة مستقلة تماماً عن محرك اللغة؛
+    # تتصل به فقط عبر نقطة تكامل واحدة داخل rin_interpreter.cpp (حل @import عبر الحزم).
+    src/pkg/semver.cpp
+    src/pkg/toml_lite.cpp
+    src/pkg/sha256.cpp
+    src/pkg/json_lite.cpp
+    src/pkg/manifest.cpp
+    src/pkg/lockfile.cpp
+    src/pkg/archive.cpp
+    src/pkg/cache.cpp
+    src/pkg/registry.cpp
+    src/pkg/resolver.cpp
+    src/pkg/package_ops.cpp
+    src/pkg/auth.cpp
+    src/pkg/cli_pkg.cpp
 )
 
 target_include_directories(rin PRIVATE ${RIN_CORE_DIR})
