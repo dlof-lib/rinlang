@@ -1,9 +1,0 @@
-@import "math";
-@import "strings";
-
-fun main() {
-    let container = container.open("lib/math.rcl");
-    let obj = object;
-    print "Rin CLC demo — " + "مرحباً";
-    return obj;
-}
