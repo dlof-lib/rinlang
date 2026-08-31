@@ -56,6 +56,12 @@ class LoomFabricView @JvmOverloads constructor(
         // never a plain box. Spacer is a pure layout strand -- an invisible flexible gap -- and
         // must draw nothing at all, same as the native Dye backend (rin_loom_paint.h) treats it.
         const val BADGE = "Badge"; const val SPACER = "Spacer"
+        // §21: Object Inspector (rin_loom_object.h) — a live, read-only card synthesized from a
+        // registered `.object("id") ... container.(); .end/object` value. Native already lowers
+        // it to a Card-like Box with plain Text children (title + "key: value" rows) via
+        // applyObjectConveniences(), so no bespoke drawing beyond the background box below is
+        // needed — the Text children draw themselves through the ordinary recursive walk.
+        const val OBJECT = "Object"
     }
 
     private val defaultBar = Color.rgb(30, 31, 40)
@@ -398,6 +404,7 @@ class LoomFabricView @JvmOverloads constructor(
                 drawText(canvas, rect, attrs, attrs.optString("label"), Color.WHITE, centered = true, boldHint = true, singleLine = true)
             }
             Kind.CARD -> drawBox(canvas, rect, attrs, defaultCard, defaultRadius = 14f)
+            Kind.OBJECT -> drawBox(canvas, rect, attrs, defaultCard, defaultRadius = 12f)
 
             // ---- new kinds ----
             Kind.HEADER, Kind.TOPBAR, Kind.BOTTOMBAR -> drawBox(canvas, rect, attrs, defaultBar, defaultRadius = 0f)
