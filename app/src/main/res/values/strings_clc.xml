@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  نصوص شاشة "CLC" الجديدة (ClcActivity): تصدير/فحص/استيراد حاويات .rcl (Rin Compact Library
+  Container) الخاصة بمشروع. ملف إضافي منفصل، بنفس أسلوب strings_libraries.xml — أندرويد يدمج كل
+  ملفات values/*.xml تلقائياً طالما لا تتكرر أسماء العناصر.
+-->
+<resources>
+    <!-- صف "المزيد" وعنوان الشاشة -->
+    <string name="clc_screen_title">CLC</string>
+    <string name="more_row_clc_subtitle">تصدير واستيراد حاويات .rcl الخاصة بالمشروع</string>
+
+    <!-- قسم التصدير -->
+    <string name="clc_section_export">تصدير مكتبة</string>
+    <string name="clc_section_export_hint">يبني حاوية .rcl واحدة من أي مجلد فرعي داخل المشروع</string>
+    <string name="clc_export_src_hint">المجلد المصدر</string>
+    <string name="clc_export_src_field_hint">مثال: lib</string>
+    <string name="clc_export_out_hint">اسم الحاوية الناتجة</string>
+    <string name="clc_export_root_option">(جذر المشروع)</string>
+    <string name="action_browse_folder">استعراض</string>
+    <string name="action_export_now">تصدير الآن</string>
+    <string name="clc_export_src_required_toast">اختر مجلداً فرعياً كمصدر للتصدير أولاً</string>
+    <string name="clc_export_success_format">✅ تم التصدير: %1$s (%2$s)</string>
+    <string name="clc_export_error_format">⚠️ فشل التصدير: %1$s</string>
+
+    <!-- قسم الحاويات الموجودة داخل المشروع -->
+    <string name="clc_section_containers">حاويات .rcl في المشروع</string>
+    <string name="clc_section_containers_hint">كل ملفات .rcl الموجودة داخل مجلد المشروع، أو التي أحضرتها من جهازك</string>
+    <string name="clc_no_containers_yet">لا توجد حاويات .rcl بعد. صدّر مكتبة أعلاه، أو استورد حاوية جاهزة من جهازك.</string>
+    <string name="action_import_from_device">استيراد من الجهاز</string>
+    <string name="clc_imported_toast">تم إحضار الحاوية: %1$s</string>
+    <string name="clc_delete_container_title">حذف الحاوية</string>
+    <string name="clc_delete_container_confirm">هل تريد حذف الحاوية \"%1$s\"؟ لا يمكن التراجع عن هذا.</string>
+
+    <!-- أزرار عنصر الحاوية في القائمة -->
+    <string name="action_inspect">فحص</string>
+    <string name="action_import_and_run">استيراد وتشغيل</string>
+
+    <!-- حوار "فحص" (قراءة فقط: container.open/metaName/metaVersion/fileCount/fileName/close) -->
+    <string name="clc_inspect_title_format">تفاصيل: %1$s</string>
+    <string name="clc_inspect_name">الاسم:</string>
+    <string name="clc_inspect_version">الإصدار:</string>
+    <string name="clc_inspect_count">عدد الملفات:</string>
+    <string name="clc_inspect_files_header">الملفات:</string>
+
+    <!-- حوار "استيراد وتشغيل" (libraryImport فعلي + كود Rin اختياري إضافي) -->
+    <string name="clc_run_dialog_title_format">استيراد وتشغيل: %1$s</string>
+    <string name="clc_run_code_hint">كود Rin إضافي يُنفَّذ بعد الاستيراد (اختياري) — مثال: استدعاء دالة من المكتبة المستورَدة</string>
+    <string name="clc_run_code_field_hint">print greet(\"Rin\");</string>
+    <string name="action_run">تشغيل</string>
+    <string name="clc_run_success_prefix">✅ نجح التشغيل. المخرجات:</string>
+    <string name="clc_run_error_prefix">⚠️ فشل التشغيل:</string>
+</resources>
