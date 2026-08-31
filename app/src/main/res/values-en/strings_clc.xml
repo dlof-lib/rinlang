@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- "More" row and screen title -->
+    <string name="clc_screen_title">CLC</string>
+    <string name="more_row_clc_subtitle">Export and import this project\'s .rcl containers</string>
+
+    <!-- Export section -->
+    <string name="clc_section_export">Export library</string>
+    <string name="clc_section_export_hint">Builds a single .rcl container from any subfolder inside the project</string>
+    <string name="clc_export_src_hint">Source folder</string>
+    <string name="clc_export_src_field_hint">e.g. lib</string>
+    <string name="clc_export_out_hint">Output container name</string>
+    <string name="clc_export_root_option">(project root)</string>
+    <string name="action_browse_folder">Browse</string>
+    <string name="action_export_now">Export now</string>
+    <string name="clc_export_src_required_toast">Pick a subfolder as the export source first</string>
+    <string name="clc_export_success_format">✅ Exported: %1$s (%2$s)</string>
+    <string name="clc_export_error_format">⚠️ Export failed: %1$s</string>
+
+    <!-- Containers found inside the project -->
+    <string name="clc_section_containers">Project .rcl containers</string>
+    <string name="clc_section_containers_hint">Every .rcl file found inside the project folder, or brought in from your device</string>
+    <string name="clc_no_containers_yet">No .rcl containers yet. Export a library above, or import an existing one from your device.</string>
+    <string name="action_import_from_device">Import from device</string>
+    <string name="clc_imported_toast">Container imported: %1$s</string>
+    <string name="clc_delete_container_title">Delete container</string>
+    <string name="clc_delete_container_confirm">Delete the container \"%1$s\"? This cannot be undone.</string>
+
+    <!-- Container item buttons -->
+    <string name="action_inspect">Inspect</string>
+    <string name="action_import_and_run">Import &amp; run</string>
+
+    <!-- "Inspect" dialog (read-only: container.open/metaName/metaVersion/fileCount/fileName/close) -->
+    <string name="clc_inspect_title_format">Details: %1$s</string>
+    <string name="clc_inspect_name">Name:</string>
+    <string name="clc_inspect_version">Version:</string>
+    <string name="clc_inspect_count">File count:</string>
+    <string name="clc_inspect_files_header">Files:</string>
+
+    <!-- "Import & run" dialog (real libraryImport + optional extra Rin code) -->
+    <string name="clc_run_dialog_title_format">Import &amp; run: %1$s</string>
+    <string name="clc_run_code_hint">Optional extra Rin code to run after the import — e.g. call a function from the imported library</string>
+    <string name="clc_run_code_field_hint">print greet(\"Rin\");</string>
+    <string name="action_run">Run</string>
+    <string name="clc_run_success_prefix">✅ Run succeeded. Output:</string>
+    <string name="clc_run_error_prefix">⚠️ Run failed:</string>
+</resources>
