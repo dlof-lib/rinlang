@@ -46,7 +46,6 @@
     <string name="clc_run_dialog_title_format">استيراد وتشغيل: %1$s</string>
     <string name="clc_run_code_hint">كود Rin إضافي يُنفَّذ بعد الاستيراد (اختياري) — مثال: استدعاء دالة من المكتبة المستورَدة</string>
     <string name="clc_run_code_field_hint">print greet(\"Rin\");</string>
-    <string name="action_run">تشغيل</string>
     <string name="clc_run_success_prefix">✅ نجح التشغيل. المخرجات:</string>
     <string name="clc_run_error_prefix">⚠️ فشل التشغيل:</string>
 </resources>
