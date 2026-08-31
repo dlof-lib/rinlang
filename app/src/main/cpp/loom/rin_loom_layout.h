@@ -277,6 +277,12 @@ struct Loom {
             case StrandKind::GRID: size = layoutGrid(s, c2, originX, originY); break;
             case StrandKind::WRAP: size = layoutWrap(s, c2, originX, originY); break;
 
+            // §21: Object Inspector — a padded box (identical rules to Card) whose content is
+            // the title + field-row Text strands synthesized by applyObjectConveniences() in
+            // rin_loom_object.h *before* layout ever runs, so by the time this switch executes,
+            // s->children is just an ordinary list of Text strands like any hand-authored Card.
+            case StrandKind::OBJECT: size = layoutSingleChildBox(s, c2, resolveSpacing(*s, "padding", 12) + s->attrNum("border", 0), originX, originY); break;
+
             // Spacer (§15): sizing defaults to "expand" (fills the parent's remaining main-axis
             // extent) unless the .rin source overrides sizing= or gives an explicit width=/height=
             // for a fixed-size gap instead — see the sizing-mode override just above this switch.
