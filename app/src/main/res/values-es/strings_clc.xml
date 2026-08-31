@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Fila de "Más" y título de la pantalla -->
+    <string name="clc_screen_title">CLC</string>
+    <string name="more_row_clc_subtitle">Exporta e importa los contenedores .rcl de este proyecto</string>
+
+    <!-- Sección de exportación -->
+    <string name="clc_section_export">Exportar biblioteca</string>
+    <string name="clc_section_export_hint">Crea un único contenedor .rcl a partir de cualquier subcarpeta del proyecto</string>
+    <string name="clc_export_src_hint">Carpeta de origen</string>
+    <string name="clc_export_src_field_hint">ej.: lib</string>
+    <string name="clc_export_out_hint">Nombre del contenedor de salida</string>
+    <string name="clc_export_root_option">(raíz del proyecto)</string>
+    <string name="action_browse_folder">Examinar</string>
+    <string name="action_export_now">Exportar ahora</string>
+    <string name="clc_export_src_required_toast">Elige primero una subcarpeta como origen de la exportación</string>
+    <string name="clc_export_success_format">✅ Exportado: %1$s (%2$s)</string>
+    <string name="clc_export_error_format">⚠️ Error al exportar: %1$s</string>
+
+    <!-- Contenedores encontrados dentro del proyecto -->
+    <string name="clc_section_containers">Contenedores .rcl del proyecto</string>
+    <string name="clc_section_containers_hint">Todos los archivos .rcl dentro de la carpeta del proyecto, o traídos desde tu dispositivo</string>
+    <string name="clc_no_containers_yet">Aún no hay contenedores .rcl. Exporta una biblioteca arriba, o importa una desde tu dispositivo.</string>
+    <string name="action_import_from_device">Importar desde el dispositivo</string>
+    <string name="clc_imported_toast">Contenedor importado: %1$s</string>
+    <string name="clc_delete_container_title">Eliminar contenedor</string>
+    <string name="clc_delete_container_confirm">¿Eliminar el contenedor \"%1$s\"? Esto no se puede deshacer.</string>
+
+    <!-- Botones del elemento de contenedor -->
+    <string name="action_inspect">Inspeccionar</string>
+    <string name="action_import_and_run">Importar y ejecutar</string>
+
+    <!-- Diálogo "Inspeccionar" (solo lectura: container.open/metaName/metaVersion/fileCount/fileName/close) -->
+    <string name="clc_inspect_title_format">Detalles: %1$s</string>
+    <string name="clc_inspect_name">Nombre:</string>
+    <string name="clc_inspect_version">Versión:</string>
+    <string name="clc_inspect_count">Cantidad de archivos:</string>
+    <string name="clc_inspect_files_header">Archivos:</string>
+
+    <!-- Diálogo "Importar y ejecutar" (libraryImport real + código Rin adicional opcional) -->
+    <string name="clc_run_dialog_title_format">Importar y ejecutar: %1$s</string>
+    <string name="clc_run_code_hint">Código Rin adicional opcional que se ejecuta tras la importación — p. ej. llamar a una función de la biblioteca importada</string>
+    <string name="clc_run_code_field_hint">print greet(\"Rin\");</string>
+    <string name="action_run">Ejecutar</string>
+    <string name="clc_run_success_prefix">✅ Ejecución correcta. Salida:</string>
+    <string name="clc_run_error_prefix">⚠️ Error en la ejecución:</string>
+</resources>
