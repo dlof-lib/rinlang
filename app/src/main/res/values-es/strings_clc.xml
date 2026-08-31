@@ -41,7 +41,6 @@
     <string name="clc_run_dialog_title_format">Importar y ejecutar: %1$s</string>
     <string name="clc_run_code_hint">Código Rin adicional opcional que se ejecuta tras la importación — p. ej. llamar a una función de la biblioteca importada</string>
     <string name="clc_run_code_field_hint">print greet(\"Rin\");</string>
-    <string name="action_run">Ejecutar</string>
     <string name="clc_run_success_prefix">✅ Ejecución correcta. Salida:</string>
     <string name="clc_run_error_prefix">⚠️ Error en la ejecución:</string>
 </resources>
