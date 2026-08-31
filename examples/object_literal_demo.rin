@@ -1,0 +1,46 @@
+// ============================================================================
+//  examples/object_literal_demo.rin
+//  الصيغة الجديدة بأسلوب استدعاء دوال لإنشاء كائن (Object) بمعرّف (id) صريح:
+//
+//      .object("<id>")
+//          field(value);      // يضبط حقلاً باسم field
+//          field:(value);     // نفس الشيء (صيغة مُنمَّطة/typed اختيارية، بلا فرق دلالي)
+//          field();           // بلا وسيطة => قيمة الحقل تكون nil
+//          container.();      // اختياري: يربط الكائن بسجل عام (objectRegistry) قابل للوصول
+//                              //   من أي مكان لاحقاً عبر نفس المعرّف
+//      .end/object
+//
+//      view.print/object(expr);   // معاينة حيّة (live preview) في الكونسول: expr إما نص
+//                                  //   (id مسجَّل عبر container.();) أو قيمة كائن مباشرة.
+//
+//  هذه صيغة إضافية بحتة (additive) فوق الشكل الحالي `.object=text` (الذي يبقى صالحاً بلا أي
+//  تغيير، انظر التمييز بين الشكلين في rin_parser.cpp: '(' مقابل '=' بعد `.object`)، وأيضاً بجانب
+//  `@Object=name ... .end/Object` و `document id="..." fields={...}` الموجودتين أصلاً.
+// ============================================================================
+
+.object("user01")
+    name("ABOO");
+    age(19);
+    online(true);
+.end/object
+
+print "-- basic --";
+print user01;          // الكائن مُعرَّف كمتغيّر عادي باسم المعرّف نفسه في النطاق الحالي
+print user01["name"];  // فهرسة عادية بالمفتاح، كأي قاموس (map) آخر في اللغة
+
+// container.(); يسجّل الكائن في سجل عام قابل للوصول عبر نفس المعرّف من أي مكان، وهو ما
+// يحتاجه view.print/object عند تمرير نص (id) بدل تمرير الكائن نفسه مباشرة.
+.object("user02")
+    name("Sara");
+    age(27);
+    online(false);
+    image:("avatar.png");  // صيغة مُنمَّطة (typed): نفس معنى image("avatar.png")
+    number:();              // بلا وسيطة => number = nil
+    container.();
+.end/object
+
+print "-- live preview by id --";
+view.print/object("user02");
+
+print "-- live preview by direct value --";
+view.print/object(user01);
