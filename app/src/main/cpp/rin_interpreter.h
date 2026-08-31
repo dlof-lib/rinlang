@@ -2,6 +2,12 @@
 #include "rin_ast.h"
 #include "diagnostics/diagnostic.h"
 #include "diagnostics/diagnostic_engine.h"
+#include "clc/clc_io.h" // ClcFormatError (يُستخدَم في معالجة أخطاء natives CLC أدناه) — clc_container.h
+                          // لا يتضمّنه تلقائياً بذاته.
+#include "clc/clc_container.h" // مكتبة CLC (Rin Compact Library Container، .rcl) — انظر
+                                // clcContainerOpen/clcContainerClose/libraryImport/libraryExport
+                                // في registerNatives()/invokeCallee() (rin_interpreter.cpp)
+                                // وdocs/RIN_INTEGRATION.md في مستودع rin-clc الأصلي.
 #include <sstream>
 #include <unordered_map>
 #include <unordered_set>
@@ -617,6 +623,18 @@ private:
     // ليُشارَك حرفياً -- بلا أي فرق سلوكي -- مع evaluatePipelineFlow أدناه، بدل تكرار نفس منطق
     // الفرز/الأخطاء مرتين. لا يغيّر أي سلوك على المسار العادي (evaluate() تستدعيه الآن بدل تكرار كوده).
     Value invokeCallee(const std::string& callee, std::vector<Value>& args, int line, const EnvPtr& env);
+
+    // ---- ربط CLC (Rin Compact Library Container، .rcl) ----------------------------------
+    // container.open/container.close/library.export لا تحتاج env فتُسجَّل كـ natives عادية في
+    // registerNatives() (أدناه). library.import وحدها تحتاج env (لتدمج كل @import من ملفات .rin
+    // المستخرَجة داخل نفس نطاق نداء library.import نفسه، تماماً كسلوك @import العادي) فتُعترَض هنا
+    // في invokeCallee() قبل الوصول لخريطة natives العامة، بنفس أسلوب اعتراض builtinOps أعلاه.
+    Value doLibraryImport(std::vector<Value>& args, int line, const EnvPtr& env);
+    // جدول حاويات .rcl المفتوحة حالياً عبر container.open (المفتاح = المقبض/handle الرقمي المُعاد
+    // للمستخدم). container.close يزيل المدخلة. لا حاجة لقفل/تزامن: Interpreter غير مشترك بين خيوط.
+    std::unordered_map<int, clc::ContainerInfo> clcOpenContainers_;
+    std::unordered_map<int, std::string> clcOpenContainerPaths_; // نفس المفتاح -> مسار الملف .rcl نفسه (لازم لاحقاً لـ extractOneFile)
+    int clcNextHandle_ = 1;
 
     flow::RinFlowEngine flowEngine_;
     // جلسة Flow النشطة حالياً لهذا الـ Interpreter (nullptr خارج runProgramAsFlow) -- تُقرَأ من
