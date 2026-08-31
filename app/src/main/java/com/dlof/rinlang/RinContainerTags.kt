@@ -54,6 +54,12 @@ object RinContainerTags {
             return tag.takeIf { it in atTags }
         }
 
+        // .object("id") ... .end/object  -> صيغة كائن (Object) بأسلوب استدعاء دوال (call-style)،
+        // إضافية بحتة بجانب `.object=text` (التي تبقى عبارة حقل عادية منتهية بـ ';' فتُستبعَد أصلاً
+        // أعلاه) و`@Object=name`. تُغلَق دوماً حرفياً بـ `.end/object` (انظر
+        // Parser::objectLiteralStatement: consumeEndTag("object", ...) في rin_parser.cpp).
+        if (line.startsWith(".object(") && line.endsWith(")")) return "object"
+
         val bareTag = line.substringBefore('=').trim()
         return bareTag.takeIf { it in bareBlockKeywords }
     }
@@ -169,6 +175,13 @@ object RinSnippets {
                 "    translation lang=\"en\" text=\"Hello\";\n" +
                 "    $CURSOR_MARKER\n" +
                 ".end/Translations\n"
+        ),
+        Snippet(
+            ".object(\"id\") (call-style)",
+            ".object(\"$CURSOR_MARKER\")\n" +
+                "    name(\"...\");\n" +
+                "    container.();\n" +
+                ".end/object\n"
         )
     )
 }
