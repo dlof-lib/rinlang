@@ -36,6 +36,7 @@ inline Color colorForKind(StrandKind k) {
         case StrandKind::BADGE:  return themeRegistry().active().primary;
         case StrandKind::ICON:   return themeRegistry().active().text; // a plain glyph reads as text-toned by default
         case StrandKind::ICONBUTTON: return themeRegistry().active().primary; // same default as Button
+        case StrandKind::OBJECT: return themeRegistry().active().surface; // §21: Card-like panel
         default: return themeRegistry().active().background;
     }
 }
