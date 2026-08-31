@@ -7,6 +7,7 @@
 #include "../rin_parser.h"
 #include "rin_loom.h"
 #include "rin_loom_tokens.h"
+#include "rin_loom_object.h"
 #include <stdexcept>
 
 namespace loom {
@@ -47,6 +48,7 @@ inline PipelineResult runColdPipeline(const std::string& source) {
         // Rin Loom: register any @theme=... blocks (Pattern Book) before the Fabric is built,
         // so Strand colors resolve against the right active theme from the very first paint.
         registerThemesFromProgram(program, result.warp);
+        registerObjectsFromProgram(program, result.warp); // §21: Object Inspector source
         std::shared_ptr<rin::ViewStmt> root;
         for (auto& stmt : program) {
             if (auto v = std::dynamic_pointer_cast<rin::ViewStmt>(stmt)) { root = v; break; }
@@ -57,6 +59,7 @@ inline PipelineResult runColdPipeline(const std::string& source) {
         result.program = program;
         result.fabric = buildFabric(root, result.warp, result.subs, "", 0);
         applyBannerConveniences(result.fabric, result.warp, result.subs);
+        applyObjectConveniences(result.fabric); // §21: source= -> title + field rows
         result.ok = true;
     } catch (rin::RinError& e) {
         result.ok = false; result.errorMessage = e.message; result.errorLine = e.line;
@@ -112,6 +115,7 @@ inline PipelineResult runColdPipelineForContainer(const std::string& source, con
             }
         }
         registerThemesFromProgram(*body, result.warp);
+        registerObjectsFromProgram(*body, result.warp); // §21: Object Inspector source
         std::shared_ptr<rin::ViewStmt> root;
         for (auto& stmt : *body) {
             if (auto v = std::dynamic_pointer_cast<rin::ViewStmt>(stmt)) { root = v; break; }
@@ -122,6 +126,7 @@ inline PipelineResult runColdPipelineForContainer(const std::string& source, con
         result.program = program; // البرنامج الكامل يبقى محفوظاً (Needle قد يحتاج دوال أعلى المستوى)
         result.fabric = buildFabric(root, result.warp, result.subs, "", 0);
         applyBannerConveniences(result.fabric, result.warp, result.subs);
+        applyObjectConveniences(result.fabric); // §21: source= -> title + field rows
         result.ok = true;
     } catch (rin::RinError& e) {
         result.ok = false; result.errorMessage = e.message; result.errorLine = e.line;
@@ -151,6 +156,9 @@ inline std::vector<Patch> runHotPipeline(PipelineResult& state, const std::strin
             }
         }
         registerThemesFromProgram(program, state.warp);
+        registerObjectsFromProgram(program, state.warp); // §21: keep registry fresh on hot edits;
+        // note this does NOT re-synthesize an already-built Object Strand's rows -- same documented
+        // limitation as applyBannerConveniences above (only the next cold build/Run picks it up).
         std::shared_ptr<rin::ViewStmt> root;
         for (auto& stmt : program) {
             if (auto v = std::dynamic_pointer_cast<rin::ViewStmt>(stmt)) { root = v; break; }
