@@ -472,4 +472,45 @@ struct ThemeStmt : Stmt {
     std::vector<ViewAttr> attrs; // يعاد استخدام ViewAttr (key/value/line) نفسه بدل بنية مكررة
 };
 
+// ---- Call-style object literal ----
+// .object("user01")
+//     name("ABOO");
+//     age(19);
+//     online(true);
+//     image:("img.png");     -> الشكل المُنمَّط (typed) `field:(value)` مطابق وظيفياً لـ `field(value)`
+//     number:();              -> بلا وسيطة => قيمة الحقل تكون nil
+//     container.();            -> (اختياري) يربط هذا الكائن بسجل عام (objectRegistry في المفسّر)
+//                                  بحيث يمكن الوصول إليه لاحقاً من أي مكان عبر نفس المعرّف، تماماً
+//                                  كآلية link.id للحاويات، وهو ما يجعل view.print/object("user01")
+//                                  قادراً على إيجاده حتى خارج النطاق الذي أُنشئ فيه.
+// .end/object
+//
+// ملاحظة: هذا شكل مختلف تماماً عن `.object=text` (انظر أعلاه، لا يزال صالحاً بلا أي تغيير)؛
+// التمييز بينهما يحدث في المحلل النحوي عبر التوكن التالي مباشرة بعد `.object`: '=' للشكل القديم،
+// '(' لهذا الشكل الجديد.
+//
+// وقت التنفيذ: يُبنى كائن من نوع Value::MAP من كل أزواج (field, value) بالترتيب المكتوب، ويُعرَّف
+// كمتغيّر باسم المعرّف (id) في النطاق الحالي (تماماً كـ let)، بحيث `print user01;` يعمل مباشرة بعد
+// `.object("user01") ... .end/object` في نفس الملف/النطاق.
+struct ObjectFieldCall {
+    std::string name;   // اسم الحقل، مثال: "name", "age", "image", "number"
+    bool typed = false;  // true عند الكتابة بصيغة `field:(value)` بدل `field(value)` (بلا فرق دلالي)
+    ExprPtr value;        // قد تكون فارغة (nullptr) لصيغة `field();` بلا وسيطة => قيمة الحقل nil
+    int line = 0;
+};
+struct ObjectLiteralStmt : Stmt {
+    std::string id;                       // النص الذي مُرِّر إلى .object("...")
+    std::vector<ObjectFieldCall> fields;
+    bool linkToContainer = false;         // true إن ظهرت `container.();` داخل الجسم
+};
+
+// view.print/object(expr);
+// معاينة حيّة (live preview) لكائن في الكونسول: يقبل expr إما نصاً (معرّف id سُجِّل مسبقاً عبر
+// `container.();` داخل `.object("id") ... .end/object`) أو قيمة MAP مباشرة (مثال: نتيجة
+// `.object(...)` مُعرَّفة كمتغيّر، أو أي قاموس آخر). لا يُنشئ كائناً جديداً بذاته؛ فقط يعرض ما هو
+// موجود بالفعل بتهيئة بطاقة معاينة متعددة الأسطر، مسبوقة برمز 🖼️ يلتقطه RinConsoleFormatter.kt.
+struct ViewPrintObjectStmt : Stmt {
+    ExprPtr target;
+};
+
 } // namespace rin
