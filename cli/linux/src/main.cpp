@@ -26,6 +26,7 @@
 #include "rin_interpreter.h"
 #include "diagnostics/diagnostic_renderer.h"
 #include "diagnostics/source_manager.h"
+#include "pkg/cli_pkg.h"
 
 #include <iostream>
 #include <fstream>
@@ -192,6 +193,7 @@ void printUsage() {
         "Rin Language CLI - v" << kVersion << "\n\n"
         "الاستخدام:\n"
         "  rin new <name> [--template console]   إنشاء مشروع Rin جديد\n"
+        "  rin pkg <command> [...]                RinPM: مدير حزم Rin (rin pkg --help)\n"
         "  rin build [file] [-o out] [--release]  بناء تنفيذي أصلي (عبر rinc)\n"
         "  rin run [file]                         تشغيل برنامج Rin\n"
         "  rin check <file> [--format=plain|short|json|lsp]\n"
@@ -633,6 +635,8 @@ int main(int argc, char** argv) {
             return 0;
         }
         if (cmd == "--help" || cmd == "-h") { printUsage(); return 0; }
+
+        if (cmd == "pkg") return rinpm::cli::run(rest, kVersion);
 
         if (cmd == "new") return cmdNew(rest.empty() ? "" : rest[0]);
         if (cmd == "build") return cmdBuild(rest);
