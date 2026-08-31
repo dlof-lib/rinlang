@@ -182,6 +182,12 @@ object RinSnippets {
                 "    name(\"...\");\n" +
                 "    container.();\n" +
                 ".end/object\n"
+        ),
+        Snippet(
+            "@view.Object (معاينة حيّة لكائن في Loom)",
+            "@view.Object=$CURSOR_MARKER\n" +
+                "    source=\"user01\";\n" +
+                ".end/view\n"
         )
     )
 }
