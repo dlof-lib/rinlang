@@ -52,6 +52,16 @@ enum class StrandKind {
     // spec §36/§40 asks for.
     ICON, ICONBUTTON,
 
+    // §21: Object Inspector. `@view.Object=name  source="user01"; .end/view` renders a live,
+    // read-only card for a `.object("user01") ... container.(); .end/object` value (or
+    // `@Object=name`) registered in loom::objectLiteralRegistry() — the Loom-side counterpart of
+    // the console-only `view.print/object(...)` statement (rin_interpreter.cpp), now wired into
+    // the actual Fabric/Loom/Dye pipeline instead of stdout. Same naming note as BOX above: the
+    // tag "Object" here is a *view* Strand kind, grammatically distinct from the data-literal
+    // `@Object=`/`.object()` construct it reads from (matched by an entirely different parser
+    // path, see viewDeclaration() vs objectLiteralStatement() in rin_parser.cpp) — no collision.
+    OBJECT,
+
     CUSTOM
 };
 inline StrandKind strandKindFromTag(const std::string& tag) {
@@ -100,6 +110,7 @@ inline StrandKind strandKindFromTag(const std::string& tag) {
     if (tag == "Tooltip" || tag == "tooltip") return StrandKind::TOOLTIP;
     if (tag == "Icon" || tag == "icon") return StrandKind::ICON;
     if (tag == "IconButton" || tag == "iconbutton" || tag == "iconButton") return StrandKind::ICONBUTTON;
+    if (tag == "Object" || tag == "object") return StrandKind::OBJECT;
 
     return StrandKind::CUSTOM; // resolved via Bolt (plugin) registry — see architecture doc §18
 }
@@ -143,6 +154,7 @@ inline std::string strandKindName(StrandKind k) {
         case StrandKind::TOOLTIP: return "Tooltip";
         case StrandKind::ICON: return "Icon";
         case StrandKind::ICONBUTTON: return "IconButton";
+        case StrandKind::OBJECT: return "Object";
 
         default: return "Custom";
     }
