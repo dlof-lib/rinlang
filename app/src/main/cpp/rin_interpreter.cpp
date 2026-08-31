@@ -3782,6 +3782,54 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
         return;
     }
 
+    if (auto s = std::dynamic_pointer_cast<ObjectLiteralStmt>(stmt)) {
+        auto m = std::make_shared<MapData>();
+        for (const auto& f : s->fields) {
+            Value v = f.value ? evaluate(f.value, env) : Value::nil();
+            m->push_back({Value::string(f.name), v});
+        }
+        Value objVal = Value::makeMap(m);
+        env->define(s->id, objVal);
+        if (s->linkToContainer) {
+            objectRegistry[s->id] = objVal;
+        }
+        output << "🧩 .object(\"" << s->id << "\") -> " << objVal.toDisplayString()
+               << (s->linkToContainer ? "  (🔗 container.())" : "") << "\n";
+        return;
+    }
+
+    if (auto s = std::dynamic_pointer_cast<ViewPrintObjectStmt>(stmt)) {
+        Value target = evaluate(s->target, env);
+        Value objVal;
+        std::string label;
+        if (target.type == Value::Type::STRING) {
+            auto it = objectRegistry.find(target.str);
+            if (it == objectRegistry.end()) {
+                throw diagErr(diag::Code::E0035_RuntimeError, s->line,
+                    "لا يمكن تنفيذ view.print/object(\"" + target.str + "\"): لا يوجد كائن مسجَّل "
+                    "بهذا المعرّف — يجب أن يحتوي جسم '.object(\"" + target.str + "\")' على 'container.();'");
+            }
+            objVal = it->second;
+            label = target.str;
+        } else if (target.type == Value::Type::MAP) {
+            objVal = target;
+        } else {
+            throw diagErr(diag::Code::E0004_InvalidType, s->line,
+                "'view.print/object': يتوقّع معرّفاً نصياً (مسجَّلاً عبر container.();) أو كائناً "
+                "(map) مباشرة، لكن وُجد نوع " + target.typeName());
+        }
+        output << "🖼️ ┌─ object preview" << (label.empty() ? "" : (" \"" + label + "\"")) << "\n";
+        if (objVal.type == Value::Type::MAP) {
+            for (const auto& kv : *objVal.map) {
+                output << "🖼️ │ " << kv.first.toDisplayString() << ": " << kv.second.toDisplayString() << "\n";
+            }
+        } else {
+            output << "🖼️ │ " << objVal.toDisplayString() << "\n";
+        }
+        output << "🖼️ └─\n";
+        return;
+    }
+
     if (auto s = std::dynamic_pointer_cast<LinkStmt>(stmt)) {
         std::string target = s->target;
         bool byId = !s->byId.empty();
