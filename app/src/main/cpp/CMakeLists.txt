@@ -29,6 +29,16 @@ add_library(
         # ومرسومة عبر Loom/Dye، ويُعرَّض إلى Kotlin عبر jni_bridge.cpp -> RinEngine.kt.
         rin_c_api.cpp
         loom/rin_loom_c_api.cpp
+        # clc/: مكتبة CLC (Rin Compact Library Container، .rcl) — مستقلة تماماً عن باقي المحرّك،
+        # مربوطة فقط عبر natives خام في rin_interpreter.cpp (container.open/close، library.import/
+        # export؛ انظر registerNatives()/invokeCallee() هناك وdocs/RIN_INTEGRATION.md في مستودع
+        # rin-clc الأصلي لتفاصيل صيغة .rcl والتصميم).
+        clc/clc_container.cpp
+        clc/clc_compress.cpp
+        clc/clc_security.cpp
+        clc/clc_rin_opt.cpp
+        clc/clc_zip_import.cpp
+        clc/sha256.cpp
 )
 
 # rinc: مترجم Rin الأصلي (native compiler) — هدف مستقل تماماً عن مكتبة rinengine
@@ -55,6 +65,14 @@ add_executable(
         diagnostics/source_manager.cpp
         diagnostics/diagnostic_engine.cpp
         diagnostics/diagnostic_renderer.cpp
+        # rin_interpreter.cpp أعلاه يتضمّن clc/clc_container.h (natives library.import/export)،
+        # فيحتاج rincheck نفس مصادر clc/ لتُبنى/تُربَط، رغم أن rincheck لا يُنفِّذ فعلياً (lex+parse فقط).
+        clc/clc_container.cpp
+        clc/clc_compress.cpp
+        clc/clc_security.cpp
+        clc/clc_rin_opt.cpp
+        clc/clc_zip_import.cpp
+        clc/sha256.cpp
 )
 
 # rincheck sources live under tools/, while Rin headers (rin_lexer.h,
