@@ -1,0 +1,58 @@
+// ============================================================================
+//  examples/object_loom_preview_demo.rin
+//  يربط ثلاث ميزات ببعضها في نفس الملف:
+//
+//    1) .object("id") ... container.(); .end/object   -> كائن بيانات عادي (rin_ast.h)
+//    2) view.print/object(...)                         -> معاينة حيّة نصّية في الكونسول (موجودة أصلاً)
+//    3) @view.Object=name  source="id";  .end/view      -> معاينة حيّة *مرئية* داخل محرّك Loom
+//       (جديد: loom/rin_loom_object.h) — تُبنى كبطاقة (Card) فيها عنوان وسطر لكل حقل، عبر خط
+//       أنابيب Fabric/Loom/Dye الحقيقي نفسه الذي تمر منه بقية عناصر @view (Text/Card/Column...)،
+//       وليس مساراً منفصلاً.
+//
+//  شغّل هذا الملف عبر "Live Preview" في التطبيق (أو tools/rin_loom_run render <file>) لرؤية بطاقة
+//  الكائن مرسومة فعلياً داخل إطار الجهاز، وليس فقط كنص في الكونسول.
+// ============================================================================
+
+.object("user01")
+    name("ABOO");
+    age(19);
+    online(true);
+    container.();   // يربط الكائن بسجل عام — كل من view.print/object و@view.Object يحتاجانه
+.end/object
+
+.object("user02")
+    name("Sara");
+    age(27);
+    online(false);
+    image:("avatar.png");
+    container.();
+.end/object
+
+print "-- console preview (existing) --";
+view.print/object("user01");
+
+@view.Column=root
+    padding=16;
+    gap=16;
+
+    @view.Text=heading
+        text="Loom Object Inspector";
+        size="title";
+    .end/view
+
+    // كل بطاقة هنا حيّة فعلاً في معاينة Loom: عنوان + سطر لكل حقل، مبنيّة من نفس الكائنات
+    // المسجّلة أعلاه عبر container.();
+    @view.Object=user01_card
+        source="user01";
+    .end/view
+
+    @view.Object=user02_card
+        source="user02";
+        title="Sara's Profile";
+    .end/view
+
+    // معرّف غير مسجَّل عمداً: يُظهر رسالة تحذير داخل المعاينة بدل صندوق فارغ (احتواء أخطاء، §16)
+    @view.Object=missing_card
+        source="user03";
+    .end/view
+.end/view
