@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- شاشة "المزيد": تجمع باقي أقسام التطبيق التي لا تظهر في الشريط السفلي الرئيسي،
-     مرتّبة بالترتيب: الملفات، المكتبات، منفّذ الأنابيب (RinFlow)، متجر الإضافات، الإعدادات. -->
+     مرتّبة بالترتيب: الملفات، المكتبات، CLC (حاويات .rcl)، منفّذ الأنابيب (RinFlow)، متجر الإضافات، الإعدادات. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
@@ -127,6 +127,64 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="2dp"
                         android:text="@string/more_row_libraries_subtitle"
+                        android:textColor="@color/rin_on_toolbar_dim"
+                        android:textSize="12sp" />
+                </LinearLayout>
+
+                <ImageView
+                    android:layout_width="14dp"
+                    android:layout_height="14dp"
+                    android:src="@drawable/ic_chevron_end"
+                    android:tint="@color/rin_on_toolbar_dim"
+                    android:contentDescription="@null" />
+            </LinearLayout>
+
+            <!-- 2.5 CLC (حاويات .rcl) -->
+            <LinearLayout
+                android:id="@+id/rowClc"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:background="@drawable/bg_list_card"
+                android:clickable="true"
+                android:focusable="true"
+                android:padding="14dp"
+                android:layout_marginBottom="10dp">
+
+                <FrameLayout
+                    android:layout_width="38dp"
+                    android:layout_height="38dp"
+                    android:background="@drawable/bg_section_icon_circle">
+                    <ImageView
+                        android:layout_width="18dp"
+                        android:layout_height="18dp"
+                        android:layout_gravity="center"
+                        android:src="@drawable/ic_log_container"
+                        android:tint="@color/rin_accent"
+                        android:contentDescription="@null" />
+                </FrameLayout>
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:layout_marginStart="12dp"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/clc_screen_title"
+                        android:textColor="@color/rin_on_toolbar"
+                        android:textSize="15sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:text="@string/more_row_clc_subtitle"
                         android:textColor="@color/rin_on_toolbar_dim"
                         android:textSize="12sp" />
                 </LinearLayout>
