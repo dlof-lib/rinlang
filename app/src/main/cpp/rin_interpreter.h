@@ -579,6 +579,14 @@ private:
     // نفسه، سواء عبر "../" متكررة أو مسار مطلق صريح) لمنع أي كود Rin (خصوصاً مكتبة مستوردة من مصدر
     // غير موثوق) من الوصول لملفات خارج مجلد المشروع المعزول. line اختياري لرسالة خطأ أوضح إن توفّر.
     std::string resolvePath(const std::string& rawPath, int line = -1) const;
+    // ---- تكامل RinPM (Package Manager) مع @import ----
+    // يُستدعى فقط بعد فشل البحث عن اسم "عارٍ" كمكتبة مدمجة أو كملف في lib/ الخاص بالمشروع.
+    // يبحث عن pkgName في rin.lock الخاص بالمشروع الحالي (basePath)، ثم يقرأ مصدرها الفعلي من
+    // الكاش العالمي لـ RinPM (~/.rin/packages/<name>/<version>/src/...) الذي تملؤه فعلياً
+    // `rin pkg install`. هذا هو نقطة التكامل الوحيدة بين محرك اللغة وطبقة الحزم المستقلة
+    // (cli/linux/src/pkg/*) — عمداً بلا أي #include لملفات تلك الطبقة هنا، حفاظاً على استقلالية
+    // محرك اللغة (يُبنى أيضاً لأندرويد/macOS/ويندوز حيث لا معنى لمسارات RinPM الخاصة بلينكس CLI).
+    bool tryLoadInstalledPackageEntry(const std::string& pkgName, std::string& sourceOut) const;
     void ensureParentDir(const std::string& fullPath) const;            // ينشئ مجلدات الأب إن لزم (mkdir -p يدوياً)
     std::string buildSaveDocument(const std::string& key, const EnvPtr& containerEnv,
                                    ContainerKind kind, bool simplified) const; // يبني نص .rin قابل لإعادة القراءة من متغيرات حاوية
