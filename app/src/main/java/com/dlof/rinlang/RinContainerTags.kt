@@ -24,7 +24,10 @@ object RinContainerTags {
         "container.table", "container.doc", "container.object", "Object", "container.open/object",
         "container.portal", "portal", "container.block", "block", "container.sticker", "sticker",
         "container.aukt", "AUKT", "container.chatbot", "chatbot",
-        "container.everything", "Everything", "pipe", "data", "api",
+        // make (سابقاً "Everything"؛ الاسمان القديمان "Everything"/"container.everything" ما زالا
+        // مقبولين كاسم بديل للتوافق العكسي): ثلاث صيغ متكافئة تماماً "make"/"Rin.make"/"container.make".
+        "container.everything", "Everything", "container.make", "make", "Rin.make",
+        "pipe", "data", "api",
         "Containers.Group", "Volume"
     )
 
@@ -191,11 +194,11 @@ object RinSnippets {
                 ".end/view\n"
         ),
         Snippet(
-            "Everything (أنشئ/برمِج أي شيء)",
-            "@Everything=$CURSOR_MARKER\n" +
+            "make (أنشئ/برمِج أي شيء — سابقاً Everything)",
+            "@make=$CURSOR_MARKER\n" +
                 "    fun greet(name) { return \"Hello \" + name; }\n" +
-                "    print greet(\"World\");\n" +
-                ".end/Everything\n"
+                "    show greet(\"World\");\n" +
+                ".end/make\n"
         )
     )
 }
