@@ -1,34 +1,67 @@
-# RINZIP v2 — ضغط ZIP حقيقي (Deflate عبر zlib native)
+# Rin — Library Loader UI (مربوطة فعليًا بـ @import، ومُختبَرة)
 
-تم اختبار كل هذا فعلياً: بناء + تشغيل + قراءة بـ `unzip` النظامي + قراءة أرشيف
-أنشأه أمر `zip` الحقيقي — انظر تفاصيل الاختبار في الرد المرافق.
+كل الملفات هنا بمسارات مطابقة تمامًا لمستودعك — انسخها فوق الأصلية مباشرة.
 
-## الملفات في هذه الحزمة (انسخها فوق نفس المسارات في rinlang-main)
+## الحالة: **مربوطة ومُختبَرة على المفسّر الحقيقي**، لا محاكاة
 
-- `lib/rinzip.og.rin` — المكتبة الجديدة (تُضغط تلقائياً بـ Deflate، وتتراجع إلى
-  Store تلقائياً إن لم يكن الضغط مفيداً). إضافات: `rzFileEntryStored()` لإجبار
-  Store صراحة (للمحتوى الثنائي المضغوط أصلاً كالصور)، وحقول `originalBytes`/
-  `ratio` في نتيجة `rzSaveArchive`.
-- `app/src/main/cpp/rin_stdlib_libs.h` — نفس المكتبة أعلاه مُضمَّنة (النسخة
-  المطابقة تماماً، طبقاً لتعليق الملف الأصلي "نُسخة طبق الأصل").
-- `app/src/main/cpp/rin_interpreter.cpp` — أضاف native جديدين فقط:
-  `zlibDeflateRaw(bytes)` و`zlibInflateRaw(compressed, expectedSize)`، بضغط
-  DEFLATE خام (windowBits=-15) مطابق تماماً لما تتوقّعه صيغة ZIP الرسمية
-  (method=8). أُضيف أيضاً `#include <zlib.h>`.
-- `app/src/main/cpp/CMakeLists.txt` — ربط `libz` (متوفّرة دوماً في NDK sysroot،
-  لا حاجة لأي تنزيل/توريد) لهدفي `rinengine` و`rincheck`.
-- `cli/linux/CMakeLists.txt`, `cli/macos/CMakeLists.txt`,
-  `cli/windows/CMakeLists.txt`, `bindings/CMakeLists.txt` — نفس الربط عبر
-  `find_package(ZLIB REQUIRED)` القياسي لبناء سطر الأوامر خارج أندرويد
-  (لينكس/macOS تأتي بـ zlib النظام عادة؛ ويندوز يحتاج vcpkg — ملاحظة داخل الملف).
+كل سيناريو أدناه بُني وشُغِّل فعليًا (g++) على `rin_interpreter.cpp` الحقيقي، وليس على عرض توضيحي منفصل:
 
-## لا حاجة لأي تعديل آخر
-لا JNI جديد، لا تبعيات خارجية، لا تغيير على `jni_bridge.cpp` أو Kotlin —
-الإضافة native خالصة داخل نفس `rin_interpreter.cpp` بنفس أسلوب `natives[...]`
-الموجود أصلاً (crc32/adler32/readFile...)، وlibz مكتبة نظام موجودة أصلاً على كل
-جهاز أندرويد عبر NDK.
+1. **الافتراضي (بلا أي علم جديد)** — تأكدت أن الناتج **مطابق حرفيًا** لما كان قبل هذه الميزة.
+2. **`--import-progress`** — استيراد ناجح، ينهي بـ `✓ math loaded (embedded)`.
+3. **استيراد مكرر** — يعرض `↺ math already imported (skipped)`.
+4. **مكتبة غير موجودة** — يفشل بشكل صحيح دون تجميد الشريط، نفس رسالة الخطأ الأصلية.
+5. **استيراد متداخل حقيقي** (مكتبة تستورد مكتبتين فرعيتين من القرص فعليًا) — الشجرة تُبنى تدريجيًا من التنفيذ الفعلي:
+   ```
+   Importing parent
+   [██████████████------] 70%  Resolving dependencies...
 
+   Loading:
+   └── child_a   ...
 
-## RelyRIN
+   [████████████████████] 100%
+   ✓ child_a loaded
 
-مكتبة `lib/relyRIN.og.rin` للمعاينة الحية لـ Markdown، التنسيق والوسائط وYouTube. انظر `RELYRIN.md` و`examples/relyRIN_live_preview.rin`.
+   Loading:
+   ├── child_a   ✓
+   └── child_b   ...
+   ...
+   ```
+
+## الملفات
+
+| الملف | التغيير |
+|---|---|
+| `app/src/main/cpp/loader_ui/library_loader_ui.h/.cpp` | الوحدة نفسها (جديدة) |
+| `app/src/main/cpp/loader_ui/demo_main.cpp` | عرض توضيحي مستقل (جديد، اختياري) |
+| `app/src/main/cpp/rin_interpreter.h/.cpp` | إضافة `setImportUISink/setImportUIMode` + ربط المراحل الثمانية داخل `ImportStmt` الفعلي |
+| `app/src/main/cpp/CMakeLists.txt` | إضافة `loader_ui/library_loader_ui.cpp` لأهداف `rinengine` و`rincheck` (أندرويد) |
+| `cli/linux/CMakeLists.txt`, `cli/macos/CMakeLists.txt`, `cli/windows/CMakeLists.txt` | نفس الإضافة لكل CLI |
+| `cli/linux/src/main.cpp`, `cli/macos/src/main.cpp`, `cli/windows/src/main.cpp` | علم `--import-progress` جديد، اختياري تمامًا |
+
+## الاستخدام
+
+```bash
+rin run file.rin --import-progress   # linux
+rin file.rin --import-progress       # macos/windows
+rin -c "..." --import-progress       # يعمل مع -c وcheck أيضًا
+```
+
+بلا العلم = **نفس السلوك القديم تمامًا**، بلا أي فرق في الناتج أو الأداء (`importUiSink_` يبقى `nullptr`).
+
+## نقاط صدق (لم أخفِها)
+
+- **لا بث حي حقيقي على مستوى كل مرحلة لأي مستهلك خارجي بعد.** آلية `setStreamSink()` الحالية في `run()` تبث على مستوى "كل statement علوي كامل"، وربط كل مرحلة بها مباشرة كان سيُرسل نفس البايتات مرتين (اكتشفته وتراجعت عنه أثناء التنفيذ). النتيجة: الشريط يظهر بكامل نصّه (بما فيه كل رموز `\r`) دفعة واحدة في نهاية عبارة `@import`، وليس متحركًا حرفيًا بفواصل زمنية حقيقية — لأن مراحل تحليل/تحميل مكتبة مضمّنة أو من القرص تستغرق مايكروثانية فعليًا، لا ثوانٍ. هذا سلوك **صحيح وغير مخادع** (لا padding وهمي)، لكنه ليس "أنيميشن حي" بالمعنى البصري لمستهلك خارجي بعد. يصبح هذا مفيدًا بصريًا حقيقةً في سياق له زمن I/O فعلي (تنزيل حزمة RinPM عبر الشبكة).
+- **شجرة التبعيات محدودة لمستوى واحد** (`depth==1` تحت أي مكتبة أعلى مستوى). أحفاد أعمق (مستوى 2+) لا يظهرون كصف شجرة مستقل، لكن شريطهم الخاص يعمل بشكل طبيعي.
+- **RinPM (`rin pkg install`) لم تُربط** — لهذا مراحل حقيقية مختلفة (Resolve→Fetch→Extract→Register)، خارج نطاق هذا الربط بـ `@import`.
+
+## البناء اليدوي (بلا CMake) للتجربة السريعة
+
+```bash
+CORE=app/src/main/cpp
+g++ -std=c++17 -I "$CORE" cli/linux/src/main.cpp \
+  "$CORE"/rin_lexer.cpp "$CORE"/rin_parser.cpp "$CORE"/rin_interpreter.cpp \
+  "$CORE"/loader_ui/library_loader_ui.cpp "$CORE"/rin_http.cpp \
+  "$CORE"/diagnostics/*.cpp "$CORE"/clc/*.cpp \
+  cli/linux/src/pkg/*.cpp -lz -o rin
+./rin run yourfile.rin --import-progress
+```
