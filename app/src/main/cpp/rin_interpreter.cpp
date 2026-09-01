@@ -3570,6 +3570,14 @@ std::string Interpreter::run(const std::vector<StmtPtr>& statements) {
     return output.str();
 }
 
+void Interpreter::setImportUIMode(loaderui::Mode mode) {
+    if (mode == loaderui::Mode::Quiet) {
+        importUiSink_.reset(); // مطابق تماماً لعدم استدعاء setImportUISink إطلاقاً
+    } else {
+        importUiSink_ = std::make_shared<loaderui::ConsoleBarSink>(output);
+    }
+}
+
 void Interpreter::executeBlock(const std::vector<StmtPtr>& statements, EnvPtr env) {
     for (const auto& s : statements) execute(s, env);
 }
@@ -3946,6 +3954,30 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
         }
         const std::string& rawPath = pathVal.str;
 
+        // ---- Library Loader UI: جلسة اختيارية لهذا الاستيراد بعينه (انظر
+        // app/src/main/cpp/loader_ui/library_loader_ui.h). importUiSink_ == nullptr (الافتراضي)
+        // يعني uiSession == nullptr، فتصبح uiStage(...) أدناه no-op كاملة بلا أي تكلفة أو تغيير
+        // على الناتج — لا فرق إطلاقاً عن الكود قبل إضافة هذه الوحدة ما لم يُستدعَ setImportUIMode/
+        // setImportUISink صراحة. importDepth_ الحالي (قبل الزيادة أدناه) هو عمق هذا الاستيراد:
+        // 0 لاستيراد أعلى مستوى، >0 إن كان تبعية داخل مكتبة أخرى قيد التحميل حالياً (يُستخدَم لعرض
+        // شجرة كمثال rin.ui: core/layout/paint/widgets).
+        //
+        // ملاحظة streaming: كل نص يكتبه uiSession يذهب إلى [output] كأي طباعة أخرى في هذا الملف؛
+        // لا نستدعي streamSink_ من هنا مباشرة عمداً — البث الحي (setStreamSink) يعمل بالفعل على
+        // مستوى "كل statement علوي كامل" في حلقة run() (انظر تعليقها هناك)، فيلتقط تلقائياً كل ما
+        // كتبه uiSession ضمن نفس الفرق قبل/بعد الحالي دون أي تدخّل هنا. استدعاء streamSink_ من هذا
+        // الموضع أيضاً كان يعني إرسال نفس البايتات مرتين لأي مستهلك خارجي (bug تم تفاديه عمداً).
+        std::unique_ptr<loaderui::LoadSession> uiSession;
+        if (importUiSink_) {
+            uiSession = std::make_unique<loaderui::LoadSession>(importUiSink_, rawPath, importDepth_);
+        }
+        auto uiStage = [&](loaderui::LoadStage st, const std::string& detail = "") {
+            if (uiSession) uiSession->stage(st, detail);
+        };
+        auto uiFinish = [&](loaderui::LoadOutcome outcome) {
+            if (uiSession) uiSession->finish(std::move(outcome));
+        };
+
         // ---- تقوية مفهوم lib/*.og.rin: اسم مكتبة "عارٍ" بلا مسار ولا امتداد (مثل @import "math";
         //      أو @import "myhelpers";) يُفهم تلقائياً على أنه lib/<name>.og.rin — سواء كانت مكتبة
         //      مدمجة قياسية أو مكتبة مستخدم حقيقية أنشأها/رفعها المستخدم من قسم "المكتبات" في المحرر
@@ -3959,12 +3991,14 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
             if (!hasExt) libPath += kLibExt;
             libPath = "lib/" + libPath;
         }
+        uiStage(loaderui::LoadStage::Resolving);
 
         // 1) أولاً: هل هذا اسم مكتبة مدمجة داخل المفسّر نفسه (مثل lib/data.og.rin)؟
         //    هذا يجعل @import يعمل مباشرة على أي منصة (بما فيها أندرويد) دون أي ملفات إضافية على القرص.
         const auto& embedded = embeddedRinLibraries();
         auto libIt = embedded.find(libPath);
         bool fromEmbedded = (libIt != embedded.end());
+        uiStage(loaderui::LoadStage::Locating);
 
         std::string source;
         if (fromEmbedded) {
@@ -3993,6 +4027,7 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
                     }
                 }
                 if (!foundAsPackage) {
+                    uiFinish(loaderui::LoadOutcome{false, false, false, "module not found: `" + rawPath + "`"});
                     auto d = diagErr(diag::Code::E0029_ModuleNotFound, s->line, "module not found: `" + rawPath + "`");
                     d.diagnostic->message = "module not found: `" + rawPath + "`";
                     d.diagnostic->withReason(
@@ -4004,12 +4039,17 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
                 }
             }
         }
+        uiStage(loaderui::LoadStage::Reading);
 
         // منع إعادة استيراد نفس المكتبة بنفس أسلوب الاستيراد (مباشر أو باسم مستعار) أكثر من مرة
         // في نفس التشغيل، تماماً كأنظمة الوحدات (modules) المعتادة.
         std::string importKey = libPath + (s->alias.empty() ? "" : ("#as:" + s->alias));
         if (importedPaths.count(importKey)) {
-            output << "↺ @import: \"" << libPath << "\" مستورَدة مسبقاً بالفعل (تم تجاهل التكرار)\n";
+            if (uiSession) {
+                uiFinish(loaderui::LoadOutcome{true, fromEmbedded, /*fromCache=*/true, ""});
+            } else {
+                output << "↺ @import: \"" << libPath << "\" مستورَدة مسبقاً بالفعل (تم تجاهل التكرار)\n";
+            }
             return;
         }
 
@@ -4020,12 +4060,21 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
             Parser importedParser(importedTokens, libPath);
             importedStatements = importedParser.parse();
         } catch (RinError& e) {
+            uiFinish(loaderui::LoadOutcome{false, fromEmbedded, false, e.message});
             auto d = diagErr(diag::Code::E0028_ImportError, s->line, "@import: error parsing library \"" + libPath + "\"");
             d.diagnostic->withReason("line " + std::to_string(e.line) + " of \"" + libPath + "\": " + e.message);
             if (e.diagnostic) d.diagnostic->withCause(diag::renderShort(*e.diagnostic));
             throw d;
         }
+        uiStage(loaderui::LoadStage::Parsing);
 
+        // ملاحظة دقة: Dependencies/Registering/Initializing الثلاثة تحدث فعلياً معاً داخل نداء
+        // executeBlock واحد أدناه (تنفيذ المكتبة يشمل أي @import متداخلة بداخلها *و* تعريف كل
+        // fun/let أعلى مستوى في نفس الوقت) — لا يوجد فاصل تنفيذي حقيقي بين الثلاثة لمسار الدمج
+        // المباشر تحديداً. تُعرَض كثلاث مراحل UI متتالية (70%/85%/95%) لتطابق تصميم الشريط
+        // المطلوب، لا كادّعاء بأن كل واحدة نقطة تنفيذ منفصلة فعلياً هنا.
+        uiStage(loaderui::LoadStage::Dependencies, "Resolving dependencies...");
+        importDepth_++; // أي @import تُنفَّذ أثناء executeBlock أدناه هي تبعية لهذه المكتبة (عمق+1)
         try {
             if (s->alias.empty()) {
                 // دمج مباشر: كل fun/let/text أعلى مستوى في المكتبة تصبح متاحة في النطاق الحالي مباشرة،
@@ -4041,16 +4090,28 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
                 if (!groupStack.empty()) groupMembers[groupStack.back()].push_back(s->alias);
             }
         } catch (RinError& e) {
+            importDepth_--;
+            uiFinish(loaderui::LoadOutcome{false, fromEmbedded, false, e.message});
             auto d = diagErr(diag::Code::E0028_ImportError, s->line, "@import: error inside library \"" + libPath + "\"");
             d.diagnostic->withReason("line " + std::to_string(e.line) + " of \"" + libPath + "\": " + e.message);
             if (e.diagnostic) d.diagnostic->withCause(diag::renderShort(*e.diagnostic));
             throw d;
         }
+        importDepth_--;
+        uiStage(loaderui::LoadStage::Registering);
+        uiStage(loaderui::LoadStage::Initializing);
+        uiStage(loaderui::LoadStage::Completed);
 
         importedPaths.insert(importKey);
-        output << (fromEmbedded ? "📦" : "📥") << " @import: تم استيراد \"" << libPath << "\""
-               << (s->alias.empty() ? "" : (" باسم '" + s->alias + "'"))
-               << (fromEmbedded ? " (مكتبة مدمجة)" : " (من القرص)") << "\n";
+        if (uiSession) {
+            // Loader UI مفعَّل: رسالة "✓ ... loaded" التي يطبعها uiFinish أدناه تغني عن سطر
+            // "📦 @import: تم استيراد..." التقليدي (نفس المعلومة، بلا ازدواجية على نفس السطر).
+            uiFinish(loaderui::LoadOutcome{true, fromEmbedded, false, ""});
+        } else {
+            output << (fromEmbedded ? "📦" : "📥") << " @import: تم استيراد \"" << libPath << "\""
+                   << (s->alias.empty() ? "" : (" باسم '" + s->alias + "'"))
+                   << (fromEmbedded ? " (مكتبة مدمجة)" : " (من القرص)") << "\n";
+        }
         return;
     }
 
