@@ -474,6 +474,9 @@ static std::string containerTagName(ContainerKind k) {
         case ContainerKind::STICKER: return "container.sticker";
         // "@chatbot=" أو "@container.chatbot=" -> دائماً "container.chatbot" موحَّدة عند الحفظ وإعادة القراءة.
         case ContainerKind::CHATBOT: return "container.chatbot";
+        // "@Everything="/"@container.everything=" توحَّد دائماً إلى "container.everything" عند
+        // الحفظ وإعادة القراءة — نفس مبدأ بقية المفاهيم أعلاه.
+        case ContainerKind::EVERYTHING: return "container.everything";
         default: return "container";
     }
 }
@@ -491,6 +494,7 @@ static std::string containerIcon(ContainerKind k) {
         case ContainerKind::BLOCK: return "🧱";
         case ContainerKind::STICKER: return "🏷️";
         case ContainerKind::CHATBOT: return "💬";
+        case ContainerKind::EVERYTHING: return "🌌";
         default: return "📦";
     }
 }
