@@ -137,5 +137,144 @@
                     android:text="@string/project_type_free_desc" />
             </LinearLayout>
         </GridLayout>
+
+        <!-- قسم "رسم الواجهة": يظهر فقط عند اختيار نوع المشروع UI (يُتحكَّم بـ visibility من
+             ProjectsActivity.selectChip). يجمع خيارات توب بار/بلا توب بار، قائمة جانبية/بلا
+             قائمة جانبية، ولون أساسي، لتُستخدم عند توليد main.rin (انظر
+             ProjectManager.UiDesignOptions + mainRinTemplateFor). -->
+        <LinearLayout
+            android:id="@+id/sectionUiDesign"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:layout_marginTop="18dp"
+            android:visibility="gone">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="8dp"
+                android:text="@string/ui_design_section_title"
+                android:textSize="12.5sp"
+                android:textColor="@color/rin_editor_hint" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="10dp"
+                android:text="@string/ui_design_section_desc"
+                android:textSize="10.5sp"
+                android:textColor="@color/rin_editor_hint" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:background="@drawable/bg_list_card"
+                android:padding="14dp">
+
+                <!-- شريط علوي: تشغيل/إيقاف -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="@string/ui_design_topbar_label"
+                            android:textColor="@color/rin_on_toolbar"
+                            android:textSize="13.5sp" />
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="@string/ui_design_topbar_desc"
+                            android:textColor="@color/rin_editor_hint"
+                            android:textSize="10.5sp" />
+                    </LinearLayout>
+
+                    <Switch
+                        android:id="@+id/switchUiTopBar"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:checked="true" />
+                </LinearLayout>
+
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:layout_marginTop="12dp"
+                    android:layout_marginBottom="12dp"
+                    android:background="@color/rin_divider" />
+
+                <!-- قائمة جانبية: تشغيل/إيقاف -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="@string/ui_design_sidebar_label"
+                            android:textColor="@color/rin_on_toolbar"
+                            android:textSize="13.5sp" />
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="@string/ui_design_sidebar_desc"
+                            android:textColor="@color/rin_editor_hint"
+                            android:textSize="10.5sp" />
+                    </LinearLayout>
+
+                    <Switch
+                        android:id="@+id/switchUiSidebar"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:checked="true" />
+                </LinearLayout>
+
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:layout_marginTop="12dp"
+                    android:layout_marginBottom="12dp"
+                    android:background="@color/rin_divider" />
+
+                <!-- الألوان: شبكة دوائر قابلة للاختيار، تُبنى برمجياً في ProjectsActivity
+                     (انظر renderColorSwatches) بدل سبعة View ثابتة هنا. -->
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="10dp"
+                    android:text="@string/ui_design_colors_label"
+                    android:textColor="@color/rin_on_toolbar"
+                    android:textSize="13.5sp" />
+
+                <LinearLayout
+                    android:id="@+id/rowUiColors"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:weightSum="6"
+                    android:gravity="center" />
+            </LinearLayout>
+        </LinearLayout>
     </LinearLayout>
 </ScrollView>
