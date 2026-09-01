@@ -2,14 +2,18 @@ package com.dlof.rinlang
 
 import android.app.AlertDialog
 import android.content.Intent
+import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.EditText
+import android.widget.LinearLayout
+import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 
@@ -86,10 +90,59 @@ class ProjectsActivity : AppCompatActivity() {
             chipFree to ProjectType.FREE
         )
 
+        // قسم "رسم الواجهة" (يظهر فقط عند اختيار نوع UI): توب بار/بلا توب بار، قائمة جانبية/بلا
+        // قائمة جانبية، ولون أساسي — تُقرأ كلها عند الضغط على "إنشاء" وتُمرَّر كـ
+        // ProjectManager.UiDesignOptions لتوليد main.rin المطابق (انظر ProjectManager.kt).
+        val sectionUiDesign: View = view.findViewById(R.id.sectionUiDesign)
+        val switchUiTopBar: Switch = view.findViewById(R.id.switchUiTopBar)
+        val switchUiSidebar: Switch = view.findViewById(R.id.switchUiSidebar)
+        val rowUiColors: LinearLayout = view.findViewById(R.id.rowUiColors)
+
+        // لوحة الألوان الأساسية المتاحة لاختيار المستخدم؛ أول لون (البنفسجي) هو الافتراضي
+        // نفسه المستخدم سابقاً في قالب UI الثابت، حتى لا يتغيّر الشكل الافتراضي لمن لا يلمس هذا الخيار.
+        val colorPalette = listOf(
+            R.color.ui_design_color_purple,
+            R.color.ui_design_color_blue,
+            R.color.ui_design_color_green,
+            R.color.ui_design_color_amber,
+            R.color.ui_design_color_pink,
+            R.color.ui_design_color_cyan
+        ).map { ContextCompat.getColor(this, it) }
+        var selectedColorIndex = 0
+
+        val swatchSizePx = (30 * resources.displayMetrics.density).toInt()
+        val swatchStrokePx = (2.5f * resources.displayMetrics.density).toInt()
+
+        fun renderColorSwatches() {
+            rowUiColors.removeAllViews()
+            colorPalette.forEachIndexed { index, color ->
+                val swatch = View(this)
+                val params = LinearLayout.LayoutParams(0, swatchSizePx, 1f).apply {
+                    val marginPx = (4 * resources.displayMetrics.density).toInt()
+                    setMargins(marginPx, 0, marginPx, 0)
+                }
+                swatch.layoutParams = params
+                swatch.background = GradientDrawable().apply {
+                    shape = GradientDrawable.OVAL
+                    setColor(color)
+                    if (index == selectedColorIndex) {
+                        setStroke(swatchStrokePx, ContextCompat.getColor(this@ProjectsActivity, R.color.rin_on_toolbar))
+                    }
+                }
+                swatch.setOnClickListener {
+                    selectedColorIndex = index
+                    renderColorSwatches()
+                }
+                rowUiColors.addView(swatch)
+            }
+        }
+        renderColorSwatches()
+
         var selectedType = ProjectType.FREE
         fun selectChip(chip: View) {
             selectedType = chips.getValue(chip)
             chips.keys.forEach { it.isSelected = it === chip }
+            sectionUiDesign.visibility = if (selectedType == ProjectType.UI) View.VISIBLE else View.GONE
         }
         chips.keys.forEach { chip -> chip.setOnClickListener { selectChip(chip) } }
         selectChip(chipFree)
@@ -99,8 +152,13 @@ class ProjectsActivity : AppCompatActivity() {
             .setView(view)
             .setPositiveButton(R.string.create) { _, _ ->
                 val name = input.text.toString()
+                val uiOptions = ProjectManager.UiDesignOptions(
+                    topBar = switchUiTopBar.isChecked,
+                    sidebar = switchUiSidebar.isChecked,
+                    primaryColor = String.format("#%06X", 0xFFFFFF and colorPalette[selectedColorIndex])
+                )
                 ProjectCreationProgressDialog(this).run(
-                    work = { ProjectManager.createProject(this, name, selectedType) },
+                    work = { ProjectManager.createProject(this, name, selectedType, uiOptions) },
                     onDone = { project, errorMessage ->
                         if (project != null) {
                             refresh()
