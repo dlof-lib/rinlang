@@ -8,6 +8,9 @@
                                 // clcContainerOpen/clcContainerClose/libraryImport/libraryExport
                                 // في registerNatives()/invokeCallee() (rin_interpreter.cpp)
                                 // وdocs/RIN_INTEGRATION.md في مستودع rin-clc الأصلي.
+#include "loader_ui/library_loader_ui.h" // Library Loader UI — اختياري تماماً وغير مفعّل افتراضياً،
+                                          // انظر setImportUISink/setImportUIMode أدناه ومعالجة
+                                          // ImportStmt في rin_interpreter.cpp.
 #include <sstream>
 #include <unordered_map>
 #include <unordered_set>
@@ -470,10 +473,28 @@ public:
     // للتوسّع). مثال: registerFlowNodeType("myCustomStage", flow::NodeType::TRANSFORM);
     void registerFlowNodeType(const std::string& fnName, flow::NodeType type) { flowNodeTypeOverrides_[fnName] = type; }
 
+    // ---- Library Loader UI (see app/src/main/cpp/loader_ui/library_loader_ui.h) ----
+    // اختياري تماماً وغير مفعَّل افتراضياً (importUiSink_ == nullptr): كل متصل حالي (rin_cli بلا
+    // أي علم جديد، rincheck، JNI bridge/RinEngine.kt، RinFlow...) يستمر بنفس الناتج بالحرف الواحد
+    // دون أي تغيير ما لم يستدعِ إحدى الدالتين التاليتين صراحة. عند التفعيل: كل مرحلة من مراحل
+    // @import الثمانية الحقيقية (Resolving..Completed، انظر ImportStmt في rin_interpreter.cpp)
+    // تُكتب إلى [output] بنفس أسلوب أي طباعة أخرى في هذا الملف، وتُدفع *فوراً* عبر setStreamSink()
+    // الحالي إن كان مضبوطاً (بث حي لكل مرحلة على حدة، وليس فقط لكل statement علوي كامل كما في
+    // مسار streaming القديم) — هذا ما يمنح الشريط شكله الحي الفعلي عند استخدامه من طرفية حقيقية.
+    void setImportUISink(std::shared_ptr<loaderui::ILoadSink> sink) { importUiSink_ = std::move(sink); }
+    // مساعد سريع: Mode::Verbose يبني ConsoleBarSink يكتب مباشرة إلى [output]، Mode::Quiet يعادل
+    // تماماً عدم ضبط أي sink إطلاقاً (nullptr) — أي نفس السلوك الافتراضي القديم بالضبط.
+    void setImportUIMode(loaderui::Mode mode);
+
 private:
     EnvPtr globals;
     std::ostringstream output;
     std::string sourceFile = "<input>"; // نظام Diagnostics — انظر setSourceFile() أعلاه
+
+    // ---- Library Loader UI state (انظر setImportUISink/setImportUIMode أعلاه) ----
+    std::shared_ptr<loaderui::ILoadSink> importUiSink_; // nullptr افتراضياً = معطَّل كلياً
+    std::size_t importDepth_ = 0; // عمق تعشيش @import الحالي (0 = استيراد أعلى مستوى، وليس تبعية
+                                   // مكتبة أخرى قيد التحميل) — يُستخدَم لعرض الشجرة (rin.ui مثلاً)
 
     // ---- Structured result state for the last run() (see hadError()/lastDiagnostic() above) ----
     std::optional<diag::Diagnostic> lastDiagnostic_;
