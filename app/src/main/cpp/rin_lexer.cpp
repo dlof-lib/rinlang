@@ -7,6 +7,10 @@ namespace rin {
 
 static const std::unordered_map<std::string, TokenType> keywords = {
     {"let", TokenType::LET},       {"print", TokenType::PRINT},
+    // 'show' مرادف إنجليزي مبسّط كامل لـ 'print' (نفس TokenType::PRINT حرفياً، فيرث كل صيغه وسماته
+    // sep=/end=/level=/... وحتى show.log(...) بلا أي كود إضافي) — جزء من عائلة الكلمات السهلة
+    // المرافقة لمفهوم make (انظر container.everything/make في rin_ast.h و atBlock() في rin_parser.cpp).
+    {"show", TokenType::PRINT},
     {"if", TokenType::IF},         {"else", TokenType::ELSE},
     {"while", TokenType::WHILE},   {"fun", TokenType::FUN},
     {"return", TokenType::RETURN}, {"true", TokenType::TRUE},
