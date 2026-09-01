@@ -79,6 +79,37 @@ print insertDoc("users", "u3", { name: "منى", city: "الرياض" });
 .end/container
 ```
 
+## 5) المفهوم الجامع: `@Everything`
+
+```rin
+@Everything=my_app
+    fun greet(name) {
+        return "Hello " + name;
+    }
+
+    @table=users
+        row cells=["1", "سارة"];
+    .end/table
+
+    @chatbot=bot
+        text model = "rin-chat-1";
+    .end/chatbot
+
+    print greet("World");
+.end/Everything
+```
+
+- `@Everything=name ... .end/Everything` (أو `@container.everything=name ... .end/container.everything`)
+  هي نقطة الدخول "الجامعة": بلا أي قيود على جسمها، تماماً كـ [`@container`](#1-حاوية-بيانات-container)
+  العادية — يمكن أن تحوي منطقاً كاملاً (`fun`, `let`, `if`, `while`, `for`)، وأي حاوية أخرى متداخلة
+  بأي عدد وترتيب: `table`/`doc`/`Object`/`portal`/`block`/`sticker`/`chatbot`/`AUKT`/`container.pipe`/
+  `container.api`/`container.import`، وأي واجهة `view.*`.
+- الفرق الجوهري عن الأنواع الأخرى: `Everything` لا تملك أي منطق تنفيذ خاص بها — هي فقط اسم/غلاف مميّز
+  فوق آلية `container` القياسية نفسها (نفس التحليل، نفس التنفيذ). لهذا فهم `@container` أولاً هو شرط
+  مسبق لفهم `Everything`، تماماً كما أن AUKT مبنية فوق نفس المبدأ.
+- استخدمها حين تريد بناء "تطبيق/عالم" واحد يجمع منطقاً وبيانات وواجهة وحاويات فرعية متعددة معاً، دون
+  تسمية مسبقة لما سيكون بداخله.
+
 ## انظر أيضاً
 
 - [`objects.md`](./objects.md) — الوحدة الأساسية (كائن/مستند) التي تُبنى منها الحاويات.
