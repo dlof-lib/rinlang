@@ -1,3 +1,102 @@
-# Variables
+# المتغيّرات (Variables)
 
-Variables store values used by Rin programs. Use the variable syntax supported by the Rin 1.0 parser.
+> راجع أيضاً: [`control-flow.md`](./control-flow.md) لاستخدام المتغيّرات داخل الشروط
+> والحلقات، [`functions.md`](./functions.md) لتمرير المتغيّرات كوسائط،
+> [`objects.md`](./objects.md) للمتغيّرات من نوع كائن/قاموس، و
+> [`language-reference.md`](./language-reference.md) للخريطة الكاملة.
+
+## 1) تعريف متغيّر: `let`
+
+```rin
+let x = 10;
+let name = "Rin";
+```
+
+`let` هو الشكل العام لأي قيمة: عدد، نص، منطقي، مصفوفة، أو كائن. القيمة يمكن
+تغييرها لاحقاً بإسناد عادي بدون `let`:
+
+```rin
+x = x + 1;
+```
+
+هذا بالضبط ما تعتمد عليه حلقات [`while`/`for`](./control-flow.md#3-الحلقات-التكرارية)
+لتحديث عدّاداتها في كل دورة.
+
+## 1.1) الصيغة الإنجليزية المبسّطة (سهلة التعلّم): `set ... to ...`
+
+```rin
+set x to 10;
+set name to "Rin";
+```
+
+`set NAME to VALUE;` مطابقة تماماً لـ `let NAME = VALUE;` — نفس المتغيّر، نفس
+القيمة، بلا أي فرق في المعنى أو الأداء؛ الفرق صياغي بحت: جملة إنجليزية عادية
+("set x to 10" = "اجعل x يساوي 10") تسهّل القراءة على المبتدئين قبل تعلّم رمز
+`=`. الشكلان يمكن مزجهما بحرّية في نفس البرنامج:
+
+```rin
+let a = 1;      // let
+set b to 2;     // set ... to ...  -- نفس النتيجة تماماً
+print a + b;    // 3
+```
+
+`set` و`to` كلمتان **غير محجوزتين**: يمكن استخدامهما كأسماء متغيّرات أو دوال
+عادية في أي مكان آخر؛ يُفهمان كصياغة `let` فقط عند ظهور التسلسل الدقيق
+`set NAME to`.
+
+## 2) متغيّر نصي مُنمَّط: `text`
+
+```rin
+text name = "Rin";
+```
+
+صيغة بديلة صريحة لِـ `let` عندما تريد توضيح أن القيمة نصّية (تُستخدم كثيراً داخل
+[الحاويات](./containers.md) و[الكائنات](./objects.md#1-كائن-تنسيقستايل-object) لتسمية الحقول).
+
+## 3) المصفوفات (Arrays)
+
+```rin
+let arr = [1, 2, 3];
+push(arr, 4);
+print arr;          // [1, 2, 3, 4]
+print sort([3, 1, 2]);
+```
+
+دوال المصفوفات الجاهزة (`push`, `sort`, ...) موثّقة في [`standard-library.md`](./standard-library.md).
+
+## 4) القواميس/الخرائط (Maps)
+
+```rin
+let m = { name: "Rin", age: 2 };
+print m["name"];
+print keys(m);
+```
+
+القاموس هو نفس الأساس الذي تُبنى عليه [الكائنات](./objects.md) و
+[مستندات NoSQL](./containers.md#3-مجموعات-nosql-containersgroup--containerdoc) في اللغة —
+فهرسة `m["key"]` تعمل بنفس الطريقة في كل هذه الحالات.
+
+## 5) النطاق (Scope)
+
+المتغيّرات المعرَّفة داخل كتلة `{ }` (سواء جسم `if`, `while`, `for`, أو
+[دالة](./functions.md)) محلية لتلك الكتلة. هذا يعني أن:
+
+```rin
+let i = 0;
+while (i < 5) {
+    let doubled = i * 2;   // doubled محلي لجسم الحلقة فقط
+    print doubled;
+    i = i + 1;
+}
+```
+
+يربط مباشرة بين مفهومي **المتغيّرات** و[**التحكم بالتدفّق**](./control-flow.md):
+كل كتلة شرط أو حلقة تفتح نطاقاً جديداً للمتغيّرات المعرَّفة بداخلها.
+
+## انظر أيضاً
+
+- [`control-flow.md`](./control-flow.md) — استخدام المتغيّرات كشروط (`if (isReady)`).
+- [`functions.md`](./functions.md) — المتغيّرات كوسائط ومخرجات.
+- [`objects.md`](./objects.md) — تمثيل بيانات مركّبة فوق نفس أساس `let`/القاموس.
+- [`pipelines.md`](./pipelines.md) — تمرير متغيّر عبر سلسلة أنابيب `|>`.
+- [`language-reference.md`](./language-reference.md) — الخريطة الكاملة للغة.
