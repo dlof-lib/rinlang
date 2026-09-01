@@ -92,15 +92,30 @@ target_include_directories(
 
 # loomc: أداة سطر أوامر مستقلة لمحرّك العرض Loomtime — نفس فلسفة rinc أعلاه تماماً:
 # هدف مستقل، لا يُربط بـ rinengine ولا يُحزَم داخل APK، للاختبار على جهاز تطوير عادي فقط.
+#
+# ملاحظة: loom/loomc.cpp يتضمّن rin_loom_pipeline.h، وهذا الأخير يشغّل rin::Interpreter حقيقياً
+# (runColdPipelineWithRuntime/runColdPipeline كلاهما ينشئ/يشغّل rin::Interpreter فعلياً، انظر
+# تعليقاته الخاصة) وليس مجرّد lex+parse مثل rincheck، لذا يحتاج نفس مصادر وقت التشغيل التي
+# يحتاجها rincheck أدناه (rin_interpreter.cpp وكل ما يعتمد عليه) وإلا فشل الربط (linker) بأخطاء
+# "undefined symbol" لـ rin::Interpreter::Interpreter()/run() و rin::Value::toDisplayString().
 add_executable(
         loomc
         loom/loomc.cpp
         rin_lexer.cpp
         rin_parser.cpp
+        rin_interpreter.cpp
+        loader_ui/library_loader_ui.cpp
+        rin_http.cpp
         diagnostics/diagnostic.cpp
         diagnostics/source_manager.cpp
         diagnostics/diagnostic_engine.cpp
         diagnostics/diagnostic_renderer.cpp
+        clc/clc_container.cpp
+        clc/clc_compress.cpp
+        clc/clc_security.cpp
+        clc/clc_rin_opt.cpp
+        clc/clc_zip_import.cpp
+        clc/sha256.cpp
 )
 
 find_library(log-lib log)
@@ -116,5 +131,10 @@ target_link_libraries(
 
 target_link_libraries(
         rincheck
+        ${z-lib}
+)
+
+target_link_libraries(
+        loomc
         ${z-lib}
 )
