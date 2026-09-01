@@ -225,6 +225,19 @@ StmtPtr Parser::functionDeclaration() {
 }
 
 StmtPtr Parser::statement() {
+    // print.log(...) / print.log.info/warn/error/debug(...) -> نظام Log منظَّم (انظر LogStmt في
+    // rin_ast.h). يُفحَص قبل match({TokenType::PRINT}) العادي أدناه: PRINT '.' IDENT("log") هو
+    // الشكل الوحيد الذي يُحوَّل لعبارة Log خاصة؛ أي 'print' أخرى (بلا '.' IDENT("log") تالياً
+    // مباشرة) تبقى عبارة print العادية تماماً كما كانت، بلا أي تغيير في سلوكها.
+    if (check(TokenType::PRINT) && checkNext(TokenType::DOT) &&
+        current + 2 < tokens.size() && tokens[current + 2].type == TokenType::IDENT &&
+        tokens[current + 2].lexeme == "log") {
+        Token printTok = peek();
+        advance(); // 'print'
+        advance(); // '.'
+        advance(); // 'log'
+        return logStatement(printTok);
+    }
     if (match({TokenType::PRINT})) return printStatement();
     if (match({TokenType::IF})) return ifStatement();
     if (match({TokenType::WHILE})) return whileStatement();
@@ -386,6 +399,61 @@ StmtPtr Parser::printStatement() {
     }
     consume(TokenType::SEMICOLON, "Expected ';' after print statement");
     stmt->line = tok.line;
+    return stmt;
+}
+
+// print.log(...) / print.log.info(...) / print.log.warn(...) / print.log.error(...) / print.log.debug(...);
+// كل ما بين القوسين (رسائل + سمات) مفصول بفواصل، بأي ترتيب بينها:
+//   print.log.info("Server started");
+//   print.log.info("multi", "values", sep="-", label="AUTH");
+// السمات الاختيارية المدعومة (كل واحدة مرة على الأكثر): sep=expr | if=expr | label=expr | source=expr.
+// يُستدعى بعد أن يكون statement() قد استهلك بالفعل 'print' '.' 'log'. printTok هو توكن 'print'
+// نفسه (لتحديد سطر بداية العبارة في stmt->line — أدقّ من سطر '(' التالية عند تعدّد الأسطر).
+// ملاحظة مهمة (نفس ملاحظة printStatement() أعلاه بالضبط): كل عنصر بين القوسين إما رسالة (قيمة
+// عادية تُقرأ عبر pipeline() لا expression() الكاملة، لنفس السبب: تجنّب ابتلاع "sep=..." كتعبير
+// إسناد كامل) أو سمة key=value — نميّز بينهما بالنظر خطوتين للأمام: IDENT (أو 'if' المحجوزة) تليها
+// '=' مباشرة تُعتبر سمة، وإلا فهي رسالة عادية.
+StmtPtr Parser::logStatement(const Token& printTok) {
+    auto stmt = std::make_shared<LogStmt>();
+    stmt->level = "log"; // افتراضي: print.log(...) العام بلا مستوى مسبق
+    static const std::unordered_set<std::string> logLevels = {"info", "warn", "error", "debug"};
+    // print.log.info/warn/error/debug(...) : '.' IDENT(level) إضافية قبل '(' — اختيارية تماماً.
+    if (check(TokenType::DOT) && checkNext(TokenType::IDENT) && logLevels.count(tokens[current + 1].lexeme)) {
+        advance(); // '.'
+        stmt->level = advance().lexeme; // IDENT(level)
+    }
+    consume(TokenType::LPAREN, "Expected '(' after 'print.log" + (stmt->level == "log" ? std::string() : ("." + stmt->level)) + "'");
+    static const std::unordered_set<std::string> logAttrs = {"sep", "label", "source"};
+    std::unordered_set<std::string> seenAttrs;
+    if (!check(TokenType::RPAREN)) {
+        for (;;) {
+            std::string attr;
+            if (check(TokenType::IF) && checkNext(TokenType::EQUAL)) {
+                attr = "if"; // 'if' كلمة محجوزة (TokenType::IF)، تماماً كما في printStatement() أعلاه
+            } else if (check(TokenType::IDENT) && logAttrs.count(peek().lexeme) && checkNext(TokenType::EQUAL)) {
+                attr = peek().lexeme;
+            }
+            if (!attr.empty()) {
+                advance(); // استهلاك توكن اسم السمة
+                if (seenAttrs.count(attr)) {
+                    throw err(diag::Code::E0016_InvalidProperty, printTok, "'print.log': `" + attr + "` attribute repeated");
+                }
+                seenAttrs.insert(attr);
+                advance(); // '='
+                ExprPtr value = expression();
+                if (attr == "sep") stmt->sep = value;
+                else if (attr == "if") stmt->ifCond = value;
+                else if (attr == "label") stmt->label = value;
+                else if (attr == "source") stmt->source = value;
+            } else {
+                stmt->exprs.push_back(pipeline());
+            }
+            if (!match({TokenType::COMMA})) break;
+        }
+    }
+    consume(TokenType::RPAREN, "Expected ')' after 'print.log' arguments");
+    consume(TokenType::SEMICOLON, "Expected ';' after 'print.log' statement");
+    stmt->line = printTok.line;
     return stmt;
 }
 
