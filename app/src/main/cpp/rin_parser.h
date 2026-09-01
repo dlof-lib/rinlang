@@ -53,10 +53,12 @@ private:
     // statements
     StmtPtr declaration();
     StmtPtr letDeclaration();
+    StmtPtr setDeclaration(); // 'set' name 'to' expr ';'  -> صياغة إنجليزية مبسّطة (sugar) لِـ LetStmt، مطابقة تماماً لـ let من ناحية الدلالة
     StmtPtr functionDeclaration();
     StmtPtr statement();
     StmtPtr printStatement();
     StmtPtr ifStatement();
+    StmtPtr whenStatement(); // 'when' (condition) thenBranch ['otherwise' elseBranch]  -> صياغة إنجليزية مبسّطة (sugar) لِـ IfStmt، مطابقة تماماً لـ if/else من ناحية الدلالة
     StmtPtr whileStatement();
     StmtPtr forStatement(); // for (init; condition; increment) body  -> حلقة for على طراز C
     StmtPtr plusConditionStatement(); // plus.condition(cond) { .. } / { .. } -> شرط ثلاثي عام
