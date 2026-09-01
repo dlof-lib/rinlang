@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Rin Lang</string>
+    <string name="app_name">RinStudio</string>
     <string name="app_editor_title">Rin Editor</string>
     <string name="action_run">Run</string>
 
@@ -207,7 +207,7 @@ print \"Hello, \" + name + \"!\";
     <string name="apk_export_status_success">تم البناء والتوقيع بنجاح</string>
     <string name="apk_export_status_failed">فشل التصدير</string>
     <string name="apk_export_no_entry_error">لا يوجد ملف .rin واحد على الأقل في هذا المشروع</string>
-    <string name="apk_export_note_limitation">ملاحظة: اسم التطبيق وأيقونته على الشاشة الرئيسية للحزمة الناتجة يبقيان كما في RinLang — هوية مشروعك الفعلية تظهر داخل شاشة تشغيله بعد فتحه.</string>
+    <string name="apk_export_note_limitation">ملاحظة: اسم التطبيق وأيقونته على الشاشة الرئيسية للحزمة الناتجة يبقيان كما في RinStudio — هوية مشروعك الفعلية تظهر داخل شاشة تشغيله بعد فتحه.</string>
     <string name="exported_run_loading">جارٍ تشغيل المشروع…</string>
     <string name="exported_run_error_prefix">خطأ أثناء التشغيل:</string>
     <string name="exported_run_restart">إعادة التشغيل</string>
