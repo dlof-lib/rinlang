@@ -106,6 +106,18 @@ std::vector<StmtPtr> Parser::parse() {
 
 StmtPtr Parser::declaration() {
     if (match({TokenType::LET})) return letDeclaration();
+    // 'set' NAME 'to' EXPR ';' -> صياغة إنجليزية مبسّطة (سهلة التعلّم) لِـ 'let NAME = EXPR;'، بنفس
+    // AST (LetStmt) تماماً بلا أي فرق دلالي. 'set' و'to' كلمتان سياقيتان غير محجوزتان (تبقيان IDENT
+    // عاديين في أي سياق آخر)، بنفس أسلوب 'route'/'row'/'style'/'document'/'warp'/'view' أعلاه: لا
+    // تتحوّلان لعبارة خاصة إلا عند ظهور التسلسل الدقيق set IDENT to في بداية عبارة، فلا تتعارضان مع
+    // استخدام 'set' أو 'to' كاسم متغيّر أو دالة عادي في أي مكان آخر.
+    if (check(TokenType::IDENT) && peek().lexeme == "set" &&
+        checkNext(TokenType::IDENT) &&
+        current + 2 < tokens.size() && tokens[current + 2].type == TokenType::IDENT &&
+        tokens[current + 2].lexeme == "to") {
+        advance(); // 'set'
+        return setDeclaration();
+    }
     if (match({TokenType::FUN})) return functionDeclaration();
 
     // مفاهيم لغة الحاويات/البيانات
@@ -199,6 +211,19 @@ StmtPtr Parser::letDeclaration() {
     return stmt;
 }
 
+// 'set' سبق استهلاكها في declaration()؛ الدخول هنا يبدأ مباشرة من اسم المتغيّر.
+StmtPtr Parser::setDeclaration() {
+    auto name = consume(TokenType::IDENT, "Expected variable name after 'set'");
+    consume(TokenType::IDENT, "Expected 'to' after 'set " + name.lexeme + "'"); // يستهلك 'to' (تحقّقنا من لفظها مسبقاً في declaration())
+    ExprPtr initializer = expression();
+    consume(TokenType::SEMICOLON, "Expected ';' after 'set ... to ...' declaration");
+    auto stmt = std::make_shared<LetStmt>();
+    stmt->name = name.lexeme;
+    stmt->initializer = initializer;
+    stmt->line = name.line;
+    return stmt;
+}
+
 StmtPtr Parser::functionDeclaration() {
     auto name = consume(TokenType::IDENT, "Expected function name after 'fun'");
     consume(TokenType::LPAREN, "Expected '(' after function name");
@@ -240,6 +265,14 @@ StmtPtr Parser::statement() {
     }
     if (match({TokenType::PRINT})) return printStatement();
     if (match({TokenType::IF})) return ifStatement();
+    // 'when' (condition) thenBranch ['otherwise' elseBranch] -> صياغة إنجليزية مبسّطة (سهلة التعلّم)
+    // لِـ 'if (condition) thenBranch [else elseBranch]'، بنفس AST (IfStmt) تماماً بلا أي فرق دلالي.
+    // 'when' كلمة سياقية غير محجوزة (تبقى IDENT عادياً في أي سياق آخر)؛ نميّزها فقط عند ظهورها
+    // مباشرة قبل '(' في بداية عبارة، بنفس أسلوب 'route'/'row'/'set' أعلاه.
+    if (check(TokenType::IDENT) && peek().lexeme == "when" && checkNext(TokenType::LPAREN)) {
+        advance(); // 'when'
+        return whenStatement();
+    }
     if (match({TokenType::WHILE})) return whileStatement();
     if (match({TokenType::FOR})) return forStatement();
     if (match({TokenType::RETURN})) return returnStatement();
@@ -464,6 +497,26 @@ StmtPtr Parser::ifStatement() {
     auto thenBranch = statement();
     StmtPtr elseBranch = nullptr;
     if (match({TokenType::ELSE})) elseBranch = statement();
+    auto stmt = std::make_shared<IfStmt>();
+    stmt->condition = condition;
+    stmt->thenBranch = thenBranch;
+    stmt->elseBranch = elseBranch;
+    return stmt;
+}
+
+// 'when' سبق استهلاكها في statement()؛ الدخول هنا يبدأ مباشرة من '('.
+StmtPtr Parser::whenStatement() {
+    consume(TokenType::LPAREN, "Expected '(' after 'when'");
+    auto condition = expression();
+    consume(TokenType::RPAREN, "Expected ')' after when condition");
+    auto thenBranch = statement();
+    StmtPtr elseBranch = nullptr;
+    // 'otherwise' كلمة سياقية غير محجوزة (نظير 'else' الإنجليزي البسيط)، تُقبل هنا فقط مباشرة بعد
+    // فرع 'then' من 'when'، بنفس أسلوب فحص الكلمات السياقية الأخرى في هذا الملف.
+    if (check(TokenType::IDENT) && peek().lexeme == "otherwise") {
+        advance(); // 'otherwise'
+        elseBranch = statement();
+    }
     auto stmt = std::make_shared<IfStmt>();
     stmt->condition = condition;
     stmt->thenBranch = thenBranch;
