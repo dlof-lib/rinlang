@@ -310,7 +310,7 @@ struct TextStmt : Stmt {
 
 enum class ObjectStyleFieldKind { Text, Image, File, Fonts, Background, Css3 };
 
-enum class ContainerKind { PLAIN, PIPE, DATA, API, IMPORT, TABLE, DOC, OBJECT, PORTAL, BLOCK, STICKER, AUKT, CHATBOT };
+enum class ContainerKind { PLAIN, PIPE, DATA, API, IMPORT, TABLE, DOC, OBJECT, PORTAL, BLOCK, STICKER, AUKT, CHATBOT, EVERYTHING };
 
 // ---- AUKT: Automated Knowledge Tables (جداول المعرفة الآلية) ----
 // @container.aukt=name  <body>  .end/container.aukt
@@ -330,6 +330,29 @@ enum class ContainerKind { PLAIN, PIPE, DATA, API, IMPORT, TABLE, DOC, OBJECT, P
 //   الامتداد الموصى به لحفظ/تصدير حاوية AUKT هو "name.aak.rin" (بدل "name.rin" الافتراضي)؛ الترميز/
 //   البنية الداخلية للملف تبقى نص Rin عادياً تماماً (لا صيغة ثنائية جديدة) — فقط الامتداد يُميِّزه
 //   بصرياً وللتطبيق (يفتحه محرِّر AUKT المخصص تلقائياً بدل المحرِّر النصي العادي).
+
+// ---- Everything: المفهوم الجامع — "أنشئ أي شيء وبرمِج أي شيء به" ----
+// @container.everything=name  <body>  .end/container.everything
+// @Everything=name             <body>  .end/Everything
+//   كلا الشكلين ينتجان نفس ContainerKind::EVERYTHING. هي نقطة الدخول العليا/العامة في اللغة:
+//   لا قيود إطلاقاً على جسمها (بالضبط كـ container العادية وAUKT) — يجوز أن تحوي بأي عدد وأي ترتيب:
+//     - منطق إجرائي كامل:            fun/متغيرات let/شروط if/حلقات for، while، return...
+//     - أي حاوية بيانات أو منطق أخرى متداخلة: container/container.pipe/container.api/container.import
+//     - أي مفهوم تنسيق/تجميع آخر:    table/doc/Object/portal/block/sticker/chatbot/AUKT، بأي تعشيش
+//     - واجهة Loomtime كاملة:        عبارات view.* (نفس المسموح بداخل container العادية)
+//   الفكرة الجوهرية: "Everything" لا تُنفَّذ بمنطق خاص بها إطلاقاً — فهي تستدعي (تفوّض إلى) نفس آلية
+//   container القياسية حرفياً: نفس تحليل الجسم (نفس مسار الشجرة النحوية لـ @container)، ونفس تنفيذ
+//   الجسم عبر executeBlock للحاوية القياسية. أي أن فهم/تعلّم "container" أولاً شرط لفهم Everything،
+//   لأنها في الجوهر مجرد اسم/غلاف مميّز فوق نفس المفهوم — غرضها فقط تسمية نقطة دخول "تطبيق/عالم" جامع
+//   يمكن أن يحوي أي شيء آخر في اللغة تحت مظلة واحدة، دون أي تقييد بيانات نقية (validateDataContainerBody
+//   لا تُطبَّق عليها، تماماً كـ container/AUKT/chatbot).
+//   مثال:
+//     @Everything=myApp
+//         fun greet(name) { return "Hello " + name; }
+//         @table=users  row cells=["1","Sara"]; .end/table
+//         @chatbot=bot  text model="rin-chat-1"; .end/chatbot
+//         print greet("World");
+//     .end/Everything
 
 struct ContainerStmt : Stmt {
     std::string name; // قد تكون فارغة إن لم يُحدَّد اسم
