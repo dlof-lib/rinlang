@@ -51,6 +51,22 @@ int main() {
                 .end/container
             .end/Containers.Group
         .end/Volume
+
+        @Everything=my_app
+            fun greet(name) {
+                return "Hello " + name;
+            }
+
+            @table=users
+                row cells=["1", "سارة"];
+            .end/table
+
+            @doc=notes
+                document id="n1" fields={ note: "ملاحظة" };
+            .end/doc
+
+            print greet("World");
+        .end/Everything
     )";
 
     try {
