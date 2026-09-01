@@ -33,6 +33,7 @@ add_executable(rin
     ${RIN_CORE_DIR}/rin_lexer.cpp
     ${RIN_CORE_DIR}/rin_parser.cpp
     ${RIN_CORE_DIR}/rin_interpreter.cpp
+    ${RIN_CORE_DIR}/loader_ui/library_loader_ui.cpp
     ${RIN_CORE_DIR}/rin_http.cpp
     ${RIN_CORE_DIR}/diagnostics/diagnostic.cpp
     ${RIN_CORE_DIR}/diagnostics/source_manager.cpp
