@@ -1,13 +1,34 @@
 @import "lib/relyRIN.og.rin";
 
-let md = "# RelyRIN\n\n**Live Markdown** preview from Rin.\n\n::image https://example.com/rin.png | Rin\n\n::youtube https://www.youtube.com/watch?v=dQw4w9WgXcQ\n\n::audio audio.mp3\n\n::video video.mp4";
+let markdown = """
+# RelyRIN
 
-let html = relyLiveStyled(md, {
+**Live Markdown Preview** from Rin.
+
+::image https://example.com/rin.png | Rin
+
+::youtube https://www.youtube.com/watch?v=dQw4w9WgXcQ
+
+::audio audio.mp3
+
+::video video.mp4
+""";
+
+let style = relyStyle({
     "accent": "#22c88e",
     "accent2": "#d4af37",
     "bg": "#ffffff",
     "maxWidth": "960px"
 });
 
-writeFile("rely_preview.html", html);
+let preview = relyLiveDocument(
+    markdown,
+    style
+);
+
+writeFile(
+    "rely_preview.html",
+    preview
+);
+
 print relyInfo();
