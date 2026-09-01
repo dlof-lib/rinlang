@@ -60,11 +60,15 @@ namespace RinLang.VSSDK.Classification
                 // @import [as]
                 (new Regex(@"@import\b(\s+as\b)?", o), RinClassificationTypes.ImportKeyword),
 
-                // @container / @container.pipe|data|api|import|table|doc|object|portal|block, @Containers.Group, @Volume
-                (new Regex(@"@(container(\.(pipe|data|api|import|table|doc|object|portal|block))?|Containers\.Group|Volume)\b", o), RinClassificationTypes.ContainerKeyword),
+                // @container / @container.pipe|data|api|import|table|doc|object|portal|block|everything|make, @Containers.Group, @Volume
+                (new Regex(@"@(container(\.(pipe|data|api|import|table|doc|object|portal|block|everything|make))?|Containers\.Group|Volume)\b", o), RinClassificationTypes.ContainerKeyword),
 
                 // مفاهيم التنسيق والستايل المستقلة (بلا بادئة container.): @Object / @portal / @block
                 (new Regex(@"@(Object|portal|block)\b", o), RinClassificationTypes.ContainerKeyword),
+
+                // @make / @Everything (legacy alias) / @Rin.make -- the universal "make" concept
+                // (see ContainerKind::EVERYTHING in rin_ast.h). All forms are equivalent.
+                (new Regex(@"@(Everything|Rin\.make|make)\b", o), RinClassificationTypes.ContainerKeyword),
 
                 // Section / Translations headers.
                 (new Regex(@"\b(Section|Translations)\b", o), RinClassificationTypes.ContainerKeyword),
@@ -81,11 +85,13 @@ namespace RinLang.VSSDK.Classification
                 // fun name( — function declarations (captures the name separately below).
                 (new Regex(@"(?<=\bfun\s+)[A-Za-z_][A-Za-z0-9_]*(?=\s*\()", o), RinClassificationTypes.FunctionCall),
 
-                // Storage keywords.
-                (new Regex(@"\b(let|fun|text)\b", o), RinClassificationTypes.Storage),
+                // Storage keywords. 'make' is the simplified-English synonym for 'let'
+                // (also doubles as the @make container tag, matched separately above).
+                (new Regex(@"\b(let|fun|text|make)\b", o), RinClassificationTypes.Storage),
 
-                // Control keywords / logical operators / print.
-                (new Regex(@"\b(if|else|while|for|return|break|continue|and|or|print)\b", o), RinClassificationTypes.Keyword),
+                // Control keywords / logical operators / print. 'show' is the simplified-English
+                // synonym for 'print' (rin_lexer.cpp maps it to the same token).
+                (new Regex(@"\b(if|else|while|for|return|break|continue|and|or|print|show)\b", o), RinClassificationTypes.Keyword),
 
                 // Boolean / nil constants.
                 (new Regex(@"\b(true|false|nil)\b", o), RinClassificationTypes.BooleanNil),
