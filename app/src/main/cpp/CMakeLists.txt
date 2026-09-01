@@ -11,6 +11,9 @@ add_library(
         rin_lexer.cpp
         rin_parser.cpp
         rin_interpreter.cpp
+        # loader_ui/: Library Loader UI — اختياري تماماً وغير مفعَّل افتراضياً من rin_interpreter.cpp
+        # (انظر setImportUISink/setImportUIMode في rin_interpreter.h)، مستقلة كلياً عن باقي المحرّك.
+        loader_ui/library_loader_ui.cpp
         # diagnostics/: نظام Compiler Diagnostics الموحّد (E-codes/W-codes، rendering، suggestion
         # engine) المستخدَم من rin_lexer.cpp/rin_parser.cpp/rin_interpreter.cpp أعلاه — انظر
         # docs/ERROR_SYSTEM.md لتوثيق كامل.
@@ -60,6 +63,7 @@ add_executable(
         rin_lexer.cpp
         rin_parser.cpp
         rin_interpreter.cpp
+        loader_ui/library_loader_ui.cpp
         rin_http.cpp
         diagnostics/diagnostic.cpp
         diagnostics/source_manager.cpp
