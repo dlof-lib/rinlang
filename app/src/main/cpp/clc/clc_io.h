@@ -7,6 +7,7 @@
 #include <string>
 #include <vector>
 #include <stdexcept>
+#include <istream>
 
 namespace clc {
 
@@ -79,6 +80,39 @@ public:
     }
     bool eof() const { return pos >= size; }
     size_t remaining() const { return size - pos; }
+};
+
+// ---- بث حقيقي بلا قرص: يعرض buffer بايتات في الذاكرة (مثلاً جسم رد HTTP بعد تنزيل حاوية
+// .rcl) كـ std::istream عادي، كي تُعاد نفس دوال القراءة (readAndValidateHeader/readAllSections/
+// reconstructFile في clc_container.cpp، المكتوبة أصلاً بلغة std::istream& عامة) دون أي تكرار
+// كود ودون كتابة أي بايت واحد إلى القرص. seekg/tellg/read تعمل بمؤشرات صرفة داخل الذاكرة.
+class MemoryStreamBuf : public std::streambuf {
+public:
+    MemoryStreamBuf(const uint8_t* data, size_t size) {
+        char* p = const_cast<char*>(reinterpret_cast<const char*>(data));
+        setg(p, p, p + size);
+    }
+protected:
+    pos_type seekoff(off_type off, std::ios_base::seekdir dir, std::ios_base::openmode) override {
+        if (dir == std::ios_base::cur) gbump(int(off));
+        else if (dir == std::ios_base::end) setg(eback(), egptr() + off, egptr());
+        else setg(eback(), eback() + off, egptr());
+        return pos_type(gptr() - eback());
+    }
+    pos_type seekpos(pos_type pos, std::ios_base::openmode which) override {
+        return seekoff(off_type(pos), std::ios_base::beg, which);
+    }
+};
+
+class MemoryIStream : public std::istream {
+public:
+    MemoryIStream(const uint8_t* data, size_t size) : std::istream(&buf_), buf_(data, size) {
+        rdbuf(&buf_);
+    }
+    explicit MemoryIStream(const std::vector<uint8_t>& bytes)
+        : MemoryIStream(bytes.data(), bytes.size()) {}
+private:
+    MemoryStreamBuf buf_;
 };
 
 } // namespace clc
