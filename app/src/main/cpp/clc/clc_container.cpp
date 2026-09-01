@@ -267,7 +267,7 @@ uint32_t headerCrc(const std::vector<uint8_t>& headerBytes) {
 }
 
 // يقرأ ويتحقق من الرأس + الـ footer الأساسيين، ويعيد (header, fileSize).
-std::pair<ClcHeader,uint64_t> readAndValidateHeader(std::ifstream& in, const std::string& path) {
+std::pair<ClcHeader,uint64_t> readAndValidateHeader(std::istream& in, const std::string& path) {
     in.seekg(0, std::ios::end);
     uint64_t fileSize = uint64_t(in.tellg());
     if (fileSize < CLC_HEADER_SIZE + CLC_FOOTER_SIZE)
@@ -306,7 +306,7 @@ struct ParsedSections {
     std::vector<BlockEntry> blocks;
 };
 
-ParsedSections readAllSections(std::ifstream& in, const ClcHeader& h, uint64_t fileSize) {
+ParsedSections readAllSections(std::istream& in, const ClcHeader& h, uint64_t fileSize) {
     auto readSection = [&](uint64_t offset, uint64_t maxLen)->std::vector<uint8_t> {
         if (offset > fileSize) throw ClcFormatError("section offset beyond file size (corrupted)");
         uint64_t avail = fileSize - offset;
@@ -346,7 +346,7 @@ ParsedSections readAllSections(std::ifstream& in, const ClcHeader& h, uint64_t f
 }
 
 // يعيد بناء محتوى ملف واحد بالكامل (inflate كل كتله بالترتيب + فك قاموس Rin إن لزم).
-std::vector<uint8_t> reconstructFile(std::ifstream& in, const ClcHeader& h, const FileEntry& fe,
+std::vector<uint8_t> reconstructFile(std::istream& in, const ClcHeader& h, const FileEntry& fe,
                                       const std::vector<BlockEntry>& blocks, const std::vector<std::string>& dict) {
     std::vector<uint8_t> encoded;
     encoded.reserve(fe.originalSize);
@@ -740,6 +740,58 @@ void extractOneFile(const std::string& rclPath, const std::string& entryPath, co
         }
     }
     throw ClcFormatError("entry not found in container: " + entryPath);
+}
+
+// =========================================================================
+// بث حقيقي بلا قرص (true streaming, no disk) — نفس منطق القراءة أعلاه تماماً،
+// لكن عبر MemoryIStream (clc_io.h) بدل std::ifstream، فلا يُفتح أو يُكتب أي
+// ملف مؤقت على الإطلاق. "<memory>" تُستخدَم فقط كتسمية في رسائل الخطأ.
+// =========================================================================
+ContainerInfo readContainerInfoFromMemory(const std::vector<uint8_t>& bytes) {
+    MemoryIStream in(bytes);
+    auto [h, fileSize] = readAndValidateHeader(in, "<memory>");
+    auto sections = readAllSections(in, h, fileSize);
+    ContainerInfo info;
+    info.header = h;
+    info.metadata = sections.metadata;
+    info.dependencies = sections.deps;
+    info.files = sections.files;
+    info.blocks = sections.blocks;
+    info.containerFileSize = fileSize;
+    return info;
+}
+
+std::vector<uint8_t> extractOneFileToMemory(const std::vector<uint8_t>& bytes, const std::string& entryPath) {
+    MemoryIStream in(bytes);
+    auto [h, fileSize] = readAndValidateHeader(in, "<memory>");
+    auto ps = readAllSections(in, h, fileSize);
+    for (auto& f : ps.files) {
+        if (f.flags & FILE_FLAG_IS_DIR) continue;
+        if (f.path != entryPath) continue;
+        auto content = reconstructFile(in, h, f, ps.blocks, ps.dict);
+        auto actualHash = sha256(content);
+        if (actualHash != f.contentHash) throw ClcFormatError("content hash mismatch for '" + f.path + "'");
+        return content;
+    }
+    throw ClcFormatError("entry not found in container: " + entryPath);
+}
+
+std::map<std::string, std::vector<uint8_t>> unpackContainerToMemory(const std::vector<uint8_t>& bytes) {
+    MemoryIStream in(bytes);
+    auto [h, fileSize] = readAndValidateHeader(in, "<memory>");
+    auto ps = readAllSections(in, h, fileSize);
+    std::map<std::string, std::vector<uint8_t>> out;
+    for (auto& f : ps.files) {
+        if (f.flags & FILE_FLAG_IS_DIR) continue;
+        auto content = reconstructFile(in, h, f, ps.blocks, ps.dict);
+        if (content.size() != f.originalSize)
+            throw ClcFormatError("size mismatch reconstructing '" + f.path + "' (corrupted container)");
+        auto actualHash = sha256(content);
+        if (actualHash != f.contentHash)
+            throw ClcFormatError("content hash mismatch for '" + f.path + "' (corrupted container)");
+        out[f.path] = std::move(content);
+    }
+    return out;
 }
 
 } // namespace clc
