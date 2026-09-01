@@ -474,9 +474,10 @@ static std::string containerTagName(ContainerKind k) {
         case ContainerKind::STICKER: return "container.sticker";
         // "@chatbot=" أو "@container.chatbot=" -> دائماً "container.chatbot" موحَّدة عند الحفظ وإعادة القراءة.
         case ContainerKind::CHATBOT: return "container.chatbot";
-        // "@Everything="/"@container.everything=" توحَّد دائماً إلى "container.everything" عند
-        // الحفظ وإعادة القراءة — نفس مبدأ بقية المفاهيم أعلاه.
-        case ContainerKind::EVERYTHING: return "container.everything";
+        // "@make="/"@Rin.make="/"@container.make=" (والاسمان القديمان للتوافق العكسي: "@Everything="/
+        // "@container.everything=") توحَّد جميعاً دائماً إلى "container.make" عند الحفظ وإعادة
+        // القراءة — نفس مبدأ بقية المفاهيم أعلاه.
+        case ContainerKind::EVERYTHING: return "container.make";
         default: return "container";
     }
 }
@@ -494,7 +495,7 @@ static std::string containerIcon(ContainerKind k) {
         case ContainerKind::BLOCK: return "🧱";
         case ContainerKind::STICKER: return "🏷️";
         case ContainerKind::CHATBOT: return "💬";
-        case ContainerKind::EVERYTHING: return "🌌";
+        case ContainerKind::EVERYTHING: return "🛠️";
         default: return "📦";
     }
 }
@@ -520,7 +521,7 @@ static ContainerKind resolveContainerKindName(const std::string& raw) {
     if (s == "sticker") return ContainerKind::STICKER;
     if (s == "aukt") return ContainerKind::AUKT;
     if (s == "chatbot") return ContainerKind::CHATBOT;
-    if (s == "everything") return ContainerKind::EVERYTHING;
+    if (s == "everything" || s == "make") return ContainerKind::EVERYTHING;
     if (s == "container" || s == "plain") return ContainerKind::PLAIN;
     return ContainerKind::PLAIN;
 }
@@ -2200,8 +2201,9 @@ void Interpreter::registerNatives() {
         return performApiCall(key, method, path, line);
     };
 
-    // ================= أدوات @Everything الديناميكية: أنشئ أي شيء وبرمِج أي شيء وقت التشغيل =================
-    // @Everything (انظر ContainerKind::EVERYTHING أعلى) تسمح فعلاً بتعشيش أي نوع حاوية آخر بصياغة
+    // ================= أدوات @make الديناميكية: أنشئ أي شيء وبرمِج أي شيء وقت التشغيل =================
+    // @make (الاسم الرسمي الحالي؛ سابقاً @Everything، وما زالت مقبولة كاسم قديم — انظر
+    // ContainerKind::EVERYTHING أعلى) تسمح فعلاً بتعشيش أي نوع حاوية آخر بصياغة
     // ثابتة (@table=... .end/table إلخ) بلا أي قيد. الأدوات التالية تضيف الطبقة المكمّلة: إنشاء/قراءة/
     // كتابة/استدعاء أي حاوية أو حقل بالاسم كنص عادي (Value) وقت التشغيل، بحيث يمكن لحلقة for واحدة أن
     // "تُنشئ أي شيء" (أسماء وأنواع محسوبة ديناميكياً) و"تبرمج أي شيء" (تخزين حتى دوال Rin كقيم حقول
@@ -2225,6 +2227,9 @@ void Interpreter::registerNatives() {
         if (!groupStack.empty()) groupMembers[groupStack.back()].push_back(name);
         return Value::string(name);
     };
+    // create(kind, name?) -> مرادف إنجليزي مبسّط كامل لـ spawn() (نفس الدالة حرفياً)، من نفس عائلة
+    // الكلمات السهلة المرافقة لمفهوم make: "create something executable or usable" وقت التشغيل.
+    natives["create"] = natives["spawn"];
 
     // destroyContainer(name) -> يحذف حاوية أُنشئت عبر spawn (أو أي حاوية أخرى) بالكامل من containers/
     // containerKinds. true إن كانت موجودة فحُذفت، false إن لم تكن موجودة أصلاً.
@@ -2329,6 +2334,9 @@ void Interpreter::registerNatives() {
         }
         return callFunction(a[0].function, args, line);
     };
+    // run(fn, args?) -> مرادف إنجليزي مبسّط كامل لـ callFn() (نفس الدالة حرفياً)، من نفس عائلة
+    // الكلمات السهلة المرافقة لمفهوم make: "run" أوضح لغوياً من "callFn" للمبرمج المبتدئ.
+    natives["run"] = natives["callFn"];
 
     // ================= HTTP حقيقي وفعلي (اتصال شبكة حقيقي) =================
     // على عكس container.api/route/call أعلاه (محاكاة صرفة بلا شبكة، جيدة للاختبار)، كل ما يلي
