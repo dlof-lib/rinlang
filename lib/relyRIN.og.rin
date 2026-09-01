@@ -1,24 +1,19 @@
-// ============================================================================
-// lib/relyRIN.og.rin — RelyRIN Media + Live Markdown Preview
-// ============================================================================
-// مكتبة وسائط ومعاينة حية مكتوبة بالكامل بلغة Rin.
-// لا تعتمد على Java/Kotlin/JS داخل المكتبة نفسها؛ تُخرج HTML/CSS قياسيين يمكن
-// عرضه في WebView/متصفح، بما في ذلك YouTube عبر iframe.
-// 
-// الاستيراد:
-//   @import "lib/relyRIN.og.rin";
-//   let page = relyLive("# Hello\n\n**Rin**");
-//   let yt = relyYoutube("https://www.youtube.com/watch?v=dQw4w9WgXcQ");
-//   let md = relyMarkdownFile("README.md");
+// =============================================================================
+// RelyRIN — Rin media + Markdown live-preview library
+// =============================================================================
+// الهدف: API صغيرة ومنظمة لمعالجة Markdown، إنشاء المعاينة الحية،
+// وإخراج الصور والصوت والفيديو وYouTube إلى HTML/CSS قياسي.
 //
-// المبادئ:
-//   - Markdown -> HTML
-//   - Theme/Style -> CSS
-//   - Image/Audio/Video -> HTML5 media
-//   - YouTube -> privacy-friendly embed URL
-//   - Live preview -> يعيد وثيقة HTML كاملة في كل استدعاء
-//   - لا تنفيذ JavaScript من Markdown؛ الروابط والنصوص تُهَرَّب لمنع HTML injection
-// ============================================================================
+// المجموعات المنطقية:
+//   relyLive*   -> preview/document
+//   relyMd*     -> Markdown/files
+//   relyStyle*  -> themes/CSS
+//   relyMedia*  -> image/audio/video/YouTube
+//   relyCore*   -> low-level helpers
+//
+// Rin تستخدم أسماء دوال مسطحة؛ لذلك تم تمثيل المجموعات ببادئات ثابتة
+// بدل أسماء نقطية قد لا يدعمها كل إصدار من المحرك.
+// =============================================================================
 
 @import "lib/strings.og.rin";
 
@@ -529,14 +524,88 @@ fun relyBuildMarkdown(path, outputPath) {
     return { source: path, output: outputPath, ok: true };
 }
 
+// =============================================================================
+// Public grouped API
+// =============================================================================
+
+fun relyLiveMarkdown(md) {
+    return relyLive(md);
+}
+
+fun relyLiveDocument(md, style) {
+    return relyDocument(md, style);
+}
+
+fun relyLiveWrite(md, outputPath) {
+    return relyWritePreview(md, outputPath);
+}
+
+fun relyLiveWriteStyled(md, outputPath, style) {
+    return relyWritePreviewStyled(md, outputPath, style);
+}
+
+fun relyMdRender(md) {
+    return relyRenderMarkdown(md);
+}
+
+fun relyMdPreview(path) {
+    return relyMarkdownFile(path);
+}
+
+fun relyMdPreviewStyled(path, style) {
+    return relyMarkdownFileStyled(path, style);
+}
+
+fun relyMdBuild(path, outputPath) {
+    return relyBuildMarkdown(path, outputPath);
+}
+
+fun relyStyleDefault() {
+    return relyThemeDefault();
+}
+
+fun relyStyle(theme) {
+    return relyTheme(theme);
+}
+
+fun relyStyleCss(theme) {
+    return relyCss(theme);
+}
+
+fun relyMediaImage(src, alt) {
+    return relyImage(src, alt);
+}
+
+fun relyMediaAudio(src, controls) {
+    return relyAudio(src, controls);
+}
+
+fun relyMediaVideo(src, controls, autoplay, muted, loop) {
+    return relyVideo(src, controls, autoplay, muted, loop);
+}
+
+fun relyMediaYoutube(url) {
+    return relyYoutube(url);
+}
+
+fun relyMediaRender(kind, src, options) {
+    return relyMedia(kind, src, options);
+}
+
 fun relyInfo() {
     return {
         "name": "relyRIN",
-        "version": "1.0.0",
-        "description": "Live Markdown preview, styling and media rendering for Rin, including YouTube embeds",
+        "version": "1.1.0",
+        "description": "Rin-native live Markdown preview and media rendering",
+        "api": {
+            "live": ["relyLiveMarkdown", "relyLiveDocument", "relyLiveWrite", "relyLiveWriteStyled"],
+            "md": ["relyMdRender", "relyMdPreview", "relyMdPreviewStyled", "relyMdBuild"],
+            "style": ["relyStyleDefault", "relyStyle", "relyStyleCss"],
+            "media": ["relyMediaImage", "relyMediaAudio", "relyMediaVideo", "relyMediaYoutube", "relyMediaRender"]
+        },
         "features": [
             "Markdown to HTML",
-            "Live HTML document generation",
+            "Live preview documents",
             "Custom themes and CSS",
             "Images",
             "Audio",
