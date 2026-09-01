@@ -32,6 +32,17 @@
     <string name="project_type_ui_desc">Screens and views</string>
     <string name="project_type_free_desc">A blank code file</string>
 
+    <!-- "Draw the interface" options in the New UI Project dialog: only shown when the UI
+         type is selected. Lets the user toggle a top bar / no top bar, a sidebar / no sidebar,
+         and pick a primary color, before generating main.rin (see ProjectManager.UiDesignOptions). -->
+    <string name="ui_design_section_title">Draw the interface</string>
+    <string name="ui_design_section_desc">Choose the main screen elements before creating the project</string>
+    <string name="ui_design_topbar_label">Top bar</string>
+    <string name="ui_design_topbar_desc">A fixed title bar at the top of the screen</string>
+    <string name="ui_design_sidebar_label">Sidebar</string>
+    <string name="ui_design_sidebar_desc">A side navigation menu with its items</string>
+    <string name="ui_design_colors_label">Colors</string>
+
     <!-- New-project creation stages -->
     <string name="project_creating_title">Creating project</string>
     <string name="project_stage_loading">Loading..</string>
