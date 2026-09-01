@@ -79,6 +79,15 @@
 
     <!-- ألوان تمييز شارة نوع المشروع في قائمة المشاريع (Container/Table/UI/Free Project)،
          كل نوع بهوية لونية مستقلة بدل لون rin_accent الموحّد للجميع. -->
+    <!-- لوحة ألوان قسم "رسم الواجهة" داخل حوار مشروع UI جديد: يختار المستخدم لوناً أساسياً
+         (primary) يُكتب داخل @theme في main.rin المولَّد، بدل البنفسجي الثابت وحده. -->
+    <color name="ui_design_color_purple">#7C5CFF</color>
+    <color name="ui_design_color_blue">#3B82F6</color>
+    <color name="ui_design_color_green">#22C88E</color>
+    <color name="ui_design_color_amber">#F2A65A</color>
+    <color name="ui_design_color_pink">#FF4D6D</color>
+    <color name="ui_design_color_cyan">#5FD0E0</color>
+
     <color name="project_type_container_color">#4EC9B0</color>
     <color name="project_type_table_color">#D7BA7D</color>
     <color name="project_type_ui_color">#5FD0E0</color>
