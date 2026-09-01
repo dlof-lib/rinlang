@@ -239,7 +239,18 @@ struct Loom {
                 if (!isOpen) { size = {0,0,0,0}; break; }
                 Constraints dc = c2;
                 if (!s->attr("width")) { dc.minW = dc.maxW = std::min(280.0, c2.maxW); }
-                dc.minH = dc.maxH = c2.maxH; // full height overlay
+                // full height overlay — but only when we have a real (finite) height budget to fill.
+                // A Drawer that ends up outside Scaffold's dedicated role="drawer"/"sidebar" slot
+                // (wrong/typo'd role, or no Scaffold at all) is measured here with whatever
+                // constraint its parent handed it, which can be the ~1e9 "unbounded" sentinel used
+                // for probe passes and root calls. Forcing dc.maxH to that sentinel used to make the
+                // Drawer literally report a ~1e9px height, which then propagated up as the
+                // *measured* size of everything above it (e.g. Scaffold's contentUsedH) and made
+                // LoomFabricView try to allocate a view a billion pixels tall — nothing drew at all.
+                // When the budget isn't finite, size to content instead (like a normal Column) so a
+                // misclassified Drawer degrades to a visibly-wrong-but-recoverable element rather
+                // than a fully black preview.
+                if (c2.maxH < 1e9) { dc.minH = dc.maxH = c2.maxH; }
                 size = layoutLinear(s, dc, Axis::Y, originX, originY);
                 break;
             }
@@ -634,12 +645,13 @@ struct Loom {
     }
 
     // ---- new: Scaffold — the "page shell": Header/TopBar (role="topbar", fixed to top),
-    // BottomBar (role="bottombar", fixed to bottom), Drawer (role="drawer", overlays above
-    // content, positioned off-screen at x=-width when its own open=false), and Content
-    // (role="content" or unmarked, gets whatever vertical space is left between the bars).
-    // This is the piece a whole .rin *page* is expected to be wrapped in once TopBar/BottomBar/
-    // Drawer are used, so they stay pinned while Content scrolls (scrolling itself is a host
-    // ScrollView concern — Content here is simply given the full remaining height to lay out in).
+    // BottomBar (role="bottombar", fixed to bottom), Drawer (role="drawer" or role="sidebar",
+    // both accepted — overlays above content, positioned off-screen at x=-width when its own
+    // open=false), and Content (role="content" or unmarked, gets whatever vertical space is
+    // left between the bars). This is the piece a whole .rin *page* is expected to be wrapped
+    // in once TopBar/BottomBar/Drawer are used, so they stay pinned while Content scrolls
+    // (scrolling itself is a host ScrollView concern — Content here is simply given the full
+    // remaining height to lay out in).
     Rect layoutScaffold(StrandPtr s, Constraints c, double originX, double originY) {
         double topH = 0, bottomH = 0;
         StrandPtr topbar, bottombar, drawer;
@@ -648,7 +660,7 @@ struct Loom {
             std::string role = child->attrStr("role", "");
             if (role == "topbar" || role == "header") topbar = child;
             else if (role == "bottombar") bottombar = child;
-            else if (role == "drawer") drawer = child;
+            else if (role == "drawer" || role == "sidebar") drawer = child; // "sidebar" is a common alias authors reach for
             else content.push_back(child);
         }
         if (topbar) { Rect r = layout(topbar, {c.maxW, c.maxW, 0, c.maxH}, originX, originY); topH = r.h; }
