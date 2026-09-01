@@ -88,6 +88,19 @@ struct ApiEndpoint {
     std::vector<std::pair<std::string, std::string>> headers; // بترتيب التسجيل؛ نفس المفتاح المُعاد تسجيله يُحدَّث مكانه
 };
 
+// سجلّ واحد صادر عن print.log(...) / print.log.info/warn/error/debug(...) (انظر LogStmt في
+// rin_ast.h) — الحقول الخمسة المطلوبة حرفياً: Time/Level/Message/Source/Line. يُراكَم كل سجلّ في
+// Interpreter::logHistory_ عند تنفيذه (بصرف النظر عن طباعته من عدمه)، وهذا بالضبط ما يجعل النظام
+// قابلاً للتوسّع مستقبلاً إلى ملفات Log: logSave()/logHistory() (natives، انظر registerNatives())
+// تُبنى فوق logHistory_ الموجود دون أي حاجة لتغيير عبارة print.log نفسها لاحقاً.
+struct LogEntry {
+    std::string time;    // HH:MM:SS وقت التنفيذ الفعلي
+    std::string level;   // "log" | "info" | "warn" | "error" | "debug"
+    std::string message; // exprs مُجمَّعة بـ sep
+    std::string source;  // sourceFile الحالي، أو source= مخصّص
+    int line = 0;         // رقم سطر عبارة print.log في الكود
+};
+
 // ---- relation: علاقة معرَّفة بين مجموعتَي مستندات (شبيهة بمفتاح أجنبي/foreign key بسيط) ----
 // يربط قيمة حقل fromField داخل مستند في fromContainer بكل مستند في toContainer تساوي فيه toField
 // نفس القيمة (انظر relatedDocs). يُعرَّف عبر defineRelation، ويُستعلَم عنه عبر relatedDocs.
@@ -493,6 +506,7 @@ private:
     std::unordered_set<std::string> installedNames;          // ما تم "تثبيته" عبر installation (بما فيها ما حُمِّل من فهرس سابق فعلي على القرص)
     std::vector<std::string> containerStack;                 // مفتاح الحاوية الحالية (لأجل link/tying/merge/save/route/call)
     std::string currentFilePath;                              // آخر مسار مُعرَّف عبر file
+    std::vector<LogEntry> logHistory_;                        // كل سجلّات print.log بترتيب حدوثها (انظر LogEntry أعلاه) — logHistory()/logSave()/logClear() natives
     std::unordered_map<std::string, std::vector<ApiRoute>> apiRoutes; // مفتاح container.api -> نقاطها المسجَّلة عبر route
     std::unordered_map<std::string, ApiEndpoint> apiEndpoints; // اسم -> نقطة API حقيقية مسجَّلة عبر apiRegister/apiHeader
     int defaultHttpTimeoutMs = 15000; // مهلة افتراضية لكل طلب HTTP حقيقي (قابلة للتعديل عبر httpSetTimeout)
