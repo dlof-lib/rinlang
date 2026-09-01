@@ -6,6 +6,7 @@
 #include <cstdlib>
 #include <sstream>
 #include <unordered_map>
+#include <memory>
 
 namespace {
 char* dupToC(const std::string& s) {
@@ -25,11 +26,15 @@ struct LoomSession {
     loom::OverlayLayer overlayLayer; // rebuilt every relayout() -- see rin_loom_overlay.h
 
     // Persistent interpreter for this session's onTap handlers (see dispatchTap's doc comment in
-    // rin_loom_needle.h). Fixes the previously-documented gap where sendMessage()/botReply() etc.
-    // called from an onTap handler never persisted between taps because a brand-new
-    // rin::Interpreter (with its own empty chatHistoryStore) was created every single tap. One
-    // LoomSession == one screen/session == one Interpreter, seeded on first tap.
-    rin::Interpreter interp;
+    // rin_loom_needle.h)... One LoomSession == one screen/session == one Interpreter, seeded on
+    // first tap (or on cold render -- see rin_loom_session_create's real-runtime comment below).
+    //
+    // Held via unique_ptr rather than by value: rin::Interpreter has an implicitly-deleted copy
+    // assignment operator (it owns non-copy-assignable state), so `sess->interp = Interpreter()`
+    // (needed on the "previous run failed, retry from a clean Interpreter" path in
+    // rin_loom_session_update_source) cannot compile against a plain value member -- reassigning
+    // the pointee via std::make_unique sidesteps that entirely.
+    std::unique_ptr<rin::Interpreter> interp = std::make_unique<rin::Interpreter>();
     bool interpSeeded = false;
 };
 
@@ -147,7 +152,7 @@ RIN_API void* rin_loom_session_create(const char* source, int rootWidth) {
     // not a throwaway one -- so the exact same Interpreter instance (with its containers/chat
     // state/etc. already populated by this real run) is reused by every subsequent onTap via
     // Needle, instead of a brand-new empty Interpreter being created per tap or per session.
-    sess->state = loom::runColdPipelineWithRuntime(source ? source : "", sess->interp);
+    sess->state = loom::runColdPipelineWithRuntime(source ? source : "", *sess->interp);
     // Mark seeded immediately: the run() above already executed the whole program (container
     // bodies, top-level funs hoisted, etc.), so Needle's own lazy "seed once on first tap" path
     // in dispatchTap (rin_loom_needle.h) must NOT run() this same Interpreter a second time --
@@ -160,7 +165,7 @@ RIN_API void* rin_loom_session_create_for_container(const char* source, const ch
     auto* sess = new (std::nothrow) LoomSession();
     if (!sess) return nullptr;
     sess->rootWidth = rootWidth > 0 ? rootWidth : 390;
-    sess->state = loom::runColdPipelineForContainerWithRuntime(source ? source : "", containerName ? containerName : "", sess->interp);
+    sess->state = loom::runColdPipelineForContainerWithRuntime(source ? source : "", containerName ? containerName : "", *sess->interp);
     if (sess->state.ok) { sess->interpSeeded = true; relayout(sess); rebuildIndex(sess); } // see rin_loom_session_create's comment
     return sess;
 }
@@ -178,7 +183,7 @@ RIN_API char* rin_loom_session_tap(void* sessionPtr, double x, double y) {
     loom::TapResult tap = loom::dispatchTapWithOverlay(sess->state.fabric, sess->state.warp,
                                                         sess->state.program, sess->overlayLayer, x, y,
                                                         nullptr, nullptr,
-                                                        &sess->interp, &sess->interpSeeded);
+                                                        sess->interp.get(), &sess->interpSeeded);
 
     if (!tap.changedWarpNames.empty()) {
         loom::Shuttle shuttle;
@@ -219,9 +224,9 @@ RIN_API char* rin_loom_session_update_source(void* sessionPtr, const char* newSo
         // Never had a good Fabric to diff against -- just retry the cold pipeline outright, still
         // through the session's own persistent Interpreter (not a throwaway one) so state stays
         // consistent with whatever taps run next -- see rin_loom_session_create's comment.
-        sess->interp = rin::Interpreter(); // previous run (if any) never completed successfully; start clean
+        sess->interp = std::make_unique<rin::Interpreter>(); // previous run (if any) never completed successfully; start clean
         sess->interpSeeded = false;
-        sess->state = loom::runColdPipelineWithRuntime(src, sess->interp);
+        sess->state = loom::runColdPipelineWithRuntime(src, *sess->interp);
         if (sess->state.ok) {
             sess->interpSeeded = true;
             relayout(sess); rebuildIndex(sess);
