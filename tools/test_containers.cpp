@@ -52,7 +52,7 @@ int main() {
             .end/Containers.Group
         .end/Volume
 
-        @Everything=my_app
+        @make=my_app
             fun greet(name) {
                 return "Hello " + name;
             }
@@ -65,24 +65,35 @@ int main() {
                 document id="n1" fields={ note: "ملاحظة" };
             .end/doc
 
-            print greet("World");
-        .end/Everything
+            make msg = greet("World");
+            show msg;
+        .end/make
 
-        @Everything=dynamic_demo
+        @Rin.make=dynamic_demo
             fun makeGreeter(prefix) {
                 fun greet(who) { return prefix + " " + who; }
                 return greet;
             }
-            spawn("table", "dyn_a");
+            create("table", "dyn_a");
             setField("dyn_a", "note", "spawned at runtime");
             setField("dyn_a", "sayHi", makeGreeter("Hi from dyn_a ->"));
-            print "dyn_a kind =", kindOf("dyn_a");
-            print "dyn_a note =", getField("dyn_a", "note");
-            print callFn(getField("dyn_a", "sayHi"), ["World"]);
-            print "hasContainer(dyn_a) =", hasContainer("dyn_a");
-            print "destroyContainer(dyn_a) =", destroyContainer("dyn_a");
-            print "hasContainer(dyn_a) after destroy =", hasContainer("dyn_a");
+            show "dyn_a kind =", kindOf("dyn_a");
+            show "dyn_a note =", getField("dyn_a", "note");
+            show run(getField("dyn_a", "sayHi"), ["World"]);
+            show "hasContainer(dyn_a) =", hasContainer("dyn_a");
+            show "destroyContainer(dyn_a) =", destroyContainer("dyn_a");
+            show "hasContainer(dyn_a) after destroy =", hasContainer("dyn_a");
+        .end/Rin.make
+
+        // الاسمان القديمان "@Everything"/"@container.everything" ما زالا مقبولين بالكامل
+        // (اسم بديل/alias للتوافق العكسي) — يُختبَران هنا صراحةً حتى لا ينكسرا مستقبلاً.
+        @Everything=legacy_alias_check
+            print "legacy @Everything alias still works";
         .end/Everything
+
+        @container.everything=legacy_alias_check2
+            print "legacy @container.everything alias still works";
+        .end/container.everything
     )";
 
     try {
