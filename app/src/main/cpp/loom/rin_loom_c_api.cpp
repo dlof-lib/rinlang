@@ -142,8 +142,17 @@ RIN_API void* rin_loom_session_create(const char* source, int rootWidth) {
     auto* sess = new (std::nothrow) LoomSession();
     if (!sess) return nullptr;
     sess->rootWidth = rootWidth > 0 ? rootWidth : 390;
-    sess->state = loom::runColdPipeline(source ? source : "");
-    if (sess->state.ok) { relayout(sess); rebuildIndex(sess); }
+    // Real Runtime Session (see rin_loom_pipeline.h's runColdPipelineWithRuntime): the session's
+    // own persistent rin::Interpreter runs the program for real right here at creation time --
+    // not a throwaway one -- so the exact same Interpreter instance (with its containers/chat
+    // state/etc. already populated by this real run) is reused by every subsequent onTap via
+    // Needle, instead of a brand-new empty Interpreter being created per tap or per session.
+    sess->state = loom::runColdPipelineWithRuntime(source ? source : "", sess->interp);
+    // Mark seeded immediately: the run() above already executed the whole program (container
+    // bodies, top-level funs hoisted, etc.), so Needle's own lazy "seed once on first tap" path
+    // in dispatchTap (rin_loom_needle.h) must NOT run() this same Interpreter a second time --
+    // that would double every side effect (chat messages appended twice, docs inserted twice, ...).
+    if (sess->state.ok) { sess->interpSeeded = true; relayout(sess); rebuildIndex(sess); }
     return sess;
 }
 
@@ -151,8 +160,8 @@ RIN_API void* rin_loom_session_create_for_container(const char* source, const ch
     auto* sess = new (std::nothrow) LoomSession();
     if (!sess) return nullptr;
     sess->rootWidth = rootWidth > 0 ? rootWidth : 390;
-    sess->state = loom::runColdPipelineForContainer(source ? source : "", containerName ? containerName : "");
-    if (sess->state.ok) { relayout(sess); rebuildIndex(sess); }
+    sess->state = loom::runColdPipelineForContainerWithRuntime(source ? source : "", containerName ? containerName : "", sess->interp);
+    if (sess->state.ok) { sess->interpSeeded = true; relayout(sess); rebuildIndex(sess); } // see rin_loom_session_create's comment
     return sess;
 }
 
@@ -207,9 +216,17 @@ RIN_API char* rin_loom_session_update_source(void* sessionPtr, const char* newSo
     std::string src = newSource ? newSource : "";
 
     if (!sess->state.ok) {
-        // Never had a good Fabric to diff against -- just retry the cold pipeline outright.
-        sess->state = loom::runColdPipeline(src);
-        if (sess->state.ok) { relayout(sess); rebuildIndex(sess); return dupToC(fabricEnvelope(sess, ",\"handled\":false,\"changed\":[]")); }
+        // Never had a good Fabric to diff against -- just retry the cold pipeline outright, still
+        // through the session's own persistent Interpreter (not a throwaway one) so state stays
+        // consistent with whatever taps run next -- see rin_loom_session_create's comment.
+        sess->interp = rin::Interpreter(); // previous run (if any) never completed successfully; start clean
+        sess->interpSeeded = false;
+        sess->state = loom::runColdPipelineWithRuntime(src, sess->interp);
+        if (sess->state.ok) {
+            sess->interpSeeded = true;
+            relayout(sess); rebuildIndex(sess);
+            return dupToC(fabricEnvelope(sess, ",\"handled\":false,\"changed\":[]"));
+        }
         return dupToC(sessionErrorJson(sess));
     }
 
