@@ -618,6 +618,17 @@ Java_com_dlof_rinlang_RinEngine_loomSessionFreeNative(JNIEnv* /* env */, jobject
     rin_loom_session_free(reinterpret_cast<void*>(handle));
 }
 
+// loomSessionSetViewportNative(handle, viewportHeight) -> Overlay Engine (rin_loom_overlay.h):
+// Dialog centering / Tooltip clamping needs the *real* on-screen viewport height (not the 844
+// native-side default) to re-home overlays correctly against the actual device -- see
+// rin_loom_session_set_viewport's own doc comment in rin_loom_c_api.h/.cpp. Kotlin should call
+// this once it knows the preview surface's real measured height (dp), same moment it already
+// measures the surface's width for rootWidth (see LoomPreviewActivity.fitDeviceWidth()).
+extern "C" JNIEXPORT void JNICALL
+Java_com_dlof_rinlang_RinEngine_loomSessionSetViewportNative(JNIEnv* /* env */, jobject /* this */, jlong handle, jint viewportHeight) {
+    rin_loom_session_set_viewport(reinterpret_cast<void*>(handle), (int)viewportHeight);
+}
+
 // ================= جسر HTTP الحقيقي: JNI_OnLoad + native -> Kotlin (RinHttpBridge) =================
 // لماذا هنا تحديداً وليس داخل rin_http.cpp؟ rin_http.h/.cpp مصمَّمان عمداً بلا أي اعتماد على
 // <jni.h> (انظر تعليق rin_http.h) حتى يبقيا قابلين للبناء كأداة سطر أوامر عادية بلا NDK. كل ما
