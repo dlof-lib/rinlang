@@ -32,6 +32,18 @@
     <string name="project_type_ui_desc">Pantallas y vistas</string>
     <string name="project_type_free_desc">Un archivo de código en blanco</string>
 
+    <!-- Opciones de "dibujar la interfaz" en el diálogo de nuevo proyecto UI: solo aparecen al
+         elegir el tipo UI. Permiten activar/desactivar la barra superior, activar/desactivar el
+         menú lateral y elegir un color principal, antes de generar main.rin (ver
+         ProjectManager.UiDesignOptions). -->
+    <string name="ui_design_section_title">Dibujar la interfaz</string>
+    <string name="ui_design_section_desc">Elige los elementos principales de la pantalla antes de crear el proyecto</string>
+    <string name="ui_design_topbar_label">Barra superior</string>
+    <string name="ui_design_topbar_desc">Una barra de título fija en la parte superior de la pantalla</string>
+    <string name="ui_design_sidebar_label">Menú lateral</string>
+    <string name="ui_design_sidebar_desc">Un menú de navegación lateral con sus elementos</string>
+    <string name="ui_design_colors_label">Colores</string>
+
     <!-- Etapas de creación de un proyecto nuevo -->
     <string name="project_creating_title">Creando proyecto</string>
     <string name="project_stage_loading">Cargando..</string>
