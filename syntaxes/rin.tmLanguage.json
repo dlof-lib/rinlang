@@ -79,7 +79,7 @@
       "comment": ".end/Kind closing marker. Slashes can appear inside the kind itself (container.open/object), so the tail is matched greedily.",
       "patterns": [
         {
-          "match": "(\\.end)(/)(Containers\\.Group|Volume|Object|portal|block|sticker|AUKT|table|doc|container(?:\\.(?:pipe|data|api|import|table|doc|object|portal|block|sticker|aukt|open))?(?:/object)?|view(?:\\.[A-Za-z][A-Za-z0-9_]*)?|Section|Translations)\\b",
+          "match": "(\\.end)(/)(Containers\\.Group|Volume|Object|portal|block|sticker|AUKT|Everything|table|doc|container(?:\\.(?:pipe|data|api|import|table|doc|object|portal|block|sticker|aukt|everything|open))?(?:/object)?|view(?:\\.[A-Za-z][A-Za-z0-9_]*)?|Section|Translations)\\b",
           "captures": {
             "1": { "name": "punctuation.definition.tag.end.rin" },
             "2": { "name": "punctuation.separator.rin" },
@@ -123,7 +123,7 @@
       "patterns": [
         {
           "comment": "Recognized container/view family tags get their own scope for finer theming.",
-          "match": "(@)(Containers\\.Group|Volume|Object|portal|block|sticker|AUKT|table|doc|container(?:\\.(?:pipe|data|api|import|table|doc|object|portal|block|sticker|aukt|open))?(?:/object)?|view(?:\\.[A-Za-z][A-Za-z0-9_]*)?)\\b(=)?",
+          "match": "(@)(Containers\\.Group|Volume|Object|portal|block|sticker|AUKT|Everything|table|doc|container(?:\\.(?:pipe|data|api|import|table|doc|object|portal|block|sticker|aukt|everything|open))?(?:/object)?|view(?:\\.[A-Za-z][A-Za-z0-9_]*)?)\\b(=)?",
           "captures": {
             "1": { "name": "punctuation.definition.tag.rin" },
             "2": { "name": "entity.name.tag.container.rin" },
