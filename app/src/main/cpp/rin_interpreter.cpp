@@ -499,6 +499,32 @@ static std::string containerIcon(ContainerKind k) {
     }
 }
 
+// يحوّل نص kind حرّاً (كما يمرّره المبرمج إلى spawn(kind, name)) إلى ContainerKind معروف، بمطابقة
+// غير حسّاسة لحالة الأحرف وبتجاهل بادئة "container." الاختيارية (نفس أسماء الوسوم الرسمية في
+// rin_parser.cpp: container/pipe/data/api/table/doc/object/portal/block/sticker/aukt/chatbot/
+// everything). أي نص غير معروف يُعاد كـ ContainerKind::PLAIN (بلا أي تقييد على الجسم لاحقاً) —
+// النص الأصلي يبقى محفوظاً كاملاً في containerCustomKind لأجل kindOf() الاستقصائية.
+static ContainerKind resolveContainerKindName(const std::string& raw) {
+    std::string s = raw;
+    for (auto& c : s) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    static const std::string prefix = "container.";
+    if (s.compare(0, prefix.size(), prefix) == 0) s = s.substr(prefix.size());
+    if (s == "pipe") return ContainerKind::PIPE;
+    if (s == "data") return ContainerKind::DATA;
+    if (s == "api") return ContainerKind::API;
+    if (s == "table") return ContainerKind::TABLE;
+    if (s == "doc") return ContainerKind::DOC;
+    if (s == "object") return ContainerKind::OBJECT;
+    if (s == "portal") return ContainerKind::PORTAL;
+    if (s == "block") return ContainerKind::BLOCK;
+    if (s == "sticker") return ContainerKind::STICKER;
+    if (s == "aukt") return ContainerKind::AUKT;
+    if (s == "chatbot") return ContainerKind::CHATBOT;
+    if (s == "everything") return ContainerKind::EVERYTHING;
+    if (s == "container" || s == "plain") return ContainerKind::PLAIN;
+    return ContainerKind::PLAIN;
+}
+
 // ================= تسلسل القيم (serialization) لأجل save/installation الحقيقيَّين =================
 // يحوّل رقماً إلى نص Rin قابل لإعادة التحليل مباشرة (بدون ترميز علمي e/E غير مدعوم في scanNumber).
 static std::string numberLiteral(double n) {
@@ -2172,6 +2198,136 @@ void Interpreter::registerNatives() {
         std::string method = asString(a[1], "callApi", line);
         std::string path = asString(a[2], "callApi", line);
         return performApiCall(key, method, path, line);
+    };
+
+    // ================= أدوات @Everything الديناميكية: أنشئ أي شيء وبرمِج أي شيء وقت التشغيل =================
+    // @Everything (انظر ContainerKind::EVERYTHING أعلى) تسمح فعلاً بتعشيش أي نوع حاوية آخر بصياغة
+    // ثابتة (@table=... .end/table إلخ) بلا أي قيد. الأدوات التالية تضيف الطبقة المكمّلة: إنشاء/قراءة/
+    // كتابة/استدعاء أي حاوية أو حقل بالاسم كنص عادي (Value) وقت التشغيل، بحيث يمكن لحلقة for واحدة أن
+    // "تُنشئ أي شيء" (أسماء وأنواع محسوبة ديناميكياً) و"تبرمج أي شيء" (تخزين حتى دوال Rin كقيم حقول
+    // ثم استدعاؤها لاحقاً عبر callFn). لا علاقة لهذه الأدوات بنوع الحاوية المحيطة بها إطلاقاً — تعمل
+    // من أي مكان في البرنامج، تماماً كـ callApi أعلاه.
+
+    // spawn(kind, name?) -> ينشئ حاوية جديدة باسم name (أو معرّفاً تلقائياً "#N" إن أُغفل/كان فارغاً)
+    // ونوع kind (نص حرّ: "table"/"chatbot"/"everything"/أي اسم آخر غير معروف -> PLAIN بلا أي قيد
+    // بيانات نقية). تُسجَّل داخل نفس containers/containerKinds الحقيقيَّين (فتراها install/save/link/
+    // tying/merge وكل أدوات container.* الأخرى بنفس الطريقة تماماً كأي @container عادية)، وتُضاف إلى
+    // آخر Containers.Group مفتوحة إن وُجدت. تُعيد اسم الحاوية الفعلي (string) لتيسير التسلسل/التخزين.
+    natives["spawn"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgsRange("spawn", a, 1, 2, line);
+        std::string kindRaw = asString(a[0], "spawn", line);
+        std::string name = (a.size() > 1) ? asString(a[1], "spawn", line) : "";
+        if (name.empty()) name = "#" + std::to_string(containers.size());
+        auto env = std::make_shared<Environment>(globals);
+        containers[name] = env;
+        containerKinds[name] = resolveContainerKindName(kindRaw);
+        containerCustomKind[name] = kindRaw;
+        if (!groupStack.empty()) groupMembers[groupStack.back()].push_back(name);
+        return Value::string(name);
+    };
+
+    // destroyContainer(name) -> يحذف حاوية أُنشئت عبر spawn (أو أي حاوية أخرى) بالكامل من containers/
+    // containerKinds. true إن كانت موجودة فحُذفت، false إن لم تكن موجودة أصلاً.
+    natives["destroyContainer"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("destroyContainer", a, 1, line);
+        std::string name = asString(a[0], "destroyContainer", line);
+        bool existed = containers.count(name) > 0;
+        containers.erase(name);
+        containerKinds.erase(name);
+        containerCustomKind.erase(name);
+        return Value::boolean_(existed);
+    };
+
+    // hasContainer(name) -> true إن كانت هناك حاوية مسجَّلة بهذا الاسم (عبر @container أو spawn)
+    natives["hasContainer"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("hasContainer", a, 1, line);
+        return Value::boolean_(containers.count(asString(a[0], "hasContainer", line)) > 0);
+    };
+
+    // kindOf(name) -> نص نوع الحاوية: النص الحرفي الذي مُرِّر لِـ spawn() إن أُنشئت به، وإلا الوسم
+    // الرسمي الموحَّد (نفس containerTagName المستخدم في الحفظ/التسلسل، مثال "container.table").
+    // nil إن لم توجد حاوية بهذا الاسم إطلاقاً.
+    natives["kindOf"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("kindOf", a, 1, line);
+        std::string name = asString(a[0], "kindOf", line);
+        if (!containers.count(name)) return Value::nil();
+        auto customIt = containerCustomKind.find(name);
+        if (customIt != containerCustomKind.end()) return Value::string(customIt->second);
+        return Value::string(containerTagName(containerKinds.count(name) ? containerKinds[name] : ContainerKind::PLAIN));
+    };
+
+    // containerNames() -> مصفوفة بكل أسماء الحاويات المسجَّلة حالياً (عبر @container أو spawn)
+    natives["containerNames"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("containerNames", a, 0, line);
+        auto result = std::make_shared<ArrayData>();
+        for (auto& kv : containers) result->push_back(Value::string(kv.first));
+        return Value::makeArray(result);
+    };
+
+    // setField(container, key, value) -> يعرِّف/يحدِّث متغيّراً باسم key بداخل بيئة الحاوية container
+    // (مباشرة، بصرف النظر عن نوعها) — هذا ما يجعل "برمجة أي شيء" ممكنة وقت التشغيل: يمكن تخزين حتى
+    // دالة Rin كقيمة حقل (value من نوع FUNCTION)، تُستدعى لاحقاً عبر callFn(). يُعيد true عند النجاح.
+    natives["setField"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("setField", a, 3, line);
+        std::string name = asString(a[0], "setField", line);
+        std::string key = asString(a[1], "setField", line);
+        auto it = containers.find(name);
+        if (it == containers.end()) {
+            throw errWithReason(diag::Code::E0014_InvalidContainer, line,
+                                 "'" + name + "' is not a known container",
+                                 "create it first via `@container=" + name + "` or `spawn(kind, \"" + name + "\")`");
+        }
+        it->second->define(key, a[2]);
+        return Value::boolean_(true);
+    };
+
+    // getField(container, key) -> قيمة الحقل key بداخل الحاوية container، أو nil إن لم يكن معرَّفاً
+    natives["getField"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("getField", a, 2, line);
+        std::string name = asString(a[0], "getField", line);
+        std::string key = asString(a[1], "getField", line);
+        auto it = containers.find(name);
+        if (it == containers.end()) {
+            throw errWithReason(diag::Code::E0014_InvalidContainer, line,
+                                 "'" + name + "' is not a known container",
+                                 "create it first via `@container=" + name + "` or `spawn(kind, \"" + name + "\")`");
+        }
+        Value out;
+        if (it->second->get(key, out)) return out;
+        return Value::nil();
+    };
+
+    // hasField(container, key) -> true إن كان الحقل key معرَّفاً (مباشرة أو عبر أي بيئة أب) بداخل container
+    natives["hasField"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("hasField", a, 2, line);
+        std::string name = asString(a[0], "hasField", line);
+        auto it = containers.find(name);
+        if (it == containers.end()) return Value::boolean_(false);
+        Value out;
+        return Value::boolean_(it->second->get(asString(a[1], "hasField", line), out));
+    };
+
+    // callFn(fn, args?) -> يستدعي أي قيمة دالة Rin (FUNCTION) — سواء أتت من getField()، أو من متغيّر
+    // عادي، أو من عنصر مصفوفة/قاموس — مع وسائط args (مصفوفة اختيارية، افتراضياً بلا وسائط). هذا هو ما
+    // يجعل تخزين "سلوك" كامل بداخل حقل حاوية مجدياً فعلاً: setField(name, "greet", greetFn) ثم لاحقاً
+    // callFn(getField(name, "greet"), ["World"]).
+    natives["callFn"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgsRange("callFn", a, 1, 2, line);
+        if (a[0].type != Value::Type::FUNCTION || !a[0].function) {
+            throw errWithReason(diag::Code::E0007_InvalidArguments, line,
+                                 "callFn() requires a function value as its first argument",
+                                 "got a " + a[0].typeName() + " instead — pass a `fun` value (e.g. from getField())");
+        }
+        std::vector<Value> args;
+        if (a.size() > 1) {
+            if (a[1].type != Value::Type::ARRAY || !a[1].array) {
+                throw errWithReason(diag::Code::E0007_InvalidArguments, line,
+                                     "callFn()'s second argument must be an array of arguments",
+                                     "got a " + a[1].typeName() + " instead — wrap arguments in [...]");
+            }
+            args = *a[1].array;
+        }
+        return callFunction(a[0].function, args, line);
     };
 
     // ================= HTTP حقيقي وفعلي (اتصال شبكة حقيقي) =================
