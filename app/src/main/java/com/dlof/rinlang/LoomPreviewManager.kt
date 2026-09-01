@@ -72,6 +72,16 @@ object LoomPreviewManager {
     @Volatile var rootWidth: Int = 390
         private set
 
+    /**
+     * Viewport height (same px space as [rootWidth]) last given to the native Overlay Engine —
+     * see [RinEngine.LoomSession.setViewport]. Kept here (not just pushed once) so a brand-new
+     * session created by [start] — which the native side always boots at its own 844px default
+     * (see rin_loom_session_set_viewport's doc comment) — is immediately corrected to the real
+     * on-screen height instead of waiting for whatever caller happens to call [setViewport] next.
+     */
+    @Volatile var viewportHeight: Int = 844
+        private set
+
     /** True once a session exists — the editor only bothers pushing live edits when this is true. */
     val isRunning: Boolean get() = session != null
 
@@ -110,10 +120,29 @@ object LoomPreviewManager {
         worker.execute {
             session?.close()
             val fresh = RinEngine.LoomSession(source, rootWidth)
+            fresh.setViewport(viewportHeight) // correct the native 844px default immediately -- see [viewportHeight]'s kdoc
             session = fresh
             beginTrackedOperation()
             val json = try { fresh.currentJson() } catch (t: Throwable) { errorJson(t) }
             endTrackedOperation()
+            deliver(json, 0)
+        }
+    }
+
+    /**
+     * Updates the Overlay Engine's notion of the real on-screen viewport height (Dialog centering
+     * / Tooltip clamping — see [RinEngine.LoomSession.setViewport]) and immediately re-delivers a
+     * fresh Fabric snapshot so any currently-open overlay re-homes without waiting for the next
+     * edit/tap. Safe to call whenever the preview surface's measured height changes (initial
+     * layout, rotation, device-frame switch) — cheap no-op on the native side if nothing changed
+     * or no overlay is open. No-ops entirely if no session is running yet.
+     */
+    fun setViewport(height: Int) {
+        viewportHeight = height
+        val current = session ?: return
+        worker.execute {
+            current.setViewport(height)
+            val json = try { current.currentJson() } catch (t: Throwable) { errorJson(t) }
             deliver(json, 0)
         }
     }
