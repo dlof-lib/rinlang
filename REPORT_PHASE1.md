@@ -116,3 +116,30 @@ ok:   nested while+if+container: card body ran exactly once (i==1)
 لاحظتُ فشلين في `test_loom_actions` ("parses") لكن تحققتُ بشكل قاطع أنهما **موجودان أصلًا في
 الكود الأصلي غير المعدَّل** (بنيته وشغّلته من نسخة نظيفة من الملف المرفوع) — أي ليسا ناتجين عن
 تعديلاتي.
+
+## Hotfix (post-report): Android NDK build failure من logs_90905711962.zip
+سجل الـ CI الذي أرفقته (`Build debug APK/8_Build debug APK.txt`) أظهر خطأ حقيقي واحد فقط، على
+منصة Android الفعلية (clang++ NDK 26.1, arm64-v8a):
+
+```
+rin_loom_c_api.cpp:222:22: error: object of type 'rin::Interpreter' cannot be assigned
+because its copy assignment operator is implicitly deleted
+```
+
+**السبب:** `rin::Interpreter` تحمل حالة غير قابلة لعملية `operator=` (implicitly deleted)، والسطر
+الذي أضفتُه في `rin_loom_session_update_source` (`sess->interp = rin::Interpreter();`) كان يحاول
+عملية إسناد كاملة لإعادة تعيين الجلسة عند فشل آخر حالة جيدة. لم يظهر هذا في اختبارات g++ على لينكس
+لأنني لم أُنشئ اختبارًا يمر تحديدًا بمسار "فشل ثم أُعِد المحاولة" في `update_source` — ثغرة في
+تغطية الاختبارات اعترف بها صراحة.
+
+**الإصلاح:** حوّلت `LoomSession::interp` من قيمة (`rin::Interpreter interp;`) إلى
+`std::unique_ptr<rin::Interpreter>` — إعادة التعيين الآن `sess->interp = std::make_unique<rin::Interpreter>();`
+(بناء جديد كامل، وليس عملية إسناد)، مع تحديث كل نقاط الاستخدام الأربع في نفس الملف
+(`*sess->interp` بدل `sess->interp`، و`sess->interp.get()` بدل `&sess->interp`).
+
+**التحقق:** أعدتُ بناء `rin_loom_c_api.cpp` بمفرده (نفس أعراض الفشل: ملف كائن، ثم كمكتبة مشتركة
+كاملة مربوطة بكل مصادر rin/clc الحقيقية) — نجح البناء بلا أي تحذير متعلق بهذا. أعدتُ أيضًا تشغيل
+كل الاختبارات الثمانية (Phase 1 العشرين + السبعة القديمة) — كلها ناجحة كما كانت، صفر رجوع إضافي.
+
+### Files changed (تحديث)
+- `app/src/main/cpp/loom/rin_loom_c_api.cpp` (تعديل إضافي فوق تعديلات الجلسة السابقة)
