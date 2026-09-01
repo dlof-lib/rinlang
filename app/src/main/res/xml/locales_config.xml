@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- يعلن اللغات المتوفرة لميزة "لغة التطبيق" الحديثة في أندرويد 13+ (Settings > Apps > Rin Lang > Language)
+<!-- يعلن اللغات المتوفرة لميزة "لغة التطبيق" الحديثة في أندرويد 13+ (Settings > Apps > RinStudio > Language)
      ويُستخدم أيضاً كمرجع للغات التي تدعمها شاشة الإعدادات الداخلية (LocaleHelper.kt) على كل الإصدارات. -->
 <locale-config xmlns:android="http://schemas.android.com/apk/res/android">
     <locale android:name="ar" />
