@@ -176,16 +176,11 @@ int main() {
             check(attr(findByName(r.fabric, "counter"), "text") == "0", "warp+onTap: initial count == 0");
             int expected[] = {1, 2, 3, 4, 0};
             bool allGood = true;
+            rin::Interpreter interp; // one persistent Interpreter across all 5 taps -- see LoomSession
             for (int tap = 0; tap < 5; tap++) {
-                auto tapResult = loom::dispatchTap(r.fabric, r.warp, r.program, /*x*/0, /*y*/0, nullptr, nullptr);
-                // dispatchTap hit-tests geometry, which isn't laid out in this test (no Loom::layout
-                // call) -- so call the handler directly via the same real-execution path it uses
-                // internally to keep this test focused on execution correctness, not hit-testing.
-                (void)tapResult;
                 std::unordered_map<std::string, rin::Value> globals;
                 for (auto& kv : r.warp.cells) globals[kv.first] = loom::loomValueToRin(kv.second);
                 std::vector<rin::Value> args; std::vector<std::string> aliases; std::string err;
-                rin::Interpreter interp;
                 bool okCall = interp.callTopLevelFunction(r.program, "increment", args, aliases, globals, err);
                 if (!okCall) { allGood = false; break; }
                 for (auto& kv : globals) r.warp.set(kv.first, loom::rinValueToLoom(kv.second));
@@ -231,34 +226,31 @@ int main() {
     // ---- 8. container-scoped pipeline: real execution scoped to the container's own body ----
     {
         std::string src = R"(
-            @container.card
+            @container=card
                 warp visits = 0;
                 while (visits < 3) {
                     visits = visits + 1;
                 }
                 @view.Text=t text=visits;
                 .end/view
-            .end/container.card
+            .end/container
         )";
         auto r = loom::runColdPipelineForContainer(src, "card");
-        if (!r.ok) std::cerr << "  (debug) container error: " << r.errorMessage << " line " << r.errorLine << "\n";
         check(r.ok, "container-scoped: pipeline succeeds");
         if (r.ok) check(attr(r.fabric, "text") == "3", "container-scoped: real while inside container reaches 3");
     }
 
-    // ---- 9. nested loop + if + container.open pattern (no container.open native yet -- this
-    //          documents the *current* real behavior: the container's body executes for real
-    //          the moment execution reaches its @container...end block, including inside a
-    //          while/if, since ContainerStmt is executed like any other statement) ----
+    // ---- 9. nested loop + if + container pattern: a container's own body genuinely executes
+    //          each time real control flow reaches it (spec item 26) ----
     {
         std::string src = R"(
             let i = 0;
-            let cardRuns = 0;
+            warp cardRuns = 0;
             while (i < 3) {
                 if (i == 1) {
-                    @container.card
+                    @container=card
                         cardRuns = cardRuns + 1;
-                    .end/container.card
+                    .end/container
                 }
                 i = i + 1;
             }
@@ -266,7 +258,6 @@ int main() {
             .end/view
         )";
         auto r = loom::runColdPipeline(src);
-        if (!r.ok) std::cerr << "  (debug) nested error: " << r.errorMessage << " line " << r.errorLine << "\n";
         check(r.ok, "nested while+if+container: pipeline succeeds");
         // NOTE: `cardRuns` is declared at top level but reassigned from inside the container's own
         // child Environment -- Environment::assign() walks up the parent chain, so this must find
