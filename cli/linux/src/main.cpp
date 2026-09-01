@@ -195,7 +195,7 @@ void printUsage() {
         "  rin new <name> [--template console]   إنشاء مشروع Rin جديد\n"
         "  rin pkg <command> [...]                RinPM: مدير حزم Rin (rin pkg --help)\n"
         "  rin build [file] [-o out] [--release]  بناء تنفيذي أصلي (عبر rinc)\n"
-        "  rin run [file]                         تشغيل برنامج Rin\n"
+        "  rin run [file] [--import-progress]     تشغيل برنامج Rin (شريط تحميل حي لـ @import)\n"
         "  rin check <file> [--format=plain|short|json|lsp]\n"
         "  rin test [dir]                         تشغيل اختبارات .rin\n"
         "  rin fmt <file> [--write]               إعادة محاذاة المسافات البادئة\n"
@@ -374,7 +374,11 @@ int cmdBuild(const std::vector<std::string>& args) {
 // ---------------------------------------------------------------------------
 int cmdRun(const std::vector<std::string>& args) {
     std::string file;
-    for (auto& a : args) if (!a.empty() && a[0] != '-') file = a;
+    bool importProgress = false;
+    for (auto& a : args) {
+        if (a == "--import-progress") importProgress = true;
+        else if (!a.empty() && a[0] != '-') file = a;
+    }
     if (file.empty()) {
         std::string root = findProjectRoot();
         if (!root.empty()) file = root + "/src/main.rin";
@@ -389,6 +393,9 @@ int cmdRun(const std::vector<std::string>& args) {
         return 2;
     }
     rin::Interpreter interp;
+    // --import-progress اختياري تماماً: بدونه السلوك مطابق تماماً لما كان عليه قبل هذه الميزة
+    // (لا شريط تحميل، لا أي فرق في الناتج). راجع rin::loaderui في app/src/main/cpp/loader_ui/.
+    if (importProgress) interp.setImportUIMode(rin::loaderui::Mode::Verbose);
     bool ok = runSource(source, file, interp);
     return ok ? 0 : 1;
 }
