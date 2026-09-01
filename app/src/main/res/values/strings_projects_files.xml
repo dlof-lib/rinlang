@@ -38,6 +38,17 @@
     <string name="project_type_ui_desc">شاشات وواجهات</string>
     <string name="project_type_free_desc">ملف كود فارغ</string>
 
+    <!-- خيارات "رسم الواجهة" داخل حوار مشروع UI جديد: تظهر فقط عند اختيار نوع UI،
+         وتسمح باختيار توب بار/بلا توب بار، قائمة جانبية/بلا قائمة جانبية، ولون أساسي،
+         قبل توليد main.rin (انظر ProjectManager.UiDesignOptions). -->
+    <string name="ui_design_section_title">رسم الواجهة</string>
+    <string name="ui_design_section_desc">اختر عناصر الشاشة الأساسية قبل إنشاء المشروع</string>
+    <string name="ui_design_topbar_label">شريط علوي</string>
+    <string name="ui_design_topbar_desc">شريط عنوان ثابت أعلى الشاشة</string>
+    <string name="ui_design_sidebar_label">قائمة جانبية</string>
+    <string name="ui_design_sidebar_desc">قائمة تنقّل جانبية بعناصرها</string>
+    <string name="ui_design_colors_label">الألوان</string>
+
     <!-- مراحل إنشاء مشروع جديد -->
     <string name="project_creating_title">إنشاء مشروع</string>
     <string name="project_stage_loading">جاري التحميل..</string>
