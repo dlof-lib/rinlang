@@ -3743,6 +3743,14 @@ void Interpreter::executeBlock(const std::vector<StmtPtr>& statements, EnvPtr en
 }
 
 void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
+    // Live Preview infinite-loop protection (see setExecutionBudget()): every statement --
+    // including each pass through a while/for body, since the loop's body is itself executed via
+    // this same execute() -- counts against the budget. execBudget_ == 0 (the default for every
+    // caller that never calls setExecutionBudget(), i.e. the CLI and all pre-existing callers)
+    // keeps this check a no-op, so nothing changes for anyone but Live Preview.
+    if (execBudget_ > 0 && ++execCount_ > execBudget_) {
+        throw RinError("Execution limit exceeded\nPossible infinite loop", stmt ? stmt->line : 0);
+    }
     if (auto s = std::dynamic_pointer_cast<ExpressionStmt>(stmt)) {
         evaluate(s->expr, env);
         return;
@@ -3955,7 +3963,30 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
         output << message << "\n";
         return;
     }
+    // @view...=name ... .end/view -- Loomtime UI markup. Not executable code (no side effect on
+    // env/output), but observed via viewReachedCb_ if a caller registered one: this is how a
+    // `@view` sitting inside a real `if`/`while`/`for` branch (see setViewReachedCallback()'s
+    // comment) gets identified as "the one real execution actually walked into", instead of a
+    // Live Preview caller having to guess by re-scanning the AST statically afterward.
+    if (auto s = std::dynamic_pointer_cast<ViewStmt>(stmt)) {
+        if (viewReachedCb_) viewReachedCb_(s);
+        return;
+    }
     if (auto s = std::dynamic_pointer_cast<LetStmt>(stmt)) {
+        Value v = Value::nil();
+        if (s->initializer) v = evaluate(s->initializer, env);
+        env->define(s->name, v);
+        return;
+    }
+    // warp name = expr;  --  Loomtime's reactive global-state declaration (rin_loom_pipeline.h /
+    // rin_loom_needle.h read these back out via exportGlobals()/callTopLevelFunction). Previously
+    // unhandled here entirely (silently skipped by run()), which is exactly why Live Preview had
+    // to hand-evaluate `warp` initializers itself with a separate, simplified expression
+    // evaluator instead of running the program for real. A `warp` cell is semantically just a
+    // `let` that Loom additionally treats as reactive UI state, so it gets identical runtime
+    // handling -- assignment (`count = count + 1;`), reads, and everything else about it are 100%
+    // ordinary Environment variable semantics, with no special-casing anywhere in the interpreter.
+    if (auto s = std::dynamic_pointer_cast<WarpStmt>(stmt)) {
         Value v = Value::nil();
         if (s->initializer) v = evaluate(s->initializer, env);
         env->define(s->name, v);
