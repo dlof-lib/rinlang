@@ -383,6 +383,11 @@ class LoomFabricView @JvmOverloads constructor(
         val h = node.optDouble("h", 0.0).toFloat()
         val attrs = node.optJSONObject("attrs") ?: JSONObject()
         val rect = RectF(x, y, x + w, y + h)
+        // The engine's own resolved color for this node (tone=/color=<role>/@theme= already
+        // baked in) — used below in place of each kind's hardcoded default so the preview
+        // reflects what the code actually specifies, not just a literal color="#RRGGBB". Null
+        // (old/cached session) means "fall back to the hardcoded default exactly as before".
+        val resolved = resolvedColor(node)
 
         when (kind) {
             // `format=` is a plain generic attr (see rin_loom_paint.h's fabricToJson — every
@@ -394,32 +399,32 @@ class LoomFabricView @JvmOverloads constructor(
             // needed, this is still an ordinary Text node.
             Kind.TEXT -> when (attrs.optString("format")) {
                 "code" -> drawCodeText(canvas, rect, attrs, attrs.optString("text"), defaultText)
-                "markdown" -> drawMarkdownText(canvas, rect, attrs, attrs.optString("text"), defaultText)
-                else -> drawText(canvas, rect, attrs, attrs.optString("text"), defaultText)
+                "markdown" -> drawMarkdownText(canvas, rect, attrs, attrs.optString("text"), resolved ?: defaultText)
+                else -> drawText(canvas, rect, attrs, attrs.optString("text"), resolved ?: defaultText)
             }
-            Kind.DIVIDER -> drawDivider(canvas, rect, attrs)
+            Kind.DIVIDER -> drawDivider(canvas, rect, attrs, resolved ?: defaultDivider)
             Kind.IMAGE -> drawImage(canvas, rect, attrs)
             Kind.BUTTON -> {
-                drawBox(canvas, rect, attrs, defaultButton, defaultRadius = 10f)
+                drawBox(canvas, rect, attrs, resolved ?: defaultButton, defaultRadius = 10f)
                 drawText(canvas, rect, attrs, attrs.optString("label"), Color.WHITE, centered = true, boldHint = true, singleLine = true)
             }
-            Kind.CARD -> drawBox(canvas, rect, attrs, defaultCard, defaultRadius = 14f)
-            Kind.OBJECT -> drawBox(canvas, rect, attrs, defaultCard, defaultRadius = 12f)
+            Kind.CARD -> drawBox(canvas, rect, attrs, resolved ?: defaultCard, defaultRadius = 14f)
+            Kind.OBJECT -> drawBox(canvas, rect, attrs, resolved ?: defaultCard, defaultRadius = 12f)
 
             // ---- new kinds ----
-            Kind.HEADER, Kind.TOPBAR, Kind.BOTTOMBAR -> drawBox(canvas, rect, attrs, defaultBar, defaultRadius = 0f)
+            Kind.HEADER, Kind.TOPBAR, Kind.BOTTOMBAR -> drawBox(canvas, rect, attrs, resolved ?: defaultBar, defaultRadius = 0f)
             Kind.DRAWER -> {
                 if (rect.width() > 0f) {
-                    drawBox(canvas, rect, attrs, defaultDrawer, defaultRadius = 0f)
+                    drawBox(canvas, rect, attrs, resolved ?: defaultDrawer, defaultRadius = 0f)
                     // subtle edge shadow so an open drawer reads as "above" the content behind it
                     fillPaint.shader = null; fillPaint.clearShadowLayer()
                     fillPaint.color = Color.argb(70, 0, 0, 0)
                     canvas.drawRect(rect.right, rect.top, rect.right + 6f, rect.bottom, fillPaint)
                 }
             }
-            Kind.MENU -> if (rect.width() > 0f) drawBox(canvas, rect, attrs, defaultCard, defaultRadius = 10f)
+            Kind.MENU -> if (rect.width() > 0f) drawBox(canvas, rect, attrs, resolved ?: defaultCard, defaultRadius = 10f)
             Kind.MENUITEM -> {
-                drawBox(canvas, rect, attrs, defaultCard, defaultRadius = 0f)
+                drawBox(canvas, rect, attrs, resolved ?: defaultCard, defaultRadius = 0f)
                 drawText(canvas, rect, attrs, attrs.optString("label").ifBlank { attrs.optString("text") }, defaultText, singleLine = true)
             }
             Kind.TABLE -> drawTable(canvas, rect, node, attrs)
@@ -428,13 +433,14 @@ class LoomFabricView @JvmOverloads constructor(
             Kind.AUDIO -> drawMediaPlaceholder(canvas, rect, attrs, "♪", attrs.optString("src"))
             Kind.WEBVIEW -> drawMediaPlaceholder(canvas, rect, attrs, "🌐", attrs.optString("src"))
             Kind.SCAFFOLD -> { /* pure layout container: TopBar/Content/BottomBar/Drawer children draw themselves */ }
-            Kind.SPLASH -> drawBox(canvas, rect, attrs, defaultContainer, defaultRadius = 0f)
+            Kind.SPLASH -> drawBox(canvas, rect, attrs, resolved ?: defaultContainer, defaultRadius = 0f)
             Kind.BANNER -> {
                 // A Banner is a padded box (like Card) whose default fill depends on its `type`
                 // attr (info/success/warning/error/action/progress/custom) rather than one fixed
-                // color; an explicit color= on the strand still wins (handled inside drawBox).
+                // color; an explicit tone=/color= on the strand still wins — [resolved] already
+                // carries that resolution (see loom::resolveColor()'s BANNER-specific fallback).
                 if (rect.width() > 0f && rect.height() > 0f) {
-                    drawBox(canvas, rect, attrs, bannerTypeColor(attrs.optString("type")), defaultRadius = 12f)
+                    drawBox(canvas, rect, attrs, resolved ?: bannerTypeColor(attrs.optString("type")), defaultRadius = 12f)
                 }
             }
             Kind.DIALOG -> {
@@ -444,12 +450,12 @@ class LoomFabricView @JvmOverloads constructor(
                 // the normal recursive walk, which skips it via overlayNames) at its corrected,
                 // scrim-backed, viewport-centered position.
                 if (rect.width() > 0f && rect.height() > 0f) {
-                    drawBox(canvas, rect, attrs, defaultDialog, defaultRadius = 16f)
+                    drawBox(canvas, rect, attrs, resolved ?: defaultDialog, defaultRadius = 16f)
                 }
             }
             Kind.TOOLTIP -> {
                 if (rect.width() > 0f && rect.height() > 0f) {
-                    drawBox(canvas, rect, attrs, defaultTooltip, defaultRadius = 6f)
+                    drawBox(canvas, rect, attrs, resolved ?: defaultTooltip, defaultRadius = 6f)
                     drawText(canvas, rect, attrs, attrs.optString("text"), defaultText, centered = true, singleLine = true)
                 }
             }
@@ -460,7 +466,7 @@ class LoomFabricView @JvmOverloads constructor(
             // Badge rendered as an empty dark rectangle instead of its "Beta"/"جديد" text.
             Kind.BADGE -> {
                 if (rect.width() > 0f && rect.height() > 0f) {
-                    val tone = toneColor(attrs.optString("tone").ifBlank { "primary" })
+                    val tone = resolved ?: toneColor(attrs.optString("tone").ifBlank { "primary" })
                     drawBox(canvas, rect, attrs, tone, defaultRadius = rect.height() / 2f)
                     drawText(canvas, rect, attrs, attrs.optString("text"), Color.WHITE, centered = true, boldHint = true, singleLine = true)
                 }
@@ -472,7 +478,7 @@ class LoomFabricView @JvmOverloads constructor(
             // blank space (the stray rectangle artifacts inside gradient header/nav rows).
             Kind.SPACER -> { /* intentionally draws nothing */ }
 
-            else -> drawBox(canvas, rect, attrs, defaultContainer, defaultRadius = 0f) // Column/Row/Stack/Custom
+            else -> drawBox(canvas, rect, attrs, resolved ?: defaultContainer, defaultRadius = 0f) // Column/Row/Stack/Custom
         }
 
         // Table draws its own header + cell children explicitly (needs column geometry), so it
@@ -772,10 +778,10 @@ class LoomFabricView @JvmOverloads constructor(
         textPaint.isFakeBoldText = false // textPaint is shared — never leave bold set for the next node
     }
 
-    private fun drawDivider(canvas: Canvas, rect: RectF, attrs: JSONObject) {
+    private fun drawDivider(canvas: Canvas, rect: RectF, attrs: JSONObject, fallback: Int) {
         fillPaint.shader = null
         fillPaint.clearShadowLayer()
-        fillPaint.color = parseHexColor(attrs.optString("color").ifBlank { null }, defaultDivider)
+        fillPaint.color = parseHexColor(attrs.optString("color").ifBlank { null }, fallback)
         canvas.drawRect(rect, fillPaint)
     }
 
@@ -917,5 +923,24 @@ class LoomFabricView @JvmOverloads constructor(
     private fun parseHexColor(hex: String?, fallback: Int): Int {
         if (hex.isNullOrBlank() || hex.length < 7 || hex[0] != '#') return fallback
         return try { Color.parseColor(hex) } catch (t: Throwable) { fallback }
+    }
+
+    /**
+     * Reads the native engine's already-resolved paint color for [node] — the
+     * `"resolvedColor"` field `loom::fabricToJson` now emits from `loom::resolveColor()` (see
+     * rin_loom_paint.h), i.e. `tone=`, a semantic `color="primary"`-style role name, and the
+     * active `@theme=` already baked in exactly as the real Dye rasterizer would paint it.
+     *
+     * [parseHexColor] above can only ever understand a literal `color="#RRGGBB"` written
+     * straight into the .rin source, so before this every one of those three cases was
+     * completely invisible to this view and it silently fell back to its own hardcoded
+     * per-kind palette instead — the preview not matching the code's actual colors. Null only
+     * for a cached/old session JSON that predates this field, in which case callers fall back
+     * to that same hardcoded default as before.
+     */
+    private fun resolvedColor(node: JSONObject): Int? {
+        val hex = node.optString("resolvedColor")
+        if (hex.length != 7 || hex[0] != '#') return null
+        return try { Color.parseColor(hex) } catch (t: Throwable) { null }
     }
 }
