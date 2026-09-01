@@ -3570,14 +3570,6 @@ std::string Interpreter::run(const std::vector<StmtPtr>& statements) {
     return output.str();
 }
 
-void Interpreter::setImportUIMode(loaderui::Mode mode) {
-    if (mode == loaderui::Mode::Quiet) {
-        importUiSink_.reset(); // مطابق تماماً لعدم استدعاء setImportUISink إطلاقاً
-    } else {
-        importUiSink_ = std::make_shared<loaderui::ConsoleBarSink>(output);
-    }
-}
-
 void Interpreter::executeBlock(const std::vector<StmtPtr>& statements, EnvPtr env) {
     for (const auto& s : statements) execute(s, env);
 }
@@ -3954,30 +3946,6 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
         }
         const std::string& rawPath = pathVal.str;
 
-        // ---- Library Loader UI: جلسة اختيارية لهذا الاستيراد بعينه (انظر
-        // app/src/main/cpp/loader_ui/library_loader_ui.h). importUiSink_ == nullptr (الافتراضي)
-        // يعني uiSession == nullptr، فتصبح uiStage(...) أدناه no-op كاملة بلا أي تكلفة أو تغيير
-        // على الناتج — لا فرق إطلاقاً عن الكود قبل إضافة هذه الوحدة ما لم يُستدعَ setImportUIMode/
-        // setImportUISink صراحة. importDepth_ الحالي (قبل الزيادة أدناه) هو عمق هذا الاستيراد:
-        // 0 لاستيراد أعلى مستوى، >0 إن كان تبعية داخل مكتبة أخرى قيد التحميل حالياً (يُستخدَم لعرض
-        // شجرة كمثال rin.ui: core/layout/paint/widgets).
-        //
-        // ملاحظة streaming: كل نص يكتبه uiSession يذهب إلى [output] كأي طباعة أخرى في هذا الملف؛
-        // لا نستدعي streamSink_ من هنا مباشرة عمداً — البث الحي (setStreamSink) يعمل بالفعل على
-        // مستوى "كل statement علوي كامل" في حلقة run() (انظر تعليقها هناك)، فيلتقط تلقائياً كل ما
-        // كتبه uiSession ضمن نفس الفرق قبل/بعد الحالي دون أي تدخّل هنا. استدعاء streamSink_ من هذا
-        // الموضع أيضاً كان يعني إرسال نفس البايتات مرتين لأي مستهلك خارجي (bug تم تفاديه عمداً).
-        std::unique_ptr<loaderui::LoadSession> uiSession;
-        if (importUiSink_) {
-            uiSession = std::make_unique<loaderui::LoadSession>(importUiSink_, rawPath, importDepth_);
-        }
-        auto uiStage = [&](loaderui::LoadStage st, const std::string& detail = "") {
-            if (uiSession) uiSession->stage(st, detail);
-        };
-        auto uiFinish = [&](loaderui::LoadOutcome outcome) {
-            if (uiSession) uiSession->finish(std::move(outcome));
-        };
-
         // ---- تقوية مفهوم lib/*.og.rin: اسم مكتبة "عارٍ" بلا مسار ولا امتداد (مثل @import "math";
         //      أو @import "myhelpers";) يُفهم تلقائياً على أنه lib/<name>.og.rin — سواء كانت مكتبة
         //      مدمجة قياسية أو مكتبة مستخدم حقيقية أنشأها/رفعها المستخدم من قسم "المكتبات" في المحرر
@@ -3991,14 +3959,12 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
             if (!hasExt) libPath += kLibExt;
             libPath = "lib/" + libPath;
         }
-        uiStage(loaderui::LoadStage::Resolving);
 
         // 1) أولاً: هل هذا اسم مكتبة مدمجة داخل المفسّر نفسه (مثل lib/data.og.rin)؟
         //    هذا يجعل @import يعمل مباشرة على أي منصة (بما فيها أندرويد) دون أي ملفات إضافية على القرص.
         const auto& embedded = embeddedRinLibraries();
         auto libIt = embedded.find(libPath);
         bool fromEmbedded = (libIt != embedded.end());
-        uiStage(loaderui::LoadStage::Locating);
 
         std::string source;
         if (fromEmbedded) {
@@ -4027,7 +3993,6 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
                     }
                 }
                 if (!foundAsPackage) {
-                    uiFinish(loaderui::LoadOutcome{false, false, false, "module not found: `" + rawPath + "`"});
                     auto d = diagErr(diag::Code::E0029_ModuleNotFound, s->line, "module not found: `" + rawPath + "`");
                     d.diagnostic->message = "module not found: `" + rawPath + "`";
                     d.diagnostic->withReason(
@@ -4039,17 +4004,12 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
                 }
             }
         }
-        uiStage(loaderui::LoadStage::Reading);
 
         // منع إعادة استيراد نفس المكتبة بنفس أسلوب الاستيراد (مباشر أو باسم مستعار) أكثر من مرة
         // في نفس التشغيل، تماماً كأنظمة الوحدات (modules) المعتادة.
         std::string importKey = libPath + (s->alias.empty() ? "" : ("#as:" + s->alias));
         if (importedPaths.count(importKey)) {
-            if (uiSession) {
-                uiFinish(loaderui::LoadOutcome{true, fromEmbedded, /*fromCache=*/true, ""});
-            } else {
-                output << "↺ @import: \"" << libPath << "\" مستورَدة مسبقاً بالفعل (تم تجاهل التكرار)\n";
-            }
+            output << "↺ @import: \"" << libPath << "\" مستورَدة مسبقاً بالفعل (تم تجاهل التكرار)\n";
             return;
         }
 
@@ -4060,21 +4020,12 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
             Parser importedParser(importedTokens, libPath);
             importedStatements = importedParser.parse();
         } catch (RinError& e) {
-            uiFinish(loaderui::LoadOutcome{false, fromEmbedded, false, e.message});
             auto d = diagErr(diag::Code::E0028_ImportError, s->line, "@import: error parsing library \"" + libPath + "\"");
             d.diagnostic->withReason("line " + std::to_string(e.line) + " of \"" + libPath + "\": " + e.message);
             if (e.diagnostic) d.diagnostic->withCause(diag::renderShort(*e.diagnostic));
             throw d;
         }
-        uiStage(loaderui::LoadStage::Parsing);
 
-        // ملاحظة دقة: Dependencies/Registering/Initializing الثلاثة تحدث فعلياً معاً داخل نداء
-        // executeBlock واحد أدناه (تنفيذ المكتبة يشمل أي @import متداخلة بداخلها *و* تعريف كل
-        // fun/let أعلى مستوى في نفس الوقت) — لا يوجد فاصل تنفيذي حقيقي بين الثلاثة لمسار الدمج
-        // المباشر تحديداً. تُعرَض كثلاث مراحل UI متتالية (70%/85%/95%) لتطابق تصميم الشريط
-        // المطلوب، لا كادّعاء بأن كل واحدة نقطة تنفيذ منفصلة فعلياً هنا.
-        uiStage(loaderui::LoadStage::Dependencies, "Resolving dependencies...");
-        importDepth_++; // أي @import تُنفَّذ أثناء executeBlock أدناه هي تبعية لهذه المكتبة (عمق+1)
         try {
             if (s->alias.empty()) {
                 // دمج مباشر: كل fun/let/text أعلى مستوى في المكتبة تصبح متاحة في النطاق الحالي مباشرة،
@@ -4090,28 +4041,16 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
                 if (!groupStack.empty()) groupMembers[groupStack.back()].push_back(s->alias);
             }
         } catch (RinError& e) {
-            importDepth_--;
-            uiFinish(loaderui::LoadOutcome{false, fromEmbedded, false, e.message});
             auto d = diagErr(diag::Code::E0028_ImportError, s->line, "@import: error inside library \"" + libPath + "\"");
             d.diagnostic->withReason("line " + std::to_string(e.line) + " of \"" + libPath + "\": " + e.message);
             if (e.diagnostic) d.diagnostic->withCause(diag::renderShort(*e.diagnostic));
             throw d;
         }
-        importDepth_--;
-        uiStage(loaderui::LoadStage::Registering);
-        uiStage(loaderui::LoadStage::Initializing);
-        uiStage(loaderui::LoadStage::Completed);
 
         importedPaths.insert(importKey);
-        if (uiSession) {
-            // Loader UI مفعَّل: رسالة "✓ ... loaded" التي يطبعها uiFinish أدناه تغني عن سطر
-            // "📦 @import: تم استيراد..." التقليدي (نفس المعلومة، بلا ازدواجية على نفس السطر).
-            uiFinish(loaderui::LoadOutcome{true, fromEmbedded, false, ""});
-        } else {
-            output << (fromEmbedded ? "📦" : "📥") << " @import: تم استيراد \"" << libPath << "\""
-                   << (s->alias.empty() ? "" : (" باسم '" + s->alias + "'"))
-                   << (fromEmbedded ? " (مكتبة مدمجة)" : " (من القرص)") << "\n";
-        }
+        output << (fromEmbedded ? "📦" : "📥") << " @import: تم استيراد \"" << libPath << "\""
+               << (s->alias.empty() ? "" : (" باسم '" + s->alias + "'"))
+               << (fromEmbedded ? " (مكتبة مدمجة)" : " (من القرص)") << "\n";
         return;
     }
 
@@ -4664,6 +4603,9 @@ Value Interpreter::invokeCallee(const std::string& callee, std::vector<Value>& a
     if (callee == "libraryImport") {
         return doLibraryImport(args, line, env);
     }
+    if (callee == "libraryImportUrl") {
+        return doLibraryImportUrl(args, line, env);
+    }
 
     auto nativeIt = natives.find(callee);
     if (nativeIt != natives.end()) {
@@ -4677,61 +4619,39 @@ Value Interpreter::invokeCallee(const std::string& callee, std::vector<Value>& a
     return callFunction(calleeVal.function, args, line);
 }
 
-// library.import(path) -> يفتح حاوية .rcl، يستخرج كل ملف .rin بداخلها (واحداً تلو الآخر إلى مجلد
-// مؤقت داخل basePath المعزول ذاته، لا خارجه)، ثم يُنفِّذ كل واحد منها بنفس بالضبط منطق '@import'
-// العادي (Lexer -> Parser -> executeBlock داخل نفس env نطاق نداء library.import) — إعادة استخدام
-// كاملة لمسار التنفيذ الموجود فعلاً بدل تكراره. يُعيد مصفوفة (array) بأسماء ملفات .rin المستورَدة
-// فعلياً، بنفس ترتيب ظهورها داخل الحاوية.
+// executeLibraryContainerBytes: منطق مشترك بث حقيقي بلا قرص — يأخذ بايتات حاوية .rcl (أياً كان
+// مصدرها) ويستخرج+ينفّذ كل ملف .rin بداخلها مباشرة من الذاكرة عبر clc::*FromMemory (clc_container.h)،
+// بلا أي ملف مؤقت على القرص في أي خطوة (بعكس السلوك القديم الذي كان يكتب كل ملف مستخرَج فعلياً إلى
+// .rin_clc_tmp/ على القرص ثم يعيد فتحه وقراءته، فقط ليحذفه بعد ذلك). نفس بالضبط منطق '@import'
+// العادي للتنفيذ (Lexer -> Parser -> executeBlock داخل نفس env نطاق النداء) — إعادة استخدام كاملة.
 // انظر ملاحظة الأمان أعلى قسم natives CLC في registerNatives(): هذا يمنح ملفات .rin المستورَدة من
 // حاوية .rcl نفس ثقة أي '@import' عادي (بلا sandbox إضافي على ما تفعله بعد التنفيذ) — وهذا سلوك
 // @import الحالي نفسه، وليس تراجعاً جديداً في الحماية أُدخِل هنا خصيصاً.
-Value Interpreter::doLibraryImport(std::vector<Value>& args, int line, const EnvPtr& env) {
-    expectArgs("libraryImport", args, 1, line);
-    std::string rawPath = asString(args[0], "libraryImport", line);
-    std::string rclPath = resolvePath(rawPath, line);
-
+Value Interpreter::executeLibraryContainerBytes(const std::vector<uint8_t>& bytes, const std::string& sourceLabel,
+                                                 int line, const EnvPtr& env) {
     clc::ContainerInfo info;
     try {
-        info = clc::readContainerInfo(rclPath);
+        info = clc::readContainerInfoFromMemory(bytes);
     } catch (const clc::ClcFormatError& e) {
         throw errWithReason(diag::Code::E0028_ImportError, line,
-                             "library.import: تعذّرت قراءة الحاوية '" + rawPath + "'", e.what());
-    } catch (const std::exception& e) {
-        throw errWithReason(diag::Code::E0028_ImportError, line,
-                             "library.import: تعذّر فتح '" + rawPath + "'", e.what());
+                             "library.import: تعذّرت قراءة الحاوية '" + sourceLabel + "'", e.what());
     }
-
-    // مجلد مؤقت فريد لكل نداء (نسبةً إلى basePath نفسه عبر resolvePath -> ما زال داخل عزل المشروع)،
-    // كي لا تتصادم استخراجات نداءات library.import متعددة في نفس التشغيل ببعضها.
-    static int importCounter = 0;
-    std::string tmpDir = resolvePath(".rin_clc_tmp/import_" + std::to_string(line) + "_" + std::to_string(importCounter++), line);
 
     auto arr = std::make_shared<ArrayData>();
     for (auto& f : info.files) {
         if (f.flags & clc::FILE_FLAG_IS_DIR) continue;
         if (f.path.size() < 4 || f.path.compare(f.path.size() - 4, 4, ".rin") != 0) continue; // .og.rin ينتهي بـ .rin أيضاً فيُغطّى
 
-        std::string extractedPath = tmpDir + "/" + f.path;
+        std::vector<uint8_t> content;
         try {
-            clc::extractOneFile(rclPath, f.path, tmpDir);
+            content = clc::extractOneFileToMemory(bytes, f.path); // فك ضغط في الذاكرة فقط، بلا أي كتابة على القرص
         } catch (const clc::ClcFormatError& e) {
             throw errWithReason(diag::Code::E0028_ImportError, line,
-                                 "library.import: فشل استخراج '" + f.path + "' من '" + rawPath + "'", e.what());
+                                 "library.import: فشل استخراج '" + f.path + "' من '" + sourceLabel + "'", e.what());
         }
+        std::string source(reinterpret_cast<const char*>(content.data()), content.size());
 
-        std::ifstream in(extractedPath, std::ios::binary);
-        if (!in) {
-            throw errWithReason(diag::Code::E0036_IOFailure, line,
-                                 "library.import: تعذّرت قراءة الملف المستخرَج '" + f.path + "'",
-                                 "استُخرِج إلى '" + extractedPath + "' لكن تعذّرت إعادة فتحه للقراءة");
-        }
-        std::ostringstream buf;
-        buf << in.rdbuf();
-        std::string source = buf.str();
-        in.close();
-        ::remove(extractedPath.c_str()); // لا حاجة لإبقاء النسخة المؤقتة على القرص بعد قراءتها في الذاكرة
-
-        std::string importedName = rawPath + "::" + f.path;
+        std::string importedName = sourceLabel + "::" + f.path;
         try {
             Lexer importedLexer(source, importedName);
             auto importedTokens = importedLexer.scanTokens();
@@ -4752,6 +4672,55 @@ Value Interpreter::doLibraryImport(std::vector<Value>& args, int line, const Env
     }
 
     return Value::makeArray(arr);
+}
+
+// library.import(path) -> حاوية .rcl محلية على القرص (المسار نفسه يمرّ عبر resolvePath() فيبقى
+// معزولاً داخل basePath كالمعتاد). تُقرَأ بايتات الملف مرة واحدة فقط إلى الذاكرة، ثم يُستخرَج وينفَّذ
+// كل شيء من هناك عبر executeLibraryContainerBytes أعلاه — بلا أي مجلد/ملف مؤقت وسيط على القرص.
+Value Interpreter::doLibraryImport(std::vector<Value>& args, int line, const EnvPtr& env) {
+    expectArgs("libraryImport", args, 1, line);
+    std::string rawPath = asString(args[0], "libraryImport", line);
+    std::string rclPath = resolvePath(rawPath, line);
+
+    std::ifstream in(rclPath, std::ios::binary);
+    if (!in) {
+        throw errWithReason(diag::Code::E0028_ImportError, line,
+                             "library.import: تعذّر فتح '" + rawPath + "'",
+                             "الملف غير موجود أو تعذّرت قراءته");
+    }
+    std::ostringstream raw;
+    raw << in.rdbuf();
+    in.close();
+    std::string rawStr = raw.str();
+    std::vector<uint8_t> bytes(rawStr.begin(), rawStr.end());
+
+    return executeLibraryContainerBytes(bytes, rawPath, line, env);
+}
+
+// libraryImportUrl(url) -> بث حقيقي كامل عبر الشبكة، بلا أي تخزين على القرص في أي مرحلة: يُنزِّل
+// حاوية .rcl عبر rin::http::performRequest() (نفس عميل HTTP الحقيقي المستخدَم لـ httpGet/httpPost —
+// اتصال شبكة فعلي، وليس محاكاة) مباشرة إلى الذاكرة (body هنا std::string يحمل بايتات خام فقط)، ثم
+// يمرّرها لنفس executeLibraryContainerBytes. هذا هو المسار الكامل لخط أنابيب Rin Runtime بالضبط كما
+// في المخطط: Downloader (rin::http) -> Reader/Extractor (clc::*FromMemory، بث حقيقي بلا قرص) ->
+// RinParser/SymbolRegistry/PackageInitializer/Runtime (Lexer/Parser/executeBlock الموجودة أصلاً).
+Value Interpreter::doLibraryImportUrl(std::vector<Value>& args, int line, const EnvPtr& env) {
+    expectArgs("libraryImportUrl", args, 1, line);
+    std::string url = asString(args[0], "libraryImportUrl", line);
+
+    auto res = rin::http::performRequest("GET", url, {}, "", 0);
+    if (!res.ok) {
+        throw errWithReason(diag::Code::E0028_ImportError, line,
+                             "libraryImportUrl: فشل الاتصال بـ '" + url + "'",
+                             res.error.empty() ? "تعذّر الاتصال (DNS/timeout/رفض الاتصال)" : res.error);
+    }
+    if (res.status < 200 || res.status >= 300) {
+        throw errWithReason(diag::Code::E0028_ImportError, line,
+                             "libraryImportUrl: رد الخادوم بحالة غير ناجحة من '" + url + "'",
+                             "HTTP " + std::to_string(res.status));
+    }
+    std::vector<uint8_t> bytes(res.body.begin(), res.body.end()); // بايتات في الذاكرة فقط، لا كتابة على القرص إطلاقاً
+
+    return executeLibraryContainerBytes(bytes, url, line, env);
 }
 
 Value Interpreter::evaluate(const ExprPtr& expr, EnvPtr env) {
