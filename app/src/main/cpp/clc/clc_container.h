@@ -82,6 +82,26 @@ void extractOneFile(const std::string& rclPath, const std::string& entryPath, co
 // يقرأ فقط البنية (header/metadata/index/blocks) بلا فك أي بيانات — سريع.
 ContainerInfo readContainerInfo(const std::string& rclPath);
 
+// ============================================================================
+// بث حقيقي (true streaming) — بلا أي كتابة على القرص بتاتاً: تعمل هذه الثلاثة
+// مباشرة على بايتات حاوية .rcl الموجودة أصلاً في الذاكرة (مثلاً جسم رد HTTP بعد
+// تنزيل حقيقي عبر الشبكة)، فتُغطّي معاً مراحل PackageReader + PackageExtractor
+// من خط أنابيب Rin Runtime: القراءة تتم من الـ buffer نفسه (لا نسخ إلى ملف
+// مؤقت)، وفك الضغط (Extractor) يعيد بايتات كل ملف مباشرة في الذاكرة أيضاً.
+// ============================================================================
+
+// نفس readContainerInfo لكن من buffer في الذاكرة بدل مسار ملف.
+ContainerInfo readContainerInfoFromMemory(const std::vector<uint8_t>& bytes);
+
+// يفك ضغط ملف واحد فقط بالاسم/المسار النسبي ويعيد بايتاته مباشرة (يتحقق من
+// sha256 كما extractOneFile تماماً) — بلا أي ملف مؤقت على القرص إطلاقاً.
+std::vector<uint8_t> extractOneFileToMemory(const std::vector<uint8_t>& bytes, const std::string& entryPath);
+
+// يفك ضغط كل ملفات الحاوية دفعة واحدة إلى خريطة (مسار نسبي -> بايتات)، بلا أي
+// كتابة على القرص — البديل الكامل لـ unpackContainer عندما لا نريد تخزين أي
+// شيء في نظام الملفات (المجلدات الفارغة لا تظهر هنا، فلا معنى لمجلد في ذاكرة).
+std::map<std::string, std::vector<uint8_t>> unpackContainerToMemory(const std::vector<uint8_t>& bytes);
+
 // فحص سريع: crc32 لكل كتلة + اتساق الأقسام البنيوية (بلا sha256 كامل).
 CheckReport checkContainer(const std::string& rclPath);
 
