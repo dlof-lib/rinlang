@@ -67,6 +67,7 @@ private:
     StmtPtr objectFieldStatement();
     StmtPtr objectLiteralStatement(const Token& objectTok); // .object("id") field(value); ... container.(); .end/object
     StmtPtr viewPrintObjectStatement(); // view.print/object(expr);  (يُستدعى بعد استهلاك 'view' '.' 'print')
+    StmtPtr logStatement(const Token& printTok); // print.log(...) / print.log.info/warn/error/debug(...)  (يُستدعى بعد استهلاك 'print' '.' 'log')
     int loopDepth = 0; // >0 داخل جسم حلقة while؛ يُستخدم للتحقق من صحة break/continue وقت التحليل
     std::shared_ptr<BlockStmt> block();
     StmtPtr expressionStatement();
