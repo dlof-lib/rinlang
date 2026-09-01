@@ -106,18 +106,6 @@ std::vector<StmtPtr> Parser::parse() {
 
 StmtPtr Parser::declaration() {
     if (match({TokenType::LET})) return letDeclaration();
-    // 'set' NAME 'to' EXPR ';' -> صياغة إنجليزية مبسّطة (سهلة التعلّم) لِـ 'let NAME = EXPR;'، بنفس
-    // AST (LetStmt) تماماً بلا أي فرق دلالي. 'set' و'to' كلمتان سياقيتان غير محجوزتان (تبقيان IDENT
-    // عاديين في أي سياق آخر)، بنفس أسلوب 'route'/'row'/'style'/'document'/'warp'/'view' أعلاه: لا
-    // تتحوّلان لعبارة خاصة إلا عند ظهور التسلسل الدقيق set IDENT to في بداية عبارة، فلا تتعارضان مع
-    // استخدام 'set' أو 'to' كاسم متغيّر أو دالة عادي في أي مكان آخر.
-    if (check(TokenType::IDENT) && peek().lexeme == "set" &&
-        checkNext(TokenType::IDENT) &&
-        current + 2 < tokens.size() && tokens[current + 2].type == TokenType::IDENT &&
-        tokens[current + 2].lexeme == "to") {
-        advance(); // 'set'
-        return setDeclaration();
-    }
     if (match({TokenType::FUN})) return functionDeclaration();
 
     // مفاهيم لغة الحاويات/البيانات
@@ -211,19 +199,6 @@ StmtPtr Parser::letDeclaration() {
     return stmt;
 }
 
-// 'set' سبق استهلاكها في declaration()؛ الدخول هنا يبدأ مباشرة من اسم المتغيّر.
-StmtPtr Parser::setDeclaration() {
-    auto name = consume(TokenType::IDENT, "Expected variable name after 'set'");
-    consume(TokenType::IDENT, "Expected 'to' after 'set " + name.lexeme + "'"); // يستهلك 'to' (تحقّقنا من لفظها مسبقاً في declaration())
-    ExprPtr initializer = expression();
-    consume(TokenType::SEMICOLON, "Expected ';' after 'set ... to ...' declaration");
-    auto stmt = std::make_shared<LetStmt>();
-    stmt->name = name.lexeme;
-    stmt->initializer = initializer;
-    stmt->line = name.line;
-    return stmt;
-}
-
 StmtPtr Parser::functionDeclaration() {
     auto name = consume(TokenType::IDENT, "Expected function name after 'fun'");
     consume(TokenType::LPAREN, "Expected '(' after function name");
@@ -265,14 +240,6 @@ StmtPtr Parser::statement() {
     }
     if (match({TokenType::PRINT})) return printStatement();
     if (match({TokenType::IF})) return ifStatement();
-    // 'when' (condition) thenBranch ['otherwise' elseBranch] -> صياغة إنجليزية مبسّطة (سهلة التعلّم)
-    // لِـ 'if (condition) thenBranch [else elseBranch]'، بنفس AST (IfStmt) تماماً بلا أي فرق دلالي.
-    // 'when' كلمة سياقية غير محجوزة (تبقى IDENT عادياً في أي سياق آخر)؛ نميّزها فقط عند ظهورها
-    // مباشرة قبل '(' في بداية عبارة، بنفس أسلوب 'route'/'row'/'set' أعلاه.
-    if (check(TokenType::IDENT) && peek().lexeme == "when" && checkNext(TokenType::LPAREN)) {
-        advance(); // 'when'
-        return whenStatement();
-    }
     if (match({TokenType::WHILE})) return whileStatement();
     if (match({TokenType::FOR})) return forStatement();
     if (match({TokenType::RETURN})) return returnStatement();
@@ -497,26 +464,6 @@ StmtPtr Parser::ifStatement() {
     auto thenBranch = statement();
     StmtPtr elseBranch = nullptr;
     if (match({TokenType::ELSE})) elseBranch = statement();
-    auto stmt = std::make_shared<IfStmt>();
-    stmt->condition = condition;
-    stmt->thenBranch = thenBranch;
-    stmt->elseBranch = elseBranch;
-    return stmt;
-}
-
-// 'when' سبق استهلاكها في statement()؛ الدخول هنا يبدأ مباشرة من '('.
-StmtPtr Parser::whenStatement() {
-    consume(TokenType::LPAREN, "Expected '(' after 'when'");
-    auto condition = expression();
-    consume(TokenType::RPAREN, "Expected ')' after when condition");
-    auto thenBranch = statement();
-    StmtPtr elseBranch = nullptr;
-    // 'otherwise' كلمة سياقية غير محجوزة (نظير 'else' الإنجليزي البسيط)، تُقبل هنا فقط مباشرة بعد
-    // فرع 'then' من 'when'، بنفس أسلوب فحص الكلمات السياقية الأخرى في هذا الملف.
-    if (check(TokenType::IDENT) && peek().lexeme == "otherwise") {
-        advance(); // 'otherwise'
-        elseBranch = statement();
-    }
     auto stmt = std::make_shared<IfStmt>();
     stmt->condition = condition;
     stmt->thenBranch = thenBranch;
@@ -866,6 +813,9 @@ StmtPtr Parser::atBlock() {
         // مفاهيم التنسيق والستايل: كائن (Object) / بوابة تنسيق (portal) / كتلة واجهة جاهزة (block)
         "container.object", "Object", "container.open/object", "container.portal", "portal", "container.block", "block",
         "container.sticker", "sticker", "container.aukt", "AUKT", "container.chatbot", "chatbot",
+        // Everything: المفهوم الجامع — بلا أي قيود على الجسم (تماماً كـ container/AUKT)، يستدعي/يفوّض
+        // إلى نفس آلية container القياسية حرفياً. انظر التوثيق الكامل أعلى ContainerStmt في rin_ast.h.
+        "container.everything", "Everything",
         // اختصارات مستقلة (بلا بادئة container.) لبقية أنواع الحاويات، بنفس مبدأ table/doc/Object/portal/
         // block/sticker/AUKT أعلاه: @pipe / @data / @api تُنتج بالضبط نفس ContainerKind::PIPE/DATA/API
         // التي تُنتجها container.pipe/container.data/container.api، بلا أي فرق دلالي — مجرد كتابة أقصر.
@@ -885,7 +835,7 @@ StmtPtr Parser::atBlock() {
             d.diagnostic->withHint("expected one of: container, container.pipe, container.data, container.api, "
                                     "container.import, container.table, container.doc, container.object, "
                                     "container.portal, container.block, container.sticker, container.aukt, "
-                                    "container.chatbot, Containers.Group, or Volume");
+                                    "container.chatbot, container.everything, Containers.Group, or Volume");
         }
         throw d;
     }
@@ -903,7 +853,8 @@ StmtPtr Parser::atBlock() {
         tag == "container.block" || tag == "block" ||
         tag == "container.sticker" || tag == "sticker" ||
         tag == "container.aukt" || tag == "AUKT" ||
-        tag == "container.chatbot" || tag == "chatbot") {
+        tag == "container.chatbot" || tag == "chatbot" ||
+        tag == "container.everything" || tag == "Everything") {
         // container.table/table (صفوف row + نمط style)، container.doc/doc (مستندات document)، وكذلك
         // container.object/Object، container.portal/portal، container.block/block، وأخيراً
         // container.sticker/sticker (بطاقة هوية بصرية جاهزة: أيقونة/ألوان/حواف/خلفية...) تشترك جميعاً
@@ -930,6 +881,7 @@ StmtPtr Parser::atBlock() {
         else if (tag == "container.sticker" || tag == "sticker") s->kind = ContainerKind::STICKER;
         else if (tag == "container.aukt" || tag == "AUKT") s->kind = ContainerKind::AUKT;
         else if (tag == "container.chatbot" || tag == "chatbot") s->kind = ContainerKind::CHATBOT;
+        else if (tag == "container.everything" || tag == "Everything") s->kind = ContainerKind::EVERYTHING;
         else s->kind = ContainerKind::PLAIN;
         return s;
     }
