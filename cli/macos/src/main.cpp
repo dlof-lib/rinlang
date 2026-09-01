@@ -23,6 +23,7 @@
 #include <fstream>
 #include <sstream>
 #include <string>
+#include <vector>
 #include <cstring>
 #include <unistd.h>
 
@@ -47,7 +48,8 @@ void printUsage() {
         "  rin check <file.rin> [--format=plain|short|json|lsp]\n"
         "                            فحص الملف فقط (lex+parse، بلا تنفيذ) وطباعة كل الأخطاء\n"
         "  rin --version | -v        إظهار رقم الإصدار\n"
-        "  rin --help    | -h        هذه الرسالة\n";
+        "  rin --help    | -h        هذه الرسالة\n"
+        "  --import-progress         (يُضاف لأي استدعاء أعلاه) شريط تحميل حي لـ @import\n";
 }
 
 /** Lexes/parses/interprets [source] against the given (possibly REPL-shared) interpreter.
@@ -123,8 +125,19 @@ int runRepl() {
 } // namespace
 
 int main(int argc, char** argv) {
-    if (argc >= 2) {
-        std::string arg1 = argv[1];
+    // --import-progress: علم اختياري يعمل مع أي شكل استدعاء أدناه (ملف/-c/stdin)، فيُزال من
+    // قائمة الوسائط قبل أي معالجة أخرى حتى لا يتعارض مع argv[1]==check/-c/... الحالية. غيابه
+    // (الحالة الافتراضية) يعني سلوكاً مطابقاً تماماً لما قبل إضافة هذه الميزة — بلا أي فرق.
+    std::vector<std::string> args;
+    bool importProgress = false;
+    for (int i = 1; i < argc; ++i) {
+        std::string a = argv[i];
+        if (a == "--import-progress") importProgress = true;
+        else args.push_back(std::move(a));
+    }
+
+    if (!args.empty()) {
+        const std::string& arg1 = args[0];
         if (arg1 == "--version" || arg1 == "-v") {
             std::cout << "rin " << kVersion << "\n";
             return 0;
@@ -133,11 +146,11 @@ int main(int argc, char** argv) {
             printUsage();
             return 0;
         }
-        if (arg1 == "check" && argc >= 3) {
+        if (arg1 == "check" && args.size() >= 2) {
             rin::diag::OutputFormat fmt = rin::diag::OutputFormat::Plain;
-            std::string filePath = argv[2];
-            for (int i = 3; i < argc; ++i) {
-                std::string opt = argv[i];
+            std::string filePath = args[1];
+            for (size_t i = 2; i < args.size(); ++i) {
+                const std::string& opt = args[i];
                 if (opt == "--format=json") fmt = rin::diag::OutputFormat::Json;
                 else if (opt == "--format=short") fmt = rin::diag::OutputFormat::Short;
                 else if (opt == "--format=lsp") fmt = rin::diag::OutputFormat::Lsp;
@@ -150,17 +163,17 @@ int main(int argc, char** argv) {
     std::string source;
     std::string sourceName = "<stdin>";
 
-    if (argc >= 3 && std::strcmp(argv[1], "-c") == 0) {
-        source = argv[2];
+    if (args.size() >= 2 && args[0] == "-c") {
+        source = args[1];
         sourceName = "<inline>";
-    } else if (argc >= 2) {
-        std::ifstream f(argv[1], std::ios::binary);
+    } else if (!args.empty()) {
+        std::ifstream f(args[0], std::ios::binary);
         if (!f) {
-            std::cerr << "rin: تعذّر فتح الملف '" << argv[1] << "'\n";
+            std::cerr << "rin: تعذّر فتح الملف '" << args[0] << "'\n";
             return 2;
         }
         source = readAll(f);
-        sourceName = argv[1];
+        sourceName = args[0];
     } else if (isatty(fileno(stdin))) {
         // لا وسائط ولا إعادة توجيه: طرفية تفاعلية حقيقية -> REPL بدل انتظار EOF صامت.
         return runRepl();
@@ -169,6 +182,7 @@ int main(int argc, char** argv) {
     }
 
     rin::Interpreter interp;
+    if (importProgress) interp.setImportUIMode(rin::loaderui::Mode::Verbose);
     bool ok = runSource(source, sourceName, interp);
     return ok ? 0 : 1;
 }
