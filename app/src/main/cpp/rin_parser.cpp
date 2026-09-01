@@ -107,6 +107,16 @@ std::vector<StmtPtr> Parser::parse() {
 StmtPtr Parser::declaration() {
     if (match({TokenType::LET})) return letDeclaration();
     if (match({TokenType::FUN})) return functionDeclaration();
+    // 'make name = expr;' / 'make name;' -> صيغة إنجليزية مبسّطة سهلة التعلّم، مرادف كامل لِـ
+    // 'let name = expr;' (يفوّض مباشرة إلى letDeclaration() نفسها، فيرث كل سلوكها بلا أي فرق).
+    // 'make' كلمة سياقية غير محجوزة (تُقرأ IDENT عادي، بنفس أسلوب route/row/style/document/warp
+    // أدناه)، فلا تتعارض مع استخدامها اسماً لحاوية عبر '@make=...' (انظر atBlock()/readTagKeyword())
+    // ولا مع استخدامها اسم دالة عادية `make(...)`: الشرط أدناه لا يتحقق إلا حين تُتبَع مباشرة باسم
+    // متغيّر (IDENT)، أي بالضبط شكل إعلان متغيّر.
+    if (check(TokenType::IDENT) && peek().lexeme == "make" && checkNext(TokenType::IDENT)) {
+        advance();
+        return letDeclaration();
+    }
 
     // مفاهيم لغة الحاويات/البيانات
     if (match({TokenType::TEXT})) return textDeclaration();
@@ -616,7 +626,7 @@ std::string Parser::readTagKeyword() {
             const std::string& w = tokens[current + 1].lexeme;
             nextIsContextualWord = (w == "data" || w == "api" || w == "import" || w == "table" || w == "doc" ||
                                      w == "object" || w == "portal" || w == "block" || w == "aukt" || w == "open" ||
-                                     w == "chatbot");
+                                     w == "chatbot" || w == "everything" || w == "make");
         }
         // لا نستهلك '.' إلا إذا كانت متبوعة مباشرة بإحدى هذه الكلمات، وإلا فقد تكون في الحقيقة
         // بداية وسم إغلاق آخر مجاور مثل '.end/container' تلاه '.end/Containers.Group'
@@ -630,6 +640,16 @@ std::string Parser::readTagKeyword() {
                 tag = "container.open/object";
             }
         }
+    } else if (first.type == TokenType::IDENT && first.lexeme == "Rin" && check(TokenType::DOT) &&
+               current + 1 < tokens.size() && tokens[current + 1].type == TokenType::IDENT &&
+               tokens[current + 1].lexeme == "make") {
+        // 'Rin.make' -> شكل مساحة-اسم (namespace) اختياري لنفس @make/@Everything (انظر ContainerKind::
+        // EVERYTHING في rin_ast.h)، بنفس أسلوب 'Containers.Group' أعلاه لكن بلا كلمة محجوزة عالمياً:
+        // 'Rin' تبقى معرّفاً عادياً في أي مكان آخر (اسم متغير مثلاً)، ولا تتحوّل لهذا الشكل الخاص إلا
+        // عند ظهورها بالضبط كـ 'Rin' '.' 'make' مباشرة بعد '@' أو '.end'.
+        advance(); // consume '.'
+        advance(); // consume 'make'
+        tag = "Rin.make";
     }
     return tag;
 }
@@ -813,9 +833,13 @@ StmtPtr Parser::atBlock() {
         // مفاهيم التنسيق والستايل: كائن (Object) / بوابة تنسيق (portal) / كتلة واجهة جاهزة (block)
         "container.object", "Object", "container.open/object", "container.portal", "portal", "container.block", "block",
         "container.sticker", "sticker", "container.aukt", "AUKT", "container.chatbot", "chatbot",
-        // Everything: المفهوم الجامع — بلا أي قيود على الجسم (تماماً كـ container/AUKT)، يستدعي/يفوّض
-        // إلى نفس آلية container القياسية حرفياً. انظر التوثيق الكامل أعلى ContainerStmt في rin_ast.h.
-        "container.everything", "Everything",
+        // make (اسمها الرسمي الحالي؛ سابقاً "Everything"): المفهوم الجامع — بلا أي قيود على الجسم
+        // (تماماً كـ container/AUKT)، يستدعي/يفوّض إلى نفس آلية container القياسية حرفياً. ثلاث صيغ
+        // مكافئة تماماً تُنتج نفس ContainerKind::EVERYTHING: "make" (الأقصر)، "Rin.make" (بمساحة اسم
+        // صريحة)، و"container.make" (بنفس أسلوب بقية container.xxx). "Everything"/"container.everything"
+        // ما زالتا مقبولتين كاسمين قديمين (alias) للتوافق العكسي فقط. انظر التوثيق الكامل أعلى
+        // ContainerStmt في rin_ast.h.
+        "container.everything", "Everything", "container.make", "make", "Rin.make",
         // اختصارات مستقلة (بلا بادئة container.) لبقية أنواع الحاويات، بنفس مبدأ table/doc/Object/portal/
         // block/sticker/AUKT أعلاه: @pipe / @data / @api تُنتج بالضبط نفس ContainerKind::PIPE/DATA/API
         // التي تُنتجها container.pipe/container.data/container.api، بلا أي فرق دلالي — مجرد كتابة أقصر.
@@ -835,7 +859,8 @@ StmtPtr Parser::atBlock() {
             d.diagnostic->withHint("expected one of: container, container.pipe, container.data, container.api, "
                                     "container.import, container.table, container.doc, container.object, "
                                     "container.portal, container.block, container.sticker, container.aukt, "
-                                    "container.chatbot, container.everything, Containers.Group, or Volume");
+                                    "container.chatbot, container.make (or make / Rin.make / the legacy "
+                                    "container.everything / Everything), Containers.Group, or Volume");
         }
         throw d;
     }
@@ -854,7 +879,8 @@ StmtPtr Parser::atBlock() {
         tag == "container.sticker" || tag == "sticker" ||
         tag == "container.aukt" || tag == "AUKT" ||
         tag == "container.chatbot" || tag == "chatbot" ||
-        tag == "container.everything" || tag == "Everything") {
+        tag == "container.everything" || tag == "Everything" ||
+        tag == "container.make" || tag == "make" || tag == "Rin.make") {
         // container.table/table (صفوف row + نمط style)، container.doc/doc (مستندات document)، وكذلك
         // container.object/Object، container.portal/portal، container.block/block، وأخيراً
         // container.sticker/sticker (بطاقة هوية بصرية جاهزة: أيقونة/ألوان/حواف/خلفية...) تشترك جميعاً
@@ -881,7 +907,8 @@ StmtPtr Parser::atBlock() {
         else if (tag == "container.sticker" || tag == "sticker") s->kind = ContainerKind::STICKER;
         else if (tag == "container.aukt" || tag == "AUKT") s->kind = ContainerKind::AUKT;
         else if (tag == "container.chatbot" || tag == "chatbot") s->kind = ContainerKind::CHATBOT;
-        else if (tag == "container.everything" || tag == "Everything") s->kind = ContainerKind::EVERYTHING;
+        else if (tag == "container.everything" || tag == "Everything" ||
+                 tag == "container.make" || tag == "make" || tag == "Rin.make") s->kind = ContainerKind::EVERYTHING;
         else s->kind = ContainerKind::PLAIN;
         return s;
     }
