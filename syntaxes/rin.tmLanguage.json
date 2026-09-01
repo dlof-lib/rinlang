@@ -79,7 +79,7 @@
       "comment": ".end/Kind closing marker. Slashes can appear inside the kind itself (container.open/object), so the tail is matched greedily.",
       "patterns": [
         {
-          "match": "(\\.end)(/)(Containers\\.Group|Volume|Object|portal|block|sticker|AUKT|Everything|table|doc|container(?:\\.(?:pipe|data|api|import|table|doc|object|portal|block|sticker|aukt|everything|open))?(?:/object)?|view(?:\\.[A-Za-z][A-Za-z0-9_]*)?|Section|Translations)\\b",
+          "match": "(\\.end)(/)(Containers\\.Group|Volume|Object|portal|block|sticker|AUKT|Everything|Rin\\.make|make|table|doc|container(?:\\.(?:pipe|data|api|import|table|doc|object|portal|block|sticker|aukt|everything|make|open))?(?:/object)?|view(?:\\.[A-Za-z][A-Za-z0-9_]*)?|Section|Translations)\\b",
           "captures": {
             "1": { "name": "punctuation.definition.tag.end.rin" },
             "2": { "name": "punctuation.separator.rin" },
@@ -123,7 +123,7 @@
       "patterns": [
         {
           "comment": "Recognized container/view family tags get their own scope for finer theming.",
-          "match": "(@)(Containers\\.Group|Volume|Object|portal|block|sticker|AUKT|Everything|table|doc|container(?:\\.(?:pipe|data|api|import|table|doc|object|portal|block|sticker|aukt|everything|open))?(?:/object)?|view(?:\\.[A-Za-z][A-Za-z0-9_]*)?)\\b(=)?",
+          "match": "(@)(Containers\\.Group|Volume|Object|portal|block|sticker|AUKT|Everything|Rin\\.make|make|table|doc|container(?:\\.(?:pipe|data|api|import|table|doc|object|portal|block|sticker|aukt|everything|make|open))?(?:/object)?|view(?:\\.[A-Za-z][A-Za-z0-9_]*)?)\\b(=)?",
           "captures": {
             "1": { "name": "punctuation.definition.tag.rin" },
             "2": { "name": "entity.name.tag.container.rin" },
@@ -170,14 +170,15 @@
     },
 
     "keywords-storage": {
-      "comment": "warp (Parser::warpDeclaration) is a contextual reactive-state declaration, parsed exactly like `let name = expr;`.",
+      "comment": "warp (Parser::warpDeclaration) is a contextual reactive-state declaration, parsed exactly like `let name = expr;`. 'make' is a simplified-English contextual synonym for `let` (Parser::declaration(), matched only as `make <ident>`), unrelated to the `@make` container tag below.",
       "name": "storage.type.rin",
-      "match": "\\b(let|fun|text|warp)\\b"
+      "match": "\\b(let|fun|text|warp|make)\\b"
     },
 
     "keyword-print": {
+      "comment": "'show' is a full lexer-level synonym for 'print' (rin_lexer.cpp keywords table -> same TokenType::PRINT), part of the simplified-English keyword family alongside `make`/`@make`.",
       "name": "keyword.other.print.rin",
-      "match": "\\bprint\\b"
+      "match": "\\b(print|show)\\b"
     },
 
     "container-statement-keywords": {
