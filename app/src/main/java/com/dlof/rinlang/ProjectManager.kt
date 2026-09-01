@@ -28,6 +28,22 @@ object ProjectManager {
     private const val RIN_EXTENSION = ".rin"
 
     /**
+     * خيارات "رسم الواجهة" لمشروع نوع UI، تُختار في حوار "مشروع جديد" (انظر
+     * ProjectsActivity.showCreateDialog) قبل الإنشاء: توب بار/بلا توب بار، قائمة جانبية/بلا
+     * قائمة جانبية، ولون أساسي (primary) يُكتب داخل @theme في main.rin المولَّد باستخدام
+     * محرّك الواجهات Loomtime (@view.Scaffold/@view.TopBar/@view.Drawer، انظر
+     * docs/loomtime/RIN_LOOM_ENGINE_ARCHITECTURE.md وsite.rin). لا تؤثر على أنواع المشاريع
+     * الأخرى (Container/Table/Free)، وتُستخدم قيمها الافتراضية عند عدم تمريرها صراحةً.
+     */
+    data class UiDesignOptions(
+        val topBar: Boolean = true,
+        val sidebar: Boolean = true,
+        val primaryColor: String = "#7C5CFF",
+        val background: String = "#0F0F14",
+        val text: String = "#F5F5F7"
+    )
+
+    /**
      * ملف البيانات الوصفية لمشروع واحد، في جذر مجلد المشروع مباشرة. يحفظ حالياً نوع المشروع
      * (container/table/ui/free) الذي اختاره المستخدم عند الإنشاء، داخل حاوية Rin مصغّرة
      * (@container ... .end/container) بدل سطر "مفتاح=قيمة" خام — تماشياً مع لغة Rin نفسها
@@ -88,8 +104,11 @@ object ProjectManager {
         )
     }
 
-    /** القالب الابتدائي لملف main.rin حسب نوع المشروع المختار عند الإنشاء. */
-    private fun mainRinTemplateFor(type: ProjectType, name: String): String = when (type) {
+    /**
+     * القالب الابتدائي لملف main.rin حسب نوع المشروع المختار عند الإنشاء. [uiOptions] لا يُقرأ
+     * إلا عندما [type] == ProjectType.UI (انظر فرع ProjectType.UI أدناه).
+     */
+    private fun mainRinTemplateFor(type: ProjectType, name: String, uiOptions: UiDesignOptions = UiDesignOptions()): String = when (type) {
         ProjectType.CONTAINER ->
             "// مشروع: $name\n" +
                 "// نوع المشروع: حاوية (@container) — بيانات حية (warp) داخل حاوية مسمّاة.\n\n" +
@@ -108,23 +127,7 @@ object ProjectManager {
                 ".end/table\n\n" +
                 "print \"جدول مشروع $name جاهز\";\n"
 
-        ProjectType.UI ->
-            "// مشروع: $name\n" +
-                "// نوع المشروع: واجهة مستخدم (Loomtime) — @container يحوي @theme و@view.\n\n" +
-                "@container=Home\n" +
-                "    warp userName = \"زائر\";\n\n" +
-                "    @theme=Midnight\n" +
-                "        active=true;\n" +
-                "        primary=\"#7C5CFF\";\n" +
-                "        background=\"#0F0F14\";\n" +
-                "        text=\"#F5F5F7\";\n" +
-                "    .end/theme\n\n" +
-                "    @view.Column=Root\n" +
-                "        @view.Text=Title\n" +
-                "            text=\"مرحباً من \" + userName + \" — $name\";\n" +
-                "        .end/view\n" +
-                "    .end/view\n" +
-                ".end/container\n"
+        ProjectType.UI -> buildUiRinTemplate(name, uiOptions)
 
         ProjectType.FREE ->
             "// مشروع: $name\n" +
@@ -132,17 +135,86 @@ object ProjectManager {
     }
 
     /**
+     * يبني main.rin لمشروع UI باستخدام محرّك الواجهات Loomtime (@view.Scaffold/@view.TopBar/
+     * @view.Drawer، نفس النحو المستخدم في site.rin وdocs/loomtime/RIN_LOOM_ENGINE_ARCHITECTURE.md)،
+     * مطابقاً لمخطّط "رسم الواجهة": شريط علوي اختياري (دائرة صورة رمزية + عنوان)، محتوى رئيسي
+     * (بطاقتان مؤطّرتان)، وقائمة جانبية اختيارية (زر "القائمة" + عنصرا تنقّل). كلا العنصرين
+     * يُدرج أو يُستبعد حسب [options.topBar]/[options.sidebar]، واللون الأساسي المختار يُستخدم
+     * في @theme وفي عناصر الهوية (الدائرة/الزر/العنوان) بدل البنفسجي الثابت وحده.
+     */
+    private fun buildUiRinTemplate(name: String, options: UiDesignOptions): String {
+        val sb = StringBuilder()
+        sb.append("// مشروع: $name\n")
+        sb.append("// نوع المشروع: واجهة مستخدم (Loomtime) — @container يحوي @theme و@view.\n")
+        sb.append("// وُلِّد من خيارات \"رسم الواجهة\": شريط علوي=${options.topBar}، قائمة جانبية=${options.sidebar}.\n\n")
+        sb.append("@container=Home\n")
+        sb.append("    warp userName = \"زائر\";\n\n")
+        sb.append("    @theme=Midnight\n")
+        sb.append("        active=true;\n")
+        sb.append("        primary=\"${options.primaryColor}\";\n")
+        sb.append("        background=\"${options.background}\";\n")
+        sb.append("        text=\"${options.text}\";\n")
+        sb.append("    .end/theme\n\n")
+
+        sb.append("    @view.Scaffold=Root\n")
+
+        // الشريط العلوي: دائرة صورة رمزية + عنوان، فقط لو options.topBar == true.
+        if (options.topBar) {
+            sb.append("        @view.TopBar=nav\n")
+            sb.append("            role=\"topbar\"; padding=16; bg=\"${options.background}\";\n")
+            sb.append("            @view.Row=navRow\n")
+            sb.append("                gap=12; valign=\"center\";\n")
+            sb.append("                @view.Card=navAvatar width=44; height=44; radius=999; bg=\"${options.primaryColor}\"; .end/view\n")
+            sb.append("                @view.Text=navTitle text=\"شريط علوي\"; size=18; weight=\"800\"; color=\"${options.primaryColor}\"; .end/view\n")
+            sb.append("            .end/view\n")
+            sb.append("        .end/view\n\n")
+        }
+
+        // الجسم: محتوى رئيسي (بطاقتان مؤطّرتان) + قائمة جانبية اختيارية بعرض ثابت.
+        sb.append("        @view.Row=body\n")
+        sb.append("            gap=0;\n\n")
+
+        sb.append("            @view.Column=content\n")
+        sb.append("                grow=1; gap=20; padding=20;\n")
+        sb.append("                @view.Card=placeholder1 height=180; radius=14; bg=\"transparent\"; borderColor=\"${options.text}22\"; borderWidth=1; .end/view\n")
+        sb.append("                @view.Card=placeholder2 height=180; radius=14; bg=\"transparent\"; borderColor=\"${options.text}22\"; borderWidth=1; .end/view\n")
+        sb.append("            .end/view\n")
+
+        if (options.sidebar) {
+            sb.append("\n            @view.Drawer=sidebar\n")
+            sb.append("                role=\"sidebar\"; open=\"true\"; width=220; bg=\"${options.background}\";\n")
+            sb.append("                @view.Column=sidebarCol\n")
+            sb.append("                    gap=10; padding=16;\n")
+            sb.append("                    @view.Button=menuBtn label=\"القائمة\"; bg=\"${options.primaryColor}\"; color=\"#FFFFFF\"; radius=10; .end/view\n")
+            sb.append("                    @view.MenuItem=sidebarItem1 label=\"\"; bg=\"${options.text}14\"; radius=10; height=34; .end/view\n")
+            sb.append("                    @view.MenuItem=sidebarItem2 label=\"\"; bg=\"${options.text}14\"; radius=10; height=34; .end/view\n")
+            sb.append("                .end/view\n")
+            sb.append("            .end/view\n")
+        }
+
+        sb.append("        .end/view\n")
+        sb.append("    .end/view\n")
+        sb.append(".end/container\n")
+        return sb.toString()
+    }
+
+    /**
      * ينشئ مشروعاً جديداً بمجلد + ملف main.rin ابتدائي مناسب لـ [type] + ملف بيانات وصفية
      * يحفظ هذا النوع، ويرمي IllegalArgumentException لو الاسم مستخدم أو غير صالح.
      */
-    fun createProject(context: Context, name: String, type: ProjectType = ProjectType.FREE): Project {
+    fun createProject(
+        context: Context,
+        name: String,
+        type: ProjectType = ProjectType.FREE,
+        uiOptions: UiDesignOptions = UiDesignOptions()
+    ): Project {
         val trimmed = name.trim()
         require(isValidProjectName(trimmed)) { "اسم المشروع غير صالح" }
         val dir = File(projectsRoot(context), trimmed)
         require(!dir.exists()) { "يوجد مشروع بهذا الاسم بالفعل" }
         dir.mkdirs()
         writeProjectMeta(dir, type)
-        File(dir, "main.rin").writeText(mainRinTemplateFor(type, trimmed))
+        File(dir, "main.rin").writeText(mainRinTemplateFor(type, trimmed, uiOptions))
         return Project(trimmed, dir, dir.lastModified(), type)
     }
 
