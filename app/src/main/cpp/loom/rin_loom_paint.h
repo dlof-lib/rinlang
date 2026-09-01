@@ -53,6 +53,24 @@ inline Color bannerTypeColor(const std::string& type) {
     if (type == "info")     return th.info;
     return colorForKind(StrandKind::BANNER); // "custom" / unset -> neutral
 }
+// Hex-formats a resolved Color for the JSON bridge (see fabricToJson's "resolvedColor" field
+// below) -- the Kotlin/Compose preview renderer (LoomFabricView.kt) has no access to the native
+// Color Engine (tone=/color=<role> resolution, the active @theme=), so without this the preview
+// can only ever understand a literal "color=\"#RRGGBB\"" written straight into the .rin source
+// and otherwise falls back to its own hardcoded palette -- silently ignoring tone=, a semantic
+// color=<role> name, and any non-default @theme= entirely. Emitting the already-resolved color
+// here makes fabricToJson's output the same single source of truth for paint color that
+// Dye::paintInto() already uses to rasterize the "real" (PNG-export) path.
+inline std::string colorToHex(Color c) {
+    static const char* digits = "0123456789ABCDEF";
+    std::string out = "#";
+    for (unsigned char v : {c.r, c.g, c.b}) {
+        out += digits[(v >> 4) & 0xF];
+        out += digits[v & 0xF];
+    }
+    return out;
+}
+
 // Resolves a Strand's paint color, in order:
 //   1. tone="<role>"   — semantic Theme role (primary/success/danger/...), the Color Engine's
 //                         intended everyday spelling — see spec §8/§9 ("Button { tone: primary; }").
@@ -420,6 +438,10 @@ inline void fabricToJson(const StrandPtr& s, std::ostringstream& os) {
        << ",\"line\":" << s->sourceLine
        << ",\"x\":" << s->geometry.x << ",\"y\":" << s->geometry.y
        << ",\"w\":" << s->geometry.w << ",\"h\":" << s->geometry.h
+       // The engine's own resolved paint color for this Strand -- tone=/color=<role>/the active
+       // @theme= already baked in, exactly as Dye::paintInto() would paint it. See colorToHex()
+       // above for why this is needed at all.
+       << ",\"resolvedColor\":\"" << colorToHex(resolveColor(s)) << "\""
        << ",\"attrs\":{";
     for (size_t i=0;i<s->attrs.size();i++) {
         if (i) os << ",";
