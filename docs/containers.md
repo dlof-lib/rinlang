@@ -79,10 +79,16 @@ print insertDoc("users", "u3", { name: "منى", city: "الرياض" });
 .end/container
 ```
 
-## 5) المفهوم الجامع: `@Everything`
+## 5) المفهوم الجامع: `@make` (سابقاً `@Everything`)
+
+> **تسمية:** كان هذا المفهوم يُسمّى `Everything`. الاسم الرسمي الحالي هو `make` (بمعنى "أنشئ شيئًا
+> قابلًا للتنفيذ أو الاستخدام")، مع ثلاث صيغ متكافئة تماماً بلا أي فرق دلالي:
+> `@make=name`، `@Rin.make=name` (بمساحة اسم صريحة)، و`@container.make=name` (بنفس أسلوب بقية
+> `container.xxx`). الاسمان القديمان `@Everything` و`@container.everything` ما زالا مقبولين بالكامل
+> كاسم بديل (alias) للتوافق العكسي، بلا أي خطة لإزالتهما — الكود القديم يستمر بالعمل بلا أي تعديل.
 
 ```rin
-@Everything=my_app
+@make=my_app
     fun greet(name) {
         return "Hello " + name;
     }
@@ -95,53 +101,73 @@ print insertDoc("users", "u3", { name: "منى", city: "الرياض" });
         text model = "rin-chat-1";
     .end/chatbot
 
-    print greet("World");
-.end/Everything
+    make msg = greet("World");
+    show msg;
+.end/make
 ```
 
-- `@Everything=name ... .end/Everything` (أو `@container.everything=name ... .end/container.everything`)
-  هي نقطة الدخول "الجامعة": بلا أي قيود على جسمها، تماماً كـ [`@container`](#1-حاوية-بيانات-container)
-  العادية — يمكن أن تحوي منطقاً كاملاً (`fun`, `let`, `if`, `while`, `for`)، وأي حاوية أخرى متداخلة
+- `@make=name ... .end/make` (أو `@Rin.make=name ... .end/Rin.make`، أو `@container.make=name ...
+  .end/container.make`، أو الاسم القديم `@Everything=name ... .end/Everything`) هي نقطة الدخول
+  "الجامعة": بلا أي قيود على جسمها، تماماً كـ [`@container`](#1-حاوية-بيانات-container)
+  العادية — يمكن أن تحوي منطقاً كاملاً (`fun`, `let`/`make`, `if`, `while`, `for`)، وأي حاوية أخرى متداخلة
   بأي عدد وترتيب: `table`/`doc`/`Object`/`portal`/`block`/`sticker`/`chatbot`/`AUKT`/`container.pipe`/
   `container.api`/`container.import`، وأي واجهة `view.*`.
-- الفرق الجوهري عن الأنواع الأخرى: `Everything` لا تملك أي منطق تنفيذ خاص بها — هي فقط اسم/غلاف مميّز
+- الفرق الجوهري عن الأنواع الأخرى: `make` لا تملك أي منطق تنفيذ خاص بها — هي فقط اسم/غلاف مميّز
   فوق آلية `container` القياسية نفسها (نفس التحليل، نفس التنفيذ). لهذا فهم `@container` أولاً هو شرط
-  مسبق لفهم `Everything`، تماماً كما أن AUKT مبنية فوق نفس المبدأ.
+  مسبق لفهم `make`، تماماً كما أن AUKT مبنية فوق نفس المبدأ.
 - استخدمها حين تريد بناء "تطبيق/عالم" واحد يجمع منطقاً وبيانات وواجهة وحاويات فرعية متعددة معاً، دون
   تسمية مسبقة لما سيكون بداخله.
+
+### صياغة إنجليزية مبسّطة وسهلة التعلّم (عائلة `make`)
+
+مرافقةً لإعادة التسمية، تتوفر كلمات مرادفة بإنجليزية مبسّطة — كل واحدة مرادف كامل 100% لما يقابلها
+(نفس السلوك تماماً، بلا أي فرق)، مصمَّمة لتكون أسهل قراءة للمبتدئ ومتّسقة مع اسم `make` نفسه:
+
+| السهلة | مرادفة تماماً لـ | مثال |
+|---|---|---|
+| `make x = expr;` | `let x = expr;` | `make total = 10;` |
+| `show expr;` | `print expr;` (بكل سماته، حتى `show.log(...)`) | `show "Hello";` |
+| `create(kind, name?)` | `spawn(kind, name?)` | `create("table", "t1");` |
+| `run(fn, args?)` | `callFn(fn, args?)` | `run(myFn, [1, 2]);` |
+
+هذه الكلمات متاحة في كل البرنامج (وليست حصرية على `@make`)، لكنها تحمل نفس روح المفهوم: كتابة أبسط
+وأقرب للإنجليزية العادية لمن يتعلّم اللغة حديثاً.
 
 ### إنشاء/برمجة أي شيء وقت التشغيل (دوال ديناميكية)
 
 الصياغة الثابتة أعلاه (`@table=...` إلخ) تتطلّب معرفة الاسم والنوع مسبقاً أثناء الكتابة. للحالات التي
 تحتاج فيها اسم/نوع الحاوية أن يُحسبا وقت التشغيل (مثلاً بداخل حلقة)، تتوفر مجموعة دوال قياسية تعمل من
-أي مكان في البرنامج (وليس فقط بداخل `@Everything`، تماماً كـ `callApi`):
+أي مكان في البرنامج (وليس فقط بداخل `@make`، تماماً كـ `callApi`):
 
 ```rin
-for (let i = 0; i < 3; i = i + 1) {
-    let kind = "table";
+for (make i = 0; i < 3; i = i + 1) {
+    make kind = "table";
     if (i == 1) { kind = "doc"; }
     if (i == 2) { kind = "chatbot"; }
-    let name = "dyn_" + i;
+    make name = "dyn_" + i;
 
-    spawn(kind, name);                      // ينشئ حاوية جديدة بنوع/اسم محسوبَين
+    create(kind, name);                     // ينشئ حاوية جديدة بنوع/اسم محسوبَين (= spawn)
     setField(name, "index", i);             // يبرمج حقلاً بداخلها (أي قيمة، حتى دالة)
 }
 
-print containerNames();                     // كل الحاويات المسجَّلة حالياً
-print kindOf("dyn_1");                      // "doc"
-print getField("dyn_1", "index");           // 1
-print hasField("dyn_1", "missing");         // false
+show containerNames();                      // كل الحاويات المسجَّلة حالياً
+show kindOf("dyn_1");                       // "doc"
+show getField("dyn_1", "index");            // 1
+show hasField("dyn_1", "missing");          // false
 destroyContainer("dyn_2");                  // يحذفها بالكامل
 ```
 
-- `spawn(kind, name?)` — ينشئ حاوية جديدة بنوع حرّ (نص) واسم اختياري، ويُعيد اسمها الفعلي.
+- `spawn(kind, name?)` / `create(kind, name?)` — ينشئ حاوية جديدة بنوع حرّ (نص) واسم اختياري، ويُعيد
+  اسمها الفعلي. مرِّر `"make"` كـ `kind` لإنشاء حاوية `make` ديناميكياً وقت التشغيل.
 - `destroyContainer(name)` / `hasContainer(name)` — حذف/فحص وجود حاوية.
 - `setField(container, key, value)` / `getField(container, key)` / `hasField(container, key)` —
   كتابة/قراءة/فحص أي حقل بداخل أي حاوية بالاسم (القيمة قد تكون حتى دالة Rin كاملة).
-- `kindOf(name)` — نوع الحاوية (النص الذي مُرِّر لِـ `spawn`، أو الوسم الرسمي لحاوية عادية).
-- `callFn(fn, args?)` — يستدعي أي قيمة دالة (مثلاً واحدة خرجت من `getField`) مع مصفوفة وسائط اختيارية.
+- `kindOf(name)` — نوع الحاوية (النص الذي مُرِّر لِـ `spawn`/`create`، أو الوسم الرسمي لحاوية عادية،
+  مثال `"container.make"`).
+- `callFn(fn, args?)` / `run(fn, args?)` — يستدعي أي قيمة دالة (مثلاً واحدة خرجت من `getField`) مع
+  مصفوفة وسائط اختيارية.
 
-هذه الدوال هي ما يجعل `@Everything` "تُنشئ أي شيء وتُبرمج أي شيء" فعلياً وقت التشغيل، لا فقط عبر تعشيش
+هذه الدوال هي ما يجعل `@make` "تُنشئ أي شيء وتُبرمج أي شيء" فعلياً وقت التشغيل، لا فقط عبر تعشيش
 ثابت مكتوب مسبقاً.
 
 ## انظر أيضاً
