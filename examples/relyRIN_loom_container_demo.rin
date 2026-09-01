@@ -1,0 +1,35 @@
+// ============================================================================
+// RelyRIN + real Rin Container + real Rin Loom
+// ============================================================================
+// RelyRIN prepares the document; the existing Container/Loom pipeline renders it.
+
+@import "lib/relyRIN.og.rin";
+
+@container=RelyDocument
+    warp source = "# RelyRIN\n\n**Live Preview**\n\n::youtube https://www.youtube.com/watch?v=dQw4w9WgXcQ";
+
+    @theme=RelyGreen
+        active=true;
+        primary="#22c88e";
+        background="#ffffff";
+        text="#202124";
+    .end/theme
+
+    @view.Column=Root
+        padding=20;
+        gap=16;
+
+        @view.Text=Title
+            text="RelyRIN + Loom";
+            size="title";
+        .end/view
+
+        @view.Text=Markdown
+            text=source;
+        .end/view
+
+        @view.WebView=Preview
+            html=relyMdRender(source);
+        .end/view
+    .end/view
+.end/container
