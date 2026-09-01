@@ -390,8 +390,28 @@ private:
             return plusConditionStatement();
         }
         if (match({Tok::LET})) return letDeclaration();
+        // 'set' NAME 'to' EXPR ';' -> صياغة إنجليزية مبسّطة (سهلة التعلّم) لِـ 'let NAME = EXPR;'،
+        // مطابقة لإضافة setDeclaration() في rin_parser.cpp (نفس AST: LetStmt). 'set'/'to' كلمتان
+        // سياقيتان غير محجوزتان، لا تتحوّلان لعبارة خاصة إلا عند ظهور التسلسل الدقيق set IDENT to.
+        if (check(Tok::IDENT) && peek().lexeme == "set" &&
+            checkNext(Tok::IDENT) &&
+            current + 2 < tokens.size() && tokens[current + 2].type == Tok::IDENT &&
+            tokens[current + 2].lexeme == "to") {
+            advance(); // 'set'
+            return setDeclaration();
+        }
         if (match({Tok::FUN})) return functionDeclaration();
         return statement();
+    }
+
+    // 'set' سبق استهلاكها في declaration()؛ الدخول هنا يبدأ مباشرة من اسم المتغيّر.
+    StmtPtr setDeclaration() {
+        Token name = consume(Tok::IDENT, "Expected variable name after 'set'");
+        consume(Tok::IDENT, "Expected 'to' after 'set " + name.lexeme + "'"); // يستهلك 'to'
+        ExprPtr init = expression();
+        consume(Tok::SEMICOLON, "Expected ';' after 'set ... to ...' declaration");
+        auto s = std::make_shared<LetStmt>(); s->name = name.lexeme; s->initializer = init; s->line = name.line;
+        return s;
     }
 
     // true فقط إن كان الموضع الحالي '.' متبوعاً مباشرة بـ IDENT بلفظ "end" (وسم إغلاق).
@@ -531,6 +551,13 @@ private:
     StmtPtr statement() {
         if (match({Tok::PRINT})) return printStatement();
         if (match({Tok::IF})) return ifStatement();
+        // 'when' (condition) thenBranch ['otherwise' elseBranch] -> صياغة إنجليزية مبسّطة لِـ
+        // 'if (condition) thenBranch [else elseBranch]'، مطابقة لإضافة whenStatement() في
+        // rin_parser.cpp (نفس AST: IfStmt). 'when'/'otherwise' كلمتان سياقيتان غير محجوزتان.
+        if (check(Tok::IDENT) && peek().lexeme == "when" && checkNext(Tok::LPAREN)) {
+            advance(); // 'when'
+            return whenStatement();
+        }
         if (match({Tok::WHILE})) return whileStatement();
         if (match({Tok::RINOPEN})) return rinopenStatement();
         if (match({Tok::FOR})) return forStatement();
@@ -571,6 +598,22 @@ private:
         auto thenB = statement();
         StmtPtr elseB = nullptr;
         if (match({Tok::ELSE})) elseB = statement();
+        auto s = std::make_shared<IfStmt>();
+        s->condition = cond; s->thenBranch = thenB; s->elseBranch = elseB; s->line = cond->line;
+        return s;
+    }
+
+    // 'when' سبق استهلاكها في statement()؛ الدخول هنا يبدأ مباشرة من '('.
+    StmtPtr whenStatement() {
+        consume(Tok::LPAREN, "Expected '(' after 'when'");
+        auto cond = expression();
+        consume(Tok::RPAREN, "Expected ')' after when condition");
+        auto thenB = statement();
+        StmtPtr elseB = nullptr;
+        if (check(Tok::IDENT) && peek().lexeme == "otherwise") {
+            advance(); // 'otherwise'
+            elseB = statement();
+        }
         auto s = std::make_shared<IfStmt>();
         s->condition = cond; s->thenBranch = thenB; s->elseBranch = elseB; s->line = cond->line;
         return s;
