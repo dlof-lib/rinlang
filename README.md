@@ -27,3 +27,8 @@
 الإضافة native خالصة داخل نفس `rin_interpreter.cpp` بنفس أسلوب `natives[...]`
 الموجود أصلاً (crc32/adler32/readFile...)، وlibz مكتبة نظام موجودة أصلاً على كل
 جهاز أندرويد عبر NDK.
+
+
+## RelyRIN
+
+مكتبة `lib/relyRIN.og.rin` للمعاينة الحية لـ Markdown، التنسيق والوسائط وYouTube. انظر `RELYRIN.md` و`examples/relyRIN_live_preview.rin`.
