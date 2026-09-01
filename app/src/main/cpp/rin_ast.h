@@ -331,33 +331,42 @@ enum class ContainerKind { PLAIN, PIPE, DATA, API, IMPORT, TABLE, DOC, OBJECT, P
 //   البنية الداخلية للملف تبقى نص Rin عادياً تماماً (لا صيغة ثنائية جديدة) — فقط الامتداد يُميِّزه
 //   بصرياً وللتطبيق (يفتحه محرِّر AUKT المخصص تلقائياً بدل المحرِّر النصي العادي).
 
-// ---- Everything: المفهوم الجامع — "أنشئ أي شيء وبرمِج أي شيء به" ----
-// @container.everything=name  <body>  .end/container.everything
-// @Everything=name             <body>  .end/Everything
-//   كلا الشكلين ينتجان نفس ContainerKind::EVERYTHING. هي نقطة الدخول العليا/العامة في اللغة:
+// ---- make (سابقاً "Everything"): المفهوم الجامع — "أنشئ شيئًا قابلًا للتنفيذ أو الاستخدام" ----
+// @make=name                    <body>  .end/make               (الشكل الموصى به، الأقصر)
+// @Rin.make=name                <body>  .end/Rin.make           (بمساحة اسم صريحة)
+// @container.make=name          <body>  .end/container.make     (بنفس أسلوب container.xxx الأخرى)
+//   الأسماء القديمة التالية ما زالت مقبولة بالكامل للتوافق العكسي (alias)، بلا أي خطة لإزالتها:
+// @container.everything=name    <body>  .end/container.everything
+// @Everything=name              <body>  .end/Everything
+//   كل الأشكال الخمسة أعلاه تنتج بالضبط نفس ContainerKind::EVERYTHING. هي نقطة الدخول العليا/العامة في اللغة:
 //   لا قيود إطلاقاً على جسمها (بالضبط كـ container العادية وAUKT) — يجوز أن تحوي بأي عدد وأي ترتيب:
 //     - منطق إجرائي كامل:            fun/متغيرات let/شروط if/حلقات for، while، return...
 //     - أي حاوية بيانات أو منطق أخرى متداخلة: container/container.pipe/container.api/container.import
 //     - أي مفهوم تنسيق/تجميع آخر:    table/doc/Object/portal/block/sticker/chatbot/AUKT، بأي تعشيش
 //     - واجهة Loomtime كاملة:        عبارات view.* (نفس المسموح بداخل container العادية)
-//   الفكرة الجوهرية: "Everything" لا تُنفَّذ بمنطق خاص بها إطلاقاً — فهي تستدعي (تفوّض إلى) نفس آلية
+//   الفكرة الجوهرية: "make" لا تُنفَّذ بمنطق خاص بها إطلاقاً — فهي تستدعي (تفوّض إلى) نفس آلية
 //   container القياسية حرفياً: نفس تحليل الجسم (نفس مسار الشجرة النحوية لـ @container)، ونفس تنفيذ
-//   الجسم عبر executeBlock للحاوية القياسية. أي أن فهم/تعلّم "container" أولاً شرط لفهم Everything،
+//   الجسم عبر executeBlock للحاوية القياسية. أي أن فهم/تعلّم "container" أولاً شرط لفهم make،
 //   لأنها في الجوهر مجرد اسم/غلاف مميّز فوق نفس المفهوم — غرضها فقط تسمية نقطة دخول "تطبيق/عالم" جامع
 //   يمكن أن يحوي أي شيء آخر في اللغة تحت مظلة واحدة، دون أي تقييد بيانات نقية (validateDataContainerBody
 //   لا تُطبَّق عليها، تماماً كـ container/AUKT/chatbot).
-//   مثال:
-//     @Everything=myApp
+//   مثال (بالصياغة الإنجليزية المبسّطة الجديدة المرافقة: make بدل let، show بدل print):
+//     @make=myApp
 //         fun greet(name) { return "Hello " + name; }
 //         @table=users  row cells=["1","Sara"]; .end/table
 //         @chatbot=bot  text model="rin-chat-1"; .end/chatbot
-//         print greet("World");
-//     .end/Everything
-//   إضافة تكميلية: دوال قياسية ديناميكية (تعمل من أي مكان في البرنامج، ليست حصرية على Everything)
+//         make msg = greet("World");
+//         show msg;
+//     .end/make
+//   عائلة الكلمات الإنجليزية المبسّطة السهلة التعلّم المرافقة لمفهوم make (كل واحدة مرادف كامل بلا
+//   أي فرق في السلوك عن مقابلها القديم، فيرث كل ميزاته): make (بدل let)، show (بدل print، حتى
+//   show.log(...))، create(kind, name?) (بدل spawn) و run(fn, args?) (بدل callFn) أدناه.
+//   إضافة تكميلية: دوال قياسية ديناميكية (تعمل من أي مكان في البرنامج، ليست حصرية على make)
 //   تسمح بإنشاء/قراءة/كتابة/استدعاء أي حاوية أو حقل بالاسم *وقت التشغيل* (اسم/نوع محسوبَين، لا
-//   يلزم معرفتهما وقت الكتابة): spawn(kind, name?)، destroyContainer(name)، hasContainer(name)،
-//   setField(container, key, value)، getField(container, key)، hasField(container, key)،
-//   kindOf(name)، containerNames()، callFn(fn, args?). انظر التوثيق الكامل والأمثلة في
+//   يلزم معرفتهما وقت الكتابة): spawn(kind, name?)/create(kind, name?)، destroyContainer(name)،
+//   hasContainer(name)، setField(container, key, value)، getField(container, key)،
+//   hasField(container, key)، kindOf(name)، containerNames()، callFn(fn, args?)/run(fn, args?).
+//   انظر التوثيق الكامل والأمثلة في
 //   registerNatives() داخل rin_interpreter.cpp وفي docs/containers.md.
 
 struct ContainerStmt : Stmt {
