@@ -2364,6 +2364,55 @@ void Interpreter::registerNatives() {
         return Value::nil();
     };
 
+    // ---- Log System (print.log/print.log.info/warn/error/debug — انظر LogStmt في rin_ast.h) ----
+    // هذه الدوال الثلاث هي واجهة الاستعلام/التصدير فوق Interpreter::logHistory_ (يتراكم تلقائياً
+    // في execute()، فرع LogStmt، عند كل استدعاء print.log). نفس أسلوب التسمية المسطَّحة flat
+    // المستخدَم أعلاه لـ bannerSuccess/bannerError/... (اللغة لا تملك receiver.method(...) عاماً)،
+    // وهي بالضبط نقطة التوسّع المستقبلية "ملفات Log" المذكورة في تعليق LogEntry (rin_interpreter.h):
+    // logSave(path) تكتب فعلياً كل سجلّ متراكم إلى ملف حقيقي على القرص (إلحاق append، لا استبدال،
+    // فيمكن استدعاؤها أكثر من مرة أثناء تشغيل طويل بلا فقدان سجلّات سابقة كُتبت مسبقاً).
+    natives["logHistory"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgsRange("logHistory", a, 0, 0, line);
+        auto arr = std::make_shared<ArrayData>();
+        for (const auto& e : logHistory_) {
+            auto m = std::make_shared<MapData>();
+            m->push_back({Value::string("time"), Value::string(e.time)});
+            m->push_back({Value::string("level"), Value::string(e.level)});
+            m->push_back({Value::string("message"), Value::string(e.message)});
+            m->push_back({Value::string("source"), Value::string(e.source)});
+            m->push_back({Value::string("line"), Value::num(static_cast<double>(e.line))});
+            arr->push_back(Value::makeMap(m));
+        }
+        return Value::makeArray(arr);
+    };
+    natives["logClear"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgsRange("logClear", a, 0, 0, line);
+        size_t n = logHistory_.size();
+        logHistory_.clear();
+        return Value::num(static_cast<double>(n));
+    };
+    natives["logSave"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("logSave", a, 1, line);
+        std::string relPath = asString(a[0], "logSave", line);
+        std::string fullPath = resolvePath(relPath, line);
+        ensureParentDir(fullPath);
+        std::ofstream out(fullPath, std::ios::binary | std::ios::app);
+        if (!out) {
+            throw diagErr(diag::Code::E0036_IOFailure, line, "logSave: تعذّر فتح/إنشاء الملف '" + relPath + "' للكتابة الفعلية على القرص");
+        }
+        for (const auto& e : logHistory_) {
+            std::string upperLevel = e.level;
+            std::transform(upperLevel.begin(), upperLevel.end(), upperLevel.begin(),
+                            [](unsigned char c) { return std::toupper(c); });
+            out << e.time << " [" << upperLevel << "] " << e.message
+                << " (" << e.source << ":" << e.line << ")\n";
+        }
+        if (!out.good()) {
+            throw diagErr(diag::Code::E0036_IOFailure, line, "logSave: حدث خطأ أثناء الكتابة الفعلية إلى '" + relPath + "'");
+        }
+        return Value::num(static_cast<double>(logHistory_.size()));
+    };
+
     natives["apiGet"] = [this](std::vector<Value>& a, int line) -> Value {
         expectArgs("apiGet", a, 2, line);
         std::string name = asString(a[0], "apiGet", line);
@@ -3655,6 +3704,87 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
         for (long long i = 0; i < times; i++) {
             output << prefix << content << end;
         }
+        return;
+    }
+    // print.log(...) / print.log.info/warn/error/debug(...) -> نظام Log منظَّم (انظر LogStmt في
+    // rin_ast.h وLogEntry في rin_interpreter.h). كل استدعاء يبني LogEntry كاملاً (Time/Level/
+    // Message/Source/Line)، يُراكَمه في logHistory_ (بصرف النظر عن if=)، ثم يطبعه في الكونسول
+    // بصيغة "[LEVEL] message" مسبوقة برمز مطابق تماماً لرموز print level="..." الموجودة أصلاً
+    // (نفس النصوص الحرفية التي يتعرّف عليها RinConsoleFormatter.kt) حتى يُصنَّف/يُلوَّن سطر
+    // print.log.info/warn/error/debug تلقائياً في كونسول التطبيق دون أي تغيير إضافي هناك.
+    if (auto s = std::dynamic_pointer_cast<LogStmt>(stmt)) {
+        // if= : نفس دلالة print تماماً — عند falsy، لا شيء يُقيَّم إطلاقاً ولا يُنشأ أي سجلّ.
+        if (s->ifCond) {
+            Value condVal = evaluate(s->ifCond, env);
+            if (!condVal.isTruthy()) return;
+        }
+
+        std::string sep = " ";
+        if (s->sep) {
+            Value sepVal = evaluate(s->sep, env);
+            if (sepVal.type != Value::Type::STRING) {
+                throw diagErr(diag::Code::E0004_InvalidType, stmt->line, "'print.log': 'sep' يجب أن يكون نصاً (string)، لكن وُجد نوع " + sepVal.typeName());
+            }
+            sep = sepVal.str;
+        }
+
+        std::ostringstream body;
+        for (size_t i = 0; i < s->exprs.size(); i++) {
+            if (i > 0) body << sep;
+            body << evaluate(s->exprs[i], env).toDisplayString();
+        }
+        std::string message = body.str();
+
+        std::string source = sourceFile;
+        if (s->source) {
+            Value srcVal = evaluate(s->source, env);
+            if (srcVal.type != Value::Type::STRING) {
+                throw diagErr(diag::Code::E0004_InvalidType, stmt->line, "'print.log': 'source' يجب أن يكون نصاً (string)، لكن وُجد نوع " + srcVal.typeName());
+            }
+            source = srcVal.str;
+        }
+
+        std::string label;
+        if (s->label) {
+            Value lbv = evaluate(s->label, env);
+            if (lbv.type != Value::Type::STRING) {
+                throw diagErr(diag::Code::E0004_InvalidType, stmt->line, "'print.log': 'label' يجب أن يكون نصاً، لكن وُجد نوع " + lbv.typeName());
+            }
+            label = lbv.str;
+        }
+
+        std::time_t t = std::time(nullptr);
+        std::tm tmv{};
+#if defined(_WIN32)
+        localtime_s(&tmv, &t);
+#else
+        localtime_r(&t, &tmv);
+#endif
+        char timeBuf[16];
+        std::snprintf(timeBuf, sizeof(timeBuf), "%02d:%02d:%02d", tmv.tm_hour, tmv.tm_min, tmv.tm_sec);
+
+        LogEntry entry;
+        entry.time = timeBuf;
+        entry.level = s->level;
+        entry.message = message;
+        entry.source = source;
+        entry.line = stmt->line;
+        logHistory_.push_back(entry);
+
+        std::string icon;
+        if (s->level == "info") icon = "\u2139\uFE0F ";        // ℹ️
+        else if (s->level == "warn") icon = "\u26A0\uFE0F ";    // ⚠️
+        else if (s->level == "error") icon = "\u274C ";         // ❌
+        else if (s->level == "debug") icon = "\U0001F41E ";     // 🐞
+        else icon = "\U0001FAB5 ";                               // 🪵 (مستوى "log" العام)
+
+        std::string upperLevel = s->level;
+        std::transform(upperLevel.begin(), upperLevel.end(), upperLevel.begin(),
+                        [](unsigned char c) { return std::toupper(c); });
+
+        output << icon << "[" << upperLevel << "] ";
+        if (!label.empty()) output << "[" << label << "] ";
+        output << message << "\n";
         return;
     }
     if (auto s = std::dynamic_pointer_cast<LetStmt>(stmt)) {
