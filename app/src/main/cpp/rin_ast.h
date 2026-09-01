@@ -353,6 +353,12 @@ enum class ContainerKind { PLAIN, PIPE, DATA, API, IMPORT, TABLE, DOC, OBJECT, P
 //         @chatbot=bot  text model="rin-chat-1"; .end/chatbot
 //         print greet("World");
 //     .end/Everything
+//   إضافة تكميلية: دوال قياسية ديناميكية (تعمل من أي مكان في البرنامج، ليست حصرية على Everything)
+//   تسمح بإنشاء/قراءة/كتابة/استدعاء أي حاوية أو حقل بالاسم *وقت التشغيل* (اسم/نوع محسوبَين، لا
+//   يلزم معرفتهما وقت الكتابة): spawn(kind, name?)، destroyContainer(name)، hasContainer(name)،
+//   setField(container, key, value)، getField(container, key)، hasField(container, key)،
+//   kindOf(name)، containerNames()، callFn(fn, args?). انظر التوثيق الكامل والأمثلة في
+//   registerNatives() داخل rin_interpreter.cpp وفي docs/containers.md.
 
 struct ContainerStmt : Stmt {
     std::string name; // قد تكون فارغة إن لم يُحدَّد اسم
