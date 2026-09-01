@@ -495,6 +495,10 @@ private:
     // حالة لغة الحاويات/البيانات (container / Containers.Group / Volume / link / tying / merge ...)
     std::unordered_map<std::string, EnvPtr> containers;      // اسم الحاوية -> بيئة متغيراتها
     std::unordered_map<std::string, ContainerKind> containerKinds; // اسم الحاوية -> نوعها (لإعادة بنائها بشكل صحيح عند الحفظ)
+    // اسم حاوية أُنشئت ديناميكياً عبر spawn(kind, name) -> نص "kind" كما مرَّره المبرمج حرفياً
+    // (قد لا يطابق أي ContainerKind معروف؛ يُستخدَم فقط لأجل kindOf() الاستقصائية). انظر قسم
+    // "أدوات @Everything الديناميكية" في registerNatives() لمزيد من التفصيل.
+    std::unordered_map<std::string, std::string> containerCustomKind;
     std::unordered_map<std::string, EnvPtr> groupEnvs;       // اسم المجموعة -> بيئتها الخاصة (متغيرات مُعلَنة مباشرة داخلها)
     std::unordered_map<std::string, std::vector<std::string>> groupMembers; // اسم المجموعة -> أسماء الحاويات/المجموعات الفرعية المباشرة بداخلها (بالترتيب)
     // ---- Section: حالة تُحفَظ بعد الإغلاق (قبل هذا كانت Section زخرفية بحتة: تطبع 🔹/◽ فقط ثم
