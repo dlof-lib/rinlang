@@ -4688,6 +4688,565 @@ fun rzInfo() {
 }
 )RINZIPOGRIN";
 
+
+// ============================================================================
+// Embedded RelyRIN — generated from lib/relyRIN.og.rin
+// ============================================================================
+static const char* kLib_relyRIN_og_rin = R"RELYRINOGRIN(
+// ============================================================================
+// lib/relyRIN.og.rin — RelyRIN Media + Live Markdown Preview
+// ============================================================================
+// مكتبة وسائط ومعاينة حية مكتوبة بالكامل بلغة Rin.
+// لا تعتمد على Java/Kotlin/JS داخل المكتبة نفسها؛ تُخرج HTML/CSS قياسيين يمكن
+// عرضه في WebView/متصفح، بما في ذلك YouTube عبر iframe.
+// 
+// الاستيراد:
+//   @import "lib/relyRIN.og.rin";
+//   let page = relyLive("# Hello\n\n**Rin**");
+//   let yt = relyYoutube("https://www.youtube.com/watch?v=dQw4w9WgXcQ");
+//   let md = relyMarkdownFile("README.md");
+//
+// المبادئ:
+//   - Markdown -> HTML
+//   - Theme/Style -> CSS
+//   - Image/Audio/Video -> HTML5 media
+//   - YouTube -> privacy-friendly embed URL
+//   - Live preview -> يعيد وثيقة HTML كاملة في كل استدعاء
+//   - لا تنفيذ JavaScript من Markdown؛ الروابط والنصوص تُهَرَّب لمنع HTML injection
+// ============================================================================
+
+@import "lib/strings.og.rin";
+
+// ----------------------------- Utilities -----------------------------------
+
+fun relyEscape(s) {
+    let x = replace(s, "&", "&amp;");
+    x = replace(x, "<", "&lt;");
+    x = replace(x, ">", "&gt;");
+    x = replace(x, "\"", "&quot;");
+    x = replace(x, "'", "&#39;");
+    return x;
+}
+
+fun relyAttr(s) {
+    return relyEscape(toString(s));
+}
+
+fun relyStyleValue(s) {
+    // قيم style المخصصة تُمرّر كنص؛ لا تُفسّر كـ HTML.
+    return relyAttr(s);
+}
+
+fun relyLineArray(md) {
+    return split(replace(md, "\r\n", "\n"), "\n");
+}
+
+fun relyStarts(s, p) { return startsWith(s, p); }
+
+fun relyHeadingLevel(s) {
+    let n = 0;
+    while (n < len(s) and charAt(s, n) == "#") { n = n + 1; }
+    return n;
+}
+
+fun relyStripHeading(s, n) {
+    let x = substr(s, n);
+    if (startsWith(x, " ")) { x = substr(x, 1); }
+    return trim(x);
+}
+
+fun relyFind(s, needle, start) {
+    let r = indexOf(substr(s, start), needle);
+    if (r < 0) { return -1; }
+    return r + start;
+}
+
+fun relyYoutubeId(url) {
+    let u = trim(url);
+    // youtu.be/<id>
+    let p = indexOf(u, "youtu.be/");
+    if (p >= 0) {
+        let x = substr(u, p + 9);
+        let q = indexOf(x, "?");
+        if (q >= 0) { x = substr(x, 0, q); }
+        q = indexOf(x, "&");
+        if (q >= 0) { x = substr(x, 0, q); }
+        q = indexOf(x, "#");
+        if (q >= 0) { x = substr(x, 0, q); }
+        return x;
+    }
+    // youtube.com/watch?v=<id>
+    p = indexOf(u, "v=");
+    if (p >= 0) {
+        let x = substr(u, p + 2);
+        let q = indexOf(x, "&");
+        if (q >= 0) { x = substr(x, 0, q); }
+        q = indexOf(x, "#");
+        if (q >= 0) { x = substr(x, 0, q); }
+        return x;
+    }
+    // /embed/<id> or /shorts/<id>
+    p = indexOf(u, "/embed/");
+    if (p < 0) { p = indexOf(u, "/shorts/"); }
+    if (p >= 0) {
+        let x = substr(u, p + 7);
+        let q = indexOf(x, "?");
+        if (q >= 0) { x = substr(x, 0, q); }
+        q = indexOf(x, "&");
+        if (q >= 0) { x = substr(x, 0, q); }
+        return x;
+    }
+    return "";
+}
+
+// ----------------------------- Style ---------------------------------------
+
+fun relyThemeDefault() {
+    return {
+        bg: "#ffffff",
+        "text": "#202124",
+        "muted": "#6b7280",
+        "accent": "#7c5cff",
+        "accent2": "#22c88e",
+        "border": "#e5e7eb",
+        "codeBg": "#f5f7fa",
+        "quoteBg": "#f8f7ff",
+        "cardBg": "#ffffff",
+        "link": "#2563eb",
+        "radius": "14px",
+        "maxWidth": "920px",
+        "font": "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+    };
+}
+
+fun relyTheme(overrides) {
+    let t = relyThemeDefault();
+    let ks = keys(overrides);
+    let i = 0;
+    while (i < len(ks)) {
+        t[ks[i]] = overrides[ks[i]];
+        i = i + 1;
+    }
+    return t;
+}
+
+fun relyCss(theme) {
+    return "<style>\n" +
+    ":root{color-scheme:light;}\n" +
+    "*{box-sizing:border-box;}\n" +
+    "html,body{margin:0;padding:0;background:" + relyStyleValue(theme["bg"]) + ";color:" + relyStyleValue(theme["text"]) + ";}\n" +
+    "body{font-family:" + relyStyleValue(theme["font"]) + ";line-height:1.72;}\n" +
+    ".rely-page{max-width:" + relyStyleValue(theme["maxWidth"]) + ";margin:0 auto;padding:32px 22px 64px;}\n" +
+    ".rely-page h1{font-size:2.15rem;line-height:1.18;margin:0 0 20px;padding-bottom:14px;border-bottom:2px solid " + relyStyleValue(theme["accent"]) + ";}\n" +
+    ".rely-page h2{font-size:1.55rem;margin-top:32px;padding-bottom:8px;border-bottom:1px solid " + relyStyleValue(theme["border"]) + ";}\n" +
+    ".rely-page h3{font-size:1.25rem;margin-top:26px;}\n" +
+    ".rely-page p{margin:12px 0;}\n" +
+    ".rely-page a{color:" + relyStyleValue(theme["link"]) + ";text-decoration:none;}\n" +
+    ".rely-page a:hover{text-decoration:underline;}\n" +
+    ".rely-code{background:" + relyStyleValue(theme["codeBg"]) + ";border:1px solid " + relyStyleValue(theme["border"]) + ";border-radius:" + relyStyleValue(theme["radius"]) + ";padding:16px;overflow:auto;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:.92em;}\n" +
+    ".rely-inline-code{background:" + relyStyleValue(theme["codeBg"]) + ";border-radius:6px;padding:2px 6px;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;}\n" +
+    ".rely-quote{margin:18px 0;padding:12px 16px;border-left:4px solid " + relyStyleValue(theme["accent"]) + ";background:" + relyStyleValue(theme["quoteBg"]) + ";border-radius:0 " + relyStyleValue(theme["radius"]) + " " + relyStyleValue(theme["radius"]) + " 0;}\n" +
+    ".rely-media{display:block;width:100%;max-width:100%;margin:18px auto;border-radius:" + relyStyleValue(theme["radius"]) + ";overflow:hidden;}\n" +
+    ".rely-media img,.rely-media video{display:block;width:100%;height:auto;}\n" +
+    ".rely-audio{width:100%;}\n" +
+    ".rely-video{background:#000;}\n" +
+    ".rely-youtube{position:relative;width:100%;aspect-ratio:16/9;background:#000;border-radius:" + relyStyleValue(theme["radius"]) + ";overflow:hidden;margin:20px 0;}\n" +
+    ".rely-youtube iframe{position:absolute;inset:0;width:100%;height:100%;border:0;}\n" +
+    ".rely-card{background:" + relyStyleValue(theme["cardBg"]) + ";border:1px solid " + relyStyleValue(theme["border"]) + ";border-radius:" + relyStyleValue(theme["radius"]) + ";padding:18px;margin:18px 0;}\n" +
+    ".rely-hr{border:0;border-top:1px solid " + relyStyleValue(theme["border"]) + ";margin:28px 0;}\n" +
+    ".rely-table{width:100%;border-collapse:collapse;margin:18px 0;}\n" +
+    ".rely-table th,.rely-table td{border:1px solid " + relyStyleValue(theme["border"]) + ";padding:9px 11px;text-align:start;}\n" +
+    ".rely-table th{background:" + relyStyleValue(theme["codeBg"]) + ";}\n" +
+    ".rely-task{list-style:none;margin-left:-24px;}\n" +
+    "</style>\n";
+}
+
+// ----------------------------- Inline Markdown -----------------------------
+
+fun relyInline(s) {
+    let x = relyEscape(s);
+
+    // Images and links are handled before emphasis.
+    // ![alt](src)
+    while (true) {
+        let p = indexOf(x, "![");
+        if (p < 0) { break; }
+        let a = relyFind(x, "](", p + 2);
+        if (a < 0) { break; }
+        let e = relyFind(x, ")", a + 2);
+        if (e < 0) { break; }
+        let alt = substr(x, p + 2, a - (p + 2));
+        let src = substr(x, a + 2, e - (a + 2));
+        let tag = "<span class=\"rely-media\"><img src=\"" + relyAttr(src) + "\" alt=\"" + relyAttr(alt) + "\" loading=\"lazy\"></span>";
+        x = substr(x, 0, p) + tag + substr(x, e + 1);
+    }
+
+    while (true) {
+        let p = indexOf(x, "[");
+        if (p < 0) { break; }
+        let a = indexOf(x, "](", p + 1);
+        if (a < 0) { break; }
+        let e = relyFind(x, ")", a + 2);
+        if (e < 0) { break; }
+        let label = substr(x, p + 1, a - (p + 1));
+        let href = substr(x, a + 2, e - (a + 2));
+        let tag = "<a href=\"" + relyAttr(href) + "\" target=\"_blank\" rel=\"noopener noreferrer\">" + label + "</a>";
+        x = substr(x, 0, p) + tag + substr(x, e + 1);
+    }
+
+    // Inline code first.
+    while (true) {
+        let p = indexOf(x, "`");
+        if (p < 0) { break; }
+        let e = relyFind(x, "`", p + 1);
+        if (e < 0) { break; }
+        let c = substr(x, p + 1, e - p - 1);
+        x = substr(x, 0, p) + "<code class=\"rely-inline-code\">" + c + "</code>" + substr(x, e + 1);
+    }
+
+    // Strong / emphasis / strike.
+    x = relyReplacePair(x, "**", "<strong>", "</strong>");
+    x = relyReplacePair(x, "__", "<strong>", "</strong>");
+    x = relyReplacePair(x, "~~", "<del>", "</del>");
+    x = relyReplacePair(x, "*", "<em>", "</em>");
+    x = relyReplacePair(x, "_", "<em>", "</em>");
+    return x;
+}
+
+fun relyReplacePair(s, marker, openTag, closeTag) {
+    let x = s;
+    let p = indexOf(x, marker);
+    while (p >= 0) {
+        let e = relyFind(x, marker, p + len(marker));
+        if (e < 0) { break; }
+        let inner = substr(x, p + len(marker), e - p - len(marker));
+        x = substr(x, 0, p) + openTag + inner + closeTag + substr(x, e + len(marker));
+        p = relyFind(x, marker, p + len(openTag) + len(inner) + len(closeTag));
+    }
+    return x;
+}
+
+// ----------------------------- Media API -----------------------------------
+
+fun relyImage(src, alt) {
+    return "<figure class=\"rely-media\"><img src=\"" + relyAttr(src) + "\" alt=\"" + relyAttr(alt) + "\" loading=\"lazy\"></figure>";
+}
+
+fun relyAudio(src, controls) {
+    let c = controls;
+    if (c == nil) { c = true; }
+    let attrs = "";
+    if (c) { attrs = " controls"; }
+    return "<div class=\"rely-media\"><audio class=\"rely-audio\" src=\"" + relyAttr(src) + "\"" + attrs + " preload=\"metadata\"></audio></div>";
+}
+
+fun relyVideo(src, controls, autoplay, muted, loop) {
+    let attrs = "";
+    if (controls == nil or controls) { attrs = attrs + " controls"; }
+    if (autoplay) { attrs = attrs + " autoplay"; }
+    if (muted) { attrs = attrs + " muted"; }
+    if (loop) { attrs = attrs + " loop"; }
+    return "<div class=\"rely-media\"><video class=\"rely-video\" src=\"" + relyAttr(src) + "\"" + attrs + " playsinline preload=\"metadata\"></video></div>";
+}
+
+fun relyYoutube(url) {
+    let id = relyYoutubeId(url);
+    if (id == "") {
+        return "<div class=\"rely-card\">RelyRIN: YouTube URL غير صالحة.</div>";
+    }
+    let src = "https://www.youtube-nocookie.com/embed/" + relyAttr(id) + "?rel=0";
+    return "<div class=\"rely-youtube\"><iframe src=\"" + src + "\" title=\"YouTube video\" allow=\"accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share\" allowfullscreen loading=\"lazy\"></iframe></div>";
+}
+
+fun relyYoutubeIdBlock(id) {
+    return relyYoutube("https://www.youtube.com/watch?v=" + id);
+}
+
+fun relyMedia(kind, src, options) {
+    if (kind == "image") {
+        let alt = "RelyRIN media";
+        if (has(options, "alt")) { alt = options["alt"]; }
+        return relyImage(src, alt);
+    }
+    if (kind == "audio") {
+        let controls = true;
+        if (has(options, "controls")) { controls = options["controls"]; }
+        return relyAudio(src, controls);
+    }
+    if (kind == "video") {
+        let controls = true;
+        let autoplay = false;
+        let muted = false;
+        let loop = false;
+        if (has(options, "controls")) { controls = options["controls"]; }
+        if (has(options, "autoplay")) { autoplay = options["autoplay"]; }
+        if (has(options, "muted")) { muted = options["muted"]; }
+        if (has(options, "loop")) { loop = options["loop"]; }
+        return relyVideo(src, controls, autoplay, muted, loop);
+    }
+    if (kind == "youtube") { return relyYoutube(src); }
+    return "<div class=\"rely-card\">RelyRIN: نوع وسائط غير معروف: " + relyEscape(kind) + "</div>";
+}
+
+// ----------------------------- Markdown renderer ---------------------------
+
+fun relyRenderMarkdown(md) {
+    let lines = relyLineArray(md);
+    let out = "";
+    let i = 0;
+    let inCode = false;
+    let codeLang = "";
+    let code = "";
+
+    while (i < len(lines)) {
+        let raw = lines[i];
+        let line = trim(raw);
+
+        if (startsWith(line, "```")) {
+            if (inCode) {
+                out = out + "<pre class=\"rely-code\" data-lang=\"" + relyAttr(codeLang) + "\"><code>" + relyEscape(code) + "</code></pre>\n";
+                inCode = false;
+                codeLang = "";
+                code = "";
+            } else {
+                inCode = true;
+                codeLang = trim(substr(line, 3));
+            }
+            i = i + 1;
+            continue;
+        }
+
+        if (inCode) {
+            if (code != "") { code = code + "\n"; }
+            code = code + raw;
+            i = i + 1;
+            continue;
+        }
+
+        if (line == "") {
+            i = i + 1;
+            continue;
+        }
+
+        // RelyRIN media directives:
+        // ::youtube URL
+        // ::image URL | ALT
+        // ::audio URL
+        // ::video URL
+        if (startsWith(line, "::youtube ")) {
+            out = out + relyYoutube(trim(substr(line, 10))) + "\n";
+            i = i + 1;
+            continue;
+        }
+        if (startsWith(line, "::image ")) {
+            let spec = trim(substr(line, 8));
+            let parts = split(spec, "|");
+            let src = trim(parts[0]);
+            let alt = "image";
+            if (len(parts) > 1) { alt = trim(parts[1]); }
+            out = out + relyImage(src, alt) + "\n";
+            i = i + 1;
+            continue;
+        }
+        if (startsWith(line, "::audio ")) {
+            out = out + relyAudio(trim(substr(line, 8)), true) + "\n";
+            i = i + 1;
+            continue;
+        }
+        if (startsWith(line, "::video ")) {
+            out = out + relyVideo(trim(substr(line, 8)), true, false, false, false) + "\n";
+            i = i + 1;
+            continue;
+        }
+
+        let level = relyHeadingLevel(line);
+        if (level > 0 and level <= 6 and (len(line) == level or charAt(line, level) == " ")) {
+            let title = relyStripHeading(line, level);
+            out = out + "<h" + toString(level) + ">" + relyInline(title) + "</h" + toString(level) + ">\n";
+            i = i + 1;
+            continue;
+        }
+
+        if (line == "---" or line == "***" or line == "___") {
+            out = out + "<hr class=\"rely-hr\">\n";
+            i = i + 1;
+            continue;
+        }
+
+        if (startsWith(line, ">")) {
+            let q = trim(substr(line, 1));
+            out = out + "<blockquote class=\"rely-quote\">" + relyInline(q) + "</blockquote>\n";
+            i = i + 1;
+            continue;
+        }
+
+        // unordered / task list
+        if (startsWith(line, "- ") or startsWith(line, "* ") or startsWith(line, "+ ")) {
+            let marker = substr(line, 0, 1);
+            let body = trim(substr(line, 2));
+            if (startsWith(body, "[ ] ")) {
+                body = substr(body, 4);
+                out = out + "<ul><li class=\"rely-task\">☐ " + relyInline(body) + "</li></ul>\n";
+            } else if (startsWith(body, "[x] ") or startsWith(body, "[X] ")) {
+                body = substr(body, 4);
+                out = out + "<ul><li class=\"rely-task\">☑ " + relyInline(body) + "</li></ul>\n";
+            } else {
+                out = out + "<ul><li>" + relyInline(body) + "</li></ul>\n";
+            }
+            i = i + 1;
+            continue;
+        }
+
+        // ordered list
+        let firstSpace = indexOf(line, " ");
+        if (firstSpace > 0) {
+            let prefix = substr(line, 0, firstSpace);
+            let dot = substr(prefix, len(prefix) - 1, 1);
+            if (dot == "." or dot == ")") {
+                let number = substr(prefix, 0, len(prefix) - 1);
+                if (relyIsDigits(number)) {
+                    out = out + "<ol><li>" + relyInline(trim(substr(line, firstSpace + 1))) + "</li></ol>\n";
+                    i = i + 1;
+                    continue;
+                }
+            }
+        }
+
+        // table: detect | and next separator line.
+        if (indexOf(line, "|") >= 0 and i + 1 < len(lines) and indexOf(lines[i + 1], "|") >= 0) {
+            let sep = split(lines[i + 1], "|");
+            let validSep = true;
+            let si = 0;
+            while (si < len(sep)) {
+                let cell = trim(sep[si]);
+                if (cell != "" and cell != "---" and cell != ":---" and cell != "---:" and cell != ":---:") {
+                    validSep = false;
+                }
+                si = si + 1;
+            }
+            if (validSep) {
+                let cells = split(line, "|");
+                out = out + "<table class=\"rely-table\"><thead><tr>";
+                let ci = 0;
+                while (ci < len(cells)) {
+                    let c = trim(cells[ci]);
+                    if (c != "") { out = out + "<th>" + relyInline(c) + "</th>"; }
+                    ci = ci + 1;
+                }
+                out = out + "</tr></thead><tbody>\n";
+                i = i + 2;
+                while (i < len(lines) and indexOf(lines[i], "|") >= 0 and trim(lines[i]) != "") {
+                    let row = split(lines[i], "|");
+                    out = out + "<tr>";
+                    ci = 0;
+                    while (ci < len(row)) {
+                        let c = trim(row[ci]);
+                        if (c != "") { out = out + "<td>" + relyInline(c) + "</td>"; }
+                        ci = ci + 1;
+                    }
+                    out = out + "</tr>\n";
+                    i = i + 1;
+                }
+                out = out + "</tbody></table>\n";
+                continue;
+            }
+        }
+
+        // Paragraph with soft line breaks.
+        let para = relyInline(line);
+        i = i + 1;
+        while (i < len(lines)) {
+            let next = trim(lines[i]);
+            if (next == "" or startsWith(next, "#") or startsWith(next, ">") or
+                startsWith(next, "```") or startsWith(next, "::")) {
+                break;
+            }
+            para = para + "<br>\n" + relyInline(next);
+            i = i + 1;
+        }
+        out = out + "<p>" + para + "</p>\n";
+    }
+
+    return out;
+}
+
+fun relyIsDigits(s) {
+    if (s == "") { return false; }
+    let i = 0;
+    while (i < len(s)) {
+        let c = charAt(s, i);
+        if (indexOf("0123456789", c) < 0) { return false; }
+        i = i + 1;
+    }
+    return true;
+}
+
+// ----------------------------- Live document API ----------------------------
+
+fun relyDocument(md, theme) {
+    let t = relyTheme(theme);
+    return "<!doctype html><html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>RelyRIN Preview</title>" +
+        relyCss(t) + "</head><body><main class=\"rely-page\">" +
+        relyRenderMarkdown(md) +
+        "</main></body></html>";
+}
+
+fun relyLive(md) {
+    return relyDocument(md, {});
+}
+
+fun relyLiveStyled(md, style) {
+    return relyDocument(md, style);
+}
+
+fun relyMarkdownFile(path) {
+    return relyLive(readFile(path));
+}
+
+fun relyMarkdownFileStyled(path, style) {
+    return relyLiveStyled(readFile(path), style);
+}
+
+fun relyWritePreview(md, outputPath) {
+    writeFile(outputPath, relyLive(md));
+    return outputPath;
+}
+
+fun relyWritePreviewStyled(md, outputPath, style) {
+    writeFile(outputPath, relyLiveStyled(md, style));
+    return outputPath;
+}
+
+// تحديث/معاينة ملف MD: القراءة والإخراج إلى HTML في عملية واحدة.
+fun relyBuildMarkdown(path, outputPath) {
+    let md = readFile(path);
+    writeFile(outputPath, relyLive(md));
+    return { source: path, output: outputPath, ok: true };
+}
+
+fun relyInfo() {
+    return {
+        "name": "relyRIN",
+        "version": "1.0.0",
+        "description": "Live Markdown preview, styling and media rendering for Rin, including YouTube embeds",
+        "features": [
+            "Markdown to HTML",
+            "Live HTML document generation",
+            "Custom themes and CSS",
+            "Images",
+            "Audio",
+            "HTML5 video",
+            "YouTube embeds",
+            "Code blocks",
+            "Links",
+            "Tables",
+            "Task lists",
+            "Rin media directives"
+        ]
+    };
+}
+
+)RELYRINOGRIN";
 inline const std::unordered_map<std::string, std::string>& embeddedRinLibraries() {
     static const std::unordered_map<std::string, std::string> libs = {
         {"lib/math.og.rin", kLib_math_og_rin},
@@ -4712,6 +5271,7 @@ inline const std::unordered_map<std::string, std::string>& embeddedRinLibraries(
         {"lib/ghpublish.og.rin", kLib_ghpublish_og_rin},
         {"lib/rinxg.og.rin", kLib_rinxg_og_rin},
         {"lib/rinzip.og.rin", kLib_rinzip_og_rin},
+        {"lib/relyRIN.og.rin", kLib_relyRIN_og_rin},
     };
     return libs;
 }
