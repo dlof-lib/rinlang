@@ -195,6 +195,20 @@ object RinEngine {
         /** Re-parses [newSource] and diffs it in place, preserving current Warp state. */
         fun updateSource(newSource: String): String = loomSessionUpdateSourceNative(handle, newSource)
 
+        /**
+         * Tells the Overlay Engine (Dialog centering / Tooltip clamping — see
+         * `rin_loom_session_set_viewport`'s own doc comment in rin_loom_c_api.h/.cpp) the real
+         * on-screen viewport height in the same pixel space as [rootWidth], so an open `@Dialog`
+         * re-centers and an anchored `@Tooltip` re-clamps against the *actual* device instead of
+         * the native side's 844px fallback. Cheap: re-runs layout's second (Overlay) pass only,
+         * not a full re-render -- safe to call on every rotation/resize. No-op if no overlay is
+         * currently open (nothing to re-home yet); the next [currentJson]/[tap]/[updateSource]
+         * result will simply reflect it once one is.
+         */
+        fun setViewport(viewportHeight: Int) {
+            if (!closed) loomSessionSetViewportNative(handle, viewportHeight)
+        }
+
         /** Releases the native session. Safe to call more than once. */
         fun close() {
             if (!closed) { loomSessionFreeNative(handle); closed = true }
@@ -208,5 +222,6 @@ object RinEngine {
     private external fun loomSessionRenderJsonNative(handle: Long): String
     private external fun loomSessionTapNative(handle: Long, x: Double, y: Double): String
     private external fun loomSessionUpdateSourceNative(handle: Long, newSource: String): String
+    private external fun loomSessionSetViewportNative(handle: Long, viewportHeight: Int)
     private external fun loomSessionFreeNative(handle: Long)
 }
