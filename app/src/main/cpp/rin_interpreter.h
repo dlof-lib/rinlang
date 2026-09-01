@@ -470,6 +470,58 @@ public:
     // للتوسّع). مثال: registerFlowNodeType("myCustomStage", flow::NodeType::TRANSFORM);
     void registerFlowNodeType(const std::string& fnName, flow::NodeType type) { flowNodeTypeOverrides_[fnName] = type; }
 
+    // ---- Live Preview / Loomtime runtime bridge (see loom/rin_live_runtime.h) ----
+    //
+    // Reads back every top-level binding currently visible in the global Environment after a
+    // run() (variables from `let`/`warp`, hoisted `fun`s as FUNCTION values, etc.) as a plain
+    // name->Value snapshot. This is what lets a caller that just executed a *real* program via
+    // run() (not the old AST-scanning shortcut) recover the actual resulting state -- e.g. to
+    // seed loom::WarpScope from the true post-execution value of a `warp` cell instead of only
+    // ever evaluating its initializer expression once, in isolation, the way
+    // loom::runColdPipeline used to. Read-only: does not copy the Environment's parent chain
+    // (globals has none) and does not mutate anything.
+    std::unordered_map<std::string, Value> exportGlobals() const {
+        std::unordered_map<std::string, Value> out;
+        if (globals) out = globals->values;
+        return out;
+    }
+
+    // Same idea as exportGlobals(), but for a named @container's own Environment -- e.g. to read
+    // back the real post-execution value of a `warp` cell declared *inside* that container's body
+    // (see the ContainerStmt case in execute(): each container gets its own child Environment,
+    // registered here under its name). Empty map if no container by that name was registered
+    // during the last run() (never executed, or run() failed before reaching it).
+    std::unordered_map<std::string, Value> exportContainerGlobals(const std::string& containerName) const {
+        auto it = containers.find(containerName);
+        if (it == containers.end() || !it->second) return {};
+        return it->second->values;
+    }
+
+    // Caps the total number of statements execute() will run across this Interpreter's lifetime
+    // (cumulative, not per-call -- callers that want a fresh budget per run() should construct a
+    // fresh Interpreter, exactly like Live Preview's cold/hot pipeline does). 0 (the default)
+    // means unlimited, i.e. completely unchanged behavior for the CLI and every existing caller
+    // that never calls this. Live Preview is the one caller expected to set this, so that a
+    // program the user is actively typing (e.g. `while (true) {}`) can't hang the preview thread
+    // -- see rin_loom_pipeline.h's runColdPipeline overload that takes an Interpreter&.
+    void setExecutionBudget(long long maxStatements) { execBudget_ = maxStatements; }
+    long long executedStatementCount() const { return execCount_; }
+
+    // ---- Real branch-aware `@view` selection (Live Preview §4/§10) ----
+    //
+    // A `@view...=name ... .end/view` root can now sit inside real control flow, e.g.:
+    //   if (logged) { @view...=title text="Welcome"; .end/view }
+    //   else        { @view...=title text="Login";   .end/view }
+    // execute() has always silently no-op'd on a ViewStmt it encounters (view markup isn't
+    // executable code); this callback -- fired from that same no-op case, purely as an
+    // observation hook -- lets a caller (see loom::runColdPipelineWithRuntime) find out which
+    // ViewStmt real execution actually walked into, so the *correct* branch's view genuinely
+    // becomes the one built into the Fabric, decided by the real `if`/`while`/`for` control flow
+    // that already ran, rather than a second, separate static scan of the AST guessing at it.
+    // Unset by default (nullptr), so every pre-existing caller of run()/execute() is unaffected.
+    using ViewReachedCallback = std::function<void(const std::shared_ptr<ViewStmt>&)>;
+    void setViewReachedCallback(ViewReachedCallback cb) { viewReachedCb_ = std::move(cb); }
+
 private:
     EnvPtr globals;
     std::ostringstream output;
@@ -692,6 +744,10 @@ private:
     // مكدّسات صغيرة نسبياً كما في بعض خيوط أندرويد)، ويكفي لأي تكرار عملي (fibonacci، إلخ).
     static constexpr int kMaxCallDepth = 300;
     int callDepth = 0;
+    // ---- Execution budget (Live Preview infinite-loop protection; see setExecutionBudget()) ----
+    long long execBudget_ = 0;  // 0 = unlimited (unchanged default behavior for every existing caller)
+    long long execCount_ = 0;   // total execute() calls so far on this Interpreter instance
+    ViewReachedCallback viewReachedCb_; // see setViewReachedCallback() above; null = old no-op behavior
 
     // ينسخ متغيرات هدف tying/merge (حاوية مفردة أو Containers.Group كاملة) داخل بيئة الحاوية الحالية.
     // يُرجع true إن كان الهدف مجموعة (Containers.Group)، أو false إن كان حاوية مفردة.
