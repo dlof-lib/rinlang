@@ -23,7 +23,8 @@ object RinContainerTags {
         "container", "container.pipe", "container.data", "container.api", "container.import",
         "container.table", "container.doc", "container.object", "Object", "container.open/object",
         "container.portal", "portal", "container.block", "block", "container.sticker", "sticker",
-        "container.aukt", "AUKT", "container.chatbot", "chatbot", "pipe", "data", "api",
+        "container.aukt", "AUKT", "container.chatbot", "chatbot",
+        "container.everything", "Everything", "pipe", "data", "api",
         "Containers.Group", "Volume"
     )
 
@@ -188,6 +189,13 @@ object RinSnippets {
             "@view.Object=$CURSOR_MARKER\n" +
                 "    source=\"user01\";\n" +
                 ".end/view\n"
+        ),
+        Snippet(
+            "Everything (أنشئ/برمِج أي شيء)",
+            "@Everything=$CURSOR_MARKER\n" +
+                "    fun greet(name) { return \"Hello \" + name; }\n" +
+                "    print greet(\"World\");\n" +
+                ".end/Everything\n"
         )
     )
 }
