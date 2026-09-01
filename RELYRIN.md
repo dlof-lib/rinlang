@@ -1,60 +1,79 @@
 # RelyRIN
 
-مكتبة Rin للمعاينة الحية لملفات Markdown والوسائط.
+**RelyRIN** هي مكتبة Rin للمعاينة الحية والوسائط، مكتوبة بالكامل بلغة Rin.
 
-## أسلوب API
+## القدرات
 
-أسماء الدوال منظمة إلى مجموعات واضحة:
+- Markdown → HTML.
+- وثيقة Preview كاملة جاهزة للـ WebView/المتصفح.
+- Themes وCSS قابلة للتخصيص من Rin.
+- عناوين H1–H6.
+- Bold / Italic / Strike / Inline Code.
+- روابط وصور.
+- كتل كود.
+- اقتباسات وقوائم ومهام.
+- جداول Markdown.
+- HTML5 Audio.
+- HTML5 Video.
+- YouTube Embed عبر `youtube-nocookie.com`.
+- Directives للوسائط داخل Markdown:
+  - `::image URL | ALT`
+  - `::audio URL`
+  - `::video URL`
+  - `::youtube URL`
+- قراءة `.md` من القرص وبناء Preview HTML.
+- كتابة ملف Preview مباشرة.
 
-- `relyLive*` — المعاينة والوثائق الحية
-- `relyMd*` — Markdown والملفات
-- `relyStyle*` — النمط وCSS
-- `relyMedia*` — الصور والصوت والفيديو وYouTube
-
-## مثال
+## الاستخدام
 
 ```rin
 @import "lib/relyRIN.og.rin";
 
-let style = relyStyle({
-    "accent": "#22c88e",
-    "bg": "#ffffff"
-});
-
-let preview = relyLiveDocument(
-    "# Hello Rin\n\n**Live Preview**",
-    style
-);
-
-writeFile("preview.html", preview);
+let html = relyLive("# Hello\n\n**Rin**");
+writeFile("preview.html", html);
 ```
 
-## Markdown
+### YouTube
 
 ```rin
-let html = relyMdRender(markdown);
-let preview = relyMdPreview("README.md");
-let styled = relyMdPreviewStyled("README.md", style);
+let video = relyYoutube("https://www.youtube.com/watch?v=VIDEO_ID");
+let page = relyLive("## Video\n\n" + video);
 ```
 
-## Media
-
-```rin
-let image = relyMediaImage("image.png", "Rin");
-let audio = relyMediaAudio("audio.mp3", true);
-let video = relyMediaVideo("video.mp4", true, false, false, false);
-let youtube = relyMediaYoutube("https://www.youtube.com/watch?v=VIDEO_ID");
-```
-
-## Directives
-
-داخل Markdown:
+أو داخل Markdown:
 
 ```text
-::image image.png | Rin
-::audio audio.mp3
-::video video.mp4
 ::youtube https://www.youtube.com/watch?v=VIDEO_ID
 ```
 
-RelyRIN يحول المحتوى إلى HTML/CSS جاهز للعرض في WebView أو المتصفح.
+### الوسائط
+
+```rin
+let image = relyImage("images/rin.png", "Rin");
+let audio = relyAudio("audio/theme.mp3", true);
+let video = relyVideo("video/demo.mp4", true, false, false, false);
+```
+
+### Theme
+
+```rin
+let html = relyLiveStyled("# Rin", {
+    "accent": "#22c88e",
+    "bg": "#ffffff",
+    "text": "#202124",
+    "radius": "16px"
+});
+```
+
+## API الأساسية
+
+`relyLive` · `relyLiveStyled` · `relyDocument` · `relyRenderMarkdown` · `relyMarkdownFile` · `relyMarkdownFileStyled` · `relyWritePreview` · `relyWritePreviewStyled` · `relyBuildMarkdown` · `relyImage` · `relyAudio` · `relyVideo` · `relyYoutube` · `relyYoutubeId` · `relyMedia` · `relyTheme` · `relyCss` · `relyInfo`
+
+> **ملاحظة:** RelyRIN تنتج HTML/CSS قياسيين. تشغيل المعاينة فعلياً داخل Android يتطلب أن يقوم WebView/واجهة التطبيق بعرض HTML الناتج، مع السماح بالإنترنت إذا كانت المعاينة تحتوي على YouTube.
+
+## Architecture
+
+RelyRIN is a bridge library, not a replacement renderer. It uses Rin's existing
+`@container`, `@theme`, `@view`, Loom/Fabric/Dye pipeline and View implementations.
+RelyRIN adds Markdown parsing, media descriptors, YouTube URL handling and live-preview
+source generation on top of those existing systems.
