@@ -110,6 +110,18 @@ class LoomPreviewActivity : AppCompatActivity(), LoomPreviewManager.Listener {
         // +/- buttons (setZoom already updates it for those — this covers the gesture path).
         fabricView.onZoomChanged = { z -> txtZoom.text = getString(R.string.loom_zoom_percent_format, (z * 100).toInt()) }
 
+        // Overlay Engine (Dialog centering / Tooltip clamping — see [LoomPreviewManager.setViewport]):
+        // keeps the native side's notion of "screen height" synced to the preview surface's real
+        // measured height in dp, same unit as currentDeviceWidth. Fires on the very first layout
+        // and again on every later resize (e.g. rotation, splitting the screen) — each call is
+        // cheap on the native side and a no-op unless the height actually changed.
+        previewSurface.addOnLayoutChangeListener { _, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom ->
+            val heightPx = bottom - top
+            if (heightPx > 0 && heightPx != (oldBottom - oldTop)) {
+                LoomPreviewManager.setViewport(pxToDp(heightPx))
+            }
+        }
+
         currentPageName = intent.getStringExtra(EXTRA_FILE_NAME)?.takeIf { it.isNotBlank() } ?: currentPageName
         txtTitle.text = currentPageName
 
@@ -141,12 +153,14 @@ class LoomPreviewActivity : AppCompatActivity(), LoomPreviewManager.Listener {
         }
     }
 
+    /** يحوّل قيمة بكسل فعلية إلى dp — نفس وحدة rootWidth/viewportHeight الممرَّرة للمحرّك الأصلي. */
+    private fun pxToDp(px: Int): Int = (px / resources.displayMetrics.density).toInt()
+
     /** يحوّل عرض سطح المعاينة الحالي (بكسل فعلي) إلى dp — هذا هو "عرض الجهاز" الذي يملأ الشاشة تماماً. */
     private fun fitDeviceWidth(): Int {
         val widthPx = previewSurface.width
         if (widthPx <= 0) return DEFAULT_DEVICE_WIDTH
-        val density = resources.displayMetrics.density
-        return (widthPx / density).toInt().coerceAtLeast(200)
+        return pxToDp(widthPx).coerceAtLeast(200)
     }
 
     /** يُستدعى عند ضغط "تشغيل" مجدداً من المحرر بينما هذه الشاشة (singleTask) ما تزال في المهمّة. */
