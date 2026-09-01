@@ -140,6 +140,38 @@ struct PrintStmt : Stmt {
     ExprPtr width;   // nullptr = بلا حشو
     ExprPtr align;   // nullptr = افتراضي "left" (فقط له معنى مع width)
 };
+// print.log(...);  |  print.log.info(...);  |  print.log.warn(...);  |  print.log.error(...);  |  print.log.debug(...);
+// نظام Log منظَّم (structured logging)، إضافة مستقلة تماماً عن print العادي أعلاه (لا تُعدِّل أي
+// سلوك موجود). 'print' توكن محجوز (TokenType::PRINT) وليس IDENT، لذا لا يمكن أن يظهر كمستقبِل
+// (receiver) في تعبير استدعاء عام receiver.method(...) — اللغة لا تملك مثل هذا التعبير أصلاً (انظر
+// ملاحظة bannerConvenience في rin_interpreter.cpp). بدل ذلك، وبنفس أسلوب `view.print/object(...)`
+// أعلاه بالضبط، هذه سلسلة كلمات محجوزة/سياقية خاصة يتعرّف عليها المحلل عند بداية العبارة فقط:
+// PRINT '.' IDENT("log") ['.' IDENT(info|warn|error|debug)] '(' args ')' ';'
+//   - `print.log(...)`         -> مستوى عام "log" (بلا تصنيف مسبق)
+//   - `print.log.info(...)`    -> مستوى "info"
+//   - `print.log.warn(...)`    -> مستوى "warn"
+//   - `print.log.error(...)`   -> مستوى "error"
+//   - `print.log.debug(...)`   -> مستوى "debug"
+// داخل القوسين: رسائل (قيم عادية مفصولة بفواصل، تُجمَّع بـ sep=) وسمات key=value اختيارية، بأي
+// ترتيب بينها، كل واحدة مرة على الأكثر: sep=expr (فاصل بين الرسائل، افتراضياً " ") | if=expr (بوابة
+// تنفيذ، falsy = no-op تام بلا أي سجلّ) | label=expr (وسم إضافي "[LABEL] " بعد رمز المستوى) |
+// source=expr (يتجاوز sourceFile الافتراضي لحقل Source فقط لهذا السجلّ). مثال:
+//   print.log.info("multi", "values", sep="-", label="AUTH");
+// كل استدعاء Log واحد يُنتج سجلّاً (LogEntry، انظر rin_interpreter.h) يحمل خمسة حقول دائماً:
+//   Time (وقت التنفيذ الفعلي HH:MM:SS)، Level (أحد الخمسة أعلاه)، Message (exprs مُجمَّعة بـ sep)،
+//   Source (اسم الملف الحالي — sourceFile، أو مصدر مخصّص عبر source=)، Line (رقم السطر في الكود).
+// السجلّات تُراكَم داخلياً في Interpreter::logHistory_ (انظر logHistory()/logSave()/logClear()
+// natives) — هذا ما يجعل النظام "قابلاً للتوسّع مستقبلاً إلى ملفات Log": أي ميزة لاحقة (كتابة كل
+// سجلّ فور حدوثه إلى ملف، تدوير ملفات log, ...) تُبنى فوق logHistory_ الموجود بالفعل دون أي تغيير
+// على شكل عبارة print.log نفسها.
+struct LogStmt : Stmt {
+    std::string level; // "log" | "info" | "warn" | "error" | "debug" — يُحدَّد وقت التحليل (ثابت)
+    std::vector<ExprPtr> exprs;
+    ExprPtr sep;    // nullptr = افتراضي " "
+    ExprPtr ifCond; // nullptr = يُسجَّل دائماً (بلا بوابة شرط)
+    ExprPtr label;  // nullptr = بلا وسم إضافي
+    ExprPtr source; // nullptr = يُستخدم sourceFile الحالي للمفسِّر
+};
 struct LetStmt : Stmt { std::string name; ExprPtr initializer; };
 struct BlockStmt : Stmt { std::vector<StmtPtr> statements; };
 struct IfStmt : Stmt {
