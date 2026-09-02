@@ -158,6 +158,14 @@ StmtPtr Parser::declaration() {
         advance(); // 'print'
         return viewPrintObjectStatement();
     }
+    // Make Unit الحقيقي: @make.(name) ... .end/make[=name]
+    // نميّزه قبل atBlock() لأن @make القديمة (بدون .(...)) تبقى ContainerKind::EVERYTHING للتوافق.
+    if (check(TokenType::AT) && current + 5 < tokens.size() &&
+        tokens[current + 1].type == TokenType::IDENT && tokens[current + 1].lexeme == "make" &&
+        tokens[current + 2].type == TokenType::DOT &&
+        tokens[current + 3].type == TokenType::LPAREN) {
+        return makeUnitBlock();
+    }
     if (match({TokenType::AT})) return atBlock();
     if (match({TokenType::SECTION})) return sectionBlock();
     if (match({TokenType::TRANSLATIONS})) return translationsBlock();
@@ -821,6 +829,82 @@ StmtPtr Parser::themeDeclaration() {
                   "expected an attribute (key=value;) or '.end/theme' inside @theme=" + s->name);
     }
     consumeEndTag("theme", themeTok.line, s->name);
+    return s;
+}
+
+static bool isMakeWord(const std::string& w) {
+    return w == "kind" || w == "use" || w == "need" || w == "allow" || w == "deny" ||
+           w == "input" || w == "output" || w == "public" || w == "private" ||
+           w == "version" || w == "description" || w == "strict";
+}
+
+static void pushUnique(std::vector<std::string>& v, const std::string& x) {
+    if (std::find(v.begin(), v.end(), x) == v.end()) v.push_back(x);
+}
+
+StmtPtr Parser::makeUnitBlock() {
+    Token atTok = consume(TokenType::AT, "Expected '@' before '@make.(name)'");
+    Token makeTok = consume(TokenType::IDENT, "Expected 'make' after '@'");
+    if (makeTok.lexeme != "make") throw err(diag::Code::E0015_UnknownContainer, makeTok, "expected `make` in `@make.(name)`");
+    consume(TokenType::DOT, "Expected '.' after '@make'");
+    consume(TokenType::LPAREN, "Expected '(' after '@make.'");
+    Token nameTok = consume(TokenType::IDENT, "Expected a unit name inside '@make.(name)'");
+    consume(TokenType::RPAREN, "Expected ')' after Make Unit name");
+
+    auto s = std::make_shared<MakeStmt>();
+    s->name = nameTok.lexeme;
+    s->line = atTok.line;
+    s->kind = ContainerKind::EVERYTHING;
+
+    while (!checkClosingTag() && !isAtEnd()) {
+        if (check(TokenType::IDENT)) {
+            std::string word = peek().lexeme;
+            if (isMakeWord(word)) {
+                advance();
+                if (word == "strict") {
+                    consume(TokenType::SEMICOLON, "Expected ';' after 'strict'");
+                    s->strict = true;
+                    continue;
+                }
+                if (word == "kind") {
+                    Token v = consume(TokenType::IDENT, "Expected a Make type after 'kind'");
+                    s->makeType = v.lexeme;
+                    consume(TokenType::SEMICOLON, "Expected ';' after 'kind'");
+                    continue;
+                }
+                if (word == "version" || word == "description") {
+                    Token v = consume(TokenType::STRING, "Expected a string after Make metadata field");
+                    if (word == "version") s->version = v.lexeme;
+                    else s->description = v.lexeme;
+                    consume(TokenType::SEMICOLON, "Expected ';' after Make metadata");
+                    continue;
+                }
+                // Capability names may themselves be Rin keywords (e.g. `container`, `loop`, `function`).
+                // Accept their lexeme without reserving these words globally.
+                if (!(check(TokenType::IDENT) || check(TokenType::CONTAINER) || check(TokenType::FOR) ||
+                      check(TokenType::WHILE) || check(TokenType::FUN) || check(TokenType::RETURN) ||
+                      check(TokenType::PRINT) || check(TokenType::TEXT) || check(TokenType::PIPE_KW))) {
+                    throw err(diag::Code::E0012_MissingToken, peek(), "Expected a capability or name after Make directive");
+                }
+                Token value = advance();
+                std::vector<std::string>* dst = nullptr;
+                if (word == "use") dst = &s->uses;
+                else if (word == "need") dst = &s->needs;
+                else if (word == "allow") dst = &s->allows;
+                else if (word == "deny") dst = &s->denies;
+                else if (word == "input") dst = &s->inputs;
+                else if (word == "output") dst = &s->outputs;
+                else if (word == "public") dst = &s->publics;
+                else if (word == "private") dst = &s->privates;
+                pushUnique(*dst, value.lexeme);
+                consume(TokenType::SEMICOLON, "Expected ';' after Make directive");
+                continue;
+            }
+        }
+        s->body.push_back(declaration());
+    }
+
+    consumeEndTag("make", atTok.line, s->name);
     return s;
 }
 
