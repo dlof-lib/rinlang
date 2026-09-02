@@ -1,0 +1,23 @@
+@make.(dashboard)
+    kind page;
+    use function;
+    use condition;
+    use loop;
+    use container;
+    need container;
+    strict;
+    version "1.0.0";
+    description "A real page Make Unit";
+
+    fun total(items)
+        let sum = 0;
+        for (let i = 0; i < 3; i = i + 1) {
+            sum = sum + items[i];
+        }
+        return sum;
+    end
+
+    @container=body
+        let title = "Dashboard";
+    .end/container
+.end/make=dashboard
