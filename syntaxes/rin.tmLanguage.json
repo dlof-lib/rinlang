@@ -183,7 +183,7 @@
     },
 
     "make-unit": {
-      "comment": "Make Unit syntax and policy directives.",
+      "comment": "Make Unit syntax and policy directives (see docs/MAKE_UNIT.md).",
       "patterns": [
         {
           "match": "(@)(make)(\\.)(\\()([A-Za-z_][A-Za-z0-9_]*)(\\))",
@@ -195,6 +195,21 @@
             "5": { "name": "entity.name.type.rin" },
             "6": { "name": "punctuation.section.parameters.end.rin" }
           }
+        },
+        {
+          "comment": "Policy directive keywords: kind, use, need, allow, deny, strict, input/output, public/private, version/description.",
+          "match": "\\b(kind|use|need|allow|deny|strict|input|output|public|private|version|description)\\b",
+          "name": "keyword.control.directive.make.rin"
+        },
+        {
+          "comment": "kind's value list: app|page|component|library|module|service|task|data|plugin, only right after the `kind` keyword.",
+          "match": "(?<=\\bkind\\s)\\s*(app|page|component|library|module|service|task|data|plugin)\\b",
+          "name": "storage.type.make-kind.rin"
+        },
+        {
+          "comment": "Capability names, only when they follow use/need/allow/deny (Rin's Make-Unit capability policy surface).",
+          "match": "(?<=\\b(?:use|need|allow|deny)\\s)\\s*(container|loop|function|condition|return|view|data|api|import|table|doc|chatbot)\\b",
+          "name": "support.type.capability.make.rin"
         }
       ]
     },
