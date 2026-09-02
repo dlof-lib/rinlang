@@ -34,6 +34,6 @@
 - `version "1.0.0";` and `description "...";` add metadata.
 - `strict;` requires every detected capability to be declared with `use`.
 
-Capabilities include `container`, `loop`, `function`, `condition`, `return`, `view`, `data`, `api`, `import`, `table`, `doc`, and `chatbot`.
+Capabilities include `container`, `loop`, `function`, `condition`, `return`, `view`, `data`, `api`, `import`, `table`, `doc`, `chatbot`, and `reckon`.
 
 The policy is validated before the Make Unit body executes. Existing `@make=name` remains backward-compatible.
