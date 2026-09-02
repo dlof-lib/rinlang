@@ -176,4 +176,5 @@ destroyContainer("dyn_2");                  // يحذفها بالكامل
 - [`variables.md`](./variables.md) و[`control-flow.md`](./control-flow.md) — كل ما يُكتب داخل حاوية.
 - [`pipelines.md`](./pipelines.md) — `@container.pipe` وسلاسل `|>`.
 - [`standard-library.md`](./standard-library.md) — دوال NoSQL/ملفات (`queryDocs`, `insertDoc`, ...).
+- [`cross-file-containers.md`](./cross-file-containers.md) — استدعاء حاوية أو عنصر واجهة (`@view.*`) واحد بالاسم من ملف آخر عبر `use ... from` (صفحة مكتوبة بإنجليزية مبسّطة).
 - [`language-reference.md`](./language-reference.md) — الخريطة الكاملة للغة.
