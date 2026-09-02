@@ -303,6 +303,18 @@ inline std::string accessibleRole(StrandKind k) {
         case StrandKind::AVATAR:   return "image";
         case StrandKind::BADGE:    return "status";
         case StrandKind::TOOLTIP:  return "tooltip";
+        // Ready-elements expansion:
+        case StrandKind::LINK:     return "link";
+        case StrandKind::RADIO:    return "radio";
+        case StrandKind::SLIDER:   return "slider";
+        case StrandKind::SEARCH:   return "searchbox";
+        case StrandKind::SELECT:   return "combobox";
+        case StrandKind::FILE:     return "button"; // a file field is a tap target, not free-text entry
+        case StrandKind::DATE:     return "textbox";
+        case StrandKind::TIME:     return "textbox";
+        case StrandKind::CODE_EDITOR: return "textbox";
+        case StrandKind::LIST:     return "list";
+        case StrandKind::LISTITEM: return "listitem";
         default: return "";
     }
 }
@@ -310,13 +322,15 @@ inline std::string accessibleName(const Strand& s) {
     std::string explicitLabel = s.attrStr("a11y_label", "");
     if (!explicitLabel.empty()) return explicitLabel;
     if (s.kind == StrandKind::BUTTON || s.kind == StrandKind::MENUITEM || s.kind == StrandKind::TABITEM ||
-        s.kind == StrandKind::CHECKBOX || s.kind == StrandKind::SWITCH)
+        s.kind == StrandKind::CHECKBOX || s.kind == StrandKind::SWITCH || s.kind == StrandKind::RADIO)
         return s.attrStr("label", "");
-    if (s.kind == StrandKind::INPUT || s.kind == StrandKind::TEXTAREA) {
+    if (s.kind == StrandKind::INPUT || s.kind == StrandKind::TEXTAREA || s.kind == StrandKind::SEARCH ||
+        s.kind == StrandKind::SELECT || s.kind == StrandKind::FILE || s.kind == StrandKind::DATE ||
+        s.kind == StrandKind::TIME || s.kind == StrandKind::CODE_EDITOR) {
         std::string v = s.attrStr("value", "");
         return !v.empty() ? v : s.attrStr("placeholder", "");
     }
-    return s.attrStr("text", "");
+    return s.attrStr("text", ""); // covers Link (text=) and every plain leaf as before
 }
 
 // ---- Sizing modes (§5/§6): semantic replacements for scattering width=/height= everywhere --
