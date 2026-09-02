@@ -108,10 +108,15 @@ class ProjectsActivity : AppCompatActivity() {
             R.color.ui_design_color_pink,
             R.color.ui_design_color_cyan
         ).map { ContextCompat.getColor(this, it) }
+        // فهرس اصطناعي (خارج مدى colorPalette) يمثّل اختيار "لون مخصص" عبر عجلة الألوان الكاملة
+        // بدل أحد الألوان الجاهزة الستة.
+        val customColorIndex = colorPalette.size
         var selectedColorIndex = 0
+        var customColor: Int? = null
 
         val swatchSizePx = (30 * resources.displayMetrics.density).toInt()
         val swatchStrokePx = (2.5f * resources.displayMetrics.density).toInt()
+        val plusIconPx = (7 * resources.displayMetrics.density).toInt()
 
         fun renderColorSwatches() {
             rowUiColors.removeAllViews()
@@ -135,8 +140,55 @@ class ProjectsActivity : AppCompatActivity() {
                 }
                 rowUiColors.addView(swatch)
             }
+
+            // شارة "لون مخصص": تعرض علامة + فوق دائرة فارغة إن لم يُختر لون مخصص بعد، أو
+            // اللون المخصص نفسه إن كان موجوداً. الضغط عليها يفتح عجلة الألوان الكاملة دوماً
+            // (لتعديل الاختيار حتى لو كان محدَّداً سلفاً).
+            val customSwatch = android.widget.ImageView(this)
+            val customParams = LinearLayout.LayoutParams(0, swatchSizePx, 1f).apply {
+                val marginPx = (4 * resources.displayMetrics.density).toInt()
+                setMargins(marginPx, 0, marginPx, 0)
+            }
+            customSwatch.layoutParams = customParams
+            val isCustomSelected = selectedColorIndex == customColorIndex
+            customSwatch.background = GradientDrawable().apply {
+                shape = GradientDrawable.OVAL
+                if (customColor != null) {
+                    setColor(customColor!!)
+                } else {
+                    setColor(ContextCompat.getColor(this@ProjectsActivity, android.R.color.transparent))
+                }
+                setStroke(
+                    if (isCustomSelected) swatchStrokePx else (1.5f * resources.displayMetrics.density).toInt(),
+                    ContextCompat.getColor(
+                        this@ProjectsActivity,
+                        if (isCustomSelected) R.color.rin_on_toolbar else R.color.rin_editor_hint
+                    )
+                )
+            }
+            if (customColor == null) {
+                val plusIcon = ContextCompat.getDrawable(this, android.R.drawable.ic_input_add)?.mutate()
+                plusIcon?.setTint(ContextCompat.getColor(this, R.color.rin_editor_hint))
+                customSwatch.setImageDrawable(plusIcon)
+                customSwatch.setPadding(plusIconPx, plusIconPx, plusIconPx, plusIconPx)
+            } else {
+                customSwatch.setImageDrawable(null)
+                customSwatch.setPadding(0, 0, 0, 0)
+            }
+            customSwatch.contentDescription = getString(R.string.color_picker_custom_desc)
+            customSwatch.setOnClickListener {
+                showColorPickerDialog(customColor ?: colorPalette[selectedColorIndex.coerceIn(0, colorPalette.lastIndex)]) { pickedColor ->
+                    customColor = pickedColor
+                    selectedColorIndex = customColorIndex
+                    renderColorSwatches()
+                }
+            }
+            rowUiColors.addView(customSwatch)
         }
         renderColorSwatches()
+
+        fun currentUiColor(): Int =
+            if (selectedColorIndex == customColorIndex) (customColor ?: colorPalette[0]) else colorPalette[selectedColorIndex]
 
         var selectedType = ProjectType.FREE
         fun selectChip(chip: View) {
@@ -155,7 +207,7 @@ class ProjectsActivity : AppCompatActivity() {
                 val uiOptions = ProjectManager.UiDesignOptions(
                     topBar = switchUiTopBar.isChecked,
                     sidebar = switchUiSidebar.isChecked,
-                    primaryColor = String.format("#%06X", 0xFFFFFF and colorPalette[selectedColorIndex])
+                    primaryColor = String.format("#%06X", 0xFFFFFF and currentUiColor())
                 )
                 ProjectCreationProgressDialog(this).run(
                     work = { ProjectManager.createProject(this, name, selectedType, uiOptions) },
@@ -169,6 +221,62 @@ class ProjectsActivity : AppCompatActivity() {
                     }
                 )
             }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
+
+    /**
+     * حوار "اختيار لون" الكامل: عجلة ألوان (Hue+Saturation) تفاعلية + معاينة دائرية + حقل هكس
+     * قابل للتعديل يدوياً. يُفتح من شارة "لون مخصص" في حوار "مشروع جديد" ([showCreateDialog]).
+     * [onPicked] يُستدعى فقط عند الضغط على "رجوع" (وليس أثناء السحب)، باللون النهائي المختار.
+     */
+    private fun showColorPickerDialog(initialColor: Int, onPicked: (Int) -> Unit) {
+        val view = LayoutInflater.from(this).inflate(R.layout.dialog_color_picker, null)
+        val wheel: HueSaturationPickerView = view.findViewById(R.id.hueSaturationPicker)
+        val preview: View = view.findViewById(R.id.imgColorPreview)
+        val hexInput: EditText = view.findViewById(R.id.inputColorHex)
+
+        var currentColor = initialColor
+
+        fun updatePreview(color: Int, updateHexField: Boolean) {
+            currentColor = color
+            preview.background = GradientDrawable().apply {
+                shape = GradientDrawable.OVAL
+                setColor(color)
+                setStroke(
+                    (1.5f * resources.displayMetrics.density).toInt(),
+                    ContextCompat.getColor(this@ProjectsActivity, R.color.rin_divider)
+                )
+            }
+            if (updateHexField) {
+                hexInput.setText(String.format("%06X", 0xFFFFFF and color))
+            }
+        }
+
+        wheel.post { wheel.setColor(initialColor) }
+        updatePreview(initialColor, updateHexField = true)
+        wheel.onColorChanged = { color -> updatePreview(color, updateHexField = true) }
+
+        // تعديل الهكس يدوياً: عند مغادرة الحقل (فقدان التركيز)، إن كانت القيمة صالحة (6 خانات
+        // hex) نطبّقها على المعاينة وموضع المؤشر في العجلة، وإلا نعيد القيمة السابقة الصالحة.
+        hexInput.setOnFocusChangeListener { _, hasFocus ->
+            if (!hasFocus) {
+                val text = hexInput.text.toString().removePrefix("#")
+                val parsed = text.toIntOrNull(16)
+                if (text.length == 6 && parsed != null) {
+                    val color = (0xFF000000).toInt() or parsed
+                    wheel.setColor(color)
+                    updatePreview(color, updateHexField = false)
+                } else {
+                    updatePreview(currentColor, updateHexField = true)
+                }
+            }
+        }
+
+        AlertDialog.Builder(this)
+            .setTitle(R.string.color_picker_title)
+            .setView(view)
+            .setPositiveButton(R.string.color_picker_back) { _, _ -> onPicked(currentColor) }
             .setNegativeButton(R.string.cancel, null)
             .show()
     }
