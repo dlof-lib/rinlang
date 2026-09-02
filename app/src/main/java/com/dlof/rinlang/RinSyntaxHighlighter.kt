@@ -39,6 +39,11 @@ import java.util.regex.Pattern
  * - **تهدئة (debounce)** لإعادة التلوين بدل تنفيذه عند كل حرف يُكتب، لتحسين استجابة المحرر في
  *   الملفات الأطول، مع تلوين فوري (بلا تهدئة) عند فتح المحرر لأول مرة أو تبديل اللغة.
  * - **حدّ أقصى آمن لطول النص**: الملفات الضخمة جداً تُترك بلا تلوين بدل تجميد الواجهة (ANR).
+ * - **مفاهيم وحدة make (@make.(name))** (انظر docs/MAKE_UNIT.md): توجيهات السياسة
+ *   kind/use/need/allow/deny/strict/input/output/public/private/version/description تُلوَّن
+ *   بفئة مستقلة [syntax_make_directive]، وأسماء القدرات (capabilities) الجديدة
+ *   loop/function/view/chatbot أُضيفت إلى كلمات لغة الحاويات (container/data/api/import/table/doc
+ *   وreturn كانت مُلوَّنة أصلاً).
  */
 object RinSyntaxHighlighter {
 
@@ -59,13 +64,23 @@ object RinSyntaxHighlighter {
     )
 
     // كلمات لغة الحاويات/البيانات (data container language) - حساسة لحالة الأحرف كما في المحرّك.
+    // تتضمن أيضاً أسماء قدرات (capabilities) وحدة make: loop/function/condition/view/chatbot
+    // (container/data/api/import/table/doc/return مذكورة أصلاً ضمن قوائم أخرى).
     private val rinContainerKeywords = listOf(
         "text", "container", "Containers", "Group", "Volume", "Section",
         "Translations", "translation", "link", "tying", "merge",
         "installation", "simplified", "save", "file", "end",
         "row", "style", "document", "route",
         "data", "api", "import", "table", "doc", "portal", "block", "pipe",
-        "plus", "condition"
+        "plus", "condition",
+        "loop", "function", "view", "chatbot"
+    )
+
+    // توجيهات سياسة وحدة make (@make.(name) ... kind/use/need/allow/deny/strict/...) —
+    // انظر docs/MAKE_UNIT.md. فئة لونية مستقلة (بنفسجي) لتمييزها عن كلمات التحكم العادية.
+    private val rinMakeDirectiveKeywords = listOf(
+        "kind", "use", "need", "allow", "deny", "strict",
+        "input", "output", "public", "private", "version", "description"
     )
 
     // حقول تنسيق/ستايل خاصة حصراً بـ @container.object/@Object: txt/img/object.file/Fonts/
@@ -103,6 +118,7 @@ object RinSyntaxHighlighter {
         val keyword: Pattern? = null,
         val secondaryKeyword: Pattern? = null, // أنواع البيانات (types) في اللغات المطبوعة/الحاويات في Rin
         val styleField: Pattern? = null,       // حصراً في Rin
+        val makeDirective: Pattern? = null,    // توجيهات سياسة وحدة make (kind/use/need/...) — حصراً في Rin
         val builtin: Pattern? = null,
         val number: Pattern? = defaultNumber,
         val string: Pattern? = defaultString,
@@ -115,6 +131,7 @@ object RinSyntaxHighlighter {
         keyword = wordsPattern(rinCoreKeywords),
         secondaryKeyword = wordsPattern(rinContainerKeywords),
         styleField = wordsPattern(rinStyleFieldKeywords),
+        makeDirective = wordsPattern(rinMakeDirectiveKeywords),
         builtin = wordsPattern(rinBuiltins),
         tag = rinTag,
         lineComment = lineCommentSlash
@@ -327,6 +344,7 @@ object RinSyntaxHighlighter {
         val keyword: Int,
         val secondaryKeyword: Int,
         val styleField: Int,
+        val makeDirective: Int,
         val string: Int,
         val number: Int,
         val comment: Int,
@@ -352,6 +370,7 @@ object RinSyntaxHighlighter {
             keyword = ContextCompat.getColor(context, R.color.syntax_keyword),
             secondaryKeyword = ContextCompat.getColor(context, R.color.syntax_container_keyword),
             styleField = ContextCompat.getColor(context, R.color.syntax_style_keyword),
+            makeDirective = ContextCompat.getColor(context, R.color.syntax_make_directive),
             string = ContextCompat.getColor(context, R.color.syntax_string),
             number = ContextCompat.getColor(context, R.color.syntax_number),
             comment = ContextCompat.getColor(context, R.color.syntax_comment),
@@ -437,6 +456,7 @@ object RinSyntaxHighlighter {
         applyAll(profile.keyword, colors.keyword)
         applyAll(profile.secondaryKeyword, colors.secondaryKeyword)
         applyAll(profile.styleField, colors.styleField)
+        applyAll(profile.makeDirective, colors.makeDirective)
         applyAll(profile.builtin, colors.builtin)
         applyAll(profile.number, colors.number)
         applyAll(profile.tag, colors.tag)
