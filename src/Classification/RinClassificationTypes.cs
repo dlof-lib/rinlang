@@ -30,6 +30,10 @@ namespace RinLang.VSSDK.Classification
         public const string Operator = "Rin.Operator";
         public const string Punctuation = "Rin.Punctuation";
 
+        // Make Unit (@make.(name) ... ) policy surface -- see docs/MAKE_UNIT.md.
+        public const string MakeDirective = "Rin.MakeDirective";
+        public const string Capability = "Rin.Capability";
+
         [Export] [Name(Comment)] internal static ClassificationTypeDefinition CommentType;
         [Export] [Name(StringLiteral)] internal static ClassificationTypeDefinition StringType;
         [Export] [Name(Number)] internal static ClassificationTypeDefinition NumberType;
@@ -47,5 +51,7 @@ namespace RinLang.VSSDK.Classification
         [Export] [Name(ExplicitMathFunction)] internal static ClassificationTypeDefinition ExplicitMathFunctionType;
         [Export] [Name(Operator)] internal static ClassificationTypeDefinition OperatorType;
         [Export] [Name(Punctuation)] internal static ClassificationTypeDefinition PunctuationType;
+        [Export] [Name(MakeDirective)] internal static ClassificationTypeDefinition MakeDirectiveType;
+        [Export] [Name(Capability)] internal static ClassificationTypeDefinition CapabilityType;
     }
 }
