@@ -117,8 +117,12 @@ class LoomPreviewActivity : AppCompatActivity(), LoomPreviewManager.Listener {
         // cheap on the native side and a no-op unless the height actually changed.
         previewSurface.addOnLayoutChangeListener { _, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom ->
             val heightPx = bottom - top
-            if (heightPx > 0 && heightPx != (oldBottom - oldTop)) {
-                LoomPreviewManager.setViewport(pxToDp(heightPx))
+            // Always publish the measured viewport, including the first layout pass. The native
+            // session may have been created just before this callback and must never fall back to
+            // its 844dp default (or the 1e9 unbounded sentinel used by layout internals).
+            if (heightPx > 0) {
+                val viewportDp = pxToDp(heightPx).coerceAtLeast(120)
+                LoomPreviewManager.setViewport(viewportDp)
             }
         }
 
@@ -248,6 +252,10 @@ class LoomPreviewActivity : AppCompatActivity(), LoomPreviewManager.Listener {
             return
         }
 
+        // UI-side safety net: older/native layouts can expose the internal 1e9 "unbounded"
+        // constraint as a real geometry value. Never let that sentinel reach Android Canvas; it
+        // makes the preview effectively invisible and produces the h=1000000000 inspector value.
+        sanitizePreviewGeometry(fabric)
         val h = fabric.optDouble("h", 640.0).toInt().coerceAtLeast(120)
         fabricView.setFabric(fabric, currentDeviceWidth, h, result.optJSONArray("overlays"))
 
@@ -260,6 +268,31 @@ class LoomPreviewActivity : AppCompatActivity(), LoomPreviewManager.Listener {
             getString(R.string.loom_stats_format, measured, elapsedMs, cache)
         } else {
             getString(R.string.loom_stats_idle)
+        }
+    }
+
+    /**
+     * Defensive renderer-side clamp for the native layout's unbounded sentinel. Normal large
+     * pages remain untouched; only values at/above the known 1e9 sentinel are corrected.
+     */
+    private fun sanitizePreviewGeometry(node: JSONObject) {
+        val viewport = LoomPreviewManager.viewportHeight.coerceAtLeast(120)
+        val kind = node.optString("kind", "")
+        val rawH = node.optDouble("h", 0.0)
+        val rawW = node.optDouble("w", 0.0)
+
+        if (rawH >= 900_000_000.0) {
+            node.put("h", if (kind == "Drawer" || kind == "Sidebar") viewport else viewport)
+        }
+        if (rawW >= 900_000_000.0) {
+            node.put("w", currentDeviceWidth.toDouble())
+        }
+
+        val children = node.optJSONArray("children")
+        if (children != null) {
+            for (i in 0 until children.length()) {
+                children.optJSONObject(i)?.let(::sanitizePreviewGeometry)
+            }
         }
     }
 
