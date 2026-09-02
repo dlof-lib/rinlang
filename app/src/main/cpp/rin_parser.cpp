@@ -138,6 +138,22 @@ StmtPtr Parser::declaration() {
         advance(); // 'view'
         return viewDeclaration();
     }
+    // @element.<Kind>=name ... .end/element -> جاهز وظيفي بلا Style.
+    if (check(TokenType::AT) && checkNext(TokenType::IDENT) &&
+        current + 1 < tokens.size() && tokens[current + 1].lexeme == "element") {
+        advance(); advance();
+        return elementDeclaration();
+    }
+    // @loop.<Kind>=name ... .end/loop / @loop=name ... -> قماش المظهر والتخطيط.
+    if (check(TokenType::AT) && checkNext(TokenType::IDENT) &&
+        current + 1 < tokens.size() && tokens[current + 1].lexeme == "loop") {
+        advance(); advance();
+        return loopCanvasDeclaration();
+    }
+    // on.<element>.<event>=handler(...); is behavior owned by the surrounding container.
+    if (check(TokenType::IDENT) && peek().lexeme == "on" && checkNext(TokenType::DOT)) {
+        return uiBindingStatement();
+    }
     // '@theme=Name key=expr; ... .end/theme' -> Rin Loom Theme (Pattern Book) declaration, نفس
     // أسلوب فحص '@import'/'@view' أعلاه بالضبط.
     if (check(TokenType::AT) && checkNext(TokenType::IDENT) &&
@@ -188,14 +204,6 @@ StmtPtr Parser::declaration() {
     if (check(TokenType::IDENT) && peek().lexeme == "document") { advance(); return documentStatement(); }
     // 'warp' كلمة سياقية غير محجوزة أيضاً (Loomtime: خلية حالة تفاعلية يستخدمها محرّك العرض)
     if (check(TokenType::IDENT) && peek().lexeme == "warp") { advance(); return warpDeclaration(); }
-    // 'reckon name(collection) [where cond] |> fn() ...;' -> انظر docs/RECKON.md و ReckonStmt في
-    // rin_ast.h. كلمة سياقية غير محجوزة (بنفس أسلوب route/row/document/warp أعلاه بالضبط)، مُميَّزة
-    // هنا بالنظر خطوة إضافية للأمام (IDENT مباشرة بعدها) حتى لا تصطدم باستخدام "reckon" اسم متغيّر
-    // عادي في أي سياق آخر.
-    if (check(TokenType::IDENT) && peek().lexeme == "reckon" && checkNext(TokenType::IDENT)) {
-        advance(); // 'reckon'
-        return reckonDeclaration();
-    }
     // 'plus.condition' كلمة مفتاحية مركّبة سياقية (شرط ثلاثي عام: plus.condition(cond) {..} / {..}).
     // تُفحَص هنا (declaration()) وليس في statement() حتى تعمل بنفس المستوى فوق أي إعلان حاوية
     // (@container...) بداخل كتلتيها، تماماً كأسلوب فحص '@import'/'@view' أعلاه: ننظر 3 خطوات
@@ -222,45 +230,6 @@ StmtPtr Parser::letDeclaration() {
     stmt->name = name.lexeme;
     stmt->initializer = initializer;
     stmt->line = name.line;
-    return stmt;
-}
-
-// reckon <name>(<collection>)
-//     [where <condition>] |> <function>() [|> <function>() ...];
-// Always exactly two lines in source (no semicolon after the header -- only one, at the very
-// end); see docs/RECKON.md. `where`/`item` are contextual (never reserved), matching every other
-// contextual keyword in this parser.
-StmtPtr Parser::reckonDeclaration() {
-    Token nameTok = consume(TokenType::IDENT, "Expected a result name after 'reckon'");
-    consume(TokenType::LPAREN, "Expected '(' after the reckon result name, e.g. reckon name(collection)");
-    auto stmt = std::make_shared<ReckonStmt>();
-    stmt->name = nameTok.lexeme;
-    stmt->line = nameTok.line;
-    stmt->collection = expression();
-    consume(TokenType::RPAREN, "Expected ')' after the reckon collection expression");
-
-    if (check(TokenType::IDENT) && peek().lexeme == "where") {
-        advance(); // 'where'
-        // logicOr(), not pipeline(): a `where` condition is a plain boolean expression over
-        // `item` and must not itself try to swallow the reckon body's own '|>' chain.
-        stmt->whereCond = logicOr();
-    }
-
-    consume(TokenType::PIPE, "Expected '|>' to start the reckon pipeline body (after the optional 'where' clause)");
-    do {
-        Token fnTok = consume(TokenType::IDENT, "Expected a function name after '|>' in a reckon body");
-        auto stage = std::make_shared<CallExpr>();
-        stage->callee = fnTok.lexeme;
-        stage->line = fnTok.line;
-        consume(TokenType::LPAREN, "Expected '(' after function name '" + fnTok.lexeme + "' in reckon body");
-        if (!check(TokenType::RPAREN)) {
-            do { stage->args.push_back(expression()); } while (match({TokenType::COMMA}));
-        }
-        consume(TokenType::RPAREN, "Expected ')' after arguments for '" + fnTok.lexeme + "' in reckon body");
-        stmt->stages.push_back(stage);
-    } while (match({TokenType::PIPE}));
-
-    consume(TokenType::SEMICOLON, "Expected ';' after the reckon pipeline body");
     return stmt;
 }
 
@@ -831,6 +800,77 @@ std::shared_ptr<ViewStmt> Parser::viewDeclaration() {
                   "expected an attribute (key=value;), a nested '@view...', or '.end/view' inside @view." + s->kindTag);
     }
     consumeEndTag("view", viewTok.line, name);
+    return s;
+}
+
+std::shared_ptr<ViewStmt> Parser::elementDeclaration() {
+    Token openTok = previous();
+    consume(TokenType::DOT, "Expected '.' after '@element'");
+    if (isAtEnd() || peek().lexeme.empty() || peek().type == TokenType::DOT || peek().type == TokenType::EQUAL || peek().type == TokenType::SEMICOLON)
+        throw err(diag::Code::E0012_MissingToken, peek(), "Expected an element kind after '@element.'");
+    Token kindTok = advance(); // accepts reserved Rin words such as `text`/`file` as element kinds
+    auto s = std::make_shared<ViewStmt>();
+    s->name = readOptionalName();
+    s->kindTag = kindTok.lexeme;
+    s->role = UiRole::ELEMENT;
+    s->line = openTok.line;
+    while (!checkClosingTag() && !isAtEnd()) {
+        if (check(TokenType::AT) && checkNext(TokenType::IDENT) && tokens[current + 1].lexeme == "element") {
+            advance(); advance(); s->children.push_back(elementDeclaration()); continue;
+        }
+        if (!check(TokenType::AT) && checkNext(TokenType::EQUAL)) {
+            Token key = advance(); consume(TokenType::EQUAL, "Expected '=' after element attribute");
+            ExprPtr val = expression(); consume(TokenType::SEMICOLON, "Expected ';' after element attribute");
+            s->attrs.push_back({key.lexeme, val, key.line}); continue;
+        }
+        throw err(diag::Code::E0012_MissingToken, peek(), "expected an element attribute, nested '@element...', or '.end/element'");
+    }
+    consumeEndTag("element", openTok.line, s->name);
+    return s;
+}
+
+std::shared_ptr<ViewStmt> Parser::loopCanvasDeclaration() {
+    Token openTok = previous();
+    auto s = std::make_shared<ViewStmt>();
+    s->role = UiRole::LOOP; s->line = openTok.line;
+    if (check(TokenType::DOT)) {
+        advance();
+        Token kindTok = consume(TokenType::IDENT, "Expected a canvas layout kind after '@loop.'");
+        s->kindTag = kindTok.lexeme;
+        s->name = readOptionalName();
+    } else {
+        s->kindTag = "Column";
+        s->name = readOptionalName();
+    }
+    while (!checkClosingTag() && !isAtEnd()) {
+        if (check(TokenType::AT) && checkNext(TokenType::IDENT) && tokens[current + 1].lexeme == "element") {
+            advance(); advance(); s->children.push_back(elementDeclaration()); continue;
+        }
+        if (check(TokenType::AT) && checkNext(TokenType::IDENT) && tokens[current + 1].lexeme == "loop") {
+            advance(); advance(); s->children.push_back(loopCanvasDeclaration()); continue;
+        }
+        if (!check(TokenType::AT) && checkNext(TokenType::EQUAL)) {
+            Token key = advance(); consume(TokenType::EQUAL, "Expected '=' after loop attribute");
+            ExprPtr val = expression(); consume(TokenType::SEMICOLON, "Expected ';' after loop attribute");
+            s->attrs.push_back({key.lexeme, val, key.line}); continue;
+        }
+        throw err(diag::Code::E0012_MissingToken, peek(), "expected a loop canvas attribute, nested element/loop, or '.end/loop'");
+    }
+    consumeEndTag("loop", openTok.line, s->name);
+    return s;
+}
+
+StmtPtr Parser::uiBindingStatement() {
+    Token onTok = advance();
+    consume(TokenType::DOT, "Expected '.' after 'on'");
+    Token target = consume(TokenType::IDENT, "Expected element name after 'on.'");
+    consume(TokenType::DOT, "Expected '.' before event name");
+    Token event = consume(TokenType::IDENT, "Expected event name after element name");
+    consume(TokenType::EQUAL, "Expected '=' after event binding");
+    ExprPtr handler = expression();
+    consume(TokenType::SEMICOLON, "Expected ';' after event binding");
+    auto s = std::make_shared<UiBindingStmt>();
+    s->target = target.lexeme; s->event = event.lexeme; s->handler = handler; s->line = onTok.line;
     return s;
 }
 
