@@ -1,0 +1,36 @@
+// Reckon demo — see docs/RECKON.md
+// Every reckon below is exactly two lines: a header naming the result and its
+// input collection, and one pipeline statement with an optional `where` filter.
+
+let scores = [-5, 42, 88, 0, 73, 91, -12, 60];
+let grades = [55, 62, 78, 91, 40, 100, 67];
+
+reckon average(scores)
+    where item > 0 |> mean();
+
+reckon passVariance(grades)
+    where item >= 60 |> variance();
+
+reckon normalizedScores(scores)
+    |> normalize() |> scale();
+
+show average;
+show passVariance;
+show normalizedScores;
+
+if (average > 50) {
+    show "healthy average";
+}
+
+// Same result, declared inside a strict Make Unit that must own its capabilities.
+@make.(reportCard)
+    kind data;
+    use reckon;
+    need reckon;
+    strict;
+
+    reckon topAverage(grades)
+        where item >= 60 |> mean();
+
+    show topAverage;
+.end/make=reportCard
