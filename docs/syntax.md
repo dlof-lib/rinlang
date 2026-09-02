@@ -32,6 +32,7 @@ and  or  !            منطق    (انظر control-flow.md)
 | `fun`, `return` | [`functions.md`](./functions.md) |
 | `@Object`, `.object("id")` | [`objects.md`](./objects.md) |
 | `@container`, `@container.pipe`, `@container.doc`, `Containers.Group`, `Section` | [`containers.md`](./containers.md) |
+| `use Name from "path";` (سهل التعلّم) | [`cross-file-containers.md`](./cross-file-containers.md) |
 
 كل هذه الكلمات المفتاحية تشترك في نفس قواعد الكتل `{}` والفواصل المنقوطة أعلاه —
 وهذا هو الرابط النحوي الذي يجعل مفاهيم اللغة متجانسة ومترابطة بدل أن تكون جزراً
