@@ -66,9 +66,21 @@ namespace RinLang.VSSDK.Classification
                 // مفاهيم التنسيق والستايل المستقلة (بلا بادئة container.): @Object / @portal / @block
                 (new Regex(@"@(Object|portal|block)\b", o), RinClassificationTypes.ContainerKeyword),
 
+                // @make.(name) -- the real Make Unit syntax (see docs/MAKE_UNIT.md). Matched
+                // before the bare @make rule below so the whole tag, including the parenthesized
+                // unit name, is claimed as one container-keyword span.
+                (new Regex(@"@make\.\([A-Za-z_][A-Za-z0-9_]*\)", o), RinClassificationTypes.ContainerKeyword),
+
                 // @make / @Everything (legacy alias) / @Rin.make -- the universal "make" concept
                 // (see ContainerKind::EVERYTHING in rin_ast.h). All forms are equivalent.
                 (new Regex(@"@(Everything|Rin\.make|make)\b", o), RinClassificationTypes.ContainerKeyword),
+
+                // Make Unit policy directives: kind/use/need/allow/deny/strict/input/output/
+                // public/private/version/description (docs/MAKE_UNIT.md).
+                (new Regex(@"\b(kind|use|need|allow|deny|strict|input|output|public|private|version|description)\b", o), RinClassificationTypes.MakeDirective),
+
+                // Capability names, only right after use/need/allow/deny.
+                (new Regex(@"(?<=\b(use|need|allow|deny)\s)\s*(container|loop|function|condition|return|view|data|api|import|table|doc|chatbot)\b", o), RinClassificationTypes.Capability),
 
                 // Section / Translations headers.
                 (new Regex(@"\b(Section|Translations)\b", o), RinClassificationTypes.ContainerKeyword),
