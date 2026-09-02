@@ -30,6 +30,8 @@
 //   open    = "true"/"false"   (Drawer/Menu visibility — collapses to 0 size when closed)
 //   columns = "Name,Age,City" (Table header labels, comma separated)
 //   ratio   = "16:9" etc.      (Video/WebView aspect ratio when no explicit height=)
+//   direction = "ltr" | "rtl"  (Row and anything else built on the axis=X flow path — TopBar/
+//                               BottomBar/Tabs/ListItem/TableRow — mirrors main-axis child order)
 // ---------------------------------------------------------------------------------------------
 #pragma once
 #include "rin_loom_strand.h"
@@ -343,6 +345,50 @@ struct Loom {
 
             case StrandKind::TOOLTIP: size = measureTooltip(s, c2); break;
 
+            // ---- Ready-elements expansion (docs/RIN_ELEMENTS.md) ----
+            // Link: same box a Text of the same string would occupy — it's a plain text run with
+            // a link-toned color (see paint.h), not its own layout primitive.
+            case StrandKind::LINK: size = measureText(s, c2); break;
+            // Radio: same square-ish hit-box sizing as Checkbox (paint.h draws it as a ring
+            // instead of a filled square, but the box it's measured into is identical).
+            case StrandKind::RADIO: {
+                double sz = std::min(s->attrNum("size", 22), std::min(c2.maxW, c2.maxH));
+                size = {0,0, std::max(sz,c2.minW), std::max(sz,c2.minH)};
+                break;
+            }
+            // Slider: a full-width track, same default height as Progress's bar (a bit taller so
+            // the thumb painted on top of it in paint.h has room), unless height= overrides it.
+            case StrandKind::SLIDER: {
+                double h = s->attr("height") ? c2.minH : std::min(24.0, c2.maxH);
+                size = {0,0, c2.maxW, std::max(h, c2.minH)};
+                break;
+            }
+            // Search/Select/File/Date/Time/CodeEditor: all "a bordered field box sized around its
+            // text" like Input/TextArea already are — measureField's existing value=/placeholder=
+            // convention covers every one of them (Select's placeholder is its unset label, File's
+            // is "no file chosen", Date/Time's is their format hint). Only the default box height
+            // differs per kind (CodeEditor gets a much taller default, like a small TextArea).
+            case StrandKind::SEARCH: size = measureField(s, c2, 40); break;
+            case StrandKind::SELECT: size = measureField(s, c2, 40); break;
+            case StrandKind::FILE:   size = measureField(s, c2, 44); break;
+            case StrandKind::DATE:   size = measureField(s, c2, 40); break;
+            case StrandKind::TIME:   size = measureField(s, c2, 40); break;
+            case StrandKind::CODE_EDITOR: size = measureField(s, c2, 220); break;
+
+            // List/ListItem: List is just a Column of ListItem rows (or anything else nested
+            // inside it); ListItem is just a Row (icon/text/trailing-action children lay out
+            // left-to-right — and right-to-left for free via the new direction="rtl" support
+            // layoutLinear gains below, since both reuse the exact same function as Row/Column).
+            case StrandKind::LIST: size = layoutLinear(s, c2, Axis::Y, originX, originY); break;
+            case StrandKind::LISTITEM: size = layoutLinear(s, c2, Axis::X, originX, originY); break;
+
+            // Calculator: a self-contained widget. Ships a sensible default box (280x360, like
+            // Image's 96x96 default) when the .rin source gives it no children of its own; if the
+            // author nests real children (e.g. a Grid of Buttons for the keypad), it instead sizes
+            // around them exactly like Box/Card do — same "don't force a choice" precedent Object
+            // Inspector and Card share.
+            case StrandKind::CALCULATOR: size = measureCalculator(s, c2, originX, originY); break;
+
             // ---- new: media placeholders — sized like an Image (explicit width/height, else a
             // sensible default box). Actual playback happens in the real app, not this preview.
             case StrandKind::VIDEO:
@@ -492,7 +538,7 @@ struct Loom {
         double leftover = std::max(0.0, innerMain - fixedMainUsed - gapsTotal);
         double perFlex = flexCount > 0 ? leftover / flexCount : 0.0;
 
-        struct Placed { StrandPtr child; double crossSize; };
+        struct Placed { StrandPtr child; double crossSize; double localX; double mainSize; };
         std::vector<Placed> placed;
         double mainUsed = 0;
 
@@ -535,9 +581,25 @@ struct Loom {
             Rect r = layout(child, cc, originX + localX, originY + localY);
             double mainSize = (axis==Axis::Y) ? r.h : r.w, crossSize = (axis==Axis::Y) ? r.w : r.h;
             cursorMain += mainSize + gap; mainUsed += mainSize + gap; crossMax = std::max(crossMax, crossSize);
-            placed.push_back({child, crossSize});
+            placed.push_back({child, crossSize, localX, mainSize});
         }
         if (flowChildren > 0) mainUsed -= gap;
+
+        // RTL row support (§ ready-elements expansion — "صف يمين يسار"/row right-to-left): a
+        // `direction="rtl"` attribute on a Row (or anything else built on this same axis=X path —
+        // TopBar/BottomBar/Tabs/ListItem/TableRow all get it for free) mirrors each child's
+        // main-axis position across the content span it just computed above, so child #1 in
+        // source order ends up flush against the *right* edge and later children proceed
+        // leftward — without touching gap/alignment math or reordering the children array itself
+        // (hit-testing, a11y traversal order, etc. all stay in source order; only the visual X
+        // shifts). Column (axis=Y) is unaffected — RTL only ever changes horizontal flow.
+        if (axis == Axis::X && s->attrStr("direction", "ltr") == "rtl" && !placed.empty()) {
+            for (auto& p : placed) {
+                double newLocalX = mainUsed - (p.localX - padding) - p.mainSize;
+                double dx = (padding + newLocalX) - p.localX;
+                if (dx != 0.0) translate(p.child, dx, 0);
+            }
+        }
 
         // Second pass: nudge each child along the cross axis now that innerCross is finalized.
         // (Doesn't touch main-axis position, so gap/order above is untouched — only left/top vs
@@ -792,6 +854,17 @@ struct Loom {
         double contentW = measureTextWidth(value.empty() ? placeholder : value, fontSize);
         double w = s->attr("width") ? c.minW : std::min(std::max(120.0, contentW + 24.0), c.maxW);
         double h = s->attr("height") ? c.minH : std::min(defaultH, c.maxH);
+        return {0,0, std::max(w,c.minW), std::max(h,c.minH)};
+    }
+
+    // Calculator (ready-elements expansion): see the StrandKind::CALCULATOR case comment above
+    // for why this branches on whether the .rin source gave it real children.
+    Rect measureCalculator(StrandPtr s, Constraints c, double originX, double originY) {
+        if (!s->children.empty()) {
+            return layoutSingleChildBox(s, c, resolveSpacing(*s, "padding", 12) + s->attrNum("border", 0), originX, originY);
+        }
+        double w = std::min(s->attrNum("width", 280), c.maxW);
+        double h = std::min(s->attrNum("height", 360), c.maxH);
         return {0,0, std::max(w,c.minW), std::max(h,c.minH)};
     }
 };
