@@ -39,6 +39,9 @@ namespace RinLang.VSSDK.Classification
                 [RinClassificationTypes.Punctuation] = registryService.GetClassificationType(RinClassificationTypes.Punctuation),
                 [RinClassificationTypes.MakeDirective] = registryService.GetClassificationType(RinClassificationTypes.MakeDirective),
                 [RinClassificationTypes.Capability] = registryService.GetClassificationType(RinClassificationTypes.Capability),
+                [RinClassificationTypes.ReckonKeyword] = registryService.GetClassificationType(RinClassificationTypes.ReckonKeyword),
+                [RinClassificationTypes.ReckonName] = registryService.GetClassificationType(RinClassificationTypes.ReckonName),
+                [RinClassificationTypes.ReckonItem] = registryService.GetClassificationType(RinClassificationTypes.ReckonItem),
             };
         }
 
