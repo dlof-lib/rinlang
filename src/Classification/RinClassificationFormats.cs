@@ -255,4 +255,35 @@ namespace RinLang.VSSDK.Classification
             ForegroundColor = Color.FromRgb(0xAB, 0xB2, 0xBF);
         }
     }
+
+    // Make Unit (@make.(name) ... ) policy surface -- see docs/MAKE_UNIT.md.
+
+    [Export(typeof(EditorFormatDefinition))]
+    [ClassificationType(ClassificationTypeNames = RinClassificationTypes.MakeDirective)]
+    [Name(RinClassificationTypes.MakeDirective)]
+    [UserVisible(true)]
+    [Order(After = Priority.High)]
+    internal sealed class RinMakeDirectiveFormat : ClassificationFormatDefinition
+    {
+        public RinMakeDirectiveFormat()
+        {
+            DisplayName = "Rin - Make Unit directive (kind/use/need/allow/deny/strict/input/output/public/private/version/description)";
+            ForegroundColor = Color.FromRgb(0xC5, 0x86, 0xC0);
+            IsBold = true;
+        }
+    }
+
+    [Export(typeof(EditorFormatDefinition))]
+    [ClassificationType(ClassificationTypeNames = RinClassificationTypes.Capability)]
+    [Name(RinClassificationTypes.Capability)]
+    [UserVisible(true)]
+    [Order(After = Priority.High)]
+    internal sealed class RinCapabilityFormat : ClassificationFormatDefinition
+    {
+        public RinCapabilityFormat()
+        {
+            DisplayName = "Rin - Make Unit capability name (after use/need/allow/deny)";
+            ForegroundColor = Color.FromRgb(0x57, 0xD6, 0xB8);
+        }
+    }
 }
