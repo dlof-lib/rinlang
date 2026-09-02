@@ -14,9 +14,28 @@ reckon passVariance(grades)
 reckon normalizedScores(scores)
     |> normalize() |> scale();
 
+// New arithmetic expansion: aggregation functions like count/iqr/weightedMean, and
+// transformations like movingAverage/clamp. See docs/RECKON.md for the full reference table.
+reckon passCount(grades)
+    where item >= 60 |> count();
+
+reckon passSpread(grades)
+    where item >= 60 |> iqr();
+
+let weights = [1, 1, 2, 2, 1, 3, 2];
+reckon weightedGrade(grades)
+    |> weightedMean(weights);
+
+reckon smoothedScores(scores)
+    |> movingAverage(3) |> clamp(0, 100);
+
 show average;
 show passVariance;
 show normalizedScores;
+show passCount;
+show passSpread;
+show weightedGrade;
+show smoothedScores;
 
 if (average > 50) {
     show "healthy average";
@@ -26,6 +45,7 @@ if (average > 50) {
 @make.(reportCard)
     kind data;
     use reckon;
+    use io;
     need reckon;
     strict;
 
