@@ -15,6 +15,7 @@
 - [`functions.md`](./functions.md) — `fun`/`return`، التكرار الذاتي (recursion).
 - [`objects.md`](./objects.md) — `@Object`، `.object("id")`، القاموس الحرفي.
 - [`containers.md`](./containers.md) — `@container`، أقسام، ترجمات، مستندات NoSQL.
+- [`cross-file-containers.md`](./cross-file-containers.md) — `use ... from` (English) — calling a container/UI element from another file.
 - [`boat.md`](./boat.md)
 
 ### بيئة التشغيل
