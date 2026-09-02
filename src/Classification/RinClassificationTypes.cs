@@ -34,6 +34,11 @@ namespace RinLang.VSSDK.Classification
         public const string MakeDirective = "Rin.MakeDirective";
         public const string Capability = "Rin.Capability";
 
+        // Reckon (two-line computed value) -- see docs/RECKON.md.
+        public const string ReckonKeyword = "Rin.ReckonKeyword";
+        public const string ReckonName = "Rin.ReckonName";
+        public const string ReckonItem = "Rin.ReckonItem";
+
         [Export] [Name(Comment)] internal static ClassificationTypeDefinition CommentType;
         [Export] [Name(StringLiteral)] internal static ClassificationTypeDefinition StringType;
         [Export] [Name(Number)] internal static ClassificationTypeDefinition NumberType;
@@ -53,5 +58,8 @@ namespace RinLang.VSSDK.Classification
         [Export] [Name(Punctuation)] internal static ClassificationTypeDefinition PunctuationType;
         [Export] [Name(MakeDirective)] internal static ClassificationTypeDefinition MakeDirectiveType;
         [Export] [Name(Capability)] internal static ClassificationTypeDefinition CapabilityType;
+        [Export] [Name(ReckonKeyword)] internal static ClassificationTypeDefinition ReckonKeywordType;
+        [Export] [Name(ReckonName)] internal static ClassificationTypeDefinition ReckonNameType;
+        [Export] [Name(ReckonItem)] internal static ClassificationTypeDefinition ReckonItemType;
     }
 }
