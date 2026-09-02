@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<CodeSnippets xmlns="http://schemas.microsoft.com/VisualStudio/2005/CodeSnippet">
+  <CodeSnippet Format="1.0.0">
+    <Header>
+      <Title>reckon</Title>
+      <Shortcut>reckon</Shortcut>
+      <Description>Reckon — قيمة محسوبة من مجموعة بسطرين فقط: تصفية اختيارية where ثم أنبوب |> دوال إحصائية. انظر docs/RECKON.md</Description>
+      <SnippetTypes>
+        <SnippetType>Expansion</SnippetType>
+      </SnippetTypes>
+    </Header>
+    <Snippet>
+      <Declarations>
+        <Literal>
+          <ID>p1</ID>
+          <ToolTip>اسم النتيجة</ToolTip>
+          <Default>average</Default>
+        </Literal>
+        <Literal>
+          <ID>p2</ID>
+          <ToolTip>المجموعة المصدر</ToolTip>
+          <Default>values</Default>
+        </Literal>
+        <Literal>
+          <ID>p3</ID>
+          <ToolTip>شرط where (اتركه كما هو لحذف التصفية)</ToolTip>
+          <Default>item &gt; 0</Default>
+        </Literal>
+        <Literal>
+          <ID>p4</ID>
+          <ToolTip>دالة الأنبوب النهائية</ToolTip>
+          <Default>mean</Default>
+        </Literal>
+      </Declarations>
+      <Code Language="Rin"><![CDATA[reckon $p1$($p2$)
+	where $p3$ |> $p4$();$end$]]></Code>
+    </Snippet>
+  </CodeSnippet>
+</CodeSnippets>
