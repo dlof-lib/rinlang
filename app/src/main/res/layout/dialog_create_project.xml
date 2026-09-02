@@ -3,6 +3,7 @@
      (Container / Table / UI / Free Project). التحديد الفعلي يُدار من ProjectsActivity
      بتبديل isSelected على كل شريحة (انظر bg_project_type_chip.xml). -->
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content">
 
@@ -95,12 +96,14 @@
                 android:layout_row="1"
                 android:layout_column="0">
 
-                <ImageView
-                    android:layout_width="24dp"
-                    android:layout_height="24dp"
-                    android:src="@drawable/ic_type_ui"
-                    android:tint="@color/selector_project_type_chip_text"
-                    android:duplicateParentState="true"
+                <!-- بدل أيقونة عامة: صورة مصغّرة فعلية من واجهة UI حقيقية (شريط علوي + قائمة
+                     جانبية)، لتُظهر للمستخدم شكل النتيجة قبل الاختيار، بلا أيقونة. -->
+                <com.google.android.material.imageview.ShapeableImageView
+                    android:layout_width="match_parent"
+                    android:layout_height="52dp"
+                    android:scaleType="centerCrop"
+                    android:src="@drawable/thumb_type_ui"
+                    app:shapeAppearanceOverlay="@style/ProjectTypeUiThumbShape"
                     android:contentDescription="@null" />
 
                 <TextView
@@ -258,7 +261,8 @@
                     android:background="@color/rin_divider" />
 
                 <!-- الألوان: شبكة دوائر قابلة للاختيار، تُبنى برمجياً في ProjectsActivity
-                     (انظر renderColorSwatches) بدل سبعة View ثابتة هنا. -->
+                     (انظر renderColorSwatches) بدل ثماني View ثابتة هنا. الشارة الأخيرة
+                     "لون مخصص" تفتح عجلة ألوان كاملة (HueSaturationPickerView). -->
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -272,7 +276,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:orientation="horizontal"
-                    android:weightSum="6"
+                    android:weightSum="7"
                     android:gravity="center" />
             </LinearLayout>
         </LinearLayout>
