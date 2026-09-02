@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<CodeSnippets xmlns="http://schemas.microsoft.com/VisualStudio/2005/CodeSnippet">
+  <CodeSnippet Format="1.0.0">
+    <Header>
+      <Title>make.unit</Title>
+      <Shortcut>makeunit</Shortcut>
+      <Description>وحدة Make Unit الحقيقية @make.(name) — منطق قابل للتنفيذ مع سياسة قدرات (kind/use/need/allow/deny/strict) وبيانات وصفية (input/output/public/private/version/description). انظر docs/MAKE_UNIT.md</Description>
+      <SnippetTypes>
+        <SnippetType>Expansion</SnippetType>
+      </SnippetTypes>
+    </Header>
+    <Snippet>
+      <Declarations>
+        <Literal>
+          <ID>p1</ID>
+          <ToolTip>اسم الوحدة</ToolTip>
+          <Default>name</Default>
+        </Literal>
+        <Literal>
+          <ID>p2</ID>
+          <ToolTip>kind: app|page|component|library|module|service|task|data|plugin</ToolTip>
+          <Default>page</Default>
+        </Literal>
+      </Declarations>
+      <Code Language="Rin"><![CDATA[@make.($p1$)
+	kind $p2$;
+	use container;
+	need container;
+	strict;
+
+	fun render(items)
+		$end$
+	end
+.end/make=$p1$]]></Code>
+    </Snippet>
+  </CodeSnippet>
+</CodeSnippets>
