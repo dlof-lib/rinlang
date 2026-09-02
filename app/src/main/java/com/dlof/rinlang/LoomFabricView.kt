@@ -62,6 +62,25 @@ class LoomFabricView @JvmOverloads constructor(
         // applyObjectConveniences(), so no bespoke drawing beyond the background box below is
         // needed — the Text children draw themselves through the ordinary recursive walk.
         const val OBJECT = "Object"
+
+        // ---- Live preview closes the parity gap: these kinds already exist natively
+        // (loom::StrandKind, rin_loom_paint.h) — the "missing components" pass and the
+        // ready-elements expansion — but previously had no case below, so they fell into the
+        // generic else-branch as a plain, undecorated box: a Checkbox drew as an empty square
+        // with no tick, a Progress bar never showed its fill, an Input never showed its
+        // placeholder. Every one of these now gets the same content a real render would show.
+        const val PROGRESS = "Progress"; const val CHECKBOX = "Checkbox"; const val SWITCH = "Switch"
+        const val AVATAR = "Avatar"; const val INPUT = "Input"; const val TEXTAREA = "TextArea"
+        const val TABS = "Tabs"; const val TABITEM = "TabItem"
+        const val ICON = "Icon"; const val ICONBUTTON = "IconButton"
+        // Ready-elements expansion (docs/RIN_ELEMENTS.md):
+        const val LINK = "Link"; const val RADIO = "Radio"; const val SLIDER = "Slider"
+        const val SEARCH = "Search"; const val SELECT = "Select"; const val FILE = "File"
+        const val DATE = "Date"; const val TIME = "Time"; const val CODE_EDITOR = "CodeEditor"
+        const val CALCULATOR = "Calculator"; const val LIST = "List"; const val LISTITEM = "ListItem"
+        // Sidebar/Popup never appear here: they're pure tag aliases the native side already
+        // resolves onto Drawer/Dialog (see strandKindFromTag() in rin_loom_strand.h), so the
+        // Fabric JSON this view reads always says "kind":"Drawer"/"Dialog" already.
     }
 
     private val defaultBar = Color.rgb(30, 31, 40)
@@ -81,6 +100,15 @@ class LoomFabricView @JvmOverloads constructor(
     private val defaultDialog = Color.rgb(40, 42, 54) // matches loom::colorForKind()'s Theme::surface for DIALOG
     private val defaultTooltip = Color.rgb(60, 62, 74) // matches Theme::neutral for TOOLTIP
     private val scrimColor = Color.argb(140, 0, 0, 0) // ~55% black — matches loom::scrimColor()'s RGB, opacity is this renderer's own convention (see rin_loom_paint.h's SCRIM_RECT comment)
+
+    // ---- live-preview additions: field boxes (Input/TextArea/Search/Select/File/Date/Time/
+    // CodeEditor all share the same bordered look natively — see paintField in rin_loom_paint.h)
+    // and the small controls (Checkbox/Switch/Progress/Radio/Slider/Avatar/Icon). ----
+    private val defaultFieldBg = Color.rgb(30, 31, 40) // Theme::surface, slightly darker than Card
+    private val defaultFieldBorder = Color.argb(120, 255, 255, 255)
+    private val defaultPlaceholder = Color.argb(140, 230, 230, 240) // dimmer than defaultText
+    private val defaultTrack = Color.rgb(51, 51, 63) // unfilled Progress/Slider track — matches defaultDivider
+    private val defaultLink = Color.rgb(95, 211, 255) // link-toned text — matches toneColor("info")
 
     // ---- must match loom::bannerTypeColor() in rin_loom_paint.h exactly ----
     private fun bannerTypeColor(type: String): Int = when (type) {
@@ -204,6 +232,18 @@ class LoomFabricView @JvmOverloads constructor(
         }
     }
     private val missingSrc = HashSet<String>()
+
+    // ---- real video thumbnails: `<Video src="...">` now decodes an actual frame from the file
+    // instead of only ever drawing the placeholder glyph — same upgrade [loadBitmapForRect]
+    // already gave Image, just via MediaMetadataRetriever since the source is a video container,
+    // not a still image. Kept as a separate cache from images: different decode path/cost, and a
+    // video src should never collide with an unrelated image cached under the same string. ----
+    private val videoThumbCache = object : android.util.LruCache<String, android.graphics.Bitmap>(8) {
+        override fun entryRemoved(evicted: Boolean, key: String, oldValue: android.graphics.Bitmap, newValue: android.graphics.Bitmap?) {
+            if (evicted && oldValue !== newValue) oldValue.recycle()
+        }
+    }
+    private val missingVideoSrc = HashSet<String>()
 
     /** Node currently highlighted by the Inspector (long-press), drawn on top after the tree. */
     private var inspectedNode: JSONObject? = null
@@ -429,7 +469,7 @@ class LoomFabricView @JvmOverloads constructor(
             }
             Kind.TABLE -> drawTable(canvas, rect, node, attrs)
             Kind.TABLEROW -> { /* cells are children; the header/grid lines are drawn by Table itself */ }
-            Kind.VIDEO -> drawMediaPlaceholder(canvas, rect, attrs, "▶", attrs.optString("src"))
+            Kind.VIDEO -> drawVideoPreview(canvas, rect, attrs)
             Kind.AUDIO -> drawMediaPlaceholder(canvas, rect, attrs, "♪", attrs.optString("src"))
             Kind.WEBVIEW -> drawMediaPlaceholder(canvas, rect, attrs, "🌐", attrs.optString("src"))
             Kind.SCAFFOLD -> { /* pure layout container: TopBar/Content/BottomBar/Drawer children draw themselves */ }
@@ -478,7 +518,40 @@ class LoomFabricView @JvmOverloads constructor(
             // blank space (the stray rectangle artifacts inside gradient header/nav rows).
             Kind.SPACER -> { /* intentionally draws nothing */ }
 
-            else -> drawBox(canvas, rect, attrs, resolved ?: defaultContainer, defaultRadius = 0f) // Column/Row/Stack/Custom
+            // ---- live-preview parity pass: see the Kind object's comment for why these were
+            // missing. Each reuses the same field/control drawing this pass adds below. ----
+            Kind.INPUT -> drawField(canvas, rect, attrs, singleLine = true, monospace = false)
+            Kind.TEXTAREA -> drawField(canvas, rect, attrs, singleLine = false, monospace = false)
+            Kind.PROGRESS -> drawProgress(canvas, rect, attrs, resolved)
+            Kind.CHECKBOX -> drawCheckbox(canvas, rect, attrs, resolved)
+            Kind.SWITCH -> drawSwitch(canvas, rect, attrs, resolved)
+            Kind.AVATAR -> drawAvatar(canvas, rect, attrs, resolved)
+            Kind.TABS -> { /* pure row of TabItem children -- they draw their own selected state */ }
+            Kind.TABITEM -> drawTabItem(canvas, rect, attrs)
+            Kind.ICON -> drawIcon(canvas, rect, attrs, resolved)
+            Kind.ICONBUTTON -> {
+                drawBox(canvas, rect, attrs, resolved ?: defaultButton, defaultRadius = min(rect.width(), rect.height()) / 2f)
+                drawIcon(canvas, rect, attrs, Color.WHITE)
+            }
+
+            // Ready-elements expansion (docs/RIN_ELEMENTS.md):
+            Kind.LINK -> drawText(canvas, rect, attrs, attrs.optString("text"), resolved ?: defaultLink)
+            Kind.RADIO -> drawRadio(canvas, rect, attrs, resolved)
+            Kind.SLIDER -> drawSlider(canvas, rect, attrs, resolved)
+            Kind.SEARCH, Kind.SELECT, Kind.DATE, Kind.TIME -> drawField(canvas, rect, attrs, singleLine = true, monospace = false)
+            Kind.FILE -> drawField(canvas, rect, attrs, singleLine = true, monospace = false,
+                emptyPlaceholder = "لم يتم اختيار ملف")
+            Kind.CODE_EDITOR -> drawField(canvas, rect, attrs, singleLine = false, monospace = true)
+            Kind.CALCULATOR -> {
+                drawBox(canvas, rect, attrs, resolved ?: defaultCard, defaultRadius = 14f)
+                if ((node.optJSONArray("children")?.length() ?: 0) == 0 && rect.width() > 0f && rect.height() > 0f) {
+                    drawText(canvas, rect, attrs, "🖩", defaultText, centered = true, singleLine = true)
+                }
+            }
+            Kind.LIST -> { /* plain Column of rows -- children draw themselves */ }
+            Kind.LISTITEM -> drawBox(canvas, rect, attrs, resolved ?: defaultContainer, defaultRadius = 0f)
+
+            else -> drawBox(canvas, rect, attrs, resolved ?: defaultContainer, defaultRadius = 0f) // Column/Row/Stack/Box/Grid/Wrap/Custom
         }
 
         // Table draws its own header + cell children explicitly (needs column geometry), so it
@@ -595,6 +668,190 @@ class LoomFabricView @JvmOverloads constructor(
             val strokeRadius = max(0f, radius - inset)
             canvas.drawRoundRect(strokeRect, strokeRadius, strokeRadius, strokePaint)
         }
+    }
+
+    /**
+     * Live-preview additions (see the Kind object's comment above for why these were missing).
+     * Every one of these mirrors its native counterpart in rin_loom_paint.h in spirit — same
+     * shape, same fill-fraction math — not pixel-identical, exactly the same relationship
+     * [drawBox]/[drawText] already have to loom::paintBox()/paintText().
+     */
+
+    /** Input/TextArea/Search/Select/File/Date/Time/CodeEditor: a bordered field box (paintField's
+     * native look) with left-aligned value= text, or a dimmer placeholder= when value is empty.
+     * [emptyPlaceholder] lets File supply "لم يتم اختيار ملف" as its own convention when the
+     * author left placeholder= unset, matching docs/RIN_ELEMENTS.md's description of it. */
+    private fun drawField(
+        canvas: Canvas, rect: RectF, attrs: JSONObject,
+        singleLine: Boolean, monospace: Boolean, emptyPlaceholder: String = ""
+    ) {
+        if (rect.width() <= 0f || rect.height() <= 0f) return
+        drawBox(canvas, rect, attrs, defaultFieldBg, defaultRadius = 8f)
+        strokePaint.color = defaultFieldBorder
+        strokePaint.strokeWidth = 1f
+        canvas.drawRoundRect(rect, 8f, 8f, strokePaint)
+
+        val value = attrs.optString("value")
+        val placeholder = attrs.optString("placeholder").ifBlank { emptyPlaceholder }
+        val (text, color) = if (value.isNotEmpty()) value to defaultText else placeholder to defaultPlaceholder
+        if (text.isEmpty()) return
+
+        val savedTypeface = textPaint.typeface
+        if (monospace) textPaint.typeface = android.graphics.Typeface.MONOSPACE
+        try {
+            drawText(canvas, rect, attrs, text, color, singleLine = singleLine)
+        } finally {
+            textPaint.typeface = savedTypeface
+        }
+    }
+
+    /** Progress: a pill-shaped track with a filled portion sized by value=/min=/max= — matches
+     * loom::paintProgress()'s own track+fill (no thumb; that's what distinguishes it from Slider). */
+    private fun drawProgress(canvas: Canvas, rect: RectF, attrs: JSONObject, resolved: Int?) {
+        if (rect.width() <= 0f || rect.height() <= 0f) return
+        val radius = rect.height() / 2f
+        fillPaint.shader = null; fillPaint.clearShadowLayer()
+        fillPaint.color = defaultTrack
+        canvas.drawRoundRect(rect, radius, radius, fillPaint)
+
+        val frac = progressFraction(attrs)
+        if (frac > 0f) {
+            fillPaint.color = resolved ?: defaultButton
+            canvas.drawRoundRect(RectF(rect.left, rect.top, rect.left + rect.width() * frac, rect.bottom), radius, radius, fillPaint)
+        }
+    }
+
+    /** Slider: Progress's own track+fill, plus a round thumb drawn at the current value's
+     * position so it reads as draggable — matches loom::paintSlider() in rin_loom_paint.h. */
+    private fun drawSlider(canvas: Canvas, rect: RectF, attrs: JSONObject, resolved: Int?) {
+        drawProgress(canvas, rect, attrs, resolved)
+        if (rect.width() <= 0f || rect.height() <= 0f) return
+        val frac = progressFraction(attrs)
+        val thumbSize = min(rect.height() * 1.6f, rect.height() + 6f)
+        val cx = rect.left + rect.width() * frac
+        val cy = rect.top + rect.height() / 2f
+        fillPaint.shader = null; fillPaint.clearShadowLayer()
+        fillPaint.color = resolved ?: defaultButton
+        canvas.drawCircle(cx, cy, thumbSize / 2f, fillPaint)
+    }
+
+    private fun progressFraction(attrs: JSONObject): Float {
+        val minV = attrs.optString("min").toFloatOrNull() ?: 0f
+        val maxV = attrs.optString("max").toFloatOrNull() ?: 100f
+        val value = (attrs.optString("value").toFloatOrNull() ?: minV).coerceIn(minV, maxV)
+        return if (maxV > minV) (value - minV) / (maxV - minV) else 0f
+    }
+
+    /** Checkbox: a bordered square that fills solid with a tick mark when checked="true" —
+     * matches the native filled-square look (as opposed to Radio's ring+dot below). */
+    private fun drawCheckbox(canvas: Canvas, rect: RectF, attrs: JSONObject, resolved: Int?) {
+        if (rect.width() <= 0f || rect.height() <= 0f) return
+        val checked = attrs.optString("checked") == "true"
+        val radius = attrs.optString("radius").toFloatOrNull() ?: 4f
+        fillPaint.shader = null; fillPaint.clearShadowLayer()
+        fillPaint.color = defaultFieldBg
+        canvas.drawRoundRect(rect, radius, radius, fillPaint)
+        strokePaint.color = if (checked) (resolved ?: defaultButton) else defaultFieldBorder
+        strokePaint.strokeWidth = if (checked) 2f else 1.5f
+        canvas.drawRoundRect(rect, radius, radius, strokePaint)
+        if (checked) {
+            fillPaint.color = resolved ?: defaultButton
+            val inset = min(rect.width(), rect.height()) * 0.22f
+            canvas.drawRoundRect(RectF(rect.left + inset, rect.top + inset, rect.right - inset, rect.bottom - inset), radius / 2f, radius / 2f, fillPaint)
+            // simple tick
+            strokePaint.color = Color.WHITE
+            strokePaint.strokeWidth = max(1.5f, min(rect.width(), rect.height()) * 0.12f)
+            val path = android.graphics.Path()
+            path.moveTo(rect.left + rect.width() * 0.26f, rect.top + rect.height() * 0.52f)
+            path.lineTo(rect.left + rect.width() * 0.44f, rect.top + rect.height() * 0.72f)
+            path.lineTo(rect.left + rect.width() * 0.76f, rect.top + rect.height() * 0.30f)
+            canvas.drawPath(path, strokePaint)
+        }
+    }
+
+    /** Radio: same box Checkbox uses, drawn as a ring with a filled center dot when checked —
+     * matches loom::paintRadio() (never a filled square, unlike Checkbox above). */
+    private fun drawRadio(canvas: Canvas, rect: RectF, attrs: JSONObject, resolved: Int?) {
+        if (rect.width() <= 0f || rect.height() <= 0f) return
+        val checked = attrs.optString("checked") == "true"
+        val radius = min(rect.width(), rect.height()) / 2f
+        fillPaint.shader = null; fillPaint.clearShadowLayer()
+        fillPaint.color = defaultFieldBg
+        canvas.drawRoundRect(rect, radius, radius, fillPaint)
+        strokePaint.color = if (checked) (resolved ?: defaultButton) else defaultFieldBorder
+        strokePaint.strokeWidth = if (checked) 2f else 1.5f
+        canvas.drawRoundRect(rect, radius, radius, strokePaint)
+        if (checked) {
+            fillPaint.color = resolved ?: defaultButton
+            val inset = max(4f, min(rect.width(), rect.height()) * 0.28f)
+            canvas.drawRoundRect(RectF(rect.left + inset, rect.top + inset, rect.right - inset, rect.bottom - inset),
+                (min(rect.width(), rect.height()) - inset * 2f) / 2f, (min(rect.width(), rect.height()) - inset * 2f) / 2f, fillPaint)
+        }
+    }
+
+    /** Switch: a pill track (tinted when on=true) with a circular knob at the corresponding end —
+     * matches the native toggle look. */
+    private fun drawSwitch(canvas: Canvas, rect: RectF, attrs: JSONObject, resolved: Int?) {
+        if (rect.width() <= 0f || rect.height() <= 0f) return
+        val on = attrs.optString("checked") == "true"
+        val radius = rect.height() / 2f
+        fillPaint.shader = null; fillPaint.clearShadowLayer()
+        fillPaint.color = if (on) (resolved ?: defaultButton) else defaultTrack
+        canvas.drawRoundRect(rect, radius, radius, fillPaint)
+
+        val knobRadius = rect.height() / 2f - 3f
+        val knobCx = if (on) rect.right - radius else rect.left + radius
+        fillPaint.color = Color.WHITE
+        canvas.drawCircle(knobCx, rect.top + radius, knobRadius, fillPaint)
+    }
+
+    /** Avatar: a circular image (reusing the same decode/cache path Image already has) when
+     * src= is set, else a tinted circle with the first letter of label=/name= as initials. */
+    private fun drawAvatar(canvas: Canvas, rect: RectF, attrs: JSONObject, resolved: Int?) {
+        if (rect.width() <= 0f || rect.height() <= 0f) return
+        val src = attrs.optString("src")
+        val bmp = if (src.isNotBlank()) loadBitmapForRect(src, rect.width().toInt(), rect.height().toInt()) else null
+        val radius = min(rect.width(), rect.height()) / 2f
+        if (bmp != null) {
+            canvas.save()
+            val clip = android.graphics.Path().apply { addCircle(rect.centerX(), rect.centerY(), radius, android.graphics.Path.Direction.CW) }
+            canvas.clipPath(clip)
+            val bw = bmp.width.toFloat(); val bh = bmp.height.toFloat()
+            val scale = max(rect.width() / bw, rect.height() / bh)
+            val dw = bw * scale; val dh = bh * scale
+            canvas.drawBitmap(bmp, null, RectF(rect.centerX() - dw / 2f, rect.centerY() - dh / 2f, rect.centerX() + dw / 2f, rect.centerY() + dh / 2f), bitmapPaint)
+            canvas.restore()
+            return
+        }
+        fillPaint.shader = null; fillPaint.clearShadowLayer()
+        fillPaint.color = resolved ?: defaultButton
+        canvas.drawCircle(rect.centerX(), rect.centerY(), radius, fillPaint)
+        val initial = (attrs.optString("label").ifBlank { attrs.optString("name") }).trim().firstOrNull()?.uppercaseChar()?.toString() ?: ""
+        if (initial.isNotEmpty()) drawText(canvas, rect, attrs, initial, Color.WHITE, centered = true, boldHint = true, singleLine = true)
+    }
+
+    /** TabItem: its label, underlined/tinted when selected="true" — Tabs itself (the row
+     * container) draws nothing beyond its children, same as Kind.TABS above. */
+    private fun drawTabItem(canvas: Canvas, rect: RectF, attrs: JSONObject) {
+        if (rect.width() <= 0f || rect.height() <= 0f) return
+        val selected = attrs.optString("selected") == "true"
+        drawText(canvas, rect, attrs, attrs.optString("label").ifBlank { attrs.optString("text") },
+            if (selected) defaultButton else defaultText, centered = true, boldHint = selected, singleLine = true)
+        if (selected) {
+            strokePaint.color = defaultButton
+            strokePaint.strokeWidth = 2f
+            canvas.drawLine(rect.left, rect.bottom - 1f, rect.right, rect.bottom - 1f, strokePaint)
+        }
+    }
+
+    /** Icon/IconButton: no glyph atlas on this preview surface (real icon rendering is a
+     * host-app/runtime concern, same relationship Image's real bitmap decode has to a raw
+     * placeholder) — draws the first letter of name= as a plain-text stand-in so an icon still
+     * reads as "something is here" rather than an empty box. */
+    private fun drawIcon(canvas: Canvas, rect: RectF, attrs: JSONObject, fallbackColor: Int) {
+        if (rect.width() <= 0f || rect.height() <= 0f) return
+        val glyph = attrs.optString("name").trim().firstOrNull()?.uppercaseChar()?.toString() ?: "•"
+        drawText(canvas, rect, attrs, glyph, fallbackColor, centered = true, boldHint = true, singleLine = true)
     }
 
     /**
@@ -822,6 +1079,93 @@ class LoomFabricView @JvmOverloads constructor(
         } catch (t: Throwable) {
             missingSrc.add(cacheKey)
             null
+        }
+    }
+
+    /** Decodes (and caches) a representative frame near the start of the video at [src] as a real
+     * thumbnail — same "decode once, cache, remember failures" shape as [loadBitmapForRect] just
+     * above, only using MediaMetadataRetriever instead of BitmapFactory since the source is a
+     * video container, not a still image. Downsampled to roughly [targetW]x[targetH] for memory. */
+    private fun loadVideoThumbnail(src: String, targetW: Int, targetH: Int): android.graphics.Bitmap? {
+        if (src.isBlank() || targetW <= 0 || targetH <= 0) return null
+        val cacheKey = "$src|$targetW|$targetH"
+        videoThumbCache.get(cacheKey)?.let { return it }
+        if (cacheKey in missingVideoSrc) return null
+
+        val file = resolveImageFile(src)
+        if (file == null) { missingVideoSrc.add(cacheKey); return null }
+        val retriever = android.media.MediaMetadataRetriever()
+        return try {
+            retriever.setDataSource(file.absolutePath)
+            val frame = retriever.getFrameAtTime(0L, android.media.MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
+            if (frame == null) {
+                missingVideoSrc.add(cacheKey)
+                null
+            } else {
+                val scale = min(1f, max(targetW.toFloat() / frame.width, targetH.toFloat() / frame.height))
+                val bmp = if (scale < 1f) {
+                    android.graphics.Bitmap.createScaledBitmap(
+                        frame, max(1, (frame.width * scale).toInt()), max(1, (frame.height * scale).toInt()), true
+                    ).also { if (it !== frame) frame.recycle() }
+                } else frame
+                videoThumbCache.put(cacheKey, bmp)
+                bmp
+            }
+        } catch (t: Throwable) {
+            missingVideoSrc.add(cacheKey)
+            null
+        } finally {
+            try { retriever.release() } catch (t: Throwable) { /* best-effort cleanup */ }
+        }
+    }
+
+    /** Real `<Video src="...">`: draws an actual decoded frame from the file — the same
+     * cover-crop + rounded-corner treatment [drawImage] gives a still image — with a dark scrim
+     * and a centered play glyph on top so it still reads as "video", not a photo. Falls back to
+     * [drawMediaPlaceholder]'s plain glyph+label box when src is blank/unresolvable/undecodable,
+     * same relationship [drawImage] already has to [drawImagePlaceholder]. */
+    private fun drawVideoPreview(canvas: Canvas, rect: RectF, attrs: JSONObject) {
+        if (rect.width() <= 0f || rect.height() <= 0f) return
+        val src = attrs.optString("src")
+        val thumb = if (src.isNotBlank()) loadVideoThumbnail(src, rect.width().toInt(), rect.height().toInt()) else null
+        if (thumb == null) { drawMediaPlaceholder(canvas, rect, attrs, "▶", src); return }
+
+        val radius = attrs.optString("radius").toFloatOrNull() ?: 8f
+        canvas.save()
+        val clip = android.graphics.Path().apply { addRoundRect(rect, radius, radius, android.graphics.Path.Direction.CW) }
+        canvas.clipPath(clip)
+        val bw = thumb.width.toFloat()
+        val bh = thumb.height.toFloat()
+        val scale = max(rect.width() / bw, rect.height() / bh)
+        val dw = bw * scale
+        val dh = bh * scale
+        val dstLeft = rect.left + (rect.width() - dw) / 2f
+        val dstTop = rect.top + (rect.height() - dh) / 2f
+        canvas.drawBitmap(thumb, null, RectF(dstLeft, dstTop, dstLeft + dw, dstTop + dh), bitmapPaint)
+
+        // dark scrim so the play glyph reads clearly over any frame content, bright or dark
+        fillPaint.shader = null; fillPaint.clearShadowLayer()
+        fillPaint.color = Color.argb(70, 0, 0, 0)
+        canvas.drawRect(rect, fillPaint)
+        canvas.restore()
+
+        // centered play button: translucent white circle + glyph
+        val knobRadius = min(rect.width(), rect.height()) * 0.16f
+        if (knobRadius > 2f) {
+            fillPaint.color = Color.argb(210, 255, 255, 255)
+            canvas.drawCircle(rect.centerX(), rect.centerY(), knobRadius, fillPaint)
+            textPaint.color = Color.rgb(30, 31, 40)
+            textPaint.textSize = knobRadius * 1.1f
+            textPaint.isFakeBoldText = false
+            val glyph = "▶"
+            val gw = textPaint.measureText(glyph)
+            canvas.drawText(glyph, rect.centerX() - gw / 2f + knobRadius * 0.08f,
+                rect.centerY() - (textPaint.descent() + textPaint.ascent()) / 2f, textPaint)
+        }
+
+        if (src.isNotBlank()) {
+            drawText(canvas, RectF(rect.left + 6f, rect.bottom - 18f, rect.right - 6f, rect.bottom - 2f),
+                attrs, src, Color.argb(220, 255, 255, 255), singleLine = true)
         }
     }
 
