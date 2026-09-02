@@ -37,7 +37,8 @@
 //  ما هو خارج نطاق هذا المترجم (خاص بمحرك المفسّر/تطبيق أندرويد وليس له معنى
 //  واضح كملف تنفيذي مستقل): @container / Containers.Group / Volume / Section /
 //  Translations / link / tying / merge / installation / save / table / row /
-//  style / document (NoSQL) / route / @container.api / @import.
+//  style / document (NoSQL) / route / @container.api / @import / use ... from
+//  (انظر docs/cross-file-containers.md).
 //  يصدر المترجم خطأ واضحاً عند مصادفة أي منها بدل توليد سلوك غير صحيح صامت.
 // ============================================================================
 
@@ -99,7 +100,8 @@ struct Token {
 static const std::unordered_set<std::string> kUnsupportedContainerWords = {
     "text", "container", "Containers", "Group", "Volume", "Section",
     "Translations", "translation", "link", "tying", "merge", "installation",
-    "simplified", "save", "file", "route", "row", "style", "document"
+    "simplified", "save", "file", "route", "row", "style", "document",
+    "use", "from" // use Name from "path.rin"; — سهل التعلّم لاستدعاء حاوية/عنصر @view باسمه من ملف آخر (انظر docs/cross-file-containers.md)
 };
 
 // أسماء الدوال الأصلية (native) الموجودة في المفسّر الأصلي (rin_interpreter.cpp) وغير المدعومة
