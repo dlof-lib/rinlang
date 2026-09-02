@@ -17,6 +17,7 @@
     { "include": "#keywords-logical" },
     { "include": "#keywords-storage" },
     { "include": "#keyword-print" },
+    { "include": "#make-unit" },
     { "include": "#container-statement-keywords" },
     { "include": "#relation-keywords" },
     { "include": "#attribute-keywords" },
@@ -179,6 +180,23 @@
       "comment": "'show' is a full lexer-level synonym for 'print' (rin_lexer.cpp keywords table -> same TokenType::PRINT), part of the simplified-English keyword family alongside `make`/`@make`.",
       "name": "keyword.other.print.rin",
       "match": "\\b(print|show)\\b"
+    },
+
+    "make-unit": {
+      "comment": "Make Unit syntax and policy directives.",
+      "patterns": [
+        {
+          "match": "(@)(make)(\\.)(\\()([A-Za-z_][A-Za-z0-9_]*)(\\))",
+          "captures": {
+            "1": { "name": "punctuation.definition.tag.rin" },
+            "2": { "name": "entity.name.tag.container.rin" },
+            "3": { "name": "punctuation.accessor.rin" },
+            "4": { "name": "punctuation.section.parameters.begin.rin" },
+            "5": { "name": "entity.name.type.rin" },
+            "6": { "name": "punctuation.section.parameters.end.rin" }
+          }
+        }
+      ]
     },
 
     "container-statement-keywords": {
