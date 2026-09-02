@@ -1170,9 +1170,12 @@ void Interpreter::registerNatives() {
         return Value::makeArray(result);
     };
     natives["scale"] = [](std::vector<Value>& a, int line) {
-        expectArgs("scale", a, 2, line);
+        // Factor is optional (default 1.0, i.e. a no-op multiplier) so `|> normalize() |> scale()`
+        // is valid on its own inside a Reckon pipeline; pass an explicit factor to actually rescale,
+        // e.g. `|> normalize() |> scale(100)` for a 0-100 range.
+        expectArgsRange("scale", a, 1, 2, line);
         auto nums = asNumberArray(a[0], "scale", line);
-        double factor = asNumber(a[1], "scale", line);
+        double factor = (a.size() > 1) ? asNumber(a[1], "scale", line) : 1.0;
         auto result = std::make_shared<ArrayData>();
         result->reserve(nums.size());
         for (double n : nums) result->push_back(Value::num(n * factor));
@@ -1185,6 +1188,168 @@ void Interpreter::registerNatives() {
         auto result = std::make_shared<ArrayData>();
         result->reserve(nums.size());
         for (double n : nums) result->push_back(Value::num(n + delta));
+        return Value::makeArray(result);
+    };
+
+    // ---- Reckon expansion: مزيد من دوال العمليات الحسابية القابلة للاستخدام بعد |> (وبالتالي
+    // داخل جسم reckon)، بنفس أسلوب sum/mean/variance/... أعلاه تماماً. انظر docs/RECKON.md و
+    // docs/standard-library.md. كل دالة "تجميع" (aggregation) تُرجع رقماً واحداً؛ كل دالة
+    // "تحويل" (transformation) تُرجع مصفوفة بنفس حجم المُدخَل (أو أصغر لِـ movingAverage).
+
+    // product(nums) -> aggregation: حاصل ضرب كل العناصر.
+    natives["product"] = [](std::vector<Value>& a, int line) {
+        expectArgs("product", a, 1, line);
+        auto nums = asNumberArray(a[0], "product", line);
+        double total = 1.0;
+        for (double n : nums) total *= n;
+        return Value::num(total);
+    };
+    // count(nums) -> aggregation: عدد العناصر؛ مفيدة بعد where لمعرفة كم عنصراً مرّ الفلتر.
+    natives["count"] = [](std::vector<Value>& a, int line) {
+        expectArgs("count", a, 1, line);
+        auto nums = asNumberArray(a[0], "count", line);
+        return Value::num(static_cast<double>(nums.size()));
+    };
+    // range(nums) -> aggregation: المدى (أكبر قيمة - أصغر قيمة).
+    natives["range"] = [](std::vector<Value>& a, int line) {
+        expectArgs("range", a, 1, line);
+        auto nums = asNumberArray(a[0], "range", line);
+        double lo = *std::min_element(nums.begin(), nums.end());
+        double hi = *std::max_element(nums.begin(), nums.end());
+        return Value::num(hi - lo);
+    };
+    // geometricMean(nums) -> aggregation: الوسط الهندسي؛ يتطلّب أرقاماً موجبة تماماً.
+    natives["geometricMean"] = [](std::vector<Value>& a, int line) {
+        expectArgs("geometricMean", a, 1, line);
+        auto nums = asNumberArray(a[0], "geometricMean", line);
+        double logSum = 0.0;
+        for (double n : nums) {
+            if (n <= 0.0) throw diagErr(diag::Code::E0004_InvalidType, line,
+                "'geometricMean' expects strictly positive numbers, found " + std::to_string(n));
+            logSum += std::log(n);
+        }
+        return Value::num(std::exp(logSum / static_cast<double>(nums.size())));
+    };
+    // harmonicMean(nums) -> aggregation: الوسط التوافقي؛ يتطلّب أرقاماً غير صفرية.
+    natives["harmonicMean"] = [](std::vector<Value>& a, int line) {
+        expectArgs("harmonicMean", a, 1, line);
+        auto nums = asNumberArray(a[0], "harmonicMean", line);
+        double invSum = 0.0;
+        for (double n : nums) {
+            if (n == 0.0) throw diagErr(diag::Code::E0035_RuntimeError, line,
+                "'harmonicMean' cannot divide by a zero element");
+            invSum += 1.0 / n;
+        }
+        return Value::num(static_cast<double>(nums.size()) / invSum);
+    };
+    // rms(nums) -> aggregation: الجذر التربيعي لمتوسط المربعات (root mean square).
+    natives["rms"] = [](std::vector<Value>& a, int line) {
+        expectArgs("rms", a, 1, line);
+        auto nums = asNumberArray(a[0], "rms", line);
+        double sq = 0.0;
+        for (double n : nums) sq += n * n;
+        return Value::num(std::sqrt(sq / static_cast<double>(nums.size())));
+    };
+    // percentile(nums, p) -> aggregation: المئين p (0-100) بالاستيفاء الخطي بين أقرب رتبتين.
+    natives["percentile"] = [](std::vector<Value>& a, int line) {
+        expectArgs("percentile", a, 2, line);
+        auto nums = asNumberArray(a[0], "percentile", line);
+        double p = asNumber(a[1], "percentile", line);
+        if (p < 0.0 || p > 100.0) throw diagErr(diag::Code::E0007_InvalidArguments, line,
+            "'percentile' expects its second argument to be between 0 and 100");
+        std::sort(nums.begin(), nums.end());
+        double rank = (p / 100.0) * static_cast<double>(nums.size() - 1);
+        size_t lo = static_cast<size_t>(std::floor(rank));
+        size_t hi = static_cast<size_t>(std::ceil(rank));
+        if (lo == hi) return Value::num(nums[lo]);
+        double frac = rank - static_cast<double>(lo);
+        return Value::num(nums[lo] + (nums[hi] - nums[lo]) * frac);
+    };
+    // iqr(nums) -> aggregation: المدى الربيعي (Q3 - Q1)، مقياس تشتت أقل حساسية للقيم الشاذة.
+    natives["iqr"] = [](std::vector<Value>& a, int line) {
+        expectArgs("iqr", a, 1, line);
+        auto nums = asNumberArray(a[0], "iqr", line);
+        std::sort(nums.begin(), nums.end());
+        auto percentileOf = [&](double p) {
+            double rank = (p / 100.0) * static_cast<double>(nums.size() - 1);
+            size_t lo = static_cast<size_t>(std::floor(rank));
+            size_t hi = static_cast<size_t>(std::ceil(rank));
+            if (lo == hi) return nums[lo];
+            double frac = rank - static_cast<double>(lo);
+            return nums[lo] + (nums[hi] - nums[lo]) * frac;
+        };
+        return Value::num(percentileOf(75.0) - percentileOf(25.0));
+    };
+    // weightedMean(nums, weights) -> aggregation: متوسط مرجَّح؛ المصفوفتان يجب أن تتساويا طولاً.
+    natives["weightedMean"] = [](std::vector<Value>& a, int line) {
+        expectArgs("weightedMean", a, 2, line);
+        auto nums = asNumberArray(a[0], "weightedMean", line);
+        auto weights = asNumberArray(a[1], "weightedMean", line);
+        if (nums.size() != weights.size()) throw diagErr(diag::Code::E0007_InvalidArguments, line,
+            "'weightedMean' expects its two arrays to be the same length");
+        double weightedSum = 0.0, weightSum = 0.0;
+        for (size_t i = 0; i < nums.size(); i++) { weightedSum += nums[i] * weights[i]; weightSum += weights[i]; }
+        if (weightSum == 0.0) throw diagErr(diag::Code::E0035_RuntimeError, line,
+            "'weightedMean' cannot divide by a zero total weight");
+        return Value::num(weightedSum / weightSum);
+    };
+    // zscore(nums) -> transformation: كل عنصر يصبح (x - mean) / stddev؛ نفس حجم المُدخَل.
+    natives["zscore"] = [](std::vector<Value>& a, int line) {
+        expectArgs("zscore", a, 1, line);
+        auto nums = asNumberArray(a[0], "zscore", line);
+        double m = 0.0;
+        for (double n : nums) m += n;
+        m /= static_cast<double>(nums.size());
+        double sq = 0.0;
+        for (double n : nums) sq += (n - m) * (n - m);
+        double sd = std::sqrt(sq / static_cast<double>(nums.size()));
+        auto result = std::make_shared<ArrayData>();
+        result->reserve(nums.size());
+        for (double n : nums) result->push_back(Value::num(sd == 0.0 ? 0.0 : (n - m) / sd));
+        return Value::makeArray(result);
+    };
+    // cumulativeSum(nums) -> transformation: مجموع تراكمي؛ نفس حجم المُدخَل.
+    natives["cumulativeSum"] = [](std::vector<Value>& a, int line) {
+        expectArgs("cumulativeSum", a, 1, line);
+        auto nums = asNumberArray(a[0], "cumulativeSum", line);
+        auto result = std::make_shared<ArrayData>();
+        result->reserve(nums.size());
+        double running = 0.0;
+        for (double n : nums) { running += n; result->push_back(Value::num(running)); }
+        return Value::makeArray(result);
+    };
+    // movingAverage(nums, windowSize) -> transformation: متوسط متحرك بنافذة windowSize؛ الناتج
+    // أقصر بـ (windowSize - 1) عنصراً من المُدخَل، تماماً كأي متوسط متحرك تقليدي.
+    natives["movingAverage"] = [](std::vector<Value>& a, int line) {
+        expectArgs("movingAverage", a, 2, line);
+        auto nums = asNumberArray(a[0], "movingAverage", line);
+        double windowD = asNumber(a[1], "movingAverage", line);
+        if (windowD < 1.0 || windowD > static_cast<double>(nums.size()))
+            throw diagErr(diag::Code::E0007_InvalidArguments, line,
+                "'movingAverage' expects a window size between 1 and the array length");
+        size_t window = static_cast<size_t>(windowD);
+        auto result = std::make_shared<ArrayData>();
+        result->reserve(nums.size() - window + 1);
+        double windowSum = 0.0;
+        for (size_t i = 0; i < window; i++) windowSum += nums[i];
+        result->push_back(Value::num(windowSum / static_cast<double>(window)));
+        for (size_t i = window; i < nums.size(); i++) {
+            windowSum += nums[i] - nums[i - window];
+            result->push_back(Value::num(windowSum / static_cast<double>(window)));
+        }
+        return Value::makeArray(result);
+    };
+    // clamp(nums, lo, hi) -> transformation: يقصّ كل عنصر إلى المجال [lo, hi]؛ نفس حجم المُدخَل.
+    natives["clamp"] = [](std::vector<Value>& a, int line) {
+        expectArgs("clamp", a, 3, line);
+        auto nums = asNumberArray(a[0], "clamp", line);
+        double lo = asNumber(a[1], "clamp", line);
+        double hi = asNumber(a[2], "clamp", line);
+        if (lo > hi) throw diagErr(diag::Code::E0007_InvalidArguments, line,
+            "'clamp' expects its low bound to be <= its high bound");
+        auto result = std::make_shared<ArrayData>();
+        result->reserve(nums.size());
+        for (double n : nums) result->push_back(Value::num(std::min(hi, std::max(lo, n))));
         return Value::makeArray(result);
     };
 
@@ -3983,6 +4148,40 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
         Value v = Value::nil();
         if (s->initializer) v = evaluate(s->initializer, env);
         env->define(s->name, v);
+        return;
+    }
+    // reckon name(collection) [where cond] |> fn() ...;  --  see docs/RECKON.md and ReckonStmt in
+    // rin_ast.h. Semantically sugar for exactly the loop+if pattern it replaces: walk `collection`
+    // once, keep the elements where `whereCond` (evaluated with `item` bound) is truthy, then run
+    // that array through the same `|>` dispatch (invokeCallee) already used by ordinary pipelines,
+    // and bind the final value under `name` exactly like `let` would.
+    if (auto s = std::dynamic_pointer_cast<ReckonStmt>(stmt)) {
+        Value collVal = evaluate(s->collection, env);
+        if (collVal.type != Value::Type::ARRAY) {
+            throw diagErr(diag::Code::E0004_InvalidType, s->line,
+                "`reckon " + s->name + "` expects an array/collection, but got a " + collVal.typeName());
+        }
+        Value current;
+        if (s->whereCond) {
+            auto filtered = std::make_shared<ArrayData>();
+            auto itemEnv = std::make_shared<Environment>(env);
+            for (auto& elem : *collVal.array) {
+                itemEnv->define("item", elem);
+                Value cond = evaluate(s->whereCond, itemEnv);
+                if (cond.isTruthy()) filtered->push_back(elem);
+            }
+            current = Value::makeArray(filtered);
+        } else {
+            current = collVal;
+        }
+        for (auto& stage : s->stages) {
+            std::vector<Value> args;
+            args.reserve(stage->args.size() + 1);
+            args.push_back(current);
+            for (auto& a : stage->args) args.push_back(evaluate(a, env));
+            current = invokeCallee(stage->callee, args, stage->line, env);
+        }
+        env->define(s->name, current);
         return;
     }
     // warp name = expr;  --  Loomtime's reactive global-state declaration (rin_loom_pipeline.h /
