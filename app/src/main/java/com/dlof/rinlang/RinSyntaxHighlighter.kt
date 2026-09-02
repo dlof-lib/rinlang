@@ -80,7 +80,11 @@ object RinSyntaxHighlighter {
         "loop", "function", "view", "chatbot", "element", "container", "on",
         "button", "input", "search", "image", "video", "audio", "progress",
         "checkbox", "radio", "switch", "slider", "select", "list", "column", "box",
-        "card", "sidebar", "popup", "modal", "tabs", "code_editor", "calculator", "divider"
+        "card", "sidebar", "popup", "modal", "tabs", "code_editor", "calculator", "divider",
+        // Ready-elements expansion: date/time pickers, plus a few common tag aliases
+        // (see strandKindFromTag() in rin_loom_strand.h) so they highlight the same as their
+        // canonical spellings above.
+        "date", "time", "dropdown", "range", "listitem", "direction"
     )
 
     // توجيهات سياسة وحدة make (@make.(name) ... kind/use/need/allow/deny/strict/...) —
