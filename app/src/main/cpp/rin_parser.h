@@ -53,6 +53,7 @@ private:
     // statements
     StmtPtr declaration();
     StmtPtr letDeclaration();
+    StmtPtr reckonDeclaration();
     StmtPtr setDeclaration(); // 'set' name 'to' expr ';'  -> صياغة إنجليزية مبسّطة (sugar) لِـ LetStmt، مطابقة تماماً لـ let من ناحية الدلالة
     StmtPtr functionDeclaration();
     StmtPtr statement();
