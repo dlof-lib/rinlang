@@ -679,14 +679,24 @@ struct Loom {
             contentUsedH = std::max(contentUsedH, r.h);
         }
         if (bottombar) layout(bottombar, {c.maxW, c.maxW, bottomH, bottomH}, originX, originY + topH + contentUsedH);
+        double totalH = topH + contentUsedH + bottomH;
+        double screenH = std::min(totalH, c.maxH);
+        // FIX: same class of bug as the Scaffold-height fix above, one level down. The drawer/
+        // sidebar slot used to be laid out with {c.maxH, c.maxH} as its height constraint --
+        // Scaffold's *own incoming* constraint, which at the root is the engine's unbounded
+        // sentinel (1e9, see rin_loom_c_api.cpp). That forced the drawer/sidebar child's
+        // measured height to ~1e9px (visible in inspectors as e.g. role=sidebar, h=1000000000),
+        // which rendered as a giant absolutely-positioned box covering/blanking the whole
+        // preview. The drawer should fill the *actual* screen height Scaffold just computed
+        // (screenH, already finite from contentUsedH above), not its own possibly-unbounded
+        // incoming budget.
         if (drawer) {
             bool isOpen = drawer->attrStr("open", "false") == "true";
             double dw = drawer->attr("width") ? drawer->attrNum("width", 280) : 280.0;
             double dx = isOpen ? originX : originX - dw; // off-canvas to the left when closed
-            layout(drawer, {isOpen ? dw : 0, isOpen ? dw : 0, c.maxH, c.maxH}, dx, originY);
+            layout(drawer, {isOpen ? dw : 0, isOpen ? dw : 0, screenH, screenH}, dx, originY);
         }
-        double totalH = topH + contentUsedH + bottomH;
-        return {0,0, c.maxW, std::min(totalH, c.maxH)};
+        return {0,0, c.maxW, screenH};
     }
 
     // ---- Missing-components pass: Grid (§15) — `columns=` (default 2) fixed-column-count grid,
