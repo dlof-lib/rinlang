@@ -1,4 +1,5 @@
 #include "rin_interpreter.h"
+#include "rin_make.h"
 #include "rin_lexer.h"
 #include "rin_parser.h"
 #include "rin_stdlib_libs.h"
@@ -4083,9 +4084,21 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
     }
 
     if (auto s = std::dynamic_pointer_cast<ContainerStmt>(stmt)) {
+        if (auto make = std::dynamic_pointer_cast<MakeStmt>(stmt)) {
+            try {
+                validateMakeUnit(*make);
+            } catch (const std::exception& e) {
+                throw diagErr(diag::Code::E0016_InvalidProperty, make->line, std::string("invalid Make Unit: ") + e.what());
+            }
+        }
         auto containerEnv = std::make_shared<Environment>(env);
         std::string tag = containerTagName(s->kind);
         std::string icon = containerIcon(s->kind);
+        if (std::dynamic_pointer_cast<MakeStmt>(stmt)) {
+            auto make = std::dynamic_pointer_cast<MakeStmt>(stmt);
+            tag = "make." + make->makeType;
+            icon = "🛠️";
+        }
         output << icon << " " << tag << (s->name.empty() ? "" : (" = " + s->name)) << "\n";
         std::string containerKey = s->name.empty() ? ("#" + std::to_string(containers.size())) : s->name;
         containers[containerKey] = containerEnv;
