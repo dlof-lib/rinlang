@@ -42,6 +42,9 @@
     <string name="ui_design_sidebar_label">Sidebar</string>
     <string name="ui_design_sidebar_desc">A side navigation menu with its items</string>
     <string name="ui_design_colors_label">Colors</string>
+    <string name="color_picker_title">Choose a color</string>
+    <string name="color_picker_custom_desc">Custom color</string>
+    <string name="color_picker_back">Back</string>
 
     <!-- New-project creation stages -->
     <string name="project_creating_title">Creating project</string>
