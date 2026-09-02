@@ -109,7 +109,14 @@ object RinSyntaxHighlighter {
         "abs", "sqrt", "pow", "floor", "ceil", "round", "min", "max", "random",
         "len", "upper", "lower", "trim", "substr", "split", "join",
         "indexOf", "replace", "contains", "charAt", "toString", "toNumber",
-        "push", "pop", "sort", "keys", "values", "has", "remove"
+        "push", "pop", "sort", "keys", "values", "has", "remove",
+        // Stats/pipeline functions usable as `|>` steps, incl. inside a reckon body -- see
+        // docs/RECKON.md. sum/mean/.../shift already existed as natives but were missing from
+        // this list; product..clamp are the new Reckon-arithmetic expansion.
+        "sum", "mean", "median", "variance", "stddev", "mode", "minOf", "maxOf",
+        "normalize", "scale", "shift",
+        "product", "count", "range", "geometricMean", "harmonicMean", "rms",
+        "percentile", "iqr", "weightedMean", "zscore", "cumulativeSum", "movingAverage", "clamp"
     )
 
     // نص محاط بعلامتي تنصيص مع دعم التهريب (\" \\ \n ...) بنفس أسلوب rin_lexer.cpp::scanString.
