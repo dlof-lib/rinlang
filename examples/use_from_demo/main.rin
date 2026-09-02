@@ -1,0 +1,20 @@
+// ============================================================================
+//  examples/use_from_demo/main.rin
+//  Calls one UI element (Sidebar) and one data container (SidebarState) that
+//  both live in sidebar.rin, by name, with a single `use ... from` line.
+//  See docs/cross-file-containers.md for the full write-up of this concept.
+// ============================================================================
+
+use Sidebar, SidebarState from "sidebar.rin";
+
+@view.Scaffold=page
+    @view.Row=top role = "topbar"
+        @view.Text=title text = "My App";
+    .end/view
+
+    Sidebar role = "sidebar" open = SidebarState.open;
+
+    @view.Column=content role = "content"
+        @view.Text=hello text = "Hello!";
+    .end/view
+.end/view
