@@ -204,7 +204,8 @@ struct WarpSubscriptions {
 
 // ---- Renderer Engine: pure function AST subtree -> Strand subtree ----
 inline StrandPtr buildFabric(const std::shared_ptr<rin::ViewStmt>& node, WarpScope& warp,
-                              WarpSubscriptions& subs, const std::string& parentPath, int idx) {
+                              WarpSubscriptions& subs, const std::string& parentPath, int idx,
+                              const std::vector<rin::ViewAttr>& inheritedLoopVisual = {}) {
     auto s = std::make_shared<Strand>();
     s->kind = strandKindFromTag(node->kindTag);
     if (s->kind == StrandKind::CUSTOM) s->customTag = node->kindTag;
@@ -221,9 +222,34 @@ inline StrandPtr buildFabric(const std::shared_ptr<rin::ViewStmt>& node, WarpSco
         s->attrs.push_back({a.key, a.value, v});
         attrHash = fnv1a(a.key + "=" + v.asString(), attrHash);
     }
+    // A Loop is the visual canvas. Its optional element_* defaults are inherited by descendants,
+    // while Element itself remains free of visual styling in source. Explicit child attributes
+    // still win because they are appended before inherited defaults are applied below.
+    std::vector<rin::ViewAttr> childVisual = inheritedLoopVisual;
+    if (node->role == rin::UiRole::LOOP) {
+        static const std::unordered_map<std::string,std::string> map = {
+            {"element_width","width"},{"element_height","height"},{"element_color","color"},
+            {"element_background","background"},{"element_text_size","size"},{"element_radius","radius"},
+            {"element_padding","padding"},{"element_font","font"}
+        };
+        childVisual.clear();
+        for (auto& a : node->attrs) { auto it=map.find(a.key); if (it!=map.end()) childVisual.push_back({it->second,a.value,a.line}); }
+    }
+    if (node->role == rin::UiRole::ELEMENT && !inheritedLoopVisual.empty()) {
+        std::unordered_set<std::string> ownKeys;
+        for (auto& a : node->attrs) ownKeys.insert(a.key);
+        for (auto& a : inheritedLoopVisual) {
+            if (ownKeys.count(a.key)) continue;
+            std::vector<std::string> reads;
+            Value v = evalAttrExpr(a.value, warp, &reads);
+            for (auto& w : reads) subs.record(w, s->id);
+            s->attrs.push_back({a.key, a.value, v});
+            attrHash = fnv1a(a.key + "=" + v.asString(), attrHash);
+        }
+    }
     uint64_t childHashAcc = 0; int i = 0;
     for (auto& c : node->children) {
-        auto child = buildFabric(c, warp, subs, myPath, i++);
+        auto child = buildFabric(c, warp, subs, myPath, i++, childVisual);
         childHashAcc = fnv1a(std::to_string(child->contentHash), childHashAcc);
         s->children.push_back(child);
     }
