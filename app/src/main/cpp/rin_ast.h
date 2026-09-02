@@ -375,6 +375,37 @@ struct ContainerStmt : Stmt {
     ContainerKind kind = ContainerKind::PLAIN;
 };
 
+// ---- Make Unit: وحدة صناعة/بناء عامة وقابلة للسياسة ----
+// @make.(name)
+//     kind app;
+//     use container;
+//     use loop;
+//     need container;
+//     allow function;
+//     deny import;
+//     input source;
+//     output result;
+//     strict;
+//     ...
+// .end/make=name
+//
+// MakeUnit يظل Stmt مستقلًا (ويُنشأ كـ ContainerStmt عند التسجيل) حتى نحتفظ بتوافق
+// الحاويات القديم، مع طبقة سياسة حقيقية تتحقق من القدرات المستخدمة داخل الجسم.
+struct MakeStmt : ContainerStmt {
+    std::string makeType = "app";
+    std::vector<std::string> uses;
+    std::vector<std::string> needs;
+    std::vector<std::string> allows;
+    std::vector<std::string> denies;
+    std::vector<std::string> inputs;
+    std::vector<std::string> outputs;
+    std::vector<std::string> publics;
+    std::vector<std::string> privates;
+    std::string version;
+    std::string description;
+    bool strict = false;
+};
+
 // @Containers.Group=name  <body>  .end/Containers.Group
 struct ContainerGroupStmt : Stmt {
     std::string name;
