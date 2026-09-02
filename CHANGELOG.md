@@ -1,5 +1,14 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+- `use Name from "path.rin";` — simple-English syntax for calling one named
+  container (`@container=Name`) or UI element (`@view.Kind=Name`) from
+  another `.rin` file by name, without pulling in everything else that file
+  defines. See [`docs/cross-file-containers.md`](docs/cross-file-containers.md)
+  and [`examples/use_from_demo/`](examples/use_from_demo/).
+
 ## [1.0.0] — 2026-08-28
 
 ### Added
