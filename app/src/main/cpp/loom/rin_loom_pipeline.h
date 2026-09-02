@@ -67,6 +67,52 @@ struct PipelineResult {
 // Live Preview should always pass a real budget (see rin::Interpreter::setExecutionBudget()) so
 // that a program the user is mid-typing, e.g. `while (true) {}`, can't hang the preview thread --
 // it fails with a RuntimeError instead, same as any other runtime error.
+// New Rin Elements/Container/Loop architecture helpers.
+// Element is behavior-neutral markup; Container owns handlers; Loop owns visual canvas attributes.
+inline void attachContainerUiBindings(const std::vector<rin::StmtPtr>& stmts,
+                                      const std::vector<rin::StmtPtr>& allProgram) {
+    std::unordered_map<std::string, std::vector<std::shared_ptr<rin::UiBindingStmt>>> bindings;
+    std::function<void(const std::vector<rin::StmtPtr>&)> collect = [&](const auto& xs) {
+        for (auto& st : xs) {
+            if (auto b = std::dynamic_pointer_cast<rin::UiBindingStmt>(st)) bindings[b->target].push_back(b);
+            if (auto c = std::dynamic_pointer_cast<rin::ContainerStmt>(st)) collect(c->body);
+            if (auto block = std::dynamic_pointer_cast<rin::BlockStmt>(st)) collect(block->statements);
+            if (auto i = std::dynamic_pointer_cast<rin::IfStmt>(st)) { if(i->thenBranch) collect({i->thenBranch}); if(i->elseBranch) collect({i->elseBranch}); }
+            if (auto w = std::dynamic_pointer_cast<rin::WhileStmt>(st)) if(w->body) collect({w->body});
+            if (auto f = std::dynamic_pointer_cast<rin::ForStmt>(st)) if(f->body) collect({f->body});
+        }
+    };
+    collect(stmts);
+    std::function<void(const std::shared_ptr<rin::ViewStmt>&)> apply = [&](const auto& node) {
+        if (!node) return;
+        auto it = bindings.find(node->name);
+        if (it != bindings.end()) {
+            for (auto& b : it->second) {
+                std::string ev=b->event;
+                if (ev=="click" || ev=="tap") node->attrs.push_back({"onTap", b->handler, b->line});
+                else node->attrs.push_back({"on"+ev, b->handler, b->line});
+            }
+        }
+        for (auto& c : node->children) apply(c);
+    };
+    for (auto& st : allProgram) if (auto v=std::dynamic_pointer_cast<rin::ViewStmt>(st)) apply(v);
+}
+
+inline void sanitizeElements(std::shared_ptr<rin::ViewStmt>& node) {
+    if (!node) return;
+    if (node->role == rin::UiRole::ELEMENT) {
+        static const std::unordered_set<std::string> visual = {
+            "x","y","width","height","min_width","max_width","min_height","max_height",
+            "color","background","border","radius","padding","margin","opacity","shadow",
+            "font","font_size","text_size","size","align","valign"
+        };
+        std::vector<rin::ViewAttr> kept;
+        for (auto& a: node->attrs) if (!visual.count(a.key)) kept.push_back(a);
+        node->attrs.swap(kept);
+    }
+    for (auto& c: node->children) sanitizeElements(c);
+}
+
 inline PipelineResult runColdPipelineWithRuntime(const std::string& source, rin::Interpreter& interp,
                                                   long long instructionBudget = 1000000) {
     PipelineResult result;
@@ -83,7 +129,7 @@ inline PipelineResult runColdPipelineWithRuntime(const std::string& source, rin:
         // scan's behavior for the common case of a single top-level @view).
         std::shared_ptr<rin::ViewStmt> reachedRoot;
         interp.setViewReachedCallback([&reachedRoot](const std::shared_ptr<rin::ViewStmt>& v) {
-            if (!reachedRoot) reachedRoot = v;
+            if (!reachedRoot && v->role != rin::UiRole::ELEMENT) reachedRoot = v;
         });
 
         interp.setExecutionBudget(instructionBudget);
@@ -118,11 +164,13 @@ inline PipelineResult runColdPipelineWithRuntime(const std::string& source, rin:
             // through execute()). Kept so a bug in the callback path degrades to the old static
             // scan instead of always failing outright.
             for (auto& stmt : program) {
-                if (auto v = std::dynamic_pointer_cast<rin::ViewStmt>(stmt)) { root = v; break; }
+                if (auto v = std::dynamic_pointer_cast<rin::ViewStmt>(stmt)) { if (v->role != rin::UiRole::ELEMENT) { root = v; break; } }
             }
         }
         if (!root) throw rin::RinError("no top-level '@view...=name' root found", 1);
 
+        attachContainerUiBindings(program, program);
+        sanitizeElements(root);
         result.viewAst = root;
         result.program = program;
         result.fabric = buildFabric(root, result.warp, result.subs, "", 0);
@@ -229,7 +277,7 @@ inline PipelineResult runColdPipelineForContainerWithRuntime(const std::string& 
         collectViewStmts(*body, ownViews);
         std::shared_ptr<rin::ViewStmt> reachedRoot;
         interp.setViewReachedCallback([&reachedRoot, &ownViews](const std::shared_ptr<rin::ViewStmt>& v) {
-            if (!reachedRoot && ownViews.count(v.get())) reachedRoot = v;
+            if (!reachedRoot && ownViews.count(v.get()) && v->role != rin::UiRole::ELEMENT) reachedRoot = v;
         });
 
         interp.setExecutionBudget(instructionBudget);
@@ -257,11 +305,13 @@ inline PipelineResult runColdPipelineForContainerWithRuntime(const std::string& 
         std::shared_ptr<rin::ViewStmt> root = reachedRoot;
         if (!root) {
             for (auto& stmt : *body) { // defensive fallback -- see runColdPipelineWithRuntime's equivalent
-                if (auto v = std::dynamic_pointer_cast<rin::ViewStmt>(stmt)) { root = v; break; }
+                if (auto v = std::dynamic_pointer_cast<rin::ViewStmt>(stmt)) { if (v->role != rin::UiRole::ELEMENT) { root = v; break; } }
             }
         }
         if (!root) throw rin::RinError("no '@view...=name' root found inside container '" + containerName + "'", 1);
 
+        attachContainerUiBindings(*body, program);
+        sanitizeElements(root);
         result.viewAst = root;
         result.program = program; // البرنامج الكامل يبقى محفوظاً (Needle قد يحتاج دوال أعلى المستوى)
         result.fabric = buildFabric(root, result.warp, result.subs, "", 0);
@@ -307,9 +357,11 @@ inline std::vector<Patch> runHotPipeline(PipelineResult& state, const std::strin
         // limitation as applyBannerConveniences above (only the next cold build/Run picks it up).
         std::shared_ptr<rin::ViewStmt> root;
         for (auto& stmt : program) {
-            if (auto v = std::dynamic_pointer_cast<rin::ViewStmt>(stmt)) { root = v; break; }
+            if (auto v = std::dynamic_pointer_cast<rin::ViewStmt>(stmt)) { if (v->role != rin::UiRole::ELEMENT) { root = v; break; } }
         }
-        if (!root) throw rin::RinError("no top-level '@view...=name' root found", 1);
+        if (!root) throw rin::RinError("no top-level '@view/@loop...=name' root found", 1);
+        attachContainerUiBindings(program, program);
+        sanitizeElements(root);
 
         Shuttle shuttle;
         shuttle.diff(state.fabric, root, state.warp, state.subs, "", 0);
