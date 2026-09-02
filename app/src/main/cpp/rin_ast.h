@@ -173,6 +173,23 @@ struct LogStmt : Stmt {
     ExprPtr source; // nullptr = يُستخدم sourceFile الحالي للمفسِّر
 };
 struct LetStmt : Stmt { std::string name; ExprPtr initializer; };
+
+// reckon <name>(<collection>)
+//     [where <condition>] |> <function>() [|> <function>() ...];
+// See docs/RECKON.md. Always exactly two lines in source; parsed as a single statement by
+// Parser::reckonDeclaration(). `collection` is the array/collection expression from the header.
+// `whereCond` (nullable) is a boolean expression evaluated once per element with the implicit
+// binding `item`; elements for which it is falsy are skipped. `stages` is the `|>` chain that
+// follows -- each entry only stores the *extra* arguments written after the function name (e.g.
+// `scale(2)` -> args=[2]); Interpreter::execute(ReckonStmt) prepends the running value as the
+// first argument at runtime and dispatches through the same invokeCallee() used for ordinary
+// pipelines, so every native or user-defined pipeline-compatible function works here unchanged.
+struct ReckonStmt : Stmt {
+    std::string name;
+    ExprPtr collection;
+    ExprPtr whereCond; // nullable
+    std::vector<std::shared_ptr<CallExpr>> stages;
+};
 struct BlockStmt : Stmt { std::vector<StmtPtr> statements; };
 struct IfStmt : Stmt {
     ExprPtr condition;
