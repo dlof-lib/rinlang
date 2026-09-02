@@ -286,4 +286,50 @@ namespace RinLang.VSSDK.Classification
             ForegroundColor = Color.FromRgb(0x57, 0xD6, 0xB8);
         }
     }
+
+    // Reckon (two-line computed value) -- see docs/RECKON.md.
+
+    [Export(typeof(EditorFormatDefinition))]
+    [ClassificationType(ClassificationTypeNames = RinClassificationTypes.ReckonKeyword)]
+    [Name(RinClassificationTypes.ReckonKeyword)]
+    [UserVisible(true)]
+    [Order(After = Priority.High)]
+    internal sealed class RinReckonKeywordFormat : ClassificationFormatDefinition
+    {
+        public RinReckonKeywordFormat()
+        {
+            DisplayName = "Rin - Reckon keyword (reckon/where)";
+            ForegroundColor = Color.FromRgb(0xC7, 0x92, 0xEA);
+            IsBold = true;
+        }
+    }
+
+    [Export(typeof(EditorFormatDefinition))]
+    [ClassificationType(ClassificationTypeNames = RinClassificationTypes.ReckonName)]
+    [Name(RinClassificationTypes.ReckonName)]
+    [UserVisible(true)]
+    [Order(After = Priority.High)]
+    internal sealed class RinReckonNameFormat : ClassificationFormatDefinition
+    {
+        public RinReckonNameFormat()
+        {
+            DisplayName = "Rin - Reckon result name";
+            ForegroundColor = Color.FromRgb(0x82, 0xAA, 0xFF);
+        }
+    }
+
+    [Export(typeof(EditorFormatDefinition))]
+    [ClassificationType(ClassificationTypeNames = RinClassificationTypes.ReckonItem)]
+    [Name(RinClassificationTypes.ReckonItem)]
+    [UserVisible(true)]
+    [Order(After = Priority.High)]
+    internal sealed class RinReckonItemFormat : ClassificationFormatDefinition
+    {
+        public RinReckonItemFormat()
+        {
+            DisplayName = "Rin - Reckon implicit item binding";
+            ForegroundColor = Color.FromRgb(0xFF, 0x8A, 0x6B);
+            IsItalic = true;
+        }
+    }
 }
