@@ -1,0 +1,38 @@
+@container=app
+    @element.button=run
+        text="Run";
+    .end/element
+
+    @element.input=name
+        placeholder="Your name";
+    .end/element
+
+    on.run.click=runCode();
+.end/container
+
+fun runCode() {
+    print "Rin UI";
+}
+
+@loop=canvas
+    width=390;
+    height=700;
+    background="#ffffff";
+
+    @element.text=title
+        text="Rin Elements";
+    .end/element
+
+    @element.button=run
+        text="Run";
+    .end/element
+
+    @element.input=name
+        placeholder="Name";
+    .end/element
+
+    @element.progress=download
+        value=50;
+        max=100;
+    .end/element
+.end/loop
