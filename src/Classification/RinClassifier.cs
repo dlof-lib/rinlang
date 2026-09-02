@@ -37,6 +37,8 @@ namespace RinLang.VSSDK.Classification
                 [RinClassificationTypes.ExplicitMathFunction] = registryService.GetClassificationType(RinClassificationTypes.ExplicitMathFunction),
                 [RinClassificationTypes.Operator] = registryService.GetClassificationType(RinClassificationTypes.Operator),
                 [RinClassificationTypes.Punctuation] = registryService.GetClassificationType(RinClassificationTypes.Punctuation),
+                [RinClassificationTypes.MakeDirective] = registryService.GetClassificationType(RinClassificationTypes.MakeDirective),
+                [RinClassificationTypes.Capability] = registryService.GetClassificationType(RinClassificationTypes.Capability),
             };
         }
 
