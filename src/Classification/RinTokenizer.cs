@@ -80,7 +80,17 @@ namespace RinLang.VSSDK.Classification
                 (new Regex(@"\b(kind|use|need|allow|deny|strict|input|output|public|private|version|description)\b", o), RinClassificationTypes.MakeDirective),
 
                 // Capability names, only right after use/need/allow/deny.
-                (new Regex(@"(?<=\b(use|need|allow|deny)\s)\s*(container|loop|function|condition|return|view|data|api|import|table|doc|chatbot)\b", o), RinClassificationTypes.Capability),
+                (new Regex(@"(?<=\b(use|need|allow|deny)\s)\s*(container|loop|function|condition|return|view|data|api|import|table|doc|chatbot|reckon)\b", o), RinClassificationTypes.Capability),
+
+                // reckon name(collection) -- header line of a Reckon (docs/RECKON.md).
+                (new Regex(@"\breckon\b", o), RinClassificationTypes.ReckonKeyword),
+                (new Regex(@"(?<=\breckon\s)[A-Za-z_][A-Za-z0-9_]*", o), RinClassificationTypes.ReckonName),
+
+                // where -- Reckon's optional filter clause.
+                (new Regex(@"\bwhere\b", o), RinClassificationTypes.ReckonKeyword),
+
+                // item -- Reckon's implicit per-element binding.
+                (new Regex(@"\bitem\b", o), RinClassificationTypes.ReckonItem),
 
                 // Section / Translations headers.
                 (new Regex(@"\b(Section|Translations)\b", o), RinClassificationTypes.ContainerKeyword),
