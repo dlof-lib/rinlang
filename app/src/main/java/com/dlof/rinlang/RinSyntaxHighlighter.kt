@@ -42,8 +42,10 @@ import java.util.regex.Pattern
  * - **مفاهيم وحدة make (@make.(name))** (انظر docs/MAKE_UNIT.md): توجيهات السياسة
  *   kind/use/need/allow/deny/strict/input/output/public/private/version/description تُلوَّن
  *   بفئة مستقلة [syntax_make_directive]، وأسماء القدرات (capabilities) الجديدة
- *   loop/function/view/chatbot أُضيفت إلى كلمات لغة الحاويات (container/data/api/import/table/doc
- *   وreturn كانت مُلوَّنة أصلاً).
+ *   loop/function/view/chatbot/reckon أُضيفت إلى كلمات لغة الحاويات (container/data/api/import/
+ *   table/doc وreturn كانت مُلوَّنة أصلاً).
+ * - **مفهوم Reckon الحسابي بسطرين** (انظر docs/RECKON.md): `reckon`/`where` بفئة الكلمات
+ *   المفتاحية الأساسية، و`item` الضمني بفئة مستقلة مائلة [syntax_reckon_item].
  */
 object RinSyntaxHighlighter {
 
@@ -60,7 +62,9 @@ object RinSyntaxHighlighter {
 
     private val rinCoreKeywords = listOf(
         "let", "print", "if", "else", "while", "for", "fun", "return", "break", "continue",
-        "true", "false", "nil", "and", "or"
+        "true", "false", "nil", "and", "or",
+        // Reckon (docs/RECKON.md): a two-line computed value; "where" is its filter clause.
+        "reckon", "where"
     )
 
     // كلمات لغة الحاويات/البيانات (data container language) - حساسة لحالة الأحرف كما في المحرّك.
@@ -82,6 +86,10 @@ object RinSyntaxHighlighter {
         "kind", "use", "need", "allow", "deny", "strict",
         "input", "output", "public", "private", "version", "description"
     )
+
+    // مفهوم Reckon الحسابي بسطرين — انظر docs/RECKON.md. `item` هو الاسم الضمني لعنصر
+    // المجموعة داخل جملة `where`/الأنبوب؛ فئة لونية مستقلة (مائلة) لتمييزه كـ"مرجع ضمني".
+    private val rinReckonItemKeywords = listOf("item")
 
     // حقول تنسيق/ستايل خاصة حصراً بـ @container.object/@Object: txt/img/object.file/Fonts/
     // background/css3.
@@ -119,6 +127,7 @@ object RinSyntaxHighlighter {
         val secondaryKeyword: Pattern? = null, // أنواع البيانات (types) في اللغات المطبوعة/الحاويات في Rin
         val styleField: Pattern? = null,       // حصراً في Rin
         val makeDirective: Pattern? = null,    // توجيهات سياسة وحدة make (kind/use/need/...) — حصراً في Rin
+        val reckonItem: Pattern? = null,       // `item` الضمني داخل Reckon — حصراً في Rin
         val builtin: Pattern? = null,
         val number: Pattern? = defaultNumber,
         val string: Pattern? = defaultString,
@@ -132,6 +141,7 @@ object RinSyntaxHighlighter {
         secondaryKeyword = wordsPattern(rinContainerKeywords),
         styleField = wordsPattern(rinStyleFieldKeywords),
         makeDirective = wordsPattern(rinMakeDirectiveKeywords),
+        reckonItem = wordsPattern(rinReckonItemKeywords),
         builtin = wordsPattern(rinBuiltins),
         tag = rinTag,
         lineComment = lineCommentSlash
@@ -345,6 +355,7 @@ object RinSyntaxHighlighter {
         val secondaryKeyword: Int,
         val styleField: Int,
         val makeDirective: Int,
+        val reckonItem: Int,
         val string: Int,
         val number: Int,
         val comment: Int,
@@ -371,6 +382,7 @@ object RinSyntaxHighlighter {
             secondaryKeyword = ContextCompat.getColor(context, R.color.syntax_container_keyword),
             styleField = ContextCompat.getColor(context, R.color.syntax_style_keyword),
             makeDirective = ContextCompat.getColor(context, R.color.syntax_make_directive),
+            reckonItem = ContextCompat.getColor(context, R.color.syntax_reckon_item),
             string = ContextCompat.getColor(context, R.color.syntax_string),
             number = ContextCompat.getColor(context, R.color.syntax_number),
             comment = ContextCompat.getColor(context, R.color.syntax_comment),
@@ -457,6 +469,7 @@ object RinSyntaxHighlighter {
         applyAll(profile.secondaryKeyword, colors.secondaryKeyword)
         applyAll(profile.styleField, colors.styleField)
         applyAll(profile.makeDirective, colors.makeDirective)
+        applyAll(profile.reckonItem, colors.reckonItem, italic = true)
         applyAll(profile.builtin, colors.builtin)
         applyAll(profile.number, colors.number)
         applyAll(profile.tag, colors.tag)
