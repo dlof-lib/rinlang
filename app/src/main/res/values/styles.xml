@@ -28,6 +28,11 @@
         <item name="android:textColor">@color/selector_project_type_chip_text</item>
     </style>
 
+    <!-- زوايا دائرية للصورة المصغّرة (thumbnail) في بطاقة نوع مشروع UI، بدل أيقونة عادية. -->
+    <style name="ProjectTypeUiThumbShape">
+        <item name="cornerSize">10dp</item>
+    </style>
+
     <!-- وصف مختصر أسفل عنوان البطاقة (مثل "بيانات حيّة داخل حاوية"). -->
     <style name="ProjectTypeChipSubtitle">
         <item name="android:layout_width">wrap_content</item>
