@@ -37,6 +37,19 @@ inline Color colorForKind(StrandKind k) {
         case StrandKind::ICON:   return themeRegistry().active().text; // a plain glyph reads as text-toned by default
         case StrandKind::ICONBUTTON: return themeRegistry().active().primary; // same default as Button
         case StrandKind::OBJECT: return themeRegistry().active().surface; // §21: Card-like panel
+
+        // Ready-elements expansion:
+        case StrandKind::LINK:   return themeRegistry().active().primary; // reads as a link, not plain text
+        case StrandKind::RADIO:  return themeRegistry().active().primary; // same tone role as Checkbox/Switch
+        case StrandKind::SLIDER: return themeRegistry().active().primary; // filled portion + thumb, same as Progress
+        case StrandKind::SEARCH:
+        case StrandKind::SELECT:
+        case StrandKind::FILE:
+        case StrandKind::DATE:
+        case StrandKind::TIME:
+        case StrandKind::CODE_EDITOR: return themeRegistry().active().surface; // same field box as Input/TextArea
+        case StrandKind::CALCULATOR:  return themeRegistry().active().surface; // self-contained widget panel
+
         default: return themeRegistry().active().background;
     }
 }
@@ -147,7 +160,22 @@ struct Dye {
         if (s->kind == StrandKind::CHECKBOX) { paintCheckbox(s, list, r); return; }
         if (s->kind == StrandKind::SWITCH)   { paintSwitch(s, list); return; }
         if (s->kind == StrandKind::AVATAR)   { paintAvatar(s, list, r); return; }
-        if (s->kind == StrandKind::INPUT || s->kind == StrandKind::TEXTAREA) { paintField(s, list, r); return; }
+        if (s->kind == StrandKind::INPUT || s->kind == StrandKind::TEXTAREA ||
+            s->kind == StrandKind::SEARCH || s->kind == StrandKind::SELECT || s->kind == StrandKind::FILE ||
+            s->kind == StrandKind::DATE || s->kind == StrandKind::TIME || s->kind == StrandKind::CODE_EDITOR)
+            { paintField(s, list, r); return; } // same bordered box + value/placeholder text as Input
+
+        // Ready-elements expansion: Radio/Slider get their own dedicated shapes (a ring+dot and a
+        // track+thumb respectively) rather than reusing Checkbox/Progress's plain-filled look.
+        if (s->kind == StrandKind::RADIO)  { paintRadio(s, list); return; }
+        if (s->kind == StrandKind::SLIDER) { paintSlider(s, list, r); return; }
+        // Link: a plain text run in the link tone, no box at all — same convention Button's
+        // `variant="link"` treatment already uses (see paintButton's ButtonTreatment::LINK case).
+        if (s->kind == StrandKind::LINK) {
+            list.push_back({DrawOp::TEXT_RUN, s->geometry, resolveColor(s), s->attrStr("text", ""), s->id, 0, 0});
+            for (auto& c : s->children) paintInto(c, list);
+            return;
+        }
 
         if (s->kind != StrandKind::TEXT)
             list.push_back({DrawOp::FILL_RECT, s->geometry, resolveColor(s), "", s->id, r, 0});
@@ -188,6 +216,38 @@ struct Dye {
             list.push_back({DrawOp::FILL_RECT, s->geometry, th.background, "", s->id, soft, 0});
             list.push_back({DrawOp::STROKE_RECT, s->geometry, th.border, "", s->id, soft, 1.5});
         }
+    }
+    // Ready-elements expansion: Radio (a ring that gets an inner filled dot when checked=true,
+    // the standard native radio-button look — deliberately not just paintCheckbox with a round
+    // radius, since a checkbox stays filled-square when checked while a radio's outer ring never
+    // fills) and Slider (Progress's own track+fill, plus a round thumb drawn at the current value's
+    // position so it reads as draggable rather than as a plain progress bar).
+    void paintRadio(const StrandPtr& s, DrawList& list) {
+        const Theme& th = themeRegistry().active();
+        Color tone = resolveColor(s);
+        bool checked = s->attrStr("checked", "false") == "true";
+        double circleRadius = std::min(s->geometry.w, s->geometry.h) / 2.0;
+        list.push_back({DrawOp::FILL_RECT, s->geometry, th.background, "", s->id, circleRadius, 0});
+        list.push_back({DrawOp::STROKE_RECT, s->geometry, checked ? tone : th.border, "", s->id, circleRadius, checked ? 2.0 : 1.5});
+        if (checked) {
+            double inset = std::max(4.0, std::min(s->geometry.w, s->geometry.h) * 0.28);
+            Rect dot{ s->geometry.x + inset, s->geometry.y + inset, s->geometry.w - inset*2, s->geometry.h - inset*2 };
+            list.push_back({DrawOp::FILL_RECT, dot, tone, "", s->id, std::min(dot.w,dot.h)/2.0, 0});
+        }
+    }
+    void paintSlider(const StrandPtr& s, DrawList& list, double radius) {
+        const Theme& th = themeRegistry().active();
+        double trackRadius = std::min(radius, s->geometry.h / 2.0);
+        list.push_back({DrawOp::FILL_RECT, s->geometry, th.border, "", s->id, trackRadius, 0}); // track
+        double minV = s->attrNum("min", 0), maxV = s->attrNum("max", 100);
+        double value = std::max(minV, std::min(maxV, s->attrNum("value", minV)));
+        double frac = (maxV > minV) ? (value - minV) / (maxV - minV) : 0.0;
+        Rect fill = s->geometry; fill.w = s->geometry.w * frac;
+        Color tone = resolveColor(s);
+        list.push_back({DrawOp::FILL_RECT, fill, tone, "", s->id, trackRadius, 0}); // filled portion
+        double thumbSize = std::min(s->geometry.h * 1.6, s->geometry.h + 6);
+        Rect thumb{ s->geometry.x + fill.w - thumbSize/2.0, s->geometry.y + (s->geometry.h - thumbSize)/2.0, thumbSize, thumbSize };
+        list.push_back({DrawOp::FILL_RECT, thumb, tone, "", s->id, thumbSize/2.0, 0});
     }
     void paintSwitch(const StrandPtr& s, DrawList& list) {
         const Theme& th = themeRegistry().active();
