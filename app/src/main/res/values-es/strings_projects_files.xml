@@ -43,6 +43,9 @@
     <string name="ui_design_sidebar_label">Menú lateral</string>
     <string name="ui_design_sidebar_desc">Un menú de navegación lateral con sus elementos</string>
     <string name="ui_design_colors_label">Colores</string>
+    <string name="color_picker_title">Elegir un color</string>
+    <string name="color_picker_custom_desc">Color personalizado</string>
+    <string name="color_picker_back">Atrás</string>
 
     <!-- Etapas de creación de un proyecto nuevo -->
     <string name="project_creating_title">Creando proyecto</string>
