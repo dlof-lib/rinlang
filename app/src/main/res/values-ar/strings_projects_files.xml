@@ -48,6 +48,9 @@
     <string name="ui_design_sidebar_label">قائمة جانبية</string>
     <string name="ui_design_sidebar_desc">قائمة تنقّل جانبية بعناصرها</string>
     <string name="ui_design_colors_label">الألوان</string>
+    <string name="color_picker_title">اختيار لون</string>
+    <string name="color_picker_custom_desc">لون مخصص</string>
+    <string name="color_picker_back">رجوع</string>
 
     <!-- مراحل إنشاء مشروع جديد -->
     <string name="project_creating_title">إنشاء مشروع</string>
