@@ -42,9 +42,12 @@ pipeline statement, ended by `;` — nothing to close, nothing to indent, nothin
 ## Syntax
 
 ```
-reckon <name>(<collection>);
+reckon <name>(<collection>)
     [where <condition>] |> <function>() [|> <function>() ...];
 ```
+
+Note there is exactly **one** `;` in the whole statement, at the very end of line 2 — the header
+line (`reckon <name>(<collection>)`) is never terminated on its own.
 
 - `reckon` — declares a Reckon. Plain, simple English: "figure it out."
 - `<name>(<collection>)` — the result name and the array/collection it reads from, exactly
@@ -57,6 +60,48 @@ reckon <name>(<collection>);
   else in Rin. Chain as many steps as you like: `|> normalize() |> mean() |> round()`.
 - No closing tag. A Reckon is always exactly two lines — that is the rule, not just a style
   choice, which is what makes it fast to learn and impossible to get "unbalanced."
+
+## Arithmetic functions usable in a Reckon pipeline
+
+Any of these can follow `|>` inside a Reckon body (or in an ordinary pipeline outside of one —
+they're all plain natives, not Reckon-specific). Each takes the running array as its implicit
+first argument; extra arguments, if any, are written in the parentheses.
+
+**Aggregation** — collapse an array down to a single number:
+
+| Function | Extra args | Result |
+|---|---|---|
+| `sum()` | — | total of all elements |
+| `mean()` | — | arithmetic average |
+| `median()` | — | middle value (interpolated if the count is even) |
+| `mode()` | — | most frequent value |
+| `variance()` | — | population variance |
+| `stddev()` | — | population standard deviation |
+| `minOf()` / `maxOf()` | — | smallest / largest element |
+| `range()` | — | `maxOf() - minOf()` |
+| `product()` | — | product of all elements |
+| `count()` | — | number of elements (handy right after `where`) |
+| `geometricMean()` | — | geometric mean (elements must be `> 0`) |
+| `harmonicMean()` | — | harmonic mean (elements must be `!= 0`) |
+| `rms()` | — | root mean square |
+| `iqr()` | — | interquartile range (`Q3 - Q1`), a spread measure robust to outliers |
+| `percentile(p)` | `p` (0–100) | the p-th percentile, linearly interpolated |
+| `weightedMean(weights)` | `weights` (same-length array) | weighted average |
+
+**Transformation** — return a new array the same size as the input (except `movingAverage`):
+
+| Function | Extra args | Result |
+|---|---|---|
+| `normalize()` | — | rescales every element into `[0, 1]` |
+| `scale(factor)` | `factor` (optional, default `1`) | multiplies every element by `factor` |
+| `shift(delta)` | `delta` | adds `delta` to every element |
+| `clamp(lo, hi)` | `lo`, `hi` | clips every element into `[lo, hi]` |
+| `zscore()` | — | `(x - mean) / stddev` for every element |
+| `cumulativeSum()` | — | running total at each position |
+| `movingAverage(windowSize)` | `windowSize` | rolling average; output is `windowSize - 1` elements shorter |
+
+Chain them like any other pipeline: `|> normalize() |> scale(100) |> mean()` first rescales to
+`[0, 1]`, then to `[0, 100]`, then reduces to one number.
 
 ## More examples
 
@@ -72,6 +117,31 @@ A straight pipeline with no filter at all — still two lines:
 ```rin
 reckon normalizedScores(scores)
     |> normalize() |> scale();
+```
+
+How many passing grades were there, and by how much do they typically spread out (robust to
+one outlier grade)?
+
+```rin
+reckon passCount(grades)
+    where item >= 60 |> count();
+
+reckon passSpread(grades)
+    where item >= 60 |> iqr();
+```
+
+A weighted course average, where `weights` lines up 1:1 with `scores`:
+
+```rin
+reckon courseAverage(scores)
+    |> weightedMean(weights);
+```
+
+Smoothing noisy sensor readings with a 3-point moving average, then clamping to a valid range:
+
+```rin
+reckon smoothed(readings)
+    |> movingAverage(3) |> clamp(0, 100);
 ```
 
 Using the result like any other value:
