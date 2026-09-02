@@ -10,6 +10,7 @@ add_library(
         jni_bridge.cpp
         rin_lexer.cpp
         rin_parser.cpp
+        rin_make.cpp
         rin_interpreter.cpp
         # loader_ui/: Library Loader UI — اختياري تماماً وغير مفعَّل افتراضياً من rin_interpreter.cpp
         # (انظر setImportUISink/setImportUIMode في rin_interpreter.h)، مستقلة كلياً عن باقي المحرّك.
@@ -62,6 +63,7 @@ add_executable(
         ../../../../tools/rin_check.cpp
         rin_lexer.cpp
         rin_parser.cpp
+        rin_make.cpp
         rin_interpreter.cpp
         loader_ui/library_loader_ui.cpp
         rin_http.cpp
@@ -103,6 +105,7 @@ add_executable(
         loom/loomc.cpp
         rin_lexer.cpp
         rin_parser.cpp
+        rin_make.cpp
         rin_interpreter.cpp
         loader_ui/library_loader_ui.cpp
         rin_http.cpp
