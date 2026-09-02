@@ -144,6 +144,13 @@ object RinSnippets {
         Snippet("UI: Loop Canvas", "@loop=app\n    width=390;\n    height=700;\n    background=\"#ffffff\";\n\n    @element.button=run\n        text=\"Run\";\n    .end/element\n.end/loop\n"),
         Snippet("UI: Button", "@element.button=button\n    text=\"Button\";\n.end/element\n"),
         Snippet("UI: Input", "@element.input=input\n    placeholder=\"Text...\";\n.end/element\n"),
+        // Ready-elements expansion: a few of the newer element kinds (see docs/RIN_ELEMENTS.md),
+        // inserted the same way the ones above are.
+        Snippet("UI: Search Bar", "@element.search=search\n    placeholder=\"Search...\";\n.end/element\n"),
+        Snippet("UI: Link", "@element.link=more\n    text=\"Learn more\";\n.end/element\n"),
+        Snippet("UI: Row (RTL)", "@element.row=actions\n    direction=\"rtl\";\n\n    @element.button=ok\n        text=\"موافق\";\n    .end/element\n.end/element\n"),
+        Snippet("UI: Code Editor", "@element.code_editor=snippet\n    value=\"print 1;\";\n.end/element\n"),
+        Snippet("UI: Calculator", "@element.calculator=calc\n.end/element\n"),
         Snippet("UI: Container Event", "@container=app\n    @element.button=run\n        text=\"Run\";\n    .end/element\n    on.run.click=runCode();\n.end/container\n"),
         Snippet(
             "container",
