@@ -188,6 +188,14 @@ StmtPtr Parser::declaration() {
     if (check(TokenType::IDENT) && peek().lexeme == "document") { advance(); return documentStatement(); }
     // 'warp' كلمة سياقية غير محجوزة أيضاً (Loomtime: خلية حالة تفاعلية يستخدمها محرّك العرض)
     if (check(TokenType::IDENT) && peek().lexeme == "warp") { advance(); return warpDeclaration(); }
+    // 'reckon name(collection) [where cond] |> fn() ...;' -> انظر docs/RECKON.md و ReckonStmt في
+    // rin_ast.h. كلمة سياقية غير محجوزة (بنفس أسلوب route/row/document/warp أعلاه بالضبط)، مُميَّزة
+    // هنا بالنظر خطوة إضافية للأمام (IDENT مباشرة بعدها) حتى لا تصطدم باستخدام "reckon" اسم متغيّر
+    // عادي في أي سياق آخر.
+    if (check(TokenType::IDENT) && peek().lexeme == "reckon" && checkNext(TokenType::IDENT)) {
+        advance(); // 'reckon'
+        return reckonDeclaration();
+    }
     // 'plus.condition' كلمة مفتاحية مركّبة سياقية (شرط ثلاثي عام: plus.condition(cond) {..} / {..}).
     // تُفحَص هنا (declaration()) وليس في statement() حتى تعمل بنفس المستوى فوق أي إعلان حاوية
     // (@container...) بداخل كتلتيها، تماماً كأسلوب فحص '@import'/'@view' أعلاه: ننظر 3 خطوات
@@ -214,6 +222,45 @@ StmtPtr Parser::letDeclaration() {
     stmt->name = name.lexeme;
     stmt->initializer = initializer;
     stmt->line = name.line;
+    return stmt;
+}
+
+// reckon <name>(<collection>)
+//     [where <condition>] |> <function>() [|> <function>() ...];
+// Always exactly two lines in source (no semicolon after the header -- only one, at the very
+// end); see docs/RECKON.md. `where`/`item` are contextual (never reserved), matching every other
+// contextual keyword in this parser.
+StmtPtr Parser::reckonDeclaration() {
+    Token nameTok = consume(TokenType::IDENT, "Expected a result name after 'reckon'");
+    consume(TokenType::LPAREN, "Expected '(' after the reckon result name, e.g. reckon name(collection)");
+    auto stmt = std::make_shared<ReckonStmt>();
+    stmt->name = nameTok.lexeme;
+    stmt->line = nameTok.line;
+    stmt->collection = expression();
+    consume(TokenType::RPAREN, "Expected ')' after the reckon collection expression");
+
+    if (check(TokenType::IDENT) && peek().lexeme == "where") {
+        advance(); // 'where'
+        // logicOr(), not pipeline(): a `where` condition is a plain boolean expression over
+        // `item` and must not itself try to swallow the reckon body's own '|>' chain.
+        stmt->whereCond = logicOr();
+    }
+
+    consume(TokenType::PIPE, "Expected '|>' to start the reckon pipeline body (after the optional 'where' clause)");
+    do {
+        Token fnTok = consume(TokenType::IDENT, "Expected a function name after '|>' in a reckon body");
+        auto stage = std::make_shared<CallExpr>();
+        stage->callee = fnTok.lexeme;
+        stage->line = fnTok.line;
+        consume(TokenType::LPAREN, "Expected '(' after function name '" + fnTok.lexeme + "' in reckon body");
+        if (!check(TokenType::RPAREN)) {
+            do { stage->args.push_back(expression()); } while (match({TokenType::COMMA}));
+        }
+        consume(TokenType::RPAREN, "Expected ')' after arguments for '" + fnTok.lexeme + "' in reckon body");
+        stmt->stages.push_back(stage);
+    } while (match({TokenType::PIPE}));
+
+    consume(TokenType::SEMICOLON, "Expected ';' after the reckon pipeline body");
     return stmt;
 }
 
