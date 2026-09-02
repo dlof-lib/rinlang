@@ -141,6 +141,10 @@ object RinSnippets {
     data class Snippet(val title: String, val template: String)
 
     val all: List<Snippet> = listOf(
+        Snippet("UI: Loop Canvas", "@loop=app\n    width=390;\n    height=700;\n    background=\"#ffffff\";\n\n    @element.button=run\n        text=\"Run\";\n    .end/element\n.end/loop\n"),
+        Snippet("UI: Button", "@element.button=button\n    text=\"Button\";\n.end/element\n"),
+        Snippet("UI: Input", "@element.input=input\n    placeholder=\"Text...\";\n.end/element\n"),
+        Snippet("UI: Container Event", "@container=app\n    @element.button=run\n        text=\"Run\";\n    .end/element\n    on.run.click=runCode();\n.end/container\n"),
         Snippet(
             "container",
             "@container=my_data\n    $CURSOR_MARKER\n.end/container\n"
