@@ -53,7 +53,6 @@ private:
     // statements
     StmtPtr declaration();
     StmtPtr letDeclaration();
-    StmtPtr reckonDeclaration();
     StmtPtr setDeclaration(); // 'set' name 'to' expr ';'  -> صياغة إنجليزية مبسّطة (sugar) لِـ LetStmt، مطابقة تماماً لـ let من ناحية الدلالة
     StmtPtr functionDeclaration();
     StmtPtr statement();
@@ -104,7 +103,10 @@ private:
     std::string readOptionalFormatAttr(); // يقرأ "format=IDENT" اختيارياً (لـ save/installation)، أو "" إن لم توجد
 
     // Loomtime rendering engine (view strands / reactive state) — امتداد إضافي
-    std::shared_ptr<ViewStmt> viewDeclaration(); // @view.<Kind>=name ... .end/view  (يُستدعى بعد استهلاك '@' و'view')
+    std::shared_ptr<ViewStmt> viewDeclaration(); // @view.<Kind>=name ... .end/view
+    std::shared_ptr<ViewStmt> elementDeclaration(); // @element.<Kind>=name ... .end/element
+    std::shared_ptr<ViewStmt> loopCanvasDeclaration(); // @loop.<Kind>=name ... .end/loop OR @loop=name ...
+    StmtPtr uiBindingStatement(); // on.<element>.<event>=handler(...); inside a Container
     StmtPtr warpDeclaration();                    // warp name = expr;              (يُستدعى بعد استهلاك 'warp')
     StmtPtr themeDeclaration();                   // @theme=Name key=expr; ... .end/theme  (يُستدعى بعد استهلاك '@' و'theme')
 
