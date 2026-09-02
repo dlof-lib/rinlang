@@ -18,6 +18,7 @@
     { "include": "#keywords-storage" },
     { "include": "#keyword-print" },
     { "include": "#make-unit" },
+    { "include": "#reckon-unit" },
     { "include": "#container-statement-keywords" },
     { "include": "#relation-keywords" },
     { "include": "#attribute-keywords" },
@@ -208,8 +209,32 @@
         },
         {
           "comment": "Capability names, only when they follow use/need/allow/deny (Rin's Make-Unit capability policy surface).",
-          "match": "(?<=\\b(?:use|need|allow|deny)\\s)\\s*(container|loop|function|condition|return|view|data|api|import|table|doc|chatbot)\\b",
+          "match": "(?<=\\b(?:use|need|allow|deny)\\s)\\s*(container|loop|function|condition|return|view|data|api|import|table|doc|chatbot|reckon)\\b",
           "name": "support.type.capability.make.rin"
+        }
+      ]
+    },
+
+    "reckon-unit": {
+      "comment": "Reckon: a two-line computed value over a collection. See docs/RECKON.md.",
+      "patterns": [
+        {
+          "comment": "reckon name(collection) header.",
+          "match": "\\b(reckon)\\b\\s+([A-Za-z_][A-Za-z0-9_]*)",
+          "captures": {
+            "1": { "name": "keyword.control.reckon.rin" },
+            "2": { "name": "entity.name.function.reckon.rin" }
+          }
+        },
+        {
+          "comment": "where filter clause on the body line.",
+          "match": "\\bwhere\\b",
+          "name": "keyword.control.reckon.rin"
+        },
+        {
+          "comment": "item: the implicit per-element binding, only meaningful inside a Reckon body.",
+          "match": "\\bitem\\b",
+          "name": "variable.language.reckon-item.rin"
         }
       ]
     },
