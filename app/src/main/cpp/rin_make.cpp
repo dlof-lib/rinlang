@@ -14,6 +14,7 @@ static void collect(const StmtPtr& stmt, std::set<std::string>& out) {
     if (std::dynamic_pointer_cast<WhileStmt>(stmt) || std::dynamic_pointer_cast<ForStmt>(stmt)) out.insert("loop");
     if (std::dynamic_pointer_cast<IfStmt>(stmt) || std::dynamic_pointer_cast<PlusConditionStmt>(stmt)) out.insert("condition");
     if (std::dynamic_pointer_cast<ReturnStmt>(stmt)) out.insert("return");
+    if (std::dynamic_pointer_cast<ReckonStmt>(stmt)) out.insert("reckon");
     if (std::dynamic_pointer_cast<BreakStmt>(stmt) || std::dynamic_pointer_cast<ContinueStmt>(stmt)) out.insert("loop-control");
     if (std::dynamic_pointer_cast<ViewStmt>(stmt) || std::dynamic_pointer_cast<WarpStmt>(stmt) || std::dynamic_pointer_cast<ThemeStmt>(stmt)) out.insert("view");
     if (auto c = std::dynamic_pointer_cast<ContainerStmt>(stmt)) {
@@ -60,13 +61,13 @@ std::set<std::string> makeCapabilities(const std::vector<StmtPtr>& body) {
 }
 
 std::vector<std::string> makeDefaultAllows(const std::string& kind) {
-    if (kind == "component") return {"function","condition","loop","loop-control","return","io","container","view","data","table","doc"};
-    if (kind == "page") return {"function","condition","loop","loop-control","return","io","container","view","data","table","doc","api"};
-    if (kind == "library" || kind == "module") return {"function","condition","loop","loop-control","return","io","data","table","doc","import"};
-    if (kind == "service") return {"function","condition","loop","loop-control","return","io","container","data","api","doc","import"};
-    if (kind == "task") return {"function","condition","loop","loop-control","return","io","data","container"};
-    if (kind == "data") return {"condition","loop","loop-control","return","io","data","table","doc"};
-    if (kind == "plugin") return {"function","condition","loop","loop-control","return","io","container","view","data","api","import","chatbot"};
+    if (kind == "component") return {"function","condition","loop","loop-control","return","io","container","view","data","table","doc","reckon"};
+    if (kind == "page") return {"function","condition","loop","loop-control","return","io","container","view","data","table","doc","api","reckon"};
+    if (kind == "library" || kind == "module") return {"function","condition","loop","loop-control","return","io","data","table","doc","import","reckon"};
+    if (kind == "service") return {"function","condition","loop","loop-control","return","io","container","data","api","doc","import","reckon"};
+    if (kind == "task") return {"function","condition","loop","loop-control","return","io","data","container","reckon"};
+    if (kind == "data") return {"condition","loop","loop-control","return","io","data","table","doc","reckon"};
+    if (kind == "plugin") return {"function","condition","loop","loop-control","return","io","container","view","data","api","import","chatbot","reckon"};
     if (kind == "app") return {};
     return {"__unknown_make_kind__"};
 }
