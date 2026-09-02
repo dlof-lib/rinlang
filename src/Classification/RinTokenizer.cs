@@ -40,7 +40,9 @@ namespace RinLang.VSSDK.Classification
                 "abs","sqrt","pow","floor","ceil","round","min","max","random","len","upper","lower","trim",
                 "substr","split","join","indexOf","replace","contains","charAt","toString","toNumber","toBool",
                 "isBool","sum","mean","median","variance","stddev","mode","minOf","maxOf","normalize","scale",
-                "shift","groupContainers","groupMembers","sectionVars","sectionNames","hasSection","insertDoc",
+                "shift","product","count","range","geometricMean","harmonicMean","rms","percentile","iqr",
+                "weightedMean","zscore","cumulativeSum","movingAverage","clamp",
+                "groupContainers","groupMembers","sectionVars","sectionNames","hasSection","insertDoc",
                 "updateDoc","deleteDoc","findDoc","queryDocs","queryOneDoc","docIds","allDocs","countDocs","call",
                 "callApi","push","pop","sort","keys","values","has","remove","writeFile","appendFile","readFile",
                 "fileExists","deleteFile","isInstalled","listInstalled","loadInstalled"
