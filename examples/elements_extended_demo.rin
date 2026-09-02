@@ -1,0 +1,94 @@
+// examples/elements_extended_demo.rin — the ready-elements expansion (docs/RIN_ELEMENTS.md):
+// link/radio/slider/search/select/file/date/time/code_editor/calculator + an RTL row.
+// Same three-layer split every other Loop demo uses: @container owns behavior, @loop owns
+// geometry/colors/sizes, @element only describes semantic components + functional data.
+
+@container=app
+    @element.button=save
+        text="حفظ";
+    .end/element
+
+    @element.button=cancel
+        text="إلغاء";
+    .end/element
+
+    on.save.click=saveForm();
+.end/container
+
+fun saveForm() {
+    print "Saved";
+}
+
+@loop=canvas
+    width=390;
+    height=900;
+    background="#ffffff";
+    element_width=320;
+    element_height=44;
+    element_color="#111111";
+    element_text_size=16;
+
+    @element.text=title
+        text="Ready Elements";
+    .end/element
+
+    // Row (right-to-left): "save" sits flush right, "cancel" follows to its left — reading
+    // order for Arabic UIs, with no reordering of the children and no gap/align changes.
+    @element.row=actions
+        direction="rtl";
+
+        @element.button=save
+            text="حفظ";
+        .end/element
+
+        @element.button=cancel
+            text="إلغاء";
+        .end/element
+    .end/element
+
+    @element.link=more
+        text="مزيد من المعلومات";
+    .end/element
+
+    @element.radio=optionA
+        label="خيار أ";
+        checked=true;
+    .end/element
+
+    @element.radio=optionB
+        label="خيار ب";
+    .end/element
+
+    @element.slider=volume
+        min=0;
+        max=100;
+        value=40;
+    .end/element
+
+    @element.search=search
+        placeholder="بحث...";
+    .end/element
+
+    @element.select=country
+        placeholder="اختر الدولة";
+    .end/element
+
+    @element.file=attachment
+        placeholder="لم يتم اختيار ملف";
+    .end/element
+
+    @element.date=dueDate
+        placeholder="اختر التاريخ";
+    .end/element
+
+    @element.time=dueTime
+        placeholder="اختر الوقت";
+    .end/element
+
+    @element.code_editor=snippet
+        value="print \"مرحبا\";";
+    .end/element
+
+    @element.calculator=calc
+    .end/element
+.end/loop
