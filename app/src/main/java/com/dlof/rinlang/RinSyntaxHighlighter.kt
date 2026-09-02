@@ -77,7 +77,10 @@ object RinSyntaxHighlighter {
         "row", "style", "document", "route",
         "data", "api", "import", "table", "doc", "portal", "block", "pipe",
         "plus", "condition",
-        "loop", "function", "view", "chatbot"
+        "loop", "function", "view", "chatbot", "element", "container", "on",
+        "button", "input", "search", "image", "video", "audio", "progress",
+        "checkbox", "radio", "switch", "slider", "select", "list", "column", "box",
+        "card", "sidebar", "popup", "modal", "tabs", "code_editor", "calculator", "divider"
     )
 
     // توجيهات سياسة وحدة make (@make.(name) ... kind/use/need/allow/deny/strict/...) —
@@ -102,14 +105,7 @@ object RinSyntaxHighlighter {
         "abs", "sqrt", "pow", "floor", "ceil", "round", "min", "max", "random",
         "len", "upper", "lower", "trim", "substr", "split", "join",
         "indexOf", "replace", "contains", "charAt", "toString", "toNumber",
-        "push", "pop", "sort", "keys", "values", "has", "remove",
-        // Stats/pipeline functions usable as `|>` steps, incl. inside a reckon body -- see
-        // docs/RECKON.md. sum/mean/.../shift already existed as natives but were missing from
-        // this list; product..clamp are the new Reckon-arithmetic expansion.
-        "sum", "mean", "median", "variance", "stddev", "mode", "minOf", "maxOf",
-        "normalize", "scale", "shift",
-        "product", "count", "range", "geometricMean", "harmonicMean", "rms",
-        "percentile", "iqr", "weightedMean", "zscore", "cumulativeSum", "movingAverage", "clamp"
+        "push", "pop", "sort", "keys", "values", "has", "remove"
     )
 
     // نص محاط بعلامتي تنصيص مع دعم التهريب (\" \\ \n ...) بنفس أسلوب rin_lexer.cpp::scanString.
