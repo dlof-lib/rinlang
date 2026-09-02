@@ -51,6 +51,9 @@
     <!-- توجيهات سياسة وحدة make (kind/use/need/allow/deny/strict/input/output/public/private/
          version/description) — بنفسجي مميز بنفس هوية الكلمات المفتاحية التحكّمية في VS Code -->
     <color name="syntax_make_directive">#C586C0</color>
+    <!-- `item` الضمني داخل مفهوم Reckon الحسابي بسطرين (docs/RECKON.md) — لون مائل مستقل
+         لتمييزه كـ"مرجع ضمني" وليس متغيّراً مُعلَناً صراحةً -->
+    <color name="syntax_reckon_item">#FF8A6B</color>
 
     <!-- الهوية الثانية "أخضر" — تُستخدم إلى جانب البنفسجي في: مؤشر التبويب السفلي، حالة
          "تم الانتساب"، حبّات إحصائيات التنزيلات/التثبيت، وأيقونة "موثّق" — بلا استبدال
