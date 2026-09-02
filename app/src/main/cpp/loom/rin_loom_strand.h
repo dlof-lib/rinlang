@@ -62,6 +62,15 @@ enum class StrandKind {
     // path, see viewDeclaration() vs objectLiteralStatement() in rin_parser.cpp) — no collision.
     OBJECT,
 
+    // ---- Ready-elements expansion (@element.* catalog, docs/RIN_ELEMENTS.md): the remaining
+    // "بدون تنسيق" (no built-in style, just semantics + function) leaf kinds the doc already
+    // promised but the engine didn't back yet. Every one of these reuses an existing measure/
+    // paint primitive below (LINK->Text's box, RADIO->Checkbox's box-but-circular, SLIDER->
+    // Progress-with-a-thumb, SEARCH/SELECT/FILE/DATE/TIME/CODE_EDITOR->the same bordered Field
+    // box Input/TextArea already draw) rather than inventing parallel machinery — same rule
+    // ICONBUTTON/TABITEM above already follow.
+    LINK, RADIO, SLIDER, SELECT, LIST, LISTITEM, FILE, DATE, TIME, CODE_EDITOR, CALCULATOR, SEARCH,
+
     CUSTOM
 };
 inline StrandKind strandKindFromTag(const std::string& tag) {
@@ -112,6 +121,30 @@ inline StrandKind strandKindFromTag(const std::string& tag) {
     if (tag == "IconButton" || tag == "iconbutton" || tag == "iconButton") return StrandKind::ICONBUTTON;
     if (tag == "Object" || tag == "object") return StrandKind::OBJECT;
 
+    // ---- Ready-elements expansion ----
+    if (tag == "Link" || tag == "link") return StrandKind::LINK;
+    if (tag == "Radio" || tag == "radio") return StrandKind::RADIO;
+    if (tag == "Slider" || tag == "slider" || tag == "Range" || tag == "range") return StrandKind::SLIDER;
+    if (tag == "Select" || tag == "select" || tag == "Dropdown" || tag == "dropdown") return StrandKind::SELECT;
+    if (tag == "List" || tag == "list") return StrandKind::LIST;
+    if (tag == "ListItem" || tag == "listitem" || tag == "listItem") return StrandKind::LISTITEM;
+    if (tag == "File" || tag == "file" || tag == "FilePicker" || tag == "filepicker" || tag == "filePicker")
+        return StrandKind::FILE;
+    if (tag == "Date" || tag == "date" || tag == "DatePicker" || tag == "datepicker" || tag == "datePicker")
+        return StrandKind::DATE;
+    if (tag == "Time" || tag == "time" || tag == "TimePicker" || tag == "timepicker" || tag == "timePicker")
+        return StrandKind::TIME;
+    if (tag == "CodeEditor" || tag == "codeeditor" || tag == "codeEditor" || tag == "code_editor")
+        return StrandKind::CODE_EDITOR;
+    if (tag == "Calculator" || tag == "calculator") return StrandKind::CALCULATOR;
+    if (tag == "Search" || tag == "search" || tag == "SearchBar" || tag == "searchbar" || tag == "searchBar")
+        return StrandKind::SEARCH;
+    // Sidebar/Popup: pure vocabulary aliases onto existing kinds (Drawer/Dialog already do the
+    // real work — a side-panel and a popup are exactly those, under the names this doc's element
+    // catalog uses). No new StrandKind needed, matching the Box/Container/Panel/Frame precedent above.
+    if (tag == "Sidebar" || tag == "sidebar") return StrandKind::DRAWER;
+    if (tag == "Popup" || tag == "popup") return StrandKind::DIALOG;
+
     return StrandKind::CUSTOM; // resolved via Bolt (plugin) registry — see architecture doc §18
 }
 inline std::string strandKindName(StrandKind k) {
@@ -155,6 +188,19 @@ inline std::string strandKindName(StrandKind k) {
         case StrandKind::ICON: return "Icon";
         case StrandKind::ICONBUTTON: return "IconButton";
         case StrandKind::OBJECT: return "Object";
+
+        case StrandKind::LINK: return "Link";
+        case StrandKind::RADIO: return "Radio";
+        case StrandKind::SLIDER: return "Slider";
+        case StrandKind::SELECT: return "Select";
+        case StrandKind::LIST: return "List";
+        case StrandKind::LISTITEM: return "ListItem";
+        case StrandKind::FILE: return "File";
+        case StrandKind::DATE: return "Date";
+        case StrandKind::TIME: return "Time";
+        case StrandKind::CODE_EDITOR: return "CodeEditor";
+        case StrandKind::CALCULATOR: return "Calculator";
+        case StrandKind::SEARCH: return "Search";
 
         default: return "Custom";
     }
