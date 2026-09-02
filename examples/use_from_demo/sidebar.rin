@@ -1,0 +1,15 @@
+// ============================================================================
+//  examples/use_from_demo/sidebar.rin
+//  A file that defines two named, reusable things — one UI element and one
+//  data container — meant to be called from another file with
+//  `use ... from "...";`. See docs/cross-file-containers.md.
+// ============================================================================
+
+@view.Column=Sidebar width = 220 bg = "#0F0F14"
+    @view.Text=navHome text = "Home";
+    @view.Text=navSettings text = "Settings";
+.end/view
+
+@container=SidebarState
+    let open = true;
+.end/container
