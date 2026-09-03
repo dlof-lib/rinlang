@@ -4392,6 +4392,25 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
         return;
     }
 
+    // RCS-1.0 §3.14 Dependency (Phase 3): 'requires A, B;' -- فحص إلزامي فوري (لا خيار لتعطيله):
+    // كل اسم يُفحَص عبر containers.count(name) (نفس آلية native hasContainer الموجودة فعلاً)؛ أول
+    // اسم غير مسجَّل بعد يرمي RinError بكود E0041_MissingDependency فوراً، فيتوقف تنفيذ جسم الحاوية
+    // عند هذه النقطة بالضبط -- وضع 'requires' كأول عبارة في الجسم (كما في كل أمثلة §3.14) يحقّق
+    // حرفياً "فحص قبل أي كود آخر". خارج أي حاوية (containerStack فارغة) يبقى الفحص فعّالاً أيضاً
+    // (لا علاقة له بوجود حاوية أب -- يتحقق فقط من وجود الأسماء المطلوبة في سجلّ containers العام).
+    if (auto s = std::dynamic_pointer_cast<DependencyStmt>(stmt)) {
+        for (const auto& depName : s->names) {
+            if (containers.count(depName) == 0) {
+                auto d = diagErr(diag::Code::E0041_MissingDependency, s->line,
+                    "requires: الحاوية المطلوبة '" + depName + "' غير موجودة");
+                d.diagnostic->withReason("RCS-1.0 §3.14 Dependency: 'requires' يفحص وجود كل اعتماد فوراً قبل أي كود آخر")
+                 .withHint("تأكّد أن حاوية باسم '" + depName + "' مُعرَّفة أو تم إنشاؤها (spawn/create) قبل هذه النقطة");
+                throw d;
+            }
+        }
+        return;
+    }
+
     // RCS-1.0 §3.6 Events: 'on.event "name"(...) { .. }' -- تُسجَّل فقط (لا تُنفَّذ فوراً)، بنفس
     // أسلوب LifecycleHookStmt أعلاه بالضبط: دالة (Callable) تُخزَّن بداخل eventHandlers[الحاوية
     // الحالية] لتُستدعى لاحقاً من فرع EmitStmt أدناه عند emit في أحد أبنائها (المباشر افتراضياً،
