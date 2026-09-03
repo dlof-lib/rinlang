@@ -8,7 +8,10 @@
                                 // clcContainerOpen/clcContainerClose/libraryImport/libraryExport
                                 // في registerNatives()/invokeCallee() (rin_interpreter.cpp)
                                 // وdocs/RIN_INTEGRATION.md في مستودع rin-clc الأصلي.
+#include "loader_ui/library_loader_ui.h" // rin::loaderui — انظر setImportUISink/setImportUIMode أدناه
+                                          // وربطها الفعلي مع @import في rin_interpreter.cpp.
 #include <sstream>
+#include <iostream>
 #include <unordered_map>
 #include <unordered_set>
 #include <memory>
@@ -402,6 +405,16 @@ public:
     using StreamSink = std::function<void(const std::string& incrementalChunk)>;
     void setStreamSink(StreamSink sink) { streamSink_ = std::move(sink); }
 
+    // ---- Library Loader UI (see loader_ui/library_loader_ui.h) ----
+    // [importUISink_] اختياري، غير مفعّل افتراضياً (nullptr)، لذا @import يتصرف حرفياً كما كان قبل
+    // هذه الميزة متى لم يُضبط أي sink (نفس فلسفة streamSink_ أعلاه). عند ضبطه، تُبلَّغ كل مرحلة من
+    // مراحل @import (Resolving/Locating/Reading/Parsing/Dependencies/Registering/Initializing/
+    // Completed) فعلياً أثناء تنفيذها في execute()، وليس عبر Animation وهمية.
+    void setImportUISink(std::shared_ptr<loaderui::ILoadSink> sink) { importUISink_ = std::move(sink); }
+    // اختصار سريع: Verbose -> شريط تقدّم على std::cout، Quiet -> بلا أي إخراج (لكن بمرور فعلي عبر
+    // نفس مسار LoadSession، بخلاف عدم ضبط أي sink إطلاقاً).
+    void setImportUIMode(loaderui::Mode mode) { importUISink_ = loaderui::makeSink(mode, std::cout); }
+
     // كل معرّفات الربط العامة (container.link.id) المسجَّلة أثناء هذا التشغيل، ومقابل كل واحد اسم
     // الحاوية التي سجّلته. تُستخدم من طرف التطبيق/الأدوات الخارجية (مثلاً tools/rin_link_index.py)
     // لبناء فهرس ربط شامل بين ملفات rin. و.html/.js/.cpp عبر نفس المعرّف (انظر rin_ast.h: LinkIdDeclStmt).
@@ -532,6 +545,9 @@ private:
     std::optional<std::string> lastErrorMessage_;
     int lastErrorLine_ = 0;
     StreamSink streamSink_; // انظر setStreamSink() أعلاه — فارغ افتراضياً (no-op)
+
+    std::shared_ptr<loaderui::ILoadSink> importUISink_; // انظر setImportUISink()/setImportUIMode() أعلاه — nullptr افتراضياً (no-op)
+    std::size_t importDepth_ = 0; // عمق @import الحالي (0 = أعلى مستوى)، يُمرَّر إلى LoadSession في execute()
 
     // ---- Diagnostics helpers (src/diagnostics) ----
     // يبني RinError غنياً (Diagnostic كامل: كود + موقع من رقم السطر + رسالة) لأي خطأ تشغيل. العمود
