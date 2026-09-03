@@ -1,0 +1,10 @@
+// main.rin — أبسط مثال ممكن على RinHTML: حالة (state) ودالة تُستدعى من HTML.
+let count = 0;
+
+fun add() {
+    count = count + 1;
+}
+
+fun reset() {
+    count = 0;
+}
