@@ -2399,13 +2399,23 @@ void Interpreter::registerNatives() {
 
     // destroyContainer(name) -> يحذف حاوية أُنشئت عبر spawn (أو أي حاوية أخرى) بالكامل من containers/
     // containerKinds. true إن كانت موجودة فحُذفت، false إن لم تكن موجودة أصلاً.
+    // RCS-1.0 §3.2 Lifecycle: on destroy() (إن كانت مُعرَّفة لهذه الحاوية) يُستدعى أولاً، قبل أي
+    // حذف فعلي -- حتى يستطيع كودها قراءة حقول state/getField للحاوية وهي لا تزال موجودة بالكامل.
     natives["destroyContainer"] = [this](std::vector<Value>& a, int line) -> Value {
         expectArgs("destroyContainer", a, 1, line);
         std::string name = asString(a[0], "destroyContainer", line);
         bool existed = containers.count(name) > 0;
+        if (existed) {
+            auto hooksIt = containerLifecycle.find(name);
+            if (hooksIt != containerLifecycle.end()) {
+                fireLifecycleHook(name, hooksIt->second.destroy, {}, line);
+            }
+        }
         containers.erase(name);
         containerKinds.erase(name);
         containerCustomKind.erase(name);
+        containerLifecycle.erase(name);
+        containerStateNames.erase(name);
         return Value::boolean_(existed);
     };
 
@@ -4264,6 +4274,43 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
         env->define(s->name, v);
         return;
     }
+
+    // RCS-1.0 §3.2 Lifecycle: 'on init/mount/update/destroy/error(...) { .. }' لا يُنفَّذ جسمها
+    // فوراً كعبارة عادية إطلاقاً -- فقط تُسجَّل كدالة (Callable) بداخل containerLifecycle[الحاوية
+    // الحالية] لتُستدعى لاحقاً من نقاط محدَّدة (انظر ContainerStmt أدناه لـ init/mount،
+    // maybeTriggerStateUpdate لـ update، destroyContainer native لـ destroy، fireLifecycleHook
+    // لـ error). "الحاوية الحالية" = قمة containerStack وقت تنفيذ جسم الحاوية (نفس اللحظة التي
+    // تُعرَّف بها أي state/fun أخرى بداخلها) -- إن ظهرت خارج أي حاوية (containerStack فارغة)، لا
+    // شيء يحدث (تُسجَّل بلا مفتاح صالح فتبقى ميتة عملياً، بلا أي خطأ لأن هذا امتداد إضافي بحت).
+    if (auto s = std::dynamic_pointer_cast<LifecycleHookStmt>(stmt)) {
+        if (containerStack.empty()) return;
+        auto callable = std::make_shared<Callable>();
+        callable->declaration = s->asFunction;
+        callable->closure = env;
+        Value v; v.type = Value::Type::FUNCTION; v.function = callable;
+        auto& hooks = containerLifecycle[containerStack.back()];
+        if (s->hook == "init") hooks.init = v;
+        else if (s->hook == "mount") hooks.mount = v;
+        else if (s->hook == "update") hooks.update = v;
+        else if (s->hook == "destroy") hooks.destroy = v;
+        else if (s->hook == "error") hooks.error = v;
+        return;
+    }
+
+    // RCS-1.0 §3.3 State: 'state IDENT = expr;' -- يُعرَّف الاسم في بيئة الحاوية تماماً كـ `let`
+    // (executeBlock عادي يستطيع قراءته/تحديثه بلا أي فرق سطحي)، والفرق الوحيد الفعلي يُسجَّل هنا:
+    // إضافة اسمه إلى containerStateNames[الحاوية الحالية] حتى يتعرَّف AssignExpr لاحقاً على أي
+    // إسناد لهذا الاسم كـ "تغيّر حالة" يستحق إطلاق on update(prevState) تلقائياً (انظر
+    // maybeTriggerStateUpdate). خارج أي حاوية (containerStack فارغة) يُعامَل تماماً كـ `let` عادية
+    // بلا أي تسجيل إضافي -- امتداد إضافي بحت، لا خطأ.
+    if (auto s = std::dynamic_pointer_cast<StateDeclStmt>(stmt)) {
+        Value v = Value::nil();
+        if (s->initializer) v = evaluate(s->initializer, env);
+        env->define(s->name, v);
+        if (!containerStack.empty()) containerStateNames[containerStack.back()].insert(s->name);
+        return;
+    }
+
     if (auto s = std::dynamic_pointer_cast<ReturnStmt>(stmt)) {
         Value v = Value::nil();
         if (s->value) v = evaluate(s->value, env);
@@ -4325,6 +4372,20 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
         containerStack.push_back(containerKey);
         executeBlock(s->body, containerEnv);
         containerStack.pop_back();
+
+        // RCS-1.0 §3.2 Lifecycle: init() ثم mount() تلقائياً بعد انتهاء الجسم التصريحي للحاوية
+        // (state/fun/on ... كلها سُجِّلت الآن). Phase 1 لا تملك بعد طبقة Tree (§3.5) بتعليق حقيقي
+        // للإرفاق بشجرة أب، لذا mount() تُطلَق فوراً بعد init() -- كل حاوية "مُرفَقة" بمجرد
+        // إنشائها بنفس دلالة التنفيذ الفوري الحالية للغة (سيُعاد ضبط توقيت mount() لاحقاً مرحلة
+        // Tree/Routing إن لزم دون كسر أي برنامج يعتمد على هذا التوقيت اليوم). لا شيء يحدث إن لم
+        // تُعرَّف init/mount لهذه الحاوية (fireLifecycleHook تتجاهل قيمة nil بصمت).
+        {
+            auto hooksIt = containerLifecycle.find(containerKey);
+            if (hooksIt != containerLifecycle.end()) {
+                fireLifecycleHook(containerKey, hooksIt->second.init, {}, s->line);
+                fireLifecycleHook(containerKey, hooksIt->second.mount, {}, s->line);
+            }
+        }
 
         if (s->kind == ContainerKind::IMPORT) {
             // ---- استيراد حقيقي: قراءة ملف .rin آخر من القرص، تحليله، وتنفيذه فعلياً ----
@@ -4951,6 +5012,72 @@ void Interpreter::fireChatEvent(const std::string& container, const std::string&
     }
 }
 
+// ---- RCS-1.0 §3.2 Lifecycle + §3.3 State (Phase 1) ----
+
+// انظر إعلانها في rin_interpreter.h للشرح الكامل: يستدعي hookFn (إن كانت دالة فعلاً) ويوجِّه أي
+// RinError يقع أثناء الاستدعاء إلى on error(err) لنفس الحاوية إن وُجد، وإلا يُعاد رميه كما هو.
+void Interpreter::fireLifecycleHook(const std::string& containerKey, const Value& hookFn,
+                                     std::vector<Value> args, int line) {
+    if (hookFn.type != Value::Type::FUNCTION || !hookFn.function) return;
+    try {
+        callFunction(hookFn.function, args, line);
+    } catch (RinError& e) {
+        auto it = containerLifecycle.find(containerKey);
+        if (it != containerLifecycle.end() && it->second.error.type == Value::Type::FUNCTION &&
+            it->second.error.function) {
+            // err = { message: "..." } -- نفس شكل الخطأ الموصوف في RCS-1.0 §3.2 (مثال on error).
+            // نستدعي on error مباشرة (لا عبر fireLifecycleHook نفسها) حتى لا نُطلِق حلقة لا نهائية
+            // إن كان on error نفسها ترمي خطأً آخر -- في تلك الحالة يُعاد رمي الخطأ الجديد كما هو.
+            auto errMap = std::make_shared<MapData>();
+            errMap->push_back({Value::string("message"), Value::string(e.message)});
+            std::vector<Value> errArgs{Value::makeMap(errMap)};
+            callFunction(it->second.error.function, errArgs, line);
+            return;
+        }
+        throw; // لا خُطّاف on error مُعرَّف لهذه الحاوية -> نفس سلوك أي خطأ Rin عادي بلا كتم صامت
+    }
+}
+
+// انظر إعلانها في rin_interpreter.h للشرح الكامل.
+void Interpreter::assignStateAware(Environment* owner, const std::string& name, const Value& newValue, int line) {
+    // يبحث عن الحاوية التي تملك بيئة owner فعلاً (نفس المؤشر بالضبط) -- بحث خطي مقبول التكلفة
+    // لعدد الحاويات المتوقَّع في مفسّر Rin، ولا يُنفَّذ إطلاقاً إن لم تكن owner بيئة حاوية أصلاً
+    // (أي متغيّر عادي داخل دالة/حلقة عادية لا يمر بهذا المسار إطلاقاً بفضل الفحص الأول أدناه).
+    std::string containerKey;
+    for (auto& kv : containers) {
+        if (kv.second.get() == owner) { containerKey = kv.first; break; }
+    }
+    if (containerKey.empty()) { owner->values[name] = newValue; return; }
+
+    auto namesIt = containerStateNames.find(containerKey);
+    bool isState = namesIt != containerStateNames.end() && namesIt->second.count(name) > 0;
+    if (!isState) { owner->values[name] = newValue; return; }
+
+    auto hooksIt = containerLifecycle.find(containerKey);
+    bool hasUpdateHook = hooksIt != containerLifecycle.end() &&
+                          hooksIt->second.update.type == Value::Type::FUNCTION && hooksIt->second.update.function;
+
+    Value prevSnapshot;
+    if (hasUpdateHook) {
+        // prevState = خريطة (map) بكل حقول state الحالية لهذه الحاوية *قبل* هذا الإسناد بالذات
+        // (لا فقط قيمة الحقل الواحد الذي تغيَّر) -- أكثر فائدة عملياً عند وجود أكثر من حقل state.
+        auto prevState = std::make_shared<MapData>();
+        for (auto& fieldName : namesIt->second) {
+            Value v;
+            if (owner->values.count(fieldName)) v = owner->values[fieldName];
+            prevState->push_back({Value::string(fieldName), v});
+        }
+        prevSnapshot = Value::makeMap(prevState);
+    }
+
+    owner->values[name] = newValue;
+
+    if (hasUpdateHook) {
+        std::vector<Value> args{prevSnapshot};
+        fireLifecycleHook(containerKey, hooksIt->second.update, args, line);
+    }
+}
+
 Value Interpreter::callFunction(const std::shared_ptr<Callable>& fn, std::vector<Value>& args, int line) {
     if (args.size() != fn->declaration->params.size()) {
         auto d = diagErr(diag::Code::E0007_InvalidArguments, line,
@@ -5167,9 +5294,20 @@ Value Interpreter::evaluate(const ExprPtr& expr, EnvPtr env) {
     }
     if (auto e = std::dynamic_pointer_cast<AssignExpr>(expr)) {
         Value v = evaluate(e->value, env);
-        if (!env->assign(e->name, v)) {
+        // RCS-1.0 §3.3 State: نجد أولاً البيئة (Environment) التي تملك هذا الاسم فعلاً -- بالضبط
+        // نفس المسار الذي يتبعه Environment::assign (تصعيد عبر parent حتى إيجاد أول تعريف) -- ثم
+        // نُفوِّض الكتابة الفعلية إلى assignStateAware() التي تكتب القيمة وتُطلق تلقائياً
+        // on update(prevState) إن كان هذا الاسم أحد حقول `state` لحاوية معروفة. لا تغيير في
+        // السلوك لأي متغيّر عادي (let/معاملات دالة/إلخ): يبقى الإسناد يعمل تماماً كما كان
+        // (undefinedVariableErr عند الفشل).
+        Environment* owner = nullptr;
+        for (Environment* cur = env.get(); cur; cur = cur->parent.get()) {
+            if (cur->values.count(e->name)) { owner = cur; break; }
+        }
+        if (!owner) {
             throw undefinedVariableErr(e->name, e->line, env);
         }
+        assignStateAware(owner, e->name, v, e->line);
         return v;
     }
     if (auto e = std::dynamic_pointer_cast<LogicalExpr>(expr)) {
