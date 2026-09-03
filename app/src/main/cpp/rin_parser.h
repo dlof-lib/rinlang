@@ -44,6 +44,11 @@ private:
     // عبر consume(). إن كان recoveryEngine مفعّلاً (داخل parseCollectingDiagnostics) يُصدِر
     // الـ Diagnostic إلى المُجمِّع بدل رميه مباشرة، ويستدعي المستدعي synchronize() بنفسه.
     RinError err(diag::Code code, const Token& tok, std::string message) const;
+    // نسخة غنية من err(): تضيف reason: (لماذا حدث الخطأ) و/أو help: (كيف يُصلَح) مباشرة، لتفادي
+    // تكرار بناء Diagnostic يدوياً في كل موقع استدعاء يحتاج تفصيلاً أكثر من رسالة سطر واحد.
+    // expected/found اختياريان: يُملآن فقط إن مُرِّرت سلسلة غير فارغة.
+    RinError errRich(diag::Code code, const Token& tok, std::string message, std::string reason,
+                      std::string hint, std::string expected = "", std::string found = "") const;
     // نسخة لأخطاء تُبنى من Stmt/Expr (اللذان يحملان .line فقط بلا عمود دقيق، انظر rin_ast.h)؛
     // العمود يُقارَب بـ 1 (بداية السطر) — لا يزال أدق بكثير من عدم وجود Diagnostic إطلاقاً.
     RinError errAtLine(diag::Code code, int line, std::string message) const;
