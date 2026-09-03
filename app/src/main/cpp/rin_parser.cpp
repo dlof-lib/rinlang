@@ -196,6 +196,13 @@ StmtPtr Parser::declaration() {
         advance(); // 'emit'
         return emitStatement();
     }
+    // RCS-1.0 §3.14 Dependency (Phase 3): 'requires' IDENT (',' IDENT)* ';' -- كلمة سياقية غير
+    // محجوزة أيضاً (بنفس أسلوب 'state'/'slot' أعلاه بالضبط)، مُميَّزة بالنظر خطوة إضافية للأمام
+    // (IDENT مباشرة بعدها) حتى لا تصطدم باستخدام "requires" اسم متغيّر/دالة عادية في أي سياق آخر.
+    if (check(TokenType::IDENT) && peek().lexeme == "requires" && checkNext(TokenType::IDENT)) {
+        advance(); // 'requires'
+        return dependencyDeclaration();
+    }
     // '@theme=Name key=expr; ... .end/theme' -> Rin Loom Theme (Pattern Book) declaration, نفس
     // أسلوب فحص '@import'/'@view' أعلاه بالضبط.
     if (check(TokenType::AT) && checkNext(TokenType::IDENT) &&
@@ -400,6 +407,21 @@ StmtPtr Parser::eventHandlerDeclaration() {
     s->asFunction = fn;
     s->line = nameTok.line;
     return s;
+}
+
+// RCS-1.0 §3.14 Dependency (Phase 3): requires IDENT (',' IDENT)* ';'  (يُستدعى بعد استهلاك
+// 'requires' من declaration()). قائمة أسماء حاويات مطلوبة، فاصلة بينها فاصلة (,)، بلا أي أنواع أو
+// تعبيرات -- مطابقة حرفية لـ EBNF: dependency_stmt ::= "requires" IDENT ("," IDENT)* ";".
+StmtPtr Parser::dependencyDeclaration() {
+    auto stmt = std::make_shared<DependencyStmt>();
+    Token first = consume(TokenType::IDENT, "Expected a container name after 'requires'");
+    stmt->line = first.line;
+    stmt->names.push_back(first.lexeme);
+    while (match({TokenType::COMMA})) {
+        stmt->names.push_back(consume(TokenType::IDENT, "Expected a container name after ',' in 'requires' list").lexeme);
+    }
+    consume(TokenType::SEMICOLON, "Expected ';' after 'requires' statement");
+    return stmt;
 }
 
 // reckon <name>(<collection>)
