@@ -86,6 +86,11 @@ private:
     bool checkClosingTag() const;      // هل التوكن الحالي بداية ".end/..."
     void consumeEndTag(const std::string& expectedTag, int openLine, const std::string& openName = ""); // يستهلك ويتحقق من ".end/<expectedTag>" أو اختصارها ".end;"
 
+    // RCS-1.0 §3.2 Lifecycle: on init/mount/update/destroy/error(params) { body }  (يُستدعى بعد
+    // استهلاك 'on' فقط عندما لا يتبعها '.' — تلك تبقى on.<element>.<event> عبر uiBindingStatement()).
+    StmtPtr lifecycleHookDeclaration();
+    // RCS-1.0 §3.3 State: state IDENT = expr;  (يُستدعى بعد استهلاك 'state')
+    StmtPtr stateDeclaration();
     StmtPtr textDeclaration();
     StmtPtr objectStyleFieldDeclaration(ObjectStyleFieldKind kind); // txt/img/object.file/Fonts/background/css3 name=...; (حصراً داخل @Object)
     StmtPtr atBlock();                 // @container / @container.pipe / @container.data / @container.api / @container.import / @Containers.Group / @Volume
