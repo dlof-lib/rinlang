@@ -150,6 +150,19 @@ StmtPtr Parser::declaration() {
         advance(); advance();
         return loopCanvasDeclaration();
     }
+    // RCS-1.0 §3.6 Events (Phase 2): 'on.event' STRING '(' params ')' '{' body '}' -- يُميَّز عن
+    // on.<element>.<event> أدناه بالنظر ثلاث خطوات للأمام: هنا IDENT("event") ثم STRING مباشرة،
+    // بينما on.<element>.<event> يكون IDENT(اسم العنصر) ثم DOT ثم IDENT(اسم الحدث). يجب فحص هذا
+    // *قبل* on.<element>.<event> أدناه (كلاهما يبدأ بـ on '.') حتى لا يُبتلَع خطأً كربط عنصر عادي.
+    if (check(TokenType::IDENT) && peek().lexeme == "on" && checkNext(TokenType::DOT) &&
+        current + 2 < tokens.size() && tokens[current + 2].type == TokenType::IDENT &&
+        tokens[current + 2].lexeme == "event" &&
+        current + 3 < tokens.size() && tokens[current + 3].type == TokenType::STRING) {
+        advance(); // 'on'
+        advance(); // '.'
+        advance(); // 'event'
+        return eventHandlerDeclaration();
+    }
     // on.<element>.<event>=handler(...); is behavior owned by the surrounding container.
     if (check(TokenType::IDENT) && peek().lexeme == "on" && checkNext(TokenType::DOT)) {
         return uiBindingStatement();
@@ -168,6 +181,20 @@ StmtPtr Parser::declaration() {
     if (check(TokenType::IDENT) && peek().lexeme == "state" && checkNext(TokenType::IDENT)) {
         advance(); // 'state'
         return stateDeclaration();
+    }
+    // RCS-1.0 §3.5 Tree (Phase 2): 'slot' IDENT ';' -- كلمة سياقية غير محجوزة أيضاً (بنفس أسلوب
+    // 'state' أعلاه)، مُميَّزة بالنظر خطوة إضافية للأمام حتى لا تصطدم باستخدام "slot" اسم متغيّر
+    // عادي في أي سياق آخر.
+    if (check(TokenType::IDENT) && peek().lexeme == "slot" && checkNext(TokenType::IDENT)) {
+        advance(); // 'slot'
+        return slotDeclaration();
+    }
+    // RCS-1.0 §3.6 Events (Phase 2): 'emit' STRING (',' expr)? ('bubbles')? ';' -- كلمة سياقية
+    // غير محجوزة أيضاً، مُميَّزة بالنظر خطوة إضافية للأمام (STRING مباشرة بعدها، لا أي شيء آخر)
+    // حتى لا تصطدم باستخدام "emit" اسم متغيّر/دالة عادية في أي سياق آخر.
+    if (check(TokenType::IDENT) && peek().lexeme == "emit" && checkNext(TokenType::STRING)) {
+        advance(); // 'emit'
+        return emitStatement();
     }
     // '@theme=Name key=expr; ... .end/theme' -> Rin Loom Theme (Pattern Book) declaration, نفس
     // أسلوب فحص '@import'/'@view' أعلاه بالضبط.
@@ -311,6 +338,68 @@ StmtPtr Parser::stateDeclaration() {
     stmt->initializer = initializer;
     stmt->line = name.line;
     return stmt;
+}
+
+// RCS-1.0 §3.5 Tree (Phase 2): slot IDENT;  (يُستدعى بعد استهلاك 'slot' من declaration()).
+StmtPtr Parser::slotDeclaration() {
+    Token name = consume(TokenType::IDENT, "Expected a slot name after 'slot'");
+    consume(TokenType::SEMICOLON, "Expected ';' after slot declaration");
+    auto stmt = std::make_shared<SlotDeclStmt>();
+    stmt->name = name.lexeme;
+    stmt->line = name.line;
+    return stmt;
+}
+
+// RCS-1.0 §3.6 Events (Phase 2): emit STRING ("," expr)? ("bubbles")? ";"  (يُستدعى بعد استهلاك
+// 'emit' من declaration()). 'bubbles' كلمة سياقية اختيارية بلا وسائط: تُقرأ IDENT عادي، لا تتعارض
+// مع أي استخدام آخر لهذا الاسم لأنها تُفحَص فقط في هذا الموضع الدقيق (بين payload اختياري و';').
+StmtPtr Parser::emitStatement() {
+    Token nameTok = consume(TokenType::STRING, "Expected an event name string after 'emit'");
+    auto stmt = std::make_shared<EmitStmt>();
+    stmt->eventName = nameTok.lexeme;
+    stmt->line = nameTok.line;
+    if (match({TokenType::COMMA})) {
+        stmt->payload = expression();
+    }
+    if (check(TokenType::IDENT) && peek().lexeme == "bubbles") {
+        advance(); // 'bubbles'
+        stmt->bubbles = true;
+    }
+    consume(TokenType::SEMICOLON, "Expected ';' after 'emit' statement");
+    return stmt;
+}
+
+// RCS-1.0 §3.6 Events (Phase 2): on.event STRING '(' params ')' '{' body '}'  (يُستدعى بعد
+// استهلاك 'on' '.' 'event' من declaration()). نفس أسلوب lifecycleHookDeclaration() تماماً: الجسم
+// يُبنى كـ FunctionStmt عادي جاهز للاستدعاء عبر Interpreter::callFunction الموجودة فعلاً بلا أي
+// آلية استدعاء موازية جديدة.
+StmtPtr Parser::eventHandlerDeclaration() {
+    Token nameTok = consume(TokenType::STRING, "Expected an event name string after 'on.event'");
+    consume(TokenType::LPAREN, "Expected '(' after event name in 'on.event \"" + nameTok.lexeme + "\"'");
+    std::vector<std::string> params;
+    if (!check(TokenType::RPAREN)) {
+        do {
+            params.push_back(consume(TokenType::IDENT, "Expected parameter name").lexeme);
+        } while (match({TokenType::COMMA}));
+    }
+    consume(TokenType::RPAREN, "Expected ')' after event handler parameters");
+    consume(TokenType::LBRACE, "Expected '{' before event handler body 'on.event \"" + nameTok.lexeme + "\"'");
+    int savedLoopDepth = loopDepth;
+    loopDepth = 0;
+    auto body = block();
+    loopDepth = savedLoopDepth;
+
+    auto fn = std::make_shared<FunctionStmt>();
+    fn->name = "on.event " + nameTok.lexeme; // لأغراض رسائل الخطأ فقط (عدد الوسائط في callFunction)
+    fn->params = params;
+    fn->body = body;
+    fn->line = nameTok.line;
+
+    auto s = std::make_shared<EventHandlerStmt>();
+    s->eventName = nameTok.lexeme;
+    s->asFunction = fn;
+    s->line = nameTok.line;
+    return s;
 }
 
 // reckon <name>(<collection>)
