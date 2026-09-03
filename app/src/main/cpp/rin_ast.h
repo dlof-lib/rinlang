@@ -456,6 +456,17 @@ struct EventHandlerStmt : Stmt {
     std::shared_ptr<FunctionStmt> asFunction;
 };
 
+// ---- Dependency (RCS-1.0 §3.14, Phase 3) ----
+// requires IDENT ("," IDENT)* ";"  -- داخل جسم أي @container. تُفحَص فوراً وقت تنفيذها (بترتيبها
+// النصّي داخل جسم الحاوية -- وضعها كأول عبارة، كما في كل أمثلة RCS-1.0 §3.14، يحقّق حرفياً معنى
+// "تُفحَص عند on init() تلقائياً قبل أي كود آخر"، بلا الحاجة لآلية تأجيل منفصلة أو ربط ضمني بخُطّاف
+// init). كل اسم يُفحَص عبر containers.count(name) (نفس آلية native hasContainer الموجودة فعلاً)؛
+// أول اسم غير موجود يرمي RinError بكود E0041_MissingDependency فوراً (لا استمرار جزئي، ولا خيار
+// لتعطيل الفحص -- "الهدف أمان مبكر لا مرونة" كما تنص المواصفة حرفياً).
+struct DependencyStmt : Stmt {
+    std::vector<std::string> names;
+};
+
 // ---- Make Unit: وحدة صناعة/بناء عامة وقابلة للسياسة ----
 // @make.(name)
 //     kind app;
