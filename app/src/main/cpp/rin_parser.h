@@ -31,6 +31,11 @@ private:
     const Token& advance();
     bool check(TokenType type) const;
     bool checkNext(TokenType type) const; // ينظر إلى التوكن التالي (current+1) دون استهلاكه
+    // RCS-1.0 §3.13/§7 Phase 0: يحاول تحليل توجيه سياسة واحد (use/need/allow/deny/strict/
+    // version/description) في بداية جسم أي @container عادية (وليس فقط @make.(name)). يعيد
+    // false ويستعيد موضع القارئ كما كان تماماً إن لم يطابق النمط المتوقع بالضبط — حتى لا يكسر
+    // أي برنامج قديم قد يستخدم هذه الكلمات كأسماء متغيرات/دوال عادية داخل حاوية.
+    bool tryParsePolicyDirective(ContainerStmt& s);
     bool match(std::initializer_list<TokenType> types);
     const Token& consume(TokenType type, const std::string& message);
 
