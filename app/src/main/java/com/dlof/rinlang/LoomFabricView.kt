@@ -528,7 +528,7 @@ class LoomFabricView @JvmOverloads constructor(
             Kind.AVATAR -> drawAvatar(canvas, rect, attrs, resolved)
             Kind.TABS -> { /* pure row of TabItem children -- they draw their own selected state */ }
             Kind.TABITEM -> drawTabItem(canvas, rect, attrs)
-            Kind.ICON -> drawIcon(canvas, rect, attrs, resolved)
+            Kind.ICON -> drawIcon(canvas, rect, attrs, resolved ?: defaultText)
             Kind.ICONBUTTON -> {
                 drawBox(canvas, rect, attrs, resolved ?: defaultButton, defaultRadius = min(rect.width(), rect.height()) / 2f)
                 drawIcon(canvas, rect, attrs, Color.WHITE)
