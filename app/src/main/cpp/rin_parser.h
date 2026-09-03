@@ -91,6 +91,13 @@ private:
     StmtPtr lifecycleHookDeclaration();
     // RCS-1.0 §3.3 State: state IDENT = expr;  (يُستدعى بعد استهلاك 'state')
     StmtPtr stateDeclaration();
+    // RCS-1.0 §3.5 Tree (Phase 2): slot IDENT;  (يُستدعى بعد استهلاك 'slot')
+    StmtPtr slotDeclaration();
+    // RCS-1.0 §3.6 Events (Phase 2): emit STRING (, expr)? (bubbles)? ;  (يُستدعى بعد استهلاك 'emit')
+    StmtPtr emitStatement();
+    // RCS-1.0 §3.6 Events (Phase 2): on.event STRING (params) { body }  (يُستدعى بعد استهلاك
+    // 'on' '.' 'event' -- يُميَّز عن on.<element>.<event> في declaration() بالنظر للتوكن الرابع).
+    StmtPtr eventHandlerDeclaration();
     StmtPtr textDeclaration();
     StmtPtr objectStyleFieldDeclaration(ObjectStyleFieldKind kind); // txt/img/object.file/Fonts/background/css3 name=...; (حصراً داخل @Object)
     StmtPtr atBlock();                 // @container / @container.pipe / @container.data / @container.api / @container.import / @Containers.Group / @Volume
