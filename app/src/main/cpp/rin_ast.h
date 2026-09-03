@@ -408,6 +408,25 @@ struct ContainerStmt : Stmt {
     bool hasPolicy = false;
 };
 
+// ---- Lifecycle (RCS-1.0 §3.2) ----
+// on init/mount/update/destroy/error(params) { body }  -- داخل جسم أي @container.
+// نُبقي "body" على شكل FunctionStmt جاهز (اسمه = "on " + hook فقط لأغراض رسائل الخطأ) بدل عقدة
+// BlockStmt مجرّدة، حتى يُستخدَم المفسِّر Interpreter::callFunction الموجود فعلاً لاستدعاء الخُطّاف
+// بلا أي آلية استدعاء موازية جديدة (نفس فحص عدد الوسائط، نفس حارس عمق الاستدعاء، إلخ).
+struct LifecycleHookStmt : Stmt {
+    std::string hook; // "init" | "mount" | "update" | "destroy" | "error"
+    std::shared_ptr<FunctionStmt> asFunction; // params + body، يُبنى مباشرة عند التحليل
+};
+
+// ---- State (RCS-1.0 §3.3) ----
+// state IDENT = expr; -- إعلان حقل "حالة" قابل للمراقبة داخل جسم حاوية. الفرق الوحيد عن `let`:
+// أي إسناد لاحق لهذا الاسم (من داخل الحاوية أو من دالة مُعرَّفة بداخلها) يُطلق تلقائياً خُطّاف
+// on update(prevState) إن كان معرَّفاً لنفس الحاوية (انظر Interpreter::evaluate على AssignExpr).
+struct StateDeclStmt : Stmt {
+    std::string name;
+    ExprPtr initializer;
+};
+
 // ---- Make Unit: وحدة صناعة/بناء عامة وقابلة للسياسة ----
 // @make.(name)
 //     kind app;
