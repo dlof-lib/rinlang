@@ -32,6 +32,9 @@ add_executable(rin
     src/main.cpp
     ${RIN_CORE_DIR}/rin_lexer.cpp
     ${RIN_CORE_DIR}/rin_parser.cpp
+    # rin_make.cpp: validateMakeUnit/validateContainerPolicy — يستدعيهما execute() في
+    # rin_interpreter.cpp أدناه لكل @make/@container، فيفشل الربط (undefined reference) بدونه.
+    ${RIN_CORE_DIR}/rin_make.cpp
     ${RIN_CORE_DIR}/rin_interpreter.cpp
     ${RIN_CORE_DIR}/loader_ui/library_loader_ui.cpp
     ${RIN_CORE_DIR}/rin_http.cpp
@@ -39,6 +42,15 @@ add_executable(rin
     ${RIN_CORE_DIR}/diagnostics/source_manager.cpp
     ${RIN_CORE_DIR}/diagnostics/diagnostic_engine.cpp
     ${RIN_CORE_DIR}/diagnostics/diagnostic_renderer.cpp
+    # clc/ — مكتبة CLC (Rin Compact Library Container، .rcl): rin_interpreter.cpp يستدعي
+    # clc::readContainerInfo/readContainerInfoFromMemory/packDirectory/extractOneFileToMemory
+    # مباشرة ضمن registerNatives()/executeLibraryContainerBytes()، فيفشل الربط بدونها.
+    ${RIN_CORE_DIR}/clc/clc_container.cpp
+    ${RIN_CORE_DIR}/clc/clc_compress.cpp
+    ${RIN_CORE_DIR}/clc/clc_security.cpp
+    ${RIN_CORE_DIR}/clc/clc_rin_opt.cpp
+    ${RIN_CORE_DIR}/clc/clc_zip_import.cpp
+    ${RIN_CORE_DIR}/clc/sha256.cpp
 )
 
 target_include_directories(rin PRIVATE ${RIN_CORE_DIR})
