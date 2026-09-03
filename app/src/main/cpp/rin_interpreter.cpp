@@ -4295,6 +4295,15 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
             } catch (const std::exception& e) {
                 throw diagErr(diag::Code::E0016_InvalidProperty, make->line, std::string("invalid Make Unit: ") + e.what());
             }
+        } else if (s->hasPolicy) {
+            // RCS-1.0 §3.13 Security (Phase 0): سياسة عامة على @container عادية — تُنفَّذ فقط
+            // إن استُخدمت فعلاً كلمة واحدة من use/need/allow/deny/strict داخل جسمها؛ أي حاوية
+            // قديمة (hasPolicy == false) لا تمرّ بهذا المسار إطلاقاً (permissive كما كانت دوماً).
+            try {
+                validateContainerPolicy(*s);
+            } catch (const std::exception& e) {
+                throw diagErr(diag::Code::E0016_InvalidProperty, s->line, std::string("invalid container policy: ") + e.what());
+            }
         }
         auto containerEnv = std::make_shared<Environment>(env);
         std::string tag = containerTagName(s->kind);
