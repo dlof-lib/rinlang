@@ -82,7 +82,10 @@ private:
 
     // data-container language (container / Containers.Group / Volume / Section / ...)
     std::string readTagKeyword();      // يقرأ "container" أو "Volume" أو "Containers.Group" ...
-    std::string readOptionalName();    // يقرأ "=name" اختياريًا بعد كلمة مفتاحية
+    // يقرأ "=name" اختياريًا بعد كلمة مفتاحية. context يصف — بلغة الإنسان — أي بنية يُقرأ لها
+    // الاسم (مثلاً "a `@container` block", "an `@element` name", "a closing tag") حتى تحمل
+    // رسالة الخطأ E0012 عند غياب الاسم بعد '=' سياقاً دقيقاً بدل رسالة عامة واحدة للجميع.
+    std::string readOptionalName(const std::string& context = "this");
     bool checkClosingTag() const;      // هل التوكن الحالي بداية ".end/..."
     void consumeEndTag(const std::string& expectedTag, int openLine, const std::string& openName = ""); // يستهلك ويتحقق من ".end/<expectedTag>" أو اختصارها ".end;"
 
