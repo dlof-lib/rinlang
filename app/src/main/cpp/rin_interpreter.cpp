@@ -4592,6 +4592,9 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
         //      مدمجة قياسية أو مكتبة مستخدم حقيقية أنشأها/رفعها المستخدم من قسم "المكتبات" في المحرر
         //      (تُحفَظ داخل مجلد lib/ الخاص بمشروعه). المسارات الصريحة (تحتوي على '/') تبقى تماماً كما
         //      كُتبت لضمان التوافق الكامل مع أي شيفرة سابقة تستخدم @import "lib/xxx.og.rin" مباشرة.
+        loaderui::LoadSession importUI(importUISink_, rawPath, importDepth_);
+        importUI.stage(loaderui::LoadStage::Resolving);
+
         std::string libPath = rawPath;
         if (libPath.find('/') == std::string::npos) {
             static const std::string kLibExt = ".og.rin";
@@ -4600,6 +4603,8 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
             if (!hasExt) libPath += kLibExt;
             libPath = "lib/" + libPath;
         }
+
+        importUI.stage(loaderui::LoadStage::Locating);
 
         // 1) أولاً: هل هذا اسم مكتبة مدمجة داخل المفسّر نفسه (مثل lib/data.og.rin)؟
         //    هذا يجعل @import يعمل مباشرة على أي منصة (بما فيها أندرويد) دون أي ملفات إضافية على القرص.
@@ -4650,38 +4655,60 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
         // في نفس التشغيل، تماماً كأنظمة الوحدات (modules) المعتادة.
         std::string importKey = libPath + (s->alias.empty() ? "" : ("#as:" + s->alias));
         if (importedPaths.count(importKey)) {
+            loaderui::LoadOutcome cached;
+            cached.fromCache = true;
+            importUI.finish(cached);
             output << "↺ @import: \"" << libPath << "\" مستورَدة مسبقاً بالفعل (تم تجاهل التكرار)\n";
             return;
         }
+
+        importUI.stage(loaderui::LoadStage::Reading);
 
         std::vector<StmtPtr> importedStatements;
         try {
             Lexer importedLexer(source, libPath);
             auto importedTokens = importedLexer.scanTokens();
+            importUI.stage(loaderui::LoadStage::Parsing);
             Parser importedParser(importedTokens, libPath);
             importedStatements = importedParser.parse();
         } catch (RinError& e) {
+            loaderui::LoadOutcome failed;
+            failed.success = false;
+            failed.errorMessage = e.message;
+            importUI.finish(failed);
             auto d = diagErr(diag::Code::E0028_ImportError, s->line, "@import: error parsing library \"" + libPath + "\"");
             d.diagnostic->withReason("line " + std::to_string(e.line) + " of \"" + libPath + "\": " + e.message);
             if (e.diagnostic) d.diagnostic->withCause(diag::renderShort(*e.diagnostic));
             throw d;
         }
 
+        importUI.stage(loaderui::LoadStage::Dependencies);
+
         try {
+            ++importDepth_;
             if (s->alias.empty()) {
                 // دمج مباشر: كل fun/let/text أعلى مستوى في المكتبة تصبح متاحة في النطاق الحالي مباشرة،
                 // تماماً كـ #include. أي @container بداخل المكتبة يُسجَّل عالمياً كأي حاوية عادية.
+                importUI.stage(loaderui::LoadStage::Initializing);
                 executeBlock(importedStatements, env);
             } else {
                 // استيراد باسم مستعار: يُسجَّل كحاوية باسم alias (بنفس دلالات container.import)،
                 // فيمكن لاحقاً استخدام link/tying/merge معها كأي حاوية أخرى دون تلويث النطاق الحالي.
                 auto libEnv = std::make_shared<Environment>(env);
+                importUI.stage(loaderui::LoadStage::Initializing);
                 executeBlock(importedStatements, libEnv);
                 containers[s->alias] = libEnv;
                 containerKinds[s->alias] = ContainerKind::IMPORT;
+                importUI.stage(loaderui::LoadStage::Registering);
                 if (!groupStack.empty()) groupMembers[groupStack.back()].push_back(s->alias);
             }
+            --importDepth_;
         } catch (RinError& e) {
+            --importDepth_;
+            loaderui::LoadOutcome failed;
+            failed.success = false;
+            failed.errorMessage = e.message;
+            importUI.finish(failed);
             auto d = diagErr(diag::Code::E0028_ImportError, s->line, "@import: error inside library \"" + libPath + "\"");
             d.diagnostic->withReason("line " + std::to_string(e.line) + " of \"" + libPath + "\": " + e.message);
             if (e.diagnostic) d.diagnostic->withCause(diag::renderShort(*e.diagnostic));
@@ -4689,6 +4716,11 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
         }
 
         importedPaths.insert(importKey);
+        loaderui::LoadOutcome ok;
+        ok.success = true;
+        ok.fromEmbedded = fromEmbedded;
+        importUI.stage(loaderui::LoadStage::Completed);
+        importUI.finish(ok);
         output << (fromEmbedded ? "📦" : "📥") << " @import: تم استيراد \"" << libPath << "\""
                << (s->alias.empty() ? "" : (" باسم '" + s->alias + "'"))
                << (fromEmbedded ? " (مكتبة مدمجة)" : " (من القرص)") << "\n";
