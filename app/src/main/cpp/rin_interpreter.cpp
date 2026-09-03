@@ -2416,6 +2416,21 @@ void Interpreter::registerNatives() {
         containerCustomKind.erase(name);
         containerLifecycle.erase(name);
         containerStateNames.erase(name);
+        // RCS-1.0 §3.5 Tree + §3.6 Events (Phase 2): تنظيف كل أثر لهذه الحاوية من سجلات الشجرة
+        // والأحداث -- بما في ذلك إزالتها من قائمة أبناء أبيها (إن كان لها أب) حتى لا يبقى اسمها
+        // ميتاً داخل childrenOf(parent) بعد حذفها فعلياً.
+        auto parentIt = containerParent.find(name);
+        if (parentIt != containerParent.end()) {
+            auto childrenIt = containerChildren.find(parentIt->second);
+            if (childrenIt != containerChildren.end()) {
+                auto& siblings = childrenIt->second;
+                siblings.erase(std::remove(siblings.begin(), siblings.end(), name), siblings.end());
+            }
+            containerParent.erase(parentIt);
+        }
+        containerChildren.erase(name);
+        containerSlots.erase(name);
+        eventHandlers.erase(name);
         return Value::boolean_(existed);
     };
 
@@ -2442,6 +2457,64 @@ void Interpreter::registerNatives() {
         expectArgs("containerNames", a, 0, line);
         auto result = std::make_shared<ArrayData>();
         for (auto& kv : containers) result->push_back(Value::string(kv.first));
+        return Value::makeArray(result);
+    };
+
+    // ---- RCS-1.0 §3.5 Tree (Phase 2): استعلام برمجي عن شجرة التعشيش النصّي الموجودة فعلاً ----
+    // مبنية فوق containerParent/containerChildren المُسجَّلتين تلقائياً في ContainerStmt (انظر
+    // execute()) لكل @container متعشَّشة نصّياً داخل جسم @container أخرى -- بلا أي بناء نحو جديد.
+
+    // parentOf(name) -> اسم حاوية الأب المباشرة (نص)، أو nil إن لم توجد حاوية بهذا الاسم أصلاً أو
+    // كانت حاوية جذرية (بلا أب) أو أُنشئت ديناميكياً عبر spawn()/create() (بلا تعشيش نصّي).
+    natives["parentOf"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("parentOf", a, 1, line);
+        std::string name = asString(a[0], "parentOf", line);
+        auto it = containerParent.find(name);
+        if (it == containerParent.end()) return Value::nil();
+        return Value::string(it->second);
+    };
+
+    // childrenOf(name) -> مصفوفة بأسماء الأبناء المباشرين فقط (لا الأحفاد) بترتيب أول تعريف؛
+    // مصفوفة فارغة إن لم توجد حاوية بهذا الاسم أو لم يكن لها أبناء متعشَّشون نصّياً بداخلها.
+    natives["childrenOf"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("childrenOf", a, 1, line);
+        std::string name = asString(a[0], "childrenOf", line);
+        auto result = std::make_shared<ArrayData>();
+        auto it = containerChildren.find(name);
+        if (it != containerChildren.end()) {
+            for (auto& child : it->second) result->push_back(Value::string(child));
+        }
+        return Value::makeArray(result);
+    };
+
+    // siblingsOf(name) -> مصفوفة بأسماء الحاويات الأخرى ذات الأب المباشر نفسه (باستثناء name نفسها)
+    // بترتيب أول تعريف؛ مصفوفة فارغة إن لم يكن لـname أب أصلاً (حاوية جذرية) أو لم يكن لها إخوة.
+    natives["siblingsOf"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("siblingsOf", a, 1, line);
+        std::string name = asString(a[0], "siblingsOf", line);
+        auto result = std::make_shared<ArrayData>();
+        auto parentIt = containerParent.find(name);
+        if (parentIt != containerParent.end()) {
+            auto childrenIt = containerChildren.find(parentIt->second);
+            if (childrenIt != containerChildren.end()) {
+                for (auto& sibling : childrenIt->second) {
+                    if (sibling != name) result->push_back(Value::string(sibling));
+                }
+            }
+        }
+        return Value::makeArray(result);
+    };
+
+    // slotsOf(name) -> مصفوفة بأسماء حقول `slot` المُعلَنة داخل الحاوية name بترتيب التعريف؛
+    // مصفوفة فارغة إن لم توجد حاوية بهذا الاسم أو لم تُعلن أي slot بداخلها (انظر SlotDeclStmt).
+    natives["slotsOf"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("slotsOf", a, 1, line);
+        std::string name = asString(a[0], "slotsOf", line);
+        auto result = std::make_shared<ArrayData>();
+        auto it = containerSlots.find(name);
+        if (it != containerSlots.end()) {
+            for (auto& slot : it->second) result->push_back(Value::string(slot));
+        }
         return Value::makeArray(result);
     };
 
@@ -4311,6 +4384,60 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
         return;
     }
 
+    // RCS-1.0 §3.5 Tree (Phase 2): 'slot IDENT;' -- توثيق بنيوي بحت (انظر SlotDeclStmt في
+    // rin_ast.h): تُسجَّل فقط ضمن containerSlots[الحاوية الحالية] لأجل الاستقصاء عبر native جديدة
+    // slotsOf. خارج أي حاوية (containerStack فارغة) لا شيء يحدث -- امتداد إضافي بحت، لا خطأ.
+    if (auto s = std::dynamic_pointer_cast<SlotDeclStmt>(stmt)) {
+        if (!containerStack.empty()) containerSlots[containerStack.back()].push_back(s->name);
+        return;
+    }
+
+    // RCS-1.0 §3.6 Events: 'on.event "name"(...) { .. }' -- تُسجَّل فقط (لا تُنفَّذ فوراً)، بنفس
+    // أسلوب LifecycleHookStmt أعلاه بالضبط: دالة (Callable) تُخزَّن بداخل eventHandlers[الحاوية
+    // الحالية] لتُستدعى لاحقاً من فرع EmitStmt أدناه عند emit في أحد أبنائها (المباشر افتراضياً،
+    // أو أي حفيد إن استُخدمت 'emit ... bubbles;'). خارج أي حاوية (containerStack فارغة) لا شيء
+    // يحدث -- امتداد إضافي بحت، لا خطأ.
+    if (auto s = std::dynamic_pointer_cast<EventHandlerStmt>(stmt)) {
+        if (containerStack.empty()) return;
+        auto callable = std::make_shared<Callable>();
+        callable->declaration = s->asFunction;
+        callable->closure = env;
+        Value v; v.type = Value::Type::FUNCTION; v.function = callable;
+        eventHandlers[containerStack.back()].push_back({s->eventName, v});
+        return;
+    }
+
+    // RCS-1.0 §3.6 Events: 'emit "name", payload; [bubbles]' -- يصعد ابتداءً من أب الحاوية التي
+    // نُنفَّذ حالياً بداخلها فعلياً (مُحدَّدة عبر containerKeyForEnv(env)، لا قمة containerStack:
+    // emit يقع غالباً داخل جسم دالة تُستدعى بعد انتهاء التنفيذ التصريحي للحاوية بوقت طويل، حين تكون
+    // containerStack قد فرغت مجدداً بالفعل). بلا 'bubbles': يتوقف عند أول أب فقط (كل معالج مطابق
+    // الاسم عنده يُستدعى). مع 'bubbles': يستمر صعوداً عبر كل سلسلة الأجداد حتى الجذر. لا شيء يحدث
+    // إن لم توجد حاوية أب أصلاً (حاوية جذرية أعلى المستوى)، أو إن استُخدمت emit خارج أي حاوية إطلاقاً.
+    if (auto s = std::dynamic_pointer_cast<EmitStmt>(stmt)) {
+        Value payload = Value::nil();
+        if (s->payload) payload = evaluate(s->payload, env);
+        std::string emitterKey = containerKeyForEnv(env.get());
+        std::string current = emitterKey;
+        while (!current.empty()) {
+            auto parentIt = containerParent.find(current);
+            if (parentIt == containerParent.end()) break; // لا أب (حاوية جذرية) -> توقف بلا أي حدث
+            const std::string parentKey = parentIt->second;
+            auto handlersIt = eventHandlers.find(parentKey);
+            if (handlersIt != eventHandlers.end()) {
+                for (auto& entry : handlersIt->second) {
+                    if (entry.first != s->eventName) continue;
+                    if (entry.second.type != Value::Type::FUNCTION || !entry.second.function) continue;
+                    std::vector<Value> cbArgs;
+                    if (s->payload) cbArgs.push_back(payload);
+                    callFunction(entry.second.function, cbArgs, s->line);
+                }
+            }
+            if (!s->bubbles) break; // الأب المباشر فقط افتراضياً
+            current = parentKey; // 'bubbles': استمرار صعوداً للجدّ التالي
+        }
+        return;
+    }
+
     if (auto s = std::dynamic_pointer_cast<ReturnStmt>(stmt)) {
         Value v = Value::nil();
         if (s->value) v = evaluate(s->value, env);
@@ -4366,6 +4493,14 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
         containerKinds[containerKey] = s->kind;
         if (!groupStack.empty()) {
             groupMembers[groupStack.back()].push_back(containerKey);
+        }
+        // RCS-1.0 §3.5 Tree (Phase 2): تعشيش نصّي حقيقي (@container داخل جسم @container أخرى) هو
+        // بالضبط علاقة الأب/الابن -- تُسجَّل هنا فوراً قبل push على containerStack (أي بينما لا تزال
+        // قمة containerStack الحالية = الحاوية *الأب*، لا هذه الحاوية الجديدة نفسها). حاوية جذرية
+        // أعلى المستوى (containerStack فارغة الآن) لا تُسجَّل في containerParent إطلاقاً -- بلا أب.
+        if (!containerStack.empty()) {
+            containerParent[containerKey] = containerStack.back();
+            containerChildren[containerStack.back()].push_back(containerKey);
         }
         std::string savedFilePath = currentFilePath;
         currentFilePath.clear(); // كل حاوية تبدأ بمسار ملف نظيف حتى لا يرث container.import مساراً من حاوية سابقة
@@ -5076,6 +5211,19 @@ void Interpreter::assignStateAware(Environment* owner, const std::string& name, 
         std::vector<Value> args{prevSnapshot};
         fireLifecycleHook(containerKey, hooksIt->second.update, args, line);
     }
+}
+
+// ---- RCS-1.0 §3.5 Tree (Phase 2) ----
+
+// انظر إعلانها في rin_interpreter.h للشرح الكامل: تمشي صعوداً من startEnv عبر Environment::parent
+// حتى تجد بيئة تطابق (بالمؤشر) إحدى قيم `containers`، أو تصل لجذر السلسلة بلا أي تطابق.
+std::string Interpreter::containerKeyForEnv(Environment* startEnv) const {
+    for (Environment* cur = startEnv; cur != nullptr; cur = cur->parent.get()) {
+        for (auto& kv : containers) {
+            if (kv.second.get() == cur) return kv.first;
+        }
+    }
+    return "";
 }
 
 Value Interpreter::callFunction(const std::shared_ptr<Callable>& fn, std::vector<Value>& args, int line) {
