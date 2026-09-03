@@ -44,6 +44,18 @@ RinError Parser::errAtLine(diag::Code code, int line, std::string message) const
     return RinError(std::move(d));
 }
 
+RinError Parser::errRich(diag::Code code, const Token& tok, std::string message, std::string reason,
+                          std::string hint, std::string expected, std::string found) const {
+    diag::Diagnostic d(code, std::move(message), locOf(tok));
+    if (!reason.empty()) d.withReason(std::move(reason));
+    if (!hint.empty()) d.withHint(std::move(hint));
+    if (!expected.empty()) d.expected = std::move(expected);
+    if (!found.empty()) d.found = std::move(found);
+    else d.found = (tok.type == TokenType::END_OF_FILE) ? "end of file"
+                   : (tok.lexeme.empty() ? "an unexpected token" : ("`" + tok.lexeme + "`"));
+    return RinError(std::move(d));
+}
+
 // يستخرج النص بين أول علامتي اقتباس مفردتين من رسائل مثل "Expected ')' after ..." -> ")"
 // لملء الحقل expected: تلقائياً في consume() دون حاجة لإعادة صياغة كل رسالة قديمة يدوياً.
 std::string Parser::extractQuoted(const std::string& message) {
@@ -542,7 +554,14 @@ StmtPtr Parser::rinopenStatement() {
 StmtPtr Parser::objectFieldStatement() {
     consume(TokenType::DOT, "Expected '.' before '.object'");
     Token object = consume(TokenType::IDENT, "Expected 'object' after '.'");
-    if (object.lexeme != "object") throw err(diag::Code::E0016_InvalidProperty, object, "expected `.object=type` or `.object(\"id\")`");
+    if (object.lexeme != "object")
+        throw errRich(diag::Code::E0016_InvalidProperty, object,
+                       "expected `.object=type` or `.object(\"id\")`",
+                       "an object-field statement must start with the literal keyword `object` right "
+                       "after the leading '.', either as `.object=type` (typed field) or "
+                       "`.object(\"id\")` (object literal by id)",
+                       "replace `" + object.lexeme + "` with `object`",
+                       "the literal word `object`");
     // '.object("id") ... .end/object' -> شكل جديد بأسلوب استدعاء دوال (انظر ObjectLiteralStmt في
     // rin_ast.h)؛ يُميَّز عن الشكل القديم '.object=type' بالتوكن التالي مباشرة: '(' هنا مقابل '='.
     if (check(TokenType::LPAREN)) return objectLiteralStatement(object);
@@ -551,8 +570,14 @@ StmtPtr Parser::objectFieldStatement() {
     if (check(TokenType::DOT) && checkNext(TokenType::IDENT) && current + 2 < tokens.size() && tokens[current + 1].lexeme == "object") return objectFieldStatement();
     if (match({TokenType::LET})) return letDeclaration();
     if (match({TokenType::FUN})) return functionDeclaration();
-    throw err(diag::Code::E0013_InvalidExpression, peek(),
-              "expected an object member type after `.object=` (`text`, `let`, or `fun`), or an id after `.object(`");
+    throw errRich(diag::Code::E0013_InvalidExpression, peek(),
+                  "expected an object member type after `.object=` (`text`, `let`, or `fun`), or an id after `.object(`",
+                  "after `.object=` the parser only recognizes three member forms: `text` (a text "
+                  "field), `let` (a typed value field), or `fun` (a method) — nothing else is a valid "
+                  "continuation here",
+                  "pick one of `.object=text`, `.object=let`, or `.object=fun`, or switch to the "
+                  "id-based form `.object(\"id\") ... .end/object` if you meant an object literal",
+                  "`text`, `let`, or `fun`");
 }
 
 // .object("id")
@@ -602,7 +627,12 @@ StmtPtr Parser::viewPrintObjectStatement() {
     Token tok = previous(); // 'print'
     consume(TokenType::SLASH, "Expected '/' after 'view.print'");
     Token objTok = consume(TokenType::IDENT, "Expected 'object' after 'view.print/'");
-    if (objTok.lexeme != "object") throw err(diag::Code::E0016_InvalidProperty, objTok, "expected 'object' after 'view.print/'");
+    if (objTok.lexeme != "object")
+        throw errRich(diag::Code::E0016_InvalidProperty, objTok, "expected 'object' after 'view.print/'",
+                       "`view.print/` only supports one form, `view.print/object(expr)`, which prints "
+                       "an object literal's fields; the word right after the '/' must be the literal "
+                       "`object`",
+                       "replace `" + objTok.lexeme + "` with `object`", "the literal word `object`");
     consume(TokenType::LPAREN, "Expected '(' after 'view.print/object'");
     auto stmt = std::make_shared<ViewPrintObjectStmt>();
     stmt->target = expression();
@@ -700,7 +730,13 @@ StmtPtr Parser::logStatement(const Token& printTok) {
             if (!attr.empty()) {
                 advance(); // استهلاك توكن اسم السمة
                 if (seenAttrs.count(attr)) {
-                    throw err(diag::Code::E0016_InvalidProperty, printTok, "'print.log': `" + attr + "` attribute repeated");
+                    throw errRich(diag::Code::E0016_InvalidProperty, printTok,
+                                   "'print.log': `" + attr + "` attribute repeated",
+                                   "each attribute (`sep`, `label`, `source`, `if`) may only be set "
+                                   "once per `print.log(...)` call; the parser found `" + attr +
+                                   "=` a second time in the same call",
+                                   "remove the duplicate `" + attr + "=...` — keep only the first "
+                                   "occurrence, or the last one if that's the value you actually want");
                 }
                 seenAttrs.insert(attr);
                 advance(); // '='
@@ -827,7 +863,13 @@ StmtPtr Parser::returnStatement() {
 // وإلا فهي خطأ وقت التحليل (رسالة واضحة بدل فشل صامت وقت التنفيذ).
 StmtPtr Parser::breakStatement() {
     Token tok = previous();
-    if (loopDepth == 0) throw err(diag::Code::E0011_UnexpectedToken, tok, "'break' used outside of a loop");
+    if (loopDepth == 0)
+        throw errRich(diag::Code::E0011_UnexpectedToken, tok, "'break' used outside of a loop",
+                       "`break` exits the innermost enclosing loop, so the parser only allows it "
+                       "while it is currently inside a `while`/`for`/`rinopen` loop body; this "
+                       "`break` appears at a point where no loop is open",
+                       "move this `break` inside a loop body, or remove it if it was left over from "
+                       "refactoring");
     consume(TokenType::SEMICOLON, "Expected ';' after 'break'");
     auto stmt = std::make_shared<BreakStmt>();
     stmt->line = tok.line;
@@ -837,7 +879,13 @@ StmtPtr Parser::breakStatement() {
 // continue; -> نفس قيد break: صالحة فقط داخل جسم حلقة while.
 StmtPtr Parser::continueStatement() {
     Token tok = previous();
-    if (loopDepth == 0) throw err(diag::Code::E0011_UnexpectedToken, tok, "'continue' used outside of a loop");
+    if (loopDepth == 0)
+        throw errRich(diag::Code::E0011_UnexpectedToken, tok, "'continue' used outside of a loop",
+                       "`continue` skips to the next iteration of the innermost enclosing loop, so "
+                       "the parser only allows it while it is currently inside a `while`/`for`/"
+                       "`rinopen` loop body; this `continue` appears at a point where no loop is open",
+                       "move this `continue` inside a loop body, or remove it if it was left over "
+                       "from refactoring");
     consume(TokenType::SEMICOLON, "Expected ';' after 'continue'");
     auto stmt = std::make_shared<ContinueStmt>();
     stmt->line = tok.line;
@@ -890,7 +938,13 @@ std::string Parser::readTagKeyword() {
             tag = "container." + sub.lexeme;
             if (sub.lexeme == "open" && match({TokenType::SLASH})) {
                 Token kind = consume(TokenType::IDENT, "Expected 'object' after 'container.open/'");
-                if (kind.lexeme != "object") throw err(diag::Code::E0016_InvalidProperty, kind, "expected 'object' after 'container.open/'");
+                if (kind.lexeme != "object")
+                    throw errRich(diag::Code::E0016_InvalidProperty, kind,
+                                   "expected 'object' after 'container.open/'",
+                                   "`container.open/` currently only supports one kind, "
+                                   "`container.open/object`, for opening an object-backed container",
+                                   "replace `" + kind.lexeme + "` with `object`",
+                                   "the literal word `object`");
                 tag = "container.open/object";
             }
         }
@@ -1059,8 +1113,14 @@ std::shared_ptr<ViewStmt> Parser::viewDeclaration() {
             s->attrs.push_back(a);
             continue;
         }
-        throw err(diag::Code::E0012_MissingToken, peek(),
-                  "expected an attribute (key=value;), a nested '@view...', or '.end/view' inside @view." + s->kindTag);
+        throw errRich(diag::Code::E0012_MissingToken, peek(),
+                      "expected an attribute (key=value;), a nested '@view...', or '.end/view' inside @view." + s->kindTag,
+                      "inside an `@view." + s->kindTag + "` body, the parser only accepts an "
+                      "`attribute=value;` line, a nested `@view...` strand, or the closing "
+                      "`.end/view` tag; the current token starts none of these",
+                      "add an `attribute=value;` line, open a nested `@view.<kind>`, or close this "
+                      "strand with `.end/view;`",
+                      "an attribute, '@view', or '.end/view'");
     }
     consumeEndTag("view", viewTok.line, name);
     return s;
@@ -1070,7 +1130,12 @@ std::shared_ptr<ViewStmt> Parser::elementDeclaration() {
     Token openTok = previous();
     consume(TokenType::DOT, "Expected '.' after '@element'");
     if (isAtEnd() || peek().lexeme.empty() || peek().type == TokenType::DOT || peek().type == TokenType::EQUAL || peek().type == TokenType::SEMICOLON)
-        throw err(diag::Code::E0012_MissingToken, peek(), "Expected an element kind after '@element.'");
+        throw errRich(diag::Code::E0012_MissingToken, peek(), "Expected an element kind after '@element.'",
+                      "`@element.` must be followed immediately by the kind of UI element being "
+                      "declared (e.g. `text`, `button`, `file`) — the parser found something else "
+                      "(or nothing) right after the '.'",
+                      "add an element kind after the '.', e.g. `@element.text` or `@element.button`",
+                      "an element kind identifier");
     Token kindTok = advance(); // accepts reserved Rin words such as `text`/`file` as element kinds
     auto s = std::make_shared<ViewStmt>();
     s->name = readOptionalName("an `@element." + kindTok.lexeme + "`");
@@ -1086,7 +1151,14 @@ std::shared_ptr<ViewStmt> Parser::elementDeclaration() {
             ExprPtr val = expression(); consume(TokenType::SEMICOLON, "Expected ';' after element attribute");
             s->attrs.push_back({key.lexeme, val, key.line}); continue;
         }
-        throw err(diag::Code::E0012_MissingToken, peek(), "expected an element attribute, nested '@element...', or '.end/element'");
+        throw errRich(diag::Code::E0012_MissingToken, peek(),
+                      "expected an element attribute, nested '@element...', or '.end/element'",
+                      "inside an `@element` body, the parser only accepts three things: an "
+                      "`attribute=value;` line, a nested `@element...` child, or the closing "
+                      "`.end/element` tag; the current token starts none of these",
+                      "add an `attribute=value;` line, open a nested `@element.<kind>`, or close "
+                      "this element with `.end/element;`",
+                      "an attribute, '@element', or '.end/element'");
     }
     consumeEndTag("element", openTok.line, s->name);
     return s;
@@ -1117,7 +1189,14 @@ std::shared_ptr<ViewStmt> Parser::loopCanvasDeclaration() {
             ExprPtr val = expression(); consume(TokenType::SEMICOLON, "Expected ';' after loop attribute");
             s->attrs.push_back({key.lexeme, val, key.line}); continue;
         }
-        throw err(diag::Code::E0012_MissingToken, peek(), "expected a loop canvas attribute, nested element/loop, or '.end/loop'");
+        throw errRich(diag::Code::E0012_MissingToken, peek(),
+                      "expected a loop canvas attribute, nested element/loop, or '.end/loop'",
+                      "inside an `@loop` body, the parser only accepts an `attribute=value;` line, "
+                      "a nested `@element...`/`@loop...` child, or the closing `.end/loop` tag; the "
+                      "current token starts none of these",
+                      "add an `attribute=value;` line, open a nested `@element`/`@loop`, or close "
+                      "this loop canvas with `.end/loop;`",
+                      "an attribute, '@element'/'@loop', or '.end/loop'");
     }
     consumeEndTag("loop", openTok.line, s->name);
     return s;
@@ -1175,8 +1254,14 @@ StmtPtr Parser::themeDeclaration() {
             s->attrs.push_back(a);
             continue;
         }
-        throw err(diag::Code::E0012_MissingToken, peek(),
-                  "expected an attribute (key=value;) or '.end/theme' inside @theme=" + s->name);
+        throw errRich(diag::Code::E0012_MissingToken, peek(),
+                      "expected an attribute (key=value;) or '.end/theme' inside @theme=" + s->name,
+                      "the body of a `@theme` block may only contain `key=value;` attribute lines "
+                      "until it is closed; the parser found a token here that starts neither an "
+                      "attribute (an identifier followed by '=') nor the closing tag",
+                      "add `key=value;` for the attribute you meant, or close the block with "
+                      "`.end/theme" + (s->name.empty() ? "" : ("=" + s->name)) + ";` if you're done",
+                      "an identifier followed by '=', or '.end/theme'");
     }
     consumeEndTag("theme", themeTok.line, s->name);
     return s;
@@ -1263,7 +1348,11 @@ static bool isContainerFamilyTag(const std::string& tag) {
 StmtPtr Parser::makeUnitBlock() {
     Token atTok = consume(TokenType::AT, "Expected '@' before '@make.(name)'");
     Token makeTok = consume(TokenType::IDENT, "Expected 'make' after '@'");
-    if (makeTok.lexeme != "make") throw err(diag::Code::E0015_UnknownContainer, makeTok, "expected `make` in `@make.(name)`");
+    if (makeTok.lexeme != "make")
+        throw errRich(diag::Code::E0015_UnknownContainer, makeTok, "expected `make` in `@make.(name)`",
+                       "a Make Unit block always opens with the literal word `make` right after '@', "
+                       "as in `@make.(UnitName)` — this token is not that keyword",
+                       "replace `" + makeTok.lexeme + "` with `make`", "the literal word `make`");
     consume(TokenType::DOT, "Expected '.' after '@make'");
     consume(TokenType::LPAREN, "Expected '(' after '@make.'");
     Token nameTok = consume(TokenType::IDENT, "Expected a unit name inside '@make.(name)'");
@@ -1302,7 +1391,14 @@ StmtPtr Parser::makeUnitBlock() {
                 if (!(check(TokenType::IDENT) || check(TokenType::CONTAINER) || check(TokenType::FOR) ||
                       check(TokenType::WHILE) || check(TokenType::FUN) || check(TokenType::RETURN) ||
                       check(TokenType::PRINT) || check(TokenType::TEXT) || check(TokenType::PIPE_KW))) {
-                    throw err(diag::Code::E0012_MissingToken, peek(), "Expected a capability or name after Make directive");
+                    throw errRich(diag::Code::E0012_MissingToken, peek(),
+                                  "Expected a capability or name after Make directive",
+                                  "`" + word + "` inside a `@make` block must be followed by exactly "
+                                  "one capability/name token (an identifier, or one of the reserved "
+                                  "words that are also valid capability names, e.g. `container`, "
+                                  "`loop`, `function`)",
+                                  "add a single capability or name token right after `" + word + "`",
+                                  "a capability or name token");
                 }
                 Token value = advance();
                 std::vector<std::string>* dst = nullptr;
@@ -1535,7 +1631,14 @@ StmtPtr Parser::translationsBlock() {
 StmtPtr Parser::translationStatement() {
     Token tok = previous();
     Token langKey = consume(TokenType::IDENT, "Expected 'lang' after 'translation'");
-    if (langKey.lexeme != "lang") throw err(diag::Code::E0016_InvalidProperty, langKey, "expected 'lang' attribute after 'translation'");
+    if (langKey.lexeme != "lang")
+        throw errRich(diag::Code::E0016_InvalidProperty, langKey,
+                       "expected 'lang' attribute after 'translation'",
+                       "a `translation` statement always starts with `lang=\"...\"` followed by "
+                       "`text=\"...\"`; the first attribute name must be the literal word `lang`",
+                       "replace `" + langKey.lexeme + "` with `lang`, e.g. "
+                       "`translation lang=\"en\" text=\"Hello\";`",
+                       "the literal word `lang`");
     consume(TokenType::EQUAL, "Expected '=' after 'lang'");
     Token langVal = consume(TokenType::STRING, "Expected a text value for 'lang'");
     consume(TokenType::TEXT, "Expected 'text' attribute after 'lang=\"...\"'");
@@ -1569,7 +1672,13 @@ StmtPtr Parser::linkStatement() {
 
     Token key = consume(TokenType::IDENT, "Expected 'to' or 'id' after 'link'");
     if (key.lexeme != "to" && key.lexeme != "id")
-        throw err(diag::Code::E0016_InvalidProperty, key, "expected 'to' or 'id' attribute after 'link'");
+        throw errRich(diag::Code::E0016_InvalidProperty, key,
+                       "expected 'to' or 'id' attribute after 'link'",
+                       "a `link` statement takes exactly one attribute: `to=name` (link by container "
+                       "name) or `id=\"...\"` (link by global id) — `" + key.lexeme + "` is neither",
+                       "replace `" + key.lexeme + "` with `to` or `id`, e.g. `link to=Other;` or "
+                       "`link id=\"other-id\";`",
+                       "`to` or `id`");
     consume(TokenType::EQUAL, "Expected '=' after '" + key.lexeme + "'");
 
     auto s = std::make_shared<LinkStmt>();
@@ -1581,7 +1690,12 @@ StmtPtr Parser::linkStatement() {
     } else {
         // link to=name;  -> ربط باسم الحاوية (كما كان)
         if (!check(TokenType::IDENT) && !check(TokenType::STRING))
-            throw err(diag::Code::E0012_MissingToken, peek(), "expected a container name after 'to='");
+            throw errRich(diag::Code::E0012_MissingToken, peek(),
+                          "expected a container name after 'to='",
+                          "`link to=` must be followed by the target container's name — either a "
+                          "plain identifier or a quoted string",
+                          "add the target container's name right after 'to=', e.g. `link to=Other;`",
+                          "an identifier or string literal");
         s->target = advance().lexeme;
     }
     consume(TokenType::SEMICOLON, "Expected ';' after link statement");
@@ -1591,10 +1705,21 @@ StmtPtr Parser::linkStatement() {
 StmtPtr Parser::tyingStatement() {
     Token tok = previous();
     Token key = consume(TokenType::IDENT, "Expected 'with' after 'tying'");
-    if (key.lexeme != "with") throw err(diag::Code::E0016_InvalidProperty, key, "expected 'with' attribute after 'tying'");
+    if (key.lexeme != "with")
+        throw errRich(diag::Code::E0016_InvalidProperty, key,
+                       "expected 'with' attribute after 'tying'",
+                       "a `tying` statement only takes the attribute `with=name`, naming the "
+                       "container it ties to",
+                       "replace `" + key.lexeme + "` with `with`, e.g. `tying with=Other;`",
+                       "the literal word `with`");
     consume(TokenType::EQUAL, "Expected '=' after 'with'");
     if (!check(TokenType::IDENT) && !check(TokenType::STRING))
-        throw err(diag::Code::E0012_MissingToken, peek(), "expected a container name after 'with='");
+        throw errRich(diag::Code::E0012_MissingToken, peek(),
+                      "expected a container name after 'with='",
+                      "`tying with=` must be followed by the target container's name — either a "
+                      "plain identifier or a quoted string",
+                      "add the target container's name right after 'with=', e.g. `tying with=Other;`",
+                      "an identifier or string literal");
     std::string target = advance().lexeme;
     consume(TokenType::SEMICOLON, "Expected ';' after tying statement");
     auto s = std::make_shared<TyingStmt>();
@@ -1617,7 +1742,12 @@ StmtPtr Parser::mergeStatement() {
     }
     consume(TokenType::EQUAL, "Expected '=' after 'with'");
     if (!check(TokenType::IDENT) && !check(TokenType::STRING))
-        throw err(diag::Code::E0012_MissingToken, peek(), "expected a container name after 'with='");
+        throw errRich(diag::Code::E0012_MissingToken, peek(),
+                      "expected a container name after 'with='",
+                      "`merge with=` must be followed by the container's name to merge with — "
+                      "either a plain identifier or a quoted string",
+                      "add the target container's name right after 'with=', e.g. `merge with=Other;`",
+                      "an identifier or string literal");
     std::string target = advance().lexeme;
     consume(TokenType::SEMICOLON, "Expected ';' after merge statement");
     auto s = std::make_shared<MergeStmt>();
@@ -1632,14 +1762,26 @@ std::string Parser::readOptionalFormatAttr() {
     if (!(check(TokenType::IDENT) && peek().lexeme == "format")) return "";
     advance(); // 'format'
     consume(TokenType::EQUAL, "Expected '=' after 'format'");
-    if (!check(TokenType::IDENT)) throw err(diag::Code::E0012_MissingToken, peek(), "expected a format name after 'format=' (e.g. png, zip)");
+    if (!check(TokenType::IDENT))
+        throw errRich(diag::Code::E0012_MissingToken, peek(),
+                      "expected a format name after 'format=' (e.g. png, zip)",
+                      "`format=` must be followed by a plain identifier naming the output format — "
+                      "it is not quoted like other names in this language",
+                      "add a format name right after 'format=', e.g. `format=zip;` "
+                      "(remove any quotes if you wrote `format=\"zip\"`)",
+                      "an identifier (unquoted format name)");
     return advance().lexeme;
 }
 
 StmtPtr Parser::installationStatement(bool simplifiedFlag) {
     Token tok = previous();
     if (!check(TokenType::IDENT) && !check(TokenType::STRING))
-        throw err(diag::Code::E0012_MissingToken, peek(), "expected a name after 'installation'");
+        throw errRich(diag::Code::E0012_MissingToken, peek(),
+                      "expected a name after 'installation'",
+                      "an `installation` statement must name its target right after the keyword — "
+                      "either a plain identifier or a quoted string",
+                      "add the target name right after 'installation', e.g. `installation MyApp;`",
+                      "an identifier or string literal");
     std::string target = advance().lexeme;
     std::string format = readOptionalFormatAttr();
     consume(TokenType::SEMICOLON, "Expected ';' after installation statement");
@@ -1667,7 +1809,13 @@ StmtPtr Parser::saveStatement(bool simplifiedFlag) {
 StmtPtr Parser::rowStatement() {
     Token tok = previous(); // 'row'
     Token key = consume(TokenType::IDENT, "Expected 'cells' after 'row'");
-    if (key.lexeme != "cells") throw err(diag::Code::E0016_InvalidProperty, key, "expected 'cells' attribute after 'row' (e.g. row cells=[1, 2, 3];)");
+    if (key.lexeme != "cells")
+        throw errRich(diag::Code::E0016_InvalidProperty, key,
+                       "expected 'cells' attribute after 'row' (e.g. row cells=[1, 2, 3];)",
+                       "a `row` statement only takes the attribute `cells=[...]`, listing the row's "
+                       "values",
+                       "replace `" + key.lexeme + "` with `cells`, e.g. `row cells=[1, 2, 3];`",
+                       "the literal word `cells`");
     consume(TokenType::EQUAL, "Expected '=' after 'cells'");
     ExprPtr cellsExpr = expression();
     consume(TokenType::SEMICOLON, "Expected ';' after row statement");
@@ -1680,7 +1828,13 @@ StmtPtr Parser::rowStatement() {
 StmtPtr Parser::styleStatement() {
     Token tok = previous(); // 'style'
     Token key = consume(TokenType::IDENT, "Expected 'value' after 'style'");
-    if (key.lexeme != "value") throw err(diag::Code::E0016_InvalidProperty, key, "expected 'value' attribute after 'style' (e.g. style value=\"style://dark\";)");
+    if (key.lexeme != "value")
+        throw errRich(diag::Code::E0016_InvalidProperty, key,
+                       "expected 'value' attribute after 'style' (e.g. style value=\"style://dark\";)",
+                       "a `style` statement only takes the attribute `value=...`, naming the style "
+                       "to apply",
+                       "replace `" + key.lexeme + "` with `value`, e.g. `style value=\"style://dark\";`",
+                       "the literal word `value`");
     consume(TokenType::EQUAL, "Expected '=' after 'value'");
     ExprPtr valueExpr = expression();
     consume(TokenType::SEMICOLON, "Expected ';' after style statement");
@@ -1693,11 +1847,24 @@ StmtPtr Parser::styleStatement() {
 StmtPtr Parser::documentStatement() {
     Token tok = previous(); // 'document'
     Token idKey = consume(TokenType::IDENT, "Expected 'id' after 'document'");
-    if (idKey.lexeme != "id") throw err(diag::Code::E0016_InvalidProperty, idKey, "expected 'id' attribute after 'document' (e.g. document id=\"u1\" fields={...};)");
+    if (idKey.lexeme != "id")
+        throw errRich(diag::Code::E0016_InvalidProperty, idKey,
+                       "expected 'id' attribute after 'document' (e.g. document id=\"u1\" fields={...};)",
+                       "a `document` statement must start with `id=...` naming the document's id, "
+                       "followed by `fields={...}`",
+                       "replace `" + idKey.lexeme + "` with `id`, e.g. `document id=\"u1\" fields={...};`",
+                       "the literal word `id`");
     consume(TokenType::EQUAL, "Expected '=' after 'id'");
     ExprPtr idExpr = expression();
     Token fieldsKey = consume(TokenType::IDENT, "Expected 'fields' after 'document id=...'");
-    if (fieldsKey.lexeme != "fields") throw err(diag::Code::E0016_InvalidProperty, fieldsKey, "expected 'fields' attribute after 'document id=...' (e.g. document id=\"u1\" fields={...};)");
+    if (fieldsKey.lexeme != "fields")
+        throw errRich(diag::Code::E0016_InvalidProperty, fieldsKey,
+                       "expected 'fields' attribute after 'document id=...' (e.g. document id=\"u1\" fields={...};)",
+                       "after `document id=...`, the next attribute must be `fields={...}` giving "
+                       "the document's field/value map",
+                       "replace `" + fieldsKey.lexeme + "` with `fields`, e.g. "
+                       "`document id=\"u1\" fields={ name: \"Ali\" };`",
+                       "the literal word `fields`");
     consume(TokenType::EQUAL, "Expected '=' after 'fields'");
     ExprPtr fieldsExpr = expression();
     consume(TokenType::SEMICOLON, "Expected ';' after document statement");
@@ -1709,7 +1876,12 @@ StmtPtr Parser::documentStatement() {
 StmtPtr Parser::fileStatement() {
     Token tok = previous();
     Token key = consume(TokenType::IDENT, "Expected 'path' after 'file'");
-    if (key.lexeme != "path") throw err(diag::Code::E0016_InvalidProperty, key, "expected 'path' attribute after 'file'");
+    if (key.lexeme != "path")
+        throw errRich(diag::Code::E0016_InvalidProperty, key,
+                       "expected 'path' attribute after 'file'",
+                       "a `file` statement only takes the attribute `path=...`, naming the file path",
+                       "replace `" + key.lexeme + "` with `path`, e.g. `file path=\"data.txt\";`",
+                       "the literal word `path`");
     consume(TokenType::EQUAL, "Expected '=' after 'path'");
     ExprPtr pathExpr = expression();
     consume(TokenType::SEMICOLON, "Expected ';' after file statement");
@@ -1744,7 +1916,14 @@ StmtPtr Parser::simplifiedStatement() {
     Token tok = previous();
     if (match({TokenType::INSTALLATION})) return installationStatement(true);
     if (match({TokenType::SAVE})) return saveStatement(true);
-    throw err(diag::Code::E0011_UnexpectedToken, peek(), "'simplified' must be followed by 'installation' or 'save'");
+    throw errRich(diag::Code::E0011_UnexpectedToken, peek(),
+                  "'simplified' must be followed by 'installation' or 'save'",
+                  "`simplified` is a modifier that only makes sense in front of `installation` or "
+                  "`save`, selecting their shortened output form; it cannot stand before anything "
+                  "else",
+                  "follow `simplified` with `installation ...;` or `save ...;`, or remove "
+                  "`simplified` if you didn't mean to use the shortened form",
+                  "'installation' or 'save'");
 }
 
 // ============ التعبيرات (expressions) ============
@@ -1771,7 +1950,13 @@ ExprPtr Parser::assignment() {
             set->line = eq.line;
             return set;
         }
-        throw err(diag::Code::E0003_InvalidAssignment, eq, "invalid assignment target");
+        throw errRich(diag::Code::E0003_InvalidAssignment, eq, "invalid assignment target",
+                      "only a plain variable (`x = ...`) or an index expression (`x[i] = ...`) can "
+                      "appear on the left of '='; the expression the parser built for the left-hand "
+                      "side here is neither",
+                      "assign to a variable or an index expression instead, e.g. `x = value;` or "
+                      "`x[0] = value;`",
+                      "a variable name or an index expression");
     }
     return expr;
 }
@@ -1794,7 +1979,15 @@ ExprPtr Parser::pipeline() {
                 callExpr->callee = var->name;
                 callExpr->line = var->line;
             } else {
-                throw err(diag::Code::E0013_InvalidExpression, opTok, "expected a function call (e.g. 'step()') after '|>'");
+                throw errRich(diag::Code::E0013_InvalidExpression, opTok,
+                              "expected a function call (e.g. 'step()') after '|>'",
+                              "'|>' pipes its left-hand value into a function call on the right, so "
+                              "the right side must be either a call like `step()` or a bare function "
+                              "name like `step` (treated as a no-argument call); the expression here "
+                              "is neither",
+                              "put a function name or call on the right of '|>', e.g. `x |> step()` "
+                              "or `x |> step`",
+                              "a function call or function name");
             }
         }
 
@@ -1907,7 +2100,15 @@ ExprPtr Parser::call() {
     for (;;) {
         if (match({TokenType::LPAREN})) {
             auto var = std::dynamic_pointer_cast<VariableExpr>(expr);
-            if (!var) throw err(diag::Code::E0013_InvalidExpression, previous(), "only functions can be called");
+            if (!var)
+                throw errRich(diag::Code::E0013_InvalidExpression, previous(),
+                              "only functions can be called",
+                              "'(' here is being parsed as a call, but a call's callee must be a "
+                              "plain name (e.g. `foo()`); the expression right before this '(' is not "
+                              "a plain name, so it cannot be called",
+                              "call a plain function name instead, or remove the '(' if it wasn't "
+                              "meant to be a call",
+                              "a function name before '('");
             auto c = std::make_shared<CallExpr>();
             c->callee = var->name;
             c->line = previous().line;
@@ -1997,7 +2198,14 @@ ExprPtr Parser::primary() {
                     lit->str = advance().lexeme;
                     keyExpr = lit;
                 } else {
-                    throw err(diag::Code::E0013_InvalidExpression, peek(), "expected a key (name or string) in map literal");
+                    throw errRich(diag::Code::E0013_InvalidExpression, peek(),
+                                  "expected a key (name or string) in map literal",
+                                  "each entry in a `{ ... }` map literal starts with a key, which "
+                                  "must be a plain identifier or a quoted string, followed by ':' and "
+                                  "the value",
+                                  "use a plain identifier or a quoted string as the key, e.g. "
+                                  "`{ name: \"Ali\" }` or `{ \"name\": \"Ali\" }`",
+                                  "an identifier or string literal");
                 }
                 consume(TokenType::COLON, "Expected ':' after map key");
                 auto valueExpr = expression();
@@ -2007,7 +2215,13 @@ ExprPtr Parser::primary() {
         consume(TokenType::RBRACE, "Expected '}' after map entries");
         return map;
     }
-    throw err(diag::Code::E0013_InvalidExpression, peek(), "expected expression");
+    throw errRich(diag::Code::E0013_InvalidExpression, peek(), "expected expression",
+                  "the parser reached a point where a value is required (a literal, variable, "
+                  "parenthesized expression, list `[...]`, or map `{...}`) but the current token "
+                  "cannot start any of those",
+                  "check for a missing operand — a stray operator, an extra comma, or an unmatched "
+                  "closing bracket right before this token are the most common causes",
+                  "a literal, variable, '(', '[', or '{'");
 }
 
 } // namespace rin
