@@ -674,6 +674,36 @@ private:
     // كانت فعلاً قبل هذا الإسناد (لا بعده).
     void assignStateAware(Environment* owner, const std::string& name, const Value& newValue, int line);
 
+    // ---- RCS-1.0 §3.5 Tree (Phase 2) ----
+    // اسم حاوية ابن -> اسم حاوية أبها المباشرة. تُملأ فقط للحاويات المتعشَّشة نصّياً داخل جسم حاوية
+    // أخرى وقت التنفيذ (انظر ContainerStmt في execute(): تُسجَّل قبل push على containerStack مباشرة
+    // إن كانت containerStack غير فارغة حينها). حاوية أُنشئت عبر spawn()/create() أو حاوية جذرية أعلى
+    // المستوى لا تملك أباً في هذه الخريطة إطلاقاً (لا مُدخَل لها هنا على الإطلاق).
+    std::unordered_map<std::string, std::string> containerParent;
+    // اسم حاوية الأب -> أسماء أبنائها المباشرين فقط بترتيب أول ظهور -- لا الأحفاد، مطابقةً حرفياً
+    // لِـ RCS-1.0 §3.5: "الأب يرى الأبناء المباشرين فقط لا الأحفاد (لمنع تسرّب حالة عابر للمستويات
+    // بلا قصد)". يُستخدَم من natives الجديدة childrenOf/siblingsOf أدناه.
+    std::unordered_map<std::string, std::vector<std::string>> containerChildren;
+    // اسم الحاوية -> أسماء حقول `slot` المُعلَنة بداخلها بترتيب التعريف (RCS-1.0 §3.5). توثيق بنيوي
+    // بحت في Phase 2 -- بلا أي ربط فعلي لحاوية ابن حقيقية بكل slot بعد (انظر SlotDeclStmt في
+    // rin_ast.h)؛ تُستخدَم فقط من native جديدة slotsOf أدناه لأجل الاستقصاء.
+    std::unordered_map<std::string, std::vector<std::string>> containerSlots;
+    // يبحث عن اسم أقرب حاوية "مالكة" فعلياً لبيئة تنفيذ مُعطاة (startEnv)، بالمشي صعوداً عبر سلسلة
+    // آباء البيئة (Environment::parent) حتى إيجاد بيئة مطابقة تماماً (بالمؤشر) لإحدى قيم `containers`،
+    // أو الوصول لجذر السلسلة بلا أي تطابق. ضروري لـ EmitStmt تحديداً: 'emit' يقع غالباً داخل جسم
+    // دالة (fun) تُستدعى *بعد* انتهاء التنفيذ التصريحي للحاوية بوقت طويل (حين تكون containerStack قد
+    // فرغت مجدداً بالفعل، خلافاً للحظة تعريف state/on التي تلتقطها containerStack مباشرة في Phase 1)،
+    // فلا يكفي الاعتماد على قمة containerStack وحدها لمعرفة "الحاوية التي نُنفَّذ حالياً بداخلها".
+    // يُعيد نصاً فارغاً إن لم تكن startEnv (ولا أي جدّ لها) بيئة حاوية مسجَّلة إطلاقاً (تنفيذ عالمي
+    // خارج أي حاوية على الإطلاق).
+    std::string containerKeyForEnv(Environment* startEnv) const;
+
+    // ---- RCS-1.0 §3.6 Events (Phase 2) ----
+    // اسم الحاوية -> [(اسم الحدث، دالة المعالج)] بترتيب التسجيل عبر `on.event` -- نفس شكل
+    // chatHandlers أعلاه بالضبط. مستقلّة تماماً عن channelSubs (PubSub §3.12 -- انظر الفرق الموثَّق
+    // هناك): هذه الأحداث تصعد فقط عبر شجرة Tree (§3.5) -- الأب المباشر افتراضياً، أو كل الأجداد صعوداً
+    // مع 'emit ... bubbles;' -- بلا أي اسم قناة صريح يُسجَّل له مشتركون من أي مكان في البرنامج.
+    std::unordered_map<std::string, std::vector<std::pair<std::string, Value>>> eventHandlers;
 
     // ---- تخزين حقيقي على القرص (save/file/installation) ----
     std::string basePath;                                     // جذر حقيقي اختياري لكل عمليات الملفات
