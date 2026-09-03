@@ -648,6 +648,33 @@ private:
     void notifyWatchers(const std::string& container, const std::string& id, const Value& doc,
                          const std::string& event, int line);
 
+    // ---- RCS-1.0 §3.2 Lifecycle + §3.3 State (Phase 1) ----
+    // اسم الحاوية -> قيم دوالها الخمس (Value::Type::FUNCTION أو Value::nil() إن لم تُعرَّف). تُملأ
+    // عند تنفيذ LifecycleHookStmt داخل جسم الحاوية (انظر execute() في rin_interpreter.cpp)، ولا
+    // تُنفَّذ أبداً كعبارة عادية -- فقط تُسجَّل، ثم تُستدعى تلقائياً من نقاط محدَّدة (init/mount عند
+    // نهاية جسم الحاوية، update عند إسناد لحقل state، destroy عبر destroyContainer، error عند
+    // استثناء RinError يقع أثناء استدعاء أي خُطّاف آخر لنفس الحاوية).
+    struct LifecycleHooks {
+        Value init, mount, update, destroy, error;
+    };
+    std::unordered_map<std::string, LifecycleHooks> containerLifecycle;
+    // اسم الحاوية -> أسماء حقولها المُعلَنة عبر `state` (لا `let` العادية). يُستخدَم فقط لتمييز
+    // إسناد يستحق إطلاق on update(prevState) تلقائياً من إسناد عادي لا علاقة له بأي خُطّاف.
+    std::unordered_map<std::string, std::unordered_set<std::string>> containerStateNames;
+    // يستدعي دالة خُطّاف واحدة (إن كانت مُعرَّفة فعلاً) بأمان: أي RinError يقع أثناء تنفيذها يُوجَّه
+    // تلقائياً إلى خُطّاف on error(err) الخاص بنفس الحاوية إن وُجد (err = {message: "..."})، وإلا
+    // يُعاد رميه كما هو (نفس سلوك أي خطأ Rin عادي بلا أي كتم صامت). لا تفعل شيئاً إن كانت hookFn
+    // ليست دالة أصلاً (الحالة الافتراضية لأي حاوية لم تُعرِّف هذا الخُطّاف).
+    void fireLifecycleHook(const std::string& containerKey, const Value& hookFn,
+                            std::vector<Value> args, int line);
+    // يُستدعى بدل الإسناد المباشر لأي متغيّر تم إيجاد بيئته المالكة (owner) مسبقاً: يكتب newValue
+    // بنفسه، ويطلق تلقائياً on update(prevState) *بعد* الكتابة مباشرة إن كانت owner بيئة حاوية
+    // معروفة و`name` أحد حقول `state` المُعلَنة لها ولديها خُطّاف update مُعرَّف -- الالتقاط
+    // (snapshot) لكل حقول state الحالية يحدث *قبل* الكتابة بالذات حتى يعكس prevState القيم كما
+    // كانت فعلاً قبل هذا الإسناد (لا بعده).
+    void assignStateAware(Environment* owner, const std::string& name, const Value& newValue, int line);
+
+
     // ---- تخزين حقيقي على القرص (save/file/installation) ----
     std::string basePath;                                     // جذر حقيقي اختياري لكل عمليات الملفات
     bool installedIndexLoaded = false;
