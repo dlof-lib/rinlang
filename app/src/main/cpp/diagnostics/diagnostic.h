@@ -71,6 +71,7 @@ enum class Code {
     E0038_PackageError,
     E0039_InternalCompilerError,
     E0040_UnsupportedFeature,
+    E0041_MissingDependency, // RCS-1.0 §3.14 Dependency: 'requires X;' حيث X غير موجودة في الشجرة وقت الفحص
 
     W0001_UnusedVariable,
     W0002_UnusedImport,
