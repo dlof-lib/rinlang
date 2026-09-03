@@ -44,11 +44,30 @@ jobs:
       # ------------------------------------------------------------------
       - name: Sanity-check site.rin as a @view program with loomc
         run: |
+          # نفس قائمة مصادر هدف loomc في app/src/main/cpp/CMakeLists.txt بالضبط — لازمة كاملة
+          # لأن loom/loomc.cpp يتضمّن rin_loom_pipeline.h الذي يشغّل rin::Interpreter حقيقياً
+          # (runColdPipelineWithRuntime)، وليس مجرّد lex+parse فقط؛ بدون rin_interpreter.cpp وكل ما
+          # يعتمد عليه (diagnostics/, loader_ui/, clc/) يفشل الربط بأخطاء "undefined reference".
           g++ -O2 -std=c++17 -o loomc_native_check \
             app/src/main/cpp/loom/loomc.cpp \
             app/src/main/cpp/rin_lexer.cpp \
             app/src/main/cpp/rin_parser.cpp \
-            -I app/src/main/cpp
+            app/src/main/cpp/rin_make.cpp \
+            app/src/main/cpp/rin_interpreter.cpp \
+            app/src/main/cpp/loader_ui/library_loader_ui.cpp \
+            app/src/main/cpp/rin_http.cpp \
+            app/src/main/cpp/diagnostics/diagnostic.cpp \
+            app/src/main/cpp/diagnostics/source_manager.cpp \
+            app/src/main/cpp/diagnostics/diagnostic_engine.cpp \
+            app/src/main/cpp/diagnostics/diagnostic_renderer.cpp \
+            app/src/main/cpp/clc/clc_container.cpp \
+            app/src/main/cpp/clc/clc_compress.cpp \
+            app/src/main/cpp/clc/clc_security.cpp \
+            app/src/main/cpp/clc/clc_rin_opt.cpp \
+            app/src/main/cpp/clc/clc_zip_import.cpp \
+            app/src/main/cpp/clc/sha256.cpp \
+            -I app/src/main/cpp \
+            -lz
           ./loomc_native_check site.rin 420 /tmp/site_check.ppm
           echo "Native @view/Loom check OK."
           rm -f loomc_native_check /tmp/site_check.ppm
