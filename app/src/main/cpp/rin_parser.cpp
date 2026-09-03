@@ -154,6 +154,21 @@ StmtPtr Parser::declaration() {
     if (check(TokenType::IDENT) && peek().lexeme == "on" && checkNext(TokenType::DOT)) {
         return uiBindingStatement();
     }
+    // RCS-1.0 §3.2 Lifecycle: 'on' IDENT('init'/'mount'/'update'/'destroy'/'error') '(' ... — يُميَّز
+    // عن on.<element>.<event> أعلاه بالنظر التالي مباشرة: هنا التالي IDENT (اسم الخُطّاف) لا DOT.
+    // 'on' كلمة سياقية غير محجوزة (بنفس أسلوب route/row/document/warp)، فلا تتعارض مع استخدامها
+    // اسم متغيّر عادي في أي سياق آخر.
+    if (check(TokenType::IDENT) && peek().lexeme == "on" && checkNext(TokenType::IDENT)) {
+        advance(); // 'on'
+        return lifecycleHookDeclaration();
+    }
+    // RCS-1.0 §3.3 State: 'state' IDENT '=' expr ';' -- كلمة سياقية غير محجوزة أيضاً (بنفس أسلوب
+    // 'route'/'row'/'document'/'warp' أعلاه)، مُميَّزة بالنظر خطوة إضافية للأمام (IDENT مباشرة
+    // بعدها) حتى لا تصطدم باستخدام "state" اسم متغيّر عادي في أي سياق آخر.
+    if (check(TokenType::IDENT) && peek().lexeme == "state" && checkNext(TokenType::IDENT)) {
+        advance(); // 'state'
+        return stateDeclaration();
+    }
     // '@theme=Name key=expr; ... .end/theme' -> Rin Loom Theme (Pattern Book) declaration, نفس
     // أسلوب فحص '@import'/'@view' أعلاه بالضبط.
     if (check(TokenType::AT) && checkNext(TokenType::IDENT) &&
@@ -235,6 +250,63 @@ StmtPtr Parser::letDeclaration() {
     if (match({TokenType::EQUAL})) initializer = expression();
     consume(TokenType::SEMICOLON, "Expected ';' after variable declaration");
     auto stmt = std::make_shared<LetStmt>();
+    stmt->name = name.lexeme;
+    stmt->initializer = initializer;
+    stmt->line = name.line;
+    return stmt;
+}
+
+// RCS-1.0 §3.2 Lifecycle: on init/mount/update/destroy/error(params) { body }  (يُستدعى بعد
+// استهلاك 'on' من declaration()). الجسم يُبنى داخلياً كـ FunctionStmt عادي (اسمه "on <hook>")
+// حتى يُنفَّذ لاحقاً عبر Interpreter::callFunction الموجودة فعلاً بلا أي آلية استدعاء موازية.
+StmtPtr Parser::lifecycleHookDeclaration() {
+    Token hookTok = consume(TokenType::IDENT,
+        "Expected a lifecycle hook name after 'on' (init/mount/update/destroy/error)");
+    static const std::unordered_set<std::string> validHooks = {"init", "mount", "update", "destroy", "error"};
+    if (!validHooks.count(hookTok.lexeme)) {
+        auto d = err(diag::Code::E0012_MissingToken, hookTok,
+                     "unknown lifecycle hook 'on " + hookTok.lexeme + "'");
+        d.diagnostic->withReason("RCS-1.0 §3.2 Lifecycle defines exactly five hooks")
+         .withHint("expected one of: on init(), on mount(), on update(prevState), on destroy(), on error(err)");
+        throw d;
+    }
+    consume(TokenType::LPAREN, "Expected '(' after lifecycle hook name 'on " + hookTok.lexeme + "'");
+    std::vector<std::string> params;
+    if (!check(TokenType::RPAREN)) {
+        do {
+            params.push_back(consume(TokenType::IDENT, "Expected parameter name").lexeme);
+        } while (match({TokenType::COMMA}));
+    }
+    consume(TokenType::RPAREN, "Expected ')' after lifecycle hook parameters");
+    consume(TokenType::LBRACE, "Expected '{' before lifecycle hook body 'on " + hookTok.lexeme + "'");
+    // نفس حماية loopDepth الموجودة في functionDeclaration(): جسم الخُطّاف يبدأ سياق حلقة جديداً
+    // من الصفر (break/continue بداخله لا يُعتبران صالحين إلا بحلقة while داخل الخُطّاف نفسه).
+    int savedLoopDepth = loopDepth;
+    loopDepth = 0;
+    auto body = block();
+    loopDepth = savedLoopDepth;
+
+    auto fn = std::make_shared<FunctionStmt>();
+    fn->name = "on " + hookTok.lexeme; // لأغراض رسائل الخطأ فقط (عدد الوسائط في callFunction)
+    fn->params = params;
+    fn->body = body;
+    fn->line = hookTok.line;
+
+    auto s = std::make_shared<LifecycleHookStmt>();
+    s->hook = hookTok.lexeme;
+    s->asFunction = fn;
+    s->line = hookTok.line;
+    return s;
+}
+
+// RCS-1.0 §3.3 State: state IDENT = expr;  (يُستدعى بعد استهلاك 'state' من declaration()).
+// التهيئة إلزامية دائماً (مطابقة تماماً للـ EBNF: state_stmt ::= "state" IDENT "=" expr ";").
+StmtPtr Parser::stateDeclaration() {
+    auto name = consume(TokenType::IDENT, "Expected state field name after 'state'");
+    consume(TokenType::EQUAL, "Expected '=' after state field name ('state' fields must be initialized)");
+    ExprPtr initializer = expression();
+    consume(TokenType::SEMICOLON, "Expected ';' after state field declaration");
+    auto stmt = std::make_shared<StateDeclStmt>();
     stmt->name = name.lexeme;
     stmt->initializer = initializer;
     stmt->line = name.line;
@@ -1259,6 +1331,24 @@ void Parser::validateDataContainerBody(const std::vector<StmtPtr>& body) {
                                "functions (`fun`) are not allowed inside `container.data`/`container.table`/`table`");
             d.diagnostic->withReason("`container.data` containers must stay pure data (serializable)")
              .withHint("use `container` or `container.pipe` for logic instead");
+            throw d;
+        }
+        // RCS-1.0 §3.2/§3.3: خُطّافات دورة الحياة (`on init/mount/update/destroy/error`) وحقول
+        // الحالة (`state`) هما سلوك، لا بيانات نقية — نفس منطق حظر `fun` أعلاه بالضبط، ونفس
+        // السبب: `container.data`/`container.table`/`table`/... يجب أن تبقى قابلة للتسلسل
+        // (serializable) بالكامل بلا أي دوال مرفقة.
+        if (std::dynamic_pointer_cast<LifecycleHookStmt>(st)) {
+            auto d = errAtLine(diag::Code::E0014_InvalidContainer, st->line,
+                               "lifecycle hooks ('on init/mount/update/destroy/error') are not allowed inside `container.data`/`container.table`/`table`");
+            d.diagnostic->withReason("`container.data` containers must stay pure data (serializable)")
+             .withHint("use `container` or `container.pipe` for logic instead");
+            throw d;
+        }
+        if (std::dynamic_pointer_cast<StateDeclStmt>(st)) {
+            auto d = errAtLine(diag::Code::E0014_InvalidContainer, st->line,
+                               "'state' fields are not allowed inside `container.data`/`container.table`/`table`");
+            d.diagnostic->withReason("`container.data` containers must stay pure data (serializable)")
+             .withHint("use `container` or `container.pipe` for reactive state instead");
             throw d;
         }
         if (std::dynamic_pointer_cast<ContainerStmt>(st) || std::dynamic_pointer_cast<ContainerGroupStmt>(st) ||
