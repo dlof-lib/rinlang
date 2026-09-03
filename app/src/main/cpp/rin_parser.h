@@ -98,6 +98,8 @@ private:
     // RCS-1.0 §3.6 Events (Phase 2): on.event STRING (params) { body }  (يُستدعى بعد استهلاك
     // 'on' '.' 'event' -- يُميَّز عن on.<element>.<event> في declaration() بالنظر للتوكن الرابع).
     StmtPtr eventHandlerDeclaration();
+    // RCS-1.0 §3.14 Dependency (Phase 3): requires IDENT (, IDENT)* ;  (يُستدعى بعد استهلاك 'requires')
+    StmtPtr dependencyDeclaration();
     StmtPtr textDeclaration();
     StmtPtr objectStyleFieldDeclaration(ObjectStyleFieldKind kind); // txt/img/object.file/Fonts/background/css3 name=...; (حصراً داخل @Object)
     StmtPtr atBlock();                 // @container / @container.pipe / @container.data / @container.api / @container.import / @Containers.Group / @Volume
