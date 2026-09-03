@@ -908,10 +908,43 @@ std::string Parser::readTagKeyword() {
     return tag;
 }
 
-std::string Parser::readOptionalName() {
+std::string Parser::readOptionalName(const std::string& context) {
     if (!match({TokenType::EQUAL})) return "";
     if (check(TokenType::IDENT) || check(TokenType::STRING)) return advance().lexeme;
-    throw err(diag::Code::E0012_MissingToken, peek(), "expected a name after '='");
+
+    // الاسم بعد '=' اختياري بالكامل — أي أن '=' نفسه لم يكن مُجبَراً على الظهور هنا. لذا وصول
+    // القارئ إلى هذه النقطة يعني أن المبرمج كتب '=' فعلاً وقصد إعطاء اسماً، لكن ما تبعه ليس
+    // معرّفاً (IDENT) ولا سلسلة نصية (STRING) — أشهر سبب: نسي كتابة الاسم فانتقل مباشرة لبقية
+    // الجملة (';' أو نهاية السطر)، أو وضع رقماً/رمزاً بدل اسم صريح.
+    const Token& bad = peek();
+    std::string ctx = context.empty() ? "this" : context;
+    diag::Diagnostic d(diag::Code::E0012_MissingToken,
+                        "expected a name after '=' in " + ctx, locOf(bad));
+    d.expected = "an identifier (e.g. `MyName`) or a string literal (e.g. `\"My Name\"`)";
+    d.found = (bad.type == TokenType::END_OF_FILE) ? "end of file"
+              : (bad.lexeme.empty() ? "an empty token" : ("`" + bad.lexeme + "`"));
+    d.withReason("here '=' is being used to give a name to " + ctx +
+                 "; once the parser sees '=' in this position it must be followed immediately "
+                 "by exactly one identifier or one quoted string that becomes the name — "
+                 "nothing else is a valid name token");
+    if (bad.type == TokenType::SEMICOLON) {
+        d.withHint("either remove the trailing '=' if " + ctx + " does not need a name, "
+                   "or put the name right after it, e.g. `=MyName;` instead of `=;`");
+    } else if (bad.type == TokenType::DOT || bad.type == TokenType::AT || bad.type == TokenType::END_OF_FILE) {
+        d.withHint("either remove the trailing '=' if " + ctx + " does not need a name, "
+                   "or add a name directly after it (no space issue — the token itself is "
+                   "missing), e.g. `=MyName`");
+    } else if (bad.type == TokenType::NUMBER) {
+        d.withHint("names cannot start with a digit — wrap it in quotes to use it as a string "
+                   "name instead, e.g. `=\"" + bad.lexeme + "\"`, or start the identifier with a "
+                   "letter, e.g. `=Item" + bad.lexeme + "`");
+    } else {
+        d.withHint("a name after '=' must be a plain identifier (letters, digits, '_' — not "
+                   "starting with a digit) or a double-quoted string; `" + bad.lexeme +
+                   "` is neither, so wrap it in quotes if it's meant to be a literal name, e.g. "
+                   "`=\"" + bad.lexeme + "\"`");
+    }
+    throw RinError(std::move(d));
 }
 
 bool Parser::checkClosingTag() const {
@@ -952,7 +985,7 @@ void Parser::consumeEndTag(const std::string& expectedTag, int openLine, const s
     // '} // namespace Foo' في لغات أخرى، لكن هنا يُتحقَّق منه فعلياً وقت التحليل النحوي بدل أن يكون
     // مجرد تعليق يمكن أن يفوت المبرمج تحديثه). كتابته اختيارية بالكامل ولا تُغيّر أي سلوك قديم.
     Token afterTag = peek();
-    std::string closingName = readOptionalName();
+    std::string closingName = readOptionalName("a closing tag (`.end/" + expectedTag + "=name`)");
     if (!closingName.empty()) {
         if (openName.empty()) {
             auto d = err(diag::Code::E0011_UnexpectedToken, afterTag,
@@ -995,7 +1028,7 @@ std::shared_ptr<ViewStmt> Parser::viewDeclaration() {
     Token viewTok = previous(); // 'view'
     consume(TokenType::DOT, "Expected '.' after '@view' (did you mean '@view.Column=...'?)");
     Token kindTok = consume(TokenType::IDENT, "Expected a strand kind after '@view.' (e.g. Column, Text, Button)");
-    std::string name = readOptionalName();
+    std::string name = readOptionalName("a `@view." + kindTok.lexeme + "` strand");
 
     auto s = std::make_shared<ViewStmt>();
     s->name = name;
@@ -1040,7 +1073,7 @@ std::shared_ptr<ViewStmt> Parser::elementDeclaration() {
         throw err(diag::Code::E0012_MissingToken, peek(), "Expected an element kind after '@element.'");
     Token kindTok = advance(); // accepts reserved Rin words such as `text`/`file` as element kinds
     auto s = std::make_shared<ViewStmt>();
-    s->name = readOptionalName();
+    s->name = readOptionalName("an `@element." + kindTok.lexeme + "`");
     s->kindTag = kindTok.lexeme;
     s->role = UiRole::ELEMENT;
     s->line = openTok.line;
@@ -1067,10 +1100,10 @@ std::shared_ptr<ViewStmt> Parser::loopCanvasDeclaration() {
         advance();
         Token kindTok = consume(TokenType::IDENT, "Expected a canvas layout kind after '@loop.'");
         s->kindTag = kindTok.lexeme;
-        s->name = readOptionalName();
+        s->name = readOptionalName("a `@loop." + kindTok.lexeme + "` canvas");
     } else {
         s->kindTag = "Column";
-        s->name = readOptionalName();
+        s->name = readOptionalName("a `@loop` canvas");
     }
     while (!checkClosingTag() && !isAtEnd()) {
         if (check(TokenType::AT) && checkNext(TokenType::IDENT) && tokens[current + 1].lexeme == "element") {
@@ -1333,7 +1366,7 @@ StmtPtr Parser::atBlock() {
         }
         throw d;
     }
-    std::string name = readOptionalName();
+    std::string name = readOptionalName("a `@" + tag + "` block");
     std::vector<StmtPtr> body;
     // RCS-1.0 §7 Phase 0: قبل كل عبارة عادية، نجرّب أولاً قراءتها كتوجيه سياسة (policy_block)
     // إن كانت هذه حاوية من عائلة container (لا Containers.Group/Volume). tryParsePolicyDirective
@@ -1480,7 +1513,7 @@ void Parser::validateDataContainerBody(const std::vector<StmtPtr>& body) {
 
 StmtPtr Parser::sectionBlock() {
     Token secTok = previous();
-    std::string name = readOptionalName();
+    std::string name = readOptionalName("a `Section` block");
     std::vector<StmtPtr> body;
     while (!checkClosingTag() && !isAtEnd()) body.push_back(declaration());
     consumeEndTag("Section", secTok.line, name);
