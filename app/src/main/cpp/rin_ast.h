@@ -427,6 +427,35 @@ struct StateDeclStmt : Stmt {
     ExprPtr initializer;
 };
 
+// ---- Tree (RCS-1.0 §3.5, Phase 2) ----
+// slot IDENT; -- مكان محجوز داخل جسم حاوية يُتوقَّع أن يملأه أب لاحقاً بحاوية ابن. Phase 2 تسجّل
+// الاسم فقط (عبر Interpreter::containerSlots، لأجل الاستقصاء عبر native جديدة slotsOf) بلا فرض
+// أي ربط فعلي لحاوية ابن حقيقية بكل slot وقت التحليل -- ذلك الربط (بناء نحو استدعاء يمرّر حاوية
+// لكل slot صراحة، كما في مثال RCS-1.0 §3.5 الكامل) مؤجَّل لمرحلة لاحقة، تماماً كما توثّق المواصفة.
+struct SlotDeclStmt : Stmt {
+    std::string name;
+};
+
+// ---- Events (RCS-1.0 §3.6, Phase 2) ----
+// emit STRING ("," expr)? ("bubbles")? ";"
+// ملاحظة: EBNF الأصلية في RCS-1.0 §3.6 تكتب "emit IDENT"، لكن كل الأمثلة الفعلية في نفس القسم
+// تستخدم اسم حدث كنص حرفي (STRING) دائماً، مثل "form:submitted" أو "cart:changed" أو
+// "router:blocked" -- لا يصلح IDENT أصلاً لاحتواء ':'. التنفيذ هنا يتبع الأمثلة الفعلية حرفياً
+// (STRING)، لا صياغة الـ EBNF المختصرة.
+struct EmitStmt : Stmt {
+    std::string eventName;
+    ExprPtr payload;      // قد تكون nullptr (بلا payload) -- المعالج المطابق يُستدعى حينها بلا وسائط
+    bool bubbles = false; // 'emit ... bubbles;' -- الصعود عبر كل مستويات الشجرة، لا الأب المباشر فقط
+};
+
+// on.event STRING (params) { body } -- معالج حدث يصعد إليه emit من أبناء هذه الحاوية المباشرين
+// (أو أي جدّ إن استُخدمت 'bubbles' في emit). نفس أسلوب LifecycleHookStmt تماماً: الجسم يُبنى
+// كـ FunctionStmt عادي جاهز للاستدعاء عبر Interpreter::callFunction الموجودة فعلاً.
+struct EventHandlerStmt : Stmt {
+    std::string eventName;
+    std::shared_ptr<FunctionStmt> asFunction;
+};
+
 // ---- Make Unit: وحدة صناعة/بناء عامة وقابلة للسياسة ----
 // @make.(name)
 //     kind app;
