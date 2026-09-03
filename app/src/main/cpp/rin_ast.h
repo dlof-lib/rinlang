@@ -390,6 +390,22 @@ struct ContainerStmt : Stmt {
     std::string name; // قد تكون فارغة إن لم يُحدَّد اسم
     std::vector<StmtPtr> body;
     ContainerKind kind = ContainerKind::PLAIN;
+
+    // ---- Policy block (RCS-1.0 §3.13 Security) ----
+    // مُعمَّمة من @make.(name) (انظر MakeStmt أدناه) إلى أي @container: نفس الكلمات الأربع
+    // (use/need/allow/deny) + strict/version/description، لكن هنا **اختيارية تماماً** —
+    // hasPolicy تبقى false ما لم تُستخدم فعلياً كلمة واحدة منها داخل جسم الحاوية، وعندها فقط
+    // يُطبَّق التحقق (validateContainerPolicy في rin_make.cpp) بنفس آلية Make Unit تماماً، بلا
+    // أي قوائم افتراضية (تلك حصراً لـ makeDefaultAllows حسب kind الخاص بـ Make). لا كسر توافق
+    // عكسي: حاوية لا تستخدم أياً من هذه الكلمات تسلك تماماً كما تسلك اليوم (permissive).
+    std::vector<std::string> uses;
+    std::vector<std::string> needs;
+    std::vector<std::string> allows;
+    std::vector<std::string> denies;
+    std::string version;
+    std::string description;
+    bool strict = false;
+    bool hasPolicy = false;
 };
 
 // ---- Make Unit: وحدة صناعة/بناء عامة وقابلة للسياسة ----
@@ -410,17 +426,13 @@ struct ContainerStmt : Stmt {
 // الحاويات القديم، مع طبقة سياسة حقيقية تتحقق من القدرات المستخدمة داخل الجسم.
 struct MakeStmt : ContainerStmt {
     std::string makeType = "app";
-    std::vector<std::string> uses;
-    std::vector<std::string> needs;
-    std::vector<std::string> allows;
-    std::vector<std::string> denies;
+    // uses/needs/allows/denies/version/description/strict انتقلت إلى ContainerStmt الأساسية
+    // (انظر §3.13 أعلاه) بما أنها الآن مُعمَّمة لأي حاوية، لا حصراً لـ Make Unit — MakeStmt
+    // يرثها كما هي بلا أي تغيير في الاستخدام (make->uses ما زالت تعمل تماماً كالسابق).
     std::vector<std::string> inputs;
     std::vector<std::string> outputs;
     std::vector<std::string> publics;
     std::vector<std::string> privates;
-    std::string version;
-    std::string description;
-    bool strict = false;
 };
 
 // @Containers.Group=name  <body>  .end/Containers.Group
