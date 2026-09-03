@@ -976,6 +976,74 @@ static void pushUnique(std::vector<std::string>& v, const std::string& x) {
     if (std::find(v.begin(), v.end(), x) == v.end()) v.push_back(x);
 }
 
+// RCS-1.0 §3.13 Security — الكلمات الأربع + strict/version/description معمَّمة الآن لأي
+// @container (لا فقط @make.(name)). عمداً بلا "kind"/"input"/"output"/"public"/"private":
+// تلك تبقى خاصة بـ Make Unit فقط في هذه المرحلة (Phase 0 لا تغيّر إلا Security).
+static bool isGeneralPolicyWord(const std::string& w) {
+    return w == "use" || w == "need" || w == "allow" || w == "deny" ||
+           w == "strict" || w == "version" || w == "description";
+}
+
+bool Parser::tryParsePolicyDirective(ContainerStmt& s) {
+    if (!check(TokenType::IDENT)) return false;
+    std::string word = peek().lexeme;
+    if (!isGeneralPolicyWord(word)) return false;
+
+    size_t savedPos = current; // نقطة رجوع كاملة إن لم يطابق الشكل المتوقع بالضبط
+    advance(); // استهلاك كلمة التوجيه نفسها
+
+    if (word == "strict") {
+        if (!check(TokenType::SEMICOLON)) { current = savedPos; return false; }
+        advance();
+        s.strict = true;
+        s.hasPolicy = true;
+        return true;
+    }
+    if (word == "version" || word == "description") {
+        if (!check(TokenType::STRING)) { current = savedPos; return false; }
+        Token v = advance();
+        if (!check(TokenType::SEMICOLON)) { current = savedPos; return false; }
+        advance();
+        if (word == "version") s.version = v.lexeme; else s.description = v.lexeme;
+        s.hasPolicy = true;
+        return true;
+    }
+    // use/need/allow/deny <capability-name> ; — نفس الاستثناء الموجود في makeUnitBlock: اسم
+    // القدرة قد يكون كلمة محجوزة في Rin (container/loop/function...) لا معرِّفاً عادياً.
+    bool okTok = check(TokenType::IDENT) || check(TokenType::CONTAINER) || check(TokenType::FOR) ||
+                 check(TokenType::WHILE) || check(TokenType::FUN) || check(TokenType::RETURN) ||
+                 check(TokenType::PRINT) || check(TokenType::TEXT) || check(TokenType::PIPE_KW);
+    if (!okTok) { current = savedPos; return false; }
+    Token value = advance();
+    if (!check(TokenType::SEMICOLON)) { current = savedPos; return false; }
+    advance();
+    std::vector<std::string>* dst = nullptr;
+    if (word == "use") dst = &s.uses;
+    else if (word == "need") dst = &s.needs;
+    else if (word == "allow") dst = &s.allows;
+    else dst = &s.denies;
+    pushUnique(*dst, value.lexeme);
+    s.hasPolicy = true;
+    return true;
+}
+
+// نفس مجموعة الوسوم التي تُنتج ContainerStmt أدناه (container/pipe/data/api/.../make) —
+// فقط هذه تخضع لتوجيهات policy_block الجديدة؛ Containers.Group/Volume تبقى كما هي (خارج
+// نطاق هذه المرحلة، لا حاجة/طلب لها هناك حالياً).
+static bool isContainerFamilyTag(const std::string& tag) {
+    static const std::unordered_set<std::string> s = {
+        "container", "container.pipe", "pipe", "container.data", "data",
+        "container.api", "api", "container.import",
+        "container.table", "table", "container.doc", "doc",
+        "container.object", "Object", "container.open/object",
+        "container.portal", "portal", "container.block", "block",
+        "container.sticker", "sticker", "container.aukt", "AUKT",
+        "container.chatbot", "chatbot",
+        "container.everything", "Everything", "container.make", "make", "Rin.make"
+    };
+    return s.count(tag) != 0;
+}
+
 StmtPtr Parser::makeUnitBlock() {
     Token atTok = consume(TokenType::AT, "Expected '@' before '@make.(name)'");
     Token makeTok = consume(TokenType::IDENT, "Expected 'make' after '@'");
@@ -1084,7 +1152,16 @@ StmtPtr Parser::atBlock() {
     }
     std::string name = readOptionalName();
     std::vector<StmtPtr> body;
-    while (!checkClosingTag() && !isAtEnd()) body.push_back(declaration());
+    // RCS-1.0 §7 Phase 0: قبل كل عبارة عادية، نجرّب أولاً قراءتها كتوجيه سياسة (policy_block)
+    // إن كانت هذه حاوية من عائلة container (لا Containers.Group/Volume). tryParsePolicyDirective
+    // يستعيد موضع القارئ بنفسه إن لم يطابق النمط، فلا خطر على أي برنامج قديم يستخدم هذه الكلمات
+    // كأسماء عادية. الحقول المُجمَّعة هنا تُطبَّق على ContainerStmt بعد إنشائها أدناه.
+    ContainerStmt policyAccum;
+    bool familyTag = isContainerFamilyTag(tag);
+    while (!checkClosingTag() && !isAtEnd()) {
+        if (familyTag && tryParsePolicyDirective(policyAccum)) continue;
+        body.push_back(declaration());
+    }
     consumeEndTag(tag, atTok.line, name);
 
     if (tag == "container" || tag == "container.pipe" || tag == "pipe" || tag == "container.data" || tag == "data" ||
@@ -1113,6 +1190,12 @@ StmtPtr Parser::atBlock() {
             tag == "container.sticker" || tag == "sticker")) validateDataContainerBody(body);
         auto s = std::make_shared<ContainerStmt>();
         s->name = name; s->body = body; s->line = atTok.line;
+        if (policyAccum.hasPolicy) {
+            s->uses = policyAccum.uses; s->needs = policyAccum.needs;
+            s->allows = policyAccum.allows; s->denies = policyAccum.denies;
+            s->version = policyAccum.version; s->description = policyAccum.description;
+            s->strict = policyAccum.strict; s->hasPolicy = true;
+        }
         if (tag == "container.pipe" || tag == "pipe") s->kind = ContainerKind::PIPE;
         else if (tag == "container.data" || tag == "data") s->kind = ContainerKind::DATA;
         else if (tag == "container.api" || tag == "api") s->kind = ContainerKind::API;
