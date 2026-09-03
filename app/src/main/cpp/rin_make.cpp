@@ -82,6 +82,42 @@ static std::string listMissing(const std::vector<std::string>& missing) {
     return o.str();
 }
 
+// جوهر التحقق مشترك بين Make Unit (سياسة كاملة + قوائم افتراضية حسب kind) وأي @container
+// عادية استخدمت policy_block (§3.13 Phase 0، بلا أي قوائم افتراضية). label تُستخدم فقط
+// لصياغة رسالة الخطأ.
+static void enforcePolicy(const std::string& label, const std::set<std::string>& used,
+                           const std::vector<std::string>& allowed,
+                           const std::vector<std::string>& denies,
+                           const std::vector<std::string>& needs,
+                           const std::vector<std::string>& uses,
+                           bool strict) {
+    if (!allowed.empty()) {
+        std::vector<std::string> bad;
+        for (const auto& cap : used) if (!contains(allowed, cap)) bad.push_back(cap);
+        if (!bad.empty()) {
+            throw std::runtime_error(label + " uses forbidden capabilities: " + listMissing(bad));
+        }
+    }
+
+    if (!denies.empty()) {
+        for (const auto& cap : used) if (contains(denies, cap)) {
+            throw std::runtime_error(label + " denies capability: " + cap);
+        }
+    }
+
+    if (!needs.empty()) {
+        std::vector<std::string> missing;
+        for (const auto& cap : needs) if (used.find(cap) == used.end()) missing.push_back(cap);
+        if (!missing.empty()) throw std::runtime_error(label + " requires capabilities not used: " + listMissing(missing));
+    }
+
+    if (strict && !uses.empty()) {
+        for (const auto& cap : used) if (!contains(uses, cap)) {
+            throw std::runtime_error(label + " is strict: capability '" + cap + "' must be declared with `use " + cap + ";`");
+        }
+    }
+}
+
 void validateMakeUnit(const MakeStmt& make) {
     auto used = makeCapabilities(make.body);
     auto defaults = makeDefaultAllows(make.makeType);
@@ -93,31 +129,15 @@ void validateMakeUnit(const MakeStmt& make) {
 
     // Explicit allow is the strongest whitelist. Otherwise known Make kinds receive a useful default policy.
     const std::vector<std::string>& allowed = !make.allows.empty() ? make.allows : defaults;
-    if (!allowed.empty()) {
-        std::vector<std::string> bad;
-        for (const auto& cap : used) if (!contains(allowed, cap)) bad.push_back(cap);
-        if (!bad.empty()) {
-            throw std::runtime_error("Make Unit '" + make.name + "' kind='" + make.makeType + "' uses forbidden capabilities: " + listMissing(bad));
-        }
-    }
+    enforcePolicy("Make Unit '" + make.name + "' kind='" + make.makeType + "'",
+                  used, allowed, make.denies, make.needs, make.uses, make.strict);
+}
 
-    if (!make.denies.empty()) {
-        for (const auto& cap : used) if (contains(make.denies, cap)) {
-            throw std::runtime_error("Make Unit '" + make.name + "' denies capability: " + cap);
-        }
-    }
-
-    if (!make.needs.empty()) {
-        std::vector<std::string> missing;
-        for (const auto& cap : make.needs) if (used.find(cap) == used.end()) missing.push_back(cap);
-        if (!missing.empty()) throw std::runtime_error("Make Unit '" + make.name + "' requires capabilities not used: " + listMissing(missing));
-    }
-
-    if (make.strict && !make.uses.empty()) {
-        for (const auto& cap : used) if (!contains(make.uses, cap)) {
-            throw std::runtime_error("Make Unit '" + make.name + "' is strict: capability '" + cap + "' must be declared with `use " + cap + ";`");
-        }
-    }
+void validateContainerPolicy(const ContainerStmt& c) {
+    auto used = makeCapabilities(c.body);
+    // بلا أي قائمة افتراضية هنا (خلافاً لـ Make Unit): حاوية عادية لا تملك مفهوم kind/makeType،
+    // فـ allow الصريحة فقط -إن وُجدت- هي التي تعمل كقائمة بيضاء.
+    enforcePolicy("Container '" + c.name + "'", used, c.allows, c.denies, c.needs, c.uses, c.strict);
 }
 
 } // namespace rin
