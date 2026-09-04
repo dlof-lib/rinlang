@@ -31,7 +31,7 @@ print maskMembers("ui-root");
 print maskParent("child-root");
 print maskChildren("app-root");
 
-// Mask v3
+// Mask v1
 maskAlias("save", "save-button");
 maskTag("save-button", "primary");
 maskTag("save-button", "action");
