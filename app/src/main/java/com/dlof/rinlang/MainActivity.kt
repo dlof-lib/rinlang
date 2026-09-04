@@ -29,8 +29,8 @@ import java.io.OutputStreamWriter
 /**
  * IDE-style activity for the Rin language:
  *  - A code editor with line numbers, syntax highlighting, undo/redo,
- *    auto-indent and find/replace — implemented from scratch in C++
- *    ([RinCodeEditorView], [RinCodeEditorController], app/src/main/cpp/editor/).
+ *    auto-indent and find/replace — implemented from scratch in pure Kotlin
+ *    ([RinCodeEditorView], [RinCodeEditorController], [RinEditorEngine], [RinSyntax]).
  *  - A "Run" button that hands source off to the native C++ engine through
  *    [RinEngine], scheduled and tracked by [RinJobScheduler] so runs never
  *    block the UI and every execution is kept as its own timestamped entry
@@ -145,6 +145,7 @@ class MainActivity : AppCompatActivity() {
         val btnMenuRun: Button = findViewById(R.id.btnMenuRun)
         val btnMenuLibraries: Button = findViewById(R.id.btnMenuLibraries)
 
+        var initialLanguageExtension = "rin"
         if (savedInstanceState == null) {
             val project = currentProject
             val libraryName = intent.getStringExtra(EXTRA_LIBRARY_NAME)
@@ -160,22 +161,22 @@ class MainActivity : AppCompatActivity() {
                     currentProjectLibrary = libraryToOpen
                     editCode.setText(ProjectManager.readLibrary(libraryToOpen))
                     txtFileName.text = getString(R.string.library_file_name_format, libraryToOpen.name)
+                    initialLanguageExtension = "rin"
                 }
                 fileToOpen != null -> {
                     currentProjectFile = fileToOpen
                     editCode.setText(ProjectManager.readFile(fileToOpen))
                     txtFileName.text = fileToOpen.name
+                    initialLanguageExtension = extensionOf(fileToOpen.name)
                 }
                 else -> editCode.setText(getString(R.string.sample_program))
             }
         }
 
-        // ملاحظة: لا حاجة بعد الآن لـ RinSyntaxHighlighter.attach(...) هنا — محرر الأكواد الجديد
-        // (RinCodeEditorView) يُلوِّن الصيغة النحوية لغة Rin نفسها تلقائيًا وباستمرار داخليًا عبر
-        // محرك C++ الأصلي (rin::Lexer الفعلي، انظر app/src/main/cpp/editor/rin_editor_engine.cpp)
-        // بلا أي إعداد إضافي، بصرف النظر عن امتداد الملف المفتوح.
         // أرقام الأسطر + تراجع/إعادة + مسافة بادئة تلقائية + أقواس مغلقة تلقائياً + تظليل الأقواس/السطر الحالي
+        // + تلوين نحوي حقيقي (Kotlin خالص عبر RinSyntax، بلا أي C++/JNI) يتبدّل تلقائيًا حسب امتداد الملف.
         editorController = RinCodeEditorController(this, editCode, txtLineNumbers, scrollEditor)
+        editorController.setLanguage(initialLanguageExtension)
 
         // كل تعديل في المحرر يُدفع مباشرةً (بعد تهدئة/debounce قصيرة) إلى جلسة المعاينة الحية
         // إن كانت مفتوحة — نفس فكرة "on each keystroke... updateSource(newSource)" الموثّقة في
@@ -507,6 +508,7 @@ class MainActivity : AppCompatActivity() {
         currentProjectFile = null
         currentProjectLibrary = null
         txtFileName.text = getString(R.string.new_file_name)
+        editorController.setLanguage("rin")
         Toast.makeText(this, getString(R.string.new_file_toast), Toast.LENGTH_SHORT).show()
     }
 
@@ -658,6 +660,7 @@ class MainActivity : AppCompatActivity() {
             currentProjectLibrary = null
             val name = queryDisplayName(uri) ?: uri.lastPathSegment ?: "opened.rin"
             txtFileName.text = name
+            editorController.setLanguage(extensionOf(name))
             Toast.makeText(this, getString(R.string.file_opened_toast, name), Toast.LENGTH_SHORT).show()
         } catch (t: Throwable) {
             Toast.makeText(this, "${getString(R.string.file_open_error)}: ${t.message}", Toast.LENGTH_LONG).show()
