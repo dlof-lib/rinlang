@@ -70,7 +70,7 @@ warp copyHtml   = "false";
 
   // ================================ الشريط العلوي ================================
   @view.TopBar=nav
-    role="topbar"; padding=14; bg="#0a0c0acc";
+    role="topbar"; padding=14; bg="#0a0c0acc"; shadow="true";
     @view.Row=navRow
       gap=10; valign="center";
       @view.Text=brand text="⧉ Rin"; size=19; weight="800"; color="#f4f6f3"; .end/view
@@ -106,7 +106,7 @@ warp copyHtml   = "false";
 
     // ------------------------------------ Hero ------------------------------------
     @view.Column=hero
-      gap=16; padding=30; align="center"; gradient="#0d100d,#0a140d"; radius=20;
+      gap=16; padding=30; align="center"; gradient="#0d100d,#0a140d"; radius=20; shadow="true";
 
       @view.Text=heroEyebrow text="لغة برمجة صغيرة، حقيقية بالكامل"; size=12; color="#22c55e"; weight="700"; .end/view
       @view.Text=heroTitle
@@ -154,26 +154,26 @@ warp copyHtml   = "false";
 
     // -------------------------------- شريط إحصاءات ---------------------------------
     @view.Grid=statsRow
-      columns=2; gap=10;
-      @view.Card=stat1 padding=16; bg="#10130f"; radius=14;
+      columns=2; gap=12;
+      @view.Card=stat1 padding=16; bg="#10130f"; radius=16; shadow="true";
         @view.Column=stat1c gap=2;
           @view.Text=stat1n text="1"; size=22; weight="900"; color="#22c55e"; .end/view
           @view.Text=stat1l text="محرّك C++17 واحد لكل شيء"; size=12; color="#9aa39c"; .end/view
         .end/view
       .end/view
-      @view.Card=stat2 padding=16; bg="#10130f"; radius=14;
+      @view.Card=stat2 padding=16; bg="#10130f"; radius=16; shadow="true";
         @view.Column=stat2c gap=2;
           @view.Text=stat2n text="3"; size=22; weight="900"; color="#22c55e"; .end/view
           @view.Text=stat2l text="منصّات تشغيل: CLI / Android / Web"; size=12; color="#9aa39c"; .end/view
         .end/view
       .end/view
-      @view.Card=stat3 padding=16; bg="#10130f"; radius=14;
+      @view.Card=stat3 padding=16; bg="#10130f"; radius=16; shadow="true";
         @view.Column=stat3c gap=2;
           @view.Text=stat3n text="0"; size=22; weight="900"; color="#22c55e"; .end/view
           @view.Text=stat3l text="أسطر جافاسكربت داخل main.rin"; size=12; color="#9aa39c"; .end/view
         .end/view
       .end/view
-      @view.Card=stat4 padding=16; bg="#10130f"; radius=14;
+      @view.Card=stat4 padding=16; bg="#10130f"; radius=16; shadow="true";
         @view.Column=stat4c gap=2;
           @view.Text=stat4n text=sectionCountStr; size=22; weight="900"; color="#22c55e"; .end/view
           @view.Text=stat4l
@@ -192,63 +192,63 @@ warp copyHtml   = "false";
       @view.Text=featuresEyebrow text="لماذا Rin"; size=12; color="#22c55e"; weight="700"; .end/view
       @view.Text=featuresTitle text="أكثر من مجرّد لغة برمجة عامة"; size=21; weight="800"; color="#f4f6f3"; .end/view
 
-      @view.Card=f1 padding=16; bg="#10130f"; radius=14;
+      @view.Card=f1 padding=16; bg="#10130f"; radius=16; shadow="true";
         @view.Column=f1c gap=4;
           @view.Text=f1icon text="🧠 مفسّر C++17 مستقل"; size=15; weight="700"; color="#f4f6f3"; .end/view
           @view.Text=f1desc text="Lexer وParser وInterpreter كاملة بلغة C++ نقية، تعمل على أي جهاز فيه g++ بمعزل تام عن أندرويد."; size=13; color="#9aa39c"; .end/view
         .end/view
       .end/view
 
-      @view.Card=f2 padding=16; bg="#10130f"; radius=14;
+      @view.Card=f2 padding=16; bg="#10130f"; radius=16; shadow="true";
         @view.Column=f2c gap=4;
           @view.Text=f2icon text="📱 IDE أندرويد كامل"; size=15; weight="700"; color="#f4f6f3"; .end/view
           @view.Text=f2desc text="محرر أكواد بتلوين نحوي، حفظ وفتح عبر SAF، مشاريع متعددة، وقوائم File/Edit/View/Run احترافية."; size=13; color="#9aa39c"; .end/view
         .end/view
       .end/view
 
-      @view.Card=f3 padding=16; bg="#10130f"; radius=14;
+      @view.Card=f3 padding=16; bg="#10130f"; radius=16; shadow="true";
         @view.Column=f3c gap=4;
           @view.Text=f3icon text="📦 لغة حاويات بيانات"; size=15; weight="700"; color="#f4f6f3"; .end/view
           @view.Text=f3desc text="container وContainers.Group وVolume وSection، مع link وtying وmerge لربط ودمج البيانات."; size=13; color="#9aa39c"; .end/view
         .end/view
       .end/view
 
-      @view.Card=f4 padding=16; bg="#10130f"; radius=14;
+      @view.Card=f4 padding=16; bg="#10130f"; radius=16; shadow="true";
         @view.Column=f4c gap=4;
           @view.Text=f4icon text="🗄️ قاعدة بيانات NoSQL مدمجة"; size=15; weight="700"; color="#f4f6f3"; .end/view
           @view.Text=f4desc text="container.doc مع CRUD كامل: insertDoc وupdateDoc وdeleteDoc وqueryDocs، وعلاقات عبر defineRelation."; size=13; color="#9aa39c"; .end/view
         .end/view
       .end/view
 
-      @view.Card=f5 padding=16; bg="#10130f"; radius=14;
+      @view.Card=f5 padding=16; bg="#10130f"; radius=16; shadow="true";
         @view.Column=f5c gap=4;
           @view.Text=f5icon text="🔀 خط أنابيب وإحصاء (RinFlow)"; size=15; weight="700"; color="#f4f6f3"; .end/view
           @view.Text=f5desc text="مُشغّل |> يبني Flow Graph حقيقياً قابلاً للبث والإعادة، مع دوال إحصائية جاهزة: mean وstddev وnormalize."; size=13; color="#9aa39c"; .end/view
         .end/view
       .end/view
 
-      @view.Card=f6 padding=16; bg="#10130f"; radius=14;
+      @view.Card=f6 padding=16; bg="#10130f"; radius=16; shadow="true";
         @view.Column=f6c gap=4;
           @view.Text=f6icon text="🧵 محرّك واجهات Loomtime"; size=15; weight="700"; color="#f4f6f3"; .end/view
           @view.Text=f6desc text="Fabric وLoom وWarp وShuttle وDye — نفس المحرّك الذي يبني هذه الصفحة بالذات، شجرة @view حقيقية بلا HTML."; size=13; color="#9aa39c"; .end/view
         .end/view
       .end/view
 
-      @view.Card=f7 padding=16; bg="#10130f"; radius=14;
+      @view.Card=f7 padding=16; bg="#10130f"; radius=16; shadow="true";
         @view.Column=f7c gap=4;
           @view.Text=f7icon text="🩺 نظام تشخيصات (Diagnostics)"; size=15; weight="700"; color="#f4f6f3"; .end/view
           @view.Text=f7desc text="أخطاء برمز ومكان دقيق واقتراحات 'did you mean'، بدل رسائل C++ خام عند كتابة برنامج Rin خاطئ."; size=13; color="#9aa39c"; .end/view
         .end/view
       .end/view
 
-      @view.Card=f8 padding=16; bg="#10130f"; radius=14;
+      @view.Card=f8 padding=16; bg="#10130f"; radius=16; shadow="true";
         @view.Column=f8c gap=4;
           @view.Text=f8icon text="🌐 RinHTML — Rin داخل المتصفح"; size=15; weight="700"; color="#f4f6f3"; .end/view
           @view.Text=f8desc text="عناصر <rin-app> وتوجيهات rin-click/rin-text تشغّل ملف .rin فعلياً كمنطق صفحة HTML، بلا كتابة جافاسكربت."; size=13; color="#9aa39c"; .end/view
         .end/view
       .end/view
 
-      @view.Card=f9 padding=16; bg="#10130f"; radius=14;
+      @view.Card=f9 padding=16; bg="#10130f"; radius=16; shadow="true";
         @view.Column=f9c gap=4;
           @view.Text=f9icon text="🗣️ صياغة إنجليزية طبيعية اختيارية"; size=15; weight="700"; color="#f4f6f3"; .end/view
           @view.Text=f9desc text="when (x > 5) { ... } otherwise { ... } مطابقة تماماً لـ if/else — نفس السلوك، صياغة أقرب للمبتدئين، ويمكن مزجهما بحرّية."; size=13; color="#9aa39c"; .end/view
@@ -269,7 +269,7 @@ warp copyHtml   = "false";
       .end/view
 
       // ---- 1) متغيّرات وطباعة ----
-      @view.Card=tour1 padding=16; bg="#10130f"; radius=14;
+      @view.Card=tour1 padding=16; bg="#10130f"; radius=16; shadow="true";
         @view.Column=tour1c gap=8;
           @view.Text=tour1t text="1 — متغيّرات وطباعة"; size=15; weight="700"; color="#f4f6f3"; .end/view
           @view.Text=tour1d text="let لأي قيمة، وtext لسلسلة نصية مُنمَّطة الاستخدام."; size=13; color="#9aa39c"; .end/view
@@ -285,7 +285,7 @@ warp copyHtml   = "false";
       .end/view
 
       // ---- 2) شروط: if/else وwhen/otherwise ----
-      @view.Card=tour2 padding=16; bg="#10130f"; radius=14;
+      @view.Card=tour2 padding=16; bg="#10130f"; radius=16; shadow="true";
         @view.Column=tour2c gap=8;
           @view.Text=tour2t text="2 — شرطان متكافئان: if/else وwhen/otherwise"; size=15; weight="700"; color="#f4f6f3"; .end/view
           @view.Text=tour2d text="صياغة كلاسيكية وصياغة إنجليزية طبيعية، بنفس المعنى تماماً — اختر ما يناسب من يقرأ الكود."; size=13; color="#9aa39c"; .end/view
@@ -301,7 +301,7 @@ warp copyHtml   = "false";
       .end/view
 
       // ---- 3) دوال وتكرار ----
-      @view.Card=tour3 padding=16; bg="#10130f"; radius=14;
+      @view.Card=tour3 padding=16; bg="#10130f"; radius=16; shadow="true";
         @view.Column=tour3c gap=8;
           @view.Text=tour3t text="3 — دوال، تكرار ذاتي، وحلقات"; size=15; weight="700"; color="#f4f6f3"; .end/view
           @view.Text=tour3d text="fun عادية، تدعم الاستدعاء الذاتي (recursion) بلا قيود اصطناعية."; size=13; color="#9aa39c"; .end/view
@@ -317,7 +317,7 @@ warp copyHtml   = "false";
       .end/view
 
       // ---- 4) مصفوفات وقواميس ----
-      @view.Card=tour4 padding=16; bg="#10130f"; radius=14;
+      @view.Card=tour4 padding=16; bg="#10130f"; radius=16; shadow="true";
         @view.Column=tour4c gap=8;
           @view.Text=tour4t text="4 — مصفوفات وقواميس (كائنات)"; size=15; weight="700"; color="#f4f6f3"; .end/view
           @view.Text=tour4d text="push وsort جاهزتان للمصفوفات، وفهرسة [\"key\"] عادية للقواميس/الكائنات."; size=13; color="#9aa39c"; .end/view
@@ -333,7 +333,7 @@ warp copyHtml   = "false";
       .end/view
 
       // ---- 5) الأنابيب |> ----
-      @view.Card=tour5 padding=16; bg="#10130f"; radius=14;
+      @view.Card=tour5 padding=16; bg="#10130f"; radius=16; shadow="true";
         @view.Column=tour5c gap=8;
           @view.Text=tour5t text="5 — الأنابيب |> بدل تعشيش الاستدعاءات"; size=15; weight="700"; color="#f4f6f3"; .end/view
           @view.Text=tour5d text="يمرّر |> القيمة على يساره كمُدخل ضمني للدالة على يمينه — سلسلة خطوات مقروءة في سطر واحد."; size=13; color="#9aa39c"; .end/view
@@ -349,7 +349,7 @@ warp copyHtml   = "false";
       .end/view
 
       // ---- 6) حاويات NoSQL ----
-      @view.Card=tour6 padding=16; bg="#10130f"; radius=14;
+      @view.Card=tour6 padding=16; bg="#10130f"; radius=16; shadow="true";
         @view.Column=tour6c gap=8;
           @view.Text=tour6t text="6 — قاعدة بيانات NoSQL مدمجة"; size=15; weight="700"; color="#f4f6f3"; .end/view
           @view.Text=tour6d text="Containers.Group وcontainer.doc يبنيان مستندات JSON حقيقية، تُستعلَم عبر queryDocs بلا أي خادم خارجي."; size=13; color="#9aa39c"; .end/view
@@ -364,7 +364,7 @@ warp copyHtml   = "false";
         .end/view
       .end/view
       // ---- 7) حلقة + make + حاويات ديناميكية ----
-      @view.Card=tour7 padding=16; bg="#10130f"; radius=14;
+      @view.Card=tour7 padding=16; bg="#10130f"; radius=16; shadow="true";
         @view.Column=tour7c gap=8;
           @view.Text=tour7t text="7 — for + make: إنشاء حاويات ديناميكياً وقت التشغيل"; size=15; weight="700"; color="#f4f6f3"; .end/view
           @view.Text=tour7d text="داخل حلقة for عادية، make مرادفة تماماً لـ let، وcreate() (أو spawn) تبني حاوية جديدة بنوع/اسم مُحسوبَين في كل دورة — لا حاجة لمعرفة العدد أو الاسم وقت الكتابة."; size=13; color="#9aa39c"; .end/view
@@ -390,7 +390,7 @@ warp copyHtml   = "false";
         size=13; color="#9aa39c";
       .end/view
 
-      @view.Card=codeCard padding=16; bg="#0d100d"; radius=14;
+      @view.Card=codeCard padding=16; bg="#0d100d"; radius=16; shadow="true";
         @view.Column=codeCardCol gap=10;
           @view.Text=codeSnippet
             mono="true"; size=12.5; color="#cfd6cf";
@@ -418,7 +418,7 @@ warp copyHtml   = "false";
         size=13; color="#9aa39c";
       .end/view
 
-      @view.Card=rinhtmlCard padding=16; bg="#0d100d"; radius=14;
+      @view.Card=rinhtmlCard padding=16; bg="#0d100d"; radius=16; shadow="true";
         @view.Column=rinhtmlCardCol gap=10;
           @view.Text=rinhtmlSnippet
             mono="true"; size=12.5; color="#cfd6cf";
@@ -442,7 +442,7 @@ warp copyHtml   = "false";
       @view.Text=qsEyebrow text="ابدأ الآن"; size=12; color="#22c55e"; weight="700"; .end/view
       @view.Text=qsTitle text="أربع خطوات لتشغيل Rin"; size=21; weight="800"; color="#f4f6f3"; .end/view
 
-      @view.Card=s1 padding=16; bg="#10130f"; radius=14;
+      @view.Card=s1 padding=16; bg="#10130f"; radius=16; shadow="true";
         @view.Column=s1c gap=6;
           @view.Text=s1t text="1 — استنسخ المستودع"; size=15; weight="700"; color="#f4f6f3"; .end/view
           @view.Text=s1d text="احصل على الشيفرة المصدرية الكاملة للغة والمفسّر."; size=13; color="#9aa39c"; .end/view
@@ -452,7 +452,7 @@ warp copyHtml   = "false";
         .end/view
       .end/view
 
-      @view.Card=s2 padding=16; bg="#10130f"; radius=14;
+      @view.Card=s2 padding=16; bg="#10130f"; radius=16; shadow="true";
         @view.Column=s2c gap=6;
           @view.Text=s2t text="2 — ابنِ المفسّر الرسمي"; size=15; weight="700"; color="#f4f6f3"; .end/view
           @view.Text=s2d text="بناء واحد بسيط باستخدام g++ لتفعيل rin_run."; size=13; color="#9aa39c"; .end/view
@@ -462,7 +462,7 @@ warp copyHtml   = "false";
         .end/view
       .end/view
 
-      @view.Card=s3 padding=16; bg="#10130f"; radius=14;
+      @view.Card=s3 padding=16; bg="#10130f"; radius=16; shadow="true";
         @view.Column=s3c gap=6;
           @view.Text=s3t text="3 — شغّل أي ملف Rin"; size=15; weight="700"; color="#f4f6f3"; .end/view
           @view.Text=s3d text="نفّذ برنامجك مباشرة عبر سطر الأوامر."; size=13; color="#9aa39c"; .end/view
@@ -472,7 +472,7 @@ warp copyHtml   = "false";
         .end/view
       .end/view
 
-      @view.Card=s4 padding=16; bg="#10130f"; radius=14;
+      @view.Card=s4 padding=16; bg="#10130f"; radius=16; shadow="true";
         @view.Column=s4c gap=6;
           @view.Text=s4t text="4 — جرّب الأمثلة الجاهزة"; size=15; weight="700"; color="#f4f6f3"; .end/view
           @view.Text=s4d text="مجلد examples/ فيه عشرات ملفات .rin الحقيقية: حاويات، NoSQL، Loomtime، دردشة."; size=13; color="#9aa39c"; .end/view
@@ -492,35 +492,35 @@ warp copyHtml   = "false";
       @view.Text=ecoTitle text="مبنية كمنصّة كاملة، لا لغة معزولة"; size=21; weight="800"; color="#f4f6f3"; .end/view
 
       @view.Grid=ecoGrid
-        columns=2; gap=10;
-      @view.Card=e1 padding=12; bg="#10130f"; radius=12;
+        columns=2; gap=12;
+      @view.Card=e1 padding=14; bg="#10130f"; radius=14; shadow="true";
         @view.Text=e1t text="🧩 نظام مكتبات @import + حزم CLC مضغوطة (.rcl)"; size=13; color="#cfd6cf"; .end/view
       .end/view
-      @view.Card=e2 padding=12; bg="#10130f"; radius=12;
+      @view.Card=e2 padding=14; bg="#10130f"; radius=14; shadow="true";
         @view.Text=e2t text="🛍️ متجر حزم داخل التطبيق (RinPM)"; size=13; color="#cfd6cf"; .end/view
       .end/view
-      @view.Card=e3 padding=12; bg="#10130f"; radius=12;
+      @view.Card=e3 padding=14; bg="#10130f"; radius=14; shadow="true";
         @view.Text=e3t text="🗄️ حاويات بيانات NoSQL (container.doc)"; size=13; color="#cfd6cf"; .end/view
       .end/view
-      @view.Card=e4 padding=12; bg="#10130f"; radius=12;
+      @view.Card=e4 padding=14; bg="#10130f"; radius=14; shadow="true";
         @view.Text=e4t text="🌐 container.api وroute — محاكاة أو طلب شبكة حقيقي"; size=13; color="#cfd6cf"; .end/view
       .end/view
-      @view.Card=e5 padding=12; bg="#10130f"; radius=12;
+      @view.Card=e5 padding=14; bg="#10130f"; radius=14; shadow="true";
         @view.Text=e5t text="🧵 محرّك واجهات Loomtime (هذه الصفحة نفسها)"; size=13; color="#cfd6cf"; .end/view
       .end/view
-      @view.Card=e6 padding=12; bg="#10130f"; radius=12;
+      @view.Card=e6 padding=14; bg="#10130f"; radius=14; shadow="true";
         @view.Text=e6t text="🌍 RinHTML — تشغيل .rin كمنطق صفحة HTML مباشرة"; size=13; color="#cfd6cf"; .end/view
       .end/view
-      @view.Card=e7 padding=12; bg="#10130f"; radius=12;
+      @view.Card=e7 padding=14; bg="#10130f"; radius=14; shadow="true";
         @view.Text=e7t text="⚙️ بناء ونشر تلقائي عبر GitHub Actions (native + WASM + هذه الصفحة)"; size=13; color="#cfd6cf"; .end/view
       .end/view
-      @view.Card=e8 padding=12; bg="#10130f"; radius=12;
+      @view.Card=e8 padding=14; bg="#10130f"; radius=14; shadow="true";
         @view.Text=e8t text="🖥️ إضافة Visual Studio لتلوين الصياغة"; size=13; color="#cfd6cf"; .end/view
       .end/view
-      @view.Card=e9 padding=12; bg="#10130f"; radius=12;
+      @view.Card=e9 padding=14; bg="#10130f"; radius=14; shadow="true";
         @view.Text=e9t text="🔤 ربط مع C / Node.js / Python (bindings/)"; size=13; color="#cfd6cf"; .end/view
       .end/view
-      @view.Card=e10 padding=12; bg="#10130f"; radius=12;
+      @view.Card=e10 padding=14; bg="#10130f"; radius=14; shadow="true";
         @view.Text=e10t text="🩺 نظام تشخيصات أخطاء برموز ومواقع دقيقة (diagnostics/)"; size=13; color="#cfd6cf"; .end/view
       .end/view
       .end/view
@@ -538,28 +538,28 @@ warp copyHtml   = "false";
         size=13; color="#9aa39c";
       .end/view
 
-      @view.Card=c1 padding=16; bg="#10130f"; radius=14;
+      @view.Card=c1 padding=16; bg="#10130f"; radius=16; shadow="true";
         @view.Column=c1c gap=4;
           @view.Text=c1t text="⚡ محرّك واحد، لا ثلاث لغات مختلفة"; size=14; weight="700"; color="#f4f6f3"; .end/view
           @view.Text=c1d text="نفس rin_lexer/rin_parser/rin_interpreter يعمل حرفياً على CLI وAndroid وWeb — لا حاجة لكتابة نفس المنطق ثلاث مرات بثلاث لغات مختلفة."; size=13; color="#9aa39c"; .end/view
         .end/view
       .end/view
 
-      @view.Card=c2 padding=16; bg="#10130f"; radius=14;
+      @view.Card=c2 padding=16; bg="#10130f"; radius=16; shadow="true";
         @view.Column=c2c gap=4;
           @view.Text=c2t text="🗄️ بيانات وواجهة من نفس اللغة"; size=14; weight="700"; color="#f4f6f3"; .end/view
           @view.Text=c2d text="حاويات NoSQL وأنابيب إحصاء ومحرّك واجهات Loomtime كلها امتدادات أصيلة للغة نفسها، لا مكتبات خارجية منفصلة."; size=13; color="#9aa39c"; .end/view
         .end/view
       .end/view
 
-      @view.Card=c3 padding=16; bg="#10130f"; radius=14;
+      @view.Card=c3 padding=16; bg="#10130f"; radius=16; shadow="true";
         @view.Column=c3c gap=4;
           @view.Text=c3t text="🪶 بلا أي إطار خارجي (Zero-dependency)"; size=14; weight="700"; color="#f4f6f3"; .end/view
           @view.Text=c3d text="المفسّر يبنى بـ g++ فقط، بلا npm ولا pip ولا مدير حزم إلزامي — ملف واحد وأمر بناء واحد يكفيان."; size=13; color="#9aa39c"; .end/view
         .end/view
       .end/view
 
-      @view.Card=c4 padding=16; bg="#10130f"; radius=14;
+      @view.Card=c4 padding=16; bg="#10130f"; radius=16; shadow="true";
         @view.Column=c4c gap=4;
           @view.Text=c4t text="🗣️ صياغة قابلة للتخصيص للمبتدئين"; size=14; weight="700"; color="#f4f6f3"; .end/view
           @view.Text=c4d text="when/otherwise إلى جانب if/else — نفس اللغة، بابان مختلفان لدخولها، بلا تجزئة في السلوك أو الأداء."; size=13; color="#9aa39c"; .end/view
@@ -575,42 +575,42 @@ warp copyHtml   = "false";
       @view.Text=faqEyebrow text="أسئلة شائعة"; size=12; color="#22c55e"; weight="700"; .end/view
       @view.Text=faqTitle text="قبل ما تبدأ"; size=21; weight="800"; color="#f4f6f3"; .end/view
 
-      @view.Card=q1 padding=16; bg="#10130f"; radius=14;
+      @view.Card=q1 padding=16; bg="#10130f"; radius=16; shadow="true";
         @view.Column=q1c gap=4;
           @view.Text=q1q text="هل Rin مجرد DSL محدود؟"; size=14; weight="700"; color="#f4f6f3"; .end/view
           @view.Text=q1a text="لا. لديها متغيرات وشروط وحلقات ودوال ومصفوفات وقواميس كأي لغة عامة، بالإضافة إلى امتدادات حاويات البيانات وLoomtime."; size=13; color="#9aa39c"; .end/view
         .end/view
       .end/view
 
-      @view.Card=q2 padding=16; bg="#10130f"; radius=14;
+      @view.Card=q2 padding=16; bg="#10130f"; radius=16; shadow="true";
         @view.Column=q2c gap=4;
           @view.Text=q2q text="أين تعمل؟"; size=14; weight="700"; color="#f4f6f3"; .end/view
           @view.Text=q2a text="أي جهاز فيه g++ (سطر أوامر Linux/macOS/Windows)، داخل تطبيق أندرويد عبر JNI، وداخل المتصفح عبر WebAssembly — نفس محرك اللغة بلا تعديل."; size=13; color="#9aa39c"; .end/view
         .end/view
       .end/view
 
-      @view.Card=q3 padding=16; bg="#10130f"; radius=14;
+      @view.Card=q3 padding=16; bg="#10130f"; radius=16; shadow="true";
         @view.Column=q3c gap=4;
           @view.Text=q3q text="ما الرخصة؟"; size=14; weight="700"; color="#f4f6f3"; .end/view
           @view.Text=q3a text="MIT — الشيفرة المصدرية كاملة ومفتوحة على GitHub، يمكنك استخدامها وتعديلها بحرية."; size=13; color="#9aa39c"; .end/view
         .end/view
       .end/view
 
-      @view.Card=q4 padding=16; bg="#10130f"; radius=14;
+      @view.Card=q4 padding=16; bg="#10130f"; radius=16; shadow="true";
         @view.Column=q4c gap=4;
           @view.Text=q4q text="كيف أشغّل Rin داخل موقع HTML بدون جافاسكربت؟"; size=14; weight="700"; color="#f4f6f3"; .end/view
           @view.Text=q4a text="عبر RinHTML: أضف <rin-app src=\"file.rin\"> وربطها بعناصر rin-click/rin-text — انظر قسم 'Rin في المتصفح' أعلاه."; size=13; color="#9aa39c"; .end/view
         .end/view
       .end/view
 
-      @view.Card=q5 padding=16; bg="#10130f"; radius=14;
+      @view.Card=q5 padding=16; bg="#10130f"; radius=16; shadow="true";
         @view.Column=q5c gap=4;
           @view.Text=q5q text="هل توجد حزم جاهزة أستخدمها مباشرة؟"; size=14; weight="700"; color="#f4f6f3"; .end/view
           @view.Text=q5a text="نعم عبر @import للمكتبات القياسية (مثل math)، وعبر RinPM كمتجر حزم داخل تطبيق أندرويد، بالإضافة إلى حزم CLC مضغوطة (.rcl) قابلة للاستيراد من ملف أو مسار."; size=13; color="#9aa39c"; .end/view
         .end/view
       .end/view
 
-      @view.Card=q6 padding=16; bg="#10130f"; radius=14;
+      @view.Card=q6 padding=16; bg="#10130f"; radius=16; shadow="true";
         @view.Column=q6c gap=4;
           @view.Text=q6q text="هل يمكنني المساهمة في المشروع؟"; size=14; weight="700"; color="#f4f6f3"; .end/view
           @view.Text=q6a text="بالتأكيد — المستودع مفتوح على GitHub، ودليل المساهمة موجود في CONTRIBUTING.md مع قواعد سلوك واضحة في CODE_OF_CONDUCT.md."; size=13; color="#9aa39c"; .end/view
@@ -621,7 +621,7 @@ warp copyHtml   = "false";
     @view.Divider=secDiv9 height=1; color="#1c231d"; .end/view
 
     // -------------------------------- الدعوة الختامية --------------------------------
-    @view.Card=finalCta padding=22; gradient="#0d100d,#0a1610"; radius=20; align="center";
+    @view.Card=finalCta padding=22; gradient="#0d100d,#0a1610"; radius=20; align="center"; shadow="true";
       @view.Column=finalCtaCol gap=10; align="center";
         @view.Text=finalCtaTitle text="جاهز تكتب أول برنامج Rin؟"; size=18; weight="800"; color="#f4f6f3"; .end/view
         @view.Text=finalCtaDesc text="الشيفرة المصدرية كاملة، موثّقة، ومفتوحة تحت رخصة MIT."; size=13; color="#9aa39c"; .end/view
