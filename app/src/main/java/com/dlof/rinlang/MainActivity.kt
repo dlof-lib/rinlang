@@ -30,7 +30,7 @@ import java.io.OutputStreamWriter
  * IDE-style activity for the Rin language:
  *  - A code editor with line numbers, syntax highlighting, undo/redo,
  *    auto-indent and find/replace — implemented from scratch in pure Kotlin
- *    ([RinCodeEditorView], [RinCodeEditorController], [RinEditorEngine], [RinSyntax]).
+ *    ([RinCodeEditorView], [RinCodeEditorController], [RinNativeEditor], [rin::Lexer]).
  *  - A "Run" button that hands source off to the native C++ engine through
  *    [RinEngine], scheduled and tracked by [RinJobScheduler] so runs never
  *    block the UI and every execution is kept as its own timestamped entry
