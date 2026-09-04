@@ -32,8 +32,7 @@ private:
 };
 
 // كل الكلمات المحجوزة الفعلية التي يتعرف عليها Lexer (مصدرها خريطة keywords الداخلية في
-// rin_lexer.cpp نفسها — بلا أي تكرار/نسخ لقائمة منفصلة قد تنحرف عنها مستقبلاً)؛ يستخدمها
-// editor/rin_editor_engine.cpp لبناء اقتراحات الإكمال التلقائي (autocomplete).
+// rin_lexer.cpp نفسها — بلا أي تكرار/نسخ لقائمة منفصلة قد تنحرف عنها مستقبلاً).
 std::vector<std::string> keywordList();
 
 } // namespace rin
