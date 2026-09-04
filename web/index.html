@@ -106,10 +106,19 @@
       stage.appendChild(frag);
     }
 
-    function walk(node, parent) {
+    function walk(node, container) {
       var el = buildElement(node);
-      parent.appendChild(el);
-      for (var i = 0; i < node.children.length; i++) walk(node.children[i], el.childElementCount !== undefined ? el : el);
+      container.appendChild(el);
+      // مهم: كل الأبناء يُلحَقون بنفس الحاوية المسطّحة (container)، لا بعنصر الأب
+      // (el) — لأن كل .strand بترميز position:absolute، وx/y القادمتين من JSON
+      // إحداثيات صفحة مطلقة (نفس نظام الإحداثيات الذي يحسبه محرّك Loom نفسه،
+      // انظر rin_loom_layout.h). لو أُلحق الابن بعنصر الأب (الذي هو نفسه
+      // position:absolute)، يصبح عنصر الأب "containing block" جديداً لأبنائه في
+      // CSS، فيُضاف top/left الأب فوق top/left الابن المطلقين أصلاً — وكل مستوى
+      // تعشيش إضافي يراكم هذا الخطأ. ترتيب الإلحاق (الأب أولاً ثم أبناؤه بعمق قبل
+      // الانتقال للشقيق التالي) يبقى كما هو ليحافظ على ترتيب الرسم الصحيح (الخلفية
+      // قبل محتواها) دون الحاجة لأي تعشيش DOM فعلي.
+      for (var i = 0; i < node.children.length; i++) walk(node.children[i], container);
     }
 
     function buildElement(node) {
