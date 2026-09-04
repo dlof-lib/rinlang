@@ -7,10 +7,9 @@ import android.widget.ScrollView
 import android.widget.TextView
 
 /**
- * بديل [CodeEditorController] القديم (المبني فوق [RinEditText]/android.widget.EditText) —
- * بنفس الواجهة العامة تمامًا (نفس أسماء وتوقيعات الدوال) حتى يبقى [MainActivity] يعمل بأقل
- * تعديل ممكن، لكن كل التحرير الفعلي هنا مُفوَّض بالكامل إلى [RinCodeEditorView] ومحرك C++
- * الأصلي خلفه (app/src/main/cpp/editor/) — لا يوجد أي منطق تحرير في هذا الملف نفسه، فقط:
+ * متحكم رفيع فوق [RinCodeEditorView] — لا يوجد أي منطق تحرير في هذا الملف نفسه، كل التحرير
+ * الفعلي مُفوَّض بالكامل إلى [RinCodeEditorView] ومحركه [RinEditorEngine] (Kotlin خالص، بلا
+ * أي C++/JNI). هذا الصنف مسؤول فقط عن:
  * مزامنة عمود أرقام الأسطر، التمرير التلقائي إلى المؤشر/التطابق، وحالة "بحث حسّاس لحالة الأحرف".
  */
 class RinCodeEditorController(
@@ -84,13 +83,14 @@ class RinCodeEditorController(
         // بعد الإدراج المؤشر في نهاية النص المُدرَج بالكامل؛ أرجعه للخلف بطول after ليستقر عند موضع العلامة.
         if (after.isNotEmpty()) {
             val cur = editorView.engine.getCursor()
-            val lineText = editorView.engine.getLine(cur.line)
-            val curChar = RinNativeEditor.byteOffsetToCharIndex(lineText, cur.col)
-            val targetChar = (curChar - after.length).coerceAtLeast(0)
-            editorView.engine.setCursor(cur.line, RinNativeEditor.charIndexToByteOffset(lineText, targetChar), false)
+            val targetChar = (cur.col - after.length).coerceAtLeast(0)
+            editorView.engine.setCursor(cur.line, targetChar, false)
             editorView.invalidate()
         }
     }
+
+    /** يبدّل لغة التلوين النحوي الحالية حسب امتداد الملف المفتوح (مثال: "kt"، "cpp"، "rin"). */
+    fun setLanguage(extension: String) = editorView.setLanguage(extension)
 
     fun goToLine(lineNumberOneBased: Int) {
         val y = editorView.goToLine(lineNumberOneBased)
