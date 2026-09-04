@@ -7,7 +7,6 @@ class Lexer {
 public:
     explicit Lexer(std::string source, std::string filename = "<input>");
     std::vector<Token> scanTokens();
-
 private:
     std::string src;
     std::string file;      // اسم الملف؛ يُستخدم في مواقع Diagnostics ويُسجَّل في SourceManager
@@ -31,5 +30,10 @@ private:
     void scanNumber();
     void scanIdentifier();
 };
+
+// كل الكلمات المحجوزة الفعلية التي يتعرف عليها Lexer (مصدرها خريطة keywords الداخلية في
+// rin_lexer.cpp نفسها — بلا أي تكرار/نسخ لقائمة منفصلة قد تنحرف عنها مستقبلاً)؛ يستخدمها
+// editor/rin_editor_engine.cpp لبناء اقتراحات الإكمال التلقائي (autocomplete).
+std::vector<std::string> keywordList();
 
 } // namespace rin
