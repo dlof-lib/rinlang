@@ -1,0 +1,10 @@
+// Rin Stack Pro — LIFO stack.
+fun stack_new(){return [];}
+fun stack_push(s,v){push(s,v);return s;}
+fun stack_peek(s){if(len(s)==0){return nil;}return s[len(s)-1];}
+fun stack_pop(s){if(len(s)==0){return nil;}return pop(s);}
+fun stack_size(s){return len(s);}
+fun stack_empty(s){return len(s)==0;}
+fun stack_pushMany(s,arr){let i=0;while(i<len(arr)){push(s,arr[i]);i=i+1;}return s;}
+fun stack_clear(s){while(len(s)>0){pop(s);}return s;}
+fun stack_toArray(s){let out=[];let i=0;while(i<len(s)){push(out,s[i]);i=i+1;}return out;}
