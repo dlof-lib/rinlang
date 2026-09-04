@@ -215,7 +215,7 @@ struct ResolvedAttr { std::string key; rin::ExprPtr rawExpr; Value value; };
 struct Strand {
     StrandId id = 0;
     StrandKind kind;
-    std::string name, customTag;
+    std::string name, customTag, mask;
     int sourceLine = 0;
     std::vector<ResolvedAttr> attrs;
     std::vector<std::shared_ptr<Strand>> children;
@@ -256,6 +256,7 @@ inline StrandPtr buildFabric(const std::shared_ptr<rin::ViewStmt>& node, WarpSco
     s->kind = strandKindFromTag(node->kindTag);
     if (s->kind == StrandKind::CUSTOM) s->customTag = node->kindTag;
     s->name = node->name;
+    s->mask = "";
     s->sourceLine = node->line;
     std::string myPath = parentPath + "/" + (node->name.empty() ? ("#" + std::to_string(idx)) : node->name);
     s->id = deriveId(parentPath, node->name, idx, s->kind);
@@ -266,6 +267,7 @@ inline StrandPtr buildFabric(const std::shared_ptr<rin::ViewStmt>& node, WarpSco
         Value v = evalAttrExpr(a.value, warp, &reads);
         for (auto& w : reads) subs.record(w, s->id);
         s->attrs.push_back({a.key, a.value, v});
+        if (a.key == "mask") s->mask = v.asString();
         attrHash = fnv1a(a.key + "=" + v.asString(), attrHash);
     }
     // A Loop is the visual canvas. Its optional element_* defaults are inherited by descendants,
@@ -432,6 +434,26 @@ inline StrandPtr findAny(const StrandPtr& s, const std::function<bool(const Stra
 inline StrandPtr findById(const StrandPtr& root, const std::string& name) {
     if (!root) return nullptr;
     return findAny(root, [&](const StrandPtr& s) { return s->name == name; });
+}
+inline StrandPtr findByMask(const StrandPtr& root, const std::string& mask) {
+    if (!root || mask.empty()) return nullptr;
+    return findAny(root, [&](const StrandPtr& s) { return s->mask == mask; });
+}
+
+// Mask queries for Loom: the mask is a logical identity, not merely a styling attribute.
+inline std::vector<StrandPtr> findAllByMask(const StrandPtr& root, const std::string& mask) {
+    std::vector<StrandPtr> out;
+    if (!root || mask.empty()) return out;
+    std::function<void(const StrandPtr&)> walk = [&](const StrandPtr& s) {
+        if (s && s->mask == mask) out.push_back(s);
+        if (s) for (auto& c : s->children) walk(c);
+    };
+    walk(root);
+    return out;
+}
+
+inline int countByMask(const StrandPtr& root, const std::string& mask) {
+    return static_cast<int>(findAllByMask(root, mask).size());
 }
 inline StrandPtr findByKind(const StrandPtr& root, StrandKind kind) {
     if (!root) return nullptr;
