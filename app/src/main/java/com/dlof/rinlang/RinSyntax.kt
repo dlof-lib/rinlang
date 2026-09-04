@@ -205,48 +205,51 @@ private object RinLexer {
         val n = text.length
         var inBlockComment = state.inBlockComment
         while (i < n) {
+            val loopStart = i
             if (inBlockComment) {
                 val end = text.indexOf("*/", i)
                 if (end == -1) { out.add(hl(li, i, n, HighlightKind.COMMENT)); i = n }
                 else { out.add(hl(li, i, end + 2, HighlightKind.COMMENT)); i = end + 2; inBlockComment = false }
-                continue
-            }
-            val c = text[i]
-            when {
-                c == '/' && i + 1 < n && text[i + 1] == '/' -> { out.add(hl(li, i, n, HighlightKind.COMMENT)); i = n }
-                c == '/' && i + 1 < n && text[i + 1] == '*' -> {
-                    val end = text.indexOf("*/", i + 2)
-                    if (end == -1) { out.add(hl(li, i, n, HighlightKind.COMMENT)); i = n; inBlockComment = true }
-                    else { out.add(hl(li, i, end + 2, HighlightKind.COMMENT)); i = end + 2 }
-                }
-                c == '"' -> { val end = scanQuoted(text, i, '"'); out.add(hl(li, i, end, HighlightKind.STRING)); i = end }
-                c == '@' -> {
-                    val start = i; i++
-                    while (i < n && (text[i].isLetterOrDigit() || text[i] == '_' || text[i] == '.')) i++
-                    out.add(hl(li, start, i, HighlightKind.AT))
-                }
-                c == '.' && text.startsWith(".end", i) -> {
-                    val start = i; i += 4
-                    while (i < n && (text[i].isLetterOrDigit() || text[i] == '_' || text[i] == '/' || text[i] == '.')) i++
-                    out.add(hl(li, start, i, HighlightKind.AT))
-                }
-                c.isDigit() -> { val end = scanNumber(text, i); out.add(hl(li, i, end, HighlightKind.NUMBER)); i = end }
-                c.isLetter() || c == '_' -> {
-                    val start = i
-                    while (i < n && (text[i].isLetterOrDigit() || text[i] == '_')) i++
-                    val word = text.substring(start, i)
-                    val kind = when {
-                        word in coreKeywords -> HighlightKind.KEYWORD
-                        word in builtins && followedByOpenParen(text, i) -> HighlightKind.CALL
-                        word in builtins -> HighlightKind.CALL
-                        word in containerKeywords -> HighlightKind.TYPE
-                        followedByOpenParen(text, i) -> HighlightKind.CALL
-                        else -> HighlightKind.IDENT
+            } else {
+                val c = text[i]
+                when {
+                    c == '/' && i + 1 < n && text[i + 1] == '/' -> { out.add(hl(li, i, n, HighlightKind.COMMENT)); i = n }
+                    c == '/' && i + 1 < n && text[i + 1] == '*' -> {
+                        val end = text.indexOf("*/", i + 2)
+                        if (end == -1) { out.add(hl(li, i, n, HighlightKind.COMMENT)); i = n; inBlockComment = true }
+                        else { out.add(hl(li, i, end + 2, HighlightKind.COMMENT)); i = end + 2 }
                     }
-                    out.add(hl(li, start, i, kind))
+                    c == '"' -> { val end = scanQuoted(text, i, '"'); out.add(hl(li, i, end, HighlightKind.STRING)); i = end }
+                    c == '@' -> {
+                        val start = i; i++
+                        while (i < n && (text[i].isLetterOrDigit() || text[i] == '_' || text[i] == '.')) i++
+                        out.add(hl(li, start, i, HighlightKind.AT))
+                    }
+                    c == '.' && text.startsWith(".end", i) -> {
+                        val start = i; i += 4
+                        while (i < n && (text[i].isLetterOrDigit() || text[i] == '_' || text[i] == '/' || text[i] == '.')) i++
+                        out.add(hl(li, start, i, HighlightKind.AT))
+                    }
+                    c.isDigit() -> { val end = scanNumber(text, i); out.add(hl(li, i, end, HighlightKind.NUMBER)); i = end }
+                    c.isLetter() || c == '_' -> {
+                        val start = i
+                        while (i < n && (text[i].isLetterOrDigit() || text[i] == '_')) i++
+                        val word = text.substring(start, i)
+                        val kind = when {
+                            word in coreKeywords -> HighlightKind.KEYWORD
+                            word in builtins && followedByOpenParen(text, i) -> HighlightKind.CALL
+                            word in builtins -> HighlightKind.CALL
+                            word in containerKeywords -> HighlightKind.TYPE
+                            followedByOpenParen(text, i) -> HighlightKind.CALL
+                            else -> HighlightKind.IDENT
+                        }
+                        out.add(hl(li, start, i, kind))
+                    }
+                    else -> i++
                 }
-                else -> i++
             }
+            // حاجز أمان قاطع: تقدّم إجباري لكل تكرار مهما كان السبب — يمنع أي تجمّد نهائيًا.
+            if (i <= loopStart) i = loopStart + 1
         }
         return LineState(inBlockComment)
     }
@@ -288,43 +291,46 @@ private object CFamilyLexer {
             }
         }
         while (i < n) {
+            val loopStart = i
             if (inBlockComment) {
                 val end = text.indexOf("*/", i)
                 if (end == -1) { out.add(hl(li, i, n, HighlightKind.COMMENT)); i = n }
                 else { out.add(hl(li, i, end + 2, HighlightKind.COMMENT)); i = end + 2; inBlockComment = false }
-                continue
-            }
-            val c = text[i]
-            when {
-                c == '/' && i + 1 < n && text[i + 1] == '/' -> { out.add(hl(li, i, n, HighlightKind.COMMENT)); i = n }
-                c == '/' && i + 1 < n && text[i + 1] == '*' -> {
-                    val end = text.indexOf("*/", i + 2)
-                    if (end == -1) { out.add(hl(li, i, n, HighlightKind.COMMENT)); i = n; inBlockComment = true }
-                    else { out.add(hl(li, i, end + 2, HighlightKind.COMMENT)); i = end + 2 }
-                }
-                c == '"' -> { val end = scanQuoted(text, i, '"'); out.add(hl(li, i, end, HighlightKind.STRING)); i = end }
-                c == '\'' -> { val end = scanQuoted(text, i, '\''); out.add(hl(li, i, end, HighlightKind.STRING)); i = end }
-                jsTemplate && c == '`' -> { val end = scanQuoted(text, i, '`'); out.add(hl(li, i, end, HighlightKind.STRING)); i = end }
-                c == '@' -> {
-                    val start = i; i++
-                    while (i < n && (text[i].isLetterOrDigit() || text[i] == '_')) i++
-                    out.add(hl(li, start, i, HighlightKind.AT))
-                }
-                c.isDigit() -> { val end = scanNumber(text, i); out.add(hl(li, i, end, HighlightKind.NUMBER)); i = end }
-                c.isLetter() || c == '_' -> {
-                    val start = i
-                    while (i < n && (text[i].isLetterOrDigit() || text[i] == '_')) i++
-                    val word = text.substring(start, i)
-                    val kind = when {
-                        word in keywords -> HighlightKind.KEYWORD
-                        word in types -> HighlightKind.TYPE
-                        followedByOpenParen(text, i) -> HighlightKind.CALL
-                        else -> HighlightKind.IDENT
+            } else {
+                val c = text[i]
+                when {
+                    c == '/' && i + 1 < n && text[i + 1] == '/' -> { out.add(hl(li, i, n, HighlightKind.COMMENT)); i = n }
+                    c == '/' && i + 1 < n && text[i + 1] == '*' -> {
+                        val end = text.indexOf("*/", i + 2)
+                        if (end == -1) { out.add(hl(li, i, n, HighlightKind.COMMENT)); i = n; inBlockComment = true }
+                        else { out.add(hl(li, i, end + 2, HighlightKind.COMMENT)); i = end + 2 }
                     }
-                    out.add(hl(li, start, i, kind))
+                    c == '"' -> { val end = scanQuoted(text, i, '"'); out.add(hl(li, i, end, HighlightKind.STRING)); i = end }
+                    c == '\'' -> { val end = scanQuoted(text, i, '\''); out.add(hl(li, i, end, HighlightKind.STRING)); i = end }
+                    jsTemplate && c == '`' -> { val end = scanQuoted(text, i, '`'); out.add(hl(li, i, end, HighlightKind.STRING)); i = end }
+                    c == '@' -> {
+                        val start = i; i++
+                        while (i < n && (text[i].isLetterOrDigit() || text[i] == '_')) i++
+                        out.add(hl(li, start, i, HighlightKind.AT))
+                    }
+                    c.isDigit() -> { val end = scanNumber(text, i); out.add(hl(li, i, end, HighlightKind.NUMBER)); i = end }
+                    c.isLetter() || c == '_' -> {
+                        val start = i
+                        while (i < n && (text[i].isLetterOrDigit() || text[i] == '_')) i++
+                        val word = text.substring(start, i)
+                        val kind = when {
+                            word in keywords -> HighlightKind.KEYWORD
+                            word in types -> HighlightKind.TYPE
+                            followedByOpenParen(text, i) -> HighlightKind.CALL
+                            else -> HighlightKind.IDENT
+                        }
+                        out.add(hl(li, start, i, kind))
+                    }
+                    else -> i++
                 }
-                else -> i++
             }
+            // حاجز أمان قاطع: تقدّم إجباري لكل تكرار مهما كان السبب — يمنع أي تجمّد نهائيًا.
+            if (i <= loopStart) i = loopStart + 1
         }
         return LineState(inBlockComment)
     }
@@ -361,6 +367,7 @@ private object PythonLexer {
             out.add(hl(li, 0, end + 3, HighlightKind.STRING)); i = end + 3; inTriple = null
         }
         while (i < n) {
+            val loopStart = i
             val c = text[i]
             when {
                 c == '#' -> { out.add(hl(li, i, n, HighlightKind.COMMENT)); i = n }
@@ -388,6 +395,8 @@ private object PythonLexer {
                 }
                 else -> i++
             }
+            // حاجز أمان قاطع: تقدّم إجباري لكل تكرار مهما كان السبب — يمنع أي تجمّد نهائيًا.
+            if (i <= loopStart) i = loopStart + 1
         }
         return inTriple
     }
@@ -406,6 +415,7 @@ private object SimpleLexer {
             var i = 0
             val n = text.length
             while (i < n) {
+                val loopStart = i
                 val c = text[i]
                 when {
                     lineComment != null && text.startsWith(lineComment, i) -> { out.add(hl(li, i, n, HighlightKind.COMMENT)); i = n }
@@ -429,6 +439,8 @@ private object SimpleLexer {
                     }
                     else -> i++
                 }
+                // حاجز أمان قاطع: تقدّم إجباري لكل تكرار مهما كان السبب — يمنع أي تجمّد نهائيًا.
+                if (i <= loopStart) i = loopStart + 1
             }
         }
         return out
@@ -447,32 +459,35 @@ private object CssLexer {
             val n = text.length
             var inBlockComment = state.inBlockComment
             while (i < n) {
+                val loopStart = i
                 if (inBlockComment) {
                     val end = text.indexOf("*/", i)
                     if (end == -1) { out.add(hl(li, i, n, HighlightKind.COMMENT)); i = n }
                     else { out.add(hl(li, i, end + 2, HighlightKind.COMMENT)); i = end + 2; inBlockComment = false }
-                    continue
+                } else {
+                    val c = text[i]
+                    when {
+                        c == '/' && i + 1 < n && text[i + 1] == '*' -> {
+                            val end = text.indexOf("*/", i + 2)
+                            if (end == -1) { out.add(hl(li, i, n, HighlightKind.COMMENT)); i = n; inBlockComment = true }
+                            else { out.add(hl(li, i, end + 2, HighlightKind.COMMENT)); i = end + 2 }
+                        }
+                        c == '"' -> { val end = scanQuoted(text, i, '"'); out.add(hl(li, i, end, HighlightKind.STRING)); i = end }
+                        c == '\'' -> { val end = scanQuoted(text, i, '\''); out.add(hl(li, i, end, HighlightKind.STRING)); i = end }
+                        c == '@' -> {
+                            val start = i; i++
+                            while (i < n && (text[i].isLetter() || text[i] == '-')) i++
+                            out.add(hl(li, start, i, HighlightKind.AT))
+                        }
+                        c.isDigit() || (c == '-' && i + 1 < n && text[i + 1].isDigit()) -> {
+                            val end = scanNumber(text, if (c == '-') i + 1 else i)
+                            out.add(hl(li, i, end, HighlightKind.NUMBER)); i = end
+                        }
+                        else -> i++
+                    }
                 }
-                val c = text[i]
-                when {
-                    c == '/' && i + 1 < n && text[i + 1] == '*' -> {
-                        val end = text.indexOf("*/", i + 2)
-                        if (end == -1) { out.add(hl(li, i, n, HighlightKind.COMMENT)); i = n; inBlockComment = true }
-                        else { out.add(hl(li, i, end + 2, HighlightKind.COMMENT)); i = end + 2 }
-                    }
-                    c == '"' -> { val end = scanQuoted(text, i, '"'); out.add(hl(li, i, end, HighlightKind.STRING)); i = end }
-                    c == '\'' -> { val end = scanQuoted(text, i, '\''); out.add(hl(li, i, end, HighlightKind.STRING)); i = end }
-                    c == '@' -> {
-                        val start = i; i++
-                        while (i < n && (text[i].isLetter() || text[i] == '-')) i++
-                        out.add(hl(li, start, i, HighlightKind.AT))
-                    }
-                    c.isDigit() || (c == '-' && i + 1 < n && text[i + 1].isDigit()) -> {
-                        val end = scanNumber(text, if (c == '-') i + 1 else i)
-                        out.add(hl(li, i, end, HighlightKind.NUMBER)); i = end
-                    }
-                    else -> i++
-                }
+                // حاجز أمان قاطع: تقدّم إجباري لكل تكرار مهما كان السبب — يمنع أي تجمّد نهائيًا.
+                if (i <= loopStart) i = loopStart + 1
             }
             state = LineState(inBlockComment)
         }
@@ -491,36 +506,42 @@ private object HtmlLexer {
             var i = 0
             val n = text.length
             while (i < n) {
+                val loopStart = i
                 if (inComment) {
                     val end = text.indexOf("-->", i)
                     if (end == -1) { out.add(hl(li, i, n, HighlightKind.COMMENT)); i = n }
                     else { out.add(hl(li, i, end + 3, HighlightKind.COMMENT)); i = end + 3; inComment = false }
-                    continue
-                }
-                val c = text[i]
-                when {
-                    text.startsWith("<!--", i) -> {
-                        val end = text.indexOf("-->", i + 4)
-                        if (end == -1) { out.add(hl(li, i, n, HighlightKind.COMMENT)); i = n; inComment = true }
-                        else { out.add(hl(li, i, end + 3, HighlightKind.COMMENT)); i = end + 3 }
-                    }
-                    c == '<' -> {
-                        val end = text.indexOf('>', i)
-                        val tagEnd = if (end == -1) n else end + 1
-                        out.add(hl(li, i, tagEnd, HighlightKind.AT))
-                        // نصوص السمات (attr="value") داخل الوسم بلون منفصل
-                        var j = i
-                        while (j < tagEnd) {
-                            if (text[j] == '"') {
-                                val strEnd = scanQuoted(text, j, '"').coerceAtMost(tagEnd)
-                                out.add(hl(li, j, strEnd, HighlightKind.STRING))
-                                j = strEnd
-                            } else j++
+                } else {
+                    val c = text[i]
+                    when {
+                        text.startsWith("<!--", i) -> {
+                            val end = text.indexOf("-->", i + 4)
+                            if (end == -1) { out.add(hl(li, i, n, HighlightKind.COMMENT)); i = n; inComment = true }
+                            else { out.add(hl(li, i, end + 3, HighlightKind.COMMENT)); i = end + 3 }
                         }
-                        i = tagEnd
+                        c == '<' -> {
+                            val end = text.indexOf('>', i)
+                            val tagEnd = if (end == -1) n else end + 1
+                            out.add(hl(li, i, tagEnd, HighlightKind.AT))
+                            // نصوص السمات (attr="value") داخل الوسم بلون منفصل
+                            var j = i
+                            while (j < tagEnd) {
+                                val jStart = j
+                                if (text[j] == '"') {
+                                    val strEnd = scanQuoted(text, j, '"').coerceAtMost(tagEnd)
+                                    out.add(hl(li, j, strEnd, HighlightKind.STRING))
+                                    j = strEnd
+                                } else j++
+                                // حاجز أمان قاطع لحلقة مسح السمات الداخلية أيضًا.
+                                if (j <= jStart) j = jStart + 1
+                            }
+                            i = tagEnd
+                        }
+                        else -> i++
                     }
-                    else -> i++
                 }
+                // حاجز أمان قاطع: تقدّم إجباري لكل تكرار مهما كان السبب — يمنع أي تجمّد نهائيًا.
+                if (i <= loopStart) i = loopStart + 1
             }
         }
         return out
