@@ -1,0 +1,20 @@
+// Rin Numbers Pro — integer and numeric helpers.
+fun num_isEven(n){return n%2==0;}
+fun num_isOdd(n){return n%2!=0;}
+fun num_between(n,a,b){return n>=a and n<=b;}
+fun num_clamp(n,a,b){if(n<a){return a;}if(n>b){return b;}return n;}
+fun num_sign(n){if(n>0){return 1;}if(n<0){return -1;}return 0;}
+fun num_abs(n){return abs(n);}
+fun num_floor(n){return floor(n);}
+fun num_ceil(n){return ceil(n);}
+fun num_round(n){return floor(n+0.5);}
+fun num_min(a,b){if(a<b){return a;}return b;}
+fun num_max(a,b){if(a>b){return a;}return b;}
+fun num_pow(a,b){return pow(a,b);}
+fun num_digits(n){let s=str(n);if(startsWith(s,"-")){s=substr(s,1);}return len(s);}
+fun num_sumTo(n){let s=0;let i=1;while(i<=n){s=s+i;i=i+1;}return s;}
+fun num_productTo(n){let p=1;let i=2;while(i<=n){p=p*i;i=i+1;}return p;}
+fun num_gcd(a,b){a=abs(a);b=abs(b);while(b!=0){let t=a%b;a=b;b=t;}return a;}
+fun num_lcm(a,b){if(a==0 or b==0){return 0;}return abs(a*b)/num_gcd(a,b);}
+fun num_isPrime(n){if(n<2){return false;}let i=2;while(i*i<=n){if(n%i==0){return false;}i=i+1;}return true;}
+fun num_factorial(n){if(n<0){return nil;}let r=1;let i=2;while(i<=n){r=r*i;i=i+1;}return r;}
