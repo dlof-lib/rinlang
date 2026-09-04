@@ -1,0 +1,7 @@
+// Rin Events Pro — event emitter.
+fun events_new(){return {};}
+fun events_on(e,name,fn){if(e[name]==nil){e[name]=[];}push(e[name],fn);return e;}
+fun events_count(e,name){if(e[name]==nil){return 0;}return len(e[name]);}
+fun events_emit(e,name,fn,value){if(e[name]==nil){return 0;}fn(value);return 1;}
+fun events_clear(e,name){if(e[name]!=nil){remove(e,name);}return e;}
+fun events_clearAll(e){let ks=keys(e);let i=0;while(i<len(ks)){remove(e,ks[i]);i=i+1;}return e;}
