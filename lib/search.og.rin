@@ -1,0 +1,9 @@
+// Rin Search Pro — linear search helpers.
+fun search_linear(arr,value){let i=0;while(i<len(arr)){if(arr[i]==value){return i;}i=i+1;}return -1;}
+fun search_all(arr,value){let out=[];let i=0;while(i<len(arr)){if(arr[i]==value){push(out,i);}i=i+1;}return out;}
+fun search_firstBy(arr,fn){let i=0;while(i<len(arr)){if(fn(arr[i])){return i;}i=i+1;}return -1;}
+fun search_valuesBy(arr,fn){let out=[];let i=0;while(i<len(arr)){if(fn(arr[i])){push(out,arr[i]);}i=i+1;}return out;}
+fun search_prefix(arr,prefix){let out=[];let i=0;while(i<len(arr)){if(startsWith(arr[i],prefix)){push(out,arr[i]);}i=i+1;}return out;}
+fun search_suffix(arr,suffix){let out=[];let i=0;while(i<len(arr)){if(endsWith(arr[i],suffix)){push(out,arr[i]);}i=i+1;}return out;}
+fun search_text(arr,queryText){let out=[];let i=0;while(i<len(arr)){if(contains(arr[i],queryText)){push(out,arr[i]);}i=i+1;}return out;}
+fun search_sorted(arr,needle){let lo=0;let hi=len(arr)-1;while(lo<=hi){let mid=floor((lo+hi)/2);if(arr[mid]==needle){return mid;}if(arr[mid]<needle){lo=mid+1;}else{hi=mid-1;}}return -1;}
