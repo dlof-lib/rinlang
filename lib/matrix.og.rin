@@ -1,0 +1,9 @@
+// Rin Matrix Pro — small dense matrix operations.
+fun mat_zeros(rows,cols){let out=[];let r=0;while(r<rows){let row=[];let c=0;while(c<cols){push(row,0);c=c+1;}push(out,row);r=r+1;}return out;}
+fun mat_fill(rows,cols,v){let out=[];let r=0;while(r<rows){let row=[];let c=0;while(c<cols){push(row,v);c=c+1;}push(out,row);r=r+1;}return out;}
+fun mat_identity(n){let out=mat_zeros(n,n);let i=0;while(i<n){out[i][i]=1;i=i+1;}return out;}
+fun mat_add(a,b){let out=[];let r=0;while(r<len(a)){let row=[];let c=0;while(c<len(a[r])){push(row,a[r][c]+b[r][c]);c=c+1;}push(out,row);r=r+1;}return out;}
+fun mat_sub(a,b){let out=[];let r=0;while(r<len(a)){let row=[];let c=0;while(c<len(a[r])){push(row,a[r][c]-b[r][c]);c=c+1;}push(out,row);r=r+1;}return out;}
+fun mat_scale(a,k){let out=[];let r=0;while(r<len(a)){let row=[];let c=0;while(c<len(a[r])){push(row,a[r][c]*k);c=c+1;}push(out,row);r=r+1;}return out;}
+fun mat_transpose(a){if(len(a)==0){return [];}let out=[];let c=0;while(c<len(a[0])){let row=[];let r=0;while(r<len(a)){push(row,a[r][c]);r=r+1;}push(out,row);c=c+1;}return out;}
+fun mat_mul(a,b){if(len(a)==0 or len(b)==0){return [];}let bt=mat_transpose(b);let out=[];let i=0;while(i<len(a)){let row=[];let j=0;while(j<len(bt)){let s=0;let k=0;while(k<len(a[i])){s=s+a[i][k]*bt[j][k];k=k+1;}push(row,s);j=j+1;}push(out,row);i=i+1;}return out;}
