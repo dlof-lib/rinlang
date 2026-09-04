@@ -41,11 +41,11 @@ print maskTags("save-button");
 print maskRefs("save-button");
 print maskSummary("save");
 
-// Mask v4 registry demo
+// Mask v1 registry demo
 let m = "app.main";
 print maskExists(m);
 maskNamespace(m, "ui/app");
-maskVersion(m, "4.0");
+maskVersion(m, "1.0");
 maskNote(m, "Stable application identity");
 maskTag(m, "root");
 print maskSummary(m);
