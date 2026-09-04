@@ -1,0 +1,12 @@
+// Rin Validation Pro — reusable validation primitives.
+fun vp_required(s){return s!=nil and trim(str(s))!="";}
+fun vp_minLen(s,n){return len(str(s))>=n;}
+fun vp_maxLen(s,n){return len(str(s))<=n;}
+fun vp_between(n,a,b){return n>=a and n<=b;}
+fun vp_digitsOnly(s){if(len(s)==0){return false;}let d="0123456789";let i=0;while(i<len(s)){if(!contains(d,charAt(s,i))){return false;}i=i+1;}return true;}
+fun vp_hasUpper(s){let x="ABCDEFGHIJKLMNOPQRSTUVWXYZ";let i=0;while(i<len(s)){if(contains(x,charAt(s,i))){return true;}i=i+1;}return false;}
+fun vp_hasLower(s){let x="abcdefghijklmnopqrstuvwxyz";let i=0;while(i<len(s)){if(contains(x,charAt(s,i))){return true;}i=i+1;}return false;}
+fun vp_hasDigit(s){let x="0123456789";let i=0;while(i<len(s)){if(contains(x,charAt(s,i))){return true;}i=i+1;}return false;}
+fun vp_hasSpace(s){return contains(s," ");}
+fun vp_email(s){let a=indexOf(s,"@");let b=indexOf(s,".");return a>0 and b>a+1 and b<len(s)-1;}
+fun vp_integerString(s){if(len(s)==0){return false;}let x=s;if(startsWith(x,"-")){x=substr(x,1);}return vp_digitsOnly(x);}
