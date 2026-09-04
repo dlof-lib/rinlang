@@ -8,6 +8,9 @@ add_library(
         rinengine
         SHARED
         jni_bridge.cpp
+        # Native Rin Code Editor — C++17 engine + JNI bridge; uses the real Rin Lexer for highlighting.
+        editor/rin_editor_engine.cpp
+        editor/rin_editor_jni.cpp
         rin_lexer.cpp
         rin_parser.cpp
         rin_make.cpp
@@ -43,10 +46,8 @@ add_library(
         clc/clc_rin_opt.cpp
         clc/clc_zip_import.cpp
         clc/sha256.cpp
-        # ملاحظة: محرك محرر الأكواد (تخزين نص + تراجع/إعادة + مسافة بادئة/إغلاق أقواس تلقائي +
-        # أوامر مستوى-سطر + بحث + تلوين نحوي) لم يعد بلغة C++ — أُعيد بناؤه بالكامل بلغة Kotlin
-        # خالصة (انظر RinEditorEngine.kt وRinSyntax.kt، يستهلكهما RinCodeEditorView.kt)، فلا يوجد
-        # هنا أي مصدر C++ خاص بالمحرر بعد الآن.
+        # المحرر الأصلي هنا C++17 ومربوط عبر JNI، ويستخدم rin::Lexer الحقيقي من نفس مصدر اللغة
+        # لتلوين Rin وإكمالها، بحيث لا توجد نسخة ثانية من قواعد اللغة داخل واجهة Android.
 )
 
 # rinc: مترجم Rin الأصلي (native compiler) — هدف مستقل تماماً عن مكتبة rinengine
