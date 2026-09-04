@@ -418,22 +418,18 @@
                     android:scrollbars="horizontal"
                     android:overScrollMode="never">
 
-                    <com.dlof.rinlang.RinEditText
+                    <!-- محرر أكواد مبني من الصفر بلغة C++ (انظر app/src/main/cpp/editor/)، مُظهَر هنا
+                         عبر View/Canvas مخصّصة بالكامل بدل android.widget.EditText — انظر
+                         RinCodeEditorView.kt وRinNativeEditor.kt وRinCodeEditorController.kt. -->
+                    <com.dlof.rinlang.RinCodeEditorView
                         android:id="@+id/editCode"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:background="@android:color/transparent"
-                        android:textColor="@color/rin_editor_text"
-                        android:textColorHint="@color/rin_editor_hint"
-                        android:fontFamily="monospace"
-                        android:gravity="top|start"
-                        android:inputType="textMultiLine|textNoSuggestions"
                         android:paddingStart="12dp"
                         android:paddingEnd="12dp"
                         android:paddingTop="14dp"
-                        android:paddingBottom="14dp"
-                        android:textSize="14sp"
-                        android:hint="@string/editor_hint" />
+                        android:paddingBottom="14dp" />
                 </HorizontalScrollView>
             </LinearLayout>
         </ScrollView>
