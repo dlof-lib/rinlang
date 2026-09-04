@@ -1,0 +1,10 @@
+// Rin MaskKit Pro — high-level helpers for the Mask identity system.
+fun mask_isValid(name){return name!=nil and trim(str(name))!="";}
+fun mask_normalize(name){return slugify(trim(str(name)));}
+fun mask_equal(a,b){return mask_normalize(a)==mask_normalize(b);}
+fun mask_aliasKey(namespace,name){if(trim(str(namespace))==""){return mask_normalize(name);}return trim(str(namespace))+":"+mask_normalize(name);}
+fun mask_label(namespace,name){return mask_aliasKey(namespace,name);}
+fun mask_descriptor(name,kind,namespace){return {mask:mask_normalize(name),kind:kind,namespace:namespace,key:mask_aliasKey(namespace,name)};}
+fun mask_matches(name,query){return mask_equal(name,query) or contains(mask_normalize(name),mask_normalize(query));}
+fun mask_listMatches(names,query){let out=[];let i=0;while(i<len(names)){if(mask_matches(names[i],query)){push(out,names[i]);}i=i+1;}return out;}
+fun mask_namespaceKey(namespace,name){return mask_aliasKey(namespace,name);}
