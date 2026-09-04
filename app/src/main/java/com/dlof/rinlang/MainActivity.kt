@@ -29,7 +29,8 @@ import java.io.OutputStreamWriter
 /**
  * IDE-style activity for the Rin language:
  *  - A code editor with line numbers, syntax highlighting, undo/redo,
- *    auto-indent and find/replace ([CodeEditorController], [RinSyntaxHighlighter]).
+ *    auto-indent and find/replace — implemented from scratch in C++
+ *    ([RinCodeEditorView], [RinCodeEditorController], app/src/main/cpp/editor/).
  *  - A "Run" button that hands source off to the native C++ engine through
  *    [RinEngine], scheduled and tracked by [RinJobScheduler] so runs never
  *    block the UI and every execution is kept as its own timestamped entry
@@ -53,7 +54,7 @@ class MainActivity : AppCompatActivity() {
     /** غير null فقط عندما يكون المحرر مفتوحاً على مكتبة lib/ *.og.rin بدل ملف .rin عادي. */
     private var currentProjectLibrary: RinLibrary? = null
 
-    private lateinit var editCode: RinEditText
+    private lateinit var editCode: RinCodeEditorView
     private lateinit var txtLineNumbers: TextView
     private lateinit var txtEngineVersion: TextView
     private lateinit var txtFileName: TextView
@@ -65,7 +66,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var txtFindCount: TextView
     private lateinit var scrollEditor: ScrollView
 
-    private lateinit var editorController: CodeEditorController
+    private lateinit var editorController: RinCodeEditorController
     private lateinit var jobAdapter: RinJobAdapter
 
     /** URI of the file currently open, if any. Null means "unsaved / new file". */
@@ -169,16 +170,12 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // تلوين الصيغة النحوية (syntax highlighting) أثناء الكتابة — يبدأ بالامتداد الصحيح
-        // للملف الذي فُتح فعلاً (rin، og.rin كمكتبة، أو الملف الافتراضي)، بدل افتراض Rin دوماً.
-        val initialExtension = when {
-            currentProjectLibrary != null -> "rin"
-            currentProjectFile != null -> extensionOf(currentProjectFile!!.name)
-            else -> "rin"
-        }
-        RinSyntaxHighlighter.attach(this, editCode, initialExtension)
+        // ملاحظة: لا حاجة بعد الآن لـ RinSyntaxHighlighter.attach(...) هنا — محرر الأكواد الجديد
+        // (RinCodeEditorView) يُلوِّن الصيغة النحوية لغة Rin نفسها تلقائيًا وباستمرار داخليًا عبر
+        // محرك C++ الأصلي (rin::Lexer الفعلي، انظر app/src/main/cpp/editor/rin_editor_engine.cpp)
+        // بلا أي إعداد إضافي، بصرف النظر عن امتداد الملف المفتوح.
         // أرقام الأسطر + تراجع/إعادة + مسافة بادئة تلقائية + أقواس مغلقة تلقائياً + تظليل الأقواس/السطر الحالي
-        editorController = CodeEditorController(this, editCode, txtLineNumbers, scrollEditor)
+        editorController = RinCodeEditorController(this, editCode, txtLineNumbers, scrollEditor)
 
         // كل تعديل في المحرر يُدفع مباشرةً (بعد تهدئة/debounce قصيرة) إلى جلسة المعاينة الحية
         // إن كانت مفتوحة — نفس فكرة "on each keystroke... updateSource(newSource)" الموثّقة في
@@ -367,7 +364,7 @@ class MainActivity : AppCompatActivity() {
 
     /**
      * يعرض قائمة مقتطفات لغة الحاويات في Rin ([RinSnippets.all])، ويُدرج المقتطف المختار عند
-     * المؤشر مع ترك المؤشر داخل جسم الحاوية مباشرة (انظر [CodeEditorController.insertSnippetAtCursor]).
+     * المؤشر مع ترك المؤشر داخل جسم الحاوية مباشرة (انظر [RinCodeEditorController.insertSnippetAtCursor]).
      */
     private fun showSnippetsDialog() {
         val snippets = RinSnippets.all
@@ -408,7 +405,7 @@ class MainActivity : AppCompatActivity() {
     /**
      * يعرض "بنية الملف": كل حاويات/أقسام Rin (@container، Section، Translations...) مع رقم
      * سطرها وعمق تعشيشها (مسافة بادئة نصية)، والنقر على أي عنصر يقفز إليه مباشرة عبر
-     * [CodeEditorController.goToLine] — تنقّل أسرع من التمرير اليدوي في الملفات الطويلة.
+     * [RinCodeEditorController.goToLine] — تنقّل أسرع من التمرير اليدوي في الملفات الطويلة.
      */
     private fun showOutlineDialog() {
         val entries = editorController.buildOutline()
@@ -510,9 +507,6 @@ class MainActivity : AppCompatActivity() {
         currentProjectFile = null
         currentProjectLibrary = null
         txtFileName.text = getString(R.string.new_file_name)
-        // ملف جديد داخل التطبيق هو دوماً .rin افتراضياً (انظر suggestedFileName)، بصرف النظر
-        // عن لغة الملف السابق المفتوح في نفس المحرر.
-        RinSyntaxHighlighter.setLanguage("rin")
         Toast.makeText(this, getString(R.string.new_file_toast), Toast.LENGTH_SHORT).show()
     }
 
@@ -664,9 +658,6 @@ class MainActivity : AppCompatActivity() {
             currentProjectLibrary = null
             val name = queryDisplayName(uri) ?: uri.lastPathSegment ?: "opened.rin"
             txtFileName.text = name
-            // بدّل قواعد تلوين الصيغة النحوية حسب امتداد الملف المفتوح فعلياً (cpp/kt/py/...)
-            // بدل بقائها عالقة على قواعد Rin أو الملف السابق.
-            RinSyntaxHighlighter.setLanguage(extensionOf(name))
             Toast.makeText(this, getString(R.string.file_opened_toast, name), Toast.LENGTH_SHORT).show()
         } catch (t: Throwable) {
             Toast.makeText(this, "${getString(R.string.file_open_error)}: ${t.message}", Toast.LENGTH_LONG).show()
