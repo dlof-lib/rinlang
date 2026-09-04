@@ -1,0 +1,14 @@
+// Rin Animation Pro — easing, interpolation and timelines.
+fun anim_linear(t){return t;}
+fun anim_clamp(t){if(t<0){return 0;}if(t>1){return 1;}return t;}
+fun anim_easeIn(t){return t*t;}
+fun anim_easeOut(t){return 1-(1-t)*(1-t);}
+fun anim_easeInOut(t){if(t<0.5){return 2*t*t;}return 1-((-2*t+2)*(-2*t+2))/2;}
+fun anim_smooth(t){return t*t*(3-2*t);}
+fun anim_smoother(t){return t*t*t*(t*(t*6-15)+10);}
+fun anim_lerp(a,b,t){return a+(b-a)*anim_clamp(t);}
+fun anim_inverseLerp(a,b,v){if(a==b){return 0;}return (v-a)/(b-a);}
+fun anim_remap(v,a1,b1,a2,b2){return anim_lerp(a2,b2,anim_inverseLerp(a1,b1,v));}
+fun anim_step(t,steps){if(steps<=0){return 0;}return floor(anim_clamp(t)*steps)/steps;}
+fun anim_pingPong(t){let x=t%2;if(x<1){return x;}return 2-x;}
+fun anim_keyframe(a,b,startTime,endTime,t){if(t<=startTime){return a;}if(t>=endTime){return b;}return anim_lerp(a,b,(t-startTime)/(endTime-startTime));}
