@@ -1,0 +1,10 @@
+// Rin Graph Pro — directed graph helpers.
+fun graph_new(){return {};}
+fun graph_add(g,a,b){if(g[a]==nil){g[a]=[];}if(!contains(g[a],b)){push(g[a],b);}return g;}
+fun graph_neighbors(g,a){if(g[a]==nil){return [];}return g[a];}
+fun graph_has(g,a){return has(g,a);}
+fun graph_degree(g,a){return len(graph_neighbors(g,a));}
+fun graph_remove(g,a,b){if(g[a]==nil){return g;}let out=[];let i=0;while(i<len(g[a])){if(g[a][i]!=b){push(out,g[a][i]);}i=i+1;}g[a]=out;return g;}
+fun graph_nodes(g){return keys(g);}
+fun graph_hasEdge(g,a,b){return g[a]!=nil and contains(g[a],b);}
+fun graph_bfs(g,start){let q=[start];let seen=[];let out=[];while(len(q)>0){let v=q[0];let i=1;while(i<len(q)){q[i-1]=q[i];i=i+1;}pop(q);if(!contains(seen,v)){push(seen,v);push(out,v);let ns=graph_neighbors(g,v);let j=0;while(j<len(ns)){push(q,ns[j]);j=j+1;}}}return out;}
