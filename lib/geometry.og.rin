@@ -1,0 +1,14 @@
+// Rin Geometry Pro — 2D geometry primitives.
+fun geo_distance(x1,y1,x2,y2){let dx=x2-x1;let dy=y2-y1;return sqrt(dx*dx+dy*dy);}
+fun geo_midX(x1,x2){return (x1+x2)/2;}
+fun geo_midY(y1,y2){return (y1+y2)/2;}
+fun geo_rectArea(w,h){return w*h;}
+fun geo_rectPerimeter(w,h){return 2*(w+h);}
+fun geo_circleArea(r){return PI*r*r;}
+fun geo_circleLength(r){return 2*PI*r;}
+fun geo_dot(ax,ay,bx,by){return ax*bx+ay*by;}
+fun geo_cross(ax,ay,bx,by){return ax*by-ay*bx;}
+fun geo_point(x,y){return {x:x,y:y};}
+fun geo_rect(x,y,w,h){return {x:x,y:y,w:w,h:h};}
+fun geo_containsPoint(r,x,y){return x>=r["x"] and x<=r["x"]+r["w"] and y>=r["y"] and y<=r["y"]+r["h"];}
+fun geo_rectsOverlap(a,b){return a["x"]<b["x"]+b["w"] and a["x"]+a["w"]>b["x"] and a["y"]<b["y"]+b["h"] and a["y"]+a["h"]>b["y"];}
