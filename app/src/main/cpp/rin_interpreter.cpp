@@ -2452,6 +2452,401 @@ void Interpreter::registerNatives() {
         return Value::string(containerTagName(containerKinds.count(name) ? containerKinds[name] : ContainerKind::PLAIN));
     };
 
+    // findMask(mask) -> الاسم المرتبط بالقناع، مع أولوية الحاويات ثم المجموعات ثم Volume.
+    // القناع هو هوية منطقية مستقلة عن الاسم؛ إعادة تسمية الاسم لا تغيّر عقد القناع في المصدر.
+    natives["findMask"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("findMask", a, 1, line);
+        std::string mask = asString(a[0], "findMask", line);
+        auto c = containerMasks.find(mask); if (c != containerMasks.end()) return Value::string(c->second);
+        auto g = groupMasks.find(mask); if (g != groupMasks.end()) return Value::string(g->second);
+        auto v = volumeMasks.find(mask); if (v != volumeMasks.end()) return Value::string(v->second);
+        return Value::nil();
+    };
+
+    // maskOf(name) -> القناع المسجّل للحاوية/المجموعة/Volume، أو nil.
+    natives["maskOf"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("maskOf", a, 1, line);
+        std::string name = asString(a[0], "maskOf", line);
+        for (auto& kv : containerMasks) if (kv.second == name) return Value::string(kv.first);
+        for (auto& kv : groupMasks) if (kv.second == name) return Value::string(kv.first);
+        for (auto& kv : volumeMasks) if (kv.second == name) return Value::string(kv.first);
+        return Value::nil();
+    };
+
+    // ---- Mask Power API ---------------------------------------------------------------
+    // القناع أصبح طبقة هوية تشغيلية: يمكن الاستعلام عنه، معرفة نوعه، سرد الأقنعة،
+    // واستعماله للوصول إلى أعضاء المجموعة/العلاقة الأب-الابن دون معرفة الاسم الأصلي.
+    natives["maskExists"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("maskExists", a, 1, line);
+        std::string mask = asString(a[0], "maskExists", line);
+        return Value::boolean_(!mask.empty() &&
+            (containerMasks.count(mask) || groupMasks.count(mask) || volumeMasks.count(mask)));
+    };
+
+    // maskTarget(mask) -> الاسم/المفتاح المرتبط بالقناع.
+    natives["maskTarget"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("maskTarget", a, 1, line);
+        std::string mask = asString(a[0], "maskTarget", line);
+        auto c = containerMasks.find(mask); if (c != containerMasks.end()) return Value::string(c->second);
+        auto g = groupMasks.find(mask); if (g != groupMasks.end()) return Value::string(g->second);
+        auto v = volumeMasks.find(mask); if (v != volumeMasks.end()) return Value::string(v->second);
+        return Value::nil();
+    };
+
+    // maskKind(mask) -> container | group | volume | nil.
+    natives["maskKind"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("maskKind", a, 1, line);
+        std::string mask = asString(a[0], "maskKind", line);
+        if (containerMasks.count(mask)) return Value::string("container");
+        if (groupMasks.count(mask)) return Value::string("group");
+        if (volumeMasks.count(mask)) return Value::string("volume");
+        return Value::nil();
+    };
+
+    // maskNames(kind?) -> كل الأقنعة المسجّلة، أو أقنعة نوع محدد.
+    natives["maskNames"] = [this](std::vector<Value>& a, int line) -> Value {
+        if (a.size() > 1) expectArgsRange("maskNames", a, 0, 1, line);
+        std::string kind = a.empty() ? "" : asString(a[0], "maskNames", line);
+        auto result = std::make_shared<ArrayData>();
+        auto add = [&](const auto& table, const std::string& expected) {
+            if (!kind.empty() && kind != expected) return;
+            for (auto& kv : table) result->push_back(Value::string(kv.first));
+        };
+        add(containerMasks, "container"); add(groupMasks, "group"); add(volumeMasks, "volume");
+        std::sort(result->begin(), result->end(), [](const Value& x, const Value& y) { return x.str < y.str; });
+        return Value::makeArray(result);
+    };
+
+    // maskInfo(mask) -> كائن معلومات صغير مناسب للتفاعل والـ debugging.
+    natives["maskInfo"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("maskInfo", a, 1, line);
+        std::string mask = asString(a[0], "maskInfo", line);
+        std::string kind, target;
+        if (auto it = containerMasks.find(mask); it != containerMasks.end()) { kind = "container"; target = it->second; }
+        else if (auto it = groupMasks.find(mask); it != groupMasks.end()) { kind = "group"; target = it->second; }
+        else if (auto it = volumeMasks.find(mask); it != volumeMasks.end()) { kind = "volume"; target = it->second; }
+        else return Value::nil();
+        auto m = std::make_shared<MapData>();
+        m->push_back({Value::string("mask"), Value::string(mask)});
+        m->push_back({Value::string("name"), Value::string(target)});
+        m->push_back({Value::string("kind"), Value::string(kind)});
+        if (kind == "group") {
+            auto it = groupMembers.find(target);
+            auto members = std::make_shared<ArrayData>();
+            if (it != groupMembers.end()) for (auto& n : it->second) members->push_back(Value::string(n));
+            m->push_back({Value::string("members"), Value::makeArray(members)});
+        }
+        return Value::makeMap(m);
+    };
+
+    // maskMembers(mask) -> أعضاء المجموعة التي يحددها القناع، وإلا مصفوفة فارغة.
+    natives["maskMembers"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("maskMembers", a, 1, line);
+        std::string mask = asString(a[0], "maskMembers", line);
+        auto result = std::make_shared<ArrayData>();
+        auto gm = groupMasks.find(mask);
+        if (gm != groupMasks.end()) {
+            auto it = groupMembers.find(gm->second);
+            if (it != groupMembers.end()) for (auto& n : it->second) result->push_back(Value::string(n));
+        }
+        return Value::makeArray(result);
+    };
+
+    // maskParent(mask) -> قناع الأب عندما يكون الهدف حاوية متداخلة داخل حاوية أخرى.
+    natives["maskParent"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("maskParent", a, 1, line);
+        std::string mask = asString(a[0], "maskParent", line);
+        auto cm = containerMasks.find(mask);
+        if (cm == containerMasks.end()) return Value::nil();
+        auto p = containerParent.find(cm->second);
+        if (p == containerParent.end()) return Value::nil();
+        for (auto& kv : containerMasks) if (kv.second == p->second) return Value::string(kv.first);
+        return Value::nil();
+    };
+
+    // maskChildren(mask) -> أقنعة الأبناء المباشرين للحاوية التي يحددها القناع.
+    natives["maskChildren"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("maskChildren", a, 1, line);
+        std::string mask = asString(a[0], "maskChildren", line);
+        auto cm = containerMasks.find(mask);
+        auto result = std::make_shared<ArrayData>();
+        if (cm == containerMasks.end()) return Value::makeArray(result);
+        auto it = containerChildren.find(cm->second);
+        if (it == containerChildren.end()) return Value::makeArray(result);
+        for (auto& child : it->second) {
+            for (auto& kv : containerMasks) if (kv.second == child) { result->push_back(Value::string(kv.first)); break; }
+        }
+        return Value::makeArray(result);
+    };
+
+    // ---- Mask v3: identity graph ------------------------------------------------------
+    // v3 يجعل القناع طبقة هوية قابلة للتركيب: alias + tags + refs + lock + resolution.
+    // كل هذه البيانات مستقلة عن name، لذلك يمكن تغيير الاسم دون كسر هوية القناع.
+    auto maskKnown = [this](const std::string& m) -> bool {
+        return !m.empty() && (containerMasks.count(m) || groupMasks.count(m) || volumeMasks.count(m));
+    };
+    auto maskResolveInternal = [this, &maskKnown](std::string token) -> std::string {
+        if (maskKnown(token)) return token;
+        std::unordered_set<std::string> seen;
+        for (int i = 0; i < 64 && !token.empty(); ++i) {
+            if (maskKnown(token)) return token;
+            if (!seen.insert(token).second) break;
+            auto it = maskAliases.find(token);
+            if (it == maskAliases.end()) break;
+            token = it->second;
+        }
+        return maskKnown(token) ? token : std::string();
+    };
+
+    natives["maskResolve"] = [this, maskResolveInternal](std::vector<Value>& a, int line) -> Value {
+        expectArgs("maskResolve", a, 1, line);
+        std::string r = maskResolveInternal(asString(a[0], "maskResolve", line));
+        return r.empty() ? Value::nil() : Value::string(r);
+    };
+
+    natives["maskAlias"] = [this, maskResolveInternal](std::vector<Value>& a, int line) -> Value {
+        expectArgs("maskAlias", a, 2, line);
+        std::string alias = asString(a[0], "maskAlias", line);
+        std::string target = maskResolveInternal(asString(a[1], "maskAlias", line));
+        if (alias.empty() || target.empty()) throw err(diag::Code::E0035_RuntimeError, line, "maskAlias: unknown or empty mask");
+        if (lockedMasks.count(target)) throw err(diag::Code::E0035_RuntimeError, line, "maskAlias: mask is locked");
+        maskAliases[alias] = target;
+        return Value::boolean_(true);
+    };
+
+    natives["maskAliases"] = [this, maskResolveInternal](std::vector<Value>& a, int line) -> Value {
+        expectArgs("maskAliases", a, 1, line);
+        std::string mask = maskResolveInternal(asString(a[0], "maskAliases", line));
+        auto out = std::make_shared<ArrayData>();
+        if (mask.empty()) return Value::makeArray(out);
+        for (auto& kv : maskAliases) if (maskResolveInternal(kv.second) == mask) out->push_back(Value::string(kv.first));
+        return Value::makeArray(out);
+    };
+
+    natives["maskTag"] = [this, maskResolveInternal](std::vector<Value>& a, int line) -> Value {
+        expectArgs("maskTag", a, 2, line);
+        std::string mask = maskResolveInternal(asString(a[0], "maskTag", line));
+        std::string tag = asString(a[1], "maskTag", line);
+        if (mask.empty() || tag.empty()) throw err(diag::Code::E0035_RuntimeError, line, "maskTag: unknown or empty mask/tag");
+        if (lockedMasks.count(mask)) throw err(diag::Code::E0035_RuntimeError, line, "maskTag: mask is locked");
+        auto& tags = maskTags[mask];
+        if (std::find(tags.begin(), tags.end(), tag) == tags.end()) tags.push_back(tag);
+        return Value::boolean_(true);
+    };
+
+    natives["maskUntag"] = [this, maskResolveInternal](std::vector<Value>& a, int line) -> Value {
+        expectArgs("maskUntag", a, 2, line);
+        std::string mask = maskResolveInternal(asString(a[0], "maskUntag", line));
+        std::string tag = asString(a[1], "maskUntag", line);
+        if (mask.empty()) return Value::boolean_(false);
+        if (lockedMasks.count(mask)) throw err(diag::Code::E0035_RuntimeError, line, "maskUntag: mask is locked");
+        auto it = maskTags.find(mask); if (it == maskTags.end()) return Value::boolean_(false);
+        auto& v = it->second;
+        auto pos = std::find(v.begin(), v.end(), tag);
+        if (pos == v.end()) return Value::boolean_(false);
+        v.erase(pos);
+        return Value::boolean_(true);
+    };
+
+    natives["maskTags"] = [this, maskResolveInternal](std::vector<Value>& a, int line) -> Value {
+        expectArgs("maskTags", a, 1, line);
+        std::string mask = maskResolveInternal(asString(a[0], "maskTags", line));
+        auto out = std::make_shared<ArrayData>();
+        auto it = maskTags.find(mask); if (it != maskTags.end()) for (auto& t : it->second) out->push_back(Value::string(t));
+        return Value::makeArray(out);
+    };
+
+    natives["maskHasTag"] = [this, maskResolveInternal](std::vector<Value>& a, int line) -> Value {
+        expectArgs("maskHasTag", a, 2, line);
+        std::string mask = maskResolveInternal(asString(a[0], "maskHasTag", line));
+        std::string tag = asString(a[1], "maskHasTag", line);
+        auto it = maskTags.find(mask); if (it == maskTags.end()) return Value::boolean_(false);
+        return Value::boolean_(std::find(it->second.begin(), it->second.end(), tag) != it->second.end());
+    };
+
+    natives["maskRef"] = [this, maskResolveInternal](std::vector<Value>& a, int line) -> Value {
+        expectArgs("maskRef", a, 2, line);
+        std::string mask = maskResolveInternal(asString(a[0], "maskRef", line));
+        std::string ref = asString(a[1], "maskRef", line);
+        if (mask.empty() || ref.empty()) throw err(diag::Code::E0035_RuntimeError, line, "maskRef: unknown or empty mask/ref");
+        if (lockedMasks.count(mask)) throw err(diag::Code::E0035_RuntimeError, line, "maskRef: mask is locked");
+        auto& refs = maskRefs[mask];
+        if (std::find(refs.begin(), refs.end(), ref) == refs.end()) refs.push_back(ref);
+        return Value::boolean_(true);
+    };
+
+    natives["maskRefs"] = [this, maskResolveInternal](std::vector<Value>& a, int line) -> Value {
+        expectArgs("maskRefs", a, 1, line);
+        std::string mask = maskResolveInternal(asString(a[0], "maskRefs", line));
+        auto out = std::make_shared<ArrayData>();
+        auto it = maskRefs.find(mask); if (it != maskRefs.end()) for (auto& r : it->second) out->push_back(Value::string(r));
+        return Value::makeArray(out);
+    };
+
+    natives["maskLock"] = [this, maskResolveInternal](std::vector<Value>& a, int line) -> Value {
+        expectArgs("maskLock", a, 1, line);
+        std::string mask = maskResolveInternal(asString(a[0], "maskLock", line));
+        if (mask.empty()) throw err(diag::Code::E0035_RuntimeError, line, "maskLock: unknown mask");
+        lockedMasks.insert(mask);
+        return Value::boolean_(true);
+    };
+
+    natives["maskLocked"] = [this, maskResolveInternal](std::vector<Value>& a, int line) -> Value {
+        expectArgs("maskLocked", a, 1, line);
+        std::string mask = maskResolveInternal(asString(a[0], "maskLocked", line));
+        return Value::boolean_(!mask.empty() && lockedMasks.count(mask));
+    };
+
+    natives["maskCompare"] = [this, maskResolveInternal](std::vector<Value>& a, int line) -> Value {
+        expectArgs("maskCompare", a, 2, line);
+        std::string x = maskResolveInternal(asString(a[0], "maskCompare", line));
+        std::string y = maskResolveInternal(asString(a[1], "maskCompare", line));
+        return Value::boolean_(!x.empty() && x == y);
+    };
+
+    natives["maskByTag"] = [this, maskResolveInternal](std::vector<Value>& a, int line) -> Value {
+        expectArgs("maskByTag", a, 1, line);
+        std::string tag = asString(a[0], "maskByTag", line);
+        auto out = std::make_shared<ArrayData>();
+        for (auto& kv : maskTags) {
+            if (!maskResolveInternal(kv.first).empty() && std::find(kv.second.begin(), kv.second.end(), tag) != kv.second.end())
+                out->push_back(Value::string(kv.first));
+        }
+        return Value::makeArray(out);
+    };
+
+    natives["maskSummary"] = [this, maskResolveInternal](std::vector<Value>& a, int line) -> Value {
+        expectArgs("maskSummary", a, 1, line);
+        std::string mask = maskResolveInternal(asString(a[0], "maskSummary", line));
+        auto m = std::make_shared<MapData>();
+        if (mask.empty()) return Value::makeMap(m);
+        std::string kind, target;
+        if (auto it = containerMasks.find(mask); it != containerMasks.end()) { kind="container"; target=it->second; }
+        else if (auto it = groupMasks.find(mask); it != groupMasks.end()) { kind="group"; target=it->second; }
+        else if (auto it = volumeMasks.find(mask); it != volumeMasks.end()) { kind="volume"; target=it->second; }
+        m->push_back({Value::string("mask"), Value::string(mask)});
+        m->push_back({Value::string("target"), Value::string(target)});
+        m->push_back({Value::string("kind"), Value::string(kind)});
+        m->push_back({Value::string("locked"), Value::boolean_(lockedMasks.count(mask) != 0)});
+        auto ts = maskTags.find(mask); auto rs = maskRefs.find(mask);
+        auto ta = std::make_shared<ArrayData>(); if (ts != maskTags.end()) for (auto& t:ts->second) ta->push_back(Value::string(t));
+        auto ra = std::make_shared<ArrayData>(); if (rs != maskRefs.end()) for (auto& r:rs->second) ra->push_back(Value::string(r));
+        m->push_back({Value::string("tags"), Value::makeArray(ta)});
+        m->push_back({Value::string("refs"), Value::makeArray(ra)});
+        auto aa = std::make_shared<ArrayData>(); for (auto& kv:maskAliases) if (maskResolveInternal(kv.second)==mask) aa->push_back(Value::string(kv.first));
+        m->push_back({Value::string("aliases"), Value::makeArray(aa)});
+        auto ni=maskNamespaces.find(mask); if(ni!=maskNamespaces.end()) m->push_back({Value::string("namespace"),Value::string(ni->second)});
+        auto vi=maskVersions.find(mask); if(vi!=maskVersions.end()) m->push_back({Value::string("version"),Value::string(vi->second)});
+        auto no=maskNotes.find(mask); if(no!=maskNotes.end()) m->push_back({Value::string("note"),Value::string(no->second)});
+        m->push_back({Value::string("active"),Value::boolean_(maskEnabled.count(mask)==0?true:maskEnabled[mask])});
+        auto pi=maskParents.find(mask); if(pi!=maskParents.end()) { std::string pm=maskResolveInternal(pi->second); if(!pm.empty()) m->push_back({Value::string("parent"),Value::string(pm)}); }
+        return Value::makeMap(m);
+    };
+
+    // ---- Mask v4: registry, lifecycle, namespaces and relations ----------------------
+    // v4 يجعل القناع سجلاً قابلاً للإدارة: يمكن تنظيمه داخل namespace، تعطيله، وصفه،
+    // إعطاؤه نسخة، وبناء علاقات أب/ابن مستقلة عن أسماء الحاويات.
+    auto maskResolve4 = maskResolveInternal;
+    auto maskType4 = [this](const std::string& mask) -> std::string {
+        if (containerMasks.count(mask)) return "container";
+        if (groupMasks.count(mask)) return "group";
+        if (volumeMasks.count(mask)) return "volume";
+        return "";
+    };
+    auto maskTarget4 = [this](const std::string& mask) -> std::string {
+        auto c=containerMasks.find(mask); if(c!=containerMasks.end()) return c->second;
+        auto g=groupMasks.find(mask); if(g!=groupMasks.end()) return g->second;
+        auto v=volumeMasks.find(mask); if(v!=volumeMasks.end()) return v->second;
+        return "";
+    };
+
+    natives["maskActive"] = [this, maskResolve4](std::vector<Value>& a, int line) -> Value {
+        expectArgs("maskActive", a, 1, line); std::string m=maskResolve4(asString(a[0],"maskActive",line));
+        if(m.empty()) return Value::boolean_(false); auto it=maskEnabled.find(m); return Value::boolean_(it==maskEnabled.end() ? true : it->second);
+    };
+    natives["maskEnable"] = [this, maskResolve4](std::vector<Value>& a, int line) -> Value {
+        expectArgs("maskEnable", a, 1, line); std::string m=maskResolve4(asString(a[0],"maskEnable",line));
+        if(m.empty()) throw err(diag::Code::E0035_RuntimeError,line,"maskEnable: unknown mask"); maskEnabled[m]=true; return Value::boolean_(true);
+    };
+    natives["maskDisable"] = [this, maskResolve4](std::vector<Value>& a, int line) -> Value {
+        expectArgs("maskDisable", a, 1, line); std::string m=maskResolve4(asString(a[0],"maskDisable",line));
+        if(m.empty()) throw err(diag::Code::E0035_RuntimeError,line,"maskDisable: unknown mask"); maskEnabled[m]=false; return Value::boolean_(true);
+    };
+    natives["maskNamespace"] = [this, maskResolve4](std::vector<Value>& a, int line) -> Value {
+        expectArgsRange("maskNamespace", a, 1, 2, line); std::string m=maskResolve4(asString(a[0],"maskNamespace",line));
+        if(m.empty()) return Value::nil(); if(a.size()==1){ auto it=maskNamespaces.find(m); return it==maskNamespaces.end()?Value::nil():Value::string(it->second); }
+        if(lockedMasks.count(m)) throw err(diag::Code::E0035_RuntimeError,line,"maskNamespace: mask is locked");
+        std::string ns=asString(a[1],"maskNamespace",line); if(ns.empty()) maskNamespaces.erase(m); else maskNamespaces[m]=ns; return Value::boolean_(true);
+    };
+    natives["maskByNamespace"] = [this, maskResolve4](std::vector<Value>& a, int line) -> Value {
+        expectArgs("maskByNamespace", a, 1, line); std::string ns=asString(a[0],"maskByNamespace",line); auto out=std::make_shared<ArrayData>();
+        for(auto& kv:maskNamespaces) if(kv.second==ns && !maskResolve4(kv.first).empty()) out->push_back(Value::string(kv.first)); return Value::makeArray(out);
+    };
+    natives["maskVersion"] = [this, maskResolve4](std::vector<Value>& a, int line) -> Value {
+        expectArgsRange("maskVersion", a, 1, 2, line); std::string m=maskResolve4(asString(a[0],"maskVersion",line)); if(m.empty()) return Value::nil();
+        if(a.size()==1){auto it=maskVersions.find(m); return it==maskVersions.end()?Value::nil():Value::string(it->second);} if(lockedMasks.count(m)) throw err(diag::Code::E0035_RuntimeError,line,"maskVersion: mask is locked"); maskVersions[m]=asString(a[1],"maskVersion",line); return Value::boolean_(true);
+    };
+    natives["maskNote"] = [this, maskResolve4](std::vector<Value>& a, int line) -> Value {
+        expectArgsRange("maskNote", a, 1, 2, line); std::string m=maskResolve4(asString(a[0],"maskNote",line)); if(m.empty()) return Value::nil();
+        if(a.size()==1){auto it=maskNotes.find(m); return it==maskNotes.end()?Value::nil():Value::string(it->second);} if(lockedMasks.count(m)) throw err(diag::Code::E0035_RuntimeError,line,"maskNote: mask is locked"); maskNotes[m]=asString(a[1],"maskNote",line); return Value::boolean_(true);
+    };
+    natives["maskParentSet"] = [this, maskResolve4](std::vector<Value>& a, int line) -> Value {
+        expectArgs("maskParentSet", a, 2, line); std::string child=maskResolve4(asString(a[0],"maskParentSet",line)); std::string parent=maskResolve4(asString(a[1],"maskParentSet",line));
+        if(child.empty()||parent.empty()||child==parent) throw err(diag::Code::E0035_RuntimeError,line,"maskParentSet: invalid mask relation"); if(lockedMasks.count(child)) throw err(diag::Code::E0035_RuntimeError,line,"maskParentSet: child is locked");
+        std::string p=parent; for(int i=0;i<64&&!p.empty();++i){ if(p==child) throw err(diag::Code::E0035_RuntimeError,line,"maskParentSet: cyclic relation"); auto it=maskParents.find(p); if(it==maskParents.end()) break; p=maskResolve4(it->second); }
+        maskParents[child]=parent; return Value::boolean_(true);
+    };
+    natives["maskParentGet"] = [this, maskResolve4](std::vector<Value>& a, int line) -> Value {
+        expectArgs("maskParentGet", a, 1, line); std::string m=maskResolve4(asString(a[0],"maskParentGet",line)); if(m.empty()) return Value::nil(); auto it=maskParents.find(m); if(it==maskParents.end()) return Value::nil(); std::string p=maskResolve4(it->second); return p.empty()?Value::nil():Value::string(p);
+    };
+    natives["maskChildrenOf"] = [this, maskResolve4](std::vector<Value>& a, int line) -> Value {
+        expectArgs("maskChildrenOf", a, 1, line); std::string parent=maskResolve4(asString(a[0],"maskChildrenOf",line)); auto out=std::make_shared<ArrayData>(); if(parent.empty()) return Value::makeArray(out);
+        for(auto& kv:maskParents) if(maskResolve4(kv.second)==parent && !maskResolve4(kv.first).empty()) out->push_back(Value::string(kv.first)); return Value::makeArray(out);
+    };
+    natives["maskDescendants"] = [this, maskResolve4](std::vector<Value>& a, int line) -> Value {
+        expectArgs("maskDescendants", a, 1, line); std::string root=maskResolve4(asString(a[0],"maskDescendants",line)); auto out=std::make_shared<ArrayData>(); if(root.empty()) return Value::makeArray(out);
+        std::vector<std::string> q{root}; std::unordered_set<std::string> seen{root}; for(size_t i=0;i<q.size();++i){ for(auto& kv:maskParents) if(maskResolve4(kv.second)==q[i]){std::string c=maskResolve4(kv.first); if(!c.empty()&&seen.insert(c).second){out->push_back(Value::string(c));q.push_back(c);}} } return Value::makeArray(out);
+    };
+    natives["maskRoot"] = [this, maskResolve4](std::vector<Value>& a, int line) -> Value {
+        expectArgs("maskRoot", a, 1, line); std::string m=maskResolve4(asString(a[0],"maskRoot",line)); if(m.empty()) return Value::nil(); std::unordered_set<std::string> seen;
+        while(!m.empty() && seen.insert(m).second){auto it=maskParents.find(m); if(it==maskParents.end()) break; m=maskResolve4(it->second);} return m.empty()?Value::nil():Value::string(m);
+    };
+    natives["maskDepth"] = [this, maskResolve4](std::vector<Value>& a, int line) -> Value {
+        expectArgs("maskDepth", a, 1, line); std::string m=maskResolve4(asString(a[0],"maskDepth",line)); if(m.empty()) return Value::num(-1); int d=0; std::unordered_set<std::string> seen;
+        while(seen.insert(m).second){auto it=maskParents.find(m); if(it==maskParents.end()) break; m=maskResolve4(it->second); if(m.empty()) return Value::num(-1); ++d;} return Value::num(d);
+    };
+    natives["maskDetach"] = [this, maskResolve4](std::vector<Value>& a, int line) -> Value {
+        expectArgs("maskDetach", a, 1, line); std::string m=maskResolve4(asString(a[0],"maskDetach",line)); if(m.empty()) return Value::boolean_(false); if(lockedMasks.count(m)) throw err(diag::Code::E0035_RuntimeError,line,"maskDetach: mask is locked"); return Value::boolean_(maskParents.erase(m)>0);
+    };
+    natives["maskHasRef"] = [this, maskResolve4](std::vector<Value>& a, int line) -> Value {
+        expectArgs("maskHasRef", a, 2, line); std::string m=maskResolve4(asString(a[0],"maskHasRef",line)); std::string r=asString(a[1],"maskHasRef",line); auto it=maskRefs.find(m); return Value::boolean_(it!=maskRefs.end()&&std::find(it->second.begin(),it->second.end(),r)!=it->second.end());
+    };
+    natives["maskUnref"] = [this, maskResolve4](std::vector<Value>& a, int line) -> Value {
+        expectArgs("maskUnref", a, 2, line); std::string m=maskResolve4(asString(a[0],"maskUnref",line)); std::string r=asString(a[1],"maskUnref",line); if(m.empty()) return Value::boolean_(false); if(lockedMasks.count(m)) throw err(diag::Code::E0035_RuntimeError,line,"maskUnref: mask is locked"); auto it=maskRefs.find(m); if(it==maskRefs.end()) return Value::boolean_(false); auto p=std::find(it->second.begin(),it->second.end(),r); if(p==it->second.end()) return Value::boolean_(false); it->second.erase(p); return Value::boolean_(true);
+    };
+    natives["maskClearTags"] = [this, maskResolve4](std::vector<Value>& a, int line) -> Value {
+        expectArgs("maskClearTags", a, 1, line); std::string m=maskResolve4(asString(a[0],"maskClearTags",line)); if(m.empty()) return Value::boolean_(false); if(lockedMasks.count(m)) throw err(diag::Code::E0035_RuntimeError,line,"maskClearTags: mask is locked"); maskTags.erase(m); return Value::boolean_(true);
+    };
+    natives["maskClearRefs"] = [this, maskResolve4](std::vector<Value>& a, int line) -> Value {
+        expectArgs("maskClearRefs", a, 1, line); std::string m=maskResolve4(asString(a[0],"maskClearRefs",line)); if(m.empty()) return Value::boolean_(false); if(lockedMasks.count(m)) throw err(diag::Code::E0035_RuntimeError,line,"maskClearRefs: mask is locked"); maskRefs.erase(m); return Value::boolean_(true);
+    };
+    natives["maskCount"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("maskCount", a, 0, line); return Value::num(static_cast<double>(containerMasks.size()+groupMasks.size()+volumeMasks.size()));
+    };
+    natives["maskKinds"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("maskKinds", a, 0, line); auto out=std::make_shared<ArrayData>(); out->push_back(Value::string("container")); out->push_back(Value::string("group")); out->push_back(Value::string("volume")); return Value::makeArray(out);
+    };
+    natives["maskKindCount"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("maskKindCount", a, 1, line); std::string k=asString(a[0],"maskKindCount",line); if(k=="container") return Value::num(containerMasks.size()); if(k=="group") return Value::num(groupMasks.size()); if(k=="volume") return Value::num(volumeMasks.size()); return Value::num(0);
+    };
+    natives["maskHasAllTags"] = [this, maskResolve4](std::vector<Value>& a, int line) -> Value {
+        expectArgs("maskHasAllTags", a, 2, line); std::string m=maskResolve4(asString(a[0],"maskHasAllTags",line)); if(m.empty()||a[1].type!=Value::Type::ARRAY) return Value::boolean_(false); auto it=maskTags.find(m); if(it==maskTags.end()) return Value::boolean_(a[1].array->empty()); for(auto& x:*a[1].array) if(std::find(it->second.begin(),it->second.end(),asString(x,"maskHasAllTags",line))==it->second.end()) return Value::boolean_(false); return Value::boolean_(true);
+    };
+    natives["maskHasAnyTag"] = [this, maskResolve4](std::vector<Value>& a, int line) -> Value {
+        expectArgs("maskHasAnyTag", a, 2, line); std::string m=maskResolve4(asString(a[0],"maskHasAnyTag",line)); if(m.empty()||a[1].type!=Value::Type::ARRAY) return Value::boolean_(false); auto it=maskTags.find(m); if(it==maskTags.end()) return Value::boolean_(false); for(auto& x:*a[1].array) if(std::find(it->second.begin(),it->second.end(),asString(x,"maskHasAnyTag",line))!=it->second.end()) return Value::boolean_(true); return Value::boolean_(false);
+    };
+    // maskOf(name) يبقى متوافقاً، لكنه أصبح يشمل كل أنواع الكائنات المسجّلة.
+
     // containerNames() -> مصفوفة بكل أسماء الحاويات المسجَّلة حالياً (عبر @container أو spawn)
     natives["containerNames"] = [this](std::vector<Value>& a, int line) -> Value {
         expectArgs("containerNames", a, 0, line);
@@ -4510,6 +4905,7 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
         std::string containerKey = s->name.empty() ? ("#" + std::to_string(containers.size())) : s->name;
         containers[containerKey] = containerEnv;
         containerKinds[containerKey] = s->kind;
+        if (!s->mask.empty()) containerMasks[s->mask] = containerKey;
         if (!groupStack.empty()) {
             groupMembers[groupStack.back()].push_back(containerKey);
         }
@@ -4732,7 +5128,8 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
         std::string groupKey = s->name.empty() ? ("#group" + std::to_string(groupEnvs.size())) : s->name;
         auto groupEnv = std::make_shared<Environment>(env); // نطاق خاص بالمجموعة (بدل التنفيذ المباشر داخل البيئة الأب)
         groupEnvs[groupKey] = groupEnv;
-        groupMembers.emplace(groupKey, std::vector<std::string>{}); // تضمن وجود مُدخَل حتى لو بقيت فارغة
+        groupMembers.emplace(groupKey, std::vector<std::string>{});
+        if (!s->mask.empty()) groupMasks[s->mask] = groupKey; // تضمن وجود مُدخَل حتى لو بقيت فارغة
 
         // مجموعة متداخلة داخل مجموعة أخرى: سجّلها كعضو في المجموعة الأب أيضاً.
         if (!groupStack.empty()) {
@@ -4759,6 +5156,7 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
     }
 
     if (auto s = std::dynamic_pointer_cast<VolumeStmt>(stmt)) {
+        if (!s->mask.empty()) volumeMasks[s->mask] = s->name;
         output << "📚 Volume" << (s->name.empty() ? "" : (" = " + s->name)) << "\n";
         executeBlock(s->body, env);
         output << "✅ .end/Volume" << (s->name.empty() ? "" : (" (" + s->name + ")")) << "\n";
