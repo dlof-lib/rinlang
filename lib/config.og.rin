@@ -1,0 +1,11 @@
+// Rin Config Pro — layered configuration maps.
+fun cfg_new(){return {};}
+fun cfg_set(c,key,value){c[key]=value;return c;}
+fun cfg_get(c,key,defaultValue){if(!has(c,key)){return defaultValue;}return c[key];}
+fun cfg_has(c,key){return has(c,key);}
+fun cfg_remove(c,key){if(has(c,key)){remove(c[key]);}return c;}
+fun cfg_merge(a,b){let out={};let ks=keys(a);let i=0;while(i<len(ks)){out[ks[i]]=a[ks[i]];i=i+1;}ks=keys(b);i=0;while(i<len(ks)){out[ks[i]]=b[ks[i]];i=i+1;}return out;}
+fun cfg_keys(c){return keys(c);}
+fun cfg_size(c){return len(keys(c));}
+fun cfg_require(c,key){if(!has(c,key)){return nil;}return c[key];}
+fun cfg_defaults(c,defaults){return cfg_merge(defaults,c);}
