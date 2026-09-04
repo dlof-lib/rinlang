@@ -1,0 +1,9 @@
+// Rin Logger Pro — structured logging helpers.
+fun log_info(s){print "[INFO] "+str(s);return s;}
+fun log_warn(s){print "[WARN] "+str(s);return s;}
+fun log_error(s){print "[ERROR] "+str(s);return s;}
+fun log_debug(s){print "[DEBUG] "+str(s);return s;}
+fun log_section(s){print "--- "+str(s)+" ---";return s;}
+fun log_value(level,key,value){print "["+level+"] "+key+"="+str(value);return value;}
+fun log_ok(s){print "[OK] "+str(s);return s;}
+fun log_trace(s){print "[TRACE] "+str(s);return s;}
