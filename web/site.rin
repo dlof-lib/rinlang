@@ -1,5 +1,5 @@
 // =============================================================================
-// site.rin — الصفحة الرسمية للغة Rin (إعادة بناء احترافية)
+// site.rin — الصفحة الرسمية للغة Rin (إعادة بناء كاملة، احترافية، موسّعة)
 // -----------------------------------------------------------------------------
 // مكتوبة بالكامل بلغة Rin — صفر أسطر HTML، صفر سلاسل نصية مبنية بالدمج. كل
 // عنصر أدناه (@view.Kind=name) هو Strand حقيقي يبنيه ويخطّطه محرك Loomtime
@@ -11,11 +11,22 @@
 // حرفيات، خلايا warp، عمليات + - * / على نصوص/أرقام، ونداءات onTap=fn(...).
 // لذلك لا توجد حلقات/شروط هنا؛ كل بطاقة مكتوبة يدوياً — بالضبط كما تكتب أي
 // تطبيق Loomtime حقيقي آخر.
+//
+// خريطة الأقسام: topbar · drawer · hero · stats · features · tour (جولة في
+// اللغة، أمثلة كود حقيقية) · thisPage (هذه الصفحة نفسها) · rinhtml ·
+// quickstart · ecosystem · compare (لماذا Rin) · faq · finalCta · footer
 // =============================================================================
 
 warp navOpen    = "false";
-warp copyState  = "";
-warp copyState2 = "";
+
+warp copyVars   = "false";
+warp copyFlow   = "false";
+warp copyFun    = "false";
+warp copyData   = "false";
+warp copyPipe   = "false";
+warp copyDb     = "false";
+warp copyPage   = "false";
+warp copyHtml   = "false";
 
 @view.Scaffold=page
 
@@ -23,8 +34,9 @@ warp copyState2 = "";
   @view.TopBar=nav
     role="topbar"; padding=14; bg="#0a0a10cc";
     @view.Row=navRow
-      gap=12; valign="center";
+      gap=10; valign="center";
       @view.Text=brand text="⧉ Rin"; size=19; weight="800"; color="#eceef7"; .end/view
+      @view.Button=docsTop label="التوثيق"; url="https://github.com/dlof-lib/rinlang/tree/main/docs"; bg="#14141f"; color="#eceef7"; .end/view
       @view.Button=ghTop label="GitHub"; url="https://github.com/dlof-lib/rinlang"; bg="#14141f"; color="#eceef7"; .end/view
       @view.Button=menuBtn label="☰"; onTap=toggle(navOpen); bg="#14141f"; color="#eceef7"; .end/view
     .end/view
@@ -32,18 +44,21 @@ warp copyState2 = "";
 
   // ============================== درج التنقّل (جوال) ==============================
   @view.Drawer=mobileMenu
-    role="drawer"; open=navOpen; width=260; bg="#101018";
+    role="drawer"; open=navOpen; width=270; bg="#101018";
     @view.Column=drawerCol
       gap=2; padding=20;
       @view.Text=drawerLabel text="التنقّل"; size=12; color="#565768"; weight="700"; .end/view
-      @view.MenuItem=dm1 label="لماذا Rin";      url="#features";   onTap=toggle(navOpen); color="#eceef7"; .end/view
-      @view.MenuItem=dm2 label="الكود الحقيقي";  url="#code";       onTap=toggle(navOpen); color="#eceef7"; .end/view
-      @view.MenuItem=dm3 label="Rin في المتصفح"; url="#rinhtml";    onTap=toggle(navOpen); color="#eceef7"; .end/view
-      @view.MenuItem=dm4 label="البدء السريع";   url="#quickstart"; onTap=toggle(navOpen); color="#eceef7"; .end/view
-      @view.MenuItem=dm5 label="المنظومة";       url="#ecosystem";  onTap=toggle(navOpen); color="#eceef7"; .end/view
-      @view.MenuItem=dm6 label="الأسئلة الشائعة"; url="#faq";       onTap=toggle(navOpen); color="#eceef7"; .end/view
+      @view.MenuItem=dm1  label="لماذا Rin";        url="#features";   onTap=toggle(navOpen); color="#eceef7"; .end/view
+      @view.MenuItem=dm2  label="جولة في اللغة";     url="#tour";       onTap=toggle(navOpen); color="#eceef7"; .end/view
+      @view.MenuItem=dm3  label="هذه الصفحة كودها"; url="#code";       onTap=toggle(navOpen); color="#eceef7"; .end/view
+      @view.MenuItem=dm4  label="Rin في المتصفح";    url="#rinhtml";    onTap=toggle(navOpen); color="#eceef7"; .end/view
+      @view.MenuItem=dm5  label="البدء السريع";      url="#quickstart"; onTap=toggle(navOpen); color="#eceef7"; .end/view
+      @view.MenuItem=dm6  label="المنظومة";          url="#ecosystem";  onTap=toggle(navOpen); color="#eceef7"; .end/view
+      @view.MenuItem=dm7  label="لماذا لا لغة أخرى؟"; url="#compare";   onTap=toggle(navOpen); color="#eceef7"; .end/view
+      @view.MenuItem=dm8  label="الأسئلة الشائعة";    url="#faq";       onTap=toggle(navOpen); color="#eceef7"; .end/view
       @view.Divider=dmDiv height=1; color="#232336"; .end/view
-      @view.MenuItem=dm7 label="GitHub"; url="https://github.com/dlof-lib/rinlang"; onTap=toggle(navOpen); color="#7c5cff"; .end/view
+      @view.MenuItem=dm9  label="التوثيق الكامل"; url="https://github.com/dlof-lib/rinlang/tree/main/docs"; onTap=toggle(navOpen); color="#9a9ab0"; .end/view
+      @view.MenuItem=dm10 label="GitHub"; url="https://github.com/dlof-lib/rinlang"; onTap=toggle(navOpen); color="#7c5cff"; .end/view
     .end/view
   .end/view
 
@@ -61,7 +76,7 @@ warp copyState2 = "";
         size=27; weight="900"; color="#eceef7";
       .end/view
       @view.Text=heroDesc
-        text="Lexer وParser وInterpreter حقيقية بلا أي إطار خارجي، تعمل كسطر أوامر، داخل IDE أندرويد كامل بـ Kotlin، وداخل المتصفح مباشرة عبر WebAssembly — نفس الملفات الثلاثة، بلا نسخ ولا إعادة كتابة.";
+        text="Lexer وParser وInterpreter حقيقية بلا أي إطار خارجي، تعمل كسطر أوامر، داخل IDE أندرويد كامل بـ Kotlin، وداخل المتصفح مباشرة عبر WebAssembly — نفس الملفات الثلاثة، بلا نسخ ولا إعادة كتابة. حتى هذه الصفحة التي تقرأها الآن مكتوبة بها.";
         size=14; color="#9a9ab0";
       .end/view
 
@@ -183,6 +198,120 @@ warp copyState2 = "";
           @view.Text=f8desc text="عناصر <rin-app> وتوجيهات rin-click/rin-text تشغّل ملف .rin فعلياً كمنطق صفحة HTML، بلا كتابة جافاسكربت."; size=13; color="#9a9ab0"; .end/view
         .end/view
       .end/view
+
+      @view.Card=f9 padding=16; bg="#14141f"; radius=14;
+        @view.Column=f9c gap=4;
+          @view.Text=f9icon text="🗣️ صياغة إنجليزية طبيعية اختيارية"; size=15; weight="700"; color="#eceef7"; .end/view
+          @view.Text=f9desc text="when (x > 5) { ... } otherwise { ... } مطابقة تماماً لـ if/else — نفس السلوك، صياغة أقرب للمبتدئين، ويمكن مزجهما بحرّية."; size=13; color="#9a9ab0"; .end/view
+        .end/view
+      .end/view
+    .end/view
+
+    // ================================ جولة في اللغة ================================
+    @view.Column=tour
+      gap=14;
+      @view.Text=tourEyebrow text="جولة في اللغة"; size=12; color="#7c5cff"; weight="700"; .end/view
+      @view.Text=tourTitle text="ست بطاقات، كود حقيقي، صفر تبسيط مخلّ"; size=21; weight="800"; color="#eceef7"; .end/view
+      @view.Text=tourDesc
+        text="كل مقتطف أدناه مأخوذ حرفياً من التوثيق الرسمي (docs/) أو من samples/showcase.rin، ويعمل فعلياً عبر rin_run — بلا تبسيط تسويقي.";
+        size=13; color="#9a9ab0";
+      .end/view
+
+      // ---- 1) متغيّرات وطباعة ----
+      @view.Card=tour1 padding=16; bg="#14141f"; radius=14;
+        @view.Column=tour1c gap=8;
+          @view.Text=tour1t text="1 — متغيّرات وطباعة"; size=15; weight="700"; color="#eceef7"; .end/view
+          @view.Text=tour1d text="let لأي قيمة، وtext لسلسلة نصية مُنمَّطة الاستخدام."; size=13; color="#9a9ab0"; .end/view
+          @view.Text=tour1code
+            mono="true"; size=12.5; color="#c9c6dd";
+            text="let name = \"Rin\";\nlet x = 10;\n\nprint \"Hello, \" + name + \"!\";\nprint x * 2;";
+          .end/view
+          @view.Button=tour1btn label="نسخ الكود"; onTap=toggle(copyVars);
+            copyText="let name = \"Rin\";\nlet x = 10;\n\nprint \"Hello, \" + name + \"!\";\nprint x * 2;";
+            bg="#191926"; color="#eceef7";
+          .end/view
+        .end/view
+      .end/view
+
+      // ---- 2) شروط: if/else وwhen/otherwise ----
+      @view.Card=tour2 padding=16; bg="#14141f"; radius=14;
+        @view.Column=tour2c gap=8;
+          @view.Text=tour2t text="2 — شرطان متكافئان: if/else وwhen/otherwise"; size=15; weight="700"; color="#eceef7"; .end/view
+          @view.Text=tour2d text="صياغة كلاسيكية وصياغة إنجليزية طبيعية، بنفس المعنى تماماً — اختر ما يناسب من يقرأ الكود."; size=13; color="#9a9ab0"; .end/view
+          @view.Text=tour2code
+            mono="true"; size=12.5; color="#c9c6dd";
+            text="if (x > 5) {\n    print \"big\";\n} else {\n    print \"small\";\n}\n\nwhen (age >= 18) {\n    print \"بالغ\";\n} otherwise {\n    print \"قاصر\";\n}";
+          .end/view
+          @view.Button=tour2btn label="نسخ الكود"; onTap=toggle(copyFlow);
+            copyText="if (x > 5) {\n    print \"big\";\n} else {\n    print \"small\";\n}\n\nwhen (age >= 18) {\n    print \"بالغ\";\n} otherwise {\n    print \"قاصر\";\n}";
+            bg="#191926"; color="#eceef7";
+          .end/view
+        .end/view
+      .end/view
+
+      // ---- 3) دوال وتكرار ----
+      @view.Card=tour3 padding=16; bg="#14141f"; radius=14;
+        @view.Column=tour3c gap=8;
+          @view.Text=tour3t text="3 — دوال، تكرار ذاتي، وحلقات"; size=15; weight="700"; color="#eceef7"; .end/view
+          @view.Text=tour3d text="fun عادية، تدعم الاستدعاء الذاتي (recursion) بلا قيود اصطناعية."; size=13; color="#9a9ab0"; .end/view
+          @view.Text=tour3code
+            mono="true"; size=12.5; color="#c9c6dd";
+            text="fun fib(n) {\n    if (n < 2) { return n; }\n    return fib(n - 1) + fib(n - 2);\n}\nprint fib(10);\n\nlet i = 0;\nwhile (i < 5) {\n    print i;\n    i = i + 1;\n}";
+          .end/view
+          @view.Button=tour3btn label="نسخ الكود"; onTap=toggle(copyFun);
+            copyText="fun fib(n) {\n    if (n < 2) { return n; }\n    return fib(n - 1) + fib(n - 2);\n}\nprint fib(10);\n\nlet i = 0;\nwhile (i < 5) {\n    print i;\n    i = i + 1;\n}";
+            bg="#191926"; color="#eceef7";
+          .end/view
+        .end/view
+      .end/view
+
+      // ---- 4) مصفوفات وقواميس ----
+      @view.Card=tour4 padding=16; bg="#14141f"; radius=14;
+        @view.Column=tour4c gap=8;
+          @view.Text=tour4t text="4 — مصفوفات وقواميس (كائنات)"; size=15; weight="700"; color="#eceef7"; .end/view
+          @view.Text=tour4d text="push وsort جاهزتان للمصفوفات، وفهرسة [\"key\"] عادية للقواميس/الكائنات."; size=13; color="#9a9ab0"; .end/view
+          @view.Text=tour4code
+            mono="true"; size=12.5; color="#c9c6dd";
+            text="let arr = [1, 2, 3];\npush(arr, 4);\nprint sort([3, 1, 2]);\n\nlet m = { name: \"Rin\", age: 2 };\nprint m[\"name\"];\nprint keys(m);";
+          .end/view
+          @view.Button=tour4btn label="نسخ الكود"; onTap=toggle(copyData);
+            copyText="let arr = [1, 2, 3];\npush(arr, 4);\nprint sort([3, 1, 2]);\n\nlet m = { name: \"Rin\", age: 2 };\nprint m[\"name\"];\nprint keys(m);";
+            bg="#191926"; color="#eceef7";
+          .end/view
+        .end/view
+      .end/view
+
+      // ---- 5) الأنابيب |> ----
+      @view.Card=tour5 padding=16; bg="#14141f"; radius=14;
+        @view.Column=tour5c gap=8;
+          @view.Text=tour5t text="5 — الأنابيب |> بدل تعشيش الاستدعاءات"; size=15; weight="700"; color="#eceef7"; .end/view
+          @view.Text=tour5d text="يمرّر |> القيمة على يساره كمُدخل ضمني للدالة على يمينه — سلسلة خطوات مقروءة في سطر واحد."; size=13; color="#9a9ab0"; .end/view
+          @view.Text=tour5code
+            mono="true"; size=12.5; color="#c9c6dd";
+            text="let data = [10, 20, 30, 40, 50];\nlet result = data |> normalize() |> mean();\nprint result;\n\nif (result > 0) { print \"طبيعي\"; }";
+          .end/view
+          @view.Button=tour5btn label="نسخ الكود"; onTap=toggle(copyPipe);
+            copyText="let data = [10, 20, 30, 40, 50];\nlet result = data |> normalize() |> mean();\nprint result;\n\nif (result > 0) { print \"طبيعي\"; }";
+            bg="#191926"; color="#eceef7";
+          .end/view
+        .end/view
+      .end/view
+
+      // ---- 6) حاويات NoSQL ----
+      @view.Card=tour6 padding=16; bg="#14141f"; radius=14;
+        @view.Column=tour6c gap=8;
+          @view.Text=tour6t text="6 — قاعدة بيانات NoSQL مدمجة"; size=15; weight="700"; color="#eceef7"; .end/view
+          @view.Text=tour6d text="Containers.Group وcontainer.doc يبنيان مستندات JSON حقيقية، تُستعلَم عبر queryDocs بلا أي خادم خارجي."; size=13; color="#9a9ab0"; .end/view
+          @view.Text=tour6code
+            mono="true"; size=12.5; color="#c9c6dd";
+            text="@Containers.Group=shop_db\n  @container.doc=users\n    document id=\"u1\" fields={ name: \"سارة\", city: \"الرياض\" };\n  .end/container.doc\n.end/Containers.Group\n\nprint queryDocs(\"users\", \"city\", \"الرياض\");";
+          .end/view
+          @view.Button=tour6btn label="نسخ الكود"; onTap=toggle(copyDb);
+            copyText="@Containers.Group=shop_db\n  @container.doc=users\n    document id=\"u1\" fields={ name: \"سارة\", city: \"الرياض\" };\n  .end/container.doc\n.end/Containers.Group\n\nprint queryDocs(\"users\", \"city\", \"الرياض\");";
+            bg="#191926"; color="#eceef7";
+          .end/view
+        .end/view
+      .end/view
     .end/view
 
     // ------------------------------ معاينة حية (هذه الصفحة) ------------------------------
@@ -202,8 +331,8 @@ warp copyState2 = "";
             text="// مقتطف حقيقي من هذا الملف نفسه\nwarp navOpen = \"false\";\n\n@view.Button=menuBtn\n  label=\"☰\";\n  onTap=toggle(navOpen);\n.end/view\n\n// لا HTML — Strand حقيقي، بحالة Warp حقيقية،\n// يُخطَّط برمّته عبر Loom ثم يُرسل كـ JSON إلى المتصفح.";
           .end/view
           @view.Button=copyBtn
-            label="نسخ " + copyState;
-            onTap=toggle(copyState);
+            label="نسخ الكود";
+            onTap=toggle(copyPage);
             copyText="warp navOpen = \"false\";\n\n@view.Button=menuBtn\n  label=\"☰\";\n  onTap=toggle(navOpen);\n.end/view";
             bg="#191926"; color="#eceef7";
           .end/view
@@ -214,7 +343,7 @@ warp copyState2 = "";
     // -------------------------------- Rin في المتصفح (RinHTML) --------------------------------
     @view.Column=rinhtml
       gap=14;
-      @view.Text=rinhtmlEyebrow text="ميزة جديدة"; size=12; color="#7c5cff"; weight="700"; .end/view
+      @view.Text=rinhtmlEyebrow text="ميزة"; size=12; color="#7c5cff"; weight="700"; .end/view
       @view.Text=rinhtmlTitle text="RinHTML: تشغيل .rin مباشرة داخل صفحة HTML"; size=21; weight="800"; color="#eceef7"; .end/view
       @view.Text=rinhtmlDesc
         text="HTML يبقى واجهة عرض فقط، وRin هو من ينفّذ المنطق — بلا جافاسكربت وسيط. عنصر <rin-app> يحمّل ملف .rin ويشغّله عبر نفس محرّك C++17 (WebAssembly)، وتوجيهات rin-click / rin-text تربط الحالة مباشرة بعناصر الصفحة.";
@@ -228,9 +357,9 @@ warp copyState2 = "";
             text="<rin-app src=\"main.rin\" allow=\"dom\"></rin-app>\n\n<button rin-click=\"add()\">+1</button>\n<div rin-text=\"count\"></div>\n\n// main.rin\nlet count = 0;\nfun add() { count = count + 1; }";
           .end/view
           @view.Button=copyBtn2
-            label="نسخ " + copyState2;
-            onTap=toggle(copyState2);
-            copyText="let count = 0;\nfun add() { count = count + 1; }";
+            label="نسخ الكود";
+            onTap=toggle(copyHtml);
+            copyText="<rin-app src=\"main.rin\" allow=\"dom\"></rin-app>\n\n<button rin-click=\"add()\">+1</button>\n<div rin-text=\"count\"></div>\n\n// main.rin\nlet count = 0;\nfun add() { count = count + 1; }";
             bg="#191926"; color="#eceef7";
           .end/view
         .end/view
@@ -317,6 +446,48 @@ warp copyState2 = "";
       @view.Card=e9 padding=12; bg="#14141f"; radius=12;
         @view.Text=e9t text="🔤 ربط مع C / Node.js / Python (bindings/)"; size=13; color="#c9c6dd"; .end/view
       .end/view
+      @view.Card=e10 padding=12; bg="#14141f"; radius=12;
+        @view.Text=e10t text="🩺 نظام تشخيصات أخطاء برموز ومواقع دقيقة (diagnostics/)"; size=13; color="#c9c6dd"; .end/view
+      .end/view
+    .end/view
+
+    // ------------------------------ لماذا لا لغة أخرى؟ ------------------------------
+    @view.Column=compare
+      gap=14;
+      @view.Text=compareEyebrow text="لماذا Rin تحديداً"; size=12; color="#7c5cff"; weight="700"; .end/view
+      @view.Text=compareTitle text="لماذا لا Python أو JavaScript فقط؟"; size=21; weight="800"; color="#eceef7"; .end/view
+      @view.Text=compareDesc
+        text="Rin لا تنافس هذه اللغات على العمومية — هي تجمع أربعة أشياء نادراً ما تجدها معاً في مكان واحد:";
+        size=13; color="#9a9ab0";
+      .end/view
+
+      @view.Card=c1 padding=16; bg="#14141f"; radius=14;
+        @view.Column=c1c gap=4;
+          @view.Text=c1t text="⚡ محرّك واحد، لا ثلاث لغات مختلفة"; size=14; weight="700"; color="#eceef7"; .end/view
+          @view.Text=c1d text="نفس rin_lexer/rin_parser/rin_interpreter يعمل حرفياً على CLI وAndroid وWeb — لا حاجة لكتابة نفس المنطق ثلاث مرات بثلاث لغات مختلفة."; size=13; color="#9a9ab0"; .end/view
+        .end/view
+      .end/view
+
+      @view.Card=c2 padding=16; bg="#14141f"; radius=14;
+        @view.Column=c2c gap=4;
+          @view.Text=c2t text="🗄️ بيانات وواجهة من نفس اللغة"; size=14; weight="700"; color="#eceef7"; .end/view
+          @view.Text=c2d text="حاويات NoSQL وأنابيب إحصاء ومحرّك واجهات Loomtime كلها امتدادات أصيلة للغة نفسها، لا مكتبات خارجية منفصلة."; size=13; color="#9a9ab0"; .end/view
+        .end/view
+      .end/view
+
+      @view.Card=c3 padding=16; bg="#14141f"; radius=14;
+        @view.Column=c3c gap=4;
+          @view.Text=c3t text="🪶 بلا أي إطار خارجي (Zero-dependency)"; size=14; weight="700"; color="#eceef7"; .end/view
+          @view.Text=c3d text="المفسّر يبنى بـ g++ فقط، بلا npm ولا pip ولا مدير حزم إلزامي — ملف واحد وأمر بناء واحد يكفيان."; size=13; color="#9a9ab0"; .end/view
+        .end/view
+      .end/view
+
+      @view.Card=c4 padding=16; bg="#14141f"; radius=14;
+        @view.Column=c4c gap=4;
+          @view.Text=c4t text="🗣️ صياغة قابلة للتخصيص للمبتدئين"; size=14; weight="700"; color="#eceef7"; .end/view
+          @view.Text=c4d text="when/otherwise إلى جانب if/else — نفس اللغة، بابان مختلفان لدخولها، بلا تجزئة في السلوك أو الأداء."; size=13; color="#9a9ab0"; .end/view
+        .end/view
+      .end/view
     .end/view
 
     // ------------------------------ الأسئلة الشائعة ------------------------------
@@ -352,6 +523,20 @@ warp copyState2 = "";
           @view.Text=q4a text="عبر RinHTML: أضف <rin-app src=\"file.rin\"> وربطها بعناصر rin-click/rin-text — انظر قسم 'Rin في المتصفح' أعلاه."; size=13; color="#9a9ab0"; .end/view
         .end/view
       .end/view
+
+      @view.Card=q5 padding=16; bg="#14141f"; radius=14;
+        @view.Column=q5c gap=4;
+          @view.Text=q5q text="هل توجد حزم جاهزة أستخدمها مباشرة؟"; size=14; weight="700"; color="#eceef7"; .end/view
+          @view.Text=q5a text="نعم عبر @import للمكتبات القياسية (مثل math)، وعبر RinPM كمتجر حزم داخل تطبيق أندرويد، بالإضافة إلى حزم CLC مضغوطة (.rcl) قابلة للاستيراد من ملف أو مسار."; size=13; color="#9a9ab0"; .end/view
+        .end/view
+      .end/view
+
+      @view.Card=q6 padding=16; bg="#14141f"; radius=14;
+        @view.Column=q6c gap=4;
+          @view.Text=q6q text="هل يمكنني المساهمة في المشروع؟"; size=14; weight="700"; color="#eceef7"; .end/view
+          @view.Text=q6a text="بالتأكيد — المستودع مفتوح على GitHub، ودليل المساهمة موجود في CONTRIBUTING.md مع قواعد سلوك واضحة في CODE_OF_CONDUCT.md."; size=13; color="#9a9ab0"; .end/view
+        .end/view
+      .end/view
     .end/view
 
     // -------------------------------- الدعوة الختامية --------------------------------
@@ -368,11 +553,17 @@ warp copyState2 = "";
     @view.Column=footer
       gap=10;
       @view.Text=footerCopy text="© 2026 Rin — مبنية ومنشورة تلقائياً بلغة Rin عبر GitHub Actions."; size=12; color="#565768"; .end/view
-      @view.Row=footerLinks
+      @view.Row=footerLinks1
         gap=16;
         @view.Text=fl1 text="GitHub"; size=12; color="#9a9ab0"; url="https://github.com/dlof-lib/rinlang"; .end/view
-        @view.Text=fl2 text="الإبلاغ عن مشكلة"; size=12; color="#9a9ab0"; url="https://github.com/dlof-lib/rinlang/issues"; .end/view
-        @view.Text=fl3 text="الرخصة (MIT)"; size=12; color="#9a9ab0"; url="https://github.com/dlof-lib/rinlang/blob/main/LICENSE"; .end/view
+        @view.Text=fl2 text="التوثيق"; size=12; color="#9a9ab0"; url="https://github.com/dlof-lib/rinlang/tree/main/docs"; .end/view
+        @view.Text=fl3 text="الأمثلة"; size=12; color="#9a9ab0"; url="https://github.com/dlof-lib/rinlang/tree/main/examples"; .end/view
+      .end/view
+      @view.Row=footerLinks2
+        gap=16;
+        @view.Text=fl4 text="الإبلاغ عن مشكلة"; size=12; color="#9a9ab0"; url="https://github.com/dlof-lib/rinlang/issues"; .end/view
+        @view.Text=fl5 text="المساهمة"; size=12; color="#9a9ab0"; url="https://github.com/dlof-lib/rinlang/blob/main/CONTRIBUTING.md"; .end/view
+        @view.Text=fl6 text="الرخصة (MIT)"; size=12; color="#9a9ab0"; url="https://github.com/dlof-lib/rinlang/blob/main/LICENSE"; .end/view
       .end/view
     .end/view
 
