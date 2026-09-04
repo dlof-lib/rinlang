@@ -384,9 +384,9 @@ warp copyHtml   = "false";
     @view.Column=code
       gap=14;
       @view.Text=codeEyebrow text="معاينة حية"; size=12; color="#22c55e"; weight="700"; .end/view
-      @view.Text=codeTitle text="هذه الصفحة نفسها مكتوبة بلغة Rin"; size=21; weight="800"; color="#f4f6f3"; .end/view
+      @view.Text=codeTitle text="حلقة for حقيقية، لا مثال توضيحي"; size=21; weight="800"; color="#f4f6f3"; .end/view
       @view.Text=codeDesc
-        text="لا HTML مكتوب يدوياً ولا سلسلة مبنيّة بالدمج — كل @view.Card و@view.Text و@view.Button أدناه هو Strand حقيقي، بُني وخُطِّط ورُسم عبر Fabric وLoom وDye، تماماً كأي تطبيق Rin آخر على أندرويد.";
+        text="هذا نسخ حرفي لأعلى هذا الملف نفسه: حلقة for + make تُنفَّذ فعلياً عبر rin::Interpreter::run() قبل أن يبني Loom أي @view — وناتجها (عدد الحاويات) هو نفس الرقم الذي تراه حيّاً في بطاقة الإحصاءات أعلاه.";
         size=13; color="#9aa39c";
       .end/view
 
@@ -394,12 +394,12 @@ warp copyHtml   = "false";
         @view.Column=codeCardCol gap=10;
           @view.Text=codeSnippet
             mono="true"; size=12.5; color="#cfd6cf";
-            text="// مقتطف حقيقي من هذا الملف نفسه\nwarp navOpen = \"false\";\n\n@view.Button=menuBtn\n  label=\"☰\";\n  onTap=toggle(navOpen);\n.end/view\n\n// لا HTML — Strand حقيقي، بحالة Warp حقيقية،\n// يُخطَّط برمّته عبر Loom ثم يُرسل كـ JSON إلى المتصفح.";
+            text="// نفس الحلقة الموجودة أعلى هذا الملف بالضبط\nfor (let i = 0; i < 7; i = i + 1) {\n    make kind = \"tourSnippet\";\n    make name = \"tourSnippet_\" + i;\n    create(kind, name);\n    setField(name, \"index\", i);\n}\nlet totalContainers = len(containerNames());\n\n// النتيجة تُقرأ حيّة في بطاقة الإحصاءات أعلاه ↑";
           .end/view
           @view.Button=copyBtn
             label="نسخ الكود";
             onTap=toggle(copyPage);
-            copyText="warp navOpen = \"false\";\n\n@view.Button=menuBtn\n  label=\"☰\";\n  onTap=toggle(navOpen);\n.end/view";
+            copyText="for (let i = 0; i < 7; i = i + 1) {\n    make kind = \"tourSnippet\";\n    make name = \"tourSnippet_\" + i;\n    create(kind, name);\n    setField(name, \"index\", i);\n}\nlet totalContainers = len(containerNames());";
             bg="#141a15"; color="#f4f6f3";
           .end/view
         .end/view
