@@ -1,0 +1,14 @@
+// Rin Format Pro — deterministic text formatting.
+fun fmt_padNumber(n,width){let s=str(n);while(len(s)<width){s="0"+s;}return s;}
+fun fmt_kv(key,value){return key+"="+str(value);}
+fun fmt_line(left,right,width){let s=left;while(len(s)+len(right)<width){s=s+" ";}return s+right;}
+fun fmt_joinLines(arr,sep){return join(arr,sep);}
+fun fmt_quote(s){return "\""+s+"\"";}
+fun fmt_bracket(s){return "["+s+"]";}
+fun fmt_percent(x){return str(x)+"%";}
+fun fmt_bool(v){if(v){return "true";}return "false";}
+fun fmt_signNumber(n){if(n>0){return "+"+str(n);}return str(n);}
+fun fmt_repeat(s,n){let out="";let i=0;while(i<n){out=out+s;i=i+1;}return out;}
+fun fmt_left(s,width){if(len(s)>=width){return substr(s,0,width);}let out=s;while(len(out)<width){out=out+" ";}return out;}
+fun fmt_right(s,width){if(len(s)>=width){return substr(s,0,width);}let out=s;while(len(out)<width){out=" "+out;}return out;}
+fun fmt_center(s,width){if(len(s)>=width){return substr(s,0,width);}let left=floor((width-len(s))/2);let out="";let i=0;while(i<left){out=out+" ";i=i+1;}out=out+s;while(len(out)<width){out=out+" ";}return out;}
