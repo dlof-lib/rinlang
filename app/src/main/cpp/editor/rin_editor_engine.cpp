@@ -584,9 +584,16 @@ std::vector<HighlightSpan> EditorEngine::computeHighlights() const {
     try {
         rin::Lexer lexer(source);
         std::vector<rin::Token> tokens = lexer.scanTokens();
-        for (const rin::Token& tok : tokens) {
+        for (size_t i = 0; i < tokens.size(); ++i) {
+            const rin::Token& tok = tokens[i];
             if (tok.type == rin::TokenType::END_OF_FILE) continue;
             HighlightKind kind = kindForToken(tok.type);
+            if (kind == HighlightKind::Ident && i + 1 < tokens.size() &&
+                tokens[i + 1].type == rin::TokenType::LPAREN) {
+                // معرِّف متبوع مباشرة بقوس فتح: نمط استدعاء دالة — يُلوَّن بلون مميّز
+                // (نفس أسلوب المحررات الاحترافية مثل VS Code Dark+).
+                kind = HighlightKind::Call;
+            }
             if (kind == HighlightKind::Default) continue;
             int line0 = tok.line - 1;
             if (line0 < 0 || line0 >= (int)lines_.size()) continue;
@@ -602,6 +609,56 @@ std::vector<HighlightSpan> EditorEngine::computeHighlights() const {
         // (بلا تلوين) بدل تعطّل الواجهة بالكامل، إلى أن يُصلَح النص.
     }
     return out;
+}
+
+std::vector<std::string> EditorEngine::collectSuggestions(const std::string& prefix, int maxResults) const {
+    std::vector<std::string> result;
+    if (maxResults <= 0) return result;
+    std::string prefixLower = prefix;
+    for (auto& c : prefixLower) c = (char)std::tolower((unsigned char)c);
+
+    auto startsWithPrefix = [&](const std::string& word) {
+        if (word.size() < prefixLower.size()) return false;
+        for (size_t i = 0; i < prefixLower.size(); ++i) {
+            if (std::tolower((unsigned char)word[i]) != prefixLower[i]) return false;
+        }
+        return true;
+    };
+
+    // 1) الكلمات المحجوزة الفعلية للغة
+    std::vector<std::string> keywordMatches;
+    for (const std::string& kw : rin::keywordList()) {
+        if (!prefixLower.empty() && !startsWithPrefix(kw)) continue;
+        if (kw == prefix) continue; // النص المطابق تمامًا لما كُتب بالفعل لا فائدة من اقتراحه
+        keywordMatches.push_back(kw);
+    }
+    std::sort(keywordMatches.begin(), keywordMatches.end());
+
+    // 2) المعرِّفات (IDENT) الفريدة الظاهرة فعلاً في المستند الحالي
+    std::unordered_set<std::string> identSet;
+    try {
+        rin::Lexer lexer(getText());
+        for (const rin::Token& tok : lexer.scanTokens()) {
+            if (tok.type != rin::TokenType::IDENT) continue;
+            if (tok.lexeme == prefix) continue;
+            if (!prefixLower.empty() && !startsWithPrefix(tok.lexeme)) continue;
+            identSet.insert(tok.lexeme);
+        }
+    } catch (...) {
+        // مستند غير صالح نحويًا مؤقتًا أثناء الكتابة: نكتفي باقتراحات الكلمات المحجوزة أعلاه.
+    }
+    std::vector<std::string> identMatches(identSet.begin(), identSet.end());
+    std::sort(identMatches.begin(), identMatches.end());
+
+    for (const auto& kw : keywordMatches) {
+        if ((int)result.size() >= maxResults) return result;
+        result.push_back(kw);
+    }
+    for (const auto& id : identMatches) {
+        if ((int)result.size() >= maxResults) return result;
+        result.push_back(id);
+    }
+    return result;
 }
 
 } // namespace rinedit
