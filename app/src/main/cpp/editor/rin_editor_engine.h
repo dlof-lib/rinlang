@@ -27,6 +27,7 @@ enum class HighlightKind {
     Bracket = 6,
     At = 7,
     Error = 8,
+    Call = 9, // معرِّف متبوع مباشرة بـ '(' — نمط استدعاء دالة (لتلوين مميّز كما في المحررات الاحترافية)
 };
 
 struct HighlightSpan {
@@ -114,6 +115,13 @@ public:
 
     // --- تلوين نحوي حقيقي (rin::Lexer) ---
     std::vector<HighlightSpan> computeHighlights() const;
+
+    // --- إكمال تلقائي (autocomplete) حقيقي ---
+    // يُرجع حتى maxResults اقتراحًا يبدأ بـ prefix (غير حسّاس لحالة الأحرف)، مبنية على: كل
+    // الكلمات المحجوزة الفعلية في لغة Rin (rin::keywordList()) + كل المعرِّفات (IDENT) الفريدة
+    // الظاهرة فعلاً في المستند الحالي (متغيرات/دوال عرَّفها المستخدم) — الكلمات المحجوزة أولاً
+    // ثم المعرِّفات، وكلٌّ منها مُرتَّب أبجديًا؛ لا يقترح prefix نفسه إن كان مطابقًا تمامًا لوحده.
+    std::vector<std::string> collectSuggestions(const std::string& prefix, int maxResults) const;
 
 private:
     std::vector<std::string> lines_;
