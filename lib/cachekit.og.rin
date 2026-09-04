@@ -1,0 +1,11 @@
+// Rin Cache Pro — in-memory cache with optional TTL metadata.
+fun cache_new(){return {data:{},meta:{}};}
+fun cache_set(c,key,value){c["data"][key]=value;c["meta"][key]={};return value;}
+fun cache_get(c,key,fallback){if(!has(c["data"],key)){return fallback;}return c["data"][key];}
+fun cache_has(c,key){return has(c["data"],key);}
+fun cache_delete(c,key){if(has(c["data"],key)){remove(c["data"][key]);}if(has(c["meta"],key)){remove(c["meta"][key]);}return c;}
+fun cache_clear(c){c["data"]={};c["meta"]={};return c;}
+fun cache_size(c){return len(keys(c["data"]));}
+fun cache_keys(c){return keys(c["data"]);}
+fun cache_setMeta(c,key,meta){if(!has(c["data"],key)){return c;}c["meta"][key]=meta;return c;}
+fun cache_meta(c,key){if(!has(c["meta"],key)){return nil;}return c["meta"][key];}
