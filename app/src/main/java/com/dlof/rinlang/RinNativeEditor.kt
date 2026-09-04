@@ -52,6 +52,7 @@ class RinNativeEditor {
         @JvmStatic private external fun nativeCheckBracketBalance(handle: Long): Int
         @JvmStatic private external fun nativeGetHighlightSpansFlat(handle: Long): IntArray
         @JvmStatic private external fun nativeFindAllFlat(handle: Long, query: String, caseSensitive: Boolean): IntArray
+        @JvmStatic private external fun nativeGetSuggestions(handle: Long, prefix: String, maxResults: Int): Array<String>
         @JvmStatic private external fun nativeLineStartPosition(handle: Long, oneBasedLine: Int): IntArray
 
         /** يحوّل فهرس-حرف UTF-16 (Kotlin/Java) داخل [line] إلى إزاحة-بايت UTF-8 (المحرك C++). */
@@ -60,15 +61,20 @@ class RinNativeEditor {
             return line.substring(0, clamped).toByteArray(Charsets.UTF_8).size
         }
 
-        /** يحوّل إزاحة-بايت UTF-8 (المحرك C++) داخل [line] إلى فهرس-حرف UTF-16 (Kotlin/Java). */
+        /** يحوّل إزاحة-بايت UTF-8 (المحرك C++) داخل [line] إلى فهرس-حرف UTF-16 (Kotlin/Java) — O(n). */
         fun byteOffsetToCharIndex(line: String, byteOffset: Int): Int {
             if (byteOffset <= 0) return 0
             var bytes = 0
-            for (i in line.indices) {
+            var i = 0
+            val n = line.length
+            while (i < n) {
                 if (bytes >= byteOffset) return i
-                bytes += line.substring(i, i + 1).toByteArray(Charsets.UTF_8).size
+                val cp = line.codePointAt(i)
+                val charCount = Character.charCount(cp)
+                bytes += String(Character.toChars(cp)).toByteArray(Charsets.UTF_8).size
+                i += charCount
             }
-            return line.length
+            return n
         }
     }
 
@@ -160,6 +166,10 @@ class RinNativeEditor {
         }
         return out
     }
+
+    /** اقتراحات إكمال تلقائي (كلمات محجوزة للغة Rin + معرِّفات المستند) تبدأ بـ [prefix]. */
+    fun getSuggestions(prefix: String, maxResults: Int = 20): List<String> =
+        nativeGetSuggestions(requireHandle(), prefix, maxResults).toList()
 
     fun lineStartPosition(oneBasedLine: Int): Pos {
         val a = nativeLineStartPosition(requireHandle(), oneBasedLine)
