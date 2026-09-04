@@ -12,12 +12,49 @@
 // لذلك لا توجد حلقات/شروط هنا؛ كل بطاقة مكتوبة يدوياً — بالضبط كما تكتب أي
 // تطبيق Loomtime حقيقي آخر.
 //
+// لكن كل ما *قبل* @view.Scaffold أدناه هو برنامج Rin كامل وحقيقي — يُنفَّذ
+// بالكامل عبر rin::Interpreter::run() (@container، for، make، الدوال، كل شيء)
+// قبل أن يبني Loom الشجرة إطلاقاً (انظر runColdPipelineWithRuntime في
+// loom/rin_loom_pipeline.h). لذلك نستخدمه هنا فعلياً بدل الاكتفاء بعرضه في
+// قسم "جولة في اللغة": حاوية container.doc حقيقية تُعدّ أقسام هذه الصفحة، ثم
+// حلقة for + make تُنشئ حاويات ديناميكية إضافية وقت التشغيل — والنتيجتان
+// تُقرآن حيّاً في warp cells يعرضهما شريط الإحصاءات أدناه (بطاقة رابعة).
+//
 // خريطة الأقسام: topbar · drawer · hero · stats · features · tour (جولة في
 // اللغة، أمثلة كود حقيقية) · thisPage (هذه الصفحة نفسها) · rinhtml ·
 // quickstart · ecosystem · compare (لماذا Rin) · faq · finalCta · footer
 // =============================================================================
 
+// ---- برمجة حقيقية قبل أي @view: حاوية NoSQL تُعدّ أقسام هذه الصفحة نفسها ----
+@container.doc=pageSections
+  document id="s0" fields={ name: "hero",        kind: "section" };
+  document id="s1" fields={ name: "stats",       kind: "section" };
+  document id="s2" fields={ name: "features",    kind: "section" };
+  document id="s3" fields={ name: "tour",        kind: "section" };
+  document id="s4" fields={ name: "code",        kind: "section" };
+  document id="s5" fields={ name: "rinhtml",     kind: "section" };
+  document id="s6" fields={ name: "quickstart",  kind: "section" };
+  document id="s7" fields={ name: "ecosystem",   kind: "section" };
+  document id="s8" fields={ name: "compare",     kind: "section" };
+  document id="s9" fields={ name: "faq",         kind: "section" };
+.end/container.doc
+
+let sectionCount = len(queryDocs("pageSections", "kind", "section"));
+
+// حلقة for + make + create(): تبني حاوية ديناميكية منفصلة لكل مقتطف كود حقيقي
+// في قسم "جولة في اللغة" (سبعة مقتطفات) — بدل عدّها يدوياً كرقم ثابت.
+for (let i = 0; i < 7; i = i + 1) {
+    make kind = "tourSnippet";
+    make name = "tourSnippet_" + i;
+    create(kind, name);
+    setField(name, "index", i);
+}
+let totalContainers = len(containerNames());
+
 warp navOpen    = "false";
+
+warp sectionCountStr    = "" + sectionCount;
+warp totalContainersStr = "" + totalContainers;
 
 warp copyVars   = "false";
 warp copyFlow   = "false";
@@ -25,6 +62,7 @@ warp copyFun    = "false";
 warp copyData   = "false";
 warp copyPipe   = "false";
 warp copyDb     = "false";
+warp copyMake   = "false";
 warp copyPage   = "false";
 warp copyHtml   = "false";
 
@@ -116,7 +154,7 @@ warp copyHtml   = "false";
 
     // -------------------------------- شريط إحصاءات ---------------------------------
     @view.Grid=statsRow
-      columns=3; gap=10;
+      columns=2; gap=10;
       @view.Card=stat1 padding=16; bg="#10130f"; radius=14;
         @view.Column=stat1c gap=2;
           @view.Text=stat1n text="1"; size=22; weight="900"; color="#22c55e"; .end/view
@@ -133,6 +171,15 @@ warp copyHtml   = "false";
         @view.Column=stat3c gap=2;
           @view.Text=stat3n text="0"; size=22; weight="900"; color="#22c55e"; .end/view
           @view.Text=stat3l text="أسطر جافاسكربت داخل main.rin"; size=12; color="#9aa39c"; .end/view
+        .end/view
+      .end/view
+      @view.Card=stat4 padding=16; bg="#10130f"; radius=14;
+        @view.Column=stat4c gap=2;
+          @view.Text=stat4n text=sectionCountStr; size=22; weight="900"; color="#22c55e"; .end/view
+          @view.Text=stat4l
+            text="قسم في هذه الصفحة — مُحصاة الآن حيّاً عبر container.doc حقيقي (والمجموع مع حاويات for+make الديناميكية: " + totalContainersStr + ")";
+            size=12; color="#9aa39c";
+          .end/view
         .end/view
       .end/view
     .end/view
@@ -215,7 +262,7 @@ warp copyHtml   = "false";
     @view.Column=tour
       gap=14;
       @view.Text=tourEyebrow text="جولة في اللغة"; size=12; color="#22c55e"; weight="700"; .end/view
-      @view.Text=tourTitle text="ست بطاقات، كود حقيقي، صفر تبسيط مخلّ"; size=21; weight="800"; color="#f4f6f3"; .end/view
+      @view.Text=tourTitle text="سبع بطاقات، كود حقيقي، صفر تبسيط مخلّ"; size=21; weight="800"; color="#f4f6f3"; .end/view
       @view.Text=tourDesc
         text="كل مقتطف أدناه مأخوذ حرفياً من التوثيق الرسمي (docs/) أو من samples/showcase.rin، ويعمل فعلياً عبر rin_run — بلا تبسيط تسويقي.";
         size=13; color="#9aa39c";
@@ -316,9 +363,22 @@ warp copyHtml   = "false";
           .end/view
         .end/view
       .end/view
+      // ---- 7) حلقة + make + حاويات ديناميكية ----
+      @view.Card=tour7 padding=16; bg="#10130f"; radius=14;
+        @view.Column=tour7c gap=8;
+          @view.Text=tour7t text="7 — for + make: إنشاء حاويات ديناميكياً وقت التشغيل"; size=15; weight="700"; color="#f4f6f3"; .end/view
+          @view.Text=tour7d text="داخل حلقة for عادية، make مرادفة تماماً لـ let، وcreate() (أو spawn) تبني حاوية جديدة بنوع/اسم مُحسوبَين في كل دورة — لا حاجة لمعرفة العدد أو الاسم وقت الكتابة."; size=13; color="#9aa39c"; .end/view
+          @view.Text=tour7code
+            mono="true"; size=12.5; color="#cfd6cf";
+            text="for (make i = 0; i < 3; i = i + 1) {\n    make kind = \"table\";\n    if (i == 1) { kind = \"doc\"; }\n    if (i == 2) { kind = \"chatbot\"; }\n    make name = \"dyn_\" + i;\n\n    create(kind, name);\n    setField(name, \"index\", i);\n}\n\nshow containerNames();\nshow kindOf(\"dyn_1\");        // \"doc\"\nshow getField(\"dyn_1\", \"index\"); // 1";
+          .end/view
+          @view.Button=tour7btn label="نسخ الكود"; onTap=toggle(copyMake);
+            copyText="for (make i = 0; i < 3; i = i + 1) {\n    make kind = \"table\";\n    if (i == 1) { kind = \"doc\"; }\n    if (i == 2) { kind = \"chatbot\"; }\n    make name = \"dyn_\" + i;\n\n    create(kind, name);\n    setField(name, \"index\", i);\n}\n\nshow containerNames();\nshow kindOf(\"dyn_1\");\nshow getField(\"dyn_1\", \"index\");";
+            bg="#141a15"; color="#f4f6f3";
+          .end/view
+        .end/view
+      .end/view
     .end/view
-
-    @view.Divider=secDiv3 height=1; color="#1c231d"; .end/view
 
     // ------------------------------ معاينة حية (هذه الصفحة) ------------------------------
     @view.Column=code
