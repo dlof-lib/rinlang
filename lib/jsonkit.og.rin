@@ -1,0 +1,10 @@
+// Rin JSONKit Pro — JSON encode/decode helpers.
+fun json_array(arr){return jsonEncode(arr);}
+fun json_object(o){return jsonEncode(o);}
+fun json_pretty(v){return jsonEncode(v);}
+fun json_parse(s){return jsonDecode(s);}
+fun json_stringify(v){return jsonEncode(v);}
+fun json_has(o,key){return has(o,key);}
+fun json_get(o,key,fallback){if(!has(o,key)){return fallback;}return o[key];}
+fun json_set(o,key,value){o[key]=value;return o;}
+fun json_remove(o,key){if(has(o,key)){remove(o[key]);}return o;}
