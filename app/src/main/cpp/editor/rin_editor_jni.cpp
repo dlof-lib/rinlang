@@ -232,6 +232,20 @@ Java_com_dlof_rinlang_RinNativeEditor_nativeFindAllFlat(JNIEnv* env, jclass, jlo
     return toIntArray(env, flat);
 }
 
+// اقتراحات إكمال تلقائي (كلمات محجوزة + معرِّفات المستند) تبدأ بـ prefix.
+JNIEXPORT jobjectArray JNICALL
+Java_com_dlof_rinlang_RinNativeEditor_nativeGetSuggestions(JNIEnv* env, jclass, jlong handle, jstring prefix, jint maxResults) {
+    std::vector<std::string> sugg = handleToEngine(handle)->collectSuggestions(jstringToUtf8(env, prefix), maxResults);
+    jclass stringClass = env->FindClass("java/lang/String");
+    jobjectArray arr = env->NewObjectArray((jsize)sugg.size(), stringClass, nullptr);
+    for (size_t i = 0; i < sugg.size(); ++i) {
+        jstring s = utf8ToJstring(env, sugg[i]);
+        env->SetObjectArrayElement(arr, (jsize)i, s);
+        env->DeleteLocalRef(s);
+    }
+    return arr;
+}
+
 JNIEXPORT jintArray JNICALL
 Java_com_dlof_rinlang_RinNativeEditor_nativeLineStartPosition(JNIEnv* env, jclass, jlong handle, jint oneBasedLine) {
     return cursorArray(env, handleToEngine(handle)->lineStartPosition(oneBasedLine));
