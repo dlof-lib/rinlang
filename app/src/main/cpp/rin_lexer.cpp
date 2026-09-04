@@ -41,6 +41,13 @@ static const std::unordered_map<std::string, TokenType> keywords = {
     // سياقياً فقط في المحلل النحوي، حتى لا تصبح كلمات محجوزة تتعارض مع أسماء متغيرات المستخدم.
 };
 
+std::vector<std::string> keywordList() {
+    std::vector<std::string> out;
+    out.reserve(keywords.size());
+    for (const auto& kv : keywords) out.push_back(kv.first);
+    return out;
+}
+
 Lexer::Lexer(std::string source, std::string filename) : src(std::move(source)), file(std::move(filename)) {
     diag::globalSourceManager().addFile(file, src);
 }
