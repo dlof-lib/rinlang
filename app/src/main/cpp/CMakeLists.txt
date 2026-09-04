@@ -43,6 +43,13 @@ add_library(
         clc/clc_rin_opt.cpp
         clc/clc_zip_import.cpp
         clc/sha256.cpp
+        # editor/: محرك محرر أكواد كامل بلغة C++ خاص بلغة Rin (تخزين نص + تراجع/إعادة حقيقي +
+        # مسافة بادئة/إغلاق أقواس تلقائي + أوامر مستوى-سطر + بحث + تلوين نحوي عبر rin::Lexer
+        # الفعلي أعلاه) — يستبدل منطق CodeEditorController.kt/RinSyntaxHighlighter.kt القديم
+        # المبني على android.widget.EditText؛ مُعرَّض إلى Kotlin عبر editor/rin_editor_jni.cpp
+        # -> RinNativeEditor.kt، ويُستهلَك من RinCodeEditorView.kt (View مخصّصة بالكامل).
+        editor/rin_editor_engine.cpp
+        editor/rin_editor_jni.cpp
 )
 
 # rinc: مترجم Rin الأصلي (native compiler) — هدف مستقل تماماً عن مكتبة rinengine
