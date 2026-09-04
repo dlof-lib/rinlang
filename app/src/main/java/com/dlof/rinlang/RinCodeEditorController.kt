@@ -8,7 +8,7 @@ import android.widget.TextView
 
 /**
  * متحكم رفيع فوق [RinCodeEditorView] — لا يوجد أي منطق تحرير في هذا الملف نفسه، كل التحرير
- * الفعلي مُفوَّض بالكامل إلى [RinCodeEditorView] ومحركه [RinEditorEngine] (Kotlin خالص، بلا
+ * الفعلي مُفوَّض بالكامل إلى [RinCodeEditorView] ومحركه [RinNativeEditor] (C++17 عبر JNI، بلا
  * أي C++/JNI). هذا الصنف مسؤول فقط عن:
  * مزامنة عمود أرقام الأسطر، التمرير التلقائي إلى المؤشر/التطابق، وحالة "بحث حسّاس لحالة الأحرف".
  */
