@@ -1,9 +1,44 @@
 // ============================================================================
-//  lib/math.og.rin — امتدادات رياضية فوق stdlib الأساسية (abs/sqrt/pow/min/max/random/PI/E)
+//  lib/math.og.rin — مكتبة رياضية احترافية متكاملة فوق stdlib الأساسية
+//  (stdlib الأساسية توفر: abs/sqrt/pow/floor/ceil/round/min/max/random/len/
+//   sum/mean/median/mode/variance/stddev/geometricMean/harmonicMean/rms/
+//   percentile/iqr/weightedMean/zscore/range/clamp(مصفوفة)/normalize/scale
+//   minOf/maxOf/count/product/PI — هذا الملف لا يكرّرها بل يبني فوقها)
+//
+//  الأقسام:
+//    1) ثوابت
+//    2) نظرية أعداد وتوافيقيات (number theory & combinatorics)
+//    3) دوال مساعدة عامة (utility)
+//    4) مثلثات (trigonometry) — sin/cos/tan وما يتفرّع عنها، بلا دعم فطري
+//       من المفسّر، لذا مبنية هنا بسلاسل تايلور مع اختزال المجال (range
+//       reduction) لدقة كاملة عملياً على مدى double
+//    5) أسّية ولوغاريتمات (exp/ln) — نفس المبدأ (سلاسل + اختزال مجال)
+//    6) دوال زائدية (hyperbolic)
+//    7) متجهات ثنائية/ثلاثية الأبعاد (vec2/vec3) كمصفوفات [x,y]/[x,y,z]
+//    8) دوال Easing (لمنحنيات الحركة في واجهات Loom أو محرك الألعاب)
+//    9) إحصاء إضافي (عيّنة/تباين مشترك/ارتباط بيرسون)
+//    10) عشوائية مساعدة (فوق random() الفطرية)
+//
 //  استيراد:
 //    @import "lib/math.og.rin";              // دمج مباشر في النطاق الحالي
-//    @import "lib/math.og.rin" as mathx;      // كحاوية باسم مستعار (tying/merge لاحقاً)
+//    @import "lib/math.og.rin" as mathx;      // كحاوية باسم مستعار
 // ============================================================================
+
+// ---------------------------------------------------------------------------
+// 1) ثوابت
+// ---------------------------------------------------------------------------
+let E       = 2.71828182845904523536;   // أساس اللوغاريتم الطبيعي
+let TAU     = 6.28318530717958647692;   // 2*PI
+let PHI     = 1.61803398874989484820;   // النسبة الذهبية
+let SQRT2   = 1.41421356237309504880;
+let SQRT3   = 1.73205080756887729353;
+let LN2     = 0.69314718055994530942;
+let LN10    = 2.30258509299404568402;
+let EPSILON = 0.0000001;                // فرق افتراضي لمقارنة الأعداد العشرية
+
+// ---------------------------------------------------------------------------
+// 2) نظرية أعداد وتوافيقيات
+// ---------------------------------------------------------------------------
 
 // n! — المضروب (0! = 1)
 fun factorial(n) {
@@ -33,6 +68,21 @@ fun lcm(a, b) {
     return result;
 }
 
+// خوارزمية إقليدس الموسّعة: تُعيد [g, x, y] بحيث a*x + b*y = g = gcd(a,b)
+fun extendedGcd(a, b) {
+    if (b == 0) { return [a, 1, 0]; }
+    let r = extendedGcd(b, a % b);
+    let g = r[0];
+    let x1 = r[1];
+    let y1 = r[2];
+    return [g, y1, x1 - floor(a / b) * y1];
+}
+
+// هل a و b أوّليان فيما بينهما (coprime)؟
+fun isCoprime(a, b) {
+    return gcd(a, b) == 1;
+}
+
 // هل n عدد أوّلي؟
 fun isPrime(n) {
     if (n < 2) { return false; }
@@ -46,23 +96,116 @@ fun isPrime(n) {
     return true;
 }
 
-// يحصر x بين lo و hi
-fun clamp(x, lo, hi) {
-    if (x < lo) { return lo; }
-    if (x > hi) { return hi; }
-    return x;
+// أصغر عدد أوّلي أكبر تماماً من n
+fun nextPrime(n) {
+    let v = floor(n) + 1;
+    while (!isPrime(v)) {
+        v = v + 1;
+    }
+    return v;
 }
 
-// استيفاء خطي (linear interpolation) بين a و b عند النسبة t (0..1)
-fun lerp(a, b, t) {
-    return a + (b - a) * t;
+// تحليل n إلى عوامله الأوّلية (مصفوفة مرتّبة تصاعدياً، مع التكرار)
+fun primeFactors(n) {
+    let result = [];
+    let v = n;
+    if (v < 0) { v = -v; }
+    let d = 2;
+    while (d * d <= v) {
+        while (v % d == 0) {
+            push(result, d);
+            v = v / d;
+        }
+        d = d + 1;
+    }
+    if (v > 1) { push(result, v); }
+    return result;
 }
 
-// إشارة الرقم: 1 موجب، -1 سالب، 0 صفر
-fun sign(x) {
-    if (x > 0) { return 1; }
-    if (x < 0) { return -1; }
-    return 0;
+// كل قواسم |n| الموجبة (مرتّبة تصاعدياً)
+fun divisors(n) {
+    let result = [];
+    let v = n;
+    if (v < 0) { v = -v; }
+    if (v == 0) { return result; }
+    let i = 1;
+    while (i * i <= v) {
+        if (v % i == 0) {
+            push(result, i);
+            let other = v / i;
+            if (other != i) { push(result, other); }
+        }
+        i = i + 1;
+    }
+    return sort(result);
+}
+
+// هل n مربّع كامل؟
+fun isPerfectSquare(n) {
+    if (n < 0) { return false; }
+    let r = round(sqrt(n));
+    return r * r == n;
+}
+
+// هل n مكعّب كامل؟
+fun isPerfectCube(n) {
+    let v = n;
+    if (v < 0) { v = -v; }
+    let r = round(pow(v, 1 / 3));
+    let cubed = r * r * r;
+    if (n < 0) { return -cubed == n; }
+    return cubed == n;
+}
+
+// أُس معياري: (base^exp) mod m — بدون تجاوز سعة الأعداد الكبيرة
+fun modPow(base, exp, m) {
+    if (m == 1) { return 0; }
+    let result = 1;
+    let b = base % m;
+    if (b < 0) { b = b + m; }
+    let e = exp;
+    while (e > 0) {
+        if (e % 2 == 1) {
+            result = (result * b) % m;
+        }
+        e = floor(e / 2);
+        b = (b * b) % m;
+    }
+    return result;
+}
+
+// مجموع أرقام |n| (بالنظام العشري)
+fun digitSum(n) {
+    let v = n;
+    if (v < 0) { v = -v; }
+    v = floor(v);
+    let total = 0;
+    while (v > 0) {
+        total = total + (v % 10);
+        v = floor(v / 10);
+    }
+    return total;
+}
+
+// عكس ترتيب أرقام n (يحافظ على الإشارة)
+fun reverseDigits(n) {
+    let neg = n < 0;
+    let v = n;
+    if (neg) { v = -v; }
+    v = floor(v);
+    let result = 0;
+    while (v > 0) {
+        result = result * 10 + (v % 10);
+        v = floor(v / 10);
+    }
+    if (neg) { return -result; }
+    return result;
+}
+
+// هل n (غير سالب) مطابق لنفسه عند عكس أرقامه؟
+fun isPalindromeNumber(n) {
+    if (n < 0) { return false; }
+    return n == reverseDigits(n);
 }
 
 // الحد رقم n من متتالية فيبوناتشي (تكراري، بلا استدعاء ذاتي بطيء)
@@ -79,9 +222,121 @@ fun fibonacci(n) {
     return a;
 }
 
-// متوسط مصفوفة أرقام (اسم بديل مريح لـ mean الأصلية)
-fun average(arr) {
-    return mean(arr);
+// عدد التبديلات (permutations) لاختيار r من أصل n مرتَّبة: nPr
+fun permutationsCount(n, r) {
+    if (r < 0 or r > n) { return 0; }
+    let result = 1;
+    let i = 0;
+    while (i < r) {
+        result = result * (n - i);
+        i = i + 1;
+    }
+    return result;
+}
+
+// عدد التوافيق (combinations) لاختيار r من أصل n: nCr
+fun combinationsCount(n, r) {
+    if (r < 0 or r > n) { return 0; }
+    if (r > n - r) { r = n - r; }
+    let result = 1;
+    let i = 0;
+    while (i < r) {
+        result = (result * (n - i)) / (i + 1);
+        i = i + 1;
+    }
+    return round(result);
+}
+
+// مرادف عرفي لـ combinationsCount
+fun binomialCoefficient(n, r) {
+    return combinationsCount(n, r);
+}
+
+// عدد كاتالان رقم n (0-indexed)
+fun catalanNumber(n) {
+    return combinationsCount(2 * n, n) / (n + 1);
+}
+
+// ---------------------------------------------------------------------------
+// 3) دوال مساعدة عامة
+// ---------------------------------------------------------------------------
+
+// يحصر x بين lo و hi (نسخة عددية؛ clamp الفطرية تعمل على مصفوفة كاملة)
+fun clampNum(x, lo, hi) {
+    if (x < lo) { return lo; }
+    if (x > hi) { return hi; }
+    return x;
+}
+
+// استيفاء خطي (linear interpolation) بين a و b عند النسبة t (0..1)
+fun lerp(a, b, t) {
+    return a + (b - a) * t;
+}
+
+// عكس lerp: عند أي نسبة t تقع القيمة v بين a و b؟
+fun invLerp(a, b, v) {
+    if (a == b) { return 0; }
+    return (v - a) / (b - a);
+}
+
+// يعيد ترسيم value من مجال [inMin, inMax] إلى مجال [outMin, outMax]
+fun remap(value, inMin, inMax, outMin, outMax) {
+    return lerp(outMin, outMax, invLerp(inMin, inMax, value));
+}
+
+// يلفّ x ضمن المجال [lo, hi) (مفيد لتدوير القيم الدورية كالزوايا)
+fun wrap(x, lo, hi) {
+    let span = hi - lo;
+    if (span == 0) { return lo; }
+    let v = x - lo;
+    v = v - span * floor(v / span);
+    return lo + v;
+}
+
+// يلفّ زاوية بالراديان إلى المجال (-PI, PI]
+fun wrapAngle(angle) {
+    return wrap(angle, -PI, PI);
+}
+
+// يحرّك current نحو target بخطوة أقصاها maxDelta (لا يتجاوز target)
+fun moveToward(current, target, maxDelta) {
+    let diff = target - current;
+    if (abs(diff) <= maxDelta) { return target; }
+    return current + sign(diff) * maxDelta;
+}
+
+// إشارة الرقم: 1 موجب، -1 سالب، 0 صفر
+fun sign(x) {
+    if (x > 0) { return 1; }
+    if (x < 0) { return -1; }
+    return 0;
+}
+
+// يقصّ الجزء العشري من x نحو الصفر (بخلاف floor الذي يتجه لأسفل دوماً)
+fun trunc(x) {
+    if (x < 0) { return ceil(x); }
+    return floor(x);
+}
+
+// الجزء الكسري من x (دوماً >= 0)
+fun fract(x) {
+    return x - floor(x);
+}
+
+// قسمة آمنة: تعيد fallback بدل الانهيار عند b == 0
+fun safeDiv(a, b, fallback) {
+    if (b == 0) { return fallback; }
+    return a / b;
+}
+
+// تساوٍ تقريبي باستخدام EPSILON الافتراضي
+fun approxEqual(a, b) {
+    return abs(a - b) < EPSILON;
+}
+
+// تساوٍ تقريبي بفارق eps مخصّص
+fun approxEqualEps(a, b, eps) {
+    return abs(a - b) < eps;
 }
 
 // تقريب x إلى عدد محدد من الخانات العشرية
@@ -99,4 +354,392 @@ fun inRange(x, lo, hi) {
 fun percentOf(part, total) {
     if (total == 0) { return 0; }
     return (part / total) * 100;
+}
+
+// متوسط مصفوفة أرقام (اسم بديل مريح لـ mean الفطرية)
+fun average(arr) {
+    return mean(arr);
+}
+
+// القاسم المشترك الأكبر لعناصر مصفوفة كاملة (0 إن كانت فارغة)
+fun gcdArr(arr) {
+    if (len(arr) == 0) { return 0; }
+    let result = arr[0];
+    let i = 1;
+    while (i < len(arr)) {
+        result = gcd(result, arr[i]);
+        i = i + 1;
+    }
+    return result;
+}
+
+// المضاعف المشترك الأصغر لعناصر مصفوفة كاملة (0 إن كانت فارغة)
+fun lcmArr(arr) {
+    if (len(arr) == 0) { return 0; }
+    let result = arr[0];
+    let i = 1;
+    while (i < len(arr)) {
+        result = lcm(result, arr[i]);
+        i = i + 1;
+    }
+    return result;
+}
+
+// مجموع مربعات عناصر مصفوفة أرقام
+fun sumOfSquares(arr) {
+    let total = 0;
+    let i = 0;
+    while (i < len(arr)) {
+        total = total + arr[i] * arr[i];
+        i = i + 1;
+    }
+    return total;
+}
+
+// طول الوتر لمثلث قائم بضلعين a وb: sqrt(a^2 + b^2)
+fun hypot(a, b) {
+    return sqrt(a * a + b * b);
+}
+
+// يحوّل زاوية من درجات إلى راديان
+fun degToRad(deg) {
+    return deg * (PI / 180);
+}
+
+// يحوّل زاوية من راديان إلى درجات
+fun radToDeg(rad) {
+    return rad * (180 / PI);
+}
+
+// ---------------------------------------------------------------------------
+// 4) مثلثات — بلا دعم فطري من المفسّر: سلاسل تايلور مع اختزال مجال (range
+//    reduction) لضمان دقّة عملية كاملة (double) على أي مدخل معقول
+// ---------------------------------------------------------------------------
+
+// يلفّ زاوية إلى المجال (-PI, PI] استعداداً لسلسلة تايلور (تقارب أسرع وأدق)
+fun _reduceAngle(x) {
+    return x - TAU * floor((x + PI) / TAU);
+}
+
+fun sin(x) {
+    let v = _reduceAngle(x);
+    let v2 = v * v;
+    let term = v;
+    let total = v;
+    let i = 1;
+    while (i <= 15) {
+        term = term * (-v2) / ((2 * i) * (2 * i + 1));
+        total = total + term;
+        i = i + 1;
+    }
+    return total;
+}
+
+fun cos(x) {
+    let v = _reduceAngle(x);
+    let v2 = v * v;
+    let term = 1;
+    let total = 1;
+    let i = 1;
+    while (i <= 15) {
+        term = term * (-v2) / ((2 * i - 1) * (2 * i));
+        total = total + term;
+        i = i + 1;
+    }
+    return total;
+}
+
+fun tan(x) { return sin(x) / cos(x); }
+fun cot(x) { return cos(x) / sin(x); }
+fun sec(x) { return 1 / cos(x); }
+fun csc(x) { return 1 / sin(x); }
+
+// نسخ مريحة تأخذ زاوية بالدرجات
+fun sinDeg(deg) { return sin(degToRad(deg)); }
+fun cosDeg(deg) { return cos(degToRad(deg)); }
+fun tanDeg(deg) { return tan(degToRad(deg)); }
+
+// سلسلة تايلور لـ atan تفترض |x| صغيرة (تُستخدم داخلياً بعد اختزال المجال)
+fun _atanTaylor(x) {
+    let x2 = x * x;
+    let term = x;
+    let total = x;
+    let i = 1;
+    while (i <= 12) {
+        term = term * (-x2);
+        total = total + term / (2 * i + 1);
+        i = i + 1;
+    }
+    return total;
+}
+
+// atan(x) عبر اختزال نصف-الزاوية المتكرر: atan(x) = 2*atan(x/(1+sqrt(1+x^2)))
+// حتى تصغر القيمة كفاية لتقارب سريع لسلسلة تايلور
+fun atan(x) {
+    let neg = x < 0;
+    let v = x;
+    if (neg) { v = -v; }
+    let k = 0;
+    while (v > 0.1 and k < 60) {
+        v = v / (1 + sqrt(1 + v * v));
+        k = k + 1;
+    }
+    let result = _atanTaylor(v) * pow(2, k);
+    if (neg) { return -result; }
+    return result;
+}
+
+fun asin(x) {
+    if (x < -1 or x > 1) { print "asin: x يجب أن يكون بين -1 و 1"; return nil; }
+    if (x == 1) { return PI / 2; }
+    if (x == -1) { return -(PI / 2); }
+    return atan(x / sqrt(1 - x * x));
+}
+
+fun acos(x) {
+    if (x < -1 or x > 1) { print "acos: x يجب أن يكون بين -1 و 1"; return nil; }
+    return (PI / 2) - asin(x);
+}
+
+// atan2(y, x): زاوية النقطة (x, y) مع مراعاة الربع الصحيح
+fun atan2(y, x) {
+    if (x > 0) { return atan(y / x); }
+    if (x < 0) {
+        if (y >= 0) { return atan(y / x) + PI; }
+        return atan(y / x) - PI;
+    }
+    if (y > 0) { return PI / 2; }
+    if (y < 0) { return -(PI / 2); }
+    return 0;
+}
+
+// ---------------------------------------------------------------------------
+// 5) أسّية ولوغاريتمات — نفس منهج القسم السابق (سلاسل + اختزال مجال)
+// ---------------------------------------------------------------------------
+
+// سلسلة تايلور لـ exp تفترض |x| <= 0.5 (تُستخدم داخلياً بعد اختزال المجال)
+fun _expTaylor(x) {
+    let term = 1;
+    let total = 1;
+    let i = 1;
+    while (i <= 25) {
+        term = term * x / i;
+        total = total + term;
+        i = i + 1;
+    }
+    return total;
+}
+
+// exp(x) عبر اختزال المجال: نقسم x على 2 حتى تصغر ثم نربّع النتيجة بالعدد
+// نفسه من المرّات (exp(x) = exp(x/2^k)^(2^k))
+fun exp(x) {
+    if (x == 0) { return 1; }
+    let neg = x < 0;
+    let v = x;
+    if (neg) { v = -v; }
+    let k = 0;
+    while (v > 0.5) {
+        v = v / 2;
+        k = k + 1;
+    }
+    let result = _expTaylor(v);
+    let i = 0;
+    while (i < k) {
+        result = result * result;
+        i = i + 1;
+    }
+    if (neg) { return 1 / result; }
+    return result;
+}
+
+// اللوغاريتم الطبيعي: نختزل x إلى [1,2) عبر تتبّع الأس e (x = m * 2^e) ثم
+// نستخدم سلسلة atanh السريعة التقارب: ln(m) = 2*atanh((m-1)/(m+1))
+fun ln(x) {
+    if (x <= 0) { print "ln: x يجب أن يكون > 0"; return nil; }
+    let v = x;
+    let e = 0;
+    while (v >= 2) { v = v / 2; e = e + 1; }
+    while (v < 1) { v = v * 2; e = e - 1; }
+    let z = (v - 1) / (v + 1);
+    let z2 = z * z;
+    let term = z;
+    let total = 0;
+    let k = 1;
+    while (k <= 39) {
+        total = total + term / k;
+        term = term * z2;
+        k = k + 2;
+    }
+    return 2 * total + e * LN2;
+}
+
+fun log2(x) { return ln(x) / LN2; }
+fun log10(x) { return ln(x) / LN10; }
+fun logBase(x, base) { return ln(x) / ln(base); }
+
+// ---------------------------------------------------------------------------
+// 6) دوال زائدية (hyperbolic)
+// ---------------------------------------------------------------------------
+fun sinh(x) { return (exp(x) - exp(-x)) / 2; }
+fun cosh(x) { return (exp(x) + exp(-x)) / 2; }
+fun tanh(x) { return sinh(x) / cosh(x); }
+
+// ---------------------------------------------------------------------------
+// 7) متجهات ثنائية/ثلاثية الأبعاد — كمصفوفات [x,y] / [x,y,z]
+// ---------------------------------------------------------------------------
+fun vec2(x, y) { return [x, y]; }
+fun vec2Add(a, b) { return [a[0] + b[0], a[1] + b[1]]; }
+fun vec2Sub(a, b) { return [a[0] - b[0], a[1] - b[1]]; }
+fun vec2Scale(a, s) { return [a[0] * s, a[1] * s]; }
+fun vec2Dot(a, b) { return a[0] * b[0] + a[1] * b[1]; }
+fun vec2LengthSq(a) { return a[0] * a[0] + a[1] * a[1]; }
+fun vec2Length(a) { return sqrt(vec2LengthSq(a)); }
+fun vec2Normalize(a) {
+    let l = vec2Length(a);
+    if (l == 0) { return [0, 0]; }
+    return [a[0] / l, a[1] / l];
+}
+fun vec2Distance(a, b) { return vec2Length(vec2Sub(b, a)); }
+fun vec2Lerp(a, b, t) { return [lerp(a[0], b[0], t), lerp(a[1], b[1], t)]; }
+fun vec2Angle(a) { return atan2(a[1], a[0]); }
+
+fun vec3(x, y, z) { return [x, y, z]; }
+fun vec3Add(a, b) { return [a[0] + b[0], a[1] + b[1], a[2] + b[2]]; }
+fun vec3Sub(a, b) { return [a[0] - b[0], a[1] - b[1], a[2] - b[2]]; }
+fun vec3Scale(a, s) { return [a[0] * s, a[1] * s, a[2] * s]; }
+fun vec3Dot(a, b) { return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]; }
+fun vec3Cross(a, b) {
+    return [
+        a[1] * b[2] - a[2] * b[1],
+        a[2] * b[0] - a[0] * b[2],
+        a[0] * b[1] - a[1] * b[0]
+    ];
+}
+fun vec3LengthSq(a) { return a[0] * a[0] + a[1] * a[1] + a[2] * a[2]; }
+fun vec3Length(a) { return sqrt(vec3LengthSq(a)); }
+fun vec3Normalize(a) {
+    let l = vec3Length(a);
+    if (l == 0) { return [0, 0, 0]; }
+    return [a[0] / l, a[1] / l, a[2] / l];
+}
+fun vec3Distance(a, b) { return vec3Length(vec3Sub(b, a)); }
+fun vec3Lerp(a, b, t) {
+    return [lerp(a[0], b[0], t), lerp(a[1], b[1], t), lerp(a[2], b[2], t)];
+}
+
+// ---------------------------------------------------------------------------
+// 8) دوال Easing — منحنيات حركة قياسية لواجهات Loom أو محرك الألعاب (t في [0,1])
+// ---------------------------------------------------------------------------
+fun smoothstep(t) {
+    let c = clampNum(t, 0, 1);
+    return c * c * (3 - 2 * c);
+}
+fun smootherstep(t) {
+    let c = clampNum(t, 0, 1);
+    return c * c * c * (c * (c * 6 - 15) + 10);
+}
+fun easeInQuad(t) { return t * t; }
+fun easeOutQuad(t) { return 1 - (1 - t) * (1 - t); }
+fun easeInOutQuad(t) {
+    if (t < 0.5) { return 2 * t * t; }
+    return 1 - pow(-2 * t + 2, 2) / 2;
+}
+fun easeInCubic(t) { return t * t * t; }
+fun easeOutCubic(t) { return 1 - pow(1 - t, 3); }
+fun easeInOutCubic(t) {
+    if (t < 0.5) { return 4 * t * t * t; }
+    return 1 - pow(-2 * t + 2, 3) / 2;
+}
+fun easeInSine(t) { return 1 - cos((t * PI) / 2); }
+fun easeOutSine(t) { return sin((t * PI) / 2); }
+fun easeInOutSine(t) { return -(cos(PI * t) - 1) / 2; }
+fun easeOutBounce(t) {
+    let n1 = 7.5625;
+    let d1 = 2.75;
+    let x = t;
+    if (x < 1 / d1) { return n1 * x * x; }
+    if (x < 2 / d1) {
+        x = x - 1.5 / d1;
+        return n1 * x * x + 0.75;
+    }
+    if (x < 2.5 / d1) {
+        x = x - 2.25 / d1;
+        return n1 * x * x + 0.9375;
+    }
+    x = x - 2.625 / d1;
+    return n1 * x * x + 0.984375;
+}
+fun easeInBounce(t) { return 1 - easeOutBounce(1 - t); }
+
+// ---------------------------------------------------------------------------
+// 9) إحصاء إضافي فوق stdlib (عيّنة/تباين مشترك/ارتباط بيرسون)
+// ---------------------------------------------------------------------------
+
+// تباين العيّنة (يقسم على n-1 بخلاف variance الفطرية التي تقسم على n)
+fun sampleVariance(arr) {
+    let n = len(arr);
+    if (n < 2) { return 0; }
+    let m = mean(arr);
+    let total = 0;
+    let i = 0;
+    while (i < n) {
+        let diff = arr[i] - m;
+        total = total + diff * diff;
+        i = i + 1;
+    }
+    return total / (n - 1);
+}
+fun sampleStdDev(arr) { return sqrt(sampleVariance(arr)); }
+
+// التباين المشترك (population covariance) بين مصفوفتين متساويتي الطول
+fun covariance(xs, ys) {
+    let n = len(xs);
+    if (n == 0 or n != len(ys)) { return 0; }
+    let mx = mean(xs);
+    let my = mean(ys);
+    let total = 0;
+    let i = 0;
+    while (i < n) {
+        total = total + (xs[i] - mx) * (ys[i] - my);
+        i = i + 1;
+    }
+    return total / n;
+}
+
+// معامل ارتباط بيرسون (Pearson correlation) بين -1 و 1
+fun correlation(xs, ys) {
+    let sx = stddev(xs);
+    let sy = stddev(ys);
+    if (sx == 0 or sy == 0) { return 0; }
+    return covariance(xs, ys) / (sx * sy);
+}
+
+// ---------------------------------------------------------------------------
+// 10) عشوائية مساعدة — فوق random() الفطرية التي تعيد رقماً في [0,1)
+// ---------------------------------------------------------------------------
+fun randomRange(lo, hi) { return lo + random() * (hi - lo); }
+fun randomInt(lo, hi) { return floor(lo + random() * (hi - lo + 1)); }
+fun randomBool(p) { return random() < p; }
+fun randomSign() {
+    if (random() < 0.5) { return -1; }
+    return 1;
+}
+fun randomChoice(arr) {
+    let n = len(arr);
+    if (n == 0) { return nil; }
+    let i = floor(random() * n);
+    if (i >= n) { i = n - 1; }
+    return arr[i];
+}
+// خلط مصفوفة في مكانها (Fisher–Yates) وتُعيدها أيضاً
+fun shuffle(arr) {
+    let i = len(arr) - 1;
+    while (i > 0) {
+        let j = floor(random() * (i + 1));
+        let tmp = arr[i];
+        arr[i] = arr[j];
+        arr[j] = tmp;
+        i = i - 1;
+    }
+    return arr;
 }
