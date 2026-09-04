@@ -30,10 +30,10 @@ import kotlin.math.max
 import kotlin.math.roundToInt
 
 /**
- * محرر أكواد كامل مبني من الصفر فوق [View]/Canvas — بلا أي استخدام لـ [android.widget.EditText] —
- * وكل منطق التحرير الفعلي (تخزين، تراجع/إعادة، إزاحة تلقائية، إغلاق أقواس تلقائي، أوامر سطر،
- * بحث، تلوين نحوي حقيقي) موجود في [RinEditorEngine]/[RinSyntax] — محرك Kotlin خالص بالكامل،
- * بلا أي اعتماد على C++/JNI (انظر توثيق [RinEditorEngine]).
+ * محرر Rin احترافي مبني فوق [View]/Canvas. واجهة الرسم وIME في Kotlin، بينما حالة المستند
+ * وكل عمليات التحرير والتراجع/الإعادة والتلوين والإكمال تُنفّذ فعلياً في C++17 عبر JNI.
+ * التلوين لا ينسخ قواعد Rin إلى Kotlin: RinCodeEditorView يستهلك tokens التي ينتجها
+ * rin::Lexer الحقيقي من مصدر اللغة نفسه.
  *
  * هذا الصنف مسؤول فقط عن: القياس/الرسم (Canvas)، اللمس (وضع المؤشر/السحب للتحديد)، والربط
  * بلوحة المفاتيح الافتراضية (IME) عبر [InputConnection] حقيقي مبني على [BaseInputConnection]
@@ -47,7 +47,8 @@ class RinCodeEditorView @JvmOverloads constructor(
     attrs: AttributeSet? = null
 ) : View(context, attrs) {
 
-    val engine = RinEditorEngine()
+    /** المصدر الوحيد للحقيقة: محرك C++17 الأصلي المربوط عبر JNI. */
+    val engine = RinNativeEditor()
 
     // --- إعداد الرسم ---------------------------------------------------
 
@@ -92,7 +93,7 @@ class RinCodeEditorView @JvmOverloads constructor(
     private var lastKnownText: String = ""
     private var suppressForward = false
 
-    // ذاكرة مؤقتة (cache) للتلوين النحوي ومطابقة الأقواس — تُحدَّث فقط داخل [afterEngineMutation]،
+    // ذاكرة مؤقتة للتلوين النحوي ومطابقة الأقواس — تُحدَّث فقط داخل [afterEngineMutation]،
     // ويقرأها [onDraw] مباشرة بلا أي إعادة حساب.
     private var cachedHighlightsByLine: Map<Int, List<RinEditorEngine.Highlight>> = emptyMap()
     private var cachedBracketInfo: Quad? = null
@@ -120,7 +121,7 @@ class RinCodeEditorView @JvmOverloads constructor(
         }
     }
 
-    // --- تزامن ثنائي الاتجاه بين المحرك وnative/shadow -----------------
+    // --- تزامن ثنائي الاتجاه بين محرك C++ وواجهة Android/shadow -----------------
 
     /** يُستدعى بعد أي عملية تُغيّر حالة المحرك مباشرة (لمس، مفاتيح، أوامر المتحكم...). */
     private fun afterEngineMutation() {
