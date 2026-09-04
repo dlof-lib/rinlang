@@ -1,0 +1,10 @@
+// Rin Router Pro — route table and path helpers.
+fun route_match(path,pattern){return path==pattern;}
+fun route_prefix(path,prefix){return startsWith(path,prefix);}
+fun route_suffix(path,suffix){return endsWith(path,suffix);}
+fun route_segments(path){let p=split(path,"/");let out=[];let i=0;while(i<len(p)){if(trim(p[i])!=""){push(out,p[i]);}i=i+1;}return out;}
+fun route_segment(path,index){let p=route_segments(path);if(index<0 or index>=len(p)){return nil;}return p[index];}
+fun route_new(){return [];}
+fun route_add(routes,pattern,handler){push(routes,{pattern:pattern,handler:handler});return routes;}
+fun route_find(routes,path){let i=0;while(i<len(routes)){if(route_match(path,routes[i]["pattern"])){return routes[i];}i=i+1;}return nil;}
+fun route_count(routes){return len(routes);}
