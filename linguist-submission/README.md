@@ -59,7 +59,7 @@ languages, and will close any such PRs that attempt to add them"*).
 |---|---|
 | `syntaxes/rin.tmLanguage.json` | ✅ تم إنشاؤه من الصفر بناءً على كلمات Rin المحجوزة الحقيقية في `app/src/main/cpp/rin_lexer.cpp` (لم يكن موجوداً سابقاً) |
 | `languages.yml.patch` | ✅ محدَّث ليطابق قواعد اليوم (بلا `language_id` يدوي) |
-| `samples/*.rin` | ✅ ٦ ملفات، ٦٧٩ سطراً إجمالاً، من مكتبات Rin القياسية الفعلية |
+| `samples/*.rin` | ✅ ٦ ملفات، ١٣٢٢ سطراً إجمالاً، من مكتبات Rin القياسية الفعلية |
 | ~~`grammars.yml.patch`~~ | ❌ حُذف — لم يعد يُعدَّل يدوياً، انظر الخطوة ٤ أدناه |
 
 ## خطوات التقديم (الرسمية، من CONTRIBUTING.md الحالي)
@@ -108,7 +108,7 @@ cp linguist-submission/samples/*.rin <linguist-checkout>/samples/Rin/
 ```
 
 هذه العيّنات مأخوذة فعلياً من مكتبات Rin القياسية (`lib/*.rin`) — **ليست** أمثلة "hello world"
-(وهذه فئة يرفضها فريق linguist صراحة). ٦٧٩ سطراً موزّعة على ٦ ملفات.
+(وهذه فئة يرفضها فريق linguist صراحة). ١٣٢٢ سطراً موزّعة على ٦ ملفات.
 
 ### 6) توليد المعرّف
 
