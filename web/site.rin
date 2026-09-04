@@ -42,19 +42,41 @@
 let sectionCount = len(queryDocs("pageSections", "kind", "section"));
 
 // حلقة for + make + create(): تبني حاوية ديناميكية منفصلة لكل مقتطف كود حقيقي
-// في قسم "جولة في اللغة" (سبعة مقتطفات) — بدل عدّها يدوياً كرقم ثابت.
-for (let i = 0; i < 7; i = i + 1) {
+// في قسم "جولة في اللغة" (سبعة مقتطفات)، وتكتب عنوانه الحقيقي بـ setField() —
+// بدل عدّها يدوياً أو الاكتفاء برقم فارغ.
+let tourTitles = [
+    "متغيّرات وطباعة",
+    "شرطان متكافئان: if/else وwhen/otherwise",
+    "دوال، تكرار ذاتي، وحلقات",
+    "مصفوفات وقواميس (كائنات)",
+    "الأنابيب |> بدل تعشيش الاستدعاءات",
+    "قاعدة بيانات NoSQL مدمجة",
+    "for + make: حاويات ديناميكية وقت التشغيل"
+];
+
+for (let i = 0; i < len(tourTitles); i = i + 1) {
     make kind = "tourSnippet";
     make name = "tourSnippet_" + i;
     create(kind, name);
     setField(name, "index", i);
+    setField(name, "title", tourTitles[i]);
 }
 let totalContainers = len(containerNames());
+
+// قراءة حيّة: العناوين السبعة تُجمَع رجوعاً من الحاويات نفسها عبر getField() —
+// وليس من مصفوفة tourTitles مباشرة — لإثبات أن الكتابة والقراءة وقت التشغيل
+// حقيقيتان فعلاً، لا مجرد نسخ نص ثابت. النتيجة تُعرض حرفياً في قسم "معاينة حية".
+let liveTitles = "";
+for (let i = 0; i < len(tourTitles); i = i + 1) {
+    liveTitles = liveTitles + (i + 1) + ") " + getField("tourSnippet_" + i, "title");
+    if (i < len(tourTitles) - 1) { liveTitles = liveTitles + "\n"; }
+}
 
 warp navOpen    = "false";
 
 warp sectionCountStr    = "" + sectionCount;
 warp totalContainersStr = "" + totalContainers;
+warp liveTitlesStr      = liveTitles;
 
 warp copyVars   = "false";
 warp copyFlow   = "false";
@@ -384,9 +406,9 @@ warp copyHtml   = "false";
     @view.Column=code
       gap=14;
       @view.Text=codeEyebrow text="معاينة حية"; size=12; color="#22c55e"; weight="700"; .end/view
-      @view.Text=codeTitle text="حلقة for حقيقية، لا مثال توضيحي"; size=21; weight="800"; color="#f4f6f3"; .end/view
+      @view.Text=codeTitle text="حلقة for متكاملة: تكتب، ثم تُقرأ، ثم تُعرض"; size=21; weight="800"; color="#f4f6f3"; .end/view
       @view.Text=codeDesc
-        text="هذا نسخ حرفي لأعلى هذا الملف نفسه: حلقة for + make تُنفَّذ فعلياً عبر rin::Interpreter::run() قبل أن يبني Loom أي @view — وناتجها (عدد الحاويات) هو نفس الرقم الذي تراه حيّاً في بطاقة الإحصاءات أعلاه.";
+        text="نسخ حرفي لأعلى هذا الملف: حلقة for + make + create() تبني حاوية لكل مقتطف كود، وsetField() تكتب عنوانه فيها — كلاهما عبر rin::Interpreter::run() قبل أن يبني Loom أي @view. تحتها مباشرة: نفس العناوين، لكن مقروءة رجوعاً من الحاويات عبر getField() لا من المصفوفة الأصلية — إثبات أن الكتابة والقراءة حقيقيتان وقت التشغيل.";
         size=13; color="#9aa39c";
       .end/view
 
@@ -394,13 +416,21 @@ warp copyHtml   = "false";
         @view.Column=codeCardCol gap=10;
           @view.Text=codeSnippet
             mono="true"; size=12.5; color="#cfd6cf";
-            text="// نفس الحلقة الموجودة أعلى هذا الملف بالضبط\nfor (let i = 0; i < 7; i = i + 1) {\n    make kind = \"tourSnippet\";\n    make name = \"tourSnippet_\" + i;\n    create(kind, name);\n    setField(name, \"index\", i);\n}\nlet totalContainers = len(containerNames());\n\n// النتيجة تُقرأ حيّة في بطاقة الإحصاءات أعلاه ↑";
+            text="let tourTitles = [ \"متغيّرات وطباعة\", ... ]; // سبعة عناوين حقيقية\n\nfor (let i = 0; i < len(tourTitles); i = i + 1) {\n    make kind = \"tourSnippet\";\n    make name = \"tourSnippet_\" + i;\n    create(kind, name);\n    setField(name, \"title\", tourTitles[i]);\n}\n\n// قراءة حيّة رجوعاً من الحاويات نفسها:\nlet liveTitles = \"\";\nfor (let i = 0; i < len(tourTitles); i = i + 1) {\n    liveTitles = liveTitles + (i + 1) + \") \"\n        + getField(\"tourSnippet_\" + i, \"title\");\n}";
           .end/view
           @view.Button=copyBtn
             label="نسخ الكود";
             onTap=toggle(copyPage);
-            copyText="for (let i = 0; i < 7; i = i + 1) {\n    make kind = \"tourSnippet\";\n    make name = \"tourSnippet_\" + i;\n    create(kind, name);\n    setField(name, \"index\", i);\n}\nlet totalContainers = len(containerNames());";
+            copyText="for (let i = 0; i < len(tourTitles); i = i + 1) {\n    make kind = \"tourSnippet\";\n    make name = \"tourSnippet_\" + i;\n    create(kind, name);\n    setField(name, \"title\", tourTitles[i]);\n}\n\nlet liveTitles = \"\";\nfor (let i = 0; i < len(tourTitles); i = i + 1) {\n    liveTitles = liveTitles + (i + 1) + \") \" + getField(\"tourSnippet_\" + i, \"title\");\n}";
             bg="#141a15"; color="#f4f6f3";
+          .end/view
+
+          @view.Divider=codeOutDiv height=1; color="#1c231d"; .end/view
+
+          @view.Text=codeOutLabel text="↓ الخرج الفعلي وقت التشغيل (مقروء عبر getField، وليس نصاً ثابتاً)"; size=11; color="#22c55e"; weight="700"; .end/view
+          @view.Text=codeOut
+            mono="true"; size=12.5; color="#4ade80";
+            text=liveTitlesStr;
           .end/view
         .end/view
       .end/view
