@@ -152,3 +152,40 @@
 - "Snapshots" (الاستعادة) أصبحت @container.doc حقيقية (NoSQL) بدل map عادي.
 - تم بناء المفسّر واختبار كل دالة فعلياً (g++ -std=c++17، cli/linux) والتحقق
   من صحة ملف ZIP الناتج عبر Python zipfile (CRC صحيح).
+
+## Mask (قناع)
+
+- Added `mask` as a logical identity concept for Loom views/elements/loops and Rin containers/groups/volumes.
+- Added `MaskStmt` for `mask = expr;` inside container/group/volume blocks.
+- Added Loom-side `Strand::mask` and `findByMask()` lookup.
+- Added runtime natives `findMask(mask)` and `maskOf(name)` for container/group/volume identities.
+- Added documentation: `docs/mask.md`.
+
+
+## Mask v2 — Expanded capabilities
+- Added `maskExists`, `maskTarget`, `maskKind`, `maskNames`, and `maskInfo`.
+- Added group/relationship queries: `maskMembers`, `maskParent`, `maskChildren`.
+- Added Loom multi-match helpers: `findAllByMask()` and `countByMask()`.
+- Expanded Mask documentation and examples.
+
+## Mask v3
+- Added alias resolution: `maskAlias`, `maskResolve`, `maskAliases`.
+- Added metadata tags: `maskTag`, `maskUntag`, `maskTags`, `maskHasTag`, `maskByTag`.
+- Added logical references: `maskRef`, `maskRefs`.
+- Added identity locking: `maskLock`, `maskLocked`.
+- Added canonical identity comparison: `maskCompare`.
+- Added `maskSummary` for inspecting complete mask metadata.
+- Mask metadata remains independent from target names.
+
+## Mask v4
+
+- Expanded Mask into a programmable identity registry.
+- Added lifecycle activation: `maskActive`, `maskEnable`, `maskDisable`.
+- Added namespaces: `maskNamespace`, `maskByNamespace`.
+- Added identity metadata: `maskVersion`, `maskNote`.
+- Added explicit mask graph: `maskParentSet`, `maskParentGet`, `maskChildrenOf`, `maskDescendants`, `maskRoot`, `maskDepth`, `maskDetach`.
+- Added reference management: `maskHasRef`, `maskUnref`, `maskClearRefs`.
+- Added tag management: `maskClearTags`, `maskHasAllTags`, `maskHasAnyTag`.
+- Added registry inspection: `maskCount`, `maskKinds`, `maskKindCount`.
+- Extended `maskSummary()` with v4 metadata.
+- Added cycle protection and lock enforcement for mutable mask metadata.
