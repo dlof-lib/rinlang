@@ -17,6 +17,7 @@ package com.dlof.rinlang
  *
  * مثيل واحد من هذا الصنف = مستند واحد مفتوح في المحرر.
  */
+@Deprecated("Use RinNativeEditor: the production editor engine is C++17 and shares the real Rin lexer.")
 class RinEditorEngine {
 
     // --- تمثيل النص -------------------------------------------------------
