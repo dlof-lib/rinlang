@@ -195,7 +195,7 @@ Mask
       └─ volume
 ```
 
-## Mask v4 — Identity Registry
+## Mask v1 — Identity Registry
 
 Mask v4 turns the mask into a programmable identity registry. The identity remains separate from the object's name and can carry operational metadata and relations.
 
