@@ -135,7 +135,8 @@ private:
     std::shared_ptr<ViewStmt> elementDeclaration(); // @element.<Kind>=name ... .end/element
     std::shared_ptr<ViewStmt> loopCanvasDeclaration(); // @loop.<Kind>=name ... .end/loop OR @loop=name ...
     StmtPtr uiBindingStatement(); // on.<element>.<event>=handler(...); inside a Container
-    StmtPtr warpDeclaration();                    // warp name = expr;              (يُستدعى بعد استهلاك 'warp')
+    StmtPtr warpDeclaration();                    // warp name = expr;
+    StmtPtr maskDeclaration();                    // mask = expr;              (يُستدعى بعد استهلاك 'warp')
     StmtPtr themeDeclaration();                   // @theme=Name key=expr; ... .end/theme  (يُستدعى بعد استهلاك '@' و'theme')
 
     // expressions (precedence climbing)
