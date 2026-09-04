@@ -187,6 +187,12 @@ StmtPtr Parser::declaration() {
         advance(); // 'on'
         return lifecycleHookDeclaration();
     }
+    // قناع: mask = expr; داخل الحاويات/المجموعات/Volume. داخل @view/@element/@loop
+    // يبقى Attribute عادياً ويُلتقط هناك، لذلك لا يوجد تعارض بين الشكلين.
+    if (check(TokenType::IDENT) && peek().lexeme == "mask" && checkNext(TokenType::EQUAL)) {
+        advance();
+        return maskDeclaration();
+    }
     // RCS-1.0 §3.3 State: 'state' IDENT '=' expr ';' -- كلمة سياقية غير محجوزة أيضاً (بنفس أسلوب
     // 'route'/'row'/'document'/'warp' أعلاه)، مُميَّزة بالنظر خطوة إضافية للأمام (IDENT مباشرة
     // بعدها) حتى لا تصطدم باستخدام "state" اسم متغيّر عادي في أي سياق آخر.
@@ -1216,6 +1222,17 @@ StmtPtr Parser::uiBindingStatement() {
     return s;
 }
 
+// mask = expr;
+StmtPtr Parser::maskDeclaration() {
+    Token tok = previous();
+    consume(TokenType::EQUAL, "Expected '=' after mask");
+    ExprPtr value = expression();
+    consume(TokenType::SEMICOLON, "Expected ';' after mask declaration");
+    auto s = std::make_shared<MaskStmt>();
+    s->value = value; s->line = tok.line;
+    return s;
+}
+
 // warp name = expr;
 StmtPtr Parser::warpDeclaration() {
     Token tok = previous(); // 'warp'
@@ -1464,6 +1481,7 @@ StmtPtr Parser::atBlock() {
     }
     std::string name = readOptionalName("a `@" + tag + "` block");
     std::vector<StmtPtr> body;
+    std::string mask;
     // RCS-1.0 §7 Phase 0: قبل كل عبارة عادية، نجرّب أولاً قراءتها كتوجيه سياسة (policy_block)
     // إن كانت هذه حاوية من عائلة container (لا Containers.Group/Volume). tryParsePolicyDirective
     // يستعيد موضع القارئ بنفسه إن لم يطابق النمط، فلا خطر على أي برنامج قديم يستخدم هذه الكلمات
@@ -1472,7 +1490,11 @@ StmtPtr Parser::atBlock() {
     bool familyTag = isContainerFamilyTag(tag);
     while (!checkClosingTag() && !isAtEnd()) {
         if (familyTag && tryParsePolicyDirective(policyAccum)) continue;
-        body.push_back(declaration());
+        auto st = declaration();
+        if (auto m = std::dynamic_pointer_cast<MaskStmt>(st)) {
+            if (auto lit = std::dynamic_pointer_cast<LiteralExpr>(m->value); lit && lit->kind == LiteralExpr::Kind::STRING) mask = lit->str;
+            else body.push_back(st);
+        } else body.push_back(st);
     }
     consumeEndTag(tag, atTok.line, name);
 
@@ -1501,7 +1523,7 @@ StmtPtr Parser::atBlock() {
             tag == "container.block" || tag == "block" ||
             tag == "container.sticker" || tag == "sticker")) validateDataContainerBody(body);
         auto s = std::make_shared<ContainerStmt>();
-        s->name = name; s->body = body; s->line = atTok.line;
+        s->name = name; s->mask = mask; s->body = body; s->line = atTok.line;
         if (policyAccum.hasPolicy) {
             s->uses = policyAccum.uses; s->needs = policyAccum.needs;
             s->allows = policyAccum.allows; s->denies = policyAccum.denies;
@@ -1527,11 +1549,11 @@ StmtPtr Parser::atBlock() {
     }
     if (tag == "Containers.Group") {
         auto s = std::make_shared<ContainerGroupStmt>();
-        s->name = name; s->body = body; s->line = atTok.line;
+        s->name = name; s->mask = mask; s->body = body; s->line = atTok.line;
         return s;
     }
     auto s = std::make_shared<VolumeStmt>();
-    s->name = name; s->body = body; s->line = atTok.line;
+    s->name = name; s->mask = mask; s->body = body; s->line = atTok.line;
     return s;
 }
 
