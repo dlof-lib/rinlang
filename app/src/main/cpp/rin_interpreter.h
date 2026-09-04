@@ -567,6 +567,21 @@ private:
     // (قد لا يطابق أي ContainerKind معروف؛ يُستخدَم فقط لأجل kindOf() الاستقصائية). انظر قسم
     // "أدوات @Everything الديناميكية" في registerNatives() لمزيد من التفصيل.
     std::unordered_map<std::string, std::string> containerCustomKind;
+    std::unordered_map<std::string, std::string> containerMasks; // قناع الحاوية -> اسمها
+    std::unordered_map<std::string, std::string> groupMasks;     // قناع المجموعة -> اسمها
+    std::unordered_map<std::string, std::string> volumeMasks;    // قناع Volume -> اسمها
+    // Mask v3: metadata/relations kept independently from the target object's name.
+    std::unordered_map<std::string, std::string> maskAliases; // alias -> canonical mask
+    std::unordered_map<std::string, std::vector<std::string>> maskTags; // mask -> unique tags
+    std::unordered_map<std::string, std::vector<std::string>> maskRefs; // mask -> logical references
+    std::unordered_set<std::string> lockedMasks; // immutable identity guard for runtime changes
+    // Mask v4: lifecycle + indexing metadata. These remain separate from the target name so
+    // a mask stays stable while the object is renamed or rebuilt.
+    std::unordered_map<std::string, std::string> maskNamespaces; // mask -> logical namespace
+    std::unordered_map<std::string, std::string> maskParents;    // mask -> parent mask (explicit relation)
+    std::unordered_map<std::string, std::string> maskVersions;   // mask -> user-defined identity version
+    std::unordered_map<std::string, bool> maskEnabled;           // mask -> active/inactive identity
+    std::unordered_map<std::string, std::string> maskNotes;     // mask -> short developer note
     std::unordered_map<std::string, EnvPtr> groupEnvs;       // اسم المجموعة -> بيئتها الخاصة (متغيرات مُعلَنة مباشرة داخلها)
     std::unordered_map<std::string, std::vector<std::string>> groupMembers; // اسم المجموعة -> أسماء الحاويات/المجموعات الفرعية المباشرة بداخلها (بالترتيب)
     // ---- Section: حالة تُحفَظ بعد الإغلاق (قبل هذا كانت Section زخرفية بحتة: تطبع 🔹/◽ فقط ثم
