@@ -1,0 +1,11 @@
+// Rin Query Pro — query pipeline for arrays.
+fun query_first(arr,fn){let i=0;while(i<len(arr)){if(fn(arr[i])){return arr[i];}i=i+1;}return nil;}
+fun query_last(arr,fn){let i=len(arr)-1;while(i>=0){if(fn(arr[i])){return arr[i];}i=i-1;}return nil;}
+fun query_count(arr,fn){let c=0;let i=0;while(i<len(arr)){if(fn(arr[i])){c=c+1;}i=i+1;}return c;}
+fun query_any(arr,fn){return query_count(arr,fn)>0;}
+fun query_all(arr,fn){return query_count(arr,fn)==len(arr);}
+fun query_none(arr,fn){return query_count(arr,fn)==0;}
+fun query_take(arr,fn){let out=[];let i=0;while(i<len(arr)){if(fn(arr[i])){push(out,arr[i]);}i=i+1;}return out;}
+fun query_index(arr,fn){let i=0;while(i<len(arr)){if(fn(arr[i])){return i;}i=i+1;}return -1;}
+fun query_distinct(arr){let out=[];let i=0;while(i<len(arr)){if(!contains(out,arr[i])){push(out,arr[i]);}i=i+1;}return out;}
+fun query_page(arr,page,size){if(page<1 or size<=0){return [];}let start=(page-1)*size;let out=[];let i=start;while(i<len(arr) and i<start+size){push(out,arr[i]);i=i+1;}return out;}
