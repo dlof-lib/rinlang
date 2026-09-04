@@ -388,6 +388,7 @@ enum class ContainerKind { PLAIN, PIPE, DATA, API, IMPORT, TABLE, DOC, OBJECT, P
 
 struct ContainerStmt : Stmt {
     std::string name; // قد تكون فارغة إن لم يُحدَّد اسم
+    std::string mask; // قناع: هوية منطقية مستقرة للحاوية، مستقلة عن الاسم
     std::vector<StmtPtr> body;
     ContainerKind kind = ContainerKind::PLAIN;
 
@@ -406,6 +407,13 @@ struct ContainerStmt : Stmt {
     std::string description;
     bool strict = false;
     bool hasPolicy = false;
+};
+
+// قناع (Mask): هوية منطقية قابلة لإعادة الاستخدام للحاويات/المجموعات/Volume.
+// داخل @view/@element/@loop يُكتب كـ mask=...; ويُخزّن كخاصية. داخل @container/Group/Volume
+// يُحوّل parser إلى هذا البيان حتى يربطه المفسّر بالنطاق الحاوي الحالي.
+struct MaskStmt : Stmt {
+    ExprPtr value;
 };
 
 // ---- Lifecycle (RCS-1.0 §3.2) ----
@@ -497,12 +505,14 @@ struct MakeStmt : ContainerStmt {
 // @Containers.Group=name  <body>  .end/Containers.Group
 struct ContainerGroupStmt : Stmt {
     std::string name;
+    std::string mask;
     std::vector<StmtPtr> body;
 };
 
 // @Volume=name  <body>  .end/Volume
 struct VolumeStmt : Stmt {
     std::string name;
+    std::string mask;
     std::vector<StmtPtr> body;
 };
 
