@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
+import android.graphics.drawable.GradientDrawable
 import android.os.Handler
 import android.os.Looper
 import android.text.Editable
@@ -13,6 +14,7 @@ import android.text.SpannableStringBuilder
 import android.text.TextWatcher
 import android.util.AttributeSet
 import android.util.TypedValue
+import android.view.Gravity
 import android.view.GestureDetector
 import android.view.KeyEvent
 import android.view.MotionEvent
@@ -20,6 +22,9 @@ import android.view.View
 import android.view.inputmethod.BaseInputConnection
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputConnection
+import android.widget.LinearLayout
+import android.widget.PopupWindow
+import android.widget.TextView
 import androidx.core.content.ContextCompat
 import kotlin.math.max
 import kotlin.math.roundToInt
@@ -49,6 +54,8 @@ class RinCodeEditorView @JvmOverloads constructor(
         typeface = android.graphics.Typeface.MONOSPACE
         textSize = spToPx(14f)
         color = ContextCompat.getColor(context, R.color.rin_editor_text)
+        isSubpixelText = true
+        isLinearText = false
     }
     private val cursorPaint = Paint().apply { color = ContextCompat.getColor(context, R.color.rin_editor_text) }
     private val currentLinePaint = Paint().apply { color = ContextCompat.getColor(context, R.color.rin_current_line_bg) }
@@ -61,6 +68,7 @@ class RinCodeEditorView @JvmOverloads constructor(
     private val colorString = ContextCompat.getColor(context, R.color.syntax_string)
     private val colorNumber = ContextCompat.getColor(context, R.color.syntax_number)
     private val colorAt = ContextCompat.getColor(context, R.color.syntax_tag)
+    private val colorCall = ContextCompat.getColor(context, R.color.syntax_builtin)
     private val colorDefault = ContextCompat.getColor(context, R.color.rin_editor_text)
     private val colorError = Color.parseColor("#F14C4C")
 
@@ -79,6 +87,11 @@ class RinCodeEditorView @JvmOverloads constructor(
     private val shadowEditable = SpannableStringBuilder()
     private var lastKnownText: String = ""
     private var suppressForward = false
+
+    // ذاكرة مؤقتة (cache) للتلوين النحوي ومطابقة الأقواس — تُحدَّث فقط داخل [afterNativeMutation]،
+    // ويقرأها [onDraw] مباشرة بلا أي إعادة حساب (انظر التعليق داخل afterNativeMutation).
+    private var cachedHighlightsByLine: Map<Int, List<RinNativeEditor.Highlight>> = emptyMap()
+    private var cachedBracketInfo: Quad? = null
 
     private val shadowWatcher = object : TextWatcher {
         override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
@@ -115,11 +128,26 @@ class RinCodeEditorView @JvmOverloads constructor(
             shadowEditable.replace(0, shadowEditable.length, newText)
             suppressForward = false
             lastKnownText = newText
+            // التلوين النحوي يستدعي rin::Lexer على كامل المستند (مكلف نسبيًا) — نُعيد حسابه
+            // فقط عندما يتغيّر النص فعليًا، لا عند كل رسم (وميض المؤشر مثلاً يستدعي invalidate()
+            // مرتين بالثانية بلا أي تغيير نصّي، فيقرأ القيمة المخزَّنة مباشرة بلا أي تكلفة).
+            val byLine = HashMap<Int, MutableList<RinNativeEditor.Highlight>>()
+            for (h in engine.getHighlights()) byLine.getOrPut(h.line) { mutableListOf() }.add(h)
+            cachedHighlightsByLine = byLine
         }
+        // مطابقة الأقواس تعتمد على موضع المؤشر (يتغيّر أيضًا بلا تعديل نصّي، كالأسهم)، فتُحسَب في
+        // كل استدعاء لهذه الدالة (رخيصة الثمن)، لكن أبدًا داخل onDraw نفسها.
+        cachedBracketInfo = computeBracketMatchForDraw()
+
         val cur = engine.getCursor()
         val flat = nativePosToFlatOffset(newText, cur.line, cur.col).coerceIn(0, shadowEditable.length)
         Selection.setSelection(shadowEditable, flat)
-        if (changed) notifyExternalWatchers(old, newText)
+        if (changed) {
+            notifyExternalWatchers(old, newText)
+            updateSuggestionPopup()
+        } else {
+            dismissSuggestionPopup()
+        }
         requestLayout()
         invalidate()
     }
@@ -219,6 +247,11 @@ class RinCodeEditorView @JvmOverloads constructor(
         // (0, length) وبعلامة SPAN_INCLUSIVE_INCLUSIVE، فيستدعيه SpannableStringBuilder
         // تلقائيًا عند أي replace() — بلا حاجة لأي آلية أخرى.
         shadowEditable.setSpan(shadowWatcher, 0, shadowEditable.length, Editable.SPAN_INCLUSIVE_INCLUSIVE)
+        // تعبئة أولية للذاكرة المؤقتة (cache) قبل أول onDraw، حتى لا يُرسَم بلا تلوين للحظة.
+        val byLine = HashMap<Int, MutableList<RinNativeEditor.Highlight>>()
+        for (h in engine.getHighlights()) byLine.getOrPut(h.line) { mutableListOf() }.add(h)
+        cachedHighlightsByLine = byLine
+        cachedBracketInfo = computeBracketMatchForDraw()
     }
 
     // --- القياس والرسم ----------------------------------------------------
@@ -243,11 +276,8 @@ class RinCodeEditorView @JvmOverloads constructor(
         val lc = engine.lineCount()
         val cur = engine.getCursor()
         val sel = engine.getSelection()
-        val highlightsByLine = HashMap<Int, MutableList<RinNativeEditor.Highlight>>()
-        for (h in engine.getHighlights()) highlightsByLine.getOrPut(h.line) { mutableListOf() }.add(h)
-
-        // القوس المطابق للمؤشر الحالي (إن وُجد)
-        val bracketInfo = computeBracketMatchForDraw()
+        val highlightsByLine = cachedHighlightsByLine
+        val bracketInfo = cachedBracketInfo
 
         var y = paddingTop.toFloat()
         for (line in 0 until lc) {
@@ -355,6 +385,7 @@ class RinCodeEditorView @JvmOverloads constructor(
         3 -> colorNumber    // HighlightKind::Number
         7 -> colorAt        // HighlightKind::At
         8 -> colorError     // HighlightKind::Error
+        9 -> colorCall      // HighlightKind::Call (معرِّف متبوع بقوس فتح — نمط استدعاء دالة)
         else -> colorDefault
     }
 
@@ -439,6 +470,8 @@ class RinCodeEditorView @JvmOverloads constructor(
         if (gainFocus) {
             cursorVisible = true
             blinkHandler.postDelayed(blinkRunnable, 500L)
+        } else {
+            dismissSuggestionPopup()
         }
         invalidate()
     }
@@ -446,6 +479,7 @@ class RinCodeEditorView @JvmOverloads constructor(
     override fun onDetachedFromWindow() {
         super.onDetachedFromWindow()
         blinkHandler.removeCallbacks(blinkRunnable)
+        dismissSuggestionPopup()
         engine.destroy()
     }
 
@@ -698,5 +732,96 @@ class RinCodeEditorView @JvmOverloads constructor(
             if (l != sel.end.line) sb.append('\n')
         }
         return sb.toString()
+    }
+
+    // --- إكمال تلقائي (Autocomplete) — نافذة اقتراحات حقيقية مبنية على [RinNativeEditor.getSuggestions] ---
+
+    private var suggestionPopup: PopupWindow? = null
+    private val maxSuggestionRows = 6
+
+    /** (بادئة الكلمة قبل المؤشر مباشرة، عمود-بايت بداية تلك الكلمة على سطر المؤشر) أو null إن لا كلمة جارية. */
+    private fun currentWordPrefix(): Pair<String, Int>? {
+        if (engine.getSelection().hasSelection) return null
+        val cur = engine.getCursor()
+        val lineText = engine.getLine(cur.line)
+        val charCol = RinNativeEditor.byteOffsetToCharIndex(lineText, cur.col)
+        fun isWordChar(c: Char) = c.isLetter() || c.isDigit() || c == '_'
+        var start = charCol
+        while (start > 0 && isWordChar(lineText[start - 1])) start--
+        if (start == charCol) return null
+        val prefix = lineText.substring(start, charCol)
+        return prefix to RinNativeEditor.charIndexToByteOffset(lineText, start)
+    }
+
+    private fun updateSuggestionPopup() {
+        if (!hasFocus() || !isAttachedToWindow) { dismissSuggestionPopup(); return }
+        val (prefix, wordStartByteCol) = currentWordPrefix() ?: run { dismissSuggestionPopup(); return }
+        val suggestions = engine.getSuggestions(prefix, maxSuggestionRows)
+        if (suggestions.isEmpty()) { dismissSuggestionPopup(); return }
+        showSuggestionPopup(suggestions, wordStartByteCol)
+    }
+
+    private fun buildSuggestionRow(text: String, onPick: () -> Unit): TextView = TextView(context).apply {
+        this.text = text
+        typeface = android.graphics.Typeface.MONOSPACE
+        setTextColor(colorDefault)
+        textSize = 14f
+        val padH = (12 * resources.displayMetrics.density).toInt()
+        val padV = (8 * resources.displayMetrics.density).toInt()
+        setPadding(padH, padV, padH, padV)
+        isClickable = true
+        isFocusable = false
+        setOnClickListener { onPick() }
+    }
+
+    private fun showSuggestionPopup(suggestions: List<String>, wordStartByteCol: Int) {
+        val cur = engine.getCursor()
+        val container = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            background = GradientDrawable().apply {
+                setColor(Color.parseColor("#2A2D31"))
+                cornerRadius = 8 * resources.displayMetrics.density
+                setStroke((resources.displayMetrics.density).toInt().coerceAtLeast(1), Color.parseColor("#454A50"))
+            }
+        }
+        for (s in suggestions) {
+            container.addView(buildSuggestionRow(s) { applySuggestion(s, wordStartByteCol) })
+        }
+
+        val popup = suggestionPopup ?: PopupWindow(
+            container, LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT
+        ).apply {
+            isOutsideTouchable = false
+            isFocusable = false
+            elevation = 12f
+            suggestionPopup = this
+        }
+        popup.contentView = container
+
+        val loc = IntArray(2)
+        getLocationOnScreen(loc)
+        val lineText = engine.getLine(cur.line)
+        val charCol = RinNativeEditor.byteOffsetToCharIndex(lineText, wordStartByteCol)
+        val cursorLocalX = paddingLeft + textPaint.measureText(lineText, 0, charCol)
+        val cursorLocalY = yOfLine(cur.line)
+        val screenX = (loc[0] + cursorLocalX).toInt()
+        val screenY = loc[1] + cursorLocalY + lineHeight.roundToInt()
+
+        if (popup.isShowing) {
+            popup.update(screenX, screenY, -1, -1)
+        } else {
+            popup.showAtLocation(this, Gravity.NO_GRAVITY, screenX, screenY)
+        }
+    }
+
+    private fun applySuggestion(suggestion: String, wordStartByteCol: Int) {
+        val cur = engine.getCursor()
+        engine.replaceRange(cur.line, wordStartByteCol, cur.line, cur.col, suggestion)
+        dismissSuggestionPopup()
+        afterNativeMutation()
+    }
+
+    private fun dismissSuggestionPopup() {
+        suggestionPopup?.let { if (it.isShowing) it.dismiss() }
     }
 }
