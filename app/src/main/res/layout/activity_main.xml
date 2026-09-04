@@ -418,10 +418,8 @@
                     android:scrollbars="horizontal"
                     android:overScrollMode="never">
 
-                    <!-- محرر أكواد مبني من الصفر بلغة Kotlin خالصة (بلا أي C++/JNI؛ انظر
-                         RinEditorEngine.kt وRinSyntax.kt)، مُظهَر هنا عبر View/Canvas مخصّصة
-                         بالكامل بدل android.widget.EditText — انظر RinCodeEditorView.kt
-                         وRinCodeEditorController.kt. -->
+                    <!-- محرر Rin احترافي: الرسم وIME في Kotlin، والمنطق الفعلي والتلوين في
+                         C++17 عبر JNI. التلوين مصدره rin::Lexer الحقيقي، وليس Regex/نسخة Kotlin. -->
                     <com.dlof.rinlang.RinCodeEditorView
                         android:id="@+id/editCode"
                         android:layout_width="wrap_content"
