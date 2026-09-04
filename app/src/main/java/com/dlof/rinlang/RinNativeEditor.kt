@@ -92,6 +92,7 @@ class RinNativeEditor {
     fun destroy() {
         if (!destroyed) {
             nativeDestroy(handle)
+            handle = 0L
             destroyed = true
         }
     }
@@ -168,6 +169,12 @@ class RinNativeEditor {
     }
 
     /** اقتراحات إكمال تلقائي (كلمات محجوزة للغة Rin + معرِّفات المستند) تبدأ بـ [prefix]. */
+    /** توافق واجهة RinCodeEditorView القديمة. التلوين هنا Rin أصلاً من rin::Lexer في C++. */
+    fun setLanguage(extension: String) { /* Native Rin editor is intentionally language-source driven. */ }
+
+    fun collectSuggestions(prefix: String, maxResults: Int = 20): List<String> =
+        getSuggestions(prefix, maxResults)
+
     fun getSuggestions(prefix: String, maxResults: Int = 20): List<String> =
         nativeGetSuggestions(requireHandle(), prefix, maxResults).toList()
 
