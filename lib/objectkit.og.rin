@@ -1,0 +1,12 @@
+// Rin ObjectKit Pro — dynamic map helpers.
+fun obj_new(){return {};}
+fun obj_has(o,key){return has(o,key);}
+fun obj_get(o,key,fallback){if(!has(o,key)){return fallback;}return o[key];}
+fun obj_set(o,key,value){o[key]=value;return o;}
+fun obj_remove(o,key){if(has(o,key)){remove(o[key]);}return o;}
+fun obj_keys(o){return keys(o);}
+fun obj_values(o){return values(o);}
+fun obj_size(o){return len(keys(o));}
+fun obj_merge(a,b){let out={};let ks=keys(a);let i=0;while(i<len(ks)){out[ks[i]]=a[ks[i]];i=i+1;}ks=keys(b);i=0;while(i<len(ks)){out[ks[i]]=b[ks[i]];i=i+1;}return out;}
+fun obj_pick(o,wanted){let out={};let i=0;while(i<len(wanted)){let k=wanted[i];if(has(o,k)){out[k]=o[k];}i=i+1;}return out;}
+fun obj_omit(o,blocked){let out={};let ks=keys(o);let i=0;while(i<len(ks)){if(!contains(blocked,ks[i])){out[ks[i]]=o[ks[i]];}i=i+1;}return out;}
