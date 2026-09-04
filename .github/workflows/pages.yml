@@ -86,13 +86,32 @@ jobs:
       - name: Compile the official Rin engine (incl. Loomtime) to WebAssembly
         run: |
           mkdir -p dist
+          # القائمة الكاملة لما يحتاجه rin_interpreter.cpp فعلياً عند الربط (linker) —
+          # مطابقة تماماً لهدف rinengine في app/src/main/cpp/CMakeLists.txt، فقط مع
+          # استبدال rin_http.cpp (fork/exec لـ curl، غير ممكن داخل WASM) بالبديل
+          # web/rin_http_wasm_stub.cpp، وrin_run.cpp/loomc.cpp بجسر WASM المخصص
+          # web/rin_wasm_bridge.cpp + loom/rin_loom_c_api.cpp. بدون rin_make.cpp أو
+          # diagnostics/ أو loader_ui/ أو clc/ يفشل الربط بأخطاء "undefined symbol"
+          # (nearestMatches، validateMakeUnit، validateContainerPolicy، ...).
           em++ -O2 -std=c++17 -fexceptions \
             -I app/src/main/cpp \
             app/src/main/cpp/rin_lexer.cpp \
             app/src/main/cpp/rin_parser.cpp \
+            app/src/main/cpp/rin_make.cpp \
             app/src/main/cpp/rin_interpreter.cpp \
             app/src/main/cpp/rin_c_api.cpp \
             app/src/main/cpp/loom/rin_loom_c_api.cpp \
+            app/src/main/cpp/loader_ui/library_loader_ui.cpp \
+            app/src/main/cpp/diagnostics/diagnostic.cpp \
+            app/src/main/cpp/diagnostics/source_manager.cpp \
+            app/src/main/cpp/diagnostics/diagnostic_engine.cpp \
+            app/src/main/cpp/diagnostics/diagnostic_renderer.cpp \
+            app/src/main/cpp/clc/clc_container.cpp \
+            app/src/main/cpp/clc/clc_compress.cpp \
+            app/src/main/cpp/clc/clc_security.cpp \
+            app/src/main/cpp/clc/clc_rin_opt.cpp \
+            app/src/main/cpp/clc/clc_zip_import.cpp \
+            app/src/main/cpp/clc/sha256.cpp \
             web/rin_http_wasm_stub.cpp \
             web/rin_wasm_bridge.cpp \
             -s MODULARIZE=1 \
