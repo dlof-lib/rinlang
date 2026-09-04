@@ -32,21 +32,22 @@ import kotlin.math.roundToInt
 /**
  * محرر أكواد كامل مبني من الصفر فوق [View]/Canvas — بلا أي استخدام لـ [android.widget.EditText] —
  * وكل منطق التحرير الفعلي (تخزين، تراجع/إعادة، إزاحة تلقائية، إغلاق أقواس تلقائي، أوامر سطر،
- * بحث، تلوين نحوي حقيقي) موجود في محرك C++ (انظر [RinNativeEditor] وapp/src/main/cpp/editor/).
+ * بحث، تلوين نحوي حقيقي) موجود في [RinEditorEngine]/[RinSyntax] — محرك Kotlin خالص بالكامل،
+ * بلا أي اعتماد على C++/JNI (انظر توثيق [RinEditorEngine]).
  *
  * هذا الصنف مسؤول فقط عن: القياس/الرسم (Canvas)، اللمس (وضع المؤشر/السحب للتحديد)، والربط
  * بلوحة المفاتيح الافتراضية (IME) عبر [InputConnection] حقيقي مبني على [BaseInputConnection]
- * فوق "مرآة" [Editable] تُبقى متزامنة مع المحرك الأصلي في الاتجاهين.
+ * فوق "مرآة" [Editable] تُبقى متزامنة مع المحرك في الاتجاهين.
  *
- * يُستخدَم في XML بديلاً حرفياً عن RinEditText القديم (نفس wrap_content داخل
- * ScrollView/HorizontalScrollView خارجي يتوليان التمرير — هذا الصنف لا يُمرِّر نفسه إطلاقاً).
+ * كل الإحداثيات المتبادلة مع المحرك هي (سطر, عمود-حرف UTF-16) مباشرة — بلا أي طبقة تحويل
+ * بايت/حرف وسيطة (خلافاً للمحرك القديم المبني على C++).
  */
 class RinCodeEditorView @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null
 ) : View(context, attrs) {
 
-    val engine = RinNativeEditor()
+    val engine = RinEditorEngine()
 
     // --- إعداد الرسم ---------------------------------------------------
 
@@ -69,6 +70,9 @@ class RinCodeEditorView @JvmOverloads constructor(
     private val colorNumber = ContextCompat.getColor(context, R.color.syntax_number)
     private val colorAt = ContextCompat.getColor(context, R.color.syntax_tag)
     private val colorCall = ContextCompat.getColor(context, R.color.syntax_builtin)
+    private val colorComment = ContextCompat.getColor(context, R.color.syntax_comment)
+    private val colorType = ContextCompat.getColor(context, R.color.syntax_container_keyword)
+    private val colorPreprocessor = ContextCompat.getColor(context, R.color.syntax_make_directive)
     private val colorDefault = ContextCompat.getColor(context, R.color.rin_editor_text)
     private val colorError = Color.parseColor("#F14C4C")
 
@@ -88,9 +92,9 @@ class RinCodeEditorView @JvmOverloads constructor(
     private var lastKnownText: String = ""
     private var suppressForward = false
 
-    // ذاكرة مؤقتة (cache) للتلوين النحوي ومطابقة الأقواس — تُحدَّث فقط داخل [afterNativeMutation]،
-    // ويقرأها [onDraw] مباشرة بلا أي إعادة حساب (انظر التعليق داخل afterNativeMutation).
-    private var cachedHighlightsByLine: Map<Int, List<RinNativeEditor.Highlight>> = emptyMap()
+    // ذاكرة مؤقتة (cache) للتلوين النحوي ومطابقة الأقواس — تُحدَّث فقط داخل [afterEngineMutation]،
+    // ويقرأها [onDraw] مباشرة بلا أي إعادة حساب.
+    private var cachedHighlightsByLine: Map<Int, List<RinEditorEngine.Highlight>> = emptyMap()
     private var cachedBracketInfo: Quad? = null
 
     private val shadowWatcher = object : TextWatcher {
@@ -116,10 +120,10 @@ class RinCodeEditorView @JvmOverloads constructor(
         }
     }
 
-    // --- تزامن ثنائي الاتجاه بين المحرك الأصلي وnative/shadow -----------------
+    // --- تزامن ثنائي الاتجاه بين المحرك وnative/shadow -----------------
 
     /** يُستدعى بعد أي عملية تُغيّر حالة المحرك مباشرة (لمس، مفاتيح، أوامر المتحكم...). */
-    private fun afterNativeMutation() {
+    private fun afterEngineMutation() {
         val newText = engine.getText()
         val old = lastKnownText
         val changed = newText != old
@@ -128,10 +132,10 @@ class RinCodeEditorView @JvmOverloads constructor(
             shadowEditable.replace(0, shadowEditable.length, newText)
             suppressForward = false
             lastKnownText = newText
-            // التلوين النحوي يستدعي rin::Lexer على كامل المستند (مكلف نسبيًا) — نُعيد حسابه
-            // فقط عندما يتغيّر النص فعليًا، لا عند كل رسم (وميض المؤشر مثلاً يستدعي invalidate()
-            // مرتين بالثانية بلا أي تغيير نصّي، فيقرأ القيمة المخزَّنة مباشرة بلا أي تكلفة).
-            val byLine = HashMap<Int, MutableList<RinNativeEditor.Highlight>>()
+            // التلوين النحوي يمسح كامل المستند (مكلف نسبيًا على ملف ضخم) — نُعيد حسابه فقط عندما
+            // يتغيّر النص فعليًا، لا عند كل رسم (وميض المؤشر مثلاً يستدعي invalidate() مرتين
+            // بالثانية بلا أي تغيير نصّي، فيقرأ القيمة المخزَّنة مباشرة بلا أي تكلفة).
+            val byLine = HashMap<Int, MutableList<RinEditorEngine.Highlight>>()
             for (h in engine.getHighlights()) byLine.getOrPut(h.line) { mutableListOf() }.add(h)
             cachedHighlightsByLine = byLine
         }
@@ -140,7 +144,7 @@ class RinCodeEditorView @JvmOverloads constructor(
         cachedBracketInfo = computeBracketMatchForDraw()
 
         val cur = engine.getCursor()
-        val flat = nativePosToFlatOffset(newText, cur.line, cur.col).coerceIn(0, shadowEditable.length)
+        val flat = flatOffsetOf(newText, cur.line, cur.col).coerceIn(0, shadowEditable.length)
         Selection.setSelection(shadowEditable, flat)
         if (changed) {
             notifyExternalWatchers(old, newText)
@@ -152,11 +156,11 @@ class RinCodeEditorView @JvmOverloads constructor(
         invalidate()
     }
 
-    /** يوجّه تعديلاً وصل من IME (عبر [shadowWatcher]) إلى المحرك الأصلي بأذكى طريقة ممكنة. */
+    /** يوجّه تعديلاً وصل من IME (عبر [shadowWatcher]) إلى المحرك بأذكى طريقة ممكنة. */
     private fun routeShadowEdit(s: CharSequence, start: Int, before: Int, count: Int) {
         val oldText = lastKnownText
         val insertedPiece = s.subSequence(start, start + count).toString()
-        val cursorFlatBefore = nativeFlatCursor(oldText)
+        val cursorFlatBefore = flatOffsetOf(oldText, engine.getCursor().line, engine.getCursor().col)
 
         if (before == 0 && count == 1 && start == cursorFlatBefore) {
             // كتابة حرف واحد عند المؤشر مباشرة: مرّرها عبر المسار "الذكي" (إغلاق أقواس/مسافة تلقائية)
@@ -169,40 +173,34 @@ class RinCodeEditorView @JvmOverloads constructor(
             engine.deleteForward()
         } else {
             // حالة عامة: لصق، إكمال تلقائي/تصحيح تلقائي من IME، أو استبدال تحديد
-            val (l1, c1) = flatOffsetToNativePos(oldText, start)
-            val (l2, c2) = flatOffsetToNativePos(oldText, start + before)
+            val (l1, c1) = flatOffsetToPos(oldText, start)
+            val (l2, c2) = flatOffsetToPos(oldText, start + before)
             engine.replaceRange(l1, c1, l2, c2, insertedPiece)
         }
-        afterNativeMutation()
+        afterEngineMutation()
     }
 
-    private fun nativeFlatCursor(text: String): Int {
-        val cur = engine.getCursor()
-        return nativePosToFlatOffset(text, cur.line, cur.col)
-    }
-
-    private fun nativePosToFlatOffset(text: String, line: Int, byteCol: Int): Int {
+    /** فهرس مسطّح (flat) داخل نص كامل يفصل أسطره بـ'\n' لموضع (line, charCol) — لا تحويل بايتات هنا. */
+    private fun flatOffsetOf(text: String, line: Int, col: Int): Int {
         val lines = text.split("\n")
         var offset = 0
         val clampedLine = line.coerceIn(0, max(0, lines.size - 1))
         for (i in 0 until clampedLine) offset += lines[i].length + 1
         val lineText = lines.getOrElse(clampedLine) { "" }
-        offset += RinNativeEditor.byteOffsetToCharIndex(lineText, byteCol)
+        offset += col.coerceIn(0, lineText.length)
         return offset
     }
 
-    private fun flatOffsetToNativePos(text: String, flatOffset: Int): Pair<Int, Int> {
+    private fun flatOffsetToPos(text: String, flatOffset: Int): Pair<Int, Int> {
         val lines = text.split("\n")
         var remaining = flatOffset.coerceIn(0, text.length)
         for ((i, l) in lines.withIndex()) {
-            if (remaining <= l.length) {
-                return i to RinNativeEditor.charIndexToByteOffset(l, remaining)
-            }
+            if (remaining <= l.length) return i to remaining
             remaining -= (l.length + 1)
         }
         val lastIdx = max(0, lines.size - 1)
         val lastLine = lines.getOrElse(lastIdx) { "" }
-        return lastIdx to RinNativeEditor.charIndexToByteOffset(lastLine, lastLine.length)
+        return lastIdx to lastLine.length
     }
 
     // --- واجهة عامة متوافقة مع الاستخدام القديم (android.widget.EditText-like) -------------
@@ -212,12 +210,22 @@ class RinCodeEditorView @JvmOverloads constructor(
 
     fun setText(newText: CharSequence) {
         engine.setText(newText.toString())
-        afterNativeMutation()
+        afterEngineMutation()
+    }
+
+    /** يبدّل لغة التلوين النحوي الحالية (يُستدعى عند فتح ملف جديد بامتداد مختلف، مثال: "kt"، "cpp"). */
+    fun setLanguage(extension: String) {
+        engine.setLanguage(SyntaxLanguage.forExtension(extension))
+        cachedHighlightsByLine = HashMap<Int, MutableList<RinEditorEngine.Highlight>>().apply {
+            for (h in engine.getHighlights()) getOrPut(h.line) { mutableListOf() }.add(h)
+        }
+        invalidate()
     }
 
     fun selectAll() {
-        engine.setSelection(0, 0, engine.lineCount() - 1, engine.getLine(engine.lineCount() - 1).toByteArray(Charsets.UTF_8).size)
-        afterNativeMutation()
+        val lastLine = engine.lineCount() - 1
+        engine.setSelection(0, 0, lastLine, engine.getLine(lastLine).length)
+        afterEngineMutation()
     }
 
     fun setTextSize(unit: Int, size: Float) {
@@ -248,7 +256,7 @@ class RinCodeEditorView @JvmOverloads constructor(
         // تلقائيًا عند أي replace() — بلا حاجة لأي آلية أخرى.
         shadowEditable.setSpan(shadowWatcher, 0, shadowEditable.length, Editable.SPAN_INCLUSIVE_INCLUSIVE)
         // تعبئة أولية للذاكرة المؤقتة (cache) قبل أول onDraw، حتى لا يُرسَم بلا تلوين للحظة.
-        val byLine = HashMap<Int, MutableList<RinNativeEditor.Highlight>>()
+        val byLine = HashMap<Int, MutableList<RinEditorEngine.Highlight>>()
         for (h in engine.getHighlights()) byLine.getOrPut(h.line) { mutableListOf() }.add(h)
         cachedHighlightsByLine = byLine
         cachedBracketInfo = computeBracketMatchForDraw()
@@ -291,10 +299,10 @@ class RinCodeEditorView @JvmOverloads constructor(
 
             // تظليل التحديد
             if (sel.hasSelection && line in sel.start.line..sel.end.line) {
-                val fromCol = if (line == sel.start.line) RinNativeEditor.byteOffsetToCharIndex(lineText, sel.start.col) else 0
-                val toCol = if (line == sel.end.line) RinNativeEditor.byteOffsetToCharIndex(lineText, sel.end.col) else lineText.length
-                val x1 = paddingLeft + textPaint.measureText(lineText, 0, fromCol)
-                val x2 = paddingLeft + (if (line == sel.end.line) textPaint.measureText(lineText, 0, toCol) else textPaint.measureText(lineText) + charWidth)
+                val fromCol = if (line == sel.start.line) sel.start.col else 0
+                val toCol = if (line == sel.end.line) sel.end.col else lineText.length
+                val x1 = paddingLeft + textPaint.measureText(lineText, 0, fromCol.coerceIn(0, lineText.length))
+                val x2 = paddingLeft + (if (line == sel.end.line) textPaint.measureText(lineText, 0, toCol.coerceIn(0, lineText.length)) else textPaint.measureText(lineText) + charWidth)
                 canvas.drawRect(x1, y, max(x1, x2), y + lineHeight, selectionPaint)
             }
 
@@ -317,10 +325,8 @@ class RinCodeEditorView @JvmOverloads constructor(
             findMatches?.let { matches ->
                 for (m in matches) {
                     if (m.line != line) continue
-                    val fromCol = RinNativeEditor.byteOffsetToCharIndex(lineText, m.startCol)
-                    val toCol = RinNativeEditor.byteOffsetToCharIndex(lineText, m.endCol)
-                    val x1 = paddingLeft + textPaint.measureText(lineText, 0, fromCol)
-                    val x2 = paddingLeft + textPaint.measureText(lineText, 0, toCol)
+                    val x1 = paddingLeft + textPaint.measureText(lineText, 0, m.startCol.coerceIn(0, lineText.length))
+                    val x2 = paddingLeft + textPaint.measureText(lineText, 0, m.endCol.coerceIn(0, lineText.length))
                     canvas.drawRect(x1, y, x2, y + lineHeight, findMatchPaint)
                 }
             }
@@ -330,8 +336,7 @@ class RinCodeEditorView @JvmOverloads constructor(
 
             // مؤشر الكتابة (يومض)
             if (line == cur.line && !sel.hasSelection && cursorVisible && hasFocus()) {
-                val charCol = RinNativeEditor.byteOffsetToCharIndex(lineText, cur.col)
-                val cx = paddingLeft + textPaint.measureText(lineText, 0, charCol)
+                val cx = paddingLeft + textPaint.measureText(lineText, 0, cur.col.coerceIn(0, lineText.length))
                 canvas.drawRect(cx, y, cx + max(2f, resources.displayMetrics.density * 1.5f), y + lineHeight, cursorPaint)
             }
 
@@ -342,7 +347,7 @@ class RinCodeEditorView @JvmOverloads constructor(
     private fun drawHighlightedLine(
         canvas: Canvas,
         lineText: String,
-        spans: List<RinNativeEditor.Highlight>?,
+        spans: List<RinEditorEngine.Highlight>?,
         startX: Float,
         baseline: Float
     ) {
@@ -354,38 +359,41 @@ class RinCodeEditorView @JvmOverloads constructor(
         }
         // رتّب الامتدادات وارسم كل جزء بلونه، وما بينها بلون افتراضي
         val sorted = spans.sortedBy { it.startCol }
-        var cursorByte = 0
+        var cursor = 0
         var cursorX = startX
         for (h in sorted) {
-            val fromChar = RinNativeEditor.byteOffsetToCharIndex(lineText, h.startCol)
-            val toChar = RinNativeEditor.byteOffsetToCharIndex(lineText, h.endCol)
-            val gapFromChar = RinNativeEditor.byteOffsetToCharIndex(lineText, cursorByte)
-            if (fromChar > gapFromChar) {
+            val from = h.startCol.coerceIn(0, lineText.length)
+            val to = h.endCol.coerceIn(0, lineText.length)
+            val gapFrom = cursor.coerceIn(0, lineText.length)
+            if (from > gapFrom) {
                 textPaint.color = colorDefault
-                canvas.drawText(lineText, gapFromChar, fromChar, cursorX, baseline, textPaint)
-                cursorX += textPaint.measureText(lineText, gapFromChar, fromChar)
+                canvas.drawText(lineText, gapFrom, from, cursorX, baseline, textPaint)
+                cursorX += textPaint.measureText(lineText, gapFrom, from)
             }
-            if (toChar > fromChar) {
+            if (to > from) {
                 textPaint.color = colorForKind(h.kind)
-                canvas.drawText(lineText, fromChar, toChar, cursorX, baseline, textPaint)
-                cursorX += textPaint.measureText(lineText, fromChar, toChar)
+                canvas.drawText(lineText, from, to, cursorX, baseline, textPaint)
+                cursorX += textPaint.measureText(lineText, from, to)
             }
-            cursorByte = h.endCol
+            cursor = h.endCol
         }
-        val tailFromChar = RinNativeEditor.byteOffsetToCharIndex(lineText, cursorByte)
-        if (tailFromChar < lineText.length) {
+        val tailFrom = cursor.coerceIn(0, lineText.length)
+        if (tailFrom < lineText.length) {
             textPaint.color = colorDefault
-            canvas.drawText(lineText, tailFromChar, lineText.length, cursorX, baseline, textPaint)
+            canvas.drawText(lineText, tailFrom, lineText.length, cursorX, baseline, textPaint)
         }
     }
 
     private fun colorForKind(kind: Int): Int = when (kind) {
-        1 -> colorKeyword   // HighlightKind::Keyword
-        2 -> colorString    // HighlightKind::String
-        3 -> colorNumber    // HighlightKind::Number
-        7 -> colorAt        // HighlightKind::At
-        8 -> colorError     // HighlightKind::Error
-        9 -> colorCall      // HighlightKind::Call (معرِّف متبوع بقوس فتح — نمط استدعاء دالة)
+        HighlightKind.KEYWORD -> colorKeyword
+        HighlightKind.STRING -> colorString
+        HighlightKind.NUMBER -> colorNumber
+        HighlightKind.AT -> colorAt
+        HighlightKind.ERROR -> colorError
+        HighlightKind.CALL -> colorCall
+        HighlightKind.COMMENT -> colorComment
+        HighlightKind.TYPE -> colorType
+        HighlightKind.PREPROCESSOR -> colorPreprocessor
         else -> colorDefault
     }
 
@@ -394,7 +402,7 @@ class RinCodeEditorView @JvmOverloads constructor(
         val cur = engine.getCursor()
         if (engine.getSelection().hasSelection) return null
         val lineText = engine.getLine(cur.line)
-        val charCol = RinNativeEditor.byteOffsetToCharIndex(lineText, cur.col)
+        val charCol = cur.col.coerceIn(0, lineText.length)
         val before: Char? = if (charCol > 0) lineText[charCol - 1] else null
         val at: Char? = if (charCol < lineText.length) lineText[charCol] else null
         val opens = setOf('(', '[', '{')
@@ -404,7 +412,6 @@ class RinCodeEditorView @JvmOverloads constructor(
             at != null && (at in opens || at in closes) -> at to charCol
             else -> return null
         }
-        // ابحث في نص المستند الكامل عبر إحداثيات (سطر, عمود-حرف) باستخدام getLine لكل سطر
         val fullLines = (0 until engine.lineCount()).map { engine.getLine(it) }
         val target = findMatchingBracketAcrossLines(fullLines, cur.line, bracketCharCol, bracketChar, opens, closes)
         return if (target != null) Quad(cur.line, bracketCharCol, target.first, target.second, true)
@@ -423,9 +430,9 @@ class RinCodeEditorView @JvmOverloads constructor(
             var depth = 0
             var l = line; var c = charCol
             while (l < lines.size) {
-                val text = lines[l]
-                while (c < text.length) {
-                    val ch = text[c]
+                val lineTxt = lines[l]
+                while (c < lineTxt.length) {
+                    val ch = lineTxt[c]
                     if (ch == bracket) depth++
                     else if (ch == pairs[bracket]) { depth--; if (depth == 0) return l to c }
                     c++
@@ -437,10 +444,10 @@ class RinCodeEditorView @JvmOverloads constructor(
             var depth = 0
             var l = line; var c = charCol
             while (l >= 0) {
-                val text = lines[l]
+                val lineTxt = lines[l]
                 while (c >= 0) {
-                    if (c < text.length) {
-                        val ch = text[c]
+                    if (c < lineTxt.length) {
+                        val ch = lineTxt[c]
                         if (ch == bracket) depth++
                         else if (ch == reversed[bracket]) { depth--; if (depth == 0) return l to c }
                     }
@@ -487,7 +494,7 @@ class RinCodeEditorView @JvmOverloads constructor(
 
     // --- اللمس: وضع المؤشر بالنقر، السحب للتحديد، الضغط الطويل لتحديد كلمة ------------
 
-    private fun offsetForTouch(x: Float, y: Float): RinNativeEditor.Pos {
+    private fun offsetForTouch(x: Float, y: Float): RinEditorEngine.Pos {
         val line = (((y - paddingTop) / lineHeight).toInt()).coerceIn(0, max(0, engine.lineCount() - 1))
         val lineText = engine.getLine(line)
         val relX = x - paddingLeft
@@ -498,8 +505,7 @@ class RinCodeEditorView @JvmOverloads constructor(
             val d = kotlin.math.abs(w - relX)
             if (d < bestDist) { bestDist = d; bestChar = i }
         }
-        val byteCol = RinNativeEditor.charIndexToByteOffset(lineText, bestChar)
-        return RinNativeEditor.Pos(line, byteCol)
+        return RinEditorEngine.Pos(line, bestChar)
     }
 
     private val gestureDetector = GestureDetector(context, object : GestureDetector.SimpleOnGestureListener() {
@@ -508,7 +514,7 @@ class RinCodeEditorView @JvmOverloads constructor(
             showKeyboard()
             val p = offsetForTouch(e.x, e.y)
             engine.setCursor(p.line, p.col, false)
-            afterNativeMutation()
+            afterEngineMutation()
             return true
         }
 
@@ -535,7 +541,7 @@ class RinCodeEditorView @JvmOverloads constructor(
                     dragging = true
                     val p = offsetForTouch(event.x, event.y)
                     engine.setCursor(p.line, p.col, true)
-                    afterNativeMutation()
+                    afterEngineMutation()
                 }
             }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
@@ -549,15 +555,14 @@ class RinCodeEditorView @JvmOverloads constructor(
     private fun selectWordAt(x: Float, y: Float) {
         val p = offsetForTouch(x, y)
         val lineText = engine.getLine(p.line)
-        val charCol = RinNativeEditor.byteOffsetToCharIndex(lineText, p.col)
         fun isWordChar(c: Char) = c.isLetterOrDigit() || c == '_'
-        var start = charCol
-        var end = charCol
+        var start = p.col
+        var end = p.col
         while (start > 0 && isWordChar(lineText[start - 1])) start--
         while (end < lineText.length && isWordChar(lineText.getOrElse(end) { ' ' })) end++
         if (start == end) return
-        engine.setSelection(p.line, RinNativeEditor.charIndexToByteOffset(lineText, start), p.line, RinNativeEditor.charIndexToByteOffset(lineText, end))
-        afterNativeMutation()
+        engine.setSelection(p.line, start, p.line, end)
+        afterEngineMutation()
     }
 
     private fun showKeyboard() {
@@ -585,29 +590,26 @@ class RinCodeEditorView @JvmOverloads constructor(
         val cur = engine.getCursor()
         when (keyCode) {
             KeyEvent.KEYCODE_DPAD_LEFT -> {
-                val lineText = engine.getLine(cur.line)
-                val charCol = RinNativeEditor.byteOffsetToCharIndex(lineText, cur.col)
-                if (charCol > 0) engine.setCursor(cur.line, RinNativeEditor.charIndexToByteOffset(lineText, charCol - 1), event.isShiftPressed)
-                else if (cur.line > 0) { val prev = engine.getLine(cur.line - 1); engine.setCursor(cur.line - 1, prev.toByteArray(Charsets.UTF_8).size, event.isShiftPressed) }
-                afterNativeMutation(); return true
+                if (cur.col > 0) engine.setCursor(cur.line, cur.col - 1, event.isShiftPressed)
+                else if (cur.line > 0) { val prevLen = engine.getLine(cur.line - 1).length; engine.setCursor(cur.line - 1, prevLen, event.isShiftPressed) }
+                afterEngineMutation(); return true
             }
             KeyEvent.KEYCODE_DPAD_RIGHT -> {
                 val lineText = engine.getLine(cur.line)
-                val charCol = RinNativeEditor.byteOffsetToCharIndex(lineText, cur.col)
-                if (charCol < lineText.length) engine.setCursor(cur.line, RinNativeEditor.charIndexToByteOffset(lineText, charCol + 1), event.isShiftPressed)
+                if (cur.col < lineText.length) engine.setCursor(cur.line, cur.col + 1, event.isShiftPressed)
                 else if (cur.line + 1 < engine.lineCount()) engine.setCursor(cur.line + 1, 0, event.isShiftPressed)
-                afterNativeMutation(); return true
+                afterEngineMutation(); return true
             }
-            KeyEvent.KEYCODE_DPAD_UP -> { engine.setCursor(cur.line - 1, cur.col, event.isShiftPressed); afterNativeMutation(); return true }
-            KeyEvent.KEYCODE_DPAD_DOWN -> { engine.setCursor(cur.line + 1, cur.col, event.isShiftPressed); afterNativeMutation(); return true }
-            KeyEvent.KEYCODE_MOVE_HOME -> { engine.setCursor(cur.line, 0, event.isShiftPressed); afterNativeMutation(); return true }
+            KeyEvent.KEYCODE_DPAD_UP -> { engine.setCursor(cur.line - 1, cur.col, event.isShiftPressed); afterEngineMutation(); return true }
+            KeyEvent.KEYCODE_DPAD_DOWN -> { engine.setCursor(cur.line + 1, cur.col, event.isShiftPressed); afterEngineMutation(); return true }
+            KeyEvent.KEYCODE_MOVE_HOME -> { engine.setCursor(cur.line, 0, event.isShiftPressed); afterEngineMutation(); return true }
             KeyEvent.KEYCODE_MOVE_END -> {
-                val len = engine.getLine(cur.line).toByteArray(Charsets.UTF_8).size
-                engine.setCursor(cur.line, len, event.isShiftPressed); afterNativeMutation(); return true
+                val len = engine.getLine(cur.line).length
+                engine.setCursor(cur.line, len, event.isShiftPressed); afterEngineMutation(); return true
             }
             KeyEvent.KEYCODE_TAB -> {
                 if (engine.getSelection().hasSelection) engine.indentSelection() else engine.insertText("    ", smart = false)
-                afterNativeMutation(); return true
+                afterEngineMutation(); return true
             }
         }
         return super.onKeyDown(keyCode, event)
@@ -615,31 +617,31 @@ class RinCodeEditorView @JvmOverloads constructor(
 
     // --- دعم البحث (يُستدعى من RinCodeEditorController) -----------------------
 
-    private var findMatches: List<RinNativeEditor.FindMatch>? = null
-    fun setFindHighlights(matches: List<RinNativeEditor.FindMatch>?) { findMatches = matches; invalidate() }
+    private var findMatches: List<RinEditorEngine.FindMatch>? = null
+    fun setFindHighlights(matches: List<RinEditorEngine.FindMatch>?) { findMatches = matches; invalidate() }
 
     /** إحداثيات y (بالبكسل، ضمن هذا الـView) لبداية [line] — تُستخدم للتمرير الحالي إلى المؤشر. */
     fun yOfLine(line: Int): Int = (paddingTop + line * lineHeight).roundToInt()
 
     // --- عمليات تحرير عامة تُستدعى من [RinCodeEditorController] ------------------------
-    // كل واحدة: تُغيّر حالة المحرك الأصلي مباشرة، ثم تُزامن الـshadow/الرسم عبر [afterNativeMutation].
+    // كل واحدة: تُغيّر حالة المحرك مباشرة، ثم تُزامن الـshadow/الرسم عبر [afterEngineMutation].
 
-    fun undo(): Boolean { val r = engine.undo() != null; afterNativeMutation(); return r }
-    fun redo(): Boolean { val r = engine.redo() != null; afterNativeMutation(); return r }
-    fun duplicateCurrentLine() { engine.duplicateCurrentLine(); afterNativeMutation() }
-    fun deleteCurrentLine() { engine.deleteCurrentLine(); afterNativeMutation() }
-    fun moveLineUp() { engine.moveLineUp(); afterNativeMutation() }
-    fun moveLineDown() { engine.moveLineDown(); afterNativeMutation() }
-    fun toggleLineComment() { engine.toggleLineComment(); afterNativeMutation() }
-    fun indentSelection() { engine.indentSelection(); afterNativeMutation() }
-    fun unindentSelection() { engine.unindentSelection(); afterNativeMutation() }
+    fun undo(): Boolean { val r = engine.undo() != null; afterEngineMutation(); return r }
+    fun redo(): Boolean { val r = engine.redo() != null; afterEngineMutation(); return r }
+    fun duplicateCurrentLine() { engine.duplicateCurrentLine(); afterEngineMutation() }
+    fun deleteCurrentLine() { engine.deleteCurrentLine(); afterEngineMutation() }
+    fun moveLineUp() { engine.moveLineUp(); afterEngineMutation() }
+    fun moveLineDown() { engine.moveLineDown(); afterEngineMutation() }
+    fun toggleLineComment() { engine.toggleLineComment(); afterEngineMutation() }
+    fun indentSelection() { engine.indentSelection(); afterEngineMutation() }
+    fun unindentSelection() { engine.unindentSelection(); afterEngineMutation() }
     fun checkBracketBalance(): Int = engine.checkBracketBalance()
     fun lineCount(): Int = engine.lineCount()
 
     /** يُدرج [textToInsert] عند المؤشر (مستبدلاً أي تحديد حالي) بلا سلوك "ذكي" (بلا إغلاق أقواس تلقائي). */
     fun insertAtCursor(textToInsert: String) {
         engine.insertText(textToInsert, smart = false)
-        afterNativeMutation()
+        afterEngineMutation()
     }
 
     /** يحرّك المؤشر إلى بداية [oneBasedLine] (مُقيَّد ضمن الحدود) ويعيد y بالبكسل لأجل التمرير. */
@@ -647,7 +649,7 @@ class RinCodeEditorView @JvmOverloads constructor(
         val pos = engine.lineStartPosition(oneBasedLine)
         requestFocus()
         engine.setCursor(pos.line, pos.col, false)
-        afterNativeMutation()
+        afterEngineMutation()
         return yOfLine(pos.line)
     }
 
@@ -660,7 +662,7 @@ class RinCodeEditorView @JvmOverloads constructor(
         val next = matches.firstOrNull { it.line > cur.line || (it.line == cur.line && it.startCol >= cur.col) } ?: matches.first()
         engine.setSelection(next.line, next.startCol, next.line, next.endCol)
         requestFocus()
-        afterNativeMutation()
+        afterEngineMutation()
         return yOfLine(next.line)
     }
 
@@ -672,7 +674,7 @@ class RinCodeEditorView @JvmOverloads constructor(
         val prev = matches.lastOrNull { it.line < cur.line || (it.line == cur.line && it.endCol <= cur.col) } ?: matches.last()
         engine.setSelection(prev.line, prev.startCol, prev.line, prev.endCol)
         requestFocus()
-        afterNativeMutation()
+        afterEngineMutation()
         return yOfLine(prev.line)
     }
 
@@ -685,7 +687,7 @@ class RinCodeEditorView @JvmOverloads constructor(
             val matchesQuery = if (caseSensitive) selectedText == query else selectedText.equals(query, ignoreCase = true)
             if (matchesQuery) {
                 engine.replaceRange(sel.start.line, sel.start.col, sel.end.line, sel.end.col, replacement)
-                afterNativeMutation()
+                afterEngineMutation()
             }
         }
         findNext(query, caseSensitive)
@@ -699,7 +701,7 @@ class RinCodeEditorView @JvmOverloads constructor(
         for (m in matches.asReversed()) {
             engine.replaceRange(m.line, m.startCol, m.line, m.endCol, replacement)
         }
-        if (matches.isNotEmpty()) afterNativeMutation()
+        if (matches.isNotEmpty()) afterEngineMutation()
         return matches.size
     }
 
@@ -714,19 +716,17 @@ class RinCodeEditorView @JvmOverloads constructor(
         return (idx + 1) to matches.size
     }
 
-    private fun textOfSelection(sel: RinNativeEditor.Selection): String {
+    private fun textOfSelection(sel: RinEditorEngine.Selection): String {
         if (sel.start.line == sel.end.line) {
             val lineText = engine.getLine(sel.start.line)
-            val fromChar = RinNativeEditor.byteOffsetToCharIndex(lineText, sel.start.col)
-            val toChar = RinNativeEditor.byteOffsetToCharIndex(lineText, sel.end.col)
-            return lineText.substring(fromChar.coerceIn(0, lineText.length), toChar.coerceIn(0, lineText.length))
+            return lineText.substring(sel.start.col.coerceIn(0, lineText.length), sel.end.col.coerceIn(0, lineText.length))
         }
         val sb = StringBuilder()
         for (l in sel.start.line..sel.end.line) {
             val lineText = engine.getLine(l)
             when (l) {
-                sel.start.line -> sb.append(lineText.substring(RinNativeEditor.byteOffsetToCharIndex(lineText, sel.start.col)))
-                sel.end.line -> sb.append(lineText.substring(0, RinNativeEditor.byteOffsetToCharIndex(lineText, sel.end.col)))
+                sel.start.line -> sb.append(lineText.substring(sel.start.col.coerceIn(0, lineText.length)))
+                sel.end.line -> sb.append(lineText.substring(0, sel.end.col.coerceIn(0, lineText.length)))
                 else -> sb.append(lineText)
             }
             if (l != sel.end.line) sb.append('\n')
@@ -734,31 +734,31 @@ class RinCodeEditorView @JvmOverloads constructor(
         return sb.toString()
     }
 
-    // --- إكمال تلقائي (Autocomplete) — نافذة اقتراحات حقيقية مبنية على [RinNativeEditor.getSuggestions] ---
+    // --- إكمال تلقائي (Autocomplete) — نافذة اقتراحات حقيقية مبنية على [RinEditorEngine.collectSuggestions] ---
 
     private var suggestionPopup: PopupWindow? = null
     private val maxSuggestionRows = 6
 
-    /** (بادئة الكلمة قبل المؤشر مباشرة، عمود-بايت بداية تلك الكلمة على سطر المؤشر) أو null إن لا كلمة جارية. */
+    /** (بادئة الكلمة قبل المؤشر مباشرة، عمود-حرف بداية تلك الكلمة على سطر المؤشر) أو null إن لا كلمة جارية. */
     private fun currentWordPrefix(): Pair<String, Int>? {
         if (engine.getSelection().hasSelection) return null
         val cur = engine.getCursor()
         val lineText = engine.getLine(cur.line)
-        val charCol = RinNativeEditor.byteOffsetToCharIndex(lineText, cur.col)
+        val col = cur.col.coerceIn(0, lineText.length)
         fun isWordChar(c: Char) = c.isLetter() || c.isDigit() || c == '_'
-        var start = charCol
+        var start = col
         while (start > 0 && isWordChar(lineText[start - 1])) start--
-        if (start == charCol) return null
-        val prefix = lineText.substring(start, charCol)
-        return prefix to RinNativeEditor.charIndexToByteOffset(lineText, start)
+        if (start == col) return null
+        val prefix = lineText.substring(start, col)
+        return prefix to start
     }
 
     private fun updateSuggestionPopup() {
         if (!hasFocus() || !isAttachedToWindow) { dismissSuggestionPopup(); return }
-        val (prefix, wordStartByteCol) = currentWordPrefix() ?: run { dismissSuggestionPopup(); return }
-        val suggestions = engine.getSuggestions(prefix, maxSuggestionRows)
+        val (prefix, wordStartCol) = currentWordPrefix() ?: run { dismissSuggestionPopup(); return }
+        val suggestions = engine.collectSuggestions(prefix, maxSuggestionRows)
         if (suggestions.isEmpty()) { dismissSuggestionPopup(); return }
-        showSuggestionPopup(suggestions, wordStartByteCol)
+        showSuggestionPopup(suggestions, wordStartCol)
     }
 
     private fun buildSuggestionRow(text: String, onPick: () -> Unit): TextView = TextView(context).apply {
@@ -774,7 +774,7 @@ class RinCodeEditorView @JvmOverloads constructor(
         setOnClickListener { onPick() }
     }
 
-    private fun showSuggestionPopup(suggestions: List<String>, wordStartByteCol: Int) {
+    private fun showSuggestionPopup(suggestions: List<String>, wordStartCol: Int) {
         val cur = engine.getCursor()
         val container = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
@@ -785,7 +785,7 @@ class RinCodeEditorView @JvmOverloads constructor(
             }
         }
         for (s in suggestions) {
-            container.addView(buildSuggestionRow(s) { applySuggestion(s, wordStartByteCol) })
+            container.addView(buildSuggestionRow(s) { applySuggestion(s, wordStartCol) })
         }
 
         val popup = suggestionPopup ?: PopupWindow(
@@ -801,8 +801,7 @@ class RinCodeEditorView @JvmOverloads constructor(
         val loc = IntArray(2)
         getLocationOnScreen(loc)
         val lineText = engine.getLine(cur.line)
-        val charCol = RinNativeEditor.byteOffsetToCharIndex(lineText, wordStartByteCol)
-        val cursorLocalX = paddingLeft + textPaint.measureText(lineText, 0, charCol)
+        val cursorLocalX = paddingLeft + textPaint.measureText(lineText, 0, wordStartCol.coerceIn(0, lineText.length))
         val cursorLocalY = yOfLine(cur.line)
         val screenX = (loc[0] + cursorLocalX).toInt()
         val screenY = loc[1] + cursorLocalY + lineHeight.roundToInt()
@@ -814,11 +813,11 @@ class RinCodeEditorView @JvmOverloads constructor(
         }
     }
 
-    private fun applySuggestion(suggestion: String, wordStartByteCol: Int) {
+    private fun applySuggestion(suggestion: String, wordStartCol: Int) {
         val cur = engine.getCursor()
-        engine.replaceRange(cur.line, wordStartByteCol, cur.line, cur.col, suggestion)
+        engine.replaceRange(cur.line, wordStartCol, cur.line, cur.col, suggestion)
         dismissSuggestionPopup()
-        afterNativeMutation()
+        afterEngineMutation()
     }
 
     private fun dismissSuggestionPopup() {
