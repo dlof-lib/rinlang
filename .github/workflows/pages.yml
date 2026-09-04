@@ -103,6 +103,7 @@ jobs:
             -s STACK_SIZE=8388608 \
             -s DISABLE_EXCEPTION_CATCHING=0 \
             -s ENVIRONMENT=web \
+            -s USE_ZLIB=1 \
             -o dist/rin.js
 
       - name: Assemble the Pages bundle
