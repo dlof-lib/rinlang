@@ -1,0 +1,10 @@
+// Rin Colors Pro — color construction and conversion helpers.
+fun color_clamp(x){if(x<0){return 0;}if(x>255){return 255;}return x;}
+fun color_hex(r,g,b){return "#"+toHex(color_clamp(r))+toHex(color_clamp(g))+toHex(color_clamp(b));}
+fun color_rgb(r,g,b){return "rgb("+str(color_clamp(r))+","+str(color_clamp(g))+","+str(color_clamp(b))+")";}
+fun color_rgba(r,g,b,a){return "rgba("+str(color_clamp(r))+","+str(color_clamp(g))+","+str(color_clamp(b))+","+str(a)+")";}
+fun color_mix(a,b){return "mix("+a+","+b+")";}
+fun color_gray(v){return color_rgb(v,v,v);}
+fun color_transparent(){return "rgba(0,0,0,0)";}
+fun color_cssVar(name){return "var(--"+name+")";}
+fun color_withAlpha(hex,a){return "alpha("+hex+","+str(a)+")";}
