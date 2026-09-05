@@ -81,8 +81,6 @@ object ProjectManager {
      * type="container"; ... .end/container) والصيغة الخام القديمة (type=container سطراً بسطر)،
      * حتى تبقى المشاريع التي أُنشئت قبل التحديث تعمل دون أي هجرة يدوية.
      */
-    internal fun readProjectTypeForAlbum(dir: File): ProjectType = readProjectType(dir)
-
     private fun readProjectType(dir: File): ProjectType {
         val metaFile = File(dir, PROJECT_META_FILE)
         if (!metaFile.isFile) return ProjectType.FREE
@@ -133,6 +131,13 @@ object ProjectManager {
 
         ProjectType.FREE ->
             "// مشروع: $name\n" +
+                "print \"مرحباً من مشروع $name\";\n"
+
+        // يُستبدَل فوراً بعد الإنشاء عبر CustomLanguageProjectScaffolder.installBundledIllust
+        // (انظر ProjectsActivity)؛ هذا المحتوى احتياطي فقط في حال لم يُستدعَ ذلك لأي سبب.
+        ProjectType.ILLUST ->
+            "// مشروع: $name\n" +
+                "// نوع المشروع: Illust (لغة رسم/SVG مبنية فوق Rin)\n" +
                 "print \"مرحباً من مشروع $name\";\n"
     }
 
