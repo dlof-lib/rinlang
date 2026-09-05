@@ -92,4 +92,12 @@
 
     <!-- زر التنقل الجديد داخل المحرر (MainActivity) -->
     <string name="btn_projects">المشاريع</string>
+
+    <!-- ألبومات المشاريع (ProjectAlbumManager / ProjectsActivity) -->
+    <string name="album_new">ألبوم جديد</string>
+    <string name="album_name_hint">اسم الألبوم</string>
+    <string name="album_created">تم إنشاء الألبوم</string>
+    <string name="album_create_first">أنشئ ألبوماً أولاً</string>
+    <string name="album_uncategorized">بدون تصنيف</string>
+    <string name="album_empty">لا توجد مشاريع في هذا الألبوم</string>
 </resources>
