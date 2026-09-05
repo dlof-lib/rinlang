@@ -37,27 +37,62 @@
     <color name="rin_bracket_error_bg">#5FF14C4C</color>
     <color name="rin_find_match_bg">#5FD7BA7D</color>
 
-    <!-- تلوين الصيغة النحوية (syntax highlighting) في المحرر — نمط فاتح احترافي مصمم خصيصاً
-         لخلفية بيضاء (rin_editor_bg)، وليس نسخة من ألوان الثيم الداكن. كل لون هنا يحقق نسبة
-         تباين ≥ 4.5:1 مقابل الأبيض (WCAG AA) لضمان وضوح قرائي حقيقي، وليس مجرد "ديكور". -->
+    <!-- ============================================================================
+         نظام تلوين الصيغة النحوية الموحَّد (Unified Syntax Palette) — نمط فاتح احترافي
+         مصمَّم خصيصاً لخلفية بيضاء (rin_editor_bg)، وليس نسخة من ألوان الثيم الداكن.
+
+         ست هويات لونية ثابتة، كل واحدة تمثّل "مفهوماً" واحداً في الكود بلا تشتّت، ونفس
+         الهوية تتكرر بظلال متوازنة بين الثيم الفاتح والداكن (انظر values-night/colors.xml):
+
+           • أزرق    (Blue)   → الكلمات المفتاحية وتدفّق التحكّم: if/for/return/kind...
+           • بنفسجي  (Purple) → الأنواع/الحاويات وتوجيهات وحدة make (type/container/policy)
+           • أخضر    (Green)  → النصوص الحرفية (string literals)
+           • برتقالي (Orange) → الأرقام وحقول الستايل و`item` الضمني في Reckon
+           • ذهبي    (Gold)   → الدوال المُستدعاة (calls/builtins) و@tags/@decorators
+           • أبيض    (White)  → التعليقات — رمادي محايد هادئ على الفاتح ليبقى مقروءاً فوق
+                                 خلفية بيضاء، ويتحوّل إلى أبيض شبه-صريح فعلياً في الثيم الداكن.
+
+         كل لون هنا يحقق نسبة تباين ≥ 4.5:1 مقابل الأبيض (WCAG AA) لضمان وضوح قرائي حقيقي،
+         وليس مجرد "ديكور". -->
+
+    <!-- • أزرق — الكلمات المفتاحية الأساسية -->
     <color name="syntax_keyword">#0B4FCC</color>
-    <color name="syntax_container_keyword">#00695C</color>
-    <!-- حقول تنسيق/ستايل الكائن (txt/img/object.file/Fonts/background/css3): نفس هوية "الستايل"
-         اللونية المستخدمة في كونسول التشغيل (log_kind_style) لتمييزها بصرياً عن بقية كلمات الحاويات -->
-    <color name="syntax_style_keyword">#9C5700</color>
-    <color name="syntax_string">#9A1B1B</color>
-    <color name="syntax_number">#7A3E9D</color>
-    <color name="syntax_comment">#256029</color>
-    <color name="syntax_builtin">#6F5B00</color>
-    <color name="syntax_tag">#A6006B</color>
-    <!-- توجيهات سياسة وحدة make (kind/use/need/allow/deny/strict/input/output/public/private/
-         version/description) — بنفسجي مميز بنفس هوية الكلمات المفتاحية التحكّمية في VS Code -->
+
+    <!-- • بنفسجي — الأنواع/الحاويات، وتوجيهات سياسة وحدة make (kind/use/need/allow/deny/
+         strict/input/output/public/private/version/description) بنفس الهوية البنفسجية،
+         لأنّ الاثنين مفهوم واحد منطقياً: "تصنيف/سياسة على مستوى الوحدة"، لا حاجة لهويتين. -->
+    <color name="syntax_container_keyword">#6A1B9A</color>
     <color name="syntax_make_directive">#6A1B9A</color>
-    <!-- `item` الضمني داخل مفهوم Reckon الحسابي بسطرين (docs/RECKON.md) — لون مائل مستقل
-         لتمييزه كـ"مرجع ضمني" وليس متغيّراً مُعلَناً صراحةً -->
-    <color name="syntax_reckon_item">#B15400</color>
+
+    <!-- • برتقالي — حقول تنسيق/ستايل الكائن (txt/img/object.file/Fonts/background/css3):
+         نفس هوية "الستايل" اللونية المستخدمة في كونسول التشغيل (log_kind_style) لتمييزها
+         بصرياً عن بقية كلمات الحاويات، وضمن نفس عائلة "برتقالي" لباقي حقول هذا المفهوم -->
+    <color name="syntax_style_keyword">#9C5700</color>
+
+    <!-- • أخضر — النصوص الحرفية (strings) -->
+    <color name="syntax_string">#1D7A4C</color>
+
+    <!-- • برتقالي — الأرقام (numbers) -->
+    <color name="syntax_number">#B45F06</color>
+
+    <!-- • أبيض (رمادي محايد هادئ على خلفية فاتحة) — التعليقات؛ مائل (italic) في الرسم لتمييزه
+         إضافياً عن النص العادي بلا اعتماد كلي على اللون وحده -->
+    <color name="syntax_comment">#6B7280</color>
+
+    <!-- • ذهبي — الدوال المُستدعاة (function calls / builtins) -->
+    <color name="syntax_builtin">#8A6D00</color>
+
+    <!-- • ذهبي — وسوم/زخارف @tag، نفس هوية الدوال لأنها الأخرى "استدعاء" مفهومياً -->
+    <color name="syntax_tag">#8A6D00</color>
+
+    <!-- • برتقالي (بظلّ مستقل عن الأرقام) — `item` الضمني داخل مفهوم Reckon الحسابي بسطرين
+         (docs/RECKON.md)، لتمييزه كـ"مرجع ضمني" وليس متغيّراً مُعلَناً صراحةً أو رقماً حرفياً -->
+    <color name="syntax_reckon_item">#A45A00</color>
+
     <!-- نص التوكِن الذي يعلّمه المحلّل/المُحلّل النحوي كخطأ — أحمر غامق يبقى واضحاً على
-         خلفية المحرر البيضاء (خلافاً للأحمر الفاتح المستخدم كتظليل شفاف لخلفية القوس الخاطئ). -->
+         خلفية المحرر البيضاء (خلافاً للأحمر الفاتح المستخدم كتظليل شفاف لخلفية القوس الخاطئ).
+         هذا اللون خارج المنظومة الست أعلاه عمداً: "خطأ" ليس مفهوماً نحوياً بل حالة تنبيه،
+         ويجب أن يبقى قابلاً للتمييز الفوري عنها جميعاً. -->
     <color name="syntax_error">#C62828</color>
 
     <!-- الهوية الثانية "أخضر" — تُستخدم إلى جانب البنفسجي في: مؤشر التبويب السفلي، حالة
@@ -182,13 +217,15 @@
     <color name="pipeline_terminal_cyan">#5FD3FF</color>
     <color name="pipeline_terminal_cursor">#3FE07D</color>
 
-    <!-- ألوان الصيغة النحوية داخل بطاقة الكود الفاتحة على شاشة Pipeline Runner -->
-    <color name="pipeline_syntax_keyword">#1857A4</color>
-    <color name="pipeline_syntax_container">#1E7A4C</color>
-    <color name="pipeline_syntax_string">#8A5A1F</color>
-    <color name="pipeline_syntax_number">#0E7A6B</color>
-    <color name="pipeline_syntax_comment">#8A97A0</color>
-    <color name="pipeline_syntax_tag">#8A5A1F</color>
+    <!-- ألوان الصيغة النحوية داخل بطاقة الكود الفاتحة على شاشة Pipeline Runner — مُوحَّدة الآن
+         مع نفس منظومة الألوان الست (أزرق/بنفسجي/أخضر/برتقالي/ذهبي/أبيض) أعلاه بدل هوية لونية
+         منفصلة، حتى يبدو الكود بنفس الشكل أينما ظهر في التطبيق. -->
+    <color name="pipeline_syntax_keyword">@color/syntax_keyword</color>
+    <color name="pipeline_syntax_container">@color/syntax_container_keyword</color>
+    <color name="pipeline_syntax_string">@color/syntax_string</color>
+    <color name="pipeline_syntax_number">@color/syntax_number</color>
+    <color name="pipeline_syntax_comment">@color/syntax_comment</color>
+    <color name="pipeline_syntax_tag">@color/syntax_builtin</color>
 
     <!-- شاشة "المعاينة الحية" (Live Preview / Loomtime): إطار جهاز داكن على خلفية أغمق قليلاً
          من بقية التطبيق حتى يبرز إطار الهاتف بوضوح، مع شارة "Live" خضراء ولوحة أخطاء Snag حمراء. -->
