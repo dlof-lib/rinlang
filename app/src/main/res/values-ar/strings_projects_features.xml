@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="albums_title">الألبومات</string>
+    <string name="album_move_title">نقل المشروع إلى ألبوم</string>
+</resources>
