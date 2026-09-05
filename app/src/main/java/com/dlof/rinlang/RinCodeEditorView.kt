@@ -66,15 +66,24 @@ class RinCodeEditorView @JvmOverloads constructor(
     private val bracketErrorPaint = Paint().apply { color = ContextCompat.getColor(context, R.color.rin_bracket_error_bg) }
     private val findMatchPaint = Paint().apply { color = ContextCompat.getColor(context, R.color.rin_find_match_bg) }
 
-    private val colorKeyword = ContextCompat.getColor(context, R.color.syntax_keyword)
-    private val colorString = ContextCompat.getColor(context, R.color.syntax_string)
-    private val colorNumber = ContextCompat.getColor(context, R.color.syntax_number)
-    private val colorAt = ContextCompat.getColor(context, R.color.syntax_tag)
-    private val colorCall = ContextCompat.getColor(context, R.color.syntax_builtin)
-    private val colorComment = ContextCompat.getColor(context, R.color.syntax_comment)
-    private val colorType = ContextCompat.getColor(context, R.color.syntax_container_keyword)
-    private val colorPreprocessor = ContextCompat.getColor(context, R.color.syntax_make_directive)
+    // --- نظام تلوين الصيغة النحوية الموحَّد (Unified Syntax Palette) --------------------
+    // ست هويات لونية ثابتة فقط، كل واحدة تمثّل "مفهوماً" واحداً في الكود، معرَّفة مركزياً في
+    // colors.xml (وظليلها الداكن في values-night/colors.xml) بدل تشتّت الألوان هنا:
+    //   أزرق → تحكّم/كلمات مفتاحية · بنفسجي → أنواع/حاويات/سياسات · أخضر → نصوص حرفية
+    //   برتقالي → أرقام/حقول ستايل · ذهبي → دوال مُستدعاة ووسوم @ · أبيض(محايد) → تعليقات
+    // كل HighlightKind القادم من محرك rin::Lexer الحقيقي (عبر JNI) يُطابَق هنا بلون واحد
+    // فقط من هذه الستة — انظر resolveColor(kind) أسفله لخريطة المطابقة الكاملة.
+    private val colorKeyword = ContextCompat.getColor(context, R.color.syntax_keyword)       // أزرق
+    private val colorString = ContextCompat.getColor(context, R.color.syntax_string)         // أخضر
+    private val colorNumber = ContextCompat.getColor(context, R.color.syntax_number)         // برتقالي
+    private val colorAt = ContextCompat.getColor(context, R.color.syntax_tag)                // ذهبي (وسوم @)
+    private val colorCall = ContextCompat.getColor(context, R.color.syntax_builtin)          // ذهبي (دوال)
+    private val colorComment = ContextCompat.getColor(context, R.color.syntax_comment)       // أبيض/محايد
+    private val colorType = ContextCompat.getColor(context, R.color.syntax_container_keyword) // بنفسجي
+    private val colorPreprocessor = ContextCompat.getColor(context, R.color.syntax_make_directive) // بنفسجي
     private val colorDefault = ContextCompat.getColor(context, R.color.rin_editor_text)
+    // أحمر — خارج المنظومة الست عمداً: حالة تنبيه (خطأ نحوي) لا مفهوم لغوي، ويجب أن يبقى
+    // قابلاً للتمييز الفوري عن الستة جميعاً بلا التباس.
     private val colorError = ContextCompat.getColor(context, R.color.syntax_error)
 
     private var lineHeight = 0f
