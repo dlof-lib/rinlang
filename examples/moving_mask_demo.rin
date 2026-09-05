@@ -95,5 +95,41 @@ mm_spawn(world, "b", 4, 3);
 print "المسافة بين a و b: " + toString(mm_distanceTo(world, "a", "b"));
 print "هل يتصادمان (صندوق 5×5 لكل منهما)؟ " + toString(mm_collidesAABB(world, "a", 5, 5, "b", 5, 5));
 
+print "\n=== 8) التكامل مع Loom (Warp / Strand / Fabric / Needle / Shuttle) ===";
+
+// -- Warp: تصدير حالة "a" كحقول جاهزة لخلايا warp --
+print "أسماء خلايا warp المقترحة لـ a: " + toString(mm_warpFieldNames("a"));
+print "حقول a الحالية: " + toString(mm_warpFields(world, "a", nil));
+// في ملف .rin حقيقي تُعلن الخلايا مرة واحدة، ثم تُسند كل دورة من الحقول أعلاه، مثلاً:
+//   warp a_x = 0; warp a_y = 0;
+//   a_x = mm_warpFields(world, "a", nil)["x"];
+//   a_y = mm_warpFields(world, "a", nil)["y"];
+
+// -- Strand: تسمية بصرية اختيارية --
+mm_setStrandKind(world, "player", "Icon");
+mm_setStrandKind(world, "hud", "Card");
+print "نوع player البصري المُقترَح: " + mm_strandKind(world, "player");
+
+// -- Fabric: لقطة مسطَّحة بكل الأقنعة --
+print "لقطة Fabric لكل الأقنعة الحالية:";
+print mm_toFabric(world);
+
+// -- Needle: اختبار إصابة نقطة لمس --
+let tapLog = [];
+fun onNeedleTap(payload) { push(tapLog, payload); }
+mm_on(world, "needleTap", onNeedleTap);
+let hitName = mm_dispatchNeedle(world, 5, 5, 3);
+print "أقرب قناع لنقطة لمس (5,5) بنصف قطر 3: " + toString(hitName);
+print "عدد أحداث needleTap المُسجَّلة: " + toString(len(tapLog));
+
+// -- Shuttle: مقارنة لقطتين وإنتاج Patch[] --
+let before = mm_snapshot(world);
+mm_translate(world, "a", 50, 0);
+mm_destroy(world, "b");
+mm_spawn(world, "c", 1, 1);
+let patches = mm_shuttleDiff(world, before);
+print "Patches بين اللقطتين (Insert/Remove/Move):";
+print patches;
+
 print "\n--- ملخص العالم النهائي ---";
 print mm_summary(world);
