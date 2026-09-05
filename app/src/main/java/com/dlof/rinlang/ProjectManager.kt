@@ -81,6 +81,8 @@ object ProjectManager {
      * type="container"; ... .end/container) والصيغة الخام القديمة (type=container سطراً بسطر)،
      * حتى تبقى المشاريع التي أُنشئت قبل التحديث تعمل دون أي هجرة يدوية.
      */
+    internal fun readProjectTypeForAlbum(dir: File): ProjectType = readProjectType(dir)
+
     private fun readProjectType(dir: File): ProjectType {
         val metaFile = File(dir, PROJECT_META_FILE)
         if (!metaFile.isFile) return ProjectType.FREE
