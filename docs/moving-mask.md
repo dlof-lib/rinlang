@@ -162,6 +162,16 @@ Loomtime حقيقية:
 | | `mm_dispatchNeedle(mm, x, y, radius)` | ينفّذ الإصابة أعلاه ويُطلق حدث `"needleTap"` |
 | **Shuttle** (تفاضل) | `mm_snapshot(mm)` | لقطة خفيفة (name/x/y/active) لكل الأقنعة |
 | | `mm_shuttleDiff(mm, previousSnapshot)` | يقارن باللقطة الحالية ويُعيد `Patch[]`‏: `"Insert"`/`"Remove"`/`"Move"` |
+| **Actions** (Action Engine) | `mm_defineAction(mm, actionName, fn)` | يُسجِّل فعلاً مخصَّصاً `fn(mm, name, payload)` باسم |
+| | `mm_applyAction(mm, name, actionName, payload)` | يُطبِّق فعلاً مخصَّصاً (إن وُجد) وإلا فعلاً جاهزاً: `activate`/`deactivate`/`toggleActive`/`stop`/`teleport`/`nudge`/`addTag`/`removeTag` |
+| **Navigation** (مشاهد) | `mm_navigate(mm, sceneName)` | ينتقل لمشهد جديد (يدفع الحالي إلى مكدّس)، يُنشِّط أقنعته ويُعطِّل مشاهد أخرى معروفة |
+| | `mm_navBack(mm)` / `mm_navReplace(mm, s)` / `mm_navReload(mm)` / `mm_currentScene(mm)` | تراجع/استبدال/إعادة تطبيق/استعلام عن المشهد الحالي |
+| **Overlay** (طبقة علوية) | `mm_setOverlay(mm, name, flag)` / `mm_isOverlay` | يضع/يستعلم عن وسم "overlay" الخاص |
+| | `mm_needleHitTopmost(mm, x, y, radius)` | يفحص طبقة overlay أولاً، ثم يقع على `mm_needleHit` العادية |
+| **Dye** (لون) | `mm_setColor(mm, name, hex)` / `mm_color(mm, name, fallback)` | لون بصري اختياري للقناع |
+| **Theme** (Pattern Book) | `mm_defineTheme(mm, themeName, colors)` / `mm_setActiveTheme` / `mm_activeTheme` | لوحة ألوان مُسمّاة نشطة على مستوى المحرّك، تُطلق `"themeChanged"` |
+| | `mm_themeColor(mm, roleName, fallback)` | لون دور (`primary`, `danger`...) من الـTheme النشط |
+| **Object Inspector** | `mm_toObjectInspector(mm, name)` | بطاقة `{id, fields: [...]}` كاملة لقناع واحد (تشمل meta الحرّة) |
 
 **قيد مهم:** Loomtime لا يوفّر حالياً تعيين خلية `warp` بالاسم النصّي ديناميكياً من كود Rin
 عادي (لا يوجد `eval`/`setGlobal` في stdlib)، لذا الإسناد النهائي `اسم_الخلية = القيمة;` يبقى
@@ -183,6 +193,21 @@ fun onTick() {
     player_x = f["player_x"];
     player_y = f["player_y"];
 }
+```
+
+مثال ثانٍ يجمع المشاهد (Navigation) مع الطبقة العلوية (Overlay) وTheme:
+
+```rin
+mm_addTag(world, "menuButton", "menu");
+mm_addTag(world, "playerCharacter", "game");
+mm_navigate(world, "menu");   // ينشّط menuButton، يُعطِّل playerCharacter
+
+mm_setOverlay(world, "helpTooltip", true);
+let hit = mm_needleHitTopmost(world, tapX, tapY, 24);  // يُصاب helpTooltip دوماً أولاً
+
+mm_defineTheme(world, "Midnight", { primary: "#7C5CFF", danger: "#D14545" });
+mm_setActiveTheme(world, "Midnight");
+mm_setColor(world, "menuButton", mm_themeColor(world, "primary", "#000000"));
 ```
 
 ## يتكامل طبيعياً مع
