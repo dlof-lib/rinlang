@@ -31,6 +31,8 @@
     <string name="project_type_table_desc">Filas y columnas</string>
     <string name="project_type_ui_desc">Pantallas y vistas</string>
     <string name="project_type_free_desc">Un archivo de código en blanco</string>
+    <string name="project_type_illust">Illust</string>
+    <string name="project_type_illust_desc">Un lenguaje de dibujo/SVG listo sobre Rin</string>
 
     <!-- Opciones de "dibujar la interfaz" en el diálogo de nuevo proyecto UI: solo aparecen al
          elegir el tipo UI. Permiten activar/desactivar la barra superior, activar/desactivar el
@@ -85,12 +87,4 @@
 
     <!-- Nuevo botón de navegación dentro del editor (MainActivity) -->
     <string name="btn_projects">Proyectos</string>
-
-    <!-- Álbumes de proyectos (ProjectAlbumManager / ProjectsActivity) -->
-    <string name="album_new">Nuevo álbum</string>
-    <string name="album_name_hint">Nombre del álbum</string>
-    <string name="album_created">Álbum creado</string>
-    <string name="album_create_first">Crea un álbum primero</string>
-    <string name="album_uncategorized">Sin categorizar</string>
-    <string name="album_empty">No hay proyectos en este álbum</string>
 </resources>
