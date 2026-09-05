@@ -39,7 +39,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:columnCount="2"
-            android:rowCount="2"
+            android:rowCount="3"
             android:useDefaultMargins="false">
 
             <LinearLayout
@@ -138,6 +138,44 @@
                 <TextView
                     style="@style/ProjectTypeChipSubtitle"
                     android:text="@string/project_type_free_desc" />
+            </LinearLayout>
+
+            <!-- شريحة خامسة بعرض الصفّين معاً: نوع مشروع "Illust" الجاهز — لغة رسم/SVG
+                 مضمَّنة كاملة (راجع BundledIllustLanguage.kt)، تُنشئ مشروعاً يعمل فوراً
+                 (شغّل run.rin) بدل main.rin ترحيبي فارغ. -->
+            <LinearLayout
+                android:id="@+id/chipTypeIllust"
+                style="@style/ProjectTypeChip"
+                android:layout_row="2"
+                android:layout_column="0"
+                android:layout_columnSpan="2"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+
+                <ImageView
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:layout_marginEnd="10dp"
+                    android:src="@drawable/ic_illust_file"
+                    android:duplicateParentState="true"
+                    android:contentDescription="@null" />
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        style="@style/ProjectTypeChipTitle"
+                        android:duplicateParentState="true"
+                        android:layout_marginTop="0dp"
+                        android:text="@string/project_type_illust" />
+
+                    <TextView
+                        style="@style/ProjectTypeChipSubtitle"
+                        android:text="@string/project_type_illust_desc" />
+                </LinearLayout>
             </LinearLayout>
         </GridLayout>
 
