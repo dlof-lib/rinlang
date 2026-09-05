@@ -31,7 +31,6 @@ class ProjectsActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_projects)
-        RinLoading.startup(this, 700L)
         BottomNavHelper.setup(this, BottomNavTab.PROJECTS)
 
         findViewById<TextView>(R.id.txtToolbarTitle).text = getString(R.string.projects_screen_title)
@@ -44,14 +43,12 @@ class ProjectsActivity : AppCompatActivity() {
         adapter = ProjectsAdapter(
             onOpen = { project -> openProject(project) },
             onRename = { project -> showRenameDialog(project) },
-            onDelete = { project -> showDeleteConfirm(project) },
-            onMove = { project -> showMoveDialog(project) }
+            onDelete = { project -> showDeleteConfirm(project) }
         )
         rvProjects.layoutManager = LinearLayoutManager(this)
         rvProjects.adapter = adapter
 
         fabNewProject.setOnClickListener { showCreateDialog() }
-        findViewById<View>(R.id.btnProjectAlbums).setOnClickListener { showAlbumsDialog() }
     }
 
     override fun onResume() {
@@ -60,13 +57,7 @@ class ProjectsActivity : AppCompatActivity() {
     }
 
     private fun refresh() {
-        val projects = ProjectManager.listProjects(this).let { list ->
-            when (AppSettings.getProjectSort(this)) {
-                "name" -> list.sortedBy { it.name.lowercase() }
-                "type" -> list.sortedWith(compareBy<Project> { it.type.id }.thenBy { it.name.lowercase() })
-                else -> list
-            }
-        }
+        val projects = ProjectManager.listProjects(this)
         adapter.submit(projects)
         txtEmpty.visibility = if (projects.isEmpty()) View.VISIBLE else View.GONE
     }
@@ -92,11 +83,13 @@ class ProjectsActivity : AppCompatActivity() {
         val chipTable: View = view.findViewById(R.id.chipTypeTable)
         val chipUi: View = view.findViewById(R.id.chipTypeUi)
         val chipFree: View = view.findViewById(R.id.chipTypeFree)
+        val chipIllust: View = view.findViewById(R.id.chipTypeIllust)
         val chips = mapOf(
             chipContainer to ProjectType.CONTAINER,
             chipTable to ProjectType.TABLE,
             chipUi to ProjectType.UI,
-            chipFree to ProjectType.FREE
+            chipFree to ProjectType.FREE,
+            chipIllust to ProjectType.ILLUST
         )
 
         // قسم "رسم الواجهة" (يظهر فقط عند اختيار نوع UI): توب بار/بلا توب بار، قائمة جانبية/بلا
@@ -219,7 +212,14 @@ class ProjectsActivity : AppCompatActivity() {
                     primaryColor = String.format("#%06X", 0xFFFFFF and currentUiColor())
                 )
                 ProjectCreationProgressDialog(this).run(
-                    work = { ProjectManager.createProject(this, name, selectedType, uiOptions) },
+                    work = {
+                        val project = ProjectManager.createProject(this, name, selectedType, uiOptions)
+                        if (selectedType == ProjectType.ILLUST) {
+                            com.dlof.rinlang.store.languages.CustomLanguageProjectScaffolder
+                                .installBundledIllust(this, project.dir)
+                        }
+                        project
+                    },
                     onDone = { project, errorMessage ->
                         if (project != null) {
                             refresh()
@@ -290,34 +290,6 @@ class ProjectsActivity : AppCompatActivity() {
             .show()
     }
 
-    private fun showMoveDialog(project: Project) {
-        val albums = ProjectAlbumManager.listAlbums(this)
-        if (albums.isEmpty()) {
-            Toast.makeText(this, R.string.album_create_first, Toast.LENGTH_SHORT).show()
-            return
-        }
-        AlertDialog.Builder(this)
-            .setTitle(R.string.album_move_title)
-            .setItems(albums.toTypedArray()) { _, which ->
-                try { ProjectAlbumManager.moveProjectToAlbum(this, project, albums[which]); refresh() }
-                catch (e: IllegalArgumentException) { Toast.makeText(this, e.message, Toast.LENGTH_SHORT).show() }
-            }.setNegativeButton(R.string.cancel, null).show()
-    }
-
-    private fun showAlbumsDialog() {
-        val albums=ProjectAlbumManager.listAlbums(this)
-        val names=(listOf(getString(R.string.album_uncategorized))+albums).toTypedArray()
-        AlertDialog.Builder(this).setTitle(R.string.albums_title).setItems(names){_,which->if(which>0)showAlbumProjects(albums[which-1])}.setPositiveButton(R.string.album_new){_,_->showCreateAlbumDialog()}.setNegativeButton(R.string.cancel,null).show()
-    }
-    private fun showCreateAlbumDialog() {
-        val input=EditText(this); input.hint=getString(R.string.album_name_hint)
-        AlertDialog.Builder(this).setTitle(R.string.album_new).setView(input).setPositiveButton(R.string.create){_,_->try{ProjectAlbumManager.createAlbum(this,input.text.toString());Toast.makeText(this,R.string.album_created,Toast.LENGTH_SHORT).show()}catch(e:IllegalArgumentException){Toast.makeText(this,e.message,Toast.LENGTH_SHORT).show()}}.setNegativeButton(R.string.cancel,null).show()
-    }
-    private fun showAlbumProjects(album:String) {
-        val projects=ProjectAlbumManager.projectsInAlbum(this,album); val names=if(projects.isEmpty())arrayOf(getString(R.string.album_empty))else projects.map{it.name}.toTypedArray()
-        AlertDialog.Builder(this).setTitle(album).setItems(names){_,which->if(projects.isNotEmpty())openProject(projects[which])}.setNegativeButton(R.string.cancel,null).show()
-    }
-
     private fun showRenameDialog(project: Project) {
         val input = EditText(this)
         input.setText(project.name)
@@ -352,8 +324,7 @@ class ProjectsActivity : AppCompatActivity() {
 private class ProjectsAdapter(
     val onOpen: (Project) -> Unit,
     val onRename: (Project) -> Unit,
-    val onDelete: (Project) -> Unit,
-    val onMove: (Project) -> Unit
+    val onDelete: (Project) -> Unit
 ) : RecyclerView.Adapter<ProjectsAdapter.VH>() {
 
     private var items: List<Project> = emptyList()
@@ -369,7 +340,6 @@ private class ProjectsAdapter(
         val txtMeta: TextView = view.findViewById(R.id.txtProjectMeta)
         val btnRename: View = view.findViewById(R.id.btnRenameProject)
         val btnDelete: View = view.findViewById(R.id.btnDeleteProject)
-        val btnMove: View = view.findViewById(R.id.btnMoveProject)
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH {
@@ -397,7 +367,6 @@ private class ProjectsAdapter(
         holder.itemView.setOnClickListener { onOpen(project) }
         holder.btnRename.setOnClickListener { onRename(project) }
         holder.btnDelete.setOnClickListener { onDelete(project) }
-        holder.btnMove.setOnClickListener { onMove(project) }
     }
 
     override fun getItemCount(): Int = items.size
@@ -408,6 +377,7 @@ private class ProjectsAdapter(
         ProjectType.TABLE -> context.getString(R.string.project_type_table)
         ProjectType.UI -> context.getString(R.string.project_type_ui)
         ProjectType.FREE -> context.getString(R.string.project_type_free)
+        ProjectType.ILLUST -> context.getString(R.string.project_type_illust)
     }
 
     /** أيقونة + لون هوية شارة نوع المشروع، بنفس الأيقونات المستخدمة في حوار "مشروع جديد". */
@@ -416,5 +386,6 @@ private class ProjectsAdapter(
         ProjectType.TABLE -> R.drawable.ic_type_table to R.color.project_type_table_color
         ProjectType.UI -> R.drawable.ic_type_ui to R.color.project_type_ui_color
         ProjectType.FREE -> R.drawable.ic_type_free to R.color.project_type_free_color
+        ProjectType.ILLUST -> R.drawable.ic_illust_file to R.color.project_type_illust_color
     }
 }
