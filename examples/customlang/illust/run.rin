@@ -1,0 +1,48 @@
+// ============================================================================
+//  run.rin — نقطة الدخول الكاملة للغة "Illust": مصدر .illust -> tokens -> AST
+//  -> تنفيذ فوري (SVG عبر Interpreter) + توليد كود Rin مستقل (CodeGen).
+//
+//  الاستخدام من سطر أوامر Rin:
+//    rin run run.rin --  path/to/drawing.illust
+//  أو عدّل SOURCE_PATH أدناه مباشرة أثناء التطوير داخل المحرر/IDE.
+// ============================================================================
+
+@import "./Interpreter.rin";
+@import "./CodeGen.rin";
+
+let SOURCE_PATH = "examples/hello.illust";
+
+fun runFile(path) {
+    let source = readFile(path);
+    let tokens = lex(source);
+
+    let i = 0;
+    while (i < len(tokens)) {
+        if (isLangError(tokens[i])) {
+            print formatLangError(tokens[i]);
+            return nil;
+        }
+        i = i + 1;
+    }
+
+    let ast = parse(tokens);
+    if (isLangError(ast)) {
+        print formatLangError(ast);
+        return nil;
+    }
+
+    print "── SVG (Interpreter) ──";
+    let svg = interpret(ast);
+    print svg;
+
+    print "── كود Rin مُولَّد (CodeGen) ──";
+    let generated = generate(ast);
+    print generated;
+    // اختياري: احفظ الناتج وشغّله لاحقاً بأي مفسّر Rin عادي بلا الحاجة لمفسّر Illust
+    // writeFile("build/output.rin", generated);
+    // اختياري: احفظ SVG مباشرة كملف قابل للعرض في أي متصفح
+    // writeFile("build/output.svg", svg);
+    return nil;
+}
+
+runFile(SOURCE_PATH);
