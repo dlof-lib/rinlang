@@ -1,0 +1,322 @@
+// ============================================================================
+//  Interpreter.rin — المرحلة الثالثة من "Illust" (v0.2 موسّعة): تنفيذ AST مباشرة
+//  وتوليد SVG حقيقي.
+//
+//  قاعدة تصميم عامة (كما في langkit): أي دالة قد تفشل تُعيد ok(value)/err(errObj).
+//  execStatement/execBlock تُعيدان تحديداً ok({ ctrl: "normal" }) أو
+//  ok({ ctrl: "return", value: v }) — تسمح لجملة return بالانتشار للأعلى عبر
+//  if/while/group/rotate حتى تصل لنداء الدالة التي بدأت التنفيذ (انظر callFunction).
+//
+//  ctx خريطة حالة عامة واحدة تُمرَّر بالمرجع: { width, height, elements: [...],
+//  fillNone, fillColor, strokeNone, strokeColor, strokeWidth, functions: {...} }.
+//  group()/rotate() لم تعد تُعدِّل إحداثيات كل شكل يدوياً؛ بدل ذلك تصدر عنصر
+//  SVG حقيقي <g transform="..."> يلف عناصر الأبناء — أبسط وأصح ويدعم الدوران فعلياً.
+// ============================================================================
+
+@import "./Parser.rin";
+
+fun newCtx() {
+    return {
+        width: 400,
+        height: 300,
+        elements: [],
+        fillNone: false,
+        fillColor: "#000000",
+        strokeNone: true,
+        strokeColor: "#000000",
+        strokeWidth: 1,
+        functions: {}
+    };
+}
+
+fun normal() { return ok({ ctrl: "normal" }); }
+
+// يُنفّذ برنامجاً كاملاً ويُعيد نص SVG، أو نص خطأ منسَّق عبر formatLangError
+fun interpret(program) {
+    if (isLangError(program)) { return formatLangError(program); }
+    let ctx = newCtx();
+    let env = {};
+    let log = [];
+    let r = execBlock(program["body"], env, ctx, log);
+    if (isOk(r) == false) { return formatLangError(resultError(r)); }
+    return renderSVG(ctx);
+}
+
+// ينفّذ قائمة جمل بالترتيب؛ يتوقف فوراً وينشر النتيجة للأعلى عند أول خطأ أو return
+fun execBlock(statements, env, ctx, log) {
+    let i = 0;
+    while (i < len(statements)) {
+        let r = execStatement(statements[i], env, ctx, log);
+        if (isOk(r) == false) { return r; }
+        if (r["value"]["ctrl"] == "return") { return r; }
+        i = i + 1;
+    }
+    return normal();
+}
+
+fun execStatement(node, env, ctx, log) {
+    if (nodeIs(node, "Let")) {
+        let v = evalExpr(node["value"], env, ctx, log);
+        if (isOk(v) == false) { return v; }
+        env[node["name"]] = v["value"];
+        return normal();
+    }
+    if (nodeIs(node, "Assign")) {
+        if (has(env, node["name"]) == false) {
+            return err(langError("Interpreter", "متغيّر غير معرَّف: " + node["name"], node["line"]));
+        }
+        let v = evalExpr(node["value"], env, ctx, log);
+        if (isOk(v) == false) { return v; }
+        env[node["name"]] = v["value"];
+        return normal();
+    }
+    if (nodeIs(node, "ExprStmt")) {
+        let v = evalExpr(node["expr"], env, ctx, log);
+        if (isOk(v) == false) { return v; }
+        return normal();
+    }
+    if (nodeIs(node, "Canvas")) {
+        let w = evalExpr(node["w"], env, ctx, log); if (isOk(w) == false) { return w; }
+        let h = evalExpr(node["h"], env, ctx, log); if (isOk(h) == false) { return h; }
+        ctx["width"] = w["value"];
+        ctx["height"] = h["value"];
+        return normal();
+    }
+    if (nodeIs(node, "Fill")) {
+        if (node["none"]) {
+            ctx["fillNone"] = true;
+        } else {
+            let c = evalExpr(node["color"], env, ctx, log); if (isOk(c) == false) { return c; }
+            ctx["fillNone"] = false;
+            ctx["fillColor"] = toString(c["value"]);
+        }
+        return normal();
+    }
+    if (nodeIs(node, "Stroke")) {
+        if (node["none"]) {
+            ctx["strokeNone"] = true;
+        } else {
+            let c = evalExpr(node["color"], env, ctx, log); if (isOk(c) == false) { return c; }
+            let w = evalExpr(node["width"], env, ctx, log); if (isOk(w) == false) { return w; }
+            ctx["strokeNone"] = false;
+            ctx["strokeColor"] = toString(c["value"]);
+            ctx["strokeWidth"] = w["value"];
+        }
+        return normal();
+    }
+    if (nodeIs(node, "Rect")) {
+        let x = evalExpr(node["x"], env, ctx, log); if (isOk(x) == false) { return x; }
+        let y = evalExpr(node["y"], env, ctx, log); if (isOk(y) == false) { return y; }
+        let w = evalExpr(node["w"], env, ctx, log); if (isOk(w) == false) { return w; }
+        let h = evalExpr(node["h"], env, ctx, log); if (isOk(h) == false) { return h; }
+        push(ctx["elements"], "  <rect x=\"" + toString(x["value"]) + "\" y=\"" + toString(y["value"])
+            + "\" width=\"" + toString(w["value"]) + "\" height=\"" + toString(h["value"]) + "\"" + styleAttrs(ctx) + " />");
+        return normal();
+    }
+    if (nodeIs(node, "Circle")) {
+        let cx = evalExpr(node["cx"], env, ctx, log); if (isOk(cx) == false) { return cx; }
+        let cy = evalExpr(node["cy"], env, ctx, log); if (isOk(cy) == false) { return cy; }
+        let r = evalExpr(node["r"], env, ctx, log); if (isOk(r) == false) { return r; }
+        push(ctx["elements"], "  <circle cx=\"" + toString(cx["value"]) + "\" cy=\"" + toString(cy["value"])
+            + "\" r=\"" + toString(r["value"]) + "\"" + styleAttrs(ctx) + " />");
+        return normal();
+    }
+    if (nodeIs(node, "Ellipse")) {
+        let cx = evalExpr(node["cx"], env, ctx, log); if (isOk(cx) == false) { return cx; }
+        let cy = evalExpr(node["cy"], env, ctx, log); if (isOk(cy) == false) { return cy; }
+        let rx = evalExpr(node["rx"], env, ctx, log); if (isOk(rx) == false) { return rx; }
+        let ry = evalExpr(node["ry"], env, ctx, log); if (isOk(ry) == false) { return ry; }
+        push(ctx["elements"], "  <ellipse cx=\"" + toString(cx["value"]) + "\" cy=\"" + toString(cy["value"])
+            + "\" rx=\"" + toString(rx["value"]) + "\" ry=\"" + toString(ry["value"]) + "\"" + styleAttrs(ctx) + " />");
+        return normal();
+    }
+    if (nodeIs(node, "Polygon")) {
+        let pts = evalExpr(node["points"], env, ctx, log); if (isOk(pts) == false) { return pts; }
+        let arr = pts["value"];
+        let strs = [];
+        let i = 0;
+        while (i < len(arr)) { push(strs, toString(arr[i])); i = i + 1; }
+        push(ctx["elements"], "  <polygon points=\"" + join(strs, ",") + "\"" + styleAttrs(ctx) + " />");
+        return normal();
+    }
+    if (nodeIs(node, "PathEl")) {
+        let d = evalExpr(node["d"], env, ctx, log); if (isOk(d) == false) { return d; }
+        push(ctx["elements"], "  <path d=\"" + escapeXml(toString(d["value"])) + "\"" + styleAttrs(ctx) + " />");
+        return normal();
+    }
+    if (nodeIs(node, "Line")) {
+        let x1 = evalExpr(node["x1"], env, ctx, log); if (isOk(x1) == false) { return x1; }
+        let y1 = evalExpr(node["y1"], env, ctx, log); if (isOk(y1) == false) { return y1; }
+        let x2 = evalExpr(node["x2"], env, ctx, log); if (isOk(x2) == false) { return x2; }
+        let y2 = evalExpr(node["y2"], env, ctx, log); if (isOk(y2) == false) { return y2; }
+        let strokeBit = " stroke=\"" + ctx["strokeColor"] + "\" stroke-width=\"" + toString(ctx["strokeWidth"]) + "\"";
+        if (ctx["strokeNone"]) { strokeBit = " stroke=\"" + ctx["fillColor"] + "\" stroke-width=\"1\""; }
+        push(ctx["elements"], "  <line x1=\"" + toString(x1["value"]) + "\" y1=\"" + toString(y1["value"])
+            + "\" x2=\"" + toString(x2["value"]) + "\" y2=\"" + toString(y2["value"]) + "\"" + strokeBit + " />");
+        return normal();
+    }
+    if (nodeIs(node, "Text")) {
+        let x = evalExpr(node["x"], env, ctx, log); if (isOk(x) == false) { return x; }
+        let y = evalExpr(node["y"], env, ctx, log); if (isOk(y) == false) { return y; }
+        let s = evalExpr(node["str"], env, ctx, log); if (isOk(s) == false) { return s; }
+        push(ctx["elements"], "  <text x=\"" + toString(x["value"]) + "\" y=\"" + toString(y["value"]) + "\""
+            + styleAttrs(ctx) + ">" + escapeXml(toString(s["value"])) + "</text>");
+        return normal();
+    }
+    if (nodeIs(node, "PrintDebug")) {
+        let v = evalExpr(node["value"], env, ctx, log); if (isOk(v) == false) { return v; }
+        push(log, toString(v["value"]));
+        return normal();
+    }
+    if (nodeIs(node, "If")) {
+        let c = evalExpr(node["cond"], env, ctx, log); if (isOk(c) == false) { return c; }
+        if (toBool(c["value"])) { return execBlock(node["thenBody"], env, ctx, log); }
+        return execBlock(node["elseBody"], env, ctx, log);
+    }
+    if (nodeIs(node, "While")) {
+        let c = evalExpr(node["cond"], env, ctx, log); if (isOk(c) == false) { return c; }
+        while (toBool(c["value"])) {
+            let r = execBlock(node["body"], env, ctx, log);
+            if (isOk(r) == false) { return r; }
+            if (r["value"]["ctrl"] == "return") { return r; }
+            c = evalExpr(node["cond"], env, ctx, log); if (isOk(c) == false) { return c; }
+        }
+        return normal();
+    }
+    if (nodeIs(node, "Group")) {
+        let dx = evalExpr(node["dx"], env, ctx, log); if (isOk(dx) == false) { return dx; }
+        let dy = evalExpr(node["dy"], env, ctx, log); if (isOk(dy) == false) { return dy; }
+        push(ctx["elements"], "  <g transform=\"translate(" + toString(dx["value"]) + "," + toString(dy["value"]) + ")\">");
+        let r = execBlock(node["body"], env, ctx, log);
+        push(ctx["elements"], "  </g>");
+        return r;
+    }
+    if (nodeIs(node, "Rotate")) {
+        let a = evalExpr(node["angle"], env, ctx, log); if (isOk(a) == false) { return a; }
+        push(ctx["elements"], "  <g transform=\"rotate(" + toString(a["value"]) + ")\">");
+        let r = execBlock(node["body"], env, ctx, log);
+        push(ctx["elements"], "  </g>");
+        return r;
+    }
+    if (nodeIs(node, "FunDecl")) {
+        ctx["functions"][node["name"]] = { params: node["params"], body: node["body"] };
+        return normal();
+    }
+    if (nodeIs(node, "Return")) {
+        let v = evalExpr(node["value"], env, ctx, log); if (isOk(v) == false) { return v; }
+        return ok({ ctrl: "return", value: v["value"] });
+    }
+    return err(langError("Interpreter", "نوع جملة غير مدعوم: " + node["kind"], node["line"]));
+}
+
+fun evalExpr(node, env, ctx, log) {
+    if (nodeIs(node, "NumberLit")) { return ok(node["value"]); }
+    if (nodeIs(node, "StringLit")) { return ok(node["value"]); }
+    if (nodeIs(node, "ArrayLit")) {
+        let items = node["items"];
+        let out = [];
+        let i = 0;
+        while (i < len(items)) {
+            let v = evalExpr(items[i], env, ctx, log);
+            if (isOk(v) == false) { return v; }
+            push(out, v["value"]);
+            i = i + 1;
+        }
+        return ok(out);
+    }
+    if (nodeIs(node, "Ident")) {
+        if (has(env, node["name"]) == false) {
+            return err(langError("Interpreter", "متغيّر غير معرَّف: " + node["name"], node["line"]));
+        }
+        return ok(env[node["name"]]);
+    }
+    if (nodeIs(node, "Call")) { return callFunction(node["name"], node["args"], env, ctx, log, node["line"]); }
+    if (nodeIs(node, "Unary")) {
+        let v = evalExpr(node["operand"], env, ctx, log);
+        if (isOk(v) == false) { return v; }
+        return ok(0 - v["value"]);
+    }
+    if (nodeIs(node, "Binary")) {
+        let l = evalExpr(node["left"], env, ctx, log);
+        if (isOk(l) == false) { return l; }
+        let r = evalExpr(node["right"], env, ctx, log);
+        if (isOk(r) == false) { return r; }
+        let lv = l["value"];
+        let rv = r["value"];
+        let op = node["op"];
+        if (op == "+") { return ok(lv + rv); }
+        if (op == "-") { return ok(lv - rv); }
+        if (op == "*") { return ok(lv * rv); }
+        if (op == "/") { return ok(lv / rv); }
+        if (op == "==") { return ok(lv == rv); }
+        if (op == "!=") { return ok(lv != rv); }
+        if (op == "<") { return ok(lv < rv); }
+        if (op == "<=") { return ok(lv <= rv); }
+        if (op == ">") { return ok(lv > rv); }
+        if (op == ">=") { return ok(lv >= rv); }
+        return err(langError("Interpreter", "عامل غير معروف: " + op, node["line"]));
+    }
+    return err(langError("Interpreter", "نوع عقدة غير مدعوم: " + node["kind"], node["line"]));
+}
+
+// نداء دالة معرَّفة بواسطة المستخدم عبر fun: بيئة جديدة (المعاملات فقط، بلا إغلاق على
+// متغيرات المستدعي)، لكن ctx (لوحة الرسم) مشتركة عالمياً فتقدر الدالة ترسم مباشرة.
+fun callFunction(name, argNodes, env, ctx, log, line) {
+    if (has(ctx["functions"], name) == false) {
+        return err(langError("Interpreter", "دالة غير معرَّفة: " + name, line));
+    }
+    let def = ctx["functions"][name];
+    if (len(argNodes) != len(def["params"])) {
+        return err(langError("Interpreter", "عدد معطيات غير مطابق لِـ" + name, line));
+    }
+    let newEnv = {};
+    let i = 0;
+    while (i < len(argNodes)) {
+        let v = evalExpr(argNodes[i], env, ctx, log);
+        if (isOk(v) == false) { return v; }
+        newEnv[def["params"][i]] = v["value"];
+        i = i + 1;
+    }
+    let r = execBlock(def["body"], newEnv, ctx, log);
+    if (isOk(r) == false) { return r; }
+    if (r["value"]["ctrl"] == "return") { return ok(r["value"]["value"]); }
+    return ok(nil);
+}
+
+// ---- بناء نص SVG النهائي من ctx ------------------------------------------
+
+fun styleAttrs(ctx) {
+    let s = "";
+    if (ctx["fillNone"]) { s = s + " fill=\"none\""; } else { s = s + " fill=\"" + ctx["fillColor"] + "\""; }
+    if (ctx["strokeNone"] == false) {
+        s = s + " stroke=\"" + ctx["strokeColor"] + "\" stroke-width=\"" + toString(ctx["strokeWidth"]) + "\"";
+    }
+    return s;
+}
+
+fun escapeXml(s) {
+    let out = "";
+    let i = 0;
+    while (i < len(s)) {
+        let c = charAt(s, i);
+        if (c == "&") { out = out + "&amp;"; }
+        else if (c == "<") { out = out + "&lt;"; }
+        else if (c == ">") { out = out + "&gt;"; }
+        else if (c == "\"") { out = out + "&quot;"; }
+        else { out = out + c; }
+        i = i + 1;
+    }
+    return out;
+}
+
+fun renderSVG(ctx) {
+    let lines = [];
+    push(lines, "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 " + toString(ctx["width"]) + " " + toString(ctx["height"]) + "\" width=\"" + toString(ctx["width"]) + "\" height=\"" + toString(ctx["height"]) + "\">");
+    let i = 0;
+    while (i < len(ctx["elements"])) {
+        push(lines, ctx["elements"][i]);
+        i = i + 1;
+    }
+    push(lines, "</svg>");
+    return join(lines, "\n");
+}
