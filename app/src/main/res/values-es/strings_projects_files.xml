@@ -85,4 +85,14 @@
 
     <!-- Nuevo botón de navegación dentro del editor (MainActivity) -->
     <string name="btn_projects">Proyectos</string>
+
+    <!-- Álbumes de proyectos (ProjectAlbumManager / ProjectsActivity) -->
+    <string name="albums_title">Álbumes</string>
+    <string name="album_new">Nuevo álbum</string>
+    <string name="album_name_hint">Nombre del álbum</string>
+    <string name="album_created">Álbum creado</string>
+    <string name="album_move_title">Mover a un álbum</string>
+    <string name="album_create_first">Crea un álbum primero</string>
+    <string name="album_uncategorized">Sin categorizar</string>
+    <string name="album_empty">No hay proyectos en este álbum</string>
 </resources>
