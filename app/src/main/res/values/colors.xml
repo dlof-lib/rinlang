@@ -1,30 +1,30 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="rin_background">#17181C</color>
-    <color name="rin_toolbar">#1F2126</color>
-    <color name="rin_toolbar_bottom">#202329</color>
+    <color name="rin_background">#F5F7FA</color>
+    <color name="rin_toolbar">#FFFFFF</color>
+    <color name="rin_toolbar_bottom">#F0F2F5</color>
     <color name="rin_bottom_nav_selected">#7C5CFF</color>
-    <color name="rin_bottom_nav_unselected">#9198A3</color>
-    <color name="rin_on_toolbar">#F3F4F6</color>
-    <color name="rin_on_toolbar_dim">#9198A3</color>
+    <color name="rin_bottom_nav_unselected">#667085</color>
+    <color name="rin_on_toolbar">#1C2128</color>
+    <color name="rin_on_toolbar_dim">#667085</color>
     <color name="rin_accent">#7C5CFF</color>
     <color name="rin_accent_border_subtle">#4D7C5CFF</color>
     <color name="rin_accent_pressed">#6A47E8</color>
-    <color name="rin_editor_bg">#1B1D22</color>
-    <color name="rin_editor_surface_border">#2A2D34</color>
-    <color name="rin_editor_text">#E3E5E8</color>
-    <color name="rin_editor_hint">#6E7480</color>
-    <color name="rin_divider">#2A2D34</color>
-    <color name="rin_console_header">#1D1F25</color>
-    <color name="rin_console_bg">#131417</color>
+    <color name="rin_editor_bg">#FFFFFF</color>
+    <color name="rin_editor_surface_border">#DDE2E8</color>
+    <color name="rin_editor_text">#20252B</color>
+    <color name="rin_editor_hint">#667085</color>
+    <color name="rin_divider">#DDE2E8</color>
+    <color name="rin_console_header">#F1F3F6</color>
+    <color name="rin_console_bg">#FFFFFF</color>
     <color name="rin_console_text">#57D6B8</color>
-    <color name="rin_ghost_ripple">#22FFFFFF</color>
-    <color name="rin_ghost_pressed_bg">#14FFFFFF</color>
+    <color name="rin_ghost_ripple">#22000000</color>
+    <color name="rin_ghost_pressed_bg">#14000000</color>
     <color name="rin_logo_badge_bg">#7C5CFF</color>
 
     <!-- الشريط العلوي المطوَّر: تدرّج + إطار أيقونة التطبيق + فاصل ظل -->
     <color name="rin_toolbar_gradient_top">#24262D</color>
-    <color name="rin_toolbar_gradient_bottom">#1B1D22</color>
+    <color name="rin_toolbar_gradient_bottom">#FFFFFF</color>
     <color name="rin_app_icon_border">#33FFFFFF</color>
     <color name="rin_toolbar_shadow">#33000000</color>
     <color name="rin_menubar_divider">#20FFFFFF</color>
@@ -65,8 +65,8 @@
     <color name="rin_gradient_green_end">#1AA377</color>
 
     <!-- بطاقات الإحصائيات القابلة للضغط في الملف الشخصي وصفحة تفاصيل الحزمة -->
-    <color name="rin_stat_card_bg">#1B1D22</color>
-    <color name="rin_stat_card_border">#2A2D34</color>
+    <color name="rin_stat_card_bg">#FFFFFF</color>
+    <color name="rin_stat_card_border">#DDE2E8</color>
     <color name="rin_stat_card_pressed">#22252C</color>
 
     <color name="rin_star_gold">#FFC94D</color>
@@ -132,7 +132,7 @@
     <!-- بطاقة/زر تنزيل النتائج الفعلية إلى Downloads -->
     <color name="rin_download_chip_bg">#20232B</color>
     <color name="rin_download_chip_border">#3A3E48</color>
-    <color name="rin_download_progress_track">#2A2D34</color>
+    <color name="rin_download_progress_track">#DDE2E8</color>
 
     <!-- شاشة "Pipeline Runner": تصميم فاتح مطابق لمخطط تدفق الأنابيب المرئي -->
     <color name="pipeline_header_bg">#0F2A3D</color>
@@ -195,9 +195,9 @@
     <color name="loom_error_bg">#3A1518</color>
     <color name="loom_error_border">#F14C4C</color>
     <color name="loom_error_text">#FFB4AC</color>
-    <color name="loom_footer_text">#9198A3</color>
-    <color name="loom_inspector_bg">#1B1D22</color>
-    <color name="loom_inspector_border">#2A2D34</color>
-    <color name="loom_inspector_key">#9198A3</color>
-    <color name="loom_inspector_value">#E3E5E8</color>
+    <color name="loom_footer_text">#667085</color>
+    <color name="loom_inspector_bg">#FFFFFF</color>
+    <color name="loom_inspector_border">#DDE2E8</color>
+    <color name="loom_inspector_key">#667085</color>
+    <color name="loom_inspector_value">#20252B</color>
 </resources>
