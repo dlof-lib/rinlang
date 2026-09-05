@@ -98,6 +98,7 @@ class MainActivity : AppCompatActivity() {
         ThemeManager.apply(this)
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+        RinLoading.startup(this)
         BottomNavHelper.setup(this, BottomNavTab.EDITOR)
         RinEngine.init(applicationContext) // يفعّل save/installation/file الحقيقية على تخزين التطبيق الخاص
 
