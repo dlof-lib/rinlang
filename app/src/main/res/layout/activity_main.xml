@@ -11,6 +11,7 @@
          صف 2: شريط قوائم مصغّر بأسلوب الكمبيوتر (File / Edit / View / Run)، كل قائمة
          تفتح PopupMenu فيها خيارات كثيرة، بدل حشو الشاشة بعشرات الأزرار الكبيرة. -->
     <LinearLayout
+        android:id="@+id/editorToolbarRoot"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
@@ -111,6 +112,7 @@
         <!-- الصف الثاني: شريط قوائم مصغّر (File / Edit / View / Run / المكتبات) — كل زر صغير
              بأيقونة + نص، ويفتح قائمة منسدلة فيها خيارات إضافية، تماماً كقوائم تطبيقات الكمبيوتر. -->
         <LinearLayout
+            android:id="@+id/editorMenuRow"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
@@ -441,6 +443,7 @@
 
     <!-- ===== رأس منطقة الكونسول / سجل التشغيل ===== -->
     <LinearLayout
+        android:id="@+id/editorConsoleRoot"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
