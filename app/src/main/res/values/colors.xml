@@ -37,23 +37,28 @@
     <color name="rin_bracket_error_bg">#5FF14C4C</color>
     <color name="rin_find_match_bg">#5FD7BA7D</color>
 
-    <!-- تلوين الصيغة النحوية (syntax highlighting) في المحرر -->
-    <color name="syntax_keyword">#569CD6</color>
-    <color name="syntax_container_keyword">#4EC9B0</color>
+    <!-- تلوين الصيغة النحوية (syntax highlighting) في المحرر — نمط فاتح احترافي مصمم خصيصاً
+         لخلفية بيضاء (rin_editor_bg)، وليس نسخة من ألوان الثيم الداكن. كل لون هنا يحقق نسبة
+         تباين ≥ 4.5:1 مقابل الأبيض (WCAG AA) لضمان وضوح قرائي حقيقي، وليس مجرد "ديكور". -->
+    <color name="syntax_keyword">#0B4FCC</color>
+    <color name="syntax_container_keyword">#00695C</color>
     <!-- حقول تنسيق/ستايل الكائن (txt/img/object.file/Fonts/background/css3): نفس هوية "الستايل"
          اللونية المستخدمة في كونسول التشغيل (log_kind_style) لتمييزها بصرياً عن بقية كلمات الحاويات -->
-    <color name="syntax_style_keyword">#F2A65A</color>
-    <color name="syntax_string">#CE9178</color>
-    <color name="syntax_number">#B5CEA8</color>
-    <color name="syntax_comment">#6A9955</color>
-    <color name="syntax_builtin">#DCDCAA</color>
-    <color name="syntax_tag">#D7BA7D</color>
+    <color name="syntax_style_keyword">#9C5700</color>
+    <color name="syntax_string">#9A1B1B</color>
+    <color name="syntax_number">#7A3E9D</color>
+    <color name="syntax_comment">#256029</color>
+    <color name="syntax_builtin">#6F5B00</color>
+    <color name="syntax_tag">#A6006B</color>
     <!-- توجيهات سياسة وحدة make (kind/use/need/allow/deny/strict/input/output/public/private/
          version/description) — بنفسجي مميز بنفس هوية الكلمات المفتاحية التحكّمية في VS Code -->
-    <color name="syntax_make_directive">#C586C0</color>
+    <color name="syntax_make_directive">#6A1B9A</color>
     <!-- `item` الضمني داخل مفهوم Reckon الحسابي بسطرين (docs/RECKON.md) — لون مائل مستقل
          لتمييزه كـ"مرجع ضمني" وليس متغيّراً مُعلَناً صراحةً -->
-    <color name="syntax_reckon_item">#FF8A6B</color>
+    <color name="syntax_reckon_item">#B15400</color>
+    <!-- نص التوكِن الذي يعلّمه المحلّل/المُحلّل النحوي كخطأ — أحمر غامق يبقى واضحاً على
+         خلفية المحرر البيضاء (خلافاً للأحمر الفاتح المستخدم كتظليل شفاف لخلفية القوس الخاطئ). -->
+    <color name="syntax_error">#C62828</color>
 
     <!-- الهوية الثانية "أخضر" — تُستخدم إلى جانب البنفسجي في: مؤشر التبويب السفلي، حالة
          "تم الانتساب"، حبّات إحصائيات التنزيلات/التثبيت، وأيقونة "موثّق" — بلا استبدال
