@@ -27,6 +27,11 @@ object AppSettings {
     private const val KEY_SAVE_PAUSE = "save_on_pause"
     private const val KEY_CONFIRM_EXIT = "confirm_exit"
     private const val KEY_FORMAT_SAVE = "format_on_save"
+    private const val KEY_THEME_MODE = "theme_mode"
+    private const val KEY_EDITOR_LAYOUT = "editor_layout"
+    private const val KEY_PROJECT_SORT = "project_sort"
+    private const val KEY_SHOW_CONSOLE = "show_console"
+    private const val KEY_SHOW_TOOLBAR = "show_toolbar"
 
     private fun prefs(context: Context) =
         context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -67,6 +72,17 @@ object AppSettings {
     fun isFormatOnSave(context: Context) = prefs(context).getBoolean(KEY_FORMAT_SAVE, false)
     fun setFormatOnSave(context: Context, v: Boolean) = put(context, KEY_FORMAT_SAVE, v)
 
+    fun getThemeMode(context: Context) = prefs(context).getString(KEY_THEME_MODE, "system") ?: "system"
+    fun setThemeMode(context: Context, value: String) = prefs(context).edit().putString(KEY_THEME_MODE, value).apply()
+    fun getEditorLayout(context: Context) = prefs(context).getString(KEY_EDITOR_LAYOUT, "standard") ?: "standard"
+    fun setEditorLayout(context: Context, value: String) = prefs(context).edit().putString(KEY_EDITOR_LAYOUT, value).apply()
+    fun getProjectSort(context: Context) = prefs(context).getString(KEY_PROJECT_SORT, "recent") ?: "recent"
+    fun setProjectSort(context: Context, value: String) = prefs(context).edit().putString(KEY_PROJECT_SORT, value).apply()
+    fun isShowConsole(context: Context) = prefs(context).getBoolean(KEY_SHOW_CONSOLE, true)
+    fun setShowConsole(context: Context, v: Boolean) = put(context, KEY_SHOW_CONSOLE, v)
+    fun isShowToolbar(context: Context) = prefs(context).getBoolean(KEY_SHOW_TOOLBAR, true)
+    fun setShowToolbar(context: Context, v: Boolean) = put(context, KEY_SHOW_TOOLBAR, v)
+
     private fun put(context: Context, key: String, value: Boolean) = prefs(context).edit().putBoolean(key, value).apply()
 
     fun resetToDefaults(context: Context) {
@@ -88,6 +104,11 @@ object AppSettings {
             .putBoolean(KEY_SAVE_PAUSE, true)
             .putBoolean(KEY_CONFIRM_EXIT, false)
             .putBoolean(KEY_FORMAT_SAVE, false)
+            .putString(KEY_THEME_MODE, "system")
+            .putString(KEY_EDITOR_LAYOUT, "standard")
+            .putString(KEY_PROJECT_SORT, "recent")
+            .putBoolean(KEY_SHOW_CONSOLE, true)
+            .putBoolean(KEY_SHOW_TOOLBAR, true)
             .apply()
     }
 }
