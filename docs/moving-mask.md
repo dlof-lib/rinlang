@@ -143,6 +143,48 @@ print mm_position(world, "player");     // {x: 25, y: 22}
 ### 13) الفحص والتلخيص (Inspection)
 `mm_describe` (قناع واحد)، `mm_summary` (إحصاء عام)، `mm_toString` (كل الأقنعة كنص).
 
+### 14) التكامل مع Loom (Warp / Strand / Fabric / Needle / Shuttle)
+
+محرّك Loomtime (`app/src/main/cpp/loom/*.h`) نظام C++ مستقل تماماً بمفرداته الخاصة: **Fabric**
+(شجرة عرض حيّة من Strand)، **Warp** (خلايا حالة تفاعلية يقرأها `@view.*` تلقائياً)، **Needle**
+(محرّك اللمس/الإصابة)، و**Shuttle** (مقارنة شجرتين وإنتاج `Patch[]`). movingmask لا يستدعي ذلك
+المحرّك مباشرة ولا يُعدِّله — يبقى ملفاً Rin خالصاً كبقية هذه المكتبة — لكنه يستعير نفس
+المفاهيم والمفردات على مستوى بياناته الخاصة، لتسهيل ربط عالم الأقنعة المتحركة يدوياً بواجهة
+Loomtime حقيقية:
+
+| مفهوم Loom | دالة movingmask | ماذا تفعل |
+|---|---|---|
+| **Warp** (خلايا حالة) | `mm_warpFieldNames(prefix)` | أسماء خلايا `warp` المقترحة لبادئة معيّنة |
+| | `mm_warpFields(mm, name, prefix)` | يُصدِّر x/y/vx/vy/active لقناع كحقول مُسطَّحة |
+| **Strand** (نوع بصري) | `mm_setStrandKind` / `mm_strandKind` | تسمية بصرية اختيارية للقناع (Text/Image/Button/Card/Icon/Box...) |
+| **Fabric** (شجرة عرض) | `mm_toFabric(mm)` | لقطة مسطَّحة بكل الأقنعة (name/kind/x/y/active/tags) |
+| **Needle** (لمس/إصابة) | `mm_needleHit(mm, x, y, radius)` | أقرب قناع نشط ضمن دائرة إصابة حول نقطة |
+| | `mm_dispatchNeedle(mm, x, y, radius)` | ينفّذ الإصابة أعلاه ويُطلق حدث `"needleTap"` |
+| **Shuttle** (تفاضل) | `mm_snapshot(mm)` | لقطة خفيفة (name/x/y/active) لكل الأقنعة |
+| | `mm_shuttleDiff(mm, previousSnapshot)` | يقارن باللقطة الحالية ويُعيد `Patch[]`‏: `"Insert"`/`"Remove"`/`"Move"` |
+
+**قيد مهم:** Loomtime لا يوفّر حالياً تعيين خلية `warp` بالاسم النصّي ديناميكياً من كود Rin
+عادي (لا يوجد `eval`/`setGlobal` في stdlib)، لذا الإسناد النهائي `اسم_الخلية = القيمة;` يبقى
+بيد المستخدم كل دورة — `mm_warpFields` يُجهِّز القيم فقط. مثال نمط الاستخدام الموصى به:
+
+```rin
+@import "lib/movingmask.og.rin";
+
+warp player_x = 20;
+warp player_y = 20;
+
+let world = mm_new();
+mm_spawn(world, "player", 20, 20);
+mm_setVelocity(world, "player", 5, 2);
+
+fun onTick() {
+    mm_tick(world, 1, true);
+    let f = mm_warpFields(world, "player", "player");
+    player_x = f["player_x"];
+    player_y = f["player_y"];
+}
+```
+
 ## يتكامل طبيعياً مع
 
 - [`lib/loopkit.og.rin`](../lib/loopkit.og.rin) — مرّر دالة صغيرة تستدعي `mm_tick` إلى
@@ -155,6 +197,8 @@ print mm_position(world, "player");     // {x: 25, y: 22}
 
 ## انظر أيضاً
 
+- [`loomtime/RIN_LOOM_ENGINE_ARCHITECTURE.md`](./loomtime/RIN_LOOM_ENGINE_ARCHITECTURE.md) —
+  معمارية محرّك Loomtime نفسه (Fabric/Warp/Needle/Shuttle) التي يستعير منها القسم 14 مفرداته.
 - [`mask.md`](./mask.md) — نظام القناع الأصلي (هوية ساكنة).
 - [`standard-library.md`](./standard-library.md) — خريطة كل مكتبات Rin القياسية.
 - [`../examples/moving_mask_demo.rin`](../examples/moving_mask_demo.rin) — مثال تشغيلي كامل.
