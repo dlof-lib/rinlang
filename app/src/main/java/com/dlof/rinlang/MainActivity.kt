@@ -95,10 +95,10 @@ class MainActivity : AppCompatActivity() {
         }
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        ThemeManager.apply(this)
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
-        RinLoading.startup(this)
+        // RIN logo is redrawn progressively and acts as the editor loading bar.
+        RinLogoLoadingOverlay.show(this, 1050L)
         BottomNavHelper.setup(this, BottomNavTab.EDITOR)
         RinEngine.init(applicationContext) // يفعّل save/installation/file الحقيقية على تخزين التطبيق الخاص
 
@@ -126,7 +126,7 @@ class MainActivity : AppCompatActivity() {
         scrollEditor = findViewById(R.id.scrollEditor)
 
         applyStoredEditorSettings()
-        applyEditorLayoutSettings()
+        RinLogoLoadingOverlay.setProgress(0.34f)
 
         // أزرار الوصول السريع (أيقونة فقط، صغيرة جداً) في الصف الأول من الشريط العلوي
         val btnRun: ImageButton = findViewById(R.id.btnRun)
@@ -180,6 +180,7 @@ class MainActivity : AppCompatActivity() {
         // + تلوين نحوي حقيقي (Kotlin خالص عبر RinSyntax، بلا أي C++/JNI) يتبدّل تلقائيًا حسب امتداد الملف.
         editorController = RinCodeEditorController(this, editCode, txtLineNumbers, scrollEditor)
         editorController.setLanguage(initialLanguageExtension)
+        RinLogoLoadingOverlay.setProgress(0.78f)
 
         // كل تعديل في المحرر يُدفع مباشرةً (بعد تهدئة/debounce قصيرة) إلى جلسة المعاينة الحية
         // إن كانت مفتوحة — نفس فكرة "on each keystroke... updateSource(newSource)" الموثّقة في
@@ -214,6 +215,9 @@ class MainActivity : AppCompatActivity() {
                 if (jobs.any { it.status == JobStatus.RUNNING }) android.view.View.VISIBLE
                 else android.view.View.GONE
         }
+
+        RinLogoLoadingOverlay.setProgress(0.94f)
+        window.decorView.post { RinLogoLoadingOverlay.finish() }
 
         txtEngineVersion.text = try {
             RinEngine.engineVersion()
@@ -602,16 +606,6 @@ class MainActivity : AppCompatActivity() {
 
         lineNumbersVisible = AppSettings.getShowLineNumbers(this)
         txtLineNumbers.visibility = if (lineNumbersVisible) android.view.View.VISIBLE else android.view.View.GONE
-    }
-
-    private fun applyEditorLayoutSettings() {
-        val toolbar=findViewById<android.view.View>(R.id.editorToolbarRoot)
-        val menu=findViewById<android.view.View>(R.id.editorMenuRow)
-        val console=findViewById<android.view.View>(R.id.editorConsoleRoot)
-        val mode=AppSettings.getEditorLayout(this)
-        toolbar.visibility=if(AppSettings.isShowToolbar(this)&&mode!="focus") android.view.View.VISIBLE else android.view.View.GONE
-        menu.visibility=if(mode=="compact") android.view.View.GONE else android.view.View.VISIBLE
-        console.visibility=if(AppSettings.isShowConsole(this)&&mode!="focus") android.view.View.VISIBLE else android.view.View.GONE
     }
 
     private fun toggleLineNumbers() {
