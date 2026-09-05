@@ -1,5 +1,7 @@
 package com.dlof.rinlang
 
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Color
@@ -14,9 +16,12 @@ import android.text.SpannableStringBuilder
 import android.text.TextWatcher
 import android.util.AttributeSet
 import android.util.TypedValue
+import android.view.ActionMode
 import android.view.Gravity
 import android.view.GestureDetector
 import android.view.KeyEvent
+import android.view.Menu
+import android.view.MenuItem
 import android.view.MotionEvent
 import android.view.View
 import android.view.inputmethod.BaseInputConnection
@@ -96,6 +101,25 @@ class RinCodeEditorView @JvmOverloads constructor(
         charWidth = textPaint.measureText("0")
     }
 
+    // --- أبعاد المحتوى المخزَّنة (للقياس فقط) --------------------------------
+    // onMeasure كان يمسح كل أسطر المستند (measureText لكل سطر عبر JNI) في كل مرة يُستدعى فيها —
+    // وهو ما كان يحدث بعد *كل* تعديل في afterEngineMutation، بما فيها تحريك المؤشر وحده (أسهم،
+    // نقر) بلا أي تغيّر في النص أو الأبعاد فعليًا. هذا سبب رئيسي لبطء/عدم سلاسة الحركة خصوصًا في
+    // الملفات الطويلة. الحل: نُعيد حساب الأبعاد فقط عندما يتغيّر النص فعليًا أو حجم الخط
+    // (recomputeContentSize)، ويكتفي onMeasure بقراءة القيم المخزَّنة.
+    private var cachedMaxLineWidth = 0f
+    private var cachedLineCount = 1
+    private fun recomputeContentSize() {
+        var maxW = 0f
+        val lc = engine.lineCount()
+        for (i in 0 until lc) {
+            val w = textPaint.measureText(engine.getLine(i))
+            if (w > maxW) maxW = w
+        }
+        cachedMaxLineWidth = maxW
+        cachedLineCount = lc
+    }
+
     // --- حالة نص الظل (Shadow Editable) لأجل IME فقط ---------------------
 
     private val shadowEditable = SpannableStringBuilder()
@@ -148,6 +172,7 @@ class RinCodeEditorView @JvmOverloads constructor(
             val byLine = HashMap<Int, MutableList<RinNativeEditor.Highlight>>()
             for (h in engine.getHighlights()) byLine.getOrPut(h.line) { mutableListOf() }.add(h)
             cachedHighlightsByLine = byLine
+            recomputeContentSize()
         }
         // مطابقة الأقواس تعتمد على موضع المؤشر (يتغيّر أيضًا بلا تعديل نصّي، كالأسهم)، فتُحسَب في
         // كل استدعاء لهذه الدالة (رخيصة الثمن)، لكن أبدًا داخل onDraw نفسها.
@@ -162,7 +187,9 @@ class RinCodeEditorView @JvmOverloads constructor(
         } else {
             dismissSuggestionPopup()
         }
-        requestLayout()
+        // requestLayout() يعيد تشغيل onMeasure (ومسح المستند بالكامل)؛ لا داعٍ له إطلاقًا عند
+        // تغيّر المؤشر/التحديد فقط بلا تغيّر في النص — invalidate() وحدها تكفي لإعادة الرسم.
+        if (changed) requestLayout()
         invalidate()
     }
 
@@ -241,6 +268,7 @@ class RinCodeEditorView @JvmOverloads constructor(
     fun setTextSize(unit: Int, size: Float) {
         textPaint.textSize = TypedValue.applyDimension(unit, size, resources.displayMetrics)
         recomputeMetrics()
+        recomputeContentSize() // أبعاد كل الأسطر تتغيّر مع حجم الخط، لا فقط عند تعديل النص
         requestLayout()
         invalidate()
     }
@@ -270,19 +298,16 @@ class RinCodeEditorView @JvmOverloads constructor(
         for (h in engine.getHighlights()) byLine.getOrPut(h.line) { mutableListOf() }.add(h)
         cachedHighlightsByLine = byLine
         cachedBracketInfo = computeBracketMatchForDraw()
+        recomputeContentSize()
     }
 
     // --- القياس والرسم ----------------------------------------------------
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
-        var maxLineWidth = 0f
-        val lc = engine.lineCount()
-        for (i in 0 until lc) {
-            val w = textPaint.measureText(engine.getLine(i))
-            if (w > maxLineWidth) maxLineWidth = w
-        }
-        val desiredWidth = (maxLineWidth + paddingLeft + paddingRight + charWidth).roundToInt()
-        val desiredHeight = ((lc * lineHeight) + paddingTop + paddingBottom).roundToInt()
+        // لا مسح للمستند هنا — القيم مُحدَّثة مسبقًا في recomputeContentSize() (تُستدعى فقط عند
+        // تغيّر النص أو حجم الخط فعليًا، انظر afterEngineMutation/setTextSize).
+        val desiredWidth = (cachedMaxLineWidth + paddingLeft + paddingRight + charWidth).roundToInt()
+        val desiredHeight = ((cachedLineCount * lineHeight) + paddingTop + paddingBottom).roundToInt()
         setMeasuredDimension(
             resolveSizeAndState(desiredWidth, widthMeasureSpec, 0),
             resolveSizeAndState(desiredHeight, heightMeasureSpec, 0)
@@ -489,6 +514,7 @@ class RinCodeEditorView @JvmOverloads constructor(
             blinkHandler.postDelayed(blinkRunnable, 500L)
         } else {
             dismissSuggestionPopup()
+            actionMode?.finish()
         }
         invalidate()
     }
@@ -497,6 +523,7 @@ class RinCodeEditorView @JvmOverloads constructor(
         super.onDetachedFromWindow()
         blinkHandler.removeCallbacks(blinkRunnable)
         dismissSuggestionPopup()
+        actionMode?.finish()
         engine.destroy()
     }
 
@@ -533,10 +560,12 @@ class RinCodeEditorView @JvmOverloads constructor(
             requestFocus()
             showKeyboard()
             selectWordAt(e.x, e.y)
+            showTextActionMode()
         }
 
         override fun onDoubleTap(e: MotionEvent): Boolean {
             selectWordAt(e.x, e.y)
+            showTextActionMode()
             return true
         }
     })
@@ -556,8 +585,10 @@ class RinCodeEditorView @JvmOverloads constructor(
                 }
             }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                val wasDragging = dragging
                 dragging = false
                 parent?.requestDisallowInterceptTouchEvent(false)
+                if (wasDragging && engine.getSelection().hasSelection) showTextActionMode()
             }
         }
         return true
@@ -579,6 +610,92 @@ class RinCodeEditorView @JvmOverloads constructor(
     private fun showKeyboard() {
         val imm = context.getSystemService(Context.INPUT_METHOD_SERVICE) as? android.view.inputmethod.InputMethodManager
         imm?.showSoftInput(this, android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT)
+    }
+
+    // --- نسخ/قص/لصق (لم يكن مُنفَّذًا إطلاقًا سابقًا: لا ClipboardManager ولا قائمة تحديد) -----
+    // View مخصّص فوق Canvas مثل هذا لا يحصل تلقائيًا على شريط "نسخ/قص/لصق" الذي يوفّره Android
+    // مجانًا لأي EditText — يجب استدعاء startActionMode يدويًا وتوفير القائمة العائمة بأنفسنا.
+
+    private var actionMode: ActionMode? = null
+
+    private fun clipboardManager(): ClipboardManager =
+        context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+
+    private fun copySelectionToClipboard(): Boolean {
+        val sel = engine.getSelection()
+        if (!sel.hasSelection) return false
+        val selected = textOfSelection(sel)
+        clipboardManager().setPrimaryClip(ClipData.newPlainText("rin_code", selected))
+        return true
+    }
+
+    private fun cutSelectionToClipboard() {
+        val sel = engine.getSelection()
+        if (!copySelectionToClipboard()) return
+        engine.replaceRange(sel.start.line, sel.start.col, sel.end.line, sel.end.col, "")
+        afterEngineMutation()
+    }
+
+    private fun pasteFromClipboard() {
+        val clip = clipboardManager()
+        if (!clip.hasPrimaryClip()) return
+        val item = clip.primaryClip?.let { if (it.itemCount > 0) it.getItemAt(0) else null } ?: return
+        val pasted = item.coerceToText(context)?.toString() ?: return
+        val sel = engine.getSelection()
+        if (sel.hasSelection) {
+            engine.replaceRange(sel.start.line, sel.start.col, sel.end.line, sel.end.col, pasted)
+        } else {
+            engine.insertText(pasted, smart = false)
+        }
+        afterEngineMutation()
+    }
+
+    private val actionModeCallback = object : ActionMode.Callback {
+        override fun onCreateActionMode(mode: ActionMode, menu: Menu): Boolean {
+            menu.add(0, ACTION_SELECT_ALL, 0, android.R.string.selectAll)
+            menu.add(0, ACTION_CUT, 1, android.R.string.cut)
+            menu.add(0, ACTION_COPY, 2, android.R.string.copy)
+            menu.add(0, ACTION_PASTE, 3, android.R.string.paste)
+            return true
+        }
+
+        override fun onPrepareActionMode(mode: ActionMode, menu: Menu): Boolean {
+            val hasSelection = engine.getSelection().hasSelection
+            menu.findItem(ACTION_CUT)?.isVisible = hasSelection
+            menu.findItem(ACTION_COPY)?.isVisible = hasSelection
+            menu.findItem(ACTION_PASTE)?.isVisible = clipboardManager().hasPrimaryClip()
+            return true
+        }
+
+        override fun onActionItemClicked(mode: ActionMode, item: MenuItem): Boolean {
+            when (item.itemId) {
+                ACTION_SELECT_ALL -> { selectAll(); mode.invalidate(); return true }
+                ACTION_CUT -> { cutSelectionToClipboard(); mode.finish() }
+                ACTION_COPY -> { copySelectionToClipboard(); mode.finish() }
+                ACTION_PASTE -> { pasteFromClipboard(); mode.finish() }
+            }
+            return true
+        }
+
+        override fun onDestroyActionMode(mode: ActionMode) {
+            actionMode = null
+        }
+    }
+
+    private fun showTextActionMode() {
+        val existing = actionMode
+        if (existing == null) {
+            actionMode = startActionMode(actionModeCallback, ActionMode.TYPE_FLOATING)
+        } else {
+            existing.invalidate()
+        }
+    }
+
+    companion object {
+        private const val ACTION_SELECT_ALL = 1
+        private const val ACTION_CUT = 2
+        private const val ACTION_COPY = 3
+        private const val ACTION_PASTE = 4
     }
 
     // --- لوحة المفاتيح (IME) عبر InputConnection حقيقي ------------------------
