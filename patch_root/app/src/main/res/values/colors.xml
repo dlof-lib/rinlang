@@ -1,0 +1,204 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="rin_background">#17181C</color>
+    <color name="rin_toolbar">#1F2126</color>
+    <color name="rin_toolbar_bottom">#202329</color>
+    <color name="rin_bottom_nav_selected">#7C5CFF</color>
+    <color name="rin_bottom_nav_unselected">#9198A3</color>
+    <color name="rin_on_toolbar">#F3F4F6</color>
+    <color name="rin_on_toolbar_dim">#9198A3</color>
+    <color name="rin_accent">#7C5CFF</color>
+    <color name="rin_accent_border_subtle">#4D7C5CFF</color>
+    <color name="rin_accent_pressed">#6A47E8</color>
+    <color name="rin_editor_bg">#1B1D22</color>
+    <color name="rin_editor_surface_border">#2A2D34</color>
+    <color name="rin_editor_text">#E3E5E8</color>
+    <color name="rin_editor_hint">#6E7480</color>
+    <color name="rin_divider">#2A2D34</color>
+    <color name="rin_console_header">#1D1F25</color>
+    <color name="rin_console_bg">#131417</color>
+    <color name="rin_console_text">#57D6B8</color>
+    <color name="rin_ghost_ripple">#22FFFFFF</color>
+    <color name="rin_ghost_pressed_bg">#14FFFFFF</color>
+    <color name="rin_logo_badge_bg">#7C5CFF</color>
+
+    <!-- الشريط العلوي المطوَّر: تدرّج + إطار أيقونة التطبيق + فاصل ظل -->
+    <color name="rin_toolbar_gradient_top">#24262D</color>
+    <color name="rin_toolbar_gradient_bottom">#1B1D22</color>
+    <color name="rin_app_icon_border">#33FFFFFF</color>
+    <color name="rin_toolbar_shadow">#33000000</color>
+    <color name="rin_menubar_divider">#20FFFFFF</color>
+    <color name="rin_run_gradient_start">#8F72FF</color>
+    <color name="rin_run_gradient_end">#6A47E8</color>
+
+    <!-- مساعدات المحرر: تظليل السطر الحالي، تظليل الأقواس المتطابقة، وتحذير الأقواس غير المتوازنة -->
+    <color name="rin_current_line_bg">#1FFFFFFF</color>
+    <color name="rin_bracket_match_bg">#5F7C5CFF</color>
+    <color name="rin_bracket_error_bg">#5FF14C4C</color>
+    <color name="rin_find_match_bg">#5FD7BA7D</color>
+
+    <!-- تلوين الصيغة النحوية (syntax highlighting) في المحرر -->
+    <color name="syntax_keyword">#569CD6</color>
+    <color name="syntax_container_keyword">#4EC9B0</color>
+    <!-- حقول تنسيق/ستايل الكائن (txt/img/object.file/Fonts/background/css3): نفس هوية "الستايل"
+         اللونية المستخدمة في كونسول التشغيل (log_kind_style) لتمييزها بصرياً عن بقية كلمات الحاويات -->
+    <color name="syntax_style_keyword">#F2A65A</color>
+    <color name="syntax_string">#CE9178</color>
+    <color name="syntax_number">#B5CEA8</color>
+    <color name="syntax_comment">#6A9955</color>
+    <color name="syntax_builtin">#DCDCAA</color>
+    <color name="syntax_tag">#D7BA7D</color>
+    <!-- توجيهات سياسة وحدة make (kind/use/need/allow/deny/strict/input/output/public/private/
+         version/description) — بنفسجي مميز بنفس هوية الكلمات المفتاحية التحكّمية في VS Code -->
+    <color name="syntax_make_directive">#C586C0</color>
+    <!-- `item` الضمني داخل مفهوم Reckon الحسابي بسطرين (docs/RECKON.md) — لون مائل مستقل
+         لتمييزه كـ"مرجع ضمني" وليس متغيّراً مُعلَناً صراحةً -->
+    <color name="syntax_reckon_item">#FF8A6B</color>
+
+    <!-- الهوية الثانية "أخضر" — تُستخدم إلى جانب البنفسجي في: مؤشر التبويب السفلي، حالة
+         "تم الانتساب"، حبّات إحصائيات التنزيلات/التثبيت، وأيقونة "موثّق" — بلا استبدال
+         البنفسجي كلون أساسي، فقط كطبقة تمييز ثانية (Purple + Green identity). -->
+    <color name="rin_accent_green">#22C88E</color>
+    <color name="rin_accent_green_dim">#4D22C88E</color>
+    <color name="rin_accent_green_pressed">#1CA877</color>
+    <color name="rin_gradient_green_start">#2FE0A0</color>
+    <color name="rin_gradient_green_end">#1AA377</color>
+
+    <!-- بطاقات الإحصائيات القابلة للضغط في الملف الشخصي وصفحة تفاصيل الحزمة -->
+    <color name="rin_stat_card_bg">#1B1D22</color>
+    <color name="rin_stat_card_border">#2A2D34</color>
+    <color name="rin_stat_card_pressed">#22252C</color>
+
+    <color name="rin_star_gold">#FFC94D</color>
+    <color name="rin_star_gold_dim">#4DFFC94D</color>
+    <color name="rin_star_track">#333640</color>
+
+    <!-- لون القلب عند "أُعجِب به" في صفحة تفاصيل الحزمة (زر الإعجاب) -->
+    <color name="rin_like_active">#FF4D6D</color>
+
+    <!-- شارة "ناشر موثّق" في متجر Rin (تحميلات + تقييم عاليان)، منفصلة عن ألوان الحالة الأخرى -->
+    <color name="rin_verified_badge">#3B9EFF</color>
+
+    <!-- ألوان قائمة التشغيل المجدولة (job queue / execution history), مثل بطاقات الحاويات -->
+    <color name="rin_job_card_bg">#17171A</color>
+    <color name="rin_job_card_border">#2D2D30</color>
+
+    <!-- ألوان تمييز شارة نوع المشروع في قائمة المشاريع (Container/Table/UI/Free Project)،
+         كل نوع بهوية لونية مستقلة بدل لون rin_accent الموحّد للجميع. -->
+    <!-- لوحة ألوان قسم "رسم الواجهة" داخل حوار مشروع UI جديد: يختار المستخدم لوناً أساسياً
+         (primary) يُكتب داخل @theme في main.rin المولَّد، بدل البنفسجي الثابت وحده. -->
+    <color name="ui_design_color_purple">#7C5CFF</color>
+    <color name="ui_design_color_blue">#3B82F6</color>
+    <color name="ui_design_color_green">#22C88E</color>
+    <color name="ui_design_color_amber">#F2A65A</color>
+    <color name="ui_design_color_pink">#FF4D6D</color>
+    <color name="ui_design_color_cyan">#5FD0E0</color>
+
+    <color name="project_type_container_color">#4EC9B0</color>
+    <color name="project_type_table_color">#D7BA7D</color>
+    <color name="project_type_ui_color">#5FD0E0</color>
+    <color name="project_type_free_color">#7C5CFF</color>
+    <color name="project_type_illust_color">#E67E22</color>
+    <color name="status_queued">#8A8A8A</color>
+    <color name="status_running">#569CD6</color>
+    <color name="status_success">#4EC9B0</color>
+    <color name="status_error">#F14C4C</color>
+    <color name="status_timeout">#D7BA7D</color>
+    <color name="status_cancelled">#8A8A8A</color>
+
+    <!-- لون خلفية حبّة الحالة (status pill) داخل بطاقة المهمة -->
+    <color name="rin_job_card_bg_hover">#1C1C20</color>
+
+    <!-- ألوان تصنيف أسطر ناتج التشغيل (استبدال الإيموجي بأيقونات ملوّنة حسب نوع العملية) -->
+    <color name="log_kind_structure">#569CD6</color>   <!-- فتح/إغلاق حاويات: جدول، حزمة، مجلد -->
+    <color name="log_kind_success">#4EC9B0</color>      <!-- إغلاق ناجح ✅ -->
+    <color name="log_kind_import">#8A7CFF</color>      <!-- استيراد/ربط/دمج -->
+    <color name="log_kind_export">#C88CFF</color>      <!-- حفظ/تثبيت فعلي على القرص -->
+    <color name="log_kind_data">#D7BA7D</color>         <!-- صفوف بيانات، مسار ملف -->
+    <color name="log_kind_style">#F2A65A</color>        <!-- تنسيق/ستايل -->
+    <color name="log_kind_network">#5FD0E0</color>      <!-- API/شبكة/ترجمة -->
+    <color name="log_kind_error">#F14C4C</color>
+    <color name="log_kind_plain">#AEB4BD</color>
+    <!-- ثلاث هويات جديدة خاصة بـ print level=... (info/warn/debug) — success وerror فوق تُعادان
+         استخدامهما كما هما (نفس اللون) لأن level="success"/level="error" منطقياً نفس تصنيف
+         ✅ إغلاق ناجح و❌ خطأ تشغيل الفعليين -->
+    <color name="log_kind_info">#5C9DFF</color>
+    <color name="log_kind_warning">#E8B23D</color>
+    <color name="log_kind_debug">#B98CFF</color>
+
+    <!-- تحميل هيكلي (skeleton loading) + شاشة انقطاع الاتصال -->
+    <color name="rin_skeleton_base">#22252C</color>
+    <color name="rin_skeleton_highlight">#31353F</color>
+
+    <!-- بطاقة/زر تنزيل النتائج الفعلية إلى Downloads -->
+    <color name="rin_download_chip_bg">#20232B</color>
+    <color name="rin_download_chip_border">#3A3E48</color>
+    <color name="rin_download_progress_track">#2A2D34</color>
+
+    <!-- شاشة "Pipeline Runner": تصميم فاتح مطابق لمخطط تدفق الأنابيب المرئي -->
+    <color name="pipeline_header_bg">#0F2A3D</color>
+    <color name="pipeline_header_bg_end">#12303F</color>
+    <color name="pipeline_header_text">#FFFFFF</color>
+    <color name="pipeline_header_subtext">#9FB4C2</color>
+    <color name="pipeline_screen_bg">#EEF1F3</color>
+    <color name="pipeline_panel_bg">#FFFFFF</color>
+    <color name="pipeline_code_bg">#F6F7F8</color>
+    <color name="pipeline_code_border">#E1E5E8</color>
+    <color name="pipeline_active_line_bg">#E4EEF7</color>
+    <color name="pipeline_text_primary">#1B2733</color>
+    <color name="pipeline_text_muted">#6B7A85</color>
+    <color name="pipeline_green">#1E7A4C</color>
+    <color name="pipeline_green_dark">#155C39</color>
+    <color name="pipeline_green_light_bg">#DCEFE3</color>
+    <color name="pipeline_green_light_text">#1E7A4C</color>
+    <color name="pipeline_red">#C0392B</color>
+    <color name="pipeline_red_light_bg">#F8E0DD</color>
+    <color name="pipeline_red_light_text">#C0392B</color>
+    <color name="pipeline_arrow">#9AA7B0</color>
+    <color name="pipeline_node_border">#1E7A4C</color>
+    <color name="pipeline_node_bg">#FFFFFF</color>
+    <color name="pipeline_neutral_bg">#E7EBED</color>
+    <color name="pipeline_btn_outline_border">#C6CDD2</color>
+    <color name="pipeline_btn_outline_text">#3C4650</color>
+
+    <!-- أسلوب الطرفية (Terminal) الجديد لعرض خطوات @container.pipe في RinFlow،
+         بدل بطاقات CI/CD الأفقية: نافذة داكنة بسطور نصية أحادية المسافة. -->
+    <color name="pipeline_terminal_bg">#0B0E14</color>
+    <color name="pipeline_terminal_header_bg">#161B22</color>
+    <color name="pipeline_terminal_border">#2A313C</color>
+    <color name="pipeline_terminal_dot_red">#FF5F56</color>
+    <color name="pipeline_terminal_dot_yellow">#FFBD2E</color>
+    <color name="pipeline_terminal_dot_green">#27C93F</color>
+    <color name="pipeline_terminal_prompt">#5FD3FF</color>
+    <color name="pipeline_terminal_text">#E6EDF3</color>
+    <color name="pipeline_terminal_dim">#7D8590</color>
+    <color name="pipeline_terminal_green">#3FE07D</color>
+    <color name="pipeline_terminal_red">#FF6B6B</color>
+    <color name="pipeline_terminal_amber">#FFC163</color>
+    <color name="pipeline_terminal_cyan">#5FD3FF</color>
+    <color name="pipeline_terminal_cursor">#3FE07D</color>
+
+    <!-- ألوان الصيغة النحوية داخل بطاقة الكود الفاتحة على شاشة Pipeline Runner -->
+    <color name="pipeline_syntax_keyword">#1857A4</color>
+    <color name="pipeline_syntax_container">#1E7A4C</color>
+    <color name="pipeline_syntax_string">#8A5A1F</color>
+    <color name="pipeline_syntax_number">#0E7A6B</color>
+    <color name="pipeline_syntax_comment">#8A97A0</color>
+    <color name="pipeline_syntax_tag">#8A5A1F</color>
+
+    <!-- شاشة "المعاينة الحية" (Live Preview / Loomtime): إطار جهاز داكن على خلفية أغمق قليلاً
+         من بقية التطبيق حتى يبرز إطار الهاتف بوضوح، مع شارة "Live" خضراء ولوحة أخطاء Snag حمراء. -->
+    <color name="loom_canvas_bg">#101115</color>
+    <color name="loom_device_frame_bg">#0B0C0F</color>
+    <color name="loom_device_frame_border">#33FFFFFF</color>
+    <color name="loom_device_notch_bg">#000000</color>
+    <color name="loom_live_dot">#22C88E</color>
+    <color name="loom_error_bg">#3A1518</color>
+    <color name="loom_error_border">#F14C4C</color>
+    <color name="loom_error_text">#FFB4AC</color>
+    <color name="loom_footer_text">#9198A3</color>
+    <color name="loom_inspector_bg">#1B1D22</color>
+    <color name="loom_inspector_border">#2A2D34</color>
+    <color name="loom_inspector_key">#9198A3</color>
+    <color name="loom_inspector_value">#E3E5E8</color>
+</resources>
