@@ -10,11 +10,11 @@ object ProjectAlbumManager {
     private fun root(context: Context): File = File(context.filesDir, ALBUMS_DIR).also { if (!it.exists()) it.mkdirs() }
 
     fun listAlbums(context: Context): List<String> =
-        root(context).listFiles { f -> f.isDirectory }?.map { it.name }?.sorted(String.CASE_INSENSITIVE_ORDER) ?: emptyList()
+        root(context).listFiles { f -> f.isDirectory }?.map { it.name }?.sortedWith(String.CASE_INSENSITIVE_ORDER) ?: emptyList()
 
     fun createAlbum(context: Context, name: String) {
         val clean = name.trim()
-        require(clean.isNotEmpty() && clean.length <= 64 && clean.matches(Regex("^[A-Za-z0-9_\-\u0600-\u06FF ]+$"))) { "اسم الألبوم غير صالح" }
+        require(clean.isNotEmpty() && clean.length <= 64 && clean.matches(Regex("^[A-Za-z0-9_\\-\u0600-\u06FF ]+$"))) { "اسم الألبوم غير صالح" }
         val dir = File(root(context), clean)
         require(!dir.exists()) { "يوجد ألبوم بهذا الاسم" }
         dir.mkdirs()
