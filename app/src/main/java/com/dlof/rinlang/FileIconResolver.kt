@@ -93,6 +93,13 @@ object FileIconResolver {
             return
         }
 
+        // 1.5) .illust -> أيقونة "Illust" المحلية المخصصة (لوحة ألوان+فرشاة)، فوراً وبلا شبكة —
+        //      نفس فلسفة .rin أعلاه؛ لغة مخصصة معروفة للتطبيق وليست ملف نوع عام يُطلَب من Iconify.
+        if (ext == "illust") {
+            imageView.setImageResource(R.drawable.ic_illust_file)
+            return
+        }
+
         // نضع أيقونة افتراضية فوراً (بلا وميض فراغ) بينما يُحضَّر أي شيء أدق بالخلفية.
         imageView.setImageResource(R.drawable.ic_rin_stack)
         // نربط الطلب بالـ ImageView نفسه لتفادي "تسرّب" نتيجة متأخرة لعنصر أعيد تدويره لملف آخر.
