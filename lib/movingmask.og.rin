@@ -56,6 +56,9 @@
 //    12) التكامل مع الحلقات (loop integration: tick / runLoop / animateTo / forEach)
 //    13) الأحداث (lightweight event hooks)
 //    14) الفحص والتلخيص (inspection / debug)
+//    15) التكامل مع Loom — مفاهيم مستعارة من محرّك الواجهات Loomtime
+//        (Warp field export / Strand kind tagging / Fabric snapshot /
+//         Needle hit-test & dispatch / Shuttle diff)
 // ============================================================================
 
 
@@ -1452,4 +1455,195 @@ fun mm_toString(mm) {
         i = i + 1;
     }
     return out;
+}
+
+
+// ============================================================================
+// 15) التكامل مع Loom — مفاهيم مستعارة من محرّك الواجهات Loomtime
+// ============================================================================
+//  محرّك Loomtime (app/src/main/cpp/loom/*.h) نظام مستقل تماماً بمفرداته الخاصة: الـ Fabric
+//  (شجرة عرض حيّة من Strand)، الـ Warp (خلايا حالة تفاعلية يقرأها @view.* تلقائياً)، الـ
+//  Needle (محرّك اللمس/الإصابة الذي يحوّل نقطة لمس إلى Strand وحدث)، والـ Shuttle (يقارن
+//  شجرتين ويُنتج Patch[] segmentية). هذه المكتبة (movingmask) لا تُعدِّل ذلك المحرّك ولا
+//  تستدعيه مباشرة — فهو C++ منفصل عن هذا الملف الذي يبقى Rin خالصاً مستقلاً بذاته كما في
+//  بقية الأقسام أعلاه. بدل ذلك، هذا القسم يستعير *نفس المفاهيم والمفردات* على مستوى بيانات
+//  movingmask نفسها، بحيث يسهل ربط عالم الأقنعة المتحركة يدوياً بواجهة Loomtime حقيقية:
+//
+//    - Warp:    mm_warpFields/mm_warpFieldNames — تُصدِّر حالة قناع كحقول مُسطَّحة بأسماء
+//                جاهزة لتُسنَد إلى خلايا `warp` التي يُعلنها المستخدم بنفسه في ملف .rin
+//                (Loomtime لا يوفّر تعيين خلية warp بالاسم النصّي ديناميكياً من كود Rin
+//                عادي، لذا الإسناد النهائي `اسم_الخلية = القيمة;` يبقى بيد المستخدم كل
+//                دورة — انظر المثال في docs/moving-mask.md).
+//    - Strand:  mm_setStrandKind/mm_strandKind — تسمية بصرية اختيارية للقناع (نفس أسماء
+//                loom::StrandKind قدر الإمكان: "Text","Image","Button","Card","Icon","Box"...)
+//                تُخزَّن في meta العادية؛ مفيدة إن أردت لاحقاً رسم/تصدير القناع بشكل مختلف
+//                بحسب نوعه المُعلن.
+//    - Fabric:  mm_toFabric — لقطة مسطَّحة (بلا تعشيش أب/أبناء، على عكس شجرة Fabric
+//                الحقيقية) بكل الأقنعة النشطة وغير النشطة، بنفس روح "شجرة عرض" جاهزة
+//                للطباعة/التصدير/رسم مخصَّص.
+//    - Needle:  mm_needleHit/mm_dispatchNeedle — اختبار إصابة نقطة (لمسة/نقرة) ضد كل
+//                الأقنعة النشطة (بدائرة نصف قطرها radius حول موضع كل قناع)، وإطلاق حدث
+//                "needleTap" على أقرب إصابة — نفس فكرة Needle الحقيقي (تحويل نقطة لمس
+//                إلى هدف ثم تنفيذ فعلي) لكن فوق عالم الأقنعة المتحركة بدل شجرة Strand.
+//    - Shuttle: mm_snapshot/mm_shuttleDiff — يقارن لقطة سابقة (من mm_snapshot) بحالة mm
+//                الحالية، ويُنتج مصفوفة Patch شبيهة بما يُنتجه Shuttle الحقيقي: "Insert"
+//                لقناع جديد، "Remove" لقناع اختفى، "Move" لقناع تغيّر موضعه أو نشاطه —
+//                مفيد لمعرفة "ماذا تغيّر بالضبط بين دورتين" (مزامنة شبكية، إعادة تشغيل،
+//                رسم تفاضلي مخصَّص) بدل إعادة رسم/إرسال كل شيء من الصفر كل دورة.
+
+// ---- Warp: تصدير حالة قناع كحقول مُسطَّحة جاهزة لخلايا warp -----------------------------
+
+// أسماء الحقول الأربعة/الخمسة التي يُنتجها mm_warpFields لبادئة prefix مُعطاة — مفيدة
+// لمعرفة أسماء خلايا warp الواجب إعلانها مسبقاً في ملف .rin قبل الإسناد إليها
+fun mm_warpFieldNames(prefix) {
+    return [prefix + "_x", prefix + "_y", prefix + "_vx", prefix + "_vy", prefix + "_active"];
+}
+
+// يُصدِّر موضع/سرعة/حالة نشاط قناع كخريطة حقول مُسطَّحة بأسماء prefix+"_x" وهكذا (prefix
+// الافتراضي هو اسم القناع نفسه إن مُرِّر nil) — جاهزة لتُسنَد يدوياً إلى خلايا `warp` معلَنة
+// بنفس الاسم كل دورة، فتُحدَّث واجهة @view.* التي تقرأ تلك الخلايا تلقائياً عبر إعادة الرسم
+// التفاعلية العادية لِـ Loomtime؛ يُعيد nil إن لم يوجد القناع
+fun mm_warpFields(mm, name, prefix) {
+    let rec = mm_get(mm, name);
+    if (rec == nil) { return nil; }
+    let p = prefix;
+    if (p == nil) { p = name; }
+    let out = {};
+    out[p + "_x"] = rec["x"];
+    out[p + "_y"] = rec["y"];
+    out[p + "_vx"] = rec["vx"];
+    out[p + "_vy"] = rec["vy"];
+    out[p + "_active"] = rec["active"];
+    return out;
+}
+
+// ---- Strand: تسمية بصرية اختيارية للقناع ------------------------------------------------
+
+// يُسمّي "نوع Strand" مُقترَح لقناع (نصّ حرّ، لكن يُفضَّل استخدام نفس مفردات loom::StrandKind
+// مثل "Text"/"Image"/"Button"/"Card"/"Icon"/"Box"...) — تخزين بسيط فوق meta العادية،
+// لا يُنشئ أي Strand حقيقي ولا يتحقّق من صحة القيمة
+fun mm_setStrandKind(mm, name, kind) {
+    return mm_setMeta(mm, name, "strandKind", kind);
+}
+
+// نوع الـStrand المُقترَح لقناع، أو "Unknown" إن لم يُضبط أي نوع له مسبقاً
+fun mm_strandKind(mm, name) {
+    return mm_getMeta(mm, name, "strandKind", "Unknown");
+}
+
+// ---- Fabric: لقطة مسطَّحة بكل الأقنعة ----------------------------------------------------
+
+// مصفوفة بلقطة كل قناع مسجَّل في mm (بترتيب الإنشاء): {name, kind (من mm_strandKind), x, y,
+// active, tags} — لقطة مسطَّحة بلا تعشيش أب/أبناء (على عكس شجرة Fabric الحقيقية، فأقنعة
+// movingmask لا تملك علاقة أب/ابن أصلاً)، جاهزة للطباعة أو التصدير أو تغذية رسم مخصَّص
+fun mm_toFabric(mm) {
+    let out = [];
+    let i = 0;
+    while (i < len(mm["order"])) {
+        let name = mm["order"][i];
+        let rec = mm["items"][name];
+        push(out, {
+            name: name,
+            kind: mm_strandKind(mm, name),
+            x: rec["x"],
+            y: rec["y"],
+            active: rec["active"],
+            tags: rec["tags"]
+        });
+        i = i + 1;
+    }
+    return out;
+}
+
+// ---- Needle: اختبار إصابة نقطة لمس/نقرة ضد الأقنعة النشطة --------------------------------
+
+// يبحث عن أقرب قناع نشط لنقطة (x, y) ضمن نصف قطر radius (دائرة إصابة حول موضع كل قناع)،
+// ويُعيد { name: أقرب اسم أو nil, distance: المسافة أو nil } — nil في الحقلين إن لم يقع أي
+// قناع نشط ضمن radius من تلك النقطة إطلاقاً
+fun mm_needleHit(mm, x, y, radius) {
+    let point = mm_point(x, y);
+    let bestName = nil;
+    let bestDistance = nil;
+    let i = 0;
+    while (i < len(mm["order"])) {
+        let name = mm["order"][i];
+        if (mm_isActive(mm, name)) {
+            let d = mm_distance(point, mm_position(mm, name));
+            if (d <= radius) {
+                if (bestDistance == nil or d < bestDistance) {
+                    bestDistance = d;
+                    bestName = name;
+                }
+            }
+        }
+        i = i + 1;
+    }
+    return { name: bestName, distance: bestDistance };
+}
+
+// يُنفِّذ mm_needleHit عند (x, y) بنصف قطر radius، وإن وُجدت إصابة يُطلق حدث "needleTap"
+// (payload: { name, x, y, distance }) — سجِّل مستمعاً عبر mm_on(mm, "needleTap", fn) لتنفيذ
+// فعل حقيقي عند الإصابة، بنفس روح Needle الحقيقي (تحويل نقطة لمس إلى تنفيذ فعلي). يُعيد اسم
+// القناع المُصاب، أو nil إن لم تُصب أي دائرة إصابة
+fun mm_dispatchNeedle(mm, x, y, radius) {
+    let hit = mm_needleHit(mm, x, y, radius);
+    if (hit["name"] != nil) {
+        mm__fire(mm, "needleTap", { name: hit["name"], x: x, y: y, distance: hit["distance"] });
+    }
+    return hit["name"];
+}
+
+// ---- Shuttle: مقارنة لقطتين وإنتاج Patch[] ----------------------------------------------
+
+// لقطة خفيفة بكل الأقنعة (name/x/y/active فقط، بلا سرعة أو مسار أو أثر) — احتفظ بناتج هذه
+// الدالة جانباً، ثم مرِّره لاحقاً إلى mm_shuttleDiff لمعرفة ما تغيّر بالضبط منذ تلك اللحظة
+fun mm_snapshot(mm) {
+    let out = [];
+    let i = 0;
+    while (i < len(mm["order"])) {
+        let name = mm["order"][i];
+        let rec = mm["items"][name];
+        push(out, { name: name, x: rec["x"], y: rec["y"], active: rec["active"] });
+        i = i + 1;
+    }
+    return out;
+}
+
+// يقارن لقطة سابقة previousSnapshot (من mm_snapshot) بحالة mm الحالية، ويُعيد مصفوفة Patch
+// (كل عنصر { kind, name, x, y }): "Insert" لقناع موجود الآن ولم يكن في اللقطة السابقة،
+// "Remove" لقناع كان في اللقطة السابقة واختفى الآن (x/y يكونان nil)، "Move" لقناع موجود في
+// الحالتين لكن تغيّر موضعه أو نشاطه. الأقنعة التي لم تتغيّر إطلاقاً لا تظهر في الناتج —
+// تماماً كما لا يُنتج Shuttle الحقيقي Patch لأي Strand لم يتغيّر شيء في سماته
+fun mm_shuttleDiff(mm, previousSnapshot) {
+    let prevIndex = {};
+    let j = 0;
+    while (j < len(previousSnapshot)) {
+        let snap = previousSnapshot[j];
+        prevIndex[snap["name"]] = snap;
+        j = j + 1;
+    }
+    let patches = [];
+    let i = 0;
+    while (i < len(mm["order"])) {
+        let name = mm["order"][i];
+        let rec = mm["items"][name];
+        if (has(prevIndex, name)) {
+            let old = prevIndex[name];
+            let moved = mm_nearlyEqual(old["x"], rec["x"]) == false or mm_nearlyEqual(old["y"], rec["y"]) == false or old["active"] != rec["active"];
+            if (moved) {
+                push(patches, { kind: "Move", name: name, x: rec["x"], y: rec["y"] });
+            }
+            remove(prevIndex, name);
+        } else {
+            push(patches, { kind: "Insert", name: name, x: rec["x"], y: rec["y"] });
+        }
+        i = i + 1;
+    }
+    let removedNames = keys(prevIndex);
+    let k = 0;
+    while (k < len(removedNames)) {
+        push(patches, { kind: "Remove", name: removedNames[k], x: nil, y: nil });
+        k = k + 1;
+    }
+    return patches;
 }
