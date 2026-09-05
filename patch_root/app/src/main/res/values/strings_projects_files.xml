@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  نصوص شاشتَي المشاريع والملفات الجديدتين. مشروعك الأصلي (خارج هذا الرفع) فيه
+  على الأرجح res/values/strings.xml موجود بالفعل بنصوص MainActivity — لا تستبدله
+  بهذا الملف، بل انسخ العناصر أدناه بداخله (أو أبقِ هذا الملف كما هو، فأندرويد
+  يدمج كل ملفات values/*.xml تلقائياً طالما لا تتكرر أسماء العناصر).
+-->
+<resources>
+    <!-- أزرار عامة تستخدمها حوارات المشاريع/الملفات (كانت ناقصة وتسبّبت بخطأ بناء فعلي) -->
+    <string name="create">إنشاء</string>
+    <string name="cancel">إلغاء</string>
+    <string name="rename">إعادة تسمية</string>
+    <string name="delete">حذف</string>
+
+    <!-- الشريط العلوي الموحّد للشاشات الفرعية -->
+    <string name="action_back">رجوع</string>
+    <string name="projects_screen_title">المشاريع</string>
+    <string name="files_screen_title">الملفات</string>
+
+    <!-- شاشة المشاريع -->
+    <string name="new_project_title">مشروع جديد</string>
+    <string name="rename_project_title">إعادة تسمية المشروع</string>
+    <string name="delete_project_title">حذف المشروع</string>
+    <string name="delete_project_confirm">هل تريد حذف المشروع \"%1$s\" وكل ملفاته؟</string>
+    <string name="project_name_hint">اسم المشروع</string>
+    <string name="no_projects_yet">لا توجد مشاريع بعد. اضغط + لإنشاء أول مشروع.</string>
+    <string name="project_not_found">تعذّر العثور على المشروع</string>
+    <string name="project_meta_format">%1$d ملف</string>
+
+    <!-- أنواع المشاريع (تُختار عند الإنشاء وتُحفظ في project.og.urin) -->
+    <string name="project_type_label">اختيار النوع</string>
+    <string name="project_type_container">Container</string>
+    <string name="project_type_table">Table</string>
+    <string name="project_type_ui">UI</string>
+    <string name="project_type_free">Free Project</string>
+    <string name="project_type_container_desc">بيانات حيّة داخل حاوية</string>
+    <string name="project_type_table_desc">جدول صفوف وأعمدة</string>
+    <string name="project_type_ui_desc">شاشات وواجهات</string>
+    <string name="project_type_free_desc">ملف كود فارغ</string>
+    <string name="project_type_illust">Illust</string>
+    <string name="project_type_illust_desc">لغة رسم/SVG جاهزة فوق Rin</string>
+
+    <!-- خيارات "رسم الواجهة" داخل حوار مشروع UI جديد: تظهر فقط عند اختيار نوع UI،
+         وتسمح باختيار توب بار/بلا توب بار، قائمة جانبية/بلا قائمة جانبية، ولون أساسي،
+         قبل توليد main.rin (انظر ProjectManager.UiDesignOptions). -->
+    <string name="ui_design_section_title">رسم الواجهة</string>
+    <string name="ui_design_section_desc">اختر عناصر الشاشة الأساسية قبل إنشاء المشروع</string>
+    <string name="ui_design_topbar_label">شريط علوي</string>
+    <string name="ui_design_topbar_desc">شريط عنوان ثابت أعلى الشاشة</string>
+    <string name="ui_design_sidebar_label">قائمة جانبية</string>
+    <string name="ui_design_sidebar_desc">قائمة تنقّل جانبية بعناصرها</string>
+    <string name="ui_design_colors_label">الألوان</string>
+    <string name="color_picker_title">اختيار لون</string>
+    <string name="color_picker_custom_desc">لون مخصص</string>
+    <string name="color_picker_back">رجوع</string>
+
+    <!-- مراحل إنشاء مشروع جديد -->
+    <string name="project_creating_title">إنشاء مشروع</string>
+    <string name="project_stage_loading">جاري التحميل..</string>
+    <string name="project_stage_preparing">يتم التجهيز..</string>
+    <string name="project_stage_done">تم..</string>
+
+    <!-- شاشة الملفات -->
+    <string name="new_file_title">ملف جديد</string>
+    <string name="upload_file">رفع ملف</string>
+    <string name="upload_media">رفع وسائط</string>
+    <string name="delete_file_title">حذف الملف</string>
+    <string name="delete_file_confirm">هل تريد حذف الملف \"%1$s\"؟</string>
+    <string name="file_name_hint">اسم الملف (مثال: main.rin)</string>
+    <string name="no_files_yet">لا توجد ملفات بعد. أنشئ ملفاً جديداً أو ارفع ملفاً أو وسائط من جهازك.</string>
+    <string name="file_uploaded_toast">تم رفع الملف: %1$s</string>
+    <string name="file_meta_format">%1$s • %2$s</string>
+    <string name="no_app_to_open_file">لا يوجد تطبيق مثبَّت لفتح هذا النوع من الملفات</string>
+
+    <!-- المجلدات الفرعية وإعادة التسمية -->
+    <string name="new_folder_title">مجلد جديد</string>
+    <string name="folder_name_hint">اسم المجلد</string>
+    <string name="folder_meta_format">مجلد • %1$s</string>
+    <string name="delete_folder_title">حذف المجلد</string>
+    <string name="delete_folder_confirm">هل تريد حذف المجلد \"%1$s\" وكل ما بداخله؟</string>
+    <string name="rename_file_title">إعادة تسمية الملف</string>
+    <string name="rename_folder_title">إعادة تسمية المجلد</string>
+    <string name="file_renamed_toast">تمت إعادة التسمية إلى: %1$s</string>
+    <string name="folder_renamed_toast">تمت إعادة التسمية إلى: %1$s</string>
+
+    <!-- أدوات الأرشيف المضغوط (ZIP): رفع وفك ضغط، أو تنزيل المشروع كأرشيف -->
+    <string name="zip_tools_title">أرشيف ZIP</string>
+    <string name="zip_upload_extract">رفع أرشيف مضغوط وفك ضغطه هنا</string>
+    <string name="zip_download_project">تنزيل المشروع كأرشيف ZIP</string>
+    <string name="zip_extracted_toast">تم فك ضغط %1$d ملف داخل المشروع</string>
+    <string name="zip_extract_error">تعذّر فك ضغط الأرشيف</string>
+
+    <!-- زر التنقل الجديد داخل المحرر (MainActivity) -->
+    <string name="btn_projects">المشاريع</string>
+</resources>
