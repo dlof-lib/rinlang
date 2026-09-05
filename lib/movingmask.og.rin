@@ -57,8 +57,17 @@
 //    13) الأحداث (lightweight event hooks)
 //    14) الفحص والتلخيص (inspection / debug)
 //    15) التكامل مع Loom — مفاهيم مستعارة من محرّك الواجهات Loomtime
-//        (Warp field export / Strand kind tagging / Fabric snapshot /
-//         Needle hit-test & dispatch / Shuttle diff)
+//        15.1) Warp   — تصدير حالة قناع كحقول مُسطَّحة
+//        15.2) Strand — تسمية بصرية اختيارية للقناع
+//        15.3) Fabric — لقطة مسطَّحة بكل الأقنعة
+//        15.4) Needle — اختبار إصابة نقطة لمس/نقرة
+//        15.5) Shuttle — مقارنة لقطتين وإنتاج Patch[]
+//        15.6) Actions — نظام أفعال جاهزة قابل للتوسعة (Action Engine)
+//        15.7) Navigation — مشاهد (scenes) عبر الوسوم، بمكدّس تنقّل
+//        15.8) Overlay — طبقة علوية فوق الجميع (أولوية في اختبار الإصابة)
+//        15.9) Dye — لون بصري اختياري للقناع
+//        15.10) Theme — لوحات ألوان مُسمّاة على مستوى المحرّك (Pattern Book)
+//        15.11) Object Inspector — بطاقة فحص كاملة لقناع واحد
 // ============================================================================
 
 
@@ -176,6 +185,11 @@ fun mm__cos(x) {
 //    tick:       عدّاد الدورات (frames) التي نُفِّذت عبر mm_tick/mm_runLoop
 //    historyLimit: أقصى عدد نقاط أثر تُحفظ لكل قناع (mm_recordHistory)
 //    handlers:   خريطة اسم حدث -> مصفوفة دوال مستمعة (mm_on)
+//    actions:    خريطة اسم فعل مخصَّص -> دالة مُسجَّلة (mm_defineAction، قسم 15.6)
+//    themes:     خريطة اسم Theme -> خريطة أدوار لونية (mm_defineTheme، قسم 15.10)
+//    activeTheme: اسم الـTheme النشط حالياً، أو nil (mm_setActiveTheme، قسم 15.10)
+//    nav:        حالة التنقّل بين المشاهد: { stack: [...], current: نص أو nil,
+//                knownScenes: [...] } (قسم 15.7)
 
 // ينشئ محرّك أقنعة متحركة جديداً وفارغاً
 fun mm_new() {
@@ -187,7 +201,11 @@ fun mm_new() {
         regions: {},
         tick: 0,
         historyLimit: MM_DEFAULT_HISTORY_LIMIT,
-        handlers: {}
+        handlers: {},
+        actions: {},
+        themes: {},
+        activeTheme: nil,
+        nav: { stack: [], current: nil, knownScenes: [] }
     };
 }
 
@@ -1490,6 +1508,26 @@ fun mm_toString(mm) {
 //                لقناع جديد، "Remove" لقناع اختفى، "Move" لقناع تغيّر موضعه أو نشاطه —
 //                مفيد لمعرفة "ماذا تغيّر بالضبط بين دورتين" (مزامنة شبكية، إعادة تشغيل،
 //                رسم تفاضلي مخصَّص) بدل إعادة رسم/إرسال كل شيء من الصفر كل دورة.
+//    - Actions: mm_defineAction/mm_applyAction — سجل أفعال قابل للتوسعة، بنفس فكرة Needle
+//                الحقيقي (يجرِّب دالة مستخدم مُسجَّلة أولاً، ثم يقع على أفعال جاهزة مبنية:
+//                activate/deactivate/toggleActive/stop/teleport/nudge/addTag/removeTag)
+//                بدل إعادة كتابة نفس سلسلة `if` في كل مكان يُطبَّق فيه فعل على قناع باسمه.
+//    - Navigation: mm_navigate/mm_navBack/mm_navReplace/mm_navReload — مشاهد (scenes) مبنية
+//                فوق نظام الوسوم (tags) الموجود أصلاً: الانتقال لمشهد يُنشِّط كل قناع يحمل
+//                وسم ذلك المشهد ويُعطِّل أقنعة المشاهد الأخرى المعروفة (الأقنعة بلا وسم مشهد
+//                تبقى كما هي دوماً — عناصر عامة كالـHUD) — بنفس فكرة NavigationManager
+//                الحقيقي (navigate/back/replace/reload) لكن فوق عالم الأقنعة لا شجرة Strand.
+//    - Overlay: mm_setOverlay/mm_isOverlay/mm_needleHitTopmost — طبقة أقنعة "علوية" (وسم
+//                "overlay" خاص) تُفحَص أولاً في اختبار الإصابة قبل بقية الأقنعة، بنفس فكرة
+//                OverlayLayer الحقيقية (نوافذ/تلميحات تعلو المحتوى العادي وتُصاب أولاً).
+//    - Dye:     mm_setColor/mm_color — لون بصري اختياري للقناع (نصّ حرّ مثل "#RRGGBB")،
+//                يوازي سمة اللون التي يرسمها Dye الحقيقي على كل Strand.
+//    - Theme:   mm_defineTheme/mm_setActiveTheme/mm_activeTheme/mm_themeColor — لوحات ألوان
+//                مُسمّاة على مستوى المحرّك كله (أدوار مثل primary/secondary/danger...)، بنفس
+//                فكرة Pattern Book الحقيقي (`@theme=...`)، مع حدث "themeChanged" عند التبديل.
+//    - Object Inspector: mm_toObjectInspector — بطاقة فحص كاملة لقناع واحد (id + مصفوفة
+//                حقول مُسمّاة، تشمل meta الحرّة) بنفس شكل بطاقة .object(id) الحيّة التي
+//                يرسمها Loom الحقيقي (rin_loom_object.h) لكن دون الاعتماد على أي AST حقيقي.
 
 // ---- Warp: تصدير حالة قناع كحقول مُسطَّحة جاهزة لخلايا warp -----------------------------
 
@@ -1646,4 +1684,254 @@ fun mm_shuttleDiff(mm, previousSnapshot) {
         k = k + 1;
     }
     return patches;
+}
+
+
+// ---- Actions: نظام أفعال جاهزة قابل للتوسعة (Action Engine) ----------------------------
+
+// يُسجِّل دالة فعل مخصَّصة fn(mm, name, payload) باسم actionName على محرّك mm بالكامل (وليس
+// على قناع واحد) — تُستدعى لاحقاً عبر mm_applyAction بنفس الاسم على أي قناع. تستبدل أي فعل
+// مخصَّص مسجَّل سابقاً بنفس الاسم بالكامل (لا تراكم)
+fun mm_defineAction(mm, actionName, fn) {
+    mm["actions"][actionName] = fn;
+    return true;
+}
+
+// يُطبِّق فعلاً باسم actionName على قناع name، بترتيب محاولتين بالضبط (بنفس منطق Needle
+// الحقيقي: دالة مستخدم أولاً، ثم أفعال جاهزة مبنية):
+//   1) إن كان actionName مُسجَّلاً عبر mm_defineAction: تُستدعى تلك الدالة fn(mm, name, payload)
+//      وتُعاد قيمتها كما هي (أي شيء تُعيده الدالة المخصَّصة).
+//   2) وإلا: يُحاول الأفعال الجاهزة التالية (payload بحسب الفعل، أو نادَته بلا حاجة إليه):
+//      "activate"     -> mm_setActive(mm, name, true)
+//      "deactivate"   -> mm_setActive(mm, name, false)
+//      "toggleActive" -> يعكس mm_isActive الحالية
+//      "stop"         -> mm_stop(mm, name)
+//      "teleport"     -> mm_setPosition(mm, name, payload["x"], payload["y"])
+//      "nudge"        -> mm_translate(mm, name, payload["dx"], payload["dy"])
+//      "addTag"       -> mm_addTag(mm, name, payload)  (payload نصّ الوسم مباشرة)
+//      "removeTag"    -> يُزيل payload من قائمة وسوم القناع (لا يوجد mm_removeTag أصلاً؛
+//                        يُعاد بناء المصفوفة هنا عبر mm__arrayWithout)
+//   يُعيد false إن لم يكن actionName معروفاً بأي من الطريقتين، أو إن لم يكن القناع موجوداً
+fun mm_applyAction(mm, name, actionName, payload) {
+    if (has(mm["actions"], actionName)) {
+        let fn = mm["actions"][actionName];
+        return fn(mm, name, payload);
+    }
+    if (mm_exists(mm, name) == false) { return false; }
+    if (actionName == "activate") { return mm_setActive(mm, name, true); }
+    if (actionName == "deactivate") { return mm_setActive(mm, name, false); }
+    if (actionName == "toggleActive") { return mm_setActive(mm, name, mm_isActive(mm, name) == false); }
+    if (actionName == "stop") { return mm_stop(mm, name); }
+    if (actionName == "teleport") { return mm_setPosition(mm, name, payload["x"], payload["y"]); }
+    if (actionName == "nudge") { return mm_translate(mm, name, payload["dx"], payload["dy"]); }
+    if (actionName == "addTag") { return mm_addTag(mm, name, payload); }
+    if (actionName == "removeTag") {
+        mm["items"][name]["tags"] = mm__arrayWithout(mm["items"][name]["tags"], payload);
+        return true;
+    }
+    return false;
+}
+
+
+// ---- Navigation: مشاهد (scenes) عبر الوسوم، بمكدّس تنقّل -------------------------------
+//  الأقنعة التي لا تحمل أي وسم مشهد مُعرَّف من قبل (عبر mm_navigate/mm_navReplace) تبقى
+//  دوماً كما هي — لا يُغيِّر التنقّل نشاطها إطلاقاً؛ فقط الأقنعة الموسومة صراحة بأحد أسماء
+//  المشاهد المعروفة (mm["nav"]["knownScenes"]) هي التي تُنشَّط/تُعطَّل عند كل انتقال.
+
+// (داخلية) تُطبِّق ظهور مشهد sceneName فعلياً: تُنشِّط أقنعته وتُعطِّل بقية المشاهد المعروفة
+fun mm__applyScene(mm, sceneName) {
+    if (mm__arrayHas(mm["nav"]["knownScenes"], sceneName) == false) {
+        push(mm["nav"]["knownScenes"], sceneName);
+    }
+    let scenes = mm["nav"]["knownScenes"];
+    let s = 0;
+    while (s < len(scenes)) {
+        let members = mm_withTag(mm, scenes[s]);
+        let m = 0;
+        while (m < len(members)) {
+            mm_setActive(mm, members[m], scenes[s] == sceneName);
+            m = m + 1;
+        }
+        s = s + 1;
+    }
+    return true;
+}
+
+// ينتقل إلى مشهد جديد sceneName: يدفع المشهد الحالي (إن وُجد) إلى مكدّس التنقّل، يُنشِّط كل
+// قناع موسوم بـsceneName، ويُعطِّل أقنعة أي مشهد آخر معروف. يُطلق حدث "navigate" (payload:
+// { to: sceneName, from: المشهد السابق أو nil })
+fun mm_navigate(mm, sceneName) {
+    let previous = mm["nav"]["current"];
+    if (previous != nil) { push(mm["nav"]["stack"], previous); }
+    mm["nav"]["current"] = sceneName;
+    mm__applyScene(mm, sceneName);
+    mm__fire(mm, "navigate", { to: sceneName, from: previous });
+    return true;
+}
+
+// يعود إلى المشهد الذي كان قبل المشهد الحالي مباشرة (من رأس مكدّس التنقّل)، بلا دفع المشهد
+// الحالي إلى المكدّس (على عكس mm_navigate). لا يفعل شيئاً ويُعيد false إن كان المكدّس فارغاً
+fun mm_navBack(mm) {
+    if (len(mm["nav"]["stack"]) == 0) { return false; }
+    let previous = mm["nav"]["current"];
+    let target = pop(mm["nav"]["stack"]);
+    mm["nav"]["current"] = target;
+    mm__applyScene(mm, target);
+    mm__fire(mm, "navigate", { to: target, from: previous });
+    return true;
+}
+
+// ينتقل إلى مشهد جديد بديلاً عن الحالي دون دفعه إلى المكدّس (المشهد الحالي "يُستبدَل"، فلن
+// يعود إليه mm_navBack) — مفيد لشاشات لا يجب العودة إليها (تسجيل الدخول بعد نجاحه مثلاً)
+fun mm_navReplace(mm, sceneName) {
+    let previous = mm["nav"]["current"];
+    mm["nav"]["current"] = sceneName;
+    mm__applyScene(mm, sceneName);
+    mm__fire(mm, "navigate", { to: sceneName, from: previous });
+    return true;
+}
+
+// يُعيد تطبيق ظهور/اختفاء المشهد الحالي من جديد (بلا تغيير المكدّس أو المشهد الحالي)،
+// ويُطلق حدث "navigate" بنفس المصدر والهدف — مفيد بعد إضافة أقنعة جديدة موسومة بمشهد قائم
+fun mm_navReload(mm) {
+    let current = mm["nav"]["current"];
+    if (current == nil) { return false; }
+    mm__applyScene(mm, current);
+    mm__fire(mm, "navigate", { to: current, from: current });
+    return true;
+}
+
+// اسم المشهد الحالي، أو nil إن لم يُستدعَ mm_navigate/mm_navReplace بعد على الإطلاق
+fun mm_currentScene(mm) {
+    return mm["nav"]["current"];
+}
+
+
+// ---- Overlay: طبقة علوية فوق الجميع (أولوية في اختبار الإصابة) -------------------------
+//  طبقة الـ"overlay" هنا مجرّد وسم خاص محجوز باسم "overlay" فوق نظام الوسوم العادي —
+//  mm_needleHitTopmost تفحص أولاً كل الأقنعة الموسومة به قبل بقية العالم، فتُطابق أول
+//  إصابة عليها بصرف النظر عمّا إذا كان هناك قناع أقرب في الطبقة العادية تحتها.
+
+// يضع/يُزيل وسم "overlay" عن قناع (flag=true يضعه، flag=false يُزيله)
+fun mm_setOverlay(mm, name, flag) {
+    if (mm_exists(mm, name) == false) { return false; }
+    if (flag) { return mm_addTag(mm, name, "overlay"); }
+    mm["items"][name]["tags"] = mm__arrayWithout(mm["items"][name]["tags"], "overlay");
+    return true;
+}
+
+// هل يحمل القناع وسم "overlay" حالياً؟
+fun mm_isOverlay(mm, name) {
+    return mm_hasTag(mm, name, "overlay");
+}
+
+// نفس mm_needleHit، لكنها تفحص أولاً حصرياً الأقنعة الموسومة "overlay" (طبقة علوية)؛ إن
+// أصابت واحداً منها تُعيده فوراً بلا فحص الطبقة العادية إطلاقاً، وإلا تقع على mm_needleHit
+// العادية فوق كل الأقنعة المتبقية — بهذا تُصاب الطبقة العلوية دوماً أولاً كما في Needle
+// الحقيقي مع OverlayLayer
+fun mm_needleHitTopmost(mm, x, y, radius) {
+    let overlayNames = mm_withTag(mm, "overlay");
+    let point = mm_point(x, y);
+    let bestName = nil;
+    let bestDistance = nil;
+    let i = 0;
+    while (i < len(overlayNames)) {
+        let name = overlayNames[i];
+        if (mm_isActive(mm, name)) {
+            let d = mm_distance(point, mm_position(mm, name));
+            if (d <= radius) {
+                if (bestDistance == nil or d < bestDistance) {
+                    bestDistance = d;
+                    bestName = name;
+                }
+            }
+        }
+        i = i + 1;
+    }
+    if (bestName != nil) { return { name: bestName, distance: bestDistance }; }
+    return mm_needleHit(mm, x, y, radius);
+}
+
+
+// ---- Dye: لون بصري اختياري للقناع -------------------------------------------------------
+
+// يضبط لوناً بصرياً اختيارياً لقناع (نصّ حرّ، عادة "#RRGGBB") — تخزين بسيط فوق meta العادية
+fun mm_setColor(mm, name, colorHex) {
+    return mm_setMeta(mm, name, "color", colorHex);
+}
+
+// لون القناع الحالي، أو fallback إن لم يُضبط له لون بعد (مرّر nil لِـfallback افتراضياً)
+fun mm_color(mm, name, fallback) {
+    return mm_getMeta(mm, name, "color", fallback);
+}
+
+
+// ---- Theme: لوحات ألوان مُسمّاة على مستوى المحرّك (Pattern Book) -----------------------
+
+// يُعرِّف/يُحدِّث Theme باسم themeName على مستوى المحرّك كله: خريطة أدوار لونية حرّة (مثل
+// primary/secondary/success/danger/warning/info/neutral...) بقيم نصّية "#RRGGBB". يستبدل أي
+// Theme سابق بنفس الاسم بالكامل
+fun mm_defineTheme(mm, themeName, colorsMap) {
+    mm["themes"][themeName] = colorsMap;
+    return true;
+}
+
+// يجعل Theme المُعرَّف مسبقاً باسم themeName هو النشط حالياً على مستوى المحرّك؛ يُعيد false
+// بلا أي تأثير إن لم يكن ذلك الـTheme مُعرَّفاً أصلاً عبر mm_defineTheme. يُطلق حدث
+// "themeChanged" (payload: { theme: themeName }) عند النجاح
+fun mm_setActiveTheme(mm, themeName) {
+    if (has(mm["themes"], themeName) == false) { return false; }
+    mm["activeTheme"] = themeName;
+    mm__fire(mm, "themeChanged", { theme: themeName });
+    return true;
+}
+
+// اسم الـTheme النشط حالياً، أو nil إن لم يُضبط أي Theme بعد
+fun mm_activeTheme(mm) {
+    return mm["activeTheme"];
+}
+
+// قيمة دور لوني roleName من الـTheme النشط حالياً (مثل "primary")، أو fallback إن لم يوجد
+// Theme نشط أصلاً، أو لم يحمل ذلك الـTheme هذا الدور
+fun mm_themeColor(mm, roleName, fallback) {
+    let active = mm["activeTheme"];
+    if (active == nil) { return fallback; }
+    if (has(mm["themes"], active) == false) { return fallback; }
+    let palette = mm["themes"][active];
+    if (has(palette, roleName) == false) { return fallback; }
+    return palette[roleName];
+}
+
+
+// ---- Object Inspector: بطاقة فحص كاملة لقناع واحد --------------------------------------
+
+// بطاقة فحص حيّة لقناع واحد، بنفس روح بطاقة `.object(id) ... container.(); .end/object`
+// التي يرسمها Loom الحقيقي (rin_loom_object.h) لكن مبنية فوق سجلّ movingmask مباشرة بلا أي
+// AST: { id: name, fields: [ {name, value}, ... ] } — الحقول الأساسية أولاً (x/y/vx/vy/
+// active/container/strandKind/color)، ثم كل مفتاح إضافي من meta الحرّة (بترتيب مفاتيحه)
+// بلا تكرار (يُتجاوَز أي مفتاح meta اسمه "strandKind" أو "color" لأنه أُضيف مسبقاً أعلاه
+// بقيمته الصحيحة عبر mm_strandKind/mm_color بدل قراءته مباشرة من meta مرّتين). يُعيد nil
+// إن لم يوجد القناع
+fun mm_toObjectInspector(mm, name) {
+    let rec = mm_get(mm, name);
+    if (rec == nil) { return nil; }
+    let fields = [];
+    push(fields, { name: "x", value: rec["x"] });
+    push(fields, { name: "y", value: rec["y"] });
+    push(fields, { name: "vx", value: rec["vx"] });
+    push(fields, { name: "vy", value: rec["vy"] });
+    push(fields, { name: "active", value: rec["active"] });
+    push(fields, { name: "container", value: rec["container"] });
+    push(fields, { name: "strandKind", value: mm_strandKind(mm, name) });
+    push(fields, { name: "color", value: mm_color(mm, name, nil) });
+    let metaKeys = keys(rec["meta"]);
+    let i = 0;
+    while (i < len(metaKeys)) {
+        let key = metaKeys[i];
+        if (key != "strandKind" and key != "color") {
+            push(fields, { name: key, value: rec["meta"][key] });
+        }
+        i = i + 1;
+    }
+    return { id: name, fields: fields };
 }
