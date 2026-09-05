@@ -1,0 +1,13 @@
+<resources>
+    <string name="rin_loading_title">RIN</string>
+    <string name="rin_loading_working">جارٍ التنفيذ…</string>
+    <string name="rin_loading_percent">%1$d%%</string>
+    <string name="rin_loading_preparing">جارٍ التحضير…</string>
+    <string name="rin_loading_starting">جارٍ تشغيل Rin…</string>
+    <string name="rin_loading_detail_starting">تهيئة مساحة العمل</string>
+    <string name="rin_loading_stage_ui">بناء الواجهة</string>
+    <string name="rin_loading_stage_editor">تهيئة المحرر</string>
+    <string name="rin_loading_stage_engine">ربط المحرك الأصلي</string>
+    <string name="rin_loading_stage_ready">إنهاء مساحة العمل</string>
+    <string name="rin_loading_stage_done">جاهز</string>
+</resources>
