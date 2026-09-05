@@ -84,4 +84,14 @@
 
     <!-- New navigation button inside the editor (MainActivity) -->
     <string name="btn_projects">Projects</string>
+
+    <!-- Project albums (ProjectAlbumManager / ProjectsActivity) -->
+    <string name="albums_title">Albums</string>
+    <string name="album_new">New Album</string>
+    <string name="album_name_hint">Album name</string>
+    <string name="album_created">Album created</string>
+    <string name="album_move_title">Move to album</string>
+    <string name="album_create_first">Create an album first</string>
+    <string name="album_uncategorized">Uncategorized</string>
+    <string name="album_empty">No projects in this album</string>
 </resources>
