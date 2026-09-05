@@ -80,6 +80,16 @@
         android:src="@drawable/ic_edit_pencil" />
 
     <ImageButton
+        android:id="@+id/btnMoveProject"
+        android:layout_width="38dp"
+        android:layout_height="38dp"
+        android:layout_marginStart="2dp"
+        android:padding="10dp"
+        android:background="@drawable/bg_icon_btn"
+        android:contentDescription="@string/album_move_title"
+        android:src="@android:drawable/ic_menu_directions" />
+
+    <ImageButton
         android:id="@+id/btnDeleteProject"
         android:layout_width="38dp"
         android:layout_height="38dp"
