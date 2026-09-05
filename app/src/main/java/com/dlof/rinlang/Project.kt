@@ -11,7 +11,8 @@ enum class ProjectType(val id: String) {
     CONTAINER("container"),
     TABLE("table"),
     UI("ui"),
-    FREE("free");
+    FREE("free"),
+    ILLUST("illust");
 
     companion object {
         /** يحوّل معرّفاً نصياً (كما يُقرأ من project.og.urin) إلى [ProjectType]، أو FREE لأي قيمة غير معروفة/غائبة. */
