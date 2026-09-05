@@ -85,4 +85,36 @@ object CustomLanguageProjectScaffolder {
 
         return project
     }
+
+    /**
+     * يثبّت لغة "Illust" المضمَّنة (راجع [BundledIllustLanguage]) داخل مشروع أُنشئ حديثاً:
+     * يحذف main.rin الترحيبي، يكتب كل ملفات اللغة الجاهزة والمُختبرة كما هي (بلا استبدال
+     * عناصر نائبة، فهي محتوى حقيقي ثابت وليست قالباً فارغاً)، ثم يسجّلها في
+     * [CustomLanguageRegistry] حتى تُلوَّن ملفات .illust فوراً من أول فتح.
+     */
+    fun installBundledIllust(context: Context, projectDir: File) {
+        File(projectDir, "main.rin").delete()
+
+        File(projectDir, "Lexer.rin").writeText(BundledIllustLanguage.LEXER_RIN, Charsets.UTF_8)
+        File(projectDir, "Parser.rin").writeText(BundledIllustLanguage.PARSER_RIN, Charsets.UTF_8)
+        File(projectDir, "Interpreter.rin").writeText(BundledIllustLanguage.INTERPRETER_RIN, Charsets.UTF_8)
+        File(projectDir, "CodeGen.rin").writeText(BundledIllustLanguage.CODEGEN_RIN, Charsets.UTF_8)
+        File(projectDir, "run.rin").writeText(BundledIllustLanguage.RUN_RIN, Charsets.UTF_8)
+        File(projectDir, "syntax.rinsyntax.json").writeText(BundledIllustLanguage.SYNTAX_JSON, Charsets.UTF_8)
+        File(projectDir, "README.md").writeText(BundledIllustLanguage.README_MD, Charsets.UTF_8)
+
+        val examplesDir = File(projectDir, "examples").apply { mkdirs() }
+        File(examplesDir, "hello.illust").writeText(BundledIllustLanguage.EXAMPLE_HELLO_ILLUST, Charsets.UTF_8)
+
+        val manifest = CustomLanguageManifest(
+            id = BundledIllustLanguage.LANGUAGE_ID,
+            name = BundledIllustLanguage.LANGUAGE_NAME,
+            developer = BundledIllustLanguage.DEVELOPER,
+            fileExtension = BundledIllustLanguage.FILE_EXTENSION,
+            description = BundledIllustLanguage.DESCRIPTION
+        )
+        manifest.write(projectDir)
+
+        CustomLanguageRegistry.register(context, manifest, projectDir)
+    }
 }
