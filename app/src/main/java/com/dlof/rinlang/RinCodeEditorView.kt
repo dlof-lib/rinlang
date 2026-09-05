@@ -75,7 +75,7 @@ class RinCodeEditorView @JvmOverloads constructor(
     private val colorType = ContextCompat.getColor(context, R.color.syntax_container_keyword)
     private val colorPreprocessor = ContextCompat.getColor(context, R.color.syntax_make_directive)
     private val colorDefault = ContextCompat.getColor(context, R.color.rin_editor_text)
-    private val colorError = Color.parseColor("#F14C4C")
+    private val colorError = ContextCompat.getColor(context, R.color.syntax_error)
 
     private var lineHeight = 0f
     private var charWidth = 0f
