@@ -31,6 +31,8 @@
     <string name="project_type_table_desc">Rows and columns</string>
     <string name="project_type_ui_desc">Screens and views</string>
     <string name="project_type_free_desc">A blank code file</string>
+    <string name="project_type_illust">Illust</string>
+    <string name="project_type_illust_desc">A ready-made drawing/SVG language on Rin</string>
 
     <!-- "Draw the interface" options in the New UI Project dialog: only shown when the UI
          type is selected. Lets the user toggle a top bar / no top bar, a sidebar / no sidebar,
@@ -84,12 +86,4 @@
 
     <!-- New navigation button inside the editor (MainActivity) -->
     <string name="btn_projects">Projects</string>
-
-    <!-- Project albums (ProjectAlbumManager / ProjectsActivity) -->
-    <string name="album_new">New Album</string>
-    <string name="album_name_hint">Album name</string>
-    <string name="album_created">Album created</string>
-    <string name="album_create_first">Create an album first</string>
-    <string name="album_uncategorized">Uncategorized</string>
-    <string name="album_empty">No projects in this album</string>
 </resources>
