@@ -1,0 +1,99 @@
+// ============================================================================
+//  examples/moving_mask_demo.rin — مثال تشغيلي شامل لمكتبة lib/movingmask.og.rin
+//  شغّله بـ: rin examples/moving_mask_demo.rin
+// ============================================================================
+
+@import "lib/movingmask.og.rin";
+
+print "=== 1) محرّك + حدود + ارتداد عند الحافة ===";
+let world = mm_new();
+mm_setBounds(world, 0, 0, 100, 100);
+
+let bounceLog = [];
+fun onBounce(payload) { push(bounceLog, payload); }
+mm_on(world, "bounce", onBounce);
+
+mm_spawn(world, "ball", 90, 50);
+mm_setVelocity(world, "ball", 20, 0);
+mm_runLoop(world, 3, 1, true, nil);
+print "موضع الكرة بعد 3 دورات: " + toString(mm_position(world, "ball"));
+print "عدد الارتدادات المُسجَّلة: " + toString(len(bounceLog));
+
+
+print "\n=== 2) نقاط طريق (waypoints) ===";
+mm_spawn(world, "guard", 0, 0);
+mm_setPath(world, "guard", [{x: 10, y: 0}, {x: 10, y: 10}, {x: 0, y: 10}], true);
+let steps = 0;
+while (steps < 8) {
+    mm_followPath(world, "guard", 4);
+    steps = steps + 1;
+}
+print "موضع الحارس بعد 8 خطوات على مسار حلقي: " + toString(mm_position(world, "guard"));
+
+
+print "\n=== 3) دورية بين نقطتين (patrol) ===";
+mm_spawn(world, "sentry", 0, 0);
+let p = 0;
+while (p < 6) {
+    mm_patrol(world, "sentry", 0, 0, 20, 0, 7);
+    print "  دورية خطوة " + toString(p) + ": " + toString(mm_position(world, "sentry"));
+    p = p + 1;
+}
+
+
+print "\n=== 4) التكامل مع الحاويات (منطقي + جسر فعلي) ===";
+@container="hud"
+mask = "hud-root";
+.end/container
+
+mm_spawn(world, "player", 5, 5);
+mm_attach(world, "player", "teamA");
+print "أعضاء teamA: " + toString(mm_membersOf(world, "teamA"));
+
+mm_syncToNativeContainer(world, "player", "hud");
+print "قراءة موضع اللاعب من حاوية hud الفعلية: (" + toString(getField("hud", "mm_x")) + ", " + toString(getField("hud", "mm_y")) + ")";
+
+
+print "\n=== 5) قناع منزلق فوق مصفوفة (1D) ===";
+let samples = [3, 7, 2, 8, 5, 9, 1];
+print "المتوسط المنزلق (نافذة 3، أصلية movingAverage): " + toString(movingAverage(samples, 3));
+print "المجموع المنزلق (نافذة 3): " + toString(mm_movingSum(samples, 3));
+print "أقصى قيمة منزلقة (نافذة 3): " + toString(mm_movingMax(samples, 3));
+print "كاشف حواف بسيط (kernel [1,0,-1]): " + toString(mm_convolve1D(samples, [1, 0, -1]));
+
+
+print "\n=== 6) قناع منزلق فوق شبكة (2D) — بلور وختم قطعة ===";
+let grid = [
+    [10, 10, 10, 10],
+    [10, 90, 90, 10],
+    [10, 90, 90, 10],
+    [10, 10, 10, 10]
+];
+let blurKernel = [[1/9, 1/9, 1/9], [1/9, 1/9, 1/9], [1/9, 1/9, 1/9]];
+let blurred = mm_convolve2D(grid, blurKernel, -1);
+print "الشبكة بعد بلور 3×3 (الحواف = -1):";
+print blurred;
+
+let board = [
+    [".", ".", ".", "."],
+    [".", ".", ".", "."],
+    [".", ".", ".", "."],
+    [".", ".", ".", "."]
+];
+let piece = [["#", "#"], ["#", "#"]];
+mm_gridStamp(board, piece, 0, 0, nil);
+print "اللوحة بعد ختم قطعة 2×2 عند (0,0):";
+print board;
+mm_gridMoveStamp(board, piece, 0, 0, 2, 2, nil, ".");
+print "اللوحة بعد تحريك نفس القطعة إلى (2,2):";
+print board;
+
+
+print "\n=== 7) أثر الحركة والتصادم بين قناعين ===";
+mm_spawn(world, "a", 0, 0);
+mm_spawn(world, "b", 4, 3);
+print "المسافة بين a و b: " + toString(mm_distanceTo(world, "a", "b"));
+print "هل يتصادمان (صندوق 5×5 لكل منهما)؟ " + toString(mm_collidesAABB(world, "a", 5, 5, "b", 5, 5));
+
+print "\n--- ملخص العالم النهائي ---";
+print mm_summary(world);
