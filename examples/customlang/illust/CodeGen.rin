@@ -1,0 +1,301 @@
+// ============================================================================
+//  CodeGen.rin — مسار بديل لـ Interpreter.rin (v0.2 موسّعة): يولّد كود Rin حقيقي
+//  مستقل بذاته يبني نفس مخرجات SVG. دوال illust المعرَّفة بـ fun تُترجَم مباشرة
+//  إلى دوال Rin حقيقية (fun/return أصليان في اللغة) — بلا أي محاكاة استدعاء.
+// ============================================================================
+
+@import "./Parser.rin";
+
+fun preambleLines() {
+    return [
+        "fun __newCtx() {",
+        "    return { width: 400, height: 300, elements: [], fillNone: false,",
+        "             fillColor: \"#000000\", strokeNone: true, strokeColor: \"#000000\",",
+        "             strokeWidth: 1 };",
+        "}",
+        "fun __styleAttrs(ctx) {",
+        "    let s = \"\";",
+        "    if (ctx[\"fillNone\"]) { s = s + \" fill=\\\"none\\\"\"; } else { s = s + \" fill=\\\"\" + ctx[\"fillColor\"] + \"\\\"\"; }",
+        "    if (ctx[\"strokeNone\"] == false) {",
+        "        s = s + \" stroke=\\\"\" + ctx[\"strokeColor\"] + \"\\\" stroke-width=\\\"\" + toString(ctx[\"strokeWidth\"]) + \"\\\"\";",
+        "    }",
+        "    return s;",
+        "}",
+        "fun __escapeXml(s) {",
+        "    let out = \"\"; let i = 0;",
+        "    while (i < len(s)) {",
+        "        let c = charAt(s, i);",
+        "        if (c == \"&\") { out = out + \"&amp;\"; }",
+        "        else if (c == \"<\") { out = out + \"&lt;\"; }",
+        "        else if (c == \">\") { out = out + \"&gt;\"; }",
+        "        else if (c == \"\\\"\") { out = out + \"&quot;\"; }",
+        "        else { out = out + c; }",
+        "        i = i + 1;",
+        "    }",
+        "    return out;",
+        "}",
+        "fun __rect(ctx, x, y, w, h) {",
+        "    push(ctx[\"elements\"], \"  <rect x=\\\"\" + toString(x) + \"\\\" y=\\\"\" + toString(y) + \"\\\" width=\\\"\" + toString(w) + \"\\\" height=\\\"\" + toString(h) + \"\\\"\" + __styleAttrs(ctx) + \" />\");",
+        "}",
+        "fun __circle(ctx, cx, cy, r) {",
+        "    push(ctx[\"elements\"], \"  <circle cx=\\\"\" + toString(cx) + \"\\\" cy=\\\"\" + toString(cy) + \"\\\" r=\\\"\" + toString(r) + \"\\\"\" + __styleAttrs(ctx) + \" />\");",
+        "}",
+        "fun __ellipse(ctx, cx, cy, rx, ry) {",
+        "    push(ctx[\"elements\"], \"  <ellipse cx=\\\"\" + toString(cx) + \"\\\" cy=\\\"\" + toString(cy) + \"\\\" rx=\\\"\" + toString(rx) + \"\\\" ry=\\\"\" + toString(ry) + \"\\\"\" + __styleAttrs(ctx) + \" />\");",
+        "}",
+        "fun __polygon(ctx, points) {",
+        "    let strs = []; let i = 0;",
+        "    while (i < len(points)) { push(strs, toString(points[i])); i = i + 1; }",
+        "    push(ctx[\"elements\"], \"  <polygon points=\\\"\" + join(strs, \",\") + \"\\\"\" + __styleAttrs(ctx) + \" />\");",
+        "}",
+        "fun __path(ctx, d) {",
+        "    push(ctx[\"elements\"], \"  <path d=\\\"\" + __escapeXml(toString(d)) + \"\\\"\" + __styleAttrs(ctx) + \" />\");",
+        "}",
+        "fun __line(ctx, x1, y1, x2, y2) {",
+        "    let sb = \" stroke=\\\"\" + ctx[\"strokeColor\"] + \"\\\" stroke-width=\\\"\" + toString(ctx[\"strokeWidth\"]) + \"\\\"\";",
+        "    if (ctx[\"strokeNone\"]) { sb = \" stroke=\\\"\" + ctx[\"fillColor\"] + \"\\\" stroke-width=\\\"1\\\"\"; }",
+        "    push(ctx[\"elements\"], \"  <line x1=\\\"\" + toString(x1) + \"\\\" y1=\\\"\" + toString(y1) + \"\\\" x2=\\\"\" + toString(x2) + \"\\\" y2=\\\"\" + toString(y2) + \"\\\"\" + sb + \" />\");",
+        "}",
+        "fun __text(ctx, x, y, s) {",
+        "    push(ctx[\"elements\"], \"  <text x=\\\"\" + toString(x) + \"\\\" y=\\\"\" + toString(y) + \"\\\"\" + __styleAttrs(ctx) + \">\" + __escapeXml(toString(s)) + \"</text>\");",
+        "}",
+        "fun __gOpen(ctx, transform) { push(ctx[\"elements\"], \"  <g transform=\\\"\" + transform + \"\\\">\"); }",
+        "fun __gClose(ctx) { push(ctx[\"elements\"], \"  </g>\"); }",
+        "fun __renderSVG(ctx) {",
+        "    let lines = [];",
+        "    push(lines, \"<svg xmlns=\\\"http://www.w3.org/2000/svg\\\" viewBox=\\\"0 0 \" + toString(ctx[\"width\"]) + \" \" + toString(ctx[\"height\"]) + \"\\\" width=\\\"\" + toString(ctx[\"width\"]) + \"\\\" height=\\\"\" + toString(ctx[\"height\"]) + \"\\\">\");",
+        "    let i = 0;",
+        "    while (i < len(ctx[\"elements\"])) { push(lines, ctx[\"elements\"][i]); i = i + 1; }",
+        "    push(lines, \"</svg>\");",
+        "    return join(lines, \"\\n\");",
+        "}"
+    ];
+}
+
+fun generate(program) {
+    if (isLangError(program)) { return formatLangError(program); }
+    let lines = [];
+    push(lines, "// ---- مُولَّد تلقائياً من Illust عبر CodeGen.rin ----");
+    push(lines, "// كود Rin مستقل بذاته: لا يعتمد وقت التشغيل على مفسّر Illust.");
+    let pre = preambleLines();
+    let i = 0;
+    while (i < len(pre)) { push(lines, pre[i]); i = i + 1; }
+    push(lines, "let __ctx = __newCtx();");
+
+    // تمريرة أولى: عرِّف دوال المستخدم (fun) بصيغة Rin حقيقية قبل بقية البرنامج،
+    // لأن Rin (مثل أي لغة C-style) لا يشترط ترتيباً لكن هذا أوضح للقارئ.
+    let topBody = program["body"];
+    let mainBody = [];
+    let j = 0;
+    while (j < len(topBody)) {
+        let stmt = topBody[j];
+        if (nodeIs(stmt, "FunDecl")) {
+            let r = genFunDecl(stmt, lines);
+            if (isOk(r) == false) { return formatLangError(resultError(r)); }
+        } else {
+            push(mainBody, stmt);
+        }
+        j = j + 1;
+    }
+
+    let r2 = genBlock(mainBody, lines, "");
+    if (isOk(r2) == false) { return formatLangError(resultError(r2)); }
+    push(lines, "print __renderSVG(__ctx);");
+    return join(lines, "\n");
+}
+
+fun genFunDecl(node, lines) {
+    push(lines, "fun " + node["name"] + "(" + join(node["params"], ", ") + ") {");
+    let r = genBlock(node["body"], lines, "    ");
+    if (isOk(r) == false) { return r; }
+    push(lines, "}");
+    return ok(true);
+}
+
+fun genBlock(statements, lines, indent) {
+    let i = 0;
+    while (i < len(statements)) {
+        let r = genStatement(statements[i], lines, indent);
+        if (isOk(r) == false) { return r; }
+        i = i + 1;
+    }
+    return ok(true);
+}
+
+fun genStatement(node, lines, indent) {
+    if (nodeIs(node, "FunDecl")) {
+        // دالة معرَّفة داخل كتلة متداخلة: نفس المعالجة، Rin يسمح بذلك في أعلى المستوى غالباً
+        return genFunDecl(node, lines);
+    }
+    if (nodeIs(node, "Let")) {
+        let e = genExpr(node["value"]); if (isOk(e) == false) { return e; }
+        push(lines, indent + "let " + node["name"] + " = " + e["value"] + ";");
+        return ok(true);
+    }
+    if (nodeIs(node, "Assign")) {
+        let e = genExpr(node["value"]); if (isOk(e) == false) { return e; }
+        push(lines, indent + node["name"] + " = " + e["value"] + ";");
+        return ok(true);
+    }
+    if (nodeIs(node, "ExprStmt")) {
+        let e = genExpr(node["expr"]); if (isOk(e) == false) { return e; }
+        push(lines, indent + e["value"] + ";");
+        return ok(true);
+    }
+    if (nodeIs(node, "Return")) {
+        let e = genExpr(node["value"]); if (isOk(e) == false) { return e; }
+        push(lines, indent + "return " + e["value"] + ";");
+        return ok(true);
+    }
+    if (nodeIs(node, "Canvas")) {
+        let w = genExpr(node["w"]); if (isOk(w) == false) { return w; }
+        let h = genExpr(node["h"]); if (isOk(h) == false) { return h; }
+        push(lines, indent + "__ctx[\"width\"] = " + w["value"] + "; __ctx[\"height\"] = " + h["value"] + ";");
+        return ok(true);
+    }
+    if (nodeIs(node, "Fill")) {
+        if (node["none"]) {
+            push(lines, indent + "__ctx[\"fillNone\"] = true;");
+        } else {
+            let c = genExpr(node["color"]); if (isOk(c) == false) { return c; }
+            push(lines, indent + "__ctx[\"fillNone\"] = false; __ctx[\"fillColor\"] = toString(" + c["value"] + ");");
+        }
+        return ok(true);
+    }
+    if (nodeIs(node, "Stroke")) {
+        if (node["none"]) {
+            push(lines, indent + "__ctx[\"strokeNone\"] = true;");
+        } else {
+            let c = genExpr(node["color"]); if (isOk(c) == false) { return c; }
+            let w = genExpr(node["width"]); if (isOk(w) == false) { return w; }
+            push(lines, indent + "__ctx[\"strokeNone\"] = false; __ctx[\"strokeColor\"] = toString(" + c["value"] + "); __ctx[\"strokeWidth\"] = " + w["value"] + ";");
+        }
+        return ok(true);
+    }
+    if (nodeIs(node, "Rect")) {
+        let x = genExpr(node["x"]); if (isOk(x) == false) { return x; }
+        let y = genExpr(node["y"]); if (isOk(y) == false) { return y; }
+        let w = genExpr(node["w"]); if (isOk(w) == false) { return w; }
+        let h = genExpr(node["h"]); if (isOk(h) == false) { return h; }
+        push(lines, indent + "__rect(__ctx, " + x["value"] + ", " + y["value"] + ", " + w["value"] + ", " + h["value"] + ");");
+        return ok(true);
+    }
+    if (nodeIs(node, "Circle")) {
+        let cx = genExpr(node["cx"]); if (isOk(cx) == false) { return cx; }
+        let cy = genExpr(node["cy"]); if (isOk(cy) == false) { return cy; }
+        let r = genExpr(node["r"]); if (isOk(r) == false) { return r; }
+        push(lines, indent + "__circle(__ctx, " + cx["value"] + ", " + cy["value"] + ", " + r["value"] + ");");
+        return ok(true);
+    }
+    if (nodeIs(node, "Ellipse")) {
+        let cx = genExpr(node["cx"]); if (isOk(cx) == false) { return cx; }
+        let cy = genExpr(node["cy"]); if (isOk(cy) == false) { return cy; }
+        let rx = genExpr(node["rx"]); if (isOk(rx) == false) { return rx; }
+        let ry = genExpr(node["ry"]); if (isOk(ry) == false) { return ry; }
+        push(lines, indent + "__ellipse(__ctx, " + cx["value"] + ", " + cy["value"] + ", " + rx["value"] + ", " + ry["value"] + ");");
+        return ok(true);
+    }
+    if (nodeIs(node, "Polygon")) {
+        let pts = genExpr(node["points"]); if (isOk(pts) == false) { return pts; }
+        push(lines, indent + "__polygon(__ctx, " + pts["value"] + ");");
+        return ok(true);
+    }
+    if (nodeIs(node, "PathEl")) {
+        let d = genExpr(node["d"]); if (isOk(d) == false) { return d; }
+        push(lines, indent + "__path(__ctx, " + d["value"] + ");");
+        return ok(true);
+    }
+    if (nodeIs(node, "Line")) {
+        let x1 = genExpr(node["x1"]); if (isOk(x1) == false) { return x1; }
+        let y1 = genExpr(node["y1"]); if (isOk(y1) == false) { return y1; }
+        let x2 = genExpr(node["x2"]); if (isOk(x2) == false) { return x2; }
+        let y2 = genExpr(node["y2"]); if (isOk(y2) == false) { return y2; }
+        push(lines, indent + "__line(__ctx, " + x1["value"] + ", " + y1["value"] + ", " + x2["value"] + ", " + y2["value"] + ");");
+        return ok(true);
+    }
+    if (nodeIs(node, "Text")) {
+        let x = genExpr(node["x"]); if (isOk(x) == false) { return x; }
+        let y = genExpr(node["y"]); if (isOk(y) == false) { return y; }
+        let s = genExpr(node["str"]); if (isOk(s) == false) { return s; }
+        push(lines, indent + "__text(__ctx, " + x["value"] + ", " + y["value"] + ", " + s["value"] + ");");
+        return ok(true);
+    }
+    if (nodeIs(node, "PrintDebug")) {
+        let v = genExpr(node["value"]); if (isOk(v) == false) { return v; }
+        push(lines, indent + "print " + v["value"] + ";");
+        return ok(true);
+    }
+    if (nodeIs(node, "If")) {
+        let c = genExpr(node["cond"]); if (isOk(c) == false) { return c; }
+        push(lines, indent + "if (" + c["value"] + ") {");
+        let r1 = genBlock(node["thenBody"], lines, indent + "    ");
+        if (isOk(r1) == false) { return r1; }
+        push(lines, indent + "} else {");
+        let r2 = genBlock(node["elseBody"], lines, indent + "    ");
+        if (isOk(r2) == false) { return r2; }
+        push(lines, indent + "}");
+        return ok(true);
+    }
+    if (nodeIs(node, "While")) {
+        let c = genExpr(node["cond"]); if (isOk(c) == false) { return c; }
+        push(lines, indent + "while (" + c["value"] + ") {");
+        let r1 = genBlock(node["body"], lines, indent + "    ");
+        if (isOk(r1) == false) { return r1; }
+        push(lines, indent + "}");
+        return ok(true);
+    }
+    if (nodeIs(node, "Group")) {
+        let dx = genExpr(node["dx"]); if (isOk(dx) == false) { return dx; }
+        let dy = genExpr(node["dy"]); if (isOk(dy) == false) { return dy; }
+        push(lines, indent + "__gOpen(__ctx, \"translate(\" + toString(" + dx["value"] + ") + \",\" + toString(" + dy["value"] + ") + \")\");");
+        let r1 = genBlock(node["body"], lines, indent);
+        if (isOk(r1) == false) { return r1; }
+        push(lines, indent + "__gClose(__ctx);");
+        return ok(true);
+    }
+    if (nodeIs(node, "Rotate")) {
+        let a = genExpr(node["angle"]); if (isOk(a) == false) { return a; }
+        push(lines, indent + "__gOpen(__ctx, \"rotate(\" + toString(" + a["value"] + ") + \")\");");
+        let r1 = genBlock(node["body"], lines, indent);
+        if (isOk(r1) == false) { return r1; }
+        push(lines, indent + "__gClose(__ctx);");
+        return ok(true);
+    }
+    return err(langError("CodeGen", "لا يمكن توليد كود لجملة: " + node["kind"], node["line"]));
+}
+
+fun genExpr(node) {
+    if (nodeIs(node, "NumberLit")) { return ok(toString(node["value"])); }
+    if (nodeIs(node, "StringLit")) { return ok("\"" + node["value"] + "\""); }
+    if (nodeIs(node, "Ident")) { return ok(node["name"]); }
+    if (nodeIs(node, "ArrayLit")) {
+        let parts = [];
+        let i = 0;
+        while (i < len(node["items"])) {
+            let e = genExpr(node["items"][i]); if (isOk(e) == false) { return e; }
+            push(parts, e["value"]);
+            i = i + 1;
+        }
+        return ok("[" + join(parts, ", ") + "]");
+    }
+    if (nodeIs(node, "Call")) {
+        let parts = [];
+        let i = 0;
+        while (i < len(node["args"])) {
+            let e = genExpr(node["args"][i]); if (isOk(e) == false) { return e; }
+            push(parts, e["value"]);
+            i = i + 1;
+        }
+        return ok(node["name"] + "(" + join(parts, ", ") + ")");
+    }
+    if (nodeIs(node, "Unary")) {
+        let v = genExpr(node["operand"]); if (isOk(v) == false) { return v; }
+        return ok("(-" + v["value"] + ")");
+    }
+    if (nodeIs(node, "Binary")) {
+        let l = genExpr(node["left"]); if (isOk(l) == false) { return l; }
+        let r = genExpr(node["right"]); if (isOk(r) == false) { return r; }
+        return ok("(" + l["value"] + " " + node["op"] + " " + r["value"] + ")");
+    }
+    return err(langError("CodeGen", "لا يمكن توليد كود لتعبير: " + node["kind"], node["line"]));
+}
