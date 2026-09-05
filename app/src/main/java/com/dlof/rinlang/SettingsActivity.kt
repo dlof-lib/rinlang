@@ -28,6 +28,7 @@ class SettingsActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_settings)
+        RinLoading.startup(this, 650L)
         findViewById<TextView>(R.id.txtToolbarTitle).text = getString(R.string.settings_title)
         findViewById<View>(R.id.btnToolbarBack).setOnClickListener { finish() }
 
