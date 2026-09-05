@@ -414,10 +414,17 @@
                     android:layout_marginBottom="14dp"
                     android:background="@color/rin_divider" />
 
+                <!-- layoutDirection="ltr" مقصود هنا: التطبيق عربي (supportsRtl) فتُصبح هذه
+                     الحاوية القابلة للتمرير أفقيًا معكوسة تلقائيًا في RTL — بينما محتوى الكود
+                     نفسه (Canvas.drawText في RinCodeEditorView) يُرسَم يسارًا-لليمين دومًا مهما
+                     كانت لغة التعليقات/السلاسل النصية داخله، كأي محرر كود حقيقي. بلا هذا السطر
+                     يفترق اتجاه اللمس/السحب/موضع التمرير الابتدائي لهذه الحاوية عن اتجاه الرسم
+                     الفعلي بداخلها، وهذا بالضبط أصل شكوى "عدم سلاسة الحركة يمينًا ويسارًا". -->
                 <HorizontalScrollView
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
+                    android:layoutDirection="ltr"
                     android:scrollbars="horizontal"
                     android:overScrollMode="never">
 
@@ -427,6 +434,7 @@
                         android:id="@+id/editCode"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
+                        android:layoutDirection="ltr"
                         android:background="@android:color/transparent"
                         android:paddingStart="12dp"
                         android:paddingEnd="12dp"
