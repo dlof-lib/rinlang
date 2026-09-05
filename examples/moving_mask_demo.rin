@@ -131,5 +131,49 @@ let patches = mm_shuttleDiff(world, before);
 print "Patches بين اللقطتين (Insert/Remove/Move):";
 print patches;
 
+print "\n=== 9) توسعة Loom: Actions / Navigation / Overlay / Dye / Theme / Object Inspector ===";
+
+// -- Actions: فعل جاهز مبني + فعل مخصَّص مُسجَّل --
+mm_applyAction(world, "player", "teleport", { x: 9, y: 9 });
+print "موضع player بعد فعل teleport: " + toString(mm_position(world, "player"));
+fun healAction(mmRef, name, payload) {
+    mm_setMeta(mmRef, name, "hp", payload["amount"]);
+    return true;
+}
+mm_defineAction(world, "heal", healAction);
+mm_applyAction(world, "player", "heal", { amount: 100 });
+print "hp بعد فعل heal مخصَّص: " + toString(mm_getMeta(world, "player", "hp", 0));
+
+// -- Navigation: مشهدان (menu/game) مبنيان فوق الوسوم --
+// (ملاحظة: مشهد لا يُدار إلا بعد أول mm_navigate/mm_navReplace إليه؛ لذا نُعرِّف المشهدين
+//  أولاً بزيارة كل واحد مرة، ثم نُظهر التبديل الفعلي بينهما)
+mm_addTag(world, "guard", "menu");
+mm_addTag(world, "sentry", "game");
+mm_navigate(world, "game");
+mm_navigate(world, "menu");
+print "نشاط guard/sentry داخل مشهد menu: " + toString(mm_isActive(world, "guard")) + " / " + toString(mm_isActive(world, "sentry"));
+mm_navigate(world, "game");
+print "نشاط guard/sentry داخل مشهد game: " + toString(mm_isActive(world, "guard")) + " / " + toString(mm_isActive(world, "sentry"));
+mm_navBack(world);
+print "بعد mm_navBack، المشهد الحالي: " + mm_currentScene(world);
+
+// -- Overlay: قناع علوي يُصاب قبل غيره حتى لو لم يكن الأقرب --
+mm_setActive(world, "sentry", true);
+mm_setPosition(world, "sentry", 4, 4);
+mm_spawn(world, "tooltip", 4, 4);
+mm_setOverlay(world, "tooltip", true);
+let topHit = mm_needleHitTopmost(world, 4, 4, 3);
+print "إصابة طبقة علوية عند (4,4): " + toString(topHit["name"]);
+
+// -- Dye + Theme: لون مباشر، ولون مُشتق من Theme نشط --
+mm_defineTheme(world, "Midnight", { primary: "#7C5CFF", danger: "#D14545" });
+mm_setActiveTheme(world, "Midnight");
+mm_setColor(world, "player", mm_themeColor(world, "primary", "#000000"));
+print "لون player من Theme النشط: " + mm_color(world, "player", "#000000");
+
+// -- Object Inspector: بطاقة فحص كاملة لقناع واحد --
+print "بطاقة فحص player:";
+print mm_toObjectInspector(world, "player");
+
 print "\n--- ملخص العالم النهائي ---";
 print mm_summary(world);
