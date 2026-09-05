@@ -37,6 +37,8 @@
     <string name="project_type_table_desc">جدول صفوف وأعمدة</string>
     <string name="project_type_ui_desc">شاشات وواجهات</string>
     <string name="project_type_free_desc">ملف كود فارغ</string>
+    <string name="project_type_illust">Illust</string>
+    <string name="project_type_illust_desc">لغة رسم/SVG جاهزة فوق Rin</string>
 
     <!-- خيارات "رسم الواجهة" داخل حوار مشروع UI جديد: تظهر فقط عند اختيار نوع UI،
          وتسمح باختيار توب بار/بلا توب بار، قائمة جانبية/بلا قائمة جانبية، ولون أساسي،
@@ -90,12 +92,4 @@
 
     <!-- زر التنقل الجديد داخل المحرر (MainActivity) -->
     <string name="btn_projects">المشاريع</string>
-
-    <!-- ألبومات المشاريع (ProjectAlbumManager / ProjectsActivity) -->
-    <string name="album_new">ألبوم جديد</string>
-    <string name="album_name_hint">اسم الألبوم</string>
-    <string name="album_created">تم إنشاء الألبوم</string>
-    <string name="album_create_first">أنشئ ألبوماً أولاً</string>
-    <string name="album_uncategorized">بدون تصنيف</string>
-    <string name="album_empty">لا توجد مشاريع في هذا الألبوم</string>
 </resources>
