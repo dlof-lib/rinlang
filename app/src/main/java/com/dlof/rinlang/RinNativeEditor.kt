@@ -10,6 +10,14 @@ package com.dlof.rinlang
  * بين "إزاحة بايت UTF-8" (ما يستخدمه المحرك C++، طبقًا لاصطلاح rin::Lexer) و"فهرس حرف UTF-16"
  * (ما تستخدمه كل واجهات برمجة النصوص في Kotlin/Android: String, Canvas.measureText, ...).
  *
+ * ملاحظة إصلاح مهمة: كل دالة تُرسل أو تستقبل "عمودًا" من/إلى الجانب الأصلي (C++) يجب أن تمرّ عبر
+ * [charIndexToByteOffset]/[byteOffsetToCharIndex] هنا — وإلا فإن أي سطر يحوي حرفًا خارج ASCII
+ * (كالعربية، وهي أساسية في هذا التطبيق) يجعل "عمود-حرف UTF-16" و"إزاحة-بايت UTF-8" يفترقان،
+ * فيهبط المؤشر/التحديد في منتصف حرف متعدد البايتات. أسوأ نتيجة لذلك: JNI's NewStringUTF على
+ * سلسلة UTF-8 غير صالحة (مقطوعة من المنتصف) يُنهي العملية بالكامل — وهو بالضبط سبب "الخروج
+ * عند كتابة كود" عند وجود نص عربي (تعليق أو سلسلة نصية) في المستند. كل دالة عامة أدناه تضمن
+ * التحويل تلقائيًا حتى لا يضطر المستدعي (RinCodeEditorView وغيره) لمعرفة هذا التفصيل إطلاقًا.
+ *
  * مثيل واحد من هذا الصنف = مستند واحد مفتوح في المحرر.
  */
 class RinNativeEditor {
@@ -88,6 +96,26 @@ class RinNativeEditor {
         return handle
     }
 
+    /**
+     * نص [line] كما يراه المحرك حاليًا، مع تثبيت رقم السطر ضمن الحدود الفعلية أولاً (نفس منطق
+     * clampLine في C++). يُستخدم فقط كأساس لتحويل بايت↔حرف أدناه؛ سطر خارج الحدود (مثال: -1 من
+     * سهم لأعلى عند أول سطر) يُطابَق مع نفس السطر الذي سيُثبَّت إليه المحرك أصلاً، بدل إرجاع نص
+     * فارغ يُفقِد عمود المؤشر المطلوب أثناء التحويل.
+     */
+    private fun clampedLineText(line: Int): String {
+        val count = nativeGetLineCount(requireHandle())
+        val clampedLine = line.coerceIn(0, (count - 1).coerceAtLeast(0))
+        return nativeGetLine(requireHandle(), clampedLine)
+    }
+
+    /** فهرس-حرف UTF-16 → إزاحة-بايت UTF-8، بالنسبة لنص [line] الحالي. */
+    private fun charToByte(line: Int, charCol: Int): Int =
+        charIndexToByteOffset(clampedLineText(line), charCol)
+
+    /** إزاحة-بايت UTF-8 (قادمة من C++) → فهرس-حرف UTF-16، بالنسبة لنص [line] الحالي. */
+    private fun byteToChar(line: Int, byteCol: Int): Int =
+        byteOffsetToCharIndex(clampedLineText(line), byteCol)
+
     /** يُستدعى عند التخلّص النهائي من المحرر (مثلاً View.onDetachedFromWindow) لتحرير الذاكرة الأصلية. */
     fun destroy() {
         if (!destroyed) {
@@ -104,53 +132,73 @@ class RinNativeEditor {
 
     fun getCursor(): Pos {
         val a = nativeGetCursor(requireHandle())
-        return Pos(a[0], a[1])
+        return Pos(a[0], byteToChar(a[0], a[1]))
     }
 
     fun getSelection(): Selection {
         val a = nativeGetSelection(requireHandle())
-        return Selection(a[0] == 1, Pos(a[1], a[2]), Pos(a[3], a[4]))
+        val startLine = a[1]; val endLine = a[3]
+        return Selection(
+            a[0] == 1,
+            Pos(startLine, byteToChar(startLine, a[2])),
+            Pos(endLine, byteToChar(endLine, a[4]))
+        )
     }
 
-    fun setCursor(line: Int, col: Int, extend: Boolean = false) = nativeSetCursor(requireHandle(), line, col, extend)
-    fun setSelection(aLine: Int, aCol: Int, bLine: Int, bCol: Int) = nativeSetSelection(requireHandle(), aLine, aCol, bLine, bCol)
+    fun setCursor(line: Int, col: Int, extend: Boolean = false) =
+        nativeSetCursor(requireHandle(), line, charToByte(line, col), extend)
+
+    fun setSelection(aLine: Int, aCol: Int, bLine: Int, bCol: Int) =
+        nativeSetSelection(requireHandle(), aLine, charToByte(aLine, aCol), bLine, charToByte(bLine, bCol))
+
     fun collapseSelection() = nativeCollapseSelection(requireHandle())
 
     /** يُدرج [text] عند المؤشر. [smart] يفعّل الإزاحة التلقائية/إغلاق الأقواس (اتركها true للكتابة العادية). */
     fun insertText(text: String, smart: Boolean = true): Pos {
         val a = nativeInsertText(requireHandle(), text, smart)
-        return Pos(a[0], a[1])
+        return Pos(a[0], byteToChar(a[0], a[1]))
     }
 
-    fun deleteBackward(): Pos { val a = nativeDeleteBackward(requireHandle()); return Pos(a[0], a[1]) }
-    fun deleteForward(): Pos { val a = nativeDeleteForward(requireHandle()); return Pos(a[0], a[1]) }
+    fun deleteBackward(): Pos { val a = nativeDeleteBackward(requireHandle()); return Pos(a[0], byteToChar(a[0], a[1])) }
+    fun deleteForward(): Pos { val a = nativeDeleteForward(requireHandle()); return Pos(a[0], byteToChar(a[0], a[1])) }
 
     fun replaceRange(sl: Int, sc: Int, el: Int, ec: Int, text: String): Pos {
-        val a = nativeReplaceRange(requireHandle(), sl, sc, el, ec, text)
-        return Pos(a[0], a[1])
+        // التحويل يجب أن يحدث *قبل* الاستبدال: بعد الاستبدال قد لا يكون السطر el موجودًا أصلاً.
+        val scByte = charToByte(sl, sc)
+        val ecByte = charToByte(el, ec)
+        val a = nativeReplaceRange(requireHandle(), sl, scByte, el, ecByte, text)
+        return Pos(a[0], byteToChar(a[0], a[1]))
     }
 
     /** يُرجع null إن لم يبقَ شيء للتراجع عنه. */
-    fun undo(): Pos? = nativeUndo(requireHandle())?.let { Pos(it[0], it[1]) }
-    fun redo(): Pos? = nativeRedo(requireHandle())?.let { Pos(it[0], it[1]) }
+    fun undo(): Pos? = nativeUndo(requireHandle())?.let { Pos(it[0], byteToChar(it[0], it[1])) }
+    fun redo(): Pos? = nativeRedo(requireHandle())?.let { Pos(it[0], byteToChar(it[0], it[1])) }
 
-    fun duplicateCurrentLine(): Pos { val a = nativeDuplicateLine(requireHandle()); return Pos(a[0], a[1]) }
-    fun deleteCurrentLine(): Pos { val a = nativeDeleteLine(requireHandle()); return Pos(a[0], a[1]) }
-    fun moveLineUp(): Pos { val a = nativeMoveLineUp(requireHandle()); return Pos(a[0], a[1]) }
-    fun moveLineDown(): Pos { val a = nativeMoveLineDown(requireHandle()); return Pos(a[0], a[1]) }
-    fun toggleLineComment(): Pos { val a = nativeToggleComment(requireHandle()); return Pos(a[0], a[1]) }
-    fun indentSelection(): Pos { val a = nativeIndentSelection(requireHandle()); return Pos(a[0], a[1]) }
-    fun unindentSelection(): Pos { val a = nativeUnindentSelection(requireHandle()); return Pos(a[0], a[1]) }
+    fun duplicateCurrentLine(): Pos { val a = nativeDuplicateLine(requireHandle()); return Pos(a[0], byteToChar(a[0], a[1])) }
+    fun deleteCurrentLine(): Pos { val a = nativeDeleteLine(requireHandle()); return Pos(a[0], byteToChar(a[0], a[1])) }
+    fun moveLineUp(): Pos { val a = nativeMoveLineUp(requireHandle()); return Pos(a[0], byteToChar(a[0], a[1])) }
+    fun moveLineDown(): Pos { val a = nativeMoveLineDown(requireHandle()); return Pos(a[0], byteToChar(a[0], a[1])) }
+    fun toggleLineComment(): Pos { val a = nativeToggleComment(requireHandle()); return Pos(a[0], byteToChar(a[0], a[1])) }
+    fun indentSelection(): Pos { val a = nativeIndentSelection(requireHandle()); return Pos(a[0], byteToChar(a[0], a[1])) }
+    fun unindentSelection(): Pos { val a = nativeUnindentSelection(requireHandle()); return Pos(a[0], byteToChar(a[0], a[1])) }
 
-    /** -1 = متوازن، وإلا رقم أول سطر فيه خلل (1-based). */
+    /** -1 = متوازن، وإلا رقم أول سطر فيه خلل (1-based). لا عمود هنا فلا حاجة لتحويل. */
     fun checkBracketBalance(): Int = nativeCheckBracketBalance(requireHandle())
 
     fun getHighlights(): List<Highlight> {
         val flat = nativeGetHighlightSpansFlat(requireHandle())
         val out = ArrayList<Highlight>(flat.size / 4)
         var i = 0
+        // ذاكرة مؤقتة لسطر واحد: امتدادات نفس السطر متتالية غالبًا في الناتج المسطّح، فتفادي
+        // إعادة قراءة نص السطر عبر JNI لكل امتداد يقلّل التكلفة بشكل كبير على ملف كبير.
+        var cachedLine = -1
+        var cachedText = ""
         while (i + 3 < flat.size) {
-            out.add(Highlight(flat[i], flat[i + 1], flat[i + 2], flat[i + 3]))
+            val line = flat[i]
+            if (line != cachedLine) { cachedText = clampedLineText(line); cachedLine = line }
+            val startCol = byteOffsetToCharIndex(cachedText, flat[i + 1])
+            val endCol = byteOffsetToCharIndex(cachedText, flat[i + 2])
+            out.add(Highlight(line, startCol, endCol, flat[i + 3]))
             i += 4
         }
         return out
@@ -161,8 +209,14 @@ class RinNativeEditor {
         val flat = nativeFindAllFlat(requireHandle(), query, caseSensitive)
         val out = ArrayList<FindMatch>(flat.size / 3)
         var i = 0
+        var cachedLine = -1
+        var cachedText = ""
         while (i + 2 < flat.size) {
-            out.add(FindMatch(flat[i], flat[i + 1], flat[i + 2]))
+            val line = flat[i]
+            if (line != cachedLine) { cachedText = clampedLineText(line); cachedLine = line }
+            val startCol = byteOffsetToCharIndex(cachedText, flat[i + 1])
+            val endCol = byteOffsetToCharIndex(cachedText, flat[i + 2])
+            out.add(FindMatch(line, startCol, endCol))
             i += 3
         }
         return out
@@ -180,6 +234,6 @@ class RinNativeEditor {
 
     fun lineStartPosition(oneBasedLine: Int): Pos {
         val a = nativeLineStartPosition(requireHandle(), oneBasedLine)
-        return Pos(a[0], a[1])
+        return Pos(a[0], byteToChar(a[0], a[1]))
     }
 }
