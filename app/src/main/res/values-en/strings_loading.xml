@@ -1,0 +1,13 @@
+<resources>
+    <string name="rin_loading_title">RIN</string>
+    <string name="rin_loading_working">Working…</string>
+    <string name="rin_loading_percent">%1$d%%</string>
+    <string name="rin_loading_preparing">Preparing…</string>
+    <string name="rin_loading_starting">Starting Rin…</string>
+    <string name="rin_loading_detail_starting">Initializing the workspace</string>
+    <string name="rin_loading_stage_ui">Building interface</string>
+    <string name="rin_loading_stage_editor">Preparing editor</string>
+    <string name="rin_loading_stage_engine">Connecting native engine</string>
+    <string name="rin_loading_stage_ready">Finalizing workspace</string>
+    <string name="rin_loading_stage_done">Ready</string>
+</resources>
