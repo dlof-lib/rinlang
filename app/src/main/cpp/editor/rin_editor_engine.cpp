@@ -572,8 +572,17 @@ static HighlightKind kindForToken(rin::TokenType t) {
             return HighlightKind::Operator;
         case TT::END_OF_FILE:
             return HighlightKind::Default;
+        // كلمات لغة الحاويات/الأنواع — هوية بنفسجية منفصلة عن الكلمات المفتاحية الأساسية
+        // (let/if/while/fun...) التي تبقى زرقاء عبر الفرع default أدناه. بدون هذا الفرع
+        // كانت كل هذه الكلمات تصل إلى default وتُلوَّن كـ Keyword خطأً (أزرق بدل بنفسجي).
+        case TT::TEXT: case TT::CONTAINER: case TT::CONTAINERS: case TT::GROUP:
+        case TT::VOLUME: case TT::SECTION: case TT::TRANSLATIONS: case TT::TRANSLATION:
+        case TT::LINK: case TT::TYING: case TT::MERGE: case TT::INSTALLATION:
+        case TT::SIMPLIFIED: case TT::SAVE: case TT::FILE_KW: case TT::END:
+        case TT::PIPE_KW:
+            return HighlightKind::Type;
         default:
-            // كل الكلمات المحجوزة الأخرى (let/if/while/fun/container/Section/...)
+            // كل الكلمات المحجوزة الأخرى (let/if/while/fun/return/break/continue/...)
             return HighlightKind::Keyword;
     }
 }
