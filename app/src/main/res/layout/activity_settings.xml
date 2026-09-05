@@ -1,218 +1,613 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical"
+    android:fillViewport="true"
     android:background="@color/rin_background">
-
-    <include layout="@layout/toolbar_app" />
-
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:padding="24dp">
-
-        <!-- قسم إعدادات المحرر -->
+        android:orientation="vertical">
+        <include layout="@layout/toolbar_app" />
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:background="@drawable/bg_list_card"
-            android:padding="16dp">
+            android:paddingStart="18dp"
+            android:paddingEnd="18dp"
+            android:paddingTop="16dp"
+            android:paddingBottom="28dp">
 
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="@string/settings_editor_section_title"
+                android:text="@string/settings_hero_title"
                 android:textColor="@color/rin_on_toolbar"
                 android:textStyle="bold"
-                android:textSize="15sp"
-                android:layout_marginBottom="14dp" />
-
-            <TextView
-                android:id="@+id/txtFontSizeLabel"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:textColor="@color/rin_on_toolbar"
-                android:textSize="13sp"
-                android:layout_marginBottom="6dp"
-                tools:text="حجم الخط: 14" />
-
-            <SeekBar
-                android:id="@+id/seekFontSize"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:max="12"
-                android:layout_marginBottom="20dp" />
-
-            <View
-                android:layout_width="match_parent"
-                android:layout_height="1dp"
-                android:background="@color/rin_editor_hint"
-                android:layout_marginBottom="16dp"
-                android:alpha="0.25" />
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_vertical">
-
-                <LinearLayout
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:orientation="vertical">
-
-                    <TextView
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="@string/settings_show_line_numbers"
-                        android:textColor="@color/rin_on_toolbar"
-                        android:textSize="14sp" />
-
-                    <TextView
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="@string/settings_show_line_numbers_hint"
-                        android:textColor="@color/rin_editor_hint"
-                        android:textSize="11.5sp" />
-                </LinearLayout>
-
-                <Switch
-                    android:id="@+id/switchLineNumbers"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content" />
-            </LinearLayout>
-        </LinearLayout>
-
-        <!-- قسم لغة التطبيق: ثلاثة خيارات (عربي/إنجليزي/إسباني) بنفس أسلوب بطاقة قسم المحرر أعلاه -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:background="@drawable/bg_list_card"
-            android:padding="16dp"
-            android:layout_marginTop="16dp">
-
+                android:textSize="24sp" />
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="@string/settings_language_section_title"
-                android:textColor="@color/rin_on_toolbar"
-                android:textStyle="bold"
-                android:textSize="15sp"
-                android:layout_marginBottom="4dp" />
-
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="@string/settings_language_hint"
+                android:layout_marginTop="4dp"
+                android:text="@string/settings_hero_hint"
                 android:textColor="@color/rin_editor_hint"
-                android:textSize="11.5sp"
-                android:layout_marginBottom="14dp" />
+                android:textSize="12sp" />
 
-            <LinearLayout
-                android:id="@+id/rowLangAr"
+            <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_vertical"
-                android:clickable="true"
-                android:focusable="true"
-                android:background="@drawable/bg_lang_option_selected"
-                android:padding="14dp"
-                android:layout_marginBottom="10dp">
-
-                <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="@string/lang_name_ar"
-                    android:textColor="@color/rin_on_toolbar"
-                    android:textSize="14sp" />
-
-                <ImageView
-                    android:id="@+id/checkLangAr"
-                    android:layout_width="18dp"
-                    android:layout_height="18dp"
-                    android:src="@android:drawable/checkbox_on_background"
-                    app:tint="@color/rin_accent"
-                    android:contentDescription="@null" />
-            </LinearLayout>
-
+                android:layout_marginTop="22dp"
+                android:layout_marginBottom="8dp"
+                android:text="@string/settings_editor_section_title"
+                android:textColor="@color/rin_accent"
+                android:textStyle="bold"
+                android:textSize="14sp" />
             <LinearLayout
-                android:id="@+id/rowLangEn"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_vertical"
-                android:clickable="true"
-                android:focusable="true"
-                android:background="@drawable/bg_list_card"
-                android:padding="14dp"
-                android:layout_marginBottom="10dp">
-
-                <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="@string/lang_name_en"
-                    android:textColor="@color/rin_on_toolbar"
-                    android:textSize="14sp" />
-
-                <ImageView
-                    android:id="@+id/checkLangEn"
-                    android:layout_width="18dp"
-                    android:layout_height="18dp"
-                    android:src="@android:drawable/checkbox_on_background"
-                    app:tint="@color/rin_accent"
-                    android:visibility="invisible"
-                    android:contentDescription="@null" />
-            </LinearLayout>
-
-            <LinearLayout
-                android:id="@+id/rowLangEs"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_vertical"
-                android:clickable="true"
-                android:focusable="true"
+                android:orientation="vertical"
                 android:background="@drawable/bg_list_card"
                 android:padding="14dp">
-
                 <TextView
-                    android:layout_width="0dp"
+                    android:id="@+id/txtFontSizeLabel"
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="@string/lang_name_es"
                     android:textColor="@color/rin_on_toolbar"
-                    android:textSize="14sp" />
-
-                <ImageView
-                    android:id="@+id/checkLangEs"
-                    android:layout_width="18dp"
-                    android:layout_height="18dp"
-                    android:src="@android:drawable/checkbox_on_background"
-                    app:tint="@color/rin_accent"
-                    android:visibility="invisible"
-                    android:contentDescription="@null" />
+                    android:textStyle="bold"
+                    android:textSize="13.5sp"
+                    tools:text="حجم الخط: 14" />
+                <SeekBar
+                    android:id="@+id/seekFontSize"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:max="12"
+                    android:layout_marginTop="4dp" />
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:layout_marginTop="8dp">
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+                        <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/settings_show_line_numbers" android:textColor="@color/rin_on_toolbar" android:textSize="13sp" />
+                        <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/settings_show_line_numbers_hint" android:textColor="@color/rin_editor_hint" android:textSize="11sp" />
+                    </LinearLayout>
+                    <Switch android:id="@+id/switchLineNumbers" android:layout_width="wrap_content" android:layout_height="wrap_content" />
+                </LinearLayout>
             </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:padding="14dp"
+            android:background="@drawable/bg_list_card"
+            android:layout_marginBottom="8dp">
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:paddingEnd="10dp">
+                <TextView
+                    android:id="@+id/preferenceTitle"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/settings_syntax"
+                    android:textColor="@color/rin_on_toolbar"
+                    android:textStyle="bold"
+                    android:textSize="13.5sp" />
+                <TextView
+                    android:id="@+id/preferenceHint"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:text="@string/settings_syntax_hint"
+                    android:textColor="@color/rin_editor_hint"
+                    android:textSize="11sp" />
+            </LinearLayout>
+            <Switch
+                android:id="@+id/switchSyntax"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content" />
+        </LinearLayout>
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:padding="14dp"
+            android:background="@drawable/bg_list_card"
+            android:layout_marginBottom="8dp">
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:paddingEnd="10dp">
+                <TextView
+                    android:id="@+id/preferenceTitle"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/settings_brackets"
+                    android:textColor="@color/rin_on_toolbar"
+                    android:textStyle="bold"
+                    android:textSize="13.5sp" />
+                <TextView
+                    android:id="@+id/preferenceHint"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:text="@string/settings_brackets_hint"
+                    android:textColor="@color/rin_editor_hint"
+                    android:textSize="11sp" />
+            </LinearLayout>
+            <Switch
+                android:id="@+id/switchBrackets"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content" />
+        </LinearLayout>
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:padding="14dp"
+            android:background="@drawable/bg_list_card"
+            android:layout_marginBottom="8dp">
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:paddingEnd="10dp">
+                <TextView
+                    android:id="@+id/preferenceTitle"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/settings_autocomplete"
+                    android:textColor="@color/rin_on_toolbar"
+                    android:textStyle="bold"
+                    android:textSize="13.5sp" />
+                <TextView
+                    android:id="@+id/preferenceHint"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:text="@string/settings_autocomplete_hint"
+                    android:textColor="@color/rin_editor_hint"
+                    android:textSize="11sp" />
+            </LinearLayout>
+            <Switch
+                android:id="@+id/switchAutocomplete"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content" />
+        </LinearLayout>
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:padding="14dp"
+            android:background="@drawable/bg_list_card"
+            android:layout_marginBottom="8dp">
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:paddingEnd="10dp">
+                <TextView
+                    android:id="@+id/preferenceTitle"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/settings_auto_close"
+                    android:textColor="@color/rin_on_toolbar"
+                    android:textStyle="bold"
+                    android:textSize="13.5sp" />
+                <TextView
+                    android:id="@+id/preferenceHint"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:text="@string/settings_auto_close_hint"
+                    android:textColor="@color/rin_editor_hint"
+                    android:textSize="11sp" />
+            </LinearLayout>
+            <Switch
+                android:id="@+id/switchAutoClose"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content" />
+        </LinearLayout>
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:padding="14dp"
+            android:background="@drawable/bg_list_card"
+            android:layout_marginBottom="8dp">
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:paddingEnd="10dp">
+                <TextView
+                    android:id="@+id/preferenceTitle"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/settings_auto_indent"
+                    android:textColor="@color/rin_on_toolbar"
+                    android:textStyle="bold"
+                    android:textSize="13.5sp" />
+                <TextView
+                    android:id="@+id/preferenceHint"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:text="@string/settings_auto_indent_hint"
+                    android:textColor="@color/rin_editor_hint"
+                    android:textSize="11sp" />
+            </LinearLayout>
+            <Switch
+                android:id="@+id/switchAutoIndent"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content" />
+        </LinearLayout>
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:padding="14dp"
+            android:background="@drawable/bg_list_card"
+            android:layout_marginBottom="8dp">
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:paddingEnd="10dp">
+                <TextView
+                    android:id="@+id/preferenceTitle"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/settings_word_wrap"
+                    android:textColor="@color/rin_on_toolbar"
+                    android:textStyle="bold"
+                    android:textSize="13.5sp" />
+                <TextView
+                    android:id="@+id/preferenceHint"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:text="@string/settings_word_wrap_hint"
+                    android:textColor="@color/rin_editor_hint"
+                    android:textSize="11sp" />
+            </LinearLayout>
+            <Switch
+                android:id="@+id/switchWordWrap"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content" />
+        </LinearLayout>
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:padding="14dp"
+            android:background="@drawable/bg_list_card"
+            android:layout_marginBottom="8dp">
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:paddingEnd="10dp">
+                <TextView
+                    android:id="@+id/preferenceTitle"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/settings_whitespace"
+                    android:textColor="@color/rin_on_toolbar"
+                    android:textStyle="bold"
+                    android:textSize="13.5sp" />
+                <TextView
+                    android:id="@+id/preferenceHint"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:text="@string/settings_whitespace_hint"
+                    android:textColor="@color/rin_editor_hint"
+                    android:textSize="11sp" />
+            </LinearLayout>
+            <Switch
+                android:id="@+id/switchWhitespace"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content" />
+        </LinearLayout>
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:padding="14dp"
+            android:background="@drawable/bg_list_card"
+            android:layout_marginBottom="8dp">
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:paddingEnd="10dp">
+                <TextView
+                    android:id="@+id/preferenceTitle"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/settings_current_line"
+                    android:textColor="@color/rin_on_toolbar"
+                    android:textStyle="bold"
+                    android:textSize="13.5sp" />
+                <TextView
+                    android:id="@+id/preferenceHint"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:text="@string/settings_current_line_hint"
+                    android:textColor="@color/rin_editor_hint"
+                    android:textSize="11sp" />
+            </LinearLayout>
+            <Switch
+                android:id="@+id/switchCurrentLine"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content" />
+        </LinearLayout>
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:padding="14dp"
+            android:background="@drawable/bg_list_card"
+            android:layout_marginBottom="8dp">
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:paddingEnd="10dp">
+                <TextView
+                    android:id="@+id/preferenceTitle"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/settings_smooth_cursor"
+                    android:textColor="@color/rin_on_toolbar"
+                    android:textStyle="bold"
+                    android:textSize="13.5sp" />
+                <TextView
+                    android:id="@+id/preferenceHint"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:text="@string/settings_smooth_cursor_hint"
+                    android:textColor="@color/rin_editor_hint"
+                    android:textSize="11sp" />
+            </LinearLayout>
+            <Switch
+                android:id="@+id/switchSmoothCursor"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content" />
+        </LinearLayout>
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:padding="14dp"
+            android:background="@drawable/bg_list_card"
+            android:layout_marginBottom="8dp">
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:paddingEnd="10dp">
+                <TextView
+                    android:id="@+id/preferenceTitle"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/settings_minimap"
+                    android:textColor="@color/rin_on_toolbar"
+                    android:textStyle="bold"
+                    android:textSize="13.5sp" />
+                <TextView
+                    android:id="@+id/preferenceHint"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:text="@string/settings_minimap_hint"
+                    android:textColor="@color/rin_editor_hint"
+                    android:textSize="11sp" />
+            </LinearLayout>
+            <Switch
+                android:id="@+id/switchMinimap"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content" />
+        </LinearLayout>
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:padding="14dp"
+            android:background="@drawable/bg_list_card"
+            android:layout_marginBottom="8dp">
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:paddingEnd="10dp">
+                <TextView
+                    android:id="@+id/preferenceTitle"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/settings_haptic"
+                    android:textColor="@color/rin_on_toolbar"
+                    android:textStyle="bold"
+                    android:textSize="13.5sp" />
+                <TextView
+                    android:id="@+id/preferenceHint"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:text="@string/settings_haptic_hint"
+                    android:textColor="@color/rin_editor_hint"
+                    android:textSize="11sp" />
+            </LinearLayout>
+            <Switch
+                android:id="@+id/switchHaptic"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content" />
+        </LinearLayout>
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:padding="14dp"
+            android:background="@drawable/bg_list_card"
+            android:layout_marginBottom="8dp">
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:paddingEnd="10dp">
+                <TextView
+                    android:id="@+id/preferenceTitle"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/settings_save_pause"
+                    android:textColor="@color/rin_on_toolbar"
+                    android:textStyle="bold"
+                    android:textSize="13.5sp" />
+                <TextView
+                    android:id="@+id/preferenceHint"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:text="@string/settings_save_pause_hint"
+                    android:textColor="@color/rin_editor_hint"
+                    android:textSize="11sp" />
+            </LinearLayout>
+            <Switch
+                android:id="@+id/switchSavePause"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content" />
+        </LinearLayout>
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:padding="14dp"
+            android:background="@drawable/bg_list_card"
+            android:layout_marginBottom="8dp">
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:paddingEnd="10dp">
+                <TextView
+                    android:id="@+id/preferenceTitle"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/settings_confirm_exit"
+                    android:textColor="@color/rin_on_toolbar"
+                    android:textStyle="bold"
+                    android:textSize="13.5sp" />
+                <TextView
+                    android:id="@+id/preferenceHint"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:text="@string/settings_confirm_exit_hint"
+                    android:textColor="@color/rin_editor_hint"
+                    android:textSize="11sp" />
+            </LinearLayout>
+            <Switch
+                android:id="@+id/switchConfirmExit"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content" />
+        </LinearLayout>
+            <LinearLayout
+            android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:orientation="horizontal" android:gravity="center_vertical"
+            android:padding="14dp" android:background="@drawable/bg_list_card" android:layout_marginBottom="8dp">
+            <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical" android:paddingEnd="10dp">
+                <TextView android:id="@+id/preferenceTitleFormat" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/settings_format_save" android:textColor="@color/rin_on_toolbar" android:textStyle="bold" android:textSize="13.5sp" />
+                <TextView android:id="@+id/preferenceHintFormat" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="2dp" android:text="@string/settings_format_save_hint" android:textColor="@color/rin_editor_hint" android:textSize="11sp" />
+            </LinearLayout>
+            <Switch android:id="@+id/switchFormatSave" android:layout_width="wrap_content" android:layout_height="wrap_content" />
         </LinearLayout>
 
-        <Button
-            android:id="@+id/btnResetDefaults"
-            android:layout_width="match_parent"
-            android:layout_height="46dp"
-            android:layout_marginTop="16dp"
-            android:background="@drawable/bg_toolbar_btn_ghost"
-            android:text="@string/action_reset_defaults"
-            android:textAllCaps="false"
-            android:textSize="13sp"
-            android:textColor="@color/rin_editor_hint" />
+        <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:layout_marginBottom="8dp"
+                android:text="@string/settings_indentation_title"
+                android:textColor="@color/rin_accent"
+                android:textStyle="bold"
+                android:textSize="14sp" />
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:background="@drawable/bg_list_card"
+                android:padding="14dp">
+                <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/settings_tab_size" android:textColor="@color/rin_on_toolbar" android:textStyle="bold" android:textSize="13.5sp" />
+                <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/settings_tab_size_hint" android:textColor="@color/rin_editor_hint" android:textSize="11sp" android:layout_marginTop="2dp" />
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center" android:layout_marginTop="10dp">
+                    <TextView android:id="@+id/btnTab2" android:layout_width="0dp" android:layout_height="42dp" android:layout_weight="1" android:gravity="center" android:text="2" android:textColor="@color/rin_on_toolbar" android:textStyle="bold" android:background="@drawable/bg_list_card" />
+                    <TextView android:id="@+id/btnTab4" android:layout_width="0dp" android:layout_height="42dp" android:layout_weight="1" android:layout_marginStart="8dp" android:gravity="center" android:text="4" android:textColor="@color/rin_on_toolbar" android:textStyle="bold" android:background="@drawable/bg_lang_option_selected" />
+                    <TextView android:id="@+id/btnTab8" android:layout_width="0dp" android:layout_height="42dp" android:layout_weight="1" android:layout_marginStart="8dp" android:gravity="center" android:text="8" android:textColor="@color/rin_on_toolbar" android:textStyle="bold" android:background="@drawable/bg_list_card" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:layout_marginBottom="8dp"
+                android:text="@string/settings_language_section_title"
+                android:textColor="@color/rin_accent"
+                android:textStyle="bold"
+                android:textSize="14sp" />
+            <LinearLayout android:id="@+id/rowLangAr" android:layout_width="match_parent" android:layout_height="48dp" android:gravity="center_vertical" android:padding="12dp" android:background="@drawable/bg_lang_option_selected" android:clickable="true" android:focusable="true">
+                <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="@string/lang_name_ar" android:textColor="@color/rin_on_toolbar" android:textSize="13sp" />
+                <ImageView android:id="@+id/checkLangAr" android:layout_width="18dp" android:layout_height="18dp" android:src="@android:drawable/checkbox_on_background" app:tint="@color/rin_accent" android:contentDescription="@null" />
+            </LinearLayout>
+            <LinearLayout android:id="@+id/rowLangEn" android:layout_width="match_parent" android:layout_height="48dp" android:layout_marginTop="7dp" android:gravity="center_vertical" android:padding="12dp" android:background="@drawable/bg_list_card" android:clickable="true" android:focusable="true">
+                <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="@string/lang_name_en" android:textColor="@color/rin_on_toolbar" android:textSize="13sp" />
+                <ImageView android:id="@+id/checkLangEn" android:layout_width="18dp" android:layout_height="18dp" android:src="@android:drawable/checkbox_on_background" app:tint="@color/rin_accent" android:visibility="invisible" android:contentDescription="@null" />
+            </LinearLayout>
+            <LinearLayout android:id="@+id/rowLangEs" android:layout_width="match_parent" android:layout_height="48dp" android:layout_marginTop="7dp" android:gravity="center_vertical" android:padding="12dp" android:background="@drawable/bg_list_card" android:clickable="true" android:focusable="true">
+                <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="@string/lang_name_es" android:textColor="@color/rin_on_toolbar" android:textSize="13sp" />
+                <ImageView android:id="@+id/checkLangEs" android:layout_width="18dp" android:layout_height="18dp" android:src="@android:drawable/checkbox_on_background" app:tint="@color/rin_accent" android:visibility="invisible" android:contentDescription="@null" />
+            </LinearLayout>
+
+            <Button android:id="@+id/btnResetDefaults" android:layout_width="match_parent" android:layout_height="46dp" android:layout_marginTop="18dp" android:background="@drawable/bg_toolbar_btn_ghost" android:text="@string/action_reset_defaults" android:textAllCaps="false" android:textSize="13sp" android:textColor="@color/rin_editor_hint" />
+        </LinearLayout>
     </LinearLayout>
-</LinearLayout>
+</ScrollView>
