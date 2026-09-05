@@ -1,30 +1,30 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="rin_background">#F5F7FA</color>
-    <color name="rin_toolbar">#FFFFFF</color>
-    <color name="rin_toolbar_bottom">#F0F2F5</color>
+    <color name="rin_background">#17181C</color>
+    <color name="rin_toolbar">#1F2126</color>
+    <color name="rin_toolbar_bottom">#202329</color>
     <color name="rin_bottom_nav_selected">#7C5CFF</color>
-    <color name="rin_bottom_nav_unselected">#667085</color>
-    <color name="rin_on_toolbar">#1C2128</color>
-    <color name="rin_on_toolbar_dim">#667085</color>
+    <color name="rin_bottom_nav_unselected">#9198A3</color>
+    <color name="rin_on_toolbar">#F3F4F6</color>
+    <color name="rin_on_toolbar_dim">#9198A3</color>
     <color name="rin_accent">#7C5CFF</color>
     <color name="rin_accent_border_subtle">#4D7C5CFF</color>
     <color name="rin_accent_pressed">#6A47E8</color>
-    <color name="rin_editor_bg">#FFFFFF</color>
-    <color name="rin_editor_surface_border">#DDE2E8</color>
-    <color name="rin_editor_text">#20252B</color>
-    <color name="rin_editor_hint">#667085</color>
-    <color name="rin_divider">#DDE2E8</color>
-    <color name="rin_console_header">#F1F3F6</color>
-    <color name="rin_console_bg">#FFFFFF</color>
+    <color name="rin_editor_bg">#1B1D22</color>
+    <color name="rin_editor_surface_border">#2A2D34</color>
+    <color name="rin_editor_text">#E3E5E8</color>
+    <color name="rin_editor_hint">#6E7480</color>
+    <color name="rin_divider">#2A2D34</color>
+    <color name="rin_console_header">#1D1F25</color>
+    <color name="rin_console_bg">#131417</color>
     <color name="rin_console_text">#57D6B8</color>
-    <color name="rin_ghost_ripple">#22000000</color>
-    <color name="rin_ghost_pressed_bg">#14000000</color>
+    <color name="rin_ghost_ripple">#22FFFFFF</color>
+    <color name="rin_ghost_pressed_bg">#14FFFFFF</color>
     <color name="rin_logo_badge_bg">#7C5CFF</color>
 
     <!-- الشريط العلوي المطوَّر: تدرّج + إطار أيقونة التطبيق + فاصل ظل -->
     <color name="rin_toolbar_gradient_top">#24262D</color>
-    <color name="rin_toolbar_gradient_bottom">#FFFFFF</color>
+    <color name="rin_toolbar_gradient_bottom">#1B1D22</color>
     <color name="rin_app_icon_border">#33FFFFFF</color>
     <color name="rin_toolbar_shadow">#33000000</color>
     <color name="rin_menubar_divider">#20FFFFFF</color>
@@ -37,63 +37,23 @@
     <color name="rin_bracket_error_bg">#5FF14C4C</color>
     <color name="rin_find_match_bg">#5FD7BA7D</color>
 
-    <!-- ============================================================================
-         نظام تلوين الصيغة النحوية الموحَّد (Unified Syntax Palette) — نمط فاتح احترافي
-         مصمَّم خصيصاً لخلفية بيضاء (rin_editor_bg)، وليس نسخة من ألوان الثيم الداكن.
-
-         ست هويات لونية ثابتة، كل واحدة تمثّل "مفهوماً" واحداً في الكود بلا تشتّت، ونفس
-         الهوية تتكرر بظلال متوازنة بين الثيم الفاتح والداكن (انظر values-night/colors.xml):
-
-           • أزرق    (Blue)   → الكلمات المفتاحية وتدفّق التحكّم: if/for/return/kind...
-           • بنفسجي  (Purple) → الأنواع/الحاويات وتوجيهات وحدة make (type/container/policy)
-           • أخضر    (Green)  → النصوص الحرفية (string literals)
-           • برتقالي (Orange) → الأرقام وحقول الستايل و`item` الضمني في Reckon
-           • ذهبي    (Gold)   → الدوال المُستدعاة (calls/builtins) و@tags/@decorators
-           • أبيض    (White)  → التعليقات — رمادي محايد هادئ على الفاتح ليبقى مقروءاً فوق
-                                 خلفية بيضاء، ويتحوّل إلى أبيض شبه-صريح فعلياً في الثيم الداكن.
-
-         كل لون هنا يحقق نسبة تباين ≥ 4.5:1 مقابل الأبيض (WCAG AA) لضمان وضوح قرائي حقيقي،
-         وليس مجرد "ديكور". -->
-
-    <!-- • أزرق — الكلمات المفتاحية الأساسية -->
-    <color name="syntax_keyword">#0B4FCC</color>
-
-    <!-- • بنفسجي — الأنواع/الحاويات، وتوجيهات سياسة وحدة make (kind/use/need/allow/deny/
-         strict/input/output/public/private/version/description) بنفس الهوية البنفسجية،
-         لأنّ الاثنين مفهوم واحد منطقياً: "تصنيف/سياسة على مستوى الوحدة"، لا حاجة لهويتين. -->
-    <color name="syntax_container_keyword">#6A1B9A</color>
-    <color name="syntax_make_directive">#6A1B9A</color>
-
-    <!-- • برتقالي — حقول تنسيق/ستايل الكائن (txt/img/object.file/Fonts/background/css3):
-         نفس هوية "الستايل" اللونية المستخدمة في كونسول التشغيل (log_kind_style) لتمييزها
-         بصرياً عن بقية كلمات الحاويات، وضمن نفس عائلة "برتقالي" لباقي حقول هذا المفهوم -->
-    <color name="syntax_style_keyword">#9C5700</color>
-
-    <!-- • أخضر — النصوص الحرفية (strings) -->
-    <color name="syntax_string">#1D7A4C</color>
-
-    <!-- • برتقالي — الأرقام (numbers) -->
-    <color name="syntax_number">#B45F06</color>
-
-    <!-- • أبيض (رمادي محايد هادئ على خلفية فاتحة) — التعليقات؛ مائل (italic) في الرسم لتمييزه
-         إضافياً عن النص العادي بلا اعتماد كلي على اللون وحده -->
-    <color name="syntax_comment">#6B7280</color>
-
-    <!-- • ذهبي — الدوال المُستدعاة (function calls / builtins) -->
-    <color name="syntax_builtin">#8A6D00</color>
-
-    <!-- • ذهبي — وسوم/زخارف @tag، نفس هوية الدوال لأنها الأخرى "استدعاء" مفهومياً -->
-    <color name="syntax_tag">#8A6D00</color>
-
-    <!-- • برتقالي (بظلّ مستقل عن الأرقام) — `item` الضمني داخل مفهوم Reckon الحسابي بسطرين
-         (docs/RECKON.md)، لتمييزه كـ"مرجع ضمني" وليس متغيّراً مُعلَناً صراحةً أو رقماً حرفياً -->
-    <color name="syntax_reckon_item">#A45A00</color>
-
-    <!-- نص التوكِن الذي يعلّمه المحلّل/المُحلّل النحوي كخطأ — أحمر غامق يبقى واضحاً على
-         خلفية المحرر البيضاء (خلافاً للأحمر الفاتح المستخدم كتظليل شفاف لخلفية القوس الخاطئ).
-         هذا اللون خارج المنظومة الست أعلاه عمداً: "خطأ" ليس مفهوماً نحوياً بل حالة تنبيه،
-         ويجب أن يبقى قابلاً للتمييز الفوري عنها جميعاً. -->
-    <color name="syntax_error">#C62828</color>
+    <!-- تلوين الصيغة النحوية (syntax highlighting) في المحرر -->
+    <color name="syntax_keyword">#569CD6</color>
+    <color name="syntax_container_keyword">#4EC9B0</color>
+    <!-- حقول تنسيق/ستايل الكائن (txt/img/object.file/Fonts/background/css3): نفس هوية "الستايل"
+         اللونية المستخدمة في كونسول التشغيل (log_kind_style) لتمييزها بصرياً عن بقية كلمات الحاويات -->
+    <color name="syntax_style_keyword">#F2A65A</color>
+    <color name="syntax_string">#CE9178</color>
+    <color name="syntax_number">#B5CEA8</color>
+    <color name="syntax_comment">#6A9955</color>
+    <color name="syntax_builtin">#DCDCAA</color>
+    <color name="syntax_tag">#D7BA7D</color>
+    <!-- توجيهات سياسة وحدة make (kind/use/need/allow/deny/strict/input/output/public/private/
+         version/description) — بنفسجي مميز بنفس هوية الكلمات المفتاحية التحكّمية في VS Code -->
+    <color name="syntax_make_directive">#C586C0</color>
+    <!-- `item` الضمني داخل مفهوم Reckon الحسابي بسطرين (docs/RECKON.md) — لون مائل مستقل
+         لتمييزه كـ"مرجع ضمني" وليس متغيّراً مُعلَناً صراحةً -->
+    <color name="syntax_reckon_item">#FF8A6B</color>
 
     <!-- الهوية الثانية "أخضر" — تُستخدم إلى جانب البنفسجي في: مؤشر التبويب السفلي، حالة
          "تم الانتساب"، حبّات إحصائيات التنزيلات/التثبيت، وأيقونة "موثّق" — بلا استبدال
@@ -105,8 +65,8 @@
     <color name="rin_gradient_green_end">#1AA377</color>
 
     <!-- بطاقات الإحصائيات القابلة للضغط في الملف الشخصي وصفحة تفاصيل الحزمة -->
-    <color name="rin_stat_card_bg">#FFFFFF</color>
-    <color name="rin_stat_card_border">#DDE2E8</color>
+    <color name="rin_stat_card_bg">#1B1D22</color>
+    <color name="rin_stat_card_border">#2A2D34</color>
     <color name="rin_stat_card_pressed">#22252C</color>
 
     <color name="rin_star_gold">#FFC94D</color>
@@ -138,6 +98,7 @@
     <color name="project_type_table_color">#D7BA7D</color>
     <color name="project_type_ui_color">#5FD0E0</color>
     <color name="project_type_free_color">#7C5CFF</color>
+    <color name="project_type_illust_color">#E67E22</color>
     <color name="status_queued">#8A8A8A</color>
     <color name="status_running">#569CD6</color>
     <color name="status_success">#4EC9B0</color>
@@ -172,7 +133,7 @@
     <!-- بطاقة/زر تنزيل النتائج الفعلية إلى Downloads -->
     <color name="rin_download_chip_bg">#20232B</color>
     <color name="rin_download_chip_border">#3A3E48</color>
-    <color name="rin_download_progress_track">#DDE2E8</color>
+    <color name="rin_download_progress_track">#2A2D34</color>
 
     <!-- شاشة "Pipeline Runner": تصميم فاتح مطابق لمخطط تدفق الأنابيب المرئي -->
     <color name="pipeline_header_bg">#0F2A3D</color>
@@ -217,15 +178,13 @@
     <color name="pipeline_terminal_cyan">#5FD3FF</color>
     <color name="pipeline_terminal_cursor">#3FE07D</color>
 
-    <!-- ألوان الصيغة النحوية داخل بطاقة الكود الفاتحة على شاشة Pipeline Runner — مُوحَّدة الآن
-         مع نفس منظومة الألوان الست (أزرق/بنفسجي/أخضر/برتقالي/ذهبي/أبيض) أعلاه بدل هوية لونية
-         منفصلة، حتى يبدو الكود بنفس الشكل أينما ظهر في التطبيق. -->
-    <color name="pipeline_syntax_keyword">@color/syntax_keyword</color>
-    <color name="pipeline_syntax_container">@color/syntax_container_keyword</color>
-    <color name="pipeline_syntax_string">@color/syntax_string</color>
-    <color name="pipeline_syntax_number">@color/syntax_number</color>
-    <color name="pipeline_syntax_comment">@color/syntax_comment</color>
-    <color name="pipeline_syntax_tag">@color/syntax_builtin</color>
+    <!-- ألوان الصيغة النحوية داخل بطاقة الكود الفاتحة على شاشة Pipeline Runner -->
+    <color name="pipeline_syntax_keyword">#1857A4</color>
+    <color name="pipeline_syntax_container">#1E7A4C</color>
+    <color name="pipeline_syntax_string">#8A5A1F</color>
+    <color name="pipeline_syntax_number">#0E7A6B</color>
+    <color name="pipeline_syntax_comment">#8A97A0</color>
+    <color name="pipeline_syntax_tag">#8A5A1F</color>
 
     <!-- شاشة "المعاينة الحية" (Live Preview / Loomtime): إطار جهاز داكن على خلفية أغمق قليلاً
          من بقية التطبيق حتى يبرز إطار الهاتف بوضوح، مع شارة "Live" خضراء ولوحة أخطاء Snag حمراء. -->
@@ -237,9 +196,9 @@
     <color name="loom_error_bg">#3A1518</color>
     <color name="loom_error_border">#F14C4C</color>
     <color name="loom_error_text">#FFB4AC</color>
-    <color name="loom_footer_text">#667085</color>
-    <color name="loom_inspector_bg">#FFFFFF</color>
-    <color name="loom_inspector_border">#DDE2E8</color>
-    <color name="loom_inspector_key">#667085</color>
-    <color name="loom_inspector_value">#20252B</color>
+    <color name="loom_footer_text">#9198A3</color>
+    <color name="loom_inspector_bg">#1B1D22</color>
+    <color name="loom_inspector_border">#2A2D34</color>
+    <color name="loom_inspector_key">#9198A3</color>
+    <color name="loom_inspector_value">#E3E5E8</color>
 </resources>
