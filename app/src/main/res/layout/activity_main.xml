@@ -399,6 +399,7 @@
                     android:fontFamily="monospace"
                     android:textColor="@color/rin_editor_hint"
                     android:textSize="14sp"
+                    android:lineSpacingMultiplier="1.15"
                     android:gravity="end|top"
                     android:paddingTop="14dp"
                     android:paddingBottom="14dp"
