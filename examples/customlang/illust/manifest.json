@@ -1,0 +1,18 @@
+{
+  "id": "illust",
+  "name": "Illust",
+  "version": "0.1.0",
+  "developer": "you",
+  "fileExtension": "illust",
+  "description": "لغة رسم/جرافيكس صغيرة فوق Rin: أوامر نصية بسيطة (canvas/rect/circle/line/text/fill/stroke) تتحول لمخرجات SVG حقيقية، مع متغيرات وشروط وحلقات.",
+  "entry": {
+    "lexer": "Lexer.rin",
+    "parser": "Parser.rin",
+    "interpreter": "Interpreter.rin",
+    "codegen": "CodeGen.rin",
+    "run": "run.rin"
+  },
+  "syntax": "syntax.rinsyntax.json",
+  "official": false,
+  "createdWithRinLangVersion": "langkit-1.0"
+}
