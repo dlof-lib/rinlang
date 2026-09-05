@@ -95,6 +95,7 @@ class MainActivity : AppCompatActivity() {
         }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        ThemeManager.apply(this)
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
         BottomNavHelper.setup(this, BottomNavTab.EDITOR)
@@ -124,6 +125,7 @@ class MainActivity : AppCompatActivity() {
         scrollEditor = findViewById(R.id.scrollEditor)
 
         applyStoredEditorSettings()
+        applyEditorLayoutSettings()
 
         // أزرار الوصول السريع (أيقونة فقط، صغيرة جداً) في الصف الأول من الشريط العلوي
         val btnRun: ImageButton = findViewById(R.id.btnRun)
@@ -599,6 +601,16 @@ class MainActivity : AppCompatActivity() {
 
         lineNumbersVisible = AppSettings.getShowLineNumbers(this)
         txtLineNumbers.visibility = if (lineNumbersVisible) android.view.View.VISIBLE else android.view.View.GONE
+    }
+
+    private fun applyEditorLayoutSettings() {
+        val toolbar=findViewById<android.view.View>(R.id.editorToolbarRoot)
+        val menu=findViewById<android.view.View>(R.id.editorMenuRow)
+        val console=findViewById<android.view.View>(R.id.editorConsoleRoot)
+        val mode=AppSettings.getEditorLayout(this)
+        toolbar.visibility=if(AppSettings.isShowToolbar(this)&&mode!="focus") android.view.View.VISIBLE else android.view.View.GONE
+        menu.visibility=if(mode=="compact") android.view.View.GONE else android.view.View.VISIBLE
+        console.visibility=if(AppSettings.isShowConsole(this)&&mode!="focus") android.view.View.VISIBLE else android.view.View.GONE
     }
 
     private fun toggleLineNumbers() {
