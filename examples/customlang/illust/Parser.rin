@@ -1,0 +1,485 @@
+// ============================================================================
+//  Parser.rin — المرحلة الثانية من "Illust": tokens -> شجرة AST
+//  محلّل نازل بالتكرار (recursive descent). قواعد النحو (v0.2 موسّعة):
+//
+//    program    -> statement* EOF
+//    statement  -> "let" IDENT "=" expr ";"
+//                | IDENT "=" expr ";"                                  // إعادة إسناد
+//                | "canvas" "(" expr "," expr ")" ";"
+//                | "fill" "(" fillArg ")" ";"
+//                | "stroke" "(" strokeArg ")" ";"
+//                | "rect" "(" expr×4 ")" ";"
+//                | "circle" "(" expr×3 ")" ";"
+//                | "ellipse" "(" expr×4 ")" ";"
+//                | "polygon" "(" expr ")" ";"        // expr عادة مصفوفة [x1,y1,x2,y2,...]
+//                | "path" "(" expr ")" ";"           // expr نص سمة d الخام في SVG
+//                | "line" "(" expr×4 ")" ";"
+//                | "text" "(" expr×3 ")" ";"
+//                | "print" "(" expr ")" ";"
+//                | "if" "(" expr ")" "{" statement* "}" ("else" "{" statement* "}")?
+//                | "while" "(" expr ")" "{" statement* "}"
+//                | "group" "(" expr "," expr ")" "{" statement* "}"    // <g transform="translate(dx,dy)">
+//                | "rotate" "(" expr ")" "{" statement* "}"            // <g transform="rotate(a)">
+//                | "fun" IDENT "(" (IDENT ("," IDENT)*)? ")" "{" statement* "}"
+//                | "return" expr ";"
+//                | callExpr ";"                                        // نداء دالة كجملة مستقلة
+//    fillArg    -> "none" | expr
+//    strokeArg  -> "none" | expr "," expr
+//    expr       -> comparison
+//    comparison -> term (("=="|"!="|"<"|"<="|">"|">=") term)*
+//    term       -> factor (("+"|"-") factor)*
+//    factor     -> unary (("*"|"/") unary)*
+//    unary      -> "-" unary | callOrPrimary
+//    callOrPrimary -> IDENT "(" (expr ("," expr)*)? ")"                 // نداء دالة كتعبير
+//                   | primary
+//    primary    -> NUMBER | STRING | IDENT | "(" expr ")" | "[" (expr ("," expr)*)? "]"
+// ============================================================================
+
+@import "./Lexer.rin";
+
+fun parse(tokens) {
+    let pos = 0;
+    let statements = [];
+    while (pAtEnd(tokens, pos) == false) {
+        let r = parseStatement(tokens, pos);
+        if (isLangError(r["node"])) { return r["node"]; }
+        push(statements, r["node"]);
+        pos = r["pos"];
+    }
+    return astNode("Program", 0, { body: statements });
+}
+
+fun parseBlock(tokens, pos) {
+    // يستهلك "{" statement* "}" ويُعيد { body: [...], pos: ... }
+    let a1 = pAdvance(tokens, pos); pos = a1["pos"]; // '{'
+    let body = [];
+    while (pCheckValue(tokens, pos, "OP", "}") == false and pAtEnd(tokens, pos) == false) {
+        let s = parseStatement(tokens, pos);
+        if (isLangError(s["node"])) { return { body: s["node"], pos: pos, isErr: true }; }
+        push(body, s["node"]);
+        pos = s["pos"];
+    }
+    let a2 = pAdvance(tokens, pos); pos = a2["pos"]; // '}'
+    return { body: body, pos: pos, isErr: false };
+}
+
+fun parseStatement(tokens, pos) {
+    if (pCheckValue(tokens, pos, "KEYWORD", "let")) { return parseLet(tokens, pos); }
+    if (pCheckValue(tokens, pos, "KEYWORD", "canvas")) { return parseCanvas(tokens, pos); }
+    if (pCheckValue(tokens, pos, "KEYWORD", "fill")) { return parseFill(tokens, pos); }
+    if (pCheckValue(tokens, pos, "KEYWORD", "stroke")) { return parseStroke(tokens, pos); }
+    if (pCheckValue(tokens, pos, "KEYWORD", "rect")) { return parseShape4(tokens, pos, "Rect", ["x", "y", "w", "h"]); }
+    if (pCheckValue(tokens, pos, "KEYWORD", "circle")) { return parseShape3(tokens, pos, "Circle", ["cx", "cy", "r"]); }
+    if (pCheckValue(tokens, pos, "KEYWORD", "ellipse")) { return parseShape4(tokens, pos, "Ellipse", ["cx", "cy", "rx", "ry"]); }
+    if (pCheckValue(tokens, pos, "KEYWORD", "polygon")) { return parseShape1(tokens, pos, "Polygon", "points"); }
+    if (pCheckValue(tokens, pos, "KEYWORD", "path")) { return parseShape1(tokens, pos, "PathEl", "d"); }
+    if (pCheckValue(tokens, pos, "KEYWORD", "line")) { return parseShape4(tokens, pos, "Line", ["x1", "y1", "x2", "y2"]); }
+    if (pCheckValue(tokens, pos, "KEYWORD", "text")) { return parseText(tokens, pos); }
+    if (pCheckValue(tokens, pos, "KEYWORD", "print")) { return parsePrint(tokens, pos); }
+    if (pCheckValue(tokens, pos, "KEYWORD", "if")) { return parseIf(tokens, pos); }
+    if (pCheckValue(tokens, pos, "KEYWORD", "while")) { return parseWhile(tokens, pos); }
+    if (pCheckValue(tokens, pos, "KEYWORD", "group")) { return parseGroup(tokens, pos); }
+    if (pCheckValue(tokens, pos, "KEYWORD", "rotate")) { return parseRotate(tokens, pos); }
+    if (pCheckValue(tokens, pos, "KEYWORD", "fun")) { return parseFunDecl(tokens, pos); }
+    if (pCheckValue(tokens, pos, "KEYWORD", "return")) { return parseReturn(tokens, pos); }
+    if (pCheck(tokens, pos, "IDENT") and pCheckValue(tokens, pos + 1, "OP", "=")) { return parseAssign(tokens, pos); }
+    if (pCheck(tokens, pos, "IDENT") and pCheckValue(tokens, pos + 1, "OP", "(")) { return parseCallStatement(tokens, pos); }
+    let tok = pPeek(tokens, pos);
+    return { node: langError("Parser", "جملة غير معروفة تبدأ بـ '" + toString(tok["value"]) + "'", tok["line"]), pos: pos };
+}
+
+// إعادة إسناد لمتغيّر موجود مسبقاً: IDENT "=" expr ";"  (بعكس "let" الذي يُعرِّف متغيّراً جديداً)
+fun parseAssign(tokens, pos) {
+    let line = pPeek(tokens, pos)["line"];
+    let nameTok = pPeek(tokens, pos);
+    let a1 = pAdvance(tokens, pos); pos = a1["pos"]; // IDENT
+    let a2 = pAdvance(tokens, pos); pos = a2["pos"]; // '='
+    let r = parseExpr(tokens, pos);
+    if (isLangError(r["node"])) { return r; }
+    pos = r["pos"];
+    let a3 = pExpect(tokens, pos, "OP", "Parser"); // ';'
+    pos = a3["pos"];
+    return { node: astNode("Assign", line, { name: nameTok["value"], value: r["node"] }), pos: pos };
+}
+
+// نداء دالة مستخدم كجملة مستقلة: foo(1, 2);
+fun parseCallStatement(tokens, pos) {
+    let line = pPeek(tokens, pos)["line"];
+    let r = parseExpr(tokens, pos);
+    if (isLangError(r["node"])) { return r; }
+    pos = r["pos"];
+    let a = pExpect(tokens, pos, "OP", "Parser"); // ';'
+    pos = a["pos"];
+    return { node: astNode("ExprStmt", line, { expr: r["node"] }), pos: pos };
+}
+
+fun parseLet(tokens, pos) {
+    let line = pPeek(tokens, pos)["line"];
+    let a1 = pAdvance(tokens, pos); pos = a1["pos"]; // 'let'
+    let nameTok = pPeek(tokens, pos);
+    let a2 = pExpect(tokens, pos, "IDENT", "Parser");
+    if (isLangError(a2["tok"])) { return { node: a2["tok"], pos: pos }; }
+    pos = a2["pos"];
+    let a3 = pExpect(tokens, pos, "OP", "Parser"); // '='
+    pos = a3["pos"];
+    let r = parseExpr(tokens, pos);
+    if (isLangError(r["node"])) { return r; }
+    pos = r["pos"];
+    let a4 = pExpect(tokens, pos, "OP", "Parser"); // ';'
+    pos = a4["pos"];
+    return { node: astNode("Let", line, { name: nameTok["value"], value: r["node"] }), pos: pos };
+}
+
+fun parseCanvas(tokens, pos) {
+    let line = pPeek(tokens, pos)["line"];
+    let a1 = pAdvance(tokens, pos); pos = a1["pos"]; // 'canvas'
+    let a2 = pAdvance(tokens, pos); pos = a2["pos"]; // '('
+    let w = parseExpr(tokens, pos);
+    if (isLangError(w["node"])) { return w; }
+    pos = w["pos"];
+    let a3 = pAdvance(tokens, pos); pos = a3["pos"]; // ','
+    let h = parseExpr(tokens, pos);
+    if (isLangError(h["node"])) { return h; }
+    pos = h["pos"];
+    let a4 = pAdvance(tokens, pos); pos = a4["pos"]; // ')'
+    let a5 = pAdvance(tokens, pos); pos = a5["pos"]; // ';'
+    return { node: astNode("Canvas", line, { w: w["node"], h: h["node"] }), pos: pos };
+}
+
+fun parseFill(tokens, pos) {
+    let line = pPeek(tokens, pos)["line"];
+    let a1 = pAdvance(tokens, pos); pos = a1["pos"]; // 'fill'
+    let a2 = pAdvance(tokens, pos); pos = a2["pos"]; // '('
+    if (pCheckValue(tokens, pos, "KEYWORD", "none")) {
+        let a3 = pAdvance(tokens, pos); pos = a3["pos"]; // 'none'
+        let a4 = pAdvance(tokens, pos); pos = a4["pos"]; // ')'
+        let a5 = pAdvance(tokens, pos); pos = a5["pos"]; // ';'
+        return { node: astNode("Fill", line, { none: true, color: nil }), pos: pos };
+    }
+    let c = parseExpr(tokens, pos);
+    if (isLangError(c["node"])) { return c; }
+    pos = c["pos"];
+    let a4 = pAdvance(tokens, pos); pos = a4["pos"]; // ')'
+    let a5 = pAdvance(tokens, pos); pos = a5["pos"]; // ';'
+    return { node: astNode("Fill", line, { none: false, color: c["node"] }), pos: pos };
+}
+
+fun parseStroke(tokens, pos) {
+    let line = pPeek(tokens, pos)["line"];
+    let a1 = pAdvance(tokens, pos); pos = a1["pos"]; // 'stroke'
+    let a2 = pAdvance(tokens, pos); pos = a2["pos"]; // '('
+    if (pCheckValue(tokens, pos, "KEYWORD", "none")) {
+        let a3 = pAdvance(tokens, pos); pos = a3["pos"]; // 'none'
+        let a4 = pAdvance(tokens, pos); pos = a4["pos"]; // ')'
+        let a5 = pAdvance(tokens, pos); pos = a5["pos"]; // ';'
+        return { node: astNode("Stroke", line, { none: true, color: nil, width: nil }), pos: pos };
+    }
+    let c = parseExpr(tokens, pos);
+    if (isLangError(c["node"])) { return c; }
+    pos = c["pos"];
+    let a3 = pAdvance(tokens, pos); pos = a3["pos"]; // ','
+    let w = parseExpr(tokens, pos);
+    if (isLangError(w["node"])) { return w; }
+    pos = w["pos"];
+    let a4 = pAdvance(tokens, pos); pos = a4["pos"]; // ')'
+    let a5 = pAdvance(tokens, pos); pos = a5["pos"]; // ';'
+    return { node: astNode("Stroke", line, { none: false, color: c["node"], width: w["node"] }), pos: pos };
+}
+
+// أشكال بأربعة معطيات رقمية: rect(x,y,w,h) و line(x1,y1,x2,y2)
+fun parseShape4(tokens, pos, kind, names) {
+    let line = pPeek(tokens, pos)["line"];
+    let a1 = pAdvance(tokens, pos); pos = a1["pos"]; // اسم الأمر
+    let a2 = pAdvance(tokens, pos); pos = a2["pos"]; // '('
+    let v1 = parseExpr(tokens, pos); if (isLangError(v1["node"])) { return v1; } pos = v1["pos"];
+    let s1 = pAdvance(tokens, pos); pos = s1["pos"]; // ','
+    let v2 = parseExpr(tokens, pos); if (isLangError(v2["node"])) { return v2; } pos = v2["pos"];
+    let s2 = pAdvance(tokens, pos); pos = s2["pos"]; // ','
+    let v3 = parseExpr(tokens, pos); if (isLangError(v3["node"])) { return v3; } pos = v3["pos"];
+    let s3 = pAdvance(tokens, pos); pos = s3["pos"]; // ','
+    let v4 = parseExpr(tokens, pos); if (isLangError(v4["node"])) { return v4; } pos = v4["pos"];
+    let a3 = pAdvance(tokens, pos); pos = a3["pos"]; // ')'
+    let a4 = pAdvance(tokens, pos); pos = a4["pos"]; // ';'
+    let props = {};
+    props[names[0]] = v1["node"];
+    props[names[1]] = v2["node"];
+    props[names[2]] = v3["node"];
+    props[names[3]] = v4["node"];
+    return { node: astNode(kind, line, props), pos: pos };
+}
+
+// أشكال بثلاثة معطيات: circle(cx,cy,r)
+fun parseShape3(tokens, pos, kind, names) {
+    let line = pPeek(tokens, pos)["line"];
+    let a1 = pAdvance(tokens, pos); pos = a1["pos"];
+    let a2 = pAdvance(tokens, pos); pos = a2["pos"]; // '('
+    let v1 = parseExpr(tokens, pos); if (isLangError(v1["node"])) { return v1; } pos = v1["pos"];
+    let s1 = pAdvance(tokens, pos); pos = s1["pos"]; // ','
+    let v2 = parseExpr(tokens, pos); if (isLangError(v2["node"])) { return v2; } pos = v2["pos"];
+    let s2 = pAdvance(tokens, pos); pos = s2["pos"]; // ','
+    let v3 = parseExpr(tokens, pos); if (isLangError(v3["node"])) { return v3; } pos = v3["pos"];
+    let a3 = pAdvance(tokens, pos); pos = a3["pos"]; // ')'
+    let a4 = pAdvance(tokens, pos); pos = a4["pos"]; // ';'
+    let props = {};
+    props[names[0]] = v1["node"];
+    props[names[1]] = v2["node"];
+    props[names[2]] = v3["node"];
+    return { node: astNode(kind, line, props), pos: pos };
+}
+
+// أشكال بمعطى واحد فقط: polygon(pointsArrayExpr) و path(dStringExpr)
+fun parseShape1(tokens, pos, kind, name) {
+    let line = pPeek(tokens, pos)["line"];
+    let a1 = pAdvance(tokens, pos); pos = a1["pos"]; // اسم الأمر
+    let a2 = pAdvance(tokens, pos); pos = a2["pos"]; // '('
+    let v1 = parseExpr(tokens, pos); if (isLangError(v1["node"])) { return v1; } pos = v1["pos"];
+    let a3 = pAdvance(tokens, pos); pos = a3["pos"]; // ')'
+    let a4 = pAdvance(tokens, pos); pos = a4["pos"]; // ';'
+    let props = {};
+    props[name] = v1["node"];
+    return { node: astNode(kind, line, props), pos: pos };
+}
+
+fun parseText(tokens, pos) {
+    let line = pPeek(tokens, pos)["line"];
+    let a1 = pAdvance(tokens, pos); pos = a1["pos"]; // 'text'
+    let a2 = pAdvance(tokens, pos); pos = a2["pos"]; // '('
+    let x = parseExpr(tokens, pos); if (isLangError(x["node"])) { return x; } pos = x["pos"];
+    let s1 = pAdvance(tokens, pos); pos = s1["pos"]; // ','
+    let y = parseExpr(tokens, pos); if (isLangError(y["node"])) { return y; } pos = y["pos"];
+    let s2 = pAdvance(tokens, pos); pos = s2["pos"]; // ','
+    let str = parseExpr(tokens, pos); if (isLangError(str["node"])) { return str; } pos = str["pos"];
+    let a3 = pAdvance(tokens, pos); pos = a3["pos"]; // ')'
+    let a4 = pAdvance(tokens, pos); pos = a4["pos"]; // ';'
+    return { node: astNode("Text", line, { x: x["node"], y: y["node"], str: str["node"] }), pos: pos };
+}
+
+fun parsePrint(tokens, pos) {
+    let line = pPeek(tokens, pos)["line"];
+    let a1 = pAdvance(tokens, pos); pos = a1["pos"]; // 'print'
+    let a2 = pAdvance(tokens, pos); pos = a2["pos"]; // '('
+    let v = parseExpr(tokens, pos); if (isLangError(v["node"])) { return v; } pos = v["pos"];
+    let a3 = pAdvance(tokens, pos); pos = a3["pos"]; // ')'
+    let a4 = pAdvance(tokens, pos); pos = a4["pos"]; // ';'
+    return { node: astNode("PrintDebug", line, { value: v["node"] }), pos: pos };
+}
+
+fun parseIf(tokens, pos) {
+    let line = pPeek(tokens, pos)["line"];
+    let a1 = pAdvance(tokens, pos); pos = a1["pos"]; // 'if'
+    let a2 = pAdvance(tokens, pos); pos = a2["pos"]; // '('
+    let cond = parseExpr(tokens, pos);
+    if (isLangError(cond["node"])) { return cond; }
+    pos = cond["pos"];
+    let a3 = pAdvance(tokens, pos); pos = a3["pos"]; // ')'
+    let thenBlk = parseBlock(tokens, pos);
+    if (thenBlk["isErr"]) { return { node: thenBlk["body"], pos: thenBlk["pos"] }; }
+    pos = thenBlk["pos"];
+    let elseBody = [];
+    if (pCheckValue(tokens, pos, "KEYWORD", "else")) {
+        let a4 = pAdvance(tokens, pos); pos = a4["pos"]; // 'else'
+        let elseBlk = parseBlock(tokens, pos);
+        if (elseBlk["isErr"]) { return { node: elseBlk["body"], pos: elseBlk["pos"] }; }
+        pos = elseBlk["pos"];
+        elseBody = elseBlk["body"];
+    }
+    return { node: astNode("If", line, { cond: cond["node"], thenBody: thenBlk["body"], elseBody: elseBody }), pos: pos };
+}
+
+fun parseWhile(tokens, pos) {
+    let line = pPeek(tokens, pos)["line"];
+    let a1 = pAdvance(tokens, pos); pos = a1["pos"]; // 'while'
+    let a2 = pAdvance(tokens, pos); pos = a2["pos"]; // '('
+    let cond = parseExpr(tokens, pos);
+    if (isLangError(cond["node"])) { return cond; }
+    pos = cond["pos"];
+    let a3 = pAdvance(tokens, pos); pos = a3["pos"]; // ')'
+    let blk = parseBlock(tokens, pos);
+    if (blk["isErr"]) { return { node: blk["body"], pos: blk["pos"] }; }
+    pos = blk["pos"];
+    return { node: astNode("While", line, { cond: cond["node"], body: blk["body"] }), pos: pos };
+}
+
+fun parseGroup(tokens, pos) {
+    let line = pPeek(tokens, pos)["line"];
+    let a1 = pAdvance(tokens, pos); pos = a1["pos"]; // 'group'
+    let a2 = pAdvance(tokens, pos); pos = a2["pos"]; // '('
+    let dx = parseExpr(tokens, pos); if (isLangError(dx["node"])) { return dx; } pos = dx["pos"];
+    let s1 = pAdvance(tokens, pos); pos = s1["pos"]; // ','
+    let dy = parseExpr(tokens, pos); if (isLangError(dy["node"])) { return dy; } pos = dy["pos"];
+    let a3 = pAdvance(tokens, pos); pos = a3["pos"]; // ')'
+    let blk = parseBlock(tokens, pos);
+    if (blk["isErr"]) { return { node: blk["body"], pos: blk["pos"] }; }
+    pos = blk["pos"];
+    return { node: astNode("Group", line, { dx: dx["node"], dy: dy["node"], body: blk["body"] }), pos: pos };
+}
+
+fun parseRotate(tokens, pos) {
+    let line = pPeek(tokens, pos)["line"];
+    let a1 = pAdvance(tokens, pos); pos = a1["pos"]; // 'rotate'
+    let a2 = pAdvance(tokens, pos); pos = a2["pos"]; // '('
+    let angle = parseExpr(tokens, pos); if (isLangError(angle["node"])) { return angle; } pos = angle["pos"];
+    let a3 = pAdvance(tokens, pos); pos = a3["pos"]; // ')'
+    let blk = parseBlock(tokens, pos);
+    if (blk["isErr"]) { return { node: blk["body"], pos: blk["pos"] }; }
+    pos = blk["pos"];
+    return { node: astNode("Rotate", line, { angle: angle["node"], body: blk["body"] }), pos: pos };
+}
+
+fun parseFunDecl(tokens, pos) {
+    let line = pPeek(tokens, pos)["line"];
+    let a1 = pAdvance(tokens, pos); pos = a1["pos"]; // 'fun'
+    let nameTok = pPeek(tokens, pos);
+    let a2 = pExpect(tokens, pos, "IDENT", "Parser");
+    if (isLangError(a2["tok"])) { return { node: a2["tok"], pos: pos }; }
+    pos = a2["pos"];
+    let a3 = pAdvance(tokens, pos); pos = a3["pos"]; // '('
+    let params = [];
+    while (pCheckValue(tokens, pos, "OP", ")") == false) {
+        let pTok = pPeek(tokens, pos);
+        let a = pExpect(tokens, pos, "IDENT", "Parser");
+        if (isLangError(a["tok"])) { return { node: a["tok"], pos: pos }; }
+        pos = a["pos"];
+        push(params, pTok["value"]);
+        if (pCheckValue(tokens, pos, "OP", ",")) {
+            let c = pAdvance(tokens, pos); pos = c["pos"];
+        }
+    }
+    let a4 = pAdvance(tokens, pos); pos = a4["pos"]; // ')'
+    let blk = parseBlock(tokens, pos);
+    if (blk["isErr"]) { return { node: blk["body"], pos: blk["pos"] }; }
+    pos = blk["pos"];
+    return { node: astNode("FunDecl", line, { name: nameTok["value"], params: params, body: blk["body"] }), pos: pos };
+}
+
+fun parseReturn(tokens, pos) {
+    let line = pPeek(tokens, pos)["line"];
+    let a1 = pAdvance(tokens, pos); pos = a1["pos"]; // 'return'
+    let v = parseExpr(tokens, pos); if (isLangError(v["node"])) { return v; } pos = v["pos"];
+    let a2 = pAdvance(tokens, pos); pos = a2["pos"]; // ';'
+    return { node: astNode("Return", line, { value: v["node"] }), pos: pos };
+}
+
+fun parseExpr(tokens, pos) { return parseComparison(tokens, pos); }
+
+fun parseComparison(tokens, pos) {
+    let left = parseTerm(tokens, pos);
+    if (isLangError(left["node"])) { return left; }
+    pos = left["pos"];
+    let node = left["node"];
+    while (pCheckValue(tokens, pos, "OP", "==") or pCheckValue(tokens, pos, "OP", "!=")
+        or pCheckValue(tokens, pos, "OP", "<") or pCheckValue(tokens, pos, "OP", "<=")
+        or pCheckValue(tokens, pos, "OP", ">") or pCheckValue(tokens, pos, "OP", ">=")) {
+        let opTok = pPeek(tokens, pos);
+        let a = pAdvance(tokens, pos); pos = a["pos"];
+        let right = parseTerm(tokens, pos);
+        if (isLangError(right["node"])) { return right; }
+        pos = right["pos"];
+        node = astNode("Binary", opTok["line"], { op: opTok["value"], left: node, right: right["node"] });
+    }
+    return { node: node, pos: pos };
+}
+
+fun parseTerm(tokens, pos) {
+    let left = parseFactor(tokens, pos);
+    if (isLangError(left["node"])) { return left; }
+    pos = left["pos"];
+    let node = left["node"];
+    while (pCheckValue(tokens, pos, "OP", "+") or pCheckValue(tokens, pos, "OP", "-")) {
+        let opTok = pPeek(tokens, pos);
+        let a = pAdvance(tokens, pos); pos = a["pos"];
+        let right = parseFactor(tokens, pos);
+        if (isLangError(right["node"])) { return right; }
+        pos = right["pos"];
+        node = astNode("Binary", opTok["line"], { op: opTok["value"], left: node, right: right["node"] });
+    }
+    return { node: node, pos: pos };
+}
+
+fun parseFactor(tokens, pos) {
+    let left = parseUnary(tokens, pos);
+    if (isLangError(left["node"])) { return left; }
+    pos = left["pos"];
+    let node = left["node"];
+    while (pCheckValue(tokens, pos, "OP", "*") or pCheckValue(tokens, pos, "OP", "/")) {
+        let opTok = pPeek(tokens, pos);
+        let a = pAdvance(tokens, pos); pos = a["pos"];
+        let right = parseUnary(tokens, pos);
+        if (isLangError(right["node"])) { return right; }
+        pos = right["pos"];
+        node = astNode("Binary", opTok["line"], { op: opTok["value"], left: node, right: right["node"] });
+    }
+    return { node: node, pos: pos };
+}
+
+fun parseUnary(tokens, pos) {
+    if (pCheckValue(tokens, pos, "OP", "-")) {
+        let opTok = pPeek(tokens, pos);
+        let a = pAdvance(tokens, pos); pos = a["pos"];
+        let operand = parseUnary(tokens, pos);
+        if (isLangError(operand["node"])) { return operand; }
+        return { node: astNode("Unary", opTok["line"], { op: "-", operand: operand["node"] }), pos: operand["pos"] };
+    }
+    return parsePrimary(tokens, pos);
+}
+
+fun parsePrimary(tokens, pos) {
+    let tok = pPeek(tokens, pos);
+    if (tokIs(tok, "NUMBER")) {
+        let a = pAdvance(tokens, pos);
+        return { node: astNode("NumberLit", tok["line"], { value: toNumber(tok["value"]) }), pos: a["pos"] };
+    }
+    if (tokIs(tok, "STRING")) {
+        let a = pAdvance(tokens, pos);
+        return { node: astNode("StringLit", tok["line"], { value: tok["value"] }), pos: a["pos"] };
+    }
+    if (tokIs(tok, "IDENT")) {
+        let a = pAdvance(tokens, pos);
+        // نداء دالة كتعبير: foo(1, 2)
+        if (pCheckValue(tokens, a["pos"], "OP", "(")) {
+            return parseCallArgs(tokens, a["pos"], tok["value"], tok["line"]);
+        }
+        return { node: astNode("Ident", tok["line"], { name: tok["value"] }), pos: a["pos"] };
+    }
+    if (tokIsValue(tok, "OP", "(")) {
+        let a = pAdvance(tokens, pos);
+        let inner = parseExpr(tokens, a["pos"]);
+        if (isLangError(inner["node"])) { return inner; }
+        let a2 = pAdvance(tokens, inner["pos"]); // ')'
+        return { node: inner["node"], pos: a2["pos"] };
+    }
+    if (tokIsValue(tok, "OP", "[")) {
+        let a = pAdvance(tokens, pos);
+        pos = a["pos"];
+        let items = [];
+        while (pCheckValue(tokens, pos, "OP", "]") == false) {
+            let it = parseExpr(tokens, pos);
+            if (isLangError(it["node"])) { return it; }
+            pos = it["pos"];
+            push(items, it["node"]);
+            if (pCheckValue(tokens, pos, "OP", ",")) {
+                let c = pAdvance(tokens, pos); pos = c["pos"];
+            }
+        }
+        let a2 = pAdvance(tokens, pos); pos = a2["pos"]; // ']'
+        return { node: astNode("ArrayLit", tok["line"], { items: items }), pos: pos };
+    }
+    return { node: langError("Parser", "تعبير غير متوقَّع عند '" + toString(tok["value"]) + "'", tok["line"]), pos: pos };
+}
+
+// يستهلك "(" arg ("," arg)* ")" لِنداء دالة اسمها fname، بدءاً من الموضع الواقف عند "("
+fun parseCallArgs(tokens, pos, fname, line) {
+    let a1 = pAdvance(tokens, pos); pos = a1["pos"]; // '('
+    let args = [];
+    while (pCheckValue(tokens, pos, "OP", ")") == false) {
+        let e = parseExpr(tokens, pos);
+        if (isLangError(e["node"])) { return e; }
+        pos = e["pos"];
+        push(args, e["node"]);
+        if (pCheckValue(tokens, pos, "OP", ",")) {
+            let c = pAdvance(tokens, pos); pos = c["pos"];
+        }
+    }
+    let a2 = pAdvance(tokens, pos); pos = a2["pos"]; // ')'
+    return { node: astNode("Call", line, { name: fname, args: args }), pos: pos };
+}
