@@ -95,7 +95,7 @@ class RinCodeEditorView @JvmOverloads constructor(
 
     // ذاكرة مؤقتة للتلوين النحوي ومطابقة الأقواس — تُحدَّث فقط داخل [afterEngineMutation]،
     // ويقرأها [onDraw] مباشرة بلا أي إعادة حساب.
-    private var cachedHighlightsByLine: Map<Int, List<RinEditorEngine.Highlight>> = emptyMap()
+    private var cachedHighlightsByLine: Map<Int, List<RinNativeEditor.Highlight>> = emptyMap()
     private var cachedBracketInfo: Quad? = null
 
     private val shadowWatcher = object : TextWatcher {
@@ -136,7 +136,7 @@ class RinCodeEditorView @JvmOverloads constructor(
             // التلوين النحوي يمسح كامل المستند (مكلف نسبيًا على ملف ضخم) — نُعيد حسابه فقط عندما
             // يتغيّر النص فعليًا، لا عند كل رسم (وميض المؤشر مثلاً يستدعي invalidate() مرتين
             // بالثانية بلا أي تغيير نصّي، فيقرأ القيمة المخزَّنة مباشرة بلا أي تكلفة).
-            val byLine = HashMap<Int, MutableList<RinEditorEngine.Highlight>>()
+            val byLine = HashMap<Int, MutableList<RinNativeEditor.Highlight>>()
             for (h in engine.getHighlights()) byLine.getOrPut(h.line) { mutableListOf() }.add(h)
             cachedHighlightsByLine = byLine
         }
@@ -216,8 +216,8 @@ class RinCodeEditorView @JvmOverloads constructor(
 
     /** يبدّل لغة التلوين النحوي الحالية (يُستدعى عند فتح ملف جديد بامتداد مختلف، مثال: "kt"، "cpp"). */
     fun setLanguage(extension: String) {
-        engine.setLanguage(SyntaxLanguage.forExtension(extension))
-        cachedHighlightsByLine = HashMap<Int, MutableList<RinEditorEngine.Highlight>>().apply {
+        engine.setLanguage(extension)
+        cachedHighlightsByLine = HashMap<Int, MutableList<RinNativeEditor.Highlight>>().apply {
             for (h in engine.getHighlights()) getOrPut(h.line) { mutableListOf() }.add(h)
         }
         invalidate()
@@ -257,7 +257,7 @@ class RinCodeEditorView @JvmOverloads constructor(
         // تلقائيًا عند أي replace() — بلا حاجة لأي آلية أخرى.
         shadowEditable.setSpan(shadowWatcher, 0, shadowEditable.length, Editable.SPAN_INCLUSIVE_INCLUSIVE)
         // تعبئة أولية للذاكرة المؤقتة (cache) قبل أول onDraw، حتى لا يُرسَم بلا تلوين للحظة.
-        val byLine = HashMap<Int, MutableList<RinEditorEngine.Highlight>>()
+        val byLine = HashMap<Int, MutableList<RinNativeEditor.Highlight>>()
         for (h in engine.getHighlights()) byLine.getOrPut(h.line) { mutableListOf() }.add(h)
         cachedHighlightsByLine = byLine
         cachedBracketInfo = computeBracketMatchForDraw()
@@ -348,7 +348,7 @@ class RinCodeEditorView @JvmOverloads constructor(
     private fun drawHighlightedLine(
         canvas: Canvas,
         lineText: String,
-        spans: List<RinEditorEngine.Highlight>?,
+        spans: List<RinNativeEditor.Highlight>?,
         startX: Float,
         baseline: Float
     ) {
@@ -495,7 +495,7 @@ class RinCodeEditorView @JvmOverloads constructor(
 
     // --- اللمس: وضع المؤشر بالنقر، السحب للتحديد، الضغط الطويل لتحديد كلمة ------------
 
-    private fun offsetForTouch(x: Float, y: Float): RinEditorEngine.Pos {
+    private fun offsetForTouch(x: Float, y: Float): RinNativeEditor.Pos {
         val line = (((y - paddingTop) / lineHeight).toInt()).coerceIn(0, max(0, engine.lineCount() - 1))
         val lineText = engine.getLine(line)
         val relX = x - paddingLeft
@@ -506,7 +506,7 @@ class RinCodeEditorView @JvmOverloads constructor(
             val d = kotlin.math.abs(w - relX)
             if (d < bestDist) { bestDist = d; bestChar = i }
         }
-        return RinEditorEngine.Pos(line, bestChar)
+        return RinNativeEditor.Pos(line, bestChar)
     }
 
     private val gestureDetector = GestureDetector(context, object : GestureDetector.SimpleOnGestureListener() {
@@ -619,8 +619,8 @@ class RinCodeEditorView @JvmOverloads constructor(
 
     // --- دعم البحث (يُستدعى من RinCodeEditorController) -----------------------
 
-    private var findMatches: List<RinEditorEngine.FindMatch>? = null
-    fun setFindHighlights(matches: List<RinEditorEngine.FindMatch>?) { findMatches = matches; invalidate() }
+    private var findMatches: List<RinNativeEditor.FindMatch>? = null
+    fun setFindHighlights(matches: List<RinNativeEditor.FindMatch>?) { findMatches = matches; invalidate() }
 
     /** إحداثيات y (بالبكسل، ضمن هذا الـView) لبداية [line] — تُستخدم للتمرير الحالي إلى المؤشر. */
     fun yOfLine(line: Int): Int = (paddingTop + line * lineHeight).roundToInt()
@@ -718,7 +718,7 @@ class RinCodeEditorView @JvmOverloads constructor(
         return (idx + 1) to matches.size
     }
 
-    private fun textOfSelection(sel: RinEditorEngine.Selection): String {
+    private fun textOfSelection(sel: RinNativeEditor.Selection): String {
         if (sel.start.line == sel.end.line) {
             val lineText = engine.getLine(sel.start.line)
             return lineText.substring(sel.start.col.coerceIn(0, lineText.length), sel.end.col.coerceIn(0, lineText.length))
@@ -736,7 +736,7 @@ class RinCodeEditorView @JvmOverloads constructor(
         return sb.toString()
     }
 
-    // --- إكمال تلقائي (Autocomplete) — نافذة اقتراحات حقيقية مبنية على [RinEditorEngine.collectSuggestions] ---
+    // --- إكمال تلقائي (Autocomplete) — نافذة اقتراحات حقيقية مبنية على [RinNativeEditor.collectSuggestions] ---
 
     private var suggestionPopup: PopupWindow? = null
     private val maxSuggestionRows = 6
