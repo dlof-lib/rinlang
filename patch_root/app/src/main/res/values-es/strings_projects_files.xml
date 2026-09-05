@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Botones comunes usados por los diálogos de proyectos/archivos -->
+    <string name="create">Crear</string>
+    <string name="cancel">Cancelar</string>
+    <string name="rename">Renombrar</string>
+    <string name="delete">Eliminar</string>
+
+    <!-- Barra superior unificada para las subpantallas -->
+    <string name="action_back">Atrás</string>
+    <string name="projects_screen_title">Proyectos</string>
+    <string name="files_screen_title">Archivos</string>
+
+    <!-- Pantalla de proyectos -->
+    <string name="new_project_title">Nuevo proyecto</string>
+    <string name="rename_project_title">Renombrar proyecto</string>
+    <string name="delete_project_title">Eliminar proyecto</string>
+    <string name="delete_project_confirm">¿Eliminar el proyecto \"%1$s\" y todos sus archivos?</string>
+    <string name="project_name_hint">Nombre del proyecto</string>
+    <string name="no_projects_yet">Aún no hay proyectos. Toca + para crear tu primer proyecto.</string>
+    <string name="project_not_found">Proyecto no encontrado</string>
+    <string name="project_meta_format">%1$d archivos</string>
+
+    <!-- Tipos de proyecto (se eligen al crear, se guardan en project.og.urin) -->
+    <string name="project_type_label">Elegir tipo</string>
+    <string name="project_type_container">Container</string>
+    <string name="project_type_table">Table</string>
+    <string name="project_type_ui">UI</string>
+    <string name="project_type_free">Free Project</string>
+    <string name="project_type_container_desc">Datos vivos en un contenedor</string>
+    <string name="project_type_table_desc">Filas y columnas</string>
+    <string name="project_type_ui_desc">Pantallas y vistas</string>
+    <string name="project_type_free_desc">Un archivo de código en blanco</string>
+    <string name="project_type_illust">Illust</string>
+    <string name="project_type_illust_desc">Un lenguaje de dibujo/SVG listo sobre Rin</string>
+
+    <!-- Opciones de "dibujar la interfaz" en el diálogo de nuevo proyecto UI: solo aparecen al
+         elegir el tipo UI. Permiten activar/desactivar la barra superior, activar/desactivar el
+         menú lateral y elegir un color principal, antes de generar main.rin (ver
+         ProjectManager.UiDesignOptions). -->
+    <string name="ui_design_section_title">Dibujar la interfaz</string>
+    <string name="ui_design_section_desc">Elige los elementos principales de la pantalla antes de crear el proyecto</string>
+    <string name="ui_design_topbar_label">Barra superior</string>
+    <string name="ui_design_topbar_desc">Una barra de título fija en la parte superior de la pantalla</string>
+    <string name="ui_design_sidebar_label">Menú lateral</string>
+    <string name="ui_design_sidebar_desc">Un menú de navegación lateral con sus elementos</string>
+    <string name="ui_design_colors_label">Colores</string>
+    <string name="color_picker_title">Elegir un color</string>
+    <string name="color_picker_custom_desc">Color personalizado</string>
+    <string name="color_picker_back">Atrás</string>
+
+    <!-- Etapas de creación de un proyecto nuevo -->
+    <string name="project_creating_title">Creando proyecto</string>
+    <string name="project_stage_loading">Cargando..</string>
+    <string name="project_stage_preparing">Preparando..</string>
+    <string name="project_stage_done">Listo..</string>
+
+    <!-- Pantalla de archivos -->
+    <string name="new_file_title">Nuevo archivo</string>
+    <string name="upload_file">Subir archivo</string>
+    <string name="upload_media">Subir multimedia</string>
+    <string name="delete_file_title">Eliminar archivo</string>
+    <string name="delete_file_confirm">¿Eliminar el archivo \"%1$s\"?</string>
+    <string name="file_name_hint">Nombre del archivo (ej.: main.rin)</string>
+    <string name="no_files_yet">Aún no hay archivos. Crea uno nuevo, o sube un archivo o multimedia desde tu dispositivo.</string>
+    <string name="file_uploaded_toast">Archivo subido: %1$s</string>
+    <string name="file_meta_format">%1$s • %2$s</string>
+    <string name="no_app_to_open_file">No hay ninguna app instalada que pueda abrir este tipo de archivo</string>
+
+    <!-- Subcarpetas y renombrado -->
+    <string name="new_folder_title">Nueva carpeta</string>
+    <string name="folder_name_hint">Nombre de la carpeta</string>
+    <string name="folder_meta_format">Carpeta • %1$s</string>
+    <string name="delete_folder_title">Eliminar carpeta</string>
+    <string name="delete_folder_confirm">¿Eliminar la carpeta \"%1$s\" y todo su contenido?</string>
+    <string name="rename_file_title">Renombrar archivo</string>
+    <string name="rename_folder_title">Renombrar carpeta</string>
+    <string name="file_renamed_toast">Renombrado a: %1$s</string>
+    <string name="folder_renamed_toast">Renombrado a: %1$s</string>
+
+    <!-- Herramientas de archivo ZIP: subir y extraer, o descargar el proyecto como archivo -->
+    <string name="zip_tools_title">Archivo ZIP</string>
+    <string name="zip_upload_extract">Sube un archivo comprimido y extráelo aquí</string>
+    <string name="zip_download_project">Descargar proyecto como archivo ZIP</string>
+    <string name="zip_extracted_toast">Se extrajeron %1$d archivo(s) en el proyecto</string>
+    <string name="zip_extract_error">No se pudo extraer el archivo</string>
+
+    <!-- Nuevo botón de navegación dentro del editor (MainActivity) -->
+    <string name="btn_projects">Proyectos</string>
+</resources>
