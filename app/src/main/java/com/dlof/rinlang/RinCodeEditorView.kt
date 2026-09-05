@@ -59,7 +59,7 @@ class RinCodeEditorView @JvmOverloads constructor(
 
     private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         typeface = android.graphics.Typeface.MONOSPACE
-        textSize = spToPx(14f)
+        textSize = spToPx(AppSettings.DEFAULT_FONT_SIZE_SP) // يُستبدَل فورًا بالقيمة المحفوظة عبر applyStoredEditorSettings()، ويبقى هذا فقط توافقًا مبدئيًا قبل أول تطبيق للإعدادات
         color = ContextCompat.getColor(context, R.color.rin_editor_text)
         isSubpixelText = true
         isLinearText = false
@@ -191,6 +191,32 @@ class RinCodeEditorView @JvmOverloads constructor(
         // تغيّر المؤشر/التحديد فقط بلا تغيّر في النص — invalidate() وحدها تكفي لإعادة الرسم.
         if (changed) requestLayout()
         invalidate()
+        scrollCursorIntoView()
+    }
+
+    /**
+     * يطلب من أسلاف هذا الـView القابلين للتمرير (HorizontalScrollView الأفقي وScrollView
+     * العمودي المحيطين به في activity_main.xml) تمرير أنفسهم تلقائيًا حتى يبقى المؤشر ظاهرًا —
+     * تمامًا كما يفعل أي محرر نصوص طبيعي عند الكتابة أو التنقّل بالأسهم يمينًا/يسارًا قرب حافة
+     * الشاشة. لم يكن هناك أي منطق كهذا سابقًا (لا عمودي إلا عند "goToLine"/البحث، ولا أفقي
+     * إطلاقًا)، فكان المؤشر يخرج عن حدود الرؤية بصمت أثناء الكتابة العادية — وهذا هو أصل شكوى
+     * "عدم سلاسة الحركة يمينًا ويسارًا". يُستخدم requestRectangleOnScreen القياسي في Android بدل
+     * التمرير اليدوي لأنه يتعاون تلقائيًا مع أي عدد من الحاويات القابلة للتمرير المتداخلة.
+     */
+    private fun scrollCursorIntoView() {
+        if (dragging) return // لا نُحرّك الشاشة تحت إصبع المستخدم أثناء السحب الفعلي لتحديد نص
+        val cur = engine.getCursor()
+        val lineText = engine.getLine(cur.line)
+        val cx = paddingLeft + textPaint.measureText(lineText, 0, cur.col.coerceIn(0, lineText.length))
+        val cyTop = yOfLine(cur.line)
+        val margin = charWidth * 2f // هامش أمان صغير حتى لا يلتصق المؤشر بحافة الشاشة تمامًا
+        val rect = android.graphics.Rect(
+            (cx - margin).toInt().coerceAtLeast(0),
+            cyTop,
+            (cx + margin).toInt(),
+            (cyTop + lineHeight).toInt()
+        )
+        requestRectangleOnScreen(rect, false)
     }
 
     /** يوجّه تعديلاً وصل من IME (عبر [shadowWatcher]) إلى المحرك بأذكى طريقة ممكنة. */
@@ -926,13 +952,36 @@ class RinCodeEditorView @JvmOverloads constructor(
         }
         popup.contentView = container
 
+        // قياس مبدئي للقائمة قبل وضعها، حتى نعرف عرضها/ارتفاعها الفعليين ونُبقيها كاملة داخل
+        // حدود الشاشة — سابقًا لم يكن هناك أي تثبيت لهذا، فكانت القائمة تخرج جزئيًا (أو كليًا) عن
+        // يمين الشاشة عند اقتراح كلمة قرب نهاية سطر طويل، أو تظهر أسفل المؤشر مباشرة بلا تحقق من
+        // وجود مساحة كافية، فتقع خلف لوحة المفاتيح ولا تُرى إطلاقًا أثناء الكتابة الفعلية. هذا هو
+        // أصل شكوى "المقترحات".
+        container.measure(
+            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
+            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
+        )
+        val popupWidth = container.measuredWidth
+        val popupHeight = container.measuredHeight
+
         val loc = IntArray(2)
         getLocationOnScreen(loc)
         val lineText = engine.getLine(cur.line)
         val cursorLocalX = paddingLeft + textPaint.measureText(lineText, 0, wordStartCol.coerceIn(0, lineText.length))
         val cursorLocalY = yOfLine(cur.line)
-        val screenX = (loc[0] + cursorLocalX).toInt()
-        val screenY = loc[1] + cursorLocalY + lineHeight.roundToInt()
+
+        val dm = resources.displayMetrics
+        val screenWidth = dm.widthPixels
+        val screenHeight = dm.heightPixels
+
+        val rawX = (loc[0] + cursorLocalX).toInt()
+        val screenX = rawX.coerceIn(0, (screenWidth - popupWidth).coerceAtLeast(0))
+
+        val belowY = loc[1] + cursorLocalY + lineHeight.roundToInt()
+        val aboveY = loc[1] + cursorLocalY - popupHeight
+        // اعرض أسفل المؤشر إن وُجدت مساحة كافية، وإلا أعلاه (مثال: المؤشر على سطر قريب من أسفل
+        // الشاشة حيث تكون لوحة المفاتيح مفتوحة وتُغطّي المساحة تحته).
+        val screenY = if (belowY + popupHeight <= screenHeight) belowY else aboveY.coerceAtLeast(0)
 
         if (popup.isShowing) {
             popup.update(screenX, screenY, -1, -1)
