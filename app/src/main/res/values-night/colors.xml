@@ -127,6 +127,7 @@
     <color name="project_type_table_color">#D7BA7D</color>
     <color name="project_type_ui_color">#5FD0E0</color>
     <color name="project_type_free_color">#7C5CFF</color>
+    <color name="project_type_illust_color">#E67E22</color>
     <color name="status_queued">#8A8A8A</color>
     <color name="status_running">#569CD6</color>
     <color name="status_success">#4EC9B0</color>
