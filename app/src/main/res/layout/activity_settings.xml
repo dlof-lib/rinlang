@@ -607,6 +607,26 @@
                 <ImageView android:id="@+id/checkLangEs" android:layout_width="18dp" android:layout_height="18dp" android:src="@android:drawable/checkbox_on_background" app:tint="@color/rin_accent" android:visibility="invisible" android:contentDescription="@null" />
             </LinearLayout>
 
+            <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="22dp" android:layout_marginBottom="8dp" android:text="@string/settings_theme_section_title" android:textStyle="bold" android:textSize="15sp" android:textColor="@color/rin_on_toolbar" />
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
+                <TextView android:id="@+id/btnThemeSystem" android:layout_width="0dp" android:layout_height="42dp" android:layout_weight="1" android:gravity="center" android:text="@string/theme_system" android:background="@drawable/bg_list_card" android:textColor="@color/rin_on_toolbar" />
+                <TextView android:id="@+id/btnThemeDark" android:layout_width="0dp" android:layout_height="42dp" android:layout_weight="1" android:layout_marginStart="8dp" android:gravity="center" android:text="@string/theme_dark" android:background="@drawable/bg_list_card" android:textColor="@color/rin_on_toolbar" />
+                <TextView android:id="@+id/btnThemeLight" android:layout_width="0dp" android:layout_height="42dp" android:layout_weight="1" android:layout_marginStart="8dp" android:gravity="center" android:text="@string/theme_light" android:background="@drawable/bg_list_card" android:textColor="@color/rin_on_toolbar" />
+            </LinearLayout>
+            <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="22dp" android:layout_marginBottom="8dp" android:text="@string/settings_layout_section_title" android:textStyle="bold" android:textSize="15sp" android:textColor="@color/rin_on_toolbar" />
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
+                <TextView android:id="@+id/btnLayoutStandard" android:layout_width="0dp" android:layout_height="42dp" android:layout_weight="1" android:gravity="center" android:text="@string/layout_standard" android:background="@drawable/bg_list_card" android:textColor="@color/rin_on_toolbar" />
+                <TextView android:id="@+id/btnLayoutFocus" android:layout_width="0dp" android:layout_height="42dp" android:layout_weight="1" android:layout_marginStart="8dp" android:gravity="center" android:text="@string/layout_focus" android:background="@drawable/bg_list_card" android:textColor="@color/rin_on_toolbar" />
+                <TextView android:id="@+id/btnLayoutCompact" android:layout_width="0dp" android:layout_height="42dp" android:layout_weight="1" android:layout_marginStart="8dp" android:gravity="center" android:text="@string/layout_compact" android:background="@drawable/bg_list_card" android:textColor="@color/rin_on_toolbar" />
+            </LinearLayout>
+            <include layout="@layout/settings_switch_row_console" />
+            <include layout="@layout/settings_switch_row_toolbar" />
+            <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="22dp" android:layout_marginBottom="8dp" android:text="@string/settings_projects_section_title" android:textStyle="bold" android:textSize="15sp" android:textColor="@color/rin_on_toolbar" />
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
+                <TextView android:id="@+id/btnSortRecent" android:layout_width="0dp" android:layout_height="42dp" android:layout_weight="1" android:gravity="center" android:text="@string/sort_recent" android:background="@drawable/bg_list_card" android:textColor="@color/rin_on_toolbar" />
+                <TextView android:id="@+id/btnSortName" android:layout_width="0dp" android:layout_height="42dp" android:layout_weight="1" android:layout_marginStart="8dp" android:gravity="center" android:text="@string/sort_name" android:background="@drawable/bg_list_card" android:textColor="@color/rin_on_toolbar" />
+                <TextView android:id="@+id/btnSortType" android:layout_width="0dp" android:layout_height="42dp" android:layout_weight="1" android:layout_marginStart="8dp" android:gravity="center" android:text="@string/sort_type" android:background="@drawable/bg_list_card" android:textColor="@color/rin_on_toolbar" />
+            </LinearLayout>
             <Button android:id="@+id/btnResetDefaults" android:layout_width="match_parent" android:layout_height="46dp" android:layout_marginTop="18dp" android:background="@drawable/bg_toolbar_btn_ghost" android:text="@string/action_reset_defaults" android:textAllCaps="false" android:textSize="13sp" android:textColor="@color/rin_editor_hint" />
         </LinearLayout>
     </LinearLayout>
