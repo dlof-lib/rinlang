@@ -55,4 +55,21 @@
     <string name="settings_confirm_exit_hint">اطلب تأكيداً قبل مغادرة المحرر.</string>
     <string name="settings_format_save">تنسيق عند الحفظ</string>
     <string name="settings_format_save_hint">جهّز المحرر لتنسيق الكود تلقائياً عند الحفظ.</string>
+    <string name="settings_theme_section_title">السمة</string>
+    <string name="theme_system">النظام</string>
+    <string name="theme_dark">داكن</string>
+    <string name="theme_light">فاتح</string>
+    <string name="settings_layout_section_title">تخطيط المحرر</string>
+    <string name="layout_standard">قياسي</string>
+    <string name="layout_focus">تركيز</string>
+    <string name="layout_compact">مضغوط</string>
+    <string name="settings_show_console">إظهار الكونسول</string>
+    <string name="settings_show_console_hint">إظهار أو إخفاء سجل التشغيل أسفل المحرر.</string>
+    <string name="settings_show_toolbar">إظهار شريط المحرر</string>
+    <string name="settings_show_toolbar_hint">إخفاء الشريط للحصول على مساحة كتابة أكبر.</string>
+    <string name="settings_projects_section_title">المشاريع</string>
+    <string name="sort_recent">الأحدث</string><string name="sort_name">الاسم</string><string name="sort_type">النوع</string>
+    <string name="albums_title">ألبومات المشاريع</string><string name="album_new">ألبوم جديد</string><string name="album_name_hint">اسم الألبوم</string><string name="album_created">تم إنشاء الألبوم</string><string name="album_empty">الألبوم فارغ</string><string name="album_uncategorized">غير مصنف</string><string name="album_uncategorized_hint">يمكن نقل المشاريع إلى ألبوم من إدارة المشاريع.</string><string name="create">إنشاء</string>
+    <string name="album_create_first">إنشاء ألبوم أولاً</string>
+    <string name="album_move_title">نقل المشروع</string>
 </resources>
