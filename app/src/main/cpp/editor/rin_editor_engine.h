@@ -28,6 +28,10 @@ enum class HighlightKind {
     At = 7,
     Error = 8,
     Call = 9, // معرِّف متبوع مباشرة بـ '(' — نمط استدعاء دالة (لتلوين مميّز كما في المحررات الاحترافية)
+    // = 11 عمداً (تخطّي 10 المحجوزة لـ Comment في HighlightKind.kt؛ الماسح الحقيقي لا يُصدر
+    // رموز تعليقات أصلاً لأنها تُستبعَد أثناء المسح). القيمة يجب أن تطابق HighlightKind.TYPE في
+    // Kotlin حرفياً لأن nativeGetHighlightSpansFlat يمرّر ترتيب enum الخام كعدد صحيح مباشرة.
+    Type = 11, // كلمات لغة الحاويات/الأنواع (container/table/Section/Group/link/save/file/...)
 };
 
 struct HighlightSpan {
