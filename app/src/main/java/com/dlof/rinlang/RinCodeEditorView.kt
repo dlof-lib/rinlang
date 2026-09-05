@@ -165,7 +165,7 @@ class RinCodeEditorView @JvmOverloads constructor(
 
         if (before == 0 && count == 1 && start == cursorFlatBefore) {
             // كتابة حرف واحد عند المؤشر مباشرة: مرّرها عبر المسار "الذكي" (إغلاق أقواس/مسافة تلقائية)
-            engine.insertText(insertedPiece, smart = true)
+            engine.insertText(insertedPiece, smart = AppSettings.isAutoCloseBrackets(context) || AppSettings.isAutoIndent(context))
         } else if (before == 1 && count == 0 && start + before == cursorFlatBefore) {
             // حذف حرف واحد قبل المؤشر مباشرة: Backspace ذكي (يحذف زوج قوس تلقائي بالكامل عند اللزوم)
             engine.deleteBackward()
@@ -286,7 +286,7 @@ class RinCodeEditorView @JvmOverloads constructor(
         val cur = engine.getCursor()
         val sel = engine.getSelection()
         val highlightsByLine = cachedHighlightsByLine
-        val bracketInfo = cachedBracketInfo
+        val bracketInfo = if (AppSettings.isBracketMatching(context)) cachedBracketInfo else null
 
         var y = paddingTop.toFloat()
         for (line in 0 until lc) {
@@ -294,7 +294,7 @@ class RinCodeEditorView @JvmOverloads constructor(
             val baseline = y - ascent
 
             // تظليل السطر الحالي
-            if (line == cur.line && !sel.hasSelection) {
+            if (line == cur.line && !sel.hasSelection && AppSettings.isCurrentLineHighlight(context)) {
                 canvas.drawRect(0f, y, width.toFloat(), y + lineHeight, currentLinePaint)
             }
 
@@ -333,7 +333,7 @@ class RinCodeEditorView @JvmOverloads constructor(
             }
 
             // النص الملوَّن نحويًا
-            drawHighlightedLine(canvas, lineText, highlightsByLine[line], paddingLeft.toFloat(), baseline)
+            drawHighlightedLine(canvas, lineText, if (AppSettings.isSyntaxHighlighting(context)) highlightsByLine[line] else null, paddingLeft.toFloat(), baseline)
 
             // مؤشر الكتابة (يومض)
             if (line == cur.line && !sel.hasSelection && cursorVisible && hasFocus()) {
@@ -468,7 +468,7 @@ class RinCodeEditorView @JvmOverloads constructor(
         override fun run() {
             cursorVisible = !cursorVisible
             invalidate()
-            blinkHandler.postDelayed(this, 500L)
+            if (AppSettings.isSmoothCursor(context)) blinkHandler.postDelayed(this, 420L) else blinkHandler.postDelayed(this, 550L)
         }
     }
 
@@ -511,6 +511,7 @@ class RinCodeEditorView @JvmOverloads constructor(
 
     private val gestureDetector = GestureDetector(context, object : GestureDetector.SimpleOnGestureListener() {
         override fun onSingleTapUp(e: MotionEvent): Boolean {
+            if (AppSettings.isHapticFeedback(context)) performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP)
             requestFocus()
             showKeyboard()
             val p = offsetForTouch(e.x, e.y)
@@ -609,7 +610,7 @@ class RinCodeEditorView @JvmOverloads constructor(
                 engine.setCursor(cur.line, len, event.isShiftPressed); afterEngineMutation(); return true
             }
             KeyEvent.KEYCODE_TAB -> {
-                if (engine.getSelection().hasSelection) engine.indentSelection() else engine.insertText("    ", smart = false)
+                if (engine.getSelection().hasSelection) engine.indentSelection() else engine.insertText(" ".repeat(AppSettings.getTabSize(context)), smart = false)
                 afterEngineMutation(); return true
             }
         }
@@ -755,7 +756,7 @@ class RinCodeEditorView @JvmOverloads constructor(
     }
 
     private fun updateSuggestionPopup() {
-        if (!hasFocus() || !isAttachedToWindow) { dismissSuggestionPopup(); return }
+        if (!AppSettings.isAutocomplete(context) || !hasFocus() || !isAttachedToWindow) { dismissSuggestionPopup(); return }
         val (prefix, wordStartCol) = currentWordPrefix() ?: run { dismissSuggestionPopup(); return }
         val suggestions = engine.collectSuggestions(prefix, maxSuggestionRows)
         if (suggestions.isEmpty()) { dismissSuggestionPopup(); return }
