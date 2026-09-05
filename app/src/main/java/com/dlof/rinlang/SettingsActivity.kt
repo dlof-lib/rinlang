@@ -75,6 +75,19 @@ class SettingsActivity : AppCompatActivity() {
         rowLangAr.setOnClickListener { selectLanguage(LocaleHelper.LANG_ARABIC) }
         rowLangEn.setOnClickListener { selectLanguage(LocaleHelper.LANG_ENGLISH) }
         rowLangEs.setOnClickListener { selectLanguage(LocaleHelper.LANG_SPANISH) }
+
+        findViewById<View>(R.id.btnThemeSystem).setOnClickListener { setTheme(ThemeManager.SYSTEM) }
+        findViewById<View>(R.id.btnThemeDark).setOnClickListener { setTheme(ThemeManager.DARK) }
+        findViewById<View>(R.id.btnThemeLight).setOnClickListener { setTheme(ThemeManager.LIGHT) }
+        findViewById<View>(R.id.btnLayoutStandard).setOnClickListener { setLayout("standard") }
+        findViewById<View>(R.id.btnLayoutFocus).setOnClickListener { setLayout("focus") }
+        findViewById<View>(R.id.btnLayoutCompact).setOnClickListener { setLayout("compact") }
+        bindSwitch(R.id.switchShowConsole, R.string.settings_show_console, R.string.settings_show_console_hint, AppSettings.isShowConsole(this)) { AppSettings.setShowConsole(this, it) }
+        bindSwitch(R.id.switchShowToolbar, R.string.settings_show_toolbar, R.string.settings_show_toolbar_hint, AppSettings.isShowToolbar(this)) { AppSettings.setShowToolbar(this, it) }
+        findViewById<View>(R.id.btnSortRecent).setOnClickListener { setProjectSort("recent") }
+        findViewById<View>(R.id.btnSortName).setOnClickListener { setProjectSort("name") }
+        findViewById<View>(R.id.btnSortType).setOnClickListener { setProjectSort("type") }
+
         findViewById<View>(R.id.btnResetDefaults).setOnClickListener {
             AppSettings.resetToDefaults(this)
             applyCurrentValuesToUi()
@@ -82,6 +95,12 @@ class SettingsActivity : AppCompatActivity() {
         }
         applyCurrentValuesToUi()
     }
+
+    private fun setTheme(mode: String) { AppSettings.setThemeMode(this, mode); ThemeManager.apply(this); recreate() }
+    private fun setLayout(value: String) { AppSettings.setEditorLayout(this, value); updateLayoutButtons() }
+    private fun setProjectSort(value: String) { AppSettings.setProjectSort(this, value); updateProjectSortButtons() }
+    private fun updateLayoutButtons() { val s=AppSettings.getEditorLayout(this); listOf(R.id.btnLayoutStandard to "standard",R.id.btnLayoutFocus to "focus",R.id.btnLayoutCompact to "compact").forEach { (id,v)->findViewById<TextView>(id).setBackgroundResource(if(s==v) R.drawable.bg_lang_option_selected else R.drawable.bg_list_card) } }
+    private fun updateProjectSortButtons() { val s=AppSettings.getProjectSort(this); listOf(R.id.btnSortRecent to "recent",R.id.btnSortName to "name",R.id.btnSortType to "type").forEach { (id,v)->findViewById<TextView>(id).setBackgroundResource(if(s==v) R.drawable.bg_lang_option_selected else R.drawable.bg_list_card) } }
 
     private fun bindSwitch(id: Int, title: Int, hint: Int, initial: Boolean, save: (Boolean) -> Unit) {
         val row = findViewById<View>(id).parent as View
@@ -130,6 +149,8 @@ class SettingsActivity : AppCompatActivity() {
         switches[R.id.switchConfirmExit]?.isChecked = AppSettings.isConfirmExit(this)
         switches[R.id.switchFormatSave]?.isChecked = AppSettings.isFormatOnSave(this)
         updateTabButtons()
+        updateLayoutButtons()
+        updateProjectSortButtons()
         val current = LocaleHelper.getCurrentAppLocaleTag() ?: LocaleHelper.LANG_ARABIC
         highlightSelectedLanguage(current)
     }
