@@ -33,6 +33,7 @@ import android.widget.PopupWindow
 import android.widget.TextView
 import androidx.core.content.ContextCompat
 import kotlin.math.max
+import kotlin.math.min
 import kotlin.math.roundToInt
 
 /**
@@ -180,6 +181,30 @@ class RinCodeEditorView @JvmOverloads constructor(
         }
     }
 
+    /**
+     * يطبّق [newText] على [target] بأقل تعديل ممكن (بادئة/لاحقة مشتركة تبقى بلا مساس) بدل محو
+     * النص بالكامل واستبداله دومًا. كان الكود القديم يستدعي `shadowEditable.replace(0, length,
+     * newText)` عند *كل* ضغطة مفتاح — أي إعادة كتابة المستند بأكمله من الصفر مهما كانت ضخامته
+     * وحجم التعديل الفعلي (حرف واحد غالبًا). هذا يُبطل أي composing span فعّال يتتبّعه IME
+     * (تصحيح تلقائي/إكمال Gboard) لأنه ببساطة span على *نفس* الكائن يُمحى بالكامل، فيضطر IME أحيانًا
+     * لإعادة إرسال جزء من الحرف/الكلمة الأخيرة من جديد — وهذا أصل شكوى الكتابة "تتكرر"/تنسخ نفسها
+     * وغير السلسة، خصوصًا في الملفات الأطول (نسخ SpannableStringBuilder كامل عند كل حرف مكلف
+     * فعليًا). حساب بادئة/لاحقة مشتركة يجعل النطاق المُعدَّل فعليًا بحجم التغيير الحقيقي فقط
+     * (عادة حرف واحد)، فيبقى باقي الكائن (وأي حالة IME مرتبطة به) مستقرًا بلا مساس.
+     */
+    private fun applyMinimalDiff(target: Editable, oldText: String, newText: String) {
+        if (oldText == newText) return
+        val maxCommon = min(oldText.length, newText.length)
+        var prefix = 0
+        while (prefix < maxCommon && oldText[prefix] == newText[prefix]) prefix++
+        var oldEnd = oldText.length
+        var newEnd = newText.length
+        while (oldEnd > prefix && newEnd > prefix && oldText[oldEnd - 1] == newText[newEnd - 1]) {
+            oldEnd--; newEnd--
+        }
+        target.replace(prefix, oldEnd, newText.substring(prefix, newEnd))
+    }
+
     // --- تزامن ثنائي الاتجاه بين محرك C++ وواجهة Android/shadow -----------------
 
     /** يُستدعى بعد أي عملية تُغيّر حالة المحرك مباشرة (لمس، مفاتيح، أوامر المتحكم...). */
@@ -189,7 +214,7 @@ class RinCodeEditorView @JvmOverloads constructor(
         val changed = newText != old
         if (changed) {
             suppressForward = true
-            shadowEditable.replace(0, shadowEditable.length, newText)
+            applyMinimalDiff(shadowEditable, old, newText)
             suppressForward = false
             lastKnownText = newText
             // التلوين النحوي يمسح كامل المستند (مكلف نسبيًا على ملف ضخم) — نُعيد حسابه فقط عندما
@@ -873,6 +898,18 @@ class RinCodeEditorView @JvmOverloads constructor(
             }
             KeyEvent.KEYCODE_TAB -> {
                 if (engine.getSelection().hasSelection) engine.indentSelection() else engine.insertText(" ".repeat(AppSettings.getTabSize(context)), smart = false)
+                afterEngineMutation(); return true
+            }
+            // Enter/Return: كان بلا أي معالجة هنا إطلاقًا. لوحات المفاتيح الافتراضية (خصوصًا
+            // Gboard) عندما يكون inputType مضبوطًا TYPE_TEXT_FLAG_MULTI_LINE مع IME_ACTION_NONE
+            // (كما هنا) تُرسل مفتاح Enter كـKeyEvent فعلي عبر dispatchKeyEvent (تمامًا مثل
+            // Backspace/Delete أعلاه)، وليس عبر commitText("\n") على الـInputConnection. وبما أن
+            // onKeyDown لم يكن يتعامل مع KEYCODE_ENTER إطلاقًا، كان يصل إلى super.onKeyDown()
+            // فلا يحدث شيء — هذا بالضبط سبب "Enter لا ينزلني للسطر الأسفل ولا يفتح سطرًا جديدًا".
+            // نمرّره عبر نفس مسار "الذكي" الذي يستخدمه IME عند إدراج حرف واحد فعليًا، حتى يستفيد
+            // من المسافة البادئة التلقائية بعد '{'/':' ونحوها إن كانت مفعّلة.
+            KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_NUMPAD_ENTER -> {
+                engine.insertText("\n", smart = AppSettings.isAutoIndent(context))
                 afterEngineMutation(); return true
             }
             // Backspace/Delete: يصلان عادةً عبر IME (BaseInputConnection.deleteSurroundingText
