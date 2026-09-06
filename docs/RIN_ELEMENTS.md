@@ -36,7 +36,7 @@ Rin UI is split into three strict layers:
 
 ## Ready elements
 
-`text`, `button`, `input`, `search`, `image`, `video`, `audio`, [`link`](./link.md), `progress`, `checkbox`, `radio`, `switch`, `slider`, `select`, `list`, `row`, `column`, `box`, `card`, `sidebar`, `popup`, `modal`, `tabs`, `table`, `file`, `date`, `time`, `divider`, `code_editor`, `calculator`.
+`text`, `button`, `input`, `search`, `image`, `video`, `audio`, `link`, `progress`, `checkbox`, `radio`, `switch`, `slider`, `select`, `list`, `row`, `column`, `box`, `card`, `sidebar`, `popup`, `modal`, `tabs`, `table`, `file`, `date`, `time`, `divider`, `code_editor`, `calculator`.
 
 Every one of these is now backed end-to-end (parser tag → Fabric `StrandKind` → Loom measure/paint → JSON export), not just accepted syntax. A few are pure vocabulary aliases onto an existing kind rather than a new one — `sidebar` is a `Drawer`, `popup` is a `Dialog`, `range`/`dropdown`/`textfield` are accepted alongside `slider`/`select`/`input` — so `.rin` source can use whichever name reads best without losing any behavior.
 
@@ -74,3 +74,31 @@ Element attributes stay functional-only, per the split at the top of this doc �
 With `direction="rtl"`, `save` (first child in source order) is placed flush against the right edge and `cancel` follows to its left — matching reading order for Arabic UIs without reversing the children in source or touching `gap=`/alignment. `direction` defaults to `"ltr"` (today's existing behavior, unchanged) when omitted; `column` is unaffected either way — direction only ever changes horizontal (main-axis-X) flow.
 
 The editor provides insertion snippets for the new UI layer (including the newly-backed elements above) and syntax highlighting for the new keywords.
+
+## Real Loom output contract
+
+`@element.*` is not discarded markup. Each element becomes a real Fabric Strand with:
+
+- `role: "element"`
+- `sourceTag`: the exact element kind written in Rin
+- resolved attributes and theme color
+- measured `x/y/w/h`
+- accessibility metadata
+- interaction metadata (`onTap`, `href`)
+- native Dye commands in the top-level `paint` JSON output
+
+For button-like elements, `text=` is accepted as the visible semantic label and is used for both
+measurement and painting when `label=` is not present:
+
+```rin
+@loop=screen
+    element_width=320;
+    element_height=48;
+
+    @element.button=run
+        text="Run";
+    .end/element
+.end/loop
+```
+
+This produces a real button-sized Strand and a real `text` draw command owned by that Strand.
