@@ -2,9 +2,11 @@ package com.dlof.rinlang
 
 /**
  * أدوات مشتركة تفهم "وسوم" لغة الحاويات في Rin (@container=name ... .end/container، Section،
- * Translations، @view.<Kind>، @theme...)، مبنية على القائمة الرسمية المعتمدة في محرّك اللغة
- * نفسه (انظر Parser::atBlock::validTags و sectionBlock/translationsBlock/viewBlock/themeBlock
- * في rin_parser.cpp)، لاستخدامها في أكثر من ميزة تحرير خاصة بلغة Rin تحديداً:
+ * Translations، @view.<Kind>، @theme، وطبقة الواجهة @element.<kind> / @loop(.Kind) الموصوفة في
+ * docs/RIN_ELEMENTS.md)، مبنية على القائمة الرسمية المعتمدة في محرّك اللغة نفسه (انظر
+ * Parser::atBlock::validTags و sectionBlock/translationsBlock/viewBlock/themeBlock/
+ * elementDeclaration/loopCanvasDeclaration في rin_parser.cpp)، لاستخدامها في أكثر من ميزة تحرير
+ * خاصة بلغة Rin تحديداً:
  * - فحص توازن الوسوم ([RinContainerTags.checkTagBalance])، إلى جانب "Check brackets" الحالي.
  * - "بنية الملف" (outline) للتنقّل السريع بين الحاويات ([RinContainerTags.buildOutline]).
  * - كتالوج مقتطفات الإدراج السريع ([RinSnippets]) في نفس الملف.
@@ -38,6 +40,17 @@ object RinContainerTags {
     // "@theme=Name ... .end/theme"
     private val themeTagPattern = Regex("^@theme(=.*)?$")
 
+    // "@element.<kind>=name ... .end/element" — طبقة الـ Elements في docs/RIN_ELEMENTS.md، أي kind
+    // تُقبل (button/input/search/.../calculator)، لكن الإغلاق حرفياً دوماً ".end/element" بصرف
+    // النظر عن الـ kind (انظر Parser::elementDeclaration: consumeEndTag("element", ...) في
+    // rin_parser.cpp) — بنفس منطق @view.<Kind> أعلاه تماماً.
+    private val elementTagPattern = Regex("^@element\\.[A-Za-z_][A-Za-z0-9_]*(=.*)?$")
+
+    // "@loop=name" أو "@loop.<Kind>=name" ... .end/loop" — طبقة اللوحة (canvas) في نفس المستند،
+    // الشكل بلا ".<Kind>" افتراضه "Column" (انظر Parser::loopCanvasDeclaration)، وكلاهما يُغلَق
+    // حرفياً دوماً بـ ".end/loop" (consumeEndTag("loop", ...)).
+    private val loopTagPattern = Regex("^@loop(\\.[A-Za-z][A-Za-z0-9_]*)?(=.*)?$")
+
     // كلمات مفتاحية بلا '@' تبدأ كتلة مغلقة بـ ".end/<Keyword>" (انظر sectionBlock/
     // translationsBlock في rin_parser.cpp).
     private val bareBlockKeywords = setOf("Section", "Translations")
@@ -54,6 +67,8 @@ object RinContainerTags {
         if (line.startsWith("@")) {
             if (viewTagPattern.matches(line)) return "view"
             if (themeTagPattern.matches(line)) return "theme"
+            if (elementTagPattern.matches(line)) return "element"
+            if (loopTagPattern.matches(line)) return "loop"
             val tag = line.removePrefix("@").substringBefore('=').trim()
             return tag.takeIf { it in atTags }
         }
