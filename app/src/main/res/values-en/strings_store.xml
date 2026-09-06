@@ -155,6 +155,7 @@
 
     <!-- "My Packages" section inside the Account screen: view and delete published packages -->
     <string name="account_my_packages_title">My Published Packages</string>
+    <string name="package_published_badge">Published</string>
     <string name="account_my_packages_empty">You haven\'t published any package yet. Publish a library from the Libraries screen to see it here.</string>
     <string name="my_package_meta_format">%1$s • %2$d downloads</string>
     <string name="action_delete_package">Delete</string>
