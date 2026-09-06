@@ -5805,6 +5805,2357 @@ fun relyInfo() {
 }
 
 )RELYRINOGRIN";
+static const char* kLib_movingmask_og_rin = R"MOVINGMASKOGRIN(
+// ============================================================================
+//  lib/movingmask.og.rin  —  Moving Mask: أقنعة متحركة فوق الحاويات والحلقات
+// ============================================================================
+//  استيراد:
+//    @import "lib/movingmask.og.rin";
+//    @import "lib/movingmask.og.rin" as mm;
+//
+//  الفكرة (المفهوم الأساسي):
+//  ---------------------------------------------------------------------------
+//  "القناع" (mask) في Rin هوية منطقية ثابتة لعنصر/حاوية/مجموعة (انظر lib/maskkit.og.rin
+//  و docs/mask.md والدوال الأصلية findMask/maskOf/maskExists...). لكن تلك الهوية بحد
+//  ذاتها *ساكنة*: لا موضع لها، ولا سرعة، ولا مسار تتحرك عبره بمرور الزمن.
+//
+//  "Moving Mask" يضيف طبقة فوق ذلك: قناع يملك حالة حركية (موضع/سرعة/تسارع/مسار)
+//  ويمكن أن:
+//    1) يتحرك عبر الزمن ضمن حلقة (loop) — كل "دورة" (tick) تُحرّك كل الأقنعة النشطة.
+//    2) ينتقل بين الحاويات (containers) — منطقياً عبر سجل داخلي، أو فعلياً عبر ربط
+//       مباشر بدوال الحاويات الأصلية في Rin: spawn/create, hasContainer, containerNames,
+//       parentOf, childrenOf, siblingsOf, setField, getField, destroyContainer — وأيضاً
+//       عبر نظام mask الأصلي (maskParentSet/maskDetach/maskTag/...) حين يكون متاحاً.
+//    3) "ينزلق" (slides) كقناع/نافذة فوق مصفوفة أو شبكة (grid) — هذا هو المعنى الكلاسيكي
+//       الآخر لـ"moving mask" في معالجة الإشارات/الصور: نافذة صغيرة (kernel/stencil)
+//       تتحرك خانة خانة فوق حاوية بيانات أكبر (convolution, moving average/max/min).
+//
+//  هذا الملف مستقل بذاته (لا يعتمد على أي lib/*.og.rin آخر) ليعمل فور الاستيراد،
+//  لكنه يتكامل بشكل طبيعي مع:
+//    - lib/loopkit.og.rin   (repeatTimes/stepLoop/loopUntil) لتشغيل mm_tick داخل حلقاتها.
+//    - lib/iterkit.og.rin   (iterNew/iterForEach) للمرور على أقنعة متحركة كمُكرِّر.
+//    - lib/gridkit.og.rin   (makeGrid/forEachCell) كحاوية ثنائية الأبعاد لقسم الشبكات هنا.
+//    - lib/animation.og.rin (anim_lerp/anim_easeInOut...) كدوال Easing لـ mm_animateTo.
+//    - lib/maskkit.og.rin + docs/mask.md (هوية القناع الساكنة) كطبقة هوية تحت هذه الطبقة.
+//
+//  الحالة (state) هنا صريحة دائماً: تُنشئ محرّكاً بـ mm_new() وتُمرّره لكل دالة — لا توجد
+//  حالة عامة (global) مخفية، بنفس روح lib/cachekit.og.rin و lib/iterkit.og.rin.
+//
+//  مثال سريع:
+//    let world = mm_new();
+//    mm_setBounds(world, 0, 0, 390, 700);
+//    mm_spawn(world, "player", 20, 20);
+//    mm_setVelocity(world, "player", 5, 2);
+//    mm_tick(world, 1);                    // خطوة زمنية واحدة
+//    print mm_position(world, "player");   // {x:25, y:22}
+//
+//  فهرس الأقسام:
+//    1)  ثوابت ومساعدات داخلية عامة
+//    2)  المحرّك: إنشاء / تدمير / استعلام عن الأقنعة المتحركة
+//    3)  الموضع، السرعة، التسارع (الفيزياء الأساسية)
+//    4)  المسارات ونقاط الطريق (paths / waypoints)
+//    5)  أنماط حركة جاهزة (patrol / orbit / wander / seek / flee)
+//    6)  الحدود والمناطق (bounds / regions)
+//    7)  التكامل مع الحاويات (containers) — منطقي وفعلي (native bridge)
+//    8)  القناع المنزلق فوق المصفوفات (sliding window / 1D convolution)
+//    9)  القناع المنزلق فوق الشبكات (grid stencil / 2D convolution / نقل القناع بصرياً)
+//    10) الأثر والتاريخ (trail / history)
+//    11) القرب والتصادم (distance / proximity / AABB collision)
+//    12) التكامل مع الحلقات (loop integration: tick / runLoop / animateTo / forEach)
+//    13) الأحداث (lightweight event hooks)
+//    14) الفحص والتلخيص (inspection / debug)
+//    15) التكامل مع Loom — مفاهيم مستعارة من محرّك الواجهات Loomtime
+//        15.1) Warp   — تصدير حالة قناع كحقول مُسطَّحة
+//        15.2) Strand — تسمية بصرية اختيارية للقناع
+//        15.3) Fabric — لقطة مسطَّحة بكل الأقنعة
+//        15.4) Needle — اختبار إصابة نقطة لمس/نقرة
+//        15.5) Shuttle — مقارنة لقطتين وإنتاج Patch[]
+//        15.6) Actions — نظام أفعال جاهزة قابل للتوسعة (Action Engine)
+//        15.7) Navigation — مشاهد (scenes) عبر الوسوم، بمكدّس تنقّل
+//        15.8) Overlay — طبقة علوية فوق الجميع (أولوية في اختبار الإصابة)
+//        15.9) Dye — لون بصري اختياري للقناع
+//        15.10) Theme — لوحات ألوان مُسمّاة على مستوى المحرّك (Pattern Book)
+//        15.11) Object Inspector — بطاقة فحص كاملة لقناع واحد
+//    16) التكوين الجماعي والانسيابية (Flocking / Rigid Formations) — جديد
+//    17) آلة حالات محدودة لكل قناع (Per-Mask Finite State Machine) — جديد
+//    18) التسلسل والاستعادة (Serialization / Save & Load عبر JSON) — جديد
+//    19) الفهرسة المكانية لتسريع استعلامات الجوار (Spatial Grid Index) — جديد
+//    20) المؤقتات والتهدئة لكل قناع (Timers / Cooldowns) — جديد
+//
+//  الإصدار: 1.0.0 — أول نشر رسمي لهذه المكتبة ضمن RinStudio (مدمجة embedded في المفسّر،
+//  متاحة فوراً عبر شاشة "المكتبات" بلا رفع يدوي). انظر CHANGELOG.md.
+// ============================================================================
+
+
+// ============================================================================
+// 1) ثوابت ومساعدات داخلية عامة
+// ============================================================================
+
+let MM_EPSILON = 0.0000001;      // فرق افتراضي لمقارنة الأعداد العشرية
+let MM_DEFAULT_HISTORY_LIMIT = 30; // عدد نقاط الأثر (trail) المحفوظة كحد أقصى لكل قناع
+let MM_TAU = 6.28318530717958647692; // 2*PI — يُستخدم لاختزال زوايا mm_orbitStep فقط
+let MM_VERSION = "1.0.0"; // إصدار مكتبة movingmask نفسها (انظر CHANGELOG.md)
+
+// نص/رقم إصدار مكتبة movingmask الحالي — استخدمه لعرض "عن هذه المكتبة" في تطبيقك
+fun mm_version() {
+    return MM_VERSION;
+}
+
+// يحصر x بين lo و hi (نسخة عددية بسيطة؛ clamp() الأصلية في Rin تعمل على مصفوفات فقط)
+fun mm_clampNum(x, lo, hi) {
+    if (x < lo) { return lo; }
+    if (x > hi) { return hi; }
+    return x;
+}
+
+// استيفاء خطي بسيط بين a و b عند النسبة t (0..1) — بلا حصر لـ t، للسماح بالاستقراء (extrapolate)
+fun mm_lerp(a, b, t) {
+    return a + (b - a) * t;
+}
+
+// إشارة الرقم: 1 موجب، -1 سالب، 0 صفر
+fun mm_sign(x) {
+    if (x > 0) { return 1; }
+    if (x < 0) { return -1; }
+    return 0;
+}
+
+// المسافة الإقليدية بين نقطتين {x,y}
+fun mm_distance(p1, p2) {
+    let dx = p1["x"] - p2["x"];
+    let dy = p1["y"] - p2["y"];
+    return sqrt(dx * dx + dy * dy);
+}
+
+// هل الرقمان متقاربان عملياً (أقل من MM_EPSILON فرقاً)؟
+fun mm_nearlyEqual(a, b) {
+    let d = a - b;
+    if (d < 0) { d = 0 - d; }
+    return d < MM_EPSILON;
+}
+
+// نسخة سطحية (shallow copy) من نقطة {x,y} — مفيدة كي لا تُعدَّل نقطة مصدر بالمرجع بالخطأ
+fun mm_point(x, y) {
+    return { x: x, y: y };
+}
+
+// هل تحتوي مصفوفة الأسماء arr على القيمة value؟ (مساعد صغير فوق contains() الأصلية،
+// موجود هنا فقط توضيحاً؛ contains() الأصلية تدعم المصفوفات مباشرة)
+fun mm__arrayHas(arr, value) {
+    return contains(arr, value);
+}
+
+// يحذف أول ظهور لـ value من مصفوفة arr ويُعيد مصفوفة جديدة بلا تلك القيمة (بلا تعديل arr
+// الأصلية بالمرجع؛ remove() الأصلية تعمل على مفاتيح الخرائط فقط لا عناصر المصفوفات)
+fun mm__arrayWithout(arr, value) {
+    let out = [];
+    let i = 0;
+    while (i < len(arr)) {
+        if (arr[i] != value) { push(out, arr[i]); }
+        i = i + 1;
+    }
+    return out;
+}
+
+// --- جيب وجيب تمام داخليان لأجل mm_orbitStep فقط ------------------------------------
+// المفسّر لا يوفّر sin/cos فطرياً؛ نفس أسلوب lib/math.og.rin (سلسلة تايلور + اختزال مجال
+// إلى المجال (-PI, PI]) لكن بأسماء mm__ خاصة كي لا تتصادم مع sin/cos لو استوردهما المستخدم
+// من lib/math.og.rin في نفس الملف
+
+fun mm__reduceAngle(x) {
+    return x - MM_TAU * floor((x + PI) / MM_TAU);
+}
+
+fun mm__sin(x) {
+    let v = mm__reduceAngle(x);
+    let v2 = v * v;
+    let term = v;
+    let total = v;
+    let i = 1;
+    while (i <= 12) {
+        term = term * (0 - v2) / ((2 * i) * (2 * i + 1));
+        total = total + term;
+        i = i + 1;
+    }
+    return total;
+}
+
+fun mm__cos(x) {
+    let v = mm__reduceAngle(x);
+    let v2 = v * v;
+    let term = 1;
+    let total = 1;
+    let i = 1;
+    while (i <= 12) {
+        term = term * (0 - v2) / ((2 * i - 1) * (2 * i));
+        total = total + term;
+        i = i + 1;
+    }
+    return total;
+}
+
+
+// ============================================================================
+// 2) المحرّك: إنشاء / تدمير / استعلام عن الأقنعة المتحركة
+// ============================================================================
+//  المحرّك (engine) خريطة واحدة تحمل كل حالة النظام:
+//    items:      خريطة اسم القناع -> سجل حالته الكاملة (موضع/سرعة/مسار/حاوية/...)
+//    order:      مصفوفة أسماء الأقنعة بترتيب إنشائها (لأجل mm_forEach/mm_names)
+//    containers: خريطة اسم حاوية منطقية -> مصفوفة أسماء الأقنعة بداخلها
+//    bounds:     حدود العالم {minX,minY,maxX,maxY} أو nil إن لم تُضبط
+//    regions:    خريطة اسم منطقة -> حدودها {minX,minY,maxX,maxY}
+//    tick:       عدّاد الدورات (frames) التي نُفِّذت عبر mm_tick/mm_runLoop
+//    historyLimit: أقصى عدد نقاط أثر تُحفظ لكل قناع (mm_recordHistory)
+//    handlers:   خريطة اسم حدث -> مصفوفة دوال مستمعة (mm_on)
+//    actions:    خريطة اسم فعل مخصَّص -> دالة مُسجَّلة (mm_defineAction، قسم 15.6)
+//    themes:     خريطة اسم Theme -> خريطة أدوار لونية (mm_defineTheme، قسم 15.10)
+//    activeTheme: اسم الـTheme النشط حالياً، أو nil (mm_setActiveTheme، قسم 15.10)
+//    nav:        حالة التنقّل بين المشاهد: { stack: [...], current: نص أو nil,
+//                knownScenes: [...] } (قسم 15.7)
+
+// ينشئ محرّك أقنعة متحركة جديداً وفارغاً
+fun mm_new() {
+    return {
+        items: {},
+        order: [],
+        containers: {},
+        bounds: nil,
+        regions: {},
+        tick: 0,
+        historyLimit: MM_DEFAULT_HISTORY_LIMIT,
+        handlers: {},
+        actions: {},
+        themes: {},
+        activeTheme: nil,
+        nav: { stack: [], current: nil, knownScenes: [] }
+    };
+}
+
+// يبني سجل قناع متحرك جديد بحالة ابتدائية كاملة عند (x, y)
+fun mm__newRecord(x, y) {
+    return {
+        x: x, y: y,
+        vx: 0, vy: 0,
+        ax: 0, ay: 0,
+        active: true,
+        "container": nil,
+        tags: [],
+        path: [],
+        pathIndex: 0,
+        pathLoop: false,
+        patrolDir: 1,
+        orbitAngle: 0,
+        orbitCenterX: 0,
+        orbitCenterY: 0,
+        orbitRadius: 0,
+        history: [],
+        meta: {}
+    };
+}
+
+// يُنشئ قناعاً متحركاً جديداً باسم name عند الموضع (x, y) ويُسجّله في المحرّك mm.
+// إن كان هناك قناع بنفس الاسم مسبقاً يُستبدل بالكامل بسجل جديد (بلا تراكم حالة قديمة).
+fun mm_spawn(mm, name, x, y) {
+    if (has(mm["items"], name) == false) {
+        push(mm["order"], name);
+    }
+    mm["items"][name] = mm__newRecord(x, y);
+    return mm["items"][name];
+}
+
+// هل يوجد قناع متحرك مسجَّل بهذا الاسم في mm؟
+fun mm_exists(mm, name) {
+    return has(mm["items"], name);
+}
+
+// يُعيد السجل الخام (الخريطة الكاملة) لقناع، أو nil إن لم يوجد — للاستخدام المتقدّم فقط؛
+// يُفضَّل استخدام الدوال المتخصصة (mm_position, mm_velocity...) بدل التلاعب المباشر بالسجل
+fun mm_get(mm, name) {
+    if (mm_exists(mm, name) == false) { return nil; }
+    return mm["items"][name];
+}
+
+// يحذف قناعاً متحركاً بالكامل: من items، من order، ومن أي حاوية منطقية كان منضمّاً إليها
+fun mm_destroy(mm, name) {
+    if (mm_exists(mm, name) == false) { return false; }
+    let rec = mm["items"][name];
+    if (rec["container"] != nil) {
+        mm_detach(mm, name);
+    }
+    remove(mm["items"], name);
+    mm["order"] = mm__arrayWithout(mm["order"], name);
+    return true;
+}
+
+// عدد الأقنعة المتحركة المسجَّلة حالياً في mm
+fun mm_count(mm) {
+    return len(mm["order"]);
+}
+
+// مصفوفة بكل أسماء الأقنعة المسجَّلة بترتيب إنشائها (نسخة مستقلة آمنة للتعديل)
+fun mm_names(mm) {
+    let out = [];
+    let i = 0;
+    while (i < len(mm["order"])) {
+        push(out, mm["order"][i]);
+        i = i + 1;
+    }
+    return out;
+}
+
+// يُفعِّل/يُعطِّل قناعاً: الأقنعة غير النشطة (active=false) يتجاهلها mm_tick/mm_integrateAll
+fun mm_setActive(mm, name, activeFlag) {
+    if (mm_exists(mm, name) == false) { return false; }
+    mm["items"][name]["active"] = activeFlag;
+    return true;
+}
+
+// هل القناع نشط حالياً؟
+fun mm_isActive(mm, name) {
+    if (mm_exists(mm, name) == false) { return false; }
+    return mm["items"][name]["active"];
+}
+
+// يُلصق وسماً (tag) نصّياً بقناع متحرك (لا علاقة له بوسوم نظام mask الأصلي؛ وسم محلي بسيط
+// لتصنيف/تصفية الأقنعة المتحركة نفسها — انظر mm_withTag)
+fun mm_addTag(mm, name, tag) {
+    if (mm_exists(mm, name) == false) { return false; }
+    let tags = mm["items"][name]["tags"];
+    if (mm__arrayHas(tags, tag) == false) { push(tags, tag); }
+    return true;
+}
+
+// هل يحمل القناع الوسم tag؟
+fun mm_hasTag(mm, name, tag) {
+    if (mm_exists(mm, name) == false) { return false; }
+    return mm__arrayHas(mm["items"][name]["tags"], tag);
+}
+
+// مصفوفة بأسماء كل الأقنعة النشطة التي تحمل الوسم tag
+fun mm_withTag(mm, tag) {
+    let out = [];
+    let i = 0;
+    while (i < len(mm["order"])) {
+        let name = mm["order"][i];
+        if (mm_hasTag(mm, name, tag)) { push(out, name); }
+        i = i + 1;
+    }
+    return out;
+}
+
+// يخزّن/يقرأ بيانات مستخدم حرّة على القناع (meta) — مفيد لإرفاق حالة خاصة بلعبتك/تطبيقك
+// (مثال: نوع الشخصية، صحتها، مالكها...) دون تعديل بنية سجل movingmask نفسه
+fun mm_setMeta(mm, name, key, value) {
+    if (mm_exists(mm, name) == false) { return false; }
+    mm["items"][name]["meta"][key] = value;
+    return true;
+}
+
+fun mm_getMeta(mm, name, key, fallback) {
+    if (mm_exists(mm, name) == false) { return fallback; }
+    let metaMap = mm["items"][name]["meta"];
+    if (has(metaMap, key) == false) { return fallback; }
+    return metaMap[key];
+}
+
+
+// ============================================================================
+// 3) الموضع، السرعة، التسارع (الفيزياء الأساسية)
+// ============================================================================
+
+// يُعيد موضع القناع كنقطة {x,y} مستقلة (نسخة، وليست مرجعاً للسجل الداخلي)
+fun mm_position(mm, name) {
+    let rec = mm_get(mm, name);
+    if (rec == nil) { return nil; }
+    return mm_point(rec["x"], rec["y"]);
+}
+
+// يضبط موضع القناع مباشرة عند (x, y) — قفزة فورية، بلا تفعيل السرعة
+fun mm_setPosition(mm, name, x, y) {
+    if (mm_exists(mm, name) == false) { return false; }
+    mm["items"][name]["x"] = x;
+    mm["items"][name]["y"] = y;
+    return true;
+}
+
+// يُزيح القناع نسبياً بمقدار (dx, dy) عن موضعه الحالي
+fun mm_translate(mm, name, dx, dy) {
+    if (mm_exists(mm, name) == false) { return false; }
+    mm["items"][name]["x"] = mm["items"][name]["x"] + dx;
+    mm["items"][name]["y"] = mm["items"][name]["y"] + dy;
+    return true;
+}
+
+// يُعيد سرعة القناع الحالية {x,y} (المكوّنان vx/vy مُمثَّلان كنقطة لتماثل mm_position)
+fun mm_velocity(mm, name) {
+    let rec = mm_get(mm, name);
+    if (rec == nil) { return nil; }
+    return mm_point(rec["vx"], rec["vy"]);
+}
+
+// يضبط سرعة القناع مباشرة
+fun mm_setVelocity(mm, name, vx, vy) {
+    if (mm_exists(mm, name) == false) { return false; }
+    mm["items"][name]["vx"] = vx;
+    mm["items"][name]["vy"] = vy;
+    return true;
+}
+
+// يضبط تسارع القناع مباشرة (يُطبَّق تلقائياً على السرعة داخل mm_integrate/mm_tick)
+fun mm_setAcceleration(mm, name, ax, ay) {
+    if (mm_exists(mm, name) == false) { return false; }
+    mm["items"][name]["ax"] = ax;
+    mm["items"][name]["ay"] = ay;
+    return true;
+}
+
+// يُعيد تسارع القناع الحالي {x,y}
+fun mm_acceleration(mm, name) {
+    let rec = mm_get(mm, name);
+    if (rec == nil) { return nil; }
+    return mm_point(rec["ax"], rec["ay"]);
+}
+
+// يُضيف قوة (fx, fy) إلى تسارع القناع الحالي (كتلة=1 دائماً هنا؛ نموذج فيزيائي مبسّط
+// يناسب واجهات وألعاب ثنائية الأبعاد وليس محاكاة فيزيائية دقيقة)
+fun mm_applyForce(mm, name, fx, fy) {
+    if (mm_exists(mm, name) == false) { return false; }
+    mm["items"][name]["ax"] = mm["items"][name]["ax"] + fx;
+    mm["items"][name]["ay"] = mm["items"][name]["ay"] + fy;
+    return true;
+}
+
+// يُصفّر سرعة القناع وتسارعه دفعة واحدة (يبقيه في مكانه الحالي)
+fun mm_stop(mm, name) {
+    if (mm_exists(mm, name) == false) { return false; }
+    mm["items"][name]["vx"] = 0;
+    mm["items"][name]["vy"] = 0;
+    mm["items"][name]["ax"] = 0;
+    mm["items"][name]["ay"] = 0;
+    return true;
+}
+
+// خطوة تكامل فيزيائي واحدة لقناع واحد بخطوة زمنية dt (عادة 1 لكل "دورة"/frame منطقية):
+//   v += a * dt
+//   pos += v * dt
+// ثم يُسجَّل الموضع الجديد في الأثر (history) إن كان محرّك التسجيل مفعَّلاً ضمنياً.
+// لا تُطبَّق على الأقنعة غير النشطة (active=false).
+fun mm_integrate(mm, name, dt) {
+    if (mm_exists(mm, name) == false) { return false; }
+    let rec = mm["items"][name];
+    if (rec["active"] == false) { return false; }
+    rec["vx"] = rec["vx"] + rec["ax"] * dt;
+    rec["vy"] = rec["vy"] + rec["ay"] * dt;
+    rec["x"] = rec["x"] + rec["vx"] * dt;
+    rec["y"] = rec["y"] + rec["vy"] * dt;
+    mm_recordHistory(mm, name);
+    return true;
+}
+
+// يُطبِّق mm_integrate على كل الأقنعة النشطة في mm بخطوة زمنية dt واحدة — هذا هو "قلب"
+// التكامل مع الحلقات: استدعِها مرة كل دورة/frame من حلقتك الخاصة، أو استخدم mm_tick/mm_runLoop
+// أدناه (قسم 12) لِلف ذلك تلقائياً في حلقة while جاهزة.
+fun mm_integrateAll(mm, dt) {
+    let i = 0;
+    while (i < len(mm["order"])) {
+        mm_integrate(mm, mm["order"][i], dt);
+        i = i + 1;
+    }
+    return nil;
+}
+
+
+// ============================================================================
+// 4) المسارات ونقاط الطريق (paths / waypoints)
+// ============================================================================
+//  المسار مصفوفة من نقاط {x,y} يتبعها القناع نقطة فنقطة. mm_followPath تُحرِّك القناع
+//  بمقدار "speed" وحدة بحد أقصى نحو نقطة الطريق الحالية، وتنتقل تلقائياً للنقطة التالية
+//  عند الوصول إليها (أو عند الاقتراب منها ضمن MM_EPSILON).
+
+// يضبط مسار القناع الكامل (مصفوفة نقاط {x,y}) ويُعيد مؤشر التقدّم إلى البداية.
+// loopFlag=true يجعل المسار يعيد الكرّة من أوّله بعد بلوغ آخر نقطة بدل التوقف.
+fun mm_setPath(mm, name, points, loopFlag) {
+    if (mm_exists(mm, name) == false) { return false; }
+    mm["items"][name]["path"] = points;
+    mm["items"][name]["pathIndex"] = 0;
+    mm["items"][name]["pathLoop"] = loopFlag;
+    return true;
+}
+
+// يُعيد مؤشر التقدّم الحالي على المسار إلى 0 دون تغيير نقاط المسار نفسها
+fun mm_resetPath(mm, name) {
+    if (mm_exists(mm, name) == false) { return false; }
+    mm["items"][name]["pathIndex"] = 0;
+    return true;
+}
+
+// هل انتهى القناع من اتّباع مساره بالكامل؟ (لا معنى لهذا إن كان pathLoop=true، فهو لا ينتهي أبداً)
+fun mm_pathDone(mm, name) {
+    let rec = mm_get(mm, name);
+    if (rec == nil) { return true; }
+    return rec["pathIndex"] >= len(rec["path"]);
+}
+
+// نسبة التقدّم على المسار (0..1) بحسب عدد نقاط الطريق المُجتازة، وليس المسافة الفعلية —
+// مقياس مبسّط وسريع؛ استخدم mm_distanceTraveled (قسم 10) للمسافة الحقيقية المقطوعة
+fun mm_pathProgress(mm, name) {
+    let rec = mm_get(mm, name);
+    if (rec == nil) { return 0; }
+    let total = len(rec["path"]);
+    if (total == 0) { return 1; }
+    let progress = rec["pathIndex"] / total;
+    return mm_clampNum(progress, 0, 1);
+}
+
+// يُحرِّك القناع خطوة واحدة نحو نقطة طريقه الحالية بمسافة أقصاها speed وحدة:
+//   - إن كانت المسافة المتبقية <= speed: يصل تماماً إلى نقطة الطريق، ويتقدّم المؤشر للتالية
+//     (أو يعود للبداية إن كان pathLoop=true وبلغ آخر نقطة، وإلا يتوقف هناك).
+//   - وإلا: يتحرّك بمقدار speed باتجاه نقطة الطريق فقط (بلا تجاوزها).
+// لا يفعل شيئاً (ويُعيد false) إن لم يكن للقناع مسار متبقٍّ.
+fun mm_followPath(mm, name, speed) {
+    let rec = mm_get(mm, name);
+    if (rec == nil) { return false; }
+    if (mm_pathDone(mm, name)) { return false; }
+    let target = rec["path"][rec["pathIndex"]];
+    let here = mm_point(rec["x"], rec["y"]);
+    let remaining = mm_distance(here, target);
+    if (remaining <= speed or mm_nearlyEqual(remaining, speed)) {
+        rec["x"] = target["x"];
+        rec["y"] = target["y"];
+        rec["pathIndex"] = rec["pathIndex"] + 1;
+        if (rec["pathIndex"] >= len(rec["path"]) and rec["pathLoop"]) {
+            rec["pathIndex"] = 0;
+        }
+    } else {
+        let dx = target["x"] - here["x"];
+        let dy = target["y"] - here["y"];
+        let mag = sqrt(dx * dx + dy * dy);
+        rec["x"] = here["x"] + (dx / mag) * speed;
+        rec["y"] = here["y"] + (dy / mag) * speed;
+    }
+    mm_recordHistory(mm, name);
+    return true;
+}
+
+
+// ============================================================================
+// 5) أنماط حركة جاهزة (motion patterns)
+// ============================================================================
+
+// يُحرِّك القناع مباشرة نحو (targetX, targetY) بمسافة أقصاها speed لهذه الخطوة فقط —
+// نمط "seek" الكلاسيكي في التوجيه الذاتي (steering behaviors)
+fun mm_seek(mm, name, targetX, targetY, speed) {
+    if (mm_exists(mm, name) == false) { return false; }
+    let rec = mm["items"][name];
+    let here = mm_point(rec["x"], rec["y"]);
+    let target = mm_point(targetX, targetY);
+    let remaining = mm_distance(here, target);
+    if (remaining < MM_EPSILON) { return true; }
+    let step = speed;
+    if (step > remaining) { step = remaining; }
+    let dx = target["x"] - here["x"];
+    let dy = target["y"] - here["y"];
+    rec["x"] = here["x"] + (dx / remaining) * step;
+    rec["y"] = here["y"] + (dy / remaining) * step;
+    mm_recordHistory(mm, name);
+    return true;
+}
+
+// عكس mm_seek: يُبعِد القناع عن (dangerX, dangerY) بمسافة speed لهذه الخطوة —
+// نمط "flee" الكلاسيكي؛ إن كان القناع بالضبط عند نقطة الخطر، يبتعد افتراضياً على محور x
+fun mm_flee(mm, name, dangerX, dangerY, speed) {
+    if (mm_exists(mm, name) == false) { return false; }
+    let rec = mm["items"][name];
+    let here = mm_point(rec["x"], rec["y"]);
+    let danger = mm_point(dangerX, dangerY);
+    let dx = here["x"] - danger["x"];
+    let dy = here["y"] - danger["y"];
+    let mag = sqrt(dx * dx + dy * dy);
+    if (mag < MM_EPSILON) {
+        rec["x"] = rec["x"] + speed;
+        mm_recordHistory(mm, name);
+        return true;
+    }
+    rec["x"] = here["x"] + (dx / mag) * speed;
+    rec["y"] = here["y"] + (dy / mag) * speed;
+    mm_recordHistory(mm, name);
+    return true;
+}
+
+// حركة "دورية" بين نقطتين A و B: يتحرّك القناع نحو الطرف الحالي بمقدار speed، وعند بلوغه
+// يعكس اتجاهه (patrolDir) ليعود نحو الطرف الآخر — نمط حراسة/دوريات كلاسيكي في الألعاب
+fun mm_patrol(mm, name, ax, ay, bx, by, speed) {
+    if (mm_exists(mm, name) == false) { return false; }
+    let rec = mm["items"][name];
+    let target = mm_point(bx, by);
+    if (rec["patrolDir"] < 0) { target = mm_point(ax, ay); }
+    let here = mm_point(rec["x"], rec["y"]);
+    let remaining = mm_distance(here, target);
+    if (remaining <= speed or mm_nearlyEqual(remaining, speed)) {
+        rec["x"] = target["x"];
+        rec["y"] = target["y"];
+        rec["patrolDir"] = 0 - rec["patrolDir"];
+    } else {
+        let dx = target["x"] - here["x"];
+        let dy = target["y"] - here["y"];
+        rec["x"] = here["x"] + (dx / remaining) * speed;
+        rec["y"] = here["y"] + (dy / remaining) * speed;
+    }
+    mm_recordHistory(mm, name);
+    return true;
+}
+
+// يُهيّئ حركة مدارية (orbit) حول مركز (cx, cy) بنصف قطر radius، بدءاً من الزاوية startAngle
+// (بالراديان). استدعِها مرة واحدة قبل mm_orbitStep لأول مرة على قناع معيّن.
+fun mm_setOrbit(mm, name, cx, cy, radius, startAngle) {
+    if (mm_exists(mm, name) == false) { return false; }
+    let rec = mm["items"][name];
+    rec["orbitCenterX"] = cx;
+    rec["orbitCenterY"] = cy;
+    rec["orbitRadius"] = radius;
+    rec["orbitAngle"] = startAngle;
+    rec["x"] = cx + radius * mm__cos(startAngle);
+    rec["y"] = cy + radius * mm__sin(startAngle);
+    return true;
+}
+
+// يُقدِّم القناع خطوة واحدة على مداره الحالي بزيادة زاوية angularStep (بالراديان؛ موجبة
+// = عكس اتجاه عقارب الساعة، سالبة = معه) — يتطلّب استدعاء mm_setOrbit أولاً على هذا القناع
+fun mm_orbitStep(mm, name, angularStep) {
+    if (mm_exists(mm, name) == false) { return false; }
+    let rec = mm["items"][name];
+    rec["orbitAngle"] = rec["orbitAngle"] + angularStep;
+    rec["x"] = rec["orbitCenterX"] + rec["orbitRadius"] * mm__cos(rec["orbitAngle"]);
+    rec["y"] = rec["orbitCenterY"] + rec["orbitRadius"] * mm__sin(rec["orbitAngle"]);
+    mm_recordHistory(mm, name);
+    return true;
+}
+
+// خطوة "تجوال" عشوائي (wander): تُزيح القناع بمقدار عشوائي بين -jitter و +jitter على كل
+// من x وy — بسيط وسريع، مناسب لحركة خلفية غير موجَّهة (جسيمات، كائنات ثانوية...)
+fun mm_wander(mm, name, jitter) {
+    if (mm_exists(mm, name) == false) { return false; }
+    let dx = (random() * 2 - 1) * jitter;
+    let dy = (random() * 2 - 1) * jitter;
+    mm_translate(mm, name, dx, dy);
+    mm_recordHistory(mm, name);
+    return true;
+}
+
+
+// ============================================================================
+// 6) الحدود والمناطق (bounds / regions)
+// ============================================================================
+//  bounds: حدود "عالم" واحدة عامة للمحرّك كله (مثلاً أبعاد @loop=canvas: width/height).
+//  regions: عدد حرّ من المناطق المُسمّاة الإضافية (منطقة هدف، منطقة خطر...)، كل واحدة
+//  بحدودها الخاصة، للاستعلام عبر mm_inRegion/mm_regionsContaining.
+
+// يضبط حدود عالم المحرّك بالكامل (مستطيل [minX..maxX] × [minY..maxY])
+fun mm_setBounds(mm, minX, minY, maxX, maxY) {
+    mm["bounds"] = { minX: minX, minY: minY, maxX: maxX, maxY: maxY };
+    return true;
+}
+
+// يُزيل حدود العالم (mm_clampToBounds/mm_bounceAtBounds/mm_inBounds لن تفعل شيئاً بعدها)
+fun mm_clearBounds(mm) {
+    mm["bounds"] = nil;
+    return true;
+}
+
+// هل موضع القناع داخل حدود العالم؟ true دائماً إن لم تُضبط حدود أصلاً
+fun mm_inBounds(mm, name) {
+    if (mm["bounds"] == nil) { return true; }
+    let rec = mm_get(mm, name);
+    if (rec == nil) { return false; }
+    let b = mm["bounds"];
+    if (rec["x"] < b["minX"] or rec["x"] > b["maxX"]) { return false; }
+    if (rec["y"] < b["minY"] or rec["y"] > b["maxY"]) { return false; }
+    return true;
+}
+
+// يحصر موضع القناع داخل حدود العالم (بلا تغيير سرعته) — لا يفعل شيئاً إن لم تُضبط حدود
+fun mm_clampToBounds(mm, name) {
+    if (mm["bounds"] == nil) { return false; }
+    if (mm_exists(mm, name) == false) { return false; }
+    let rec = mm["items"][name];
+    let b = mm["bounds"];
+    rec["x"] = mm_clampNum(rec["x"], b["minX"], b["maxX"]);
+    rec["y"] = mm_clampNum(rec["y"], b["minY"], b["maxY"]);
+    return true;
+}
+
+// يحصر موضع القناع داخل الحدود، ويعكس مكوّن السرعة (vx أو vy) المسؤول عن الخروج عند
+// الاصطدام بحافة — سلوك "ارتداد" (bounce) كلاسيكي (كرة تصطدم بجدران الشاشة مثلاً).
+// يُطلق حدث "bounce" (انظر قسم 13) عند حدوث أي ارتداد فعلي.
+fun mm_bounceAtBounds(mm, name) {
+    if (mm["bounds"] == nil) { return false; }
+    if (mm_exists(mm, name) == false) { return false; }
+    let rec = mm["items"][name];
+    let b = mm["bounds"];
+    let bounced = false;
+    if (rec["x"] < b["minX"]) { rec["x"] = b["minX"]; rec["vx"] = 0 - rec["vx"]; bounced = true; }
+    if (rec["x"] > b["maxX"]) { rec["x"] = b["maxX"]; rec["vx"] = 0 - rec["vx"]; bounced = true; }
+    if (rec["y"] < b["minY"]) { rec["y"] = b["minY"]; rec["vy"] = 0 - rec["vy"]; bounced = true; }
+    if (rec["y"] > b["maxY"]) { rec["y"] = b["maxY"]; rec["vy"] = 0 - rec["vy"]; bounced = true; }
+    if (bounced) { mm__fire(mm, "bounce", { name: name, x: rec["x"], y: rec["y"] }); }
+    return bounced;
+}
+
+// يُسجِّل/يُحدِّث منطقة مُسمّاة بحدودها الخاصة (مستقلة عن bounds العالم العام)
+fun mm_setRegion(mm, regionName, minX, minY, maxX, maxY) {
+    mm["regions"][regionName] = { minX: minX, minY: minY, maxX: maxX, maxY: maxY };
+    return true;
+}
+
+// يحذف منطقة مُسمّاة
+fun mm_removeRegion(mm, regionName) {
+    if (has(mm["regions"], regionName) == false) { return false; }
+    remove(mm["regions"], regionName);
+    return true;
+}
+
+// هل موضع القناع داخل منطقة مُسمّاة معيّنة؟ false إن لم توجد منطقة بهذا الاسم أصلاً
+fun mm_inRegion(mm, name, regionName) {
+    if (has(mm["regions"], regionName) == false) { return false; }
+    let rec = mm_get(mm, name);
+    if (rec == nil) { return false; }
+    let r = mm["regions"][regionName];
+    if (rec["x"] < r["minX"] or rec["x"] > r["maxX"]) { return false; }
+    if (rec["y"] < r["minY"] or rec["y"] > r["maxY"]) { return false; }
+    return true;
+}
+
+// مصفوفة بأسماء كل المناطق المُسمّاة التي يقع موضع القناع داخلها حالياً (قد تكون أكثر من
+// واحدة إن تداخلت المناطق)
+fun mm_regionsContaining(mm, name) {
+    let out = [];
+    let names = keys(mm["regions"]);
+    let i = 0;
+    while (i < len(names)) {
+        if (mm_inRegion(mm, name, names[i])) { push(out, names[i]); }
+        i = i + 1;
+    }
+    return out;
+}
+
+
+// ============================================================================
+// 7) التكامل مع الحاويات (containers) — منطقي وفعلي (native bridge)
+// ============================================================================
+//  طبقتان هنا:
+//
+//  أ) عضوية منطقية (logical membership) — تُدار بالكامل داخل mm["containers"]، تعمل دوماً
+//     بلا أي شرط، ولا تحتاج وجود @container حقيقية في المصدر. مفيدة لتجميع أقنعة متحركة
+//     في "دِلاء" منطقية عشوائية (فريق أ/فريق ب، شاشة1/شاشة2...).
+//
+//  ب) جسر مع الحاويات الفعلية في Rin (native bridge) — تستخدم الدوال الأصلية
+//     hasContainer/containerNames/setField/getField/childrenOf/parentOf/siblingsOf/spawn
+//     لمزامنة موضع القناع المتحرك كحقل فعلي (field) على حاوية @container حقيقية بنفس
+//     الاسم، حين تكون هذه الحاوية موجودة فعلاً في البرنامج. هذا يسمح لبقية كودك (الذي لا
+//     يعرف شيئاً عن movingmask) بقراءة موضع/سرعة القناع عبر getField(name, "mm_x") العادية.
+
+// يُلحق قناعاً منطقياً بحاوية منطقية containerName (ينشئ الدلو إن لم يكن موجوداً). يُزيله
+// أولاً من أي حاوية منطقية سابقة كان بها (عضوية واحدة فقط في كل مرة). يُطلق حدث
+// "enterContainer" بعد الإلحاق (وحدث "leaveContainer" عن الحاوية القديمة إن وُجدت).
+fun mm_attach(mm, name, containerName) {
+    if (mm_exists(mm, name) == false) { return false; }
+    let rec = mm["items"][name];
+    let previous = rec["container"];
+    if (previous != nil) { mm_detach(mm, name); }
+    if (has(mm["containers"], containerName) == false) {
+        mm["containers"][containerName] = [];
+    }
+    push(mm["containers"][containerName], name);
+    rec["container"] = containerName;
+    mm__fire(mm, "enterContainer", { name: name, "container": containerName });
+    return true;
+}
+
+// يُخرج قناعاً من حاويته المنطقية الحالية (إن كان منضمّاً لأي واحدة). يُطلق حدث "leaveContainer"
+fun mm_detach(mm, name) {
+    if (mm_exists(mm, name) == false) { return false; }
+    let rec = mm["items"][name];
+    let containerName = rec["container"];
+    if (containerName == nil) { return false; }
+    if (has(mm["containers"], containerName)) {
+        mm["containers"][containerName] = mm__arrayWithout(mm["containers"][containerName], name);
+    }
+    rec["container"] = nil;
+    mm__fire(mm, "leaveContainer", { name: name, "container": containerName });
+    return true;
+}
+
+// اسم الحاوية المنطقية الحالية للقناع، أو nil إن لم يكن منضمّاً لأي واحدة
+fun mm_containerOf(mm, name) {
+    let rec = mm_get(mm, name);
+    if (rec == nil) { return nil; }
+    return rec["container"];
+}
+
+// مصفوفة بأسماء كل الأقنعة المنضمّة حالياً لحاوية منطقية معيّنة (مصفوفة فارغة إن لم توجد)
+fun mm_membersOf(mm, containerName) {
+    if (has(mm["containers"], containerName) == false) { return []; }
+    let out = [];
+    let src = mm["containers"][containerName];
+    let i = 0;
+    while (i < len(src)) { push(out, src[i]); i = i + 1; }
+    return out;
+}
+
+// عدد الأقنعة داخل حاوية منطقية معيّنة
+fun mm_containerSize(mm, containerName) {
+    return len(mm_membersOf(mm, containerName));
+}
+
+// ينقل قناعاً من حاويته المنطقية الحالية إلى toContainer مباشرة (اختصار لِـ
+// mm_detach ثم mm_attach معاً في استدعاء واحد؛ يعمل حتى لو لم يكن منضمّاً لأي حاوية أصلاً)
+fun mm_transfer(mm, name, toContainer) {
+    if (mm_exists(mm, name) == false) { return false; }
+    return mm_attach(mm, name, toContainer);
+}
+
+// مصفوفة بأسماء كل الحاويات المنطقية المُنشأة حتى الآن في mm (بها أقنعة أو كانت بها سابقاً)
+fun mm_containerNames(mm) {
+    return keys(mm["containers"]);
+}
+
+// ---- جسر الحاويات الفعلية (native bridge) ---------------------------------------------
+
+// هل توجد حاوية Rin فعلية (@container أو spawn) بهذا الاسم في البرنامج الحالي؟
+// غلاف رقيق فوق hasContainer() الأصلية، بالاسم موحَّد مع بقية هذه المكتبة
+fun mm_nativeContainerExists(containerName) {
+    return hasContainer(containerName);
+}
+
+// يكتب موضع/سرعة القناع المتحرك كحقول فعلية (mm_x, mm_y, mm_vx, mm_vy) على حاوية Rin
+// فعلية بنفس الاسم containerName (عبر setField الأصلية) — فقط إن كانت هذه الحاوية موجودة
+// فعلاً (وإلا تُعاد false بلا أي تأثير). هذا يجعل موضع القناع المتحرك قابلاً للقراءة من
+// أي كود Rin آخر لا يستورد movingmask إطلاقاً، طالما يستخدم getField(containerName, "mm_x").
+fun mm_syncToNativeContainer(mm, name, containerName) {
+    if (mm_exists(mm, name) == false) { return false; }
+    if (hasContainer(containerName) == false) { return false; }
+    let rec = mm["items"][name];
+    setField(containerName, "mm_x", rec["x"]);
+    setField(containerName, "mm_y", rec["y"]);
+    setField(containerName, "mm_vx", rec["vx"]);
+    setField(containerName, "mm_vy", rec["vy"]);
+    setField(containerName, "mm_mask", name);
+    return true;
+}
+
+// عكس مزامنة mm_syncToNativeContainer: يقرأ mm_x/mm_y (إن وُجدا كحقلين على الحاوية
+// الفعلية) ويضبط بهما موضع القناع المتحرك — مفيد حين تُعدِّل موضع الحاوية من مكان آخر
+// (مثلاً حدث UI) وتريد أن يلحق movingmask بهذا التعديل عند الدورة التالية
+fun mm_syncFromNativeContainer(mm, name, containerName) {
+    if (mm_exists(mm, name) == false) { return false; }
+    if (hasContainer(containerName) == false) { return false; }
+    if (hasField(containerName, "mm_x") == false) { return false; }
+    if (hasField(containerName, "mm_y") == false) { return false; }
+    let x = getField(containerName, "mm_x");
+    let y = getField(containerName, "mm_y");
+    mm_setPosition(mm, name, x, y);
+    return true;
+}
+
+// ينقل قناعاً "فعلياً" بين حاويتين حقيقيتين في نفس الاستدعاء: يزيل حقول mm_* عن
+// fromContainer (إن كانت موجودة) ويكتبها على toContainer، بالإضافة لتحديث العضوية
+// المنطقية عبر mm_transfer — بهذا يبقى المصدران (المنطقي والفعلي) متوافقين معاً دوماً.
+// يُعيد false إن لم تكن toContainer موجودة فعلياً (fromContainer اختيارية: مرّر nil لتجاهلها)
+fun mm_transferNativeContainer(mm, name, fromContainer, toContainer) {
+    if (mm_exists(mm, name) == false) { return false; }
+    if (hasContainer(toContainer) == false) { return false; }
+    if (fromContainer != nil and hasContainer(fromContainer)) {
+        if (hasField(fromContainer, "mm_mask")) {
+            setField(fromContainer, "mm_mask", nil);
+        }
+    }
+    mm_syncToNativeContainer(mm, name, toContainer);
+    mm_transfer(mm, name, toContainer);
+    return true;
+}
+
+// يبني مصفوفة بأسماء أبناء حاوية فعلية containerName (عبر childrenOf الأصلية) الذين لهم
+// أيضاً قناع متحرك مسجَّل بنفس الاسم في mm — تقاطع مباشر بين شجرة الحاويات الفعلية وعالم
+// movingmask، مفيد لمعرفة "أيّ أبناء هذه الحاوية يتحرّكون فعلياً؟"
+fun mm_movingChildrenOf(mm, containerName) {
+    let out = [];
+    let kids = childrenOf(containerName);
+    let i = 0;
+    while (i < len(kids)) {
+        if (mm_exists(mm, kids[i])) { push(out, kids[i]); }
+        i = i + 1;
+    }
+    return out;
+}
+
+// ---- جسر هوية القناع الأصلي (mask registry bridge) -------------------------------------
+// (انظر lib/maskkit.og.rin و docs/mask.md — نظام mask الأصلي هوية منطقية ساكنة منفصلة تماماً
+// عن هذه المكتبة. الدوال التالية تربط الاثنين معاً اختيارياً، دون أن يفرض أحدهما الآخر)
+
+// يربط قناعاً متحركاً باسمه name بهوية قناع Rin أصلية موجودة مسبقاً (عبر findMask/maskExists)،
+// ويُعيد معلومات تلك الهوية (kind/target) إن وُجدت، أو nil إن لم يكن القناع الأصلي مسجَّلاً
+fun mm_identityOf(name) {
+    if (maskExists(name) == false) { return nil; }
+    return { mask: name, kind: maskKind(name), target: maskTarget(name) };
+}
+
+// يُلحق قناعاً متحركاً بالحاوية المنطقية نفسها التي يستهدفها قناع Rin الأصلي identityMask
+// (عبر maskTarget) — أي: "انضم منطقياً إلى نفس الحاوية التي يشير إليها هذا القناع الأصلي"
+fun mm_attachByIdentity(mm, name, identityMask) {
+    if (mm_exists(mm, name) == false) { return false; }
+    if (maskExists(identityMask) == false) { return false; }
+    let target = maskTarget(identityMask);
+    if (target == nil) { return false; }
+    return mm_attach(mm, name, target);
+}
+
+
+// ============================================================================
+// 8) القناع المنزلق فوق المصفوفات (sliding window / 1D convolution)
+// ============================================================================
+//  هذا هو المعنى الكلاسيكي الآخر لِـ"moving mask": نافذة صغيرة الحجم تنزلق خانة خانة
+//  فوق مصفوفة أكبر، وتُطبَّق عملية عندها في كل موضع (مجموع، متوسط، أقصى/أدنى، أو حاصل
+//  ضرب مرجَّح مع "قناع/نواة" kernel — أي convolution أحادية البُعد).
+//
+//  ملاحظة: المفسّر يوفّر movingAverage(arr, window) أصلياً (متوسط منزلق فقط)؛ الدوال هنا
+//  تُكمِّلها بعمليات أخرى (مجموع/أقصى/أدنى/عام/التفاف) لا توفّرها stdlib.
+
+// يُعيد نافذة القناع الآمنة حول centerIndex بنصف قطر radius من مصفوفة arr، أي العناصر
+// من (centerIndex-radius) إلى (centerIndex+radius) شاملة — مع قص الطرفين الخارجين عن
+// حدود arr تلقائياً بدل توقّف بخطأ (نافذة أصغر قرب الأطراف بدل fillValue وهمية)
+fun mm_windowAt(arr, centerIndex, radius) {
+    let lo = centerIndex - radius;
+    if (lo < 0) { lo = 0; }
+    let hi = centerIndex + radius;
+    if (hi > len(arr) - 1) { hi = len(arr) - 1; }
+    let out = [];
+    let i = lo;
+    while (i <= hi) {
+        push(out, arr[i]);
+        i = i + 1;
+    }
+    return out;
+}
+
+// يُنزلق بنافذة ثابتة الحجم windowSize فوق كامل arr من اليسار لليمين، خطوة واحدة كل مرة،
+// مستدعياً fn(windowSlice, startIndex) عند كل موضع، ويجمع نواتج fn في مصفوفة يُعيدها —
+// هذا هو "محرّك" القناع المنزلق العام: أي عملية نافذة (مجموع/أقصى/بحث نمط...) تُبنى فوقه
+fun mm_slideOverArray(arr, windowSize, fn) {
+    let result = [];
+    if (windowSize < 1 or windowSize > len(arr)) { return result; }
+    let start = 0;
+    while (start + windowSize <= len(arr)) {
+        let slice = [];
+        let i = start;
+        while (i < start + windowSize) {
+            push(slice, arr[i]);
+            i = i + 1;
+        }
+        push(result, fn(slice, start));
+        start = start + 1;
+    }
+    return result;
+}
+
+fun mm__sumArray(arr) {
+    let total = 0;
+    let i = 0;
+    while (i < len(arr)) { total = total + arr[i]; i = i + 1; }
+    return total;
+}
+
+fun mm__maxArray(arr) {
+    let best = arr[0];
+    let i = 1;
+    while (i < len(arr)) { if (arr[i] > best) { best = arr[i]; } i = i + 1; }
+    return best;
+}
+
+fun mm__minArray(arr) {
+    let best = arr[0];
+    let i = 1;
+    while (i < len(arr)) { if (arr[i] < best) { best = arr[i]; } i = i + 1; }
+    return best;
+}
+
+// مجموع كل نافذة بحجم windowSize منزلقة فوق arr (تكميلي لِـ movingAverage الأصلية)
+fun mm_movingSum(arr, windowSize) {
+    fun sumOnly(slice, startIndex) { return mm__sumArray(slice); }
+    return mm_slideOverArray(arr, windowSize, sumOnly);
+}
+
+// أقصى قيمة في كل نافذة منزلقة (مفيد لكشف قمم محلية أو "أسوأ حالة" على مدى نافذة زمنية)
+fun mm_movingMax(arr, windowSize) {
+    fun maxOnly(slice, startIndex) { return mm__maxArray(slice); }
+    return mm_slideOverArray(arr, windowSize, maxOnly);
+}
+
+// أدنى قيمة في كل نافذة منزلقة
+fun mm_movingMin(arr, windowSize) {
+    fun minOnly(slice, startIndex) { return mm__minArray(slice); }
+    return mm_slideOverArray(arr, windowSize, minOnly);
+}
+
+// التفاف أحادي البُعد (1D convolution): يُنزلق "قناع/نواة" kernel (مصفوفة أوزان صغيرة)
+// فوق arr، وعند كل موضع يحسب مجموع حاصل ضرب النافذة المطابقة في أوزان kernel عنصراً
+// بعنصر. طول kernel يجب أن يقسم يساوي حجم النافذة المستخدمة. هذا التعميم الرياضي الدقيق
+// لعبارة "قناع متحرك": نفس kernel يمرّ فوق كل موضع من الحاوية، بوزن ثابت لكل خانة نسبية.
+fun mm_convolve1D(arr, kernel) {
+    let k = len(kernel);
+    fun applyKernel(slice, startIndex) {
+        let total = 0;
+        let i = 0;
+        while (i < k) {
+            total = total + slice[i] * kernel[i];
+            i = i + 1;
+        }
+        return total;
+    }
+    return mm_slideOverArray(arr, k, applyKernel);
+}
+
+
+// ============================================================================
+// 9) القناع المنزلق فوق الشبكات (2D grid stencil / convolution / نقل القناع بصرياً)
+// ============================================================================
+//  الشبكة هنا بنفس اتفاقية lib/gridkit.og.rin: مصفوفة صفوف grid[row][col]. القسم السابق
+//  عمّم بُعداً واحداً؛ هذا القسم يعمّمه إلى بُعدين — الاستخدام الأكلاسيكي لِـ"moving mask"
+//  في معالجة الصور (بلور/كشف حواف)، الأتمتة الخلوية (game of life ونحوه)، ولوحات الألعاب
+//  (تحريك شكل/قطعة كاملة الشكل across the board، مثل قطعة Tetris أو منطقة تأثير سحر).
+
+// أبعاد شبكة مساعِدة (بنفس منطق gridRows/gridCols من gridkit، مُعادة هنا كي يبقى هذا
+// الملف مستقلاً بذاته)
+fun mm_gridRows(g) { return len(g); }
+fun mm_gridCols(g) {
+    if (len(g) == 0) { return 0; }
+    return len(g[0]);
+}
+fun mm_gridInBounds(g, row, col) {
+    if (row < 0 or row >= mm_gridRows(g)) { return false; }
+    if (col < 0 or col >= mm_gridCols(g)) { return false; }
+    return true;
+}
+
+// يُعيد نافذة القناع المستطيلة حول (row, col) بنصف قطر radius (أي مربّع طوله
+// (2*radius+1) تقريباً)، مع استبدال الخانات الواقعة خارج حدود الشبكة بـ fillValue بدل
+// حذفها — على عكس mm_windowAt الأحادية البُعد، النافذة هنا دائماً بنفس الحجم الثابت
+// (2*radius+1)×(2*radius+1) مهما كانت (row, col) قريبة من حافة الشبكة، وهذا مهم لأي
+// عملية تعتمد على حجم نافذة موحّد (مثل mm_convolve2D).
+fun mm_gridWindowAt(g, row, col, radius, fillValue) {
+    let out = [];
+    let r = row - radius;
+    while (r <= row + radius) {
+        let rowOut = [];
+        let c = col - radius;
+        while (c <= col + radius) {
+            if (mm_gridInBounds(g, r, c)) {
+                push(rowOut, g[r][c]);
+            } else {
+                push(rowOut, fillValue);
+            }
+            c = c + 1;
+        }
+        push(out, rowOut);
+        r = r + 1;
+    }
+    return out;
+}
+
+// يُنزلق بنافذة ثابتة الحجم windowRows×windowCols فوق كامل الشبكة g (صفاً فصفاً، عموداً
+// فعموداً من اليسار لليمين داخل كل صف)، مستدعياً fn(windowGrid, row, col) عند كل موضع
+// يُشكِّل فيه أعلى-يسار النافذة الخانة (row, col) — بلا توسيع افتراضي؛ فقط المواضع التي
+// تسع فيها النافذة كاملة داخل الشبكة (استخدم mm_gridWindowAt يدوياً إن أردت حشو الأطراف)
+fun mm_forEachGridWindow(g, windowRows, windowCols, fn) {
+    let rows = mm_gridRows(g);
+    let cols = mm_gridCols(g);
+    let r = 0;
+    while (r + windowRows <= rows) {
+        let c = 0;
+        while (c + windowCols <= cols) {
+            let win = [];
+            let wr = 0;
+            while (wr < windowRows) {
+                let winRow = [];
+                let wc = 0;
+                while (wc < windowCols) {
+                    push(winRow, g[r + wr][c + wc]);
+                    wc = wc + 1;
+                }
+                push(win, winRow);
+                wr = wr + 1;
+            }
+            fn(win, r, c);
+            c = c + 1;
+        }
+        r = r + 1;
+    }
+    return nil;
+}
+
+// التفاف ثنائي البُعد (2D convolution / stencil): يُنزلق "قناع/نواة" kernel (شبكة أوزان
+// صغيرة مربّعة) فوق كامل الشبكة g، وعند كل موضع (خارج الحافة بمقدار نصف حجم kernel) يحسب
+// مجموع حاصل ضرب النافذة المطابقة في أوزان kernel خانة بخانة. يُعيد شبكة نتائج جديدة
+// بنفس أبعاد g (الخانات القريبة جداً من الحافة التي لا تسع النواة كاملة تُملأ بـ edgeValue).
+// هذا هو التطبيق الأدق لِمصطلح "moving mask" في معالجة الصور: مثال جاهز لبلور بسيط عبر
+// kernel = [[1/9,1/9,1/9],[1/9,1/9,1/9],[1/9,1/9,1/9]].
+fun mm_convolve2D(g, kernel, edgeValue) {
+    let kRows = len(kernel);
+    let kCols = len(kernel[0]);
+    let radius = floor(kRows / 2);
+    let rows = mm_gridRows(g);
+    let cols = mm_gridCols(g);
+    let out = [];
+    let r = 0;
+    while (r < rows) {
+        let outRow = [];
+        let c = 0;
+        while (c < cols) {
+            if (r - radius < 0 or r + radius > rows - 1 or c - radius < 0 or c + radius > cols - 1) {
+                push(outRow, edgeValue);
+            } else {
+                let total = 0;
+                let kr = 0;
+                while (kr < kRows) {
+                    let kc = 0;
+                    while (kc < kCols) {
+                        total = total + g[r - radius + kr][c - radius + kc] * kernel[kr][kc];
+                        kc = kc + 1;
+                    }
+                    kr = kr + 1;
+                }
+                push(outRow, total);
+            }
+            c = c + 1;
+        }
+        push(out, outRow);
+        r = r + 1;
+    }
+    return out;
+}
+
+// "يختم" (stamps) قناعاً/نموذجاً stencilGrid (شبكة قيم صغيرة، مثل بصمة قطعة أو منطقة
+// تأثير) فوق شبكة g عند الزاوية العلوية اليسرى (row, col): لكل خانة من stencilGrid لا
+// تساوي skipValue، يكتب قيمتها في الخانة المقابلة من g (تجاهل الخانات خارج حدود g بأمان
+// بلا خطأ). يُعدِّل g مباشرة بالمرجع ويُعيده أيضاً لتسلسل الاستدعاءات (chaining).
+fun mm_gridStamp(g, stencilGrid, row, col, skipValue) {
+    let sr = 0;
+    while (sr < len(stencilGrid)) {
+        let sc = 0;
+        while (sc < len(stencilGrid[sr])) {
+            let value = stencilGrid[sr][sc];
+            if (value != skipValue) {
+                let targetRow = row + sr;
+                let targetCol = col + sc;
+                if (mm_gridInBounds(g, targetRow, targetCol)) {
+                    g[targetRow][targetCol] = value;
+                }
+            }
+            sc = sc + 1;
+        }
+        sr = sr + 1;
+    }
+    return g;
+}
+
+// "يمحو" بصمة stencilGrid من شبكة g عند (row, col): يُعيد كل خانة كانت ستُختم بها (أي لا
+// تساوي skipValue) إلى clearValue — يُستخدم عادة قبل mm_gridStamp عند موضع جديد، معاً
+// يُشكِّلان أساس "تحريك قناع على شبكة" الحقيقي (امسح القديم، اختم الجديد)
+fun mm_gridClearStamp(g, stencilGrid, row, col, skipValue, clearValue) {
+    let sr = 0;
+    while (sr < len(stencilGrid)) {
+        let sc = 0;
+        while (sc < len(stencilGrid[sr])) {
+            if (stencilGrid[sr][sc] != skipValue) {
+                let targetRow = row + sr;
+                let targetCol = col + sc;
+                if (mm_gridInBounds(g, targetRow, targetCol)) {
+                    g[targetRow][targetCol] = clearValue;
+                }
+            }
+            sc = sc + 1;
+        }
+        sr = sr + 1;
+    }
+    return g;
+}
+
+// "تحريك القناع" الحرفي فوق حاوية-شبكة: يمحو بصمة stencilGrid من موضعها القديم
+// (fromRow, fromCol) بقيمة clearValue، ثم يختمها في موضعها الجديد (toRow, toCol) — استدعاء
+// واحد يكفي لكل "خطوة" حركة مرئية لقطعة/كائن كامل الشكل فوق لوحة (لعبة، شاشة نصية، أتمتة
+// خلوية بمنطقة تأثير...)، بدل تحريك خانة مفردة كما تفعل setCell التقليدية.
+fun mm_gridMoveStamp(g, stencilGrid, fromRow, fromCol, toRow, toCol, skipValue, clearValue) {
+    mm_gridClearStamp(g, stencilGrid, fromRow, fromCol, skipValue, clearValue);
+    mm_gridStamp(g, stencilGrid, toRow, toCol, skipValue);
+    return g;
+}
+
+
+// ============================================================================
+// 10) الأثر والتاريخ (trail / history)
+// ============================================================================
+//  كل حركة فعلية (mm_integrate, mm_followPath, mm_seek, mm_flee, mm_patrol, mm_orbitStep,
+//  mm_wander) تستدعي mm_recordHistory تلقائياً، فتتراكم نقاط أثر (trail) محدودة الطول
+//  (mm["historyLimit"]) لكل قناع — مفيدة للرسم (خط أثر خلف كائن متحرك)، أو لحساب المسافة
+//  الفعلية المقطوعة، أو للتراجع عن آخر خطوة (undo مبسّط).
+
+// يضبط أقصى عدد نقاط أثر تُحفظ لكل قناع في هذا المحرّك (القيمة الافتراضية
+// MM_DEFAULT_HISTORY_LIMIT). القيم الأقدم من الحد تُحذف تلقائياً عند كل تسجيل جديد.
+fun mm_setHistoryLimit(mm, limit) {
+    mm["historyLimit"] = limit;
+    return true;
+}
+
+// يُسجِّل الموضع الحالي للقناع في أثره — تُستدعى تلقائياً من دوال الحركة أعلاه، لكن يمكن
+// استدعاؤها يدوياً أيضاً بعد أي تعديل موضع مباشر (مثل mm_setPosition) إن أردت تتبّعه
+fun mm_recordHistory(mm, name) {
+    if (mm_exists(mm, name) == false) { return false; }
+    let rec = mm["items"][name];
+    push(rec["history"], mm_point(rec["x"], rec["y"]));
+    while (len(rec["history"]) > mm["historyLimit"]) {
+        shift(rec["history"]);
+    }
+    return true;
+}
+
+// مصفوفة نقاط أثر القناع الكاملة (من الأقدم إلى الأحدث)، أو مصفوفة فارغة إن لم يتحرّك بعد
+fun mm_trail(mm, name) {
+    let rec = mm_get(mm, name);
+    if (rec == nil) { return []; }
+    return rec["history"];
+}
+
+// يمسح أثر القناع بالكامل بلا تغيير موضعه الحالي
+fun mm_clearTrail(mm, name) {
+    if (mm_exists(mm, name) == false) { return false; }
+    mm["items"][name]["history"] = [];
+    return true;
+}
+
+// مجموع المسافات بين كل نقطتين متتاليتين في أثر القناع — تقريب جيد "للمسافة الفعلية
+// المقطوعة" (على عكس mm_pathProgress التي تقيس نسبة نقاط الطريق المُجتازة فقط)
+fun mm_distanceTraveled(mm, name) {
+    let trail = mm_trail(mm, name);
+    if (len(trail) < 2) { return 0; }
+    let total = 0;
+    let i = 1;
+    while (i < len(trail)) {
+        total = total + mm_distance(trail[i - 1], trail[i]);
+        i = i + 1;
+    }
+    return total;
+}
+
+// يُعيد القناع إلى الموضع الذي كان عليه قبل آخر حركة مسجَّلة (يتراجع بخطوة واحدة فقط)،
+// ويحذف من الأثر النقطة المكرِّرة للموضع الحالي بعد ذلك. يتطلّب نقطتي أثر على الأقل
+// (حركتين مسجَّلتين) ليعرف "الموضع السابق"؛ وإلا يُعيد false بلا أي تغيير في الموضع
+// (تراجع واحد لا يكفي معلومات لمعرفة موضع القناع عند الإنشاء، قبل أول حركة له إطلاقاً).
+fun mm_undoLastMove(mm, name) {
+    if (mm_exists(mm, name) == false) { return false; }
+    let rec = mm["items"][name];
+    if (len(rec["history"]) < 2) { return false; }
+    pop(rec["history"]);
+    let previous = rec["history"][len(rec["history"]) - 1];
+    rec["x"] = previous["x"];
+    rec["y"] = previous["y"];
+    return true;
+}
+
+
+// ============================================================================
+// 11) القرب والتصادم (distance / proximity / AABB collision)
+// ============================================================================
+
+// المسافة الإقليدية بين موضعي قناعين متحركين
+fun mm_distanceTo(mm, name1, name2) {
+    let p1 = mm_position(mm, name1);
+    let p2 = mm_position(mm, name2);
+    if (p1 == nil or p2 == nil) { return nil; }
+    return mm_distance(p1, p2);
+}
+
+// هل المسافة بين قناعين أقل من أو تساوي threshold؟
+fun mm_isNear(mm, name1, name2, threshold) {
+    let d = mm_distanceTo(mm, name1, name2);
+    if (d == nil) { return false; }
+    return d <= threshold;
+}
+
+// تصادم صندوقي محاذٍ للمحاور (AABB): يفترض أن موضع كل قناع هو مركز مستطيله، بعرض w
+// وارتفاع h. يُعيد true إن تداخل مستطيلا القناعين (تصادم كلاسيكي وسريع في الألعاب
+// ثنائية الأبعاد، أدق من مجرّد فحص المسافة بين مركزين).
+fun mm_collidesAABB(mm, name1, w1, h1, name2, w2, h2) {
+    let p1 = mm_position(mm, name1);
+    let p2 = mm_position(mm, name2);
+    if (p1 == nil or p2 == nil) { return false; }
+    let dx = p1["x"] - p2["x"];
+    if (dx < 0) { dx = 0 - dx; }
+    let dy = p1["y"] - p2["y"];
+    if (dy < 0) { dy = 0 - dy; }
+    let overlapX = dx < (w1 + w2) / 2;
+    let overlapY = dy < (h1 + h2) / 2;
+    return overlapX and overlapY;
+}
+
+// يبحث عن أقرب قناع آخر (نشط) إلى name ضمن كل الأقنعة المسجَّلة في mm، ويُعيد
+// { name: أقرب اسم أو nil, distance: المسافة أو nil } — nil في الحقلين إن لم يوجد أي قناع
+// آخر على الإطلاق
+fun mm_nearestTo(mm, name) {
+    let here = mm_position(mm, name);
+    if (here == nil) { return { name: nil, distance: nil }; }
+    let bestName = nil;
+    let bestDistance = nil;
+    let i = 0;
+    while (i < len(mm["order"])) {
+        let other = mm["order"][i];
+        if (other != name and mm_isActive(mm, other)) {
+            let d = mm_distance(here, mm_position(mm, other));
+            if (bestDistance == nil or d < bestDistance) {
+                bestDistance = d;
+                bestName = other;
+            }
+        }
+        i = i + 1;
+    }
+    return { name: bestName, distance: bestDistance };
+}
+
+
+// ============================================================================
+// 12) التكامل مع الحلقات (loop integration)
+// ============================================================================
+//  هذا القسم هو نقطة الدمج المباشرة مع أي حلقة while/for في برنامجك، أو مع دوال
+//  lib/loopkit.og.rin (repeatTimes/stepLoop تقبل دالة fn(i) — مرّر لها دالة صغيرة تستدعي
+//  mm_tick(world, 1) بداخلها لتشغيل movingmask من داخل تلك المكتبة مباشرة).
+
+// "دورة" واحدة كاملة لكل شيء في العالم: تُكامل فيزياء كل الأقنعة النشطة بخطوة dt، ثم
+// تُطبِّق الحدود (حصر أو ارتداد بحسب bounceMode)، ثم تزيد عدّاد الدورات، ثم تُطلق حدث
+// "tick". استدعِها مرة واحدة لكل frame/دورة من حلقة تشغيل تطبيقك (game loop).
+// bounceMode: true = ارتداد عند الحدود (mm_bounceAtBounds)، false = حصر فقط (mm_clampToBounds)
+fun mm_tick(mm, dt, bounceMode) {
+    mm_integrateAll(mm, dt);
+    if (mm["bounds"] != nil) {
+        let i = 0;
+        while (i < len(mm["order"])) {
+            let name = mm["order"][i];
+            if (bounceMode) { mm_bounceAtBounds(mm, name); } else { mm_clampToBounds(mm, name); }
+            i = i + 1;
+        }
+    }
+    mm["tick"] = mm["tick"] + 1;
+    mm__fire(mm, "tick", { tick: mm["tick"] });
+    return mm["tick"];
+}
+
+// يُشغِّل steps دورة كاملة عبر mm_tick تباعاً (حلقة while جاهزة، بنفس روح
+// lib/loopkit.og.rin/repeatTimes)، مستدعياً fn(mm, tickIndex) اختيارياً بعد كل دورة (مرّر
+// nil لِـfn لتجاهل ذلك) — الطريقة الأسرع لتشغيل محاكاة/لعبة كاملة الحركة بسطر واحد.
+fun mm_runLoop(mm, steps, dt, bounceMode, fn) {
+    let i = 0;
+    while (i < steps) {
+        mm_tick(mm, dt, bounceMode);
+        if (fn != nil) { fn(mm, i); }
+        i = i + 1;
+    }
+    return mm["tick"];
+}
+
+// يُحرِّك قناعاً من موضعه الحالي إلى (targetX, targetY) عبر steps دورة متتالية، باستخدام
+// دالة تسهيل (easing) easingFn تأخذ t بين 0 و1 وتُعيد t "مُنعَّماً" بين 0 و1 (مرّر nil
+// لحركة خطية بلا تنعيم — mm_lerp مباشرة). يُعيد مصفوفة كل المواضع الوسيطة التي مرّ بها
+// (بنفس فكرة stepLoopCollect من lib/loopkit.og.rin)، ويترك القناع عند targetX/targetY تماماً
+// في النهاية بلا انجراف عددي (floating point drift).
+fun mm_animateTo(mm, name, targetX, targetY, steps, easingFn) {
+    let result = [];
+    if (mm_exists(mm, name) == false) { return result; }
+    let start = mm_position(mm, name);
+    if (steps < 1) { steps = 1; }
+    let i = 1;
+    while (i <= steps) {
+        let t = i / steps;
+        if (easingFn != nil) { t = easingFn(t); }
+        let x = mm_lerp(start["x"], targetX, t);
+        let y = mm_lerp(start["y"], targetY, t);
+        mm_setPosition(mm, name, x, y);
+        mm_recordHistory(mm, name);
+        push(result, mm_point(x, y));
+        i = i + 1;
+    }
+    mm_setPosition(mm, name, targetX, targetY);
+    return result;
+}
+
+// يستدعي fn(mm, name, record, index) على كل قناع مسجَّل في mm بترتيب الإنشاء — حلقة
+// عامة موحّدة، بنفس روح iterForEach من lib/iterkit.og.rin لكن فوق سجلّات movingmask
+fun mm_forEach(mm, fn) {
+    let i = 0;
+    while (i < len(mm["order"])) {
+        let name = mm["order"][i];
+        fn(mm, name, mm["items"][name], i);
+        i = i + 1;
+    }
+    return nil;
+}
+
+// نفس mm_forEach لكن مقصورة على أعضاء حاوية منطقية واحدة فقط (mm_membersOf)
+fun mm_forEachInContainer(mm, containerName, fn) {
+    let members = mm_membersOf(mm, containerName);
+    let i = 0;
+    while (i < len(members)) {
+        let name = members[i];
+        fn(mm, name, mm["items"][name], i);
+        i = i + 1;
+    }
+    return nil;
+}
+
+
+// ============================================================================
+// 13) الأحداث (lightweight event hooks)
+// ============================================================================
+//  أحداث جاهزة تُطلقها هذه المكتبة تلقائياً: "enterContainer", "leaveContainer", "bounce",
+//  "tick" (انظر الأقسام 6، 7، 12 أعلاه لمكان إطلاق كل واحد بالضبط). يمكنك أيضاً إطلاق
+//  أحداثك الخاصة عبر mm__fire من كود تطبيقك مباشرة لأي اسم حدث تختاره.
+
+// يُسجِّل دالة استماع fn(payload) تُستدعى في كل مرة يُطلَق فيها الحدث eventName —
+// يمكن تسجيل أكثر من دالة على نفس الحدث؛ تُستدعى كلها بترتيب التسجيل
+fun mm_on(mm, eventName, fn) {
+    if (has(mm["handlers"], eventName) == false) {
+        mm["handlers"][eventName] = [];
+    }
+    push(mm["handlers"][eventName], fn);
+    return true;
+}
+
+// يحذف كل الدوال المسجَّلة على حدث eventName معيّن (بلا التأثير على أحداث أخرى)
+fun mm_off(mm, eventName) {
+    if (has(mm["handlers"], eventName) == false) { return false; }
+    remove(mm["handlers"], eventName);
+    return true;
+}
+
+// (داخلية) يُطلق الحدث eventName فعلياً: يستدعي كل الدوال المسجَّلة عليه بالترتيب،
+// مُمرِّراً لها payload كوسيط وحيد — لا تفعل شيئاً إن لم تُسجَّل أي دالة على هذا الحدث
+fun mm__fire(mm, eventName, payload) {
+    if (has(mm["handlers"], eventName) == false) { return nil; }
+    let list = mm["handlers"][eventName];
+    let i = 0;
+    while (i < len(list)) {
+        let handler = list[i];
+        handler(payload);
+        i = i + 1;
+    }
+    return nil;
+}
+
+
+// ============================================================================
+// 14) الفحص والتلخيص (inspection / debug)
+// ============================================================================
+
+// نص وصفي مختصر لقناع متحرك واحد (موضع، سرعة، حاوية، حالة نشاط) — مناسب لِـ print مباشرة
+fun mm_describe(mm, name) {
+    let rec = mm_get(mm, name);
+    if (rec == nil) { return "mm: لا يوجد قناع متحرك باسم '" + name + "'"; }
+    let containerText = "بلا حاوية";
+    if (rec["container"] != nil) { containerText = "داخل " + rec["container"]; }
+    let stateText = "نشط";
+    if (rec["active"] == false) { stateText = "متوقّف"; }
+    return name + " @ (" + toString(rec["x"]) + ", " + toString(rec["y"]) + ")"
+        + " سرعة(" + toString(rec["vx"]) + ", " + toString(rec["vy"]) + ")"
+        + " — " + containerText + " — " + stateText;
+}
+
+// خريطة تلخيص عامة لحالة المحرّك بالكامل: عدد الأقنعة، عدد النشطة منها، عدد الحاويات
+// المنطقية، عدد المناطق المُسمّاة، عدد الدورات المُنفَّذة، وهل توجد حدود عالم مضبوطة
+fun mm_summary(mm) {
+    let activeCount = 0;
+    let i = 0;
+    while (i < len(mm["order"])) {
+        if (mm_isActive(mm, mm["order"][i])) { activeCount = activeCount + 1; }
+        i = i + 1;
+    }
+    return {
+        total: mm_count(mm),
+        active: activeCount,
+        containers: len(keys(mm["containers"])),
+        regions: len(keys(mm["regions"])),
+        tick: mm["tick"],
+        hasBounds: mm["bounds"] != nil
+    };
+}
+
+// نص تسلسلي كامل بحالة كل قناع متحرك مسجَّل في mm، سطر لكل قناع — مفيد لـ print تشخيصي
+// سريع لكامل العالم دفعة واحدة
+fun mm_toString(mm) {
+    let out = "";
+    let i = 0;
+    while (i < len(mm["order"])) {
+        out = out + mm_describe(mm, mm["order"][i]);
+        if (i < len(mm["order"]) - 1) { out = out + "\n"; }
+        i = i + 1;
+    }
+    return out;
+}
+
+
+// ============================================================================
+// 15) التكامل مع Loom — مفاهيم مستعارة من محرّك الواجهات Loomtime
+// ============================================================================
+//  محرّك Loomtime (app/src/main/cpp/loom/*.h) نظام مستقل تماماً بمفرداته الخاصة: الـ Fabric
+//  (شجرة عرض حيّة من Strand)، الـ Warp (خلايا حالة تفاعلية يقرأها @view.* تلقائياً)، الـ
+//  Needle (محرّك اللمس/الإصابة الذي يحوّل نقطة لمس إلى Strand وحدث)، والـ Shuttle (يقارن
+//  شجرتين ويُنتج Patch[] segmentية). هذه المكتبة (movingmask) لا تُعدِّل ذلك المحرّك ولا
+//  تستدعيه مباشرة — فهو C++ منفصل عن هذا الملف الذي يبقى Rin خالصاً مستقلاً بذاته كما في
+//  بقية الأقسام أعلاه. بدل ذلك، هذا القسم يستعير *نفس المفاهيم والمفردات* على مستوى بيانات
+//  movingmask نفسها، بحيث يسهل ربط عالم الأقنعة المتحركة يدوياً بواجهة Loomtime حقيقية:
+//
+//    - Warp:    mm_warpFields/mm_warpFieldNames — تُصدِّر حالة قناع كحقول مُسطَّحة بأسماء
+//                جاهزة لتُسنَد إلى خلايا `warp` التي يُعلنها المستخدم بنفسه في ملف .rin
+//                (Loomtime لا يوفّر تعيين خلية warp بالاسم النصّي ديناميكياً من كود Rin
+//                عادي، لذا الإسناد النهائي `اسم_الخلية = القيمة;` يبقى بيد المستخدم كل
+//                دورة — انظر المثال في docs/moving-mask.md).
+//    - Strand:  mm_setStrandKind/mm_strandKind — تسمية بصرية اختيارية للقناع (نفس أسماء
+//                loom::StrandKind قدر الإمكان: "Text","Image","Button","Card","Icon","Box"...)
+//                تُخزَّن في meta العادية؛ مفيدة إن أردت لاحقاً رسم/تصدير القناع بشكل مختلف
+//                بحسب نوعه المُعلن.
+//    - Fabric:  mm_toFabric — لقطة مسطَّحة (بلا تعشيش أب/أبناء، على عكس شجرة Fabric
+//                الحقيقية) بكل الأقنعة النشطة وغير النشطة، بنفس روح "شجرة عرض" جاهزة
+//                للطباعة/التصدير/رسم مخصَّص.
+//    - Needle:  mm_needleHit/mm_dispatchNeedle — اختبار إصابة نقطة (لمسة/نقرة) ضد كل
+//                الأقنعة النشطة (بدائرة نصف قطرها radius حول موضع كل قناع)، وإطلاق حدث
+//                "needleTap" على أقرب إصابة — نفس فكرة Needle الحقيقي (تحويل نقطة لمس
+//                إلى هدف ثم تنفيذ فعلي) لكن فوق عالم الأقنعة المتحركة بدل شجرة Strand.
+//    - Shuttle: mm_snapshot/mm_shuttleDiff — يقارن لقطة سابقة (من mm_snapshot) بحالة mm
+//                الحالية، ويُنتج مصفوفة Patch شبيهة بما يُنتجه Shuttle الحقيقي: "Insert"
+//                لقناع جديد، "Remove" لقناع اختفى، "Move" لقناع تغيّر موضعه أو نشاطه —
+//                مفيد لمعرفة "ماذا تغيّر بالضبط بين دورتين" (مزامنة شبكية، إعادة تشغيل،
+//                رسم تفاضلي مخصَّص) بدل إعادة رسم/إرسال كل شيء من الصفر كل دورة.
+//    - Actions: mm_defineAction/mm_applyAction — سجل أفعال قابل للتوسعة، بنفس فكرة Needle
+//                الحقيقي (يجرِّب دالة مستخدم مُسجَّلة أولاً، ثم يقع على أفعال جاهزة مبنية:
+//                activate/deactivate/toggleActive/stop/teleport/nudge/addTag/removeTag)
+//                بدل إعادة كتابة نفس سلسلة `if` في كل مكان يُطبَّق فيه فعل على قناع باسمه.
+//    - Navigation: mm_navigate/mm_navBack/mm_navReplace/mm_navReload — مشاهد (scenes) مبنية
+//                فوق نظام الوسوم (tags) الموجود أصلاً: الانتقال لمشهد يُنشِّط كل قناع يحمل
+//                وسم ذلك المشهد ويُعطِّل أقنعة المشاهد الأخرى المعروفة (الأقنعة بلا وسم مشهد
+//                تبقى كما هي دوماً — عناصر عامة كالـHUD) — بنفس فكرة NavigationManager
+//                الحقيقي (navigate/back/replace/reload) لكن فوق عالم الأقنعة لا شجرة Strand.
+//    - Overlay: mm_setOverlay/mm_isOverlay/mm_needleHitTopmost — طبقة أقنعة "علوية" (وسم
+//                "overlay" خاص) تُفحَص أولاً في اختبار الإصابة قبل بقية الأقنعة، بنفس فكرة
+//                OverlayLayer الحقيقية (نوافذ/تلميحات تعلو المحتوى العادي وتُصاب أولاً).
+//    - Dye:     mm_setColor/mm_color — لون بصري اختياري للقناع (نصّ حرّ مثل "#RRGGBB")،
+//                يوازي سمة اللون التي يرسمها Dye الحقيقي على كل Strand.
+//    - Theme:   mm_defineTheme/mm_setActiveTheme/mm_activeTheme/mm_themeColor — لوحات ألوان
+//                مُسمّاة على مستوى المحرّك كله (أدوار مثل primary/secondary/danger...)، بنفس
+//                فكرة Pattern Book الحقيقي (`@theme=...`)، مع حدث "themeChanged" عند التبديل.
+//    - Object Inspector: mm_toObjectInspector — بطاقة فحص كاملة لقناع واحد (id + مصفوفة
+//                حقول مُسمّاة، تشمل meta الحرّة) بنفس شكل بطاقة .object(id) الحيّة التي
+//                يرسمها Loom الحقيقي (rin_loom_object.h) لكن دون الاعتماد على أي AST حقيقي.
+
+// ---- Warp: تصدير حالة قناع كحقول مُسطَّحة جاهزة لخلايا warp -----------------------------
+
+// أسماء الحقول الأربعة/الخمسة التي يُنتجها mm_warpFields لبادئة prefix مُعطاة — مفيدة
+// لمعرفة أسماء خلايا warp الواجب إعلانها مسبقاً في ملف .rin قبل الإسناد إليها
+fun mm_warpFieldNames(prefix) {
+    return [prefix + "_x", prefix + "_y", prefix + "_vx", prefix + "_vy", prefix + "_active"];
+}
+
+// يُصدِّر موضع/سرعة/حالة نشاط قناع كخريطة حقول مُسطَّحة بأسماء prefix+"_x" وهكذا (prefix
+// الافتراضي هو اسم القناع نفسه إن مُرِّر nil) — جاهزة لتُسنَد يدوياً إلى خلايا `warp` معلَنة
+// بنفس الاسم كل دورة، فتُحدَّث واجهة @view.* التي تقرأ تلك الخلايا تلقائياً عبر إعادة الرسم
+// التفاعلية العادية لِـ Loomtime؛ يُعيد nil إن لم يوجد القناع
+fun mm_warpFields(mm, name, prefix) {
+    let rec = mm_get(mm, name);
+    if (rec == nil) { return nil; }
+    let p = prefix;
+    if (p == nil) { p = name; }
+    let out = {};
+    out[p + "_x"] = rec["x"];
+    out[p + "_y"] = rec["y"];
+    out[p + "_vx"] = rec["vx"];
+    out[p + "_vy"] = rec["vy"];
+    out[p + "_active"] = rec["active"];
+    return out;
+}
+
+// ---- Strand: تسمية بصرية اختيارية للقناع ------------------------------------------------
+
+// يُسمّي "نوع Strand" مُقترَح لقناع (نصّ حرّ، لكن يُفضَّل استخدام نفس مفردات loom::StrandKind
+// مثل "Text"/"Image"/"Button"/"Card"/"Icon"/"Box"...) — تخزين بسيط فوق meta العادية،
+// لا يُنشئ أي Strand حقيقي ولا يتحقّق من صحة القيمة
+fun mm_setStrandKind(mm, name, kind) {
+    return mm_setMeta(mm, name, "strandKind", kind);
+}
+
+// نوع الـStrand المُقترَح لقناع، أو "Unknown" إن لم يُضبط أي نوع له مسبقاً
+fun mm_strandKind(mm, name) {
+    return mm_getMeta(mm, name, "strandKind", "Unknown");
+}
+
+// ---- Fabric: لقطة مسطَّحة بكل الأقنعة ----------------------------------------------------
+
+// مصفوفة بلقطة كل قناع مسجَّل في mm (بترتيب الإنشاء): {name, kind (من mm_strandKind), x, y,
+// active, tags} — لقطة مسطَّحة بلا تعشيش أب/أبناء (على عكس شجرة Fabric الحقيقية، فأقنعة
+// movingmask لا تملك علاقة أب/ابن أصلاً)، جاهزة للطباعة أو التصدير أو تغذية رسم مخصَّص
+fun mm_toFabric(mm) {
+    let out = [];
+    let i = 0;
+    while (i < len(mm["order"])) {
+        let name = mm["order"][i];
+        let rec = mm["items"][name];
+        push(out, {
+            name: name,
+            kind: mm_strandKind(mm, name),
+            x: rec["x"],
+            y: rec["y"],
+            active: rec["active"],
+            tags: rec["tags"]
+        });
+        i = i + 1;
+    }
+    return out;
+}
+
+// ---- Needle: اختبار إصابة نقطة لمس/نقرة ضد الأقنعة النشطة --------------------------------
+
+// يبحث عن أقرب قناع نشط لنقطة (x, y) ضمن نصف قطر radius (دائرة إصابة حول موضع كل قناع)،
+// ويُعيد { name: أقرب اسم أو nil, distance: المسافة أو nil } — nil في الحقلين إن لم يقع أي
+// قناع نشط ضمن radius من تلك النقطة إطلاقاً
+fun mm_needleHit(mm, x, y, radius) {
+    let point = mm_point(x, y);
+    let bestName = nil;
+    let bestDistance = nil;
+    let i = 0;
+    while (i < len(mm["order"])) {
+        let name = mm["order"][i];
+        if (mm_isActive(mm, name)) {
+            let d = mm_distance(point, mm_position(mm, name));
+            if (d <= radius) {
+                if (bestDistance == nil or d < bestDistance) {
+                    bestDistance = d;
+                    bestName = name;
+                }
+            }
+        }
+        i = i + 1;
+    }
+    return { name: bestName, distance: bestDistance };
+}
+
+// يُنفِّذ mm_needleHit عند (x, y) بنصف قطر radius، وإن وُجدت إصابة يُطلق حدث "needleTap"
+// (payload: { name, x, y, distance }) — سجِّل مستمعاً عبر mm_on(mm, "needleTap", fn) لتنفيذ
+// فعل حقيقي عند الإصابة، بنفس روح Needle الحقيقي (تحويل نقطة لمس إلى تنفيذ فعلي). يُعيد اسم
+// القناع المُصاب، أو nil إن لم تُصب أي دائرة إصابة
+fun mm_dispatchNeedle(mm, x, y, radius) {
+    let hit = mm_needleHit(mm, x, y, radius);
+    if (hit["name"] != nil) {
+        mm__fire(mm, "needleTap", { name: hit["name"], x: x, y: y, distance: hit["distance"] });
+    }
+    return hit["name"];
+}
+
+// ---- Shuttle: مقارنة لقطتين وإنتاج Patch[] ----------------------------------------------
+
+// لقطة خفيفة بكل الأقنعة (name/x/y/active فقط، بلا سرعة أو مسار أو أثر) — احتفظ بناتج هذه
+// الدالة جانباً، ثم مرِّره لاحقاً إلى mm_shuttleDiff لمعرفة ما تغيّر بالضبط منذ تلك اللحظة
+fun mm_snapshot(mm) {
+    let out = [];
+    let i = 0;
+    while (i < len(mm["order"])) {
+        let name = mm["order"][i];
+        let rec = mm["items"][name];
+        push(out, { name: name, x: rec["x"], y: rec["y"], active: rec["active"] });
+        i = i + 1;
+    }
+    return out;
+}
+
+// يقارن لقطة سابقة previousSnapshot (من mm_snapshot) بحالة mm الحالية، ويُعيد مصفوفة Patch
+// (كل عنصر { kind, name, x, y }): "Insert" لقناع موجود الآن ولم يكن في اللقطة السابقة،
+// "Remove" لقناع كان في اللقطة السابقة واختفى الآن (x/y يكونان nil)، "Move" لقناع موجود في
+// الحالتين لكن تغيّر موضعه أو نشاطه. الأقنعة التي لم تتغيّر إطلاقاً لا تظهر في الناتج —
+// تماماً كما لا يُنتج Shuttle الحقيقي Patch لأي Strand لم يتغيّر شيء في سماته
+fun mm_shuttleDiff(mm, previousSnapshot) {
+    let prevIndex = {};
+    let j = 0;
+    while (j < len(previousSnapshot)) {
+        let snap = previousSnapshot[j];
+        prevIndex[snap["name"]] = snap;
+        j = j + 1;
+    }
+    let patches = [];
+    let i = 0;
+    while (i < len(mm["order"])) {
+        let name = mm["order"][i];
+        let rec = mm["items"][name];
+        if (has(prevIndex, name)) {
+            let old = prevIndex[name];
+            let moved = mm_nearlyEqual(old["x"], rec["x"]) == false or mm_nearlyEqual(old["y"], rec["y"]) == false or old["active"] != rec["active"];
+            if (moved) {
+                push(patches, { kind: "Move", name: name, x: rec["x"], y: rec["y"] });
+            }
+            remove(prevIndex, name);
+        } else {
+            push(patches, { kind: "Insert", name: name, x: rec["x"], y: rec["y"] });
+        }
+        i = i + 1;
+    }
+    let removedNames = keys(prevIndex);
+    let k = 0;
+    while (k < len(removedNames)) {
+        push(patches, { kind: "Remove", name: removedNames[k], x: nil, y: nil });
+        k = k + 1;
+    }
+    return patches;
+}
+
+
+// ---- Actions: نظام أفعال جاهزة قابل للتوسعة (Action Engine) ----------------------------
+
+// يُسجِّل دالة فعل مخصَّصة fn(mm, name, payload) باسم actionName على محرّك mm بالكامل (وليس
+// على قناع واحد) — تُستدعى لاحقاً عبر mm_applyAction بنفس الاسم على أي قناع. تستبدل أي فعل
+// مخصَّص مسجَّل سابقاً بنفس الاسم بالكامل (لا تراكم)
+fun mm_defineAction(mm, actionName, fn) {
+    mm["actions"][actionName] = fn;
+    return true;
+}
+
+// يُطبِّق فعلاً باسم actionName على قناع name، بترتيب محاولتين بالضبط (بنفس منطق Needle
+// الحقيقي: دالة مستخدم أولاً، ثم أفعال جاهزة مبنية):
+//   1) إن كان actionName مُسجَّلاً عبر mm_defineAction: تُستدعى تلك الدالة fn(mm, name, payload)
+//      وتُعاد قيمتها كما هي (أي شيء تُعيده الدالة المخصَّصة).
+//   2) وإلا: يُحاول الأفعال الجاهزة التالية (payload بحسب الفعل، أو نادَته بلا حاجة إليه):
+//      "activate"     -> mm_setActive(mm, name, true)
+//      "deactivate"   -> mm_setActive(mm, name, false)
+//      "toggleActive" -> يعكس mm_isActive الحالية
+//      "stop"         -> mm_stop(mm, name)
+//      "teleport"     -> mm_setPosition(mm, name, payload["x"], payload["y"])
+//      "nudge"        -> mm_translate(mm, name, payload["dx"], payload["dy"])
+//      "addTag"       -> mm_addTag(mm, name, payload)  (payload نصّ الوسم مباشرة)
+//      "removeTag"    -> يُزيل payload من قائمة وسوم القناع (لا يوجد mm_removeTag أصلاً؛
+//                        يُعاد بناء المصفوفة هنا عبر mm__arrayWithout)
+//   يُعيد false إن لم يكن actionName معروفاً بأي من الطريقتين، أو إن لم يكن القناع موجوداً
+fun mm_applyAction(mm, name, actionName, payload) {
+    if (has(mm["actions"], actionName)) {
+        let fn = mm["actions"][actionName];
+        return fn(mm, name, payload);
+    }
+    if (mm_exists(mm, name) == false) { return false; }
+    if (actionName == "activate") { return mm_setActive(mm, name, true); }
+    if (actionName == "deactivate") { return mm_setActive(mm, name, false); }
+    if (actionName == "toggleActive") { return mm_setActive(mm, name, mm_isActive(mm, name) == false); }
+    if (actionName == "stop") { return mm_stop(mm, name); }
+    if (actionName == "teleport") { return mm_setPosition(mm, name, payload["x"], payload["y"]); }
+    if (actionName == "nudge") { return mm_translate(mm, name, payload["dx"], payload["dy"]); }
+    if (actionName == "addTag") { return mm_addTag(mm, name, payload); }
+    if (actionName == "removeTag") {
+        mm["items"][name]["tags"] = mm__arrayWithout(mm["items"][name]["tags"], payload);
+        return true;
+    }
+    return false;
+}
+
+
+// ---- Navigation: مشاهد (scenes) عبر الوسوم، بمكدّس تنقّل -------------------------------
+//  الأقنعة التي لا تحمل أي وسم مشهد مُعرَّف من قبل (عبر mm_navigate/mm_navReplace) تبقى
+//  دوماً كما هي — لا يُغيِّر التنقّل نشاطها إطلاقاً؛ فقط الأقنعة الموسومة صراحة بأحد أسماء
+//  المشاهد المعروفة (mm["nav"]["knownScenes"]) هي التي تُنشَّط/تُعطَّل عند كل انتقال.
+
+// (داخلية) تُطبِّق ظهور مشهد sceneName فعلياً: تُنشِّط أقنعته وتُعطِّل بقية المشاهد المعروفة
+fun mm__applyScene(mm, sceneName) {
+    if (mm__arrayHas(mm["nav"]["knownScenes"], sceneName) == false) {
+        push(mm["nav"]["knownScenes"], sceneName);
+    }
+    let scenes = mm["nav"]["knownScenes"];
+    let s = 0;
+    while (s < len(scenes)) {
+        let members = mm_withTag(mm, scenes[s]);
+        let m = 0;
+        while (m < len(members)) {
+            mm_setActive(mm, members[m], scenes[s] == sceneName);
+            m = m + 1;
+        }
+        s = s + 1;
+    }
+    return true;
+}
+
+// ينتقل إلى مشهد جديد sceneName: يدفع المشهد الحالي (إن وُجد) إلى مكدّس التنقّل، يُنشِّط كل
+// قناع موسوم بـsceneName، ويُعطِّل أقنعة أي مشهد آخر معروف. يُطلق حدث "navigate" (payload:
+// { to: sceneName, from: المشهد السابق أو nil })
+fun mm_navigate(mm, sceneName) {
+    let previous = mm["nav"]["current"];
+    if (previous != nil) { push(mm["nav"]["stack"], previous); }
+    mm["nav"]["current"] = sceneName;
+    mm__applyScene(mm, sceneName);
+    mm__fire(mm, "navigate", { to: sceneName, from: previous });
+    return true;
+}
+
+// يعود إلى المشهد الذي كان قبل المشهد الحالي مباشرة (من رأس مكدّس التنقّل)، بلا دفع المشهد
+// الحالي إلى المكدّس (على عكس mm_navigate). لا يفعل شيئاً ويُعيد false إن كان المكدّس فارغاً
+fun mm_navBack(mm) {
+    if (len(mm["nav"]["stack"]) == 0) { return false; }
+    let previous = mm["nav"]["current"];
+    let target = pop(mm["nav"]["stack"]);
+    mm["nav"]["current"] = target;
+    mm__applyScene(mm, target);
+    mm__fire(mm, "navigate", { to: target, from: previous });
+    return true;
+}
+
+// ينتقل إلى مشهد جديد بديلاً عن الحالي دون دفعه إلى المكدّس (المشهد الحالي "يُستبدَل"، فلن
+// يعود إليه mm_navBack) — مفيد لشاشات لا يجب العودة إليها (تسجيل الدخول بعد نجاحه مثلاً)
+fun mm_navReplace(mm, sceneName) {
+    let previous = mm["nav"]["current"];
+    mm["nav"]["current"] = sceneName;
+    mm__applyScene(mm, sceneName);
+    mm__fire(mm, "navigate", { to: sceneName, from: previous });
+    return true;
+}
+
+// يُعيد تطبيق ظهور/اختفاء المشهد الحالي من جديد (بلا تغيير المكدّس أو المشهد الحالي)،
+// ويُطلق حدث "navigate" بنفس المصدر والهدف — مفيد بعد إضافة أقنعة جديدة موسومة بمشهد قائم
+fun mm_navReload(mm) {
+    let current = mm["nav"]["current"];
+    if (current == nil) { return false; }
+    mm__applyScene(mm, current);
+    mm__fire(mm, "navigate", { to: current, from: current });
+    return true;
+}
+
+// اسم المشهد الحالي، أو nil إن لم يُستدعَ mm_navigate/mm_navReplace بعد على الإطلاق
+fun mm_currentScene(mm) {
+    return mm["nav"]["current"];
+}
+
+
+// ---- Overlay: طبقة علوية فوق الجميع (أولوية في اختبار الإصابة) -------------------------
+//  طبقة الـ"overlay" هنا مجرّد وسم خاص محجوز باسم "overlay" فوق نظام الوسوم العادي —
+//  mm_needleHitTopmost تفحص أولاً كل الأقنعة الموسومة به قبل بقية العالم، فتُطابق أول
+//  إصابة عليها بصرف النظر عمّا إذا كان هناك قناع أقرب في الطبقة العادية تحتها.
+
+// يضع/يُزيل وسم "overlay" عن قناع (flag=true يضعه، flag=false يُزيله)
+fun mm_setOverlay(mm, name, flag) {
+    if (mm_exists(mm, name) == false) { return false; }
+    if (flag) { return mm_addTag(mm, name, "overlay"); }
+    mm["items"][name]["tags"] = mm__arrayWithout(mm["items"][name]["tags"], "overlay");
+    return true;
+}
+
+// هل يحمل القناع وسم "overlay" حالياً؟
+fun mm_isOverlay(mm, name) {
+    return mm_hasTag(mm, name, "overlay");
+}
+
+// نفس mm_needleHit، لكنها تفحص أولاً حصرياً الأقنعة الموسومة "overlay" (طبقة علوية)؛ إن
+// أصابت واحداً منها تُعيده فوراً بلا فحص الطبقة العادية إطلاقاً، وإلا تقع على mm_needleHit
+// العادية فوق كل الأقنعة المتبقية — بهذا تُصاب الطبقة العلوية دوماً أولاً كما في Needle
+// الحقيقي مع OverlayLayer
+fun mm_needleHitTopmost(mm, x, y, radius) {
+    let overlayNames = mm_withTag(mm, "overlay");
+    let point = mm_point(x, y);
+    let bestName = nil;
+    let bestDistance = nil;
+    let i = 0;
+    while (i < len(overlayNames)) {
+        let name = overlayNames[i];
+        if (mm_isActive(mm, name)) {
+            let d = mm_distance(point, mm_position(mm, name));
+            if (d <= radius) {
+                if (bestDistance == nil or d < bestDistance) {
+                    bestDistance = d;
+                    bestName = name;
+                }
+            }
+        }
+        i = i + 1;
+    }
+    if (bestName != nil) { return { name: bestName, distance: bestDistance }; }
+    return mm_needleHit(mm, x, y, radius);
+}
+
+
+// ---- Dye: لون بصري اختياري للقناع -------------------------------------------------------
+
+// يضبط لوناً بصرياً اختيارياً لقناع (نصّ حرّ، عادة "#RRGGBB") — تخزين بسيط فوق meta العادية
+fun mm_setColor(mm, name, colorHex) {
+    return mm_setMeta(mm, name, "color", colorHex);
+}
+
+// لون القناع الحالي، أو fallback إن لم يُضبط له لون بعد (مرّر nil لِـfallback افتراضياً)
+fun mm_color(mm, name, fallback) {
+    return mm_getMeta(mm, name, "color", fallback);
+}
+
+
+// ---- Theme: لوحات ألوان مُسمّاة على مستوى المحرّك (Pattern Book) -----------------------
+
+// يُعرِّف/يُحدِّث Theme باسم themeName على مستوى المحرّك كله: خريطة أدوار لونية حرّة (مثل
+// primary/secondary/success/danger/warning/info/neutral...) بقيم نصّية "#RRGGBB". يستبدل أي
+// Theme سابق بنفس الاسم بالكامل
+fun mm_defineTheme(mm, themeName, colorsMap) {
+    mm["themes"][themeName] = colorsMap;
+    return true;
+}
+
+// يجعل Theme المُعرَّف مسبقاً باسم themeName هو النشط حالياً على مستوى المحرّك؛ يُعيد false
+// بلا أي تأثير إن لم يكن ذلك الـTheme مُعرَّفاً أصلاً عبر mm_defineTheme. يُطلق حدث
+// "themeChanged" (payload: { theme: themeName }) عند النجاح
+fun mm_setActiveTheme(mm, themeName) {
+    if (has(mm["themes"], themeName) == false) { return false; }
+    mm["activeTheme"] = themeName;
+    mm__fire(mm, "themeChanged", { theme: themeName });
+    return true;
+}
+
+// اسم الـTheme النشط حالياً، أو nil إن لم يُضبط أي Theme بعد
+fun mm_activeTheme(mm) {
+    return mm["activeTheme"];
+}
+
+// قيمة دور لوني roleName من الـTheme النشط حالياً (مثل "primary")، أو fallback إن لم يوجد
+// Theme نشط أصلاً، أو لم يحمل ذلك الـTheme هذا الدور
+fun mm_themeColor(mm, roleName, fallback) {
+    let active = mm["activeTheme"];
+    if (active == nil) { return fallback; }
+    if (has(mm["themes"], active) == false) { return fallback; }
+    let palette = mm["themes"][active];
+    if (has(palette, roleName) == false) { return fallback; }
+    return palette[roleName];
+}
+
+
+// ---- Object Inspector: بطاقة فحص كاملة لقناع واحد --------------------------------------
+
+// بطاقة فحص حيّة لقناع واحد، بنفس روح بطاقة `.object(id) ... container.(); .end/object`
+// التي يرسمها Loom الحقيقي (rin_loom_object.h) لكن مبنية فوق سجلّ movingmask مباشرة بلا أي
+// AST: { id: name, fields: [ {name, value}, ... ] } — الحقول الأساسية أولاً (x/y/vx/vy/
+// active/container/strandKind/color)، ثم كل مفتاح إضافي من meta الحرّة (بترتيب مفاتيحه)
+// بلا تكرار (يُتجاوَز أي مفتاح meta اسمه "strandKind" أو "color" لأنه أُضيف مسبقاً أعلاه
+// بقيمته الصحيحة عبر mm_strandKind/mm_color بدل قراءته مباشرة من meta مرّتين). يُعيد nil
+// إن لم يوجد القناع
+fun mm_toObjectInspector(mm, name) {
+    let rec = mm_get(mm, name);
+    if (rec == nil) { return nil; }
+    let fields = [];
+    push(fields, { name: "x", value: rec["x"] });
+    push(fields, { name: "y", value: rec["y"] });
+    push(fields, { name: "vx", value: rec["vx"] });
+    push(fields, { name: "vy", value: rec["vy"] });
+    push(fields, { name: "active", value: rec["active"] });
+    push(fields, { name: "container", value: rec["container"] });
+    push(fields, { name: "strandKind", value: mm_strandKind(mm, name) });
+    push(fields, { name: "color", value: mm_color(mm, name, nil) });
+    let metaKeys = keys(rec["meta"]);
+    let i = 0;
+    while (i < len(metaKeys)) {
+        let key = metaKeys[i];
+        if (key != "strandKind" and key != "color") {
+            push(fields, { name: key, value: rec["meta"][key] });
+        }
+        i = i + 1;
+    }
+    return { id: name, fields: fields };
+}
+
+
+// ============================================================================
+// 16) التكوين الجماعي والانسيابية (Flocking / Rigid Formations)
+// ============================================================================
+//  Boids الكلاسيكية (Craig Reynolds): كل قناع "طائر" يعدّل تسارعه بناءً على جيرانه القريبين
+//  عبر ثلاث قواعد بسيطة تُركَّب معاً: الابتعاد (separation)، المحاذاة (alignment)، والتماسك
+//  (cohesion). القوى هنا "توجيهية" (steering): تُضاف إلى تسارع القناع عبر mm_applyForce ولا
+//  تُحرِّكه مباشرة — استدعِ mm_integrate/mm_tick بعدها لتطبيق الحركة الفعلية. مرّر لهذه الدوال
+//  مصفوفة أسماء الجيران (others) بدل كل القناع (استخدم mm_spatialNeighbors من القسم 19
+//  لحساب هذه القائمة بكفاءة بدل المرور على كل الأقنعة في كل خطوة).
+
+// (داخلية) يحصر متجه قوة (fx, fy) بحيث لا يتجاوز مقداره maxForce، مع الحفاظ على اتجاهه
+fun mm__limitMagnitude(fx, fy, maxForce) {
+    let mag = sqrt(fx * fx + fy * fy);
+    if (mag <= maxForce or mag < MM_EPSILON) { return mm_point(fx, fy); }
+    return mm_point((fx / mag) * maxForce, (fy / mag) * maxForce);
+}
+
+// قوة الابتعاد: تدفع القناع بعيداً عن كل جار أقرب من desiredSeparation، بوزن يتناسب عكسياً
+// مع المسافة (الجيران الأقرب يدفعون أقوى). تُطبَّق مباشرة عبر mm_applyForce وتُعاد أيضاً.
+fun mm_flockSeparation(mm, name, others, desiredSeparation, maxForce) {
+    let here = mm_position(mm, name);
+    if (here == nil) { return mm_point(0, 0); }
+    let steerX = 0;
+    let steerY = 0;
+    let count = 0;
+    let i = 0;
+    while (i < len(others)) {
+        let otherName = others[i];
+        if (otherName != name) {
+            let otherPos = mm_position(mm, otherName);
+            if (otherPos != nil) {
+                let d = mm_distance(here, otherPos);
+                if (d > 0 and d < desiredSeparation) {
+                    steerX = steerX + (here["x"] - otherPos["x"]) / d;
+                    steerY = steerY + (here["y"] - otherPos["y"]) / d;
+                    count = count + 1;
+                }
+            }
+        }
+        i = i + 1;
+    }
+    if (count > 0) {
+        steerX = steerX / count;
+        steerY = steerY / count;
+    }
+    let limited = mm__limitMagnitude(steerX, steerY, maxForce);
+    mm_applyForce(mm, name, limited["x"], limited["y"]);
+    return limited;
+}
+
+// قوة المحاذاة: تُقرِّب سرعة القناع من متوسط سرعات جيرانه (يتّجه القطيع بنفس الاتجاه تقريباً)
+fun mm_flockAlignment(mm, name, others, maxForce) {
+    let sumVx = 0;
+    let sumVy = 0;
+    let count = 0;
+    let i = 0;
+    while (i < len(others)) {
+        let otherName = others[i];
+        if (otherName != name and mm_exists(mm, otherName)) {
+            let v = mm_velocity(mm, otherName);
+            sumVx = sumVx + v["x"];
+            sumVy = sumVy + v["y"];
+            count = count + 1;
+        }
+        i = i + 1;
+    }
+    if (count == 0) { return mm_point(0, 0); }
+    let limited = mm__limitMagnitude(sumVx / count, sumVy / count, maxForce);
+    mm_applyForce(mm, name, limited["x"], limited["y"]);
+    return limited;
+}
+
+// قوة التماسك: تسحب القناع نحو مركز ثقل جيرانه (يبقى القطيع مجتمعاً بلا تشتت)
+fun mm_flockCohesion(mm, name, others, maxForce) {
+    let here = mm_position(mm, name);
+    if (here == nil) { return mm_point(0, 0); }
+    let sumX = 0;
+    let sumY = 0;
+    let count = 0;
+    let i = 0;
+    while (i < len(others)) {
+        let otherName = others[i];
+        if (otherName != name) {
+            let otherPos = mm_position(mm, otherName);
+            if (otherPos != nil) {
+                sumX = sumX + otherPos["x"];
+                sumY = sumY + otherPos["y"];
+                count = count + 1;
+            }
+        }
+        i = i + 1;
+    }
+    if (count == 0) { return mm_point(0, 0); }
+    let limited = mm__limitMagnitude((sumX / count) - here["x"], (sumY / count) - here["y"], maxForce);
+    mm_applyForce(mm, name, limited["x"], limited["y"]);
+    return limited;
+}
+
+// يُطبِّق القواعد الثلاث معاً بأوزان قابلة للتخصيص (weights: {separation, alignment, cohesion})
+// دفعة واحدة على قناع name بين جيرانه others — استدعِها لكل قناع كل دورة قبل mm_tick لمحاكاة
+// سرب/قطيع كامل، ثم mm_tick لتطبيق الحركة الناتجة فعلياً
+fun mm_flockStep(mm, name, others, desiredSeparation, maxForce, weights) {
+    let sep = mm_flockSeparation(mm, name, others, desiredSeparation, maxForce * weights["separation"]);
+    let ali = mm_flockAlignment(mm, name, others, maxForce * weights["alignment"]);
+    let coh = mm_flockCohesion(mm, name, others, maxForce * weights["cohesion"]);
+    return { separation: sep, alignment: ali, cohesion: coh };
+}
+
+// ---- التكوينات الجماعية الجامدة (Rigid Formations) -------------------------------------
+// خلافاً للانسيابية (flocking) القائمة على قوى تقريبية، التكوين الجامد يُثبِّت إزاحة دقيقة
+// (dx, dy) لكل تابع عن قائده — مفيد لتشكيلات عسكرية/مركبات مرافقة تحافظ على شكل ثابت تماماً.
+
+// يُسجِّل إزاحة ثابتة (dx, dy) لقناع "follower" نسبةً لموضع قناع "leader" الحالي
+fun mm_setFormationOffset(mm, followerName, leaderName, dx, dy) {
+    return mm_setMeta(mm, followerName, "formation", { leader: leaderName, dx: dx, dy: dy });
+}
+
+// يُزيل التكوين عن قناع تابع (يعود للحركة الحرّة العادية دون تدخّل mm_applyFormations)
+fun mm_clearFormationOffset(mm, followerName) {
+    if (mm_exists(mm, followerName) == false) { return false; }
+    let metaMap = mm["items"][followerName]["meta"];
+    if (has(metaMap, "formation")) { remove(metaMap, "formation"); }
+    return true;
+}
+
+// يُحرِّك فوراً كل قناع يملك تكوين مُسجَّل (عبر mm_setFormationOffset) إلى موضع قائده الحالي
+// زائد إزاحته الثابتة — استدعِها بعد تحريك القادة (عبر seek/path/تحكّم مباشر) في كل دورة
+fun mm_applyFormations(mm) {
+    let i = 0;
+    while (i < len(mm["order"])) {
+        let name = mm["order"][i];
+        let formation = mm_getMeta(mm, name, "formation", nil);
+        if (formation != nil) {
+            let leaderPos = mm_position(mm, formation["leader"]);
+            if (leaderPos != nil) {
+                mm_setPosition(mm, name, leaderPos["x"] + formation["dx"], leaderPos["y"] + formation["dy"]);
+                mm_recordHistory(mm, name);
+            }
+        }
+        i = i + 1;
+    }
+    return nil;
+}
+
+
+// ============================================================================
+// 17) آلة حالات محدودة لكل قناع (Per-Mask Finite State Machine)
+// ============================================================================
+//  آلة حالة بسيطة (FSM) مخزَّنة داخل meta كل قناع: حالة حالية + جدول انتقالات
+//  (fromState + event -> toState). مفيدة لسلوك كائنات الألعاب/الواجهات (idle/walk/attack،
+//  أو draft/submitted/approved لعنصر واجهة) بلا كتابة سلاسل if متكرّرة يدوياً في كل مكان.
+
+// يُهيّئ آلة حالة لقناع بحالة ابتدائية initialState وجدول انتقالات فارغ. يستبدل أي آلة
+// حالة كانت مُسجَّلة سابقاً على هذا القناع بالكامل.
+fun mm_fsmDefine(mm, name, initialState) {
+    return mm_setMeta(mm, name, "fsm", { state: initialState, transitions: {} });
+}
+
+// يُسجِّل انتقالاً: عند وقوع الحدث event والقناع في الحالة fromState، ينتقل إلى toState.
+// يتطلّب استدعاء mm_fsmDefine على هذا القناع أولاً؛ يُعيد false وبلا تأثير إن لم توجد آلة
+// حالة عليه بعد.
+fun mm_fsmAddTransition(mm, name, fromState, event, toState) {
+    let fsm = mm_getMeta(mm, name, "fsm", nil);
+    if (fsm == nil) { return false; }
+    let key = fromState + "::" + event;
+    fsm["transitions"][key] = toState;
+    return true;
+}
+
+// الحالة الحالية لآلة حالة قناع، أو nil إن لم تُعرَّف له آلة حالة أصلاً
+fun mm_fsmState(mm, name) {
+    let fsm = mm_getMeta(mm, name, "fsm", nil);
+    if (fsm == nil) { return nil; }
+    return fsm["state"];
+}
+
+// هل آلة حالة القناع في الحالة state بالضبط؟ false أيضاً إن لم توجد آلة حالة عليه
+fun mm_fsmIs(mm, name, state) {
+    return mm_fsmState(mm, name) == state;
+}
+
+// يُطلق حدثاً event على آلة حالة القناع: إن وُجد انتقال مُسجَّل من حالتها الحالية بهذا
+// الحدث، تنتقل إلى الحالة الجديدة وتُطلق حدث محرّك "fsmChanged" (payload: {name, from, to,
+// event})، وتُعيد الحالة الجديدة. وإلا (لا انتقال مطابق، أو لا آلة حالة على القناع أصلاً)
+// تبقى الحالة كما هي وتُعاد الحالة الحالية (أو nil إن لم توجد آلة حالة أصلاً).
+fun mm_fsmFire(mm, name, event) {
+    let fsm = mm_getMeta(mm, name, "fsm", nil);
+    if (fsm == nil) { return nil; }
+    let key = fsm["state"] + "::" + event;
+    if (has(fsm["transitions"], key)) {
+        let from = fsm["state"];
+        let to = fsm["transitions"][key];
+        fsm["state"] = to;
+        mm__fire(mm, "fsmChanged", { name: name, from: from, to: to, event: event });
+        return to;
+    }
+    return fsm["state"];
+}
+
+
+// ============================================================================
+// 18) التسلسل والاستعادة (Serialization / Save & Load عبر JSON)
+// ============================================================================
+//  يحوِّل حالة المحرّك (أو يستعيدها) إلى/من نص JSON عبر jsonEncode/jsonDecode الأصليتين —
+//  مفيد لحفظ تقدّم لعبة/محاكاة على القرص (عبر دوال storage الأصلية) واستعادتها لاحقاً
+//  بالضبط. **قيد مهم**: القيم الدالية (handlers عبر mm_on، actions المخصَّصة عبر
+//  mm_defineAction) لا يمكن تسلسلها في JSON — تُستبعَد تلقائياً من الناتج (mm_toPlainData)،
+//  وتبقى مسؤولية المستخدم إعادة تسجيلها بعد الاستعادة إن احتاج إليها.
+
+// يُصدِّر البيانات الخام القابلة للتسلسل من محرّك mm بالكامل كخريطة عادية (بلا handlers/
+// actions/themes التي تحوي دوال) — استخدمها مباشرة أو مرّرها لـjsonEncode بنفسك
+fun mm_toPlainData(mm) {
+    return {
+        items: mm["items"],
+        order: mm["order"],
+        containers: mm["containers"],
+        bounds: mm["bounds"],
+        regions: mm["regions"],
+        tick: mm["tick"],
+        historyLimit: mm["historyLimit"],
+        nav: mm["nav"]
+    };
+}
+
+// نص JSON كامل لحالة محرّك mm (عبر mm_toPlainData + jsonEncode) — جاهز للكتابة في ملف عبر
+// دوال storage الأصلية على منصتك
+fun mm_serialize(mm) {
+    return jsonEncode(mm_toPlainData(mm));
+}
+
+// يبني محرّكاً جديداً تماماً من نص JSON أنتجه mm_serialize سابقاً — بلا أي handlers/actions/
+// themes مُسجَّلة (استخدم mm_deserializeInto بدلاً منه للإبقاء على مستمعين/أفعال محرّك قائم
+// مع استعادة بيانات الأقنعة فقط)
+fun mm_deserialize(jsonText) {
+    let data = jsonDecode(jsonText);
+    let mm = mm_new();
+    mm["items"] = data["items"];
+    mm["order"] = data["order"];
+    mm["containers"] = data["containers"];
+    mm["bounds"] = data["bounds"];
+    mm["regions"] = data["regions"];
+    mm["tick"] = data["tick"];
+    mm["historyLimit"] = data["historyLimit"];
+    mm["nav"] = data["nav"];
+    return mm;
+}
+
+// يستعيد بيانات الأقنعة/الحدود/المناطق من نص JSON *داخل* محرّك mm قائم بالفعل، محتفظاً
+// بكل handlers/actions/themes المُسجَّلة عليه مسبقاً بلا تغيير — الخيار الأنسب لاستعادة حفظ
+// أثناء تشغيل التطبيق (بدل استبدال المحرّك بالكامل كما تفعل mm_deserialize)
+fun mm_deserializeInto(mm, jsonText) {
+    let data = jsonDecode(jsonText);
+    mm["items"] = data["items"];
+    mm["order"] = data["order"];
+    mm["containers"] = data["containers"];
+    mm["bounds"] = data["bounds"];
+    mm["regions"] = data["regions"];
+    mm["tick"] = data["tick"];
+    mm["historyLimit"] = data["historyLimit"];
+    mm["nav"] = data["nav"];
+    return true;
+}
+
+
+// ============================================================================
+// 19) الفهرسة المكانية لتسريع استعلامات الجوار (Spatial Grid Index)
+// ============================================================================
+//  mm_nearestTo وmm_needleHit (القسمان 11 و15) تفحصان كل قناع مسجَّل في كل استدعاء — O(n)
+//  لكل استعلام، وهذا يصبح بطيئاً مع مئات/آلاف الأقنعة النشطة كل دورة. الفهرس المكاني هنا
+//  يقسم العالم إلى خلايا مربّعة بحجم cellSize، ويُصنِّف كل قناع في خليته الحالية، فيصبح
+//  إيجاد "جيران قريبين" يفحص فقط الخلايا المجاورة مباشرة بدل كل قناع في العالم.
+
+// (داخلية) مفتاح نصّي فريد لخلية الشبكة المكانية التي تقع فيها نقطة (x, y) بحجم خلية cellSize
+fun mm__spatialCellKey(x, y, cellSize) {
+    return toString(floor(x / cellSize)) + "," + toString(floor(y / cellSize));
+}
+
+// يبني (أو يُعيد بناء) الفهرس المكاني لمحرّك mm بالكامل من مواضع كل الأقنعة *النشطة* حالياً،
+// بحجم خلية cellSize. استدعِها مرة كل دورة (بعد mm_tick) قبل أي استعلام عبر mm_spatialNeighbors
+// في نفس تلك الدورة — الفهرس لقطة لحظية، لا يتحدَّث تلقائياً بعد تحريك أي قناع لاحقاً.
+fun mm_buildSpatialIndex(mm, cellSize) {
+    let buckets = {};
+    let i = 0;
+    while (i < len(mm["order"])) {
+        let name = mm["order"][i];
+        if (mm_isActive(mm, name)) {
+            let rec = mm["items"][name];
+            let key = mm__spatialCellKey(rec["x"], rec["y"], cellSize);
+            if (has(buckets, key) == false) { buckets[key] = []; }
+            push(buckets[key], name);
+        }
+        i = i + 1;
+    }
+    mm["spatial"] = { cellSize: cellSize, buckets: buckets };
+    return true;
+}
+
+// مصفوفة بأسماء كل الأقنعة النشطة الأخرى الواقعة فعلياً ضمن مسافة radius من قناع name،
+// بالبحث فقط ضمن خليته الحالية وثماني خلايا مجاورة (بدل كل قناع في العالم) — يتطلّب استدعاء
+// mm_buildSpatialIndex أولاً في نفس الدورة، وإلا يُعيد مصفوفة فارغة دوماً
+fun mm_spatialNeighbors(mm, name, radius) {
+    let out = [];
+    if (has(mm, "spatial") == false) { return out; }
+    let here = mm_position(mm, name);
+    if (here == nil) { return out; }
+    let spatial = mm["spatial"];
+    let cellSize = spatial["cellSize"];
+    let cx = floor(here["x"] / cellSize);
+    let cy = floor(here["y"] / cellSize);
+    let dxCell = 0 - 1;
+    while (dxCell <= 1) {
+        let dyCell = 0 - 1;
+        while (dyCell <= 1) {
+            let key = toString(cx + dxCell) + "," + toString(cy + dyCell);
+            if (has(spatial["buckets"], key)) {
+                let bucket = spatial["buckets"][key];
+                let i = 0;
+                while (i < len(bucket)) {
+                    let otherName = bucket[i];
+                    if (otherName != name) {
+                        let d = mm_distance(here, mm_position(mm, otherName));
+                        if (d <= radius) { push(out, otherName); }
+                    }
+                    i = i + 1;
+                }
+            }
+            dyCell = dyCell + 1;
+        }
+        dxCell = dxCell + 1;
+    }
+    return out;
+}
+
+
+// ============================================================================
+// 20) المؤقتات والتهدئة لكل قناع (Timers / Cooldowns)
+// ============================================================================
+//  مؤقتات مُسمّاة مخزَّنة داخل meta كل قناع، تُعَدّ تنازلياً بوحدة "دورات" (ticks) — مفيدة
+//  لتهدئة قدرة (cooldown)، عدّاد استعداد قبل تفعيل، أو أي حدث مؤجَّل مرتبط بقناع بعينه.
+
+// يبدأ (أو يُعيد ضبط) مؤقتاً باسم timerName على قناع name لمدة durationTicks دورة
+fun mm_setTimer(mm, name, timerName, durationTicks) {
+    let timers = mm_getMeta(mm, name, "timers", nil);
+    if (timers == nil) {
+        timers = {};
+        mm_setMeta(mm, name, "timers", timers);
+    }
+    timers[timerName] = durationTicks;
+    return true;
+}
+
+// هل المؤقت timerName لا يزال يعدّ (لم يبلغ الصفر بعد) على قناع name؟ false أيضاً إن لم
+// يُبدَأ هذا المؤقت أصلاً على هذا القناع
+fun mm_isTimerActive(mm, name, timerName) {
+    let timers = mm_getMeta(mm, name, "timers", nil);
+    if (timers == nil) { return false; }
+    if (has(timers, timerName) == false) { return false; }
+    return timers[timerName] > 0;
+}
+
+// عدد الدورات المتبقية للمؤقت timerName على قناع name، أو 0 إن لم يُبدَأ أصلاً
+fun mm_timerRemaining(mm, name, timerName) {
+    let timers = mm_getMeta(mm, name, "timers", nil);
+    if (timers == nil) { return 0; }
+    if (has(timers, timerName) == false) { return 0; }
+    return timers[timerName];
+}
+
+// يُنقِص كل المؤقتات النشطة على كل الأقنعة بمقدار dt دورة واحدة (استدعِها مرة كل دورة، عادة
+// مباشرة بعد mm_tick). كل مؤقت يبلغ الصفر أو أقل يُطلِق حدث محرّك "timerDone" (payload:
+// {name: اسم القناع, timer: اسم المؤقت}) مرة واحدة فقط عند لحظة البلوغ، ثم يبقى عند 0.
+fun mm_tickTimers(mm, dt) {
+    let i = 0;
+    while (i < len(mm["order"])) {
+        let name = mm["order"][i];
+        let timers = mm_getMeta(mm, name, "timers", nil);
+        if (timers != nil) {
+            let timerNames = keys(timers);
+            let t = 0;
+            while (t < len(timerNames)) {
+                let timerName = timerNames[t];
+                if (timers[timerName] > 0) {
+                    timers[timerName] = timers[timerName] - dt;
+                    if (timers[timerName] <= 0) {
+                        timers[timerName] = 0;
+                        mm__fire(mm, "timerDone", { name: name, timer: timerName });
+                    }
+                }
+                t = t + 1;
+            }
+        }
+        i = i + 1;
+    }
+    return nil;
+}
+
+)"MOVINGMASKOGRIN";
 inline const std::unordered_map<std::string, std::string>& embeddedRinLibraries() {
     static const std::unordered_map<std::string, std::string> libs = {
         {"lib/math.og.rin", kLib_math_og_rin},
@@ -5830,6 +8181,7 @@ inline const std::unordered_map<std::string, std::string>& embeddedRinLibraries(
         {"lib/rinxg.og.rin", kLib_rinxg_og_rin},
         {"lib/rinzip.og.rin", kLib_rinzip_og_rin},
         {"lib/relyRIN.og.rin", kLib_relyRIN_og_rin},
+        {"lib/movingmask.og.rin", kLib_movingmask_og_rin},
     };
     return libs;
 }
