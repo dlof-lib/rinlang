@@ -1,11 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- بطاقة "مكتبتي" الجديدة (تجديد شامل للشكل): بطاقة بيضاء بشريط تمييز بنفسجي جانبي
+     (bg_library_card_mine) بدل نمط "job card" الداكن العام، مع أيقونة متدرّجة وشارة meta
+     على شكل حبّة بدل نص عائم بلا خلفية. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="vertical"
-    android:background="@drawable/bg_list_card"
-    android:layout_margin="5dp"
-    android:padding="13dp">
+    android:background="@drawable/bg_library_card_mine"
+    android:layout_margin="6dp"
+    android:paddingStart="16dp"
+    android:paddingTop="14dp"
+    android:paddingEnd="13dp"
+    android:paddingBottom="13dp">
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -13,24 +20,24 @@
         android:orientation="horizontal"
         android:gravity="center_vertical">
 
-        <!-- أيقونة "rin+" داخل شارة دائرية بلون التمييز، لتمييزها بصرياً كمكتبة/حزمة -->
+        <!-- أيقونة "rin+" داخل شارة متدرّجة بنفسجية، بدل الدائرة المسطّحة الشفافة سابقاً -->
         <FrameLayout
-            android:layout_width="36dp"
-            android:layout_height="36dp"
+            android:layout_width="38dp"
+            android:layout_height="38dp"
             android:layout_marginEnd="12dp">
 
             <View
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
-                android:background="@drawable/bg_icon_badge_accent"
-                android:alpha="0.16" />
+                android:background="@drawable/bg_package_icon_gradient" />
 
             <ImageView
-                android:layout_width="22dp"
-                android:layout_height="22dp"
+                android:layout_width="20dp"
+                android:layout_height="20dp"
                 android:layout_gravity="center"
                 android:scaleType="fitCenter"
                 android:src="@drawable/ic_rin_stack"
+                app:tint="@android:color/white"
                 android:contentDescription="@null" />
         </FrameLayout>
 
@@ -48,12 +55,16 @@
                 android:textStyle="bold"
                 android:textColor="@color/rin_on_toolbar" />
 
+            <!-- meta كحبّة رمادية خفيفة بدل نص صغير عائم، أوضح بصرياً داخل بطاقة بيضاء -->
             <TextView
                 android:id="@+id/txtLibraryMeta"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="1dp"
-                android:textSize="12sp"
+                android:layout_marginTop="5dp"
+                android:background="@drawable/bg_chip_meta"
+                android:paddingHorizontal="9dp"
+                android:paddingVertical="2dp"
+                android:textSize="11sp"
                 android:textColor="@color/rin_editor_hint" />
         </LinearLayout>
 
@@ -70,13 +81,13 @@
     <View
         android:layout_width="match_parent"
         android:layout_height="1dp"
-        android:layout_marginTop="10dp"
+        android:layout_marginTop="12dp"
         android:background="@color/rin_divider" />
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
+        android:layout_marginTop="10dp"
         android:orientation="horizontal">
 
         <Button
