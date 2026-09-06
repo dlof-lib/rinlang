@@ -12,6 +12,8 @@ import android.widget.LinearLayout
 import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
+import android.text.Editable
+import android.text.TextWatcher
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -27,6 +29,7 @@ class ProjectsActivity : AppCompatActivity() {
     private lateinit var rvProjects: RecyclerView
     private lateinit var txtEmpty: View
     private lateinit var adapter: ProjectsAdapter
+    private lateinit var txtProjectCount: TextView
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -39,6 +42,8 @@ class ProjectsActivity : AppCompatActivity() {
 
         rvProjects = findViewById(R.id.rvProjects)
         txtEmpty = findViewById(R.id.txtEmptyProjects)
+        txtProjectCount = findViewById(R.id.txtProjectCount)
+        val inputProjectSearch: EditText = findViewById(R.id.inputProjectSearch)
         val fabNewProject: View = findViewById(R.id.fabNewProject)
 
         adapter = ProjectsAdapter(
@@ -49,6 +54,15 @@ class ProjectsActivity : AppCompatActivity() {
         )
         rvProjects.layoutManager = LinearLayoutManager(this)
         rvProjects.adapter = adapter
+
+        inputProjectSearch.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                adapter.setQuery(s?.toString().orEmpty())
+                updateEmptyState()
+            }
+            override fun afterTextChanged(s: Editable?) = Unit
+        })
 
         fabNewProject.setOnClickListener { showCreateDialog() }
         findViewById<View>(R.id.btnProjectAlbums).setOnClickListener { showAlbumsDialog() }
@@ -68,7 +82,16 @@ class ProjectsActivity : AppCompatActivity() {
             }
         }
         adapter.submit(projects)
-        txtEmpty.visibility = if (projects.isEmpty()) View.VISIBLE else View.GONE
+        updateEmptyState()
+        txtProjectCount.text = resources.getQuantityString(
+            R.plurals.projects_count,
+            projects.size,
+            projects.size
+        )
+    }
+
+    private fun updateEmptyState() {
+        txtEmpty.visibility = if (adapter.itemCount == 0) View.VISIBLE else View.GONE
     }
 
     private fun openProject(project: Project) {
@@ -365,10 +388,26 @@ private class ProjectsAdapter(
     val onMove: (Project) -> Unit
 ) : RecyclerView.Adapter<ProjectsAdapter.VH>() {
 
+    private var allItems: List<Project> = emptyList()
     private var items: List<Project> = emptyList()
+    private var query: String = ""
 
     fun submit(newItems: List<Project>) {
-        items = newItems
+        allItems = newItems
+        applyFilter()
+    }
+
+    fun setQuery(value: String) {
+        query = value.trim()
+        applyFilter()
+    }
+
+    private fun applyFilter() {
+        items = if (query.isBlank()) {
+            allItems
+        } else {
+            allItems.filter { it.name.contains(query, ignoreCase = true) }
+        }
         notifyDataSetChanged()
     }
 
