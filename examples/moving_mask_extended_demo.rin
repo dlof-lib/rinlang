@@ -1,0 +1,76 @@
+// ============================================================================
+//  examples/moving_mask_extended_demo.rin
+//  مثال تشغيلي للمفاهيم الخمسة الجديدة في lib/movingmask.og.rin (الإصدار 1.0.0):
+//    16) Flocking / Rigid Formations
+//    17) Finite State Machine لكل قناع
+//    18) Serialization (حفظ/استعادة عبر JSON)
+//    19) Spatial Grid Index (فهرسة مكانية لتسريع البحث عن الجيران)
+//    20) Timers / Cooldowns
+//  شغّله بـ: rin examples/moving_mask_extended_demo.rin
+//  (للمثال الأساسي الشامل لبقية المكتبة، انظر examples/moving_mask_demo.rin)
+// ============================================================================
+
+@import "lib/movingmask.og.rin";
+
+print "إصدار مكتبة movingmask: " + mm_version();
+
+print "\n=== 16) سرب (flocking) + تشكيل جامد (rigid formation) ===";
+let flock = mm_new();
+mm_spawn(flock, "b1", 0, 0);
+mm_spawn(flock, "b2", 5, 0);
+mm_spawn(flock, "b3", 0, 5);
+mm_setVelocity(flock, "b1", 1, 0);
+mm_setVelocity(flock, "b2", 1, 1);
+mm_setVelocity(flock, "b3", 0, 1);
+let weights = { separation: 1.5, alignment: 1.0, cohesion: 1.0 };
+mm_flockStep(flock, "b1", mm_names(flock), 8, 2, weights);
+mm_integrate(flock, "b1", 1);
+print "موضع b1 بعد خطوة سرب واحدة: " + toString(mm_position(flock, "b1"));
+
+mm_spawn(flock, "leader", 10, 10);
+mm_spawn(flock, "follower1", 0, 0);
+mm_setFormationOffset(flock, "follower1", "leader", -5, -5);
+mm_setPosition(flock, "leader", 20, 20);
+mm_applyFormations(flock);
+print "follower1 يتبع leader بإزاحة ثابتة (-5,-5): " + toString(mm_position(flock, "follower1"));
+
+print "\n=== 17) آلة حالات محدودة (NPC: idle -> chase -> idle) ===";
+let world = mm_new();
+mm_spawn(world, "npc", 0, 0);
+mm_fsmDefine(world, "npc", "idle");
+mm_fsmAddTransition(world, "npc", "idle", "seePlayer", "chase");
+mm_fsmAddTransition(world, "npc", "chase", "loseTrack", "idle");
+print "الحالة الابتدائية: " + mm_fsmState(world, "npc");
+mm_fsmFire(world, "npc", "seePlayer");
+print "بعد حدث seePlayer: " + mm_fsmState(world, "npc");
+mm_fsmFire(world, "npc", "loseTrack");
+print "بعد حدث loseTrack: " + mm_fsmState(world, "npc");
+
+print "\n=== 18) تسلسل واستعادة (Serialize / Deserialize) ===";
+mm_spawn(world, "item", 3, 4);
+mm_setVelocity(world, "item", 1, 1);
+let saved = mm_serialize(world);
+print "طول نص JSON المحفوظ: " + toString(len(saved));
+let restored = mm_deserialize(saved);
+print "بعد الاستعادة في محرّك جديد تماماً — موضع item: " + toString(mm_position(restored, "item"));
+
+print "\n=== 19) فهرسة مكانية (Spatial Grid Index) للجيران ===";
+let sworld = mm_new();
+mm_spawn(sworld, "p1", 0, 0);
+mm_spawn(sworld, "p2", 3, 0);
+mm_spawn(sworld, "p3", 50, 50);
+mm_buildSpatialIndex(sworld, 10);
+print "جيران p1 ضمن نصف قطر 5 (بلا فحص p3 البعيد): " + toString(mm_spatialNeighbors(sworld, "p1", 5));
+
+print "\n=== 20) مؤقتات وتهدئة (Timers / Cooldowns) ===";
+let tworld = mm_new();
+mm_spawn(tworld, "hero", 0, 0);
+mm_setTimer(tworld, "hero", "attackCooldown", 3);
+let doneLog = [];
+fun onTimerDone(payload) { push(doneLog, payload); }
+mm_on(tworld, "timerDone", onTimerDone);
+mm_tickTimers(tworld, 1);
+mm_tickTimers(tworld, 1);
+print "متبقٍّ بعد دورتين من 3: " + toString(mm_timerRemaining(tworld, "hero", "attackCooldown"));
+mm_tickTimers(tworld, 1);
+print "جاهز للهجوم مجدداً؟ " + toString(mm_isTimerActive(tworld, "hero", "attackCooldown") == false);
