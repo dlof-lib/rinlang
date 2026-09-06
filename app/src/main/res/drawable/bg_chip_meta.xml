@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- حبّة رمادية خفيفة لعرض معلومة وصفية قصيرة (حجم/عدد أسطر...) داخل بطاقات "المكتبات"
+     المُجدَّدة وبطاقات "حزمي المنشورة"، بدل نص عادي عائم بلا خلفية. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="@color/rin_chip_bg" />
+    <corners android:radius="20dp" />
+</shape>
