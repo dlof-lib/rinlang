@@ -21,6 +21,7 @@
             android:alpha="0.16" />
 
         <ImageView
+            android:id="@+id/imgBuiltinIcon"
             android:layout_width="22dp"
             android:layout_height="22dp"
             android:layout_gravity="center"
