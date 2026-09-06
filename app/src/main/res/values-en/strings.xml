@@ -232,6 +232,7 @@ print \"Hello, \" + name + \"!\";
     <string name="loom_zoom_out">Zoom out</string>
     <string name="loom_zoom_100">100%</string>
     <string name="loom_zoom_percent_format">%1$d%%</string>
+    <string name="loom_link_open_failed">Couldn\'t open link: %1$s</string>
     <string name="loom_restart_session">Restart session</string>
     <string name="loom_session_restarted_toast">Live Preview session restarted</string>
     <string name="loom_device_changed_toast">Device width changed to %1$dpx — session restarted</string>
