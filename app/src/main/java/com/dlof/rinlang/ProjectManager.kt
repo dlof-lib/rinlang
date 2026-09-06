@@ -38,9 +38,14 @@ object ProjectManager {
     data class UiDesignOptions(
         val topBar: Boolean = true,
         val sidebar: Boolean = true,
+        val bottomNav: Boolean = false,
+        val buttonStyle: String = "filled",
         val primaryColor: String = "#7C5CFF",
         val background: String = "#0F0F14",
-        val text: String = "#F5F5F7"
+        val text: String = "#F5F5F7",
+        val fontFamily: String = "sans",
+        val typography: String = "medium",
+        val cornerRadius: Int = 14
     )
 
     /**
@@ -155,7 +160,8 @@ object ProjectManager {
         val sb = StringBuilder()
         sb.append("// مشروع: $name\n")
         sb.append("// نوع المشروع: واجهة مستخدم (Loomtime) — @container يحوي @theme و@view.\n")
-        sb.append("// وُلِّد من خيارات \"رسم الواجهة\": شريط علوي=${options.topBar}، قائمة جانبية=${options.sidebar}.\n\n")
+        sb.append("// وُلِّد من خيارات UI: topBar=${options.topBar}, sidebar=${options.sidebar}, bottomNav=${options.bottomNav}, buttonStyle=${options.buttonStyle}.\n")
+        sb.append("// font=${options.fontFamily}, typography=${options.typography}, radius=${options.cornerRadius}.\n\n")
         sb.append("@container=Home\n")
         sb.append("    warp userName = \"زائر\";\n\n")
         sb.append("    @theme=Midnight\n")
@@ -163,6 +169,7 @@ object ProjectManager {
         sb.append("        primary=\"${options.primaryColor}\";\n")
         sb.append("        background=\"${options.background}\";\n")
         sb.append("        text=\"${options.text}\";\n")
+        sb.append("        font=\"${options.fontFamily}\"; typography=\"${options.typography}\"; radius=${options.cornerRadius};\n")
         sb.append("    .end/theme\n\n")
 
         sb.append("    @view.Scaffold=Root\n")
@@ -185,20 +192,37 @@ object ProjectManager {
 
         sb.append("            @view.Column=content\n")
         sb.append("                grow=1; gap=20; padding=20;\n")
-        sb.append("                @view.Card=placeholder1 height=180; radius=14; bg=\"transparent\"; borderColor=\"${options.text}22\"; borderWidth=1; .end/view\n")
-        sb.append("                @view.Card=placeholder2 height=180; radius=14; bg=\"transparent\"; borderColor=\"${options.text}22\"; borderWidth=1; .end/view\n")
+        sb.append("                @view.Card=placeholder1 height=180; radius=${options.cornerRadius}; bg=\"transparent\"; borderColor=\"${options.text}22\"; borderWidth=1; .end/view\n")
+        sb.append("                @view.Card=placeholder2 height=180; radius=${options.cornerRadius}; bg=\"transparent\"; borderColor=\"${options.text}22\"; borderWidth=1; .end/view\n")
         sb.append("            .end/view\n")
+
+        val buttonBg = when (options.buttonStyle) {
+            "outline" -> "transparent"
+            "soft" -> options.primaryColor + "22"
+            else -> options.primaryColor
+        }
+        val buttonBorder = if (options.buttonStyle == "outline") " borderColor=\"${options.primaryColor}\"; borderWidth=1;" else ""
 
         if (options.sidebar) {
             sb.append("\n            @view.Drawer=sidebar\n")
             sb.append("                role=\"sidebar\"; open=\"true\"; width=220; bg=\"${options.background}\";\n")
             sb.append("                @view.Column=sidebarCol\n")
             sb.append("                    gap=10; padding=16;\n")
-            sb.append("                    @view.Button=menuBtn label=\"القائمة\"; bg=\"${options.primaryColor}\"; color=\"#FFFFFF\"; radius=10; .end/view\n")
+            sb.append("                    @view.Button=menuBtn label=\"القائمة\"; bg=\"$buttonBg\"; color=\"${options.primaryColor}\"; radius=${options.cornerRadius};$buttonBorder .end/view\n")
             sb.append("                    @view.MenuItem=sidebarItem1 label=\"\"; bg=\"${options.text}14\"; radius=10; height=34; .end/view\n")
             sb.append("                    @view.MenuItem=sidebarItem2 label=\"\"; bg=\"${options.text}14\"; radius=10; height=34; .end/view\n")
             sb.append("                .end/view\n")
             sb.append("            .end/view\n")
+        }
+
+        if (options.bottomNav) {
+            sb.append("\n        @view.BottomBar=bottomNav\n")
+            sb.append("            height=64; bg=\"${options.background}\";\n")
+            sb.append("            @view.Row=bottomItems gap=18; valign=\"center\";\n")
+            sb.append("                @view.Button=home label=\"الرئيسية\"; bg=\"$buttonBg\"; color=\"${options.primaryColor}\"; radius=${options.cornerRadius};$buttonBorder .end/view\n")
+            sb.append("                @view.Button=settings label=\"الإعدادات\"; bg=\"$buttonBg\"; color=\"${options.primaryColor}\"; radius=${options.cornerRadius};$buttonBorder .end/view\n")
+            sb.append("            .end/view\n")
+            sb.append("        .end/view\n")
         }
 
         sb.append("        .end/view\n")
