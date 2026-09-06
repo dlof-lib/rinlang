@@ -159,6 +159,8 @@
 
     <!-- قسم "حزمي" داخل شاشة الحساب: عرض حزم المستخدم المنشورة وحذفها -->
     <string name="account_my_packages_title">حزمي المنشورة</string>
+    <!-- شارة صغيرة خضراء فوق كل صف في قسم "حزمي المنشورة" تؤكّد أنها مرئية للجميع في المتجر -->
+    <string name="package_published_badge">منشورة</string>
     <string name="account_my_packages_empty">لم تنشر أي حزمة بعد. انشر مكتبة من شاشة المكتبات لتظهر هنا.</string>
     <string name="my_package_meta_format">%1$s • %2$d تنزيل</string>
     <string name="action_delete_package">حذف</string>
