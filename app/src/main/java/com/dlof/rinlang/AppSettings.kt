@@ -6,10 +6,9 @@ import android.content.Context
 object AppSettings {
     const val MIN_FONT_SIZE_SP = 10f
     const val MAX_FONT_SIZE_SP = 22f
-    // كان 14f — صغير جدًا للقراءة المريحة في محرر كود على شاشة هاتف (خصوصًا مع الحروف العربية
-    // التي تحتاج ارتفاع-x أوضح قليلاً من اللاتينية بنفس الحجم الاسمي). القيمة الفعلية المستخدمة
-    // تبقى قابلة للتغيير من إعدادات التكبير/التصغير كما كانت.
-    const val DEFAULT_FONT_SIZE_SP = 17f
+    // خُفِّض الحجم الافتراضي من 17f إلى 13f لمظهر محرر أكثر إحكامًا وأصغر حجمًا (أسطر كود أكثر
+    // ظهورًا على الشاشة دفعة واحدة)، مع إبقاء التكبير/التصغير من الإعدادات كما هو دون تغيير حدوده.
+    const val DEFAULT_FONT_SIZE_SP = 13f
     const val DEFAULT_SHOW_LINE_NUMBERS = true
 
     private const val PREFS_NAME = "rin_app_settings"
