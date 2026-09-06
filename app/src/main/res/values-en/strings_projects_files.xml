@@ -8,6 +8,16 @@
 
     <!-- Unified top bar for sub-screens -->
     <string name="action_back">Back</string>
+    <string name="projects_count_zero">Projects</string>
+    <string name="projects_screen_heading">Your projects</string>
+    <string name="search_projects_hint">Search projects...</string>
+    <string name="open_project_action">Open project</string>
+    <string name="no_projects_hint">Create your first project and start building with Rin.</string>
+    <plurals name="projects_count">
+        <item quantity="zero">No projects</item>
+        <item quantity="one">1 project</item>
+        <item quantity="other">%1$d projects</item>
+    </plurals>
     <string name="projects_screen_title">Projects</string>
     <string name="files_screen_title">Files</string>
 
