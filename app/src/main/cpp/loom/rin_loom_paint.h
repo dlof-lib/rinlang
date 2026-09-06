@@ -359,6 +359,7 @@ struct Dye {
     // alone with no label=. Plain Button keeps drawing label= exactly as before (unaffected).
     std::string buttonDisplayLabel(const StrandPtr& s) const {
         std::string label = s->attrStr("label", "");
+        if (label.empty()) label = s->attrStr("text", "");
         if (s->kind != StrandKind::ICONBUTTON) return label;
         std::string iconName = s->attrStr("icon", "");
         if (iconName.empty()) return label; // an IconButton with no icon= just behaves like Button
@@ -516,6 +517,8 @@ inline std::string jsonEscape(const std::string& s) {
 }
 inline void fabricToJson(const StrandPtr& s, std::ostringstream& os) {
     os << "{\"kind\":\"" << strandKindName(s->kind) << "\",\"name\":\"" << jsonEscape(s->name) << "\""
+       << ",\"role\":\"" << uiRoleName(s->role) << "\""
+       << ",\"sourceTag\":\"" << jsonEscape(s->sourceTag.empty() ? strandKindName(s->kind) : s->sourceTag) << "\""
        << ",\"line\":" << s->sourceLine
        << ",\"x\":" << s->geometry.x << ",\"y\":" << s->geometry.y
        << ",\"w\":" << s->geometry.w << ",\"h\":" << s->geometry.h
@@ -535,10 +538,47 @@ inline void fabricToJson(const StrandPtr& s, std::ostringstream& os) {
        << ",\"name\":\"" << jsonEscape(accessibleName(*s)) << "\""
        << ",\"state\":\"" << stateName(resolveState(*s)) << "\""
        << ",\"disabled\":" << (resolveState(*s) == StrandState::DISABLED ? "true" : "false")
-       << "},\"children\":[";
+       << "},\"interaction\":{\"clickable\":"
+       << ((s->attr("onTap") || (s->kind == StrandKind::LINK && !s->attrStr("href", "").empty())) ? "true" : "false")
+       << ",\"onTap\":\"" << jsonEscape(s->attr("onTap") ? s->attr("onTap")->asString() : "") << "\""
+       << ",\"href\":\"" << jsonEscape(s->attrStr("href", "")) << "\"},\"children\":[";
     for (size_t i=0;i<s->children.size();i++) { if (i) os << ","; fabricToJson(s->children[i], os); }
     os << "]}";
 }
+inline const char* drawOpName(DrawOp op) {
+    switch (op) {
+        case DrawOp::FILL_RECT: return "fill_rect";
+        case DrawOp::STROKE_RECT: return "stroke_rect";
+        case DrawOp::TEXT_RUN: return "text";
+        case DrawOp::SCRIM_RECT: return "scrim";
+        default: return "unknown";
+    }
+}
+
+// Serializes the exact Dye output, not a second approximation made by the host UI. This makes
+// Loom's native renderer output inspectable and gives every host backend the same geometry/color/
+// text primitives. Kotlin may still use its Canvas adapter, but it can now consume this as the
+// canonical render plan when a pixel-identical/native path is desired.
+inline std::string drawListToJsonString(const DrawList& list) {
+    std::ostringstream os;
+    os << "[";
+    for (size_t i = 0; i < list.size(); ++i) {
+        const auto& d = list[i];
+        if (i) os << ",";
+        os << "{\"op\":\"" << drawOpName(d.op) << "\""
+           << ",\"owner\":" << d.owner
+           << ",\"x\":" << d.bounds.x << ",\"y\":" << d.bounds.y
+           << ",\"w\":" << d.bounds.w << ",\"h\":" << d.bounds.h
+           << ",\"color\":\"" << colorToHex(d.color) << "\""
+           << ",\"radius\":" << d.radius
+           << ",\"strokeWidth\":" << d.strokeWidth;
+        if (!d.text.empty()) os << ",\"text\":\"" << jsonEscape(d.text) << "\"";
+        os << "}";
+    }
+    os << "]";
+    return os.str();
+}
+
 inline std::string fabricToJsonString(const StrandPtr& s) {
     std::ostringstream os; fabricToJson(s, os); return os.str();
 }
