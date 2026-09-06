@@ -18,6 +18,11 @@
     <string name="delete_project_confirm">¿Eliminar el proyecto \"%1$s\" y todos sus archivos?</string>
     <string name="project_name_hint">Nombre del proyecto</string>
     <string name="no_projects_yet">Aún no hay proyectos. Toca + para crear tu primer proyecto.</string>
+    <string name="no_projects_hint">Crea tu primer proyecto con el botón + de abajo</string>
+    <string name="projects_screen_heading">Proyectos</string>
+    <string name="projects_count_zero">No hay proyectos</string>
+    <string name="search_projects_hint">Buscar proyectos</string>
+    <string name="open_project_action">Abrir proyecto</string>
     <string name="project_not_found">Proyecto no encontrado</string>
     <string name="project_meta_format">%1$d archivos</string>
 
