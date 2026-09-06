@@ -46,6 +46,8 @@ class LibrariesActivity : AppCompatActivity() {
     private lateinit var rvBuiltinLibraries: RecyclerView
     private lateinit var txtEmpty: View
     private lateinit var userAdapter: UserLibraryAdapter
+    private lateinit var tvHeroSubtitle: TextView
+    private lateinit var tvLibrariesCountPill: TextView
 
     private val importLibraryLauncher =
         registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -82,6 +84,12 @@ class LibrariesActivity : AppCompatActivity() {
             visibility = View.VISIBLE
         }
         findViewById<View>(R.id.btnToolbarBack).setOnClickListener { finish() }
+
+        // رأس شاشة "المكتبات" الجديد: نفس اسم المشروع الذي كان يظهر في txtToolbarSubtitle،
+        // معروضاً الآن أيضاً داخل البطاقة المتدرّجة العلوية.
+        tvHeroSubtitle = findViewById(R.id.tvLibrariesHeroSubtitle)
+        tvHeroSubtitle.text = project.name
+        tvLibrariesCountPill = findViewById(R.id.tvLibrariesCountPill)
 
         rvUserLibraries = findViewById(R.id.rvUserLibraries)
         rvBuiltinLibraries = findViewById(R.id.rvBuiltinLibraries)
@@ -143,6 +151,8 @@ class LibrariesActivity : AppCompatActivity() {
         val libraries = ProjectManager.listLibraries(project)
         userAdapter.submit(libraries)
         txtEmpty.visibility = if (libraries.isEmpty()) View.VISIBLE else View.GONE
+        // حبّة العدّاد أعلى الشاشة: تعكس فوراً عدد مكتبات المستخدم لهذا المشروع دون فتح القائمة.
+        tvLibrariesCountPill.text = libraries.size.toString()
     }
 
     private fun uploadLibrary(uri: Uri) {
