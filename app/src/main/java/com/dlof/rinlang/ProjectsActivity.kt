@@ -8,12 +8,12 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.EditText
+import android.widget.ArrayAdapter
+import android.widget.RadioButton
 import android.widget.LinearLayout
 import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
-import android.text.Editable
-import android.text.TextWatcher
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -29,7 +29,6 @@ class ProjectsActivity : AppCompatActivity() {
     private lateinit var rvProjects: RecyclerView
     private lateinit var txtEmpty: View
     private lateinit var adapter: ProjectsAdapter
-    private lateinit var txtProjectCount: TextView
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -42,8 +41,6 @@ class ProjectsActivity : AppCompatActivity() {
 
         rvProjects = findViewById(R.id.rvProjects)
         txtEmpty = findViewById(R.id.txtEmptyProjects)
-        txtProjectCount = findViewById(R.id.txtProjectCount)
-        val inputProjectSearch: EditText = findViewById(R.id.inputProjectSearch)
         val fabNewProject: View = findViewById(R.id.fabNewProject)
 
         adapter = ProjectsAdapter(
@@ -54,15 +51,6 @@ class ProjectsActivity : AppCompatActivity() {
         )
         rvProjects.layoutManager = LinearLayoutManager(this)
         rvProjects.adapter = adapter
-
-        inputProjectSearch.addTextChangedListener(object : TextWatcher {
-            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
-            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
-                adapter.setQuery(s?.toString().orEmpty())
-                updateEmptyState()
-            }
-            override fun afterTextChanged(s: Editable?) = Unit
-        })
 
         fabNewProject.setOnClickListener { showCreateDialog() }
         findViewById<View>(R.id.btnProjectAlbums).setOnClickListener { showAlbumsDialog() }
@@ -82,16 +70,7 @@ class ProjectsActivity : AppCompatActivity() {
             }
         }
         adapter.submit(projects)
-        updateEmptyState()
-        txtProjectCount.text = resources.getQuantityString(
-            R.plurals.projects_count,
-            projects.size,
-            projects.size
-        )
-    }
-
-    private fun updateEmptyState() {
-        txtEmpty.visibility = if (adapter.itemCount == 0) View.VISIBLE else View.GONE
+        txtEmpty.visibility = if (projects.isEmpty()) View.VISIBLE else View.GONE
     }
 
     private fun openProject(project: Project) {
@@ -131,6 +110,16 @@ class ProjectsActivity : AppCompatActivity() {
         val switchUiTopBar: Switch = view.findViewById(R.id.switchUiTopBar)
         val switchUiSidebar: Switch = view.findViewById(R.id.switchUiSidebar)
         val rowUiColors: LinearLayout = view.findViewById(R.id.rowUiColors)
+        val rowUiTextColor: LinearLayout = view.findViewById(R.id.rowUiTextColor)
+        val rowUiBackground: LinearLayout = view.findViewById(R.id.rowUiBackground)
+        val switchUiBottomNav: Switch = view.findViewById(R.id.switchUiBottomNav)
+        val radioUiFilled: RadioButton = view.findViewById(R.id.radioUiFilled)
+        val radioUiSoft: RadioButton = view.findViewById(R.id.radioUiSoft)
+        val radioUiOutline: RadioButton = view.findViewById(R.id.radioUiOutline)
+        val spinnerUiFont: android.widget.Spinner = view.findViewById(R.id.spinnerUiFont)
+        val spinnerUiTypography: android.widget.Spinner = view.findViewById(R.id.spinnerUiTypography)
+        val spinnerUiRadius: android.widget.Spinner = view.findViewById(R.id.spinnerUiRadius)
+        val uiPreview: UiDesignPreviewView = view.findViewById(R.id.uiDesignPreview)
 
         // لوحة الألوان الأساسية المتاحة لاختيار المستخدم؛ أول لون (البنفسجي) هو الافتراضي
         // نفسه المستخدم سابقاً في قالب UI الثابت، حتى لا يتغيّر الشكل الافتراضي لمن لا يلمس هذا الخيار.
@@ -147,6 +136,8 @@ class ProjectsActivity : AppCompatActivity() {
         val customColorIndex = colorPalette.size
         var selectedColorIndex = 0
         var customColor: Int? = null
+        var backgroundColor = ContextCompat.getColor(this, R.color.rin_background)
+        var textColor = ContextCompat.getColor(this, R.color.rin_on_toolbar)
 
         val swatchSizePx = (30 * resources.displayMetrics.density).toInt()
         val swatchStrokePx = (2.5f * resources.displayMetrics.density).toInt()
@@ -171,6 +162,7 @@ class ProjectsActivity : AppCompatActivity() {
                 swatch.setOnClickListener {
                     selectedColorIndex = index
                     renderColorSwatches()
+                    uiPreview.configure(colorPalette[selectedColorIndex], backgroundColor, textColor, switchUiTopBar.isChecked, switchUiSidebar.isChecked, switchUiBottomNav.isChecked, "filled", 14, "sans", "medium")
                 }
                 rowUiColors.addView(swatch)
             }
@@ -215,20 +207,53 @@ class ProjectsActivity : AppCompatActivity() {
                     customColor = pickedColor
                     selectedColorIndex = customColorIndex
                     renderColorSwatches()
+                    uiPreview.configure(pickedColor, backgroundColor, textColor, switchUiTopBar.isChecked, switchUiSidebar.isChecked, switchUiBottomNav.isChecked, "filled", 14, "sans", "medium")
                 }
             }
             rowUiColors.addView(customSwatch)
         }
         renderColorSwatches()
 
+        fun addColorControl(row: LinearLayout, color: Int, onPick: (Int) -> Unit) {
+            val swatch = View(this)
+            val size = (34 * resources.displayMetrics.density).toInt()
+            swatch.layoutParams = LinearLayout.LayoutParams(size, size).apply { setMargins(0, 2, 8, 2) }
+            swatch.background = GradientDrawable().apply { shape = GradientDrawable.RECTANGLE; cornerRadius = 10f; setColor(color); setStroke(2, ContextCompat.getColor(this@ProjectsActivity, R.color.rin_divider)) }
+            swatch.setOnClickListener { showColorPickerDialog(color, onPick) }
+            row.removeAllViews(); row.addView(swatch)
+        }
+        addColorControl(rowUiTextColor, textColor) { textColor = it; updateUiPreview() }
+        addColorControl(rowUiBackground, backgroundColor) { backgroundColor = it; updateUiPreview() }
+
         fun currentUiColor(): Int =
             if (selectedColorIndex == customColorIndex) (customColor ?: colorPalette[0]) else colorPalette[selectedColorIndex]
+
+        val fontAdapter = ArrayAdapter.createFromResource(this, R.array.ui_font_names, android.R.layout.simple_spinner_item).also { it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
+        spinnerUiFont.adapter = fontAdapter
+        val typoAdapter = ArrayAdapter.createFromResource(this, R.array.ui_typography_names, android.R.layout.simple_spinner_item).also { it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
+        spinnerUiTypography.adapter = typoAdapter
+        val radiusAdapter = ArrayAdapter.createFromResource(this, R.array.ui_radius_names, android.R.layout.simple_spinner_item).also { it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
+        spinnerUiRadius.adapter = radiusAdapter
+        spinnerUiRadius.setSelection(2)
+
+        fun currentButtonStyle(): String = when { radioUiOutline.isChecked -> "outline"; radioUiSoft.isChecked -> "soft"; else -> "filled" }
+        fun currentFont(): String = resources.getStringArray(R.array.ui_font_values)[spinnerUiFont.selectedItemPosition.coerceIn(0, 2)]
+        fun currentTypography(): String = resources.getStringArray(R.array.ui_typography_values)[spinnerUiTypography.selectedItemPosition.coerceIn(0, 2)]
+        fun currentRadius(): Int = resources.getIntArray(R.array.ui_radius_values)[spinnerUiRadius.selectedItemPosition.coerceIn(0, 4)]
+        fun updateUiPreview() { uiPreview.configure(currentUiColor(), backgroundColor, textColor, switchUiTopBar.isChecked, switchUiSidebar.isChecked, switchUiBottomNav.isChecked, currentButtonStyle(), currentRadius(), currentFont(), currentTypography()) }
+        val previewListeners = listOf<View>(switchUiTopBar, switchUiSidebar, switchUiBottomNav, radioUiFilled, radioUiSoft, radioUiOutline, spinnerUiFont, spinnerUiTypography, spinnerUiRadius)
+        previewListeners.forEach { it.setOnClickListener { updateUiPreview() } }
+        spinnerUiFont.setOnItemSelectedListener(object : android.widget.AdapterView.OnItemSelectedListener { override fun onNothingSelected(parent: android.widget.AdapterView<*>?) {} override fun onItemSelected(parent: android.widget.AdapterView<*>?, v: View?, position: Int, id: Long) { updateUiPreview() } })
+        spinnerUiTypography.setOnItemSelectedListener(spinnerUiFont.onItemSelectedListener)
+        spinnerUiRadius.setOnItemSelectedListener(spinnerUiFont.onItemSelectedListener)
+        updateUiPreview()
 
         var selectedType = ProjectType.FREE
         fun selectChip(chip: View) {
             selectedType = chips.getValue(chip)
             chips.keys.forEach { it.isSelected = it === chip }
             sectionUiDesign.visibility = if (selectedType == ProjectType.UI) View.VISIBLE else View.GONE
+            if (selectedType == ProjectType.UI) updateUiPreview()
         }
         chips.keys.forEach { chip -> chip.setOnClickListener { selectChip(chip) } }
         selectChip(chipFree)
@@ -241,7 +266,14 @@ class ProjectsActivity : AppCompatActivity() {
                 val uiOptions = ProjectManager.UiDesignOptions(
                     topBar = switchUiTopBar.isChecked,
                     sidebar = switchUiSidebar.isChecked,
-                    primaryColor = String.format("#%06X", 0xFFFFFF and currentUiColor())
+                    bottomNav = switchUiBottomNav.isChecked,
+                    buttonStyle = currentButtonStyle(),
+                    primaryColor = String.format("#%06X", 0xFFFFFF and currentUiColor()),
+                    background = String.format("#%06X", 0xFFFFFF and backgroundColor),
+                    text = String.format("#%06X", 0xFFFFFF and textColor),
+                    fontFamily = currentFont(),
+                    typography = currentTypography(),
+                    cornerRadius = currentRadius()
                 )
                 ProjectCreationProgressDialog(this).run(
                     work = {
@@ -388,26 +420,10 @@ private class ProjectsAdapter(
     val onMove: (Project) -> Unit
 ) : RecyclerView.Adapter<ProjectsAdapter.VH>() {
 
-    private var allItems: List<Project> = emptyList()
     private var items: List<Project> = emptyList()
-    private var query: String = ""
 
     fun submit(newItems: List<Project>) {
-        allItems = newItems
-        applyFilter()
-    }
-
-    fun setQuery(value: String) {
-        query = value.trim()
-        applyFilter()
-    }
-
-    private fun applyFilter() {
-        items = if (query.isBlank()) {
-            allItems
-        } else {
-            allItems.filter { it.name.contains(query, ignoreCase = true) }
-        }
+        items = newItems
         notifyDataSetChanged()
     }
 
