@@ -68,6 +68,14 @@
 //        15.9) Dye — لون بصري اختياري للقناع
 //        15.10) Theme — لوحات ألوان مُسمّاة على مستوى المحرّك (Pattern Book)
 //        15.11) Object Inspector — بطاقة فحص كاملة لقناع واحد
+//    16) التكوين الجماعي والانسيابية (Flocking / Rigid Formations) — جديد
+//    17) آلة حالات محدودة لكل قناع (Per-Mask Finite State Machine) — جديد
+//    18) التسلسل والاستعادة (Serialization / Save & Load عبر JSON) — جديد
+//    19) الفهرسة المكانية لتسريع استعلامات الجوار (Spatial Grid Index) — جديد
+//    20) المؤقتات والتهدئة لكل قناع (Timers / Cooldowns) — جديد
+//
+//  الإصدار: 1.0.0 — أول نشر رسمي لهذه المكتبة ضمن RinStudio (مدمجة embedded في المفسّر،
+//  متاحة فوراً عبر شاشة "المكتبات" بلا رفع يدوي). انظر CHANGELOG.md.
 // ============================================================================
 
 
@@ -78,6 +86,12 @@
 let MM_EPSILON = 0.0000001;      // فرق افتراضي لمقارنة الأعداد العشرية
 let MM_DEFAULT_HISTORY_LIMIT = 30; // عدد نقاط الأثر (trail) المحفوظة كحد أقصى لكل قناع
 let MM_TAU = 6.28318530717958647692; // 2*PI — يُستخدم لاختزال زوايا mm_orbitStep فقط
+let MM_VERSION = "1.0.0"; // إصدار مكتبة movingmask نفسها (انظر CHANGELOG.md)
+
+// نص/رقم إصدار مكتبة movingmask الحالي — استخدمه لعرض "عن هذه المكتبة" في تطبيقك
+fun mm_version() {
+    return MM_VERSION;
+}
 
 // يحصر x بين lo و hi (نسخة عددية بسيطة؛ clamp() الأصلية في Rin تعمل على مصفوفات فقط)
 fun mm_clampNum(x, lo, hi) {
@@ -1934,4 +1948,401 @@ fun mm_toObjectInspector(mm, name) {
         i = i + 1;
     }
     return { id: name, fields: fields };
+}
+
+
+// ============================================================================
+// 16) التكوين الجماعي والانسيابية (Flocking / Rigid Formations)
+// ============================================================================
+//  Boids الكلاسيكية (Craig Reynolds): كل قناع "طائر" يعدّل تسارعه بناءً على جيرانه القريبين
+//  عبر ثلاث قواعد بسيطة تُركَّب معاً: الابتعاد (separation)، المحاذاة (alignment)، والتماسك
+//  (cohesion). القوى هنا "توجيهية" (steering): تُضاف إلى تسارع القناع عبر mm_applyForce ولا
+//  تُحرِّكه مباشرة — استدعِ mm_integrate/mm_tick بعدها لتطبيق الحركة الفعلية. مرّر لهذه الدوال
+//  مصفوفة أسماء الجيران (others) بدل كل القناع (استخدم mm_spatialNeighbors من القسم 19
+//  لحساب هذه القائمة بكفاءة بدل المرور على كل الأقنعة في كل خطوة).
+
+// (داخلية) يحصر متجه قوة (fx, fy) بحيث لا يتجاوز مقداره maxForce، مع الحفاظ على اتجاهه
+fun mm__limitMagnitude(fx, fy, maxForce) {
+    let mag = sqrt(fx * fx + fy * fy);
+    if (mag <= maxForce or mag < MM_EPSILON) { return mm_point(fx, fy); }
+    return mm_point((fx / mag) * maxForce, (fy / mag) * maxForce);
+}
+
+// قوة الابتعاد: تدفع القناع بعيداً عن كل جار أقرب من desiredSeparation، بوزن يتناسب عكسياً
+// مع المسافة (الجيران الأقرب يدفعون أقوى). تُطبَّق مباشرة عبر mm_applyForce وتُعاد أيضاً.
+fun mm_flockSeparation(mm, name, others, desiredSeparation, maxForce) {
+    let here = mm_position(mm, name);
+    if (here == nil) { return mm_point(0, 0); }
+    let steerX = 0;
+    let steerY = 0;
+    let count = 0;
+    let i = 0;
+    while (i < len(others)) {
+        let otherName = others[i];
+        if (otherName != name) {
+            let otherPos = mm_position(mm, otherName);
+            if (otherPos != nil) {
+                let d = mm_distance(here, otherPos);
+                if (d > 0 and d < desiredSeparation) {
+                    steerX = steerX + (here["x"] - otherPos["x"]) / d;
+                    steerY = steerY + (here["y"] - otherPos["y"]) / d;
+                    count = count + 1;
+                }
+            }
+        }
+        i = i + 1;
+    }
+    if (count > 0) {
+        steerX = steerX / count;
+        steerY = steerY / count;
+    }
+    let limited = mm__limitMagnitude(steerX, steerY, maxForce);
+    mm_applyForce(mm, name, limited["x"], limited["y"]);
+    return limited;
+}
+
+// قوة المحاذاة: تُقرِّب سرعة القناع من متوسط سرعات جيرانه (يتّجه القطيع بنفس الاتجاه تقريباً)
+fun mm_flockAlignment(mm, name, others, maxForce) {
+    let sumVx = 0;
+    let sumVy = 0;
+    let count = 0;
+    let i = 0;
+    while (i < len(others)) {
+        let otherName = others[i];
+        if (otherName != name and mm_exists(mm, otherName)) {
+            let v = mm_velocity(mm, otherName);
+            sumVx = sumVx + v["x"];
+            sumVy = sumVy + v["y"];
+            count = count + 1;
+        }
+        i = i + 1;
+    }
+    if (count == 0) { return mm_point(0, 0); }
+    let limited = mm__limitMagnitude(sumVx / count, sumVy / count, maxForce);
+    mm_applyForce(mm, name, limited["x"], limited["y"]);
+    return limited;
+}
+
+// قوة التماسك: تسحب القناع نحو مركز ثقل جيرانه (يبقى القطيع مجتمعاً بلا تشتت)
+fun mm_flockCohesion(mm, name, others, maxForce) {
+    let here = mm_position(mm, name);
+    if (here == nil) { return mm_point(0, 0); }
+    let sumX = 0;
+    let sumY = 0;
+    let count = 0;
+    let i = 0;
+    while (i < len(others)) {
+        let otherName = others[i];
+        if (otherName != name) {
+            let otherPos = mm_position(mm, otherName);
+            if (otherPos != nil) {
+                sumX = sumX + otherPos["x"];
+                sumY = sumY + otherPos["y"];
+                count = count + 1;
+            }
+        }
+        i = i + 1;
+    }
+    if (count == 0) { return mm_point(0, 0); }
+    let limited = mm__limitMagnitude((sumX / count) - here["x"], (sumY / count) - here["y"], maxForce);
+    mm_applyForce(mm, name, limited["x"], limited["y"]);
+    return limited;
+}
+
+// يُطبِّق القواعد الثلاث معاً بأوزان قابلة للتخصيص (weights: {separation, alignment, cohesion})
+// دفعة واحدة على قناع name بين جيرانه others — استدعِها لكل قناع كل دورة قبل mm_tick لمحاكاة
+// سرب/قطيع كامل، ثم mm_tick لتطبيق الحركة الناتجة فعلياً
+fun mm_flockStep(mm, name, others, desiredSeparation, maxForce, weights) {
+    let sep = mm_flockSeparation(mm, name, others, desiredSeparation, maxForce * weights["separation"]);
+    let ali = mm_flockAlignment(mm, name, others, maxForce * weights["alignment"]);
+    let coh = mm_flockCohesion(mm, name, others, maxForce * weights["cohesion"]);
+    return { separation: sep, alignment: ali, cohesion: coh };
+}
+
+// ---- التكوينات الجماعية الجامدة (Rigid Formations) -------------------------------------
+// خلافاً للانسيابية (flocking) القائمة على قوى تقريبية، التكوين الجامد يُثبِّت إزاحة دقيقة
+// (dx, dy) لكل تابع عن قائده — مفيد لتشكيلات عسكرية/مركبات مرافقة تحافظ على شكل ثابت تماماً.
+
+// يُسجِّل إزاحة ثابتة (dx, dy) لقناع "follower" نسبةً لموضع قناع "leader" الحالي
+fun mm_setFormationOffset(mm, followerName, leaderName, dx, dy) {
+    return mm_setMeta(mm, followerName, "formation", { leader: leaderName, dx: dx, dy: dy });
+}
+
+// يُزيل التكوين عن قناع تابع (يعود للحركة الحرّة العادية دون تدخّل mm_applyFormations)
+fun mm_clearFormationOffset(mm, followerName) {
+    if (mm_exists(mm, followerName) == false) { return false; }
+    let metaMap = mm["items"][followerName]["meta"];
+    if (has(metaMap, "formation")) { remove(metaMap, "formation"); }
+    return true;
+}
+
+// يُحرِّك فوراً كل قناع يملك تكوين مُسجَّل (عبر mm_setFormationOffset) إلى موضع قائده الحالي
+// زائد إزاحته الثابتة — استدعِها بعد تحريك القادة (عبر seek/path/تحكّم مباشر) في كل دورة
+fun mm_applyFormations(mm) {
+    let i = 0;
+    while (i < len(mm["order"])) {
+        let name = mm["order"][i];
+        let formation = mm_getMeta(mm, name, "formation", nil);
+        if (formation != nil) {
+            let leaderPos = mm_position(mm, formation["leader"]);
+            if (leaderPos != nil) {
+                mm_setPosition(mm, name, leaderPos["x"] + formation["dx"], leaderPos["y"] + formation["dy"]);
+                mm_recordHistory(mm, name);
+            }
+        }
+        i = i + 1;
+    }
+    return nil;
+}
+
+
+// ============================================================================
+// 17) آلة حالات محدودة لكل قناع (Per-Mask Finite State Machine)
+// ============================================================================
+//  آلة حالة بسيطة (FSM) مخزَّنة داخل meta كل قناع: حالة حالية + جدول انتقالات
+//  (fromState + event -> toState). مفيدة لسلوك كائنات الألعاب/الواجهات (idle/walk/attack،
+//  أو draft/submitted/approved لعنصر واجهة) بلا كتابة سلاسل if متكرّرة يدوياً في كل مكان.
+
+// يُهيّئ آلة حالة لقناع بحالة ابتدائية initialState وجدول انتقالات فارغ. يستبدل أي آلة
+// حالة كانت مُسجَّلة سابقاً على هذا القناع بالكامل.
+fun mm_fsmDefine(mm, name, initialState) {
+    return mm_setMeta(mm, name, "fsm", { state: initialState, transitions: {} });
+}
+
+// يُسجِّل انتقالاً: عند وقوع الحدث event والقناع في الحالة fromState، ينتقل إلى toState.
+// يتطلّب استدعاء mm_fsmDefine على هذا القناع أولاً؛ يُعيد false وبلا تأثير إن لم توجد آلة
+// حالة عليه بعد.
+fun mm_fsmAddTransition(mm, name, fromState, event, toState) {
+    let fsm = mm_getMeta(mm, name, "fsm", nil);
+    if (fsm == nil) { return false; }
+    let key = fromState + "::" + event;
+    fsm["transitions"][key] = toState;
+    return true;
+}
+
+// الحالة الحالية لآلة حالة قناع، أو nil إن لم تُعرَّف له آلة حالة أصلاً
+fun mm_fsmState(mm, name) {
+    let fsm = mm_getMeta(mm, name, "fsm", nil);
+    if (fsm == nil) { return nil; }
+    return fsm["state"];
+}
+
+// هل آلة حالة القناع في الحالة state بالضبط؟ false أيضاً إن لم توجد آلة حالة عليه
+fun mm_fsmIs(mm, name, state) {
+    return mm_fsmState(mm, name) == state;
+}
+
+// يُطلق حدثاً event على آلة حالة القناع: إن وُجد انتقال مُسجَّل من حالتها الحالية بهذا
+// الحدث، تنتقل إلى الحالة الجديدة وتُطلق حدث محرّك "fsmChanged" (payload: {name, from, to,
+// event})، وتُعيد الحالة الجديدة. وإلا (لا انتقال مطابق، أو لا آلة حالة على القناع أصلاً)
+// تبقى الحالة كما هي وتُعاد الحالة الحالية (أو nil إن لم توجد آلة حالة أصلاً).
+fun mm_fsmFire(mm, name, event) {
+    let fsm = mm_getMeta(mm, name, "fsm", nil);
+    if (fsm == nil) { return nil; }
+    let key = fsm["state"] + "::" + event;
+    if (has(fsm["transitions"], key)) {
+        let from = fsm["state"];
+        let to = fsm["transitions"][key];
+        fsm["state"] = to;
+        mm__fire(mm, "fsmChanged", { name: name, from: from, to: to, event: event });
+        return to;
+    }
+    return fsm["state"];
+}
+
+
+// ============================================================================
+// 18) التسلسل والاستعادة (Serialization / Save & Load عبر JSON)
+// ============================================================================
+//  يحوِّل حالة المحرّك (أو يستعيدها) إلى/من نص JSON عبر jsonEncode/jsonDecode الأصليتين —
+//  مفيد لحفظ تقدّم لعبة/محاكاة على القرص (عبر دوال storage الأصلية) واستعادتها لاحقاً
+//  بالضبط. **قيد مهم**: القيم الدالية (handlers عبر mm_on، actions المخصَّصة عبر
+//  mm_defineAction) لا يمكن تسلسلها في JSON — تُستبعَد تلقائياً من الناتج (mm_toPlainData)،
+//  وتبقى مسؤولية المستخدم إعادة تسجيلها بعد الاستعادة إن احتاج إليها.
+
+// يُصدِّر البيانات الخام القابلة للتسلسل من محرّك mm بالكامل كخريطة عادية (بلا handlers/
+// actions/themes التي تحوي دوال) — استخدمها مباشرة أو مرّرها لـjsonEncode بنفسك
+fun mm_toPlainData(mm) {
+    return {
+        items: mm["items"],
+        order: mm["order"],
+        containers: mm["containers"],
+        bounds: mm["bounds"],
+        regions: mm["regions"],
+        tick: mm["tick"],
+        historyLimit: mm["historyLimit"],
+        nav: mm["nav"]
+    };
+}
+
+// نص JSON كامل لحالة محرّك mm (عبر mm_toPlainData + jsonEncode) — جاهز للكتابة في ملف عبر
+// دوال storage الأصلية على منصتك
+fun mm_serialize(mm) {
+    return jsonEncode(mm_toPlainData(mm));
+}
+
+// يبني محرّكاً جديداً تماماً من نص JSON أنتجه mm_serialize سابقاً — بلا أي handlers/actions/
+// themes مُسجَّلة (استخدم mm_deserializeInto بدلاً منه للإبقاء على مستمعين/أفعال محرّك قائم
+// مع استعادة بيانات الأقنعة فقط)
+fun mm_deserialize(jsonText) {
+    let data = jsonDecode(jsonText);
+    let mm = mm_new();
+    mm["items"] = data["items"];
+    mm["order"] = data["order"];
+    mm["containers"] = data["containers"];
+    mm["bounds"] = data["bounds"];
+    mm["regions"] = data["regions"];
+    mm["tick"] = data["tick"];
+    mm["historyLimit"] = data["historyLimit"];
+    mm["nav"] = data["nav"];
+    return mm;
+}
+
+// يستعيد بيانات الأقنعة/الحدود/المناطق من نص JSON *داخل* محرّك mm قائم بالفعل، محتفظاً
+// بكل handlers/actions/themes المُسجَّلة عليه مسبقاً بلا تغيير — الخيار الأنسب لاستعادة حفظ
+// أثناء تشغيل التطبيق (بدل استبدال المحرّك بالكامل كما تفعل mm_deserialize)
+fun mm_deserializeInto(mm, jsonText) {
+    let data = jsonDecode(jsonText);
+    mm["items"] = data["items"];
+    mm["order"] = data["order"];
+    mm["containers"] = data["containers"];
+    mm["bounds"] = data["bounds"];
+    mm["regions"] = data["regions"];
+    mm["tick"] = data["tick"];
+    mm["historyLimit"] = data["historyLimit"];
+    mm["nav"] = data["nav"];
+    return true;
+}
+
+
+// ============================================================================
+// 19) الفهرسة المكانية لتسريع استعلامات الجوار (Spatial Grid Index)
+// ============================================================================
+//  mm_nearestTo وmm_needleHit (القسمان 11 و15) تفحصان كل قناع مسجَّل في كل استدعاء — O(n)
+//  لكل استعلام، وهذا يصبح بطيئاً مع مئات/آلاف الأقنعة النشطة كل دورة. الفهرس المكاني هنا
+//  يقسم العالم إلى خلايا مربّعة بحجم cellSize، ويُصنِّف كل قناع في خليته الحالية، فيصبح
+//  إيجاد "جيران قريبين" يفحص فقط الخلايا المجاورة مباشرة بدل كل قناع في العالم.
+
+// (داخلية) مفتاح نصّي فريد لخلية الشبكة المكانية التي تقع فيها نقطة (x, y) بحجم خلية cellSize
+fun mm__spatialCellKey(x, y, cellSize) {
+    return toString(floor(x / cellSize)) + "," + toString(floor(y / cellSize));
+}
+
+// يبني (أو يُعيد بناء) الفهرس المكاني لمحرّك mm بالكامل من مواضع كل الأقنعة *النشطة* حالياً،
+// بحجم خلية cellSize. استدعِها مرة كل دورة (بعد mm_tick) قبل أي استعلام عبر mm_spatialNeighbors
+// في نفس تلك الدورة — الفهرس لقطة لحظية، لا يتحدَّث تلقائياً بعد تحريك أي قناع لاحقاً.
+fun mm_buildSpatialIndex(mm, cellSize) {
+    let buckets = {};
+    let i = 0;
+    while (i < len(mm["order"])) {
+        let name = mm["order"][i];
+        if (mm_isActive(mm, name)) {
+            let rec = mm["items"][name];
+            let key = mm__spatialCellKey(rec["x"], rec["y"], cellSize);
+            if (has(buckets, key) == false) { buckets[key] = []; }
+            push(buckets[key], name);
+        }
+        i = i + 1;
+    }
+    mm["spatial"] = { cellSize: cellSize, buckets: buckets };
+    return true;
+}
+
+// مصفوفة بأسماء كل الأقنعة النشطة الأخرى الواقعة فعلياً ضمن مسافة radius من قناع name،
+// بالبحث فقط ضمن خليته الحالية وثماني خلايا مجاورة (بدل كل قناع في العالم) — يتطلّب استدعاء
+// mm_buildSpatialIndex أولاً في نفس الدورة، وإلا يُعيد مصفوفة فارغة دوماً
+fun mm_spatialNeighbors(mm, name, radius) {
+    let out = [];
+    if (has(mm, "spatial") == false) { return out; }
+    let here = mm_position(mm, name);
+    if (here == nil) { return out; }
+    let spatial = mm["spatial"];
+    let cellSize = spatial["cellSize"];
+    let cx = floor(here["x"] / cellSize);
+    let cy = floor(here["y"] / cellSize);
+    let dxCell = 0 - 1;
+    while (dxCell <= 1) {
+        let dyCell = 0 - 1;
+        while (dyCell <= 1) {
+            let key = toString(cx + dxCell) + "," + toString(cy + dyCell);
+            if (has(spatial["buckets"], key)) {
+                let bucket = spatial["buckets"][key];
+                let i = 0;
+                while (i < len(bucket)) {
+                    let otherName = bucket[i];
+                    if (otherName != name) {
+                        let d = mm_distance(here, mm_position(mm, otherName));
+                        if (d <= radius) { push(out, otherName); }
+                    }
+                    i = i + 1;
+                }
+            }
+            dyCell = dyCell + 1;
+        }
+        dxCell = dxCell + 1;
+    }
+    return out;
+}
+
+
+// ============================================================================
+// 20) المؤقتات والتهدئة لكل قناع (Timers / Cooldowns)
+// ============================================================================
+//  مؤقتات مُسمّاة مخزَّنة داخل meta كل قناع، تُعَدّ تنازلياً بوحدة "دورات" (ticks) — مفيدة
+//  لتهدئة قدرة (cooldown)، عدّاد استعداد قبل تفعيل، أو أي حدث مؤجَّل مرتبط بقناع بعينه.
+
+// يبدأ (أو يُعيد ضبط) مؤقتاً باسم timerName على قناع name لمدة durationTicks دورة
+fun mm_setTimer(mm, name, timerName, durationTicks) {
+    let timers = mm_getMeta(mm, name, "timers", nil);
+    if (timers == nil) {
+        timers = {};
+        mm_setMeta(mm, name, "timers", timers);
+    }
+    timers[timerName] = durationTicks;
+    return true;
+}
+
+// هل المؤقت timerName لا يزال يعدّ (لم يبلغ الصفر بعد) على قناع name؟ false أيضاً إن لم
+// يُبدَأ هذا المؤقت أصلاً على هذا القناع
+fun mm_isTimerActive(mm, name, timerName) {
+    let timers = mm_getMeta(mm, name, "timers", nil);
+    if (timers == nil) { return false; }
+    if (has(timers, timerName) == false) { return false; }
+    return timers[timerName] > 0;
+}
+
+// عدد الدورات المتبقية للمؤقت timerName على قناع name، أو 0 إن لم يُبدَأ أصلاً
+fun mm_timerRemaining(mm, name, timerName) {
+    let timers = mm_getMeta(mm, name, "timers", nil);
+    if (timers == nil) { return 0; }
+    if (has(timers, timerName) == false) { return 0; }
+    return timers[timerName];
+}
+
+// يُنقِص كل المؤقتات النشطة على كل الأقنعة بمقدار dt دورة واحدة (استدعِها مرة كل دورة، عادة
+// مباشرة بعد mm_tick). كل مؤقت يبلغ الصفر أو أقل يُطلِق حدث محرّك "timerDone" (payload:
+// {name: اسم القناع, timer: اسم المؤقت}) مرة واحدة فقط عند لحظة البلوغ، ثم يبقى عند 0.
+fun mm_tickTimers(mm, dt) {
+    let i = 0;
+    while (i < len(mm["order"])) {
+        let name = mm["order"][i];
+        let timers = mm_getMeta(mm, name, "timers", nil);
+        if (timers != nil) {
+            let timerNames = keys(timers);
+            let t = 0;
+            while (t < len(timerNames)) {
+                let timerName = timerNames[t];
+                if (timers[timerName] > 0) {
+                    timers[timerName] = timers[timerName] - dt;
+                    if (timers[timerName] <= 0) {
+                        timers[timerName] = 0;
+                        mm__fire(mm, "timerDone", { name: name, timer: timerName });
+                    }
+                }
+                t = t + 1;
+            }
+        }
+        i = i + 1;
+    }
+    return nil;
 }
