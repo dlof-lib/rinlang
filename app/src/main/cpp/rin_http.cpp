@@ -19,9 +19,14 @@ namespace rin {
 namespace http {
 
 static std::function<HttpResult(const std::string&, const std::string&, const HeaderList&, const std::string&, int)> g_androidBridge;
+static std::function<HttpResult(const std::string&, int)> g_androidBinaryGetBridge;
 
 void setAndroidBridge(std::function<HttpResult(const std::string&, const std::string&, const HeaderList&, const std::string&, int)> bridge) {
     g_androidBridge = std::move(bridge);
+}
+
+void setAndroidBinaryGetBridge(std::function<HttpResult(const std::string&, int)> bridge) {
+    g_androidBinaryGetBridge = std::move(bridge);
 }
 
 // يستخرج "<<<RIN_HTTP_STATUS:NNN>>>" المُلحَقة بنهاية stdout عبر curl -w (انظر buildCurlArgs)،
@@ -161,6 +166,18 @@ HttpResult performRequest(const std::string& method, const std::string& url,
 }
 
 #endif
+
+// performBinaryGet: على أندرويد يمر عبر g_androidBinaryGetBridge (jbyteArray خام، انظر
+// rin_http.h)؛ في غيابه (بناء لم يُسجِّل الجسر الثنائي بعد) يتراجع إلى performRequest العادي حتى
+// لا ينهار البرنامج، رغم أن ذلك قد يُفسد بايتات ثنائية حقيقية على أندرويد تحديداً. على أي منصة
+// أخرى (CLI/سطح مكتب) نستخدم performRequest العادي دائماً لأنه آمن للبايتات هناك أصلاً (curl عبر
+// pipe/subprocess حقيقي، بلا أي تحويل نصي وسيط).
+HttpResult performBinaryGet(const std::string& url, int timeoutMs) {
+#if defined(__ANDROID__)
+    if (g_androidBinaryGetBridge) return g_androidBinaryGetBridge(url, timeoutMs);
+#endif
+    return performRequest("GET", url, {}, "", timeoutMs);
+}
 
 } // namespace http
 } // namespace rin
