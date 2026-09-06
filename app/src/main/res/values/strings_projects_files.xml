@@ -15,20 +15,6 @@
     <!-- الشريط العلوي الموحّد للشاشات الفرعية -->
     <string name="action_back">رجوع</string>
     <string name="projects_screen_title">المشاريع</string>
-    <string name="projects_count_zero">مشاريع</string>
-    <string name="projects_screen_heading">مشاريعك</string>
-    <string name="search_projects_hint">ابحث عن مشروع...</string>
-    <string name="open_project_action">فتح المشروع</string>
-    <string name="no_projects_hint">أنشئ مشروعك الأول وابدأ العمل على ملفات Rin.</string>
-    <plurals name="projects_count">
-        <item quantity="zero">لا توجد مشاريع</item>
-        <item quantity="one">مشروع واحد</item>
-        <item quantity="two">مشروعان</item>
-        <item quantity="few">%1$d مشاريع</item>
-        <item quantity="many">%1$d مشروعاً</item>
-        <item quantity="other">%1$d مشروع</item>
-    </plurals>
-
     <string name="files_screen_title">الملفات</string>
 
     <!-- شاشة المشاريع -->
@@ -67,6 +53,25 @@
     <string name="color_picker_title">اختيار لون</string>
     <string name="color_picker_custom_desc">لون مخصص</string>
     <string name="color_picker_back">رجوع</string>
+    <string name="ui_design_more_options">خيارات الواجهة المتقدمة</string>
+    <string name="ui_design_bottom_nav">شريط تنقل سفلي</string>
+    <string name="ui_design_button_style">نمط الأزرار</string>
+    <string name="ui_design_button_filled">ممتلئ</string>
+    <string name="ui_design_button_soft">ناعم</string>
+    <string name="ui_design_button_outline">مخطط</string>
+    <string name="ui_design_font">الخط</string>
+    <string name="ui_design_typography">حجم النص</string>
+    <string name="ui_design_radius">استدارة</string>
+    <string name="ui_design_background">لون الخلفية</string>
+    <string name="ui_design_text_color">لون النص</string>
+    <string name="ui_design_preview">معاينة مباشرة</string>
+    <string-array name="ui_font_names"><item>Sans</item><item>Serif</item><item>Monospace</item></string-array>
+    <string-array name="ui_font_values"><item>sans</item><item>serif</item><item>mono</item></string-array>
+    <string-array name="ui_typography_names"><item>صغير</item><item>متوسط</item><item>كبير</item></string-array>
+    <string-array name="ui_typography_values"><item>small</item><item>medium</item><item>large</item></string-array>
+    <string-array name="ui_radius_names"><item>0</item><item>10</item><item>14</item><item>22</item><item>30</item></string-array>
+    <integer-array name="ui_radius_values"><item>0</item><item>10</item><item>14</item><item>22</item><item>30</item></integer-array>
+
 
     <!-- مراحل إنشاء مشروع جديد -->
     <string name="project_creating_title">إنشاء مشروع</string>
