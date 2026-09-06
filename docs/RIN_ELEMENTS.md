@@ -36,7 +36,7 @@ Rin UI is split into three strict layers:
 
 ## Ready elements
 
-`text`, `button`, `input`, `search`, `image`, `video`, `audio`, `link`, `progress`, `checkbox`, `radio`, `switch`, `slider`, `select`, `list`, `row`, `column`, `box`, `card`, `sidebar`, `popup`, `modal`, `tabs`, `table`, `file`, `date`, `time`, `divider`, `code_editor`, `calculator`.
+`text`, `button`, `input`, `search`, `image`, `video`, `audio`, [`link`](./link.md), `progress`, `checkbox`, `radio`, `switch`, `slider`, `select`, `list`, `row`, `column`, `box`, `card`, `sidebar`, `popup`, `modal`, `tabs`, `table`, `file`, `date`, `time`, `divider`, `code_editor`, `calculator`.
 
 Every one of these is now backed end-to-end (parser tag → Fabric `StrandKind` → Loom measure/paint → JSON export), not just accepted syntax. A few are pure vocabulary aliases onto an existing kind rather than a new one — `sidebar` is a `Drawer`, `popup` is a `Dialog`, `range`/`dropdown`/`textfield` are accepted alongside `slider`/`select`/`input` — so `.rin` source can use whichever name reads best without losing any behavior.
 
