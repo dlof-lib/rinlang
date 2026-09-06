@@ -3,7 +3,6 @@ package com.dlof.rinlang
 import android.animation.ValueAnimator
 import android.content.Context
 import android.graphics.*
-import android.graphics.drawable.GradientDrawable
 import android.view.View
 import android.view.animation.DecelerateInterpolator
 import android.widget.FrameLayout
@@ -31,14 +30,12 @@ class RinLoadingView @JvmOverloads constructor(
     private val title = TextView(context)
     private val stage = TextView(context)
     private val progressText = TextView(context)
-    private val progressTrack = View(context)
-    private val progressFill = View(context)
+    private val progressBar = RinProgressBar(context)
     private val detail = TextView(context)
 
     private var progress = -1
     private var running = false
     private var pulseAnimator: ValueAnimator? = null
-    private var progressAnimator: ValueAnimator? = null
 
     init {
         isClickable = true
@@ -83,20 +80,12 @@ class RinLoadingView @JvmOverloads constructor(
         }
         content.addView(stage)
 
-        progressTrack.background = rounded(R.color.rin_skeleton_base, 8)
-        progressTrack.layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, dp(7), android.view.Gravity.CENTER_HORIZONTAL).apply {
+        progressBar.layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, dp(8), android.view.Gravity.CENTER_HORIZONTAL).apply {
             topMargin = dp(188)
             marginStart = dp(46)
             marginEnd = dp(46)
         }
-        content.addView(progressTrack)
-
-        progressFill.background = gradientProgress()
-        progressFill.layoutParams = LayoutParams(0, dp(7), android.view.Gravity.CENTER_HORIZONTAL).apply {
-            topMargin = dp(188)
-            marginStart = dp(46)
-        }
-        content.addView(progressFill)
+        content.addView(progressBar)
 
         progressText.textSize = 12f
         progressText.gravity = android.view.Gravity.CENTER
@@ -141,39 +130,20 @@ class RinLoadingView @JvmOverloads constructor(
 
     fun setProgress(value: Int, animate: Boolean = true) {
         val target = value.coerceIn(-1, 100)
-        val old = progress
         progress = target
         if (target < 0) {
             progressText.text = context.getString(R.string.rin_loading_working)
-            progressFill.layoutParams.width = 0
-            progressFill.requestLayout()
+            progressBar.setIndeterminate(true)
             return
         }
         progressText.text = context.getString(R.string.rin_loading_percent, target)
-        val width = progressTrack.width
-        if (width <= 0) {
-            progressFill.layoutParams.width = 0
-            progressFill.requestLayout()
-            progressFill.post { applyProgressWidth(target / 100f) }
-            return
-        }
-        if (!animate || old < 0) applyProgressWidth(target / 100f)
-        else {
-            progressAnimator?.cancel()
-            progressAnimator = ValueAnimator.ofFloat(old / 100f, target / 100f).apply {
-                duration = 240L
-                interpolator = DecelerateInterpolator()
-                addUpdateListener { applyProgressWidth(it.animatedValue as Float) }
-                start()
-            }
-        }
+        progressBar.setProgress(target, animate)
     }
 
     fun stop(immediate: Boolean = false) {
         if (!running) return
         running = false
         pulseAnimator?.cancel()
-        progressAnimator?.cancel()
         animation.stop()
         if (immediate) {
             visibility = View.GONE
@@ -184,13 +154,6 @@ class RinLoadingView @JvmOverloads constructor(
             visibility = View.GONE
             alpha = 1f
         }.start()
-    }
-
-    private fun applyProgressWidth(fraction: Float) {
-        val max = progressTrack.width
-        val lp = progressFill.layoutParams
-        lp.width = (max * fraction.coerceIn(0f, 1f)).toInt()
-        progressFill.layoutParams = lp
     }
 
     private fun startPulse() {
@@ -207,19 +170,6 @@ class RinLoadingView @JvmOverloads constructor(
             start()
         }
     }
-
-    private fun rounded(color: Int, radiusDp: Int): GradientDrawable =
-        GradientDrawable().apply {
-            shape = GradientDrawable.RECTANGLE
-            cornerRadius = dp(radiusDp).toFloat()
-            setColor(ContextCompat.getColor(context, color))
-        }
-
-    private fun gradientProgress(): GradientDrawable =
-        GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, intArrayOf(
-            ContextCompat.getColor(context, R.color.rin_gradient_green_start),
-            ContextCompat.getColor(context, R.color.rin_gradient_green_end)
-        )).apply { cornerRadius = dp(8).toFloat() }
 
     private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()
 }
