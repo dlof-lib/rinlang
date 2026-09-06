@@ -4,10 +4,17 @@
 > المكتبة، و[`standard-library.md`](./standard-library.md) للخريطة العامة لمكتبات Rin.
 
 **الوحدة:** `lib/movingmask.og.rin`
+**الإصدار:** `1.0.0` (أول نشر رسمي، مدمجة embedded داخل مفسّر RinStudio — انظر
+[`CHANGELOG.md`](../CHANGELOG.md))
 **الاستيراد:**
 ```rin
 @import "lib/movingmask.og.rin";
 ```
+
+**مدمجة في تطبيق RinStudio:** هذه المكتبة متاحة فوراً من داخل شاشة "المكتبات" (زر
+"المكتبات" في المحرِّر ← تبويب المكتبات القياسية) بلا حاجة لرفعها يدوياً — اضغط "إدراج"
+ليُضاف سطر `@import` تلقائياً عند مكان المؤشر. رقم إصدارها الحالي متاح برمجياً عبر
+`mm_version()`.
 
 ## الفكرة
 
@@ -210,6 +217,60 @@ mm_setActiveTheme(world, "Midnight");
 mm_setColor(world, "menuButton", mm_themeColor(world, "primary", "#000000"));
 ```
 
+### 15) التكوين الجماعي والانسيابية (Flocking / Rigid Formations) — جديد في 1.0.0
+Boids الكلاسيكية (Craig Reynolds) فوق قناع واحد مقابل مصفوفة جيران، بالإضافة لتشكيلات
+جامدة (إزاحة ثابتة تابع↔قائد):
+
+- `mm_flockSeparation` / `mm_flockAlignment` / `mm_flockCohesion` — قوى توجيهية فردية،
+  تُطبَّق مباشرة عبر `mm_applyForce` وتُعاد أيضاً كـ `{x, y}`
+- `mm_flockStep(mm, name, others, desiredSeparation, maxForce, weights)` — يُركِّب الثلاثة
+  بأوزان `{separation, alignment, cohesion}` دفعة واحدة
+- `mm_setFormationOffset(mm, follower, leader, dx, dy)` / `mm_clearFormationOffset` —
+  إزاحة ثابتة لتابع عن قائده
+- `mm_applyFormations(mm)` — يُحرِّك كل الأتباع إلى موضع قادتهم + إزاحتهم دفعة واحدة
+
+### 16) آلة حالات محدودة لكل قناع (Finite State Machine) — جديد في 1.0.0
+حالة + جدول انتقالات مخزَّنان في `meta` كل قناع — بلا سلاسل `if` متكرّرة لسلوك idle/chase/
+attack أو أي دورة حياة أخرى:
+
+- `mm_fsmDefine(mm, name, initialState)` — يُهيّئ آلة حالة على قناع
+- `mm_fsmAddTransition(mm, name, fromState, event, toState)` — يُسجِّل انتقالاً
+- `mm_fsmFire(mm, name, event)` — يُطلق حدثاً؛ ينتقل إن وُجد انتقال مطابق، ويُطلق حدث محرّك
+  `"fsmChanged"`
+- `mm_fsmState` / `mm_fsmIs` — استعلام عن الحالة الحالية
+
+### 17) التسلسل والاستعادة (Serialization / Save & Load) — جديد في 1.0.0
+حفظ/استعادة حالة محرّك كامل عبر JSON (`jsonEncode`/`jsonDecode` الأصليتين):
+
+- `mm_toPlainData(mm)` — بيانات خام قابلة للتسلسل (بلا handlers/actions/themes الدالية)
+- `mm_serialize(mm)` — نص JSON كامل، جاهز للكتابة على القرص
+- `mm_deserialize(jsonText)` — يبني محرّكاً جديداً تماماً من نص محفوظ
+- `mm_deserializeInto(mm, jsonText)` — يستعيد بيانات الأقنعة داخل محرّك قائم، محتفظاً
+  بـ handlers/actions المُسجَّلة عليه مسبقاً
+
+**قيد:** الدوال المسجَّلة (`mm_on`, `mm_defineAction`) لا تُسلسَل — يبقى إعادة تسجيلها بعد
+الاستعادة مسؤولية المستخدم، تماماً كقيد خلايا `warp` في القسم 15.
+
+### 18) الفهرسة المكانية لتسريع استعلامات الجوار (Spatial Grid Index) — جديد في 1.0.0
+يقسم `mm_nearestTo`/`mm_needleHit` العالمَ بحثاً خطياً O(n) في كل استعلام؛ الفهرس المكاني
+هنا يقسم العالم إلى خلايا شبكية بحجم `cellSize` فيجعل البحث عن الجيران يفحص فقط الخلايا
+المجاورة الثماني:
+
+- `mm_buildSpatialIndex(mm, cellSize)` — يبني/يُعيد بناء الفهرس من الأقنعة النشطة حالياً
+  (لقطة لحظية؛ أعد بناءه كل دورة بعد التحريك)
+- `mm_spatialNeighbors(mm, name, radius)` — الجيران الفعليون ضمن `radius`، بالبحث في
+  الخلية الحالية وجيرانها الثماني فقط
+
+### 19) المؤقتات والتهدئة لكل قناع (Timers / Cooldowns) — جديد في 1.0.0
+مؤقتات مُسمّاة تُعَدّ تنازلياً بوحدة دورات، مخزَّنة في `meta` كل قناع:
+
+- `mm_setTimer(mm, name, timerName, durationTicks)`
+- `mm_isTimerActive` / `mm_timerRemaining`
+- `mm_tickTimers(mm, dt)` — يُنقِص كل المؤقتات، ويُطلق حدث محرّك `"timerDone"` عند البلوغ
+
+مثال شامل لهذه المفاهيم الخمسة: [`../examples/moving_mask_extended_demo.rin`](../examples/moving_mask_extended_demo.rin).
+
+
 ## يتكامل طبيعياً مع
 
 - [`lib/loopkit.og.rin`](../lib/loopkit.og.rin) — مرّر دالة صغيرة تستدعي `mm_tick` إلى
@@ -227,3 +288,5 @@ mm_setColor(world, "menuButton", mm_themeColor(world, "primary", "#000000"));
 - [`mask.md`](./mask.md) — نظام القناع الأصلي (هوية ساكنة).
 - [`standard-library.md`](./standard-library.md) — خريطة كل مكتبات Rin القياسية.
 - [`../examples/moving_mask_demo.rin`](../examples/moving_mask_demo.rin) — مثال تشغيلي كامل.
+- [`../examples/moving_mask_extended_demo.rin`](../examples/moving_mask_extended_demo.rin) —
+  مثال المفاهيم الخمسة الجديدة (15-19) في الإصدار 1.0.0.
