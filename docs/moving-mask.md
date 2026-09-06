@@ -4,7 +4,7 @@
 > المكتبة، و[`standard-library.md`](./standard-library.md) للخريطة العامة لمكتبات Rin.
 
 **الوحدة:** `lib/movingmask.og.rin`
-**الإصدار:** `1.0.0` (أول نشر رسمي، مدمجة embedded داخل مفسّر RinStudio — انظر
+**الإصدار:** `1.2.0` (مدمجة embedded داخل مفسّر RinStudio — انظر
 [`CHANGELOG.md`](../CHANGELOG.md))
 **الاستيراد:**
 ```rin
@@ -268,7 +268,68 @@ attack أو أي دورة حياة أخرى:
 - `mm_isTimerActive` / `mm_timerRemaining`
 - `mm_tickTimers(mm, dt)` — يُنقِص كل المؤقتات، ويُطلق حدث محرّك `"timerDone"` عند البلوغ
 
-مثال شامل لهذه المفاهيم الخمسة: [`../examples/moving_mask_extended_demo.rin`](../examples/moving_mask_extended_demo.rin).
+### 20) قياس الإطارات في الثانية وخطوة زمنية ثابتة (FPS Meter / Fixed Timestep) — جديد في 1.1.0
+كل دوال المكتبة "منطقية" بحتة (تأخذ `dt` كوسيط بلا قراءة ساعة نظام فعلية — لا يوفّر مفسّر
+Rin دالة وقت أصلية). هذا القسم يبني *فوق* `dt` الذي يمرّره التطبيق المضيف عدّاداً لـFPS
+الفعلي، ومُجمِّعاً لخطوة زمنية ثابتة (النمط القياسي في محركات الألعاب لفصل الفيزياء
+المحدَّدة عن معدّل العرض المتغيّر):
+
+- `mm_fpsInit(mm)` / `mm_fpsUpdate(mm, dtSeconds)` — تُحدَّث القيمة كل نافذة نصف ثانية
+  (`MM_DEFAULT_FPS_WINDOW`) لقراءة مستقرة بلا اهتزاز
+- `mm_fps(mm)` / `mm_fpsFrameCount(mm)` / `mm_fpsReset(mm)`
+- `mm_fixedStepInit(mm, fixedDt)` — يهيّئ مُجمِّعاً بخطوة ثابتة (مثلاً `1/60`)
+- `mm_fixedStepRun(mm, realDt, maxSteps, stepFn)` — يستدعي `stepFn(fixedDt)` بقدر ما
+  يسمح المُجمِّع، بحد أقصى `maxSteps` (حماية من "spiral of death" عند تجمّد التطبيق للحظة)
+- `mm_fixedStepAlpha(mm)` — نسبة الزمن المتبقي غير المُستهلَك، لاستكمال العرض البصري
+  (interpolation) بين خطوتَي فيزياء
+
+### 21) أحجام الشاشة/الصفحة والتصميم المتجاوب (Viewport / Responsive) — جديد في 1.2.0
+مختلف عن `bounds` (منطقة اللعب المنطقية، القسم 6): هذا حجم الشاشة/الصفحة الفعلي، للتموضع
+النسبي وتحجيم القيم بين أجهزة مختلفة:
+
+- `mm_setViewport(mm, width, height)` / `mm_viewport(mm)`
+- `mm_toViewportPercent` / `mm_fromViewportPercent` / `mm_setPositionPercent` — تموضع
+  بنسبة مئوية من الشاشة بدل إحداثيات مطلقة
+- `mm_viewportClass(mm)` — `"compact"`/`"medium"`/`"expanded"` (حدود Material Design 3)
+- `mm_scaleForViewport(mm, baseValue, baseWidth)` — تحجيم تناسبي لقيمة صُمِّمت لعرض مرجعي
+
+### 22) أنواع شريط التحميل (Progress / Loading Bar Kinds) — جديد في 1.2.0
+خمسة أنواع (`kind`): `"linear"`، `"circular"` (نفس منطق linear، الفرق بصري عند الرسم)،
+`"indeterminate"` (يتأرجح بلا مدة معروفة)، `"segmented"` (مراحل معدودة)، `"buffer"`
+(كشريط الفيديو: قيمتان played/buffered):
+
+- `mm_progressCreate(mm, name, kind, duration)` / `mm_progressSet` / `mm_progressGet`
+- `mm_progressTick(mm, name, dt)` — تقدُّم تلقائي حسب النوع
+- `mm_progressSetSegments` / `mm_progressCompletedSegments` (لِـ`"segmented"`)
+- `mm_progressSetBuffer` (لِـ`"buffer"`) / `mm_progressIsDone`
+- `mm_progressWarp(mm, name)` — لقطة مسطَّحة جاهزة لعنصر واجهة Loom
+
+### 23) اللمس وسلاسة الحركة (Touch Gestures & Motion Smoothing) — جديد في 1.2.0
+تفسير لمس خام إلى بادرات، بالإضافة لتنعيم حركة مستقل عن معدّل الإطارات:
+
+- `mm_touchBegin` / `mm_touchMove` / `mm_touchDrag` (سحب لتحريك مباشر) / `mm_isTouching`
+- `mm_touchEnd(mm, name)` — يُصنِّف `"tap"` أو `"swipe"` حسب مسافة العتبة
+  `MM_TAP_DISTANCE_THRESHOLD`، ويُعيد `{type, dx, dy, distance}`
+- `mm_smoothFollow(mm, name, targetX, targetY, remainPerSecond, dt)` — تنعيم أُسّي
+  مستقل عن الإطارات (framerate-independent) لموضع القناع
+- `mm_smoothVelocity` — نفس المنطق على متجه السرعة
+
+### 24) العملات والنقاط القابلة للجمع (Coins / Collectibles / Score) — جديد في 1.2.0
+- `mm_spawnCoin(mm, name, x, y, value)` / `mm_isCoin` / `mm_isCoinCollected`
+- `mm_collectCoinsNear(mm, collectorName, radius)` — يجمع كل عملة قريبة تلقائياً، يُخفيها،
+  يُضيف قيمتها للنقاط، ويُطلق حدث محرّك `"coinCollected"` لكل عملة
+- `mm_addScore` / `mm_score` / `mm_resetScore` — عدّاد نقاط عام على مستوى المحرّك، يُطلق
+  حدث `"scoreChanged"`
+
+### 25) أزرار التحكم الافتراضية (Virtual Joystick & Control Buttons) — جديد في 1.2.0
+- `mm_joystickCreate(mm, name, centerX, centerY, maxRadius)` / `mm_joystickUpdate` /
+  `mm_joystickRelease` / `mm_joystickVector` — عصا تحكّم مستمرّة مُطبَّعة (-1..1)
+- `mm_joystickApplyToVelocity(mm, name, maskName, maxSpeed)` — تحكّم ثنائي العصا فوري
+- `mm_buttonDefine` / `mm_buttonPress` / `mm_buttonRelease` / `mm_buttonIsPressed`
+- `mm_buttonConsumeJustPressed` / `mm_buttonConsumeJustReleased` — نمط "لحظة الضغط/الإفلات"
+  (edge-triggered) لتفادي تكرار تنفيذ فعل الزر كل إطار طالما الإصبع ضاغط
+
+مثال شامل لكل هذه المفاهيم: [`../examples/moving_mask_extended_demo.rin`](../examples/moving_mask_extended_demo.rin).
 
 
 ## يتكامل طبيعياً مع
