@@ -13,6 +13,13 @@ import android.util.AttributeSet
 import android.view.GestureDetector
 import android.view.MotionEvent
 import android.view.View
+import android.view.ViewGroup
+import android.widget.FrameLayout
+import android.widget.VideoView
+import android.widget.MediaController
+import android.webkit.WebView
+import android.webkit.WebViewClient
+import android.net.Uri
 import org.json.JSONObject
 import kotlin.math.max
 import kotlin.math.min
@@ -30,7 +37,7 @@ import kotlin.math.min
 class LoomFabricView @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null
-) : View(context, attrs) {
+) : FrameLayout(context, attrs) {
 
     /** Node kinds, mirroring `loom::StrandKind` (rin_loom_strand.h) exactly. */
     private object Kind {
@@ -39,10 +46,9 @@ class LoomFabricView @JvmOverloads constructor(
         const val STACK = "Stack"; const val DIVIDER = "Divider"
         // New: app chrome, media, and table — mirror the StrandKind additions noted in
         // rin_loom_layout.h (HEADER/TOPBAR/BOTTOMBAR/DRAWER/MENU/MENUITEM/TABLE/TABLEROW/
-        // VIDEO/AUDIO/WEBVIEW/SCAFFOLD/SPLASH). These are *design-time placeholders*: the real
-        // video/audio/web playback and the real page-navigation-on-tap-or-timer are wired up by
-        // the host app/runtime, not drawn here — same relationship Image already has with a
-        // real <img>.
+        // VIDEO/AUDIO/WEBVIEW/SCAFFOLD/SPLASH). Video remains a Canvas thumbnail for local files,
+        // while `video_url=` gets a real remote playback overlay supplied by the host view.
+        // The source language stays provider-neutral.
         const val HEADER = "Header"; const val TOPBAR = "TopBar"; const val BOTTOMBAR = "BottomBar"
         const val DRAWER = "Drawer"; const val MENU = "Menu"; const val MENUITEM = "MenuItem"
         const val TABLE = "Table"; const val TABLEROW = "TableRow"
@@ -99,7 +105,16 @@ class LoomFabricView @JvmOverloads constructor(
     private val defaultBanner = Color.rgb(44, 47, 61) // neutral Banner default; see bannerTypeColor()
     private val defaultDialog = Color.rgb(40, 42, 54) // matches loom::colorForKind()'s Theme::surface for DIALOG
     private val defaultTooltip = Color.rgb(60, 62, 74) // matches Theme::neutral for TOOLTIP
-    private val scrimColor = Color.argb(140, 0, 0, 0) // ~55% black — matches loom::scrimColor()'s RGB, opacity is this renderer's own convention (see rin_loom_paint.h's SCRIM_RECT comment)
+    private val scrimColor = Color.argb(140, 0, 0, 0)
+
+    // Remote media overlays: the Canvas renderer remains the design-time fallback, while
+    // `video_url=` gets a real playback surface on top of the matching Fabric rectangle.
+    private val remoteMediaViews = linkedMapOf<String, View>()
+    private var lastRemoteMediaSignature = ""
+    private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private val remoteFontCache = mutableMapOf<String, android.graphics.Typeface>()
+    private val pendingFontUrls = mutableSetOf<String>()
+ // ~55% black — matches loom::scrimColor()'s RGB, opacity is this renderer's own convention (see rin_loom_paint.h's SCRIM_RECT comment)
 
     // ---- live-preview additions: field boxes (Input/TextArea/Search/Select/File/Date/Time/
     // CodeEditor all share the same bordered look natively — see paintField in rin_loom_paint.h)
@@ -352,12 +367,18 @@ class LoomFabricView @JvmOverloads constructor(
         }
 
         requestLayout()
+        syncRemoteMediaOverlays(node)
         invalidate()
     }
 
     override fun onDetachedFromWindow() {
-        super.onDetachedFromWindow()
         pendingAutoNavigate?.let { navHandler.removeCallbacks(it) }
+        remoteMediaViews.values.forEach { v ->
+            if (v is VideoView) v.stopPlayback()
+            if (v is WebView) v.stopLoading()
+        }
+        remoteMediaViews.clear()
+        super.onDetachedFromWindow()
     }
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
@@ -504,8 +525,8 @@ class LoomFabricView @JvmOverloads constructor(
             Kind.TABLE -> drawTable(canvas, rect, node, attrs)
             Kind.TABLEROW -> { /* cells are children; the header/grid lines are drawn by Table itself */ }
             Kind.VIDEO -> drawVideoPreview(canvas, rect, attrs)
-            Kind.AUDIO -> drawMediaPlaceholder(canvas, rect, attrs, "♪", attrs.optString("src"))
-            Kind.WEBVIEW -> drawMediaPlaceholder(canvas, rect, attrs, "🌐", attrs.optString("src"))
+            Kind.AUDIO -> drawMediaPlaceholder(canvas, rect, attrs, "♪", mediaSource(attrs))
+            Kind.WEBVIEW -> drawMediaPlaceholder(canvas, rect, attrs, "🌐", mediaSource(attrs))
             Kind.SCAFFOLD -> { /* pure layout container: TopBar/Content/BottomBar/Drawer children draw themselves */ }
             Kind.SPLASH -> drawBox(canvas, rect, attrs, resolved ?: defaultContainer, defaultRadius = 0f)
             Kind.BANNER -> {
@@ -939,6 +960,65 @@ class LoomFabricView @JvmOverloads constructor(
         return lines
     }
 
+    /** Font concept: `font_local="fonts/MyFont.ttf"` resolves from the project, while
+     * `font_url="https://.../MyFont.ttf"` downloads once into app cache and is reused offline.
+     * `font="sans|serif|mono"` remains the lightweight built-in fallback. */
+    private fun resolveTypeface(attrs: JSONObject): android.graphics.Typeface {
+        val local = attrs.optString("font_local").trim()
+        if (local.isNotBlank()) {
+            val file = resolveProjectFile(local)
+            if (file?.isFile == true) {
+                try { return android.graphics.Typeface.createFromFile(file) } catch (_: Throwable) { }
+            }
+        }
+        val url = attrs.optString("font_url").trim()
+        if (url.isNotBlank() && isRemoteUrl(url)) {
+            remoteFontCache[url]?.let { return it }
+            requestRemoteFont(url)
+        }
+        return when (attrs.optString("font").lowercase()) {
+            "serif" -> android.graphics.Typeface.SERIF
+            "mono", "monospace" -> android.graphics.Typeface.MONOSPACE
+            else -> android.graphics.Typeface.DEFAULT
+        }
+    }
+
+    private fun resolveProjectFile(path: String): java.io.File? {
+        val stripped = path.removePrefix("file://")
+        val direct = java.io.File(stripped)
+        if (direct.isAbsolute) return direct.takeIf { it.isFile }
+        val base = RinEngine.currentBaseDir()
+        if (base.isBlank()) return null
+        return java.io.File(base, stripped).takeIf { it.isFile }
+    }
+
+    private fun requestRemoteFont(url: String) {
+        if (!pendingFontUrls.add(url)) return
+        Thread {
+            try {
+                val dir = java.io.File(context.cacheDir, "rin_fonts").apply { mkdirs() }
+                val target = java.io.File(dir, "font_${url.hashCode().toUInt().toString(16)}.bin")
+                if (!target.isFile) {
+                    val connection = java.net.URL(url).openConnection().apply {
+                        connectTimeout = 10000
+                        readTimeout = 15000
+                        useCaches = true
+                    }
+                    connection.getInputStream().use { input ->
+                        java.io.FileOutputStream(target).use { output -> input.copyTo(output) }
+                    }
+                }
+                val tf = android.graphics.Typeface.createFromFile(target)
+                remoteFontCache[url] = tf
+                mainHandler.post { invalidate() }
+            } catch (_: Throwable) {
+                // Keep the built-in font if the remote resource is unavailable.
+            } finally {
+                pendingFontUrls.remove(url)
+            }
+        }.start()
+    }
+
     private fun drawText(
         canvas: Canvas, rect: RectF, attrs: JSONObject, text: String,
         fallbackColor: Int, centered: Boolean = false, boldHint: Boolean = false, singleLine: Boolean = false
@@ -949,6 +1029,8 @@ class LoomFabricView @JvmOverloads constructor(
         textPaint.textSize = sizeSp
         textPaint.isFakeBoldText = boldHint
         textPaint.isAntiAlias = true
+        val savedTypeface = textPaint.typeface
+        textPaint.typeface = resolveTypeface(attrs)
 
         val hPad = 4f
         val available = max(4f, rect.width() - hPad * 2f)
@@ -959,6 +1041,7 @@ class LoomFabricView @JvmOverloads constructor(
             val startX = if (centered) rect.left + (rect.width() - textWidth) / 2f else rect.left + hPad
             val baseline = rect.top + rect.height() / 2f - (textPaint.descent() + textPaint.ascent()) / 2f
             canvas.drawText(truncated, 0, truncated.length, startX, baseline, textPaint)
+            textPaint.typeface = savedTypeface
             return
         }
 
@@ -984,6 +1067,7 @@ class LoomFabricView @JvmOverloads constructor(
             canvas.drawText(line, startX, baseline, textPaint)
             baseline += lineHeight
         }
+        textPaint.typeface = savedTypeface
     }
 
     // ---- chat message formatting (`format=` on a Text node — see the Kind.TEXT dispatch above)
@@ -1105,6 +1189,103 @@ class LoomFabricView @JvmOverloads constructor(
         canvas.drawRect(rect, fillPaint)
     }
 
+    private fun mediaSource(attrs: JSONObject): String =
+        attrs.optString("video_url").ifBlank { attrs.optString("src") }
+
+    private fun isRemoteUrl(value: String): Boolean =
+        value.startsWith("https://", true) || value.startsWith("http://", true)
+
+    private fun isVideoPageUrl(value: String): Boolean {
+        val u = value.lowercase()
+        return u.contains("youtube.com/watch") || u.contains("youtu.be/") ||
+            u.contains("youtube.com/shorts/") || u.contains("youtube-nocookie.com/embed/")
+    }
+
+    private fun videoEmbedUrl(value: String): String {
+        val id = Regex("(?:v=|youtu\\.be/|shorts/)([A-Za-z0-9_-]{6,})").find(value)?.groupValues?.getOrNull(1)
+        return if (id != null) "https://www.youtube-nocookie.com/embed/$id?autoplay=0&rel=0" else value
+    }
+
+    /**
+     * Real playback for `video_url=`. Direct media URLs use Android VideoView; page-style video
+     * URLs are rendered in an isolated WebView embed. The source language stays provider-neutral:
+     * authors only write `video_url="..."`.
+     */
+    private fun syncRemoteMediaOverlays(root: JSONObject?) {
+        if (root == null) return
+        val found = mutableListOf<Triple<String, JSONObject, String>>()
+        collectVideoUrlNodes(root, found)
+        val signature = found.joinToString("|") { "${it.first}:${it.third}" }
+        if (signature == lastRemoteMediaSignature) {
+            mainHandler.post { updateRemoteMediaLayout(found) }
+            return
+        }
+        lastRemoteMediaSignature = signature
+        remoteMediaViews.values.forEach { v ->
+            if (v is VideoView) v.stopPlayback()
+            if (v is WebView) v.destroy()
+            removeView(v)
+        }
+        remoteMediaViews.clear()
+
+        found.forEach { (name, _, url) ->
+            if (!isRemoteUrl(url)) return@forEach
+            val view: View = if (isVideoPageUrl(url)) {
+                WebView(context).apply {
+                    settings.javaScriptEnabled = true
+                    settings.domStorageEnabled = true
+                    settings.mediaPlaybackRequiresUserGesture = true
+                    webViewClient = WebViewClient()
+                    setBackgroundColor(Color.BLACK)
+                    loadUrl(videoEmbedUrl(url))
+                }
+            } else {
+                VideoView(context).apply {
+                    setBackgroundColor(Color.BLACK)
+                    val controller = MediaController(context)
+                    controller.setAnchorView(this)
+                    setMediaController(controller)
+                    setVideoURI(Uri.parse(url))
+                    setOnPreparedListener { it.isLooping = false }
+                    setOnErrorListener { _, _, _ -> visibility = View.GONE; true }
+                    setOnCompletionListener { visibility = View.VISIBLE }
+                    visibility = View.VISIBLE
+                    start()
+                }
+            }
+            remoteMediaViews[name] = view
+            addView(view, FrameLayout.LayoutParams(1, 1))
+        }
+        mainHandler.post { updateRemoteMediaLayout(found) }
+    }
+
+    private fun collectVideoUrlNodes(node: JSONObject, out: MutableList<Triple<String, JSONObject, String>>) {
+        val kind = node.optString("kind")
+        val attrs = node.optJSONObject("attrs") ?: JSONObject()
+        if (kind == Kind.VIDEO) {
+            val url = attrs.optString("video_url").trim()
+            if (url.isNotBlank()) out += Triple(node.optString("name"), node, url)
+        }
+        val children = node.optJSONArray("children") ?: return
+        for (i in 0 until children.length()) children.optJSONObject(i)?.let { collectVideoUrlNodes(it, out) }
+    }
+
+    private fun updateRemoteMediaLayout(found: List<Triple<String, JSONObject, String>>) {
+        val scale = density * zoom
+        found.forEach { (name, node, _) ->
+            val v = remoteMediaViews[name] ?: return@forEach
+            val x = (node.optDouble("x", 0.0) * scale).toInt()
+            val y = (node.optDouble("y", 0.0) * scale).toInt()
+            val w = max(1, (node.optDouble("w", 1.0) * scale).toInt())
+            val h = max(1, (node.optDouble("h", 1.0) * scale).toInt())
+            val lp = (v.layoutParams as? FrameLayout.LayoutParams) ?: FrameLayout.LayoutParams(w, h)
+            lp.width = w; lp.height = h; lp.leftMargin = x; lp.topMargin = y
+            v.layoutParams = lp
+            v.visibility = View.VISIBLE
+        }
+        remoteMediaViews.entries.removeIf { (name, _) -> found.none { it.first == name } }
+    }
+
     /** Resolves `src=` to a real file: relative paths are relative to the current project's root
      * (same root save/installation/file already use — [RinEngine.currentBaseDir]); absolute paths
      * and `file://` URIs are used as-is. Null if nothing exists there. */
@@ -1189,7 +1370,7 @@ class LoomFabricView @JvmOverloads constructor(
      * same relationship [drawImage] already has to [drawImagePlaceholder]. */
     private fun drawVideoPreview(canvas: Canvas, rect: RectF, attrs: JSONObject) {
         if (rect.width() <= 0f || rect.height() <= 0f) return
-        val src = attrs.optString("src")
+        val src = mediaSource(attrs)
         val thumb = if (src.isNotBlank()) loadVideoThumbnail(src, rect.width().toInt(), rect.height().toInt()) else null
         if (thumb == null) { drawMediaPlaceholder(canvas, rect, attrs, "▶", src); return }
 
