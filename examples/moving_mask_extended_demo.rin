@@ -1,11 +1,17 @@
 // ============================================================================
 //  examples/moving_mask_extended_demo.rin
-//  مثال تشغيلي للمفاهيم الخمسة الجديدة في lib/movingmask.og.rin (الإصدار 1.0.0):
+//  مثال تشغيلي للمفاهيم الجديدة في lib/movingmask.og.rin (الإصدار 1.2.0):
 //    16) Flocking / Rigid Formations
 //    17) Finite State Machine لكل قناع
 //    18) Serialization (حفظ/استعادة عبر JSON)
 //    19) Spatial Grid Index (فهرسة مكانية لتسريع البحث عن الجيران)
 //    20) Timers / Cooldowns
+//    21) FPS Meter / Fixed Timestep Accumulator
+//    22) Viewport / Responsive Sizing (أحجام الشاشة)
+//    23) Progress / Loading Bar Kinds (أنواع شريط التحميل)
+//    24) Touch Gestures & Motion Smoothing (اللمس وسلاسة الحركة)
+//    25) Coins / Collectibles / Score (العملات والنقاط)
+//    26) Virtual Joystick & Control Buttons (أزرار التحكّم)
 //  شغّله بـ: rin examples/moving_mask_extended_demo.rin
 //  (للمثال الأساسي الشامل لبقية المكتبة، انظر examples/moving_mask_demo.rin)
 // ============================================================================
@@ -74,3 +80,81 @@ mm_tickTimers(tworld, 1);
 print "متبقٍّ بعد دورتين من 3: " + toString(mm_timerRemaining(tworld, "hero", "attackCooldown"));
 mm_tickTimers(tworld, 1);
 print "جاهز للهجوم مجدداً؟ " + toString(mm_isTimerActive(tworld, "hero", "attackCooldown") == false);
+
+print "\n=== 21) عدّاد FPS وخطوة زمنية ثابتة (Fixed Timestep) ===";
+let fpsWorld = mm_new();
+mm_fpsInit(fpsWorld);
+let f = 0;
+while (f < 40) {
+    mm_fpsUpdate(fpsWorld, 1 / 60);
+    f = f + 1;
+}
+print "fps بعد محاكاة 40 إطاراً بمعدّل 60fps: " + toString(mm_fps(fpsWorld));
+
+mm_spawn(fpsWorld, "ball", 0, 0);
+mm_setVelocity(fpsWorld, "ball", 10, 0);
+mm_fixedStepInit(fpsWorld, 1 / 60);
+fun onFixedStep(fixedDt) { mm_integrate(fpsWorld, "ball", fixedDt); }
+// إطار "بطيء" (0.1 ثانية) — يُشغِّل عدة خطوات فيزياء ثابتة بحد أقصى 5 (حماية spiral of death)
+let stepsRan = mm_fixedStepRun(fpsWorld, 0.1, 5, onFixedStep);
+print "خطوات فيزياء ثابتة نُفِّذت لإطار 0.1 ثانية: " + toString(stepsRan);
+print "موضع الكرة: " + toString(mm_position(fpsWorld, "ball"));
+print "alpha للاستكمال البصري بين الخطوات: " + toString(mm_fixedStepAlpha(fpsWorld));
+
+print "\n=== 22) أحجام الشاشة والتصميم المتجاوب (Viewport) ===";
+let ui = mm_new();
+mm_setViewport(ui, 400, 800);
+print "فئة الشاشة الحالية: " + mm_viewportClass(ui);
+mm_spawn(ui, "coinCounterHud", 0, 0);
+mm_setPositionPercent(ui, "coinCounterHud", 0.05, 0.05); // زاوية علوية يسرى دوماً
+print "موضع عدّاد العملات (5%,5% من أي شاشة): " + toString(mm_position(ui, "coinCounterHud"));
+print "سرعة 120 مصمَّمة لعرض مرجعي 400 على شاشة عرضها الحالي أيضاً 400 (بلا تغيير): " + toString(mm_scaleForViewport(ui, 120, 400));
+
+print "\n=== 23) أنواع شريط التحميل (Progress Bars) ===";
+let bars = mm_new();
+mm_progressCreate(bars, "levelLoading", "linear", 3);
+mm_progressTick(bars, "levelLoading", 1.5);
+print "شريط تحميل المستوى (خطي): " + toString(mm_progressWarp(bars, "levelLoading"));
+mm_progressCreate(bars, "serverPing", "indeterminate", 1);
+mm_progressTick(bars, "serverPing", 0.4);
+print "شريط انتظار الخادم (بلا مدة معروفة): " + toString(mm_progressWarp(bars, "serverPing"));
+mm_progressCreate(bars, "onboarding", "segmented", 4);
+mm_progressSetSegments(bars, "onboarding", 4);
+mm_progressSet(bars, "onboarding", 0.5);
+print "شريط خطوات التسجيل (مرحلي): " + toString(mm_progressWarp(bars, "onboarding"));
+
+print "\n=== 24) اللمس وسلاسة الحركة (Touch & Smoothing) ===";
+let touchWorld = mm_new();
+mm_spawn(touchWorld, "photo", 0, 0);
+mm_touchBegin(touchWorld, "photo", 0, 0);
+mm_touchMove(touchWorld, "photo", 80, 0);
+print "بادرة بعد سحب طويل: " + toString(mm_touchEnd(touchWorld, "photo"));
+mm_spawn(touchWorld, "chaseCam", 0, 0);
+let s = 0;
+while (s < 20) {
+    mm_smoothFollow(touchWorld, "chaseCam", 200, 0, 0.1, 1 / 60);
+    s = s + 1;
+}
+print "كاميرا تتبع هدفاً بسلاسة بعد 20 إطاراً: " + toString(mm_position(touchWorld, "chaseCam"));
+
+print "\n=== 25) العملات والنقاط (Coins / Score) ===";
+let game = mm_new();
+mm_spawn(game, "hero", 0, 0);
+mm_spawnCoin(game, "goldCoin1", 2, 0, 5);
+mm_spawnCoin(game, "goldCoin2", 3, 0, 5);
+let collected = mm_collectCoinsNear(game, "hero", 10);
+print "عملات جُمِعت قرب البطل: " + toString(collected);
+print "مجموع النقاط الآن: " + toString(mm_score(game));
+
+print "\n=== 26) عصا تحكّم افتراضية وأزرار (Controls) ===";
+let controls = mm_new();
+mm_spawn(controls, "avatar", 0, 0);
+mm_joystickCreate(controls, "moveStick", 60, 60, 25);
+mm_joystickUpdate(controls, "moveStick", 60, 35); // سحب للأعلى تماماً
+mm_joystickApplyToVelocity(controls, "moveStick", "avatar", 150);
+print "سرعة الشخصية من عصا التحكّم: " + toString(mm_velocity(controls, "avatar"));
+mm_buttonDefine(controls, "jump");
+mm_buttonPress(controls, "jump");
+if (mm_buttonConsumeJustPressed(controls, "jump")) {
+    print "قفزة نُفِّذت لمرة واحدة عند لحظة الضغط";
+}
