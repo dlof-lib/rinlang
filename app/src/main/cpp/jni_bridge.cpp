@@ -641,6 +641,7 @@ namespace {
 JavaVM* g_javaVm = nullptr;
 jclass g_httpBridgeClass = nullptr;          // global ref لصف Kotlin com.dlof.rinlang.RinHttpBridge
 jmethodID g_httpBridgeRequestMethod = nullptr; // MethodID لـ RinHttpBridge.request(...) الثابتة (static)
+jmethodID g_httpBridgeRequestBinaryGetMethod = nullptr; // MethodID لـ RinHttpBridge.requestBinaryGet(...) (fetchImage/fetchIcon)
 
 // FindClass لا يعمل بأمان إلا من الترد (thread) الذي استُدعي منه System.loadLibrary أصلاً (أي هنا
 // داخل JNI_OnLoad نفسه) لأنه وقتها فقط يملك سياق مُحمِّل الأصناف (ClassLoader) الخاص بالتطبيق؛ أي
@@ -666,6 +667,13 @@ bool ensureHttpBridgeAttached(JNIEnv* env) {
         g_httpBridgeClass = nullptr;
         return false;
     }
+
+    // requestBinaryGet(...) اختياري (fetchImage/fetchIcon فقط): غيابه لا يُسقط تسجيل الجسر
+    // النصي العادي أعلاه، فقط تبقى fetchImage/fetchIcon معطَّلتين بخطأ واضح (انظر performBinaryGet
+    // في rin_http.cpp) إن كان RinHttpBridge.kt المرفَق أقدم من هذه الإضافة.
+    g_httpBridgeRequestBinaryGetMethod = env->GetStaticMethodID(
+        g_httpBridgeClass, "requestBinaryGet", "(Ljava/lang/String;I)[Ljava/lang/Object;");
+    if (g_httpBridgeRequestBinaryGetMethod == nullptr) env->ExceptionClear();
     return true;
 }
 
@@ -782,6 +790,71 @@ rin::http::HttpResult callKotlinHttpBridge(const std::string& method, const std:
     return result;
 }
 
+// نظير callKotlinHttpBridge أعلاه، لكن يستدعي RinHttpBridge.requestBinaryGet(...) ويقرأ العنصر
+// الرابع كـ jbyteArray خام (GetByteArrayRegion) بدل jstring — فتبقى بايتات الصورة/الأيقونة كما
+// وصلت فعلياً من الخادوم بلا أي تحويل نصي وسيط يُفسدها (انظر شرح كامل في rin_http.h).
+rin::http::HttpResult callKotlinHttpBridgeBinaryGet(const std::string& url, int timeoutMs) {
+    rin::http::HttpResult result;
+
+    if (g_httpBridgeClass == nullptr || g_httpBridgeRequestBinaryGetMethod == nullptr) {
+        result.ok = false;
+        result.error = "جسر تنزيل الصور الثنائي غير مُهيَّأ (RinHttpBridge.kt المرفَق لا يحتوي requestBinaryGet — أعد بناء التطبيق)";
+        return result;
+    }
+
+    bool didAttach = false;
+    JNIEnv* env = attachEnv(&didAttach);
+    if (env == nullptr) {
+        result.ok = false;
+        result.error = "تعذّر الوصول إلى JNIEnv لتنفيذ تنزيل صورة حقيقي من هذا الترد";
+        return result;
+    }
+
+    jstring jUrl = env->NewStringUTF(url.c_str());
+    auto jResult = static_cast<jobjectArray>(env->CallStaticObjectMethod(
+        g_httpBridgeClass, g_httpBridgeRequestBinaryGetMethod, jUrl, (jint)timeoutMs));
+
+    if (env->ExceptionCheck()) {
+        env->ExceptionDescribe();
+        env->ExceptionClear();
+        result.ok = false;
+        result.error = "استثناء غير متوقَّع في RinHttpBridge.requestBinaryGet (انظر logcat)";
+    } else if (jResult == nullptr || env->GetArrayLength(jResult) < 4) {
+        result.ok = false;
+        result.error = "رد غير صالح من RinHttpBridge.requestBinaryGet";
+    } else {
+        auto jOk = (jstring)env->GetObjectArrayElement(jResult, 0);
+        auto jStatus = (jstring)env->GetObjectArrayElement(jResult, 1);
+        auto jError = (jstring)env->GetObjectArrayElement(jResult, 2);
+        auto jBytes = (jbyteArray)env->GetObjectArrayElement(jResult, 3);
+
+        std::string okStr = jstringToStd(env, jOk);
+        std::string statusStr = jstringToStd(env, jStatus);
+        result.error = jstringToStd(env, jError);
+        result.ok = (okStr == "1");
+        try { result.status = std::stol(statusStr); } catch (...) { result.status = 0; }
+
+        if (jBytes != nullptr) {
+            jsize len = env->GetArrayLength(jBytes);
+            result.body.resize(static_cast<size_t>(len));
+            if (len > 0) {
+                env->GetByteArrayRegion(jBytes, 0, len, reinterpret_cast<jbyte*>(&result.body[0]));
+            }
+            env->DeleteLocalRef(jBytes);
+        }
+
+        env->DeleteLocalRef(jOk);
+        env->DeleteLocalRef(jStatus);
+        env->DeleteLocalRef(jError);
+    }
+
+    if (jResult) env->DeleteLocalRef(jResult);
+    env->DeleteLocalRef(jUrl);
+
+    if (didAttach) g_javaVm->DetachCurrentThread();
+    return result;
+}
+
 } // namespace (anonymous)
 
 extern "C" JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void* /* reserved */) {
@@ -792,6 +865,9 @@ extern "C" JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void* /* reserved */) {
     }
     if (ensureHttpBridgeAttached(env)) {
         rin::http::setAndroidBridge(callKotlinHttpBridge);
+        if (g_httpBridgeRequestBinaryGetMethod != nullptr) {
+            rin::http::setAndroidBinaryGetBridge(callKotlinHttpBridgeBinaryGet);
+        }
     }
     // else: RinHttpBridge.kt غير موجود بعد في هذه الحزمة/هذا البناء — httpGet/apiCall... ستُعيد
     // خطأً واضحاً بدل الانهيار (انظر رسالة "جسر HTTP ... غير مُهيَّأ بعد" في rin_http.cpp).
