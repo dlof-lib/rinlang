@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- حبّة (pill) بيضاء شبه شفافة لعرض إحصائية سريعة (عدد المكتبات) فوق رأس شاشة "المكتبات". -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="#26FFFFFF" />
+    <stroke android:width="1dp" android:color="#40FFFFFF" />
+    <corners android:radius="20dp" />
+</shape>
