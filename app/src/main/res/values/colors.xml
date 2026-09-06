@@ -31,11 +31,17 @@
     <color name="rin_run_gradient_start">#8F72FF</color>
     <color name="rin_run_gradient_end">#6A47E8</color>
 
-    <!-- مساعدات المحرر: تظليل السطر الحالي، تظليل الأقواس المتطابقة، وتحذير الأقواس غير المتوازنة -->
-    <color name="rin_current_line_bg">#1FFFFFFF</color>
+    <!-- مساعدات المحرر: تظليل السطر الحالي، تظليل الأقواس المتطابقة، وتحذير الأقواس غير المتوازنة.
+         تظليل السطر الحالي مربوط الآن بهوية لون التطبيق (البنفسجي rin_accent) بدل رمادي عام،
+         ليبدو المحرر متماسكًا بصريًا مع باقي التطبيق بدل تظليل أبيض شبه غير مرئي فوق خلفية بيضاء. -->
+    <color name="rin_current_line_bg">#147C5CFF</color>
     <color name="rin_bracket_match_bg">#5F7C5CFF</color>
     <color name="rin_bracket_error_bg">#5FF14C4C</color>
     <color name="rin_find_match_bg">#5FD7BA7D</color>
+
+    <!-- لون أرقام الأسطر: بنفسجي هادئ منخفض التشبع بدل الرمادي المحايد، متناسق مع البنفسجي
+         العام للتطبيق مع بقائه أخفت من لون نص الكود نفسه (rin_editor_text) حتى لا يشتت الانتباه. -->
+    <color name="rin_linenum_text">#8A7FA0</color>
 
     <!-- ============================================================================
          نظام تلوين الصيغة النحوية الموحَّد (Unified Syntax Palette) — نمط فاتح احترافي
