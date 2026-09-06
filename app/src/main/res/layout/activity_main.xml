@@ -397,21 +397,22 @@
                     android:layout_height="wrap_content"
                     android:background="@android:color/transparent"
                     android:fontFamily="monospace"
-                    android:textColor="@color/rin_editor_hint"
-                    android:textSize="14sp"
+                    android:textColor="@color/rin_linenum_text"
+                    android:textSize="11sp"
                     android:lineSpacingMultiplier="1.15"
+                    android:includeFontPadding="false"
                     android:gravity="end|top"
-                    android:paddingTop="14dp"
-                    android:paddingBottom="14dp"
-                    android:paddingStart="12dp"
-                    android:paddingEnd="8dp"
-                    android:minWidth="30dp" />
+                    android:paddingTop="10dp"
+                    android:paddingBottom="10dp"
+                    android:paddingStart="10dp"
+                    android:paddingEnd="6dp"
+                    android:minWidth="24dp" />
 
                 <View
                     android:layout_width="1dp"
                     android:layout_height="match_parent"
-                    android:layout_marginTop="14dp"
-                    android:layout_marginBottom="14dp"
+                    android:layout_marginTop="10dp"
+                    android:layout_marginBottom="10dp"
                     android:background="@color/rin_divider" />
 
                 <!-- layoutDirection="ltr" مقصود هنا: التطبيق عربي (supportsRtl) فتُصبح هذه
@@ -436,10 +437,10 @@
                         android:layout_height="wrap_content"
                         android:layoutDirection="ltr"
                         android:background="@android:color/transparent"
-                        android:paddingStart="12dp"
-                        android:paddingEnd="12dp"
-                        android:paddingTop="14dp"
-                        android:paddingBottom="14dp" />
+                        android:paddingStart="10dp"
+                        android:paddingEnd="10dp"
+                        android:paddingTop="10dp"
+                        android:paddingBottom="10dp" />
                 </HorizontalScrollView>
             </LinearLayout>
         </ScrollView>
