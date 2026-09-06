@@ -9,6 +9,7 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.EditText
+import android.widget.ImageView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
@@ -272,6 +273,7 @@ private class BuiltinLibraryAdapter(
     }
 
     class VH(view: View) : RecyclerView.ViewHolder(view) {
+        val imgIcon: ImageView = view.findViewById(R.id.imgBuiltinIcon)
         val txtName: TextView = view.findViewById(R.id.txtBuiltinNameItem)
         val txtDescription: TextView = view.findViewById(R.id.txtBuiltinDescription)
         val txtFunctions: TextView = view.findViewById(R.id.txtBuiltinFunctions)
@@ -285,6 +287,7 @@ private class BuiltinLibraryAdapter(
 
     override fun onBindViewHolder(holder: VH, position: Int) {
         val info = items[position]
+        holder.imgIcon.setImageResource(info.iconRes)
         holder.txtName.text = info.importPath
         holder.txtDescription.text = info.description
         holder.txtFunctions.text = info.sampleFunctions
