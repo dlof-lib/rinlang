@@ -457,6 +457,7 @@ struct Loom {
     }
     Rect measureButton(StrandPtr s, Constraints c) {
         std::string label = s->attrStr("label", "");
+        if (label.empty()) label = s->attrStr("text", "");
         // IconButton (§18/§2): the icon glyph takes visual width too, so measurement accounts for
         // it the same way it accounts for label= -- a one-glyph-wide stand-in ("@ ") prefixed
         // when icon= is present, whether or not label= is also set. Uses measureTextWidth(), the
