@@ -95,7 +95,13 @@ inline std::string colorToHex(Color c) {
 inline Color resolveColor(const StrandPtr& s) {
     Color fallback = (s->kind == StrandKind::BANNER)
         ? bannerTypeColor(s->attrStr("type", ""))
-        : colorForKind(s->kind);
+        // Link concepts (docs/link.md): `visited="true"` swaps the default (untoned) link color
+        // for a muted violet, the same convention the web uses to tell an already-followed link
+        // apart from a fresh one — checked at the same fallback precedence level as colorForKind's
+        // plain LINK->primary default, so an explicit tone=/color= below still overrides either.
+        : (s->kind == StrandKind::LINK && s->attrStr("visited", "false") == "true")
+            ? Color{160, 130, 255}
+            : colorForKind(s->kind);
 
     if (auto tone = s->attr("tone")) {
         Color c;
@@ -169,10 +175,25 @@ struct Dye {
         // track+thumb respectively) rather than reusing Checkbox/Progress's plain-filled look.
         if (s->kind == StrandKind::RADIO)  { paintRadio(s, list); return; }
         if (s->kind == StrandKind::SLIDER) { paintSlider(s, list, r); return; }
-        // Link: a plain text run in the link tone, no box at all — same convention Button's
-        // `variant="link"` treatment already uses (see paintButton's ButtonTreatment::LINK case).
+        // Link concepts (docs/link.md): a plain text run in the link tone (visited-aware via
+        // resolveColor above), no box at all — same convention Button's `variant="link"`
+        // treatment already uses (see paintButton's ButtonTreatment::LINK case) — plus a real
+        // underline by default, since that's the one visual cue that actually reads as "this is
+        // a hyperlink" rather than plain colored text. `underline="false"` opts out (e.g. a Link
+        // used as a plain nav item that shouldn't look clickable-in-body-text).
         if (s->kind == StrandKind::LINK) {
-            list.push_back({DrawOp::TEXT_RUN, s->geometry, resolveColor(s), s->attrStr("text", ""), s->id, 0, 0});
+            Color linkColor = resolveColor(s);
+            std::string text = s->attrStr("text", "");
+            list.push_back({DrawOp::TEXT_RUN, s->geometry, linkColor, text, s->id, 0, 0});
+            if (!text.empty() && s->attrStr("underline", "true") == "true") {
+                // Link's own box is already measured to fit its text (see rin_loom_layout.h's
+                // `case StrandKind::LINK: size = measureText(s, c2);`), so the geometry's width
+                // doubles as the underline's span without a separate text-measurement pass here.
+                Rect underlineRect = s->geometry;
+                underlineRect.y = s->geometry.y + s->geometry.h - 2;
+                underlineRect.h = 1.5;
+                list.push_back({DrawOp::FILL_RECT, underlineRect, linkColor, "", s->id, 0, 0});
+            }
             for (auto& c : s->children) paintInto(c, list);
             return;
         }
