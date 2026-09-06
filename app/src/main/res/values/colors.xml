@@ -253,4 +253,8 @@
     <color name="loom_inspector_border">#DDE2E8</color>
     <color name="loom_inspector_key">#667085</color>
     <color name="loom_inspector_value">#20252B</color>
+    <color name="project_card_bg">#FFFFFF</color>
+    <color name="project_card_border">#E2E6ED</color>
+    <color name="project_icon_bg">#F0ECFF</color>
+    <color name="project_delete_color">#D6455D</color>
 </resources>
