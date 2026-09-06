@@ -5,7 +5,6 @@ import android.app.AlertDialog
 import android.graphics.Typeface
 import android.view.Gravity
 import android.widget.LinearLayout
-import android.widget.ProgressBar
 import android.widget.TextView
 import androidx.core.content.ContextCompat
 
@@ -15,7 +14,7 @@ class RinDownloadProgressDialog(activity: Activity, fileName: String) {
     private val dp = activity.resources.displayMetrics.density
     private val txtStatus: TextView
     private val txtBytes: TextView
-    private val progressBar: ProgressBar
+    private val progressBar: RinProgressBar
     private val dialog: AlertDialog
 
     init {
@@ -41,18 +40,10 @@ class RinDownloadProgressDialog(activity: Activity, fileName: String) {
         }
         container.addView(fileNameView)
 
-        progressBar = ProgressBar(activity, null, android.R.attr.progressBarStyleHorizontal).apply {
-            isIndeterminate = false
-            max = 1000
-            progress = 0
-            progressTintList = android.content.res.ColorStateList.valueOf(
-                ContextCompat.getColor(context, R.color.rin_accent)
-            )
-            progressBackgroundTintList = android.content.res.ColorStateList.valueOf(
-                ContextCompat.getColor(context, R.color.rin_download_progress_track)
-            )
+        progressBar = RinProgressBar(activity).apply {
+            setProgress(0, animate = false)
         }
-        container.addView(progressBar, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, (10 * dp).toInt()))
+        container.addView(progressBar, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, (8 * dp).toInt()))
 
         val row = LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -88,14 +79,14 @@ class RinDownloadProgressDialog(activity: Activity, fileName: String) {
     /** Updates the bar from real bytes copied so far vs. the artifact's true on-disk size. */
     fun updateProgress(copiedBytes: Long, totalBytes: Long) {
         val ratio = if (totalBytes > 0) copiedBytes.toDouble() / totalBytes.toDouble() else 0.0
-        progressBar.progress = (ratio * 1000).toInt().coerceIn(0, 1000)
+        progressBar.setProgress((ratio * 100).toInt().coerceIn(0, 100))
         val copiedStr = RinConsoleFormatter.formatBytes(copiedBytes)
         val totalStr = RinConsoleFormatter.formatBytes(totalBytes)
         txtBytes.text = "$copiedStr / $totalStr"
     }
 
     fun finishSuccess(message: String) {
-        progressBar.progress = 1000
+        progressBar.setProgress(100)
         txtStatus.text = message
         dialog.setCancelable(true)
     }
