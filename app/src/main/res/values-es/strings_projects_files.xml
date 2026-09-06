@@ -8,6 +8,15 @@
 
     <!-- Barra superior unificada para las subpantallas -->
     <string name="action_back">Atrás</string>
+    <string name="projects_count_zero">Proyectos</string>
+    <string name="projects_screen_heading">Tus proyectos</string>
+    <string name="search_projects_hint">Buscar proyectos...</string>
+    <string name="open_project_action">Abrir proyecto</string>
+    <string name="no_projects_hint">Crea tu primer proyecto y empieza a trabajar con Rin.</string>
+    <plurals name="projects_count">
+        <item quantity="one">1 proyecto</item>
+        <item quantity="other">%1$d proyectos</item>
+    </plurals>
     <string name="projects_screen_title">Proyectos</string>
     <string name="files_screen_title">Archivos</string>
 
