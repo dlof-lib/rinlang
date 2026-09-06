@@ -4,7 +4,7 @@
 // geometry/colors/sizes, @element only describes semantic components + functional data.
 
 @container=app
-    @element.button=save
+    @element.button=saveBtn
         text="حفظ";
     .end/element
 
@@ -12,7 +12,7 @@
         text="إلغاء";
     .end/element
 
-    on.save.click=saveForm();
+    on.saveBtn.click=saveForm();
 .end/container
 
 fun saveForm() {
@@ -37,7 +37,7 @@ fun saveForm() {
     @element.row=actions
         direction="rtl";
 
-        @element.button=save
+        @element.button=saveBtn
             text="حفظ";
         .end/element
 
