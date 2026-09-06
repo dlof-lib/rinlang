@@ -28,6 +28,8 @@
 #include <string>
 #include <sstream>
 #include <unordered_map>
+#include <cstring>
+#include <cctype>
 
 namespace loom {
 
@@ -71,7 +73,32 @@ struct TapResult {
     std::string route;                     // the resulting current route when navigated == true
     bool exported = false;                 // true if an exportPNG()/screenshot()/exportImage() ran
     std::string exportedPath;              // the file it was written to, when exported == true
+    std::string openedUrl;                 // Link concepts (docs/link.md): set when a tapped
+                                            // Strand's href= resolved to an *external* URL --
+                                            // opening it is a host-app/JNI concern (same relationship
+                                            // `exportedPath` has to the actual file write), same as
+                                            // LoomFabricView.kt's onOpenUrl on the Kotlin preview side.
 };
+
+// Link concepts (docs/link.md): true for an href value that names an external resource rather
+// than an in-app route -- a URL scheme (http:, https:, mailto:, tel:) present. A bare filename
+// like "mu.rin" or a path like "/settings" is never external. Mirrors
+// LoomFabricView.kt's isExternalTarget() so the native dispatch path and the Kotlin live-preview
+// path agree on the same href values.
+inline bool isExternalHref(const std::string& target) {
+    static const char* schemes[] = {"http:", "https:", "mailto:", "tel:"};
+    for (const char* scheme : schemes) {
+        size_t len = std::strlen(scheme);
+        if (target.size() >= len) {
+            bool match = true;
+            for (size_t i = 0; i < len; i++) {
+                if (std::tolower(static_cast<unsigned char>(target[i])) != scheme[i]) { match = false; break; }
+            }
+            if (match) return true;
+        }
+    }
+    return false;
+}
 
 // Dispatches a tap at (x, y) against `fabricRoot`. `program` is the last successfully parsed
 // top-level statement list (PipelineResult::program) -- used to look up a matching `fun`.
@@ -116,7 +143,30 @@ inline TapResult dispatchTap(const StrandPtr& fabricRoot, WarpScope& warp,
         }
         if (onTapExpr) break;
     }
-    if (!onTapExpr) return result; // tapped something, but nothing interactive there
+
+    // Link concepts (docs/link.md): `href=` is a plain string attribute (not an onTap
+    // expression), so it's resolved directly rather than through the interpreter path below --
+    // it never needed one, it's just sugar over navigate()/an external URL. Only tried when no
+    // onTap was found, so an explicit onTap= on the same Link still wins, same precedence
+    // LoomFabricView.kt's Kotlin-side navigateTargetForTap()/openUrlTargetForTap() already use.
+    if (!onTapExpr) {
+        for (auto& s : path) {
+            if (resolveState(*s) == StrandState::DISABLED) continue;
+            std::string href = s->attrStr("href", "");
+            if (href.empty()) continue;
+            result.handled = true;
+            result.targetId = s->id;
+            if (isExternalHref(href)) {
+                result.openedUrl = href;
+            } else if (nav) {
+                nav->navigate(href);
+                result.navigated = true;
+                result.route = nav->current();
+            }
+            return result;
+        }
+        return result; // tapped something, but nothing interactive there
+    }
 
     result.handled = true;
     result.targetId = owner->id;
