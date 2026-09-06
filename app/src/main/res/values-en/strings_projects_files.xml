@@ -8,16 +8,6 @@
 
     <!-- Unified top bar for sub-screens -->
     <string name="action_back">Back</string>
-    <string name="projects_count_zero">Projects</string>
-    <string name="projects_screen_heading">Your projects</string>
-    <string name="search_projects_hint">Search projects...</string>
-    <string name="open_project_action">Open project</string>
-    <string name="no_projects_hint">Create your first project and start building with Rin.</string>
-    <plurals name="projects_count">
-        <item quantity="zero">No projects</item>
-        <item quantity="one">1 project</item>
-        <item quantity="other">%1$d projects</item>
-    </plurals>
     <string name="projects_screen_title">Projects</string>
     <string name="files_screen_title">Files</string>
 
@@ -104,4 +94,23 @@
     <string name="album_create_first">Create an album first</string>
     <string name="album_uncategorized">Uncategorized</string>
     <string name="album_empty">No projects in this album</string>
+
+    <string name="ui_design_more_options">Advanced interface options</string>
+    <string name="ui_design_bottom_nav">Bottom navigation bar</string>
+    <string name="ui_design_button_style">Button style</string>
+    <string name="ui_design_button_filled">Filled</string>
+    <string name="ui_design_button_soft">Soft</string>
+    <string name="ui_design_button_outline">Outline</string>
+    <string name="ui_design_font">Font</string>
+    <string name="ui_design_typography">Text size</string>
+    <string name="ui_design_radius">Corner radius</string>
+    <string name="ui_design_background">Background color</string>
+    <string name="ui_design_text_color">Text color</string>
+    <string name="ui_design_preview">Live preview</string>
+    <string-array name="ui_font_names"><item>Sans</item><item>Serif</item><item>Monospace</item></string-array>
+    <string-array name="ui_font_values"><item>sans</item><item>serif</item><item>mono</item></string-array>
+    <string-array name="ui_typography_names"><item>Small</item><item>Medium</item><item>Large</item></string-array>
+    <string-array name="ui_typography_values"><item>small</item><item>medium</item><item>large</item></string-array>
+    <string-array name="ui_radius_names"><item>0</item><item>10</item><item>14</item><item>22</item><item>30</item></string-array>
+    <integer-array name="ui_radius_values"><item>0</item><item>10</item><item>14</item><item>22</item><item>30</item></integer-array>
 </resources>
