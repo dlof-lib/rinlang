@@ -109,6 +109,8 @@ class LoomFabricView @JvmOverloads constructor(
     private val defaultPlaceholder = Color.argb(140, 230, 230, 240) // dimmer than defaultText
     private val defaultTrack = Color.rgb(51, 51, 63) // unfilled Progress/Slider track — matches defaultDivider
     private val defaultLink = Color.rgb(95, 211, 255) // link-toned text — matches toneColor("info")
+    private val defaultVisitedLink = Color.rgb(160, 130, 255) // Link `visited="true"` — a muted
+        // violet, distinct from both the unvisited link tone and defaultButton's brighter purple
 
     // ---- must match loom::bannerTypeColor() in rin_loom_paint.h exactly ----
     private fun bannerTypeColor(type: String): Int = when (type) {
@@ -186,14 +188,45 @@ class LoomFabricView @JvmOverloads constructor(
      */
     var onNavigate: ((target: String) -> Unit)? = null
 
+    /**
+     * Link concepts (docs/link.md): fired with an absolute URL whenever a tapped node resolves
+     * to an *external* link — either `onTap="open:https://..."` or a bare `href=` attribute
+     * (Link's shorthand for onTap) whose value carries a URL scheme. Internal targets (a bare
+     * filename/route, or one starting with "/") go through [onNavigate] instead, exactly like
+     * `onTap="navigate:..."` already does — `href` is just sugar over that same split, so a
+     * `Link` never needs an explicit `onTap` for either case.
+     */
+    var onOpenUrl: ((url: String) -> Unit)? = null
+
     private val navHandler = android.os.Handler(android.os.Looper.getMainLooper())
     private var pendingAutoNavigate: Runnable? = null
 
-    /** Walks up from the hit node to find the nearest `onTap="navigate:...."` instruction. */
+    /** True for `href`/`onTap="open:..."` values that name an external resource rather than an
+     * in-app route — a URL scheme (`http:`, `https:`, `mailto:`, `tel:`) present. A bare filename
+     * like "mu.rin" or a path like "/settings" is never external. */
+    private fun isExternalTarget(target: String): Boolean =
+        Regex("^(https?|mailto|tel):", RegexOption.IGNORE_CASE).containsMatchIn(target)
+
+    /** Walks up from the hit node to find the nearest `onTap="navigate:...."` instruction, or a
+     * bare `href=` attribute (Link's shorthand — see [onOpenUrl]) that resolves to an internal
+     * route rather than an external URL. */
     private fun navigateTargetForTap(node: JSONObject?): String? {
         val attrs = node?.optJSONObject("attrs") ?: return null
         val onTap = attrs.optString("onTap")
         if (onTap.startsWith("navigate:")) return onTap.removePrefix("navigate:").trim()
+        val href = attrs.optString("href").trim()
+        if (href.isNotEmpty() && onTap.isEmpty() && !isExternalTarget(href)) return href
+        return null
+    }
+
+    /** Mirror of [navigateTargetForTap] for the external-URL half of the same shorthand: an
+     * `onTap="open:URL"` instruction, or a bare `href=` that carries a URL scheme. */
+    private fun openUrlTargetForTap(node: JSONObject?): String? {
+        val attrs = node?.optJSONObject("attrs") ?: return null
+        val onTap = attrs.optString("onTap")
+        if (onTap.startsWith("open:")) return onTap.removePrefix("open:").trim()
+        val href = attrs.optString("href").trim()
+        if (href.isNotEmpty() && onTap.isEmpty() && isExternalTarget(href)) return href
         return null
     }
 
@@ -259,6 +292,7 @@ class LoomFabricView @JvmOverloads constructor(
             onTap?.invoke(rx, ry)
             val hit = fabric?.let { hitTest(it, rx.toFloat(), ry.toFloat()) }
             navigateTargetForTap(hit)?.let { onNavigate?.invoke(it) }
+            openUrlTargetForTap(hit)?.let { onOpenUrl?.invoke(it) }
             return true
         }
 
@@ -535,7 +569,7 @@ class LoomFabricView @JvmOverloads constructor(
             }
 
             // Ready-elements expansion (docs/RIN_ELEMENTS.md):
-            Kind.LINK -> drawText(canvas, rect, attrs, attrs.optString("text"), resolved ?: defaultLink)
+            Kind.LINK -> drawLink(canvas, rect, attrs, resolved)
             Kind.RADIO -> drawRadio(canvas, rect, attrs, resolved)
             Kind.SLIDER -> drawSlider(canvas, rect, attrs, resolved)
             Kind.SEARCH, Kind.SELECT, Kind.DATE, Kind.TIME -> drawField(canvas, rect, attrs, singleLine = true, monospace = false)
@@ -841,6 +875,35 @@ class LoomFabricView @JvmOverloads constructor(
             strokePaint.color = defaultButton
             strokePaint.strokeWidth = 2f
             canvas.drawLine(rect.left, rect.bottom - 1f, rect.right, rect.bottom - 1f, strokePaint)
+        }
+    }
+
+    /**
+     * Link concepts (docs/link.md): plain link-toned text, underlined by default like any real
+     * hyperlink (`underline="false"` turns that off — e.g. for a Link used as a plain nav item),
+     * and switched to a muted [defaultVisitedLink] tone when `visited="true"` so a user can tell
+     * an already-followed link apart from a fresh one, same convention the web uses. Behavior
+     * (where it navigates/opens) is a separate concept — see `href`/`onOpenUrl`/`onNavigate`.
+     */
+    private fun drawLink(canvas: Canvas, rect: RectF, attrs: JSONObject, resolved: Int?) {
+        if (rect.width() <= 0f || rect.height() <= 0f) return
+        val visited = attrs.optString("visited") == "true"
+        val color = resolved ?: (if (visited) defaultVisitedLink else defaultLink)
+        val text = attrs.optString("text")
+        drawText(canvas, rect, attrs, text, color)
+        val underline = attrs.optString("underline").ifBlank { "true" } == "true"
+        if (underline && text.isNotEmpty()) {
+            val sizeSp = attrs.optString("size").toFloatOrNull() ?: 14f
+            textPaint.textSize = sizeSp
+            val hPad = 4f
+            val textWidth = min(rect.width() - hPad * 2f, textPaint.measureText(text))
+            if (textWidth > 0f) {
+                val baseline = rect.top + rect.height() / 2f - (textPaint.descent() + textPaint.ascent()) / 2f
+                val underlineY = baseline + textPaint.descent() * 0.9f
+                strokePaint.color = color
+                strokePaint.strokeWidth = max(1f, sizeSp / 14f)
+                canvas.drawLine(rect.left + hPad, underlineY, rect.left + hPad + textWidth, underlineY, strokePaint)
+            }
         }
     }
 
