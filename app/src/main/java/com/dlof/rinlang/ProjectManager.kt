@@ -170,6 +170,7 @@ object ProjectManager {
         sb.append("        background=\"${options.background}\";\n")
         sb.append("        text=\"${options.text}\";\n")
         sb.append("        font=\"${options.fontFamily}\"; typography=\"${options.typography}\"; radius=${options.cornerRadius};\n")
+        sb.append("        // خطوط مخصصة: font_local=\"fonts/MyFont.ttf\" أو font_url=\"https://example.com/MyFont.ttf\"\n")
         sb.append("    .end/theme\n\n")
 
         sb.append("    @view.Scaffold=Root\n")
@@ -194,6 +195,8 @@ object ProjectManager {
         sb.append("                grow=1; gap=20; padding=20;\n")
         sb.append("                @view.Card=placeholder1 height=180; radius=${options.cornerRadius}; bg=\"transparent\"; borderColor=\"${options.text}22\"; borderWidth=1; .end/view\n")
         sb.append("                @view.Card=placeholder2 height=180; radius=${options.cornerRadius}; bg=\"transparent\"; borderColor=\"${options.text}22\"; borderWidth=1; .end/view\n")
+        sb.append("                // فيديو خارجي: استخدم video_url فقط؛ لا تحتاج لذكر مزود الخدمة.\n")
+        sb.append("                // @view.Video=demoVideo width=100% height=220; video_url=\"https://example.com/video.mp4\"; ratio=\"16:9\"; .end/view\n")
         sb.append("            .end/view\n")
 
         val buttonBg = when (options.buttonStyle) {
