@@ -18,6 +18,11 @@
     <string name="delete_project_confirm">Delete the project \"%1$s\" and all its files?</string>
     <string name="project_name_hint">Project name</string>
     <string name="no_projects_yet">No projects yet. Tap + to create your first project.</string>
+    <string name="no_projects_hint">Create your first project with the + button below</string>
+    <string name="projects_screen_heading">Projects</string>
+    <string name="projects_count_zero">No projects</string>
+    <string name="search_projects_hint">Search projects</string>
+    <string name="open_project_action">Open project</string>
     <string name="project_not_found">Project not found</string>
     <string name="project_meta_format">%1$d files</string>
 
