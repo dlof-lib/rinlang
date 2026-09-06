@@ -925,3 +925,20 @@ single-attribute source edit produces exactly one `UpdateAttrs` patch via the Sh
 runtime `warp.set(...)` (simulating a button tap) re-resolves only the Strands that actually read
 that cell, using their stored expression — not a template placeholder — and (3) an unrelated
 sibling subtree's geometry is provably untouched by either kind of update.
+
+## Loom Engine vNext — Real Element Output
+
+Loom now treats the parsed Rin UI as a real rendering contract rather than a visual hint:
+
+- Every `@element.*` Strand preserves its `role=element` and original `sourceTag` in the Fabric JSON.
+- `@loop` remains the visual owner; `element_*` defaults are inherited by elements without overwriting explicit functional attributes.
+- Button-like elements accept `text=` as the semantic label (with `label=` taking precedence), so `@element.button text="Run"` produces measurable geometry and a real text draw command.
+- The C ABI JSON now includes `paint`, containing the exact native Dye draw plan (`fill_rect`, `stroke_rect`, `text`, `scrim`) with resolved color, geometry, radius, stroke width, and owner Strand ID.
+- Session rendering uses `paintWithOverlay`, so modal scrims and overlay z-order are part of the same native output contract.
+- `interaction` metadata exposes whether a Strand is clickable and carries its resolved `onTap`/`href` values; accessibility metadata remains alongside it.
+
+This keeps the pipeline authoritative:
+
+`Rin source -> Lexer -> Parser -> real Interpreter -> runtime state -> Fabric -> Loom layout -> Dye paint plan -> host renderer`
+
+The host renderer may adapt the native paint plan to Canvas/Compose, but it no longer needs to infer what the Rin source meant when native output is requested.
