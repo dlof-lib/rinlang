@@ -101,4 +101,56 @@ object RinHttpBridge {
         }
         return out.toString("UTF-8")
     }
+
+    private fun readAllBytes(input: java.io.InputStream): ByteArray {
+        val out = ByteArrayOutputStream()
+        val buf = ByteArray(8192)
+        while (true) {
+            val read = input.read(buf)
+            if (read < 0) break
+            out.write(buf, 0, read)
+        }
+        return out.toByteArray()
+    }
+
+    /**
+     * تنزيل GET ثنائي حقيقي وآمن للبايتات (صور/أيقونات، fetchImage/fetchIcon في لغة Rin) — نظير
+     * [request] أعلاه لكن الرد يُعاد كـ ByteArray خام بدل String، لأن [readAllUtf8]/UTF-8 يُفسدان
+     * أي بايت ليس نصاً صالحاً (أي صورة PNG/JPEG حقيقية تقريباً). يُستدعى من jni_bridge.cpp عبر
+     * rin::http::setAndroidBinaryGetBridge (وليس setAndroidBridge العادي) لنفس السبب.
+     *
+     * القيمة المُعادة: مصفوفة من 4 عناصر بترتيب ثابت يقرأه الطرف C++:
+     *  [0] "1" إن تم الاتصال فعلياً وحصلنا على رد بحالة 2xx، وإلا "0"
+     *  [1] رمز حالة HTTP كنص (أو "0" إن فشل الاتصال قبل وصول أي رد)
+     *  [2] رسالة خطأ بشرية إن فشل الاتصال/الحالة ليست 2xx (فارغة عند النجاح)
+     *  [3] بايتات الجسم الخام (ByteArray) عند النجاح، أو null
+     */
+    @JvmStatic
+    fun requestBinaryGet(url: String, timeoutMs: Int): Array<Any?> {
+        var connection: HttpURLConnection? = null
+        return try {
+            val effectiveTimeout = if (timeoutMs > 0) timeoutMs else DEFAULT_TIMEOUT_MS
+            val conn = URL(url).openConnection() as HttpURLConnection
+            connection = conn
+            conn.requestMethod = "GET"
+            conn.connectTimeout = effectiveTimeout
+            conn.readTimeout = effectiveTimeout
+            conn.instanceFollowRedirects = true
+            conn.doInput = true
+
+            val status = conn.responseCode
+            if (status in 200..299) {
+                val bytes = conn.inputStream.use { readAllBytes(it) }
+                arrayOf<Any?>("1", status.toString(), "", bytes)
+            } else {
+                // جسم رسالة الخطأ (إن وُجد) نصّي غالباً، لكنه غير مطلوب هنا (fetchImage/fetchIcon
+                // يهتمان بالبايتات الناجحة فقط) — رمز الحالة وحده كافٍ في رسالة الخطأ للمبرمج.
+                arrayOf<Any?>("0", status.toString(), "الخادوم ردّ بحالة $status", null)
+            }
+        } catch (t: Throwable) {
+            arrayOf<Any?>("0", "0", t.message ?: t.toString(), null)
+        } finally {
+            connection?.disconnect()
+        }
+    }
 }
