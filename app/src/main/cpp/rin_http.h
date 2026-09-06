@@ -48,5 +48,17 @@ HttpResult performRequest(const std::string& method,
                            const std::string& body,
                            int timeoutMs = 0);
 
+// نقطة حقن ثانية مستقلة، خاصة بأندرويد فقط، لتنزيل ثنائي حقيقي (صور/أيقونات) — انظر
+// jni_bridge.cpp لماذا هذه منفصلة عن setAndroidBridge أعلاه: الجسر العادي يمرّ بايتات الرد عبر
+// jstring (NewStringUTF/GetStringUTFChars)، وهذا التمثيل نصّي (Modified UTF-8) يُفسد أي بايت غير
+// صالح كنص UTF-8 — أي صورة PNG/JPEG حقيقية تقريباً. هذا الجسر البديل يمرّر جسم الرد كـ jbyteArray
+// خام بلا أي تحويل نصي في الاتجاهين، فيبقى كل بايت كما وصل فعلياً من الخادوم.
+void setAndroidBinaryGetBridge(std::function<HttpResult(const std::string& url, int timeoutMs)> bridge);
+
+// تنزيل GET ثنائي حقيقي وآمن للبايتات: يستخدم setAndroidBinaryGetBridge أعلاه على أندرويد
+// (تفادياً لإفساد UTF-8)، ويُعاد توجيهه إلى performRequest العادي على سطح المكتب/CLI (curl عبر
+// pipe/subprocess حقيقي هناك أصلاً آمن للبايتات الثنائية، فلا حاجة لمسار منفصل).
+HttpResult performBinaryGet(const std::string& url, int timeoutMs = 0);
+
 } // namespace http
 } // namespace rin
