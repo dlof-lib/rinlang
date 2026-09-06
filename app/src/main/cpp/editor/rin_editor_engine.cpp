@@ -587,6 +587,78 @@ static HighlightKind kindForToken(rin::TokenType t) {
     }
 }
 
+// rin::Lexer يُسقط تعليقات "//" بصمت أثناء المسح (لا يوجد TokenType لها إطلاقاً)، لذا لا
+// يمكن استخراج مواضعها من التوكنز مباشرة. لكن بما أن scanTokens() (إن لم يرمِ استثناءً) يكون
+// قد فسَّر *كل* حرف في المصدر كواحد من: مسافة/تبويب/سطر جديد، جزء من توكن حقيقي (بما فيها
+// النصوص متعددة الأسطر)، أو تعليق — فإن أي "فجوة" متبقية على سطر ما بعد طرح كل نطاقات
+// التوكنز منه، وليست فراغاً بيضاء بالكامل، يجب أن تكون تعليقاً (يبدأ حتماً بـ"//" وحتى نهاية
+// السطر). هذه الدالة تستنتج تلك الفجوات دون أي حاجة لتعديل rin::Lexer نفسه.
+static std::vector<HighlightSpan> computeCommentGaps(
+    const std::vector<rin::Token>& tokens, const std::vector<std::string>& lines) {
+    std::vector<HighlightSpan> comments;
+    // occupied[line] = نطاقات [start,end) بايتيّة مُغطّاة بتوكن حقيقي على هذا السطر (قد يمتد
+    // توكن نص واحد عبر عدة أسطر إن احتوى `\n` مُهرَّباً أو حرفياً).
+    std::vector<std::vector<std::pair<int, int>>> occupied(lines.size());
+    for (const rin::Token& tok : tokens) {
+        if (tok.type == rin::TokenType::END_OF_FILE) continue;
+        int startLine0 = tok.line - 1;
+        // endLine غير متوفر مباشرة في Token (فقط line/col/endCol لسطر البداية)؛ التوكن الوحيد
+        // القادر على امتداد أسطر متعددة فعلياً هو STRING، ونُقدّر امتداده بعدّ '\n' داخل lexeme.
+        int spannedLines = 0;
+        if (tok.type == rin::TokenType::STRING) {
+            for (char c : tok.lexeme) if (c == '\n') spannedLines++;
+        }
+        int endLine0 = startLine0 + spannedLines;
+        int startCol0 = std::max(0, tok.col - 1);
+        if (startLine0 < 0 || startLine0 >= (int)lines.size()) continue;
+        if (spannedLines == 0) {
+            int endCol0 = tok.endCol - 1;
+            occupied[startLine0].push_back({startCol0, std::max(startCol0, endCol0)});
+        } else {
+            // أول سطر: من startCol0 حتى نهاية نص السطر الفعلي (المُقتبس يستمر بعده).
+            occupied[startLine0].push_back({startCol0, (int)lines[startLine0].size()});
+            // الأسطر الوسطى بالكامل داخل السلسلة النصية.
+            for (int l = startLine0 + 1; l < endLine0 && l < (int)lines.size(); ++l) {
+                occupied[l].push_back({0, (int)lines[l].size()});
+            }
+            // آخر سطر: من بدايته حتى عمود الإغلاق endCol.
+            if (endLine0 >= 0 && endLine0 < (int)lines.size()) {
+                occupied[endLine0].push_back({0, std::max(0, tok.endCol - 1)});
+            }
+        }
+    }
+
+    for (size_t line = 0; line < lines.size(); ++line) {
+        const std::string& text = lines[line];
+        if (text.empty()) continue;
+        auto& ranges = occupied[line];
+        std::sort(ranges.begin(), ranges.end());
+        int cursor = 0;
+        for (const auto& r : ranges) {
+            if (r.first > cursor) {
+                // فجوة [cursor, r.first) غير مُغطّاة بأي توكن — تحقّق إن كانت تعليقاً حقيقياً.
+                int gapEnd = r.first;
+                int ws = cursor;
+                while (ws < gapEnd && (text[ws] == ' ' || text[ws] == '\t' || text[ws] == '\r')) ws++;
+                if (ws < gapEnd && ws + 1 < (int)text.size() && text[ws] == '/' && text[ws + 1] == '/') {
+                    comments.push_back({(int)line, ws, gapEnd, HighlightKind::Comment});
+                }
+            }
+            cursor = std::max(cursor, r.second);
+        }
+        // الفجوة الأخيرة بعد آخر توكن حتى نهاية السطر.
+        int gapEnd = (int)text.size();
+        if (cursor < gapEnd) {
+            int ws = cursor;
+            while (ws < gapEnd && (text[ws] == ' ' || text[ws] == '\t' || text[ws] == '\r')) ws++;
+            if (ws < gapEnd && ws + 1 < (int)text.size() && text[ws] == '/' && text[ws + 1] == '/') {
+                comments.push_back({(int)line, ws, gapEnd, HighlightKind::Comment});
+            }
+        }
+    }
+    return comments;
+}
+
 std::vector<HighlightSpan> EditorEngine::computeHighlights() const {
     std::vector<HighlightSpan> out;
     std::string source = getText();
@@ -612,6 +684,8 @@ std::vector<HighlightSpan> EditorEngine::computeHighlights() const {
             if (endCol0 <= startCol0) continue;
             out.push_back({line0, startCol0, endCol0, kind});
         }
+        std::vector<HighlightSpan> comments = computeCommentGaps(tokens, lines_);
+        out.insert(out.end(), comments.begin(), comments.end());
     } catch (...) {
         // نص مؤقتًا غير صالح نحويًا أثناء الكتابة (مثل علامة تنصيص لم تُغلَق بعد): rin::Lexer
         // يرمي استثناءً من داخل scanTokens() ولا يُرجع رموزًا جزئية، لذا نُعيد قائمة فارغة
