@@ -27,12 +27,15 @@ data class BuiltinLibraryInfo(
     /** وصف قصير بالعربية لما تحتويه المكتبة. */
     val description: String,
     /** أبرز الدوال المتاحة، للعرض السريع دون الحاجة لفتح الشيفرة المصدرية. */
-    val sampleFunctions: String
+    val sampleFunctions: String,
+    /** أيقونة العرض في شاشة "المكتبات" — افتراضياً شارة "rin+" العامة؛ لبعض المكتبات
+     *  أيقونة مخصّصة تعبّر عن فكرتها (مثل movingmask أدناه). */
+    val iconRes: Int = R.drawable.ic_rin_stack
 )
 
 /**
  * سجل مرجعي (يطابق `embeddedRinLibraries()` في rin_stdlib_libs.h) بالمكتبات القياسية
- * الإحدى والعشرين المدمجة داخل المفسّر نفسه، وتعمل @import عليها فوراً على أي جهاز دون رفعها.
+ * الاثنتين والعشرين المدمجة داخل المفسّر نفسه، وتعمل @import عليها فوراً على أي جهاز دون رفعها.
  * هذا السجل نصي فقط (للعرض والإدراج السريع في المحرر)، ولا يكرر شيفرة المكتبات نفسها.
  */
 object BuiltinLibraries {
@@ -141,6 +144,12 @@ object BuiltinLibraries {
             "lib/rinxg.og.rin", "rinxg",
             "لغة تصريحية كاملة (Lexer+Parser+مُصيِّر) لتصميم واجهات الويب فوق Rin، تُترجَم إلى HTML+CSS حقيقي",
             "rxToHtml • rxParseToAst • rxInfo"
+        ),
+        BuiltinLibraryInfo(
+            "lib/movingmask.og.rin", "movingmask",
+            "أقنعة متحركة فوق الحاويات والحلقات: فيزياء وموضع/سرعة، مسارات، أنماط حركة (seek/patrol/orbit)، سرب وتشكيلات، آلة حالات، تسلسل JSON، فهرسة مكانية، مؤقتات، وقناع منزلق فوق مصفوفات وشبكات (convolution)، مع تكامل اختياري مع Loom",
+            "mm_new • mm_spawn • mm_tick • mm_seek • mm_flockStep • mm_fsmFire • mm_serialize • mm_buildSpatialIndex • mm_setTimer",
+            iconRes = R.drawable.ic_lib_movingmask
         )
     )
 }
