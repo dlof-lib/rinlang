@@ -46,7 +46,7 @@ RIN_API void* rin_loom_session_create_for_container(const char* source, const ch
 // whenever the host's visible area actually changes (e.g. rotation).
 RIN_API void rin_loom_session_set_viewport(void* session, int viewportHeight);
 
-// Current Fabric snapshot, same JSON shape as rin_loom_render_json. Free with rin_free_string().
+// Current Fabric snapshot plus the exact native Dye paint plan (`paint` array), same JSON shape as rin_loom_render_json. Free with rin_free_string().
 RIN_API char* rin_loom_session_render_json(void* session);
 
 // Dispatches a tap at (x, y) — same pixel space as the session's rootWidth. Finds the topmost
