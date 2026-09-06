@@ -106,6 +106,17 @@ class LoomPreviewActivity : AppCompatActivity(), LoomPreviewManager.Listener {
         fabricView.onTap = { x, y -> LoomPreviewManager.tap(x, y) }
         fabricView.onInspect = { node -> showInspector(node) }
         fabricView.onNavigate = { target -> navigateTo(target) }
+        // Link concepts (docs/link.md): an external `href`/`onTap="open:..."` hands us a real
+        // URL rather than an in-project route, so it leaves the preview entirely via a normal
+        // ACTION_VIEW intent — same pattern already used for opening an exported APK/file
+        // (see ApkExportActivity/FilesActivity) — instead of being treated as page navigation.
+        fabricView.onOpenUrl = { url ->
+            try {
+                startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url)))
+            } catch (_: Exception) {
+                Toast.makeText(this, getString(R.string.loom_link_open_failed, url), Toast.LENGTH_SHORT).show()
+            }
+        }
         // Real pinch-to-zoom on the canvas keeps this label in sync too, not just the toolbar
         // +/- buttons (setZoom already updates it for those — this covers the gesture path).
         fabricView.onZoomChanged = { z -> txtZoom.text = getString(R.string.loom_zoom_percent_format, (z * 100).toInt()) }
