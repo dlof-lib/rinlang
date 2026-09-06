@@ -180,6 +180,12 @@ class MainActivity : AppCompatActivity() {
         // + تلوين نحوي حقيقي (Kotlin خالص عبر RinSyntax، بلا أي C++/JNI) يتبدّل تلقائيًا حسب امتداد الملف.
         editorController = RinCodeEditorController(this, editCode, txtLineNumbers, scrollEditor)
         editorController.setLanguage(initialLanguageExtension)
+        // حركة القرص (pinch-to-zoom) داخل المحرر تُغيّر حجم خطه مباشرة؛ نُزامن هنا عمود أرقام
+        // الأسطر (لا يملكه RinCodeEditorView) ونحفظ القيمة الجديدة، تمامًا مثل أزرار +/- الحالية.
+        editCode.onFontSizeChangeListener = { newSp ->
+            txtLineNumbers.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, newSp)
+            AppSettings.setEditorFontSizeSp(this, newSp)
+        }
         RinLogoLoadingOverlay.setProgress(0.78f)
 
         // كل تعديل في المحرر يُدفع مباشرةً (بعد تهدئة/debounce قصيرة) إلى جلسة المعاينة الحية
