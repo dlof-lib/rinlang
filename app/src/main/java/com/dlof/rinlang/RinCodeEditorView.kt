@@ -23,6 +23,7 @@ import android.view.KeyEvent
 import android.view.Menu
 import android.view.MenuItem
 import android.view.MotionEvent
+import android.view.ScaleGestureDetector
 import android.view.View
 import android.view.inputmethod.BaseInputConnection
 import android.view.inputmethod.EditorInfo
@@ -583,6 +584,15 @@ class RinCodeEditorView @JvmOverloads constructor(
         }
 
         override fun onLongPress(e: MotionEvent) {
+            // الضغط الطويل يبدأ "وضع التحديد بالسحب": من الآن حتى رفع الإصبع، أي تحريك يُوسِّع
+            // التحديد بدل تمرير الشاشة (لذا نمنع الأب [ScrollView/HorizontalScrollView] من
+            // اعتراض اللمسة). قبل الضغط الطويل — أي سحب بإصبع واحد عادي — يبقى تمريرًا حرًّا
+            // للأب، تمامًا مثل أي محرر نصوص حقيقي (وهو ما كان مفقودًا: كان كل سحب، حتى بلا ضغط
+            // طويل، يُعامَل فورًا كسحب-تحديد ويمنع الأب من التمرير، فتظهر الشاشة وكأنها "تقفز"
+            // يمينًا ويسارًا بدل التمرير السلس عبر الأسطر الطويلة).
+            isSelectingDrag = true
+            parent?.requestDisallowInterceptTouchEvent(true)
+            if (AppSettings.isHapticFeedback(context)) performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
             requestFocus()
             showKeyboard()
             selectWordAt(e.x, e.y)
@@ -596,25 +606,95 @@ class RinCodeEditorView @JvmOverloads constructor(
         }
     })
 
+    // --- تكبير/تصغير الخط بحركة القرص (Pinch-to-zoom) ------------------------------------
+    // إعلام اختياري للمستدعي (MainActivity) عند تغيّر حجم الخط أثناء القرص، ليُزامن عمود أرقام
+    // الأسطر (لا يملكه هذا الـView) ويحفظ القيمة الجديدة — تمامًا كما يفعل مع أزرار +/- الحالية.
+    var onFontSizeChangeListener: ((Float) -> Unit)? = null
+
+    private val scaleGestureDetector = ScaleGestureDetector(context, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
+        override fun onScale(detector: ScaleGestureDetector): Boolean {
+            val currentSp = textPaint.textSize / resources.displayMetrics.scaledDensity
+            val newSp = (currentSp * detector.scaleFactor).coerceIn(AppSettings.MIN_FONT_SIZE_SP, AppSettings.MAX_FONT_SIZE_SP)
+            if (kotlin.math.abs(newSp - currentSp) > 0.01f) {
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, newSp)
+                onFontSizeChangeListener?.invoke(newSp)
+            }
+            return true
+        }
+    })
+
+    // --- لمسات متعدّدة الأصابع: نقرة بإصبعين = تراجع، نقرة بثلاثة أصابع = إعادة -------------
+    // نمط شائع في محررات الأكواد كاختصار سريع بلا الحاجة لأزرار شريط الأدوات. نُميّزها عن
+    // القرص (pinch) والسحب بأنها لمسة قصيرة (بلا حركة تُذكر) ترفع كل أصابعها بسرعة.
+    private var multiTouchStartTime = 0L
+    private var multiTouchStartX = 0f
+    private var multiTouchStartY = 0f
+    private var multiTouchMaxPointers = 1
+    private var multiTouchExceededSlop = false
+    private val multiTapSlopPx by lazy { resources.displayMetrics.density * 18f }
+    private val multiTapMaxDurationMs = 250L
+
+    private fun trackMultiTouchStart(event: MotionEvent) {
+        multiTouchStartTime = System.currentTimeMillis()
+        multiTouchStartX = event.x; multiTouchStartY = event.y
+        multiTouchMaxPointers = event.pointerCount
+        multiTouchExceededSlop = false
+    }
+
+    private fun trackMultiTouchMove(event: MotionEvent) {
+        multiTouchMaxPointers = max(multiTouchMaxPointers, event.pointerCount)
+        if (kotlin.math.abs(event.x - multiTouchStartX) > multiTapSlopPx ||
+            kotlin.math.abs(event.y - multiTouchStartY) > multiTapSlopPx) {
+            multiTouchExceededSlop = true
+        }
+    }
+
+    private fun maybeHandleMultiFingerTap() {
+        if (multiTouchExceededSlop) return
+        if (System.currentTimeMillis() - multiTouchStartTime > multiTapMaxDurationMs) return
+        when (multiTouchMaxPointers) {
+            2 -> { if (AppSettings.isHapticFeedback(context)) performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP); undo() }
+            3 -> { if (AppSettings.isHapticFeedback(context)) performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP); redo() }
+        }
+    }
+
     private var dragging = false
+    private var isSelectingDrag = false
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
         gestureDetector.onTouchEvent(event)
+        scaleGestureDetector.onTouchEvent(event)
         when (event.actionMasked) {
-            MotionEvent.ACTION_DOWN -> { dragging = false; parent?.requestDisallowInterceptTouchEvent(true) }
+            MotionEvent.ACTION_DOWN -> {
+                dragging = false
+                isSelectingDrag = false
+                trackMultiTouchStart(event)
+                // لا نمنع الأب من الاعتراض هنا: نمنحه فرصة تولّي التمرير الطبيعي إن كانت هذه
+                // بداية سحب-تمرير وليست سحب-تحديد (الذي يُفعَّل فقط بعد onLongPress أعلاه).
+            }
+            MotionEvent.ACTION_POINTER_DOWN -> trackMultiTouchMove(event)
             MotionEvent.ACTION_MOVE -> {
                 if (event.pointerCount == 1) {
-                    dragging = true
-                    val p = offsetForTouch(event.x, event.y)
-                    engine.setCursor(p.line, p.col, true)
-                    afterEngineMutation()
+                    if (isSelectingDrag) {
+                        dragging = true
+                        val p = offsetForTouch(event.x, event.y)
+                        engine.setCursor(p.line, p.col, true)
+                        afterEngineMutation()
+                    }
+                    // وإلا (سحب عادي بلا ضغط طويل): لا نستهلك الحركة كتحديد نص إطلاقًا، فيبقى
+                    // بإمكان ScrollView/HorizontalScrollView الأب اعتراضها وتمرير الشاشة بسلاسة.
+                } else {
+                    trackMultiTouchMove(event)
                 }
             }
+            MotionEvent.ACTION_POINTER_UP -> trackMultiTouchMove(event)
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                 val wasDragging = dragging
                 dragging = false
+                isSelectingDrag = false
                 parent?.requestDisallowInterceptTouchEvent(false)
                 if (wasDragging && engine.getSelection().hasSelection) showTextActionMode()
+                if (!wasDragging && event.actionMasked == MotionEvent.ACTION_UP) maybeHandleMultiFingerTap()
             }
         }
         return true
@@ -765,6 +845,15 @@ class RinCodeEditorView @JvmOverloads constructor(
                 if (engine.getSelection().hasSelection) engine.indentSelection() else engine.insertText(" ".repeat(AppSettings.getTabSize(context)), smart = false)
                 afterEngineMutation(); return true
             }
+            // Backspace/Delete: يصلان عادةً عبر IME (BaseInputConnection.deleteSurroundingText
+            // على shadowEditable) ويُوجَّهان تلقائيًا في routeShadowEdit. لكن هذا View هو View
+            // خام (ليس EditText)، وبعض لوحات المفاتيح (ولوحات المفاتيح الفعلية/بلوتوث دومًا)
+            // تُرسل هذين المفتاحين كـKeyEvent مباشر عبر dispatchKeyEvent بدل InputConnection —
+            // وبما أن onKeyDown لم يكن يتعامل معهما إطلاقًا، كانا يصلان إلى super.onKeyDown()
+            // (سلوك View الافتراضي، أي لا شيء) فتبدو الكتابة تعمل والحذف لا يعمل تمامًا.
+            // نتعامل معهما هنا مباشرة عبر نفس مسارات المحرك التي يستخدمها routeShadowEdit.
+            KeyEvent.KEYCODE_DEL -> { engine.deleteBackward(); afterEngineMutation(); return true }
+            KeyEvent.KEYCODE_FORWARD_DEL -> { engine.deleteForward(); afterEngineMutation(); return true }
         }
         return super.onKeyDown(keyCode, event)
     }
