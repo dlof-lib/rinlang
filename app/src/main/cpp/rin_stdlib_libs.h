@@ -5881,9 +5881,15 @@ static const char* kLib_movingmask_og_rin = R"MOVINGMASKOGRIN(
 //    18) التسلسل والاستعادة (Serialization / Save & Load عبر JSON) — جديد
 //    19) الفهرسة المكانية لتسريع استعلامات الجوار (Spatial Grid Index) — جديد
 //    20) المؤقتات والتهدئة لكل قناع (Timers / Cooldowns) — جديد
+//    21) قياس الإطارات في الثانية وخطوة زمنية ثابتة (FPS Meter / Fixed Timestep) — جديد
+//    22) أحجام الشاشة/الصفحة والتصميم المتجاوب (Viewport / Responsive Sizing) — جديد
+//    23) أنواع شريط التحميل (Progress / Loading Bar Kinds) — جديد
+//    24) اللمس وسلاسة الحركة (Touch Gestures & Motion Smoothing) — جديد
+//    25) العملات والنقاط القابلة للجمع (Coins / Collectibles / Score) — جديد
+//    26) أزرار التحكم الافتراضية (Virtual Joystick & Control Buttons) — جديد
 //
-//  الإصدار: 1.0.0 — أول نشر رسمي لهذه المكتبة ضمن RinStudio (مدمجة embedded في المفسّر،
-//  متاحة فوراً عبر شاشة "المكتبات" بلا رفع يدوي). انظر CHANGELOG.md.
+//  الإصدار: 1.2.0 — انظر CHANGELOG.md لسجل التغييرات الكامل بين الإصدارات. مدمجة embedded
+//  داخل مفسّر RinStudio، متاحة فوراً عبر شاشة "المكتبات" بلا رفع يدوي.
 // ============================================================================
 
 
@@ -5894,7 +5900,8 @@ static const char* kLib_movingmask_og_rin = R"MOVINGMASKOGRIN(
 let MM_EPSILON = 0.0000001;      // فرق افتراضي لمقارنة الأعداد العشرية
 let MM_DEFAULT_HISTORY_LIMIT = 30; // عدد نقاط الأثر (trail) المحفوظة كحد أقصى لكل قناع
 let MM_TAU = 6.28318530717958647692; // 2*PI — يُستخدم لاختزال زوايا mm_orbitStep فقط
-let MM_VERSION = "1.0.0"; // إصدار مكتبة movingmask نفسها (انظر CHANGELOG.md)
+let MM_VERSION = "1.2.0"; // إصدار مكتبة movingmask نفسها (انظر CHANGELOG.md)
+let MM_DEFAULT_FPS_WINDOW = 0.5; // مدة نافذة حساب FPS الافتراضية بالثواني (كل نصف ثانية يُعاد الحساب)
 
 // نص/رقم إصدار مكتبة movingmask الحالي — استخدمه لعرض "عن هذه المكتبة" في تطبيقك
 fun mm_version() {
@@ -8155,7 +8162,573 @@ fun mm_tickTimers(mm, dt) {
     return nil;
 }
 
-)"MOVINGMASKOGRIN";
+
+// ============================================================================
+// 21) قياس الإطارات في الثانية وخطوة زمنية ثابتة (FPS Meter / Fixed Timestep)
+// ============================================================================
+//  كل دوال movingmask (mm_tick, mm_integrate, mm_tickTimers...) "منطقية" بحتة: تأخذ dt كوسيط
+//  بلا أي علاقة بالزمن الفعلي — المكتبة نفسها لا تقرأ ساعة النظام (لا يوفّر مفسّر Rin دالة
+//  وقت أصلية حتى الآن). هذا القسم يبني *فوق* dt الذي يُمرِّره التطبيق المضيف (من حلقة الرسم
+//  في Android/الـCLI) عدّاداً لقياس FPS الفعلي، ومُجمِّعاً (accumulator) لخطوة زمنية ثابتة —
+//  النمط القياسي في محركات الألعاب لفصل الفيزياء المحدَّدة (deterministic) عن معدّل العرض
+//  المتغيّر (انظر مقالة "Fix Your Timestep" الشهيرة لـGlenn Fiedler لخلفية كاملة عن النمط).
+
+// ---- عدّاد FPS (FPS Meter) --------------------------------------------------------------
+// يُهيّئ عدّاد FPS على محرّك mm. استدعِها مرة واحدة عند البدء، قبل أي استدعاء لـmm_fpsUpdate.
+fun mm_fpsInit(mm) {
+    mm["fps"] = { frames: 0, elapsed: 0, value: 0, totalFrames: 0 };
+    return true;
+}
+
+// استدعِها مرة واحدة كل إطار حقيقي (frame)، مُمرِّراً لها dtSeconds = الزمن الفعلي المنقضي
+// منذ الإطار السابق بالثواني (كما يقيسه المضيف: Choreographer على أندرويد، أو ساعة نظام
+// التشغيل في الـCLI). تُراكِم المكتبة الإطارات والزمن ضمن نافذة MM_DEFAULT_FPS_WINDOW
+// (نصف ثانية افتراضياً)، وعند اكتمال النافذة تُعيد حساب mm_fps() الحالي وتصفّر النافذة —
+// هذا يمنع رقماً "مهتزاً" يتغيّر كل إطار، ويُعيد بدلاً منه قراءة مستقرة كل نصف ثانية.
+// تتطلّب استدعاء mm_fpsInit أولاً؛ بلا تأثير (وتُعيد 0) إن لم يكن العدّاد مُهيَّأ بعد.
+fun mm_fpsUpdate(mm, dtSeconds) {
+    if (has(mm, "fps") == false) { return 0; }
+    let fps = mm["fps"];
+    fps["frames"] = fps["frames"] + 1;
+    fps["elapsed"] = fps["elapsed"] + dtSeconds;
+    fps["totalFrames"] = fps["totalFrames"] + 1;
+    if (fps["elapsed"] >= MM_DEFAULT_FPS_WINDOW) {
+        fps["value"] = fps["frames"] / fps["elapsed"];
+        fps["frames"] = 0;
+        fps["elapsed"] = 0;
+    }
+    return fps["value"];
+}
+
+// آخر قيمة FPS محسوبة (تتحدَّث كل نافذة MM_DEFAULT_FPS_WINDOW عبر mm_fpsUpdate) — 0 حتى
+// اكتمال أول نافذة، أو إن لم يُستدعَ mm_fpsInit أصلاً
+fun mm_fps(mm) {
+    if (has(mm, "fps") == false) { return 0; }
+    return mm["fps"]["value"];
+}
+
+// إجمالي عدد الإطارات المُعدودة منذ mm_fpsInit (تراكمي، لا يتأثر بتصفير النافذة الداخلية) —
+// مفيد كعدّاد تشخيصي عام لعمر الجلسة
+fun mm_fpsFrameCount(mm) {
+    if (has(mm, "fps") == false) { return 0; }
+    return mm["fps"]["totalFrames"];
+}
+
+// يُصفِّر عدّاد FPS بالكامل (بما فيه totalFrames وmm_fps الحالي) دون الحاجة لإعادة mm_fpsInit
+fun mm_fpsReset(mm) {
+    if (has(mm, "fps") == false) { return false; }
+    mm["fps"] = { frames: 0, elapsed: 0, value: 0, totalFrames: 0 };
+    return true;
+}
+
+// ---- خطوة زمنية ثابتة (Fixed Timestep Accumulator) -------------------------------------
+// يُهيّئ مُجمِّعاً (accumulator) لخطوة زمنية ثابتة مقدارها fixedDt ثانية (مثلاً 1/60 لفيزياء
+// بمعدّل 60 خطوة/ثانية بغضّ النظر عن معدّل عرض الشاشة الفعلي). استدعِها مرة واحدة عند البدء.
+fun mm_fixedStepInit(mm, fixedDt) {
+    mm["fixedStep"] = { fixedDt: fixedDt, accumulator: 0 };
+    return true;
+}
+
+// نسبة الزمن المتراكم غير المُستهلَك بعد من fixedDt (بين 0 و1) — مفيدة لِـ"استكمال" (interpolate)
+// موضع العرض بصرياً بين خطوتَي فيزياء متتاليتين بدل عرض حركة متقطّعة (jitter) على شاشات عالية
+// التردد. تُعيد 0 إن لم يُستدعَ mm_fixedStepInit أصلاً.
+fun mm_fixedStepAlpha(mm) {
+    if (has(mm, "fixedStep") == false) { return 0; }
+    let fs = mm["fixedStep"];
+    let alpha = fs["accumulator"] / fs["fixedDt"];
+    if (alpha > 1) { return 1; }
+    if (alpha < 0) { return 0; }
+    return alpha;
+}
+
+// يُراكِم الزمن الفعلي المنقضي realDtSeconds (منذ آخر إطار) على المُجمِّع، ثم يستدعي الدالة
+// stepFn(fixedDt) بقدر ما يسمح المُجمِّع من خطوات ثابتة كاملة — بحد أقصى maxSteps خطوة في
+// نفس الاستدعاء (يحمي من "دوّامة الموت" spiral of death عند تجمّد التطبيق للحظة، إذ يمنع
+// محاولة تعويض كل الوقت الضائع دفعة واحدة). عادةً stepFn هي دالة تستدعي mm_tick/mm_tickTimers
+// بنفسها بمعدّل ثابت. تُعيد عدد الخطوات المُنفَّذة فعلياً؛ لا تفعل شيئاً وتُعيد 0 إن لم يُستدعَ
+// mm_fixedStepInit أصلاً.
+//
+// مثال:
+//   mm_fixedStepInit(mm, 1 / 60);
+//   fun onFixedStep(fixedDt) { mm_tick(mm, fixedDt, "bounce"); mm_tickTimers(mm, fixedDt); }
+//   // كل إطار عرض (قد يكون معدّله متغيّراً):
+//   mm_fixedStepRun(mm, realDtThisFrame, 5, onFixedStep);
+fun mm_fixedStepRun(mm, realDtSeconds, maxSteps, stepFn) {
+    if (has(mm, "fixedStep") == false) { return 0; }
+    let fs = mm["fixedStep"];
+    fs["accumulator"] = fs["accumulator"] + realDtSeconds;
+    let steps = 0;
+    while (fs["accumulator"] >= fs["fixedDt"] and steps < maxSteps) {
+        stepFn(fs["fixedDt"]);
+        fs["accumulator"] = fs["accumulator"] - fs["fixedDt"];
+        steps = steps + 1;
+    }
+    return steps;
+}
+
+
+// ============================================================================
+// 22) أحجام الشاشة/الصفحة والتصميم المتجاوب (Viewport / Responsive Sizing)
+// ============================================================================
+//  "الحدود" (bounds، القسم 6) تمنع القناع من مغادرة منطقة اللعب منطقياً — أما "الإطار
+//  المرئي" (viewport) هنا فهو مفهوم مختلف: حجم شاشة/صفحة التطبيق الفعلي بالبكسل المنطقي،
+//  يُستخدم للتموضع النسبي (٪ من الشاشة) وتحجيم القيم تناسبياً بين أحجام أجهزة مختلفة (هاتف
+//  صغير مقابل تابلت)، بدل إحداثيات مطلقة تنكسر على شاشة بحجم مختلف عمّا صُمِّمت له.
+
+// يُسجِّل حجم الشاشة/الصفحة الحالي (width×height بالبكسل المنطقي، كما يقيسه المضيف) على
+// محرّك mm — استدعِها عند بدء التشغيل وكل مرة يتغيّر فيها الحجم (تدوير الجهاز مثلاً)
+fun mm_setViewport(mm, width, height) {
+    mm["viewport"] = { width: width, height: height };
+    return true;
+}
+
+// حجم الشاشة/الصفحة الحالي المُسجَّل، أو نقاط الحجم الافتراضية (0,0) إن لم يُستدعَ
+// mm_setViewport بعد
+fun mm_viewport(mm) {
+    if (has(mm, "viewport") == false) { return { width: 0, height: 0 }; }
+    return mm["viewport"];
+}
+
+// يحوِّل نقطة مطلقة (x, y) إلى نسبة مئوية (0..1) من أبعاد الشاشة الحالية — مفيد لتخزين
+// مواضع عناصر واجهة بصيغة تتكيّف تلقائياً مع أي حجم شاشة لاحقاً بدل إحداثيات ثابتة
+fun mm_toViewportPercent(mm, x, y) {
+    let vp = mm_viewport(mm);
+    if (vp["width"] <= 0 or vp["height"] <= 0) { return mm_point(0, 0); }
+    return mm_point(x / vp["width"], y / vp["height"]);
+}
+
+// عكس mm_toViewportPercent: يحوِّل نسبة مئوية (0..1) إلى نقطة مطلقة على أبعاد الشاشة
+// الحالية — استخدمها لوضع عنصر عند "20% من العرض، 80% من الارتفاع" بغضّ النظر عن حجم الجهاز
+fun mm_fromViewportPercent(mm, percentX, percentY) {
+    let vp = mm_viewport(mm);
+    return mm_point(percentX * vp["width"], percentY * vp["height"]);
+}
+
+// تصنيف تقريبي لحجم الشاشة الحالية إلى فئة نصية شائعة في التصميم المتجاوب: "compact"
+// (هاتف عمودي، العرض أقل من 600)، "medium" (هاتف أفقي/تابلت صغير، أقل من 840)، أو
+// "expanded" (تابلت كبير/سطح مكتب) — تُطابق حدود فئات Material Design 3 لسهولة اتخاذ قرارات
+// تخطيط (كعدد أعمدة الشبكة أو حجم عناصر التحكم) دون كتابة أرقام سحرية متكرّرة يدوياً
+fun mm_viewportClass(mm) {
+    let vp = mm_viewport(mm);
+    if (vp["width"] < 600) { return "compact"; }
+    if (vp["width"] < 840) { return "medium"; }
+    return "expanded";
+}
+
+// يُحجِّم قيمة baseValue (مصمَّمة أصلاً لعرض مرجعي baseWidth) تناسبياً مع عرض الشاشة الحالي
+// — مثلاً سرعة/حجم قناع صُمِّم لعرض 400 نقطة يُكبَّر تلقائياً على شاشة أعرض بنفس النسبة،
+// فيبدو التصرّف متسقاً بصرياً عبر أحجام أجهزة مختلفة بدل بدو أصغر/أسرع نسبياً على الشاشات
+// الكبيرة. يُعيد baseValue بلا تغيير إن لم يُضبَط viewport بعد.
+fun mm_scaleForViewport(mm, baseValue, baseWidth) {
+    let vp = mm_viewport(mm);
+    if (vp["width"] <= 0 or baseWidth <= 0) { return baseValue; }
+    return baseValue * (vp["width"] / baseWidth);
+}
+
+// يُحرِّك (يُثبِّت مباشرة، بلا فيزياء) قناع name إلى موضع نسبي (percentX, percentY) من
+// أبعاد الشاشة الحالية — مختصر لِـ mm_fromViewportPercent + mm_setPosition، مفيد لعناصر
+// واجهة تلتصق بزاوية/مركز الشاشة (كزر تحكّم في الزاوية السفلى) بغضّ النظر عن حجمها
+fun mm_setPositionPercent(mm, name, percentX, percentY) {
+    let p = mm_fromViewportPercent(mm, percentX, percentY);
+    return mm_setPosition(mm, name, p["x"], p["y"]);
+}
+
+
+// ============================================================================
+// 23) أنواع شريط التحميل (Progress / Loading Bar Kinds)
+// ============================================================================
+//  أشرطة تقدُّم/تحميل مُسمّاة يديرها محرّك mm بمعزل عن الأقنعة (وإن أمكن ربطها بقناع لعرضه
+//  بصرياً عبر Loom). أربعة أنواع شائعة مدعومة عبر kind واحد:
+//    "linear"       — شريط عادي محدَّد المدة (تحميل ملف، شريط صحة/طاقة)
+//    "circular"     — نفس منطق linear رقمياً؛ الفرق بصري بحت عند الرسم (حلقي بدل مستطيل)
+//    "indeterminate"— بلا مدة معروفة (انتظار استجابة خادم)؛ يتأرجح ذهاباً وإياباً بلا توقف
+//    "segmented"    — بمراحل منفصلة معدودة (خطوات معالج، مهام مرحلة يومية)
+//    "buffer"       — بقيمتين (المُشغَّل played والمُخزَّن مسبقاً buffered)، كشريط الفيديو
+
+// ينشئ شريط تقدُّم باسم name من نوع kind ("linear"/"circular"/"indeterminate"/"segmented"/
+// "buffer") بمدة duration (بالثواني أو أي وحدة زمن يستخدمها mm_progressTick لاحقاً؛
+// تُتجاهَل duration لنوع "indeterminate" حيث تمثّل بدلاً منها مدة دورة تأرجح واحدة)
+fun mm_progressCreate(mm, name, kind, duration) {
+    if (has(mm, "progress") == false) { mm["progress"] = {}; }
+    mm["progress"][name] = { kind: kind, value: 0, duration: duration, direction: 1, segments: 1, buffered: 0 };
+    return true;
+}
+
+// (داخلية) يجلب سجل شريط تقدُّم أو nil إن لم يُنشَأ بهذا الاسم
+fun mm__progressGet(mm, name) {
+    if (has(mm, "progress") == false) { return nil; }
+    if (has(mm["progress"], name) == false) { return nil; }
+    return mm["progress"][name];
+}
+
+// يضبط قيمة شريط تقدُّم يدوياً مباشرة إلى value (0..1، تُحصَر ضمن هذا المدى تلقائياً) —
+// مفيد لأشرطة تُحدَّث من مصدر خارجي (تقدّم تنزيل حقيقي) بدل عدّاد زمني داخلي عبر
+// mm_progressTick
+fun mm_progressSet(mm, name, value) {
+    let p = mm__progressGet(mm, name);
+    if (p == nil) { return false; }
+    p["value"] = mm_clampNum(value, 0, 1);
+    return true;
+}
+
+// القيمة الحالية لشريط تقدُّم (0..1)، أو 0 إن لم يُنشَأ بهذا الاسم
+fun mm_progressGet(mm, name) {
+    let p = mm__progressGet(mm, name);
+    if (p == nil) { return 0; }
+    return p["value"];
+}
+
+// يُقدِّم شريط تقدُّم تلقائياً بمقدار dt زمنياً وفق نوعه:
+// - "linear"/"circular"/"segmented": القيمة += dt/duration، تُحصَر عند 1 (لا تتجاوزه)
+// - "indeterminate": تتأرجح القيمة بين 0 و1 ذهاباً وإياباً باستمرار كل duration (ping-pong)
+// - "buffer": القيمة (played) تتقدَّم كالخطي، لكن لا تتجاوز أبداً قيمة buffered المضبوطة
+//   عبر mm_progressSetBuffer (كشريط فيديو لا يشغّل ما لم يُخزَّن مسبقاً)
+fun mm_progressTick(mm, name, dt) {
+    let p = mm__progressGet(mm, name);
+    if (p == nil) { return 0; }
+    if (p["kind"] == "indeterminate") {
+        let step = (dt / p["duration"]) * p["direction"];
+        p["value"] = p["value"] + step;
+        if (p["value"] >= 1) { p["value"] = 1; p["direction"] = 0 - 1; }
+        if (p["value"] <= 0) { p["value"] = 0; p["direction"] = 1; }
+        return p["value"];
+    }
+    let next = p["value"] + (dt / p["duration"]);
+    if (p["kind"] == "buffer" and next > p["buffered"]) { next = p["buffered"]; }
+    p["value"] = mm_clampNum(next, 0, 1);
+    return p["value"];
+}
+
+// يضبط عدد المراحل الكلي لشريط من نوع "segmented" (مثلاً 5 خطوات معالج تسجيل)
+fun mm_progressSetSegments(mm, name, totalSegments) {
+    let p = mm__progressGet(mm, name);
+    if (p == nil) { return false; }
+    p["segments"] = totalSegments;
+    return true;
+}
+
+// عدد المراحل المكتملة فعلياً لشريط "segmented" بناءً على قيمته الحالية (0..segments)
+fun mm_progressCompletedSegments(mm, name) {
+    let p = mm__progressGet(mm, name);
+    if (p == nil) { return 0; }
+    return floor(p["value"] * p["segments"]);
+}
+
+// يضبط مقدار المخزَّن مسبقاً (buffered، 0..1) لشريط من نوع "buffer" — القيمة المُشغَّلة
+// (mm_progressGet) لن تتجاوزه أبداً عبر mm_progressTick اللاحقة
+fun mm_progressSetBuffer(mm, name, bufferedValue) {
+    let p = mm__progressGet(mm, name);
+    if (p == nil) { return false; }
+    p["buffered"] = mm_clampNum(bufferedValue, 0, 1);
+    return true;
+}
+
+// هل اكتمل شريط تقدُّم محدَّد المدة (value >= 1)؟ يُعيد false دوماً لنوع "indeterminate"
+// (لا معنى للاكتمال هناك) وكذلك إن لم يُنشَأ الشريط أصلاً
+fun mm_progressIsDone(mm, name) {
+    let p = mm__progressGet(mm, name);
+    if (p == nil) { return false; }
+    if (p["kind"] == "indeterminate") { return false; }
+    return p["value"] >= 1;
+}
+
+// لقطة مسطَّحة كاملة لشريط تقدُّم (نمط mm_warp من القسم 15) جاهزة للتغذية مباشرة لعنصر
+// واجهة Loom — تتضمّن دائماً kind/value/percent/done، بالإضافة إلى completedSegments/segments
+// لنوع "segmented"، أو buffered لنوع "buffer"
+fun mm_progressWarp(mm, name) {
+    let p = mm__progressGet(mm, name);
+    if (p == nil) { return nil; }
+    let out = { kind: p["kind"], value: p["value"], percent: round(p["value"] * 100), done: mm_progressIsDone(mm, name) };
+    if (p["kind"] == "segmented") {
+        out["segments"] = p["segments"];
+        out["completedSegments"] = mm_progressCompletedSegments(mm, name);
+    }
+    if (p["kind"] == "buffer") {
+        out["buffered"] = p["buffered"];
+    }
+    return out;
+}
+
+
+// ============================================================================
+// 24) اللمس وسلاسة الحركة (Touch Gestures & Motion Smoothing)
+// ============================================================================
+//  تفسير خام لأحداث لمس/نقر مضيفة (down/move/up) إلى بادرات (tap مقابل swipe) مخزَّنة في
+//  meta كل قناع، بالإضافة لتنعيم حركة مستقل عن اللمس (اقتفاء هدف بسلاسة بدل انتقال مفاجئ).
+
+// (داخلية) عتبة المسافة (بوحدة نقاط) التي تفصل tap عن swipe في mm_touchEnd
+let MM_TAP_DISTANCE_THRESHOLD = 12;
+
+// يبدأ تتبّع لمسة على قناع name عند نقطة (x, y) — استدعِها عند حدث "لمسة بدأت" من المضيف
+fun mm_touchBegin(mm, name, x, y) {
+    return mm_setMeta(mm, name, "touch", { active: true, startX: x, startY: y, curX: x, curY: y, distance: 0 });
+}
+
+// يُحدِّث موضع اللمسة الجارية إلى (x, y)، ويُراكِم المسافة المقطوعة منذ آخر تحديث (لتمييز
+// tap عن swipe لاحقاً في mm_touchEnd) — بلا تأثير إن لم تبدأ لمسة على هذا القناع بعد
+fun mm_touchMove(mm, name, x, y) {
+    let touch = mm_getMeta(mm, name, "touch", nil);
+    if (touch == nil or touch["active"] == false) { return false; }
+    touch["distance"] = touch["distance"] + mm_distance(mm_point(touch["curX"], touch["curY"]), mm_point(x, y));
+    touch["curX"] = x;
+    touch["curY"] = y;
+    return true;
+}
+
+// اختصار شائع لأنماط "السحب لتحريك": يُحدِّث موضع اللمسة عبر mm_touchMove ثم يُحرِّك
+// القناع مباشرة إلى نفس نقطة اللمسة (drag-to-move بلا أي فيزياء وسيطة)
+fun mm_touchDrag(mm, name, x, y) {
+    mm_touchMove(mm, name, x, y);
+    mm_setPosition(mm, name, x, y);
+    mm_recordHistory(mm, name);
+    return true;
+}
+
+// هل توجد لمسة جارية حالياً على هذا القناع؟
+fun mm_isTouching(mm, name) {
+    let touch = mm_getMeta(mm, name, "touch", nil);
+    if (touch == nil) { return false; }
+    return touch["active"];
+}
+
+// ينهي تتبّع اللمسة على قناع name، ويُصنِّف البادرة: إن كانت المسافة الكلية المقطوعة أقل
+// من MM_TAP_DISTANCE_THRESHOLD تُصنَّف "tap"، وإلا "swipe" مع اتجاه ومسافة الخط المستقيم من
+// البداية للنهاية (بصرف النظر عن مسار السحب الفعلي). يُعيد الخريطة {type, dx, dy, distance}
+// (dx/dy تساويان 0 لِـ"tap")، ويمسح حالة اللمسة عن القناع. يُعيد نتيجة "tap" فارغة المسافة
+// بلا مسح أي شيء إن لم تبدأ لمسة على هذا القناع أصلاً.
+fun mm_touchEnd(mm, name) {
+    let touch = mm_getMeta(mm, name, "touch", nil);
+    if (touch == nil or touch["active"] == false) { return { type: "tap", dx: 0, dy: 0, distance: 0 }; }
+    let result = { type: "tap", dx: 0, dy: 0, distance: touch["distance"] };
+    if (touch["distance"] >= MM_TAP_DISTANCE_THRESHOLD) {
+        result["type"] = "swipe";
+        result["dx"] = touch["curX"] - touch["startX"];
+        result["dy"] = touch["curY"] - touch["startY"];
+    }
+    touch["active"] = false;
+    return result;
+}
+
+// ---- سلاسة الحركة (Motion Smoothing) ----------------------------------------------------
+// تنعيم أُسّي مستقل عن معدّل الإطارات (framerate-independent exponential smoothing): يقترب
+// القناع من هدفه بنسبة ثابتة من المسافة المتبقية كل ثانية بدل خطوة ثابتة كل إطار، فتبدو
+// الحركة سلسة ومتّسقة السرعة النسبية بصرف النظر عن تفاوت معدّل الإطارات الفعلي.
+// remainPerSecond (بين 0 و1): نسبة المسافة المتبقية بعد مرور ثانية كاملة — كلما اقترب من 0
+// كانت المتابعة أسرع/ألصق بالهدف، وكلما اقترب من 1 كانت أبطأ/أكثر "تراخياً" (لزوجة أعلى).
+fun mm_smoothFollow(mm, name, targetX, targetY, remainPerSecond, dt) {
+    let here = mm_position(mm, name);
+    if (here == nil) { return false; }
+    let t = 1 - pow(remainPerSecond, dt);
+    mm_setPosition(mm, name, here["x"] + (targetX - here["x"]) * t, here["y"] + (targetY - here["y"]) * t);
+    mm_recordHistory(mm, name);
+    return true;
+}
+
+// نفس منطق التنعيم الأُسّي أعلاه، لكن على متجه السرعة بدل الموضع مباشرة — مفيد لتنعيم
+// استجابة عصا تحكّم افتراضية (القسم 26) بحيث لا تتغيّر سرعة القناع بقفزة مفاجئة عند تحريك
+// العصا بسرعة، بل تنتقل بسلاسة نحو السرعة المستهدفة
+fun mm_smoothVelocity(mm, name, targetVx, targetVy, remainPerSecond, dt) {
+    let v = mm_velocity(mm, name);
+    let t = 1 - pow(remainPerSecond, dt);
+    return mm_setVelocity(mm, name, v["x"] + (targetVx - v["x"]) * t, v["y"] + (targetVy - v["y"]) * t);
+}
+
+
+// ============================================================================
+// 25) العملات والنقاط القابلة للجمع (Coins / Collectibles / Score)
+// ============================================================================
+//  آلية "عملات" جاهزة فوق مفاهيم mm الأساسية: قناع عادي (mm_spawn) بوسم meta.coin، تُجمَع
+//  تلقائياً عند اقتراب قناع "جامع" (لاعب) منها ضمن نصف قطر معيّن، مع عدّاد نقاط على مستوى
+//  المحرّك بالكامل — نمط شائع في ألعاب المنصّات/الأركيد بلا كتابة منطق تصادم يدوي متكرّر.
+
+// ينشئ عملة/قابلاً للجمع باسم name عند (x, y) بقيمة value نقطة — قناع عادي فعلياً (يعمل
+// عليه mm_position/mm_setActive... إلخ كأي قناع) موسوم فقط بأنه "قابل للجمع"
+fun mm_spawnCoin(mm, name, x, y, value) {
+    mm_spawn(mm, name, x, y);
+    mm_setMeta(mm, name, "coin", { value: value, collected: false });
+    return true;
+}
+
+// هل هذا القناع عملة/قابل للجمع (أُنشئ عبر mm_spawnCoin)؟
+fun mm_isCoin(mm, name) {
+    return mm_getMeta(mm, name, "coin", nil) != nil;
+}
+
+// هل جُمعت هذه العملة بالفعل (عبر mm_collectCoinsNear)؟ false أيضاً إن لم تكن عملة أصلاً
+fun mm_isCoinCollected(mm, name) {
+    let coin = mm_getMeta(mm, name, "coin", nil);
+    if (coin == nil) { return false; }
+    return coin["collected"];
+}
+
+// يفحص كل العملات النشطة غير المجموعة بعد، ويجمع كل عملة تقع ضمن radius من موضع قناع
+// collectorName: يُعلِّمها "مجموعة"، يُخفيها (mm_setActive إلى false)، يُضيف قيمتها لعدّاد
+// النقاط الكلي عبر mm_addScore تلقائياً، ويُطلق حدث محرّك "coinCollected" لكل عملة
+// (payload: {name, value, collector}). يُعيد {totalValue, names}: مجموع قيم ما جُمِع في هذا
+// الاستدعاء وأسماء العملات المجموعة (مصفوفة فارغة إن لم تُجمَع أي عملة).
+fun mm_collectCoinsNear(mm, collectorName, radius) {
+    let collectorPos = mm_position(mm, collectorName);
+    let totalValue = 0;
+    let collectedNames = [];
+    if (collectorPos == nil) { return { totalValue: totalValue, names: collectedNames }; }
+    let i = 0;
+    while (i < len(mm["order"])) {
+        let name = mm["order"][i];
+        if (mm_isCoin(mm, name) and mm_isCoinCollected(mm, name) == false and mm_isActive(mm, name)) {
+            let coinPos = mm_position(mm, name);
+            if (mm_distance(collectorPos, coinPos) <= radius) {
+                let coin = mm_getMeta(mm, name, "coin", nil);
+                coin["collected"] = true;
+                mm_setActive(mm, name, false);
+                totalValue = totalValue + coin["value"];
+                push(collectedNames, name);
+                mm__fire(mm, "coinCollected", { name: name, value: coin["value"], collector: collectorName });
+            }
+        }
+        i = i + 1;
+    }
+    if (totalValue > 0) { mm_addScore(mm, totalValue); }
+    return { totalValue: totalValue, names: collectedNames };
+}
+
+// ---- عدّاد نقاط عام على مستوى المحرّك (Score) --------------------------------------------
+// يُضيف amount (قد تكون سالبة لخصم نقاط) إلى عدّاد نقاط محرّك mm الكلي، ويُطلق حدث محرّك
+// "scoreChanged" (payload: {amount, total})
+fun mm_addScore(mm, amount) {
+    if (has(mm, "score") == false) { mm["score"] = 0; }
+    mm["score"] = mm["score"] + amount;
+    mm__fire(mm, "scoreChanged", { amount: amount, total: mm["score"] });
+    return mm["score"];
+}
+
+// مجموع النقاط الحالي، أو 0 إن لم تُضَف أي نقطة بعد
+fun mm_score(mm) {
+    if (has(mm, "score") == false) { return 0; }
+    return mm["score"];
+}
+
+// يُصفِّر عدّاد النقاط إلى 0 (بداية لعبة جديدة مثلاً)
+fun mm_resetScore(mm) {
+    mm["score"] = 0;
+    return true;
+}
+
+
+// ============================================================================
+// 26) أزرار التحكم الافتراضية (Virtual Joystick & Control Buttons)
+// ============================================================================
+//  عنصرا تحكّم لمسي جاهزان لأي لعبة/تطبيق تفاعلي: عصا تحكّم افتراضية مستمرّة (اتجاه+قوة)،
+//  وأزرار منفصلة (اضغط/أفلت) بحالة "لحظة الضغط/الإفلات" القياسية (edge-triggered) لتفادي
+//  تكرار تنفيذ فعل الزر في كل إطار طالما الإصبع لا يزال ضاغطاً عليه.
+
+// ---- عصا تحكّم افتراضية (Virtual Joystick) ----------------------------------------------
+// ينشئ عصا تحكّم افتراضية باسم name، مركزها (centerX, centerY) ونصف قطرها الأقصى maxRadius
+// (بالنقاط) — هذا هو موضع/حجم "القرص" المرسوم على الشاشة (عادة زاوية سفلية ثابتة)
+fun mm_joystickCreate(mm, name, centerX, centerY, maxRadius) {
+    if (has(mm, "joysticks") == false) { mm["joysticks"] = {}; }
+    mm["joysticks"][name] = { centerX: centerX, centerY: centerY, maxRadius: maxRadius, x: 0, y: 0, active: false };
+    return true;
+}
+
+// يُحدِّث عصا تحكّم بموضع لمسة خام (touchX, touchY): يحسب المتجه من مركز العصا إلى نقطة
+// اللمسة، يحصر مقداره ضمن maxRadius (لا يمكن سحب "المقبض" خارج حدود القرص)، ويخزّنه
+// مُطبَّعاً بين -1 و1 على كل محور (0,0 يعني عصا في مركزها تماماً، 1 يعني أقصى انحراف)
+fun mm_joystickUpdate(mm, name, touchX, touchY) {
+    if (has(mm, "joysticks") == false or has(mm["joysticks"], name) == false) { return false; }
+    let j = mm["joysticks"][name];
+    let dx = touchX - j["centerX"];
+    let dy = touchY - j["centerY"];
+    let mag = sqrt(dx * dx + dy * dy);
+    if (mag > j["maxRadius"]) {
+        dx = (dx / mag) * j["maxRadius"];
+        dy = (dy / mag) * j["maxRadius"];
+    }
+    j["x"] = dx / j["maxRadius"];
+    j["y"] = dy / j["maxRadius"];
+    j["active"] = true;
+    return true;
+}
+
+// يُعيد عصا تحكّم إلى مركزها (يُستدعى عند رفع الإصبع عنها)
+fun mm_joystickRelease(mm, name) {
+    if (has(mm, "joysticks") == false or has(mm["joysticks"], name) == false) { return false; }
+    let j = mm["joysticks"][name];
+    j["x"] = 0;
+    j["y"] = 0;
+    j["active"] = false;
+    return true;
+}
+
+// المتجه المُطبَّع الحالي لعصا تحكّم {x, y} (كل محور بين -1 و1)، أو نقطة صفرية إن لم تُنشَأ
+fun mm_joystickVector(mm, name) {
+    if (has(mm, "joysticks") == false or has(mm["joysticks"], name) == false) { return mm_point(0, 0); }
+    let j = mm["joysticks"][name];
+    return mm_point(j["x"], j["y"]);
+}
+
+// اختصار شائع: يقرأ متجه عصا تحكّم name ويضبط سرعة قناع maskName مباشرة إلى
+// (المتجه × maxSpeed) — نمط "تحكّم ثنائي العصا" (twin-stick) الفوري بلا تنعيم؛ للتحكّم
+// السلس استخدم mm_smoothVelocity على النتيجة بدلاً من ضبط السرعة مباشرة
+fun mm_joystickApplyToVelocity(mm, name, maskName, maxSpeed) {
+    let v = mm_joystickVector(mm, name);
+    return mm_setVelocity(mm, maskName, v["x"] * maxSpeed, v["y"] * maxSpeed);
+}
+
+// ---- أزرار تحكّم منفصلة (Discrete Control Buttons) ---------------------------------------
+// يُعرِّف زرَّ تحكّم باسم buttonName بحالة غير مضغوطة ابتدائية (مثل "jump" أو "attack")
+fun mm_buttonDefine(mm, buttonName) {
+    if (has(mm, "buttons") == false) { mm["buttons"] = {}; }
+    mm["buttons"][buttonName] = { pressed: false, justPressed: false, justReleased: false };
+    return true;
+}
+
+// يُسجِّل ضغطاً على زر (من حدث لمس "بدأ" على منطقة الزر في المضيف) — يضبط pressed وjustPressed
+// معاً؛ استهلك justPressed عبر mm_buttonConsumeJustPressed لتفادي إعادة تنفيذ الفعل كل إطار
+fun mm_buttonPress(mm, buttonName) {
+    if (has(mm, "buttons") == false or has(mm["buttons"], buttonName) == false) { mm_buttonDefine(mm, buttonName); }
+    let b = mm["buttons"][buttonName];
+    b["pressed"] = true;
+    b["justPressed"] = true;
+    return true;
+}
+
+// يُسجِّل إفلات زر (من حدث لمس "انتهى")
+fun mm_buttonRelease(mm, buttonName) {
+    if (has(mm, "buttons") == false or has(mm["buttons"], buttonName) == false) { return false; }
+    let b = mm["buttons"][buttonName];
+    b["pressed"] = false;
+    b["justReleased"] = true;
+    return true;
+}
+
+// هل الزر مضغوط حالياً (سواء لحظة الضغط أو مُستمرّاً منذ إطارات سابقة)؟ مناسب لحركة
+// مستمرّة طالما الإصبع فوق الزر (مثل "تحرّك يميناً")
+fun mm_buttonIsPressed(mm, buttonName) {
+    if (has(mm, "buttons") == false or has(mm["buttons"], buttonName) == false) { return false; }
+    return mm["buttons"][buttonName]["pressed"];
+}
+
+// يُعيد true لمرة واحدة بالضبط عند لحظة الضغط الأولى، ثم يستهلك (يمسح) العلم فوراً —
+// استدعِها مرة كل دورة لتنفيذ فعل "لمرة واحدة" (كالقفز) لا يتكرّر طالما الإصبع باقياً ضاغطاً
+fun mm_buttonConsumeJustPressed(mm, buttonName) {
+    if (has(mm, "buttons") == false or has(mm["buttons"], buttonName) == false) { return false; }
+    let b = mm["buttons"][buttonName];
+    let result = b["justPressed"];
+    b["justPressed"] = false;
+    return result;
+}
+
+// نظير mm_buttonConsumeJustPressed للحظة الإفلات — مفيد لأفعال تُنفَّذ عند رفع الإصبع
+// (مثل "اشحن ثم أطلق" عند الإفلات)
+fun mm_buttonConsumeJustReleased(mm, buttonName) {
+    if (has(mm, "buttons") == false or has(mm["buttons"], buttonName) == false) { return false; }
+    let b = mm["buttons"][buttonName];
+    let result = b["justReleased"];
+    b["justReleased"] = false;
+    return result;
+}
+
+)MOVINGMASKOGRIN";
 inline const std::unordered_map<std::string, std::string>& embeddedRinLibraries() {
     static const std::unordered_map<std::string, std::string> libs = {
         {"lib/math.og.rin", kLib_math_og_rin},
