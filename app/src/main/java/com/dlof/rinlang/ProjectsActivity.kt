@@ -222,8 +222,6 @@ class ProjectsActivity : AppCompatActivity() {
             swatch.setOnClickListener { showColorPickerDialog(color, onPick) }
             row.removeAllViews(); row.addView(swatch)
         }
-        addColorControl(rowUiTextColor, textColor) { textColor = it; updateUiPreview() }
-        addColorControl(rowUiBackground, backgroundColor) { backgroundColor = it; updateUiPreview() }
 
         fun currentUiColor(): Int =
             if (selectedColorIndex == customColorIndex) (customColor ?: colorPalette[0]) else colorPalette[selectedColorIndex]
@@ -241,6 +239,10 @@ class ProjectsActivity : AppCompatActivity() {
         fun currentTypography(): String = resources.getStringArray(R.array.ui_typography_values)[spinnerUiTypography.selectedItemPosition.coerceIn(0, 2)]
         fun currentRadius(): Int = resources.getIntArray(R.array.ui_radius_values)[spinnerUiRadius.selectedItemPosition.coerceIn(0, 4)]
         fun updateUiPreview() { uiPreview.configure(currentUiColor(), backgroundColor, textColor, switchUiTopBar.isChecked, switchUiSidebar.isChecked, switchUiBottomNav.isChecked, currentButtonStyle(), currentRadius(), currentFont(), currentTypography()) }
+
+        addColorControl(rowUiTextColor, textColor) { textColor = it; updateUiPreview() }
+        addColorControl(rowUiBackground, backgroundColor) { backgroundColor = it; updateUiPreview() }
+
         val previewListeners = listOf<View>(switchUiTopBar, switchUiSidebar, switchUiBottomNav, radioUiFilled, radioUiSoft, radioUiOutline, spinnerUiFont, spinnerUiTypography, spinnerUiRadius)
         previewListeners.forEach { it.setOnClickListener { updateUiPreview() } }
         spinnerUiFont.setOnItemSelectedListener(object : android.widget.AdapterView.OnItemSelectedListener { override fun onNothingSelected(parent: android.widget.AdapterView<*>?) {} override fun onItemSelected(parent: android.widget.AdapterView<*>?, v: View?, position: Int, id: Long) { updateUiPreview() } })
