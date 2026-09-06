@@ -212,10 +212,19 @@ using StrandId = uint64_t;
 
 struct ResolvedAttr { std::string key; rin::ExprPtr rawExpr; Value value; };
 
+inline const char* uiRoleName(rin::UiRole role) {
+    switch (role) {
+        case rin::UiRole::ELEMENT: return "element";
+        case rin::UiRole::LOOP: return "loop";
+        default: return "view";
+    }
+}
+
 struct Strand {
     StrandId id = 0;
     StrandKind kind;
-    std::string name, customTag, mask;
+    rin::UiRole role = rin::UiRole::VIEW;
+    std::string name, customTag, sourceTag, mask;
     int sourceLine = 0;
     std::vector<ResolvedAttr> attrs;
     std::vector<std::shared_ptr<Strand>> children;
@@ -254,6 +263,8 @@ inline StrandPtr buildFabric(const std::shared_ptr<rin::ViewStmt>& node, WarpSco
                               const std::vector<rin::ViewAttr>& inheritedLoopVisual = {}) {
     auto s = std::make_shared<Strand>();
     s->kind = strandKindFromTag(node->kindTag);
+    s->role = node->role;
+    s->sourceTag = node->kindTag;
     if (s->kind == StrandKind::CUSTOM) s->customTag = node->kindTag;
     s->name = node->name;
     s->mask = "";
