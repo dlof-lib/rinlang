@@ -3120,6 +3120,46 @@ void Interpreter::registerNatives() {
         std::string path = asString(a[2], "apiCall", line);
         return performRealApiCall(name, method, path, a[3], line);
     };
+
+    // ---- استرداد صور/أيقونات حقيقية من الإنترنت (fetchImage/fetchIcon) ----
+    // تبني فوق نفس عميل HTTP الحقيقي أعلاه (httpGet وغيرها) بدل تكرار منطق الاتصال: تُنفَّذ
+    // GET حقيقي إلى [url]، وعند نجاحه (ok && status 2xx) يُكتب جسم الرد الخام (بايتات الصورة/
+    // الأيقونة كما وصلت، بلا أي تحويل نصي يفسدها) إلى [savePath] عبر writeRealFile — نفس دالة
+    // الكتابة الثنائية الآمنة المستخدَمة أصلاً لتصدير PNG (exportChat/save). المسار المحفوظ نسبي
+    // لمشروع المخرج (basePath) تماماً كباقي natives الملفات (readFile/writeFile). fetchIcon اسم
+    // مستقل لنفس التنفيذ (أيقونة هي صورة صغيرة فعلياً) فقط لوضوح القراءة داخل كود Rin.
+    auto fetchImageImpl = [this](std::vector<Value>& a, int line, const char* who) -> Value {
+        expectArgs(who, a, 2, line);
+        std::string url = asString(a[0], who, line);
+        std::string savePath = asString(a[1], who, line);
+        // performBinaryGet (وليس httpGet/performRequest العادي): على أندرويد يمرّ بايتات الرد
+        // كـ jbyteArray خام بدل jstring نصّي، فلا تُفسَد بايتات PNG/JPEG الحقيقية (انظر شرح كامل
+        // في rin_http.h/jni_bridge.cpp). على CLI/سطح المكتب يُعيد توجيهه لنفس performRequest
+        // الآمن أصلاً هناك (curl عبر pipe).
+        auto result = http::performBinaryGet(url, defaultHttpTimeoutMs);
+        if (!result.ok) {
+            throw diagErr(diag::Code::E0037_NetworkError, line,
+                std::string(who) + ": تعذّر الاتصال بـ '" + url + "'" +
+                (result.error.empty() ? "" : (" (" + result.error + ")")));
+        }
+        if (result.status < 200 || result.status >= 300) {
+            throw diagErr(diag::Code::E0037_NetworkError, line,
+                std::string(who) + ": الخادوم ردّ بحالة " + std::to_string(result.status) + " لـ '" + url + "'");
+        }
+        if (result.body.empty()) {
+            throw diagErr(diag::Code::E0037_NetworkError, line,
+                std::string(who) + ": رد فارغ من '" + url + "' (لا توجد بيانات صورة لحفظها)");
+        }
+        writeRealFile(savePath, result.body, line, who);
+        return Value::boolean_(true);
+    };
+    natives["fetchImage"] = [fetchImageImpl](std::vector<Value>& a, int line) -> Value {
+        return fetchImageImpl(a, line, "fetchImage");
+    };
+    natives["fetchIcon"] = [fetchImageImpl](std::vector<Value>& a, int line) -> Value {
+        return fetchImageImpl(a, line, "fetchIcon");
+    };
+
     // ---- Banner convenience API (see docs/banner.md) ----
     // Deliberately flat identifiers (bannerSuccess, not banner.success) because Rin's call()
     // parser only ever accepts a single IDENT followed by '(' -- there is no general member-call
@@ -6510,6 +6550,8 @@ flow::NodeType Interpreter::inferFlowNodeType(const std::string& fnName) const {
         {"apiCall", flow::NodeType::NETWORK},
         {"apiGet", flow::NodeType::NETWORK},
         {"apiPost", flow::NodeType::NETWORK},
+        {"fetchImage", flow::NodeType::NETWORK},
+        {"fetchIcon", flow::NodeType::NETWORK},
         {"pipe", flow::NodeType::PIPELINE},
     };
     auto d = defaults.find(fnName);
