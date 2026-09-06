@@ -232,6 +232,7 @@ print \"Hello, \" + name + \"!\";
     <string name="loom_zoom_out">تصغير</string>
     <string name="loom_zoom_100">100%</string>
     <string name="loom_zoom_percent_format">%1$d%%</string>
+    <string name="loom_link_open_failed">تعذر فتح الرابط: %1$s</string>
     <string name="loom_restart_session">إعادة تشغيل الجلسة</string>
     <string name="loom_session_restarted_toast">تمت إعادة تشغيل جلسة المعاينة الحية</string>
     <string name="loom_device_changed_toast">تم تغيير عرض الجهاز إلى %1$dpx — أُعيد تشغيل الجلسة</string>
