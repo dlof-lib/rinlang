@@ -132,13 +132,38 @@ class RinCodeEditorView @JvmOverloads constructor(
     private var cachedHighlightsByLine: Map<Int, List<RinNativeEditor.Highlight>> = emptyMap()
     private var cachedBracketInfo: Quad? = null
 
+    // بيانات التعديل المُلتقَطة في onTextChanged وتُنفَّذ فعليًا في afterTextChanged (انظر
+    // الشرح أسفل shadowWatcher). pendingEditStart = -1 يعني "لا تعديل معلَّق حاليًا".
+    private var pendingEditStart = -1
+    private var pendingEditBefore = 0
+    private var pendingEditText = ""
+
     private val shadowWatcher = object : TextWatcher {
         override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
         override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
             if (suppressForward || s == null) return
-            routeShadowEdit(s, start, before, count)
+            // مهم جدًا: لا نستدعي routeShadowEdit (وبالتالي afterEngineMutation، الذي يعيد كتابة
+            // shadowEditable كاملاً عبر replace()) من هنا. onTextChanged يُستدعى من *منتصف*
+            // عملية replace() الأصلية القادمة من IME (BaseInputConnection.commitText/
+            // deleteSurroundingText) على نفس shadowEditable — أي أن استدعاء .replace() آخر على
+            // نفس الكائن الآن هو تعديل متداخل (reentrant) في منتصف تعديل لم يكتمل بعد. هذا بالضبط
+            // ما كان يسبب "الكل": حذف أكثر/أقل من حرف، كتابة تتكرر أو حروف تنقلب، وتجمّد/إغلاق
+            // التطبيق أحيانًا — لأن SpannableStringBuilder وBaseInputConnection لا يضمنان سلوكًا
+            // صحيحًا عند تعديل الأمتداد (spans) للكائن نفسه أثناء تعديله. الحل القياسي في Android:
+            // نلتقط بيانات التغيير هنا فقط (قراءة، بلا أي كتابة)، ونُنفّذ التوجيه الفعلي للمحرك في
+            // afterTextChanged، بعد أن يكون Android قد أنهى تعديله الأصلي بالكامل.
+            pendingEditStart = start
+            pendingEditBefore = before
+            pendingEditText = s.subSequence(start, start + count).toString()
         }
-        override fun afterTextChanged(s: Editable?) {}
+        override fun afterTextChanged(s: Editable?) {
+            if (suppressForward || pendingEditStart < 0) return
+            val start = pendingEditStart
+            val before = pendingEditBefore
+            val insertedPiece = pendingEditText
+            pendingEditStart = -1
+            routeShadowEdit(insertedPiece, start, before)
+        }
     }
 
     // --- مستمعو تغيّر النص الخارجيون (تطابقًا مع addTextChangedListener على EditText قديمًا) ---
@@ -220,10 +245,15 @@ class RinCodeEditorView @JvmOverloads constructor(
         requestRectangleOnScreen(rect, false)
     }
 
-    /** يوجّه تعديلاً وصل من IME (عبر [shadowWatcher]) إلى المحرك بأذكى طريقة ممكنة. */
-    private fun routeShadowEdit(s: CharSequence, start: Int, before: Int, count: Int) {
+    /**
+     * يوجّه تعديلاً وصل من IME (عبر [shadowWatcher]) إلى المحرك بأذكى طريقة ممكنة.
+     * يُستدعى الآن من afterTextChanged (بعد اكتمال تعديل shadowEditable الأصلي بالكامل)، لا من
+     * onTextChanged — انظر التعليق أعلى [shadowWatcher] لسبب ذلك. [insertedPiece] هو النص الملتقَط
+     * مسبقًا في onTextChanged (قراءة فقط، قبل أي كتابة)، و[count] بات مشتقًا من طوله مباشرة.
+     */
+    private fun routeShadowEdit(insertedPiece: String, start: Int, before: Int) {
         val oldText = lastKnownText
-        val insertedPiece = s.subSequence(start, start + count).toString()
+        val count = insertedPiece.length
         val cursorFlatBefore = flatOffsetOf(oldText, engine.getCursor().line, engine.getCursor().col)
 
         if (before == 0 && count == 1 && start == cursorFlatBefore) {
