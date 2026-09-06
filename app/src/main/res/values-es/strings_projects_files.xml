@@ -8,15 +8,6 @@
 
     <!-- Barra superior unificada para las subpantallas -->
     <string name="action_back">Atrás</string>
-    <string name="projects_count_zero">Proyectos</string>
-    <string name="projects_screen_heading">Tus proyectos</string>
-    <string name="search_projects_hint">Buscar proyectos...</string>
-    <string name="open_project_action">Abrir proyecto</string>
-    <string name="no_projects_hint">Crea tu primer proyecto y empieza a trabajar con Rin.</string>
-    <plurals name="projects_count">
-        <item quantity="one">1 proyecto</item>
-        <item quantity="other">%1$d proyectos</item>
-    </plurals>
     <string name="projects_screen_title">Proyectos</string>
     <string name="files_screen_title">Archivos</string>
 
@@ -104,4 +95,23 @@
     <string name="album_create_first">Crea un álbum primero</string>
     <string name="album_uncategorized">Sin categorizar</string>
     <string name="album_empty">No hay proyectos en este álbum</string>
+
+    <string name="ui_design_more_options">Opciones avanzadas de interfaz</string>
+    <string name="ui_design_bottom_nav">Barra de navegación inferior</string>
+    <string name="ui_design_button_style">Estilo de botón</string>
+    <string name="ui_design_button_filled">Relleno</string>
+    <string name="ui_design_button_soft">Suave</string>
+    <string name="ui_design_button_outline">Contorno</string>
+    <string name="ui_design_font">Fuente</string>
+    <string name="ui_design_typography">Tamaño de texto</string>
+    <string name="ui_design_radius">Radio de esquina</string>
+    <string name="ui_design_background">Color de fondo</string>
+    <string name="ui_design_text_color">Color de texto</string>
+    <string name="ui_design_preview">Vista previa en vivo</string>
+    <string-array name="ui_font_names"><item>Sans</item><item>Serif</item><item>Monoespaciada</item></string-array>
+    <string-array name="ui_font_values"><item>sans</item><item>serif</item><item>mono</item></string-array>
+    <string-array name="ui_typography_names"><item>Pequeño</item><item>Mediano</item><item>Grande</item></string-array>
+    <string-array name="ui_typography_values"><item>small</item><item>medium</item><item>large</item></string-array>
+    <string-array name="ui_radius_names"><item>0</item><item>10</item><item>14</item><item>22</item><item>30</item></string-array>
+    <integer-array name="ui_radius_values"><item>0</item><item>10</item><item>14</item><item>22</item><item>30</item></integer-array>
 </resources>
