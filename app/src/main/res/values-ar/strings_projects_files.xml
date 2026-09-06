@@ -15,6 +15,20 @@
     <!-- الشريط العلوي الموحّد للشاشات الفرعية -->
     <string name="action_back">رجوع</string>
     <string name="projects_screen_title">المشاريع</string>
+    <string name="projects_count_zero">مشاريع</string>
+    <string name="projects_screen_heading">مشاريعك</string>
+    <string name="search_projects_hint">ابحث عن مشروع...</string>
+    <string name="open_project_action">فتح المشروع</string>
+    <string name="no_projects_hint">أنشئ مشروعك الأول وابدأ العمل على ملفات Rin.</string>
+    <plurals name="projects_count">
+        <item quantity="zero">لا توجد مشاريع</item>
+        <item quantity="one">مشروع واحد</item>
+        <item quantity="two">مشروعان</item>
+        <item quantity="few">%1$d مشاريع</item>
+        <item quantity="many">%1$d مشروعاً</item>
+        <item quantity="other">%1$d مشروع</item>
+    </plurals>
+
     <string name="files_screen_title">الملفات</string>
 
     <!-- شاشة المشاريع -->
