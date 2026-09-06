@@ -6,6 +6,7 @@
        بلا رفع، مع إمكانية إدراج سطر @import الخاص بها بضغطة واحدة. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
@@ -27,13 +28,99 @@
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:padding="8dp">
+            android:orientation="vertical">
+
+            <!-- رأس بصري جديد (تجديد شامل للشكل): بطاقة تدرّج بنفسجي بعنوان الشاشة وأيقونتها،
+                 بدل عنوان نصي مسطّح كسابقاً — يمنح الشاشة هوية مستقلة فوراً عند فتحها. -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:background="@drawable/bg_libraries_hero"
+                android:paddingHorizontal="20dp"
+                android:paddingTop="18dp"
+                android:paddingBottom="22dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <FrameLayout
+                        android:layout_width="46dp"
+                        android:layout_height="46dp"
+                        android:layout_marginEnd="14dp">
+
+                        <View
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            android:background="@drawable/bg_hero_icon_ring" />
+
+                        <ImageView
+                            android:layout_width="24dp"
+                            android:layout_height="24dp"
+                            android:layout_gravity="center"
+                            android:scaleType="fitCenter"
+                            android:src="@drawable/ic_rin_stack"
+                            app:tint="@android:color/white"
+                            android:contentDescription="@null" />
+                    </FrameLayout>
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="@string/libraries_screen_title"
+                            android:textColor="@android:color/white"
+                            android:textStyle="bold"
+                            android:textSize="19sp" />
+
+                        <!-- يُملأ برمجياً باسم المشروع الحالي (نفس ما كان يظهر سابقاً في
+                             txtToolbarSubtitle)، بدل نص وصفي عام لا يميّز بين المشاريع. -->
+                        <TextView
+                            android:id="@+id/tvLibrariesHeroSubtitle"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="2dp"
+                            android:alpha="0.85"
+                            android:textColor="@android:color/white"
+                            android:textSize="12sp"
+                            tools:text="my_project" />
+                    </LinearLayout>
+
+                    <!-- حبّة سريعة تعرض عدد مكتبات المستخدم دفعة واحدة بلا الحاجة لعدّها يدوياً
+                         من القائمة أسفلها؛ tvLibrariesCountPill يُملأ برمجياً في LibrariesActivity
+                         (نص افتراضي "0" هنا فقط لأجل المعاينة قبل أول تحديث). -->
+                    <TextView
+                        android:id="@+id/tvLibrariesCountPill"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/bg_hero_stat_pill"
+                        android:paddingHorizontal="12dp"
+                        android:paddingVertical="6dp"
+                        android:textColor="@android:color/white"
+                        android:textStyle="bold"
+                        android:textSize="12sp"
+                        tools:text="0" />
+                </LinearLayout>
+            </LinearLayout>
 
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="10dp"
+                android:orientation="vertical"
+                android:padding="8dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
                 android:layout_marginStart="8dp"
                 android:gravity="center_vertical"
                 android:orientation="horizontal">
@@ -52,15 +139,6 @@
                     android:textStyle="bold"
                     android:textSize="15sp" />
             </LinearLayout>
-
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="19dp"
-                android:layout_marginBottom="6dp"
-                android:text="@string/libraries_section_mine_hint"
-                android:textColor="@color/rin_editor_hint"
-                android:textSize="12sp" />
 
             <androidx.recyclerview.widget.RecyclerView
                 android:id="@+id/rvUserLibraries"
@@ -267,6 +345,7 @@
                 android:layout_height="wrap_content"
                 android:nestedScrollingEnabled="false" />
 
+            </LinearLayout>
         </LinearLayout>
     </androidx.core.widget.NestedScrollView>
 
