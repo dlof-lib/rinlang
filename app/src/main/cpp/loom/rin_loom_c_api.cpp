@@ -82,10 +82,13 @@ std::string overlayLayerJson(const loom::OverlayLayer& layer) {
 // fields (already-serialized, comma-prefixed) spliced in before "fabric".
 std::string fabricEnvelope(LoomSession* sess, const std::string& extraFields) {
     std::ostringstream os;
+    loom::Dye dye;
+    auto draw = dye.paintWithOverlay(sess->state.fabric, sess->overlayLayer);
     os << "{\"ok\":true" << extraFields
        << ",\"strandsMeasured\":" << sess->loomEngine.stats.strandsMeasured
        << ",\"cacheHits\":" << sess->loomEngine.stats.cacheHits
        << ",\"overlays\":" << overlayLayerJson(sess->overlayLayer)
+       << ",\"paint\":" << loom::drawListToJsonString(draw)
        << ",\"fabric\":" << loom::fabricToJsonString(sess->state.fabric) << "}";
     return os.str();
 }
@@ -113,9 +116,12 @@ RIN_API char* rin_loom_render_json(const char* source, int rootWidth) {
     loom::Loom loomEngine;
     loomEngine.layout(r.fabric, loom::Constraints{0, (double)rootWidth, 0, 1e9}, 0, 0);
 
+    loom::Dye dye;
+    auto draw = dye.paint(r.fabric);
     std::ostringstream os;
     os << "{\"ok\":true,\"strandsMeasured\":" << loomEngine.stats.strandsMeasured
        << ",\"cacheHits\":" << loomEngine.stats.cacheHits
+       << ",\"paint\":" << loom::drawListToJsonString(draw)
        << ",\"fabric\":" << loom::fabricToJsonString(r.fabric) << "}";
     return dupToC(os.str());
 }
