@@ -28,9 +28,15 @@ enum class HighlightKind {
     At = 7,
     Error = 8,
     Call = 9, // معرِّف متبوع مباشرة بـ '(' — نمط استدعاء دالة (لتلوين مميّز كما في المحررات الاحترافية)
-    // = 11 عمداً (تخطّي 10 المحجوزة لـ Comment في HighlightKind.kt؛ الماسح الحقيقي لا يُصدر
-    // رموز تعليقات أصلاً لأنها تُستبعَد أثناء المسح). القيمة يجب أن تطابق HighlightKind.TYPE في
-    // Kotlin حرفياً لأن nativeGetHighlightSpansFlat يمرّر ترتيب enum الخام كعدد صحيح مباشرة.
+    // Comment = 10: يطابق HighlightKind.COMMENT في Kotlin حرفياً (nativeGetHighlightSpansFlat
+    // يمرّر ترتيب enum الخام كعدد صحيح مباشرة). rin::Lexer نفسه لا يُصدر رمزاً للتعليقات
+    // (يُسقطها بصمت أثناء المسح — انظر case '/' في rin_lexer.cpp)، لذا لا يمكن الحصول على
+    // مواضعها من tokens مباشرة. الحل: EditorEngine::computeHighlights() يستنتج فجوات
+    // التعليقات بنفسه من "الفراغات" غير المُغطّاة بأي token على كل سطر (انظر
+    // computeCommentGaps في rin_editor_engine.cpp) بدل تعديل rin::Lexer/rin::Parser
+    // الأساسيَّين (تعديلهما ليُصدرا رمز تعليق يتطلّب تحديث كل مستهلكي التوكنز في المحلّل
+    // النحوي وغير آمن لمجرد إضافة تلوين في المحرر).
+    Comment = 10,
     Type = 11, // كلمات لغة الحاويات/الأنواع (container/table/Section/Group/link/save/file/...)
 };
 
