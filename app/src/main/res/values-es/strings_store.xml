@@ -157,6 +157,7 @@
 
     <!-- Sección "Mis paquetes" dentro de la pantalla de cuenta: ver y eliminar paquetes publicados -->
     <string name="account_my_packages_title">Mis paquetes publicados</string>
+    <string name="package_published_badge">Publicado</string>
     <string name="account_my_packages_empty">Aún no has publicado ningún paquete. Publica una biblioteca desde la pantalla de Bibliotecas para verla aquí.</string>
     <string name="my_package_meta_format">%1$s • %2$d descargas</string>
     <string name="action_delete_package">Eliminar</string>
