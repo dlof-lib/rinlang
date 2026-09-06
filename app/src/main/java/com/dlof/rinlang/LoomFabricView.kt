@@ -114,6 +114,11 @@ class LoomFabricView @JvmOverloads constructor(
     private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
     private val remoteFontCache = mutableMapOf<String, android.graphics.Typeface>()
     private val pendingFontUrls = mutableSetOf<String>()
+    // Remote images: `src="https://..."` (Image/Avatar/etc.) downloads once into app cache and
+    // decodes from disk from then on — same "download once, cache, reuse offline" shape as
+    // remoteFontCache/pendingFontUrls above, just keyed by the target box size too (a small
+    // Avatar and a large Image sharing one URL still want independently-downsampled bitmaps).
+    private val pendingImageUrls = mutableSetOf<String>()
  // ~55% black — matches loom::scrimColor()'s RGB, opacity is this renderer's own convention (see rin_loom_paint.h's SCRIM_RECT comment)
 
     // ---- live-preview additions: field boxes (Input/TextArea/Search/Select/File/Date/Time/
@@ -1288,7 +1293,9 @@ class LoomFabricView @JvmOverloads constructor(
 
     /** Resolves `src=` to a real file: relative paths are relative to the current project's root
      * (same root save/installation/file already use — [RinEngine.currentBaseDir]); absolute paths
-     * and `file://` URIs are used as-is. Null if nothing exists there. */
+     * and `file://` URIs are used as-is. Null if nothing exists there. `http(s)://` URLs are not
+     * resolved here — see [loadBitmapForRect], which downloads them into [remoteImageCacheFile]
+     * first (mirrors resolveTypeface's `font_url=` -> requestRemoteFont handling above). */
     private fun resolveImageFile(src: String): java.io.File? {
         if (src.isBlank() || src.contains("://") && !src.startsWith("file://")) return null // http(s) etc. not fetched here
         val stripped = src.removePrefix("file://")
@@ -1300,16 +1307,65 @@ class LoomFabricView @JvmOverloads constructor(
         return if (relative.isFile) relative else null
     }
 
+    /** Disk-cache location for a downloaded remote image, keyed by URL hash — same cache dir
+     * naming convention as requestRemoteFont's `rin_fonts/` above, just for images/icons
+     * (fetchImage/fetchIcon's real-world counterpart: `<Image src="https://...">` preview). */
+    private fun remoteImageCacheFile(url: String): java.io.File {
+        val dir = java.io.File(context.cacheDir, "rin_images").apply { mkdirs() }
+        return java.io.File(dir, "img_${url.hashCode().toUInt().toString(16)}.bin")
+    }
+
+    /** Downloads [url] once into [remoteImageCacheFile], then invalidates so the next
+     * [loadBitmapForRect] call decodes it from disk — exact same shape as requestRemoteFont
+     * above (Thread + connectTimeout/readTimeout + mainHandler.post{invalidate()}), just for
+     * image bytes instead of a font file. Real network I/O never happens on the UI thread. */
+    private fun requestRemoteImage(url: String) {
+        if (!pendingImageUrls.add(url)) return
+        Thread {
+            try {
+                val target = remoteImageCacheFile(url)
+                if (!target.isFile) {
+                    val connection = java.net.URL(url).openConnection().apply {
+                        connectTimeout = 10000
+                        readTimeout = 15000
+                        useCaches = true
+                    }
+                    connection.getInputStream().use { input ->
+                        java.io.FileOutputStream(target).use { output -> input.copyTo(output) }
+                    }
+                }
+                mainHandler.post { invalidate() }
+            } catch (_: Throwable) {
+                // Leave the placeholder showing; a bad/unreachable URL shouldn't crash the preview.
+            } finally {
+                pendingImageUrls.remove(url)
+            }
+        }.start()
+    }
+
     /** Decodes (and caches, downsampled to roughly [targetW]x[targetH] to keep memory sane) the
      * bitmap for [src], or null if it can't be resolved/decoded — cached too, so a bad src isn't
-     * re-stat'd on every single frame while the preview is live. */
+     * re-stat'd on every single frame while the preview is live. `http(s)://` sources are
+     * downloaded once into disk cache (see [requestRemoteImage]) and decoded from there; until
+     * that download lands this returns null so the placeholder shows, same as any unresolved src. */
     private fun loadBitmapForRect(src: String, targetW: Int, targetH: Int): android.graphics.Bitmap? {
         if (src.isBlank() || targetW <= 0 || targetH <= 0) return null
         val cacheKey = "$src|$targetW|$targetH"
         bitmapCache.get(cacheKey)?.let { return it }
         if (cacheKey in missingSrc) return null
 
-        val file = resolveImageFile(src)
+        val file: java.io.File?
+        if (isRemoteUrl(src)) {
+            val cached = remoteImageCacheFile(src)
+            if (cached.isFile) {
+                file = cached
+            } else {
+                requestRemoteImage(src)
+                return null // still downloading (or first request just kicked off) — show placeholder for now
+            }
+        } else {
+            file = resolveImageFile(src)
+        }
         if (file == null) { missingSrc.add(cacheKey); return null }
         return try {
             val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
