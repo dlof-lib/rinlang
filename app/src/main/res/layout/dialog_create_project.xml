@@ -316,6 +316,43 @@
                     android:orientation="horizontal"
                     android:weightSum="7"
                     android:gravity="center" />
+
+                <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="18dp" android:text="@string/ui_design_more_options" android:textColor="@color/rin_on_toolbar" android:textSize="13.5sp" />
+
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical" android:layout_marginTop="8dp">
+                    <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="@string/ui_design_bottom_nav" android:textColor="@color/rin_on_toolbar" />
+                    <Switch android:id="@+id/switchUiBottomNav" android:layout_width="wrap_content" android:layout_height="wrap_content" />
+                </LinearLayout>
+
+                <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:text="@string/ui_design_button_style" android:textColor="@color/rin_on_toolbar" />
+                <RadioGroup android:id="@+id/groupUiButtonStyle" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
+                    <RadioButton android:id="@+id/radioUiFilled" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="@string/ui_design_button_filled" android:checked="true" />
+                    <RadioButton android:id="@+id/radioUiSoft" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="@string/ui_design_button_soft" />
+                    <RadioButton android:id="@+id/radioUiOutline" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="@string/ui_design_button_outline" />
+                </RadioGroup>
+
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:weightSum="3" android:layout_marginTop="6dp">
+                    <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical">
+                        <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/ui_design_font" android:textColor="@color/rin_on_toolbar" />
+                        <Spinner android:id="@+id/spinnerUiFont" android:layout_width="match_parent" android:layout_height="44dp" />
+                    </LinearLayout>
+                    <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical" android:layout_marginStart="8dp">
+                        <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/ui_design_typography" android:textColor="@color/rin_on_toolbar" />
+                        <Spinner android:id="@+id/spinnerUiTypography" android:layout_width="match_parent" android:layout_height="44dp" />
+                    </LinearLayout>
+                    <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical" android:layout_marginStart="8dp">
+                        <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/ui_design_radius" android:textColor="@color/rin_on_toolbar" />
+                        <Spinner android:id="@+id/spinnerUiRadius" android:layout_width="match_parent" android:layout_height="44dp" />
+                    </LinearLayout>
+                </LinearLayout>
+
+                <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="14dp" android:text="@string/ui_design_background" android:textColor="@color/rin_on_toolbar" />
+                <LinearLayout android:id="@+id/rowUiBackground" android:layout_width="match_parent" android:layout_height="42dp" android:orientation="horizontal" android:gravity="center_vertical" />
+                <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:text="@string/ui_design_text_color" android:textColor="@color/rin_on_toolbar" />
+                <LinearLayout android:id="@+id/rowUiTextColor" android:layout_width="match_parent" android:layout_height="42dp" android:orientation="horizontal" android:gravity="center_vertical" />
+
+                <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="14dp" android:text="@string/ui_design_preview" android:textColor="@color/rin_on_toolbar" />
+                <com.dlof.rinlang.UiDesignPreviewView android:id="@+id/uiDesignPreview" android:layout_width="match_parent" android:layout_height="230dp" android:layout_marginTop="8dp" />
             </LinearLayout>
         </LinearLayout>
     </LinearLayout>
