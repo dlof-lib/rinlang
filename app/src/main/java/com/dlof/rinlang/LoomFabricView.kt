@@ -111,6 +111,15 @@ class LoomFabricView @JvmOverloads constructor(
     // Remote media overlays: the Canvas renderer remains the design-time fallback, while
     // `video_url=` gets a real playback surface on top of the matching Fabric rectangle.
     private val remoteMediaViews = linkedMapOf<String, View>()
+
+    /**
+     * Embedded HTML assistance for the single official Loom preview. C++ remains authoritative
+     * for Rin execution, layout and hit-testing; WebView is only a rendering capability for things
+     * Android Canvas/Loom should not reimplement (HTML/CSS, remote pages, rich web content).
+     * It is an overlay inside this same LoomFabricView, never a second preview.
+     */
+    private val htmlAssistViews = linkedMapOf<String, WebView>()
+    private var lastHtmlAssistSignature = ""
     private var lastRemoteMediaSignature = ""
     private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
     private val remoteFontCache = mutableMapOf<String, android.graphics.Typeface>()
@@ -263,27 +272,11 @@ class LoomFabricView @JvmOverloads constructor(
      * top of that single scale. All drawing, hit testing and media overlays use this exact
      * same transform.
      */
-
-    /**
-     * The pure "fit" ratio — real device px per Loom root-px, with **zoom excluded** — captured
-     * once in [onMeasure] from the parent's real EXACTLY width (see there). [previewScale] used
-     * to instead recompute this ratio on every draw as `width / rootWidthPx`, but for zoom > 1
-     * `width` is *already* `rootWidthPx * fitScale * zoom` (onMeasure grows the view so the
-     * enclosing ScrollView/HorizontalScrollView can expose the enlarged canvas). Dividing that
-     * back by `rootWidthPx` therefore yields `fitScale * zoom`, not `fitScale` — and the old
-     * `previewScale()` then multiplied by `zoom` *again*, so the actual draw scale became
-     * `fitScale * zoom^2` instead of `fitScale * zoom`. At 100% zoom this canceled out (zoom = 1),
-     * which is why it looked fine there; at any other zoom level the Fabric was drawn at the
-     * *square* of the requested zoom — e.g. "150%" actually painted at 225% and immediately
-     * overflowed/clipped the canvas, while the nested ScrollViews' own fillViewport pass (which
-     * decides whether to allow scrolling at all) was working off yet another, un-zoomed guess for
-     * the same width, so the two disagreed. Keeping this ratio in a field computed only when the
-     * measurement is authoritative (EXACTLY) — and never re-derived from a width that may already
-     * carry `zoom` — is what keeps a single multiplication by `zoom` correct at every level.
-     */
-    private var fitScale: Float = 1f
-
-    private fun previewScale(): Float = fitScale.coerceAtLeast(0.0001f) * zoom
+    private fun previewScale(): Float {
+        val rw = rootWidthPx.coerceAtLeast(1).toFloat()
+        val viewportW = width.toFloat().coerceAtLeast(1f)
+        return (viewportW / rw) * zoom
+    }
 
     private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
     private val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -406,6 +399,7 @@ class LoomFabricView @JvmOverloads constructor(
 
         requestLayout()
         syncRemoteMediaOverlays(node)
+        syncHtmlAssistOverlays(node)
         invalidate()
     }
 
@@ -416,6 +410,8 @@ class LoomFabricView @JvmOverloads constructor(
             if (v is WebView) v.stopLoading()
         }
         remoteMediaViews.clear()
+        htmlAssistViews.values.forEach { it.stopLoading(); it.destroy() }
+        htmlAssistViews.clear()
         super.onDetachedFromWindow()
     }
 
@@ -428,20 +424,11 @@ class LoomFabricView @JvmOverloads constructor(
          * For zoom > 100%, grow the child so the ScrollView can expose the enlarged canvas.
          * Do not use Android display density here: the native Fabric is already in logical
          * preview units and previewScale() is the sole coordinate transform.
-         *
-         * widthMode is only ever EXACTLY here on the pass where the parent (HorizontalScrollView
-         * -> ScrollView, see activity_loom_preview.xml) hands us its *real* pixel viewport width —
-         * that's the one and only trustworthy moment to learn "device px per root-px", so it's the
-         * only branch allowed to update [fitScale]. The UNSPECIFIED pass (the ScrollViews' own
-         * first, unconstrained measurement before their fillViewport correction lands) cannot
-         * know that ratio yet; reusing the last-known [fitScale] there — instead of hardcoding 1f —
-         * keeps that provisional guess close to correct so the ScrollViews' "does this need to
-         * scroll" decision isn't thrown off by a bogus first estimate.
          */
         val baseScale = when (widthMode) {
-            MeasureSpec.UNSPECIFIED -> fitScale
-            else -> (widthSize.toFloat().coerceAtLeast(1f) /
-                rootWidthPx.coerceAtLeast(1).toFloat()).also { fitScale = it }
+            MeasureSpec.UNSPECIFIED -> 1f
+            else -> widthSize.toFloat().coerceAtLeast(1f) /
+                rootWidthPx.coerceAtLeast(1).toFloat()
         }
         val contentW = (rootWidthPx * baseScale * zoom).roundToInt().coerceAtLeast(1)
         val contentH = (rootHeightPx * baseScale * zoom).roundToInt().coerceAtLeast(1)
@@ -1338,6 +1325,102 @@ class LoomFabricView @JvmOverloads constructor(
             v.visibility = View.VISIBLE
         }
         remoteMediaViews.entries.removeIf { (name, _) -> found.none { it.first == name } }
+    }
+
+    /**
+     * Creates WebViews only for explicit HTML-capability nodes. Supported forms are:
+     *   @element.WebView=name html="<button>...</button>";
+     *   @element.WebView=name url="https://...";
+     *   @element.WebView=name src="https://...";
+     *
+     * The native Loom Fabric still owns the node geometry. This method merely mounts the HTML
+     * renderer at that geometry, so HTML can assist the preview without becoming another preview
+     * engine. No Rin code is evaluated by WebView.
+     */
+    private fun syncHtmlAssistOverlays(root: JSONObject?) {
+        if (root == null) return
+        val found = mutableListOf<Triple<String, JSONObject, String>>()
+        collectHtmlAssistNodes(root, found)
+        val signature = found.joinToString("|") { "${it.first}:${it.third}" }
+        if (signature == lastHtmlAssistSignature) {
+            mainHandler.post { updateHtmlAssistLayout(found) }
+            return
+        }
+        lastHtmlAssistSignature = signature
+
+        htmlAssistViews.values.forEach { it.stopLoading(); it.destroy() }
+        htmlAssistViews.clear()
+
+        found.forEach { (name, attrsNode, payload) ->
+            val web = WebView(context).apply {
+                settings.javaScriptEnabled = true
+                settings.domStorageEnabled = true
+                settings.allowFileAccess = true
+                settings.allowContentAccess = true
+                settings.mediaPlaybackRequiresUserGesture = true
+                setBackgroundColor(Color.TRANSPARENT)
+                webViewClient = WebViewClient()
+                // A tiny, deliberately non-Rin bridge. HTML may request a normal Loom tap by
+                // coordinates, but all Rin execution remains in LoomPreviewManager/native C++.
+                val bridgeNode = attrsNode
+                addJavascriptInterface(object {
+                    @android.webkit.JavascriptInterface
+                    fun invalidatePreview() { mainHandler.post { invalidate() } }
+
+                    /** HTML -> the same native Loom/Rin event path; never executes Rin in JS. */
+                    @android.webkit.JavascriptInterface
+                    fun tap() {
+                        val rx = bridgeNode.optDouble("x", 0.0) + bridgeNode.optDouble("w", 0.0) / 2.0
+                        val ry = bridgeNode.optDouble("y", 0.0) + bridgeNode.optDouble("h", 0.0) / 2.0
+                        mainHandler.post { LoomPreviewManager.tap(rx, ry) }
+                    }
+                }, "RinPreview")
+                if (payload.startsWith("http://") || payload.startsWith("https://")) {
+                    loadUrl(payload)
+                } else {
+                    val baseHtml = """
+                        <!doctype html><html><head><meta name='viewport' content='width=device-width,initial-scale=1,user-scalable=no'>
+                        <style>html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:transparent}</style>
+                        </head><body>$payload<script>
+                        document.addEventListener('click',function(){ if(window.RinPreview){ window.RinPreview.tap(); } },true);
+                        </script></body></html>
+                    """.trimIndent()
+                    loadDataWithBaseURL("https://rin.local/", baseHtml, "text/html", "UTF-8", null)
+                }
+            }
+            htmlAssistViews[name] = web
+            addView(web, FrameLayout.LayoutParams(1, 1))
+        }
+        mainHandler.post { updateHtmlAssistLayout(found) }
+    }
+
+    private fun collectHtmlAssistNodes(node: JSONObject, out: MutableList<Triple<String, JSONObject, String>>) {
+        val kind = node.optString("kind")
+        val attrs = node.optJSONObject("attrs") ?: JSONObject()
+        if (kind == Kind.WEBVIEW) {
+            val payload = attrs.optString("html").trim()
+                .ifBlank { attrs.optString("url").trim() }
+                .ifBlank { attrs.optString("src").trim() }
+            if (payload.isNotBlank()) out += Triple(node.optString("name"), node, payload)
+        }
+        val children = node.optJSONArray("children") ?: return
+        for (i in 0 until children.length()) children.optJSONObject(i)?.let { collectHtmlAssistNodes(it, out) }
+    }
+
+    private fun updateHtmlAssistLayout(found: List<Triple<String, JSONObject, String>>) {
+        val scale = previewScale().coerceAtLeast(0.0001f)
+        found.forEach { (name, node, _) ->
+            val v = htmlAssistViews[name] ?: return@forEach
+            val x = (node.optDouble("x", 0.0) * scale).roundToInt()
+            val y = (node.optDouble("y", 0.0) * scale).roundToInt()
+            val w = max(1, (node.optDouble("w", 1.0) * scale).roundToInt())
+            val h = max(1, (node.optDouble("h", 1.0) * scale).roundToInt())
+            val lp = (v.layoutParams as? FrameLayout.LayoutParams) ?: FrameLayout.LayoutParams(w, h)
+            lp.width = w; lp.height = h; lp.leftMargin = x; lp.topMargin = y
+            v.layoutParams = lp
+            v.visibility = View.VISIBLE
+        }
+        htmlAssistViews.entries.removeIf { (name, _) -> found.none { it.first == name } }
     }
 
     /** Resolves `src=` to a real file: relative paths are relative to the current project's root
