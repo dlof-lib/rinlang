@@ -249,4 +249,13 @@ print \"Hello, \" + name + \"!\";
     <string name="menu_run_live_preview">Live Preview</string>
     <string name="loom_no_view_toast">No @view.&lt;Kind&gt;=name block found in this code yet.</string>
     <string name="loom_navigate_missing_toast">Page not found: %1$s</string>
+
+    <!-- ===== Crash / error log dialog (see CrashHandler, ErrorReporter, CrashReportActivity) ===== -->
+    <string name="crash_dialog_title_fatal">The app ran into a problem</string>
+    <string name="crash_dialog_title_error">An error occurred</string>
+    <string name="crash_dialog_no_log">No log available.</string>
+    <string name="crash_dialog_copy">Copy log</string>
+    <string name="crash_dialog_copied">Log copied to clipboard</string>
+    <string name="crash_dialog_close_app">Close app</string>
+    <string name="crash_dialog_dismiss">Dismiss</string>
 </resources>
