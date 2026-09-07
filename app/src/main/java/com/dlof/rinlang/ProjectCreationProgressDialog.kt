@@ -161,8 +161,10 @@ class ProjectCreationProgressDialog(activity: Activity) {
                 } catch (e: Exception) {
                     // أي خطأ آخر غير متوقع (مساحة تخزين ممتلئة، فشل كتابة ملف، إلخ) كان
                     // يهرب من هنا فيتسبب بإغلاق التطبيق بالكامل بدل عرض رسالة. الآن يُعامَل
-                    // كفشل عادي في الإنشاء بدل كروت (Crash).
+                    // كفشل عادي في الإنشاء، مع عرض لوج الخطأ الكامل عبر ErrorReporter
+                    // بدل رسالة Toast مبهمة فقط.
                     dismiss()
+                    ErrorReporter.report(dialog.context, e, "PROJECT_CREATE")
                     onDone(null, e.message ?: e.javaClass.simpleName)
                 }
             }, PREPARING_STAGE_DELAY_MS)
