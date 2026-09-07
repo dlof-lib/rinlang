@@ -329,6 +329,7 @@ static std::string tokenTypeName(TokenType t) {
         case TokenType::AT: return "AT";
         case TokenType::DOT: return "DOT";
         case TokenType::PIPE: return "PIPE";
+        case TokenType::QUESTION: return "QUESTION";
         case TokenType::END_OF_FILE: return "EOF";
         case TokenType::ERROR: return "ERROR";
     }
@@ -4412,6 +4413,13 @@ std::string Interpreter::run(const std::vector<StmtPtr>& statements) {
         lastErrorMessage_ = e.message;
         lastErrorLine_ = e.line;
         if (streamSink_) streamSink_(appended);
+    } catch (ThrowSignal& e) {
+        std::string msg = "unhandled exception: " + e.value.toDisplayString();
+        std::string appended = "\n[Error line " + std::to_string(e.line) + "]: " + msg + "\n";
+        output << appended;
+        lastErrorMessage_ = msg;
+        lastErrorLine_ = e.line;
+        if (streamSink_) streamSink_(appended);
     } catch (ReturnSignal&) {
         const char* appended = "\n[Error]: 'return' used outside of a function\n";
         output << appended;
@@ -4720,6 +4728,36 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
         auto blockEnv = std::make_shared<Environment>(env);
         executeBlock(s->statements, blockEnv);
         return;
+    }
+    if (auto s = std::dynamic_pointer_cast<TryCatchStmt>(stmt)) {
+        try {
+            execute(s->tryBranch, env);
+        } catch (ThrowSignal& ex) {
+            auto catchEnv = std::make_shared<Environment>(env);
+            if (!s->catchName.empty()) {
+                auto err = std::make_shared<MapData>();
+                err->push_back({Value::string("value"), ex.value});
+                err->push_back({Value::string("message"), Value::string(ex.value.toDisplayString())});
+                err->push_back({Value::string("line"), Value::num(ex.line)});
+                catchEnv->define(s->catchName, Value::makeMap(err));
+            }
+            execute(s->catchBranch, catchEnv);
+        } catch (RinError& ex) {
+            auto catchEnv = std::make_shared<Environment>(env);
+            if (!s->catchName.empty()) {
+                auto err = std::make_shared<MapData>();
+                err->push_back({Value::string("message"), Value::string(ex.message)});
+                err->push_back({Value::string("line"), Value::num(ex.line)});
+                if (ex.diagnostic) err->push_back({Value::string("code"), Value::string(diag::codeString(ex.diagnostic->code))});
+                catchEnv->define(s->catchName, Value::makeMap(err));
+            }
+            execute(s->catchBranch, catchEnv);
+        }
+        return;
+    }
+    if (auto s = std::dynamic_pointer_cast<ThrowStmt>(stmt)) {
+        Value v = s->value ? evaluate(s->value, env) : Value::nil();
+        throw ThrowSignal{v, s->line};
     }
     if (auto s = std::dynamic_pointer_cast<IfStmt>(stmt)) {
         if (evaluate(s->condition, env).isTruthy()) {
@@ -5946,6 +5984,10 @@ Value Interpreter::evaluate(const ExprPtr& expr, EnvPtr env) {
         }
         assignStateAware(owner, e->name, v, e->line);
         return v;
+    }
+    if (auto e = std::dynamic_pointer_cast<ConditionalExpr>(expr)) {
+        if (evaluate(e->condition, env).isTruthy()) return evaluate(e->whenTrue, env);
+        return evaluate(e->whenFalse, env);
     }
     if (auto e = std::dynamic_pointer_cast<LogicalExpr>(expr)) {
         Value left = evaluate(e->left, env);
