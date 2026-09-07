@@ -27,4 +27,15 @@
         <item name="android:windowBackground">@color/pipeline_screen_bg</item>
         <item name="android:statusBarColor">@color/pipeline_header_bg</item>
     </style>
+
+    <!-- ثيم شفاف لـ CrashReportActivity: النشاط نفسه بلا أي واجهة مرئية، فقط الـ Dialog
+         الذي يعرضه فوق آخر ما كان ظاهراً على الشاشة (أو خلفية سوداء لو كان التطبيق كله
+         قد أُغلق فعلاً بسبب الكراش). -->
+    <style name="Theme.RinLang.Transparent" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowAnimationStyle">@null</item>
+        <item name="android:backgroundDimEnabled">true</item>
+    </style>
 </resources>
