@@ -37,7 +37,13 @@ object RinApkExporter {
                 onProgress(Progress.Log("Starting export (stub)...", ok = true))
 
                 // Create a small placeholder APK file in cache so callers can interact with it.
-                val out = File(context.cacheDir, "${project.name}.apk")
+                // يجب أن يكون داخل cacheDir/apk_export/ حصراً — هو المسار الوحيد المُعلَن في
+                // res/xml/file_paths.xml تحت <cache-path name="apk_export" path="apk_export/">.
+                // أي ملف خارج هذا المسار (مثلاً مباشرة في جذر cacheDir) يجعل
+                // FileProvider.getUriForFile يرمي IllegalArgumentException فوراً
+                // ("Failed to find configured root...") عند أول محاولة تثبيت/مشاركة.
+                val exportDir = File(context.cacheDir, "apk_export").apply { mkdirs() }
+                val out = File(exportDir, "${project.name}.apk")
                 if (!out.exists()) out.outputStream().use { /* create empty file */ }
 
                 onProgress(Progress.Log("Finished export (stub)", ok = true))
