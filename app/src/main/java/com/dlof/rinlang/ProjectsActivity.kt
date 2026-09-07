@@ -53,7 +53,7 @@ class ProjectsActivity : AppCompatActivity() {
         rvProjects.adapter = adapter
 
         fabNewProject.setOnClickListener { showCreateDialog() }
-        findViewById<View>(R.id.btnProjectAlbums).setOnClickListener { showAlbumsDialog() }
+        findViewById<View>(R.id.btnProjectAlbums).setOnClickListener { startActivity(Intent(this, AlbumsActivity::class.java)) }
     }
 
     override fun onResume() {
