@@ -105,8 +105,12 @@ class SettingsActivity : AppCompatActivity() {
 
     private fun bindSwitch(id: Int, title: Int, hint: Int, initial: Boolean, save: (Boolean) -> Unit) {
         val row = findViewById<View>(id).parent as View
-        row.findViewById<TextView>(R.id.preferenceTitle).text = getString(title)
-        row.findViewById<TextView>(R.id.preferenceHint).text = getString(hint)
+        // كل صف بنيته: LinearLayout(row) > LinearLayout(column: عنوان + تلميح) + Switch
+        // نعتمد على الموقع بدل android:id لأن نفس الـ id (preferenceTitle/preferenceHint) يتكرر
+        // في عدة صفوف داخل نفس ملف activity_settings.xml، وهو ما يرفضه فحص lint (DuplicateIds).
+        val column = (row as LinearLayout).getChildAt(0) as LinearLayout
+        (column.getChildAt(0) as TextView).text = getString(title)
+        (column.getChildAt(1) as TextView).text = getString(hint)
         val sw = findViewById<Switch>(id)
         switches[id] = sw
         sw.setOnCheckedChangeListener { _, checked -> save(checked) }
