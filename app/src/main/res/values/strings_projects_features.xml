@@ -2,4 +2,10 @@
 <resources>
     <string name="albums_title">الألبومات</string>
     <string name="album_move_title">نقل المشروع إلى ألبوم</string>
+    <string name="album_count_format">%1$d ألبوم</string>
+    <string name="album_projects_count_format">%1$d مشروع</string>
+    <string name="album_create_description">أنشئ مساحة مرتبة لمجموعة من مشاريعك.</string>
+    <string name="album_delete_title">حذف الألبوم</string>
+    <string name="album_delete_confirm">هل تريد حذف الألبوم «%1$s»؟ ستُحذف المشاريع الموجودة داخله أيضاً.</string>
+    <string name="back">رجوع</string>
 </resources>
