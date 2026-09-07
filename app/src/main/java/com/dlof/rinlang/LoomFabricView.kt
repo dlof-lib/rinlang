@@ -263,11 +263,27 @@ class LoomFabricView @JvmOverloads constructor(
      * top of that single scale. All drawing, hit testing and media overlays use this exact
      * same transform.
      */
-    private fun previewScale(): Float {
-        val rw = rootWidthPx.coerceAtLeast(1).toFloat()
-        val viewportW = width.toFloat().coerceAtLeast(1f)
-        return (viewportW / rw) * zoom
-    }
+
+    /**
+     * The pure "fit" ratio — real device px per Loom root-px, with **zoom excluded** — captured
+     * once in [onMeasure] from the parent's real EXACTLY width (see there). [previewScale] used
+     * to instead recompute this ratio on every draw as `width / rootWidthPx`, but for zoom > 1
+     * `width` is *already* `rootWidthPx * fitScale * zoom` (onMeasure grows the view so the
+     * enclosing ScrollView/HorizontalScrollView can expose the enlarged canvas). Dividing that
+     * back by `rootWidthPx` therefore yields `fitScale * zoom`, not `fitScale` — and the old
+     * `previewScale()` then multiplied by `zoom` *again*, so the actual draw scale became
+     * `fitScale * zoom^2` instead of `fitScale * zoom`. At 100% zoom this canceled out (zoom = 1),
+     * which is why it looked fine there; at any other zoom level the Fabric was drawn at the
+     * *square* of the requested zoom — e.g. "150%" actually painted at 225% and immediately
+     * overflowed/clipped the canvas, while the nested ScrollViews' own fillViewport pass (which
+     * decides whether to allow scrolling at all) was working off yet another, un-zoomed guess for
+     * the same width, so the two disagreed. Keeping this ratio in a field computed only when the
+     * measurement is authoritative (EXACTLY) — and never re-derived from a width that may already
+     * carry `zoom` — is what keeps a single multiplication by `zoom` correct at every level.
+     */
+    private var fitScale: Float = 1f
+
+    private fun previewScale(): Float = fitScale.coerceAtLeast(0.0001f) * zoom
 
     private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
     private val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -412,11 +428,20 @@ class LoomFabricView @JvmOverloads constructor(
          * For zoom > 100%, grow the child so the ScrollView can expose the enlarged canvas.
          * Do not use Android display density here: the native Fabric is already in logical
          * preview units and previewScale() is the sole coordinate transform.
+         *
+         * widthMode is only ever EXACTLY here on the pass where the parent (HorizontalScrollView
+         * -> ScrollView, see activity_loom_preview.xml) hands us its *real* pixel viewport width —
+         * that's the one and only trustworthy moment to learn "device px per root-px", so it's the
+         * only branch allowed to update [fitScale]. The UNSPECIFIED pass (the ScrollViews' own
+         * first, unconstrained measurement before their fillViewport correction lands) cannot
+         * know that ratio yet; reusing the last-known [fitScale] there — instead of hardcoding 1f —
+         * keeps that provisional guess close to correct so the ScrollViews' "does this need to
+         * scroll" decision isn't thrown off by a bogus first estimate.
          */
         val baseScale = when (widthMode) {
-            MeasureSpec.UNSPECIFIED -> 1f
-            else -> widthSize.toFloat().coerceAtLeast(1f) /
-                rootWidthPx.coerceAtLeast(1).toFloat()
+            MeasureSpec.UNSPECIFIED -> fitScale
+            else -> (widthSize.toFloat().coerceAtLeast(1f) /
+                rootWidthPx.coerceAtLeast(1).toFloat()).also { fitScale = it }
         }
         val contentW = (rootWidthPx * baseScale * zoom).roundToInt().coerceAtLeast(1)
         val contentH = (rootHeightPx * baseScale * zoom).roundToInt().coerceAtLeast(1)
