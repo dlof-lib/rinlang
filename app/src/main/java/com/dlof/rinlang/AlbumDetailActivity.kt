@@ -51,7 +51,7 @@ private class AlbumProjectsAdapter(private val onOpen: (Project) -> Unit) : Recy
         val type: TextView = v.findViewById(R.id.txtAlbumProjectType)
         val meta: TextView = v.findViewById(R.id.txtAlbumProjectMeta)
     }
-    override fun onCreateViewHolder(p: ViewGroup, t: Int) = VH(LayoutInflater.from(p.context).inflate(R.layout/item_album_project, p, false))
+    override fun onCreateViewHolder(p: ViewGroup, t: Int) = VH(LayoutInflater.from(p.context).inflate(R.layout.item_album_project, p, false))
     override fun onBindViewHolder(h: VH, p: Int) {
         val project = items[p]
         h.name.text = project.name
