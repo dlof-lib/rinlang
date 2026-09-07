@@ -164,23 +164,31 @@ class ApkExportActivity : AppCompatActivity() {
         androidx.core.content.FileProvider.getUriForFile(this, "$packageName.fileprovider", file)
 
     private fun installApk(file: java.io.File) {
-        val uri = apkUri(file)
-        val intent = Intent(Intent.ACTION_VIEW).apply {
-            setDataAndType(uri, "application/vnd.android.package-archive")
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        try {
+            val uri = apkUri(file)
+            val intent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, "application/vnd.android.package-archive")
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            startActivity(intent)
+        } catch (e: Exception) {
+            ErrorReporter.report(this, e, "APK_INSTALL")
         }
-        startActivity(intent)
     }
 
     private fun shareApk(file: java.io.File) {
-        val uri = apkUri(file)
-        val intent = Intent(Intent.ACTION_SEND).apply {
-            type = "application/vnd.android.package-archive"
-            putExtra(Intent.EXTRA_STREAM, uri)
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        try {
+            val uri = apkUri(file)
+            val intent = Intent(Intent.ACTION_SEND).apply {
+                type = "application/vnd.android.package-archive"
+                putExtra(Intent.EXTRA_STREAM, uri)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            startActivity(Intent.createChooser(intent, getString(R.string.apk_export_action_share)))
+        } catch (e: Exception) {
+            ErrorReporter.report(this, e, "APK_SHARE")
         }
-        startActivity(Intent.createChooser(intent, getString(R.string.apk_export_action_share)))
     }
 
     private fun saveToDownloads(file: java.io.File) {
