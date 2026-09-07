@@ -249,4 +249,13 @@ print \"Hello, \" + name + \"!\";
     <string name="menu_run_live_preview">معاينة حية</string>
     <string name="loom_no_view_toast">لا يوجد أي مقطع @view.&lt;Kind&gt;=name في هذا الكود بعد.</string>
     <string name="loom_navigate_missing_toast">الصفحة غير موجودة: %1$s</string>
+
+    <!-- ===== حوار لوج الكراش/الخطأ (انظر CrashHandler وErrorReporter وCrashReportActivity) ===== -->
+    <string name="crash_dialog_title_fatal">حدثت مشكلة في التطبيق</string>
+    <string name="crash_dialog_title_error">حدث خطأ</string>
+    <string name="crash_dialog_no_log">لا يوجد لوج متاح.</string>
+    <string name="crash_dialog_copy">نسخ اللوج</string>
+    <string name="crash_dialog_copied">تم نسخ اللوج</string>
+    <string name="crash_dialog_close_app">إغلاق التطبيق</string>
+    <string name="crash_dialog_dismiss">إغلاق</string>
 </resources>
