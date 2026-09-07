@@ -477,7 +477,7 @@ class MainActivity : AppCompatActivity() {
                 .show()
         }
 
-        // وبالمثل: أي @view.<Kind>=name حقيقي في الكود يفتح شاشة "المعاينة الحية" مباشرةً —
+        // وبالمثل: أي @view/@loop root حقيقي في الكود يفتح شاشة "المعاينة الحية" مباشرةً —
         // كل تشغيل (Run) هو إعادة تنفيذ كاملة عمداً (تماماً كبطاقة عمل جديدة في قائمة RinJobScheduler)،
         // بينما التعديلات اللاحقة أثناء الكتابة تُحدَّث حيّاً عبر LoomPreviewManager.pushLiveEdit
         // دون فقدان حالة Warp (كعدّاد ضُغط عليه).
@@ -498,7 +498,7 @@ class MainActivity : AppCompatActivity() {
         startActivity(intent)
     }
 
-    /** فتح يدوي من قائمة التشغيل (زر "معاينة حية"): يتحقق أولاً من وجود @view.، وإلا ينبّه المستخدم. */
+    /** فتح يدوي من قائمة التشغيل (زر "معاينة حية"): يتحقق من وجود @view أو @loop root. */
     private fun openLivePreviewManually() {
         val source = editCode.text.toString()
         if (!LoomViewTracer.containsView(source)) {
