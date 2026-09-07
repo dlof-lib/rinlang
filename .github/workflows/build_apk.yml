@@ -82,7 +82,13 @@ jobs:
             echo "generated=false" >> "$GITHUB_OUTPUT"
           else
             STORE_PASS="$(openssl rand -base64 32 | tr -d '\n/+=' | cut -c1-40)"
-            KEY_PASS="$(openssl rand -base64 32 | tr -d '\n/+=' | cut -c1-40)"
+            # ملاحظة مهمة: نوع الـ keystore الافتراضي في JDK الحديث هو PKCS12، وهو لا يدعم كلمة
+            # مرور منفصلة للمفتاح عن كلمة مرور الـ store (keytool يتجاهل -keypass بصمت مع تحذير
+            # "Different store and key passwords not supported for PKCS12 KeyStores"). لذلك يجب
+            # أن تكون KEY_PASS مطابقة لـ STORE_PASS تماماً، وإلا يفشل التوقيع لاحقاً بخطأ
+            # "Given final block not properly padded" عند محاولة Gradle فك تشفير المفتاح
+            # بكلمة مرور مختلفة عن التي استُخدمت فعلياً في التشفير.
+            KEY_PASS="$STORE_PASS"
             KEY_ALIAS="rinlang"
 
             keytool -genkeypair -v \
