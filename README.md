@@ -4,6 +4,10 @@
 
 ## الحالة: **مربوطة ومُختبَرة على المفسّر الحقيقي**، لا محاكاة
 
+## Core language completion
+
+The core language now includes expression-level conditionals (`? :`) and structured exceptions (`try/catch/throw`) in the same real Lexer → Parser → Interpreter pipeline. See `docs/core-completion.md` and `samples/core_completion.rin`.
+
 كل سيناريو أدناه بُني وشُغِّل فعليًا (g++) على `rin_interpreter.cpp` الحقيقي، وليس على عرض توضيحي منفصل:
 
 1. **الافتراضي (بلا أي علم جديد)** — تأكدت أن الناتج **مطابق حرفيًا** لما كان قبل هذه الميزة.
