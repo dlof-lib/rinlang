@@ -19,8 +19,8 @@ import java.util.zip.ZipOutputStream
  *
  *  1. ينسخ كل مُدخلات zip من الحزمة المضيفة بنفس أسلوب الضغط (STORED/DEFLATED) —
  *     باستثناء AndroidManifest.xml (يُستبدل بالنسخة المُعدَّلة من [AxmlManifestPatcher])
- *     وملفات توقيع META-INF القديمة (MANIFEST.MF/*.SF/*.RSA) لأنها ستُستبدل بتوقيع جديد.
- *  2. يحقن ملفات مشروع Rin كموارد assets/rin_export_project/* + بيان JSON صغير يقرأه
+ *     وملفات توقيع META-INF القديمة (MANIFEST.MF, أو أي ملف SF أو RSA) لأنها ستُستبدل بتوقيع جديد.
+ *  2. يحقن ملفات مشروع Rin كموارد assets/rin_export_project/ (كل الملفات) + بيان JSON صغير يقرأه
  *     [com.dlof.rinlang.ExportedRunActivity] عند إقلاع الحزمة المُصدَّرة.
  *  3. يطبّق محاذاة zipalign الحقيقية: المُدخلات غير المضغوطة (STORED) — وتحديداً مكتبات
  *     .so — تُحاذى لحدود 4096 بايت (متطلّب أندرويد الحديث لتحميلها عبر mmap مباشرة من
