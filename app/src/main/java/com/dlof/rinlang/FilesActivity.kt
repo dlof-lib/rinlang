@@ -71,7 +71,7 @@ class FilesActivity : AppCompatActivity() {
 
         val projectName = intent.getStringExtra(EXTRA_PROJECT_NAME)
             ?: run { finish(); return }
-        val existing = ProjectManager.listProjects(this).find { it.name == projectName }
+        val existing = ProjectAlbumManager.findProject(this, projectName)
             ?: run {
                 Toast.makeText(this, R.string.project_not_found, Toast.LENGTH_SHORT).show()
                 finish(); return
