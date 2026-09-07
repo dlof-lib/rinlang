@@ -40,6 +40,12 @@ struct LogicalExpr : Expr {
     ExprPtr right;
 };
 
+struct ConditionalExpr : Expr {
+    ExprPtr condition;
+    ExprPtr whenTrue;
+    ExprPtr whenFalse;
+};
+
 struct UnaryExpr : Expr {
     TokenType op;
     ExprPtr right;
@@ -241,6 +247,16 @@ struct ReturnStmt : Stmt {
 struct BreakStmt : Stmt {};
 // continue; -> يقفز مباشرة إلى فحص شرط أقرب حلقة while محيطة (يتجاوز باقي جسم الحلقة)
 struct ContinueStmt : Stmt {};
+
+struct TryCatchStmt : Stmt {
+    std::shared_ptr<BlockStmt> tryBranch;
+    std::string catchName;
+    std::shared_ptr<BlockStmt> catchBranch;
+};
+
+struct ThrowStmt : Stmt {
+    ExprPtr value;
+};
 
 // ---- Data-container language statements (container / Containers.Group / Volume / Section ...) ----
 
