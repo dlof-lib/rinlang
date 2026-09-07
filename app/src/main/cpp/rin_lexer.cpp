@@ -169,6 +169,7 @@ void Lexer::scanToken() {
         case '%': addToken(TokenType::PERCENT); break;
         case '@': addToken(TokenType::AT); break;
         case '.': addToken(TokenType::DOT); break;
+        case '?': addToken(TokenType::QUESTION); break;
         case '|':
             if (match('>')) {
                 addToken(TokenType::PIPE);
