@@ -1,0 +1,23 @@
+// Rin core completion sample
+let score = 87;
+let label = score >= 60 ? "PASS" : "FAIL";
+print label;
+
+fun safeDivide(a, b) {
+    if (b == 0) {
+        throw { message: "division by zero", operation: "divide" };
+    }
+    return a / b;
+}
+
+try {
+    print safeDivide(10, 0);
+} catch (err) {
+    print "error=" + err["message"];
+}
+
+try {
+    throw "custom failure";
+} catch (err) {
+    print "caught=" + err["message"];
+}
