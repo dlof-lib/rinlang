@@ -21,8 +21,28 @@ object ProjectAlbumManager {
     }
 
     fun deleteAlbum(context: Context, name: String) {
+        // حذف الألبوم لا يحذف المشاريع: إعادة المشاريع إلى المجلد الرئيسي أكثر أماناً.
         val dir = File(root(context), name)
-        if (dir.isDirectory) dir.deleteRecursively()
+        if (!dir.isDirectory) return
+        val projectsRoot = File(context.filesDir, "projects").also { if (!it.exists()) it.mkdirs() }
+        dir.listFiles { f -> f.isDirectory }?.forEach { project ->
+            var target = File(projectsRoot, project.name)
+            if (target.exists()) {
+                var i = 2
+                while (File(projectsRoot, "${project.name}-$i").exists()) i++
+                target = File(projectsRoot, "${project.name}-$i")
+            }
+            project.renameTo(target)
+        }
+        dir.delete()
+    }
+
+    fun findProject(context: Context, name: String): Project? {
+        ProjectManager.listProjects(context).find { it.name == name }?.let { return it }
+        for (album in listAlbums(context)) {
+            projectsInAlbum(context, album).find { it.name == name }?.let { return it }
+        }
+        return null
     }
 
     fun moveProjectToAlbum(context: Context, project: Project, album: String?) {
