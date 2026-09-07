@@ -21,7 +21,7 @@ import kotlin.concurrent.thread
  *   1. تحديد ملف APK للحزمة المضيفة نفسها على القرص (applicationInfo.sourceDir).
  *   2. استخراج AndroidManifest.xml الثنائي منها وتعديله بايتاً بايت عبر [AxmlManifestPatcher]:
  *      معرّف حزمة فريد جديد + اسم تطبيق معروض هو اسم المشروع.
- *   3. حقن ملفات المشروع (.rin وكل ما يرافقها) كأصول assets/rin_export_project/*
+ *   3. حقن ملفات المشروع (.rin وكل ما يرافقها) كأصول assets/rin_export_project/ (كل الملفات)
  *      + بيان JSON صغير يقرأه ExportedRunActivity.
  *   4. إعادة تجميع الحزمة (نسخ كل مُدخلات zip الأصلية بنفس أسلوب الضغط) مع محاذاة zipalign
  *      حقيقية لمكتبات .so (4096) وبقية مُدخلات STORED (4) — [ApkRepackager].
