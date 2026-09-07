@@ -69,3 +69,11 @@
 
 ### Status
 Rin 1.0.0 — Stable Release
+
+## Core language completion pass
+
+- Added expression-level conditional operator `condition ? whenTrue : whenFalse`.
+- Added structured `try { ... } catch (name) { ... }` handling.
+- Added `throw expr;` with arbitrary Rin values and structured caught-error maps.
+- Unhandled user exceptions now terminate through the normal interpreter error channel.
+- Added `samples/core_completion.rin` and `tools/test_core_completion.cpp` regression coverage.
