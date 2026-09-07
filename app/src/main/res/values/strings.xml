@@ -207,7 +207,7 @@ print \"Hello, \" + name + \"!\";
     <string name="apk_export_status_success">تم البناء والتوقيع بنجاح</string>
     <string name="apk_export_status_failed">فشل التصدير</string>
     <string name="apk_export_no_entry_error">لا يوجد ملف .rin واحد على الأقل في هذا المشروع</string>
-    <string name="apk_export_note_limitation">ملاحظة: اسم التطبيق وأيقونته على الشاشة الرئيسية للحزمة الناتجة يبقيان كما في RinStudio — هوية مشروعك الفعلية تظهر داخل شاشة تشغيله بعد فتحه.</string>
+    <string name="apk_export_note_limitation">ملاحظة: اسم التطبيق المعروض أعلاه يُكتب فعلياً داخل بيان الحزمة الناتجة. الأيقونة فقط تبقى كما في RinStudio (resources.arsc لا يُعدَّل حالياً). التوقيع حقيقي بمخطّط v1 (JAR) بمفتاح RSA-2048 خاص بجهازك.</string>
     <string name="exported_run_loading">جارٍ تشغيل المشروع…</string>
     <string name="exported_run_error_prefix">خطأ أثناء التشغيل:</string>
     <string name="exported_run_restart">إعادة التشغيل</string>
