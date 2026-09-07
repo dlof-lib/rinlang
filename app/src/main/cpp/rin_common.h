@@ -46,6 +46,7 @@ enum class TokenType {
     AT,              // @  (بداية كتلة container/container.pipe/Containers.Group/Volume)
     DOT,             // .  (تُستخدم في وسم الإغلاق .end/... وفي container.pipe)
     PIPE,            // |>   (مُشغّل الأنابيب: يمرر القيمة اليسرى كأول وسيط للنداء اليمين)
+    QUESTION,        // ?  conditional expression
     END_OF_FILE, ERROR
 };
 
