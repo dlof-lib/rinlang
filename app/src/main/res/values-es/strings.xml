@@ -210,4 +210,13 @@ print \"Hello, \" + name + \"!\";
 
     <!-- ===== Pantalla de bienvenida (Splash) ===== -->
     <string name="splash_tagline">Un lenguaje de programación ligero y rápido</string>
+
+    <!-- ===== Diálogo de registro de fallo/error (ver CrashHandler, ErrorReporter, CrashReportActivity) ===== -->
+    <string name="crash_dialog_title_fatal">La aplicación tuvo un problema</string>
+    <string name="crash_dialog_title_error">Ocurrió un error</string>
+    <string name="crash_dialog_no_log">No hay registro disponible.</string>
+    <string name="crash_dialog_copy">Copiar registro</string>
+    <string name="crash_dialog_copied">Registro copiado</string>
+    <string name="crash_dialog_close_app">Cerrar aplicación</string>
+    <string name="crash_dialog_dismiss">Cerrar</string>
 </resources>
