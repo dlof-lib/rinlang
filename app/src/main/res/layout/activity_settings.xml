@@ -97,7 +97,6 @@
                 android:orientation="vertical"
                 android:paddingEnd="10dp">
                 <TextView
-                    android:id="@+id/preferenceTitle"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:text="@string/settings_syntax"
@@ -105,7 +104,6 @@
                     android:textStyle="bold"
                     android:textSize="13.5sp" />
                 <TextView
-                    android:id="@+id/preferenceHint"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="2dp"
@@ -133,7 +131,6 @@
                 android:orientation="vertical"
                 android:paddingEnd="10dp">
                 <TextView
-                    android:id="@+id/preferenceTitle"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:text="@string/settings_brackets"
@@ -141,7 +138,6 @@
                     android:textStyle="bold"
                     android:textSize="13.5sp" />
                 <TextView
-                    android:id="@+id/preferenceHint"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="2dp"
@@ -169,7 +165,6 @@
                 android:orientation="vertical"
                 android:paddingEnd="10dp">
                 <TextView
-                    android:id="@+id/preferenceTitle"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:text="@string/settings_autocomplete"
@@ -177,7 +172,6 @@
                     android:textStyle="bold"
                     android:textSize="13.5sp" />
                 <TextView
-                    android:id="@+id/preferenceHint"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="2dp"
@@ -205,7 +199,6 @@
                 android:orientation="vertical"
                 android:paddingEnd="10dp">
                 <TextView
-                    android:id="@+id/preferenceTitle"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:text="@string/settings_auto_close"
@@ -213,7 +206,6 @@
                     android:textStyle="bold"
                     android:textSize="13.5sp" />
                 <TextView
-                    android:id="@+id/preferenceHint"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="2dp"
@@ -241,7 +233,6 @@
                 android:orientation="vertical"
                 android:paddingEnd="10dp">
                 <TextView
-                    android:id="@+id/preferenceTitle"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:text="@string/settings_auto_indent"
@@ -249,7 +240,6 @@
                     android:textStyle="bold"
                     android:textSize="13.5sp" />
                 <TextView
-                    android:id="@+id/preferenceHint"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="2dp"
@@ -277,7 +267,6 @@
                 android:orientation="vertical"
                 android:paddingEnd="10dp">
                 <TextView
-                    android:id="@+id/preferenceTitle"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:text="@string/settings_word_wrap"
@@ -285,7 +274,6 @@
                     android:textStyle="bold"
                     android:textSize="13.5sp" />
                 <TextView
-                    android:id="@+id/preferenceHint"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="2dp"
@@ -313,7 +301,6 @@
                 android:orientation="vertical"
                 android:paddingEnd="10dp">
                 <TextView
-                    android:id="@+id/preferenceTitle"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:text="@string/settings_whitespace"
@@ -321,7 +308,6 @@
                     android:textStyle="bold"
                     android:textSize="13.5sp" />
                 <TextView
-                    android:id="@+id/preferenceHint"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="2dp"
@@ -349,7 +335,6 @@
                 android:orientation="vertical"
                 android:paddingEnd="10dp">
                 <TextView
-                    android:id="@+id/preferenceTitle"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:text="@string/settings_current_line"
@@ -357,7 +342,6 @@
                     android:textStyle="bold"
                     android:textSize="13.5sp" />
                 <TextView
-                    android:id="@+id/preferenceHint"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="2dp"
@@ -385,7 +369,6 @@
                 android:orientation="vertical"
                 android:paddingEnd="10dp">
                 <TextView
-                    android:id="@+id/preferenceTitle"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:text="@string/settings_smooth_cursor"
@@ -393,7 +376,6 @@
                     android:textStyle="bold"
                     android:textSize="13.5sp" />
                 <TextView
-                    android:id="@+id/preferenceHint"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="2dp"
@@ -421,7 +403,6 @@
                 android:orientation="vertical"
                 android:paddingEnd="10dp">
                 <TextView
-                    android:id="@+id/preferenceTitle"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:text="@string/settings_minimap"
@@ -429,7 +410,6 @@
                     android:textStyle="bold"
                     android:textSize="13.5sp" />
                 <TextView
-                    android:id="@+id/preferenceHint"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="2dp"
@@ -457,7 +437,6 @@
                 android:orientation="vertical"
                 android:paddingEnd="10dp">
                 <TextView
-                    android:id="@+id/preferenceTitle"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:text="@string/settings_haptic"
@@ -465,7 +444,6 @@
                     android:textStyle="bold"
                     android:textSize="13.5sp" />
                 <TextView
-                    android:id="@+id/preferenceHint"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="2dp"
@@ -493,7 +471,6 @@
                 android:orientation="vertical"
                 android:paddingEnd="10dp">
                 <TextView
-                    android:id="@+id/preferenceTitle"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:text="@string/settings_save_pause"
@@ -501,7 +478,6 @@
                     android:textStyle="bold"
                     android:textSize="13.5sp" />
                 <TextView
-                    android:id="@+id/preferenceHint"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="2dp"
@@ -529,7 +505,6 @@
                 android:orientation="vertical"
                 android:paddingEnd="10dp">
                 <TextView
-                    android:id="@+id/preferenceTitle"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:text="@string/settings_confirm_exit"
@@ -537,7 +512,6 @@
                     android:textStyle="bold"
                     android:textSize="13.5sp" />
                 <TextView
-                    android:id="@+id/preferenceHint"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="2dp"
@@ -555,8 +529,8 @@
             android:orientation="horizontal" android:gravity="center_vertical"
             android:padding="14dp" android:background="@drawable/bg_list_card" android:layout_marginBottom="8dp">
             <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical" android:paddingEnd="10dp">
-                <TextView android:id="@+id/preferenceTitle" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/settings_format_save" android:textColor="@color/rin_on_toolbar" android:textStyle="bold" android:textSize="13.5sp" />
-                <TextView android:id="@+id/preferenceHint" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="2dp" android:text="@string/settings_format_save_hint" android:textColor="@color/rin_editor_hint" android:textSize="11sp" />
+                <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/settings_format_save" android:textColor="@color/rin_on_toolbar" android:textStyle="bold" android:textSize="13.5sp" />
+                <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="2dp" android:text="@string/settings_format_save_hint" android:textColor="@color/rin_editor_hint" android:textSize="11sp" />
             </LinearLayout>
             <Switch android:id="@+id/switchFormatSave" android:layout_width="wrap_content" android:layout_height="wrap_content" />
         </LinearLayout>
