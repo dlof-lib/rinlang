@@ -22,6 +22,7 @@ import android.webkit.WebViewClient
 import android.net.Uri
 import org.json.JSONObject
 import kotlin.math.max
+import kotlin.math.roundToInt
 import kotlin.math.min
 
 /**
@@ -164,6 +165,7 @@ class LoomFabricView @JvmOverloads constructor(
         set(value) {
             field = value.coerceIn(0.25f, 3f)
             onZoomChanged?.invoke(field)
+            requestLayout()
             invalidate()
         }
 
@@ -250,7 +252,22 @@ class LoomFabricView @JvmOverloads constructor(
         return null
     }
 
-    private val density = resources.displayMetrics.density
+    /*
+     * Fabric coordinates are logical Loom units (the same dp-like unit used by the native
+     * layout engine). The old renderer multiplied them by Android density, which made a
+     * 390-wide design become ~1000px on a phone and then forced it into an EXACTLY-sized
+     * ScrollView child. The result was clipping/stretch-like visual corruption.
+     *
+     * The live preview is a design canvas, not a native dp surface: at zoom=1 the complete
+     * logical device width is fitted to the actual preview viewport. Zoom is then applied on
+     * top of that single scale. All drawing, hit testing and media overlays use this exact
+     * same transform.
+     */
+    private fun previewScale(): Float {
+        val rw = rootWidthPx.coerceAtLeast(1).toFloat()
+        val viewportW = width.toFloat().coerceAtLeast(1f)
+        return (viewportW / rw) * zoom
+    }
 
     private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
     private val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -331,7 +348,7 @@ class LoomFabricView @JvmOverloads constructor(
     }
 
     private fun viewToRoot(vx: Float, vy: Float): Pair<Double, Double> {
-        val scale = density * zoom
+        val scale = previewScale().coerceAtLeast(0.0001f)
         return (vx / scale).toDouble() to (vy / scale).toDouble()
     }
 
@@ -387,27 +404,34 @@ class LoomFabricView @JvmOverloads constructor(
     }
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
-        val scale = density * zoom
-        val contentW = (rootWidthPx * scale).toInt()
-        val contentH = (rootHeightPx * scale).toInt()
-
-        // نحترم القيد الحقيقي القادم من الحاوية (match_parent + fillViewport في التخطيط) بدل
-        // فرض حجم المحتوى دائماً، حتى تملأ المعاينة الشاشة كاملة عند التكبير 100% الافتراضي —
-        // ونستخدم حجم المحتوى الطبيعي فقط عندما لا يوجد قيد صارم (UNSPECIFIED)، أي عندما يكون
-        // المحتوى نفسه أكبر من المساحة المتاحة (تكبير > 100% مثلاً)، فيبقى قابلاً للتمرير.
         val widthMode = MeasureSpec.getMode(widthMeasureSpec)
         val widthSize = MeasureSpec.getSize(widthMeasureSpec)
+
+        /*
+         * At 100% the logical device is always fitted to the available preview width.
+         * For zoom > 100%, grow the child so the ScrollView can expose the enlarged canvas.
+         * Do not use Android display density here: the native Fabric is already in logical
+         * preview units and previewScale() is the sole coordinate transform.
+         */
+        val baseScale = when (widthMode) {
+            MeasureSpec.UNSPECIFIED -> 1f
+            else -> widthSize.toFloat().coerceAtLeast(1f) /
+                rootWidthPx.coerceAtLeast(1).toFloat()
+        }
+        val contentW = (rootWidthPx * baseScale * zoom).roundToInt().coerceAtLeast(1)
+        val contentH = (rootHeightPx * baseScale * zoom).roundToInt().coerceAtLeast(1)
+
         val finalWidth = when (widthMode) {
-            MeasureSpec.EXACTLY -> widthSize
+            MeasureSpec.EXACTLY -> if (zoom <= 1f) widthSize else contentW
             MeasureSpec.AT_MOST -> min(contentW, widthSize).coerceAtLeast(suggestedMinimumWidth)
-            else -> max(contentW, suggestedMinimumWidth)
+            else -> contentW.coerceAtLeast(suggestedMinimumWidth)
         }
 
         val heightMode = MeasureSpec.getMode(heightMeasureSpec)
         val heightSize = MeasureSpec.getSize(heightMeasureSpec)
         val finalHeight = when (heightMode) {
-            MeasureSpec.EXACTLY -> heightSize
-            MeasureSpec.AT_MOST -> min(contentH, heightSize).coerceAtLeast(suggestedMinimumHeight)
+            MeasureSpec.EXACTLY -> if (zoom <= 1f) heightSize else contentH
+            MeasureSpec.AT_MOST -> max(contentH, heightSize).coerceAtLeast(suggestedMinimumHeight)
             else -> max(contentH, suggestedMinimumHeight)
         }
 
@@ -417,7 +441,7 @@ class LoomFabricView @JvmOverloads constructor(
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
         canvas.save()
-        canvas.scale(density * zoom, density * zoom)
+        canvas.scale(previewScale(), previewScale())
 
         val root = fabric
         if (root != null) {
@@ -856,735 +880,4 @@ class LoomFabricView @JvmOverloads constructor(
         val on = attrs.optString("checked") == "true"
         val radius = rect.height() / 2f
         fillPaint.shader = null; fillPaint.clearShadowLayer()
-        fillPaint.color = if (on) (resolved ?: defaultButton) else defaultTrack
-        canvas.drawRoundRect(rect, radius, radius, fillPaint)
-
-        val knobRadius = rect.height() / 2f - 3f
-        val knobCx = if (on) rect.right - radius else rect.left + radius
-        fillPaint.color = Color.WHITE
-        canvas.drawCircle(knobCx, rect.top + radius, knobRadius, fillPaint)
-    }
-
-    /** Avatar: a circular image (reusing the same decode/cache path Image already has) when
-     * src= is set, else a tinted circle with the first letter of label=/name= as initials. */
-    private fun drawAvatar(canvas: Canvas, rect: RectF, attrs: JSONObject, resolved: Int?) {
-        if (rect.width() <= 0f || rect.height() <= 0f) return
-        val src = attrs.optString("src")
-        val bmp = if (src.isNotBlank()) loadBitmapForRect(src, rect.width().toInt(), rect.height().toInt()) else null
-        val radius = min(rect.width(), rect.height()) / 2f
-        if (bmp != null) {
-            canvas.save()
-            val clip = android.graphics.Path().apply { addCircle(rect.centerX(), rect.centerY(), radius, android.graphics.Path.Direction.CW) }
-            canvas.clipPath(clip)
-            val bw = bmp.width.toFloat(); val bh = bmp.height.toFloat()
-            val scale = max(rect.width() / bw, rect.height() / bh)
-            val dw = bw * scale; val dh = bh * scale
-            canvas.drawBitmap(bmp, null, RectF(rect.centerX() - dw / 2f, rect.centerY() - dh / 2f, rect.centerX() + dw / 2f, rect.centerY() + dh / 2f), bitmapPaint)
-            canvas.restore()
-            return
-        }
-        fillPaint.shader = null; fillPaint.clearShadowLayer()
-        fillPaint.color = resolved ?: defaultButton
-        canvas.drawCircle(rect.centerX(), rect.centerY(), radius, fillPaint)
-        val initial = (attrs.optString("label").ifBlank { attrs.optString("name") }).trim().firstOrNull()?.uppercaseChar()?.toString() ?: ""
-        if (initial.isNotEmpty()) drawText(canvas, rect, attrs, initial, Color.WHITE, centered = true, boldHint = true, singleLine = true)
-    }
-
-    /** TabItem: its label, underlined/tinted when selected="true" — Tabs itself (the row
-     * container) draws nothing beyond its children, same as Kind.TABS above. */
-    private fun drawTabItem(canvas: Canvas, rect: RectF, attrs: JSONObject) {
-        if (rect.width() <= 0f || rect.height() <= 0f) return
-        val selected = attrs.optString("selected") == "true"
-        drawText(canvas, rect, attrs, attrs.optString("label").ifBlank { attrs.optString("text") },
-            if (selected) defaultButton else defaultText, centered = true, boldHint = selected, singleLine = true)
-        if (selected) {
-            strokePaint.color = defaultButton
-            strokePaint.strokeWidth = 2f
-            canvas.drawLine(rect.left, rect.bottom - 1f, rect.right, rect.bottom - 1f, strokePaint)
-        }
-    }
-
-    /**
-     * Link concepts (docs/link.md): plain link-toned text, underlined by default like any real
-     * hyperlink (`underline="false"` turns that off — e.g. for a Link used as a plain nav item),
-     * and switched to a muted [defaultVisitedLink] tone when `visited="true"` so a user can tell
-     * an already-followed link apart from a fresh one, same convention the web uses. Behavior
-     * (where it navigates/opens) is a separate concept — see `href`/`onOpenUrl`/`onNavigate`.
-     */
-    private fun drawLink(canvas: Canvas, rect: RectF, attrs: JSONObject, resolved: Int?) {
-        if (rect.width() <= 0f || rect.height() <= 0f) return
-        val visited = attrs.optString("visited") == "true"
-        val color = resolved ?: (if (visited) defaultVisitedLink else defaultLink)
-        val text = attrs.optString("text")
-        drawText(canvas, rect, attrs, text, color)
-        val underline = attrs.optString("underline").ifBlank { "true" } == "true"
-        if (underline && text.isNotEmpty()) {
-            val sizeSp = attrs.optString("size").toFloatOrNull() ?: 14f
-            textPaint.textSize = sizeSp
-            val hPad = 4f
-            val textWidth = min(rect.width() - hPad * 2f, textPaint.measureText(text))
-            if (textWidth > 0f) {
-                val baseline = rect.top + rect.height() / 2f - (textPaint.descent() + textPaint.ascent()) / 2f
-                val underlineY = baseline + textPaint.descent() * 0.9f
-                strokePaint.color = color
-                strokePaint.strokeWidth = max(1f, sizeSp / 14f)
-                canvas.drawLine(rect.left + hPad, underlineY, rect.left + hPad + textWidth, underlineY, strokePaint)
-            }
-        }
-    }
-
-    /** Icon/IconButton: no glyph atlas on this preview surface (real icon rendering is a
-     * host-app/runtime concern, same relationship Image's real bitmap decode has to a raw
-     * placeholder) — draws the first letter of name= as a plain-text stand-in so an icon still
-     * reads as "something is here" rather than an empty box. */
-    private fun drawIcon(canvas: Canvas, rect: RectF, attrs: JSONObject, fallbackColor: Int) {
-        if (rect.width() <= 0f || rect.height() <= 0f) return
-        val glyph = attrs.optString("name").trim().firstOrNull()?.uppercaseChar()?.toString() ?: "•"
-        drawText(canvas, rect, attrs, glyph, fallbackColor, centered = true, boldHint = true, singleLine = true)
-    }
-
-    /**
-     * Greedy word-wrap using REAL measured glyph widths (mirrors `loom::wrapText` in
-     * rin_loom_layout.h, which only has a rough per-codepoint estimate to size the box before
-     * paint). Matching algorithms means the line count — and therefore the box height the native
-     * layout already committed to — lines up with what actually gets drawn here.
-     */
-    private fun wrapLines(text: String, paint: TextPaint, maxWidth: Float): List<String> {
-        if (text.isEmpty()) return listOf("")
-        if (maxWidth <= 0f) return listOf(text)
-        val words = text.split(" ").filter { it.isNotEmpty() }
-        if (words.isEmpty()) return listOf("")
-        val lines = mutableListOf<String>()
-        var line = ""
-        for (w in words) {
-            val candidate = if (line.isEmpty()) w else "$line $w"
-            line = if (line.isEmpty() || paint.measureText(candidate) <= maxWidth) candidate
-            else { lines.add(line); w }
-        }
-        if (line.isNotEmpty() || lines.isEmpty()) lines.add(line)
-        return lines
-    }
-
-    /** Font concept: `font_local="fonts/MyFont.ttf"` resolves from the project, while
-     * `font_url="https://.../MyFont.ttf"` downloads once into app cache and is reused offline.
-     * `font="sans|serif|mono"` remains the lightweight built-in fallback. */
-    private fun resolveTypeface(attrs: JSONObject): android.graphics.Typeface {
-        val local = attrs.optString("font_local").trim()
-        if (local.isNotBlank()) {
-            val file = resolveProjectFile(local)
-            if (file?.isFile == true) {
-                try { return android.graphics.Typeface.createFromFile(file) } catch (_: Throwable) { }
-            }
-        }
-        val url = attrs.optString("font_url").trim()
-        if (url.isNotBlank() && isRemoteUrl(url)) {
-            remoteFontCache[url]?.let { return it }
-            requestRemoteFont(url)
-        }
-        return when (attrs.optString("font").lowercase()) {
-            "serif" -> android.graphics.Typeface.SERIF
-            "mono", "monospace" -> android.graphics.Typeface.MONOSPACE
-            else -> android.graphics.Typeface.DEFAULT
-        }
-    }
-
-    private fun resolveProjectFile(path: String): java.io.File? {
-        val stripped = path.removePrefix("file://")
-        val direct = java.io.File(stripped)
-        if (direct.isAbsolute) return direct.takeIf { it.isFile }
-        val base = RinEngine.currentBaseDir()
-        if (base.isBlank()) return null
-        return java.io.File(base, stripped).takeIf { it.isFile }
-    }
-
-    private fun requestRemoteFont(url: String) {
-        if (!pendingFontUrls.add(url)) return
-        Thread {
-            try {
-                val dir = java.io.File(context.cacheDir, "rin_fonts").apply { mkdirs() }
-                val target = java.io.File(dir, "font_${url.hashCode().toUInt().toString(16)}.bin")
-                if (!target.isFile) {
-                    val connection = java.net.URL(url).openConnection().apply {
-                        connectTimeout = 10000
-                        readTimeout = 15000
-                        useCaches = true
-                    }
-                    connection.getInputStream().use { input ->
-                        java.io.FileOutputStream(target).use { output -> input.copyTo(output) }
-                    }
-                }
-                val tf = android.graphics.Typeface.createFromFile(target)
-                remoteFontCache[url] = tf
-                mainHandler.post { invalidate() }
-            } catch (_: Throwable) {
-                // Keep the built-in font if the remote resource is unavailable.
-            } finally {
-                pendingFontUrls.remove(url)
-            }
-        }.start()
-    }
-
-    private fun drawText(
-        canvas: Canvas, rect: RectF, attrs: JSONObject, text: String,
-        fallbackColor: Int, centered: Boolean = false, boldHint: Boolean = false, singleLine: Boolean = false
-    ) {
-        if (text.isEmpty() || rect.width() <= 0f || rect.height() <= 0f) return
-        val sizeSp = attrs.optString("size").toFloatOrNull() ?: 14f
-        textPaint.color = parseHexColor(attrs.optString("color").ifBlank { null }, fallbackColor)
-        textPaint.textSize = sizeSp
-        textPaint.isFakeBoldText = boldHint
-        textPaint.isAntiAlias = true
-        val savedTypeface = textPaint.typeface
-        textPaint.typeface = resolveTypeface(attrs)
-
-        val hPad = 4f
-        val available = max(4f, rect.width() - hPad * 2f)
-
-        if (singleLine) {
-            val truncated = TextUtils.ellipsize(text, textPaint, available, TextUtils.TruncateAt.END)
-            val textWidth = textPaint.measureText(truncated, 0, truncated.length)
-            val startX = if (centered) rect.left + (rect.width() - textWidth) / 2f else rect.left + hPad
-            val baseline = rect.top + rect.height() / 2f - (textPaint.descent() + textPaint.ascent()) / 2f
-            canvas.drawText(truncated, 0, truncated.length, startX, baseline, textPaint)
-            textPaint.typeface = savedTypeface
-            return
-        }
-
-        // Real multi-line body text: wrap, then draw one line per row filling the box top-down —
-        // the box's height was sized by loom::measureText for exactly this many lines * lineHeight,
-        // so no vertical centering of the whole block is needed (it already fills the box).
-        val lineHeight = textPaint.textSize * 1.4f
-        var maxLines = max(1, (rect.height() / lineHeight).toInt())
-        attrs.optString("maxLines").toIntOrNull()?.let { if (it > 0) maxLines = min(maxLines, it) }
-
-        var lines = wrapLines(text, textPaint, available)
-        val overflowed = lines.size > maxLines
-        if (overflowed) lines = lines.subList(0, maxLines)
-
-        var baseline = rect.top - textPaint.ascent()
-        for ((i, rawLine) in lines.withIndex()) {
-            val isLastVisible = i == lines.lastIndex
-            val line = if (overflowed && isLastVisible)
-                TextUtils.ellipsize(rawLine, textPaint, available, TextUtils.TruncateAt.END).toString()
-            else rawLine
-            val lineWidth = textPaint.measureText(line)
-            val startX = if (centered) rect.left + (rect.width() - lineWidth) / 2f else rect.left + hPad
-            canvas.drawText(line, startX, baseline, textPaint)
-            baseline += lineHeight
-        }
-        textPaint.typeface = savedTypeface
-    }
-
-    // ---- chat message formatting (`format=` on a Text node — see the Kind.TEXT dispatch above)
-    // ----
-
-    private val defaultCodeBg = Color.rgb(18, 19, 26) // dark, distinct from defaultCard/Bubble fill
-    private val defaultCodeText = Color.rgb(180, 230, 180) // faint terminal-green, readable on dark bg
-
-    /** `format="code"`: a monospace block with its own dark rounded background, matching how a
-     * real code fence renders in a chat client. Reuses [drawBox]/[drawText] as-is (no new paint
-     * fields) — only the typeface and the two default colors differ from plain body text. */
-    private fun drawCodeText(canvas: Canvas, rect: RectF, attrs: JSONObject, text: String, fallbackColor: Int) {
-        if (text.isEmpty() || rect.width() <= 0f || rect.height() <= 0f) return
-        drawBox(canvas, rect, JSONObject().apply {
-            // an explicit color= on the Strand still governs the bubble itself (drawBox already
-            // reads attrs.color); the code block only supplies its own fallback background.
-            if (attrs.has("color")) put("color", attrs.optString("color"))
-            if (attrs.has("radius")) put("radius", attrs.optString("radius"))
-        }, defaultCodeBg, defaultRadius = 8f)
-
-        val savedTypeface = textPaint.typeface
-        textPaint.typeface = android.graphics.Typeface.MONOSPACE
-        try {
-            drawText(canvas, rect, attrs, text, if (attrs.has("color")) fallbackColor else defaultCodeText)
-        } finally {
-            textPaint.typeface = savedTypeface // textPaint is a shared field — never leak this elsewhere
-        }
-    }
-
-    /** One word plus whether it should render bold (i.e. it came from inside a `**...**` span). */
-    private data class MdWord(val text: String, val bold: Boolean)
-
-    /** Splits `text` on `**bold**` markers into a flat word list tagged bold/not-bold. Only bold
-     * spans are supported (the one inline style `botReplyMarkdown` callers reach for most, e.g.
-     * "بإمكانك تفعيل الحساب من **الإعدادات > الحساب > تفعيل**" from
-     * examples/chatbot_container_demo.rin) — anything fancier (headings, links, code spans inside
-     * markdown) still shows as plain text with its literal `**`/`` ` ``/`#` markers rather than
-     * silently dropping content, which is the safer failure mode for a chat transcript. */
-    private fun parseMarkdownWords(text: String): List<MdWord> {
-        val words = mutableListOf<MdWord>()
-        var bold = false
-        var i = 0
-        val sb = StringBuilder()
-        fun flushWord() { if (sb.isNotEmpty()) { words.add(MdWord(sb.toString(), bold)); sb.clear() } }
-        while (i < text.length) {
-            val c = text[i]
-            if (c == '*' && i + 1 < text.length && text[i + 1] == '*') {
-                flushWord()
-                bold = !bold
-                i += 2
-                continue
-            }
-            if (c == ' ') { flushWord(); i++; continue }
-            sb.append(c)
-            i++
-        }
-        flushWord()
-        return words
-    }
-
-    /** `format="markdown"`: wraps like plain body text (same `available`/`lineHeight` box the
-     * caller's box was already sized for) but renders `**bold**` spans in real bold, word by
-     * word, instead of drawing the literal asterisks. RTL scripts (Arabic, as in this project's
-     * own chat examples) still lay out left-to-right word-by-word here, same simplification
-     * [wrapLines] already makes for plain text above — a real bidi run reorder is out of scope for
-     * this renderer. */
-    private fun drawMarkdownText(canvas: Canvas, rect: RectF, attrs: JSONObject, text: String, fallbackColor: Int) {
-        if (text.isEmpty() || rect.width() <= 0f || rect.height() <= 0f) return
-        val sizeSp = attrs.optString("size").toFloatOrNull() ?: 14f
-        textPaint.color = parseHexColor(attrs.optString("color").ifBlank { null }, fallbackColor)
-        textPaint.textSize = sizeSp
-        textPaint.isAntiAlias = true
-
-        val hPad = 4f
-        val available = max(4f, rect.width() - hPad * 2f)
-        val spaceWidth = run { textPaint.isFakeBoldText = false; textPaint.measureText(" ") }
-
-        // Greedy word-wrap identical in spirit to wrapLines(), but keeping each word's bold flag
-        // (measuring width for bold words with isFakeBoldText=true, since bold glyphs are wider).
-        val words = parseMarkdownWords(text)
-        val lines = mutableListOf<MutableList<MdWord>>(mutableListOf())
-        var lineWidth = 0f
-        for (w in words) {
-            textPaint.isFakeBoldText = w.bold
-            val wWidth = textPaint.measureText(w.text)
-            val current = lines.last()
-            val candidateWidth = if (current.isEmpty()) wWidth else lineWidth + spaceWidth + wWidth
-            if (current.isNotEmpty() && candidateWidth > available) {
-                lines.add(mutableListOf(w))
-                lineWidth = wWidth
-            } else {
-                current.add(w)
-                lineWidth = candidateWidth
-            }
-        }
-
-        val lineHeight = textPaint.textSize * 1.4f
-        var maxLines = max(1, (rect.height() / lineHeight).toInt())
-        attrs.optString("maxLines").toIntOrNull()?.let { if (it > 0) maxLines = min(maxLines, it) }
-        val visibleLines = if (lines.size > maxLines) lines.subList(0, maxLines) else lines
-
-        var baseline = rect.top - textPaint.ascent()
-        for (line in visibleLines) {
-            var x = rect.left + hPad
-            for (w in line) {
-                textPaint.isFakeBoldText = w.bold
-                canvas.drawText(w.text, x, baseline, textPaint)
-                x += textPaint.measureText(w.text) + spaceWidth
-            }
-            baseline += lineHeight
-        }
-        textPaint.isFakeBoldText = false // textPaint is shared — never leave bold set for the next node
-    }
-
-    private fun drawDivider(canvas: Canvas, rect: RectF, attrs: JSONObject, fallback: Int) {
-        fillPaint.shader = null
-        fillPaint.clearShadowLayer()
-        fillPaint.color = parseHexColor(attrs.optString("color").ifBlank { null }, fallback)
-        canvas.drawRect(rect, fillPaint)
-    }
-
-    private fun mediaSource(attrs: JSONObject): String =
-        attrs.optString("video_url").ifBlank { attrs.optString("src") }
-
-    private fun isRemoteUrl(value: String): Boolean =
-        value.startsWith("https://", true) || value.startsWith("http://", true)
-
-    private fun isVideoPageUrl(value: String): Boolean {
-        val u = value.lowercase()
-        return u.contains("youtube.com/watch") || u.contains("youtu.be/") ||
-            u.contains("youtube.com/shorts/") || u.contains("youtube-nocookie.com/embed/")
-    }
-
-    private fun videoEmbedUrl(value: String): String {
-        val id = Regex("(?:v=|youtu\\.be/|shorts/)([A-Za-z0-9_-]{6,})").find(value)?.groupValues?.getOrNull(1)
-        return if (id != null) "https://www.youtube-nocookie.com/embed/$id?autoplay=0&rel=0" else value
-    }
-
-    /**
-     * Real playback for `video_url=`. Direct media URLs use Android VideoView; page-style video
-     * URLs are rendered in an isolated WebView embed. The source language stays provider-neutral:
-     * authors only write `video_url="..."`.
-     */
-    private fun syncRemoteMediaOverlays(root: JSONObject?) {
-        if (root == null) return
-        val found = mutableListOf<Triple<String, JSONObject, String>>()
-        collectVideoUrlNodes(root, found)
-        val signature = found.joinToString("|") { "${it.first}:${it.third}" }
-        if (signature == lastRemoteMediaSignature) {
-            mainHandler.post { updateRemoteMediaLayout(found) }
-            return
-        }
-        lastRemoteMediaSignature = signature
-        remoteMediaViews.values.forEach { v ->
-            if (v is VideoView) v.stopPlayback()
-            if (v is WebView) v.destroy()
-            removeView(v)
-        }
-        remoteMediaViews.clear()
-
-        found.forEach { (name, _, url) ->
-            if (!isRemoteUrl(url)) return@forEach
-            val view: View = if (isVideoPageUrl(url)) {
-                WebView(context).apply {
-                    settings.javaScriptEnabled = true
-                    settings.domStorageEnabled = true
-                    settings.mediaPlaybackRequiresUserGesture = true
-                    webViewClient = WebViewClient()
-                    setBackgroundColor(Color.BLACK)
-                    loadUrl(videoEmbedUrl(url))
-                }
-            } else {
-                VideoView(context).apply {
-                    setBackgroundColor(Color.BLACK)
-                    val controller = MediaController(context)
-                    controller.setAnchorView(this)
-                    setMediaController(controller)
-                    setVideoURI(Uri.parse(url))
-                    setOnPreparedListener { it.isLooping = false }
-                    setOnErrorListener { _, _, _ -> visibility = View.GONE; true }
-                    setOnCompletionListener { visibility = View.VISIBLE }
-                    visibility = View.VISIBLE
-                    start()
-                }
-            }
-            remoteMediaViews[name] = view
-            addView(view, FrameLayout.LayoutParams(1, 1))
-        }
-        mainHandler.post { updateRemoteMediaLayout(found) }
-    }
-
-    private fun collectVideoUrlNodes(node: JSONObject, out: MutableList<Triple<String, JSONObject, String>>) {
-        val kind = node.optString("kind")
-        val attrs = node.optJSONObject("attrs") ?: JSONObject()
-        if (kind == Kind.VIDEO) {
-            val url = attrs.optString("video_url").trim()
-            if (url.isNotBlank()) out += Triple(node.optString("name"), node, url)
-        }
-        val children = node.optJSONArray("children") ?: return
-        for (i in 0 until children.length()) children.optJSONObject(i)?.let { collectVideoUrlNodes(it, out) }
-    }
-
-    private fun updateRemoteMediaLayout(found: List<Triple<String, JSONObject, String>>) {
-        val scale = density * zoom
-        found.forEach { (name, node, _) ->
-            val v = remoteMediaViews[name] ?: return@forEach
-            val x = (node.optDouble("x", 0.0) * scale).toInt()
-            val y = (node.optDouble("y", 0.0) * scale).toInt()
-            val w = max(1, (node.optDouble("w", 1.0) * scale).toInt())
-            val h = max(1, (node.optDouble("h", 1.0) * scale).toInt())
-            val lp = (v.layoutParams as? FrameLayout.LayoutParams) ?: FrameLayout.LayoutParams(w, h)
-            lp.width = w; lp.height = h; lp.leftMargin = x; lp.topMargin = y
-            v.layoutParams = lp
-            v.visibility = View.VISIBLE
-        }
-        remoteMediaViews.entries.removeIf { (name, _) -> found.none { it.first == name } }
-    }
-
-    /** Resolves `src=` to a real file: relative paths are relative to the current project's root
-     * (same root save/installation/file already use — [RinEngine.currentBaseDir]); absolute paths
-     * and `file://` URIs are used as-is. Null if nothing exists there. `http(s)://` URLs are not
-     * resolved here — see [loadBitmapForRect], which downloads them into [remoteImageCacheFile]
-     * first (mirrors resolveTypeface's `font_url=` -> requestRemoteFont handling above). */
-    private fun resolveImageFile(src: String): java.io.File? {
-        if (src.isBlank() || src.contains("://") && !src.startsWith("file://")) return null // http(s) etc. not fetched here
-        val stripped = src.removePrefix("file://")
-        val direct = java.io.File(stripped)
-        if (direct.isAbsolute) return if (direct.isFile) direct else null
-        val base = RinEngine.currentBaseDir()
-        if (base.isBlank()) return null
-        val relative = java.io.File(base, stripped)
-        return if (relative.isFile) relative else null
-    }
-
-    /** Disk-cache location for a downloaded remote image, keyed by URL hash — same cache dir
-     * naming convention as requestRemoteFont's `rin_fonts/` above, just for images/icons
-     * (fetchImage/fetchIcon's real-world counterpart: `<Image src="https://...">` preview). */
-    private fun remoteImageCacheFile(url: String): java.io.File {
-        val dir = java.io.File(context.cacheDir, "rin_images").apply { mkdirs() }
-        return java.io.File(dir, "img_${url.hashCode().toUInt().toString(16)}.bin")
-    }
-
-    /** Downloads [url] once into [remoteImageCacheFile], then invalidates so the next
-     * [loadBitmapForRect] call decodes it from disk — exact same shape as requestRemoteFont
-     * above (Thread + connectTimeout/readTimeout + mainHandler.post{invalidate()}), just for
-     * image bytes instead of a font file. Real network I/O never happens on the UI thread. */
-    private fun requestRemoteImage(url: String) {
-        if (!pendingImageUrls.add(url)) return
-        Thread {
-            try {
-                val target = remoteImageCacheFile(url)
-                if (!target.isFile) {
-                    val connection = java.net.URL(url).openConnection().apply {
-                        connectTimeout = 10000
-                        readTimeout = 15000
-                        useCaches = true
-                    }
-                    connection.getInputStream().use { input ->
-                        java.io.FileOutputStream(target).use { output -> input.copyTo(output) }
-                    }
-                }
-                mainHandler.post { invalidate() }
-            } catch (_: Throwable) {
-                // Leave the placeholder showing; a bad/unreachable URL shouldn't crash the preview.
-            } finally {
-                pendingImageUrls.remove(url)
-            }
-        }.start()
-    }
-
-    /** Decodes (and caches, downsampled to roughly [targetW]x[targetH] to keep memory sane) the
-     * bitmap for [src], or null if it can't be resolved/decoded — cached too, so a bad src isn't
-     * re-stat'd on every single frame while the preview is live. `http(s)://` sources are
-     * downloaded once into disk cache (see [requestRemoteImage]) and decoded from there; until
-     * that download lands this returns null so the placeholder shows, same as any unresolved src. */
-    private fun loadBitmapForRect(src: String, targetW: Int, targetH: Int): android.graphics.Bitmap? {
-        if (src.isBlank() || targetW <= 0 || targetH <= 0) return null
-        val cacheKey = "$src|$targetW|$targetH"
-        bitmapCache.get(cacheKey)?.let { return it }
-        if (cacheKey in missingSrc) return null
-
-        val file: java.io.File?
-        if (isRemoteUrl(src)) {
-            val cached = remoteImageCacheFile(src)
-            if (cached.isFile) {
-                file = cached
-            } else {
-                requestRemoteImage(src)
-                return null // still downloading (or first request just kicked off) — show placeholder for now
-            }
-        } else {
-            file = resolveImageFile(src)
-        }
-        if (file == null) { missingSrc.add(cacheKey); return null }
-        return try {
-            val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
-            android.graphics.BitmapFactory.decodeFile(file.absolutePath, bounds)
-            var sample = 1
-            while (bounds.outWidth / (sample * 2) >= targetW && bounds.outHeight / (sample * 2) >= targetH) sample *= 2
-            val opts = android.graphics.BitmapFactory.Options().apply { inSampleSize = sample }
-            val bmp = android.graphics.BitmapFactory.decodeFile(file.absolutePath, opts)
-            if (bmp != null) bitmapCache.put(cacheKey, bmp) else missingSrc.add(cacheKey)
-            bmp
-        } catch (t: Throwable) {
-            missingSrc.add(cacheKey)
-            null
-        }
-    }
-
-    /** Decodes (and caches) a representative frame near the start of the video at [src] as a real
-     * thumbnail — same "decode once, cache, remember failures" shape as [loadBitmapForRect] just
-     * above, only using MediaMetadataRetriever instead of BitmapFactory since the source is a
-     * video container, not a still image. Downsampled to roughly [targetW]x[targetH] for memory. */
-    private fun loadVideoThumbnail(src: String, targetW: Int, targetH: Int): android.graphics.Bitmap? {
-        if (src.isBlank() || targetW <= 0 || targetH <= 0) return null
-        val cacheKey = "$src|$targetW|$targetH"
-        videoThumbCache.get(cacheKey)?.let { return it }
-        if (cacheKey in missingVideoSrc) return null
-
-        val file = resolveImageFile(src)
-        if (file == null) { missingVideoSrc.add(cacheKey); return null }
-        val retriever = android.media.MediaMetadataRetriever()
-        return try {
-            retriever.setDataSource(file.absolutePath)
-            val frame = retriever.getFrameAtTime(0L, android.media.MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
-            if (frame == null) {
-                missingVideoSrc.add(cacheKey)
-                null
-            } else {
-                val scale = min(1f, max(targetW.toFloat() / frame.width, targetH.toFloat() / frame.height))
-                val bmp = if (scale < 1f) {
-                    android.graphics.Bitmap.createScaledBitmap(
-                        frame, max(1, (frame.width * scale).toInt()), max(1, (frame.height * scale).toInt()), true
-                    ).also { if (it !== frame) frame.recycle() }
-                } else frame
-                videoThumbCache.put(cacheKey, bmp)
-                bmp
-            }
-        } catch (t: Throwable) {
-            missingVideoSrc.add(cacheKey)
-            null
-        } finally {
-            try { retriever.release() } catch (t: Throwable) { /* best-effort cleanup */ }
-        }
-    }
-
-    /** Real `<Video src="...">`: draws an actual decoded frame from the file — the same
-     * cover-crop + rounded-corner treatment [drawImage] gives a still image — with a dark scrim
-     * and a centered play glyph on top so it still reads as "video", not a photo. Falls back to
-     * [drawMediaPlaceholder]'s plain glyph+label box when src is blank/unresolvable/undecodable,
-     * same relationship [drawImage] already has to [drawImagePlaceholder]. */
-    private fun drawVideoPreview(canvas: Canvas, rect: RectF, attrs: JSONObject) {
-        if (rect.width() <= 0f || rect.height() <= 0f) return
-        val src = mediaSource(attrs)
-        val thumb = if (src.isNotBlank()) loadVideoThumbnail(src, rect.width().toInt(), rect.height().toInt()) else null
-        if (thumb == null) { drawMediaPlaceholder(canvas, rect, attrs, "▶", src); return }
-
-        val radius = attrs.optString("radius").toFloatOrNull() ?: 8f
-        canvas.save()
-        val clip = android.graphics.Path().apply { addRoundRect(rect, radius, radius, android.graphics.Path.Direction.CW) }
-        canvas.clipPath(clip)
-        val bw = thumb.width.toFloat()
-        val bh = thumb.height.toFloat()
-        val scale = max(rect.width() / bw, rect.height() / bh)
-        val dw = bw * scale
-        val dh = bh * scale
-        val dstLeft = rect.left + (rect.width() - dw) / 2f
-        val dstTop = rect.top + (rect.height() - dh) / 2f
-        canvas.drawBitmap(thumb, null, RectF(dstLeft, dstTop, dstLeft + dw, dstTop + dh), bitmapPaint)
-
-        // dark scrim so the play glyph reads clearly over any frame content, bright or dark
-        fillPaint.shader = null; fillPaint.clearShadowLayer()
-        fillPaint.color = Color.argb(70, 0, 0, 0)
-        canvas.drawRect(rect, fillPaint)
-        canvas.restore()
-
-        // centered play button: translucent white circle + glyph
-        val knobRadius = min(rect.width(), rect.height()) * 0.16f
-        if (knobRadius > 2f) {
-            fillPaint.color = Color.argb(210, 255, 255, 255)
-            canvas.drawCircle(rect.centerX(), rect.centerY(), knobRadius, fillPaint)
-            textPaint.color = Color.rgb(30, 31, 40)
-            textPaint.textSize = knobRadius * 1.1f
-            textPaint.isFakeBoldText = false
-            val glyph = "▶"
-            val gw = textPaint.measureText(glyph)
-            canvas.drawText(glyph, rect.centerX() - gw / 2f + knobRadius * 0.08f,
-                rect.centerY() - (textPaint.descent() + textPaint.ascent()) / 2f, textPaint)
-        }
-
-        if (src.isNotBlank()) {
-            drawText(canvas, RectF(rect.left + 6f, rect.bottom - 18f, rect.right - 6f, rect.bottom - 2f),
-                attrs, src, Color.argb(220, 255, 255, 255), singleLine = true)
-        }
-    }
-
-    /** Real `<Image src="...">`: draws the actual decoded bitmap, cropped/rounded to the box the
-     * native layout already computed. `fit="contain"` letterboxes instead of the default
-     * cover-and-crop. Falls back to [drawImagePlaceholder] when src is blank/unresolvable. */
-    private fun drawImage(canvas: Canvas, rect: RectF, attrs: JSONObject) {
-        if (rect.width() <= 0f || rect.height() <= 0f) return
-        val src = attrs.optString("src")
-        val bmp = loadBitmapForRect(src, rect.width().toInt(), rect.height().toInt())
-        if (bmp == null) { drawImagePlaceholder(canvas, rect, attrs); return }
-
-        val radius = attrs.optString("radius").toFloatOrNull() ?: 8f
-        canvas.save()
-        val clip = android.graphics.Path().apply { addRoundRect(rect, radius, radius, android.graphics.Path.Direction.CW) }
-        canvas.clipPath(clip)
-
-        val bw = bmp.width.toFloat()
-        val bh = bmp.height.toFloat()
-        val scale = if (attrs.optString("fit") == "contain") min(rect.width() / bw, rect.height() / bh)
-        else max(rect.width() / bw, rect.height() / bh)
-        val dw = bw * scale
-        val dh = bh * scale
-        val dstLeft = rect.left + (rect.width() - dw) / 2f
-        val dstTop = rect.top + (rect.height() - dh) / 2f
-        canvas.drawBitmap(bmp, null, RectF(dstLeft, dstTop, dstLeft + dw, dstTop + dh), bitmapPaint)
-        canvas.restore()
-    }
-
-    private fun drawImagePlaceholder(canvas: Canvas, rect: RectF, attrs: JSONObject) {
-        if (rect.width() <= 0f || rect.height() <= 0f) return
-        fillPaint.shader = null
-        fillPaint.clearShadowLayer()
-        fillPaint.color = defaultImage
-        val radius = 8f
-        canvas.drawRoundRect(rect, radius, radius, fillPaint)
-
-        // simple "picture" glyph (mountain + dot) so an <Image> reads as an image, not a blank card
-        strokePaint.color = Color.argb(160, 255, 255, 255)
-        val pad = min(rect.width(), rect.height()) * 0.22f
-        val glyph = RectF(rect.left + pad, rect.top + pad, rect.right - pad, rect.bottom - pad)
-        if (glyph.width() > 2f && glyph.height() > 2f) {
-            canvas.drawCircle(glyph.left + glyph.width() * 0.22f, glyph.top + glyph.height() * 0.28f, glyph.width() * 0.09f, strokePaint)
-            val path = android.graphics.Path()
-            path.moveTo(glyph.left, glyph.bottom)
-            path.lineTo(glyph.left + glyph.width() * 0.38f, glyph.top + glyph.height() * 0.4f)
-            path.lineTo(glyph.left + glyph.width() * 0.62f, glyph.bottom - glyph.height() * 0.2f)
-            path.lineTo(glyph.left + glyph.width() * 0.8f, glyph.top + glyph.height() * 0.55f)
-            path.lineTo(glyph.right, glyph.bottom)
-            canvas.drawPath(path, strokePaint)
-        }
-
-        val label = attrs.optString("src").ifBlank { null }
-        if (label != null) drawText(canvas, RectF(rect.left, rect.bottom - 16f, rect.right, rect.bottom), attrs, label, Color.argb(210, 255, 255, 255), singleLine = true)
-    }
-
-    private fun drawGrid(canvas: Canvas) {
-        val step = 8f // 8dp baseline grid, standard mobile design unit
-        var gx = 0f
-        while (gx <= rootWidthPx) { canvas.drawLine(gx, 0f, gx, rootHeightPx.toFloat(), gridPaint); gx += step }
-        var gy = 0f
-        while (gy <= rootHeightPx) { canvas.drawLine(0f, gy, rootWidthPx.toFloat(), gy, gridPaint); gy += step }
-    }
-
-    private fun drawSafeArea(canvas: Canvas) {
-        val margin = 16f
-        canvas.drawRect(margin, margin, rootWidthPx - margin, rootHeightPx - margin, safeAreaPaint)
-    }
-
-    private fun drawInspectHighlight(canvas: Canvas, node: JSONObject) {
-        val x = node.optDouble("x", 0.0).toFloat()
-        val y = node.optDouble("y", 0.0).toFloat()
-        val w = node.optDouble("w", 0.0).toFloat()
-        val h = node.optDouble("h", 0.0).toFloat()
-        if (w <= 0f || h <= 0f) return
-        canvas.drawRect(x, y, x + w, y + h, inspectHighlightPaint)
-    }
-
-    // ---- hit test (client-side; independent of the native tap-dispatch used for onTap handlers) ----
-
-    private fun hitTest(node: JSONObject, x: Float, y: Float): JSONObject? {
-        val nx = node.optDouble("x", 0.0).toFloat()
-        val ny = node.optDouble("y", 0.0).toFloat()
-        val nw = node.optDouble("w", 0.0).toFloat()
-        val nh = node.optDouble("h", 0.0).toFloat()
-        if (x < nx || y < ny || x > nx + nw || y > ny + nh) return null
-
-        val children = node.optJSONArray("children")
-        if (children != null) {
-            for (i in children.length() - 1 downTo 0) {
-                val child = children.optJSONObject(i) ?: continue
-                val hit = hitTest(child, x, y)
-                if (hit != null) return hit
-            }
-        }
-        return node
-    }
-
-    private fun parseHexColor(hex: String?, fallback: Int): Int {
-        if (hex.isNullOrBlank() || hex.length < 7 || hex[0] != '#') return fallback
-        return try { Color.parseColor(hex) } catch (t: Throwable) { fallback }
-    }
-
-    /**
-     * Reads the native engine's already-resolved paint color for [node] — the
-     * `"resolvedColor"` field `loom::fabricToJson` now emits from `loom::resolveColor()` (see
-     * rin_loom_paint.h), i.e. `tone=`, a semantic `color="primary"`-style role name, and the
-     * active `@theme=` already baked in exactly as the real Dye rasterizer would paint it.
-     *
-     * [parseHexColor] above can only ever understand a literal `color="#RRGGBB"` written
-     * straight into the .rin source, so before this every one of those three cases was
-     * completely invisible to this view and it silently fell back to its own hardcoded
-     * per-kind palette instead — the preview not matching the code's actual colors. Null only
-     * for a cached/old session JSON that predates this field, in which case callers fall back
-     * to that same hardcoded default as before.
-     */
-    private fun resolvedColor(node: JSONObject): Int? {
-        val hex = node.optString("resolvedColor")
-        if (hex.length != 7 || hex[0] != '#') return null
-        return try { Color.parseColor(hex) } catch (t: Throwable) { null }
-    }
-}
+        fillPaint.color = if (on)
