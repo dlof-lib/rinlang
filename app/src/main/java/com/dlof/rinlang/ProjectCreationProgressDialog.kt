@@ -158,6 +158,12 @@ class ProjectCreationProgressDialog(activity: Activity) {
                 } catch (e: IllegalArgumentException) {
                     dismiss()
                     onDone(null, e.message)
+                } catch (e: Exception) {
+                    // أي خطأ آخر غير متوقع (مساحة تخزين ممتلئة، فشل كتابة ملف، إلخ) كان
+                    // يهرب من هنا فيتسبب بإغلاق التطبيق بالكامل بدل عرض رسالة. الآن يُعامَل
+                    // كفشل عادي في الإنشاء بدل كروت (Crash).
+                    dismiss()
+                    onDone(null, e.message ?: e.javaClass.simpleName)
                 }
             }, PREPARING_STAGE_DELAY_MS)
         }, LOADING_STAGE_DELAY_MS)
