@@ -527,6 +527,33 @@ StmtPtr Parser::statement() {
     if (match({TokenType::RETURN})) return returnStatement();
     if (match({TokenType::BREAK})) return breakStatement();
     if (match({TokenType::CONTINUE})) return continueStatement();
+    if (check(TokenType::IDENT) && peek().lexeme == "try" && checkNext(TokenType::LBRACE)) {
+        advance();
+        auto st = std::make_shared<TryCatchStmt>();
+        consume(TokenType::LBRACE, "Expected '{' after 'try'");
+        st->tryBranch = block();
+        if (!(check(TokenType::IDENT) && peek().lexeme == "catch"))
+            throw errRich(diag::Code::E0012_MissingToken, peek(), "expected 'catch' after 'try' block",
+                          "a try block must be followed by a catch block",
+                          "write `try { ... } catch (error) { ... }`");
+        advance();
+        if (match({TokenType::LPAREN})) {
+            st->catchName = consume(TokenType::IDENT, "Expected catch variable name").lexeme;
+            consume(TokenType::RPAREN, "Expected ')' after catch variable");
+        }
+        consume(TokenType::LBRACE, "Expected '{' before catch body");
+        st->catchBranch = block();
+        st->line = previous().line;
+        return st;
+    }
+    if (check(TokenType::IDENT) && peek().lexeme == "throw") {
+        Token t = advance();
+        auto st = std::make_shared<ThrowStmt>();
+        st->value = expression();
+        consume(TokenType::SEMICOLON, "Expected ';' after throw value");
+        st->line = t.line;
+        return st;
+    }
     if (match({TokenType::RINOPEN})) return rinopenStatement();
     if (check(TokenType::DOT) && checkNext(TokenType::IDENT) && current + 2 < tokens.size() && tokens[current + 1].lexeme == "object") return objectFieldStatement();
     if (check(TokenType::LBRACE)) { advance(); return block(); }
@@ -1954,6 +1981,15 @@ ExprPtr Parser::expression() { return assignment(); }
 
 ExprPtr Parser::assignment() {
     auto expr = pipeline();
+    if (match({TokenType::QUESTION})) {
+        Token q = previous();
+        auto whenTrue = expression();
+        consume(TokenType::COLON, "Expected ':' in conditional expression");
+        auto whenFalse = assignment();
+        auto c = std::make_shared<ConditionalExpr>();
+        c->condition = expr; c->whenTrue = whenTrue; c->whenFalse = whenFalse; c->line = q.line;
+        expr = c;
+    }
     if (match({TokenType::EQUAL})) {
         Token eq = previous();
         auto value = assignment();
