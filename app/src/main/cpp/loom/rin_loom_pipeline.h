@@ -55,7 +55,7 @@ struct PipelineResult {
 // functions -- exactly like running the same source as a normal Rin program, before Loom ever
 // looks at it. Loom's only job afterwards is to read back the *result* of that real execution
 // (via exportGlobals()) to seed each `warp` cell with its true post-execution value, and to build
-// the Fabric from the first top-level `@view...=name` root. This replaces the old
+// the Fabric from the first top-level `@view...=name` or `@loop...=name` root. This replaces the old
 // "evalAttrExpr(initializer) per warp, ignore everything else at top level" shortcut, which never
 // actually ran the program -- only its `warp` initializers, in isolation, with no real if/while/
 // for/function semantics behind them.
@@ -167,7 +167,7 @@ inline PipelineResult runColdPipelineWithRuntime(const std::string& source, rin:
                 if (auto v = std::dynamic_pointer_cast<rin::ViewStmt>(stmt)) { if (v->role != rin::UiRole::ELEMENT) { root = v; break; } }
             }
         }
-        if (!root) throw rin::RinError("no top-level '@view...=name' root found", 1);
+        if (!root) throw rin::RinError("no top-level '@view/@loop...=name' root found", 1);
 
         attachContainerUiBindings(program, program);
         sanitizeElements(root);
@@ -308,7 +308,7 @@ inline PipelineResult runColdPipelineForContainerWithRuntime(const std::string& 
                 if (auto v = std::dynamic_pointer_cast<rin::ViewStmt>(stmt)) { if (v->role != rin::UiRole::ELEMENT) { root = v; break; } }
             }
         }
-        if (!root) throw rin::RinError("no '@view...=name' root found inside container '" + containerName + "'", 1);
+        if (!root) throw rin::RinError("no '@view...=name' or '@loop...=name' root found inside container '" + containerName + "'", 1);
 
         attachContainerUiBindings(*body, program);
         sanitizeElements(root);
