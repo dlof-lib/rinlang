@@ -17,6 +17,7 @@
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
     <application
+        android:name=".RinApplication"
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher_round"
@@ -35,6 +36,16 @@
                 android:name="autoStoreLocales"
                 android:value="true" />
         </service>
+
+        <!-- نشاط شفاف مهمته الوحيدة عرض حوار لوج الكراش/الخطأ (انظر CrashHandler وErrorReporter).
+             android:process منفصل غير مستخدم عمداً: نريده يعمل داخل نفس عملية التطبيق نفسها
+             حتى لو كانت متأزّمة، فهذا هو المكان الوحيد المتاح لعرض واجهة عند كراش قاتل. -->
+        <activity
+            android:name=".CrashReportActivity"
+            android:exported="false"
+            android:launchMode="singleInstance"
+            android:excludeFromRecents="true"
+            android:theme="@style/Theme.RinLang.Transparent" />
 
         <activity
             android:name=".SplashActivity"
