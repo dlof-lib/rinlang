@@ -68,6 +68,31 @@ RIN_API char* rin_loom_session_update_source(void* session, const char* newSourc
 // Releases a session created by rin_loom_session_create.
 RIN_API void rin_loom_session_free(void* session);
 
+// ---------------------------------------------------------------------
+// Native raster access (Desktop client — see tools/rin_loom_desktop.cpp): unlike
+// rin_loom_session_render_json's "paint" array (a DrawCommand list a *host* renderer walks and
+// draws itself, e.g. LoomFabricView.kt's Canvas), these two return/consume the actual flat pixel
+// buffer produced by the engine's own rasterizer (rin_loom_paint.h's rasterizeToBuffer/writePNG —
+// the ONE rasterizer in the engine; nothing here re-implements paint logic). This is what lets a
+// dependency-free desktop window (Xlib, no Skia/Cairo/GL) blit a genuinely-rendered frame with
+// XPutImage, and what lets the same tool dump a headless screenshot with no display at all.
+
+// Rasterizes the session's current Fabric+Overlay (same paintWithOverlay() pass
+// rin_loom_session_render_json uses) into a malloc'd RGB888 buffer (row-major, top-to-bottom,
+// 3 bytes/pixel). *outW receives rootWidth; *outH receives the Fabric's measured content height.
+// Returns nullptr (and 0/0 in outW/outH) if the session has no valid Fabric. Free the result with
+// rin_loom_free_buffer().
+RIN_API unsigned char* rin_loom_session_render_rgb(void* session, int* outW, int* outH);
+
+// Releases a buffer returned by rin_loom_session_render_rgb.
+RIN_API void rin_loom_free_buffer(unsigned char* buf);
+
+// Rasterizes the session's current Fabric+Overlay and writes it straight to a real PNG file at
+// `path` (spec-valid PNG, same encoder as the Container-export path) — a headless equivalent of
+// the Desktop client's window, for CI/screenshot use with no X server involved. Returns 1 on
+// success, 0 on failure (no Fabric, or the file could not be written).
+RIN_API int rin_loom_session_export_png(void* session, const char* path);
+
 #ifdef __cplusplus
 }
 #endif
