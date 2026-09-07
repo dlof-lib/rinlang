@@ -260,6 +260,44 @@ RIN_API void rin_loom_session_free(void* sessionPtr) {
     delete static_cast<LoomSession*>(sessionPtr);
 }
 
+RIN_API unsigned char* rin_loom_session_render_rgb(void* sessionPtr, int* outW, int* outH) {
+    if (outW) *outW = 0;
+    if (outH) *outH = 0;
+    auto* sess = static_cast<LoomSession*>(sessionPtr);
+    if (!sess || !sess->state.ok || !sess->state.fabric) return nullptr;
+
+    loom::Dye dye;
+    auto draw = dye.paintWithOverlay(sess->state.fabric, sess->overlayLayer);
+    int W = sess->rootWidth;
+    int H = (int)std::ceil(sess->state.fabric->geometry.h);
+    if (H <= 0) H = sess->viewportHeight; // degenerate/empty Fabric: fall back to a sane canvas
+    auto buf = loom::rasterizeToBuffer(draw, W, H); // the ONE rasterizer -- see header comment
+
+    unsigned char* out = static_cast<unsigned char*>(std::malloc(buf.size()));
+    if (!out) return nullptr;
+    std::memcpy(out, buf.data(), buf.size());
+    if (outW) *outW = W;
+    if (outH) *outH = H;
+    return out;
+}
+
+RIN_API void rin_loom_free_buffer(unsigned char* buf) {
+    std::free(buf);
+}
+
+RIN_API int rin_loom_session_export_png(void* sessionPtr, const char* path) {
+    auto* sess = static_cast<LoomSession*>(sessionPtr);
+    if (!sess || !sess->state.ok || !sess->state.fabric || !path) return 0;
+
+    loom::Dye dye;
+    auto draw = dye.paintWithOverlay(sess->state.fabric, sess->overlayLayer);
+    int W = sess->rootWidth;
+    int H = (int)std::ceil(sess->state.fabric->geometry.h);
+    if (H <= 0) H = sess->viewportHeight;
+    auto buf = loom::rasterizeToBuffer(draw, W, H);
+    return loom::writePNG(path, W, H, buf) ? 1 : 0;
+}
+
 RIN_API void rin_loom_session_set_viewport(void* sessionPtr, int viewportHeight) {
     auto* sess = static_cast<LoomSession*>(sessionPtr);
     if (!sess) return;
