@@ -243,7 +243,11 @@ class ProjectsActivity : AppCompatActivity() {
         addColorControl(rowUiTextColor, textColor) { textColor = it; updateUiPreview() }
         addColorControl(rowUiBackground, backgroundColor) { backgroundColor = it; updateUiPreview() }
 
-        val previewListeners = listOf<View>(switchUiTopBar, switchUiSidebar, switchUiBottomNav, radioUiFilled, radioUiSoft, radioUiOutline, spinnerUiFont, spinnerUiTypography, spinnerUiRadius)
+        // Spinner (وأي AdapterView) لا يدعم setOnClickListener إطلاقاً — يرمي RuntimeException
+        // فوراً عند أول محاولة استخدامه ("Don't call setOnClickListener for an AdapterView").
+        // اختيار عنصر من Spinner أصلاً يُعاد بثه عبر setOnItemSelectedListener بالأسفل، فلا
+        // حاجة لإضافته هنا أساساً.
+        val previewListeners = listOf<View>(switchUiTopBar, switchUiSidebar, switchUiBottomNav, radioUiFilled, radioUiSoft, radioUiOutline)
         previewListeners.forEach { it.setOnClickListener { updateUiPreview() } }
         spinnerUiFont.setOnItemSelectedListener(object : android.widget.AdapterView.OnItemSelectedListener { override fun onNothingSelected(parent: android.widget.AdapterView<*>?) {} override fun onItemSelected(parent: android.widget.AdapterView<*>?, v: View?, position: Int, id: Long) { updateUiPreview() } })
         spinnerUiTypography.setOnItemSelectedListener(spinnerUiFont.onItemSelectedListener)
