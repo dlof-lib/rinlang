@@ -150,6 +150,21 @@ bool valuesEqual(const Value& a, const Value& b) {
             }
             return true;
         }
+        case Value::Type::INSTANCE: {
+            // class (reference semantics): مساواة فقط لنفس الكائن بالذات (نفس المؤشّر).
+            // struct (value semantics): مساواة تركيبية (نفس الصنف + كل الحقول متساوية)، تماماً
+            // كـ ARRAY/MAP أعلاه — الأنسب لنوع القيمة الذي يُفترَض أن ينسخه المبرمج بحرّية.
+            if (a.instance == b.instance) return true;
+            if (!a.instance || !b.instance) return false;
+            if (!a.instance->isStruct || !b.instance->isStruct) return false;
+            if (a.instance->className != b.instance->className) return false;
+            if (a.instance->fields.size() != b.instance->fields.size()) return false;
+            for (auto& kv : a.instance->fields) {
+                auto it = b.instance->fields.find(kv.first);
+                if (it == b.instance->fields.end() || !valuesEqual(kv.second, it->second)) return false;
+            }
+            return true;
+        }
     }
     return false;
 }
@@ -163,6 +178,7 @@ std::string Value::typeName() const {
         case Type::FUNCTION: return "function";
         case Type::ARRAY: return "array";
         case Type::MAP: return "map";
+        case Type::INSTANCE: return instance ? instance->className : "instance";
     }
     return "nil";
 }
@@ -193,6 +209,17 @@ std::string Value::toDisplayString() const {
             return ss.str();
         }
         case Type::MAP: {
+            // OOP: قيمة enum case (انظر execute(EnumStmt) في rin_interpreter.cpp) لها شكل ثابت
+            // {__enum__, name, value} بهذا الترتيب بالضبط -- نعرضها بصيغة "EnumName.CaseName"
+            // المألوفة بدل تفريغ الـ map الخام، بلا أي تغيير على أي map عادية أخرى في اللغة.
+            if (map->size() == 3 &&
+                (*map)[0].first.type == Type::STRING && (*map)[0].first.str == "__enum__" &&
+                (*map)[0].second.type == Type::STRING &&
+                (*map)[1].first.type == Type::STRING && (*map)[1].first.str == "name" &&
+                (*map)[1].second.type == Type::STRING &&
+                (*map)[2].first.type == Type::STRING && (*map)[2].first.str == "value") {
+                return (*map)[0].second.str + "." + (*map)[1].second.str;
+            }
             std::ostringstream ss;
             ss << "{";
             for (size_t i = 0; i < map->size(); i++) {
@@ -200,6 +227,21 @@ std::string Value::toDisplayString() const {
                 ss << reprValue((*map)[i].first) << ": " << reprValue((*map)[i].second);
             }
             ss << "}";
+            return ss.str();
+        }
+        case Type::INSTANCE: {
+            if (!instance) return "nil";
+            std::ostringstream ss;
+            ss << instance->className << " { ";
+            bool first = true;
+            for (auto& name : instance->fieldOrder) {
+                auto it = instance->fields.find(name);
+                if (it == instance->fields.end()) continue;
+                if (!first) ss << ", ";
+                first = false;
+                ss << name << ": " << reprValue(it->second);
+            }
+            ss << " }";
             return ss.str();
         }
     }
@@ -4319,6 +4361,7 @@ bool Interpreter::callTopLevelFunction(const std::vector<StmtPtr>& program,
             v.function = callable;
             globals->define(fn->name, v);
         }
+        if (auto cls = std::dynamic_pointer_cast<ClassStmt>(s)) registerClassStmt(cls);
     }
     // Seed every known Warp cell as a plain global, so a zero-arg handler that mutates a
     // same-named global directly (rather than via a parameter) also works.
@@ -4383,10 +4426,12 @@ std::string Interpreter::run(const std::vector<StmtPtr>& statements) {
             v.function = callable;
             globals->define(fn->name, v);
         }
+        if (auto cls = std::dynamic_pointer_cast<ClassStmt>(s)) registerClassStmt(cls);
     }
     try {
         for (const auto& s : statements) {
             if (std::dynamic_pointer_cast<FunctionStmt>(s)) continue; // already hoisted
+            if (std::dynamic_pointer_cast<ClassStmt>(s)) continue; // already hoisted (registerClassStmt above)
             // البث الحي (streamSink_): نلتقط موضع الكتابة *قبل* تنفيذ هذا الـ statement العلوي
             // و*بعده*، ونمرّر الفرق فقط -- تمامًا ما أضافه هذا الـ statement بالذات، لا أكثر ولا
             // أقل. هذا يمنح دقة "لكل statement علوي" حقيقية بلا أي تعديل على الـ 40+ موضع طباعة
@@ -4672,8 +4717,31 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
     }
     if (auto s = std::dynamic_pointer_cast<LetStmt>(stmt)) {
         Value v = Value::nil();
-        if (s->initializer) v = evaluate(s->initializer, env);
+        if (s->initializer) v = copyForBinding(evaluate(s->initializer, env));
         env->define(s->name, v);
+        return;
+    }
+    // OOP: class/struct declaration -> تسجيل/استبدال تعريفها في classes (انظر registerClassStmt).
+    // نفس الفلسفة تماماً كـ FunctionStmt أدناه: يُسجَّل أيضاً عبر hoisting في run()/
+    // callTopLevelFunction لأجل استخدام على مستوى أعلى/وراثة أمامية (forward reference)، وهنا مرة
+    // أخرى لأجل تعريفات محلية داخل دالة/كتلة (لا تُحصَد hoisting، بنفس سلوك 'fun' محلية تماماً).
+    if (auto s = std::dynamic_pointer_cast<ClassStmt>(stmt)) {
+        registerClassStmt(s);
+        return;
+    }
+    // OOP: enum declaration -> يُعرَّف كمتغيّر عادي من نوع map يضم كل الحالات (انظر تعليق EnumStmt
+    // في rin_ast.h)؛ لا حاجة لأي سجل داخلي جديد، فقط map عادية يصل إليها GetExpr كأي map أخرى.
+    if (auto s = std::dynamic_pointer_cast<EnumStmt>(stmt)) {
+        auto m = std::make_shared<MapData>();
+        for (auto& c : s->cases) {
+            Value raw = c.value ? evaluate(c.value, env) : Value::nil();
+            auto caseMap = std::make_shared<MapData>();
+            caseMap->push_back({Value::string("__enum__"), Value::string(s->name)});
+            caseMap->push_back({Value::string("name"), Value::string(c.name)});
+            caseMap->push_back({Value::string("value"), raw});
+            m->push_back({Value::string(c.name), Value::makeMap(caseMap)});
+        }
+        env->define(s->name, Value::makeMap(m));
         return;
     }
     // reckon name(collection) [where cond] |> fn() ...;  --  see docs/RECKON.md and ReckonStmt in
@@ -5753,6 +5821,117 @@ std::string Interpreter::containerKeyForEnv(Environment* startEnv) const {
     return "";
 }
 
+// ---- OOP: class/struct/enum runtime ----
+
+void Interpreter::registerClassStmt(const std::shared_ptr<ClassStmt>& s) {
+    ClassDef def;
+    def.name = s->name;
+    def.superclass = s->superclass;
+    def.isStruct = s->isStruct;
+    def.line = s->line;
+    for (auto& f : s->fields) def.fieldDefs.push_back({f.name, f.initializer});
+    for (auto& m : s->methods) def.methods[m->name] = m;
+    classes[s->name] = std::move(def);
+}
+
+std::shared_ptr<FunctionStmt> Interpreter::findMethod(const std::string& className, const std::string& methodName) const {
+    std::string cur = className;
+    std::unordered_set<std::string> seen;
+    while (!cur.empty()) {
+        auto it = classes.find(cur);
+        if (it == classes.end()) break;
+        if (!seen.insert(cur).second) break; // وراثة دائرية: توقّف بلا خطأ هنا (يُكتشف صراحة في instantiateClass)
+        auto mIt = it->second.methods.find(methodName);
+        if (mIt != it->second.methods.end()) return mIt->second;
+        cur = it->second.superclass;
+    }
+    return nullptr;
+}
+
+Value Interpreter::bindMethod(const Value& receiver, const std::shared_ptr<FunctionStmt>& method) {
+    auto callable = std::make_shared<Callable>();
+    callable->declaration = method;
+    auto closureEnv = std::make_shared<Environment>(globals);
+    closureEnv->define("self", receiver);
+    callable->closure = closureEnv;
+    Value v;
+    v.type = Value::Type::FUNCTION;
+    v.function = callable;
+    return v;
+}
+
+Value Interpreter::copyForBinding(const Value& v) const {
+    if (v.type == Value::Type::INSTANCE && v.instance && v.instance->isStruct) {
+        auto copy = std::make_shared<InstanceData>();
+        copy->className = v.instance->className;
+        copy->isStruct = true;
+        copy->fieldOrder = v.instance->fieldOrder;
+        for (auto& kv : v.instance->fields) {
+            copy->fields[kv.first] = copyForBinding(kv.second); // استنساخ متكرر لأي حقل struct متداخل
+        }
+        return Value::makeInstance(copy);
+    }
+    return v;
+}
+
+Value Interpreter::instantiateClass(const std::string& className, std::vector<Value>& args, int line) {
+    // يبني سلسلة الوراثة من الجذر (الأب الأبعد) إلى الصنف نفسه، فيكتشف أي وراثة دائرية أو صنفاً
+    // أباً غير معرَّف بخطأ واضح بدل الدخول في حلقة لا نهائية أو تجاهل صامت.
+    std::vector<const ClassDef*> chain;
+    std::string cur = className;
+    std::unordered_set<std::string> seen;
+    bool first = true;
+    while (!cur.empty()) {
+        auto cIt = classes.find(cur);
+        if (cIt == classes.end()) {
+            if (first) throw unknownFunctionErr(className, line); // لا يجب أن يحدث؛ المستدعي يتحقق مسبقاً
+            throw errWithReason(diag::Code::E0001_UndefinedVariable, line,
+                                 "class `" + className + "` extends unknown class `" + cur + "`",
+                                 "no class or struct named `" + cur + "` is defined");
+        }
+        if (!seen.insert(cur).second) {
+            throw errWithReason(diag::Code::E0035_RuntimeError, line,
+                                 "circular inheritance detected for class `" + className + "`",
+                                 "class `" + cur + "` ends up inheriting from itself, directly or indirectly");
+        }
+        chain.push_back(&cIt->second);
+        cur = cIt->second.superclass;
+        first = false;
+    }
+    std::reverse(chain.begin(), chain.end()); // الجذر أولاً، الصنف المطلوب أخيراً
+
+    auto inst = std::make_shared<InstanceData>();
+    inst->className = className;
+    inst->isStruct = chain.back()->isStruct;
+    Value instVal = Value::makeInstance(inst);
+
+    // بيئة تقييم قيم الحقول الافتراضية: تسمح لأي تعبير تهيئة حقل بقراءة حقول أخرى عُرِّفت قبله
+    // (عبر self) — بترتيب من الأب إلى الابن، فيطغى تعريف الابن على الأب عند تكرار نفس الاسم.
+    auto fieldEnv = std::make_shared<Environment>(globals);
+    fieldEnv->define("self", instVal);
+    for (auto* def : chain) {
+        for (auto& fd : def->fieldDefs) {
+            Value fv = fd.second ? copyForBinding(evaluate(fd.second, fieldEnv)) : Value::nil();
+            if (!inst->fields.count(fd.first)) inst->fieldOrder.push_back(fd.first);
+            inst->fields[fd.first] = fv;
+        }
+    }
+
+    auto initMethod = findMethod(className, "init");
+    if (initMethod) {
+        Value bound = bindMethod(instVal, initMethod);
+        callFunction(bound.function, args, line);
+    } else if (!args.empty()) {
+        auto d = diagErr(diag::Code::E0007_InvalidArguments, line,
+                          "`" + className + "` has no constructor accepting arguments");
+        d.diagnostic->expected = "0 argument(s)";
+        d.diagnostic->found = std::to_string(args.size()) + " argument(s)";
+        d.diagnostic->withReason("`" + className + "` does not define an `init` method, so it can only be created with no arguments");
+        throw d;
+    }
+    return instVal;
+}
+
 Value Interpreter::callFunction(const std::shared_ptr<Callable>& fn, std::vector<Value>& args, int line) {
     if (args.size() != fn->declaration->params.size()) {
         auto d = diagErr(diag::Code::E0007_InvalidArguments, line,
@@ -5782,7 +5961,9 @@ Value Interpreter::callFunction(const std::shared_ptr<Callable>& fn, std::vector
 
     auto callEnv = std::make_shared<Environment>(fn->closure);
     for (size_t i = 0; i < args.size(); i++) {
-        callEnv->define(fn->declaration->params[i], args[i]);
+        // struct بدلالة قيمة: كل استدعاء دالة/method يستقبل نسخته الخاصة من أي وسيط struct (انظر
+        // copyForBinding) — بلا أي تغيير على class/array/map/الأنواع البدائية (تبقى مرجعية كالمعتاد).
+        callEnv->define(fn->declaration->params[i], copyForBinding(args[i]));
     }
     try {
         executeBlock(fn->declaration->body->statements, callEnv);
@@ -5838,6 +6019,13 @@ Value Interpreter::invokeCallee(const std::string& callee, std::vector<Value>& a
     auto nativeIt = natives.find(callee);
     if (nativeIt != natives.end()) {
         return nativeIt->second(args, line);
+    }
+
+    // OOP: ClassName(args...) -> إنشاء كائن جديد (instantiateClass)، بنفس صياغة نداء دالة عادية
+    // تماماً (call() في الـ parser لا يفرّق بين اسم دالة واسم صنف، كلاهما مجرد IDENT قبل '(').
+    auto classIt = classes.find(callee);
+    if (classIt != classes.end()) {
+        return instantiateClass(callee, args, line);
     }
 
     Value calleeVal;
@@ -5982,8 +6170,9 @@ Value Interpreter::evaluate(const ExprPtr& expr, EnvPtr env) {
         if (!owner) {
             throw undefinedVariableErr(e->name, e->line, env);
         }
-        assignStateAware(owner, e->name, v, e->line);
-        return v;
+        Value stored = copyForBinding(v);
+        assignStateAware(owner, e->name, stored, e->line);
+        return stored;
     }
     if (auto e = std::dynamic_pointer_cast<ConditionalExpr>(expr)) {
         if (evaluate(e->condition, env).isTruthy()) return evaluate(e->whenTrue, env);
@@ -6154,6 +6343,82 @@ Value Interpreter::evaluate(const ExprPtr& expr, EnvPtr env) {
             return val;
         }
         throw diagErr(diag::Code::E0004_InvalidType, e->line, "cannot assign into a value of type `" + obj.typeName() + "` via `[]`");
+    }
+    // OOP: object.name -> قراءة حقل/دالة مرتبطة (class/struct instance) أو قيمة مفتاح (map؛ يشمل
+    // Name.CaseA لقيم enum، لأن Name نفسها مجرد map عادية — انظر execute(EnumStmt) أعلاه).
+    if (auto e = std::dynamic_pointer_cast<GetExpr>(expr)) {
+        Value obj = evaluate(e->object, env);
+        if (obj.type == Value::Type::INSTANCE) {
+            auto& inst = *obj.instance;
+            auto fIt = inst.fields.find(e->name);
+            if (fIt != inst.fields.end()) return fIt->second;
+            auto method = findMethod(inst.className, e->name);
+            if (method) return bindMethod(obj, method);
+            throw errWithReason(diag::Code::E0001_UndefinedVariable, e->line,
+                                 "no field or method named `" + e->name + "` on `" + inst.className + "`",
+                                 "`" + inst.className + "` has neither a field nor a method called `" + e->name + "`");
+        }
+        if (obj.type == Value::Type::MAP) {
+            for (auto& kv : *obj.map) {
+                if (kv.first.type == Value::Type::STRING && kv.first.str == e->name) return kv.second;
+            }
+            return Value::nil();
+        }
+        throw diagErr(diag::Code::E0004_InvalidType, e->line,
+                      "cannot access property `." + e->name + "` on a value of type `" + obj.typeName() + "`");
+    }
+    // OOP: object.name = value -> كتابة/تعديل حقل (class/struct instance) أو مفتاح (map).
+    if (auto e = std::dynamic_pointer_cast<SetExpr>(expr)) {
+        Value obj = evaluate(e->object, env);
+        Value val = evaluate(e->value, env);
+        if (obj.type == Value::Type::INSTANCE) {
+            Value stored = copyForBinding(val);
+            auto& inst = *obj.instance;
+            if (!inst.fields.count(e->name)) inst.fieldOrder.push_back(e->name);
+            inst.fields[e->name] = stored;
+            return stored;
+        }
+        if (obj.type == Value::Type::MAP) {
+            for (auto& kv : *obj.map) {
+                if (kv.first.type == Value::Type::STRING && kv.first.str == e->name) { kv.second = val; return val; }
+            }
+            obj.map->push_back({Value::string(e->name), val});
+            return val;
+        }
+        throw diagErr(diag::Code::E0004_InvalidType, e->line,
+                      "cannot set property `." + e->name + "` on a value of type `" + obj.typeName() + "`");
+    }
+    // OOP: object.method(args...) -> نداء دالة مرتبطة (class/struct instance، مع 'self' مربوطة
+    // تلقائياً) أو نداء حقل يحمل قيمة دالة (callback عادي مخزَّن في حقل).
+    if (auto e = std::dynamic_pointer_cast<MethodCallExpr>(expr)) {
+        Value obj = evaluate(e->object, env);
+        std::vector<Value> args;
+        args.reserve(e->args.size());
+        for (auto& a : e->args) args.push_back(evaluate(a, env));
+        if (obj.type == Value::Type::INSTANCE) {
+            auto& inst = *obj.instance;
+            auto fIt = inst.fields.find(e->method);
+            if (fIt != inst.fields.end() && fIt->second.type == Value::Type::FUNCTION) {
+                return callFunction(fIt->second.function, args, e->line);
+            }
+            auto method = findMethod(inst.className, e->method);
+            if (!method) {
+                throw errWithReason(diag::Code::E0006_UnknownFunction, e->line,
+                                     "`" + inst.className + "` has no method `" + e->method + "`",
+                                     "no method or callable field named `" + e->method + "` exists on `" + inst.className + "`");
+            }
+            Value bound = bindMethod(obj, method);
+            return callFunction(bound.function, args, e->line);
+        }
+        if (obj.type == Value::Type::MAP) {
+            for (auto& kv : *obj.map) {
+                if (kv.first.type == Value::Type::STRING && kv.first.str == e->method && kv.second.type == Value::Type::FUNCTION) {
+                    return callFunction(kv.second.function, args, e->line);
+                }
+            }
+        }
+        throw diagErr(diag::Code::E0004_InvalidType, e->line,
+                      "cannot call method `." + e->method + "` on a value of type `" + obj.typeName() + "`");
     }
     return Value::nil();
 }
