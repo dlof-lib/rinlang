@@ -813,6 +813,14 @@ private:
     // بنفس أسلوب FunctionStmt) أو عند تنفيذ ClassStmt مباشرة (تعريف محلي داخل دالة/كتلة).
     std::unordered_map<std::string, ClassDef> classes;
     void registerClassStmt(const std::shared_ptr<ClassStmt>& s);
+    // يتحقق هل [name] مستخدَم مسبقاً كنوع مختلف من الكيانات القابلة للنداء (دالة مدمجة native، أو
+    // صنف OOP آخر، أو دالة عرَّفها المستخدم في globals) — يُستدعى عند تسجيل صنف جديد أو hoisting
+    // دالة جديدة لمنع التظليل الصامت بينها (انظر errWithReason(E0002_DuplicateVariable, ...) في
+    // المواضع التي تستدعيه). يُعيد true ويملأ whatOut بنوع الكيان المتصادم إن وُجد تصادم، وfalse لو
+    // الاسم حر تماماً. [includeExistingFunction]: مرّرها false عند hoisting دالة (fun) تحديداً، لأن
+    // إعادة تعريف دالة بنفس اسمها سلوك مسموح ومقصود أصلاً في اللغة (آخر تعريف يفوز، بلا خطأ) —
+    // مرّرها true (الافتراضي) عند تسجيل صنف، حيث تصادم اسمه مع دالة مُعرَّفة مسبقاً *يجب* أن يُرفَض.
+    bool nameCollides(const std::string& name, std::string& whatOut, bool includeExistingFunction = true) const;
     // يبني كائناً جديداً من صنف [className]: يمشي سلسلة الوراثة من الجذر (الأب الأبعد) حتى الصنف
     // نفسه فيُهيّئ كل الحقول بترتيبها (فتُطغى قيم الابن على الأب عند تكرار نفس الاسم)، ثم يستدعي
     // 'init' الأقرب في سلسلة الوراثة إن عُرِّفت (بـ args)، أو يرفض أي وسيط إن لم تُعرَّف init إطلاقاً.
