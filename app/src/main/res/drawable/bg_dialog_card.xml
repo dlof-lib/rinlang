@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- خلفية موحّدة لكل حوارات AlertDialog في التطبيق (ألبوم جديد / مشروع جديد / تأكيد حذف / إلخ):
+     بطاقة عائمة داكنة بزوايا دائرية كاملة وحدّ زجاجي رفيع بدل مستطيل النظام المسطّح حاد الحواف،
+     مع شريط تمييز رفيع بتدرّج هوية العلامة (بنفسجي إلى أخضر) عبر الحافة العلوية — نفس فكرة
+     bg_toolbar_accent_bar لكن أفقياً، ليقرأ كل حوار كـ"بطاقة مميّزة" بدل نافذة نظام عامة. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="@color/rin_toolbar" />
+            <corners android:radius="20dp" />
+            <stroke android:width="1dp" android:color="@color/rin_app_icon_border" />
+        </shape>
+    </item>
+    <item android:height="4dp" android:gravity="top">
+        <shape android:shape="rectangle">
+            <gradient
+                android:type="linear"
+                android:angle="0"
+                android:startColor="@color/rin_run_gradient_start"
+                android:endColor="@color/rin_accent_green" />
+            <corners android:radius="20dp" />
+        </shape>
+    </item>
+</layer-list>
