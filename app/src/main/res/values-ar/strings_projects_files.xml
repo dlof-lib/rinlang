@@ -30,6 +30,7 @@
     <string name="projects_count_format">%1$d مشروع</string>
     <string name="search_projects_hint">ابحث في المشاريع</string>
     <string name="open_project_action">فتح المشروع</string>
+    <string name="project_more_actions">خيارات المشروع</string>
     <string name="project_not_found">تعذّر العثور على المشروع</string>
     <string name="no_search_results">لا توجد نتائج مطابقة</string>
     <string name="project_meta_format">%1$d ملف</string>
