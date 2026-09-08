@@ -161,9 +161,11 @@ object BottomNavHelper {
         val icon = activity.findViewById<ImageView?>(iconId)
         val text = activity.findViewById<TextView?>(textId)
 
+        // الحبّة المُحدَّدة أصبحت تدرّجاً كامل التشبّع (بدل تلميح شفاف باهت)، لذا يتحوّل لون
+        // الأيقونة/النص المُحدَّد للأبيض لضمان تباين ممتاز فوقها؛ غير المُحدَّد يبقى رمادياً كالسابق.
         val color = ContextCompat.getColor(
             activity,
-            if (selected) R.color.rin_bottom_nav_selected else R.color.rin_bottom_nav_unselected
+            if (selected) android.R.color.white else R.color.rin_bottom_nav_unselected
         )
         icon?.setColorFilter(color)
         text?.setTextColor(color)
