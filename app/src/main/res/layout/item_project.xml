@@ -1,131 +1,97 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- تصميم "غلاف ألبوم" لبطاقة المشروع: نفس هوية شاشة الألبومات (item_album.xml) — غلاف
+     ملوّن بتدرّج حسب نوع المشروع + طبقة ظل خلفية مزاحة قليلاً توحي بعمق فعلي، بدل قائمة
+     أسطر مسطّحة. يُعرض عمودين في شبكة (انظر ProjectsActivity: GridLayoutManager) بدل عمود
+     واحد بعد إصلاح مشكلة الألبومات، ليصبح مظهر "المشاريع" و"الألبومات" متسقين فعلاً. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:layout_marginStart="2dp"
-    android:layout_marginEnd="2dp"
-    android:layout_marginTop="5dp"
-    android:layout_marginBottom="5dp"
     android:orientation="vertical"
-    android:background="@drawable/bg_project_card"
-    android:padding="14dp"
-    android:clickable="true"
-    android:focusable="true">
+    android:padding="7dp">
 
-    <LinearLayout
+    <FrameLayout
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:gravity="center_vertical">
+        android:layout_height="168dp">
 
-        <FrameLayout
-            android:layout_width="54dp"
-            android:layout_height="54dp"
-            android:background="@drawable/bg_project_icon">
-
-            <ImageView
-                android:layout_width="32dp"
-                android:layout_height="32dp"
-                android:layout_gravity="center"
-                android:scaleType="fitCenter"
-                android:src="@drawable/ic_rin_folder"
-                android:contentDescription="@null" />
-        </FrameLayout>
+        <!-- طبقة الظل: نسخة أغمق من الغلاف، مزاحة لأسفل ولليمين قليلاً، توحي بأن البطاقة
+             "أوراق" مكدّسة فوق بعضها بدل مستطيل مسطح واحد. -->
+        <View
+            android:id="@+id/projectCoverBack"
+            android:layout_width="match_parent"
+            android:layout_height="156dp"
+            android:layout_marginStart="7dp"
+            android:layout_marginTop="9dp" />
 
         <LinearLayout
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:layout_marginStart="12dp"
-            android:orientation="vertical">
+            android:id="@+id/projectCover"
+            android:layout_width="match_parent"
+            android:layout_height="156dp"
+            android:orientation="vertical"
+            android:padding="14dp"
+            android:layout_gravity="top|start"
+            android:elevation="4dp"
+            android:clickable="true"
+            android:focusable="true">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical">
+
+                <ImageView
+                    android:id="@+id/imgProjectTypeIcon"
+                    android:layout_width="16dp"
+                    android:layout_height="16dp"
+                    android:contentDescription="@null" />
+
+                <TextView
+                    android:id="@+id/txtProjectType"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:layout_marginStart="6dp"
+                    android:textColor="#CCFFFFFF"
+                    android:textSize="9sp"
+                    android:textStyle="bold"
+                    android:maxLines="1"
+                    android:ellipsize="end" />
+
+                <ImageButton
+                    android:id="@+id/btnProjectMore"
+                    android:layout_width="30dp"
+                    android:layout_height="30dp"
+                    android:layout_marginEnd="-8dp"
+                    android:layout_marginTop="-6dp"
+                    android:padding="6dp"
+                    android:background="@drawable/bg_icon_btn"
+                    android:src="@drawable/ic_nav_more"
+                    android:contentDescription="@string/open_project_action" />
+            </LinearLayout>
+
+            <Space
+                android:layout_width="1dp"
+                android:layout_height="0dp"
+                android:layout_weight="1" />
 
             <TextView
                 android:id="@+id/txtProjectName"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:textColor="@android:color/white"
                 android:textSize="16sp"
                 android:textStyle="bold"
-                android:textColor="@color/rin_on_toolbar"
-                android:ellipsize="end"
-                android:maxLines="1" />
+                android:maxLines="2"
+                android:ellipsize="end" />
 
             <TextView
-                android:id="@+id/txtProjectType"
-                android:layout_width="wrap_content"
-                android:layout_height="28dp"
-                android:layout_marginTop="6dp"
-                android:gravity="center_vertical"
-                android:paddingStart="8dp"
-                android:paddingEnd="9dp"
-                android:drawablePadding="5dp"
-                android:background="@drawable/bg_project_type_badge"
+                android:id="@+id/txtProjectMeta"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:textColor="#DDFFFFFF"
                 android:textSize="10.5sp"
-                android:textStyle="bold"
-                android:maxLines="1" />
+                android:maxLines="1"
+                android:ellipsize="end" />
         </LinearLayout>
-    </LinearLayout>
-
-    <TextView
-        android:id="@+id/txtProjectMeta"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginStart="66dp"
-        android:layout_marginTop="9dp"
-        android:textSize="12sp"
-        android:textColor="@color/rin_editor_hint" />
-
-    <View
-        android:layout_width="match_parent"
-        android:layout_height="1dp"
-        android:layout_marginTop="12dp"
-        android:layout_marginBottom="9dp"
-        android:background="@color/rin_divider" />
-
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="40dp"
-        android:orientation="horizontal"
-        android:gravity="center_vertical">
-
-        <TextView
-            android:layout_width="0dp"
-            android:layout_height="match_parent"
-            android:layout_weight="1"
-            android:gravity="center_vertical"
-            android:text="@string/open_project_action"
-            android:textColor="@color/rin_accent"
-            android:textSize="12.5sp"
-            android:textStyle="bold" />
-
-        <ImageButton
-            android:id="@+id/btnRenameProject"
-            android:layout_width="40dp"
-            android:layout_height="40dp"
-            android:padding="10dp"
-            android:background="@drawable/bg_icon_btn"
-            android:tint="@color/rin_editor_hint"
-            android:contentDescription="@string/rename_project_title"
-            android:src="@drawable/ic_edit_pencil" />
-
-        <ImageButton
-            android:id="@+id/btnMoveProject"
-            android:layout_width="40dp"
-            android:layout_height="40dp"
-            android:padding="10dp"
-            android:layout_marginStart="2dp"
-            android:background="@drawable/bg_icon_btn"
-            android:tint="@color/rin_editor_hint"
-            android:contentDescription="@string/album_move_title"
-            android:src="@android:drawable/ic_menu_directions" />
-
-        <ImageButton
-            android:id="@+id/btnDeleteProject"
-            android:layout_width="40dp"
-            android:layout_height="40dp"
-            android:padding="10dp"
-            android:layout_marginStart="2dp"
-            android:background="@drawable/bg_icon_btn"
-            android:tint="@color/project_delete_color"
-            android:contentDescription="@string/delete_project_title"
-            android:src="@drawable/ic_trash_red" />
-    </LinearLayout>
+    </FrameLayout>
 </LinearLayout>
