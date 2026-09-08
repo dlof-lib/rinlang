@@ -294,9 +294,10 @@ class MainActivity : AppCompatActivity() {
         btnMenuLibraries.setOnClickListener { openLibrariesScreen() }
     }
 
-    /** يبني PopupMenu بمظهر داكن يتناسق مع بقية التطبيق. */
+    /** يبني PopupMenu ببطاقة داكنة دائرية الزوايا وظل واضح (bg_popup_menu)، بدل مستطيل النظام
+     *  المسطّح الافتراضي، لتتطابق قوائم File/Edit/View/Run مع هوية التطبيق الاحترافية. */
     private fun darkPopupMenu(anchor: android.view.View): PopupMenu {
-        val themedContext = ContextThemeWrapper(this, MaterialR.style.ThemeOverlay_MaterialComponents_Dark)
+        val themedContext = ContextThemeWrapper(this, R.style.ThemeOverlay_RinLang_PopupMenu)
         return PopupMenu(themedContext, anchor)
     }
 
