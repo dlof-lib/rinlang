@@ -56,8 +56,40 @@
     <string name="ui_design_sidebar_desc">قائمة تنقّل جانبية بعناصرها</string>
     <string name="ui_design_colors_label">الألوان</string>
     <string name="color_picker_title">اختيار لون</string>
-    <string name="color_picker_custom_desc">لون مخصص</string>
-    <string name="color_picker_back">رجوع</string>
+    <string name="color_picker_custom_desc">إضافة لون جديد</string>
+    <string name="color_picker_edit_desc">لون مخصّص — اضغط مطولاً للحذف</string>
+    <!-- كان اسمها "رجوع" رغم أنها تُطبِّق اللون فعلياً — تصحيح خطأ تسمية مربك. -->
+    <string name="color_picker_back">تطبيق</string>
+    <string name="color_removed_toast">تمت إزالة اللون</string>
+
+    <!-- قسم "خيارات الحاوية" داخل حوار مشروع Container جديد: اسم المتغيّر الحيّ (warp)
+         الابتدائي وقيمته (انظر ProjectManager.ContainerOptions). -->
+    <string name="container_options_section_title">خيارات الحاوية</string>
+    <string name="container_options_section_desc">اسم وقيمة المتغيّر الحيّ الابتدائي داخل الحاوية</string>
+    <string name="container_var_name_label">اسم المتغيّر</string>
+    <string name="container_var_value_label">القيمة الابتدائية</string>
+
+    <!-- قسم "خيارات الجدول" داخل حوار مشروع Table جديد: عدد الأعمدة والصفوف الابتدائية
+         (انظر ProjectManager.TableOptions). -->
+    <string name="table_options_section_title">خيارات الجدول</string>
+    <string name="table_options_section_desc">عدد الأعمدة وصفوف البيانات التجريبية عند الإنشاء</string>
+    <string name="table_columns_label">عدد الأعمدة</string>
+    <string name="table_rows_label">عدد الصفوف</string>
+
+    <!-- قسم "خيارات المشروع الحر" داخل حوار مشروع Free Project جديد: قالب البداية
+         (انظر ProjectManager.FreeOptions). -->
+    <string name="free_options_section_title">خيارات المشروع</string>
+    <string name="free_options_section_desc">اختر شكل ملف main.rin عند الإنشاء</string>
+    <string name="free_template_empty">فارغ تماماً</string>
+    <string name="free_template_greeting">تعليق ترحيبي</string>
+    <string name="free_template_example">أمثلة تعليمية</string>
+
+    <!-- قسم "خيارات الرسم" داخل حوار مشروع Illust جديد: تضمين مثال جاهز أو لوحة فارغة
+         (انظر ProjectManager.IllustOptions + CustomLanguageProjectScaffolder.installBundledIllust). -->
+    <string name="illust_options_section_title">خيارات الرسم</string>
+    <string name="illust_options_section_desc">ابدأ بمثال جاهز أو بلوحة رسم فارغة</string>
+    <string name="illust_include_example_label">تضمين مثال جاهز</string>
+    <string name="illust_include_example_desc">ملف hello.illust يشرح أساسيات اللغة</string>
 
     <!-- مراحل إنشاء مشروع جديد -->
     <string name="project_creating_title">إنشاء مشروع</string>
@@ -123,4 +155,10 @@
     <string-array name="ui_typography_values"><item>small</item><item>medium</item><item>large</item></string-array>
     <string-array name="ui_radius_names"><item>0</item><item>10</item><item>14</item><item>22</item><item>30</item></string-array>
     <integer-array name="ui_radius_values"><item>0</item><item>10</item><item>14</item><item>22</item><item>30</item></integer-array>
+
+    <!-- قيم Spinner عدد أعمدة/صفوف قسم "خيارات الجدول" (أرقام، لا تحتاج ترجمة لكل لغة). -->
+    <string-array name="table_columns_names"><item>2</item><item>3</item><item>4</item><item>5</item><item>6</item></string-array>
+    <integer-array name="table_columns_values"><item>2</item><item>3</item><item>4</item><item>5</item><item>6</item></integer-array>
+    <string-array name="table_rows_names"><item>1</item><item>2</item><item>3</item><item>4</item><item>5</item><item>6</item><item>7</item><item>8</item><item>9</item><item>10</item></string-array>
+    <integer-array name="table_rows_values"><item>1</item><item>2</item><item>3</item><item>4</item><item>5</item><item>6</item><item>7</item><item>8</item><item>9</item><item>10</item></integer-array>
 </resources>
