@@ -121,6 +121,27 @@ class ProjectsActivity : AppCompatActivity() {
         val spinnerUiRadius: android.widget.Spinner = view.findViewById(R.id.spinnerUiRadius)
         val uiPreview: UiDesignPreviewView = view.findViewById(R.id.uiDesignPreview)
 
+        // أقسام "خيارات" الخاصة بكل نوع مشروع آخر غير UI (Container/Table/Free/Illust)،
+        // تُظهَر بنفس منطق sectionUiDesign حسب النوع المختار (انظر selectChip بالأسفل).
+        val sectionContainerOptions: View = view.findViewById(R.id.sectionContainerOptions)
+        val inputContainerVarName: EditText = view.findViewById(R.id.inputContainerVarName)
+        val inputContainerVarValue: EditText = view.findViewById(R.id.inputContainerVarValue)
+
+        val sectionTableOptions: View = view.findViewById(R.id.sectionTableOptions)
+        val spinnerTableColumns: android.widget.Spinner = view.findViewById(R.id.spinnerTableColumns)
+        val spinnerTableRows: android.widget.Spinner = view.findViewById(R.id.spinnerTableRows)
+        val tableColumnsAdapter = ArrayAdapter.createFromResource(this, R.array.table_columns_names, android.R.layout.simple_spinner_item).also { it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
+        spinnerTableColumns.adapter = tableColumnsAdapter
+        val tableRowsAdapter = ArrayAdapter.createFromResource(this, R.array.table_rows_names, android.R.layout.simple_spinner_item).also { it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
+        spinnerTableRows.adapter = tableRowsAdapter
+
+        val sectionFreeOptions: View = view.findViewById(R.id.sectionFreeOptions)
+        val radioFreeEmpty: RadioButton = view.findViewById(R.id.radioFreeEmpty)
+        val radioFreeExample: RadioButton = view.findViewById(R.id.radioFreeExample)
+
+        val sectionIllustOptions: View = view.findViewById(R.id.sectionIllustOptions)
+        val switchIllustExample: Switch = view.findViewById(R.id.switchIllustExample)
+
         // لوحة الألوان الأساسية المتاحة لاختيار المستخدم؛ أول لون (البنفسجي) هو الافتراضي
         // نفسه المستخدم سابقاً في قالب UI الثابت، حتى لا يتغيّر الشكل الافتراضي لمن لا يلمس هذا الخيار.
         val colorPalette = listOf(
@@ -131,27 +152,42 @@ class ProjectsActivity : AppCompatActivity() {
             R.color.ui_design_color_pink,
             R.color.ui_design_color_cyan
         ).map { ContextCompat.getColor(this, it) }
-        // فهرس اصطناعي (خارج مدى colorPalette) يمثّل اختيار "لون مخصص" عبر عجلة الألوان الكاملة
-        // بدل أحد الألوان الجاهزة الستة.
-        val customColorIndex = colorPalette.size
+        // ألوان مخصّصة يضيفها المستخدم بنفسه عبر عجلة الألوان الكاملة، بلا حدّ لعددها (بدل
+        // شارة مخصّصة واحدة تُستبدَل في كل مرة). تُخزَّن في هذه القائمة طوال جلسة الحوار
+        // فقط، وتُعرض بعد ألوان [colorPalette] الجاهزة مباشرة وقبل شارة "+" الأخيرة.
+        val customColors = mutableListOf<Int>()
         var selectedColorIndex = 0
-        var customColor: Int? = null
         var backgroundColor = ContextCompat.getColor(this, R.color.rin_background)
         var textColor = ContextCompat.getColor(this, R.color.rin_on_toolbar)
 
         val swatchSizePx = (30 * resources.displayMetrics.density).toInt()
         val swatchStrokePx = (2.5f * resources.displayMetrics.density).toInt()
         val plusIconPx = (7 * resources.displayMetrics.density).toInt()
+        // تخزّن مرجع renderColorSwatches (المعرَّفة لاحقاً بالأسفل) لتتمكّن selectColorAt من
+        // استدعائها رغم تعريفها قبلها — تفادياً لخطأ "استخدام قبل التعريف" في Kotlin.
+        var renderColorSwatchesRef: (() -> Unit)? = null
+
+        // كل الألوان القابلة للاختيار حالياً: اللوحة الجاهزة أولاً، ثم أي ألوان مخصّصة
+        // أضافها المستخدم، بنفس الترتيب المعروض في rowUiColors.
+        fun allSelectableColors(): List<Int> = colorPalette + customColors
+
+        fun selectColorAt(index: Int) {
+            selectedColorIndex = index
+            renderColorSwatchesRef?.invoke()
+            val color = allSelectableColors().getOrElse(index) { colorPalette[0] }
+            uiPreview.configure(color, backgroundColor, textColor, switchUiTopBar.isChecked, switchUiSidebar.isChecked, switchUiBottomNav.isChecked, "filled", 14, "sans", "medium")
+        }
 
         fun renderColorSwatches() {
             rowUiColors.removeAllViews()
+            val margin = (4 * resources.displayMetrics.density).toInt()
+
+            fun swatchParams() = LinearLayout.LayoutParams(0, swatchSizePx, 1f).apply { setMargins(margin, 0, margin, 0) }
+
+            // ألوان اللوحة الجاهزة الستة (لا تُحذف ولا تُعدَّل، فقط تُختار).
             colorPalette.forEachIndexed { index, color ->
                 val swatch = View(this)
-                val params = LinearLayout.LayoutParams(0, swatchSizePx, 1f).apply {
-                    val marginPx = (4 * resources.displayMetrics.density).toInt()
-                    setMargins(marginPx, 0, marginPx, 0)
-                }
-                swatch.layoutParams = params
+                swatch.layoutParams = swatchParams()
                 swatch.background = GradientDrawable().apply {
                     shape = GradientDrawable.OVAL
                     setColor(color)
@@ -159,59 +195,65 @@ class ProjectsActivity : AppCompatActivity() {
                         setStroke(swatchStrokePx, ContextCompat.getColor(this@ProjectsActivity, R.color.rin_on_toolbar))
                     }
                 }
-                swatch.setOnClickListener {
-                    selectedColorIndex = index
-                    renderColorSwatches()
-                    uiPreview.configure(colorPalette[selectedColorIndex], backgroundColor, textColor, switchUiTopBar.isChecked, switchUiSidebar.isChecked, switchUiBottomNav.isChecked, "filled", 14, "sans", "medium")
+                swatch.setOnClickListener { selectColorAt(index) }
+                rowUiColors.addView(swatch)
+            }
+
+            // الألوان المخصّصة التي أضافها المستخدم: نقرة تختارها، ضغطة مطوّلة تحذفها
+            // (انظر color_picker_edit_desc)، بدل استبدال لون واحد في كل مرة.
+            customColors.forEachIndexed { customIdx, color ->
+                val globalIndex = colorPalette.size + customIdx
+                val swatch = View(this)
+                swatch.layoutParams = swatchParams()
+                swatch.background = GradientDrawable().apply {
+                    shape = GradientDrawable.OVAL
+                    setColor(color)
+                    if (globalIndex == selectedColorIndex) {
+                        setStroke(swatchStrokePx, ContextCompat.getColor(this@ProjectsActivity, R.color.rin_on_toolbar))
+                    }
+                }
+                swatch.contentDescription = getString(R.string.color_picker_edit_desc)
+                swatch.setOnClickListener { selectColorAt(globalIndex) }
+                swatch.setOnLongClickListener {
+                    val wasSelected = globalIndex == selectedColorIndex
+                    customColors.removeAt(customIdx)
+                    if (wasSelected) selectedColorIndex = 0
+                    else if (selectedColorIndex > globalIndex) selectedColorIndex -= 1
+                    renderColorSwatchesRef?.invoke()
+                    if (wasSelected) {
+                        val color0 = allSelectableColors().getOrElse(selectedColorIndex) { colorPalette[0] }
+                        uiPreview.configure(color0, backgroundColor, textColor, switchUiTopBar.isChecked, switchUiSidebar.isChecked, switchUiBottomNav.isChecked, "filled", 14, "sans", "medium")
+                    }
+                    Toast.makeText(this, R.string.color_removed_toast, Toast.LENGTH_SHORT).show()
+                    true
                 }
                 rowUiColors.addView(swatch)
             }
 
-            // شارة "لون مخصص": تعرض علامة + فوق دائرة فارغة إن لم يُختر لون مخصص بعد، أو
-            // اللون المخصص نفسه إن كان موجوداً. الضغط عليها يفتح عجلة الألوان الكاملة دوماً
-            // (لتعديل الاختيار حتى لو كان محدَّداً سلفاً).
-            val customSwatch = android.widget.ImageView(this)
-            val customParams = LinearLayout.LayoutParams(0, swatchSizePx, 1f).apply {
-                val marginPx = (4 * resources.displayMetrics.density).toInt()
-                setMargins(marginPx, 0, marginPx, 0)
-            }
-            customSwatch.layoutParams = customParams
-            val isCustomSelected = selectedColorIndex == customColorIndex
-            customSwatch.background = GradientDrawable().apply {
+            // شارة "+": تفتح عجلة الألوان الكاملة دوماً لإضافة لون جديد إلى القائمة أعلاه
+            // (لا تستبدل أي لون موجود)، ثم تُحدَّد تلقائياً.
+            val addSwatch = android.widget.ImageView(this)
+            addSwatch.layoutParams = swatchParams()
+            addSwatch.background = GradientDrawable().apply {
                 shape = GradientDrawable.OVAL
-                if (customColor != null) {
-                    setColor(customColor!!)
-                } else {
-                    setColor(ContextCompat.getColor(this@ProjectsActivity, android.R.color.transparent))
-                }
-                setStroke(
-                    if (isCustomSelected) swatchStrokePx else (1.5f * resources.displayMetrics.density).toInt(),
-                    ContextCompat.getColor(
-                        this@ProjectsActivity,
-                        if (isCustomSelected) R.color.rin_on_toolbar else R.color.rin_editor_hint
-                    )
-                )
+                setColor(ContextCompat.getColor(this@ProjectsActivity, android.R.color.transparent))
+                setStroke((1.5f * resources.displayMetrics.density).toInt(), ContextCompat.getColor(this@ProjectsActivity, R.color.rin_editor_hint))
             }
-            if (customColor == null) {
-                val plusIcon = ContextCompat.getDrawable(this, android.R.drawable.ic_input_add)?.mutate()
-                plusIcon?.setTint(ContextCompat.getColor(this, R.color.rin_editor_hint))
-                customSwatch.setImageDrawable(plusIcon)
-                customSwatch.setPadding(plusIconPx, plusIconPx, plusIconPx, plusIconPx)
-            } else {
-                customSwatch.setImageDrawable(null)
-                customSwatch.setPadding(0, 0, 0, 0)
-            }
-            customSwatch.contentDescription = getString(R.string.color_picker_custom_desc)
-            customSwatch.setOnClickListener {
-                showColorPickerDialog(customColor ?: colorPalette[selectedColorIndex.coerceIn(0, colorPalette.lastIndex)]) { pickedColor ->
-                    customColor = pickedColor
-                    selectedColorIndex = customColorIndex
-                    renderColorSwatches()
-                    uiPreview.configure(pickedColor, backgroundColor, textColor, switchUiTopBar.isChecked, switchUiSidebar.isChecked, switchUiBottomNav.isChecked, "filled", 14, "sans", "medium")
+            val plusIcon = ContextCompat.getDrawable(this, android.R.drawable.ic_input_add)?.mutate()
+            plusIcon?.setTint(ContextCompat.getColor(this, R.color.rin_editor_hint))
+            addSwatch.setImageDrawable(plusIcon)
+            addSwatch.setPadding(plusIconPx, plusIconPx, plusIconPx, plusIconPx)
+            addSwatch.contentDescription = getString(R.string.color_picker_custom_desc)
+            addSwatch.setOnClickListener {
+                val startFrom = allSelectableColors().getOrElse(selectedColorIndex) { colorPalette[0] }
+                showColorPickerDialog(startFrom) { pickedColor ->
+                    customColors.add(pickedColor)
+                    selectColorAt(colorPalette.size + customColors.size - 1)
                 }
             }
-            rowUiColors.addView(customSwatch)
+            rowUiColors.addView(addSwatch)
         }
+        renderColorSwatchesRef = ::renderColorSwatches
         renderColorSwatches()
 
         fun addColorControl(row: LinearLayout, color: Int, onPick: (Int) -> Unit) {
@@ -223,8 +265,7 @@ class ProjectsActivity : AppCompatActivity() {
             row.removeAllViews(); row.addView(swatch)
         }
 
-        fun currentUiColor(): Int =
-            if (selectedColorIndex == customColorIndex) (customColor ?: colorPalette[0]) else colorPalette[selectedColorIndex]
+        fun currentUiColor(): Int = allSelectableColors().getOrElse(selectedColorIndex) { colorPalette[0] }
 
         val fontAdapter = ArrayAdapter.createFromResource(this, R.array.ui_font_names, android.R.layout.simple_spinner_item).also { it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
         spinnerUiFont.adapter = fontAdapter
@@ -258,7 +299,12 @@ class ProjectsActivity : AppCompatActivity() {
         fun selectChip(chip: View) {
             selectedType = chips.getValue(chip)
             chips.keys.forEach { it.isSelected = it === chip }
+            // كل نوع مشروع له قسم "خيارات" واحد على الأكثر ظاهر في نفس الوقت.
             sectionUiDesign.visibility = if (selectedType == ProjectType.UI) View.VISIBLE else View.GONE
+            sectionContainerOptions.visibility = if (selectedType == ProjectType.CONTAINER) View.VISIBLE else View.GONE
+            sectionTableOptions.visibility = if (selectedType == ProjectType.TABLE) View.VISIBLE else View.GONE
+            sectionFreeOptions.visibility = if (selectedType == ProjectType.FREE) View.VISIBLE else View.GONE
+            sectionIllustOptions.visibility = if (selectedType == ProjectType.ILLUST) View.VISIBLE else View.GONE
             if (selectedType == ProjectType.UI) updateUiPreview()
         }
         chips.keys.forEach { chip -> chip.setOnClickListener { selectChip(chip) } }
@@ -281,12 +327,26 @@ class ProjectsActivity : AppCompatActivity() {
                     typography = currentTypography(),
                     cornerRadius = currentRadius()
                 )
+                val containerOptions = ProjectManager.ContainerOptions(
+                    varName = inputContainerVarName.text.toString(),
+                    varValue = inputContainerVarValue.text.toString()
+                )
+                val tableOptions = ProjectManager.TableOptions(
+                    columns = resources.getIntArray(R.array.table_columns_values)[spinnerTableColumns.selectedItemPosition.coerceIn(0, 4)],
+                    rows = resources.getIntArray(R.array.table_rows_values)[spinnerTableRows.selectedItemPosition.coerceIn(0, 9)]
+                )
+                val freeOptions = ProjectManager.FreeOptions(
+                    template = when { radioFreeEmpty.isChecked -> "empty"; radioFreeExample.isChecked -> "example"; else -> "greeting" }
+                )
+                val includeIllustExample = switchIllustExample.isChecked
                 ProjectCreationProgressDialog(this).run(
                     work = {
-                        val project = ProjectManager.createProject(this, name, selectedType, uiOptions)
+                        val project = ProjectManager.createProject(
+                            this, name, selectedType, uiOptions, containerOptions, tableOptions, freeOptions
+                        )
                         if (selectedType == ProjectType.ILLUST) {
                             com.dlof.rinlang.store.languages.CustomLanguageProjectScaffolder
-                                .installBundledIllust(this, project.dir)
+                                .installBundledIllust(this, project.dir, includeIllustExample)
                         }
                         project
                     },
