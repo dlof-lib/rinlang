@@ -29,9 +29,9 @@
     <string name="project_meta_format">%1$d files</string>
     <string name="project_meta_with_time_format">%1$d files • %2$s</string>
     <string name="sort_projects_action">Sort projects</string>
-    <string name="sort_recent">Recently edited</string>
-    <string name="sort_name">Name</string>
-    <string name="sort_type">Type</string>
+    <string name="projects_sort_recent">Recently edited</string>
+    <string name="projects_sort_name">Name</string>
+    <string name="projects_sort_type">Type</string>
 
     <!-- Project types (chosen at creation, saved in project.og.urin) -->
     <string name="project_type_label">Choose type</string>
