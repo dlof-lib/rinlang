@@ -19,8 +19,8 @@
         android:paddingStart="10dp"
         android:paddingEnd="10dp"
         android:paddingBottom="4dp"
-        android:background="@drawable/bg_toolbar_gradient"
-        android:elevation="3dp">
+        android:background="@drawable/bg_toolbar_card"
+        android:elevation="6dp">
 
         <!-- الصف الأول: هوية المحرر (أيقونة التطبيق الحقيقية) + اسم الملف + وصول سريع -->
         <LinearLayout
@@ -73,13 +73,16 @@
                     android:singleLine="true" />
             </LinearLayout>
 
-            <ProgressBar
+            <!-- مؤشر "جارٍ التشغيل" — استُبدل مؤشر النظام الرمادي العام (progressBarStyleSmall)
+                 بمكوّن RinSpinner المخصَّص (قوس دوّار بتدرّج هوية العلامة)، ليتطابق مع بقية
+                 مؤشرات التحميل في التطبيق بدل عنصر افتراضي دخيل على الشريط العلوي الاحترافي. -->
+            <com.dlof.rinlang.RinSpinner
                 android:id="@+id/progressRunning"
-                style="?android:attr/progressBarStyleSmall"
-                android:layout_width="16dp"
-                android:layout_height="16dp"
+                android:layout_width="18dp"
+                android:layout_height="18dp"
                 android:layout_marginEnd="8dp"
-                android:visibility="gone" />
+                android:visibility="gone"
+                app:rinSpinnerStrokeWidth="2.5dp" />
 
             <ImageButton
                 android:id="@+id/btnProjects"
