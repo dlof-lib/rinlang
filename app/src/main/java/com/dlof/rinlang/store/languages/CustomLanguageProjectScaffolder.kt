@@ -92,7 +92,12 @@ object CustomLanguageProjectScaffolder {
      * عناصر نائبة، فهي محتوى حقيقي ثابت وليست قالباً فارغاً)، ثم يسجّلها في
      * [CustomLanguageRegistry] حتى تُلوَّن ملفات .illust فوراً من أول فتح.
      */
-    fun installBundledIllust(context: Context, projectDir: File) {
+    /**
+     * [includeExample] يتحكّم بمحتوى examples/: true (الافتراضي) يثبّت مثال hello.illust
+     * الجاهز كما كان الحال دائماً؛ false يثبّت بدلاً منه canvas.illust فارغاً (تعليق توضيحي
+     * فقط)، لمن يفضّل البدء بلوحة رسم فارغة بدل مثال معبّأ مسبقاً.
+     */
+    fun installBundledIllust(context: Context, projectDir: File, includeExample: Boolean = true) {
         File(projectDir, "main.rin").delete()
 
         File(projectDir, "Lexer.rin").writeText(BundledIllustLanguage.LEXER_RIN, Charsets.UTF_8)
@@ -104,7 +109,14 @@ object CustomLanguageProjectScaffolder {
         File(projectDir, "README.md").writeText(BundledIllustLanguage.README_MD, Charsets.UTF_8)
 
         val examplesDir = File(projectDir, "examples").apply { mkdirs() }
-        File(examplesDir, "hello.illust").writeText(BundledIllustLanguage.EXAMPLE_HELLO_ILLUST, Charsets.UTF_8)
+        if (includeExample) {
+            File(examplesDir, "hello.illust").writeText(BundledIllustLanguage.EXAMPLE_HELLO_ILLUST, Charsets.UTF_8)
+        } else {
+            File(examplesDir, "canvas.illust").writeText(
+                "// لوحة رسم فارغة — ابدأ الرسم هنا بلغة ${BundledIllustLanguage.LANGUAGE_NAME}\n",
+                Charsets.UTF_8
+            )
+        }
 
         val manifest = CustomLanguageManifest(
             id = BundledIllustLanguage.LANGUAGE_ID,
