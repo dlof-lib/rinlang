@@ -97,6 +97,31 @@ struct IndexSetExpr : Expr {
     ExprPtr value;
 };
 
+// ---- OOP: classes/structs/enums (additive expression nodes) ----
+// object.name -> قراءة حقل (field) من كائن (class instance) أو قيمة من مفتاح (map) أو دالة مرتبطة
+// (bound method) إن كان الاسم اسم دالة معرَّفة داخل صنف الكائن بدل حقل. انظر rin_interpreter.cpp:
+// evaluate(GetExpr).
+struct GetExpr : Expr {
+    ExprPtr object;
+    std::string name;
+};
+
+// object.name = value -> كتابة/تعديل حقل داخل كائن (class/struct instance) أو مفتاح داخل map.
+struct SetExpr : Expr {
+    ExprPtr object;
+    std::string name;
+    ExprPtr value;
+};
+
+// object.method(args...) -> نداء دالة (method) مرتبطة بكائن (self مربوطة تلقائياً بداخلها)، أو
+// نداء حقل يحمل قيمة دالة (callback مخزَّن في حقل عادي). عقدة منفصلة عن CallExpr لأن callee في
+// CallExpr اسم بسيط (IDENT) فقط دائماً (انظر Parser::call()) — هذه العقدة تحديداً لأشكال receiver.method(...).
+struct MethodCallExpr : Expr {
+    ExprPtr object;
+    std::string method;
+    std::vector<ExprPtr> args;
+};
+
 // ---- Statements ----
 struct Stmt {
     virtual ~Stmt() = default;
@@ -239,6 +264,39 @@ struct FunctionStmt : Stmt {
     std::string name;
     std::vector<std::string> params;
     std::shared_ptr<BlockStmt> body;
+};
+
+// ---- OOP: class / struct / enum declarations (additive language layer) ----
+// class Name [extends Base] { let field = expr; ... fun method(...) { ... } ... }
+// struct Name { ... }  -> نفس صياغة class تماماً، الفرق الوحيد دلالي وقت التشغيل: struct لها
+// دلالة "قيمة" (value semantics: نسخ عند الإسناد/تمرير كوسيط) بدل دلالة "مرجع" الافتراضية لـ class
+// (انظر Interpreter::copyForBinding في rin_interpreter.cpp). 'class'/'struct'/'extends' كلمات
+// سياقية غير محجوزة (بنفس أسلوب route/row/document/warp/state/... أعلاه)، فلا تتعارض مع استخدامها
+// أسماء متغيرات عادية في أي سياق آخر.
+struct ClassFieldDecl {
+    std::string name;
+    ExprPtr initializer; // قد تكون فارغة (nullptr) => القيمة الافتراضية nil
+};
+struct ClassStmt : Stmt {
+    std::string name;
+    std::string superclass; // فارغ = بلا وراثة
+    bool isStruct = false;
+    std::vector<ClassFieldDecl> fields;
+    std::vector<std::shared_ptr<FunctionStmt>> methods; // تتضمن 'init' إن عُرِّفت (المُنشئ/constructor)
+};
+
+// enum Name { CaseA, CaseB = expr, ... }
+// كل حالة (case) قيمتها الفعلية وقت التشغيل هي map ثابتة الشكل {__enum__, name, value} (انظر
+// Interpreter::execute(EnumStmt)) — يُصل إليها عبر GetExpr العادية (Name.CaseA)، لأن 'Name' نفسها
+// تُعرَّف كمتغيّر عادي من نوع map يضم كل الحالات. 'value' اختيارية (expr بعد '=')؛ nil إن غابت.
+struct EnumCase {
+    std::string name;
+    ExprPtr value; // قد تكون فارغة (nullptr) => nil
+    int line = 0;
+};
+struct EnumStmt : Stmt {
+    std::string name;
+    std::vector<EnumCase> cases;
 };
 struct ReturnStmt : Stmt {
     ExprPtr value; // may be null
