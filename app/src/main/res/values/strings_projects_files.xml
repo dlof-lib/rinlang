@@ -27,10 +27,17 @@
     <string name="no_projects_hint">أنشئ مشروعك الأول من زر + في الأسفل</string>
     <string name="projects_screen_heading">المشاريع</string>
     <string name="projects_count_zero">لا توجد مشاريع</string>
+    <string name="projects_count_format">%1$d مشروع</string>
     <string name="search_projects_hint">ابحث في المشاريع</string>
     <string name="open_project_action">فتح المشروع</string>
     <string name="project_not_found">تعذّر العثور على المشروع</string>
+    <string name="no_search_results">لا توجد نتائج مطابقة</string>
     <string name="project_meta_format">%1$d ملف</string>
+    <string name="project_meta_with_time_format">%1$d ملف • %2$s</string>
+    <string name="sort_projects_action">ترتيب المشاريع</string>
+    <string name="sort_recent">الأحدث تعديلاً</string>
+    <string name="sort_name">الاسم</string>
+    <string name="sort_type">النوع</string>
 
     <!-- أنواع المشاريع (تُختار عند الإنشاء وتُحفظ في project.og.urin) -->
     <string name="project_type_label">اختيار النوع</string>
