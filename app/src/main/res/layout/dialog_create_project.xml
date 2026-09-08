@@ -191,28 +191,18 @@
             android:layout_marginTop="18dp"
             android:visibility="gone">
 
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="8dp"
-                android:text="@string/ui_design_section_title"
-                android:textSize="12.5sp"
-                android:textColor="@color/rin_editor_hint" />
-
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="10dp"
-                android:text="@string/ui_design_section_desc"
-                android:textSize="10.5sp"
-                android:textColor="@color/rin_editor_hint" />
-
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:background="@drawable/bg_list_card"
-                android:padding="14dp">
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+                <View style="@style/OptionsSectionAccent" android:backgroundTint="@color/project_type_ui_color" />
+                <TextView style="@style/OptionsSectionTitle" android:text="@string/ui_design_section_title" />
+            </LinearLayout>
+
+            <TextView style="@style/OptionsSectionDesc" android:text="@string/ui_design_section_desc" />
+
+            <LinearLayout style="@style/OptionsSectionCard">
 
                 <!-- شريط علوي: تشغيل/إيقاف -->
                 <LinearLayout
@@ -353,6 +343,149 @@
 
                 <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="14dp" android:text="@string/ui_design_preview" android:textColor="@color/rin_on_toolbar" />
                 <com.dlof.rinlang.UiDesignPreviewView android:id="@+id/uiDesignPreview" android:layout_width="match_parent" android:layout_height="230dp" android:layout_marginTop="8dp" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- قسم "خيارات الحاوية": يظهر فقط عند اختيار نوع Container (انظر
+             ProjectsActivity.selectChip + ProjectManager.ContainerOptions). -->
+        <LinearLayout
+            android:id="@+id/sectionContainerOptions"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:layout_marginTop="18dp"
+            android:visibility="gone">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+                <View style="@style/OptionsSectionAccent" android:backgroundTint="@color/project_type_container_color" />
+                <TextView style="@style/OptionsSectionTitle" android:text="@string/container_options_section_title" />
+            </LinearLayout>
+
+            <TextView style="@style/OptionsSectionDesc" android:text="@string/container_options_section_desc" />
+
+            <LinearLayout style="@style/OptionsSectionCard">
+                <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/container_var_name_label" android:textColor="@color/rin_on_toolbar" android:textSize="13.5sp" />
+                <EditText
+                    android:id="@+id/inputContainerVarName"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:text="counter"
+                    android:maxLines="1"
+                    android:inputType="text"
+                    android:textColor="@color/rin_on_toolbar"
+                    android:textColorHint="@color/rin_editor_hint" />
+
+                <View android:layout_width="match_parent" android:layout_height="1dp" android:layout_marginTop="14dp" android:layout_marginBottom="14dp" android:background="@color/rin_divider" />
+
+                <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/container_var_value_label" android:textColor="@color/rin_on_toolbar" android:textSize="13.5sp" />
+                <EditText
+                    android:id="@+id/inputContainerVarValue"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:text="0"
+                    android:maxLines="1"
+                    android:inputType="text"
+                    android:textColor="@color/rin_on_toolbar"
+                    android:textColorHint="@color/rin_editor_hint" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- قسم "خيارات الجدول": يظهر فقط عند اختيار نوع Table (انظر
+             ProjectsActivity.selectChip + ProjectManager.TableOptions). -->
+        <LinearLayout
+            android:id="@+id/sectionTableOptions"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:layout_marginTop="18dp"
+            android:visibility="gone">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+                <View style="@style/OptionsSectionAccent" android:backgroundTint="@color/project_type_table_color" />
+                <TextView style="@style/OptionsSectionTitle" android:text="@string/table_options_section_title" />
+            </LinearLayout>
+
+            <TextView style="@style/OptionsSectionDesc" android:text="@string/table_options_section_desc" />
+
+            <LinearLayout style="@style/OptionsSectionCard" android:orientation="horizontal" android:weightSum="2">
+                <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical">
+                    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/table_columns_label" android:textColor="@color/rin_on_toolbar" android:textSize="13.5sp" />
+                    <Spinner android:id="@+id/spinnerTableColumns" android:layout_width="match_parent" android:layout_height="44dp" android:layout_marginTop="6dp" />
+                </LinearLayout>
+                <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical" android:layout_marginStart="14dp">
+                    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/table_rows_label" android:textColor="@color/rin_on_toolbar" android:textSize="13.5sp" />
+                    <Spinner android:id="@+id/spinnerTableRows" android:layout_width="match_parent" android:layout_height="44dp" android:layout_marginTop="6dp" />
+                </LinearLayout>
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- قسم "خيارات المشروع" (Free Project): يظهر فقط عند اختيار نوع Free (انظر
+             ProjectsActivity.selectChip + ProjectManager.FreeOptions). -->
+        <LinearLayout
+            android:id="@+id/sectionFreeOptions"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:layout_marginTop="18dp"
+            android:visibility="gone">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+                <View style="@style/OptionsSectionAccent" android:backgroundTint="@color/project_type_free_color" />
+                <TextView style="@style/OptionsSectionTitle" android:text="@string/free_options_section_title" />
+            </LinearLayout>
+
+            <TextView style="@style/OptionsSectionDesc" android:text="@string/free_options_section_desc" />
+
+            <LinearLayout style="@style/OptionsSectionCard">
+                <RadioGroup android:id="@+id/groupFreeTemplate" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical">
+                    <RadioButton android:id="@+id/radioFreeEmpty" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/free_template_empty" />
+                    <RadioButton android:id="@+id/radioFreeGreeting" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:text="@string/free_template_greeting" android:checked="true" />
+                    <RadioButton android:id="@+id/radioFreeExample" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:text="@string/free_template_example" />
+                </RadioGroup>
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- قسم "خيارات الرسم" (Illust): يظهر فقط عند اختيار نوع Illust (انظر
+             ProjectsActivity.selectChip + ProjectManager.IllustOptions). -->
+        <LinearLayout
+            android:id="@+id/sectionIllustOptions"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:layout_marginTop="18dp"
+            android:visibility="gone">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+                <View style="@style/OptionsSectionAccent" android:backgroundTint="@color/project_type_illust_color" />
+                <TextView style="@style/OptionsSectionTitle" android:text="@string/illust_options_section_title" />
+            </LinearLayout>
+
+            <TextView style="@style/OptionsSectionDesc" android:text="@string/illust_options_section_desc" />
+
+            <LinearLayout style="@style/OptionsSectionCard" android:orientation="horizontal" android:gravity="center_vertical">
+                <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical">
+                    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/illust_include_example_label" android:textColor="@color/rin_on_toolbar" android:textSize="13.5sp" />
+                    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/illust_include_example_desc" android:textColor="@color/rin_editor_hint" android:textSize="10.5sp" />
+                </LinearLayout>
+                <Switch android:id="@+id/switchIllustExample" android:layout_width="wrap_content" android:layout_height="wrap_content" android:checked="true" />
             </LinearLayout>
         </LinearLayout>
     </LinearLayout>
