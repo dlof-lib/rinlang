@@ -51,8 +51,41 @@
     <string name="ui_design_sidebar_desc">Un menú de navegación lateral con sus elementos</string>
     <string name="ui_design_colors_label">Colores</string>
     <string name="color_picker_title">Elegir un color</string>
-    <string name="color_picker_custom_desc">Color personalizado</string>
-    <string name="color_picker_back">Atrás</string>
+    <string name="color_picker_custom_desc">Añadir un nuevo color</string>
+    <string name="color_picker_edit_desc">Color personalizado — mantén pulsado para eliminar</string>
+    <!-- Se llamaba "Atrás" aunque en realidad aplica el color — se corrigió una etiqueta confusa. -->
+    <string name="color_picker_back">Aplicar</string>
+    <string name="color_removed_toast">Color eliminado</string>
+
+    <!-- Sección "Opciones del contenedor" en el diálogo de nuevo proyecto Container: nombre y
+         valor inicial de la variable viva (warp) (ver ProjectManager.ContainerOptions). -->
+    <string name="container_options_section_title">Opciones del contenedor</string>
+    <string name="container_options_section_desc">Nombre y valor inicial de la variable viva dentro del contenedor</string>
+    <string name="container_var_name_label">Nombre de la variable</string>
+    <string name="container_var_value_label">Valor inicial</string>
+
+    <!-- Sección "Opciones de la tabla" en el diálogo de nuevo proyecto Table: número de
+         columnas y filas iniciales (ver ProjectManager.TableOptions). -->
+    <string name="table_options_section_title">Opciones de la tabla</string>
+    <string name="table_options_section_desc">Número de columnas y filas de datos de ejemplo al crear</string>
+    <string name="table_columns_label">Columnas</string>
+    <string name="table_rows_label">Filas</string>
+
+    <!-- Sección "Opciones del proyecto" en el diálogo de nuevo Free Project: plantilla inicial
+         (ver ProjectManager.FreeOptions). -->
+    <string name="free_options_section_title">Opciones del proyecto</string>
+    <string name="free_options_section_desc">Elige el contenido de main.rin al crearlo</string>
+    <string name="free_template_empty">Completamente vacío</string>
+    <string name="free_template_greeting">Comentario de bienvenida</string>
+    <string name="free_template_example">Ejemplos de aprendizaje</string>
+
+    <!-- Sección "Opciones de dibujo" en el diálogo de nuevo proyecto Illust: incluir un ejemplo
+         listo o empezar con un lienzo vacío (ver ProjectManager.IllustOptions +
+         CustomLanguageProjectScaffolder.installBundledIllust). -->
+    <string name="illust_options_section_title">Opciones de dibujo</string>
+    <string name="illust_options_section_desc">Empieza con un ejemplo listo o con un lienzo vacío</string>
+    <string name="illust_include_example_label">Incluir un ejemplo listo</string>
+    <string name="illust_include_example_desc">Un archivo hello.illust que explica lo básico del lenguaje</string>
 
     <!-- Etapas de creación de un proyecto nuevo -->
     <string name="project_creating_title">Creando proyecto</string>
