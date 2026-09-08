@@ -36,14 +36,34 @@
                     android:textSize="22sp"
                     android:textStyle="bold" />
 
-                <TextView
-                    android:id="@+id/txtProjectCount"
+                <LinearLayout
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="3dp"
-                    android:text="@string/projects_count_zero"
-                    android:textColor="@color/rin_editor_hint"
-                    android:textSize="12.5sp" />
+                    android:gravity="center_vertical"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:background="@drawable/bg_icon_btn"
+                    android:paddingStart="2dp"
+                    android:paddingEnd="6dp"
+                    android:id="@+id/btnProjectSort">
+
+                    <TextView
+                        android:id="@+id/txtProjectCount"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/projects_count_zero"
+                        android:textColor="@color/rin_editor_hint"
+                        android:textSize="12.5sp" />
+
+                    <ImageView
+                        android:layout_width="13dp"
+                        android:layout_height="13dp"
+                        android:layout_marginStart="4dp"
+                        android:src="@drawable/ic_node_sort"
+                        app:tint="@color/rin_editor_hint"
+                        android:contentDescription="@string/sort_projects_action" />
+                </LinearLayout>
             </LinearLayout>
 
             <TextView
@@ -116,6 +136,7 @@
                 android:contentDescription="@null" />
 
             <TextView
+                android:id="@+id/txtEmptyProjectsTitle"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="14dp"
@@ -126,6 +147,7 @@
                 android:gravity="center" />
 
             <TextView
+                android:id="@+id/txtEmptyProjectsHint"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="5dp"
