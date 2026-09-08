@@ -14,14 +14,30 @@
             <corners android:radius="10dp" />
         </shape>
     </item>
+    <!-- الحالة الافتراضية: تدرّج أساسي + طبقة لمعان زجاجي علوية خفيفة، لإحساس CTA لامع
+         بدل سطح تدرّج مسطّح، بنفس أسلوب bg_bottom_nav_pill لتوحيد لغة "اللمعان" عبر التطبيق. -->
     <item>
-        <shape android:shape="rectangle" android:angle="45">
-            <gradient
-                android:type="linear"
-                android:angle="45"
-                android:startColor="@color/rin_run_gradient_start"
-                android:endColor="@color/rin_run_gradient_end" />
-            <corners android:radius="10dp" />
-        </shape>
+        <layer-list>
+            <item>
+                <shape android:shape="rectangle" android:angle="45">
+                    <gradient
+                        android:type="linear"
+                        android:angle="45"
+                        android:startColor="@color/rin_run_gradient_start"
+                        android:endColor="@color/rin_run_gradient_end" />
+                    <corners android:radius="10dp" />
+                </shape>
+            </item>
+            <item>
+                <shape android:shape="rectangle">
+                    <gradient
+                        android:type="linear"
+                        android:angle="90"
+                        android:startColor="#3DFFFFFF"
+                        android:endColor="#00FFFFFF" />
+                    <corners android:radius="10dp" />
+                </shape>
+            </item>
+        </layer-list>
     </item>
 </selector>
