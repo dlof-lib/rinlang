@@ -3,13 +3,21 @@
      التبويب المُحدَّد (bgBottomNavIndicator)، أيقونات أكبر (24dp بدل 20dp)، وارتفاع أكبر
      قليلاً (64dp) لتحسين مساحة اللمس. الموقع/العرض الفعلي للحبّة يُحسَب ويُحرَّك برمجياً في
      BottomNavHelper.kt (animateIndicatorTo) بعد أول تخطيط للشريط، لأن كل تبويب weight="1"
-     وعرضه الحقيقي غير معروف إلا بعد القياس. -->
+     وعرضه الحقيقي غير معروف إلا بعد القياس.
+
+     تطوير إضافي: الشريط نفسه أصبح بطاقة "عائمة" (island) بهامش من حواف الشاشة الثلاثة
+     بدل شريط مستطيل ملاصق للحواف — بزوايا دائرية كاملة (bg_bottom_nav_floating) وظل أعمق
+     (elevation 14dp)، بنفس لغة "البطاقة العائمة" المستخدمة الآن في الشريط العلوي
+     (bg_toolbar_card). الحبّة المُحدَّدة أصبحت تدرّجاً كامل التشبّع بدل تلميح شفاف باهت. -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/bottomNavBar"
     android:layout_width="match_parent"
     android:layout_height="64dp"
-    android:background="@color/rin_toolbar_bottom"
-    android:elevation="8dp">
+    android:layout_marginStart="14dp"
+    android:layout_marginEnd="14dp"
+    android:layout_marginBottom="14dp"
+    android:background="@drawable/bg_bottom_nav_floating"
+    android:elevation="14dp">
 
     <!-- الحبّة المتحرّكة: تبدأ بعرض/موقع صفريَين وتُضبَط فعلياً من الكود عند أول تخطيط -->
     <View
@@ -18,6 +26,7 @@
         android:layout_height="40dp"
         android:layout_gravity="center_vertical|start"
         android:layout_marginStart="8dp"
+        android:elevation="3dp"
         android:background="@drawable/bg_bottom_nav_pill" />
 
     <LinearLayout
