@@ -542,6 +542,7 @@ private class ProjectsAdapter(
         val frameTypeIcon: android.widget.FrameLayout = view.findViewById(R.id.frameProjectTypeIcon)
         val imgTypeIcon: android.widget.ImageView = view.findViewById(R.id.imgProjectTypeIcon)
         val btnMore: View = view.findViewById(R.id.btnProjectMore)
+        val btnOpen: View = view.findViewById(R.id.btnOpenProject)
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH {
@@ -582,6 +583,7 @@ private class ProjectsAdapter(
         holder.txtMeta.text = context.getString(R.string.project_meta_with_time_format, fileCount, relativeTime)
 
         holder.itemView.setOnClickListener { onOpen(project) }
+        holder.btnOpen.setOnClickListener { onOpen(project) }
         holder.btnMore.setOnClickListener { anchor -> showActionsMenu(anchor, project) }
     }
 
