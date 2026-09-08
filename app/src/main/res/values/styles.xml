@@ -42,4 +42,41 @@
         <item name="android:gravity">center</item>
         <item name="android:textColor">@color/rin_editor_hint</item>
     </style>
+
+    <!-- شريط لوني صغير يسبق عنوان كل قسم "خيارات" (Container/Table/Free/Illust/UI) داخل حوار
+         "مشروع جديد"، ليتّبع الجميع نفس أسلوب الترويسة الموحّد بدل نصّ عادي فقط. -->
+    <style name="OptionsSectionAccent">
+        <item name="android:layout_width">4dp</item>
+        <item name="android:layout_height">14dp</item>
+        <item name="android:layout_marginEnd">8dp</item>
+        <item name="android:background">@drawable/bg_options_section_accent</item>
+    </style>
+
+    <!-- عنوان قسم "خيارات" (مثل "خيارات الجدول")، يظهر بجانب [OptionsSectionAccent]. -->
+    <style name="OptionsSectionTitle">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:textSize">12.5sp</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:textColor">@color/rin_on_toolbar</item>
+    </style>
+
+    <!-- وصف مختصر أسفل عنوان قسم "خيارات". -->
+    <style name="OptionsSectionDesc">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">3dp</item>
+        <item name="android:layout_marginBottom">10dp</item>
+        <item name="android:textSize">10.5sp</item>
+        <item name="android:textColor">@color/rin_editor_hint</item>
+    </style>
+
+    <!-- بطاقة قسم "خيارات" الموحّدة (نفس bg_list_card + padding ثابت) لكل الأقسام الأربعة. -->
+    <style name="OptionsSectionCard">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:orientation">vertical</item>
+        <item name="android:background">@drawable/bg_list_card</item>
+        <item name="android:padding">14dp</item>
+    </style>
 </resources>
