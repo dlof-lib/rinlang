@@ -54,7 +54,7 @@
                 android:background="@drawable/bg_icon_btn"
                 android:src="@drawable/ic_nav_more"
                 app:tint="@color/rin_editor_hint"
-                android:contentDescription="@string/open_project_action" />
+                android:contentDescription="@string/project_more_actions" />
         </LinearLayout>
 
         <TextView
@@ -93,4 +93,20 @@
             android:maxLines="1"
             android:ellipsize="end" />
     </LinearLayout>
+
+    <!-- زر صريح لفتح المشروع أسفل البطاقة، إضافة إلى إمكانية النقر على البطاقة كلها —
+         يجعل نيّة "فتح" واضحة بصرياً بدل الاعتماد فقط على سلوك ضمني (لمس أي جزء منها). -->
+    <TextView
+        android:id="@+id/btnOpenProject"
+        android:layout_width="match_parent"
+        android:layout_height="36dp"
+        android:layout_marginTop="8dp"
+        android:background="@drawable/bg_project_open_btn"
+        android:gravity="center"
+        android:text="@string/open_project_action"
+        android:textColor="@android:color/white"
+        android:textSize="12.5sp"
+        android:textStyle="bold"
+        android:clickable="true"
+        android:focusable="true" />
 </LinearLayout>
