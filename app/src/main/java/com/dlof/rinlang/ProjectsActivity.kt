@@ -30,7 +30,14 @@ class ProjectsActivity : AppCompatActivity() {
 
     private lateinit var rvProjects: RecyclerView
     private lateinit var txtEmpty: View
+    private lateinit var txtEmptyTitle: TextView
+    private lateinit var txtEmptyHint: TextView
+    private lateinit var txtProjectCount: TextView
     private lateinit var adapter: ProjectsAdapter
+
+    /** كل المشاريع بعد الفرز، قبل تطبيق فلتر البحث — المصدر الذي يُعاد فلترته عند كل كتابة. */
+    private var sortedProjects: List<Project> = emptyList()
+    private var searchQuery: String = ""
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -43,6 +50,9 @@ class ProjectsActivity : AppCompatActivity() {
 
         rvProjects = findViewById(R.id.rvProjects)
         txtEmpty = findViewById(R.id.txtEmptyProjects)
+        txtEmptyTitle = findViewById(R.id.txtEmptyProjectsTitle)
+        txtEmptyHint = findViewById(R.id.txtEmptyProjectsHint)
+        txtProjectCount = findViewById(R.id.txtProjectCount)
         val fabNewProject: View = findViewById(R.id.fabNewProject)
 
         adapter = ProjectsAdapter(
@@ -59,6 +69,36 @@ class ProjectsActivity : AppCompatActivity() {
 
         fabNewProject.setOnClickListener { showCreateDialog() }
         findViewById<View>(R.id.btnProjectAlbums).setOnClickListener { startActivity(Intent(this, AlbumsActivity::class.java)) }
+        findViewById<View>(R.id.btnProjectSort).setOnClickListener { anchor -> showSortMenu(anchor) }
+
+        // شريط البحث كان موجوداً بصرياً فقط بلا أي منطق خلفه — الكتابة فيه لم تكن تفعل شيئاً.
+        // الآن يفلتر شبكة المشاريع فورياً بحسب الاسم مع كل حرف يُكتب.
+        findViewById<EditText>(R.id.inputProjectSearch).addTextChangedListener(object : android.text.TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                searchQuery = s?.toString().orEmpty()
+                applyFilter()
+            }
+            override fun afterTextChanged(s: android.text.Editable?) {}
+        })
+    }
+
+    /** قائمة "ترتيب المشاريع" المنبثقة من رأس الشاشة: تكرار سريع لخيارات AppSettings.setProjectSort
+     * المتاحة أصلاً في الإعدادات، لكن مباشرة فوق شاشة المشاريع نفسها. */
+    private fun showSortMenu(anchor: View) {
+        val popup = PopupMenu(this, anchor)
+        popup.menuInflater.inflate(R.menu.menu_project_sort, popup.menu)
+        popup.setOnMenuItemClickListener { item ->
+            val value = when (item.itemId) {
+                R.id.sortProjectsName -> "name"
+                R.id.sortProjectsType -> "type"
+                else -> "recent"
+            }
+            AppSettings.setProjectSort(this, value)
+            refresh()
+            true
+        }
+        popup.show()
     }
 
     override fun onResume() {
@@ -67,15 +107,46 @@ class ProjectsActivity : AppCompatActivity() {
     }
 
     private fun refresh() {
-        val projects = ProjectManager.listProjects(this).let { list ->
+        sortedProjects = ProjectManager.listProjects(this).let { list ->
             when (AppSettings.getProjectSort(this)) {
                 "name" -> list.sortedBy { it.name.lowercase() }
                 "type" -> list.sortedWith(compareBy<Project> { it.type.id }.thenBy { it.name.lowercase() })
                 else -> list
             }
         }
-        adapter.submit(projects)
-        txtEmpty.visibility = if (projects.isEmpty()) View.VISIBLE else View.GONE
+        // عدّاد المشاريع كان نصاً ثابتاً على "لا توجد مشاريع" دوماً بغضّ النظر عن العدد
+        // الفعلي — لم يكن مربوطاً بأي منطق. الآن يعرض العدد الحقيقي.
+        txtProjectCount.text = if (sortedProjects.isEmpty()) {
+            getString(R.string.projects_count_zero)
+        } else {
+            getString(R.string.projects_count_format, sortedProjects.size)
+        }
+        applyFilter()
+    }
+
+    /** يطبّق فلتر البحث الحالي فوق [sortedProjects] ويُحدّث الشبكة وحالة "لا توجد نتائج/مشاريع". */
+    private fun applyFilter() {
+        val query = searchQuery.trim()
+        val filtered = if (query.isEmpty()) {
+            sortedProjects
+        } else {
+            sortedProjects.filter { it.name.contains(query, ignoreCase = true) }
+        }
+        adapter.submit(filtered)
+
+        if (filtered.isEmpty()) {
+            txtEmpty.visibility = View.VISIBLE
+            if (sortedProjects.isEmpty()) {
+                txtEmptyTitle.text = getString(R.string.no_projects_yet)
+                txtEmptyHint.text = getString(R.string.no_projects_hint)
+                txtEmptyHint.visibility = View.VISIBLE
+            } else {
+                txtEmptyTitle.text = getString(R.string.no_search_results)
+                txtEmptyHint.visibility = View.GONE
+            }
+        } else {
+            txtEmpty.visibility = View.GONE
+        }
     }
 
     private fun openProject(project: Project) {
@@ -465,11 +536,10 @@ private class ProjectsAdapter(
     }
 
     class VH(view: View) : RecyclerView.ViewHolder(view) {
-        val cover: View = view.findViewById(R.id.projectCover)
-        val coverBack: View = view.findViewById(R.id.projectCoverBack)
         val txtName: TextView = view.findViewById(R.id.txtProjectName)
         val txtType: TextView = view.findViewById(R.id.txtProjectType)
         val txtMeta: TextView = view.findViewById(R.id.txtProjectMeta)
+        val frameTypeIcon: android.widget.FrameLayout = view.findViewById(R.id.frameProjectTypeIcon)
         val imgTypeIcon: android.widget.ImageView = view.findViewById(R.id.imgProjectTypeIcon)
         val btnMore: View = view.findViewById(R.id.btnProjectMore)
     }
@@ -484,27 +554,32 @@ private class ProjectsAdapter(
         val context = holder.itemView.context
         val density = context.resources.displayMetrics.density
 
-        // غلاف بتدرّج لوني حسب نوع المشروع (نفس هوية شارة النوع السابقة)، بدل لوحة رمادية
-        // مسطّحة — وطبقة "ظل" خلفه أغمق قليلاً، بنفس أسلوب AlbumsAdapter تماماً، ليبدو
-        // "مشاريعي" و"الألبومات" جزءاً من نفس التصميم بدل شاشتين منفصلتين بصرياً.
+        // كانت البطاقة كلها تُلوَّن بتدرّج زاهٍ حسب نوع المشروع (يبدو مرحاً/طفولياً أقرب
+        // لتطبيق ألبومات صور). الآن البطاقة مسطّحة محايدة (bg_project_card)، وهوية نوع
+        // المشروع تنحصر في شارة أيقونة صغيرة ملوّنة بخفّة (لون النوع بشفافية منخفضة كخلفية
+        // + نفس اللون كامل التشبّع للأيقونة والتسمية) — تصميم أهدأ وأقرب لأدوات برمجية جادة.
         val (iconRes, colorRes) = typeIconAndColor(project.type)
         val color = ContextCompat.getColor(context, colorRes)
-        holder.cover.background = GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(color, darken(color, .55f))).apply {
-            cornerRadius = 20f * density
-        }
-        holder.coverBack.background = GradientDrawable().apply {
+        holder.frameTypeIcon.background = GradientDrawable().apply {
             shape = GradientDrawable.RECTANGLE
-            setColor(darken(color, .72f))
-            cornerRadius = 18f * density
+            cornerRadius = 9f * density
+            setColor(withAlpha(color, 0.16f))
         }
+        val icon = ContextCompat.getDrawable(context, iconRes)?.mutate()
+        icon?.setTint(color)
+        holder.imgTypeIcon.setImageDrawable(icon)
 
         holder.txtName.text = project.name
-        holder.txtType.text = typeLabel(context, project.type)
-        val icon = ContextCompat.getDrawable(context, iconRes)?.mutate()
-        icon?.setTint(Color.WHITE)
-        holder.imgTypeIcon.setImageDrawable(icon)
+        holder.txtType.text = typeLabel(context, project.type).uppercase()
+        holder.txtType.setTextColor(color)
+        // البطاقة كانت تعرض عدد الملفات فقط — لا شيء يوحي متى آخر مرة عُدِّل فيها المشروع
+        // رغم أن Project.lastModified متوفّر أصلاً. إضافة وقت نسبي ("قبل يومين"، محلَّى تلقائياً
+        // حسب لغة الجهاز عبر DateUtils) تجعل البطاقة تعكس مشروعاً حياً قيد العمل، لا مجرّد مجلد.
         val fileCount = ProjectManager.listFiles(project).size
-        holder.txtMeta.text = context.getString(R.string.project_meta_format, fileCount)
+        val relativeTime = android.text.format.DateUtils.getRelativeTimeSpanString(
+            project.lastModified, System.currentTimeMillis(), android.text.format.DateUtils.MINUTE_IN_MILLIS
+        )
+        holder.txtMeta.text = context.getString(R.string.project_meta_with_time_format, fileCount, relativeTime)
 
         holder.itemView.setOnClickListener { onOpen(project) }
         holder.btnMore.setOnClickListener { anchor -> showActionsMenu(anchor, project) }
@@ -527,12 +602,10 @@ private class ProjectsAdapter(
         popup.show()
     }
 
-    private fun darken(c: Int, amount: Float): Int {
-        val r = (Color.red(c) * amount).toInt()
-        val g = (Color.green(c) * amount).toInt()
-        val b = (Color.blue(c) * amount).toInt()
-        return Color.rgb(r, g, b)
-    }
+    /** يُرجع نفس اللون بدرجة شفافية مخفَّضة (alpha 0..1) — تُستخدَم لخلفية شارة أيقونة النوع
+     * كي تبقى شارة صغيرة خفيفة بدل تلوين كامل البطاقة. */
+    private fun withAlpha(c: Int, alpha: Float): Int =
+        Color.argb((alpha * 255).toInt(), Color.red(c), Color.green(c), Color.blue(c))
 
     /** نص شارة نوع المشروع المعروضة بجانب اسمه في القائمة. */
     private fun typeLabel(context: android.content.Context, type: ProjectType): String = when (type) {
