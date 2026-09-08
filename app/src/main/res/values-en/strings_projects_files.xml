@@ -50,8 +50,41 @@
     <string name="ui_design_sidebar_desc">A side navigation menu with its items</string>
     <string name="ui_design_colors_label">Colors</string>
     <string name="color_picker_title">Choose a color</string>
-    <string name="color_picker_custom_desc">Custom color</string>
-    <string name="color_picker_back">Back</string>
+    <string name="color_picker_custom_desc">Add a new color</string>
+    <string name="color_picker_edit_desc">Custom color — long-press to remove</string>
+    <!-- Was labeled "Back" even though it actually applies the color — fixed a confusing label. -->
+    <string name="color_picker_back">Apply</string>
+    <string name="color_removed_toast">Color removed</string>
+
+    <!-- "Container options" section in the new Container-project dialog: the initial live
+         (warp) variable name and value (see ProjectManager.ContainerOptions). -->
+    <string name="container_options_section_title">Container options</string>
+    <string name="container_options_section_desc">Name and starting value of the initial live variable inside the container</string>
+    <string name="container_var_name_label">Variable name</string>
+    <string name="container_var_value_label">Initial value</string>
+
+    <!-- "Table options" section in the new Table-project dialog: column count and starting
+         row count (see ProjectManager.TableOptions). -->
+    <string name="table_options_section_title">Table options</string>
+    <string name="table_options_section_desc">Number of columns and sample data rows at creation</string>
+    <string name="table_columns_label">Columns</string>
+    <string name="table_rows_label">Rows</string>
+
+    <!-- "Free project options" section in the new Free-project dialog: starting template
+         (see ProjectManager.FreeOptions). -->
+    <string name="free_options_section_title">Project options</string>
+    <string name="free_options_section_desc">Choose the shape of main.rin when created</string>
+    <string name="free_template_empty">Completely empty</string>
+    <string name="free_template_greeting">Welcome comment</string>
+    <string name="free_template_example">Learning examples</string>
+
+    <!-- "Drawing options" section in the new Illust-project dialog: include a ready example
+         or start with a blank canvas (see ProjectManager.IllustOptions +
+         CustomLanguageProjectScaffolder.installBundledIllust). -->
+    <string name="illust_options_section_title">Drawing options</string>
+    <string name="illust_options_section_desc">Start with a ready example or a blank canvas</string>
+    <string name="illust_include_example_label">Include a ready example</string>
+    <string name="illust_include_example_desc">A hello.illust file explaining the language basics</string>
 
     <!-- New-project creation stages -->
     <string name="project_creating_title">Creating project</string>
