@@ -229,6 +229,15 @@ struct Loom {
             case StrandKind::BOTTOMBAR: {
                 Constraints barC = c2;
                 if (!s->attr("height")) { barC.minH = barC.maxH = std::min(56.0, c2.maxH); }
+                // FIX (display bug): app-chrome bars must span the full available width by
+                // default, same as every real mobile top/bottom bar — a TopBar that only hugs
+                // its children's natural width (e.g. just a title's text width) leaves the rest
+                // of the row unpainted and everything below/after it misreads as if it had been
+                // laid out at the wrong origin. layoutLinear() itself only ever *hugs* content
+                // (see its final `return {..., max(totalW,c.minW), ...}` — it fills only when the
+                // caller hands it a minW/maxW floor), so — exactly like the height default just
+                // above — width= still overrides this when the .rin source sets it explicitly.
+                if (!s->attr("width")) { barC.minW = barC.maxW = c2.maxW; }
                 size = layoutLinear(s, barC, Axis::X, originX, originY);
                 break;
             }
