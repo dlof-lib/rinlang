@@ -4351,17 +4351,37 @@ bool Interpreter::callTopLevelFunction(const std::vector<StmtPtr>& program,
 
     // Hoist every top-level function first (mirrors run()'s hoist pass) so the callee -- and
     // anything it calls in turn -- resolves regardless of source order, and simple recursion works.
-    for (const auto& s : program) {
-        if (auto fn = std::dynamic_pointer_cast<FunctionStmt>(s)) {
-            auto callable = std::make_shared<Callable>();
-            callable->declaration = fn;
-            callable->closure = globals;
-            Value v;
-            v.type = Value::Type::FUNCTION;
-            v.function = callable;
-            globals->define(fn->name, v);
+    // Wrapped in try/catch (unlike run()'s own hoist pass) because this function's contract is
+    // bool+errorOut, not an exception -- a name-collision diagnostic thrown by nameCollides()/
+    // registerClassStmt() below must be reported the same way any other RinError here is (see the
+    // existing `catch (RinError& e)` further down), not left to escape uncaught.
+    try {
+        for (const auto& s : program) {
+            if (auto fn = std::dynamic_pointer_cast<FunctionStmt>(s)) {
+                // includeExistingFunction=false: إعادة تعريف نفس الدالة بنفس الاسم مسموحة (آخر
+                // تعريف يفوز) -- فقط نمنع تصادمها مع native/class مختلفين (انظر nameCollides).
+                std::string what;
+                if (nameCollides(fn->name, what, /*includeExistingFunction=*/false)) {
+                    throw errWithReason(diag::Code::E0002_DuplicateVariable, fn->line,
+                                         "function `" + fn->name + "` uses the same name as an existing " + what,
+                                         "`" + fn->name + "` is already defined as a " + what + "; Rin does not "
+                                         "allow a function to share a name with a built-in function or a class, "
+                                         "since calling `" + fn->name + "(...)` would then silently resolve to "
+                                         "only one of them instead of this function");
+                }
+                auto callable = std::make_shared<Callable>();
+                callable->declaration = fn;
+                callable->closure = globals;
+                Value v;
+                v.type = Value::Type::FUNCTION;
+                v.function = callable;
+                globals->define(fn->name, v);
+            }
+            if (auto cls = std::dynamic_pointer_cast<ClassStmt>(s)) registerClassStmt(cls);
         }
-        if (auto cls = std::dynamic_pointer_cast<ClassStmt>(s)) registerClassStmt(cls);
+    } catch (RinError& e) {
+        errorOut = e.message;
+        return false;
     }
     // Seed every known Warp cell as a plain global, so a zero-arg handler that mutates a
     // same-named global directly (rather than via a parameter) also works.
@@ -4414,21 +4434,35 @@ std::string Interpreter::run(const std::vector<StmtPtr>& statements) {
     loadInstalledIndex(); // يحمّل أسماء أي تثبيتات فعلية سابقة على نفس basePath (استمرارية عبر التشغيلات)
     importedPaths.clear(); // كل تشغيل جديد يبدأ بسجل @import نظيف (لا يرث استيرادات تشغيل سابق)
     callDepth = 0; // كل تشغيل جديد يبدأ بعدّاد عمق استدعاء نظيف (احتياطاً عند إعادة استخدام نفس الكائن)
-    // First pass: hoist function declarations so they can be called
-    // regardless of source order (and support simple recursion).
-    for (const auto& s : statements) {
-        if (auto fn = std::dynamic_pointer_cast<FunctionStmt>(s)) {
-            auto callable = std::make_shared<Callable>();
-            callable->declaration = fn;
-            callable->closure = globals;
-            Value v;
-            v.type = Value::Type::FUNCTION;
-            v.function = callable;
-            globals->define(fn->name, v);
-        }
-        if (auto cls = std::dynamic_pointer_cast<ClassStmt>(s)) registerClassStmt(cls);
-    }
     try {
+        // First pass: hoist function declarations so they can be called
+        // regardless of source order (and support simple recursion).
+        for (const auto& s : statements) {
+            if (auto fn = std::dynamic_pointer_cast<FunctionStmt>(s)) {
+                // منع تظليل صامت: دالة بنفس اسم دالة مدمجة (native) أو صنف OOP موجود مسبقاً كانت
+                // تُشلّ بصمت تام (انظر nameCollides وrin-oop-naming-contradiction.md) — الآن تُرفَض
+                // بخطأ تشخيصي واضح عند hoisting بدل الانتظار حتى أول نداء Name(args) مضلِّل.
+                // includeExistingFunction=false: إعادة تعريف نفس الدالة بنفس الاسم مسموحة كما
+                // كانت دائماً (آخر تعريف يفوز) — هنا فقط نمنع تصادمها مع native/class مختلفين.
+                std::string what;
+                if (nameCollides(fn->name, what, /*includeExistingFunction=*/false)) {
+                    throw errWithReason(diag::Code::E0002_DuplicateVariable, fn->line,
+                                         "function `" + fn->name + "` uses the same name as an existing " + what,
+                                         "`" + fn->name + "` is already defined as a " + what + "; Rin does not "
+                                         "allow a function to share a name with a built-in function or a class, "
+                                         "since calling `" + fn->name + "(...)` would then silently resolve to "
+                                         "only one of them instead of this function");
+                }
+                auto callable = std::make_shared<Callable>();
+                callable->declaration = fn;
+                callable->closure = globals;
+                Value v;
+                v.type = Value::Type::FUNCTION;
+                v.function = callable;
+                globals->define(fn->name, v);
+            }
+            if (auto cls = std::dynamic_pointer_cast<ClassStmt>(s)) registerClassStmt(cls);
+        }
         for (const auto& s : statements) {
             if (std::dynamic_pointer_cast<FunctionStmt>(s)) continue; // already hoisted
             if (std::dynamic_pointer_cast<ClassStmt>(s)) continue; // already hoisted (registerClassStmt above)
@@ -4879,6 +4913,20 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
         return;
     }
     if (auto s = std::dynamic_pointer_cast<FunctionStmt>(stmt)) {
+        // نفس فحص التصادم المطبَّق عند hoisting المستوى الأعلى (انظر run()/callTopLevelFunction
+        // ونameCollides): بلا هذا الفحص، دالة محلية باسم يطابق native/class كانت ستُشلّ بصمت
+        // بنفس الطريقة تماماً -- Name(args) يبحث في natives ثم classes قبل أي بحث في env أصلاً،
+        // بصرف النظر عن النطاق (scope) الذي عُرِّفت به. includeExistingFunction=false: إعادة تعريف
+        // نفس الدالة محلياً (مثلاً كل تكرار حلقة يمرّ على نفس التعريف) تبقى مسموحة كما كانت دائماً.
+        std::string what;
+        if (nameCollides(s->name, what, /*includeExistingFunction=*/false)) {
+            throw errWithReason(diag::Code::E0002_DuplicateVariable, s->line,
+                                 "function `" + s->name + "` uses the same name as an existing " + what,
+                                 "`" + s->name + "` is already defined as a " + what + "; Rin does not "
+                                 "allow a function to share a name with a built-in function or a class, "
+                                 "since calling `" + s->name + "(...)` would then silently resolve to "
+                                 "only one of them instead of this function");
+        }
         auto callable = std::make_shared<Callable>();
         callable->declaration = s;
         callable->closure = env;
@@ -5823,7 +5871,38 @@ std::string Interpreter::containerKeyForEnv(Environment* startEnv) const {
 
 // ---- OOP: class/struct/enum runtime ----
 
+// يتحقق تصادم [name] مع أي مساحة أسماء أخرى قابلة للنداء: دالة مدمجة (natives)، صنف OOP آخر
+// (classes)، أو دالة عرَّفها المستخدم في النطاق العالمي (globals، من نوع FUNCTION تحديداً — قيمة
+// عادية بنفس الاسم مثل رقم/نص ليست "تصادماً قابلاً للنداء" بنفس هذا المعنى). لا يفحص إعادة تعريف
+// *نفس* الصنف بنفس الاسم (تُعامَل كتحديث تعريف عادي، بنفس سلوك classes[name] = ... الحالي)، فقط
+// تصادمه مع نوع كيان *مختلف*.
+bool Interpreter::nameCollides(const std::string& name, std::string& whatOut, bool includeExistingFunction) const {
+    if (natives.count(name)) { whatOut = "built-in function"; return true; }
+    if (classes.count(name)) { whatOut = "class"; return true; }
+    if (includeExistingFunction && globals && globals->values.count(name)) {
+        const Value& existing = globals->values.at(name);
+        if (existing.type == Value::Type::FUNCTION) { whatOut = "function"; return true; }
+    }
+    return false;
+}
+
 void Interpreter::registerClassStmt(const std::shared_ptr<ClassStmt>& s) {
+    // منع تظليل صامت لدالة مدمجة أو دالة مُعرَّفة من المستخدم بصنف بنفس الاسم (انظر nameCollides
+    // أعلاه وrin-oop-naming-contradiction.md): بدون هذا الفحص، Name(args) كان يفوز فيه الكيان
+    // الأسبق في ترتيب البحث الثابت داخل evaluate(CallExpr) (natives ثم classes ثم env) بصرف النظر
+    // عن أيّهما عرَّفه المبرمج أخيراً أو قصده فعلاً، بلا أي تحذير عند التعريف. إعادة تعريف *نفس*
+    // الصنف (نفس الاسم موجود مسبقاً في classes فقط) مسموحة كما كانت دائماً — هذا يستبدلها فحسب.
+    if (!classes.count(s->name)) {
+        std::string what;
+        if (nameCollides(s->name, what)) {
+            throw errWithReason(diag::Code::E0002_DuplicateVariable, s->line,
+                                 "class `" + s->name + "` uses the same name as an existing " + what,
+                                 "`" + s->name + "` is already defined as a " + what + "; Rin does not "
+                                 "allow a class to share a name with a built-in function or another "
+                                 "user-defined function, since calling `" + s->name + "(...)` would "
+                                 "then silently resolve to only one of them instead of the class");
+        }
+    }
     ClassDef def;
     def.name = s->name;
     def.superclass = s->superclass;
