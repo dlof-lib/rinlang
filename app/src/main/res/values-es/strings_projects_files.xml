@@ -21,10 +21,17 @@
     <string name="no_projects_hint">Crea tu primer proyecto con el botón + de abajo</string>
     <string name="projects_screen_heading">Proyectos</string>
     <string name="projects_count_zero">No hay proyectos</string>
+    <string name="projects_count_format">%1$d proyectos</string>
     <string name="search_projects_hint">Buscar proyectos</string>
     <string name="open_project_action">Abrir proyecto</string>
     <string name="project_not_found">Proyecto no encontrado</string>
+    <string name="no_search_results">No hay proyectos coincidentes</string>
     <string name="project_meta_format">%1$d archivos</string>
+    <string name="project_meta_with_time_format">%1$d archivos • %2$s</string>
+    <string name="sort_projects_action">Ordenar proyectos</string>
+    <string name="sort_recent">Editado recientemente</string>
+    <string name="sort_name">Nombre</string>
+    <string name="sort_type">Tipo</string>
 
     <!-- Tipos de proyecto (se eligen al crear, se guardan en project.og.urin) -->
     <string name="project_type_label">Elegir tipo</string>
