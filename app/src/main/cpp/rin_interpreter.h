@@ -30,6 +30,7 @@ struct Environment;
 using EnvPtr = std::shared_ptr<Environment>;
 
 struct Value; // fwd
+struct InstanceData; // fwd (see full definition after Value below — OOP: class/struct instances)
 
 struct Callable {
     std::shared_ptr<FunctionStmt> declaration;
@@ -45,13 +46,17 @@ using MapData = std::vector<std::pair<Value, Value>>;
 using MapPtr = std::shared_ptr<MapData>;
 
 struct Value {
-    enum class Type { NIL, NUMBER, STRING, BOOL, FUNCTION, ARRAY, MAP } type = Type::NIL;
+    // INSTANCE: كائن (class أو struct) — انظر InstanceData أدناه (تُعرَّف بعد Value لأنها تحتاج
+    // Value كاملة النوع لأجل std::unordered_map<std::string, Value> حقولها؛ shared_ptr هنا لا
+    // يحتاج نوعاً كاملاً فيعمل بلا مشكلة).
+    enum class Type { NIL, NUMBER, STRING, BOOL, FUNCTION, ARRAY, MAP, INSTANCE } type = Type::NIL;
     double number = 0.0;
     std::string str;
     bool boolean = false;
     std::shared_ptr<Callable> function;
     ArrayPtr array;
     MapPtr map;
+    std::shared_ptr<InstanceData> instance;
 
     static Value nil() { return Value{}; }
     static Value num(double n) { Value v; v.type = Type::NUMBER; v.number = n; return v; }
@@ -59,6 +64,7 @@ struct Value {
     static Value boolean_(bool b) { Value v; v.type = Type::BOOL; v.boolean = b; return v; }
     static Value makeArray(ArrayPtr a) { Value v; v.type = Type::ARRAY; v.array = std::move(a); return v; }
     static Value makeMap(MapPtr m) { Value v; v.type = Type::MAP; v.map = std::move(m); return v; }
+    static Value makeInstance(std::shared_ptr<InstanceData> inst) { Value v; v.type = Type::INSTANCE; v.instance = std::move(inst); return v; }
 
     bool isTruthy() const {
         if (type == Type::NIL) return false;
@@ -70,8 +76,32 @@ struct Value {
     std::string typeName() const;
 };
 
+// ---- OOP: بيانات كائن (instance) فعلي لصنف class/struct مُعرَّف عبر ClassStmt (rin_ast.h) ----
+// class (isStruct=false) لها دلالة مرجع (reference) عادية: نسخ Value لكائن class ينسخ shared_ptr
+// فقط (نفس البيانات الأصلية، تماماً كمصفوفات/قواميس Rin). struct (isStruct=true) لها دلالة قيمة
+// (value): Interpreter::copyForBinding في rin_interpreter.cpp يستنسخ InstanceData كاملة عند
+// الإسناد (let/=) وعند تمرير وسيط لدالة/method، فيسلك عملياً كنسخ قيمة حقيقي عند أهم نقطتين
+// (الإسناد والتمرير)، دون الحاجة لإعادة تصميم Value بالكامل.
+struct InstanceData {
+    std::string className;
+    bool isStruct = false;
+    std::unordered_map<std::string, Value> fields;
+    std::vector<std::string> fieldOrder; // ترتيب أول ظهور لكل حقل (لأجل toDisplayString مرتّبة)
+};
+
 // مقارنة تركيبية (structural) بين قيمتين، تُستخدم في == != وفهرسة القواميس بالمفتاح.
 bool valuesEqual(const Value& a, const Value& b);
+
+// ---- OOP: تعريف صنف (class/struct) واحد — مبني من ClassStmt عند تنفيذه/hoisting (انظر
+// Interpreter::registerClassStmt في rin_interpreter.cpp) ----
+struct ClassDef {
+    std::string name;
+    std::string superclass; // فارغ = بلا وراثة
+    bool isStruct = false;
+    std::vector<std::pair<std::string, ExprPtr>> fieldDefs; // (اسم الحقل، عبارة القيمة الافتراضية أو nullptr)
+    std::unordered_map<std::string, std::shared_ptr<FunctionStmt>> methods; // تتضمن "init" إن عُرِّفت
+    int line = 0;
+};
 
 // نقطة API واحدة مُسجَّلة داخل @container.api عبر عبارة route؛ يُستخدَم لمطابقة استدعاءات call()/callApi()
 // بأسلوب "API حقيقي قابل للاختبار" (mock/stub) دون الحاجة لاتصال شبكة فعلي.
@@ -776,6 +806,28 @@ private:
     void executeBlock(const std::vector<StmtPtr>& statements, EnvPtr env);
     Value evaluate(const ExprPtr& expr, EnvPtr env);
     Value callFunction(const std::shared_ptr<Callable>& fn, std::vector<Value>& args, int line);
+
+    // ---- OOP: class/struct/enum runtime (rin_interpreter.cpp) ----
+    // اسم الصنف -> تعريفه (ClassDef). سجل عام واحد (بنفس فلسفة `containers` أعلاه: كل الأصناف
+    // "عامة" بصرف النظر عن مكان تعريفها نصياً)، يُملأ إما عبر hoisting (run()/callTopLevelFunction،
+    // بنفس أسلوب FunctionStmt) أو عند تنفيذ ClassStmt مباشرة (تعريف محلي داخل دالة/كتلة).
+    std::unordered_map<std::string, ClassDef> classes;
+    void registerClassStmt(const std::shared_ptr<ClassStmt>& s);
+    // يبني كائناً جديداً من صنف [className]: يمشي سلسلة الوراثة من الجذر (الأب الأبعد) حتى الصنف
+    // نفسه فيُهيّئ كل الحقول بترتيبها (فتُطغى قيم الابن على الأب عند تكرار نفس الاسم)، ثم يستدعي
+    // 'init' الأقرب في سلسلة الوراثة إن عُرِّفت (بـ args)، أو يرفض أي وسيط إن لم تُعرَّف init إطلاقاً.
+    Value instantiateClass(const std::string& className, std::vector<Value>& args, int line);
+    // يبحث عن دالة (method) باسم معيّن بدءاً من [className] ثم صعوداً عبر superclass (توريث بسيط
+    // بترتيب أقرب تعريف يفوز)؛ nullptr إن لم توجد في السلسلة كاملة.
+    std::shared_ptr<FunctionStmt> findMethod(const std::string& className, const std::string& methodName) const;
+    // يبني قيمة FUNCTION "مربوطة" (bound method): نفس جسم [method]، لكن بيئة إغلاق (closure) جديدة
+    // تُعرِّف 'self' = receiver مسبقاً، بحيث تُستدعى عبر callFunction العادية بلا أي مسار خاص.
+    Value bindMethod(const Value& receiver, const std::shared_ptr<FunctionStmt>& method);
+    // دلالة القيمة (value semantics) لـ struct: عند إسناد/تمرير قيمة struct instance، تُستنسَخ
+    // InstanceData بالكامل (استنساخ عميق متكرر لأي حقل struct متداخل بدوره) بدل مشاركة نفس
+    // shared_ptr كما تفعل class/array/map عادةً. أي قيمة أخرى (بما فيها class instance عادية) تُعاد
+    // كما هي بلا أي نسخ (سلوك المرجع المعتاد، بلا أي تغيير).
+    Value copyForBinding(const Value& v) const;
 
     // ---- RinFlow internals ----
     // يُنفِّذ نداءً واحداً بالاسم (builtinOps الخاصة، ثم natives، ثم دالة Rin مُعرَّفة) بعد أن تكون
