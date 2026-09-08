@@ -11,7 +11,7 @@ import android.widget.EditText
 import android.widget.ImageButton
 import android.widget.LinearLayout
 import android.widget.PopupMenu
-import android.widget.ProgressBar
+// RinSpinner (مؤشر التحميل الدائري المخصَّص بهوية العلامة) في نفس الحزمة، لا حاجة لاستيراده صراحةً.
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
@@ -59,7 +59,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var txtEngineVersion: TextView
     private lateinit var txtFileName: TextView
     private lateinit var rvJobs: RecyclerView
-    private lateinit var progressRunning: ProgressBar
+    private lateinit var progressRunning: RinSpinner
     private lateinit var findBar: LinearLayout
     private lateinit var txtFind: EditText
     private lateinit var txtReplace: EditText
@@ -217,9 +217,9 @@ class MainActivity : AppCompatActivity() {
         RinJobScheduler.onJobsChanged = { jobs ->
             jobAdapter.submit(jobs)
             if (jobs.isNotEmpty()) rvJobs.scrollToPosition(jobs.size - 1)
-            progressRunning.visibility =
-                if (jobs.any { it.status == JobStatus.RUNNING }) android.view.View.VISIBLE
-                else android.view.View.GONE
+            val anyRunning = jobs.any { it.status == JobStatus.RUNNING }
+            progressRunning.visibility = if (anyRunning) android.view.View.VISIBLE else android.view.View.GONE
+            if (anyRunning) progressRunning.start() else progressRunning.stop()
         }
 
         RinLogoLoadingOverlay.setProgress(0.94f)
