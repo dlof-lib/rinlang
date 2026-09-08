@@ -49,6 +49,43 @@ object ProjectManager {
     )
 
     /**
+     * خيارات مشروع نوع Container، تُختار في حوار "مشروع جديد" (قسم "خيارات الحاوية") قبل
+     * الإنشاء: اسم المتغيّر الحيّ (warp) الابتدائي وقيمته، بدل "counter"/"0" الثابتين دائماً.
+     * لا تؤثر على أنواع المشاريع الأخرى.
+     */
+    data class ContainerOptions(
+        val varName: String = "counter",
+        val varValue: String = "0"
+    )
+
+    /**
+     * خيارات مشروع نوع Table، تُختار في حوار "مشروع جديد" (قسم "خيارات الجدول") قبل الإنشاء:
+     * عدد الأعمدة (2-6) وعدد صفوف البيانات الابتدائية (1-10)، تُستخدم لتوليد رؤوس أعمدة
+     * وصفوف تجريبية مطابقة للعدد المختار بدل عمودين وصف واحد ثابتين.
+     */
+    data class TableOptions(
+        val columns: Int = 2,
+        val rows: Int = 1
+    )
+
+    /**
+     * خيارات مشروع نوع Free Project، تُختار في حوار "مشروع جديد" (قسم "خيارات المشروع الحر")
+     * قبل الإنشاء: قالب البداية — "empty" (ملف فارغ تماماً)، "greeting" (تعليق ترحيبي، السلوك
+     * الافتراضي السابق)، أو "example" (أمثلة تعليمية بسيطة على متغيّرات/طباعة).
+     */
+    data class FreeOptions(
+        val template: String = "greeting"
+    )
+
+    /**
+     * خيارات مشروع نوع Illust، تُختار في حوار "مشروع جديد" (قسم "خيارات الرسم") قبل الإنشاء:
+     * تضمين ملف مثال جاهز (hello.illust) أو البدء بلوحة فارغة (canvas.illust) بدلاً منه.
+     */
+    data class IllustOptions(
+        val includeExample: Boolean = true
+    )
+
+    /**
      * ملف البيانات الوصفية لمشروع واحد، في جذر مجلد المشروع مباشرة. يحفظ حالياً نوع المشروع
      * (container/table/ui/free) الذي اختاره المستخدم عند الإنشاء، داخل حاوية Rin مصغّرة
      * (@container ... .end/container) بدل سطر "مفتاح=قيمة" خام — تماشياً مع لغة Rin نفسها
@@ -115,30 +152,58 @@ object ProjectManager {
      * القالب الابتدائي لملف main.rin حسب نوع المشروع المختار عند الإنشاء. [uiOptions] لا يُقرأ
      * إلا عندما [type] == ProjectType.UI (انظر فرع ProjectType.UI أدناه).
      */
-    private fun mainRinTemplateFor(type: ProjectType, name: String, uiOptions: UiDesignOptions = UiDesignOptions()): String = when (type) {
-        ProjectType.CONTAINER ->
+    private fun mainRinTemplateFor(
+        type: ProjectType,
+        name: String,
+        uiOptions: UiDesignOptions = UiDesignOptions(),
+        containerOptions: ContainerOptions = ContainerOptions(),
+        tableOptions: TableOptions = TableOptions(),
+        freeOptions: FreeOptions = FreeOptions()
+    ): String = when (type) {
+        ProjectType.CONTAINER -> {
+            val varName = containerOptions.varName.trim().ifEmpty { "counter" }
+            val varValue = containerOptions.varValue.trim().ifEmpty { "0" }
             "// مشروع: $name\n" +
                 "// نوع المشروع: حاوية (@container) — بيانات حية (warp) داخل حاوية مسمّاة.\n\n" +
                 "@container=Main\n" +
-                "    warp counter = 0;\n\n" +
+                "    warp $varName = $varValue;\n\n" +
                 "    print \"مرحباً من حاوية مشروع $name\";\n" +
-                "    print \"العداد:\", counter;\n" +
+                "    print \"$varName:\", $varName;\n" +
                 ".end/container\n"
+        }
 
-        ProjectType.TABLE ->
+        ProjectType.TABLE -> {
+            val columns = tableOptions.columns.coerceIn(2, 6)
+            val rows = tableOptions.rows.coerceIn(1, 10)
+            val headerCells = (1..columns).joinToString(", ") { "\"العمود $it\"" }
+            val dataRows = (1..rows).joinToString("\n") { r ->
+                val cells = (1..columns).joinToString(", ") { c -> "\"قيمة $r-$c\"" }
+                "    row cells=[$cells];"
+            }
             "// مشروع: $name\n" +
-                "// نوع المشروع: جدول بيانات (@table)\n\n" +
+                "// نوع المشروع: جدول بيانات (@table) — $columns عمود × $rows صف بيانات ابتدائي.\n\n" +
                 "@table=main_table\n" +
-                "    row cells=[\"العمود الأول\", \"العمود الثاني\"];\n" +
-                "    row cells=[\"قيمة 1\", \"قيمة 2\"];\n" +
+                "    row cells=[$headerCells];\n" +
+                "$dataRows\n" +
                 ".end/table\n\n" +
                 "print \"جدول مشروع $name جاهز\";\n"
+        }
 
         ProjectType.UI -> buildUiRinTemplate(name, uiOptions)
 
-        ProjectType.FREE ->
-            "// مشروع: $name\n" +
-                "print \"مرحباً من مشروع $name\";\n"
+        ProjectType.FREE -> when (freeOptions.template) {
+            "empty" -> ""
+            "example" ->
+                "// مشروع: $name\n" +
+                    "// أمثلة تعليمية بسيطة — احذفها متى شئت.\n\n" +
+                    "warp userName = \"صديقي\";\n" +
+                    "warp total = 10 + 5;\n\n" +
+                    "print \"مرحباً،\", userName;\n" +
+                    "print \"الناتج:\", total;\n"
+            else ->
+                "// مشروع: $name\n" +
+                    "print \"مرحباً من مشروع $name\";\n"
+        }
 
         // يُستبدَل فوراً بعد الإنشاء عبر CustomLanguageProjectScaffolder.installBundledIllust
         // (انظر ProjectsActivity)؛ هذا المحتوى احتياطي فقط في حال لم يُستدعَ ذلك لأي سبب.
@@ -242,7 +307,10 @@ object ProjectManager {
         context: Context,
         name: String,
         type: ProjectType = ProjectType.FREE,
-        uiOptions: UiDesignOptions = UiDesignOptions()
+        uiOptions: UiDesignOptions = UiDesignOptions(),
+        containerOptions: ContainerOptions = ContainerOptions(),
+        tableOptions: TableOptions = TableOptions(),
+        freeOptions: FreeOptions = FreeOptions()
     ): Project {
         val trimmed = name.trim()
         require(isValidProjectName(trimmed)) { "اسم المشروع غير صالح" }
@@ -250,7 +318,9 @@ object ProjectManager {
         require(!dir.exists()) { "يوجد مشروع بهذا الاسم بالفعل" }
         dir.mkdirs()
         writeProjectMeta(dir, type)
-        File(dir, "main.rin").writeText(mainRinTemplateFor(type, trimmed, uiOptions))
+        File(dir, "main.rin").writeText(
+            mainRinTemplateFor(type, trimmed, uiOptions, containerOptions, tableOptions, freeOptions)
+        )
         return Project(trimmed, dir, dir.lastModified(), type)
     }
 
