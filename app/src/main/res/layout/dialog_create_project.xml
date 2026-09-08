@@ -16,6 +16,8 @@
         android:paddingTop="16dp"
         android:paddingBottom="4dp">
 
+        <!-- حقل إدخال مربّع بحدّ وخلفية (bg_input_field) بدل خط سفلي مسطّح افتراضي، ليتطابق
+             مع أسلوب حقول الإدخال المميّزة في بقية شاشات التطبيق (تسجيل الدخول/الحساب). -->
         <EditText
             android:id="@+id/inputProjectName"
             android:layout_width="match_parent"
@@ -23,6 +25,11 @@
             android:hint="@string/project_name_hint"
             android:textColor="@color/rin_on_toolbar"
             android:textColorHint="@color/rin_editor_hint"
+            android:background="@drawable/bg_input_field"
+            android:paddingStart="14dp"
+            android:paddingEnd="14dp"
+            android:paddingTop="12dp"
+            android:paddingBottom="12dp"
             android:maxLines="1"
             android:inputType="text" />
 
