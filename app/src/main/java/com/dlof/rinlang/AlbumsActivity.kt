@@ -76,12 +76,23 @@ class AlbumsActivity : AppCompatActivity() {
         val input = EditText(this).apply {
             hint = getString(R.string.album_name_hint)
             setSingleLine(true)
-            setPadding(28, 12, 28, 12)
+            setTextColor(ContextCompat.getColor(this@AlbumsActivity, R.color.rin_on_toolbar))
+            setHintTextColor(ContextCompat.getColor(this@AlbumsActivity, R.color.rin_editor_hint))
+            background = ContextCompat.getDrawable(this@AlbumsActivity, R.drawable.bg_input_field)
+            val pad = (14 * resources.displayMetrics.density).toInt()
+            setPadding(pad, pad, pad, pad)
+        }
+        val container = android.widget.FrameLayout(this).apply {
+            val margin = (22 * resources.displayMetrics.density).toInt()
+            addView(input, android.widget.FrameLayout.LayoutParams(
+                android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
+                android.widget.FrameLayout.LayoutParams.WRAP_CONTENT
+            ).apply { marginStart = margin; marginEnd = margin; topMargin = margin / 2 })
         }
         AlertDialog.Builder(this)
             .setTitle(R.string.album_new)
             .setMessage(R.string.album_create_description)
-            .setView(input)
+            .setView(container)
             .setPositiveButton(R.string.create) { _, _ ->
                 try {
                     ProjectAlbumManager.createAlbum(this, input.text.toString())
