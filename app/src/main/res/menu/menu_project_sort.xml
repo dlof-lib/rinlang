@@ -4,7 +4,7 @@
      الإعدادات، لكن مباشرة فوق الشاشة التي يُطبَّق عليها الترتيب — بدل إلزام المستخدم بالخروج
      لشاشة أخرى لتغيير ترتيب مألوف. -->
 <menu xmlns:android="http://schemas.android.com/apk/res/android">
-    <item android:id="@+id/sortProjectsRecent" android:title="@string/sort_recent" />
-    <item android:id="@+id/sortProjectsName" android:title="@string/sort_name" />
-    <item android:id="@+id/sortProjectsType" android:title="@string/sort_type" />
+    <item android:id="@+id/sortProjectsRecent" android:title="@string/projects_sort_recent" />
+    <item android:id="@+id/sortProjectsName" android:title="@string/projects_sort_name" />
+    <item android:id="@+id/sortProjectsType" android:title="@string/projects_sort_type" />
 </menu>
