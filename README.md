@@ -1,10 +1,49 @@
-# Rin official single live preview fix
+# إصلاح "مشكلة الألبومات" + تصميم شاشة المشاريع بشكل ألبوم احترافي
 
-- The editor now recognizes `@loop=name`, `@loop.Kind=name`, `@view=name`, and `@view.Kind=name` as Loom roots.
-- `runProgram()` and manual Live Preview use the same root detector, so `@loop=screen` opens the real preview.
-- Native C++ remains the single authoritative Rin execution + Loom layout/runtime.
-- `LoomFabricView` remains the only preview surface.
-- HTML is an embedded capability inside that same preview: `WebView` nodes with `html=`, `url=` or `src=` can render HTML/CSS/remote web content where Canvas is not suitable.
-- Inline HTML clicks are forwarded back to `LoomPreviewManager.tap()` and therefore use the same native Rin handler path; JavaScript never executes Rin code.
-- Remote web pages do not receive the Rin bridge.
-- C++ pipeline accepts `@loop` as an official root in both cold and hot paths.
+## المُعدَّل
+- **app/src/main/java/com/dlof/rinlang/ProjectsActivity.kt**
+- **app/src/main/res/layout/item_project.xml**
+
+## المُنشأ
+- **app/src/main/res/menu/menu_project_actions.xml**
+
+---
+
+## 1) خلل فعلي وُجد وأُصلح: "مشكلة الألبومات"
+كانت شاشة المشاريع (ProjectsActivity) تحمل **نسخة قديمة مهجورة بالكامل** من تدفّق الألبومات
+(`showAlbumsDialog` / `showCreateAlbumDialog` / `showAlbumProjects`) — حوارات AlertDialog بسيطة،
+من قبل أن تُبنى شاشتا `AlbumsActivity` / `AlbumDetailActivity` الحاليتين بتصميم الغلاف المرئي.
+هذه الدوال الثلاث **لم تعد مُستدعاة من أي مكان** في الكود (زر "الألبومات" يفتح `AlbumsActivity`
+مباشرة الآن) — كود ميت متروك يعرض منطق ألبومات مختلف عن الشاشة الفعلية لو استُدعي بالخطأ
+لاحقاً. تمت إزالته نهائياً.
+
+**كما كان `showMoveDialog` (نقل مشروع لألبوم — الوظيفة الفعلية المستخدَمة) ينتهي بطريق مسدود:**
+لو لم يكن للمستخدم أي ألبوم بعد، كان يعرض Toast فقط ("أنشئ ألبوماً أولاً") ويُغلق، بلا أي طريق
+لإنشاء الألبوم من هناك — يضطر المستخدم للخروج، فتح شاشة الألبومات، إنشاء واحد، ثم العودة
+والمحاولة من جديد. أصبح الآن **"+ ألبوم جديد" خياراً ثابتاً أول القائمة**: ينشئ الألبوم وينقل
+المشروع إليه في خطوة واحدة متصلة.
+
+## 2) التصميم: شاشة مشاريع بشكل "ألبوم" احترافي ومنظّم
+- `item_project.xml` أُعيد بناؤه بالكامل بنفس لغة تصميم `item_album.xml` (غلاف بتدرّج لوني +
+  طبقة ظل خلفية مزاحة قليلاً توحي بعمق حقيقي)، بدل بطاقة قائمة مسطّحة أحادية العمود.
+- كل مشروع يأخذ لون غلافه من **نوع المشروع نفسه** (الألوان الموجودة أصلاً في التطبيق:
+  Container/Table/UI/Free/Illust) بدل تدرّج عشوائي — هوية بصرية متسقة وسهلة القراءة دفعة
+  واحدة عبر الشبكة.
+- `ProjectsActivity.kt`: `LinearLayoutManager` → `GridLayoutManager(this, 2)` — شبكة عمودين
+  مطابقة تماماً لشبكة شاشة الألبومات، بدل قائمة رأسية طويلة.
+- ثلاثة أزرار (تعديل/نقل/حذف) كانت تشغل صفاً كاملاً بأسفل كل بطاقة — لا تتّسع في تصميم شبكي
+  عمودين. استُبدلت بزر واحد "⋮" (المزيد) أعلى الغلاف يفتح قائمة منبثقة واحدة
+  (`menu_project_actions.xml`) تجمع الإجراءات الثلاثة، فتبقى البطاقة نظيفة ومنظّمة.
+
+## التحقق
+هذا تعديل Kotlin/Android XML، وبيئة العمل هنا بلا Android SDK/Gradle (لا شبكة اتصال) لذا لا
+يمكن بناء/تشغيل التطبيق فعلياً هنا كما حدث مع محرك C++ سابقاً. بدلاً من ذلك:
+- تحقّقت أن كل XML جديد/معدَّل صالح البنية (XML well-formed).
+- بحثت بالكامل عن أي إشارة متبقية لأي id قديم أُزيل من `item_project.xml`
+  (`btnRenameProject`/`btnDeleteProject`/`btnMoveProject`) في كل الكود والموارد — لا توجد.
+- تأكدت أن كل الموارد المشار إليها (ألوان الأنواع الخمسة، `ic_nav_more`، السلاسل النصية
+  المستخدمة في القائمة المنبثقة) موجودة بالفعل في المشروع، فلا حاجة لإضافة موارد جديدة عدا
+  ملف القائمة نفسه.
+
+## التطبيق
+انسخ الملفات الثلاثة فوق نفس المسارات في مشروعك، ثم أعد البناء عبر Gradle كالمعتاد.
