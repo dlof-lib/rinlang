@@ -24,6 +24,7 @@
     <string name="projects_count_format">%1$d projects</string>
     <string name="search_projects_hint">Search projects</string>
     <string name="open_project_action">Open project</string>
+    <string name="project_more_actions">Project options</string>
     <string name="project_not_found">Project not found</string>
     <string name="no_search_results">No matching projects</string>
     <string name="project_meta_format">%1$d files</string>
