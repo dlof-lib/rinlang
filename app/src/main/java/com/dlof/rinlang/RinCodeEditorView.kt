@@ -194,6 +194,16 @@ class RinCodeEditorView @JvmOverloads constructor(
      */
     private fun applyMinimalDiff(target: Editable, oldText: String, newText: String) {
         if (oldText == newText) return
+        if (target.length != oldText.length) {
+            // شبكة أمان: لا يُفترض حدوث هذا بعد تصحيح afterEngineMutation لتمرير محتوى target
+            // الفعلي بدل lastKnownText (انظر تعليق تلك النقطة) — لكن لو انحرف target عن oldText
+            // لأي سبب مستقبلي غير متوقَّع، نُعيد كتابته بالكامل بدل حساب نطاق [prefix, oldEnd) قد
+            // يتجاوز طول target الفعلي ويرمي IndexOutOfBoundsException ويُغلق التطبيق بالكامل (هذا
+            // بالضبط ما حدث في تقرير عطل "replace ends beyond length" أثناء عملية القص). أسوأ نتيجة
+            // هنا فقدان composing span نشط لضغطة واحدة، بدل عطل كامل للتطبيق.
+            target.replace(0, target.length, newText)
+            return
+        }
         val maxCommon = min(oldText.length, newText.length)
         var prefix = 0
         while (prefix < maxCommon && oldText[prefix] == newText[prefix]) prefix++
@@ -214,7 +224,21 @@ class RinCodeEditorView @JvmOverloads constructor(
         val changed = newText != old
         if (changed) {
             suppressForward = true
-            applyMinimalDiff(shadowEditable, old, newText)
+            // نقارن ضد محتوى shadowEditable الفعلي الحالي (toString())، لا ضد lastKnownText
+            // المخزَّن: عند الوصول من routeShadowEdit يكون IME قد عدَّل shadowEditable هذا مباشرة
+            // *قبل* هذا الاستدعاء (لأن getEditable() تُعيد shadowEditable نفسه لـ InputConnection)،
+            // فيصبح lastKnownText (نص المحرك القديم قبل التعديل) غير مطابق إطلاقًا لمحتوى
+            // shadowEditable الفعلي في تلك اللحظة. حساب الفرق ضد lastKnownText وتطبيقه على
+            // shadowEditable في هذه الحالة كان يُعيد تطبيق تعديل IME نفسه فوق تعديل IME الأصلي
+            // (ازدواج)، فيُدخل حروفًا مكرَّرة أو يحذف حروفًا زائدة بصمت — والخطأ يتراكم مع كل ضغطة
+            // مفتاح حتى ينحرف طول shadowEditable الفعلي عن الطول الذي يتوقّعه هذا الكود، فتنفجر
+            // IndexOutOfBoundsException لاحقًا في عملية غير ذات صلة إطلاقًا (كما حدث هنا عند القص:
+            // applyMinimalDiff استخدمت طول lastKnownText المنحرف أصلاً من ضغطات سابقة). المقارنة
+            // ضد shadowEditable.toString() نفسه تبقى صحيحة في كل الحالات: لم يُعدَّل بعد (أزرار
+            // شريط الأدوات/قص/لصق/الانتقال لسطر) فيطابق lastKnownText تمامًا فيُعطي نفس النتيجة
+            // كالسابق، أو عُدِّل بالفعل من IME فيطابق newText جزئيًا (مثل إغلاق قوس تلقائي أضافه
+            // المحرّك ولم يكتبه IME) فيُكمِّل الفرق الناقص فقط بدل إعادة كتابة ما كُتب أصلاً.
+            applyMinimalDiff(shadowEditable, shadowEditable.toString(), newText)
             suppressForward = false
             lastKnownText = newText
             // التلوين النحوي يمسح كامل المستند (مكلف نسبيًا على ملف ضخم) — نُعيد حسابه فقط عندما
