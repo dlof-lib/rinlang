@@ -1,97 +1,96 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- تصميم "غلاف ألبوم" لبطاقة المشروع: نفس هوية شاشة الألبومات (item_album.xml) — غلاف
-     ملوّن بتدرّج حسب نوع المشروع + طبقة ظل خلفية مزاحة قليلاً توحي بعمق فعلي، بدل قائمة
-     أسطر مسطّحة. يُعرض عمودين في شبكة (انظر ProjectsActivity: GridLayoutManager) بدل عمود
-     واحد بعد إصلاح مشكلة الألبومات، ليصبح مظهر "المشاريع" و"الألبومات" متسقين فعلاً. -->
+<!-- تصميم بطاقة مشروع "جاد" بدل غلاف الألبوم الملوّن بالكامل (كان يبدو مرحاً/طفولياً
+     بتدرّجاته الزاهية وظلّه المزدوج على هيئة "أوراق مكدّسة"). البطاقة الآن مسطّحة بلون
+     محايد واحد (bg_project_card — كان معرَّفاً أصلاً في الألوان لكن غير مستخدَم في أي
+     تخطيط)، وهوية نوع المشروع تنحصر في شارة أيقونة صغيرة فقط بدل تلوين البطاقة كلها —
+     أقرب لتصميم أدوات برمجية جادة (VS Code / Linear) من تطبيق ألبومات صور. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="vertical"
-    android:padding="7dp">
+    android:padding="6dp">
 
-    <FrameLayout
+    <LinearLayout
+        android:id="@+id/projectCover"
         android:layout_width="match_parent"
-        android:layout_height="168dp">
-
-        <!-- طبقة الظل: نسخة أغمق من الغلاف، مزاحة لأسفل ولليمين قليلاً، توحي بأن البطاقة
-             "أوراق" مكدّسة فوق بعضها بدل مستطيل مسطح واحد. -->
-        <View
-            android:id="@+id/projectCoverBack"
-            android:layout_width="match_parent"
-            android:layout_height="156dp"
-            android:layout_marginStart="7dp"
-            android:layout_marginTop="9dp" />
+        android:layout_height="150dp"
+        android:orientation="vertical"
+        android:padding="14dp"
+        android:background="@drawable/bg_project_card"
+        android:elevation="2dp"
+        android:clickable="true"
+        android:focusable="true">
 
         <LinearLayout
-            android:id="@+id/projectCover"
             android:layout_width="match_parent"
-            android:layout_height="156dp"
-            android:orientation="vertical"
-            android:padding="14dp"
-            android:layout_gravity="top|start"
-            android:elevation="4dp"
-            android:clickable="true"
-            android:focusable="true">
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical">
 
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:gravity="center_vertical">
+            <FrameLayout
+                android:id="@+id/frameProjectTypeIcon"
+                android:layout_width="32dp"
+                android:layout_height="32dp">
 
                 <ImageView
                     android:id="@+id/imgProjectTypeIcon"
                     android:layout_width="16dp"
                     android:layout_height="16dp"
+                    android:layout_gravity="center"
                     android:contentDescription="@null" />
-
-                <TextView
-                    android:id="@+id/txtProjectType"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:layout_marginStart="6dp"
-                    android:textColor="#CCFFFFFF"
-                    android:textSize="9sp"
-                    android:textStyle="bold"
-                    android:maxLines="1"
-                    android:ellipsize="end" />
-
-                <ImageButton
-                    android:id="@+id/btnProjectMore"
-                    android:layout_width="30dp"
-                    android:layout_height="30dp"
-                    android:layout_marginEnd="-8dp"
-                    android:layout_marginTop="-6dp"
-                    android:padding="6dp"
-                    android:background="@drawable/bg_icon_btn"
-                    android:src="@drawable/ic_nav_more"
-                    android:contentDescription="@string/open_project_action" />
-            </LinearLayout>
+            </FrameLayout>
 
             <Space
-                android:layout_width="1dp"
-                android:layout_height="0dp"
+                android:layout_width="0dp"
+                android:layout_height="1dp"
                 android:layout_weight="1" />
 
-            <TextView
-                android:id="@+id/txtProjectName"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:textColor="@android:color/white"
-                android:textSize="16sp"
-                android:textStyle="bold"
-                android:maxLines="2"
-                android:ellipsize="end" />
-
-            <TextView
-                android:id="@+id/txtProjectMeta"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
-                android:textColor="#DDFFFFFF"
-                android:textSize="10.5sp"
-                android:maxLines="1"
-                android:ellipsize="end" />
+            <ImageButton
+                android:id="@+id/btnProjectMore"
+                android:layout_width="30dp"
+                android:layout_height="30dp"
+                android:layout_marginEnd="-8dp"
+                android:padding="6dp"
+                android:background="@drawable/bg_icon_btn"
+                android:src="@drawable/ic_nav_more"
+                app:tint="@color/rin_editor_hint"
+                android:contentDescription="@string/open_project_action" />
         </LinearLayout>
-    </FrameLayout>
+
+        <TextView
+            android:id="@+id/txtProjectType"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:textSize="9.5sp"
+            android:textStyle="bold"
+            android:letterSpacing="0.08"
+            android:maxLines="1"
+            android:ellipsize="end" />
+
+        <Space
+            android:layout_width="1dp"
+            android:layout_height="0dp"
+            android:layout_weight="1" />
+
+        <TextView
+            android:id="@+id/txtProjectName"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textColor="@color/rin_on_toolbar"
+            android:textSize="16sp"
+            android:textStyle="bold"
+            android:maxLines="2"
+            android:ellipsize="end" />
+
+        <TextView
+            android:id="@+id/txtProjectMeta"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:textColor="@color/rin_editor_hint"
+            android:textSize="10.5sp"
+            android:maxLines="1"
+            android:ellipsize="end" />
+    </LinearLayout>
 </LinearLayout>
