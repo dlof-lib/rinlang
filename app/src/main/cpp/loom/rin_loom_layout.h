@@ -522,6 +522,20 @@ struct Loom {
         // the *unbounded-so-far* main axis, since we don't yet know how much flexible siblings
         // will need) and sums how much main-axis space they + gaps actually consume. Whatever is
         // left over (never negative) is split evenly across the flexible children in pass 2.
+        // FIX (display bug): when this container's own main axis is itself unbounded (the ~1e9
+        // sentinel used for the true render root / probe passes, same convention as the `< 1e8`
+        // checks elsewhere in this file), "leftover" below would be ~1e9 and every flexible child
+        // would be handed a ~1e9 share of it as a *real* min==max constraint -- not an estimate,
+        // a concrete height (or width in a Row) that LoomFabricView then tries to actually
+        // allocate and draw. That's the exact class of bug already fixed for Drawer above ("size
+        // to content instead" when the budget isn't finite) and for the implicit-Spacer cross-axis
+        // case below -- just never generalized to ordinary sizing="fill"/"expand" children. A
+        // sizing="fill" Card as the second child of a root Column with no fixed screen height (see
+        // samples/loom_sizing_demo.rin) used to report height=1000000000 and silently push every
+        // sibling after it to y=1000000000 too. With no real budget to divide, flexible children
+        // just fall back to measuring their own natural size this pass, exactly like non-flexible
+        // children already do.
+        bool unboundedMain = innerMain >= 1e8;
         std::vector<bool> flexible(s->children.size());
         std::vector<double> mainSizeOf(s->children.size(), 0.0);
         double fixedMainUsed = 0; int flexCount = 0; size_t flowChildren = 0;
@@ -537,7 +551,7 @@ struct Loom {
             // above explains why that approach was abandoned).
             if (isOverlayStrand(*s->children[i])) { flexible[i] = false; mainSizeOf[i] = 0; continue; }
             flowChildren++;
-            flexible[i] = isMainAxisFlexible(s->children[i], axis);
+            flexible[i] = !unboundedMain && isMainAxisFlexible(s->children[i], axis);
             if (flexible[i]) { flexCount++; continue; }
             Constraints probeC = (axis==Axis::Y) ? Constraints{0, innerMaxW, 0, 1e9} : Constraints{0, 1e9, 0, innerMaxH};
             Rect probe = layout(s->children[i], probeC, 0, 0);
