@@ -61,6 +61,25 @@ inline void encode(const Value& v, std::ostringstream& os) {
             os << "}";
             break;
         }
+        case Value::Type::INSTANCE: {
+            // كائن class/struct -> JSON object بحقوله فقط (بترتيب أول ظهور)، تماماً كتحويل MAP
+            // أعلاه؛ لا يوجد سطر خاص للدوال (methods) لأنها ليست حقولاً (fields) أصلاً.
+            os << "{";
+            if (v.instance) {
+                bool first = true;
+                for (auto& name : v.instance->fieldOrder) {
+                    auto it = v.instance->fields.find(name);
+                    if (it == v.instance->fields.end()) continue;
+                    if (!first) os << ",";
+                    first = false;
+                    encodeEscaped(name, os);
+                    os << ":";
+                    encode(it->second, os);
+                }
+            }
+            os << "}";
+            break;
+        }
     }
 }
 
