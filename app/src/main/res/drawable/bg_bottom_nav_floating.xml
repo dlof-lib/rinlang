@@ -1,8 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- خلفية شريط التنقل السفلي الجديدة: بطاقة عائمة كاملة الاستدارة بدل شريط مستطيل ملاصق
      لحواف الشاشة — نمط "island nav" الشائع في تطبيقات حديثة متميّزة (بدل خلفية مسطّحة
-     تلامس حواف الشاشة الثلاثة). تُستخدَم مع هامش حول الشريط في bottom_nav_bar.xml. -->
+     تلامس حواف الشاشة الثلاثة). تُستخدَم مع هامش حول الشريط في bottom_nav_bar.xml.
+
+     تطوير إضافي: لون مسطّح واحد استُبدل بتدرّج رأسي خفيف جداً (rin_toolbar → rin_toolbar_bottom)
+     يمنح البطاقة عمقاً وإحساساً زجاجياً بدل سطح مسطّح تماماً، بالإضافة إلى حدّ رفيع شبه شفاف
+     يطابق نفس لمسة bg_toolbar_card لتوحيد الهوية البصرية بين أعلى وأسفل الشاشة. -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
-    <solid android:color="@color/rin_toolbar_bottom" />
+    <gradient
+        android:angle="90"
+        android:startColor="@color/rin_toolbar"
+        android:endColor="@color/rin_toolbar_bottom" />
     <corners android:radius="28dp" />
+    <stroke android:width="1dp" android:color="@color/rin_app_icon_border" />
 </shape>
