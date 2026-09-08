@@ -2,19 +2,24 @@
 <!-- شريط علوي موحّد لكل الشاشات الفرعية (المشاريع / الملفات / المكتبات):
      زر رجوع + شارة "rin" + عنوان الشاشة + عنوان فرعي اختياري (مثلاً اسم المشروع الحالي).
      بنفس هوية الشريط العلوي في المحرر الرئيسي (MainActivity) لضمان مظهر موحّد واحترافي
-     عبر التطبيق كله، بدل شاشات بلا عنوان أو زر رجوع كما كانت سابقاً. -->
+     عبر التطبيق كله، بدل شاشات بلا عنوان أو زر رجوع كما كانت سابقاً.
+
+     إعادة تصميم: بطاقة عائمة بزوايا سفلية دائرية (bg_toolbar_card) وظل أعمق (elevation 6dp)
+     بدل مستطيل حاد الحواف مسطّح على محتوى الشاشة مباشرة — نفس لغة "البطاقة العائمة" المستخدمة
+     الآن في الشريط السفلي (bg_bottom_nav_floating)، لهوية بصرية متطابقة أعلى وأسفل الشاشة.
+     شريط تمييز صغير بتدرّج العلامة (bg_toolbar_accent_bar) أُضيف بجانب العنوان كتوقيع بصري. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="horizontal"
     android:gravity="center_vertical"
-    android:background="@drawable/bg_toolbar_gradient"
-    android:elevation="3dp"
+    android:background="@drawable/bg_toolbar_card"
+    android:elevation="6dp"
     android:paddingStart="4dp"
     android:paddingEnd="14dp"
-    android:paddingTop="9dp"
-    android:paddingBottom="9dp">
+    android:paddingTop="10dp"
+    android:paddingBottom="14dp">
 
     <ImageButton
         android:id="@+id/btnToolbarBack"
@@ -25,10 +30,10 @@
         android:background="@drawable/bg_icon_btn"
         android:contentDescription="@string/action_back" />
 
-    <!-- أيقونة التطبيق الحقيقية (mipmap/ic_launcher) داخل إطار أنيق، بديلاً عن شارة النص "rin" -->
+    <!-- أيقونة التطبيق الحقيقية (mipmap/ic_launcher) داخل إطار متوهّج بلون العلامة -->
     <FrameLayout
-        android:layout_width="30dp"
-        android:layout_height="30dp"
+        android:layout_width="34dp"
+        android:layout_height="34dp"
         android:layout_marginStart="4dp"
         android:background="@drawable/bg_app_icon_frame">
 
@@ -36,25 +41,32 @@
             android:id="@+id/imgToolbarAppIcon"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:padding="2dp"
+            android:padding="3dp"
             android:src="@mipmap/ic_launcher_round"
             android:contentDescription="@string/app_name" />
     </FrameLayout>
+
+    <View
+        android:layout_width="3dp"
+        android:layout_height="22dp"
+        android:layout_marginStart="12dp"
+        android:background="@drawable/bg_toolbar_accent_bar" />
 
     <LinearLayout
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_weight="1"
         android:orientation="vertical"
-        android:layout_marginStart="10dp">
+        android:layout_marginStart="8dp">
 
         <TextView
             android:id="@+id/txtToolbarTitle"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:textColor="@color/rin_on_toolbar"
-            android:textSize="16sp"
+            android:textSize="17sp"
             android:textStyle="bold"
+            android:letterSpacing="0.01"
             android:ellipsize="end"
             android:singleLine="true"
             tools:text="المشاريع" />
