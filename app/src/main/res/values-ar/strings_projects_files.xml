@@ -35,9 +35,9 @@
     <string name="project_meta_format">%1$d ملف</string>
     <string name="project_meta_with_time_format">%1$d ملف • %2$s</string>
     <string name="sort_projects_action">ترتيب المشاريع</string>
-    <string name="sort_recent">الأحدث تعديلاً</string>
-    <string name="sort_name">الاسم</string>
-    <string name="sort_type">النوع</string>
+    <string name="projects_sort_recent">الأحدث تعديلاً</string>
+    <string name="projects_sort_name">الاسم</string>
+    <string name="projects_sort_type">النوع</string>
 
     <!-- أنواع المشاريع (تُختار عند الإنشاء وتُحفظ في project.og.urin) -->
     <string name="project_type_label">اختيار النوع</string>
