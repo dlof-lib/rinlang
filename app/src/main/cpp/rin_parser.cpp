@@ -119,6 +119,21 @@ std::vector<StmtPtr> Parser::parse() {
 StmtPtr Parser::declaration() {
     if (match({TokenType::LET})) return letDeclaration();
     if (match({TokenType::FUN})) return functionDeclaration();
+    // OOP: 'class'/'struct'/'enum' كلمات سياقية غير محجوزة (بنفس أسلوب route/row/document/warp/
+    // state أعلاه بالضبط)، مُميَّزة بالنظر خطوة إضافية للأمام (IDENT — اسم الصنف/التعداد — مباشرة
+    // بعدها) حتى لا تصطدم باستخدام أي منها اسم متغيّر عادي في أي سياق آخر.
+    if (check(TokenType::IDENT) && peek().lexeme == "class" && checkNext(TokenType::IDENT)) {
+        advance(); // 'class'
+        return classDeclaration(false);
+    }
+    if (check(TokenType::IDENT) && peek().lexeme == "struct" && checkNext(TokenType::IDENT)) {
+        advance(); // 'struct'
+        return classDeclaration(true);
+    }
+    if (check(TokenType::IDENT) && peek().lexeme == "enum" && checkNext(TokenType::IDENT)) {
+        advance(); // 'enum'
+        return enumDeclaration();
+    }
     // 'make name = expr;' / 'make name;' -> صيغة إنجليزية مبسّطة سهلة التعلّم، مرادف كامل لِـ
     // 'let name = expr;' (يفوّض مباشرة إلى letDeclaration() نفسها، فيرث كل سلوكها بلا أي فرق).
     // 'make' كلمة سياقية غير محجوزة (تُقرأ IDENT عادي، بنفس أسلوب route/row/style/document/warp
@@ -504,6 +519,75 @@ StmtPtr Parser::functionDeclaration() {
     fn->body = body;
     fn->line = name.line;
     return fn;
+}
+
+// class Name [extends Base] { let field = expr; ... fun method(...) { ... } ... }
+// struct Name { ... }  -> نفس الصياغة بالضبط (isStruct يفرّق بينهما دلالياً وقت التشغيل فقط).
+StmtPtr Parser::classDeclaration(bool isStruct) {
+    auto name = consume(TokenType::IDENT,
+                         isStruct ? "Expected struct name after 'struct'" : "Expected class name after 'class'");
+    auto cls = std::make_shared<ClassStmt>();
+    cls->name = name.lexeme;
+    cls->isStruct = isStruct;
+    cls->line = name.line;
+
+    // 'extends' كلمة سياقية غير محجوزة أيضاً، مُميَّزة بالنظر خطوة إضافية للأمام (IDENT اسم الصنف
+    // الأب مباشرة بعدها) — بلا فرق سلوكي بين class/struct هنا: كلاهما يقبل extends.
+    if (check(TokenType::IDENT) && peek().lexeme == "extends" && checkNext(TokenType::IDENT)) {
+        advance(); // 'extends'
+        cls->superclass = advance().lexeme;
+    }
+
+    consume(TokenType::LBRACE, isStruct ? "Expected '{' before struct body" : "Expected '{' before class body");
+    while (!check(TokenType::RBRACE) && !isAtEnd()) {
+        if (match({TokenType::FUN})) {
+            auto fn = std::dynamic_pointer_cast<FunctionStmt>(functionDeclaration());
+            cls->methods.push_back(fn);
+            continue;
+        }
+        if (match({TokenType::LET})) {
+            auto letStmt = std::dynamic_pointer_cast<LetStmt>(letDeclaration());
+            ClassFieldDecl fd;
+            fd.name = letStmt->name;
+            fd.initializer = letStmt->initializer;
+            cls->fields.push_back(std::move(fd));
+            continue;
+        }
+        throw errRich(diag::Code::E0013_InvalidExpression, peek(),
+                      "expected a field ('let') or method ('fun') inside " +
+                          std::string(isStruct ? "struct" : "class") + " body",
+                      "only field declarations (`let name = value;`) and method declarations "
+                      "(`fun name(...) { ... }`) are allowed directly inside a class/struct body",
+                      "add 'let' before a field or 'fun' before a method",
+                      "'let' or 'fun'");
+    }
+    consume(TokenType::RBRACE, isStruct ? "Expected '}' after struct body" : "Expected '}' after class body");
+    return cls;
+}
+
+// enum Name { CaseA, CaseB = expr, ... }
+StmtPtr Parser::enumDeclaration() {
+    auto name = consume(TokenType::IDENT, "Expected enum name after 'enum'");
+    auto en = std::make_shared<EnumStmt>();
+    en->name = name.lexeme;
+    en->line = name.line;
+
+    consume(TokenType::LBRACE, "Expected '{' before enum body");
+    if (!check(TokenType::RBRACE)) {
+        do {
+            if (check(TokenType::RBRACE)) break; // يسمح بفاصلة زائدة قبل '}'
+            auto caseTok = consume(TokenType::IDENT, "Expected enum case name");
+            EnumCase c;
+            c.name = caseTok.lexeme;
+            c.line = caseTok.line;
+            if (match({TokenType::EQUAL})) {
+                c.value = expression();
+            }
+            en->cases.push_back(std::move(c));
+        } while (match({TokenType::COMMA}));
+    }
+    consume(TokenType::RBRACE, "Expected '}' after enum body");
+    return en;
 }
 
 StmtPtr Parser::statement() {
@@ -2008,13 +2092,23 @@ ExprPtr Parser::assignment() {
             set->line = eq.line;
             return set;
         }
+        // OOP: object.name = value  ->  SetExpr (كتابة/تعديل حقل)، بنفس أسلوب IndexExpr->IndexSetExpr
+        // أعلاه بالضبط: GetExpr التي بناها call() تُعاد صياغتها كهدف كتابة بدل هدف قراءة.
+        if (auto get = std::dynamic_pointer_cast<GetExpr>(expr)) {
+            auto set = std::make_shared<SetExpr>();
+            set->object = get->object;
+            set->name = get->name;
+            set->value = value;
+            set->line = eq.line;
+            return set;
+        }
         throw errRich(diag::Code::E0003_InvalidAssignment, eq, "invalid assignment target",
-                      "only a plain variable (`x = ...`) or an index expression (`x[i] = ...`) can "
-                      "appear on the left of '='; the expression the parser built for the left-hand "
-                      "side here is neither",
-                      "assign to a variable or an index expression instead, e.g. `x = value;` or "
-                      "`x[0] = value;`",
-                      "a variable name or an index expression");
+                      "only a plain variable (`x = ...`), an index expression (`x[i] = ...`), or a "
+                      "property (`x.name = ...`) can appear on the left of '='; the expression the "
+                      "parser built for the left-hand side here is none of those",
+                      "assign to a variable, an index expression, or a property instead, e.g. "
+                      "`x = value;`, `x[0] = value;`, or `x.name = value;`",
+                      "a variable name, an index expression, or a property");
     }
     return expr;
 }
@@ -2186,6 +2280,32 @@ ExprPtr Parser::call() {
             ie->index = index;
             ie->line = bracket.line;
             expr = ie;
+        } else if (match({TokenType::DOT})) {
+            // OOP: object.name  ->  GetExpr (قراءة حقل/دالة مرتبطة) أو، إن تبعها '(', MethodCallExpr
+            // (نداء دالة مرتبطة). عقدة جديدة بحتة (additive): أي '.' يظهر هنا مباشرة بعد تعبير كان
+            // قبل هذا التغيير خطأً نحوياً دائماً (call() لم تكن تستهلك DOT إطلاقاً)، فلا يوجد أي
+            // برنامج Rin صالح سابقاً يتأثر بهذا التغيير.
+            Token dot = previous();
+            const Token& nameTok = consume(TokenType::IDENT, "Expected property or method name after '.'");
+            if (match({TokenType::LPAREN})) {
+                auto mc = std::make_shared<MethodCallExpr>();
+                mc->object = expr;
+                mc->method = nameTok.lexeme;
+                mc->line = dot.line;
+                if (!check(TokenType::RPAREN)) {
+                    do {
+                        mc->args.push_back(expression());
+                    } while (match({TokenType::COMMA}));
+                }
+                consume(TokenType::RPAREN, "Expected ')' after method arguments");
+                expr = mc;
+            } else {
+                auto ge = std::make_shared<GetExpr>();
+                ge->object = expr;
+                ge->name = nameTok.lexeme;
+                ge->line = dot.line;
+                expr = ge;
+            }
         } else {
             break;
         }
