@@ -66,6 +66,11 @@ private:
     StmtPtr reckonDeclaration();
     StmtPtr setDeclaration(); // 'set' name 'to' expr ';'  -> صياغة إنجليزية مبسّطة (sugar) لِـ LetStmt، مطابقة تماماً لـ let من ناحية الدلالة
     StmtPtr functionDeclaration();
+    // OOP: class Name [extends Base] { fields/methods }  |  struct Name { fields/methods }
+    // (يُستدعى بعد استهلاك 'class' أو 'struct' في declaration(); isStruct يفرّق بينهما)
+    StmtPtr classDeclaration(bool isStruct);
+    // enum Name { CaseA, CaseB = expr, ... }  (يُستدعى بعد استهلاك 'enum' في declaration())
+    StmtPtr enumDeclaration();
     StmtPtr statement();
     StmtPtr printStatement();
     StmtPtr ifStatement();
