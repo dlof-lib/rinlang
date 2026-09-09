@@ -3,6 +3,36 @@
 ## [Unreleased]
 
 ### Added
+- `rinVersion()` / `rinEdition()` — the engine version (from
+  `rin_version.h`) is now readable from inside `.rin` scripts themselves, not
+  just from the host side (`rin --version`, `rin_engine_version()`,
+  `RinEngine.engineVersion()`). Implemented identically in both the
+  interpreter (`rin_interpreter.cpp`'s `registerNatives()`) and the native
+  compiler (`rinc.cpp`'s codegen, both copies), verified to return the same
+  value (`"1.0.0"`/`"2026"`) through both execution paths. Because `rinc.cpp`
+  is deliberately a self-contained single file with no project includes, its
+  two native functions hold the version as manually-synced literals rather
+  than `#include`ing `rin_version.h` — see the checklist in
+  [`docs/VERSIONING.md`](docs/VERSIONING.md).
+- The app's built-in "مثال" (example) starter-project template
+  (`ProjectManager.kt` → `mainRinTemplateFor()`, `ProjectType.FREE` with
+  `freeOptions.template == "example"`) now includes a line using
+  `rinVersion()`/`rinEdition()`, so anyone creating a new example project in
+  the editor sees the version-reading feature demonstrated immediately.
+- Official versioning system: `app/src/main/cpp/rin_version.h` is now the
+  single source of truth for the Rin engine version, replacing four
+  independently hardcoded numbers that had already drifted apart (`rin
+  --version` printed `0.2.0` on Linux vs `0.1.0` on macOS/Windows for the
+  identical CLI tool; the Android app and the C API reported `1.1` from two
+  separate hardcoded strings; the root `VERSION` file said `1.0.0` and was
+  read by nothing). `jni_bridge.cpp`, `rin_c_api.cpp`, and all three
+  `cli/*/src/main.cpp` now include `rin_version.h` instead of defining their
+  own version string. `app/build.gradle` now reads `versionName` from the
+  root `VERSION` file and derives `versionCode` from it
+  (`major*10000+minor*100+patch`). See
+  [`docs/VERSIONING.md`](docs/VERSIONING.md) for the policy, the release
+  checklist, and why `rinc`, embedded `.rin` libraries, and RinPM package
+  versions are intentionally kept separate from this number.
 - `use Name from "path.rin";` — simple-English syntax for calling one named
   container (`@container=Name`) or UI element (`@view.Kind=Name`) from
   another `.rin` file by name, without pulling in everything else that file
