@@ -5774,6 +5774,25 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
         // منع إعادة استيراد نفس المكتبة بنفس أسلوب الاستيراد (مباشر أو باسم مستعار) أكثر من مرة
         // في نفس التشغيل، تماماً كأنظمة الوحدات (modules) المعتادة.
         std::string importKey = libPath + (s->alias.empty() ? "" : ("#as:" + s->alias));
+
+        // Modules: اكتشاف دورة استيراد (A تستورد B وB لا تزال بمنتصف استيراد A نفسها) -- importedPaths
+        // أعلاه وحدها لا تكفي هنا لأنها لا تُملأ إلا *بعد* اكتمال الاستيراد بنجاح، فدورة لم تكتمل بعد
+        // لا تظهر فيها إطلاقاً. importChain (مكدّس نصي بسيط) هو "بيان تبعيات" runtime بأبسط شكل ممكن.
+        if (std::find(importChain.begin(), importChain.end(), importKey) != importChain.end()) {
+            std::string chainDesc;
+            for (auto& k : importChain) chainDesc += k + " -> ";
+            chainDesc += importKey;
+            auto d = diagErr(diag::Code::E0028_ImportError, s->line, "circular import detected");
+            d.diagnostic->withReason("import chain: " + chainDesc)
+             .withHint("break the cycle by moving the shared code into a third module that both sides import instead");
+            throw d;
+        }
+        importChain.push_back(importKey);
+        struct ImportChainGuard {
+            std::vector<std::string>& chain;
+            ~ImportChainGuard() { if (!chain.empty()) chain.pop_back(); }
+        } importChainGuard{importChain};
+
         if (importedPaths.count(importKey)) {
             loaderui::LoadOutcome cached;
             cached.fromCache = true;
@@ -5809,8 +5828,35 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
             if (s->alias.empty()) {
                 // دمج مباشر: كل fun/let/text أعلى مستوى في المكتبة تصبح متاحة في النطاق الحالي مباشرة،
                 // تماماً كـ #include. أي @container بداخل المكتبة يُسجَّل عالمياً كأي حاوية عادية.
+                //
+                // Modules: لو استخدمت المكتبة 'export' على أي تصريح أعلى مستوى ولو مرة واحدة، الدمج
+                // يصبح "المُصدَّر فقط" بدل "كل شيء" تلقائياً (بلا أي صياغة إضافية من طرف المستورِد) --
+                // وإلا (لا export إطلاقاً في كامل الملف) يبقى الدمج الكامل القديم تماماً كما كان دائماً،
+                // بتوافقية كاملة للخلف مع كل مكتبة/ملف .rin موجود مسبقاً. class/struct استثناء واحد
+                // مقصود: تسجيلها (classes، انظر registerClassStmt) عالمي دوماً بصرف النظر عن 'export' --
+                // إذ لا يوجد أصلاً مفهوم "نطاق" لصنف في هذا المفسّر يمكن تقييده، فتصديرها هنا توثيقي بحت
+                // (يوضّح أنها جزء من الواجهة العامة للمكتبة) بلا أي أثر إضافي على الوصول الفعلي إليها.
+                bool hasExports = false;
+                for (auto& st : importedStatements) {
+                    if (st->exported) { hasExports = true; break; }
+                }
                 importUI.stage(loaderui::LoadStage::Initializing);
-                executeBlock(importedStatements, env);
+                if (!hasExports) {
+                    executeBlock(importedStatements, env);
+                } else {
+                    auto libEnv = std::make_shared<Environment>(env);
+                    executeBlock(importedStatements, libEnv);
+                    for (auto& st : importedStatements) {
+                        if (!st->exported) continue;
+                        std::string name;
+                        if (auto ls = std::dynamic_pointer_cast<LetStmt>(st)) name = ls->name;
+                        else if (auto fs = std::dynamic_pointer_cast<FunctionStmt>(st)) name = fs->name;
+                        else if (auto es = std::dynamic_pointer_cast<EnumStmt>(st)) name = es->name;
+                        else continue; // ClassStmt: مسجَّلة عالمياً فعلاً (انظر التعليق أعلاه)، لا شيء يُنسَخ
+                        Value v;
+                        if (libEnv->get(name, v)) env->define(name, v);
+                    }
+                }
             } else {
                 // استيراد باسم مستعار: يُسجَّل كحاوية باسم alias (بنفس دلالات container.import)،
                 // فيمكن لاحقاً استخدام link/tying/merge معها كأي حاوية أخرى دون تلويث النطاق الحالي.
@@ -5844,6 +5890,169 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
         output << (fromEmbedded ? "📦" : "📥") << " @import: تم استيراد \"" << libPath << "\""
                << (s->alias.empty() ? "" : (" باسم '" + s->alias + "'"))
                << (fromEmbedded ? " (مكتبة مدمجة)" : " (من القرص)") << "\n";
+        return;
+    }
+
+    // Modules: 'import { a, b, c } from "path";' -- نفس آلية حلّ/تنفيذ '@import' أعلاه بالضبط
+    // (المكتبات المدمجة، ثم القرص، ثم حزم RinPM، ثم نفس اكتشاف الدورة عبر importChain)، لكن دوماً
+    // بتنفيذ معزول (كـ 'as alias' حتى لو لم يُطلب alias) ثم نسخ انتقائي: فقط الأسماء المطلوبة صراحة،
+    // وفقط لو كانت مُصدَّرة فعلاً عبر 'export' في الملف المستورَد -- بلا أي استثناء توافقية للخلف هنا
+    // (صياغة جديدة كلياً، لا يعتمد عليها أي ملف .rin موجود مسبقاً بعكس @import بلا 'export').
+    if (auto s = std::dynamic_pointer_cast<ImportSelectedStmt>(stmt)) {
+        Value pathVal = evaluate(s->path, env);
+        if (pathVal.type != Value::Type::STRING) {
+            throw diagErr(diag::Code::E0028_ImportError, s->line, "'import { ... } from' requires a string path/library name");
+        }
+        const std::string& rawPath = pathVal.str;
+
+        loaderui::LoadSession importUI(importUISink_, rawPath, importDepth_);
+        importUI.stage(loaderui::LoadStage::Resolving);
+
+        std::string libPath = rawPath;
+        if (libPath.find('/') == std::string::npos) {
+            static const std::string kLibExt = ".og.rin";
+            bool hasExt = libPath.size() >= kLibExt.size() &&
+                          libPath.compare(libPath.size() - kLibExt.size(), kLibExt.size(), kLibExt) == 0;
+            if (!hasExt) libPath += kLibExt;
+            libPath = "lib/" + libPath;
+        }
+
+        importUI.stage(loaderui::LoadStage::Locating);
+
+        const auto& embedded = embeddedRinLibraries();
+        auto libIt = embedded.find(libPath);
+        bool fromEmbedded = (libIt != embedded.end());
+
+        std::string source;
+        if (fromEmbedded) {
+            source = libIt->second;
+        } else {
+            std::ifstream in(resolvePath(libPath), std::ios::binary);
+            if (in) {
+                std::ostringstream buf;
+                buf << in.rdbuf();
+                source = buf.str();
+            } else {
+                bool foundAsPackage = false;
+                if (rawPath.find('/') == std::string::npos) {
+                    std::string pkgSource;
+                    if (tryLoadInstalledPackageEntry(rawPath, pkgSource)) {
+                        source = pkgSource;
+                        foundAsPackage = true;
+                    }
+                }
+                if (!foundAsPackage) {
+                    auto d = diagErr(diag::Code::E0029_ModuleNotFound, s->line, "module not found: `" + rawPath + "`");
+                    d.diagnostic->message = "module not found: `" + rawPath + "`";
+                    d.diagnostic->withReason(
+                        "searched for `" + libPath + "` among embedded libraries, the project's lib/ folder, "
+                        "and RinPM packages installed via `rin pkg install`")
+                     .withHint("create/upload it from the \"Libraries\" section of the editor, "
+                               "or run `rin pkg add " + rawPath + "` if it is meant to be a package");
+                    throw d;
+                }
+            }
+        }
+
+        // مفتاح مستقل تماماً عن مفاتيح @import (بادئة "#sel:") -- استيراد نفس الملف مرة بـ @import
+        // ومرة بـ import{...} في نفس التشغيل حالتان مختلفتان تماماً (النطاقات المستهدَفة مختلفة).
+        std::string importKey = libPath + "#sel";
+        if (std::find(importChain.begin(), importChain.end(), importKey) != importChain.end()) {
+            std::string chainDesc;
+            for (auto& k : importChain) chainDesc += k + " -> ";
+            chainDesc += importKey;
+            auto d = diagErr(diag::Code::E0028_ImportError, s->line, "circular import detected");
+            d.diagnostic->withReason("import chain: " + chainDesc)
+             .withHint("break the cycle by moving the shared code into a third module that both sides import instead");
+            throw d;
+        }
+        importChain.push_back(importKey);
+        struct ImportChainGuard {
+            std::vector<std::string>& chain;
+            ~ImportChainGuard() { if (!chain.empty()) chain.pop_back(); }
+        } importChainGuard{importChain};
+
+        importUI.stage(loaderui::LoadStage::Reading);
+
+        std::vector<StmtPtr> importedStatements;
+        try {
+            Lexer importedLexer(source, libPath);
+            auto importedTokens = importedLexer.scanTokens();
+            importUI.stage(loaderui::LoadStage::Parsing);
+            Parser importedParser(importedTokens, libPath);
+            importedStatements = importedParser.parse();
+        } catch (RinError& e) {
+            loaderui::LoadOutcome failed;
+            failed.success = false;
+            failed.errorMessage = e.message;
+            importUI.finish(failed);
+            auto d = diagErr(diag::Code::E0028_ImportError, s->line, "import: error parsing module \"" + libPath + "\"");
+            d.diagnostic->withReason("line " + std::to_string(e.line) + " of \"" + libPath + "\": " + e.message);
+            if (e.diagnostic) d.diagnostic->withCause(diag::renderShort(*e.diagnostic));
+            throw d;
+        }
+
+        importUI.stage(loaderui::LoadStage::Dependencies);
+
+        auto libEnv = std::make_shared<Environment>(env);
+        try {
+            ++importDepth_;
+            importUI.stage(loaderui::LoadStage::Initializing);
+            executeBlock(importedStatements, libEnv);
+            --importDepth_;
+        } catch (RinError& e) {
+            --importDepth_;
+            loaderui::LoadOutcome failed;
+            failed.success = false;
+            failed.errorMessage = e.message;
+            importUI.finish(failed);
+            auto d = diagErr(diag::Code::E0028_ImportError, s->line, "import: error inside module \"" + libPath + "\"");
+            d.diagnostic->withReason("line " + std::to_string(e.line) + " of \"" + libPath + "\": " + e.message);
+            if (e.diagnostic) d.diagnostic->withCause(diag::renderShort(*e.diagnostic));
+            throw d;
+        }
+
+        // كل اسم مطلوب يجب أن يقابل تصريحاً أعلى مستوى مُصدَّراً صراحة عبر 'export' -- خطأ واضح
+        // فوراً لو غير مُصدَّر (privacy) أو غير موجود إطلاقاً (typo)، بدل الاستمرار بقيمة nil صامتة.
+        for (auto& requestedName : s->names) {
+            StmtPtr found = nullptr;
+            for (auto& st : importedStatements) {
+                std::string name;
+                if (auto ls = std::dynamic_pointer_cast<LetStmt>(st)) name = ls->name;
+                else if (auto fs = std::dynamic_pointer_cast<FunctionStmt>(st)) name = fs->name;
+                else if (auto es = std::dynamic_pointer_cast<EnumStmt>(st)) name = es->name;
+                else if (auto cs = std::dynamic_pointer_cast<ClassStmt>(st)) name = cs->name;
+                if (name == requestedName) { found = st; break; }
+            }
+            if (!found) {
+                throw errWithReason(diag::Code::E0028_ImportError, s->line,
+                                     "`" + requestedName + "` is not defined in \"" + libPath + "\"",
+                                     "no top-level `let`/`fun`/`class`/`struct`/`enum` named `" + requestedName + "` "
+                                     "was found in this module");
+            }
+            if (!found->exported) {
+                throw errWithReason(diag::Code::E0028_ImportError, s->line,
+                                     "`" + requestedName + "` is not exported from \"" + libPath + "\"",
+                                     "`" + requestedName + "` is defined in this module but not marked `export`, "
+                                     "so it is private to that module");
+            }
+            if (std::dynamic_pointer_cast<ClassStmt>(found)) continue; // مسجَّلة عالمياً فعلاً، لا شيء يُنسَخ
+            Value v;
+            if (libEnv->get(requestedName, v)) env->define(requestedName, v);
+        }
+
+        importedPaths.insert(importKey);
+        loaderui::LoadOutcome ok;
+        ok.success = true;
+        ok.fromEmbedded = fromEmbedded;
+        importUI.stage(loaderui::LoadStage::Completed);
+        importUI.finish(ok);
+        output << (fromEmbedded ? "📦" : "📥") << " import: تم استيراد ";
+        for (size_t i = 0; i < s->names.size(); i++) {
+            if (i) output << ", ";
+            output << s->names[i];
+        }
+        output << " من \"" << libPath << "\"" << (fromEmbedded ? " (مكتبة مدمجة)" : " (من القرص)") << "\n";
         return;
     }
 
