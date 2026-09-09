@@ -424,8 +424,14 @@ class MainActivity : AppCompatActivity() {
 
     /**
      * يعرض "بنية الملف": كل حاويات/أقسام Rin (@container، Section، Translations...) مع رقم
-     * سطرها وعمق تعشيشها (مسافة بادئة نصية)، والنقر على أي عنصر يقفز إليه مباشرة عبر
+     * سطرها وعمق تعشيشها، والنقر على أي عنصر يقفز إليه مباشرة عبر
      * [RinCodeEditorController.goToLine] — تنقّل أسرع من التمرير اليدوي في الملفات الطويلة.
+     *
+     * كل صف مُصنَّف ومُلوَّن حسب نوع وسمه (حاوية/عرض/ثيم/عنصر/لوب/كائن/قسم) ومتّصل بخطوط إرشاد
+     * شجرية حقيقية بعمق التعشيش الفعلي ([OutlineDialogAdapter]، [OutlineTreeGuideView]) بدل
+     * سطر نصي مسطّح بمسافات بادئة يدوية. لاحظ أيضاً استخدام `AlertDialog.Builder(this)` مباشرة
+     * (بلا ContextThemeWrapper بثيم Material العام) كي يرث الحوار بطاقة bg_dialog_card الموحَّدة
+     * (Theme.RinLang.AlertDialog) التي تستخدمها بقية حوارات التطبيق، بدل حوار النظام المسطّح.
      */
     private fun showOutlineDialog() {
         val entries = editorController.buildOutline()
@@ -433,18 +439,27 @@ class MainActivity : AppCompatActivity() {
             Toast.makeText(this, getString(R.string.outline_empty_toast), Toast.LENGTH_SHORT).show()
             return
         }
-        val labels = entries.map { entry ->
-            "    ".repeat(entry.depth) + entry.label + "  (" + getString(R.string.outline_line_format, entry.lineNumber) + ")"
-        }.toTypedArray()
-        val themedContext = ContextThemeWrapper(this, MaterialR.style.ThemeOverlay_MaterialComponents_Dark)
-        AlertDialog.Builder(themedContext)
-            .setTitle(R.string.outline_dialog_title)
-            .setItems(labels) { dialog, which ->
-                editorController.goToLine(entries[which].lineNumber)
-                dialog.dismiss()
+        val content = layoutInflater.inflate(R.layout.dialog_outline_content, null) as MaxHeightFrameLayout
+        content.maxHeightPx = (resources.displayMetrics.heightPixels * 0.55f).toInt()
+        val recyclerView = content.findViewById<RecyclerView>(R.id.outlineRecyclerView)
+        recyclerView.layoutManager = LinearLayoutManager(this)
+
+        var dialog: AlertDialog? = null
+        recyclerView.adapter = OutlineDialogAdapter(
+            entries = entries,
+            lineLabel = { line -> "(" + getString(R.string.outline_line_format, line) + ")" },
+            onEntryClick = { entry ->
+                editorController.goToLine(entry.lineNumber)
+                dialog?.dismiss()
             }
-            .setNegativeButton(R.string.go_to_line_cancel) { dialog, _ -> dialog.dismiss() }
-            .show()
+        )
+
+        dialog = AlertDialog.Builder(this)
+            .setTitle(R.string.outline_dialog_title)
+            .setView(content)
+            .setNegativeButton(R.string.go_to_line_cancel) { d, _ -> d.dismiss() }
+            .create()
+        dialog.show()
     }
 
     private fun showRunMenu(anchor: android.view.View) {
