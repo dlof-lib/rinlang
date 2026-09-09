@@ -104,7 +104,11 @@ inline void sanitizeElements(std::shared_ptr<rin::ViewStmt>& node) {
         static const std::unordered_set<std::string> visual = {
             "x","y","width","height","min_width","max_width","min_height","max_height",
             "color","background","border","radius","padding","margin","opacity","shadow",
-            "font","font_size","text_size","size","align","valign"
+            "font","font_size","text_size","size","align","valign",
+            // new: directional margin sides + the @loop-only "screen" preset shortcut, stripped
+            // from @element.* sources for the same reason plain "margin" already was above —
+            // elements stay functional-only; margins/screen size belong to @loop/@container.
+            "margin_left","margin_top","margin_right","margin_bottom","screen"
         };
         std::vector<rin::ViewAttr> kept;
         for (auto& a: node->attrs) if (!visual.count(a.key)) kept.push_back(a);
