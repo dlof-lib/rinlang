@@ -14,6 +14,7 @@
 //    rin.exe --version | -v       رقم الإصدار
 //    rin.exe --help    | -h       رسالة المساعدة هذه
 // ============================================================================
+#include "rin_version.h"
 #include "rin_lexer.h"
 #include "rin_parser.h"
 #include "rin_interpreter.h"
@@ -40,7 +41,8 @@
 
 namespace {
 
-constexpr const char* kVersion = "0.1.0";
+// رقم إصدار موحَّد من rin_version.h — انظر docs/VERSIONING.md.
+constexpr const char* kVersion = RIN_VERSION_STRING;
 
 std::string readAll(std::istream& in) {
     std::ostringstream ss;
