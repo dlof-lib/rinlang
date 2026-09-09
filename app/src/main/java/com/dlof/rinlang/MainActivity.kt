@@ -214,7 +214,12 @@ class MainActivity : AppCompatActivity() {
         jobAdapter.onPinToggleRequested = { number -> RinJobScheduler.togglePin(number) }
         rvJobs.layoutManager = LinearLayoutManager(this)
         rvJobs.adapter = jobAdapter
-        RinJobScheduler.onJobsChanged = { jobs ->
+        // Wired through RinExecutionManager (Queue -> Structured Events -> Run Session) rather
+        // than reading RinJobScheduler directly, so the adapter's per-run stats footer
+        // (RinExecutionManager.toSession(job).stats) reflects the same real data pipeline the
+        // rest of the run-history UI uses, instead of two code paths reading the scheduler.
+        RinExecutionManager.attach { sessions ->
+            val jobs = sessions.map { it.job }
             jobAdapter.submit(jobs)
             if (jobs.isNotEmpty()) rvJobs.scrollToPosition(jobs.size - 1)
             val anyRunning = jobs.any { it.status == JobStatus.RUNNING }
@@ -711,12 +716,10 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
-        // RinJobScheduler is a process-wide singleton that outlives this Activity;
-        // without this the lambda above would keep the destroyed Activity reachable
-        // (and every view it holds) for as long as the process stays alive.
-        if (RinJobScheduler.onJobsChanged != null) {
-            RinJobScheduler.detach()
-        }
+        // RinJobScheduler (and RinExecutionManager, which wraps it) is a process-wide singleton
+        // that outlives this Activity; without this the lambda above would keep the destroyed
+        // Activity reachable (and every view it holds) for as long as the process stays alive.
+        RinExecutionManager.detach()
         super.onDestroy()
     }
 }
