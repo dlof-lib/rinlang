@@ -203,7 +203,15 @@ struct LogStmt : Stmt {
     ExprPtr label;  // nullptr = بلا وسم إضافي
     ExprPtr source; // nullptr = يُستخدم sourceFile الحالي للمفسِّر
 };
-struct LetStmt : Stmt { std::string name; ExprPtr initializer; };
+struct LetStmt : Stmt {
+    std::string name;
+    ExprPtr initializer;
+    // ---- Type System (اختياري 100%، additive بحت) ----
+    // 'let name: Type = expr;' — typeName فارغ يعني "بلا نوع معلَن" (= السلوك القديم بالضبط، بلا أي
+    // فحص). انظر التعليق الكبير أعلى Interpreter::checkDeclaredType في rin_interpreter.cpp لشرح
+    // كامل الفلسفة (لماذا هذا أبسط ما يمكن من نظام أنواع، بلا generics/inference/nullability).
+    std::string typeName;
+};
 
 // reckon <name>(<collection>)
 //     [where <condition>] |> <function>() [|> <function>() ...];
@@ -264,6 +272,14 @@ struct FunctionStmt : Stmt {
     std::string name;
     std::vector<std::string> params;
     std::shared_ptr<BlockStmt> body;
+    // ---- Type System (اختياري 100%، additive بحت) ----
+    // 'fun f(a: Type, b): ReturnType { ... }' — paramTypes مصفوفة موازية لـ params بنفس الطول
+    // بالضبط (سلسلة فارغة "" في أي فتحة تعني ذلك الوسيط بلا نوع معلَن)؛ عُزِلت عن params نفسها
+    // (بدل تحويلها لـ vector<Param>) عمداً حتى لا يتأثر أي كود موجود مسبقاً يقرأ/يبني params كسلاسل
+    // خام (خصوصاً callFunction/bindMethod اللذان يربطان القيم بالاسم فقط). returnType فارغ = بلا
+    // نوع إرجاع معلَن. انظر checkDeclaredType في rin_interpreter.cpp.
+    std::vector<std::string> paramTypes;
+    std::string returnType;
 };
 
 // ---- OOP: class / struct / enum declarations (additive language layer) ----
