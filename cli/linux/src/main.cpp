@@ -21,6 +21,7 @@
 //    rin                                     REPL تفاعلي
 //    rin --version | -v ، --help | -h
 // ============================================================================
+#include "rin_version.h"
 #include "rin_lexer.h"
 #include "rin_parser.h"
 #include "rin_interpreter.h"
@@ -47,7 +48,10 @@
 
 namespace {
 
-constexpr const char* kVersion = "0.2.0";
+// رقم إصدار موحَّد يأتي من rin_version.h (المصدر الرسمي الوحيد) — كان قبل
+// هذا الملف رقماً منفصلاً هنا (0.2.0) اختلف بالصدفة عن macOS/Windows
+// (0.1.0/0.1.0) رغم أنها نفس أداة rin CLI. انظر docs/VERSIONING.md.
+constexpr const char* kVersion = RIN_VERSION_STRING;
 
 // ---------------------------------------------------------------------------
 // أدوات عامة
