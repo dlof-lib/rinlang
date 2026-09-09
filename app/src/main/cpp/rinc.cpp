@@ -1186,7 +1186,16 @@ private:
             "sum","mean","push","pop","sort","keys","values","has","remove",
             "writeFile","readFile","appendFile","fileExists","deleteFile",
             "maxOf","minOf","median","mode","stddev","variance","scale",
-            "normalize","shift","isBool","chr","ord","jsonEncode","jsonDecode"
+            "normalize","shift","isBool","chr","ord","jsonEncode","jsonDecode",
+            // Color Engine (rin_color.h port — see the RUNTIME_HEADER block above titled
+            // "Rin Color Engine — C port for the native (rinc) compiler"). "str" is a plain
+            // alias for toString(), same as in rin_interpreter.cpp's natives[] — both were
+            // undefined-function bugs before this (lib/colors.og.rin and others already called
+            // str()/toHex() as if they existed).
+            "str","toHex","colorValid","colorParse","colorRgb","colorRgba","colorHsl","colorHsla",
+            "colorComponents","colorToHsl","colorToRgbaString","colorToHslaString","colorMix",
+            "colorLighten","colorDarken","colorWithAlpha","colorBlend","colorInvert",
+            "colorGrayscale","colorLuminance","colorContrast","colorIsLight","colorTextOn"
         };
         if (natives.count(c->callee)) {
             return "rt_native_" + c->callee + "(" + argsArr + ", " + std::to_string(n) + ")";
@@ -1914,6 +1923,428 @@ static Value rt_native_jsonDecode(Value* a, int n) {
     }
     return rt_str(a[0].str);
 }
+
+
+// ---- Rin Color Engine — C port for the native (rinc) compiler ------------------------------
+// A from-scratch reimplementation, in portable C, of the SAME algorithms as
+// app/src/main/cpp/rin_color.h (the shared engine used by the interpreter's natives and by
+// Loom's renderer) — this compiler emits standalone C and cannot #include that C++ header, so
+// this is a parallel port kept in lockstep with it by hand. See rin_color.h's own doc comment
+// for the full literal syntax rc_try_parse() below accepts: #rgb/#rgba/#rrggbb/#rrggbbaa,
+// rgb()/rgba(), hsl()/hsla(), the 148 named CSS colors, "transparent".
+typedef struct { unsigned char r, g, b, a; } RcColor;
+
+static unsigned char rc_clampb(int v) { return (unsigned char)(v < 0 ? 0 : (v > 255 ? 255 : v)); }
+static double rc_clamp01(double v) { return v < 0 ? 0 : (v > 1 ? 1 : v); }
+static unsigned char rc_alpha_from_unit(double a) { return (unsigned char)(rc_clamp01(a) * 255.0 + 0.5); }
+static double rc_unit_from_alpha(unsigned char a) { return a / 255.0; }
+
+static int rc_hexval(char c) {
+    if (c >= '0' && c <= '9') return c - '0';
+    if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+    if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+    return 0;
+}
+static int rc_is_hexdigit(char c) { return (c>='0'&&c<='9')||(c>='a'&&c<='f')||(c>='A'&&c<='F'); }
+
+static void rc_trim_lower(const char* in, char* out, int outCap) {
+    int a = 0, b = (int)strlen(in);
+    while (a < b && isspace((unsigned char)in[a])) a++;
+    while (b > a && isspace((unsigned char)in[b-1])) b--;
+    int len = b - a; if (len >= outCap) len = outCap - 1;
+    for (int i = 0; i < len; i++) out[i] = (char)tolower((unsigned char)in[a+i]);
+    out[len] = 0;
+}
+static void rc_trim(const char* in, char* out, int outCap) {
+    int a = 0, b = (int)strlen(in);
+    while (a < b && isspace((unsigned char)in[a])) a++;
+    while (b > a && isspace((unsigned char)in[b-1])) b--;
+    int len = b - a; if (len >= outCap) len = outCap - 1;
+    memcpy(out, in + a, len); out[len] = 0;
+}
+
+typedef struct { const char* name; unsigned char r, g, b, a; } RcNamed;
+static const RcNamed RC_NAMED[] = {
+{"transparent",0,0,0,0},
+  {"black",0,0,0,255},
+  {"white",255,255,255,255},
+  {"red",255,0,0,255},
+  {"green",0,128,0,255},
+  {"blue",0,0,255,255},
+  {"yellow",255,255,0,255},
+  {"cyan",0,255,255,255},
+  {"magenta",255,0,255,255},
+  {"gray",128,128,128,255},
+  {"grey",128,128,128,255},
+  {"silver",192,192,192,255},
+  {"maroon",128,0,0,255},
+  {"olive",128,128,0,255},
+  {"lime",0,255,0,255},
+  {"aqua",0,255,255,255},
+  {"teal",0,128,128,255},
+  {"navy",0,0,128,255},
+  {"fuchsia",255,0,255,255},
+  {"purple",128,0,128,255},
+  {"orange",255,165,0,255},
+  {"pink",255,192,203,255},
+  {"brown",165,42,42,255},
+  {"gold",255,215,0,255},
+  {"indigo",75,0,130,255},
+  {"violet",238,130,238,255},
+  {"turquoise",64,224,208,255},
+  {"coral",255,127,80,255},
+  {"salmon",250,128,114,255},
+  {"khaki",240,230,140,255},
+  {"orchid",218,112,214,255},
+  {"plum",221,160,221,255},
+  {"tan",210,180,140,255},
+  {"beige",245,245,220,255},
+  {"ivory",255,255,240,255},
+  {"lavender",230,230,250,255},
+  {"crimson",220,20,60,255},
+  {"chocolate",210,105,30,255},
+  {"tomato",255,99,71,255},
+  {"orangered",255,69,0,255},
+  {"hotpink",255,105,180,255},
+  {"deeppink",255,20,147,255},
+  {"skyblue",135,206,235,255},
+  {"steelblue",70,130,180,255},
+  {"royalblue",65,105,225,255},
+  {"slateblue",106,90,205,255},
+  {"dodgerblue",30,144,255,255},
+  {"cornflowerblue",100,149,237,255},
+  {"seagreen",46,139,87,255},
+  {"forestgreen",34,139,34,255},
+  {"limegreen",50,205,50,255},
+  {"darkgreen",0,100,0,255},
+  {"darkred",139,0,0,255},
+  {"darkblue",0,0,139,255},
+  {"darkorange",255,140,0,255},
+  {"darkviolet",148,0,211,255},
+  {"darkslategray",47,79,79,255},
+  {"darkslategrey",47,79,79,255},
+  {"darkgray",169,169,169,255},
+  {"darkgrey",169,169,169,255},
+  {"lightgray",211,211,211,255},
+  {"lightgrey",211,211,211,255},
+  {"lightblue",173,216,230,255},
+  {"lightgreen",144,238,144,255},
+  {"lightyellow",255,255,224,255},
+  {"lightpink",255,182,193,255},
+  {"lightcoral",240,128,128,255},
+  {"lightsalmon",255,160,122,255},
+  {"lightseagreen",32,178,170,255},
+  {"lightskyblue",135,206,250,255},
+  {"lightslategray",119,136,153,255},
+  {"lightslategrey",119,136,153,255},
+  {"mintcream",245,255,250,255},
+  {"honeydew",240,255,240,255},
+  {"aliceblue",240,248,255,255},
+  {"azure",240,255,255,255},
+  {"snow",255,250,250,255},
+  {"linen",250,240,230,255},
+  {"whitesmoke",245,245,245,255},
+  {"gainsboro",220,220,220,255},
+  {"seashell",255,245,238,255},
+  {"wheat",245,222,179,255},
+  {"peachpuff",255,218,185,255},
+  {"navajowhite",255,222,173,255},
+  {"moccasin",255,228,181,255},
+  {"cornsilk",255,248,220,255},
+  {"lemonchiffon",255,250,205,255},
+  {"papayawhip",255,239,213,255},
+  {"blanchedalmond",255,235,205,255},
+  {"bisque",255,228,196,255},
+  {"antiquewhite",250,235,215,255},
+  {"mistyrose",255,228,225,255},
+  {"thistle",216,191,216,255},
+  {"mediumpurple",147,112,219,255},
+  {"mediumorchid",186,85,211,255},
+  {"mediumvioletred",199,21,133,255},
+  {"mediumseagreen",60,179,113,255},
+  {"mediumspringgreen",0,250,154,255},
+  {"mediumturquoise",72,209,204,255},
+  {"mediumblue",0,0,205,255},
+  {"mediumslateblue",123,104,238,255},
+  {"mediumaquamarine",102,205,170,255},
+  {"aquamarine",127,255,212,255},
+  {"springgreen",0,255,127,255},
+  {"chartreuse",127,255,0,255},
+  {"yellowgreen",154,205,50,255},
+  {"olivedrab",107,142,35,255},
+  {"darkolivegreen",85,107,47,255},
+  {"darkkhaki",189,183,107,255},
+  {"palegoldenrod",238,232,170,255},
+  {"goldenrod",218,165,32,255},
+  {"darkgoldenrod",184,134,11,255},
+  {"peru",205,133,63,255},
+  {"sienna",160,82,45,255},
+  {"saddlebrown",139,69,19,255},
+  {"firebrick",178,34,34,255},
+  {"indianred",205,92,92,255},
+  {"rosybrown",188,143,143,255},
+  {"palevioletred",219,112,147,255},
+  {"deepskyblue",0,191,255,255},
+  {"cadetblue",95,158,160,255},
+  {"powderblue",176,224,230,255},
+  {"paleturquoise",175,238,238,255},
+  {"darkcyan",0,139,139,255},
+  {"darkturquoise",0,206,209,255},
+  {"lightcyan",224,255,255,255},
+  {"lightsteelblue",176,196,222,255},
+  {"midnightblue",25,25,112,255},
+  {"darkslateblue",72,61,139,255},
+  {"blueviolet",138,43,226,255},
+  {"darkmagenta",139,0,139,255},
+  {"darkorchid",153,50,204,255},
+  {"darksalmon",233,150,122,255},
+  {"darkseagreen",143,188,143,255},
+  {"palegreen",152,251,152,255},
+  {"greenyellow",173,255,47,255},
+  {"lawngreen",124,252,0,255},
+  {"lightgoldenrodyellow",250,250,210,255},
+  {"lightskygray",135,206,235,255},
+  {"slategray",112,128,144,255},
+  {"slategrey",112,128,144,255},
+  {"dimgray",105,105,105,255},
+  {"dimgrey",105,105,105,255},
+  {"lightsalmonpink",255,160,122,255},
+  {"lightgoldenrod",238,221,130,255},
+  {"ghostwhite",248,248,255,255},
+  {"floralwhite",255,250,240,255},
+  {"oldlace",253,245,230,255},
+  {"lavenderblush",255,240,245,255},
+  {"lightgrayish",220,220,220,255},
+  {"rebeccapurple",102,51,153,255},
+};
+static const int RC_NAMED_COUNT = sizeof(RC_NAMED) / sizeof(RC_NAMED[0]);
+
+static int rc_named_lookup(const char* lowname, RcColor* out) {
+    for (int i = 0; i < RC_NAMED_COUNT; i++) {
+        if (strcmp(RC_NAMED[i].name, lowname) == 0) {
+            out->r = RC_NAMED[i].r; out->g = RC_NAMED[i].g; out->b = RC_NAMED[i].b; out->a = RC_NAMED[i].a;
+            return 1;
+        }
+    }
+    return 0;
+}
+
+// Splits on comma/slash/whitespace into up to maxTok tokens of up to 31 chars each.
+static int rc_split_args(const char* s, char toks[][32], int maxTok) {
+    int count = 0, ti = 0; toks[0][0] = 0;
+    for (const char* p = s; ; p++) {
+        char c = *p;
+        if (c == ',' || c == '/' || isspace((unsigned char)c) || c == 0) {
+            if (ti > 0) { toks[count][ti] = 0; count++; if (count >= maxTok) return count; ti = 0; toks[count][0] = 0; }
+            if (c == 0) break;
+        } else if (ti < 31) toks[count][ti++] = c;
+    }
+    return count;
+}
+static int rc_parse_channel255(const char* tok, unsigned char* out) {
+    int len = (int)strlen(tok); if (len == 0) return 0;
+    char* end;
+    if (tok[len-1] == '%') {
+        char buf[32]; int cl = len-1 < 31 ? len-1 : 31; memcpy(buf, tok, cl); buf[cl] = 0;
+        double pct = strtod(buf, &end); if (end == buf) return 0;
+        *out = rc_clampb((int)(pct / 100.0 * 255.0 + 0.5));
+    } else {
+        double v = strtod(tok, &end); if (end == tok) return 0;
+        *out = rc_clampb((int)(v + 0.5));
+    }
+    return 1;
+}
+static int rc_parse_alpha_unit(const char* tok, double* out) {
+    int len = (int)strlen(tok); if (len == 0) return 0;
+    char* end;
+    if (tok[len-1] == '%') {
+        char buf[32]; int cl = len-1 < 31 ? len-1 : 31; memcpy(buf, tok, cl); buf[cl] = 0;
+        double pct = strtod(buf, &end); if (end == buf) return 0;
+        *out = rc_clamp01(pct / 100.0);
+    } else {
+        double v = strtod(tok, &end); if (end == tok) return 0;
+        *out = rc_clamp01(v);
+    }
+    return 1;
+}
+static double rc_hue_to_rgb(double p, double q, double t) {
+    if (t < 0) t += 1; if (t > 1) t -= 1;
+    if (t < 1.0/6.0) return p + (q-p)*6.0*t;
+    if (t < 1.0/2.0) return q;
+    if (t < 2.0/3.0) return p + (q-p)*(2.0/3.0-t)*6.0;
+    return p;
+}
+static RcColor rc_hsl_to_rgb(double h, double s, double l, unsigned char a) {
+    h = fmod(fmod(h, 360.0) + 360.0, 360.0) / 360.0;
+    s = rc_clamp01(s); l = rc_clamp01(l);
+    double r, g, b;
+    if (s < 1e-9) { r = g = b = l; }
+    else {
+        double q = (l < 0.5) ? l * (1+s) : l + s - l*s;
+        double p = 2*l - q;
+        r = rc_hue_to_rgb(p, q, h + 1.0/3.0);
+        g = rc_hue_to_rgb(p, q, h);
+        b = rc_hue_to_rgb(p, q, h - 1.0/3.0);
+    }
+    RcColor out; out.r = rc_clampb((int)(r*255+0.5)); out.g = rc_clampb((int)(g*255+0.5)); out.b = rc_clampb((int)(b*255+0.5)); out.a = a;
+    return out;
+}
+static void rc_rgb_to_hsl(RcColor c, double* h, double* s, double* l) {
+    double r = c.r/255.0, g = c.g/255.0, b = c.b/255.0;
+    double mx = r>g ? (r>b?r:b) : (g>b?g:b);
+    double mn = r<g ? (r<b?r:b) : (g<b?g:b);
+    double hh = 0, ss = 0, ll = (mx+mn)/2.0;
+    double d = mx - mn;
+    if (d > 1e-9) {
+        ss = (ll > 0.5) ? d / (2.0-mx-mn) : d / (mx+mn);
+        if (mx == r) hh = fmod((g-b)/d + (g<b?6.0:0.0), 6.0);
+        else if (mx == g) hh = (b-r)/d + 2.0;
+        else hh = (r-g)/d + 4.0;
+        hh *= 60.0;
+    }
+    *h = hh; *s = ss; *l = ll;
+}
+static int rc_try_parse(const char* raw, RcColor* out) {
+    char orig[256]; rc_trim(raw, orig, sizeof(orig));
+    char low[256]; rc_trim_lower(raw, low, sizeof(low));
+    int len = (int)strlen(orig);
+    if (len == 0) return 0;
+
+    if (orig[0] == '#') {
+        for (int i = 1; i < len; i++) if (!rc_is_hexdigit(orig[i])) return 0;
+        if (len == 4) { int r=rc_hexval(orig[1]),g=rc_hexval(orig[2]),b=rc_hexval(orig[3]);
+            out->r=rc_clampb(r*16+r); out->g=rc_clampb(g*16+g); out->b=rc_clampb(b*16+b); out->a=255; return 1; }
+        if (len == 5) { int r=rc_hexval(orig[1]),g=rc_hexval(orig[2]),b=rc_hexval(orig[3]),a=rc_hexval(orig[4]);
+            out->r=rc_clampb(r*16+r); out->g=rc_clampb(g*16+g); out->b=rc_clampb(b*16+b); out->a=rc_clampb(a*16+a); return 1; }
+        if (len == 7) { out->r=rc_clampb(rc_hexval(orig[1])*16+rc_hexval(orig[2])); out->g=rc_clampb(rc_hexval(orig[3])*16+rc_hexval(orig[4])); out->b=rc_clampb(rc_hexval(orig[5])*16+rc_hexval(orig[6])); out->a=255; return 1; }
+        if (len == 9) { out->r=rc_clampb(rc_hexval(orig[1])*16+rc_hexval(orig[2])); out->g=rc_clampb(rc_hexval(orig[3])*16+rc_hexval(orig[4])); out->b=rc_clampb(rc_hexval(orig[5])*16+rc_hexval(orig[6])); out->a=rc_clampb(rc_hexval(orig[7])*16+rc_hexval(orig[8])); return 1; }
+        return 0;
+    }
+    if (strncmp(low, "rgb(", 4) == 0 || strncmp(low, "rgba(", 5) == 0) {
+        const char* open = strchr(orig, '('); const char* close = strrchr(orig, ')');
+        if (!open || !close || close < open) return 0;
+        char inner[200]; int ilen = (int)(close-open-1); if (ilen >= (int)sizeof(inner)) ilen = sizeof(inner)-1;
+        memcpy(inner, open+1, ilen); inner[ilen] = 0;
+        char toks[6][32]; int nt = rc_split_args(inner, toks, 6);
+        if (nt < 3) return 0;
+        unsigned char r, g, b;
+        if (!rc_parse_channel255(toks[0],&r) || !rc_parse_channel255(toks[1],&g) || !rc_parse_channel255(toks[2],&b)) return 0;
+        unsigned char a = 255;
+        if (nt >= 4) { double au; if (!rc_parse_alpha_unit(toks[3],&au)) return 0; a = rc_alpha_from_unit(au); }
+        out->r=r; out->g=g; out->b=b; out->a=a; return 1;
+    }
+    if (strncmp(low, "hsl(", 4) == 0 || strncmp(low, "hsla(", 5) == 0) {
+        const char* open = strchr(orig, '('); const char* close = strrchr(orig, ')');
+        if (!open || !close || close < open) return 0;
+        char inner[200]; int ilen = (int)(close-open-1); if (ilen >= (int)sizeof(inner)) ilen = sizeof(inner)-1;
+        memcpy(inner, open+1, ilen); inner[ilen] = 0;
+        char toks[6][32]; int nt = rc_split_args(inner, toks, 6);
+        if (nt < 3) return 0;
+        char* end;
+        double h = strtod(toks[0], &end); if (end == toks[0]) return 0;
+        int l1 = (int)strlen(toks[1]); double sPct = (l1>0 && toks[1][l1-1]=='%') ? atof(toks[1]) : atof(toks[1])*100.0;
+        int l2 = (int)strlen(toks[2]); double lPct = (l2>0 && toks[2][l2-1]=='%') ? atof(toks[2]) : atof(toks[2])*100.0;
+        unsigned char a = 255;
+        if (nt >= 4) { double au; if (!rc_parse_alpha_unit(toks[3],&au)) return 0; a = rc_alpha_from_unit(au); }
+        *out = rc_hsl_to_rgb(h, sPct/100.0, lPct/100.0, a);
+        return 1;
+    }
+    RcColor named;
+    if (rc_named_lookup(low, &named)) { *out = named; return 1; }
+    return 0;
+}
+static RcColor rc_parse(const char* raw, RcColor fallback) { RcColor c; return rc_try_parse(raw, &c) ? c : fallback; }
+
+static const char RC_HEXDIGITS[] = "0123456789ABCDEF";
+static void rc_hexbyte(unsigned char v, char* out2) { out2[0]=RC_HEXDIGITS[(v>>4)&0xF]; out2[1]=RC_HEXDIGITS[v&0xF]; }
+static void rc_hex6(RcColor c, char* out7) { out7[0]='#'; rc_hexbyte(c.r,out7+1); rc_hexbyte(c.g,out7+3); rc_hexbyte(c.b,out7+5); out7[7]=0; }
+static void rc_hex8(RcColor c, char* out9) { rc_hex6(c,out9); rc_hexbyte(c.a,out9+7); out9[9]=0; }
+static void rc_hexauto(RcColor c, char* outBuf) { if (c.a == 255) rc_hex6(c, outBuf); else rc_hex8(c, outBuf); }
+
+static RcColor rc_mix(RcColor a, RcColor b, double t) {
+    t = rc_clamp01(t); RcColor out;
+    out.r = rc_clampb((int)(a.r + (b.r-a.r)*t + 0.5));
+    out.g = rc_clampb((int)(a.g + (b.g-a.g)*t + 0.5));
+    out.b = rc_clampb((int)(a.b + (b.b-a.b)*t + 0.5));
+    out.a = rc_clampb((int)(a.a + (b.a-a.a)*t + 0.5));
+    return out;
+}
+static RcColor rc_lighten(RcColor c, double amt) { RcColor white = {255,255,255,c.a}; return rc_mix(c, white, rc_clamp01(amt)); }
+static RcColor rc_darken(RcColor c, double amt) { RcColor black = {0,0,0,c.a}; return rc_mix(c, black, rc_clamp01(amt)); }
+static RcColor rc_with_alpha(RcColor c, double a01) { c.a = rc_alpha_from_unit(a01); return c; }
+static RcColor rc_grayscale(RcColor c) { unsigned char v = rc_clampb((int)(0.299*c.r+0.587*c.g+0.114*c.b+0.5)); RcColor o={v,v,v,c.a}; return o; }
+static RcColor rc_invert(RcColor c) { RcColor o = {rc_clampb(255-c.r), rc_clampb(255-c.g), rc_clampb(255-c.b), c.a}; return o; }
+static RcColor rc_blend(RcColor fg, RcColor bg) {
+    double af = rc_unit_from_alpha(fg.a); RcColor o;
+    o.r = rc_clampb((int)(fg.r*af + bg.r*(1.0-af) + 0.5));
+    o.g = rc_clampb((int)(fg.g*af + bg.g*(1.0-af) + 0.5));
+    o.b = rc_clampb((int)(fg.b*af + bg.b*(1.0-af) + 0.5));
+    o.a = 255;
+    return o;
+}
+static double rc_srgb_to_linear(double c) { c = rc_clamp01(c); return (c <= 0.03928) ? c/12.92 : pow((c+0.055)/1.055, 2.4); }
+static double rc_luminance(RcColor c) { return 0.2126*rc_srgb_to_linear(c.r/255.0) + 0.7152*rc_srgb_to_linear(c.g/255.0) + 0.0722*rc_srgb_to_linear(c.b/255.0); }
+static double rc_contrast(RcColor a, RcColor b) { double la = rc_luminance(a)+0.05, lb = rc_luminance(b)+0.05; return la>lb ? la/lb : lb/la; }
+static int rc_is_light(RcColor c) { return rc_luminance(c) > 0.5; }
+static RcColor rc_best_text(RcColor bg) {
+    RcColor black = {0,0,0,255}, white = {255,255,255,255};
+    return (rc_contrast(bg,white) >= rc_contrast(bg,black)) ? white : black;
+}
+static RcColor rc_arg_color(Value v) {
+    if (v.t != RT_STR) rt_fatal(0, "دالة لون تتوقّع نصاً");
+    RcColor c;
+    if (!rc_try_parse(v.str, &c)) rt_fatal(0, "قيمة لون غير صالحة");
+    return c;
+}
+
+// ---- rt_native_* wrappers exposed to generated Rin call sites (see emitCall's natives{} set) ----
+static Value rt_native_str(Value* a, int n) { (void)n; return rt_str_own(rt_to_display(a[0])); }
+static Value rt_native_toHex(Value* a, int n) { (void)n; char b[3]; rc_hexbyte(rc_clampb((int)(a[0].num+0.5)), b); b[2]=0; return rt_str(b); }
+static Value rt_native_colorValid(Value* a, int n) { (void)n; RcColor c; return rt_bool(a[0].t==RT_STR && rc_try_parse(a[0].str,&c)); }
+static Value rt_native_colorParse(Value* a, int n) { (void)n; char buf[10]; rc_hexauto(rc_arg_color(a[0]), buf); return rt_str(buf); }
+static Value rt_native_colorRgb(Value* a, int n) { (void)n; RcColor c; c.r=rc_clampb((int)a[0].num); c.g=rc_clampb((int)a[1].num); c.b=rc_clampb((int)a[2].num); c.a=255; char buf[8]; rc_hex6(c,buf); return rt_str(buf); }
+static Value rt_native_colorRgba(Value* a, int n) { (void)n; RcColor c; c.r=rc_clampb((int)a[0].num); c.g=rc_clampb((int)a[1].num); c.b=rc_clampb((int)a[2].num); c.a=rc_alpha_from_unit(a[3].num); char buf[10]; rc_hex8(c,buf); return rt_str(buf); }
+static Value rt_native_colorHsl(Value* a, int n) { (void)n; RcColor c = rc_hsl_to_rgb(a[0].num, a[1].num/100.0, a[2].num/100.0, 255); char buf[8]; rc_hex6(c,buf); return rt_str(buf); }
+static Value rt_native_colorHsla(Value* a, int n) { (void)n; RcColor c = rc_hsl_to_rgb(a[0].num, a[1].num/100.0, a[2].num/100.0, rc_alpha_from_unit(a[3].num)); char buf[10]; rc_hex8(c,buf); return rt_str(buf); }
+static Value rt_native_colorComponents(Value* a, int n) {
+    (void)n; RcColor c = rc_arg_color(a[0]);
+    RMap* m = rt_map_alloc(4);
+    rt_map_set(m, rt_str("r"), rt_num(c.r));
+    rt_map_set(m, rt_str("g"), rt_num(c.g));
+    rt_map_set(m, rt_str("b"), rt_num(c.b));
+    rt_map_set(m, rt_str("alpha"), rt_num(rc_unit_from_alpha(c.a)));
+    Value v = rt_nil(); v.t = RT_MAP; v.map = m; return v;
+}
+static Value rt_native_colorToHsl(Value* a, int n) {
+    (void)n; RcColor c = rc_arg_color(a[0]); double h,s,l; rc_rgb_to_hsl(c,&h,&s,&l);
+    RMap* m = rt_map_alloc(3);
+    rt_map_set(m, rt_str("h"), rt_num(h));
+    rt_map_set(m, rt_str("s"), rt_num(s*100.0));
+    rt_map_set(m, rt_str("l"), rt_num(l*100.0));
+    Value v = rt_nil(); v.t = RT_MAP; v.map = m; return v;
+}
+static Value rt_native_colorToRgbaString(Value* a, int n) {
+    (void)n; RcColor c = rc_arg_color(a[0]);
+    char buf[64]; snprintf(buf, sizeof(buf), "rgba(%d,%d,%d,%.3f)", c.r, c.g, c.b, rc_unit_from_alpha(c.a));
+    return rt_str(buf);
+}
+static Value rt_native_colorToHslaString(Value* a, int n) {
+    (void)n; RcColor c = rc_arg_color(a[0]); double h,s,l; rc_rgb_to_hsl(c,&h,&s,&l);
+    char buf[64]; snprintf(buf, sizeof(buf), "hsla(%.1f,%.1f%%,%.1f%%,%.3f)", h, s*100.0, l*100.0, rc_unit_from_alpha(c.a));
+    return rt_str(buf);
+}
+static Value rt_native_colorMix(Value* a, int n) { (void)n; char buf[10]; rc_hexauto(rc_mix(rc_arg_color(a[0]), rc_arg_color(a[1]), a[2].num), buf); return rt_str(buf); }
+static Value rt_native_colorLighten(Value* a, int n) { (void)n; char buf[10]; rc_hexauto(rc_lighten(rc_arg_color(a[0]), a[1].num), buf); return rt_str(buf); }
+static Value rt_native_colorDarken(Value* a, int n) { (void)n; char buf[10]; rc_hexauto(rc_darken(rc_arg_color(a[0]), a[1].num), buf); return rt_str(buf); }
+static Value rt_native_colorWithAlpha(Value* a, int n) { (void)n; char buf[10]; rc_hex8(rc_with_alpha(rc_arg_color(a[0]), a[1].num), buf); return rt_str(buf); }
+static Value rt_native_colorBlend(Value* a, int n) { (void)n; char buf[8]; rc_hex6(rc_blend(rc_arg_color(a[0]), rc_arg_color(a[1])), buf); return rt_str(buf); }
+static Value rt_native_colorInvert(Value* a, int n) { (void)n; char buf[10]; rc_hexauto(rc_invert(rc_arg_color(a[0])), buf); return rt_str(buf); }
+static Value rt_native_colorGrayscale(Value* a, int n) { (void)n; char buf[10]; rc_hexauto(rc_grayscale(rc_arg_color(a[0])), buf); return rt_str(buf); }
+static Value rt_native_colorLuminance(Value* a, int n) { (void)n; return rt_num(rc_luminance(rc_arg_color(a[0]))); }
+static Value rt_native_colorContrast(Value* a, int n) { (void)n; return rt_num(rc_contrast(rc_arg_color(a[0]), rc_arg_color(a[1]))); }
+static Value rt_native_colorIsLight(Value* a, int n) { (void)n; return rt_bool(rc_is_light(rc_arg_color(a[0]))); }
+static Value rt_native_colorTextOn(Value* a, int n) { (void)n; char buf[8]; rc_hex6(rc_best_text(rc_arg_color(a[0])), buf); return rt_str(buf); }
+
 
 )RTC";
 
