@@ -5,6 +5,18 @@ plugins {
     id 'com.google.gms.google-services'
 }
 
+// نظام الإصدار الرسمي لمحرّك Rin: المصدر الوحيد هو ملف VERSION في جذر
+// المستودع (يجب أن يطابق RIN_VERSION_STRING في app/src/main/cpp/rin_version.h
+// حرفياً — انظر docs/VERSIONING.md). versionName يُقرأ من هنا مباشرة بدل رقم
+// ثابت منفصل يمكن أن ينسى أحد تحديثه عند رفع الإصدار.
+def rinVersionName = new File(rootDir, "VERSION").text.trim()
+def rinVersionParts = rinVersionName.split("\\.")
+// versionCode = major*10000 + minor*100 + patch — يضمن تصاعداً رقمياً صحيحاً
+// عبر أي تسلسل SemVer صالح (patch/minor حتى 99)، كما يطلبه Play Store.
+def rinVersionCode = (rinVersionParts[0].toInteger() * 10000) +
+                      (rinVersionParts[1].toInteger() * 100) +
+                       rinVersionParts[2].toInteger()
+
 android {
     namespace 'com.dlof.rinlang'
     compileSdk 34
@@ -14,8 +26,8 @@ android {
         applicationId "com.dlof.rinlang"
         minSdk 24
         targetSdk 34
-        versionCode 3
-        versionName "1.0"
+        versionCode rinVersionCode
+        versionName rinVersionName
 
         externalNativeBuild {
             cmake {
