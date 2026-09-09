@@ -146,3 +146,24 @@ target_link_libraries(
         loomc
         ${z-lib}
 )
+
+# pitokc: أداة سطر أوامر مستقلة لـ PITOK -- لغة الواجهات المفصولة عن Rin العام (انظر
+# pitok/README.md). نفس فلسفة rinc/rincheck/loomc أعلاه تمامًا: هدف مستقل، لا يُربط بـ
+# rinengine ولا يُحزَم داخل APK. الفرق الجوهري عن loomc: هذا الهدف لا يحتاج ولا يربط أيًا من
+# rin_lexer.cpp/rin_parser.cpp/rin_interpreter.cpp إطلاقًا -- المسار الكامل هنا هو
+# pitok::Lexer -> pitok::Parser -> pitok_bridge (loom/pitok_loom_bridge.h) -> نفس
+# rin_loom_layout.h/rin_loom_paint.h اللذين يستخدمهما loomc، بلا أي تعديل عليهما. هذا الهدف هو
+# الإثبات الحيّ في نظام البناء نفسه (وليس فقط في اختبارات pitok/Makefile اليدوية) أن واجهات
+# @view/@loop/@container/@element يمكن تحليلها ورسمها دون المرور بمُحلِّل Rin العام.
+add_executable(
+        pitokc
+        ${CMAKE_CURRENT_SOURCE_DIR}/../../../../pitok/tools/pitokc.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/../../../../pitok/src/pitok_lexer.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/../../../../pitok/src/pitok_parser.cpp
+)
+target_include_directories(
+        pitokc
+        PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        ${CMAKE_CURRENT_SOURCE_DIR}/../../../../pitok/include
+)
