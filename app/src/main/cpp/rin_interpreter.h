@@ -636,6 +636,11 @@ private:
     std::unordered_map<std::string, ApiEndpoint> apiEndpoints; // اسم -> نقطة API حقيقية مسجَّلة عبر apiRegister/apiHeader
     int defaultHttpTimeoutMs = 15000; // مهلة افتراضية لكل طلب HTTP حقيقي (قابلة للتعديل عبر httpSetTimeout)
     std::unordered_set<std::string> importedPaths;            // مسارات @import المُنفَّذة فعلاً في هذا التشغيل (لمنع الاستيراد المكرَّر)
+    // Modules: سلسلة الاستيرادات الجارية حالياً (dependency graph بأبسط شكل ممكن: مجرد مكدّس
+    // نصي). importedPaths أعلاه يمنع إعادة استيراد ملف اكتمل استيراده بالفعل، لكنه لا يكتشف دورة
+    // استيراد لم تكتمل بعد (A تستورد B وB لا تزال بمنتصف استيراد A نفسها) — importChain تحديداً
+    // لهذه الحالة (انظر ImportChainGuard في execute(ImportStmt) في rin_interpreter.cpp).
+    std::vector<std::string> importChain;
     std::unordered_map<std::string, std::string> linkIdToContainer; // معرّف الربط العام (container.link.id) -> اسم الحاوية المسجَّلة به
 
     // ---- .object("id") ... container.(); .end/object  (انظر ObjectLiteralStmt في rin_ast.h) ----
