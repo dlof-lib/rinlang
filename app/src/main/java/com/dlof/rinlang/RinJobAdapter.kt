@@ -11,9 +11,13 @@ import android.graphics.Typeface
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.text.Editable
+import android.text.TextWatcher
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.EditText
+import android.widget.HorizontalScrollView
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
@@ -21,6 +25,10 @@ import android.widget.Toast
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.RecyclerView
+
+/** Which body a job's card is currently showing (section 10: Code Output UI tabs). Persisted per
+ *  job number in [RinJobAdapter], same pattern as the expand/collapse state. */
+private enum class JobTab { OUTPUT, EVENTS, DIAGNOSTICS }
 
 class RinJobAdapter(private val context: Context) : RecyclerView.Adapter<RinJobAdapter.JobViewHolder>() {
 
@@ -37,6 +45,15 @@ class RinJobAdapter(private val context: Context) : RecyclerView.Adapter<RinJobA
      *  and RecyclerView view-holder recycling. Absent from this map means "use the default"
      *  (see [isExpanded]), not "collapsed". */
     private val manualExpandState = HashMap<Int, Boolean>()
+
+    /** Selected tab per job number (section 10). Absent means OUTPUT, the default. */
+    private val selectedTab = HashMap<Int, JobTab>()
+
+    /** Selected Events-tab filter chip per job number (section 11). Null means ALL. */
+    private val selectedEventFilter = HashMap<Int, RinEventType?>()
+
+    /** Current search text per job number (section 12) -- applies to whichever tab is active. */
+    private val searchQuery = HashMap<Int, String>()
 
     fun submit(newItems: List<RinJob>) {
         items = newItems
@@ -72,13 +89,26 @@ class RinJobAdapter(private val context: Context) : RecyclerView.Adapter<RinJobA
         private val duration: TextView = itemView.findViewById(R.id.txtJobDuration)
         private val fallbackOutput: TextView = itemView.findViewById(R.id.txtJobOutput)
         private val outputLines: LinearLayout = itemView.findViewById(R.id.llJobOutputLines)
+        private val eventLines: LinearLayout = itemView.findViewById(R.id.llJobEventLines)
+        private val diagnosticsTab: LinearLayout = itemView.findViewById(R.id.llJobDiagnosticsTab)
         private val artifactsContainer: LinearLayout = itemView.findViewById(R.id.llJobArtifacts)
         private val headerRow: LinearLayout = itemView.findViewById(R.id.llJobHeader)
         private val expandIcon: ImageView = itemView.findViewById(R.id.imgJobExpand)
         private val detailContainer: LinearLayout = itemView.findViewById(R.id.llJobDetail)
         private val statsDivider: View = itemView.findViewById(R.id.dividerJobStats)
         private val statsText: TextView = itemView.findViewById(R.id.txtJobStats)
+        private val tabOutput: TextView = itemView.findViewById(R.id.txtTabOutput)
+        private val tabEvents: TextView = itemView.findViewById(R.id.txtTabEvents)
+        private val tabDiagnostics: TextView = itemView.findViewById(R.id.txtTabDiagnostics)
+        private val searchBox: EditText = itemView.findViewById(R.id.edtJobSearch)
+        private val eventFilterScroll: HorizontalScrollView = itemView.findViewById(R.id.scrollEventFilters)
+        private val eventFilterChips: LinearLayout = itemView.findViewById(R.id.llEventFilterChips)
         private val dp = itemView.resources.displayMetrics.density
+
+        /** Guards [searchBox]'s TextWatcher while [bind] programmatically restores this row's
+         *  stored query for a (possibly different) job after recycling -- without this, that
+         *  restore would itself fire the watcher and stomp [searchQuery] for the wrong job. */
+        private var suppressSearchWatcher = false
 
         /** Built once per recycled row and toggled visible only while the job is QUEUED. */
         private val cancelBtn: TextView = TextView(context).apply {
@@ -112,6 +142,21 @@ class RinJobAdapter(private val context: Context) : RecyclerView.Adapter<RinJobA
                 manualExpandState[job.number] = !expandedNow
                 applyExpandState(!expandedNow)
             }
+
+            tabOutput.setOnClickListener { boundJob?.let { selectTab(it, JobTab.OUTPUT) } }
+            tabEvents.setOnClickListener { boundJob?.let { selectTab(it, JobTab.EVENTS) } }
+            tabDiagnostics.setOnClickListener { boundJob?.let { selectTab(it, JobTab.DIAGNOSTICS) } }
+
+            searchBox.addTextChangedListener(object : TextWatcher {
+                override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+                override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+                override fun afterTextChanged(s: Editable?) {
+                    if (suppressSearchWatcher) return
+                    val job = boundJob ?: return
+                    searchQuery[job.number] = s?.toString().orEmpty()
+                    renderDetailBody(job)
+                }
+            })
 
             // Copy System (section 13): long-press anywhere on a finished run's card copies its
             // full output — quick access without needing a dedicated button on every row.
@@ -176,55 +221,85 @@ class RinJobAdapter(private val context: Context) : RecyclerView.Adapter<RinJobA
 
             applyExpandState(isExpanded(job))
 
+            val finished = job.status != JobStatus.QUEUED && job.status != JobStatus.RUNNING
+
             outputLines.removeAllViews()
+            eventLines.removeAllViews()
+            diagnosticsTab.removeAllViews()
             artifactsContainer.removeAllViews()
             artifactsContainer.visibility = View.GONE
 
-            if (job.status == JobStatus.QUEUED || job.status == JobStatus.RUNNING) {
+            if (!finished) {
                 statsDivider.visibility = View.GONE
                 statsText.visibility = View.GONE
-            } else {
-                // Real per-run numbers only (RinExecutionManager.RinExecutionStats) — duration,
-                // event count, output size and artifact count all come from re-deriving this
-                // exact job's actual output/events, not synthesized placeholders.
-                val stats = RinExecutionManager.toSession(job).stats
-                statsDivider.visibility = View.VISIBLE
-                statsText.visibility = View.VISIBLE
-                statsText.text = context.getString(
-                    R.string.job_stats_fmt,
-                    stats.durationMs,
-                    stats.eventCount,
-                    RinConsoleFormatter.formatBytes(stats.outputBytes.toLong()),
-                    stats.artifactCount
-                )
-            }
 
-            when (job.status) {
-                JobStatus.QUEUED -> {
-                    fallbackOutput.visibility = View.GONE
-                    fallbackOutput.text = ""
-                }
-                JobStatus.RUNNING -> {
-                    // Live Output (section 7): render whatever has streamed in so far, exactly
-                    // the same icon+text rows the finished view uses, instead of a static "…"
-                    // placeholder until the whole run completes.
-                    if (job.liveLines.isEmpty()) {
-                        fallbackOutput.visibility = View.VISIBLE
-                        fallbackOutput.text = "…"
-                    } else {
+                // Tabs/search/filters only make sense once there's a finished session to slice
+                // three ways -- a QUEUED/RUNNING job just shows its live stream, exactly as before.
+                tabOutput.visibility = View.GONE
+                tabEvents.visibility = View.GONE
+                tabDiagnostics.visibility = View.GONE
+                searchBox.visibility = View.GONE
+                eventFilterScroll.visibility = View.GONE
+                outputLines.visibility = View.VISIBLE
+                eventLines.visibility = View.GONE
+                diagnosticsTab.visibility = View.GONE
+
+                when (job.status) {
+                    JobStatus.QUEUED -> {
                         fallbackOutput.visibility = View.GONE
                         fallbackOutput.text = ""
-                        for (line in job.liveLines) {
-                            outputLines.addView(buildLineRow(line))
+                    }
+                    else -> {
+                        // Live Output (section 7): render whatever has streamed in so far, exactly
+                        // the same icon+text rows the finished view uses, instead of a static "…"
+                        // placeholder until the whole run completes.
+                        if (job.liveLines.isEmpty()) {
+                            fallbackOutput.visibility = View.VISIBLE
+                            fallbackOutput.text = "…"
+                        } else {
+                            fallbackOutput.visibility = View.GONE
+                            fallbackOutput.text = ""
+                            for (line in job.liveLines) {
+                                outputLines.addView(buildLineRow(line))
+                            }
                         }
                     }
                 }
-                else -> {
-                    fallbackOutput.visibility = View.GONE
-                    fallbackOutput.text = ""
-                    renderOutput(job)
-                }
+                return
             }
+
+            fallbackOutput.visibility = View.GONE
+            fallbackOutput.text = ""
+
+            // Real per-run numbers only (RinExecutionManager.RinExecutionStats) — duration,
+            // event count, output size and artifact count all come from re-deriving this exact
+            // job's actual output/events, not synthesized placeholders.
+            val session = RinExecutionManager.toSession(job)
+            statsDivider.visibility = View.VISIBLE
+            statsText.visibility = View.VISIBLE
+            statsText.text = context.getString(
+                R.string.job_stats_fmt,
+                session.stats.durationMs,
+                session.stats.eventCount,
+                RinConsoleFormatter.formatBytes(session.stats.outputBytes.toLong()),
+                session.stats.artifactCount
+            )
+
+            tabOutput.visibility = View.VISIBLE
+            tabEvents.visibility = View.VISIBLE
+            tabDiagnostics.visibility = View.VISIBLE
+            searchBox.visibility = View.VISIBLE
+
+            suppressSearchWatcher = true
+            val storedQuery = searchQuery[job.number].orEmpty()
+            if (searchBox.text?.toString() != storedQuery) {
+                searchBox.setText(storedQuery)
+                searchBox.setSelection(storedQuery.length)
+            }
+            suppressSearchWatcher = false
+
+            updateTabHighlight(job, session)
+            renderDetailBody(job, session)
         }
 
         /** Shows/hides [detailContainer] and rotates [expandIcon] to match, without touching any
@@ -234,11 +309,67 @@ class RinJobAdapter(private val context: Context) : RecyclerView.Adapter<RinJobA
             expandIcon.animate().rotation(if (expanded) 90f else 0f).setDuration(120L).start()
         }
 
-        /** Builds one icon + styled-text row per output line, and download chips for real artifacts. */
-        private fun renderOutput(job: RinJob) {
+        private fun selectTab(job: RinJob, tab: JobTab) {
+            selectedTab[job.number] = tab
+            val session = RinExecutionManager.toSession(job)
+            updateTabHighlight(job, session)
+            renderDetailBody(job, session)
+        }
+
+        /** Applies the selected/unselected pill style + real counts (section 10) to the three
+         *  tab labels. Counts come straight from [session] -- the same object [renderDetailBody]
+         *  renders from, so a tab's count and its content can never disagree. */
+        private fun updateTabHighlight(job: RinJob, session: RinRunSession) {
+            val tab = selectedTab[job.number] ?: JobTab.OUTPUT
+            val outputCount = RinConsoleFormatter.formatLines(job.output).size
+
+            tabOutput.text = context.getString(R.string.job_tab_output_fmt, outputCount)
+            tabEvents.text = context.getString(R.string.job_tab_events_fmt, session.events.size)
+            tabDiagnostics.text = context.getString(R.string.job_tab_diagnostics_fmt, session.diagnostics.size)
+
+            fun style(view: TextView, active: Boolean) {
+                view.setBackgroundResource(if (active) R.drawable.bg_category_chip else R.drawable.bg_filter_chip_unselected)
+                view.setTextColor(
+                    ContextCompat.getColor(context, if (active) R.color.rin_accent else R.color.rin_on_toolbar_dim)
+                )
+            }
+            style(tabOutput, tab == JobTab.OUTPUT)
+            style(tabEvents, tab == JobTab.EVENTS)
+            style(tabDiagnostics, tab == JobTab.DIAGNOSTICS)
+        }
+
+        /** Redraws whichever tab's content container is active, applying the current search
+         *  query (and, for Events, the current type filter chip). Called on bind, on every tab
+         *  switch, and on every search keystroke -- never touches [headerRow]/[searchBox] itself
+         *  so typing doesn't lose focus or cursor position. */
+        private fun renderDetailBody(job: RinJob, session: RinRunSession) {
+            val tab = selectedTab[job.number] ?: JobTab.OUTPUT
+            val query = searchQuery[job.number].orEmpty().trim()
+
+            outputLines.visibility = if (tab == JobTab.OUTPUT) View.VISIBLE else View.GONE
+            eventLines.visibility = if (tab == JobTab.EVENTS) View.VISIBLE else View.GONE
+            diagnosticsTab.visibility = if (tab == JobTab.DIAGNOSTICS) View.VISIBLE else View.GONE
+            eventFilterScroll.visibility = if (tab == JobTab.EVENTS) View.VISIBLE else View.GONE
+
+            when (tab) {
+                JobTab.OUTPUT -> renderOutputTab(job, query)
+                JobTab.EVENTS -> renderEventsTab(job, session, query)
+                JobTab.DIAGNOSTICS -> renderDiagnosticsTab(job, session)
+            }
+        }
+
+        /** Output tab: same per-line icon rows + artifact chips as before, now filtered by the
+         *  real search query (substring match on the printed text, case-insensitive). */
+        private fun renderOutputTab(job: RinJob, query: String) {
+            outputLines.removeAllViews()
             val lines = RinConsoleFormatter.formatLines(job.output)
-            for (line in lines) {
-                outputLines.addView(buildLineRow(line))
+                .filter { query.isEmpty() || it.text.contains(query, ignoreCase = true) }
+            if (lines.isEmpty() && query.isNotEmpty()) {
+                outputLines.addView(buildEmptyStateRow(context.getString(R.string.job_no_results)))
+            } else {
+                for (line in lines) {
+                    outputLines.addView(buildLineRow(line))
+                }
             }
 
             // Diagnostics (section 5): when the engine reported a real structured diagnostic
@@ -250,6 +381,8 @@ class RinJobAdapter(private val context: Context) : RecyclerView.Adapter<RinJobA
                 outputLines.addView(buildDiagnosticActionsRow(job, diagnostic))
             }
 
+            artifactsContainer.removeAllViews()
+            artifactsContainer.visibility = View.GONE
             if (job.status != JobStatus.SUCCESS) return
             val baseDir = try {
                 RinEngine.currentBaseDir()
@@ -271,6 +404,94 @@ class RinJobAdapter(private val context: Context) : RecyclerView.Adapter<RinJobA
             artifacts.forEach { artifact ->
                 artifactsContainer.addView(buildArtifactChip(artifact))
             }
+        }
+
+        /** Events tab (section 4/11): [RinExecutionEvent] rows -- includes RUN_STARTED/
+         *  RUN_FINISHED markers that plain output lines don't have -- filtered by the selected
+         *  type chip via [RinExecutionManager.filterEvents] and then by the search query. */
+        private fun renderEventsTab(job: RinJob, session: RinRunSession, query: String) {
+            buildEventFilterChips(job)
+
+            eventLines.removeAllViews()
+            val activeFilter = selectedEventFilter[job.number]
+            val typed = if (activeFilter == null) session.events
+            else RinExecutionManager.filterEvents(session, setOf(activeFilter))
+            val filtered = typed.filter { query.isEmpty() || it.message.contains(query, ignoreCase = true) }
+
+            if (filtered.isEmpty()) {
+                eventLines.addView(buildEmptyStateRow(context.getString(R.string.job_no_results)))
+                return
+            }
+            filtered.forEach { event ->
+                eventLines.addView(buildLineRow(RinLogLine(event.level, event.message)))
+            }
+        }
+
+        /** Builds the ALL/OUTPUT/INFO/WARNING/ERROR/DEBUG filter chip row for the Events tab,
+         *  highlighting whichever one is selected for this job. */
+        private fun buildEventFilterChips(job: RinJob) {
+            eventFilterChips.removeAllViews()
+            val options: List<Pair<RinEventType?, Int>> = listOf(
+                null to R.string.job_filter_all,
+                RinEventType.OUTPUT to R.string.job_filter_output,
+                RinEventType.INFO to R.string.job_filter_info,
+                RinEventType.WARNING to R.string.job_filter_warning,
+                RinEventType.ERROR to R.string.job_filter_error,
+                RinEventType.DEBUG to R.string.job_filter_debug
+            )
+            val active = selectedEventFilter[job.number]
+            options.forEach { (type, labelRes) ->
+                val chip = TextView(context).apply {
+                    text = context.getString(labelRes)
+                    textSize = 11f
+                    setTypeface(typeface, Typeface.BOLD)
+                    setPadding((12 * dp).toInt(), (5 * dp).toInt(), (12 * dp).toInt(), (5 * dp).toInt())
+                    setBackgroundResource(if (type == active) R.drawable.bg_category_chip else R.drawable.bg_filter_chip_unselected)
+                    setTextColor(
+                        ContextCompat.getColor(context, if (type == active) R.color.rin_accent else R.color.rin_on_toolbar_dim)
+                    )
+                    layoutParams = LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT
+                    ).apply { marginEnd = (6 * dp).toInt() }
+                    isClickable = true
+                    isFocusable = true
+                    setOnClickListener {
+                        selectedEventFilter[job.number] = type
+                        renderDetailBody(job, RinExecutionManager.toSession(job))
+                    }
+                }
+                eventFilterChips.addView(chip)
+            }
+        }
+
+        /** Diagnostics tab (section 5/10): every real [RinDiagnostic] this run produced (almost
+         *  always zero or one), or an explicit empty state instead of a blank panel. */
+        private fun renderDiagnosticsTab(job: RinJob, session: RinRunSession) {
+            diagnosticsTab.removeAllViews()
+            if (session.diagnostics.isEmpty()) {
+                diagnosticsTab.addView(buildEmptyStateRow(context.getString(R.string.job_no_diagnostics)))
+                return
+            }
+            session.diagnostics.forEach { diagnostic ->
+                val summary = TextView(context).apply {
+                    text = "${diagnostic.severity.uppercase()} [${diagnostic.code}] ${diagnostic.message}\n" +
+                        "${diagnostic.file}:${diagnostic.line}:${diagnostic.column}"
+                    textSize = 12.5f
+                    typeface = Typeface.MONOSPACE
+                    setTextColor(ContextCompat.getColor(context, R.color.log_kind_error))
+                    setTextIsSelectable(true)
+                    setPadding(0, (4 * dp).toInt(), 0, 0)
+                }
+                diagnosticsTab.addView(summary)
+                diagnosticsTab.addView(buildDiagnosticActionsRow(job, diagnostic))
+            }
+        }
+
+        private fun buildEmptyStateRow(text: String): View = TextView(context).apply {
+            this.text = text
+            textSize = 12f
+            setTextColor(ContextCompat.getColor(context, R.color.rin_on_toolbar_dim))
+            setPadding(0, (4 * dp).toInt(), 0, (4 * dp).toInt())
         }
 
         private fun buildLineRow(line: RinLogLine): View {
