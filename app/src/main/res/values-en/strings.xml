@@ -260,4 +260,17 @@ print \"Hello, \" + name + \"!\";
     <string name="crash_dialog_copied">Log copied to clipboard</string>
     <string name="crash_dialog_close_app">Close app</string>
     <string name="crash_dialog_dismiss">Dismiss</string>
+
+    <string name="job_search_hint">Search this run’s output/events</string>
+    <string name="job_tab_output_fmt">Output (%1$d)</string>
+    <string name="job_tab_events_fmt">Events (%1$d)</string>
+    <string name="job_tab_diagnostics_fmt">Diagnostics (%1$d)</string>
+    <string name="job_no_diagnostics">No diagnostics for this run.</string>
+    <string name="job_filter_all">All</string>
+    <string name="job_filter_output">Output</string>
+    <string name="job_filter_info">Info</string>
+    <string name="job_filter_warning">Warning</string>
+    <string name="job_filter_error">Error</string>
+    <string name="job_filter_debug">Debug</string>
+    <string name="job_no_results">No matches for this search/filter.</string>
 </resources>
