@@ -221,4 +221,17 @@ print \"Hello, \" + name + \"!\";
     <string name="crash_dialog_copied">Registro copiado</string>
     <string name="crash_dialog_close_app">Cerrar aplicación</string>
     <string name="crash_dialog_dismiss">Cerrar</string>
+
+    <string name="job_search_hint">Buscar en la salida/eventos de esta ejecución</string>
+    <string name="job_tab_output_fmt">Salida (%1$d)</string>
+    <string name="job_tab_events_fmt">Eventos (%1$d)</string>
+    <string name="job_tab_diagnostics_fmt">Diagnósticos (%1$d)</string>
+    <string name="job_no_diagnostics">No hay diagnósticos para esta ejecución.</string>
+    <string name="job_filter_all">Todos</string>
+    <string name="job_filter_output">Salida</string>
+    <string name="job_filter_info">Info</string>
+    <string name="job_filter_warning">Aviso</string>
+    <string name="job_filter_error">Error</string>
+    <string name="job_filter_debug">Depuración</string>
+    <string name="job_no_results">Sin coincidencias para esta búsqueda/filtro.</string>
 </resources>
