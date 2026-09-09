@@ -2,6 +2,7 @@
 // Exposes the Rin C++ engine to Kotlin through JNI.
 // Kotlin side: RinEngine.kt declares the matching `external fun` signatures.
 #include <jni.h>
+#include "rin_version.h"
 #include <string>
 #include <vector>
 #include <chrono>
@@ -515,7 +516,10 @@ Java_com_dlof_rinlang_RinEngine_replayFlowNative(JNIEnv* env, jobject /* this */
 
 extern "C" JNIEXPORT jstring JNICALL
 Java_com_dlof_rinlang_RinEngine_engineVersion(JNIEnv* env, jobject /* this */) {
-    return env->NewStringUTF("Rin Engine 1.1 (C++17) — save/file/installation حقيقية على القرص، RinFlow حقيقي");
+    static const std::string kVersionString =
+        std::string("Rin Engine ") + RIN_VERSION_STRING +
+        " (C++17) — save/file/installation حقيقية على القرص، RinFlow حقيقي";
+    return env->NewStringUTF(kVersionString.c_str());
 }
 
 
