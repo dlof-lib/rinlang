@@ -154,7 +154,7 @@ class RinJobAdapter(private val context: Context) : RecyclerView.Adapter<RinJobA
                     if (suppressSearchWatcher) return
                     val job = boundJob ?: return
                     searchQuery[job.number] = s?.toString().orEmpty()
-                    renderDetailBody(job)
+                    renderDetailBody(job, RinExecutionManager.toSession(job))
                 }
             })
 
