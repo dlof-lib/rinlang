@@ -199,7 +199,9 @@ object ProjectManager {
                     "warp userName = \"صديقي\";\n" +
                     "warp total = 10 + 5;\n\n" +
                     "print \"مرحباً،\", userName;\n" +
-                    "print \"الناتج:\", total;\n"
+                    "print \"الناتج:\", total;\n\n" +
+                    "// يمكن قراءة إصدار محرّك Rin نفسه من داخل الكود:\n" +
+                    "print \"يعمل هذا المشروع على Rin \" + rinVersion() + \" (\" + rinEdition() + \")\";\n"
             else ->
                 "// مشروع: $name\n" +
                     "print \"مرحباً من مشروع $name\";\n"
