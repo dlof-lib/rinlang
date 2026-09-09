@@ -9,6 +9,7 @@
                                 // في registerNatives()/invokeCallee() (rin_interpreter.cpp)
                                 // وdocs/RIN_INTEGRATION.md في مستودع rin-clc الأصلي.
 #include "loader_ui/library_loader_ui.h" // rin::loaderui — انظر setImportUISink/setImportUIMode أدناه
+#include "rin_candle.h" // rin::CandleRegistry — طبقة id-to-id غير محدودة فوق mask/id مباشرة، انظر docs/candle.md
                                           // وربطها الفعلي مع @import في rin_interpreter.cpp.
 #include <sstream>
 #include <iostream>
@@ -614,6 +615,11 @@ private:
     std::unordered_map<std::string, std::string> maskVersions;   // mask -> user-defined identity version
     std::unordered_map<std::string, bool> maskEnabled;           // mask -> active/inactive identity
     std::unordered_map<std::string, std::string> maskNotes;     // mask -> short developer note
+    // Candle: طبقة علاقات id-to-id فوق mask/id مباشرة، غير محدودة الصادر (∞ من id).
+    // مستقلة تماماً عن mask نفسه؛ أطراف light()/الاستعلامات تُحل عبر candleResolve أولاً
+    // (مطابقة تامة لمنطق mask v3/v4: mask معروف -> targetها، وإلا تُعامَل كـ id خام). انظر
+    // docs/candle.md ورين rin_candle.h.
+    rin::CandleRegistry candleRegistry;
     std::unordered_map<std::string, EnvPtr> groupEnvs;       // اسم المجموعة -> بيئتها الخاصة (متغيرات مُعلَنة مباشرة داخلها)
     std::unordered_map<std::string, std::vector<std::string>> groupMembers; // اسم المجموعة -> أسماء الحاويات/المجموعات الفرعية المباشرة بداخلها (بالترتيب)
     // ---- Section: حالة تُحفَظ بعد الإغلاق (قبل هذا كانت Section زخرفية بحتة: تطبع 🔹/◽ فقط ثم
