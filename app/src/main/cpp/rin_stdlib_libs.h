@@ -8729,6 +8729,320 @@ fun mm_buttonConsumeJustReleased(mm, buttonName) {
 }
 
 )MOVINGMASKOGRIN";
+static const char* kLib_nlpkit_og_rin = R"NLPKITOGRIN(
+// ============================================================================
+//  lib/nlpkit.og.rin — معالجة نصوص متقدمة: NLP بدائي + تحليل ملفات/لغات
+//  فوق نواة C++ الجديدة: utf8Len/utf8CharAt/utf8Substr/utf8Reverse/utf8ToArray،
+//  arabicStripDiacritics/arabicNormalize/detectScript، levenshtein،
+//  tokenizeWords/splitSentences، وعائلة regex* (regexTest/regexFind/regexFindAll/
+//  regexGroups/regexReplace/regexSplit).
+//
+//  استيراد:
+//    @import "lib/nlpkit.og.rin";
+//    @import "lib/nlpkit.og.rin" as nlp;
+//
+//  ملاحظة: كل الدوال هنا تعمل على نقاط ترميز UTF-8 حقيقية (عبر النواة الجديدة)، فتبقى صحيحة
+//  مع النصوص العربية/RTL، بخلاف بعض دوال strings.og.rin القديمة (charAt/substr/reverseStr)
+//  التي تعمل على البايتات وتكسر مع أي حرف غير-ASCII.
+// ============================================================================
+
+// ---- قوائم كلمات وقف (stopwords) صغيرة مدمجة: عربي + إنجليزي — تُستخدم في keywordExtract ----
+fun nlp_stopwordsAr() {
+    return ["في","من","إلى","على","عن","مع","هذا","هذه","ذلك","تلك","الذي","التي","الذين",
+        "و","أو","ثم","لكن","إن","أن","كان","كانت","يكون","لا","لم","لن","ما","هل","كل",
+        "بعض","غير","بين","عند","قد","لقد","إذا","كما","حتى","أنا","أنت","هو","هي","نحن",
+        "هم","له","لها","لهم","به","بها","فيه","فيها","هناك","هنا"];
+}
+fun nlp_stopwordsEn() {
+    return ["the","a","an","and","or","but","if","of","to","in","on","for","with","at","by",
+        "from","up","about","into","over","after","is","are","was","were","be","been","being",
+        "this","that","these","those","it","its","as","not","no","so","than","then","there",
+        "here","i","you","he","she","we","they","them","his","her","their","our","your"];
+}
+
+// هل word كلمة وقف بحسب lang ("ar" أو "en")؟ يقارن بعد lower/arabicNormalize حتى تُطابَق
+// الكلمة العربية بصرف النظر عن شكل الألف/التشكيل.
+fun nlp_isStopword(word, lang) {
+    let normalized = arabicNormalize(lower(word));
+    let list = nlp_stopwordsEn();
+    if (lang == "ar") { list = nlp_stopwordsAr(); }
+    let i = 0;
+    while (i < len(list)) {
+        if (arabicNormalize(lower(list[i])) == normalized) { return true; }
+        i = i + 1;
+    }
+    return false;
+}
+
+// يزيل كلمات الوقف من مصفوفة كلمات (ناتجة عادةً عن tokenizeWords)
+fun nlp_removeStopwords(tokens, lang) {
+    let out = [];
+    let i = 0;
+    while (i < len(tokens)) {
+        if (nlp_isStopword(tokens[i], lang) == false) { push(out, tokens[i]); }
+        i = i + 1;
+    }
+    return out;
+}
+
+// ---- تكرار الكلمات (word frequency) ----
+// يُعيد قاموساً: الكلمة (بعد lower + arabicNormalize لتوحيد الأشكال) -> عدد مرات ظهورها.
+fun nlp_wordFrequency(s) {
+    let words = tokenizeWords(s);
+    let freq = {};
+    let i = 0;
+    while (i < len(words)) {
+        let w = arabicNormalize(lower(words[i]));
+        if (has(freq, w)) { freq[w] = freq[w] + 1; } else { freq[w] = 1; }
+        i = i + 1;
+    }
+    return freq;
+}
+
+// ---- n-grams حرفية (character n-grams) — مبنية على نقاط ترميز UTF-8 حقيقية ----
+// مفيدة كأساس بسيط لكشف اللغة/التشابه الضبابي دون الاعتماد على تقسيم الكلمات.
+fun nlp_charNgrams(s, n) {
+    let cps = utf8ToArray(s);
+    let out = [];
+    let i = 0;
+    while (i + n <= len(cps)) {
+        let g = "";
+        let j = i;
+        while (j < i + n) { g = g + cps[j]; j = j + 1; }
+        push(out, g);
+        i = i + 1;
+    }
+    return out;
+}
+
+// n-grams على مستوى الكلمات (تسلسل n كلمات متتابعة مفصولة بمسافة) — مفيدة لاستخراج عبارات
+// شائعة (collocations) بدل كلمات مفردة فقط.
+fun nlp_wordNgrams(s, n) {
+    let words = tokenizeWords(s);
+    let out = [];
+    let i = 0;
+    while (i + n <= len(words)) {
+        let parts = [];
+        let j = i;
+        while (j < i + n) { push(parts, words[j]); j = j + 1; }
+        push(out, join(parts, " "));
+        i = i + 1;
+    }
+    return out;
+}
+
+// ---- استخراج كلمات مفتاحية (keyword extraction) ----
+// تحليل تكراري بسيط: يُرمّز النص، يزيل كلمات الوقف، يحسب التكرار، ثم يعيد أعلى topN كلمة
+// كمصفوفة من قواميس {word, count} مرتّبة تنازلياً حسب التكرار (فرز إدراج بسيط — بلا حاجة
+// لدالة sortBy غير موجودة في النواة الأساسية).
+fun nlp_keywordExtract(s, topN, lang) {
+    let words = tokenizeWords(s);
+    let filtered = nlp_removeStopwords(words, lang);
+    let freq = {};
+    let i = 0;
+    while (i < len(filtered)) {
+        let w = arabicNormalize(lower(filtered[i]));
+        if (len(w) < 2) { i = i + 1; continue; } // يتجاهل الأحرف المفردة الضجيجية
+        if (has(freq, w)) { freq[w] = freq[w] + 1; } else { freq[w] = 1; }
+        i = i + 1;
+    }
+    let ks = keys(freq);
+    let ranked = [];
+    i = 0;
+    while (i < len(ks)) {
+        let entry = {};
+        entry["word"] = ks[i];
+        entry["count"] = freq[ks[i]];
+        // إدراج entry في مكانه الصحيح داخل ranked (تنازلياً حسب count) — فرز إدراج O(n^2)
+        // مقبول تماماً لعدد الكلمات المفتاحية النموذجي في نص واحد.
+        let pos = 0;
+        while (pos < len(ranked) and ranked[pos]["count"] >= entry["count"]) { pos = pos + 1; }
+        let before = [];
+        let after = [];
+        let k = 0;
+        while (k < pos) { push(before, ranked[k]); k = k + 1; }
+        while (k < len(ranked)) { push(after, ranked[k]); k = k + 1; }
+        ranked = before;
+        push(ranked, entry);
+        k = 0;
+        while (k < len(after)) { push(ranked, after[k]); k = k + 1; }
+        i = i + 1;
+    }
+    if (len(ranked) > topN) {
+        let top = [];
+        i = 0;
+        while (i < topN) { push(top, ranked[i]); i = i + 1; }
+        return top;
+    }
+    return ranked;
+}
+
+// ---- كشف لغة تقريبي (script + كلمات وقف) ----
+// يعيد: "ar" (عربية غالبة) | "en" (لاتينية مع تراكب واضح مع كلمات وقف إنجليزية) |
+// "latin" (لاتينية بلا تراكب كافٍ لتأكيد الإنجليزية تحديداً — قد تكون لغة لاتينية أخرى) |
+// "mixed" (عربي+لاتيني معاً بنسب متقاربة) | "unknown" (نص فارغ أو بلا حروف).
+fun nlp_detectLanguage(s) {
+    let script = detectScript(s);
+    if (script == "arabic") { return "ar"; }
+    if (script == "empty" or script == "digits" or script == "other") { return "unknown"; }
+    if (script == "mixed") { return "mixed"; }
+    // script == "latin": نحاول تمييز الإنجليزية عبر نسبة تراكب كلمات الوقف الإنجليزية الشائعة
+    let words = tokenizeWords(s);
+    if (len(words) == 0) { return "unknown"; }
+    let hits = 0;
+    let i = 0;
+    while (i < len(words)) {
+        if (nlp_isStopword(words[i], "en")) { hits = hits + 1; }
+        i = i + 1;
+    }
+    if (hits / len(words) >= 0.12) { return "en"; }
+    return "latin";
+}
+
+// ---- تشابه نصوص (text similarity) ----
+// 1 = متطابقان تماماً، 0 = بلا أي تشابه (مبني على مسافة Levenshtein على نقاط ترميز UTF-8).
+fun nlp_textSimilarity(a, b) {
+    let la = utf8Len(a);
+    let lb = utf8Len(b);
+    let maxLen = la;
+    if (lb > maxLen) { maxLen = lb; }
+    if (maxLen == 0) { return 1.0; }
+    let dist = levenshtein(a, b);
+    let sim = 1.0 - (dist / maxLen);
+    if (sim < 0) { sim = 0; }
+    return sim;
+}
+
+// تشابه Jaccard على مستوى الكلمات (بعد إزالة التكرار): |تقاطع| / |اتحاد| — مقياس مختلف عن
+// Levenshtein، أنسب لمقارنة فقرات/جمل طويلة نسبياً حيث الترتيب أقل أهمية من مجرد وجود الكلمات.
+fun nlp_jaccardSimilarity(a, b) {
+    let wa = nlp_wordFrequency(a);
+    let wb = nlp_wordFrequency(b);
+    let ka = keys(wa);
+    let kb = keys(wb);
+    let inter = 0;
+    let i = 0;
+    while (i < len(ka)) {
+        if (has(wb, ka[i])) { inter = inter + 1; }
+        i = i + 1;
+    }
+    let unionCount = len(ka) + len(kb) - inter;
+    if (unionCount == 0) { return 1.0; }
+    return inter / unionCount;
+}
+
+// أقرب سلسلة إلى query داخل candidates حسب Levenshtein (مطابقة ضبابية / تصحيح إملائي تقريبي)؛
+// يُعيد قاموساً {match, distance}، أو {match: nil, distance: -1} إن كانت candidates فارغة.
+fun nlp_fuzzyClosest(query, candidates) {
+    let best = "";
+    let bestDist = -1;
+    let i = 0;
+    while (i < len(candidates)) {
+        let d = levenshtein(query, candidates[i]);
+        if (bestDist == -1 or d < bestDist) { bestDist = d; best = candidates[i]; }
+        i = i + 1;
+    }
+    let result = {};
+    if (bestDist == -1) { result["match"] = nil; } else { result["match"] = best; }
+    result["distance"] = bestDist;
+    return result;
+}
+
+// ---- إحصاءات/تحليل نص عام ----
+// يعيد قاموساً بإحصاءات نص واحد: عدد نقاط الترميز، عدد البايتات الخام، عدد الكلمات، عدد
+// الجمل، متوسط طول الكلمة (بنقاط الترميز)، ونوع الكتابة الغالب (عبر detectScript).
+fun nlp_analyzeText(s) {
+    let words = tokenizeWords(s);
+    let sentences = splitSentences(s);
+    let totalWordChars = 0;
+    let i = 0;
+    while (i < len(words)) { totalWordChars = totalWordChars + utf8Len(words[i]); i = i + 1; }
+    let avgWordLen = 0;
+    if (len(words) > 0) { avgWordLen = totalWordChars / len(words); }
+    let result = {};
+    result["charsUtf8"] = utf8Len(s);
+    result["charsBytes"] = len(s);
+    result["words"] = len(words);
+    result["sentences"] = len(sentences);
+    result["avgWordLen"] = avgWordLen;
+    result["script"] = detectScript(s);
+    result["language"] = nlp_detectLanguage(s);
+    return result;
+}
+
+// هل s ينتهي بـ suffix؟ (نسخة محلية صغيرة كي تبقى هذه المكتبة مستقلة بلا اعتماد على
+// @import "lib/strings.og.rin" — انظر endsWith هناك لنسخة عامة الغرض إن كانت مستوردة أصلاً)
+fun nlp_endsWith(s, suffix) {
+    let sl = len(s);
+    let pl = len(suffix);
+    if (pl > sl) { return false; }
+    return substr(s, sl - pl, pl) == suffix;
+}
+
+// ---- تحليل ملفات: تخمين لغة برمجة/ملف من امتداده ----
+// جدول امتدادات شائع؛ يعيد اسم اللغة كنص، أو "unknown" إن لم يُعرف الامتداد. لا تفتح الملف
+// فعلياً (لا تحتاج قراءة محتواه) — انظر nlp_analyzeFile أدناه لتحليل يقرأ المحتوى أيضاً.
+fun nlp_detectFileLanguage(path) {
+    let lower_path = lower(path);
+    let table = {};
+    table[".rin"] = "Rin"; table[".og.rin"] = "Rin";
+    table[".kt"] = "Kotlin"; table[".kts"] = "Kotlin";
+    table[".java"] = "Java";
+    table[".py"] = "Python";
+    table[".js"] = "JavaScript"; table[".mjs"] = "JavaScript";
+    table[".ts"] = "TypeScript"; table[".tsx"] = "TypeScript (JSX)";
+    table[".jsx"] = "JavaScript (JSX)";
+    table[".c"] = "C";
+    table[".h"] = "C/C++ Header";
+    table[".cpp"] = "C++"; table[".cc"] = "C++"; table[".cxx"] = "C++"; table[".hpp"] = "C++ Header";
+    table[".cs"] = "C#";
+    table[".go"] = "Go";
+    table[".rs"] = "Rust";
+    table[".rb"] = "Ruby";
+    table[".php"] = "PHP";
+    table[".swift"] = "Swift";
+    table[".m"] = "Objective-C";
+    table[".html"] = "HTML"; table[".htm"] = "HTML";
+    table[".css"] = "CSS";
+    table[".xml"] = "XML";
+    table[".json"] = "JSON";
+    table[".yaml"] = "YAML"; table[".yml"] = "YAML";
+    table[".toml"] = "TOML";
+    table[".md"] = "Markdown";
+    table[".sh"] = "Shell"; table[".bash"] = "Shell";
+    table[".sql"] = "SQL";
+    table[".gradle"] = "Gradle";
+    let ks = keys(table);
+    let bestExt = "";
+    let i = 0;
+    while (i < len(ks)) {
+        let ext = ks[i];
+        if (nlp_endsWith(lower_path, ext) and len(ext) > len(bestExt)) { bestExt = ext; }
+        i = i + 1;
+    }
+    if (bestExt == "") { return "unknown"; }
+    return table[bestExt];
+}
+
+// يقرأ ملفاً نصياً فعلياً (عبر readFile) ويحلّله: كل حقول nlp_analyzeText بالإضافة إلى
+// {path, language, lines, blankLines}. يرمي نفس خطأ readFile إن تعذّرت القراءة.
+fun nlp_analyzeFile(path) {
+    let content = readFile(path);
+    let result = nlp_analyzeText(content);
+    result["path"] = path;
+    result["language"] = nlp_detectFileLanguage(path);
+    let rawLines = split(content, "\n");
+    result["lines"] = len(rawLines);
+    let blanks = 0;
+    let i = 0;
+    while (i < len(rawLines)) {
+        if (trim(rawLines[i]) == "") { blanks = blanks + 1; }
+        i = i + 1;
+    }
+    result["blankLines"] = blanks;
+    return result;
+}
+)NLPKITOGRIN";
 inline const std::unordered_map<std::string, std::string>& embeddedRinLibraries() {
     static const std::unordered_map<std::string, std::string> libs = {
         {"lib/math.og.rin", kLib_math_og_rin},
@@ -8755,6 +9069,7 @@ inline const std::unordered_map<std::string, std::string>& embeddedRinLibraries(
         {"lib/rinzip.og.rin", kLib_rinzip_og_rin},
         {"lib/relyRIN.og.rin", kLib_relyRIN_og_rin},
         {"lib/movingmask.og.rin", kLib_movingmask_og_rin},
+        {"lib/nlpkit.og.rin", kLib_nlpkit_og_rin},
     };
     return libs;
 }
