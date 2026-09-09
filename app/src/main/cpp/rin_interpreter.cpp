@@ -5267,6 +5267,7 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
     if (auto s = std::dynamic_pointer_cast<LetStmt>(stmt)) {
         Value v = Value::nil();
         if (s->initializer) v = copyForBinding(evaluate(s->initializer, env));
+        if (!s->typeName.empty()) checkDeclaredType(v, s->typeName, "variable `" + s->name + "`", s->line);
         env->define(s->name, v);
         return;
     }
@@ -6428,7 +6429,7 @@ void Interpreter::registerClassStmt(const std::shared_ptr<ClassStmt>& s) {
     classes[s->name] = std::move(def);
 }
 
-std::shared_ptr<FunctionStmt> Interpreter::findMethod(const std::string& className, const std::string& methodName) const {
+std::shared_ptr<FunctionStmt> Interpreter::findMethod(const std::string& className, const std::string& methodName, std::string* ownerOut) const {
     std::string cur = className;
     std::unordered_set<std::string> seen;
     while (!cur.empty()) {
@@ -6436,22 +6437,57 @@ std::shared_ptr<FunctionStmt> Interpreter::findMethod(const std::string& classNa
         if (it == classes.end()) break;
         if (!seen.insert(cur).second) break; // وراثة دائرية: توقّف بلا خطأ هنا (يُكتشف صراحة في instantiateClass)
         auto mIt = it->second.methods.find(methodName);
-        if (mIt != it->second.methods.end()) return mIt->second;
+        if (mIt != it->second.methods.end()) {
+            if (ownerOut) *ownerOut = cur;
+            return mIt->second;
+        }
         cur = it->second.superclass;
     }
     return nullptr;
 }
 
-Value Interpreter::bindMethod(const Value& receiver, const std::shared_ptr<FunctionStmt>& method) {
+Value Interpreter::bindMethod(const Value& receiver, const std::shared_ptr<FunctionStmt>& method, const std::string& ownerClass) {
     auto callable = std::make_shared<Callable>();
     callable->declaration = method;
     auto closureEnv = std::make_shared<Environment>(globals);
     closureEnv->define("self", receiver);
+    if (!ownerClass.empty()) closureEnv->define("__class__", Value::string(ownerClass));
     callable->closure = closureEnv;
     Value v;
     v.type = Value::Type::FUNCTION;
     v.function = callable;
     return v;
+}
+
+Value Interpreter::evaluateSuperGet(const std::string& name, const EnvPtr& env, int line) {
+    Value selfVal;
+    Value classVal;
+    if (!env->get("self", selfVal) || !env->get("__class__", classVal) || classVal.type != Value::Type::STRING) {
+        throw errWithReason(diag::Code::E0035_RuntimeError, line,
+                             "`super` used outside a class method",
+                             "`super` can only be used inside the body of a method defined on a class");
+    }
+    auto classIt = classes.find(classVal.str);
+    if (classIt == classes.end() || classIt->second.superclass.empty()) {
+        throw errWithReason(diag::Code::E0035_RuntimeError, line,
+                             "`" + classVal.str + "` has no superclass",
+                             "`super` requires the class the current method is defined on to be "
+                             "declared with `extends`");
+    }
+    const std::string& superName = classIt->second.superclass;
+    // الحقول ليست "مُطبقة" لكل مستوى وراثة على حدة (نفس القاموس fields يُملأ من الأب حتى الابن عند
+    // الإنشاء، انظر instantiateClass) — فـ super.field تقرأ ببساطة قيمة self الحالية لنفس الحقل.
+    if (selfVal.type == Value::Type::INSTANCE) {
+        auto fIt = selfVal.instance->fields.find(name);
+        if (fIt != selfVal.instance->fields.end()) return fIt->second;
+    }
+    std::string owner;
+    auto method = findMethod(superName, name, &owner);
+    if (method) return bindMethod(selfVal, method, owner);
+    throw errWithReason(diag::Code::E0001_UndefinedVariable, line,
+                         "no field or method named `" + name + "` on `" + superName + "`",
+                         "`" + superName + "` (and its own ancestors) has neither a field nor a "
+                         "method called `" + name + "`");
 }
 
 Value Interpreter::copyForBinding(const Value& v) const {
@@ -6466,6 +6502,62 @@ Value Interpreter::copyForBinding(const Value& v) const {
         return Value::makeInstance(copy);
     }
     return v;
+}
+
+// ---- Type System: أبسط تحقق ممكن ----
+// الأنواع البدائية المدعومة (Any/Number/Int/String/Bool/Array/Map/Function) بالإضافة لأي اسم
+// صنف/بنية مُعرَّف عبر class/struct. Int ليس نوعاً منفصلاً في التخزين (Rin لا تملك أعداداً صحيحة
+// منفصلة عن الأعداد العشرية أصلاً -- كل الأرقام double) بل فحص إضافي فوق Number: العدد الفعلي بلا
+// جزء كسري ومنتهٍ (ليس NaN/Infinity).
+void Interpreter::checkDeclaredType(const Value& v, const std::string& typeName, const std::string& context, int line) const {
+    if (typeName.empty()) return; // بلا نوع معلَن -- بلا أي فحص، تماماً كما كانت اللغة قبل هذه الميزة
+
+    static const std::unordered_set<std::string> builtins = {
+        "Any", "Number", "Int", "String", "Bool", "Array", "Map", "Function"
+    };
+    if (!builtins.count(typeName) && !classes.count(typeName)) {
+        throw errWithReason(diag::Code::E0001_UndefinedVariable, line,
+                             "unknown type `" + typeName + "`",
+                             "`" + typeName + "` is not a built-in type (Any, Number, Int, String, "
+                             "Bool, Array, Map, Function) and no class or struct with that name is "
+                             "defined");
+    }
+
+    if (v.type == Value::Type::NIL) return; // كل نوع قابل لـ nil ضمنياً -- لا Optional/nullable منفصل
+
+    bool ok;
+    if (typeName == "Any") ok = true;
+    else if (typeName == "Number") ok = v.type == Value::Type::NUMBER;
+    else if (typeName == "Int") ok = v.type == Value::Type::NUMBER && std::isfinite(v.number) && v.number == std::floor(v.number);
+    else if (typeName == "String") ok = v.type == Value::Type::STRING;
+    else if (typeName == "Bool") ok = v.type == Value::Type::BOOL;
+    else if (typeName == "Array") ok = v.type == Value::Type::ARRAY;
+    else if (typeName == "Map") ok = v.type == Value::Type::MAP;
+    else if (typeName == "Function") ok = v.type == Value::Type::FUNCTION;
+    else {
+        // اسم صنف/بنية: مطابقة "is-a" عبر سلسلة الوراثة -- نفس منطق findMethod بالضبط، فأي كائن من
+        // صنف فرعي (Dog) يمرّ فحص نوع أبيه (Animal) بلا الحاجة لأي قواعد subtyping إضافية.
+        ok = false;
+        if (v.type == Value::Type::INSTANCE && v.instance) {
+            std::string cur = v.instance->className;
+            std::unordered_set<std::string> seen;
+            while (!cur.empty()) {
+                if (cur == typeName) { ok = true; break; }
+                if (!seen.insert(cur).second) break;
+                auto it = classes.find(cur);
+                if (it == classes.end()) break;
+                cur = it->second.superclass;
+            }
+        }
+    }
+
+    if (!ok) {
+        auto d = diagErr(diag::Code::E0004_InvalidType, line,
+                          context + " declared as `" + typeName + "` but got a value of type `" + v.typeName() + "`");
+        d.diagnostic->expected = typeName;
+        d.diagnostic->found = v.typeName();
+        throw d;
+    }
 }
 
 Value Interpreter::instantiateClass(const std::string& className, std::vector<Value>& args, int line) {
@@ -6511,9 +6603,10 @@ Value Interpreter::instantiateClass(const std::string& className, std::vector<Va
         }
     }
 
-    auto initMethod = findMethod(className, "init");
+    std::string initOwner;
+    auto initMethod = findMethod(className, "init", &initOwner);
     if (initMethod) {
-        Value bound = bindMethod(instVal, initMethod);
+        Value bound = bindMethod(instVal, initMethod, initOwner);
         callFunction(bound.function, args, line);
     } else if (!args.empty()) {
         auto d = diagErr(diag::Code::E0007_InvalidArguments, line,
@@ -6557,12 +6650,26 @@ Value Interpreter::callFunction(const std::shared_ptr<Callable>& fn, std::vector
     for (size_t i = 0; i < args.size(); i++) {
         // struct بدلالة قيمة: كل استدعاء دالة/method يستقبل نسخته الخاصة من أي وسيط struct (انظر
         // copyForBinding) — بلا أي تغيير على class/array/map/الأنواع البدائية (تبقى مرجعية كالمعتاد).
-        callEnv->define(fn->declaration->params[i], copyForBinding(args[i]));
+        Value bound = copyForBinding(args[i]);
+        // Type System: فحص كل وسيط له نوع معلَن (paramTypes[i] غير فارغة) -- انظر checkDeclaredType.
+        if (i < fn->declaration->paramTypes.size() && !fn->declaration->paramTypes[i].empty()) {
+            checkDeclaredType(bound, fn->declaration->paramTypes[i],
+                               "parameter `" + fn->declaration->params[i] + "` of `" + fn->declaration->name + "`", line);
+        }
+        callEnv->define(fn->declaration->params[i], bound);
     }
     try {
         executeBlock(fn->declaration->body->statements, callEnv);
     } catch (ReturnSignal& r) {
+        if (!fn->declaration->returnType.empty()) {
+            checkDeclaredType(r.value, fn->declaration->returnType,
+                               "return value of `" + fn->declaration->name + "`", line);
+        }
         return r.value;
+    }
+    if (!fn->declaration->returnType.empty()) {
+        checkDeclaredType(Value::nil(), fn->declaration->returnType,
+                           "return value of `" + fn->declaration->name + "`", line);
     }
     return Value::nil();
 }
@@ -6941,13 +7048,21 @@ Value Interpreter::evaluate(const ExprPtr& expr, EnvPtr env) {
     // OOP: object.name -> قراءة حقل/دالة مرتبطة (class/struct instance) أو قيمة مفتاح (map؛ يشمل
     // Name.CaseA لقيم enum، لأن Name نفسها مجرد map عادية — انظر execute(EnumStmt) أعلاه).
     if (auto e = std::dynamic_pointer_cast<GetExpr>(expr)) {
+        // super.name -> يبحث عن 'name' بدءاً من *أب* الصنف الذي عُرِّفت بداخله الدالة الحالية (لا
+        // من صنف self وقت التشغيل) — هذا وحده الفرق عن self.name العادية (توزيع ديناميكي/virtual).
+        // 'super' هنا ليست متغيّراً حقيقياً أبداً (بخلاف 'self')؛ نتعرّف عليها بفحص شكل e->object
+        // مباشرة *قبل* تقييمه، لأن تقييمها كـ VariableExpr عادية كان سيرمي دائماً "متغيّر غير معرَّف".
+        if (auto ve = std::dynamic_pointer_cast<VariableExpr>(e->object)) {
+            if (ve->name == "super") return evaluateSuperGet(e->name, env, e->line);
+        }
         Value obj = evaluate(e->object, env);
         if (obj.type == Value::Type::INSTANCE) {
             auto& inst = *obj.instance;
             auto fIt = inst.fields.find(e->name);
             if (fIt != inst.fields.end()) return fIt->second;
-            auto method = findMethod(inst.className, e->name);
-            if (method) return bindMethod(obj, method);
+            std::string owner;
+            auto method = findMethod(inst.className, e->name, &owner);
+            if (method) return bindMethod(obj, method, owner);
             throw errWithReason(diag::Code::E0001_UndefinedVariable, e->line,
                                  "no field or method named `" + e->name + "` on `" + inst.className + "`",
                                  "`" + inst.className + "` has neither a field nor a method called `" + e->name + "`");
@@ -6985,6 +7100,20 @@ Value Interpreter::evaluate(const ExprPtr& expr, EnvPtr env) {
     // OOP: object.method(args...) -> نداء دالة مرتبطة (class/struct instance، مع 'self' مربوطة
     // تلقائياً) أو نداء حقل يحمل قيمة دالة (callback عادي مخزَّن في حقل).
     if (auto e = std::dynamic_pointer_cast<MethodCallExpr>(expr)) {
+        // super.method(args...) -> نفس فكرة super.name (evaluateSuperGet)، لكن لنداء دالة مباشرة.
+        if (auto ve = std::dynamic_pointer_cast<VariableExpr>(e->object)) {
+            if (ve->name == "super") {
+                std::vector<Value> superArgs;
+                superArgs.reserve(e->args.size());
+                for (auto& a : e->args) superArgs.push_back(evaluate(a, env));
+                Value bound = evaluateSuperGet(e->method, env, e->line);
+                if (bound.type != Value::Type::FUNCTION) {
+                    throw diagErr(diag::Code::E0004_InvalidType, e->line,
+                                  "`super." + e->method + "` is not a method");
+                }
+                return callFunction(bound.function, superArgs, e->line);
+            }
+        }
         Value obj = evaluate(e->object, env);
         std::vector<Value> args;
         args.reserve(e->args.size());
@@ -6995,13 +7124,14 @@ Value Interpreter::evaluate(const ExprPtr& expr, EnvPtr env) {
             if (fIt != inst.fields.end() && fIt->second.type == Value::Type::FUNCTION) {
                 return callFunction(fIt->second.function, args, e->line);
             }
-            auto method = findMethod(inst.className, e->method);
+            std::string owner;
+            auto method = findMethod(inst.className, e->method, &owner);
             if (!method) {
                 throw errWithReason(diag::Code::E0006_UnknownFunction, e->line,
                                      "`" + inst.className + "` has no method `" + e->method + "`",
                                      "no method or callable field named `" + e->method + "` exists on `" + inst.className + "`");
             }
-            Value bound = bindMethod(obj, method);
+            Value bound = bindMethod(obj, method, owner);
             return callFunction(bound.function, args, e->line);
         }
         if (obj.type == Value::Type::MAP) {
