@@ -1,0 +1,21 @@
+// edge_cases.pitok — يختبر نقاطًا حساسة في نحو PITOK:
+// 1) "/" كقسمة حسابية داخل قيمة سمة، بجانب "/" كجزء من وسم إغلاق .end/view في نفس الملف.
+// 2) أولوية الضرب/القسمة فوق الجمع/الطرح.
+// 3) نداء دالة متداخل داخل نداء آخر.
+// 4) سلسلة نصية تحتوي على حرف "/" حرفيًا (يجب ألا يُفسَّر كوسم إغلاق).
+
+warp base = 10;
+
+@loop=app
+  screen="phone";
+
+  @view.Column=root
+    ratio=base / 2 + 1;
+    label="A/B test";
+
+    @view.Text=t1
+      text="نصف/ربع";
+      size=compute(base, scale(2, 3));
+    .end/view
+  .end/view
+.end/loop
