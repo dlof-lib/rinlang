@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="vertical"
@@ -11,10 +12,14 @@
     android:padding="12dp">
 
     <LinearLayout
+        android:id="@+id/llJobHeader"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
-        android:gravity="center_vertical">
+        android:gravity="center_vertical"
+        android:clickable="true"
+        android:focusable="true"
+        android:background="?android:attr/selectableItemBackground">
 
         <View
             android:id="@+id/viewStatusDot"
@@ -54,35 +59,78 @@
             android:layout_marginStart="6dp"
             android:textColor="@color/rin_editor_hint"
             android:textSize="11sp" />
+
+        <!-- سهم الطي/التوسيع: يتحكم بظهور تفاصيل التشغيل (llJobDetail) بالضغط على رأس البطاقة،
+             حتى تبقى قائمة عمليات تشغيل طويلة قابلة للمسح البصري السريع بدل بطاقات ضخمة دومًا،
+             تمامًا كتبويب "Run"/الطرفية في أي IDE احترافي (Android Studio / VS Code). -->
+        <ImageView
+            android:id="@+id/imgJobExpand"
+            android:layout_width="18dp"
+            android:layout_height="18dp"
+            android:layout_marginStart="4dp"
+            android:rotation="90"
+            android:src="@drawable/ic_chevron_end"
+            app:tint="@color/rin_editor_hint"
+            android:contentDescription="@string/job_toggle_expand_cta" />
     </LinearLayout>
 
-    <!-- يُستخدم فقط كنسخة احتياطية نصّية بسيطة (مثلاً حالة RUNNING/الخطأ الفادح)؛ الناتج الطبيعي
-         يُعرض بالأسلوب الاحترافي أدناه (llJobOutputLines) بدل هذا النص الخام -->
-    <TextView
-        android:id="@+id/txtJobOutput"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
-        android:fontFamily="monospace"
-        android:textColor="@color/rin_console_text"
-        android:textSize="12.5sp"
-        android:textIsSelectable="true" />
-
-    <!-- ناتج التشغيل بأسلوب احترافي: سطر لكل عملية بأيقونة ملوّنة بدل الإيموجي -->
+    <!-- كل تفاصيل التشغيل (الناتج/الشرائح/الإحصاءات) داخل حاوية واحدة قابلة للطي، حتى يتحكم
+         الضغط على الرأس بظهورها كوحدة واحدة بدل التعامل مع كل عنصر فرعي على حدة. -->
     <LinearLayout
-        android:id="@+id/llJobOutputLines"
+        android:id="@+id/llJobDetail"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="6dp"
-        android:orientation="vertical" />
+        android:orientation="vertical">
 
-    <!-- شرائح الملفات الفعلية التي أنتجها save/installation، قابلة للتنزيل الحقيقي إلى Downloads -->
-    <LinearLayout
-        android:id="@+id/llJobArtifacts"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="10dp"
-        android:orientation="vertical"
-        android:visibility="gone" />
+        <!-- يُستخدم فقط كنسخة احتياطية نصّية بسيطة (مثلاً حالة RUNNING/الخطأ الفادح)؛ الناتج الطبيعي
+             يُعرض بالأسلوب الاحترافي أدناه (llJobOutputLines) بدل هذا النص الخام -->
+        <TextView
+            android:id="@+id/txtJobOutput"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:fontFamily="monospace"
+            android:textColor="@color/rin_console_text"
+            android:textSize="12.5sp"
+            android:textIsSelectable="true" />
+
+        <!-- ناتج التشغيل بأسلوب احترافي: سطر لكل عملية بأيقونة ملوّنة بدل الإيموجي -->
+        <LinearLayout
+            android:id="@+id/llJobOutputLines"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:orientation="vertical" />
+
+        <!-- شرائح الملفات الفعلية التي أنتجها save/installation، قابلة للتنزيل الحقيقي إلى Downloads -->
+        <LinearLayout
+            android:id="@+id/llJobArtifacts"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:orientation="vertical"
+            android:visibility="gone" />
+
+        <!-- شريط إحصاءات فعلي عن هذا التشغيل تحديدًا (المدة الحقيقية، عدد الأحداث المشتقة من
+             الناتج الفعلي، حجم الناتج بالبايت، وعدد الشرائح) — من RinExecutionManager.toSession,
+             وليس أرقامًا مصطنعة، ويظهر فقط بعد اكتمال التشغيل. -->
+        <View
+            android:id="@+id/dividerJobStats"
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginTop="10dp"
+            android:background="@color/rin_divider"
+            android:visibility="gone" />
+
+        <TextView
+            android:id="@+id/txtJobStats"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:fontFamily="monospace"
+            android:textColor="@color/rin_on_toolbar_dim"
+            android:textSize="10.5sp"
+            android:visibility="gone" />
+    </LinearLayout>
 
 </LinearLayout>
