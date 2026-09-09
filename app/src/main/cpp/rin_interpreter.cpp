@@ -1,4 +1,5 @@
 #include "rin_interpreter.h"
+#include "rin_version.h"
 #include "rin_make.h"
 #include "rin_lexer.h"
 #include "rin_parser.h"
@@ -835,6 +836,19 @@ void Interpreter::registerNatives() {
     natives["random"] = [](std::vector<Value>& a, int line) {
         expectArgs("random", a, 0, line);
         return Value::num(static_cast<double>(std::rand()) / (static_cast<double>(RAND_MAX) + 1.0));
+    };
+    // رقم إصدار المحرّك الرسمي (rin_version.h — المصدر الوحيد، انظر
+    // docs/VERSIONING.md) متاح الآن داخل كود Rin نفسه، وليس فقط عبر
+    // rin --version / rin_engine_version() / RinEngine.engineVersion() على
+    // مستوى المضيف. مفيد لسكربتات تعرض رقمها في واجهتها، أو تتحقّق منه قبل
+    // استخدام ميزة معيّنة.
+    natives["rinVersion"] = [](std::vector<Value>& a, int line) {
+        expectArgs("rinVersion", a, 0, line);
+        return Value::string(RIN_VERSION_STRING);
+    };
+    natives["rinEdition"] = [](std::vector<Value>& a, int line) {
+        expectArgs("rinEdition", a, 0, line);
+        return Value::string(RIN_VERSION_EDITION);
     };
 
     // ---- معالجة نصوص (strings) ----
