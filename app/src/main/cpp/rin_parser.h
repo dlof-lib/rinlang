@@ -118,6 +118,9 @@ private:
     StmtPtr atBlock();                 // @container / @container.pipe / @container.data / @container.api / @container.import / @Containers.Group / @Volume
     StmtPtr makeUnitBlock();          // @make.(name) ... .end/make[=name]
     StmtPtr importStatement();         // @import "path"; / @import "path" as alias;   (يُستدعى بعد استهلاك '@' و'import')
+    // Modules: import { a, b, c } from "path";  (يُستدعى بعد استهلاك 'import' فقط -- بلا '@' --
+    // من declaration(); صياغة جديدة كلياً منفصلة عن importStatement()/@import أعلاه بالكامل)
+    StmtPtr importSelectedStatement();
     void validateDataContainerBody(const std::vector<StmtPtr>& body); // يمنع تعريف الدوال أو الحاويات المتداخلة داخل container.data
     StmtPtr sectionBlock();
     StmtPtr translationsBlock();
