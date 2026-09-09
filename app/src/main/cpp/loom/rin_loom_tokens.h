@@ -19,6 +19,9 @@
 // become an explicit field on PipelineResult threaded through Dye::paint(...) instead.
 #pragma once
 #include "rin_loom_eval.h"
+#include "../rin_color.h" // rincolor:: — the shared Color Engine (parsing/math/HSL/WCAG), used
+                           // here for literal color values and by rin_interpreter.cpp's color
+                           // natives for the language side. See that header's own doc comment.
 #include <string>
 #include <unordered_map>
 #include <cmath>
@@ -26,14 +29,25 @@
 namespace loom {
 
 // ---- Color -----------------------------------------------------------------------------------
-struct Color { unsigned char r = 0, g = 0, b = 0; };
+// loom::Color IS rincolor::Color (byte r/g/b/a, a defaulting to fully opaque) -- Loom doesn't
+// duplicate the color engine, it just aliases the shared one so every existing `Color{r,g,b}`
+// aggregate-init in this file keeps compiling unchanged (a is value-initialized to 255) while
+// gaining a real alpha channel everywhere for free.
+using Color = rincolor::Color;
 
-inline Color parseHexColor(const std::string& hex, Color fallback) {
-    if (hex.size() < 7 || hex[0] != '#') return fallback;
-    auto hx = [&](int i) { return (unsigned char)std::stoul(hex.substr(i, 2), nullptr, 16); };
-    try { return {hx(1), hx(3), hx(5)}; } catch (...) { return fallback; }
+// Parses any literal color syntax the engine understands (#hex3/4/6/8, rgb()/rgba(),
+// hsl()/hsla(), the 148 named CSS colors, "transparent") -- NOT semantic role names
+// ("primary"/"danger"/...), which stay Theme lookups via resolveSemanticColor() below.
+// Kept under its old name (parseHexColor) since every call site already expects "parse a
+// literal color string, falling back to `fallback` on anything that isn't one" -- only the
+// set of strings it accepts grew.
+inline Color parseHexColor(const std::string& literal, Color fallback) {
+    return rincolor::parseColor(literal, fallback);
 }
-inline bool looksLikeHexColor(const std::string& s) { return s.size() >= 7 && s[0] == '#'; }
+// Old name kept for compatibility; now covers every literal form above, not just #rrggbb --
+// this is what resolveColor() below uses to decide "is `color=`/`tone=`'s value a raw literal
+// (parse it) or a semantic role name (look it up in the Theme)".
+inline bool looksLikeHexColor(const std::string& s) { return rincolor::looksLikeColorLiteral(s); }
 
 // ---- Theme (Pattern Book): semantic color slots -----------------------------------------------
 // These are the ten roles §8/§9 of the spec asks for. A Strand never says "#6C5CE7"; it says
@@ -272,7 +286,7 @@ inline const char* stateName(StrandState st) {
 inline Color dimTowardBackground(Color c, double amount /* 0..1 */) {
     const Color& bg = themeRegistry().active().background;
     auto mix = [&](unsigned char a, unsigned char b) { return (unsigned char)(a + (b - a) * amount); };
-    return {mix(c.r, bg.r), mix(c.g, bg.g), mix(c.b, bg.b)};
+    return {mix(c.r, bg.r), mix(c.g, bg.g), mix(c.b, bg.b), c.a}; // preserve caller's alpha
 }
 
 // ---- Accessibility (§20) --------------------------------------------------------------------
