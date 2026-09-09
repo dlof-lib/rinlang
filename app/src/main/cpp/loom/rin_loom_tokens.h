@@ -156,6 +156,70 @@ inline double resolveSpacing(const Strand& s, const std::string& key, double def
     return v->asNumber(def); // numeric string ("17") still works, matching old attrNum behavior
 }
 
+// ---- Percentage-aware sizing/spacing (new: style/screen/spacing/width/height feature pass) ----
+// A raw numeric attrNum()/asNumber() read silently falls back to `def` for a string like "50%"
+// (std::stod's consumed length won't match the whole string), so percentages were effectively
+// ignored everywhere before this. These helpers add opt-in, purely additive percentage support
+// on top of the existing numeric/token forms above — no existing .rin program's numeric or
+// token-string attribute values change meaning.
+inline bool isPercentValue(const Value* v, double& pct) {
+    if (!v || v->kind != Value::Kind::STRING || v->str.empty() || v->str.back() != '%') return false;
+    try { size_t idx = 0; pct = std::stod(v->str.substr(0, v->str.size() - 1), &idx); return idx == v->str.size() - 1; }
+    catch (...) { return false; }
+}
+// Spacing family (padding/gap/margin/...) with a percentage resolved against `base` — matching
+// the CSS convention that percentage padding/margin/gap always resolves against the *width* of
+// the containing box, even for a vertical (top/bottom) value. Falls through to the existing
+// 3-arg resolveSpacing() (numeric literal / spacing token / def) for anything not a percentage.
+inline double resolveSpacing(const Strand& s, const std::string& key, double def, double base) {
+    double pct;
+    if (isPercentValue(s.attr(key), pct)) return base * pct / 100.0;
+    return resolveSpacing(s, key, def);
+}
+// width/height/min_width/max_width/min_height/max_height with percentage support: "50%" resolves
+// against `base` (the relevant axis of the parent's own available box). Non-percentage values
+// behave exactly as the old direct s->attrNum(key, def) call they replace.
+inline double resolveSizeAttr(const Strand& s, const std::string& key, double base, double def) {
+    double pct;
+    const Value* v = s.attr(key);
+    if (isPercentValue(v, pct)) return base * pct / 100.0;
+    return v ? v->asNumber(def) : def;
+}
+
+// ---- Margin (new: external spacing outside a Strand's own painted box) ------------------------
+// Margin is reserved space a Strand keeps around itself that neither it nor its own
+// background/border/content ever paints into (see rin_loom_layout.h's outer-box handling in
+// layout() — s->geometry always stays the true, margin-EXCLUDED box used for painting/hit-testing,
+// only the value layout() *returns* to its caller for cursor/bookkeeping purposes includes it).
+// `margin=` sets all four sides at once; `margin_left/top/right/bottom=` override one side.
+// Same dual numeric-or-percentage form as padding/gap above (percentages resolve against
+// `parentWidth`).
+inline void resolveMargin(const Strand& s, double parentWidth,
+                           double& left, double& top, double& right, double& bottom) {
+    double all = resolveSpacing(s, "margin", 0.0, parentWidth);
+    left = top = right = bottom = all;
+    if (s.attr("margin_left"))   left   = resolveSpacing(s, "margin_left",   left,   parentWidth);
+    if (s.attr("margin_top"))    top    = resolveSpacing(s, "margin_top",    top,    parentWidth);
+    if (s.attr("margin_right"))  right  = resolveSpacing(s, "margin_right",  right,  parentWidth);
+    if (s.attr("margin_bottom")) bottom = resolveSpacing(s, "margin_bottom", bottom, parentWidth);
+}
+
+// ---- Screen size presets (new: "screen=" convenience for @loop) --------------------------------
+// A named device-class shortcut so `@loop=app screen="phone"; ...` gets a realistic default
+// canvas size without spelling out width=/height= by hand. Explicit width=/height= on the same
+// Loop always take priority — the call site in layout() only applies a preset value for whichever
+// of the two axes has no explicit attribute at all.
+inline bool resolveScreenPreset(const std::string& name, double& w, double& h) {
+    if (name == "phone_small")   { w = 360;  h = 640;  return true; }
+    if (name == "phone")         { w = 390;  h = 844;  return true; } // common modern phone viewport
+    if (name == "phone_large")   { w = 430;  h = 932;  return true; }
+    if (name == "tablet")        { w = 768;  h = 1024; return true; }
+    if (name == "tablet_large")  { w = 1024; h = 1366; return true; }
+    if (name == "desktop")       { w = 1280; h = 800;  return true; }
+    if (name == "desktop_wide")  { w = 1440; h = 900;  return true; }
+    return false;
+}
+
 // ---- Radius tokens (§10) -------------------------------------------------------------------
 inline bool resolveRadiusToken(const std::string& name, double& out) {
     if (name == "sharp") { out = 0;  return true; }
