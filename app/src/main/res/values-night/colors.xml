@@ -99,6 +99,11 @@
     <color name="rin_gradient_green_start">#2FE0A0</color>
     <color name="rin_gradient_green_end">#1AA377</color>
 
+    <!-- حبّة رقم السطر في حوار "بنية الملف" فوق بطاقة الحوار الداكنة (bg_dialog_card بلون
+         rin_toolbar الليلي) — تراكب أبيض شفيف خفيف بدل rin_chip_bg الفاتح الثابت الذي كان
+         سيظهر كصندوق ساطع نابٍ عن سياق الوضع الليلي. -->
+    <color name="rin_outline_chip_bg">#22FFFFFF</color>
+
     <!-- بطاقات الإحصائيات القابلة للضغط في الملف الشخصي وصفحة تفاصيل الحزمة -->
     <color name="rin_stat_card_bg">#1B1D22</color>
     <color name="rin_stat_card_border">#2A2D34</color>
