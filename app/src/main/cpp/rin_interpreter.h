@@ -833,15 +833,43 @@ private:
     Value instantiateClass(const std::string& className, std::vector<Value>& args, int line);
     // يبحث عن دالة (method) باسم معيّن بدءاً من [className] ثم صعوداً عبر superclass (توريث بسيط
     // بترتيب أقرب تعريف يفوز)؛ nullptr إن لم توجد في السلسلة كاملة.
-    std::shared_ptr<FunctionStmt> findMethod(const std::string& className, const std::string& methodName) const;
+    // يبحث عن دالة (method) باسم معيّن بدءاً من [className] ثم صعوداً عبر superclass (توريث بسيط
+    // بترتيب أقرب تعريف يفوز)؛ nullptr إن لم توجد في السلسلة كاملة. [ownerOut] (اختياري) يُملأ باسم
+    // الصنف الذي وُجدت فيه فعلاً -- يلزم لدعم 'super.method()' (انظر bindMethod/evaluateSuperGet
+    // أدناه): نداء super يجب أن يبحث بدءاً من *أب الصنف المُعرِّف* للدالة الحالية، لا من صنف self
+    // وقت التشغيل (توزيع ديناميكي/virtual عادي هو ما يستخدم self.method()، لا super.method()).
+    std::shared_ptr<FunctionStmt> findMethod(const std::string& className, const std::string& methodName,
+                                              std::string* ownerOut = nullptr) const;
     // يبني قيمة FUNCTION "مربوطة" (bound method): نفس جسم [method]، لكن بيئة إغلاق (closure) جديدة
     // تُعرِّف 'self' = receiver مسبقاً، بحيث تُستدعى عبر callFunction العادية بلا أي مسار خاص.
-    Value bindMethod(const Value& receiver, const std::shared_ptr<FunctionStmt>& method);
+    // يبني قيمة FUNCTION "مربوطة" (bound method): نفس جسم [method]، لكن بيئة إغلاق (closure) جديدة
+    // تُعرِّف 'self' = receiver مسبقاً، بحيث تُستدعى عبر callFunction العادية بلا أي مسار خاص.
+    // [ownerClass] (اختياري): إن مُرِّر، يُعرَّف أيضاً '__class__' = ownerClass في نفس الإغلاق --
+    // هذا وحده ما يجعل 'super.method()' داخل جسم هذه الدالة يعرف من أين يبدأ البحث (انظر
+    // evaluateSuperGet أدناه).
+    Value bindMethod(const Value& receiver, const std::shared_ptr<FunctionStmt>& method,
+                      const std::string& ownerClass = std::string());
+    // 'super.name' / 'super.method(...)': يقرأ 'self' و'__class__' (اسم الصنف المُعرِّف للدالة
+    // الحالية) من env، ثم يبحث عن [name] بدءاً من *أب* ذلك الصنف تحديداً (بحث ساكن/static، بعكس
+    // self.name الديناميكي). يرمي خطأً واضحاً إن استُخدمت 'super' خارج جسم دالة صنف، أو إن كان
+    // الصنف الحالي بلا أب (extends). تُستخدم من evaluate(GetExpr) وevaluate(MethodCallExpr) كلتيهما
+    // (الثانية تستدعيها لتحصل على الدالة المربوطة ثم تنادي عليها بنفسها بالوسائط).
+    Value evaluateSuperGet(const std::string& name, const EnvPtr& env, int line);
     // دلالة القيمة (value semantics) لـ struct: عند إسناد/تمرير قيمة struct instance، تُستنسَخ
     // InstanceData بالكامل (استنساخ عميق متكرر لأي حقل struct متداخل بدوره) بدل مشاركة نفس
     // shared_ptr كما تفعل class/array/map عادةً. أي قيمة أخرى (بما فيها class instance عادية) تُعاد
     // كما هي بلا أي نسخ (سلوك المرجع المعتاد، بلا أي تغيير).
     Value copyForBinding(const Value& v) const;
+
+    // ---- Type System: أبسط تحقق ممكن (اختياري 100%، additive بحت) ----
+    // 'let x: Type = ...' / 'fun f(a: Type): Type' -- typeName الفارغ يعني "بلا نوع معلَن"، فيعود
+    // فوراً بلا أي فحص (نفس سلوك اللغة القديم تماماً). لا static analysis، لا type inference، لا
+    // generics، لا تمييز nullable/non-nullable (nil يمر دائماً مهما كان النوع المعلَن). فقط: عند
+    // 'let'، عند ربط كل وسيط دالة، وعند قيمة الإرجاع -- إن كانت القيمة الفعلية لا تطابق الاسم
+    // المعلَن (نوع بدائي مبني في اللغة، أو اسم صنف/بنية يُقارَن بـ "is-a" عبر سلسلة الوراثة كما في
+    // findMethod)، يُرمى خطأ واضح فوراً بدل الاستمرار بقيمة خاطئة النوع بصمت. انظر التنفيذ في
+    // rin_interpreter.cpp لقائمة الأنواع البدائية المدعومة بالضبط.
+    void checkDeclaredType(const Value& v, const std::string& typeName, const std::string& context, int line) const;
 
     // ---- RinFlow internals ----
     // يُنفِّذ نداءً واحداً بالاسم (builtinOps الخاصة، ثم natives، ثم دالة Rin مُعرَّفة) بعد أن تكون
