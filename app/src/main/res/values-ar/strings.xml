@@ -140,6 +140,8 @@
     <string name="job_pin_cta">Pin this run</string>
     <string name="job_unpin_cta">Unpin this run</string>
     <string name="job_copied_toast">Copied to clipboard</string>
+    <string name="job_toggle_expand_cta">طي/توسيع تفاصيل التشغيل</string>
+    <string name="job_stats_fmt">%1$d ms  •  %2$d حدث  •  %3$s  •  %4$d ملف</string>
     <string name="job_details_cta">Details</string>
     <string name="job_copy_cta">Copy</string>
     <string name="diag_reason_label">reason</string>
