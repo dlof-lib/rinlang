@@ -131,6 +131,8 @@
     <string name="job_pin_cta">Fijar esta ejecución</string>
     <string name="job_unpin_cta">Quitar fijado</string>
     <string name="job_copied_toast">Copiado al portapapeles</string>
+    <string name="job_toggle_expand_cta">Expandir / contraer detalles de la ejecución</string>
+    <string name="job_stats_fmt">%1$d ms  •  %2$d eventos  •  %3$s  •  %4$d archivos</string>
     <string name="job_details_cta">Detalles</string>
     <string name="job_copy_cta">Copiar</string>
     <string name="diag_reason_label">motivo</string>
