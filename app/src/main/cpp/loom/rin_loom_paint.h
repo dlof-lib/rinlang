@@ -74,24 +74,48 @@ inline Color bannerTypeColor(const std::string& type) {
 // color=<role> name, and any non-default @theme= entirely. Emitting the already-resolved color
 // here makes fabricToJson's output the same single source of truth for paint color that
 // Dye::paintInto() already uses to rasterize the "real" (PNG-export) path.
-inline std::string colorToHex(Color c) {
-    static const char* digits = "0123456789ABCDEF";
-    std::string out = "#";
-    for (unsigned char v : {c.r, c.g, c.b}) {
-        out += digits[(v >> 4) & 0xF];
-        out += digits[v & 0xF];
-    }
-    return out;
+// Hex-formats a resolved Color for the JSON bridge (see fabricToJson's "resolvedColor" field
+// below) -- the Kotlin/Compose preview renderer (LoomFabricView.kt) has no access to the native
+// Color Engine (tone=/color=<role> resolution, the active @theme=), so without this the preview
+// can only ever understand a literal "color=\"#RRGGBB\"" written straight into the .rin source
+// and otherwise falls back to its own hardcoded palette -- silently ignoring tone=, a semantic
+// color=<role> name, and any non-default @theme= entirely. Emitting the already-resolved color
+// here makes fabricToJson's output the same single source of truth for paint color that
+// Dye::paintInto() already uses to rasterize the "real" (PNG-export) path.
+//
+// Always 6-digit RGB (alpha is carried separately as its own JSON field -- see resolvedAlpha /
+// fabricToJson below) so every existing consumer of a 7-char "#RRGGBB" string keeps working
+// unchanged even now that Color itself carries alpha.
+inline std::string colorToHex(Color c) { return rincolor::toHex6(c); }
+// 0..1 alpha as a plain fraction, for JSON consumers that want to composite/opacity a fill
+// themselves (Kotlin's Color.argb(), a Canvas/GPU backend's own paint alpha, etc.).
+inline double colorAlphaUnit(Color c) { return rincolor::unitFromAlpha(c.a); }
+
+// Reads a color-family attribute's raw value as either a literal (#hex/rgb()/rgba()/hsl()/
+// hsla()/named) or a semantic Theme role name ("primary"/"danger"/...) -- the one bit of
+// "does this string mean a literal or a role" logic every color= / background= / borderColor=
+// attribute needs, factored out so all three share it instead of re-deriving it.
+inline bool resolveColorAttr(const StrandPtr& s, const std::string& key, Color& out) {
+    auto v = s->attr(key);
+    if (!v || v->kind != Value::Kind::STRING || v->str.empty()) return false;
+    if (looksLikeHexColor(v->str)) { out = parseHexColor(v->str, out); return true; }
+    return resolveSemanticColor(v->str, out);
 }
 
 // Resolves a Strand's paint color, in order:
 //   1. tone="<role>"   — semantic Theme role (primary/success/danger/...), the Color Engine's
 //                         intended everyday spelling — see spec §8/§9 ("Button { tone: primary; }").
 //   2. type="<...>"    — Banner-only notification-kind shorthand (backward compatible).
-//   3. color="#RRGGBB" — explicit hex, still supported for one-off overrides.
-//   4. color="<role>"  — a semantic role name is *also* accepted through `color=`, so existing
-//                         .rin sources that already use `color=` don't need to switch to `tone=`.
+//   3. color="..."     — any literal (#RRGGBB, #RRGGBBAA, rgb()/rgba(), hsl()/hsla(), a named
+//                         CSS color like "tomato") or a semantic role name — still supported for
+//                         one-off overrides, now with real alpha and the engine's full syntax.
+//   4. background="..."— same literal/role syntax as color=, checked when color= is absent, for
+//                         sources that spell a fill this way (matches the `background`/`element_
+//                         background` attribute the schema already recognized but never painted).
 //   5. per-kind theme-based default (colorForKind / bannerTypeColor).
+// Finally, opacity="0..1" (or "0%..100%"), if present, scales whatever alpha the color above
+// already carries -- so `color="rgba(255,0,0,0.5)" opacity="0.5"` composes to alpha 0.25, the
+// same layering CSS's own `opacity` gives a color that already has its own alpha.
 inline Color resolveColor(const StrandPtr& s) {
     Color fallback = (s->kind == StrandKind::BANNER)
         ? bannerTypeColor(s->attrStr("type", ""))
@@ -103,33 +127,46 @@ inline Color resolveColor(const StrandPtr& s) {
             ? Color{160, 130, 255}
             : colorForKind(s->kind);
 
+    Color resolved = fallback;
+    bool found = false;
     if (auto tone = s->attr("tone")) {
         Color c;
-        if (tone->kind == Value::Kind::STRING && resolveSemanticColor(tone->str, c)) return c;
+        if (tone->kind == Value::Kind::STRING && resolveSemanticColor(tone->str, c)) { resolved = c; found = true; }
     }
-    if (auto c = s->attr("color")) {
-        if (c->kind == Value::Kind::STRING && !c->str.empty()) {
-            if (looksLikeHexColor(c->str)) return parseHexColor(c->str, fallback);
-            Color sem;
-            if (resolveSemanticColor(c->str, sem)) return sem;
-        }
+    if (!found && resolveColorAttr(s, "color", resolved)) found = true;
+    if (!found && resolveColorAttr(s, "background", resolved)) found = true;
+
+    if (auto op = s->attr("opacity")) {
+        double amount = op->asNumber(1.0);
+        if (op->kind == Value::Kind::STRING && !op->str.empty() && op->str.back() == '%') amount = op->asNumber(100.0) / 100.0;
+        resolved.a = rincolor::alphaFromUnit(amount * rincolor::unitFromAlpha(resolved.a));
     }
-    return fallback;
+    return resolved;
 }
 
-// SCRIM_RECT (Overlay Engine, rin_loom_overlay.h): visually a FILL_RECT, but distinguished so a
-// renderer applies partial opacity regardless of the RGB it carries -- Color has no alpha channel
-// (see the gradient note below: "no alpha/multi-stop primitive in this toy rasterizer yet"), so a
-// real scrim's translucency is a renderer-side convention keyed on the op, the same way a real
-// GPU/Canvas backend already has to special-case GRADIENT's variant= from the JSON export.
+// Resolves a Strand's border/stroke color: an explicit `borderColor=` literal or role name,
+// else the active Theme's `border` slot -- the same two-tier fallback resolveColor() uses for
+// fill, just anchored on the border role instead of a per-kind default.
+inline Color resolveBorderColor(const StrandPtr& s) {
+    Color out = themeRegistry().active().border;
+    resolveColorAttr(s, "borderColor", out);
+    return out;
+}
+
+// SCRIM_RECT (Overlay Engine, rin_loom_overlay.h): visually a FILL_RECT, distinguished only so a
+// renderer that wants to special-case scrims still can — Color now carries real alpha (see
+// rin_color.h), so this DrawCommand's own .color.a IS the scrim's actual translucency, not a
+// renderer-side convention keyed on the op the way it had to be before the Color Engine existed.
+// rasterizeToBuffer() below alpha-blends every DrawCommand the same way regardless of op.
 enum class DrawOp { FILL_RECT, STROKE_RECT, TEXT_RUN, SCRIM_RECT };
 struct DrawCommand { DrawOp op; Rect bounds; Color color; std::string text; StrandId owner; double radius = 0; double strokeWidth = 0; };
 using DrawList = std::vector<DrawCommand>;
 
-// The scrim's RGB (a renderer applies its own opacity on top, per the SCRIM_RECT note above) —
-// a fixed near-black rather than a Theme role, since a scrim dims *whatever theme is active*
-// rather than participating in it the way primary/surface/etc. do.
-inline Color scrimColor() { return {0, 0, 0}; }
+// The scrim's color, ~55% black — a fixed near-black rather than a Theme role, since a scrim
+// dims *whatever theme is active* rather than participating in it the way primary/surface/etc.
+// do. The alpha here (140/255) matches LoomFabricView.kt's own scrimColor exactly, so the two
+// renderers dim a modal's backdrop by the same amount now that both understand real alpha.
+inline Color scrimColor() { return {0, 0, 0, 140}; }
 
 struct Dye {
     DrawList paint(const StrandPtr& s) { DrawList list; paintInto(s, list); return list; }
@@ -198,8 +235,17 @@ struct Dye {
             return;
         }
 
-        if (s->kind != StrandKind::TEXT)
+        if (s->kind != StrandKind::TEXT) {
             list.push_back({DrawOp::FILL_RECT, s->geometry, resolveColor(s), "", s->id, r, 0});
+            // `border=` was already a real padding contributor (rin_loom_layout.h) but never
+            // actually painted anything -- a Strand with border="2" reserved space for a stroke
+            // that never appeared. Now it draws one, in borderColor= (or the Theme's border
+            // role) — the generic path every kind without its own dedicated stroke logic
+            // (Checkbox/Radio/Field/Button-OUTLINE all already draw their own) falls through to.
+            double borderWidth = s->attrNum("border", 0);
+            if (borderWidth > 0)
+                list.push_back({DrawOp::STROKE_RECT, s->geometry, resolveBorderColor(s), "", s->id, r, borderWidth});
+        }
         if (s->kind == StrandKind::TEXT)
             list.push_back({DrawOp::TEXT_RUN, s->geometry, resolveColor(s), s->attrStr("text"), s->id, 0, 0});
         if (s->kind == StrandKind::TOOLTIP)
@@ -383,7 +429,19 @@ struct Dye {
 inline std::vector<unsigned char> rasterizeToBuffer(const DrawList& list, int W, int H) {
     std::vector<unsigned char> buf((size_t)W*H*3, 18);
     if (W <= 0 || H <= 0) return buf;
-    auto setPx = [&](int x,int y, Color c){ if (x<0||y<0||x>=W||y>=H) return; size_t i=((size_t)y*W+x)*3; buf[i]=c.r; buf[i+1]=c.g; buf[i+2]=c.b; };
+    // Real alpha compositing (rin_color.h's alphaBlend): a translucent DrawCommand (a SCRIM_RECT,
+    // an explicit rgba()/hsla() color=, an opacity= attribute) now actually blends with whatever
+    // is already in the buffer instead of overwriting it outright -- this is what makes this the
+    // ONE rasterizer (§21/§36) genuinely correct for alpha rather than silently ignoring it.
+    auto setPx = [&](int x,int y, Color c){
+        if (x<0||y<0||x>=W||y>=H) return;
+        size_t i=((size_t)y*W+x)*3;
+        if (c.a == 255) { buf[i]=c.r; buf[i+1]=c.g; buf[i+2]=c.b; return; }
+        if (c.a == 0) return;
+        Color bg{buf[i], buf[i+1], buf[i+2], 255};
+        Color blended = rincolor::alphaBlend(c, bg);
+        buf[i]=blended.r; buf[i+1]=blended.g; buf[i+2]=blended.b;
+    };
     for (auto& cmd : list) {
         if (cmd.op == DrawOp::FILL_RECT) {
             int x0=(int)cmd.bounds.x, y0=(int)cmd.bounds.y, x1=(int)(cmd.bounds.x+cmd.bounds.w), y1=(int)(cmd.bounds.y+cmd.bounds.h);
@@ -516,6 +574,7 @@ inline std::string jsonEscape(const std::string& s) {
     return out;
 }
 inline void fabricToJson(const StrandPtr& s, std::ostringstream& os) {
+    Color resolvedFill = resolveColor(s); // computed once, reused for both JSON fields below
     os << "{\"kind\":\"" << strandKindName(s->kind) << "\",\"name\":\"" << jsonEscape(s->name) << "\""
        << ",\"role\":\"" << uiRoleName(s->role) << "\""
        << ",\"sourceTag\":\"" << jsonEscape(s->sourceTag.empty() ? strandKindName(s->kind) : s->sourceTag) << "\""
@@ -524,8 +583,13 @@ inline void fabricToJson(const StrandPtr& s, std::ostringstream& os) {
        << ",\"w\":" << s->geometry.w << ",\"h\":" << s->geometry.h
        // The engine's own resolved paint color for this Strand -- tone=/color=<role>/the active
        // @theme= already baked in, exactly as Dye::paintInto() would paint it. See colorToHex()
-       // above for why this is needed at all.
-       << ",\"resolvedColor\":\"" << colorToHex(resolveColor(s)) << "\""
+       // above for why this is needed at all. resolvedAlpha (0..1) is a separate field rather
+       // than folded into an 8-digit hex so old clients reading resolvedColor as a plain
+       // "#RRGGBB" (LoomFabricView.kt's original parseColor, still used elsewhere) keep working
+       // unchanged -- only a client that opts into reading resolvedAlpha sees any transparency.
+       << ",\"resolvedColor\":\"" << colorToHex(resolvedFill) << "\""
+       << ",\"resolvedAlpha\":" << colorAlphaUnit(resolvedFill)
+       << ",\"resolvedBorderColor\":\"" << colorToHex(resolveBorderColor(s)) << "\""
        << ",\"attrs\":{";
     for (size_t i=0;i<s->attrs.size();i++) {
         if (i) os << ",";
@@ -570,6 +634,7 @@ inline std::string drawListToJsonString(const DrawList& list) {
            << ",\"x\":" << d.bounds.x << ",\"y\":" << d.bounds.y
            << ",\"w\":" << d.bounds.w << ",\"h\":" << d.bounds.h
            << ",\"color\":\"" << colorToHex(d.color) << "\""
+           << ",\"alpha\":" << colorAlphaUnit(d.color)
            << ",\"radius\":" << d.radius
            << ",\"strokeWidth\":" << d.strokeWidth;
         if (!d.text.empty()) os << ",\"text\":\"" << jsonEscape(d.text) << "\"";
