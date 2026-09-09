@@ -1,0 +1,37 @@
+// loom_showcase.rin — جولة سريعة على محرّك العرض Loomtime (Rendering Engine) الجديد.
+// امتداد إضافي بحت فوق لغة الحاويات: warp لخلايا الحالة التفاعلية، @view.<Kind>=name
+// لأشجار الواجهة (Column/Row/Stack/Card/Text/Button/Image/Divider مبدئياً، وأي وسم آخر
+// يُحلّ لاحقاً عبر نظام الإضافات Bolt). شغّله عبر أداة loomc (انظر CMakeLists.txt) أو من
+// خلال RinEngine.renderView(source) على جانب Kotlin.
+
+warp count = 0;
+
+@view.Column=root
+  gap=16; padding=20;
+
+  @view.Card=header
+    padding=16; shadow=10;
+    @view.Text=title text="Welcome to Rin"; size=22; .end/view
+    @view.Text=subtitle text="Loomtime rendering engine"; size=14; color="#8b899c"; .end/view
+  .end/view
+
+  @view.Row=actions
+    gap=12;
+    @view.Button=cta label="Continue"; .end/view
+    @view.Button=incBtn label="Tap to increment"; onTap=increment(count); .end/view
+  .end/view
+
+  @view.Card=counter
+    padding=16; gradient="#2c2140,#241a30";
+    @view.Text=countText text="Count: " + count; size=18; .end/view
+  .end/view
+
+  @view.Row=media
+    gap=10;
+    @view.Image=thumb src="poster.png"; width=120; height=72; .end/view
+    @view.Card=blurCard
+      padding=14;
+      @view.Text=blurLabel text="Effects: shadow / gradient / color"; size=12; color="#c9c6dd"; .end/view
+    .end/view
+  .end/view
+.end/view
