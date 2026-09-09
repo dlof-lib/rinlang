@@ -260,4 +260,17 @@ print \"Hello, \" + name + \"!\";
     <string name="crash_dialog_copied">تم نسخ اللوج</string>
     <string name="crash_dialog_close_app">إغلاق التطبيق</string>
     <string name="crash_dialog_dismiss">إغلاق</string>
+
+    <string name="job_search_hint">ابحث في ناتج/أحداث هذا التشغيل</string>
+    <string name="job_tab_output_fmt">الناتج (%1$d)</string>
+    <string name="job_tab_events_fmt">الأحداث (%1$d)</string>
+    <string name="job_tab_diagnostics_fmt">التشخيص (%1$d)</string>
+    <string name="job_no_diagnostics">لا توجد تشخيصات لهذا التشغيل.</string>
+    <string name="job_filter_all">الكل</string>
+    <string name="job_filter_output">ناتج</string>
+    <string name="job_filter_info">معلومة</string>
+    <string name="job_filter_warning">تحذير</string>
+    <string name="job_filter_error">خطأ</string>
+    <string name="job_filter_debug">تصحيح</string>
+    <string name="job_no_results">لا نتائج مطابقة لهذا البحث/الفلتر.</string>
 </resources>
