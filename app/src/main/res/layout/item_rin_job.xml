@@ -82,6 +82,95 @@
         android:layout_height="wrap_content"
         android:orientation="vertical">
 
+        <!-- تبويبات Output / Events / Diagnostics (section 10): كل تبويب مصدره
+             RinExecutionManager.toSession(job) نفسه — نفس البيانات الحقيقية بثلاث عروض مختلفة،
+             وليس ثلاث نسخ منفصلة من الناتج. العدّاد بين قوسين حقيقي (events.size /
+             diagnostics.size) لا رقم تقريبي. -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginTop="8dp">
+
+            <TextView
+                android:id="@+id/txtTabOutput"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:gravity="center"
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:paddingTop="6dp"
+                android:paddingBottom="6dp"
+                android:background="@drawable/bg_category_chip"
+                android:textColor="@color/rin_accent" />
+
+            <TextView
+                android:id="@+id/txtTabEvents"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginStart="6dp"
+                android:gravity="center"
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:paddingTop="6dp"
+                android:paddingBottom="6dp"
+                android:background="@drawable/bg_filter_chip_unselected"
+                android:textColor="@color/rin_on_toolbar_dim" />
+
+            <TextView
+                android:id="@+id/txtTabDiagnostics"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginStart="6dp"
+                android:gravity="center"
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:paddingTop="6dp"
+                android:paddingBottom="6dp"
+                android:background="@drawable/bg_filter_chip_unselected"
+                android:textColor="@color/rin_on_toolbar_dim" />
+        </LinearLayout>
+
+        <!-- بحث نصّي حقيقي داخل ناتج/أحداث هذا التشغيل تحديدًا (فرز في الذاكرة فقط، بلا
+             إعادة تشغيل)، يعمل على تبويب Output و Events معًا. -->
+        <EditText
+            android:id="@+id/edtJobSearch"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:background="@drawable/bg_filter_chip_unselected"
+            android:paddingStart="12dp"
+            android:paddingEnd="12dp"
+            android:paddingTop="6dp"
+            android:paddingBottom="6dp"
+            android:textSize="12sp"
+            android:textColor="@color/rin_on_toolbar"
+            android:textColorHint="@color/rin_editor_hint"
+            android:hint="@string/job_search_hint"
+            android:singleLine="true"
+            android:imeOptions="actionSearch"
+            android:inputType="text" />
+
+        <!-- شرائح فلترة الأحداث حسب النوع — تظهر فقط عند فتح تبويب Events، تستخدم
+             RinExecutionManager.filterEvents الموجودة أصلًا بالكود ولم تكن مستخدمة من أي واجهة. -->
+        <HorizontalScrollView
+            android:id="@+id/scrollEventFilters"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:scrollbars="none"
+            android:visibility="gone">
+
+            <LinearLayout
+                android:id="@+id/llEventFilterChips"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal" />
+        </HorizontalScrollView>
+
         <!-- يُستخدم فقط كنسخة احتياطية نصّية بسيطة (مثلاً حالة RUNNING/الخطأ الفادح)؛ الناتج الطبيعي
              يُعرض بالأسلوب الاحترافي أدناه (llJobOutputLines) بدل هذا النص الخام -->
         <TextView
@@ -94,13 +183,33 @@
             android:textSize="12.5sp"
             android:textIsSelectable="true" />
 
-        <!-- ناتج التشغيل بأسلوب احترافي: سطر لكل عملية بأيقونة ملوّنة بدل الإيموجي -->
+        <!-- ناتج التشغيل بأسلوب احترافي (تبويب Output): سطر لكل عملية بأيقونة ملوّنة -->
         <LinearLayout
             android:id="@+id/llJobOutputLines"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="6dp"
             android:orientation="vertical" />
+
+        <!-- سجلّ الأحداث المُهيكلة (تبويب Events): نفس صفوف الأيقونة+النص لكن من
+             RinExecutionEvent (يشمل RUN_STARTED/RUN_FINISHED وليس فقط أسطر print). -->
+        <LinearLayout
+            android:id="@+id/llJobEventLines"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:orientation="vertical"
+            android:visibility="gone" />
+
+        <!-- تشخيصات هذا التشغيل (تبويب Diagnostics): تفصيل كامل حقيقي لكل RinDiagnostic
+             (لا أكثر من واحد عادةً)، أو حالة فارغة صريحة إن لم يوجد أي خطأ. -->
+        <LinearLayout
+            android:id="@+id/llJobDiagnosticsTab"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:orientation="vertical"
+            android:visibility="gone" />
 
         <!-- شرائح الملفات الفعلية التي أنتجها save/installation، قابلة للتنزيل الحقيقي إلى Downloads -->
         <LinearLayout
