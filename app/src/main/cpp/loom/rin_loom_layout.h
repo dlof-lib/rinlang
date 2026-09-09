@@ -163,34 +163,63 @@ struct LoomStats { int strandsMeasured = 0; int cacheHits = 0; };
 struct Loom {
     LoomStats stats;
 
-    Rect layout(StrandPtr s, Constraints c, double originX, double originY) {
+    Rect layout(StrandPtr s, Constraints cIncoming, double originXIncoming, double originYIncoming) {
         bool sameConstraints = s->hasLastConstraints &&
-            s->lastConstraints.maxW == c.maxW && s->lastConstraints.maxH == c.maxH;
+            s->lastConstraints.maxW == cIncoming.maxW && s->lastConstraints.maxH == cIncoming.maxH;
         bool sameContent = s->hasLastContentHash && s->lastContentHash == s->contentHash;
         if (sameConstraints && sameContent && s->geometry.w > 0) {
             stats.cacheHits++;
-            double dx = originX - s->geometry.x, dy = originY - s->geometry.y;
-            if (dx != 0.0 || dy != 0.0) translate(s, dx, dy);
-            return s->geometry;
+            double dx = originXIncoming - s->geometryOuter.x, dy = originYIncoming - s->geometryOuter.y;
+            if (dx != 0.0 || dy != 0.0) { translate(s, dx, dy); s->geometryOuter.x += dx; s->geometryOuter.y += dy; }
+            return s->geometryOuter;
         }
         stats.strandsMeasured++;
-        s->lastConstraints = c; s->hasLastConstraints = true;
+        s->lastConstraints = cIncoming; s->hasLastConstraints = true;
         s->lastContentHash = s->contentHash; s->hasLastContentHash = true;
+
+        // ---- Margin box model (new: style/screen/spacing/width/height feature pass) -----------
+        // Margin is space OUTSIDE this Strand's own box: reserved so siblings don't overlap it,
+        // but never painted into by this Strand's own background/border/content. Resolved against
+        // the *incoming* (pre-margin) constraints, then folded into a shrunk `c`/shifted `origin`
+        // so every line below this block — completely unchanged — keeps working exactly as before
+        // for any Strand that never sets margin= (mL=mT=mR=mB=0, c==cIncoming, origin==incoming).
+        double marginL=0, marginT=0, marginR=0, marginB=0;
+        resolveMargin(*s, cIncoming.maxW, marginL, marginT, marginR, marginB);
+        Constraints c = cIncoming;
+        c.maxW = std::max(0.0, c.maxW - marginL - marginR);
+        c.maxH = std::max(0.0, c.maxH - marginT - marginB);
+        c.minW = std::min(c.minW, c.maxW);
+        c.minH = std::min(c.minH, c.maxH);
+        double originX = originXIncoming + marginL, originY = originYIncoming + marginT;
+
+        // Screen size presets (new): `@loop=... screen="phone"|"tablet"|"desktop"|...;` fills in
+        // whichever of width=/height= wasn't set explicitly. No effect on non-Loop strands, and no
+        // effect at all once an explicit width=/height= is present (checked first, right below).
+        if (s->role == rin::UiRole::LOOP && s->attr("screen")) {
+            double pw=0, ph=0;
+            if (resolveScreenPreset(s->attrStr("screen",""), pw, ph)) {
+                if (!s->attr("width"))  { double w = std::min(pw, c.maxW); c.minW = w; c.maxW = w; }
+                if (!s->attr("height")) { double h = std::min(ph, c.maxH); c.minH = h; c.maxH = h; }
+            }
+        }
 
         // Explicit width/height (real sizing, not just an estimate hint): if the .rin source sets
         // width=/height= on ANY strand kind, that becomes a hard min==max constraint for it — the
         // same "box model" every real UI toolkit uses — clamped so it never exceeds what the
         // parent actually offered (a Card can't demand more room than its Column gave it).
+        // Both accept a percentage ("50%"), resolved against the parent's own available extent on
+        // that axis, in addition to the original plain-number form.
         Constraints c2 = c;
-        if (s->attr("width"))  { double w = std::max(0.0, std::min(s->attrNum("width", c.maxW), c.maxW));  c2.minW = w; c2.maxW = w; }
-        if (s->attr("height")) { double h = std::max(0.0, std::min(s->attrNum("height", c.maxH), c.maxH)); c2.minH = h; c2.maxH = h; }
+        if (s->attr("width"))  { double w = std::max(0.0, std::min(resolveSizeAttr(*s, "width", c.maxW, c.maxW), c.maxW));  c2.minW = w; c2.maxW = w; }
+        if (s->attr("height")) { double h = std::max(0.0, std::min(resolveSizeAttr(*s, "height", c.maxH, c.maxH), c.maxH)); c2.minH = h; c2.maxH = h; }
 
         // Constraint System (§6): min/max-*, independent of width=/height= above, so e.g. a
         // content-sized Card can still be given a floor or a ceiling without pinning it exactly.
-        if (s->attr("min_width"))  c2.minW = std::max(c2.minW, s->attrNum("min_width", c2.minW));
-        if (s->attr("max_width"))  c2.maxW = std::min(c2.maxW, s->attrNum("max_width", c2.maxW));
-        if (s->attr("min_height")) c2.minH = std::max(c2.minH, s->attrNum("min_height", c2.minH));
-        if (s->attr("max_height")) c2.maxH = std::min(c2.maxH, s->attrNum("max_height", c2.maxH));
+        // Same percentage support as width=/height= just above.
+        if (s->attr("min_width"))  c2.minW = std::max(c2.minW, resolveSizeAttr(*s, "min_width", c.maxW, c2.minW));
+        if (s->attr("max_width"))  c2.maxW = std::min(c2.maxW, resolveSizeAttr(*s, "max_width", c.maxW, c2.maxW));
+        if (s->attr("min_height")) c2.minH = std::max(c2.minH, resolveSizeAttr(*s, "min_height", c.maxH, c2.minH));
+        if (s->attr("max_height")) c2.maxH = std::min(c2.maxH, resolveSizeAttr(*s, "max_height", c.maxH, c2.maxH));
 
         // Sizing modes (§5): fill/expand claim the parent's full *bounded* extent; fixed defers
         // to width=/height= above (a no-op here if neither was actually given -- see the scope
@@ -423,8 +452,19 @@ struct Loom {
         size.w = std::max(size.w, c2.minW);
         size.h = std::max(size.h, c2.minH);
         size.x = originX; size.y = originY;
-        s->geometry = size;
-        return size;
+        s->geometry = size; // true, margin-EXCLUDED box: what paint.h and hit-testing use.
+
+        // Outer (margin-inclusive) box: what the CALLER of layout() gets back, so a parent
+        // (layoutLinear/layoutStack/layoutGrid/layoutWrap) reserves the right amount of cursor
+        // space for this child's margin without that margin ever being part of what gets painted.
+        // Zero margin (the default) makes this identical to `size` — no behavior change for any
+        // existing .rin program that never sets margin=.
+        Rect outer = size;
+        outer.x = originXIncoming; outer.y = originYIncoming;
+        outer.w = size.w + marginL + marginR;
+        outer.h = size.h + marginT + marginB;
+        s->geometryOuter = outer;
+        return outer;
     }
 
     void translate(StrandPtr s, double dx, double dy) {
