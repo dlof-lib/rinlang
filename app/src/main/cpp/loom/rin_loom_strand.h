@@ -230,6 +230,13 @@ struct Strand {
     std::vector<std::shared_ptr<Strand>> children;
 
     Rect geometry;
+    // Outer (margin-inclusive) box: what layout() *returns* to its caller for cursor/bookkeeping
+    // math in layoutLinear/layoutStack/layoutGrid/layoutWrap. `geometry` above always stays the
+    // true, margin-EXCLUDED box that paint.h and hit-testing (rin_loom_needle.h) use — margin is
+    // reserved empty space around a Strand, never part of what it (or its background/border)
+    // paints. Defaults identical to `geometry` (zero margin) for any Strand that never sets
+    // margin=/margin_left=/etc., so nothing changes for existing .rin programs.
+    Rect geometryOuter;
     Constraints lastConstraints; bool hasLastConstraints=false;
     uint64_t contentHash=0, lastContentHash=0; bool hasLastContentHash=false;
 
@@ -289,7 +296,11 @@ inline StrandPtr buildFabric(const std::shared_ptr<rin::ViewStmt>& node, WarpSco
         static const std::unordered_map<std::string,std::string> map = {
             {"element_width","width"},{"element_height","height"},{"element_color","color"},
             {"element_background","background"},{"element_text_size","size"},{"element_radius","radius"},
-            {"element_padding","padding"},{"element_font","font"}
+            {"element_padding","padding"},{"element_font","font"},
+            // new: a Loop-level default margin for every child element, same inheritance rule as
+            // element_padding/element_radius above (an element's own explicit margin= still wins —
+            // see the "explicit child attributes still win" note just below this map).
+            {"element_margin","margin"}
         };
         childVisual.clear();
         for (auto& a : node->attrs) { auto it=map.find(a.key); if (it!=map.end()) childVisual.push_back({it->second,a.value,a.line}); }
