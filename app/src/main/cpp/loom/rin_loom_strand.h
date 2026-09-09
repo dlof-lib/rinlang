@@ -8,6 +8,7 @@
 #include <unordered_map>
 #include <algorithm>
 #include <functional>
+#include <unordered_set>
 
 namespace loom {
 
