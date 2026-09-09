@@ -20,6 +20,7 @@
 #include <errno.h>
 #include <cstdint>
 #include <unordered_map>
+#include <regex> // regexTest/regexFind/regexFindAll/regexReplace/regexSplit/regexGroups (معالجة نصوص متقدمة)
 #include <zlib.h> // zlibDeflateRaw/zlibInflateRaw (ضغط DEFLATE حقيقي متوافق مع صيغة ZIP method=8)
 
 // ---- توافق ويندوز/POSIX لـ stat()/mkdir() ----------------------------------
@@ -477,6 +478,111 @@ static std::vector<double> asNumberArray(const Value& v, const std::string& fn, 
     return out;
 }
 
+// ============================================================================
+//  معالجة نصوص متقدّمة (UTF-8 / عربي / Regex) — أدوات حرة يستخدمها natives القسم
+//  "معالجة نصوص متقدمة" أدناه في registerNatives(). كل دوال upper/lower/substr/reverseStr
+//  الأصلية في stdlib تعمل على البايتات (bytes) لا نقاط الترميز (codepoints)، وهذا يكسر أي نص
+//  عربي/RTL أو غير-ASCII (كل حرف عربي = بايتان أو أكثر في UTF-8). الدوال هنا تعمل على
+//  "نقاط ترميز" (codepoints) حقيقية فتبقى صحيحة مع العربية ومعظم اللغات الأخرى.
+// ============================================================================
+
+// يحلّل نصاً UTF-8 خاماً إلى مصفوفة نقاط ترميز، كل نقطة محفوظة كسلسلة بايتات UTF-8 خاصة بها
+// (وليس كرقم)، حتى يسهل إعادة تجميعها كنص Rin عادي دون أي تحويل ترميز إضافي. بايت غير صالح
+// يُعامَل كنقطة ترميز مستقلة من بايت واحد (لا يتوقف التحليل، فقط لا يُفهَم كجزء من تسلسل متعدد
+// البايتات) حتى لا تفشل الدوال بصمت على نص فيه بيانات ثنائية عرضاً.
+static std::vector<std::string> utf8Codepoints(const std::string& s) {
+    std::vector<std::string> out;
+    size_t i = 0, n = s.size();
+    while (i < n) {
+        unsigned char c = static_cast<unsigned char>(s[i]);
+        size_t len = 1;
+        if ((c & 0x80) == 0x00) len = 1;
+        else if ((c & 0xE0) == 0xC0) len = 2;
+        else if ((c & 0xF0) == 0xE0) len = 3;
+        else if ((c & 0xF8) == 0xF0) len = 4;
+        else len = 1; // بايت متابعة تائه أو ترميز غير صالح: خذه كنقطة مستقلة بدل التعثّر
+        if (i + len > n) len = 1;
+        out.push_back(s.substr(i, len));
+        i += len;
+    }
+    return out;
+}
+
+// يعيد أول نقطة ترميز في codepoint (سلسلة بايتات UTF-8) كنقطة كود رقمية (لأجل مقارنات المدى
+// اليونيكودية مثل التشكيل العربي/نطاق الأحرف العربية)، أو -1 إن كانت فارغة.
+static long utf8CodepointValue(const std::string& cp) {
+    if (cp.empty()) return -1;
+    unsigned char c0 = static_cast<unsigned char>(cp[0]);
+    if ((c0 & 0x80) == 0x00) return c0;
+    if ((c0 & 0xE0) == 0xC0 && cp.size() >= 2) {
+        return ((c0 & 0x1F) << 6) | (static_cast<unsigned char>(cp[1]) & 0x3F);
+    }
+    if ((c0 & 0xF0) == 0xE0 && cp.size() >= 3) {
+        return ((c0 & 0x0F) << 12) | ((static_cast<unsigned char>(cp[1]) & 0x3F) << 6) |
+               (static_cast<unsigned char>(cp[2]) & 0x3F);
+    }
+    if ((c0 & 0xF8) == 0xF0 && cp.size() >= 4) {
+        return ((c0 & 0x07) << 18) | ((static_cast<unsigned char>(cp[1]) & 0x3F) << 12) |
+               ((static_cast<unsigned char>(cp[2]) & 0x3F) << 6) | (static_cast<unsigned char>(cp[3]) & 0x3F);
+    }
+    return c0;
+}
+
+// نطاقات يونيكود: تشكيل عربي (حركات/تنوين/سكون/شدّة + علامات قرآنية) + التطويل (ـ). تُستخدم في
+// arabicStripDiacritics/arabicNormalize.
+static bool isArabicDiacriticCp(long cp) {
+    if (cp == 0x0640) return true; // ـ tatweel/kashida
+    if (cp >= 0x064B && cp <= 0x065F) return true; // حركات وتنوين أساسية
+    if (cp == 0x0670) return true; // ألف خنجرية علوية
+    if (cp >= 0x06D6 && cp <= 0x06ED) return true; // علامات قرآنية إضافية
+    return false;
+}
+
+// نطاق الحروف العربية الأساسي (يشمل الفارسية/الأردية الملحقة بنفس الكتلة تقريباً) لأجل
+// detectScript/تحليل اللغة.
+static bool isArabicLetterCp(long cp) {
+    return (cp >= 0x0621 && cp <= 0x064A) || (cp >= 0x0660 && cp <= 0x0669) /*أرقام عربية-هندية*/ ||
+           (cp >= 0x0670 && cp <= 0x06FF) || (cp >= 0xFB50 && cp <= 0xFDFF) || (cp >= 0xFE70 && cp <= 0xFEFF);
+}
+
+static bool isLatinLetterCp(long cp) {
+    return (cp >= 'a' && cp <= 'z') || (cp >= 'A' && cp <= 'Z');
+}
+
+// يحوّل نمط regex نصّي (وربما بادئة أعلام مثل "i:" لعدم حساسية الأحرف الكبيرة/الصغيرة) إلى
+// std::regex فعلي، ويرمي RinError واضحاً بدل استثناء std::regex_error المبهم عند نمط غير صالح.
+// الأعلام المدعومة (اختيارية، توضع قبل النمط بفاصلة ":"): "i" = بلا حساسية لحالة الأحرف،
+// "m" = multiline (^/$ تطابق بداية/نهاية كل سطر).
+static std::regex compileRinRegex(const std::string& rawPattern, const std::string& fn, int line) {
+    std::string pattern = rawPattern;
+    auto flags = std::regex::ECMAScript;
+    if (pattern.size() >= 2 && pattern[1] == ':' &&
+        (pattern[0] == 'i' || pattern[0] == 'm' || pattern[0] == 'I' || pattern[0] == 'M')) {
+        // يدعم أيضاً علمين معاً مثل "im:النمط"
+        size_t colon = pattern.find(':');
+        std::string flagChars = pattern.substr(0, colon);
+        bool looksLikeFlags = !flagChars.empty();
+        for (char fc : flagChars) {
+            char lo = static_cast<char>(std::tolower(static_cast<unsigned char>(fc)));
+            if (lo != 'i' && lo != 'm') { looksLikeFlags = false; break; }
+        }
+        if (looksLikeFlags) {
+            for (char fc : flagChars) {
+                char lo = static_cast<char>(std::tolower(static_cast<unsigned char>(fc)));
+                if (lo == 'i') flags |= std::regex::icase;
+                if (lo == 'm') flags |= std::regex::multiline;
+            }
+            pattern = pattern.substr(colon + 1);
+        }
+    }
+    try {
+        return std::regex(pattern, flags);
+    } catch (const std::regex_error& e) {
+        throw diagErr(diag::Code::E0035_RuntimeError, line,
+                      "'" + fn + "': نمط regex غير صالح: " + std::string(e.what()));
+    }
+}
+
 // يجمع أسماء الحاويات (containers) الفعلية داخل مجموعة (Containers.Group)، متفرّعاً بشكل متكرر
 // عبر أي مجموعات فرعية متداخلة بداخلها، ومحافظاً على ترتيب الإدخال.
 static void collectGroupContainerNames(const std::unordered_map<std::string, std::vector<std::string>>& groupMembers,
@@ -846,6 +952,255 @@ void Interpreter::registerNatives() {
         }
         return Value::string(std::string(1, s[static_cast<size_t>(i)]));
     };
+
+    // ================================================================
+    // ---- معالجة نصوص متقدمة: UTF-8 حقيقي (عربي/RTL) --------------------
+    // upper/lower/substr/charAt/reverseStr الأساسية تعمل على البايتات، فتكسر أي حرف عربي (أو أي
+    // حرف غير-ASCII) لأنه أكثر من بايت واحد في UTF-8. هذه النسخ "utf8*" تعمل على نقاط ترميز
+    // حقيقية (codepoints) فتبقى سليمة مع النصوص العربية ومعظم اللغات الأخرى.
+    // ================================================================
+    natives["utf8Len"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("utf8Len", a, 1, line);
+        std::string s = asString(a[0], "utf8Len", line);
+        return Value::num(static_cast<double>(utf8Codepoints(s).size()));
+    };
+    natives["utf8ToArray"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("utf8ToArray", a, 1, line);
+        std::string s = asString(a[0], "utf8ToArray", line);
+        auto cps = utf8Codepoints(s);
+        auto result = std::make_shared<ArrayData>();
+        result->reserve(cps.size());
+        for (auto& cp : cps) result->push_back(Value::string(cp));
+        return Value::makeArray(result);
+    };
+    natives["utf8CharAt"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("utf8CharAt", a, 2, line);
+        std::string s = asString(a[0], "utf8CharAt", line);
+        long i = static_cast<long>(asNumber(a[1], "utf8CharAt", line));
+        auto cps = utf8Codepoints(s);
+        if (i < 0 || static_cast<size_t>(i) >= cps.size()) {
+            throw diagErr(diag::Code::E0035_RuntimeError, line, "'utf8CharAt': index out of range");
+        }
+        return Value::string(cps[static_cast<size_t>(i)]);
+    };
+    natives["utf8Substr"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgsRange("utf8Substr", a, 2, 3, line);
+        std::string s = asString(a[0], "utf8Substr", line);
+        auto cps = utf8Codepoints(s);
+        long start = static_cast<long>(asNumber(a[1], "utf8Substr", line));
+        if (start < 0) start = 0;
+        if (static_cast<size_t>(start) > cps.size()) start = static_cast<long>(cps.size());
+        long len = a.size() == 3 ? static_cast<long>(asNumber(a[2], "utf8Substr", line))
+                                  : static_cast<long>(cps.size()) - start;
+        if (len < 0) len = 0;
+        if (static_cast<size_t>(start) + static_cast<size_t>(len) > cps.size()) {
+            len = static_cast<long>(cps.size()) - start;
+        }
+        std::string out;
+        for (long k = start; k < start + len; k++) out += cps[static_cast<size_t>(k)];
+        return Value::string(out);
+    };
+    natives["utf8Reverse"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("utf8Reverse", a, 1, line);
+        std::string s = asString(a[0], "utf8Reverse", line);
+        auto cps = utf8Codepoints(s);
+        std::string out;
+        for (auto it = cps.rbegin(); it != cps.rend(); ++it) out += *it;
+        return Value::string(out);
+    };
+
+    // ---- معالجة نصوص متقدمة: تطبيع/تحليل عربي (Arabic normalization) ----
+    // مفيدة قبل البحث/المقارنة/فهرسة نصوص عربية (نفس الكلمة تُكتب أحياناً بأشكال مختلفة للألف/الهمزة
+    // أو بتشكيل زائد لا يغيّر المعنى للمطابقة النصية).
+    natives["arabicStripDiacritics"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("arabicStripDiacritics", a, 1, line);
+        std::string s = asString(a[0], "arabicStripDiacritics", line);
+        std::string out;
+        for (auto& cp : utf8Codepoints(s)) {
+            if (!isArabicDiacriticCp(utf8CodepointValue(cp))) out += cp;
+        }
+        return Value::string(out);
+    };
+    natives["arabicNormalize"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("arabicNormalize", a, 1, line);
+        std::string s = asString(a[0], "arabicNormalize", line);
+        std::string out;
+        for (auto& cp : utf8Codepoints(s)) {
+            long v = utf8CodepointValue(cp);
+            if (isArabicDiacriticCp(v)) continue; // إزالة التشكيل والتطويل أيضاً كجزء من التطبيع
+            // توحيد أشكال الألف (أ إ آ ٱ) إلى ا العادية
+            if (v == 0x0623 || v == 0x0625 || v == 0x0622 || v == 0x0671) { out += "\xD8\xA7" /*ا*/; continue; }
+            // توحيد الياء المقصورة ى إلى ي (شائع في التطبيع لأغراض البحث؛ لا يغيّر النطق عملياً)
+            if (v == 0x0649) { out += "\xD9\x8A" /*ي*/; continue; }
+            out += cp;
+        }
+        return Value::string(out);
+    };
+    // detectScript(s) -> "arabic" | "latin" | "digits" | "mixed" | "other" | "empty"،
+    // بحسب الأغلبية بين نقاط الترميز غير-الفراغية في s. مفيدة كأساس بسيط لـ detectLanguage
+    // في lib/nlpkit.og.rin، ولأي منطق RTL/LTR في واجهات العرض.
+    natives["detectScript"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("detectScript", a, 1, line);
+        std::string s = asString(a[0], "detectScript", line);
+        long arabicCount = 0, latinCount = 0, digitCount = 0, otherCount = 0;
+        for (auto& cp : utf8Codepoints(s)) {
+            long v = utf8CodepointValue(cp);
+            if (v == ' ' || v == '\t' || v == '\n' || v == '\r') continue;
+            if (isArabicLetterCp(v)) arabicCount++;
+            else if (isLatinLetterCp(v)) latinCount++;
+            else if (v >= '0' && v <= '9') digitCount++;
+            else otherCount++;
+        }
+        long total = arabicCount + latinCount + digitCount + otherCount;
+        if (total == 0) return Value::string("empty");
+        if (arabicCount > 0 && latinCount > 0) return Value::string("mixed");
+        if (arabicCount > 0) return Value::string("arabic");
+        if (latinCount > 0) return Value::string("latin");
+        if (digitCount > 0) return Value::string("digits");
+        return Value::string("other");
+    };
+
+    // levenshtein(a, b) -> مسافة التحرير (عدد الإدراج/الحذف/الاستبدال الأدنى لتحويل a إلى b)،
+    // محسوبة على نقاط ترميز UTF-8 (وليس بايتات) لتبقى صحيحة مع العربية. أساس textSimilarity في
+    // lib/nlpkit.og.rin، ومفيدة مباشرةً للتصحيح الإملائي التقريبي/المطابقة الضبابية (fuzzy match).
+    natives["levenshtein"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("levenshtein", a, 2, line);
+        auto x = utf8Codepoints(asString(a[0], "levenshtein", line));
+        auto y = utf8Codepoints(asString(a[1], "levenshtein", line));
+        size_t n = x.size(), m = y.size();
+        std::vector<std::vector<size_t>> dp(n + 1, std::vector<size_t>(m + 1, 0));
+        for (size_t i = 0; i <= n; i++) dp[i][0] = i;
+        for (size_t j = 0; j <= m; j++) dp[0][j] = j;
+        for (size_t i = 1; i <= n; i++) {
+            for (size_t j = 1; j <= m; j++) {
+                size_t cost = (x[i - 1] == y[j - 1]) ? 0 : 1;
+                size_t del = dp[i - 1][j] + 1;
+                size_t ins = dp[i][j - 1] + 1;
+                size_t sub = dp[i - 1][j - 1] + cost;
+                dp[i][j] = std::min({del, ins, sub});
+            }
+        }
+        return Value::num(static_cast<double>(dp[n][m]));
+    };
+
+    // tokenizeWords(s) -> يقسّم s إلى مصفوفة "كلمات"، حيث الكلمة تسلسل متتابع من حروف عربية
+    // (بما فيها تشكيلها الملتصق) أو حروف لاتينية أو أرقام (عربية-هندية أو ASCII)، وأي شيء آخر
+    // (مسافات/علامات ترقيم) هو فاصل يُتجاهَل. مبنية على نقاط ترميز UTF-8 حقيقية فتُرجّئ الكلمات
+    // العربية سليمة (بخلاف split(s," ") العادية التي تكسر مع علامات ترقيم ملاصقة).
+    natives["tokenizeWords"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("tokenizeWords", a, 1, line);
+        std::string s = asString(a[0], "tokenizeWords", line);
+        auto result = std::make_shared<ArrayData>();
+        std::string cur;
+        for (auto& cp : utf8Codepoints(s)) {
+            long v = utf8CodepointValue(cp);
+            bool isWordCp = isArabicLetterCp(v) || isLatinLetterCp(v) || (v >= '0' && v <= '9') || isArabicDiacriticCp(v);
+            if (isWordCp) {
+                cur += cp;
+            } else if (!cur.empty()) {
+                result->push_back(Value::string(cur));
+                cur.clear();
+            }
+        }
+        if (!cur.empty()) result->push_back(Value::string(cur));
+        return Value::makeArray(result);
+    };
+    // splitSentences(s) -> يقسّم s إلى جمل عند . ! ? ؟ (علامة الاستفهام العربية) أو ۔، مع تقليم كل
+    // جملة وإسقاط الجمل الفارغة الناتجة (نقاط متتالية مثلاً).
+    natives["splitSentences"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("splitSentences", a, 1, line);
+        std::string s = asString(a[0], "splitSentences", line);
+        auto result = std::make_shared<ArrayData>();
+        std::string cur;
+        auto flush = [&]() {
+            size_t b = cur.find_first_not_of(" \t\r\n");
+            if (b == std::string::npos) { cur.clear(); return; }
+            size_t e = cur.find_last_not_of(" \t\r\n");
+            result->push_back(Value::string(cur.substr(b, e - b + 1)));
+            cur.clear();
+        };
+        for (auto& cp : utf8Codepoints(s)) {
+            long v = utf8CodepointValue(cp);
+            bool isEnder = (v == '.' || v == '!' || v == '?' || v == 0x061F /*؟*/ || v == 0x06D4 /*۔*/);
+            if (isEnder) { flush(); }
+            else { cur += cp; }
+        }
+        flush();
+        return Value::makeArray(result);
+    };
+
+    // ---- معالجة نصوص متقدمة: Regular Expressions (Regex) ----
+    // النمط بصيغة ECMAScript القياسية (std::regex). يمكن بَدء النمط بأعلام اختيارية قبل ":"،
+    // مثل "i:^abc$" (بلا حساسية لحالة الأحرف) أو "im:...". ملاحظة مهمة: المطابقة نفسها تعمل على
+    // مستوى البايتات (بايتات UTF-8)، فالنصوص الحرفية العربية داخل النمط تُطابَق بشكل صحيح، لكن
+    // أصناف الأحرف العامة مثل \w \s \b لا "تفهم" حرفاً عربياً واحداً كوحدة (تتعامل مع بايتاته
+    // منفردة) — لأصناف أحرف عربية استخدم مدى Unicode صريحاً في النمط، أو دوال utf8*/arabic* أعلاه.
+    natives["regexTest"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("regexTest", a, 2, line);
+        std::string s = asString(a[0], "regexTest", line);
+        std::regex re = compileRinRegex(asString(a[1], "regexTest", line), "regexTest", line);
+        return Value::boolean_(std::regex_search(s, re));
+    };
+    natives["regexFind"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("regexFind", a, 2, line);
+        std::string s = asString(a[0], "regexFind", line);
+        std::regex re = compileRinRegex(asString(a[1], "regexFind", line), "regexFind", line);
+        std::smatch m;
+        if (!std::regex_search(s, m, re)) return Value::string("");
+        return Value::string(m.str(0));
+    };
+    natives["regexFindAll"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("regexFindAll", a, 2, line);
+        std::string s = asString(a[0], "regexFindAll", line);
+        std::regex re = compileRinRegex(asString(a[1], "regexFindAll", line), "regexFindAll", line);
+        auto result = std::make_shared<ArrayData>();
+        auto begin = std::sregex_iterator(s.begin(), s.end(), re);
+        auto end = std::sregex_iterator();
+        for (auto it = begin; it != end; ++it) result->push_back(Value::string(it->str(0)));
+        return Value::makeArray(result);
+    };
+    // regexGroups(s, pattern) -> أول تطابق كاملاً مع مجموعاته الملتقطة: العنصر 0 هو التطابق
+    // الكامل، ثم مجموعة 1، 2... بترتيبها. مصفوفة فارغة إن لم يوجد تطابق.
+    natives["regexGroups"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("regexGroups", a, 2, line);
+        std::string s = asString(a[0], "regexGroups", line);
+        std::regex re = compileRinRegex(asString(a[1], "regexGroups", line), "regexGroups", line);
+        std::smatch m;
+        auto result = std::make_shared<ArrayData>();
+        if (std::regex_search(s, m, re)) {
+            for (size_t i = 0; i < m.size(); i++) result->push_back(Value::string(m[i].matched ? m.str(i) : ""));
+        }
+        return Value::makeArray(result);
+    };
+    // regexReplace(s, pattern, replacement[, all]) -> all افتراضياً true (يستبدل كل المطابقات)؛
+    // مرّر false لاستبدال أول مطابقة فقط. replacement يدعم مراجع المجموعات $1 $2... (صيغة ECMAScript).
+    natives["regexReplace"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgsRange("regexReplace", a, 3, 4, line);
+        std::string s = asString(a[0], "regexReplace", line);
+        std::regex re = compileRinRegex(asString(a[1], "regexReplace", line), "regexReplace", line);
+        std::string repl = asString(a[2], "regexReplace", line);
+        bool all = a.size() == 4 ? a[3].isTruthy() : true;
+        if (all) return Value::string(std::regex_replace(s, re, repl));
+        std::smatch m;
+        if (!std::regex_search(s, m, re)) return Value::string(s);
+        std::string out;
+        out += s.substr(0, static_cast<size_t>(m.position(0)));
+        out += m.format(repl);
+        out += s.substr(static_cast<size_t>(m.position(0) + m.length(0)));
+        return Value::string(out);
+    };
+    // regexSplit(s, pattern) -> يقسّم s عند كل تطابق للنمط (بدل فاصل ثابت كما في split العادية).
+    natives["regexSplit"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("regexSplit", a, 2, line);
+        std::string s = asString(a[0], "regexSplit", line);
+        std::regex re = compileRinRegex(asString(a[1], "regexSplit", line), "regexSplit", line);
+        auto result = std::make_shared<ArrayData>();
+        std::sregex_token_iterator it(s.begin(), s.end(), re, -1), end;
+        for (; it != end; ++it) result->push_back(Value::string(*it));
+        if (result->empty()) result->push_back(Value::string(s));
+        return Value::makeArray(result);
+    };
+
     // chr(n) -> يحوّل رقماً صحيحاً (0..255) إلى نص من بايت واحد (عكس ord).
     // يسمح ببناء بيانات ثنائية خام (مثل ملفات PNG) داخل سكربتات Rin نفسها.
     natives["chr"] = [](std::vector<Value>& a, int line) -> Value {
@@ -2628,13 +2983,7 @@ void Interpreter::registerNatives() {
     auto maskKnown = [this](const std::string& m) -> bool {
         return !m.empty() && (containerMasks.count(m) || groupMasks.count(m) || volumeMasks.count(m));
     };
-    // ملاحظة إصلاح: كانت تلتقط maskKnown بالمرجع (&maskKnown)، وهو متغيّر محلي في هذه الدالة
-    // (registerNatives). بما أن natives[...] تُخزَّن كـ std::function وتُستدعى لاحقاً بعد عودة
-    // registerNatives()، كان المرجع يتحوّل إلى dangling reference (stack-use-after-return) عند
-    // أي استدعاء فعلي لـ maskResolve/maskAlias/... (وأي دالة candle تعتمد عليها) — يسبب سلوكاً
-    // غير معرَّف وربما segfault. الالتقاط بالقيمة آمن تماماً هنا: maskKnown لا تحمل أي حالة سوى
-    // [this]، فنسخها لا تُكلّف شيئاً ولا تُغيّر السلوك.
-    auto maskResolveInternal = [this, maskKnown](std::string token) -> std::string {
+    auto maskResolveInternal = [this, &maskKnown](std::string token) -> std::string {
         if (maskKnown(token)) return token;
         std::unordered_set<std::string> seen;
         for (int i = 0; i < 64 && !token.empty(); ++i) {
@@ -2895,172 +3244,6 @@ void Interpreter::registerNatives() {
         expectArgs("maskHasAnyTag", a, 2, line); std::string m=maskResolve4(asString(a[0],"maskHasAnyTag",line)); if(m.empty()||a[1].type!=Value::Type::ARRAY) return Value::boolean_(false); auto it=maskTags.find(m); if(it==maskTags.end()) return Value::boolean_(false); for(auto& x:*a[1].array) if(std::find(it->second.begin(),it->second.end(),asString(x,"maskHasAnyTag",line))!=it->second.end()) return Value::boolean_(true); return Value::boolean_(false);
     };
     // maskOf(name) يبقى متوافقاً، لكنه أصبح يشمل كل أنواع الكائنات المسجّلة.
-
-    // ---- Candle: طبقة id-to-id غير محدودة فوق mask/id مباشرة (انظر docs/candle.md) --------
-    // candle لا يستبدل mask ولا id، بل يضيف علاقة موجَّهة id -> ∞ من id فوقهما. كل طرف يُقبل
-    // إما كـ mask معروف (يُحل إلى targetه عبر نفس منطق mask v3/v4) أو كمعرّف خام مباشر.
-    auto candleResolve = [this, maskResolveInternal, maskTarget4](const std::string& token) -> std::string {
-        std::string m = maskResolveInternal(token);
-        if (!m.empty()) { std::string t = maskTarget4(m); return t.empty() ? m : t; }
-        return token; // ليس قناعاً معروفاً -> يُعامَل كمعرّف داخلي (id) خام كما هو
-    };
-    // ملاحظة: التقاط دالة تكرارية بذاتها بالمرجع (Y-combinator يدوي بسيط) خطِر هنا تحديداً لأن
-    // natives[...] تُخزَّن كـ std::function وتُستدعى بعد عودة registerNatives() (نفس درس
-    // maskResolveInternal أعلاه) — لذا نضعها على الـ heap عبر shared_ptr ونلتقطها بالقيمة
-    // (نسخ shared_ptr، لا مرجعاً لمتغيّر مكدَّس محلي)، فتبقى صالحة طوال عمر البرنامج.
-    // weak_ptr داخل الإغلاق (لا shared_ptr) لتفادي دورة مرجعية (self-reference cycle) كانت
-    // ستُبقي هذا الكائن حياً للأبد بلا سبب حقيقي (تسريب حقيقي، لا وهمياً — رُصد فعلياً بـ
-    // LeakSanitizer قبل هذا التعديل): shared_ptr يملك دالة تحمل نسخة من نفس shared_ptr.
-    auto candleTreeToValue = std::make_shared<std::function<Value(const rin::CandleTreeNode&)>>();
-    std::weak_ptr<std::function<Value(const rin::CandleTreeNode&)>> candleTreeToValueWeak = candleTreeToValue;
-    *candleTreeToValue = [candleTreeToValueWeak](const rin::CandleTreeNode& node) -> Value {
-        auto m = std::make_shared<MapData>();
-        m->push_back({Value::string("id"), Value::string(node.id)});
-        m->push_back({Value::string("relation"), node.relation.empty() ? Value::nil() : Value::string(node.relation)});
-        auto kids = std::make_shared<ArrayData>();
-        if (auto self = candleTreeToValueWeak.lock()) {
-            for (auto& c : node.children) kids->push_back((*self)(c));
-        }
-        m->push_back({Value::string("children"), Value::makeArray(kids)});
-        return Value::makeMap(m);
-    };
-
-    // light(fromMaskOrId, toMaskOrId, relation?) -> ينشئ/يحدّث وصلة موجَّهة from -> to.
-    // يرفض self-loop افتراضياً (بعد الحل: from == to) ويرجع false في هذه الحالة.
-    natives["light"] = [this, candleResolve](std::vector<Value>& a, int line) -> Value {
-        expectArgsRange("light", a, 2, 3, line);
-        std::string from = candleResolve(asString(a[0], "light", line));
-        std::string to = candleResolve(asString(a[1], "light", line));
-        std::string rel = a.size() == 3 && a[2].type != Value::Type::NIL ? asString(a[2], "light", line) : std::string();
-        return Value::boolean_(candleRegistry.light(from, to, rel));
-    };
-
-    // extinguish(fromMaskOrId, toMaskOrId) -> يحذف وصلة محددة، يرجع true إن وُجدت.
-    natives["extinguish"] = [this, candleResolve](std::vector<Value>& a, int line) -> Value {
-        expectArgs("extinguish", a, 2, line);
-        std::string from = candleResolve(asString(a[0], "extinguish", line));
-        std::string to = candleResolve(asString(a[1], "extinguish", line));
-        return Value::boolean_(candleRegistry.extinguish(from, to));
-    };
-
-    // extinguishAll(maskOrId) -> يطفئ كل الوصلات الصادرة من عنصر، يرجع عددها.
-    natives["extinguishAll"] = [this, candleResolve](std::vector<Value>& a, int line) -> Value {
-        expectArgs("extinguishAll", a, 1, line);
-        std::string from = candleResolve(asString(a[0], "extinguishAll", line));
-        return Value::num(static_cast<double>(candleRegistry.extinguishAll(from)));
-    };
-
-    // candleExists(from, to) -> هل توجد وصلة مباشرة؟
-    natives["candleExists"] = [this, candleResolve](std::vector<Value>& a, int line) -> Value {
-        expectArgs("candleExists", a, 2, line);
-        std::string from = candleResolve(asString(a[0], "candleExists", line));
-        std::string to = candleResolve(asString(a[1], "candleExists", line));
-        return Value::boolean_(candleRegistry.exists(from, to));
-    };
-
-    // candleTargets(maskOrId) -> كل ما أُشعل من هذا العنصر مباشرة (قد تكون قائمة كبيرة/∞ عملياً).
-    natives["candleTargets"] = [this, candleResolve](std::vector<Value>& a, int line) -> Value {
-        expectArgs("candleTargets", a, 1, line);
-        std::string id = candleResolve(asString(a[0], "candleTargets", line));
-        auto out = std::make_shared<ArrayData>();
-        for (auto& t : candleRegistry.targets(id)) out->push_back(Value::string(t));
-        return Value::makeArray(out);
-    };
-
-    // candleSources(maskOrId) -> من أشعل هذا العنصر مباشرة.
-    natives["candleSources"] = [this, candleResolve](std::vector<Value>& a, int line) -> Value {
-        expectArgs("candleSources", a, 1, line);
-        std::string id = candleResolve(asString(a[0], "candleSources", line));
-        auto out = std::make_shared<ArrayData>();
-        for (auto& s : candleRegistry.sources(id)) out->push_back(Value::string(s));
-        return Value::makeArray(out);
-    };
-
-    // candleCount(maskOrId) -> عدد الوصلات الصادرة.
-    natives["candleCount"] = [this, candleResolve](std::vector<Value>& a, int line) -> Value {
-        expectArgs("candleCount", a, 1, line);
-        std::string id = candleResolve(asString(a[0], "candleCount", line));
-        return Value::num(static_cast<double>(candleRegistry.count(id)));
-    };
-
-    // candleInfo(maskOrId) -> {targets, sources, isRoot, isLeaf}
-    natives["candleInfo"] = [this, candleResolve](std::vector<Value>& a, int line) -> Value {
-        expectArgs("candleInfo", a, 1, line);
-        std::string id = candleResolve(asString(a[0], "candleInfo", line));
-        auto ci = candleRegistry.info(id);
-        auto m = std::make_shared<MapData>();
-        auto tg = std::make_shared<ArrayData>(); for (auto& t : ci.targets) tg->push_back(Value::string(t));
-        auto sr = std::make_shared<ArrayData>(); for (auto& s : ci.sources) sr->push_back(Value::string(s));
-        m->push_back({Value::string("targets"), Value::makeArray(tg)});
-        m->push_back({Value::string("sources"), Value::makeArray(sr)});
-        m->push_back({Value::string("isRoot"), Value::boolean_(ci.isRoot)});
-        m->push_back({Value::string("isLeaf"), Value::boolean_(ci.isLeaf)});
-        return Value::makeMap(m);
-    };
-
-    // candleRelation(from, to) -> وسم العلاقة الذي مُرِّر إلى light()، أو nil إن لم توجد وصلة/وسم.
-    natives["candleRelation"] = [this, candleResolve](std::vector<Value>& a, int line) -> Value {
-        expectArgs("candleRelation", a, 2, line);
-        std::string from = candleResolve(asString(a[0], "candleRelation", line));
-        std::string to = candleResolve(asString(a[1], "candleRelation", line));
-        if (!candleRegistry.exists(from, to)) return Value::nil();
-        std::string r = candleRegistry.relation(from, to);
-        return r.empty() ? Value::nil() : Value::string(r);
-    };
-
-    // candleByRelation(relation) -> كل الوصلات {from, to} الموسومة بعلاقة معيّنة.
-    natives["candleByRelation"] = [this](std::vector<Value>& a, int line) -> Value {
-        expectArgs("candleByRelation", a, 1, line);
-        std::string rel = asString(a[0], "candleByRelation", line);
-        auto out = std::make_shared<ArrayData>();
-        for (auto& edge : candleRegistry.byRelation(rel)) {
-            auto m = std::make_shared<MapData>();
-            m->push_back({Value::string("from"), Value::string(edge.first)});
-            m->push_back({Value::string("to"), Value::string(edge.second)});
-            out->push_back(Value::makeMap(m));
-        }
-        return Value::makeArray(out);
-    };
-
-    // candleChain(from, to) -> BFS محمي بـ visited set؛ يعيد المسار [from,...,to] إن وُجد، وإلا مصفوفة فارغة.
-    natives["candleChain"] = [this, candleResolve](std::vector<Value>& a, int line) -> Value {
-        expectArgs("candleChain", a, 2, line);
-        std::string from = candleResolve(asString(a[0], "candleChain", line));
-        std::string to = candleResolve(asString(a[1], "candleChain", line));
-        auto out = std::make_shared<ArrayData>();
-        for (auto& id : candleRegistry.chain(from, to)) out->push_back(Value::string(id));
-        return Value::makeArray(out);
-    };
-
-    // candleDepth(maskOrId) -> أقصر عدد قفزات من أقرب جذر، أو -1 إن كان غير معروف/غير قابل للوصول من أي جذر.
-    natives["candleDepth"] = [this, candleResolve](std::vector<Value>& a, int line) -> Value {
-        expectArgs("candleDepth", a, 1, line);
-        std::string id = candleResolve(asString(a[0], "candleDepth", line));
-        return Value::num(static_cast<double>(candleRegistry.depth(id)));
-    };
-
-    // candleRoots() -> عناصر تُشعل غيرها فقط ولم تُشعَل من أحد.
-    natives["candleRoots"] = [this](std::vector<Value>& a, int line) -> Value {
-        expectArgs("candleRoots", a, 0, line);
-        auto out = std::make_shared<ArrayData>();
-        for (auto& id : candleRegistry.roots()) out->push_back(Value::string(id));
-        return Value::makeArray(out);
-    };
-
-    // candleLeaves() -> عناصر أُشعلت فقط ولا تُشعل غيرها.
-    natives["candleLeaves"] = [this](std::vector<Value>& a, int line) -> Value {
-        expectArgs("candleLeaves", a, 0, line);
-        auto out = std::make_shared<ArrayData>();
-        for (auto& id : candleRegistry.leaves()) out->push_back(Value::string(id));
-        return Value::makeArray(out);
-    };
-
-    // candleTree(maskOrId) -> تمثيل شجري كامل {id, relation, children:[...]}  بدءاً من هذا العنصر كجذر.
-    natives["candleTree"] = [this, candleResolve, candleTreeToValue](std::vector<Value>& a, int line) -> Value {
-        expectArgs("candleTree", a, 1, line);
-        std::string id = candleResolve(asString(a[0], "candleTree", line));
-        return (*candleTreeToValue)(candleRegistry.tree(id));
-    };
 
     // containerNames() -> مصفوفة بكل أسماء الحاويات المسجَّلة حالياً (عبر @container أو spawn)
     natives["containerNames"] = [this](std::vector<Value>& a, int line) -> Value {
