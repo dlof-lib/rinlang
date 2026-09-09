@@ -647,7 +647,7 @@ class LoomFabricView @JvmOverloads constructor(
             Kind.LIST -> { /* plain Column of rows -- children draw themselves */ }
             Kind.LISTITEM -> drawBox(canvas, rect, attrs, resolved ?: defaultContainer, defaultRadius = 0f)
 
-            else -> drawBox(canvas, rect, attrs, resolved ?: defaultContainer, defaultRadius = 0f) // Column/Row/Stack/Box/Grid/Wrap/Custom
+            else -> drawBox(canvas, rect, attrs, resolved ?: defaultContainer, defaultRadius = 0f, borderColorFallback = resolvedBorderColor(node) ?: Color.WHITE) // Column/Row/Stack/Box/Grid/Wrap/Custom
         }
 
         // Table draws its own header + cell children explicitly (needs column geometry), so it
@@ -727,7 +727,7 @@ class LoomFabricView @JvmOverloads constructor(
         }
     }
 
-    private fun drawBox(canvas: Canvas, rect: RectF, attrs: JSONObject, fallback: Int, defaultRadius: Float) {
+    private fun drawBox(canvas: Canvas, rect: RectF, attrs: JSONObject, fallback: Int, defaultRadius: Float, borderColorFallback: Int = Color.WHITE) {
         if (rect.width() <= 0f || rect.height() <= 0f) return
         val radius = attrs.optString("radius").toFloatOrNull() ?: defaultRadius
         val shadow = attrs.optString("shadow").toFloatOrNull()
@@ -757,7 +757,7 @@ class LoomFabricView @JvmOverloads constructor(
         val borderWidthPx = attrs.optString("border").toFloatOrNull()
         if (borderWidthPx != null && borderWidthPx > 0f && rect.width() > 1f && rect.height() > 1f) {
             val strokeW = borderWidthPx
-            strokePaint.color = parseHexColor(attrs.optString("borderColor").ifBlank { null }, Color.WHITE)
+            strokePaint.color = parseHexColor(attrs.optString("borderColor").ifBlank { null }, borderColorFallback)
             strokePaint.strokeWidth = strokeW
             val inset = strokeW / 2f
             val strokeRect = RectF(rect.left + inset, rect.top + inset, rect.right - inset, rect.bottom - inset)
@@ -1696,9 +1696,76 @@ class LoomFabricView @JvmOverloads constructor(
         return node
     }
 
-    private fun parseHexColor(hex: String?, fallback: Int): Int {
-        if (hex.isNullOrBlank() || hex.length < 7 || hex[0] != '#') return fallback
-        return try { Color.parseColor(hex) } catch (t: Throwable) { fallback }
+    // Mirrors rin_color.h's literal syntax (see that header's doc comment) so the preview
+    // understands exactly what the native engine does: #rgb/#rgba/#rrggbb/#rrggbbaa (note:
+    // RRGGBBAA order, NOT Android's own AARRGGBB — converted below), rgb()/rgba(),
+    // hsl()/hsla(), and falls back to Android's own Color.parseColor() for named colors
+    // (Android's built-in table overlaps the common CSS names this preview is likely to see).
+    private fun parseHexColor(raw: String?, fallback: Int): Int {
+        val s = raw?.trim()
+        if (s.isNullOrBlank()) return fallback
+        try {
+            if (s[0] == '#') {
+                val hex = s.substring(1)
+                return when (hex.length) {
+                    3 -> { // #rgb
+                        val r = hex[0].toString().repeat(2).toInt(16)
+                        val g = hex[1].toString().repeat(2).toInt(16)
+                        val b = hex[2].toString().repeat(2).toInt(16)
+                        Color.rgb(r, g, b)
+                    }
+                    4 -> { // #rgba
+                        val r = hex[0].toString().repeat(2).toInt(16)
+                        val g = hex[1].toString().repeat(2).toInt(16)
+                        val b = hex[2].toString().repeat(2).toInt(16)
+                        val a = hex[3].toString().repeat(2).toInt(16)
+                        Color.argb(a, r, g, b)
+                    }
+                    6 -> Color.parseColor(s) // #rrggbb — Android already parses this directly
+                    8 -> { // #rrggbbaa (this engine's order) -> Android wants #aarrggbb
+                        val r = hex.substring(0, 2).toInt(16)
+                        val g = hex.substring(2, 4).toInt(16)
+                        val b = hex.substring(4, 6).toInt(16)
+                        val a = hex.substring(6, 8).toInt(16)
+                        Color.argb(a, r, g, b)
+                    }
+                    else -> fallback
+                }
+            }
+            val low = s.lowercase()
+            if (low.startsWith("rgb(") || low.startsWith("rgba(")) {
+                val inner = s.substring(s.indexOf('(') + 1, s.lastIndexOf(')'))
+                val parts = inner.split(',', '/').map { it.trim() }.filter { it.isNotEmpty() }
+                if (parts.size < 3) return fallback
+                fun chan(t: String): Int = if (t.endsWith('%')) (t.dropLast(1).toFloat() / 100f * 255f).toInt().coerceIn(0, 255)
+                                            else t.toFloat().toInt().coerceIn(0, 255)
+                val r = chan(parts[0]); val g = chan(parts[1]); val b = chan(parts[2])
+                val a = if (parts.size >= 4) (parts[3].removeSuffix("%").toFloat().let { if (parts[3].endsWith('%')) it / 100f else it } * 255f).toInt().coerceIn(0, 255) else 255
+                return Color.argb(a, r, g, b)
+            }
+            if (low.startsWith("hsl(") || low.startsWith("hsla(")) {
+                val inner = s.substring(s.indexOf('(') + 1, s.lastIndexOf(')'))
+                val parts = inner.split(',', '/').map { it.trim() }.filter { it.isNotEmpty() }
+                if (parts.size < 3) return fallback
+                val h = parts[0].toFloat()
+                val sat = parts[1].removeSuffix("%").toFloat() / 100f
+                val light = parts[2].removeSuffix("%").toFloat() / 100f
+                val a = if (parts.size >= 4) parts[3].removeSuffix("%").toFloat().let { if (parts[3].endsWith('%')) it / 100f else it } else 1f
+                val rgb = android.graphics.Color.HSVToColor(hslToHsv(h, sat, light))
+                return Color.argb((a * 255f).toInt().coerceIn(0, 255), Color.red(rgb), Color.green(rgb), Color.blue(rgb))
+            }
+            if (low == "transparent") return Color.TRANSPARENT
+            return Color.parseColor(s)
+        } catch (t: Throwable) {
+            return fallback
+        }
+    }
+
+    // HSL (h: 0-360, s/l: 0-1) -> HSV float[3], since Android only ships an HSV helper.
+    private fun hslToHsv(h: Float, s: Float, l: Float): FloatArray {
+        val v = l + s * min(l, 1f - l)
+        val sHsv = if (v <= 0f) 0f else 2f * (1f - l / v)
+        return floatArrayOf(((h % 360f) + 360f) % 360f, sHsv.coerceIn(0f, 1f), v.coerceIn(0f, 1f))
     }
 
     /**
@@ -1716,6 +1783,23 @@ class LoomFabricView @JvmOverloads constructor(
      */
     private fun resolvedColor(node: JSONObject): Int? {
         val hex = node.optString("resolvedColor")
+        if (hex.length != 7 || hex[0] != '#') return null
+        val base = try { Color.parseColor(hex) } catch (t: Throwable) { return null }
+        val alpha = node.optDouble("resolvedAlpha", 1.0).toFloat().coerceIn(0f, 1f)
+        if (alpha >= 0.999f) return base
+        return Color.argb((alpha * 255f).toInt().coerceIn(0, 255), Color.red(base), Color.green(base), Color.blue(base))
+    }
+
+    /**
+     * Same idea as [resolvedColor] but for a Strand's border/stroke — the
+     * `"resolvedBorderColor"` field (an explicit `borderColor=` literal-or-role, else the active
+     * Theme's `border` slot; see `loom::resolveBorderColor()`). [drawBox] passes this as the
+     * fallback for its own raw `borderColor=` read, so a `tone=`-free `border=` still gets a
+     * sensible, theme-correct stroke color instead of drawBox's previous hardcoded
+     * `Color.WHITE` fallback.
+     */
+    private fun resolvedBorderColor(node: JSONObject): Int? {
+        val hex = node.optString("resolvedBorderColor")
         if (hex.length != 7 || hex[0] != '#') return null
         return try { Color.parseColor(hex) } catch (t: Throwable) { null }
     }
