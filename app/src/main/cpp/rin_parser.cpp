@@ -117,6 +117,23 @@ std::vector<StmtPtr> Parser::parse() {
 }
 
 StmtPtr Parser::declaration() {
+    // Modules: 'export let/fun/class/struct/enum ...' -- 'export' كلمة سياقية غير محجوزة (نفس
+    // أسلوب class/struct/enum أدناه بالضبط)، مُميَّزة بالنظر خطوة إضافية للأمام: يجب أن يتبعها
+    // مباشرة LET أو FUN أو IDENT("class"/"struct"/"enum") تحديداً، وإلا فهي مجرد اسم متغيّر/دالة
+    // عادي اسمه "export" في أي سياق آخر (نداء `export(x)`، إسناد `export = 5;`، إلخ) فلا نتدخّل.
+    if (check(TokenType::IDENT) && peek().lexeme == "export" && current + 1 < tokens.size()) {
+        const Token& after = tokens[current + 1];
+        bool followedByDeclaration =
+            after.type == TokenType::LET || after.type == TokenType::FUN ||
+            (after.type == TokenType::IDENT &&
+             (after.lexeme == "class" || after.lexeme == "struct" || after.lexeme == "enum"));
+        if (followedByDeclaration) {
+            advance(); // 'export'
+            StmtPtr inner = declaration();
+            inner->exported = true;
+            return inner;
+        }
+    }
     if (match({TokenType::LET})) return letDeclaration();
     if (match({TokenType::FUN})) return functionDeclaration();
     // OOP: 'class'/'struct'/'enum' كلمات سياقية غير محجوزة (بنفس أسلوب route/row/document/warp/
@@ -156,6 +173,13 @@ StmtPtr Parser::declaration() {
         advance(); // '@'
         advance(); // 'import'
         return importStatement();
+    }
+    // Modules: 'import { a, b, c } from "path";' -- بلا '@' إطلاقاً، صياغة مستقلة تماماً عن
+    // '@import' أعلاه (لا تصادم: تلك تبدأ بـ '@'، هذه تبدأ بـ IDENT("import") مباشرة تتبعه '{').
+    // 'import' هنا أيضاً كلمة سياقية غير محجوزة كسابقتها بالضبط.
+    if (check(TokenType::IDENT) && peek().lexeme == "import" && checkNext(TokenType::LBRACE)) {
+        advance(); // 'import'
+        return importSelectedStatement();
     }
     // '@view.<Kind>=name ... .end/view' -> Loomtime rendering engine (امتداد إضافي، نفس أسلوب
     // '@import' أعلاه بالضبط: نتحقق من الشكل قبل تفويض الأمر لـ atBlock() العام).
@@ -1717,7 +1741,39 @@ StmtPtr Parser::importStatement() {
     return s;
 }
 
-// container.data / container.table / table يجب أن تبقى "بيانات نقية": بلا تعريف دوال وبلا حاويات/مجموعات/أحجام
+// import { a, b, c } from "path";  (يُستدعى بعد استهلاك 'import' فقط، من declaration())
+StmtPtr Parser::importSelectedStatement() {
+    Token kw = previous(); // 'import' (للحصول على رقم السطر)
+    consume(TokenType::LBRACE, "Expected '{' after 'import'");
+    std::vector<std::string> names;
+    if (!check(TokenType::RBRACE)) {
+        do {
+            names.push_back(consume(TokenType::IDENT, "Expected a name to import").lexeme);
+        } while (match({TokenType::COMMA}));
+    }
+    consume(TokenType::RBRACE, "Expected '}' after import list");
+    if (!(check(TokenType::IDENT) && peek().lexeme == "from")) {
+        throw errRich(diag::Code::E0012_MissingToken, peek(), "expected 'from' after import list",
+                      "'import { ... }' must be followed by 'from \"path\";' naming the module to "
+                      "import those names from",
+                      "add `from \"path\";` after the closing '}', e.g. `import { a, b } from \"lib/x.og.rin\";`",
+                      "'from'");
+    }
+    advance(); // 'from'
+    Token pathTok = consume(TokenType::STRING, "Expected a string path after 'from'");
+    consume(TokenType::SEMICOLON, "Expected ';' after import statement");
+
+    auto pathExpr = std::make_shared<LiteralExpr>();
+    pathExpr->kind = LiteralExpr::Kind::STRING;
+    pathExpr->str = pathTok.lexeme;
+    pathExpr->line = pathTok.line;
+
+    auto s = std::make_shared<ImportSelectedStmt>();
+    s->names = std::move(names);
+    s->path = pathExpr;
+    s->line = kw.line;
+    return s;
+}
 // متداخلة، وبلا route (المخصصة لـ container.api فقط) — ما يضمن أن أي حاوية بيانات (أو جدول) تبقى قابلة
 // للتسلسل (serializable) بسهولة ولا تحمل منطقاً إجرائياً مخفياً بداخلها.
 void Parser::validateDataContainerBody(const std::vector<StmtPtr>& body) {
