@@ -3,6 +3,7 @@
 // تماماً (lex -> parse -> interpret) لكن بدون أي اعتماد على JNI/أندرويد، حتى
 // تُبنى كمكتبة مشتركة عامة تستدعيها أي لغة برمجة أخرى.
 #include "rin_c_api.h"
+#include "rin_version.h"
 #include "rin_lexer.h"
 #include "rin_parser.h"
 #include "rin_interpreter.h"
@@ -62,9 +63,11 @@ RIN_API void rin_free_string(char* s) {
 }
 
 RIN_API const char* rin_engine_version(void) {
-    // سلسلة ثابتة (static)، لا تحتاج تحريراً من المستدعي.
-    static const char* kVersion = "Rin Engine 1.1 (C++17) - C ABI";
-    return kVersion;
+    // سلسلة ثابتة (static)، لا تحتاج تحريراً من المستدعي. الرقم نفسه يأتي من
+    // rin_version.h (المصدر الرسمي الوحيد) — لا تُعدِّل الرقم هنا مباشرة.
+    static const std::string kVersion =
+        std::string("Rin Engine ") + RIN_VERSION_STRING + " (C++17) - C ABI";
+    return kVersion.c_str();
 }
 
 // ---- الجلسات (Sessions) ----
