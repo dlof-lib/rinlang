@@ -1,10 +1,109 @@
-// Rin Colors Pro — color construction and conversion helpers.
-fun color_clamp(x){if(x<0){return 0;}if(x>255){return 255;}return x;}
-fun color_hex(r,g,b){return "#"+toHex(color_clamp(r))+toHex(color_clamp(g))+toHex(color_clamp(b));}
-fun color_rgb(r,g,b){return "rgb("+str(color_clamp(r))+","+str(color_clamp(g))+","+str(color_clamp(b))+")";}
-fun color_rgba(r,g,b,a){return "rgba("+str(color_clamp(r))+","+str(color_clamp(g))+","+str(color_clamp(b))+","+str(a)+")";}
-fun color_mix(a,b){return "mix("+a+","+b+")";}
-fun color_gray(v){return color_rgb(v,v,v);}
-fun color_transparent(){return "rgba(0,0,0,0)";}
-fun color_cssVar(name){return "var(--"+name+")";}
-fun color_withAlpha(hex,a){return "alpha("+hex+","+str(a)+")";}
+// Rin Colors Pro — the language-level face of Rin's Color Engine (see app/src/main/cpp/
+// rin_color.h for the native implementation shared with Loom's renderer/previews).
+//
+// Every function below that takes a `color` parameter accepts ANY literal color syntax the
+// engine understands: "#rgb", "#rgba", "#rrggbb", "#rrggbbaa", "rgb(r,g,b)", "rgba(r,g,b,a)",
+// "hsl(h,s%,l%)", "hsla(h,s%,l%,a)", or a named CSS color ("tomato", "steelblue", ...). Output
+// is always canonical hex: 6 digits ("#RRGGBB") when fully opaque, 8 digits
+// ("#RRGGBBAA") only when the color actually carries transparency.
+//
+// A native of the SAME name already exists (colorParse/colorMix/colorLighten/colorDarken/
+// colorInvert/colorGrayscale/colorValid/colorContrast/colorTextOn/colorIsLight/... — see
+// registerNatives()'s "محرك الألوان" section in rin_interpreter.cpp) — call those directly,
+// don't wrap them again here (a same-named `fun` would shadow the native and recurse forever).
+// This file only adds: the original color_* helpers (kept for backward compatibility, now
+// delegating to the real engine instead of building unparseable placeholder strings), a few
+// differently-named conveniences, and small compositions (WCAG pass/fail, shade/tint ramps)
+// that aren't single native calls.
+
+fun color_clamp(x){ if(x<0){return 0;} if(x>255){return 255;} return x; }
+
+// ---- Construction (kept for backward compatibility; now delegates to the native engine) ----
+fun color_hex(r,g,b){ return colorRgb(color_clamp(r), color_clamp(g), color_clamp(b)); }
+// color_rgb/color_rgba keep their original "rgb(...)"/"rgba(...)" CSS-literal output shape
+// (both are directly accepted anywhere a color= is, per rin_color.h) -- just clamped/validated
+// through the real engine now instead of hand-built string concatenation.
+fun color_rgb(r,g,b){ let c = colorComponents(color_hex(r,g,b)); return "rgb("+str(c["r"])+","+str(c["g"])+","+str(c["b"])+")"; }
+fun color_rgba(r,g,b,a){ return colorToRgbaString(colorRgba(color_clamp(r), color_clamp(g), color_clamp(b), a)); }
+fun color_gray(v){ return color_hex(v,v,v); }
+fun color_transparent(){ return "transparent"; }
+fun color_cssVar(name){ return "var(--"+name+")"; }
+
+// ---- Parsing / validation --------------------------------------------------------------
+// colorNormalize(color) -> canonical "#RRGGBB"/"#RRGGBBAA" for any accepted input syntax.
+fun colorNormalize(color){ return colorParse(color); }
+// colorComponentsOf(color) -> {r,g,b,alpha} (r/g/b 0-255, alpha 0..1).
+fun colorComponentsOf(color){ return colorComponents(color); }
+
+// ---- HSL construction --------------------------------------------------------------------
+// hue: degrees 0-360. saturation/lightness: percent 0-100 (matches CSS hsl() authoring).
+fun color_hsl(hue, saturation, lightness){ return colorHsl(hue, saturation, lightness); }
+fun color_hsla(hue, saturation, lightness, alpha){ return colorHsla(hue, saturation, lightness, alpha); }
+fun colorHueOf(color){ let hsl = colorToHsl(color); return hsl["h"]; }
+fun colorSaturationOf(color){ let hsl = colorToHsl(color); return hsl["s"]; }
+fun colorLightnessOf(color){ let hsl = colorToHsl(color); return hsl["l"]; }
+
+// ---- Mixing / tinting ----------------------------------------------------------------------
+// color_mix(a, b[, t]) -> linear blend; t=0 -> a, t=1 -> b, default t=0.5 (an even 50/50 mix,
+// unlike the old placeholder which just wrote "mix(a,b)" as a literal, unparseable string).
+fun color_mix(a, b, t){ if (t == nil) { t = 0.5; } return colorMix(a, b, t); }
+// tint/shade: the common design-tool names for lighten-toward-white / darken-toward-black
+// (colorLighten/colorDarken themselves are natives -- call those directly for the plain case).
+fun colorTint(color, amount){ return colorLighten(color, amount); }
+fun colorShade(color, amount){ return colorDarken(color, amount); }
+
+// ---- Alpha / transparency ------------------------------------------------------------------
+// Back-compat alias for the old (differently-cased) helper name some sources may already use
+// (colorWithAlpha itself is the native -- call it directly for the plain case).
+fun color_withAlpha(color, alpha){ return colorWithAlpha(color, alpha); }
+fun color_alpha(color, alpha){ return colorWithAlpha(color, alpha); }
+// colorOpacity(color) -> the color's own current alpha, as a 0..1 fraction.
+fun colorOpacity(color){ let c = colorComponents(color); return c["alpha"]; }
+// colorOver(fgColor, bgColor) -> what fgColor actually looks like painted over bgColor
+// (bgColor is treated as opaque) — real compositing, not just picking one of the two.
+fun colorOver(fgColor, bgColor){ return colorBlend(fgColor, bgColor); }
+
+// ---- Accessibility (WCAG) -------------------------------------------------------------------
+// colorMeetsAA(fg, bg[, largeText]) -> true if the pair clears WCAG AA (4.5:1 normal text,
+// 3:1 for large text — 18pt+/14pt-bold+, matching the WCAG size threshold).
+fun colorMeetsAA(fg, bg, largeText){
+    let ratio = colorContrast(fg, bg);
+    if (largeText == true) { return ratio >= 3.0; }
+    return ratio >= 4.5;
+}
+// colorMeetsAAA(fg, bg[, largeText]) -> true if the pair clears the stricter WCAG AAA level
+// (7:1 normal text, 4.5:1 large text).
+fun colorMeetsAAA(fg, bg, largeText){
+    let ratio = colorContrast(fg, bg);
+    if (largeText == true) { return ratio >= 4.5; }
+    return ratio >= 7.0;
+}
+// colorReadableTextOn(background) -> "#000000" or "#FFFFFF", whichever reads best on it
+// (colorTextOn itself is the native -- call it directly for the plain case).
+fun colorReadableTextOn(background){ return colorTextOn(background); }
+
+// ---- Palette generation --------------------------------------------------------------------
+// colorShades(color, steps) -> an array of `steps` colors from `color` down to near-black,
+// evenly spaced — a ready-made shade ramp (e.g. for a hover/pressed/disabled family) from one
+// base tone instead of hand-picking each stop.
+fun colorShades(color, steps){
+    let out = [];
+    let i = 0;
+    while (i < steps) {
+        let t = i / (steps - 1);
+        push(out, colorDarken(color, t * 0.85));
+        i = i + 1;
+    }
+    return out;
+}
+// colorTints(color, steps) -> same idea, ramping toward near-white instead.
+fun colorTints(color, steps){
+    let out = [];
+    let i = 0;
+    while (i < steps) {
+        let t = i / (steps - 1);
+        push(out, colorLighten(color, t * 0.85));
+        i = i + 1;
+    }
+    return out;
+}
