@@ -126,6 +126,11 @@ struct MethodCallExpr : Expr {
 struct Stmt {
     virtual ~Stmt() = default;
     int line = 0;
+    // Modules: 'export let/fun/class/struct/enum ...' -- انظر Parser::declaration() (فحص 'export'
+    // السياقي) وInterpreter::execute(ImportStmt) في rin_interpreter.cpp. افتراضياً false لكل عبارة
+    // (بما فيها كل الشيفرة الموجودة مسبقاً -- additive بحت، بلا أي تغيير سلوكي لأي برنامج لا يستخدم
+    // 'export' إطلاقاً).
+    bool exported = false;
 };
 using StmtPtr = std::shared_ptr<Stmt>;
 
@@ -701,9 +706,25 @@ struct RouteStmt : Stmt {
 //                                          بحيث يمكن لاحقاً ربطها بـ link/tying/merge كأي حاوية عادية.
 // يُحلَّل المسار أولاً ضمن سجل المكتبات المدمجة داخل المفسّر (rin_stdlib_libs.h)، وإن لم يوجد
 // يُقرأ كملف فعلي على القرص (نسبةً إلى basePath) — تماماً بكافة عمليات الملفات في اللغة.
+//
+// Modules (additive): لو استخدمت المكتبة المستورَدة 'export' على أي تصريح أعلى مستوى فيها ولو
+// مرة واحدة (انظر Stmt::exported أعلاه)، يتحول الدمج المباشر (@import بلا 'as') من "كل شيء" إلى
+// "المُصدَّر فقط" تلقائياً -- بلا أي صياغة إضافية مطلوبة، وبتوافقية كاملة للخلف: أي مكتبة موجودة
+// مسبقاً لا تحتوي 'export' إطلاقاً تستمر بالدمج الكامل تماماً كما كانت دائماً. انظر شرح كامل
+// الفلسفة (ولماذا class/struct استثناء) في Interpreter::execute(ImportStmt) بـ rin_interpreter.cpp.
 struct ImportStmt : Stmt {
     ExprPtr path;      // مسار/اسم المكتبة (نص)
     std::string alias; // فارغ = دمج مباشر في النطاق الحالي
+};
+
+// import { a, b, c } from "path";  -> استيراد انتقائي صريح (بلا '@'، صياغة جديدة كلياً، لا تتقاطع
+// مع '@import' أعلاه إطلاقاً). يتطلّب أن يكون كل اسم مطلوب مُصدَّراً فعلاً عبر 'export' في الملف
+// المستورَد (بلا استثناء توافقية للخلف هنا؛ صياغة جديدة كلياً لا يعتمد عليها أي برنامج قديم) --
+// وإلا خطأ واضح فوراً (اسم غير مُصدَّر، أو غير موجود إطلاقاً). كل اسم يُدرَج مباشرة في النطاق
+// الحالي بنفس اسمه (لا alias فردي لكل عنصر -- أبسط ما يمكن، طبقة تسمية واحدة لا أكثر).
+struct ImportSelectedStmt : Stmt {
+    std::vector<std::string> names;
+    ExprPtr path;
 };
 
 // ---- Loomtime rendering engine: view strands + reactive state (Warp) ----
