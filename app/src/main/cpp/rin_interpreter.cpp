@@ -5,6 +5,10 @@
 #include "rin_stdlib_libs.h"
 #include "rin_http.h"
 #include "rin_json.h"
+#include "rin_color.h" // rincolor:: — the shared Color Engine (parsing/math/HSL/WCAG); also
+                        // used by loom/rin_loom_tokens.h. See that header's doc comment for the
+                        // full literal syntax. Registered as language-level natives below
+                        // (registerNatives()'s "محرك الألوان" section).
 #include "diagnostics/diagnostic_renderer.h"
 #include "diagnostics/source_manager.h"
 #include <cmath>
@@ -1441,6 +1445,13 @@ void Interpreter::registerNatives() {
         expectArgs("toString", a, 1, line);
         return Value::string(a[0].toDisplayString());
     };
+    // str(value) -> alias for toString(value). Several stdlib libraries (lib/colors.og.rin,
+    // lib/csv.og.rin, lib/format.og.rin, ...) already call `str(...)` expecting exactly this
+    // short alias to exist; it never did, so every one of those call sites was an undefined-
+    // function runtime error waiting to happen. Registered as a real native (not a `fun` in
+    // rin_stdlib_libs.h) so it's available to every .rin source with no @import required, same
+    // as toString/len/upper/... already are.
+    natives["str"] = natives["toString"];
     natives["toNumber"] = [](std::vector<Value>& a, int line) -> Value {
         expectArgs("toNumber", a, 1, line);
         if (a[0].type == Value::Type::NUMBER) return a[0];
@@ -1484,6 +1495,155 @@ void Interpreter::registerNatives() {
     natives["isBool"] = [](std::vector<Value>& a, int line) -> Value {
         expectArgs("isBool", a, 1, line);
         return Value::boolean_(a[0].type == Value::Type::BOOL);
+    };
+
+    // ---- محرك الألوان (Color Engine) — rin_color.h، مشترك مع loom::Color/resolveColor() -----
+    // كل الدوال هنا تقبل أي صياغة لونية حرفية (#rgb/#rgba/#rrggbb/#rrggbbaa، rgb()/rgba()،
+    // hsl()/hsla()، أو اسم لون CSS مثل "tomato") وليس أسماء الأدوار الدلالية (primary/danger/…)
+    // — تلك خاصة بـ Loom (tone=) وتُحلّ عبر الـ Theme هناك، لا هنا على مستوى اللغة.
+    auto parseColorArg = [](const Value& v, const std::string& fn, int line) -> rincolor::Color {
+        std::string s = asString(v, fn, line);
+        rincolor::Color c;
+        if (!rincolor::tryParseColor(s, c))
+            throw diagErr(diag::Code::E0035_RuntimeError, line, "'" + fn + "': \"" + s + "\" ليست قيمة لون صالحة");
+        return c;
+    };
+    // toHex(n) -> بايت واحد (0-255) إلى صيغة سداسية عشرية من رقمين ("FF"، "0A"، ...). هذه هي
+    // الدالة التي كانت lib/colors.og.rin تفترض وجودها دون أن تكون معرّفة فعلياً في أي مكان.
+    natives["toHex"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("toHex", a, 1, line);
+        int n = (int)std::lround(asNumber(a[0], "toHex", line));
+        return Value::string(rincolor::toHexByte(rincolor::clampByte(n)));
+    };
+    natives["colorValid"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("colorValid", a, 1, line);
+        rincolor::Color c;
+        return Value::boolean_(a[0].type == Value::Type::STRING && rincolor::tryParseColor(a[0].str, c));
+    };
+    // colorParse(literal) -> الصيغة السداسية العشرية القانونية: 6 خانات إن كان معتماً تماماً،
+    // و8 خانات (مع alpha) إن كان يحمل شفافية — أي صياغة مدخلة (rgb()/hsl()/اسم لون/...) تُطبَّع
+    // لهذا الشكل الموحّد.
+    natives["colorParse"] = [parseColorArg](std::vector<Value>& a, int line) -> Value {
+        expectArgs("colorParse", a, 1, line);
+        return Value::string(rincolor::toHexAuto(parseColorArg(a[0], "colorParse", line)));
+    };
+    natives["colorRgb"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("colorRgb", a, 3, line);
+        rincolor::Color c{ rincolor::clampByte((int)asNumber(a[0],"colorRgb",line)),
+                            rincolor::clampByte((int)asNumber(a[1],"colorRgb",line)),
+                            rincolor::clampByte((int)asNumber(a[2],"colorRgb",line)), 255 };
+        return Value::string(rincolor::toHex6(c));
+    };
+    // colorRgba(r,g,b,a) -> a كنسبة 0..1 (مطابقة لـ CSS rgba()).
+    natives["colorRgba"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("colorRgba", a, 4, line);
+        rincolor::Color c{ rincolor::clampByte((int)asNumber(a[0],"colorRgba",line)),
+                            rincolor::clampByte((int)asNumber(a[1],"colorRgba",line)),
+                            rincolor::clampByte((int)asNumber(a[2],"colorRgba",line)),
+                            rincolor::alphaFromUnit(asNumber(a[3],"colorRgba",line)) };
+        return Value::string(rincolor::toHex8(c));
+    };
+    // colorHsl(h, s, l) -> h بالدرجات (0-360)، s/l كنسبة مئوية (0-100)، مطابقة لكتابة hsl() في CSS.
+    natives["colorHsl"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("colorHsl", a, 3, line);
+        rincolor::Color c = rincolor::hslToRgb(asNumber(a[0],"colorHsl",line),
+                                                asNumber(a[1],"colorHsl",line) / 100.0,
+                                                asNumber(a[2],"colorHsl",line) / 100.0);
+        return Value::string(rincolor::toHex6(c));
+    };
+    natives["colorHsla"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("colorHsla", a, 4, line);
+        rincolor::Color c = rincolor::hslToRgb(asNumber(a[0],"colorHsla",line),
+                                                asNumber(a[1],"colorHsla",line) / 100.0,
+                                                asNumber(a[2],"colorHsla",line) / 100.0,
+                                                rincolor::alphaFromUnit(asNumber(a[3],"colorHsla",line)));
+        return Value::string(rincolor::toHex8(c));
+    };
+    // colorComponents(literal) -> {r,g,b} 0-255 وalpha 0..1 — للسكربتات التي تريد الوصول
+    // الرقمي لمكوّنات لون مكتوب بأي صياغة (بما فيها اسم لون أو hsl()).
+    natives["colorComponents"] = [parseColorArg](std::vector<Value>& a, int line) -> Value {
+        expectArgs("colorComponents", a, 1, line);
+        rincolor::Color c = parseColorArg(a[0], "colorComponents", line);
+        auto m = std::make_shared<MapData>();
+        m->push_back({Value::string("r"), Value::num(c.r)});
+        m->push_back({Value::string("g"), Value::num(c.g)});
+        m->push_back({Value::string("b"), Value::num(c.b)});
+        m->push_back({Value::string("alpha"), Value::num(rincolor::unitFromAlpha(c.a))});
+        return Value::makeMap(m);
+    };
+    // colorToHsl(literal) -> {h,s,l}: h بالدرجات، s/l كنسبة مئوية.
+    natives["colorToHsl"] = [parseColorArg](std::vector<Value>& a, int line) -> Value {
+        expectArgs("colorToHsl", a, 1, line);
+        rincolor::HSL hsl = rincolor::rgbToHsl(parseColorArg(a[0], "colorToHsl", line));
+        auto m = std::make_shared<MapData>();
+        m->push_back({Value::string("h"), Value::num(hsl.h)});
+        m->push_back({Value::string("s"), Value::num(hsl.s * 100.0)});
+        m->push_back({Value::string("l"), Value::num(hsl.l * 100.0)});
+        return Value::makeMap(m);
+    };
+    natives["colorToRgbaString"] = [parseColorArg](std::vector<Value>& a, int line) -> Value {
+        expectArgs("colorToRgbaString", a, 1, line);
+        return Value::string(rincolor::toRgbaString(parseColorArg(a[0], "colorToRgbaString", line)));
+    };
+    natives["colorToHslaString"] = [parseColorArg](std::vector<Value>& a, int line) -> Value {
+        expectArgs("colorToHslaString", a, 1, line);
+        return Value::string(rincolor::toHslaString(parseColorArg(a[0], "colorToHslaString", line)));
+    };
+    // colorMix(c1, c2, t) -> مزج خطي بين لونين (t: 0 يعطي c1، 1 يعطي c2)، بما فيها alpha.
+    natives["colorMix"] = [parseColorArg](std::vector<Value>& a, int line) -> Value {
+        expectArgs("colorMix", a, 3, line);
+        rincolor::Color mixed = rincolor::mix(parseColorArg(a[0], "colorMix", line),
+                                               parseColorArg(a[1], "colorMix", line),
+                                               asNumber(a[2], "colorMix", line));
+        return Value::string(rincolor::toHexAuto(mixed));
+    };
+    natives["colorLighten"] = [parseColorArg](std::vector<Value>& a, int line) -> Value {
+        expectArgs("colorLighten", a, 2, line);
+        return Value::string(rincolor::toHexAuto(rincolor::lighten(parseColorArg(a[0], "colorLighten", line), asNumber(a[1], "colorLighten", line))));
+    };
+    natives["colorDarken"] = [parseColorArg](std::vector<Value>& a, int line) -> Value {
+        expectArgs("colorDarken", a, 2, line);
+        return Value::string(rincolor::toHexAuto(rincolor::darken(parseColorArg(a[0], "colorDarken", line), asNumber(a[1], "colorDarken", line))));
+    };
+    // colorWithAlpha(c, alpha) -> نفس اللون بشفافية جديدة (alpha: 0..1)، بصرف النظر عن أي
+    // alpha كان يحمله المدخل أصلاً.
+    natives["colorWithAlpha"] = [parseColorArg](std::vector<Value>& a, int line) -> Value {
+        expectArgs("colorWithAlpha", a, 2, line);
+        return Value::string(rincolor::toHex8(rincolor::withAlpha(parseColorArg(a[0], "colorWithAlpha", line), asNumber(a[1], "colorWithAlpha", line))));
+    };
+    // colorBlend(fg, bg) -> النتيجة الفعلية لرسم fg (وقد يكون شفافاً) فوق bg (يُعامَل كمعتم) —
+    // ما "يبدو عليه" اللون فعلاً بعد التركيب، وليس مجرد مزج حسابي بسيط.
+    natives["colorBlend"] = [parseColorArg](std::vector<Value>& a, int line) -> Value {
+        expectArgs("colorBlend", a, 2, line);
+        return Value::string(rincolor::toHex6(rincolor::alphaBlend(parseColorArg(a[0], "colorBlend", line), parseColorArg(a[1], "colorBlend", line))));
+    };
+    natives["colorInvert"] = [parseColorArg](std::vector<Value>& a, int line) -> Value {
+        expectArgs("colorInvert", a, 1, line);
+        return Value::string(rincolor::toHexAuto(rincolor::invert(parseColorArg(a[0], "colorInvert", line))));
+    };
+    natives["colorGrayscale"] = [parseColorArg](std::vector<Value>& a, int line) -> Value {
+        expectArgs("colorGrayscale", a, 1, line);
+        return Value::string(rincolor::toHexAuto(rincolor::grayscale(parseColorArg(a[0], "colorGrayscale", line))));
+    };
+    // colorLuminance(c) -> اللمعان النسبي وفق WCAG 2.x (0 أسود .. 1 أبيض).
+    natives["colorLuminance"] = [parseColorArg](std::vector<Value>& a, int line) -> Value {
+        expectArgs("colorLuminance", a, 1, line);
+        return Value::num(rincolor::relativeLuminance(parseColorArg(a[0], "colorLuminance", line)));
+    };
+    // colorContrast(c1, c2) -> نسبة تباين WCAG (1.0 .. 21.0) — 4.5 حدّ AA للنص العادي، 7.0 لـ AAA.
+    natives["colorContrast"] = [parseColorArg](std::vector<Value>& a, int line) -> Value {
+        expectArgs("colorContrast", a, 2, line);
+        return Value::num(rincolor::contrastRatio(parseColorArg(a[0], "colorContrast", line), parseColorArg(a[1], "colorContrast", line)));
+    };
+    natives["colorIsLight"] = [parseColorArg](std::vector<Value>& a, int line) -> Value {
+        expectArgs("colorIsLight", a, 1, line);
+        return Value::boolean_(rincolor::isLight(parseColorArg(a[0], "colorIsLight", line)));
+    };
+    // colorTextOn(bg) -> "#000000" أو "#FFFFFF"، أياً كان الأوضح فوق bg — نفس القاعدة التي تحدّد
+    // متى يكون النص المناسب على خلفية ما أسود أم أبيض.
+    natives["colorTextOn"] = [parseColorArg](std::vector<Value>& a, int line) -> Value {
+        expectArgs("colorTextOn", a, 1, line);
+        return Value::string(rincolor::toHex6(rincolor::bestTextColor(parseColorArg(a[0], "colorTextOn", line))));
     };
 
     // ---- إحصاء (statistics) - مصمّمة للعمل مع خطوط الأنابيب |> و container.pipe ----
