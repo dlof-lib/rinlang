@@ -313,12 +313,20 @@ StmtPtr Parser::declaration() {
 
 StmtPtr Parser::letDeclaration() {
     auto name = consume(TokenType::IDENT, "Expected variable name after 'let'");
+    // Type System: 'let name: Type = expr;' — ':' اختيارية بالكامل (additive صرف؛ أي برنامج Rin
+    // صالح سابقاً لا يحتوي ':' هنا أصلاً فيبقى يعمل حرفياً بلا أي تغيير). التحقق الفعلي وقت التشغيل
+    // فقط (انظر Interpreter::checkDeclaredType) -- لا تحليل ساكن، لا استدلال، هذا كل ما في الأمر.
+    std::string typeName;
+    if (match({TokenType::COLON})) {
+        typeName = consume(TokenType::IDENT, "Expected a type name after ':'").lexeme;
+    }
     ExprPtr initializer = nullptr;
     if (match({TokenType::EQUAL})) initializer = expression();
     consume(TokenType::SEMICOLON, "Expected ';' after variable declaration");
     auto stmt = std::make_shared<LetStmt>();
     stmt->name = name.lexeme;
     stmt->initializer = initializer;
+    stmt->typeName = typeName;
     stmt->line = name.line;
     return stmt;
 }
@@ -500,12 +508,25 @@ StmtPtr Parser::functionDeclaration() {
     auto name = consume(TokenType::IDENT, "Expected function name after 'fun'");
     consume(TokenType::LPAREN, "Expected '(' after function name");
     std::vector<std::string> params;
+    std::vector<std::string> paramTypes;
     if (!check(TokenType::RPAREN)) {
         do {
             params.push_back(consume(TokenType::IDENT, "Expected parameter name").lexeme);
+            // Type System: 'fun f(a: Type, b) { ... }' — كل وسيط يقبل ': Type' اختيارية بشكل
+            // مستقل (يمكن خلط وسائط مُنوَّعة مع أخرى غير مُنوَّعة بحرّية).
+            std::string paramType;
+            if (match({TokenType::COLON})) {
+                paramType = consume(TokenType::IDENT, "Expected a type name after ':'").lexeme;
+            }
+            paramTypes.push_back(paramType);
         } while (match({TokenType::COMMA}));
     }
     consume(TokenType::RPAREN, "Expected ')' after parameters");
+    // Type System: 'fun f(...): ReturnType { ... }' — نوع الإرجاع اختياري أيضاً.
+    std::string returnType;
+    if (match({TokenType::COLON})) {
+        returnType = consume(TokenType::IDENT, "Expected a type name after ':'").lexeme;
+    }
     consume(TokenType::LBRACE, "Expected '{' before function body");
     // جسم الدالة يبدأ سياق "حلقة" جديداً من الصفر: break/continue داخل دالة معرَّفة نصياً داخل
     // حلقة while خارجية لا يجب أن تُعتبر صالحة إلا إذا كانت هناك حلقة while أخرى داخل الدالة نفسها.
@@ -516,6 +537,8 @@ StmtPtr Parser::functionDeclaration() {
     auto fn = std::make_shared<FunctionStmt>();
     fn->name = name.lexeme;
     fn->params = params;
+    fn->paramTypes = paramTypes;
+    fn->returnType = returnType;
     fn->body = body;
     fn->line = name.line;
     return fn;
