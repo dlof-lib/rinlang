@@ -32,9 +32,26 @@ class RinJobAdapter(private val context: Context) : RecyclerView.Adapter<RinJobA
     /** Invoked with a job's [RinJob.number] when the user taps the pin toggle. */
     var onPinToggleRequested: ((Int) -> Unit)? = null
 
+    /** Explicit user overrides of the expand/collapse state, keyed by [RinJob.number] rather
+     *  than list position -- survives reordering, job completion (QUEUED -> RUNNING -> SUCCESS)
+     *  and RecyclerView view-holder recycling. Absent from this map means "use the default"
+     *  (see [isExpanded]), not "collapsed". */
+    private val manualExpandState = HashMap<Int, Boolean>()
+
     fun submit(newItems: List<RinJob>) {
         items = newItems
         notifyDataSetChanged()
+    }
+
+    /** Default: the most recently queued run (the one the person just tapped "Run" for) starts
+     *  expanded so its output is visible immediately, and every still-active (QUEUED/RUNNING) run
+     *  is always expanded too. Older finished runs default to collapsed, so a long run history
+     *  stays scannable one-line-per-card instead of one giant wall of expanded output -- same
+     *  idea as a real IDE's Run panel. A manual tap on the header always wins over this default. */
+    private fun isExpanded(job: RinJob): Boolean {
+        manualExpandState[job.number]?.let { return it }
+        if (job.status == JobStatus.QUEUED || job.status == JobStatus.RUNNING) return true
+        return items.lastOrNull()?.number == job.number
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): JobViewHolder {
@@ -56,6 +73,11 @@ class RinJobAdapter(private val context: Context) : RecyclerView.Adapter<RinJobA
         private val fallbackOutput: TextView = itemView.findViewById(R.id.txtJobOutput)
         private val outputLines: LinearLayout = itemView.findViewById(R.id.llJobOutputLines)
         private val artifactsContainer: LinearLayout = itemView.findViewById(R.id.llJobArtifacts)
+        private val headerRow: LinearLayout = itemView.findViewById(R.id.llJobHeader)
+        private val expandIcon: ImageView = itemView.findViewById(R.id.imgJobExpand)
+        private val detailContainer: LinearLayout = itemView.findViewById(R.id.llJobDetail)
+        private val statsDivider: View = itemView.findViewById(R.id.dividerJobStats)
+        private val statsText: TextView = itemView.findViewById(R.id.txtJobStats)
         private val dp = itemView.resources.displayMetrics.density
 
         /** Built once per recycled row and toggled visible only while the job is QUEUED. */
@@ -81,6 +103,16 @@ class RinJobAdapter(private val context: Context) : RecyclerView.Adapter<RinJobA
         private var boundJob: RinJob? = null
 
         init {
+            // Tapping the header toggles the collapsed/expanded detail body (output, artifacts,
+            // stats) for this specific run -- keyed by job number in the adapter so it survives
+            // recycling/rebinding instead of resetting on every scroll.
+            headerRow.setOnClickListener {
+                val job = boundJob ?: return@setOnClickListener
+                val expandedNow = isExpanded(job)
+                manualExpandState[job.number] = !expandedNow
+                applyExpandState(!expandedNow)
+            }
+
             // Copy System (section 13): long-press anywhere on a finished run's card copies its
             // full output — quick access without needing a dedicated button on every row.
             itemView.setOnLongClickListener {
@@ -142,9 +174,30 @@ class RinJobAdapter(private val context: Context) : RecyclerView.Adapter<RinJobA
                 cancelBtn.setOnClickListener(null)
             }
 
+            applyExpandState(isExpanded(job))
+
             outputLines.removeAllViews()
             artifactsContainer.removeAllViews()
             artifactsContainer.visibility = View.GONE
+
+            if (job.status == JobStatus.QUEUED || job.status == JobStatus.RUNNING) {
+                statsDivider.visibility = View.GONE
+                statsText.visibility = View.GONE
+            } else {
+                // Real per-run numbers only (RinExecutionManager.RinExecutionStats) — duration,
+                // event count, output size and artifact count all come from re-deriving this
+                // exact job's actual output/events, not synthesized placeholders.
+                val stats = RinExecutionManager.toSession(job).stats
+                statsDivider.visibility = View.VISIBLE
+                statsText.visibility = View.VISIBLE
+                statsText.text = context.getString(
+                    R.string.job_stats_fmt,
+                    stats.durationMs,
+                    stats.eventCount,
+                    RinConsoleFormatter.formatBytes(stats.outputBytes.toLong()),
+                    stats.artifactCount
+                )
+            }
 
             when (job.status) {
                 JobStatus.QUEUED -> {
@@ -172,6 +225,13 @@ class RinJobAdapter(private val context: Context) : RecyclerView.Adapter<RinJobA
                     renderOutput(job)
                 }
             }
+        }
+
+        /** Shows/hides [detailContainer] and rotates [expandIcon] to match, without touching any
+         *  other bound state — cheap enough to call on every bind and on every header tap. */
+        private fun applyExpandState(expanded: Boolean) {
+            detailContainer.visibility = if (expanded) View.VISIBLE else View.GONE
+            expandIcon.animate().rotation(if (expanded) 90f else 0f).setDuration(120L).start()
         }
 
         /** Builds one icon + styled-text row per output line, and download chips for real artifacts. */
