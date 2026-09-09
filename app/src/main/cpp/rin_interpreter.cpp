@@ -2628,7 +2628,13 @@ void Interpreter::registerNatives() {
     auto maskKnown = [this](const std::string& m) -> bool {
         return !m.empty() && (containerMasks.count(m) || groupMasks.count(m) || volumeMasks.count(m));
     };
-    auto maskResolveInternal = [this, &maskKnown](std::string token) -> std::string {
+    // ملاحظة إصلاح: كانت تلتقط maskKnown بالمرجع (&maskKnown)، وهو متغيّر محلي في هذه الدالة
+    // (registerNatives). بما أن natives[...] تُخزَّن كـ std::function وتُستدعى لاحقاً بعد عودة
+    // registerNatives()، كان المرجع يتحوّل إلى dangling reference (stack-use-after-return) عند
+    // أي استدعاء فعلي لـ maskResolve/maskAlias/... (وأي دالة candle تعتمد عليها) — يسبب سلوكاً
+    // غير معرَّف وربما segfault. الالتقاط بالقيمة آمن تماماً هنا: maskKnown لا تحمل أي حالة سوى
+    // [this]، فنسخها لا تُكلّف شيئاً ولا تُغيّر السلوك.
+    auto maskResolveInternal = [this, maskKnown](std::string token) -> std::string {
         if (maskKnown(token)) return token;
         std::unordered_set<std::string> seen;
         for (int i = 0; i < 64 && !token.empty(); ++i) {
@@ -2889,6 +2895,172 @@ void Interpreter::registerNatives() {
         expectArgs("maskHasAnyTag", a, 2, line); std::string m=maskResolve4(asString(a[0],"maskHasAnyTag",line)); if(m.empty()||a[1].type!=Value::Type::ARRAY) return Value::boolean_(false); auto it=maskTags.find(m); if(it==maskTags.end()) return Value::boolean_(false); for(auto& x:*a[1].array) if(std::find(it->second.begin(),it->second.end(),asString(x,"maskHasAnyTag",line))!=it->second.end()) return Value::boolean_(true); return Value::boolean_(false);
     };
     // maskOf(name) يبقى متوافقاً، لكنه أصبح يشمل كل أنواع الكائنات المسجّلة.
+
+    // ---- Candle: طبقة id-to-id غير محدودة فوق mask/id مباشرة (انظر docs/candle.md) --------
+    // candle لا يستبدل mask ولا id، بل يضيف علاقة موجَّهة id -> ∞ من id فوقهما. كل طرف يُقبل
+    // إما كـ mask معروف (يُحل إلى targetه عبر نفس منطق mask v3/v4) أو كمعرّف خام مباشر.
+    auto candleResolve = [this, maskResolveInternal, maskTarget4](const std::string& token) -> std::string {
+        std::string m = maskResolveInternal(token);
+        if (!m.empty()) { std::string t = maskTarget4(m); return t.empty() ? m : t; }
+        return token; // ليس قناعاً معروفاً -> يُعامَل كمعرّف داخلي (id) خام كما هو
+    };
+    // ملاحظة: التقاط دالة تكرارية بذاتها بالمرجع (Y-combinator يدوي بسيط) خطِر هنا تحديداً لأن
+    // natives[...] تُخزَّن كـ std::function وتُستدعى بعد عودة registerNatives() (نفس درس
+    // maskResolveInternal أعلاه) — لذا نضعها على الـ heap عبر shared_ptr ونلتقطها بالقيمة
+    // (نسخ shared_ptr، لا مرجعاً لمتغيّر مكدَّس محلي)، فتبقى صالحة طوال عمر البرنامج.
+    // weak_ptr داخل الإغلاق (لا shared_ptr) لتفادي دورة مرجعية (self-reference cycle) كانت
+    // ستُبقي هذا الكائن حياً للأبد بلا سبب حقيقي (تسريب حقيقي، لا وهمياً — رُصد فعلياً بـ
+    // LeakSanitizer قبل هذا التعديل): shared_ptr يملك دالة تحمل نسخة من نفس shared_ptr.
+    auto candleTreeToValue = std::make_shared<std::function<Value(const rin::CandleTreeNode&)>>();
+    std::weak_ptr<std::function<Value(const rin::CandleTreeNode&)>> candleTreeToValueWeak = candleTreeToValue;
+    *candleTreeToValue = [candleTreeToValueWeak](const rin::CandleTreeNode& node) -> Value {
+        auto m = std::make_shared<MapData>();
+        m->push_back({Value::string("id"), Value::string(node.id)});
+        m->push_back({Value::string("relation"), node.relation.empty() ? Value::nil() : Value::string(node.relation)});
+        auto kids = std::make_shared<ArrayData>();
+        if (auto self = candleTreeToValueWeak.lock()) {
+            for (auto& c : node.children) kids->push_back((*self)(c));
+        }
+        m->push_back({Value::string("children"), Value::makeArray(kids)});
+        return Value::makeMap(m);
+    };
+
+    // light(fromMaskOrId, toMaskOrId, relation?) -> ينشئ/يحدّث وصلة موجَّهة from -> to.
+    // يرفض self-loop افتراضياً (بعد الحل: from == to) ويرجع false في هذه الحالة.
+    natives["light"] = [this, candleResolve](std::vector<Value>& a, int line) -> Value {
+        expectArgsRange("light", a, 2, 3, line);
+        std::string from = candleResolve(asString(a[0], "light", line));
+        std::string to = candleResolve(asString(a[1], "light", line));
+        std::string rel = a.size() == 3 && a[2].type != Value::Type::NIL ? asString(a[2], "light", line) : std::string();
+        return Value::boolean_(candleRegistry.light(from, to, rel));
+    };
+
+    // extinguish(fromMaskOrId, toMaskOrId) -> يحذف وصلة محددة، يرجع true إن وُجدت.
+    natives["extinguish"] = [this, candleResolve](std::vector<Value>& a, int line) -> Value {
+        expectArgs("extinguish", a, 2, line);
+        std::string from = candleResolve(asString(a[0], "extinguish", line));
+        std::string to = candleResolve(asString(a[1], "extinguish", line));
+        return Value::boolean_(candleRegistry.extinguish(from, to));
+    };
+
+    // extinguishAll(maskOrId) -> يطفئ كل الوصلات الصادرة من عنصر، يرجع عددها.
+    natives["extinguishAll"] = [this, candleResolve](std::vector<Value>& a, int line) -> Value {
+        expectArgs("extinguishAll", a, 1, line);
+        std::string from = candleResolve(asString(a[0], "extinguishAll", line));
+        return Value::num(static_cast<double>(candleRegistry.extinguishAll(from)));
+    };
+
+    // candleExists(from, to) -> هل توجد وصلة مباشرة؟
+    natives["candleExists"] = [this, candleResolve](std::vector<Value>& a, int line) -> Value {
+        expectArgs("candleExists", a, 2, line);
+        std::string from = candleResolve(asString(a[0], "candleExists", line));
+        std::string to = candleResolve(asString(a[1], "candleExists", line));
+        return Value::boolean_(candleRegistry.exists(from, to));
+    };
+
+    // candleTargets(maskOrId) -> كل ما أُشعل من هذا العنصر مباشرة (قد تكون قائمة كبيرة/∞ عملياً).
+    natives["candleTargets"] = [this, candleResolve](std::vector<Value>& a, int line) -> Value {
+        expectArgs("candleTargets", a, 1, line);
+        std::string id = candleResolve(asString(a[0], "candleTargets", line));
+        auto out = std::make_shared<ArrayData>();
+        for (auto& t : candleRegistry.targets(id)) out->push_back(Value::string(t));
+        return Value::makeArray(out);
+    };
+
+    // candleSources(maskOrId) -> من أشعل هذا العنصر مباشرة.
+    natives["candleSources"] = [this, candleResolve](std::vector<Value>& a, int line) -> Value {
+        expectArgs("candleSources", a, 1, line);
+        std::string id = candleResolve(asString(a[0], "candleSources", line));
+        auto out = std::make_shared<ArrayData>();
+        for (auto& s : candleRegistry.sources(id)) out->push_back(Value::string(s));
+        return Value::makeArray(out);
+    };
+
+    // candleCount(maskOrId) -> عدد الوصلات الصادرة.
+    natives["candleCount"] = [this, candleResolve](std::vector<Value>& a, int line) -> Value {
+        expectArgs("candleCount", a, 1, line);
+        std::string id = candleResolve(asString(a[0], "candleCount", line));
+        return Value::num(static_cast<double>(candleRegistry.count(id)));
+    };
+
+    // candleInfo(maskOrId) -> {targets, sources, isRoot, isLeaf}
+    natives["candleInfo"] = [this, candleResolve](std::vector<Value>& a, int line) -> Value {
+        expectArgs("candleInfo", a, 1, line);
+        std::string id = candleResolve(asString(a[0], "candleInfo", line));
+        auto ci = candleRegistry.info(id);
+        auto m = std::make_shared<MapData>();
+        auto tg = std::make_shared<ArrayData>(); for (auto& t : ci.targets) tg->push_back(Value::string(t));
+        auto sr = std::make_shared<ArrayData>(); for (auto& s : ci.sources) sr->push_back(Value::string(s));
+        m->push_back({Value::string("targets"), Value::makeArray(tg)});
+        m->push_back({Value::string("sources"), Value::makeArray(sr)});
+        m->push_back({Value::string("isRoot"), Value::boolean_(ci.isRoot)});
+        m->push_back({Value::string("isLeaf"), Value::boolean_(ci.isLeaf)});
+        return Value::makeMap(m);
+    };
+
+    // candleRelation(from, to) -> وسم العلاقة الذي مُرِّر إلى light()، أو nil إن لم توجد وصلة/وسم.
+    natives["candleRelation"] = [this, candleResolve](std::vector<Value>& a, int line) -> Value {
+        expectArgs("candleRelation", a, 2, line);
+        std::string from = candleResolve(asString(a[0], "candleRelation", line));
+        std::string to = candleResolve(asString(a[1], "candleRelation", line));
+        if (!candleRegistry.exists(from, to)) return Value::nil();
+        std::string r = candleRegistry.relation(from, to);
+        return r.empty() ? Value::nil() : Value::string(r);
+    };
+
+    // candleByRelation(relation) -> كل الوصلات {from, to} الموسومة بعلاقة معيّنة.
+    natives["candleByRelation"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("candleByRelation", a, 1, line);
+        std::string rel = asString(a[0], "candleByRelation", line);
+        auto out = std::make_shared<ArrayData>();
+        for (auto& edge : candleRegistry.byRelation(rel)) {
+            auto m = std::make_shared<MapData>();
+            m->push_back({Value::string("from"), Value::string(edge.first)});
+            m->push_back({Value::string("to"), Value::string(edge.second)});
+            out->push_back(Value::makeMap(m));
+        }
+        return Value::makeArray(out);
+    };
+
+    // candleChain(from, to) -> BFS محمي بـ visited set؛ يعيد المسار [from,...,to] إن وُجد، وإلا مصفوفة فارغة.
+    natives["candleChain"] = [this, candleResolve](std::vector<Value>& a, int line) -> Value {
+        expectArgs("candleChain", a, 2, line);
+        std::string from = candleResolve(asString(a[0], "candleChain", line));
+        std::string to = candleResolve(asString(a[1], "candleChain", line));
+        auto out = std::make_shared<ArrayData>();
+        for (auto& id : candleRegistry.chain(from, to)) out->push_back(Value::string(id));
+        return Value::makeArray(out);
+    };
+
+    // candleDepth(maskOrId) -> أقصر عدد قفزات من أقرب جذر، أو -1 إن كان غير معروف/غير قابل للوصول من أي جذر.
+    natives["candleDepth"] = [this, candleResolve](std::vector<Value>& a, int line) -> Value {
+        expectArgs("candleDepth", a, 1, line);
+        std::string id = candleResolve(asString(a[0], "candleDepth", line));
+        return Value::num(static_cast<double>(candleRegistry.depth(id)));
+    };
+
+    // candleRoots() -> عناصر تُشعل غيرها فقط ولم تُشعَل من أحد.
+    natives["candleRoots"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("candleRoots", a, 0, line);
+        auto out = std::make_shared<ArrayData>();
+        for (auto& id : candleRegistry.roots()) out->push_back(Value::string(id));
+        return Value::makeArray(out);
+    };
+
+    // candleLeaves() -> عناصر أُشعلت فقط ولا تُشعل غيرها.
+    natives["candleLeaves"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("candleLeaves", a, 0, line);
+        auto out = std::make_shared<ArrayData>();
+        for (auto& id : candleRegistry.leaves()) out->push_back(Value::string(id));
+        return Value::makeArray(out);
+    };
+
+    // candleTree(maskOrId) -> تمثيل شجري كامل {id, relation, children:[...]}  بدءاً من هذا العنصر كجذر.
+    natives["candleTree"] = [this, candleResolve, candleTreeToValue](std::vector<Value>& a, int line) -> Value {
+        expectArgs("candleTree", a, 1, line);
+        std::string id = candleResolve(asString(a[0], "candleTree", line));
+        return (*candleTreeToValue)(candleRegistry.tree(id));
+    };
 
     // containerNames() -> مصفوفة بكل أسماء الحاويات المسجَّلة حالياً (عبر @container أو spawn)
     natives["containerNames"] = [this](std::vector<Value>& a, int line) -> Value {
