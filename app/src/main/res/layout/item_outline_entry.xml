@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- صف واحد في قائمة حوار "بنية الملف" (بديل عن سطر نصي مسطّح في AlertDialog.setItems() السابق):
+     [خط إرشاد شجري بعمق التعشيش الفعلي] [شارة دائرية ملوّنة بنوع الوسم] [نص الوسم] [حبّة رقم السطر]. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:minHeight="46dp"
+    android:orientation="horizontal"
+    android:gravity="center_vertical"
+    android:background="@drawable/bg_outline_item"
+    android:paddingStart="4dp"
+    android:paddingEnd="12dp">
+
+    <com.dlof.rinlang.OutlineTreeGuideView
+        android:id="@+id/outlineTreeGuide"
+        android:layout_width="0dp"
+        android:layout_height="match_parent" />
+
+    <TextView
+        android:id="@+id/outlineKindBadge"
+        android:layout_width="24dp"
+        android:layout_height="24dp"
+        android:layout_marginEnd="10dp"
+        android:gravity="center"
+        android:includeFontPadding="false"
+        android:textSize="12sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/outlineLabel"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:ellipsize="end"
+        android:fontFamily="monospace"
+        android:maxLines="1"
+        android:textColor="@color/rin_on_toolbar"
+        android:textSize="14sp" />
+
+    <TextView
+        android:id="@+id/outlineLineChip"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="8dp"
+        android:background="@drawable/bg_outline_chip"
+        android:paddingStart="8dp"
+        android:paddingEnd="8dp"
+        android:paddingTop="3dp"
+        android:paddingBottom="3dp"
+        android:textColor="@color/rin_on_toolbar_dim"
+        android:textSize="11sp" />
+
+</LinearLayout>
