@@ -1,0 +1,53 @@
+// examples/candle.rin — على غرار examples/mask.rin، يوضح طبقة candle (id-to-id) كاملة.
+// راجع docs/candle.md للتصميم الكامل. candle لا يستبدل mask ولا id، بل يضيف علاقة موجَّهة
+// id -> ∞ من id فوقهما، وكل طرف يُقبل كـ mask (يُحل تلقائياً) أو كمعرّف خام مباشر.
+
+@view.Column="screen"
+mask="main-screen";
+.end/view
+
+@element.button="save"
+mask="save-button";
+.end/element
+
+@element.button="cancel"
+mask="cancel-button";
+.end/element
+
+@element.text="hint"
+mask="hint-label";
+.end/element
+
+// ---- الإشعال (light) — يقبل mask أو id خام، بعلاقة اختيارية موسومة ----
+light("main-screen", "save-button", "contains");
+light("main-screen", "cancel-button", "contains");
+light("save-button", "hint-label", "explains");
+
+// self-loop مرفوضة افتراضياً -> false
+print light("save-button", "save-button");
+
+// ---- الاستعلام المباشر ----
+print candleExists("main-screen", "save-button"); // true
+print candleExists("save-button", "main-screen"); // false (موجَّهة، لا تتماثل)
+print candleTargets("main-screen"); // ["save-button", "cancel-button"]
+print candleSources("save-button"); // ["main-screen"]
+print candleCount("main-screen");   // 2
+print candleInfo("save-button");    // {targets, sources, isRoot:false, isLeaf:false}
+
+// ---- العلاقات الموسومة ----
+print candleRelation("main-screen", "save-button"); // "contains"
+print candleByRelation("contains"); // [{from:"main-screen", to:"save-button"}, ...]
+
+// ---- البنية والانتشار ----
+print candleChain("main-screen", "hint-label"); // ["main-screen", "save-button", "hint-label"]
+print candleDepth("hint-label"); // 2
+print candleRoots();  // ["main-screen"]
+print candleLeaves(); // ["cancel-button", "hint-label"]
+print candleTree("main-screen"); // شجرة كاملة {id, relation, children:[...]}
+
+// ---- الإطفاء ----
+print extinguish("main-screen", "cancel-button"); // true
+print candleTargets("main-screen"); // ["save-button"] فقط بعد الإطفاء
+
+print extinguishAll("main-screen"); // 1 (عدد ما تبقّى من وصلات صادرة)
+print candleCount("main-screen");   // 0
