@@ -50,6 +50,11 @@ class MoreActivity : AppCompatActivity() {
             openProjectScoped(ApkExportActivity::class.java, ApkExportActivity.EXTRA_PROJECT_NAME)
         }
 
+        // 3.6 تطبيقات Rin (سجل كل عمليات التصدير — لا يحتاج مشروعاً محدداً)
+        findViewById<View>(R.id.rowRinApps).setOnClickListener {
+            startActivity(Intent(this, RinAppsActivity::class.java))
+        }
+
         // 4. متجر الإضافات
         findViewById<View>(R.id.rowExtensions).setOnClickListener {
             startActivity(Intent(this, RinExtensionsMarketplaceActivity::class.java))
