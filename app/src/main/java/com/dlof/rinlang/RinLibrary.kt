@@ -160,6 +160,11 @@ object BuiltinLibraries {
             "lib/requirekit.og.rin", "requirekit",
             "عدّة الحقول والاشتراطات الإلزامية: حقول إلزامية في نموذج/كائن، مجموعات شرطية (أحدها فقط/على الأقل)، واشتراطات عامة تُجمَع أخطاؤها معاً",
             "requireField • requireNonEmptyFields • requireAtLeastOne • requireExactlyOne • requireThat • requireInRange • requireOneOf • requireAll"
+        ),
+        BuiltinLibraryInfo(
+            "lib/physics.og.rin", "physics",
+            "مكتبة فيزياء متكاملة: متجهات px*، حركة خطية وإسقاطية، قوى نيوتن، طاقة وزخم واصطدامات، حركة دائرية، نوابض واهتزاز توافقي، وسوائل/طفو",
+            "pxVecAdd • pxProjectileRange • pxProjectilePositionAt • pxForceScalar • pxKineticEnergy • pxElasticCollision • pxCentripetalForce • pxSpringPeriod • pxBuoyantForce"
         )
     )
 }
