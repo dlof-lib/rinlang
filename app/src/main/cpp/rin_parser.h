@@ -71,6 +71,11 @@ private:
     StmtPtr classDeclaration(bool isStruct);
     // enum Name { CaseA, CaseB = expr, ... }  (يُستدعى بعد استهلاك 'enum' في declaration())
     StmtPtr enumDeclaration();
+    // match (subject) { case v1, v2 { .. } case v3 { .. } else { .. } }  (يُستدعى بعد استهلاك
+    // 'match' في declaration())
+    StmtPtr matchStatement();
+    // achieve expr; / achieve;  (يُستدعى بعد استهلاك 'achieve' في declaration())
+    StmtPtr achieveStatement();
     StmtPtr statement();
     StmtPtr printStatement();
     StmtPtr ifStatement();
@@ -87,6 +92,7 @@ private:
     StmtPtr viewPrintObjectStatement(); // view.print/object(expr);  (يُستدعى بعد استهلاك 'view' '.' 'print')
     StmtPtr logStatement(const Token& printTok); // print.log(...) / print.log.info/warn/error/debug(...)  (يُستدعى بعد استهلاك 'print' '.' 'log')
     int loopDepth = 0; // >0 داخل جسم حلقة while؛ يُستخدم للتحقق من صحة break/continue وقت التحليل
+    int goalDepth = 0; // >0 داخل جسم 'goal { .. }'؛ يُستخدم للتحقق من صحة 'achieve' وقت التحليل
     std::shared_ptr<BlockStmt> block();
     StmtPtr expressionStatement();
 
