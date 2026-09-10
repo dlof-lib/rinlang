@@ -331,8 +331,96 @@ StmtPtr Parser::declaration() {
         advance(); // 'condition'
         return plusConditionStatement();
     }
+    // 'when' (condition) thenBranch ['otherwise' elseBranch] -> صياغة إنجليزية مبسّطة (sugar) لِـ
+    // if/else، مطابقة تماماً من ناحية الدلالة (تُبنى داخلياً كـ IfStmt نفسها تماماً، انظر
+    // whenStatement() أدناه) — راجع docs/control-flow.md §1.1. 'when' كلمة سياقية غير محجوزة،
+    // مُميَّزة فقط عند ظهورها IDENT("when") متبوعة مباشرة بـ '(' في بداية عبارة (تماماً كأسلوب
+    // فحص plus.condition أعلاه)، فلا تتعارض مع استخدامها اسم متغيّر/دالة عادية (when(x) نداء دالة
+    // عادي لأنه لا يظهر في بداية عبارة بهذا الفحص إطلاقاً... في الواقع الفحص هنا لا يميّز موضع بداية
+    // العبارة من موضع آخر، لكنه يطابق تماماً أسلوب فحص match/route/document الأخرى في هذا الملف).
+    if (check(TokenType::IDENT) && peek().lexeme == "when" && checkNext(TokenType::LPAREN)) {
+        advance(); // 'when'
+        return whenStatement();
+    }
+    // 'match' (subject) { case v1, v2 { .. } ... [else { .. }] } -> مطابقة أنماط (pattern
+    // matching)، امتداد إضافي فوق if/else (انظر MatchStmt في rin_ast.h للشرح الكامل). 'match'
+    // كلمة سياقية غير محجوزة، مُميَّزة عند ظهورها IDENT("match") متبوعة مباشرة بـ '('.
+    if (check(TokenType::IDENT) && peek().lexeme == "match" && checkNext(TokenType::LPAREN)) {
+        advance(); // 'match'
+        return matchStatement();
+    }
+    // 'achieve' expr; / 'achieve';  -> ينهي أقرب كتلة goal {..} محيطة (انظر GoalExpr/AchieveStmt
+    // في rin_ast.h). 'achieve' كلمة سياقية غير محجوزة؛ الشرط الوحيد لتمييزها عن استخدام "achieve"
+    // اسم متغيّر عادي هو ألا يتبعها مباشرة '=' (حتى لا نصطدم بإسناد 'achieve = 5;' لمتغيّر بهذا
+    // الاسم) -- بنفس روح فحص 'mask'/'state' أعلاه لكن بالعكس (هناك EQUAL شرط الدخول، هنا شرط الاستبعاد).
+    if (check(TokenType::IDENT) && peek().lexeme == "achieve" && !checkNext(TokenType::EQUAL)) {
+        advance(); // 'achieve'
+        return achieveStatement();
+    }
 
     return statement();
+}
+
+// match (subject) { case v1, v2 { .. } case v3 { .. } [else { .. }] }
+StmtPtr Parser::matchStatement() {
+    consume(TokenType::LPAREN, "Expected '(' after 'match'");
+    auto subject = expression();
+    consume(TokenType::RPAREN, "Expected ')' after 'match' subject");
+    consume(TokenType::LBRACE, "Expected '{' before 'match' body");
+
+    auto stmt = std::make_shared<MatchStmt>();
+    stmt->subject = subject;
+    bool sawElse = false;
+    while (!check(TokenType::RBRACE) && !isAtEnd()) {
+        if (sawElse) {
+            throw err(diag::Code::E0013_InvalidExpression, peek(),
+                      "'else' must be the last branch inside a 'match' block");
+        }
+        if (check(TokenType::IDENT) && peek().lexeme == "case") {
+            Token caseTok = advance(); // 'case'
+            MatchCase mc;
+            mc.line = caseTok.line;
+            do { mc.values.push_back(expression()); } while (match({TokenType::COMMA}));
+            consume(TokenType::LBRACE, "Expected '{' to start 'case' body");
+            mc.body = block(); // يستهلك '}' المطابقة بنفسه
+            stmt->cases.push_back(std::move(mc));
+            continue;
+        }
+        if (check(TokenType::ELSE)) {
+            advance(); // 'else'
+            consume(TokenType::LBRACE, "Expected '{' to start 'match' else body");
+            stmt->elseBranch = block();
+            sawElse = true;
+            continue;
+        }
+        throw err(diag::Code::E0013_InvalidExpression, peek(),
+                  "expected 'case' or 'else' inside a 'match' block");
+    }
+    consume(TokenType::RBRACE, "Expected '}' after 'match' body");
+    if (stmt->cases.empty()) {
+        throw err(diag::Code::E0013_InvalidExpression, previous(),
+                  "'match' must have at least one 'case'");
+    }
+    return stmt;
+}
+
+// achieve expr; / achieve;
+// achieve expr; / achieve;  -> يجب أن تظهر فقط داخل جسم 'goal { ... }' (مباشرة أو متداخلة عبر
+// if/match/block)؛ وإلا فهي خطأ وقت التحليل (نفس قيد break/continue خارج حلقة تماماً).
+StmtPtr Parser::achieveStatement() {
+    Token tok = previous(); // 'achieve'
+    if (goalDepth == 0)
+        throw errRich(diag::Code::E0011_UnexpectedToken, tok, "'achieve' used outside of a 'goal' block",
+                       "`achieve` ends the innermost enclosing `goal { ... }` block and becomes its "
+                       "value, so the parser only allows it while it is currently inside a `goal` "
+                       "block body; this `achieve` appears at a point where no `goal` block is open",
+                       "move this `achieve` inside a `goal { ... }` block, or use `return` instead if "
+                       "you meant to exit the enclosing function");
+    auto stmt = std::make_shared<AchieveStmt>();
+    stmt->line = tok.line;
+    if (!check(TokenType::SEMICOLON)) stmt->value = expression();
+    consume(TokenType::SEMICOLON, "Expected ';' after 'achieve'");
+    return stmt;
 }
 
 StmtPtr Parser::letDeclaration() {
@@ -378,12 +466,15 @@ StmtPtr Parser::lifecycleHookDeclaration() {
     }
     consume(TokenType::RPAREN, "Expected ')' after lifecycle hook parameters");
     consume(TokenType::LBRACE, "Expected '{' before lifecycle hook body 'on " + hookTok.lexeme + "'");
-    // نفس حماية loopDepth الموجودة في functionDeclaration(): جسم الخُطّاف يبدأ سياق حلقة جديداً
-    // من الصفر (break/continue بداخله لا يُعتبران صالحين إلا بحلقة while داخل الخُطّاف نفسه).
+    // نفس حماية loopDepth/goalDepth الموجودة في functionDeclaration(): جسم الخُطّاف يبدأ سياق حلقة/هدف
+    // جديداً من الصفر (break/continue/achieve بداخله لا تُعتبر صالحة إلا بحلقة/goal داخل الخُطّاف نفسه).
     int savedLoopDepth = loopDepth;
+    int savedGoalDepth = goalDepth;
     loopDepth = 0;
+    goalDepth = 0;
     auto body = block();
     loopDepth = savedLoopDepth;
+    goalDepth = savedGoalDepth;
 
     auto fn = std::make_shared<FunctionStmt>();
     fn->name = "on " + hookTok.lexeme; // لأغراض رسائل الخطأ فقط (عدد الوسائط في callFunction)
@@ -457,9 +548,12 @@ StmtPtr Parser::eventHandlerDeclaration() {
     consume(TokenType::RPAREN, "Expected ')' after event handler parameters");
     consume(TokenType::LBRACE, "Expected '{' before event handler body 'on.event \"" + nameTok.lexeme + "\"'");
     int savedLoopDepth = loopDepth;
+    int savedGoalDepth = goalDepth;
     loopDepth = 0;
+    goalDepth = 0;
     auto body = block();
     loopDepth = savedLoopDepth;
+    goalDepth = savedGoalDepth;
 
     auto fn = std::make_shared<FunctionStmt>();
     fn->name = "on.event " + nameTok.lexeme; // لأغراض رسائل الخطأ فقط (عدد الوسائط في callFunction)
@@ -552,12 +646,16 @@ StmtPtr Parser::functionDeclaration() {
         returnType = consume(TokenType::IDENT, "Expected a type name after ':'").lexeme;
     }
     consume(TokenType::LBRACE, "Expected '{' before function body");
-    // جسم الدالة يبدأ سياق "حلقة" جديداً من الصفر: break/continue داخل دالة معرَّفة نصياً داخل
-    // حلقة while خارجية لا يجب أن تُعتبر صالحة إلا إذا كانت هناك حلقة while أخرى داخل الدالة نفسها.
+    // جسم الدالة يبدأ سياق "حلقة"/"هدف" جديداً من الصفر: break/continue/achieve داخل دالة معرَّفة
+    // نصياً داخل حلقة while أو goal خارجية لا يجب أن تُعتبر صالحة إلا إذا كانت هناك حلقة/goal أخرى
+    // داخل الدالة نفسها.
     int savedLoopDepth = loopDepth;
+    int savedGoalDepth = goalDepth;
     loopDepth = 0;
+    goalDepth = 0;
     auto body = block();
     loopDepth = savedLoopDepth;
+    goalDepth = savedGoalDepth;
     auto fn = std::make_shared<FunctionStmt>();
     fn->name = name.lexeme;
     fn->params = params;
@@ -928,6 +1026,26 @@ StmtPtr Parser::ifStatement() {
     auto thenBranch = statement();
     StmtPtr elseBranch = nullptr;
     if (match({TokenType::ELSE})) elseBranch = statement();
+    auto stmt = std::make_shared<IfStmt>();
+    stmt->condition = condition;
+    stmt->thenBranch = thenBranch;
+    stmt->elseBranch = elseBranch;
+    return stmt;
+}
+
+// when (condition) thenBranch ['otherwise' elseBranch] -> مطابقة تماماً لـ if/else، انظر التعليق
+// أعلى موقع الاستدعاء في declaration() وdocs/control-flow.md §1.1. 'otherwise' كلمة سياقية غير
+// محجوزة أيضاً (بنفس أسلوب 'else' لكن غير محجوزة عالمياً)، فلا تتعارض مع استخدامها اسم متغيّر عادي.
+StmtPtr Parser::whenStatement() {
+    consume(TokenType::LPAREN, "Expected '(' after 'when'");
+    auto condition = expression();
+    consume(TokenType::RPAREN, "Expected ')' after 'when' condition");
+    auto thenBranch = statement();
+    StmtPtr elseBranch = nullptr;
+    if (check(TokenType::IDENT) && peek().lexeme == "otherwise") {
+        advance(); // 'otherwise'
+        elseBranch = statement();
+    }
     auto stmt = std::make_shared<IfStmt>();
     stmt->condition = condition;
     stmt->thenBranch = thenBranch;
@@ -2412,6 +2530,20 @@ ExprPtr Parser::primary() {
     if (match({TokenType::STRING})) {
         auto e = std::make_shared<LiteralExpr>();
         e->kind = LiteralExpr::Kind::STRING; e->str = previous().lexeme; return e;
+    }
+    // goal { ... } -> كتلة هدف تُقيَّم كتعبير (انظر GoalExpr/AchieveStmt في rin_ast.h للشرح
+    // الكامل). يجب فحصها *قبل* IDENT العام أدناه وإلا لالتُقِطت "goal" كاسم متغيّر عادي. 'goal'
+    // كلمة سياقية غير محجوزة، مُميَّزة فقط عند ظهورها IDENT("goal") متبوعة مباشرة بـ '{' — فاستخدام
+    // "goal" اسم متغيّر عادي (goal + 1، goal(x)، let goal = 5، ...) يبقى يعمل بلا أي تغيير.
+    if (check(TokenType::IDENT) && peek().lexeme == "goal" && checkNext(TokenType::LBRACE)) {
+        Token goalTok = advance(); // 'goal'
+        advance(); // '{'
+        auto e = std::make_shared<GoalExpr>();
+        e->line = goalTok.line;
+        goalDepth++;
+        e->body = block(); // يستهلك '}' المطابقة بنفسه
+        goalDepth--;
+        return e;
     }
     if (match({TokenType::IDENT})) {
         auto e = std::make_shared<VariableExpr>();
