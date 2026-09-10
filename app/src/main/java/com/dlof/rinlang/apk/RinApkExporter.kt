@@ -2,6 +2,8 @@ package com.dlof.rinlang.apk
 
 import android.content.Context
 import com.dlof.rinlang.Project
+import com.dlof.rinlang.RinAppRecord
+import com.dlof.rinlang.RinAppsRegistry
 import org.json.JSONObject
 import java.io.File
 import java.security.MessageDigest
@@ -26,20 +28,25 @@ import kotlin.concurrent.thread
  *   4. إعادة تجميع الحزمة (نسخ كل مُدخلات zip الأصلية بنفس أسلوب الضغط) مع محاذاة zipalign
  *      حقيقية لمكتبات .so (4096) وبقية مُدخلات STORED (4) — [ApkRepackager].
  *   5. توليد/جلب هوية توقيع RSA-2048 حقيقية من AndroidKeyStore ([RinSigningIdentity])
- *      وتوقيع الحزمة فعلياً بمخطّط v1 (JAR signing، PKCS#7) — [ApkV1Signer].
+ *      وتوقيع الحزمة فعلياً بمخطّط v1 (JAR signing، PKCS#7) — [ApkV1Signer] — ثم إضافة
+ *      كتلة توقيع v2 حقيقية فوقها ([ApkV2Signer]، تُتحقَّق ذاتياً قبل القبول، وتتراجع
+ *      لـ v1 وحده إن تعذّر ذلك — مع سطر تحذير واضح في السجل) لأقصى ثقة تثبيت على أندرويد
+ *      الحديث.
+ *   6. تسجيل التصدير في [RinAppsRegistry] (بيانات وصفية + نقل الحزمة لتخزين دائم بدل
+ *      cacheDir) لتظهر لاحقاً في شاشة "تطبيقات Rin" ([com.dlof.rinlang.RinAppsActivity]).
  *
  * الناتج: ملف .apk حقيقي، قابل للتثبيت مباشرة عبر "تثبيت" أو "مشاركة"، بمعرّف حزمة مستقل
  * عن RinStudio نفسها (فلا يتعارض التثبيت معها ولا بين تصديرين مختلفين).
  *
  * محدوديات معروفة (بلا إخفاء):
- *  - مخطّط توقيع v1 (JAR) فقط، بلا v2/v3 — يكفي للتثبيت والتشغيل على كل إصدارات أندرويد
- *    الحالية، لكن بلا حماية v2 الإضافية (تفصيل التوقيع في [ApkV1Signer]).
+ *  - توقيع v1+v2 معاً (بلا v3) — v2 يُضاف فعلياً الآن (كان v1 فقط سابقاً)، وهو ما يقبله
+ *    كل أندرويد 7.0+ بثقة تحقّق كاملة؛ v1 يبقى موجوداً أيضاً للتوافق مع أندرويد الأقدم.
  *  - الأيقونة تبقى أيقونة RinStudio نفسها (resources.arsc لا يُعدَّل) — الاسم المعروض فقط
  *    هو المتغيّر؛ هوية المشروع الكاملة تظهر داخل شاشة تشغيله بعد فتحه.
  */
 object RinApkExporter {
 
-    data class ExportResult(val apkFile: File, val applicationId: String)
+    data class ExportResult(val apkFile: File, val applicationId: String, val signedWithV2: Boolean = false)
 
     sealed class Progress {
         data class Log(val text: String, val ok: Boolean = true) : Progress()
@@ -131,20 +138,50 @@ object RinApkExporter {
                 log("✓ شهادة التوقيع (SHA-256): ${fingerprint.take(32)}…")
 
                 log("… توقيع الحزمة (APK Signature Scheme v1 / JAR signing، SHA256withRSA)")
-                val signedApk = File(work, "signed.apk")
-                ApkV1Signer.sign(unsignedApk, signedApk, identity.privateKey, identity.certificate)
+                val signedApkV1 = File(work, "signed_v1.apk")
+                ApkV1Signer.sign(unsignedApk, signedApkV1, identity.privateKey, identity.certificate)
+                log("✓ تم توقيع v1")
 
-                val finalHash = MessageDigest.getInstance("SHA-256").digest(signedApk.readBytes())
-                log("✓ تم التوقيع — بصمة الحزمة النهائية: ${finalHash.joinToString("") { "%02x".format(it) }.take(24)}…")
+                log("… إضافة كتلة توقيع v2 حقيقية (APK Signature Scheme v2) فوق v1 لأقصى ثقة تثبيت")
+                var finalSignedFile = signedApkV1
+                var signedWithV2 = false
+                try {
+                    val signedApkV2 = File(work, "signed_v2.apk")
+                    ApkV2Signer.signAndVerify(signedApkV1, signedApkV2, identity.privateKey, identity.certificate)
+                    finalSignedFile = signedApkV2
+                    signedWithV2 = true
+                    log("✓ تم توقيع v2 والتحقّق الذاتي الكامل منه بنجاح (v1+v2 معاً)")
+                } catch (e: Exception) {
+                    log("⚠ تعذّر توقيع v2 (${e.message ?: e.toString()}) — استُخدم توقيع v1 وحده (يبقى قابلاً للتثبيت)")
+                }
 
-                // نقل الناتج إلى مسار apk_export/ المُعلَن في file_paths.xml (مطلوب لـ FileProvider)
-                val exportDir = File(context.cacheDir, "apk_export").apply { mkdirs() }
-                val out = File(exportDir, "${sanitizeFileToken(project.name)}.apk")
+                val finalHash = MessageDigest.getInstance("SHA-256").digest(finalSignedFile.readBytes())
+                log("✓ بصمة الحزمة النهائية (SHA-256): ${finalHash.joinToString("") { "%02x".format(it) }.take(24)}…")
+
+                // نقل الناتج إلى تخزين دائم (filesDir/rin_apps/ عبر RinAppsRegistry) بدل
+                // cacheDir الذي قد يُطهَّر تلقائياً — يبقى متاحاً لاحقاً في شاشة "تطبيقات Rin".
+                val exportDir = RinAppsRegistry.appsDir(context)
+                val out = File(exportDir, "$applicationId.apk")
                 if (out.exists()) out.delete()
-                signedApk.copyTo(out, overwrite = true)
+                finalSignedFile.copyTo(out, overwrite = true)
+
+                RinAppsRegistry.add(
+                    context,
+                    RinAppRecord(
+                        id = applicationId,
+                        projectName = project.name,
+                        displayName = appDisplayName,
+                        applicationId = applicationId,
+                        apkFileName = out.name,
+                        sizeBytes = out.length(),
+                        exportedAt = System.currentTimeMillis(),
+                        entryFile = entryFile,
+                        signedWithV2 = signedWithV2
+                    )
+                )
 
                 log("✓ الحزمة النهائية: ${out.name} (${out.length() / 1024} كِلوبايت)")
-                onProgress(Progress.Done(ExportResult(out, applicationId)))
+                onProgress(Progress.Done(ExportResult(out, applicationId, signedWithV2)))
             } catch (t: Throwable) {
                 onProgress(Progress.Failed(t.message ?: t.toString()))
             } finally {
@@ -194,6 +231,4 @@ object RinApkExporter {
         return "$hostPackage.export.${slug}_$suffix"
     }
 
-    private fun sanitizeFileToken(name: String): String =
-        name.map { c -> if (c.isLetterOrDigit()) c else '_' }.joinToString("").ifBlank { "export" }
 }
