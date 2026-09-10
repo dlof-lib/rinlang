@@ -3,6 +3,30 @@
 ## [Unreleased]
 
 ### Added
+- **`match (subject) { case v1, v2 { .. } ... else { .. } }`** — pattern-matching
+  statement, additive over `if`/`else` (see `docs/control-flow.md` §2.1). Compares
+  `subject` (evaluated once) against each `case` value using the same equality as
+  `==`; first matching `case` runs and matching stops (no C-style fallthrough).
+  Pairs naturally with `enum` values.
+- **`goal { ... }` / `achieve expr;`** — a block *expression* that evaluates to
+  `nil` unless `achieve expr;` fires somewhere inside it, in which case the block
+  short-circuits and evaluates to that value — a scoped early-exit smaller than a
+  full function `return` (see `docs/control-flow.md` §6). `achieve` outside any
+  enclosing `goal` block is a parse-time error, exactly like `break`/`continue`
+  outside a loop; `goal`/`loop` depth tracking correctly resets across nested
+  function bodies (mirrors the existing `loopDepth` mechanism).
+- **`when (cond) { .. } otherwise { .. }`** now actually works in the real
+  interpreter (`app/src/main/cpp`). It was documented in `docs/control-flow.md`
+  §1.1 and even had a `Parser::whenStatement()` declaration, but the function was
+  never implemented/wired — the only working copy lived in the separate
+  `compiler/rinc.cpp` transpiler. Fixed: `whenStatement()` now builds the exact
+  same `IfStmt` as `if`/`else`, wired into `Parser::declaration()`.
+- **`docs/enums.md`** — new page documenting `enum` (options: a closed list of
+  named cases, e.g. `enum Status { Active, Paused, Done }`, accessed as
+  `Status.Active`). This language feature already existed fully in
+  `rin_ast.h`/`rin_parser.cpp`/`rin_interpreter.cpp` but had no documentation
+  page anywhere; this fills that gap and cross-links it from `control-flow.md`.
+
 - `rinVersion()` / `rinEdition()` — the engine version (from
   `rin_version.h`) is now readable from inside `.rin` scripts themselves, not
   just from the host side (`rin --version`, `rin_engine_version()`,
