@@ -728,3 +728,252 @@ struct Vector3 {
     fun toStr() { return "Vector3(" + self.x + ", " + self.y + ", " + self.z + ")"; }
 }
 
+// ════════════════════════════════════════════════════════════════════════
+// RMF (Rin Math Fabric) Phase 2 §8 — Matrix (مصفوفة عامة بأي حجم rows×cols)
+// نفس أسلوب Vector2/Vector3 أعلاه بالضبط (struct + __add__/__sub__/__mul__/__neg__)، مع فرق واحد:
+// __mul__ يحتاج التمييز بين ثلاث حالات (Matrix*Matrix، Matrix*Vector، Matrix*رقم) -- هنا بالضبط
+// تظهر فائدة type() الجديدة (انظر natives["type"] في rin_interpreter.cpp): بدل ثلاث دوال منفصلة
+// (mulScalar/mulVector/mulMatrix)، دالة سحرية واحدة تفحص type(other) وتتصرف بما يناسب -- هذا هو
+// "الحساب الذكي" (§3) عملياً.
+// ════════════════════════════════════════════════════════════════════════
+
+struct Matrix {
+    let rows = 0;
+    let cols = 0;
+    let data = [];
+
+    fun init(rows, cols) {
+        self.rows = rows;
+        self.cols = cols;
+        let d = [];
+        let i = 0;
+        while (i < rows) {
+            let row = [];
+            let j = 0;
+            while (j < cols) {
+                push(row, 0);
+                j = j + 1;
+            }
+            push(d, row);
+            i = i + 1;
+        }
+        self.data = d;
+    }
+
+    fun get(i, j) { return self.data[i][j]; }
+    fun set(i, j, v) { self.data[i][j] = v; }
+
+    fun __add__(o) {
+        let m = Matrix(self.rows, self.cols);
+        let i = 0;
+        while (i < self.rows) {
+            let j = 0;
+            while (j < self.cols) {
+                m.set(i, j, self.get(i, j) + o.get(i, j));
+                j = j + 1;
+            }
+            i = i + 1;
+        }
+        return m;
+    }
+
+    fun __sub__(o) {
+        let m = Matrix(self.rows, self.cols);
+        let i = 0;
+        while (i < self.rows) {
+            let j = 0;
+            while (j < self.cols) {
+                m.set(i, j, self.get(i, j) - o.get(i, j));
+                j = j + 1;
+            }
+            i = i + 1;
+        }
+        return m;
+    }
+
+    fun __neg__() {
+        let m = Matrix(self.rows, self.cols);
+        let i = 0;
+        while (i < self.rows) {
+            let j = 0;
+            while (j < self.cols) {
+                m.set(i, j, -self.get(i, j));
+                j = j + 1;
+            }
+            i = i + 1;
+        }
+        return m;
+    }
+
+    fun __mul__(o) {
+        let t = type(o);
+        if (t == "number") {
+            let m = Matrix(self.rows, self.cols);
+            let i = 0;
+            while (i < self.rows) {
+                let j = 0;
+                while (j < self.cols) {
+                    m.set(i, j, self.get(i, j) * o);
+                    j = j + 1;
+                }
+                i = i + 1;
+            }
+            return m;
+        }
+        if (t == "Vector2" or t == "Vector3") {
+            let vals = [o.x, o.y];
+            if (t == "Vector3") { vals = [o.x, o.y, o.z]; }
+            if (len(vals) != self.cols) {
+                print "Matrix * Vector: dimension mismatch";
+                return nil;
+            }
+            let out = [];
+            let i = 0;
+            while (i < self.rows) {
+                let total = 0;
+                let j = 0;
+                while (j < self.cols) {
+                    total = total + self.get(i, j) * vals[j];
+                    j = j + 1;
+                }
+                push(out, total);
+                i = i + 1;
+            }
+            if (t == "Vector2") { return Vector2(out[0], out[1]); }
+            return Vector3(out[0], out[1], out[2]);
+        }
+        // Matrix * Matrix
+        if (self.cols != o.rows) {
+            print "Matrix multiplication: dimension mismatch";
+            return nil;
+        }
+        let m = Matrix(self.rows, o.cols);
+        let i = 0;
+        while (i < self.rows) {
+            let j = 0;
+            while (j < o.cols) {
+                let total = 0;
+                let k = 0;
+                while (k < self.cols) {
+                    total = total + self.get(i, k) * o.get(k, j);
+                    k = k + 1;
+                }
+                m.set(i, j, total);
+                j = j + 1;
+            }
+            i = i + 1;
+        }
+        return m;
+    }
+
+    fun transpose() {
+        let m = Matrix(self.cols, self.rows);
+        let i = 0;
+        while (i < self.rows) {
+            let j = 0;
+            while (j < self.cols) {
+                m.set(j, i, self.get(i, j));
+                j = j + 1;
+            }
+            i = i + 1;
+        }
+        return m;
+    }
+
+    // محدد (determinant) — صيغة مباشرة لـ 1×1/2×2، وتوسيع بالإشارات المتعاقبة (cofactor expansion)
+    // لأي حجم أكبر عبر _minor أدناه -- أبسط تطبيق ممكن (O(n!))، كافٍ عملياً للأحجام الشائعة
+    // (رسوميات/فيزياء نادراً ما تتجاوز 4×4).
+    fun determinant() {
+        if (self.rows != self.cols) {
+            print "determinant: matrix must be square";
+            return nil;
+        }
+        let n = self.rows;
+        if (n == 1) { return self.get(0, 0); }
+        if (n == 2) {
+            return self.get(0,0) * self.get(1,1) - self.get(0,1) * self.get(1,0);
+        }
+        let total = 0;
+        let j = 0;
+        let sign = 1;
+        while (j < n) {
+            let sub = self._minor(0, j);
+            total = total + sign * self.get(0, j) * sub.determinant();
+            sign = -sign;
+            j = j + 1;
+        }
+        return total;
+    }
+
+    // المصفوفة الفرعية بعد حذف الصف skipRow والعمود skipCol (تُستخدم داخلياً في determinant فقط)
+    fun _minor(skipRow, skipCol) {
+        let m = Matrix(self.rows - 1, self.cols - 1);
+        let ri = 0;
+        let i = 0;
+        while (i < self.rows) {
+            if (i != skipRow) {
+                let rj = 0;
+                let j = 0;
+                while (j < self.cols) {
+                    if (j != skipCol) {
+                        m.set(ri, rj, self.get(i, j));
+                        rj = rj + 1;
+                    }
+                    j = j + 1;
+                }
+                ri = ri + 1;
+            }
+            i = i + 1;
+        }
+        return m;
+    }
+
+    fun toStr() {
+        let s = "";
+        let i = 0;
+        while (i < self.rows) {
+            let rowStr = "[";
+            let j = 0;
+            while (j < self.cols) {
+                rowStr = rowStr + self.get(i, j);
+                if (j < self.cols - 1) { rowStr = rowStr + ", "; }
+                j = j + 1;
+            }
+            rowStr = rowStr + "]";
+            s = s + rowStr;
+            if (i < self.rows - 1) { s = s + "\n"; }
+            i = i + 1;
+        }
+        return s;
+    }
+}
+
+// مصفوفة الوحدة (identity) بحجم n×n — دالة حرة بدل static method (غير مدعومة على الأصناف حالياً)
+fun matrixIdentity(n) {
+    let m = Matrix(n, n);
+    let i = 0;
+    while (i < n) {
+        m.set(i, i, 1);
+        i = i + 1;
+    }
+    return m;
+}
+
+// يبني Matrix من مصفوفة صفوف عادية (array of arrays)، مثال: matrixFrom([[1,2],[3,4]])
+fun matrixFrom(rowsData) {
+    let r = len(rowsData);
+    let c = 0;
+    if (r > 0) { c = len(rowsData[0]); }
+    let m = Matrix(r, c);
+    let i = 0;
+    while (i < r) {
+        let j = 0;
+        while (j < c) {
+            m.set(i, j, rowsData[i][j]);
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    return m;
+}
+
