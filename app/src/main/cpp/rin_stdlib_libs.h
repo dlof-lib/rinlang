@@ -281,10 +281,8 @@ fun clampNum(x, lo, hi) {
     return x;
 }
 
-// استيفاء خطي (linear interpolation) بين a و b عند النسبة t (0..1)
-fun lerp(a, b, t) {
-    return a + (b - a) * t;
-}
+// ملاحظة: lerp(a, b, t) بات الآن دالة أساسية مدمجة في المفسّر (RMF §6/§28) متاحة دوماً بلا حتى
+// @import "math" — أُزيل تعريفها المكرَّر من هنا (كان بنفس الصيغة بالضبط: a + (b - a) * t).
 
 // عكس lerp: عند أي نسبة t تقع القيمة v بين a و b؟
 fun invLerp(a, b, v) {
@@ -319,17 +317,8 @@ fun moveToward(current, target, maxDelta) {
 }
 
 // إشارة الرقم: 1 موجب، -1 سالب، 0 صفر
-fun sign(x) {
-    if (x > 0) { return 1; }
-    if (x < 0) { return -1; }
-    return 0;
-}
 
 // يقصّ الجزء العشري من x نحو الصفر (بخلاف floor الذي يتجه لأسفل دوماً)
-fun trunc(x) {
-    if (x < 0) { return ceil(x); }
-    return floor(x);
-}
 
 // الجزء الكسري من x (دوماً >= 0)
 fun fract(x) {
@@ -434,35 +423,8 @@ fun _reduceAngle(x) {
     return x - TAU * floor((x + PI) / TAU);
 }
 
-fun sin(x) {
-    let v = _reduceAngle(x);
-    let v2 = v * v;
-    let term = v;
-    let total = v;
-    let i = 1;
-    while (i <= 15) {
-        term = term * (-v2) / ((2 * i) * (2 * i + 1));
-        total = total + term;
-        i = i + 1;
-    }
-    return total;
-}
 
-fun cos(x) {
-    let v = _reduceAngle(x);
-    let v2 = v * v;
-    let term = 1;
-    let total = 1;
-    let i = 1;
-    while (i <= 15) {
-        term = term * (-v2) / ((2 * i - 1) * (2 * i));
-        total = total + term;
-        i = i + 1;
-    }
-    return total;
-}
 
-fun tan(x) { return sin(x) / cos(x); }
 fun cot(x) { return cos(x) / sin(x); }
 fun sec(x) { return 1 / cos(x); }
 fun csc(x) { return 1 / sin(x); }
@@ -488,43 +450,10 @@ fun _atanTaylor(x) {
 
 // atan(x) عبر اختزال نصف-الزاوية المتكرر: atan(x) = 2*atan(x/(1+sqrt(1+x^2)))
 // حتى تصغر القيمة كفاية لتقارب سريع لسلسلة تايلور
-fun atan(x) {
-    let neg = x < 0;
-    let v = x;
-    if (neg) { v = -v; }
-    let k = 0;
-    while (v > 0.1 and k < 60) {
-        v = v / (1 + sqrt(1 + v * v));
-        k = k + 1;
-    }
-    let result = _atanTaylor(v) * pow(2, k);
-    if (neg) { return -result; }
-    return result;
-}
 
-fun asin(x) {
-    if (x < -1 or x > 1) { print "asin: x يجب أن يكون بين -1 و 1"; return nil; }
-    if (x == 1) { return PI / 2; }
-    if (x == -1) { return -(PI / 2); }
-    return atan(x / sqrt(1 - x * x));
-}
 
-fun acos(x) {
-    if (x < -1 or x > 1) { print "acos: x يجب أن يكون بين -1 و 1"; return nil; }
-    return (PI / 2) - asin(x);
-}
 
 // atan2(y, x): زاوية النقطة (x, y) مع مراعاة الربع الصحيح
-fun atan2(y, x) {
-    if (x > 0) { return atan(y / x); }
-    if (x < 0) {
-        if (y >= 0) { return atan(y / x) + PI; }
-        return atan(y / x) - PI;
-    }
-    if (y > 0) { return PI / 2; }
-    if (y < 0) { return -(PI / 2); }
-    return 0;
-}
 
 // ---------------------------------------------------------------------------
 // 5) أسّية ولوغاريتمات — نفس منهج القسم السابق (سلاسل + اختزال مجال)
@@ -545,49 +474,11 @@ fun _expTaylor(x) {
 
 // exp(x) عبر اختزال المجال: نقسم x على 2 حتى تصغر ثم نربّع النتيجة بالعدد
 // نفسه من المرّات (exp(x) = exp(x/2^k)^(2^k))
-fun exp(x) {
-    if (x == 0) { return 1; }
-    let neg = x < 0;
-    let v = x;
-    if (neg) { v = -v; }
-    let k = 0;
-    while (v > 0.5) {
-        v = v / 2;
-        k = k + 1;
-    }
-    let result = _expTaylor(v);
-    let i = 0;
-    while (i < k) {
-        result = result * result;
-        i = i + 1;
-    }
-    if (neg) { return 1 / result; }
-    return result;
-}
 
 // اللوغاريتم الطبيعي: نختزل x إلى [1,2) عبر تتبّع الأس e (x = m * 2^e) ثم
 // نستخدم سلسلة atanh السريعة التقارب: ln(m) = 2*atanh((m-1)/(m+1))
-fun ln(x) {
-    if (x <= 0) { print "ln: x يجب أن يكون > 0"; return nil; }
-    let v = x;
-    let e = 0;
-    while (v >= 2) { v = v / 2; e = e + 1; }
-    while (v < 1) { v = v * 2; e = e - 1; }
-    let z = (v - 1) / (v + 1);
-    let z2 = z * z;
-    let term = z;
-    let total = 0;
-    let k = 1;
-    while (k <= 39) {
-        total = total + term / k;
-        term = term * z2;
-        k = k + 2;
-    }
-    return 2 * total + e * LN2;
-}
 
 fun log2(x) { return ln(x) / LN2; }
-fun log10(x) { return ln(x) / LN10; }
 fun logBase(x, base) { return ln(x) / ln(base); }
 
 // ---------------------------------------------------------------------------
@@ -756,6 +647,100 @@ fun shuffle(arr) {
     }
     return arr;
 }
+
+// ════════════════════════════════════════════════════════════════════════
+// RMF (Rin Math Fabric) Phase 1 §7 — Vector2 / Vector3
+// بُنيت فوق struct + Operator Overloading (__add__/__sub__/__mul__/__div__/__neg__، انظر
+// tryOperatorOverload في rin_interpreter.cpp) بدل أي دعم خاص داخل المفسّر لكل نوع رياضي على حدة —
+// هذا بالضبط ما يجعل RMF قابلاً للتوسّع (§41) بأنواع رياضية إضافية (Matrix/Complex/Fraction/Unit
+// لاحقاً) بنفس الأسلوب، بلا أي حاجة لتعديل C++ إضافي لكل نوع جديد. struct (لا class): دلالة قيمة
+// (تُنسَخ عند الإسناد/تمرير كوسيط) هي الأنسب لكيان رياضي كالمتجه، تماماً كـ int/float.
+// ════════════════════════════════════════════════════════════════════════
+
+struct Vector2 {
+    let x = 0;
+    let y = 0;
+
+    fun init(x, y) {
+        self.x = x;
+        self.y = y;
+    }
+
+    fun __add__(o) { return Vector2(self.x + o.x, self.y + o.y); }
+    fun __sub__(o) { return Vector2(self.x - o.x, self.y - o.y); }
+    fun __mul__(k) { return Vector2(self.x * k, self.y * k); }
+    fun __div__(k) { return Vector2(self.x / k, self.y / k); }
+    fun __neg__() { return Vector2(-self.x, -self.y); }
+
+    fun lengthSquared() { return self.x * self.x + self.y * self.y; }
+    fun length() { return sqrt(self.lengthSquared()); }
+
+    fun normalize() {
+        let len = self.length();
+        if (len == 0) { return Vector2(0, 0); }
+        return Vector2(self.x / len, self.y / len);
+    }
+
+    fun dot(o) { return self.x * o.x + self.y * o.y; }
+    fun distance(o) { return (self - o).length(); }
+    fun angle() { return atan2(self.y, self.x); }
+
+    fun lerp(o, t) {
+        return Vector2(self.x + (o.x - self.x) * t, self.y + (o.y - self.y) * t);
+    }
+
+    fun toStr() { return "Vector2(" + self.x + ", " + self.y + ")"; }
+}
+
+struct Vector3 {
+    let x = 0;
+    let y = 0;
+    let z = 0;
+
+    fun init(x, y, z) {
+        self.x = x;
+        self.y = y;
+        self.z = z;
+    }
+
+    fun __add__(o) { return Vector3(self.x + o.x, self.y + o.y, self.z + o.z); }
+    fun __sub__(o) { return Vector3(self.x - o.x, self.y - o.y, self.z - o.z); }
+    fun __mul__(k) { return Vector3(self.x * k, self.y * k, self.z * k); }
+    fun __div__(k) { return Vector3(self.x / k, self.y / k, self.z / k); }
+    fun __neg__() { return Vector3(-self.x, -self.y, -self.z); }
+
+    fun lengthSquared() { return self.x * self.x + self.y * self.y + self.z * self.z; }
+    fun length() { return sqrt(self.lengthSquared()); }
+
+    fun normalize() {
+        let len = self.length();
+        if (len == 0) { return Vector3(0, 0, 0); }
+        return Vector3(self.x / len, self.y / len, self.z / len);
+    }
+
+    fun dot(o) { return self.x * o.x + self.y * o.y + self.z * o.z; }
+
+    fun cross(o) {
+        return Vector3(
+            self.y * o.z - self.z * o.y,
+            self.z * o.x - self.x * o.z,
+            self.x * o.y - self.y * o.x
+        );
+    }
+
+    fun distance(o) { return (self - o).length(); }
+
+    fun lerp(o, t) {
+        return Vector3(
+            self.x + (o.x - self.x) * t,
+            self.y + (o.y - self.y) * t,
+            self.z + (o.z - self.z) * t
+        );
+    }
+
+    fun toStr() { return "Vector3(" + self.x + ", " + self.y + ", " + self.z + ")"; }
+}
+
 )MATHOGRIN";
 
 static const char* kLib_strings_og_rin = R"STRINGSOGRIN(
