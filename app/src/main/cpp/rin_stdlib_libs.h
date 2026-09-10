@@ -9043,6 +9043,492 @@ fun nlp_analyzeFile(path) {
     return result;
 }
 )NLPKITOGRIN";
+static const char* kLib_syskit_og_rin = R"SYSKITOGRIN(
+// ============================================================================
+//  lib/syskit.og.rin — عدّة نظام (System Kit): معلومات المحرّك + مسارات +
+//                       ملفات آمنة + إعدادات دائمة (JSON) + سجلّ + فحوصات
+//  استيراد:
+//    @import "lib/syskit.og.rin";
+//    @import "lib/syskit.og.rin" as sys;
+//
+//  مكتبة Rin خالصة فوق natives الأساسية الموجودة فعلاً في المفسّر
+//  (readFile/writeFile/appendFile/deleteFile/fileExists/rinVersion/rinEdition/
+//   jsonEncode/jsonDecode/split/join/trim/substr/indexOf/has/keys...) — بلا أي
+//  تعديل على محرّك C++. الهدف: كل ما يحتاجه سكربت "نظامي" (يقرأ/يكتب ملفات،
+//  يحفظ إعداداته، يسجّل أحداثه، ويتحقّق من حالته) بأسلوب {ok:true/value:...}
+//  أو {ok:false/error:...} بدل توقّف مفاجئ بخطأ، بنفس اتفاقية opskit/envkit.
+//
+//  ملاحظة لغوية: لا تملك Rin عامل نفي "!" ولا كلمة "not"؛ النفي دائماً
+//  بمقارنة صريحة x == false (كبقية مكتبات lib/*.og.rin).
+//
+//  مثال سريع:
+//    let info = sysInfo();                         // {version:"...", edition:"..."}
+//    let cfg  = sysConfigLoad("app.cfg.json", {theme:"dark"});
+//    cfg = sysConfigSet(cfg, "lang", "ar");
+//    sysConfigSave("app.cfg.json", cfg);
+//    sysLogInfo("app.log", "بدأ التطبيق");
+// ============================================================================
+
+// ---- 1) معلومات النظام/المحرّك (Engine / system info) -----------------------
+
+// {version: rinVersion(), edition: rinEdition()} — لعرضها في واجهة سكربتك
+fun sysInfo() {
+    return { version: rinVersion(), edition: rinEdition() };
+}
+
+// نص جاهز للعرض: "Rin v<version> (<edition>)"
+fun sysVersionString() {
+    return "Rin v" + rinVersion() + " (" + rinEdition() + ")";
+}
+
+// تحقّق بسيط: هل إصدار المحرّك الحالي يساوي النص expected بالضبط؟
+fun sysIsVersion(expected) {
+    return rinVersion() == expected;
+}
+
+// ---- 2) مسارات الملفات (Path utilities) — نصوص خالصة، بلا لمس القرص --------
+
+// يدمج جزأي مسار بفاصل "/" واحد بالضبط بينهما (يتعامل مع "/" الزائدة في a أو الناقصة)
+fun pathJoin(a, b) {
+    if (a == "") { return b; }
+    if (b == "") { return a; }
+    let left = a;
+    if (substr(left, len(left) - 1, 1) == "/") {
+        left = substr(left, 0, len(left) - 1);
+    }
+    let right = b;
+    if (substr(right, 0, 1) == "/") {
+        right = substr(right, 1, len(right) - 1);
+    }
+    return left + "/" + right;
+}
+
+// يدمج عدّة أجزاء دفعة واحدة: pathJoinAll(["a", "b", "c.txt"]) -> "a/b/c.txt"
+fun pathJoinAll(parts) {
+    if (len(parts) == 0) { return ""; }
+    let result = parts[0];
+    let i = 1;
+    while (i < len(parts)) {
+        result = pathJoin(result, parts[i]);
+        i = i + 1;
+    }
+    return result;
+}
+
+// آخر جزء في المسار (اسم الملف أو المجلد الأخير): "a/b/c.txt" -> "c.txt"
+fun pathBaseName(p) {
+    let idx = lastIndexOfChar(p, "/");
+    if (idx == -1) { return p; }
+    return substr(p, idx + 1, len(p) - idx - 1);
+}
+
+// كل ما قبل آخر "/": "a/b/c.txt" -> "a/b"، وإن لم يوجد "/" يُعيد "."
+fun pathDirName(p) {
+    let idx = lastIndexOfChar(p, "/");
+    if (idx == -1) { return "."; }
+    if (idx == 0) { return "/"; }
+    return substr(p, 0, idx);
+}
+
+// الامتداد بلا نقطة: "a/b/c.txt" -> "txt"، وبلا امتداد -> ""
+fun pathExtension(p) {
+    let base = pathBaseName(p);
+    let idx = lastIndexOfChar(base, ".");
+    if (idx == -1) { return ""; }
+    if (idx == 0) { return ""; }
+    return substr(base, idx + 1, len(base) - idx - 1);
+}
+
+// اسم الملف بلا امتداد: "a/b/c.txt" -> "c"
+fun pathStem(p) {
+    let base = pathBaseName(p);
+    let idx = lastIndexOfChar(base, ".");
+    if (idx <= 0) { return base; }
+    return substr(base, 0, idx);
+}
+
+// هل المسار مطلق (يبدأ بـ "/")؟
+fun pathIsAbsolute(p) {
+    return substr(p, 0, 1) == "/";
+}
+
+// يبسّط مساراً: يحذف الأجزاء الفارغة و"." ويُنفّذ ".." (صعود مجلد) نصّياً بحت
+// (بلا لمس القرص فعلياً)، ويحافظ على "/" الأولى إن كان المسار مطلقاً
+fun pathNormalize(p) {
+    let absolute = pathIsAbsolute(p);
+    let rawParts = split(p, "/");
+    let stack = [];
+    let i = 0;
+    while (i < len(rawParts)) {
+        let part = rawParts[i];
+        if (part != "" and part != ".") {
+            if (part == ".." and len(stack) > 0 and stack[len(stack) - 1] != "..") {
+                pop(stack);
+            } else {
+                push(stack, part);
+            }
+        }
+        i = i + 1;
+    }
+    let joined = join(stack, "/");
+    if (absolute) { return "/" + joined; }
+    if (joined == "") { return "."; }
+    return joined;
+}
+
+// موقع آخر ظهور لمحرف ch داخل s (مساعد داخلي لدوال المسارات أعلاه)، -1 إن لم يوجد
+fun lastIndexOfChar(s, ch) {
+    let last = -1;
+    let i = 0;
+    while (i < len(s)) {
+        if (substr(s, i, 1) == ch) { last = i; }
+        i = i + 1;
+    }
+    return last;
+}
+
+// ---- 3) ملفات آمنة (Safe file ops) — لا تتوقّف بخطأ عند غياب الملف --------
+
+// قراءة آمنة: {ok:true, value:"..."} أو {ok:false, error:"..."} بدل توقّف readFile الخام
+fun fileRead(path) {
+    if (fileExists(path) == false) {
+        return { ok: false, error: "fileRead: الملف غير موجود: " + path };
+    }
+    return { ok: true, value: readFile(path) };
+}
+
+// كتابة آمنة (تنشئ الملف أو تستبدل محتواه بالكامل)
+fun fileWrite(path, content) {
+    writeFile(path, content);
+    return { ok: true, path: path };
+}
+
+// إلحاق نص بنهاية ملف (يُنشئه إن لم يكن موجوداً)
+fun fileAppend(path, content) {
+    appendFile(path, content);
+    return { ok: true, path: path };
+}
+
+// حذف آمن: لا يفشل إن كان الملف غير موجود أصلاً
+fun fileDelete(path) {
+    if (fileExists(path) == false) {
+        return { ok: true, path: path, existed: false };
+    }
+    deleteFile(path);
+    return { ok: true, path: path, existed: true };
+}
+
+// يضمن وجود الملف: ينشئه بمحتوى defaultContent إن لم يكن موجوداً، ولا يلمسه إن كان موجوداً
+fun fileEnsure(path, defaultContent) {
+    if (fileExists(path)) {
+        return { ok: true, created: false };
+    }
+    writeFile(path, defaultContent);
+    return { ok: true, created: true };
+}
+
+// نسخ ملف كامل (نصّي) من src إلى dest
+fun sysCopyFile(src, dest) {
+    if (fileExists(src) == false) {
+        return { ok: false, error: "sysCopyFile: الملف غير موجود: " + src };
+    }
+    writeFile(dest, readFile(src));
+    return { ok: true, from: src, to: dest };
+}
+
+// يقرأ ملفاً كمصفوفة أسطر (يقبل نهايات "\n" أو "\r\n")
+fun fileReadLines(path) {
+    let res = fileRead(path);
+    if (res["ok"] == false) { return res; }
+    let normalized = replace(res["value"], "\r\n", "\n");
+    if (normalized == "") { return { ok: true, value: [] }; }
+    return { ok: true, value: split(normalized, "\n") };
+}
+
+// يكتب مصفوفة أسطر كملف واحد مفصول بـ "\n"
+fun fileWriteLines(path, lines) {
+    return fileWrite(path, join(lines, "\n"));
+}
+
+// يلحق سطراً واحداً (مع "\n" تلقائياً) بنهاية ملف
+fun fileAppendLine(path, line) {
+    return fileAppend(path, line + "\n");
+}
+
+// حجم محتوى الملف بعدد المحارف (تقريبي بحسب len على النص المقروء)
+fun fileSizeChars(path) {
+    let res = fileRead(path);
+    if (res["ok"] == false) { return res; }
+    return { ok: true, value: len(res["value"]) };
+}
+
+// ---- 4) إعدادات نظام دائمة (Persistent JSON-backed system config) ---------
+
+// يحمّل إعدادات من ملف JSON؛ إن لم يكن الملف موجوداً أو كان تالفاً يُعيد defaults كما هي
+fun sysConfigLoad(path, defaults) {
+    if (fileExists(path) == false) { return defaults; }
+    let parsed = jsonDecode(readFile(path));
+    if (parsed == nil) { return defaults; }
+    return parsed;
+}
+
+// يحفظ خريطة إعدادات كاملة إلى ملف JSON
+fun sysConfigSave(path, cfg) {
+    writeFile(path, jsonEncode(cfg));
+    return { ok: true, path: path };
+}
+
+// قراءة مفتاح من خريطة إعدادات في الذاكرة، بقيمة افتراضية عند غيابه
+fun sysConfigGet(cfg, key, fallback) {
+    if (has(cfg, key) == false) { return fallback; }
+    return cfg[key];
+}
+
+// تعديل مفتاح في خريطة إعدادات في الذاكرة (لا يكتب للقرص، فقط يُعيد الخريطة المعدَّلة)
+fun sysConfigSet(cfg, key, value) {
+    cfg[key] = value;
+    return cfg;
+}
+
+// دورة كاملة: تحميل من القرص -> تعديل مفتاح واحد -> حفظ فوري -> إعادة الخريطة الناتجة
+fun sysConfigUpdate(path, key, value, defaults) {
+    let cfg = sysConfigLoad(path, defaults);
+    cfg = sysConfigSet(cfg, key, value);
+    sysConfigSave(path, cfg);
+    return cfg;
+}
+
+// ---- 5) سجلّ نظام بسيط (Simple system log) ---------------------------------
+
+// يلحق سطر سجلّ منسّق "[LEVEL] message" بملف السجلّ (يُنشئه إن لم يوجد)
+fun sysLog(path, level, message) {
+    return fileAppendLine(path, "[" + level + "] " + message);
+}
+
+fun sysLogInfo(path, message) {
+    return sysLog(path, "INFO", message);
+}
+
+fun sysLogWarn(path, message) {
+    return sysLog(path, "WARN", message);
+}
+
+fun sysLogError(path, message) {
+    return sysLog(path, "ERROR", message);
+}
+
+// يفرّغ ملف السجلّ (أو يُنشئه فارغاً إن لم يكن موجوداً)
+fun sysLogClear(path) {
+    return fileWrite(path, "");
+}
+
+// يقرأ كل أسطر السجلّ كمصفوفة نصوص؛ مصفوفة فارغة إن لم يوجد الملف أو كان فارغاً
+fun sysLogRead(path) {
+    if (fileExists(path) == false) { return []; }
+    let res = fileReadLines(path);
+    if (res["ok"] == false) { return []; }
+    return res["value"];
+}
+
+// ---- 6) فحوصات وحراسات نظام (System guards) --------------------------------
+// كلها بأسلوب {ok:.., error:..} الموحَّد بدل رمي أخطاء غامضة منتصف سكربت طويل.
+
+// تحقّق عام: يُعيد {ok:true} إن كان cond صحيحاً، وإلا {ok:false, error:message}
+fun sysAssert(cond, message) {
+    if (cond) { return { ok: true }; }
+    return { ok: false, error: message };
+}
+
+// يتحقّق أن ملفاً موجوداً فعلاً قبل استخدامه
+fun sysRequireFile(path) {
+    if (fileExists(path)) { return { ok: true, path: path }; }
+    return { ok: false, error: "sysRequireFile: الملف غير موجود: " + path };
+}
+
+// يشغّل قائمة فحوصات (مصفوفة نتائج بصيغة {ok,...} كالتي تُعيدها الدوال أعلاه)
+// ويُعيد أول فحص فاشل، أو {ok:true} إن نجحت كلها
+fun sysCheckAll(checks) {
+    let i = 0;
+    while (i < len(checks)) {
+        if (checks[i]["ok"] == false) { return checks[i]; }
+        i = i + 1;
+    }
+    return { ok: true };
+}
+)SYSKITOGRIN";
+static const char* kLib_requirekit_og_rin = R"REQUIREKITOGRIN(
+// ============================================================================
+//  lib/requirekit.og.rin — عدّة الحقول والاشتراطات الإلزامية (Mandatory / Required Kit)
+//  استيراد:
+//    @import "lib/requirekit.og.rin";
+//    @import "lib/requirekit.og.rin" as require;
+//
+//  مكتبة Rin خالصة (بلا أي تعديل على محرّك C++) للتحقّق من "الإلزامية": حقول
+//  إلزامية في خريطة (نموذج/طلب/كائن)، مجموعات إلزامية شرطية (أحدها على الأقل /
+//  واحد فقط منها)، واشتراطات عامة بأسلوب "Design by Contract" (require/ensure).
+//  كلها بنفس اتفاقية {ok:true/...} أو {ok:false, error/errors:...} المستخدمة في
+//  validate.og.rin/opskit.og.rin/syskit.og.rin — بلا توقّف مفاجئ بخطأ أبداً.
+//
+//  الفارق عن lib/validate.og.rin: تلك تتحقق من *شكل* قيمة مفردة (بريد صالح؟
+//  رقم صالح؟)، بينما هذه تتحقق من *وجود/إلزامية* حقول كاملة داخل خريطة، وتُجمِّع
+//  كل الحقول/الاشتراطات الناقصة دفعة واحدة بدل التوقف عند أول خطأ — مفيد لعرض
+//  كل مشاكل نموذج إدخال للمستخدم مرة واحدة بدل رسالة واحدة في كل مرة.
+//
+//  مثال سريع:
+//    let form = { name: "ريما", email: "" };
+//    let r = requireNonEmptyFields(form, ["name", "email", "phone"]);
+//    print r;  // {ok:false, missing:["email","phone"], error:"..."}
+//
+//    let checks = [
+//        requireThat(len(form["name"]) > 0, "الاسم مطلوب"),
+//        requireInRange(17, 18, 99, "العمر")
+//    ];
+//    print requireAll(checks);  // {ok:false, errors:["العمر: يجب أن يكون بين 18 و99"]}
+// ============================================================================
+
+// هل القيمة "مفقودة" فعلياً (nil أو نص فارغ)؟ مساعد داخلي لهذه المكتبة تحديداً
+// (كل مكتبة lib/*.og.rin قائمة بذاتها، بلا اعتماد متبادل على مكتبات أخرى)
+fun rq_isMissing(v) {
+    if (v == nil) { return true; }
+    if (v == "") { return true; }
+    return false;
+}
+
+// ---- 1) حقل إلزامي واحد على خريطة (map/object/form) ------------------------
+
+// هل المفتاح key موجود أصلاً في obj (بصرف النظر عن قيمته، حتى لو فارغة)؟
+fun requireField(obj, key) {
+    if (has(obj, key) == false) {
+        return { ok: false, error: "requireField: الحقل الإلزامي غير موجود: " + key };
+    }
+    return { ok: true, value: obj[key] };
+}
+
+// هل المفتاح موجود *وله قيمة فعلية* (ليست nil ولا نصاً فارغاً)؟
+fun requireNonEmptyField(obj, key) {
+    if (has(obj, key) == false) {
+        return { ok: false, error: "requireNonEmptyField: الحقل الإلزامي غير موجود: " + key };
+    }
+    if (rq_isMissing(obj[key])) {
+        return { ok: false, error: "requireNonEmptyField: الحقل الإلزامي فارغ: " + key };
+    }
+    return { ok: true, value: obj[key] };
+}
+
+// ---- 2) دفعة حقول إلزامية — تجمع كل الحقول الناقصة دفعة واحدة --------------
+
+// keysArr = ["name", "email", ...] — يُعيد كل المفاتيح غير الموجودة أصلاً في obj
+fun requireFields(obj, keysArr) {
+    let missing = [];
+    let i = 0;
+    while (i < len(keysArr)) {
+        if (has(obj, keysArr[i]) == false) { push(missing, keysArr[i]); }
+        i = i + 1;
+    }
+    if (len(missing) == 0) { return { ok: true }; }
+    return { ok: false, missing: missing, error: "requireFields: حقول إلزامية ناقصة: " + join(missing, "، ") };
+}
+
+// كـrequireFields لكن تعتبر القيمة الفارغة (nil/"") ناقصة أيضاً، لا وجود المفتاح فقط
+fun requireNonEmptyFields(obj, keysArr) {
+    let missing = [];
+    let i = 0;
+    while (i < len(keysArr)) {
+        let k = keysArr[i];
+        if (has(obj, k) == false or rq_isMissing(obj[k])) { push(missing, k); }
+        i = i + 1;
+    }
+    if (len(missing) == 0) { return { ok: true }; }
+    return { ok: false, missing: missing, error: "requireNonEmptyFields: حقول إلزامية فارغة أو ناقصة: " + join(missing, "، ") };
+}
+
+// ---- 3) مجموعات إلزامية شرطية (اختيار واحد بين عدّة حقول) ------------------
+
+// يكفي أن يكون حقل واحد على الأقل من keysArr موجوداً وله قيمة (مثال: هاتف أو بريد)
+fun requireAtLeastOne(obj, keysArr) {
+    let i = 0;
+    while (i < len(keysArr)) {
+        let k = keysArr[i];
+        if (has(obj, k) and rq_isMissing(obj[k]) == false) { return { ok: true, matched: k }; }
+        i = i + 1;
+    }
+    return { ok: false, error: "requireAtLeastOne: يجب توفير أحد الحقول التالية على الأقل: " + join(keysArr, "، ") };
+}
+
+// حقل واحد فقط بالضبط من keysArr يجب أن يكون موجوداً وله قيمة (حقول متعارضة/متبادلة)
+fun requireExactlyOne(obj, keysArr) {
+    let present = [];
+    let i = 0;
+    while (i < len(keysArr)) {
+        let k = keysArr[i];
+        if (has(obj, k) and rq_isMissing(obj[k]) == false) { push(present, k); }
+        i = i + 1;
+    }
+    if (len(present) == 1) { return { ok: true, matched: present[0] }; }
+    if (len(present) == 0) {
+        return { ok: false, error: "requireExactlyOne: يجب توفير أحد الحقول التالية: " + join(keysArr, "، ") };
+    }
+    return { ok: false, error: "requireExactlyOne: حقول متعارضة، يُسمح بواحد فقط من: " + join(present, "، ") };
+}
+
+// ---- 4) اشتراطات عامة على قيمة مفردة (بأسلوب Design by Contract) ----------
+
+// اشتراط عام: يُعيد {ok:true} إن كان cond صحيحاً، وإلا {ok:false, error:message}
+fun requireThat(cond, message) {
+    if (cond) { return { ok: true }; }
+    return { ok: false, error: message };
+}
+
+// يشترط أن تقع value بين minVal وmaxVal (بما فيهما)
+fun requireInRange(value, minVal, maxVal, fieldName) {
+    if (value >= minVal and value <= maxVal) { return { ok: true }; }
+    return { ok: false, error: fieldName + ": يجب أن يكون بين " + toString(minVal) + " و" + toString(maxVal) };
+}
+
+// يشترط أن تكون value إحدى القيم المسموحة في allowed (مصفوفة)
+fun requireOneOf(value, allowed, fieldName) {
+    if (contains(allowed, value)) { return { ok: true }; }
+    return { ok: false, error: fieldName + ": قيمة غير مسموحة (" + toString(value) + ")" };
+}
+
+// يشترط ألا يقل طول value (نص أو مصفوفة) عن minLen
+fun requireMinLen(value, minLen, fieldName) {
+    if (len(value) >= minLen) { return { ok: true }; }
+    return { ok: false, error: fieldName + ": طول أقل من الحد الأدنى المطلوب (" + toString(minLen) + ")" };
+}
+
+// يشترط ألا يزيد طول value (نص أو مصفوفة) عن maxLen
+fun requireMaxLen(value, maxLen, fieldName) {
+    if (len(value) <= maxLen) { return { ok: true }; }
+    return { ok: false, error: fieldName + ": طول أكبر من الحد الأقصى المسموح (" + toString(maxLen) + ")" };
+}
+
+// ---- 5) تجميع عدّة اشتراطات معاً --------------------------------------------
+
+// checks = مصفوفة نتائج {ok,...} (كالتي تُعيدها الدوال أعلاه) — يجمع كل رسائل
+// الفشل دفعة واحدة بدل التوقف عند أول خطأ؛ مثالي لعرض كل أخطاء نموذج معاً
+fun requireAll(checks) {
+    let errors = [];
+    let i = 0;
+    while (i < len(checks)) {
+        if (checks[i]["ok"] == false) { push(errors, checks[i]["error"]); }
+        i = i + 1;
+    }
+    if (len(errors) == 0) { return { ok: true }; }
+    return { ok: false, errors: errors };
+}
+
+// كـrequireAll لكن يتوقّف عند أول اشتراط فاشل ويُعيده مباشرة (أسرع حين يكفيك أول خطأ فقط)
+fun requireFirstFailure(checks) {
+    let i = 0;
+    while (i < len(checks)) {
+        if (checks[i]["ok"] == false) { return checks[i]; }
+        i = i + 1;
+    }
+    return { ok: true };
+}
+)REQUIREKITOGRIN";
+
 inline const std::unordered_map<std::string, std::string>& embeddedRinLibraries() {
     static const std::unordered_map<std::string, std::string> libs = {
         {"lib/math.og.rin", kLib_math_og_rin},
@@ -9070,6 +9556,8 @@ inline const std::unordered_map<std::string, std::string>& embeddedRinLibraries(
         {"lib/relyRIN.og.rin", kLib_relyRIN_og_rin},
         {"lib/movingmask.og.rin", kLib_movingmask_og_rin},
         {"lib/nlpkit.og.rin", kLib_nlpkit_og_rin},
+        {"lib/syskit.og.rin", kLib_syskit_og_rin},
+        {"lib/requirekit.og.rin", kLib_requirekit_og_rin},
     };
     return libs;
 }
