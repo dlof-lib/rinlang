@@ -882,6 +882,19 @@ private:
     // rin_interpreter.cpp لقائمة الأنواع البدائية المدعومة بالضبط.
     void checkDeclaredType(const Value& v, const std::string& typeName, const std::string& context, int line) const;
 
+    // ---- RMF (Rin Math Fabric) Phase 1 §33/§41 — Operator Overloading ----
+    // الأساس اللي كل نوع رياضي إضافي (Vector/Matrix/Complex/Fraction/Unit...) يُبنى فوقه: أي صنف
+    // (class/struct) يعرّف دالة سحرية باسم معيّن (__add__/__sub__/__mul__/__div__/__mod__/__neg__)
+    // يصبح فوراً قابلاً للاستخدام مع عامل التشغيل المقابل (+ - * / % وسالب أحادي) بدل الحاجة لدالة
+    // منفصلة (add(a,b)) لكل نوع جديد -- هذا ما يجعل RMF "لغة رياضية واحدة متماسكة" بدل مجموعة
+    // دوال متفرقة (انظر evaluate(BinaryExpr)/evaluate(UnaryExpr) في rin_interpreter.cpp). يُبحَث
+    // أولاً في الطرف الأيسر (left.__op__(right))، ثم في الطرف الأيمن إن غاب (لعمليات مثل
+    // Number * Vector عندما لا يعرّف Number نفسه أي شيء عن Vector). لا نتيجة (nullopt) يعني: لا
+    // يوجد أي طرف INSTANCE يعرّف هذه الدالة السحرية، فليكمل المستدعي بمنطقه الرقمي العادي (والذي
+    // سيرمي خطأ نوع واضحاً بنفسه إن لم يكن كلا الطرفين رقماً أصلاً).
+    std::optional<Value> tryOperatorOverload(const std::string& magicName, const Value& left,
+                                              const Value& right, int line);
+
     // ---- RinFlow internals ----
     // يُنفِّذ نداءً واحداً بالاسم (builtinOps الخاصة، ثم natives، ثم دالة Rin مُعرَّفة) بعد أن تكون
     // [args] قد قُيِّمت مسبقاً بالفعل. استُخرِج من داخل حالة CallExpr في evaluate() (rin_interpreter.cpp)
