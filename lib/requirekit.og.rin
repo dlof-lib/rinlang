@@ -1,0 +1,170 @@
+// ============================================================================
+//  lib/requirekit.og.rin — عدّة الحقول والاشتراطات الإلزامية (Mandatory / Required Kit)
+//  استيراد:
+//    @import "lib/requirekit.og.rin";
+//    @import "lib/requirekit.og.rin" as require;
+//
+//  مكتبة Rin خالصة (بلا أي تعديل على محرّك C++) للتحقّق من "الإلزامية": حقول
+//  إلزامية في خريطة (نموذج/طلب/كائن)، مجموعات إلزامية شرطية (أحدها على الأقل /
+//  واحد فقط منها)، واشتراطات عامة بأسلوب "Design by Contract" (require/ensure).
+//  كلها بنفس اتفاقية {ok:true/...} أو {ok:false, error/errors:...} المستخدمة في
+//  validate.og.rin/opskit.og.rin/syskit.og.rin — بلا توقّف مفاجئ بخطأ أبداً.
+//
+//  الفارق عن lib/validate.og.rin: تلك تتحقق من *شكل* قيمة مفردة (بريد صالح؟
+//  رقم صالح؟)، بينما هذه تتحقق من *وجود/إلزامية* حقول كاملة داخل خريطة، وتُجمِّع
+//  كل الحقول/الاشتراطات الناقصة دفعة واحدة بدل التوقف عند أول خطأ — مفيد لعرض
+//  كل مشاكل نموذج إدخال للمستخدم مرة واحدة بدل رسالة واحدة في كل مرة.
+//
+//  مثال سريع:
+//    let form = { name: "ريما", email: "" };
+//    let r = requireNonEmptyFields(form, ["name", "email", "phone"]);
+//    print r;  // {ok:false, missing:["email","phone"], error:"..."}
+//
+//    let checks = [
+//        requireThat(len(form["name"]) > 0, "الاسم مطلوب"),
+//        requireInRange(17, 18, 99, "العمر")
+//    ];
+//    print requireAll(checks);  // {ok:false, errors:["العمر: يجب أن يكون بين 18 و99"]}
+// ============================================================================
+
+// هل القيمة "مفقودة" فعلياً (nil أو نص فارغ)؟ مساعد داخلي لهذه المكتبة تحديداً
+// (كل مكتبة lib/*.og.rin قائمة بذاتها، بلا اعتماد متبادل على مكتبات أخرى)
+fun rq_isMissing(v) {
+    if (v == nil) { return true; }
+    if (v == "") { return true; }
+    return false;
+}
+
+// ---- 1) حقل إلزامي واحد على خريطة (map/object/form) ------------------------
+
+// هل المفتاح key موجود أصلاً في obj (بصرف النظر عن قيمته، حتى لو فارغة)؟
+fun requireField(obj, key) {
+    if (has(obj, key) == false) {
+        return { ok: false, error: "requireField: الحقل الإلزامي غير موجود: " + key };
+    }
+    return { ok: true, value: obj[key] };
+}
+
+// هل المفتاح موجود *وله قيمة فعلية* (ليست nil ولا نصاً فارغاً)؟
+fun requireNonEmptyField(obj, key) {
+    if (has(obj, key) == false) {
+        return { ok: false, error: "requireNonEmptyField: الحقل الإلزامي غير موجود: " + key };
+    }
+    if (rq_isMissing(obj[key])) {
+        return { ok: false, error: "requireNonEmptyField: الحقل الإلزامي فارغ: " + key };
+    }
+    return { ok: true, value: obj[key] };
+}
+
+// ---- 2) دفعة حقول إلزامية — تجمع كل الحقول الناقصة دفعة واحدة --------------
+
+// keysArr = ["name", "email", ...] — يُعيد كل المفاتيح غير الموجودة أصلاً في obj
+fun requireFields(obj, keysArr) {
+    let missing = [];
+    let i = 0;
+    while (i < len(keysArr)) {
+        if (has(obj, keysArr[i]) == false) { push(missing, keysArr[i]); }
+        i = i + 1;
+    }
+    if (len(missing) == 0) { return { ok: true }; }
+    return { ok: false, missing: missing, error: "requireFields: حقول إلزامية ناقصة: " + join(missing, "، ") };
+}
+
+// كـrequireFields لكن تعتبر القيمة الفارغة (nil/"") ناقصة أيضاً، لا وجود المفتاح فقط
+fun requireNonEmptyFields(obj, keysArr) {
+    let missing = [];
+    let i = 0;
+    while (i < len(keysArr)) {
+        let k = keysArr[i];
+        if (has(obj, k) == false or rq_isMissing(obj[k])) { push(missing, k); }
+        i = i + 1;
+    }
+    if (len(missing) == 0) { return { ok: true }; }
+    return { ok: false, missing: missing, error: "requireNonEmptyFields: حقول إلزامية فارغة أو ناقصة: " + join(missing, "، ") };
+}
+
+// ---- 3) مجموعات إلزامية شرطية (اختيار واحد بين عدّة حقول) ------------------
+
+// يكفي أن يكون حقل واحد على الأقل من keysArr موجوداً وله قيمة (مثال: هاتف أو بريد)
+fun requireAtLeastOne(obj, keysArr) {
+    let i = 0;
+    while (i < len(keysArr)) {
+        let k = keysArr[i];
+        if (has(obj, k) and rq_isMissing(obj[k]) == false) { return { ok: true, matched: k }; }
+        i = i + 1;
+    }
+    return { ok: false, error: "requireAtLeastOne: يجب توفير أحد الحقول التالية على الأقل: " + join(keysArr, "، ") };
+}
+
+// حقل واحد فقط بالضبط من keysArr يجب أن يكون موجوداً وله قيمة (حقول متعارضة/متبادلة)
+fun requireExactlyOne(obj, keysArr) {
+    let present = [];
+    let i = 0;
+    while (i < len(keysArr)) {
+        let k = keysArr[i];
+        if (has(obj, k) and rq_isMissing(obj[k]) == false) { push(present, k); }
+        i = i + 1;
+    }
+    if (len(present) == 1) { return { ok: true, matched: present[0] }; }
+    if (len(present) == 0) {
+        return { ok: false, error: "requireExactlyOne: يجب توفير أحد الحقول التالية: " + join(keysArr, "، ") };
+    }
+    return { ok: false, error: "requireExactlyOne: حقول متعارضة، يُسمح بواحد فقط من: " + join(present, "، ") };
+}
+
+// ---- 4) اشتراطات عامة على قيمة مفردة (بأسلوب Design by Contract) ----------
+
+// اشتراط عام: يُعيد {ok:true} إن كان cond صحيحاً، وإلا {ok:false, error:message}
+fun requireThat(cond, message) {
+    if (cond) { return { ok: true }; }
+    return { ok: false, error: message };
+}
+
+// يشترط أن تقع value بين minVal وmaxVal (بما فيهما)
+fun requireInRange(value, minVal, maxVal, fieldName) {
+    if (value >= minVal and value <= maxVal) { return { ok: true }; }
+    return { ok: false, error: fieldName + ": يجب أن يكون بين " + toString(minVal) + " و" + toString(maxVal) };
+}
+
+// يشترط أن تكون value إحدى القيم المسموحة في allowed (مصفوفة)
+fun requireOneOf(value, allowed, fieldName) {
+    if (contains(allowed, value)) { return { ok: true }; }
+    return { ok: false, error: fieldName + ": قيمة غير مسموحة (" + toString(value) + ")" };
+}
+
+// يشترط ألا يقل طول value (نص أو مصفوفة) عن minLen
+fun requireMinLen(value, minLen, fieldName) {
+    if (len(value) >= minLen) { return { ok: true }; }
+    return { ok: false, error: fieldName + ": طول أقل من الحد الأدنى المطلوب (" + toString(minLen) + ")" };
+}
+
+// يشترط ألا يزيد طول value (نص أو مصفوفة) عن maxLen
+fun requireMaxLen(value, maxLen, fieldName) {
+    if (len(value) <= maxLen) { return { ok: true }; }
+    return { ok: false, error: fieldName + ": طول أكبر من الحد الأقصى المسموح (" + toString(maxLen) + ")" };
+}
+
+// ---- 5) تجميع عدّة اشتراطات معاً --------------------------------------------
+
+// checks = مصفوفة نتائج {ok,...} (كالتي تُعيدها الدوال أعلاه) — يجمع كل رسائل
+// الفشل دفعة واحدة بدل التوقف عند أول خطأ؛ مثالي لعرض كل أخطاء نموذج معاً
+fun requireAll(checks) {
+    let errors = [];
+    let i = 0;
+    while (i < len(checks)) {
+        if (checks[i]["ok"] == false) { push(errors, checks[i]["error"]); }
+        i = i + 1;
+    }
+    if (len(errors) == 0) { return { ok: true }; }
+    return { ok: false, errors: errors };
+}
+
+// كـrequireAll لكن يتوقّف عند أول اشتراط فاشل ويُعيده مباشرة (أسرع حين يكفيك أول خطأ فقط)
+fun requireFirstFailure(checks) {
+    let i = 0;
+    while (i < len(checks)) {
+        if (checks[i]["ok"] == false) { return checks[i]; }
+        i = i + 1;
+    }
+    return { ok: true };
+}
