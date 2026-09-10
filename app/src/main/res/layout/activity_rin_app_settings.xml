@@ -1,0 +1,142 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- شاشة "إعدادات" تطبيق Rin مُصدَّر: تفاصيله الكاملة (معرّف الحزمة، الحجم، تاريخ التصدير،
+     ملف الدخول، مخطّط التوقيع، بصمة مفتاح التوقيع) وإجراءاته (تثبيت/مشاركة/حفظ/إعادة تصدير/حذف). -->
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/rin_background"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+
+        <include layout="@layout/toolbar_app" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="16dp">
+
+            <!-- بطاقة العنوان -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:background="@drawable/bg_library_card_mine"
+                android:padding="16dp">
+
+                <FrameLayout
+                    android:layout_width="46dp"
+                    android:layout_height="46dp"
+                    android:layout_marginEnd="14dp">
+
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:background="@drawable/bg_package_icon_gradient" />
+
+                    <ImageView
+                        android:layout_width="24dp"
+                        android:layout_height="24dp"
+                        android:layout_gravity="center"
+                        android:src="@drawable/ic_log_export"
+                        app:tint="@android:color/white"
+                        android:contentDescription="@null" />
+                </FrameLayout>
+
+                <TextView
+                    android:id="@+id/txtRinAppSettingsName"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:textColor="@color/rin_on_toolbar"
+                    android:textSize="18sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
+            <!-- بطاقة التفاصيل -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:layout_marginTop="12dp"
+                android:background="@drawable/bg_library_card_mine"
+                android:padding="16dp">
+
+                <include layout="@layout/row_rin_app_detail" android:id="@+id/rowRinAppProject" />
+                <include layout="@layout/row_rin_app_detail" android:id="@+id/rowRinAppPackageId" />
+                <include layout="@layout/row_rin_app_detail" android:id="@+id/rowRinAppEntryFile" />
+                <include layout="@layout/row_rin_app_detail" android:id="@+id/rowRinAppSize" />
+                <include layout="@layout/row_rin_app_detail" android:id="@+id/rowRinAppDate" />
+                <include layout="@layout/row_rin_app_detail" android:id="@+id/rowRinAppSigning" />
+                <include layout="@layout/row_rin_app_detail" android:id="@+id/rowRinAppFingerprint" />
+            </LinearLayout>
+
+            <!-- إجراءات -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:layout_marginTop="14dp">
+
+                <Button
+                    android:id="@+id/btnRinAppSettingsInstall"
+                    android:layout_width="0dp"
+                    android:layout_height="44dp"
+                    android:layout_weight="1"
+                    android:layout_marginEnd="6dp"
+                    android:text="@string/apk_export_action_install"
+                    android:textAllCaps="false"
+                    android:background="@drawable/bg_toolbar_btn_primary"
+                    android:textColor="@android:color/white" />
+
+                <Button
+                    android:id="@+id/btnRinAppSettingsShare"
+                    android:layout_width="0dp"
+                    android:layout_height="44dp"
+                    android:layout_weight="1"
+                    android:layout_marginEnd="6dp"
+                    android:text="@string/apk_export_action_share"
+                    android:textAllCaps="false"
+                    android:background="@drawable/bg_toolbar_btn_ghost"
+                    android:textColor="@color/rin_on_toolbar" />
+
+                <Button
+                    android:id="@+id/btnRinAppSettingsSave"
+                    android:layout_width="0dp"
+                    android:layout_height="44dp"
+                    android:layout_weight="1"
+                    android:text="@string/apk_export_action_save"
+                    android:textAllCaps="false"
+                    android:background="@drawable/bg_toolbar_btn_ghost"
+                    android:textColor="@color/rin_on_toolbar" />
+            </LinearLayout>
+
+            <Button
+                android:id="@+id/btnRinAppSettingsReExport"
+                android:layout_width="match_parent"
+                android:layout_height="44dp"
+                android:layout_marginTop="10dp"
+                android:text="@string/rin_app_action_reexport"
+                android:textAllCaps="false"
+                android:background="@drawable/bg_toolbar_btn_ghost"
+                android:textColor="@color/rin_on_toolbar" />
+
+            <Button
+                android:id="@+id/btnRinAppSettingsDelete"
+                android:layout_width="match_parent"
+                android:layout_height="44dp"
+                android:layout_marginTop="10dp"
+                android:text="@string/rin_app_action_delete"
+                android:textAllCaps="false"
+                android:background="@drawable/bg_toolbar_btn_ghost"
+                android:textColor="@color/pipeline_terminal_red" />
+
+        </LinearLayout>
+    </LinearLayout>
+</ScrollView>
