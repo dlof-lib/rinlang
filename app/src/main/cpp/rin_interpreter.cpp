@@ -5442,6 +5442,37 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
         }
         return;
     }
+    // match (subject) { case v1, v2 { .. } case v3 { .. } [else { .. }] } -> مطابقة أنماط (انظر
+    // MatchStmt في rin_ast.h). subject يُقيَّم مرة واحدة فقط؛ لكل case بالترتيب، نقارن subject بكل
+    // قيمة في case.values (نفس دلالة == تماماً عبر valuesEqual الموجودة أصلاً)؛ أول case تُطابق
+    // فيها أي قيمة يُنفَّذ جسمها (داخل بيئة/نطاق Environment خاصة به، كأي كتلة {} أخرى) ثم تتوقف
+    // المطابقة فوراً (بلا "fallthrough"). لم تُطابق أي حالة؟ يُنفَّذ elseBranch إن وُجدت، وإلا لا شيء.
+    if (auto s = std::dynamic_pointer_cast<MatchStmt>(stmt)) {
+        Value subject = evaluate(s->subject, env);
+        for (auto& mc : s->cases) {
+            bool matched = false;
+            for (auto& valExpr : mc.values) {
+                if (valuesEqual(subject, evaluate(valExpr, env))) { matched = true; break; }
+            }
+            if (matched) {
+                auto caseEnv = std::make_shared<Environment>(env);
+                executeBlock(mc.body->statements, caseEnv);
+                return;
+            }
+        }
+        if (s->elseBranch) {
+            auto elseEnv = std::make_shared<Environment>(env);
+            executeBlock(s->elseBranch->statements, elseEnv);
+        }
+        return;
+    }
+    // achieve expr; / achieve; -> ينهي أقرب كتلة goal {..} محيطة (انظر GoalExpr/AchieveStmt في
+    // rin_ast.h وevaluate(GoalExpr) أدناه الذي يلتقط هذه الإشارة). الفحص وقت التحليل (Parser::
+    // achieveStatement) يضمن أصلاً أن هذه العبارة لا تظهر إلا داخل goal، لذا لا حاجة لفحص إضافي هنا.
+    if (auto s = std::dynamic_pointer_cast<AchieveStmt>(stmt)) {
+        Value v = s->value ? evaluate(s->value, env) : Value::nil();
+        throw AchieveSignal{v};
+    }
     if (auto s = std::dynamic_pointer_cast<FunctionStmt>(stmt)) {
         // نفس فحص التصادم المطبَّق عند hoisting المستوى الأعلى (انظر run()/callTopLevelFunction
         // ونameCollides): بلا هذا الفحص، دالة محلية باسم يطابق native/class كانت ستُشلّ بصمت
@@ -7101,6 +7132,19 @@ Value Interpreter::evaluate(const ExprPtr& expr, EnvPtr env) {
     if (auto e = std::dynamic_pointer_cast<ConditionalExpr>(expr)) {
         if (evaluate(e->condition, env).isTruthy()) return evaluate(e->whenTrue, env);
         return evaluate(e->whenFalse, env);
+    }
+    // goal { ... } -> ينفّذ الجسم تتابعياً (كأي كتلة {} عادية، داخل بيئة/نطاق Environment خاصة به)؛
+    // إن رُميت AchieveSignal بداخله (عبر 'achieve expr;')، تصبح قيمة التعبير هي تلك القيمة فوراً؛
+    // وإلا (اكتمل الجسم بالكامل بلا أي achieve) تكون قيمة التعبير nil. انظر GoalExpr/AchieveStmt في
+    // rin_ast.h للشرح الكامل، وexecute(AchieveStmt) أعلاه لجهة الرمي.
+    if (auto e = std::dynamic_pointer_cast<GoalExpr>(expr)) {
+        auto goalEnv = std::make_shared<Environment>(env);
+        try {
+            executeBlock(e->body->statements, goalEnv);
+        } catch (AchieveSignal& a) {
+            return a.value;
+        }
+        return Value::nil();
     }
     if (auto e = std::dynamic_pointer_cast<LogicalExpr>(expr)) {
         Value left = evaluate(e->left, env);
