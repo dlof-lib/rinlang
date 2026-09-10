@@ -905,6 +905,16 @@ void Interpreter::registerNatives() {
         double t = asNumber(a[2], "lerp", line);
         return Value::num(x + (y - x) * t);
     };
+    // RMF Phase 2 §33/§41 — استبطان النوع (type introspection) من داخل Rin نفسها: يُعيد اسم نوع
+    // القيمة كنص ("number"/"string"/"bool"/"array"/"map"/"function"/"nil"، أو اسم الصنف الفعلي لأي
+    // class/struct instance -- انظر Value::typeName() في هذا الملف). هذا ما يسمح لدالة سحرية مثل
+    // Matrix.__mul__ أن تميّز بنفسها (من كود Rin) بين "الطرف الآخر رقم" و"الطرف الآخر Vector3" و
+    // "الطرف الآخر Matrix" وتتصرف بما يناسب كل حالة، بدل الحاجة لثلاث دوال منفصلة (mulScalar/
+    // mulVector/mulMatrix) -- هذا بالضبط أساس "الحساب الذكي" (§3) و"الترقية التلقائية للأنواع" (§33).
+    natives["type"] = [](std::vector<Value>& a, int line) {
+        expectArgs("type", a, 1, line);
+        return Value::string(a[0].typeName());
+    };
     // رقم إصدار المحرّك الرسمي (rin_version.h — المصدر الوحيد، انظر
     // docs/VERSIONING.md) متاح الآن داخل كود Rin نفسه، وليس فقط عبر
     // rin --version / rin_engine_version() / RinEngine.engineVersion() على
