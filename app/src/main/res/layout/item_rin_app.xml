@@ -1,0 +1,122 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:background="@drawable/bg_library_card_mine"
+    android:layout_margin="6dp"
+    android:paddingStart="16dp"
+    android:paddingTop="14dp"
+    android:paddingEnd="13dp"
+    android:paddingBottom="13dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+
+        <FrameLayout
+            android:layout_width="38dp"
+            android:layout_height="38dp"
+            android:layout_marginEnd="12dp">
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:background="@drawable/bg_package_icon_gradient" />
+
+            <ImageView
+                android:layout_width="20dp"
+                android:layout_height="20dp"
+                android:layout_gravity="center"
+                android:scaleType="fitCenter"
+                android:src="@drawable/ic_log_export"
+                app:tint="@android:color/white"
+                android:contentDescription="@null" />
+        </FrameLayout>
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/txtRinAppName"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textSize="16sp"
+                android:textStyle="bold"
+                android:textColor="@color/rin_on_toolbar"
+                android:ellipsize="end"
+                android:maxLines="1" />
+
+            <TextView
+                android:id="@+id/txtRinAppMeta"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="5dp"
+                android:background="@drawable/bg_chip_meta"
+                android:paddingHorizontal="9dp"
+                android:paddingVertical="2dp"
+                android:textSize="11sp"
+                android:textColor="@color/rin_editor_hint" />
+        </LinearLayout>
+
+        <ImageButton
+            android:id="@+id/btnRinAppMore"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:padding="8dp"
+            android:background="@drawable/bg_icon_btn"
+            android:contentDescription="@string/rin_apps_more_actions"
+            android:src="@drawable/ic_node_sort" />
+    </LinearLayout>
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:layout_marginTop="12dp"
+        android:background="@color/rin_divider" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:orientation="horizontal">
+
+        <Button
+            android:id="@+id/btnRinAppDetails"
+            android:layout_width="0dp"
+            android:layout_height="34dp"
+            android:layout_weight="1"
+            android:layout_marginEnd="6dp"
+            android:minWidth="0dp"
+            android:minHeight="0dp"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            android:text="@string/rin_app_action_details"
+            android:textAllCaps="false"
+            android:textSize="12sp"
+            android:background="@drawable/bg_toolbar_btn_ghost"
+            android:textColor="@color/rin_on_toolbar" />
+
+        <Button
+            android:id="@+id/btnRinAppInstall"
+            android:layout_width="0dp"
+            android:layout_height="34dp"
+            android:layout_weight="1"
+            android:minWidth="0dp"
+            android:minHeight="0dp"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            android:text="@string/apk_export_action_install"
+            android:textAllCaps="false"
+            android:textSize="12sp"
+            android:background="@drawable/bg_toolbar_btn_primary"
+            android:textColor="@android:color/white" />
+    </LinearLayout>
+
+</LinearLayout>
