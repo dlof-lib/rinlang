@@ -86,6 +86,18 @@ inline Value evalAttrExpr(const rin::ExprPtr& e, const WarpScope& warp, std::vec
         if (bin->op == rin::TokenType::SLASH) return Value::num(r.asNumber()!=0 ? l.asNumber() / r.asNumber() : 0.0);
         return Value::txt(l.asString() + r.asString());
     }
+    if (auto cond = std::dynamic_pointer_cast<rin::ConditionalExpr>(e)) {
+        // Ternary in a @view attribute (background=pressed ? "#a" : "#b";). RIN's own
+        // truthiness (rin_interpreter.cpp's isTruthy): a STRING is truthy unless empty or
+        // literally "false"; a NUMBER is truthy unless exactly 0. Only the winning branch is
+        // evaluated -- readNames still records reads from *both* the condition and whichever
+        // branch actually ran, exactly like every other case above, so a Warp update to a cell
+        // used only in the untaken branch still re-subscribes correctly next time it's taken.
+        Value c = evalAttrExpr(cond->condition, warp, readNames);
+        bool truthy = (c.kind == Value::Kind::NUMBER) ? (c.number != 0.0) : !(c.str.empty() || c.str == "false");
+        return truthy ? evalAttrExpr(cond->whenTrue, warp, readNames)
+                      : evalAttrExpr(cond->whenFalse, warp, readNames);
+    }
     if (auto call = std::dynamic_pointer_cast<rin::CallExpr>(e)) {
         // Event-handler attributes (onTap=increment(count);) are captured as a raw descriptor
         // string "increment(count)" rather than invoked here — Needle (input dispatch) matches
