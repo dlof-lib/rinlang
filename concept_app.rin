@@ -1,0 +1,50 @@
+// concept_app.rin — تطبيق Loom حقيقي (وليس نموذجاً منطقياً فقط): كل سلوك هنا
+// مرتبط بعنصر @view فعلي، وكل onTap= يستدعي فعل Loom Action حقيقي مسجَّل أصلاً
+// في app/src/main/cpp/loom/rin_loom_actions.h (toggle/increment/decrement)،
+// فتُعاد صياغة الشجرة وتُرسم فعلياً — أي تغيير هنا يظهر في JSON/PNG حقيقيين.
+//
+// شغّله:
+//   render:  rin_loom_run render concept_app.rin
+//   تفاعلي:  rin_loom_run session concept_app.rin
+//            ثم اكتب: tap <x> <y>   لِلَمس أي زر فعلياً وإعادة الرسم الحقيقية
+
+warp pressed  = false;   // ضغط الزر (تغذية بصرية فورية)
+warp selected = false;   // تبديل عام
+warp visible  = true;    // إظهار/إخفاء
+warp dark     = false;   // تغيير اللون
+warp zoom     = 96;      // تكبير/تصغير (width=/height= حقيقيان)
+warp posX     = 20;      // سحب (نُدغَة يسار/يمين حقيقية عبر margin_left=)
+warp posY     = 20;      // سحب (نُدغَة أعلى/أسفل حقيقية عبر margin_top=)
+
+@view.Column=root
+  gap=16; padding=20;
+
+  // البطاقة: كل خاصية هنا معبَّر عنها كتعبير Rin حقيقي يُعاد تقييمه عند كل
+  // تغيير Warp — width=/height= (زووم فعلي)، background= (لون فعلي، بتعبير
+  // شرطي ternary حقيقي)، margin_left=/margin_top= (موضع فعلي = سحب)،
+  // visible= (إظهار/إخفاء فعلي).
+  @view.Box=card
+    width=zoom; height=zoom;
+    background=dark ? "#1b1f2a" : (pressed ? "#2f7dc4" : "#3498db");
+    radius=16;
+    margin_left=posX; margin_top=posY;
+    visible=visible;
+    onTap=toggle(pressed);
+  .end/view
+
+  @view.Text=state
+    text="pressed=" + pressed + "  selected=" + selected + "  zoom=" + zoom + "  x=" + posX + "  y=" + posY;
+    size=12; color="#8b899c";
+  .end/view
+
+  @view.Row=controls
+    gap=8;
+    @view.Button=zoomIn     label="+";        onTap=increment(zoom, 12);   .end/view
+    @view.Button=zoomOut    label="-";        onTap=decrement(zoom, 12);   .end/view
+    @view.Button=nudgeRight label="سحب →";    onTap=increment(posX, 20);   .end/view
+    @view.Button=nudgeDown  label="سحب ↓";    onTap=increment(posY, 20);   .end/view
+    @view.Button=colorBtn   label="لون";      onTap=toggle(dark);          .end/view
+    @view.Button=visBtn     label="إظهار/إخفاء"; onTap=toggle(visible);    .end/view
+    @view.Button=selBtn     label="تحديد";    onTap=toggle(selected); variant=selected ? "outline" : "filled"; .end/view
+  .end/view
+.end/view
