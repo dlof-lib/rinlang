@@ -9528,6 +9528,404 @@ fun requireFirstFailure(checks) {
     return { ok: true };
 }
 )REQUIREKITOGRIN";
+static const char* kLib_physics_og_rin = R"PHYSICSOGRIN(
+// ============================================================================
+//  lib/physics.og.rin — مكتبة فيزياء متكاملة فوق stdlib الأساسية
+//  استيراد:
+//    @import "lib/physics.og.rin";
+//    @import "lib/physics.og.rin" as physics;
+//
+//  مكتبة Rin خالصة (بلا أي تعديل على محرّك C++)، قائمة بذاتها بالكامل مثل باقي
+//  lib/*.og.rin (لا تعتمد على lib/math.og.rin ولا أي مكتبة أخرى، حتى تعمل بمجرد
+//  استيرادها وحدها). لتفادي أي تعارض أسماء مع lib/math.og.rin عند استيراد
+//  الاثنتين معاً في نفس النطاق (مثال شائع جداً في سكربتات الفيزياء/الألعاب)،
+//  كل دالة هنا مسبوقة بـ px (Physics) — فمتجهاتها px* منفصلة تماماً عن vec2/vec3
+//  في math.og.rin، وحتى المثلثات الداخلية هنا pxSin/pxCos منفصلة عن sin/cos هناك.
+//
+//  الوحدات المستخدمة افتراضياً في كل الصيغ: SI — كتلة بالكيلوغرام (kg)،
+//  مسافة بالمتر (m)، زمن بالثانية (s)، قوة بالنيوتن (N)، طاقة بالجول (J).
+//
+//  الأقسام:
+//    0) ثوابت فيزيائية
+//    1) زوايا ومثلثات داخلية (Taylor + اختزال مجال، لأن المفسّر لا يدعمها فطرياً)
+//    2) متجهات فيزيائية ثنائية الأبعاد (موضع/سرعة/قوة كمصفوفة [x, y])
+//    3) حركة خطية أحادية البعد (kinematics)
+//    4) حركة إسقاطية (projectile motion) — متجهية فوق الجاذبية
+//    5) قوى ونيوتن (Newton's laws)
+//    6) طاقة وشغل وزخم واصطدامات
+//    7) حركة دائرية ودورانية
+//    8) نوابض واهتزاز توافقي بسيط (SHM)
+//    9) كثافة وضغط وطفو (سوائل)
+//
+//  مثال سريع (قذيفة تنطلق بسرعة 20م/ث وزاوية 45°):
+//    let range = pxProjectileRange(20, 45, PX_G_EARTH);
+//    let pos = pxProjectilePositionAt([0, 0], pxProjectileVelocity(20, 45), PX_G_EARTH, 1.0);
+//    print range; print pos;
+// ============================================================================
+
+// ---------------------------------------------------------------------------
+// 0) ثوابت فيزيائية (وحدات SI)
+// ---------------------------------------------------------------------------
+let PX_G_EARTH  = 9.81;          // تسارع الجاذبية على سطح الأرض (m/s²)
+let PX_G_MOON   = 1.62;          // على سطح القمر (m/s²)
+let PX_G_MARS   = 3.71;          // على سطح المريخ (m/s²)
+let PX_C        = 299792458;     // سرعة الضوء في الفراغ (m/s)
+let PX_G_CONST  = 0.0000000000667430; // ثابت الجذب العام G (m³·kg⁻¹·s⁻²)
+let PX_ATM      = 101325;        // ضغط جوي قياسي (باسكال Pa)
+let PX_WATER_DENSITY = 1000;     // كثافة الماء العذب (kg/m³)
+
+// ---------------------------------------------------------------------------
+// 1) زوايا ومثلثات داخلية — لا تعتمد على lib/math.og.rin عمداً (استقلالية كاملة)
+// ---------------------------------------------------------------------------
+
+fun pxDegToRad(deg) { return deg * (PI / 180); }
+fun pxRadToDeg(rad) { return rad * (180 / PI); }
+
+// يلفّ زاوية إلى المجال (-PI, PI] لتسريع/تدقيق تقارب سلاسل تايلور أدناه
+fun _pxReduceAngle(x) {
+    let tau = 2 * PI;
+    return x - tau * floor((x + PI) / tau);
+}
+
+fun pxSin(x) {
+    let v = _pxReduceAngle(x);
+    let v2 = v * v;
+    let term = v;
+    let total = v;
+    let i = 1;
+    while (i <= 15) {
+        term = term * (-v2) / ((2 * i) * (2 * i + 1));
+        total = total + term;
+        i = i + 1;
+    }
+    return total;
+}
+
+fun pxCos(x) {
+    let v = _pxReduceAngle(x);
+    let v2 = v * v;
+    let term = 1;
+    let total = 1;
+    let i = 1;
+    while (i <= 15) {
+        term = term * (-v2) / ((2 * i - 1) * (2 * i));
+        total = total + term;
+        i = i + 1;
+    }
+    return total;
+}
+
+// سلسلة تايلور لـ atan تفترض |x| صغيرة (تُستخدم داخلياً بعد اختزال المجال)
+fun _pxAtanTaylor(x) {
+    let x2 = x * x;
+    let term = x;
+    let total = x;
+    let i = 1;
+    while (i <= 12) {
+        term = term * (-x2);
+        total = total + term / (2 * i + 1);
+        i = i + 1;
+    }
+    return total;
+}
+
+fun _pxAtan(x) {
+    let neg = x < 0;
+    let v = x;
+    if (neg) { v = -v; }
+    let k = 0;
+    while (v > 0.1 and k < 60) {
+        v = v / (1 + sqrt(1 + v * v));
+        k = k + 1;
+    }
+    let result = _pxAtanTaylor(v) * pow(2, k);
+    if (neg) { return -result; }
+    return result;
+}
+
+// atan2(y, x): زاوية النقطة (x, y) بالراديان، مع مراعاة الربع الصحيح
+fun pxAtan2(y, x) {
+    if (x > 0) { return _pxAtan(y / x); }
+    if (x < 0) {
+        if (y >= 0) { return _pxAtan(y / x) + PI; }
+        return _pxAtan(y / x) - PI;
+    }
+    if (y > 0) { return PI / 2; }
+    if (y < 0) { return -(PI / 2); }
+    return 0;
+}
+
+// ---------------------------------------------------------------------------
+// 2) متجهات فيزيائية ثنائية الأبعاد — موضع/سرعة/تسارع/قوة كمصفوفة [x, y]
+// ---------------------------------------------------------------------------
+
+fun pxVec(x, y) { return [x, y]; }
+fun pxVecZero() { return [0, 0]; }
+fun pxVecAdd(a, b) { return [a[0] + b[0], a[1] + b[1]]; }
+fun pxVecSub(a, b) { return [a[0] - b[0], a[1] - b[1]]; }
+fun pxVecScale(a, s) { return [a[0] * s, a[1] * s]; }
+fun pxVecDot(a, b) { return a[0] * b[0] + a[1] * b[1]; }
+fun pxVecLengthSq(a) { return a[0] * a[0] + a[1] * a[1]; }
+fun pxVecLength(a) { return sqrt(pxVecLengthSq(a)); }
+
+fun pxVecNormalize(a) {
+    let len = pxVecLength(a);
+    if (len == 0) { return [0, 0]; }
+    return [a[0] / len, a[1] / len];
+}
+
+fun pxVecDistance(a, b) { return pxVecLength(pxVecSub(b, a)); }
+
+// زاوية المتجه بالراديان (اتجاه حركته)
+fun pxVecAngle(a) { return pxAtan2(a[1], a[0]); }
+
+// يبني متجهاً من زاوية (راديان) ومقدار (magnitude) — عكس pxVecAngle/pxVecLength
+fun pxVecFromAngle(angleRad, magnitude) {
+    return [magnitude * pxCos(angleRad), magnitude * pxSin(angleRad)];
+}
+
+// مجموع مصفوفة متجهات (لجمع عدّة قوى مثلاً) دفعة واحدة
+fun pxVecSum(vectors) {
+    let total = [0, 0];
+    let i = 0;
+    while (i < len(vectors)) {
+        total = pxVecAdd(total, vectors[i]);
+        i = i + 1;
+    }
+    return total;
+}
+
+// ---------------------------------------------------------------------------
+// 3) حركة خطية أحادية البعد (kinematics) — v0: سرعة ابتدائية، a: تسارع، t: زمن
+// ---------------------------------------------------------------------------
+
+// السرعة بعد زمن t بتسارع ثابت a
+fun pxVelocityAfter(v0, a, t) { return v0 + a * t; }
+
+// الإزاحة بعد زمن t بتسارع ثابت a
+fun pxDisplacement(v0, a, t) { return v0 * t + 0.5 * a * t * t; }
+
+// مربّع السرعة النهائية بعد إزاحة d بتسارع ثابت a (v² = v0² + 2ad) — بلا جذر
+fun pxVelocitySquaredAfterDistance(v0, a, d) { return v0 * v0 + 2 * a * d; }
+
+// السرعة النهائية (المقدار) بعد إزاحة d بتسارع ثابت a
+fun pxFinalVelocity(v0, a, d) {
+    let vSq = pxVelocitySquaredAfterDistance(v0, a, d);
+    if (vSq < 0) { return 0; }
+    return sqrt(vSq);
+}
+
+// متوسط السرعة خلال إزاحة d في زمن t
+fun pxAverageVelocity(d, t) {
+    if (t == 0) { return 0; }
+    return d / t;
+}
+
+// الزمن اللازم لتوقّف جسم يتباطأ بتسارع a (سالب) من سرعة ابتدائية v0
+fun pxTimeToStop(v0, a) {
+    if (a == 0) { return nil; }
+    return -v0 / a;
+}
+
+// ---------------------------------------------------------------------------
+// 4) حركة إسقاطية (Projectile motion) — متجهية فوق الجاذبية g (موجبة دائماً)
+// ---------------------------------------------------------------------------
+
+// متجه السرعة الابتدائية من سرعة إطلاق (speed) وزاوية بالدرجات (angleDeg)
+fun pxProjectileVelocity(speed, angleDeg) {
+    return pxVecFromAngle(pxDegToRad(angleDeg), speed);
+}
+
+// المدى الأفقي الكلي على أرض مستوية: v²sin(2θ)/g
+fun pxProjectileRange(speed, angleDeg, g) {
+    if (g == 0) { return nil; }
+    return (speed * speed * pxSin(2 * pxDegToRad(angleDeg))) / g;
+}
+
+// أقصى ارتفاع يصله المقذوف: v²sin²(θ)/(2g)
+fun pxProjectileMaxHeight(speed, angleDeg, g) {
+    if (g == 0) { return nil; }
+    let s = pxSin(pxDegToRad(angleDeg));
+    return (speed * speed * s * s) / (2 * g);
+}
+
+// زمن الطيران الكلي حتى العودة لنفس ارتفاع الإطلاق: 2·v·sin(θ)/g
+fun pxProjectileTimeOfFlight(speed, angleDeg, g) {
+    if (g == 0) { return nil; }
+    return (2 * speed * pxSin(pxDegToRad(angleDeg))) / g;
+}
+
+// موضع المقذوف عند الزمن t، انطلاقاً من pos0 بسرعة ابتدائية vel0 وجاذبية g
+// (خطوة محاكاة جاهزة للاستخدام داخل حلقة لعبة/محرّك فيزياء)
+fun pxProjectilePositionAt(pos0, vel0, g, t) {
+    let x = pos0[0] + vel0[0] * t;
+    let y = pos0[1] + vel0[1] * t - 0.5 * g * t * t;
+    return [x, y];
+}
+
+// سرعة المقذوف عند الزمن t (مكوّن x ثابت، y يتناقص بفعل الجاذبية)
+fun pxProjectileVelocityAt(vel0, g, t) {
+    return [vel0[0], vel0[1] - g * t];
+}
+
+// ---------------------------------------------------------------------------
+// 5) قوى ونيوتن (Newton's laws) — F = m·a
+// ---------------------------------------------------------------------------
+
+fun pxForceScalar(mass, accel) { return mass * accel; }
+fun pxForceVec(mass, accelVec) { return pxVecScale(accelVec, mass); }
+
+// التسارع الناتج عن قوة على كتلة (F = m·a -> a = F/m)
+fun pxAccelFromForce(force, mass) {
+    if (mass == 0) { return nil; }
+    return force / mass;
+}
+
+// وزن جسم (قوة الجاذبية عليه) بكتلة mass تحت تسارع جاذبية g
+fun pxWeight(mass, g) { return mass * g; }
+
+// محصّلة عدّة قوى متجهية (مصفوفة متجهات [x,y]) دفعة واحدة
+fun pxNetForceVec(forces) { return pxVecSum(forces); }
+
+// قوة الاحتكاك القصوى: μ (معامل الاحتكاك) × القوة العمودية
+fun pxFriction(normalForce, mu) { return mu * normalForce; }
+
+// القوة العمودية لجسم على سطح أفقي مستوٍ (بلا قوى رأسية أخرى)
+fun pxNormalForceOnFlat(mass, g) { return mass * g; }
+
+// ---------------------------------------------------------------------------
+// 6) طاقة وشغل وزخم واصطدامات
+// ---------------------------------------------------------------------------
+
+fun pxKineticEnergy(mass, v) { return 0.5 * mass * v * v; }
+fun pxPotentialEnergyGravity(mass, g, height) { return mass * g * height; }
+
+// الشغل المبذول بقوة تصنع زاوية angleDeg مع اتجاه الإزاحة
+fun pxWork(force, distance, angleDeg) {
+    return force * distance * pxCos(pxDegToRad(angleDeg));
+}
+
+fun pxPower(work, time) {
+    if (time == 0) { return nil; }
+    return work / time;
+}
+
+fun pxSpringPotentialEnergy(k, displacement) { return 0.5 * k * displacement * displacement; }
+
+fun pxMomentum(mass, v) { return mass * v; }
+fun pxImpulse(force, time) { return force * time; }
+
+// اصطدام عديم المرونة تماماً (الجسمان يلتصقان): سرعة مشتركة بعد الاصطدام
+fun pxInelasticCollisionVelocity(m1, v1, m2, v2) {
+    let totalMass = m1 + m2;
+    if (totalMass == 0) { return nil; }
+    return (m1 * v1 + m2 * v2) / totalMass;
+}
+
+// اصطدام مرن تماماً (1D): يُعيد {v1: السرعة الجديدة للجسم الأول, v2: للثاني}
+fun pxElasticCollision(m1, v1, m2, v2) {
+    let totalMass = m1 + m2;
+    if (totalMass == 0) { return { v1: v1, v2: v2 }; }
+    let newV1 = ((m1 - m2) * v1 + 2 * m2 * v2) / totalMass;
+    let newV2 = ((m2 - m1) * v2 + 2 * m1 * v1) / totalMass;
+    return { v1: newV1, v2: newV2 };
+}
+
+// ---------------------------------------------------------------------------
+// 7) حركة دائرية ودورانية
+// ---------------------------------------------------------------------------
+
+// التسارع الجذبي (المركزي) لجسم يتحرك بسرعة v على مسار دائري نصف قطره r
+fun pxCentripetalAcceleration(v, r) {
+    if (r == 0) { return nil; }
+    return (v * v) / r;
+}
+
+fun pxCentripetalForce(mass, v, r) {
+    let a = pxCentripetalAcceleration(v, r);
+    if (a == nil) { return nil; }
+    return mass * a;
+}
+
+// السرعة الزاوية (راديان/ثانية) من الدور الزمني (الزمن الدوري) T
+fun pxAngularVelocityFromPeriod(period) {
+    if (period == 0) { return nil; }
+    return (2 * PI) / period;
+}
+
+fun pxPeriodFromFrequency(freq) {
+    if (freq == 0) { return nil; }
+    return 1 / freq;
+}
+
+fun pxFrequencyFromPeriod(period) {
+    if (period == 0) { return nil; }
+    return 1 / period;
+}
+
+// السرعة الخطية المماسّية من السرعة الزاوية ونصف القطر (v = ω·r)
+fun pxTangentialSpeed(angularVelocity, r) { return angularVelocity * r; }
+
+// قوة الجذب العام بين كتلتين على بُعد r (قانون نيوتن للجاذبية الكونية)
+fun pxGravitationalForce(m1, m2, r) {
+    if (r == 0) { return nil; }
+    return (PX_G_CONST * m1 * m2) / (r * r);
+}
+
+// ---------------------------------------------------------------------------
+// 8) نوابض واهتزاز توافقي بسيط (SHM — Simple Harmonic Motion)
+// ---------------------------------------------------------------------------
+
+// قوة النابض حسب قانون هوك (سالبة الاتجاه دائماً نحو موضع الاتزان)
+fun pxHookeForce(k, displacement) { return -k * displacement; }
+
+// الدور الزمني لنابض-كتلة: T = 2π√(m/k)
+fun pxSpringPeriod(mass, k) {
+    if (k == 0) { return nil; }
+    return 2 * PI * sqrt(mass / k);
+}
+
+// الدور الزمني لبندول بسيط بطول length تحت جاذبية g: T = 2π√(L/g)
+fun pxPendulumPeriod(length, g) {
+    if (g == 0) { return nil; }
+    return 2 * PI * sqrt(length / g);
+}
+
+// موضع جسم يتحرك بحركة توافقية بسيطة عند الزمن t
+// (amplitude: أقصى إزاحة، angularFreq: التردد الزاوي ω، phase: طور ابتدائي بالراديان)
+fun pxSHMPositionAt(amplitude, angularFreq, t, phase) {
+    return amplitude * pxCos(angularFreq * t + phase);
+}
+
+// سرعة نفس الجسم عند الزمن t (مشتقّة الموضع)
+fun pxSHMVelocityAt(amplitude, angularFreq, t, phase) {
+    return -amplitude * angularFreq * pxSin(angularFreq * t + phase);
+}
+
+// ---------------------------------------------------------------------------
+// 9) كثافة وضغط وطفو (سوائل)
+// ---------------------------------------------------------------------------
+
+fun pxDensity(mass, volume) {
+    if (volume == 0) { return nil; }
+    return mass / volume;
+}
+
+fun pxPressure(force, area) {
+    if (area == 0) { return nil; }
+    return force / area;
+}
+
+// قوة الطفو (مبدأ أرخميدس): كثافة السائل × الحجم المُزاح × الجاذبية
+fun pxBuoyantForce(fluidDensity, displacedVolume, g) {
+    return fluidDensity * displacedVolume * g;
+}
+
+// هل الجسم يطفو على سائل كثافته fluidDensity؟ (يطفو إن كانت كثافته أقل)
+fun pxWillFloat(objectDensity, fluidDensity) {
+    return objectDensity < fluidDensity;
+}
+)PHYSICSOGRIN";
 
 inline const std::unordered_map<std::string, std::string>& embeddedRinLibraries() {
     static const std::unordered_map<std::string, std::string> libs = {
@@ -9558,6 +9956,7 @@ inline const std::unordered_map<std::string, std::string>& embeddedRinLibraries(
         {"lib/nlpkit.og.rin", kLib_nlpkit_og_rin},
         {"lib/syskit.og.rin", kLib_syskit_og_rin},
         {"lib/requirekit.og.rin", kLib_requirekit_og_rin},
+        {"lib/physics.og.rin", kLib_physics_og_rin},
     };
     return libs;
 }
