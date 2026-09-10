@@ -75,6 +75,17 @@
             android:exported="false"
             android:theme="@style/Theme.RinLang.Pipeline" />
 
+        <!-- شاشة "تطبيقات Rin": سجل كل عمليات تصدير APK الناجحة (انظر RinAppsRegistry) -->
+        <activity
+            android:name=".RinAppsActivity"
+            android:exported="false"
+            android:launchMode="singleTop" />
+
+        <!-- شاشة "إعدادات" تطبيق Rin مُصدَّر واحد: تفاصيله وإجراءاته (تُفتَح من RinAppsActivity) -->
+        <activity
+            android:name=".RinAppSettingsActivity"
+            android:exported="false" />
+
         <!-- نقطة التشغيل التلقائية داخل حزمة APK مُصدَّرة من نفس القالب (انظر SplashActivity) -->
         <activity
             android:name=".ExportedRunActivity"
