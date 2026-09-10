@@ -319,6 +319,48 @@ struct EnumStmt : Stmt {
     std::string name;
     std::vector<EnumCase> cases;
 };
+
+// match (subject) { case v1, v2 { ... } case v3 { ... } else { ... } } -> مطابقة أنماط (pattern
+// matching) على مستوى العبارات، امتداد إضافي بحت فوق if/else الموجودة أصلاً (نفس روح
+// PlusConditionStmt أعلاه: بنية جديدة كلياً، بلا أي تغيير على أي عقدة/سلوك موجود مسبقاً).
+// الفكرة: يُقيَّم subject مرة واحدة فقط، ثم يُقارَن (بنفس دلالة == أي valuesEqual تماماً، انظر
+// Interpreter::execute(MatchStmt)) بكل قيمة في كل case بالترتيب؛ أول case تُطابق فيه أي واحدة من
+// قيمه (يمكن أن تحمل الحالة الواحدة أكثر من قيمة مفصولة بفواصل: 'case 1, 2, 3 { ... }' تعني "إن
+// كانت القيمة تساوي 1 أو 2 أو 3") يُنفَّذ جسمها فقط ثم يتوقف المطابقة (لا "fallthrough" كما في C).
+// 'else' اختيارية تماماً (تُنفَّذ فقط إن لم تُطابق أي حالة)، ويجب أن تكون آخر شيء إن وُجدت.
+// 'match'/'case' كلمتان سياقيتان غير محجوزتَين (بنفس أسلوب route/row/document/warp/plus.condition
+// أعلاه بالضبط)، فلا تتعارضان مع استخدامهما اسم متغيّر عادي في أي سياق آخر. 'else' هنا هي نفس
+// TokenType::ELSE المحجوزة أصلاً (تماماً كما في if/else)، وليست كلمة سياقية جديدة.
+struct MatchCase {
+    std::vector<ExprPtr> values;         // قيمة واحدة أو أكثر (مفصولة بفواصل) لهذه الحالة
+    std::shared_ptr<BlockStmt> body;
+    int line = 0;
+};
+struct MatchStmt : Stmt {
+    ExprPtr subject;
+    std::vector<MatchCase> cases;
+    std::shared_ptr<BlockStmt> elseBranch; // قد تكون فارغة (nullptr)
+};
+
+// goal { ... } -> "كتلة هدف": تعبير (Expr وليس Stmt) يشبه أي كتلة {} عادية في تنفيذها التتابعي
+// خطوة بخطوة، لكنه بالإضافة لذلك *قيمة* يمكن استخدامها في أي مكان يُتوقَّع فيه تعبير (let x = goal
+// {...}; أو تمريرها وسيطاً لدالة، أو حتى كعبارة قائمة بذاتها 'goal { ... };'). داخلها، عبارة
+// 'achieve expr;' (انظر AchieveStmt أدناه) تُوقف تنفيذ أقرب كتلة goal محيطة فوراً وتجعل قيمتها هي
+// expr تلك -- تماماً كما تُوقف 'return' أقرب دالة محيطة وتجعل قيمتها قيمة الإرجاع. إن اكتمل تنفيذ
+// جسم goal بالكامل دون أي 'achieve' (بلا "تحقيق هدف")، تكون قيمة التعبير nil تلقائياً. هذا يفصل
+// مفهومين كانا مدمجين سابقاً فقط داخل الدوال (return) إلى مفهوم عام أصغر (هدف/غاية داخل أي تدفق
+// منطقي، بلا الحاجة لتعريف دالة كاملة فقط للخروج المبكر من منطق متداخل). 'goal' كلمة سياقية غير
+// محجوزة، تُميَّز فقط عند ظهورها IDENT("goal") متبوعة مباشرة بـ '{' (انظر Parser::primary()).
+struct GoalExpr : Expr {
+    std::shared_ptr<BlockStmt> body;
+};
+
+// achieve expr; / achieve; -> ينهي أقرب كتلة `goal { ... }` محيطة فوراً، وتصبح قيمة تلك الكتلة هي
+// expr (أو nil إن غابت). خطأ وقت التشغيل إن استُخدمت خارج أي goal محيطة (تماماً كخطأ break/continue
+// خارج حلقة). 'achieve' كلمة سياقية غير محجوزة (انظر تمييزها في Parser::declaration()).
+struct AchieveStmt : Stmt {
+    ExprPtr value; // قد تكون فارغة (nullptr) => nil
+};
 struct ReturnStmt : Stmt {
     ExprPtr value; // may be null
 };
