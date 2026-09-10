@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:id="@+id/actionRinAppShare" android:title="@string/apk_export_action_share" />
+    <item android:id="@+id/actionRinAppSave" android:title="@string/apk_export_action_save" />
+    <item android:id="@+id/actionRinAppReExport" android:title="@string/rin_app_action_reexport" />
+    <item android:id="@+id/actionRinAppDelete" android:title="@string/rin_app_action_delete" />
+</menu>
