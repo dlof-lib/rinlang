@@ -11,8 +11,9 @@
 - [`syntax.md`](./syntax.md) — القواعد النحوية العامة (فواصل، كتل، عوامل).
 - [`language-reference.md`](./language-reference.md) — المرجع الشامل وخريطة ترابط كل المفاهيم.
 - [`variables.md`](./variables.md) — `let`/`text`، مصفوفات، قواميس، نطاق.
-- [`control-flow.md`](./control-flow.md) — **الشروط** (`if`/`else`/`plus.condition`) والحلقات (`while`/`for`).
+- [`control-flow.md`](./control-flow.md) — **الشروط** (`if`/`else`/`when`/`otherwise`/`plus.condition`/`match`/`case`)، الحلقات (`while`/`for`)، و`goal`/`achieve`.
 - [`functions.md`](./functions.md) — `fun`/`return`، التكرار الذاتي (recursion).
+- [`enums.md`](./enums.md) — `enum`: قوائم اختيار (options) مغلقة.
 - [`objects.md`](./objects.md) — `@Object`، `.object("id")`، القاموس الحرفي.
 - [`containers.md`](./containers.md) — `@container`، أقسام، ترجمات، مستندات NoSQL.
 - [`cross-file-containers.md`](./cross-file-containers.md) — `use ... from` (English) — calling a container/UI element from another file.
