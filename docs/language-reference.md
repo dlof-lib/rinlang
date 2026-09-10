@@ -42,7 +42,7 @@
 | المفهوم | يعتمد على | يُستخدم داخل |
 |---|---|---|
 | [المتغيّرات](./variables.md) | [`syntax.md`](./syntax.md) | [الشروط](./control-flow.md)، [الدوال](./functions.md)، [الكائنات](./objects.md) |
-| [الشروط والحلقات](./control-flow.md) | [المتغيّرات](./variables.md) (كقيم شرط)، عوامل [`syntax.md`](./syntax.md) | [الدوال](./functions.md) (`if` قبل `return`)، [الحاويات](./containers.md) (شروط داخل `Section`) |
+| [الشروط والحلقات](./control-flow.md) (`if`/`when`/`match`/`goal`) | [المتغيّرات](./variables.md) (كقيم شرط)، عوامل [`syntax.md`](./syntax.md)، [`enums.md`](./enums.md) (قيم `match`) | [الدوال](./functions.md) (`if` قبل `return`)، [الحاويات](./containers.md) (شروط داخل `Section`) |
 | [الدوال](./functions.md) | [المتغيّرات](./variables.md) (وسائط)، [الشروط](./control-flow.md) (منطق داخلي) | [المكتبة القياسية](./standard-library.md)، [الأنابيب](./pipelines.md) |
 | [الكائنات](./objects.md) | [المتغيّرات](./variables.md) (أساس القاموس) | [الحاويات](./containers.md) (كمستندات NoSQL)، [الشروط](./control-flow.md) (فحص حقل) |
 | [الحاويات](./containers.md) | [الكائنات](./objects.md)، [المتغيّرات](./variables.md)، [الشروط/الحلقات](./control-flow.md) | تخزين/تصدير عبر [`storage.md`](./storage.md) و[`http.md`](./http.md) |
