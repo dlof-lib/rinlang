@@ -150,6 +150,16 @@ object BuiltinLibraries {
             "أقنعة متحركة فوق الحاويات والحلقات: فيزياء وحركة (seek/patrol/orbit/سرب/تشكيلات)، آلة حالات، تسلسل JSON، فهرسة مكانية، مؤقتات، FPS وخطوة زمنية ثابتة، أحجام شاشة متجاوبة، أنواع شريط تحميل، لمس وسلاسة حركة، عملات ونقاط، عصا تحكّم وأزرار افتراضية، وقناع منزلق فوق مصفوفات وشبكات، مع تكامل اختياري مع Loom",
             "mm_new • mm_spawn • mm_tick • mm_flockStep • mm_fsmFire • mm_serialize • mm_setViewport • mm_progressTick • mm_smoothFollow • mm_collectCoinsNear • mm_joystickUpdate • mm_buttonPress",
             iconRes = R.drawable.ic_lib_movingmask
+        ),
+        BuiltinLibraryInfo(
+            "lib/syskit.og.rin", "syskit",
+            "عدّة نظام: معلومات المحرّك، مسارات ملفات، ملفات آمنة، إعدادات دائمة (JSON)، سجلّ، وفحوصات",
+            "sysInfo • pathJoin • pathNormalize • fileRead • fileReadLines • sysConfigLoad • sysConfigSave • sysLogInfo • sysAssert • sysCheckAll"
+        ),
+        BuiltinLibraryInfo(
+            "lib/requirekit.og.rin", "requirekit",
+            "عدّة الحقول والاشتراطات الإلزامية: حقول إلزامية في نموذج/كائن، مجموعات شرطية (أحدها فقط/على الأقل)، واشتراطات عامة تُجمَع أخطاؤها معاً",
+            "requireField • requireNonEmptyFields • requireAtLeastOne • requireExactlyOne • requireThat • requireInRange • requireOneOf • requireAll"
         )
     )
 }
