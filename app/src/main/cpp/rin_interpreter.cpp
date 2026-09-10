@@ -300,6 +300,11 @@ Interpreter::Interpreter() {
     globals = std::make_shared<Environment>();
     globals->define("PI", Value::num(3.14159265358979323846));
     globals->define("E", Value::num(2.71828182845904523536));
+    // RMF (Rin Math Fabric) Phase 1 §31 — ثوابت رياضية إضافية، نفس أسلوب PI/E أعلاه بالضبط
+    // (متغيّرات globals عادية قابلة لإعادة التعريف كأي متغيّر آخر، لا آلية "ثابت محمي" منفصلة —
+    // أبسط ما يمكن).
+    globals->define("TAU", Value::num(6.28318530717958647692));  // 2π
+    globals->define("PHI", Value::num(1.61803398874989484820));  // النسبة الذهبية (1+√5)/2
     registerNatives();
 }
 
@@ -836,6 +841,69 @@ void Interpreter::registerNatives() {
     natives["random"] = [](std::vector<Value>& a, int line) {
         expectArgs("random", a, 0, line);
         return Value::num(static_cast<double>(std::rand()) / (static_cast<double>(RAND_MAX) + 1.0));
+    };
+    // ---- RMF (Rin Math Fabric) Phase 1 §6 — دوال رياضية إضافية (مثلثيات/أسّية/لوغاريتمية) ----
+    natives["sin"] = [](std::vector<Value>& a, int line) { expectArgs("sin", a, 1, line); return Value::num(std::sin(asNumber(a[0], "sin", line))); };
+    natives["cos"] = [](std::vector<Value>& a, int line) { expectArgs("cos", a, 1, line); return Value::num(std::cos(asNumber(a[0], "cos", line))); };
+    natives["tan"] = [](std::vector<Value>& a, int line) { expectArgs("tan", a, 1, line); return Value::num(std::tan(asNumber(a[0], "tan", line))); };
+    natives["asin"] = [](std::vector<Value>& a, int line) {
+        expectArgs("asin", a, 1, line);
+        double n = asNumber(a[0], "asin", line);
+        if (n < -1.0 || n > 1.0) throw diagErr(diag::Code::E0004_InvalidType, line, "'asin' expects a number in [-1, 1]");
+        return Value::num(std::asin(n));
+    };
+    natives["acos"] = [](std::vector<Value>& a, int line) {
+        expectArgs("acos", a, 1, line);
+        double n = asNumber(a[0], "acos", line);
+        if (n < -1.0 || n > 1.0) throw diagErr(diag::Code::E0004_InvalidType, line, "'acos' expects a number in [-1, 1]");
+        return Value::num(std::acos(n));
+    };
+    natives["atan"] = [](std::vector<Value>& a, int line) { expectArgs("atan", a, 1, line); return Value::num(std::atan(asNumber(a[0], "atan", line))); };
+    natives["atan2"] = [](std::vector<Value>& a, int line) {
+        expectArgs("atan2", a, 2, line);
+        return Value::num(std::atan2(asNumber(a[0], "atan2", line), asNumber(a[1], "atan2", line)));
+    };
+    natives["exp"] = [](std::vector<Value>& a, int line) { expectArgs("exp", a, 1, line); return Value::num(std::exp(asNumber(a[0], "exp", line))); };
+    natives["log"] = [](std::vector<Value>& a, int line) {
+        // log(x) طبيعي افتراضياً (ln)، أو log(x, base) بقاعدة صريحة — أبسط من فرض اسمين منفصلين
+        // لكل قاعدة، ويبقى 'ln' متاحاً أيضاً كاسم صريح للحالة الطبيعية (انظر أدناه).
+        if (a.size() != 1 && a.size() != 2) {
+            throw diagErr(diag::Code::E0007_InvalidArguments, line, "'log' expects 1 or 2 argument(s) but got " + std::to_string(a.size()));
+        }
+        double n = asNumber(a[0], "log", line);
+        if (n <= 0) throw diagErr(diag::Code::E0004_InvalidType, line, "'log' expects a positive number");
+        if (a.size() == 1) return Value::num(std::log(n));
+        double base = asNumber(a[1], "log", line);
+        if (base <= 0 || base == 1.0) throw diagErr(diag::Code::E0004_InvalidType, line, "'log' base must be positive and not equal to 1");
+        return Value::num(std::log(n) / std::log(base));
+    };
+    natives["log10"] = [](std::vector<Value>& a, int line) {
+        expectArgs("log10", a, 1, line);
+        double n = asNumber(a[0], "log10", line);
+        if (n <= 0) throw diagErr(diag::Code::E0004_InvalidType, line, "'log10' expects a positive number");
+        return Value::num(std::log10(n));
+    };
+    natives["ln"] = [](std::vector<Value>& a, int line) {
+        expectArgs("ln", a, 1, line);
+        double n = asNumber(a[0], "ln", line);
+        if (n <= 0) throw diagErr(diag::Code::E0004_InvalidType, line, "'ln' expects a positive number");
+        return Value::num(std::log(n));
+    };
+    natives["cbrt"] = [](std::vector<Value>& a, int line) { expectArgs("cbrt", a, 1, line); return Value::num(std::cbrt(asNumber(a[0], "cbrt", line))); };
+    natives["trunc"] = [](std::vector<Value>& a, int line) { expectArgs("trunc", a, 1, line); return Value::num(std::trunc(asNumber(a[0], "trunc", line))); };
+    natives["sign"] = [](std::vector<Value>& a, int line) {
+        expectArgs("sign", a, 1, line);
+        double n = asNumber(a[0], "sign", line);
+        return Value::num(n > 0 ? 1.0 : (n < 0 ? -1.0 : 0.0));
+    };
+    // lerp(a, b, t) — انظر §28 (Interpolation)؛ نسخة عددية بسيطة هنا. Vector.lerp الخاصة بالمتجهات
+    // مُعرَّفة في مكتبة lib/math.og.rin بدل هنا لتبقى natives هذه للأعداد المجردة فقط.
+    natives["lerp"] = [](std::vector<Value>& a, int line) {
+        expectArgs("lerp", a, 3, line);
+        double x = asNumber(a[0], "lerp", line);
+        double y = asNumber(a[1], "lerp", line);
+        double t = asNumber(a[2], "lerp", line);
+        return Value::num(x + (y - x) * t);
     };
     // رقم إصدار المحرّك الرسمي (rin_version.h — المصدر الوحيد، انظر
     // docs/VERSIONING.md) متاح الآن داخل كود Rin نفسه، وليس فقط عبر
@@ -1911,14 +1979,20 @@ void Interpreter::registerNatives() {
         }
         return Value::makeArray(result);
     };
-    // clamp(nums, lo, hi) -> transformation: يقصّ كل عنصر إلى المجال [lo, hi]؛ نفس حجم المُدخَل.
-    natives["clamp"] = [](std::vector<Value>& a, int line) {
+    // clamp(nums, lo, hi) -> transformation على مصفوفة (سلوكها الأصلي، بلا أي تغيير): يقصّ كل
+    // عنصر إلى المجال [lo, hi]؛ نفس حجم المُدخَل.
+    // RMF Phase 1 §6/§28: clamp(x, lo, hi) على رقم مفرد أيضاً الآن (بنفس الاسم -- لا داعي لاسمين
+    // منفصلين، النوع الفعلي للوسيط الأول يحدّد السلوك المناسب تلقائياً).
+    natives["clamp"] = [](std::vector<Value>& a, int line) -> Value {
         expectArgs("clamp", a, 3, line);
-        auto nums = asNumberArray(a[0], "clamp", line);
         double lo = asNumber(a[1], "clamp", line);
         double hi = asNumber(a[2], "clamp", line);
         if (lo > hi) throw diagErr(diag::Code::E0007_InvalidArguments, line,
             "'clamp' expects its low bound to be <= its high bound");
+        if (a[0].type == Value::Type::NUMBER) {
+            return Value::num(std::min(hi, std::max(lo, a[0].number)));
+        }
+        auto nums = asNumberArray(a[0], "clamp", line);
         auto result = std::make_shared<ArrayData>();
         result->reserve(nums.size());
         for (double n : nums) result->push_back(Value::num(std::min(hi, std::max(lo, n))));
@@ -6814,6 +6888,29 @@ void Interpreter::checkDeclaredType(const Value& v, const std::string& typeName,
     }
 }
 
+std::optional<Value> Interpreter::tryOperatorOverload(const std::string& magicName, const Value& left,
+                                                        const Value& right, int line) {
+    if (left.type == Value::Type::INSTANCE && left.instance) {
+        std::string owner;
+        auto method = findMethod(left.instance->className, magicName, &owner);
+        if (method) {
+            std::vector<Value> args{right};
+            Value bound = bindMethod(left, method, owner);
+            return callFunction(bound.function, args, line);
+        }
+    }
+    if (right.type == Value::Type::INSTANCE && right.instance) {
+        std::string owner;
+        auto method = findMethod(right.instance->className, magicName, &owner);
+        if (method) {
+            std::vector<Value> args{left};
+            Value bound = bindMethod(right, method, owner);
+            return callFunction(bound.function, args, line);
+        }
+    }
+    return std::nullopt;
+}
+
 Value Interpreter::instantiateClass(const std::string& className, std::vector<Value>& args, int line) {
     // يبني سلسلة الوراثة من الجذر (الأب الأبعد) إلى الصنف نفسه، فيكتشف أي وراثة دائرية أو صنفاً
     // أباً غير معرَّف بخطأ واضح بدل الدخول في حلقة لا نهائية أو تجاهل صامت.
@@ -7158,6 +7255,16 @@ Value Interpreter::evaluate(const ExprPtr& expr, EnvPtr env) {
     if (auto e = std::dynamic_pointer_cast<UnaryExpr>(expr)) {
         Value right = evaluate(e->right, env);
         if (e->op == TokenType::MINUS) {
+            // RMF §33/§41: -vector إلخ عبر __neg__ (صنف يعرّفها كدالة بلا وسائط — self فقط).
+            if (right.type == Value::Type::INSTANCE && right.instance) {
+                std::string owner;
+                auto method = findMethod(right.instance->className, "__neg__", &owner);
+                if (method) {
+                    std::vector<Value> noArgs;
+                    Value bound = bindMethod(right, method, owner);
+                    return callFunction(bound.function, noArgs, e->line);
+                }
+            }
             if (right.type != Value::Type::NUMBER)
                 throw diagErr(diag::Code::E0004_InvalidType, e->line, "unary `-` operand must be a number, found `" + right.typeName() + "`");
             return Value::num(-right.number);
@@ -7174,20 +7281,38 @@ Value Interpreter::evaluate(const ExprPtr& expr, EnvPtr env) {
                 }
                 if (left.type == Value::Type::NUMBER && right.type == Value::Type::NUMBER)
                     return Value::num(left.number + right.number);
+                // RMF §7/§8/§33/§41: vector + vector، matrix + matrix، إلخ عبر __add__ (انظر
+                // tryOperatorOverload) -- الأساس اللي كل نوع رياضي إضافي (Vector/Matrix/...) يُبنى
+                // فوقه بدل توسيع هذا المفسّر بحالة خاصة لكل نوع رياضي جديد يُضاف مستقبلاً.
+                if (left.type == Value::Type::INSTANCE || right.type == Value::Type::INSTANCE) {
+                    if (auto r = tryOperatorOverload("__add__", left, right, e->line)) return *r;
+                }
                 throw diagErr(diag::Code::E0004_InvalidType, e->line,
                           "`+` operands must be numbers or strings, found `" + left.typeName() + "` and `" + right.typeName() + "`");
             case TokenType::MINUS:
+                if (left.type == Value::Type::INSTANCE || right.type == Value::Type::INSTANCE) {
+                    if (auto r = tryOperatorOverload("__sub__", left, right, e->line)) return *r;
+                }
                 requireNumbers(left, right, "-", e->line);
                 return Value::num(left.number - right.number);
             case TokenType::STAR:
+                if (left.type == Value::Type::INSTANCE || right.type == Value::Type::INSTANCE) {
+                    if (auto r = tryOperatorOverload("__mul__", left, right, e->line)) return *r;
+                }
                 requireNumbers(left, right, "*", e->line);
                 return Value::num(left.number * right.number);
             case TokenType::SLASH:
+                if (left.type == Value::Type::INSTANCE || right.type == Value::Type::INSTANCE) {
+                    if (auto r = tryOperatorOverload("__div__", left, right, e->line)) return *r;
+                }
                 requireNumbers(left, right, "/", e->line);
                 if (right.number == 0) throw errWithReason(diag::Code::E0035_RuntimeError, e->line,
                                                             "division by zero", "the right-hand side of `/` evaluated to 0");
                 return Value::num(left.number / right.number);
             case TokenType::PERCENT:
+                if (left.type == Value::Type::INSTANCE || right.type == Value::Type::INSTANCE) {
+                    if (auto r = tryOperatorOverload("__mod__", left, right, e->line)) return *r;
+                }
                 requireNumbers(left, right, "%", e->line);
                 if (right.number == 0) throw errWithReason(diag::Code::E0035_RuntimeError, e->line,
                                                             "division by zero", "the right-hand side of `%` evaluated to 0");
