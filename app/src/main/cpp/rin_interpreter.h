@@ -188,6 +188,12 @@ struct ThrowSignal { Value value; int line = 0; };
 // Internal control-flow signals used to unwind the stack on `break` / `continue` inside `while`.
 struct BreakSignal {};
 struct ContinueSignal {};
+// Internal control-flow signal used to unwind the stack on `achieve` inside a `goal { ... }`
+// block (see GoalExpr/AchieveStmt in rin_ast.h). Caught only by Interpreter::evaluate(GoalExpr);
+// if it escapes past the nearest enclosing goal block (i.e. `achieve` used outside any `goal`),
+// it propagates like any uncaught internal signal and is reported as a runtime error by the same
+// top-level catch-all that handles a stray `break`/`continue` outside a loop.
+struct AchieveSignal { Value value; };
 
 // ============================================================================
 // RinFlow — Execution Flow Engine
