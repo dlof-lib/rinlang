@@ -8,6 +8,10 @@
 #include <random>
 #include <sstream>
 #include <stdexcept>
+#ifndef __ANDROID__
+#include <cstdint>
+#include <dlfcn.h>
+#endif
 
 namespace rin::artifact {
 namespace {
@@ -204,9 +208,71 @@ std::string barcodeSvg(const std::string& data, const Options& o) {
 
 void setQrBridge(QrBridge bridge) { g_qrBridge = bridge; }
 
+#ifndef __ANDROID__
+// Desktop QR backend: libqrencode loaded at runtime. This keeps the Rin desktop
+// executable independent of a particular linker soname while still producing a
+// real standards-compliant QR Code whenever libqrencode is installed.
+extern "C" {
+struct QRcode { int version; int width; unsigned char* data; };
+typedef QRcode* (*QrEncodeString8BitFn)(const char*, int, int);
+typedef void (*QrFreeFn)(QRcode*);
+}
+
+static std::string desktopQrSvg(const std::string& data, int requestedSize, int margin) {
+    void* lib = dlopen("libqrencode.so.4", RTLD_LAZY | RTLD_LOCAL);
+    if (!lib) lib = dlopen("libqrencode.so", RTLD_LAZY | RTLD_LOCAL);
+    if (!lib) {
+        throw std::runtime_error("desktop QR backend unavailable: install libqrencode (libqrencode.so)");
+    }
+    auto encode = reinterpret_cast<QrEncodeString8BitFn>(dlsym(lib, "QRcode_encodeString8bit"));
+    auto freeQr = reinterpret_cast<QrFreeFn>(dlsym(lib, "QRcode_free"));
+    if (!encode || !freeQr) {
+        dlclose(lib);
+        throw std::runtime_error("desktop QR backend invalid: QRcode_encodeString8bit/QRcode_free not found");
+    }
+
+    // QRecLevel::M == 1 in libqrencode.
+    QRcode* qr = encode(data.c_str(), 0, 1);
+    if (!qr || !qr->data || qr->width <= 0) {
+        if (qr) freeQr(qr);
+        dlclose(lib);
+        throw std::runtime_error("desktop QR encoder failed (libqrencode)");
+    }
+
+    const int modules = qr->width;
+    const int quiet = std::max(2, margin);
+    const int total = modules + quiet * 2;
+    const int size = std::max(64, requestedSize);
+
+    std::ostringstream out;
+    out << "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"" << size
+        << "\" height=\"" << size << "\" viewBox=\"0 0 " << total << " " << total
+        << "\" shape-rendering=\"crispEdges\">";
+    out << "<rect width=\"100%\" height=\"100%\" fill=\"white\"/>";
+    out << "<g fill=\"black\">";
+    for (int y = 0; y < modules; ++y) {
+        for (int x = 0; x < modules; ++x) {
+            if (qr->data[y * modules + x] & 1) {
+                out << "<rect x=\"" << (x + quiet) << "\" y=\"" << (y + quiet)
+                    << "\" width=\"1\" height=\"1\"/>";
+            }
+        }
+    }
+    out << "</g></svg>";
+
+    freeQr(qr);
+    dlclose(lib);
+    return out.str();
+}
+#endif
+
 std::string qrSvg(const std::string& data, const Options& o) {
-    if (!g_qrBridge) throw std::runtime_error("qr requires the Rin Android QR bridge (ZXing) in this build");
-    return g_qrBridge(data, std::max(64, o.size), 4);
+    if (g_qrBridge) return g_qrBridge(data, std::max(64, o.size), 4);
+#ifndef __ANDROID__
+    return desktopQrSvg(data, std::max(64, o.size), 4);
+#else
+    throw std::runtime_error("qr requires the Rin Android QR bridge (ZXing) in this build");
+#endif
 }
 
 } // namespace rin::artifact
