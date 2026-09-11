@@ -31,6 +31,8 @@
     <string name="settings_syntax_hint">Use the real Rin lexer colors from the native engine.</string>
     <string name="settings_brackets">Bracket matching</string>
     <string name="settings_brackets_hint">Highlight the matching bracket or an unmatched bracket.</string>
+    <string name="settings_live_diagnostics">Live error diagnostics</string>
+    <string name="settings_live_diagnostics_hint">Underline syntax errors and warnings as you type, using the real Rin lexer/parser.</string>
     <string name="settings_autocomplete">Code completion</string>
     <string name="settings_autocomplete_hint">Show Rin suggestions while typing identifiers.</string>
     <string name="settings_auto_close">Auto-close brackets</string>
