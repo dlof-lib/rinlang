@@ -72,6 +72,18 @@ class RinCodeEditorView @JvmOverloads constructor(
     private val bracketMatchPaint = Paint().apply { color = ContextCompat.getColor(context, R.color.rin_bracket_match_bg) }
     private val bracketErrorPaint = Paint().apply { color = ContextCompat.getColor(context, R.color.rin_bracket_error_bg) }
     private val findMatchPaint = Paint().apply { color = ContextCompat.getColor(context, R.color.rin_find_match_bg) }
+    // خط متعرّج (wavy underline) لتشخيص أخطاء الصياغة الحي — أحمر للأخطاء، ذهبي/برتقالي للتحذيرات
+    // (نفس لون log_kind_warning المستخدَم أصلاً في وحدة تحكّم التنفيذ، لتناسق بصري عبر التطبيق).
+    private val diagnosticErrorPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = ContextCompat.getColor(context, R.color.syntax_error)
+        style = Paint.Style.STROKE
+        strokeWidth = resources.displayMetrics.density * 1.4f
+    }
+    private val diagnosticWarningPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = ContextCompat.getColor(context, R.color.log_kind_warning)
+        style = Paint.Style.STROKE
+        strokeWidth = resources.displayMetrics.density * 1.4f
+    }
 
     // --- نظام تلوين الصيغة النحوية الموحَّد (Unified Syntax Palette) --------------------
     // ست هويات لونية ثابتة فقط، كل واحدة تمثّل "مفهوماً" واحداً في الكود، معرَّفة مركزياً في
@@ -132,6 +144,26 @@ class RinCodeEditorView @JvmOverloads constructor(
     // ويقرأها [onDraw] مباشرة بلا أي إعادة حساب.
     private var cachedHighlightsByLine: Map<Int, List<RinNativeEditor.Highlight>> = emptyMap()
     private var cachedBracketInfo: Quad? = null
+    // تشخيص أخطاء الصياغة الحي — يُحدَّث في نفس نقطة تحديث [cachedHighlightsByLine] (انظر
+    // [rebuildHighlightAndDiagnosticCaches])، ويقرأه [onDraw] لرسم خط أحمر/برتقالي متعرّج، وتقرأه
+    // [updateDiagnosticPopup] لعرض نص الرسالة عندما يقف المؤشر داخل نطاق تشخيص.
+    private var cachedDiagnosticsByLine: Map<Int, List<RinNativeEditor.Diagnostic>> = emptyMap()
+
+    /** يعيد بناء ذاكرتي التلوين والتشخيص معًا من المحرك — نقطة واحدة بدل تكرار نفس الحلقتين
+     *  في init/afterEngineMutation/setLanguage (كانت التشخيصات غائبة تمامًا سابقًا). */
+    private fun rebuildHighlightAndDiagnosticCaches() {
+        val byLine = HashMap<Int, MutableList<RinNativeEditor.Highlight>>()
+        for (h in engine.getHighlights()) byLine.getOrPut(h.line) { mutableListOf() }.add(h)
+        cachedHighlightsByLine = byLine
+
+        if (AppSettings.isLiveDiagnostics(context)) {
+            val diagByLine = HashMap<Int, MutableList<RinNativeEditor.Diagnostic>>()
+            for (d in engine.getDiagnostics()) diagByLine.getOrPut(d.line) { mutableListOf() }.add(d)
+            cachedDiagnosticsByLine = diagByLine
+        } else {
+            cachedDiagnosticsByLine = emptyMap()
+        }
+    }
 
     // بيانات التعديل المُلتقَطة في onTextChanged وتُنفَّذ فعليًا في afterTextChanged (انظر
     // الشرح أسفل shadowWatcher). pendingEditStart = -1 يعني "لا تعديل معلَّق حاليًا".
@@ -244,9 +276,7 @@ class RinCodeEditorView @JvmOverloads constructor(
             // التلوين النحوي يمسح كامل المستند (مكلف نسبيًا على ملف ضخم) — نُعيد حسابه فقط عندما
             // يتغيّر النص فعليًا، لا عند كل رسم (وميض المؤشر مثلاً يستدعي invalidate() مرتين
             // بالثانية بلا أي تغيير نصّي، فيقرأ القيمة المخزَّنة مباشرة بلا أي تكلفة).
-            val byLine = HashMap<Int, MutableList<RinNativeEditor.Highlight>>()
-            for (h in engine.getHighlights()) byLine.getOrPut(h.line) { mutableListOf() }.add(h)
-            cachedHighlightsByLine = byLine
+            rebuildHighlightAndDiagnosticCaches()
             recomputeContentSize()
         }
         // مطابقة الأقواس تعتمد على موضع المؤشر (يتغيّر أيضًا بلا تعديل نصّي، كالأسهم)، فتُحسَب في
@@ -262,6 +292,7 @@ class RinCodeEditorView @JvmOverloads constructor(
         } else {
             dismissSuggestionPopup()
         }
+        updateDiagnosticPopup()
         // requestLayout() يعيد تشغيل onMeasure (ومسح المستند بالكامل)؛ لا داعٍ له إطلاقًا عند
         // تغيّر المؤشر/التحديد فقط بلا تغيّر في النص — invalidate() وحدها تكفي لإعادة الرسم.
         if (changed) requestLayout()
@@ -359,9 +390,7 @@ class RinCodeEditorView @JvmOverloads constructor(
     /** يبدّل لغة التلوين النحوي الحالية (يُستدعى عند فتح ملف جديد بامتداد مختلف، مثال: "kt"، "cpp"). */
     fun setLanguage(extension: String) {
         engine.setLanguage(extension)
-        cachedHighlightsByLine = HashMap<Int, MutableList<RinNativeEditor.Highlight>>().apply {
-            for (h in engine.getHighlights()) getOrPut(h.line) { mutableListOf() }.add(h)
-        }
+        rebuildHighlightAndDiagnosticCaches()
         invalidate()
     }
 
@@ -400,9 +429,7 @@ class RinCodeEditorView @JvmOverloads constructor(
         // تلقائيًا عند أي replace() — بلا حاجة لأي آلية أخرى.
         shadowEditable.setSpan(shadowWatcher, 0, shadowEditable.length, Editable.SPAN_INCLUSIVE_INCLUSIVE)
         // تعبئة أولية للذاكرة المؤقتة (cache) قبل أول onDraw، حتى لا يُرسَم بلا تلوين للحظة.
-        val byLine = HashMap<Int, MutableList<RinNativeEditor.Highlight>>()
-        for (h in engine.getHighlights()) byLine.getOrPut(h.line) { mutableListOf() }.add(h)
-        cachedHighlightsByLine = byLine
+        rebuildHighlightAndDiagnosticCaches()
         cachedBracketInfo = computeBracketMatchForDraw()
         recomputeContentSize()
     }
@@ -475,6 +502,18 @@ class RinCodeEditorView @JvmOverloads constructor(
             // النص الملوَّن نحويًا
             drawHighlightedLine(canvas, lineText, if (AppSettings.isSyntaxHighlighting(context)) highlightsByLine[line] else null, paddingLeft.toFloat(), baseline)
 
+            // خط تشخيص الأخطاء الحي المتعرّج (تحت النص مباشرة، فوق تظليلات الخلفية أعلاه ولا يغطّي الحروف)
+            cachedDiagnosticsByLine[line]?.let { diags ->
+                for (d in diags) {
+                    val from = d.startCol.coerceIn(0, lineText.length)
+                    val to = max(d.endCol.coerceIn(0, lineText.length), from + 1).coerceAtMost(lineText.length.coerceAtLeast(from + 1))
+                    val x1 = paddingLeft + textPaint.measureText(lineText, 0, from)
+                    val x2 = paddingLeft + textPaint.measureText(lineText, 0, to)
+                    val paint = if (d.severity == RinNativeEditor.DiagnosticSeverity.ERROR) diagnosticErrorPaint else diagnosticWarningPaint
+                    drawWavyUnderline(canvas, x1, max(x2, x1 + charWidth * 0.4f), y + lineHeight - paint.strokeWidth, paint)
+                }
+            }
+
             // مؤشر الكتابة (يومض)
             if (line == cur.line && !sel.hasSelection && cursorVisible && hasFocus()) {
                 val cx = paddingLeft + textPaint.measureText(lineText, 0, cur.col.coerceIn(0, lineText.length))
@@ -523,6 +562,25 @@ class RinCodeEditorView @JvmOverloads constructor(
             textPaint.color = colorDefault
             canvas.drawText(lineText, tailFrom, lineText.length, cursorX, baseline, textPaint)
         }
+    }
+
+    /** يرسم خطًا متعرّجًا (نصف دوائر متتالية صغيرة) من x1 إلى x2 عند ارتفاع baselineY — أسلوب
+     *  المحررات الاحترافية (VS Code/Android Studio) للإشارة إلى خطأ/تحذير دون تغطية النص نفسه. */
+    private fun drawWavyUnderline(canvas: Canvas, x1: Float, x2: Float, baselineY: Float, paint: Paint) {
+        if (x2 <= x1) return
+        val amplitude = resources.displayMetrics.density * 1.1f
+        val step = resources.displayMetrics.density * 2.2f
+        val path = android.graphics.Path()
+        var x = x1
+        var up = true
+        path.moveTo(x, baselineY)
+        while (x < x2) {
+            val nextX = min(x + step, x2)
+            path.quadTo(x + (nextX - x) / 2f, baselineY + (if (up) -amplitude else amplitude), nextX, baselineY)
+            up = !up
+            x = nextX
+        }
+        canvas.drawPath(path, paint)
     }
 
     private fun colorForKind(kind: Int): Int = when (kind) {
@@ -620,6 +678,7 @@ class RinCodeEditorView @JvmOverloads constructor(
             blinkHandler.postDelayed(blinkRunnable, 500L)
         } else {
             dismissSuggestionPopup()
+            dismissDiagnosticPopup()
             actionMode?.finish()
         }
         invalidate()
@@ -629,6 +688,7 @@ class RinCodeEditorView @JvmOverloads constructor(
         super.onDetachedFromWindow()
         blinkHandler.removeCallbacks(blinkRunnable)
         dismissSuggestionPopup()
+        dismissDiagnosticPopup()
         actionMode?.finish()
         engine.destroy()
     }
@@ -1179,5 +1239,88 @@ class RinCodeEditorView @JvmOverloads constructor(
 
     private fun dismissSuggestionPopup() {
         suggestionPopup?.let { if (it.isShowing) it.dismiss() }
+    }
+
+    // --- تشخيص أخطاء الصياغة الحي — تلميح نصّي عند وقوف المؤشر داخل نطاق خطأ/تحذير ---------
+
+    private var diagnosticPopup: PopupWindow? = null
+
+    /** يُستدعى من [afterEngineMutation] بعد كل تعديل/تحريك مؤشر؛ يعرض رسالة أول تشخيص يقع
+     *  المؤشر ضمن نطاقه على سطره الحالي (أو يخفي النافذة إن لم يكن هناك تطابق). لا يظهر أثناء
+     *  وجود تحديد نشط (قد يغطّي التلميح ما يحدّده المستخدم) ولا فوق قائمة الإكمال التلقائي معًا. */
+    private fun updateDiagnosticPopup() {
+        if (!AppSettings.isLiveDiagnostics(context) || !hasFocus() || !isAttachedToWindow ||
+            engine.getSelection().hasSelection || suggestionPopup?.isShowing == true
+        ) {
+            dismissDiagnosticPopup(); return
+        }
+        val cur = engine.getCursor()
+        val diag = cachedDiagnosticsByLine[cur.line]?.firstOrNull { cur.col in it.startCol..it.endCol }
+        if (diag == null) { dismissDiagnosticPopup(); return }
+        showDiagnosticPopup(diag)
+    }
+
+    private fun showDiagnosticPopup(diag: RinNativeEditor.Diagnostic) {
+        val isError = diag.severity == RinNativeEditor.DiagnosticSeverity.ERROR
+        val accent = if (isError) diagnosticErrorPaint.color else diagnosticWarningPaint.color
+        val label = TextView(context).apply {
+            text = "${diag.code}  ${diag.message}"
+            typeface = android.graphics.Typeface.MONOSPACE
+            setTextColor(colorDefault)
+            textSize = 12.5f
+            val padH = (12 * resources.displayMetrics.density).toInt()
+            val padV = (8 * resources.displayMetrics.density).toInt()
+            setPadding(padH, padV, padH, padV)
+            background = GradientDrawable().apply {
+                setColor(Color.parseColor("#2A2D31"))
+                cornerRadius = 6 * resources.displayMetrics.density
+                setStroke((resources.displayMetrics.density * 1.4f).toInt().coerceAtLeast(1), accent)
+            }
+        }
+
+        val popup = diagnosticPopup ?: PopupWindow(
+            label, LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT
+        ).apply {
+            isOutsideTouchable = false
+            isFocusable = false
+            elevation = 12f
+            diagnosticPopup = this
+        }
+        popup.contentView = label
+
+        label.measure(
+            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
+            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
+        )
+        val popupWidth = label.measuredWidth
+        val popupHeight = label.measuredHeight
+
+        val cur = engine.getCursor()
+        val loc = IntArray(2)
+        getLocationOnScreen(loc)
+        val dm = resources.displayMetrics
+        val screenWidth = dm.widthPixels
+        val screenHeight = dm.heightPixels
+
+        val cursorLocalX = paddingLeft
+        val cursorLocalY = yOfLine(cur.line)
+        val rawX = loc[0] + cursorLocalX
+        val screenX = rawX.coerceIn(0, (screenWidth - popupWidth).coerceAtLeast(0))
+
+        // فوق السطر افتراضيًا (حتى لا يغطّي التلميح السطر التالي أثناء الكتابة)، أو أسفله إن لم
+        // تكن هناك مساحة كافية أعلى (مثال: أول سطر في المستند).
+        val aboveY = loc[1] + cursorLocalY - popupHeight
+        val belowY = loc[1] + cursorLocalY + lineHeight.roundToInt()
+        val screenY = if (aboveY >= 0) aboveY else belowY.coerceAtMost((screenHeight - popupHeight).coerceAtLeast(0))
+
+        if (popup.isShowing) {
+            popup.update(screenX, screenY, -1, -1)
+        } else {
+            popup.showAtLocation(this, Gravity.NO_GRAVITY, screenX, screenY)
+        }
+    }
+
+    private fun dismissDiagnosticPopup() {
+        diagnosticPopup?.let { if (it.isShowing) it.dismiss() }
     }
 }
