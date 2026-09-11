@@ -1,38 +1,36 @@
-<div align="center">
-<img src="assets/branding/banner_matrix.png" alt="RinLang banner" width="100%" />
+<div align="center"><div style="border-radius:24px; overflow:hidden;"><img src="assets/branding/banner_matrix.png" alt="RinLang banner" width="100%" style="border-radius:24px;" /></div><br/><table>
+<tr>
+<td align="center"><img src="assets/branding/rin_icon.jpg" alt="RinLang icon" width="72" height="72" style="border-radius:20px;" /><br/><b>RinLang</b>
 
-<p>
+</td><td align="center" width="60"><img src="assets/icons/globe.svg" width="18" valign="middle"/></td><td align="center"><img src="assets/branding/rinstudio_icon.jpg" alt="RinStudio icon" width="72" height="72" style="border-radius:20px;" /><br/><b>RinStudio</b>
+
+</td>
+</tr>
+</table><p>
 <img src="assets/icons/globe.svg" width="18" valign="middle"/>
 <a href="#عربي">العربية</a> &nbsp;|&nbsp; <a href="#english">English</a>
-</p>
+</p></div><a name="عربي"></a>
 
-</div>
+<div dir="rtl">نظرة سريعة
 
-<a name="عربي"></a>
-<div dir="rtl">
-
-## نظرة سريعة
-
-| | <img src="assets/branding/rin_icon.jpg" width="20" valign="middle"/> RinLang | <img src="assets/branding/rinstudio_icon.jpg" width="20" valign="middle"/> RinStudio |
-|---|---|---|
-| **النوع** | لغة برمجة (محرّك C++17) | محرّر/IDE أندرويد |
-| **الإصدار** | v1.0.0 | v1.0.0 |
-| **يعمل على** | Android · Linux · macOS · Windows · Web | Android (minSdk 24) |
-| **الترخيص** | MIT | MIT |
-| **رابط سريع** | [تفاصيل اللغة ⤵](#محتويات-rinlang) | [تفاصيل المحرر ⤵](#محتويات-rinstudio) |
+| <img src="assets/branding/rin_icon.jpg" width="20" valign="middle" style="border-radius:6px"/> RinLang| <img src="assets/branding/rinstudio_icon.jpg" width="20" valign="middle" style="border-radius:6px"/> RinStudio
+النوع| لغة برمجة (محرّك C++17)| محرّر/IDE أندرويد
+الإصدار| v1.0.0| v1.0.0
+يعمل على| Android · Linux · macOS · Windows · Web| Android (minSdk 24)
+الترخيص| MIT| MIT
+رابط سريع| "تفاصيل اللغة ⤵" (#محتويات-rinlang)| "تفاصيل المحرر ⤵" (#محتويات-rinstudio)
 
 ---
 
 <a name="محتويات-rinlang"></a>
-### 📖 محتويات هذا القسم — RinLang
-[الميزات الكاملة](#ميزات-rinlang) · [المكتبات المدمجة](#مكتبات-rinlang) · [تلوين الأكواد](#تلوين-rinlang) · [البدء السريع](#بدء-rinlang) · [بنية المشروع](#بنية-rinlang)
+
+📖 محتويات هذا القسم — RinLang
+
+"الميزات الكاملة" (#ميزات-rinlang) · "المكتبات المدمجة" (#مكتبات-rinlang) · "تلوين الأكواد" (#تلوين-rinlang) · "البدء السريع" (#بدء-rinlang) · "بنية المشروع" (#بنية-rinlang)
 
 ---
 
-<div align="center">
-<img src="assets/branding/rin_icon.jpg" alt="RinLang icon" width="110" style="border-radius:16px" />
-
-# RinLang
+<div align="center"><img src="assets/branding/rin_icon.jpg" alt="RinLang icon" width="110" style="border-radius:24px" />RinLang
 
 <p>
 <img alt="Engine" src="https://img.shields.io/badge/Engine-C%2B%2B17-00599C?style=for-the-badge&logo=cplusplus&logoColor=white" />
@@ -41,14 +39,10 @@
 <img alt="Extension" src="https://img.shields.io/badge/File%20Extension-.rin-181717?style=for-the-badge&logo=github" />
 <img alt="RTL" src="https://img.shields.io/badge/RTL%20%2F%20Arabic-Supported-549764?style=for-the-badge" />
 <img alt="Platform" src="https://img.shields.io/badge/Runs%20on-Android%20%7C%20Linux%20%7C%20macOS%20%7C%20Windows%20%7C%20Web-4E4E4E?style=for-the-badge" />
-</p>
-</div>
+</p></div>لغة برمجة مُفسَّرة بمحرّك C++17 واحد — نفس المحرّك يعمل داخل تطبيق أندرويد، من سطر الأوامر، كمكتبة مضمَّنة في لغات أخرى، وحتى داخل المتصفح عبر WebAssembly.
 
-**لغة برمجة مُفسَّرة بمحرّك C++17 واحد — نفس المحرّك يعمل داخل تطبيق أندرويد، من سطر الأوامر، كمكتبة مضمَّنة في لغات أخرى، وحتى داخل المتصفح عبر WebAssembly.**
+RinLang لغة بصياغة مألوفة (متغيرات، شروط، حلقات، دوال، مصفوفات وقواميس)، مبنية فوق مفسِّر واحد ("rin_lexer" → "rin_parser" → "rin_interpreter") بلا أي نسخة مكرَّرة عبر المنصّات. تتميّز بنظام حاويات ("@container") موحَّد تُبنى فوقه مستندات NoSQL، خطوط أنابيب بيانات بعامل "|>"، ووحدات بناء بسياسات أمان، إضافة إلى نظام استيراد ("@import") ومكتبة قياسية تضم أكثر من ٦٠ مكتبة جاهزة. دعم النصوص العربية/RTL مبني في صميم كل طبقة تمرّ فيها السلاسل النصية.
 
-RinLang لغة بصياغة مألوفة (متغيرات، شروط، حلقات، دوال، مصفوفات وقواميس)، مبنية فوق مفسِّر واحد (`rin_lexer` → `rin_parser` → `rin_interpreter`) بلا أي نسخة مكرَّرة عبر المنصّات. تتميّز بنظام **حاويات** (`@container`) موحَّد تُبنى فوقه مستندات NoSQL، خطوط أنابيب بيانات بعامل `|>`، ووحدات بناء بسياسات أمان، إضافة إلى نظام استيراد (`@import`) ومكتبة قياسية تضم أكثر من **٦٠ مكتبة** جاهزة. دعم النصوص العربية/RTL مبني في صميم كل طبقة تمرّ فيها السلاسل النصية.
-
-```rin
 fun fib(n) {
     if (n < 2) { return n; }
     return fib(n - 1) + fib(n - 2);
@@ -60,71 +54,53 @@ print fib(10);
 .end/container.doc
 
 @import "lib/math.og.rin";
-```
 
 <a name="ميزات-rinlang"></a>
+
 <details open>
-<summary><img src="assets/icons/checklist.svg" width="20" valign="middle"/> <b>الميزات الكاملة</b></summary>
+<summary><img src="assets/icons/checklist.svg" width="20" valign="middle"/> <b>الميزات الكاملة</b></summary>الميزة| الوصف
+بنية أساسية مألوفة| متغيرات، شروط، حلقات، دوال، مصفوفات وقواميس
+"@container"| حاويات موحَّدة: بيانات، مستندات NoSQL ("@container.doc")، خطوط أنابيب ("@container.pipe")، وحدات بناء ("@make") بسياسات أمان
+"@import"| استيراد ملفات ".rin"/".og.rin" مباشرة أو كحاوية باسم مستعار
+٦٠+ مكتبة مدمجة| رياضيات، فيزياء، سلاسل نصية، JSON/CSV، شبكات، تحقق من المدخلات، وغيرها
+دعم عربي/RTL أصيل| تحويل صحيح بين إزاحات UTF-16 وUTF-8 في كل مكان يمرّ فيه نص عربي عبر JNI
+صناعة لغات مخصّصة| عبر "langkit.og.rin" يمكن تعريف قواعد نحوية جديدة فوق نفس المحرّك
+تعدّد المنصّات| Android · Linux · macOS · Windows · Web (WASM) — نفس المحرّك بلا تكرار
 
-| الميزة | الوصف |
-|---|---|
-| بنية أساسية مألوفة | متغيرات، شروط، حلقات، دوال، مصفوفات وقواميس |
-| `@container` | حاويات موحَّدة: بيانات، مستندات NoSQL (`@container.doc`)، خطوط أنابيب (`@container.pipe`)، وحدات بناء (`@make`) بسياسات أمان |
-| `@import` | استيراد ملفات `.rin`/`.og.rin` مباشرة أو كحاوية باسم مستعار |
-| ٦٠+ مكتبة مدمجة | رياضيات، فيزياء، سلاسل نصية، JSON/CSV، شبكات، تحقق من المدخلات، وغيرها |
-| دعم عربي/RTL أصيل | تحويل صحيح بين إزاحات UTF‑16 وUTF‑8 في كل مكان يمرّ فيه نص عربي عبر JNI |
-| صناعة لغات مخصّصة | عبر `langkit.og.rin` يمكن تعريف قواعد نحوية جديدة فوق نفس المحرّك |
-| تعدّد المنصّات | Android · Linux · macOS · Windows · Web (WASM) — نفس المحرّك بلا تكرار |
+</details><a name="مكتبات-rinlang"></a>
 
-</details>
-
-<a name="مكتبات-rinlang"></a>
 <details>
-<summary><img src="assets/icons/book.svg" width="20" valign="middle"/> <b>قائمة المكتبات المدمجة — ٦٠+ (اضغط للعرض)</b></summary>
+<summary><img src="assets/icons/book.svg" width="20" valign="middle"/> <b>قائمة المكتبات المدمجة — ٦٠+ (اضغط للعرض)</b></summary>"math" · "physics" · "strings" · "collections" · "functional" · "data" · "jsonkit" · "csv" · "httpkit" · "validate" · "syskit" · "requirekit" · "config" · "logger" · "colors" · "geometry" · "matrix" · "graph" · "animation" · "layout" · "events" · "cachekit" · "iterkit" · "loopkit" · "format" · "envkit" · "astwalk" · "behaviorkit" · "gridkit" · "lexkit" · "maskkit" · "loopstats"
 
-`math` · `physics` · `strings` · `collections` · `functional` · `data` · `jsonkit` · `csv` · `httpkit` · `validate` · `syskit` · `requirekit` · `config` · `logger` · `colors` · `geometry` · `matrix` · `graph` · `animation` · `layout` · `events` · `cachekit` · `iterkit` · `loopkit` · `format` · `envkit` · `astwalk` · `behaviorkit` · `gridkit` · `lexkit` · `maskkit` · `loopstats`
+كل مكتبة تتّبع اصطلاح نتائج آمن "{ok, ...}" بدل رمي استثناءات غير متوقَّعة.
 
-كل مكتبة تتّبع اصطلاح نتائج آمن `{ok, ...}` بدل رمي استثناءات غير متوقَّعة.
+</details><a name="تلوين-rinlang"></a>
 
-</details>
-
-<a name="تلوين-rinlang"></a>
 <details>
-<summary><img src="assets/icons/highlighter.svg" width="20" valign="middle"/> <b>تلوين الأكواد وقواعد النحو (اضغط للعرض)</b></summary>
+<summary><img src="assets/icons/highlighter.svg" width="20" valign="middle"/> <b>تلوين الأكواد وقواعد النحو (اضغط للعرض)</b></summary>- "syntaxes/rin.tmLanguage.json" — قواعد TextMate مبنية من الكلمات المحجوزة الحقيقية في "rin_lexer.cpp"، صالحة فوراً لأي محرر يدعم TextMate.
+- "src/" ("RinLangVSSDK") — امتداد Visual Studio جاهز (".vsixmanifest" + VSPackage) يمنح تلوين Rin داخل Visual Studio.
+- تلوين GitHub تحديداً يعتمد على مشروع منفصل ""github-linguist/linguist"" (https://github.com/github-linguist/linguist) ويتطلب انتشاراً فعلياً واسعاً (٢٠٠٠+ ملف ".rin") قبل قبول طلب السحب — القواعد جاهزة ومُختبَرة، لكن هذا الشرط لم يتحقق بعد.
 
-- `syntaxes/rin.tmLanguage.json` — قواعد TextMate مبنية من الكلمات المحجوزة الحقيقية في `rin_lexer.cpp`، صالحة فوراً لأي محرر يدعم TextMate.
-- `src/` (`RinLangVSSDK`) — امتداد Visual Studio جاهز (`.vsixmanifest` + VSPackage) يمنح تلوين Rin داخل Visual Studio.
-- **تلوين GitHub تحديداً** يعتمد على مشروع منفصل [`github-linguist/linguist`](https://github.com/github-linguist/linguist) ويتطلب انتشاراً فعلياً واسعاً (٢٠٠٠+ ملف `.rin`) قبل قبول طلب السحب — القواعد جاهزة ومُختبَرة، لكن هذا الشرط لم يتحقق بعد.
+</details><a name="بدء-rinlang"></a>
 
-</details>
-
-<a name="بدء-rinlang"></a>
 <details>
-<summary><img src="assets/icons/bolt.svg" width="20" valign="middle"/> <b>البدء السريع (اضغط للعرض)</b></summary>
+<summary><img src="assets/icons/bolt.svg" width="20" valign="middle"/> <b>البدء السريع (اضغط للعرض)</b></summary>تشغيل تفاعلي عبر CLI (Linux):
 
-**تشغيل تفاعلي عبر CLI (Linux):**
-```bash
 sudo apt install cmake g++      # أو dnf/pacman المكافئ
 cd cli/linux && ./build.sh
 ./build/rin
-```
 
-**بناء المكتبة المشتركة (Python/Node/C):**
-```bash
+بناء المكتبة المشتركة (Python/Node/C):
+
 cd bindings
 cmake -B build && cmake --build build
-```
 
-**أندرويد ستوديو:** افتح مجلد `app/` كمشروع Gradle عادي (يتطلب NDK وCMake).
+أندرويد ستوديو: افتح مجلد "app/" كمشروع Gradle عادي (يتطلب NDK وCMake).
 
-</details>
+</details><a name="بنية-rinlang"></a>
 
-<a name="بنية-rinlang"></a>
 <details>
-<summary><img src="assets/icons/folder.svg" width="20" valign="middle"/> <b>بنية المشروع (اضغط للعرض)</b></summary>
-
-```
-rinlang/
+<summary><img src="assets/icons/folder.svg" width="20" valign="middle"/> <b>بنية المشروع (اضغط للعرض)</b></summary>rinlang/
 ├── app/              # RinStudio — تطبيق أندرويد (Kotlin/Compose + JNI)
 │   └── src/main/cpp/ # محرّك C++17: rin_lexer / rin_parser / rin_interpreter
 ├── cli/              # واجهات سطر أوامر مستقلة (linux/macos/windows)
@@ -137,22 +113,18 @@ rinlang/
 ├── src/              # RinLangVSSDK — امتداد Visual Studio
 ├── web/              # بناء WebAssembly + عرض تفاعلي على الويب
 └── docs/             # توثيق شامل لكل نظام فرعي في اللغة
-```
 
-</details>
-
----
+</details>---
 
 <a name="محتويات-rinstudio"></a>
-### 📖 محتويات هذا القسم — RinStudio
-[ميزات المحرر الكاملة](#ميزات-rinstudio) · [وسامات جاهزة](#وسامات-rinstudio)
+
+📖 محتويات هذا القسم — RinStudio
+
+"ميزات المحرر الكاملة" (#ميزات-rinstudio) · "وسامات جاهزة" (#وسامات-rinstudio)
 
 ---
 
-<div align="center">
-<img src="assets/branding/rinstudio_icon.jpg" alt="RinStudio icon" width="110" style="border-radius:16px" />
-
-# RinStudio
+<div align="center"><img src="assets/branding/rinstudio_icon.jpg" alt="RinStudio icon" width="110" style="border-radius:24px" />RinStudio
 
 <p>
 <img alt="Version" src="https://img.shields.io/badge/RinStudio-v1.0.0-549764?style=for-the-badge" />
@@ -160,85 +132,65 @@ rinlang/
 <img alt="Stack" src="https://img.shields.io/badge/Kotlin-Jetpack%20Compose-7F52FF?style=for-the-badge&logo=kotlin&logoColor=white" />
 <img alt="License" src="https://img.shields.io/badge/License-MIT-549764?style=for-the-badge" />
 <img alt="Build" src="https://img.shields.io/badge/Build-Signed%20Release%20APK-4E4E4E?style=for-the-badge" />
-</p>
+</p></div>IDE أندرويد كامل مخصَّص للغة RinLang — محرِّر أكواد، معاينة واجهات حيّة، ومُصدِّر تطبيقات مستقلة موقَّعة.
 
-**IDE أندرويد كامل مخصَّص للغة RinLang — محرِّر أكواد، معاينة واجهات حيّة، ومُصدِّر تطبيقات مستقلة موقَّعة.**
-
-<a href="https://github.com/dlof-lib/rinlang/releases">
+<div align="center"><a href="https://github.com/dlof-lib/rinlang/releases">
 <img src="assets/icons/download.svg" width="18" valign="middle"/>
 <img alt="Download RinStudio" src="https://img.shields.io/badge/Download-RinStudio%20APK-549764?style=for-the-badge&logo=android&logoColor=white" />
-</a>
-</div>
+</a></div><a name="ميزات-rinstudio"></a>
 
-<a name="ميزات-rinstudio"></a>
 <details open>
-<summary><img src="assets/icons/checklist.svg" width="20" valign="middle"/> <b>ميزات المحرر الكاملة</b></summary>
+<summary><img src="assets/icons/checklist.svg" width="20" valign="middle"/> <b>ميزات المحرر الكاملة</b></summary>- محرر أكواد مبني على Canvas بأداء محسَّن — قياس مُخبَّأ للأسطر، تمرير أفقي تلقائي للمؤشر، قائمة نسخ/قص/لصق عائمة، وإكمال تلقائي يتموضع ضمن حدود الشاشة دائماً.
+- تحويل حروف عربي آمن عبر JNI بين أعمدة UTF-16 (Kotlin) وUTF-8 (محرّك C++) في كل عملية تحديد/بحث/تمييز.
+- محرّك Loomtime لمعاينة واجهات Rin حيّة أثناء الكتابة (Strand/Fabric/Dye/Warp + نظام أحداث Needle + عناصر Banner/Dialog/Overlay/روابط تشعّبية حقيقية).
+- مُصدِّر APK حقيقي: إعادة تعبئة الحزمة، حقن الأيقونة بكل الكثافات، تعديل AndroidManifest على مستوى AXML، وتوقيع فعلي.
+- سوق امتدادات ومدير مكتبات لاستيراد مكتبات المجتمع مباشرة داخل المشروع.
 
-- **محرر أكواد مبني على Canvas** بأداء محسَّن — قياس مُخبَّأ للأسطر، تمرير أفقي تلقائي للمؤشر، قائمة نسخ/قص/لصق عائمة، وإكمال تلقائي يتموضع ضمن حدود الشاشة دائماً.
-- **تحويل حروف عربي آمن عبر JNI** بين أعمدة UTF‑16 (Kotlin) وUTF‑8 (محرّك C++) في كل عملية تحديد/بحث/تمييز.
-- **محرّك Loomtime** لمعاينة واجهات Rin حيّة أثناء الكتابة (Strand/Fabric/Dye/Warp + نظام أحداث Needle + عناصر Banner/Dialog/Overlay/روابط تشعّبية حقيقية).
-- **مُصدِّر APK حقيقي**: إعادة تعبئة الحزمة، حقن الأيقونة بكل الكثافات، تعديل AndroidManifest على مستوى AXML، وتوقيع فعلي.
-- **سوق امتدادات** ومدير مكتبات لاستيراد مكتبات المجتمع مباشرة داخل المشروع.
+</details><a name="وسامات-rinstudio"></a>
 
-</details>
-
-<a name="وسامات-rinstudio"></a>
 <details>
-<summary><img src="assets/icons/tag.svg" width="20" valign="middle"/> <b>وسامات جاهزة لمشاريع Rin الأخرى (اضغط للعرض)</b></summary>
-
-```markdown
-![Made with RinLang](https://img.shields.io/badge/Made%20with-RinLang-549764?style=for-the-badge)
+<summary><img src="assets/icons/tag.svg" width="20" valign="middle"/> <b>وسامات جاهزة لمشاريع Rin الأخرى (اضغط للعرض)</b></summary>![Made with RinLang](https://img.shields.io/badge/Made%20with-RinLang-549764?style=for-the-badge)
 ![Powered by Rin Engine](https://img.shields.io/badge/Powered%20by-Rin%20Engine-549764?style=flat-square&logo=cplusplus&logoColor=white)
 ![Rin Version](https://img.shields.io/badge/Rin-v1.0.0-orange?style=flat-square)
 ![RTL Ready](https://img.shields.io/badge/RTL%20%2F%20Arabic-Ready-8A2BE2?style=flat-square)
-```
 
-![Made with RinLang](https://img.shields.io/badge/Made%20with-RinLang-549764?style=for-the-badge)
-![Powered by Rin Engine](https://img.shields.io/badge/Powered%20by-Rin%20Engine-549764?style=flat-square&logo=cplusplus&logoColor=white)
+"Made with RinLang" (https://img.shields.io/badge/Made%20with-RinLang-549764?style=for-the-badge)
+"Powered by Rin Engine" (https://img.shields.io/badge/Powered%20by-Rin%20Engine-549764?style=flat-square&logo=cplusplus&logoColor=white)
 
-</details>
+</details>---
 
----
+الترخيص
 
-## الترخيص
+هذا المشروع مرخَّص بموجب رخصة MIT — راجع ملف ""LICENSE"" (LICENSE).
 
-هذا المشروع مرخَّص بموجب **رخصة MIT** — راجع ملف [`LICENSE`](LICENSE).
+<div align="right"><a href="#عربي"><img src="assets/icons/arrow-up.svg" width="16" valign="middle"/> العودة لأعلى</a>  |  <a href="#english">English version <img src="assets/icons/arrow-down.svg" width="16" valign="middle"/></a>
 
-<div align="right">
+</div></div>---
 
-<a href="#عربي"><img src="assets/icons/arrow-up.svg" width="16" valign="middle"/> العودة لأعلى</a> &nbsp;|&nbsp; <a href="#english">English version <img src="assets/icons/arrow-down.svg" width="16" valign="middle"/></a>
-
-</div>
-
-</div>
-
----
 ---
 
 <a name="english"></a>
 
-## Quick Overview
+Quick Overview
 
-| | <img src="assets/branding/rin_icon.jpg" width="20" valign="middle"/> RinLang | <img src="assets/branding/rinstudio_icon.jpg" width="20" valign="middle"/> RinStudio |
-|---|---|---|
-| **Type** | Programming language (C++17 engine) | Android editor / IDE |
-| **Version** | v1.0.0 | v1.0.0 |
-| **Runs on** | Android · Linux · macOS · Windows · Web | Android (minSdk 24) |
-| **License** | MIT | MIT |
-| **Jump to** | [Language details ⤵](#rinlang-contents-en) | [Editor details ⤵](#rinstudio-contents-en) |
+| <img src="assets/branding/rin_icon.jpg" width="20" valign="middle" style="border-radius:6px"/> RinLang| <img src="assets/branding/rinstudio_icon.jpg" width="20" valign="middle" style="border-radius:6px"/> RinStudio
+Type| Programming language (C++17 engine)| Android editor / IDE
+Version| v1.0.0| v1.0.0
+Runs on| Android · Linux · macOS · Windows · Web| Android (minSdk 24)
+License| MIT| MIT
+Jump to| "Language details ⤵" (#rinlang-contents-en)| "Editor details ⤵" (#rinstudio-contents-en)
 
 ---
 
 <a name="rinlang-contents-en"></a>
-### 📖 In this section — RinLang
-[Full feature list](#rinlang-features-en) · [Bundled libraries](#rinlang-libraries-en) · [Syntax highlighting](#rinlang-syntax-en) · [Quick start](#rinlang-quickstart-en) · [Project structure](#rinlang-structure-en)
+
+📖 In this section — RinLang
+
+"Full feature list" (#rinlang-features-en) · "Bundled libraries" (#rinlang-libraries-en) · "Syntax highlighting" (#rinlang-syntax-en) · "Quick start" (#rinlang-quickstart-en) · "Project structure" (#rinlang-structure-en)
 
 ---
 
-<div align="center">
-<img src="assets/branding/rin_icon.jpg" alt="RinLang icon" width="110" style="border-radius:16px" />
-
-# RinLang
+<div align="center"><img src="assets/branding/rin_icon.jpg" alt="RinLang icon" width="110" style="border-radius:24px" />RinLang
 
 <p>
 <img alt="Engine" src="https://img.shields.io/badge/Engine-C%2B%2B17-00599C?style=for-the-badge&logo=cplusplus&logoColor=white" />
@@ -247,14 +199,10 @@ rinlang/
 <img alt="Extension" src="https://img.shields.io/badge/File%20Extension-.rin-181717?style=for-the-badge&logo=github" />
 <img alt="RTL" src="https://img.shields.io/badge/RTL%20%2F%20Arabic-Supported-549764?style=for-the-badge" />
 <img alt="Platform" src="https://img.shields.io/badge/Runs%20on-Android%20%7C%20Linux%20%7C%20macOS%20%7C%20Windows%20%7C%20Web-4E4E4E?style=for-the-badge" />
-</p>
-</div>
+</p></div>An interpreted programming language with one shared C++17 engine — running inside an Android app, from the command line, embedded in other languages, and even in the browser via WebAssembly.
 
-**An interpreted programming language with one shared C++17 engine — running inside an Android app, from the command line, embedded in other languages, and even in the browser via WebAssembly.**
+RinLang has a familiar C-style syntax (variables, conditionals, loops, functions, arrays and maps) built on a single interpreter ("rin_lexer" → "rin_parser" → "rin_interpreter") with no duplicated logic across platforms. It features a unified container system ("@container") that NoSQL documents, "|>"-piped data pipelines, and policy-guarded build units are all built on top of, plus an "@import" system and a standard library of 60+ ready-made libraries. Arabic/RTL text support is built into every layer strings pass through, not bolted on.
 
-RinLang has a familiar C-style syntax (variables, conditionals, loops, functions, arrays and maps) built on a single interpreter (`rin_lexer` → `rin_parser` → `rin_interpreter`) with no duplicated logic across platforms. It features a unified **container system** (`@container`) that NoSQL documents, `|>`-piped data pipelines, and policy-guarded build units are all built on top of, plus an `@import` system and a standard library of **60+ ready-made libraries**. Arabic/RTL text support is built into every layer strings pass through, not bolted on.
-
-```rin
 fun fib(n) {
     if (n < 2) { return n; }
     return fib(n - 1) + fib(n - 2);
@@ -266,71 +214,53 @@ print fib(10);
 .end/container.doc
 
 @import "lib/math.og.rin";
-```
 
 <a name="rinlang-features-en"></a>
+
 <details open>
-<summary><img src="assets/icons/checklist.svg" width="20" valign="middle"/> <b>Full feature list</b></summary>
+<summary><img src="assets/icons/checklist.svg" width="20" valign="middle"/> <b>Full feature list</b></summary>Feature| Description
+Familiar core syntax| Variables, conditionals, loops, functions, arrays and maps
+"@container"| Unified containers: data, NoSQL documents ("@container.doc"), data pipelines ("@container.pipe"), policy-guarded build units ("@make")
+"@import"| Import ".rin"/".og.rin" files directly or as an aliased container
+60+ bundled libraries| Math, physics, strings, JSON/CSV, networking, input validation, and more
+Native Arabic/RTL support| Correct UTF-16 ↔ UTF-8 offset conversion everywhere Arabic text crosses the JNI boundary
+Custom language authoring| "langkit.og.rin" lets you define new grammars on top of the same engine
+Cross-platform| Android · Linux · macOS · Windows · Web (WASM) — one engine, zero duplication
 
-| Feature | Description |
-|---|---|
-| Familiar core syntax | Variables, conditionals, loops, functions, arrays and maps |
-| `@container` | Unified containers: data, NoSQL documents (`@container.doc`), data pipelines (`@container.pipe`), policy-guarded build units (`@make`) |
-| `@import` | Import `.rin`/`.og.rin` files directly or as an aliased container |
-| 60+ bundled libraries | Math, physics, strings, JSON/CSV, networking, input validation, and more |
-| Native Arabic/RTL support | Correct UTF‑16 ↔ UTF‑8 offset conversion everywhere Arabic text crosses the JNI boundary |
-| Custom language authoring | `langkit.og.rin` lets you define new grammars on top of the same engine |
-| Cross-platform | Android · Linux · macOS · Windows · Web (WASM) — one engine, zero duplication |
+</details><a name="rinlang-libraries-en"></a>
 
-</details>
-
-<a name="rinlang-libraries-en"></a>
 <details>
-<summary><img src="assets/icons/book.svg" width="20" valign="middle"/> <b>Bundled libraries — 60+ (click to expand)</b></summary>
+<summary><img src="assets/icons/book.svg" width="20" valign="middle"/> <b>Bundled libraries — 60+ (click to expand)</b></summary>"math" · "physics" · "strings" · "collections" · "functional" · "data" · "jsonkit" · "csv" · "httpkit" · "validate" · "syskit" · "requirekit" · "config" · "logger" · "colors" · "geometry" · "matrix" · "graph" · "animation" · "layout" · "events" · "cachekit" · "iterkit" · "loopkit" · "format" · "envkit" · "astwalk" · "behaviorkit" · "gridkit" · "lexkit" · "maskkit" · "loopstats"
 
-`math` · `physics` · `strings` · `collections` · `functional` · `data` · `jsonkit` · `csv` · `httpkit` · `validate` · `syskit` · `requirekit` · `config` · `logger` · `colors` · `geometry` · `matrix` · `graph` · `animation` · `layout` · `events` · `cachekit` · `iterkit` · `loopkit` · `format` · `envkit` · `astwalk` · `behaviorkit` · `gridkit` · `lexkit` · `maskkit` · `loopstats`
+Every library follows the same safe-result convention "{ok, ...}" instead of throwing unexpected exceptions.
 
-Every library follows the same safe-result convention `{ok, ...}` instead of throwing unexpected exceptions.
+</details><a name="rinlang-syntax-en"></a>
 
-</details>
-
-<a name="rinlang-syntax-en"></a>
 <details>
-<summary><img src="assets/icons/highlighter.svg" width="20" valign="middle"/> <b>Syntax highlighting & grammars (click to expand)</b></summary>
+<summary><img src="assets/icons/highlighter.svg" width="20" valign="middle"/> <b>Syntax highlighting & grammars (click to expand)</b></summary>- "syntaxes/rin.tmLanguage.json" — a TextMate grammar built from the real reserved words in "rin_lexer.cpp", ready for any TextMate-compatible editor.
+- "src/" ("RinLangVSSDK") — a ready Visual Studio extension (".vsixmanifest" + VSPackage) giving full Rin highlighting inside Visual Studio.
+- GitHub's own highlighting depends on the separate ""github-linguist/linguist"" (https://github.com/github-linguist/linguist) project and requires wide real-world adoption (2,000+ ".rin" files) before a PR is accepted — the grammar is ready and tested, but that threshold hasn't been met yet.
 
-- `syntaxes/rin.tmLanguage.json` — a TextMate grammar built from the real reserved words in `rin_lexer.cpp`, ready for any TextMate-compatible editor.
-- `src/` (`RinLangVSSDK`) — a ready Visual Studio extension (`.vsixmanifest` + VSPackage) giving full Rin highlighting inside Visual Studio.
-- **GitHub's own highlighting** depends on the separate [`github-linguist/linguist`](https://github.com/github-linguist/linguist) project and requires wide real-world adoption (2,000+ `.rin` files) before a PR is accepted — the grammar is ready and tested, but that threshold hasn't been met yet.
+</details><a name="rinlang-quickstart-en"></a>
 
-</details>
-
-<a name="rinlang-quickstart-en"></a>
 <details>
-<summary><img src="assets/icons/bolt.svg" width="20" valign="middle"/> <b>Quick start (click to expand)</b></summary>
+<summary><img src="assets/icons/bolt.svg" width="20" valign="middle"/> <b>Quick start (click to expand)</b></summary>Interactive CLI (Linux):
 
-**Interactive CLI (Linux):**
-```bash
 sudo apt install cmake g++      # or the dnf/pacman equivalent
 cd cli/linux && ./build.sh
 ./build/rin
-```
 
-**Build the shared library (Python/Node/C):**
-```bash
+Build the shared library (Python/Node/C):
+
 cd bindings
 cmake -B build && cmake --build build
-```
 
-**Android Studio:** open `app/` as a regular Gradle project (requires NDK and CMake).
+Android Studio: open "app/" as a regular Gradle project (requires NDK and CMake).
 
-</details>
+</details><a name="rinlang-structure-en"></a>
 
-<a name="rinlang-structure-en"></a>
 <details>
-<summary><img src="assets/icons/folder.svg" width="20" valign="middle"/> <b>Project structure (click to expand)</b></summary>
-
-```
-rinlang/
+<summary><img src="assets/icons/folder.svg" width="20" valign="middle"/> <b>Project structure (click to expand)</b></summary>rinlang/
 ├── app/              # RinStudio — Android app (Kotlin/Compose + JNI)
 │   └── src/main/cpp/ # C++17 engine: rin_lexer / rin_parser / rin_interpreter
 ├── cli/              # Standalone CLIs (linux/macos/windows)
@@ -343,22 +273,18 @@ rinlang/
 ├── src/              # RinLangVSSDK — Visual Studio extension
 ├── web/              # WebAssembly build + interactive web demo
 └── docs/             # Full documentation for every language subsystem
-```
 
-</details>
-
----
+</details>---
 
 <a name="rinstudio-contents-en"></a>
-### 📖 In this section — RinStudio
-[Full editor feature list](#rinstudio-features-en) · [Ready-made badges](#rinstudio-badges-en)
+
+📖 In this section — RinStudio
+
+"Full editor feature list" (#rinstudio-features-en) · "Ready-made badges" (#rinstudio-badges-en)
 
 ---
 
-<div align="center">
-<img src="assets/branding/rinstudio_icon.jpg" alt="RinStudio icon" width="110" style="border-radius:16px" />
-
-# RinStudio
+<div align="center"><img src="assets/branding/rinstudio_icon.jpg" alt="RinStudio icon" width="110" style="border-radius:24px" />RinStudio
 
 <p>
 <img alt="Version" src="https://img.shields.io/badge/RinStudio-v1.0.0-549764?style=for-the-badge" />
@@ -366,52 +292,37 @@ rinlang/
 <img alt="Stack" src="https://img.shields.io/badge/Kotlin-Jetpack%20Compose-7F52FF?style=for-the-badge&logo=kotlin&logoColor=white" />
 <img alt="License" src="https://img.shields.io/badge/License-MIT-549764?style=for-the-badge" />
 <img alt="Build" src="https://img.shields.io/badge/Build-Signed%20Release%20APK-4E4E4E?style=for-the-badge" />
-</p>
+</p></div>A full Android IDE built specifically for RinLang — code editor, live UI preview, and a signed standalone-app exporter.
 
-**A full Android IDE built specifically for RinLang — code editor, live UI preview, and a signed standalone-app exporter.**
-
-<a href="https://github.com/dlof-lib/rinlang/releases">
+<div align="center"><a href="https://github.com/dlof-lib/rinlang/releases">
 <img src="assets/icons/download.svg" width="18" valign="middle"/>
 <img alt="Download RinStudio" src="https://img.shields.io/badge/Download-RinStudio%20APK-549764?style=for-the-badge&logo=android&logoColor=white" />
-</a>
-</div>
+</a></div><a name="rinstudio-features-en"></a>
 
-<a name="rinstudio-features-en"></a>
 <details open>
-<summary><img src="assets/icons/checklist.svg" width="20" valign="middle"/> <b>Full editor feature list</b></summary>
+<summary><img src="assets/icons/checklist.svg" width="20" valign="middle"/> <b>Full editor feature list</b></summary>- Canvas-based code editor with optimized performance — cached line-width measurement, automatic horizontal cursor scrolling, a floating cut/copy/paste action mode, and an autocomplete popup that always clamps inside the screen bounds.
+- Safe Arabic character conversion over JNI between UTF-16 (Kotlin) and UTF-8 (C++ engine) columns on every select/search/highlight operation.
+- Loomtime engine for live-previewing Rin UIs while typing (Strand/Fabric/Dye/Warp + the Needle event system + Banner/Dialog/Overlay/real hyperlink components).
+- Real APK exporter: package repackaging, icon injection across every density, AXML-level AndroidManifest patching, and real signing.
+- Extensions marketplace and a library manager for importing community libraries directly into a project.
 
-- **Canvas-based code editor** with optimized performance — cached line-width measurement, automatic horizontal cursor scrolling, a floating cut/copy/paste action mode, and an autocomplete popup that always clamps inside the screen bounds.
-- **Safe Arabic character conversion over JNI** between UTF‑16 (Kotlin) and UTF‑8 (C++ engine) columns on every select/search/highlight operation.
-- **Loomtime engine** for live-previewing Rin UIs while typing (Strand/Fabric/Dye/Warp + the Needle event system + Banner/Dialog/Overlay/real hyperlink components).
-- **Real APK exporter**: package repackaging, icon injection across every density, AXML-level AndroidManifest patching, and real signing.
-- **Extensions marketplace** and a library manager for importing community libraries directly into a project.
+</details><a name="rinstudio-badges-en"></a>
 
-</details>
-
-<a name="rinstudio-badges-en"></a>
 <details>
-<summary><img src="assets/icons/tag.svg" width="20" valign="middle"/> <b>Ready-made badges for other Rin projects (click to expand)</b></summary>
-
-```markdown
-![Made with RinLang](https://img.shields.io/badge/Made%20with-RinLang-549764?style=for-the-badge)
+<summary><img src="assets/icons/tag.svg" width="20" valign="middle"/> <b>Ready-made badges for other Rin projects (click to expand)</b></summary>![Made with RinLang](https://img.shields.io/badge/Made%20with-RinLang-549764?style=for-the-badge)
 ![Powered by Rin Engine](https://img.shields.io/badge/Powered%20by-Rin%20Engine-549764?style=flat-square&logo=cplusplus&logoColor=white)
 ![Rin Version](https://img.shields.io/badge/Rin-v1.0.0-orange?style=flat-square)
 ![RTL Ready](https://img.shields.io/badge/RTL%20%2F%20Arabic-Ready-8A2BE2?style=flat-square)
-```
 
-![Made with RinLang](https://img.shields.io/badge/Made%20with-RinLang-549764?style=for-the-badge)
-![Powered by Rin Engine](https://img.shields.io/badge/Powered%20by-Rin%20Engine-549764?style=flat-square&logo=cplusplus&logoColor=white)
+"Made with RinLang" (https://img.shields.io/badge/Made%20with-RinLang-549764?style=for-the-badge)
+"Powered by Rin Engine" (https://img.shields.io/badge/Powered%20by-Rin%20Engine-549764?style=flat-square&logo=cplusplus&logoColor=white)
 
-</details>
+</details>---
 
----
+License
 
-## License
+This project is licensed under the MIT License — see ""LICENSE"" (LICENSE) for details.
 
-This project is licensed under the **MIT License** — see [`LICENSE`](LICENSE) for details.
-
-<div align="right">
-
-<a href="#english"><img src="assets/icons/arrow-up.svg" width="16" valign="middle"/> Back to top</a> &nbsp;|&nbsp; <a href="#عربي">النسخة العربية <img src="assets/icons/arrow-down.svg" width="16" valign="middle"/></a>
+<div align="right"><a href="#english"><img src="assets/icons/arrow-up.svg" width="16" valign="middle"/> Back to top</a>  |  <a href="#عربي">النسخة العربية <img src="assets/icons/arrow-down.svg" width="16" valign="middle"/></a>
 
 </div>
