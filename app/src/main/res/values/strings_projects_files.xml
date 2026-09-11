@@ -15,6 +15,13 @@
     <!-- الشريط العلوي الموحّد للشاشات الفرعية -->
     <string name="action_back">رجوع</string>
     <string name="projects_screen_title">المشاريع</string>
+    <string name="import_project_action">استيراد</string>
+    <string name="import_project_preview_title">استيراد مشروع Rin</string>
+    <string name="import_project_success">تم استيراد المشروع: %s</string>
+    <string name="import_project_error">تعذّر استيراد مشروع Rin</string>
+    <string name="export_project_action">تصدير .rinproj</string>
+    <string name="export_project_success">تم تصدير حزمة المشروع: %s</string>
+    <string name="export_project_error">تعذّر تصدير حزمة المشروع</string>
     <string name="files_screen_title">الملفات</string>
 
     <!-- شاشة المشاريع -->
