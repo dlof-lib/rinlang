@@ -977,3 +977,345 @@ fun matrixFrom(rowsData) {
     return m;
 }
 
+
+// ════════════════════════════════════════════════════════════════════════
+// RMF (Rin Math Fabric) Phase 3 §13/§14 — Fraction / Complex
+// نفس أسلوب Vector/Matrix أعلاه بالضبط: struct + دوال سحرية (__add__/__sub__/__mul__/__div__/
+// __neg__). Fraction تبسّط نفسها تلقائياً لأبسط صورة (عبر gcd) في كل init() -- هذا يجعل مقارنة
+// == بين كسرين متكافئين (1/2 و2/4 مثلاً) تعمل صحيحة مجاناً عبر المساواة التركيبية العادية لـ
+// struct (نفس الحقول = متساويان، انظر valuesEqual في rin_interpreter.cpp)، بلا أي كود مقارنة
+// إضافي مطلوب هنا.
+// ════════════════════════════════════════════════════════════════════════
+
+struct Fraction {
+    let num = 0;
+    let den = 1;
+
+    fun init(num, den) {
+        if (den == 0) {
+            print "Fraction: denominator cannot be 0";
+            den = 1;
+        }
+        if (den < 0) {
+            num = -num;
+            den = -den;
+        }
+        let g = gcd(abs(num), abs(den));
+        if (g == 0) { g = 1; }
+        self.num = num / g;
+        self.den = den / g;
+    }
+
+    fun __add__(o) { return Fraction(self.num * o.den + o.num * self.den, self.den * o.den); }
+    fun __sub__(o) { return Fraction(self.num * o.den - o.num * self.den, self.den * o.den); }
+    fun __mul__(o) { return Fraction(self.num * o.num, self.den * o.den); }
+    fun __div__(o) { return Fraction(self.num * o.den, self.den * o.num); }
+    fun __neg__() { return Fraction(-self.num, self.den); }
+
+    fun toNumber() { return self.num / self.den; }
+    fun toStr() { return self.num + "/" + self.den; }
+}
+
+struct Complex {
+    let re = 0;
+    let im = 0;
+
+    fun init(re, im) {
+        self.re = re;
+        self.im = im;
+    }
+
+    fun __add__(o) { return Complex(self.re + o.re, self.im + o.im); }
+    fun __sub__(o) { return Complex(self.re - o.re, self.im - o.im); }
+
+    fun __mul__(o) {
+        if (type(o) == "number") { return Complex(self.re * o, self.im * o); }
+        return Complex(self.re * o.re - self.im * o.im, self.re * o.im + self.im * o.re);
+    }
+
+    fun __div__(o) {
+        if (type(o) == "number") { return Complex(self.re / o, self.im / o); }
+        let denom = o.re * o.re + o.im * o.im;
+        return Complex((self.re * o.re + self.im * o.im) / denom, (self.im * o.re - self.re * o.im) / denom);
+    }
+
+    fun __neg__() { return Complex(-self.re, -self.im); }
+
+    fun magnitude() { return sqrt(self.re * self.re + self.im * self.im); }
+    fun phase() { return atan2(self.im, self.re); }
+    fun conjugate() { return Complex(self.re, -self.im); }
+
+    fun toStr() {
+        if (self.im >= 0) { return self.re + " + " + self.im + "i"; }
+        return self.re + " - " + (-self.im) + "i";
+    }
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// RMF (Rin Math Fabric) Phase 4 §19 — Geometry: Circle / Rectangle
+// مبنية فوق Vector2 (نفس فلسفة كل RMF: كل طبقة تُبنى فوق طبقة أدنى منطقياً، §41) --
+// Circle.contains تستخدم Vector2.distance مباشرة بدل إعادة كتابة حساب المسافة من الصفر.
+// ════════════════════════════════════════════════════════════════════════
+
+struct Circle {
+    let center = nil;
+    let radius = 0;
+
+    fun init(center, radius) {
+        self.center = center;
+        self.radius = radius;
+    }
+
+    fun area() { return PI * self.radius * self.radius; }
+    fun circumference() { return TAU * self.radius; }
+
+    fun contains(point) { return self.center.distance(point) <= self.radius; }
+
+    fun intersects(other) { return self.center.distance(other.center) <= (self.radius + other.radius); }
+
+    fun toStr() { return "Circle(center=" + self.center.toStr() + ", radius=" + self.radius + ")"; }
+}
+
+struct Rectangle {
+    let x = 0;
+    let y = 0;
+    let width = 0;
+    let height = 0;
+
+    fun init(x, y, width, height) {
+        self.x = x;
+        self.y = y;
+        self.width = width;
+        self.height = height;
+    }
+
+    fun area() { return self.width * self.height; }
+    fun perimeter() { return 2 * (self.width + self.height); }
+
+    fun contains(point) {
+        if (point.x < self.x) { return false; }
+        if (point.x > self.x + self.width) { return false; }
+        if (point.y < self.y) { return false; }
+        if (point.y > self.y + self.height) { return false; }
+        return true;
+    }
+
+    fun intersects(other) {
+        if (self.x >= other.x + other.width) { return false; }
+        if (self.x + self.width <= other.x) { return false; }
+        if (self.y >= other.y + other.height) { return false; }
+        if (self.y + self.height <= other.y) { return false; }
+        return true;
+    }
+
+    fun centerPoint() { return Vector2(self.x + self.width / 2, self.y + self.height / 2); }
+
+    fun toStr() { return "Rectangle(x=" + self.x + ", y=" + self.y + ", w=" + self.width + ", h=" + self.height + ")"; }
+}
+
+// مساحة مثلث برؤوس ثلاث نقاط Vector2 (صيغة shoelace/المحدد)
+fun triangleArea(a, b, c) {
+    return abs((b.x - a.x) * (c.y - a.y) - (c.x - a.x) * (b.y - a.y)) / 2;
+}
+
+// محيط مثلث برؤوس ثلاث نقاط Vector2
+fun trianglePerimeter(a, b, c) {
+    return a.distance(b) + b.distance(c) + c.distance(a);
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// RMF (Rin Math Fabric) Phase 5 §28 — Interpolation إضافية
+// lerp/invLerp/remap موجودة أصلاً (lerp أصبحت أصلية في المفسّر منذ Phase 1). smoothstep/
+// smootherstep إضافتان قياسيتان في الرسوميات (منحنى-S بدل خط مستقيم)، مبنيتان فوق clamp الأصلية.
+// ════════════════════════════════════════════════════════════════════════
+
+fun smoothstep(edge0, edge1, x) {
+    let t = clamp((x - edge0) / (edge1 - edge0), 0, 1);
+    return t * t * (3 - 2 * t);
+}
+
+fun smootherstep(edge0, edge1, x) {
+    let t = clamp((x - edge0) / (edge1 - edge0), 0, 1);
+    return t * t * t * (t * (t * 6 - 15) + 10);
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// RMF Phase 5 §20 — Calculus (عددي/numerical فقط -- لا اشتقاق/تكامل رمزي، انظر تعليق solve أدناه
+// لشرح لماذا). f هنا قيمة دالة عادية من Rin (fun أو تعبير lambda مُمرَّر كوسيط) تُستدعى مباشرة
+// داخل هذه الدوال كـ f(x) -- ممكنة بفضل كون الدوال قيماً من الدرجة الأولى (first-class) في Rin.
+// ════════════════════════════════════════════════════════════════════════
+
+// مشتقة عددية عند نقطة x (الفرق المركزي/central difference -- أدق من الفرق الأمامي البسيط)
+fun differentiate(f, x) {
+    let h = 0.0001;
+    return (f(x + h) - f(x - h)) / (2 * h);
+}
+
+// تكامل عددي محدَّد من a إلى b (قاعدة سيمبسون/Simpson's rule بـ 1000 فترة -- دقيقة وسريعة عملياً)
+fun integrate(f, a, b) {
+    let n = 1000;
+    let h = (b - a) / n;
+    let total = f(a) + f(b);
+    let i = 1;
+    while (i < n) {
+        let x = a + i * h;
+        if (i % 2 == 0) {
+            total = total + 2 * f(x);
+        } else {
+            total = total + 4 * f(x);
+        }
+        i = i + 1;
+    }
+    return total * h / 3;
+}
+
+// نهاية f عند x تقريبياً (تقترب من كلا الجانبين وتأخذ المتوسط -- تقريب عددي، ليس إثباتاً رمزياً
+// لوجود النهاية). direction اختيارية: "left"/"right"/بلا شيء (الافتراضي، من الجهتين).
+fun limitAt(f, x, direction) {
+    let h = 0.00001;
+    if (direction == "left") { return f(x - h); }
+    if (direction == "right") { return f(x + h); }
+    return (f(x - h) + f(x + h)) / 2;
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// RMF Phase 5 §4/§5 — حل المعادلات (numerical/عددي مباشر، وليس جبراً رمزياً كاملاً)
+// بناء نظام جبر رمزي حقيقي (تمثيل تعبير كشجرة، simplify/expand/factor لأي تعبير عام) مشروع بحثي
+// ضخم بذاته (محرك CAS كامل) يتجاوز نطاق أي إضافة واحدة معقولة. هنا الجزء العملي الأهم من §4/§5
+// تحديداً: حل معادلات خطية/تربيعية فعلياً بمعاملاتها الرقمية (solveLinear/solveQuadratic) --
+// يغطي "لا حل / حل واحد / حلين / حلول تقريبية" المطلوبة صراحة، ويُعيد جذوراً من نوع Complex
+// (Phase 3) بدل تجاهلها أو الفشل عندما يكون المميّز سالباً، فيغطي أيضاً "حلول رمزية عند الإمكان".
+// ════════════════════════════════════════════════════════════════════════
+
+// حل ax + b = 0. يُعيد رقماً (الحل الوحيد)، أو النص "none" (لا حل)، أو "infinite" (كل رقم حل).
+fun solveLinear(a, b) {
+    if (a == 0) {
+        if (b == 0) { return "infinite"; }
+        return "none";
+    }
+    return -b / a;
+}
+
+// حل ax^2 + bx + c = 0. يُعيد array بالحلول: عنصر واحد (جذر مضاعف)، عنصران (Number أو Complex
+// حسب إشارة المميّز)، أو -- إن كانت a=0 فعلياً معادلة خطية -- يُفوّض لـ solveLinear (وقد يُعيد نصاً
+// بدل array في تلك الحالة الحدّية، فتحقّق من type() قبل الافتراض أنها array دائماً).
+fun solveQuadratic(a, b, c) {
+    if (a == 0) { return solveLinear(b, c); }
+    let disc = b * b - 4 * a * c;
+    if (disc > 0) {
+        let sq = sqrt(disc);
+        return [(-b + sq) / (2 * a), (-b - sq) / (2 * a)];
+    }
+    if (disc == 0) {
+        return [-b / (2 * a)];
+    }
+    let sq = sqrt(-disc);
+    let re = -b / (2 * a);
+    let im = sq / (2 * a);
+    return [Complex(re, im), Complex(re, -im)];
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// RMF Phase 5 §10/§11 — Units & Dimensions
+// أبسط تصميم ممكن: كل Unit يحمل (value, name). جدول واحد (_unitInfo) يربط كل اسم وحدة بِـ
+// [البُعد، معامل التحويل إلى وحدة القياس الأساسية لذلك البُعد]. الجمع/الطرح يتطلبان نفس البُعد
+// (وإلا: خطأ رياضي واضح -- meter + second مرفوضة صراحة، تماماً كما طُلب). القسمة/الضرب بعدد عادي
+// تُغيّر value فقط. قسمة وحدتين من نفس البُعد تُوحَّدان لنفس وحدة القياس الأساسية أولاً ثم تُعطيان
+// نسبة رقمية عادية (بلا وحدة). ضرب/قسمة بين بُعدين مختلفين (مثل distance/time) تُنتج Unit بوحدة
+// مركَّبة باسمها ("m/s") -- بلا اشتقاق نظام أبعاد كامل (Velocity/Force كأنواع منفصلة)؛ القيمة
+// والوحدة المركَّبة كافيتان عملياً لنتيجة "صحيحة الأبعاد" كما طُلب صراحة في المثال (distance/time).
+// ════════════════════════════════════════════════════════════════════════
+
+fun _unitInfo(name) {
+    if (name == "m") { return ["Length", 1]; }
+    if (name == "km") { return ["Length", 1000]; }
+    if (name == "cm") { return ["Length", 0.01]; }
+    if (name == "mm") { return ["Length", 0.001]; }
+    if (name == "s") { return ["Time", 1]; }
+    if (name == "ms") { return ["Time", 0.001]; }
+    if (name == "min") { return ["Time", 60]; }
+    if (name == "hr") { return ["Time", 3600]; }
+    if (name == "kg") { return ["Mass", 1]; }
+    if (name == "g") { return ["Mass", 0.001]; }
+    if (name == "deg") { return ["Angle", 1]; }
+    if (name == "rad") { return ["Angle", 57.29577951308232]; }
+    return nil;
+}
+
+struct Unit {
+    let value = 0;
+    let name = "";
+
+    fun init(value, name) {
+        self.value = value;
+        self.name = name;
+        // لا تُحذِّر لو كانت الوحدة مركَّبة (تحتوي '*' أو '/') -- هذه تُنتَج داخلياً تلقائياً من
+        // __mul__/__div__ نفسها (مثل "km/hr")، وليست خطأ مبرمج؛ التحذير مخصَّص فقط لاسم وحدة
+        // أساسي غير معروف كتبه المبرمج مباشرة (خطأ إملائي مثلاً).
+        if (_unitInfo(name) == nil and !contains(name, "*") and !contains(name, "/")) {
+            print "Unit: unknown unit '" + name + "'";
+        }
+    }
+
+    fun dimension() {
+        let info = _unitInfo(self.name);
+        if (info == nil) { return "Unknown"; }
+        return info[0];
+    }
+
+    fun _factor() {
+        let info = _unitInfo(self.name);
+        if (info == nil) { return 1; }
+        return info[1];
+    }
+
+    fun _baseValue() { return self.value * self._factor(); }
+
+    fun __add__(o) {
+        if (self.dimension() != o.dimension()) {
+            print "InvalidUnitOperation: cannot add '" + self.name + "' and '" + o.name + "' (dimensions: " + self.dimension() + " vs " + o.dimension() + ")";
+            return nil;
+        }
+        return Unit((self._baseValue() + o._baseValue()) / self._factor(), self.name);
+    }
+
+    fun __sub__(o) {
+        if (self.dimension() != o.dimension()) {
+            print "InvalidUnitOperation: cannot subtract '" + self.name + "' and '" + o.name + "' (dimensions: " + self.dimension() + " vs " + o.dimension() + ")";
+            return nil;
+        }
+        return Unit((self._baseValue() - o._baseValue()) / self._factor(), self.name);
+    }
+
+    fun __neg__() { return Unit(-self.value, self.name); }
+
+    fun __mul__(o) {
+        if (type(o) == "number") { return Unit(self.value * o, self.name); }
+        return Unit(self.value * o.value, self.name + "*" + o.name);
+    }
+
+    fun __div__(o) {
+        if (type(o) == "number") { return Unit(self.value / o, self.name); }
+        if (self.dimension() == o.dimension()) {
+            if (self.dimension() != "Unknown") {
+                return self._baseValue() / o._baseValue();
+            }
+        }
+        return Unit(self.value / o.value, self.name + "/" + o.name);
+    }
+
+    fun convertTo(targetName) {
+        let info = _unitInfo(targetName);
+        if (info == nil) {
+            print "Unit.convertTo: unknown unit '" + targetName + "'";
+            return nil;
+        }
+        if (info[0] != self.dimension()) {
+            print "InvalidUnitOperation: cannot convert '" + self.name + "' to '" + targetName + "' (different dimensions)";
+            return nil;
+        }
+        return Unit(self._baseValue() / info[1], targetName);
+    }
+
+    fun toStr() { return self.value + self.name; }
+}
