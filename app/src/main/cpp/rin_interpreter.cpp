@@ -305,6 +305,13 @@ Interpreter::Interpreter() {
     // أبسط ما يمكن).
     globals->define("TAU", Value::num(6.28318530717958647692));  // 2π
     globals->define("PHI", Value::num(1.61803398874989484820));  // النسبة الذهبية (1+√5)/2
+    // RMF Phase 4 §22 — Random: قبل هذا التعديل لم يكن أي مكان في الكود يستدعي std::srand()
+    // إطلاقاً، فكانت random()/randomChoice()/shuffle() تُنتج بالضبط نفس التسلسل في كل تشغيل
+    // للبرنامج (بذرة std::rand الافتراضية = 1) دون أن يطلب المبرمج ذلك أو يعرفه. هنا: بذرة عشوائية
+    // حقيقية (وقت التشغيل الفعلي) تلقائياً عند بدء أي برنامج Rin، فيصبح random() عشوائياً فعلاً
+    // بشكل افتراضي (السلوك المتوقَّع)، مع إبقاء إمكانية استعادة قابلية التكرار الكاملة صراحةً عبر
+    // seed(n) (انظر natives["seed"] أدناه) عندما يحتاجها المبرمج تحديداً (محاكاة/اختبارات).
+    std::srand(static_cast<unsigned int>(std::time(nullptr)));
     registerNatives();
 }
 
@@ -841,6 +848,16 @@ void Interpreter::registerNatives() {
     natives["random"] = [](std::vector<Value>& a, int line) {
         expectArgs("random", a, 0, line);
         return Value::num(static_cast<double>(std::rand()) / (static_cast<double>(RAND_MAX) + 1.0));
+    };
+    // RMF Phase 4 §22 — seed(n): يُعيد ضبط مولّد الأرقام العشوائية العام (نفس المولّد الذي تعتمد
+    // عليه random()/randomChoice()/shuffle() كلها) لبذرة محدَّدة، فيُنتِج بالضبط نفس تسلسل
+    // "العشوائية" في كل مرة يُستدعى فيها seed(n) بنفس n -- وهذا بالضبط تعريف "simulation قابل
+    // للتكرار" (reproducible): نفس البذرة = نفس النتائج، مفيد للاختبارات وتصحيح الأخطاء.
+    natives["seed"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("seed", a, 1, line);
+        double n = asNumber(a[0], "seed", line);
+        std::srand(static_cast<unsigned int>(n));
+        return Value::nil();
     };
     // ---- RMF (Rin Math Fabric) Phase 1 §6 — دوال رياضية إضافية (مثلثيات/أسّية/لوغاريتمية) ----
     natives["sin"] = [](std::vector<Value>& a, int line) { expectArgs("sin", a, 1, line); return Value::num(std::sin(asNumber(a[0], "sin", line))); };
