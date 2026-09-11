@@ -29,6 +29,24 @@ object ProjectManager {
     private const val RIN_EXTENSION = ".rin"
 
     /**
+     * يطهّر مسار عنصر داخل أرشيف ZIP ليمنع هجوم "Zip Slip": يرفض المسارات المطلقة،
+     * ومسارات Windows بحرف السواقة (مثل C:\)، وأي مقطع يساوي ".." يمكن أن يخرج به
+     * الملف من مجلد الوجهة. يعيد مساراً نسبياً آمناً بفواصل '/' موحّدة، أو null إن كان
+     * المسار غير آمن أو فارغاً بعد التطهير.
+     */
+    private fun sanitizeZipEntryPath(rawName: String): String? {
+        val normalized = rawName.replace('\\', '/')
+        if (normalized.isBlank()) return null
+        if (normalized.startsWith("/")) return null
+        if (normalized.contains(":")) return null // e.g. C:\... على ويندوز
+        val segments = normalized.split('/').filter { it.isNotEmpty() }
+        if (segments.isEmpty()) return null
+        if (segments.any { it == ".." }) return null
+        val cleaned = segments.filter { it != "." }.joinToString("/")
+        return cleaned.ifBlank { null }
+    }
+
+    /**
      * خيارات "رسم الواجهة" لمشروع نوع UI، تُختار في حوار "مشروع جديد" (انظر
      * ProjectsActivity.showCreateDialog) قبل الإنشاء: توب بار/بلا توب بار، قائمة جانبية/بلا
      * قائمة جانبية، ولون أساسي (primary) يُكتب داخل @theme في main.rin المولَّد باستخدام
