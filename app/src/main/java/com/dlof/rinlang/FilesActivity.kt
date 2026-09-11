@@ -181,7 +181,7 @@ class FilesActivity : AppCompatActivity() {
     private fun showZipToolsDialog() {
         val options = arrayOf(
             getString(R.string.zip_upload_extract),
-            getString(R.string.zip_download_project)
+            getString(R.string.export_project_action)
         )
         AlertDialog.Builder(this)
             .setTitle(R.string.zip_tools_title)
@@ -209,12 +209,12 @@ class FilesActivity : AppCompatActivity() {
 
     private fun downloadProjectAsZip() {
         val mainHandler = Handler(Looper.getMainLooper())
-        val progressDialog = RinDownloadProgressDialog(this, "${project.name}.zip")
+        val progressDialog = RinDownloadProgressDialog(this, "${project.name}.rinproj")
         progressDialog.show()
 
         Thread {
             try {
-                val zipFile = ProjectManager.exportProjectAsZip(this, project)
+                val zipFile = ProjectManager.exportProject(this, project)
                 val artifact = RinArtifact(
                     kind = ArtifactKind.ARCHIVE_ZIP,
                     relPath = zipFile.name,
