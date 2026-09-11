@@ -14,6 +14,7 @@ add_library(
         rin_lexer.cpp
         rin_parser.cpp
         rin_make.cpp
+        rin_artifact.cpp
         rin_interpreter.cpp
         # loader_ui/: Library Loader UI — اختياري تماماً وغير مفعَّل افتراضياً من rin_interpreter.cpp
         # (انظر setImportUISink/setImportUIMode في rin_interpreter.h)، مستقلة كلياً عن باقي المحرّك.
@@ -69,6 +70,7 @@ add_executable(
         rin_lexer.cpp
         rin_parser.cpp
         rin_make.cpp
+        rin_artifact.cpp
         rin_interpreter.cpp
         loader_ui/library_loader_ui.cpp
         rin_http.cpp
@@ -111,6 +113,7 @@ add_executable(
         rin_lexer.cpp
         rin_parser.cpp
         rin_make.cpp
+        rin_artifact.cpp
         rin_interpreter.cpp
         loader_ui/library_loader_ui.cpp
         rin_http.cpp
