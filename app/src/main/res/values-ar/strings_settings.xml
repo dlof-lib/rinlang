@@ -31,6 +31,8 @@
     <string name="settings_syntax_hint">استخدم ألوان Rin الحقيقية من المحرك الأصلي.</string>
     <string name="settings_brackets">مطابقة الأقواس</string>
     <string name="settings_brackets_hint">أظهر القوس المطابق أو القوس غير المغلق.</string>
+    <string name="settings_live_diagnostics">تشخيص الأخطاء الحي</string>
+    <string name="settings_live_diagnostics_hint">ضع خطًا تحت أخطاء وتحذيرات الصياغة أثناء الكتابة، باستخدام محلل ومحلّل Rin الفعليين.</string>
     <string name="settings_autocomplete">الإكمال التلقائي للكود</string>
     <string name="settings_autocomplete_hint">أظهر اقتراحات Rin أثناء كتابة المعرّفات.</string>
     <string name="settings_auto_close">إغلاق الأقواس تلقائياً</string>
