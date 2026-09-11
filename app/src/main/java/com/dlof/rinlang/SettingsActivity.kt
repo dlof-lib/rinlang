@@ -56,6 +56,7 @@ class SettingsActivity : AppCompatActivity() {
 
         bindSwitch(R.id.switchSyntax, R.string.settings_syntax, R.string.settings_syntax_hint, AppSettings.isSyntaxHighlighting(this)) { AppSettings.setSyntaxHighlighting(this, it) }
         bindSwitch(R.id.switchBrackets, R.string.settings_brackets, R.string.settings_brackets_hint, AppSettings.isBracketMatching(this)) { AppSettings.setBracketMatching(this, it) }
+        bindSwitch(R.id.switchLiveDiagnostics, R.string.settings_live_diagnostics, R.string.settings_live_diagnostics_hint, AppSettings.isLiveDiagnostics(this)) { AppSettings.setLiveDiagnostics(this, it) }
         bindSwitch(R.id.switchAutocomplete, R.string.settings_autocomplete, R.string.settings_autocomplete_hint, AppSettings.isAutocomplete(this)) { AppSettings.setAutocomplete(this, it) }
         bindSwitch(R.id.switchAutoClose, R.string.settings_auto_close, R.string.settings_auto_close_hint, AppSettings.isAutoCloseBrackets(this)) { AppSettings.setAutoCloseBrackets(this, it) }
         bindSwitch(R.id.switchAutoIndent, R.string.settings_auto_indent, R.string.settings_auto_indent_hint, AppSettings.isAutoIndent(this)) { AppSettings.setAutoIndent(this, it) }
@@ -141,6 +142,7 @@ class SettingsActivity : AppCompatActivity() {
         switchLineNumbers.isChecked = AppSettings.getShowLineNumbers(this)
         switches[R.id.switchSyntax]?.isChecked = AppSettings.isSyntaxHighlighting(this)
         switches[R.id.switchBrackets]?.isChecked = AppSettings.isBracketMatching(this)
+        switches[R.id.switchLiveDiagnostics]?.isChecked = AppSettings.isLiveDiagnostics(this)
         switches[R.id.switchAutocomplete]?.isChecked = AppSettings.isAutocomplete(this)
         switches[R.id.switchAutoClose]?.isChecked = AppSettings.isAutoCloseBrackets(this)
         switches[R.id.switchAutoIndent]?.isChecked = AppSettings.isAutoIndent(this)
