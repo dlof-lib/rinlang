@@ -11,6 +11,24 @@
 <a name="عربي"></a>
 <div dir="rtl">
 
+## نظرة سريعة
+
+| | <img src="assets/branding/rin_icon.jpg" width="20" valign="middle"/> RinLang | <img src="assets/branding/rinstudio_icon.jpg" width="20" valign="middle"/> RinStudio |
+|---|---|---|
+| **النوع** | لغة برمجة (محرّك C++17) | محرّر/IDE أندرويد |
+| **الإصدار** | v1.0.0 | v1.0.0 |
+| **يعمل على** | Android · Linux · macOS · Windows · Web | Android (minSdk 24) |
+| **الترخيص** | MIT | MIT |
+| **رابط سريع** | [تفاصيل اللغة ⤵](#محتويات-rinlang) | [تفاصيل المحرر ⤵](#محتويات-rinstudio) |
+
+---
+
+<a name="محتويات-rinlang"></a>
+### 📖 محتويات هذا القسم — RinLang
+[الميزات الكاملة](#ميزات-rinlang) · [المكتبات المدمجة](#مكتبات-rinlang) · [تلوين الأكواد](#تلوين-rinlang) · [البدء السريع](#بدء-rinlang) · [بنية المشروع](#بنية-rinlang)
+
+---
+
 <div align="center">
 <img src="assets/branding/rin_icon.jpg" alt="RinLang icon" width="110" style="border-radius:16px" />
 
@@ -44,8 +62,9 @@ print fib(10);
 @import "lib/math.og.rin";
 ```
 
-<details>
-<summary><img src="assets/icons/checklist.svg" width="20" valign="middle"/> <b>الميزات الكاملة (اضغط للعرض)</b></summary>
+<a name="ميزات-rinlang"></a>
+<details open>
+<summary><img src="assets/icons/checklist.svg" width="20" valign="middle"/> <b>الميزات الكاملة</b></summary>
 
 | الميزة | الوصف |
 |---|---|
@@ -59,6 +78,7 @@ print fib(10);
 
 </details>
 
+<a name="مكتبات-rinlang"></a>
 <details>
 <summary><img src="assets/icons/book.svg" width="20" valign="middle"/> <b>قائمة المكتبات المدمجة — ٦٠+ (اضغط للعرض)</b></summary>
 
@@ -68,6 +88,7 @@ print fib(10);
 
 </details>
 
+<a name="تلوين-rinlang"></a>
 <details>
 <summary><img src="assets/icons/highlighter.svg" width="20" valign="middle"/> <b>تلوين الأكواد وقواعد النحو (اضغط للعرض)</b></summary>
 
@@ -77,6 +98,7 @@ print fib(10);
 
 </details>
 
+<a name="بدء-rinlang"></a>
 <details>
 <summary><img src="assets/icons/bolt.svg" width="20" valign="middle"/> <b>البدء السريع (اضغط للعرض)</b></summary>
 
@@ -97,6 +119,7 @@ cmake -B build && cmake --build build
 
 </details>
 
+<a name="بنية-rinlang"></a>
 <details>
 <summary><img src="assets/icons/folder.svg" width="20" valign="middle"/> <b>بنية المشروع (اضغط للعرض)</b></summary>
 
@@ -117,6 +140,12 @@ rinlang/
 ```
 
 </details>
+
+---
+
+<a name="محتويات-rinstudio"></a>
+### 📖 محتويات هذا القسم — RinStudio
+[ميزات المحرر الكاملة](#ميزات-rinstudio) · [وسامات جاهزة](#وسامات-rinstudio)
 
 ---
 
@@ -141,8 +170,9 @@ rinlang/
 </a>
 </div>
 
-<details>
-<summary><img src="assets/icons/checklist.svg" width="20" valign="middle"/> <b>ميزات المحرر الكاملة (اضغط للعرض)</b></summary>
+<a name="ميزات-rinstudio"></a>
+<details open>
+<summary><img src="assets/icons/checklist.svg" width="20" valign="middle"/> <b>ميزات المحرر الكاملة</b></summary>
 
 - **محرر أكواد مبني على Canvas** بأداء محسَّن — قياس مُخبَّأ للأسطر، تمرير أفقي تلقائي للمؤشر، قائمة نسخ/قص/لصق عائمة، وإكمال تلقائي يتموضع ضمن حدود الشاشة دائماً.
 - **تحويل حروف عربي آمن عبر JNI** بين أعمدة UTF‑16 (Kotlin) وUTF‑8 (محرّك C++) في كل عملية تحديد/بحث/تمييز.
@@ -152,6 +182,7 @@ rinlang/
 
 </details>
 
+<a name="وسامات-rinstudio"></a>
 <details>
 <summary><img src="assets/icons/tag.svg" width="20" valign="middle"/> <b>وسامات جاهزة لمشاريع Rin الأخرى (اضغط للعرض)</b></summary>
 
@@ -186,6 +217,24 @@ rinlang/
 
 <a name="english"></a>
 
+## Quick Overview
+
+| | <img src="assets/branding/rin_icon.jpg" width="20" valign="middle"/> RinLang | <img src="assets/branding/rinstudio_icon.jpg" width="20" valign="middle"/> RinStudio |
+|---|---|---|
+| **Type** | Programming language (C++17 engine) | Android editor / IDE |
+| **Version** | v1.0.0 | v1.0.0 |
+| **Runs on** | Android · Linux · macOS · Windows · Web | Android (minSdk 24) |
+| **License** | MIT | MIT |
+| **Jump to** | [Language details ⤵](#rinlang-contents-en) | [Editor details ⤵](#rinstudio-contents-en) |
+
+---
+
+<a name="rinlang-contents-en"></a>
+### 📖 In this section — RinLang
+[Full feature list](#rinlang-features-en) · [Bundled libraries](#rinlang-libraries-en) · [Syntax highlighting](#rinlang-syntax-en) · [Quick start](#rinlang-quickstart-en) · [Project structure](#rinlang-structure-en)
+
+---
+
 <div align="center">
 <img src="assets/branding/rin_icon.jpg" alt="RinLang icon" width="110" style="border-radius:16px" />
 
@@ -219,8 +268,9 @@ print fib(10);
 @import "lib/math.og.rin";
 ```
 
-<details>
-<summary><img src="assets/icons/checklist.svg" width="20" valign="middle"/> <b>Full feature list (click to expand)</b></summary>
+<a name="rinlang-features-en"></a>
+<details open>
+<summary><img src="assets/icons/checklist.svg" width="20" valign="middle"/> <b>Full feature list</b></summary>
 
 | Feature | Description |
 |---|---|
@@ -234,6 +284,7 @@ print fib(10);
 
 </details>
 
+<a name="rinlang-libraries-en"></a>
 <details>
 <summary><img src="assets/icons/book.svg" width="20" valign="middle"/> <b>Bundled libraries — 60+ (click to expand)</b></summary>
 
@@ -243,6 +294,7 @@ Every library follows the same safe-result convention `{ok, ...}` instead of thr
 
 </details>
 
+<a name="rinlang-syntax-en"></a>
 <details>
 <summary><img src="assets/icons/highlighter.svg" width="20" valign="middle"/> <b>Syntax highlighting & grammars (click to expand)</b></summary>
 
@@ -252,6 +304,7 @@ Every library follows the same safe-result convention `{ok, ...}` instead of thr
 
 </details>
 
+<a name="rinlang-quickstart-en"></a>
 <details>
 <summary><img src="assets/icons/bolt.svg" width="20" valign="middle"/> <b>Quick start (click to expand)</b></summary>
 
@@ -272,6 +325,7 @@ cmake -B build && cmake --build build
 
 </details>
 
+<a name="rinlang-structure-en"></a>
 <details>
 <summary><img src="assets/icons/folder.svg" width="20" valign="middle"/> <b>Project structure (click to expand)</b></summary>
 
@@ -292,6 +346,12 @@ rinlang/
 ```
 
 </details>
+
+---
+
+<a name="rinstudio-contents-en"></a>
+### 📖 In this section — RinStudio
+[Full editor feature list](#rinstudio-features-en) · [Ready-made badges](#rinstudio-badges-en)
 
 ---
 
@@ -316,8 +376,9 @@ rinlang/
 </a>
 </div>
 
-<details>
-<summary><img src="assets/icons/checklist.svg" width="20" valign="middle"/> <b>Full editor feature list (click to expand)</b></summary>
+<a name="rinstudio-features-en"></a>
+<details open>
+<summary><img src="assets/icons/checklist.svg" width="20" valign="middle"/> <b>Full editor feature list</b></summary>
 
 - **Canvas-based code editor** with optimized performance — cached line-width measurement, automatic horizontal cursor scrolling, a floating cut/copy/paste action mode, and an autocomplete popup that always clamps inside the screen bounds.
 - **Safe Arabic character conversion over JNI** between UTF‑16 (Kotlin) and UTF‑8 (C++ engine) columns on every select/search/highlight operation.
@@ -327,6 +388,7 @@ rinlang/
 
 </details>
 
+<a name="rinstudio-badges-en"></a>
 <details>
 <summary><img src="assets/icons/tag.svg" width="20" valign="middle"/> <b>Ready-made badges for other Rin projects (click to expand)</b></summary>
 
