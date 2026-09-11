@@ -1,7 +1,10 @@
 // rin_editor_engine.cpp
 #include "rin_editor_engine.h"
 #include "../rin_lexer.h"
+#include "../rin_parser.h"
 #include "../rin_common.h"
+#include "../diagnostics/diagnostic.h"
+#include "../diagnostics/diagnostic_engine.h"
 #include <algorithm>
 #include <chrono>
 #include <unordered_map>
@@ -742,6 +745,86 @@ std::vector<std::string> EditorEngine::collectSuggestions(const std::string& pre
         result.push_back(id);
     }
     return result;
+}
+
+namespace {
+
+DiagnosticSeverity toEditorSeverity(rin::diag::Severity s) {
+    switch (s) {
+        case rin::diag::Severity::Error:   return DiagnosticSeverity::Error;
+        case rin::diag::Severity::Warning: return DiagnosticSeverity::Warning;
+        case rin::diag::Severity::Note:    return DiagnosticSeverity::Note;
+        case rin::diag::Severity::Help:    return DiagnosticSeverity::Help;
+    }
+    return DiagnosticSeverity::Error;
+}
+
+} // namespace
+
+// يحوّل rin::diag::Diagnostic واحد (سطر/عمود 1-based من نظام Diagnostics) إلى EditorDiagnostic
+// صفري القاعدة مُقيَّد ضمن حدود lines_ الفعلية، ويضيفه إلى out إن كان الموقع صالحًا.
+void EditorEngine::appendEditorDiagnostic_(std::vector<EditorDiagnostic>& out,
+                                            const rin::diag::Diagnostic& d) const {
+    const auto& loc = d.location;
+    if (!loc.isValid()) return;
+    int line0 = loc.startLine - 1;
+    if (line0 < 0 || line0 >= (int)lines_.size()) return;
+    int lineLen = (int)lines_[line0].size();
+    int startCol0 = std::max(0, loc.startCol - 1);
+    // مدى متعدّد الأسطر أو عمود نهاية غير منطقي: نكتفي بتغطية بقية السطر الحالي من نقطة البداية،
+    // حتى يبقى الخط المتعرّج ظاهرًا دومًا ولو بطول تقريبي بدل اختفائه كليًا.
+    int endCol0 = (loc.endLine == loc.startLine) ? std::max(0, loc.endCol - 1) : lineLen;
+    startCol0 = std::min(startCol0, lineLen);
+    endCol0 = std::min(std::max(endCol0, startCol0 + 1), std::max(lineLen, startCol0 + 1));
+    std::string message = d.message;
+    if (d.reason) message += " — " + *d.reason;
+    out.push_back({line0, startCol0, endCol0, toEditorSeverity(d.severity),
+                    rin::diag::codeString(d.code), std::move(message)});
+}
+
+std::vector<EditorDiagnostic> EditorEngine::computeDiagnostics() const {
+    std::vector<EditorDiagnostic> out;
+    std::string source = getText();
+    std::vector<rin::Token> tokens;
+    try {
+        rin::Lexer lexer(source);
+        tokens = lexer.scanTokens();
+    } catch (const rin::RinError& e) {
+        // خطأ Lexer غير قابل للاستمرار (مثال: علامة تنصيص لم تُغلَق) — تشخيص واحد فقط، ولا نصل
+        // أبدًا إلى مرحلة Parser على توكنز غير مكتملة.
+        if (e.diagnostic) {
+            appendEditorDiagnostic_(out, *e.diagnostic);
+        } else if (e.line >= 1 && e.line - 1 < (int)lines_.size()) {
+            int line0 = e.line - 1;
+            int lineLen = (int)lines_[line0].size();
+            out.push_back({line0, 0, std::max(1, lineLen), DiagnosticSeverity::Error, "E0010", e.message});
+        }
+        return out;
+    } catch (...) {
+        return out;
+    }
+
+    try {
+        rin::diag::DiagnosticEngine engine;
+        rin::Parser parser(tokens);
+        parser.parseCollectingDiagnostics(engine);
+        for (const auto& d : engine.all()) {
+            appendEditorDiagnostic_(out, d);
+        }
+    } catch (const rin::RinError& e) {
+        // Parser رمى خطأً غير قابل للاستمرار (نادر مع parseCollectingDiagnostics، لكن ممكن نظريًا
+        // عند فشل التزامن). نضيفه كتشخيص واحد بدل فقدانه بصمت.
+        if (e.diagnostic) {
+            appendEditorDiagnostic_(out, *e.diagnostic);
+        } else if (e.line >= 1 && e.line - 1 < (int)lines_.size()) {
+            int line0 = e.line - 1;
+            int lineLen = (int)lines_[line0].size();
+            out.push_back({line0, 0, std::max(1, lineLen), DiagnosticSeverity::Error, "E0010", e.message});
+        }
+    } catch (...) {
+        // نص غير صالح نحويًا مؤقتًا أثناء الكتابة بطريقة لم نتوقّعها — لا نُعطِّل الواجهة.
+    }
+    return out;
 }
 
 } // namespace rinedit
