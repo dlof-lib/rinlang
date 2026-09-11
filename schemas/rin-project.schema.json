@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rinlang.dev/schemas/rin-project-1.json",
+  "title": "Rin Project Manifest",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["format", "formatVersion", "name", "type", "entry"],
+  "properties": {
+    "format": {"const": "rin-project"},
+    "formatVersion": {"type": "integer", "const": 1},
+    "name": {"type": "string", "minLength": 1, "maxLength": 64},
+    "type": {"type": "string", "enum": ["container", "table", "ui", "free", "illust"]},
+    "entry": {"const": "main.rin"},
+    "fileCount": {"type": "integer", "minimum": 1},
+    "rinStudio": {"type": "string"},
+    "createdFor": {"const": "Rin"},
+    "minRinVersion": {"type": "string"},
+    "sdkVersion": {"type": "string"},
+    "dependencies": {"type": "array", "items": {"type": "object"}},
+    "permissions": {"type": "array", "items": {"type": "string"}},
+    "platforms": {"type": "array", "items": {"type": "string"}}
+  }
+}
