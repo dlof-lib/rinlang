@@ -12,6 +12,7 @@
 #include "rin_editor_engine.h"
 
 using rinedit::EditorEngine;
+using rinedit::EditorDiagnostic;
 using rinedit::HighlightSpan;
 using rinedit::Match;
 using rinedit::Position;
@@ -249,6 +250,28 @@ Java_com_dlof_rinlang_RinNativeEditor_nativeGetSuggestions(JNIEnv* env, jclass, 
 JNIEXPORT jintArray JNICALL
 Java_com_dlof_rinlang_RinNativeEditor_nativeLineStartPosition(JNIEnv* env, jclass, jlong handle, jint oneBasedLine) {
     return cursorArray(env, handleToEngine(handle)->lineStartPosition(oneBasedLine));
+}
+
+// تشخيص أخطاء حي: مصفوفة نصوص، عنصر واحد لكل تشخيص بالصيغة
+// "line:startCol:endCol:severity:code:message" (message قد يحوي ':' فيُقسَّم بحدّ أقصى 6 أجزاء
+// حتى لا تُقطَع الرسالة نفسها). استدعاء JNI واحد فقط (بدل مصفوفتين منفصلتين) يعني أن
+// computeDiagnostics() — التي تُشغِّل Lexer + Parser كاملين على المستند — تُستدعى مرة واحدة فقط
+// لكل إعادة حساب، لا مرتين، وهذا مهم لأن الجانب الكوتلن يعيد حسابها عند كل تغيّر نصّي (كل ضغطة مفتاح).
+JNIEXPORT jobjectArray JNICALL
+Java_com_dlof_rinlang_RinNativeEditor_nativeGetDiagnosticsPacked(JNIEnv* env, jclass, jlong handle) {
+    std::vector<EditorDiagnostic> diags = handleToEngine(handle)->computeDiagnostics();
+    jclass stringClass = env->FindClass("java/lang/String");
+    jobjectArray arr = env->NewObjectArray((jsize)diags.size(), stringClass, nullptr);
+    for (size_t i = 0; i < diags.size(); ++i) {
+        const auto& d = diags[i];
+        std::string packed = std::to_string(d.line) + ":" + std::to_string(d.startCol) + ":" +
+                              std::to_string(d.endCol) + ":" + std::to_string(static_cast<int>(d.severity)) +
+                              ":" + d.code + ":" + d.message;
+        jstring s = utf8ToJstring(env, packed);
+        env->SetObjectArrayElement(arr, (jsize)i, s);
+        env->DeleteLocalRef(s);
+    }
+    return arr;
 }
 
 } // extern "C"
