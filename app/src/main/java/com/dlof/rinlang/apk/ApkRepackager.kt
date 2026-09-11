@@ -1,5 +1,6 @@
 package com.dlof.rinlang.apk
 
+import android.graphics.Bitmap
 import java.io.BufferedOutputStream
 import java.io.File
 import java.io.FileOutputStream
@@ -50,7 +51,8 @@ object ApkRepackager {
         hostApkFile: File,
         patchedManifest: ByteArray,
         extraEntries: List<ExtraEntry>,
-        outFile: File
+        outFile: File,
+        customIcon: Bitmap? = null
     ) {
         outFile.parentFile?.mkdirs()
         val counting = CountingOutputStream(BufferedOutputStream(FileOutputStream(outFile)))
@@ -93,7 +95,8 @@ object ApkRepackager {
                 if (e.name == "AndroidManifest.xml") continue // نكتب النسخة المُعدَّلة لاحقاً
                 if (SIGNATURE_FILE_REGEX.matches(e.name)) continue // سيُعاد توقيعها من الصفر
 
-                val data = zf.getInputStream(e).use { it.readBytes() }
+                val data = customIcon?.let { IconInjector.replacementFor(e.name, it) }
+                    ?: zf.getInputStream(e).use { it.readBytes() }
                 val alignTo = when {
                     e.method != ZipEntry.STORED -> 0
                     e.name.endsWith(".so") -> ALIGN_SO
