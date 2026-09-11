@@ -116,7 +116,10 @@ object RinSyntaxHighlighter {
         "sum", "mean", "median", "variance", "stddev", "mode", "minOf", "maxOf",
         "normalize", "scale", "shift",
         "product", "count", "range", "geometricMean", "harmonicMean", "rms",
-        "percentile", "iqr", "weightedMean", "zscore", "cumulativeSum", "movingAverage", "clamp"
+        "percentile", "iqr", "weightedMean", "zscore", "cumulativeSum", "movingAverage", "clamp",
+        "make", "make.qr", "make.barcode", "make.file", "make.filename", "make.uuid", "make.hash",
+        "qr", "barcode", "filename", "uuid", "hash", "artifact.info", "container.make.qr",
+        "container.make.barcode", "container.make.file", "container.artifact.info"
     )
 
     // نص محاط بعلامتي تنصيص مع دعم التهريب (\" \\ \n ...) بنفس أسلوب rin_lexer.cpp::scanString.
