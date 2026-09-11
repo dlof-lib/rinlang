@@ -15,6 +15,10 @@
 #include <deque>
 #include <cstdint>
 
+// تصريح أمامي فقط (بلا #include لملف diagnostic.h كامل) حتى يبقى هذا الرأس خفيفًا ومستقلاً عن
+// تفاصيل نظام Diagnostics؛ التعريف الكامل يُستخدَم فقط داخل rin_editor_engine.cpp.
+namespace rin::diag { struct Diagnostic; }
+
 namespace rinedit {
 
 enum class HighlightKind {
@@ -56,6 +60,23 @@ struct Match {
     int line;
     int startCol;
     int endCol;
+};
+
+// شدّة تشخيص واحد، تطابق rin::diag::Severity حرفيًا بنفس ترتيب enum (انظر diagnostic.h) حتى
+// يمكن لـ Kotlin تفسير القيمة الخام مباشرة دون جدول تحويل منفصل قد ينحرف عنه.
+enum class DiagnosticSeverity { Error = 0, Warning = 1, Note = 2, Help = 3 };
+
+// تشخيص واحد (خطأ/تحذير نحوي) بموقع صفري القاعدة (line/col) جاهز للرسم مباشرة في المحرر —
+// مصدره rin::Lexer + rin::Parser (طبقة النحو فقط، وليس المُفسِّر/فاحص الأنواع؛ تشغيل المُفسِّر
+// عند كل ضغطة مفتاح غير آمن وقد ينفّذ كودًا جانبيًا، فيبقى نطاق هذا التشخيص الحي: أخطاء الصياغة
+// فقط — قوس/فاصلة منقوطة ناقصة، رمز غير متوقّع، تعبير غير صالح... إلخ).
+struct EditorDiagnostic {
+    int line;      // 0-based
+    int startCol;  // 0-based
+    int endCol;    // 0-based، حصري النهاية (لا يقل عن startCol+1)
+    DiagnosticSeverity severity;
+    std::string code;    // "E0011" مثلاً
+    std::string message; // نص الرسالة الكامل (يضمّ reason: إن وُجد)
 };
 
 // سجلّ تعديل واحد قابل للتراجع/الإعادة. النطاق [startLine,startCol) هو النقطة المشتركة؛
@@ -133,6 +154,12 @@ public:
     // ثم المعرِّفات، وكلٌّ منها مُرتَّب أبجديًا؛ لا يقترح prefix نفسه إن كان مطابقًا تمامًا لوحده.
     std::vector<std::string> collectSuggestions(const std::string& prefix, int maxResults) const;
 
+    // --- تشخيص أخطاء حي (live diagnostics) ---
+    // يشغِّل rin::Lexer ثم rin::Parser::parseCollectingDiagnostics() على النص الحالي ويُرجع كل
+    // أخطاء/تحذيرات الصياغة الملتقَطة (بدل التوقف عند أول خطأ)، لرسم خط أحمر متعرّج تحتها في
+    // المحرر أثناء الكتابة. لا يُشغِّل المُفسِّر (interpreter) إطلاقًا — انظر تعليق EditorDiagnostic.
+    std::vector<EditorDiagnostic> computeDiagnostics() const;
+
 private:
     std::vector<std::string> lines_;
     Position cursor_;
@@ -156,6 +183,10 @@ private:
     void applySmartDedentForClosingBrace();
     static std::string leadingWhitespace(const std::string& s);
     static std::string rtrim(const std::string& s);
+
+    // انظر التعريف في .cpp: يحوّل rin::diag::Diagnostic واحد إلى EditorDiagnostic صفري القاعدة
+    // ويضيفه إلى out (يتجاهله بصمت إن كان الموقع غير صالح).
+    void appendEditorDiagnostic_(std::vector<EditorDiagnostic>& out, const rin::diag::Diagnostic& d) const;
 };
 
 } // namespace rinedit
