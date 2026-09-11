@@ -45,9 +45,23 @@ def ensure_binary():
         os.path.join(ROOT, "tools", "rin_run.cpp"),
         os.path.join(cpp_dir, "rin_lexer.cpp"),
         os.path.join(cpp_dir, "rin_parser.cpp"),
+        os.path.join(cpp_dir, "rin_make.cpp"),
+        os.path.join(cpp_dir, "rin_artifact.cpp"),
         os.path.join(cpp_dir, "rin_interpreter.cpp"),
+        os.path.join(cpp_dir, "loader_ui", "library_loader_ui.cpp"),
+        os.path.join(cpp_dir, "rin_http.cpp"),
+        os.path.join(cpp_dir, "diagnostics", "diagnostic.cpp"),
+        os.path.join(cpp_dir, "diagnostics", "source_manager.cpp"),
+        os.path.join(cpp_dir, "diagnostics", "diagnostic_engine.cpp"),
+        os.path.join(cpp_dir, "diagnostics", "diagnostic_renderer.cpp"),
+        os.path.join(cpp_dir, "clc", "clc_container.cpp"),
+        os.path.join(cpp_dir, "clc", "clc_compress.cpp"),
+        os.path.join(cpp_dir, "clc", "clc_security.cpp"),
+        os.path.join(cpp_dir, "clc", "clc_rin_opt.cpp"),
+        os.path.join(cpp_dir, "clc", "clc_zip_import.cpp"),
+        os.path.join(cpp_dir, "clc", "sha256.cpp"),
     ]
-    cmd = ["g++", "-std=c++17", "-O2", "-o", RIN_RUN_BIN] + sources + ["-I", cpp_dir]
+    cmd = ["g++", "-std=c++17", "-O2", "-o", RIN_RUN_BIN] + sources + ["-I", cpp_dir, "-lz", "-ldl"]
     subprocess.run(cmd, check=True)
     return RIN_RUN_BIN
 
