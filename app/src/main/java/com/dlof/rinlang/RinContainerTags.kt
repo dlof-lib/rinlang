@@ -225,6 +225,9 @@ object RinSnippets {
                 "    fun greet(name) { return \"Hello \" + name; }\n" +
                 "    show greet(\"World\");\n" +
                 ".end/make\n"
-        )
+        ),
+        Snippet("Artifact: QR داخل Container", "@container=Product\n    let id = uuid();\n    let qr = container.make.qr(id, \"product-qr\", 512);\n    $CURSOR_MARKER\n.end/container\n"),
+        Snippet("Artifact: Barcode داخل Container", "@container=Product\n    let barcode = container.make.barcode(\"RIN-001\", \"product-barcode\", \"code128\");\n    $CURSOR_MARKER\n.end/container\n"),
+        Snippet("Artifact: File + Hash", "@container=Data\n    let f = container.make.file(\"data.txt\", \"Rin\");\n    let h = hash(\"Rin\");\n    print h;\n    $CURSOR_MARKER\n.end/container\n")
     )
 }
