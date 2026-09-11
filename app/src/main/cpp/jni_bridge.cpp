@@ -9,9 +9,11 @@
 #include <mutex>
 #include <unordered_map>
 #include <memory>
+#include <stdexcept>
 #include "rin_lexer.h"
 #include "rin_parser.h"
 #include "rin_interpreter.h"
+#include "rin_artifact.h"
 #include "rin_http.h"
 #include "diagnostics/diagnostic_renderer.h"
 #include "loom/rin_loom_c_api.h"
@@ -646,6 +648,36 @@ JavaVM* g_javaVm = nullptr;
 jclass g_httpBridgeClass = nullptr;          // global ref لصف Kotlin com.dlof.rinlang.RinHttpBridge
 jmethodID g_httpBridgeRequestMethod = nullptr; // MethodID لـ RinHttpBridge.request(...) الثابتة (static)
 jmethodID g_httpBridgeRequestBinaryGetMethod = nullptr; // MethodID لـ RinHttpBridge.requestBinaryGet(...) (fetchImage/fetchIcon)
+JNIEnv* attachEnv(bool* didAttach);
+std::string jstringToStd(JNIEnv* env, jstring s);
+jclass g_artifactBridgeClass = nullptr;
+jmethodID g_artifactQrMethod = nullptr;
+
+bool ensureArtifactBridgeAttached(JNIEnv* env) {
+    jclass local = env->FindClass("com/dlof/rinlang/RinArtifactBridge");
+    if (local == nullptr) { env->ExceptionClear(); return false; }
+    g_artifactBridgeClass = reinterpret_cast<jclass>(env->NewGlobalRef(local));
+    env->DeleteLocalRef(local);
+    if (!g_artifactBridgeClass) return false;
+    g_artifactQrMethod = env->GetStaticMethodID(g_artifactBridgeClass, "generateQrSvg", "(Ljava/lang/String;II)Ljava/lang/String;");
+    if (!g_artifactQrMethod) { env->ExceptionClear(); env->DeleteGlobalRef(g_artifactBridgeClass); g_artifactBridgeClass = nullptr; return false; }
+    return true;
+}
+
+std::string callKotlinQrBridge(const std::string& data, int size, int margin) {
+    if (!g_javaVm || !g_artifactBridgeClass || !g_artifactQrMethod) throw std::runtime_error("Rin Android QR bridge is not initialized");
+    bool didAttach = false;
+    JNIEnv* env = attachEnv(&didAttach);
+    if (!env) throw std::runtime_error("could not attach JNI environment for QR generation");
+    jstring jdata = env->NewStringUTF(data.c_str());
+    jobject obj = env->CallStaticObjectMethod(g_artifactBridgeClass, g_artifactQrMethod, jdata, (jint)size, (jint)margin);
+    env->DeleteLocalRef(jdata);
+    if (env->ExceptionCheck()) { env->ExceptionDescribe(); env->ExceptionClear(); if (didAttach) g_javaVm->DetachCurrentThread(); throw std::runtime_error("Rin QR encoder failed"); }
+    std::string out = jstringToStd(env, (jstring)obj);
+    if (obj) env->DeleteLocalRef(obj);
+    if (didAttach) g_javaVm->DetachCurrentThread();
+    return out;
+}
 
 // FindClass لا يعمل بأمان إلا من الترد (thread) الذي استُدعي منه System.loadLibrary أصلاً (أي هنا
 // داخل JNI_OnLoad نفسه) لأنه وقتها فقط يملك سياق مُحمِّل الأصناف (ClassLoader) الخاص بالتطبيق؛ أي
@@ -872,6 +904,9 @@ extern "C" JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void* /* reserved */) {
         if (g_httpBridgeRequestBinaryGetMethod != nullptr) {
             rin::http::setAndroidBinaryGetBridge(callKotlinHttpBridgeBinaryGet);
         }
+    }
+    if (ensureArtifactBridgeAttached(env)) {
+        rin::artifact::setQrBridge(callKotlinQrBridge);
     }
     // else: RinHttpBridge.kt غير موجود بعد في هذه الحزمة/هذا البناء — httpGet/apiCall... ستُعيد
     // خطأً واضحاً بدل الانهيار (انظر رسالة "جسر HTTP ... غير مُهيَّأ بعد" في rin_http.cpp).
