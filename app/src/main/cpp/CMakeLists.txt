@@ -4,6 +4,11 @@ project("rinengine")
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# Desktop QR backend. Android uses the Kotlin/ZXing bridge instead.
+if(NOT ANDROID)
+    find_library(RIN_QRENCODE_LIB NAMES qrencode)
+endif()
+
 add_library(
         rinengine
         SHARED
@@ -170,3 +175,13 @@ target_include_directories(
         ${CMAKE_CURRENT_SOURCE_DIR}
         ${CMAKE_CURRENT_SOURCE_DIR}/../../../../pitok/include
 )
+
+
+# Link the native desktop QR backend when available.
+if(NOT ANDROID AND RIN_QRENCODE_LIB)
+    foreach(_rin_target rinengine rincheck loomc)
+        if(TARGET ${_rin_target})
+            target_link_libraries(${_rin_target} PRIVATE ${RIN_QRENCODE_LIB})
+        endif()
+    endforeach()
+endif()
