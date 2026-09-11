@@ -34,10 +34,12 @@ object AxmlManifestPatcher {
     private const val FLAG_UTF8 = 0x00000100
 
     private const val TYPE_STRING = 0x03
+    private const val TYPE_INT_DEC = 0x10
+    private const val NO_ENTRY = -1 // 0xFFFFFFFF كـ Int موقَّع — يعني "بلا سلسلة خام، استخدم القيمة المُطبَّعة"
 
     class ManifestFormatException(message: String) : Exception(message)
 
-    data class Result(val bytes: ByteArray, val appliedCount: Int)
+    data class Result(val bytes: ByteArray, val appliedCount: Int, val intAppliedCount: Int = 0)
 
     /**
      * سمة واحدة مطلوب تعديل قيمتها: العنصر الذي تنتمي إليه (اسم tag، مثل "manifest" أو
@@ -45,6 +47,13 @@ object AxmlManifestPatcher {
      * "authorities") والقيمة النصية الجديدة. مطلوبة، وإلا تُرمى [ManifestFormatException].
      */
     data class AttrPatch(val elementName: String, val attrName: String, val newValue: String)
+
+    /**
+     * سمة عددية صحيحة (مثل android:minSdkVersion/targetSdkVersion داخل &lt;uses-sdk&gt;) —
+     * تُكتَب كقيمة TYPE_INT_DEC مباشرة في الشجرة بلا أي إضافة لمجمّع السلاسل (لا حاجة لها
+     * أصلاً لقيمة عددية)، خلافاً لـ [AttrPatch] النصية.
+     */
+    data class IntAttrPatch(val elementName: String, val attrName: String, val newValue: Int)
 
     /**
      * يُرجع نسخة معدَّلة من [original] (بايتات AndroidManifest.xml المصرَّفة كما استُخرجت من
@@ -62,7 +71,7 @@ object AxmlManifestPatcher {
      * إن لم يجد سمة متوقعة (بنية غير معتادة) يرمي [ManifestFormatException] بدل إفساد
      * البيان بصمت — يلتقطها RinApkExporter ويوقف التصدير مع رسالة واضحة.
      */
-    fun patch(original: ByteArray, patches: List<AttrPatch>, authorityRewrite: ((String) -> String)? = null): Result {
+    fun patch(original: ByteArray, patches: List<AttrPatch>, authorityRewrite: ((String) -> String)? = null, intPatches: List<IntAttrPatch> = emptyList()): Result {
         val buf = ByteBuffer.wrap(original.copyOf()).order(ByteOrder.LITTLE_ENDIAN)
         val bytes = buf.array()
 
@@ -116,6 +125,18 @@ object AxmlManifestPatcher {
             )
         }
 
+        // سمات عددية (minSdkVersion/targetSdkVersion وغيرها) — بحث "متساهل" هنا (لا يرمي عند
+        // غيابها، فقط يتجاهلها) لأن هذه قدرة إضافية اختيارية قد لا تنطبق على كل بنية بيان
+        // محتملة، خلافاً لسمات package/label/authorities الأساسية التي يجب أن تكون موجودة دوماً.
+        fun optionalIdx(name: String): Int = strings.indexOf(name)
+        data class ResolvedInt(val elementIdx: Int, val attrIdx: Int, val newValue: Int)
+        val resolvedInt = intPatches.mapNotNull { p ->
+            val elIdx = optionalIdx(p.elementName)
+            val atIdx = optionalIdx(p.attrName)
+            if (elIdx < 0 || atIdx < 0) null else ResolvedInt(elIdx, atIdx, p.newValue)
+        }
+        val appliedInt = BooleanArray(resolvedInt.size)
+
         val idxAuthorities = if (authorityRewrite != null) strings.indexOf("authorities") else -1
         // مواقع كل سمة authorities عُثر عليها أثناء التصفّح، بانتظار تخصيص فهرس سلسلة جديد
         // لكل واحدة بعد معرفة عددها (لا يُعرف مسبقاً كم عنصر <provider> موجود).
@@ -160,6 +181,16 @@ object AxmlManifestPatcher {
                             buf.put(off + 15, TYPE_STRING.toByte())    // دائماً كسلسلة حرفية (كانت قد تكون TYPE_REFERENCE)
                             buf.putInt(off + 16, r.newStringIdx)       // typedValue.data
                             applied[ri] = true
+                        }
+                    }
+                    for (ri in resolvedInt.indices) {
+                        if (appliedInt[ri]) continue
+                        val r = resolvedInt[ri]
+                        if (nameIdx == r.elementIdx && attrNameIdx == r.attrIdx) {
+                            buf.putInt(off + 8, NO_ENTRY)              // rawValueIdx: بلا سلسلة، القيمة عددية خالصة
+                            buf.put(off + 15, TYPE_INT_DEC.toByte())   // typedValue.dataType
+                            buf.putInt(off + 16, r.newValue)           // typedValue.data = القيمة العددية مباشرة
+                            appliedInt[ri] = true
                         }
                     }
                     if (idxAuthorities >= 0 && attrNameIdx == idxAuthorities) {
@@ -237,7 +268,11 @@ object AxmlManifestPatcher {
         out.write(newSp.array())
         out.write(bytes, spOffset + spChunkSize, bytes.size - (spOffset + spChunkSize))
 
-        return Result(out.toByteArray(), resolved.size + authorityEncoded.size)
+        return Result(
+            bytes = out.toByteArray(),
+            appliedCount = resolved.size + authorityEncoded.size + appliedInt.count { it },
+            intAppliedCount = appliedInt.count { it }
+        )
     }
 
     private fun intLE(v: Int): ByteArray =
