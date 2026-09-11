@@ -47,3 +47,26 @@ The Android app uses `RinArtifactBridge.kt` + ZXing for real QR generation. The 
 ## CLI
 
 The standalone `rin_run` and `rincheck` binaries in the release package include the new parser and Artifact runtime. Barcode/file/hash/UUID work in the CLI. QR is intentionally platform-gated there until a desktop QR backend is supplied; Android uses the real ZXing backend.
+
+
+## Desktop QR Backend
+
+`rin_run` no longer depends on Android for QR generation. On desktop/CLI, `make.qr()` uses a native backend implemented in `rin_artifact.cpp` that loads `libqrencode` at runtime and converts the resulting QR matrix into standards-compliant SVG.
+
+### Linux
+Install the runtime library:
+
+```bash
+sudo apt install libqrencode4
+```
+
+The executable searches for `libqrencode.so.4` first and then `libqrencode.so`. If neither is available, Rin reports an explicit backend error instead of silently generating a fake QR.
+
+### Example
+
+```rin
+let qr = make.qr("https://example.com", "example-qr", 512);
+print qr;
+```
+
+This creates `example-qr.svg` in the current Rin project path. The SVG can be opened directly or embedded in HTML/UI output.
