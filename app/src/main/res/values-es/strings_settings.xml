@@ -27,6 +27,8 @@
     <string name="settings_syntax_hint">Usa los colores reales del lexer de Rin desde el motor nativo.</string>
     <string name="settings_brackets">Coincidencia de corchetes</string>
     <string name="settings_brackets_hint">Resalta el corchete correspondiente o uno sin cerrar.</string>
+    <string name="settings_live_diagnostics">Diagnóstico de errores en vivo</string>
+    <string name="settings_live_diagnostics_hint">Subraya errores y advertencias de sintaxis mientras escribes, usando el lexer/parser real de Rin.</string>
     <string name="settings_autocomplete">Autocompletado</string>
     <string name="settings_autocomplete_hint">Muestra sugerencias de Rin al escribir identificadores.</string>
     <string name="settings_auto_close">Cerrar corchetes automáticamente</string>
