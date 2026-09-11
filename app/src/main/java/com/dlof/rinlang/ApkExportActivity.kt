@@ -1,6 +1,8 @@
 package com.dlof.rinlang
 
 import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
@@ -15,11 +17,13 @@ import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.EditText
 import android.widget.ImageButton
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.Spinner
 import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import com.dlof.rinlang.apk.RinApkExporter
@@ -28,7 +32,8 @@ import java.util.concurrent.Executors
 /**
  * شاشة "تصدير APK": تأخذ مشروع Rin محدداً (EXTRA_PROJECT_NAME) وتبنيه عبر [RinApkExporter]
  * كحزمة APK حقيقية موقّعة (انظر توثيق تلك الكائن لتفاصيل الآلية)، بنفس أسلوب الطرفية
- * المستخدم في RinFlow لعرض خطوات البناء والتوقيع سطراً سطراً.
+ * المستخدم في RinFlow لعرض خطوات البناء والتوقيع سطراً سطراً — مُنظَّمة الآن في أقسام
+ * واضحة: الهوية، الأيقونة، شاشة البداية، التوافق (إصدارات أندرويد)، والبناء.
  */
 class ApkExportActivity : AppCompatActivity() {
 
@@ -39,6 +44,11 @@ class ApkExportActivity : AppCompatActivity() {
     private lateinit var logContainer: LinearLayout
     private lateinit var edtAppName: EditText
     private lateinit var spinnerEntry: Spinner
+    private lateinit var imgIconPreview: ImageView
+    private lateinit var btnPickIcon: Button
+    private lateinit var edtSplashTagline: EditText
+    private lateinit var spinnerMinSdk: Spinner
+    private lateinit var spinnerTargetSdk: Spinner
     private lateinit var btnBuild: Button
     private lateinit var progress: ProgressBar
     private lateinit var txtStatus: TextView
@@ -49,6 +59,25 @@ class ApkExportActivity : AppCompatActivity() {
     private lateinit var btnShare: Button
 
     private var lastResult: RinApkExporter.ExportResult? = null
+    private var selectedIcon: Bitmap? = null
+
+    /** مستويات API معروضة للاختيار — من 24 (أدنى ما يضمنه build.gradle للحزمة المضيفة، لا
+     * يصحّ النزول تحته لأن classes.dex والمكتبات الأصلية المُعاد استخدامها بُنيت على أساسه)
+     * حتى 34 (compileSdk الحالي). */
+    private val sdkLevels = listOf(
+        24 to "API 24 — Android 7.0",
+        26 to "API 26 — Android 8.0",
+        28 to "API 28 — Android 9",
+        29 to "API 29 — Android 10",
+        30 to "API 30 — Android 11",
+        31 to "API 31 — Android 12",
+        33 to "API 33 — Android 13",
+        34 to "API 34 — Android 14"
+    )
+
+    private val pickIconLauncher = registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        if (uri != null) loadPickedIcon(uri)
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -66,6 +95,11 @@ class ApkExportActivity : AppCompatActivity() {
         logContainer = findViewById(R.id.apkExportLog)
         edtAppName = findViewById(R.id.edtApkExportAppName)
         spinnerEntry = findViewById(R.id.spinnerApkExportEntry)
+        imgIconPreview = findViewById(R.id.imgApkExportIconPreview)
+        btnPickIcon = findViewById(R.id.btnApkExportPickIcon)
+        edtSplashTagline = findViewById(R.id.edtApkExportSplashTagline)
+        spinnerMinSdk = findViewById(R.id.spinnerApkExportMinSdk)
+        spinnerTargetSdk = findViewById(R.id.spinnerApkExportTargetSdk)
         btnBuild = findViewById(R.id.btnApkExportBuild)
         progress = findViewById(R.id.progressApkExport)
         txtStatus = findViewById(R.id.txtApkExportStatus)
@@ -86,6 +120,14 @@ class ApkExportActivity : AppCompatActivity() {
         val mainIndex = entryNames.indexOf("main.rin")
         if (mainIndex >= 0) spinnerEntry.setSelection(mainIndex)
 
+        val sdkLabels = sdkLevels.map { it.second }
+        spinnerMinSdk.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, sdkLabels)
+        spinnerTargetSdk.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, sdkLabels)
+        spinnerMinSdk.setSelection(0) // API 24 — نفس الحد الأدنى الحقيقي للحزمة المضيفة
+        spinnerTargetSdk.setSelection(sdkLevels.lastIndex) // API 34 — نفس compileSdk الحالي
+
+        btnPickIcon.setOnClickListener { pickIconLauncher.launch("image/*") }
+
         btnBuild.setOnClickListener { startBuild(rinFiles.isNotEmpty()) }
         btnInstall.setOnClickListener { lastResult?.let { installApk(it.apkFile) } }
         btnSave.setOnClickListener { lastResult?.let { saveToDownloads(it.apkFile) } }
@@ -97,11 +139,33 @@ class ApkExportActivity : AppCompatActivity() {
         buildExecutor.shutdownNow()
     }
 
+    private fun loadPickedIcon(uri: Uri) {
+        try {
+            val input = contentResolver.openInputStream(uri) ?: return
+            val bitmap = input.use { BitmapFactory.decodeStream(it) }
+            if (bitmap == null) {
+                Toast.makeText(this, getString(R.string.apk_export_icon_load_error), Toast.LENGTH_SHORT).show()
+                return
+            }
+            selectedIcon = bitmap
+            imgIconPreview.setImageBitmap(bitmap)
+        } catch (e: Exception) {
+            Toast.makeText(this, getString(R.string.apk_export_icon_load_error), Toast.LENGTH_SHORT).show()
+        }
+    }
+
     private fun startBuild(hasEntryFiles: Boolean) {
         if (!hasEntryFiles) {
             Toast.makeText(this, getString(R.string.apk_export_no_entry_error), Toast.LENGTH_SHORT).show()
             return
         }
+        val minSdk = sdkLevels[spinnerMinSdk.selectedItemPosition].first
+        val targetSdk = sdkLevels[spinnerTargetSdk.selectedItemPosition].first
+        if (minSdk > targetSdk) {
+            Toast.makeText(this, getString(R.string.apk_export_sdk_range_error), Toast.LENGTH_SHORT).show()
+            return
+        }
+
         logContainer.removeAllViews()
         resultActionsRow.visibility = View.GONE
         lastResult = null
@@ -111,13 +175,19 @@ class ApkExportActivity : AppCompatActivity() {
 
         val appName = edtAppName.text.toString().trim().ifBlank { project.name }
         val entry = spinnerEntry.selectedItem as? String ?: "main.rin"
+        val tagline = edtSplashTagline.text.toString().trim().ifBlank { null }
+        val icon = selectedIcon
 
         buildExecutor.execute {
             RinApkExporter.export(
                 context = applicationContext,
                 project = project,
                 appDisplayName = appName,
-                entryFile = entry
+                entryFile = entry,
+                minSdkVersion = minSdk,
+                targetSdkVersion = targetSdk,
+                customIcon = icon,
+                splash = RinApkExporter.SplashConfig(tagline = tagline)
             ) { p ->
                 mainHandler.post { handleProgress(p) }
             }
