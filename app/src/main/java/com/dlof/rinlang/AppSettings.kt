@@ -16,6 +16,7 @@ object AppSettings {
     private const val KEY_SHOW_LINE_NUMBERS = "show_line_numbers"
     private const val KEY_SYNTAX = "syntax_highlighting"
     private const val KEY_BRACKETS = "bracket_matching"
+    private const val KEY_LIVE_DIAGNOSTICS = "live_diagnostics"
     private const val KEY_AUTOCOMPLETE = "autocomplete"
     private const val KEY_AUTO_CLOSE = "auto_close_brackets"
     private const val KEY_AUTO_INDENT = "auto_indent"
@@ -47,6 +48,9 @@ object AppSettings {
     fun setSyntaxHighlighting(context: Context, v: Boolean) = put(context, KEY_SYNTAX, v)
     fun isBracketMatching(context: Context) = prefs(context).getBoolean(KEY_BRACKETS, true)
     fun setBracketMatching(context: Context, v: Boolean) = put(context, KEY_BRACKETS, v)
+    /** تشخيص أخطاء الصياغة الحي: خط متعرّج تحت الأخطاء/التحذيرات أثناء الكتابة (rin::Lexer + rin::Parser). */
+    fun isLiveDiagnostics(context: Context) = prefs(context).getBoolean(KEY_LIVE_DIAGNOSTICS, true)
+    fun setLiveDiagnostics(context: Context, v: Boolean) = put(context, KEY_LIVE_DIAGNOSTICS, v)
     fun isAutocomplete(context: Context) = prefs(context).getBoolean(KEY_AUTOCOMPLETE, true)
     fun setAutocomplete(context: Context, v: Boolean) = put(context, KEY_AUTOCOMPLETE, v)
     fun isAutoCloseBrackets(context: Context) = prefs(context).getBoolean(KEY_AUTO_CLOSE, true)
@@ -93,6 +97,7 @@ object AppSettings {
             .putBoolean(KEY_SHOW_LINE_NUMBERS, DEFAULT_SHOW_LINE_NUMBERS)
             .putBoolean(KEY_SYNTAX, true)
             .putBoolean(KEY_BRACKETS, true)
+            .putBoolean(KEY_LIVE_DIAGNOSTICS, true)
             .putBoolean(KEY_AUTOCOMPLETE, true)
             .putBoolean(KEY_AUTO_CLOSE, true)
             .putBoolean(KEY_AUTO_INDENT, true)
