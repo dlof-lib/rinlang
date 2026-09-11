@@ -77,6 +77,27 @@
             android:orientation="vertical"
             android:padding="16dp">
 
+            <!-- ===== قسم: الهوية ===== -->
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginBottom="10dp">
+                <View
+                    android:layout_width="3dp"
+                    android:layout_height="14dp"
+                    android:background="@color/pipeline_terminal_green"
+                    android:layout_marginEnd="8dp" />
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/apk_export_section_identity"
+                    android:textColor="@color/pipeline_text_primary"
+                    android:textSize="13sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
             <!-- اسم التطبيق -->
             <TextView
                 android:layout_width="wrap_content"
@@ -118,15 +139,209 @@
                 android:padding="10dp"
                 android:background="@drawable/bg_pipeline_code_card" />
 
+            <!-- ===== قسم: الأيقونة ===== -->
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginTop="22dp"
+                android:layout_marginBottom="10dp">
+                <View
+                    android:layout_width="3dp"
+                    android:layout_height="14dp"
+                    android:background="@color/pipeline_terminal_green"
+                    android:layout_marginEnd="8dp" />
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/apk_export_section_icon"
+                    android:textColor="@color/pipeline_text_primary"
+                    android:textSize="13sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:background="@drawable/bg_pipeline_code_card"
+                android:padding="12dp">
+
+                <FrameLayout
+                    android:layout_width="56dp"
+                    android:layout_height="56dp">
+                    <ImageView
+                        android:id="@+id/imgApkExportIconPreview"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:scaleType="centerCrop"
+                        android:src="@mipmap/ic_launcher_round"
+                        android:contentDescription="@string/apk_export_section_icon" />
+                </FrameLayout>
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:layout_marginStart="12dp"
+                    android:text="@string/apk_export_field_icon_hint"
+                    android:textColor="@color/pipeline_text_muted"
+                    android:textSize="11.5sp"
+                    android:lineSpacingExtra="1dp" />
+
+                <Button
+                    android:id="@+id/btnApkExportPickIcon"
+                    android:layout_width="wrap_content"
+                    android:layout_height="36dp"
+                    android:minWidth="0dp"
+                    android:paddingStart="14dp"
+                    android:paddingEnd="14dp"
+                    android:text="@string/apk_export_action_pick_icon"
+                    android:textAllCaps="false"
+                    android:textSize="12sp"
+                    android:textColor="@color/pipeline_btn_outline_text"
+                    android:background="@drawable/bg_pipeline_btn_outline" />
+            </LinearLayout>
+
+            <!-- ===== قسم: شاشة البداية ===== -->
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginTop="22dp"
+                android:layout_marginBottom="10dp">
+                <View
+                    android:layout_width="3dp"
+                    android:layout_height="14dp"
+                    android:background="@color/pipeline_terminal_green"
+                    android:layout_marginEnd="8dp" />
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/apk_export_section_splash"
+                    android:textColor="@color/pipeline_text_primary"
+                    android:textSize="13sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
+            <EditText
+                android:id="@+id/edtApkExportSplashTagline"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:inputType="text"
+                android:maxLines="1"
+                android:hint="@string/apk_export_field_splash_hint"
+                android:padding="12dp"
+                android:background="@drawable/bg_pipeline_code_card"
+                android:textColor="@color/pipeline_text_primary"
+                android:textColorHint="@color/pipeline_text_muted"
+                android:textSize="14sp" />
+
+            <!-- ===== قسم: التوافق (إصدارات أندرويد) ===== -->
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginTop="22dp"
+                android:layout_marginBottom="10dp">
+                <View
+                    android:layout_width="3dp"
+                    android:layout_height="14dp"
+                    android:background="@color/pipeline_terminal_green"
+                    android:layout_marginEnd="8dp" />
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/apk_export_section_compat"
+                    android:textColor="@color/pipeline_text_primary"
+                    android:textSize="13sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:layout_marginEnd="8dp"
+                    android:orientation="vertical">
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/apk_export_field_min_sdk_label"
+                        android:textColor="@color/pipeline_text_muted"
+                        android:textSize="12sp"
+                        android:textStyle="bold"
+                        android:layout_marginBottom="6dp" />
+                    <Spinner
+                        android:id="@+id/spinnerApkExportMinSdk"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:padding="10dp"
+                        android:background="@drawable/bg_pipeline_code_card" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/apk_export_field_target_sdk_label"
+                        android:textColor="@color/pipeline_text_muted"
+                        android:textSize="12sp"
+                        android:textStyle="bold"
+                        android:layout_marginBottom="6dp" />
+                    <Spinner
+                        android:id="@+id/spinnerApkExportTargetSdk"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:padding="10dp"
+                        android:background="@drawable/bg_pipeline_code_card" />
+                </LinearLayout>
+            </LinearLayout>
+
             <!-- ملاحظة الحدود المعروفة -->
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="10dp"
+                android:layout_marginTop="14dp"
                 android:text="@string/apk_export_note_limitation"
                 android:textColor="@color/pipeline_text_muted"
                 android:textSize="11sp"
                 android:lineSpacingExtra="2dp" />
+
+            <!-- ===== قسم: البناء ===== -->
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginTop="22dp"
+                android:layout_marginBottom="10dp">
+                <View
+                    android:layout_width="3dp"
+                    android:layout_height="14dp"
+                    android:background="@color/pipeline_terminal_green"
+                    android:layout_marginEnd="8dp" />
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/apk_export_section_build"
+                    android:textColor="@color/pipeline_text_primary"
+                    android:textSize="13sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
 
             <!-- Build terminal: نفس نافذة الطرفية المستخدمة في RinFlow لعرض خطوات البناء/التوقيع -->
             <LinearLayout
@@ -134,7 +349,7 @@
                 android:layout_height="wrap_content"
                 android:orientation="vertical"
                 android:background="@drawable/bg_pipeline_terminal_window"
-                android:layout_marginTop="16dp">
+                android:layout_marginTop="0dp">
 
                 <LinearLayout
                     android:layout_width="match_parent"
