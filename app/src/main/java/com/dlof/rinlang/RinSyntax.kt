@@ -188,7 +188,10 @@ private object RinLexer {
         "sum", "mean", "median", "variance", "stddev", "mode", "minOf", "maxOf",
         "normalize", "scale", "shift", "product", "count", "range", "geometricMean",
         "harmonicMean", "rms", "percentile", "iqr", "weightedMean", "zscore",
-        "cumulativeSum", "movingAverage", "clamp"
+        "cumulativeSum", "movingAverage", "clamp",
+        "make", "make.qr", "make.barcode", "make.file", "make.filename", "make.uuid", "make.hash",
+        "qr", "barcode", "filename", "uuid", "hash", "artifact.info", "container.make.qr",
+        "container.make.barcode", "container.make.file", "container.artifact.info"
     )
 
     fun tokenize(lines: List<String>): List<RinEditorEngine.Highlight> {
