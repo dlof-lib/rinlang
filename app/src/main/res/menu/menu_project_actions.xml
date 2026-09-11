@@ -5,5 +5,6 @@
 <menu xmlns:android="http://schemas.android.com/apk/res/android">
     <item android:id="@+id/actionRenameProject" android:title="@string/rename_project_title" />
     <item android:id="@+id/actionMoveProject" android:title="@string/album_move_title" />
+    <item android:id="@+id/actionExportProject" android:title="@string/export_project_action" />
     <item android:id="@+id/actionDeleteProject" android:title="@string/delete_project_title" />
 </menu>
