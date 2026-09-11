@@ -3,6 +3,7 @@
 #include "diagnostics/source_manager.h"
 #include <algorithm>
 #include <unordered_set>
+#include <functional>
 
 namespace rin {
 
@@ -2478,13 +2479,47 @@ ExprPtr Parser::call() {
             ie->line = bracket.line;
             expr = ie;
         } else if (match({TokenType::DOT})) {
-            // OOP: object.name  ->  GetExpr (قراءة حقل/دالة مرتبطة) أو، إن تبعها '(', MethodCallExpr
-            // (نداء دالة مرتبطة). عقدة جديدة بحتة (additive): أي '.' يظهر هنا مباشرة بعد تعبير كان
-            // قبل هذا التغيير خطأً نحوياً دائماً (call() لم تكن تستهلك DOT إطلاقاً)، فلا يوجد أي
-            // برنامج Rin صالح سابقاً يتأثر بهذا التغيير.
+            // Namespace calls: make.qr(), container.make.qr(), artifact.info() ...
+            // تُحوَّل إلى Callee string قبل إنشاء GetExpr، حتى تصل مباشرة إلى natives.
             Token dot = previous();
-            const Token& nameTok = consume(TokenType::IDENT, "Expected property or method name after '.'");
-            if (match({TokenType::LPAREN})) {
+            Token nameTok = check(TokenType::IDENT) ? advance() : consume(TokenType::FILE_KW, "Expected property or method name after '.'");
+            if (auto root = std::dynamic_pointer_cast<VariableExpr>(expr)) {
+                std::string ns = root->name + "." + nameTok.lexeme;
+                if (check(TokenType::LPAREN)) {
+                    advance();
+                    auto c = std::make_shared<CallExpr>();
+                    c->callee = ns; c->line = dot.line;
+                    if (!check(TokenType::RPAREN)) {
+                        do { c->args.push_back(expression()); } while (match({TokenType::COMMA}));
+                    }
+                    consume(TokenType::RPAREN, "Expected ')' after arguments");
+                    expr = c;
+                    continue;
+                }
+                // Keep walking the namespace: make.qr.render(...) and container.make.qr(...)
+                // are handled by the next DOT iteration when there is no call yet.
+                auto ge = std::make_shared<GetExpr>();
+                ge->object = expr; ge->name = nameTok.lexeme; ge->line = dot.line;
+                expr = ge;
+            } else if (auto chain = std::dynamic_pointer_cast<GetExpr>(expr)) {
+                // Namespace chain beyond two segments is represented as a GetExpr chain; if the
+                // final segment is called, flatten it to the same native callee convention.
+                auto callRoot = std::dynamic_pointer_cast<VariableExpr>(chain->object);
+                (void)callRoot;
+                if (match({TokenType::LPAREN})) {
+                    std::function<std::string(const ExprPtr&)> namespaceName = [&](const ExprPtr& e) -> std::string {
+                        if (auto v = std::dynamic_pointer_cast<VariableExpr>(e)) return v->name;
+                        if (auto g = std::dynamic_pointer_cast<GetExpr>(e)) return namespaceName(g->object) + "." + g->name;
+                        return std::string();
+                    };
+                    std::string ns = namespaceName(chain) + "." + nameTok.lexeme;
+                    auto c = std::make_shared<CallExpr>(); c->callee = ns; c->line = dot.line;
+                    if (!check(TokenType::RPAREN)) { do { c->args.push_back(expression()); } while (match({TokenType::COMMA})); }
+                    consume(TokenType::RPAREN, "Expected ')' after arguments");
+                    expr = c; continue;
+                }
+                auto ge = std::make_shared<GetExpr>(); ge->object = expr; ge->name = nameTok.lexeme; ge->line = dot.line; expr = ge;
+            } else if (match({TokenType::LPAREN})) {
                 auto mc = std::make_shared<MethodCallExpr>();
                 mc->object = expr;
                 mc->method = nameTok.lexeme;
@@ -2545,7 +2580,7 @@ ExprPtr Parser::primary() {
         goalDepth--;
         return e;
     }
-    if (match({TokenType::IDENT})) {
+    if (match({TokenType::IDENT, TokenType::CONTAINER})) {
         auto e = std::make_shared<VariableExpr>();
         e->name = previous().lexeme;
         e->line = previous().line;
