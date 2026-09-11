@@ -5,6 +5,8 @@ import android.content.Intent
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
+import android.net.Uri
+import androidx.activity.result.contract.ActivityResultContracts
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -39,6 +41,14 @@ class ProjectsActivity : AppCompatActivity() {
     private var sortedProjects: List<Project> = emptyList()
     private var searchQuery: String = ""
 
+    /** مستورد الحزمة الرسمية Rin Project (*.rinproj). */
+    private val importProjectLauncher = registerForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? ->
+        uri ?: return@registerForActivityResult
+        importProject(uri)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_projects)
@@ -59,7 +69,8 @@ class ProjectsActivity : AppCompatActivity() {
             onOpen = { project -> openProject(project) },
             onRename = { project -> showRenameDialog(project) },
             onDelete = { project -> showDeleteConfirm(project) },
-            onMove = { project -> showMoveDialog(project) }
+            onMove = { project -> showMoveDialog(project) },
+            onExport = { project -> exportProject(project) }
         )
         // شبكة عمودين بمظهر "غلاف ألبوم" (انظر item_project.xml) بدل قائمة مسطّحة أحادية
         // العمود — يوحّد مظهر شاشة "مشاريعي" مع شاشة "الألبومات" بدل أن تبدو شاشتين من
@@ -69,6 +80,9 @@ class ProjectsActivity : AppCompatActivity() {
 
         fabNewProject.setOnClickListener { showCreateDialog() }
         findViewById<View>(R.id.btnProjectAlbums).setOnClickListener { startActivity(Intent(this, AlbumsActivity::class.java)) }
+        findViewById<View>(R.id.btnProjectImport).setOnClickListener {
+            importProjectLauncher.launch(arrayOf(ProjectManager.OFFICIAL_PROJECT_MIME, "application/zip", "application/octet-stream", "*/*"))
+        }
         findViewById<View>(R.id.btnProjectSort).setOnClickListener { anchor -> showSortMenu(anchor) }
 
         // شريط البحث كان موجوداً بصرياً فقط بلا أي منطق خلفه — الكتابة فيه لم تكن تفعل شيئاً.
@@ -149,10 +163,61 @@ class ProjectsActivity : AppCompatActivity() {
         }
     }
 
+    private fun exportProject(project: Project) {
+        Thread {
+            try {
+                val file = ProjectManager.exportProject(this, project)
+                runOnUiThread {
+                    val artifact = RinArtifact(
+                        kind = ArtifactKind.ARCHIVE_ZIP,
+                        relPath = file.name,
+                        absoluteFile = file,
+                        sizeBytes = file.length()
+                    )
+                    RinDownloadManager.downloadToPublicDownloads(
+                        activity = this,
+                        artifact = artifact,
+                        onProgress = { _, _ -> },
+                        onDone = { _, error ->
+                            if (error == null) Toast.makeText(this, getString(R.string.export_project_success, file.name), Toast.LENGTH_LONG).show()
+                            else Toast.makeText(this, "${getString(R.string.export_project_error)}: ${error.message}", Toast.LENGTH_LONG).show()
+                        }
+                    )
+                }
+            } catch (t: Throwable) {
+                runOnUiThread { Toast.makeText(this, "${getString(R.string.export_project_error)}: ${t.message}", Toast.LENGTH_LONG).show() }
+            }
+        }.start()
+    }
+
     private fun openProject(project: Project) {
         val intent = Intent(this, FilesActivity::class.java)
         intent.putExtra(FilesActivity.EXTRA_PROJECT_NAME, project.name)
         startActivity(intent)
+    }
+
+    /** يعرض معاينة الحزمة أولاً، ثم يثبتها داخل مكتبات المشاريع بعملية ذرية. */
+    private fun importProject(uri: Uri) {
+        try {
+            val info = ProjectManager.inspectProjectPackage(this, uri)
+            val summary = "${info.name}\nالنوع: ${info.type.id}\nالملفات: ${info.fileCount}\nصيغة Rin Project v${info.formatVersion}"
+            AlertDialog.Builder(this)
+                .setTitle(R.string.import_project_preview_title)
+                .setMessage(summary)
+                .setPositiveButton(R.string.import_project_action) { _, _ ->
+                    try {
+                        val project = ProjectManager.importProjectPackage(this, uri)
+                        refresh()
+                        Toast.makeText(this, getString(R.string.import_project_success, project.name), Toast.LENGTH_LONG).show()
+                    } catch (t: Throwable) {
+                        Toast.makeText(this, "${getString(R.string.import_project_error)}: ${t.message}", Toast.LENGTH_LONG).show()
+                    }
+                }
+                .setNegativeButton(R.string.cancel, null)
+                .show()
+        } catch (t: Throwable) {
+            Toast.makeText(this, "${getString(R.string.import_project_error)}: ${t.message}", Toast.LENGTH_LONG).show()
+        }
     }
 
     /**
@@ -525,7 +590,8 @@ private class ProjectsAdapter(
     val onOpen: (Project) -> Unit,
     val onRename: (Project) -> Unit,
     val onDelete: (Project) -> Unit,
-    val onMove: (Project) -> Unit
+    val onMove: (Project) -> Unit,
+    val onExport: (Project) -> Unit
 ) : RecyclerView.Adapter<ProjectsAdapter.VH>() {
 
     private var items: List<Project> = emptyList()
@@ -597,6 +663,7 @@ private class ProjectsAdapter(
             when (item.itemId) {
                 R.id.actionRenameProject -> onRename(project)
                 R.id.actionMoveProject -> onMove(project)
+                R.id.actionExportProject -> onExport(project)
                 R.id.actionDeleteProject -> onDelete(project)
             }
             true
