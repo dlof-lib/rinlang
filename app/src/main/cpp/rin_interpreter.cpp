@@ -1,6 +1,7 @@
 #include "rin_interpreter.h"
 #include "rin_version.h"
 #include "rin_make.h"
+#include "rin_artifact.h"
 #include "rin_lexer.h"
 #include "rin_parser.h"
 #include "rin_stdlib_libs.h"
@@ -15,6 +16,7 @@
 #include <cmath>
 #include <sstream>
 #include <fstream>
+#include <filesystem>
 #include <unordered_set>
 #include <algorithm>
 #include <cctype>
@@ -810,6 +812,111 @@ static std::string serializeEnvBody(const EnvPtr& env, bool simplified) {
 }
 
 void Interpreter::registerNatives() {
+
+    // ========================================================================
+    // Rin Artifact / Container Factory
+    // إنشاء ملفات وQR/Barcode/IDs/Hash مرتبطة بالحاوية الحالية. كل Artifact يُحفظ
+    // داخل containers/<container>/ ما دام التنفيذ داخل @container، وإلا في جذر المشروع.
+    // ========================================================================
+    auto artifactContainerPrefix = [this]() -> std::string {
+        if (containerStack.empty()) return std::string();
+        return std::string("containers/") + artifact::sanitizeName(containerStack.back());
+    };
+    auto artifactPath = [this, artifactContainerPrefix](const std::string& name) -> std::string {
+        std::string safe = artifact::sanitizeName(name);
+        std::string prefix = artifactContainerPrefix();
+        return prefix.empty() ? safe : (prefix + "/" + safe);
+    };
+
+    natives["make.uuid"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("make.uuid", a, 0, line);
+        return Value::string(artifact::uuidV4());
+    };
+    natives["uuid"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("uuid", a, 0, line);
+        return Value::string(artifact::uuidV4());
+    };
+    natives["make.filename"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgsRange("make.filename", a, 0, 2, line);
+        std::string prefix = a.empty() ? "artifact" : asString(a[0], "make.filename", line);
+        std::string ext = a.size() > 1 ? asString(a[1], "make.filename", line) : "dat";
+        return Value::string(artifact::uniqueFilename(prefix, ext));
+    };
+    natives["filename"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("filename", a, 1, line);
+        return Value::string(artifact::sanitizeName(asString(a[0], "filename", line)));
+    };
+    natives["make.hash"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("make.hash", a, 1, line);
+        return Value::string(artifact::sha256Hex(asString(a[0], "make.hash", line)));
+    };
+    natives["hash"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("hash", a, 1, line);
+        return Value::string(artifact::sha256Hex(asString(a[0], "hash", line)));
+    };
+
+    auto writeArtifact = [this](const std::string& relative, const std::string& content, int line, const std::string& who) -> Value {
+        ensureParentDir(resolvePath(relative, line));
+        writeRealFile(relative, content, line, who);
+        return Value::string(relative);
+    };
+
+    natives["make.file"] = [this, artifactPath, writeArtifact](std::vector<Value>& a, int line) -> Value {
+        expectArgs("make.file", a, 2, line);
+        std::string name = asString(a[0], "make.file", line);
+        std::string content = asString(a[1], "make.file", line);
+        return writeArtifact(artifactPath(name), content, line, "make.file");
+    };
+    natives["container.make.file"] = [this, artifactPath, writeArtifact](std::vector<Value>& a, int line) -> Value {
+        expectArgs("container.make.file", a, 2, line);
+        return writeArtifact(artifactPath(asString(a[0], "container.make.file", line)),
+                             asString(a[1], "container.make.file", line), line, "container.make.file");
+    };
+
+    auto makeBarcode = [this, artifactPath, writeArtifact](std::vector<Value>& a, int line, const std::string& fn) -> Value {
+        expectArgsRange(fn, a, 1, 3, line);
+        std::string data = asString(a[0], fn, line);
+        artifact::Options o;
+        std::string name = a.size() > 1 ? asString(a[1], fn, line) : artifact::uniqueFilename("barcode", "svg");
+        if (a.size() > 2) o.type = asString(a[2], fn, line);
+        if (o.type != "code128") throw diagErr(diag::Code::E0016_InvalidProperty, line, fn + ": currently supported barcode type is code128");
+        std::string rel = artifactPath(name.find('.') == std::string::npos ? name + ".svg" : name);
+        return writeArtifact(rel, artifact::barcodeSvg(data, o), line, fn);
+    };
+    natives["make.barcode"] = [makeBarcode](std::vector<Value>& a, int line) -> Value { return makeBarcode(a, line, "make.barcode"); };
+    natives["barcode"] = [makeBarcode](std::vector<Value>& a, int line) -> Value { return makeBarcode(a, line, "barcode"); };
+    natives["container.make.barcode"] = [makeBarcode](std::vector<Value>& a, int line) -> Value { return makeBarcode(a, line, "container.make.barcode"); };
+
+    auto makeQr = [this, artifactPath, writeArtifact](std::vector<Value>& a, int line, const std::string& fn) -> Value {
+        expectArgsRange(fn, a, 1, 3, line);
+        std::string data = asString(a[0], fn, line);
+        artifact::Options o;
+        std::string name = a.size() > 1 ? asString(a[1], fn, line) : artifact::uniqueFilename("qr", "svg");
+        if (a.size() > 2) o.size = static_cast<int>(asNumber(a[2], fn, line));
+        std::string rel = artifactPath(name.find('.') == std::string::npos ? name + ".svg" : name);
+        return writeArtifact(rel, artifact::qrSvg(data, o), line, fn);
+    };
+    natives["make.qr"] = [makeQr](std::vector<Value>& a, int line) -> Value { return makeQr(a, line, "make.qr"); };
+    natives["qr"] = [makeQr](std::vector<Value>& a, int line) -> Value { return makeQr(a, line, "qr"); };
+    natives["container.make.qr"] = [makeQr](std::vector<Value>& a, int line) -> Value { return makeQr(a, line, "container.make.qr"); };
+
+    natives["artifact.info"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("artifact.info", a, 1, line);
+        std::string raw = asString(a[0], "artifact.info", line);
+        std::string full = resolvePath(raw, line);
+        std::error_code ec;
+        auto st = std::filesystem::status(full, ec);
+        if (ec || !std::filesystem::exists(st)) return Value::nil();
+        auto m = std::make_shared<MapData>();
+        m->push_back({Value::string("path"), Value::string(raw)});
+        m->push_back({Value::string("name"), Value::string(std::filesystem::path(full).filename().string())});
+        m->push_back({Value::string("extension"), Value::string(std::filesystem::path(full).extension().string())});
+        m->push_back({Value::string("size"), Value::num(static_cast<double>(std::filesystem::file_size(full, ec)))});
+        m->push_back({Value::string("exists"), Value::boolean_(true)});
+        return Value::makeMap(m);
+    };
+    natives["container.artifact.info"] = natives["artifact.info"];
+
     // ---- رياضيات (math) ----
     natives["abs"] = [](std::vector<Value>& a, int line) {
         expectArgs("abs", a, 1, line);
