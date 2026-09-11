@@ -134,5 +134,15 @@ class ExportedRunActivity : AppCompatActivity() {
             } catch (e: Exception) {
                 false
             }
+
+        /** يقرأ بيان التصدير كـ JSONObject إن وُجد (تُستدعى من [SplashActivity] لتخصيص
+         * اسم/تعليق/مدة شاشة البداية للحزمة المُصدَّرة)؛ null إن لم توجد حزمة تصدير أو تعذّرت القراءة. */
+        fun readManifestOrNull(context: android.content.Context): JSONObject? =
+            try {
+                val text = context.assets.open(MANIFEST_ASSET_PATH).bufferedReader().use { it.readText() }
+                JSONObject(text)
+            } catch (e: Exception) {
+                null
+            }
     }
 }
