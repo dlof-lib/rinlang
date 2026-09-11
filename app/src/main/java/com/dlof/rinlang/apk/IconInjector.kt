@@ -11,7 +11,7 @@ import java.io.ByteArrayOutputStream
  * يستبدل أيقونة الإطلاق داخل حزمة مُصدَّرة بصورة اختارها المستخدم — بلا لمس resources.arsc
  * أو AndroidManifest.xml إطلاقاً: أيقونات أندرويد (المسطّحة لـ API&lt;26 وadaptive لـ 26+)
  * كلها ملفات PNG عادية بأسماء ثابتة معروفة (`ic_launcher.png`, `ic_launcher_round.png`,
- * `ic_launcher_foreground.png` تحت `res/mipmap-<density>*/`) يُشار إليها من resources.arsc
+ * `ic_launcher_foreground.png` تحت `res/mipmap-<density>[*]/`) يُشار إليها من resources.arsc
  * بمعرّف مورد ثابت — استبدال *محتوى* نفس المُدخل بنفس الاسم في نفس المسار كافٍ تماماً
  * ليعرض النظام الأيقونة الجديدة، بصرف النظر عمّا تحمله resources.arsc من فهرسة.
  *
