@@ -4,6 +4,7 @@ import android.content.ContentResolver
 import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
+import org.json.JSONObject
 import java.io.BufferedOutputStream
 import java.io.File
 import java.io.FileOutputStream
@@ -94,6 +95,13 @@ object ProjectManager {
      * الملف بصيغة "type=xxx" الخام قبل هذا التعديل.
      */
     private const val PROJECT_META_FILE = "project.og.urin"
+    /** الامتداد الرسمي لحزمة مشروع Rin القابلة للنقل. الحزمة ZIP معيارياً من الداخل، لكن
+     * .rinproj يميز مشروع Rin عن أي ZIP عادي ويمكن ربطه بالمحرر لاحقاً. */
+    const val OFFICIAL_PROJECT_EXTENSION = ".rinproj"
+    const val OFFICIAL_PROJECT_MIME = "application/vnd.rin.project+zip"
+    private const val PROJECT_MANIFEST = "rin.project.json"
+    private const val PROJECT_FORMAT = "rin-project"
+    private const val PROJECT_FORMAT_VERSION = 1
 
     private fun projectsRoot(context: Context): File {
         val root = File(context.filesDir, PROJECTS_DIR)
@@ -634,12 +642,21 @@ object ProjectManager {
     // مجلد المشروع، محافظاً على بنية المجلدات الداخلية للأرشيف (مثل lib/mylib.og.rin).
     // نتحقق من كل مسار داخل الأرشيف حتى لا يخرج ("Zip Slip") إلى خارج مجلد المشروع.
 
-    /** يفكّ ضغط أرشيف ZIP من [uri] داخل مجلد المشروع، ويرجع عدد الملفات المستخرجة. */
+    /** معلومات حزمة مشروع Rin الرسمية بعد فحص الـManifest. */
+    data class ProjectPackageInfo(
+        val name: String,
+        val type: ProjectType,
+        val formatVersion: Int,
+        val entry: String,
+        val fileCount: Int,
+        val hasManifest: Boolean
+    )
+
+    /** يفكّ ضغط ZIP legacy داخل مشروع موجود. أبقيناه للتوافق فقط؛ الصيغة الرسمية هي .rinproj. */
     fun importZipFromUri(context: Context, project: Project, uri: Uri): Int {
         val resolver: ContentResolver = context.contentResolver
         val projectRoot = project.dir.canonicalFile
         var extractedCount = 0
-
         val input = resolver.openInputStream(uri)
             ?: throw IllegalStateException("تعذّرت قراءة الأرشيف المحدد")
         ZipInputStream(input).use { zip ->
@@ -648,15 +665,10 @@ object ProjectManager {
                 val safeRelPath = sanitizeZipEntryPath(entry.name)
                 if (safeRelPath != null) {
                     val outFile = File(projectRoot, safeRelPath)
-                    // تأكيد إضافي أن المسار الناتج ما زال داخل مجلد المشروع فعلياً.
                     if (outFile.canonicalFile.path.startsWith(projectRoot.path + File.separator)) {
-                        if (entry.isDirectory) {
-                            outFile.mkdirs()
-                        } else {
+                        if (entry.isDirectory) outFile.mkdirs() else {
                             outFile.parentFile?.mkdirs()
-                            BufferedOutputStream(FileOutputStream(outFile)).use { out ->
-                                zip.copyTo(out)
-                            }
+                            BufferedOutputStream(FileOutputStream(outFile)).use { out -> zip.copyTo(out) }
                             extractedCount++
                         }
                     }
@@ -668,35 +680,179 @@ object ProjectManager {
         return extractedCount
     }
 
-    /** ينظّف مسار عنصر داخل الأرشيف ويرفض أي محاولة خروج خارج مجلد المشروع (../، مسار مطلق). */
-    private fun sanitizeZipEntryPath(rawName: String): String? {
-        val normalized = rawName.replace('\\', '/').trim('/')
-        if (normalized.isEmpty()) return null
-        val segments = normalized.split('/').filter { it.isNotEmpty() && it != "." }
-        if (segments.any { it == ".." }) return null
-        return segments.joinToString(File.separator)
+    /**
+     * يستورد حزمة مشروع Rin الرسمية (.rinproj) كعملية ذرية:
+     * 1) يقرأ manifest، 2) يتحقق من الصيغة والمسارات، 3) يفكها في مجلد مؤقت،
+     * 4) يكتب metadata المتوافق، 5) ينقل المجلد للمشاريع فقط بعد نجاح كل الفحوص.
+     */
+    fun importProjectPackage(context: Context, uri: Uri, requestedName: String? = null): Project {
+        val resolver = context.contentResolver
+        val sourceName = queryDisplayName(resolver, uri) ?: "project$OFFICIAL_PROJECT_EXTENSION"
+        val tempRoot = File(projectsRoot(context), ".import_${System.currentTimeMillis()}_${(1000..9999).random()}")
+        require(!tempRoot.exists()) { "تعذّر إنشاء مساحة استيراد مؤقتة" }
+        tempRoot.mkdirs()
+        var committed = false
+        try {
+            val manifestText = extractProjectPackage(resolver, uri, tempRoot, requireManifest = true)
+            val info = parseProjectManifest(manifestText)
+            require(info.formatVersion == PROJECT_FORMAT_VERSION) {
+                "إصدار حزمة Rin غير مدعوم: ${info.formatVersion}"
+            }
+            require(File(tempRoot, "main.rin").isFile) {
+                "الحزمة غير صالحة: الملف main.rin مفقود"
+            }
+
+            val safeBase = sanitizeProjectName(requestedName?.trim().orEmpty().ifBlank { info.name.ifBlank { sourceName.removeSuffix(OFFICIAL_PROJECT_EXTENSION) } })
+            val finalName = uniqueProjectName(context, safeBase)
+            val finalDir = File(projectsRoot(context), finalName)
+            require(!finalDir.exists()) { "يوجد مشروع بهذا الاسم بالفعل" }
+            require(tempRoot.renameTo(finalDir)) { "تعذّر تثبيت المشروع المستورد" }
+            committed = true
+            writeProjectMeta(finalDir, info.type)
+            return Project(finalName, finalDir, finalDir.lastModified(), info.type)
+        } finally {
+            if (!committed && tempRoot.exists()) tempRoot.deleteRecursively()
+        }
+    }
+
+    /** يقرأ معلومات مشروع من .rinproj بدون تثبيته داخل مجلد المشاريع. */
+    fun inspectProjectPackage(context: Context, uri: Uri): ProjectPackageInfo {
+        val resolver = context.contentResolver
+        val tempRoot = File(context.cacheDir, "rinproj_inspect_${System.currentTimeMillis()}_${(1000..9999).random()}")
+        tempRoot.mkdirs()
+        return try {
+            val manifestText = extractProjectPackage(resolver, uri, tempRoot, requireManifest = true)
+            parseProjectManifest(manifestText)
+        } finally {
+            tempRoot.deleteRecursively()
+        }
+    }
+
+    private fun parseProjectManifest(text: String): ProjectPackageInfo {
+        val o = JSONObject(text)
+        require(o.optString("format") == PROJECT_FORMAT) { "هذا الملف ليس حزمة مشروع Rin رسمية" }
+        val version = o.optInt("formatVersion", -1)
+        require(version > 0) { "Manifest الخاص بالمشروع غير صالح" }
+        val name = sanitizeProjectName(o.optString("name", "RinProject"))
+        val type = ProjectType.fromId(o.optString("type", ProjectType.FREE.id))
+        val entry = o.optString("entry", "main.rin")
+        require(entry == "main.rin") { "ملف الدخول غير مدعوم: $entry" }
+        val fileCount = o.optInt("fileCount", 0).coerceAtLeast(0)
+        return ProjectPackageInfo(name, type, version, entry, fileCount, true)
+    }
+
+    private fun extractProjectPackage(
+        resolver: ContentResolver,
+        uri: Uri,
+        destination: File,
+        requireManifest: Boolean
+    ): String {
+        val root = destination.canonicalFile
+        var manifestText: String? = null
+        var entryCount = 0
+        var totalBytes = 0L
+        val seenEntries = HashSet<String>()
+        val input = resolver.openInputStream(uri) ?: throw IllegalStateException("تعذّرت قراءة حزمة المشروع")
+        ZipInputStream(input).use { zip ->
+            var entry = zip.nextEntry
+            while (entry != null) {
+                entryCount++
+                require(entryCount <= 10000) { "الحزمة تحتوي عدداً كبيراً جداً من الملفات" }
+                val normalizedEntry = entry.name.replace('\\', '/') .trim('/')
+                require(seenEntries.add(normalizedEntry)) { "الحزمة تحتوي عنصراً مكرراً: ${entry.name}" }
+                val safeRel = sanitizeZipEntryPath(entry.name)
+                require(safeRel != null) { "الحزمة تحتوي مساراً غير آمن: ${entry.name}" }
+                val out = File(root, safeRel).canonicalFile
+                require(out.path == root.path || out.path.startsWith(root.path + File.separator)) {
+                    "الحزمة تحتوي مساراً خارج جذر المشروع"
+                }
+                if (entry.isDirectory) {
+                    out.mkdirs()
+                } else {
+                    require(entry.compressedSize <= 64L * 1024L * 1024L || entry.compressedSize < 0) {
+                        "ملف داخل الحزمة أكبر من الحد المسموح"
+                    }
+                    out.parentFile?.mkdirs()
+                    BufferedOutputStream(FileOutputStream(out)).use { target ->
+                        val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                        while (true) {
+                            val n = zip.read(buffer)
+                            if (n <= 0) break
+                            totalBytes += n
+                            require(totalBytes <= 256L * 1024L * 1024L) { "حجم محتوى المشروع يتجاوز الحد المسموح" }
+                            target.write(buffer, 0, n)
+                        }
+                    }
+                    if (safeRel == PROJECT_MANIFEST) {
+                        manifestText = out.readText(Charsets.UTF_8)
+                    }
+                }
+                zip.closeEntry()
+                entry = zip.nextEntry
+            }
+        }
+        if (requireManifest) require(!manifestText.isNullOrBlank()) { "حزمة Rin تفتقد $PROJECT_MANIFEST" }
+        return manifestText ?: "{}"
+    }
+
+    /** اسم مشروع صالح للاستخدام كمجلد، مع إزالة الامتداد الرسمي إن ظهر في الاسم. */
+    private fun sanitizeProjectName(raw: String): String {
+        val normalized = raw.trim().removeSuffix(OFFICIAL_PROJECT_EXTENSION)
+            .replace(Regex("[^A-Za-z0-9_\\-\\u0600-\\u06FF ]"), "_")
+            .replace(Regex("\\s+"), " ")
+            .trim()
+        return normalized.take(64).ifBlank { "ImportedProject" }
+    }
+
+    private fun uniqueProjectName(context: Context, requested: String): String {
+        val root = projectsRoot(context)
+        if (!File(root, requested).exists()) return requested
+        var i = 2
+        while (File(root, "${requested}_$i").exists()) i++
+        return "${requested}_$i"
     }
 
     /**
-     * يضغط كل ملفات مجلد المشروع (بما فيها lib/) داخل أرشيف ZIP واحد في cacheDir، تمهيداً
-     * لتنزيله عبر [RinDownloadManager]. يرجع الملف الناتج مع اسم عرض مناسب.
+     * يصدر المشروع بصيغة Rin الرسمية .rinproj. الحزمة عبارة عن ZIP مع manifest ثابت الاسم
+     * `rin.project.json`; جميع المسارات داخل الحزمة نسبية وآمنة، وتبقى lib/ والأصول والمكتبات
+     * وأي ملفات ثنائية جزءاً من المشروع كما هي.
      */
-    fun exportProjectAsZip(context: Context, project: Project): File {
+    fun exportProject(context: Context, project: Project): File {
         val cacheDir = File(context.cacheDir, "project_exports").apply { mkdirs() }
-        val zipFile = File(cacheDir, "${project.name}.zip")
-        if (zipFile.exists()) zipFile.delete()
+        val packageFile = File(cacheDir, "${sanitizeProjectName(project.name)}$OFFICIAL_PROJECT_EXTENSION")
+        if (packageFile.exists()) packageFile.delete()
 
-        ZipOutputStream(BufferedOutputStream(FileOutputStream(zipFile))).use { zipOut ->
-            val root = project.dir
-            root.walkTopDown().filter { it.isFile }.forEach { file ->
-                val relPath = file.relativeTo(root).path.replace(File.separatorChar, '/')
+        val allFiles = project.dir.walkTopDown().filter { it.isFile }
+            .filter { it.name != PROJECT_MANIFEST && !it.path.contains("${File.separator}.") }
+            .toList()
+        val manifest = JSONObject().apply {
+            put("format", PROJECT_FORMAT)
+            put("formatVersion", PROJECT_FORMAT_VERSION)
+            put("name", project.name)
+            put("type", project.type.id)
+            put("entry", "main.rin")
+            put("fileCount", allFiles.size + 1)
+            put("rinStudio", "RinStudio")
+            put("createdFor", "Rin")
+        }
+
+        ZipOutputStream(BufferedOutputStream(FileOutputStream(packageFile))).use { zipOut ->
+            zipOut.putNextEntry(ZipEntry(PROJECT_MANIFEST))
+            zipOut.write(manifest.toString(2).toByteArray(Charsets.UTF_8))
+            zipOut.closeEntry()
+            for (file in allFiles) {
+                val relPath = file.relativeTo(project.dir).path.replace(File.separatorChar, '/')
+                require(sanitizeZipEntryPath(relPath) != null) { "مسار مشروع غير آمن: $relPath" }
                 zipOut.putNextEntry(ZipEntry(relPath))
                 file.inputStream().use { it.copyTo(zipOut) }
                 zipOut.closeEntry()
             }
         }
-        return zipFile
+        return packageFile
     }
+
+    /** اسم قديم للتوافق: أصبح exportProject هو API الرسمي، لكن الاسم السابق يستمر بالعمل. */
+    fun exportProjectAsZip(context: Context, project: Project): File = exportProject(context, project)
 
     private fun queryDisplayName(resolver: ContentResolver, uri: Uri): String? {
         return try {
