@@ -36,6 +36,26 @@ class SplashActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_splash)
 
+        // إن كانت هذه حزمة مُصدَّرة (assets/rin_export_manifest.json)، نُخصِّص عنوان/تعليق/مدة
+        // شاشة البداية من بيانات التصدير بدل ترك "RinStudio" الثابتة تظهر داخل تطبيق المستخدم
+        // نفسه بعد فتحه — الأيقونة تُخصَّص تلقائياً بالفعل عبر @mipmap/ic_launcher_round نفسها
+        // (تُستبدَل بايتاتها وقت التصدير إن اختار المستخدم صورة، بلا حاجة لأي تعديل هنا).
+        var splashDurationMs = SPLASH_DURATION_MS
+        ExportedRunActivity.readManifestOrNull(this)?.let { manifest ->
+            manifest.optString("display_name").takeIf { it.isNotBlank() }?.let { name ->
+                findViewById<android.widget.TextView>(R.id.splashAppName).text = name
+            }
+            val tagline = manifest.optString("splash_tagline")
+            val taglineView = findViewById<android.widget.TextView>(R.id.splashTagline)
+            if (tagline.isNotBlank()) {
+                taglineView.text = tagline
+            } else {
+                taglineView.visibility = android.view.View.GONE
+            }
+            val customDuration = manifest.optLong("splash_duration_ms", 0L)
+            if (customDuration in 300L..5000L) splashDurationMs = customDuration
+        }
+
         val card = findViewById<android.view.View>(R.id.splashIconFrame).parent as android.view.View
 
         // حركة دخول البطاقة: تكبير خفيف من 92% إلى 100% + تلاشي، بمنحنى تباطؤ ناعم
@@ -57,7 +77,7 @@ class SplashActivity : AppCompatActivity() {
         val bgFade = AlphaAnimation(0f, 1f).apply { duration = 550 }
         findViewById<android.view.View>(android.R.id.content).startAnimation(bgFade)
 
-        handler.postDelayed(goToEditor, SPLASH_DURATION_MS)
+        handler.postDelayed(goToEditor, splashDurationMs)
     }
 
     override fun onDestroy() {
