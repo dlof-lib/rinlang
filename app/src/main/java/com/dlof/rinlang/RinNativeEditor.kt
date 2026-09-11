@@ -62,6 +62,7 @@ class RinNativeEditor {
         @JvmStatic private external fun nativeFindAllFlat(handle: Long, query: String, caseSensitive: Boolean): IntArray
         @JvmStatic private external fun nativeGetSuggestions(handle: Long, prefix: String, maxResults: Int): Array<String>
         @JvmStatic private external fun nativeLineStartPosition(handle: Long, oneBasedLine: Int): IntArray
+        @JvmStatic private external fun nativeGetDiagnosticsPacked(handle: Long): Array<String>
 
         /** يحوّل فهرس-حرف UTF-16 (Kotlin/Java) داخل [line] إلى إزاحة-بايت UTF-8 (المحرك C++). */
         fun charIndexToByteOffset(line: String, charIndex: Int): Int {
@@ -90,6 +91,24 @@ class RinNativeEditor {
     data class Selection(val hasSelection: Boolean, val start: Pos, val end: Pos)
     data class Highlight(val line: Int, val startCol: Int, val endCol: Int, val kind: Int)
     data class FindMatch(val line: Int, val startCol: Int, val endCol: Int)
+
+    /** تشخيص صياغة حي واحد (خطأ/تحذير) — انظر [DiagnosticSeverity]. الأعمدة فهرس-حرف UTF-16 جاهز للرسم مباشرة. */
+    data class Diagnostic(
+        val line: Int,
+        val startCol: Int,
+        val endCol: Int,
+        val severity: Int,
+        val code: String,
+        val message: String
+    )
+
+    /** يطابق rinedit::DiagnosticSeverity حرفيًا (rin_editor_engine.h) بنفس ترتيب القيم. */
+    object DiagnosticSeverity {
+        const val ERROR = 0
+        const val WARNING = 1
+        const val NOTE = 2
+        const val HELP = 3
+    }
 
     private fun requireHandle(): Long {
         check(!destroyed) { "RinNativeEditor already destroyed" }
@@ -235,5 +254,34 @@ class RinNativeEditor {
     fun lineStartPosition(oneBasedLine: Int): Pos {
         val a = nativeLineStartPosition(requireHandle(), oneBasedLine)
         return Pos(a[0], byteToChar(a[0], a[1]))
+    }
+
+    /**
+     * تشخيص أخطاء الصياغة الحي (rin::Lexer + rin::Parser، بدون تشغيل المفسِّر) — انظر
+     * rinedit::EditorEngine::computeDiagnostics(). يُفكّك الحزم النصية القادمة من
+     * nativeGetDiagnosticsPacked (line:startCol:endCol:severity:code:message) ويحوّل الأعمدة
+     * من إزاحة-بايت UTF-8 إلى فهرس-حرف UTF-16، بنفس نمط [getHighlights]/[findAll].
+     */
+    fun getDiagnostics(): List<Diagnostic> {
+        val packed = nativeGetDiagnosticsPacked(requireHandle())
+        val out = ArrayList<Diagnostic>(packed.size)
+        var cachedLine = -1
+        var cachedText = ""
+        for (entry in packed) {
+            // حدّ 6 أجزاء: الرسالة نفسها (الجزء السادس/الأخير) قد تحوي ':' فلا تُقطَع.
+            val parts = entry.split(":", limit = 6)
+            if (parts.size < 6) continue
+            val line = parts[0].toIntOrNull() ?: continue
+            val startColByte = parts[1].toIntOrNull() ?: continue
+            val endColByte = parts[2].toIntOrNull() ?: continue
+            val severity = parts[3].toIntOrNull() ?: continue
+            val code = parts[4]
+            val message = parts[5]
+            if (line != cachedLine) { cachedText = clampedLineText(line); cachedLine = line }
+            val startCol = byteOffsetToCharIndex(cachedText, startColByte)
+            val endCol = byteOffsetToCharIndex(cachedText, endColByte)
+            out.add(Diagnostic(line, startCol, endCol, severity, code, message))
+        }
+        return out
     }
 }
