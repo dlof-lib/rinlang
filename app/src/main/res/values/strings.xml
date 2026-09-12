@@ -209,20 +209,7 @@ print \"Hello, \" + name + \"!\";
     <string name="apk_export_status_success">تم البناء والتوقيع بنجاح</string>
     <string name="apk_export_status_failed">فشل التصدير</string>
     <string name="apk_export_no_entry_error">لا يوجد ملف .rin واحد على الأقل في هذا المشروع</string>
-    <string name="apk_export_note_limitation">ملاحظة: التوقيع فعلي عبر مكتبة Google الرسمية apksig (v1+v2+v3 معاً، نفس شيفرة أداة apksigner) بمفتاح RSA-2048 خاص بجهازك، مع تراجع تلقائي لتوقيع v1 يدوي فقط إن تعذّر تحميل تلك المكتبة. إن لم تختر أيقونة أو ملمحاً مخصَّصين، تبقى أيقونة وخلفية شاشة بداية RinStudio كما هي.</string>
-
-    <string name="apk_export_section_identity">الهوية</string>
-    <string name="apk_export_section_icon">الأيقونة</string>
-    <string name="apk_export_section_splash">شاشة البداية</string>
-    <string name="apk_export_section_compat">التوافق (إصدار أندرويد)</string>
-    <string name="apk_export_section_build">البناء</string>
-    <string name="apk_export_field_icon_hint">اختياري — صورة مربعة يُفضَّل، تُستبدَل بها أيقونة الإطلاق في كل الكثافات تلقائياً</string>
-    <string name="apk_export_action_pick_icon">اختيار صورة</string>
-    <string name="apk_export_field_splash_hint">جملة اختيارية تظهر تحت اسم التطبيق في شاشة البداية</string>
-    <string name="apk_export_field_min_sdk_label">الحد الأدنى</string>
-    <string name="apk_export_field_target_sdk_label">الهدف</string>
-    <string name="apk_export_icon_load_error">تعذّر تحميل الصورة المختارة</string>
-    <string name="apk_export_sdk_range_error">الحد الأدنى لإصدار أندرويد لا يمكن أن يكون أكبر من الهدف</string>
+    <string name="apk_export_note_limitation">ملاحظة: اسم التطبيق المعروض أعلاه يُكتب فعلياً داخل بيان الحزمة الناتجة. الأيقونة فقط تبقى كما في RinStudio (resources.arsc لا يُعدَّل حالياً). التوقيع حقيقي بمخطّطي v1 (JAR) وv2 معاً (تُضاف كتلة v2 وتُتحقَّق ذاتياً تلقائياً، وتتراجع v1 وحدها إن تعذّر ذلك) بمفتاح RSA-2048 خاص بجهازك — لأقصى ثقة تثبيت على أندرويد الحديث.</string>
 
     <string name="more_row_rin_apps_subtitle">تصفّح كل تطبيقاتك المُصدَّرة سابقاً، ثبّتها أو شاركها أو أعد تصديرها</string>
     <string name="rin_apps_screen_title">تطبيقات Rin</string>
@@ -312,4 +299,7 @@ print \"Hello, \" + name + \"!\";
     <string name="job_filter_error">Error</string>
     <string name="job_filter_debug">Debug</string>
     <string name="job_no_results">No matches for this search/filter.</string>
+    <string name="action_rename_symbol">Rename</string>
+    <string name="rename_dialog_title">Rename symbol</string>
+    <string name="rename_dialog_hint">New name</string>
 </resources>
