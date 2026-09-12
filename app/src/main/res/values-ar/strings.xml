@@ -72,6 +72,9 @@
     <string name="menu_view_clear_console">Clear run history</string>
     <string name="menu_view_go_to_line">Go to line…</string>
     <string name="menu_view_outline">بنية الملف (الحاويات/الأقسام)…</string>
+    <string name="menu_view_fold_current">طيّ الكتلة الحالية</string>
+    <string name="menu_view_fold_all">طيّ الكل</string>
+    <string name="menu_view_unfold_all">فكّ طيّ الكل</string>
     <string name="menu_run_run">Run program</string>
     <string name="menu_run_check_brackets">Check brackets</string>
     <string name="menu_run_check_tags">فحص توازن وسوم الحاويات</string>
