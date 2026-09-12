@@ -157,7 +157,7 @@ class MainActivity : AppCompatActivity() {
                 ProjectManager.listLibraries(project).find { it.name == libraryName }
             } else null
             val fileToOpen = if (libraryToOpen == null && project != null && fileName != null) {
-                ProjectManager.listFiles(project).find { it.name == fileName }
+                ProjectManager.findFileByRelPath(project, fileName)
             } else null
             when {
                 libraryToOpen != null -> {
@@ -651,9 +651,13 @@ class MainActivity : AppCompatActivity() {
 
     /** يحفظ محتوى المحرر مباشرة داخل ملف المشروع الحالي (بدون المرور بحوار SAF). */
     private fun saveToProjectFile(file: RinFile) {
-        val project = currentProject ?: return
         try {
-            val updated = ProjectManager.writeFile(project, file.name, editCode.text.toString())
+            // نكتب مباشرة إلى مسار الملف الحقيقي (file.file) بدل إعادة بنائه من اسمه المجرّد في
+            // جذر المشروع — وإلا كان حفظ ملف داخل مجلد فرعي يُنشئ نسخة جديدة في الجذر (أو، الأسوأ،
+            // يستبدل محتوى ملف آخر غير مرتبط يحمل نفس الاسم هناك) بدل تحديث الملف الأصلي مكانه.
+            val content = editCode.text.toString()
+            file.file.writeText(content)
+            val updated = RinFile(file.name, file.file, file.file.length(), file.file.lastModified(), file.relPath)
             currentProjectFile = updated
             Toast.makeText(this, getString(R.string.file_saved_toast, updated.name), Toast.LENGTH_SHORT).show()
         } catch (t: Throwable) {
