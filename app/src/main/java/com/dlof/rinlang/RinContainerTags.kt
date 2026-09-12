@@ -119,6 +119,67 @@ object RinContainerTags {
     data class OutlineEntry(val lineNumber: Int, val depth: Int, val label: String)
 
     /**
+     * كتلة وسم واحدة قابلة للطيّ (Code Folding) — تُستهلَك من [RinCodeEditorView] لبناء خريطة
+     * الطيّ الكاملة (إلى جانب كتل '{'..'}' الحقيقية المبنية هناك مباشرة من تلوين الـlexer).
+     * [startLine]/[endLine] 0-based (سطر فتح الوسم وسطر ".end/..." المطابق له فعليًا).
+     * [displayKind] نص عرض بحت (مثال: "view.Column"، "container.pipe"، "Section") مُشتقّ من
+     * نص سطر الفتح نفسه، أدقّ من [closingTagFor] المُوحَّد (الذي يُرجع دوماً "view" لأي
+     * @view.<Kind> مثلاً، لأن الإغلاق حرفياً موحَّد) — هنا فقط لعرضٍ أوضح في شريحة الطيّ.
+     * [name] الاسم بعد '=' إن وُجد (أو محتوى `.object("...")`)، أو null إن لم يحمل الوسم اسماً.
+     */
+    data class FoldTagRegion(val startLine: Int, val endLine: Int, val displayKind: String, val name: String?)
+
+    /**
+     * يبني قائمة كل كتل الوسوم القابلة للطيّ في [text] — بنفس خوارزمية المكدّس (stack) المستخدَمة
+     * في [checkTagBalance]/[buildOutline] تمامًا (فتح/إغلاق متطابقان ومتعشّشان بصورة صحيحة)، لكن
+     * يُصدر هنا كل زوج (فتح، إغلاق مطابق فعلياً) بدل مجرّد رقم أول خلل أو قائمة مسطّحة لأغراض
+     * التنقّل. بأمان تام مع كود غير مكتمل: أي وسم فُتح ولم يُغلق حتى نهاية الملف، أو وسم إغلاق
+     * يتيم/لا يطابق قمة المكدّس، لا يُصدر له أي كتلة إطلاقاً (يُتجاهَل بصمت، بلا استثناء) — تماماً
+     * كنهج "الأمان" في checkTagBalance، فتبقى الميزة مفيدة أثناء الكتابة قبل اكتمال الملف.
+     */
+    fun buildFoldRegions(text: String): List<FoldTagRegion> {
+        data class Open(val tag: String, val displayKind: String, val name: String?, val line: Int)
+        val stack = ArrayDeque<Open>()
+        val regions = mutableListOf<FoldTagRegion>()
+        val lines = text.lines()
+        for (index in lines.indices) {
+            val trimmed = lines[index].trim()
+            val closingName = closingTagNameIn(trimmed)
+            if (closingName != null) {
+                if (stack.isNotEmpty() && stack.last().tag == closingName) {
+                    val open = stack.removeLast()
+                    regions.add(FoldTagRegion(open.line, index, open.displayKind, open.name))
+                }
+                continue
+            }
+            val tag = closingTagFor(trimmed) ?: continue
+            stack.addLast(Open(tag, displayKindFor(trimmed), extractTagName(trimmed), index))
+        }
+        return regions
+    }
+
+    /** نص عرض أدقّ من الوسم القانوني (canonical) المستخدَم للمطابقة فقط — مثال: "@view.Column=root"
+     *  يُعطي "view.Column" هنا بدل "view" الموحَّد الذي يُرجعه [closingTagFor] (صحيح للمطابقة لكن
+     *  أقل فائدة للعرض، إذ يفقد الـKind الفعلي). عرض بحت، لا يُستخدَم في أي فحص/مطابقة. */
+    private fun displayKindFor(trimmedLine: String): String = when {
+        trimmedLine.startsWith(".object(") -> "object"
+        trimmedLine.startsWith("@") -> trimmedLine.removePrefix("@").substringBefore('=').trim()
+        else -> trimmedLine.substringBefore('=').trim()
+    }
+
+    /** يستخرج "اسم" وسم فتح لعرضه في شريحة الطيّ: ما بعد '=' (بلا علامات اقتباس محيطة)، أو
+     *  محتوى `.object("id")`. عرض بحت — null إن لم يحمل الوسم اسماً (مثال: `@theme` بلا Kind،
+     *  أو `Translations`). */
+    private fun extractTagName(trimmedLine: String): String? {
+        if (trimmedLine.startsWith(".object(")) {
+            return trimmedLine.removePrefix(".object(").removeSuffix(")").trim().trim('"', '\'').ifEmpty { null }
+        }
+        val eq = trimmedLine.indexOf('=')
+        if (eq == -1) return null
+        return trimmedLine.substring(eq + 1).trim().trim('"', '\'').ifEmpty { null }
+    }
+
+    /**
      * يبني قائمة مسطّحة (بترتيب الظهور في الملف) بكل وسوم الفتح في [text] مع رقم سطرها
      * الأصلي وعمق تعشيشها، لعرضها في حوار "بنية الملف" (Outline) والتنقّل السريع بينها.
      * لا يفشل على وسوم غير متوازنة أو غير معروفة: أي سطر لا يطابق وسماً معروفاً، أو `.end/`
