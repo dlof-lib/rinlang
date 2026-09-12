@@ -191,6 +191,16 @@ print \"Hello, \" + name + \"!\";
     <string name="apk_export_field_name_label">Nombre visible de la app</string>
     <string name="apk_export_field_name_hint">p. ej. App de Ventas</string>
     <string name="apk_export_field_entry_label">Archivo de entrada</string>
+    <string name="apk_export_section_identity">Identidad</string>
+    <string name="apk_export_section_icon">Icono</string>
+    <string name="apk_export_field_icon_hint">Icono personalizado para la pantalla de inicio de tu app (opcional)</string>
+    <string name="apk_export_action_pick_icon">Elegir</string>
+    <string name="apk_export_section_splash">Pantalla de inicio</string>
+    <string name="apk_export_field_splash_hint">Texto que aparece bajo el logo al iniciar (opcional)</string>
+    <string name="apk_export_section_compat">Compatibilidad</string>
+    <string name="apk_export_field_min_sdk_label">SDK mínimo</string>
+    <string name="apk_export_field_target_sdk_label">SDK objetivo</string>
+    <string name="apk_export_section_build">Compilación</string>
     <string name="apk_export_action_build">Compilar y firmar APK</string>
     <string name="apk_export_action_install">Instalar</string>
     <string name="apk_export_action_share">Compartir</string>
