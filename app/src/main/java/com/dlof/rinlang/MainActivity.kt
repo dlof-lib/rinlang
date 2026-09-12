@@ -408,6 +408,9 @@ class MainActivity : AppCompatActivity() {
         popup.menu.add(0, 4, 3, R.string.menu_view_clear_console)
         popup.menu.add(0, 5, 4, R.string.menu_view_go_to_line)
         popup.menu.add(0, 6, 5, R.string.menu_view_outline)
+        popup.menu.add(0, 7, 6, R.string.menu_view_fold_current)
+        popup.menu.add(0, 8, 7, R.string.menu_view_fold_all)
+        popup.menu.add(0, 9, 8, R.string.menu_view_unfold_all)
         popup.setOnMenuItemClickListener { item ->
             when (item.itemId) {
                 1 -> changeEditorFontSize(1f)
@@ -416,6 +419,9 @@ class MainActivity : AppCompatActivity() {
                 4 -> RinJobScheduler.clear()
                 5 -> showGoToLineDialog()
                 6 -> showOutlineDialog()
+                7 -> editCode.foldCurrentLevel()
+                8 -> editCode.foldAll()
+                9 -> editCode.unfoldAll()
             }
             true
         }
