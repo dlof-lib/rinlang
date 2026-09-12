@@ -219,6 +219,8 @@ print \"Hello, \" + name + \"!\";
     <string name="apk_export_status_success">تم البناء والتوقيع بنجاح</string>
     <string name="apk_export_status_failed">فشل التصدير</string>
     <string name="apk_export_no_entry_error">لا يوجد ملف .rin واحد على الأقل في هذا المشروع</string>
+    <string name="apk_export_icon_load_error">تعذّر تحميل الأيقونة المحدَّدة</string>
+    <string name="apk_export_sdk_range_error">الحد الأدنى لإصدار SDK يجب ألا يتجاوز الإصدار المستهدف</string>
     <string name="apk_export_note_limitation">ملاحظة: اسم التطبيق وأيقونته على الشاشة الرئيسية للحزمة الناتجة يبقيان كما في RinStudio — هوية مشروعك الفعلية تظهر داخل شاشة تشغيله بعد فتحه. التوقيع حقيقي بمخطّطي v1 وv2 معاً (v2 يُتحقَّق ذاتياً تلقائياً، ويتراجع لـ v1 وحدها إن تعذّر ذلك) لأقصى ثقة تثبيت.</string>
 
     <string name="more_row_rin_apps_subtitle">تصفّح كل تطبيقاتك المُصدَّرة سابقاً، ثبّتها أو شاركها أو أعد تصديرها</string>
