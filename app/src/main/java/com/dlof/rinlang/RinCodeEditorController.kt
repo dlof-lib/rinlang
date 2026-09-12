@@ -1,8 +1,8 @@
 package com.dlof.rinlang
 
 import android.content.Context
-import android.text.Editable
-import android.text.TextWatcher
+import android.view.GestureDetector
+import android.view.MotionEvent
 import android.widget.ScrollView
 import android.widget.TextView
 
@@ -10,7 +10,8 @@ import android.widget.TextView
  * متحكم رفيع فوق [RinCodeEditorView] — لا يوجد أي منطق تحرير في هذا الملف نفسه، كل التحرير
  * الفعلي مُفوَّض بالكامل إلى [RinCodeEditorView] ومحركه [RinNativeEditor] (C++17 عبر JNI، بلا
  * أي C++/JNI). هذا الصنف مسؤول فقط عن:
- * مزامنة عمود أرقام الأسطر، التمرير التلقائي إلى المؤشر/التطابق، وحالة "بحث حسّاس لحالة الأحرف".
+ * مزامنة عمود أرقام الأسطر (بما فيها مؤشر ▾/▸ الطيّ بجانب كل سطر، ومعالجة النقر عليه)،
+ * التمرير التلقائي إلى المؤشر/التطابق، وحالة "بحث حسّاس لحالة الأحرف".
  */
 class RinCodeEditorController(
     private val context: Context,
@@ -22,17 +23,39 @@ class RinCodeEditorController(
 
     init {
         updateLineNumbers()
-        editorView.addTextChangedListener(object : TextWatcher {
-            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
-            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
-            override fun afterTextChanged(s: Editable?) { updateLineNumbers() }
+        // نقطة إعلام واحدة تُغطّي التعديل النصّي *و* أي طيّ/فكّ (foldAll/unfoldAll/toggleFold) —
+        // كلاهما يمرّان عبر recomputeVisibleLines() داخل RinCodeEditorView، فلا حاجة لمستمع نصّي
+        // منفصل بعد الآن (كان يُفوّت تمامًا أي تحديث لعمود الأسطر عند تبديل الطيّ وحده بلا أي
+        // تعديل نصّي، فينحرف عدد/ترتيب الأسطر المعروضة هنا عمّا يرسمه RinCodeEditorView فعلياً).
+        editorView.addVisibleLinesChangeListener { updateLineNumbers() }
+
+        // النقر على عمود الأسطر نفسه يبدّل حالة طيّ السطر المقابل إن كان بداية كتلة قابلة للطيّ
+        // (مؤشر ▾/▸ المرسوم بجانب رقمه في updateLineNumbers أدناه) — onSingleTapUp فقط (لا أي
+        // إيماءة أخرى) حتى يبقى التمرير العمودي العادي بالسحب على هذا العمود يعمل بلا أي تعارض
+        // (نُعيد false دوماً من onTouch لنترك الـScrollView المحيط يتولّى أي سحب طبيعي).
+        val gutterGestureDetector = GestureDetector(context, object : GestureDetector.SimpleOnGestureListener() {
+            override fun onSingleTapUp(e: MotionEvent): Boolean {
+                val row = ((e.y - lineNumbers.paddingTop) / editorView.lineHeightPx).toInt()
+                return editorView.toggleFoldAtVisibleRow(row)
+            }
         })
+        lineNumbers.isClickable = true
+        lineNumbers.setOnTouchListener { _, event -> gutterGestureDetector.onTouchEvent(event); false }
     }
 
+    /** يُعيد بناء نص عمود أرقام الأسطر بالكامل من الأسطر *الظاهرة* حالياً فقط (لا 1..lineCount()
+     *  تسلسلياً كالسابق) — يبقى بالتالي محاذياً تمامًا لما يرسمه RinCodeEditorView.onDraw سطراً
+     *  بسطر حتى مع وجود طيّات نشطة، ويحمل بجانب كل رقم مؤشره ▾ (كتلة مفتوحة)/▸ (مطويّة)/مسافة
+     *  (سطر عادي) — بعرض حرف واحد ثابت دوماً (خط أحادي التباعد) فلا ينزاح محاذاة الأرقام يميناً
+     *  (gravity="end") بين الأسطر التي تحمل مؤشراً وتلك التي لا تحمله. */
     private fun updateLineNumbers() {
-        val count = editorView.lineCount()
-        val sb = StringBuilder(count * 3)
-        for (i in 1..count) { sb.append(i); if (i != count) sb.append('\n') }
+        val numbers = editorView.visibleLineNumbers()
+        val markers = editorView.visibleFoldMarkers()
+        val sb = StringBuilder(numbers.size * 4)
+        for (i in numbers.indices) {
+            sb.append(numbers[i]).append(' ').append(markers[i])
+            if (i != numbers.lastIndex) sb.append('\n')
+        }
         lineNumbers.text = sb.toString()
     }
 
