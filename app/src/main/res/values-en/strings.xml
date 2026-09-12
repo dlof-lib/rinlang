@@ -72,6 +72,9 @@
     <string name="menu_view_clear_console">Clear run history</string>
     <string name="menu_view_go_to_line">Go to line…</string>
     <string name="menu_view_outline">Outline (containers/sections)…</string>
+    <string name="menu_view_fold_current">Fold current block</string>
+    <string name="menu_view_fold_all">Fold all</string>
+    <string name="menu_view_unfold_all">Unfold all</string>
     <string name="menu_run_run">Run program</string>
     <string name="menu_run_check_brackets">Check brackets</string>
     <string name="menu_run_check_tags">Check container tags</string>
