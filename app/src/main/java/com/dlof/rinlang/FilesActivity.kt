@@ -82,6 +82,14 @@ class FilesActivity : AppCompatActivity() {
         findViewById<TextView>(R.id.txtToolbarTitle).text = getString(R.string.files_screen_title)
         findViewById<TextView>(R.id.txtToolbarSubtitle).apply {
             visibility = View.VISIBLE
+            // النقر على مسار "المشروع / مجلد1 / مجلد2" يعود مباشرة إلى جذر المشروع دفعة واحدة،
+            // بدل الاضطرار للضغط على "رجوع" مرة لكل مستوى مجلد متداخل.
+            setOnClickListener {
+                if (currentRelDir.isNotBlank()) {
+                    currentRelDir = ""
+                    refresh()
+                }
+            }
         }
         findViewById<View>(R.id.btnToolbarBack).setOnClickListener { handleBack() }
 
@@ -199,7 +207,7 @@ class FilesActivity : AppCompatActivity() {
 
     private fun importZip(uri: Uri) {
         try {
-            val count = ProjectManager.importZipFromUri(this, project, uri)
+            val count = ProjectManager.importZipFromUri(this, project, uri, currentRelDir)
             refresh()
             Toast.makeText(this, getString(R.string.zip_extracted_toast, count), Toast.LENGTH_SHORT).show()
         } catch (t: Throwable) {
@@ -269,7 +277,7 @@ class FilesActivity : AppCompatActivity() {
 
     private fun importFile(uri: Uri) {
         try {
-            val file = ProjectManager.importFileFromUri(this, project, uri)
+            val file = ProjectManager.importFileFromUri(this, project, uri, currentRelDir)
             refresh()
             Toast.makeText(this, getString(R.string.file_uploaded_toast, file.name), Toast.LENGTH_SHORT).show()
         } catch (t: Throwable) {
@@ -388,7 +396,9 @@ class FilesActivity : AppCompatActivity() {
     private fun openInEditor(file: RinFile) {
         val intent = Intent(this, MainActivity::class.java)
         intent.putExtra(MainActivity.EXTRA_PROJECT_NAME, project.name)
-        intent.putExtra(MainActivity.EXTRA_FILE_NAME, file.name)
+        // نمرّر المسار النسبي الكامل (relPath) لا الاسم المجرّد وحده، وإلا فشل فتح أي ملف
+        // داخل مجلد فرعي (أو فُتح ملف آخر بالخطأ بنفس الاسم في الجذر).
+        intent.putExtra(MainActivity.EXTRA_FILE_NAME, file.relPath)
         startActivity(intent)
     }
 }
