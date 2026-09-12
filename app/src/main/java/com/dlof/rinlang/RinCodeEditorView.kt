@@ -1,5 +1,6 @@
 package com.dlof.rinlang
 
+import android.app.AlertDialog
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -28,6 +29,7 @@ import android.view.View
 import android.view.inputmethod.BaseInputConnection
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputConnection
+import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.PopupWindow
 import android.widget.TextView
@@ -387,6 +389,7 @@ class RinCodeEditorView @JvmOverloads constructor(
         if (changed) {
             notifyExternalWatchers(old, newText)
             updateSuggestionPopup()
+            dismissHoverDoc()
         } else {
             dismissSuggestionPopup()
         }
@@ -796,6 +799,7 @@ class RinCodeEditorView @JvmOverloads constructor(
         } else {
             dismissSuggestionPopup()
             dismissDiagnosticPopup()
+            dismissHoverDoc()
             actionMode?.finish()
         }
         invalidate()
@@ -806,6 +810,7 @@ class RinCodeEditorView @JvmOverloads constructor(
         blinkHandler.removeCallbacks(blinkRunnable)
         dismissSuggestionPopup()
         dismissDiagnosticPopup()
+        dismissHoverDoc()
         actionMode?.finish()
         engine.destroy()
     }
@@ -834,6 +839,7 @@ class RinCodeEditorView @JvmOverloads constructor(
             if (AppSettings.isHapticFeedback(context)) performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP)
             requestFocus()
             showKeyboard()
+            dismissHoverDoc()
             val p = offsetForTouch(e.x, e.y)
             // النقر على نفس نقطة المؤشر الحالية بالضبط أثناء ظهور تظليل قوس مطابق (bracketInfo)
             // يُفسَّر كـ"اذهب للقوس المطابق" بدل عدم فعل شيء — نقرة ثانية على نفس القوس تُنقل
@@ -864,8 +870,9 @@ class RinCodeEditorView @JvmOverloads constructor(
             if (AppSettings.isHapticFeedback(context)) performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
             requestFocus()
             showKeyboard()
-            selectWordAt(e.x, e.y)
+            val word = selectWordAt(e.x, e.y)
             showTextActionMode()
+            showHoverDocIfKeyword(word)
         }
 
         override fun onDoubleTap(e: MotionEvent): Boolean {
@@ -879,8 +886,9 @@ class RinCodeEditorView @JvmOverloads constructor(
                 toggleFold(p.line)
                 return true
             }
-            selectWordAt(e.x, e.y)
+            val word = selectWordAt(e.x, e.y)
             showTextActionMode()
+            showHoverDocIfKeyword(word)
             return true
         }
     })
@@ -979,7 +987,9 @@ class RinCodeEditorView @JvmOverloads constructor(
         return true
     }
 
-    private fun selectWordAt(x: Float, y: Float) {
+    /** يحدّد كلمة عند نقطة اللمس ويُعيد نصّها (أو null إن لم تكن هناك كلمة، مثلًا نقر على مسافة
+     *  فارغة) — القيمة المُعادة تُستخدَم لعرض تلميح توثيق سريع (hover doc) إن كانت كلمة محجوزة. */
+    private fun selectWordAt(x: Float, y: Float): String? {
         val p = offsetForTouch(x, y)
         val lineText = engine.getLine(p.line)
         fun isWordChar(c: Char) = c.isLetterOrDigit() || c == '_'
@@ -987,9 +997,10 @@ class RinCodeEditorView @JvmOverloads constructor(
         var end = p.col
         while (start > 0 && isWordChar(lineText[start - 1])) start--
         while (end < lineText.length && isWordChar(lineText.getOrElse(end) { ' ' })) end++
-        if (start == end) return
+        if (start == end) return null
         engine.setSelection(p.line, start, p.line, end)
         afterEngineMutation()
+        return lineText.substring(start, end)
     }
 
     private fun showKeyboard() {
@@ -1035,12 +1046,77 @@ class RinCodeEditorView @JvmOverloads constructor(
         afterEngineMutation()
     }
 
+    // --- إعادة تسمية رمز (Rename symbol) --------------------------------------------------
+    // نطاق واقعي بلا جدول رموز/تحليل نطاقات (scope) فعلي: نُعيد تسمية كل ظهور لنفس النص عبر
+    // *كل توكنات المستند* المصنَّفة معرِّفًا (IDENT) أو استدعاء دالة (CALL) بحسب lexer/highlighter
+    // الحقيقيين — لا مجرد بحث/استبدال نصّي أعمى، فلا نلمس الظهور نفسه داخل نص أو تعليق. هذا يعني
+    // عمليًا "أعد تسمية كل متغيّر/دالة بهذا الاسم في هذا الملف"، لا "في هذا النطاق فقط" — قيد
+    // معقول ومُصرَّح به بوضوح في نص الحوار أدناه بدل الادّعاء بدقّة أكبر مما هو متاح فعليًا.
+
+    /** يعيد اسم المعرِّف (identifier) المحدَّد حاليًا إن كان تحديدًا صالحًا لإعادة التسمية:
+     *  ضمن سطر واحد، ومطابقًا تمامًا لحدود توكن IDENT/CALL حقيقي (لا كلمة محجوزة، ولا جزء من
+     *  نص/تعليق/رقم) — وإلا null فتُخفى خانة "إعادة تسمية" من قائمة النسخ/اللصق. */
+    private fun selectedIdentifierName(): String? {
+        val sel = engine.getSelection()
+        if (!sel.hasSelection || sel.start.line != sel.end.line) return null
+        val spans = cachedHighlightsByLine[sel.start.line] ?: return null
+        val isIdent = spans.any {
+            it.startCol == sel.start.col && it.endCol == sel.end.col &&
+                (it.kind == HighlightKind.IDENT || it.kind == HighlightKind.CALL)
+        }
+        if (!isIdent) return null
+        return textOfSelection(sel)
+    }
+
+    private fun showRenameDialog(oldName: String) {
+        val input = EditText(context).apply {
+            setText(oldName)
+            setSelection(0, oldName.length)
+            isSingleLine = true
+            val pad = (16 * resources.displayMetrics.density).toInt()
+            setPadding(pad, pad / 2, pad, pad / 2)
+        }
+        AlertDialog.Builder(context)
+            .setTitle(context.getString(R.string.rename_dialog_title))
+            .setView(input)
+            .setPositiveButton(android.R.string.ok) { _, _ ->
+                val newName = input.text.toString().trim()
+                if (newName.isNotEmpty() && newName != oldName && newName.matches(IDENTIFIER_REGEX)) {
+                    renameAllOccurrences(oldName, newName)
+                }
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    /** يستبدل كل توكن IDENT/CALL في المستند نصّه الحرفي == [oldName] بالاسم [newName]، من نهاية
+     *  المستند للبداية (حتى لا تُزيح الاستبدالات السابقة إحداثيات الاستبدالات اللاحقة). */
+    private fun renameAllOccurrences(oldName: String, newName: String) {
+        val occurrences = engine.getHighlights()
+            .asSequence()
+            .filter { (it.kind == HighlightKind.IDENT || it.kind == HighlightKind.CALL) && it.endCol - it.startCol == oldName.length }
+            .filter { h ->
+                val lineText = engine.getLine(h.line)
+                val s = h.startCol.coerceIn(0, lineText.length)
+                val e = h.endCol.coerceIn(s, lineText.length)
+                e - s == oldName.length && lineText.regionMatches(s, oldName, 0, oldName.length)
+            }
+            .sortedWith(compareByDescending<RinNativeEditor.Highlight> { it.line }.thenByDescending { it.startCol })
+            .toList()
+        if (occurrences.isEmpty()) return
+        for (h in occurrences) {
+            engine.replaceRange(h.line, h.startCol, h.line, h.endCol, newName)
+        }
+        afterEngineMutation()
+    }
+
     private val actionModeCallback = object : ActionMode.Callback {
         override fun onCreateActionMode(mode: ActionMode, menu: Menu): Boolean {
             menu.add(0, ACTION_SELECT_ALL, 0, android.R.string.selectAll)
             menu.add(0, ACTION_CUT, 1, android.R.string.cut)
             menu.add(0, ACTION_COPY, 2, android.R.string.copy)
             menu.add(0, ACTION_PASTE, 3, android.R.string.paste)
+            menu.add(0, ACTION_RENAME, 4, R.string.action_rename_symbol)
             return true
         }
 
@@ -1049,6 +1125,7 @@ class RinCodeEditorView @JvmOverloads constructor(
             menu.findItem(ACTION_CUT)?.isVisible = hasSelection
             menu.findItem(ACTION_COPY)?.isVisible = hasSelection
             menu.findItem(ACTION_PASTE)?.isVisible = clipboardManager().hasPrimaryClip()
+            menu.findItem(ACTION_RENAME)?.isVisible = selectedIdentifierName() != null
             return true
         }
 
@@ -1058,6 +1135,11 @@ class RinCodeEditorView @JvmOverloads constructor(
                 ACTION_CUT -> { cutSelectionToClipboard(); mode.finish() }
                 ACTION_COPY -> { copySelectionToClipboard(); mode.finish() }
                 ACTION_PASTE -> { pasteFromClipboard(); mode.finish() }
+                ACTION_RENAME -> {
+                    val name = selectedIdentifierName()
+                    mode.finish()
+                    if (name != null) showRenameDialog(name)
+                }
             }
             return true
         }
@@ -1081,6 +1163,8 @@ class RinCodeEditorView @JvmOverloads constructor(
         private const val ACTION_CUT = 2
         private const val ACTION_COPY = 3
         private const val ACTION_PASTE = 4
+        private const val ACTION_RENAME = 5
+        private val IDENTIFIER_REGEX = Regex("^[A-Za-z_][A-Za-z0-9_]*$")
     }
 
     // --- لوحة المفاتيح (IME) عبر InputConnection حقيقي ------------------------
@@ -1473,5 +1557,61 @@ class RinCodeEditorView @JvmOverloads constructor(
 
     private fun dismissDiagnosticPopup() {
         diagnosticPopup?.let { if (it.isShowing) it.dismiss() }
+    }
+
+    // --- تلميح توثيق سريع (hover/quick-doc) عند الضغط الطويل على كلمة محجوزة -----------------
+
+    private var hoverDocPopup: PopupWindow? = null
+
+    /** يعرض تلميح توثيق [RinKeywordDocs] لكلمة [word] فوق السطر الحالي — لا شيء إن كانت
+     *  [word] فارغة (لا كلمة عند نقطة اللمس) أو ليست كلمة محجوزة موثَّقة. يُستدعى من
+     *  onLongPress/onDoubleTap بعد [selectWordAt] مباشرة. */
+    private fun showHoverDocIfKeyword(word: String?) {
+        val doc = word?.let { RinKeywordDocs.lookup(it) }
+        if (doc == null) { dismissHoverDoc(); return }
+        val label = TextView(context).apply {
+            text = "$word — $doc"
+            setTextColor(colorDefault)
+            textSize = 12.5f
+            val padH = (12 * resources.displayMetrics.density).toInt()
+            val padV = (8 * resources.displayMetrics.density).toInt()
+            setPadding(padH, padV, padH, padV)
+            background = GradientDrawable().apply {
+                setColor(Color.parseColor("#2A2D31"))
+                cornerRadius = 6 * resources.displayMetrics.density
+                setStroke((resources.displayMetrics.density * 1.4f).toInt().coerceAtLeast(1), colorType)
+            }
+        }
+        val popup = hoverDocPopup ?: PopupWindow(
+            label, LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT
+        ).apply {
+            isOutsideTouchable = true
+            isFocusable = false
+            elevation = 12f
+            hoverDocPopup = this
+        }
+        popup.contentView = label
+        label.measure(
+            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
+            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
+        )
+        val popupWidth = label.measuredWidth
+        val popupHeight = label.measuredHeight
+
+        val cur = engine.getCursor()
+        val loc = IntArray(2)
+        getLocationOnScreen(loc)
+        val dm = resources.displayMetrics
+        val rawX = loc[0] + paddingLeft
+        val screenX = rawX.coerceIn(0, (dm.widthPixels - popupWidth).coerceAtLeast(0))
+        val lineY = loc[1] + yOfLine(cur.line)
+        val aboveY = lineY - popupHeight
+        val screenY = if (aboveY >= 0) aboveY else (lineY + lineHeight.roundToInt()).coerceAtMost((dm.heightPixels - popupHeight).coerceAtLeast(0))
+
+        if (popup.isShowing) popup.update(screenX, screenY, -1, -1) else popup.showAtLocation(this, Gravity.NO_GRAVITY, screenX, screenY)
+    }
+
+    private fun dismissHoverDoc() {
+        hoverDocPopup?.let { if (it.isShowing) it.dismiss() }
     }
 }
