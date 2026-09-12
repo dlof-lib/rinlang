@@ -21,7 +21,7 @@
     <string name="pipeline_action_configure">Configure</string>
     <string name="pipeline_action_load_sample">Load Example Pipeline</string>
     <string name="pipeline_configure_title">RinFlow</string>
-    <string name="pipeline_configure_message">Container: %1$s\nStages: %2$d\nTimeout: %3$d s\n\nEach value shown in the diagram is produced by actually re-running your code through the native Rin engine, truncated at each stage of the pipe expression — nothing here is simulated.</string>
+    <string name="pipeline_configure_message">Container: %1$s\nStages: %2$d\nTimeout: %3$d s\n\nEach value shown in the diagram is produced by actually re-running your code through the native Rin [...]
 
     <!-- تصميم RinFlow الجديد: تدفق أفقي + شريط legend، بأسلوب لوحات CI/CD الاحترافية -->
     <string name="pipeline_flow_label">rinflow — pipeline.trace</string>
@@ -219,7 +219,9 @@ print \"Hello, \" + name + \"!\";
     <string name="apk_export_status_success">تم البناء والتوقيع بنجاح</string>
     <string name="apk_export_status_failed">فشل التصدير</string>
     <string name="apk_export_no_entry_error">لا يوجد ملف .rin واحد على الأقل في هذا المشروع</string>
-    <string name="apk_export_note_limitation">ملاحظة: اسم التطبيق المعروض أعلاه يُكتب فعلياً داخل بيان الحزمة الناتجة. الأيقونة فقط تبقى كما في RinStudio (resources.arsc لا يُعدَّل حالياً). التوقيع حقيقي بمخطّطي v1 (JAR) وv2 معاً (تُضاف كتلة v2 وتُتحقَّق ذاتياً تلقائياً، وتتراجع v1 وحدها إن تعذّر ذلك) بمفتاح RSA-2048 خاص بجهازك — لأقصى ثقة تثبيت على أندرويد الحديث.</string>
+    <string name="apk_export_icon_load_error">تعذّر تحميل الأيقونة</string>
+    <string name="apk_export_sdk_range_error">الحد الأدنى لا يمكن أن يكون أكبر من الإصدار المستهدف</string>
+    <string name="apk_export_note_limitation">ملاحظة: اسم التطبيق المعروض أعلاه يُكتب فعلياً داخل بيان الحزمة الناتجة. الأيقونة[...]
 
     <string name="more_row_rin_apps_subtitle">تصفّح كل تطبيقاتك المُصدَّرة سابقاً، ثبّتها أو شاركها أو أعد تصديرها</string>
     <string name="rin_apps_screen_title">تطبيقات Rin</string>
@@ -231,7 +233,7 @@ print \"Hello, \" + name + \"!\";
     <string name="rin_app_action_reexport">إعادة تصدير</string>
     <string name="rin_app_action_delete">حذف</string>
     <string name="rin_app_meta_format">%1$s · %2$d ك.ب · %3$s · %4$s</string>
-    <string name="rin_app_delete_confirm">سيُحذف ملف الـ APK نهائياً من الجهاز. تثبيته الحالي على الجهاز (إن وُجد) لن يتأثر.</string>
+    <string name="rin_app_delete_confirm">سيُحذف ملف الـ APK نها��ياً من الجهاز. تثبيته الحالي على الجهاز (إن وُجد) لن يتأثر.</string>
     <string name="rin_app_deleted_toast">تم حذف التطبيق من السجل</string>
     <string name="rin_app_not_found_toast">تعذّر العثور على هذا التطبيق في السجل</string>
     <string name="rin_app_settings_screen_title">إعدادات التطبيق</string>
@@ -297,7 +299,7 @@ print \"Hello, \" + name + \"!\";
     <string name="crash_dialog_close_app">Close app</string>
     <string name="crash_dialog_dismiss">Dismiss</string>
 
-    <string name="job_search_hint">Search this run’s output/events</string>
+    <string name="job_search_hint">Search this run's output/events</string>
     <string name="job_tab_output_fmt">Output (%1$d)</string>
     <string name="job_tab_events_fmt">Events (%1$d)</string>
     <string name="job_tab_diagnostics_fmt">Diagnostics (%1$d)</string>
