@@ -210,6 +210,8 @@ print \"Hello, \" + name + \"!\";
     <string name="apk_export_status_success">Compilado y firmado con éxito</string>
     <string name="apk_export_status_failed">Error al exportar</string>
     <string name="apk_export_no_entry_error">Este proyecto no tiene archivos .rin</string>
+    <string name="apk_export_icon_load_error">No se pudo cargar el icono seleccionado</string>
+    <string name="apk_export_sdk_range_error">El SDK mínimo no debe superar al SDK objetivo</string>
     <string name="apk_export_note_limitation">Nota: el nombre e icono del paquete resultante en la pantalla de inicio siguen siendo los de RinStudio; la identidad real de tu proyecto aparece dentro de su pantalla de ejecución al abrirlo. La firma es real, con los esquemas v1 y v2 juntos (v2 se autoverifica automáticamente y se reemplaza por v1 solo si eso falla) para la máxima confianza de instalación.</string>
 
     <string name="more_row_rin_apps_subtitle">Explora todas tus apps exportadas, instálalas, compártelas o vuelve a exportarlas</string>
