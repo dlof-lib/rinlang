@@ -219,6 +219,8 @@ print \"Hello, \" + name + \"!\";
     <string name="apk_export_status_success">Built and signed successfully</string>
     <string name="apk_export_status_failed">Export failed</string>
     <string name="apk_export_no_entry_error">This project has no .rin files</string>
+    <string name="apk_export_icon_load_error">Failed to load the selected icon</string>
+    <string name="apk_export_sdk_range_error">Minimum SDK must not exceed the target SDK</string>
     <string name="apk_export_note_limitation">Note: the resulting package’s home-screen app name and icon stay RinStudio’s own — your project’s real identity shows up inside its run screen after opening it. Signing is real, using both v1 and v2 schemes together (v2 is self-verified automatically, falling back to v1 alone if that fails) for maximum install trust.</string>
 
     <string name="more_row_rin_apps_subtitle">Browse every app you\'ve exported before, install, share, or re-export it</string>
