@@ -200,6 +200,16 @@ print \"Hello, \" + name + \"!\";
     <string name="apk_export_field_name_label">اسم التطبيق المعروض</string>
     <string name="apk_export_field_name_hint">مثال: تطبيق المبيعات</string>
     <string name="apk_export_field_entry_label">ملف البداية (Entry)</string>
+    <string name="apk_export_section_identity">الهوية</string>
+    <string name="apk_export_section_icon">الأيقونة</string>
+    <string name="apk_export_field_icon_hint">أيقونة مخصصة لتطبيقك على الشاشة الرئيسية (اختياري)</string>
+    <string name="apk_export_action_pick_icon">اختيار</string>
+    <string name="apk_export_section_splash">شاشة البداية</string>
+    <string name="apk_export_field_splash_hint">نص يظهر أسفل الشعار عند تشغيل التطبيق (اختياري)</string>
+    <string name="apk_export_section_compat">التوافق</string>
+    <string name="apk_export_field_min_sdk_label">الحد الأدنى لإصدار أندرويد</string>
+    <string name="apk_export_field_target_sdk_label">الإصدار المستهدف</string>
+    <string name="apk_export_section_build">البناء</string>
     <string name="apk_export_action_build">بناء وتوقيع APK</string>
     <string name="apk_export_action_install">تثبيت</string>
     <string name="apk_export_action_share">مشاركة</string>
