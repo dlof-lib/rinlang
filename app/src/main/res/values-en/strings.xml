@@ -200,6 +200,16 @@ print \"Hello, \" + name + \"!\";
     <string name="apk_export_field_name_label">Displayed app name</string>
     <string name="apk_export_field_name_hint">e.g. Sales App</string>
     <string name="apk_export_field_entry_label">Entry file</string>
+    <string name="apk_export_section_identity">Identity</string>
+    <string name="apk_export_section_icon">Icon</string>
+    <string name="apk_export_field_icon_hint">Custom home-screen icon for your app (optional)</string>
+    <string name="apk_export_action_pick_icon">Choose</string>
+    <string name="apk_export_section_splash">Splash Screen</string>
+    <string name="apk_export_field_splash_hint">Text shown under the logo on launch (optional)</string>
+    <string name="apk_export_section_compat">Compatibility</string>
+    <string name="apk_export_field_min_sdk_label">Minimum SDK</string>
+    <string name="apk_export_field_target_sdk_label">Target SDK</string>
+    <string name="apk_export_section_build">Build</string>
     <string name="apk_export_action_build">Build &amp; sign APK</string>
     <string name="apk_export_action_install">Install</string>
     <string name="apk_export_action_share">Share</string>
