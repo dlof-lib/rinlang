@@ -426,6 +426,19 @@ object ProjectManager {
     fun readFile(rinFile: RinFile): String = rinFile.file.readText()
 
     /**
+     * يبحث عن ملف داخل المشروع بمساره النسبي الكامل [relPath] (مثل "ui/home.rin")، وليس فقط
+     * اسمه المجرّد كما كان [listFiles] يفعل ضمناً — لازم لفتح ملفات داخل مجلدات فرعية بشكل صحيح
+     * بدل الخلط بينها وبين ملف آخر بنفس الاسم في الجذر، أو فشل الفتح تماماً.
+     */
+    fun findFileByRelPath(project: Project, relPath: String): RinFile? {
+        val trimmed = relPath.trim().trim('/')
+        if (trimmed.isEmpty()) return null
+        val target = File(project.dir, trimmed)
+        if (!target.isFile) return null
+        return RinFile(target.name, target, target.length(), target.lastModified(), trimmed)
+    }
+
+    /**
      * ينشئ ملفاً جديداً داخل [relDir] (فارغ = جذر المشروع). يقبل [fileName] بفواصل "/" لإنشاء
      * مجلدات فرعية تلقائياً قبل الملف (مثل "ui/screens/home.rin")، تماماً كما لو ضُغط زر
      * "مجلد جديد" لكل مستوى ثم أُنشئ الملف بداخله.
@@ -518,13 +531,18 @@ object ProjectManager {
      * أخرى: صور، فيديو، صوت، خطوط، ملفات لغات برمجة أخرى...)، وينسخ المحتوى بايتاً بايت (لا كنص
      * UTF-8) حتى لا تتلف الملفات الثنائية (صور/فيديو/صوت) عند الاستيراد.
      */
-    fun importFileFromUri(context: Context, project: Project, uri: Uri): RinFile {
+    fun importFileFromUri(context: Context, project: Project, uri: Uri, relDir: String = ""): RinFile {
         val resolver: ContentResolver = context.contentResolver
         val displayName = queryDisplayName(resolver, uri) ?: uri.lastPathSegment ?: "imported"
 
+        // يُرفَع الملف داخل المجلد الذي يتصفّحه المستخدم حالياً [relDir]، لا داخل جذر المشروع
+        // دوماً كما كان سابقاً — حتى لا "يختفي" الملف المرفوع من المجلد الفرعي المفتوح فعلياً.
+        val targetDir = resolveDir(project, relDir)
+        targetDir.mkdirs()
+
         var safeName = sanitizeFileName(displayName)
         if (safeName.isBlank()) safeName = "imported"
-        var target = File(project.dir, safeName)
+        var target = File(targetDir, safeName)
         var counter = 1
         // تفادي الكتابة فوق ملف موجود بنفس الاسم: أضف رقماً متسلسلاً قبل الامتداد (إن وجد).
         while (target.exists()) {
@@ -534,7 +552,7 @@ object ProjectManager {
             } else {
                 "${safeName}_$counter"
             }
-            target = File(project.dir, safeName)
+            target = File(targetDir, safeName)
             counter++
         }
 
@@ -545,7 +563,8 @@ object ProjectManager {
                 streamIn.copyTo(streamOut)
             }
         }
-        return RinFile(safeName, target, target.length(), target.lastModified())
+        val prefix = if (relDir.isBlank()) "" else "${relDir.trim('/')}/"
+        return RinFile(safeName, target, target.length(), target.lastModified(), "$prefix$safeName")
     }
 
     private fun sanitizeFileName(name: String): String =
@@ -671,9 +690,13 @@ object ProjectManager {
     )
 
     /** يفكّ ضغط ZIP legacy داخل مشروع موجود. أبقيناه للتوافق فقط؛ الصيغة الرسمية هي .rinproj. */
-    fun importZipFromUri(context: Context, project: Project, uri: Uri): Int {
+    fun importZipFromUri(context: Context, project: Project, uri: Uri, relDir: String = ""): Int {
         val resolver: ContentResolver = context.contentResolver
         val projectRoot = project.dir.canonicalFile
+        // يُفكّ الأرشيف داخل المجلد الحالي [relDir] بدل جذر المشروع دوماً؛ حد الأمان (منع
+        // الخروج عبر Zip Slip) يبقى محسوباً بالنسبة لجذر المشروع كاملاً وليس المجلد الحالي فقط.
+        val targetRoot = resolveDir(project, relDir).canonicalFile
+        targetRoot.mkdirs()
         var extractedCount = 0
         val input = resolver.openInputStream(uri)
             ?: throw IllegalStateException("تعذّرت قراءة الأرشيف المحدد")
@@ -682,8 +705,9 @@ object ProjectManager {
             while (entry != null) {
                 val safeRelPath = sanitizeZipEntryPath(entry.name)
                 if (safeRelPath != null) {
-                    val outFile = File(projectRoot, safeRelPath)
-                    if (outFile.canonicalFile.path.startsWith(projectRoot.path + File.separator)) {
+                    val outFile = File(targetRoot, safeRelPath)
+                    if (outFile.canonicalFile.path == projectRoot.path ||
+                        outFile.canonicalFile.path.startsWith(projectRoot.path + File.separator)) {
                         if (entry.isDirectory) outFile.mkdirs() else {
                             outFile.parentFile?.mkdirs()
                             BufferedOutputStream(FileOutputStream(outFile)).use { out -> zip.copyTo(out) }
