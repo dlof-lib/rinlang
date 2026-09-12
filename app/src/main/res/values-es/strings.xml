@@ -70,6 +70,9 @@
     <string name="menu_view_toggle_lines">Alternar números de línea</string>
     <string name="menu_view_clear_console">Borrar historial de ejecuciones</string>
     <string name="menu_view_go_to_line">Ir a la línea…</string>
+    <string name="menu_view_fold_current">Plegar bloque actual</string>
+    <string name="menu_view_fold_all">Plegar todo</string>
+    <string name="menu_view_unfold_all">Desplegar todo</string>
     <string name="menu_run_run">Ejecutar programa</string>
     <string name="menu_run_check_brackets">Comprobar paréntesis</string>
     <string name="new_file_name">sin_titulo.rin</string>
