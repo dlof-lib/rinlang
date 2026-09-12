@@ -117,6 +117,11 @@ class RinCodeEditorView @JvmOverloads constructor(
     private var lineHeight = 0f
     private var charWidth = 0f
     private var ascent = 0f
+
+    /** ارتفاع السطر الحالي بالبكسل (يتغيّر مع تكبير/تصغير الخط) — يستهلكه عمود أرقام الأسطر
+     *  الخارجي ([RinCodeEditorController]) لحساب أي صفّ عرض يقابل نقرة على مؤشر ▾/▸ بجانبه،
+     *  حتى يبقى متطابقاً تمامًا مع ما يرسمه [onDraw] هنا بلا أي حساب مستقلّ قد ينحرف عنه. */
+    val lineHeightPx: Float get() = lineHeight
     private fun recomputeMetrics() {
         val fm = textPaint.fontMetrics
         lineHeight = (fm.descent - fm.ascent) * 1.15f
@@ -159,21 +164,43 @@ class RinCodeEditorView @JvmOverloads constructor(
     private var cachedDiagnosticsByLine: Map<Int, List<RinNativeEditor.Diagnostic>> = emptyMap()
 
     // --- طي الكود (code folding) ---------------------------------------------------------
-    // النطاق: فقط كتل '{'..'}' الحقيقية (بحسب التلوين النحوي الفعلي، لا مسح نصّي ساذج — فلا
-    // تُطابَق أقواس داخل نصوص/تعليقات) وبامتداد سطرين فأكثر. الطيّ بصري بحت: shadowEditable/IME
-    // ومنطق الـundo/redo لا يعرفان عنه إطلاقًا — كل ما يتغيّر هو *أي الأسطر تُرسَم* (onDraw)،
-    // *ارتفاع المحتوى* (onMeasure)، و*تحويل اللمس/المؤشر من وإلى y* (offsetForTouch/yOfLine).
-    /** openLine (0-based) -> Pair(عمود القوس المفتوح '{', closeLine للقوس المغلق المطابق '}'). */
-    private var foldRegions: Map<Int, Pair<Int, Int>> = emptyMap()
+    // النطاق: كتل '{'..'}' الحقيقية (بحسب التلوين النحوي الفعلي، لا مسح نصّي ساذج — فلا تُطابَق
+    // أقواس داخل نصوص/تعليقات) — وهي التي تُشكّل أجسام fun/if/while/for/when — بالإضافة إلى كتل
+    // "وسوم" Rin الخاصة (@container/@section/@view/@element/@loop/@theme/make/... حتى
+    // `.end/<tag>` المطابق فعلياً، عبر [RinContainerTags.buildFoldRegions]، بنفس خوارزمية المكدّس
+    // المستخدَمة أصلاً في "بنية الملف"/فحص توازن الوسوم) بامتداد سطرين فأكثر. الطيّ بصري بحت:
+    // shadowEditable/IME ومنطق الـundo/redo لا يعرفان عنه إطلاقًا — كل ما يتغيّر هو *أي الأسطر
+    // تُرسَم* (onDraw)، *ارتفاع المحتوى* (onMeasure)، و*تحويل اللمس/المؤشر من وإلى y*
+    // (offsetForTouch/yOfLine).
+    /**
+     * كتلة واحدة قابلة للطيّ. [startLine]/[endLine] 0-based لأسطر المحرك الفعلية. [kind] كلمة/وسم
+     * يفهمه Rin نفسه (مثال: "fun"، "if"، "while"، "container"، "view.Column") — مُشتقّ من بنية
+     * الكود الحقيقية لا من تخمين نصّي. [name] اسم العنصر إن أمكن استخراجه (اسم الدالة، اسم
+     * الحاوية...)، وإلا null. [braceCol] غير null فقط لكتل '{' الحقيقية (عمود القوس المفتوح على
+     * [startLine]) — يُستخدَم حصراً لتقييد نقطة تفعيل النقر المزدوج بعد القوس (كتل الوسوم بلا قوس
+     * تسمح بالنقر المزدوج في أي مكان من سطر الوسم نفسه).
+     */
+    private data class FoldRegion(val startLine: Int, val endLine: Int, val kind: String, val name: String?, val braceCol: Int? = null)
+
+    private var foldRegions: Map<Int, FoldRegion> = emptyMap()
     private var foldedStartLines: MutableSet<Int> = mutableSetOf()
     /** فهارس أسطر المحرك الفعلية بترتيب العرض من الأعلى للأسفل (تُخفي أسطر أي طيّة مفعَّلة). */
     private var visibleLines: List<Int> = listOf(0)
     /** الخريطة العكسية لـ[visibleLines]: رقم سطر فعلي (لا بد أن يكون ظاهرًا) -> رقم صفّه المرسوم. */
     private var lineToRow: Map<Int, Int> = mapOf(0 to 0)
 
+    /** مستمعو "تغيّر حالة العرض" (Fold/Unfold أو تعديل نصّي يُغيّر عدد/ترتيب الأسطر الظاهرة) —
+     *  نقطة الإعلام الوحيدة التي يعتمد عليها عمود أرقام الأسطر الخارجي ([RinCodeEditorController])
+     *  ليبقى متزامناً تماماً مع أي طيّة (لا يملك هذا الـView عمود الأسطر نفسه). */
+    private val visibleLinesChangeListeners = mutableListOf<() -> Unit>()
+    fun addVisibleLinesChangeListener(listener: () -> Unit) { visibleLinesChangeListeners.add(listener) }
+    private fun notifyVisibleLinesChanged() { for (l in visibleLinesChangeListeners) l() }
+
     /** يعيد بناء ذاكرتي التلوين والتشخيص معًا من المحرك — نقطة واحدة بدل تكرار نفس الحلقتين
-     *  في init/afterEngineMutation/setLanguage (كانت التشخيصات غائبة تمامًا سابقًا). */
-    private fun rebuildHighlightAndDiagnosticCaches() {
+     *  في init/afterEngineMutation/setLanguage (كانت التشخيصات غائبة تمامًا سابقًا). [text] يُمرَّر
+     *  من المستدعي إن كان محفوظاً أصلاً (afterEngineMutation) لتفادي استدعاء JNI مكرِّر لجلب نص
+     *  المستند كاملاً؛ عند غيابه (مثال: setLanguage) يُجلَب هنا مرّة واحدة فقط. */
+    private fun rebuildHighlightAndDiagnosticCaches(text: String = engine.getText()) {
         val highlights = engine.getHighlights()
         val byLine = HashMap<Int, MutableList<RinNativeEditor.Highlight>>()
         for (h in highlights) byLine.getOrPut(h.line) { mutableListOf() }.add(h)
@@ -187,16 +214,47 @@ class RinCodeEditorView @JvmOverloads constructor(
             cachedDiagnosticsByLine = emptyMap()
         }
 
-        recomputeFoldRegions(highlights)
+        recomputeFoldRegions(highlights, text)
     }
 
-    /** يبني خريطة الكتل القابلة للطيّ عبر مطابقة-كومة (stack) لأقواس '{'/'}' الحقيقية فقط —
-     *  الاعتماد على [RinNativeEditor.Highlight] بدل مسح نصّي مباشر يضمن تجاهل أي '{'/'}' داخل
-     *  نص أو تعليق تلقائيًا (تلك لا تصل هذا الفرع أصلاً لأن اللكسر الحقيقي لا يُصنّفها Bracket).
-     *  أي طيّة محفوظة سابقًا لسطر لم يعد بداية كتلة صالحة بعد التعديل تُزال تلقائيًا. */
-    private fun recomputeFoldRegions(highlights: List<RinNativeEditor.Highlight>) {
+    // كلمات مفتاحية Rin الحقيقية التي تفتتح كتلة '{'..'}' — تُستخدَم فقط لتسمية شريحة الطيّ
+    // (عرض بحت، لا تؤثر على المطابقة نفسها التي تعتمد كلياً على تلوين الـlexer الحقيقي أعلاه).
+    // "fun" يُلتقَط اسمه أيضاً لعرضه في الشريحة؛ البقية بلا اسم قابل للاستخراج نصّياً بأمان.
+    private val braceHeaderPatterns = listOf(
+        "fun" to Regex("""^fun\s+([A-Za-z_][A-Za-z0-9_]*)\s*\("""),
+        "if" to Regex("""^if\s*\("""),
+        "while" to Regex("""^while\s*\("""),
+        "for" to Regex("""^for\s*\("""),
+        "when" to Regex("""^when\s*\("""),
+        "otherwise" to Regex("""^\}?\s*otherwise\b"""),
+        "else" to Regex("""^\}?\s*else\b""")
+    )
+
+    /** يستنتج (كلمة الكتلة، اسمها إن وُجد) من نص سطر بداية كتلة '{' — عرض بحت لشريحة الطيّ. */
+    private fun braceHeaderInfo(lineText: String): Pair<String, String?> {
+        val trimmed = lineText.trimStart()
+        for ((kind, regex) in braceHeaderPatterns) {
+            val m = regex.find(trimmed) ?: continue
+            return kind to (if (kind == "fun") m.groupValues.getOrNull(1)?.takeIf { it.isNotEmpty() } else null)
+        }
+        return "block" to null
+    }
+
+    /**
+     * يبني خريطة الكتل القابلة للطيّ من مصدرين مستقلّين تماماً (لا تعارض ممكن بينهما: سطر فتح
+     * وسم Rin لا يحوي أبداً '{' بداية كتلة في نفس الوقت في أي صياغة رسمية للغة):
+     *  1) كتل '{'..'}' الحقيقية (fun/if/while/for/when وأي كتلة عامة أخرى) — عبر مطابقة-كومة
+     *     (stack) على [RinNativeEditor.Highlight] المصنَّفة BRACKET من الـlexer الحقيقي فقط
+     *     (فلا تُطابَق أقواس داخل نصوص/تعليقات إطلاقاً).
+     *  2) كتل وسوم Rin (@container/@section/@view/...) — عبر [RinContainerTags.buildFoldRegions]
+     *     (نفس خوارزمية المكدّس المستخدَمة في "بنية الملف"/فحص توازن الوسوم بالضبط).
+     * أي طيّة محفوظة سابقاً لسطر لم يعد بداية كتلة صالحة بعد التعديل تُزال تلقائياً. كود غير
+     * مكتمل أو أقواس/وسوم غير مغلقة: كلا المصدرين يتجاهلان بصمت أي فتح بلا إغلاق مطابق حتى نهاية
+     * المستند (لا استثناء، لا تخمين) — فلا تُصدَر له أي كتلة طيّ إطلاقاً.
+     */
+    private fun recomputeFoldRegions(highlights: List<RinNativeEditor.Highlight>, text: String) {
         val stack = ArrayDeque<Pair<Int, Int>>() // (line, col) لكل '{' غير مُطابَق بعد
-        val regions = HashMap<Int, Pair<Int, Int>>()
+        val regions = HashMap<Int, FoldRegion>()
         for (h in highlights) {
             if (h.kind != HighlightKind.BRACKET) continue
             val lineText = engine.getLine(h.line)
@@ -206,8 +264,16 @@ class RinCodeEditorView @JvmOverloads constructor(
                 '{' -> stack.addLast(h.line to col)
                 '}' -> {
                     val open = stack.removeLastOrNull() ?: continue
-                    if (h.line > open.first) regions[open.first] = open.second to h.line
+                    if (h.line > open.first) {
+                        val (kind, name) = braceHeaderInfo(engine.getLine(open.first))
+                        regions[open.first] = FoldRegion(open.first, h.line, kind, name, braceCol = open.second)
+                    }
                 }
+            }
+        }
+        for (tagRegion in RinContainerTags.buildFoldRegions(text)) {
+            if (tagRegion.endLine > tagRegion.startLine) {
+                regions[tagRegion.startLine] = FoldRegion(tagRegion.startLine, tagRegion.endLine, tagRegion.displayKind, tagRegion.name)
             }
         }
         foldRegions = regions
@@ -216,7 +282,10 @@ class RinCodeEditorView @JvmOverloads constructor(
     }
 
     /** يبني قائمة الأسطر الظاهرة الفعلية بترتيب العرض — كل سطر بداية طيّة مفعَّلة يظهر هو
-     *  نفسه (ليحمل مؤشر "⋯" المرسوم في [onDraw])، وتُخفى كل الأسطر من (بدايتها+1) حتى نهايتها. */
+     *  نفسه (ليحمل شريحة الطيّ المرسومة في [onDraw])، وتُخفى كل الأسطر من (بدايتها+1) حتى نهايتها.
+     *  حالة الطيّ نفسها ([foldedStartLines]) تبقى محفوظة بلا مساس خلال هذا الاستدعاء — فتُحافَظ
+     *  تلقائياً أثناء أي تنقّل/بحث/تمرير داخل نفس الملف، وتُمسَح صراحةً فقط عند فتح مستند آخر
+     *  بالكامل (انظر [setText]). */
     private fun recomputeVisibleLines() {
         val lc = engine.lineCount()
         val list = ArrayList<Int>(lc)
@@ -225,11 +294,12 @@ class RinCodeEditorView @JvmOverloads constructor(
         while (line < lc) {
             reverse[line] = list.size
             list.add(line)
-            val closeLine = if (line in foldedStartLines) foldRegions[line]?.second else null
+            val closeLine = if (line in foldedStartLines) foldRegions[line]?.endLine else null
             line = if (closeLine != null) closeLine + 1 else line + 1
         }
         visibleLines = list
         lineToRow = reverse
+        notifyVisibleLinesChanged()
     }
 
     /** يُلغي طيّ أي كتلة يقع [line] داخل جسدها المخفي (وليس سطر بدايتها) — يُستدعى من
@@ -241,21 +311,24 @@ class RinCodeEditorView @JvmOverloads constructor(
         val it = foldedStartLines.iterator()
         while (it.hasNext()) {
             val start = it.next()
-            val end = foldRegions[start]?.second ?: continue
+            val end = foldRegions[start]?.endLine ?: continue
             if (line in (start + 1)..end) { it.remove(); anyChanged = true }
         }
         if (anyChanged) recomputeVisibleLines()
     }
 
     /** يبدّل حالة طيّ الكتلة التي يبدأ عندها [line] (لا تفعل شيئًا إن لم يكن [line] بداية كتلة
-     *  قابلة للطيّ). تُستدعى من الإيماءة في [gestureDetector.onDoubleTap]. */
+     *  قابلة للطيّ). تُستدعى من الإيماءة في [gestureDetector.onDoubleTap] ومن عمود أرقام الأسطر
+     *  الخارجي عبر [toggleFoldAtVisibleRow]. تطيّ *هذه* الكتلة فقط بمستواها الحالي — أي كتل
+     *  متداخلة بداخلها تحتفظ بحالة طيّها الخاصة (تُخفى فقط مؤقتاً مع طيّ والدها، لا تُطوى/تُفكّ
+     *  قسراً)، وأي كتل والدة تبقى كما هي أيضاً؛ هذا بالضبط سلوك "طيّ المستوى الحالي فقط". */
     private fun toggleFold(line: Int) {
         if (line !in foldRegions) return
         if (!foldedStartLines.add(line)) foldedStartLines.remove(line)
         // إن أصبح المؤشر الآن داخل جسد مخفي (كان قبل الطيّ على سطر انكشف الآن ضمنها)، أعده لسطر
         // البداية الظاهر، تمامًا كسلوك المحررات الاحترافية عند طيّ كتلة يقف المؤشر داخلها.
         val cur = engine.getCursor()
-        val end = foldRegions[line]?.second
+        val end = foldRegions[line]?.endLine
         if (line in foldedStartLines && end != null && cur.line in (line + 1)..end) {
             engine.setCursor(line, engine.getLine(line).length, false)
         }
@@ -263,6 +336,97 @@ class RinCodeEditorView @JvmOverloads constructor(
         requestLayout()
         invalidate()
     }
+
+    /** يبدّل حالة طيّ صفّ العرض [row] (0-based من أعلى المحتوى الظاهر حالياً) — يُستخدَم من عمود
+     *  أرقام الأسطر الخارجي عند النقر على مؤشر ▾/▸ بجانب سطر. يُرجع true إن كان [row] فعلاً بداية
+     *  كتلة قابلة للطيّ (وبالتالي تغيّرت الحالة)، و false غير ذلك (لا شيء يحدث). */
+    fun toggleFoldAtVisibleRow(row: Int): Boolean {
+        val line = visibleLines.getOrNull(row) ?: return false
+        if (line !in foldRegions) return false
+        if (AppSettings.isHapticFeedback(context)) performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP)
+        toggleFold(line)
+        return true
+    }
+
+    /** يطوي كل الكتل القابلة للطيّ في المستند بكل مستوياتها (Fold All) — لا شيء إن لم توجد أي
+     *  كتلة قابلة للطيّ أو كانت جميعها مطويّة أصلاً. */
+    fun foldAll() {
+        if (foldRegions.isEmpty() || foldedStartLines.containsAll(foldRegions.keys)) return
+        foldedStartLines.addAll(foldRegions.keys)
+        // المؤشر قد يستقر الآن داخل جسد مخفي (كان ظاهراً قبل الطيّ)؛ أعده لأقرب سطر بداية كتلة
+        // ظاهر يحتويه، بنفس منطق toggleFold أعلاه.
+        val cur = engine.getCursor()
+        val enclosing = enclosingFoldStart(cur.line)
+        if (enclosing != null) engine.setCursor(enclosing, engine.getLine(enclosing).length, false)
+        recomputeVisibleLines()
+        requestLayout()
+        invalidate()
+    }
+
+    /** يفكّ كل الطيّات الحالية دفعة واحدة (Unfold All). */
+    fun unfoldAll() {
+        if (foldedStartLines.isEmpty()) return
+        foldedStartLines.clear()
+        recomputeVisibleLines()
+        requestLayout()
+        invalidate()
+    }
+
+    /**
+     * يطوي "المستوى الحالي" فقط: الكتلة التي يبدأ عندها المؤشر إن كان واقفاً على سطر بداية كتلة
+     * قابلة للطيّ بالضبط، وإلا أقرب/أضيق كتلة تحتوي سطر المؤشر حالياً (لا كل الكتل الوالدة معها
+     * دفعة واحدة كما يفعل [foldAll]) — تماماً مطلب "السماح بطي المستوى الحالي فقط". لا شيء إن لم
+     * توجد أي كتلة تحتوي المؤشر، أو كانت تلك الكتلة مطويّة أصلاً.
+     */
+    fun foldCurrentLevel() {
+        val cur = engine.getCursor()
+        val target = if (cur.line in foldRegions) cur.line else enclosingFoldStart(cur.line) ?: return
+        if (target in foldedStartLines) return
+        toggleFold(target)
+    }
+
+    /** أضيق كتلة قابلة للطيّ يقع [line] داخل جسدها (وليس بداية أي كتلة) — null إن لم توجد. */
+    private fun enclosingFoldStart(line: Int): Int? {
+        var best: Int? = null
+        var bestSpan = Int.MAX_VALUE
+        for ((start, region) in foldRegions) {
+            if (line in (start + 1)..region.endLine) {
+                val span = region.endLine - start
+                if (span < bestSpan) { bestSpan = span; best = start }
+            }
+        }
+        return best
+    }
+
+    /** أرقام الأسطر الفعلية الظاهرة حالياً (1-based)، بترتيب العرض من الأعلى للأسفل — يستهلكها
+     *  عمود أرقام الأسطر الخارجي (لا يملكه هذا الـView) ليبقى متزامناً تماماً مع أي طيّة نشطة،
+     *  بدل توليد 1..lineCount() تسلسلياً بلا اعتبار للأسطر المخفية. */
+    fun visibleLineNumbers(): List<Int> = visibleLines.map { it + 1 }
+
+    /** مؤشر ▾ (كتلة قابلة للطيّ وظاهرة/مفتوحة)، ▸ (مطويّة)، أو مسافة (سطر عادي بلا كتلة) لكل
+     *  صفّ في [visibleLineNumbers] بنفس الترتيب — يستهلكه عمود أرقام الأسطر الخارجي لرسم "مؤشر
+     *  واضح ▾/▸ بجانب السطر" ملاصقاً لرقمه مباشرةً. */
+    fun visibleFoldMarkers(): List<Char> = visibleLines.map { line ->
+        when {
+            line in foldedStartLines -> '▸'
+            line in foldRegions -> '▾'
+            else -> ' '
+        }
+    }
+
+    /** نص شريحة كتلة مطويّة عند [line]: "⋯ <kind> [<name>] · <عدد الأسطر المخفية>" — مثال:
+     *  "⋯ fun greet · 5" أو "⋯ container my_data · 12" أو "⋯ if · 3" (بلا اسم للكتل الشرطية
+     *  التي لا تحمل اسماً أصلاً). [name] يُقصَّر إن كان طويلاً جداً حتى لا تطغى الشريحة على عرض
+     *  شاشة هاتف ضيّقة. */
+    private fun foldChipLabel(line: Int, region: FoldRegion): String {
+        val hidden = region.endLine - line
+        val name = region.name?.let { truncateForChip(it) }
+        val base = if (name != null) "${region.kind} $name" else region.kind
+        return "⋯ $base · $hidden"
+    }
+
+    private fun truncateForChip(s: String, max: Int = 24): String =
+        if (s.length <= max) s else s.take(max - 1) + "…"
 
     // بيانات التعديل المُلتقَطة في onTextChanged وتُنفَّذ فعليًا في afterTextChanged (انظر
     // الشرح أسفل shadowWatcher). pendingEditStart = -1 يعني "لا تعديل معلَّق حاليًا".
@@ -374,8 +538,10 @@ class RinCodeEditorView @JvmOverloads constructor(
             lastKnownText = newText
             // التلوين النحوي يمسح كامل المستند (مكلف نسبيًا على ملف ضخم) — نُعيد حسابه فقط عندما
             // يتغيّر النص فعليًا، لا عند كل رسم (وميض المؤشر مثلاً يستدعي invalidate() مرتين
-            // بالثانية بلا أي تغيير نصّي، فيقرأ القيمة المخزَّنة مباشرة بلا أي تكلفة).
-            rebuildHighlightAndDiagnosticCaches()
+            // بالثانية بلا أي تغيير نصّي، فيقرأ القيمة المخزَّنة مباشرة بلا أي تكلفة). نُمرِّر
+            // newText مباشرة (بدل ترك rebuildHighlightAndDiagnosticCaches تجلبه من جديد عبر JNI)
+            // لأنه محفوظ أصلاً هنا فوق.
+            rebuildHighlightAndDiagnosticCaches(newText)
             recomputeContentSize()
         }
         // مطابقة الأقواس تعتمد على موضع المؤشر (يتغيّر أيضًا بلا تعديل نصّي، كالأسهم)، فتُحسَب في
@@ -535,7 +701,7 @@ class RinCodeEditorView @JvmOverloads constructor(
         // تلقائيًا عند أي replace() — بلا حاجة لأي آلية أخرى.
         shadowEditable.setSpan(shadowWatcher, 0, shadowEditable.length, Editable.SPAN_INCLUSIVE_INCLUSIVE)
         // تعبئة أولية للذاكرة المؤقتة (cache) قبل أول onDraw، حتى لا يُرسَم بلا تلوين للحظة.
-        rebuildHighlightAndDiagnosticCaches()
+        rebuildHighlightAndDiagnosticCaches(lastKnownText)
         cachedBracketInfo = computeBracketMatchForDraw()
         recomputeContentSize()
     }
@@ -619,11 +785,13 @@ class RinCodeEditorView @JvmOverloads constructor(
                 }
             }
 
-            // مؤشر "⋯" لكتلة مطويّة (تحلّ محل جسدها المخفي بصريًا: يبقى '{' الحقيقي على هذا
-            // السطر ظاهرًا كالعادة، ثم "⋯" في صندوق خفيف، ثم '}' الوهمي يشير لإغلاق الكتلة).
-            if (line in foldedStartLines) {
+            // شريحة كتلة مطويّة (تحلّ محل جسدها المخفي بصريًا: السطر الرئيسي يبقى ظاهرًا كالعادة
+            // بجانب هذه الشريحة، التي تُظهر بدورها اسم العنصر (إن أمكن استخراجه من بنية Rin
+            // الفعلية) وعدد الأسطر المخفية خلفه — انظر foldChipLabel).
+            val foldRegion = foldRegions[line]
+            if (foldRegion != null && line in foldedStartLines) {
                 val chipStartX = paddingLeft + textPaint.measureText(lineText) + charWidth * 0.4f
-                val chipText = "⋯"
+                val chipText = foldChipLabel(line, foldRegion)
                 val chipPadding = charWidth * 0.5f
                 val chipTextWidth = foldChipPaint.measureText(chipText)
                 val chipRect = android.graphics.RectF(
@@ -876,12 +1044,13 @@ class RinCodeEditorView @JvmOverloads constructor(
         }
 
         override fun onDoubleTap(e: MotionEvent): Boolean {
-            // النقر المزدوج عند/بعد القوس المفتوح '{' لسطر بداية كتلة قابلة للطيّ يبدّل حالة
-            // الطيّ بدل تحديد كلمة (تحديد الكلمة يبقى يعمل عاديًا في أي مكان آخر من نفس السطر،
-            // مثال: اسم الدالة قبل القوس — فقط النقر عند القوس نفسه أو بعده يُفسَّر كطيّ/فكّ).
+            // النقر المزدوج على سطر بداية كتلة قابلة للطيّ يبدّل حالة الطيّ بدل تحديد كلمة —
+            // لكتل '{' الحقيقية (fun/if/while/...) فقط عند/بعد القوس المفتوح نفسه (تحديد الكلمة
+            // يبقى يعمل عاديًا فيما قبله على نفس السطر، مثال: اسم الدالة)؛ ولكتل وسوم Rin
+            // (@container/@section/...، بلا قوس على الإطلاق) في أي مكان من سطر الوسم نفسه.
             val p = offsetForTouch(e.x, e.y)
             val fold = foldRegions[p.line]
-            if (fold != null && p.col >= fold.first) {
+            if (fold != null && (fold.braceCol == null || p.col >= fold.braceCol)) {
                 if (AppSettings.isHapticFeedback(context)) performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP)
                 toggleFold(p.line)
                 return true
