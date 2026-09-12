@@ -200,20 +200,7 @@ print \"Hello, \" + name + \"!\";
     <string name="apk_export_status_success">Compilado y firmado con éxito</string>
     <string name="apk_export_status_failed">Error al exportar</string>
     <string name="apk_export_no_entry_error">Este proyecto no tiene archivos .rin</string>
-    <string name="apk_export_note_limitation">Nota: la firma es real, mediante la biblioteca oficial apksig de Google (v1+v2+v3 juntas, el mismo código que usa la herramienta apksigner) con una clave RSA-2048 propia del dispositivo, con reemplazo automático por una firma v1 manual solo si esa biblioteca no se puede cargar. El icono y la pantalla de bienvenida de RinStudio se mantienen a menos que elijas un reemplazo arriba.</string>
-
-    <string name="apk_export_section_identity">Identidad</string>
-    <string name="apk_export_section_icon">Icono</string>
-    <string name="apk_export_section_splash">Pantalla de bienvenida</string>
-    <string name="apk_export_section_compat">Compatibilidad (versión de Android)</string>
-    <string name="apk_export_section_build">Compilación</string>
-    <string name="apk_export_field_icon_hint">Opcional: una imagen cuadrada es ideal; reemplaza el icono de lanzamiento en todas las densidades automáticamente</string>
-    <string name="apk_export_action_pick_icon">Elegir imagen</string>
-    <string name="apk_export_field_splash_hint">Frase opcional que aparece bajo el nombre de la app en la pantalla de bienvenida</string>
-    <string name="apk_export_field_min_sdk_label">Mínimo</string>
-    <string name="apk_export_field_target_sdk_label">Objetivo</string>
-    <string name="apk_export_icon_load_error">No se pudo cargar la imagen seleccionada</string>
-    <string name="apk_export_sdk_range_error">La versión mínima de Android no puede ser mayor que la objetivo</string>
+    <string name="apk_export_note_limitation">Nota: el nombre e icono del paquete resultante en la pantalla de inicio siguen siendo los de RinStudio; la identidad real de tu proyecto aparece dentro de su pantalla de ejecución al abrirlo. La firma es real, con los esquemas v1 y v2 juntos (v2 se autoverifica automáticamente y se reemplaza por v1 solo si eso falla) para la máxima confianza de instalación.</string>
 
     <string name="more_row_rin_apps_subtitle">Explora todas tus apps exportadas, instálalas, compártelas o vuelve a exportarlas</string>
     <string name="rin_apps_screen_title">Apps de Rin</string>
@@ -272,4 +259,7 @@ print \"Hello, \" + name + \"!\";
     <string name="job_filter_error">Error</string>
     <string name="job_filter_debug">Depuración</string>
     <string name="job_no_results">Sin coincidencias para esta búsqueda/filtro.</string>
+    <string name="action_rename_symbol">Cambiar nombre</string>
+    <string name="rename_dialog_title">Cambiar nombre del símbolo</string>
+    <string name="rename_dialog_hint">Nuevo nombre</string>
 </resources>
