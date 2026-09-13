@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- WGOM (المرحلة 3: إدارة الحساب) — كانت هذه النصوص مستخدَمة في activity_account.xml
+         لكنها لم تكن معرَّفة في أي ملف قيم، ما كان يفشل AAPT عند بناء التطبيق. -->
+    <string name="section_profile">الملف الشخصي</string>
+    <string name="action_save">حفظ التغييرات</string>
+    <string name="section_password">تغيير كلمة السر</string>
+    <string name="hint_new_password">كلمة السر الجديدة</string>
+    <string name="hint_confirm_password">تأكيد كلمة السر الجديدة</string>
+    <string name="action_change_password">تغيير كلمة السر</string>
+</resources>
