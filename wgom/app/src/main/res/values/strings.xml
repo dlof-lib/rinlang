@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">WGOM</string>
+
+    <!-- تسجيل الدخول -->
+    <string name="login_subtitle">سجّل دخولك بنفس حساب RinStudio لإدارة ملفك الشخصي</string>
+    <string name="hint_email">البريد الإلكتروني</string>
+    <string name="hint_password">كلمة السر</string>
+    <string name="action_login">تسجيل الدخول</string>
+
+    <!-- إدارة الحساب -->
+    <string name="section_profile">الملف الشخصي</string>
+    <string name="hint_full_name">الاسم الكامل</string>
+    <string name="hint_username">اسم المستخدم</string>
+    <string name="action_save">حفظ التغييرات</string>
+    <string name="profile_saved">تم حفظ التغييرات بنجاح ✓</string>
+
+    <string name="section_password">تغيير كلمة السر</string>
+    <string name="hint_new_password">كلمة السر الجديدة</string>
+    <string name="hint_confirm_password">تأكيد كلمة السر الجديدة</string>
+    <string name="action_change_password">تغيير كلمة السر</string>
+    <string name="password_changed">تم تغيير كلمة السر بنجاح ✓</string>
+
+    <string name="action_logout">تسجيل الخروج</string>
+
+    <!-- أخطاء عامة -->
+    <string name="error_required_fields">فضلاً املأ جميع الحقول</string>
+    <string name="error_email_invalid">أدخل بريداً إلكترونياً صحيحاً</string>
+    <string name="error_password_short">كلمة السر يجب أن تكون 6 أحرف على الأقل</string>
+    <string name="error_password_mismatch">كلمتا السر غير متطابقتين</string>
+    <string name="error_username_taken">اسم المستخدم هذا محجوز، جرّب اسماً آخر</string>
+    <string name="error_generic">حدث خطأ غير متوقع، حاول مرة أخرى</string>
+</resources>
