@@ -1,0 +1,32 @@
+// samples/rinxg_demo.rin — يبني صفحة ويب كاملة بلغة RinXG ويحفظها كملف HTML جاهز للعرض
+@import "rinxg";
+
+let src = "page \"معرض RinXG\" {\n" +
+          "    style {\n" +
+          "        bg: #f5f5f5;\n" +
+          "        font: sans-serif;\n" +
+          "    }\n" +
+          "\n" +
+          "    container column gap=16 padding=24 {\n" +
+          "        heading level=1 color=#222 { \"مرحباً بلغة RinXG\" }\n" +
+          "        text color=#666 { \"صمِّم واجهات ويب كاملة بصيغة تصريحية بسيطة\" }\n" +
+          "\n" +
+          "        container row gap=8 {\n" +
+          "            button bg=#4CAF50 color=#ffffff radius=8 { \"ابدأ الآن\" }\n" +
+          "            button bg=#ffffff color=#4CAF50 radius=8 { \"تعلّم المزيد\" }\n" +
+          "        }\n" +
+          "\n" +
+          "        input placeholder=\"بريدك الإلكتروني...\";\n" +
+          "        link href=\"https://example.com\" { \"زيارة الموقع\" }\n" +
+          "\n" +
+          "        list {\n" +
+          "            item { \"سريعة: مكتوبة بالكامل بـ Rin\" }\n" +
+          "            item { \"تُصيَّر إلى HTML+CSS حقيقي\" }\n" +
+          "            item { \"جاهزة للعرض في أي متصفّح\" }\n" +
+          "        }\n" +
+          "    }\n" +
+          "}\n";
+
+let html = rxToHtml(src);
+writeFile("rinxg_gallery.html", html);
+print "✅ تم إنشاء rinxg_gallery.html — افتحه في أي متصفّح لمعاينة النتيجة.";
