@@ -1,5 +1,6 @@
 package com.dlof.rinlang.auth
 
+import android.content.Intent
 import android.os.Bundle
 import android.view.View
 import android.widget.Button
@@ -61,7 +62,8 @@ class VerifyCodeActivity : BaseConnectivityActivity() {
             when (result) {
                 is VerifyResult.Success -> {
                     Toast.makeText(this, R.string.verify_success, Toast.LENGTH_SHORT).show()
-                    // TODO (المرحلة التالية): الانتقال إلى شاشة "متجر Rin" الرئيسية.
+                    // المرحلة 2: لا يكتمل الدخول قبل تأكيد الجهاز عبر GETY.
+                    startActivity(Intent(this, DevicePairingActivity::class.java).putExtra(DevicePairingActivity.EXTRA_UID, uid))
                     setResult(RESULT_OK)
                     finish()
                 }
