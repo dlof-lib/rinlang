@@ -1,12 +1,36 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="@color/rin_background">
+    android:background="@color/wgom_background">
 
-    <include layout="@layout/toolbar_app" />
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:background="@color/wgom_primary"
+        android:padding="16dp">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/app_name"
+            android:textColor="@android:color/white"
+            android:textSize="18sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/btnLogout"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:padding="6dp"
+            android:text="@string/action_logout"
+            android:textColor="@android:color/white"
+            android:textSize="13sp" />
+    </LinearLayout>
 
     <androidx.core.widget.NestedScrollView
         android:layout_width="match_parent"
@@ -20,366 +44,128 @@
             android:orientation="vertical"
             android:padding="20dp">
 
-            <!-- حالة مسجّل الدخول: بطاقة ملف شخصي احترافية -->
-            <LinearLayout
-                android:id="@+id/groupLoggedIn"
+            <TextView
+                android:id="@+id/txtEmail"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:visibility="gone">
+                android:gravity="center"
+                android:textColor="@color/wgom_hint"
+                android:textSize="13sp"
+                tools:text="user@example.com"
+                xmlns:tools="http://schemas.android.com/tools" />
 
-                <!-- رأس الملف الشخصي: بطاقة بها بانر خلفية علوي (خلايا سداسية/أرقام ثنائية) + صورة
-                     دائرية تتداخل مع حافته السفلية + زر تغيير الصورة + الاسم + اسم المستخدم -->
-                <FrameLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:background="@drawable/bg_profile_card_frame"
-                    android:clipToOutline="true">
-
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:orientation="vertical"
-                        android:gravity="center_horizontal">
-
-                        <!-- بانر الخلفية: يمتد الآن ليغطي الصورة الرمزية والاسم واسم المستخدم أيضاً،
-                             وليس فقط الشريط العلوي، عبر جعله خلفية للحاوية بأكملها بدل شريط ثابت الارتفاع -->
-                        <FrameLayout
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content">
-
-                            <ImageView
-                                android:layout_width="match_parent"
-                                android:layout_height="230dp"
-                                android:layout_gravity="top"
-                                android:scaleType="centerCrop"
-                                android:src="@drawable/img_hex_banner"
-                                android:contentDescription="@null" />
-
-                            <View
-                                android:layout_width="match_parent"
-                                android:layout_height="230dp"
-                                android:layout_gravity="top"
-                                android:background="@drawable/bg_banner_scrim" />
-
-                        <LinearLayout
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:orientation="vertical"
-                            android:gravity="center_horizontal"
-                            android:paddingHorizontal="24dp"
-                            android:paddingTop="60dp"
-                            android:paddingBottom="24dp">
-
-                            <FrameLayout
-                                android:layout_width="96dp"
-                                android:layout_height="96dp"
-                                android:layout_marginTop="-40dp"
-                                android:elevation="6dp"
-                                android:translationZ="6dp">
-
-                                <ImageView
-                                    android:id="@+id/imgAvatar"
-                                    android:layout_width="96dp"
-                                    android:layout_height="96dp"
-                                    android:background="@drawable/bg_avatar_ring"
-                                    android:padding="3dp"
-                                    android:scaleType="centerCrop"
-                                    android:contentDescription="@string/account_title" />
-
-                                <TextView
-                                    android:id="@+id/txtAvatarInitial"
-                                    android:layout_width="96dp"
-                                    android:layout_height="96dp"
-                                    android:gravity="center"
-                                    android:textColor="@android:color/white"
-                                    android:textSize="34sp"
-                                    android:textStyle="bold" />
-
-                                <ImageButton
-                                    android:id="@+id/btnChangeAvatar"
-                                    android:layout_width="30dp"
-                                    android:layout_height="30dp"
-                                    android:layout_gravity="bottom|end"
-                                    android:background="@drawable/bg_avatar_edit_badge"
-                                    android:src="@drawable/ic_camera"
-                                    android:scaleType="center"
-                                    android:padding="0dp"
-                                    android:contentDescription="@string/action_change_avatar" />
-                            </FrameLayout>
-
-                            <LinearLayout
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:layout_marginTop="14dp"
-                                android:orientation="horizontal"
-                                android:gravity="center_vertical">
-
-                                <TextView
-                                    android:id="@+id/txtAccountName"
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:textColor="@color/rin_on_toolbar"
-                                    android:textSize="19sp"
-                                    android:textStyle="bold" />
-
-                                <ImageView
-                                    android:id="@+id/imgAccountVerifiedBadge"
-                                    android:layout_width="17dp"
-                                    android:layout_height="17dp"
-                                    android:layout_marginStart="6dp"
-                                    android:src="@drawable/ic_verified_badge"
-                                    android:visibility="gone"
-                                    android:contentDescription="@string/verified_publisher_badge_description" />
-                            </LinearLayout>
-
-                            <TextView
-                                android:id="@+id/txtAccountUsername"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:layout_marginTop="3dp"
-                                android:letterSpacing="0.02"
-                                android:textColor="@color/rin_accent"
-                                android:textSize="13.5sp" />
-
-                            <TextView
-                                android:id="@+id/txtAccountBio"
-                                android:layout_width="match_parent"
-                                android:layout_height="wrap_content"
-                                android:layout_marginTop="14dp"
-                                android:paddingHorizontal="6dp"
-                                android:gravity="center"
-                                android:textColor="@color/rin_editor_hint"
-                                android:textSize="13sp"
-                                android:lineSpacingExtra="4dp" />
-
-                            <!-- صفّ العدّادات: عدد المنتسبين + عدد الانتسابات لحسابي، كل منهما
-                                 قابل للضغط لفتح قائمة أصحابه (UserListActivity) — يجعل الملف
-                                 الشخصي "مرئياً" لبقية المستخدمين عبر متابعة من ينتسب إليّ ومن أتابع -->
-                            <LinearLayout
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:layout_marginTop="16dp"
-                                android:orientation="horizontal"
-                                android:gravity="center_vertical">
-
-                                <LinearLayout
-                                    android:id="@+id/rowAccountSubscribers"
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:orientation="vertical"
-                                    android:gravity="center_horizontal"
-                                    android:clickable="true"
-                                    android:focusable="true"
-                                    android:background="@drawable/bg_icon_btn"
-                                    android:paddingHorizontal="18dp"
-                                    android:paddingVertical="6dp">
-
-                                    <TextView
-                                        android:id="@+id/txtAccountSubscriberCount"
-                                        android:layout_width="wrap_content"
-                                        android:layout_height="wrap_content"
-                                        android:textColor="@color/rin_on_toolbar"
-                                        android:textSize="15sp"
-                                        android:textStyle="bold"
-                                        tools:text="0" />
-
-                                    <TextView
-                                        android:layout_width="wrap_content"
-                                        android:layout_height="wrap_content"
-                                        android:text="@string/subscriber_count_label"
-                                        android:textColor="@color/rin_editor_hint"
-                                        android:textSize="11.5sp" />
-                                </LinearLayout>
-
-                                <LinearLayout
-                                    android:id="@+id/rowAccountSubscriptions"
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:orientation="vertical"
-                                    android:gravity="center_horizontal"
-                                    android:clickable="true"
-                                    android:focusable="true"
-                                    android:background="@drawable/bg_icon_btn"
-                                    android:paddingHorizontal="18dp"
-                                    android:paddingVertical="6dp">
-
-                                    <TextView
-                                        android:id="@+id/txtAccountSubscriptionsCount"
-                                        android:layout_width="wrap_content"
-                                        android:layout_height="wrap_content"
-                                        android:textColor="@color/rin_on_toolbar"
-                                        android:textSize="15sp"
-                                        android:textStyle="bold" />
-
-                                    <TextView
-                                        android:layout_width="wrap_content"
-                                        android:layout_height="wrap_content"
-                                        android:text="@string/subscriptions_count_label"
-                                        android:textColor="@color/rin_editor_hint"
-                                        android:textSize="11.5sp" />
-                                </LinearLayout>
-                            </LinearLayout>
-
-                            <Button
-                                android:id="@+id/btnEditProfile"
-                                android:layout_width="match_parent"
-                                android:layout_height="42dp"
-                                android:layout_marginTop="16dp"
-                                android:background="@drawable/bg_toolbar_btn_ghost"
-                                android:text="@string/action_edit_profile"
-                                android:textAllCaps="false"
-                                android:textColor="@color/rin_on_toolbar"
-                                android:textSize="13sp" />
-                        </LinearLayout>
-                        </FrameLayout>
-                    </LinearLayout>
-                </FrameLayout>
-
-                <!-- بطاقة معلومات الحساب -->
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:layout_marginTop="14dp"
-                    android:background="@drawable/bg_list_card"
-                    android:padding="16dp">
-
-                    <TextView
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="@string/account_field_email"
-                        android:textColor="@color/rin_editor_hint"
-                        android:textSize="11sp" />
-
-                    <TextView
-                        android:id="@+id/txtAccountEmail"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="2dp"
-                        android:textColor="@color/rin_on_toolbar"
-                        android:textSize="14sp" />
-                </LinearLayout>
-
-                <!-- قسم "حزمي المنشورة": قائمة حزم المستخدم في متجر Rin مع زر حذف لكل حزمة -->
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:layout_marginTop="14dp">
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginBottom="8dp"
-                        android:text="@string/account_my_packages_title"
-                        android:textColor="@color/rin_on_toolbar"
-                        android:textSize="14sp"
-                        android:textStyle="bold" />
-
-                    <TextView
-                        android:id="@+id/txtMyPackagesEmpty"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginBottom="8dp"
-                        android:text="@string/account_my_packages_empty"
-                        android:textColor="@color/rin_editor_hint"
-                        android:textSize="13sp"
-                        android:visibility="gone" />
-
-                    <LinearLayout
-                        android:id="@+id/containerMyPackages"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:orientation="vertical" />
-                </LinearLayout>
-
-                <!-- قسم "إضافاتي المنشورة": قائمة إضافات المستخدم في Rin Extensions Marketplace مع زر حذف لكل إضافة -->
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:layout_marginTop="14dp">
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginBottom="8dp"
-                        android:text="@string/account_my_extensions_title"
-                        android:textColor="@color/rin_on_toolbar"
-                        android:textSize="14sp"
-                        android:textStyle="bold" />
-
-                    <TextView
-                        android:id="@+id/txtMyExtensionsEmpty"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginBottom="8dp"
-                        android:text="@string/account_my_extensions_empty"
-                        android:textColor="@color/rin_editor_hint"
-                        android:textSize="13sp"
-                        android:visibility="gone" />
-
-                    <LinearLayout
-                        android:id="@+id/containerMyExtensions"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:orientation="vertical" />
-                </LinearLayout>
-
-                <Button
-                    android:id="@+id/btnLogout"
-                    android:layout_width="match_parent"
-                    android:layout_height="46dp"
-                    android:layout_marginTop="14dp"
-                    android:background="@drawable/bg_toolbar_btn_ghost"
-                    android:text="@string/action_logout"
-                    android:textAllCaps="false"
-                    android:textColor="@color/status_error" />
-            </LinearLayout>
-
-            <!-- حالة غير مسجّل الدخول -->
-            <LinearLayout
-                android:id="@+id/groupLoggedOut"
+            <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:gravity="center_horizontal"
-                android:padding="24dp"
-                android:visibility="gone">
+                android:layout_marginTop="24dp"
+                android:text="@string/section_profile"
+                android:textColor="@color/wgom_text"
+                android:textSize="15sp"
+                android:textStyle="bold" />
 
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="@string/account_not_logged_in"
-                    android:textColor="@color/rin_on_toolbar"
-                    android:textSize="16sp"
-                    android:textStyle="bold"
-                    android:layout_marginBottom="6dp" />
+            <EditText
+                android:id="@+id/edtName"
+                android:layout_width="match_parent"
+                android:layout_height="52dp"
+                android:layout_marginTop="12dp"
+                android:background="@drawable/bg_input_field"
+                android:hint="@string/hint_full_name"
+                android:paddingHorizontal="16dp"
+                android:singleLine="true"
+                android:textColor="@color/wgom_text"
+                android:textColorHint="@color/wgom_hint" />
 
-                <TextView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="@string/account_not_logged_in_hint"
-                    android:textColor="@color/rin_editor_hint"
-                    android:textSize="13sp"
-                    android:gravity="center"
-                    android:layout_marginBottom="20dp" />
+            <EditText
+                android:id="@+id/edtUsername"
+                android:layout_width="match_parent"
+                android:layout_height="52dp"
+                android:layout_marginTop="12dp"
+                android:background="@drawable/bg_input_field"
+                android:hint="@string/hint_username"
+                android:paddingHorizontal="16dp"
+                android:singleLine="true"
+                android:textColor="@color/wgom_text"
+                android:textColorHint="@color/wgom_hint" />
 
-                <Button
-                    android:id="@+id/btnGoLogin"
-                    android:layout_width="match_parent"
-                    android:layout_height="48dp"
-                    android:background="@drawable/bg_run_button_premium"
-                    android:text="@string/action_login"
-                    android:textAllCaps="false"
-                    android:textColor="@android:color/white"
-                    android:textStyle="bold"
-                    android:elevation="0dp" />
-            </LinearLayout>
+            <Button
+                android:id="@+id/btnSaveProfile"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:layout_marginTop="12dp"
+                android:backgroundTint="@color/wgom_primary"
+                android:text="@string/action_save"
+                android:textAllCaps="false"
+                android:textColor="@android:color/white"
+                android:textStyle="bold" />
+
+            <ProgressBar
+                android:id="@+id/progressProfile"
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:layout_marginTop="12dp"
+                android:layout_gravity="center"
+                android:visibility="gone" />
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:layout_marginTop="24dp"
+                android:background="#E4E4E4" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="24dp"
+                android:text="@string/section_password"
+                android:textColor="@color/wgom_text"
+                android:textSize="15sp"
+                android:textStyle="bold" />
+
+            <EditText
+                android:id="@+id/edtNewPassword"
+                android:layout_width="match_parent"
+                android:layout_height="52dp"
+                android:layout_marginTop="12dp"
+                android:background="@drawable/bg_input_field"
+                android:hint="@string/hint_new_password"
+                android:inputType="textPassword"
+                android:paddingHorizontal="16dp"
+                android:singleLine="true"
+                android:textColor="@color/wgom_text"
+                android:textColorHint="@color/wgom_hint" />
+
+            <EditText
+                android:id="@+id/edtConfirmPassword"
+                android:layout_width="match_parent"
+                android:layout_height="52dp"
+                android:layout_marginTop="12dp"
+                android:background="@drawable/bg_input_field"
+                android:hint="@string/hint_confirm_password"
+                android:inputType="textPassword"
+                android:paddingHorizontal="16dp"
+                android:singleLine="true"
+                android:textColor="@color/wgom_text"
+                android:textColorHint="@color/wgom_hint" />
+
+            <Button
+                android:id="@+id/btnChangePassword"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:layout_marginTop="12dp"
+                android:background="@drawable/bg_button_outline"
+                android:text="@string/action_change_password"
+                android:textAllCaps="false"
+                android:textColor="@color/wgom_primary"
+                android:textStyle="bold" />
+
+            <ProgressBar
+                android:id="@+id/progressPassword"
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:layout_marginTop="12dp"
+                android:layout_gravity="center"
+                android:visibility="gone" />
+
         </LinearLayout>
     </androidx.core.widget.NestedScrollView>
-
-    <include layout="@layout/bottom_nav_bar" />
-
 </LinearLayout>
