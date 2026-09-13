@@ -1,0 +1,27 @@
+// loom_tokens_demo.rin — Rin Loom's Design Tokens + Color Engine, exercised end to end.
+// Run: ./loomc samples/loom_tokens_demo.rin
+
+@theme=Midnight
+  active=true;
+  primary="#7C5CFF";
+  danger="#E5484D";
+  success="#2FB35B";
+  surface="#1C1E2A";
+.end/theme
+
+@view.Column=root
+  gap=normal; padding=comfortable;
+
+  @view.Card=alert
+    padding=comfortable; radius=round;
+    @view.Text=title text="Storage almost full"; size=title; .end/view
+    @view.Text=body text="You are using 92% of your space."; size=body; .end/view
+  .end/view
+
+  @view.Row=actions
+    gap=compact;
+    @view.Button=confirm label="Upgrade plan"; tone=primary; .end/view
+    @view.Button=cancel label="Dismiss"; tone=neutral; .end/view
+    @view.Button=danger label="Delete files"; tone=danger; .end/view
+  .end/view
+.end/view
