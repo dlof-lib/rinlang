@@ -35,18 +35,30 @@ jobs:
       - name: Reorganize files and folders
         run: |
           set -e
+          # دالة نقل آمنة (idempotent): إذا كانت الوجهة موجودة مسبقاً،
+          # تحذف نسخة المصدر القديمة بدل أن تفشل بخطأ "destination exists"
+          safe_move() {
+            src="$1"; dst="$2"
+            if [ -e "$dst" ]; then
+              echo "   (موجود مسبقاً، حذف النسخة القديمة من: $src)"
+              git rm -f -q "$src"
+            else
+              git mv "$src" "$dst"
+            fi
+          }
+
           echo "==> نقل ملفات اختبارات tools/test_*.cpp إلى tests/tools/"
           mkdir -p tests/tools
           shopt -s nullglob 2>/dev/null || true
           for f in tools/test_*.cpp; do
-            [ -e "$f" ] && git mv "$f" "tests/tools/$(basename "$f")"
+            [ -e "$f" ] && safe_move "$f" "tests/tools/$(basename "$f")"
           done
 
           echo "==> نقل samples/ إلى examples/samples/"
           if [ -d "samples" ]; then
             mkdir -p examples/samples
             for f in samples/*; do
-              git mv "$f" "examples/samples/$(basename "$f")"
+              safe_move "$f" "examples/samples/$(basename "$f")"
             done
             rmdir samples 2>/dev/null || true
           fi
@@ -55,7 +67,7 @@ jobs:
           if [ -d "verification" ]; then
             mkdir -p tests/verification
             for f in verification/*; do
-              git mv "$f" "tests/verification/$(basename "$f")"
+              safe_move "$f" "tests/verification/$(basename "$f")"
             done
             rmdir verification 2>/dev/null || true
           fi
