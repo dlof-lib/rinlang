@@ -64,6 +64,8 @@ jobs:
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: 9.5.1
 
       - name: Grant execute permission (if wrapper is present)
         run: chmod +x ./gradlew || true
