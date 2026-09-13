@@ -1,0 +1,11 @@
+@view.Scaffold=root
+  @view.TopBar=bar role="topbar";
+    @view.Text=t text="Title"; .end/view
+  .end/view
+  @view.Column=content role="content";
+    @view.Text=body text="hello"; .end/view
+  .end/view
+  @view.BottomBar=bb role="bottombar";
+    @view.Text=bt text="nav"; .end/view
+  .end/view
+.end/view
