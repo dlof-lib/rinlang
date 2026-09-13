@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- لوحة ألوان WGOM (المرحلة 3: إدارة الحساب) — كانت مفقودة سابقاً رغم استخدامها
+         في activity_login.xml وactivity_account.xml، ما كان سيمنع بناء التطبيق. -->
+    <color name="wgom_primary">#2E7D5B</color>
+    <color name="wgom_primary_dark">#1F5C41</color>
+    <color name="wgom_background">#F5F8F6</color>
+    <color name="wgom_text">#16241C</color>
+    <color name="wgom_hint">#7C9186</color>
+</resources>
