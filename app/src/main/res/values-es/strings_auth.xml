@@ -26,19 +26,6 @@
     <string name="verify_success">Cuenta creada correctamente ✓</string>
     <string name="code_resent">Se envió un nuevo código a tu correo</string>
 
-    <!-- Fase 2: confirmar dispositivo vía GETY -->
-    <string name="pairing_title">Confirmar dispositivo vía GETY</string>
-    <string name="pairing_subtitle">Abre GETY en un dispositivo de confianza y escanea el código, o introdúcelo manualmente, para terminar de iniciar sesión</string>
-    <string name="pairing_generating">Generando código de emparejamiento…</string>
-    <string name="pairing_waiting">Esperando confirmación de GETY…</string>
-    <string name="pairing_confirmed">Dispositivo confirmado correctamente ✓</string>
-    <string name="pairing_expired">El código ha caducado, pulsa \"Regenerar\"</string>
-    <string name="pairing_countdown_format">Válido por %1$02d:%2$02d:%3$02d</string>
-    <string name="pairing_countdown_zero">00:00:00</string>
-    <string name="pairing_regenerate">Regenerar código</string>
-    <string name="pairing_cancel">Cancelar y volver</string>
-    <string name="pairing_error_generic">No se pudo generar el código, comprueba tu conexión e inténtalo de nuevo</string>
-
     <!-- Errores generales -->
     <string name="error_required_fields">Completa todos los campos</string>
     <string name="error_username_taken">Este nombre de usuario ya está en uso, prueba con otro</string>
