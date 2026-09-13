@@ -1,0 +1,40 @@
+// loom_button_library_demo.rin — Rin Loom's Button component: variants, sizes, states, a11y.
+// Run: ./loomc samples/loom_button_library_demo.rin
+// Note: attribute values here are quoted string literals throughout (tone="primary", not
+// tone=primary) even where the identifier form would also parse -- this sidesteps any future
+// collision with a reserved Rin keyword (e.g. variant="link" -- 'link' is already a keyword
+// for the container-linking statement, so the unquoted identifier form does NOT parse there).
+
+warp busy = false;
+
+@view.Column=root
+  gap="normal"; padding="comfortable";
+
+  @view.Row=variants
+    gap="compact";
+    @view.Button=b1 label="Primary";   tone="primary"; .end/view
+    @view.Button=b2 label="Outline";   tone="primary"; variant="outline"; .end/view
+    @view.Button=b3 label="Ghost";     tone="danger";  variant="ghost"; .end/view
+    @view.Button=b4 label="Link";      tone="info";    variant="link"; .end/view
+    @view.Button=b5 label="Glass";     tone="success"; variant="glass"; .end/view
+    @view.Button=b6 label="Gradient";  tone="primary"; variant="gradient"; .end/view
+  .end/view
+
+  @view.Row=sizes
+    gap="compact";
+    @view.Button=xs    label="XS";     tone="secondary"; size="xs"; .end/view
+    @view.Button=sm    label="Small";  tone="secondary"; size="small"; .end/view
+    @view.Button=md    label="Medium"; tone="secondary"; size="medium"; .end/view
+    @view.Button=lg    label="Large";  tone="secondary"; size="large"; .end/view
+    @view.Button=xl    label="XL";     tone="secondary"; size="xl"; .end/view
+  .end/view
+
+  @view.Row=states
+    gap="compact";
+    @view.Button=normal   label="Save";     tone="primary"; onTap=toggle(busy); .end/view
+    @view.Button=disabled label="Save";     tone="primary"; disabled=true; onTap=toggle(busy); .end/view
+    @view.Button=loading  label="Saving";   tone="primary"; loading=true; .end/view
+    @view.Button=selected label="Selected"; tone="primary"; variant="outline"; state="selected"; .end/view
+    @view.Button=a11y     label="Save document"; tone="primary"; a11y_label="Save the current document to disk"; .end/view
+  .end/view
+.end/view
