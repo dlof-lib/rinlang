@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      لوحة ألوان RinStudio (المرحلة 1 والمرحلة 2 من نظام الدخول) — كانت هذه الأسماء
+      مستخدَمة بالفعل في toolbar_app.xml / activity_register.xml / activity_verify_code.xml /
+      activity_device_pairing.xml / view_no_connection.xml وملفات drawable المرتبطة بها،
+      لكنها لم تكن مُعرَّفة في colors.xml إطلاقاً (ما كان يمنع بناء المشروع). القيم أدناه
+      بنفسجية الهوية (نفس وصف "تدرّج بنفسجي جذّاب" في تعليقات bg_run_button_premium)
+      ويمكن تعديلها لاحقاً بحرّية دون أي تأثير على منطق الشاشات.
+    -->
+    <color name="rin_background">#F6F5FA</color>
+    <color name="rin_accent">#7C5CFC</color>
+    <color name="rin_accent_pressed">#6647D9</color>
+    <color name="rin_accent_border_subtle">#337C5CFC</color>
+    <color name="rin_accent_green">#34C77B</color>
+
+    <color name="rin_on_toolbar">#FFFFFF</color>
+    <color name="rin_on_toolbar_dim">#D8D3F5</color>
+
+    <color name="rin_editor_text">#211F2E</color>
+    <color name="rin_editor_hint">#8A8798</color>
+
+    <color name="rin_app_icon_border">#7C5CFC</color>
+    <color name="rin_ghost_ripple">#227C5CFC</color>
+    <color name="rin_job_card_bg">#FFFFFF</color>
+    <color name="rin_job_card_border">#E4E1EE</color>
+
+    <color name="rin_run_gradient_start">#8A6CFF</color>
+    <color name="rin_run_gradient_end">#6647D9</color>
+    <color name="rin_toolbar_gradient_top">#6647D9</color>
+    <color name="rin_toolbar_gradient_bottom">#4E36B0</color>
+
+    <!-- تستخدَم في ic_no_connection.xml -->
+    <color name="status_error">#C0392B</color>
+</resources>
