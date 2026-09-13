@@ -1,511 +1,97 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="@color/rin_background">
+    android:background="@color/gety_background"
+    android:padding="24dp"
+    android:gravity="center_horizontal">
 
-    <!-- ===== الشريط العلوي الاحترافي المضغوط =====
-         صف 1: شعار + عنوان + اسم الملف + أزرار وصول سريع صغيرة جداً (تشغيل/أنابيب/مشاريع).
-         صف 2: شريط قوائم مصغّر بأسلوب الكمبيوتر (File / Edit / View / Run)، كل قائمة
-         تفتح PopupMenu فيها خيارات كثيرة، بدل حشو الشاشة بعشرات الأزرار الكبيرة. -->
-    <LinearLayout
-        android:id="@+id/editorToolbarRoot"
+    <ImageView
+        android:layout_width="80dp"
+        android:layout_height="80dp"
+        android:layout_marginTop="32dp"
+        android:src="@mipmap/ic_launcher_round"
+        android:contentDescription="@string/app_name" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:text="@string/app_name"
+        android:textColor="@color/gety_primary"
+        android:textSize="24sp"
+        android:textStyle="bold" />
+
+    <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:paddingTop="10dp"
-        android:paddingStart="10dp"
-        android:paddingEnd="10dp"
-        android:paddingBottom="4dp"
-        android:background="@drawable/bg_toolbar_card"
-        android:elevation="6dp">
+        android:layout_marginTop="8dp"
+        android:gravity="center"
+        android:text="@string/main_subtitle"
+        android:textColor="@color/gety_hint"
+        android:textSize="13sp" />
 
-        <!-- الصف الأول: هوية المحرر (أيقونة التطبيق الحقيقية) + اسم الملف + وصول سريع -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center_vertical"
-            android:paddingBottom="8dp">
-
-            <!-- أيقونة التطبيق الحقيقية (mipmap/ic_launcher) داخل إطار أنيق صغير، بديلاً عن شارة النص "rin" -->
-            <FrameLayout
-                android:layout_width="34dp"
-                android:layout_height="34dp"
-                android:background="@drawable/bg_app_icon_frame">
-
-                <ImageView
-                    android:layout_width="match_parent"
-                    android:layout_height="match_parent"
-                    android:padding="2dp"
-                    android:src="@mipmap/ic_launcher_round"
-                    android:contentDescription="@string/app_name" />
-            </FrameLayout>
-
-            <LinearLayout
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:layout_marginStart="10dp"
-                android:orientation="horizontal"
-                android:gravity="center_vertical">
-
-                <ImageView
-                    android:layout_width="14dp"
-                    android:layout_height="14dp"
-                    android:layout_marginEnd="5dp"
-                    android:src="@drawable/ic_folder_solid"
-                    android:tint="@color/rin_accent"
-                    android:contentDescription="@null" />
-
-                <TextView
-                    android:id="@+id/txtFileName"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="@string/file_unsaved"
-                    android:textColor="@color/rin_on_toolbar"
-                    android:textSize="13.5sp"
-                    android:textStyle="bold"
-                    android:ellipsize="middle"
-                    android:singleLine="true" />
-            </LinearLayout>
-
-            <!-- مؤشر "جارٍ التشغيل" — استُبدل مؤشر النظام الرمادي العام (progressBarStyleSmall)
-                 بمكوّن RinSpinner المخصَّص (قوس دوّار بتدرّج هوية العلامة)، ليتطابق مع بقية
-                 مؤشرات التحميل في التطبيق بدل عنصر افتراضي دخيل على الشريط العلوي الاحترافي. -->
-            <com.dlof.rinlang.RinSpinner
-                android:id="@+id/progressRunning"
-                android:layout_width="18dp"
-                android:layout_height="18dp"
-                android:layout_marginEnd="8dp"
-                android:visibility="gone"
-                app:rinSpinnerStrokeWidth="2.5dp" />
-
-            <ImageButton
-                android:id="@+id/btnProjects"
-                android:layout_width="30dp"
-                android:layout_height="30dp"
-                android:padding="6dp"
-                android:layout_marginEnd="6dp"
-                android:src="@drawable/ic_projects"
-                android:contentDescription="@string/desc_projects_quick"
-                android:background="@drawable/bg_icon_btn" />
-
-            <ImageButton
-                android:id="@+id/btnRun"
-                android:layout_width="34dp"
-                android:layout_height="34dp"
-                android:padding="8dp"
-                android:src="@drawable/ic_run"
-                android:contentDescription="@string/desc_run_quick"
-                android:background="@drawable/bg_run_button_premium"
-                android:elevation="1dp" />
-        </LinearLayout>
-
-        <!-- فاصل رفيع شبه شفاف بين صف الهوية وصف القوائم، يفصل بصرياً بين المنطقتين -->
-        <View
-            android:layout_width="match_parent"
-            android:layout_height="1dp"
-            android:background="@color/rin_menubar_divider"
-            android:layout_marginBottom="4dp" />
-
-        <!-- الصف الثاني: شريط قوائم مصغّر (File / Edit / View / Run / المكتبات) — كل زر صغير
-             بأيقونة + نص، ويفتح قائمة منسدلة فيها خيارات إضافية، تماماً كقوائم تطبيقات الكمبيوتر. -->
-        <LinearLayout
-            android:id="@+id/editorMenuRow"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:paddingBottom="6dp"
-            android:gravity="center_vertical">
-
-            <Button
-                android:id="@+id/btnMenuFile"
-                android:layout_width="wrap_content"
-                android:layout_height="28dp"
-                android:layout_marginEnd="2dp"
-                android:minWidth="0dp"
-                android:minHeight="0dp"
-                android:insetTop="0dp"
-                android:insetBottom="0dp"
-                android:text="@string/menu_file"
-                android:textAllCaps="false"
-                android:textSize="11.5sp"
-                android:paddingStart="7dp"
-                android:paddingEnd="6dp"
-                android:drawableStart="@drawable/ic_menu_file"
-                android:drawableEnd="@drawable/ic_dropdown"
-                android:drawablePadding="5dp"
-                android:background="@drawable/bg_menubar_btn"
-                android:textColor="@color/rin_on_toolbar" />
-
-            <Button
-                android:id="@+id/btnMenuEdit"
-                android:layout_width="wrap_content"
-                android:layout_height="28dp"
-                android:layout_marginEnd="2dp"
-                android:minWidth="0dp"
-                android:minHeight="0dp"
-                android:insetTop="0dp"
-                android:insetBottom="0dp"
-                android:text="@string/menu_edit"
-                android:textAllCaps="false"
-                android:textSize="11.5sp"
-                android:paddingStart="7dp"
-                android:paddingEnd="6dp"
-                android:drawableStart="@drawable/ic_menu_edit"
-                android:drawableEnd="@drawable/ic_dropdown"
-                android:drawablePadding="5dp"
-                android:background="@drawable/bg_menubar_btn"
-                android:textColor="@color/rin_on_toolbar" />
-
-            <Button
-                android:id="@+id/btnMenuView"
-                android:layout_width="wrap_content"
-                android:layout_height="28dp"
-                android:layout_marginEnd="2dp"
-                android:minWidth="0dp"
-                android:minHeight="0dp"
-                android:insetTop="0dp"
-                android:insetBottom="0dp"
-                android:text="@string/menu_view"
-                android:textAllCaps="false"
-                android:textSize="11.5sp"
-                android:paddingStart="7dp"
-                android:paddingEnd="6dp"
-                android:drawableStart="@drawable/ic_menu_view"
-                android:drawableEnd="@drawable/ic_dropdown"
-                android:drawablePadding="5dp"
-                android:background="@drawable/bg_menubar_btn"
-                android:textColor="@color/rin_on_toolbar" />
-
-            <Button
-                android:id="@+id/btnMenuRun"
-                android:layout_width="wrap_content"
-                android:layout_height="28dp"
-                android:layout_marginEnd="2dp"
-                android:minWidth="0dp"
-                android:minHeight="0dp"
-                android:insetTop="0dp"
-                android:insetBottom="0dp"
-                android:text="@string/menu_run"
-                android:textAllCaps="false"
-                android:textSize="11.5sp"
-                android:paddingStart="7dp"
-                android:paddingEnd="6dp"
-                android:drawableStart="@drawable/ic_menu_run"
-                android:drawableEnd="@drawable/ic_dropdown"
-                android:drawablePadding="5dp"
-                android:background="@drawable/bg_menubar_btn"
-                android:textColor="@color/rin_on_toolbar" />
-
-            <Button
-                android:id="@+id/btnMenuLibraries"
-                android:layout_width="wrap_content"
-                android:layout_height="28dp"
-                android:minWidth="0dp"
-                android:minHeight="0dp"
-                android:insetTop="0dp"
-                android:insetBottom="0dp"
-                android:text="@string/menu_file_libraries"
-                android:textAllCaps="false"
-                android:textSize="11.5sp"
-                android:paddingStart="7dp"
-                android:paddingEnd="7dp"
-                android:drawableStart="@drawable/ic_menu_libraries"
-                android:drawablePadding="5dp"
-                android:background="@drawable/bg_menubar_btn"
-                android:textColor="@color/rin_on_toolbar" />
-
-            <View
-                android:layout_width="0dp"
-                android:layout_height="1dp"
-                android:layout_weight="1" />
-
-            <TextView
-                android:id="@+id/txtEngineVersion"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:textColor="@color/rin_editor_hint"
-                android:textSize="10sp" />
-        </LinearLayout>
-
-        <!-- شريط البحث والاستبدال، مخفي افتراضياً، يُفتح من قائمة Edit -->
-        <LinearLayout
-            android:id="@+id/findBar"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:paddingBottom="6dp"
-            android:gravity="center_vertical"
-            android:visibility="gone">
-
-            <EditText
-                android:id="@+id/txtFind"
-                android:layout_width="0dp"
-                android:layout_height="32dp"
-                android:layout_weight="1"
-                android:background="@drawable/bg_toolbar_btn_ghost"
-                android:paddingStart="10dp"
-                android:paddingEnd="10dp"
-                android:hint="@string/find_hint"
-                android:textColorHint="@color/rin_editor_hint"
-                android:textColor="@color/rin_on_toolbar"
-                android:textSize="12.5sp"
-                android:singleLine="true"
-                android:layout_marginEnd="4dp" />
-
-            <EditText
-                android:id="@+id/txtReplace"
-                android:layout_width="0dp"
-                android:layout_height="32dp"
-                android:layout_weight="1"
-                android:background="@drawable/bg_toolbar_btn_ghost"
-                android:paddingStart="10dp"
-                android:paddingEnd="10dp"
-                android:hint="@string/replace_hint"
-                android:textColorHint="@color/rin_editor_hint"
-                android:textColor="@color/rin_on_toolbar"
-                android:textSize="12.5sp"
-                android:singleLine="true"
-                android:layout_marginEnd="4dp" />
-
-            <TextView
-                android:id="@+id/txtFindCount"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginEnd="4dp"
-                android:textSize="10.5sp"
-                android:textColor="@color/rin_editor_hint" />
-
-            <ImageButton
-                android:id="@+id/btnFindCase"
-                android:layout_width="28dp"
-                android:layout_height="28dp"
-                android:layout_marginEnd="2dp"
-                android:padding="5dp"
-                android:src="@drawable/ic_menu_edit"
-                android:contentDescription="@string/find_case_sensitive_desc"
-                android:background="@drawable/bg_toolbar_btn_ghost" />
-
-            <Button
-                android:id="@+id/btnFindPrev"
-                android:layout_width="wrap_content"
-                android:layout_height="30dp"
-                android:minWidth="0dp"
-                android:minHeight="0dp"
-                android:insetTop="0dp"
-                android:insetBottom="0dp"
-                android:text="@string/btn_find_prev"
-                android:textAllCaps="false"
-                android:textSize="11sp"
-                android:paddingStart="7dp"
-                android:paddingEnd="7dp"
-                android:background="@drawable/bg_toolbar_btn_ghost"
-                android:textColor="@color/rin_on_toolbar" />
-
-            <Button
-                android:id="@+id/btnFindNext"
-                android:layout_width="wrap_content"
-                android:layout_height="30dp"
-                android:minWidth="0dp"
-                android:minHeight="0dp"
-                android:insetTop="0dp"
-                android:insetBottom="0dp"
-                android:text="@string/btn_find_next"
-                android:textAllCaps="false"
-                android:textSize="11sp"
-                android:paddingStart="7dp"
-                android:paddingEnd="7dp"
-                android:background="@drawable/bg_toolbar_btn_ghost"
-                android:textColor="@color/rin_on_toolbar" />
-
-            <Button
-                android:id="@+id/btnReplaceOne"
-                android:layout_width="wrap_content"
-                android:layout_height="30dp"
-                android:minWidth="0dp"
-                android:minHeight="0dp"
-                android:insetTop="0dp"
-                android:insetBottom="0dp"
-                android:text="@string/btn_replace_one"
-                android:textAllCaps="false"
-                android:textSize="11sp"
-                android:paddingStart="7dp"
-                android:paddingEnd="7dp"
-                android:background="@drawable/bg_toolbar_btn_ghost"
-                android:textColor="@color/rin_on_toolbar" />
-
-            <Button
-                android:id="@+id/btnReplaceAll"
-                android:layout_width="wrap_content"
-                android:layout_height="30dp"
-                android:minWidth="0dp"
-                android:minHeight="0dp"
-                android:insetTop="0dp"
-                android:insetBottom="0dp"
-                android:text="@string/btn_replace_all"
-                android:textAllCaps="false"
-                android:textSize="11sp"
-                android:paddingStart="7dp"
-                android:paddingEnd="7dp"
-                android:background="@drawable/bg_toolbar_btn_ghost"
-                android:textColor="@color/rin_on_toolbar" />
-
-            <ImageButton
-                android:id="@+id/btnFindClose"
-                android:layout_width="28dp"
-                android:layout_height="28dp"
-                android:layout_marginStart="2dp"
-                android:padding="6dp"
-                android:src="@drawable/ic_close"
-                android:contentDescription="@string/find_close_desc"
-                android:background="@drawable/bg_toolbar_btn_ghost" />
-        </LinearLayout>
-    </LinearLayout>
-
-    <View
+    <Button
+        android:id="@+id/btnScan"
         android:layout_width="match_parent"
-        android:layout_height="5dp"
-        android:background="@drawable/bg_toolbar_shadow" />
+        android:layout_height="52dp"
+        android:layout_marginTop="32dp"
+        android:backgroundTint="@color/gety_primary"
+        android:text="@string/action_scan"
+        android:textAllCaps="false"
+        android:textColor="@android:color/white"
+        android:textStyle="bold" />
 
-    <!-- ===== المحرر: عمود أرقام الأسطر + النص القابل للتمرير أفقياً بلا التفاف ===== -->
-    <LinearLayout
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="20dp"
+        android:text="@string/or_manual"
+        android:textColor="@color/gety_hint"
+        android:textSize="12sp" />
+
+    <EditText
+        android:id="@+id/edtCode"
         android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="3"
-        android:orientation="vertical"
-        android:background="@drawable/bg_editor_surface"
-        android:layout_marginStart="0dp"
-        android:layout_marginEnd="0dp">
+        android:layout_height="52dp"
+        android:layout_marginTop="12dp"
+        android:background="@drawable/bg_input_field"
+        android:fontFamily="monospace"
+        android:gravity="center"
+        android:hint="@string/hint_code"
+        android:inputType="textVisiblePassword|textCapCharacters"
+        android:paddingHorizontal="16dp"
+        android:singleLine="true"
+        android:textColor="@color/gety_text"
+        android:textColorHint="@color/gety_hint" />
 
-        <ScrollView
-            android:id="@+id/scrollEditor"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:scrollbars="vertical"
-            android:overScrollMode="never">
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal">
-
-                <TextView
-                    android:id="@+id/txtLineNumbers"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:background="@android:color/transparent"
-                    android:fontFamily="monospace"
-                    android:textColor="@color/rin_linenum_text"
-                    android:textSize="11sp"
-                    android:lineSpacingMultiplier="1.15"
-                    android:includeFontPadding="false"
-                    android:gravity="end|top"
-                    android:paddingTop="10dp"
-                    android:paddingBottom="10dp"
-                    android:paddingStart="10dp"
-                    android:paddingEnd="6dp"
-                    android:minWidth="24dp" />
-
-                <View
-                    android:layout_width="1dp"
-                    android:layout_height="match_parent"
-                    android:layout_marginTop="10dp"
-                    android:layout_marginBottom="10dp"
-                    android:background="@color/rin_divider" />
-
-                <!-- layoutDirection="ltr" مقصود هنا: التطبيق عربي (supportsRtl) فتُصبح هذه
-                     الحاوية القابلة للتمرير أفقيًا معكوسة تلقائيًا في RTL — بينما محتوى الكود
-                     نفسه (Canvas.drawText في RinCodeEditorView) يُرسَم يسارًا-لليمين دومًا مهما
-                     كانت لغة التعليقات/السلاسل النصية داخله، كأي محرر كود حقيقي. بلا هذا السطر
-                     يفترق اتجاه اللمس/السحب/موضع التمرير الابتدائي لهذه الحاوية عن اتجاه الرسم
-                     الفعلي بداخلها، وهذا بالضبط أصل شكوى "عدم سلاسة الحركة يمينًا ويسارًا". -->
-                <HorizontalScrollView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:layoutDirection="ltr"
-                    android:scrollbars="horizontal"
-                    android:overScrollMode="never">
-
-                    <!-- محرر Rin احترافي: الرسم وIME في Kotlin، والمنطق الفعلي والتلوين في
-                         C++17 عبر JNI. التلوين مصدره rin::Lexer الحقيقي، وليس Regex/نسخة Kotlin. -->
-                    <com.dlof.rinlang.RinCodeEditorView
-                        android:id="@+id/editCode"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layoutDirection="ltr"
-                        android:background="@android:color/transparent"
-                        android:paddingStart="10dp"
-                        android:paddingEnd="10dp"
-                        android:paddingTop="10dp"
-                        android:paddingBottom="10dp" />
-                </HorizontalScrollView>
-            </LinearLayout>
-        </ScrollView>
-    </LinearLayout>
-
-    <View
+    <Button
+        android:id="@+id/btnConfirm"
         android:layout_width="match_parent"
-        android:layout_height="1dp"
-        android:background="@color/rin_divider" />
+        android:layout_height="52dp"
+        android:layout_marginTop="12dp"
+        android:background="@drawable/bg_button_outline"
+        android:text="@string/action_confirm"
+        android:textAllCaps="false"
+        android:textColor="@color/gety_primary"
+        android:textStyle="bold" />
 
-    <!-- ===== رأس منطقة الكونسول / سجل التشغيل ===== -->
-    <LinearLayout
-        android:id="@+id/editorConsoleRoot"
+    <ProgressBar
+        android:id="@+id/progress"
+        android:layout_width="24dp"
+        android:layout_height="24dp"
+        android:layout_marginTop="16dp"
+        android:visibility="gone" />
+
+    <TextView
+        android:id="@+id/txtStatus"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:paddingStart="14dp"
-        android:paddingEnd="8dp"
-        android:paddingTop="8dp"
-        android:paddingBottom="8dp"
-        android:background="@color/rin_console_header">
-
-        <TextView
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="@string/console_title"
-            android:textColor="@color/rin_on_toolbar"
-            android:textSize="13sp"
-            android:letterSpacing="0.02"
-            android:textStyle="bold" />
-
-        <Button
-            android:id="@+id/btnClearConsole"
-            android:layout_width="wrap_content"
-            android:layout_height="28dp"
-            android:minWidth="0dp"
-            android:minHeight="0dp"
-            android:insetTop="0dp"
-            android:insetBottom="0dp"
-            android:text="@string/action_clear_console"
-            android:textAllCaps="false"
-            android:textSize="11sp"
-            android:paddingStart="8dp"
-            android:paddingEnd="8dp"
-            android:drawableStart="@drawable/ic_delete"
-            android:drawablePadding="5dp"
-            android:background="@drawable/bg_toolbar_btn_ghost"
-            android:textColor="@color/rin_editor_hint" />
-    </LinearLayout>
-
-    <!-- سجل التشغيل: كل عملية Run تظهر كبطاقة مستقلة ومجدولة بالترتيب -->
-    <androidx.recyclerview.widget.RecyclerView
-        android:id="@+id/rvJobs"
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="2"
-        android:background="@color/rin_console_bg"
-        android:clipToPadding="false"
-        android:paddingTop="4dp"
-        android:paddingBottom="10dp" />
-
-    <include layout="@layout/bottom_nav_bar" />
+        android:layout_marginTop="16dp"
+        android:gravity="center"
+        android:textColor="@color/gety_primary"
+        android:textSize="13sp"
+        android:textStyle="bold" />
 
 </LinearLayout>
