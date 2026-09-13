@@ -51,8 +51,8 @@ class LoginActivity : BaseConnectivityActivity() {
             setLoading(false)
             when (result) {
                 is LoginResult.Success -> {
-                    // المرحلة 2: لا يكتمل الدخول قبل تأكيد الجهاز عبر GETY.
-                    startActivity(Intent(this, DevicePairingActivity::class.java).putExtra(DevicePairingActivity.EXTRA_UID, result.user.uid))
+                    Toast.makeText(this, getString(R.string.verify_success), Toast.LENGTH_SHORT).show()
+                    // TODO (المرحلة التالية): الانتقال إلى شاشة "متجر Rin" الرئيسية بدل إغلاق الشاشة فقط.
                     finish()
                 }
                 is LoginResult.NeedsVerification -> {
