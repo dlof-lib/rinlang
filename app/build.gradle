@@ -5,11 +5,11 @@ plugins {
 }
 
 android {
-    namespace 'com.dlof.gety'
+    namespace 'com.dlof.rinlang'
     compileSdk 34
 
     defaultConfig {
-        applicationId "com.dlof.gety"
+        applicationId "com.dlof.rinlang"
         minSdk 24
         targetSdk 34
         versionCode 1
