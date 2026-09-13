@@ -1,0 +1,9 @@
+      - name: Remove leftover GETY/WGOM auth files
+        run: |
+          rm -f app/src/main/java/com/dlof/rinlang/auth/PairingRepository.kt
+          rm -f app/src/main/java/com/dlof/rinlang/auth/DevicePairingActivity.kt
+          rm -f app/src/main/res/layout/activity_device_pairing.xml
+          rm -f app/src/main/res/drawable/bg_pairing_qr_frame.xml
+          rm -f app/src/main/res/layout/activity_account.xml
+          rm -f app/src/main/res/values/strings_wgom.xml
+          rm -f app/src/main/res/drawable/bg_button_outline.xml
