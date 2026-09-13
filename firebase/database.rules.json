@@ -23,6 +23,14 @@
         ".write": "auth != null && auth.uid === $uid"
       }
     },
+
+    "pairing_codes": {
+      "$token": {
+        ".read": true,
+        ".write": "(auth != null && auth.uid === newData.child('uid').val() && !data.exists()) || (data.exists() && data.child('confirmed').val() === false && data.child('expiresAt').val() > now && newData.child('uid').val() === data.child('uid').val() && newData.child('createdAt').val() === data.child('createdAt').val() && newData.child('expiresAt').val() === data.child('expiresAt').val())",
+        ".validate": "newData.hasChildren(['uid', 'createdAt', 'expiresAt', 'confirmed'])"
+      }
+    },
     "packages": {
       ".read": true,
       ".indexOn": [
