@@ -1,0 +1,38 @@
+name: Delete all Markdown files
+
+on:
+  workflow_dispatch:
+    inputs:
+      keep_readme:
+        description: 'إبقاء README.md بدون حذف؟'
+        type: boolean
+        default: true
+
+jobs:
+  delete-md:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Delete .md files
+        run: |
+          if [ "${{ inputs.keep_readme }}" = "true" ]; then
+            find . -type f -iname "*.md" -not -iname "README.md" -not -path "./.git/*" -delete
+          else
+            find . -type f -iname "*.md" -not -path "./.git/*" -delete
+          fi
+
+      - name: Commit & push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if ! git diff --cached --quiet; then
+            git commit -m "حذف جميع ملفات md"
+            git push
+          else
+            echo "لا يوجد ملفات md لحذفها."
+          fi
