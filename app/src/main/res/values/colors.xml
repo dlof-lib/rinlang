@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="wgom_primary">#1A1A1A</color>
-    <color name="wgom_primary_dark">#000000</color>
-    <color name="wgom_background">#F5F5F5</color>
-    <color name="wgom_text">#1A1A1A</color>
-    <color name="wgom_hint">#8A8A8A</color>
+    <color name="gety_primary">#1F6FB2</color>
+    <color name="gety_primary_dark">#155A94</color>
+    <color name="gety_background">#F4F8FC</color>
+    <color name="gety_text">#16324A</color>
+    <color name="gety_hint">#7C93A6</color>
 </resources>
