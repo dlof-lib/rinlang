@@ -5,4 +5,16 @@
     <color name="gety_background">#F4F8FC</color>
     <color name="gety_text">#16324A</color>
     <color name="gety_hint">#7C93A6</color>
+
+    <!-- WGOM (المرحلة 3: إدارة الحساب) — كانت غير معرَّفة إطلاقاً، ما كان يفشل
+         AAPT عند بناء activity_account.xml. -->
+    <color name="wgom_primary">#2E7D5B</color>
+    <color name="wgom_primary_dark">#1F5C41</color>
+    <color name="wgom_background">#F5F8F6</color>
+    <color name="wgom_text">#16241C</color>
+    <color name="wgom_hint">#7C9186</color>
+
+    <!-- تُستخدم في bg_chip_meta.xml وbg_filter_chip_unselected.xml (بطاقات المكتبات
+         وشرائح الفلترة) — كانت غير معرَّفة إطلاقاً. -->
+    <color name="rin_chip_bg">#E7E7EC</color>
 </resources>
