@@ -1,54 +1,35 @@
-# نظام تسجيل الدخول ثلاثي المراحل — RinStudio / GETY / WGOM
+# إصلاح فشل البناء: حذف ملفات GETY/WGOM المتبقية (سكربت يحذف نفسه)
 
-هذا الأرشيف يحتوي **فقط** على الملفات الجديدة/المعدَّلة اللازمة لفصل نظام الدخول إلى
-3 تطبيقات أندرويد منفصلة قابلة للبناء، بالإضافة إلى GitHub Actions لبناء APK لكل واحد.
+فكّوا ضغط هذا الأرشيف **في جذر مستودع rinlang-main مباشرة** (بحيث يندمج مجلد
+`scripts/` مع مجلدات مشروعكم الموجودة أصلاً: `app/`, `firebase/`, ...).
 
-## البنية
+## التنفيذ
 
-```
-rinstudio-auth/   → com.dlof.rinlang   (المرحلة 1: تسجيل/دخول + بدء المرحلة 2)
-gety/             → com.dlof.gety      (المرحلة 2: تأكيد الجهاز عبر QR/كود)
-wgom/             → com.dlof.wgom      (المرحلة 3: إدارة الحساب — الاسم/كلمة السر)
-firebase/database.rules.json → قواعد Realtime Database المشتركة بين الثلاثة
-.github/workflows/           → 3 ملفات yml لبناء APK لكل تطبيق عبر GitHub Actions
+```bash
+chmod +x scripts/fix-ci/remove-leftover-files.sh
+./scripts/fix-ci/remove-leftover-files.sh
+git push
 ```
 
-## ماذا كان ناقصاً وتم استكماله
+السكربت يقوم بكل شيء تلقائياً بترتيب واحد:
+1. يحذف الملفات السبعة المتبقية من GETY/WGOM (`git rm` إن كان المجلد مستودع Git، وإلا `rm` عادي).
+2. يعمل commit بحذفها.
+3. **يحذف نفسه** (الملف `remove-leftover-files.sh`) من القرص ومن Git في commit منفصل، حتى لا يبقى أثر له في المشروع بعد أن أدّى غرضه.
+4. يطلب منكم تنفيذ `git push` يدوياً في النهاية (لم يُنفَّذ تلقائياً تحسباً لأي مراجعة أخيرة منكم قبل الرفع).
 
-الشيفرة البرمجية (Kotlin) لكل الشاشات الثلاث كانت موجودة بالفعل في المستودع الأصلي،
-لكنها كانت جميعها مدمجة داخل وحدة Gradle واحدة مُعدّة لبناء GETY فقط. هذا يعني:
+بعدها سيختفي مجلد `scripts/fix-ci/` بالكامل من مشروعكم تلقائياً.
 
-- `colors.xml` كان يحتوي على ألوان GETY فقط؛ ألوان RinStudio (`rin_*`) وWGOM (`wgom_*`)
-  لم تكن مُعرَّفة إطلاقاً رغم استخدامها في عدّة تخطيطات — ما كان سيمنع البناء تماماً.
-- بعض النصوص (`hint_new_password`, `profile_saved`, `no_connection_title`...) لم تكن موجودة.
-- `activity_login.xml` الوحيد الموجود كان في الأصل مخصّصاً لـWGOM فقط؛ تم إنشاء نسخة
-  مطابقة لشاشة دخول RinStudio بنفس المعرّفات التي يتوقعها `LoginActivity.kt`.
-- كل تطبيق الآن له `build.gradle` / `AndroidManifest.xml` / `settings.gradle` خاص به،
-  يتضمّن فقط الاعتماديات التي يحتاجها فعلاً (RinStudio يحتاج Firebase SDK، بينما
-  GETY وWGOM يتواصلان عبر REST مباشرة بلا Firebase SDK كما في تصميمهما الأصلي).
+## الملفات المحذوفة
+```
+app/src/main/java/com/dlof/rinlang/auth/PairingRepository.kt
+app/src/main/java/com/dlof/rinlang/auth/DevicePairingActivity.kt
+app/src/main/res/layout/activity_device_pairing.xml
+app/src/main/res/drawable/bg_pairing_qr_frame.xml
+app/src/main/res/layout/activity_account.xml
+app/src/main/res/values/strings_wgom.xml
+app/src/main/res/drawable/bg_button_outline.xml
+```
 
-لم يتم تغيير أي منطق برمجي (منطق التحقق، توليد رمز الإقران، صلاحية 5 ساعات، إلخ) —
-فقط استُكملت الموارد المفقودة وأُعيد تنظيم الملفات إلى 3 مشاريع منفصلة.
-
-## قبل البناء
-
-1. **rinstudio-auth**: يحتاج `app/google-services.json` حقيقياً (مشروع Firebase
-   `dlof-massage` مسجَّل فيه `com.dlof.rinlang` مسبقاً حسب الملف الأصلي). في GitHub
-   Actions، ضَع محتواه في سرّ باسم `RINSTUDIO_GOOGLE_SERVICES_JSON`.
-   يحتاج أيضاً تفعيل EmailJS (راجع `EmailJsConfig.kt`) — القيم الحالية افتراضية،
-   بدّلها بقيمك الخاصة إن أردت إرسال بريد فعلي.
-2. **gety / wgom**: يعملان مباشرة بلا إعداد إضافي (يستخدمان REST + مفتاح Web API
-   عام الموجود مسبقاً في `FirebaseConfig.kt`).
-3. لتوقيع APK إصدار (release) بدل تصحيح (debug)، أضِف keystore ومفاتيحه كأسرار
-   GitHub منفصلة وحدِّث ملفات الـyml — لم تُضَف هنا تلقائياً لأسباب أمنية (لا يجب
-   وضع كلمات سر التوقيع داخل المستودع).
-
-## بناء APK
-
-كل تطبيق له سير عمل خاص في `.github/workflows/`:
-- `build-rinstudio-auth-apk.yml`
-- `build-gety-apk.yml`
-- `build-wgom-apk.yml`
-
-كل سير عمل يُشغَّل تلقائياً عند تعديل مجلد التطبيق المقابل على فرع `main`، أو يدوياً
-عبر "Run workflow"، وينتج APK تصحيح (debug) قابل للتحميل من تبويب Artifacts.
+## بديل: خطوة CI مؤقتة فقط (بلا حذف فعلي من المستودع)
+موجود في `.github/workflow-snippet/cleanup-step.yml` إن كنتم تفضّلون حل الـCI المؤقت
+بدل حذف الملفات من المستودع نفسه — لكن لا داعي له إن استخدمتم السكربت أعلاه.
