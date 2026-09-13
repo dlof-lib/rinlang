@@ -26,6 +26,19 @@
     <string name="verify_success">Account created successfully ✓</string>
     <string name="code_resent">A new code has been sent to your email</string>
 
+    <!-- Phase 2: confirm device via GETY -->
+    <string name="pairing_title">Confirm Device via GETY</string>
+    <string name="pairing_subtitle">Open GETY on a trusted device and scan the code, or enter it manually, to finish signing in</string>
+    <string name="pairing_generating">Generating pairing code…</string>
+    <string name="pairing_waiting">Waiting for confirmation from GETY…</string>
+    <string name="pairing_confirmed">Device confirmed successfully ✓</string>
+    <string name="pairing_expired">The code has expired, tap \"Regenerate\"</string>
+    <string name="pairing_countdown_format">Valid for %1$02d:%2$02d:%3$02d</string>
+    <string name="pairing_countdown_zero">00:00:00</string>
+    <string name="pairing_regenerate">Regenerate Code</string>
+    <string name="pairing_cancel">Cancel and go back</string>
+    <string name="pairing_error_generic">Couldn\'t generate a pairing code, check your connection and try again</string>
+
     <!-- General errors -->
     <string name="error_required_fields">Please fill in all fields</string>
     <string name="error_username_taken">This username is taken, try another one</string>
