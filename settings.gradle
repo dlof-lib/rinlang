@@ -13,5 +13,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "Wgom"
+rootProject.name = "Gety"
 include ':app'
