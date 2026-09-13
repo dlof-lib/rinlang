@@ -1,6 +1,7 @@
 plugins {
     id 'com.android.application'
     id 'org.jetbrains.kotlin.android'
+    id 'com.google.gms.google-services'
 }
 
 android {
@@ -45,6 +46,11 @@ dependencies {
     implementation 'com.journeyapps:zxing-android-embedded:4.3.0'
     implementation 'com.google.zxing:core:3.5.3'
 
-    // لا حاجة لـ Firebase SDK هنا: GETY يتواصل مع Realtime Database عبر REST المباشر
-    // (راجع FirebaseRestClient.kt) لأنه تطبيق منفصل تماماً وغير مسجَّل بحساب المستخدم.
+    // لا حاجة لـ Firebase SDK من أجل GETY نفسه (يتواصل عبر REST المباشر عبر
+    // FirebaseRestClient.kt)، لكنها مطلوبة لأن com.dlof.rinlang.auth.* (المرحلة 1)
+    // لا يزال مصدرها ضمن هذه الوحدة نفسها، ويستدعي FirebaseAuth وFirebaseDatabase
+    // مباشرة — بدونها يفشل compileReleaseKotlin بخطأ "unresolved reference: firebase".
+    implementation platform('com.google.firebase:firebase-bom:33.1.2')
+    implementation 'com.google.firebase:firebase-auth-ktx'
+    implementation 'com.google.firebase:firebase-database-ktx'
 }
