@@ -16,10 +16,27 @@ android {
         versionName "1.0"
     }
 
+    signingConfigs {
+        release {
+            def ksPath = System.getenv("RIN_KEYSTORE_PATH")
+            if (ksPath != null) {
+                storeFile file(ksPath)
+                storePassword System.getenv("RIN_KEYSTORE_PASSWORD")
+                keyAlias System.getenv("RIN_KEY_ALIAS")
+                keyPassword System.getenv("RIN_KEY_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            // يُطبَّق فقط إذا كانت متغيرات البيئة موجودة فعلياً (أثناء بناء الـ CI)، وإلا يبقى
+            // الإصدار release غير موقَّع محلياً عند البناء اليدوي بدون هذه المتغيرات.
+            if (System.getenv("RIN_KEYSTORE_PATH") != null) {
+                signingConfig signingConfigs.release
+            }
         }
         debug {
             debuggable true
