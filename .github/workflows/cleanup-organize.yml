@@ -1,50 +1,25 @@
-name: تنظيف وترتيب المستودع (Cleanup & Organize)
-
-# ⚠️ قبل أول تشغيل: نفّذ الملف upload-secrets-local.sh مرة واحدة من جهازك
-# (خارج GitHub Actions) لرفع signing/release.keystore و
-# signing/keystore-credentials.txt كـ Secrets، لأن GITHUB_TOKEN الافتراضي
-# لا يملك صلاحية إنشاء Secrets جديدة داخل الـ Actions لأسباب أمنية.
+name: ترتيب الملفات والمجلدات (Reorganize Only)
 
 on:
   workflow_dispatch:
     inputs:
-      move_signing_to_secrets:
-        description: 'إزالة ملفات signing/ من المستودع (بعد التأكد أنها مرفوعة كـ Secrets يدوياً)'
-        type: boolean
-        default: false
-      move_build_artifacts_to_release:
-        description: 'نقل build-artifact/* إلى GitHub Release بدل حذفها (لأنها كبيرة على Secrets)'
-        type: boolean
-        default: true
-      reorganize_files:
-        description: 'إعادة ترتيب الملفات (نقل test_*.cpp و samples/ و verification/)؟'
-        type: boolean
-        default: true
       update_gitignore:
-        description: 'تحديث .gitignore لمنع رفع الأسرار/المخرجات مستقبلاً؟'
+        description: 'تحديث .gitignore أيضاً؟'
         type: boolean
         default: true
-      release_tag:
-        description: 'اسم الـ tag للـ Release الذي سيحوي build-artifact (يُستخدم فقط إذا move_build_artifacts_to_release=true)'
-        type: string
-        default: 'build-artifacts'
-      purge_git_history:
-        description: '⚠️ خطير ولا رجعة فيه: حذف الأسرار القديمة من كامل تاريخ git'
-        type: boolean
-        default: false
       dry_run:
         description: 'تجربة فقط بدون commit/push (عرض ما سيحدث)'
         type: boolean
         default: true
 
 jobs:
-  cleanup:
+  reorganize:
     runs-on: ubuntu-latest
     permissions:
       contents: write
 
     steps:
-      - name: Checkout (full history)
+      - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
@@ -55,65 +30,16 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
       # ---------------------------------------------------------------
-      # 1) التحقق أن أسرار keystore موجودة فعلاً في GitHub Secrets
-      #    قبل حذف الملفات من المستودع (حماية من فقدان البيانات)
-      # ---------------------------------------------------------------
-      - name: Verify secrets exist before removing files
-        if: ${{ inputs.move_signing_to_secrets == true }}
-        env:
-          KS: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-          CREDS: ${{ secrets.ANDROID_KEYSTORE_CREDENTIALS }}
-        run: |
-          if [ -z "$KS" ] || [ -z "$CREDS" ]; then
-            echo "::warning::الأسرار ANDROID_KEYSTORE_BASE64 / ANDROID_KEYSTORE_CREDENTIALS غير موجودة."
-            echo "::warning::شغّل upload-secrets-local.sh من جهازك أولاً إذا كنت تريد حذف ملفات signing/"
-            exit 0
-          fi
-          echo "الأسرار موجودة، يمكن المتابعة بأمان."
-
-      # ---------------------------------------------------------------
-      # 2) إزالة ملفات signing/ من المستودع (قيمتها الآن في Secrets)
-      # ---------------------------------------------------------------
-      - name: Remove signing files from repo (now stored as Secrets)
-        if: ${{ inputs.move_signing_to_secrets == true && (secrets.ANDROID_KEYSTORE_BASE64 != '') && (secrets.ANDROID_KEYSTORE_CREDENTIALS != '') }}
-        run: |
-          [ -f "signing/keystore-credentials.txt" ] && git rm -f "signing/keystore-credentials.txt" || true
-          [ -f "signing/release.keystore" ] && git rm -f "signing/release.keystore" || true
-          rmdir signing 2>/dev/null || true
-
-      # ---------------------------------------------------------------
-      # 3) نقل الملفات التنفيذية الكبيرة إلى GitHub Release بدل الحذف
-      # ---------------------------------------------------------------
-      - name: Upload build-artifact binaries to a GitHub Release
-        if: ${{ inputs.move_build_artifacts_to_release == true }}
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          if [ -d "build-artifact" ] && [ "$(ls -A build-artifact 2>/dev/null)" ]; then
-            gh release view "${{ inputs.release_tag }}" >/dev/null 2>&1 || \
-              gh release create "${{ inputs.release_tag }}" \
-                --title "Build artifacts" \
-                --notes "ملفات تنفيذية منقولة تلقائياً من build-artifact/ (لا يجب أن تكون في git)."
-            gh release upload "${{ inputs.release_tag }}" build-artifact/* --clobber
-          fi
-
-      - name: Remove build-artifact from repo (now on Release)
-        if: ${{ inputs.move_build_artifacts_to_release == true }}
-        run: |
-          [ -d "build-artifact" ] && git rm -rf build-artifact || true
-
-      # ---------------------------------------------------------------
-      # 4) إعادة ترتيب الملفات في مجلدات منطقية
+      # إعادة ترتيب الملفات في مجلدات منطقية
       # ---------------------------------------------------------------
       - name: Reorganize files and folders
-        if: ${{ inputs.reorganize_files == true }}
         run: |
           set -e
           echo "==> نقل ملفات اختبارات tools/test_*.cpp إلى tests/tools/"
           mkdir -p tests/tools
-          shopt -s nullglob
+          shopt -s nullglob 2>/dev/null || true
           for f in tools/test_*.cpp; do
-            git mv "$f" "tests/tools/$(basename "$f")"
+            [ -e "$f" ] && git mv "$f" "tests/tools/$(basename "$f")"
           done
 
           echo "==> نقل samples/ إلى examples/samples/"
@@ -135,7 +61,7 @@ jobs:
           fi
 
       # ---------------------------------------------------------------
-      # 5) تحديث .gitignore
+      # تحديث .gitignore (اختياري)
       # ---------------------------------------------------------------
       - name: Update .gitignore
         if: ${{ inputs.update_gitignore == true }}
@@ -151,32 +77,13 @@ jobs:
           git status
           git diff --cached --stat || true
 
-      # ---------------------------------------------------------------
-      # 6) Commit & Push
-      # ---------------------------------------------------------------
       - name: Commit & push changes
         if: ${{ inputs.dry_run == false }}
         run: |
           git add -A
           if ! git diff --cached --quiet; then
-            git commit -m "chore: نقل الأسرار إلى Secrets/Release وإعادة تنظيم المستودع"
+            git commit -m "chore: إعادة ترتيب الملفات والمجلدات"
             git push
           else
             echo "لا توجد تغييرات لعمل commit لها."
           fi
-
-      # ---------------------------------------------------------------
-      # 7) (خطير) تنظيف تاريخ git من الأسرار القديمة
-      # ---------------------------------------------------------------
-      - name: Purge secrets from entire git history
-        if: ${{ inputs.purge_git_history == true && inputs.dry_run == false }}
-        run: |
-          pip install --break-system-packages git-filter-repo
-          python3 -m git_filter_repo \
-            --path signing/keystore-credentials.txt \
-            --path signing/release.keystore \
-            --path build-artifact/rin_run \
-            --path build-artifact/rincheck \
-            --invert-paths --force
-          git push origin --force --all
-          git push origin --force --tags
