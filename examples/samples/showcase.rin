@@ -1,0 +1,78 @@
+// showcase.rin — جولة سريعة على كل ميزات لغة Rin
+
+@import "math";
+@import "lib/functional.og.rin" as fx;
+
+// ===== أساسيات =====
+let x = 10;
+text name = "Rin";
+print "Hello, " + name + "!";
+
+if (x > 5) {
+    print "big";
+} else {
+    print "small";
+}
+
+let i = 0;
+while (i < 5) {
+    print i;
+    i = i + 1;
+}
+
+fun fib(n) {
+    if (n < 2) { return n; }
+    return fib(n - 1) + fib(n - 2);
+}
+print fib(10);
+print factorial(5);   // من مكتبة math
+
+// ===== مصفوفات وقواميس =====
+let arr = [1, 2, 3];
+push(arr, 4);
+print arr;
+print sort([3, 1, 2]);
+
+let m = { name: "Rin", age: 2 };
+print m["name"];
+print keys(m);
+
+// ===== خط الأنابيب =====
+let data = [10, 20, 30, 40, 50];
+let result = data |> normalize() |> mean();
+print result;
+
+// ===== حاوية بيانات =====
+@container=my_data
+    text title = "بيانات ريـن";
+    print title;
+
+    Section=numbers
+        let a = 10;
+        let b = 4;
+        print Addition(a, b);
+        print Subtraction(a, b);
+        print Multiplication(a, b);
+        print Equal(a, b);
+    .end/Section
+
+    Translations
+        translation lang="ar" text="مرحبا";
+        translation lang="en" text="Hello";
+    .end/Translations
+
+    file path="data/output.rin";
+    installation my_data;
+    simplified save path="data/output.min.rin";
+.end/container
+
+// ===== مجموعات وقواعد NoSQL =====
+@Containers.Group=shop_db
+    @container.doc=users
+        document id="u1" fields={ name: "سارة", age: 28, city: "الرياض" };
+        document id="u2" fields={ name: "أحمد", age: 35, city: "جدة" };
+    .end/container.doc
+.end/Containers.Group
+
+print queryDocs("users", "city", "الرياض");
+print insertDoc("users", "u3", { name: "منى", city: "الرياض" });
