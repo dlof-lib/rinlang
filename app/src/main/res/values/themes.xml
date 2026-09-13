@@ -1,71 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <style name="Theme.RinLang" parent="Theme.MaterialComponents.DayNight.NoActionBar">
-        <item name="colorPrimary">@color/rin_accent</item>
-        <item name="colorPrimaryDark">@color/rin_toolbar</item>
-        <item name="colorAccent">@color/rin_accent</item>
-        <item name="android:windowBackground">@color/rin_background</item>
-        <item name="android:statusBarColor">@color/rin_toolbar</item>
-        <!-- كل AlertDialog.Builder(this) عبر التطبيق (الألبومات/المشاريع/التأكيدات...) يرث
-             تلقائياً هذا الثيم الموحّد بدل حوار النظام المسطّح الافتراضي — انظر
-             Theme.RinLang.AlertDialog أسفله. تغيير واحد هنا يُحدِّث كل الحوارات دفعة واحدة. -->
-        <item name="android:alertDialogTheme">@style/Theme.RinLang.AlertDialog</item>
-    </style>
-
-    <!-- ثيم موحَّد لكل حوارات AlertDialog: بطاقة عائمة داكنة بزوايا دائرية كاملة + شريط تمييز
-         علوي بتدرّج هوية العلامة (bg_dialog_card) بدل مستطيل النظام المسطّح حاد الحواف، مع
-         عرض أوسع (88%) وألوان نص/تمييز متطابقة مع بقية التطبيق. -->
-    <style name="Theme.RinLang.AlertDialog" parent="@android:style/Theme.Material.Dialog.Alert">
-        <item name="android:windowBackground">@drawable/bg_dialog_card</item>
-        <item name="android:windowMinWidthMajor">88%</item>
-        <item name="android:windowMinWidthMinor">88%</item>
-        <item name="android:colorAccent">@color/rin_accent</item>
-        <item name="android:textColorPrimary">@color/rin_on_toolbar</item>
-        <item name="android:textColorSecondary">@color/rin_on_toolbar_dim</item>
-    </style>
-
-    <!-- ثيم موحَّد لقوائم PopupMenu المنسدلة (File/Edit/View/Run في الشريط العلوي): بطاقة
-         داكنة بزوايا دائرية وظل واضح (bg_popup_menu) بدل مستطيل أسود مسطّح بلا أي هوية بصرية،
-         يحلّ محل ThemeOverlay.MaterialComponents.Dark الافتراضي في MainActivity.darkPopupMenu(). -->
-    <style name="ThemeOverlay.RinLang.PopupMenu" parent="ThemeOverlay.MaterialComponents.Dark">
-        <item name="android:popupMenuStyle">@style/Widget.RinLang.PopupMenu</item>
-        <item name="android:textColorPrimary">@color/rin_on_toolbar</item>
-        <item name="colorAccent">@color/rin_accent</item>
-    </style>
-
-    <style name="Widget.RinLang.PopupMenu" parent="@android:style/Widget.Material.PopupMenu">
-        <item name="android:popupBackground">@drawable/bg_popup_menu</item>
-        <item name="android:popupElevation">10dp</item>
-    </style>
-
-    <!-- شاشة البداية (Splash): بلا شريط أدوات، خلفية متدرّجة بهوية التطبيق، تختفي تلقائياً
-         بعد لحظات قصيرة إلى MainActivity (انظر SplashActivity.kt). -->
-    <style name="Theme.RinLang.Splash" parent="Theme.MaterialComponents.DayNight.NoActionBar">
-        <item name="android:windowBackground">@drawable/bg_splash_background</item>
-        <item name="android:statusBarColor">@color/rin_background</item>
-        <item name="android:navigationBarColor">@color/rin_background</item>
-        <item name="colorPrimary">@color/rin_accent</item>
-        <item name="colorAccent">@color/rin_accent</item>
-    </style>
-
-    <!-- Light theme dedicated to the Pipeline Runner screen: dark navy header,
-         light body, green accents — independent from the IDE's dark theme. -->
-    <style name="Theme.RinLang.Pipeline" parent="Theme.MaterialComponents.Light.NoActionBar">
-        <item name="colorPrimary">@color/pipeline_green</item>
-        <item name="colorPrimaryDark">@color/pipeline_header_bg</item>
-        <item name="colorAccent">@color/pipeline_green</item>
-        <item name="android:windowBackground">@color/pipeline_screen_bg</item>
-        <item name="android:statusBarColor">@color/pipeline_header_bg</item>
-    </style>
-
-    <!-- ثيم شفاف لـ CrashReportActivity: النشاط نفسه بلا أي واجهة مرئية، فقط الـ Dialog
-         الذي يعرضه فوق آخر ما كان ظاهراً على الشاشة (أو خلفية سوداء لو كان التطبيق كله
-         قد أُغلق فعلاً بسبب الكراش). -->
-    <style name="Theme.RinLang.Transparent" parent="Theme.MaterialComponents.DayNight.NoActionBar">
-        <item name="android:windowIsTranslucent">true</item>
-        <item name="android:windowBackground">@android:color/transparent</item>
-        <item name="android:windowNoTitle">true</item>
-        <item name="android:windowAnimationStyle">@null</item>
-        <item name="android:backgroundDimEnabled">true</item>
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <style name="Theme.Wgom" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/wgom_primary</item>
+        <item name="colorPrimaryDark">@color/wgom_primary_dark</item>
+        <item name="colorAccent">@color/wgom_primary</item>
+        <item name="android:statusBarColor" tools:targetApi="21">@color/wgom_primary_dark</item>
+        <item name="android:windowBackground">@color/wgom_background</item>
     </style>
 </resources>
