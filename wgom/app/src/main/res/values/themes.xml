@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <style name="Theme.Wgom" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/wgom_primary</item>
+        <item name="colorPrimaryDark">@color/wgom_primary_dark</item>
+        <item name="colorAccent">@color/wgom_primary</item>
+        <item name="android:statusBarColor" tools:targetApi="21">@color/wgom_primary_dark</item>
+        <item name="android:windowBackground">@color/wgom_background</item>
+    </style>
+</resources>
