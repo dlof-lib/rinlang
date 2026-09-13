@@ -1,4 +1,4 @@
-// WGOM — تطبيق إدارة الحساب (المرحلة 3 من نظام دخول RinStudio): تغيير كلمة السر واسم المستخدم.
+// GETY — تطبيق تأكيد الجهاز (المرحلة 2 من نظام دخول RinStudio).
 plugins {
     id 'com.android.application' version '8.5.2' apply false
     id 'org.jetbrains.kotlin.android' version '1.9.24' apply false
