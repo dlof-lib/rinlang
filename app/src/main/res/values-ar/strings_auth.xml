@@ -30,6 +30,19 @@
     <string name="verify_success">تم إنشاء الحساب بنجاح ✓</string>
     <string name="code_resent">تم إرسال كود جديد إلى بريدك</string>
 
+    <!-- المرحلة 2: تأكيد الجهاز عبر GETY -->
+    <string name="pairing_title">تأكيد الجهاز عبر GETY</string>
+    <string name="pairing_subtitle">افتح تطبيق GETY على أي جهاز موثوق وامسح الرمز، أو أدخل الكود يدوياً، لإكمال تسجيل الدخول</string>
+    <string name="pairing_generating">جارٍ توليد رمز الإقران…</string>
+    <string name="pairing_waiting">بانتظار التأكيد من GETY…</string>
+    <string name="pairing_confirmed">تم تأكيد الجهاز بنجاح ✓</string>
+    <string name="pairing_expired">انتهت صلاحية الرمز، اضغط \"تجديد الرمز\"</string>
+    <string name="pairing_countdown_format">صالح لمدة %1$02d:%2$02d:%3$02d</string>
+    <string name="pairing_countdown_zero">00:00:00</string>
+    <string name="pairing_regenerate">تجديد الرمز</string>
+    <string name="pairing_cancel">إلغاء والعودة</string>
+    <string name="pairing_error_generic">تعذّر توليد رمز الإقران، تحقق من الاتصال وحاول مرة أخرى</string>
+
     <!-- أخطاء عامة -->
     <string name="error_required_fields">فضلاً املأ جميع الحقول</string>
     <string name="error_username_taken">اسم المستخدم هذا محجوز، جرّب اسماً آخر</string>
