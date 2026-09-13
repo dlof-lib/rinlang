@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Gety</string>
+    <string name="main_subtitle">امسح رمز QR الظاهر في RinStudio، أو أدخل الكود يدوياً، لتأكيد هذا الجهاز</string>
+    <string name="action_scan">مسح رمز QR</string>
+    <string name="or_manual">أو أدخل الكود يدوياً</string>
+    <string name="hint_code">مثال: K5PJ-QT2M-9XCF-3H7L</string>
+    <string name="action_confirm">تأكيد الجهاز</string>
+    <string name="scan_prompt">وجّه الكاميرا نحو رمز QR الظاهر في RinStudio</string>
+    <string name="status_checking">جارٍ التحقق من الرمز…</string>
+    <string name="status_confirmed">تم تأكيد الجهاز بنجاح ✓ يمكنك العودة إلى RinStudio</string>
+    <string name="error_empty_code">أدخل الكود أو امسح رمز QR أولاً</string>
+    <string name="error_code_not_found">لم يتم العثور على هذا الكود، تأكد من كتابته بشكل صحيح</string>
+    <string name="error_code_expired">انتهت صلاحية هذا الكود، اطلب رمزاً جديداً من RinStudio</string>
+    <string name="error_already_confirmed">تم تأكيد هذا الكود بالفعل من قبل</string>
+    <string name="error_generic">حدث خطأ غير متوقع، حاول مرة أخرى</string>
+</resources>
