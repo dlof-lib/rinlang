@@ -122,6 +122,20 @@ struct MethodCallExpr : Expr {
     std::vector<ExprPtr> args;
 };
 
+// fun(params) { body } used as a VALUE (not a top-level/statement declaration) -> an anonymous
+// function literal, e.g. `let add = fun(a, b) { return a + b; };`, `arr.push(fun(x) { return x*2; })`,
+// or `{ "greet": fun(n) { return "hi " + n; } }` as a map entry. Parsed only where an expression is
+// expected (Parser::primary()); `fun name(...) { ... }` at the START of a statement is still always
+// the existing named FunctionStmt declaration (Parser::declaration()/functionDeclaration()), so this
+// is purely additive and never changes how any existing 'fun' statement parses. Reuses FunctionStmt
+// as the declaration payload so the interpreter can build the exact same Callable it already builds
+// for named functions (see Interpreter::execute(FunctionStmt) vs evaluate(LambdaExpr) in
+// rin_interpreter.cpp) -- only difference is the closure is captured as a VALUE right where the
+// literal appears, instead of being bound to a name in the enclosing scope.
+struct LambdaExpr : Expr {
+    std::shared_ptr<struct FunctionStmt> decl;
+};
+
 // ---- Statements ----
 struct Stmt {
     virtual ~Stmt() = default;
