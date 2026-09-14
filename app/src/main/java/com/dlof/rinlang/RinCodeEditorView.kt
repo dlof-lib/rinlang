@@ -777,7 +777,7 @@ class RinCodeEditorView @JvmOverloads constructor(
             cachedDiagnosticsByLine[line]?.let { diags ->
                 for (d in diags) {
                     val from = d.startCol.coerceIn(0, lineText.length)
-                    val to = max(d.endCol.coerceIn(0, lineText.length), from + 1).coerceAtMost(lineText.length.coerceAtLeast(from + 1))
+                    val to = d.endCol.coerceIn(from, lineText.length)
                     val x1 = paddingLeft + textPaint.measureText(lineText, 0, from)
                     val x2 = paddingLeft + textPaint.measureText(lineText, 0, to)
                     val paint = if (d.severity == RinNativeEditor.DiagnosticSeverity.ERROR) diagnosticErrorPaint else diagnosticWarningPaint
