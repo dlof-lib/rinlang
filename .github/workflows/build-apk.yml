@@ -33,6 +33,9 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
+      - name: Verify Gradle/AGP toolchain
+        run: gradle --version
+
       - name: Grant execute permission (if wrapper is present)
         run: chmod +x ./gradlew || true
 
