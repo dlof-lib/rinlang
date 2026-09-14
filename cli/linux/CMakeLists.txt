@@ -34,6 +34,7 @@ add_executable(rin
     ${RIN_CORE_DIR}/rin_make.cpp
     ${RIN_CORE_DIR}/rin_artifact.cpp
     ${RIN_CORE_DIR}/rin_interpreter.cpp
+    ${RIN_CORE_DIR}/toolchain/rin_toolchain.cpp
     ${RIN_CORE_DIR}/binfmt/elf_format.cpp
     ${RIN_CORE_DIR}/binfmt/ar_format.cpp
     ${RIN_CORE_DIR}/binfmt/pe_format.cpp
