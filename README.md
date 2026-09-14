@@ -1,47 +1,42 @@
-# إصلاح فشل البناء: حذف ملفات GETY/WGOM المتبقية (سكربت يحذف نفسه)
+# توثيق Rin
 
-فكّوا ضغط هذا الأرشيف **في جذر مستودع rinlang-main مباشرة** (بحيث يندمج مجلد
-`scripts/` مع مجلدات مشروعكم الموجودة أصلاً: `app/`, `firebase/`, ...).
+## Rin 1.0.0
 
-## التنفيذ
+الهيكل الرسمي لتوثيق لغة وبيئة تشغيل Rin 1.x. جميع صفحات "اللغة" أدناه مترابطة
+بروابط "انظر أيضاً" في نهاية كل صفحة — ابدأ من
+[`language-reference.md`](./language-reference.md) للاطّلاع على خريطة الترابط
+الكاملة بين كل المفاهيم.
 
-```bash
-chmod +x scripts/fix-ci/remove-leftover-files.sh
-./scripts/fix-ci/remove-leftover-files.sh
-git push
-```
+### اللغة
+- [`syntax.md`](./syntax.md) — القواعد النحوية العامة (فواصل، كتل، عوامل).
+- [`language-reference.md`](./language-reference.md) — المرجع الشامل وخريطة ترابط كل المفاهيم.
+- [`variables.md`](./variables.md) — `let`/`text`، مصفوفات، قواميس، نطاق.
+- [`control-flow.md`](./control-flow.md) — **الشروط** (`if`/`else`/`when`/`otherwise`/`plus.condition`/`match`/`case`)، الحلقات (`while`/`for`)، و`goal`/`achieve`.
+- [`functions.md`](./functions.md) — `fun`/`return`، التكرار الذاتي (recursion).
+- [`enums.md`](./enums.md) — `enum`: قوائم اختيار (options) مغلقة.
+- [`objects.md`](./objects.md) — `@Object`، `.object("id")`، القاموس الحرفي.
+- [`containers.md`](./containers.md) — `@container`، أقسام، ترجمات، مستندات NoSQL.
+- [`cross-file-containers.md`](./cross-file-containers.md) — `use ... from` (English) — calling a container/UI element from another file.
+- [`boat.md`](./boat.md)
 
-السكربت يقوم بكل شيء تلقائياً بترتيب واحد:
-1. يحذف الملفات السبعة المتبقية من GETY/WGOM (`git rm` إن كان المجلد مستودع Git، وإلا `rm` عادي).
-2. يعمل commit بحذفها.
-3. **يحذف نفسه** (الملف `remove-leftover-files.sh`) من القرص ومن Git في commit منفصل، حتى لا يبقى أثر له في المشروع بعد أن أدّى غرضه.
-4. يطلب منكم تنفيذ `git push` يدوياً في النهاية (لم يُنفَّذ تلقائياً تحسباً لأي مراجعة أخيرة منكم قبل الرفع).
+### بيئة التشغيل
+- [`standard-library.md`](./standard-library.md) — دوال جاهزة (`lib/*.og.rin`).
+- [`errors.md`](./errors.md) و[`ERROR_SYSTEM.md`](./ERROR_SYSTEM.md) — نظام التشخيص.
+- [`storage.md`](./storage.md) — تخزين دائم.
+- [`http.md`](./http.md) — شبكات.
 
-بعدها سيختفي مجلد `scripts/fix-ci/` بالكامل من مشروعكم تلقائياً.
+### التنفيذ
+- [`pipelines.md`](./pipelines.md) — عامل الأنابيب `|>`.
+- [`RECKON.md`](./RECKON.md) — `reckon`: مفهوم حسابي بسطرين، مبني فوق `|>`.
+- [`MAKE_UNIT.md`](./MAKE_UNIT.md) — `@make.(name)`، سياسة القدرات (`use`/`need`/`allow`/`deny`/`strict`).
+- [`rinflow.md`](./rinflow.md) — طبقة تنفيذ التدفّق المهيكل.
 
-## الملفات المحذوفة
-```
-app/src/main/java/com/dlof/rinlang/auth/PairingRepository.kt
-app/src/main/java/com/dlof/rinlang/auth/DevicePairingActivity.kt
-app/src/main/res/layout/activity_device_pairing.xml
-app/src/main/res/drawable/bg_pairing_qr_frame.xml
-app/src/main/res/layout/activity_account.xml
-app/src/main/res/values/strings_wgom.xml
-app/src/main/res/drawable/bg_button_outline.xml
-```
+### الواجهة
+- [`banner.md`](./banner.md)
+- [`android.md`](./android.md)
 
-## بديل: خطوة CI مؤقتة فقط (بلا حذف فعلي من المستودع)
-موجود في `.github/workflow-snippet/cleanup-step.yml` إن كنتم تفضّلون حل الـCI المؤقت
-بدل حذف الملفات من المستودع نفسه — لكن لا داعي له إن استخدمتم السكربت أعلاه.
+### API
+- [`api.md`](./api.md)
 
-### Simple Container + Mask Style
-Rin now provides a compact runtime style for common container/mask access:
-
-```rin
-app = container("App");
-print container("App", "title");
-container("App", "title", "Hello");
-root = mask("app");
-```
-
-The full guide is in `docs/simple-style.md`.
+### البداية
+- [`getting-started.md`](./getting-started.md)
