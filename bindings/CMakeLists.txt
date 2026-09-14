@@ -27,7 +27,13 @@ add_library(rin SHARED
     # rin_interpreter.cpp أدناه لكل @make/@container، فيفشل الربط (undefined reference) بدونه
     # (نفس الخلل الذي كان في cli/linux/CMakeLists.txt وتم إصلاحه هناك).
     ${RIN_CPP_DIR}/rin_make.cpp
+    ${RIN_CPP_DIR}/rin_artifact.cpp
     ${RIN_CPP_DIR}/rin_interpreter.cpp
+    ${RIN_CPP_DIR}/binfmt/elf_format.cpp
+    ${RIN_CPP_DIR}/binfmt/ar_format.cpp
+    ${RIN_CPP_DIR}/binfmt/pe_format.cpp
+    ${RIN_CPP_DIR}/binfmt/macho_format.cpp
+    ${RIN_CPP_DIR}/binfmt/coff_obj.cpp
     # loader_ui/: يُضمَّن مباشرة من rin_interpreter.h (loaderui::LoadSession في @import) — ليس
     # اختيارياً على مستوى الربط رغم أنه معطَّل افتراضياً على مستوى السلوك (sink = nullptr).
     ${RIN_CPP_DIR}/loader_ui/library_loader_ui.cpp
