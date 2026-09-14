@@ -1,4 +1,4 @@
-name: Build Signed Release APK (Rin Lang)
+name: Build Signed Release APK (Rin Lang - Auto Signing)
 
 # نسخة احترافية من بناء الـ APK: تُنتج ملف release *موقَّعاً* رقمياً (لا debug)، وتُولِّد أسرار
 # التوقيع (keystore + كلمتا مرور) بنفسها تلقائياً — لا حاجة لإضافة أي GitHub Secret يدوياً مسبقاً.
@@ -65,7 +65,10 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: 9.5.1
+          gradle-version: 8.13
+
+      - name: Verify Gradle/AGP toolchain
+        run: gradle --version
 
       - name: Grant execute permission (if wrapper is present)
         run: chmod +x ./gradlew || true
