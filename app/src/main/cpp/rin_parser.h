@@ -82,6 +82,7 @@ private:
     StmtPtr whenStatement(); // 'when' (condition) thenBranch ['otherwise' elseBranch]  -> صياغة إنجليزية مبسّطة (sugar) لِـ IfStmt، مطابقة تماماً لـ if/else من ناحية الدلالة
     StmtPtr whileStatement();
     StmtPtr forStatement(); // for (init; condition; increment) body  -> حلقة for على طراز C
+                             // أو for (let NAME in iterable) body -> ForInStmt (انظر rin_ast.h)
     StmtPtr plusConditionStatement(); // plus.condition(cond) { .. } / { .. } -> شرط ثلاثي عام
     StmtPtr returnStatement();
     StmtPtr breakStatement();
