@@ -1,0 +1,563 @@
+// ============================================================================
+//  lib/archivekit.og.rin — إنشاء ملفات أرشيف وضغط حقيقية بلغة Rin خالصة
+//  استيراد:
+//    @import "lib/archivekit.og.rin";
+//    @import "lib/archivekit.og.rin" as arc;
+//
+//  تبني هذه المكتبة الصيغ الثنائية الخام بنفسها (رؤوس + محاذاة + مجاميع تحقّق)
+//  فوق natives الأساسية الموجودة فعلاً في المحرّك: crc32/zlibDeflateRaw/
+//  zlibInflateRaw/chr/ord/substr/readFile/writeFile — بلا أي تعديل على C++،
+//  بنفس روح lib/rinzip.og.rin (والتي تُستخدَم هنا مباشرة لصيغة .zip).
+//
+//  الصيغ المدعومة بضغط/تحزيم حقيقي 100% (تُفتح بأي أداة قياسية: tar, gzip,
+//  ar, cpio, unzip, 7-Zip...):
+//      .zip   — عبر lib/rinzip.og.rin (Store/Deflate حقيقي)
+//      .tar   — تحزيم USTAR خام (بلا ضغط، هذا طبيعة TAR نفسه)
+//      .gz    — ضغط GZIP حقيقي (DEFLATE + رأس/تذييل GZIP + CRC-32)
+//      .tar.gz / .tgz — TAR ثم GZIP فوقه (نفس ما يفعله "tar czf")
+//      .ar    — أرشيف Unix ar الكلاسيكي (بلا ضغط)
+//      .cpio  — صيغة newc (SVR4) الحديثة (بلا ضغط)
+//
+//  صيغ تحتاج خوارزميات ضغط غير متوفرة كـ native في هذا المحرّك (لا توجد إلا
+//  DEFLATE عبر zlib)؛ دوالها هنا تُعيد بوضوح {ok:false, error:"..."} بدل
+//  إنتاج ملف تالف يُوهم بالنجاح: .bz2 (BZIP2) .xz (LZMA2) .zst (Zstandard)
+//  .7z (LZMA) .rar (خوارزمية RAR مملوكة، لا مُرمِّز مفتوح أصلاً) .cab
+//  (MSZIP/LZX) .lzh/.lha (متعدد خوارزميات LZSS الخاصة بـ LHA) .z (LZW).
+//  راجع archFormatSupport() لجدول كامل وسبب كل حالة.
+//
+//  مثال سريع:
+//    let files = [ arcFile("hello.txt", "أهلاً من أرشيف Rin!"),
+//                  arcFile("data/notes.txt", "سطر أول\nسطر ثانٍ") ];
+//    print arcTarSave(files, "out.tar");        // {ok:true, path:"out.tar", ...}
+//    print arcGzipSaveFile("hello.txt", "أهلاً!"); // ضغط ملف مفرد إلى .gz
+//    print arcTarGzSave(files, "out.tar.gz");   // .tar.gz كامل بضغط حقيقي
+//    print arcArSave(files, "out.ar");          // أرشيف Unix ar
+//    print arcCpioSave(files, "out.cpio");      // أرشيف cpio (newc)
+// ============================================================================
+
+// ---- 0) أدوات مشتركة: أعداد ثنائية/عشرية/ثمانية/سداسية عشرية ثابتة الطول ----
+
+// يُرمّز n في القاعدة base كنص أرقام بلا صفر بادئ ("0" إن كان n صفراً)
+fun arcDigits(n, base) {
+    if (n == 0) { return "0"; }
+    let alphabet = "0123456789abcdef";
+    let result = "";
+    let x = n;
+    while (x > 0) {
+        let d = x % base;
+        result = substr(alphabet, d, 1) + result;
+        x = floor(x / base);
+    }
+    return result;
+}
+
+// يُكمِل s بأصفار من اليسار حتى الطول width (لا يقصّ إن كان أطول أصلاً)
+fun arcZeroPad(s, width) {
+    let r = s;
+    while (len(r) < width) { r = "0" + r; }
+    return r;
+}
+
+// يُكمِل s بمسافات من اليمين حتى الطول width (محاذاة يسار، شائع في رؤوس ar/cpio)
+fun arcSpacePadRight(s, width) {
+    let r = s;
+    while (len(r) < width) { r = r + " "; }
+    return r;
+}
+
+// نص n العشري (base 10) مُكمَّل بأصفار من اليسار لعرض width — لرؤوس TAR الثمانية
+fun arcOctalField(n, width) {
+    return arcZeroPad(arcDigits(n, 8), width);
+}
+
+// نص n السداسي عشري (حروف صغيرة) مُكمَّل بأصفار من اليسار لعرض width — لرؤوس cpio
+fun arcHexField(n, width) {
+    return arcZeroPad(arcDigits(n, 16), width);
+}
+
+// n مُكرَّراً كمحرف ch عدد count مرة (نص خام، لا علاقة له بترميز اللغة نفسها)
+fun arcRepeatChar(ch, count) {
+    let r = "";
+    let i = 0;
+    while (i < count) { r = r + ch; i = i + 1; }
+    return r;
+}
+
+// n كعدد 32-بت little-endian (4 بايتات خام) — لرأس/تذييل GZIP
+fun arcLE32(n) {
+    let b0 = n % 256;
+    let b1 = floor(n / 256) % 256;
+    let b2 = floor(n / 65536) % 256;
+    let b3 = floor(n / 16777216) % 256;
+    return chr(b0) + chr(b1) + chr(b2) + chr(b3);
+}
+
+// ---- 1) مُدخَل عام (يُستخدَم لكل من TAR/AR/CPIO) -----------------------------
+// مُدخَل = { name, content, isDir }
+
+// مُدخَل ملف عادي
+fun arcFile(name, content) {
+    return { name: name, content: content, isDir: false };
+}
+
+// مُدخَل مجلد (فارغ من المحتوى)
+fun arcDir(name) {
+    return { name: name, content: "", isDir: true };
+}
+
+// ============================================================================
+//  2) .tar — صيغة USTAR القياسية (بلا ضغط؛ TAR أصلاً مجرّد تحزيم/تسلسل ملفات)
+// ============================================================================
+
+// مجموع كل بايتات s كأعداد صحيحة (crc بدائي يُستخدَم لمجموع تحقّق رأس TAR)
+fun arcByteSum(s) {
+    let sum = 0;
+    let i = 0;
+    while (i < len(s)) {
+        sum = sum + ord(charAt(s, i));
+        i = i + 1;
+    }
+    return sum;
+}
+
+// يبني كتلة رأس TAR واحدة (512 بايت بالضبط) لمُدخَل name/size/isDir معطى
+fun arcTarHeader(name, size, isDir) {
+    if (len(name) > 100) {
+        return { ok: false, error: "arcTarHeader: اسم أطول من 100 محرف غير مدعوم (بلا حقل prefix): " + name };
+    }
+    let typeflag = "0";
+    if (isDir) { typeflag = "5"; }
+
+    let nameField = name;
+    if (isDir and (len(nameField) == 0 or charAt(nameField, len(nameField) - 1) != "/")) {
+        nameField = nameField + "/";
+    }
+
+    let fName     = arcSpacePadRight(nameField, 100);   // نستخدم مسافات هنا وسنستبدلها أصفاراً أدناه
+    // اسم الملف والحقول النصية في TAR تُكمَّل فعلياً بـ NUL لا بمسافة؛ نبني عبر تكرار NUL مباشرة:
+    fName = nameField + arcRepeatChar(chr(0), 100 - len(nameField));
+
+    let fMode = arcOctalField(420, 7) + chr(0);         // 0644 مبنيّة كعدد عشري 420 = 0644 ثمانياً
+    let fUid  = arcOctalField(0, 7) + chr(0);
+    let fGid  = arcOctalField(0, 7) + chr(0);
+    let fSize = arcOctalField(size, 11) + chr(0);
+    let fMtime = arcOctalField(0, 11) + chr(0);
+    let fChksumPlaceholder = arcRepeatChar(" ", 8);      // 8 مسافات مؤقتاً لحساب المجموع
+    let fTypeflag = typeflag;
+    let fLinkname = arcRepeatChar(chr(0), 100);
+    let fMagic = "ustar" + chr(0);
+    let fVersion = "00";
+    let fUname = "root" + arcRepeatChar(chr(0), 32 - 4);
+    let fGname = "root" + arcRepeatChar(chr(0), 32 - 4);
+    let fDevmajor = arcOctalField(0, 7) + chr(0);
+    let fDevminor = arcOctalField(0, 7) + chr(0);
+    let fPrefix = arcRepeatChar(chr(0), 155);
+    let fPad = arcRepeatChar(chr(0), 12);
+
+    let preChecksum = fName + fMode + fUid + fGid + fSize + fMtime + fChksumPlaceholder
+        + fTypeflag + fLinkname + fMagic + fVersion + fUname + fGname
+        + fDevmajor + fDevminor + fPrefix + fPad;
+
+    let chk = arcByteSum(preChecksum);
+    let fChksum = arcOctalField(chk, 6) + chr(0) + " ";  // 6 أرقام ثمانية + NUL + مسافة = 8 بايت
+
+    let header = fName + fMode + fUid + fGid + fSize + fMtime + fChksum
+        + fTypeflag + fLinkname + fMagic + fVersion + fUname + fGname
+        + fDevmajor + fDevminor + fPrefix + fPad;
+
+    return { ok: true, value: header };
+}
+
+// يُكمِل s بأصفار NUL خام حتى يصبح طوله مضاعفاً لـ 512 (محاذاة كتل TAR)
+fun arcPadTo512(s) {
+    let rem = len(s) % 512;
+    if (rem == 0) { return s; }
+    return s + arcRepeatChar(chr(0), 512 - rem);
+}
+
+// يبني محتوى أرشيف .tar كامل (بايتات خام كنص) من مصفوفة entries (arcFile/arcDir).
+// يُعيد {ok:true, value:bytes} أو {ok:false, error:...} عند اسم غير صالح
+fun arcTarBuild(entries) {
+    let body = "";
+    let i = 0;
+    while (i < len(entries)) {
+        let e = entries[i];
+        let isDir = has(e, "isDir") and e["isDir"];
+        let content = "";
+        if (isDir == false) { content = e["content"]; }
+        let size = len(content);
+
+        let hdr = arcTarHeader(e["name"], size, isDir);
+        if (hdr["ok"] == false) { return hdr; }
+
+        body = body + hdr["value"];
+        if (isDir == false) {
+            body = body + arcPadTo512(content);
+        }
+        i = i + 1;
+    }
+    // نهاية الأرشيف: كتلتان فارغتان (1024 بايت صفر) حسب مواصفة TAR
+    body = body + arcRepeatChar(chr(0), 1024);
+    return { ok: true, value: body };
+}
+
+// يبني الأرشيف عبر arcTarBuild ثم يكتبه مباشرة إلى outPath على القرص
+fun arcTarSave(entries, outPath) {
+    let built = arcTarBuild(entries);
+    if (built["ok"] == false) { return built; }
+    writeFile(outPath, built["value"]);
+    return { ok: true, path: outPath, bytes: len(built["value"]), entries: len(entries) };
+}
+
+// ============================================================================
+//  3) .gz — ضغط GZIP حقيقي لمحتوى مفرد (RFC 1952: رأس + DEFLATE خام + تذييل)
+// ============================================================================
+
+// يضغط content بالكامل إلى بايتات .gz خام (بلا اسم ملف داخلي، أبسط حالة صالحة)
+fun arcGzipCompress(content) {
+    let compressed = zlibDeflateRaw(content);
+    let header = chr(31) + chr(139) + chr(8) + chr(0) + arcLE32(0) + chr(0) + chr(255);
+    let crc = crc32(content);
+    let isize = len(content) % 4294967296;
+    let footer = arcLE32(crc) + arcLE32(isize);
+    return header + compressed + footer;
+}
+
+// يضغط content ويكتبه مباشرة كملف .gz إلى outPath
+fun arcGzipSave(content, outPath) {
+    let bytes = arcGzipCompress(content);
+    writeFile(outPath, bytes);
+    let ratio = 1.0;
+    if (len(content) > 0) { ratio = len(bytes) / len(content); }
+    return { ok: true, path: outPath, bytes: len(bytes), originalBytes: len(content), ratio: ratio };
+}
+
+// يقرأ ملفاً موجوداً من القرص ثم يضغطه إلى outPath (اختصار مريح لضغط ملف قائم)
+fun arcGzipCompressFile(srcPath, outPath) {
+    if (fileExists(srcPath) == false) {
+        return { ok: false, error: "arcGzipCompressFile: الملف غير موجود: " + srcPath };
+    }
+    return arcGzipSave(readFile(srcPath), outPath);
+}
+
+// ---- فكّ ضغط .gz (للتحقّق الذاتي ولقراءة أرشيفات .gz خارجية بسيطة) ---------
+
+// يفكّ ضغط بايتات .gz خام (رأس أساسي بلا FEXTRA/FNAME/FCOMMENT) إلى {ok, value/error}
+fun arcGunzip(data) {
+    if (len(data) < 18 or ord(charAt(data, 0)) != 31 or ord(charAt(data, 1)) != 139) {
+        return { ok: false, error: "arcGunzip: ليس رأس GZIP صالحاً" };
+    }
+    let flg = ord(charAt(data, 3));
+    if (flg != 0) {
+        return { ok: false, error: "arcGunzip: أعلام GZIP إضافية (FNAME/FEXTRA/...) غير مدعومة هنا" };
+    }
+    let isize = ord(charAt(data, len(data) - 4))
+        + ord(charAt(data, len(data) - 3)) * 256
+        + ord(charAt(data, len(data) - 2)) * 65536
+        + ord(charAt(data, len(data) - 1)) * 16777216;
+    let compressed = substr(data, 10, len(data) - 10 - 8);
+    let content = zlibInflateRaw(compressed, isize);
+    if (crc32(content) != (ord(charAt(data, len(data) - 8))
+        + ord(charAt(data, len(data) - 7)) * 256
+        + ord(charAt(data, len(data) - 6)) * 65536
+        + ord(charAt(data, len(data) - 5)) * 16777216)) {
+        return { ok: false, error: "arcGunzip: فشل التحقّق CRC-32 (بيانات تالفة)" };
+    }
+    return { ok: true, value: content };
+}
+
+// ============================================================================
+//  4) .tar.gz / .tgz — TAR ثم GZIP فوقه دفعة واحدة (نفس أثر "tar czf")
+// ============================================================================
+
+fun arcTarGzSave(entries, outPath) {
+    let built = arcTarBuild(entries);
+    if (built["ok"] == false) { return built; }
+    return arcGzipSave(built["value"], outPath);
+}
+
+// ============================================================================
+//  5) .ar — أرشيف Unix ar الكلاسيكي (بلا ضغط؛ صيغة الرأس العام لملفات .a/.deb)
+// ============================================================================
+
+// رأس عنصر ar واحد (60 بايت بالضبط) — الاسم محدود بـ 16 محرفاً في هذا التطبيق
+// المبسّط (بلا جدول أسماء ممتد GNU/BSD)
+fun arcArHeader(name, size) {
+    if (len(name) > 16) {
+        return { ok: false, error: "arcArHeader: اسم أطول من 16 محرفاً غير مدعوم هنا: " + name };
+    }
+    let fName  = arcSpacePadRight(name, 16);
+    let fMtime = arcSpacePadRight("0", 12);
+    let fUid   = arcSpacePadRight("0", 6);
+    let fGid   = arcSpacePadRight("0", 6);
+    let fMode  = arcSpacePadRight(arcDigits(420, 8), 8); // 0644 عشري=420 بالقاعدة الثمانية أعلاه؛ منسوخ decimal-octal كنص فقط
+    // ملاحظة: حقل mode في ar ثماني الأساس نصّياً (كنص "100644" مثلاً)، لذا نبنيه صراحة:
+    fMode = arcSpacePadRight("100644", 8);
+    let fSize  = arcSpacePadRight(toString(size), 10);
+    let fEnd   = chr(96) + chr(10); // "`\n"
+    return { ok: true, value: fName + fMtime + fUid + fGid + fMode + fSize + fEnd };
+}
+
+// يبني محتوى أرشيف .ar كامل من مصفوفة entries (المجلدات تُتجاهَل، ar لا يدعمها)
+fun arcArBuild(entries) {
+    let body = "!<arch>\n";
+    let i = 0;
+    while (i < len(entries)) {
+        let e = entries[i];
+        let isDir = has(e, "isDir") and e["isDir"];
+        if (isDir == false) {
+            let content = e["content"];
+            let hdr = arcArHeader(e["name"], len(content));
+            if (hdr["ok"] == false) { return hdr; }
+            body = body + hdr["value"] + content;
+            if (len(content) % 2 == 1) { body = body + "\n"; } // محاذاة إلى عدد زوجي من البايتات
+        }
+        i = i + 1;
+    }
+    return { ok: true, value: body };
+}
+
+fun arcArSave(entries, outPath) {
+    let built = arcArBuild(entries);
+    if (built["ok"] == false) { return built; }
+    writeFile(outPath, built["value"]);
+    return { ok: true, path: outPath, bytes: len(built["value"]), entries: len(entries) };
+}
+
+// ============================================================================
+//  6) .cpio — صيغة "newc" (SVR4 بلا CRC) الحديثة، بلا ضغط
+// ============================================================================
+
+// يُكمِل s بأصفار NUL حتى يصبح طوله مضاعفاً لـ 4 (محاذاة cpio لكل من الرأس+الاسم والبيانات)
+fun arcPadTo4(s) {
+    let rem = len(s) % 4;
+    if (rem == 0) { return s; }
+    return s + arcRepeatChar(chr(0), 4 - rem);
+}
+
+// رأس + اسم عنصر cpio واحد (newc)، مُكمَّل بالفعل لمضاعف 4
+fun arcCpioHeader(name, size, isDir) {
+    let mode = 33188; // 0100644 ثمانياً = ملف عادي rw-r--r--
+    if (isDir) { mode = 16877; } // 0040755 ثمانياً = مجلد rwxr-xr-x
+    let nameWithNul = name + chr(0);
+    let magic = "070701";
+    let header = magic
+        + arcHexField(0, 8)              // ino
+        + arcHexField(mode, 8)           // mode
+        + arcHexField(0, 8)              // uid
+        + arcHexField(0, 8)              // gid
+        + arcHexField(1, 8)              // nlink
+        + arcHexField(0, 8)              // mtime
+        + arcHexField(size, 8)           // filesize
+        + arcHexField(0, 8)              // devmajor
+        + arcHexField(0, 8)              // devminor
+        + arcHexField(0, 8)              // rdevmajor
+        + arcHexField(0, 8)              // rdevminor
+        + arcHexField(len(nameWithNul), 8) // namesize (بما فيه NUL الفاصل)
+        + arcHexField(0, 8);             // check (0 في newc)
+    return arcPadTo4(header + nameWithNul);
+}
+
+// يبني محتوى أرشيف .cpio كامل (newc) من مصفوفة entries، بما فيها المجلدات
+fun arcCpioBuild(entries) {
+    let body = "";
+    let i = 0;
+    while (i < len(entries)) {
+        let e = entries[i];
+        let isDir = has(e, "isDir") and e["isDir"];
+        let content = "";
+        if (isDir == false) { content = e["content"]; }
+        body = body + arcCpioHeader(e["name"], len(content), isDir);
+        if (isDir == false) {
+            body = body + arcPadTo4(content);
+        }
+        i = i + 1;
+    }
+    // عنصر النهاية الإلزامي "TRAILER!!!"
+    body = body + arcCpioHeader("TRAILER!!!", 0, false);
+    // محاذاة تقليدية لمضاعف 512 بايت لكامل الأرشيف (كما تفعل أدوات cpio الحقيقية)
+    let rem = len(body) % 512;
+    if (rem != 0) { body = body + arcRepeatChar(chr(0), 512 - rem); }
+    return { ok: true, value: body };
+}
+
+fun arcCpioSave(entries, outPath) {
+    let built = arcCpioBuild(entries);
+    writeFile(outPath, built["value"]);
+    return { ok: true, path: outPath, bytes: len(built["value"]), entries: len(entries) };
+}
+
+// ============================================================================
+//  7) .bz2 / .xz / .zst — ضغط حقيقي عبر natives bz2Compress/xzCompress/zstdCompress
+// ============================================================================
+// خلافاً لـ zlibDeflateRaw (خام، يحتاج تغليف ZIP/GZIP يدوياً)، هذه الثلاثة natives تُنتج
+// مباشرة تدفّق/إطار/حاوية كاملة وصالحة بذاتها (.bz2/.xz/.zst الرسميين)، فلا حاجة لأي
+// رأس/تذييل إضافي هنا — الناتج يُكتَب للقرص كما هو ويُفتح بأي أداة قياسية (bzip2, xz, zstd,
+// 7-Zip...) مباشرة. natives هذا القسم مسجَّلة فقط عندما بُني المحرّك بأعلام RIN_HAVE_BZ2/
+// RIN_HAVE_ZSTD/RIN_HAVE_LZMA (متوفرة في بنية سطح المكتب/لينكس الحالية؛ انظر تعليق natives
+// نفسها في rin_interpreter.cpp لسبب عدم تفعيلها افتراضياً على Android/WASM). إن استُدعيت
+// هذه الدوال على محرّك بُني بلا هذه الأعلام، ستفشل باستدعاء دالة native غير مسجَّلة —
+// استخدم archFormatSupportTable() لمعرفة ما هو مُفعَّل فعلياً في نسختك الحالية من المحرّك.
+
+// يضغط content بالكامل إلى بايتات .bz2 خام جاهزة للكتابة مباشرة
+fun arcBzip2Compress(content) {
+    return bz2Compress(content);
+}
+
+// يضغط content ويكتبه مباشرة كملف .bz2 إلى outPath
+fun arcBzip2Save(content, outPath) {
+    let bytes = arcBzip2Compress(content);
+    writeFile(outPath, bytes);
+    let ratio = 1.0;
+    if (len(content) > 0) { ratio = len(bytes) / len(content); }
+    return { ok: true, path: outPath, bytes: len(bytes), originalBytes: len(content), ratio: ratio };
+}
+
+// يفكّ ضغط بايتات .bz2 خام (يعرف الحجم الأصلي مسبقاً originalSize، إذ لا يُخزَّن داخل bz2 نفسه)
+fun arcBunzip2(data, originalSize) {
+    return { ok: true, value: bz2Decompress(data, originalSize) };
+}
+
+// TAR ثم BZIP2 فوقه دفعة واحدة (نفس أثر "tar cjf")
+fun arcTarBz2Save(entries, outPath) {
+    let built = arcTarBuild(entries);
+    if (built["ok"] == false) { return built; }
+    return arcBzip2Save(built["value"], outPath);
+}
+
+// يضغط content بالكامل إلى بايتات .xz خام جاهزة للكتابة مباشرة
+fun arcXzCompress(content) {
+    return xzCompress(content);
+}
+
+fun arcXzSave(content, outPath) {
+    let bytes = arcXzCompress(content);
+    writeFile(outPath, bytes);
+    let ratio = 1.0;
+    if (len(content) > 0) { ratio = len(bytes) / len(content); }
+    return { ok: true, path: outPath, bytes: len(bytes), originalBytes: len(content), ratio: ratio };
+}
+
+fun arcUnxz(data, originalSize) {
+    return { ok: true, value: xzDecompress(data, originalSize) };
+}
+
+// TAR ثم XZ فوقه دفعة واحدة (نفس أثر "tar cJf")
+fun arcTarXzSave(entries, outPath) {
+    let built = arcTarBuild(entries);
+    if (built["ok"] == false) { return built; }
+    return arcXzSave(built["value"], outPath);
+}
+
+// يضغط content بالكامل إلى بايتات .zst خام جاهزة للكتابة مباشرة
+fun arcZstdCompress(content) {
+    return zstdCompress(content);
+}
+
+fun arcZstdSave(content, outPath) {
+    let bytes = arcZstdCompress(content);
+    writeFile(outPath, bytes);
+    let ratio = 1.0;
+    if (len(content) > 0) { ratio = len(bytes) / len(content); }
+    return { ok: true, path: outPath, bytes: len(bytes), originalBytes: len(content), ratio: ratio };
+}
+
+fun arcUnzstd(data, originalSize) {
+    return { ok: true, value: zstdDecompress(data, originalSize) };
+}
+
+// TAR ثم Zstandard فوقه دفعة واحدة (نفس أثر "tar --zstd -cf")
+fun arcTarZstSave(entries, outPath) {
+    let built = arcTarBuild(entries);
+    if (built["ok"] == false) { return built; }
+    return arcZstdSave(built["value"], outPath);
+}
+
+// ============================================================================
+//  8) صيغ ما تزال غير مدعومة (تحتاج خوارزميات/حاويات أعقد من مجرد stream ضغط واحد)
+// ============================================================================
+// هذه تحتاج فوق خوارزمية الضغط نفسها حاوية ملف خاصة معقّدة (فهرس مركزي مشفَّر
+// اختيارياً في 7z، جدول أسماء طويلة في RAR5، بنية CFHEADER/CFFOLDER متعددة الأجزاء
+// في CAB) — أو، في حالة RAR، لا مُرمِّز مفتوح المصدر أصلاً يمكن الاستناد إليه.
+
+fun arc7zBuild(entries) {
+    return { ok: false, error: ".7z يحتاج مُرمِّز LZMA وحاوية 7z معقّدة (رؤوس مشفَّرة اختيارياً)، غير متوفرة كـ native." };
+}
+
+fun arcRarBuild(entries) {
+    return { ok: false, error: ".rar خوارزمية RAR مملوكة (WinRAR/RARLAB)؛ لا يوجد مُرمِّز مفتوح المصدر أصلاً، فضلاً عن native هنا." };
+}
+
+fun arcCabBuild(entries) {
+    return { ok: false, error: ".cab (Microsoft Cabinet) يحتاج ضغط MSZIP/LZX ورأس CFHEADER/CFFOLDER/CFDATA متخصّص، غير متوفر كـ native." };
+}
+
+fun arcLhaBuild(entries) {
+    return { ok: false, error: ".lzh/.lha يحتاج خوارزميات LZSS الخاصة بـ LHA (lh5/lh6/lh7)، غير متوفرة كـ native." };
+}
+
+fun arcCompressLzw(content) {
+    return { ok: false, error: ".Z (Unix compress) يحتاج مُرمِّز LZW متغيّر العرض، غير متوفر كـ native حالياً." };
+}
+
+// ============================================================================
+//  8) جدول دعم شامل + معلومات المكتبة
+// ============================================================================
+
+// جدول كامل بكل امتداد مطلوب: هل مدعوم فعلياً بضغط/تحزيم حقيقي، والدالة المسؤولة
+fun archFormatSupport() {
+    return [
+        { ext: ".zip",           supported: true,  via: "lib/rinzip.og.rin (rzSaveArchive)" },
+        { ext: ".tar",           supported: true,  via: "arcTarSave" },
+        { ext: ".tar.gz/.tgz",   supported: true,  via: "arcTarGzSave" },
+        { ext: ".tar.bz2/.tbz2", supported: true,  via: "arcTarBz2Save (يحتاج بناء المحرّك بعلم RIN_HAVE_BZ2)" },
+        { ext: ".tar.xz/.txz",   supported: true,  via: "arcTarXzSave (يحتاج بناء المحرّك بعلم RIN_HAVE_LZMA)" },
+        { ext: ".tar.zst",       supported: true,  via: "arcTarZstSave (يحتاج بناء المحرّك بعلم RIN_HAVE_ZSTD)" },
+        { ext: ".gz",            supported: true,  via: "arcGzipSave" },
+        { ext: ".bz2",           supported: true,  via: "arcBzip2Save (يحتاج بناء المحرّك بعلم RIN_HAVE_BZ2)" },
+        { ext: ".xz",            supported: true,  via: "arcXzSave (يحتاج بناء المحرّك بعلم RIN_HAVE_LZMA)" },
+        { ext: ".zst",           supported: true,  via: "arcZstdSave (يحتاج بناء المحرّك بعلم RIN_HAVE_ZSTD)" },
+        { ext: ".7z",            supported: false, via: "arc7zBuild — يحتاج native LZMA + حاوية 7z" },
+        { ext: ".rar",           supported: false, via: "arcRarBuild — خوارزمية مملوكة، لا مُرمِّز مفتوح" },
+        { ext: ".cab",           supported: false, via: "arcCabBuild — يحتاج native MSZIP/LZX" },
+        { ext: ".ar",            supported: true,  via: "arcArSave" },
+        { ext: ".cpio",          supported: true,  via: "arcCpioSave" },
+        { ext: ".lzh/.lha",      supported: false, via: "arcLhaBuild — يحتاج خوارزميات LZSS الخاصة بـ LHA" },
+        { ext: ".z",             supported: false, via: "arcCompressLzw — يحتاج مُرمِّز LZW" }
+    ];
+}
+
+// نص جدول مقروء جاهز للطباعة مباشرة عبر print
+fun archFormatSupportTable() {
+    let rows = archFormatSupport();
+    let lines = [];
+    push(lines, "الامتداد            الحالة       عبر");
+    let i = 0;
+    while (i < len(rows)) {
+        let r = rows[i];
+        let status = "❌ غير مدعوم";
+        if (r["supported"]) { status = "✅ مدعوم"; }
+        push(lines, arcSpacePadRight(r["ext"], 18) + arcSpacePadRight(status, 13) + r["via"]);
+        i = i + 1;
+    }
+    return join(lines, "\n");
+}
+
+fun archInfo() {
+    return {
+        name: "archivekit",
+        version: "1.0.0",
+        description: "إنشاء أرشيفات/ضغط حقيقية بلغة Rin خالصة: zip (عبر rinzip)، tar، tar.gz/tgz، tar.bz2/xz/zst، gz/bz2/xz/zst، ar، cpio — مع جدول واضح لما لا يزال يحتاج حاوية أعقد (7z/rar/cab/lha/Z)",
+        exports: [
+            "arcFile", "arcDir",
+            "arcTarBuild", "arcTarSave",
+            "arcGzipCompress", "arcGzipSave", "arcGzipCompressFile", "arcGunzip", "arcTarGzSave",
+            "arcBzip2Compress", "arcBzip2Save", "arcBunzip2", "arcTarBz2Save",
+            "arcXzCompress", "arcXzSave", "arcUnxz", "arcTarXzSave",
+            "arcZstdCompress", "arcZstdSave", "arcUnzstd", "arcTarZstSave",
+            "arcArBuild", "arcArSave",
+            "arcCpioBuild", "arcCpioSave",
+            "archFormatSupport", "archFormatSupportTable", "archInfo"
+        ]
+    };
+}
