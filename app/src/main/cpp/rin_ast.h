@@ -136,6 +136,18 @@ struct LambdaExpr : Expr {
     std::shared_ptr<struct FunctionStmt> decl;
 };
 
+// callee_expr(args...) where callee_expr is NOT a plain name -> calling the function VALUE an
+// arbitrary expression evaluates to, e.g. `arr[0]()`, `(fun(x) { return x; })(1)`, `getFn()()`.
+// A plain `name(...)` callee still always becomes the existing CallExpr (string callee, needed so
+// natives/namespace calls and classes keep resolving exactly as before -- see Parser::call() in
+// rin_parser.cpp); this node only exists for the case that used to be a hard parse error ("only
+// functions can be called"), so it is purely additive and never changes how any previously-valid
+// program parses.
+struct CallValueExpr : Expr {
+    ExprPtr callee;
+    std::vector<ExprPtr> args;
+};
+
 // ---- Statements ----
 struct Stmt {
     virtual ~Stmt() = default;
@@ -268,6 +280,18 @@ struct ForStmt : Stmt {
     StmtPtr initializer; // may be null
     ExprPtr condition;   // may be null -> يُعامل كـ true
     ExprPtr increment;   // may be null
+    StmtPtr body;
+};
+// for (let NAME in iterable) { body } -> حلقة تكرار حقيقية (لم تكن موجودة سابقاً؛ الوسيلة الوحيدة
+// للتكرار على مصفوفة/قاموس كانت for القياسية على طراز C مع فهرس عددي يدوي). iterable: مصفوفة (كل
+// عنصر بدوره)، أو قاموس (كل مفتاح بدوره، بنفس ترتيب `keys(map)` الموجودة أصلاً)، أو نص (كل حرف
+// بدوره كنص من محرف واحد). كل تكرار يحصل على بيئة/نطاق (Environment) خاصة به مع NAME معرَّفة فيها
+// من الصفر (نفس فكرة إصلاح per-iteration closures في ForStmt العادية -- انظر
+// Interpreter::execute(ForInStmt) في rin_interpreter.cpp)، فأي closure تُنشأ داخل الجسم تلتقط قيمة
+// تلك التكرارة تحديداً بشكل صحيح. break/continue يعملان بداخلها بنفس دلالة for/while العادية.
+struct ForInStmt : Stmt {
+    std::string varName;
+    ExprPtr iterable;
     StmtPtr body;
 };
 // plus.condition (condition) { trueBranch } / { falseBranch } -> "شرط ثلاثي" عام على مستوى
