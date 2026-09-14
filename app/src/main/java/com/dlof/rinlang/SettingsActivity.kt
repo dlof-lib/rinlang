@@ -16,12 +16,7 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var seekFontSize: SeekBar
     private lateinit var txtFontSizeLabel: TextView
     private lateinit var switchLineNumbers: Switch
-    private lateinit var rowLangAr: View
-    private lateinit var rowLangEn: View
-    private lateinit var rowLangEs: View
-    private lateinit var checkLangAr: ImageView
-    private lateinit var checkLangEn: ImageView
-    private lateinit var checkLangEs: ImageView
+
 
     private val switches = mutableMapOf<Int, Switch>()
 
@@ -35,12 +30,6 @@ class SettingsActivity : AppCompatActivity() {
         seekFontSize = findViewById(R.id.seekFontSize)
         txtFontSizeLabel = findViewById(R.id.txtFontSizeLabel)
         switchLineNumbers = findViewById(R.id.switchLineNumbers)
-        rowLangAr = findViewById(R.id.rowLangAr)
-        rowLangEn = findViewById(R.id.rowLangEn)
-        rowLangEs = findViewById(R.id.rowLangEs)
-        checkLangAr = findViewById(R.id.checkLangAr)
-        checkLangEn = findViewById(R.id.checkLangEn)
-        checkLangEs = findViewById(R.id.checkLangEs)
 
         seekFontSize.max = 12
         seekFontSize.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
@@ -74,9 +63,6 @@ class SettingsActivity : AppCompatActivity() {
         findViewById<View>(R.id.btnTab4).setOnClickListener { selectTabSize(4) }
         findViewById<View>(R.id.btnTab8).setOnClickListener { selectTabSize(8) }
 
-        rowLangAr.setOnClickListener { selectLanguage(LocaleHelper.LANG_ARABIC) }
-        rowLangEn.setOnClickListener { selectLanguage(LocaleHelper.LANG_ENGLISH) }
-        rowLangEs.setOnClickListener { selectLanguage(LocaleHelper.LANG_SPANISH) }
 
         findViewById<View>(R.id.btnThemeSystem).setOnClickListener { setTheme(ThemeManager.SYSTEM) }
         findViewById<View>(R.id.btnThemeDark).setOnClickListener { setTheme(ThemeManager.DARK) }
@@ -95,6 +81,7 @@ class SettingsActivity : AppCompatActivity() {
             applyCurrentValuesToUi()
             Toast.makeText(this, R.string.settings_reset_toast, Toast.LENGTH_SHORT).show()
         }
+        findViewById<View>(R.id.btnOpenLanguagePicker).setOnClickListener { startActivity(android.content.Intent(this, LanguageActivity::class.java)) }
         applyCurrentValuesToUi()
     }
 
@@ -130,10 +117,6 @@ class SettingsActivity : AppCompatActivity() {
         findViewById<TextView>(R.id.btnTab8).setBackgroundResource(if (selected == 8) R.drawable.bg_lang_option_selected else R.drawable.bg_list_card)
     }
 
-    private fun selectLanguage(languageTag: String) {
-        if (LocaleHelper.getCurrentAppLocaleTag() == languageTag) return
-        LocaleHelper.setAppLocale(languageTag)
-    }
 
     private fun applyCurrentValuesToUi() {
         val fontSize = AppSettings.getEditorFontSizeSp(this)
@@ -158,16 +141,6 @@ class SettingsActivity : AppCompatActivity() {
         updateTabButtons()
         updateLayoutButtons()
         updateProjectSortButtons()
-        val current = LocaleHelper.getCurrentAppLocaleTag() ?: LocaleHelper.LANG_ARABIC
-        highlightSelectedLanguage(current)
     }
 
-    private fun highlightSelectedLanguage(tag: String) {
-        rowLangAr.setBackgroundResource(if (tag == LocaleHelper.LANG_ARABIC) R.drawable.bg_lang_option_selected else R.drawable.bg_list_card)
-        rowLangEn.setBackgroundResource(if (tag == LocaleHelper.LANG_ENGLISH) R.drawable.bg_lang_option_selected else R.drawable.bg_list_card)
-        rowLangEs.setBackgroundResource(if (tag == LocaleHelper.LANG_SPANISH) R.drawable.bg_lang_option_selected else R.drawable.bg_list_card)
-        checkLangAr.visibility = if (tag == LocaleHelper.LANG_ARABIC) View.VISIBLE else View.INVISIBLE
-        checkLangEn.visibility = if (tag == LocaleHelper.LANG_ENGLISH) View.VISIBLE else View.INVISIBLE
-        checkLangEs.visibility = if (tag == LocaleHelper.LANG_SPANISH) View.VISIBLE else View.INVISIBLE
-    }
 }
