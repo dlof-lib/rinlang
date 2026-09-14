@@ -1,0 +1,15 @@
+{
+  "name": "Rin — لغة برمجة",
+  "short_name": "Rin",
+  "description": "Rin لغة برمجة كاملة بحاويات @container وقاعدة بيانات NoSQL وأنابيب |> مدمجة.",
+  "start_url": "index.html",
+  "display": "standalone",
+  "background_color": "#12101C",
+  "theme_color": "#12101C",
+  "lang": "ar",
+  "dir": "rtl",
+  "icons": [
+    { "src": "brand/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "brand/icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}
