@@ -3225,6 +3225,32 @@ void Interpreter::registerNatives() {
         return Value::boolean_(containers.count(asString(a[0], "hasContainer", line)) > 0);
     };
 
+    // container(name) — أسلوب كتابة بسيط للوصول إلى حاوية موجودة.
+    // container(name, field) — قراءة حقل.
+    // container(name, field, value) — كتابة حقل.
+    // يعيد الاستدعاء الأول كائن وصف صغيراً حتى يصبح من السهل تمريره/طباعته دون API طويل.
+    natives["container"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgsRange("container", a, 1, 3, line);
+        std::string name = asString(a[0], "container", line);
+        if (!containers.count(name)) return Value::nil();
+        if (a.size() == 1) {
+            auto m = std::make_shared<MapData>();
+            m->push_back({Value::string("name"), Value::string(name)});
+            auto k = containerKinds.find(name);
+            m->push_back({Value::string("kind"), Value::string(k != containerKinds.end() ? containerTagName(k->second) : "container")});
+            return Value::makeMap(m);
+        }
+        std::string key = asString(a[1], "container", line);
+        if (a.size() == 2) {
+            auto env = containers.at(name);
+            auto it = env->values.find(key);
+            return it == env->values.end() ? Value::nil() : it->second;
+        }
+        auto env = containers.at(name);
+        env->values[key] = a[2];
+        return a[2];
+    };
+
     // kindOf(name) -> نص نوع الحاوية: النص الحرفي الذي مُرِّر لِـ spawn() إن أُنشئت به، وإلا الوسم
     // الرسمي الموحَّد (نفس containerTagName المستخدم في الحفظ/التسلسل، مثال "container.table").
     // nil إن لم توجد حاوية بهذا الاسم إطلاقاً.
@@ -3266,6 +3292,23 @@ void Interpreter::registerNatives() {
         std::string mask = asString(a[0], "maskExists", line);
         return Value::boolean_(!mask.empty() &&
             (containerMasks.count(mask) || groupMasks.count(mask) || volumeMasks.count(mask)));
+    };
+
+    // mask(name) — اختصار بسيط للوصول إلى هوية Mask دون استدعاء maskInfo/maskTarget يدوياً.
+    // يعيد {mask,name,kind} أو nil، ويمكن تمريره مباشرةً داخل التعبيرات.
+    natives["mask"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("mask", a, 1, line);
+        std::string name = asString(a[0], "mask", line);
+        std::string kind, target;
+        if (auto it = containerMasks.find(name); it != containerMasks.end()) { kind = "container"; target = it->second; }
+        else if (auto it = groupMasks.find(name); it != groupMasks.end()) { kind = "group"; target = it->second; }
+        else if (auto it = volumeMasks.find(name); it != volumeMasks.end()) { kind = "volume"; target = it->second; }
+        else return Value::nil();
+        auto m = std::make_shared<MapData>();
+        m->push_back({Value::string("mask"), Value::string(name)});
+        m->push_back({Value::string("name"), Value::string(target)});
+        m->push_back({Value::string("kind"), Value::string(kind)});
+        return Value::makeMap(m);
     };
 
     // maskTarget(mask) -> الاسم/المفتاح المرتبط بالقناع.
