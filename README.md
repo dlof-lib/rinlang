@@ -33,3 +33,15 @@ app/src/main/res/drawable/bg_button_outline.xml
 ## بديل: خطوة CI مؤقتة فقط (بلا حذف فعلي من المستودع)
 موجود في `.github/workflow-snippet/cleanup-step.yml` إن كنتم تفضّلون حل الـCI المؤقت
 بدل حذف الملفات من المستودع نفسه — لكن لا داعي له إن استخدمتم السكربت أعلاه.
+
+### Simple Container + Mask Style
+Rin now provides a compact runtime style for common container/mask access:
+
+```rin
+app = container("App");
+print container("App", "title");
+container("App", "title", "Hello");
+root = mask("app");
+```
+
+The full guide is in `docs/simple-style.md`.
