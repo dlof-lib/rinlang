@@ -21,6 +21,11 @@ add_library(
         rin_make.cpp
         rin_artifact.cpp
         rin_interpreter.cpp
+        binfmt/elf_format.cpp
+        binfmt/ar_format.cpp
+        binfmt/pe_format.cpp
+        binfmt/macho_format.cpp
+        binfmt/coff_obj.cpp
         # loader_ui/: Library Loader UI — اختياري تماماً وغير مفعَّل افتراضياً من rin_interpreter.cpp
         # (انظر setImportUISink/setImportUIMode في rin_interpreter.h)، مستقلة كلياً عن باقي المحرّك.
         loader_ui/library_loader_ui.cpp
@@ -77,6 +82,11 @@ add_executable(
         rin_make.cpp
         rin_artifact.cpp
         rin_interpreter.cpp
+        binfmt/elf_format.cpp
+        binfmt/ar_format.cpp
+        binfmt/pe_format.cpp
+        binfmt/macho_format.cpp
+        binfmt/coff_obj.cpp
         loader_ui/library_loader_ui.cpp
         rin_http.cpp
         diagnostics/diagnostic.cpp
@@ -120,6 +130,11 @@ add_executable(
         rin_make.cpp
         rin_artifact.cpp
         rin_interpreter.cpp
+        binfmt/elf_format.cpp
+        binfmt/ar_format.cpp
+        binfmt/pe_format.cpp
+        binfmt/macho_format.cpp
+        binfmt/coff_obj.cpp
         loader_ui/library_loader_ui.cpp
         rin_http.cpp
         diagnostics/diagnostic.cpp
