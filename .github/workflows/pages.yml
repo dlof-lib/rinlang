@@ -54,6 +54,12 @@ jobs:
             app/src/main/cpp/rin_parser.cpp \
             app/src/main/cpp/rin_make.cpp \
             app/src/main/cpp/rin_interpreter.cpp \
+            app/src/main/cpp/rin_artifact.cpp \
+            app/src/main/cpp/binfmt/elf_format.cpp \
+            app/src/main/cpp/binfmt/ar_format.cpp \
+            app/src/main/cpp/binfmt/pe_format.cpp \
+            app/src/main/cpp/binfmt/macho_format.cpp \
+            app/src/main/cpp/binfmt/coff_obj.cpp \
             app/src/main/cpp/loader_ui/library_loader_ui.cpp \
             app/src/main/cpp/rin_http.cpp \
             app/src/main/cpp/diagnostics/diagnostic.cpp \
@@ -68,7 +74,7 @@ jobs:
             app/src/main/cpp/clc/sha256.cpp \
             -I app/src/main/cpp \
             -lz
-          ./loomc_native_check site.rin 420 /tmp/site_check.ppm
+          ./loomc_native_check web/site.rin 420 /tmp/site_check.ppm
           echo "Native @view/Loom check OK."
           rm -f loomc_native_check /tmp/site_check.ppm
 
@@ -99,6 +105,12 @@ jobs:
             app/src/main/cpp/rin_parser.cpp \
             app/src/main/cpp/rin_make.cpp \
             app/src/main/cpp/rin_interpreter.cpp \
+            app/src/main/cpp/rin_artifact.cpp \
+            app/src/main/cpp/binfmt/elf_format.cpp \
+            app/src/main/cpp/binfmt/ar_format.cpp \
+            app/src/main/cpp/binfmt/pe_format.cpp \
+            app/src/main/cpp/binfmt/macho_format.cpp \
+            app/src/main/cpp/binfmt/coff_obj.cpp \
             app/src/main/cpp/rin_c_api.cpp \
             app/src/main/cpp/loom/rin_loom_c_api.cpp \
             app/src/main/cpp/loader_ui/library_loader_ui.cpp \
@@ -128,7 +140,7 @@ jobs:
       - name: Assemble the Pages bundle
         run: |
           # site.rin يُنسخ كما هو حرفياً — هو المصدر الوحيد لمحتوى الصفحة (شجرة @view).
-          cp site.rin dist/site.rin
+          cp web/site.rin dist/site.rin
           # المحمّل العام (bootloader) الذي يشغّل rin.wasm ويرسم أي Fabric يُعيده.
           cp web/index.html dist/index.html
 
