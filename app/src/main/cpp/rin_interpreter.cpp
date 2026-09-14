@@ -13,6 +13,11 @@
                         // (registerNatives()'s "محرك الألوان" section).
 #include "diagnostics/diagnostic_renderer.h"
 #include "diagnostics/source_manager.h"
+#include "binfmt/elf_format.h"
+#include "binfmt/ar_format.h"
+#include "binfmt/pe_format.h"
+#include "binfmt/macho_format.h"
+#include "binfmt/coff_obj.h"
 #include <cmath>
 #include <sstream>
 #include <fstream>
@@ -29,50 +34,6 @@
 #include <unordered_map>
 #include <regex> // regexTest/regexFind/regexFindAll/regexReplace/regexSplit/regexGroups (معالجة نصوص متقدمة)
 #include <zlib.h> // zlibDeflateRaw/zlibInflateRaw (ضغط DEFLATE حقيقي متوافق مع صيغة ZIP method=8)
-
-// ---- bz2Compress/bz2Decompress/zstdCompress/... (natives .bz2/.xz/.zst اختيارية) --------------
-// خلافاً لـ zlib (الموجودة أصلاً داخل sysroot أي NDK/توزيعة، فلا حاجة لتوريدها)، مكتبات BZIP2/
-// XZ(LZMA)/Zstandard ليست جزءاً قياسياً من كل منصّة (وتحديداً غير متوفرة افتراضياً على Android
-// NDK sysroot ولا على بيئة Emscripten/WASM). لذلك natives هذا القسم مُفعَّلة فقط عندما يُعرِّف
-// نظام البناء الفعلي أحد الأعلام أدناه (انظر cli/linux/CMakeLists.txt) — على أي منصّة أخرى تبقى
-// هذه natives غير مُسجَّلة، ومحاولة استدعائها من سكربت Rin يفشل بخطأ "دالة غير معروفة" الاعتيادي،
-// تماماً كأي قدرة خاصّة بمنصّة واحدة فقط في هذا المشروع.
-//
-// RIN_HAVE_BZ2   -> يتطلّب رأس bzlib.h الحقيقي + ربط -lbz2 (حزمة libbz2-dev على دبيان/أوبنتو).
-// RIN_HAVE_ZSTD  -> لا يتطلّب zstd.h (قد لا يكون مُثبَّتاً)؛ نُصرِّح يدوياً بالتوقيعات القليلة
-//                   المطلوبة من واجهة libzstd العامة المستقرة (compress/decompress أحاديّا الطلب)
-//                   ونربط مباشرة بـ soname عبر -l:libzstd.so.1 — هذه الدوال موثّقة رسمياً بأنها
-//                   مستقرة الـ ABI عبر إصدارات المكتبة.
-// RIN_HAVE_LZMA  -> نفس فكرة RIN_HAVE_ZSTD تماماً لكن لواجهة liblzma العامة (xz-utils) عبر
-//                   -l:liblzma.so.5، بلا حاجة لرأس lzma.h.
-#if defined(RIN_HAVE_BZ2)
-#include <bzlib.h>
-#endif
-#if defined(RIN_HAVE_ZSTD)
-extern "C" {
-    size_t ZSTD_compressBound(size_t srcSize);
-    size_t ZSTD_compress(void* dst, size_t dstCapacity,
-                          const void* src, size_t srcSize, int compressionLevel);
-    size_t ZSTD_decompress(void* dst, size_t dstCapacity,
-                            const void* src, size_t srcSize);
-    unsigned ZSTD_isError(size_t code);
-}
-#endif
-#if defined(RIN_HAVE_LZMA)
-extern "C" {
-    int lzma_easy_buffer_encode(
-        uint32_t preset, int check,
-        const void* allocator,
-        const uint8_t* in, size_t in_size,
-        uint8_t* out, size_t* out_pos, size_t out_size);
-    size_t lzma_stream_buffer_bound(size_t uncompressed_size);
-    int lzma_stream_buffer_decode(
-        uint64_t* memlimit, uint32_t flags,
-        const void* allocator,
-        const uint8_t* in, size_t* in_pos, size_t in_size,
-        uint8_t* out, size_t* out_pos, size_t out_size);
-}
-#endif
 
 // ---- توافق ويندوز/POSIX لـ stat()/mkdir() ----------------------------------
 // على أندرويد NDK/لينكس/macOS: stat()/mkdir(path, mode) القياسيتان بتوقيعهما
@@ -1596,113 +1557,6 @@ void Interpreter::registerNatives() {
         }
         return Value::string(out);
     };
-#if defined(RIN_HAVE_BZ2)
-    // bz2Compress(s) -> تدفّق .bz2 كامل وصالح (يشمل رأسه/تذييله الخاصّين؛ خلافاً لـ zlibDeflateRaw
-    // ليس "خاماً" — الناتج يُكتَب مباشرة كملف .bz2 ويُفتح بأي أداة bzip2 قياسية دون أي لفّ إضافي).
-    natives["bz2Compress"] = [](std::vector<Value>& a, int line) -> Value {
-        expectArgs("bz2Compress", a, 1, line);
-        std::string input = asString(a[0], "bz2Compress", line);
-        unsigned int destLen = static_cast<unsigned int>(input.size() + input.size() / 100 + 600);
-        std::string out; out.resize(destLen);
-        int rc = BZ2_bzBuffToBuffCompress(&out[0], &destLen,
-            const_cast<char*>(input.data()), static_cast<unsigned int>(input.size()), 9, 0, 0);
-        if (rc != BZ_OK) {
-            throw diagErr(diag::Code::E0035_RuntimeError, line, "bz2Compress: فشل ضغط BZIP2 (رمز=" + std::to_string(rc) + ")");
-        }
-        out.resize(destLen);
-        return Value::string(out);
-    };
-    // bz2Decompress(compressed, expectedSize) -> يفكّ تدفّق .bz2 كاملاً إلى expectedSize بايت بالضبط
-    natives["bz2Decompress"] = [](std::vector<Value>& a, int line) -> Value {
-        expectArgs("bz2Decompress", a, 2, line);
-        std::string input = asString(a[0], "bz2Decompress", line);
-        double expectedD = asNumber(a[1], "bz2Decompress", line);
-        if (expectedD < 0) {
-            throw diagErr(diag::Code::E0004_InvalidType, line, "bz2Decompress: الحجم المتوقّع يجب أن يكون >= 0");
-        }
-        unsigned int expected = static_cast<unsigned int>(expectedD);
-        if (expected == 0) { return Value::string(""); }
-        std::string out; out.resize(expected);
-        unsigned int outLen = expected;
-        int rc = BZ2_bzBuffToBuffDecompress(&out[0], &outLen,
-            const_cast<char*>(input.data()), static_cast<unsigned int>(input.size()), 0, 0);
-        if (rc != BZ_OK || outLen != expected) {
-            throw diagErr(diag::Code::E0035_RuntimeError, line, "bz2Decompress: فشل فكّ ضغط BZIP2 (بيانات تالفة أو الحجم المتوقّع خاطئ)");
-        }
-        return Value::string(out);
-    };
-#endif
-#if defined(RIN_HAVE_ZSTD)
-    // zstdCompress(s) -> إطار Zstandard كامل وصالح (يُكتَب مباشرة كملف .zst)
-    natives["zstdCompress"] = [](std::vector<Value>& a, int line) -> Value {
-        expectArgs("zstdCompress", a, 1, line);
-        std::string input = asString(a[0], "zstdCompress", line);
-        size_t bound = ZSTD_compressBound(input.size());
-        std::string out; out.resize(bound);
-        size_t outLen = ZSTD_compress(out.empty() ? nullptr : &out[0], bound, input.data(), input.size(), 19);
-        if (ZSTD_isError(outLen)) {
-            throw diagErr(diag::Code::E0035_RuntimeError, line, "zstdCompress: فشل ضغط Zstandard");
-        }
-        out.resize(outLen);
-        return Value::string(out);
-    };
-    // zstdDecompress(compressed, expectedSize) -> يفكّ إطار .zst كاملاً إلى expectedSize بايت بالضبط
-    natives["zstdDecompress"] = [](std::vector<Value>& a, int line) -> Value {
-        expectArgs("zstdDecompress", a, 2, line);
-        std::string input = asString(a[0], "zstdDecompress", line);
-        double expectedD = asNumber(a[1], "zstdDecompress", line);
-        if (expectedD < 0) {
-            throw diagErr(diag::Code::E0004_InvalidType, line, "zstdDecompress: الحجم المتوقّع يجب أن يكون >= 0");
-        }
-        size_t expected = static_cast<size_t>(expectedD);
-        if (expected == 0) { return Value::string(""); }
-        std::string out; out.resize(expected);
-        size_t outLen = ZSTD_decompress(&out[0], expected, input.data(), input.size());
-        if (ZSTD_isError(outLen) || outLen != expected) {
-            throw diagErr(diag::Code::E0035_RuntimeError, line, "zstdDecompress: فشل فكّ ضغط Zstandard (بيانات تالفة أو الحجم المتوقّع خاطئ)");
-        }
-        return Value::string(out);
-    };
-#endif
-#if defined(RIN_HAVE_LZMA)
-    // xzCompress(s) -> تدفّق .xz كامل وصالح (حاوية XZ الرسمية بأعلى مستوى ضغط + CRC32 داخلي)
-    natives["xzCompress"] = [](std::vector<Value>& a, int line) -> Value {
-        expectArgs("xzCompress", a, 1, line);
-        std::string input = asString(a[0], "xzCompress", line);
-        size_t bound = lzma_stream_buffer_bound(input.size());
-        std::string out; out.resize(bound);
-        size_t outPos = 0;
-        int rc = lzma_easy_buffer_encode(9 /*preset أقصى*/, 1 /*LZMA_CHECK_CRC32*/, nullptr,
-            reinterpret_cast<const uint8_t*>(input.data()), input.size(),
-            reinterpret_cast<uint8_t*>(out.empty() ? nullptr : &out[0]), &outPos, bound);
-        if (rc != 0) {
-            throw diagErr(diag::Code::E0035_RuntimeError, line, "xzCompress: فشل ضغط XZ (رمز=" + std::to_string(rc) + ")");
-        }
-        out.resize(outPos);
-        return Value::string(out);
-    };
-    // xzDecompress(compressed, expectedSize) -> يفكّ تدفّق .xz كاملاً إلى expectedSize بايت بالضبط
-    natives["xzDecompress"] = [](std::vector<Value>& a, int line) -> Value {
-        expectArgs("xzDecompress", a, 2, line);
-        std::string input = asString(a[0], "xzDecompress", line);
-        double expectedD = asNumber(a[1], "xzDecompress", line);
-        if (expectedD < 0) {
-            throw diagErr(diag::Code::E0004_InvalidType, line, "xzDecompress: الحجم المتوقّع يجب أن يكون >= 0");
-        }
-        size_t expected = static_cast<size_t>(expectedD);
-        std::string out; out.resize(expected == 0 ? 1 : expected);
-        uint64_t memlimit = UINT64_MAX;
-        size_t inPos = 0, outPos = 0;
-        int rc = lzma_stream_buffer_decode(&memlimit, 0, nullptr,
-            reinterpret_cast<const uint8_t*>(input.data()), &inPos, input.size(),
-            reinterpret_cast<uint8_t*>(&out[0]), &outPos, out.size());
-        if (rc != 0 || outPos != expected) {
-            throw diagErr(diag::Code::E0035_RuntimeError, line, "xzDecompress: فشل فكّ ضغط XZ (بيانات تالفة أو الحجم المتوقّع خاطئ)");
-        }
-        out.resize(outPos);
-        return Value::string(out);
-    };
-#endif
     // ---- CLC (Rin Compact Library Container، .rcl) — natives خام فوق مكتبة clc:: (clc/) ----
     // نفس فكرة crc32/zlibDeflateRaw أعلاه بالضبط: هذه natives رقيقة تستدعي مباشرة دوال مكتبة C++
     // مستقلة (هنا clc::) بلا أي تكرار لمنطقها. انظر clc/clc_container.h ودليل التكامل الأصلي
@@ -4361,6 +4215,82 @@ void Interpreter::registerNatives() {
                             std::to_string(e.line) + "): " + e.message);
         }
         installedNames.insert(name);
+        return Value::boolean_(true);
+    };
+
+    // ========================================================================
+    // binfmt: صيغ تنفيذية/مكتبات حقيقية (PE/ELF/Mach-O/ar/COFF) — تُبنى بايتاً-بايتاً هنا
+    // (لا اعتماد على أي مكتبة PE/ELF/Mach-O خارجية)، وتُكتب فعلياً على القرص عبر writeRealFile
+    // تماماً كأي ملف Rin آخر. راجع app/src/main/cpp/binfmt/*.h للتفاصيل الهندسية الكاملة لكل
+    // صيغة (تحقّقنا من صحة ELF/ar تنفيذياً فعلاً، ومن صحة PE/Mach-O بنيوياً عبر objdump/تحليل
+    // يدوي مطابق للمواصفة — انظر README المرفق لتفاصيل التحقق الكاملة والقيود المعروفة).
+    natives["buildExe"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgsRange("buildExe", a, 2, 3, line);
+        std::string path = asString(a[0], "buildExe", line);
+        std::string platform = asString(a[1], "buildExe", line); // "windows" | "linux" | "macos"
+        double exitCode = a.size() >= 3 ? asNumber(a[2], "buildExe", line) : 0.0;
+        uint8_t code = uint8_t(int(exitCode) & 0xFF);
+        std::string bytes;
+        if (platform == "windows") bytes = binfmt::pe::buildExecutable(uint32_t(int(exitCode)));
+        else if (platform == "linux") bytes = binfmt::elf::buildExecutable(code);
+        else if (platform == "macos") bytes = binfmt::macho::buildExecutable(code);
+        else throw diagErr(diag::Code::E0004_InvalidType, line, "buildExe: platform يجب أن تكون 'windows' أو 'linux' أو 'macos' (وصلت: '" + platform + "')");
+        writeRealFile(path, bytes, line, "buildExe");
+        return Value::boolean_(true);
+    };
+    natives["buildCom"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgsRange("buildCom", a, 1, 2, line);
+        std::string path = asString(a[0], "buildCom", line);
+        double exitCode = a.size() >= 2 ? asNumber(a[1], "buildCom", line) : 0.0;
+        writeRealFile(path, binfmt::pe::buildCom(uint8_t(int(exitCode) & 0xFF)), line, "buildCom");
+        return Value::boolean_(true);
+    };
+    natives["buildDll"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgsRange("buildDll", a, 3, 4, line);
+        std::string path = asString(a[0], "buildDll", line);
+        std::string exportName = asString(a[1], "buildDll", line);
+        double returnValue = asNumber(a[2], "buildDll", line);
+        std::string dllFileName = a.size() >= 4 ? asString(a[3], "buildDll", line) : std::filesystem::path(path).filename().string();
+        writeRealFile(path, binfmt::pe::buildDll(exportName, int32_t(returnValue), dllFileName), line, "buildDll");
+        return Value::boolean_(true);
+    };
+    natives["buildSo"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("buildSo", a, 3, line);
+        std::string path = asString(a[0], "buildSo", line);
+        std::string exportName = asString(a[1], "buildSo", line);
+        double returnValue = asNumber(a[2], "buildSo", line);
+        writeRealFile(path, binfmt::elf::buildSharedObject(exportName, int32_t(returnValue)), line, "buildSo");
+        return Value::boolean_(true);
+    };
+    natives["buildDylib"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgsRange("buildDylib", a, 3, 4, line);
+        std::string path = asString(a[0], "buildDylib", line);
+        std::string exportName = asString(a[1], "buildDylib", line);
+        double returnValue = asNumber(a[2], "buildDylib", line);
+        std::string installName = a.size() >= 4 ? asString(a[3], "buildDylib", line) : std::filesystem::path(path).filename().string();
+        writeRealFile(path, binfmt::macho::buildDylib(exportName, int32_t(returnValue), installName), line, "buildDylib");
+        return Value::boolean_(true);
+    };
+    natives["buildA"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgsRange("buildA", a, 3, 4, line);
+        std::string path = asString(a[0], "buildA", line);
+        std::string symbolName = asString(a[1], "buildA", line);
+        double returnValue = asNumber(a[2], "buildA", line);
+        std::string memberName = a.size() >= 4 ? asString(a[3], "buildA", line) : (symbolName + ".o");
+        auto obj = binfmt::elf::buildRelocatable(symbolName, int32_t(returnValue));
+        binfmt::ar::Member m{memberName, obj, {symbolName}};
+        writeRealFile(path, binfmt::ar::build({m}), line, "buildA");
+        return Value::boolean_(true);
+    };
+    natives["buildLib"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgsRange("buildLib", a, 3, 4, line);
+        std::string path = asString(a[0], "buildLib", line);
+        std::string symbolName = asString(a[1], "buildLib", line);
+        double returnValue = asNumber(a[2], "buildLib", line);
+        std::string memberName = a.size() >= 4 ? asString(a[3], "buildLib", line) : (symbolName + ".obj");
+        auto obj = binfmt::coff::buildObject(symbolName, int32_t(returnValue));
+        binfmt::ar::Member m{memberName, obj, {symbolName}};
+        writeRealFile(path, binfmt::ar::build({m}), line, "buildLib");
         return Value::boolean_(true);
     };
 }
