@@ -1,82 +1,93 @@
-# تعديلات على محرّك RinLang (rin_interpreter.cpp / rin_parser.cpp / rin_ast.h)
+# تعديلات على محرّك RinLang (rin_interpreter.cpp / rin_parser.cpp / rin_parser.h / rin_ast.h)
 
-تم البناء والاختبار فعلياً على الجهاز (g++ -std=c++17) عبر `tools/rin_run.cpp` (مُشغِّل
-سطر أوامر مستقل بلا أندرويد/JNI)، وأيضاً عبر `tools/test_containers.cpp` للتأكد من عدم
-وجود أي تراجع (regression) في نداءات namespace القديمة (`make.qr(...)`, `container.*`,
-الأنابيب `|>`, ...).
+تم بناء واختبار كل ما هنا فعلياً محلياً (g++ -std=c++17) عبر `tools/rin_run.cpp` (مُشغِّل
+CLI مستقل)، وأُعيد بناء `tools/test_containers.cpp` بعد كل جولة تعديلات وقورن ناتجه
+حرفاً بحرف بالناتج قبل أي تعديل — **متطابق تماماً** في كل مرة (بلا أي تراجع في
+container/pipeline/namespace natives).
 
-## 1) إصلاح خطأ حقيقي: نداء دالة على كائن (`obj.method()`) كان دائماً يفشل
+---
 
-**المشكلة:** `let a = Animal(); a.speak();` كان يرمي دائماً
-`error: a.speak is not a function` — أي أن أبسط وأكثر نمط استخدام لـ OOP في اللغة
-(استدعاء method على متغيّر عادي يحمل instance) **لم يكن يعمل إطلاقاً**، رغم أن
-class/struct/inheritance/super كلها مُطبَّقة بالكامل في المفسّر.
+## الجولة 1 (سابقاً)
 
-**السبب:** `Parser::call()` (rin_parser.cpp) يحوّل أي `IDENT '.' IDENT '('` حيث الجذر
-متغيّر بسيط إلى `CallExpr` بـ callee نصي مُلصَق ("a.speak")، لأنه نفس الشكل النحوي
-المستخدم لنداءات namespace المدمجة (`make.qr()`, `container.open()`, ...) — الـ parser
-لا يملك معلومة نوع لحظة التحليل ليفرّق بين الاثنين، فلا يبني `MethodCallExpr` (عقدة
-OOP الصحيحة) إلا حين يكون الكائن ناتج تعبير آخر غير متغيّر مباشر.
+### 1) إصلاح: `obj.method()` على متغيّر عادي كان يفشل دائماً
+`let a = Animal(); a.speak();` كان يرمي "not a function" رغم أن class/inheritance/super
+مُطبَّقة بالكامل، لأن `Parser::call()` يحوّل أي `IDENT.IDENT(...)` (جذره متغيّر بسيط) إلى
+نداء namespace نصي (نفس آلية `make.qr()`) دون تفريق. أُصلح في
+`Interpreter::invokeCallee` بفحص fallback: إن كان الجذر متغيّراً حقيقياً في `env` وقيمته
+INSTANCE/MAP، يُنفَّذ نفس توزيع `MethodCallExpr`. نفس الإصلاح لـ `super.method()`.
 
-**الإصلاح:** في `Interpreter::invokeCallee` (rin_interpreter.cpp)، أُضيف fallback قبل رمي
-"unknown function": إن كان الـ callee على شكل `root.method` وكان `root` فعلاً متغيّراً
-موجوداً في البيئة (`env`) وقيمته `INSTANCE` أو `MAP`، يُنفَّذ نفس منطق توزيع الدالة
-المستخدَم في `evaluate(MethodCallExpr)` تماماً (بحث في الحقول ثم `findMethod`/`bindMethod`).
-كذلك أُضيف حالة خاصة لـ `super.method(...)` (نفس المشكلة بالضبط) تستدعي
-`evaluateSuperGet` الموجودة أصلاً. **لا يؤثر على أي نداء namespace حقيقي** لأن الشرط
-يتطلب أن يكون `root` متغيّراً حقيقياً في البيئة أولاً — `make`/`container` ليست متغيّرات
-أبداً فلا تدخل هذا المسار.
+### 2) ميزة جديدة: تعبيرات لامبدا `fun(params) { body }`
+لم يكن للغة أي صياغة لدالة مجهولة كتعبير (فقط `fun name(...) {}` كعبارة). أُضيفت عقدة
+`LambdaExpr` (rin_ast.h) + حالة في `Parser::primary()` (تُفعَّل فقط في موضع تعبير، إضافية
+بحتة) + حالة في `Interpreter::evaluate()` تبني `Callable` مربوطاً بـ closure حقيقية.
 
-تم التحقق: حقول + methods + inheritance + `super.method()` كلها تعمل الآن بشكل صحيح على
-متغيّرات عادية، ونداءات container/pipeline القديمة ما زالت تعمل بلا أي تغيير في الناتج.
+---
 
-## 2) ميزة جديدة: تعبيرات lambda/دالة مجهولة `fun(params) { body }`
+## الجولة 2 (هذه الجولة)
 
-كانت اللغة تدعم الدوال ككائنات أولى (closures تعمل فعلاً عبر تعريف `fun` مُسمّاة محلية
-وإرجاعها)، لكن لم يكن هناك أي صياغة لـ *دالة مجهولة كتعبير* (لا يمكن كتابة
-`{ "x": fun(n) { ... } }` أو `arr.push(fun(x) { ... })` مباشرة).
+### 3) إصلاح: كل closures داخل حلقة `for` كانت تتشارك نفس المتغيّر (كل واحدة تُرجع القيمة
+### الأخيرة بدل قيمة تكرارتها)
+```rin
+let fns = [];
+for (let i = 0; i < 3; i = i + 1) { fns[len(fns)] = fun() { return i; }; }
+print fns[0](); print fns[1](); print fns[2]();
+// قبل الإصلاح: 3 3 3   (خطأ -- كل closure تشارك نفس forEnv)
+// بعد الإصلاح: 0 1 2   (صحيح -- نفس دلالة JS `let`/Swift/Kotlin/Rust)
+```
+**السبب:** `execute(ForStmt)` كان يُنفِّذ جسم كل تكرارة داخل نفس `forEnv` الحرفية طوال
+الحلقة، فكل closure أُنشئت بداخل الجسم تلتقط نفس المتغيّر المتغيّر (لا قيمة ثابتة لكل
+تكرارة). **الإصلاح:** كل تكرارة الآن تُنفَّذ داخل `iterEnv` جديدة (نسخة/snapshot من قيم
+`forEnv` وقت بداية تلك التكرارة تحديداً)، مع نقل أي تعديل يحصل عليها داخل الجسم (مثل
+`i = i + 10;` صريحة داخل الجسم نفسه، وليس فقط `increment` القياسية) رجوعاً إلى `forEnv`
+بعد كل تكرارة، حتى تبقى `condition`/`increment` تريان أي تعديل كهذا كما كانت قبل
+الإصلاح تماماً. تم التحقق أن `i = i + 10` بداخل الجسم لا يزال يقطع الحلقة مبكراً كما كان.
 
-- **rin_ast.h:** عقدة جديدة `LambdaExpr : Expr` تحمل `FunctionStmt` بلا اسم.
-- **rin_parser.cpp:** حالة جديدة في `Parser::primary()` تُفعَّل فقط عندما يظهر `fun` في
-  موضع تعبير (أي بعد أن تكون كل مسارات `fun` كعبارة/تعريف مُسمّى في
-  `declaration()`/`functionDeclaration()` قد فشلت بالفعل) — إضافية بحتة، لا تُغيّر أي
-  مسار تحليل موجود لـ `fun` في بداية عبارة.
-- **rin_interpreter.cpp:** حالة جديدة في `evaluate()` تبني `Callable` مربوطاً بنفس `env`
-  الحالية (نفس آلية `execute(FunctionStmt)` تماماً)، فتُعيد قيمة `FUNCTION` عادية —
-  فتعمل مع كل ما يعمل معه أي دالة أخرى: تمرير كوسيط، تخزين في map/مصفوفة، إرجاعها
-  (closures متداخلة)، إلخ.
-
-تم التحقق (كل الأمثلة نُفِّذت فعلياً عبر `rin_run` المبني محلياً وأعطت الناتج الصحيح):
+### 4) ميزة جديدة: استدعاء نتيجة تعبير عشوائي مباشرة (`arr[0]()`, `(fun(x){...})(1)`, `getFn()()`)
+كان أي `(` بعد أي شيء غير اسم بسيط (IDENT) يرمي خطأ تحليل صريح ("only functions can be
+called")، فلا يمكن استدعاء عنصر مصفوفة يحمل دالة مباشرة، أو استدعاء نتيجة دالة أخرى
+مباشرة، أو استدعاء lambda فوراً (IIFE). أُضيفت عقدة `CallValueExpr` (rin_ast.h): بدل رمي
+الخطأ، `Parser::call()` يبني الآن هذه العقدة (تُقيَّم أي تعبير callee إلى قيمة FUNCTION ثم
+تُستدعى) — **إضافية بحتة تماماً**: كانت الحالة التي تعالجها خطأ تحليل صريح قبلاً، فلا يمكن
+أن تُغيّر تحليل أي برنامج كان صالحاً سابقاً.
 
 ```rin
-let add = fun(a, b) { return a + b; };
-print add(3, 4);                              // 7
-
-let m = { "greet": fun(n) { return "hi " + n; } };
-print m.greet("world");                       // hi world
-
-fun apply(f, x) { return f(x); }
-print apply(fun(x) { return x * x; }, 5);     // 25
-
+let fns = [fun(){return 1;}, fun(){return 2;}];
+print fns[0]();              // 1
+print (fun(x){return x*10;})(4);   // 40  (IIFE)
 fun makeAdder(n) { return fun(x) { return x + n; }; }
-let add5 = makeAdder(5);
-print add5(10);                               // 15
+print makeAdder(3)(4);       // 7  (نداء متسلسل)
 ```
 
-## ملاحظة حول `rinc.cpp` (المترجم/compiler/rinc.cpp و app/src/main/cpp/rinc.cpp)
+### 5) ميزة جديدة: حلقة `for (let NAME in iterable) { body }` (لم تكن موجودة إطلاقاً)
+الوسيلة الوحيدة للتكرار على مصفوفة/قاموس كانت `for` على طراز C مع فهرس عددي يدوي
+(`for (let i=0; i<len(arr); i=i+1) { arr[i] ... }`). عقدة `ForInStmt` جديدة (rin_ast.h) +
+تمييز في `Parser::forStatement()` (نظرة 3 رموز للأمام: `let` + IDENT + IDENT("in")، فلا
+لبس مع `for (let i = 0; ...)` العادية إطلاقاً؛ "in" كلمة سياقية غير محجوزة، تبقى تعمل
+اسم متغيّر عادي بلا أي تغيير) + تنفيذ في `Interpreter::execute(ForInStmt)`. يدعم:
+مصفوفة (كل عنصر)، قاموس (كل مفتاح، بنفس ترتيب `keys()`)، نص (كل محرف كنص بطول 1).
+`break`/`continue` يعملان بداخلها بنفس الدلالة المعتادة، وكل تكرارة لها بيئة خاصة بها من
+الصفر (نفس إصلاح #3 أعلاه)، فـ closures بداخلها تلتقط القيمة الصحيحة لكل تكرارة أيضاً.
 
-لم يُعدَّل أي منهما: كلاهما يُضمِّن ملفات المفسّر الحقيقية (rin_lexer.cpp/rin_parser.cpp/
-rin_interpreter.cpp) وقت البناء عند تفعيل "وضع تضمين المفسّر" للميزات غير القابلة
-للترجمة المباشرة إلى C — فيستفيدان تلقائياً من كلا الإصلاحين أعلاه بمجرد إعادة بنائهما
-من هذه النسخة المعدَّلة، بلا أي تعديل مطلوب على `rinc.cpp` نفسه.
+```rin
+for (let x in [10, 20, 30]) { print x; }             // 10 20 30
+let m = {"a": 1, "b": 2};
+for (let k in m) { print k + "=" + m[k]; }            // a=1  b=2
+for (let c in "abc") { print c; }                     // a b c
+```
+
+---
+
+## ملاحظة حول `rinc.cpp`
+لم يُعدَّل (لا `compiler/rinc.cpp` ولا `app/src/main/cpp/rinc.cpp`): كلاهما يُضمِّن ملفات
+المفسّر الحقيقية وقت البناء عند تفعيل "وضع تضمين المفسّر"، فيستفيدان تلقائياً من كل
+الإصلاحات/الميزات أعلاه بمجرد إعادة بنائهما من هذه النسخة المعدَّلة.
 
 ## طريقة التطبيق
-
-انسخ الملفات الثلاثة إلى نفس المسارات في المستودع الأصلي (استبدال كامل):
+انسخ الملفات الأربعة إلى نفس المسارات في المستودع الأصلي (استبدال كامل):
 - `app/src/main/cpp/rin_ast.h`
+- `app/src/main/cpp/rin_parser.h`
 - `app/src/main/cpp/rin_parser.cpp`
 - `app/src/main/cpp/rin_interpreter.cpp`
 
-ثم أعد البناء بأي من المسارات الموجودة أصلاً في المشروع (Gradle/NDK للأندرويد،
-`scripts/build_all.sh desktop`، أو `tools/rin_run.cpp` كمُشغِّل CLI مستقل للاختبار
-السريع بلا أندرويد).
+ثم أعد البناء بأي من المسارات الموجودة أصلاً (Gradle/NDK، `scripts/build_all.sh desktop`،
+أو `tools/rin_run.cpp` كمُشغِّل CLI مستقل للاختبار السريع).
