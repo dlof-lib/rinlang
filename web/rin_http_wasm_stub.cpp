@@ -39,5 +39,19 @@ HttpResult performRequest(const std::string& method,
     return r;
 }
 
+void setAndroidBinaryGetBridge(std::function<HttpResult(const std::string&, int)> bridge) {
+    (void)bridge; // غير مستخدم في بناء المتصفح
+}
+
+HttpResult performBinaryGet(const std::string& url, int timeoutMs) {
+    (void)url; (void)timeoutMs;
+    HttpResult r;
+    r.ok = false;
+    r.status = 0;
+    r.error = "طلبات الشبكة (fetchImage/fetchIcon) غير مدعومة في نسخة المتصفح (WebAssembly) من "
+              "مفسّر Rin؛ استخدم المفسّر الأصلي (rin_run/native) لبرامج تحتاج اتصال شبكة حقيقي.";
+    return r;
+}
+
 } // namespace http
 } // namespace rin
