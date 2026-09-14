@@ -2566,6 +2566,51 @@ ExprPtr Parser::primary() {
         auto e = std::make_shared<LiteralExpr>();
         e->kind = LiteralExpr::Kind::STRING; e->str = previous().lexeme; return e;
     }
+    // fun(params) { body } as an EXPRESSION -> anonymous function literal (see LambdaExpr in
+    // rin_ast.h). primary() only runs where an expression is expected, so this can never fire for
+    // a statement-starting `fun name(...) { ... }` (that is consumed by Parser::declaration()/
+    // functionDeclaration() before statement/expression parsing is ever reached) -- purely
+    // additive, no existing 'fun' parse path changes.
+    if (check(TokenType::FUN)) {
+        Token funTok = advance(); // 'fun'
+        consume(TokenType::LPAREN, "Expected '(' after 'fun'");
+        std::vector<std::string> params;
+        std::vector<std::string> paramTypes;
+        if (!check(TokenType::RPAREN)) {
+            do {
+                params.push_back(consume(TokenType::IDENT, "Expected parameter name").lexeme);
+                std::string paramType;
+                if (match({TokenType::COLON})) {
+                    paramType = consume(TokenType::IDENT, "Expected a type name after ':'").lexeme;
+                }
+                paramTypes.push_back(paramType);
+            } while (match({TokenType::COMMA}));
+        }
+        consume(TokenType::RPAREN, "Expected ')' after parameters");
+        std::string returnType;
+        if (match({TokenType::COLON})) {
+            returnType = consume(TokenType::IDENT, "Expected a type name after ':'").lexeme;
+        }
+        consume(TokenType::LBRACE, "Expected '{' before function body");
+        int savedLoopDepth = loopDepth;
+        int savedGoalDepth = goalDepth;
+        loopDepth = 0;
+        goalDepth = 0;
+        auto body = block();
+        loopDepth = savedLoopDepth;
+        goalDepth = savedGoalDepth;
+        auto fn = std::make_shared<FunctionStmt>();
+        fn->name = ""; // anonymous
+        fn->params = params;
+        fn->paramTypes = paramTypes;
+        fn->returnType = returnType;
+        fn->body = body;
+        fn->line = funTok.line;
+        auto lambda = std::make_shared<LambdaExpr>();
+        lambda->decl = fn;
+        lambda->line = funTok.line;
+        return lambda;
+    }
     // goal { ... } -> كتلة هدف تُقيَّم كتعبير (انظر GoalExpr/AchieveStmt في rin_ast.h للشرح
     // الكامل). يجب فحصها *قبل* IDENT العام أدناه وإلا لالتُقِطت "goal" كاسم متغيّر عادي. 'goal'
     // كلمة سياقية غير محجوزة، مُميَّزة فقط عند ظهورها IDENT("goal") متبوعة مباشرة بـ '{' — فاستخدام
