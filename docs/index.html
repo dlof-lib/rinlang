@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Rin — لغة برمجة تبدأ من هاتفك</title>
+<meta name="description" content="Rin لغة برمجة كاملة بحاويات @container وقاعدة بيانات NoSQL وأنابيب |> مدمجة، مع بيئة تطوير أندرويد كاملة، ومحرّك C++‎ يُصدَّر أيضاً كـ WebAssembly وكمكتبة لغات أخرى."/>
+<link rel="icon" type="image/svg+xml" href="assets/favicon.svg"/>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="assets/style.css"/>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="wrap">
+    <a class="brand" href="index.html">
+      <svg class="mark" viewBox="0 0 32 32" aria-hidden="true">
+        <g fill="none" stroke="#8B6BFF" stroke-width="2.6" stroke-linecap="round">
+          <path d="M6 13 V6 H13"/><path d="M19 6 H26 V13"/>
+          <path d="M26 19 V26 H19"/><path d="M13 26 H6 V19"/>
+        </g>
+        <circle cx="16" cy="16" r="3.1" fill="#F0A857"/>
+      </svg>
+      Rin
+    </a>
+    <button class="nav-burger" aria-label="فتح القائمة" aria-expanded="false">☰</button>
+    <div class="nav-links">
+      <a href="index.html" class="is-active">الرئيسية</a>
+      <a href="language.html">اللغة</a>
+      <a href="get-started.html">دليل البدء</a>
+      <a class="nav-cta" href="https://github.com/dlof-lib/rinlang" target="_blank" rel="noopener">GitHub</a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="wrap hero-grid">
+    <div>
+      <div class="eyebrow">لغة برمجة كاملة، بلا حاسوب مطلوب</div>
+      <h1>ابدأ من هاتفك، واكتب Rin من الصفر إلى تطبيق يعمل.</h1>
+      <p class="lede">
+        Rin لغة برمجة حقيقية بمحرّك C++‎17 خاص بها، تأتي ببيئة تطوير أندرويد كاملة —
+        محرّر، مترجم، وتصدير APK — فلا تحتاج حاسوباً لتبدأ. ولها أيضاً حاويات
+        <code>@container</code> منظِّمة، وقاعدة بيانات NoSQL، وأنابيب <code>|&gt;</code>
+        مدمجة في صلب اللغة نفسها.
+      </p>
+      <div class="cta-row">
+        <a class="btn btn-primary" href="get-started.html">دليل البدء</a>
+        <a class="btn btn-ghost" href="https://github.com/dlof-lib/rinlang" target="_blank" rel="noopener">استعرض على GitHub</a>
+      </div>
+      <div class="hero-stats">
+        <div><b>1.0.0</b><span>الإصدار الحالي</span></div>
+        <div><b>.rin</b><span>امتداد الملفات</span></div>
+        <div><b>MIT</b><span>الرخصة</span></div>
+      </div>
+    </div>
+
+    <div class="code-panel">
+      <div class="code-head">
+        <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+        <span class="name">sales.rin</span>
+      </div>
+<pre class="code"><span class="tag">@container</span>=sales_pipeline
+    <span class="kw">let</span> raw = [12, 18, 9, 25, 14];
+    <span class="kw">let</span> result = raw <span class="pipe">|&gt;</span> <span class="fn">normalize</span>() <span class="pipe">|&gt;</span> <span class="fn">mean</span>();
+
+    <span class="kw">translation</span> lang=<span class="str">"ar"</span> text=<span class="str">"متوسط المبيعات"</span>;
+    <span class="kw">translation</span> lang=<span class="str">"en"</span> text=<span class="str">"Average sales"</span>;
+
+    <span class="kw">print</span> result;
+<span class="tag">.end/container</span></pre>
+    </div>
+  </div>
+</header>
+
+<section class="section" id="differences">
+  <div class="wrap">
+    <div class="section-head">
+      <h2>ما الذي يجعل Rin مختلفة</h2>
+      <p class="lede">
+        ليست فقط متغيّرات ودوال وحلقات — Rin تضيف طبقة تنظيمية للبيانات والمنطق
+        غير موجودة في أغلب اللغات، بصياغة واحدة تقرأها من الأعلى للأسفل.
+      </p>
+    </div>
+
+    <div class="feature-row">
+      <div class="feature-copy">
+        <div class="index">01</div>
+        <h3>الحاويات @container</h3>
+        <p>
+          بنية تعريفية تُجمِّع بيانات ومنطقاً مرتبطين ببعضهما في وحدة واحدة واضحة
+          الحدود، بدل تفريقها بين متغيّرات ودوال متناثرة. الحاويات قابلة للتجميع
+          داخل مجموعات <code>@Containers.Group</code>، وقابلة للتصدير كملف
+          <code>.rin</code> جاهز أو نسخة مبسَّطة منه.
+        </p>
+      </div>
+      <div class="feature-code code-panel">
+        <div class="code-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="name">container.rin</span></div>
+<pre class="code"><span class="tag">@container</span>=my_data
+    text title = <span class="str">"بيانات رين"</span>;
+    print title;
+
+    Section=numbers
+        <span class="kw">let</span> a = <span class="num">10</span>;
+        <span class="kw">let</span> b = <span class="num">4</span>;
+        print <span class="fn">Addition</span>(a, b);
+    <span class="tag">.end/Section</span>
+<span class="tag">.end/container</span></pre>
+      </div>
+    </div>
+
+    <div class="feature-row flip">
+      <div class="feature-copy">
+        <div class="index">02</div>
+        <h3>قاعدة بيانات NoSQL مدمجة</h3>
+        <p>
+          مخزن وثائق (documents) بلا أي اتصال خارجي أو استيراد إضافي — أنشئ حاوية
+          وثائق بـ <code>@container.doc</code>، ثم أدرج/استعلم عنها مباشرة بدوال
+          اللغة الأساسية نفسها.
+        </p>
+      </div>
+      <div class="feature-code code-panel">
+        <div class="code-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="name">users.rin</span></div>
+<pre class="code"><span class="tag">@container.doc</span>=users
+    document id=<span class="str">"u1"</span> fields={ name: <span class="str">"سارة"</span>, age: <span class="num">28</span> };
+<span class="tag">.end/container.doc</span>
+
+<span class="fn">insertDoc</span>(<span class="str">"users"</span>, <span class="str">"u3"</span>, { name: <span class="str">"منى"</span> });
+print <span class="fn">queryDocs</span>(<span class="str">"users"</span>, <span class="str">"city"</span>, <span class="str">"الرياض"</span>);</pre>
+      </div>
+    </div>
+
+    <div class="feature-row">
+      <div class="feature-copy">
+        <div class="index">03</div>
+        <h3>أنابيب <code>|&gt;</code> لتسلسل العمليات</h3>
+        <p>
+          بدل تعشيش الاستدعاءات <code>f(g(h(x)))</code> أو متغيّرات وسيطة متكرّرة،
+          الأنبوب يمرّر ناتج كل خطوة إلى التي تليها بترتيب القراءة الطبيعي — داخل
+          حاويات <code>@container.pipe</code> المخصَّصة لهذا الغرض.
+        </p>
+      </div>
+      <div class="feature-code code-panel">
+        <div class="code-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="name">pipe.rin</span></div>
+<pre class="code"><span class="tag">@container.pipe</span>=sales_pipeline
+    <span class="kw">let</span> raw = [<span class="num">1</span>, <span class="num">2</span>, <span class="num">3</span>, <span class="num">4</span>, <span class="num">5</span>];
+    <span class="kw">let</span> result = raw <span class="pipe">|&gt;</span> <span class="fn">normalize</span>() <span class="pipe">|&gt;</span> <span class="fn">mean</span>();
+    print result;
+<span class="tag">.end/container.pipe</span></pre>
+      </div>
+    </div>
+
+    <div class="feature-row flip">
+      <div class="feature-copy">
+        <div class="index">04</div>
+        <h3>ترجمة نصوص مدمجة في اللغة</h3>
+        <p>
+          <code>translation</code> تُسجِّل نص العنصر بأكثر من لغة داخل الحاوية نفسها،
+          بلا حاجة لملفات <code>.json</code> منفصلة أو مكتبة i18n خارجية —
+          مفيدة تحديداً لواجهات تحتاج عربية/إنجليزية معاً من اليوم الأول.
+        </p>
+      </div>
+      <div class="feature-code code-panel">
+        <div class="code-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="name">i18n.rin</span></div>
+<pre class="code"><span class="tag">@container</span>=greeting
+    Translations
+        <span class="kw">translation</span> lang=<span class="str">"ar"</span> text=<span class="str">"مرحبا"</span>;
+        <span class="kw">translation</span> lang=<span class="str">"en"</span> text=<span class="str">"Hello"</span>;
+    <span class="tag">.end/Translations</span>
+<span class="tag">.end/container</span></pre>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section" id="ecosystem">
+  <div class="wrap">
+    <div class="section-head">
+      <h2>نظام متكامل، لا لغة فقط</h2>
+      <p class="lede">
+        كل ما حول محرّك Rin مبني ليعمل معه بلا حواجز: من الكتابة على الهاتف، إلى
+        التشغيل في المتصفح، إلى استدعاء نفس المحرّك من لغة أخرى تماماً.
+      </p>
+    </div>
+
+    <div class="eco-grid">
+      <div class="eco-item">
+        <h4>بيئة تطوير أندرويد <span class="tag-mono">IDE</span></h4>
+        <p>محرّر شيفرة كامل، تشغيل مباشر، وتصدير APK — كل ذلك من داخل الهاتف نفسه بلا حاسوب.</p>
+      </div>
+      <div class="eco-item">
+        <h4>تصدير WebAssembly <span class="tag-mono">WASM</span></h4>
+        <p>المحرّك نفسه (لا نسخة مصغَّرة) يُصدَّر إلى WebAssembly ليعمل داخل المتصفح مباشرة.</p>
+      </div>
+      <div class="eco-item">
+        <h4>الربط مع لغات أخرى <span class="tag-mono">C ABI</span></h4>
+        <p>مكتبة <code>librin</code> بواجهة C قياسية، مع أمثلة جاهزة لـ Python وNode.js لاستدعاء محرّك Rin من داخلهما.</p>
+      </div>
+      <div class="eco-item">
+        <h4>مدير الحزم <span class="tag-mono">RinPM</span></h4>
+        <p>تثبيت وحل تبعيات وقفل إصدارات لمكتبات Rin، بنفس منطق مديري الحزم المعتادة.</p>
+      </div>
+      <div class="eco-item">
+        <h4>عُدّة صناعة اللغات <span class="tag-mono">langkit</span></h4>
+        <p>لبنات جاهزة لبناء لغة برمجة مصغّرة خاصة بك فوق Rin: محلِّل لفظي، مُحلِّل تركيبي، وAST.</p>
+      </div>
+      <div class="eco-item">
+        <h4>حاوية Rin المدمجة <span class="tag-mono">.rcl</span></h4>
+        <p>صيغة حاوية/ضغط ثنائية خاصة بمشاريع ومكتبات Rin، مستقلة عن ZIP.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section" id="recent">
+  <div class="wrap">
+    <div class="section-head">
+      <h2>آخر ما وصل إلى المحرّك</h2>
+      <p class="lede">
+        محرّك Rin يتطوّر بشكل نشط. هذه أحدث الإضافات على المفسّر نفسه (rin_interpreter.cpp /
+        rin_parser.cpp)، مبنية ومُختبَرة فعلياً قبل النشر.
+      </p>
+    </div>
+
+    <div class="update-block">
+      <h3>إصلاح: كل closure داخل حلقة <code>for</code> كانت تشارك نفس المتغيّر</h3>
+      <p class="lede">
+        الآن لكل تكرارة بيئتها الخاصة، فتلتقط كل دالة مجهولة قيمة تكرارتها هي — لا
+        القيمة الأخيرة للحلقة فقط.
+      </p>
+      <div class="diff-grid">
+        <div class="diff-col before">
+          <div class="diff-head">قبل الإصلاح</div>
+<pre><span></span>print fns[0](); // 3
+print fns[1](); // 3
+print fns[2](); // 3</pre>
+        </div>
+        <div class="diff-col after">
+          <div class="diff-head">بعد الإصلاح</div>
+<pre><span></span>print fns[0](); // 0
+print fns[1](); // 1
+print fns[2](); // 2</pre>
+        </div>
+      </div>
+    </div>
+
+    <div class="update-block">
+      <h3>ميزات جديدة: تعبيرات لامبدا، ونداء أي قيمة دالة مباشرة</h3>
+      <p class="lede">
+        <code>fun(x) { return x; }</code> أصبحت تعمل كتعبير في أي موضع (تُسنَد لمتغيّر،
+        تُمرَّر وسيطاً، أو تُستدعى فوراً)، وأي تعبير ناتجه دالة — عنصر مصفوفة، أو نتيجة
+        استدعاء آخر — أصبح قابلاً للاستدعاء مباشرة بدل رمي خطأ تحليل.
+      </p>
+      <div class="code-panel">
+        <div class="code-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="name">lambdas.rin</span></div>
+<pre class="code"><span class="kw">let</span> arr = [<span class="kw">fun</span>(){<span class="kw">return</span> <span class="num">1</span>;}, <span class="kw">fun</span>(){<span class="kw">return</span> <span class="num">2</span>;}];
+print arr[<span class="num">0</span>]();                        <span class="cm">// 1</span>
+print (<span class="kw">fun</span>(x){<span class="kw">return</span> x*<span class="num">10</span>;})(<span class="num">4</span>);         <span class="cm">// 40 — نداء فوري (IIFE)</span>
+
+<span class="kw">fun</span> makeAdder(n) { <span class="kw">return</span> <span class="kw">fun</span>(x) { <span class="kw">return</span> x + n; }; }
+print makeAdder(<span class="num">3</span>)(<span class="num">4</span>);                    <span class="cm">// 7 — نداء متسلسل</span></pre>
+      </div>
+    </div>
+
+    <div class="update-block">
+      <h3>ميزة جديدة: <code>for (let x in iterable)</code></h3>
+      <p class="lede">
+        قبلها كان التكرار على مصفوفة أو قاموس يحتاج فهرساً عددياً يدوياً. الآن تعمل
+        مباشرة على مصفوفة، أو قاموس (كل مفتاح)، أو نص (كل حرف).
+      </p>
+      <div class="code-panel">
+        <div class="code-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="name">forin.rin</span></div>
+<pre class="code"><span class="kw">for</span> (<span class="kw">let</span> x <span class="kw">in</span> [<span class="num">10</span>, <span class="num">20</span>, <span class="num">30</span>]) { print x; }      <span class="cm">// 10 20 30</span>
+
+<span class="kw">let</span> m = {<span class="str">"a"</span>: <span class="num">1</span>, <span class="str">"b"</span>: <span class="num">2</span>};
+<span class="kw">for</span> (<span class="kw">let</span> k <span class="kw">in</span> m) { print k + <span class="str">"="</span> + m[k]; }   <span class="cm">// a=1  b=2</span>
+
+<span class="kw">for</span> (<span class="kw">let</span> c <span class="kw">in</span> <span class="str">"abc"</span>) { print c; }              <span class="cm">// a b c</span></pre>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer class="footer">
+  <div class="wrap">
+    <div class="footer-links">
+      <a href="index.html">الرئيسية</a>
+      <a href="language.html">اللغة</a>
+      <a href="get-started.html">دليل البدء</a>
+      <a href="https://github.com/dlof-lib/rinlang" target="_blank" rel="noopener">GitHub</a>
+    </div>
+    <div class="footer-meta">
+      <div>Rin — الإصدار 1.0.0 — رخصة MIT</div>
+      <div>هذا الموقع جزء من مستودع rinlang، ويُنشَر عبر GitHub Pages من مجلد docs/</div>
+    </div>
+  </div>
+</footer>
+
+<script src="assets/site.js"></script>
+</body>
+</html>
