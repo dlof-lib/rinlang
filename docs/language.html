@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>جولة في لغة Rin — Rin</title>
+<meta name="description" content="جولة في صياغة Rin: المتغيّرات والدوال، الأصناف والوراثة، الدوال المجهولة والإغلاقات، الحاويات، قاعدة بيانات NoSQL، والأنابيب."/>
+<link rel="icon" type="image/svg+xml" href="assets/favicon.svg"/>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="assets/style.css"/>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="wrap">
+    <a class="brand" href="index.html">
+      <svg class="mark" viewBox="0 0 32 32" aria-hidden="true">
+        <g fill="none" stroke="#8B6BFF" stroke-width="2.6" stroke-linecap="round">
+          <path d="M6 13 V6 H13"/><path d="M19 6 H26 V13"/>
+          <path d="M26 19 V26 H19"/><path d="M13 26 H6 V19"/>
+        </g>
+        <circle cx="16" cy="16" r="3.1" fill="#F0A857"/>
+      </svg>
+      Rin
+    </a>
+    <button class="nav-burger" aria-label="فتح القائمة" aria-expanded="false">☰</button>
+    <div class="nav-links">
+      <a href="index.html">الرئيسية</a>
+      <a href="language.html" class="is-active">اللغة</a>
+      <a href="get-started.html">دليل البدء</a>
+      <a class="nav-cta" href="https://github.com/dlof-lib/rinlang" target="_blank" rel="noopener">GitHub</a>
+    </div>
+  </div>
+</nav>
+
+<header class="page-head">
+  <div class="wrap">
+    <div class="eyebrow">جولة في الصياغة</div>
+    <h1>لغة Rin، من المتغيّر الأول إلى الحاوية الكاملة</h1>
+    <p class="lede">
+      كل مثال في هذه الصفحة شيفرة Rin حقيقية — إما من أمثلة المشروع نفسه، أو
+      مُنفَّذة فعلياً على المحرّك أثناء إعداد هذه الصفحة، مع ناتجها كما هو.
+    </p>
+  </div>
+</header>
+
+<section class="doc-section">
+  <div class="wrap">
+    <h2>الأساسيات</h2>
+    <p class="lede">متغيّرات، شروط، حلقات، ودوال — بصياغة قريبة من C/JavaScript، بلا فاصلة منقوطة اختيارية.</p>
+    <div class="code-panel">
+      <div class="code-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="name">basics.rin</span></div>
+<pre class="code"><span class="kw">let</span> x = <span class="num">10</span>;
+<span class="kw">let</span> name = <span class="str">"Rin"</span>;
+print <span class="str">"Hello, "</span> + name + <span class="str">"!"</span>;
+
+<span class="kw">if</span> (x &gt; <span class="num">5</span>) {
+    print <span class="str">"big"</span>;
+} <span class="kw">else</span> {
+    print <span class="str">"small"</span>;
+}
+
+<span class="kw">fun</span> fib(n) {
+    <span class="kw">if</span> (n &lt; <span class="num">2</span>) { <span class="kw">return</span> n; }
+    <span class="kw">return</span> fib(n - <span class="num">1</span>) + fib(n - <span class="num">2</span>);
+}
+print fib(<span class="num">10</span>);   <span class="cm">// 55</span></pre>
+    </div>
+  </div>
+</section>
+
+<section class="doc-section">
+  <div class="wrap">
+    <h2>المصفوفات والقواميس</h2>
+    <p class="lede">مدمجة في اللغة مباشرة بدوال قياسية عامة: <code>push</code> / <code>pop</code> / <code>sort</code> / <code>keys</code>.</p>
+    <div class="code-panel">
+      <div class="code-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="name">collections.rin</span></div>
+<pre class="code"><span class="kw">let</span> arr = [<span class="num">1</span>, <span class="num">2</span>, <span class="num">3</span>];
+<span class="fn">push</span>(arr, <span class="num">4</span>);
+print <span class="fn">pop</span>(arr);           <span class="cm">// 4</span>
+print <span class="fn">sort</span>([<span class="num">3</span>, <span class="num">1</span>, <span class="num">2</span>]);   <span class="cm">// [1, 2, 3]</span>
+
+<span class="kw">let</span> m = {name: <span class="str">"Rin"</span>, age: <span class="num">2</span>};
+print m[<span class="str">"name"</span>];       <span class="cm">// Rin</span>
+print <span class="fn">keys</span>(m);          <span class="cm">// [name, age]</span></pre>
+    </div>
+  </div>
+</section>
+
+<section class="doc-section">
+  <div class="wrap">
+    <h2>الأصناف والوراثة</h2>
+    <p class="lede">
+      <code>class</code> و<code>extends</code> و<code>super</code> بالمعنى المعتاد؛ استدعاء
+      <code>كائن.دالة()</code> على متغيّر عادي يعمل تماماً كما تتوقّع.
+    </p>
+    <div class="code-panel">
+      <div class="code-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="name">classes.rin</span></div>
+<pre class="code"><span class="kw">class</span> Animal {
+    <span class="kw">fun</span> speak() { <span class="kw">return</span> <span class="str">"..."</span>; }
+}
+<span class="kw">class</span> Dog <span class="kw">extends</span> Animal {
+    <span class="kw">fun</span> speak() { <span class="kw">return</span> <span class="str">"Woof "</span> + <span class="kw">super</span>.speak(); }
+}
+<span class="kw">let</span> a = Dog();
+print a.speak();</pre>
+      <div class="code-out"><span class="muted">→</span> Woof ...</div>
+    </div>
+  </div>
+</section>
+
+<section class="doc-section">
+  <div class="wrap">
+    <h2>الدوال المجهولة والإغلاقات</h2>
+    <p class="lede">
+      <code>fun(params) { body }</code> كتعبير، قابل للإسناد أو التمرير أو النداء
+      الفوري — ولكل تكرارة حلقة إغلاقها الخاص، لا متغيّراً مشتركاً.
+    </p>
+    <div class="code-panel">
+      <div class="code-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="name">closures.rin</span></div>
+<pre class="code"><span class="kw">let</span> fns = [];
+<span class="kw">for</span> (<span class="kw">let</span> i = <span class="num">0</span>; i &lt; <span class="num">3</span>; i = i + <span class="num">1</span>) {
+    fns[<span class="fn">len</span>(fns)] = <span class="kw">fun</span>() { <span class="kw">return</span> i; };
+}
+print fns[<span class="num">0</span>]();
+print fns[<span class="num">1</span>]();
+print fns[<span class="num">2</span>]();
+
+<span class="kw">fun</span> makeAdder(n) { <span class="kw">return</span> <span class="kw">fun</span>(x) { <span class="kw">return</span> x + n; }; }
+print makeAdder(<span class="num">3</span>)(<span class="num">4</span>);</pre>
+      <div class="code-out"><span class="muted">→</span> 0<br/><span class="muted">→</span> 1<br/><span class="muted">→</span> 2<br/><span class="muted">→</span> 7</div>
+    </div>
+  </div>
+</section>
+
+<section class="doc-section">
+  <div class="wrap">
+    <h2>التكرار <code>for ... in</code></h2>
+    <p class="lede">على مصفوفة (كل عنصر)، قاموس (كل مفتاح)، أو نص (كل حرف) — بلا فهرس عددي يدوي.</p>
+    <div class="code-panel">
+      <div class="code-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="name">forin.rin</span></div>
+<pre class="code"><span class="kw">for</span> (<span class="kw">let</span> x <span class="kw">in</span> [<span class="num">10</span>, <span class="num">20</span>, <span class="num">30</span>]) { print x; }
+
+<span class="kw">let</span> m = {<span class="str">"a"</span>: <span class="num">1</span>, <span class="str">"b"</span>: <span class="num">2</span>};
+<span class="kw">for</span> (<span class="kw">let</span> k <span class="kw">in</span> m) { print k + <span class="str">"="</span> + m[k]; }
+
+<span class="kw">for</span> (<span class="kw">let</span> c <span class="kw">in</span> <span class="str">"abc"</span>) { print c; }</pre>
+      <div class="code-out"><span class="muted">→</span> 10 20 30<br/><span class="muted">→</span> a=1 b=2<br/><span class="muted">→</span> a b c</div>
+    </div>
+  </div>
+</section>
+
+<section class="doc-section">
+  <div class="wrap">
+    <h2>الحاويات @container</h2>
+    <p class="lede">
+      وحدة تنظيمية تُجمِّع بيانات ومنطقاً؛ قابلة للتجميع داخل
+      <code>@Containers.Group</code>، وقابلة لاستدعاء بعضها البعض.
+    </p>
+    <div class="code-panel">
+      <div class="code-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="name">groups.rin</span></div>
+<pre class="code"><span class="tag">@Containers.Group</span>=my_group
+    <span class="tag">@container</span>=g1
+        text label = <span class="str">"عنصر"</span>;
+    <span class="tag">.end/container</span>
+<span class="tag">.end/Containers.Group</span></pre>
+    </div>
+    <p class="note">
+      الأسلوب المبسّط: بدل عدّة دوال منخفضة المستوى، <code>container("Home")</code> تُعيد
+      وصفاً مختصراً للحاوية، و<code>container("Home", "title")</code> تقرأ حقلاً منها
+      مباشرة (تُعيد <code>nil</code> بدل الانهيار إن لم يوجد).
+    </p>
+  </div>
+</section>
+
+<section class="doc-section">
+  <div class="wrap">
+    <h2>قاعدة بيانات NoSQL</h2>
+    <p class="lede">مخزن وثائق مدمج، بلا أي استيراد أو اتصال خارجي.</p>
+    <div class="code-panel">
+      <div class="code-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="name">docs.rin</span></div>
+<pre class="code"><span class="tag">@container.doc</span>=users
+    document id=<span class="str">"u1"</span> fields={ name: <span class="str">"سارة"</span>, age: <span class="num">28</span> };
+<span class="tag">.end/container.doc</span>
+
+print <span class="fn">insertDoc</span>(<span class="str">"users"</span>, <span class="str">"u3"</span>, { name: <span class="str">"منى"</span> });
+print <span class="fn">queryDocs</span>(<span class="str">"users"</span>, <span class="str">"city"</span>, <span class="str">"الرياض"</span>);</pre>
+    </div>
+  </div>
+</section>
+
+<section class="doc-section">
+  <div class="wrap">
+    <h2>الأنابيب <code>|&gt;</code></h2>
+    <p class="lede">تمرير ناتج خطوة إلى التي تليها بترتيب القراءة، داخل <code>@container.pipe</code>.</p>
+    <div class="code-panel">
+      <div class="code-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="name">pipe.rin</span></div>
+<pre class="code"><span class="tag">@container.pipe</span>=sales_pipeline
+    <span class="kw">let</span> raw = [<span class="num">1</span>, <span class="num">2</span>, <span class="num">3</span>, <span class="num">4</span>, <span class="num">5</span>];
+    <span class="kw">let</span> result = raw <span class="pipe">|&gt;</span> <span class="fn">normalize</span>() <span class="pipe">|&gt;</span> <span class="fn">mean</span>();
+    print result;
+<span class="tag">.end/container.pipe</span></pre>
+    </div>
+  </div>
+</section>
+
+<section class="doc-section">
+  <div class="wrap">
+    <h2>المكتبات و<code>@import</code></h2>
+    <p class="lede">
+      عشرات مكتبات <code>lib/*.og.rin</code> مضمَّنة في المحرّك مباشرة — رياضيات،
+      نصوص، تحقّق، عُدّة نظام، فيزياء، وأخرى — تُستورَد بسطر واحد، باسم مستعار
+      اختياري.
+    </p>
+    <div class="code-panel">
+      <div class="code-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="name">imports.rin</span></div>
+<pre class="code"><span class="kw">@import</span> <span class="str">"lib/math.og.rin"</span>;
+<span class="kw">@import</span> <span class="str">"lib/data.og.rin"</span> <span class="kw">as</span> data;</pre>
+    </div>
+    <p class="note">
+      من بين هذه المكتبات <code>langkit.og.rin</code>: عُدّة لبناء لغة برمجة
+      مصغّرة خاصة بك فوق Rin نفسها — محلِّل لفظي، مُحلِّل تركيبي، وشجرة AST جاهزة.
+    </p>
+  </div>
+</section>
+
+<footer class="footer">
+  <div class="wrap">
+    <div class="footer-links">
+      <a href="index.html">الرئيسية</a>
+      <a href="language.html">اللغة</a>
+      <a href="get-started.html">دليل البدء</a>
+      <a href="https://github.com/dlof-lib/rinlang" target="_blank" rel="noopener">GitHub</a>
+    </div>
+    <div class="footer-meta">
+      <div>Rin — الإصدار 1.0.0 — رخصة MIT</div>
+      <div>هذا الموقع جزء من مستودع rinlang، ويُنشَر عبر GitHub Pages من مجلد docs/</div>
+    </div>
+  </div>
+</footer>
+
+<script src="assets/site.js"></script>
+</body>
+</html>
