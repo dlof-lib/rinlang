@@ -23,49 +23,6 @@ add_compile_options(-Wall -O2)
 # على أوبنتو/دبيان: sudo apt install zlib1g-dev — عادة مثبّتة مسبقاً على أغلب توزيعات لينكس.
 find_package(ZLIB REQUIRED)
 
-# ---- اختياري: BZIP2/liblzma(XZ)/Zstandard — natives bz2Compress/xzCompress/zstdCompress ----
-# (تُستخدَم من lib/archivekit.og.rin لدعم .bz2/.xz/.zst و.tar.bz2/.tar.xz/.tar.zst حقيقياً).
-# خلافاً لـ zlib أعلاه، الثلاثة اختيارية تماماً: إن لم تتوفر إحداها يُبنى rin بدونها بلا أي
-# خطأ، وتبقى natives المقابلة لها ببساطة غير مسجَّلة (راجع تعليق RIN_HAVE_BZ2/RIN_HAVE_ZSTD/
-# RIN_HAVE_LZMA في rin_interpreter.cpp لسبب هذا الاختيار على منصّات أخرى مثل Android/WASM).
-# لتفعيل الثلاثة معاً على أوبنتو/دبيان: sudo apt install libbz2-dev libzstd1 liblzma5
-# (Zstandard/LZMA لا يحتاجان رأسيهما الحقيقيين — rin_interpreter.cpp يُصرِّح بتوقيعات الواجهة
-# العامة المستقرة لكل منهما يدوياً؛ يكفي وجود المكتبة وقت الربط والتشغيل).
-
-find_path(RIN_BZ2_INCLUDE_DIR bzlib.h)
-find_library(RIN_BZ2_LIB NAMES bz2)
-if (RIN_BZ2_INCLUDE_DIR AND RIN_BZ2_LIB)
-    message(STATUS "rin: BZIP2 موجودة -> .bz2/.tar.bz2 مدعومة (RIN_HAVE_BZ2): ${RIN_BZ2_LIB}")
-else()
-    message(STATUS "rin: BZIP2 (bzlib.h/libbz2) غير موجودة -> .bz2/.tar.bz2 غير مدعومة في هذا البناء")
-endif()
-
-find_library(RIN_ZSTD_LIB NAMES zstd libzstd.so.1 libzstd)
-if (NOT RIN_ZSTD_LIB)
-    file(GLOB _rin_zstd_candidates /usr/lib/*/libzstd.so.1 /usr/lib/libzstd.so.1 /lib/*/libzstd.so.1 /lib/libzstd.so.1)
-    if (_rin_zstd_candidates)
-        list(GET _rin_zstd_candidates 0 RIN_ZSTD_LIB)
-    endif()
-endif()
-if (RIN_ZSTD_LIB)
-    message(STATUS "rin: Zstandard موجودة -> .zst/.tar.zst مدعومة (RIN_HAVE_ZSTD): ${RIN_ZSTD_LIB}")
-else()
-    message(STATUS "rin: Zstandard (libzstd) غير موجودة -> .zst/.tar.zst غير مدعومة في هذا البناء")
-endif()
-
-find_library(RIN_LZMA_LIB NAMES lzma liblzma.so.5 liblzma)
-if (NOT RIN_LZMA_LIB)
-    file(GLOB _rin_lzma_candidates /usr/lib/*/liblzma.so.5 /usr/lib/liblzma.so.5 /lib/*/liblzma.so.5 /lib/liblzma.so.5)
-    if (_rin_lzma_candidates)
-        list(GET _rin_lzma_candidates 0 RIN_LZMA_LIB)
-    endif()
-endif()
-if (RIN_LZMA_LIB)
-    message(STATUS "rin: liblzma موجودة -> .xz/.tar.xz مدعومة (RIN_HAVE_LZMA): ${RIN_LZMA_LIB}")
-else()
-    message(STATUS "rin: liblzma غير موجودة -> .xz/.tar.xz غير مدعومة في هذا البناء")
-endif()
-
 set(RIN_CORE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../../app/src/main/cpp)
 
 add_executable(rin
@@ -75,7 +32,13 @@ add_executable(rin
     # rin_make.cpp: validateMakeUnit/validateContainerPolicy — يستدعيهما execute() في
     # rin_interpreter.cpp أدناه لكل @make/@container، فيفشل الربط (undefined reference) بدونه.
     ${RIN_CORE_DIR}/rin_make.cpp
+    ${RIN_CORE_DIR}/rin_artifact.cpp
     ${RIN_CORE_DIR}/rin_interpreter.cpp
+    ${RIN_CORE_DIR}/binfmt/elf_format.cpp
+    ${RIN_CORE_DIR}/binfmt/ar_format.cpp
+    ${RIN_CORE_DIR}/binfmt/pe_format.cpp
+    ${RIN_CORE_DIR}/binfmt/macho_format.cpp
+    ${RIN_CORE_DIR}/binfmt/coff_obj.cpp
     ${RIN_CORE_DIR}/loader_ui/library_loader_ui.cpp
     ${RIN_CORE_DIR}/rin_http.cpp
     ${RIN_CORE_DIR}/diagnostics/diagnostic.cpp
@@ -110,20 +73,6 @@ add_executable(rin
 
 target_include_directories(rin PRIVATE ${RIN_CORE_DIR})
 target_link_libraries(rin PRIVATE ZLIB::ZLIB)
-
-if (RIN_BZ2_INCLUDE_DIR AND RIN_BZ2_LIB)
-    target_compile_definitions(rin PRIVATE RIN_HAVE_BZ2)
-    target_include_directories(rin PRIVATE ${RIN_BZ2_INCLUDE_DIR})
-    target_link_libraries(rin PRIVATE ${RIN_BZ2_LIB})
-endif()
-if (RIN_ZSTD_LIB)
-    target_compile_definitions(rin PRIVATE RIN_HAVE_ZSTD)
-    target_link_libraries(rin PRIVATE ${RIN_ZSTD_LIB})
-endif()
-if (RIN_LZMA_LIB)
-    target_compile_definitions(rin PRIVATE RIN_HAVE_LZMA)
-    target_link_libraries(rin PRIVATE ${RIN_LZMA_LIB})
-endif()
 
 set_target_properties(rin PROPERTIES OUTPUT_NAME "rin")
 
