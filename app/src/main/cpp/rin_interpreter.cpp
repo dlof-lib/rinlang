@@ -7338,6 +7338,60 @@ Value Interpreter::invokeCallee(const std::string& callee, std::vector<Value>& a
         return instantiateClass(callee, args, line);
     }
 
+    // OOP fix: `obj.method(args...)` where `obj` is a plain variable (e.g. `let a = Animal();
+    // a.speak();`) is parsed by call() in rin_parser.cpp as a dotted-string CallExpr callee
+    // ("a.speak") — the exact same representation used for namespace natives like `make.qr()` —
+    // because the parser cannot tell at parse time whether the identifier before the '.' is a
+    // namespace root or an ordinary variable holding a class instance / map. Natives and classes
+    // above didn't match, so before giving up as "unknown function", check whether the part
+    // before the single '.' really is a variable bound to an INSTANCE or MAP and dispatch the
+    // call exactly like MethodCallExpr does (see evaluate(MethodCallExpr) below) instead of
+    // incorrectly reporting a perfectly valid method call as an unknown function.
+    {
+        size_t dot = callee.find('.');
+        if (dot != std::string::npos && dot == callee.rfind('.')) {
+            std::string root = callee.substr(0, dot);
+            std::string method = callee.substr(dot + 1);
+            // super.method(args...): same ambiguity as above ('super' parses as a VariableExpr
+            // root too), so it never reaches the MethodCallExpr super-branch either. 'super' is
+            // never an actual variable in env, so this is checked first and unconditionally.
+            if (root == "super") {
+                Value bound = evaluateSuperGet(method, env, line);
+                if (bound.type != Value::Type::FUNCTION) {
+                    throw diagErr(diag::Code::E0004_InvalidType, line,
+                                  "`super." + method + "` is not a method");
+                }
+                return callFunction(bound.function, args, line);
+            }
+            Value obj;
+            if (env->get(root, obj)) {
+                if (obj.type == Value::Type::INSTANCE) {
+                    auto& inst = *obj.instance;
+                    auto fIt = inst.fields.find(method);
+                    if (fIt != inst.fields.end() && fIt->second.type == Value::Type::FUNCTION) {
+                        return callFunction(fIt->second.function, args, line);
+                    }
+                    std::string owner;
+                    auto m = findMethod(inst.className, method, &owner);
+                    if (m) {
+                        Value bound = bindMethod(obj, m, owner);
+                        return callFunction(bound.function, args, line);
+                    }
+                    throw errWithReason(diag::Code::E0006_UnknownFunction, line,
+                                         "`" + inst.className + "` has no method `" + method + "`",
+                                         "no method or callable field named `" + method + "` exists on `" + inst.className + "`");
+                }
+                if (obj.type == Value::Type::MAP) {
+                    for (auto& kv : *obj.map) {
+                        if (kv.first.type == Value::Type::STRING && kv.first.str == method && kv.second.type == Value::Type::FUNCTION) {
+                            return callFunction(kv.second.function, args, line);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     Value calleeVal;
     if (!env->get(callee, calleeVal) || calleeVal.type != Value::Type::FUNCTION) {
         throw unknownFunctionErr(callee, line);
@@ -7457,6 +7511,18 @@ Value Interpreter::evaluate(const ExprPtr& expr, EnvPtr env) {
             case LiteralExpr::Kind::BOOL: return Value::boolean_(e->boolean);
             case LiteralExpr::Kind::NIL: return Value::nil();
         }
+    }
+    // fun(params) { body } literal -> بناء Callable مربوط بنفس env الحالية وقت الوصول إلى موضع
+    // الـ literal (closure حقيقي، بنفس منطق execute(FunctionStmt) تماماً)، مباشرة كقيمة FUNCTION
+    // بلا أي تسمية/تعريف في أي نطاق -- فرق اللامبدا الوحيد عن دالة مُسمّاة عادية.
+    if (auto e = std::dynamic_pointer_cast<LambdaExpr>(expr)) {
+        auto callable = std::make_shared<Callable>();
+        callable->declaration = e->decl;
+        callable->closure = env;
+        Value v;
+        v.type = Value::Type::FUNCTION;
+        v.function = callable;
+        return v;
     }
     if (auto e = std::dynamic_pointer_cast<VariableExpr>(expr)) {
         Value v;
