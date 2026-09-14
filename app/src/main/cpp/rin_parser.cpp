@@ -1078,6 +1078,29 @@ StmtPtr Parser::forStatement() {
     Token forTok = previous(); // 'for'
     consume(TokenType::LPAREN, "Expected '(' after 'for'");
 
+    // for (let NAME in iterable) { body } -> ForInStmt (انظر rin_ast.h). يجب فحصه *قبل* مسار
+    // C-style أدناه: 'let' + IDENT + IDENT("in") تحديداً (نظرة ثلاث خطوات للأمام) يُميِّزه عن
+    // `for (let i = 0; ...)` العادية بلا أي غموض -- 'in' كلمة سياقية غير محجوزة (بنفس أسلوب
+    // extends/try/catch أعلاه)، فاستخدامها اسم متغيّر عادي في أي سياق آخر يبقى يعمل بلا تغيير.
+    if (check(TokenType::LET) && current + 2 < tokens.size() &&
+        tokens[current + 1].type == TokenType::IDENT &&
+        tokens[current + 2].type == TokenType::IDENT && tokens[current + 2].lexeme == "in") {
+        advance(); // 'let'
+        Token nameTok = advance(); // NAME
+        advance(); // 'in'
+        auto iterable = expression();
+        consume(TokenType::RPAREN, "Expected ')' after 'for...in' iterable");
+        loopDepth++;
+        auto body = statement();
+        loopDepth--;
+        auto stmt = std::make_shared<ForInStmt>();
+        stmt->varName = nameTok.lexeme;
+        stmt->iterable = iterable;
+        stmt->body = body;
+        stmt->line = forTok.line;
+        return stmt;
+    }
+
     StmtPtr initializer = nullptr;
     if (match({TokenType::SEMICOLON})) {
         initializer = nullptr; // for (;;) -> لا مُهيّئ
@@ -2450,15 +2473,22 @@ ExprPtr Parser::call() {
     for (;;) {
         if (match({TokenType::LPAREN})) {
             auto var = std::dynamic_pointer_cast<VariableExpr>(expr);
-            if (!var)
-                throw errRich(diag::Code::E0013_InvalidExpression, previous(),
-                              "only functions can be called",
-                              "'(' here is being parsed as a call, but a call's callee must be a "
-                              "plain name (e.g. `foo()`); the expression right before this '(' is not "
-                              "a plain name, so it cannot be called",
-                              "call a plain function name instead, or remove the '(' if it wasn't "
-                              "meant to be a call",
-                              "a function name before '('");
+            if (!var) {
+                // Not a plain name -> call whatever VALUE this expression evaluates to instead of
+                // the old hard error (see CallValueExpr in rin_ast.h): covers `arr[0]()`,
+                // `(fun(x){...})(1)`, `getFn()()`, etc.
+                auto cv = std::make_shared<CallValueExpr>();
+                cv->callee = expr;
+                cv->line = previous().line;
+                if (!check(TokenType::RPAREN)) {
+                    do {
+                        cv->args.push_back(expression());
+                    } while (match({TokenType::COMMA}));
+                }
+                consume(TokenType::RPAREN, "Expected ')' after arguments");
+                expr = cv;
+                continue;
+            }
             auto c = std::make_shared<CallExpr>();
             c->callee = var->name;
             c->line = previous().line;
