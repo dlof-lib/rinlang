@@ -1,0 +1,16 @@
+// Rin Simple Style — container + mask
+@container=Home
+mask = "home-root";
+let title = "Rin";
+let count = 3;
+.end/container
+
+// الوصول البسيط للحاوية
+print container("Home");
+print container("Home", "title");
+container("Home", "title", "Rin Simple");
+print container("Home", "title");
+
+// الوصول البسيط للقناع
+print mask("home-root");
+print mask("missing");
