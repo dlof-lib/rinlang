@@ -53,4 +53,5 @@
     <string name="settings_confirm_exit_hint">Ask before leaving when this option is enabled.</string>
     <string name="settings_format_save">Format on save</string>
     <string name="settings_format_save_hint">Prepare the editor for automatic formatting workflows on save.</string>
+<string name="settings_language_current">English 🇺🇸</string><string name="language_picker_title">Choose language</string><string name="language_picker_subtitle">Choose a language and country</string><string name="language_picker_search">Search a language or country…</string><string name="language_picker_applied">Applied %1$s</string><string name="language_group_arabic">Arabic • Arab countries</string><string name="language_group_english">English • English-speaking countries</string><string name="language_group_spanish">Español • Spanish-speaking countries</string>
 </resources>
