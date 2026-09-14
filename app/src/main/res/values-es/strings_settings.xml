@@ -53,4 +53,5 @@
     <string name="settings_confirm_exit_hint">Pide confirmación antes de salir.</string>
     <string name="settings_format_save">Formatear al guardar</string>
     <string name="settings_format_save_hint">Prepara el editor para flujos de formato automático al guardar.</string>
+<string name="settings_language_current">Español 🇪🇸</string><string name="language_picker_title">Elegir idioma</string><string name="language_picker_subtitle">Elige idioma y país</string><string name="language_picker_search">Buscar idioma o país…</string><string name="language_picker_applied">Aplicado: %1$s</string><string name="language_group_arabic">العربية • Países árabes</string><string name="language_group_english">English • Países anglófonos</string><string name="language_group_spanish">Español • Países hispanohablantes</string>
 </resources>
