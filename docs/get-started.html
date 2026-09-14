@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>دليل البدء — Rin</title>
+<meta name="description" content="ابدأ مع Rin: من تطبيق أندرويد بلا حاسوب، إلى بناء سطر الأوامر على لينكس، إلى تشغيل المحرّك داخل المتصفح عبر WebAssembly."/>
+<link rel="icon" type="image/svg+xml" href="assets/favicon.svg"/>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="assets/style.css"/>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="wrap">
+    <a class="brand" href="index.html">
+      <svg class="mark" viewBox="0 0 32 32" aria-hidden="true">
+        <g fill="none" stroke="#8B6BFF" stroke-width="2.6" stroke-linecap="round">
+          <path d="M6 13 V6 H13"/><path d="M19 6 H26 V13"/>
+          <path d="M26 19 V26 H19"/><path d="M13 26 H6 V19"/>
+        </g>
+        <circle cx="16" cy="16" r="3.1" fill="#F0A857"/>
+      </svg>
+      Rin
+    </a>
+    <button class="nav-burger" aria-label="فتح القائمة" aria-expanded="false">☰</button>
+    <div class="nav-links">
+      <a href="index.html">الرئيسية</a>
+      <a href="language.html">اللغة</a>
+      <a href="get-started.html" class="is-active">دليل البدء</a>
+      <a class="nav-cta" href="https://github.com/dlof-lib/rinlang" target="_blank" rel="noopener">GitHub</a>
+    </div>
+  </div>
+</nav>
+
+<header class="page-head">
+  <div class="wrap">
+    <div class="eyebrow">دليل البدء</div>
+    <h1>اختر طريقك إلى Rin</h1>
+    <p class="lede">
+      ثلاث طرق حقيقية لتشغيل نفس المحرّك: من الهاتف مباشرة بلا حاسوب، من سطر
+      الأوامر على لينكس، أو داخل المتصفح عبر WebAssembly.
+    </p>
+  </div>
+</header>
+
+<section class="doc-section">
+  <div class="wrap">
+    <h2>الطريق الأول: تطبيق أندرويد</h2>
+    <p class="lede">
+      بيئة تطوير كاملة داخل الهاتف: محرّر شيفرة، تشغيل فوري، وتصدير الناتج
+      كملف APK — بلا حاسوب أو تثبيت إضافي.
+    </p>
+    <div class="step-list">
+      <div class="step">
+        <div class="num">01</div>
+        <div>
+          <h3>ثبّت التطبيق</h3>
+          <p>حمّل ملف APK من صفحة الإصدارات (Releases) في مستودع GitHub، أو ابنِه بنفسك عبر Gradle من مجلد <code>app/</code>.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="num">02</div>
+        <div>
+          <h3>أنشئ مشروعاً</h3>
+          <p>من الشاشة الرئيسية أنشئ مشروعاً جديداً، وابدأ الكتابة في المحرّر — تلوين صياغة، إكمال تلقائي، وتشخيص أخطاء فوري.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="num">03</div>
+        <div>
+          <h3>صدِّر التطبيق</h3>
+          <p>من شاشة تصدير APK حدِّد الاسم، الأيقونة، وإصدار SDK، واحصل على ملف APK جاهز للتثبيت أو المشاركة.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="doc-section">
+  <div class="wrap">
+    <h2>الطريق الثاني: سطر أوامر لينكس</h2>
+    <p class="lede">
+      مُفسِّر مستقل تماماً عن أندرويد/NDK، يبني نفس ملفات المحرّك الحقيقية
+      (<code>rin_lexer.cpp</code> / <code>rin_parser.cpp</code> / <code>rin_interpreter.cpp</code>)
+      كملف تنفيذي واحد.
+    </p>
+    <div class="step-list">
+      <div class="step">
+        <div class="num">01</div>
+        <div>
+          <h3>ثبّت المتطلبات</h3>
+          <p>CMake ومترجم ++C، إضافة إلى zlib للضغط الحقيقي المستخدم داخل المحرّك.</p>
+<pre class="code">sudo apt install cmake g++ zlib1g-dev   <span class="cm"># Debian / Ubuntu</span></pre>
+        </div>
+      </div>
+      <div class="step">
+        <div class="num">02</div>
+        <div>
+          <h3>ابنِ المُفسِّر</h3>
+<pre class="code">cd cli/linux
+./build.sh
+<span class="cm"># أو يدوياً:</span>
+cmake -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build
+<span class="cm"># الناتج: build/rin</span></pre>
+        </div>
+      </div>
+      <div class="step">
+        <div class="num">03</div>
+        <div>
+          <h3>اكتب أول برنامج وشغّله</h3>
+<pre class="code"><span class="cm">// hello.rin</span>
+<span class="kw">let</span> name = <span class="str">"Rin"</span>;
+print <span class="str">"مرحباً، "</span> + name;</pre>
+<pre class="code">./build/rin hello.rin
+<span class="cm"># مرحباً، Rin</span></pre>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="doc-section">
+  <div class="wrap">
+    <h2>الطريق الثالث: داخل المتصفح عبر WebAssembly</h2>
+    <p class="lede">
+      نفس محرّك Rin (لا نسخة مصغَّرة) يُصدَّر إلى WebAssembly ويعمل داخل صفحة
+      ويب مباشرة — ملفات هذا المسار موجودة في مجلد <code>web/</code> من المستودع
+      نفسه (خارج نطاق هذا الموقع المنشور من <code>docs/</code>)، وتُبنى محلياً:
+    </p>
+    <pre class="code">./web/build_rinhtml_wasm.sh</pre>
+    <p class="note">
+      استنسخ المستودع كاملاً لتشغيل هذا المسار، أو راجع <code>web/index.html</code>
+      و<code>web/site.rin</code> مباشرة على GitHub لرؤية كيف يُشغَّل المحرّك من
+      داخل المتصفح.
+    </p>
+  </div>
+</section>
+
+<section class="doc-section">
+  <div class="wrap">
+    <h2>الربط مع لغات أخرى</h2>
+    <p class="lede">
+      مجلد <code>bindings/</code> يبني المحرّك كمكتبة مشتركة (<code>librin.so</code> /
+      <code>.dylib</code> / <code>.dll</code>) بواجهة C ثابتة، مستقلة عن أندرويد/NDK،
+      مع أمثلة جاهزة لاستدعائها من C وPython (عبر <code>ctypes</code>) وNode.js
+      (عبر <code>ffi-napi</code>).
+    </p>
+  </div>
+</section>
+
+<footer class="footer">
+  <div class="wrap">
+    <div class="footer-links">
+      <a href="index.html">الرئيسية</a>
+      <a href="language.html">اللغة</a>
+      <a href="get-started.html">دليل البدء</a>
+      <a href="https://github.com/dlof-lib/rinlang" target="_blank" rel="noopener">GitHub</a>
+    </div>
+    <div class="footer-meta">
+      <div>Rin — الإصدار 1.0.0 — رخصة MIT</div>
+      <div>هذا الموقع جزء من مستودع rinlang، ويُنشَر عبر GitHub Pages من مجلد docs/</div>
+    </div>
+  </div>
+</footer>
+
+<script src="assets/site.js"></script>
+</body>
+</html>
