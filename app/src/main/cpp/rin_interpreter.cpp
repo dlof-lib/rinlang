@@ -5751,15 +5751,73 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
         auto forEnv = std::make_shared<Environment>(env);
         if (s->initializer) execute(s->initializer, forEnv);
         while (!s->condition || evaluate(s->condition, forEnv).isTruthy()) {
+            // Fresh per-iteration environment that snapshots the loop variable(s) declared in
+            // forEnv (e.g. `i` from `for (let i = 0; ...)`), so a closure created inside the body
+            // (`fun() { return i; }`) captures the value `i` had *during that iteration* instead
+            // of the one shared, mutating binding every closure would otherwise alias to (which
+            // would make every closure created in the loop return the same final value once the
+            // loop ends) -- matches modern-language `for` semantics (JS `let`, Swift, Kotlin,
+            // Rust). forEnv itself stays the single "live" environment condition/increment run
+            // against, so a loop body with no closures behaves exactly as before.
+            auto iterEnv = std::make_shared<Environment>(env);
+            iterEnv->values = forEnv->values;
             try {
-                execute(s->body, forEnv);
+                execute(s->body, iterEnv);
             } catch (BreakSignal&) {
+                // Propagate any in-body mutation of the loop variable(s) before breaking, in case
+                // code after the loop (or the loop condition were it re-checked) relies on it --
+                // mirrors the propagation done after a normal iteration below.
+                for (auto& kv : iterEnv->values) {
+                    if (forEnv->values.count(kv.first)) forEnv->values[kv.first] = kv.second;
+                }
                 break;
             } catch (ContinueSignal&) {
                 // لا شيء إضافي هنا: increment أدناه ينفَّذ دائماً بعد الـ catch، سواء بـ continue أو
                 // بانتهاء الجسم طبيعياً، تماماً كسلوك for القياسي.
             }
+            // Propagate any change the body made directly to a loop variable (e.g. an explicit
+            // `i = i + 1;` inside the body itself, not just the standard increment clause) back to
+            // forEnv, so the condition/increment clauses still observe it -- without this, mutating
+            // the loop variable from inside the body would appear to silently do nothing once the
+            // iteration ends.
+            for (auto& kv : iterEnv->values) {
+                if (forEnv->values.count(kv.first)) forEnv->values[kv.first] = kv.second;
+            }
             if (s->increment) evaluate(s->increment, forEnv);
+        }
+        return;
+    }
+    // for (let NAME in iterable) { body } -> حلقة تكرار حقيقية (انظر ForInStmt في rin_ast.h).
+    // iterable تُقيَّم مرة واحدة فقط قبل الحلقة (كأي حلقة for/foreach في أي لغة حقيقية). كل تكرار
+    // يحصل على بيئة (Environment) خاصة به من الصفر مع NAME معرَّفة فيها (نفس فكرة إصلاح
+    // per-iteration closures في ForStmt أعلاه)، فأي closure تُنشأ داخل الجسم تلتقط قيمة تلك
+    // التكرارة بشكل صحيح بدل قيمة مشتركة تتغيّر.
+    if (auto s = std::dynamic_pointer_cast<ForInStmt>(stmt)) {
+        Value iterableVal = evaluate(s->iterable, env);
+        std::vector<Value> items;
+        if (iterableVal.type == Value::Type::ARRAY) {
+            items = *iterableVal.array;
+        } else if (iterableVal.type == Value::Type::MAP) {
+            items.reserve(iterableVal.map->size());
+            for (auto& kv : *iterableVal.map) items.push_back(kv.first);
+        } else if (iterableVal.type == Value::Type::STRING) {
+            items.reserve(iterableVal.str.size());
+            for (char c : iterableVal.str) items.push_back(Value::string(std::string(1, c)));
+        } else {
+            throw diagErr(diag::Code::E0004_InvalidType, s->line,
+                          "`for...in` requires an array, map, or string; found a `" +
+                              iterableVal.typeName() + "`");
+        }
+        for (auto& item : items) {
+            auto iterEnv = std::make_shared<Environment>(env);
+            iterEnv->define(s->varName, item);
+            try {
+                execute(s->body, iterEnv);
+            } catch (BreakSignal&) {
+                break;
+            } catch (ContinueSignal&) {
+                // لا شيء إضافي: ننتقل للعنصر التالي مباشرة، تماماً كـ continue في أي حلقة أخرى.
+            }
         }
         return;
     }
@@ -7672,6 +7730,20 @@ Value Interpreter::evaluate(const ExprPtr& expr, EnvPtr env) {
         std::vector<Value> args;
         for (auto& a : e->args) args.push_back(evaluate(a, env));
         return invokeCallee(e->callee, args, e->line, env);
+    }
+    // callee_expr(args...) where callee_expr isn't a plain name (see CallValueExpr in rin_ast.h):
+    // evaluate the callee expression to a VALUE first (e.g. an IndexExpr like `arr[0]`, a
+    // parenthesized/lambda expression, or another call's result), then call it if it's a function.
+    if (auto e = std::dynamic_pointer_cast<CallValueExpr>(expr)) {
+        Value callee = evaluate(e->callee, env);
+        std::vector<Value> args;
+        args.reserve(e->args.size());
+        for (auto& a : e->args) args.push_back(evaluate(a, env));
+        if (callee.type != Value::Type::FUNCTION || !callee.function) {
+            throw diagErr(diag::Code::E0004_InvalidType, e->line,
+                          "cannot call a value of type `" + callee.typeName() + "`");
+        }
+        return callFunction(callee.function, args, e->line);
     }
     if (auto e = std::dynamic_pointer_cast<ArrayExpr>(expr)) {
         auto arr = std::make_shared<ArrayData>();
