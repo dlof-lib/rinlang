@@ -602,17 +602,13 @@
                 android:textColor="@color/rin_accent"
                 android:textStyle="bold"
                 android:textSize="14sp" />
-            <LinearLayout android:id="@+id/rowLangAr" android:layout_width="match_parent" android:layout_height="48dp" android:gravity="center_vertical" android:padding="12dp" android:background="@drawable/bg_lang_option_selected" android:clickable="true" android:focusable="true">
-                <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="@string/lang_name_ar" android:textColor="@color/rin_on_toolbar" android:textSize="13sp" />
-                <ImageView android:id="@+id/checkLangAr" android:layout_width="18dp" android:layout_height="18dp" android:src="@android:drawable/checkbox_on_background" app:tint="@color/rin_accent" android:contentDescription="@null" />
-            </LinearLayout>
-            <LinearLayout android:id="@+id/rowLangEn" android:layout_width="match_parent" android:layout_height="48dp" android:layout_marginTop="7dp" android:gravity="center_vertical" android:padding="12dp" android:background="@drawable/bg_list_card" android:clickable="true" android:focusable="true">
-                <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="@string/lang_name_en" android:textColor="@color/rin_on_toolbar" android:textSize="13sp" />
-                <ImageView android:id="@+id/checkLangEn" android:layout_width="18dp" android:layout_height="18dp" android:src="@android:drawable/checkbox_on_background" app:tint="@color/rin_accent" android:visibility="invisible" android:contentDescription="@null" />
-            </LinearLayout>
-            <LinearLayout android:id="@+id/rowLangEs" android:layout_width="match_parent" android:layout_height="48dp" android:layout_marginTop="7dp" android:gravity="center_vertical" android:padding="12dp" android:background="@drawable/bg_list_card" android:clickable="true" android:focusable="true">
-                <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="@string/lang_name_es" android:textColor="@color/rin_on_toolbar" android:textSize="13sp" />
-                <ImageView android:id="@+id/checkLangEs" android:layout_width="18dp" android:layout_height="18dp" android:src="@android:drawable/checkbox_on_background" app:tint="@color/rin_accent" android:visibility="invisible" android:contentDescription="@null" />
+            <LinearLayout android:id="@+id/btnOpenLanguagePicker" android:layout_width="match_parent" android:layout_height="76dp" android:gravity="center_vertical" android:padding="14dp" android:background="@drawable/bg_lang_option_selected" android:clickable="true" android:focusable="true">
+                <TextView android:layout_width="52dp" android:layout_height="52dp" android:gravity="center" android:text="🌐" android:textSize="27sp"/>
+                <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical" android:paddingStart="10dp">
+                    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/settings_language_current" android:textColor="@color/rin_on_toolbar" android:textStyle="bold" android:textSize="14sp"/>
+                    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/settings_language_hint" android:textColor="@color/rin_editor_hint" android:textSize="11sp" android:layout_marginTop="3dp"/>
+                </LinearLayout>
+                <TextView android:layout_width="40dp" android:layout_height="40dp" android:gravity="center" android:text="›" android:textSize="27sp" android:textColor="@color/rin_accent"/>
             </LinearLayout>
 
             <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="22dp" android:layout_marginBottom="8dp" android:text="@string/settings_theme_section_title" android:textStyle="bold" android:textSize="15sp" android:textColor="@color/rin_on_toolbar" />
