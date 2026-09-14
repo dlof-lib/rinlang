@@ -1,28 +1,62 @@
 plugins {
     id 'com.android.application'
     id 'org.jetbrains.kotlin.android'
-    id 'com.google.gms.google-services' version '4.5.0'
+    // يجب أن يبقى هذا آخر سطر بلوجنات لكي يقرأ google-services.json بشكل صحيح
+    id 'com.google.gms.google-services'
 }
+
+// نظام الإصدار الرسمي لمحرّك Rin: المصدر الوحيد هو ملف VERSION في جذر
+// المستودع (يجب أن يطابق RIN_VERSION_STRING في app/src/main/cpp/rin_version.h
+// حرفياً — انظر docs/VERSIONING.md). versionName يُقرأ من هنا مباشرة بدل رقم
+// ثابت منفصل يمكن أن ينسى أحد تحديثه عند رفع الإصدار.
+def rinVersionName = new File(rootDir, "VERSION").text.trim()
+def rinVersionParts = rinVersionName.split("\\.")
+// versionCode = major*10000 + minor*100 + patch — يضمن تصاعداً رقمياً صحيحاً
+// عبر أي تسلسل SemVer صالح (patch/minor حتى 99)، كما يطلبه Play Store.
+def rinVersionCode = (rinVersionParts[0].toInteger() * 10000) +
+                      (rinVersionParts[1].toInteger() * 100) +
+                       rinVersionParts[2].toInteger()
 
 android {
     namespace 'com.dlof.rinlang'
     compileSdk 34
+    ndkVersion "26.1.10909125"
 
     defaultConfig {
         applicationId "com.dlof.rinlang"
         minSdk 24
         targetSdk 34
-        versionCode 1
-        versionName "1.0"
+        versionCode rinVersionCode
+        versionName rinVersionName
+
+        externalNativeBuild {
+            cmake {
+                cppFlags '-std=c++17'
+            }
+        }
     }
 
+    externalNativeBuild {
+        cmake {
+            path "src/main/cpp/CMakeLists.txt"
+            version "3.22.1"
+        }
+    }
+
+    // توقيع الإصدار الاحترافي (release) عبر متغيّرات بيئة، بدل قيم ثابتة في الملف أو Secrets يجب
+    // ضبطها يدوياً في GitHub. سير عمل build_apk.yml يُولِّد keystore وكلمتَي مرور عشوائيتين بنفسه
+    // في كل تشغيل ويمرّرهما هنا كمتغيّرات بيئة — فلا حاجة لأي إعداد يدوي على GitHub إطلاقاً.
+    // عند البناء المحلي بدون هذه المتغيّرات، يقع release تلقائياً على توقيع debug القياسي حتى
+    // لا يفشل `gradle assembleRelease` محلياً بسبب غياب keystore.
+    def rinKeystorePath = System.getenv("RIN_KEYSTORE_PATH")
+    def hasReleaseSigning = rinKeystorePath != null && file(rinKeystorePath).exists()
+
     signingConfigs {
-        release {
-            def ksPath = System.getenv("RIN_KEYSTORE_PATH")
-            if (ksPath != null) {
-                storeFile file(ksPath)
+        if (hasReleaseSigning) {
+            release {
+                storeFile file(rinKeystorePath)
                 storePassword System.getenv("RIN_KEYSTORE_PASSWORD")
-                keyAlias System.getenv("RIN_KEY_ALIAS")
+                keyAlias System.getenv("RIN_KEY_ALIAS") ?: "rin"
                 keyPassword System.getenv("RIN_KEY_PASSWORD")
             }
         }
@@ -32,9 +66,7 @@ android {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
-            // يُطبَّق فقط إذا كانت متغيرات البيئة موجودة فعلياً (أثناء بناء الـ CI)، وإلا يبقى
-            // الإصدار release غير موقَّع محلياً عند البناء اليدوي بدون هذه المتغيرات.
-            if (System.getenv("RIN_KEYSTORE_PATH") != null) {
+            if (hasReleaseSigning) {
                 signingConfig signingConfigs.release
             }
         }
@@ -51,23 +83,31 @@ android {
     kotlinOptions {
         jvmTarget = '17'
     }
+
+    buildFeatures {
+        viewBinding false
+    }
 }
 
 dependencies {
     implementation 'androidx.core:core-ktx:1.13.1'
     implementation 'androidx.appcompat:appcompat:1.7.0'
+    implementation 'androidx.activity:activity-ktx:1.9.2'
     implementation 'com.google.android.material:material:1.12.0'
-    implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
-
-    // مسح رمز QR بالكاميرا (مكتبة جاهزة وموثوقة، تغلّف zxing وتدير صلاحية الكاميرا تلقائياً).
-    implementation 'com.journeyapps:zxing-android-embedded:4.3.0'
+    // Real QR generation for Rin Artifact / Container runtime.
     implementation 'com.google.zxing:core:3.5.3'
+    implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
+    implementation 'androidx.recyclerview:recyclerview:1.3.2'
 
-    // لا حاجة لـ Firebase SDK من أجل GETY نفسه (يتواصل عبر REST المباشر عبر
-    // FirebaseRestClient.kt)، لكنها مطلوبة لأن com.dlof.rinlang.auth.* (المرحلة 1)
-    // لا يزال مصدرها ضمن هذه الوحدة نفسها، ويستدعي FirebaseAuth وFirebaseDatabase
-    // مباشرة — بدونها يفشل compileReleaseKotlin بخطأ "unresolved reference: firebase".
+    // Firebase — Realtime Database + Authentication (Email/Password) فقط، وكلاهما ضمن
+    // خطة Spark المجانية بدون بطاقة دفع. لا نستخدم Cloud Functions ولا Storage المدفوع.
     implementation platform('com.google.firebase:firebase-bom:33.1.2')
     implementation 'com.google.firebase:firebase-auth-ktx'
     implementation 'com.google.firebase:firebase-database-ktx'
+
+    // مكتبة Google الرسمية لتوقيع حزم APK (نفس المكتبة التي تستخدمها أداة `apksigner` في
+    // Android SDK) — تُستخدم من ميزة "تصدير APK" (انظر RinApkExporter) لتوقيع مشاريع Rin
+    // المُصدَّرة بتوقيع Android رسمي فعلي (Signature Scheme v1 + v2 + v3)، بلا اعتماد على
+    // أدوات بناء خارجية أو خادم بعيد. لا تعتمد على أي API داخلي في OpenJDK فتعمل على أندرويد.
+    implementation 'com.android.tools.build:apksig:8.5.2'
 }
