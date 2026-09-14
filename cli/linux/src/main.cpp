@@ -28,6 +28,7 @@
 #include "diagnostics/diagnostic_renderer.h"
 #include "diagnostics/source_manager.h"
 #include "pkg/cli_pkg.h"
+#include "toolchain/rin_toolchain.h"
 
 #include <iostream>
 #include <fstream>
@@ -201,6 +202,10 @@ void printUsage() {
         "  rin build [file] [-o out] [--release]  بناء تنفيذي أصلي (عبر rinc)\n"
         "  rin run [file] [--import-progress]     تشغيل برنامج Rin (شريط تحميل حي لـ @import)\n"
         "  rin check <file> [--format=plain|short|json|lsp]\n"
+        "  rin analyze <file>                      semantic analyzer + type checker\n"
+        "  rin bytecode <file> [--optimize] [--out file.rbc]  compile/disassemble bytecode\n"
+        "  rin vm <file>                           execute Rin bytecode VM\n"
+        "  rin toolchain-new <name>                generate a complete toolchain project skeleton\n"
         "  rin test [dir]                         تشغيل اختبارات .rin\n"
         "  rin fmt <file> [--write]               إعادة محاذاة المسافات البادئة\n"
         "  rin clean                              حذف مخرجات ./build\n"
@@ -558,6 +563,89 @@ int cmdFmt(const std::vector<std::string>& args) {
 }
 
 // ---------------------------------------------------------------------------
+// Rin Toolchain commands: semantic analysis, static typing and bytecode VM.
+// These commands share the canonical Lexer/Parser/AST used by the interpreter.
+// ---------------------------------------------------------------------------
+bool loadAstForToolchain(const std::string& path, std::vector<rin::StmtPtr>& out) {
+    std::string source;
+    if (!readFile(path, source)) {
+        std::cerr << "rin: تعذّر فتح الملف '" << path << "'\n";
+        return false;
+    }
+    try {
+        rin::Lexer lexer(source, path);
+        auto tokens = lexer.scanTokens();
+        rin::Parser parser(tokens, path);
+        out = parser.parse();
+        return true;
+    } catch (rin::RinError& e) {
+        if (e.diagnostic) std::cerr << rin::diag::renderPlain(*e.diagnostic, rin::diag::globalSourceManager());
+        else std::cerr << "[rin] خطأ عند السطر " << e.line << ": " << e.message << "\n";
+        return false;
+    }
+}
+
+int cmdAnalyze(const std::vector<std::string>& args) {
+    if (args.empty()) { std::cerr << "rin analyze: يلزم ملف .rin\n"; return 2; }
+    std::vector<rin::StmtPtr> ast;
+    if (!loadAstForToolchain(args[0], ast)) return 1;
+    rin::toolchain::SemanticAnalyzer semantic;
+    rin::toolchain::TypeChecker types;
+    auto sr=semantic.analyze(ast);
+    auto tr=types.check(ast);
+    std::cout << "Rin Toolchain Analysis\n";
+    std::cout << "semantic: " << (sr.diagnostics.hasErrors() ? "FAILED" : "OK") << "\n";
+    std::cout << sr.diagnostics.renderText();
+    std::cout << "types:    " << (tr.diagnostics.hasErrors() ? "FAILED" : "OK") << "\n";
+    std::cout << tr.diagnostics.renderText();
+    return (sr.diagnostics.hasErrors() || tr.diagnostics.hasErrors()) ? 1 : 0;
+}
+
+int cmdBytecode(const std::vector<std::string>& args, bool execute) {
+    if (args.empty()) { std::cerr << "rin " << (execute?"vm":"bytecode") << ": يلزم ملف .rin\n"; return 2; }
+    std::vector<rin::StmtPtr> ast;
+    if (!loadAstForToolchain(args[0], ast)) return 1;
+    rin::toolchain::SemanticAnalyzer semantic;
+    auto sr=semantic.analyze(ast);
+    if (sr.diagnostics.hasErrors()) { std::cerr << sr.diagnostics.renderText(); return 1; }
+    rin::toolchain::BytecodeCompiler compiler;
+    auto cr=compiler.compile(ast);
+    if (!cr.diagnostics.renderText().empty()) std::cerr << cr.diagnostics.renderText();
+    if (cr.diagnostics.hasErrors()) return 1;
+    bool optimize = std::find(args.begin(), args.end(), "--optimize") != args.end();
+    auto outIt = std::find(args.begin(), args.end(), "--out");
+    std::string outPath;
+    if (outIt != args.end() && std::next(outIt) != args.end()) outPath = *std::next(outIt);
+    if (optimize) {
+        rin::toolchain::Optimizer opt;
+        std::cout << "optimizer: " << opt.optimize(cr.chunk) << " optimization(s)\n";
+    }
+    if (!execute) {
+        if (!outPath.empty()) {
+            if (!rin::toolchain::writeBytecode(cr.chunk, outPath)) {
+                std::cerr << "rin bytecode: تعذّر كتابة " << outPath << "\n"; return 1;
+            }
+            std::cout << "bytecode: " << outPath << "\n";
+        }
+        std::cout << rin::toolchain::BytecodeCompiler::disassemble(cr.chunk); return 0;
+    }
+    rin::toolchain::BytecodeVM vm;
+    auto r=vm.run(cr.chunk);
+    std::cout << r.output;
+    if (!r.ok) { std::cerr << r.diagnostics.renderText(); return 1; }
+    return 0;
+}
+
+int cmdToolchainNew(const std::vector<std::string>& args) {
+    if (args.empty()) { std::cerr << "rin toolchain-new: يلزم اسم المشروع\n"; return 2; }
+    rin::toolchain::DiagnosticBag d;
+    rin::toolchain::ProjectOptions o; o.name=args[0];
+    if (!rin::toolchain::generateProject(args[0],o,d)) { std::cerr << d.renderText(); return 1; }
+    std::cout << "Rin Toolchain: تم إنشاء المشروع " << args[0] << "\n";
+    return 0;
+}
+
+// ---------------------------------------------------------------------------
 // rin clean
 // ---------------------------------------------------------------------------
 int cmdClean() {
@@ -656,6 +744,10 @@ int main(int argc, char** argv) {
         if (cmd == "fmt") return cmdFmt(rest);
         if (cmd == "clean") return cmdClean();
         if (cmd == "doctor") return cmdDoctor();
+        if (cmd == "analyze") return cmdAnalyze(rest);
+        if (cmd == "bytecode") return cmdBytecode(rest, false);
+        if (cmd == "vm") return cmdBytecode(rest, true);
+        if (cmd == "toolchain-new") return cmdToolchainNew(rest);
 
         if (cmd == "check" && !rest.empty()) {
             rin::diag::OutputFormat fmt = rin::diag::OutputFormat::Plain;
