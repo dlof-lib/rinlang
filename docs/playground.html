@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>المحرّر — جرّب Rin في متصفحك — Rin</title>
+<meta name="description" content="اكتب وشغّل Rin مباشرة في متصفحك: نفس المحرّك الحقيقي (rin_lexer.cpp / rin_parser.cpp / rin_interpreter.cpp) مُصرَّفاً WebAssembly، بلا تثبيت وبلا حاسوب."/>
+<link rel="icon" href="assets/brand/favicon.ico" sizes="any"/>
+<link rel="icon" type="image/png" sizes="32x32" href="assets/brand/icon-32.png"/>
+<link rel="icon" type="image/png" sizes="16x16" href="assets/brand/icon-16.png"/>
+<link rel="apple-touch-icon" href="assets/brand/apple-touch-icon.png"/>
+<link rel="manifest" href="assets/site.webmanifest"/>
+<meta name="theme-color" content="#12101C"/>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="assets/style.css"/>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="wrap">
+    <a class="brand" href="index.html">
+      <img class="mark" src="assets/brand/icon-32.png" width="26" height="26" alt="شعار Rin"/>
+      Rin
+    </a>
+    <button class="nav-burger" aria-label="فتح القائمة" aria-expanded="false">☰</button>
+    <div class="nav-links">
+      <a href="index.html">الرئيسية</a>
+      <a href="language.html">اللغة</a>
+      <a href="lessons.html">دروس</a>
+      <a href="playground.html" class="is-active">المحرّر</a>
+      <a href="get-started.html">دليل البدء</a>
+      <a class="nav-cta" href="https://github.com/dlof-lib/rinlang" target="_blank" rel="noopener">GitHub</a>
+    </div>
+  </div>
+</nav>
+
+<header class="page-head pg-header">
+  <div class="wrap">
+    <div class="eyebrow">المحرّر التفاعلي</div>
+    <h1>اكتب Rin وشغّلها هنا مباشرة</h1>
+    <p class="lede">
+      نفس محرّك Rin الحقيقي — لا محاكاة ولا نسخة مصغَّرة — مُصرَّف إلى
+      WebAssembly ويعمل بالكامل داخل متصفحك، بلا خادوم وبلا اتصال شبكة أثناء
+      التشغيل.
+    </p>
+    <div class="pg-status">
+      <span class="badge off" id="pgStatus">…</span>
+      <span class="txt" id="pgStatusText">جاري التحقق من المحرّك…</span>
+    </div>
+  </div>
+</header>
+
+<section class="pg-section">
+  <div class="wrap">
+
+    <div class="engine-banner" id="pgBanner">
+      <h3>المحرّك المُجمَّع (WASM) غير موجود بعد في هذه النسخة من الموقع</h3>
+      <p>
+        هذه الصفحة جاهزة بالكامل للتشغيل الحقيقي، وتحتاج فقط ملفّي
+        <code>rin.js</code> و<code>rin.wasm</code> في <code>assets/engine/</code> —
+        يُبنيان مرّة واحدة من نفس مصادر المحرّك الرسمية عبر Emscripten، ثم تكتشفهما
+        الصفحة تلقائياً بلا أي تعديل آخر:
+      </p>
+      <pre>bash docs/assets/engine/build-engine.sh</pre>
+      <p>
+        إلى أن يُبنى المحرّك، الأمثلة الجاهزة تعرض ناتجها المُسجَّل مسبقاً (معاينة
+        فقط)، ويمكنك الكتابة بحرّية في المحرّر — تفاصيل الخطوة في
+        <code>assets/engine/README.md</code>، وطرق تشغيل بديلة (أندرويد/سطر
+        الأوامر) في <a href="get-started.html">دليل البدء</a>.
+      </p>
+    </div>
+
+    <div class="pg-toolbar" style="margin-top:26px;">
+      <select id="pgExample" aria-label="اختر مثالاً جاهزاً"></select>
+      <button class="btn-reset" id="pgReset" type="button">إعادة تحميل المثال</button>
+      <span class="spacer"></span>
+      <button class="btn-run" id="pgRun" type="button">▶ تشغيل</button>
+    </div>
+
+    <div class="pg-grid">
+      <div class="pg-pane">
+        <div class="code-head">
+          <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+          <span class="name">main.rin</span>
+        </div>
+        <div class="pg-editor-wrap">
+          <textarea id="pgEditor" class="pg-editor" spellcheck="false" autocapitalize="off" autocomplete="off"></textarea>
+        </div>
+      </div>
+      <div class="pg-pane">
+        <div class="code-head">
+          <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+          <span class="name">output</span>
+        </div>
+        <pre class="pg-output" id="pgOutput">…</pre>
+      </div>
+    </div>
+
+    <div class="callout" style="margin-top:26px;">
+      <b>ملاحظة:</b> التنفيذ (عند تفعيل المحرّك) يحدث بالكامل داخل متصفحك عبر
+      WebAssembly — لا يُرسَل ما تكتبه إلى أي خادوم. هذا نفس المبدأ المتّبع في
+      <code>web/index.html</code> و<code>web/site.rin</code> من المستودع الرسمي.
+    </div>
+  </div>
+</section>
+
+<footer class="footer">
+  <div class="wrap">
+    <div class="footer-links">
+      <a href="index.html">الرئيسية</a>
+      <a href="language.html">اللغة</a>
+      <a href="lessons.html">دروس</a>
+      <a href="playground.html">المحرّر</a>
+      <a href="get-started.html">دليل البدء</a>
+      <a href="license.html">الترخيص</a>
+      <a href="credits.html">شكر وتقدير</a>
+      <a href="https://github.com/dlof-lib/rinlang" target="_blank" rel="noopener">GitHub</a>
+    </div>
+    <div class="footer-meta">
+      <div>Rin — الإصدار 1.0.0 — رخصة MIT</div>
+      <div>هذا الموقع جزء من مستودع rinlang، ويُنشَر عبر GitHub Pages من مجلد docs/</div>
+    </div>
+  </div>
+</footer>
+
+<script src="assets/site.js"></script>
+<script src="assets/playground-examples.js"></script>
+<script src="assets/playground.js"></script>
+</body>
+</html>
