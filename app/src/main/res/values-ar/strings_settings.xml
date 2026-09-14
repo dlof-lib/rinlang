@@ -57,4 +57,5 @@
     <string name="settings_confirm_exit_hint">اطلب تأكيداً قبل مغادرة المحرر.</string>
     <string name="settings_format_save">تنسيق عند الحفظ</string>
     <string name="settings_format_save_hint">جهّز المحرر لتنسيق الكود تلقائياً عند الحفظ.</string>
+<string name="settings_language_current">العربية 🇸🇾</string><string name="language_picker_title">اختيار اللغة</string><string name="language_picker_subtitle">اختر اللغة والبلد</string><string name="language_picker_search">ابحث عن لغة أو بلد…</string><string name="language_picker_applied">تم تطبيق %1$s</string><string name="language_group_arabic">العربية • الدول العربية</string><string name="language_group_english">English • الدول الناطقة بالإنجليزية</string><string name="language_group_spanish">Español • الدول الناطقة بالإسبانية</string>
 </resources>
