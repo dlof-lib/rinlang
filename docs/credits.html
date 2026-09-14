@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>شكر وتقدير — Rin</title>
+<meta name="description" content="شكر وتقدير لكل ما ألهم Rin: لغات البرمجة التي أخذت منها أفكاراً، والأدوات مفتوحة المصدر التي يقوم عليها المحرّك وهذا الموقع."/>
+<link rel="icon" href="assets/brand/favicon.ico" sizes="any"/>
+<link rel="icon" type="image/png" sizes="32x32" href="assets/brand/icon-32.png"/>
+<link rel="icon" type="image/png" sizes="16x16" href="assets/brand/icon-16.png"/>
+<link rel="apple-touch-icon" href="assets/brand/apple-touch-icon.png"/>
+<link rel="manifest" href="assets/site.webmanifest"/>
+<meta name="theme-color" content="#12101C"/>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="assets/style.css"/>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="wrap">
+    <a class="brand" href="index.html">
+      <img class="mark" src="assets/brand/icon-32.png" width="26" height="26" alt="شعار Rin"/>
+      Rin
+    </a>
+    <button class="nav-burger" aria-label="فتح القائمة" aria-expanded="false">☰</button>
+    <div class="nav-links">
+      <a href="index.html">الرئيسية</a>
+      <a href="language.html">اللغة</a>
+      <a href="lessons.html">دروس</a>
+      <a href="playground.html">المحرّر</a>
+      <a href="get-started.html">دليل البدء</a>
+      <a class="nav-cta" href="https://github.com/dlof-lib/rinlang" target="_blank" rel="noopener">GitHub</a>
+    </div>
+  </div>
+</nav>
+
+<header class="page-head">
+  <div class="wrap">
+    <div class="eyebrow">شكر وتقدير</div>
+    <h1>Rin ما كانت لتكون بهذا الشكل بلا هؤلاء</h1>
+    <p class="lede">
+      لا توجد لغة برمجة تُبنى من فراغ. Rin تقف على أفكار جرّبتها وأثبتتها لغات
+      وأدوات أخرى قبلها، وتعمل بفضل مكوّنات مفتوحة المصدر يستخدمها المحرّك
+      وهذا الموقع مباشرة. هذه صفحة شكر لكل ذلك.
+    </p>
+  </div>
+</header>
+
+<section class="doc-section">
+  <div class="wrap">
+    <h2>لغات برمجة ألهمت تصميم Rin</h2>
+    <p class="lede">
+      ليست علاقة اعتمادية (dependency) بل إلهام في التصميم — كل فكرة أدناه
+      أُعيد تفسيرها وتنفيذها من الصفر داخل محرّك Rin نفسه.
+    </p>
+    <div class="credits-grid">
+      <div class="credit-item">
+        <h4>C/C++ <span class="tag-mono">composition</span></h4>
+        <p>صياغة التعابير والعمليات، وأسلوب الأقواس المتداخلة الذي بُني عليه مُحلِّل Rin اللفظي والتركيبي.</p>
+      </div>
+      <div class="credit-item">
+        <h4>JavaScript <span class="tag-mono">flexibility</span></h4>
+        <p>الدوال كقيم من الدرجة الأولى، الدوال المجهولة القابلة للنداء الفوري، والقواميس/المصفوفات الديناميكية.</p>
+      </div>
+      <div class="credit-item">
+        <h4>Python <span class="tag-mono">readability</span></h4>
+        <p>وضوح <code>for x in iterable</code>، وتفضيل الصياغة المقروءة على الاختصار المُبهَم.</p>
+      </div>
+      <div class="credit-item">
+        <h4>Elixir / F# <span class="tag-mono">pipelines</span></h4>
+        <p>فكرة الأنبوب <code>|&gt;</code> نفسها: تمرير ناتج خطوة إلى التالية بترتيب القراءة بدل التعشيش.</p>
+      </div>
+      <div class="credit-item">
+        <h4>MongoDB <span class="tag-mono">documents</span></h4>
+        <p>نموذج الوثائق (documents) بلا مخطط جامد، الذي بُنيت عليه قاعدة بيانات NoSQL المدمجة في Rin.</p>
+      </div>
+      <div class="credit-item">
+        <h4>Swift / Kotlin <span class="tag-mono">tooling-first</span></h4>
+        <p>فكرة لغة يُصمَّم محرّكها وأداة تطويرها معاً منذ اليوم الأول، بدل إضافة IDE لاحقاً كمشروع منفصل.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="doc-section">
+  <div class="wrap">
+    <h2>أدوات ومشاريع مفتوحة المصدر</h2>
+    <p class="lede">هذه لا تُلهم فقط — بل تُشغَّل فعلياً داخل محرّك Rin أو حول هذا الموقع.</p>
+    <div class="credits-grid">
+      <div class="credit-item">
+        <h4>zlib</h4>
+        <p>الضغط الحقيقي المستخدَم داخل صيغة الحاوية <code>.rcl</code> وأدوات <code>clc</code>.</p>
+      </div>
+      <div class="credit-item">
+        <h4>Emscripten / LLVM</h4>
+        <p>تصريف محرّك C++‎17 نفسه إلى WebAssembly، دون كتابة أي جزء منه من جديد بلغة أخرى.</p>
+      </div>
+      <div class="credit-item">
+        <h4>CMake</h4>
+        <p>نظام البناء الموحَّد عبر سطر أوامر لينكس/macOS/ويندوز وتطبيق أندرويد.</p>
+      </div>
+      <div class="credit-item">
+        <h4>Android NDK</h4>
+        <p>الجسر الذي يجعل بيئة تطوير Rin تعمل كاملة داخل الهاتف بلا حاسوب.</p>
+      </div>
+      <div class="credit-item">
+        <h4>GitHub Actions</h4>
+        <p>بناء واختبار المحرّك تلقائياً مع كل تغيير، ونشر هذا الموقع عبر GitHub Pages.</p>
+      </div>
+      <div class="credit-item">
+        <h4>IBM Plex</h4>
+        <p>عائلة الخطوط (Sans Arabic / Mono) المستخدَمة في كل صفحات هذا الموقع.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="doc-section">
+  <div class="wrap">
+    <h2>المجتمع والمساهمون</h2>
+    <p class="lede">
+      شكر لكل من فتح Issue، اقترح ميزة، أبلغ عن خلل، أو راجع كوداً — سواء ظهر
+      اسمه في <code>git log</code> أو لا. قائمة المساهمين الكاملة محدَّثة دائماً
+      في مستودع GitHub نفسه.
+    </p>
+    <div class="thanks-list">
+      <span>مساهمو الكود</span>
+      <span>مُبلِّغو الأخطاء</span>
+      <span>كاتبو الوثائق</span>
+      <span>مترجمو الواجهة (translation)</span>
+      <span>مختبِرو الإصدارات المبكّرة</span>
+      <span>كل من جرّب Rin وأعطى رأياً صادقاً</span>
+    </div>
+    <div class="callout ok" style="margin-top:28px;">
+      تريد اسمك هنا؟ المساهمة مفتوحة على
+      <a href="https://github.com/dlof-lib/rinlang" target="_blank" rel="noopener" style="color:var(--ink)">GitHub</a> —
+      من إصلاح خطأ صغير في المحرّك، إلى درس جديد في
+      <a href="lessons.html" style="color:var(--ink)">صفحة الدروس</a> هذه.
+    </div>
+  </div>
+</section>
+
+<footer class="footer">
+  <div class="wrap">
+    <div class="footer-links">
+      <a href="index.html">الرئيسية</a>
+      <a href="language.html">اللغة</a>
+      <a href="lessons.html">دروس</a>
+      <a href="playground.html">المحرّر</a>
+      <a href="get-started.html">دليل البدء</a>
+      <a href="license.html">الترخيص</a>
+      <a href="credits.html" class="is-active">شكر وتقدير</a>
+      <a href="https://github.com/dlof-lib/rinlang" target="_blank" rel="noopener">GitHub</a>
+    </div>
+    <div class="footer-meta">
+      <div>Rin — الإصدار 1.0.0 — رخصة MIT</div>
+      <div>هذا الموقع جزء من مستودع rinlang، ويُنشَر عبر GitHub Pages من مجلد docs/</div>
+    </div>
+  </div>
+</footer>
+
+<script src="assets/site.js"></script>
+</body>
+</html>
