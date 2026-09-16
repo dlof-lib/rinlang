@@ -162,6 +162,18 @@ StmtPtr Parser::declaration() {
         advance();
         return letDeclaration();
     }
+    // مرادفات إنجليزية إضافية لِـ 'let' — تماماً بنفس أسلوب/قيود 'make' أعلاه حرفياً (كلمات سياقية
+    // غير محجوزة، تُقرأ IDENT عادي، لا تتحقق إلا حين تُتبَع مباشرة باسم متغيّر IDENT، فلا تتعارض مع
+    // استخدام أيٍّ منها اسم دالة عادية foo(...) أو اسم حاوية @foo=... في أي مكان آخر من اللغة):
+    // set/define/declare/create/var name = expr;  كلها تفوَّض إلى letDeclaration() نفسها بلا أي فرق
+    // دلالي عن 'let'/'make' — مجرد أسماء بديلة مألوفة من لغات أخرى (set من Lisp، var من JS،
+    // define/declare/create صياغة وصفية عامة) لتسهيل التعلّم على القادمين من خلفيات مختلفة.
+    if (check(TokenType::IDENT) && checkNext(TokenType::IDENT) &&
+        (peek().lexeme == "set" || peek().lexeme == "define" || peek().lexeme == "declare" ||
+         peek().lexeme == "create" || peek().lexeme == "var")) {
+        advance();
+        return letDeclaration();
+    }
 
     // مفاهيم لغة الحاويات/البيانات
     if (match({TokenType::TEXT})) return textDeclaration();
