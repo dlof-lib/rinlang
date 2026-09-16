@@ -4,57 +4,50 @@
 #include <stdexcept>
 
 // ============================================================================================
-// RIN CONTAINER SQL (اختصاراً RCSQL) — نظام استعلام مصغّر ومميّز خاص بلغة Rin، يُستخدَم للبحث/
-// الفلترة داخل مجموعات مستندات NoSQL المُعرَّفة عبر @container.doc / @doc (انظر DocumentStmt في
-// rin_ast.h وdocStore في rin_interpreter.h) — أي أن "بنية الحاويات" التي يُستعلَم عنها هنا هي حرفياً
-// حاويات @ الموجودة أصلاً في اللغة (تعريف البيانات يبقى عبر @doc/@container.doc كالمعتاد؛ RCSQL لا
-// يُعرِّف بيانات جديدة، فقط يستعلمها).
+// RIN CONTAINER SQL (RCSQL) 1.0
+// --------------------------------------------------------------------------------------------
+// استعلام خفيف خاص بـ Rin للبحث داخل @container.doc / @doc الموجودة مسبقاً.
+// RCSQL ليس محرك تخزين جديداً ولا يضيف قاعدة بيانات ثانية.
 //
-// يمكن أيضاً "تعريف" استعلام RCSQL كحاوية @ مستقلة قابلة لإعادة الاستخدام عبر @sql/@container.sql
-// (انظر ContainerKind::SQL وsqlViews في rin_interpreter.h) ثم استدعاؤه لاحقاً بقناعه (mask) بدل
-// كتابة النص الخام في كل مرة — هذا ما تقصده "استدعاء RIN CONTAINER SQL بالأقنعة".
+// الرموز التركيبية الوحيدة داخل نص الاستعلام:
+//     /  :  &  (  )  #
+// بالإضافة إلى المعرّفات (حروف/أرقام/underscore، مع دعم UTF-8)، والمسافات.
+// أي رمز آخر مرفوض مباشرة.
 //
-// الصياغة (EBNF مبسّطة) -- خمسة رموز تركيبية فقط مسموح بها، بالإضافة لحروف/أرقام المعرّفات:
+// grammar:
+//   query      := target ("&" predicate)*
+//   target     := "#" IDENT | IDENT ("/" IDENT)*
+//   predicate := field ":" OP "(" ARG? ")"
+//   field      := IDENT ("/" IDENT)*
+//   OP         := eq | ne | gt | gte | lt | lte | has | like
+//              | starts | ends | contains | exists | missing
+//              | empty | notempty | isnull | notnull
+//   ARG        := IDENT
 //
-//   query      := target ( "&" predicate )*
-//   target     := "#" IDENT                  -- قناع (mask) يُحلّ إلى اسم حاوية عبر containerMasks
-//               | IDENT ( "/" IDENT )*        -- اسم حاوية مباشر، أو مسار Group/حاوية متداخلة
-//   predicate  := field ":" OP "(" ARG? ")"
-//   field      := IDENT ( "/" IDENT )*        -- يدعم حقول map متداخلة: address/city
-//   OP         := "eq" | "ne" | "gt" | "gte" | "lt" | "lte" | "has" | "like"
-//   ARG        := IDENT                       -- وسيط واحد فقط (لا فاصلة: ',' ليست من الرموز المسموحة)
-//   IDENT      := تسلسل غير فارغ من: حروف/أرقام لاتينية، '_' '.' '-'، أو أي بايت UTF-8 عربي/غير-ASCII
-//
-// مثال: "#usersMask & role:eq(admin) & age:gte(18) & address/city:eq(Cairo)"
-// مثال (بلا قناع، عبر مسار Group/حاوية متداخلة): "store/users & active:eq(true)"
+// كل predicates مرتبطة بـ AND بواسطة '&'. لا توجد صيغة OR في RCSQL 1.0.
 // ============================================================================================
 
 namespace rin::sql {
 
-// شرط فلترة واحد: field OP (arg) -- كلها AND فيما بينها بترتيب الكتابة (بلا OR في هذه النسخة).
 struct Predicate {
-    std::string field; // قد يحوي '/' لحقل متداخل، محفوظاً كما كُتب: "address/city"
-    std::string op;    // eq | ne | gt | gte | lt | lte | has | like
-    std::string arg;   // نص الوسيط الخام (قد يكون فارغاً لعمليات لا تحتاج وسيطاً لاحقاً)
+    std::string field;
+    std::string op;
+    std::string arg;
 };
 
-// استعلام RCSQL كامل بعد التحليل.
 struct Query {
-    bool targetIsMask = false;             // true إن كُتب الهدف كـ "#mask"
-    std::string targetMask;                // اسم القناع بلا '#' (فقط إن targetIsMask)
-    std::vector<std::string> targetPath;   // أجزاء المسار المفصولة بـ '/' (فقط إن !targetIsMask)
-    std::vector<Predicate> predicates;     // بترتيب الكتابة، AND فيما بينها
+    bool targetIsMask = false;
+    std::string targetMask;
+    std::vector<std::string> targetPath;
+    std::vector<Predicate> predicates;
 };
 
-// خطأ تركيبي (syntax) في نص RCSQL -- بما في ذلك استخدام أي رمز خارج القائمة المسموحة.
 struct SqlSyntaxError : std::runtime_error {
     explicit SqlSyntaxError(const std::string& msg) : std::runtime_error(msg) {}
 };
 
-// يحلّل نص استعلام RCSQL إلى Query جاهز للتنفيذ. يرمي SqlSyntaxError عند أي خلل تركيبي.
-// دالة نقية بلا أي اعتماد على Interpreter/Value -- تحليل الرموز فقط؛ تحليل الهدف (مطابقة القناع/
-// المسار الفعلي) وتنفيذ الشروط الفعلية على المستندات تتم في rin_interpreter.cpp (تحتاج docStore/
-// containerMasks/valuesEqual، غير متوفرة هنا عمداً حفاظاً على استقلالية هذا الملف واختباره بمعزل).
 Query parse(const std::string& text);
+bool isSupportedOperator(const std::string& op);
+bool operatorNeedsArgument(const std::string& op);
 
 } // namespace rin::sql
