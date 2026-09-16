@@ -53,16 +53,16 @@ int main() {
 
     static const char* seedDocs = R"RIN(
         @container.doc=users
-            mask="app.users";
+            mask="appUsers";
             document id="u1" fields={ name: "Ali", role: "admin", age: 25, address: { city: "Cairo" }, tags: ["vip", "early"] };
-            document id="u2" fields={ name: "Sara", role: "user", age: 30, address: { city: "Giza" }, tags: ["new"] };
+            document id="u2" fields={ name: "Sara", role: "user", age: 30, address: { city: "Giza" }, tags: ["new"], phone: null };
             document id="u3" fields={ name: "Omar", role: "admin", age: 17, address: { city: "Cairo" }, tags: [] };
         .end/container.doc
     )RIN";
 
     // (1) استعلام خام عبر قناع '#' مع شرط واحد.
     failures += run("raw query via mask (#) -- single predicate", std::string(seedDocs) + R"RIN(
-        print sql("#app.users & role:eq(admin)");
+        print sql("#appUsers & role:eq(admin)");
     )RIN", false, "\"name\": \"Ali\"");
 
     // (2) استعلام خام عبر اسم حاوية مباشر (بلا قناع).
@@ -82,51 +82,66 @@ int main() {
 
     // (4) عدة شروط AND متصلة بـ '&' بما فيها حقل متداخل عبر '/'.
     failures += run("multiple AND predicates incl. nested field", std::string(seedDocs) + R"RIN(
-        print sql("#app.users & role:eq(admin) & address/city:eq(Cairo) & age:gte(18)");
+        print sql("#appUsers & role:eq(admin) & address/city:eq(Cairo) & age:gte(18)");
     )RIN", false, "\"name\": \"Ali\"");
 
     // (5) عمليات مقارنة رقمية: gt/gte/lt/lte.
     failures += run("numeric comparisons gt/gte/lt/lte", std::string(seedDocs) + R"RIN(
-        print sql("#app.users & age:gt(20)");
-        print sql("#app.users & age:lte(17)");
+        print sql("#appUsers & age:gt(20)");
+        print sql("#appUsers & age:lte(17)");
     )RIN", false, "\"name\": \"Ali\"");
 
     // (6) has() على مصفوفة (tags) وعلى map (address).
     failures += run("has() on array and on map", std::string(seedDocs) + R"RIN(
-        print sql("#app.users & tags:has(vip)");
-        print sql("#app.users & address:has(city)");
+        print sql("#appUsers & tags:has(vip)");
+        print sql("#appUsers & address:has(city)");
     )RIN", false, "\"name\": \"Ali\"");
 
     // (7) like() كمطابقة substring غير حسّاسة لحالة الأحرف.
     failures += run("like() substring match", std::string(seedDocs) + R"RIN(
-        print sql("#app.users & name:like(ar)");
+        print sql("#appUsers & name:like(ar)");
     )RIN", false, "\"name\": \"Sara\"");
 
     // (8) sqlOne يعيد أول تطابق فقط؛ sqlCount يعيد العدد فقط.
     failures += run("sqlOne / sqlCount", std::string(seedDocs) + R"RIN(
-        print sqlOne("#app.users & role:eq(admin)");
-        print sqlCount("#app.users & role:eq(admin)");
+        print sqlOne("#appUsers & role:eq(admin)");
+        print sqlCount("#appUsers & role:eq(admin)");
     )RIN", false, "\"name\": \"Ali\"");
 
     // (9) @sql مُسمّاة تُستدعى لاحقاً بقناعها فقط (بلا تكرار النص الخام).
     failures += run("named @sql view invoked by its mask", std::string(seedDocs) + R"RIN(
         @sql=activeAdmins
-            mask="q.activeAdmins";
-            text query = "#app.users & role:eq(admin) & age:gte(18)";
+            mask="qActiveAdmins";
+            text query = "#appUsers & role:eq(admin) & age:gte(18)";
         .end/sql
-        print sql("q.activeAdmins");
-        print sqlCount("q.activeAdmins");
+        print sql("qActiveAdmins");
+        print sqlCount("qActiveAdmins");
     )RIN", false, "\"name\": \"Ali\"");
 
-    // (10) قناع/حاوية غير موجودة -> مصفوفة فارغة بصمت (لا خطأ) -- بنفس سلوك بقية دوال docStore.
+    // (10) عمليات النص/الوجود/الفراغ/null + sqlExists/sqlIds/sqlExplain.
+    failures += run("RCSQL 1.0 extended predicates", std::string(seedDocs) + R"RIN(
+        print sql("#appUsers & name:starts(A)");
+        print sql("#appUsers & name:ends(a)");
+        print sql("#appUsers & name:contains(AR)");
+        print sql("#appUsers & phone:missing()");
+        print sql("#appUsers & tags:notempty()");
+        print sql("#appUsers & tags:empty()");
+        print sql("#appUsers & phone:isnull()");
+        print sql("#appUsers & phone:notnull()");
+        print sqlExists("#appUsers & role:eq(admin)");
+        print sqlIds("#appUsers & role:eq(admin)");
+        print sqlExplain("#appUsers & role:eq(admin) & age:gte(18)");
+    )RIN", false, "RCSQL 1.0");
+
+    // (11) قناع/حاوية غير موجودة -> مصفوفة فارغة بصمت (لا خطأ) -- بنفس سلوك بقية دوال docStore.
     failures += run("unknown mask/container -> empty result, no error", R"RIN(
         print sql("#no.such.mask & x:eq(1)");
         print sql("noSuchContainer & x:eq(1)");
     )RIN", false, "[]");
 
-    // (11) رمز خارج القائمة المسموحة (/ : & () #) -> خطأ تركيبي E0042.
+    // (12) رمز خارج القائمة المسموحة (/ : & () #) -> خطأ تركيبي E0042.
     failures += run("disallowed symbol raises E0042 syntax error", R"RIN(
-        print sql("users|role:eq(admin)");
+        print sql("users.role:eq(admin)");
     )RIN", true, "E0042");
 
     if (failures == 0) {
