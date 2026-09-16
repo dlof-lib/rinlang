@@ -208,6 +208,43 @@ int main() {
         print sql("users & limit:eq(abc)");
     )RIN", true, "E0042");
 
+    // (23) not(...) -- نفي شرط واحد.
+    failures += run("not(...) negates a single predicate", std::string(seedDocs2) + R"RIN(
+        print sqlCount("#app.members & not(role:eq(user))");
+    )RIN", false, "2");
+
+    // (24) تركيب منطقي متداخل: (A AND B) OR (C AND D) عبر or(and(...) & and(...)).
+    failures += run("nested and(...)/or(...) composition", std::string(seedDocs2) + R"RIN(
+        print sql("#app.members & or(and(role:eq(admin) & active:eq(true)) & and(role:eq(owner) & active:eq(true)))");
+    )RIN", false, "\"name\": \"Omar\"");
+
+    // (25) تفريد مركّب: تكرار distinct:eq(...) يبني مفتاح تفريد من عدّة حقول معاً.
+    failures += run("composite distinct:eq(...) x2", std::string(seedDocs2) + R"RIN(
+        print sqlCount("#app.members & distinct:eq(role)");
+        print sqlCount("#app.members & distinct:eq(role) & distinct:eq(active)");
+    )RIN", false, "3");
+
+    // (26) sqlValidate -- لا يرمي أبداً، يعيد {ok,...} حتى مع نص خاطئ تماماً.
+    failures += run("sqlValidate never throws, reports ok/error", R"RIN(
+        print sqlValidate("users & role:eq(admin)");
+        print sqlValidate("users|bad");
+    )RIN", false, "\"ok\": true");
+
+    // (27) sqlExplain -- يبني شجرة تشخيصية للاستعلام المُحلَّل (هدف/شروط/فرز/حد...).
+    failures += run("sqlExplain returns a parsed-query breakdown", std::string(seedDocs2) + R"RIN(
+        print sqlExplain("#app.members & role:eq(user) & order:desc(age) & limit:eq(2)");
+    )RIN", false, "\"container\": \"members\"");
+
+    // (28) sqlGroupBy -- تجميع حسب حقل، مع عدد ومعرّفات كل مجموعة.
+    failures += run("sqlGroupBy groups with count + ids", std::string(seedDocs2) + R"RIN(
+        print sqlGroupBy("#app.members", "role");
+    )RIN", false, "\"key\": \"user\"");
+
+    // (29) sqlGroupSum -- تجميع مع مجموع رقمي لكل مجموعة.
+    failures += run("sqlGroupSum groups with numeric sum", std::string(seedDocs2) + R"RIN(
+        print sqlGroupSum("#app.members", "role", "age");
+    )RIN", false, "\"sum\"");
+
     if (failures == 0) {
         std::cout << "ALL PASSED\n";
     } else {
