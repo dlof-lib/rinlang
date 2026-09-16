@@ -1787,6 +1787,12 @@ StmtPtr Parser::atBlock() {
     std::string name = readOptionalName("a `@" + tag + "` block");
     std::vector<StmtPtr> body;
     std::string mask;
+    // فقط لأجل @Program: عبارة `recover (err) { ... }` أو `recover { ... }` اختيارية، تُكتَب في أي
+    // موضع داخل الجسم (عادة كآخر شيء قبل .end/Program، بنفس مكان catch بعد try) -- انظر شرح
+    // ProgramStmt::recoverBody الكامل في rin_ast.h. لا تُدرَج في body العادي مطلقاً (مثل mask
+    // تماماً)، بل تُستخرَج هنا مباشرة.
+    std::string recoverName;
+    std::shared_ptr<BlockStmt> recoverBody;
     // RCS-1.0 §7 Phase 0: قبل كل عبارة عادية، نجرّب أولاً قراءتها كتوجيه سياسة (policy_block)
     // إن كانت هذه حاوية من عائلة container (لا Containers.Group/Volume). tryParsePolicyDirective
     // يستعيد موضع القارئ بنفسه إن لم يطابق النمط، فلا خطر على أي برنامج قديم يستخدم هذه الكلمات
@@ -1795,6 +1801,17 @@ StmtPtr Parser::atBlock() {
     bool familyTag = isContainerFamilyTag(tag);
     while (!checkClosingTag() && !isAtEnd()) {
         if (familyTag && tryParsePolicyDirective(policyAccum)) continue;
+        if (tag == "Program" && !recoverBody && check(TokenType::IDENT) && peek().lexeme == "recover" &&
+            (checkNext(TokenType::LBRACE) || checkNext(TokenType::LPAREN))) {
+            advance(); // 'recover'
+            if (match({TokenType::LPAREN})) {
+                recoverName = consume(TokenType::IDENT, "Expected recover variable name").lexeme;
+                consume(TokenType::RPAREN, "Expected ')' after recover variable");
+            }
+            consume(TokenType::LBRACE, "Expected '{' after 'recover'");
+            recoverBody = block();
+            continue;
+        }
         auto st = declaration();
         if (auto m = std::dynamic_pointer_cast<MaskStmt>(st)) {
             if (auto lit = std::dynamic_pointer_cast<LiteralExpr>(m->value); lit && lit->kind == LiteralExpr::Kind::STRING) mask = lit->str;
@@ -1863,6 +1880,7 @@ StmtPtr Parser::atBlock() {
     if (tag == "Program") {
         auto s = std::make_shared<ProgramStmt>();
         s->name = name; s->mask = mask; s->body = body; s->line = atTok.line;
+        s->recoverName = recoverName; s->recoverBody = recoverBody;
         return s;
     }
     auto s = std::make_shared<VolumeStmt>();
