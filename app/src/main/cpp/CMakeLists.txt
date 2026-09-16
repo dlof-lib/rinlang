@@ -19,6 +19,7 @@ add_library(
         rin_lexer.cpp
         rin_parser.cpp
         rin_make.cpp
+        rin_container_sql.cpp
         rin_artifact.cpp
         rin_interpreter.cpp
         binfmt/elf_format.cpp
@@ -80,6 +81,7 @@ add_executable(
         rin_lexer.cpp
         rin_parser.cpp
         rin_make.cpp
+        rin_container_sql.cpp
         rin_artifact.cpp
         rin_interpreter.cpp
         binfmt/elf_format.cpp
@@ -128,6 +130,7 @@ add_executable(
         rin_lexer.cpp
         rin_parser.cpp
         rin_make.cpp
+        rin_container_sql.cpp
         rin_artifact.cpp
         rin_interpreter.cpp
         binfmt/elf_format.cpp
