@@ -638,6 +638,11 @@ private:
     std::unordered_map<std::string, EnvPtr> sectionEnvs; // اسم القسم -> بيئته (آخر تنفيذ له إن تكرّر، مثلاً داخل حلقة)
     std::vector<std::string> sectionOrder;               // أسماء الأقسام المُسمّاة بترتيب أول ظهور (بلا تكرار)
     std::vector<std::string> groupStack;                      // المجموعة الحالية المفتوحة (لتسجيل الأعضاء أثناء التنفيذ)
+    // ---- @Program: بداية/نهاية على مستوى البرنامج بأكمله (انظر ProgramStmt في rin_ast.h وتنفيذه
+    // في execute()) -- programStack يتتبّع أي @Program مفتوحة حالياً (يدعم التعشيش: @Program
+    // داخل @Program أخرى، مثلاً لتقسيم برنامج كبير إلى مراحل/phases كل منها له بداية/نهاية خاصة
+    // بها)، لأجل natives programName()/programDepth()/inProgram() في registerNatives().
+    std::vector<std::string> programStack;
     std::unordered_map<std::string, std::string> translations; // lang -> text (آخر ترجمة مسجّلة لكل لغة)
     std::unordered_set<std::string> installedNames;          // ما تم "تثبيته" عبر installation (بما فيها ما حُمِّل من فهرس سابق فعلي على القرص)
     std::vector<std::string> containerStack;                 // مفتاح الحاوية الحالية (لأجل link/tying/merge/save/route/call)
