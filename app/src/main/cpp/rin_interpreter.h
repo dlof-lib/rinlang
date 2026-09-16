@@ -195,6 +195,14 @@ struct ContinueSignal {};
 // it propagates like any uncaught internal signal and is reported as a runtime error by the same
 // top-level catch-all that handles a stray `break`/`continue` outside a loop.
 struct AchieveSignal { Value value; };
+// Internal control-flow signal used to unwind the stack on '@stop' inside a `@Program { ... }`
+// block (see StopStmt/ProgramStmt in rin_ast.h). Caught only by the nearest enclosing
+// Interpreter::execute(ProgramStmt) frame (exactly like BreakSignal is caught only by the
+// nearest enclosing loop) -- a '@stop' inside a nested @Program never affects an outer one.
+// If it escapes past every enclosing @Program (i.e. '@stop' used outside any @Program), it
+// propagates like any uncaught internal signal and is reported as a runtime error by
+// Interpreter::run() (same style as a stray 'return' outside a function).
+struct StopProgramSignal { Value value; bool hasValue = false; };
 
 // ============================================================================
 // RinFlow — Execution Flow Engine
@@ -431,6 +439,10 @@ public:
     // اسم الملف المستخدَم في كل Diagnostic صادر عن هذا الـ Interpreter (نظام Diagnostics — انظر
     // diagnostics/). يُضبَط عادة إلى نفس الاسم الذي مُرِّر إلى Lexer/Parser لنفس الملف.
     void setSourceFile(const std::string& name) { sourceFile = name; }
+    // وسائط سطر الأوامر (أو أي مُشغِّل آخر) المتاحة لأقرب @Program إلى سطح الملف كمتغيّر "args"
+    // (مصفوفة نصوص) -- انظر شرح programArgs_ أدناه. استدعِها قبل run() (اختيارية تماماً، لا تفعل
+    // شيئاً إن لم يستخدم البرنامج @Program أصلاً).
+    void setProgramArgs(std::vector<std::string> args) { programArgs_ = std::move(args); }
 
     // يحدّد جذر حقيقي على القرص تُبنى فوقه كل مسارات file/save/installation/writeFile/readFile...
     // (مثلاً مجلد التطبيق الخاص على أندرويد عبر context.filesDir). فارغ = المجلد الحالي (CWD).
@@ -643,6 +655,15 @@ private:
     // داخل @Program أخرى، مثلاً لتقسيم برنامج كبير إلى مراحل/phases كل منها له بداية/نهاية خاصة
     // بها)، لأجل natives programName()/programDepth()/inProgram() في registerNatives().
     std::vector<std::string> programStack;
+    // نتيجة أقرب @Program انتهت للتو (عبر '@stop expr;'، أو nil إن انتهت طبيعياً/بلا @stop قط) --
+    // تُقرَأ عبر native programResult() الجديدة مباشرة بعد `.end/Program`. تُحدَّث في كل مرة تنتهي
+    // فيها أي @Program (بصرف النظر عن عمق تعشيشها)، فتعكس دائماً آخر Program انتهت فعلياً.
+    Value lastProgramResult_ = Value::nil();
+    // وسائط سطر الأوامر (أو أي مُشغِّل آخر) -- تُمرَّر عبر setProgramArgs() العامة أدناه، وتُربَط
+    // تلقائياً باسم "args" (مصفوفة نصوص) داخل أقرب @Program إلى سطح الملف عند تنفيذها (انظر
+    // Interpreter::execute(ProgramStmt)). فارغة افتراضياً لأي مستدعٍ لا يستدعي setProgramArgs()
+    // إطلاقاً (توافقية كاملة بلا أي تغيير سلوكي لأي برنامج/مستدعٍ سابق).
+    std::vector<std::string> programArgs_;
     std::unordered_map<std::string, std::string> translations; // lang -> text (آخر ترجمة مسجّلة لكل لغة)
     std::unordered_set<std::string> installedNames;          // ما تم "تثبيته" عبر installation (بما فيها ما حُمِّل من فهرس سابق فعلي على القرص)
     std::vector<std::string> containerStack;                 // مفتاح الحاوية الحالية (لأجل link/tying/merge/save/route/call)
