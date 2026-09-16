@@ -27,6 +27,7 @@ add_library(rin SHARED
     # rin_interpreter.cpp أدناه لكل @make/@container، فيفشل الربط (undefined reference) بدونه
     # (نفس الخلل الذي كان في cli/linux/CMakeLists.txt وتم إصلاحه هناك).
     ${RIN_CPP_DIR}/rin_make.cpp
+    ${RIN_CPP_DIR}/rin_container_sql.cpp
     ${RIN_CPP_DIR}/rin_artifact.cpp
     ${RIN_CPP_DIR}/rin_interpreter.cpp
     ${RIN_CPP_DIR}/binfmt/elf_format.cpp
