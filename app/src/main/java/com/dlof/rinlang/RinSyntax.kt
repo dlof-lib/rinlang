@@ -161,11 +161,11 @@ private data class LineState(val inBlockComment: Boolean = false)
 // ====================================================================================
 private object RinLexer {
     val coreKeywords = setOf(
-        "let", "print", "if", "else", "while", "for", "fun", "return", "break", "continue",
-        "true", "false", "nil", "and", "or", "reckon", "where"
+        "let", "print", "show", "rinopen", "if", "else", "while", "for", "fun", "return", "break",
+        "continue", "true", "false", "nil", "and", "or", "reckon", "where"
     )
     val containerKeywords = setOf(
-        "text", "container", "Containers", "Group", "Volume", "Section",
+        "text", "warp", "container", "Containers", "Group", "Volume", "Section",
         "Translations", "translation", "link", "tying", "merge",
         "installation", "simplified", "save", "file", "end",
         "row", "style", "document", "route",
@@ -183,12 +183,18 @@ private object RinLexer {
         "Addition", "Subtraction", "Multiplication", "Equal",
         "abs", "sqrt", "pow", "floor", "ceil", "round", "min", "max", "random",
         "len", "upper", "lower", "trim", "substr", "split", "join",
-        "indexOf", "replace", "contains", "charAt", "toString", "toNumber",
+        "indexOf", "replace", "contains", "charAt", "toString", "toNumber", "toBool", "isBool",
         "push", "pop", "sort", "keys", "values", "has", "remove",
         "sum", "mean", "median", "variance", "stddev", "mode", "minOf", "maxOf",
         "normalize", "scale", "shift", "product", "count", "range", "geometricMean",
         "harmonicMean", "rms", "percentile", "iqr", "weightedMean", "zscore",
         "cumulativeSum", "movingAverage", "clamp",
+        "groupContainers", "groupMembers", "sectionVars", "sectionNames", "hasSection",
+        "insertDoc", "updateDoc", "deleteDoc", "findDoc", "queryDocs", "queryOneDoc",
+        "docIds", "allDocs", "countDocs", "call", "callApi",
+        "writeFile", "appendFile", "readFile", "fileExists", "deleteFile",
+        "isInstalled", "listInstalled", "loadInstalled",
+        "chr", "ord", "bytesFromArray", "crc32", "adler32",
         "make", "make.qr", "make.barcode", "make.file", "make.filename", "make.uuid", "make.hash",
         "qr", "barcode", "filename", "uuid", "hash", "artifact.info", "container.make.qr",
         "container.make.barcode", "container.make.file", "container.artifact.info"
