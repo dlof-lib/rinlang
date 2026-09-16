@@ -165,7 +165,13 @@ private object RinLexer {
         "continue", "true", "false", "nil", "and", "or", "reckon", "where"
     )
     val containerKeywords = setOf(
-        "text", "warp", "container", "Containers", "Group", "Volume", "Section",
+        "text",
+        // 'warp' is a contextual reactive-state declaration (same role as 'let'); 'set'/'define'/
+        // 'declare'/'create'/'var' are further contextual synonyms for 'let' itself (Parser::
+        // declaration(), rin_parser.cpp — same file/pattern as 'make' below, only recognized when
+        // directly followed by an identifier) — all storage.type.rin in syntaxes/rin.tmLanguage.json.
+        "warp", "set", "define", "declare", "create", "var",
+        "container", "Containers", "Group", "Volume", "Section",
         "Translations", "translation", "link", "tying", "merge",
         "installation", "simplified", "save", "file", "end",
         "row", "style", "document", "route",
