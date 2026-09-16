@@ -281,6 +281,15 @@ StmtPtr Parser::declaration() {
         advance(); // 'print'
         return viewPrintObjectStatement();
     }
+    // '@stop;' أو '@stop expr;' -> إنهاء نظيف وفوري لأقرب @Program مفتوحة (انظر StopStmt في
+    // rin_ast.h)، نفس أسلوب فحص '@import'/'@view'/'@theme' أعلاه بالضبط: '@' ثم IDENT("stop")
+    // تحديداً، فلا يتعارض إطلاقاً مع استخدام 'stop' اسم متغيّر/دالة عادية (تلك تُقرأ بلا '@').
+    if (check(TokenType::AT) && checkNext(TokenType::IDENT) &&
+        current + 1 < tokens.size() && tokens[current + 1].lexeme == "stop") {
+        advance(); // '@'
+        advance(); // 'stop'
+        return stopDeclaration();
+    }
     // Make Unit الحقيقي: @make.(name) ... .end/make[=name]
     // نميّزه قبل atBlock() لأن @make القديمة (بدون .(...)) تبقى ContainerKind::EVERYTHING للتوافق.
     if (check(TokenType::AT) && current + 5 < tokens.size() &&
@@ -1547,6 +1556,19 @@ StmtPtr Parser::warpDeclaration() {
     return s;
 }
 
+// '@stop;' أو '@stop expr;' -- يُستدعى بعد أن يكون declaration() قد استهلك بالفعل '@' و'stop'.
+// القيمة اختيارية تماماً (فارغة => nil عند التنفيذ، انظر StopStmt في rin_ast.h)؛ صلاحية استخدامها
+// (داخل @Program فعلاً أم لا) تُفحَص وقت التنفيذ لا التحليل (Interpreter::execute(StopStmt))، بنفس
+// أسلوب break/continue خارج حلقة تماماً.
+StmtPtr Parser::stopDeclaration() {
+    Token stopTok = previous(); // 'stop'
+    auto s = std::make_shared<StopStmt>();
+    s->line = stopTok.line;
+    if (!check(TokenType::SEMICOLON)) s->value = expression();
+    consume(TokenType::SEMICOLON, "Expected ';' after '@stop'");
+    return s;
+}
+
 // Rin Loom: Theme (Pattern Book) declaration -------------------------------------------
 // @theme=<Name>  key=expr; ...  .end/theme
 // يُستدعى بعد أن يكون declaration() قد استهلك بالفعل '@' و'theme'، بنفس أسلوب viewDeclaration()
@@ -1793,6 +1815,11 @@ StmtPtr Parser::atBlock() {
     // تماماً)، بل تُستخرَج هنا مباشرة.
     std::string recoverName;
     std::shared_ptr<BlockStmt> recoverBody;
+    // فقط لأجل @Program أيضاً: عبارة `finally { ... }` اختيارية، بأي ترتيب مع recover أعلاه (كلتاهما
+    // تُستخرَجان من body العادي بنفس الأسلوب بالضبط) -- انظر شرح ProgramStmt::finallyBody الكامل في
+    // rin_ast.h. جسمها ينفَّذ دائماً مرة واحدة قبل نهاية هذه Program فعلياً، بصرف النظر عن نجاحها/
+    // استردادها/إيقافها (@stop)/فشلها.
+    std::shared_ptr<BlockStmt> finallyBody;
     // RCS-1.0 §7 Phase 0: قبل كل عبارة عادية، نجرّب أولاً قراءتها كتوجيه سياسة (policy_block)
     // إن كانت هذه حاوية من عائلة container (لا Containers.Group/Volume). tryParsePolicyDirective
     // يستعيد موضع القارئ بنفسه إن لم يطابق النمط، فلا خطر على أي برنامج قديم يستخدم هذه الكلمات
@@ -1810,6 +1837,13 @@ StmtPtr Parser::atBlock() {
             }
             consume(TokenType::LBRACE, "Expected '{' after 'recover'");
             recoverBody = block();
+            continue;
+        }
+        if (tag == "Program" && !finallyBody && check(TokenType::IDENT) && peek().lexeme == "finally" &&
+            checkNext(TokenType::LBRACE)) {
+            advance(); // 'finally'
+            advance(); // '{'
+            finallyBody = block();
             continue;
         }
         auto st = declaration();
@@ -1881,6 +1915,7 @@ StmtPtr Parser::atBlock() {
         auto s = std::make_shared<ProgramStmt>();
         s->name = name; s->mask = mask; s->body = body; s->line = atTok.line;
         s->recoverName = recoverName; s->recoverBody = recoverBody;
+        s->finallyBody = finallyBody;
         return s;
     }
     auto s = std::make_shared<VolumeStmt>();
