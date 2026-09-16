@@ -765,6 +765,10 @@ int main(int argc, char** argv) {
     // توافقية خلفية كاملة: rin file.rin / rin -c "..." / rin < file / REPL
     std::string source;
     std::string sourceName = "<stdin>";
+    // أي وسائط إضافية بعد اسم الملف (rin file.rin arg1 arg2 ...) تُمرَّر كما هي إلى الجسم عبر
+    // setProgramArgs() -- انظر شرح "args" الكامل في rin_ast.h (ProgramStmt) وrin_interpreter.h.
+    // لا تُستخدَم في وضع '-c'/REPL/stdin (rest تبقى فارغة هناك، فـ "args" تكون [] كما كانت دائماً).
+    std::vector<std::string> rest;
 
     if (argc >= 3 && std::strcmp(argv[1], "-c") == 0) {
         source = argv[2];
@@ -775,6 +779,7 @@ int main(int argc, char** argv) {
             return 2;
         }
         sourceName = argv[1];
+        for (int i = 2; i < argc; i++) rest.emplace_back(argv[i]);
     } else if (isatty(fileno(stdin))) {
         return runRepl();
     } else {
@@ -782,6 +787,7 @@ int main(int argc, char** argv) {
     }
 
     rin::Interpreter interp;
+    interp.setProgramArgs(rest);
     bool ok = runSource(source, sourceName, interp);
     return ok ? 0 : 1;
 }
