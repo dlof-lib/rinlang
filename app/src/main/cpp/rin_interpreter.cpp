@@ -2631,6 +2631,13 @@ void Interpreter::registerNatives() {
         expectArgs("programDepth", a, 0, line);
         return Value::num(static_cast<double>(programStack.size()));
     };
+    // programResult() -> "نتيجة" آخر @Program انتهت للتو (بصرف النظر عن عمق تعشيشها): القيمة
+    // المُمرَّرة لـ '@stop expr;' إن استُخدِمت لإنهائها يدوياً، أو nil إن انتهت طبيعياً (بلا @stop
+    // إطلاقاً) أو استُرِدَّت عبر recover. مفيدة مباشرة بعد `.end/Program` لمعرفة كيف/بماذا انتهت.
+    natives["programResult"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("programResult", a, 0, line);
+        return lastProgramResult_;
+    };
 
 
 
@@ -6168,6 +6175,15 @@ std::string Interpreter::run(const std::vector<StmtPtr>& statements) {
         lastErrorMessage_ = "'return' used outside of a function";
         lastErrorLine_ = 0;
         if (streamSink_) streamSink_(appended);
+    } catch (StopProgramSignal&) {
+        // '@stop' لا معنى له خارج أي @Program مفتوحة -- نفس أسلوب 'return' خارج دالة أعلاه بالضبط
+        // (StopProgramSignal يُلتَقط عادة داخل Interpreter::execute(ProgramStmt) نفسها؛ وصولها إلى
+        // هنا يعني أنها لم تجد أي @Program محيطة تلتقطها إطلاقاً).
+        const char* appended = "\n[Error]: '@stop' used outside of any @Program\n";
+        output << appended;
+        lastErrorMessage_ = "'@stop' used outside of any @Program";
+        lastErrorLine_ = 0;
+        if (streamSink_) streamSink_(appended);
     }
     return output.str();
 }
@@ -6810,6 +6826,16 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
     if (std::dynamic_pointer_cast<ContinueStmt>(stmt)) {
         throw ContinueSignal{};
     }
+    // '@stop;' / '@stop expr;' -- انظر StopStmt في rin_ast.h وStopProgramSignal في rin_interpreter.h.
+    // تُلتَقط حصراً عند أقرب Interpreter::execute(ProgramStmt) محيطة (بالضبط كـ BreakSignal مع أقرب
+    // حلقة محيطة)؛ إن لم توجد أي @Program محيطة تصل الإشارة حتى Interpreter::run() فتُعامَل هناك
+    // كخطأ تنفيذ صريح (بنفس أسلوب 'return' خارج دالة).
+    if (auto s = std::dynamic_pointer_cast<StopStmt>(stmt)) {
+        Value v = Value::nil();
+        bool hasValue = s->value != nullptr;
+        if (s->value) v = evaluate(s->value, env);
+        throw StopProgramSignal{v, hasValue};
+    }
 
     // ---- لغة الحاويات/البيانات ----
 
@@ -7378,10 +7404,12 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
     // بداية/نهاية صريحتان على مستوى البرنامج بأكمله (لا حاوية/مجموعة واحدة فقط): تُطبَع علامة
     // بداية واضحة عند الدخول، ثم تُنفَّذ كل العبارات العادية بداخلها كما لو كانت في نفس النطاق
     // المحيط تماماً (لا نطاق env جديد هنا خلافاً لـ Group -- Program إطار عرض لا حاوية بيانات).
-    // عند الخروج: بلا recover، أي خطأ غير مُدار يُطبَع كعلامة فشل صريحة (❌) ثم يُعاد رميه كما هو
-    // (فتستمر معالجة Interpreter::run المعتادة بلا أي تغيير)؛ ومع recover (انظر ProgramStmt في
-    // rin_ast.h)، الخطأ يُلتَقط هنا فعلياً (🩹) وجسم recover يُنفَّذ بدلاً من إعادة الرمي، فيستمر
-    // البرنامج بعد .end/Program بشكل طبيعي كأن شيئاً لم يحدث.
+    // نقطة دخول حقيقية: أقرب @Program إلى سطح الملف (depth==0) تحصل على "args" (مصفوفة نصوص).
+    // أربع نهايات ممكنة، كل منها يمر عبر finally (إن وُجدت) قبل مغادرة هذه العبارة فعلياً:
+    //   1) نجاح طبيعي              -> 🏁
+    //   2) '@stop' (انظر StopStmt) -> 🏁 (مع إشارة "أُوقفت يدوياً")، لا فشل إطلاقاً
+    //   3) خطأ + recover موجودة    -> 🩹، يُلتَقط ولا يُعاد رميه، البرنامج يكمل بعد .end/Program
+    //   4) خطأ + بلا recover       -> ❌، يُعاد رميه كما هو بعد finally (فتستمر معالجة run() المعتادة)
     if (auto s = std::dynamic_pointer_cast<ProgramStmt>(stmt)) {
         if (!s->mask.empty()) volumeMasks[s->mask] = s->name; // نفس سجل الأقنعة العام المستخدم لـ Volume (لا داعي لسجل مستقل لهذا الغرض البسيط)
 
@@ -7390,21 +7418,52 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
         size_t depth = programStack.size();
         std::string indent(depth * 2, ' ');
         std::string label = s->name.empty() ? ("#program" + std::to_string(depth)) : s->name;
+        std::string suffix = s->name.empty() ? "" : (" (" + s->name + ")");
 
         output << indent << "🚀 Program" << (s->name.empty() ? "" : (" = " + s->name));
         if (!programStack.empty()) output << "  ↳ ضمن: " << programStack.back();
         output << "\n";
 
+        // "args": مصفوفة نصوص = وسائط سطر الأوامر (انظر setProgramArgs()/programArgs_ في
+        // rin_interpreter.h)، تُربَط فقط لأقرب @Program إلى سطح الملف (depth==0 قبل الدفع أدناه)،
+        // ضمن نفس بيئة الجسم المحيطة (Program لا تفتح نطاقاً منفصلاً) -- فارغة إن لم يستدعِ
+        // المستدعي setProgramArgs() إطلاقاً (توافقية كاملة).
+        if (depth == 0) {
+            auto argsArr = std::make_shared<ArrayData>();
+            for (auto& a : programArgs_) argsArr->push_back(Value::string(a));
+            env->define("args", Value::makeArray(argsArr));
+        }
+
         programStack.push_back(label);
         auto startTime = std::chrono::steady_clock::now();
+        auto elapsedMs = [&]() {
+            return std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::steady_clock::now() - startTime).count();
+        };
+        // finally: تُنفَّذ دائماً مرة واحدة بالضبط، مهما كانت طريقة الخروج (نجاح/stop/recover/فشل
+        // قبل إعادة الرمي) -- بيئة فرعية خاصة بها (لا يصلها أي متغيّر خطأ، على عكس recover).
+        auto runFinally = [&]() {
+            if (s->finallyBody) {
+                auto finallyEnv = std::make_shared<Environment>(env);
+                execute(s->finallyBody, finallyEnv);
+            }
+        };
+
         try {
             executeBlock(s->body, env);
+        } catch (StopProgramSignal& stop) {
+            // '@stop' -- إنهاء نظيف، ليس فشلاً: نفس علامة النجاح 🏁 مع إشارة صريحة أنه يدوي، ثم
+            // finally، ثم استمرار طبيعي بعد .end/Program (بالضبط كنهاية الجسم طبيعياً عند هذه النقطة).
+            output << indent << "🏁 .end/Program" << suffix << "  ⏱️ " << elapsedMs()
+                   << "ms — أُوقفت يدوياً (@stop)\n";
+            lastProgramResult_ = stop.hasValue ? stop.value : Value::nil();
+            runFinally();
+            programStack.pop_back();
+            return;
         } catch (ThrowSignal& ex) {
             if (s->recoverBody) {
-                auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(
-                    std::chrono::steady_clock::now() - startTime).count();
-                output << indent << "🩹 .end/Program" << (s->name.empty() ? "" : (" (" + s->name + ")"))
-                       << "  — استُرِدَّ بعد ⏱️ " << elapsedMs << "ms\n";
+                output << indent << "🩹 .end/Program" << suffix << "  — استُرِدَّ بعد ⏱️ " << elapsedMs() << "ms\n";
+                lastProgramResult_ = Value::nil(); // بلا @stop هنا -- قبل تنفيذ recover/finally حتى يرى كلاهما القيمة الصحيحة إن استعلما عنها
                 auto recoverEnv = std::make_shared<Environment>(env);
                 if (!s->recoverName.empty()) {
                     auto err = std::make_shared<MapData>();
@@ -7414,21 +7473,19 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
                     recoverEnv->define(s->recoverName, Value::makeMap(err));
                 }
                 execute(s->recoverBody, recoverEnv);
+                runFinally();
                 programStack.pop_back();
                 return;
             }
-            auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(
-                std::chrono::steady_clock::now() - startTime).count();
-            output << indent << "❌ .end/Program" << (s->name.empty() ? "" : (" (" + s->name + ")"))
-                   << "  — فشل بعد ⏱️ " << elapsedMs << "ms\n";
+            output << indent << "❌ .end/Program" << suffix << "  — فشل بعد ⏱️ " << elapsedMs() << "ms\n";
+            lastProgramResult_ = Value::nil();
+            runFinally();
             programStack.pop_back();
             throw;
         } catch (RinError& ex) {
             if (s->recoverBody) {
-                auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(
-                    std::chrono::steady_clock::now() - startTime).count();
-                output << indent << "🩹 .end/Program" << (s->name.empty() ? "" : (" (" + s->name + ")"))
-                       << "  — استُرِدَّ بعد ⏱️ " << elapsedMs << "ms\n";
+                output << indent << "🩹 .end/Program" << suffix << "  — استُرِدَّ بعد ⏱️ " << elapsedMs() << "ms\n";
+                lastProgramResult_ = Value::nil();
                 auto recoverEnv = std::make_shared<Environment>(env);
                 if (!s->recoverName.empty()) {
                     auto err = std::make_shared<MapData>();
@@ -7438,20 +7495,19 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
                     recoverEnv->define(s->recoverName, Value::makeMap(err));
                 }
                 execute(s->recoverBody, recoverEnv);
+                runFinally();
                 programStack.pop_back();
                 return;
             }
-            auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(
-                std::chrono::steady_clock::now() - startTime).count();
-            output << indent << "❌ .end/Program" << (s->name.empty() ? "" : (" (" + s->name + ")"))
-                   << "  — فشل بعد ⏱️ " << elapsedMs << "ms\n";
+            output << indent << "❌ .end/Program" << suffix << "  — فشل بعد ⏱️ " << elapsedMs() << "ms\n";
+            lastProgramResult_ = Value::nil();
+            runFinally();
             programStack.pop_back();
             throw;
         }
-        auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(
-            std::chrono::steady_clock::now() - startTime).count();
-        output << indent << "🏁 .end/Program" << (s->name.empty() ? "" : (" (" + s->name + ")"))
-               << "  ⏱️ " << elapsedMs << "ms\n";
+        output << indent << "🏁 .end/Program" << suffix << "  ⏱️ " << elapsedMs() << "ms\n";
+        lastProgramResult_ = Value::nil();
+        runFinally();
         programStack.pop_back();
         return;
     }
