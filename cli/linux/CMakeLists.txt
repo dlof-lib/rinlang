@@ -32,6 +32,7 @@ add_executable(rin
     # rin_make.cpp: validateMakeUnit/validateContainerPolicy — يستدعيهما execute() في
     # rin_interpreter.cpp أدناه لكل @make/@container، فيفشل الربط (undefined reference) بدونه.
     ${RIN_CORE_DIR}/rin_make.cpp
+    ${RIN_CORE_DIR}/rin_container_sql.cpp
     ${RIN_CORE_DIR}/rin_artifact.cpp
     ${RIN_CORE_DIR}/rin_interpreter.cpp
     ${RIN_CORE_DIR}/toolchain/rin_toolchain.cpp
