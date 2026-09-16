@@ -1234,7 +1234,7 @@ std::string Parser::readTagKeyword() {
             const std::string& w = tokens[current + 1].lexeme;
             nextIsContextualWord = (w == "data" || w == "api" || w == "import" || w == "table" || w == "doc" ||
                                      w == "object" || w == "portal" || w == "block" || w == "aukt" || w == "open" ||
-                                     w == "chatbot" || w == "everything" || w == "make");
+                                     w == "chatbot" || w == "everything" || w == "make" || w == "sql");
         }
         // لا نستهلك '.' إلا إذا كانت متبوعة مباشرة بإحدى هذه الكلمات، وإلا فقد تكون في الحقيقة
         // بداية وسم إغلاق آخر مجاور مثل '.end/container' تلاه '.end/Containers.Group'
@@ -1657,6 +1657,9 @@ static bool isContainerFamilyTag(const std::string& tag) {
         "container.portal", "portal", "container.block", "block",
         "container.sticker", "sticker", "container.aukt", "AUKT",
         "container.chatbot", "chatbot",
+        // RIN CONTAINER SQL (RCSQL): استعلام مُسمّى/قابل لإعادة الاستخدام عبر مسك — انظر
+        // rin_container_sql.h وContainerKind::SQL أعلى ContainerStmt في rin_ast.h.
+        "container.sql", "sql",
         "container.everything", "Everything", "container.make", "make", "Rin.make"
     };
     return s.count(tag) != 0;
@@ -1748,6 +1751,8 @@ StmtPtr Parser::atBlock() {
         // مفاهيم التنسيق والستايل: كائن (Object) / بوابة تنسيق (portal) / كتلة واجهة جاهزة (block)
         "container.object", "Object", "container.open/object", "container.portal", "portal", "container.block", "block",
         "container.sticker", "sticker", "container.aukt", "AUKT", "container.chatbot", "chatbot",
+        // RIN CONTAINER SQL: انظر ContainerKind::SQL في rin_ast.h ورين rin_container_sql.h للصياغة.
+        "container.sql", "sql",
         // make (اسمها الرسمي الحالي؛ سابقاً "Everything"): المفهوم الجامع — بلا أي قيود على الجسم
         // (تماماً كـ container/AUKT)، يستدعي/يفوّض إلى نفس آلية container القياسية حرفياً. ثلاث صيغ
         // مكافئة تماماً تُنتج نفس ContainerKind::EVERYTHING: "make" (الأقصر)، "Rin.make" (بمساحة اسم
@@ -1774,7 +1779,7 @@ StmtPtr Parser::atBlock() {
             d.diagnostic->withHint("expected one of: container, container.pipe, container.data, container.api, "
                                     "container.import, container.table, container.doc, container.object, "
                                     "container.portal, container.block, container.sticker, container.aukt, "
-                                    "container.chatbot, container.make (or make / Rin.make / the legacy "
+                                    "container.chatbot, container.sql, container.make (or make / Rin.make / the legacy "
                                     "container.everything / Everything), Containers.Group, or Volume");
         }
         throw d;
@@ -1808,6 +1813,7 @@ StmtPtr Parser::atBlock() {
         tag == "container.sticker" || tag == "sticker" ||
         tag == "container.aukt" || tag == "AUKT" ||
         tag == "container.chatbot" || tag == "chatbot" ||
+        tag == "container.sql" || tag == "sql" ||
         tag == "container.everything" || tag == "Everything" ||
         tag == "container.make" || tag == "make" || tag == "Rin.make") {
         // container.table/table (صفوف row + نمط style)، container.doc/doc (مستندات document)، وكذلك
@@ -1821,7 +1827,8 @@ StmtPtr Parser::atBlock() {
             tag == "container.object" || tag == "Object" || tag == "container.open/object" ||
             tag == "container.portal" || tag == "portal" ||
             tag == "container.block" || tag == "block" ||
-            tag == "container.sticker" || tag == "sticker")) validateDataContainerBody(body);
+            tag == "container.sticker" || tag == "sticker" ||
+            tag == "container.sql" || tag == "sql")) validateDataContainerBody(body);
         auto s = std::make_shared<ContainerStmt>();
         s->name = name; s->mask = mask; s->body = body; s->line = atTok.line;
         if (policyAccum.hasPolicy) {
@@ -1842,6 +1849,7 @@ StmtPtr Parser::atBlock() {
         else if (tag == "container.sticker" || tag == "sticker") s->kind = ContainerKind::STICKER;
         else if (tag == "container.aukt" || tag == "AUKT") s->kind = ContainerKind::AUKT;
         else if (tag == "container.chatbot" || tag == "chatbot") s->kind = ContainerKind::CHATBOT;
+        else if (tag == "container.sql" || tag == "sql") s->kind = ContainerKind::SQL;
         else if (tag == "container.everything" || tag == "Everything" ||
                  tag == "container.make" || tag == "make" || tag == "Rin.make") s->kind = ContainerKind::EVERYTHING;
         else s->kind = ContainerKind::PLAIN;
