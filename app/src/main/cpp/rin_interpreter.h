@@ -629,6 +629,10 @@ private:
     rin::CandleRegistry candleRegistry;
     std::unordered_map<std::string, EnvPtr> groupEnvs;       // اسم المجموعة -> بيئتها الخاصة (متغيرات مُعلَنة مباشرة داخلها)
     std::unordered_map<std::string, std::vector<std::string>> groupMembers; // اسم المجموعة -> أسماء الحاويات/المجموعات الفرعية المباشرة بداخلها (بالترتيب)
+    // ---- Containers.Group: توسيع (انظر natives groupVars/hasGroup/groupNames/groupParent/
+    // groupPath/groupContainerCount/groupHasContainer/groupSnapshot في registerNatives()) ----
+    std::vector<std::string> groupOrder;                      // أسماء المجموعات المُسمّاة بترتيب أول ظهور (بلا تكرار) -- بنفس مبدأ sectionOrder
+    std::unordered_map<std::string, std::string> groupParentOf; // اسم مجموعة فرعية -> اسم المجموعة الأب المباشرة (غير موجود/فارغ = مجموعة جذر)
     // ---- Section: حالة تُحفَظ بعد الإغلاق (قبل هذا كانت Section زخرفية بحتة: تطبع 🔹/◽ فقط ثم
     // تُفقَد متغيراتها فوراً مع نهاية الكتلة، بلا أي إمكانية للاستعلام عنها لاحقاً) ----
     std::unordered_map<std::string, EnvPtr> sectionEnvs; // اسم القسم -> بيئته (آخر تنفيذ له إن تكرّر، مثلاً داخل حلقة)
