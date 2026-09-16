@@ -42,6 +42,13 @@ static void collect(const StmtPtr& stmt, std::set<std::string>& out) {
         for (const auto& child : v->body) collect(child, out);
         return;
     }
+    if (auto p = std::dynamic_pointer_cast<ProgramStmt>(stmt)) {
+        // Program هو إطار عرض لا حاوية بيانات (خلافاً لـ Group/Volume)، فلا يُدرَج "container"
+        // من أجله وحده -- لكن جسمه لا يزال بحاجة لفحص recursively كي تُكتشَف أي قدرات
+        // (container/loop/...) مُعلَنة بداخله، تماماً كما لو لم يكن داخل Program إطلاقاً.
+        for (const auto& child : p->body) collect(child, out);
+        return;
+    }
     if (auto b = std::dynamic_pointer_cast<BlockStmt>(stmt)) {
         for (const auto& child : b->statements) collect(child, out);
     }
