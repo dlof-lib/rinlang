@@ -153,6 +153,7 @@ private:
     StmtPtr warpDeclaration();                    // warp name = expr;
     StmtPtr maskDeclaration();                    // mask = expr;              (يُستدعى بعد استهلاك 'warp')
     StmtPtr themeDeclaration();                   // @theme=Name key=expr; ... .end/theme  (يُستدعى بعد استهلاك '@' و'theme')
+    StmtPtr stopDeclaration();                    // @stop; / @stop expr;  (يُستدعى بعد استهلاك '@' و'stop')
 
     // expressions (precedence climbing)
     ExprPtr expression();
