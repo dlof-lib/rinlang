@@ -224,6 +224,15 @@ inline void collectViewStmts(const std::vector<rin::StmtPtr>& stmts, std::unorde
         // Deliberately NOT recursing into ContainerStmt/ContainerGroupStmt/VolumeStmt bodies --
         // those are a different container's own scope (see runColdPipelineForContainerWithRuntime's
         // use of this function, which calls it once per target container's own direct body).
+        if (auto pr = std::dynamic_pointer_cast<rin::ProgramStmt>(stmt)) {
+            // @Program is *not* a separate scope like Group/Volume (see ProgramStmt in
+            // rin_interpreter.cpp: it executes its body directly in the surrounding
+            // environment) -- it's purely a display wrapper marking where a program begins
+            // and ends. So unlike the containers above, a @view sitting inside @Program
+            // still belongs to the enclosing scope and must be collected here.
+            collectViewStmts(pr->body, out);
+            continue;
+        }
     }
 }
 
@@ -242,6 +251,10 @@ inline const std::vector<rin::StmtPtr>* findContainerBody(const std::vector<rin:
         } else if (auto v = std::dynamic_pointer_cast<rin::VolumeStmt>(stmt)) {
             if (v->name == containerName) return &v->body;
             if (auto found = findContainerBody(v->body, containerName)) return found;
+        } else if (auto pr = std::dynamic_pointer_cast<rin::ProgramStmt>(stmt)) {
+            // @Program هو إطار عرض آخر يمكن أن يحوي @container بداخله تماماً كـ Group/Volume --
+            // بلا هذه الحالة، أي حاوية مُغلَّفة داخل @Program لن يجدها Loom إطلاقاً.
+            if (auto found = findContainerBody(pr->body, containerName)) return found;
         }
     }
     return nullptr;
