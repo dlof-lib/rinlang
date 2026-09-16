@@ -708,11 +708,10 @@ struct VolumeStmt : Stmt {
 // تماماً لكن على مستوى البرنامج نفسه لا مستوى حاوية واحدة: تطبع علامة بداية عند الدخول وعلامة
 // نهاية (مع مدة التنفيذ) عند الخروج، بصرف النظر عن أي @Containers.Group/@Volume داخلية. اختيارية
 // تماماً — الملفات التي لا تستخدمها تعمل كما كانت دائماً بلا أي تغيير.
-// @Program=name  <body>  .end/Program
-// بداية/نهاية صريحتان لبرنامج Rin بأكمله (أو لجزء رئيسي منه)، على نمط Containers.Group/Volume
-// تماماً لكن على مستوى البرنامج نفسه لا مستوى حاوية واحدة: تطبع علامة بداية عند الدخول وعلامة
-// نهاية (مع مدة التنفيذ) عند الخروج، بصرف النظر عن أي @Containers.Group/@Volume داخلية. اختيارية
-// تماماً — الملفات التي لا تستخدمها تعمل كما كانت دائماً بلا أي تغيير.
+//
+// نقطة دخول حقيقية: أقرب @Program إلى سطح الملف (غير المتعشِّشة داخل أي @Program أخرى) تحصل
+// تلقائياً على متغيّر "args" (مصفوفة نصوص = وسائط سطر الأوامر، أو فارغة) مُعرَّفاً في بيئتها —
+// انظر Interpreter::execute(ProgramStmt) وsetProgramArgs() في rin_interpreter.h/.cpp.
 //
 // الاسترداد (recover): عبارة اختيارية `recover (err) { ... }` أو `recover { ... }` تُكتَب مباشرة
 // قبل `.end/Program` (بنفس مكان `catch` بعد `try`) -- إن وُجدت، أي خطأ غير مُدار يحدث أثناء تنفيذ
@@ -721,12 +720,31 @@ struct VolumeStmt : Stmt {
 // كاملة حول جسمها). المتغير err (إن سُمِّي) هو map بنفس شكل متغير catch في try/catch تماماً:
 // {message, line} دائماً، و{code} إن كان خطأ تشخيصياً، و{value} إن كان throw صريحاً بقيمة. بلا
 // recover، السلوك كما كان: طباعة علامة "❌ .end/Program ... فشل" ثم إعادة رمي الخطأ كما هو.
+//
+// الإنهاء المضمون (finally): عبارة اختيارية `finally { ... }` تُكتَب أيضاً مباشرة قبل `.end/Program`
+// (بأي ترتيب مع recover). إن وُجدت، جسمها يُنفَّذ دائماً مرة واحدة بالضبط قبل نهاية هذه Program
+// فعلياً — نجحت الـ Program، استُرِدَّت (recover)، أُوقفت يدوياً (@stop، انظر StopStmt أدناه)، أو
+// فشلت بلا recover (وحتى في هذه الحالة الأخيرة finally تُنفَّذ *قبل* إعادة رمي الخطأ للأعلى). لا
+// تصل قيمة/متغيّر خطأ إليها (على عكس recover) — دورها التنظيف/الإغلاق الحتمي فقط، بنفس معنى
+// finally في لغات أخرى.
 struct ProgramStmt : Stmt {
     std::string name;
     std::string mask;
     std::vector<StmtPtr> body;
-    std::string recoverName;               // اسم متغير الخطأ داخل recover (اختياري، قد يبقى فارغاً)
-    std::shared_ptr<BlockStmt> recoverBody; // nullptr = لا يوجد recover لهذه الـ Program (السلوك الافتراضي: إعادة الرمي)
+    std::string recoverName;                // اسم متغير الخطأ داخل recover (اختياري، قد يبقى فارغاً)
+    std::shared_ptr<BlockStmt> recoverBody;  // nullptr = لا يوجد recover لهذه الـ Program (السلوك الافتراضي: إعادة الرمي)
+    std::shared_ptr<BlockStmt> finallyBody;  // nullptr = لا توجد finally لهذه الـ Program
+};
+
+// '@stop;' أو '@stop expr;' -- إنهاء نظيف وفوري لأقرب @Program مفتوحة حالياً (وليس كامل البرنامج
+// ولا الدالة الحالية: هذه ليست 'return' ولا 'break'). يقفز مباشرة إلى finally (إن وُجدت لهذه
+// الـ Program) ثم علامة نهاية النجاح المعتادة 🏁، ثم يستمر تنفيذ البرنامج بعد `.end/Program`
+// الخاصة بها كالمعتاد — تماماً كأن جسمها انتهى طبيعياً عند هذه النقطة. غير مسموح خارج أي @Program
+// (خطأ تنفيذ صريح، بنفس أسلوب 'return' خارج دالة -- انظر Interpreter::run()). القيمة الاختيارية
+// (إن وُجدت) تصبح "نتيجة" هذه الـ Program، تُقرَأ لاحقاً عبر الدالة المدمجة الجديدة programResult()
+// (انظر StopProgramSignal في rin_interpreter.h).
+struct StopStmt : Stmt {
+    ExprPtr value; // قد تكون null (يعادل '@stop;' بلا قيمة -> نتيجة nil)
 };
 
 // Section=name  <body>  .end/Section
