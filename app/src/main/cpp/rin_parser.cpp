@@ -1747,7 +1747,7 @@ StmtPtr Parser::atBlock() {
     std::string tag = readTagKeyword();
     static const std::vector<std::string> validTags = {
         "container", "container.pipe", "container.data", "container.api", "container.import", "container.table",
-        "container.doc", "Containers.Group", "Volume", "table", "doc",
+        "container.doc", "Containers.Group", "Volume", "Program", "table", "doc",
         // مفاهيم التنسيق والستايل: كائن (Object) / بوابة تنسيق (portal) / كتلة واجهة جاهزة (block)
         "container.object", "Object", "container.open/object", "container.portal", "portal", "container.block", "block",
         "container.sticker", "sticker", "container.aukt", "AUKT", "container.chatbot", "chatbot",
@@ -1780,7 +1780,7 @@ StmtPtr Parser::atBlock() {
                                     "container.import, container.table, container.doc, container.object, "
                                     "container.portal, container.block, container.sticker, container.aukt, "
                                     "container.chatbot, container.sql, container.make (or make / Rin.make / the legacy "
-                                    "container.everything / Everything), Containers.Group, or Volume");
+                                    "container.everything / Everything), Containers.Group, Volume, or Program");
         }
         throw d;
     }
@@ -1857,6 +1857,11 @@ StmtPtr Parser::atBlock() {
     }
     if (tag == "Containers.Group") {
         auto s = std::make_shared<ContainerGroupStmt>();
+        s->name = name; s->mask = mask; s->body = body; s->line = atTok.line;
+        return s;
+    }
+    if (tag == "Program") {
+        auto s = std::make_shared<ProgramStmt>();
         s->name = name; s->mask = mask; s->body = body; s->line = atTok.line;
         return s;
     }
@@ -1954,10 +1959,10 @@ void Parser::validateDataContainerBody(const std::vector<StmtPtr>& body) {
             throw d;
         }
         if (std::dynamic_pointer_cast<ContainerStmt>(st) || std::dynamic_pointer_cast<ContainerGroupStmt>(st) ||
-            std::dynamic_pointer_cast<VolumeStmt>(st)) {
+            std::dynamic_pointer_cast<VolumeStmt>(st) || std::dynamic_pointer_cast<ProgramStmt>(st)) {
             auto d = errAtLine(diag::Code::E0014_InvalidContainer, st->line,
-                               "nested containers/groups/volumes are not allowed inside `container.data`/`container.table`/`table`");
-            d.diagnostic->withReason("`object` containers cannot contain `route`, `container`, `Containers.Group`, or `Volume`");
+                               "nested containers/groups/volumes/programs are not allowed inside `container.data`/`container.table`/`table`");
+            d.diagnostic->withReason("`object` containers cannot contain `route`, `container`, `Containers.Group`, `Volume`, or `Program`");
             throw d;
         }
         if (std::dynamic_pointer_cast<RouteStmt>(st)) {
