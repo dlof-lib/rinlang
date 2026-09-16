@@ -172,9 +172,9 @@
     },
 
     "keywords-storage": {
-      "comment": "warp (Parser::warpDeclaration) is a contextual reactive-state declaration, parsed exactly like `let name = expr;`. 'make' is a simplified-English contextual synonym for `let` (Parser::declaration(), matched only as `make <ident>`), unrelated to the `@make` container tag below.",
+      "comment": "warp (Parser::warpDeclaration) is a contextual reactive-state declaration, parsed exactly like `let name = expr;`. 'make' is a simplified-English contextual synonym for `let` (Parser::declaration(), matched only as `make <ident>`), unrelated to the `@make` container tag below. set/define/declare/create/var are additional `let` synonyms added right after `make` in the same function, under the same constraint (only recognized when directly followed by an identifier).",
       "name": "storage.type.rin",
-      "match": "\\b(let|fun|text|warp|make)\\b"
+      "match": "\\b(let|fun|text|warp|make|set|define|declare|create|var)\\b"
     },
 
     "keyword-print": {
