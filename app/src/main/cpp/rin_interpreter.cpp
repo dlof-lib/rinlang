@@ -652,6 +652,8 @@ static std::string containerTagName(ContainerKind k) {
         // "@container.everything=") توحَّد جميعاً دائماً إلى "container.make" عند الحفظ وإعادة
         // القراءة — نفس مبدأ بقية المفاهيم أعلاه.
         case ContainerKind::EVERYTHING: return "container.make";
+        // "@sql="/"@container.sql=" توحَّد دائماً إلى "container.sql" عند الحفظ وإعادة القراءة.
+        case ContainerKind::SQL: return "container.sql";
         default: return "container";
     }
 }
@@ -670,6 +672,7 @@ static std::string containerIcon(ContainerKind k) {
         case ContainerKind::STICKER: return "🏷️";
         case ContainerKind::CHATBOT: return "💬";
         case ContainerKind::EVERYTHING: return "🛠️";
+        case ContainerKind::SQL: return "🔎";
         default: return "📦";
     }
 }
@@ -695,6 +698,7 @@ static ContainerKind resolveContainerKindName(const std::string& raw) {
     if (s == "sticker") return ContainerKind::STICKER;
     if (s == "aukt") return ContainerKind::AUKT;
     if (s == "chatbot") return ContainerKind::CHATBOT;
+    if (s == "sql") return ContainerKind::SQL;
     if (s == "everything" || s == "make") return ContainerKind::EVERYTHING;
     if (s == "container" || s == "plain") return ContainerKind::PLAIN;
     return ContainerKind::PLAIN;
@@ -814,6 +818,150 @@ static std::string serializeEnvBody(const EnvPtr& env, bool simplified) {
             << " دالة/دوال عند الحفظ (الدوال لا يمكن تمثيلها كقيمة محفوظة حالياً)\n";
     }
     return out.str();
+}
+
+// ============================================================================================
+// RIN CONTAINER SQL (RCSQL) — منطق التنفيذ (مطابقة/حلّ الهدف). التحليل النحوي البحت في
+// rin_container_sql.h/.cpp؛ ما هنا يربطه بـ docStore/containerMasks/groupMembers/valuesEqual.
+// ============================================================================================
+namespace {
+
+std::vector<std::string> sqlSplitSlash(const std::string& path) {
+    std::vector<std::string> parts;
+    size_t start = 0;
+    while (start <= path.size()) {
+        size_t pos = path.find('/', start);
+        if (pos == std::string::npos) { parts.push_back(path.substr(start)); break; }
+        parts.push_back(path.substr(start, pos - start));
+        start = pos + 1;
+    }
+    return parts;
+}
+
+// يتتبّع مساراً مفصولاً بـ '/' داخل map متداخلة (لدعم address/city في شرط RCSQL). يعيد false إن لم
+// يوجد المفتاح في أي مستوى أو لم يكن المستوى الوسيط map أصلاً.
+bool sqlGetNestedField(const Value& doc, const std::vector<std::string>& path, Value& out) {
+    const Value* cur = &doc;
+    for (auto& seg : path) {
+        if (cur->type != Value::Type::MAP || !cur->map) return false;
+        bool found = false;
+        for (auto& kv : *cur->map) {
+            if (kv.first.type == Value::Type::STRING && kv.first.str == seg) { cur = &kv.second; found = true; break; }
+        }
+        if (!found) return false;
+    }
+    out = *cur;
+    return true;
+}
+
+// يفسّر نص وسيط RCSQL الخام (بلا علامات اقتباس -- ليست ضمن الرموز المسموحة) إلى أفضل نوع Value
+// مناسب: true/false -> BOOL، null/nil -> nil، رقم صالح كاملاً -> NUMBER، وإلا -> STRING كما هو.
+Value sqlParseArg(const std::string& raw) {
+    if (raw == "true") return Value::boolean_(true);
+    if (raw == "false") return Value::boolean_(false);
+    if (raw == "null" || raw == "nil") return Value::nil();
+    if (!raw.empty()) {
+        char* end = nullptr;
+        double d = std::strtod(raw.c_str(), &end);
+        if (end && *end == '\0' && end != raw.c_str()) return Value::num(d);
+    }
+    return Value::string(raw);
+}
+
+bool sqlMatchPredicate(const Value& doc, const rin::sql::Predicate& pr) {
+    Value field;
+    if (!sqlGetNestedField(doc, sqlSplitSlash(pr.field), field)) return false;
+    Value argVal = sqlParseArg(pr.arg);
+    if (pr.op == "eq") return valuesEqual(field, argVal);
+    if (pr.op == "ne") return !valuesEqual(field, argVal);
+    if (pr.op == "gt" || pr.op == "gte" || pr.op == "lt" || pr.op == "lte") {
+        if (field.type != Value::Type::NUMBER || argVal.type != Value::Type::NUMBER) return false;
+        if (pr.op == "gt") return field.number > argVal.number;
+        if (pr.op == "gte") return field.number >= argVal.number;
+        if (pr.op == "lt") return field.number < argVal.number;
+        return field.number <= argVal.number;
+    }
+    if (pr.op == "has") {
+        if (field.type == Value::Type::ARRAY && field.array) {
+            for (auto& el : *field.array) if (valuesEqual(el, argVal)) return true;
+            return false;
+        }
+        if (field.type == Value::Type::MAP && field.map) {
+            for (auto& kv : *field.map) if (kv.first.type == Value::Type::STRING && kv.first.str == pr.arg) return true;
+            return false;
+        }
+        return false;
+    }
+    if (pr.op == "like") {
+        if (field.type != Value::Type::STRING) return false;
+        auto lower = [](std::string x) { for (auto& c : x) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c))); return x; };
+        return lower(field.str).find(lower(pr.arg)) != std::string::npos;
+    }
+    return false;
+}
+
+} // namespace
+
+std::string Interpreter::sqlResolveQueryText(const std::string& arg) const {
+    auto maskIt = containerMasks.find(arg);
+    if (maskIt != containerMasks.end()) {
+        const std::string& containerName = maskIt->second;
+        auto kindIt = containerKinds.find(containerName);
+        if (kindIt != containerKinds.end() && kindIt->second == ContainerKind::SQL) {
+            auto viewIt = sqlViews.find(containerName);
+            if (viewIt != sqlViews.end()) return viewIt->second;
+        }
+    }
+    // ليس قناعاً لحاوية @sql معروفة (أو لا نص query مخزَّن بداخلها) -> اعتبره استعلام RCSQL خاماً فورياً.
+    return arg;
+}
+
+std::string Interpreter::sqlResolveTargetContainer(const rin::sql::Query& q) const {
+    if (q.targetIsMask) {
+        auto it = containerMasks.find(q.targetMask);
+        return it != containerMasks.end() ? it->second : std::string();
+    }
+    if (q.targetPath.empty()) return std::string();
+    if (q.targetPath.size() == 1) return q.targetPath[0];
+    // مسار متعدد الأجزاء: تحقّق أن كل جزء لاحق عضو مباشر (groupMembers) في سابقه، خطوة بخطوة.
+    for (size_t k = 0; k + 1 < q.targetPath.size(); k++) {
+        auto git = groupMembers.find(q.targetPath[k]);
+        if (git == groupMembers.end()) return std::string();
+        bool ok = false;
+        for (auto& m : git->second) if (m == q.targetPath[k + 1]) { ok = true; break; }
+        if (!ok) return std::string();
+    }
+    return q.targetPath.back();
+}
+
+ArrayPtr Interpreter::sqlExecute(const std::string& rawArg, int line) const {
+    std::string queryText = sqlResolveQueryText(rawArg);
+    rin::sql::Query q;
+    try {
+        q = rin::sql::parse(queryText);
+    } catch (const rin::sql::SqlSyntaxError& e) {
+        throw diagErr(diag::Code::E0042_InvalidSql, line, std::string(e.what()));
+    }
+    auto result = std::make_shared<ArrayData>();
+    std::string container = sqlResolveTargetContainer(q);
+    if (container.empty()) return result;
+    auto it = docStore.find(container);
+    if (it == docStore.end()) return result;
+    for (auto& entry : it->second) {
+        const Value& doc = entry.second;
+        bool ok = true;
+        for (auto& pr : q.predicates) {
+            if (!sqlMatchPredicate(doc, pr)) { ok = false; break; }
+        }
+        if (!ok) continue;
+        auto m = std::make_shared<MapData>();
+        m->push_back({Value::string("_id"), Value::string(entry.first)});
+        if (doc.type == Value::Type::MAP && doc.map) {
+            for (auto& kv : *doc.map) m->push_back(kv);
+        }
+        result->push_back(Value::makeMap(m));
+    }
+    return result;
 }
 
 void Interpreter::registerNatives() {
@@ -2347,6 +2495,33 @@ void Interpreter::registerNatives() {
             }
         }
         return Value::nil();
+    };
+
+    // ---- RIN CONTAINER SQL (RCSQL) -- انظر rin_container_sql.h للصياغة الكاملة ----
+    // sql(query) -> مصفوفة كل المستندات المطابقة (كل نتيجة map تحمل "_id" إضافياً + حقول المستند).
+    // الوسيط query إما نص RCSQL خام ("#mask & field:op(arg) & ...")، أو قناع (mask) حاوية
+    // @sql/@container.sql مُعرَّفة مسبقاً -- عندها يُستبدَل تلقائياً بنص RCSQL المخزَّن بداخلها
+    // (هذا هو "استدعاء RIN CONTAINER SQL بالأقنعة"). حاوية/قناع غير موجود أو بلا مطابقات -> مصفوفة فارغة.
+    natives["sql"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("sql", a, 1, line);
+        std::string raw = asString(a[0], "sql", line);
+        return Value::makeArray(sqlExecute(raw, line));
+    };
+
+    // sqlOne(query) -> أول مستند مطابق (بنفس شكل sql()) أو nil إن لم يوجد أي تطابق
+    natives["sqlOne"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("sqlOne", a, 1, line);
+        std::string raw = asString(a[0], "sqlOne", line);
+        auto res = sqlExecute(raw, line);
+        return (res && !res->empty()) ? (*res)[0] : Value::nil();
+    };
+
+    // sqlCount(query) -> عدد المستندات المطابقة (بلا بناء المستندات نفسها في القيمة المُعادة)
+    natives["sqlCount"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("sqlCount", a, 1, line);
+        std::string raw = asString(a[0], "sqlCount", line);
+        auto res = sqlExecute(raw, line);
+        return Value::num(res ? static_cast<double>(res->size()) : 0.0);
     };
 
     // docIds(collection) -> مصفوفة أسماء (ids) كل المستندات بترتيب الإدخال
@@ -6067,6 +6242,17 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
         containerStack.push_back(containerKey);
         executeBlock(s->body, containerEnv);
         containerStack.pop_back();
+
+        // RIN CONTAINER SQL: حاوية @sql/@container.sql تخزّن نص استعلامها الخام في حقلها
+        // النصي 'text query = "...";' (ضمن containerEnv كأي حقل بيانات عادي) -- نسحبه هنا مرة
+        // واحدة عند إنشاء/تنفيذ الحاوية ونخزّنه في sqlViews[containerKey] لاستدعائه لاحقاً بقناع
+        // هذه الحاوية عبر sql()/sqlOne()/sqlCount() بدل تكرار النص الخام (انظر sqlResolveQueryText).
+        if (s->kind == ContainerKind::SQL) {
+            auto qIt = containerEnv->values.find("query");
+            if (qIt != containerEnv->values.end() && qIt->second.type == Value::Type::STRING) {
+                sqlViews[containerKey] = qIt->second.str;
+            }
+        }
 
         // RCS-1.0 §3.2 Lifecycle: init() ثم mount() تلقائياً بعد انتهاء الجسم التصريحي للحاوية
         // (state/fun/on ... كلها سُجِّلت الآن). Phase 1 لا تملك بعد طبقة Tree (§3.5) بتعليق حقيقي
