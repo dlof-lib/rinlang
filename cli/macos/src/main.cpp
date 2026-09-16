@@ -164,6 +164,9 @@ int main(int argc, char** argv) {
 
     std::string source;
     std::string sourceName = "<stdin>";
+    // أي وسائط إضافية بعد اسم الملف (rin file.rin arg1 arg2 ...) تُمرَّر إلى الجسم عبر
+    // setProgramArgs() -- انظر شرح "args" الكامل في rin_ast.h (ProgramStmt) وrin_interpreter.h.
+    std::vector<std::string> programArgs;
 
     if (args.size() >= 2 && args[0] == "-c") {
         source = args[1];
@@ -176,6 +179,7 @@ int main(int argc, char** argv) {
         }
         source = readAll(f);
         sourceName = args[0];
+        for (size_t i = 1; i < args.size(); ++i) programArgs.push_back(args[i]);
     } else if (isatty(fileno(stdin))) {
         // لا وسائط ولا إعادة توجيه: طرفية تفاعلية حقيقية -> REPL بدل انتظار EOF صامت.
         return runRepl();
@@ -184,6 +188,7 @@ int main(int argc, char** argv) {
     }
 
     rin::Interpreter interp;
+    interp.setProgramArgs(programArgs);
     if (importProgress) interp.setImportUIMode(rin::loaderui::Mode::Verbose);
     bool ok = runSource(source, sourceName, interp);
     return ok ? 0 : 1;
