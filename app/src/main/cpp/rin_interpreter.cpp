@@ -821,7 +821,7 @@ static std::string serializeEnvBody(const EnvPtr& env, bool simplified) {
 }
 
 // ============================================================================================
-// RIN CONTAINER SQL (RCSQL) — منطق التنفيذ (مطابقة/حلّ الهدف). التحليل النحوي البحت في
+// RIN CONTAINER SQL (RCSQL) — منطق التنفيذ (مطابقة/فرز/تصفّح/حلّ الهدف). التحليل النحوي البحت في
 // rin_container_sql.h/.cpp؛ ما هنا يربطه بـ docStore/containerMasks/groupMembers/valuesEqual.
 // ============================================================================================
 namespace {
@@ -830,7 +830,7 @@ std::vector<std::string> sqlSplitSlash(const std::string& path) {
     std::vector<std::string> parts;
     size_t start = 0;
     while (start <= path.size()) {
-        const size_t pos = path.find('/', start);
+        size_t pos = path.find('/', start);
         if (pos == std::string::npos) { parts.push_back(path.substr(start)); break; }
         parts.push_back(path.substr(start, pos - start));
         start = pos + 1;
@@ -838,17 +838,15 @@ std::vector<std::string> sqlSplitSlash(const std::string& path) {
     return parts;
 }
 
+// يتتبّع مساراً مفصولاً بـ '/' داخل map متداخلة (لدعم address/city في شرط RCSQL). يعيد false إن لم
+// يوجد المفتاح في أي مستوى أو لم يكن المستوى الوسيط map أصلاً.
 bool sqlGetNestedField(const Value& doc, const std::vector<std::string>& path, Value& out) {
     const Value* cur = &doc;
-    for (const auto& seg : path) {
+    for (auto& seg : path) {
         if (cur->type != Value::Type::MAP || !cur->map) return false;
         bool found = false;
-        for (const auto& kv : *cur->map) {
-            if (kv.first.type == Value::Type::STRING && kv.first.str == seg) {
-                cur = &kv.second;
-                found = true;
-                break;
-            }
+        for (auto& kv : *cur->map) {
+            if (kv.first.type == Value::Type::STRING && kv.first.str == seg) { cur = &kv.second; found = true; break; }
         }
         if (!found) return false;
     }
@@ -856,105 +854,124 @@ bool sqlGetNestedField(const Value& doc, const std::vector<std::string>& path, V
     return true;
 }
 
+// يبني نسخة جديدة من doc مع تعيين الحقل عند path (متداخل، يُنشئ map وسيطة تلقائياً إن لزم) إلى
+// newVal. لا يُعدِّل doc الأصلية (نسخ بالقيمة على مستوى كل map على المسار فقط، بقية الحقول تبقى
+// بنفس shared_ptr المشترك -- كافٍ لأن Value/MapData في هذه اللغة تُعامَل كقيم غير قابلة للتغيير
+// المشترك عبر عدّة حاويات). تُستخدَم من sqlUpdate() لتحديث حقل واحد (بما فيها حقول متداخلة).
+Value sqlSetNestedField(const Value& doc, const std::vector<std::string>& path, const Value& newVal) {
+    if (path.empty()) return newVal;
+    auto newMap = std::make_shared<MapData>();
+    if (doc.type == Value::Type::MAP && doc.map) *newMap = *doc.map;
+    const std::string& key = path[0];
+    std::vector<std::string> rest(path.begin() + 1, path.end());
+    bool found = false;
+    for (auto& kv : *newMap) {
+        if (kv.first.type == Value::Type::STRING && kv.first.str == key) {
+            kv.second = rest.empty() ? newVal : sqlSetNestedField(kv.second, rest, newVal);
+            found = true;
+            break;
+        }
+    }
+    if (!found) {
+        Value childVal = rest.empty() ? newVal : sqlSetNestedField(Value::nil(), rest, newVal);
+        newMap->push_back({Value::string(key), childVal});
+    }
+    return Value::makeMap(newMap);
+}
+
+// يفسّر نص وسيط RCSQL الخام (بلا علامات اقتباس -- ليست ضمن الرموز المسموحة) إلى أفضل نوع Value
+// مناسب: true/false -> BOOL، null/nil -> nil، رقم صالح كاملاً -> NUMBER، وإلا -> STRING كما هو.
 Value sqlParseArg(const std::string& raw) {
     if (raw == "true") return Value::boolean_(true);
     if (raw == "false") return Value::boolean_(false);
     if (raw == "null" || raw == "nil") return Value::nil();
     if (!raw.empty()) {
         char* end = nullptr;
-        const double d = std::strtod(raw.c_str(), &end);
+        double d = std::strtod(raw.c_str(), &end);
         if (end && *end == '\0' && end != raw.c_str()) return Value::num(d);
     }
     return Value::string(raw);
 }
 
-std::string sqlLowerAscii(std::string x) {
-    for (char& c : x) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+std::string sqlLower(std::string x) {
+    for (auto& c : x) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
     return x;
 }
 
-bool sqlStringContains(const Value& field, const std::string& arg) {
-    return field.type == Value::Type::STRING &&
-           sqlLowerAscii(field.str).find(sqlLowerAscii(arg)) != std::string::npos;
-}
+// يطابق مستنداً واحداً ضد شرط RCSQL واحد -- إما مجموعة OR (يكفي تطابق شرط فرعي واحد)، أو شرط ورقة
+// (field OP (arg)) عادي بإحدى العمليات المدعومة (انظر rin_container_sql.h للصياغة الكاملة).
+bool sqlMatchPredicate(const Value& doc, const rin::sql::Predicate& pr) {
+    if (pr.isGroup) {
+        if (pr.groupOp == "or") {
+            for (auto& sub : pr.subs) if (sqlMatchPredicate(doc, sub)) return true;
+            return false;
+        }
+        return false; // مجموعة بمُعامل غير معروف -- لا ينبغي أن يحدث (parse() لا تُنتج غير "or" حالياً)
+    }
 
-bool sqlStringStarts(const Value& field, const std::string& arg) {
-    if (field.type != Value::Type::STRING) return false;
-    const auto a = sqlLowerAscii(field.str);
-    const auto b = sqlLowerAscii(arg);
-    return a.size() >= b.size() && a.compare(0, b.size(), b) == 0;
-}
+    Value field;
+    bool found = sqlGetNestedField(doc, sqlSplitSlash(pr.field), field);
+    if (pr.op == "exists") return found;
+    if (pr.op == "missing") return !found;
+    if (!found) return false;
 
-bool sqlStringEnds(const Value& field, const std::string& arg) {
-    if (field.type != Value::Type::STRING) return false;
-    const auto a = sqlLowerAscii(field.str);
-    const auto b = sqlLowerAscii(arg);
-    return a.size() >= b.size() && a.compare(a.size() - b.size(), b.size(), b) == 0;
-}
-
-bool sqlIsEmpty(const Value& v) {
-    if (v.type == Value::Type::NIL) return true;
-    if (v.type == Value::Type::STRING) return v.str.empty();
-    if (v.type == Value::Type::ARRAY) return !v.array || v.array->empty();
-    if (v.type == Value::Type::MAP) return !v.map || v.map->empty();
-    return false;
-}
-
-bool sqlHas(const Value& field, const std::string& rawArg) {
-    const Value arg = sqlParseArg(rawArg);
-    if (field.type == Value::Type::ARRAY && field.array) {
-        for (const auto& el : *field.array) if (valuesEqual(el, arg)) return true;
+    if (pr.op == "eq") return valuesEqual(field, sqlParseArg(pr.arg));
+    if (pr.op == "ne") return !valuesEqual(field, sqlParseArg(pr.arg));
+    if (pr.op == "ieq") {
+        if (field.type != Value::Type::STRING) return false;
+        return sqlLower(field.str) == sqlLower(pr.arg);
+    }
+    if (pr.op == "gt" || pr.op == "gte" || pr.op == "lt" || pr.op == "lte") {
+        Value argVal = sqlParseArg(pr.arg);
+        if (field.type != Value::Type::NUMBER || argVal.type != Value::Type::NUMBER) return false;
+        if (pr.op == "gt") return field.number > argVal.number;
+        if (pr.op == "gte") return field.number >= argVal.number;
+        if (pr.op == "lt") return field.number < argVal.number;
+        return field.number <= argVal.number;
+    }
+    if (pr.op == "has") {
+        Value argVal = sqlParseArg(pr.arg);
+        if (field.type == Value::Type::ARRAY && field.array) {
+            for (auto& el : *field.array) if (valuesEqual(el, argVal)) return true;
+            return false;
+        }
+        if (field.type == Value::Type::MAP && field.map) {
+            for (auto& kv : *field.map) if (kv.first.type == Value::Type::STRING && kv.first.str == pr.arg) return true;
+            return false;
+        }
         return false;
     }
-    if (field.type == Value::Type::MAP && field.map) {
-        for (const auto& kv : *field.map) {
-            if (kv.first.type == Value::Type::STRING && kv.first.str == rawArg) return true;
-        }
+    if (pr.op == "like") {
+        if (field.type != Value::Type::STRING) return false;
+        return sqlLower(field.str).find(sqlLower(pr.arg)) != std::string::npos;
     }
-    return false;
+    if (pr.op == "starts" || pr.op == "ends") {
+        if (field.type != Value::Type::STRING) return false;
+        std::string hay = sqlLower(field.str), needle = sqlLower(pr.arg);
+        if (needle.size() > hay.size()) return false;
+        if (pr.op == "starts") return hay.compare(0, needle.size(), needle) == 0;
+        return hay.compare(hay.size() - needle.size(), needle.size(), needle) == 0;
+    }
+    return false; // "asc"/"desc" أو أي عملية أخرى غير منطقية كفلتر فعلي (لا ينبغي أن تصل هنا أصلاً)
 }
 
-bool sqlMatchPredicate(const Value& doc, const rin::sql::Predicate& pr) {
-    Value field;
-    const bool exists = sqlGetNestedField(doc, sqlSplitSlash(pr.field), field);
-
-    if (pr.op == "exists") return exists;
-    if (pr.op == "missing") return !exists;
-    if (!exists) return false;
-
-    if (pr.op == "empty") return sqlIsEmpty(field);
-    if (pr.op == "notempty") return !sqlIsEmpty(field);
-    if (pr.op == "isnull") return field.type == Value::Type::NIL;
-    if (pr.op == "notnull") return field.type != Value::Type::NIL;
-
-    const Value arg = sqlParseArg(pr.arg);
-    if (pr.op == "eq") return valuesEqual(field, arg);
-    if (pr.op == "ne") return !valuesEqual(field, arg);
-
-    if (pr.op == "gt" || pr.op == "gte" || pr.op == "lt" || pr.op == "lte") {
-        if (field.type != Value::Type::NUMBER || arg.type != Value::Type::NUMBER) return false;
-        if (pr.op == "gt") return field.number > arg.number;
-        if (pr.op == "gte") return field.number >= arg.number;
-        if (pr.op == "lt") return field.number < arg.number;
-        return field.number <= arg.number;
+// مقارنة ترتيبية بين قيمتين لأجل order:asc/desc: رقم-رقم أو نص-نص أو منطقي-منطقي فقط؛ أي تركيبة
+// أخرى (أنواع مختلفة، أو نوع غير قابل للترتيب مثل map/array) تُعامَل كمتعادلة (0) فيحسمها مفتاح
+// الفرز التالي إن وُجد، أو يبقى ترتيب الإدخال كما هو (استقرار std::stable_sort).
+int sqlCompareValues(const Value& a, const Value& b) {
+    if (a.type == Value::Type::NUMBER && b.type == Value::Type::NUMBER) {
+        return (a.number < b.number) ? -1 : (a.number > b.number ? 1 : 0);
     }
-
-    if (pr.op == "has") return sqlHas(field, pr.arg);
-    if (pr.op == "like" || pr.op == "contains") return sqlStringContains(field, pr.arg);
-    if (pr.op == "starts") return sqlStringStarts(field, pr.arg);
-    if (pr.op == "ends") return sqlStringEnds(field, pr.arg);
-    return false;
-}
-
-bool sqlDocumentMatches(const Value& doc, const rin::sql::Query& q) {
-    for (const auto& pr : q.predicates) {
-        if (!sqlMatchPredicate(doc, pr)) return false;
+    if (a.type == Value::Type::STRING && b.type == Value::Type::STRING) {
+        return a.str.compare(b.str);
     }
-    return true;
+    if (a.type == Value::Type::BOOL && b.type == Value::Type::BOOL) {
+        return static_cast<int>(a.boolean) - static_cast<int>(b.boolean);
+    }
+    return 0;
 }
 
 } // namespace
-
 
 std::string Interpreter::sqlResolveQueryText(const std::string& arg) const {
     auto maskIt = containerMasks.find(arg);
@@ -988,8 +1005,8 @@ std::string Interpreter::sqlResolveTargetContainer(const rin::sql::Query& q) con
     return q.targetPath.back();
 }
 
-ArrayPtr Interpreter::sqlExecute(const std::string& rawArg, int line) const {
-    const std::string queryText = sqlResolveQueryText(rawArg);
+Interpreter::SqlRawResult Interpreter::sqlRunRaw(const std::string& rawArg, int line) const {
+    std::string queryText = sqlResolveQueryText(rawArg);
     rin::sql::Query q;
     try {
         q = rin::sql::parse(queryText);
@@ -997,90 +1014,96 @@ ArrayPtr Interpreter::sqlExecute(const std::string& rawArg, int line) const {
         throw diagErr(diag::Code::E0042_InvalidSql, line, std::string(e.what()));
     }
 
-    auto result = std::make_shared<ArrayData>();
-    const std::string container = sqlResolveTargetContainer(q);
-    if (container.empty()) return result;
-    const auto it = docStore.find(container);
+    SqlRawResult result;
+    result.selectFields = q.selectFields;
+    result.container = sqlResolveTargetContainer(q);
+    if (result.container.empty()) return result;
+    auto it = docStore.find(result.container);
     if (it == docStore.end()) return result;
 
-    for (const auto& entry : it->second) {
-        if (!sqlDocumentMatches(entry.second, q)) continue;
+    // 1) فلترة (AND بين q.predicates، كل عنصر قد يكون بدوره مجموعة OR داخلية)
+    std::vector<std::pair<std::string, Value>> rows;
+    for (auto& entry : it->second) {
+        bool ok = true;
+        for (auto& pr : q.predicates) {
+            if (!sqlMatchPredicate(entry.second, pr)) { ok = false; break; }
+        }
+        if (ok) rows.push_back(entry);
+    }
+
+    // 2) DISTINCT (إبقاء أول ظهور فقط لكل قيمة مختلفة لحقل q.distinctField؛ المستندات التي لا تملك
+    //    الحقل تُعامَل جميعاً كقيمة nil واحدة، فيبقى منها ظهور واحد أيضاً)
+    if (!q.distinctField.empty()) {
+        auto path = sqlSplitSlash(q.distinctField);
+        std::vector<Value> seenVals;
+        std::vector<std::pair<std::string, Value>> deduped;
+        deduped.reserve(rows.size());
+        for (auto& row : rows) {
+            Value v;
+            if (!sqlGetNestedField(row.second, path, v)) v = Value::nil();
+            bool dup = false;
+            for (auto& sv : seenVals) if (valuesEqual(sv, v)) { dup = true; break; }
+            if (!dup) { seenVals.push_back(v); deduped.push_back(row); }
+        }
+        rows = std::move(deduped);
+    }
+
+    // 3) ORDER BY (مفاتيح متعددة بالترتيب المكتوب؛ std::stable_sort يحافظ على ترتيب الإدخال عند
+    //    تعادل كل مفاتيح الفرز؛ المستندات المفقود منها حقل الفرز تُدفَع دوماً إلى آخر النتائج بصرف
+    //    النظر عن asc/desc، ثم تُفصَّل فيما بينها بالمفتاح التالي أو تبقى بترتيب الإدخال)
+    if (!q.orderBy.empty()) {
+        std::vector<std::vector<std::string>> keyPaths;
+        for (auto& k : q.orderBy) keyPaths.push_back(sqlSplitSlash(k.field));
+        std::stable_sort(rows.begin(), rows.end(),
+            [&](const std::pair<std::string, Value>& A, const std::pair<std::string, Value>& B) {
+                for (size_t k = 0; k < q.orderBy.size(); k++) {
+                    Value av, bv;
+                    bool af = sqlGetNestedField(A.second, keyPaths[k], av);
+                    bool bf = sqlGetNestedField(B.second, keyPaths[k], bv);
+                    if (af != bf) return af; // الموجود يسبق المفقود دوماً
+                    if (!af) continue;       // كلاهما مفقود عند هذا المفتاح -- انتقل للمفتاح التالي
+                    int c = sqlCompareValues(av, bv);
+                    if (c != 0) return q.orderBy[k].desc ? (c > 0) : (c < 0);
+                }
+                return false; // تعادل تام على كل المفاتيح
+            });
+    }
+
+    // 4) OFFSET ثم LIMIT (بهذا الترتيب دوماً، بعد الفرز/التصفية/التفريد أعلاه)
+    if (q.offset > 0) {
+        if (static_cast<size_t>(q.offset) >= rows.size()) rows.clear();
+        else rows.erase(rows.begin(), rows.begin() + q.offset);
+    }
+    if (q.limit >= 0 && static_cast<size_t>(q.limit) < rows.size()) {
+        rows.resize(static_cast<size_t>(q.limit));
+    }
+
+    result.rows.reserve(rows.size());
+    for (auto& r : rows) result.rows.push_back(SqlMatch{r.first, r.second});
+    return result;
+}
+
+ArrayPtr Interpreter::sqlExecute(const std::string& rawArg, int line) const {
+    auto raw = sqlRunRaw(rawArg, line);
+    auto result = std::make_shared<ArrayData>();
+    for (auto& row : raw.rows) {
         auto m = std::make_shared<MapData>();
-        m->push_back({Value::string("_id"), Value::string(entry.first)});
-        if (entry.second.type == Value::Type::MAP && entry.second.map) {
-            for (const auto& kv : *entry.second.map) m->push_back(kv);
+        m->push_back({Value::string("_id"), Value::string(row.id)});
+        if (raw.selectFields.empty()) {
+            if (row.doc.type == Value::Type::MAP && row.doc.map) {
+                for (auto& kv : *row.doc.map) m->push_back(kv);
+            }
+        } else {
+            for (auto& fname : raw.selectFields) {
+                Value v;
+                if (sqlGetNestedField(row.doc, sqlSplitSlash(fname), v)) {
+                    m->push_back({Value::string(fname), v});
+                }
+            }
         }
         result->push_back(Value::makeMap(m));
     }
     return result;
-}
-
-size_t Interpreter::sqlExecuteCount(const std::string& rawArg, int line) const {
-    const std::string queryText = sqlResolveQueryText(rawArg);
-    rin::sql::Query q;
-    try {
-        q = rin::sql::parse(queryText);
-    } catch (const rin::sql::SqlSyntaxError& e) {
-        throw diagErr(diag::Code::E0042_InvalidSql, line, std::string(e.what()));
-    }
-    const std::string container = sqlResolveTargetContainer(q);
-    if (container.empty()) return 0;
-    const auto it = docStore.find(container);
-    if (it == docStore.end()) return 0;
-    size_t count = 0;
-    for (const auto& entry : it->second) if (sqlDocumentMatches(entry.second, q)) ++count;
-    return count;
-}
-
-bool Interpreter::sqlExecuteExists(const std::string& rawArg, int line) const {
-    const std::string queryText = sqlResolveQueryText(rawArg);
-    rin::sql::Query q;
-    try {
-        q = rin::sql::parse(queryText);
-    } catch (const rin::sql::SqlSyntaxError& e) {
-        throw diagErr(diag::Code::E0042_InvalidSql, line, std::string(e.what()));
-    }
-    const std::string container = sqlResolveTargetContainer(q);
-    if (container.empty()) return false;
-    const auto it = docStore.find(container);
-    if (it == docStore.end()) return false;
-    for (const auto& entry : it->second) if (sqlDocumentMatches(entry.second, q)) return true;
-    return false;
-}
-
-std::string Interpreter::sqlExplain(const std::string& rawArg, int line) const {
-    const std::string queryText = sqlResolveQueryText(rawArg);
-    rin::sql::Query q;
-    try {
-        q = rin::sql::parse(queryText);
-    } catch (const rin::sql::SqlSyntaxError& e) {
-        throw diagErr(diag::Code::E0042_InvalidSql, line, std::string(e.what()));
-    }
-
-    std::ostringstream out;
-    out << "RCSQL 1.0\n";
-    out << "TARGET " << (q.targetIsMask ? "#" + q.targetMask : [&]() {
-        std::string x;
-        for (size_t i = 0; i < q.targetPath.size(); ++i) { if (i) x += '/'; x += q.targetPath[i]; }
-        return x;
-    }()) << "\n";
-    out << "PREDICATES " << q.predicates.size() << "\n";
-    for (size_t i = 0; i < q.predicates.size(); ++i) {
-        const auto& p = q.predicates[i];
-        out << "  " << (i + 1) << " " << p.field << " " << p.op;
-        if (!p.arg.empty()) out << "(" << p.arg << ")";
-        else out << "()";
-        out << "\n";
-    }
-    const std::string container = sqlResolveTargetContainer(q);
-    const auto it = docStore.find(container);
-    const size_t total = it == docStore.end() ? 0 : it->second.size();
-    size_t matched = 0;
-    if (it != docStore.end()) for (const auto& entry : it->second) if (sqlDocumentMatches(entry.second, q)) ++matched;
-    out << "CONTAINER " << (container.empty() ? "<missing>" : container) << "\n";
-    out << "DOCUMENTS " << total << "\n";
-    out << "MATCHED " << matched << "\n";
-    return out.str();
 }
 
 void Interpreter::registerNatives() {
@@ -2639,38 +2662,177 @@ void Interpreter::registerNatives() {
     natives["sqlCount"] = [this](std::vector<Value>& a, int line) -> Value {
         expectArgs("sqlCount", a, 1, line);
         std::string raw = asString(a[0], "sqlCount", line);
-        return Value::num(static_cast<double>(sqlExecuteCount(raw, line)));
+        auto res = sqlExecute(raw, line);
+        return Value::num(res ? static_cast<double>(res->size()) : 0.0);
     };
 
-    // sqlExists(query) -> هل يوجد مستند واحد على الأقل مطابق؟
+    // sqlExists(query) -> true إن وُجد تطابق واحد على الأقل، وإلا false (أخفّ من sqlCount حين لا
+    // يهمّك إلا وجود/عدم وجود تطابق -- لا يبني مصفوفة نتائج كاملة)
     natives["sqlExists"] = [this](std::vector<Value>& a, int line) -> Value {
         expectArgs("sqlExists", a, 1, line);
-        return Value::boolean_(sqlExecuteExists(asString(a[0], "sqlExists", line), line));
+        std::string raw = asString(a[0], "sqlExists", line);
+        return Value::boolean_(!sqlRunRaw(raw, line).rows.empty());
     };
 
-    // sqlIds(query) -> IDs فقط، مع الحفاظ على ترتيب المستندات الأصلي.
+    // sqlIds(query) -> مصفوفة معرّفات (_id) المستندات المطابقة فقط، بنفس ترتيب sql()
     natives["sqlIds"] = [this](std::vector<Value>& a, int line) -> Value {
         expectArgs("sqlIds", a, 1, line);
-        const std::string raw = asString(a[0], "sqlIds", line);
-        const auto rows = sqlExecute(raw, line);
-        auto ids = std::make_shared<ArrayData>();
-        if (!rows) return Value::makeArray(ids);
-        for (const auto& row : *rows) {
-            if (row.type != Value::Type::MAP || !row.map) continue;
-            for (const auto& kv : *row.map) {
-                if (kv.first.type == Value::Type::STRING && kv.first.str == "_id") {
-                    ids->push_back(kv.second);
+        std::string raw = asString(a[0], "sqlIds", line);
+        auto res = std::make_shared<ArrayData>();
+        for (auto& row : sqlRunRaw(raw, line).rows) res->push_back(Value::string(row.id));
+        return Value::makeArray(res);
+    };
+
+    // sqlPluck(query, field) -> مصفوفة قيمة حقل واحد (field، يقبل مسار متداخل بـ '/') عبر كل
+    // المستندات المطابقة، بنفس ترتيبها وعددها؛ مستند لا يملك الحقل -> nil في موضعه (يحافظ على
+    // التطابق 1-إلى-1 بين موضع القيمة وموضع المستند المقابل لها). ملاحظة: field وسيط Rin عادي (نصّ
+    // Value منفصل عن نص الاستعلام)، فليس مقيَّداً بمجموعة رموز RCSQL -- يمكن أن يحوي '/' بحرّية.
+    natives["sqlPluck"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("sqlPluck", a, 2, line);
+        std::string raw = asString(a[0], "sqlPluck", line);
+        std::string field = asString(a[1], "sqlPluck", line);
+        auto path = sqlSplitSlash(field);
+        auto res = std::make_shared<ArrayData>();
+        for (auto& row : sqlRunRaw(raw, line).rows) {
+            Value v;
+            res->push_back(sqlGetNestedField(row.doc, path, v) ? v : Value::nil());
+        }
+        return Value::makeArray(res);
+    };
+
+    // sqlSum/sqlAvg/sqlMin/sqlMax(query, field) -> تجميع رقمي على حقل field عبر كل المستندات
+    // المطابقة؛ القيم غير الرقمية أو المفقودة تُتجاهَل بصمت (لا تُحتسَب). sqlSum على مجموعة خالية
+    // من القيم الرقمية -> 0. sqlAvg/sqlMin/sqlMax على مجموعة كذلك -> nil (لا معنى رياضياً لمتوسط/
+    // أصغر/أكبر مجموعة فارغة، بخلاف المجموع الذي عنصره المحايد 0 منطقي).
+    auto sqlAggregate = [this](const char* nativeName, std::vector<Value>& a, int line,
+                                double init, bool (*combine)(double&, double), bool wantAvgDivide,
+                                bool nilWhenEmpty) -> Value {
+        expectArgs(nativeName, a, 2, line);
+        std::string raw = asString(a[0], nativeName, line);
+        std::string field = asString(a[1], nativeName, line);
+        auto path = sqlSplitSlash(field);
+        double acc = init;
+        long count = 0;
+        for (auto& row : sqlRunRaw(raw, line).rows) {
+            Value v;
+            if (!sqlGetNestedField(row.doc, path, v)) continue;
+            if (v.type != Value::Type::NUMBER) continue;
+            combine(acc, v.number);
+            count++;
+        }
+        if (count == 0) return nilWhenEmpty ? Value::nil() : Value::num(0.0);
+        if (wantAvgDivide) return Value::num(acc / static_cast<double>(count));
+        return Value::num(acc);
+    };
+    natives["sqlSum"] = [sqlAggregate](std::vector<Value>& a, int line) -> Value {
+        return sqlAggregate("sqlSum", a, line, 0.0,
+                             +[](double& acc, double v) -> bool { acc += v; return true; },
+                             false, false);
+    };
+    natives["sqlAvg"] = [sqlAggregate](std::vector<Value>& a, int line) -> Value {
+        return sqlAggregate("sqlAvg", a, line, 0.0,
+                             +[](double& acc, double v) -> bool { acc += v; return true; },
+                             true, true);
+    };
+    natives["sqlMin"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("sqlMin", a, 2, line);
+        std::string raw = asString(a[0], "sqlMin", line);
+        std::string field = asString(a[1], "sqlMin", line);
+        auto path = sqlSplitSlash(field);
+        bool any = false; double best = 0.0;
+        for (auto& row : sqlRunRaw(raw, line).rows) {
+            Value v;
+            if (!sqlGetNestedField(row.doc, path, v) || v.type != Value::Type::NUMBER) continue;
+            if (!any || v.number < best) best = v.number;
+            any = true;
+        }
+        return any ? Value::num(best) : Value::nil();
+    };
+    natives["sqlMax"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("sqlMax", a, 2, line);
+        std::string raw = asString(a[0], "sqlMax", line);
+        std::string field = asString(a[1], "sqlMax", line);
+        auto path = sqlSplitSlash(field);
+        bool any = false; double best = 0.0;
+        for (auto& row : sqlRunRaw(raw, line).rows) {
+            Value v;
+            if (!sqlGetNestedField(row.doc, path, v) || v.type != Value::Type::NUMBER) continue;
+            if (!any || v.number > best) best = v.number;
+            any = true;
+        }
+        return any ? Value::num(best) : Value::nil();
+    };
+
+    // sqlDelete(query) -> يحذف كل المستندات المطابقة للاستعلام (بعد تطبيق أي order/limit/offset/
+    // distinct فيه أيضاً -- مفيد لعمليات مثل "احذف أقدم 3 حسابات معطَّلة") من حاويتها فعلياً، ويعيد
+    // عدد المستندات المحذوفة. بلا استرجاع (لا تراجع) -- تماماً كـ deleteDoc() الحالية لكن بالجملة.
+    natives["sqlDelete"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("sqlDelete", a, 1, line);
+        std::string raw = asString(a[0], "sqlDelete", line);
+        auto matched = sqlRunRaw(raw, line);
+        if (matched.container.empty() || matched.rows.empty()) return Value::num(0.0);
+        auto storeIt = docStore.find(matched.container);
+        if (storeIt == docStore.end()) return Value::num(0.0);
+        long deleted = 0;
+        for (auto& row : matched.rows) {
+            auto& vec = storeIt->second;
+            for (size_t i = 0; i < vec.size(); i++) {
+                if (vec[i].first == row.id) {
+                    Value removed = vec[i].second;
+                    vec.erase(vec.begin() + i);
+                    notifyWatchers(matched.container, row.id, removed, "delete", line);
+                    deleted++;
                     break;
                 }
             }
         }
-        return Value::makeArray(ids);
+        if (deleted > 0) refreshIndexesForContainer(matched.container);
+        return Value::num(static_cast<double>(deleted));
     };
 
-    // sqlExplain(query) -> خطة/تشخيص تنفيذية نصية خاصة بـ RCSQL 1.0.
-    natives["sqlExplain"] = [this](std::vector<Value>& a, int line) -> Value {
-        expectArgs("sqlExplain", a, 1, line);
-        return Value::string(sqlExplain(asString(a[0], "sqlExplain", line), line));
+    // sqlUpdate(query, field, value) -> يضبط حقلاً واحداً (field، يقبل مسار متداخل بـ '/' فيُنشئ
+    // map وسيطة تلقائياً عند الحاجة) إلى value على كل المستندات المطابقة للاستعلام، ويعيد عدد
+    // المستندات المُحدَّثة فعلياً. تحقّق ذرّي من المخطط أولاً على نسخ من كل المستندات المطابقة قبل
+    // أي التزام فعلي -- إن خالف أيّ مستند مخطط الحاوية بعد التعديل تُرفَض العملية بالكامل (لا يُحدَّث
+    // أي مستند جزئياً)، تماماً كسلوك updateDoc() الحالي لكن مضموناً على الدفعة كاملة معاً.
+    natives["sqlUpdate"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("sqlUpdate", a, 3, line);
+        std::string raw = asString(a[0], "sqlUpdate", line);
+        std::string field = asString(a[1], "sqlUpdate", line);
+        Value newVal = a[2];
+        auto path = sqlSplitSlash(field);
+        auto matched = sqlRunRaw(raw, line);
+        if (matched.container.empty() || matched.rows.empty()) return Value::num(0.0);
+
+        std::vector<std::pair<std::string, Value>> merged;
+        merged.reserve(matched.rows.size());
+        for (auto& row : matched.rows) {
+            Value updated = sqlSetNestedField(row.doc, path, newVal);
+            auto errors = schemaErrors(matched.container, updated);
+            if (!errors.empty()) {
+                auto d = diagErr(diag::Code::E0019_SchemaViolation, line,
+                                  "schema violation in `" + matched.container + "` (sqlUpdate, doc id `" + row.id + "`)");
+                d.diagnostic->withReason(joinErrors(errors));
+                throw d;
+            }
+            merged.push_back({row.id, updated});
+        }
+
+        auto storeIt = docStore.find(matched.container);
+        if (storeIt == docStore.end()) return Value::num(0.0);
+        long updatedCount = 0;
+        for (auto& [id, val] : merged) {
+            for (auto& entry : storeIt->second) {
+                if (entry.first == id) {
+                    entry.second = val;
+                    notifyWatchers(matched.container, id, val, "update", line);
+                    updatedCount++;
+                    break;
+                }
+            }
+        }
+        if (updatedCount > 0) refreshIndexesForContainer(matched.container);
+        return Value::num(static_cast<double>(updatedCount));
     };
 
     // docIds(collection) -> مصفوفة أسماء (ids) كل المستندات بترتيب الإدخال
