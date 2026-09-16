@@ -18,6 +18,11 @@
  * يعتمد على محرك WASM مبني من web/rinhtml_bridge.cpp (انظر build_rinhtml_wasm.sh)، والذي يُصدِّر:
  *   rinhtml_create, rinhtml_last_error, rinhtml_boot_output,
  *   rinhtml_get_globals, rinhtml_call, rinhtml_set_global, rinhtml_free_session
+ *
+ * أيقونة الموقع (favicon): إن عرّف main.rin حاوية @sticker (أو @container.sticker) بحقل icon،
+ * تُستخدم تلقائياً كـ<link rel="icon"> للصفحة الحالية — بلا أي إعداد إضافي. مثال:
+ *   @sticker=app  text icon = "icon.png";  .end/sticker
+ * (نفس المنطق تماماً، بصيغة Kotlin، في RinStickerIcon.kt — يُستخدم هناك لأيقونة تصدير APK.)
  */
 (function (global) {
   'use strict';
@@ -71,6 +76,42 @@
       if (!res.ok) throw new Error('تعذّر جلب ' + src + ' (HTTP ' + res.status + ')');
       return res.text();
     });
+  }
+
+  // ===========================================================================================
+  // 2ب) rinhtml-sticker-icon — حاوية @sticker/@container.sticker تصبح مسؤولة تلقائياً عن أيقونة
+  // الموقع (favicon)، بنفس التوأم بالضبط بلغة Kotlin: RinStickerIcon.kt (استخدامه لأيقونة تصدير
+  // APK). كلا الطرفين يقرأان نفس الحقل الموثَّق في rin_ast.h (سطح "sticker"):
+  //   @sticker=name  text icon = "path/to/icon.png";  ...  .end/sticker
+  // مسح نصّي خفيف على مصدر .rin كما جُلب (لا حاجة لتشغيل المحرّك WASM أولاً)، فيُطبَّق فوراً بمجرد
+  // جلب الملف — قبل انتظار boot الجلسة — حتى تظهر الأيقونة بأسرع ما يمكن أثناء تحميل الصفحة.
+  // ===========================================================================================
+  var STICKER_BLOCK_RE = /@(?:container\.)?sticker\s*=\s*"?[A-Za-z_][\w.]*"?[\s\S]*?\.end\/(?:container\.)?sticker/i;
+  var ICON_FIELD_RE = /\bicon\s*=\s*"((?:\\.|[^"\\])*)"/;
+
+  function findStickerIconPath(source) {
+    var block = STICKER_BLOCK_RE.exec(source || '');
+    if (!block) return null;
+    var m = ICON_FIELD_RE.exec(block[0]);
+    if (!m) return null;
+    var raw = m[1].replace(/\\"/g, '"').replace(/\\\\/g, '\\').trim();
+    return raw || null;
+  }
+
+  // يضبط <link rel="icon"> في <head> الصفحة الحالية، نسبةً إلى [baseSrc] (مسار main.rin نفسه)
+  // إن كانت الأيقونة نسبية — بنفس منطق fetch العادي للمتصفح. لا يفعل شيئاً إن لم توجد أيقونة sticker
+  // (يترك أي favicon معرَّف يدوياً في الصفحة كما هو).
+  function applyStickerFavicon(source, baseSrc) {
+    var path = findStickerIconPath(source);
+    if (!path || typeof document === 'undefined') return;
+    var href = baseSrc ? new URL(path, new URL(baseSrc, document.baseURI)).href : path;
+    var link = document.querySelector('link[rel~="icon"]');
+    if (!link) {
+      link = document.createElement('link');
+      link.rel = 'icon';
+      document.head.appendChild(link);
+    }
+    link.href = href;
   }
 
   // ===========================================================================================
@@ -209,6 +250,7 @@
     var app = this;
     if (!this.src) return Promise.resolve(app);
     return fetchSource(this.src).then(function (source) {
+      applyStickerFavicon(source, app.src);
       app.unmount();
       app.Module.ccall('rinhtml_free_session', null, ['number'], [app.sessionId]);
       var newId = createSession(app.Module, source);
@@ -264,6 +306,7 @@
     //   opts: { allow: "dom storage", root: HTMLElement, src: "main.rin" (لأجل reload) }
     run: function (source, opts) {
       opts = opts || {};
+      applyStickerFavicon(source, opts.src);
       return loadEngine().then(function (Module) {
         var id = createSession(Module, source);
         var app = new App(Module, id, {
