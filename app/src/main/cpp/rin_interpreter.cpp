@@ -7377,12 +7377,11 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
     // @Program=name  <body>  .end/Program
     // بداية/نهاية صريحتان على مستوى البرنامج بأكمله (لا حاوية/مجموعة واحدة فقط): تُطبَع علامة
     // بداية واضحة عند الدخول، ثم تُنفَّذ كل العبارات العادية بداخلها كما لو كانت في نفس النطاق
-    // المحيط تماماً (لا نطاق env جديد هنا خلافاً لـ Group -- Program إطار عرض لا حاوية بيانات)،
-    // ثم عند الخروج تُطبَع علامة نهاية تتضمّن مدة التنفيذ الفعلية بين العلامتين وعدد أي أخطاء
-    // حدثت أثناء التنفيذ (lastErrorMessage_ يُضبَط من catch في Interpreter::run عند فشل غير
-    // مُدار؛ لكن أي throw داخل Program نفسه سيقطع التنفيذ فوراً قبل الوصول لسطر النهاية هنا --
-    // بالضبط كما يحدث اليوم مع Group/Volume/Section عند حدوث خطأ بداخلها، فهذا سلوك متّسق
-    // ومقصود: علامة النهاية تعني "انتهى التنفيذ بنجاح"، لا مجرد "وصلنا لآخر السطر".
+    // المحيط تماماً (لا نطاق env جديد هنا خلافاً لـ Group -- Program إطار عرض لا حاوية بيانات).
+    // عند الخروج: بلا recover، أي خطأ غير مُدار يُطبَع كعلامة فشل صريحة (❌) ثم يُعاد رميه كما هو
+    // (فتستمر معالجة Interpreter::run المعتادة بلا أي تغيير)؛ ومع recover (انظر ProgramStmt في
+    // rin_ast.h)، الخطأ يُلتَقط هنا فعلياً (🩹) وجسم recover يُنفَّذ بدلاً من إعادة الرمي، فيستمر
+    // البرنامج بعد .end/Program بشكل طبيعي كأن شيئاً لم يحدث.
     if (auto s = std::dynamic_pointer_cast<ProgramStmt>(stmt)) {
         if (!s->mask.empty()) volumeMasks[s->mask] = s->name; // نفس سجل الأقنعة العام المستخدم لـ Volume (لا داعي لسجل مستقل لهذا الغرض البسيط)
 
@@ -7398,13 +7397,50 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
 
         programStack.push_back(label);
         auto startTime = std::chrono::steady_clock::now();
-        // فشل غير مُدار بداخل Program (RinError/ThrowSignal/...) يجب ألا يبتلع علامة "لم تكتمل"
-        // بصمت -- نطبع سطر فشل صريحاً يتضمّن المدة حتى نقطة الفشل، ثم نُعيد رمي نفس الاستثناء
-        // كما هو تماماً (بلا أي تعديل) ليستمر بقية سلسلة المعالجة المعتادة في Interpreter::run
-        // (رسم diagnostic كامل، ضبط lastErrorMessage_، ...) بلا أي تغيير في ذلك السلوك.
         try {
             executeBlock(s->body, env);
-        } catch (...) {
+        } catch (ThrowSignal& ex) {
+            if (s->recoverBody) {
+                auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+                    std::chrono::steady_clock::now() - startTime).count();
+                output << indent << "🩹 .end/Program" << (s->name.empty() ? "" : (" (" + s->name + ")"))
+                       << "  — استُرِدَّ بعد ⏱️ " << elapsedMs << "ms\n";
+                auto recoverEnv = std::make_shared<Environment>(env);
+                if (!s->recoverName.empty()) {
+                    auto err = std::make_shared<MapData>();
+                    err->push_back({Value::string("value"), ex.value});
+                    err->push_back({Value::string("message"), Value::string(ex.value.toDisplayString())});
+                    err->push_back({Value::string("line"), Value::num(ex.line)});
+                    recoverEnv->define(s->recoverName, Value::makeMap(err));
+                }
+                execute(s->recoverBody, recoverEnv);
+                programStack.pop_back();
+                return;
+            }
+            auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::steady_clock::now() - startTime).count();
+            output << indent << "❌ .end/Program" << (s->name.empty() ? "" : (" (" + s->name + ")"))
+                   << "  — فشل بعد ⏱️ " << elapsedMs << "ms\n";
+            programStack.pop_back();
+            throw;
+        } catch (RinError& ex) {
+            if (s->recoverBody) {
+                auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+                    std::chrono::steady_clock::now() - startTime).count();
+                output << indent << "🩹 .end/Program" << (s->name.empty() ? "" : (" (" + s->name + ")"))
+                       << "  — استُرِدَّ بعد ⏱️ " << elapsedMs << "ms\n";
+                auto recoverEnv = std::make_shared<Environment>(env);
+                if (!s->recoverName.empty()) {
+                    auto err = std::make_shared<MapData>();
+                    err->push_back({Value::string("message"), Value::string(ex.message)});
+                    err->push_back({Value::string("line"), Value::num(ex.line)});
+                    if (ex.diagnostic) err->push_back({Value::string("code"), Value::string(diag::codeString(ex.diagnostic->code))});
+                    recoverEnv->define(s->recoverName, Value::makeMap(err));
+                }
+                execute(s->recoverBody, recoverEnv);
+                programStack.pop_back();
+                return;
+            }
             auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(
                 std::chrono::steady_clock::now() - startTime).count();
             output << indent << "❌ .end/Program" << (s->name.empty() ? "" : (" (" + s->name + ")"))
