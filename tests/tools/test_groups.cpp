@@ -48,6 +48,36 @@ int main() {
         @container=viewer
             link to=team_root;
         .end/container
+
+        // 6) مجموعة بحقول مباشرة على مستوى المجموعة نفسها (مشتركة بين كل أعضائها) + حاويات
+        //    container.doc متعددة داخلها (Containers.Group التي تضم container.doc = "قاعدة بيانات")
+        @Containers.Group=company
+            text owner = "سارة";
+            @container.doc=employees
+                text label = "موظفون";
+            .end/container.doc
+            @Containers.Group=finance
+                @container.doc=invoices
+                    text label = "فواتير";
+                .end/container.doc
+            .end/Containers.Group
+        .end/Containers.Group
+
+        // 7) استقصاء توسيع Group الجديد: hasGroup/groupNames/groupVars/groupParent/groupPath/
+        //    groupContainerCount/groupHasContainer/groupSnapshot
+        print "hasGroup(company):"; print hasGroup("company");     // true
+        print "hasGroup(nope):"; print hasGroup("nope");           // false
+        print "groupNames():"; print groupNames();                 // كل المجموعات المُعرَّفة بترتيب الظهور
+        print "groupVars(company) (حقول مستوى المجموعة):"; print groupVars("company"); // {"owner": "سارة"}
+        print "groupParent(finance):"; print groupParent("finance"); // "company"
+        print "groupParent(company):"; print groupParent("company"); // "" (مجموعة جذر)
+        print "groupPath(finance):"; print groupPath("finance");     // ["company", "finance"]
+        print "groupContainerCount(company):"; print groupContainerCount("company"); // 2 (employees + invoices)
+        print "groupHasContainer(company, invoices):"; print groupHasContainer("company", "invoices"); // true
+        print "groupHasContainer(company, nope):"; print groupHasContainer("company", "nope");         // false
+        // لقطة كاملة (سجل واحد لكل حاوية عضوة، بحقولها + __container + __kind) -- ما يجعل
+        // المجموعة فعلياً "قاعدة بيانات" جاهزة للقراءة دفعة واحدة، لا مجرّد تسجيل عضوية اسمي.
+        print "groupSnapshot(company):"; print groupSnapshot("company");
     )";
 
     try {
