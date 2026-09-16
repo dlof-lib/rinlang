@@ -623,6 +623,23 @@ static void collectGroupContainerNames(const std::unordered_map<std::string, std
     }
 }
 
+// يبني map مُرتَّب أبجدياً بمتغيرات env المباشرة (بنفس مبدأ serializeEnvBody أدناه، لكن كقيمة Rin
+// حيّة "MapData" جاهزة للإرجاع من native بدل نص Rin مُسلسَل) -- الدوال (FUNCTION) تُستبعَد لأنها
+// لا تُمثَّل كقيمة Rin عادية. تُستخدَم من sectionVars/groupVars/groupSnapshot.
+static std::shared_ptr<MapData> envVarsAsMap(const EnvPtr& env) {
+    auto result = std::make_shared<MapData>();
+    std::vector<std::string> keys;
+    keys.reserve(env->values.size());
+    for (auto& kv : env->values) keys.push_back(kv.first);
+    std::sort(keys.begin(), keys.end());
+    for (auto& k : keys) {
+        const Value& v = env->values[k];
+        if (v.type == Value::Type::FUNCTION) continue;
+        result->push_back({Value::string(k), v});
+    }
+    return result;
+}
+
 static std::string toUpperAscii(std::string s) {
     for (auto& c : s) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
     return s;
@@ -2490,6 +2507,108 @@ void Interpreter::registerNatives() {
         return Value::makeArray(result);
     };
 
+    // ---- Containers.Group: توسيع (الدفعة الجديدة) -- تحوّل Group من مجرّد "غلاف تنظيمي" (تسجيل
+    // عضوية فقط) إلى بنية يمكن الاستعلام عن حالتها/شجرتها/بياناتها فعلياً، بنفس روح توسيع Section
+    // أعلاه (sectionVars/sectionNames/hasSection) ----
+
+    // hasGroup(name) -> true إن عُرِّفت مجموعة بهذا الاسم مرة واحدة على الأقل حتى الآن.
+    natives["hasGroup"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("hasGroup", a, 1, line);
+        std::string name = asString(a[0], "hasGroup", line);
+        return Value::boolean_(groupMembers.count(name) > 0);
+    };
+    // groupNames() -> مصفوفة أسماء كل المجموعات (Containers.Group) المُعرَّفة حتى الآن، بترتيب
+    // أول ظهور (جذوراً كانت أو متداخلة).
+    natives["groupNames"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("groupNames", a, 0, line);
+        auto result = std::make_shared<ArrayData>();
+        for (auto& n : groupOrder) result->push_back(Value::string(n));
+        return Value::makeArray(result);
+    };
+    // groupVars(name) -> map بالمتغيرات المُعلَنة مباشرة داخل جسم المجموعة (خارج أي حاوية/مجموعة
+    // فرعية بداخلها) -- مفيد لحقول "على مستوى المجموعة" مشتركة بين كل أعضائها (مثال: text owner
+    // = "..."; مباشرة داخل @Containers.Group). map فارغ إن لم تُعرَّف مجموعة بهذا الاسم.
+    natives["groupVars"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("groupVars", a, 1, line);
+        std::string name = asString(a[0], "groupVars", line);
+        auto it = groupEnvs.find(name);
+        auto result = (it != groupEnvs.end()) ? envVarsAsMap(it->second) : std::make_shared<MapData>();
+        return Value::makeMap(result);
+    };
+    // groupParent(name) -> اسم المجموعة الأب المباشرة التي تحتوي "name" كمجموعة فرعية متداخلة،
+    // أو نص فارغ "" إن كانت "name" مجموعة جذر (أو غير معرَّفة أصلاً).
+    natives["groupParent"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("groupParent", a, 1, line);
+        std::string name = asString(a[0], "groupParent", line);
+        auto it = groupParentOf.find(name);
+        return Value::string(it != groupParentOf.end() ? it->second : std::string());
+    };
+    // groupPath(name) -> مصفوفة أسماء تمثّل مسار الأجداد من الجذر وصولاً إلى "name" نفسها ضمناً
+    // (مثال: مجموعة "team_nested" داخل "team_root" -> ["team_root", "team_nested"]). مصفوفة
+    // فارغة إن لم تُعرَّف مجموعة بهذا الاسم أصلاً.
+    natives["groupPath"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("groupPath", a, 1, line);
+        std::string name = asString(a[0], "groupPath", line);
+        auto result = std::make_shared<ArrayData>();
+        if (!groupMembers.count(name)) return Value::makeArray(result);
+        std::vector<std::string> chain;
+        std::string cur = name;
+        std::unordered_set<std::string> seen; // حارس ضد أي دورة غير متوقّعة في groupParentOf
+        while (true) {
+            chain.push_back(cur);
+            if (!seen.insert(cur).second) break;
+            auto it = groupParentOf.find(cur);
+            if (it == groupParentOf.end()) break;
+            cur = it->second;
+        }
+        for (auto rit = chain.rbegin(); rit != chain.rend(); ++rit) result->push_back(Value::string(*rit));
+        return Value::makeArray(result);
+    };
+    // groupContainerCount(name) -> عدد الحاويات الفعلية (leaf) داخل المجموعة، مفلطحاً عبر كل
+    // المجموعات الفرعية المتداخلة (نفس تفرّع groupContainers لكن عدداً فقط بدل مصفوفة الأسماء).
+    natives["groupContainerCount"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("groupContainerCount", a, 1, line);
+        std::string name = asString(a[0], "groupContainerCount", line);
+        std::vector<std::string> flat;
+        if (groupMembers.count(name)) collectGroupContainerNames(groupMembers, name, flat);
+        return Value::num(static_cast<double>(flat.size()));
+    };
+    // groupHasContainer(name, containerName) -> true إن كانت "containerName" حاوية فعلية عضوة
+    // (مباشرة أو عبر تفرّع مجموعة فرعية متداخلة) داخل المجموعة "name".
+    natives["groupHasContainer"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("groupHasContainer", a, 2, line);
+        std::string name = asString(a[0], "groupHasContainer", line);
+        std::string target = asString(a[1], "groupHasContainer", line);
+        std::vector<std::string> flat;
+        if (groupMembers.count(name)) collectGroupContainerNames(groupMembers, name, flat);
+        return Value::boolean_(std::find(flat.begin(), flat.end(), target) != flat.end());
+    };
+    // groupSnapshot(name) -> مصفوفة map واحدة لكل حاوية فعلية عضوة في المجموعة (مفلطحة عبر أي
+    // تعشيش)، بنفس ترتيب groupContainers، وبكل متغيراتها المباشرة + حقلين وصفيين "__container"
+    // (اسم الحاوية) و"__kind" (وسمها الموحَّد، مثال "container.doc") -- هذا ما يجعل المجموعة
+    // "مفيدة" فعلياً كبنية بيانات قابلة للاستعلام دفعة واحدة (شبيه بجدول/قائمة سجلّات)، بدل مجرّد
+    // تسجيل عضوية اسمي كما كانت الحال سابقاً: مثال استخدام حقيقي -- Containers.Group تضم عدّة
+    // container.doc (= "قاعدة بيانات" من عدّة مجموعات مستندات، كما يوثّق ContainerKind::DOC أعلاه)
+    // يمكن الآن قراءة إعداداتها الوصفية دفعة واحدة عبر استدعاء groupSnapshot واحد بدل استدعاء
+    // getField لكل حاوية على حدة.
+    natives["groupSnapshot"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("groupSnapshot", a, 1, line);
+        std::string name = asString(a[0], "groupSnapshot", line);
+        auto result = std::make_shared<ArrayData>();
+        std::vector<std::string> flat;
+        if (groupMembers.count(name)) collectGroupContainerNames(groupMembers, name, flat);
+        for (auto& cname : flat) {
+            auto it = containers.find(cname);
+            if (it == containers.end()) continue;
+            auto m = envVarsAsMap(it->second);
+            m->push_back({Value::string("__container"), Value::string(cname)});
+            auto kindIt = containerKinds.find(cname);
+            m->push_back({Value::string("__kind"), Value::string(kindIt != containerKinds.end() ? containerTagName(kindIt->second) : std::string("container"))});
+            result->push_back(Value::makeMap(m));
+        }
+        return Value::makeArray(result);
+    };
+
     // ---- Section: استعلام عن حالة قسم بعد إغلاقه (يحوّل Section من زخرفية بحتة إلى شيء يمكن
     // قراءته وبناء منطق فوقه، بنفس روح groupContainers/groupMembers أعلاه) ----
 
@@ -2499,19 +2618,8 @@ void Interpreter::registerNatives() {
     natives["sectionVars"] = [this](std::vector<Value>& a, int line) -> Value {
         expectArgs("sectionVars", a, 1, line);
         std::string name = asString(a[0], "sectionVars", line);
-        auto result = std::make_shared<MapData>();
         auto it = sectionEnvs.find(name);
-        if (it != sectionEnvs.end()) {
-            std::vector<std::string> keys;
-            keys.reserve(it->second->values.size());
-            for (auto& kv : it->second->values) keys.push_back(kv.first);
-            std::sort(keys.begin(), keys.end());
-            for (auto& k : keys) {
-                const Value& v = it->second->values[k];
-                if (v.type == Value::Type::FUNCTION) continue;
-                result->push_back({Value::string(k), v});
-            }
-        }
+        auto result = (it != sectionEnvs.end()) ? envVarsAsMap(it->second) : std::make_shared<MapData>();
         return Value::makeMap(result);
     };
     // sectionNames() -> مصفوفة أسماء كل الأقسام المُسمّاة التي نُفِّذت حتى الآن، بترتيب أول ظهور.
@@ -7167,10 +7275,18 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
         groupEnvs[groupKey] = groupEnv;
         groupMembers.emplace(groupKey, std::vector<std::string>{});
         if (!s->mask.empty()) groupMasks[s->mask] = groupKey; // تضمن وجود مُدخَل حتى لو بقيت فارغة
+        // نفس مبدأ sectionOrder: يُسجَّل مرة واحدة فقط بترتيب أول ظهور، حتى لو أُعيد تنفيذ نفس
+        // المجموعة (مثلاً داخل حلقة) -- عندها تُحدَّث بيئتها/أعضاؤها لأحدث تنفيذ بلا تكرار اسمها هنا.
+        bool isFirstAppearance = std::find(groupOrder.begin(), groupOrder.end(), groupKey) == groupOrder.end();
+        if (isFirstAppearance) groupOrder.push_back(groupKey);
 
-        // مجموعة متداخلة داخل مجموعة أخرى: سجّلها كعضو في المجموعة الأب أيضاً.
+        // مجموعة متداخلة داخل مجموعة أخرى: سجّلها كعضو في المجموعة الأب أيضاً، واحفظ اتجاه العلاقة
+        // المعاكس (groupParentOf) لأجل groupParent()/groupPath() أدناه.
         if (!groupStack.empty()) {
             groupMembers[groupStack.back()].push_back(groupKey);
+            groupParentOf[groupKey] = groupStack.back();
+        } else {
+            groupParentOf.erase(groupKey); // إعادة تنفيذ مجموعة كانت متداخلة سابقاً كمجموعة جذر الآن (حالة نادرة، لكن نبقيها متّسقة)
         }
 
         output << "🗂️ Containers.Group" << (s->name.empty() ? "" : (" = " + s->name)) << "\n";
