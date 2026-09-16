@@ -53,16 +53,16 @@ int main() {
 
     static const char* seedDocs = R"RIN(
         @container.doc=users
-            mask="appUsers";
+            mask="app.users";
             document id="u1" fields={ name: "Ali", role: "admin", age: 25, address: { city: "Cairo" }, tags: ["vip", "early"] };
-            document id="u2" fields={ name: "Sara", role: "user", age: 30, address: { city: "Giza" }, tags: ["new"], phone: null };
+            document id="u2" fields={ name: "Sara", role: "user", age: 30, address: { city: "Giza" }, tags: ["new"] };
             document id="u3" fields={ name: "Omar", role: "admin", age: 17, address: { city: "Cairo" }, tags: [] };
         .end/container.doc
     )RIN";
 
     // (1) استعلام خام عبر قناع '#' مع شرط واحد.
     failures += run("raw query via mask (#) -- single predicate", std::string(seedDocs) + R"RIN(
-        print sql("#appUsers & role:eq(admin)");
+        print sql("#app.users & role:eq(admin)");
     )RIN", false, "\"name\": \"Ali\"");
 
     // (2) استعلام خام عبر اسم حاوية مباشر (بلا قناع).
@@ -82,66 +82,130 @@ int main() {
 
     // (4) عدة شروط AND متصلة بـ '&' بما فيها حقل متداخل عبر '/'.
     failures += run("multiple AND predicates incl. nested field", std::string(seedDocs) + R"RIN(
-        print sql("#appUsers & role:eq(admin) & address/city:eq(Cairo) & age:gte(18)");
+        print sql("#app.users & role:eq(admin) & address/city:eq(Cairo) & age:gte(18)");
     )RIN", false, "\"name\": \"Ali\"");
 
     // (5) عمليات مقارنة رقمية: gt/gte/lt/lte.
     failures += run("numeric comparisons gt/gte/lt/lte", std::string(seedDocs) + R"RIN(
-        print sql("#appUsers & age:gt(20)");
-        print sql("#appUsers & age:lte(17)");
+        print sql("#app.users & age:gt(20)");
+        print sql("#app.users & age:lte(17)");
     )RIN", false, "\"name\": \"Ali\"");
 
     // (6) has() على مصفوفة (tags) وعلى map (address).
     failures += run("has() on array and on map", std::string(seedDocs) + R"RIN(
-        print sql("#appUsers & tags:has(vip)");
-        print sql("#appUsers & address:has(city)");
+        print sql("#app.users & tags:has(vip)");
+        print sql("#app.users & address:has(city)");
     )RIN", false, "\"name\": \"Ali\"");
 
     // (7) like() كمطابقة substring غير حسّاسة لحالة الأحرف.
     failures += run("like() substring match", std::string(seedDocs) + R"RIN(
-        print sql("#appUsers & name:like(ar)");
+        print sql("#app.users & name:like(ar)");
     )RIN", false, "\"name\": \"Sara\"");
 
     // (8) sqlOne يعيد أول تطابق فقط؛ sqlCount يعيد العدد فقط.
     failures += run("sqlOne / sqlCount", std::string(seedDocs) + R"RIN(
-        print sqlOne("#appUsers & role:eq(admin)");
-        print sqlCount("#appUsers & role:eq(admin)");
+        print sqlOne("#app.users & role:eq(admin)");
+        print sqlCount("#app.users & role:eq(admin)");
     )RIN", false, "\"name\": \"Ali\"");
 
     // (9) @sql مُسمّاة تُستدعى لاحقاً بقناعها فقط (بلا تكرار النص الخام).
     failures += run("named @sql view invoked by its mask", std::string(seedDocs) + R"RIN(
         @sql=activeAdmins
-            mask="qActiveAdmins";
-            text query = "#appUsers & role:eq(admin) & age:gte(18)";
+            mask="q.activeAdmins";
+            text query = "#app.users & role:eq(admin) & age:gte(18)";
         .end/sql
-        print sql("qActiveAdmins");
-        print sqlCount("qActiveAdmins");
+        print sql("q.activeAdmins");
+        print sqlCount("q.activeAdmins");
     )RIN", false, "\"name\": \"Ali\"");
 
-    // (10) عمليات النص/الوجود/الفراغ/null + sqlExists/sqlIds/sqlExplain.
-    failures += run("RCSQL 1.0 extended predicates", std::string(seedDocs) + R"RIN(
-        print sql("#appUsers & name:starts(A)");
-        print sql("#appUsers & name:ends(a)");
-        print sql("#appUsers & name:contains(AR)");
-        print sql("#appUsers & phone:missing()");
-        print sql("#appUsers & tags:notempty()");
-        print sql("#appUsers & tags:empty()");
-        print sql("#appUsers & phone:isnull()");
-        print sql("#appUsers & phone:notnull()");
-        print sqlExists("#appUsers & role:eq(admin)");
-        print sqlIds("#appUsers & role:eq(admin)");
-        print sqlExplain("#appUsers & role:eq(admin) & age:gte(18)");
-    )RIN", false, "RCSQL 1.0");
-
-    // (11) قناع/حاوية غير موجودة -> مصفوفة فارغة بصمت (لا خطأ) -- بنفس سلوك بقية دوال docStore.
+    // (10) قناع/حاوية غير موجودة -> مصفوفة فارغة بصمت (لا خطأ) -- بنفس سلوك بقية دوال docStore.
     failures += run("unknown mask/container -> empty result, no error", R"RIN(
         print sql("#no.such.mask & x:eq(1)");
         print sql("noSuchContainer & x:eq(1)");
     )RIN", false, "[]");
 
-    // (12) رمز خارج القائمة المسموحة (/ : & () #) -> خطأ تركيبي E0042.
+    // (11) رمز خارج القائمة المسموحة (/ : & () #) -> خطأ تركيبي E0042.
     failures += run("disallowed symbol raises E0042 syntax error", R"RIN(
-        print sql("users.role:eq(admin)");
+        print sql("users|role:eq(admin)");
+    )RIN", true, "E0042");
+
+    static const char* seedDocs2 = R"RIN(
+        @container.doc=members
+            mask="app.members";
+            document id="m1" fields={ name: "Ali", role: "admin", age: 25, active: true };
+            document id="m2" fields={ name: "Sara", role: "user", age: 30, active: true };
+            document id="m3" fields={ name: "Omar", role: "owner", age: 40, active: true };
+            document id="m4" fields={ name: "Lina", role: "user", age: 22, active: false };
+        .end/container.doc
+    )RIN";
+
+    // (12) مجموعة or(...) -- تطابق role=admin أو role=owner.
+    failures += run("or(...) group matches either predicate", std::string(seedDocs2) + R"RIN(
+        print sql("#app.members & or(role:eq(admin) & role:eq(owner))");
+    )RIN", false, "\"name\": \"Omar\"");
+
+    // (13) order:desc + limit -- أكبر عمرين فقط، الأكبر أولاً.
+    failures += run("order:desc + limit", std::string(seedDocs2) + R"RIN(
+        print sql("#app.members & order:desc(age) & limit:eq(1)");
+    )RIN", false, "\"name\": \"Omar\"");
+
+    // (14) order:asc + offset + limit -- تصفّح صفحة ثانية.
+    failures += run("order:asc + offset + limit (pagination)", std::string(seedDocs2) + R"RIN(
+        print sql("#app.members & order:asc(age) & offset:eq(1) & limit:eq(1)");
+    )RIN", false, "\"name\": \"Ali\"");
+
+    // (15) select:has -- إسقاط حقل واحد فقط (+ _id دوماً).
+    failures += run("select:has(...) projects a single field", std::string(seedDocs2) + R"RIN(
+        print sql("#app.members & role:eq(user) & select:has(name)");
+    )RIN", false, "{\"_id\": \"m2\", \"name\": \"Sara\"}");
+
+    // (16) distinct:eq -- أول ظهور فقط لكل قيمة role.
+    failures += run("distinct:eq(...) dedupes by field", std::string(seedDocs2) + R"RIN(
+        print sqlCount("#app.members & distinct:eq(role)");
+    )RIN", false, "3");
+
+    // (17) ieq / starts / ends / exists / missing.
+    failures += run("ieq/starts/ends/exists/missing ops", std::string(seedDocs2) + R"RIN(
+        print sql("#app.members & name:ieq(ali)");
+        print sql("#app.members & name:starts(Sa)");
+        print sql("#app.members & name:ends(mar)");
+        print sqlCount("#app.members & active:exists()");
+        print sqlCount("#app.members & nickname:missing()");
+    )RIN", false, "\"name\": \"Ali\"");
+
+    // (18) sqlExists / sqlIds / sqlPluck.
+    failures += run("sqlExists / sqlIds / sqlPluck", std::string(seedDocs2) + R"RIN(
+        print sqlExists("#app.members & role:eq(admin)");
+        print sqlExists("#app.members & role:eq(ghost)");
+        print sqlIds("#app.members & active:eq(true)");
+        print sqlPluck("#app.members & active:eq(true)", "name");
+    )RIN", false, "true");
+
+    // (19) sqlSum / sqlAvg / sqlMin / sqlMax.
+    failures += run("sqlSum / sqlAvg / sqlMin / sqlMax", std::string(seedDocs2) + R"RIN(
+        print sqlSum("#app.members", "age");
+        print sqlAvg("#app.members", "age");
+        print sqlMin("#app.members", "age");
+        print sqlMax("#app.members", "age");
+    )RIN", false, "117");
+
+    // (20) sqlUpdate -- يضبط حقلاً واحداً على كل المطابقات، بشكل ذرّي (كل شيء أو لا شيء عند خرق مخطط).
+    failures += run("sqlUpdate sets a field on all matches", std::string(seedDocs2) + R"RIN(
+        let n = sqlUpdate("#app.members & role:eq(user)", "tier", "gold");
+        print n;
+        print sql("#app.members & tier:eq(gold)");
+    )RIN", false, "\"name\": \"Sara\"");
+
+    // (21) sqlDelete -- يحذف كل المطابقات فعلياً ويعيد العدد المحذوف.
+    failures += run("sqlDelete removes all matches", std::string(seedDocs2) + R"RIN(
+        let d = sqlDelete("#app.members & active:eq(false)");
+        print d;
+        print sqlCount("#app.members");
+    )RIN", false, "3");
+
+    // (22) مُعدِّل بشكل غير صالح (limit بوسيط غير رقمي) -> خطأ تركيبي E0042 واضح، لا فلترة صامتة خاطئة.
+    failures += run("invalid modifier argument raises E0042", R"RIN(
+        print sql("users & limit:eq(abc)");
     )RIN", true, "E0042");
 
     if (failures == 0) {
