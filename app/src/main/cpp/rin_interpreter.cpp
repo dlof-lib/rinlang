@@ -19,6 +19,7 @@
 #include "binfmt/macho_format.h"
 #include "binfmt/coff_obj.h"
 #include <cmath>
+#include <chrono> // Program: قياس مدة التنفيذ بين علامتي البداية والنهاية (انظر ProgramStmt أدناه)
 #include <sstream>
 #include <fstream>
 #include <filesystem>
@@ -2609,8 +2610,29 @@ void Interpreter::registerNatives() {
         return Value::makeArray(result);
     };
 
-    // ---- Section: استعلام عن حالة قسم بعد إغلاقه (يحوّل Section من زخرفية بحتة إلى شيء يمكن
-    // قراءته وبناء منطق فوقه، بنفس روح groupContainers/groupMembers أعلاه) ----
+    // ---- @Program: استعلام عن حالة التنفيذ الحالية بالنسبة لأي @Program مفتوحة الآن (مفيد
+    // داخل دوال مساعدة/سجلّات لا "ترى" مباشرة أنها استُدعيت من داخل @Program أم لا) ----
+
+    // inProgram() -> true إن كان التنفيذ الحالي يجري بداخل @Program مفتوحة (مهما كان عمق
+    // التعشيش)، و false إن كان التنفيذ على المستوى الأعلى للبرنامج مباشرة (خارج أي @Program).
+    natives["inProgram"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("inProgram", a, 0, line);
+        return Value::boolean_(!programStack.empty());
+    };
+    // programName() -> اسم أقرب @Program مفتوحة حالياً (الأعمق تعشيشاً)، أو نص فارغ "" إن لم
+    // تكن هناك أي @Program مفتوحة الآن. للـ @Program المجهولة الاسم يعاد تعريف داخلي مولَّد
+    // (مثل "#program0")، تماماً كما تفعل Containers.Group المجهولة مع groupKey الداخلي.
+    natives["programName"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("programName", a, 0, line);
+        return Value::string(programStack.empty() ? std::string() : programStack.back());
+    };
+    // programDepth() -> عدد كتل @Program المفتوحة حالياً فوق بعضها (0 = لسنا داخل أي @Program).
+    natives["programDepth"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("programDepth", a, 0, line);
+        return Value::num(static_cast<double>(programStack.size()));
+    };
+
+
 
     // sectionVars(name) -> map بمتغيرات القسم المباشرة (بالاسم name فقط، إن كان له وُجِد)، أو map
     // فارغ إن لم يُنفَّذ أي قسم بهذا الاسم بعد. المفاتيح مرتّبة أبجدياً لمخرجات ثابتة (نفس مبدأ
@@ -7289,22 +7311,58 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
             groupParentOf.erase(groupKey); // إعادة تنفيذ مجموعة كانت متداخلة سابقاً كمجموعة جذر الآن (حالة نادرة، لكن نبقيها متّسقة)
         }
 
-        output << "🗂️ Containers.Group" << (s->name.empty() ? "" : (" = " + s->name)) << "\n";
+        // العمق الحالي = عدد المجموعات المفتوحة فوق هذه (0 = مجموعة جذر) -- يُستخدم لمسافة بادئة
+        // بصرية في سطري البداية/النهاية تُظهر التعشيش مباشرة في المُخرَجات دون الحاجة لتتبّع
+        // الأقواس يدوياً، ولمعرفة اسم الأب المباشر (إن وُجد) في سطر البداية.
+        size_t depth = groupStack.size();
+        std::string indent(depth * 2, ' ');
+
+        // سطر البداية: الاسم (إن وُجد) + الأب المباشر عند التعشيش + mask (إن وُجد) -- كل هذا كان
+        // معروفاً وقت التنفيذ لكنه لم يكن يظهر إلا عبر استدعاء groupParent()/دوال أخرى لاحقاً.
+        output << indent << "🗂️ Containers.Group" << (s->name.empty() ? "" : (" = " + s->name));
+        if (!groupStack.empty()) output << "  ↳ ضمن: " << groupStack.back();
+        if (!s->mask.empty()) output << "  🎭 mask=\"" << s->mask << "\"";
+        output << "\n";
+
         groupStack.push_back(groupKey);
         executeBlock(s->body, groupEnv);
         groupStack.pop_back();
 
+        // سطر النهاية: يفرز الأعضاء المباشرين إلى مجموعات فرعية متداخلة مقابل حاويات فعلية (بدل
+        // قائمة "تحتوي:" واحدة مختلطة كسابقاً)، ويضيف إجمالي الحاويات الفعلية بعد التفرّع الكامل
+        // عبر أي تعشيش -- فيصبح سطر النهاية وحده كافياً لفهم بنية المجموعة دون استدعاء
+        // groupMembers/groupContainers يدوياً بعده مباشرة.
         auto& members = groupMembers[groupKey];
-        output << "✅ .end/Containers.Group" << (s->name.empty() ? "" : (" (" + s->name + ")"));
-        if (!members.empty()) {
-            output << " [تحتوي: ";
-            for (size_t i = 0; i < members.size(); i++) {
-                if (i) output << ", ";
-                output << members[i];
-            }
-            output << "]";
+        std::vector<std::string> subGroups, directContainers;
+        for (auto& m : members) {
+            if (groupMembers.count(m)) subGroups.push_back(m);
+            else directContainers.push_back(m);
         }
-        output << "\n";
+        std::vector<std::string> flatContainers;
+        collectGroupContainerNames(groupMembers, groupKey, flatContainers);
+
+        output << indent << "✅ .end/Containers.Group" << (s->name.empty() ? "" : (" (" + s->name + ")")) << "\n";
+        if (members.empty()) {
+            output << indent << "   (فارغة — لا حاويات ولا مجموعات فرعية)\n";
+        } else {
+            if (!directContainers.empty()) {
+                output << indent << "   📦 حاويات مباشرة (" << directContainers.size() << "): ";
+                for (size_t i = 0; i < directContainers.size(); i++) {
+                    if (i) output << ", ";
+                    output << directContainers[i];
+                }
+                output << "\n";
+            }
+            if (!subGroups.empty()) {
+                output << indent << "   🗂️ مجموعات فرعية (" << subGroups.size() << "): ";
+                for (size_t i = 0; i < subGroups.size(); i++) {
+                    if (i) output << ", ";
+                    output << subGroups[i];
+                }
+                output << "\n";
+            }
+            output << indent << "   📊 إجمالي الحاويات الفعلية (متفرّعة بالكامل): " << flatContainers.size() << "\n";
+        }
         return;
     }
 
@@ -7313,6 +7371,52 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
         output << "📚 Volume" << (s->name.empty() ? "" : (" = " + s->name)) << "\n";
         executeBlock(s->body, env);
         output << "✅ .end/Volume" << (s->name.empty() ? "" : (" (" + s->name + ")")) << "\n";
+        return;
+    }
+
+    // @Program=name  <body>  .end/Program
+    // بداية/نهاية صريحتان على مستوى البرنامج بأكمله (لا حاوية/مجموعة واحدة فقط): تُطبَع علامة
+    // بداية واضحة عند الدخول، ثم تُنفَّذ كل العبارات العادية بداخلها كما لو كانت في نفس النطاق
+    // المحيط تماماً (لا نطاق env جديد هنا خلافاً لـ Group -- Program إطار عرض لا حاوية بيانات)،
+    // ثم عند الخروج تُطبَع علامة نهاية تتضمّن مدة التنفيذ الفعلية بين العلامتين وعدد أي أخطاء
+    // حدثت أثناء التنفيذ (lastErrorMessage_ يُضبَط من catch في Interpreter::run عند فشل غير
+    // مُدار؛ لكن أي throw داخل Program نفسه سيقطع التنفيذ فوراً قبل الوصول لسطر النهاية هنا --
+    // بالضبط كما يحدث اليوم مع Group/Volume/Section عند حدوث خطأ بداخلها، فهذا سلوك متّسق
+    // ومقصود: علامة النهاية تعني "انتهى التنفيذ بنجاح"، لا مجرد "وصلنا لآخر السطر".
+    if (auto s = std::dynamic_pointer_cast<ProgramStmt>(stmt)) {
+        if (!s->mask.empty()) volumeMasks[s->mask] = s->name; // نفس سجل الأقنعة العام المستخدم لـ Volume (لا داعي لسجل مستقل لهذا الغرض البسيط)
+
+        // يدعم التعشيش (مرحلة/phase داخل برنامج أكبر): مسافة بادئة بصرية + ذكر الأب المباشر في
+        // سطر البداية، بنفس أسلوب Containers.Group تماماً.
+        size_t depth = programStack.size();
+        std::string indent(depth * 2, ' ');
+        std::string label = s->name.empty() ? ("#program" + std::to_string(depth)) : s->name;
+
+        output << indent << "🚀 Program" << (s->name.empty() ? "" : (" = " + s->name));
+        if (!programStack.empty()) output << "  ↳ ضمن: " << programStack.back();
+        output << "\n";
+
+        programStack.push_back(label);
+        auto startTime = std::chrono::steady_clock::now();
+        // فشل غير مُدار بداخل Program (RinError/ThrowSignal/...) يجب ألا يبتلع علامة "لم تكتمل"
+        // بصمت -- نطبع سطر فشل صريحاً يتضمّن المدة حتى نقطة الفشل، ثم نُعيد رمي نفس الاستثناء
+        // كما هو تماماً (بلا أي تعديل) ليستمر بقية سلسلة المعالجة المعتادة في Interpreter::run
+        // (رسم diagnostic كامل، ضبط lastErrorMessage_، ...) بلا أي تغيير في ذلك السلوك.
+        try {
+            executeBlock(s->body, env);
+        } catch (...) {
+            auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::steady_clock::now() - startTime).count();
+            output << indent << "❌ .end/Program" << (s->name.empty() ? "" : (" (" + s->name + ")"))
+                   << "  — فشل بعد ⏱️ " << elapsedMs << "ms\n";
+            programStack.pop_back();
+            throw;
+        }
+        auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now() - startTime).count();
+        output << indent << "🏁 .end/Program" << (s->name.empty() ? "" : (" (" + s->name + ")"))
+               << "  ⏱️ " << elapsedMs << "ms\n";
+        programStack.pop_back();
         return;
     }
 
