@@ -694,6 +694,9 @@ private:
     // نتيجة map تحمل حقل "_id" إضافياً (معرّف المستند) بالإضافة لكل حقول المستند الأصلية. يُستخدَم
     // من natives sql()/sqlOne()/sqlCount() الثلاثة معاً لتفادي تكرار نفس المنطق.
     ArrayPtr sqlExecute(const std::string& rawArg, int line) const;
+    size_t sqlExecuteCount(const std::string& rawArg, int line) const;
+    bool sqlExecuteExists(const std::string& rawArg, int line) const;
+    std::string sqlExplain(const std::string& rawArg, int line) const;
 
     // ---- مفهوم روبوت المحادثة (container.chatbot / chatbot المستقلة) ----
     // كل رسالة = map { role, text, time, kind, meta } بترتيب الإدخال. container -> سجلّها الكامل.
