@@ -46,6 +46,7 @@ class ApkExportActivity : AppCompatActivity() {
     private lateinit var spinnerEntry: Spinner
     private lateinit var imgIconPreview: ImageView
     private lateinit var btnPickIcon: Button
+    private lateinit var txtIconHint: TextView
     private lateinit var edtSplashTagline: EditText
     private lateinit var spinnerMinSdk: Spinner
     private lateinit var spinnerTargetSdk: Spinner
@@ -60,6 +61,10 @@ class ApkExportActivity : AppCompatActivity() {
 
     private var lastResult: RinApkExporter.ExportResult? = null
     private var selectedIcon: Bitmap? = null
+    // true طالما [selectedIcon] الحالية أتت تلقائياً من حقل icon لحاوية sticker في المشروع
+    // (انظر [RinStickerIcon]) لا من اختيار يدوي — يقرر هذا نص التلميح المعروض فقط، ولا يمنع
+    // btnPickIcon من الاستبدال في أي وقت.
+    private var iconFromSticker = false
 
     /** مستويات API معروضة للاختيار — من 24 (أدنى ما يضمنه build.gradle للحزمة المضيفة، لا
      * يصحّ النزول تحته لأن classes.dex والمكتبات الأصلية المُعاد استخدامها بُنيت على أساسه)
@@ -97,6 +102,7 @@ class ApkExportActivity : AppCompatActivity() {
         spinnerEntry = findViewById(R.id.spinnerApkExportEntry)
         imgIconPreview = findViewById(R.id.imgApkExportIconPreview)
         btnPickIcon = findViewById(R.id.btnApkExportPickIcon)
+        txtIconHint = findViewById(R.id.txtApkExportIconHint)
         edtSplashTagline = findViewById(R.id.edtApkExportSplashTagline)
         spinnerMinSdk = findViewById(R.id.spinnerApkExportMinSdk)
         spinnerTargetSdk = findViewById(R.id.spinnerApkExportTargetSdk)
@@ -119,6 +125,17 @@ class ApkExportActivity : AppCompatActivity() {
         spinnerEntry.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, entryNames)
         val mainIndex = entryNames.indexOf("main.rin")
         if (mainIndex >= 0) spinnerEntry.setSelection(mainIndex)
+
+        // أيقونة sticker تلقائياً: نعيد البحث في كل مرة يتغيّر فيها ملف الدخول المختار، لكن فقط
+        // طالما المستخدم لم يختر أيقونة يدوياً بعد (btnPickIcon يقطع هذا السلوك نهائياً بمجرد
+        // استخدامه — انظر loadPickedIcon).
+        autoDetectStickerIcon(entryNames.getOrNull(spinnerEntry.selectedItemPosition))
+        spinnerEntry.setOnItemSelectedListener(object : android.widget.AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: View?, pos: Int, id: Long) {
+                autoDetectStickerIcon(entryNames.getOrNull(pos))
+            }
+            override fun onNothingSelected(parent: android.widget.AdapterView<*>?) {}
+        })
 
         val sdkLabels = sdkLevels.map { it.second }
         spinnerMinSdk.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, sdkLabels)
@@ -148,10 +165,37 @@ class ApkExportActivity : AppCompatActivity() {
                 return
             }
             selectedIcon = bitmap
+            iconFromSticker = false
+            txtIconHint.text = getString(R.string.apk_export_field_icon_hint)
             imgIconPreview.setImageBitmap(bitmap)
         } catch (e: Exception) {
             Toast.makeText(this, getString(R.string.apk_export_icon_load_error), Toast.LENGTH_SHORT).show()
         }
+    }
+
+    /**
+     * تجعل حاوية @sticker/@container.sticker مسؤولة تلقائياً عن أيقونة التطبيق المُصدَّر: تبحث
+     * (عبر [RinStickerIcon]) عن حقل icon داخل أول sticker في مشروع المستخدم، وتملأ معاينة
+     * الأيقونة بها بلا أي تدخل يدوي إن وُجدت — بشرط ألا يكون قد اختار المستخدم أيقونة بنفسه
+     * فعلاً (btnPickIcon له الأولوية دوماً، انظر [loadPickedIcon]).
+     */
+    private fun autoDetectStickerIcon(entryFileName: String?) {
+        if (!iconFromSticker && selectedIcon != null) return // المستخدم اختار يدوياً — لا نتجاوزه
+        val file = RinStickerIcon.findIconFile(project, entryFileName)
+        if (file == null) {
+            if (iconFromSticker) { // كانت من sticker ولم تعد موجودة (تغيّر ملف الدخول مثلاً) — ارجع للافتراضي
+                selectedIcon = null
+                iconFromSticker = false
+                txtIconHint.text = getString(R.string.apk_export_field_icon_hint)
+                imgIconPreview.setImageResource(R.mipmap.ic_launcher_round)
+            }
+            return
+        }
+        val bitmap = try { BitmapFactory.decodeFile(file.absolutePath) } catch (e: Exception) { null } ?: return
+        selectedIcon = bitmap
+        iconFromSticker = true
+        txtIconHint.text = getString(R.string.apk_export_field_icon_from_sticker)
+        imgIconPreview.setImageBitmap(bitmap)
     }
 
     private fun startBuild(hasEntryFiles: Boolean) {
