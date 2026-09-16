@@ -72,6 +72,7 @@ enum class Code {
     E0039_InternalCompilerError,
     E0040_UnsupportedFeature,
     E0041_MissingDependency, // RCS-1.0 §3.14 Dependency: 'requires X;' حيث X غير موجودة في الشجرة وقت الفحص
+    E0042_InvalidSql, // RIN CONTAINER SQL: خطأ تركيبي في نص استعلام RCSQL، أو رمز خارج القائمة المسموحة (/ : & () #)
 
     W0001_UnusedVariable,
     W0002_UnusedImport,
