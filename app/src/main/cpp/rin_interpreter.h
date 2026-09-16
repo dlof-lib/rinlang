@@ -10,6 +10,7 @@
                                 // وdocs/RIN_INTEGRATION.md في مستودع rin-clc الأصلي.
 #include "loader_ui/library_loader_ui.h" // rin::loaderui — انظر setImportUISink/setImportUIMode أدناه
 #include "rin_candle.h" // rin::CandleRegistry — طبقة id-to-id غير محدودة فوق mask/id مباشرة، انظر docs/candle.md
+#include "rin_container_sql.h" // rin::sql — RIN CONTAINER SQL (RCSQL): محلّل استعلام /  : & () # فقط، انظر sqlViews/sqlExecute أدناه
                                           // وربطها الفعلي مع @import في rin_interpreter.cpp.
 #include <sstream>
 #include <iostream>
@@ -671,6 +672,28 @@ private:
     // فريد داخل نفس المجموعة (إدراج بنفس id موجود = تحديث/upsert). Containers.Group التي تضم عدّة
     // container.doc تصبح فعلياً "قاعدة بيانات" (database) كاملة من عدّة مجموعات مستندات مرتّبة.
     std::unordered_map<std::string, std::vector<std::pair<std::string, Value>>> docStore;
+
+    // ---- RIN CONTAINER SQL (RCSQL) — انظر rin_container_sql.h للصياغة الكاملة ----
+    // اسم حاوية @sql/@container.sql (ContainerKind::SQL) -> نص استعلام RCSQL الخام المخزَّن في
+    // حقلها 'text query = "...";' (يُملأ عند تنفيذ ContainerStmt، انظر execute(StmtPtr) في
+    // rin_interpreter.cpp). natives sql()/sqlOne()/sqlCount() تقبل إما نص RCSQL خام مباشرة، أو
+    // قناع (mask) حاوية @sql مُعرَّفة مسبقاً -- في الحالة الثانية يُستبدَل الوسيط بنص هذا الجدول
+    // قبل أي تحليل (انظر sqlResolveQueryText أدناه)، وهذا هو معنى "استدعاء ... بالأقنعة".
+    std::unordered_map<std::string, std::string> sqlViews;
+
+    // يحوّل وسيط sql()/sqlOne()/sqlCount() الخام إلى نص RCSQL فعلي جاهز للتحليل: إن كان الوسيط
+    // قناعاً معروفاً لحاوية ContainerKind::SQL يُستبدَل بنص sqlViews[الحاوية]، وإلا يُعاد كما هو
+    // (استعلام RCSQL خام فوري بلا حاوية مُسمّاة).
+    std::string sqlResolveQueryText(const std::string& arg) const;
+    // يحلّ هدف استعلام RCSQL (rin::sql::Query::target) إلى اسم حاوية doc فعلي: "#mask" عبر
+    // containerMasks، أو مسار IDENT("/"IDENT)* عبر تتبّع عضوية groupMembers خطوة بخطوة، أو اسم
+    // حاوية مباشر لمسار من جزء واحد. يعيد نصاً فارغاً إن تعذّر الحل (فتُعيد sql() حينها مصفوفة فارغة
+    // بصمت، بنفس سلوك بقية دوال docStore الحالية مع حاوية غير موجودة، بدل رمي خطأ).
+    std::string sqlResolveTargetContainer(const rin::sql::Query& q) const;
+    // ينفّذ استعلام RCSQL خاماً كاملاً (تحليل + حلّ الهدف + فلترة docStore) ويعيد مصفوفة نتائج، كل
+    // نتيجة map تحمل حقل "_id" إضافياً (معرّف المستند) بالإضافة لكل حقول المستند الأصلية. يُستخدَم
+    // من natives sql()/sqlOne()/sqlCount() الثلاثة معاً لتفادي تكرار نفس المنطق.
+    ArrayPtr sqlExecute(const std::string& rawArg, int line) const;
 
     // ---- مفهوم روبوت المحادثة (container.chatbot / chatbot المستقلة) ----
     // كل رسالة = map { role, text, time, kind, meta } بترتيب الإدخال. container -> سجلّها الكامل.
