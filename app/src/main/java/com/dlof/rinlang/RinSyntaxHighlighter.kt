@@ -81,6 +81,10 @@ object RinSyntaxHighlighter {
         // exactly like `let name = expr;` — same storage.type.rin scope as `let`/`text` in
         // syntaxes/rin.tmLanguage.json, so it belongs in this list rather than being unhighlighted.
         "warp",
+        // Further contextual synonyms for 'let' itself, added right after 'make' in
+        // Parser::declaration() (rin_parser.cpp) under the same constraint (only recognized when
+        // directly followed by an identifier) — same storage.type.rin scope as 'let'/'make'/'warp'.
+        "set", "define", "declare", "create", "var",
         "container", "Containers", "Group", "Volume", "Section",
         "Translations", "translation", "link", "tying", "merge",
         "installation", "simplified", "save", "file", "end",
