@@ -502,7 +502,19 @@ struct TextStmt : Stmt {
 
 enum class ObjectStyleFieldKind { Text, Image, File, Fonts, Background, Css3 };
 
-enum class ContainerKind { PLAIN, PIPE, DATA, API, IMPORT, TABLE, DOC, OBJECT, PORTAL, BLOCK, STICKER, AUKT, CHATBOT, EVERYTHING };
+enum class ContainerKind { PLAIN, PIPE, DATA, API, IMPORT, TABLE, DOC, OBJECT, PORTAL, BLOCK, STICKER, AUKT, CHATBOT, EVERYTHING, SQL };
+
+// ---- RIN CONTAINER SQL (RCSQL) — استعلام مُعرَّف/مُسمّى (انظر rin_container_sql.h للصياغة الكاملة) ----
+// @container.sql=name  text query = "..."; .end/container.sql
+// @sql=name             text query = "..."; .end/sql
+//   كلا الشكلين ينتجان نفس ContainerKind::SQL. حاوية بيانات نقية (تخضع لنفس قيود
+//   validateDataContainerBody الخاصة بـ container.data/table/doc/... -- بلا دوال ولا حاويات متداخلة)
+//   حقلها الوحيد المتوقَّع هو 'text query = "...";' يحمل نص استعلام RCSQL خام (الرموز المسموحة فيه
+//   حصراً: / : & () #). عند تنفيذ الحاوية يُقرأ هذا الحقل ويُخزَّن في Interpreter::sqlViews[name]
+//   (انظر تنفيذ ContainerStmt في rin_interpreter.cpp) بحيث يمكن استدعاؤه لاحقاً بقناع (mask) هذه
+//   الحاوية عبر sql(mask)/sqlOne(mask)/sqlCount(mask) بدل تكرار نص الاستعلام الخام في كل استدعاء —
+//   هذا بالضبط معنى "استدعاء RIN CONTAINER SQL بالأقنعة". استدعاء sql() بنص RCSQL خام مباشرة (بلا
+//   قناع مُعرَّف مسبقاً) يبقى مدعوماً أيضاً لأي استعلام فوري لا يحتاج تسمية/إعادة استخدام.
 
 // ---- AUKT: Automated Knowledge Tables (جداول المعرفة الآلية) ----
 // @container.aukt=name  <body>  .end/container.aukt
