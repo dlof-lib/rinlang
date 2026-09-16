@@ -690,13 +690,25 @@ private:
     // حاوية مباشر لمسار من جزء واحد. يعيد نصاً فارغاً إن تعذّر الحل (فتُعيد sql() حينها مصفوفة فارغة
     // بصمت، بنفس سلوك بقية دوال docStore الحالية مع حاوية غير موجودة، بدل رمي خطأ).
     std::string sqlResolveTargetContainer(const rin::sql::Query& q) const;
-    // ينفّذ استعلام RCSQL خاماً كاملاً (تحليل + حلّ الهدف + فلترة docStore) ويعيد مصفوفة نتائج، كل
-    // نتيجة map تحمل حقل "_id" إضافياً (معرّف المستند) بالإضافة لكل حقول المستند الأصلية. يُستخدَم
-    // من natives sql()/sqlOne()/sqlCount() الثلاثة معاً لتفادي تكرار نفس المنطق.
+
+    // نتيجة صف واحد بعد فلترة/فرز/تصفّح RCSQL كاملة (بلا بناء map العرض النهائي بعد).
+    struct SqlMatch { std::string id; Value doc; };
+    // ناتج تنفيذ استعلام RCSQL كامل (فلترة AND/OR + distinct + order + offset/limit)، مع اسم
+    // الحاوية الفعلي الذي حُلَّ إليه الهدف وقائمة حقول select المطلوبة (إن وُجدت) لمن يبني عرضاً
+    // نهائياً من الصفوف (sqlExecute)، أو يحتاج اسم الحاوية لتعديل/حذف مباشر (sqlUpdate/sqlDelete).
+    struct SqlRawResult {
+        std::string container;             // فارغ = هدف لم يُحلّ (قناع/مسار غير موجود)
+        std::vector<SqlMatch> rows;         // بعد كامل الأنبوب: فلترة -> distinct -> order -> offset -> limit
+        std::vector<std::string> selectFields; // من الاستعلام نفسه (select:has(...))؛ فارغ = كل الحقول
+    };
+    // ينفّذ استعلام RCSQL خاماً بالكامل (تحليل + حلّ الهدف + فلترة + distinct + فرز + offset/limit)
+    // ويعيد الصفوف الخام (بلا حقل "_id" مُدرَج بعد، وبلا إسقاط select مُطبَّق بعد). هذه هي القناة
+    // المشتركة الوحيدة التي تبني عليها كل نواتج RCSQL (sql/sqlOne/sqlCount/sqlExists/sqlIds/sqlPluck/
+    // sqlSum/sqlAvg/sqlMin/sqlMax/sqlDelete/sqlUpdate) لتفادي أي تكرار أو تفاوت سلوك بينها.
+    SqlRawResult sqlRunRaw(const std::string& rawArg, int line) const;
+    // sql(): يبني من sqlRunRaw مصفوفة نتائج نهائية للعرض، كل عنصر map يحمل "_id" + (كل الحقول، أو
+    // فقط حقول selectFields إن حُدِّدت في الاستعلام عبر select:has(...)).
     ArrayPtr sqlExecute(const std::string& rawArg, int line) const;
-    size_t sqlExecuteCount(const std::string& rawArg, int line) const;
-    bool sqlExecuteExists(const std::string& rawArg, int line) const;
-    std::string sqlExplain(const std::string& rawArg, int line) const;
 
     // ---- مفهوم روبوت المحادثة (container.chatbot / chatbot المستقلة) ----
     // كل رسالة = map { role, text, time, kind, meta } بترتيب الإدخال. container -> سجلّها الكامل.
