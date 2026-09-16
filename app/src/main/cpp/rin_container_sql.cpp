@@ -6,9 +6,6 @@ namespace rin::sql {
 
 namespace {
 
-// حرف صالح ضمن IDENT: أحرف/أرقام لاتينية، '_' '.' '-'، أو أي بايت UTF-8 غير-ASCII (>= 0x80) —
-// هذا الأخير يسمح بمعرّفات/قيم عربية كاملة (مثال: role:eq(مدير)) دون فكّ ترميز UTF-8 فعلياً، لأن
-// كل امتداد متعدد البايتات لحرف عربي واحد يقع بالكامل ضمن النطاق >= 0x80 فيُقبَل كوحدة متتالية.
 inline bool isIdentByte(unsigned char c) {
     return std::isalnum(c) || c == '_' || c == '.' || c == '-' || c >= 0x80;
 }
@@ -22,14 +19,12 @@ struct Lexer {
     bool eof() { skipSpace(); return i >= s.size(); }
     char peekChar() { skipSpace(); return i < s.size() ? s[i] : '\0'; }
 
-    // يستهلك رمزاً تركيبياً واحداً محدداً (من المسموح بها فقط) إن كان هو التالي، ويعيد true.
     bool consumeSymbol(char c) {
         skipSpace();
         if (i < s.size() && s[i] == c) { i++; return true; }
         return false;
     }
 
-    // يقرأ IDENT واحداً (تسلسل غير فارغ من isIdentByte). يرمي SqlSyntaxError إن لم يبدأ بحرف صالح.
     std::string readIdent(const std::string& what) {
         skipSpace();
         size_t start = i;
@@ -41,9 +36,6 @@ struct Lexer {
         return s.substr(start, i - start);
     }
 
-    // فحص أمان مبكر: يرفض أي رمز خارج القائمة المسموحة برسالة واضحة، قبل أي محاولة تحليل نحوي —
-    // بدل أن يُبتلَع بصمت داخل IDENT مجاور (غير ممكن أصلاً هنا لأن isIdentByte لا يشملها) أو يُنتج
-    // خطأ تحليل مُضلِّلاً لاحقاً بعيداً عن موضعه الحقيقي.
     void validateCharset() const {
         for (size_t k = 0; k < s.size(); k++) {
             unsigned char c = static_cast<unsigned char>(s[k]);
@@ -62,16 +54,12 @@ bool isSupportedOp(const std::string& op) {
     static const char* ops[] = {
         "eq", "ne", "ieq", "gt", "gte", "lt", "lte",
         "has", "like", "starts", "ends", "exists", "missing",
-        // أسماء عمليات المُعدِّلات (order:asc/order:desc) -- تُقبَل هنا نحوياً كأي عملية عادية؛
-        // parse() هي من تتحقّق من معناها الصحيح ضمن سياق حقل "order" تحديداً (انظر applyModifier).
-        "asc", "desc"
+        "asc", "desc" // أسماء عمليات المُعدِّل order:asc/order:desc (انظر applyModifierIfReserved)
     };
     for (const char* o : ops) if (op == o) return true;
     return false;
 }
 
-// IDENT ("/" IDENT)* -> أجزاء مسار (اسم حاوية متداخل أو حقل متداخل)، بدءاً من "first" إن أُعطي
-// (لتفادي إعادة قراءة أول IDENT في readPredicate بعد لمحة مسبقة لتمييز or(...)).
 std::vector<std::string> readPathFrom(Lexer& lex, std::string first, const std::string& what) {
     std::vector<std::string> parts;
     parts.push_back(std::move(first));
@@ -113,7 +101,6 @@ Predicate readPredicateLeaf(Lexer& lex, std::string firstIdent) {
     if (!lex.consumeSymbol('(')) {
         throw SqlSyntaxError("RIN CONTAINER SQL: توقّعتُ '(' بعد العملية '" + op + "'");
     }
-    // وسيط واحد اختياري (بلا فاصلة -- الفاصلة ',' ليست من الرموز المسموحة) ثم ')'
     if (lex.peekChar() != ')') {
         p.arg = lex.readIdent("وسيط العملية '" + op + "'");
     }
@@ -123,21 +110,38 @@ Predicate readPredicateLeaf(Lexer& lex, std::string firstIdent) {
     return p;
 }
 
-// يقرأ predicate واحداً كاملاً: إما مجموعة OR ("or(" predicate ("&" predicate)* ")")، أو شرط عادي
-// (field:op(arg)). كلا الشكلين يبدآن بـ IDENT واحد، فنقرأه أولاً ثم نميّز بلمحة على الرمز التالي:
-// إن كان IDENT == "or" ويليه مباشرة '(' فهي مجموعة؛ وإلا فهو بداية اسم حقل عادي (وقد يكون "or"
-// اسم حقل شرعياً أيضاً طالما لم يتبعه '(' مباشرة -- مثال: or:eq(x) شرط عادي على حقل اسمه "or").
+Predicate readPredicate(Lexer& lex); // fwd -- readPredicate واستدعاءات المجموعات متبادلة الاستدعاء
+
+// يقرأ محتوى مجموعة or(...)/and(...) بعد استهلاك "(": شرط/مجموعة واحدة على الأقل، مفصولة بـ '&'،
+// ثم ')' إغلاق.
+std::vector<Predicate> readGroupBody(Lexer& lex, const std::string& groupName) {
+    std::vector<Predicate> subs;
+    subs.push_back(readPredicate(lex));
+    while (lex.consumeSymbol('&')) subs.push_back(readPredicate(lex));
+    if (!lex.consumeSymbol(')')) {
+        throw SqlSyntaxError("RIN CONTAINER SQL: توقّعتُ ')' لإغلاق مجموعة " + groupName + "(...)");
+    }
+    return subs;
+}
+
+// يقرأ predicate/group واحداً: إن كان IDENT المقروء "or"/"and"/"not" ويليه '(' مباشرة فهي مجموعة
+// منطقية؛ وإلا فهو بداية اسم حقل عادي (وقد تكون "or"/"and"/"not" أسماء حقول شرعية أيضاً طالما لم
+// يتبعها '(' مباشرة -- مثال: or:eq(x) شرط عادي على حقل اسمه "or").
 Predicate readPredicate(Lexer& lex) {
-    std::string first = lex.readIdent("اسم حقل أو 'or('");
-    if (first == "or" && lex.peekChar() == '(') {
+    std::string first = lex.readIdent("اسم حقل أو or(...)/and(...)/not(...)");
+    if ((first == "or" || first == "and" || first == "not") && lex.peekChar() == '(') {
         lex.consumeSymbol('(');
         Predicate group;
         group.isGroup = true;
-        group.groupOp = "or";
-        group.subs.push_back(readPredicate(lex));
-        while (lex.consumeSymbol('&')) group.subs.push_back(readPredicate(lex));
-        if (!lex.consumeSymbol(')')) {
-            throw SqlSyntaxError("RIN CONTAINER SQL: توقّعتُ ')' لإغلاق مجموعة or(...)");
+        group.groupOp = first;
+        if (first == "not") {
+            group.subs.push_back(readPredicate(lex));
+            if (!lex.consumeSymbol(')')) {
+                throw SqlSyntaxError("RIN CONTAINER SQL: توقّعتُ ')' لإغلاق مجموعة not(...) -- "
+                                      "not(...) تأخذ شرطاً/مجموعة واحدة فقط، بلا '&' بداخلها");
+            }
+        } else {
+            group.subs = readGroupBody(lex, first);
         }
         return group;
     }
@@ -146,8 +150,7 @@ Predicate readPredicate(Lexer& lex) {
 
 // يحاول تفسير predicate عادي (غير مجموعة) كأحد المُعدِّلات المحجوزة (order/limit/offset/select/
 // distinct)؛ إن كان كذلك يُطبَّق أثره على q ويعاد true (فلا يُضاف إلى q.predicates كشرط فلترة
-// حقيقي). يرمي SqlSyntaxError إن كان اسم الحقل محجوزاً لكن الشكل (العملية/الوسيط) غير صالح، بدل
-// تجاهله بصمت أو معاملته كشرط لن يطابق أي مستند أبداً.
+// حقيقي). يرمي SqlSyntaxError إن كان اسم الحقل محجوزاً لكن الشكل (العملية/الوسيط) غير صالح.
 bool applyModifierIfReserved(Query& q, const Predicate& p) {
     if (p.isGroup) return false;
     if (p.field == "order") {
@@ -192,7 +195,9 @@ bool applyModifierIfReserved(Query& q, const Predicate& p) {
         if (p.arg.empty()) {
             throw SqlSyntaxError("RIN CONTAINER SQL: 'distinct' يحتاج اسم حقل كوسيط: distinct:eq(field)");
         }
-        q.distinctField = p.arg;
+        // تُكرَّر لبناء مفتاح تفريد مركّب: distinct:eq(city) & distinct:eq(role) يعني تفريداً حسب
+        // (city, role) معاً، لا كل حقل منفرداً.
+        q.distinctFields.push_back(p.arg);
         return true;
     }
     return false;
