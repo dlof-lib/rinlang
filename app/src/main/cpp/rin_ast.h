@@ -703,6 +703,17 @@ struct VolumeStmt : Stmt {
     std::vector<StmtPtr> body;
 };
 
+// @Program=name  <body>  .end/Program
+// بداية/نهاية صريحتان لبرنامج Rin بأكمله (أو لجزء رئيسي منه)، على نمط Containers.Group/Volume
+// تماماً لكن على مستوى البرنامج نفسه لا مستوى حاوية واحدة: تطبع علامة بداية عند الدخول وعلامة
+// نهاية (مع مدة التنفيذ) عند الخروج، بصرف النظر عن أي @Containers.Group/@Volume داخلية. اختيارية
+// تماماً — الملفات التي لا تستخدمها تعمل كما كانت دائماً بلا أي تغيير.
+struct ProgramStmt : Stmt {
+    std::string name;
+    std::string mask;
+    std::vector<StmtPtr> body;
+};
+
 // Section=name  <body>  .end/Section
 struct SectionStmt : Stmt {
     std::string name;
