@@ -61,7 +61,12 @@ object RinSyntaxHighlighter {
     // ----------------------------------------------------------------------------------
 
     private val rinCoreKeywords = listOf(
-        "let", "print", "if", "else", "while", "for", "fun", "return", "break", "continue",
+        "let", "print",
+        // 'show' is a full lexer-level synonym for 'print' (rin_lexer.cpp keywords table -> same
+        // TokenType::PRINT); 'rinopen' is likewise a genuine reserved keyword (TokenType::RINOPEN)
+        // — both were missing here despite already being highlighted in syntaxes/rin.tmLanguage.json.
+        "show", "rinopen",
+        "if", "else", "while", "for", "fun", "return", "break", "continue",
         "true", "false", "nil", "and", "or",
         // Reckon (docs/RECKON.md): a two-line computed value; "where" is its filter clause.
         "reckon", "where"
@@ -71,7 +76,12 @@ object RinSyntaxHighlighter {
     // تتضمن أيضاً أسماء قدرات (capabilities) وحدة make: loop/function/condition/view/chatbot
     // (container/data/api/import/table/doc/return مذكورة أصلاً ضمن قوائم أخرى).
     private val rinContainerKeywords = listOf(
-        "text", "container", "Containers", "Group", "Volume", "Section",
+        "text",
+        // 'warp' (Parser::warpDeclaration) is a contextual reactive-state declaration parsed
+        // exactly like `let name = expr;` — same storage.type.rin scope as `let`/`text` in
+        // syntaxes/rin.tmLanguage.json, so it belongs in this list rather than being unhighlighted.
+        "warp",
+        "container", "Containers", "Group", "Volume", "Section",
         "Translations", "translation", "link", "tying", "merge",
         "installation", "simplified", "save", "file", "end",
         "row", "style", "document", "route",
@@ -108,7 +118,7 @@ object RinSyntaxHighlighter {
         "Addition", "Subtraction", "Multiplication", "Equal",
         "abs", "sqrt", "pow", "floor", "ceil", "round", "min", "max", "random",
         "len", "upper", "lower", "trim", "substr", "split", "join",
-        "indexOf", "replace", "contains", "charAt", "toString", "toNumber",
+        "indexOf", "replace", "contains", "charAt", "toString", "toNumber", "toBool", "isBool",
         "push", "pop", "sort", "keys", "values", "has", "remove",
         // Stats/pipeline functions usable as `|>` steps, incl. inside a reckon body -- see
         // docs/RECKON.md. sum/mean/.../shift already existed as natives but were missing from
@@ -117,6 +127,14 @@ object RinSyntaxHighlighter {
         "normalize", "scale", "shift",
         "product", "count", "range", "geometricMean", "harmonicMean", "rms",
         "percentile", "iqr", "weightedMean", "zscore", "cumulativeSum", "movingAverage", "clamp",
+        // Container/NoSQL/grouping standard-library functions (rin_lexer builtins) that were
+        // present in syntaxes/rin.tmLanguage.json's #builtin-functions but missing here.
+        "groupContainers", "groupMembers", "sectionVars", "sectionNames", "hasSection",
+        "insertDoc", "updateDoc", "deleteDoc", "findDoc", "queryDocs", "queryOneDoc",
+        "docIds", "allDocs", "countDocs", "call", "callApi",
+        "writeFile", "appendFile", "readFile", "fileExists", "deleteFile",
+        "isInstalled", "listInstalled", "loadInstalled",
+        "chr", "ord", "bytesFromArray", "crc32", "adler32",
         "make", "make.qr", "make.barcode", "make.file", "make.filename", "make.uuid", "make.hash",
         "qr", "barcode", "filename", "uuid", "hash", "artifact.info", "container.make.qr",
         "container.make.barcode", "container.make.file", "container.artifact.info"
