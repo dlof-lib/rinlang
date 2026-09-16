@@ -1,15 +1,12 @@
 #include "rin_container_sql.h"
 #include <cctype>
+#include <algorithm>
 
 namespace rin::sql {
-
 namespace {
 
-// حرف صالح ضمن IDENT: أحرف/أرقام لاتينية، '_' '.' '-'، أو أي بايت UTF-8 غير-ASCII (>= 0x80) —
-// هذا الأخير يسمح بمعرّفات/قيم عربية كاملة (مثال: role:eq(مدير)) دون فكّ ترميز UTF-8 فعلياً، لأن
-// كل امتداد متعدد البايتات لحرف عربي واحد يقع بالكامل ضمن النطاق >= 0x80 فيُقبَل كوحدة متتالية.
 inline bool isIdentByte(unsigned char c) {
-    return std::isalnum(c) || c == '_' || c == '.' || c == '-' || c >= 0x80;
+    return std::isalnum(c) || c == '_' || c >= 0x80;
 }
 
 struct Lexer {
@@ -17,62 +14,50 @@ struct Lexer {
     size_t i = 0;
     explicit Lexer(const std::string& src) : s(src) {}
 
-    void skipSpace() { while (i < s.size() && std::isspace(static_cast<unsigned char>(s[i]))) i++; }
+    void skipSpace() {
+        while (i < s.size() && std::isspace(static_cast<unsigned char>(s[i]))) ++i;
+    }
     bool eof() { skipSpace(); return i >= s.size(); }
-    char peekChar() { skipSpace(); return i < s.size() ? s[i] : '\0'; }
+    char peek() { skipSpace(); return i < s.size() ? s[i] : '\0'; }
 
-    // يستهلك رمزاً تركيبياً واحداً محدداً (من المسموح بها فقط) إن كان هو التالي، ويعيد true.
-    bool consumeSymbol(char c) {
+    bool consume(char c) {
         skipSpace();
-        if (i < s.size() && s[i] == c) { i++; return true; }
+        if (i < s.size() && s[i] == c) { ++i; return true; }
         return false;
     }
 
-    // يقرأ IDENT واحداً (تسلسل غير فارغ من isIdentByte). يرمي SqlSyntaxError إن لم يبدأ بحرف صالح.
-    std::string readIdent(const std::string& what) {
+    std::string ident(const std::string& what) {
         skipSpace();
-        size_t start = i;
-        while (i < s.size() && isIdentByte(static_cast<unsigned char>(s[i]))) i++;
+        const size_t start = i;
+        while (i < s.size() && isIdentByte(static_cast<unsigned char>(s[i]))) ++i;
         if (i == start) {
-            throw SqlSyntaxError("RIN CONTAINER SQL: توقّعتُ " + what + " عند الموضع " +
-                                  std::to_string(i) + " من الاستعلام");
+            throw SqlSyntaxError("RIN CONTAINER SQL: توقعت " + what + " عند الموضع " + std::to_string(i));
         }
         return s.substr(start, i - start);
     }
 
-    // فحص أمان مبكر: يرفض أي رمز خارج القائمة المسموحة برسالة واضحة، قبل أي محاولة تحليل نحوي —
-    // بدل أن يُبتلَع بصمت داخل IDENT مجاور (غير ممكن أصلاً هنا لأن isIdentByte لا يشملها) أو يُنتج
-    // خطأ تحليل مُضلِّلاً لاحقاً بعيداً عن موضعه الحقيقي.
     void validateCharset() const {
-        for (size_t k = 0; k < s.size(); k++) {
-            unsigned char c = static_cast<unsigned char>(s[k]);
-            if (std::isspace(c)) continue;
-            if (isIdentByte(c)) continue;
+        for (size_t k = 0; k < s.size(); ++k) {
+            const unsigned char c = static_cast<unsigned char>(s[k]);
+            if (std::isspace(c) || isIdentByte(c)) continue;
             if (c == '/' || c == ':' || c == '&' || c == '(' || c == ')' || c == '#') continue;
-            throw SqlSyntaxError(std::string("RIN CONTAINER SQL: رمز غير مسموح به '") +
-                                  std::string(1, static_cast<char>(c)) +
-                                  "' عند الموضع " + std::to_string(k) +
-                                  " -- المسموح به حصراً: / : & ( ) # بالإضافة لحروف/أرقام المعرّفات");
+            throw SqlSyntaxError(
+                "E0042_InvalidSql: رمز غير مسموح به '" + std::string(1, static_cast<char>(c)) +
+                "' عند الموضع " + std::to_string(k) +
+                " — المسموح: / : & ( ) # والحروف/الأرقام/underscore فقط");
         }
     }
 };
 
-bool isSupportedOp(const std::string& op) {
-    static const char* ops[] = {"eq", "ne", "gt", "gte", "lt", "lte", "has", "like"};
-    for (const char* o : ops) if (op == o) return true;
-    return false;
-}
-
-// IDENT ("/" IDENT)* -> أجزاء مسار (اسم حاوية متداخل أو حقل متداخل)
 std::vector<std::string> readPath(Lexer& lex, const std::string& what) {
     std::vector<std::string> parts;
-    parts.push_back(lex.readIdent(what));
+    parts.push_back(lex.ident(what));
     while (true) {
-        size_t save = lex.i;
+        const size_t save = lex.i;
         lex.skipSpace();
         if (lex.i < lex.s.size() && lex.s[lex.i] == '/') {
-            lex.i++;
-            parts.push_back(lex.readIdent(what + " بعد '/'"));
+            ++lex.i;
+            parts.push_back(lex.ident(what + " بعد '/'") );
         } else {
             lex.i = save;
             break;
@@ -81,57 +66,79 @@ std::vector<std::string> readPath(Lexer& lex, const std::string& what) {
     return parts;
 }
 
-Predicate readPredicate(Lexer& lex) {
-    Predicate p;
-    auto fieldParts = readPath(lex, "اسم حقل");
-    std::string field = fieldParts[0];
-    for (size_t k = 1; k < fieldParts.size(); k++) field += "/" + fieldParts[k];
-    p.field = field;
-
-    if (!lex.consumeSymbol(':')) {
-        throw SqlSyntaxError("RIN CONTAINER SQL: توقّعتُ ':' بعد اسم الحقل '" + field + "'");
+std::string joinPath(const std::vector<std::string>& p) {
+    std::string out;
+    for (size_t i = 0; i < p.size(); ++i) {
+        if (i) out += '/';
+        out += p[i];
     }
-    std::string op = lex.readIdent("اسم عملية (eq/ne/gt/gte/lt/lte/has/like)");
-    if (!isSupportedOp(op)) {
-        throw SqlSyntaxError("RIN CONTAINER SQL: عملية غير معروفة '" + op +
-                              "' -- العمليات المدعومة: eq, ne, gt, gte, lt, lte, has, like");
-    }
-    p.op = op;
-    if (!lex.consumeSymbol('(')) {
-        throw SqlSyntaxError("RIN CONTAINER SQL: توقّعتُ '(' بعد العملية '" + op + "'");
-    }
-    // وسيط واحد اختياري (بلا فاصلة -- الفاصلة ',' ليست من الرموز المسموحة) ثم ')'
-    if (lex.peekChar() != ')') {
-        p.arg = lex.readIdent("وسيط العملية '" + op + "'");
-    }
-    if (!lex.consumeSymbol(')')) {
-        throw SqlSyntaxError("RIN CONTAINER SQL: توقّعتُ ')' بعد وسيط العملية '" + op + "'");
-    }
-    return p;
+    return out;
 }
 
 } // namespace
 
+bool isSupportedOperator(const std::string& op) {
+    static const char* ops[] = {
+        "eq", "ne", "gt", "gte", "lt", "lte", "has", "like",
+        "starts", "ends", "contains", "exists", "missing",
+        "empty", "notempty", "isnull", "notnull"
+    };
+    for (const char* item : ops) if (op == item) return true;
+    return false;
+}
+
+bool operatorNeedsArgument(const std::string& op) {
+    return !(op == "exists" || op == "missing" || op == "empty" ||
+             op == "notempty" || op == "isnull" || op == "notnull");
+}
+
 Query parse(const std::string& text) {
     Lexer lex(text);
     lex.validateCharset();
-
     Query q;
-    if (lex.eof()) {
-        throw SqlSyntaxError("RIN CONTAINER SQL: استعلام فارغ");
-    }
-    if (lex.consumeSymbol('#')) {
+
+    if (lex.eof()) throw SqlSyntaxError("E0042_InvalidSql: استعلام RCSQL فارغ");
+
+    if (lex.consume('#')) {
         q.targetIsMask = true;
-        q.targetMask = lex.readIdent("اسم قناع بعد '#'");
+        q.targetMask = lex.ident("اسم القناع بعد '#'");
     } else {
-        q.targetPath = readPath(lex, "اسم حاوية");
+        q.targetPath = readPath(lex, "اسم الحاوية");
     }
-    while (lex.consumeSymbol('&')) {
-        q.predicates.push_back(readPredicate(lex));
+
+    while (lex.consume('&')) {
+        Predicate p;
+        const auto parts = readPath(lex, "اسم الحقل");
+        p.field = joinPath(parts);
+
+        if (!lex.consume(':')) {
+            throw SqlSyntaxError("E0042_InvalidSql: توقعت ':' بعد الحقل '" + p.field + "'");
+        }
+        p.op = lex.ident("اسم العملية");
+        if (!isSupportedOperator(p.op)) {
+            throw SqlSyntaxError("E0042_InvalidSql: عملية غير معروفة '" + p.op + "'");
+        }
+        if (!lex.consume('(')) {
+            throw SqlSyntaxError("E0042_InvalidSql: توقعت '(' بعد العملية '" + p.op + "'");
+        }
+
+        if (lex.peek() != ')') p.arg = lex.ident("وسيط العملية '" + p.op + "'");
+
+        if (!lex.consume(')')) {
+            throw SqlSyntaxError("E0042_InvalidSql: توقعت ')' بعد العملية '" + p.op + "'");
+        }
+        const bool needs = operatorNeedsArgument(p.op);
+        if (needs && p.arg.empty()) {
+            throw SqlSyntaxError("E0042_InvalidSql: العملية '" + p.op + "' تحتاج وسيطاً");
+        }
+        if (!needs && !p.arg.empty()) {
+            throw SqlSyntaxError("E0042_InvalidSql: العملية '" + p.op + "' لا تقبل وسيطاً");
+        }
+        q.predicates.push_back(std::move(p));
     }
+
     if (!lex.eof()) {
-        throw SqlSyntaxError("RIN CONTAINER SQL: رموز زائدة غير متوقَّعة بعد نهاية الاستعلام عند الموضع " +
-                              std::to_string(lex.i));
+        throw SqlSyntaxError("E0042_InvalidSql: رموز زائدة عند الموضع " + std::to_string(lex.i));
     }
     return q;
 }
