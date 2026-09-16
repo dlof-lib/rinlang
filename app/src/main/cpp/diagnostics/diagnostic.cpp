@@ -45,6 +45,7 @@ std::string codeString(Code c) {
         case Code::E0039_InternalCompilerError:  return "E0039";
         case Code::E0040_UnsupportedFeature:     return "E0040";
         case Code::E0041_MissingDependency:      return "E0041";
+        case Code::E0042_InvalidSql:             return "E0042";
 
         case Code::W0001_UnusedVariable:         return "W0001";
         case Code::W0002_UnusedImport:           return "W0002";
@@ -101,6 +102,7 @@ std::string codeName(Code c) {
         case Code::E0039_InternalCompilerError:  return "InternalCompilerError";
         case Code::E0040_UnsupportedFeature:     return "UnsupportedFeature";
         case Code::E0041_MissingDependency:      return "MissingDependency";
+        case Code::E0042_InvalidSql:             return "InvalidSql";
 
         case Code::W0001_UnusedVariable:         return "UnusedVariable";
         case Code::W0002_UnusedImport:           return "UnusedImport";
