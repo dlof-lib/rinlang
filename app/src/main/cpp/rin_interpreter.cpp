@@ -830,7 +830,7 @@ std::vector<std::string> sqlSplitSlash(const std::string& path) {
     std::vector<std::string> parts;
     size_t start = 0;
     while (start <= path.size()) {
-        size_t pos = path.find('/', start);
+        const size_t pos = path.find('/', start);
         if (pos == std::string::npos) { parts.push_back(path.substr(start)); break; }
         parts.push_back(path.substr(start, pos - start));
         start = pos + 1;
@@ -838,15 +838,17 @@ std::vector<std::string> sqlSplitSlash(const std::string& path) {
     return parts;
 }
 
-// يتتبّع مساراً مفصولاً بـ '/' داخل map متداخلة (لدعم address/city في شرط RCSQL). يعيد false إن لم
-// يوجد المفتاح في أي مستوى أو لم يكن المستوى الوسيط map أصلاً.
 bool sqlGetNestedField(const Value& doc, const std::vector<std::string>& path, Value& out) {
     const Value* cur = &doc;
-    for (auto& seg : path) {
+    for (const auto& seg : path) {
         if (cur->type != Value::Type::MAP || !cur->map) return false;
         bool found = false;
-        for (auto& kv : *cur->map) {
-            if (kv.first.type == Value::Type::STRING && kv.first.str == seg) { cur = &kv.second; found = true; break; }
+        for (const auto& kv : *cur->map) {
+            if (kv.first.type == Value::Type::STRING && kv.first.str == seg) {
+                cur = &kv.second;
+                found = true;
+                break;
+            }
         }
         if (!found) return false;
     }
@@ -854,53 +856,105 @@ bool sqlGetNestedField(const Value& doc, const std::vector<std::string>& path, V
     return true;
 }
 
-// يفسّر نص وسيط RCSQL الخام (بلا علامات اقتباس -- ليست ضمن الرموز المسموحة) إلى أفضل نوع Value
-// مناسب: true/false -> BOOL، null/nil -> nil، رقم صالح كاملاً -> NUMBER، وإلا -> STRING كما هو.
 Value sqlParseArg(const std::string& raw) {
     if (raw == "true") return Value::boolean_(true);
     if (raw == "false") return Value::boolean_(false);
     if (raw == "null" || raw == "nil") return Value::nil();
     if (!raw.empty()) {
         char* end = nullptr;
-        double d = std::strtod(raw.c_str(), &end);
+        const double d = std::strtod(raw.c_str(), &end);
         if (end && *end == '\0' && end != raw.c_str()) return Value::num(d);
     }
     return Value::string(raw);
 }
 
-bool sqlMatchPredicate(const Value& doc, const rin::sql::Predicate& pr) {
-    Value field;
-    if (!sqlGetNestedField(doc, sqlSplitSlash(pr.field), field)) return false;
-    Value argVal = sqlParseArg(pr.arg);
-    if (pr.op == "eq") return valuesEqual(field, argVal);
-    if (pr.op == "ne") return !valuesEqual(field, argVal);
-    if (pr.op == "gt" || pr.op == "gte" || pr.op == "lt" || pr.op == "lte") {
-        if (field.type != Value::Type::NUMBER || argVal.type != Value::Type::NUMBER) return false;
-        if (pr.op == "gt") return field.number > argVal.number;
-        if (pr.op == "gte") return field.number >= argVal.number;
-        if (pr.op == "lt") return field.number < argVal.number;
-        return field.number <= argVal.number;
-    }
-    if (pr.op == "has") {
-        if (field.type == Value::Type::ARRAY && field.array) {
-            for (auto& el : *field.array) if (valuesEqual(el, argVal)) return true;
-            return false;
-        }
-        if (field.type == Value::Type::MAP && field.map) {
-            for (auto& kv : *field.map) if (kv.first.type == Value::Type::STRING && kv.first.str == pr.arg) return true;
-            return false;
-        }
+std::string sqlLowerAscii(std::string x) {
+    for (char& c : x) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    return x;
+}
+
+bool sqlStringContains(const Value& field, const std::string& arg) {
+    return field.type == Value::Type::STRING &&
+           sqlLowerAscii(field.str).find(sqlLowerAscii(arg)) != std::string::npos;
+}
+
+bool sqlStringStarts(const Value& field, const std::string& arg) {
+    if (field.type != Value::Type::STRING) return false;
+    const auto a = sqlLowerAscii(field.str);
+    const auto b = sqlLowerAscii(arg);
+    return a.size() >= b.size() && a.compare(0, b.size(), b) == 0;
+}
+
+bool sqlStringEnds(const Value& field, const std::string& arg) {
+    if (field.type != Value::Type::STRING) return false;
+    const auto a = sqlLowerAscii(field.str);
+    const auto b = sqlLowerAscii(arg);
+    return a.size() >= b.size() && a.compare(a.size() - b.size(), b.size(), b) == 0;
+}
+
+bool sqlIsEmpty(const Value& v) {
+    if (v.type == Value::Type::NIL) return true;
+    if (v.type == Value::Type::STRING) return v.str.empty();
+    if (v.type == Value::Type::ARRAY) return !v.array || v.array->empty();
+    if (v.type == Value::Type::MAP) return !v.map || v.map->empty();
+    return false;
+}
+
+bool sqlHas(const Value& field, const std::string& rawArg) {
+    const Value arg = sqlParseArg(rawArg);
+    if (field.type == Value::Type::ARRAY && field.array) {
+        for (const auto& el : *field.array) if (valuesEqual(el, arg)) return true;
         return false;
     }
-    if (pr.op == "like") {
-        if (field.type != Value::Type::STRING) return false;
-        auto lower = [](std::string x) { for (auto& c : x) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c))); return x; };
-        return lower(field.str).find(lower(pr.arg)) != std::string::npos;
+    if (field.type == Value::Type::MAP && field.map) {
+        for (const auto& kv : *field.map) {
+            if (kv.first.type == Value::Type::STRING && kv.first.str == rawArg) return true;
+        }
     }
     return false;
 }
 
+bool sqlMatchPredicate(const Value& doc, const rin::sql::Predicate& pr) {
+    Value field;
+    const bool exists = sqlGetNestedField(doc, sqlSplitSlash(pr.field), field);
+
+    if (pr.op == "exists") return exists;
+    if (pr.op == "missing") return !exists;
+    if (!exists) return false;
+
+    if (pr.op == "empty") return sqlIsEmpty(field);
+    if (pr.op == "notempty") return !sqlIsEmpty(field);
+    if (pr.op == "isnull") return field.type == Value::Type::NIL;
+    if (pr.op == "notnull") return field.type != Value::Type::NIL;
+
+    const Value arg = sqlParseArg(pr.arg);
+    if (pr.op == "eq") return valuesEqual(field, arg);
+    if (pr.op == "ne") return !valuesEqual(field, arg);
+
+    if (pr.op == "gt" || pr.op == "gte" || pr.op == "lt" || pr.op == "lte") {
+        if (field.type != Value::Type::NUMBER || arg.type != Value::Type::NUMBER) return false;
+        if (pr.op == "gt") return field.number > arg.number;
+        if (pr.op == "gte") return field.number >= arg.number;
+        if (pr.op == "lt") return field.number < arg.number;
+        return field.number <= arg.number;
+    }
+
+    if (pr.op == "has") return sqlHas(field, pr.arg);
+    if (pr.op == "like" || pr.op == "contains") return sqlStringContains(field, pr.arg);
+    if (pr.op == "starts") return sqlStringStarts(field, pr.arg);
+    if (pr.op == "ends") return sqlStringEnds(field, pr.arg);
+    return false;
+}
+
+bool sqlDocumentMatches(const Value& doc, const rin::sql::Query& q) {
+    for (const auto& pr : q.predicates) {
+        if (!sqlMatchPredicate(doc, pr)) return false;
+    }
+    return true;
+}
+
 } // namespace
+
 
 std::string Interpreter::sqlResolveQueryText(const std::string& arg) const {
     auto maskIt = containerMasks.find(arg);
@@ -935,33 +989,98 @@ std::string Interpreter::sqlResolveTargetContainer(const rin::sql::Query& q) con
 }
 
 ArrayPtr Interpreter::sqlExecute(const std::string& rawArg, int line) const {
-    std::string queryText = sqlResolveQueryText(rawArg);
+    const std::string queryText = sqlResolveQueryText(rawArg);
     rin::sql::Query q;
     try {
         q = rin::sql::parse(queryText);
     } catch (const rin::sql::SqlSyntaxError& e) {
         throw diagErr(diag::Code::E0042_InvalidSql, line, std::string(e.what()));
     }
+
     auto result = std::make_shared<ArrayData>();
-    std::string container = sqlResolveTargetContainer(q);
+    const std::string container = sqlResolveTargetContainer(q);
     if (container.empty()) return result;
-    auto it = docStore.find(container);
+    const auto it = docStore.find(container);
     if (it == docStore.end()) return result;
-    for (auto& entry : it->second) {
-        const Value& doc = entry.second;
-        bool ok = true;
-        for (auto& pr : q.predicates) {
-            if (!sqlMatchPredicate(doc, pr)) { ok = false; break; }
-        }
-        if (!ok) continue;
+
+    for (const auto& entry : it->second) {
+        if (!sqlDocumentMatches(entry.second, q)) continue;
         auto m = std::make_shared<MapData>();
         m->push_back({Value::string("_id"), Value::string(entry.first)});
-        if (doc.type == Value::Type::MAP && doc.map) {
-            for (auto& kv : *doc.map) m->push_back(kv);
+        if (entry.second.type == Value::Type::MAP && entry.second.map) {
+            for (const auto& kv : *entry.second.map) m->push_back(kv);
         }
         result->push_back(Value::makeMap(m));
     }
     return result;
+}
+
+size_t Interpreter::sqlExecuteCount(const std::string& rawArg, int line) const {
+    const std::string queryText = sqlResolveQueryText(rawArg);
+    rin::sql::Query q;
+    try {
+        q = rin::sql::parse(queryText);
+    } catch (const rin::sql::SqlSyntaxError& e) {
+        throw diagErr(diag::Code::E0042_InvalidSql, line, std::string(e.what()));
+    }
+    const std::string container = sqlResolveTargetContainer(q);
+    if (container.empty()) return 0;
+    const auto it = docStore.find(container);
+    if (it == docStore.end()) return 0;
+    size_t count = 0;
+    for (const auto& entry : it->second) if (sqlDocumentMatches(entry.second, q)) ++count;
+    return count;
+}
+
+bool Interpreter::sqlExecuteExists(const std::string& rawArg, int line) const {
+    const std::string queryText = sqlResolveQueryText(rawArg);
+    rin::sql::Query q;
+    try {
+        q = rin::sql::parse(queryText);
+    } catch (const rin::sql::SqlSyntaxError& e) {
+        throw diagErr(diag::Code::E0042_InvalidSql, line, std::string(e.what()));
+    }
+    const std::string container = sqlResolveTargetContainer(q);
+    if (container.empty()) return false;
+    const auto it = docStore.find(container);
+    if (it == docStore.end()) return false;
+    for (const auto& entry : it->second) if (sqlDocumentMatches(entry.second, q)) return true;
+    return false;
+}
+
+std::string Interpreter::sqlExplain(const std::string& rawArg, int line) const {
+    const std::string queryText = sqlResolveQueryText(rawArg);
+    rin::sql::Query q;
+    try {
+        q = rin::sql::parse(queryText);
+    } catch (const rin::sql::SqlSyntaxError& e) {
+        throw diagErr(diag::Code::E0042_InvalidSql, line, std::string(e.what()));
+    }
+
+    std::ostringstream out;
+    out << "RCSQL 1.0\n";
+    out << "TARGET " << (q.targetIsMask ? "#" + q.targetMask : [&]() {
+        std::string x;
+        for (size_t i = 0; i < q.targetPath.size(); ++i) { if (i) x += '/'; x += q.targetPath[i]; }
+        return x;
+    }()) << "\n";
+    out << "PREDICATES " << q.predicates.size() << "\n";
+    for (size_t i = 0; i < q.predicates.size(); ++i) {
+        const auto& p = q.predicates[i];
+        out << "  " << (i + 1) << " " << p.field << " " << p.op;
+        if (!p.arg.empty()) out << "(" << p.arg << ")";
+        else out << "()";
+        out << "\n";
+    }
+    const std::string container = sqlResolveTargetContainer(q);
+    const auto it = docStore.find(container);
+    const size_t total = it == docStore.end() ? 0 : it->second.size();
+    size_t matched = 0;
+    if (it != docStore.end()) for (const auto& entry : it->second) if (sqlDocumentMatches(entry.second, q)) ++matched;
+    out << "CONTAINER " << (container.empty() ? "<missing>" : container) << "\n";
+    out << "DOCUMENTS " << total << "\n";
+    out << "MATCHED " << matched << "\n";
+    return out.str();
 }
 
 void Interpreter::registerNatives() {
@@ -2520,8 +2639,38 @@ void Interpreter::registerNatives() {
     natives["sqlCount"] = [this](std::vector<Value>& a, int line) -> Value {
         expectArgs("sqlCount", a, 1, line);
         std::string raw = asString(a[0], "sqlCount", line);
-        auto res = sqlExecute(raw, line);
-        return Value::num(res ? static_cast<double>(res->size()) : 0.0);
+        return Value::num(static_cast<double>(sqlExecuteCount(raw, line)));
+    };
+
+    // sqlExists(query) -> هل يوجد مستند واحد على الأقل مطابق؟
+    natives["sqlExists"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("sqlExists", a, 1, line);
+        return Value::boolean_(sqlExecuteExists(asString(a[0], "sqlExists", line), line));
+    };
+
+    // sqlIds(query) -> IDs فقط، مع الحفاظ على ترتيب المستندات الأصلي.
+    natives["sqlIds"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("sqlIds", a, 1, line);
+        const std::string raw = asString(a[0], "sqlIds", line);
+        const auto rows = sqlExecute(raw, line);
+        auto ids = std::make_shared<ArrayData>();
+        if (!rows) return Value::makeArray(ids);
+        for (const auto& row : *rows) {
+            if (row.type != Value::Type::MAP || !row.map) continue;
+            for (const auto& kv : *row.map) {
+                if (kv.first.type == Value::Type::STRING && kv.first.str == "_id") {
+                    ids->push_back(kv.second);
+                    break;
+                }
+            }
+        }
+        return Value::makeArray(ids);
+    };
+
+    // sqlExplain(query) -> خطة/تشخيص تنفيذية نصية خاصة بـ RCSQL 1.0.
+    natives["sqlExplain"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("sqlExplain", a, 1, line);
+        return Value::string(sqlExplain(asString(a[0], "sqlExplain", line), line));
     };
 
     // docIds(collection) -> مصفوفة أسماء (ids) كل المستندات بترتيب الإدخال
