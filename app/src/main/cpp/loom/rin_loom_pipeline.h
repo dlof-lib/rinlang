@@ -160,6 +160,7 @@ inline PipelineResult runColdPipelineWithRuntime(const std::string& source, rin:
         // so Strand colors resolve against the right active theme from the very first paint.
         registerThemesFromProgram(program, result.warp);
         registerObjectsFromProgram(program, result.warp); // §21: Object Inspector source
+        registerGroupsFromProgram(program, result.warp); // §21b: Group/Volume as Object Inspector source
 
         std::shared_ptr<rin::ViewStmt> root = reachedRoot;
         if (!root) {
@@ -224,15 +225,6 @@ inline void collectViewStmts(const std::vector<rin::StmtPtr>& stmts, std::unorde
         // Deliberately NOT recursing into ContainerStmt/ContainerGroupStmt/VolumeStmt bodies --
         // those are a different container's own scope (see runColdPipelineForContainerWithRuntime's
         // use of this function, which calls it once per target container's own direct body).
-        if (auto pr = std::dynamic_pointer_cast<rin::ProgramStmt>(stmt)) {
-            // @Program is *not* a separate scope like Group/Volume (see ProgramStmt in
-            // rin_interpreter.cpp: it executes its body directly in the surrounding
-            // environment) -- it's purely a display wrapper marking where a program begins
-            // and ends. So unlike the containers above, a @view sitting inside @Program
-            // still belongs to the enclosing scope and must be collected here.
-            collectViewStmts(pr->body, out);
-            continue;
-        }
     }
 }
 
@@ -251,10 +243,6 @@ inline const std::vector<rin::StmtPtr>* findContainerBody(const std::vector<rin:
         } else if (auto v = std::dynamic_pointer_cast<rin::VolumeStmt>(stmt)) {
             if (v->name == containerName) return &v->body;
             if (auto found = findContainerBody(v->body, containerName)) return found;
-        } else if (auto pr = std::dynamic_pointer_cast<rin::ProgramStmt>(stmt)) {
-            // @Program هو إطار عرض آخر يمكن أن يحوي @container بداخله تماماً كـ Group/Volume --
-            // بلا هذه الحالة، أي حاوية مُغلَّفة داخل @Program لن يجدها Loom إطلاقاً.
-            if (auto found = findContainerBody(pr->body, containerName)) return found;
         }
     }
     return nullptr;
@@ -319,6 +307,7 @@ inline PipelineResult runColdPipelineForContainerWithRuntime(const std::string& 
         }
         registerThemesFromProgram(*body, result.warp);
         registerObjectsFromProgram(*body, result.warp); // §21: Object Inspector source
+        registerGroupsFromProgram(*body, result.warp); // §21b: Group/Volume as Object Inspector source
         std::shared_ptr<rin::ViewStmt> root = reachedRoot;
         if (!root) {
             for (auto& stmt : *body) { // defensive fallback -- see runColdPipelineWithRuntime's equivalent
@@ -370,6 +359,7 @@ inline std::vector<Patch> runHotPipeline(PipelineResult& state, const std::strin
         }
         registerThemesFromProgram(program, state.warp);
         registerObjectsFromProgram(program, state.warp); // §21: keep registry fresh on hot edits;
+        registerGroupsFromProgram(program, state.warp); // §21b: same, for Group/Volume sources
         // note this does NOT re-synthesize an already-built Object Strand's rows -- same documented
         // limitation as applyBannerConveniences above (only the next cold build/Run picks it up).
         std::shared_ptr<rin::ViewStmt> root;
