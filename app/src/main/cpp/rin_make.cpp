@@ -42,13 +42,6 @@ static void collect(const StmtPtr& stmt, std::set<std::string>& out) {
         for (const auto& child : v->body) collect(child, out);
         return;
     }
-    if (auto p = std::dynamic_pointer_cast<ProgramStmt>(stmt)) {
-        // Program هو إطار عرض لا حاوية بيانات (خلافاً لـ Group/Volume)، فلا يُدرَج "container"
-        // من أجله وحده -- لكن جسمه لا يزال بحاجة لفحص recursively كي تُكتشَف أي قدرات
-        // (container/loop/...) مُعلَنة بداخله، تماماً كما لو لم يكن داخل Program إطلاقاً.
-        for (const auto& child : p->body) collect(child, out);
-        return;
-    }
     if (auto b = std::dynamic_pointer_cast<BlockStmt>(stmt)) {
         for (const auto& child : b->statements) collect(child, out);
     }
@@ -145,6 +138,14 @@ void validateContainerPolicy(const ContainerStmt& c) {
     // بلا أي قائمة افتراضية هنا (خلافاً لـ Make Unit): حاوية عادية لا تملك مفهوم kind/makeType،
     // فـ allow الصريحة فقط -إن وُجدت- هي التي تعمل كقائمة بيضاء.
     enforcePolicy("Container '" + c.name + "'", used, c.allows, c.denies, c.needs, c.uses, c.strict);
+}
+
+void validateContainerGroupPolicy(const ContainerGroupStmt& g) {
+    auto used = makeCapabilities(g.body);
+    // نفس مبدأ validateContainerPolicy بالضبط (بلا قوائم افتراضية): سياسة المجموعة تُطبَّق على
+    // مجموع القدرات المستخدَمة في كامل شجرتها (حاوياتها المباشرة + أي مجموعات فرعية متداخلة
+    // وحاوياتها بدورها)، لا على المجموعة كغلاف تنظيمي مجرَّد.
+    enforcePolicy("Containers.Group '" + g.name + "'", used, g.allows, g.denies, g.needs, g.uses, g.strict);
 }
 
 } // namespace rin
