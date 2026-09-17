@@ -1,0 +1,44 @@
+// reactive_ui_demo.rin — يوضّح الأنظمة الخمسة مجتمعة في مثال واحد:
+//   1) events:    on.event / emit / bubbles           (موجودة أصلاً في المفسّر)
+//   2) reactivity: state + on update(prevState)        (موجودة أصلاً في المفسّر)
+//   3) layout:    @view.Row / @view.Column + gap/sizing (موجودة أصلاً في Loom، جرّبها عبر loomc)
+//   4) animation: anim_tween/anim_tick (lib/animation.og.rin) — المحرّك الجديد المضاف هنا
+//   5) lifecycle: on init()/mount()/update()/destroy()/error() (موجودة أصلاً في المفسّر)
+//
+// شغّله: ./build-artifact/rin_run examples/samples/reactive_ui_demo.rin
+// (أو الملف التنفيذي الذي بنيته بنفسك عبر cli/linux/build.sh)
+
+@import "lib/animation.og.rin";
+
+@container=Page
+    on.event "progress:done" () { print "Page: heard progress:done from its child ProgressBar"; }
+
+    @container=ProgressBar
+        state width = 0;
+
+        on init()   { print "ProgressBar: init"; }
+        on mount()  { print "ProgressBar: mounted, width=" + width; }
+        on update(prevState) {
+            print "ProgressBar: " + prevState["width"] + "% -> " + width + "%";
+        }
+        on destroy() { print "ProgressBar: destroyed"; }
+
+        fun onDone() { emit "progress:done"; }
+    .end/container
+.end/container
+
+// حركة حقيقية بزمن فعلي (30ms) عبر محرك التحريك الجديد، تُحدِّث state.width كل إطار،
+// فيُطلِق on update() تلقائياً في كل مرة — هذا هو "التفاعل" الحقيقي بين reactivity والحركة.
+anim_tween("ProgressBar", "width", 0, 100, 30, "easeOut", getField("ProgressBar", "onDone"));
+
+let frames = 0;
+while (anim_isRunning()) {
+    anim_tick();
+    frames = frames + 1;
+}
+
+print "---";
+print "total animation frames: " + frames;
+print "final width: " + getField("ProgressBar", "width");
+
+destroyContainer("ProgressBar");
