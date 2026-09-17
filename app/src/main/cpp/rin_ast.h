@@ -750,6 +750,27 @@ struct ContainerGroupStmt : Stmt { ContainerGroupStmt() { stmtKind = StmtKind::C
     std::string name;
     std::string mask;
     std::vector<StmtPtr> body;
+
+    // ---- Policy block (RCS-1.0 §3.13 Security) ----
+    // مُعمَّمة الآن أيضاً إلى @Containers.Group (سابقاً @container/@make.(name) حصراً): نفس
+    // الكلمات الأربع (use/need/allow/deny) + strict/version/description، اختيارية تماماً تماماً
+    // كما في ContainerStmt (انظر حقولها أعلاه لشرح كامل) -- hasPolicy تبقى false ما لم تُستخدم
+    // فعلياً كلمة واحدة منها مباشرة داخل جسم المجموعة (لا داخل حاوية/مجموعة فرعية بداخلها؛ تلك
+    // تُطبَّق سياستها الخاصة بها بشكل مستقل تماماً)، وعندها فقط يُطبَّق التحقق
+    // (validateContainerGroupPolicy في rin_make.cpp، بنفس آلية enforcePolicy المشتركة). القدرات
+    // المفحوصة (makeCapabilities) تُجمَع من كامل شجرة المجموعة (بما فيها كل الحاويات/المجموعات
+    // الفرعية المتداخلة بداخلها، مثل الحاويات نفسها)، فيمكن لسياسة مجموعة أن تمنع/تفرض قدرة
+    // (مثل "api" أو "import") على مستوى المجموعة كاملة دفعة واحدة، بدل تكرارها على كل حاوية
+    // بداخلها على حدة. مجموعة لا تستخدم أياً من هذه الكلمات تسلك تماماً كما تسلك اليوم (permissive،
+    // بلا كسر أي توافق عكسي).
+    std::vector<std::string> uses;
+    std::vector<std::string> needs;
+    std::vector<std::string> allows;
+    std::vector<std::string> denies;
+    std::string version;
+    std::string description;
+    bool strict = false;
+    bool hasPolicy = false;
 };
 
 // @Volume=name  <body>  .end/Volume
