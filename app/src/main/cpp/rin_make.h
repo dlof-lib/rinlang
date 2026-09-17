@@ -17,4 +17,12 @@ void validateMakeUnit(const MakeStmt& make);
 // ContainerStmt::hasPolicy == false (الحالة الافتراضية لأي حاوية قديمة).
 void validateContainerPolicy(const ContainerStmt& c);
 
+// RCS-1.0 §3.13 Security (Phase 1) — نفس المبدأ تماماً لكن على @Containers.Group: القدرات
+// المفحوصة تُجمَع (عبر makeCapabilities، التي تتفرّع أصلاً داخل ContainerGroupStmt::body بشكل
+// متكرر -- انظر collect() في rin_make.cpp) من كامل شجرة المجموعة، أي كل الحاويات/المجموعات
+// الفرعية المتداخلة بداخلها أيضاً، لا حاويات المجموعة المباشرة فقط. بلا أي قوائم افتراضية
+// (كـ validateContainerPolicy تماماً)، ولا يُستدعى إطلاقاً إن كانت
+// ContainerGroupStmt::hasPolicy == false.
+void validateContainerGroupPolicy(const ContainerGroupStmt& g);
+
 } // namespace rin
