@@ -162,18 +162,6 @@ StmtPtr Parser::declaration() {
         advance();
         return letDeclaration();
     }
-    // مرادفات إنجليزية إضافية لِـ 'let' — تماماً بنفس أسلوب/قيود 'make' أعلاه حرفياً (كلمات سياقية
-    // غير محجوزة، تُقرأ IDENT عادي، لا تتحقق إلا حين تُتبَع مباشرة باسم متغيّر IDENT، فلا تتعارض مع
-    // استخدام أيٍّ منها اسم دالة عادية foo(...) أو اسم حاوية @foo=... في أي مكان آخر من اللغة):
-    // set/define/declare/create/var name = expr;  كلها تفوَّض إلى letDeclaration() نفسها بلا أي فرق
-    // دلالي عن 'let'/'make' — مجرد أسماء بديلة مألوفة من لغات أخرى (set من Lisp، var من JS،
-    // define/declare/create صياغة وصفية عامة) لتسهيل التعلّم على القادمين من خلفيات مختلفة.
-    if (check(TokenType::IDENT) && checkNext(TokenType::IDENT) &&
-        (peek().lexeme == "set" || peek().lexeme == "define" || peek().lexeme == "declare" ||
-         peek().lexeme == "create" || peek().lexeme == "var")) {
-        advance();
-        return letDeclaration();
-    }
 
     // مفاهيم لغة الحاويات/البيانات
     if (match({TokenType::TEXT})) return textDeclaration();
@@ -292,15 +280,6 @@ StmtPtr Parser::declaration() {
         advance(); // '.'
         advance(); // 'print'
         return viewPrintObjectStatement();
-    }
-    // '@stop;' أو '@stop expr;' -> إنهاء نظيف وفوري لأقرب @Program مفتوحة (انظر StopStmt في
-    // rin_ast.h)، نفس أسلوب فحص '@import'/'@view'/'@theme' أعلاه بالضبط: '@' ثم IDENT("stop")
-    // تحديداً، فلا يتعارض إطلاقاً مع استخدام 'stop' اسم متغيّر/دالة عادية (تلك تُقرأ بلا '@').
-    if (check(TokenType::AT) && checkNext(TokenType::IDENT) &&
-        current + 1 < tokens.size() && tokens[current + 1].lexeme == "stop") {
-        advance(); // '@'
-        advance(); // 'stop'
-        return stopDeclaration();
     }
     // Make Unit الحقيقي: @make.(name) ... .end/make[=name]
     // نميّزه قبل atBlock() لأن @make القديمة (بدون .(...)) تبقى ContainerKind::EVERYTHING للتوافق.
@@ -1568,19 +1547,6 @@ StmtPtr Parser::warpDeclaration() {
     return s;
 }
 
-// '@stop;' أو '@stop expr;' -- يُستدعى بعد أن يكون declaration() قد استهلك بالفعل '@' و'stop'.
-// القيمة اختيارية تماماً (فارغة => nil عند التنفيذ، انظر StopStmt في rin_ast.h)؛ صلاحية استخدامها
-// (داخل @Program فعلاً أم لا) تُفحَص وقت التنفيذ لا التحليل (Interpreter::execute(StopStmt))، بنفس
-// أسلوب break/continue خارج حلقة تماماً.
-StmtPtr Parser::stopDeclaration() {
-    Token stopTok = previous(); // 'stop'
-    auto s = std::make_shared<StopStmt>();
-    s->line = stopTok.line;
-    if (!check(TokenType::SEMICOLON)) s->value = expression();
-    consume(TokenType::SEMICOLON, "Expected ';' after '@stop'");
-    return s;
-}
-
 // Rin Loom: Theme (Pattern Book) declaration -------------------------------------------
 // @theme=<Name>  key=expr; ...  .end/theme
 // يُستدعى بعد أن يكون declaration() قد استهلك بالفعل '@' و'theme'، بنفس أسلوب viewDeclaration()
@@ -1636,7 +1602,7 @@ static bool isGeneralPolicyWord(const std::string& w) {
            w == "strict" || w == "version" || w == "description";
 }
 
-bool Parser::tryParsePolicyDirective(ContainerStmt& s) {
+bool Parser::tryParsePolicyDirective(PolicyAccumulator& s) {
     if (!check(TokenType::IDENT)) return false;
     std::string word = peek().lexeme;
     if (!isGeneralPolicyWord(word)) return false;
@@ -1680,8 +1646,8 @@ bool Parser::tryParsePolicyDirective(ContainerStmt& s) {
 }
 
 // نفس مجموعة الوسوم التي تُنتج ContainerStmt أدناه (container/pipe/data/api/.../make) —
-// فقط هذه تخضع لتوجيهات policy_block الجديدة؛ Containers.Group/Volume تبقى كما هي (خارج
-// نطاق هذه المرحلة، لا حاجة/طلب لها هناك حالياً).
+// فقط هذه (+ Containers.Group بشكل مستقل، انظر groupTag في atBlock()) تخضع لتوجيهات
+// policy_block؛ Volume يبقى كما هو (خارج نطاق هذه المرحلة، لا حاجة/طلب له حالياً).
 static bool isContainerFamilyTag(const std::string& tag) {
     static const std::unordered_set<std::string> s = {
         "container", "container.pipe", "pipe", "container.data", "data",
@@ -1781,7 +1747,7 @@ StmtPtr Parser::atBlock() {
     std::string tag = readTagKeyword();
     static const std::vector<std::string> validTags = {
         "container", "container.pipe", "container.data", "container.api", "container.import", "container.table",
-        "container.doc", "Containers.Group", "Volume", "Program", "table", "doc",
+        "container.doc", "Containers.Group", "Volume", "table", "doc",
         // مفاهيم التنسيق والستايل: كائن (Object) / بوابة تنسيق (portal) / كتلة واجهة جاهزة (block)
         "container.object", "Object", "container.open/object", "container.portal", "portal", "container.block", "block",
         "container.sticker", "sticker", "container.aukt", "AUKT", "container.chatbot", "chatbot",
@@ -1814,50 +1780,24 @@ StmtPtr Parser::atBlock() {
                                     "container.import, container.table, container.doc, container.object, "
                                     "container.portal, container.block, container.sticker, container.aukt, "
                                     "container.chatbot, container.sql, container.make (or make / Rin.make / the legacy "
-                                    "container.everything / Everything), Containers.Group, Volume, or Program");
+                                    "container.everything / Everything), Containers.Group, or Volume");
         }
         throw d;
     }
     std::string name = readOptionalName("a `@" + tag + "` block");
     std::vector<StmtPtr> body;
     std::string mask;
-    // فقط لأجل @Program: عبارة `recover (err) { ... }` أو `recover { ... }` اختيارية، تُكتَب في أي
-    // موضع داخل الجسم (عادة كآخر شيء قبل .end/Program، بنفس مكان catch بعد try) -- انظر شرح
-    // ProgramStmt::recoverBody الكامل في rin_ast.h. لا تُدرَج في body العادي مطلقاً (مثل mask
-    // تماماً)، بل تُستخرَج هنا مباشرة.
-    std::string recoverName;
-    std::shared_ptr<BlockStmt> recoverBody;
-    // فقط لأجل @Program أيضاً: عبارة `finally { ... }` اختيارية، بأي ترتيب مع recover أعلاه (كلتاهما
-    // تُستخرَجان من body العادي بنفس الأسلوب بالضبط) -- انظر شرح ProgramStmt::finallyBody الكامل في
-    // rin_ast.h. جسمها ينفَّذ دائماً مرة واحدة قبل نهاية هذه Program فعلياً، بصرف النظر عن نجاحها/
-    // استردادها/إيقافها (@stop)/فشلها.
-    std::shared_ptr<BlockStmt> finallyBody;
-    // RCS-1.0 §7 Phase 0: قبل كل عبارة عادية، نجرّب أولاً قراءتها كتوجيه سياسة (policy_block)
-    // إن كانت هذه حاوية من عائلة container (لا Containers.Group/Volume). tryParsePolicyDirective
-    // يستعيد موضع القارئ بنفسه إن لم يطابق النمط، فلا خطر على أي برنامج قديم يستخدم هذه الكلمات
-    // كأسماء عادية. الحقول المُجمَّعة هنا تُطبَّق على ContainerStmt بعد إنشائها أدناه.
-    ContainerStmt policyAccum;
+    // RCS-1.0 §7 Phase 0/1: قبل كل عبارة عادية، نجرّب أولاً قراءتها كتوجيه سياسة (policy_block)
+    // إن كانت هذه حاوية من عائلة container أو @Containers.Group (Volume تبقى خارج النطاق حالياً،
+    // لا حاجة/طلب لها هناك). tryParsePolicyDirective يستعيد موضع القارئ بنفسه إن لم يطابق النمط،
+    // فلا خطر على أي برنامج قديم يستخدم هذه الكلمات كأسماء عادية. الحقول المُجمَّعة هنا (في
+    // PolicyAccumulator محايد النوع -- انظر rin_parser.h) تُنسَخ لاحقاً إلى ContainerStmt أو
+    // ContainerGroupStmt الفعلية بعد إنشائها أدناه، حسب أيّهما ينطبق على هذا الوسم.
+    PolicyAccumulator policyAccum;
     bool familyTag = isContainerFamilyTag(tag);
+    bool groupTag = (tag == "Containers.Group");
     while (!checkClosingTag() && !isAtEnd()) {
-        if (familyTag && tryParsePolicyDirective(policyAccum)) continue;
-        if (tag == "Program" && !recoverBody && check(TokenType::IDENT) && peek().lexeme == "recover" &&
-            (checkNext(TokenType::LBRACE) || checkNext(TokenType::LPAREN))) {
-            advance(); // 'recover'
-            if (match({TokenType::LPAREN})) {
-                recoverName = consume(TokenType::IDENT, "Expected recover variable name").lexeme;
-                consume(TokenType::RPAREN, "Expected ')' after recover variable");
-            }
-            consume(TokenType::LBRACE, "Expected '{' after 'recover'");
-            recoverBody = block();
-            continue;
-        }
-        if (tag == "Program" && !finallyBody && check(TokenType::IDENT) && peek().lexeme == "finally" &&
-            checkNext(TokenType::LBRACE)) {
-            advance(); // 'finally'
-            advance(); // '{'
-            finallyBody = block();
-            continue;
-        }
+        if ((familyTag || groupTag) && tryParsePolicyDirective(policyAccum)) continue;
         auto st = declaration();
         if (auto m = std::dynamic_pointer_cast<MaskStmt>(st)) {
             if (auto lit = std::dynamic_pointer_cast<LiteralExpr>(m->value); lit && lit->kind == LiteralExpr::Kind::STRING) mask = lit->str;
@@ -1921,13 +1861,12 @@ StmtPtr Parser::atBlock() {
     if (tag == "Containers.Group") {
         auto s = std::make_shared<ContainerGroupStmt>();
         s->name = name; s->mask = mask; s->body = body; s->line = atTok.line;
-        return s;
-    }
-    if (tag == "Program") {
-        auto s = std::make_shared<ProgramStmt>();
-        s->name = name; s->mask = mask; s->body = body; s->line = atTok.line;
-        s->recoverName = recoverName; s->recoverBody = recoverBody;
-        s->finallyBody = finallyBody;
+        if (policyAccum.hasPolicy) {
+            s->uses = policyAccum.uses; s->needs = policyAccum.needs;
+            s->allows = policyAccum.allows; s->denies = policyAccum.denies;
+            s->version = policyAccum.version; s->description = policyAccum.description;
+            s->strict = policyAccum.strict; s->hasPolicy = true;
+        }
         return s;
     }
     auto s = std::make_shared<VolumeStmt>();
@@ -2024,10 +1963,10 @@ void Parser::validateDataContainerBody(const std::vector<StmtPtr>& body) {
             throw d;
         }
         if (std::dynamic_pointer_cast<ContainerStmt>(st) || std::dynamic_pointer_cast<ContainerGroupStmt>(st) ||
-            std::dynamic_pointer_cast<VolumeStmt>(st) || std::dynamic_pointer_cast<ProgramStmt>(st)) {
+            std::dynamic_pointer_cast<VolumeStmt>(st)) {
             auto d = errAtLine(diag::Code::E0014_InvalidContainer, st->line,
-                               "nested containers/groups/volumes/programs are not allowed inside `container.data`/`container.table`/`table`");
-            d.diagnostic->withReason("`object` containers cannot contain `route`, `container`, `Containers.Group`, `Volume`, or `Program`");
+                               "nested containers/groups/volumes are not allowed inside `container.data`/`container.table`/`table`");
+            d.diagnostic->withReason("`object` containers cannot contain `route`, `container`, `Containers.Group`, or `Volume`");
             throw d;
         }
         if (std::dynamic_pointer_cast<RouteStmt>(st)) {
