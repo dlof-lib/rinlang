@@ -6253,11 +6253,12 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
     if (execBudget_ > 0 && ++execCount_ > execBudget_) {
         throw RinError("Execution limit exceeded\nPossible infinite loop", stmt ? stmt->line : 0);
     }
-    if (auto s = std::dynamic_pointer_cast<ExpressionStmt>(stmt)) {
+    switch (stmt->stmtKind) {
+    case StmtKind::ExpressionStmt: { auto s = std::static_pointer_cast<ExpressionStmt>(stmt);
         evaluate(s->expr, env);
         return;
     }
-    if (auto s = std::dynamic_pointer_cast<PrintStmt>(stmt)) {
+    case StmtKind::PrintStmt: { auto s = std::static_pointer_cast<PrintStmt>(stmt);
         // if= : بوابة تنفيذ كاملة — عند falsy، لا يُقيَّم أي شيء آخر إطلاقاً (لا exprs ولا أي سمة
         // أخرى)، فيبقى أمر print معطَّلاً تماماً بلا أي أثر جانبي، تماماً كأنه لم يُكتب أصلاً.
         if (s->ifCond) {
@@ -6390,7 +6391,7 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
     // بصيغة "[LEVEL] message" مسبوقة برمز مطابق تماماً لرموز print level="..." الموجودة أصلاً
     // (نفس النصوص الحرفية التي يتعرّف عليها RinConsoleFormatter.kt) حتى يُصنَّف/يُلوَّن سطر
     // print.log.info/warn/error/debug تلقائياً في كونسول التطبيق دون أي تغيير إضافي هناك.
-    if (auto s = std::dynamic_pointer_cast<LogStmt>(stmt)) {
+    case StmtKind::LogStmt: { auto s = std::static_pointer_cast<LogStmt>(stmt);
         // if= : نفس دلالة print تماماً — عند falsy، لا شيء يُقيَّم إطلاقاً ولا يُنشأ أي سجلّ.
         if (s->ifCond) {
             Value condVal = evaluate(s->ifCond, env);
@@ -6470,17 +6471,17 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
     // `@view` sitting inside a real `if`/`while`/`for` branch (see setViewReachedCallback()'s
     // comment) gets identified as "the one real execution actually walked into", instead of a
     // Live Preview caller having to guess by re-scanning the AST statically afterward.
-    if (auto s = std::dynamic_pointer_cast<ViewStmt>(stmt)) {
+    case StmtKind::ViewStmt: { auto s = std::static_pointer_cast<ViewStmt>(stmt);
         if (viewReachedCb_) viewReachedCb_(s);
         return;
     }
     // Container-owned UI event binding: behavior is registered/consumed by the Loom bridge.
     // It is intentionally side-effect free here so normal Rin execution remains deterministic.
-    if (auto s = std::dynamic_pointer_cast<UiBindingStmt>(stmt)) {
+    case StmtKind::UiBindingStmt: { auto s = std::static_pointer_cast<UiBindingStmt>(stmt);
         (void)s;
         return;
     }
-    if (auto s = std::dynamic_pointer_cast<LetStmt>(stmt)) {
+    case StmtKind::LetStmt: { auto s = std::static_pointer_cast<LetStmt>(stmt);
         Value v = Value::nil();
         if (s->initializer) v = copyForBinding(evaluate(s->initializer, env));
         if (!s->typeName.empty()) checkDeclaredType(v, s->typeName, "variable `" + s->name + "`", s->line);
@@ -6491,13 +6492,13 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
     // نفس الفلسفة تماماً كـ FunctionStmt أدناه: يُسجَّل أيضاً عبر hoisting في run()/
     // callTopLevelFunction لأجل استخدام على مستوى أعلى/وراثة أمامية (forward reference)، وهنا مرة
     // أخرى لأجل تعريفات محلية داخل دالة/كتلة (لا تُحصَد hoisting، بنفس سلوك 'fun' محلية تماماً).
-    if (auto s = std::dynamic_pointer_cast<ClassStmt>(stmt)) {
+    case StmtKind::ClassStmt: { auto s = std::static_pointer_cast<ClassStmt>(stmt);
         registerClassStmt(s);
         return;
     }
     // OOP: enum declaration -> يُعرَّف كمتغيّر عادي من نوع map يضم كل الحالات (انظر تعليق EnumStmt
     // في rin_ast.h)؛ لا حاجة لأي سجل داخلي جديد، فقط map عادية يصل إليها GetExpr كأي map أخرى.
-    if (auto s = std::dynamic_pointer_cast<EnumStmt>(stmt)) {
+    case StmtKind::EnumStmt: { auto s = std::static_pointer_cast<EnumStmt>(stmt);
         auto m = std::make_shared<MapData>();
         for (auto& c : s->cases) {
             Value raw = c.value ? evaluate(c.value, env) : Value::nil();
@@ -6515,7 +6516,7 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
     // once, keep the elements where `whereCond` (evaluated with `item` bound) is truthy, then run
     // that array through the same `|>` dispatch (invokeCallee) already used by ordinary pipelines,
     // and bind the final value under `name` exactly like `let` would.
-    if (auto s = std::dynamic_pointer_cast<ReckonStmt>(stmt)) {
+    case StmtKind::ReckonStmt: { auto s = std::static_pointer_cast<ReckonStmt>(stmt);
         Value collVal = evaluate(s->collection, env);
         if (collVal.type != Value::Type::ARRAY) {
             throw diagErr(diag::Code::E0004_InvalidType, s->line,
@@ -6552,18 +6553,18 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
     // `let` that Loom additionally treats as reactive UI state, so it gets identical runtime
     // handling -- assignment (`count = count + 1;`), reads, and everything else about it are 100%
     // ordinary Environment variable semantics, with no special-casing anywhere in the interpreter.
-    if (auto s = std::dynamic_pointer_cast<WarpStmt>(stmt)) {
+    case StmtKind::WarpStmt: { auto s = std::static_pointer_cast<WarpStmt>(stmt);
         Value v = Value::nil();
         if (s->initializer) v = evaluate(s->initializer, env);
         env->define(s->name, v);
         return;
     }
-    if (auto s = std::dynamic_pointer_cast<BlockStmt>(stmt)) {
+    case StmtKind::BlockStmt: { auto s = std::static_pointer_cast<BlockStmt>(stmt);
         auto blockEnv = std::make_shared<Environment>(env);
         executeBlock(s->statements, blockEnv);
         return;
     }
-    if (auto s = std::dynamic_pointer_cast<TryCatchStmt>(stmt)) {
+    case StmtKind::TryCatchStmt: { auto s = std::static_pointer_cast<TryCatchStmt>(stmt);
         try {
             execute(s->tryBranch, env);
         } catch (ThrowSignal& ex) {
@@ -6589,11 +6590,11 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
         }
         return;
     }
-    if (auto s = std::dynamic_pointer_cast<ThrowStmt>(stmt)) {
+    case StmtKind::ThrowStmt: { auto s = std::static_pointer_cast<ThrowStmt>(stmt);
         Value v = s->value ? evaluate(s->value, env) : Value::nil();
         throw ThrowSignal{v, s->line};
     }
-    if (auto s = std::dynamic_pointer_cast<IfStmt>(stmt)) {
+    case StmtKind::IfStmt: { auto s = std::static_pointer_cast<IfStmt>(stmt);
         if (evaluate(s->condition, env).isTruthy()) {
             execute(s->thenBranch, env);
         } else if (s->elseBranch) {
@@ -6601,7 +6602,7 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
         }
         return;
     }
-    if (auto s = std::dynamic_pointer_cast<WhileStmt>(stmt)) {
+    case StmtKind::WhileStmt: { auto s = std::static_pointer_cast<WhileStmt>(stmt);
         while (evaluate(s->condition, env).isTruthy()) {
             try {
                 execute(s->body, env);
@@ -6617,7 +6618,7 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
     // initializer يُنفَّذ مرة واحدة داخل بيئة (Environment) جديدة خاصة بالحلقة كلها، بحيث يبقى أي
     // متغيّر يُعلَن فيها (let i = 0) محصوراً ضمن نطاق الحلقة تماماً كسلوك for المعتاد. condition
     // الغائب يُعامل كـ true دائماً. increment يُنفَّذ بعد كل تكرار، بما في ذلك بعد continue.
-    if (auto s = std::dynamic_pointer_cast<ForStmt>(stmt)) {
+    case StmtKind::ForStmt: { auto s = std::static_pointer_cast<ForStmt>(stmt);
         auto forEnv = std::make_shared<Environment>(env);
         if (s->initializer) execute(s->initializer, forEnv);
         while (!s->condition || evaluate(s->condition, forEnv).isTruthy()) {
@@ -6662,7 +6663,7 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
     // يحصل على بيئة (Environment) خاصة به من الصفر مع NAME معرَّفة فيها (نفس فكرة إصلاح
     // per-iteration closures في ForStmt أعلاه)، فأي closure تُنشأ داخل الجسم تلتقط قيمة تلك
     // التكرارة بشكل صحيح بدل قيمة مشتركة تتغيّر.
-    if (auto s = std::dynamic_pointer_cast<ForInStmt>(stmt)) {
+    case StmtKind::ForInStmt: { auto s = std::static_pointer_cast<ForInStmt>(stmt);
         Value iterableVal = evaluate(s->iterable, env);
         std::vector<Value> items;
         if (iterableVal.type == Value::Type::ARRAY) {
@@ -6694,7 +6695,7 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
     // plus.condition (condition) { trueBranch } / { falseBranch } -> شرط ثلاثي عام: يقيّم condition
     // مرة واحدة، وينفّذ إحدى الكتلتين (كل كتلة تنفَّذ عبر execute(BlockStmt) العادية، أي تحصل على
     // بيئة/نطاق (Environment) خاص بها تماماً كأي كتلة {} أخرى في اللغة).
-    if (auto s = std::dynamic_pointer_cast<PlusConditionStmt>(stmt)) {
+    case StmtKind::PlusConditionStmt: { auto s = std::static_pointer_cast<PlusConditionStmt>(stmt);
         if (evaluate(s->condition, env).isTruthy()) {
             execute(s->trueBranch, env);
         } else {
@@ -6707,7 +6708,7 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
     // قيمة في case.values (نفس دلالة == تماماً عبر valuesEqual الموجودة أصلاً)؛ أول case تُطابق
     // فيها أي قيمة يُنفَّذ جسمها (داخل بيئة/نطاق Environment خاصة به، كأي كتلة {} أخرى) ثم تتوقف
     // المطابقة فوراً (بلا "fallthrough"). لم تُطابق أي حالة؟ يُنفَّذ elseBranch إن وُجدت، وإلا لا شيء.
-    if (auto s = std::dynamic_pointer_cast<MatchStmt>(stmt)) {
+    case StmtKind::MatchStmt: { auto s = std::static_pointer_cast<MatchStmt>(stmt);
         Value subject = evaluate(s->subject, env);
         for (auto& mc : s->cases) {
             bool matched = false;
@@ -6729,11 +6730,11 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
     // achieve expr; / achieve; -> ينهي أقرب كتلة goal {..} محيطة (انظر GoalExpr/AchieveStmt في
     // rin_ast.h وevaluate(GoalExpr) أدناه الذي يلتقط هذه الإشارة). الفحص وقت التحليل (Parser::
     // achieveStatement) يضمن أصلاً أن هذه العبارة لا تظهر إلا داخل goal، لذا لا حاجة لفحص إضافي هنا.
-    if (auto s = std::dynamic_pointer_cast<AchieveStmt>(stmt)) {
+    case StmtKind::AchieveStmt: { auto s = std::static_pointer_cast<AchieveStmt>(stmt);
         Value v = s->value ? evaluate(s->value, env) : Value::nil();
         throw AchieveSignal{v};
     }
-    if (auto s = std::dynamic_pointer_cast<FunctionStmt>(stmt)) {
+    case StmtKind::FunctionStmt: { auto s = std::static_pointer_cast<FunctionStmt>(stmt);
         // نفس فحص التصادم المطبَّق عند hoisting المستوى الأعلى (انظر run()/callTopLevelFunction
         // ونameCollides): بلا هذا الفحص، دالة محلية باسم يطابق native/class كانت ستُشلّ بصمت
         // بنفس الطريقة تماماً -- Name(args) يبحث في natives ثم classes قبل أي بحث في env أصلاً،
@@ -6765,7 +6766,7 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
     // لـ error). "الحاوية الحالية" = قمة containerStack وقت تنفيذ جسم الحاوية (نفس اللحظة التي
     // تُعرَّف بها أي state/fun أخرى بداخلها) -- إن ظهرت خارج أي حاوية (containerStack فارغة)، لا
     // شيء يحدث (تُسجَّل بلا مفتاح صالح فتبقى ميتة عملياً، بلا أي خطأ لأن هذا امتداد إضافي بحت).
-    if (auto s = std::dynamic_pointer_cast<LifecycleHookStmt>(stmt)) {
+    case StmtKind::LifecycleHookStmt: { auto s = std::static_pointer_cast<LifecycleHookStmt>(stmt);
         if (containerStack.empty()) return;
         auto callable = std::make_shared<Callable>();
         callable->declaration = s->asFunction;
@@ -6786,7 +6787,7 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
     // إسناد لهذا الاسم كـ "تغيّر حالة" يستحق إطلاق on update(prevState) تلقائياً (انظر
     // maybeTriggerStateUpdate). خارج أي حاوية (containerStack فارغة) يُعامَل تماماً كـ `let` عادية
     // بلا أي تسجيل إضافي -- امتداد إضافي بحت، لا خطأ.
-    if (auto s = std::dynamic_pointer_cast<StateDeclStmt>(stmt)) {
+    case StmtKind::StateDeclStmt: { auto s = std::static_pointer_cast<StateDeclStmt>(stmt);
         Value v = Value::nil();
         if (s->initializer) v = evaluate(s->initializer, env);
         env->define(s->name, v);
@@ -6797,7 +6798,7 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
     // RCS-1.0 §3.5 Tree (Phase 2): 'slot IDENT;' -- توثيق بنيوي بحت (انظر SlotDeclStmt في
     // rin_ast.h): تُسجَّل فقط ضمن containerSlots[الحاوية الحالية] لأجل الاستقصاء عبر native جديدة
     // slotsOf. خارج أي حاوية (containerStack فارغة) لا شيء يحدث -- امتداد إضافي بحت، لا خطأ.
-    if (auto s = std::dynamic_pointer_cast<SlotDeclStmt>(stmt)) {
+    case StmtKind::SlotDeclStmt: { auto s = std::static_pointer_cast<SlotDeclStmt>(stmt);
         if (!containerStack.empty()) containerSlots[containerStack.back()].push_back(s->name);
         return;
     }
@@ -6808,7 +6809,7 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
     // عند هذه النقطة بالضبط -- وضع 'requires' كأول عبارة في الجسم (كما في كل أمثلة §3.14) يحقّق
     // حرفياً "فحص قبل أي كود آخر". خارج أي حاوية (containerStack فارغة) يبقى الفحص فعّالاً أيضاً
     // (لا علاقة له بوجود حاوية أب -- يتحقق فقط من وجود الأسماء المطلوبة في سجلّ containers العام).
-    if (auto s = std::dynamic_pointer_cast<DependencyStmt>(stmt)) {
+    case StmtKind::DependencyStmt: { auto s = std::static_pointer_cast<DependencyStmt>(stmt);
         for (const auto& depName : s->names) {
             if (containers.count(depName) == 0) {
                 auto d = diagErr(diag::Code::E0041_MissingDependency, s->line,
@@ -6826,7 +6827,7 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
     // الحالية] لتُستدعى لاحقاً من فرع EmitStmt أدناه عند emit في أحد أبنائها (المباشر افتراضياً،
     // أو أي حفيد إن استُخدمت 'emit ... bubbles;'). خارج أي حاوية (containerStack فارغة) لا شيء
     // يحدث -- امتداد إضافي بحت، لا خطأ.
-    if (auto s = std::dynamic_pointer_cast<EventHandlerStmt>(stmt)) {
+    case StmtKind::EventHandlerStmt: { auto s = std::static_pointer_cast<EventHandlerStmt>(stmt);
         if (containerStack.empty()) return;
         auto callable = std::make_shared<Callable>();
         callable->declaration = s->asFunction;
@@ -6842,7 +6843,7 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
     // containerStack قد فرغت مجدداً بالفعل). بلا 'bubbles': يتوقف عند أول أب فقط (كل معالج مطابق
     // الاسم عنده يُستدعى). مع 'bubbles': يستمر صعوداً عبر كل سلسلة الأجداد حتى الجذر. لا شيء يحدث
     // إن لم توجد حاوية أب أصلاً (حاوية جذرية أعلى المستوى)، أو إن استُخدمت emit خارج أي حاوية إطلاقاً.
-    if (auto s = std::dynamic_pointer_cast<EmitStmt>(stmt)) {
+    case StmtKind::EmitStmt: { auto s = std::static_pointer_cast<EmitStmt>(stmt);
         Value payload = Value::nil();
         if (s->payload) payload = evaluate(s->payload, env);
         std::string emitterKey = containerKeyForEnv(env.get());
@@ -6867,21 +6868,21 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
         return;
     }
 
-    if (auto s = std::dynamic_pointer_cast<ReturnStmt>(stmt)) {
+    case StmtKind::ReturnStmt: { auto s = std::static_pointer_cast<ReturnStmt>(stmt);
         Value v = Value::nil();
         if (s->value) v = evaluate(s->value, env);
         throw ReturnSignal{v};
     }
-    if (std::dynamic_pointer_cast<BreakStmt>(stmt)) {
+    case StmtKind::BreakStmt: {
         throw BreakSignal{};
     }
-    if (std::dynamic_pointer_cast<ContinueStmt>(stmt)) {
+    case StmtKind::ContinueStmt: {
         throw ContinueSignal{};
     }
 
     // ---- لغة الحاويات/البيانات ----
 
-    if (auto s = std::dynamic_pointer_cast<TextStmt>(stmt)) {
+    case StmtKind::TextStmt: { auto s = std::static_pointer_cast<TextStmt>(stmt);
         Value v = Value::nil();
         if (s->initializer) v = evaluate(s->initializer, env);
         if (v.type != Value::Type::STRING) {
@@ -6891,7 +6892,7 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
         return;
     }
 
-    if (auto s = std::dynamic_pointer_cast<ContainerStmt>(stmt)) {
+    case StmtKind::ContainerStmt: { auto s = std::static_pointer_cast<ContainerStmt>(stmt);
         if (auto make = std::dynamic_pointer_cast<MakeStmt>(stmt)) {
             try {
                 validateMakeUnit(*make);
@@ -7005,7 +7006,7 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
         return;
     }
 
-    if (auto s = std::dynamic_pointer_cast<ImportStmt>(stmt)) {
+    case StmtKind::ImportStmt: { auto s = std::static_pointer_cast<ImportStmt>(stmt);
         Value pathVal = evaluate(s->path, env);
         if (pathVal.type != Value::Type::STRING) {
             throw diagErr(diag::Code::E0028_ImportError, s->line, "'@import' requires a string path/library name");
@@ -7206,7 +7207,7 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
     // بتنفيذ معزول (كـ 'as alias' حتى لو لم يُطلب alias) ثم نسخ انتقائي: فقط الأسماء المطلوبة صراحة،
     // وفقط لو كانت مُصدَّرة فعلاً عبر 'export' في الملف المستورَد -- بلا أي استثناء توافقية للخلف هنا
     // (صياغة جديدة كلياً، لا يعتمد عليها أي ملف .rin موجود مسبقاً بعكس @import بلا 'export').
-    if (auto s = std::dynamic_pointer_cast<ImportSelectedStmt>(stmt)) {
+    case StmtKind::ImportSelectedStmt: { auto s = std::static_pointer_cast<ImportSelectedStmt>(stmt);
         Value pathVal = evaluate(s->path, env);
         if (pathVal.type != Value::Type::STRING) {
             throw diagErr(diag::Code::E0028_ImportError, s->line, "'import { ... } from' requires a string path/library name");
@@ -7364,7 +7365,7 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
         return;
     }
 
-    if (auto s = std::dynamic_pointer_cast<ContainerGroupStmt>(stmt)) {
+    case StmtKind::ContainerGroupStmt: { auto s = std::static_pointer_cast<ContainerGroupStmt>(stmt);
         // مفتاح داخلي للمجموعات المجهولة الاسم، بنفس أسلوب الحاويات المجهولة.
         std::string groupKey = s->name.empty() ? ("#group" + std::to_string(groupEnvs.size())) : s->name;
         auto groupEnv = std::make_shared<Environment>(env); // نطاق خاص بالمجموعة (بدل التنفيذ المباشر داخل البيئة الأب)
@@ -7405,7 +7406,7 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
         return;
     }
 
-    if (auto s = std::dynamic_pointer_cast<VolumeStmt>(stmt)) {
+    case StmtKind::VolumeStmt: { auto s = std::static_pointer_cast<VolumeStmt>(stmt);
         // Volume كانت سابقاً زخرفية بحتة: executeBlock(s->body, env) مباشرة -- بلا بيئة خاصة (كل
         // متغيّر مُعلَن بداخلها يسرّب فوراً إلى بيئة الأب)، وبلا أي تسجيل عضوية إطلاقاً. الآن بنفس
         // دلالات Containers.Group تماماً: بيئة خاصة بها (volumeEnv)، مفتاح داخلي للأحجام المجهولة
@@ -7457,7 +7458,7 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
         return;
     }
 
-    if (auto s = std::dynamic_pointer_cast<SectionStmt>(stmt)) {
+    case StmtKind::SectionStmt: { auto s = std::static_pointer_cast<SectionStmt>(stmt);
         auto sectionEnv = std::make_shared<Environment>(env);
         output << "🔹 Section" << (s->name.empty() ? "" : (" = " + s->name)) << "\n";
         executeBlock(s->body, sectionEnv);
@@ -7472,20 +7473,20 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
         return;
     }
 
-    if (auto s = std::dynamic_pointer_cast<TranslationsStmt>(stmt)) {
+    case StmtKind::TranslationsStmt: { auto s = std::static_pointer_cast<TranslationsStmt>(stmt);
         output << "🌐 Translations\n";
         executeBlock(s->body, env);
         output << "◽ .end/Translations\n";
         return;
     }
 
-    if (auto s = std::dynamic_pointer_cast<TranslationStmt>(stmt)) {
+    case StmtKind::TranslationStmt: { auto s = std::static_pointer_cast<TranslationStmt>(stmt);
         translations[s->lang] = s->text;
         output << "🌍 translation [" << s->lang << "] = \"" << s->text << "\"\n";
         return;
     }
 
-    if (auto s = std::dynamic_pointer_cast<LinkIdDeclStmt>(stmt)) {
+    case StmtKind::LinkIdDeclStmt: { auto s = std::static_pointer_cast<LinkIdDeclStmt>(stmt);
         if (containerStack.empty())
             throw diagErr(diag::Code::E0014_InvalidContainer, s->line, "لا يمكن استخدام 'link.id=' خارج جسم حاوية (container)");
         const std::string& cur = containerStack.back();
@@ -7494,7 +7495,7 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
         return;
     }
 
-    if (auto s = std::dynamic_pointer_cast<ObjectLiteralStmt>(stmt)) {
+    case StmtKind::ObjectLiteralStmt: { auto s = std::static_pointer_cast<ObjectLiteralStmt>(stmt);
         auto m = std::make_shared<MapData>();
         for (const auto& f : s->fields) {
             Value v = f.value ? evaluate(f.value, env) : Value::nil();
@@ -7510,7 +7511,7 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
         return;
     }
 
-    if (auto s = std::dynamic_pointer_cast<ViewPrintObjectStmt>(stmt)) {
+    case StmtKind::ViewPrintObjectStmt: { auto s = std::static_pointer_cast<ViewPrintObjectStmt>(stmt);
         Value target = evaluate(s->target, env);
         Value objVal;
         std::string label;
@@ -7542,7 +7543,7 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
         return;
     }
 
-    if (auto s = std::dynamic_pointer_cast<LinkStmt>(stmt)) {
+    case StmtKind::LinkStmt: { auto s = std::static_pointer_cast<LinkStmt>(stmt);
         std::string target = s->target;
         bool byId = !s->byId.empty();
         if (byId) {
@@ -7560,19 +7561,19 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
         return;
     }
 
-    if (auto s = std::dynamic_pointer_cast<TyingStmt>(stmt)) {
+    case StmtKind::TyingStmt: { auto s = std::static_pointer_cast<TyingStmt>(stmt);
         bool isGroup = copyTargetIntoCurrentContainer(s->target, s->line);
         output << "🪢 tying <-> " << s->target << (isGroup ? " (Containers.Group)" : "") << "\n";
         return;
     }
 
-    if (auto s = std::dynamic_pointer_cast<MergeStmt>(stmt)) {
+    case StmtKind::MergeStmt: { auto s = std::static_pointer_cast<MergeStmt>(stmt);
         bool isGroup = copyTargetIntoCurrentContainer(s->target, s->line);
         output << "🧬 merge <- " << s->target << (isGroup ? " (Containers.Group)" : "") << "\n";
         return;
     }
 
-    if (auto s = std::dynamic_pointer_cast<InstallationStmt>(stmt)) {
+    case StmtKind::InstallationStmt: { auto s = std::static_pointer_cast<InstallationStmt>(stmt);
         installedNames.insert(s->target);
         bool isContainer = containers.count(s->target) > 0;
         bool isGroup = !isContainer && groupMembers.count(s->target) > 0;
@@ -7632,7 +7633,7 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
         return;
     }
 
-    if (auto s = std::dynamic_pointer_cast<SaveStmt>(stmt)) {
+    case StmtKind::SaveStmt: { auto s = std::static_pointer_cast<SaveStmt>(stmt);
         if (containerStack.empty() || !containers.count(containerStack.back())) {
             throw diagErr(diag::Code::E0014_InvalidContainer, s->line, "'save' يجب أن تُستخدم داخل حاوية (container) حالية لحفظ متغيراتها فعلياً");
         }
@@ -7686,13 +7687,13 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
         return;
     }
 
-    if (auto s = std::dynamic_pointer_cast<FileStmt>(stmt)) {
+    case StmtKind::FileStmt: { auto s = std::static_pointer_cast<FileStmt>(stmt);
         currentFilePath = evaluate(s->path, env).toDisplayString();
         output << "📄 file path = \"" << currentFilePath << "\"\n";
         return;
     }
 
-    if (auto s = std::dynamic_pointer_cast<RouteStmt>(stmt)) {
+    case StmtKind::RouteStmt: { auto s = std::static_pointer_cast<RouteStmt>(stmt);
         if (containerStack.empty()) {
             throw diagErr(diag::Code::E0014_InvalidContainer, s->line, "عبارة 'route' يجب أن تُستخدم داخل @container.api");
         }
@@ -7721,7 +7722,7 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
         return;
     }
 
-    if (auto s = std::dynamic_pointer_cast<RowStmt>(stmt)) {
+    case StmtKind::RowStmt: { auto s = std::static_pointer_cast<RowStmt>(stmt);
         if (containerStack.empty() || containerKinds[containerStack.back()] != ContainerKind::TABLE) {
             throw diagErr(diag::Code::E0014_InvalidContainer, s->line, "عبارة 'row' يجب أن تُستخدم داخل @container.table أو @table");
         }
@@ -7734,7 +7735,7 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
         return;
     }
 
-    if (auto s = std::dynamic_pointer_cast<StyleStmt>(stmt)) {
+    case StmtKind::StyleStmt: { auto s = std::static_pointer_cast<StyleStmt>(stmt);
         // 'style' كانت خاصة بالجدول (container.table/table) فقط، وعُمِّمت الآن (مفاهيم التنسيق
         // والستايل) لتعمل أيضاً داخل container.object/Object، container.portal/portal، و
         // container.block/block.
@@ -7757,7 +7758,7 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
         return;
     }
 
-    if (auto s = std::dynamic_pointer_cast<DocumentStmt>(stmt)) {
+    case StmtKind::DocumentStmt: { auto s = std::static_pointer_cast<DocumentStmt>(stmt);
         if (containerStack.empty() || containerKinds[containerStack.back()] != ContainerKind::DOC) {
             throw diagErr(diag::Code::E0014_InvalidContainer, s->line, "عبارة 'document' يجب أن تُستخدم داخل @container.doc أو @doc");
         }
@@ -7789,6 +7790,8 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
         output << (updated ? "🔄 document (تحديث) -> " : "🧾 document (إدراج) -> ")
                << idVal.str << " = " << fieldsVal.toDisplayString() << "\n";
         return;
+    }
+    default: break;
     }
 }
 
@@ -8502,7 +8505,8 @@ Value Interpreter::doLibraryImportUrl(std::vector<Value>& args, int line, const 
 }
 
 Value Interpreter::evaluate(const ExprPtr& expr, EnvPtr env) {
-    if (auto e = std::dynamic_pointer_cast<LiteralExpr>(expr)) {
+    switch (expr->exprKind) {
+    case ExprKind::Literal: { auto e = std::static_pointer_cast<LiteralExpr>(expr);
         switch (e->kind) {
             case LiteralExpr::Kind::NUMBER: return Value::num(e->number);
             case LiteralExpr::Kind::STRING: return Value::string(e->str);
@@ -8513,7 +8517,7 @@ Value Interpreter::evaluate(const ExprPtr& expr, EnvPtr env) {
     // fun(params) { body } literal -> بناء Callable مربوط بنفس env الحالية وقت الوصول إلى موضع
     // الـ literal (closure حقيقي، بنفس منطق execute(FunctionStmt) تماماً)، مباشرة كقيمة FUNCTION
     // بلا أي تسمية/تعريف في أي نطاق -- فرق اللامبدا الوحيد عن دالة مُسمّاة عادية.
-    if (auto e = std::dynamic_pointer_cast<LambdaExpr>(expr)) {
+    case ExprKind::Lambda: { auto e = std::static_pointer_cast<LambdaExpr>(expr);
         auto callable = std::make_shared<Callable>();
         callable->declaration = e->decl;
         callable->closure = env;
@@ -8522,14 +8526,14 @@ Value Interpreter::evaluate(const ExprPtr& expr, EnvPtr env) {
         v.function = callable;
         return v;
     }
-    if (auto e = std::dynamic_pointer_cast<VariableExpr>(expr)) {
+    case ExprKind::Variable: { auto e = std::static_pointer_cast<VariableExpr>(expr);
         Value v;
         if (!env->get(e->name, v)) {
             throw undefinedVariableErr(e->name, e->line, env);
         }
         return v;
     }
-    if (auto e = std::dynamic_pointer_cast<AssignExpr>(expr)) {
+    case ExprKind::Assign: { auto e = std::static_pointer_cast<AssignExpr>(expr);
         Value v = evaluate(e->value, env);
         // RCS-1.0 §3.3 State: نجد أولاً البيئة (Environment) التي تملك هذا الاسم فعلاً -- بالضبط
         // نفس المسار الذي يتبعه Environment::assign (تصعيد عبر parent حتى إيجاد أول تعريف) -- ثم
@@ -8548,7 +8552,7 @@ Value Interpreter::evaluate(const ExprPtr& expr, EnvPtr env) {
         assignStateAware(owner, e->name, stored, e->line);
         return stored;
     }
-    if (auto e = std::dynamic_pointer_cast<ConditionalExpr>(expr)) {
+    case ExprKind::Conditional: { auto e = std::static_pointer_cast<ConditionalExpr>(expr);
         if (evaluate(e->condition, env).isTruthy()) return evaluate(e->whenTrue, env);
         return evaluate(e->whenFalse, env);
     }
@@ -8556,7 +8560,7 @@ Value Interpreter::evaluate(const ExprPtr& expr, EnvPtr env) {
     // إن رُميت AchieveSignal بداخله (عبر 'achieve expr;')، تصبح قيمة التعبير هي تلك القيمة فوراً؛
     // وإلا (اكتمل الجسم بالكامل بلا أي achieve) تكون قيمة التعبير nil. انظر GoalExpr/AchieveStmt في
     // rin_ast.h للشرح الكامل، وexecute(AchieveStmt) أعلاه لجهة الرمي.
-    if (auto e = std::dynamic_pointer_cast<GoalExpr>(expr)) {
+    case ExprKind::Goal: { auto e = std::static_pointer_cast<GoalExpr>(expr);
         auto goalEnv = std::make_shared<Environment>(env);
         try {
             executeBlock(e->body->statements, goalEnv);
@@ -8565,7 +8569,7 @@ Value Interpreter::evaluate(const ExprPtr& expr, EnvPtr env) {
         }
         return Value::nil();
     }
-    if (auto e = std::dynamic_pointer_cast<LogicalExpr>(expr)) {
+    case ExprKind::Logical: { auto e = std::static_pointer_cast<LogicalExpr>(expr);
         Value left = evaluate(e->left, env);
         if (e->op == TokenType::OR) {
             if (left.isTruthy()) return left;
@@ -8574,7 +8578,7 @@ Value Interpreter::evaluate(const ExprPtr& expr, EnvPtr env) {
         }
         return evaluate(e->right, env);
     }
-    if (auto e = std::dynamic_pointer_cast<UnaryExpr>(expr)) {
+    case ExprKind::Unary: { auto e = std::static_pointer_cast<UnaryExpr>(expr);
         Value right = evaluate(e->right, env);
         if (e->op == TokenType::MINUS) {
             // RMF §33/§41: -vector إلخ عبر __neg__ (صنف يعرّفها كدالة بلا وسائط — self فقط).
@@ -8593,7 +8597,7 @@ Value Interpreter::evaluate(const ExprPtr& expr, EnvPtr env) {
         }
         if (e->op == TokenType::BANG) return Value::boolean_(!right.isTruthy());
     }
-    if (auto e = std::dynamic_pointer_cast<BinaryExpr>(expr)) {
+    case ExprKind::Binary: { auto e = std::static_pointer_cast<BinaryExpr>(expr);
         Value left = evaluate(e->left, env);
         Value right = evaluate(e->right, env);
         switch (e->op) {
@@ -8658,7 +8662,7 @@ Value Interpreter::evaluate(const ExprPtr& expr, EnvPtr env) {
             default: break;
         }
     }
-    if (auto e = std::dynamic_pointer_cast<CallExpr>(expr)) {
+    case ExprKind::Call: { auto e = std::static_pointer_cast<CallExpr>(expr);
         // RinFlow: سلسلة |> كاملة (جذرها هنا) مع جلسة Flow نشطة فعلاً -> تُنفَّذ عبر محرّك RinFlow
         // (Flow Graph حقيقي + Execution Events + تتبّع Node بالكامل)، بدل التقييم العادي أدناه. بلا
         // جلسة نشطة (الحالة الافتراضية دائماً لِـ run() العادي) هذا الفرع لا يُؤخَذ أبداً، فتبقى
@@ -8674,7 +8678,7 @@ Value Interpreter::evaluate(const ExprPtr& expr, EnvPtr env) {
     // callee_expr(args...) where callee_expr isn't a plain name (see CallValueExpr in rin_ast.h):
     // evaluate the callee expression to a VALUE first (e.g. an IndexExpr like `arr[0]`, a
     // parenthesized/lambda expression, or another call's result), then call it if it's a function.
-    if (auto e = std::dynamic_pointer_cast<CallValueExpr>(expr)) {
+    case ExprKind::CallValue: { auto e = std::static_pointer_cast<CallValueExpr>(expr);
         Value callee = evaluate(e->callee, env);
         std::vector<Value> args;
         args.reserve(e->args.size());
@@ -8685,13 +8689,13 @@ Value Interpreter::evaluate(const ExprPtr& expr, EnvPtr env) {
         }
         return callFunction(callee.function, args, e->line);
     }
-    if (auto e = std::dynamic_pointer_cast<ArrayExpr>(expr)) {
+    case ExprKind::Array: { auto e = std::static_pointer_cast<ArrayExpr>(expr);
         auto arr = std::make_shared<ArrayData>();
         arr->reserve(e->elements.size());
         for (auto& el : e->elements) arr->push_back(evaluate(el, env));
         return Value::makeArray(arr);
     }
-    if (auto e = std::dynamic_pointer_cast<MapExpr>(expr)) {
+    case ExprKind::Map: { auto e = std::static_pointer_cast<MapExpr>(expr);
         auto m = std::make_shared<MapData>();
         for (auto& entry : e->entries) {
             Value key = evaluate(entry.key, env);
@@ -8704,7 +8708,7 @@ Value Interpreter::evaluate(const ExprPtr& expr, EnvPtr env) {
         }
         return Value::makeMap(m);
     }
-    if (auto e = std::dynamic_pointer_cast<IndexExpr>(expr)) {
+    case ExprKind::Index: { auto e = std::static_pointer_cast<IndexExpr>(expr);
         Value obj = evaluate(e->object, env);
         Value idx = evaluate(e->index, env);
         if (obj.type == Value::Type::ARRAY) {
@@ -8742,7 +8746,7 @@ Value Interpreter::evaluate(const ExprPtr& expr, EnvPtr env) {
         }
         throw diagErr(diag::Code::E0004_InvalidType, e->line, "cannot index a value of type `" + obj.typeName() + "`");
     }
-    if (auto e = std::dynamic_pointer_cast<IndexSetExpr>(expr)) {
+    case ExprKind::IndexSet: { auto e = std::static_pointer_cast<IndexSetExpr>(expr);
         Value obj = evaluate(e->object, env);
         Value idx = evaluate(e->index, env);
         Value val = evaluate(e->value, env);
@@ -8775,7 +8779,7 @@ Value Interpreter::evaluate(const ExprPtr& expr, EnvPtr env) {
     }
     // OOP: object.name -> قراءة حقل/دالة مرتبطة (class/struct instance) أو قيمة مفتاح (map؛ يشمل
     // Name.CaseA لقيم enum، لأن Name نفسها مجرد map عادية — انظر execute(EnumStmt) أعلاه).
-    if (auto e = std::dynamic_pointer_cast<GetExpr>(expr)) {
+    case ExprKind::Get: { auto e = std::static_pointer_cast<GetExpr>(expr);
         // super.name -> يبحث عن 'name' بدءاً من *أب* الصنف الذي عُرِّفت بداخله الدالة الحالية (لا
         // من صنف self وقت التشغيل) — هذا وحده الفرق عن self.name العادية (توزيع ديناميكي/virtual).
         // 'super' هنا ليست متغيّراً حقيقياً أبداً (بخلاف 'self')؛ نتعرّف عليها بفحص شكل e->object
@@ -8805,7 +8809,7 @@ Value Interpreter::evaluate(const ExprPtr& expr, EnvPtr env) {
                       "cannot access property `." + e->name + "` on a value of type `" + obj.typeName() + "`");
     }
     // OOP: object.name = value -> كتابة/تعديل حقل (class/struct instance) أو مفتاح (map).
-    if (auto e = std::dynamic_pointer_cast<SetExpr>(expr)) {
+    case ExprKind::Set: { auto e = std::static_pointer_cast<SetExpr>(expr);
         Value obj = evaluate(e->object, env);
         Value val = evaluate(e->value, env);
         if (obj.type == Value::Type::INSTANCE) {
@@ -8827,7 +8831,7 @@ Value Interpreter::evaluate(const ExprPtr& expr, EnvPtr env) {
     }
     // OOP: object.method(args...) -> نداء دالة مرتبطة (class/struct instance، مع 'self' مربوطة
     // تلقائياً) أو نداء حقل يحمل قيمة دالة (callback عادي مخزَّن في حقل).
-    if (auto e = std::dynamic_pointer_cast<MethodCallExpr>(expr)) {
+    case ExprKind::MethodCall: { auto e = std::static_pointer_cast<MethodCallExpr>(expr);
         // super.method(args...) -> نفس فكرة super.name (evaluateSuperGet)، لكن لنداء دالة مباشرة.
         if (auto ve = std::dynamic_pointer_cast<VariableExpr>(e->object)) {
             if (ve->name == "super") {
@@ -8871,6 +8875,8 @@ Value Interpreter::evaluate(const ExprPtr& expr, EnvPtr env) {
         }
         throw diagErr(diag::Code::E0004_InvalidType, e->line,
                       "cannot call method `." + e->method + "` on a value of type `" + obj.typeName() + "`");
+    }
+    default: break;
     }
     return Value::nil();
 }
