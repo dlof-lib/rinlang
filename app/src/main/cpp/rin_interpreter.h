@@ -575,7 +575,14 @@ public:
     using ViewReachedCallback = std::function<void(const std::shared_ptr<ViewStmt>&)>;
     void setViewReachedCallback(ViewReachedCallback cb) { viewReachedCb_ = std::move(cb); }
 
+    // وسائط سطر الأوامر الإضافية بعد اسم الملف (rin file.rin arg1 arg2 ...) -- تُعرَّف كمتغيّر
+    // "args" (مصفوفة نصوص) في بيئة أقرب @Program إلى سطح الملف عند تنفيذها (انظر ProgramStmt في
+    // rin_ast.h). استدعاؤها قبل run() اختياري تماماً؛ بلا استدعاء، programArgs_ تبقى فارغة كما كانت
+    // دائماً فتُصبح "args" = [] (توافقية خلفية كاملة لأي مستدعٍ لا يستخدم هذه الميزة).
+    void setProgramArgs(std::vector<std::string> args) { programArgs_ = std::move(args); }
+
 private:
+    std::vector<std::string> programArgs_;
     EnvPtr globals;
     std::ostringstream output;
     std::string sourceFile = "<input>"; // نظام Diagnostics — انظر setSourceFile() أعلاه
