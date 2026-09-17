@@ -19,7 +19,6 @@
 #include "binfmt/macho_format.h"
 #include "binfmt/coff_obj.h"
 #include <cmath>
-#include <chrono> // Program: قياس مدة التنفيذ بين علامتي البداية والنهاية (انظر ProgramStmt أدناه)
 #include <sstream>
 #include <fstream>
 #include <filesystem>
@@ -624,9 +623,31 @@ static void collectGroupContainerNames(const std::unordered_map<std::string, std
     }
 }
 
-// يبني map مُرتَّب أبجدياً بمتغيرات env المباشرة (بنفس مبدأ serializeEnvBody أدناه، لكن كقيمة Rin
-// حيّة "MapData" جاهزة للإرجاع من native بدل نص Rin مُسلسَل) -- الدوال (FUNCTION) تُستبعَد لأنها
-// لا تُمثَّل كقيمة Rin عادية. تُستخدَم من sectionVars/groupVars/groupSnapshot.
+// يجمع أسماء الحاويات (containers) الفعلية داخل Volume، متفرّعاً بشكل متكرر عبر أي Volume فرعية
+// متداخلة بداخلها (بنفس مبدأ collectGroupContainerNames تماماً)، وأيضاً عبر أي Containers.Group
+// متداخلة داخل Volume -- في هذه الحالة يُفوَّض التفرّع لمنطق المجموعة الخاص بها (collectGroup-
+// ContainerNames) بدل إعادته هنا، فيبقى Volume قادراً على احتواء Group كعضو مباشر ورؤية كل
+// حاوياتها مفلطحة، دون أن يحتاج Group نفسه لأي معرفة بوجود Volume من الأساس.
+static void collectVolumeContainerNames(const std::unordered_map<std::string, std::vector<std::string>>& volumeMembers,
+                                         const std::unordered_map<std::string, std::vector<std::string>>& groupMembers,
+                                         const std::string& volumeKey,
+                                         std::vector<std::string>& out) {
+    auto it = volumeMembers.find(volumeKey);
+    if (it == volumeMembers.end()) return;
+    for (auto& memberName : it->second) {
+        if (volumeMembers.count(memberName)) {
+            collectVolumeContainerNames(volumeMembers, groupMembers, memberName, out); // عضو هو Volume فرعية -> تفرّع
+        } else if (groupMembers.count(memberName)) {
+            collectGroupContainerNames(groupMembers, memberName, out); // عضو هو Containers.Group متداخلة -> تفرّع عبر منطقها
+        } else {
+            out.push_back(memberName); // عضو هو حاوية فعلية
+        }
+    }
+}
+
+// يبني map مُرتَّب أبجدياً بمتغيرات env المباشرة كقيمة Rin حيّة (MapData) جاهزة للإرجاع من native،
+// بنفس مبدأ serializeEnvBody أدناه. الدوال (FUNCTION) تُستبعَد لأنها لا تُمثَّل كقيمة Rin عادية.
+// تُستخدَم من volumeVars/volumeSnapshot.
 static std::shared_ptr<MapData> envVarsAsMap(const EnvPtr& env) {
     auto result = std::make_shared<MapData>();
     std::vector<std::string> keys;
@@ -2508,96 +2529,120 @@ void Interpreter::registerNatives() {
         return Value::makeArray(result);
     };
 
-    // ---- Containers.Group: توسيع (الدفعة الجديدة) -- تحوّل Group من مجرّد "غلاف تنظيمي" (تسجيل
-    // عضوية فقط) إلى بنية يمكن الاستعلام عن حالتها/شجرتها/بياناتها فعلياً، بنفس روح توسيع Section
-    // أعلاه (sectionVars/sectionNames/hasSection) ----
+    // ---- Volume: توسيع كامل (كانت سابقاً زخرفية بحتة -- انظر شرح VolumeStmt في executeStmt
+    // أعلاه). المجموعة أدناه تجمع بين ما يوازي groupContainers/groupMembers الأساسيين، وما يوازي
+    // دفعة التوسيع الثانية لـ Group (hasGroup/groupNames/groupVars/groupParent/groupPath/
+    // groupContainerCount/groupHasContainer/groupSnapshot) دفعة واحدة، بنفس الأسماء لكن بادئة
+    // volume بدل group ----
 
-    // hasGroup(name) -> true إن عُرِّفت مجموعة بهذا الاسم مرة واحدة على الأقل حتى الآن.
-    natives["hasGroup"] = [this](std::vector<Value>& a, int line) -> Value {
-        expectArgs("hasGroup", a, 1, line);
-        std::string name = asString(a[0], "hasGroup", line);
-        return Value::boolean_(groupMembers.count(name) > 0);
-    };
-    // groupNames() -> مصفوفة أسماء كل المجموعات (Containers.Group) المُعرَّفة حتى الآن، بترتيب
-    // أول ظهور (جذوراً كانت أو متداخلة).
-    natives["groupNames"] = [this](std::vector<Value>& a, int line) -> Value {
-        expectArgs("groupNames", a, 0, line);
+    // volumeContainers(name) -> مصفوفة أسماء الحاويات الفعلية العضوة في Volume (مفلطحة عبر أي
+    // Volume فرعية متداخلة، وأي Containers.Group متداخلة بداخلها).
+    natives["volumeContainers"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("volumeContainers", a, 1, line);
+        std::string name = asString(a[0], "volumeContainers", line);
         auto result = std::make_shared<ArrayData>();
-        for (auto& n : groupOrder) result->push_back(Value::string(n));
+        if (volumeMembers.count(name)) {
+            std::vector<std::string> flat;
+            collectVolumeContainerNames(volumeMembers, groupMembers, name, flat);
+            for (auto& n : flat) result->push_back(Value::string(n));
+        }
         return Value::makeArray(result);
     };
-    // groupVars(name) -> map بالمتغيرات المُعلَنة مباشرة داخل جسم المجموعة (خارج أي حاوية/مجموعة
-    // فرعية بداخلها) -- مفيد لحقول "على مستوى المجموعة" مشتركة بين كل أعضائها (مثال: text owner
-    // = "..."; مباشرة داخل @Containers.Group). map فارغ إن لم تُعرَّف مجموعة بهذا الاسم.
-    natives["groupVars"] = [this](std::vector<Value>& a, int line) -> Value {
-        expectArgs("groupVars", a, 1, line);
-        std::string name = asString(a[0], "groupVars", line);
-        auto it = groupEnvs.find(name);
-        auto result = (it != groupEnvs.end()) ? envVarsAsMap(it->second) : std::make_shared<MapData>();
+    // volumeMembers(name) -> مصفوفة أسماء الأعضاء المباشرين فقط (بلا تفرّع)، سواء كانوا حاويات
+    // فعلية أو مجموعات/أحجام فرعية متداخلة كما هي.
+    natives["volumeMembers"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("volumeMembers", a, 1, line);
+        std::string name = asString(a[0], "volumeMembers", line);
+        auto result = std::make_shared<ArrayData>();
+        auto it = volumeMembers.find(name);
+        if (it != volumeMembers.end()) {
+            for (auto& n : it->second) result->push_back(Value::string(n));
+        }
+        return Value::makeArray(result);
+    };
+    // hasVolume(name) -> true إن عُرِّفت Volume بهذا الاسم مرة واحدة على الأقل حتى الآن.
+    natives["hasVolume"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("hasVolume", a, 1, line);
+        std::string name = asString(a[0], "hasVolume", line);
+        return Value::boolean_(volumeMembers.count(name) > 0);
+    };
+    // volumeNames() -> مصفوفة أسماء كل الأحجام (Volume) المُعرَّفة حتى الآن، بترتيب أول ظهور
+    // (جذوراً كانت أو متداخلة).
+    natives["volumeNames"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("volumeNames", a, 0, line);
+        auto result = std::make_shared<ArrayData>();
+        for (auto& n : volumeOrder) result->push_back(Value::string(n));
+        return Value::makeArray(result);
+    };
+    // volumeVars(name) -> map بالمتغيرات المُعلَنة مباشرة داخل جسم Volume (خارج أي حاوية/مجموعة/
+    // Volume فرعية بداخلها) -- مفيد لحقول "على مستوى Volume" مشتركة بين كل أعضائها (مثال:
+    // text owner = "..."; مباشرة داخل @Volume). map فارغ إن لم تُعرَّف Volume بهذا الاسم.
+    natives["volumeVars"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("volumeVars", a, 1, line);
+        std::string name = asString(a[0], "volumeVars", line);
+        auto it = volumeEnvs.find(name);
+        auto result = (it != volumeEnvs.end()) ? envVarsAsMap(it->second) : std::make_shared<MapData>();
         return Value::makeMap(result);
     };
-    // groupParent(name) -> اسم المجموعة الأب المباشرة التي تحتوي "name" كمجموعة فرعية متداخلة،
-    // أو نص فارغ "" إن كانت "name" مجموعة جذر (أو غير معرَّفة أصلاً).
-    natives["groupParent"] = [this](std::vector<Value>& a, int line) -> Value {
-        expectArgs("groupParent", a, 1, line);
-        std::string name = asString(a[0], "groupParent", line);
-        auto it = groupParentOf.find(name);
-        return Value::string(it != groupParentOf.end() ? it->second : std::string());
+    // volumeParent(name) -> اسم الـ Volume الأب المباشرة التي تحتوي "name" كـ Volume فرعية
+    // متداخلة، أو نص فارغ "" إن كانت "name" Volume جذر (أو غير معرَّفة أصلاً).
+    natives["volumeParent"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("volumeParent", a, 1, line);
+        std::string name = asString(a[0], "volumeParent", line);
+        auto it = volumeParentOf.find(name);
+        return Value::string(it != volumeParentOf.end() ? it->second : std::string());
     };
-    // groupPath(name) -> مصفوفة أسماء تمثّل مسار الأجداد من الجذر وصولاً إلى "name" نفسها ضمناً
-    // (مثال: مجموعة "team_nested" داخل "team_root" -> ["team_root", "team_nested"]). مصفوفة
-    // فارغة إن لم تُعرَّف مجموعة بهذا الاسم أصلاً.
-    natives["groupPath"] = [this](std::vector<Value>& a, int line) -> Value {
-        expectArgs("groupPath", a, 1, line);
-        std::string name = asString(a[0], "groupPath", line);
+    // volumePath(name) -> مصفوفة أسماء تمثّل مسار الأجداد من الجذر وصولاً إلى "name" نفسها ضمناً
+    // (مثال: Volume "cold_archive" داخل "assets" -> ["assets", "cold_archive"]). مصفوفة فارغة إن
+    // لم تُعرَّف Volume بهذا الاسم أصلاً.
+    natives["volumePath"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("volumePath", a, 1, line);
+        std::string name = asString(a[0], "volumePath", line);
         auto result = std::make_shared<ArrayData>();
-        if (!groupMembers.count(name)) return Value::makeArray(result);
+        if (!volumeMembers.count(name)) return Value::makeArray(result);
         std::vector<std::string> chain;
         std::string cur = name;
-        std::unordered_set<std::string> seen; // حارس ضد أي دورة غير متوقّعة في groupParentOf
+        std::unordered_set<std::string> seen; // حارس ضد أي دورة غير متوقّعة في volumeParentOf
         while (true) {
             chain.push_back(cur);
             if (!seen.insert(cur).second) break;
-            auto it = groupParentOf.find(cur);
-            if (it == groupParentOf.end()) break;
+            auto it = volumeParentOf.find(cur);
+            if (it == volumeParentOf.end()) break;
             cur = it->second;
         }
         for (auto rit = chain.rbegin(); rit != chain.rend(); ++rit) result->push_back(Value::string(*rit));
         return Value::makeArray(result);
     };
-    // groupContainerCount(name) -> عدد الحاويات الفعلية (leaf) داخل المجموعة، مفلطحاً عبر كل
-    // المجموعات الفرعية المتداخلة (نفس تفرّع groupContainers لكن عدداً فقط بدل مصفوفة الأسماء).
-    natives["groupContainerCount"] = [this](std::vector<Value>& a, int line) -> Value {
-        expectArgs("groupContainerCount", a, 1, line);
-        std::string name = asString(a[0], "groupContainerCount", line);
+    // volumeContainerCount(name) -> عدد الحاويات الفعلية (leaf) داخل Volume، مفلطحاً عبر كل
+    // الأعضاء الفرعيين المتداخلين (نفس تفرّع volumeContainers لكن عدداً فقط بدل مصفوفة الأسماء).
+    natives["volumeContainerCount"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("volumeContainerCount", a, 1, line);
+        std::string name = asString(a[0], "volumeContainerCount", line);
         std::vector<std::string> flat;
-        if (groupMembers.count(name)) collectGroupContainerNames(groupMembers, name, flat);
+        if (volumeMembers.count(name)) collectVolumeContainerNames(volumeMembers, groupMembers, name, flat);
         return Value::num(static_cast<double>(flat.size()));
     };
-    // groupHasContainer(name, containerName) -> true إن كانت "containerName" حاوية فعلية عضوة
-    // (مباشرة أو عبر تفرّع مجموعة فرعية متداخلة) داخل المجموعة "name".
-    natives["groupHasContainer"] = [this](std::vector<Value>& a, int line) -> Value {
-        expectArgs("groupHasContainer", a, 2, line);
-        std::string name = asString(a[0], "groupHasContainer", line);
-        std::string target = asString(a[1], "groupHasContainer", line);
+    // volumeHasContainer(name, containerName) -> true إن كانت "containerName" حاوية فعلية عضوة
+    // (مباشرة أو عبر تفرّع عضو فرعي متداخل) داخل Volume "name".
+    natives["volumeHasContainer"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("volumeHasContainer", a, 2, line);
+        std::string name = asString(a[0], "volumeHasContainer", line);
+        std::string target = asString(a[1], "volumeHasContainer", line);
         std::vector<std::string> flat;
-        if (groupMembers.count(name)) collectGroupContainerNames(groupMembers, name, flat);
+        if (volumeMembers.count(name)) collectVolumeContainerNames(volumeMembers, groupMembers, name, flat);
         return Value::boolean_(std::find(flat.begin(), flat.end(), target) != flat.end());
     };
-    // groupSnapshot(name) -> مصفوفة map واحدة لكل حاوية فعلية عضوة في المجموعة (مفلطحة عبر أي
-    // تعشيش)، بنفس ترتيب groupContainers، وبكل متغيراتها المباشرة + حقلين وصفيين "__container"
-    // (اسم الحاوية) و"__kind" (وسمها الموحَّد، مثال "container.doc") -- هذا ما يجعل المجموعة
-    // "مفيدة" فعلياً كبنية بيانات قابلة للاستعلام دفعة واحدة (شبيه بجدول/قائمة سجلّات)، بدل مجرّد
-    // تسجيل عضوية اسمي كما كانت الحال سابقاً: مثال استخدام حقيقي -- Containers.Group تضم عدّة
-    // container.doc (= "قاعدة بيانات" من عدّة مجموعات مستندات، كما يوثّق ContainerKind::DOC أعلاه)
-    // يمكن الآن قراءة إعداداتها الوصفية دفعة واحدة عبر استدعاء groupSnapshot واحد بدل استدعاء
-    // getField لكل حاوية على حدة.
-    natives["groupSnapshot"] = [this](std::vector<Value>& a, int line) -> Value {
-        expectArgs("groupSnapshot", a, 1, line);
-        std::string name = asString(a[0], "groupSnapshot", line);
+    // volumeSnapshot(name) -> مصفوفة map واحدة لكل حاوية فعلية عضوة في Volume (مفلطحة عبر أي
+    // تعشيش)، بنفس ترتيب volumeContainers، وبكل متغيراتها المباشرة + حقلين وصفيين "__container"
+    // (اسم الحاوية) و"__kind" (وسمها الموحَّد، مثال "container.doc") -- هذا ما يجعل Volume "مفيدة"
+    // فعلياً كطبقة تخزين قابلة للاستعلام دفعة واحدة (شبيه بقراءة كل ملفات مجلّد تخزين مرة واحدة)،
+    // بدل مجرّد تسجيل عضوية اسمي كما كانت الحال سابقاً.
+    natives["volumeSnapshot"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("volumeSnapshot", a, 1, line);
+        std::string name = asString(a[0], "volumeSnapshot", line);
         auto result = std::make_shared<ArrayData>();
         std::vector<std::string> flat;
-        if (groupMembers.count(name)) collectGroupContainerNames(groupMembers, name, flat);
+        if (volumeMembers.count(name)) collectVolumeContainerNames(volumeMembers, groupMembers, name, flat);
         for (auto& cname : flat) {
             auto it = containers.find(cname);
             if (it == containers.end()) continue;
@@ -2610,36 +2655,8 @@ void Interpreter::registerNatives() {
         return Value::makeArray(result);
     };
 
-    // ---- @Program: استعلام عن حالة التنفيذ الحالية بالنسبة لأي @Program مفتوحة الآن (مفيد
-    // داخل دوال مساعدة/سجلّات لا "ترى" مباشرة أنها استُدعيت من داخل @Program أم لا) ----
-
-    // inProgram() -> true إن كان التنفيذ الحالي يجري بداخل @Program مفتوحة (مهما كان عمق
-    // التعشيش)، و false إن كان التنفيذ على المستوى الأعلى للبرنامج مباشرة (خارج أي @Program).
-    natives["inProgram"] = [this](std::vector<Value>& a, int line) -> Value {
-        expectArgs("inProgram", a, 0, line);
-        return Value::boolean_(!programStack.empty());
-    };
-    // programName() -> اسم أقرب @Program مفتوحة حالياً (الأعمق تعشيشاً)، أو نص فارغ "" إن لم
-    // تكن هناك أي @Program مفتوحة الآن. للـ @Program المجهولة الاسم يعاد تعريف داخلي مولَّد
-    // (مثل "#program0")، تماماً كما تفعل Containers.Group المجهولة مع groupKey الداخلي.
-    natives["programName"] = [this](std::vector<Value>& a, int line) -> Value {
-        expectArgs("programName", a, 0, line);
-        return Value::string(programStack.empty() ? std::string() : programStack.back());
-    };
-    // programDepth() -> عدد كتل @Program المفتوحة حالياً فوق بعضها (0 = لسنا داخل أي @Program).
-    natives["programDepth"] = [this](std::vector<Value>& a, int line) -> Value {
-        expectArgs("programDepth", a, 0, line);
-        return Value::num(static_cast<double>(programStack.size()));
-    };
-    // programResult() -> "نتيجة" آخر @Program انتهت للتو (بصرف النظر عن عمق تعشيشها): القيمة
-    // المُمرَّرة لـ '@stop expr;' إن استُخدِمت لإنهائها يدوياً، أو nil إن انتهت طبيعياً (بلا @stop
-    // إطلاقاً) أو استُرِدَّت عبر recover. مفيدة مباشرة بعد `.end/Program` لمعرفة كيف/بماذا انتهت.
-    natives["programResult"] = [this](std::vector<Value>& a, int line) -> Value {
-        expectArgs("programResult", a, 0, line);
-        return lastProgramResult_;
-    };
-
-
+    // ---- Section: استعلام عن حالة قسم بعد إغلاقه (يحوّل Section من زخرفية بحتة إلى شيء يمكن
+    // قراءته وبناء منطق فوقه، بنفس روح groupContainers/groupMembers أعلاه) ----
 
     // sectionVars(name) -> map بمتغيرات القسم المباشرة (بالاسم name فقط، إن كان له وُجِد)، أو map
     // فارغ إن لم يُنفَّذ أي قسم بهذا الاسم بعد. المفاتيح مرتّبة أبجدياً لمخرجات ثابتة (نفس مبدأ
@@ -2647,8 +2664,19 @@ void Interpreter::registerNatives() {
     natives["sectionVars"] = [this](std::vector<Value>& a, int line) -> Value {
         expectArgs("sectionVars", a, 1, line);
         std::string name = asString(a[0], "sectionVars", line);
+        auto result = std::make_shared<MapData>();
         auto it = sectionEnvs.find(name);
-        auto result = (it != sectionEnvs.end()) ? envVarsAsMap(it->second) : std::make_shared<MapData>();
+        if (it != sectionEnvs.end()) {
+            std::vector<std::string> keys;
+            keys.reserve(it->second->values.size());
+            for (auto& kv : it->second->values) keys.push_back(kv.first);
+            std::sort(keys.begin(), keys.end());
+            for (auto& k : keys) {
+                const Value& v = it->second->values[k];
+                if (v.type == Value::Type::FUNCTION) continue;
+                result->push_back({Value::string(k), v});
+            }
+        }
         return Value::makeMap(result);
     };
     // sectionNames() -> مصفوفة أسماء كل الأقسام المُسمّاة التي نُفِّذت حتى الآن، بترتيب أول ظهور.
@@ -3985,6 +4013,9 @@ void Interpreter::registerNatives() {
         containerKinds[name] = resolveContainerKindName(kindRaw);
         containerCustomKind[name] = kindRaw;
         if (!groupStack.empty()) groupMembers[groupStack.back()].push_back(name);
+        if (!volumeStack.empty() && (openCollectorKinds.empty() || openCollectorKinds.back() == 'V')) {
+            volumeMembers[volumeStack.back()].push_back(name); // انظر شرح openCollectorKinds في الهيدر: تُسجَّل عضواً مباشراً في Volume فقط إن لم تفصلها عنها Group مفتوحة
+        }
         return Value::string(name);
     };
     // create(kind, name?) -> مرادف إنجليزي مبسّط كامل لـ spawn() (نفس الدالة حرفياً)، من نفس عائلة
@@ -4565,6 +4596,36 @@ void Interpreter::registerNatives() {
         }
         it->second->define(key, a[2]);
         return Value::boolean_(true);
+    };
+
+    // setState(container, key, value) -> مثل setField تماماً من حيث التوقيع، لكنها تمر عبر
+    // assignStateAware() بدل owner->define() المباشرة: إن كان key حقل state مُعلَناً فعلاً لهذه
+    // الحاوية (عبر `state x = ...` داخل @container)، يُطلَق on update(prevState) تلقائياً بنفس آلية
+    // الإسناد الداخلي (=) — وهذا ما يجعل setState هو المدخل الصحيح لأي محرّك خارجي (مثل حلقة تحريك/
+    // Animation tick) يريد تحديث حالة حاوية إطاراً بعد إطار مع إطلاق إعادة العرض التفاعلي في كل مرة.
+    // إن لم يكن key حقل state مُعلَناً، تتصرف تماماً كـ setField (إسناد صامت بلا خُطّاف).
+    natives["setState"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("setState", a, 3, line);
+        std::string name = asString(a[0], "setState", line);
+        std::string key = asString(a[1], "setState", line);
+        auto it = containers.find(name);
+        if (it == containers.end()) {
+            throw errWithReason(diag::Code::E0014_InvalidContainer, line,
+                                 "'" + name + "' is not a known container",
+                                 "create it first via `@container=" + name + "` or `spawn(kind, \"" + name + "\")`");
+        }
+        assignStateAware(it->second.get(), key, a[2], line);
+        return Value::boolean_(true);
+    };
+
+    // now() -> عدد الميلي‑ثانية منذ نقطة مرجعية ثابتة (steady_clock)، كعدد عشري. ليست طابعاً زمنياً
+    // مطلقاً (epoch) — فقط فرق زمني موثوق بين استدعاءين، وهو كل ما تحتاجه حلقة تحريك (delta time) أو
+    // أي قياس مدة. <chrono> مُتضمَّن أصلاً عبر rin_interpreter.h فلا حاجة لأي include إضافي هنا.
+    natives["now"] = [](std::vector<Value>& a, int line) -> Value {
+        (void)a; (void)line;
+        auto ms = std::chrono::duration<double, std::milli>(
+            std::chrono::steady_clock::now().time_since_epoch()).count();
+        return Value::num(ms);
     };
 
     // getField(container, key) -> قيمة الحقل key بداخل الحاوية container، أو nil إن لم يكن معرَّفاً
@@ -6175,15 +6236,6 @@ std::string Interpreter::run(const std::vector<StmtPtr>& statements) {
         lastErrorMessage_ = "'return' used outside of a function";
         lastErrorLine_ = 0;
         if (streamSink_) streamSink_(appended);
-    } catch (StopProgramSignal&) {
-        // '@stop' لا معنى له خارج أي @Program مفتوحة -- نفس أسلوب 'return' خارج دالة أعلاه بالضبط
-        // (StopProgramSignal يُلتَقط عادة داخل Interpreter::execute(ProgramStmt) نفسها؛ وصولها إلى
-        // هنا يعني أنها لم تجد أي @Program محيطة تلتقطها إطلاقاً).
-        const char* appended = "\n[Error]: '@stop' used outside of any @Program\n";
-        output << appended;
-        lastErrorMessage_ = "'@stop' used outside of any @Program";
-        lastErrorLine_ = 0;
-        if (streamSink_) streamSink_(appended);
     }
     return output.str();
 }
@@ -6826,16 +6878,6 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
     if (std::dynamic_pointer_cast<ContinueStmt>(stmt)) {
         throw ContinueSignal{};
     }
-    // '@stop;' / '@stop expr;' -- انظر StopStmt في rin_ast.h وStopProgramSignal في rin_interpreter.h.
-    // تُلتَقط حصراً عند أقرب Interpreter::execute(ProgramStmt) محيطة (بالضبط كـ BreakSignal مع أقرب
-    // حلقة محيطة)؛ إن لم توجد أي @Program محيطة تصل الإشارة حتى Interpreter::run() فتُعامَل هناك
-    // كخطأ تنفيذ صريح (بنفس أسلوب 'return' خارج دالة).
-    if (auto s = std::dynamic_pointer_cast<StopStmt>(stmt)) {
-        Value v = Value::nil();
-        bool hasValue = s->value != nullptr;
-        if (s->value) v = evaluate(s->value, env);
-        throw StopProgramSignal{v, hasValue};
-    }
 
     // ---- لغة الحاويات/البيانات ----
 
@@ -6881,6 +6923,9 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
         if (!s->mask.empty()) containerMasks[s->mask] = containerKey;
         if (!groupStack.empty()) {
             groupMembers[groupStack.back()].push_back(containerKey);
+        }
+        if (!volumeStack.empty() && (openCollectorKinds.empty() || openCollectorKinds.back() == 'V')) {
+            volumeMembers[volumeStack.back()].push_back(containerKey); // انظر شرح openCollectorKinds في الهيدر
         }
         // RCS-1.0 §3.5 Tree (Phase 2): تعشيش نصّي حقيقي (@container داخل جسم @container أخرى) هو
         // بالضبط علاقة الأب/الابن -- تُسجَّل هنا فوراً قبل push على containerStack (أي بينما لا تزال
@@ -7127,6 +7172,9 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
                 containerKinds[s->alias] = ContainerKind::IMPORT;
                 importUI.stage(loaderui::LoadStage::Registering);
                 if (!groupStack.empty()) groupMembers[groupStack.back()].push_back(s->alias);
+                if (!volumeStack.empty() && (openCollectorKinds.empty() || openCollectorKinds.back() == 'V')) {
+                    volumeMembers[volumeStack.back()].push_back(s->alias); // انظر شرح openCollectorKinds في الهيدر
+                }
             }
             --importDepth_;
         } catch (RinError& e) {
@@ -7323,192 +7371,89 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
         groupEnvs[groupKey] = groupEnv;
         groupMembers.emplace(groupKey, std::vector<std::string>{});
         if (!s->mask.empty()) groupMasks[s->mask] = groupKey; // تضمن وجود مُدخَل حتى لو بقيت فارغة
-        // نفس مبدأ sectionOrder: يُسجَّل مرة واحدة فقط بترتيب أول ظهور، حتى لو أُعيد تنفيذ نفس
-        // المجموعة (مثلاً داخل حلقة) -- عندها تُحدَّث بيئتها/أعضاؤها لأحدث تنفيذ بلا تكرار اسمها هنا.
-        bool isFirstAppearance = std::find(groupOrder.begin(), groupOrder.end(), groupKey) == groupOrder.end();
-        if (isFirstAppearance) groupOrder.push_back(groupKey);
 
-        // مجموعة متداخلة داخل مجموعة أخرى: سجّلها كعضو في المجموعة الأب أيضاً، واحفظ اتجاه العلاقة
-        // المعاكس (groupParentOf) لأجل groupParent()/groupPath() أدناه.
+        // مجموعة متداخلة داخل مجموعة أخرى: سجّلها كعضو في المجموعة الأب أيضاً.
         if (!groupStack.empty()) {
             groupMembers[groupStack.back()].push_back(groupKey);
-            groupParentOf[groupKey] = groupStack.back();
-        } else {
-            groupParentOf.erase(groupKey); // إعادة تنفيذ مجموعة كانت متداخلة سابقاً كمجموعة جذر الآن (حالة نادرة، لكن نبقيها متّسقة)
+        }
+        // مجموعة معرَّفة داخل Volume مفتوحة: سجّلها كعضو مباشر في تلك Volume أيضاً، فيراها
+        // volumeContainers/volumeSnapshot مفلطحة عبر منطق collectGroupContainerNames الخاص بها
+        // (انظر collectVolumeContainerNames أعلى الملف) -- هذا ما يجعل Volume قادرة فعلياً على
+        // احتواء Group كعضو من أعضائها، لا فقط حاويات مفردة.
+        if (!volumeStack.empty()) {
+            volumeMembers[volumeStack.back()].push_back(groupKey);
         }
 
-        // العمق الحالي = عدد المجموعات المفتوحة فوق هذه (0 = مجموعة جذر) -- يُستخدم لمسافة بادئة
-        // بصرية في سطري البداية/النهاية تُظهر التعشيش مباشرة في المُخرَجات دون الحاجة لتتبّع
-        // الأقواس يدوياً، ولمعرفة اسم الأب المباشر (إن وُجد) في سطر البداية.
-        size_t depth = groupStack.size();
-        std::string indent(depth * 2, ' ');
-
-        // سطر البداية: الاسم (إن وُجد) + الأب المباشر عند التعشيش + mask (إن وُجد) -- كل هذا كان
-        // معروفاً وقت التنفيذ لكنه لم يكن يظهر إلا عبر استدعاء groupParent()/دوال أخرى لاحقاً.
-        output << indent << "🗂️ Containers.Group" << (s->name.empty() ? "" : (" = " + s->name));
-        if (!groupStack.empty()) output << "  ↳ ضمن: " << groupStack.back();
-        if (!s->mask.empty()) output << "  🎭 mask=\"" << s->mask << "\"";
-        output << "\n";
-
+        output << "🗂️ Containers.Group" << (s->name.empty() ? "" : (" = " + s->name)) << "\n";
         groupStack.push_back(groupKey);
+        openCollectorKinds.push_back('G');
         executeBlock(s->body, groupEnv);
+        openCollectorKinds.pop_back();
         groupStack.pop_back();
 
-        // سطر النهاية: يفرز الأعضاء المباشرين إلى مجموعات فرعية متداخلة مقابل حاويات فعلية (بدل
-        // قائمة "تحتوي:" واحدة مختلطة كسابقاً)، ويضيف إجمالي الحاويات الفعلية بعد التفرّع الكامل
-        // عبر أي تعشيش -- فيصبح سطر النهاية وحده كافياً لفهم بنية المجموعة دون استدعاء
-        // groupMembers/groupContainers يدوياً بعده مباشرة.
         auto& members = groupMembers[groupKey];
-        std::vector<std::string> subGroups, directContainers;
-        for (auto& m : members) {
-            if (groupMembers.count(m)) subGroups.push_back(m);
-            else directContainers.push_back(m);
-        }
-        std::vector<std::string> flatContainers;
-        collectGroupContainerNames(groupMembers, groupKey, flatContainers);
-
-        output << indent << "✅ .end/Containers.Group" << (s->name.empty() ? "" : (" (" + s->name + ")")) << "\n";
-        if (members.empty()) {
-            output << indent << "   (فارغة — لا حاويات ولا مجموعات فرعية)\n";
-        } else {
-            if (!directContainers.empty()) {
-                output << indent << "   📦 حاويات مباشرة (" << directContainers.size() << "): ";
-                for (size_t i = 0; i < directContainers.size(); i++) {
-                    if (i) output << ", ";
-                    output << directContainers[i];
-                }
-                output << "\n";
+        output << "✅ .end/Containers.Group" << (s->name.empty() ? "" : (" (" + s->name + ")"));
+        if (!members.empty()) {
+            output << " [تحتوي: ";
+            for (size_t i = 0; i < members.size(); i++) {
+                if (i) output << ", ";
+                output << members[i];
             }
-            if (!subGroups.empty()) {
-                output << indent << "   🗂️ مجموعات فرعية (" << subGroups.size() << "): ";
-                for (size_t i = 0; i < subGroups.size(); i++) {
-                    if (i) output << ", ";
-                    output << subGroups[i];
-                }
-                output << "\n";
-            }
-            output << indent << "   📊 إجمالي الحاويات الفعلية (متفرّعة بالكامل): " << flatContainers.size() << "\n";
+            output << "]";
         }
+        output << "\n";
         return;
     }
 
     if (auto s = std::dynamic_pointer_cast<VolumeStmt>(stmt)) {
-        if (!s->mask.empty()) volumeMasks[s->mask] = s->name;
+        // Volume كانت سابقاً زخرفية بحتة: executeBlock(s->body, env) مباشرة -- بلا بيئة خاصة (كل
+        // متغيّر مُعلَن بداخلها يسرّب فوراً إلى بيئة الأب)، وبلا أي تسجيل عضوية إطلاقاً. الآن بنفس
+        // دلالات Containers.Group تماماً: بيئة خاصة بها (volumeEnv)، مفتاح داخلي للأحجام المجهولة
+        // الاسم بنفس أسلوب الحاويات/المجموعات المجهولة، تسجيل عضوية كاملة (volumeMembers)، ترتيب
+        // أول ظهور (volumeOrder، بنفس مبدأ sectionOrder/الآن groupOrder)، ودعم تعشيش حقيقي عبر
+        // volumeStack: Volume داخل Volume أخرى تُسجَّل أباً/ابناً (volumeParentOf) وكعضو مباشر في
+        // أبيها، تماماً كمجموعة متداخلة داخل مجموعة أخرى أعلاه.
+        std::string volumeKey = s->name.empty() ? ("#volume" + std::to_string(volumeEnvs.size())) : s->name;
+        auto volumeEnv = std::make_shared<Environment>(env); // نطاق خاص بـ Volume (بدل التنفيذ المباشر داخل البيئة الأب)
+        volumeEnvs[volumeKey] = volumeEnv;
+        volumeMembers.emplace(volumeKey, std::vector<std::string>{});
+        if (!s->mask.empty()) volumeMasks[s->mask] = volumeKey;
+
+        // بنفس مبدأ groupOrder: يُسجَّل مرة واحدة فقط بترتيب أول ظهور، حتى لو أُعيد تنفيذ نفس
+        // الـ Volume (مثلاً داخل حلقة) -- عندها تُحدَّث بيئتها/أعضاؤها لأحدث تنفيذ بلا تكرار اسمها هنا.
+        bool isFirstAppearance = std::find(volumeOrder.begin(), volumeOrder.end(), volumeKey) == volumeOrder.end();
+        if (isFirstAppearance) volumeOrder.push_back(volumeKey);
+
+        // Volume متداخلة داخل Volume أخرى: سجّلها كعضو في الـ Volume الأب أيضاً، واحفظ اتجاه
+        // العلاقة المعاكس (volumeParentOf) لأجل volumeParent()/volumePath() أدناه. مقيَّدة بنفس
+        // حارس openCollectorKinds: إن كانت هذه الـ Volume معرَّفة داخل Group مفتوحة (تلك بدورها
+        // داخل Volume أب)، فلا تُسجَّل عضواً مباشراً في الـ Volume الأب (ستبقى مرئية عبر Group فقط،
+        // بنفس منطق الحاويات أعلاه) -- حالة نادرة، لكن نبقيها متّسقة بلا ازدواج.
+        if (!volumeStack.empty() && (openCollectorKinds.empty() || openCollectorKinds.back() == 'V')) {
+            volumeMembers[volumeStack.back()].push_back(volumeKey);
+            volumeParentOf[volumeKey] = volumeStack.back();
+        } else {
+            volumeParentOf.erase(volumeKey); // إعادة تنفيذ Volume كانت متداخلة سابقاً كـ Volume جذر الآن (حالة نادرة، لكن نبقيها متّسقة)
+        }
+
         output << "📚 Volume" << (s->name.empty() ? "" : (" = " + s->name)) << "\n";
-        executeBlock(s->body, env);
-        output << "✅ .end/Volume" << (s->name.empty() ? "" : (" (" + s->name + ")")) << "\n";
-        return;
-    }
+        volumeStack.push_back(volumeKey);
+        openCollectorKinds.push_back('V');
+        executeBlock(s->body, volumeEnv);
+        openCollectorKinds.pop_back();
+        volumeStack.pop_back();
 
-    // @Program=name  <body>  .end/Program
-    // بداية/نهاية صريحتان على مستوى البرنامج بأكمله (لا حاوية/مجموعة واحدة فقط): تُطبَع علامة
-    // بداية واضحة عند الدخول، ثم تُنفَّذ كل العبارات العادية بداخلها كما لو كانت في نفس النطاق
-    // المحيط تماماً (لا نطاق env جديد هنا خلافاً لـ Group -- Program إطار عرض لا حاوية بيانات).
-    // نقطة دخول حقيقية: أقرب @Program إلى سطح الملف (depth==0) تحصل على "args" (مصفوفة نصوص).
-    // أربع نهايات ممكنة، كل منها يمر عبر finally (إن وُجدت) قبل مغادرة هذه العبارة فعلياً:
-    //   1) نجاح طبيعي              -> 🏁
-    //   2) '@stop' (انظر StopStmt) -> 🏁 (مع إشارة "أُوقفت يدوياً")، لا فشل إطلاقاً
-    //   3) خطأ + recover موجودة    -> 🩹، يُلتَقط ولا يُعاد رميه، البرنامج يكمل بعد .end/Program
-    //   4) خطأ + بلا recover       -> ❌، يُعاد رميه كما هو بعد finally (فتستمر معالجة run() المعتادة)
-    if (auto s = std::dynamic_pointer_cast<ProgramStmt>(stmt)) {
-        if (!s->mask.empty()) volumeMasks[s->mask] = s->name; // نفس سجل الأقنعة العام المستخدم لـ Volume (لا داعي لسجل مستقل لهذا الغرض البسيط)
-
-        // يدعم التعشيش (مرحلة/phase داخل برنامج أكبر): مسافة بادئة بصرية + ذكر الأب المباشر في
-        // سطر البداية، بنفس أسلوب Containers.Group تماماً.
-        size_t depth = programStack.size();
-        std::string indent(depth * 2, ' ');
-        std::string label = s->name.empty() ? ("#program" + std::to_string(depth)) : s->name;
-        std::string suffix = s->name.empty() ? "" : (" (" + s->name + ")");
-
-        output << indent << "🚀 Program" << (s->name.empty() ? "" : (" = " + s->name));
-        if (!programStack.empty()) output << "  ↳ ضمن: " << programStack.back();
+        auto& members = volumeMembers[volumeKey];
+        output << "✅ .end/Volume" << (s->name.empty() ? "" : (" (" + s->name + ")"));
+        if (!members.empty()) {
+            output << " [تحتوي: ";
+            for (size_t i = 0; i < members.size(); i++) {
+                if (i) output << ", ";
+                output << members[i];
+            }
+            output << "]";
+        }
         output << "\n";
-
-        // "args": مصفوفة نصوص = وسائط سطر الأوامر (انظر setProgramArgs()/programArgs_ في
-        // rin_interpreter.h)، تُربَط فقط لأقرب @Program إلى سطح الملف (depth==0 قبل الدفع أدناه)،
-        // ضمن نفس بيئة الجسم المحيطة (Program لا تفتح نطاقاً منفصلاً) -- فارغة إن لم يستدعِ
-        // المستدعي setProgramArgs() إطلاقاً (توافقية كاملة).
-        if (depth == 0) {
-            auto argsArr = std::make_shared<ArrayData>();
-            for (auto& a : programArgs_) argsArr->push_back(Value::string(a));
-            env->define("args", Value::makeArray(argsArr));
-        }
-
-        programStack.push_back(label);
-        auto startTime = std::chrono::steady_clock::now();
-        auto elapsedMs = [&]() {
-            return std::chrono::duration_cast<std::chrono::milliseconds>(
-                std::chrono::steady_clock::now() - startTime).count();
-        };
-        // finally: تُنفَّذ دائماً مرة واحدة بالضبط، مهما كانت طريقة الخروج (نجاح/stop/recover/فشل
-        // قبل إعادة الرمي) -- بيئة فرعية خاصة بها (لا يصلها أي متغيّر خطأ، على عكس recover).
-        auto runFinally = [&]() {
-            if (s->finallyBody) {
-                auto finallyEnv = std::make_shared<Environment>(env);
-                execute(s->finallyBody, finallyEnv);
-            }
-        };
-
-        try {
-            executeBlock(s->body, env);
-        } catch (StopProgramSignal& stop) {
-            // '@stop' -- إنهاء نظيف، ليس فشلاً: نفس علامة النجاح 🏁 مع إشارة صريحة أنه يدوي، ثم
-            // finally، ثم استمرار طبيعي بعد .end/Program (بالضبط كنهاية الجسم طبيعياً عند هذه النقطة).
-            output << indent << "🏁 .end/Program" << suffix << "  ⏱️ " << elapsedMs()
-                   << "ms — أُوقفت يدوياً (@stop)\n";
-            lastProgramResult_ = stop.hasValue ? stop.value : Value::nil();
-            runFinally();
-            programStack.pop_back();
-            return;
-        } catch (ThrowSignal& ex) {
-            if (s->recoverBody) {
-                output << indent << "🩹 .end/Program" << suffix << "  — استُرِدَّ بعد ⏱️ " << elapsedMs() << "ms\n";
-                lastProgramResult_ = Value::nil(); // بلا @stop هنا -- قبل تنفيذ recover/finally حتى يرى كلاهما القيمة الصحيحة إن استعلما عنها
-                auto recoverEnv = std::make_shared<Environment>(env);
-                if (!s->recoverName.empty()) {
-                    auto err = std::make_shared<MapData>();
-                    err->push_back({Value::string("value"), ex.value});
-                    err->push_back({Value::string("message"), Value::string(ex.value.toDisplayString())});
-                    err->push_back({Value::string("line"), Value::num(ex.line)});
-                    recoverEnv->define(s->recoverName, Value::makeMap(err));
-                }
-                execute(s->recoverBody, recoverEnv);
-                runFinally();
-                programStack.pop_back();
-                return;
-            }
-            output << indent << "❌ .end/Program" << suffix << "  — فشل بعد ⏱️ " << elapsedMs() << "ms\n";
-            lastProgramResult_ = Value::nil();
-            runFinally();
-            programStack.pop_back();
-            throw;
-        } catch (RinError& ex) {
-            if (s->recoverBody) {
-                output << indent << "🩹 .end/Program" << suffix << "  — استُرِدَّ بعد ⏱️ " << elapsedMs() << "ms\n";
-                lastProgramResult_ = Value::nil();
-                auto recoverEnv = std::make_shared<Environment>(env);
-                if (!s->recoverName.empty()) {
-                    auto err = std::make_shared<MapData>();
-                    err->push_back({Value::string("message"), Value::string(ex.message)});
-                    err->push_back({Value::string("line"), Value::num(ex.line)});
-                    if (ex.diagnostic) err->push_back({Value::string("code"), Value::string(diag::codeString(ex.diagnostic->code))});
-                    recoverEnv->define(s->recoverName, Value::makeMap(err));
-                }
-                execute(s->recoverBody, recoverEnv);
-                runFinally();
-                programStack.pop_back();
-                return;
-            }
-            output << indent << "❌ .end/Program" << suffix << "  — فشل بعد ⏱️ " << elapsedMs() << "ms\n";
-            lastProgramResult_ = Value::nil();
-            runFinally();
-            programStack.pop_back();
-            throw;
-        }
-        output << indent << "🏁 .end/Program" << suffix << "  ⏱️ " << elapsedMs() << "ms\n";
-        lastProgramResult_ = Value::nil();
-        runFinally();
-        programStack.pop_back();
         return;
     }
 
