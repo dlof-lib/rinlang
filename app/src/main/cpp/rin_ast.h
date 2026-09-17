@@ -6,9 +6,24 @@
 namespace rin {
 
 // ---- Expressions ----
+// وسم نوع (kind tag) لكل نوع Expr فرعي — يُضبَط مرة واحدة في مُنشئ كل نوع فرعي (أدناه) ويُستخدَم في
+// Interpreter::evaluate() (rin_interpreter.cpp) لاختيار المعالج عبر switch على عدد صحيح بدلاً من
+// سلسلة فحوصات dynamic_pointer_cast المتعاقبة (كل فحص RTTI مكلف، وكانت السلسلة القديمة تفحص حتى
+// 18 نوعاً بالتتابع لكل عبارة evaluate() واحدة). هذا تحسين أداء بحت: كل نوع فرعي هنا يرث Expr
+// مباشرة (بلا أي تفرّع متعدد المستويات)، فالوسم يطابق النوع الفعلي دوماً ولا يغيّر أي سلوك.
+enum class ExprKind {
+    Literal, Variable, Assign, Binary, Logical, Conditional, Unary, Call, Array, Map,
+    Index, IndexSet, Get, Set, MethodCall, Lambda, CallValue, Goal,
+    Unknown // للأنواع غير المُوسَّمة (لا يوجد حالياً)؛ يقع في الفرع الاحتياطي (dynamic_pointer_cast)
+};
+
 struct Expr {
     virtual ~Expr() = default;
     int line = 0;
+    // اسم exprKind (وليس kind) عمداً: LiteralExpr أدناه يملك مسبقاً حقلاً باسم kind (من نوع مختلف
+    // تماماً: LiteralExpr::Kind لتمييز NUMBER/STRING/BOOL/NIL) -- لو سُمِّي هذا الحقل kind لتصادم
+    // مع ذلك الحقل الموروث بالاسم (يحجب أحدهما الآخر ضمن LiteralExpr) رغم اختلاف النوعين تماماً.
+    ExprKind exprKind = ExprKind::Unknown;
 };
 using ExprPtr = std::shared_ptr<Expr>;
 
@@ -17,41 +32,49 @@ struct LiteralExpr : Expr {
     double number = 0.0;
     std::string str;
     bool boolean = false;
+    LiteralExpr() { exprKind = ExprKind::Literal; }
 };
 
 struct VariableExpr : Expr {
     std::string name;
+    VariableExpr() { exprKind = ExprKind::Variable; }
 };
 
 struct AssignExpr : Expr {
     std::string name;
     ExprPtr value;
+    AssignExpr() { exprKind = ExprKind::Assign; }
 };
 
 struct BinaryExpr : Expr {
     ExprPtr left;
     TokenType op;
     ExprPtr right;
+    BinaryExpr() { exprKind = ExprKind::Binary; }
 };
 
 struct LogicalExpr : Expr {
     ExprPtr left;
     TokenType op; // AND / OR
     ExprPtr right;
+    LogicalExpr() { exprKind = ExprKind::Logical; }
 };
 
 struct ConditionalExpr : Expr {
     ExprPtr condition;
     ExprPtr whenTrue;
     ExprPtr whenFalse;
+    ConditionalExpr() { exprKind = ExprKind::Conditional; }
 };
 
 struct UnaryExpr : Expr {
     TokenType op;
     ExprPtr right;
+    UnaryExpr() { exprKind = ExprKind::Unary; }
 };
 
 struct CallExpr : Expr {
+    CallExpr() { exprKind = ExprKind::Call; }
     std::string callee;
     std::vector<ExprPtr> args;
 
@@ -76,18 +99,21 @@ struct CallExpr : Expr {
 // [1, 2, 3] -> مصفوفة (array)
 struct ArrayExpr : Expr {
     std::vector<ExprPtr> elements;
+    ArrayExpr() { exprKind = ExprKind::Array; }
 };
 
 // { key: value, ... } -> قاموس (map)
 struct MapEntry { ExprPtr key; ExprPtr value; };
 struct MapExpr : Expr {
     std::vector<MapEntry> entries;
+    MapExpr() { exprKind = ExprKind::Map; }
 };
 
 // object[index] -> قراءة عنصر من مصفوفة/قاموس/نص
 struct IndexExpr : Expr {
     ExprPtr object;
     ExprPtr index;
+    IndexExpr() { exprKind = ExprKind::Index; }
 };
 
 // object[index] = value -> كتابة/تعديل عنصر في مصفوفة أو قاموس
@@ -95,6 +121,7 @@ struct IndexSetExpr : Expr {
     ExprPtr object;
     ExprPtr index;
     ExprPtr value;
+    IndexSetExpr() { exprKind = ExprKind::IndexSet; }
 };
 
 // ---- OOP: classes/structs/enums (additive expression nodes) ----
@@ -104,6 +131,7 @@ struct IndexSetExpr : Expr {
 struct GetExpr : Expr {
     ExprPtr object;
     std::string name;
+    GetExpr() { exprKind = ExprKind::Get; }
 };
 
 // object.name = value -> كتابة/تعديل حقل داخل كائن (class/struct instance) أو مفتاح داخل map.
@@ -111,6 +139,7 @@ struct SetExpr : Expr {
     ExprPtr object;
     std::string name;
     ExprPtr value;
+    SetExpr() { exprKind = ExprKind::Set; }
 };
 
 // object.method(args...) -> نداء دالة (method) مرتبطة بكائن (self مربوطة تلقائياً بداخلها)، أو
@@ -120,6 +149,7 @@ struct MethodCallExpr : Expr {
     ExprPtr object;
     std::string method;
     std::vector<ExprPtr> args;
+    MethodCallExpr() { exprKind = ExprKind::MethodCall; }
 };
 
 // fun(params) { body } used as a VALUE (not a top-level/statement declaration) -> an anonymous
@@ -134,6 +164,7 @@ struct MethodCallExpr : Expr {
 // literal appears, instead of being bound to a name in the enclosing scope.
 struct LambdaExpr : Expr {
     std::shared_ptr<struct FunctionStmt> decl;
+    LambdaExpr() { exprKind = ExprKind::Lambda; }
 };
 
 // callee_expr(args...) where callee_expr is NOT a plain name -> calling the function VALUE an
@@ -146,9 +177,29 @@ struct LambdaExpr : Expr {
 struct CallValueExpr : Expr {
     ExprPtr callee;
     std::vector<ExprPtr> args;
+    CallValueExpr() { exprKind = ExprKind::CallValue; }
 };
 
 // ---- Statements ----
+// وسم نوع (kind tag) لكل نوع Stmt فرعي، بنفس فلسفة ExprKind أعلاه بالضبط: يُستخدَم في
+// Interpreter::execute() لاختيار المعالج عبر switch بدل سلسلة dynamic_pointer_cast متتابعة (كانت
+// تصل حتى 69 فحصاً متتابعاً لعبارة واحدة). ملاحظة MakeStmt: يرث ContainerStmt (وليس Stmt مباشرة)
+// وتُنفَّذه نفس حالة الـ switch الخاصة بـ ContainerStmt تماماً كما كان الفحص الأصلي
+// (dynamic_pointer_cast<ContainerStmt> كان يُطابق كائنات MakeStmt أيضاً)، فلا وسم Kind خاصاً به هنا
+// عمداً -- يبقى stmtKind = ContainerStmt لكائنات MakeStmt (مُنشئ MakeStmt لا يُعدِّله).
+enum class StmtKind {
+    ExpressionStmt, PrintStmt, LogStmt, LetStmt, ReckonStmt, BlockStmt, IfStmt, WhileStmt,
+    ForStmt, ForInStmt, PlusConditionStmt, FunctionStmt, ClassStmt, EnumStmt, MatchStmt,
+    AchieveStmt, ReturnStmt, BreakStmt, ContinueStmt, TryCatchStmt, ThrowStmt, TextStmt,
+    ContainerStmt, MaskStmt, LifecycleHookStmt, StateDeclStmt, SlotDeclStmt, EmitStmt,
+    EventHandlerStmt, DependencyStmt, ContainerGroupStmt, VolumeStmt, ProgramStmt, StopStmt,
+    SectionStmt, TranslationsStmt, TranslationStmt, LinkStmt, LinkIdDeclStmt, TyingStmt,
+    MergeStmt, InstallationStmt, SaveStmt, RowStmt, StyleStmt, DocumentStmt, FileStmt,
+    RouteStmt, ImportStmt, ImportSelectedStmt, ViewStmt, UiBindingStmt, WarpStmt, ThemeStmt,
+    ObjectLiteralStmt, ViewPrintObjectStmt,
+    Unknown // فرع احتياطي (dynamic_pointer_cast) لأي نوع غير موسوم -- لا يوجد حالياً
+};
+
 struct Stmt {
     virtual ~Stmt() = default;
     int line = 0;
@@ -157,10 +208,14 @@ struct Stmt {
     // (بما فيها كل الشيفرة الموجودة مسبقاً -- additive بحت، بلا أي تغيير سلوكي لأي برنامج لا يستخدم
     // 'export' إطلاقاً).
     bool exported = false;
+    // اسم stmtKind (وليس kind) عمداً: ContainerStmt أدناه يملك مسبقاً حقلاً باسم kind (من نوع مختلف
+    // تماماً: ContainerKind) -- نفس سبب exprKind أعلاه بالضبط.
+    StmtKind stmtKind = StmtKind::Unknown;
 };
 using StmtPtr = std::shared_ptr<Stmt>;
 
-struct ExpressionStmt : Stmt { ExprPtr expr; };
+
+struct ExpressionStmt : Stmt { ExpressionStmt() { stmtKind = StmtKind::ExpressionStmt; } ExprPtr expr; };
 // print expr1, expr2, ... [sep=expr] [end=expr] [if=expr] [level=expr] [label=expr]
 //       [repeat=expr] [pretty=expr] [upper=expr] [lower=expr] [width=expr] [align=expr];
 // السلوك الافتراضي (قيمة واحدة، بلا أي سمة) مطابق تماماً للسابق: قيمة واحدة + سطر جديد "\n".
@@ -188,7 +243,7 @@ struct ExpressionStmt : Stmt { ExprPtr expr; };
 //   10) width/align: يحشو (بمسافات) النص النهائي المُجمَّع لعرض لا يقل عن width حرفاً — align
 //              يحدّد جهة الحشو: "left" (افتراضي) | "right" | "center"؛ align بلا width خطأ صريح
 //              (محاذاة بلا عرض هدف لا معنى لها)؛ لا يُقصَّر المحتوى أبداً إن كان أطول من width.
-struct PrintStmt : Stmt {
+struct PrintStmt : Stmt { PrintStmt() { stmtKind = StmtKind::PrintStmt; }
     std::vector<ExprPtr> exprs;
     ExprPtr sep; // nullptr = افتراضي " "
     ExprPtr end; // nullptr = افتراضي "\n"
@@ -226,7 +281,7 @@ struct PrintStmt : Stmt {
 // natives) — هذا ما يجعل النظام "قابلاً للتوسّع مستقبلاً إلى ملفات Log": أي ميزة لاحقة (كتابة كل
 // سجلّ فور حدوثه إلى ملف، تدوير ملفات log, ...) تُبنى فوق logHistory_ الموجود بالفعل دون أي تغيير
 // على شكل عبارة print.log نفسها.
-struct LogStmt : Stmt {
+struct LogStmt : Stmt { LogStmt() { stmtKind = StmtKind::LogStmt; }
     std::string level; // "log" | "info" | "warn" | "error" | "debug" — يُحدَّد وقت التحليل (ثابت)
     std::vector<ExprPtr> exprs;
     ExprPtr sep;    // nullptr = افتراضي " "
@@ -234,7 +289,7 @@ struct LogStmt : Stmt {
     ExprPtr label;  // nullptr = بلا وسم إضافي
     ExprPtr source; // nullptr = يُستخدم sourceFile الحالي للمفسِّر
 };
-struct LetStmt : Stmt {
+struct LetStmt : Stmt { LetStmt() { stmtKind = StmtKind::LetStmt; }
     std::string name;
     ExprPtr initializer;
     // ---- Type System (اختياري 100%، additive بحت) ----
@@ -254,19 +309,19 @@ struct LetStmt : Stmt {
 // `scale(2)` -> args=[2]); Interpreter::execute(ReckonStmt) prepends the running value as the
 // first argument at runtime and dispatches through the same invokeCallee() used for ordinary
 // pipelines, so every native or user-defined pipeline-compatible function works here unchanged.
-struct ReckonStmt : Stmt {
+struct ReckonStmt : Stmt { ReckonStmt() { stmtKind = StmtKind::ReckonStmt; }
     std::string name;
     ExprPtr collection;
     ExprPtr whereCond; // nullable
     std::vector<std::shared_ptr<CallExpr>> stages;
 };
-struct BlockStmt : Stmt { std::vector<StmtPtr> statements; };
-struct IfStmt : Stmt {
+struct BlockStmt : Stmt { BlockStmt() { stmtKind = StmtKind::BlockStmt; } std::vector<StmtPtr> statements; };
+struct IfStmt : Stmt { IfStmt() { stmtKind = StmtKind::IfStmt; }
     ExprPtr condition;
     StmtPtr thenBranch;
     StmtPtr elseBranch; // may be null
 };
-struct WhileStmt : Stmt {
+struct WhileStmt : Stmt { WhileStmt() { stmtKind = StmtKind::WhileStmt; }
     ExprPtr condition;
     StmtPtr body;
 };
@@ -276,7 +331,7 @@ struct WhileStmt : Stmt {
 //   - condition: تعبير منطقي يُقيَّم قبل كل تكرار؛ فارغ يعني true دائماً (حلقة لا نهائية إلا بـ break)
 //   - increment: تعبير يُنفَّذ بعد كل تكرار (حتى بعد continue)؛ فارغ يعني لا شيء
 // break/continue تعمل بالضبط كما في while (تُحسب ضمن loopDepth في المحلل النحوي).
-struct ForStmt : Stmt {
+struct ForStmt : Stmt { ForStmt() { stmtKind = StmtKind::ForStmt; }
     StmtPtr initializer; // may be null
     ExprPtr condition;   // may be null -> يُعامل كـ true
     ExprPtr increment;   // may be null
@@ -289,7 +344,7 @@ struct ForStmt : Stmt {
 // من الصفر (نفس فكرة إصلاح per-iteration closures في ForStmt العادية -- انظر
 // Interpreter::execute(ForInStmt) في rin_interpreter.cpp)، فأي closure تُنشأ داخل الجسم تلتقط قيمة
 // تلك التكرارة تحديداً بشكل صحيح. break/continue يعملان بداخلها بنفس دلالة for/while العادية.
-struct ForInStmt : Stmt {
+struct ForInStmt : Stmt { ForInStmt() { stmtKind = StmtKind::ForInStmt; }
     std::string varName;
     ExprPtr iterable;
     StmtPtr body;
@@ -306,12 +361,12 @@ struct ForInStmt : Stmt {
 //      إعلان حاوية (@container, @Containers.Group, ...) بداخلها، تماماً كجسم أي دالة أو حلقة.
 // الفاصل بين الكتلتين هو '/' (يُعاد استخدام توكن SLASH الموجود أصلاً لعامل القسمة — لا حاجة لتوكن
 // جديد، ولا تعارض لأن '/' هنا يظهر حصراً بين '}' الأولى و'{' الثانية داخل بنية plus.condition).
-struct PlusConditionStmt : Stmt {
+struct PlusConditionStmt : Stmt { PlusConditionStmt() { stmtKind = StmtKind::PlusConditionStmt; }
     ExprPtr condition;
     std::shared_ptr<BlockStmt> trueBranch;  // ينفَّذ إذا كان condition صحيحاً (truthy)
     std::shared_ptr<BlockStmt> falseBranch; // ينفَّذ إذا كان condition خاطئاً
 };
-struct FunctionStmt : Stmt {
+struct FunctionStmt : Stmt { FunctionStmt() { stmtKind = StmtKind::FunctionStmt; }
     std::string name;
     std::vector<std::string> params;
     std::shared_ptr<BlockStmt> body;
@@ -336,7 +391,7 @@ struct ClassFieldDecl {
     std::string name;
     ExprPtr initializer; // قد تكون فارغة (nullptr) => القيمة الافتراضية nil
 };
-struct ClassStmt : Stmt {
+struct ClassStmt : Stmt { ClassStmt() { stmtKind = StmtKind::ClassStmt; }
     std::string name;
     std::string superclass; // فارغ = بلا وراثة
     bool isStruct = false;
@@ -353,7 +408,7 @@ struct EnumCase {
     ExprPtr value; // قد تكون فارغة (nullptr) => nil
     int line = 0;
 };
-struct EnumStmt : Stmt {
+struct EnumStmt : Stmt { EnumStmt() { stmtKind = StmtKind::EnumStmt; }
     std::string name;
     std::vector<EnumCase> cases;
 };
@@ -374,7 +429,7 @@ struct MatchCase {
     std::shared_ptr<BlockStmt> body;
     int line = 0;
 };
-struct MatchStmt : Stmt {
+struct MatchStmt : Stmt { MatchStmt() { stmtKind = StmtKind::MatchStmt; }
     ExprPtr subject;
     std::vector<MatchCase> cases;
     std::shared_ptr<BlockStmt> elseBranch; // قد تكون فارغة (nullptr)
@@ -391,36 +446,37 @@ struct MatchStmt : Stmt {
 // محجوزة، تُميَّز فقط عند ظهورها IDENT("goal") متبوعة مباشرة بـ '{' (انظر Parser::primary()).
 struct GoalExpr : Expr {
     std::shared_ptr<BlockStmt> body;
+    GoalExpr() { exprKind = ExprKind::Goal; }
 };
 
 // achieve expr; / achieve; -> ينهي أقرب كتلة `goal { ... }` محيطة فوراً، وتصبح قيمة تلك الكتلة هي
 // expr (أو nil إن غابت). خطأ وقت التشغيل إن استُخدمت خارج أي goal محيطة (تماماً كخطأ break/continue
 // خارج حلقة). 'achieve' كلمة سياقية غير محجوزة (انظر تمييزها في Parser::declaration()).
-struct AchieveStmt : Stmt {
+struct AchieveStmt : Stmt { AchieveStmt() { stmtKind = StmtKind::AchieveStmt; }
     ExprPtr value; // قد تكون فارغة (nullptr) => nil
 };
-struct ReturnStmt : Stmt {
+struct ReturnStmt : Stmt { ReturnStmt() { stmtKind = StmtKind::ReturnStmt; }
     ExprPtr value; // may be null
 };
 // break; -> يخرج فوراً من أقرب حلقة while محيطة
-struct BreakStmt : Stmt {};
+struct BreakStmt : Stmt { BreakStmt() { stmtKind = StmtKind::BreakStmt; }};
 // continue; -> يقفز مباشرة إلى فحص شرط أقرب حلقة while محيطة (يتجاوز باقي جسم الحلقة)
-struct ContinueStmt : Stmt {};
+struct ContinueStmt : Stmt { ContinueStmt() { stmtKind = StmtKind::ContinueStmt; }};
 
-struct TryCatchStmt : Stmt {
+struct TryCatchStmt : Stmt { TryCatchStmt() { stmtKind = StmtKind::TryCatchStmt; }
     std::shared_ptr<BlockStmt> tryBranch;
     std::string catchName;
     std::shared_ptr<BlockStmt> catchBranch;
 };
 
-struct ThrowStmt : Stmt {
+struct ThrowStmt : Stmt { ThrowStmt() { stmtKind = StmtKind::ThrowStmt; }
     ExprPtr value;
 };
 
 // ---- Data-container language statements (container / Containers.Group / Volume / Section ...) ----
 
 // text name = "..."; -> إعلان قيمة من نوع نصي (text)
-struct TextStmt : Stmt {
+struct TextStmt : Stmt { TextStmt() { stmtKind = StmtKind::TextStmt; }
     std::string name;
     ExprPtr initializer;
 };
@@ -573,7 +629,7 @@ enum class ContainerKind { PLAIN, PIPE, DATA, API, IMPORT, TABLE, DOC, OBJECT, P
 //   انظر التوثيق الكامل والأمثلة في
 //   registerNatives() داخل rin_interpreter.cpp وفي docs/containers.md.
 
-struct ContainerStmt : Stmt {
+struct ContainerStmt : Stmt { ContainerStmt() { stmtKind = StmtKind::ContainerStmt; }
     std::string name; // قد تكون فارغة إن لم يُحدَّد اسم
     std::string mask; // قناع: هوية منطقية مستقرة للحاوية، مستقلة عن الاسم
     std::vector<StmtPtr> body;
@@ -599,7 +655,7 @@ struct ContainerStmt : Stmt {
 // قناع (Mask): هوية منطقية قابلة لإعادة الاستخدام للحاويات/المجموعات/Volume.
 // داخل @view/@element/@loop يُكتب كـ mask=...; ويُخزّن كخاصية. داخل @container/Group/Volume
 // يُحوّل parser إلى هذا البيان حتى يربطه المفسّر بالنطاق الحاوي الحالي.
-struct MaskStmt : Stmt {
+struct MaskStmt : Stmt { MaskStmt() { stmtKind = StmtKind::MaskStmt; }
     ExprPtr value;
 };
 
@@ -608,7 +664,7 @@ struct MaskStmt : Stmt {
 // نُبقي "body" على شكل FunctionStmt جاهز (اسمه = "on " + hook فقط لأغراض رسائل الخطأ) بدل عقدة
 // BlockStmt مجرّدة، حتى يُستخدَم المفسِّر Interpreter::callFunction الموجود فعلاً لاستدعاء الخُطّاف
 // بلا أي آلية استدعاء موازية جديدة (نفس فحص عدد الوسائط، نفس حارس عمق الاستدعاء، إلخ).
-struct LifecycleHookStmt : Stmt {
+struct LifecycleHookStmt : Stmt { LifecycleHookStmt() { stmtKind = StmtKind::LifecycleHookStmt; }
     std::string hook; // "init" | "mount" | "update" | "destroy" | "error"
     std::shared_ptr<FunctionStmt> asFunction; // params + body، يُبنى مباشرة عند التحليل
 };
@@ -617,7 +673,7 @@ struct LifecycleHookStmt : Stmt {
 // state IDENT = expr; -- إعلان حقل "حالة" قابل للمراقبة داخل جسم حاوية. الفرق الوحيد عن `let`:
 // أي إسناد لاحق لهذا الاسم (من داخل الحاوية أو من دالة مُعرَّفة بداخلها) يُطلق تلقائياً خُطّاف
 // on update(prevState) إن كان معرَّفاً لنفس الحاوية (انظر Interpreter::evaluate على AssignExpr).
-struct StateDeclStmt : Stmt {
+struct StateDeclStmt : Stmt { StateDeclStmt() { stmtKind = StmtKind::StateDeclStmt; }
     std::string name;
     ExprPtr initializer;
 };
@@ -627,7 +683,7 @@ struct StateDeclStmt : Stmt {
 // الاسم فقط (عبر Interpreter::containerSlots، لأجل الاستقصاء عبر native جديدة slotsOf) بلا فرض
 // أي ربط فعلي لحاوية ابن حقيقية بكل slot وقت التحليل -- ذلك الربط (بناء نحو استدعاء يمرّر حاوية
 // لكل slot صراحة، كما في مثال RCS-1.0 §3.5 الكامل) مؤجَّل لمرحلة لاحقة، تماماً كما توثّق المواصفة.
-struct SlotDeclStmt : Stmt {
+struct SlotDeclStmt : Stmt { SlotDeclStmt() { stmtKind = StmtKind::SlotDeclStmt; }
     std::string name;
 };
 
@@ -637,7 +693,7 @@ struct SlotDeclStmt : Stmt {
 // تستخدم اسم حدث كنص حرفي (STRING) دائماً، مثل "form:submitted" أو "cart:changed" أو
 // "router:blocked" -- لا يصلح IDENT أصلاً لاحتواء ':'. التنفيذ هنا يتبع الأمثلة الفعلية حرفياً
 // (STRING)، لا صياغة الـ EBNF المختصرة.
-struct EmitStmt : Stmt {
+struct EmitStmt : Stmt { EmitStmt() { stmtKind = StmtKind::EmitStmt; }
     std::string eventName;
     ExprPtr payload;      // قد تكون nullptr (بلا payload) -- المعالج المطابق يُستدعى حينها بلا وسائط
     bool bubbles = false; // 'emit ... bubbles;' -- الصعود عبر كل مستويات الشجرة، لا الأب المباشر فقط
@@ -646,7 +702,7 @@ struct EmitStmt : Stmt {
 // on.event STRING (params) { body } -- معالج حدث يصعد إليه emit من أبناء هذه الحاوية المباشرين
 // (أو أي جدّ إن استُخدمت 'bubbles' في emit). نفس أسلوب LifecycleHookStmt تماماً: الجسم يُبنى
 // كـ FunctionStmt عادي جاهز للاستدعاء عبر Interpreter::callFunction الموجودة فعلاً.
-struct EventHandlerStmt : Stmt {
+struct EventHandlerStmt : Stmt { EventHandlerStmt() { stmtKind = StmtKind::EventHandlerStmt; }
     std::string eventName;
     std::shared_ptr<FunctionStmt> asFunction;
 };
@@ -658,7 +714,7 @@ struct EventHandlerStmt : Stmt {
 // init). كل اسم يُفحَص عبر containers.count(name) (نفس آلية native hasContainer الموجودة فعلاً)؛
 // أول اسم غير موجود يرمي RinError بكود E0041_MissingDependency فوراً (لا استمرار جزئي، ولا خيار
 // لتعطيل الفحص -- "الهدف أمان مبكر لا مرونة" كما تنص المواصفة حرفياً).
-struct DependencyStmt : Stmt {
+struct DependencyStmt : Stmt { DependencyStmt() { stmtKind = StmtKind::DependencyStmt; }
     std::vector<std::string> names;
 };
 
@@ -690,14 +746,14 @@ struct MakeStmt : ContainerStmt {
 };
 
 // @Containers.Group=name  <body>  .end/Containers.Group
-struct ContainerGroupStmt : Stmt {
+struct ContainerGroupStmt : Stmt { ContainerGroupStmt() { stmtKind = StmtKind::ContainerGroupStmt; }
     std::string name;
     std::string mask;
     std::vector<StmtPtr> body;
 };
 
 // @Volume=name  <body>  .end/Volume
-struct VolumeStmt : Stmt {
+struct VolumeStmt : Stmt { VolumeStmt() { stmtKind = StmtKind::VolumeStmt; }
     std::string name;
     std::string mask;
     std::vector<StmtPtr> body;
@@ -727,7 +783,7 @@ struct VolumeStmt : Stmt {
 // فشلت بلا recover (وحتى في هذه الحالة الأخيرة finally تُنفَّذ *قبل* إعادة رمي الخطأ للأعلى). لا
 // تصل قيمة/متغيّر خطأ إليها (على عكس recover) — دورها التنظيف/الإغلاق الحتمي فقط، بنفس معنى
 // finally في لغات أخرى.
-struct ProgramStmt : Stmt {
+struct ProgramStmt : Stmt { ProgramStmt() { stmtKind = StmtKind::ProgramStmt; }
     std::string name;
     std::string mask;
     std::vector<StmtPtr> body;
@@ -743,23 +799,23 @@ struct ProgramStmt : Stmt {
 // (خطأ تنفيذ صريح، بنفس أسلوب 'return' خارج دالة -- انظر Interpreter::run()). القيمة الاختيارية
 // (إن وُجدت) تصبح "نتيجة" هذه الـ Program، تُقرَأ لاحقاً عبر الدالة المدمجة الجديدة programResult()
 // (انظر StopProgramSignal في rin_interpreter.h).
-struct StopStmt : Stmt {
+struct StopStmt : Stmt { StopStmt() { stmtKind = StmtKind::StopStmt; }
     ExprPtr value; // قد تكون null (يعادل '@stop;' بلا قيمة -> نتيجة nil)
 };
 
 // Section=name  <body>  .end/Section
-struct SectionStmt : Stmt {
+struct SectionStmt : Stmt { SectionStmt() { stmtKind = StmtKind::SectionStmt; }
     std::string name;
     std::vector<StmtPtr> body;
 };
 
 // Translations  <body: translation...>  .end/Translations
-struct TranslationsStmt : Stmt {
+struct TranslationsStmt : Stmt { TranslationsStmt() { stmtKind = StmtKind::TranslationsStmt; }
     std::vector<StmtPtr> body;
 };
 
 // translation lang="ar" text="مرحبا";
-struct TranslationStmt : Stmt {
+struct TranslationStmt : Stmt { TranslationStmt() { stmtKind = StmtKind::TranslationStmt; }
     std::string lang;
     std::string text;
 };
@@ -768,7 +824,7 @@ struct TranslationStmt : Stmt {
 // link id="X";                -> نفس الشيء، لكن الهدف يُحلّ عبر معرّف ربط عام (link.id) بدل الاسم؛
 //                                 هذا هو الشكل الذي يجعل الربط يعمل عبر الملفات (rin/html/js/cpp)
 //                                 لأن المعرّف "X" يبقى ثابتاً حتى لو اختلف اسم الحاوية من ملف لآخر.
-struct LinkStmt : Stmt {
+struct LinkStmt : Stmt { LinkStmt() { stmtKind = StmtKind::LinkStmt; }
     std::string target; // فارغ إن استُخدم byId
     std::string byId;   // فارغ إن استُخدم target (link to=)
 };
@@ -777,60 +833,60 @@ struct LinkStmt : Stmt {
 // بحيث يمكن لاحقاً استهدافها من أي مكان عبر 'link id="X";' بدل تكرار اسمها، ويمكن لملفات خارج
 // Rin (html/js/cpp) أن تُشير لنفس "X" عبر اتفاقية بسيطة (انظر tools/rin_link_index.py) لتُعتبر
 // "مرتبطة" منطقياً بنفس الحاوية دون أن ينفّذها مفسّر Rin مباشرة.
-struct LinkIdDeclStmt : Stmt {
+struct LinkIdDeclStmt : Stmt { LinkIdDeclStmt() { stmtKind = StmtKind::LinkIdDeclStmt; }
     std::string id;
 };
 
 // tying with=name;
-struct TyingStmt : Stmt {
+struct TyingStmt : Stmt { TyingStmt() { stmtKind = StmtKind::TyingStmt; }
     std::string target;
 };
 
 // merge with=name;
-struct MergeStmt : Stmt {
+struct MergeStmt : Stmt { MergeStmt() { stmtKind = StmtKind::MergeStmt; }
     std::string target;
 };
 
 // installation name; / simplified installation name; / installation name format=zip;
-struct InstallationStmt : Stmt {
+struct InstallationStmt : Stmt { InstallationStmt() { stmtKind = StmtKind::InstallationStmt; }
     std::string target;
     bool simplified = false;
     std::string format; // فارغ = الصيغة النصية الافتراضية (.rin) ؛ "zip" = أرشيف zip حقيقي على القرص
 };
 
 // save; / save path="..."; / simplified save path="..."; / save format=png; / save path="..." format=zip;
-struct SaveStmt : Stmt {
+struct SaveStmt : Stmt { SaveStmt() { stmtKind = StmtKind::SaveStmt; }
     ExprPtr path; // قد تكون فارغة (nullptr)
     bool simplified = false;
     std::string format; // فارغ = ".rin" نصي افتراضي ؛ "png" (حصراً لـ container.table/table) ؛ "zip"
 };
 
 // row cells=[v1, v2, ...];  -> يُضيف صفاً واحداً إلى الجدول الحالي (داخل container.table أو table فقط)
-struct RowStmt : Stmt {
+struct RowStmt : Stmt { RowStmt() { stmtKind = StmtKind::RowStmt; }
     ExprPtr cells; // يُتوقَّع أن يكون تعبير مصفوفة (ArrayExpr) لكن أي تعبير يُقيَّم إلى Value::ARRAY مقبول
 };
 
 // style value="style://<theme>";  -> يضبط نمط عرض الجدول الحالي (داخل container.table أو table فقط)
 // الصيغة تتبع مخطط شبيه بالـ URI: "style://dark" / "style://light" / "style://grid" ...
-struct StyleStmt : Stmt {
+struct StyleStmt : Stmt { StyleStmt() { stmtKind = StmtKind::StyleStmt; }
     ExprPtr value;
 };
 
 // document id="u1" fields={ name: "Ali", age: 30 };  -> يُدرج (أو يُحدّث إن كان الـ id موجوداً مسبقاً)
 // مستنداً واحداً داخل حاوية NoSQL الحالية (container.doc أو doc فقط). 'fields' كائن/قاموس حر البنية
 // (schema-less)، تماماً كمستندات JSON في قواعد البيانات اللاعلاقية.
-struct DocumentStmt : Stmt {
+struct DocumentStmt : Stmt { DocumentStmt() { stmtKind = StmtKind::DocumentStmt; }
     ExprPtr id;     // معرِّف المستند (نص)
     ExprPtr fields; // حقول المستند (map)
 };
 
 // file path="...";
-struct FileStmt : Stmt {
+struct FileStmt : Stmt { FileStmt() { stmtKind = StmtKind::FileStmt; }
     ExprPtr path;
 };
 
 // route method="GET" path="/users/1" status=200 body={...};  -> تُستخدم فقط داخل @container.api
-struct RouteStmt : Stmt {
+struct RouteStmt : Stmt { RouteStmt() { stmtKind = StmtKind::RouteStmt; }
     ExprPtr method;
     ExprPtr path;
     ExprPtr status;
@@ -848,7 +904,7 @@ struct RouteStmt : Stmt {
 // "المُصدَّر فقط" تلقائياً -- بلا أي صياغة إضافية مطلوبة، وبتوافقية كاملة للخلف: أي مكتبة موجودة
 // مسبقاً لا تحتوي 'export' إطلاقاً تستمر بالدمج الكامل تماماً كما كانت دائماً. انظر شرح كامل
 // الفلسفة (ولماذا class/struct استثناء) في Interpreter::execute(ImportStmt) بـ rin_interpreter.cpp.
-struct ImportStmt : Stmt {
+struct ImportStmt : Stmt { ImportStmt() { stmtKind = StmtKind::ImportStmt; }
     ExprPtr path;      // مسار/اسم المكتبة (نص)
     std::string alias; // فارغ = دمج مباشر في النطاق الحالي
 };
@@ -858,7 +914,7 @@ struct ImportStmt : Stmt {
 // المستورَد (بلا استثناء توافقية للخلف هنا؛ صياغة جديدة كلياً لا يعتمد عليها أي برنامج قديم) --
 // وإلا خطأ واضح فوراً (اسم غير مُصدَّر، أو غير موجود إطلاقاً). كل اسم يُدرَج مباشرة في النطاق
 // الحالي بنفس اسمه (لا alias فردي لكل عنصر -- أبسط ما يمكن، طبقة تسمية واحدة لا أكثر).
-struct ImportSelectedStmt : Stmt {
+struct ImportSelectedStmt : Stmt { ImportSelectedStmt() { stmtKind = StmtKind::ImportSelectedStmt; }
     std::vector<std::string> names;
     ExprPtr path;
 };
@@ -888,7 +944,7 @@ struct ViewAttr {
 
 enum class UiRole { VIEW, ELEMENT, LOOP };
 
-struct ViewStmt : Stmt {
+struct ViewStmt : Stmt { ViewStmt() { stmtKind = StmtKind::ViewStmt; }
     std::string name;                          // قد يكون فارغاً (Strand مجهول الاسم)
     std::string kindTag;                       // "Column" / "Text" / "Button" / ... أو وسم مخصَّص (Bolt plugin)
     UiRole role = UiRole::VIEW;                // VIEW قديم؛ ELEMENT وظيفة جاهزة؛ LOOP قماش/Canvas
@@ -898,14 +954,14 @@ struct ViewStmt : Stmt {
 
 // Binding declared by a Container. The container owns behavior; the Element owns no styling.
 // Syntax: on.<element>.<event> = handler(...);
-struct UiBindingStmt : Stmt {
+struct UiBindingStmt : Stmt { UiBindingStmt() { stmtKind = StmtKind::UiBindingStmt; }
     std::string target;
     std::string event;
     ExprPtr handler;
 };
 
 // warp name = expr;
-struct WarpStmt : Stmt {
+struct WarpStmt : Stmt { WarpStmt() { stmtKind = StmtKind::WarpStmt; }
     std::string name;
     ExprPtr initializer;
 };
@@ -924,7 +980,7 @@ struct WarpStmt : Stmt {
 // neutral/surface/background/text/text_muted/border) بقيمة نصية "#RRGGBB"، أو المفتاح الخاص
 // "active" (قيمة منطقية) الذي يجعل هذا الـTheme هو النشط فور تسجيله. انظر
 // loom/rin_loom_tokens.h لمنطق التسجيل والتحليل (registerThemesFromProgram).
-struct ThemeStmt : Stmt {
+struct ThemeStmt : Stmt { ThemeStmt() { stmtKind = StmtKind::ThemeStmt; }
     std::string name;
     std::vector<ViewAttr> attrs; // يعاد استخدام ViewAttr (key/value/line) نفسه بدل بنية مكررة
 };
@@ -955,7 +1011,7 @@ struct ObjectFieldCall {
     ExprPtr value;        // قد تكون فارغة (nullptr) لصيغة `field();` بلا وسيطة => قيمة الحقل nil
     int line = 0;
 };
-struct ObjectLiteralStmt : Stmt {
+struct ObjectLiteralStmt : Stmt { ObjectLiteralStmt() { stmtKind = StmtKind::ObjectLiteralStmt; }
     std::string id;                       // النص الذي مُرِّر إلى .object("...")
     std::vector<ObjectFieldCall> fields;
     bool linkToContainer = false;         // true إن ظهرت `container.();` داخل الجسم
@@ -966,7 +1022,7 @@ struct ObjectLiteralStmt : Stmt {
 // `container.();` داخل `.object("id") ... .end/object`) أو قيمة MAP مباشرة (مثال: نتيجة
 // `.object(...)` مُعرَّفة كمتغيّر، أو أي قاموس آخر). لا يُنشئ كائناً جديداً بذاته؛ فقط يعرض ما هو
 // موجود بالفعل بتهيئة بطاقة معاينة متعددة الأسطر، مسبوقة برمز 🖼️ يلتقطه RinConsoleFormatter.kt.
-struct ViewPrintObjectStmt : Stmt {
+struct ViewPrintObjectStmt : Stmt { ViewPrintObjectStmt() { stmtKind = StmtKind::ViewPrintObjectStmt; }
     ExprPtr target;
 };
 
