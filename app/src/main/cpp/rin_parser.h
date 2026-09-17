@@ -6,6 +6,23 @@
 
 namespace rin {
 
+// PolicyAccumulator: نفس حقول policy block (use/need/allow/deny/strict/version/description +
+// hasPolicy) الموجودة أصلاً في ContainerStmt/MakeStmt/ContainerGroupStmt، لكن كـ struct مستقل
+// بلا أي ارتباط بنوع AST معيّن -- بهذا يستطيع tryParsePolicyDirective تعبئتها مرة واحدة أثناء
+// تحليل جسم أي @container أو @Containers.Group، ثم يُنسَخ محتواها لاحقاً (فقط إن hasPolicy)
+// إلى حقول ContainerStmt أو ContainerGroupStmt الفعلية حسب نوع الوسم -- بلا تكرار منطق التحليل
+// نفسه لكل نوع AST على حدة.
+struct PolicyAccumulator {
+    std::vector<std::string> uses;
+    std::vector<std::string> needs;
+    std::vector<std::string> allows;
+    std::vector<std::string> denies;
+    std::string version;
+    std::string description;
+    bool strict = false;
+    bool hasPolicy = false;
+};
+
 class Parser {
 public:
     explicit Parser(std::vector<Token> tokens, std::string filename = "<input>");
@@ -32,10 +49,12 @@ private:
     bool check(TokenType type) const;
     bool checkNext(TokenType type) const; // ينظر إلى التوكن التالي (current+1) دون استهلاكه
     // RCS-1.0 §3.13/§7 Phase 0: يحاول تحليل توجيه سياسة واحد (use/need/allow/deny/strict/
-    // version/description) في بداية جسم أي @container عادية (وليس فقط @make.(name)). يعيد
-    // false ويستعيد موضع القارئ كما كان تماماً إن لم يطابق النمط المتوقع بالضبط — حتى لا يكسر
-    // أي برنامج قديم قد يستخدم هذه الكلمات كأسماء متغيرات/دوال عادية داخل حاوية.
-    bool tryParsePolicyDirective(ContainerStmt& s);
+    // version/description) في بداية جسم أي @container عادية أو @Containers.Group (Phase 1:
+    // عُمِّمت من @container فقط إلى @Containers.Group أيضاً -- انظر PolicyAccumulator أعلاه
+    // وتعليق hasPolicy في ContainerGroupStmt في rin_ast.h). يعيد false ويستعيد موضع القارئ كما
+    // كان تماماً إن لم يطابق النمط المتوقع بالضبط — حتى لا يكسر أي برنامج قديم قد يستخدم هذه
+    // الكلمات كأسماء متغيرات/دوال عادية داخل حاوية/مجموعة.
+    bool tryParsePolicyDirective(PolicyAccumulator& s);
     bool match(std::initializer_list<TokenType> types);
     const Token& consume(TokenType type, const std::string& message);
 
@@ -153,7 +172,6 @@ private:
     StmtPtr warpDeclaration();                    // warp name = expr;
     StmtPtr maskDeclaration();                    // mask = expr;              (يُستدعى بعد استهلاك 'warp')
     StmtPtr themeDeclaration();                   // @theme=Name key=expr; ... .end/theme  (يُستدعى بعد استهلاك '@' و'theme')
-    StmtPtr stopDeclaration();                    // @stop; / @stop expr;  (يُستدعى بعد استهلاك '@' و'stop')
 
     // expressions (precedence climbing)
     ExprPtr expression();
