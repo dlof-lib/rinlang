@@ -636,6 +636,10 @@ private:
     rin::CandleRegistry candleRegistry;
     std::unordered_map<std::string, EnvPtr> groupEnvs;       // اسم المجموعة -> بيئتها الخاصة (متغيرات مُعلَنة مباشرة داخلها)
     std::unordered_map<std::string, std::vector<std::string>> groupMembers; // اسم المجموعة -> أسماء الحاويات/المجموعات الفرعية المباشرة بداخلها (بالترتيب)
+    // ---- Containers.Group: توسيع (انظر natives groupVars/hasGroup/groupNames/groupParent/
+    // groupPath/groupContainerCount/groupHasContainer/groupSnapshot في registerNatives()) ----
+    std::vector<std::string> groupOrder;                      // أسماء المجموعات المُسمّاة بترتيب أول ظهور (بلا تكرار) -- بنفس مبدأ sectionOrder/volumeOrder
+    std::unordered_map<std::string, std::string> groupParentOf; // اسم مجموعة فرعية -> اسم المجموعة الأب المباشرة (غير موجود/فارغ = مجموعة جذر)
     // ---- Volume: كانت سابقاً زخرفية بحتة (تنفِّذ جسمها مباشرة داخل بيئة الأب بلا نطاق خاص، بلا
     // أي تسجيل عضوية) -- الآن بنفس دلالات Containers.Group تماماً: بيئة خاصة بها، تسجيل الحاويات/
     // المجموعات/الأحجام الفرعية المباشرة بداخلها، ودعم التعشيش (Volume داخل Volume، وGroup داخل
