@@ -12,3 +12,97 @@ fun anim_remap(v,a1,b1,a2,b2){return anim_lerp(a2,b2,anim_inverseLerp(a1,b1,v));
 fun anim_step(t,steps){if(steps<=0){return 0;}return floor(anim_clamp(t)*steps)/steps;}
 fun anim_pingPong(t){let x=t%2;if(x<1){return x;}return 2-x;}
 fun anim_keyframe(a,b,startTime,endTime,t){if(t<=startTime){return a;}if(t>=endTime){return b;}return anim_lerp(a,b,(t-startTime)/(endTime-startTime));}
+
+// ---- Rin Animation Pro — محرّك حقيقي للحركات والانتقالات (tween/timeline engine) ----
+//
+// المشغل الطبيعي في الأنظمة الأخرى (requestAnimationFrame) غير متاح كحلقة تلقائية داخل مفسّر Rin
+// نفسه (لا يوجد "event loop" مدمج)، لذا هذا المحرّك مبني على نمط قياسي في أي منصّة استضافة:
+// - الجزء الزمني (now()) والتحديث التفاعلي (setState) دالتان أصليتان (native) في المفسّر نفسه.
+// - هذه المكتبة تدير قائمة الحركات النشطة وتحوّل الزمن إلى قيم عبر دوال التسهيل (easing) أعلاه.
+// - anim_tick() هي نقطة الدخول الوحيدة المطلوب استدعاؤها من الخارج مرة كل "إطار": من حلقة CLI،
+//   أو من Kotlin عبر JNI بعد كل رسم لإطار في LoomFabricView، أو حتى من setInterval في نسخة الويب.
+//   بذلك يبقى محرّك اللغة نفسه بلا أي اعتماد على مؤقّتات نظام التشغيل أو الخيوط (threads).
+
+let __anim_registry = [];
+let __anim_nextId = 1;
+
+// يحوّل اسم تسهيل نصي (سهل الاستخدام من واجهة/محرّر) إلى الدالة الفعلية أعلاه.
+fun anim_easingByName(nameEasing) {
+    if (nameEasing == "linear") { return anim_linear; }
+    if (nameEasing == "easeIn") { return anim_easeIn; }
+    if (nameEasing == "easeOut") { return anim_easeOut; }
+    if (nameEasing == "easeInOut") { return anim_easeInOut; }
+    if (nameEasing == "smooth") { return anim_smooth; }
+    if (nameEasing == "smoother") { return anim_smoother; }
+    return anim_linear;
+}
+
+// anim_tween(container, field, from, to, durationMs, easingName?, onComplete?) -> id
+// يبدأ حركة تُحدِّث state-field باسم `field` داخل الحاوية `container` (يجب أن تكون معرَّفة
+// بـ `state field = ...;` داخل @container= حتى يُطلِق التحديث on update(prevState) تلقائياً في كل
+// إطار). تضبط القيمة الابتدائية فوراً إلى `from`، ثم تُعيد معرِّف الحركة (id) لاستخدامه مع
+// anim_cancel لاحقاً إن أردت إيقافها قبل اكتمالها.
+fun anim_tween(containerName, fieldName, fromVal, toVal, durationMs, easingName, onComplete) {
+    let easingFn = anim_easingByName(easingName);
+    let id = __anim_nextId;
+    __anim_nextId = __anim_nextId + 1;
+    let job = {
+        id: id,
+        containerName: containerName,
+        fieldName: fieldName,
+        fromVal: fromVal,
+        toVal: toVal,
+        duration: durationMs,
+        easing: easingFn,
+        onComplete: onComplete,
+        startTime: now(),
+        done: false
+    };
+    push(__anim_registry, job);
+    setState(containerName, fieldName, fromVal);
+    return id;
+}
+
+// يلغي حركة قيد التشغيل عبر id قبل اكتمالها (تبقى قيمة الحقل عند آخر ما وصلت إليه).
+fun anim_cancel(id) {
+    let kept = [];
+    let i = 0;
+    while (i < len(__anim_registry)) {
+        if (__anim_registry[i]["id"] != id) { push(kept, __anim_registry[i]); }
+        i = i + 1;
+    }
+    __anim_registry = kept;
+    return true;
+}
+
+// anim_isRunning() -> true إن كانت هناك حركة واحدة على الأقل ما زالت نشطة. مفيدة لحلقة المضيف
+// حتى تتوقف عن استدعاء anim_tick() (وتوفّر طاقة/معالجة) حين لا شيء يتحرّك فعلياً.
+fun anim_isRunning() { return len(__anim_registry) > 0; }
+
+// anim_tick() -> يجب استدعاؤها مرة واحدة في كل "إطار" من الجهة المضيفة (انظر الشرح أعلاه).
+// تحسب موضع كل حركة نشطة حسب الزمن المنقضي منذ anim_tween()، تطبّق دالة التسهيل، وتكتب القيمة
+// الجديدة عبر setState() — وهذا وحده ما يُطلِق on update(prevState) فيُعيد رسم الواجهة تفاعلياً.
+// عند اكتمال حركة (t>=1) تُثبَّت القيمة عند `to` بالضبط (لا نقصان تراكمي بسبب تقريب الزمن)، تُستدعى
+// onComplete إن كانت دالة، وتُحذف الحركة من القائمة.
+fun anim_tick() {
+    let stillRunning = [];
+    let i = 0;
+    while (i < len(__anim_registry)) {
+        let job = __anim_registry[i];
+        let elapsed = now() - job["startTime"];
+        let t = 1;
+        if (job["duration"] > 0) { t = anim_clamp(elapsed / job["duration"]); }
+        let eased = (job["easing"])(t);
+        let value = anim_lerp(job["fromVal"], job["toVal"], eased);
+        if (t >= 1) {
+            setState(job["containerName"], job["fieldName"], job["toVal"]);
+            if (job["onComplete"] != nil) { callFn(job["onComplete"]); }
+        } else {
+            setState(job["containerName"], job["fieldName"], value);
+            push(stillRunning, job);
+        }
+        i = i + 1;
+    }
+    __anim_registry = stillRunning;
+    return len(__anim_registry);
+}
