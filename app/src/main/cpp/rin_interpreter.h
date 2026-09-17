@@ -195,14 +195,6 @@ struct ContinueSignal {};
 // it propagates like any uncaught internal signal and is reported as a runtime error by the same
 // top-level catch-all that handles a stray `break`/`continue` outside a loop.
 struct AchieveSignal { Value value; };
-// Internal control-flow signal used to unwind the stack on '@stop' inside a `@Program { ... }`
-// block (see StopStmt/ProgramStmt in rin_ast.h). Caught only by the nearest enclosing
-// Interpreter::execute(ProgramStmt) frame (exactly like BreakSignal is caught only by the
-// nearest enclosing loop) -- a '@stop' inside a nested @Program never affects an outer one.
-// If it escapes past every enclosing @Program (i.e. '@stop' used outside any @Program), it
-// propagates like any uncaught internal signal and is reported as a runtime error by
-// Interpreter::run() (same style as a stray 'return' outside a function).
-struct StopProgramSignal { Value value; bool hasValue = false; };
 
 // ============================================================================
 // RinFlow — Execution Flow Engine
@@ -439,10 +431,6 @@ public:
     // اسم الملف المستخدَم في كل Diagnostic صادر عن هذا الـ Interpreter (نظام Diagnostics — انظر
     // diagnostics/). يُضبَط عادة إلى نفس الاسم الذي مُرِّر إلى Lexer/Parser لنفس الملف.
     void setSourceFile(const std::string& name) { sourceFile = name; }
-    // وسائط سطر الأوامر (أو أي مُشغِّل آخر) المتاحة لأقرب @Program إلى سطح الملف كمتغيّر "args"
-    // (مصفوفة نصوص) -- انظر شرح programArgs_ أدناه. استدعِها قبل run() (اختيارية تماماً، لا تفعل
-    // شيئاً إن لم يستخدم البرنامج @Program أصلاً).
-    void setProgramArgs(std::vector<std::string> args) { programArgs_ = std::move(args); }
 
     // يحدّد جذر حقيقي على القرص تُبنى فوقه كل مسارات file/save/installation/writeFile/readFile...
     // (مثلاً مجلد التطبيق الخاص على أندرويد عبر context.filesDir). فارغ = المجلد الحالي (CWD).
@@ -641,29 +629,31 @@ private:
     rin::CandleRegistry candleRegistry;
     std::unordered_map<std::string, EnvPtr> groupEnvs;       // اسم المجموعة -> بيئتها الخاصة (متغيرات مُعلَنة مباشرة داخلها)
     std::unordered_map<std::string, std::vector<std::string>> groupMembers; // اسم المجموعة -> أسماء الحاويات/المجموعات الفرعية المباشرة بداخلها (بالترتيب)
-    // ---- Containers.Group: توسيع (انظر natives groupVars/hasGroup/groupNames/groupParent/
-    // groupPath/groupContainerCount/groupHasContainer/groupSnapshot في registerNatives()) ----
-    std::vector<std::string> groupOrder;                      // أسماء المجموعات المُسمّاة بترتيب أول ظهور (بلا تكرار) -- بنفس مبدأ sectionOrder
-    std::unordered_map<std::string, std::string> groupParentOf; // اسم مجموعة فرعية -> اسم المجموعة الأب المباشرة (غير موجود/فارغ = مجموعة جذر)
+    // ---- Volume: كانت سابقاً زخرفية بحتة (تنفِّذ جسمها مباشرة داخل بيئة الأب بلا نطاق خاص، بلا
+    // أي تسجيل عضوية) -- الآن بنفس دلالات Containers.Group تماماً: بيئة خاصة بها، تسجيل الحاويات/
+    // المجموعات/الأحجام الفرعية المباشرة بداخلها، ودعم التعشيش (Volume داخل Volume، وGroup داخل
+    // Volume تُفرَّط عبر منطقها الخاص). انظر natives volumeContainers/volumeMembers/hasVolume/
+    // volumeNames/volumeVars/volumeParent/volumePath/volumeContainerCount/volumeHasContainer/
+    // volumeSnapshot في registerNatives()، وcollectVolumeContainerNames أعلى الملف.
+    std::unordered_map<std::string, EnvPtr> volumeEnvs;       // اسم Volume -> بيئتها الخاصة (متغيرات مُعلَنة مباشرة داخلها)
+    std::unordered_map<std::string, std::vector<std::string>> volumeMembers; // اسم Volume -> أسماء الحاويات/المجموعات/الأحجام الفرعية المباشرة بداخلها (بالترتيب)
+    std::vector<std::string> volumeOrder;                      // أسماء الأحجام المُسمّاة بترتيب أول ظهور (بلا تكرار)
+    std::unordered_map<std::string, std::string> volumeParentOf; // اسم Volume فرعي -> اسم Volume الأب المباشرة (غير موجود/فارغ = Volume جذر)
     // ---- Section: حالة تُحفَظ بعد الإغلاق (قبل هذا كانت Section زخرفية بحتة: تطبع 🔹/◽ فقط ثم
     // تُفقَد متغيراتها فوراً مع نهاية الكتلة، بلا أي إمكانية للاستعلام عنها لاحقاً) ----
     std::unordered_map<std::string, EnvPtr> sectionEnvs; // اسم القسم -> بيئته (آخر تنفيذ له إن تكرّر، مثلاً داخل حلقة)
     std::vector<std::string> sectionOrder;               // أسماء الأقسام المُسمّاة بترتيب أول ظهور (بلا تكرار)
     std::vector<std::string> groupStack;                      // المجموعة الحالية المفتوحة (لتسجيل الأعضاء أثناء التنفيذ)
-    // ---- @Program: بداية/نهاية على مستوى البرنامج بأكمله (انظر ProgramStmt في rin_ast.h وتنفيذه
-    // في execute()) -- programStack يتتبّع أي @Program مفتوحة حالياً (يدعم التعشيش: @Program
-    // داخل @Program أخرى، مثلاً لتقسيم برنامج كبير إلى مراحل/phases كل منها له بداية/نهاية خاصة
-    // بها)، لأجل natives programName()/programDepth()/inProgram() في registerNatives().
-    std::vector<std::string> programStack;
-    // نتيجة أقرب @Program انتهت للتو (عبر '@stop expr;'، أو nil إن انتهت طبيعياً/بلا @stop قط) --
-    // تُقرَأ عبر native programResult() الجديدة مباشرة بعد `.end/Program`. تُحدَّث في كل مرة تنتهي
-    // فيها أي @Program (بصرف النظر عن عمق تعشيشها)، فتعكس دائماً آخر Program انتهت فعلياً.
-    Value lastProgramResult_ = Value::nil();
-    // وسائط سطر الأوامر (أو أي مُشغِّل آخر) -- تُمرَّر عبر setProgramArgs() العامة أدناه، وتُربَط
-    // تلقائياً باسم "args" (مصفوفة نصوص) داخل أقرب @Program إلى سطح الملف عند تنفيذها (انظر
-    // Interpreter::execute(ProgramStmt)). فارغة افتراضياً لأي مستدعٍ لا يستدعي setProgramArgs()
-    // إطلاقاً (توافقية كاملة بلا أي تغيير سلوكي لأي برنامج/مستدعٍ سابق).
-    std::vector<std::string> programArgs_;
+    std::vector<std::string> volumeStack;                     // Volume الحالية المفتوحة (لتسجيل الأعضاء أثناء التنفيذ، بنفس مبدأ groupStack)
+    // 'G' عند فتح Containers.Group، 'V' عند فتح Volume -- بالتوازي التام مع groupStack/volumeStack
+    // (نفس الـ push/pop في نفس المكان بالضبط)، تُستخدَم حصراً لمعرفة "أقرب مجمِّع مفتوح فعلياً"
+    // عند تسجيل عضوية Volume المباشرة: حاوية داخل Group متداخلة داخل Volume يجب أن تُسجَّل عضواً في
+    // تلك Group فقط (كالسابق تماماً، بلا أي تغيير) -- لا عضواً مباشراً إضافياً في الـ Volume أيضاً
+    // (وإلا لتكررت في volumeContainers/volumeSnapshot: مرة عبر تفرّع Group ومرة كعضو مباشر). أما
+    // تسجيل Group نفسها كعضو مباشر في Volume المحيطة (انظر ContainerGroupStmt) فيبقى غير متأثر بهذا
+    // الحارس، فتبقى مرئية عبر التفرّع دون ازدواج. Containers.Group نفسها لا تستخدم هذا الحارس على
+    // الإطلاق (تسجيلها في groupStack يبقى كما كان قبل وجود Volume إطلاقاً، بلا أي تغيير سلوك).
+    std::vector<char> openCollectorKinds;
     std::unordered_map<std::string, std::string> translations; // lang -> text (آخر ترجمة مسجّلة لكل لغة)
     std::unordered_set<std::string> installedNames;          // ما تم "تثبيته" عبر installation (بما فيها ما حُمِّل من فهرس سابق فعلي على القرص)
     std::vector<std::string> containerStack;                 // مفتاح الحاوية الحالية (لأجل link/tying/merge/save/route/call)
