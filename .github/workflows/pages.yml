@@ -11,7 +11,7 @@ on:
       - "app/src/main/cpp/rin_interpreter.*"
       - "app/src/main/cpp/rin_http.*"
       - "app/src/main/cpp/rin_c_api.*"
-      - "app/src/main/cpp/loom/**"
+      - "app/src/main/cpp/indsin/**"
       - "tools/rin_run.cpp"
       - ".github/workflows/pages.yml"
   workflow_dispatch: {}
@@ -33,7 +33,7 @@ jobs:
         uses: actions/checkout@v4
 
       # ------------------------------------------------------------------
-      # 1) فحص سلامة سريع بأداة loomc الأصلية (نفس محرّك Loomtime، مبني
+      # 1) فحص سلامة سريع بأداة indsinc الأصلية (نفس محرّك Indsintime، مبني
       #    أصلاً على جهاز التطوير — انظر CMakeLists.txt). هذا لا يُنشر —
       #    غايته فقط إيقاف الـ workflow مبكراً بخطأ واضح إن كان site.rin
       #    نفسه فيه خطأ لغوي أو لا يحتوي جذر @view.<Kind>=name، قبل إضاعة
@@ -42,14 +42,14 @@ jobs:
       #    dist/index.html عبر writeFile — لم يعد ذلك المسار موجوداً بعد أن
       #    أصبحت الصفحة شجرة @view حقيقية بدل مولّد HTML.)
       # ------------------------------------------------------------------
-      - name: Sanity-check site.rin as a @view program with loomc
+      - name: Sanity-check site.rin as a @view program with indsinc
         run: |
-          # نفس قائمة مصادر هدف loomc في app/src/main/cpp/CMakeLists.txt بالضبط — لازمة كاملة
-          # لأن loom/loomc.cpp يتضمّن rin_loom_pipeline.h الذي يشغّل rin::Interpreter حقيقياً
+          # نفس قائمة مصادر هدف indsinc في app/src/main/cpp/CMakeLists.txt بالضبط — لازمة كاملة
+          # لأن indsin/indsinc.cpp يتضمّن rin_indsin_pipeline.h الذي يشغّل rin::Interpreter حقيقياً
           # (runColdPipelineWithRuntime)، وليس مجرّد lex+parse فقط؛ بدون rin_interpreter.cpp وكل ما
           # يعتمد عليه (diagnostics/, loader_ui/, clc/) يفشل الربط بأخطاء "undefined reference".
-          g++ -O2 -std=c++17 -o loomc_native_check \
-            app/src/main/cpp/loom/loomc.cpp \
+          g++ -O2 -std=c++17 -o indsinc_native_check \
+            app/src/main/cpp/indsin/indsinc.cpp \
             app/src/main/cpp/rin_lexer.cpp \
             app/src/main/cpp/rin_parser.cpp \
             app/src/main/cpp/rin_make.cpp \
@@ -74,29 +74,29 @@ jobs:
             app/src/main/cpp/clc/sha256.cpp \
             -I app/src/main/cpp \
             -lz
-          ./loomc_native_check web/site.rin 420 /tmp/site_check.ppm
-          echo "Native @view/Loom check OK."
-          rm -f loomc_native_check /tmp/site_check.ppm
+          ./indsinc_native_check web/site.rin 420 /tmp/site_check.ppm
+          echo "Native @view/Indsin check OK."
+          rm -f indsinc_native_check /tmp/site_check.ppm
 
       # ------------------------------------------------------------------
-      # 2) البناء الحقيقي الذي يُنشر: المفسّر الرسمي + محرّك Loomtime (نفس
-      #    ملفات lexer/parser/interpreter/loom بلا أي تعديل) مُصرَّف إلى
+      # 2) البناء الحقيقي الذي يُنشر: المفسّر الرسمي + محرّك Indsintime (نفس
+      #    ملفات lexer/parser/interpreter/indsin بلا أي تعديل) مُصرَّف إلى
       #    WebAssembly، ليُنفَّذ site.rin فعلياً (كشجرة @view) داخل متصفح
-      #    الزائر نفسه عبر rin_loom_session_*.
+      #    الزائر نفسه عبر rin_indsin_session_*.
       # ------------------------------------------------------------------
       - name: Set up Emscripten
         uses: mymindstorm/setup-emsdk@v14
         with:
           version: 3.1.61
 
-      - name: Compile the official Rin engine (incl. Loomtime) to WebAssembly
+      - name: Compile the official Rin engine (incl. Indsintime) to WebAssembly
         run: |
           mkdir -p dist
           # القائمة الكاملة لما يحتاجه rin_interpreter.cpp فعلياً عند الربط (linker) —
           # مطابقة تماماً لهدف rinengine في app/src/main/cpp/CMakeLists.txt، فقط مع
           # استبدال rin_http.cpp (fork/exec لـ curl، غير ممكن داخل WASM) بالبديل
-          # web/rin_http_wasm_stub.cpp، وrin_run.cpp/loomc.cpp بجسر WASM المخصص
-          # web/rin_wasm_bridge.cpp + loom/rin_loom_c_api.cpp. بدون rin_make.cpp أو
+          # web/rin_http_wasm_stub.cpp، وrin_run.cpp/indsinc.cpp بجسر WASM المخصص
+          # web/rin_wasm_bridge.cpp + indsin/rin_indsin_c_api.cpp. بدون rin_make.cpp أو
           # diagnostics/ أو loader_ui/ أو clc/ يفشل الربط بأخطاء "undefined symbol"
           # (nearestMatches، validateMakeUnit، validateContainerPolicy، ...).
           em++ -O2 -std=c++17 -fexceptions \
@@ -112,7 +112,7 @@ jobs:
             app/src/main/cpp/binfmt/macho_format.cpp \
             app/src/main/cpp/binfmt/coff_obj.cpp \
             app/src/main/cpp/rin_c_api.cpp \
-            app/src/main/cpp/loom/rin_loom_c_api.cpp \
+            app/src/main/cpp/indsin/rin_indsin_c_api.cpp \
             app/src/main/cpp/loader_ui/library_loader_ui.cpp \
             app/src/main/cpp/diagnostics/diagnostic.cpp \
             app/src/main/cpp/diagnostics/source_manager.cpp \
@@ -129,7 +129,7 @@ jobs:
             -s MODULARIZE=1 \
             -s EXPORT_NAME=RinModule \
             -s EXPORTED_RUNTIME_METHODS='["ccall","FS"]' \
-            -s EXPORTED_FUNCTIONS='["_rin_run_source","_rin_loom_session_create","_rin_loom_session_render_json","_rin_loom_session_tap","_rin_loom_session_update_source","_rin_loom_session_free","_rin_free_string","_malloc","_free"]' \
+            -s EXPORTED_FUNCTIONS='["_rin_run_source","_rin_indsin_session_create","_rin_indsin_session_render_json","_rin_indsin_session_tap","_rin_indsin_session_update_source","_rin_indsin_session_free","_rin_free_string","_malloc","_free"]' \
             -s ALLOW_MEMORY_GROWTH=1 \
             -s ASYNCIFY=1 \
             -s STACK_SIZE=8388608 \
