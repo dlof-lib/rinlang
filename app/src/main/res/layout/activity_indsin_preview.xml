@@ -1,0 +1,267 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@color/rin_background">
+
+    <!-- ===== الشريط العلوي: إغلاق / عنوان / شارة Live / جهاز / شبكة / منطقة آمنة / تكبير / إعادة تشغيل ===== -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:background="@color/rin_toolbar"
+        android:elevation="3dp"
+        android:paddingStart="6dp"
+        android:paddingEnd="10dp"
+        android:paddingTop="8dp"
+        android:paddingBottom="8dp">
+
+        <ImageButton
+            android:id="@+id/btnIndsinClose"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:background="@drawable/bg_toolbar_btn_ghost"
+            android:src="@drawable/ic_close"
+            android:scaleType="center"
+            android:contentDescription="@string/indsin_close"
+            android:padding="8dp" />
+
+        <ImageView
+            android:layout_width="18dp"
+            android:layout_height="18dp"
+            android:layout_marginStart="6dp"
+            android:src="@drawable/ic_preview_eye"
+            android:contentDescription="@null" />
+
+        <TextView
+            android:id="@+id/txtIndsinTitle"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginStart="8dp"
+            android:text="@string/indsin_preview_title"
+            android:textColor="@color/rin_on_toolbar"
+            android:textSize="15sp"
+            android:textStyle="bold"
+            android:maxLines="1"
+            android:ellipsize="end" />
+
+        <View
+            android:id="@+id/viewIndsinLiveDot"
+            android:layout_width="7dp"
+            android:layout_height="7dp"
+            android:layout_marginEnd="4dp"
+            android:background="@drawable/shape_status_dot"
+            android:backgroundTint="@color/indsin_live_dot" />
+
+        <TextView
+            android:id="@+id/txtIndsinLiveLabel"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="10dp"
+            android:text="@string/indsin_live_label"
+            android:textColor="@color/indsin_live_dot"
+            android:textSize="11sp"
+            android:textStyle="bold" />
+
+        <Button
+            android:id="@+id/btnIndsinDevice"
+            style="@style/Widget.MaterialComponents.Button.TextButton"
+            android:layout_width="wrap_content"
+            android:layout_height="32dp"
+            android:minWidth="0dp"
+            android:minHeight="0dp"
+            android:paddingStart="10dp"
+            android:paddingEnd="10dp"
+            android:background="@drawable/bg_download_chip"
+            android:text="@string/indsin_device_default"
+            android:textAllCaps="false"
+            android:textColor="@color/rin_on_toolbar"
+            android:textSize="12sp" />
+
+        <ImageButton
+            android:id="@+id/btnIndsinGrid"
+            android:layout_width="34dp"
+            android:layout_height="34dp"
+            android:layout_marginStart="4dp"
+            android:background="@drawable/bg_toolbar_btn_ghost"
+            android:src="@drawable/ic_grid_overlay"
+            android:scaleType="center"
+            android:contentDescription="@string/indsin_toggle_grid"
+            android:padding="8dp" />
+
+        <ImageButton
+            android:id="@+id/btnIndsinZoomOut"
+            android:layout_width="34dp"
+            android:layout_height="34dp"
+            android:layout_marginStart="2dp"
+            android:background="@drawable/bg_toolbar_btn_ghost"
+            android:src="@drawable/ic_zoom_out"
+            android:scaleType="center"
+            android:contentDescription="@string/indsin_zoom_out"
+            android:padding="8dp" />
+
+        <TextView
+            android:id="@+id/txtIndsinZoom"
+            android:layout_width="36dp"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:text="@string/indsin_zoom_100"
+            android:textColor="@color/rin_on_toolbar_dim"
+            android:textSize="11sp" />
+
+        <ImageButton
+            android:id="@+id/btnIndsinZoomIn"
+            android:layout_width="34dp"
+            android:layout_height="34dp"
+            android:background="@drawable/bg_toolbar_btn_ghost"
+            android:src="@drawable/ic_zoom_in"
+            android:scaleType="center"
+            android:contentDescription="@string/indsin_zoom_in"
+            android:padding="8dp" />
+
+        <ImageButton
+            android:id="@+id/btnIndsinRefresh"
+            android:layout_width="34dp"
+            android:layout_height="34dp"
+            android:layout_marginStart="2dp"
+            android:background="@drawable/bg_toolbar_btn_ghost"
+            android:src="@drawable/ic_refresh"
+            android:scaleType="center"
+            android:contentDescription="@string/indsin_restart_session"
+            android:padding="8dp" />
+    </LinearLayout>
+
+    <!-- ===== لوحة تنبيه Snag: يظهر عند خطأ في آخر تعديل مع إبقاء آخر إطار سليم ظاهراً خلفها ===== -->
+    <LinearLayout
+        android:id="@+id/indsinErrorBanner"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:background="@drawable/bg_indsin_error_banner"
+        android:layout_margin="10dp"
+        android:padding="10dp"
+        android:visibility="gone"
+        tools:visibility="visible">
+
+        <ImageView
+            android:layout_width="18dp"
+            android:layout_height="18dp"
+            android:src="@drawable/ic_status_warning"
+            android:contentDescription="@null" />
+
+        <TextView
+            android:id="@+id/txtIndsinError"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginStart="8dp"
+            android:textColor="@color/indsin_error_text"
+            android:textSize="12sp"
+            tools:text="Snag on line 12: unexpected token — still showing the last good frame" />
+    </LinearLayout>
+
+    <!-- ===== سطح المعاينة: IndsinFabricView يملأ العرض والطول كاملاً داخل إطار "جهاز" بزوايا دائرية
+         وظل خفيف (bg_indsin_device_frame — كان معرّفاً ولم يُستخدم من قبل) بدل مستطيل مسطح بلا حدود؛
+         يبقى قابلاً للتمرير أفقياً/عمودياً فقط إذا زاد التكبير أو ارتفاع المحتوى الفعلي عن المساحة
+         المتاحة ===== -->
+    <HorizontalScrollView
+        android:id="@+id/indsinHScroll"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:layout_margin="10dp"
+        android:background="@drawable/bg_indsin_device_frame"
+        android:elevation="4dp"
+        android:clipToOutline="true"
+        android:fillViewport="true">
+
+        <ScrollView
+            android:id="@+id/indsinVScroll"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:fillViewport="true">
+
+            <com.dlof.rinlang.IndsinFabricView
+                android:id="@+id/indsinFabricView"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:background="@color/indsin_canvas_bg" />
+        </ScrollView>
+    </HorizontalScrollView>
+
+    <!-- ===== لوحة "المفتّش" (Inspector): تفاصيل العنصر عند الضغط المطوّل عليه ===== -->
+    <LinearLayout
+        android:id="@+id/indsinInspectorPanel"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:background="@drawable/bg_indsin_inspector_panel"
+        android:padding="14dp"
+        android:visibility="gone"
+        tools:visibility="visible">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+            <TextView
+                android:id="@+id/txtInspectorTitle"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:textColor="@color/rin_on_toolbar"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                tools:text="Card · header (line 9)" />
+
+            <ImageButton
+                android:id="@+id/btnInspectorClose"
+                android:layout_width="28dp"
+                android:layout_height="28dp"
+                android:background="@drawable/bg_toolbar_btn_ghost"
+                android:src="@drawable/ic_close"
+                android:scaleType="center"
+                android:contentDescription="@string/indsin_close"
+                android:padding="6dp" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/txtInspectorBody"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:fontFamily="monospace"
+            android:textColor="@color/indsin_inspector_value"
+            android:textSize="12sp"
+            tools:text="x: 20  y: 84  w: 350  h: 96\ncolor: #2c2140\nshadow: 10" />
+    </LinearLayout>
+
+    <!-- ===== شريط سفلي: إحصاءات حقيقية من المحرّك الأصلي (لا شيء هنا محاكى) ===== -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:background="@color/rin_toolbar_bottom"
+        android:paddingStart="12dp"
+        android:paddingEnd="12dp"
+        android:paddingTop="6dp"
+        android:paddingBottom="6dp">
+
+        <TextView
+            android:id="@+id/txtIndsinStats"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:textColor="@color/indsin_footer_text"
+            android:textSize="11sp"
+            tools:text="14 strands · rendered in 3ms · cache hits 9 · long-press an element to inspect it" />
+    </LinearLayout>
+</LinearLayout>
