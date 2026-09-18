@@ -46,6 +46,11 @@ class MainActivity : AppCompatActivity() {
         const val EXTRA_FILE_NAME = "extra_file_name"
         /** اسم مكتبة .og.rin (اختياري) داخل lib/ الخاصة بذلك المشروع، تُفتَح للتعديل في نفس المحرر. */
         const val EXTRA_LIBRARY_NAME = "extra_library_name"
+        /** مهلة التأجيل (debounce) قبل التشغيل التلقائي بعد توقّف الكتابة، عند تفعيل
+         *  "تشغيل تلقائي أثناء الكتابة" من قائمة Run. أطول من مهلة دفع المعاينة الحية (200ms)
+         *  عمداً — كل تشغيل تلقائي يضيف بطاقة جديدة لسجل التشغيل، فمهلة أطول تعني بطاقات أقل
+         *  أثناء الكتابة السريعة. */
+        private const val AUTO_RUN_DEBOUNCE_MS = 700L
     }
 
     /** المشروع الحالي إن جاء التطبيق من شاشة الملفات، وإلا null (وضع الملف الحر عبر SAF كما كان سابقاً). */
@@ -68,6 +73,14 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var editorController: RinCodeEditorController
     private lateinit var jobAdapter: RinJobAdapter
+
+    /** تشغيل تلقائي (live output، انظر AppSettings.isAutoRunEnabled): يُعاد تحميلها من التفضيلات
+     *  في onCreate ويُحدَّثها togglar قائمة Run؛ آخر مصدر شُغِّل تلقائياً يمنع إعادة تشغيل نفس
+     *  الكود بلا تغيير فعلي (مثلاً بعد ضغط مسافة ثم حذفها). */
+    private var autoRunEnabled = false
+    private var lastAutoRunSource: String? = null
+    private val autoRunHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private var pendingAutoRun: Runnable? = null
 
     /** URI of the file currently open, if any. Null means "unsaved / new file". */
     private var currentUri: Uri? = null
@@ -126,6 +139,7 @@ class MainActivity : AppCompatActivity() {
         scrollEditor = findViewById(R.id.scrollEditor)
 
         applyStoredEditorSettings()
+        autoRunEnabled = AppSettings.isAutoRunEnabled(this)
         RinLogoLoadingOverlay.setProgress(0.34f)
 
         // أزرار الوصول السريع (أيقونة فقط، صغيرة جداً) في الصف الأول من الشريط العلوي
@@ -208,10 +222,31 @@ class MainActivity : AppCompatActivity() {
             }
         })
 
+        // تشغيل تلقائي للطرفية (live output، section: Run menu -> "تشغيل تلقائي أثناء الكتابة"):
+        // بعد توقّف قصير عن الكتابة يُقدَّم الكود كمهمّة عادية إلى RinJobScheduler، بنفس آلية
+        // زر Run تماماً — بطاقة جديدة في سجل التشغيل — لكن بلا الآثار الجانبية الخاصة بالضغط
+        // اليدوي (فتح المعاينة الحية أو RinFlow تلقائياً)، حتى لا تقفز الشاشة أثناء الكتابة.
+        editCode.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+            override fun afterTextChanged(s: Editable?) {
+                if (!autoRunEnabled) return
+                pendingAutoRun?.let { autoRunHandler.removeCallbacks(it) }
+                val src = s?.toString().orEmpty()
+                val task = Runnable { runProgramLive(src) }
+                pendingAutoRun = task
+                autoRunHandler.postDelayed(task, AUTO_RUN_DEBOUNCE_MS)
+            }
+        })
+
         // قائمة التشغيل المجدولة (job queue): كل عملية Run بطاقة مستقلة
         jobAdapter = RinJobAdapter(this)
         jobAdapter.onCancelRequested = { number -> RinJobScheduler.cancel(number) }
         jobAdapter.onPinToggleRequested = { number -> RinJobScheduler.togglePin(number) }
+        // "إعادة التشغيل" من بطاقة أي تشغيل سابق (طرفية أندرويد): يُقدِّم مصدر ذلك التشغيل
+        // بالضبط كمهمّة جديدة، دون لمس محتوى المحرر الحالي — نفس RinJobScheduler الذي يستخدمه
+        // زر ▶ وميزة "تشغيل تلقائي أثناء الكتابة".
+        jobAdapter.onRerunRequested = { source -> RinJobScheduler.submit(source) }
         rvJobs.layoutManager = LinearLayoutManager(this)
         rvJobs.adapter = jobAdapter
         // Wired through RinExecutionManager (Queue -> Structured Events -> Run Session) rather
@@ -220,8 +255,15 @@ class MainActivity : AppCompatActivity() {
         // rest of the run-history UI uses, instead of two code paths reading the scheduler.
         RinExecutionManager.attach { sessions ->
             val jobs = sessions.map { it.job }
+            // Auto-scroll فقط إن كان المستخدم أصلاً قريباً من آخر بطاقة قبل هذا التحديث — وإلا
+            // فقد يكون بصدد مراجعة تشغيل أقدم في وسط القائمة، وسحبه فجأة إلى الأسفل مع كل تحديث
+            // (بثّ حي أو تشغيل تلقائي أثناء الكتابة) يقطع تلك المراجعة بلا داعٍ.
+            val layoutManager = rvJobs.layoutManager as? LinearLayoutManager
+            val previousCount = jobAdapter.itemCount
+            val wasNearBottom = layoutManager == null || previousCount == 0 ||
+                layoutManager.findLastVisibleItemPosition() >= previousCount - 2
             jobAdapter.submit(jobs)
-            if (jobs.isNotEmpty()) rvJobs.scrollToPosition(jobs.size - 1)
+            if (jobs.isNotEmpty() && wasNearBottom) rvJobs.scrollToPosition(jobs.size - 1)
             val anyRunning = jobs.any { it.status == JobStatus.RUNNING }
             progressRunning.visibility = if (anyRunning) android.view.View.VISIBLE else android.view.View.GONE
             if (anyRunning) progressRunning.start() else progressRunning.stop()
@@ -474,16 +516,37 @@ class MainActivity : AppCompatActivity() {
         popup.menu.add(0, 2, 1, R.string.menu_run_check_brackets)
         popup.menu.add(0, 3, 2, R.string.menu_run_live_preview)
         popup.menu.add(0, 4, 3, R.string.menu_run_check_tags)
+        popup.menu.add(0, 5, 4, R.string.menu_run_auto_run).apply {
+            isCheckable = true
+            isChecked = autoRunEnabled
+        }
         popup.setOnMenuItemClickListener { item ->
             when (item.itemId) {
                 1 -> runProgram()
                 2 -> checkBrackets()
                 3 -> openLivePreviewManually()
                 4 -> checkContainerTags()
+                5 -> toggleAutoRun()
             }
             true
         }
         popup.show()
+    }
+
+    /** يُبدِّل تفعيل "تشغيل تلقائي أثناء الكتابة" (Run menu) ويحفظه في [AppSettings]. إيقافه
+     *  يُلغي أي تشغيل مؤجَّل لم يُنفَّذ بعد؛ تفعيله يُشغِّل الكود الحالي فوراً مرّة واحدة بدل
+     *  انتظار أول تعديل. */
+    private fun toggleAutoRun() {
+        autoRunEnabled = !autoRunEnabled
+        AppSettings.setAutoRunEnabled(this, autoRunEnabled)
+        if (autoRunEnabled) {
+            Toast.makeText(this, getString(R.string.auto_run_enabled_toast), Toast.LENGTH_SHORT).show()
+            runProgramLive(editCode.text.toString())
+        } else {
+            pendingAutoRun?.let { autoRunHandler.removeCallbacks(it) }
+            pendingAutoRun = null
+            Toast.makeText(this, getString(R.string.auto_run_disabled_toast), Toast.LENGTH_SHORT).show()
+        }
     }
 
     private fun runProgram() {
@@ -511,6 +574,18 @@ class MainActivity : AppCompatActivity() {
         if (LoomViewTracer.containsView(source)) {
             openLivePreview(source)
         }
+    }
+
+    /**
+     * نسخة "هادئة" من [runProgram] يستدعيها التشغيل التلقائي بعد توقّف الكتابة: تقدّم [source]
+     * إلى نفس [RinJobScheduler] (فتحدَّث الطرفية live output بنفس بطاقات السجل المعتادة)، لكن
+     * دون أي انتقال تلقائي لشاشة أخرى (RinFlow أو المعاينة الحية) — تلك الانتقالات تبقى حكراً
+     * على ضغطة Run الصريحة حتى لا تُفاجئ المستخدم بقفزة شاشة في منتصف الكتابة.
+     */
+    private fun runProgramLive(source: String) {
+        if (source == lastAutoRunSource) return // لم يتغيّر شيء فعلي منذ آخر تشغيل تلقائي
+        lastAutoRunSource = source
+        RinJobScheduler.submit(source) // null (طابور ممتلئ) يُتجاهَل بصمت هنا؛ المستخدم لم يطلب هذا التشغيل صراحةً
     }
 
     /** يفتح المعاينة الحية ويبدأ/يعيد تشغيل جلستها بالكود الحالي للمحرر. */
@@ -745,6 +820,9 @@ class MainActivity : AppCompatActivity() {
         // that outlives this Activity; without this the lambda above would keep the destroyed
         // Activity reachable (and every view it holds) for as long as the process stays alive.
         RinExecutionManager.detach()
+        // يمنع تشغيلاً تلقائياً مؤجَّلاً من التنفيذ بعد تدمير هذه الـActivity (مثلاً إن غادر
+        // المستخدم الشاشة خلال نافذة الـ700ms بين آخر ضغطة وتنفيذها).
+        pendingAutoRun?.let { autoRunHandler.removeCallbacks(it) }
         super.onDestroy()
     }
 }
