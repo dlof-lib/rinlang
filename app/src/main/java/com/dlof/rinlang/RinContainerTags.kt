@@ -275,7 +275,7 @@ object RinSnippets {
                 ".end/object\n"
         ),
         Snippet(
-            "@view.Object (معاينة حيّة لكائن في Loom)",
+            "@view.Object (معاينة حيّة لكائن في Indsin)",
             "@view.Object=$CURSOR_MARKER\n" +
                 "    source=\"user01\";\n" +
                 ".end/view\n"
