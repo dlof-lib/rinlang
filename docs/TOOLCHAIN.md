@@ -107,7 +107,7 @@ let name: String = "ABOO";
 let age: Int = 19;
 let score: Number = 99.5;
 let online: Bool = true;
-let tags: Array = ["rin", "loom"];
+let tags: Array = ["rin", "indsin"];
 let data: Map = {};
 ```
 
@@ -121,7 +121,7 @@ let data: Map = {};
 
 الـVM الجديد هو **Core Bytecode Backend** آمن وقابل للتوسعة، ويغطي حالياً literals، variables، assignment، arithmetic/comparison، conditionals، loops، print وreturn.
 
-أما ميزات Rin المتقدمة مثل Containers وLoomtime وNoSQL وHTTP وCLC وCandle فتظل مرتبطة بالـcanonical interpreter/native backend إلى أن تُضاف لها Lowering/Runtime ABI مستقلة.
+أما ميزات Rin المتقدمة مثل Containers وIndsintime وNoSQL وHTTP وCLC وCandle فتظل مرتبطة بالـcanonical interpreter/native backend إلى أن تُضاف لها Lowering/Runtime ABI مستقلة.
 
 هذا مقصود وليس fallback صامتاً: أي ميزة غير مدعومة في bytecode تظهر كـdiagnostic واضحة.
 
@@ -136,7 +136,7 @@ let data: Map = {};
 5. GC أو reference-counted object heap.
 6. Module bytecode/import table.
 7. Classes/structs/enums lowering.
-8. Container/Loom lowering إلى Runtime ABI.
+8. Container/Indsin lowering إلى Runtime ABI.
 9. Debug symbols (`.rbc.map`) وbreakpoints.
 10. Incremental compilation + cache.
 11. LSP diagnostics من نفس Semantic Analyzer.
