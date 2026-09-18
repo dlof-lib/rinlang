@@ -2,20 +2,20 @@
 // site.rin — الصفحة الرسمية للغة Rin (إعادة بناء كاملة، احترافية، موسّعة)
 // -----------------------------------------------------------------------------
 // مكتوبة بالكامل بلغة Rin — صفر أسطر HTML، صفر سلاسل نصية مبنية بالدمج. كل
-// عنصر أدناه (@view.Kind=name) هو Strand حقيقي يبنيه ويخطّطه محرك Loomtime
+// عنصر أدناه (@view.Kind=name) هو Strand حقيقي يبنيه ويخطّطه محرك Indsintime
 // الرسمي (نفس rin_lexer/rin_parser/rin_interpreter المستخدمة في rin_run
 // وتطبيق أندرويد)، ثم يُرسل كشجرة JSON إلى web/index.html (المحمّل العام
-// البحت) ليرسمها المتصفح. راجع docs/loomtime/RIN_LOOM_ENGINE_ARCHITECTURE.md.
+// البحت) ليرسمها المتصفح. راجع docs/indsintime/RIN_INDSIN_ENGINE_ARCHITECTURE.md.
 //
 // ملاحظة لغوية: داخل @view، قيم السمات تُقيَّم عبر مُقيِّم مصغّر يفهم فقط:
 // حرفيات، خلايا warp، عمليات + - * / على نصوص/أرقام، ونداءات onTap=fn(...).
 // لذلك لا توجد حلقات/شروط هنا؛ كل بطاقة مكتوبة يدوياً — بالضبط كما تكتب أي
-// تطبيق Loomtime حقيقي آخر.
+// تطبيق Indsintime حقيقي آخر.
 //
 // لكن كل ما *قبل* @view.Scaffold أدناه هو برنامج Rin كامل وحقيقي — يُنفَّذ
 // بالكامل عبر rin::Interpreter::run() (@container، for، make، الدوال، كل شيء)
-// قبل أن يبني Loom الشجرة إطلاقاً (انظر runColdPipelineWithRuntime في
-// loom/rin_loom_pipeline.h). لذلك نستخدمه هنا فعلياً بدل الاكتفاء بعرضه في
+// قبل أن يبني Indsin الشجرة إطلاقاً (انظر runColdPipelineWithRuntime في
+// indsin/rin_indsin_pipeline.h). لذلك نستخدمه هنا فعلياً بدل الاكتفاء بعرضه في
 // قسم "جولة في اللغة": حاوية container.doc حقيقية تُعدّ أقسام هذه الصفحة، ثم
 // حلقة for + make تُنشئ حاويات ديناميكية إضافية وقت التشغيل — والنتيجتان
 // تُقرآن حيّاً في warp cells يعرضهما شريط الإحصاءات أدناه (بطاقة رابعة).
@@ -251,8 +251,8 @@ warp copyHtml   = "false";
 
       @view.Card=f6 padding=16; bg="#10130f"; radius=16; shadow="true";
         @view.Column=f6c gap=4;
-          @view.Text=f6icon text="🧵 محرّك واجهات Loomtime"; size=15; weight="700"; color="#f4f6f3"; .end/view
-          @view.Text=f6desc text="Fabric وLoom وWarp وShuttle وDye — نفس المحرّك الذي يبني هذه الصفحة بالذات، شجرة @view حقيقية بلا HTML."; size=13; color="#9aa39c"; .end/view
+          @view.Text=f6icon text="🧵 محرّك واجهات Indsintime"; size=15; weight="700"; color="#f4f6f3"; .end/view
+          @view.Text=f6desc text="Fabric وIndsin وWarp وShuttle وDye — نفس المحرّك الذي يبني هذه الصفحة بالذات، شجرة @view حقيقية بلا HTML."; size=13; color="#9aa39c"; .end/view
         .end/view
       .end/view
 
@@ -408,7 +408,7 @@ warp copyHtml   = "false";
       @view.Text=codeEyebrow text="معاينة حية"; size=12; color="#22c55e"; weight="700"; .end/view
       @view.Text=codeTitle text="حلقة for متكاملة: تكتب، ثم تُقرأ، ثم تُعرض"; size=21; weight="800"; color="#f4f6f3"; .end/view
       @view.Text=codeDesc
-        text="نسخ حرفي لأعلى هذا الملف: حلقة for + make + create() تبني حاوية لكل مقتطف كود، وsetField() تكتب عنوانه فيها — كلاهما عبر rin::Interpreter::run() قبل أن يبني Loom أي @view. تحتها مباشرة: نفس العناوين، لكن مقروءة رجوعاً من الحاويات عبر getField() لا من المصفوفة الأصلية — إثبات أن الكتابة والقراءة حقيقيتان وقت التشغيل.";
+        text="نسخ حرفي لأعلى هذا الملف: حلقة for + make + create() تبني حاوية لكل مقتطف كود، وsetField() تكتب عنوانه فيها — كلاهما عبر rin::Interpreter::run() قبل أن يبني Indsin أي @view. تحتها مباشرة: نفس العناوين، لكن مقروءة رجوعاً من الحاويات عبر getField() لا من المصفوفة الأصلية — إثبات أن الكتابة والقراءة حقيقيتان وقت التشغيل.";
         size=13; color="#9aa39c";
       .end/view
 
@@ -505,9 +505,9 @@ warp copyHtml   = "false";
       @view.Card=s4 padding=16; bg="#10130f"; radius=16; shadow="true";
         @view.Column=s4c gap=6;
           @view.Text=s4t text="4 — جرّب الأمثلة الجاهزة"; size=15; weight="700"; color="#f4f6f3"; .end/view
-          @view.Text=s4d text="مجلد examples/ فيه عشرات ملفات .rin الحقيقية: حاويات، NoSQL، Loomtime، دردشة."; size=13; color="#9aa39c"; .end/view
+          @view.Text=s4d text="مجلد examples/ فيه عشرات ملفات .rin الحقيقية: حاويات، NoSQL، Indsintime، دردشة."; size=13; color="#9aa39c"; .end/view
           @view.Text=s4code mono="true"; size=12; color="#4ade80";
-            text="./rin_run examples/container_loom_api_demo.rin";
+            text="./rin_run examples/container_indsin_api_demo.rin";
           .end/view
         .end/view
       .end/view
@@ -536,7 +536,7 @@ warp copyHtml   = "false";
         @view.Text=e4t text="🌐 container.api وroute — محاكاة أو طلب شبكة حقيقي"; size=13; color="#cfd6cf"; .end/view
       .end/view
       @view.Card=e5 padding=14; bg="#10130f"; radius=14; shadow="true";
-        @view.Text=e5t text="🧵 محرّك واجهات Loomtime (هذه الصفحة نفسها)"; size=13; color="#cfd6cf"; .end/view
+        @view.Text=e5t text="🧵 محرّك واجهات Indsintime (هذه الصفحة نفسها)"; size=13; color="#cfd6cf"; .end/view
       .end/view
       @view.Card=e6 padding=14; bg="#10130f"; radius=14; shadow="true";
         @view.Text=e6t text="🌍 RinHTML — تشغيل .rin كمنطق صفحة HTML مباشرة"; size=13; color="#cfd6cf"; .end/view
@@ -578,7 +578,7 @@ warp copyHtml   = "false";
       @view.Card=c2 padding=16; bg="#10130f"; radius=16; shadow="true";
         @view.Column=c2c gap=4;
           @view.Text=c2t text="🗄️ بيانات وواجهة من نفس اللغة"; size=14; weight="700"; color="#f4f6f3"; .end/view
-          @view.Text=c2d text="حاويات NoSQL وأنابيب إحصاء ومحرّك واجهات Loomtime كلها امتدادات أصيلة للغة نفسها، لا مكتبات خارجية منفصلة."; size=13; color="#9aa39c"; .end/view
+          @view.Text=c2d text="حاويات NoSQL وأنابيب إحصاء ومحرّك واجهات Indsintime كلها امتدادات أصيلة للغة نفسها، لا مكتبات خارجية منفصلة."; size=13; color="#9aa39c"; .end/view
         .end/view
       .end/view
 
@@ -608,7 +608,7 @@ warp copyHtml   = "false";
       @view.Card=q1 padding=16; bg="#10130f"; radius=16; shadow="true";
         @view.Column=q1c gap=4;
           @view.Text=q1q text="هل Rin مجرد DSL محدود؟"; size=14; weight="700"; color="#f4f6f3"; .end/view
-          @view.Text=q1a text="لا. لديها متغيرات وشروط وحلقات ودوال ومصفوفات وقواميس كأي لغة عامة، بالإضافة إلى امتدادات حاويات البيانات وLoomtime."; size=13; color="#9aa39c"; .end/view
+          @view.Text=q1a text="لا. لديها متغيرات وشروط وحلقات ودوال ومصفوفات وقواميس كأي لغة عامة، بالإضافة إلى امتدادات حاويات البيانات وIndsintime."; size=13; color="#9aa39c"; .end/view
         .end/view
       .end/view
 
