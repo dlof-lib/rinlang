@@ -58,6 +58,39 @@ RIN_API char* rin_loom_session_render_json(void* session);
 // Free with rin_free_string().
 RIN_API char* rin_loom_session_tap(void* session, double x, double y);
 
+// ---- Events: long-press / double-tap / hover (rin_loom_needle.h's dispatchLongPress/
+// dispatchDoubleTap/dispatchHover, Overlay-aware) — same shape/semantics as rin_loom_session_tap
+// above, just against a different attribute (`onLongPress=`/`onDoubleTap=`/`onHoverEnter=` or
+// `onHoverExit=`) instead of `onTap=`. A hit with no matching handler on that attribute simply
+// reports `"handled":false` (not an error) — see dispatchGestureAttr's own doc comment. Free every
+// result with rin_free_string().
+
+// Dispatches a long-press at (x, y). The host is responsible for actually detecting a long-press
+// gesture (hold duration) — this only resolves *what* to run once told one landed here.
+RIN_API char* rin_loom_session_long_press(void* session, double x, double y);
+
+// Dispatches a double-tap at (x, y). Same caveat as long-press: gesture *detection* (two taps
+// within a time/distance window) is the host's job.
+RIN_API char* rin_loom_session_double_tap(void* session, double x, double y);
+
+// Dispatches a hover enter (entering=1) or exit (entering=0) at (x, y). Meant for a pointer/mouse/
+// stylus host (Mirror Loom desktop preview, or a mouse-driven Android device) — the host tracks
+// which Strand it last considered hovered and calls this with entering=0 on it before calling it
+// with entering=1 on whatever's under the pointer now, mirroring a real UI toolkit's enter/exit pair.
+RIN_API char* rin_loom_session_hover(void* session, double x, double y, int entering);
+
+// ---- Effects: advances the session's animation clock (rin_loom_effects.h's EffectRuntime) to
+// "now" and re-applies every animating Strand's current opacity/translate/scale frame, WITHOUT
+// dispatching any gesture — this is what a host's per-frame callback (Choreographer on Android,
+// requestAnimationFrame-equivalent elsewhere) calls in a loop while an enter transition (effect=
+// on some Strand) is still short of its `duration=`. Same JSON envelope shape as
+// rin_loom_session_tap (with "handled":false, "changed":[]), plus one more top-level field:
+// `"animating":bool` — true if at least one Strand is still short of its full duration, i.e. the
+// host should schedule another tick; false means it's safe to stop the per-frame loop until the
+// next real interaction (tap/long-press/.../update_source) starts a fresh animation. Free with
+// rin_free_string().
+RIN_API char* rin_loom_session_tick(void* session);
+
 // Re-parses `newSource` and diffs it against the session's existing Fabric in place (Shuttle),
 // keeping all current Warp values (so state like a tapped counter survives editing elsewhere in
 // the file). On a parse error the previous Fabric is left completely untouched (Snag containment)
