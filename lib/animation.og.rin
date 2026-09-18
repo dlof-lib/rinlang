@@ -20,7 +20,7 @@ fun anim_keyframe(a,b,startTime,endTime,t){if(t<=startTime){return a;}if(t>=endT
 // - الجزء الزمني (now()) والتحديث التفاعلي (setState) دالتان أصليتان (native) في المفسّر نفسه.
 // - هذه المكتبة تدير قائمة الحركات النشطة وتحوّل الزمن إلى قيم عبر دوال التسهيل (easing) أعلاه.
 // - anim_tick() هي نقطة الدخول الوحيدة المطلوب استدعاؤها من الخارج مرة كل "إطار": من حلقة CLI،
-//   أو من Kotlin عبر JNI بعد كل رسم لإطار في LoomFabricView، أو حتى من setInterval في نسخة الويب.
+//   أو من Kotlin عبر JNI بعد كل رسم لإطار في IndsinFabricView، أو حتى من setInterval في نسخة الويب.
 //   بذلك يبقى محرّك اللغة نفسه بلا أي اعتماد على مؤقّتات نظام التشغيل أو الخيوط (threads).
 
 let __anim_registry = [];
