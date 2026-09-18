@@ -147,7 +147,7 @@ object BuiltinLibraries {
         ),
         BuiltinLibraryInfo(
             "lib/movingmask.og.rin", "movingmask",
-            "أقنعة متحركة فوق الحاويات والحلقات: فيزياء وحركة (seek/patrol/orbit/سرب/تشكيلات)، آلة حالات، تسلسل JSON، فهرسة مكانية، مؤقتات، FPS وخطوة زمنية ثابتة، أحجام شاشة متجاوبة، أنواع شريط تحميل، لمس وسلاسة حركة، عملات ونقاط، عصا تحكّم وأزرار افتراضية، وقناع منزلق فوق مصفوفات وشبكات، مع تكامل اختياري مع Loom",
+            "أقنعة متحركة فوق الحاويات والحلقات: فيزياء وحركة (seek/patrol/orbit/سرب/تشكيلات)، آلة حالات، تسلسل JSON، فهرسة مكانية، مؤقتات، FPS وخطوة زمنية ثابتة، أحجام شاشة متجاوبة، أنواع شريط تحميل، لمس وسلاسة حركة، عملات ونقاط، عصا تحكّم وأزرار افتراضية، وقناع منزلق فوق مصفوفات وشبكات، مع تكامل اختياري مع Indsin",
             "mm_new • mm_spawn • mm_tick • mm_flockStep • mm_fsmFire • mm_serialize • mm_setViewport • mm_progressTick • mm_smoothFollow • mm_collectCoinsNear • mm_joystickUpdate • mm_buttonPress",
             iconRes = R.drawable.ic_lib_movingmask
         ),
