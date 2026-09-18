@@ -43,11 +43,11 @@ add_library(
         # RinHttpBridge.kt عبر JNI؛ لا حاجة لأي مكتبة TLS/curl إضافية هنا على أندرويد تحديداً.
         # rin_json.h مستخدَم داخل rin_interpreter.cpp مباشرة (header-only) فلا يحتاج سطراً هنا.
         rin_http.cpp
-        # rin_c_api.cpp + loom/: محرّك العرض Loomtime (rendering engine) — إضافي بحت فوق
+        # rin_c_api.cpp + indsin/: محرّك العرض Indsintime (rendering engine) — إضافي بحت فوق
         # مفسّر اللغة أعلاه؛ يحوّل جذور @view.<Kind>=name إلى Fabric (شجرة عرض) مُخطَّطة
-        # ومرسومة عبر Loom/Dye، ويُعرَّض إلى Kotlin عبر jni_bridge.cpp -> RinEngine.kt.
+        # ومرسومة عبر Indsin/Dye، ويُعرَّض إلى Kotlin عبر jni_bridge.cpp -> RinEngine.kt.
         rin_c_api.cpp
-        loom/rin_loom_c_api.cpp
+        indsin/rin_indsin_c_api.cpp
         # clc/: مكتبة CLC (Rin Compact Library Container، .rcl) — مستقلة تماماً عن باقي المحرّك،
         # مربوطة فقط عبر natives خام في rin_interpreter.cpp (container.open/close، library.import/
         # export؛ انظر registerNatives()/invokeCallee() هناك وdocs/RIN_INTEGRATION.md في مستودع
@@ -116,17 +116,17 @@ target_include_directories(
         ${CMAKE_CURRENT_SOURCE_DIR}/diagnostics
 )
 
-# loomc: أداة سطر أوامر مستقلة لمحرّك العرض Loomtime — نفس فلسفة rinc أعلاه تماماً:
+# indsinc: أداة سطر أوامر مستقلة لمحرّك العرض Indsintime — نفس فلسفة rinc أعلاه تماماً:
 # هدف مستقل، لا يُربط بـ rinengine ولا يُحزَم داخل APK، للاختبار على جهاز تطوير عادي فقط.
 #
-# ملاحظة: loom/loomc.cpp يتضمّن rin_loom_pipeline.h، وهذا الأخير يشغّل rin::Interpreter حقيقياً
+# ملاحظة: indsin/indsinc.cpp يتضمّن rin_indsin_pipeline.h، وهذا الأخير يشغّل rin::Interpreter حقيقياً
 # (runColdPipelineWithRuntime/runColdPipeline كلاهما ينشئ/يشغّل rin::Interpreter فعلياً، انظر
 # تعليقاته الخاصة) وليس مجرّد lex+parse مثل rincheck، لذا يحتاج نفس مصادر وقت التشغيل التي
 # يحتاجها rincheck أدناه (rin_interpreter.cpp وكل ما يعتمد عليه) وإلا فشل الربط (linker) بأخطاء
 # "undefined symbol" لـ rin::Interpreter::Interpreter()/run() و rin::Value::toDisplayString().
 add_executable(
-        loomc
-        loom/loomc.cpp
+        indsinc
+        indsin/indsinc.cpp
         rin_lexer.cpp
         rin_parser.cpp
         rin_make.cpp
@@ -169,16 +169,16 @@ target_link_libraries(
 )
 
 target_link_libraries(
-        loomc
+        indsinc
         ${z-lib}
 )
 
 # pitokc: أداة سطر أوامر مستقلة لـ PITOK -- لغة الواجهات المفصولة عن Rin العام (انظر
-# pitok/README.md). نفس فلسفة rinc/rincheck/loomc أعلاه تمامًا: هدف مستقل، لا يُربط بـ
-# rinengine ولا يُحزَم داخل APK. الفرق الجوهري عن loomc: هذا الهدف لا يحتاج ولا يربط أيًا من
+# pitok/README.md). نفس فلسفة rinc/rincheck/indsinc أعلاه تمامًا: هدف مستقل، لا يُربط بـ
+# rinengine ولا يُحزَم داخل APK. الفرق الجوهري عن indsinc: هذا الهدف لا يحتاج ولا يربط أيًا من
 # rin_lexer.cpp/rin_parser.cpp/rin_interpreter.cpp إطلاقًا -- المسار الكامل هنا هو
-# pitok::Lexer -> pitok::Parser -> pitok_bridge (loom/pitok_loom_bridge.h) -> نفس
-# rin_loom_layout.h/rin_loom_paint.h اللذين يستخدمهما loomc، بلا أي تعديل عليهما. هذا الهدف هو
+# pitok::Lexer -> pitok::Parser -> pitok_bridge (indsin/pitok_indsin_bridge.h) -> نفس
+# rin_indsin_layout.h/rin_indsin_paint.h اللذين يستخدمهما indsinc، بلا أي تعديل عليهما. هذا الهدف هو
 # الإثبات الحيّ في نظام البناء نفسه (وليس فقط في اختبارات pitok/Makefile اليدوية) أن واجهات
 # @view/@loop/@container/@element يمكن تحليلها ورسمها دون المرور بمُحلِّل Rin العام.
 add_executable(
@@ -197,7 +197,7 @@ target_include_directories(
 
 # Link the native desktop QR backend when available.
 if(NOT ANDROID AND RIN_QRENCODE_LIB)
-    foreach(_rin_target rinengine rincheck loomc)
+    foreach(_rin_target rinengine rincheck indsinc)
         if(TARGET ${_rin_target})
             target_link_libraries(${_rin_target} PRIVATE ${RIN_QRENCODE_LIB})
         endif()
