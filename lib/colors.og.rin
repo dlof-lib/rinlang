@@ -1,5 +1,5 @@
 // Rin Colors Pro — the language-level face of Rin's Color Engine (see app/src/main/cpp/
-// rin_color.h for the native implementation shared with Loom's renderer/previews).
+// rin_color.h for the native implementation shared with Indsin's renderer/previews).
 //
 // Every function below that takes a `color` parameter accepts ANY literal color syntax the
 // engine understands: "#rgb", "#rgba", "#rrggbb", "#rrggbbaa", "rgb(r,g,b)", "rgba(r,g,b,a)",
