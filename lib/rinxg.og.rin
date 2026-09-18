@@ -437,7 +437,7 @@ fun rxContainerStyle(attrs) {
     return css;
 }
 
-// أيقونة/ألوان Banner حسب type= — نفس الأنواع المستخدمة في محرّك Loom الأصلي (info/success/
+// أيقونة/ألوان Banner حسب type= — نفس الأنواع المستخدمة في محرّك Indsin الأصلي (info/success/
 // warning/error/action) حتى تبقى دلالة "type" واحدة عبر المشروع كله لا نظامين مختلفين.
 fun rxBannerIcon(type) {
     if (type == "success") { return "✔"; }
@@ -454,7 +454,7 @@ fun rxBannerColors(type) {
     return { "bg": "#1c2436", "accent": "#3a6ec4", "fg": "#dbe6f7" }; // info (الافتراضي)
 }
 
-// Banner: شريط تنبيه — إما بشكل مركّب (children من text/button/... مثل Loom تماماً) أو بشكل
+// Banner: شريط تنبيه — إما بشكل مركّب (children من text/button/... مثل Indsin تماماً) أو بشكل
 // مختصر مُغلَق ذاتياً (title=/text= بلا أبناء) للاستخدام السريع. اللون يُورَث للأبناء عبر
 // CSS inheritance العادي (color على الحاوية الخارجية) بدل تكراره في كل عنصر ابن يدوياً.
 fun rxRenderBanner(node) {
