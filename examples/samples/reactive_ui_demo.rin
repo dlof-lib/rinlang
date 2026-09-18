@@ -1,7 +1,7 @@
 // reactive_ui_demo.rin — يوضّح الأنظمة الخمسة مجتمعة في مثال واحد:
 //   1) events:    on.event / emit / bubbles           (موجودة أصلاً في المفسّر)
 //   2) reactivity: state + on update(prevState)        (موجودة أصلاً في المفسّر)
-//   3) layout:    @view.Row / @view.Column + gap/sizing (موجودة أصلاً في Loom، جرّبها عبر loomc)
+//   3) layout:    @view.Row / @view.Column + gap/sizing (موجودة أصلاً في Indsin، جرّبها عبر indsinc)
 //   4) animation: anim_tween/anim_tick (lib/animation.og.rin) — المحرّك الجديد المضاف هنا
 //   5) lifecycle: on init()/mount()/update()/destroy()/error() (موجودة أصلاً في المفسّر)
 //
