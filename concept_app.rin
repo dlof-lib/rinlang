@@ -1,11 +1,11 @@
-// concept_app.rin — تطبيق Loom حقيقي (وليس نموذجاً منطقياً فقط): كل سلوك هنا
-// مرتبط بعنصر @view فعلي، وكل onTap= يستدعي فعل Loom Action حقيقي مسجَّل أصلاً
-// في app/src/main/cpp/loom/rin_loom_actions.h (toggle/increment/decrement)،
+// concept_app.rin — تطبيق Indsin حقيقي (وليس نموذجاً منطقياً فقط): كل سلوك هنا
+// مرتبط بعنصر @view فعلي، وكل onTap= يستدعي فعل Indsin Action حقيقي مسجَّل أصلاً
+// في app/src/main/cpp/indsin/rin_indsin_actions.h (toggle/increment/decrement)،
 // فتُعاد صياغة الشجرة وتُرسم فعلياً — أي تغيير هنا يظهر في JSON/PNG حقيقيين.
 //
 // شغّله:
-//   render:  rin_loom_run render concept_app.rin
-//   تفاعلي:  rin_loom_run session concept_app.rin
+//   render:  rin_indsin_run render concept_app.rin
+//   تفاعلي:  rin_indsin_run session concept_app.rin
 //            ثم اكتب: tap <x> <y>   لِلَمس أي زر فعلياً وإعادة الرسم الحقيقية
 
 warp pressed  = false;   // ضغط الزر (تغذية بصرية فورية)
