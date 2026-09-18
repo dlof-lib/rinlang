@@ -2,11 +2,13 @@
 #include "rin_loom_c_api.h"
 #include "rin_loom_pipeline.h"
 #include "rin_loom_needle.h"
+#include "rin_loom_effects.h"
 #include <cstring>
 #include <cstdlib>
 #include <sstream>
 #include <unordered_map>
 #include <memory>
+#include <chrono>
 
 namespace {
 char* dupToC(const std::string& s) {
@@ -36,7 +38,18 @@ struct LoomSession {
     // the pointee via std::make_unique sidesteps that entirely.
     std::unique_ptr<rin::Interpreter> interp = std::make_unique<rin::Interpreter>();
     bool interpSeeded = false;
+
+    // Effects Engine (rin_loom_effects.h): one animation clock per session, monotonic from
+    // whenever the session was created — a plain elapsed-ms counter is all EffectRuntime needs
+    // (it only ever compares two of its own readings), so there's no wall-clock/timezone concern.
+    std::chrono::steady_clock::time_point clockStart = std::chrono::steady_clock::now();
+    loom::EffectRuntime effectRuntime;
+    bool animating = false; // set by relayout() below; read back into every JSON envelope
 };
+
+double nowMsFor(LoomSession* sess) {
+    return std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - sess->clockStart).count();
+}
 
 void relayout(LoomSession* sess) {
     if (!sess->state.ok || !sess->state.fabric) return;
@@ -46,6 +59,10 @@ void relayout(LoomSession* sess) {
     // viewport now that the whole tree (including their own content boxes) has been measured.
     sess->overlayLayer = loom::buildOverlayLayer(sess->loomEngine, sess->state.fabric,
                                                   (double)sess->rootWidth, (double)sess->viewportHeight);
+    // Effects Engine: applied last, after both passes above, so the geometry it nudges
+    // (translate/scale for an in-progress enter animation) is this frame's FINAL geometry —
+    // anything painted or exported after this reflects the current animation frame for free.
+    sess->animating = loom::applyEffectsToFabric(sess->state.fabric, sess->effectRuntime, nowMsFor(sess));
 }
 void rebuildIndex(LoomSession* sess) {
     sess->index.clear();
@@ -87,6 +104,7 @@ std::string fabricEnvelope(LoomSession* sess, const std::string& extraFields) {
     os << "{\"ok\":true" << extraFields
        << ",\"strandsMeasured\":" << sess->loomEngine.stats.strandsMeasured
        << ",\"cacheHits\":" << sess->loomEngine.stats.cacheHits
+       << ",\"animating\":" << (sess->animating ? "true" : "false")
        << ",\"overlays\":" << overlayLayerJson(sess->overlayLayer)
        << ",\"paint\":" << loom::drawListToJsonString(draw)
        << ",\"fabric\":" << loom::fabricToJsonString(sess->state.fabric) << "}";
@@ -219,6 +237,78 @@ RIN_API char* rin_loom_session_tap(void* sessionPtr, double x, double y) {
     if (!tap.error.empty()) extra << ",\"error\":\"" << loom::jsonEscape(tap.error) << "\"";
 
     return dupToC(fabricEnvelope(sess, extra.str()));
+}
+
+// Shared tail for long-press/double-tap/hover below: applies a dispatched loom::TapResult exactly
+// the same way rin_loom_session_tap does (Warp changes -> Shuttle -> recomputeHashes -> relayout,
+// then the {"handled":...,"targetId":...,"handler":...,"changed":[...]} envelope fields) so all
+// four gesture endpoints stay byte-for-byte consistent in shape. `error` is only ever set when a
+// handler was actually found but failed at runtime -- same convention as the tap endpoint.
+char* respondToGesture(LoomSession* sess, const loom::TapResult& g) {
+    if (!g.changedWarpNames.empty()) {
+        loom::Shuttle shuttle;
+        for (auto& name : g.changedWarpNames) {
+            shuttle.applyWarpChange(name, sess->state.warp, sess->state.subs, sess->index);
+        }
+        loom::recomputeHashes(sess->state.fabric);
+        relayout(sess);
+    } else {
+        // No Warp change, but an effect= elsewhere in the tree may still be mid-animation --
+        // relayout() is cheap (Tension caches unchanged Strands) and keeps sess->animating fresh
+        // for this response even when this particular gesture didn't touch anything.
+        relayout(sess);
+    }
+
+    std::ostringstream extra;
+    extra << ",\"handled\":" << (g.handled ? "true" : "false")
+          << ",\"targetId\":" << g.targetId
+          << ",\"handler\":\"" << loom::jsonEscape(g.handlerDescription) << "\""
+          << ",\"changed\":[";
+    for (size_t i = 0; i < g.changedWarpNames.size(); i++) {
+        if (i) extra << ",";
+        extra << "\"" << loom::jsonEscape(g.changedWarpNames[i]) << "\"";
+    }
+    extra << "]";
+    if (!g.error.empty()) extra << ",\"error\":\"" << loom::jsonEscape(g.error) << "\"";
+
+    return dupToC(fabricEnvelope(sess, extra.str()));
+}
+
+RIN_API char* rin_loom_session_long_press(void* sessionPtr, double x, double y) {
+    auto* sess = static_cast<LoomSession*>(sessionPtr);
+    if (!sess || !sess->state.ok) return dupToC(sessionErrorJson(sess));
+    loom::TapResult g = loom::dispatchLongPressWithOverlay(sess->state.fabric, sess->state.warp,
+                                                            sess->state.program, sess->overlayLayer, x, y,
+                                                            nullptr, nullptr,
+                                                            sess->interp.get(), &sess->interpSeeded);
+    return respondToGesture(sess, g);
+}
+
+RIN_API char* rin_loom_session_double_tap(void* sessionPtr, double x, double y) {
+    auto* sess = static_cast<LoomSession*>(sessionPtr);
+    if (!sess || !sess->state.ok) return dupToC(sessionErrorJson(sess));
+    loom::TapResult g = loom::dispatchDoubleTapWithOverlay(sess->state.fabric, sess->state.warp,
+                                                            sess->state.program, sess->overlayLayer, x, y,
+                                                            nullptr, nullptr,
+                                                            sess->interp.get(), &sess->interpSeeded);
+    return respondToGesture(sess, g);
+}
+
+RIN_API char* rin_loom_session_hover(void* sessionPtr, double x, double y, int entering) {
+    auto* sess = static_cast<LoomSession*>(sessionPtr);
+    if (!sess || !sess->state.ok) return dupToC(sessionErrorJson(sess));
+    loom::TapResult g = loom::dispatchHoverWithOverlay(sess->state.fabric, sess->state.warp,
+                                                        sess->state.program, sess->overlayLayer, x, y,
+                                                        entering != 0, nullptr, nullptr,
+                                                        sess->interp.get(), &sess->interpSeeded);
+    return respondToGesture(sess, g);
+}
+
+RIN_API char* rin_loom_session_tick(void* sessionPtr) {
+    auto* sess = static_cast<LoomSession*>(sessionPtr);
+    if (!sess || !sess->state.ok) return dupToC(sessionErrorJson(sess));
+    relayout(sess); // re-applies the Effects Engine at "now"; sess->animating reflects this tick
+    return dupToC(fabricEnvelope(sess, ",\"handled\":false,\"changed\":[]"));
 }
 
 RIN_API char* rin_loom_session_update_source(void* sessionPtr, const char* newSource) {
