@@ -35,6 +35,7 @@ object AppSettings {
     private const val KEY_PROJECT_SORT = "project_sort"
     private const val KEY_SHOW_CONSOLE = "show_console"
     private const val KEY_SHOW_TOOLBAR = "show_toolbar"
+    private const val KEY_AUTO_RUN = "auto_run_on_type"
 
     private fun prefs(context: Context) =
         context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -88,6 +89,11 @@ object AppSettings {
     fun setShowConsole(context: Context, v: Boolean) = put(context, KEY_SHOW_CONSOLE, v)
     fun isShowToolbar(context: Context) = prefs(context).getBoolean(KEY_SHOW_TOOLBAR, true)
     fun setShowToolbar(context: Context, v: Boolean) = put(context, KEY_SHOW_TOOLBAR, v)
+    /** تشغيل تلقائي (live output): يُعيد تنفيذ الكود في الطابور بعد توقّف قصير عن الكتابة،
+     *  بدل انتظار ضغط زر Run. مُعطَّل افتراضياً حتى لا يفاجَأ المستخدمون الحاليون بطابور
+     *  عمل يمتلئ بمحاولات تشغيل لم يطلبوها صراحةً. */
+    fun isAutoRunEnabled(context: Context) = prefs(context).getBoolean(KEY_AUTO_RUN, false)
+    fun setAutoRunEnabled(context: Context, v: Boolean) = put(context, KEY_AUTO_RUN, v)
 
     private fun put(context: Context, key: String, value: Boolean) = prefs(context).edit().putBoolean(key, value).apply()
 
@@ -116,6 +122,7 @@ object AppSettings {
             .putString(KEY_PROJECT_SORT, "recent")
             .putBoolean(KEY_SHOW_CONSOLE, true)
             .putBoolean(KEY_SHOW_TOOLBAR, true)
+            .putBoolean(KEY_AUTO_RUN, false)
             .apply()
     }
 }
