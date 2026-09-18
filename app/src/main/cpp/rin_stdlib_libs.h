@@ -28,7 +28,7 @@ static const char* kLib_math_og_rin = R"MATHOGRIN(
 //    5) أسّية ولوغاريتمات (exp/ln) — نفس المبدأ (سلاسل + اختزال مجال)
 //    6) دوال زائدية (hyperbolic)
 //    7) متجهات ثنائية/ثلاثية الأبعاد (vec2/vec3) كمصفوفات [x,y]/[x,y,z]
-//    8) دوال Easing (لمنحنيات الحركة في واجهات Loom أو محرك الألعاب)
+//    8) دوال Easing (لمنحنيات الحركة في واجهات Indsin أو محرك الألعاب)
 //    9) إحصاء إضافي (عيّنة/تباين مشترك/ارتباط بيرسون)
 //    10) عشوائية مساعدة (فوق random() الفطرية)
 //
@@ -532,7 +532,7 @@ fun vec3Lerp(a, b, t) {
 }
 
 // ---------------------------------------------------------------------------
-// 8) دوال Easing — منحنيات حركة قياسية لواجهات Loom أو محرك الألعاب (t في [0,1])
+// 8) دوال Easing — منحنيات حركة قياسية لواجهات Indsin أو محرك الألعاب (t في [0,1])
 // ---------------------------------------------------------------------------
 fun smoothstep(t) {
     let c = clampNum(t, 0, 1);
@@ -5245,7 +5245,7 @@ fun rxContainerStyle(attrs) {
     return css;
 }
 
-// أيقونة/ألوان Banner حسب type= — نفس الأنواع المستخدمة في محرّك Loom الأصلي (info/success/
+// أيقونة/ألوان Banner حسب type= — نفس الأنواع المستخدمة في محرّك Indsin الأصلي (info/success/
 // warning/error/action) حتى تبقى دلالة "type" واحدة عبر المشروع كله لا نظامين مختلفين.
 fun rxBannerIcon(type) {
     if (type == "success") { return "✔"; }
@@ -5262,7 +5262,7 @@ fun rxBannerColors(type) {
     return { "bg": "#1c2436", "accent": "#3a6ec4", "fg": "#dbe6f7" }; // info (الافتراضي)
 }
 
-// Banner: شريط تنبيه — إما بشكل مركّب (children من text/button/... مثل Loom تماماً) أو بشكل
+// Banner: شريط تنبيه — إما بشكل مركّب (children من text/button/... مثل Indsin تماماً) أو بشكل
 // مختصر مُغلَق ذاتياً (title=/text= بلا أبناء) للاستخدام السريع. اللون يُورَث للأبناء عبر
 // CSS inheritance العادي (color على الحاوية الخارجية) بدل تكراره في كل عنصر ابن يدوياً.
 fun rxRenderBanner(node) {
@@ -6440,7 +6440,7 @@ static const char* kLib_movingmask_og_rin = R"MOVINGMASKOGRIN(
 //    12) التكامل مع الحلقات (loop integration: tick / runLoop / animateTo / forEach)
 //    13) الأحداث (lightweight event hooks)
 //    14) الفحص والتلخيص (inspection / debug)
-//    15) التكامل مع Loom — مفاهيم مستعارة من محرّك الواجهات Loomtime
+//    15) التكامل مع Indsin — مفاهيم مستعارة من محرّك الواجهات Indsintime
 //        15.1) Warp   — تصدير حالة قناع كحقول مُسطَّحة
 //        15.2) Strand — تسمية بصرية اختيارية للقناع
 //        15.3) Fabric — لقطة مسطَّحة بكل الأقنعة
@@ -7882,23 +7882,23 @@ fun mm_toString(mm) {
 
 
 // ============================================================================
-// 15) التكامل مع Loom — مفاهيم مستعارة من محرّك الواجهات Loomtime
+// 15) التكامل مع Indsin — مفاهيم مستعارة من محرّك الواجهات Indsintime
 // ============================================================================
-//  محرّك Loomtime (app/src/main/cpp/loom/*.h) نظام مستقل تماماً بمفرداته الخاصة: الـ Fabric
+//  محرّك Indsintime (app/src/main/cpp/indsin/*.h) نظام مستقل تماماً بمفرداته الخاصة: الـ Fabric
 //  (شجرة عرض حيّة من Strand)، الـ Warp (خلايا حالة تفاعلية يقرأها @view.* تلقائياً)، الـ
 //  Needle (محرّك اللمس/الإصابة الذي يحوّل نقطة لمس إلى Strand وحدث)، والـ Shuttle (يقارن
 //  شجرتين ويُنتج Patch[] segmentية). هذه المكتبة (movingmask) لا تُعدِّل ذلك المحرّك ولا
 //  تستدعيه مباشرة — فهو C++ منفصل عن هذا الملف الذي يبقى Rin خالصاً مستقلاً بذاته كما في
 //  بقية الأقسام أعلاه. بدل ذلك، هذا القسم يستعير *نفس المفاهيم والمفردات* على مستوى بيانات
-//  movingmask نفسها، بحيث يسهل ربط عالم الأقنعة المتحركة يدوياً بواجهة Loomtime حقيقية:
+//  movingmask نفسها، بحيث يسهل ربط عالم الأقنعة المتحركة يدوياً بواجهة Indsintime حقيقية:
 //
 //    - Warp:    mm_warpFields/mm_warpFieldNames — تُصدِّر حالة قناع كحقول مُسطَّحة بأسماء
 //                جاهزة لتُسنَد إلى خلايا `warp` التي يُعلنها المستخدم بنفسه في ملف .rin
-//                (Loomtime لا يوفّر تعيين خلية warp بالاسم النصّي ديناميكياً من كود Rin
+//                (Indsintime لا يوفّر تعيين خلية warp بالاسم النصّي ديناميكياً من كود Rin
 //                عادي، لذا الإسناد النهائي `اسم_الخلية = القيمة;` يبقى بيد المستخدم كل
 //                دورة — انظر المثال في docs/moving-mask.md).
 //    - Strand:  mm_setStrandKind/mm_strandKind — تسمية بصرية اختيارية للقناع (نفس أسماء
-//                loom::StrandKind قدر الإمكان: "Text","Image","Button","Card","Icon","Box"...)
+//                indsin::StrandKind قدر الإمكان: "Text","Image","Button","Card","Icon","Box"...)
 //                تُخزَّن في meta العادية؛ مفيدة إن أردت لاحقاً رسم/تصدير القناع بشكل مختلف
 //                بحسب نوعه المُعلن.
 //    - Fabric:  mm_toFabric — لقطة مسطَّحة (بلا تعشيش أب/أبناء، على عكس شجرة Fabric
@@ -7932,7 +7932,7 @@ fun mm_toString(mm) {
 //                فكرة Pattern Book الحقيقي (`@theme=...`)، مع حدث "themeChanged" عند التبديل.
 //    - Object Inspector: mm_toObjectInspector — بطاقة فحص كاملة لقناع واحد (id + مصفوفة
 //                حقول مُسمّاة، تشمل meta الحرّة) بنفس شكل بطاقة .object(id) الحيّة التي
-//                يرسمها Loom الحقيقي (rin_loom_object.h) لكن دون الاعتماد على أي AST حقيقي.
+//                يرسمها Indsin الحقيقي (rin_indsin_object.h) لكن دون الاعتماد على أي AST حقيقي.
 
 // ---- Warp: تصدير حالة قناع كحقول مُسطَّحة جاهزة لخلايا warp -----------------------------
 
@@ -7945,7 +7945,7 @@ fun mm_warpFieldNames(prefix) {
 // يُصدِّر موضع/سرعة/حالة نشاط قناع كخريطة حقول مُسطَّحة بأسماء prefix+"_x" وهكذا (prefix
 // الافتراضي هو اسم القناع نفسه إن مُرِّر nil) — جاهزة لتُسنَد يدوياً إلى خلايا `warp` معلَنة
 // بنفس الاسم كل دورة، فتُحدَّث واجهة @view.* التي تقرأ تلك الخلايا تلقائياً عبر إعادة الرسم
-// التفاعلية العادية لِـ Loomtime؛ يُعيد nil إن لم يوجد القناع
+// التفاعلية العادية لِـ Indsintime؛ يُعيد nil إن لم يوجد القناع
 fun mm_warpFields(mm, name, prefix) {
     let rec = mm_get(mm, name);
     if (rec == nil) { return nil; }
@@ -7962,7 +7962,7 @@ fun mm_warpFields(mm, name, prefix) {
 
 // ---- Strand: تسمية بصرية اختيارية للقناع ------------------------------------------------
 
-// يُسمّي "نوع Strand" مُقترَح لقناع (نصّ حرّ، لكن يُفضَّل استخدام نفس مفردات loom::StrandKind
+// يُسمّي "نوع Strand" مُقترَح لقناع (نصّ حرّ، لكن يُفضَّل استخدام نفس مفردات indsin::StrandKind
 // مثل "Text"/"Image"/"Button"/"Card"/"Icon"/"Box"...) — تخزين بسيط فوق meta العادية،
 // لا يُنشئ أي Strand حقيقي ولا يتحقّق من صحة القيمة
 fun mm_setStrandKind(mm, name, kind) {
@@ -8311,7 +8311,7 @@ fun mm_themeColor(mm, roleName, fallback) {
 // ---- Object Inspector: بطاقة فحص كاملة لقناع واحد --------------------------------------
 
 // بطاقة فحص حيّة لقناع واحد، بنفس روح بطاقة `.object(id) ... container.(); .end/object`
-// التي يرسمها Loom الحقيقي (rin_loom_object.h) لكن مبنية فوق سجلّ movingmask مباشرة بلا أي
+// التي يرسمها Indsin الحقيقي (rin_indsin_object.h) لكن مبنية فوق سجلّ movingmask مباشرة بلا أي
 // AST: { id: name, fields: [ {name, value}, ... ] } — الحقول الأساسية أولاً (x/y/vx/vy/
 // active/container/strandKind/color)، ثم كل مفتاح إضافي من meta الحرّة (بترتيب مفاتيحه)
 // بلا تكرار (يُتجاوَز أي مفتاح meta اسمه "strandKind" أو "color" لأنه أُضيف مسبقاً أعلاه
@@ -8914,7 +8914,7 @@ fun mm_setPositionPercent(mm, name, percentX, percentY) {
 // 23) أنواع شريط التحميل (Progress / Loading Bar Kinds)
 // ============================================================================
 //  أشرطة تقدُّم/تحميل مُسمّاة يديرها محرّك mm بمعزل عن الأقنعة (وإن أمكن ربطها بقناع لعرضه
-//  بصرياً عبر Loom). أربعة أنواع شائعة مدعومة عبر kind واحد:
+//  بصرياً عبر Indsin). أربعة أنواع شائعة مدعومة عبر kind واحد:
 //    "linear"       — شريط عادي محدَّد المدة (تحميل ملف، شريط صحة/طاقة)
 //    "circular"     — نفس منطق linear رقمياً؛ الفرق بصري بحت عند الرسم (حلقي بدل مستطيل)
 //    "indeterminate"— بلا مدة معروفة (انتظار استجابة خادم)؛ يتأرجح ذهاباً وإياباً بلا توقف
@@ -9009,7 +9009,7 @@ fun mm_progressIsDone(mm, name) {
 }
 
 // لقطة مسطَّحة كاملة لشريط تقدُّم (نمط mm_warp من القسم 15) جاهزة للتغذية مباشرة لعنصر
-// واجهة Loom — تتضمّن دائماً kind/value/percent/done، بالإضافة إلى completedSegments/segments
+// واجهة Indsin — تتضمّن دائماً kind/value/percent/done، بالإضافة إلى completedSegments/segments
 // لنوع "segmented"، أو buffered لنوع "buffer"
 fun mm_progressWarp(mm, name) {
     let p = mm__progressGet(mm, name);
