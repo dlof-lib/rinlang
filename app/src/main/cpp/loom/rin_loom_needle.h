@@ -100,86 +100,40 @@ inline bool isExternalHref(const std::string& target) {
     return false;
 }
 
-// Dispatches a tap at (x, y) against `fabricRoot`. `program` is the last successfully parsed
-// top-level statement list (PipelineResult::program) -- used to look up a matching `fun`.
-// `nav`, if non-null, wires up navigate()/back()/replace()/reload() (spec §19); omitting it (the
-// default) simply means those four calls report as unrecognized, same as any other unknown
-// callee -- existing call sites that don't pass a NavigationManager keep working unchanged.
-// `exportDye`, if non-null, wires up exportPNG()/screenshot()/exportImage() (spec §21-23) the same
-// optional-pointer way `nav` wires up navigation -- omit it and those three simply report as
-// unrecognized, so existing call sites compile and behave unchanged.
-// `persistentInterp`, if non-null, is used *instead of* a throwaway `rin::Interpreter` for the
-// "real user fun" path below. This is the fix for the gap documented in README_CHATBOT.md: a
-// fresh `rin::Interpreter` per tap has its own empty chatHistoryStore/chatEventHandlers, so
-// sendMessage()/botReply() calls made from inside an onTap handler never accumulated anywhere the
-// next tap (or chatHistory()) could see. Callers that own a long-lived session (see
-// LoomSession::interp in rin_loom_c_api.cpp) pass the same Interpreter instance on every tap, and
-// this function makes sure it is seeded exactly once (its own containers/functions/warp cells
-// registered via a real `run()`) so that instance's chat/container state persists across taps
-// exactly like it already does for two `sendMessage()` calls in the same script. Passing nullptr
-// (the default) preserves the exact old per-tap-fresh-interpreter behavior for every existing
-// call site.
-inline TapResult dispatchTap(const StrandPtr& fabricRoot, WarpScope& warp,
-                              const std::vector<rin::StmtPtr>& program, double x, double y,
-                              NavigationManager* nav = nullptr, Dye* exportDye = nullptr,
-                              rin::Interpreter* persistentInterp = nullptr,
-                              bool* persistentInterpSeeded = nullptr) {
+// ---- Events & Effects: interaction events (spec §events) ----
+//
+// Needle originally only understood `onTap`. This section generalizes the *execution* half of
+// that (evaluate args against Warp, run a real top-level `fun` if one matches the callee, else
+// fall back to navigate()/exportPNG()/the built-in Action Engine) into executeHandlerExpr(), so
+// the same engine also drives onLongPress=, onDoubleTap=, onHoverEnter=/onHoverExit= below --
+// without copy-pasting the ~90-line dispatch logic per gesture. dispatchTap() itself is
+// unchanged in behavior (including its href= fallback, which is onTap-specific and stays here).
+
+// Runs `handlerExpr` (already resolved to belong to `owner`) exactly like dispatchTap's original
+// inline body did: a matching top-level `fun` first (full language semantics), else
+// navigate()/back()/replace()/reload() (needs `nav`), else exportPNG()/screenshot()/exportImage()
+// (needs `exportDye`), else the built-in Action Engine's Warp-cell verb registry. `gestureName` is
+// only used to word an unrecognized-callee/missing-nav/missing-dye error message; it doesn't
+// change behavior.
+inline TapResult executeHandlerExpr(const rin::ExprPtr& handlerExpr, const StrandPtr& owner,
+                                     WarpScope& warp, const std::vector<rin::StmtPtr>& program,
+                                     const StrandPtr& fabricRoot, NavigationManager* nav,
+                                     Dye* exportDye, rin::Interpreter* persistentInterp,
+                                     bool* persistentInterpSeeded, const char* gestureName = "onTap") {
     TapResult result;
-    if (!fabricRoot) return result;
-
-    std::vector<StrandPtr> path;
-    if (!hitTestPath(fabricRoot, x, y, path)) return result; // nothing under the tap
-
-    // Bubble outward (leaf to root) for the nearest Strand that actually declared onTap=...;
-    // A disabled Strand (state=disabled or disabled=true) is treated as if it had no onTap at
-    // all -- Needle keeps bubbling past it to whatever's underneath, exactly like a real disabled
-    // native button consumes no tap. This is real interaction gating, not just a paint dimming.
-    const rin::ExprPtr* onTapExpr = nullptr;
-    StrandPtr owner;
-    for (auto& s : path) {
-        if (resolveState(*s) == StrandState::DISABLED) continue;
-        for (auto& a : s->attrs) {
-            if (a.key == "onTap" && a.rawExpr) { onTapExpr = &a.rawExpr; owner = s; break; }
-        }
-        if (onTapExpr) break;
-    }
-
-    // Link concepts (docs/link.md): `href=` is a plain string attribute (not an onTap
-    // expression), so it's resolved directly rather than through the interpreter path below --
-    // it never needed one, it's just sugar over navigate()/an external URL. Only tried when no
-    // onTap was found, so an explicit onTap= on the same Link still wins, same precedence
-    // LoomFabricView.kt's Kotlin-side navigateTargetForTap()/openUrlTargetForTap() already use.
-    if (!onTapExpr) {
-        for (auto& s : path) {
-            if (resolveState(*s) == StrandState::DISABLED) continue;
-            std::string href = s->attrStr("href", "");
-            if (href.empty()) continue;
-            result.handled = true;
-            result.targetId = s->id;
-            if (isExternalHref(href)) {
-                result.openedUrl = href;
-            } else if (nav) {
-                nav->navigate(href);
-                result.navigated = true;
-                result.route = nav->current();
-            }
-            return result;
-        }
-        return result; // tapped something, but nothing interactive there
-    }
-
     result.handled = true;
     result.targetId = owner->id;
 
     std::string callee;
     std::vector<rin::ExprPtr> argExprs;
-    if (auto call = std::dynamic_pointer_cast<rin::CallExpr>(*onTapExpr)) {
+    if (auto call = std::dynamic_pointer_cast<rin::CallExpr>(handlerExpr)) {
         callee = call->callee;
         argExprs = call->args;
-    } else if (auto var = std::dynamic_pointer_cast<rin::VariableExpr>(*onTapExpr)) {
-        callee = var->name; // onTap=someHandler; (no parens) -> treated as a zero-arg call
+    } else if (auto var = std::dynamic_pointer_cast<rin::VariableExpr>(handlerExpr)) {
+        callee = var->name; // e.g. onLongPress=someHandler; (no parens) -> zero-arg call
     } else {
-        result.error = "onTap must be a handler name or call, e.g. onTap=increment(count);";
+        result.error = std::string(gestureName) + " must be a handler name or call, e.g. " +
+                        gestureName + "=increment(count);";
         return result;
     }
 
@@ -216,7 +170,7 @@ inline TapResult dispatchTap(const StrandPtr& fabricRoot, WarpScope& warp,
         for (auto& kv : warp.cells) globals[kv.first] = loomValueToRin(kv.second);
 
         // Prefer the caller's persistent Interpreter (keeps container.chatbot/etc. state alive
-        // across taps); fall back to a throwaway one, matching every pre-existing call site.
+        // across dispatches); fall back to a throwaway one, matching every pre-existing call site.
         rin::Interpreter localInterp;
         rin::Interpreter& interp = persistentInterp ? *persistentInterp : localInterp;
         if (persistentInterp && persistentInterpSeeded && !*persistentInterpSeeded) {
@@ -310,6 +264,152 @@ inline TapResult dispatchTap(const StrandPtr& fabricRoot, WarpScope& warp,
     return result;
 }
 
+// Walks `path` (leaf to root, as hitTestPath filled it) for the nearest enabled Strand carrying
+// attribute `key` with a real expression -- the same disabled-Strand-consuming-nothing rule
+// dispatchTap always used, now shared by every gesture kind below. Sets `owner` and returns a
+// pointer into that Strand's own attrs vector (valid as long as the Strand is alive), or nullptr
+// if no enabled Strand on the path carries `key`.
+inline const rin::ExprPtr* findEnabledHandlerAttr(const std::vector<StrandPtr>& path,
+                                                   const std::string& key, StrandPtr& owner) {
+    for (auto& s : path) {
+        if (resolveState(*s) == StrandState::DISABLED) continue;
+        for (auto& a : s->attrs) {
+            if (a.key == key && a.rawExpr) { owner = s; return &a.rawExpr; }
+        }
+    }
+    return nullptr;
+}
+
+// Dispatches a tap at (x, y) against `fabricRoot`. `program` is the last successfully parsed
+// top-level statement list (PipelineResult::program) -- used to look up a matching `fun`.
+// `nav`, if non-null, wires up navigate()/back()/replace()/reload() (spec §19); omitting it (the
+// default) simply means those four calls report as unrecognized, same as any other unknown
+// callee -- existing call sites that don't pass a NavigationManager keep working unchanged.
+// `exportDye`, if non-null, wires up exportPNG()/screenshot()/exportImage() (spec §21-23) the same
+// optional-pointer way `nav` wires up navigation -- omit it and those three simply report as
+// unrecognized, so existing call sites compile and behave unchanged.
+// `persistentInterp`, if non-null, is used *instead of* a throwaway `rin::Interpreter` for the
+// "real user fun" path below. This is the fix for the gap documented in README_CHATBOT.md: a
+// fresh `rin::Interpreter` per tap has its own empty chatHistoryStore/chatEventHandlers, so
+// sendMessage()/botReply() calls made from inside an onTap handler never accumulated anywhere the
+// next tap (or chatHistory()) could see. Callers that own a long-lived session (see
+// LoomSession::interp in rin_loom_c_api.cpp) pass the same Interpreter instance on every tap, and
+// this function makes sure it is seeded exactly once (its own containers/functions/warp cells
+// registered via a real `run()`) so that instance's chat/container state persists across taps
+// exactly like it already does for two `sendMessage()` calls in the same script. Passing nullptr
+// (the default) preserves the exact old per-tap-fresh-interpreter behavior for every existing
+// call site.
+inline TapResult dispatchTap(const StrandPtr& fabricRoot, WarpScope& warp,
+                              const std::vector<rin::StmtPtr>& program, double x, double y,
+                              NavigationManager* nav = nullptr, Dye* exportDye = nullptr,
+                              rin::Interpreter* persistentInterp = nullptr,
+                              bool* persistentInterpSeeded = nullptr) {
+    TapResult result;
+    if (!fabricRoot) return result;
+
+    std::vector<StrandPtr> path;
+    if (!hitTestPath(fabricRoot, x, y, path)) return result; // nothing under the tap
+
+    // Bubble outward (leaf to root) for the nearest Strand that actually declared onTap=...;
+    // A disabled Strand (state=disabled or disabled=true) is treated as if it had no onTap at
+    // all -- Needle keeps bubbling past it to whatever's underneath, exactly like a real disabled
+    // native button consumes no tap. This is real interaction gating, not just a paint dimming.
+    StrandPtr owner;
+    const rin::ExprPtr* onTapExpr = findEnabledHandlerAttr(path, "onTap", owner);
+
+    // Link concepts (docs/link.md): `href=` is a plain string attribute (not an onTap
+    // expression), so it's resolved directly rather than through the interpreter path below --
+    // it never needed one, it's just sugar over navigate()/an external URL. Only tried when no
+    // onTap was found, so an explicit onTap= on the same Link still wins, same precedence
+    // LoomFabricView.kt's Kotlin-side navigateTargetForTap()/openUrlTargetForTap() already use.
+    if (!onTapExpr) {
+        for (auto& s : path) {
+            if (resolveState(*s) == StrandState::DISABLED) continue;
+            std::string href = s->attrStr("href", "");
+            if (href.empty()) continue;
+            result.handled = true;
+            result.targetId = s->id;
+            if (isExternalHref(href)) {
+                result.openedUrl = href;
+            } else if (nav) {
+                nav->navigate(href);
+                result.navigated = true;
+                result.route = nav->current();
+            }
+            return result;
+        }
+        return result; // tapped something, but nothing interactive there
+    }
+
+    return executeHandlerExpr(*onTapExpr, owner, warp, program, fabricRoot, nav, exportDye,
+                               persistentInterp, persistentInterpSeeded, "onTap");
+}
+
+// Generic gesture dispatch shared by dispatchLongPress/dispatchDoubleTap/dispatchHover below:
+// hit-test at (x, y), walk for the nearest enabled Strand carrying `attrKey`, and run it through
+// the same engine dispatchTap's onTap= uses -- no href fallback (that's onTap/Link-specific).
+// Hitting something with no `attrKey` handler on the path is NOT an error: it just reports
+// `handled = false`, same as tapping empty space, so a caller can freely fire onLongPress/
+// onDoubleTap/onHoverEnter for every gesture without checking first whether the target has one.
+inline TapResult dispatchGestureAttr(const std::string& attrKey, const StrandPtr& fabricRoot,
+                                      WarpScope& warp, const std::vector<rin::StmtPtr>& program,
+                                      double x, double y, NavigationManager* nav = nullptr,
+                                      Dye* exportDye = nullptr, rin::Interpreter* persistentInterp = nullptr,
+                                      bool* persistentInterpSeeded = nullptr) {
+    TapResult result;
+    if (!fabricRoot) return result;
+    std::vector<StrandPtr> path;
+    if (!hitTestPath(fabricRoot, x, y, path)) return result;
+    StrandPtr owner;
+    const rin::ExprPtr* handlerExpr = findEnabledHandlerAttr(path, attrKey, owner);
+    if (!handlerExpr) return result; // hit something, but nothing declared attrKey= there
+    return executeHandlerExpr(*handlerExpr, owner, warp, program, fabricRoot, nav, exportDye,
+                               persistentInterp, persistentInterpSeeded, attrKey.c_str());
+}
+
+// Long-press: fires `onLongPress=...` on the topmost enabled Strand under (x, y) that declares
+// one, exactly like dispatchTap does for onTap= (real `fun`, or a built-in Action). A Strand with
+// no onLongPress= simply reports `handled = false` -- it does NOT fall back to that Strand's
+// onTap= (a long-press and a tap are different gestures; a caller that wants "long-press also
+// acts like a tap when there's no dedicated handler" can retry with dispatchTap itself).
+inline TapResult dispatchLongPress(const StrandPtr& fabricRoot, WarpScope& warp,
+                                    const std::vector<rin::StmtPtr>& program, double x, double y,
+                                    NavigationManager* nav = nullptr, Dye* exportDye = nullptr,
+                                    rin::Interpreter* persistentInterp = nullptr,
+                                    bool* persistentInterpSeeded = nullptr) {
+    return dispatchGestureAttr("onLongPress", fabricRoot, warp, program, x, y, nav, exportDye,
+                                persistentInterp, persistentInterpSeeded);
+}
+
+// Double-tap: fires `onDoubleTap=...`, same shape as dispatchLongPress above. The host (Kotlin
+// GestureDetector or any other caller) is responsible for actually detecting the double-tap
+// gesture itself (timing between two taps) -- Needle only resolves *what* to run once told
+// "a double-tap landed at (x, y)".
+inline TapResult dispatchDoubleTap(const StrandPtr& fabricRoot, WarpScope& warp,
+                                    const std::vector<rin::StmtPtr>& program, double x, double y,
+                                    NavigationManager* nav = nullptr, Dye* exportDye = nullptr,
+                                    rin::Interpreter* persistentInterp = nullptr,
+                                    bool* persistentInterpSeeded = nullptr) {
+    return dispatchGestureAttr("onDoubleTap", fabricRoot, warp, program, x, y, nav, exportDye,
+                                persistentInterp, persistentInterpSeeded);
+}
+
+// Hover: `entering=true` fires `onHoverEnter=...`, `entering=false` fires `onHoverExit=...` on
+// the topmost enabled Strand under (x, y). Meant for a pointer/mouse/stylus host (the Mirror Loom
+// desktop preview, or a mouse-driven Android device) -- there is no ongoing "currently hovered"
+// state kept here; the caller tracks which Strand it last considered hovered (e.g. by `targetId`
+// in the returned TapResult) and calls dispatchHover(..., false) on it before calling
+// dispatchHover(..., true) on whatever's under the pointer now, exactly like a real UI toolkit's
+// enter/exit pair.
+inline TapResult dispatchHover(const StrandPtr& fabricRoot, WarpScope& warp,
+                                const std::vector<rin::StmtPtr>& program, double x, double y,
+                                bool entering, NavigationManager* nav = nullptr, Dye* exportDye = nullptr,
+                                rin::Interpreter* persistentInterp = nullptr,
+                                bool* persistentInterpSeeded = nullptr) {
+    return dispatchGestureAttr(entering ? "onHoverEnter" : "onHoverExit", fabricRoot, warp, program,
+                                x, y, nav, exportDye, persistentInterp, persistentInterpSeeded);
+}
+
 // ---- Overlay-aware dispatch (Overlay Engine, rin_loom_overlay.h) ----
 //
 // Tries the overlay layer BEFORE the normal document hit-test, exactly how a real compositor
@@ -362,6 +462,66 @@ inline TapResult dispatchTapWithOverlay(const StrandPtr& fabricRoot, WarpScope& 
     const StrandPtr& hitTestRoot = ohit.hit ? ohit.hit : fabricRoot;
     return dispatchTap(hitTestRoot, warp, program, x, y, nav, exportDye,
                         persistentInterp, persistentInterpSeeded);
+}
+
+
+// Overlay-aware counterpart of dispatchLongPress/dispatchDoubleTap/dispatchHover -- same "scrim
+// blocks it, an overlay's own box redirects the hit-test root to that overlay's subtree, otherwise
+// fall through to the main fabric" rule dispatchTapWithOverlay documents above, generalized via
+// the same dispatchGestureAttr() engine every non-overlay gesture dispatcher above already shares.
+inline TapResult dispatchGestureAttrWithOverlay(const std::string& attrKey, const StrandPtr& fabricRoot,
+                                                 WarpScope& warp, const std::vector<rin::StmtPtr>& program,
+                                                 OverlayLayer& overlayLayer, double x, double y,
+                                                 NavigationManager* nav = nullptr, Dye* exportDye = nullptr,
+                                                 rin::Interpreter* persistentInterp = nullptr,
+                                                 bool* persistentInterpSeeded = nullptr) {
+    OverlayHitResult ohit = hitTestOverlayLayer(overlayLayer, x, y);
+    if (ohit.blocked) {
+        // A gesture other than a tap landing on a modal's scrim is still consumed here (nothing
+        // behind the modal should react to it), but only an actual tap dismisses a dismissible
+        // Dialog -- see dispatchTapWithOverlay's own comment; a long-press/double-tap/hover on the
+        // scrim shouldn't have the side effect of closing the dialog.
+        TapResult result;
+        result.handled = true;
+        StrandPtr owner = ohit.scrimOwner ? ohit.scrimOwner->strand : nullptr;
+        result.targetId = owner ? owner->id : 0;
+        result.handlerDescription = "scrim";
+        return result;
+    }
+    const StrandPtr& hitTestRoot = ohit.hit ? ohit.hit : fabricRoot;
+    return dispatchGestureAttr(attrKey, hitTestRoot, warp, program, x, y, nav, exportDye,
+                                persistentInterp, persistentInterpSeeded);
+}
+
+inline TapResult dispatchLongPressWithOverlay(const StrandPtr& fabricRoot, WarpScope& warp,
+                                               const std::vector<rin::StmtPtr>& program,
+                                               OverlayLayer& overlayLayer, double x, double y,
+                                               NavigationManager* nav = nullptr, Dye* exportDye = nullptr,
+                                               rin::Interpreter* persistentInterp = nullptr,
+                                               bool* persistentInterpSeeded = nullptr) {
+    return dispatchGestureAttrWithOverlay("onLongPress", fabricRoot, warp, program, overlayLayer, x, y,
+                                           nav, exportDye, persistentInterp, persistentInterpSeeded);
+}
+
+inline TapResult dispatchDoubleTapWithOverlay(const StrandPtr& fabricRoot, WarpScope& warp,
+                                               const std::vector<rin::StmtPtr>& program,
+                                               OverlayLayer& overlayLayer, double x, double y,
+                                               NavigationManager* nav = nullptr, Dye* exportDye = nullptr,
+                                               rin::Interpreter* persistentInterp = nullptr,
+                                               bool* persistentInterpSeeded = nullptr) {
+    return dispatchGestureAttrWithOverlay("onDoubleTap", fabricRoot, warp, program, overlayLayer, x, y,
+                                           nav, exportDye, persistentInterp, persistentInterpSeeded);
+}
+
+inline TapResult dispatchHoverWithOverlay(const StrandPtr& fabricRoot, WarpScope& warp,
+                                           const std::vector<rin::StmtPtr>& program,
+                                           OverlayLayer& overlayLayer, double x, double y, bool entering,
+                                           NavigationManager* nav = nullptr, Dye* exportDye = nullptr,
+                                           rin::Interpreter* persistentInterp = nullptr,
+                                           bool* persistentInterpSeeded = nullptr) {
+    return dispatchGestureAttrWithOverlay(entering ? "onHoverEnter" : "onHoverExit", fabricRoot, warp,
+                                           program, overlayLayer, x, y, nav, exportDye,
+                                           persistentInterp, persistentInterpSeeded);
 }
 
 } // namespace loom
