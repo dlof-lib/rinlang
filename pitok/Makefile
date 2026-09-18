@@ -20,14 +20,14 @@ test: $(BIN)
 		./$(BIN) "$$f" > /dev/null || exit 1; \
 	done && echo "كل الاختبارات نجحت."
 
-e2e: tools/pitok_loom_e2e.cpp $(SRC) ../app/src/main/cpp/loom/pitok_loom_bridge.h
+e2e: tools/pitok_indsin_e2e.cpp $(SRC) ../app/src/main/cpp/indsin/pitok_indsin_bridge.h
 	@mkdir -p bin
-	$(CXX) $(CXXFLAGS) -I../app/src/main/cpp $(SRC) tools/pitok_loom_e2e.cpp -o bin/pitok_loom_e2e
-	./bin/pitok_loom_e2e tests/basic.pitok
+	$(CXX) $(CXXFLAGS) -I../app/src/main/cpp $(SRC) tools/pitok_indsin_e2e.cpp -o bin/pitok_indsin_e2e
+	./bin/pitok_indsin_e2e tests/basic.pitok
 
 # pitokc: نفس الهدف المسجَّل في app/src/main/cpp/CMakeLists.txt (انظره هناك للبناء الحقيقي
 # عبر NDK) — هنا فقط لبناء/تجربة سريعة محليًا بلا cmake.
-pitokc: tools/pitokc.cpp $(SRC) ../app/src/main/cpp/loom/pitok_loom_bridge.h
+pitokc: tools/pitokc.cpp $(SRC) ../app/src/main/cpp/indsin/pitok_indsin_bridge.h
 	@mkdir -p bin
 	$(CXX) $(CXXFLAGS) -I../app/src/main/cpp $(SRC) tools/pitokc.cpp -o bin/pitokc
 
