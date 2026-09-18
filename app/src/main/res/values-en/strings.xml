@@ -147,6 +147,9 @@
     <string name="job_stats_fmt">%1$dms  •  %2$d events  •  %3$s  •  %4$d files</string>
     <string name="job_details_cta">Details</string>
     <string name="job_copy_cta">Copy</string>
+    <string name="job_share_cta">Share</string>
+    <string name="job_rerun_cta">Rerun</string>
+    <string name="job_rerun_toast">Re-running run #%1$d…</string>
     <string name="diag_reason_label">reason</string>
     <string name="diag_expected_label">expected</string>
     <string name="diag_found_label">found</string>
