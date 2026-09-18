@@ -75,6 +75,9 @@
     <string name="menu_view_unfold_all">Desplegar todo</string>
     <string name="menu_run_run">Ejecutar programa</string>
     <string name="menu_run_check_brackets">Comprobar paréntesis</string>
+    <string name="menu_run_auto_run">Ejecución automática al escribir</string>
+    <string name="auto_run_enabled_toast">Ejecución automática activada — la consola se actualiza poco después de dejar de escribir</string>
+    <string name="auto_run_disabled_toast">Ejecución automática desactivada</string>
     <string name="new_file_name">sin_titulo.rin</string>
     <string name="new_file_toast">Nuevo archivo</string>
     <string name="desc_menu_file">Menú Archivo</string>
@@ -138,6 +141,10 @@
     <string name="job_stats_fmt">%1$d ms  •  %2$d eventos  •  %3$s  •  %4$d archivos</string>
     <string name="job_details_cta">Detalles</string>
     <string name="job_copy_cta">Copiar</string>
+    <string name="job_share_cta">Compartir</string>
+    <string name="job_rerun_cta">Ejecutar de nuevo</string>
+    <string name="job_rerun_toast">Repitiendo la ejecución n.º %1$d como una nueva tarea</string>
+    <string name="job_time_fmt">%1$s</string>
     <string name="diag_reason_label">motivo</string>
     <string name="diag_expected_label">esperado</string>
     <string name="diag_found_label">encontrado</string>
