@@ -147,6 +147,10 @@
     <string name="job_stats_fmt">%1$dms  •  %2$d events  •  %3$s  •  %4$d files</string>
     <string name="job_details_cta">Details</string>
     <string name="job_copy_cta">Copy</string>
+    <string name="job_share_cta">Share</string>
+    <string name="job_rerun_cta">Run again</string>
+    <string name="job_rerun_toast">Re-running run #%1$d as a new job</string>
+    <string name="job_time_fmt">%1$s</string>
     <string name="diag_reason_label">reason</string>
     <string name="diag_expected_label">expected</string>
     <string name="diag_found_label">found</string>
@@ -291,6 +295,9 @@ print \"Hello, \" + name + \"!\";
     <string name="loom_view_detected_snackbar">Loom view detected — opening Live Preview</string>
     <string name="loom_open_action">Open</string>
     <string name="menu_run_live_preview">Live Preview</string>
+    <string name="menu_run_auto_run">Auto-run on type</string>
+    <string name="auto_run_enabled_toast">Auto-run enabled — the console updates shortly after you stop typing</string>
+    <string name="auto_run_disabled_toast">Auto-run disabled</string>
     <string name="loom_no_view_toast">No @view or @loop root was found in this code yet.</string>
     <string name="loom_navigate_missing_toast">Page not found: %1$s</string>
 
