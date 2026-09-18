@@ -122,7 +122,7 @@ build_web() {
 }
 
 # ----------------------------------------------------------------------------
-# Desktop — the real X11 Loomtime window (tools/rin_loom_desktop.cpp). Same
+# Desktop — the real X11 Indsintime window (tools/rin_indsin_desktop.cpp). Same
 # source list and flags documented in tools/README_DESKTOP.md.
 # ----------------------------------------------------------------------------
 build_desktop() {
@@ -145,9 +145,9 @@ build_desktop() {
     fi
 
     mkdir -p "$DIST/desktop"
-    "$cxx" -std=c++17 -O2 -I "$CORE" -o "$DIST/desktop/rin_loom_desktop" \
-        "$REPO_DIR/tools/rin_loom_desktop.cpp" \
-        "$CORE/loom/rin_loom_c_api.cpp" \
+    "$cxx" -std=c++17 -O2 -I "$CORE" -o "$DIST/desktop/rin_indsin_desktop" \
+        "$REPO_DIR/tools/rin_indsin_desktop.cpp" \
+        "$CORE/indsin/rin_indsin_c_api.cpp" \
         "$CORE/rin_c_api.cpp" \
         "$CORE/rin_lexer.cpp" \
         "$CORE/rin_parser.cpp" \
@@ -171,7 +171,7 @@ build_desktop() {
         warn "FAILED desktop: compile/link exited $rc."
         return 1
     fi
-    log "Desktop -> $DIST/desktop/rin_loom_desktop"
+    log "Desktop -> $DIST/desktop/rin_indsin_desktop"
     return 0
 }
 
