@@ -9,7 +9,7 @@ app/src/main/cpp/rin_ast.h
 app/src/main/cpp/rin_parser.cpp
 app/src/main/cpp/rin_interpreter.cpp
 app/src/main/cpp/rin_make.cpp
-app/src/main/cpp/loom/rin_loom_pipeline.h
+app/src/main/cpp/indsin/rin_indsin_pipeline.h
 ```
 
 أي: فك ضغط الملف مباشرة في جذر المستودع (root) وسيحل كل ملف مكان نظيره تلقائياً بنفس اسم ومسار المجلد.
@@ -46,7 +46,7 @@ app/src/main/cpp/loom/rin_loom_pipeline.h
 ### 4) `app/src/main/cpp/rin_make.cpp`
 فحص القدرات (`use`/`need`/...) الخاص بـ `make` أصبح يتجاوز داخل جسم `@Program` بحثاً عن `container`/`loop`/... بدل تجاهله بالكامل.
 
-### 5) `app/src/main/cpp/loom/rin_loom_pipeline.h`
+### 5) `app/src/main/cpp/indsin/rin_indsin_pipeline.h`
 - `findContainerBody`: يبحث الآن داخل `@Program` أيضاً عن أي `@container` مُغلَّف بداخله (كان سيفشل في إيجاده سابقاً).
 - `collectViewStmts`: يعامل `@Program` كامتداد للنطاق المحيط (وليس نطاقاً منفصلاً كـ Group/Volume)، فيجمع أي `@view` بداخله بشكل صحيح.
 
