@@ -147,10 +147,6 @@
     <string name="job_stats_fmt">%1$dms  •  %2$d events  •  %3$s  •  %4$d files</string>
     <string name="job_details_cta">Details</string>
     <string name="job_copy_cta">Copy</string>
-    <string name="job_share_cta">Share</string>
-    <string name="job_rerun_cta">Run again</string>
-    <string name="job_rerun_toast">Re-running run #%1$d as a new job</string>
-    <string name="job_time_fmt">%1$s</string>
     <string name="diag_reason_label">reason</string>
     <string name="diag_expected_label">expected</string>
     <string name="diag_found_label">found</string>
@@ -266,38 +262,35 @@ print \"Hello, \" + name + \"!\";
     <!-- ===== Splash screen ===== -->
     <string name="splash_tagline">A light and fast programming language</string>
 
-    <!-- ===== Live Preview (Loomtime rendering engine / "Mirror Loom") ===== -->
-    <string name="loom_preview_title">Live Preview</string>
-    <string name="loom_live_label">LIVE</string>
-    <string name="loom_close">Close</string>
-    <string name="loom_device_default">390px</string>
-    <string name="loom_device_width_format">%1$dpx</string>
-    <string name="loom_device_fit_screen">Fit screen (full width)</string>
-    <string name="loom_toggle_grid">Toggle alignment grid</string>
-    <string name="loom_zoom_in">Zoom in</string>
-    <string name="loom_zoom_out">Zoom out</string>
-    <string name="loom_zoom_100">100%</string>
-    <string name="loom_zoom_percent_format">%1$d%%</string>
-    <string name="loom_link_open_failed">Couldn\'t open link: %1$s</string>
-    <string name="loom_restart_session">Restart session</string>
-    <string name="loom_session_restarted_toast">Live Preview session restarted</string>
-    <string name="loom_device_changed_toast">Device width changed to %1$dpx — session restarted</string>
-    <string name="loom_internal_error">The preview received an unreadable result from the engine.</string>
-    <string name="loom_unknown_error">Unknown error</string>
-    <string name="loom_error_format">Error: %1$s</string>
-    <string name="loom_error_line_format">Snag on line %1$d: %2$s — still showing the last good frame</string>
-    <string name="loom_stats_error_only">No good frame yet — fix the error above and keep typing.</string>
-    <string name="loom_stats_idle">Waiting for the first render…</string>
-    <string name="loom_stats_format">%1$d strands · rendered in %2$dms · cache hits %3$d · long-press an element to inspect it</string>
-    <string name="loom_inspector_title_format">%1$s · %2$s (line %3$d)</string>
-    <string name="loom_view_detected_snackbar">Loom view detected — opening Live Preview</string>
-    <string name="loom_open_action">Open</string>
+    <!-- ===== Live Preview (Indsintime rendering engine / "Mirror Indsin") ===== -->
+    <string name="indsin_preview_title">Live Preview</string>
+    <string name="indsin_live_label">LIVE</string>
+    <string name="indsin_close">Close</string>
+    <string name="indsin_device_default">390px</string>
+    <string name="indsin_device_width_format">%1$dpx</string>
+    <string name="indsin_device_fit_screen">Fit screen (full width)</string>
+    <string name="indsin_toggle_grid">Toggle alignment grid</string>
+    <string name="indsin_zoom_in">Zoom in</string>
+    <string name="indsin_zoom_out">Zoom out</string>
+    <string name="indsin_zoom_100">100%</string>
+    <string name="indsin_zoom_percent_format">%1$d%%</string>
+    <string name="indsin_link_open_failed">Couldn\'t open link: %1$s</string>
+    <string name="indsin_restart_session">Restart session</string>
+    <string name="indsin_session_restarted_toast">Live Preview session restarted</string>
+    <string name="indsin_device_changed_toast">Device width changed to %1$dpx — session restarted</string>
+    <string name="indsin_internal_error">The preview received an unreadable result from the engine.</string>
+    <string name="indsin_unknown_error">Unknown error</string>
+    <string name="indsin_error_format">Error: %1$s</string>
+    <string name="indsin_error_line_format">Snag on line %1$d: %2$s — still showing the last good frame</string>
+    <string name="indsin_stats_error_only">No good frame yet — fix the error above and keep typing.</string>
+    <string name="indsin_stats_idle">Waiting for the first render…</string>
+    <string name="indsin_stats_format">%1$d strands · rendered in %2$dms · cache hits %3$d · long-press an element to inspect it</string>
+    <string name="indsin_inspector_title_format">%1$s · %2$s (line %3$d)</string>
+    <string name="indsin_view_detected_snackbar">Indsin view detected — opening Live Preview</string>
+    <string name="indsin_open_action">Open</string>
     <string name="menu_run_live_preview">Live Preview</string>
-    <string name="menu_run_auto_run">Auto-run on type</string>
-    <string name="auto_run_enabled_toast">Auto-run enabled — the console updates shortly after you stop typing</string>
-    <string name="auto_run_disabled_toast">Auto-run disabled</string>
-    <string name="loom_no_view_toast">No @view.&lt;Kind&gt;=name block found in this code yet.</string>
-    <string name="loom_navigate_missing_toast">Page not found: %1$s</string>
+    <string name="indsin_no_view_toast">No @view.&lt;Kind&gt;=name block found in this code yet.</string>
+    <string name="indsin_navigate_missing_toast">Page not found: %1$s</string>
 
     <!-- ===== Crash / error log dialog (see CrashHandler, ErrorReporter, CrashReportActivity) ===== -->
     <string name="crash_dialog_title_fatal">The app ran into a problem</string>
