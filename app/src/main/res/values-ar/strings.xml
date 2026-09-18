@@ -147,6 +147,9 @@
     <string name="job_stats_fmt">%1$d ms  •  %2$d حدث  •  %3$s  •  %4$d ملف</string>
     <string name="job_details_cta">Details</string>
     <string name="job_copy_cta">Copy</string>
+    <string name="job_share_cta">مشاركة</string>
+    <string name="job_rerun_cta">إعادة التشغيل</string>
+    <string name="job_rerun_toast">جارٍ إعادة تشغيل التشغيلة رقم %1$d…</string>
     <string name="diag_reason_label">reason</string>
     <string name="diag_expected_label">expected</string>
     <string name="diag_found_label">found</string>
