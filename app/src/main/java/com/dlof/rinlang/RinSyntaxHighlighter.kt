@@ -96,7 +96,7 @@ object RinSyntaxHighlighter {
         "checkbox", "radio", "switch", "slider", "select", "list", "column", "box",
         "card", "sidebar", "popup", "modal", "tabs", "code_editor", "calculator", "divider",
         // Ready-elements expansion: date/time pickers, plus a few common tag aliases
-        // (see strandKindFromTag() in rin_loom_strand.h) so they highlight the same as their
+        // (see strandKindFromTag() in rin_indsin_strand.h) so they highlight the same as their
         // canonical spellings above.
         "date", "time", "dropdown", "range", "listitem", "direction"
     )
