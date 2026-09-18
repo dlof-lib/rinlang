@@ -70,7 +70,7 @@ rin[3]> exit
 - `bindings/` — يبني `librin.so` كمكتبة مشتركة تُستدعى من Python/Node/C،
   لا كتنفيذي مستقل (`cd bindings && cmake -B build && cmake --build build`).
 - `cli/windows/` — نفس فكرة هذا المجلد لكن لـ`rin.exe` على ويندوز.
-- محرّك عرض الواجهات (Loomtime) ومعاينته الحية — خاص بتطبيق أندرويد فقط حالياً.
+- محرّك عرض الواجهات (Indsintime) ومعاينته الحية — خاص بتطبيق أندرويد فقط حالياً.
 
 ## بناء تلقائي عبر GitHub Actions
 `.github/workflows/linux-cli.yml` المرفَق يبني `rin` تلقائياً على
