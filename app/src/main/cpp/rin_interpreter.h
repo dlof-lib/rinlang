@@ -460,11 +460,11 @@ public:
     // لبناء فهرس ربط شامل بين ملفات rin. و.html/.js/.cpp عبر نفس المعرّف (انظر rin_ast.h: LinkIdDeclStmt).
     const std::unordered_map<std::string, std::string>& getLinkIds() const { return linkIdToContainer; }
 
-    // ---- Loomtime bridge (see loom/rin_loom_needle.h) ----
+    // ---- Indsintime bridge (see indsin/rin_indsin_needle.h) ----
     // Calls a top-level RIN function by name using the *real* interpreter -- full language
     // semantics (loops, recursion, stdlib) included -- so a Warp-bound `onTap` handler can
     // genuinely mutate state instead of being limited to the read-only attribute evaluator in
-    // rin_loom_eval.h (which only captures `onTap=increment(count);` as a string, never runs it).
+    // rin_indsin_eval.h (which only captures `onTap=increment(count);` as a string, never runs it).
     //
     // `program` supplies every top-level statement so the callee's own `fun` declaration (and any
     // others it calls) hoist exactly like a normal run(). `args` are already-evaluated argument
@@ -523,15 +523,15 @@ public:
     // للتوسّع). مثال: registerFlowNodeType("myCustomStage", flow::NodeType::TRANSFORM);
     void registerFlowNodeType(const std::string& fnName, flow::NodeType type) { flowNodeTypeOverrides_[fnName] = type; }
 
-    // ---- Live Preview / Loomtime runtime bridge (see loom/rin_live_runtime.h) ----
+    // ---- Live Preview / Indsintime runtime bridge (see indsin/rin_live_runtime.h) ----
     //
     // Reads back every top-level binding currently visible in the global Environment after a
     // run() (variables from `let`/`warp`, hoisted `fun`s as FUNCTION values, etc.) as a plain
     // name->Value snapshot. This is what lets a caller that just executed a *real* program via
     // run() (not the old AST-scanning shortcut) recover the actual resulting state -- e.g. to
-    // seed loom::WarpScope from the true post-execution value of a `warp` cell instead of only
+    // seed indsin::WarpScope from the true post-execution value of a `warp` cell instead of only
     // ever evaluating its initializer expression once, in isolation, the way
-    // loom::runColdPipeline used to. Read-only: does not copy the Environment's parent chain
+    // indsin::runColdPipeline used to. Read-only: does not copy the Environment's parent chain
     // (globals has none) and does not mutate anything.
     std::unordered_map<std::string, Value> exportGlobals() const {
         std::unordered_map<std::string, Value> out;
@@ -556,7 +556,7 @@ public:
     // means unlimited, i.e. completely unchanged behavior for the CLI and every existing caller
     // that never calls this. Live Preview is the one caller expected to set this, so that a
     // program the user is actively typing (e.g. `while (true) {}`) can't hang the preview thread
-    // -- see rin_loom_pipeline.h's runColdPipeline overload that takes an Interpreter&.
+    // -- see rin_indsin_pipeline.h's runColdPipeline overload that takes an Interpreter&.
     void setExecutionBudget(long long maxStatements) { execBudget_ = maxStatements; }
     long long executedStatementCount() const { return execCount_; }
 
@@ -567,7 +567,7 @@ public:
     //   else        { @view...=title text="Login";   .end/view }
     // execute() has always silently no-op'd on a ViewStmt it encounters (view markup isn't
     // executable code); this callback -- fired from that same no-op case, purely as an
-    // observation hook -- lets a caller (see loom::runColdPipelineWithRuntime) find out which
+    // observation hook -- lets a caller (see indsin::runColdPipelineWithRuntime) find out which
     // ViewStmt real execution actually walked into, so the *correct* branch's view genuinely
     // becomes the one built into the Fabric, decided by the real `if`/`while`/`for` control flow
     // that already ran, rather than a second, separate static scan of the AST guessing at it.
