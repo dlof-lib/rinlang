@@ -1,12 +1,12 @@
 // rin_color.h — Rin's Color Engine: one real, shared implementation of color parsing,
 // formatting, and math, used by BOTH the language runtime (natives in rin_interpreter.cpp,
-// so any .rin script can parse/mix/lighten/contrast-check colors) and Loom's renderer
-// (loom::Color in loom/rin_loom_tokens.h + rin_loom_paint.h's Dye rasterizer/JSON export).
+// so any .rin script can parse/mix/lighten/contrast-check colors) and Indsin's renderer
+// (indsin::Color in indsin/rin_indsin_tokens.h + rin_indsin_paint.h's Dye rasterizer/JSON export).
 //
-// This header has NO dependency on the interpreter or on loom -- it is pure, self-contained
+// This header has NO dependency on the interpreter or on indsin -- it is pure, self-contained
 // color math -- specifically so it can sit underneath both without creating a dependency
-// cycle (the CLI / non-Loom build of rin_run.cpp does not need to pull in Loom to get color
-// support for its own natives, and Loom does not need to know about rin::Value).
+// cycle (the CLI / non-Indsin build of rin_run.cpp does not need to pull in Indsin to get color
+// support for its own natives, and Indsin does not need to know about rin::Value).
 //
 // Supported literal syntax (parseColor / tryParseColor):
 //   #rgb  #rgba  #rrggbb  #rrggbbaa        (hex, 3/4/6/8 digit, case-insensitive)
@@ -15,7 +15,7 @@
 //   named CSS colors (the standard 148-name X11/CSS3 keyword set) + "transparent"
 //
 // Everything else (semantic role names like "primary"/"danger", resolved against the active
-// Theme) is Loom's own concern and stays in loom::resolveSemanticColor() -- this engine only
+// Theme) is Indsin's own concern and stays in indsin::resolveSemanticColor() -- this engine only
 // ever deals with literal color *values*, which is exactly the layer a language-level color
 // API needs too.
 #pragma once
@@ -32,7 +32,7 @@
 namespace rincolor {
 
 // ---- Core value type ---------------------------------------------------------------------
-// r/g/b/a all 0-255 (alpha included, unlike the old loom-only struct this replaces). A fully
+// r/g/b/a all 0-255 (alpha included, unlike the old indsin-only struct this replaces). A fully
 // opaque color has a == 255; a == 0 is fully transparent. Kept as plain bytes (not floats) so
 // it stays a trivial, cheap-to-copy aggregate everywhere it already was one.
 struct Color {
@@ -204,7 +204,7 @@ inline Color hslToRgb(double h, double s, double l, unsigned char a = 255) {
 
 // ---- Parsing -----------------------------------------------------------------------------
 // Fast pre-check used to decide "is this string even trying to be a color literal" without
-// fully parsing it -- mirrors (and replaces) the old loom::looksLikeHexColor, but recognizes
+// fully parsing it -- mirrors (and replaces) the old indsin::looksLikeHexColor, but recognizes
 // every literal form this engine understands, not just #rrggbb.
 inline bool looksLikeColorLiteral(const std::string& raw) {
     std::string s = detail::trim(raw);
