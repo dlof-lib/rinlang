@@ -603,7 +603,7 @@ enum class ContainerKind { PLAIN, PIPE, DATA, API, IMPORT, TABLE, DOC, OBJECT, P
 //     - منطق إجرائي كامل:            fun/متغيرات let/شروط if/حلقات for، while، return...
 //     - أي حاوية بيانات أو منطق أخرى متداخلة: container/container.pipe/container.api/container.import
 //     - أي مفهوم تنسيق/تجميع آخر:    table/doc/Object/portal/block/sticker/chatbot/AUKT، بأي تعشيش
-//     - واجهة Loomtime كاملة:        عبارات view.* (نفس المسموح بداخل container العادية)
+//     - واجهة Indsintime كاملة:        عبارات view.* (نفس المسموح بداخل container العادية)
 //   الفكرة الجوهرية: "make" لا تُنفَّذ بمنطق خاص بها إطلاقاً — فهي تستدعي (تفوّض إلى) نفس آلية
 //   container القياسية حرفياً: نفس تحليل الجسم (نفس مسار الشجرة النحوية لـ @container)، ونفس تنفيذ
 //   الجسم عبر executeBlock للحاوية القياسية. أي أن فهم/تعلّم "container" أولاً شرط لفهم make،
@@ -940,7 +940,7 @@ struct ImportSelectedStmt : Stmt { ImportSelectedStmt() { stmtKind = StmtKind::I
     ExprPtr path;
 };
 
-// ---- Loomtime rendering engine: view strands + reactive state (Warp) ----
+// ---- Indsintime rendering engine: view strands + reactive state (Warp) ----
 // هذا امتداد إضافي بحت (additive) فوق لغة الحاويات أعلاه — لا يُعدِّل أي عقدة موجودة.
 // يمنح RIN مفردات واجهة كاملة (Text/Image/Button/Card/Column/Row/Stack/...) بجانب
 // container.object/portal/block/sticker الموجودة أصلاً (والتي تبقى صالحة تماماً كما هي).
@@ -953,7 +953,7 @@ struct ImportSelectedStmt : Stmt { ImportSelectedStmt() { stmtKind = StmtKind::I
 //     .end/view
 //
 // warp name = expr;   -> خلية حالة تفاعلية (reactive state cell)، يُعاد تقييم أي وصلة
-//   Strand تقرأ منها تلقائياً عبر محرّك Shuttle (انظر loom/rin_loom_shuttle.h) كلما تغيّرت،
+//   Strand تقرأ منها تلقائياً عبر محرّك Shuttle (انظر indsin/rin_indsin_shuttle.h) كلما تغيّرت،
 //   سواء كان التغيير من محرِّر المستخدم (Hot Reload) أو وقت التشغيل (نقرة زر مثلاً).
 
 // key=expr;  سمة واحدة داخل كتلة @view (القيمة أي تعبير RIN عادي: نص/رقم/متغيّر warp/نداء دالة)
@@ -987,7 +987,7 @@ struct WarpStmt : Stmt { WarpStmt() { stmtKind = StmtKind::WarpStmt; }
     ExprPtr initializer;
 };
 
-// ---- Rin Loom: Theme (Pattern Book) declaration ----
+// ---- Rin Indsin: Theme (Pattern Book) declaration ----
 // @theme=<Name>   key=expr; ...   .end/theme
 //   مثال:
 //     @theme=Midnight
@@ -996,11 +996,11 @@ struct WarpStmt : Stmt { WarpStmt() { stmtKind = StmtKind::WarpStmt; }
 //       danger="#D14545";
 //     .end/theme
 //
-// امتداد إضافي فوق Loomtime تماماً كـ @view/warp أعلاه: لا كتل متداخلة، فقط سمات key=expr
+// امتداد إضافي فوق Indsintime تماماً كـ @view/warp أعلاه: لا كتل متداخلة، فقط سمات key=expr
 // مسطّحة. كل مفتاح إما اسم دور لوني دلالي (primary/secondary/success/danger/warning/info/
 // neutral/surface/background/text/text_muted/border) بقيمة نصية "#RRGGBB"، أو المفتاح الخاص
 // "active" (قيمة منطقية) الذي يجعل هذا الـTheme هو النشط فور تسجيله. انظر
-// loom/rin_loom_tokens.h لمنطق التسجيل والتحليل (registerThemesFromProgram).
+// indsin/rin_indsin_tokens.h لمنطق التسجيل والتحليل (registerThemesFromProgram).
 struct ThemeStmt : Stmt { ThemeStmt() { stmtKind = StmtKind::ThemeStmt; }
     std::string name;
     std::vector<ViewAttr> attrs; // يعاد استخدام ViewAttr (key/value/line) نفسه بدل بنية مكررة
