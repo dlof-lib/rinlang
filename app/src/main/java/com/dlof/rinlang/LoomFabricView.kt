@@ -209,6 +209,21 @@ class LoomFabricView @JvmOverloads constructor(
     var onInspect: ((node: JSONObject?) -> Unit)? = null
 
     /**
+     * Events (spec §events): fired with root-px coordinates whenever the gesture detector below
+     * recognizes the matching gesture — forwarded straight to [LoomPreviewManager.longPress]/
+     * [doubleTap]/[hover]. These fire ALONGSIDE [onInspect] on a long-press (Inspector is a dev
+     * tool, unrelated to whether the tapped Strand happens to also declare `onLongPress=`) —
+     * both simply run off the same GestureDetector callback.
+     */
+    var onLongPressHandler: ((x: Double, y: Double) -> Unit)? = null
+    var onDoubleTapHandler: ((x: Double, y: Double) -> Unit)? = null
+
+    /** [entering] true = pointer just entered the Strand named [strandName], false = it just left
+     * (a plain hit-test can't tell "which Strand" apart from "which pixel", so this view resolves
+     * that itself in [onHoverEvent] below before forwarding — see [lastHoveredName]). */
+    var onHoverHandler: ((x: Double, y: Double, entering: Boolean) -> Unit)? = null
+
+    /**
      * New: page navigation, e.g. going from `main.rin` to `mu.rin`.
      * Fired with the target filename whenever:
      *  (a) the tapped node (or an ancestor) has an attr `onTap="navigate:mu.rin"`, or
@@ -347,13 +362,51 @@ class LoomFabricView @JvmOverloads constructor(
             val hit = fabric?.let { hitTest(it, rx.toFloat(), ry.toFloat()) }
             inspectedNode = hit
             onInspect?.invoke(hit)
+            onLongPressHandler?.invoke(rx, ry) // separate from the Inspector above -- see its own doc comment
             invalidate()
+        }
+
+        override fun onDoubleTap(e: MotionEvent): Boolean {
+            val (rx, ry) = viewToRoot(e.x, e.y)
+            onDoubleTapHandler?.invoke(rx, ry)
+            return true
         }
     })
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
         gestureDetector.onTouchEvent(event)
         return true
+    }
+
+    // ---- Hover (mouse/stylus/trackpad hosts -- see rin_loom_needle.h's dispatchHover doc
+    // comment): Android delivers ACTION_HOVER_ENTER/MOVE/EXIT to onHoverEvent for a pointer that
+    // is NOT touching the screen (a real mouse, or a stylus in "hover" range). There is no native
+    // per-Strand hover *state* kept here -- this view only remembers which Strand's *name* it last
+    // considered hovered, fires onHoverHandler(..., false) on it the moment the pointer moves onto
+    // a DIFFERENT Strand (or leaves the view entirely), then onHoverHandler(..., true) on whatever
+    // is under the pointer now -- a plain enter/exit pair, same as any native UI toolkit's hover. ----
+    private var lastHoveredName: String? = null
+
+    override fun onHoverEvent(event: MotionEvent): Boolean {
+        when (event.action) {
+            android.view.MotionEvent.ACTION_HOVER_MOVE, android.view.MotionEvent.ACTION_HOVER_ENTER -> {
+                val (rx, ry) = viewToRoot(event.x, event.y)
+                val hit = fabric?.let { hitTest(it, rx.toFloat(), ry.toFloat()) }
+                val hitName = hit?.optString("name")?.takeIf { it.isNotEmpty() }
+                if (hitName != lastHoveredName) {
+                    lastHoveredName = hitName
+                    onHoverHandler?.invoke(rx, ry, true) // native side re-hit-tests at (rx,ry) itself
+                }
+            }
+            android.view.MotionEvent.ACTION_HOVER_EXIT -> {
+                if (lastHoveredName != null) {
+                    val (rx, ry) = viewToRoot(event.x, event.y)
+                    onHoverHandler?.invoke(rx, ry, false)
+                    lastHoveredName = null
+                }
+            }
+        }
+        return super.onHoverEvent(event)
     }
 
     private fun viewToRoot(vx: Float, vy: Float): Pair<Double, Double> {
