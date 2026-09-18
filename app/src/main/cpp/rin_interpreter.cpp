@@ -8,7 +8,7 @@
 #include "rin_http.h"
 #include "rin_json.h"
 #include "rin_color.h" // rincolor:: — the shared Color Engine (parsing/math/HSL/WCAG); also
-                        // used by loom/rin_loom_tokens.h. See that header's doc comment for the
+                        // used by indsin/rin_indsin_tokens.h. See that header's doc comment for the
                         // full literal syntax. Registered as language-level natives below
                         // (registerNatives()'s "محرك الألوان" section).
 #include "diagnostics/diagnostic_renderer.h"
@@ -2086,10 +2086,10 @@ void Interpreter::registerNatives() {
         return Value::boolean_(a[0].type == Value::Type::BOOL);
     };
 
-    // ---- محرك الألوان (Color Engine) — rin_color.h، مشترك مع loom::Color/resolveColor() -----
+    // ---- محرك الألوان (Color Engine) — rin_color.h، مشترك مع indsin::Color/resolveColor() -----
     // كل الدوال هنا تقبل أي صياغة لونية حرفية (#rgb/#rgba/#rrggbb/#rrggbbaa، rgb()/rgba()،
     // hsl()/hsla()، أو اسم لون CSS مثل "tomato") وليس أسماء الأدوار الدلالية (primary/danger/…)
-    // — تلك خاصة بـ Loom (tone=) وتُحلّ عبر الـ Theme هناك، لا هنا على مستوى اللغة.
+    // — تلك خاصة بـ Indsin (tone=) وتُحلّ عبر الـ Theme هناك، لا هنا على مستوى اللغة.
     auto parseColorArg = [](const Value& v, const std::string& fn, int line) -> rincolor::Color {
         std::string s = asString(v, fn, line);
         rincolor::Color c;
@@ -3745,10 +3745,10 @@ void Interpreter::registerNatives() {
     // الحاوية نفسها ليست مقيَّدة بقيود "البيانات النقية" (تماماً كـ container/container.api): يجوز
     // أن تحوي fun ودوالاً واستدعاءات عادية. الذاكرة (memory) لا تحتاج دوالاً خاصة: أعلن ببساطة
     // 'warp memory = {};' بداخل الحاوية، وهو نفس مبدأ warp المستخدم أصلاً لأي حالة حيّة (انظر
-    // container_loom_api_demo.rin). ما يلي هو سجلّ الرسائل + مؤشر الكتابة + الأحداث فقط.
+    // container_indsin_api_demo.rin). ما يلي هو سجلّ الرسائل + مؤشر الكتابة + الأحداث فقط.
 
     // يبني رسالة واحدة كـ map موحَّد الشكل: role/text/time/kind/format/meta
-    // format = "text" (افتراضي) | "markdown" | "code" -> يُقرَأ من طبقة العرض (Loom) لتقرير كيفية
+    // format = "text" (افتراضي) | "markdown" | "code" -> يُقرَأ من طبقة العرض (Indsin) لتقرير كيفية
     // رسم فقاعة الرسالة (نص عادي، Markdown مُنسَّق، أو كتلة كود بخط ثابت العرض). لا علاقة له بـ
     // "kind" (text/attachment/...) الذي يصف نوع المحتوى نفسه لا طريقة عرضه.
     auto makeChatMessageValue = [](const std::string& role, const Value& text,
@@ -3812,7 +3812,7 @@ void Interpreter::registerNatives() {
 
     // botReplyCode(container, code, language?) -> اختصار لِ botReply(container, code, "code")،
     // مع تخزين language (مثال: "cpp"/"python"/"rin") داخل meta.language لتلوين الصياغة اختيارياً
-    // على مستوى طبقة العرض (Loom/Kotlin). language اختياري، الافتراضي "" (بلا تلوين محدَّد).
+    // على مستوى طبقة العرض (Indsin/Kotlin). language اختياري، الافتراضي "" (بلا تلوين محدَّد).
     natives["botReplyCode"] = [this, makeChatMessageValue](std::vector<Value>& a, int line) -> Value {
         expectArgsRange("botReplyCode", a, 2, 3, line);
         std::string container = asString(a[0], "botReplyCode", line);
@@ -3970,7 +3970,7 @@ void Interpreter::registerNatives() {
     };
 
     // openChat(container) / closeChat(container) -> يطلقان onChat(container, "open"/"close", fn)
-    // (fn بلا وسائط) — تُستدعى من طبقة الواجهة (Loom) عند فتح/إغلاق نافذة المحادثة فعلياً.
+    // (fn بلا وسائط) — تُستدعى من طبقة الواجهة (Indsin) عند فتح/إغلاق نافذة المحادثة فعلياً.
     natives["openChat"] = [this](std::vector<Value>& a, int line) -> Value {
         expectArgs("openChat", a, 1, line);
         std::string container = asString(a[0], "openChat", line);
@@ -6564,7 +6564,7 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
         output << message << "\n";
         return;
     }
-    // @view...=name ... .end/view -- Loomtime UI markup. Not executable code (no side effect on
+    // @view...=name ... .end/view -- Indsintime UI markup. Not executable code (no side effect on
     // env/output), but observed via viewReachedCb_ if a caller registered one: this is how a
     // `@view` sitting inside a real `if`/`while`/`for` branch (see setViewReachedCallback()'s
     // comment) gets identified as "the one real execution actually walked into", instead of a
@@ -6573,7 +6573,7 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
         if (viewReachedCb_) viewReachedCb_(s);
         return;
     }
-    // Container-owned UI event binding: behavior is registered/consumed by the Loom bridge.
+    // Container-owned UI event binding: behavior is registered/consumed by the Indsin bridge.
     // It is intentionally side-effect free here so normal Rin execution remains deterministic.
     case StmtKind::UiBindingStmt: { auto s = std::static_pointer_cast<UiBindingStmt>(stmt);
         (void)s;
@@ -6643,12 +6643,12 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
         env->define(s->name, current);
         return;
     }
-    // warp name = expr;  --  Loomtime's reactive global-state declaration (rin_loom_pipeline.h /
-    // rin_loom_needle.h read these back out via exportGlobals()/callTopLevelFunction). Previously
+    // warp name = expr;  --  Indsintime's reactive global-state declaration (rin_indsin_pipeline.h /
+    // rin_indsin_needle.h read these back out via exportGlobals()/callTopLevelFunction). Previously
     // unhandled here entirely (silently skipped by run()), which is exactly why Live Preview had
     // to hand-evaluate `warp` initializers itself with a separate, simplified expression
     // evaluator instead of running the program for real. A `warp` cell is semantically just a
-    // `let` that Loom additionally treats as reactive UI state, so it gets identical runtime
+    // `let` that Indsin additionally treats as reactive UI state, so it gets identical runtime
     // handling -- assignment (`count = count + 1;`), reads, and everything else about it are 100%
     // ordinary Environment variable semantics, with no special-casing anywhere in the interpreter.
     case StmtKind::WarpStmt: { auto s = std::static_pointer_cast<WarpStmt>(stmt);
