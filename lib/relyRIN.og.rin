@@ -1,12 +1,12 @@
 // ============================================================================
 // relyRIN — Rin-native Markdown / Media / Live Preview bridge
 // ============================================================================
-// RelyRIN does NOT replace Container or Loom.
-// It prepares document/media data and emits Rin Loom source that is consumed by
+// RelyRIN does NOT replace Container or Indsin.
+// It prepares document/media data and emits Rin Indsin source that is consumed by
 // Rin's existing @container + @view pipeline.
 //
 // Flow:
-// Markdown -> RelyRIN -> @container -> @view -> Loom/Fabric/Dye
+// Markdown -> RelyRIN -> @container -> @view -> Indsin/Fabric/Dye
 // ============================================================================
 
 // ---------------------------------------------------------------------------
@@ -201,7 +201,7 @@ fun relyMdRender(markdown) {
 }
 
 // ---------------------------------------------------------------------------
-// media descriptors — data only; Loom remains the renderer.
+// media descriptors — data only; Indsin remains the renderer.
 // ---------------------------------------------------------------------------
 fun relyMediaImage(src, alt) {
     return { kind: "image", src: src, alt: alt };
@@ -244,11 +244,11 @@ fun relyMediaYoutube(url) {
 }
 
 // ---------------------------------------------------------------------------
-// Loom bridge
+// Indsin bridge
 // ---------------------------------------------------------------------------
 // This function creates a REAL Rin source fragment containing @container and
-// @view declarations. The existing Loom pipeline consumes that source.
-fun relyLoomSource(markdown, containerName, viewName, title) {
+// @view declarations. The existing Indsin pipeline consumes that source.
+fun relyIndsinSource(markdown, containerName, viewName, title) {
     let html = relyMdRender(markdown);
 
     let source = "@container=" + containerName + "\n";
@@ -270,32 +270,32 @@ fun relyLoomSource(markdown, containerName, viewName, title) {
     return source;
 }
 
-fun relyLoomDocument(markdown) {
-    return relyLoomSource(markdown, "RelyPreview", "Root", "RelyRIN Preview");
+fun relyIndsinDocument(markdown) {
+    return relyIndsinSource(markdown, "RelyPreview", "Root", "RelyRIN Preview");
 }
 
-fun relyLoomFile(path) {
-    return relyLoomDocument(readFile(path));
+fun relyIndsinFile(path) {
+    return relyIndsinDocument(readFile(path));
 }
 
 // Live preview contract: the returned source is intended for the existing
-// Loom cold/hot pipeline, which performs Fabric diffing on edits.
+// Indsin cold/hot pipeline, which performs Fabric diffing on edits.
 fun relyLive(markdown) {
-    return relyLoomDocument(markdown);
+    return relyIndsinDocument(markdown);
 }
 
 fun relyLiveFile(path) {
-    return relyLoomFile(path);
+    return relyIndsinFile(path);
 }
 
-fun relyWriteLoomPreview(markdown, path) {
-    let source = relyLoomDocument(markdown);
+fun relyWriteIndsinPreview(markdown, path) {
+    let source = relyIndsinDocument(markdown);
     writeFile(path, source);
     return path;
 }
 
 // ---------------------------------------------------------------------------
-// styling — emits a Loom @theme block, never a second renderer.
+// styling — emits a Indsin @theme block, never a second renderer.
 // ---------------------------------------------------------------------------
 fun relyThemeSource(themeName, primary, background, text) {
     return "@theme=" + themeName + "\n" +
@@ -306,15 +306,15 @@ fun relyThemeSource(themeName, primary, background, text) {
            ".end/theme\n";
 }
 
-fun relyStyledLoom(markdown, themeName, primary, background, text) {
+fun relyStyledIndsin(markdown, themeName, primary, background, text) {
     return relyThemeSource(themeName, primary, background, text) +
-           relyLoomSource(markdown, "RelyPreview", "Root", "RelyRIN Preview");
+           relyIndsinSource(markdown, "RelyPreview", "Root", "RelyRIN Preview");
 }
 
 // ---------------------------------------------------------------------------
-// media -> Loom source
+// media -> Indsin source
 // ---------------------------------------------------------------------------
-fun relyMediaLoomSource(kind, src, name) {
+fun relyMediaIndsinSource(kind, src, name) {
     let out = "@container=RelyMedia\n";
     out = out + "    @view.Column=Root\n";
     out = out + "        gap=16;\n";
@@ -351,7 +351,7 @@ fun relyInfo() {
     return {
         name: "relyRIN",
         version: "1.1.0",
-        architecture: "RelyRIN -> Container -> Loom -> Fabric/Dye",
+        architecture: "RelyRIN -> Container -> Indsin -> Fabric/Dye",
         markdown: true,
         livePreview: true,
         styles: true,
@@ -360,8 +360,8 @@ fun relyInfo() {
         video: true,
         youtube: true,
         usesContainer: true,
-        usesLoom: true,
-        replacesLoom: false,
+        usesIndsin: true,
+        replacesIndsin: false,
         replacesContainer: false
     };
 }
