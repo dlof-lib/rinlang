@@ -106,7 +106,7 @@ static const std::unordered_set<std::string> kUnsupportedContainerWords = {
 
 // أسماء الدوال الأصلية (native) الموجودة في المفسّر الأصلي (rin_interpreter.cpp) وغير المدعومة
 // مباشرةً في `rinc` (مرتبطة عضوياً بمحرّك التطبيق/JNI: NoSQL، HTTP/API، دردشة/بوت، لافتات
-// Loomtime، ذاكرة مؤقتة، إدارة تثبيت/مجموعات، ضغط/تجزئة bytes). عند استدعاء أيٍّ منها،
+// Indsintime، ذاكرة مؤقتة، إدارة تثبيت/مجموعات، ضغط/تجزئة bytes). عند استدعاء أيٍّ منها،
 // main() يتحوّل تلقائياً لوضع "تضمين المفسّر" (embed fallback) بدل رفض التجميع كلياً — انظر
 // generateEmbedFallback() أدناه. قائمة مطابقة تماماً لتدقيق natives[] في rin_interpreter.cpp.
 static const std::unordered_set<std::string> kInterpreterOnlyNatives = {
@@ -1973,7 +1973,7 @@ static Value rt_native_jsonDecode(Value* a, int n) {
 // ---- Rin Color Engine — C port for the native (rinc) compiler ------------------------------
 // A from-scratch reimplementation, in portable C, of the SAME algorithms as
 // app/src/main/cpp/rin_color.h (the shared engine used by the interpreter's natives and by
-// Loom's renderer) — this compiler emits standalone C and cannot #include that C++ header, so
+// Indsin's renderer) — this compiler emits standalone C and cannot #include that C++ header, so
 // this is a parallel port kept in lockstep with it by hand. See rin_color.h's own doc comment
 // for the full literal syntax rc_try_parse() below accepts: #rgb/#rgba/#rrggbb/#rrggbbaa,
 // rgb()/rgba(), hsl()/hsla(), the 148 named CSS colors, "transparent".
