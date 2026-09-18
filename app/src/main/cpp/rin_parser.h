@@ -164,7 +164,7 @@ private:
     StmtPtr documentStatement();  // document id="..." fields={...};  (قاعدة بيانات NoSQL: container.doc / doc)
     std::string readOptionalFormatAttr(); // يقرأ "format=IDENT" اختيارياً (لـ save/installation)، أو "" إن لم توجد
 
-    // Loomtime rendering engine (view strands / reactive state) — امتداد إضافي
+    // Indsintime rendering engine (view strands / reactive state) — امتداد إضافي
     std::shared_ptr<ViewStmt> viewDeclaration(); // @view.<Kind>=name ... .end/view
     std::shared_ptr<ViewStmt> elementDeclaration(); // @element.<Kind>=name ... .end/element
     std::shared_ptr<ViewStmt> loopCanvasDeclaration(); // @loop.<Kind>=name ... .end/loop OR @loop=name ...
