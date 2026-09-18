@@ -1,6 +1,6 @@
-# الأحداث والتأثيرات (Events & Effects) — محرك Loom UI
+# الأحداث والتأثيرات (Events & Effects) — محرك Indsin UI
 
-هذا التوثيق يغطي ميزتين جديدتين أُضيفتا إلى محرك Loomtime:
+هذا التوثيق يغطي ميزتين جديدتين أُضيفتا إلى محرك Indsintime:
 
 1. **الأحداث (Events)**: إيماءات تفاعل جديدة إلى جانب `onTap=` الموجودة أصلاً —
    `onLongPress=`، `onDoubleTap=`، و`onHoverEnter=`/`onHoverExit=`.
@@ -34,7 +34,7 @@ fun bump() { likes = likes + 1; }
 - عنصر بلا `onLongPress=`/`onDoubleTap=` لا يُعتبر خطأ عند استقبال تلك الإيماءة —
   ببساطة `handled:false`، تماماً كما لو ضغطتَ على مساحة فارغة.
 - استشعار الإيماءة نفسها (مدة الضغط الطويل، التوقيت بين نقرتين) هو مسؤولية
-  المضيف (`GestureDetector` في `LoomFabricView.kt`) — محرك Needle لا يفعل أكثر
+  المضيف (`GestureDetector` في `IndsinFabricView.kt`) — محرك Needle لا يفعل أكثر
   من: "هذه إيماءة X وقعت عند (x,y)، ماذا أُشغّل؟".
 - عنصر `onLongPress=` على نفس Strand الذي يحمل `onTap=` لا يستدعي `onTap=` عند
   الضغط الطويل، والعكس صحيح — إيماءتان مستقلتان تماماً.
@@ -52,7 +52,7 @@ fun bump() { likes = likes + 1; }
 .end/view
 ```
 
-الجانب الأصلي (`LoomFabricView.kt`) يتتبّع اسم آخر Strand اعتُبر "تحت المؤشر"،
+الجانب الأصلي (`IndsinFabricView.kt`) يتتبّع اسم آخر Strand اعتُبر "تحت المؤشر"،
 ويستدعي `onHoverExit=` عليه فور انتقال المؤشر إلى عنصر آخر، ثم `onHoverEnter=`
 على العنصر الجديد — تماماً كما تفعل أي حزمة واجهات حقيقية.
 
@@ -106,8 +106,8 @@ fun bump() { likes = likes + 1; }
 
 ### كيف يعمل داخلياً
 
-- محرك التأثيرات (`rin_loom_effects.h`) يُعيد استخدام آلية `opacity=`
-  الموجودة أصلاً في `rin_loom_paint.h` بدل اختراع خط أنابيب رسم موازٍ — كل
+- محرك التأثيرات (`rin_indsin_effects.h`) يُعيد استخدام آلية `opacity=`
+  الموجودة أصلاً في `rin_indsin_paint.h` بدل اختراع خط أنابيب رسم موازٍ — كل
   إطار من التأثير يُركّب مضاعِف شفافية على `opacity=` الأصلية للعنصر (إن
   وُجدت)، ويُزيح/يُكبّر هندسته (`geometry`) مباشرة بعد التخطيط (Layout)
   وقبل الرسم — فأي مستهلك لمخرجات `paint` (سواء الرسم الحي، أو تصدير PNG)
@@ -117,12 +117,12 @@ fun bump() { likes = likes + 1; }
 - تعديل `duration=`/`easing=` في مصدر مفتوح للتعديل الحي أثناء انتقال جارٍ
   لا يُعيد الانتقال من الصفر — فقط يُحدّث السرعة/المنحنى المتبقيين.
 
-### الدفع من جانب Kotlin (Loom Session)
+### الدفع من جانب Kotlin (Indsin Session)
 
-جلسة `RinEngine.LoomSession` الآن تعرض:
+جلسة `RinEngine.IndsinSession` الآن تعرض:
 
 ```kotlin
-val session = RinEngine.LoomSession(source, rootWidthPx)
+val session = RinEngine.IndsinSession(source, rootWidthPx)
 // إيماءات:
 session.longPress(x, y)
 session.doubleTap(x, y)
@@ -136,6 +136,6 @@ val json = session.tick() // استدعِها من Choreographer طالما "ani
 بعد (يستحق جدولة إطار آخر عبر `tick()`)، `false` يعني استقرار تام (يمكن
 إيقاف حلقة التحريك بأمان).
 
-`LoomPreviewActivity.kt` يفعل هذا تلقائياً عبر `Choreographer.FrameCallback`
+`IndsinPreviewActivity.kt` يفعل هذا تلقائياً عبر `Choreographer.FrameCallback`
 يُعاد جدولته من `onFabricUpdated` طالما `animating == true`، ويتوقف من تلقاء
 نفسه بمجرد استقرار كل شيء — لا حلقة استطلاع (polling) دائمة.
