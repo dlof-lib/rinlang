@@ -92,7 +92,7 @@
             android:exported="false" />
 
         <activity
-            android:name=".LoomPreviewActivity"
+            android:name=".IndsinPreviewActivity"
             android:exported="false"
             android:launchMode="singleTask"
             android:theme="@style/Theme.RinLang" />
