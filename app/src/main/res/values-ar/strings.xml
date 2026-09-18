@@ -78,6 +78,9 @@
     <string name="menu_run_run">Run program</string>
     <string name="menu_run_check_brackets">Check brackets</string>
     <string name="menu_run_check_tags">فحص توازن وسوم الحاويات</string>
+    <string name="menu_run_auto_run">التشغيل التلقائي أثناء الكتابة</string>
+    <string name="auto_run_enabled_toast">تم تفعيل التشغيل التلقائي — تُحدَّث وحدة التحكم بعد توقفك عن الكتابة بقليل</string>
+    <string name="auto_run_disabled_toast">تم إيقاف التشغيل التلقائي</string>
     <string name="snippets_dialog_title">إدراج مقتطف Rin</string>
     <string name="outline_dialog_title">بنية الملف</string>
     <string name="outline_empty_toast">لا توجد كتل @container أو Section أو Translations</string>
@@ -150,6 +153,7 @@
     <string name="job_share_cta">مشاركة</string>
     <string name="job_rerun_cta">إعادة التشغيل</string>
     <string name="job_rerun_toast">جارٍ إعادة تشغيل التشغيلة رقم %1$d…</string>
+    <string name="job_time_fmt">%1$s</string>
     <string name="diag_reason_label">reason</string>
     <string name="diag_expected_label">expected</string>
     <string name="diag_found_label">found</string>
