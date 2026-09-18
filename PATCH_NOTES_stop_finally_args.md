@@ -19,7 +19,7 @@ cli/windows/src/main.cpp
 cli/macos/src/main.cpp
 ```
 
-لم يتغيّر شيء في `app/src/main/cpp/rin_make.cpp` أو `app/src/main/cpp/loom/rin_loom_pipeline.h` في
+لم يتغيّر شيء في `app/src/main/cpp/rin_make.cpp` أو `app/src/main/cpp/indsin/rin_indsin_pipeline.h` في
 هذا الدور (ما زالا كما سلَّمهما التعديل السابق لـ `@Program` بلا أي حاجة لإعادة نسخهما).
 
 ## المفاهيم الجديدة الثلاثة
