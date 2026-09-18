@@ -605,7 +605,20 @@ inline void fabricToJson(const StrandPtr& s, std::ostringstream& os) {
        << "},\"interaction\":{\"clickable\":"
        << ((s->attr("onTap") || (s->kind == StrandKind::LINK && !s->attrStr("href", "").empty())) ? "true" : "false")
        << ",\"onTap\":\"" << jsonEscape(s->attr("onTap") ? s->attr("onTap")->asString() : "") << "\""
-       << ",\"href\":\"" << jsonEscape(s->attrStr("href", "")) << "\"},\"children\":[";
+       << ",\"href\":\"" << jsonEscape(s->attrStr("href", "")) << "\""
+       // Events (spec §events): same "is there a handler / what is it" shape as onTap/clickable
+       // above, one pair per gesture -- lets a client (the Inspector panel, an a11y reader, a
+       // future codegen pass) discover onLongPress=/onDoubleTap=/onHoverEnter=/onHoverExit=
+       // without re-walking s->attrs itself. Purely additive: a client that only reads
+       // "clickable"/"onTap" (every existing consumer) is unaffected.
+       << ",\"longPressable\":" << (s->attr("onLongPress") ? "true" : "false")
+       << ",\"onLongPress\":\"" << jsonEscape(s->attr("onLongPress") ? s->attr("onLongPress")->asString() : "") << "\""
+       << ",\"doubleTappable\":" << (s->attr("onDoubleTap") ? "true" : "false")
+       << ",\"onDoubleTap\":\"" << jsonEscape(s->attr("onDoubleTap") ? s->attr("onDoubleTap")->asString() : "") << "\""
+       << ",\"hoverable\":" << ((s->attr("onHoverEnter") || s->attr("onHoverExit")) ? "true" : "false")
+       << ",\"onHoverEnter\":\"" << jsonEscape(s->attr("onHoverEnter") ? s->attr("onHoverEnter")->asString() : "") << "\""
+       << ",\"onHoverExit\":\"" << jsonEscape(s->attr("onHoverExit") ? s->attr("onHoverExit")->asString() : "") << "\""
+       << "},\"children\":[";
     for (size_t i=0;i<s->children.size();i++) { if (i) os << ","; fabricToJson(s->children[i], os); }
     os << "]}";
 }
