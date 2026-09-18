@@ -1,5 +1,5 @@
-// loom_sizing_demo.rin — Rin Loom's Constraint System: sizing="fill", min_width/max_width.
-// Run: ./loomc samples/loom_sizing_demo.rin 500
+// indsin_sizing_demo.rin — Rin Indsin's Constraint System: sizing="fill", min_width/max_width.
+// Run: ./indsinc samples/indsin_sizing_demo.rin 500
 
 @view.Column=root
   gap="normal"; padding="comfortable";
