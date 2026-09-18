@@ -190,7 +190,7 @@ diagnostics الحقيقي عند استدعاء خاطئ) طابق ناتج ا�
   مستقل له في ملف C خالص — NoSQL/مستندات (`insertDoc/queryDocs/findByIndex/...`)، مخطط/ترحيلات/علاقات
   قاعدة بيانات (`defineSchema/runMigration/defineRelation/...`)، معاملات
   (`beginTransaction/...`)، الدردشة/البوت (`botReply/sendMessage/onChat/...`)،
-  HTTP/API (`httpGet/apiRegister/callApi/...`)، لافتات/تنبيهات Loomtime
+  HTTP/API (`httpGet/apiRegister/callApi/...`)، لافتات/تنبيهات Indsintime
   (`bannerInfo/...`)، إدارة تثبيت/مجموعات الحاويات (`isInstalled/
   groupMembers/...`)، الذاكرة المؤقتة (`cacheGet/...`)، وضغط/تجزئة bytes
   (`crc32/adler32/zlibDeflateRaw/...`). استدعاء أيٍّ منها يُحوِّل `rinc`
