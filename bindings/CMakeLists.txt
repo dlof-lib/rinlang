@@ -58,7 +58,7 @@ add_library(rin SHARED
     ${RIN_CPP_DIR}/clc/clc_zip_import.cpp
     ${RIN_CPP_DIR}/clc/sha256.cpp
     ${RIN_CPP_DIR}/rin_c_api.cpp
-    ${RIN_CPP_DIR}/loom/rin_loom_c_api.cpp
+    ${RIN_CPP_DIR}/indsin/rin_indsin_c_api.cpp
 )
 
 target_include_directories(rin PUBLIC ${RIN_CPP_DIR})
