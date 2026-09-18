@@ -133,12 +133,12 @@ object RinEngine {
 
 
     /**
-     * Loomtime rendering engine: parses a `@view.<Kind>=name ... .end/view` root out of [source],
-     * lays it out at [rootWidth] px via the native Loom engine, and returns a JSON dump of the
+     * Indsintime rendering engine: parses a `@view.<Kind>=name ... .end/view` root out of [source],
+     * lays it out at [rootWidth] px via the native Indsin engine, and returns a JSON dump of the
      * Fabric (kind/name/source line/geometry/resolved attributes, recursively) for a Compose/
      * Canvas layer to draw. On a parse/semantic error, returns {"error": "...", "line": N}
      * instead of throwing — callers should keep showing their last-good frame in that case
-     * (see the Snag containment model in the Loomtime architecture doc).
+     * (see the Snag containment model in the Indsintime architecture doc).
      */
     fun renderView(source: String, rootWidth: Int = 390): String = renderViewNative(source, rootWidth)
 
@@ -147,7 +147,7 @@ object RinEngine {
     /**
      * Container-scoped counterpart of [renderView]: builds the Fabric from the `@view` root that
      * lives *inside* the named `@container` (rather than the top-level program). This is the
-     * piece that ties Loomtime to `container`: any `@container` carrying its own `@view`/`warp`/
+     * piece that ties Indsintime to `container`: any `@container` carrying its own `@view`/`warp`/
      * `@theme` becomes an independently renderable screen/component, scoped to that container's
      * own warp state, addressable by the container's name. Returns
      * `{"error": "...", "line": N}` if no container with that name exists, or it has no `@view`
@@ -158,17 +158,17 @@ object RinEngine {
 
     private external fun renderContainerViewNative(source: String, containerName: String, rootWidth: Int): String
 
-    // ---- Loomtime session (Needle) ----
+    // ---- Indsintime session (Needle) ----
     // Unlike [renderView] (a stateless one-shot render), a session keeps its Fabric + Warp state
-    // alive natively across calls, so [LoomSession.tap] can run a Strand's `onTap` handler for
+    // alive natively across calls, so [IndsinSession.tap] can run a Strand's `onTap` handler for
     // real -- including a top-level `fun` with an actual `while` loop -- and see the Warp cells it
     // mutated reflected back in the next Fabric snapshot. This is what makes a "Tap to increment"
     // button in the live preview actually do something, instead of the tap being silently ignored.
     //
     // Usage from whatever draws the preview (Canvas/Compose):
-    //   val session = RinEngine.LoomSession(source, rootWidthPx)
+    //   val session = RinEngine.IndsinSession(source, rootWidthPx)
     //   ...or, scoped to one @container's own @view/warp/@theme...
-    //   val session = RinEngine.LoomSession(source, rootWidthPx, containerName = "Home")
+    //   val session = RinEngine.IndsinSession(source, rootWidthPx, containerName = "Home")
     //   ...on each pointer-down at (x, y) in that same pixel space...
     //   val resultJson = session.tap(x, y)   // re-render the canvas from resultJson's "fabric"
     //   ...on each keystroke in the editor...
@@ -176,21 +176,21 @@ object RinEngine {
     //                                                     // tapped counter) across the hot edit
     //   ...when the preview is closed/backgrounded...
     //   session.close()
-    class LoomSession(source: String, rootWidth: Int = 390, containerName: String? = null) {
+    class IndsinSession(source: String, rootWidth: Int = 390, containerName: String? = null) {
         private var handle: Long =
-            if (containerName == null) loomSessionCreateNative(source, rootWidth)
-            else loomSessionCreateForContainerNative(source, containerName, rootWidth)
+            if (containerName == null) indsinSessionCreateNative(source, rootWidth)
+            else indsinSessionCreateForContainerNative(source, containerName, rootWidth)
         private var closed = false
 
         /** Current Fabric snapshot -- same JSON shape [renderView] returns. */
-        fun currentJson(): String = loomSessionRenderJsonNative(handle)
+        fun currentJson(): String = indsinSessionRenderJsonNative(handle)
 
         /**
          * Dispatches a tap at ([x], [y]) in the same pixel space as [rootWidth]. Returns
          * `{"ok":true,"handled":bool,"targetId":N,"changed":[...],"fabric":{...}}` (plus an
          * `"error"` field if a handler was found but failed at runtime).
          */
-        fun tap(x: Double, y: Double): String = loomSessionTapNative(handle, x, y)
+        fun tap(x: Double, y: Double): String = indsinSessionTapNative(handle, x, y)
 
         /**
          * Events (spec §events): long-press / double-tap / hover, same envelope shape [tap]
@@ -200,11 +200,11 @@ object RinEngine {
          * `onDoubleTap=`/`onHoverEnter=`/`onHoverExit=` simply reports `"handled":false`, so it's
          * always safe to call these on every detected gesture without checking first.
          */
-        fun longPress(x: Double, y: Double): String = loomSessionLongPressNative(handle, x, y)
-        fun doubleTap(x: Double, y: Double): String = loomSessionDoubleTapNative(handle, x, y)
+        fun longPress(x: Double, y: Double): String = indsinSessionLongPressNative(handle, x, y)
+        fun doubleTap(x: Double, y: Double): String = indsinSessionDoubleTapNative(handle, x, y)
 
         /** [entering] true = pointer just entered this Strand, false = it just left. */
-        fun hover(x: Double, y: Double, entering: Boolean): String = loomSessionHoverNative(handle, x, y, entering)
+        fun hover(x: Double, y: Double, entering: Boolean): String = indsinSessionHoverNative(handle, x, y, entering)
 
         /**
          * Effects (spec §effects): advances the session's animation clock to "now" and re-applies
@@ -214,14 +214,14 @@ object RinEngine {
          * back `false` -- nothing is left mid-animation at that point. Same envelope shape as
          * [tap]/[longPress]/etc (with `"handled":false`), plus that `"animating":bool` field.
          */
-        fun tick(): String = loomSessionTickNative(handle)
+        fun tick(): String = indsinSessionTickNative(handle)
 
         /** Re-parses [newSource] and diffs it in place, preserving current Warp state. */
-        fun updateSource(newSource: String): String = loomSessionUpdateSourceNative(handle, newSource)
+        fun updateSource(newSource: String): String = indsinSessionUpdateSourceNative(handle, newSource)
 
         /**
          * Tells the Overlay Engine (Dialog centering / Tooltip clamping — see
-         * `rin_loom_session_set_viewport`'s own doc comment in rin_loom_c_api.h/.cpp) the real
+         * `rin_indsin_session_set_viewport`'s own doc comment in rin_indsin_c_api.h/.cpp) the real
          * on-screen viewport height in the same pixel space as [rootWidth], so an open `@Dialog`
          * re-centers and an anchored `@Tooltip` re-clamps against the *actual* device instead of
          * the native side's 844px fallback. Cheap: re-runs layout's second (Overlay) pass only,
@@ -230,26 +230,26 @@ object RinEngine {
          * result will simply reflect it once one is.
          */
         fun setViewport(viewportHeight: Int) {
-            if (!closed) loomSessionSetViewportNative(handle, viewportHeight)
+            if (!closed) indsinSessionSetViewportNative(handle, viewportHeight)
         }
 
         /** Releases the native session. Safe to call more than once. */
         fun close() {
-            if (!closed) { loomSessionFreeNative(handle); closed = true }
+            if (!closed) { indsinSessionFreeNative(handle); closed = true }
         }
 
         protected fun finalize() { close() }
     }
 
-    private external fun loomSessionCreateNative(source: String, rootWidth: Int): Long
-    private external fun loomSessionCreateForContainerNative(source: String, containerName: String, rootWidth: Int): Long
-    private external fun loomSessionRenderJsonNative(handle: Long): String
-    private external fun loomSessionTapNative(handle: Long, x: Double, y: Double): String
-    private external fun loomSessionLongPressNative(handle: Long, x: Double, y: Double): String
-    private external fun loomSessionDoubleTapNative(handle: Long, x: Double, y: Double): String
-    private external fun loomSessionHoverNative(handle: Long, x: Double, y: Double, entering: Boolean): String
-    private external fun loomSessionTickNative(handle: Long): String
-    private external fun loomSessionUpdateSourceNative(handle: Long, newSource: String): String
-    private external fun loomSessionSetViewportNative(handle: Long, viewportHeight: Int)
-    private external fun loomSessionFreeNative(handle: Long)
+    private external fun indsinSessionCreateNative(source: String, rootWidth: Int): Long
+    private external fun indsinSessionCreateForContainerNative(source: String, containerName: String, rootWidth: Int): Long
+    private external fun indsinSessionRenderJsonNative(handle: Long): String
+    private external fun indsinSessionTapNative(handle: Long, x: Double, y: Double): String
+    private external fun indsinSessionLongPressNative(handle: Long, x: Double, y: Double): String
+    private external fun indsinSessionDoubleTapNative(handle: Long, x: Double, y: Double): String
+    private external fun indsinSessionHoverNative(handle: Long, x: Double, y: Double, entering: Boolean): String
+    private external fun indsinSessionTickNative(handle: Long): String
+    private external fun indsinSessionUpdateSourceNative(handle: Long, newSource: String): String
+    private external fun indsinSessionSetViewportNative(handle: Long, viewportHeight: Int)
+    private external fun indsinSessionFreeNative(handle: Long)
 }
