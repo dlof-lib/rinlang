@@ -38,7 +38,7 @@ em++ -O2 -std=c++17 -fexceptions \
   "$CPP_DIR"/rin_make.cpp \
   "$CPP_DIR"/rin_interpreter.cpp \
   "$CPP_DIR"/rin_c_api.cpp \
-  "$CPP_DIR"/loom/rin_loom_c_api.cpp \
+  "$CPP_DIR"/indsin/rin_indsin_c_api.cpp \
   "$CPP_DIR"/loader_ui/library_loader_ui.cpp \
   "$CPP_DIR"/diagnostics/diagnostic.cpp \
   "$CPP_DIR"/diagnostics/source_manager.cpp \
