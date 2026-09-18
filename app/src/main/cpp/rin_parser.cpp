@@ -182,7 +182,7 @@ StmtPtr Parser::declaration() {
         advance(); // 'import'
         return importSelectedStatement();
     }
-    // '@view.<Kind>=name ... .end/view' -> Loomtime rendering engine (امتداد إضافي، نفس أسلوب
+    // '@view.<Kind>=name ... .end/view' -> Indsintime rendering engine (امتداد إضافي، نفس أسلوب
     // '@import' أعلاه بالضبط: نتحقق من الشكل قبل تفويض الأمر لـ atBlock() العام).
     if (check(TokenType::AT) && checkNext(TokenType::IDENT) &&
         current + 1 < tokens.size() && tokens[current + 1].lexeme == "view") {
@@ -261,7 +261,7 @@ StmtPtr Parser::declaration() {
         advance(); // 'requires'
         return dependencyDeclaration();
     }
-    // '@theme=Name key=expr; ... .end/theme' -> Rin Loom Theme (Pattern Book) declaration, نفس
+    // '@theme=Name key=expr; ... .end/theme' -> Rin Indsin Theme (Pattern Book) declaration, نفس
     // أسلوب فحص '@import'/'@view' أعلاه بالضبط.
     if (check(TokenType::AT) && checkNext(TokenType::IDENT) &&
         current + 1 < tokens.size() && tokens[current + 1].lexeme == "theme") {
@@ -309,7 +309,7 @@ StmtPtr Parser::declaration() {
     if (check(TokenType::IDENT) && peek().lexeme == "style") { advance(); return styleStatement(); }
     // 'document' كلمة سياقية غير محجوزة أيضاً (مفهوم قاعدة البيانات اللاعلاقية: container.doc / doc)
     if (check(TokenType::IDENT) && peek().lexeme == "document") { advance(); return documentStatement(); }
-    // 'warp' كلمة سياقية غير محجوزة أيضاً (Loomtime: خلية حالة تفاعلية يستخدمها محرّك العرض)
+    // 'warp' كلمة سياقية غير محجوزة أيضاً (Indsintime: خلية حالة تفاعلية يستخدمها محرّك العرض)
     if (check(TokenType::IDENT) && peek().lexeme == "warp") { advance(); return warpDeclaration(); }
     // 'reckon name(collection) [where cond] |> fn() ...;' -> انظر docs/RECKON.md و ReckonStmt في
     // rin_ast.h. كلمة سياقية غير محجوزة (بنفس أسلوب route/row/document/warp أعلاه بالضبط)، مُميَّزة
@@ -1378,7 +1378,7 @@ StmtPtr Parser::textDeclaration() {
     return s;
 }
 
-// Loomtime rendering engine: view strands + reactive state -----------------------------
+// Indsintime rendering engine: view strands + reactive state -----------------------------
 // @view.<Kind>=name  key=expr; ...  [<@view متداخلة>]  .end/view
 // يُستدعى بعد أن يكون المستدعي (declaration()) قد استهلك بالفعل '@' و'view'، تماماً كما
 // يفعل مع '@import'. نعيد استخدام readOptionalName()/checkClosingTag()/consumeEndTag()
@@ -1547,7 +1547,7 @@ StmtPtr Parser::warpDeclaration() {
     return s;
 }
 
-// Rin Loom: Theme (Pattern Book) declaration -------------------------------------------
+// Rin Indsin: Theme (Pattern Book) declaration -------------------------------------------
 // @theme=<Name>  key=expr; ...  .end/theme
 // يُستدعى بعد أن يكون declaration() قد استهلك بالفعل '@' و'theme'، بنفس أسلوب viewDeclaration()
 // أعلاه تماماً لكن بلا كتل متداخلة (Theme مسطّح: أدوار لونية + العلم الاختياري 'active' فقط).
