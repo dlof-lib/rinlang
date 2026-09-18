@@ -192,6 +192,30 @@ object RinEngine {
          */
         fun tap(x: Double, y: Double): String = loomSessionTapNative(handle, x, y)
 
+        /**
+         * Events (spec §events): long-press / double-tap / hover, same envelope shape [tap]
+         * returns. The gesture itself (hold duration, double-tap timing window, pointer-in/out) is
+         * the caller's job to detect (e.g. a GestureDetector) -- these only resolve *what* to run
+         * once told a gesture landed at ([x], [y]). A Strand with no matching `onLongPress=`/
+         * `onDoubleTap=`/`onHoverEnter=`/`onHoverExit=` simply reports `"handled":false`, so it's
+         * always safe to call these on every detected gesture without checking first.
+         */
+        fun longPress(x: Double, y: Double): String = loomSessionLongPressNative(handle, x, y)
+        fun doubleTap(x: Double, y: Double): String = loomSessionDoubleTapNative(handle, x, y)
+
+        /** [entering] true = pointer just entered this Strand, false = it just left. */
+        fun hover(x: Double, y: Double, entering: Boolean): String = loomSessionHoverNative(handle, x, y, entering)
+
+        /**
+         * Effects (spec §effects): advances the session's animation clock to "now" and re-applies
+         * every in-progress `effect=` transition's current opacity/translate/scale, with no gesture
+         * dispatch. Call this from a per-frame callback (e.g. `Choreographer.postFrameCallback`)
+         * while the last result's `"animating"` field was `true`; stop scheduling once it comes
+         * back `false` -- nothing is left mid-animation at that point. Same envelope shape as
+         * [tap]/[longPress]/etc (with `"handled":false`), plus that `"animating":bool` field.
+         */
+        fun tick(): String = loomSessionTickNative(handle)
+
         /** Re-parses [newSource] and diffs it in place, preserving current Warp state. */
         fun updateSource(newSource: String): String = loomSessionUpdateSourceNative(handle, newSource)
 
@@ -221,6 +245,10 @@ object RinEngine {
     private external fun loomSessionCreateForContainerNative(source: String, containerName: String, rootWidth: Int): Long
     private external fun loomSessionRenderJsonNative(handle: Long): String
     private external fun loomSessionTapNative(handle: Long, x: Double, y: Double): String
+    private external fun loomSessionLongPressNative(handle: Long, x: Double, y: Double): String
+    private external fun loomSessionDoubleTapNative(handle: Long, x: Double, y: Double): String
+    private external fun loomSessionHoverNative(handle: Long, x: Double, y: Double, entering: Boolean): String
+    private external fun loomSessionTickNative(handle: Long): String
     private external fun loomSessionUpdateSourceNative(handle: Long, newSource: String): String
     private external fun loomSessionSetViewportNative(handle: Long, viewportHeight: Int)
     private external fun loomSessionFreeNative(handle: Long)
