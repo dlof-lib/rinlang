@@ -53,6 +53,15 @@
             android:textStyle="bold" />
 
         <TextView
+            android:id="@+id/txtJobTime"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="6dp"
+            android:textColor="@color/rin_editor_hint"
+            android:textSize="11sp"
+            android:fontFamily="monospace" />
+
+        <TextView
             android:id="@+id/txtJobDuration"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -240,6 +249,59 @@
             android:textColor="@color/rin_on_toolbar_dim"
             android:textSize="10.5sp"
             android:visibility="gone" />
+
+        <!-- إجراءات سريعة على مستوى التشغيل كاملاً (لا تشخيص واحد فقط): نسخ/مشاركة/إعادة
+             تشغيل — تظهر فقط بعد اكتمال التشغيل، بديل واضح ومكتشَف عن الضغط المطوَّل على
+             البطاقة (الذي يبقى يعمل أيضاً للنسخ السريع). -->
+        <LinearLayout
+            android:id="@+id/llJobFooterActions"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:orientation="horizontal"
+            android:visibility="gone">
+
+            <TextView
+                android:id="@+id/txtFooterCopy"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:gravity="center"
+                android:textSize="11.5sp"
+                android:textStyle="bold"
+                android:paddingTop="7dp"
+                android:paddingBottom="7dp"
+                android:background="@drawable/bg_filter_chip_unselected"
+                android:textColor="@color/rin_accent" />
+
+            <TextView
+                android:id="@+id/txtFooterShare"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginStart="6dp"
+                android:gravity="center"
+                android:textSize="11.5sp"
+                android:textStyle="bold"
+                android:paddingTop="7dp"
+                android:paddingBottom="7dp"
+                android:background="@drawable/bg_filter_chip_unselected"
+                android:textColor="@color/rin_accent" />
+
+            <TextView
+                android:id="@+id/txtFooterRerun"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginStart="6dp"
+                android:gravity="center"
+                android:textSize="11.5sp"
+                android:textStyle="bold"
+                android:paddingTop="7dp"
+                android:paddingBottom="7dp"
+                android:background="@drawable/bg_filter_chip_unselected"
+                android:textColor="@color/rin_accent" />
+        </LinearLayout>
     </LinearLayout>
 
 </LinearLayout>
