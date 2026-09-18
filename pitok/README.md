@@ -9,7 +9,7 @@
 1. كود Rin عام الغرض (`fun`, `print`, تعبيرات، تحكّم بالسريان).
 2. **لهجتان** مختلفتان لوصف الواجهات:
    - الحديثة (المستهدفة هنا): `@view.Kind=name ... .end/view` و`@loop=name ... .end/loop`
-     (تُستخدم في 15 ملف عيّنة — الأوسع انتشارًا اليوم، ومحرّك Loomtime الجديد مبني لها).
+     (تُستخدم في 15 ملف عيّنة — الأوسع انتشارًا اليوم، ومحرّك Indsintime الجديد مبني لها).
    - الأقدم: `@container` / `@element.Kind=name ... .end/element` مع ربط أحداث
      بصيغة `on.event.action=expr;` (~14 ملفًا تستخدم `@container`).
 
@@ -37,7 +37,7 @@ pitok/
 ├── tools/
 │   └── pitok_parse.cpp  # CLI: pitok_parse file.rin → JSON على stdout
 ├── tests/
-│   ├── basic.pitok      # = samples/loom_showcase.rin الحقيقي من المستودع
+│   ├── basic.pitok      # = samples/indsin_showcase.rin الحقيقي من المستودع
 │   └── edge_cases.pitok # حالات حرجة (انظر أدناه)
 └── Makefile
 ```
@@ -48,10 +48,10 @@ pitok/
 cd pitok
 make          # يبني bin/pitok_parse
 make test     # يشغّله على كل ملفات tests/*.pitok ويتحقق من النجاح
-./bin/pitok_parse ../samples/loom_showcase.rin
+./bin/pitok_parse ../samples/indsin_showcase.rin
 ```
 
-جُرِّب فعليًا على `samples/loom_showcase.rin` الحقيقي من المستودع (لا مثال مصطنع) ونجح
+جُرِّب فعليًا على `samples/indsin_showcase.rin` الحقيقي من المستودع (لا مثال مصطنع) ونجح
 بالكامل: 241 توكن، شجرة `@view.Column=root` بعمق 4 مستويات، تعبير دمج نصوص/متغيّر
 `"Count: " + count`، ونداء حدث `onTap=increment(count)`.
 
@@ -66,19 +66,19 @@ make test     # يشغّله على كل ملفات tests/*.pitok ويتحقق �
 - **نداءات متداخلة**: `size=compute(base, scale(2, 3));`.
 - **`/` داخل سلسلة نصية حرفية**: `"نصف/ربع"` لا يُفسَّر كوسم إغلاق.
 
-## المرحلة 2 — الربط بمحرك Loomtime الحقيقي (منجزة، ومُختبرة فعليًا)
+## المرحلة 2 — الربط بمحرك Indsintime الحقيقي (منجزة، ومُختبرة فعليًا)
 
-`app/src/main/cpp/loom/pitok_loom_bridge.h` يحوّل `pitok::ViewNode` مباشرة إلى
-`loom::Strand` — نفس النوع الذي يستهلكه `rin_loom_layout.h`/`rin_loom_paint.h` اليوم —
+`app/src/main/cpp/indsin/pitok_indsin_bridge.h` يحوّل `pitok::ViewNode` مباشرة إلى
+`indsin::Strand` — نفس النوع الذي يستهلكه `rin_indsin_layout.h`/`rin_indsin_paint.h` اليوم —
 دون أي استدعاء لـ `rin::Lexer`/`rin::Parser`/`rin::Interpreter`. المسار الكامل الآن:
 
 ```
 ملف .rin  →  pitok::Lexer  →  pitok::Parser  →  pitok_bridge::runPitokColdPipeline
-          →  loom::Strand  →  loom::Loom::layout() [غير مُعدَّل إطلاقًا]  →  إحداثيات فعلية
+          →  indsin::Strand  →  indsin::Indsin::layout() [غير مُعدَّل إطلاقًا]  →  إحداثيات فعلية
 ```
 
-**تحقّق فعلي (`pitok/tools/pitok_loom_e2e.cpp`)**: شغّلت هذا المسار كاملاً على
-`samples/loom_showcase.rin` الحقيقي عبر `loom::Loom::layout()` الحقيقي (نفس الملف، بلا أي
+**تحقّق فعلي (`pitok/tools/pitok_indsin_e2e.cpp`)**: شغّلت هذا المسار كاملاً على
+`samples/indsin_showcase.rin` الحقيقي عبر `indsin::Indsin::layout()` الحقيقي (نفس الملف، بلا أي
 تعديل على منطق التخطيط)، والنتيجة أبعاد/إحداثيات محسوبة فعليًا لكل عنصر (35 Strand
 قِيست)، بما فيها استبدال خلية warp داخل تعبير: `text="Count: " + count;` تحوّل فعليًا إلى
 `"Count: 0"` — أي أن تقييم التعابير (concatenation، قراءة warp) يعمل بمعزل تام عن مُقيِّم
@@ -87,23 +87,23 @@ Rin العام.
 ```bash
 g++ -std=c++17 -Ipitok/include -Iapp/src/main/cpp \
     pitok/src/pitok_lexer.cpp pitok/src/pitok_parser.cpp \
-    pitok/tools/pitok_loom_e2e.cpp -o /tmp/pitok_loom_e2e
-/tmp/pitok_loom_e2e samples/loom_showcase.rin
+    pitok/tools/pitok_indsin_e2e.cpp -o /tmp/pitok_indsin_e2e
+/tmp/pitok_indsin_e2e samples/indsin_showcase.rin
 ```
 
-**إصلاح جانبي حقيقي وُجد أثناء هذا العمل**: `rin_loom_strand.h` كان يستخدم
+**إصلاح جانبي حقيقي وُجد أثناء هذا العمل**: `rin_indsin_strand.h` كان يستخدم
 `std::unordered_set` دون `#include <unordered_set>` — يُصادف أنه يترجم ضمن بناء المشروع
 الكامل لأن رأسًا آخر يسبقه في وحدة الترجمة الفعلية ويجلبه بشكل عرضي، لكنه ينهار فورًا في
 أي وحدة ترجمة مستقلة (كما في هذا الجسر). أُصلح بإضافة السطر الناقص مباشرة.
 
-**حدود صادقة لهذه المرحلة** (موثّقة كتعليقات داخل `pitok_loom_bridge.h` أيضًا):
+**حدود صادقة لهذه المرحلة** (موثّقة كتعليقات داخل `pitok_indsin_bridge.h` أيضًا):
 - `ResolvedAttr::rawExpr` يبقى `nullptr` لكل سمة يبنيها الجسر — يعني ذلك أن Strand الناتج
   عن PITOK **يُرسَم** بنجاح لكن لا يدعم بعد إعادة التقييم الساخن عبر `Shuttle::diff` (الذي
   يعتمد على المشي فوق `rawExpr` كـ`rin::Expr`). إغلاق هذه الفجوة يحتاج إمّا تعميم
   `rawExpr` إلى `variant<rin::ExprPtr, pitok::ExprPtr>`، أو مسار diff يعتمد على
   `contentHash` فقط بلا حاجة لـ`rawExpr` إطلاقًا — قرار يستحق مراجعة منفصلة لأنه يغيّر
   نوعًا مشتركًا مع مسار Rin.
-- `loom::Strand::role` لا يزال حرفيًا `rin::UiRole` (تعداد بسيط أُعيد استخدامه، وليس اعتمادًا
+- `indsin::Strand::role` لا يزال حرفيًا `rin::UiRole` (تعداد بسيط أُعيد استخدامه، وليس اعتمادًا
   سلوكيًا) — الفصل الكامل عن `rin_ast.h` على مستوى Strand نفسه (وليس فقط Parser الواجهات)
   يحتاج تعميم هذا النوع أيضًا، وهذا خارج نطاق "فصل الـ Parser" الذي طُلب في هذه الجولة.
 - لهجة `@view.Loop`'s child-inheritance الخاصة بـ`@element` (`element_width`، إلخ) غير
@@ -130,13 +130,13 @@ g++ -std=c++17 -Ipitok/include -Iapp/src/main/cpp \
 (`pitok/tests/container_dialect.pitok`) ونجح التحليل كاملاً: جذران (`@container=app`،
 `@loop=canvas`)، وربط الحدث `on.run.click=runCode();` التُقط بنجاح كـ
 `{target:"run", event:"click", action: Call(runCode)}`. مرّ أيضًا عبر الجسر الحقيقي إلى
-`loom::Loom::layout()` وأنتج إحداثيات فعلية (`Box "app"` بطفلين `Button`/`Input`
+`indsin::Indsin::layout()` وأنتج إحداثيات فعلية (`Box "app"` بطفلين `Button`/`Input`
 مقاسين فعليًا).
 
 **حدود صادقة لهذه المرحلة**:
-- الجسر (`pitok_loom_bridge.h`) يطوي كل `on.target.event=` كسمة `on.<event>` على نفس
+- الجسر (`pitok_indsin_bridge.h`) يطوي كل `on.target.event=` كسمة `on.<event>` على نفس
   الـStrand (قيمتها وصف الاستدعاء كسلسلة) — هذا يجعلها مرئية/قابلة للفحص، لكن **لا** يوصّلها
-  فعليًا بجدول الإرسال في `rin_loom_needle.h` (الذي يحتاج تعليمًا كيف يحلّ `target` إلى
+  فعليًا بجدول الإرسال في `rin_indsin_needle.h` (الذي يحتاج تعليمًا كيف يحلّ `target` إلى
   Strand شقيق باسمه ضمن نفس الحاوية) — تدخّل في كود معالجة الإدخال لم يُطلب في هذه الجولة.
   موثّق كسطر TODO داخل الكود مباشرة.
 - توسيع وراثة `element_*` (الأنماط الافتراضية من Loop لأبنائه في اللهجة القديمة) لم يُنقل
@@ -145,8 +145,8 @@ g++ -std=c++17 -Ipitok/include -Iapp/src/main/cpp \
 ## المرحلة 4 — تكامل حقيقي في نظام البناء (`CMakeLists.txt`)، بدون المساس بمسار التطبيق الفعلي
 
 `pitokc` هدف CMake جديد ومستقل تمامًا في `app/src/main/cpp/CMakeLists.txt` — بنفس فلسفة
-`rinc`/`rincheck`/`loomc` الموجودة أصلاً (هدف قائم بذاته، **لا** يُربط بمكتبة `rinengine`
-ولا يُحزَم داخل APK). الفرق الجوهري عن `loomc`: مصادره **لا تتضمن ولا تربط**
+`rinc`/`rincheck`/`indsinc` الموجودة أصلاً (هدف قائم بذاته، **لا** يُربط بمكتبة `rinengine`
+ولا يُحزَم داخل APK). الفرق الجوهري عن `indsinc`: مصادره **لا تتضمن ولا تربط**
 `rin_lexer.cpp`/`rin_parser.cpp`/`rin_interpreter.cpp` إطلاقًا — فقط:
 `pitok/tools/pitokc.cpp` + `pitok/src/pitok_lexer.cpp` + `pitok/src/pitok_parser.cpp`.
 
@@ -162,10 +162,10 @@ g++ -std=c++17 -Ipitok/include -Iapp/src/main/cpp \
 **تحقّق فعلي**: بنيت `pitokc` بنفس قائمة المصادر والمسارات المكتوبة في `CMakeLists.txt`
 تمامًا عبر `g++` مباشرة (تأكدت يدويًا أن حساب المسارات النسبية `../../../../` من
 `app/src/main/cpp/` يشير إلى `pitok/` بجذر المستودع بالضبط)، وشغّلتها على
-`samples/loom_showcase.rin` الحقيقي حتى مرحلة **الرسم الفعلي** (وليس فقط التخطيط):
+`samples/indsin_showcase.rin` الحقيقي حتى مرحلة **الرسم الفعلي** (وليس فقط التخطيط):
 
 ```bash
-./pitokc samples/loom_showcase.rin 390 out.ppm
+./pitokc samples/indsin_showcase.rin 390 out.ppm
 # Strands measured: 35   Tension cache hits: 0
 # ... شجرة Fabric كاملة بالإحداثيات ...
 # Wrote 15 draw command(s) to out.ppm
@@ -173,7 +173,7 @@ g++ -std=c++17 -Ipitok/include -Iapp/src/main/cpp \
 
 حوّلت `out.ppm` الناتج إلى PNG وفحصته بصريًا: الألوان (`Card` الأرجواني، التدرّج، الخلفية
 الداكنة)، التخطيط (Row/Column/gap/padding)، وأبعاد كل عنصر مطابقة تمامًا لما يُنتجه
-`loomc` نفسه على نفس الملف — أي أن مسار **الرسم الكامل** (`loom::Dye::paint` +
+`indsinc` نفسه على نفس الملف — أي أن مسار **الرسم الكامل** (`indsin::Dye::paint` +
 `rasterizeToPPM`)، لا فقط التخطيط، يعمل بلا أي تعديل عليه، مغذّى بالكامل من PITOK.
 
 **قيد أمانة**: لم يتوفّر `cmake` نفسه في بيئة التنفيذ هذه لتشغيل `cmake --build` فعليًا
@@ -189,7 +189,7 @@ g++ -std=c++17 -Ipitok/include -Iapp/src/main/cpp \
    أو (ب) أداة تحويل/فصل تلقائي تفصل قسم الواجهة عن القسم العام في نفس الملف قبل التحليل،
    أو (ج) الإبقاء على PITOK أداة مستقلة (معاينة/توليد/لينتر) دون لمس مسار التشغيل الأساسي.
    قرار يستحق مراجعة معك تحديدًا لأنه يمسّ سلوك التطبيق الفعلي على المستخدمين.
-2. **توصيل `on.target.event=` فعليًا بـ`rin_loom_needle.h`** (انظر حدود المرحلة 3).
+2. **توصيل `on.target.event=` فعليًا بـ`rin_indsin_needle.h`** (انظر حدود المرحلة 3).
 3. **استرداد الأخطاء متعدد (error recovery)** على غرار `parseCollectingDiagnostics` في
    `rin_parser`، بدل التوقف عند أول خطأ.
 4. **Hot-reload كامل عبر Shuttle** لِـStrand المبنية من PITOK (انظر حدود المرحلة 2).
