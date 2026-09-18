@@ -608,6 +608,42 @@ Java_com_dlof_rinlang_RinEngine_loomSessionTapNative(JNIEnv* env, jobject /* thi
     return result;
 }
 
+// Events & Effects: long-press / double-tap / hover / tick — same envelope-return + free()
+// pattern as loomSessionTapNative above, just against rin_loom_session_long_press/_double_tap/
+// _hover/_tick instead of rin_loom_session_tap. See those functions' own doc comments in
+// rin_loom_c_api.h for exactly what each returns.
+extern "C" JNIEXPORT jstring JNICALL
+Java_com_dlof_rinlang_RinEngine_loomSessionLongPressNative(JNIEnv* env, jobject /* this */, jlong handle, jdouble x, jdouble y) {
+    char* json = rin_loom_session_long_press(reinterpret_cast<void*>(handle), (double)x, (double)y);
+    jstring result = env->NewStringUTF(json ? json : "{\"ok\":false,\"error\":\"null result\"}");
+    rin_free_string(json);
+    return result;
+}
+
+extern "C" JNIEXPORT jstring JNICALL
+Java_com_dlof_rinlang_RinEngine_loomSessionDoubleTapNative(JNIEnv* env, jobject /* this */, jlong handle, jdouble x, jdouble y) {
+    char* json = rin_loom_session_double_tap(reinterpret_cast<void*>(handle), (double)x, (double)y);
+    jstring result = env->NewStringUTF(json ? json : "{\"ok\":false,\"error\":\"null result\"}");
+    rin_free_string(json);
+    return result;
+}
+
+extern "C" JNIEXPORT jstring JNICALL
+Java_com_dlof_rinlang_RinEngine_loomSessionHoverNative(JNIEnv* env, jobject /* this */, jlong handle, jdouble x, jdouble y, jboolean entering) {
+    char* json = rin_loom_session_hover(reinterpret_cast<void*>(handle), (double)x, (double)y, entering ? 1 : 0);
+    jstring result = env->NewStringUTF(json ? json : "{\"ok\":false,\"error\":\"null result\"}");
+    rin_free_string(json);
+    return result;
+}
+
+extern "C" JNIEXPORT jstring JNICALL
+Java_com_dlof_rinlang_RinEngine_loomSessionTickNative(JNIEnv* env, jobject /* this */, jlong handle) {
+    char* json = rin_loom_session_tick(reinterpret_cast<void*>(handle));
+    jstring result = env->NewStringUTF(json ? json : "{\"ok\":false,\"error\":\"null result\"}");
+    rin_free_string(json);
+    return result;
+}
+
 extern "C" JNIEXPORT jstring JNICALL
 Java_com_dlof_rinlang_RinEngine_loomSessionUpdateSourceNative(JNIEnv* env, jobject /* this */, jlong handle, jstring newSourceJStr) {
     const char* cSource = env->GetStringUTFChars(newSourceJStr, nullptr);
