@@ -16,7 +16,7 @@ import java.net.URL
  *
  * **مهم**: هذه الدالة تُنفِّذ اتصال شبكة *متزامناً* (blocking) — أندرويد يرفض ذلك على الترد الرئيسي
  * (NetworkOnMainThreadException). كل نقاط الدخول الحالية التي تُشغِّل كود Rin فعلياً
- * (`RinJobScheduler` عبر `workerPool`، `LoomPreviewManager` عبر `worker`، `RinFlowTracer`/
+ * (`RinJobScheduler` عبر `workerPool`، `IndsinPreviewManager` عبر `worker`، `RinFlowTracer`/
  * `PipelineTracer`) تُشغِّله أصلاً على ترد خلفي، لذا لا حاجة لأي معالجة ترد إضافية هنا — لكن أي
  * استدعاء مستقبلي لـ [RinEngine.runSource] مباشرة من الترد الرئيسي سيفشل بنفس الاستثناء الذي
  * يفشل به أي اتصال شبكة عادي على أندرويد، وهذا سلوك متوقَّع ومقصود (وليس خطأ في هذا الجسر).
