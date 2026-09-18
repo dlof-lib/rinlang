@@ -78,6 +78,9 @@
     <string name="menu_run_run">Run program</string>
     <string name="menu_run_check_brackets">Check brackets</string>
     <string name="menu_run_check_tags">Check container tags</string>
+    <string name="menu_run_auto_run">Auto-run while typing</string>
+    <string name="auto_run_enabled_toast">Auto-run enabled — the console refreshes shortly after you stop typing</string>
+    <string name="auto_run_disabled_toast">Auto-run disabled</string>
     <string name="snippets_dialog_title">Insert Rin snippet</string>
     <string name="outline_dialog_title">File outline</string>
     <string name="outline_empty_toast">No @container/Section/Translations blocks found</string>
@@ -150,6 +153,7 @@
     <string name="job_share_cta">Share</string>
     <string name="job_rerun_cta">Rerun</string>
     <string name="job_rerun_toast">Re-running run #%1$d…</string>
+    <string name="job_time_fmt">%1$s</string>
     <string name="diag_reason_label">reason</string>
     <string name="diag_expected_label">expected</string>
     <string name="diag_found_label">found</string>
