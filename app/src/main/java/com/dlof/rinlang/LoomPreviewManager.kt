@@ -178,6 +178,62 @@ object LoomPreviewManager {
         }
     }
 
+    // ---- Events: long-press / double-tap / hover — same fire-and-forget, worker-thread,
+    // busy-indicator-wrapped shape as [tap] above (a handler CAN make a real network call via
+    // rin_http.cpp, same as an onTap= handler can, so the same slow-call indicator applies). ----
+
+    /** Dispatches a long-press at ([x], [y]); see [RinEngine.LoomSession.longPress]. */
+    fun longPress(x: Double, y: Double) {
+        val current = session ?: return
+        worker.execute {
+            beginTrackedOperation()
+            val t0 = System.nanoTime()
+            val json = try { current.longPress(x, y) } catch (t: Throwable) { errorJson(t) }
+            val ms = (System.nanoTime() - t0) / 1_000_000
+            endTrackedOperation()
+            deliver(json, ms)
+        }
+    }
+
+    /** Dispatches a double-tap at ([x], [y]); see [RinEngine.LoomSession.doubleTap]. */
+    fun doubleTap(x: Double, y: Double) {
+        val current = session ?: return
+        worker.execute {
+            beginTrackedOperation()
+            val t0 = System.nanoTime()
+            val json = try { current.doubleTap(x, y) } catch (t: Throwable) { errorJson(t) }
+            val ms = (System.nanoTime() - t0) / 1_000_000
+            endTrackedOperation()
+            deliver(json, ms)
+        }
+    }
+
+    /** Dispatches a hover enter/exit at ([x], [y]); see [RinEngine.LoomSession.hover]. */
+    fun hover(x: Double, y: Double, entering: Boolean) {
+        val current = session ?: return
+        worker.execute {
+            beginTrackedOperation()
+            val t0 = System.nanoTime()
+            val json = try { current.hover(x, y, entering) } catch (t: Throwable) { errorJson(t) }
+            val ms = (System.nanoTime() - t0) / 1_000_000
+            endTrackedOperation()
+            deliver(json, ms)
+        }
+    }
+
+    // ---- Effects: per-frame animation tick. Deliberately NOT wrapped in beginTrackedOperation/
+    // endTrackedOperation like the gesture calls above -- that busy-indicator machinery exists for
+    // an occasional slow network call inside a handler, and would just flicker uselessly if run
+    // every animation frame (tick() never runs user code, so it's never slow). Result still goes
+    // through the normal [deliver] path so the preview repaints with the current animation frame.
+    fun tick() {
+        val current = session ?: return
+        worker.execute {
+            val json = try { current.tick() } catch (t: Throwable) { errorJson(t) }
+            deliver(json, 0)
+        }
+    }
+
     /** Ends the live preview session entirely (closes the native handle, frees Warp state). */
     fun stop() {
         listener = null
