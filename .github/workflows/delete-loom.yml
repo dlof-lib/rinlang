@@ -1,0 +1,55 @@
+name: Delete legacy Loom files (حذف ملفات Loom القديمة)
+
+# يحذف كل ملفات/مجلدات "Loom" القديمة (حلّ محلّها indsin) ثم يعمل commit + push،
+# وبعدها يشغّل workflow البناء تلقائياً (لأن push بواسطة GITHUB_TOKEN لا يُطلق workflows أخرى).
+#
+# الاستخدام: Actions ← "Delete legacy Loom files" ← Run workflow
+#   dry_run = true  → يعرض ما سيُحذف فقط
+#   dry_run = false → يحذف ويعمل commit/push ويشغّل البناء
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "تجربة فقط (بدون حذف فعلي)"
+        type: boolean
+        default: false
+      run_build:
+        description: "تشغيل workflow البناء بعد الحذف"
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  delete-loom:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Delete legacy Loom paths
+        run: bash .github/scripts/delete_loom.sh "${{ inputs.dry_run && 'dry' || 'apply' }}"
+
+      - name: Commit & push
+        if: ${{ !inputs.dry_run }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "لا شيء لحذفه — المستودع نظيف."
+          else
+            git commit -m "chore: remove legacy Loom files (replaced by indsin) [skip ci]"
+            git push
+          fi
+
+      - name: Trigger build
+        if: ${{ !inputs.dry_run && inputs.run_build }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run build_apk.yml --ref "${{ github.ref_name }}"
