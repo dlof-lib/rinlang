@@ -1,7 +1,7 @@
-// loom_showcase.rin — جولة سريعة على محرّك العرض Loomtime (Rendering Engine) الجديد.
+// indsin_showcase.rin — جولة سريعة على محرّك العرض Indsintime (Rendering Engine) الجديد.
 // امتداد إضافي بحت فوق لغة الحاويات: warp لخلايا الحالة التفاعلية، @view.<Kind>=name
 // لأشجار الواجهة (Column/Row/Stack/Card/Text/Button/Image/Divider مبدئياً، وأي وسم آخر
-// يُحلّ لاحقاً عبر نظام الإضافات Bolt). شغّله عبر أداة loomc (انظر CMakeLists.txt) أو من
+// يُحلّ لاحقاً عبر نظام الإضافات Bolt). شغّله عبر أداة indsinc (انظر CMakeLists.txt) أو من
 // خلال RinEngine.renderView(source) على جانب Kotlin.
 
 warp count = 0;
@@ -12,7 +12,7 @@ warp count = 0;
   @view.Card=header
     padding=16; shadow=10;
     @view.Text=title text="Welcome to Rin"; size=22; .end/view
-    @view.Text=subtitle text="Loomtime rendering engine"; size=14; color="#8b899c"; .end/view
+    @view.Text=subtitle text="Indsintime rendering engine"; size=14; color="#8b899c"; .end/view
   .end/view
 
   @view.Row=actions
