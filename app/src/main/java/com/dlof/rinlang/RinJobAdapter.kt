@@ -6,13 +6,18 @@ import android.app.AlertDialog
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Typeface
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.text.Editable
+import android.text.SpannableString
+import android.text.Spanned
 import android.text.TextWatcher
+import android.text.style.BackgroundColorSpan
+import android.text.style.StyleSpan
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -25,10 +30,17 @@ import android.widget.Toast
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.RecyclerView
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 /** Which body a job's card is currently showing (section 10: Code Output UI tabs). Persisted per
  *  job number in [RinJobAdapter], same pattern as the expand/collapse state. */
 private enum class JobTab { OUTPUT, EVENTS, DIAGNOSTICS }
+
+/** Wall-clock "queued at" stamp shown next to each job's duration. Only ever touched from the
+ *  main thread (RecyclerView bind), so a single shared formatter is safe here. */
+private val TIME_FORMAT = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
 
 class RinJobAdapter(private val context: Context) : RecyclerView.Adapter<RinJobAdapter.JobViewHolder>() {
 
@@ -39,6 +51,11 @@ class RinJobAdapter(private val context: Context) : RecyclerView.Adapter<RinJobA
 
     /** Invoked with a job's [RinJob.number] when the user taps the pin toggle. */
     var onPinToggleRequested: ((Int) -> Unit)? = null
+
+    /** Invoked with a finished job's original [RinJob.source] when the user taps "Run again"
+     *  (footer actions row) — re-submits that exact source as a brand-new job, same as pasting
+     *  it back into the editor and pressing Run, without touching the editor's current text. */
+    var onRerunRequested: ((String) -> Unit)? = null
 
     /** Explicit user overrides of the expand/collapse state, keyed by [RinJob.number] rather
      *  than list position -- survives reordering, job completion (QUEUED -> RUNNING -> SUCCESS)
@@ -82,10 +99,19 @@ class RinJobAdapter(private val context: Context) : RecyclerView.Adapter<RinJobA
 
     override fun getItemCount(): Int = items.size
 
+    /** Stops any running per-second duration ticker (see [JobViewHolder.startDurationTicker])
+     *  before a row is recycled into a different job — otherwise a RUNNING job's ticker would
+     *  keep firing against whatever unrelated job the recycled row gets bound to next. */
+    override fun onViewRecycled(holder: JobViewHolder) {
+        holder.stopDurationTicker()
+        super.onViewRecycled(holder)
+    }
+
     inner class JobViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
         private val dot: View = itemView.findViewById(R.id.viewStatusDot)
         private val title: TextView = itemView.findViewById(R.id.txtJobTitle)
         private val statusText: TextView = itemView.findViewById(R.id.txtJobStatus)
+        private val time: TextView = itemView.findViewById(R.id.txtJobTime)
         private val duration: TextView = itemView.findViewById(R.id.txtJobDuration)
         private val fallbackOutput: TextView = itemView.findViewById(R.id.txtJobOutput)
         private val outputLines: LinearLayout = itemView.findViewById(R.id.llJobOutputLines)
@@ -103,7 +129,17 @@ class RinJobAdapter(private val context: Context) : RecyclerView.Adapter<RinJobA
         private val searchBox: EditText = itemView.findViewById(R.id.edtJobSearch)
         private val eventFilterScroll: HorizontalScrollView = itemView.findViewById(R.id.scrollEventFilters)
         private val eventFilterChips: LinearLayout = itemView.findViewById(R.id.llEventFilterChips)
+        private val footerActions: LinearLayout = itemView.findViewById(R.id.llJobFooterActions)
+        private val footerCopy: TextView = itemView.findViewById(R.id.txtFooterCopy)
+        private val footerShare: TextView = itemView.findViewById(R.id.txtFooterShare)
+        private val footerRerun: TextView = itemView.findViewById(R.id.txtFooterRerun)
         private val dp = itemView.resources.displayMetrics.density
+
+        /** المُوقِّت الحي: بينما التشغيل RUNNING، يُعيد رسم [duration] كل نصف ثانية من
+         *  [RinJob.durationMs] الحقيقي، بدل الانتظار حتى وصول جزء ناتج جديد (section: مؤشّر
+         *  تنفيذ حي حتى لو كان البرنامج صامتاً لثوانٍ، كحساب طويل بلا print). */
+        private val tickerHandler = Handler(Looper.getMainLooper())
+        private var ticker: Runnable? = null
 
         /** Guards [searchBox]'s TextWatcher while [bind] programmatically restores this row's
          *  stored query for a (possibly different) job after recycling -- without this, that
@@ -170,6 +206,29 @@ class RinJobAdapter(private val context: Context) : RecyclerView.Adapter<RinJobA
                 )
                 true
             }
+
+            // شريط إجراءات سفلي مكتشَف (بديل صريح عن الضغط المطوَّل أعلاه): نسخ / مشاركة /
+            // إعادة تشغيل — يظهر فقط لتشغيل مكتمل (انظر bind()).
+            footerCopy.text = "📋  " + context.getString(R.string.job_copy_cta)
+            footerCopy.setOnClickListener {
+                val job = boundJob ?: return@setOnClickListener
+                copyToClipboard(
+                    label = "Rin Run #${job.number}",
+                    text = job.output,
+                    toastRes = R.string.job_copied_toast
+                )
+            }
+            footerShare.text = "📤  " + context.getString(R.string.job_share_cta)
+            footerShare.setOnClickListener {
+                val job = boundJob ?: return@setOnClickListener
+                shareText("Rin Run #${job.number}", job.output)
+            }
+            footerRerun.text = "↻  " + context.getString(R.string.job_rerun_cta)
+            footerRerun.setOnClickListener {
+                val job = boundJob ?: return@setOnClickListener
+                onRerunRequested?.invoke(job.source)
+                Toast.makeText(context, context.getString(R.string.job_rerun_toast, job.number), Toast.LENGTH_SHORT).show()
+            }
         }
 
         fun bind(job: RinJob) {
@@ -210,6 +269,9 @@ class RinJobAdapter(private val context: Context) : RecyclerView.Adapter<RinJobA
 
             duration.text = if (job.startedAt == 0L) "" else
                 context.getString(R.string.job_duration_fmt, job.durationMs())
+            time.text = TIME_FORMAT.format(Date(job.queuedAt))
+
+            if (job.status == JobStatus.RUNNING) startDurationTicker(job) else stopDurationTicker()
 
             if (job.status == JobStatus.QUEUED) {
                 cancelBtn.visibility = View.VISIBLE
@@ -240,6 +302,7 @@ class RinJobAdapter(private val context: Context) : RecyclerView.Adapter<RinJobA
                 tabDiagnostics.visibility = View.GONE
                 searchBox.visibility = View.GONE
                 eventFilterScroll.visibility = View.GONE
+                footerActions.visibility = View.GONE
                 outputLines.visibility = View.VISIBLE
                 eventLines.visibility = View.GONE
                 diagnosticsTab.visibility = View.GONE
@@ -289,6 +352,7 @@ class RinJobAdapter(private val context: Context) : RecyclerView.Adapter<RinJobA
             tabEvents.visibility = View.VISIBLE
             tabDiagnostics.visibility = View.VISIBLE
             searchBox.visibility = View.VISIBLE
+            footerActions.visibility = View.VISIBLE
 
             suppressSearchWatcher = true
             val storedQuery = searchQuery[job.number].orEmpty()
@@ -368,7 +432,7 @@ class RinJobAdapter(private val context: Context) : RecyclerView.Adapter<RinJobA
                 outputLines.addView(buildEmptyStateRow(context.getString(R.string.job_no_results)))
             } else {
                 for (line in lines) {
-                    outputLines.addView(buildLineRow(line))
+                    outputLines.addView(buildLineRow(line, query))
                 }
             }
 
@@ -423,7 +487,7 @@ class RinJobAdapter(private val context: Context) : RecyclerView.Adapter<RinJobA
                 return
             }
             filtered.forEach { event ->
-                eventLines.addView(buildLineRow(RinLogLine(event.level, event.message)))
+                eventLines.addView(buildLineRow(RinLogLine(event.level, event.message), query))
             }
         }
 
@@ -494,7 +558,7 @@ class RinJobAdapter(private val context: Context) : RecyclerView.Adapter<RinJobA
             setPadding(0, (4 * dp).toInt(), 0, (4 * dp).toInt())
         }
 
-        private fun buildLineRow(line: RinLogLine): View {
+        private fun buildLineRow(line: RinLogLine, highlightQuery: String = ""): View {
             val row = LinearLayout(context).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = android.view.Gravity.TOP
@@ -523,7 +587,7 @@ class RinJobAdapter(private val context: Context) : RecyclerView.Adapter<RinJobA
             }
 
             val text = TextView(context).apply {
-                text = line.text
+                text = highlightMatches(line.text, highlightQuery)
                 textSize = 12.5f
                 typeface = Typeface.MONOSPACE
                 setTextColor(if (line.kind == LogKind.PLAIN) ContextCompat.getColor(context, R.color.rin_console_text) else tint)
@@ -532,6 +596,27 @@ class RinJobAdapter(private val context: Context) : RecyclerView.Adapter<RinJobA
             }
             row.addView(text)
             return row
+        }
+
+        /** يُبرِز كل تطابقات [query] داخل [text] (خلفية صفراء + عريض) بدل الاكتفاء بترشيح
+         *  الأسطر التي تحتويه — حتى يرى المستخدم فوراً أين بالضبط طابق البحث داخل سطر طويل،
+         *  تمامًا كتمييز نتائج البحث في أي محرر نصوص احترافي. يُرجِع [text] كما هو إن كان
+         *  [query] فارغاً (لا بحث نشط). */
+        private fun highlightMatches(text: String, query: String): CharSequence {
+            if (query.isBlank()) return text
+            val spannable = SpannableString(text)
+            var start = text.indexOf(query, 0, ignoreCase = true)
+            val highlightColor = ContextCompat.getColor(context, R.color.rin_accent)
+            while (start >= 0) {
+                val end = start + query.length
+                spannable.setSpan(
+                    BackgroundColorSpan(android.graphics.Color.argb(70, android.graphics.Color.red(highlightColor), android.graphics.Color.green(highlightColor), android.graphics.Color.blue(highlightColor))),
+                    start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                )
+                spannable.setSpan(StyleSpan(Typeface.BOLD), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                start = text.indexOf(query, end, ignoreCase = true)
+            }
+            return spannable
         }
 
         private fun buildArtifactChip(artifact: RinArtifact): View {
@@ -678,6 +763,47 @@ class RinJobAdapter(private val context: Context) : RecyclerView.Adapter<RinJobA
             if (clipboard == null || text.isEmpty()) return
             clipboard.setPrimaryClip(ClipData.newPlainText(label, text))
             Toast.makeText(context, context.getString(toastRes), Toast.LENGTH_SHORT).show()
+        }
+
+        /** يفتح مُنتقي المشاركة القياسي في أندرويد (Share sheet) بناتج هذا التشغيل كنص خام —
+         *  إضافةً إلى النسخ السريع، حتى يمكن إرسال ناتج التشغيل مباشرةً عبر البريد/الرسائل/أي
+         *  تطبيق آخر بدون لصق يدوي أولاً. لا شيء يُرسَل هنا إلا عند اختيار المستخدم صراحةً وجهةً. */
+        private fun shareText(subject: String, text: String) {
+            if (text.isEmpty()) return
+            val send = Intent(Intent.ACTION_SEND).apply {
+                type = "text/plain"
+                putExtra(Intent.EXTRA_SUBJECT, subject)
+                putExtra(Intent.EXTRA_TEXT, text)
+            }
+            val chooser = Intent.createChooser(send, subject)
+            if (context !is Activity) chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            context.startActivity(chooser)
+        }
+
+        /** يبدأ عدّاداً حياً يُحدِّث [duration] كل 500ms من [RinJob.durationMs] الحقيقي طوال
+         *  بقاء [job] في حالة RUNNING — بدل انتظار وصول جزء ناتج جديد لتحديث المدة، وهو ما كان
+         *  يترك المدة "مجمَّدة" ظاهرياً أثناء حساب طويل صامت. يتوقّف من تلقاء نفسه إن لم يعد
+         *  [boundJob] هو نفسه [job] (أُعيد تدوير الصفّ لعنصر آخر) أو إن لم تعد حالته RUNNING. */
+        private fun startDurationTicker(job: RinJob) {
+            if (ticker != null) return // مُشغَّل مسبقاً لنفس الصفّ
+            val tick = object : Runnable {
+                override fun run() {
+                    val current = boundJob
+                    if (current !== job || current.status != JobStatus.RUNNING) {
+                        ticker = null
+                        return
+                    }
+                    duration.text = context.getString(R.string.job_duration_fmt, job.durationMs())
+                    tickerHandler.postDelayed(this, 500L)
+                }
+            }
+            ticker = tick
+            tickerHandler.postDelayed(tick, 500L)
+        }
+
+        fun stopDurationTicker() {
+            ticker?.let { tickerHandler.removeCallbacks(it) }
+            ticker = null
         }
 
         private fun requestDownload(artifact: RinArtifact) {
