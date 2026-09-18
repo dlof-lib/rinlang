@@ -48,6 +48,11 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v7
 
+      # يحذف بقايا ملفات Loom القديمة (تسبّب فشل aapt2: resource loom_* not found)
+      # حتى لو رُفع المشروع كـ ZIP فوق نسخة قديمة. آمن للتكرار.
+      - name: Remove legacy Loom files
+        run: bash .github/scripts/delete_loom.sh apply
+
       - name: Set up JDK 17
         uses: actions/setup-java@v6
         with:
