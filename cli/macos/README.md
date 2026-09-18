@@ -75,7 +75,7 @@ xattr -d com.apple.quarantine ./rin
 - `compiler/rinc.cpp` — مترجم (transpiler) منفصل يولّد C ثم ملفاً تنفيذياً أصلياً.
 - `bindings/` — يبني `librin.dylib` كمكتبة مشتركة تُستدعى من Python/Node/C.
 - `cli/windows/` و`cli/linux/` — نفس الفكرة لمنصّتيهما.
-- محرّك عرض الواجهات (Loomtime) ومعاينته الحية — خاص بتطبيق أندرويد فقط حالياً.
+- محرّك عرض الواجهات (Indsintime) ومعاينته الحية — خاص بتطبيق أندرويد فقط حالياً.
 
 ## بناء تلقائي عبر GitHub Actions
 `.github/workflows/macos-cli.yml` المرفَق يبني `rin` تلقائياً على
