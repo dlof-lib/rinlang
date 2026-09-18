@@ -95,7 +95,7 @@ mm_spawn(world, "b", 4, 3);
 print "المسافة بين a و b: " + toString(mm_distanceTo(world, "a", "b"));
 print "هل يتصادمان (صندوق 5×5 لكل منهما)؟ " + toString(mm_collidesAABB(world, "a", 5, 5, "b", 5, 5));
 
-print "\n=== 8) التكامل مع Loom (Warp / Strand / Fabric / Needle / Shuttle) ===";
+print "\n=== 8) التكامل مع Indsin (Warp / Strand / Fabric / Needle / Shuttle) ===";
 
 // -- Warp: تصدير حالة "a" كحقول جاهزة لخلايا warp --
 print "أسماء خلايا warp المقترحة لـ a: " + toString(mm_warpFieldNames("a"));
@@ -131,7 +131,7 @@ let patches = mm_shuttleDiff(world, before);
 print "Patches بين اللقطتين (Insert/Remove/Move):";
 print patches;
 
-print "\n=== 9) توسعة Loom: Actions / Navigation / Overlay / Dye / Theme / Object Inspector ===";
+print "\n=== 9) توسعة Indsin: Actions / Navigation / Overlay / Dye / Theme / Object Inspector ===";
 
 // -- Actions: فعل جاهز مبني + فعل مخصَّص مُسجَّل --
 mm_applyAction(world, "player", "teleport", { x: 9, y: 9 });
