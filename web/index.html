@@ -1,13 +1,13 @@
 <!DOCTYPE html>
 <!--
   هذا الملف "محمّل" (bootloader) عام بحت — لا عنوان، لا نص، لا قسم، لا لون خاص
-  بصفحة Rin نفسها مكتوب هنا. دوره الوحيد: تحميل محرّك Rin/Loomtime الرسمي
-  المُصرَّف WebAssembly، تمرير site.rin إليه كنص خام عبر rin_loom_session_create()،
+  بصفحة Rin نفسها مكتوب هنا. دوره الوحيد: تحميل محرّك Rin/Indsintime الرسمي
+  المُصرَّف WebAssembly، تمرير site.rin إليه كنص خام عبر rin_indsin_session_create()،
   ثم رسم أي شجرة Strand (JSON: kind/name/attrs/geometry/children) يُعيدها ذلك
   المحرّك عبر دالة عرض عامة واحدة (renderStrand) — تلك الدالة تربط "نوع Strand"
   بعنصر DOM ("Column" -> flex عمودي، "Card" -> صندوق، "Text" -> نص...) ولا تعرف
   شيئاً عن محتوى *هذه* الصفحة تحديداً؛ هي نفس ما يفعله بالضبط
-  tools/mirror-loom-preview/*.html كمرجع لنفس المحرّك (Fabric نفسها، JSON نفسه).
+  tools/mirror-indsin-preview/*.html كمرجع لنفس المحرّك (Fabric نفسها، JSON نفسه).
 
   المصدر الحقيقي الوحيد لكل كلمة/لون/سلوك في الصفحة هو site.rin. المتصفح لا
   يفهم إلا HTML/JS/WASM (بنية تشغيل لازمة تقنياً، تماماً كنظام تشغيل يشغّل ملفاً
@@ -79,7 +79,7 @@
   <script src="rin.js"></script>
   <script>
   (function () {
-    var DESIGN_WIDTH = 420; // rootWidth: عرض التصميم الذي يخطّط عنده محرّك Loom نفسه
+    var DESIGN_WIDTH = 420; // rootWidth: عرض التصميم الذي يخطّط عنده محرّك Indsin نفسه
 
     var bootEl = document.getElementById('boot');
     var bootMsg = document.getElementById('bootMsg');
@@ -111,8 +111,8 @@
       container.appendChild(el);
       // مهم: كل الأبناء يُلحَقون بنفس الحاوية المسطّحة (container)، لا بعنصر الأب
       // (el) — لأن كل .strand بترميز position:absolute، وx/y القادمتين من JSON
-      // إحداثيات صفحة مطلقة (نفس نظام الإحداثيات الذي يحسبه محرّك Loom نفسه،
-      // انظر rin_loom_layout.h). لو أُلحق الابن بعنصر الأب (الذي هو نفسه
+      // إحداثيات صفحة مطلقة (نفس نظام الإحداثيات الذي يحسبه محرّك Indsin نفسه،
+      // انظر rin_indsin_layout.h). لو أُلحق الابن بعنصر الأب (الذي هو نفسه
       // position:absolute)، يصبح عنصر الأب "containing block" جديداً لأبنائه في
       // CSS، فيُضاف top/left الأب فوق top/left الابن المطلقين أصلاً — وكل مستوى
       // تعشيش إضافي يراكم هذا الخطأ. ترتيب الإلحاق (الأب أولاً ثم أبناؤه بعمق قبل
@@ -194,7 +194,7 @@
 
     function dispatchTapAt(x, y) {
       if (!session) return;
-      var json = Module.ccall('rin_loom_session_tap', 'string',
+      var json = Module.ccall('rin_indsin_session_tap', 'string',
         ['number', 'number', 'number'], [session, x, y]);
       applyFrame(json);
     }
@@ -219,11 +219,11 @@
         if (!res.ok) throw new Error('تعذّر جلب site.rin (HTTP ' + res.status + ')');
         var source = await res.text();
 
-        bootMsg.textContent = 'building the @view Fabric via the official Loomtime engine…';
-        session = Module.ccall('rin_loom_session_create', 'number',
+        bootMsg.textContent = 'building the @view Fabric via the official Indsintime engine…';
+        session = Module.ccall('rin_indsin_session_create', 'number',
           ['string', 'number'], [source, DESIGN_WIDTH]);
 
-        var json = Module.ccall('rin_loom_session_render_json', 'string', ['number'], [session]);
+        var json = Module.ccall('rin_indsin_session_render_json', 'string', ['number'], [session]);
         applyFrame(json);
 
         bootEl.classList.add('hidden');
@@ -234,7 +234,7 @@
     })();
 
     window.addEventListener('beforeunload', function () {
-      if (session && Module) Module.ccall('rin_loom_session_free', null, ['number'], [session]);
+      if (session && Module) Module.ccall('rin_indsin_session_free', null, ['number'], [session]);
     });
   })();
   </script>
