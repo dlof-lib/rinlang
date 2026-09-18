@@ -32,6 +32,7 @@
 - [`rinflow.md`](./rinflow.md) — طبقة تنفيذ التدفّق المهيكل.
 
 ### الواجهة
+- [`indsin.md`](./indsin.md) — **Interface Design**: المحرّك الموحَّد لعرض الواجهات (سابقاً "Loom") وكيف يُنفِّذ `@element`/`@loop`/`@container`.
 - [`banner.md`](./banner.md)
 - [`android.md`](./android.md)
 
