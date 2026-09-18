@@ -50,8 +50,8 @@ object ProjectManager {
      * خيارات "رسم الواجهة" لمشروع نوع UI، تُختار في حوار "مشروع جديد" (انظر
      * ProjectsActivity.showCreateDialog) قبل الإنشاء: توب بار/بلا توب بار، قائمة جانبية/بلا
      * قائمة جانبية، ولون أساسي (primary) يُكتب داخل @theme في main.rin المولَّد باستخدام
-     * محرّك الواجهات Loomtime (@view.Scaffold/@view.TopBar/@view.Drawer، انظر
-     * docs/loomtime/RIN_LOOM_ENGINE_ARCHITECTURE.md وsite.rin). لا تؤثر على أنواع المشاريع
+     * محرّك الواجهات Indsintime (@view.Scaffold/@view.TopBar/@view.Drawer، انظر
+     * docs/indsintime/RIN_INDSIN_ENGINE_ARCHITECTURE.md وsite.rin). لا تؤثر على أنواع المشاريع
      * الأخرى (Container/Table/Free)، وتُستخدم قيمها الافتراضية عند عدم تمريرها صراحةً.
      */
     data class UiDesignOptions(
@@ -242,8 +242,8 @@ object ProjectManager {
     }
 
     /**
-     * يبني main.rin لمشروع UI باستخدام محرّك الواجهات Loomtime (@view.Scaffold/@view.TopBar/
-     * @view.Drawer، نفس النحو المستخدم في site.rin وdocs/loomtime/RIN_LOOM_ENGINE_ARCHITECTURE.md)،
+     * يبني main.rin لمشروع UI باستخدام محرّك الواجهات Indsintime (@view.Scaffold/@view.TopBar/
+     * @view.Drawer، نفس النحو المستخدم في site.rin وdocs/indsintime/RIN_INDSIN_ENGINE_ARCHITECTURE.md)،
      * مطابقاً لمخطّط "رسم الواجهة": شريط علوي اختياري (دائرة صورة رمزية + عنوان)، محتوى رئيسي
      * (بطاقتان مؤطّرتان)، وقائمة جانبية اختيارية (زر "القائمة" + عنصرا تنقّل). كلا العنصرين
      * يُدرج أو يُستبعد حسب [options.topBar]/[options.sidebar]، واللون الأساسي المختار يُستخدم
@@ -252,7 +252,7 @@ object ProjectManager {
     private fun buildUiRinTemplate(name: String, options: UiDesignOptions): String {
         val sb = StringBuilder()
         sb.append("// مشروع: $name\n")
-        sb.append("// نوع المشروع: واجهة مستخدم (Loomtime) — @container يحوي @theme و@view.\n")
+        sb.append("// نوع المشروع: واجهة مستخدم (Indsintime) — @container يحوي @theme و@view.\n")
         sb.append("// وُلِّد من خيارات UI: topBar=${options.topBar}, sidebar=${options.sidebar}, bottomNav=${options.bottomNav}, buttonStyle=${options.buttonStyle}.\n")
         sb.append("// font=${options.fontFamily}, typography=${options.typography}, radius=${options.cornerRadius}.\n\n")
         sb.append("@container=Home\n")
