@@ -105,6 +105,11 @@ class LoomPreviewActivity : AppCompatActivity(), LoomPreviewManager.Listener {
 
         fabricView.onTap = { x, y -> LoomPreviewManager.tap(x, y) }
         fabricView.onInspect = { node -> showInspector(node) }
+        // Events (spec §events): onLongPress=/onDoubleTap=/onHoverEnter=/onHoverExit= handlers --
+        // same fire-and-forget pattern as onTap above, just against the matching gesture endpoint.
+        fabricView.onLongPressHandler = { x, y -> LoomPreviewManager.longPress(x, y) }
+        fabricView.onDoubleTapHandler = { x, y -> LoomPreviewManager.doubleTap(x, y) }
+        fabricView.onHoverHandler = { x, y, entering -> LoomPreviewManager.hover(x, y, entering) }
         fabricView.onNavigate = { target -> navigateTo(target) }
         // Link concepts (docs/link.md): an external `href`/`onTap="open:..."` hands us a real
         // URL rather than an in-project route, so it leaves the preview entirely via a normal
@@ -238,11 +243,38 @@ class LoomPreviewActivity : AppCompatActivity(), LoomPreviewManager.Listener {
 
     override fun onDestroy() {
         super.onDestroy()
+        stopEffectsTicking()
         LoomPreviewManager.detach(this)
     }
 
     override fun onFabricUpdated(resultJson: String, elapsedMs: Long) {
         renderResult(resultJson, elapsedMs)
+        // Effects (spec §effects): every result envelope carries "animating" (see
+        // rin_loom_session_tick's doc comment) -- true means at least one Strand's effect=
+        // transition is still short of its duration=, so schedule another per-frame tick; false
+        // means everything has settled and it's safe to stop (no idle polling loop otherwise).
+        val animating = try { JSONObject(resultJson).optBoolean("animating", false) } catch (t: Throwable) { false }
+        if (animating) startEffectsTicking() else stopEffectsTicking()
+    }
+
+    // ---- Effects Engine per-frame driver: a Choreographer callback that calls
+    // LoomPreviewManager.tick() once per display frame while an enter transition is in progress,
+    // and re-arms itself from the NEXT onFabricUpdated's "animating" flag above -- so this loop
+    // is entirely self-terminating and never spins once every Strand has settled. ----
+    private var effectsTickScheduled = false
+    private val effectsFrameCallback = android.view.Choreographer.FrameCallback {
+        effectsTickScheduled = false
+        LoomPreviewManager.tick() // its result flows back through onFabricUpdated, which re-arms if still animating
+    }
+    private fun startEffectsTicking() {
+        if (effectsTickScheduled) return
+        effectsTickScheduled = true
+        android.view.Choreographer.getInstance().postFrameCallback(effectsFrameCallback)
+    }
+    private fun stopEffectsTicking() {
+        if (!effectsTickScheduled) return
+        effectsTickScheduled = false
+        android.view.Choreographer.getInstance().removeFrameCallback(effectsFrameCallback)
     }
 
     // ---- rendering the engine's result JSON ----
