@@ -16,7 +16,7 @@
 #include "rin_artifact.h"
 #include "rin_http.h"
 #include "diagnostics/diagnostic_renderer.h"
-#include "loom/rin_loom_c_api.h"
+#include "indsin/rin_indsin_c_api.h"
 
 // runSourceNative(source, baseDir) -> baseDir هو جذر حقيقي على القرص (عادة filesDir الخاص بالتطبيق
 // على أندرويد) تُبنى فوقه كل عمليات save/file/installation/writeFile/readFile الحقيقية. RinEngine.kt
@@ -526,8 +526,8 @@ Java_com_dlof_rinlang_RinEngine_engineVersion(JNIEnv* env, jobject /* this */) {
 
 
 
-// renderViewNative(source, rootWidth) -> Loomtime: يحلّل @view.<Kind>=name، يبني الـ Fabric،
-// يُخطِّطه (Loom) عند العرض rootWidth (بالبكسل)، ويُعيد تفريغ JSON كامل (kind/name/سطر المصدر/
+// renderViewNative(source, rootWidth) -> Indsintime: يحلّل @view.<Kind>=name، يبني الـ Fabric،
+// يُخطِّطه (Indsin) عند العرض rootWidth (بالبكسل)، ويُعيد تفريغ JSON كامل (kind/name/سطر المصدر/
 // هندسة/سمات مُحلَّلة، تكرارياً) يستهلكه جانب Kotlin/Canvas لرسم الواجهة فعلياً. عند فشل التحليل
 // يُعاد JSON بالشكل {"error": "...", "line": N} بدل رمي استثناء عبر حدود JNI.
 extern "C" JNIEXPORT jstring JNICALL
@@ -536,7 +536,7 @@ Java_com_dlof_rinlang_RinEngine_renderViewNative(JNIEnv* env, jobject /* this */
     std::string source(cSource ? cSource : "");
     env->ReleaseStringUTFChars(sourceJStr, cSource);
 
-    char* json = rin_loom_render_json(source.c_str(), (int)rootWidth);
+    char* json = rin_indsin_render_json(source.c_str(), (int)rootWidth);
     jstring result = env->NewStringUTF(json ? json : "{\"error\":\"null result\",\"line\":0}");
     rin_free_string(json);
     return result;
@@ -544,7 +544,7 @@ Java_com_dlof_rinlang_RinEngine_renderViewNative(JNIEnv* env, jobject /* this */
 
 // renderContainerViewNative(source, containerName, rootWidth) -> نفس renderViewNative أعلاه، لكن
 // يبني الـ Fabric من @view المُعرَّف داخل الحاوية containerName بعينها (وليس جذر البرنامج العلوي)،
-// وهو الوجه الجديد الذي يجعل Loomtime مربوطة فعلياً بـ container: كل @container يحمل @view/warp/
+// وهو الوجه الجديد الذي يجعل Indsintime مربوطة فعلياً بـ container: كل @container يحمل @view/warp/
 // @theme خاصة به يصبح شاشة/عنصر واجهة مستقلاً قابلاً للعرض باسمه، مع warp/theme الخاصين بتلك
 // الحاوية فقط. نفس شكل JSON الناتج (أو {"error":"...", "line":N} عند الفشل).
 extern "C" JNIEXPORT jstring JNICALL
@@ -556,119 +556,119 @@ Java_com_dlof_rinlang_RinEngine_renderContainerViewNative(JNIEnv* env, jobject /
     std::string containerName(cName ? cName : "");
     env->ReleaseStringUTFChars(containerNameJStr, cName);
 
-    char* json = rin_loom_render_container_json(source.c_str(), containerName.c_str(), (int)rootWidth);
+    char* json = rin_indsin_render_container_json(source.c_str(), containerName.c_str(), (int)rootWidth);
     jstring result = env->NewStringUTF(json ? json : "{\"error\":\"null result\",\"line\":0}");
     rin_free_string(json);
     return result;
 }
 
-// ---- Loomtime session (Needle): a persistent Fabric+Warp session so a live-preview tap can
+// ---- Indsintime session (Needle): a persistent Fabric+Warp session so a live-preview tap can
 // actually run its onTap handler (real fun/while loop or a built-in Warp op) and see the result,
 // instead of renderViewNative's stateless one-shot render. The native session pointer is boxed as
-// a jlong handle on the Kotlin side (see RinEngine.kt's LoomSession wrapper) -- standard JNI
+// a jlong handle on the Kotlin side (see RinEngine.kt's IndsinSession wrapper) -- standard JNI
 // pattern for opaque native resources that must outlive a single call.
 
 extern "C" JNIEXPORT jlong JNICALL
-Java_com_dlof_rinlang_RinEngine_loomSessionCreateNative(JNIEnv* env, jobject /* this */, jstring sourceJStr, jint rootWidth) {
+Java_com_dlof_rinlang_RinEngine_indsinSessionCreateNative(JNIEnv* env, jobject /* this */, jstring sourceJStr, jint rootWidth) {
     const char* cSource = env->GetStringUTFChars(sourceJStr, nullptr);
     std::string source(cSource ? cSource : "");
     env->ReleaseStringUTFChars(sourceJStr, cSource);
-    void* session = rin_loom_session_create(source.c_str(), (int)rootWidth);
+    void* session = rin_indsin_session_create(source.c_str(), (int)rootWidth);
     return reinterpret_cast<jlong>(session);
 }
 
-// loomSessionCreateForContainerNative(source, containerName, rootWidth) -> نفس الجلسة أعلاه، لكن
+// indsinSessionCreateForContainerNative(source, containerName, rootWidth) -> نفس الجلسة أعلاه، لكن
 // حالتها (Fabric+Warp) مبنية من @view/warp/@theme داخل الحاوية containerName بعينها، فيمكن لأي
-// tap لاحق (loomSessionTapNative) أن يعمل بشكل طبيعي على warp/onTap الخاصين بتلك الحاوية فقط.
+// tap لاحق (indsinSessionTapNative) أن يعمل بشكل طبيعي على warp/onTap الخاصين بتلك الحاوية فقط.
 extern "C" JNIEXPORT jlong JNICALL
-Java_com_dlof_rinlang_RinEngine_loomSessionCreateForContainerNative(JNIEnv* env, jobject /* this */, jstring sourceJStr, jstring containerNameJStr, jint rootWidth) {
+Java_com_dlof_rinlang_RinEngine_indsinSessionCreateForContainerNative(JNIEnv* env, jobject /* this */, jstring sourceJStr, jstring containerNameJStr, jint rootWidth) {
     const char* cSource = env->GetStringUTFChars(sourceJStr, nullptr);
     std::string source(cSource ? cSource : "");
     env->ReleaseStringUTFChars(sourceJStr, cSource);
     const char* cName = env->GetStringUTFChars(containerNameJStr, nullptr);
     std::string containerName(cName ? cName : "");
     env->ReleaseStringUTFChars(containerNameJStr, cName);
-    void* session = rin_loom_session_create_for_container(source.c_str(), containerName.c_str(), (int)rootWidth);
+    void* session = rin_indsin_session_create_for_container(source.c_str(), containerName.c_str(), (int)rootWidth);
     return reinterpret_cast<jlong>(session);
 }
 
 extern "C" JNIEXPORT jstring JNICALL
-Java_com_dlof_rinlang_RinEngine_loomSessionRenderJsonNative(JNIEnv* env, jobject /* this */, jlong handle) {
-    char* json = rin_loom_session_render_json(reinterpret_cast<void*>(handle));
+Java_com_dlof_rinlang_RinEngine_indsinSessionRenderJsonNative(JNIEnv* env, jobject /* this */, jlong handle) {
+    char* json = rin_indsin_session_render_json(reinterpret_cast<void*>(handle));
     jstring result = env->NewStringUTF(json ? json : "{\"ok\":false,\"error\":\"null result\"}");
     rin_free_string(json);
     return result;
 }
 
 extern "C" JNIEXPORT jstring JNICALL
-Java_com_dlof_rinlang_RinEngine_loomSessionTapNative(JNIEnv* env, jobject /* this */, jlong handle, jdouble x, jdouble y) {
-    char* json = rin_loom_session_tap(reinterpret_cast<void*>(handle), (double)x, (double)y);
+Java_com_dlof_rinlang_RinEngine_indsinSessionTapNative(JNIEnv* env, jobject /* this */, jlong handle, jdouble x, jdouble y) {
+    char* json = rin_indsin_session_tap(reinterpret_cast<void*>(handle), (double)x, (double)y);
     jstring result = env->NewStringUTF(json ? json : "{\"ok\":false,\"error\":\"null result\"}");
     rin_free_string(json);
     return result;
 }
 
 // Events & Effects: long-press / double-tap / hover / tick — same envelope-return + free()
-// pattern as loomSessionTapNative above, just against rin_loom_session_long_press/_double_tap/
-// _hover/_tick instead of rin_loom_session_tap. See those functions' own doc comments in
-// rin_loom_c_api.h for exactly what each returns.
+// pattern as indsinSessionTapNative above, just against rin_indsin_session_long_press/_double_tap/
+// _hover/_tick instead of rin_indsin_session_tap. See those functions' own doc comments in
+// rin_indsin_c_api.h for exactly what each returns.
 extern "C" JNIEXPORT jstring JNICALL
-Java_com_dlof_rinlang_RinEngine_loomSessionLongPressNative(JNIEnv* env, jobject /* this */, jlong handle, jdouble x, jdouble y) {
-    char* json = rin_loom_session_long_press(reinterpret_cast<void*>(handle), (double)x, (double)y);
+Java_com_dlof_rinlang_RinEngine_indsinSessionLongPressNative(JNIEnv* env, jobject /* this */, jlong handle, jdouble x, jdouble y) {
+    char* json = rin_indsin_session_long_press(reinterpret_cast<void*>(handle), (double)x, (double)y);
     jstring result = env->NewStringUTF(json ? json : "{\"ok\":false,\"error\":\"null result\"}");
     rin_free_string(json);
     return result;
 }
 
 extern "C" JNIEXPORT jstring JNICALL
-Java_com_dlof_rinlang_RinEngine_loomSessionDoubleTapNative(JNIEnv* env, jobject /* this */, jlong handle, jdouble x, jdouble y) {
-    char* json = rin_loom_session_double_tap(reinterpret_cast<void*>(handle), (double)x, (double)y);
+Java_com_dlof_rinlang_RinEngine_indsinSessionDoubleTapNative(JNIEnv* env, jobject /* this */, jlong handle, jdouble x, jdouble y) {
+    char* json = rin_indsin_session_double_tap(reinterpret_cast<void*>(handle), (double)x, (double)y);
     jstring result = env->NewStringUTF(json ? json : "{\"ok\":false,\"error\":\"null result\"}");
     rin_free_string(json);
     return result;
 }
 
 extern "C" JNIEXPORT jstring JNICALL
-Java_com_dlof_rinlang_RinEngine_loomSessionHoverNative(JNIEnv* env, jobject /* this */, jlong handle, jdouble x, jdouble y, jboolean entering) {
-    char* json = rin_loom_session_hover(reinterpret_cast<void*>(handle), (double)x, (double)y, entering ? 1 : 0);
+Java_com_dlof_rinlang_RinEngine_indsinSessionHoverNative(JNIEnv* env, jobject /* this */, jlong handle, jdouble x, jdouble y, jboolean entering) {
+    char* json = rin_indsin_session_hover(reinterpret_cast<void*>(handle), (double)x, (double)y, entering ? 1 : 0);
     jstring result = env->NewStringUTF(json ? json : "{\"ok\":false,\"error\":\"null result\"}");
     rin_free_string(json);
     return result;
 }
 
 extern "C" JNIEXPORT jstring JNICALL
-Java_com_dlof_rinlang_RinEngine_loomSessionTickNative(JNIEnv* env, jobject /* this */, jlong handle) {
-    char* json = rin_loom_session_tick(reinterpret_cast<void*>(handle));
+Java_com_dlof_rinlang_RinEngine_indsinSessionTickNative(JNIEnv* env, jobject /* this */, jlong handle) {
+    char* json = rin_indsin_session_tick(reinterpret_cast<void*>(handle));
     jstring result = env->NewStringUTF(json ? json : "{\"ok\":false,\"error\":\"null result\"}");
     rin_free_string(json);
     return result;
 }
 
 extern "C" JNIEXPORT jstring JNICALL
-Java_com_dlof_rinlang_RinEngine_loomSessionUpdateSourceNative(JNIEnv* env, jobject /* this */, jlong handle, jstring newSourceJStr) {
+Java_com_dlof_rinlang_RinEngine_indsinSessionUpdateSourceNative(JNIEnv* env, jobject /* this */, jlong handle, jstring newSourceJStr) {
     const char* cSource = env->GetStringUTFChars(newSourceJStr, nullptr);
     std::string source(cSource ? cSource : "");
     env->ReleaseStringUTFChars(newSourceJStr, cSource);
-    char* json = rin_loom_session_update_source(reinterpret_cast<void*>(handle), source.c_str());
+    char* json = rin_indsin_session_update_source(reinterpret_cast<void*>(handle), source.c_str());
     jstring result = env->NewStringUTF(json ? json : "{\"ok\":false,\"error\":\"null result\"}");
     rin_free_string(json);
     return result;
 }
 
 extern "C" JNIEXPORT void JNICALL
-Java_com_dlof_rinlang_RinEngine_loomSessionFreeNative(JNIEnv* /* env */, jobject /* this */, jlong handle) {
-    rin_loom_session_free(reinterpret_cast<void*>(handle));
+Java_com_dlof_rinlang_RinEngine_indsinSessionFreeNative(JNIEnv* /* env */, jobject /* this */, jlong handle) {
+    rin_indsin_session_free(reinterpret_cast<void*>(handle));
 }
 
-// loomSessionSetViewportNative(handle, viewportHeight) -> Overlay Engine (rin_loom_overlay.h):
+// indsinSessionSetViewportNative(handle, viewportHeight) -> Overlay Engine (rin_indsin_overlay.h):
 // Dialog centering / Tooltip clamping needs the *real* on-screen viewport height (not the 844
 // native-side default) to re-home overlays correctly against the actual device -- see
-// rin_loom_session_set_viewport's own doc comment in rin_loom_c_api.h/.cpp. Kotlin should call
+// rin_indsin_session_set_viewport's own doc comment in rin_indsin_c_api.h/.cpp. Kotlin should call
 // this once it knows the preview surface's real measured height (dp), same moment it already
-// measures the surface's width for rootWidth (see LoomPreviewActivity.fitDeviceWidth()).
+// measures the surface's width for rootWidth (see IndsinPreviewActivity.fitDeviceWidth()).
 extern "C" JNIEXPORT void JNICALL
-Java_com_dlof_rinlang_RinEngine_loomSessionSetViewportNative(JNIEnv* /* env */, jobject /* this */, jlong handle, jint viewportHeight) {
-    rin_loom_session_set_viewport(reinterpret_cast<void*>(handle), (int)viewportHeight);
+Java_com_dlof_rinlang_RinEngine_indsinSessionSetViewportNative(JNIEnv* /* env */, jobject /* this */, jlong handle, jint viewportHeight) {
+    rin_indsin_session_set_viewport(reinterpret_cast<void*>(handle), (int)viewportHeight);
 }
 
 // ================= جسر HTTP الحقيقي: JNI_OnLoad + native -> Kotlin (RinHttpBridge) =================
@@ -750,7 +750,7 @@ bool ensureHttpBridgeAttached(JNIEnv* env) {
 }
 
 // يُعيد JNIEnv* صالحاً للترد الحالي، مُرفِقاً هذا الترد بـ JavaVM أولاً إن لم يكن مُرفَقاً بعد
-// (طلبات httpGet/apiCall... قد تُنفَّذ من ترد خلفي مثل worker الخاص بـ LoomPreviewManager أو
+// (طلبات httpGet/apiCall... قد تُنفَّذ من ترد خلفي مثل worker الخاص بـ IndsinPreviewManager أو
 // RinJobScheduler، وليس بالضرورة الترد الذي استدعى JNI_OnLoad). [didAttach] يُعاد true إن قمنا نحن
 // بالإرفاق، حتى يُفصَل (Detach) الترد بعد الاستدعاء ولا يبقى مُرفَقاً بلا داعٍ.
 JNIEnv* attachEnv(bool* didAttach) {
