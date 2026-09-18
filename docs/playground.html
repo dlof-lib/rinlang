@@ -75,6 +75,10 @@
     <div class="pg-toolbar" style="margin-top:26px;">
       <select id="pgExample" aria-label="اختر مثالاً جاهزاً"></select>
       <button class="btn-reset" id="pgReset" type="button">إعادة تحميل المثال</button>
+      <label class="pg-live-toggle" for="pgLive" title="تشغيل الشيفرة تلقائياً كلّما توقّفت عن الكتابة">
+        <input type="checkbox" id="pgLive" checked/>
+        <span>تشغيل تلقائي أثناء الكتابة</span>
+      </label>
       <span class="spacer"></span>
       <button class="btn-run" id="pgRun" type="button">▶ تشغيل</button>
     </div>
@@ -93,6 +97,10 @@
         <div class="code-head">
           <span class="dot"></span><span class="dot"></span><span class="dot"></span>
           <span class="name">output</span>
+          <span class="pg-live-status" id="pgLiveStatus">
+            <span class="pg-live-dot" id="pgLiveDot"></span>
+            <span class="pg-live-label" id="pgLiveLabel">—</span>
+          </span>
         </div>
         <pre class="pg-output" id="pgOutput">…</pre>
       </div>
