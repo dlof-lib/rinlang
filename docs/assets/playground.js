@@ -21,12 +21,20 @@
   var statusBadge = document.getElementById("pgStatus");
   var statusTxt = document.getElementById("pgStatusText");
   var banner = document.getElementById("pgBanner");
+  var liveToggle = document.getElementById("pgLive");
+  var liveDot = document.getElementById("pgLiveDot");
+  var liveLabel = document.getElementById("pgLiveLabel");
 
   if (!editor || !output) return;
 
   var EXAMPLES = window.RIN_EXAMPLES || {};
   var engineModule = null; // كائن Module الجاهز بعد التحميل (RinModule())
   var engineReady = false;
+
+  // مهلة التأجيل قبل التشغيل التلقائي بعد توقّف الكتابة (مللي ثانية)
+  var LIVE_DEBOUNCE_MS = 500;
+  var liveTimer = null;
+  var lastRunSource = null; // لتفادي إعادة تشغيل نفس الشيفرة بلا داعٍ
 
   function setStatus(kind, text) {
     statusBadge.className = "badge " + kind;
@@ -38,6 +46,39 @@
     output.classList.toggle("is-error", !!isError);
   }
 
+  // -------------------------- مؤشّر التشغيل التلقائي ----------------------
+  // pending: بانتظار توقّف الكتابة — running: قيد التنفيذ الآن —
+  // ok/err: آخر نتيجة — idle: لا شيء بعد.
+  function setLiveIndicator(state, text) {
+    if (!liveDot || !liveLabel) return;
+    liveDot.className = "pg-live-dot" + (state !== "idle" ? " is-" + state : "");
+    liveLabel.textContent = text;
+  }
+
+  function isLiveEnabled() {
+    return !!(liveToggle && liveToggle.checked);
+  }
+
+  function scheduleLiveRun() {
+    if (!engineReady || !isLiveEnabled()) return;
+    if (liveTimer) clearTimeout(liveTimer);
+    setLiveIndicator("pending", "بانتظار توقّفك عن الكتابة…");
+    liveTimer = setTimeout(function () {
+      liveTimer = null;
+      var source = editor.value;
+      if (source === lastRunSource) return; // لم يتغيّر شيء فعلياً
+      setLiveIndicator("running", "جارٍ التشغيل…");
+      runReal(source);
+    }, LIVE_DEBOUNCE_MS);
+  }
+
+  function cancelLiveRun() {
+    if (liveTimer) {
+      clearTimeout(liveTimer);
+      liveTimer = null;
+    }
+  }
+
   function loadDefaultExample() {
     var params = new URLSearchParams(window.location.search);
     var requested = params.get("ex");
@@ -45,6 +86,18 @@
     if (key) {
       editor.value = EXAMPLES[key].code;
       if (exampleSelect) exampleSelect.value = key;
+      runOrPreview(key);
+    }
+  }
+
+  // يشغّل المثال فوراً إن كان المحرّك جاهزاً والتشغيل التلقائي مفعّلاً،
+  // وإلا يعرض الناتج المُسجَّل مسبقاً كمعاينة.
+  function runOrPreview(key) {
+    if (engineReady && isLiveEnabled()) {
+      cancelLiveRun();
+      setLiveIndicator("running", "جارٍ التشغيل…");
+      runReal(EXAMPLES[key].code);
+    } else {
       showPreviewOutput(key);
     }
   }
@@ -70,7 +123,7 @@
       var ex = EXAMPLES[exampleSelect.value];
       if (ex) {
         editor.value = ex.code;
-        showPreviewOutput(exampleSelect.value);
+        runOrPreview(exampleSelect.value);
       }
     });
   }
@@ -86,6 +139,7 @@
   });
 
   function runReal(source) {
+    lastRunSource = source;
     try {
       var resultPtr = engineModule.ccall(
         "rin_run_source", "string", ["string"], [source]
@@ -96,16 +150,20 @@
         var line = rest.slice(0, sep);
         var msg = rest.slice(sep + 1);
         setOutput("خطأ في السطر " + line + ":\n" + msg, true);
+        setLiveIndicator("err", "خطأ — السطر " + line);
       } else {
         setOutput(resultPtr || "(بلا ناتج)", false);
+        setLiveIndicator("ok", "تشغيل ناجح");
       }
     } catch (err) {
       setOutput("خطأ داخلي أثناء التشغيل:\n" + String(err), true);
+      setLiveIndicator("err", "خطأ داخلي");
     }
   }
 
   if (runBtn) {
     runBtn.addEventListener("click", function () {
+      cancelLiveRun();
       var source = editor.value;
       if (!engineReady) {
         setOutput(
@@ -116,17 +174,44 @@
         );
         return;
       }
+      setLiveIndicator("running", "جارٍ التشغيل…");
       runReal(source);
     });
   }
 
   if (resetBtn) {
     resetBtn.addEventListener("click", function () {
+      cancelLiveRun();
       var key = exampleSelect ? exampleSelect.value : Object.keys(EXAMPLES)[0];
       var ex = EXAMPLES[key];
       if (ex) {
         editor.value = ex.code;
-        showPreviewOutput(key);
+        if (engineReady && isLiveEnabled()) {
+          setLiveIndicator("running", "جارٍ التشغيل…");
+          runReal(ex.code);
+        } else {
+          showPreviewOutput(key);
+        }
+      }
+    });
+  }
+
+  // إعادة التشغيل تلقائياً كلّما توقّف المستخدم عن الكتابة (بعد المهلة)
+  editor.addEventListener("input", function () {
+    if (!engineReady) return;
+    if (!isLiveEnabled()) return;
+    scheduleLiveRun();
+  });
+
+  if (liveToggle) {
+    liveToggle.addEventListener("change", function () {
+      if (!engineReady) return;
+      if (liveToggle.checked) {
+        setLiveIndicator("running", "جارٍ التشغيل…");
+        runReal(editor.value);
+      } else {
+        cancelLiveRun();
+        setLiveIndicator("idle", "التشغيل التلقائي متوقّف");
       }
     });
   }
@@ -151,8 +236,15 @@
           engineReady = true;
           setStatus("ok", "المحرّك الحقيقي مُحمَّل — التشغيل فعلي داخل متصفحك");
           if (runBtn) runBtn.disabled = false;
+          if (liveToggle) liveToggle.disabled = false;
           if (banner) banner.classList.add("is-hidden");
-          setOutput("المحرّك جاهز. اضغط «تشغيل» لتنفيذ الشيفرة الحالية.", false);
+          if (isLiveEnabled()) {
+            setLiveIndicator("running", "جارٍ التشغيل…");
+            runReal(editor.value);
+          } else {
+            setOutput("المحرّك جاهز. اضغط «تشغيل» لتنفيذ الشيفرة الحالية.", false);
+            setLiveIndicator("idle", "التشغيل التلقائي متوقّف");
+          }
         })
         .catch(engineUnavailable);
     };
@@ -164,8 +256,13 @@
     engineReady = false;
     setStatus("off", "وضع المعاينة — المحرّك المُجمَّع غير موجود بعد");
     if (runBtn) runBtn.disabled = false; // يبقى مفعّلاً ليشرح الحالة عند الضغط
+    if (liveToggle) liveToggle.disabled = true;
     if (banner) banner.classList.remove("is-hidden");
+    setLiveIndicator("idle", "بحاجة إلى المحرّك المُجمَّع");
   }
+
+  if (liveToggle) liveToggle.disabled = true; // يُفعَّل فقط بعد نجاح تحميل المحرّك
+  setLiveIndicator("idle", "—");
 
   loadDefaultExample();
   tryLoadEngine();
