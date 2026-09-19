@@ -427,6 +427,50 @@ struct Indsin {
             // Inspector and Card share.
             case StrandKind::CALCULATOR: size = measureCalculator(s, c2, originX, originY); break;
 
+            // ---- UI/UX Library Expansion ----
+            // Tag/Chip: a pill Row of a synthesized Text label + optional close Button (see
+            // applyTagConveniences() in rin_indsin_components_ext.h) — exactly the same
+            // "synthesize real children, then let the ordinary Row layout do the work" strategy
+            // Banner already uses for title=/message=/closable=.
+            case StrandKind::TAG: {
+                // removable="true" (applyTagConveniences, rin_indsin_components_ext.h) binds
+                // visible= to an auto-created Warp cell the synthesized close Button flips to
+                // "false" -- same collapse-to-zero-when-hidden rule Banner's visible=false uses
+                // just above, so a removed Tag actually leaves the layout instead of just going
+                // invisible-but-still-occupying-space.
+                bool isVisible = s->attrStr("visible", "true") != "false";
+                if (!isVisible) { size = {0,0,0,0}; break; }
+                size = layoutLinear(s, c2, Axis::X, originX, originY);
+                break;
+            }
+            case StrandKind::KBD: size = measureKbd(s, c2); break;
+            case StrandKind::RATING: size = measureRating(s, c2); break;
+            case StrandKind::SKELETON: {
+                double w = s->attr("width") ? c2.minW : std::min(120.0, c2.maxW);
+                double h = s->attr("height") ? c2.minH : std::min(16.0, c2.maxH);
+                size = {0,0, std::max(w,c2.minW), std::max(h,c2.minH)};
+                break;
+            }
+            case StrandKind::SPINNER: {
+                // Reuses Avatar's small/medium/large/xl size tokens (resolveAvatarSize) since the
+                // semantics ("size=<token or number>") are identical -- just with a smaller
+                // un-tokened default (24, not Avatar's 40) since a loading glyph reads oversized
+                // at Avatar's default.
+                double sz = s->attr("size") ? resolveAvatarSize(*s) : 24.0;
+                sz = std::min(sz, std::min(c2.maxW, c2.maxH));
+                size = {0,0, std::max(sz,c2.minW), std::max(sz,c2.minH)};
+                break;
+            }
+            case StrandKind::STEPS: size = layoutSteps(s, c2, originX, originY); break;
+            case StrandKind::STEPITEM: size = measureStepItem(s, c2); break;
+            case StrandKind::TIMELINE: size = layoutLinear(s, c2, Axis::Y, originX, originY); break;
+            case StrandKind::TIMELINEITEM: size = measureTimelineItem(s, c2); break;
+            // Breadcrumb/Pagination: both are convenience-synthesized Rows too (items=/current=+
+            // total= -> real Text/Button children -- see rin_indsin_components_ext.h), so plain
+            // layoutLinear(Axis::X) already does the right thing once those children exist.
+            case StrandKind::BREADCRUMB: size = layoutLinear(s, c2, Axis::X, originX, originY); break;
+            case StrandKind::PAGINATION: size = layoutLinear(s, c2, Axis::X, originX, originY); break;
+
             // ---- new: media placeholders — sized like an Image (explicit width/height, else a
             // sensible default box). Actual playback happens in the real app, not this preview.
             case StrandKind::VIDEO:
@@ -906,6 +950,33 @@ struct Indsin {
         return {0,0, std::max(w,c.minW), std::max(h,c.minH)};
     }
 
+    // ---- UI/UX Library Expansion: Kbd — a small bordered "key" box, same content-sized-box idea
+    // as Badge/Tooltip just above, with proportions closer to a monospace keycap (a touch more
+    // horizontal padding, minimum width so a single-character key like "K" still reads as a key
+    // and not a sliver).
+    Rect measureKbd(StrandPtr s, Constraints c) {
+        std::string text = s->attrStr("text", "");
+        double fontSize = resolveFontSize(*s, "size", 12);
+        double hPad = 7, vPad = 3;
+        double w = std::min(std::max(measureTextWidth(text, fontSize) + hPad*2, fontSize*1.8), c.maxW);
+        double h = std::min(fontSize*1.5 + vPad*2, c.maxH);
+        return {0,0, std::max(w,c.minW), std::max(h,c.minH)};
+    }
+
+    // Rating: `max=` (default 5) equal-width star cells laid out side by side; `size=` sets each
+    // star glyph's box (default 18), `gap=` the spacing between cells (default 2). Read-only by
+    // design (see paintRating's doc comment in rin_indsin_paint.h) — the same "measures a box,
+    // doesn't model interaction state" scope Progress/Slider already have.
+    Rect measureRating(StrandPtr s, Constraints c) {
+        int maxStars = (int)std::max(1.0, s->attrNum("max", 5));
+        double gap = resolveSpacing(*s, "gap", 2);
+        double starSize = std::min(s->attrNum("size", 18), std::min((c.maxW - (maxStars-1)*gap) / maxStars, c.maxH));
+        starSize = std::max(starSize, 4.0);
+        double w = std::min(maxStars*starSize + (maxStars-1)*gap, c.maxW);
+        double h = std::min(starSize, c.maxH);
+        return {0,0, std::max(w,c.minW), std::max(h,c.minH)};
+    }
+
     // ---- Missing-components pass: Input/TextArea (§?) — a bordered field box sized around its
     // `value=`/`placeholder=` text (whichever is longer), with a sensible default height per kind
     // (`defaultH`: 40 for a single-line Input, 96 for a multi-line TextArea) unless height=
@@ -930,6 +1001,55 @@ struct Indsin {
         double w = std::min(s->attrNum("width", 280), c.maxW);
         double h = std::min(s->attrNum("height", 360), c.maxH);
         return {0,0, std::max(w,c.minW), std::max(h,c.minH)};
+    }
+
+    // ---- UI/UX Library Expansion: Steps/Stepper --------------------------------------------
+    // Steps lays its StepItem children left-to-right, each claiming an EQUAL share of the
+    // available width (unlike an ordinary Row, which packs each child to its own content size) —
+    // a stepper reads correctly only when every marker is evenly spaced, so the connector line
+    // paintSteps() draws afterward (rin_indsin_paint.h) lines up center-to-center with each
+    // circle regardless of how long that step's label= is.
+    Rect layoutSteps(StrandPtr s, Constraints c, double originX, double originY) {
+        double padding = resolveSpacing(*s, "padding", 0);
+        int n = (int)s->children.size();
+        double innerW = std::max(0.0, c.maxW - padding*2);
+        double itemW = n > 0 ? innerW / n : innerW;
+        double cursorX = 0, maxH = 0;
+        for (auto& child : s->children) {
+            Rect r = layout(child, {itemW, itemW, 0, c.maxH}, originX + padding + cursorX, originY + padding);
+            cursorX += itemW; maxH = std::max(maxH, r.h);
+        }
+        double totalH = maxH + padding*2;
+        return {0,0, std::min(innerW + padding*2, c.maxW), std::max(std::min(totalH,c.maxH), c.minH)};
+    }
+    // StepItem: a circular marker (markerSize=, default 28) stacked above its label= text —
+    // measured as one box (Stack-style) rather than built from real child Strands, since its
+    // marker/label pairing is fixed and never needs arbitrary nested content the way Card's does.
+    Rect measureStepItem(StrandPtr s, Constraints c) {
+        double circle = std::min(s->attrNum("markerSize", 28), std::min(c.maxW, c.maxH));
+        double fontSize = resolveFontSize(*s, "size", 12);
+        std::string label = s->attrStr("label", "");
+        double labelW = measureTextWidth(label, fontSize);
+        double gap = 6;
+        double w = std::min(std::max(circle, labelW), c.maxW);
+        double h = std::min(circle + gap + fontSize*1.3, c.maxH);
+        return {0,0, std::max(w,c.minW), std::max(h,c.minH)};
+    }
+
+    // ---- UI/UX Library Expansion: Timeline/TimelineItem -------------------------------------
+    // TimelineItem: an attribute-driven leaf (date=/title=/desc=), the same "measured as one
+    // self-contained box, not built from real child Strands" design as StepItem above — a
+    // vertical stack of however many of date=/title=/desc= are actually set, claiming the full
+    // row width like a List/ListItem row does.
+    Rect measureTimelineItem(StrandPtr s, Constraints c) {
+        double dot = 12;
+        double fontSize = resolveFontSize(*s, "size", 14);
+        double lineH = fontSize*1.35;
+        int lines = 1; // title= (always reserves at least one line, even if empty)
+        if (!s->attrStr("date", "").empty()) lines++;
+        if (!s->attrStr("desc", "").empty()) lines++;
+        double h = std::min(std::max(dot, lines*lineH), c.maxH);
+        return {0,0, c.maxW, std::max(h, c.minH)};
     }
 };
 
