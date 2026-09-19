@@ -99,6 +99,28 @@ inline void attachContainerUiBindings(const std::vector<rin::StmtPtr>& stmts,
     for (auto& st : allProgram) if (auto v=std::dynamic_pointer_cast<rin::ViewStmt>(st)) apply(v);
 }
 
+// UI/UX Library Expansion / @element-merge: picks which top-level ViewStmt is the screen's root,
+// preferring a real @view/@loop over a top-level @element -- an @element nested inside a @view
+// (the common, originally-only-supported case) is unaffected either way (this only looks at
+// *top-level* program statements, never walks into children), but a source file whose *only*
+// top-level UI statement is an @element (previously rejected with "no top-level ... root found",
+// even though buildFabric()/layout()/paint() below all already handle an ELEMENT-role Strand
+// identically to a VIEW one -- see strandKindFromTag() at line ~317 not branching on role at all)
+// now renders that @element as the screen itself. sanitizeElements() below still strips its
+// visual attrs either way, so an @element used as a root stays exactly as "functional-only" as
+// one nested inside a @view always was -- this only changes whether it's *accepted* as a root,
+// not what it's allowed to look like once it is one.
+inline std::shared_ptr<rin::ViewStmt> pickRootFromProgram(const std::vector<rin::StmtPtr>& program) {
+    std::shared_ptr<rin::ViewStmt> elementFallback;
+    for (auto& stmt : program) {
+        auto v = std::dynamic_pointer_cast<rin::ViewStmt>(stmt);
+        if (!v) continue;
+        if (v->role != rin::UiRole::ELEMENT) return v; // a real @view/@loop always wins outright
+        if (!elementFallback) elementFallback = v;
+    }
+    return elementFallback; // null if the program has no top-level ViewStmt of any role
+}
+
 inline void sanitizeElements(std::shared_ptr<rin::ViewStmt>& node) {
     if (!node) return;
     if (node->role == rin::UiRole::ELEMENT) {
@@ -132,9 +154,14 @@ inline PipelineResult runColdPipelineWithRuntime(const std::string& source, rin:
         // as it happens, so "which view is the root" is a fact observed from real control flow,
         // not a second static guess. Only the first one reached is kept (matches the old static
         // scan's behavior for the common case of a single top-level @view).
-        std::shared_ptr<rin::ViewStmt> reachedRoot;
-        interp.setViewReachedCallback([&reachedRoot](const std::shared_ptr<rin::ViewStmt>& v) {
-            if (!reachedRoot && v->role != rin::UiRole::ELEMENT) reachedRoot = v;
+        // @element-merge: reachedElementFallback mirrors reachedRoot but for ELEMENT-role views --
+        // used only if execution never reaches a real @view/@loop at all (see "root = " below), so
+        // a source file whose only top-level UI is an @element still renders as its own screen
+        // instead of failing with "no top-level root found".
+        std::shared_ptr<rin::ViewStmt> reachedRoot, reachedElementFallback;
+        interp.setViewReachedCallback([&reachedRoot, &reachedElementFallback](const std::shared_ptr<rin::ViewStmt>& v) {
+            if (v->role != rin::UiRole::ELEMENT) { if (!reachedRoot) reachedRoot = v; }
+            else if (!reachedElementFallback) reachedElementFallback = v;
         });
 
         interp.setExecutionBudget(instructionBudget);
@@ -163,15 +190,13 @@ inline PipelineResult runColdPipelineWithRuntime(const std::string& source, rin:
         registerObjectsFromProgram(program, result.warp); // §21: Object Inspector source
         registerGroupsFromProgram(program, result.warp); // §21b: Group/Volume as Object Inspector source
 
-        std::shared_ptr<rin::ViewStmt> root = reachedRoot;
+        std::shared_ptr<rin::ViewStmt> root = reachedRoot ? reachedRoot : reachedElementFallback;
         if (!root) {
             // Defensive fallback only -- e.g. a program with a top-level @view that for some
             // reason execute() didn't reach (shouldn't happen: top-level statements always run
             // through execute()). Kept so a bug in the callback path degrades to the old static
             // scan instead of always failing outright.
-            for (auto& stmt : program) {
-                if (auto v = std::dynamic_pointer_cast<rin::ViewStmt>(stmt)) { if (v->role != rin::UiRole::ELEMENT) { root = v; break; } }
-            }
+            root = pickRootFromProgram(program);
         }
         if (!root) throw rin::RinError("no top-level '@view/@loop...=name' root found", 1);
 
@@ -282,9 +307,11 @@ inline PipelineResult runColdPipelineForContainerWithRuntime(const std::string& 
         // view -- see the comment above interp.run() below) -- see collectViewStmts().
         std::unordered_set<const void*> ownViews;
         collectViewStmts(*body, ownViews);
-        std::shared_ptr<rin::ViewStmt> reachedRoot;
-        interp.setViewReachedCallback([&reachedRoot, &ownViews](const std::shared_ptr<rin::ViewStmt>& v) {
-            if (!reachedRoot && ownViews.count(v.get()) && v->role != rin::UiRole::ELEMENT) reachedRoot = v;
+        std::shared_ptr<rin::ViewStmt> reachedRoot, reachedElementFallback; // @element-merge: see runColdPipelineWithRuntime's equivalent above
+        interp.setViewReachedCallback([&reachedRoot, &reachedElementFallback, &ownViews](const std::shared_ptr<rin::ViewStmt>& v) {
+            if (!ownViews.count(v.get())) return;
+            if (v->role != rin::UiRole::ELEMENT) { if (!reachedRoot) reachedRoot = v; }
+            else if (!reachedElementFallback) reachedElementFallback = v;
         });
 
         interp.setExecutionBudget(instructionBudget);
@@ -310,12 +337,8 @@ inline PipelineResult runColdPipelineForContainerWithRuntime(const std::string& 
         registerThemesFromProgram(*body, result.warp);
         registerObjectsFromProgram(*body, result.warp); // §21: Object Inspector source
         registerGroupsFromProgram(*body, result.warp); // §21b: Group/Volume as Object Inspector source
-        std::shared_ptr<rin::ViewStmt> root = reachedRoot;
-        if (!root) {
-            for (auto& stmt : *body) { // defensive fallback -- see runColdPipelineWithRuntime's equivalent
-                if (auto v = std::dynamic_pointer_cast<rin::ViewStmt>(stmt)) { if (v->role != rin::UiRole::ELEMENT) { root = v; break; } }
-            }
-        }
+        std::shared_ptr<rin::ViewStmt> root = reachedRoot ? reachedRoot : reachedElementFallback;
+        if (!root) root = pickRootFromProgram(*body); // defensive fallback -- see runColdPipelineWithRuntime's equivalent above
         if (!root) throw rin::RinError("no '@view...=name' or '@loop...=name' root found inside container '" + containerName + "'", 1);
 
         attachContainerUiBindings(*body, program);
@@ -365,10 +388,7 @@ inline std::vector<Patch> runHotPipeline(PipelineResult& state, const std::strin
         registerGroupsFromProgram(program, state.warp); // §21b: same, for Group/Volume sources
         // note this does NOT re-synthesize an already-built Object Strand's rows -- same documented
         // limitation as applyBannerConveniences above (only the next cold build/Run picks it up).
-        std::shared_ptr<rin::ViewStmt> root;
-        for (auto& stmt : program) {
-            if (auto v = std::dynamic_pointer_cast<rin::ViewStmt>(stmt)) { if (v->role != rin::UiRole::ELEMENT) { root = v; break; } }
-        }
+        std::shared_ptr<rin::ViewStmt> root = pickRootFromProgram(program); // @element-merge: see its own doc comment above
         if (!root) throw rin::RinError("no top-level '@view/@loop...=name' root found", 1);
         attachContainerUiBindings(program, program);
         sanitizeElements(root);
