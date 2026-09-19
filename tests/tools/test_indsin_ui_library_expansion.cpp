@@ -234,6 +234,65 @@ int main() {
         }
     }
 
+    // 9. Spinner — now a real DrawOp::STROKE_ARC ring (not the old two-rect illusion).
+    {
+        std::cout << "-- Spinner (real arc) --\n";
+        std::string src = R"(
+@view.Spinner=sp .end/view
+)";
+        auto r = indsin::runColdPipeline(src);
+        CHECK(r.ok, "parses");
+        if (r.ok) {
+            layoutAt(r);
+            auto sp = byName(r.fabric, "sp");
+            indsin::Dye dye;
+            auto list = dye.paint(r.fabric);
+            int arcCount = 0; double sweepSum = 0; bool sawFullTrack = false;
+            for (auto& cmd : list) {
+                if (cmd.owner != sp->id) continue;
+                CHECK(cmd.op == indsin::DrawOp::STROKE_ARC, "Spinner paints only via STROKE_ARC (no rect approximation left)");
+                if (cmd.op == indsin::DrawOp::STROKE_ARC) {
+                    arcCount++;
+                    sweepSum += cmd.sweepAngleDeg;
+                    if (cmd.sweepAngleDeg >= 359.0) sawFullTrack = true;
+                    CHECK(cmd.bounds.w == cmd.bounds.h, "Spinner's arc bounding box is square (a true ring)");
+                }
+            }
+            CHECK(arcCount == 2, "Spinner paints a full track arc + one shorter active sweep arc");
+            CHECK(sawFullTrack, "one of the two arcs is the full 360-degree track");
+        }
+    }
+
+    // 10. DonutChart — data="Label:Value,..." -> one STROKE_ARC per segment, sweep proportional
+    //     to that segment's share of the total (a real arc-based chart, not a bar/square approximation).
+    {
+        std::cout << "-- DonutChart --\n";
+        std::string src = R"(
+@view.DonutChart=usage data="Design:40,Development:35,Testing:25"; .end/view
+)";
+        auto r = indsin::runColdPipeline(src);
+        CHECK(r.ok, "parses");
+        if (r.ok) {
+            layoutAt(r);
+            auto chart = byName(r.fabric, "usage");
+            CHECK(chart->kind == indsin::StrandKind::DONUT_CHART, "DonutChart resolves to its own StrandKind");
+            indsin::Dye dye;
+            auto list = dye.paint(r.fabric);
+            std::vector<indsin::DrawCommand> arcs, texts;
+            for (auto& cmd : list) if (cmd.owner == chart->id) {
+                if (cmd.op == indsin::DrawOp::STROKE_ARC) arcs.push_back(cmd);
+                if (cmd.op == indsin::DrawOp::TEXT_RUN) texts.push_back(cmd);
+            }
+            CHECK(arcs.size() == 3, "data= with 3 entries paints exactly 3 arc segments");
+            double sweepSum = 0; for (auto& a : arcs) sweepSum += a.sweepAngleDeg;
+            CHECK(std::abs(sweepSum - 360.0) < 0.01, "the 3 segments' sweep angles add up to a full 360-degree circle");
+            CHECK(std::abs(arcs[0].sweepAngleDeg - 144.0) < 0.01, "the first segment (40 of 100) sweeps 40% of 360 = 144 degrees");
+            CHECK(arcs[0].color.r != arcs[1].color.r || arcs[0].color.g != arcs[1].color.g || arcs[0].color.b != arcs[1].color.b,
+                  "segments get distinct colors from the default palette when colors= is unset");
+            CHECK(!texts.empty() && texts[0].text == "100", "with no centerLabel=, the center shows the running total (40+35+25=100)");
+        }
+    }
+
     std::cout << "\n" << (failures == 0 ? "ALL TESTS PASSED" : std::to_string(failures) + " TEST(S) FAILED") << "\n";
     return failures == 0 ? 0 : 1;
 }
