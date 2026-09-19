@@ -507,6 +507,16 @@ class IndsinFabricView @JvmOverloads constructor(
         super.onDraw(canvas)
         canvas.save()
         canvas.scale(previewScale(), previewScale())
+        // Hard device-boundary clip (احترافي/حدود الشاشة): the native layout engine is not
+        // guaranteed to keep every Strand's box inside the root's declared w/h — a Row whose
+        // children's natural widths sum past the container (no wrap/shrink yet on the native
+        // side), a shadow/border on the last node in a Column, or a stray overlay box are all
+        // real cases that previously bled straight past the device frame's rounded corners and
+        // out to whatever this View happened to be measured at (see IndsinPreviewActivity's
+        // device-frame background). Clipping here means the *worst* a layout bug can do is get
+        // visually cut at the phone's edge — exactly where a real device would cut it — instead
+        // of spilling into the surrounding preview chrome and looking broken/unbounded.
+        canvas.clipRect(0f, 0f, rootWidthPx.toFloat(), rootHeightPx.toFloat())
 
         val root = fabric
         if (root != null) {
