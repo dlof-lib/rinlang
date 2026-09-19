@@ -82,7 +82,7 @@ enum class StrandKind {
     // called out at its own paint function, not silently faked.
     TAG, KBD, RATING, SKELETON, SPINNER,
     STEPS, STEPITEM, TIMELINE, TIMELINEITEM,
-    BREADCRUMB, PAGINATION,
+    BREADCRUMB, PAGINATION, DONUT_CHART,
 
     CUSTOM
 };
@@ -174,6 +174,8 @@ inline StrandKind strandKindFromTag(const std::string& tag) {
         return StrandKind::BREADCRUMB;
     if (tag == "Pagination" || tag == "pagination" || tag == "Pager" || tag == "pager")
         return StrandKind::PAGINATION;
+    if (tag == "DonutChart" || tag == "donutchart" || tag == "PieChart" || tag == "piechart" ||
+        tag == "Donut" || tag == "donut") return StrandKind::DONUT_CHART;
 
     return StrandKind::CUSTOM; // resolved via Bolt (plugin) registry — see architecture doc §18
 }
@@ -243,6 +245,7 @@ inline std::string strandKindName(StrandKind k) {
         case StrandKind::TIMELINEITEM: return "TimelineItem";
         case StrandKind::BREADCRUMB: return "Breadcrumb";
         case StrandKind::PAGINATION: return "Pagination";
+        case StrandKind::DONUT_CHART: return "DonutChart";
 
         default: return "Custom";
     }
