@@ -50,6 +50,12 @@ inline Color colorForKind(StrandKind k) {
         case StrandKind::CODE_EDITOR: return themeRegistry().active().surface; // same field box as Input/TextArea
         case StrandKind::CALCULATOR:  return themeRegistry().active().surface; // self-contained widget panel
 
+        // UI/UX Library Expansion:
+        case StrandKind::TAG:      return themeRegistry().active().primary; // same tone role as Badge
+        case StrandKind::KBD:      return themeRegistry().active().surface;
+        case StrandKind::SKELETON: return themeRegistry().active().border; // muted placeholder block
+        case StrandKind::SPINNER:  return themeRegistry().active().primary;
+
         default: return themeRegistry().active().background;
     }
 }
@@ -235,6 +241,37 @@ struct Dye {
             return;
         }
 
+        // UI/UX Library Expansion — Tag: pill background painted here, then its synthesized
+        // Text label + optional close Button children (see applyTagConveniences() in
+        // rin_indsin_components_ext.h) paint themselves through the normal recursive path below
+        // -- same "draw my own box, then recurse" shape Card/Box already use.
+        if (s->kind == StrandKind::TAG) {
+            double pillRadius = std::min(resolveRadius(*s, 999.0), s->geometry.h / 2.0);
+            list.push_back({DrawOp::FILL_RECT, s->geometry, resolveColor(s), "", s->id, pillRadius, 0});
+            for (auto& c : s->children) paintInto(c, list);
+            return;
+        }
+        if (s->kind == StrandKind::KBD) { paintKbd(s, list); return; }
+        if (s->kind == StrandKind::RATING) { paintRating(s, list); return; }
+        if (s->kind == StrandKind::SKELETON) { paintSkeleton(s, list); return; }
+        if (s->kind == StrandKind::SPINNER) { paintSpinner(s, list); return; }
+        if (s->kind == StrandKind::STEPITEM) { paintStepItem(s, list); return; }
+        if (s->kind == StrandKind::STEPS) {
+            paintStepsConnector(s, list);
+            for (auto& c : s->children) paintInto(c, list);
+            return;
+        }
+        if (s->kind == StrandKind::TIMELINEITEM) { paintTimelineItem(s, list); return; }
+        if (s->kind == StrandKind::TIMELINE) {
+            paintTimelineConnector(s, list);
+            for (auto& c : s->children) paintInto(c, list);
+            return;
+        }
+        // Breadcrumb/Pagination: both are just Rows of synthesized Text/Button children (see
+        // rin_indsin_components_ext.h) once buildFabric+conveniences have run -- no dedicated
+        // paint case needed, the generic container path right below (background+border, then
+        // recurse) already does the right thing for a plain Row-shaped box.
+
         if (s->kind != StrandKind::TEXT) {
             list.push_back({DrawOp::FILL_RECT, s->geometry, resolveColor(s), "", s->id, r, 0});
             // `border=` was already a real padding contributor (rin_indsin_layout.h) but never
@@ -263,6 +300,151 @@ struct Dye {
         list.push_back({DrawOp::FILL_RECT, s->geometry, bg, "", s->id, pillRadius, 0});
         list.push_back({DrawOp::TEXT_RUN, s->geometry, themeRegistry().active().background, s->attrStr("text"), s->id, 0, 0});
     }
+    // ---- UI/UX Library Expansion: paint functions for the new leaf-ish/composite StrandKinds.
+    // Same rule the missing-components pass above already follows: resolve tone/state first, then
+    // draw, using only FILL_RECT/STROKE_RECT/TEXT_RUN (no new DrawOp) -- see the StrandKind enum's
+    // own doc comment in rin_indsin_strand.h for why that's a real limit here, not laziness.
+
+    void paintKbd(const StrandPtr& s, DrawList& list) {
+        const Theme& th = themeRegistry().active();
+        double pillRadius = std::min(4.0, std::min(s->geometry.w, s->geometry.h) / 3.0);
+        list.push_back({DrawOp::FILL_RECT, s->geometry, th.surface, "", s->id, pillRadius, 0});
+        list.push_back({DrawOp::STROKE_RECT, s->geometry, th.border, "", s->id, pillRadius, 1.5});
+        list.push_back({DrawOp::TEXT_RUN, s->geometry, th.text, s->attrStr("text", ""), s->id, 0, 0});
+    }
+
+    // Rating: `max=` equal-width cells, each a single filled/unfilled star glyph drawn through
+    // the ordinary TEXT_RUN path (same technique the Icon Registry uses for every other glyph —
+    // see rin_indsin_icons.h's own doc comment on why this rasterizer draws symbols this way).
+    // The filled color is a fixed amber rather than a Theme role deliberately: a star rating's
+    // "filled" look is its own convention (gold stars), not something tone=/the active Theme
+    // should reskin the way a Badge's or Button's fill does.
+    void paintRating(const StrandPtr& s, DrawList& list) {
+        const Theme& th = themeRegistry().active();
+        int maxStars = (int)std::max(1.0, s->attrNum("max", 5));
+        double value = std::max(0.0, std::min((double)maxStars, s->attrNum("value", 0)));
+        double starW = s->geometry.w / maxStars;
+        Color filledColor = {245, 176, 65};
+        for (int i = 0; i < maxStars; ++i) {
+            Rect cell{ s->geometry.x + i*starW, s->geometry.y, starW, s->geometry.h };
+            bool filled = (i + 1) <= (int)std::round(value);
+            std::string glyph = filled ? "\xE2\x98\x85" : "\xE2\x98\x86"; // "★" / "☆"
+            list.push_back({DrawOp::TEXT_RUN, cell, filled ? filledColor : th.border, glyph, s->id, 0, 0});
+        }
+    }
+
+    // Skeleton: a placeholder block. A real shimmer sweep needs a time-varying gradient this
+    // rasterizer's three static DrawOps can't express (same honest-scope limit as Icon/GRADIENT
+    // above) -- this paints the static placeholder box itself; a host renderer (IndsinFabricView.kt,
+    // the desktop/CLI hosts) is free to layer its own shimmer animation on top of any Strand
+    // tagged SKELETON, the same way a real design tool's skeleton loader is just CSS on a div.
+    void paintSkeleton(const StrandPtr& s, DrawList& list) {
+        const Theme& th = themeRegistry().active();
+        double radius = std::min(resolveRadius(*s, 4.0), std::min(s->geometry.w, s->geometry.h) / 2.0);
+        list.push_back({DrawOp::FILL_RECT, s->geometry, th.border, "", s->id, radius, 0});
+    }
+
+    // Spinner: no arc/path primitive exists in this rasterizer (see the StrandKind enum's doc
+    // comment), so an actually-animating sweep isn't paintable here -- this renders a static ring
+    // (a stroked near-circle via FILL_RECT/STROKE_RECT's own radius= support) plus one shorter,
+    // tone-colored arc-ish stroke over its top so it at least reads as "a spinner, paused" rather
+    // than a perfectly uniform (and thus ambiguous) circle. A host renderer that wants a real
+    // rotating spin animates this Strand's rotation itself; Dye only ever produces one static frame.
+    void paintSpinner(const StrandPtr& s, DrawList& list) {
+        const Theme& th = themeRegistry().active();
+        double ringRadius = std::min(s->geometry.w, s->geometry.h) / 2.0;
+        Color tone = resolveColor(s);
+        list.push_back({DrawOp::STROKE_RECT, s->geometry, th.border, "", s->id, ringRadius, 3.0});
+        Rect accent{ s->geometry.x + s->geometry.w*0.12, s->geometry.y, s->geometry.w*0.76, s->geometry.h*0.55 };
+        list.push_back({DrawOp::STROKE_RECT, accent, tone, "", s->id, ringRadius*0.6, 3.0});
+    }
+
+    // StepItem: circular marker (state= "done"/"active"/"upcoming", index= 1-based -- both
+    // injected by applyStepsConveniences() in rin_indsin_components_ext.h from the parent Steps'
+    // current= attribute) centered above its label=. "done" fills solid with a checkmark, "active"
+    // is a thicker outlined ring with its step number, "upcoming" is a muted thin ring.
+    void paintStepItem(const StrandPtr& s, DrawList& list) {
+        const Theme& th = themeRegistry().active();
+        std::string state = s->attrStr("state", "upcoming");
+        double circle = std::min(s->attrNum("markerSize", 28), std::min(s->geometry.w, s->geometry.h));
+        Rect marker{ s->geometry.x + (s->geometry.w - circle)/2.0, s->geometry.y, circle, circle };
+        Color tone = resolveColor(s);
+        if (state == "done") {
+            list.push_back({DrawOp::FILL_RECT, marker, tone, "", s->id, circle/2.0, 0});
+            list.push_back({DrawOp::TEXT_RUN, marker, th.background, "\xE2\x9C\x93", s->id, 0, 0}); // "✓"
+        } else if (state == "active") {
+            list.push_back({DrawOp::FILL_RECT, marker, th.background, "", s->id, circle/2.0, 0});
+            list.push_back({DrawOp::STROKE_RECT, marker, tone, "", s->id, circle/2.0, 2.5});
+            list.push_back({DrawOp::TEXT_RUN, marker, tone, s->attrStr("index", ""), s->id, 0, 0});
+        } else {
+            list.push_back({DrawOp::FILL_RECT, marker, th.background, "", s->id, circle/2.0, 0});
+            list.push_back({DrawOp::STROKE_RECT, marker, th.border, "", s->id, circle/2.0, 1.5});
+            list.push_back({DrawOp::TEXT_RUN, marker, th.text_muted, s->attrStr("index", ""), s->id, 0, 0});
+        }
+        Rect labelRect{ s->geometry.x, marker.y + circle + 4, s->geometry.w, s->geometry.h - circle - 4 };
+        list.push_back({DrawOp::TEXT_RUN, labelRect, (state == "upcoming") ? th.text_muted : th.text,
+                         s->attrStr("label", ""), s->id, 0, 0});
+    }
+    // Steps' own connector: a thin line spanning from the first StepItem's marker center to the
+    // last one's, painted BEFORE the StepItem children (see the StrandKind::STEPS branch in
+    // paintInto above) so every circle draws on top of it, exactly like a real stepper's
+    // background track. "done" segments (both endpoints already completed) draw in tone=;
+    // everything else stays in the Theme's border color.
+    void paintStepsConnector(const StrandPtr& s, DrawList& list) {
+        if (s->children.size() < 2) return;
+        const Theme& th = themeRegistry().active();
+        double circle = std::min(s->children.front()->attrNum("markerSize", 28),
+                                  std::min(s->children.front()->geometry.w, s->children.front()->geometry.h));
+        double lineY = s->children.front()->geometry.y + circle/2.0 - 1.0;
+        for (size_t i = 0; i + 1 < s->children.size(); ++i) {
+            auto& a = s->children[i]; auto& b = s->children[i+1];
+            double ax = a->geometry.x + a->geometry.w/2.0, bx = b->geometry.x + b->geometry.w/2.0;
+            bool segmentDone = a->attrStr("state", "") == "done";
+            Rect seg{ ax, lineY, bx - ax, 2.0 };
+            list.push_back({DrawOp::FILL_RECT, seg, segmentDone ? resolveColor(a) : th.border, "", s->id, 1.0, 0});
+        }
+    }
+
+    // TimelineItem: a small dot at the left edge, then date=/title=/desc= stacked to its right —
+    // an attribute-driven leaf (see measureTimelineItem's doc comment), so all three lines are
+    // painted directly here rather than through real child Text Strands.
+    void paintTimelineItem(const StrandPtr& s, DrawList& list) {
+        const Theme& th = themeRegistry().active();
+        double dot = 12;
+        Rect dotRect{ s->geometry.x, s->geometry.y + 2, dot, dot };
+        Color tone = resolveColor(s);
+        list.push_back({DrawOp::FILL_RECT, dotRect, tone, "", s->id, dot/2.0, 0});
+
+        double textX = s->geometry.x + dot + 12;
+        double textW = std::max(0.0, s->geometry.w - dot - 12);
+        double fontSize = resolveFontSize(*s, "size", 14);
+        double lineH = fontSize*1.35;
+        double y = s->geometry.y;
+        std::string date = s->attrStr("date", "");
+        if (!date.empty()) {
+            list.push_back({DrawOp::TEXT_RUN, {textX, y, textW, lineH}, th.text_muted, date, s->id, 0, 0});
+            y += lineH;
+        }
+        list.push_back({DrawOp::TEXT_RUN, {textX, y, textW, lineH}, th.text, s->attrStr("title", ""), s->id, 0, 0});
+        y += lineH;
+        std::string desc = s->attrStr("desc", "");
+        if (!desc.empty())
+            list.push_back({DrawOp::TEXT_RUN, {textX, y, textW, lineH}, th.text_muted, desc, s->id, 0, 0});
+    }
+    // Timeline's own connector: one continuous vertical line behind every TimelineItem's dot
+    // (first dot's center to last dot's center), painted before the children for the same
+    // "background track under the markers" reason paintStepsConnector uses above.
+    void paintTimelineConnector(const StrandPtr& s, DrawList& list) {
+        if (s->children.size() < 2) return;
+        const Theme& th = themeRegistry().active();
+        double dot = 12;
+        double lineX = s->children.front()->geometry.x + dot/2.0 - 1.0;
+        double top = s->children.front()->geometry.y + 2 + dot/2.0;
+        double bottom = s->children.back()->geometry.y + 2 + dot/2.0;
+        Rect line{ lineX, top, 2.0, bottom - top };
+        list.push_back({DrawOp::FILL_RECT, line, th.border, "", s->id, 1.0, 0});
+    }
+
     void paintProgress(const StrandPtr& s, DrawList& list, double radius) {
         const Theme& th = themeRegistry().active();
         double pillRadius = std::min(radius, s->geometry.h / 2.0);
