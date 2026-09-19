@@ -168,7 +168,12 @@
     <!-- ===== سطح المعاينة: IndsinFabricView يملأ العرض والطول كاملاً داخل إطار "جهاز" بزوايا دائرية
          وظل خفيف (bg_indsin_device_frame — كان معرّفاً ولم يُستخدم من قبل) بدل مستطيل مسطح بلا حدود؛
          يبقى قابلاً للتمرير أفقياً/عمودياً فقط إذا زاد التكبير أو ارتفاع المحتوى الفعلي عن المساحة
-         المتاحة ===== -->
+         المتاحة.
+         layoutDirection="ltr" على كلا سطحي التمرير: إحداثيات Fabric (x/y) تُحسب دائماً من الزاوية
+         العلوية اليسرى (نفس اتجاه محرر الأكواد — انظر RinCodeEditorView لنفس الإصلاح سابقاً)، بينما
+         بيئة العربية (RTL) تجعل موضع التمرير الافتراضي يبدأ من اليمين إن لم يُحدَّد الاتجاه صراحةً —
+         فيظهر الجزء الأيمن (المهم في RTL) من أي شاشة أعرض من إطار الجهاز مقطوعاً/مخفياً افتراضياً
+         بدل أن يبدأ العرض من إحداثي (0,0) الحقيقي كما يرسمه المحرّك. ===== -->
     <HorizontalScrollView
         android:id="@+id/indsinHScroll"
         android:layout_width="match_parent"
@@ -178,13 +183,15 @@
         android:background="@drawable/bg_indsin_device_frame"
         android:elevation="4dp"
         android:clipToOutline="true"
-        android:fillViewport="true">
+        android:fillViewport="true"
+        android:layoutDirection="ltr">
 
         <ScrollView
             android:id="@+id/indsinVScroll"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:fillViewport="true">
+            android:fillViewport="true"
+            android:layoutDirection="ltr">
 
             <com.dlof.rinlang.IndsinFabricView
                 android:id="@+id/indsinFabricView"
