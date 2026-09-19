@@ -72,6 +72,18 @@ enum class StrandKind {
     // ICONBUTTON/TABITEM above already follow.
     LINK, RADIO, SLIDER, SELECT, LIST, LISTITEM, FILE, DATE, TIME, CODE_EDITOR, CALCULATOR, SEARCH,
 
+    // ---- UI/UX Library Expansion (docs/indsin/UI_LIBRARY_EXPANSION.md): a full design-system
+    // pass -- the chip/keyboard-hint/rating/loading/step/timeline/navigation primitives a
+    // complete component library needs -- built entirely from the same three DrawOp primitives
+    // (FILL_RECT/STROKE_RECT/TEXT_RUN) every kind above already uses. No new rasterizer op was
+    // added for this pass (same "no arc/path primitive yet" honest-scope limit rin_indsin_icons.h
+    // already documents), so anything that would need a true circular sweep (Spinner) or arbitrary
+    // vector shape (a pie/donut chart) is approximated with rects/strokes and the limitation is
+    // called out at its own paint function, not silently faked.
+    TAG, KBD, RATING, SKELETON, SPINNER,
+    STEPS, STEPITEM, TIMELINE, TIMELINEITEM,
+    BREADCRUMB, PAGINATION,
+
     CUSTOM
 };
 inline StrandKind strandKindFromTag(const std::string& tag) {
@@ -146,6 +158,23 @@ inline StrandKind strandKindFromTag(const std::string& tag) {
     if (tag == "Sidebar" || tag == "sidebar") return StrandKind::DRAWER;
     if (tag == "Popup" || tag == "popup") return StrandKind::DIALOG;
 
+    // ---- UI/UX Library Expansion ----
+    if (tag == "Tag" || tag == "tag" || tag == "Chip" || tag == "chip") return StrandKind::TAG;
+    if (tag == "Kbd" || tag == "kbd" || tag == "Key" || tag == "key") return StrandKind::KBD;
+    if (tag == "Rating" || tag == "rating") return StrandKind::RATING;
+    if (tag == "Skeleton" || tag == "skeleton") return StrandKind::SKELETON;
+    if (tag == "Spinner" || tag == "spinner" || tag == "Loader" || tag == "loader") return StrandKind::SPINNER;
+    if (tag == "Steps" || tag == "steps" || tag == "Stepper" || tag == "stepper") return StrandKind::STEPS;
+    if (tag == "StepItem" || tag == "stepitem" || tag == "stepItem" || tag == "Step" || tag == "step")
+        return StrandKind::STEPITEM;
+    if (tag == "Timeline" || tag == "timeline") return StrandKind::TIMELINE;
+    if (tag == "TimelineItem" || tag == "timelineitem" || tag == "timelineItem" ||
+        tag == "TimelineEvent" || tag == "timelineevent") return StrandKind::TIMELINEITEM;
+    if (tag == "Breadcrumb" || tag == "breadcrumb" || tag == "Breadcrumbs" || tag == "breadcrumbs")
+        return StrandKind::BREADCRUMB;
+    if (tag == "Pagination" || tag == "pagination" || tag == "Pager" || tag == "pager")
+        return StrandKind::PAGINATION;
+
     return StrandKind::CUSTOM; // resolved via Bolt (plugin) registry — see architecture doc §18
 }
 inline std::string strandKindName(StrandKind k) {
@@ -202,6 +231,18 @@ inline std::string strandKindName(StrandKind k) {
         case StrandKind::CODE_EDITOR: return "CodeEditor";
         case StrandKind::CALCULATOR: return "Calculator";
         case StrandKind::SEARCH: return "Search";
+
+        case StrandKind::TAG: return "Tag";
+        case StrandKind::KBD: return "Kbd";
+        case StrandKind::RATING: return "Rating";
+        case StrandKind::SKELETON: return "Skeleton";
+        case StrandKind::SPINNER: return "Spinner";
+        case StrandKind::STEPS: return "Steps";
+        case StrandKind::STEPITEM: return "StepItem";
+        case StrandKind::TIMELINE: return "Timeline";
+        case StrandKind::TIMELINEITEM: return "TimelineItem";
+        case StrandKind::BREADCRUMB: return "Breadcrumb";
+        case StrandKind::PAGINATION: return "Pagination";
 
         default: return "Custom";
     }
