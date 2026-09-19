@@ -470,6 +470,14 @@ struct Indsin {
             // layoutLinear(Axis::X) already does the right thing once those children exist.
             case StrandKind::BREADCRUMB: size = layoutLinear(s, c2, Axis::X, originX, originY); break;
             case StrandKind::PAGINATION: size = layoutLinear(s, c2, Axis::X, originX, originY); break;
+            case StrandKind::DONUT_CHART: {
+                // Square, like Spinner/Avatar -- size= (token or number), default 120 (bigger than
+                // Spinner's 24 since a chart needs room for its segments to actually read).
+                double sz = s->attr("size") ? resolveAvatarSize(*s) : 120.0;
+                sz = std::min(sz, std::min(c2.maxW, c2.maxH));
+                size = {0,0, std::max(sz,c2.minW), std::max(sz,c2.minH)};
+                break;
+            }
 
             // ---- new: media placeholders — sized like an Image (explicit width/height, else a
             // sensible default box). Actual playback happens in the real app, not this preview.
