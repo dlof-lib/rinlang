@@ -9,6 +9,7 @@
 #include "rin_indsin.h"
 #include "rin_indsin_tokens.h"
 #include "rin_indsin_object.h"
+#include "rin_indsin_components_ext.h" // UI/UX Library Expansion: Tag/Breadcrumb/Pagination/Steps conveniences
 #include <stdexcept>
 #include <unordered_set>
 
@@ -181,6 +182,7 @@ inline PipelineResult runColdPipelineWithRuntime(const std::string& source, rin:
         result.fabric = buildFabric(root, result.warp, result.subs, "", 0);
         applyBannerConveniences(result.fabric, result.warp, result.subs);
         applyObjectConveniences(result.fabric); // §21: source= -> title + field rows
+        applyExtendedUiConveniences(result.fabric, result.warp, result.subs); // UI/UX Library Expansion: Tag/Breadcrumb/Pagination/Steps
         result.ok = true;
     } catch (rin::RinError& e) {
         result.ok = false; result.errorMessage = e.message; result.errorLine = e.line;
@@ -323,6 +325,7 @@ inline PipelineResult runColdPipelineForContainerWithRuntime(const std::string& 
         result.fabric = buildFabric(root, result.warp, result.subs, "", 0);
         applyBannerConveniences(result.fabric, result.warp, result.subs);
         applyObjectConveniences(result.fabric); // §21: source= -> title + field rows
+        applyExtendedUiConveniences(result.fabric, result.warp, result.subs); // UI/UX Library Expansion: Tag/Breadcrumb/Pagination/Steps
         result.ok = true;
     } catch (rin::RinError& e) {
         result.ok = false; result.errorMessage = e.message; result.errorLine = e.line;
