@@ -2,6 +2,7 @@
 #pragma once
 #include "rin_indsin_strand.h"
 #include "rin_indsin_tokens.h"
+#include "rin_indsin_layout.h" // splitCsv() -- reused here for DonutChart's data=/colors= parsing, same as Breadcrumb/Pagination already reuse it via rin_indsin_components_ext.h
 #include "rin_indsin_overlay.h" // OverlayLayer -- see paintWithOverlay() below
 #include "rin_indsin_icons.h"   // IconRegistry -- §18
 #include <fstream>
@@ -10,6 +11,7 @@
 #include <cstring>
 #include <cmath>
 #include <cstdint>
+#include <cstdlib>
 #include <zlib.h>
 
 namespace indsin {
@@ -55,6 +57,7 @@ inline Color colorForKind(StrandKind k) {
         case StrandKind::KBD:      return themeRegistry().active().surface;
         case StrandKind::SKELETON: return themeRegistry().active().border; // muted placeholder block
         case StrandKind::SPINNER:  return themeRegistry().active().primary;
+        case StrandKind::DONUT_CHART: return themeRegistry().active().surface; // segments carry their own colors
 
         default: return themeRegistry().active().background;
     }
@@ -164,8 +167,13 @@ inline Color resolveBorderColor(const StrandPtr& s) {
 // rin_color.h), so this DrawCommand's own .color.a IS the scrim's actual translucency, not a
 // renderer-side convention keyed on the op the way it had to be before the Color Engine existed.
 // rasterizeToBuffer() below alpha-blends every DrawCommand the same way regardless of op.
-enum class DrawOp { FILL_RECT, STROKE_RECT, TEXT_RUN, SCRIM_RECT };
-struct DrawCommand { DrawOp op; Rect bounds; Color color; std::string text; StrandId owner; double radius = 0; double strokeWidth = 0; };
+enum class DrawOp { FILL_RECT, STROKE_RECT, TEXT_RUN, SCRIM_RECT, STROKE_ARC };
+// startAngleDeg/sweepAngleDeg only mean anything for STROKE_ARC (0deg = 3 o'clock, clockwise,
+// matching Android's Canvas.drawArc convention exactly so IndsinFabricView.kt can pass them
+// straight through -- see its drawArcCommand()/drawSpinner()/drawDonutChart()). Every other op
+// ignores them (left at their defaults), same as radius/strokeWidth already sit unused on
+// TEXT_RUN today.
+struct DrawCommand { DrawOp op; Rect bounds; Color color; std::string text; StrandId owner; double radius = 0; double strokeWidth = 0; double startAngleDeg = 0; double sweepAngleDeg = 360; };
 using DrawList = std::vector<DrawCommand>;
 
 // The scrim's color, ~55% black — a fixed near-black rather than a Theme role, since a scrim
@@ -255,6 +263,7 @@ struct Dye {
         if (s->kind == StrandKind::RATING) { paintRating(s, list); return; }
         if (s->kind == StrandKind::SKELETON) { paintSkeleton(s, list); return; }
         if (s->kind == StrandKind::SPINNER) { paintSpinner(s, list); return; }
+        if (s->kind == StrandKind::DONUT_CHART) { paintDonutChart(s, list); return; }
         if (s->kind == StrandKind::STEPITEM) { paintStepItem(s, list); return; }
         if (s->kind == StrandKind::STEPS) {
             paintStepsConnector(s, list);
@@ -344,19 +353,76 @@ struct Dye {
         list.push_back({DrawOp::FILL_RECT, s->geometry, th.border, "", s->id, radius, 0});
     }
 
-    // Spinner: no arc/path primitive exists in this rasterizer (see the StrandKind enum's doc
-    // comment), so an actually-animating sweep isn't paintable here -- this renders a static ring
-    // (a stroked near-circle via FILL_RECT/STROKE_RECT's own radius= support) plus one shorter,
-    // tone-colored arc-ish stroke over its top so it at least reads as "a spinner, paused" rather
-    // than a perfectly uniform (and thus ambiguous) circle. A host renderer that wants a real
-    // rotating spin animates this Strand's rotation itself; Dye only ever produces one static frame.
+    // Spinner: now a genuinely round, partially-swept ring via DrawOp::STROKE_ARC (Rect{x,y,w,h}
+    // as the arc's bounding box, startAngleDeg/sweepAngleDeg in Android's own Canvas.drawArc
+    // convention -- 0deg = 3 o'clock, clockwise) -- this rasterizer's actual first arc primitive,
+    // not the earlier two-stroked-squares illusion this function used before. It's still one
+    // static frame (Dye never animates anything -- see paintSkeleton's own note above), so a host
+    // renderer that wants a real rotating spin still has to animate this Strand's rotation itself
+    // (IndsinFabricView.kt's drawSpinner() re-derives the same sweep and spins it via a
+    // ValueAnimator on its own render loop); this paints one frame of that spin, at rotation 0.
     void paintSpinner(const StrandPtr& s, DrawList& list) {
         const Theme& th = themeRegistry().active();
-        double ringRadius = std::min(s->geometry.w, s->geometry.h) / 2.0;
-        Color tone = resolveColor(s);
-        list.push_back({DrawOp::STROKE_RECT, s->geometry, th.border, "", s->id, ringRadius, 3.0});
-        Rect accent{ s->geometry.x + s->geometry.w*0.12, s->geometry.y, s->geometry.w*0.76, s->geometry.h*0.55 };
-        list.push_back({DrawOp::STROKE_RECT, accent, tone, "", s->id, ringRadius*0.6, 3.0});
+        double thickness = std::max(2.0, s->geometry.w * 0.12);
+        Rect ring{ s->geometry.x + thickness/2.0, s->geometry.y + thickness/2.0,
+                   s->geometry.w - thickness, s->geometry.h - thickness };
+        // A faint full-circle track first (so the "gap" in the active sweep below doesn't read
+        // as a missing chunk of the ring), then a shorter, tone-colored sweep over the top.
+        DrawCommand track{DrawOp::STROKE_ARC, ring, th.border, "", s->id, 0, thickness, 0, 360};
+        list.push_back(track);
+        DrawCommand sweep{DrawOp::STROKE_ARC, ring, resolveColor(s), "", s->id, 0, thickness, -90, 270};
+        list.push_back(sweep);
+    }
+
+    // DonutChart: `data="Label:Value,Label2:Value2,..."` (colon/comma convention, same shorthand
+    // shape Breadcrumb's items= and Pagination's current=/total= already use) -> one
+    // DrawOp::STROKE_ARC segment per entry, each segment's sweepAngleDeg proportional to its
+    // share of the total. `colors="#..,#.."` assigns colors by position; without it, segments
+    // cycle through a small fixed palette (same "a sensible default, not a hard requirement"
+    // relationship Rating's fixed amber fill color has to tone=). `centerLabel=` (or the running
+    // total, formatted as an integer, when unset) is drawn as TEXT_RUN in the donut's hole.
+    void paintDonutChart(const StrandPtr& s, DrawList& list) {
+        const Theme& th = themeRegistry().active();
+        static const Color kPalette[] = {
+            {124, 92, 255}, {34, 200, 142}, {232, 178, 61}, {241, 76, 76}, {95, 211, 255}, {145, 152, 163}
+        };
+        std::string dataAttr = s->attrStr("data", "");
+        std::vector<std::pair<std::string,double>> segments;
+        for (auto& entry : splitCsv(dataAttr)) {
+            size_t colon = entry.find(':');
+            if (colon == std::string::npos) continue;
+            std::string label = entry.substr(0, colon);
+            double value = std::atof(entry.substr(colon + 1).c_str());
+            if (value > 0) segments.push_back({label, value});
+        }
+        double thickness = std::max(4.0, s->geometry.w * 0.22);
+        Rect ring{ s->geometry.x + thickness/2.0, s->geometry.y + thickness/2.0,
+                   s->geometry.w - thickness, s->geometry.h - thickness };
+        double total = 0; for (auto& seg : segments) total += seg.second;
+        if (total <= 0) {
+            // No data= (or all-zero) -> an empty track, same "draw the box, not a guess" honesty
+            // Skeleton/Progress-with-no-value already follow.
+            list.push_back({DrawOp::STROKE_ARC, ring, th.border, "", s->id, 0, thickness, 0, 360});
+        } else {
+            auto colorList = splitCsv(s->attrStr("colors", ""));
+            double cursor = -90; // 12 o'clock start, same convention a real chart library uses
+            for (size_t i = 0; i < segments.size(); ++i) {
+                double sweep = segments[i].second / total * 360.0;
+                Color c = (i < colorList.size()) ? parseHexColor(colorList[i], kPalette[i % 6])
+                                                  : kPalette[i % 6];
+                list.push_back({DrawOp::STROKE_ARC, ring, c, "", s->id, 0, thickness, cursor, sweep});
+                cursor += sweep;
+            }
+        }
+        std::string center = s->attrStr("centerLabel", "");
+        if (center.empty() && total > 0) {
+            std::ostringstream oss; oss << (long long)std::llround(total);
+            center = oss.str();
+        }
+        if (!center.empty()) {
+            Rect hole{ s->geometry.x, s->geometry.y, s->geometry.w, s->geometry.h };
+            list.push_back({DrawOp::TEXT_RUN, hole, th.text, center, s->id, 0, 0});
+        }
     }
 
     // StepItem: circular marker (state= "done"/"active"/"upcoming", index= 1-based -- both
