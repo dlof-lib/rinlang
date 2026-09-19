@@ -88,6 +88,21 @@ class IndsinFabricView @JvmOverloads constructor(
         // Sidebar/Popup never appear here: they're pure tag aliases the native side already
         // resolves onto Drawer/Dialog (see strandKindFromTag() in rin_indsin_strand.h), so the
         // Fabric JSON this view reads always says "kind":"Drawer"/"Dialog" already.
+
+        // UI/UX Library Expansion (rin_indsin_strand.h's StrandKind enum, rin_indsin_paint.h):
+        // Tag/Breadcrumb/Pagination are pure Row-shaped containers of real synthesized Text/Button
+        // children (see rin_indsin_components_ext.h) -- same "children draw themselves" relationship
+        // Tabs/List already have below, so only Tag needs its own case (for the pill background;
+        // its children still recurse normally). Kbd/Rating/Skeleton/Steps/StepItem/Timeline/
+        // TimelineItem/Spinner/DonutChart are attribute-driven leaves that previously had no case
+        // here at all (same gap Badge/Spacer/Progress had before the passes above closed it), so
+        // they fell into the generic else-branch as a plain undecorated box.
+        const val TAG = "Tag"; const val KBD = "Kbd"; const val RATING = "Rating"
+        const val SKELETON = "Skeleton"; const val SPINNER = "Spinner"
+        const val STEPS = "Steps"; const val STEPITEM = "StepItem"
+        const val TIMELINE = "Timeline"; const val TIMELINEITEM = "TimelineItem"
+        const val BREADCRUMB = "Breadcrumb"; const val PAGINATION = "Pagination"
+        const val DONUT_CHART = "DonutChart"
     }
 
     private val defaultBar = Color.rgb(30, 31, 40)
@@ -454,10 +469,20 @@ class IndsinFabricView @JvmOverloads constructor(
         syncRemoteMediaOverlays(node)
         syncHtmlAssistOverlays(node)
         invalidate()
+        // UI/UX Library Expansion: (re)start the Spinner rotation ticker if this fabric has one --
+        // mainHandler.postDelayed dedupes naturally here since a stale in-flight tick just
+        // reschedules itself off the *new* fabric's containsKind() check next time it fires, but
+        // starting explicitly on every setFabric means a freshly-added Spinner (e.g. after a
+        // Warp-driven "loading=true" tap) doesn't have to wait for some other tick to notice it.
+        if (node?.let { containsKind(it, Kind.SPINNER) } == true) {
+            mainHandler.removeCallbacks(spinnerTicker)
+            mainHandler.post(spinnerTicker)
+        }
     }
 
     override fun onDetachedFromWindow() {
         pendingAutoNavigate?.let { navHandler.removeCallbacks(it) }
+        mainHandler.removeCallbacks(spinnerTicker)
         remoteMediaViews.values.forEach { v ->
             if (v is VideoView) v.stopPlayback()
             if (v is WebView) v.stopLoading()
@@ -710,6 +735,33 @@ class IndsinFabricView @JvmOverloads constructor(
             Kind.LIST -> { /* plain Column of rows -- children draw themselves */ }
             Kind.LISTITEM -> drawBox(canvas, rect, attrs, resolved ?: defaultContainer, defaultRadius = 0f)
 
+            // ---- UI/UX Library Expansion ----
+            // Tag: pill background only -- its Text label + optional close Button are real
+            // synthesized children (rin_indsin_components_ext.h) that draw themselves through the
+            // normal recursion right below this `when`, same relationship Button's own label has.
+            Kind.TAG -> if (rect.width() > 0f && rect.height() > 0f) {
+                val tone = resolved ?: toneColor(attrs.optString("tone").ifBlank { "primary" })
+                drawBox(canvas, rect, attrs, tone, defaultRadius = rect.height() / 2f)
+            }
+            Kind.KBD -> if (rect.width() > 0f && rect.height() > 0f) {
+                drawBox(canvas, rect, attrs, defaultFieldBg, defaultRadius = min(4f, min(rect.width(), rect.height()) / 3f))
+                strokePaint.color = defaultFieldBorder; strokePaint.strokeWidth = 1.5f
+                canvas.drawRoundRect(rect, min(4f, min(rect.width(), rect.height()) / 3f), min(4f, min(rect.width(), rect.height()) / 3f), strokePaint)
+                strokePaint.strokeWidth = 1.2f
+                drawText(canvas, rect, attrs, attrs.optString("text"), defaultText, centered = true, singleLine = true)
+            }
+            Kind.RATING -> drawRating(canvas, rect, attrs)
+            Kind.SKELETON -> if (rect.width() > 0f && rect.height() > 0f) {
+                drawBox(canvas, rect, attrs, defaultTrack, defaultRadius = min(4f, min(rect.width(), rect.height()) / 2f))
+            }
+            Kind.SPINNER -> drawSpinner(canvas, rect, attrs, resolved)
+            Kind.DONUT_CHART -> drawDonutChart(canvas, rect, attrs)
+            Kind.STEPS -> { /* connector line drawn per-StepItem below; children draw themselves */ }
+            Kind.STEPITEM -> drawStepItem(canvas, rect, attrs)
+            Kind.TIMELINE -> { /* connector implied by consecutive dots; children draw themselves */ }
+            Kind.TIMELINEITEM -> drawTimelineItem(canvas, rect, attrs)
+            Kind.BREADCRUMB, Kind.PAGINATION -> { /* plain Row of real synthesized Text/Button children -- they draw themselves */ }
+
             else -> drawBox(canvas, rect, attrs, resolved ?: defaultContainer, defaultRadius = 0f, borderColorFallback = resolvedBorderColor(node) ?: Color.WHITE) // Column/Row/Stack/Box/Grid/Wrap/Custom
         }
 
@@ -899,6 +951,202 @@ class IndsinFabricView @JvmOverloads constructor(
         val maxV = attrs.optString("max").toFloatOrNull() ?: 100f
         val value = (attrs.optString("value").toFloatOrNull() ?: minV).coerceIn(minV, maxV)
         return if (maxV > minV) (value - minV) / (maxV - minV) else 0f
+    }
+
+    // ---- UI/UX Library Expansion --------------------------------------------------------------
+    // Same relationship to indsin::paintRating()/paintSpinner()/paintDonutChart()/paintStepItem()/
+    // paintTimelineItem() (rin_indsin_paint.h) every other draw* function here already has to its
+    // native counterpart: same shape, same math, not pixel-identical. Spinner and DonutChart are
+    // the two that actually needed Android's real Canvas.drawArc() -- the fix for the "Dye has no
+    // arc primitive" limitation the native engine's own paintSpinner()/paintDonutChart() comments
+    // document; this renderer was never bound by that limitation since it never went through Dye.
+
+    /** Rating: `max=` equal-width star glyphs ("★"/"☆" via Canvas.drawText, same technique
+     * drawIcon already uses for glyph-based icons), filled up to `value=`. Read-only, matching
+     * indsin::paintRating()'s own fixed-amber-fill convention (not tone=/theme-driven). */
+    private fun drawRating(canvas: Canvas, rect: RectF, attrs: JSONObject) {
+        if (rect.width() <= 0f || rect.height() <= 0f) return
+        val maxStars = max(1, attrs.optString("max").toIntOrNull() ?: 5)
+        val value = (attrs.optString("value").toFloatOrNull() ?: 0f).coerceIn(0f, maxStars.toFloat())
+        val starW = rect.width() / maxStars
+        val filledColor = Color.rgb(245, 176, 65)
+        textPaint.textAlign = Paint.Align.CENTER
+        textPaint.textSize = rect.height() * 0.9f
+        textPaint.isFakeBoldText = false
+        textPaint.typeface = android.graphics.Typeface.DEFAULT
+        for (i in 0 until maxStars) {
+            val filled = (i + 1) <= Math.round(value)
+            textPaint.color = if (filled) filledColor else defaultDivider
+            val cx = rect.left + starW * i + starW / 2f
+            val cy = rect.top + rect.height() / 2f - (textPaint.ascent() + textPaint.descent()) / 2f
+            canvas.drawText(if (filled) "★" else "☆", cx, cy, textPaint)
+        }
+        textPaint.textAlign = Paint.Align.LEFT
+    }
+
+    /** ~30fps rotation phase driving [drawSpinner]'s active sweep -- only ticks while a Spinner is
+     * actually present in the current [fabric] (checked once per tick, and once in [setFabric]),
+     * so a screen with no Spinner never wastes a frame here. */
+    private var spinnerPhaseDeg = 0f
+    private val spinnerTicker = object : Runnable {
+        override fun run() {
+            spinnerPhaseDeg = (spinnerPhaseDeg + 6f) % 360f
+            invalidate()
+            if (fabric?.let { containsKind(it, Kind.SPINNER) } == true) {
+                mainHandler.postDelayed(this, 33)
+            }
+        }
+    }
+    private fun containsKind(node: JSONObject, kind: String): Boolean {
+        if (node.optString("kind") == kind) return true
+        val children = node.optJSONArray("children") ?: return false
+        for (i in 0 until children.length()) {
+            if (containsKind(children.optJSONObject(i) ?: continue, kind)) return true
+        }
+        return false
+    }
+
+    /** Spinner: a real ring via Canvas.drawArc — a faint full-circle track, then a shorter
+     * tone-colored sweep that actually rotates (see [spinnerTicker]), unlike the native
+     * paintSpinner()'s single static frame. */
+    private fun drawSpinner(canvas: Canvas, rect: RectF, attrs: JSONObject, resolved: Int?) {
+        if (rect.width() <= 0f || rect.height() <= 0f) return
+        val thickness = max(2f, rect.width() * 0.12f)
+        val inset = thickness / 2f
+        val ring = RectF(rect.left + inset, rect.top + inset, rect.right - inset, rect.bottom - inset)
+        val savedCap = strokePaint.strokeCap
+        strokePaint.strokeCap = Paint.Cap.ROUND
+        strokePaint.strokeWidth = thickness
+        strokePaint.color = defaultTrack
+        canvas.drawArc(ring, 0f, 360f, false, strokePaint)
+        strokePaint.color = resolved ?: defaultButton
+        canvas.drawArc(ring, spinnerPhaseDeg - 90f, 270f, false, strokePaint)
+        strokePaint.strokeCap = savedCap
+        strokePaint.strokeWidth = 1.2f
+    }
+
+    /** DonutChart: `data="Label:Value,Label2:Value2,..."` -> one real stroked arc segment per
+     * entry via Canvas.drawArc, sweep proportional to that entry's share of the total --
+     * `colors="#..,#.."` assigns colors by position, else cycles a fixed palette (mirrors
+     * indsin::paintDonutChart()'s own kPalette). `centerLabel=` (or the running total) is drawn
+     * in the hole. */
+    private fun drawDonutChart(canvas: Canvas, rect: RectF, attrs: JSONObject) {
+        if (rect.width() <= 0f || rect.height() <= 0f) return
+        val palette = intArrayOf(
+            Color.rgb(124, 92, 255), Color.rgb(34, 200, 142), Color.rgb(232, 178, 61),
+            Color.rgb(241, 76, 76), Color.rgb(95, 211, 255), Color.rgb(145, 152, 163)
+        )
+        val segments = attrs.optString("data").split(',').mapNotNull { entry ->
+            val parts = entry.split(':')
+            if (parts.size != 2) return@mapNotNull null
+            val v = parts[1].trim().toDoubleOrNull() ?: return@mapNotNull null
+            if (v <= 0.0) null else parts[0].trim() to v
+        }
+        val thickness = max(4f, rect.width() * 0.22f)
+        val inset = thickness / 2f
+        val ring = RectF(rect.left + inset, rect.top + inset, rect.right - inset, rect.bottom - inset)
+        val savedCap = strokePaint.strokeCap
+        strokePaint.strokeCap = Paint.Cap.BUTT
+        strokePaint.strokeWidth = thickness
+        val total = segments.sumOf { it.second }
+        if (total <= 0.0) {
+            strokePaint.color = defaultTrack
+            canvas.drawArc(ring, 0f, 360f, false, strokePaint)
+        } else {
+            val colorsAttr = attrs.optString("colors").split(',').map { it.trim() }.filter { it.isNotEmpty() }
+            var cursor = -90f
+            segments.forEachIndexed { i, (_, value) ->
+                val sweep = (value / total * 360.0).toFloat()
+                strokePaint.color = colorsAttr.getOrNull(i)?.let { parseHexColor(it, palette[i % 6]) } ?: palette[i % 6]
+                canvas.drawArc(ring, cursor, sweep, false, strokePaint)
+                cursor += sweep
+            }
+        }
+        strokePaint.strokeCap = savedCap
+        strokePaint.strokeWidth = 1.2f
+
+        val center = attrs.optString("centerLabel").ifBlank { if (total > 0.0) Math.round(total).toString() else "" }
+        if (center.isNotEmpty()) {
+            textPaint.textAlign = Paint.Align.CENTER
+            textPaint.color = defaultText
+            textPaint.textSize = rect.height() * 0.16f
+            textPaint.isFakeBoldText = true
+            textPaint.typeface = android.graphics.Typeface.DEFAULT
+            val cy = rect.centerY() - (textPaint.ascent() + textPaint.descent()) / 2f
+            canvas.drawText(center, rect.centerX(), cy, textPaint)
+            textPaint.isFakeBoldText = false
+            textPaint.textAlign = Paint.Align.LEFT
+        }
+    }
+
+    /** StepItem: circular marker (state=/index= injected natively by applyStepsConveniences() in
+     * rin_indsin_components_ext.h) above its label= -- "done" fills solid with a checkmark,
+     * "active" is a thicker outlined ring with its step number, "upcoming" a muted thin ring. */
+    private fun drawStepItem(canvas: Canvas, rect: RectF, attrs: JSONObject) {
+        if (rect.width() <= 0f || rect.height() <= 0f) return
+        val state = attrs.optString("state").ifBlank { "upcoming" }
+        val circle = min(attrs.optString("markerSize").toFloatOrNull() ?: 28f, min(rect.width(), rect.height()))
+        val marker = RectF(rect.left + (rect.width() - circle) / 2f, rect.top, rect.left + (rect.width() - circle) / 2f + circle, rect.top + circle)
+        val tone = toneColor(attrs.optString("tone").ifBlank { "primary" })
+        fillPaint.shader = null; fillPaint.clearShadowLayer()
+        textPaint.textAlign = Paint.Align.CENTER
+        textPaint.typeface = android.graphics.Typeface.DEFAULT
+        textPaint.isFakeBoldText = false
+        textPaint.textSize = circle * 0.42f
+        val textY = marker.centerY() - (textPaint.ascent() + textPaint.descent()) / 2f
+        when (state) {
+            "done" -> {
+                fillPaint.color = tone
+                canvas.drawOval(marker, fillPaint)
+                textPaint.color = Color.WHITE
+                canvas.drawText("✓", marker.centerX(), textY, textPaint)
+            }
+            "active" -> {
+                fillPaint.color = defaultCard
+                canvas.drawOval(marker, fillPaint)
+                strokePaint.color = tone; strokePaint.strokeWidth = 2.5f
+                canvas.drawOval(marker, strokePaint)
+                strokePaint.strokeWidth = 1.2f
+                textPaint.color = tone
+                canvas.drawText(attrs.optString("index"), marker.centerX(), textY, textPaint)
+            }
+            else -> {
+                fillPaint.color = defaultCard
+                canvas.drawOval(marker, fillPaint)
+                strokePaint.color = defaultDivider; strokePaint.strokeWidth = 1.5f
+                canvas.drawOval(marker, strokePaint)
+                strokePaint.strokeWidth = 1.2f
+                textPaint.color = defaultPlaceholder
+                canvas.drawText(attrs.optString("index"), marker.centerX(), textY, textPaint)
+            }
+        }
+        textPaint.textAlign = Paint.Align.LEFT
+        val labelRect = RectF(rect.left, marker.bottom + 4f, rect.right, rect.bottom)
+        drawText(canvas, labelRect, attrs, attrs.optString("label"), if (state == "upcoming") defaultPlaceholder else defaultText, centered = true, singleLine = true)
+    }
+
+    /** TimelineItem: a small filled dot at the left edge, then date=/title=/desc= stacked to its
+     * right -- an attribute-driven leaf, same shape as [drawStepItem] above. */
+    private fun drawTimelineItem(canvas: Canvas, rect: RectF, attrs: JSONObject) {
+        if (rect.width() <= 0f || rect.height() <= 0f) return
+        val dot = 12f
+        val tone = toneColor(attrs.optString("tone").ifBlank { "primary" })
+        fillPaint.shader = null; fillPaint.clearShadowLayer(); fillPaint.color = tone
+        canvas.drawOval(RectF(rect.left, rect.top + 2f, rect.left + dot, rect.top + 2f + dot), fillPaint)
+
+        val textX = rect.left + dot + 12f
+        val fontSize = attrs.optString("size").toFloatOrNull() ?: 14f
+        val lineH = fontSize * 1.35f
+        var y = rect.top
+        val date = attrs.optString("date")
+        if (date.isNotEmpty()) {
+            drawText(canvas, RectF(textX, y, rect.right, y + lineH), attrs, date, defaultPlaceholder, singleLine = true)
+            y += lineH
+        }
+        drawText(canvas, RectF(textX, y, rect.right, y + lineH), attrs, attrs.optString("title"), defaultText, singleLine = true)
+        y += lineH
+        val desc = attrs.optString("desc")
+        if (desc.isNotEmpty()) drawText(canvas, RectF(textX, y, rect.right, y + lineH), attrs, desc, defaultPlaceholder, singleLine = true)
     }
 
     /** Checkbox: a bordered square that fills solid with a tick mark when checked="true" —
