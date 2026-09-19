@@ -1,0 +1,78 @@
+// indsin_ui_library_expansion_demo.rin — جولة على المكوّنات التسعة الجديدة من توسعة مكتبة
+// UI/UX: Tag/Chip (قابل للحذف), Kbd, Rating, Skeleton, Spinner, Steps/StepItem,
+// Timeline/TimelineItem, Breadcrumb, Pagination — كلها تمرّ عبر نفس أنبوب @view.<Tag> الذي
+// يمر عليه أي Strand آخر (انظر rin_indsin_components_ext.h لمنطق التوليف التلقائي).
+// شغّله عبر: ./indsinc samples/indsin_ui_library_expansion_demo.rin
+
+@view.Column=root
+  gap="comfortable"; padding="comfortable";
+
+  @view.Text=heading text="UI/UX Library Expansion"; size="title"; .end/view
+
+  // Breadcrumb: items="..." مفصولة بفواصل -> عناصر Text حقيقية مفصولة بـ "›"،
+  // آخر عنصر (الصفحة الحالية) بلون text، والباقي بلون text_muted.
+  @view.Breadcrumb=crumbs
+    items="Home, Projects, Atlas App, Settings";
+  .end/view
+
+  // Tag/Chip: text= يُصنّع تسمية Text، و removable="true" يُصنّع زر إغلاق (×) مربوط
+  // تلقائيًا بخلية Warp باسم "<name>_visible" — النقر عليه يُخفي الوسم فعليًا (حجمه يصبح صفرًا).
+  @view.Row=tags
+    gap="compact";
+    @view.Tag=tagDesign     text="Design";      tone="primary"; .end/view
+    @view.Tag=tagIndsin     text="indsin";       tone="success"; .end/view
+    @view.Tag=tagRemovable  text="React";        tone="info"; removable=true; .end/view
+  .end/view
+
+  // Kbd: صندوق مفتاح لوحة مفاتيح صغير — مفيد لعرض اختصارات لوحة المفاتيح.
+  @view.Row=shortcut
+    gap="compact";
+    @view.Text=shortcutLabel text="Save:"; size=13; .end/view
+    @view.Kbd=kbdCtrl text="Ctrl"; .end/view
+    @view.Text=plus text="+"; size=13; .end/view
+    @view.Kbd=kbdS text="S"; .end/view
+  .end/view
+
+  // Rating: max=/value= -> نجوم مملوءة/فارغة، للقراءة فقط (سلوك مثل Progress).
+  @view.Row=ratingRow
+    gap="compact";
+    @view.Rating=productRating max=5; value=4; .end/view
+    @view.Text=ratingCount text="(128 reviews)"; size=12; color="#8b899c"; .end/view
+  .end/view
+
+  // Skeleton / Spinner: حالتا تحميل — صندوق نائب ثابت، وحلقة تحميل ثابتة (لا أنيميشن
+  // حقيقي داخل هذا المحرّك؛ انظر الملاحظة الصريحة في rin_indsin_paint.h).
+  @view.Row=loadingRow
+    gap="normal";
+    @view.Column=skeletonBlock
+      gap="compact";
+      @view.Skeleton=skTitle width=160; height=18; .end/view
+      @view.Skeleton=skLine  width=220; height=12; .end/view
+    .end/view
+    @view.Spinner=loadingSpinner size="medium"; .end/view
+  .end/view
+
+  // Steps/Stepper: current= (0-based) يُحدَّد تلقائيًا حالة كل StepItem
+  // (done / active / upcoming) وفهرسه.
+  @view.Steps=checkoutSteps
+    current=1;
+    @view.StepItem=stepAccount label="Account"; .end/view
+    @view.StepItem=stepShipping label="Shipping"; .end/view
+    @view.StepItem=stepPayment  label="Payment";  .end/view
+    @view.StepItem=stepConfirm  label="Confirm";  .end/view
+  .end/view
+
+  // Timeline/TimelineItem: date=/title=/desc= — كل عنصر صفّ واحد مع نقطة ووصلة.
+  @view.Timeline=activityLog
+    @view.TimelineItem=logDeploy  date="09:41"; title="Deployed to production"; desc="v2.3.0 shipped successfully"; .end/view
+    @view.TimelineItem=logReview  date="09:12"; title="Code review approved";   desc="by @teammate"; .end/view
+    @view.TimelineItem=logOpen    date="08:55"; title="Pull request opened"; .end/view
+  .end/view
+
+  // Pagination: current=/total= -> أزرار السابق/مرقّمة/التالي، مربوطة بخلية Warp
+  // باسم "<name>_page" عبر onTap=set(cell, N) حقيقي (أو bind="cell" لإعادة استخدام خلية موجودة).
+  @view.Pagination=resultsPager
+    current=2; total=5;
+  .end/view
+
+.end/view
