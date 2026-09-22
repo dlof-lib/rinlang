@@ -9,6 +9,9 @@ object ThemeManager {
     const val DARK = "dark"
     const val LIGHT = "light"
 
+    /** القيم المقبولة لإعداد المظهر (أي قيمة أخرى تُعامَل كـ [SYSTEM]). */
+    val MODES = setOf(SYSTEM, DARK, LIGHT)
+
     fun apply(context: Context) {
         when (AppSettings.getThemeMode(context)) {
             DARK -> AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_YES)
