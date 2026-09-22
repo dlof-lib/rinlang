@@ -7,17 +7,19 @@ import android.view.ViewGroup
 import android.widget.TextView
 import androidx.core.content.ContextCompat
 import androidx.core.graphics.ColorUtils
+import androidx.core.view.isVisible
 import androidx.recyclerview.widget.RecyclerView
 
 /**
- * محوّل قائمة حوار "بنية الملف" ([RinContainerTags.OutlineEntry]) إلى صفوف مُنسَّقة بصرياً بدل
- * سطور نصية مسطّحة (AlertDialog.setItems() السابقة): شارة دائرية بلون ورمز مميّز حسب نوع الوسم
+ * محوّل قائمة "بنية الملف" ([RinContainerTags.OutlineEntry]) إلى صفوف مُنسَّقة بصرياً بدل
+ * سطور نصية مسطّحة (AlertDialog.setItems() سابقاً): شارة دائرية بلون ورمز مميّز حسب نوع الوسم
  * (حاوية/عرض/ثيم/عنصر/لوب/كائن/قسم)، خطوط إرشاد شجرية حقيقية بعمق التعشيش الفعلي
- * ([OutlineTreeGuideView]) بدل المسافات البادئة النصية، ورقم السطر داخل حبّة منفصلة.
+ * ([OutlineTreeGuideView]) بدل المسافات البادئة النصية، حبّة نطاق السطر (فتح–إغلاق إن كان
+ * الوسم مغلقاً بالفعل)، وحبّة إضافية بعدد العناصر الفرعية المباشرة إن وُجدت.
  */
 class OutlineDialogAdapter(
     private val entries: List<RinContainerTags.OutlineEntry>,
-    private val lineLabel: (Int) -> String,
+    private val lineLabel: (RinContainerTags.OutlineEntry) -> String,
     private val onEntryClick: (RinContainerTags.OutlineEntry) -> Unit
 ) : RecyclerView.Adapter<OutlineDialogAdapter.ViewHolder>() {
 
@@ -79,6 +81,7 @@ class OutlineDialogAdapter(
         val badge: TextView = view.findViewById(R.id.outlineKindBadge)
         val label: TextView = view.findViewById(R.id.outlineLabel)
         val lineChip: TextView = view.findViewById(R.id.outlineLineChip)
+        val childChip: TextView = view.findViewById(R.id.outlineChildChip)
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
@@ -105,7 +108,14 @@ class OutlineDialogAdapter(
         }
 
         holder.label.text = entry.label
-        holder.lineChip.text = lineLabel(entry.lineNumber)
+        holder.lineChip.text = lineLabel(entry)
+
+        if (entry.childCount > 0) {
+            holder.childChip.text = holder.itemView.context.getString(R.string.outline_child_count_format, entry.childCount)
+            holder.childChip.isVisible = true
+        } else {
+            holder.childChip.isVisible = false
+        }
 
         holder.itemView.setOnClickListener { onEntryClick(entry) }
     }
