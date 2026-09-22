@@ -58,5 +58,29 @@
     <string name="settings_format_save">Format on save</string>
     <string name="settings_format_save_hint">Prepare the editor for automatic formatting workflows on save.</string>
 
+    <string name="settings_assist_section_title">المساعدة أثناء الكتابة</string>
+    <string name="settings_saving_section_title">الحفظ</string>
+    <string name="settings_run_section_title">التشغيل</string>
+    <string name="settings_interface_section_title">الواجهة</string>
+
+    <string name="settings_trim_trailing">حذف المسافات الزائدة</string>
+    <string name="settings_trim_trailing_hint">احذف المسافات في نهاية كل سطر عند الحفظ.</string>
+    <string name="settings_final_newline">سطر جديد أخير</string>
+    <string name="settings_final_newline_hint">تأكّد من انتهاء الملف بسطر جديد واحد عند الحفظ.</string>
+    <string name="settings_auto_save">الحفظ التلقائي</string>
+    <string name="settings_auto_save_hint">احفظ تلقائياً بعد التوقف عن الكتابة بهذه المدة.</string>
+    <string name="settings_off">معطّل</string>
+    <string name="settings_seconds_format">%1$dث</string>
+
+    <string name="settings_auto_run">تشغيل تلقائي</string>
+    <string name="settings_auto_run_hint">أعد تشغيل الكود تلقائياً بعد توقّف قصير عن الكتابة.</string>
+    <string name="settings_clear_console_on_run">مسح الطرفية قبل كل تشغيل</string>
+    <string name="settings_clear_console_on_run_hint">امسح سجل التشغيل السابق تلقائياً عند كل Run جديد.</string>
+
+    <string name="settings_layout_hint">قياسي: محرر أكبر مع طرفية. مضغوط: مساحة أكبر للكود. تركيز: بلا طرفية.</string>
+    <string name="settings_keep_screen_on">إبقاء الشاشة مضاءة</string>
+    <string name="settings_keep_screen_on_hint">لا تُطفئ الشاشة تلقائياً أثناء استخدام المحرر.</string>
+    <string name="settings_project_sort">ترتيب حسب</string>
+
 <string name="settings_language_current">العربية 🇸🇾</string><string name="language_picker_title">اختيار اللغة</string><string name="language_picker_subtitle">اختر لغة وبلد الواجهة</string><string name="language_picker_search">ابحث عن لغة أو بلد…</string><string name="language_picker_applied">تم تطبيق %1$s</string><string name="language_group_arabic">العربية • الدول العربية</string><string name="language_group_english">English • English-speaking countries</string><string name="language_group_spanish">Español • Países hispanohablantes</string>
 </resources>
