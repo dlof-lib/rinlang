@@ -2,16 +2,21 @@ package com.dlof.rinlang
 
 import android.app.AlertDialog
 import android.content.ActivityNotFoundException
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.text.Editable
+import android.text.TextWatcher
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.webkit.MimeTypeMap
 import android.widget.EditText
+import android.widget.PopupMenu
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.PickVisualMediaRequest
@@ -45,10 +50,13 @@ class FilesActivity : AppCompatActivity() {
     private lateinit var project: Project
     private lateinit var rvFiles: RecyclerView
     private lateinit var txtEmpty: View
+    private lateinit var txtEmptyMessage: TextView
     private lateinit var adapter: FilesAdapter
 
     /** المسار النسبي الحالي من جذر المشروع (فواصل "/")، فارغ يعني أننا في جذر المشروع. */
     private var currentRelDir: String = ""
+    /** نص البحث الحالي في شريط "🔍 بحث في ملفات المشروع"؛ فارغ = تصفّح عادي مستوى بمستوى. */
+    private var searchQuery: String = ""
 
     private val importFileLauncher =
         registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -95,6 +103,7 @@ class FilesActivity : AppCompatActivity() {
 
         rvFiles = findViewById(R.id.rvFiles)
         txtEmpty = findViewById(R.id.txtEmptyFiles)
+        txtEmptyMessage = findViewById(R.id.txtEmptyFilesMessage)
         val fabAddFile: View = findViewById(R.id.fabAddFile)
         val fabNewFolder: View = findViewById(R.id.fabNewFolder)
         val fabUploadFile: View = findViewById(R.id.fabUploadFile)
@@ -107,10 +116,20 @@ class FilesActivity : AppCompatActivity() {
             onRenameFile = { file -> showRenameFileDialog(file) },
             onRenameFolder = { folder -> showRenameFolderDialog(folder) },
             onDeleteFile = { file -> showDeleteFileConfirm(file) },
-            onDeleteFolder = { folder -> showDeleteFolderConfirm(folder) }
+            onDeleteFolder = { folder -> showDeleteFolderConfirm(folder) },
+            onMoreFile = { file, anchor -> showMoreFileActions(file, anchor) }
         )
         rvFiles.layoutManager = LinearLayoutManager(this)
         rvFiles.adapter = adapter
+
+        findViewById<EditText>(R.id.inputSearchFiles).addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+            override fun afterTextChanged(s: Editable?) {
+                searchQuery = s?.toString().orEmpty()
+                refresh()
+            }
+        })
 
         fabAddFile.setOnClickListener { showCreateFileDialog() }
         fabNewFolder.setOnClickListener { showCreateFolderDialog() }
@@ -267,12 +286,86 @@ class FilesActivity : AppCompatActivity() {
     }
 
     private fun refresh() {
+        if (searchQuery.isNotBlank()) {
+            val results = ProjectManager.searchFiles(project, searchQuery)
+            adapter.submit(emptyList(), results, searchMode = true)
+            txtEmptyMessage.setText(R.string.search_no_results)
+            txtEmpty.visibility = if (results.isEmpty()) View.VISIBLE else View.GONE
+            return
+        }
+        txtEmptyMessage.setText(R.string.no_files_yet)
         val (folders, files) = ProjectManager.listEntries(project, currentRelDir)
         adapter.submit(folders, files)
         txtEmpty.visibility = if (folders.isEmpty() && files.isEmpty()) View.VISIBLE else View.GONE
 
         findViewById<TextView>(R.id.txtToolbarSubtitle).text =
             if (currentRelDir.isBlank()) project.name else "${project.name} / $currentRelDir"
+    }
+
+    private fun showMoreFileActions(file: RinFile, anchor: View) {
+        val popup = PopupMenu(this, anchor)
+        popup.menu.add(0, 1, 0, R.string.action_duplicate)
+        popup.menu.add(0, 2, 1, R.string.action_move)
+        popup.menu.add(0, 3, 2, R.string.action_copy_path)
+        popup.setOnMenuItemClickListener { item ->
+            when (item.itemId) {
+                1 -> { duplicateFile(file); true }
+                2 -> { showMoveFileDialog(file); true }
+                3 -> { copyFilePath(file); true }
+                else -> false
+            }
+        }
+        popup.show()
+    }
+
+    private fun duplicateFile(file: RinFile) {
+        try {
+            val copy = ProjectManager.duplicateFile(file)
+            refresh()
+            Toast.makeText(this, getString(R.string.file_duplicated_toast, copy.name), Toast.LENGTH_SHORT).show()
+        } catch (t: Throwable) {
+            Toast.makeText(this, "${t.message}", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun copyFilePath(file: RinFile) {
+        val clipboard = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
+        clipboard.setPrimaryClip(ClipData.newPlainText("path", file.relPath))
+        Toast.makeText(this, R.string.path_copied_toast, Toast.LENGTH_SHORT).show()
+    }
+
+    /** يجمع كل مجلدات المشروع (بكل الأعماق) كوجهات نقل محتملة، ما عدا مجلد الملف الحالي نفسه. */
+    private fun showMoveFileDialog(file: RinFile) {
+        val allFolders = mutableListOf<RinFolder>()
+        fun walk(relDir: String) {
+            val (folders, _) = ProjectManager.listEntries(project, relDir)
+            for (f in folders) {
+                allFolders += f
+                walk(f.relPath)
+            }
+        }
+        walk("")
+        val currentDir = file.relPath.substringBeforeLast('/', "")
+        val candidateDirs = (listOf("") + allFolders.map { it.relPath }).filter { it != currentDir }
+        if (candidateDirs.isEmpty()) {
+            Toast.makeText(this, R.string.move_no_folders, Toast.LENGTH_SHORT).show()
+            return
+        }
+        val labels = candidateDirs.map { if (it.isEmpty()) getString(R.string.move_root_option) else it }.toTypedArray()
+        AlertDialog.Builder(this)
+            .setTitle(getString(R.string.move_dialog_title, file.name))
+            .setItems(labels) { _, which ->
+                val dest = candidateDirs[which]
+                try {
+                    val moved = ProjectManager.moveFile(project, file, dest)
+                    refresh()
+                    Toast.makeText(this, getString(R.string.file_moved_toast, moved.relPath), Toast.LENGTH_SHORT).show()
+                } catch (t: Throwable) {
+                    Toast.makeText(this, "${t.message}", Toast.LENGTH_LONG).show()
+                }
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
     }
 
     private fun importFile(uri: Uri) {
@@ -414,7 +507,8 @@ private class FilesAdapter(
     val onRenameFile: (RinFile) -> Unit,
     val onRenameFolder: (RinFolder) -> Unit,
     val onDeleteFile: (RinFile) -> Unit,
-    val onDeleteFolder: (RinFolder) -> Unit
+    val onDeleteFolder: (RinFolder) -> Unit,
+    val onMoreFile: (RinFile, View) -> Unit
 ) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
 
     private companion object {
@@ -423,9 +517,13 @@ private class FilesAdapter(
     }
 
     private var items: List<FileRow> = emptyList()
+    /** أثناء البحث في المشروع كله نعرض المسار النسبي الكامل مكان الحجم/التاريخ (تمييز ملفات
+     *  متشابهة الاسم في مجلدات مختلفة)، وإلا فالتصفّح العادي مستوى بمستوى كالمعتاد. */
+    private var searchMode: Boolean = false
     private val dateFormat = DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT)
 
-    fun submit(folders: List<RinFolder>, files: List<RinFile>) {
+    fun submit(folders: List<RinFolder>, files: List<RinFile>, searchMode: Boolean = false) {
+        this.searchMode = searchMode
         items = folders.map { FileRow.FolderRow(it) } + files.map { FileRow.FileRowItem(it) }
         notifyDataSetChanged()
     }
@@ -441,6 +539,7 @@ private class FilesAdapter(
         val imgIcon: android.widget.ImageView = view.findViewById(R.id.imgFileIcon)
         val txtName: TextView = view.findViewById(R.id.txtFileNameItem)
         val txtMeta: TextView = view.findViewById(R.id.txtFileMeta)
+        val btnMore: View = view.findViewById(R.id.btnMoreFile)
         val btnRename: View = view.findViewById(R.id.btnRenameFile)
         val btnDelete: View = view.findViewById(R.id.btnDeleteFile)
     }
@@ -476,13 +575,18 @@ private class FilesAdapter(
                 val file = row.file
                 holder as FileVH
                 holder.txtName.text = file.name
-                holder.txtMeta.text = holder.itemView.context.getString(
-                    R.string.file_meta_format,
-                    formatSize(file.sizeBytes),
-                    dateFormat.format(Date(file.lastModified))
-                )
+                holder.txtMeta.text = if (searchMode) {
+                    holder.itemView.context.getString(R.string.search_result_meta_format, file.relPath)
+                } else {
+                    holder.itemView.context.getString(
+                        R.string.file_meta_format,
+                        formatSize(file.sizeBytes),
+                        dateFormat.format(Date(file.lastModified))
+                    )
+                }
                 FileIconResolver.load(holder.imgIcon, file.file)
                 holder.itemView.setOnClickListener { onOpenFile(file) }
+                holder.btnMore.setOnClickListener { onMoreFile(file, holder.btnMore) }
                 holder.btnRename.setOnClickListener { onRenameFile(file) }
                 holder.btnDelete.setOnClickListener { onDeleteFile(file) }
             }
