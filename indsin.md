@@ -9,9 +9,9 @@
 ## ما الذي يغطّيه indsin
 
 `indsin` هو طبقة **التنفيذ (runtime)** التي تُحوّل مفاهيم اللغة الوصفية —
-`@element` / `@loop` / `@container` (انظر [`containers.md`](./containers.md) —
-**ملاحظة: هذا الملف موعود به في الوثائق لكنه غير موجود بعد في هذا الإصدار من
-المستودع؛ الوصف أدناه هو المرجع الموثوق حاليًا**) —
+`@element` / `@loop` / `@container` (انظر [`docs/containers.md`](./docs/containers.md)
+للدليل الكامل، و[`docs/RIN_ELEMENTS.md`](./docs/RIN_ELEMENTS.md) لكتالوج
+`@element.*` كاملاً) —
 إلى شجرة عناصر مقاسة (measured tree)، ثم إلى عمليات رسم (paint ops)، ثم إلى بكسلات
 فعلية على الشاشة. اللغة نفسها لا تتغيّر: `@element.button`، `@loop`، `on.x.click=`
 كلها كما هي. ما تغيّر هو اسم المحرّك الذي يُنفِّذها والمكوّنات المبنية عليه.
@@ -58,5 +58,8 @@
 | `app/src/main/cpp/loom/` | `app/src/main/cpp/indsin/` |
 
 ## انظر أيضاً
-- [`containers.md`](./containers.md) — `@container`، `@element`، `@loop`.
-- [`language-reference.md`](./language-reference.md) — خريطة ترابط المفاهيم.
+- [`docs/containers.md`](./docs/containers.md) — `@container`، `@element`، `@loop` بالتفصيل.
+- [`docs/RIN_ELEMENTS.md`](./docs/RIN_ELEMENTS.md) — كتالوج `@element.*` الكامل.
+- [`docs/language.html`](./docs/language.html) — "جولة في لغة Rin": جولة عامة في اللغة
+  من المتغيّر الأول إلى الحاوية الكاملة (لم يكن يغطي `@element`/`@loop` قبل هذا
+  الملف — `docs/containers.md` أعلاه هو المكمِّل له لهذا الجزء تحديدًا).
