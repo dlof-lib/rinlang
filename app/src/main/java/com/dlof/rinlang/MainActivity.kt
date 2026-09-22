@@ -664,7 +664,14 @@ class MainActivity : AppCompatActivity() {
         rvExplorerOutline.isVisible = true
         rvExplorerOutline.adapter = OutlineDialogAdapter(
             entries = entries,
-            lineLabel = { line -> "(" + getString(R.string.outline_line_format, line) + ")" },
+            lineLabel = { entry ->
+                val end = entry.endLine
+                if (end != null && end > entry.lineNumber) {
+                    "(" + getString(R.string.outline_line_range_format, entry.lineNumber, end) + ")"
+                } else {
+                    "(" + getString(R.string.outline_line_format, entry.lineNumber) + ")"
+                }
+            },
             onEntryClick = { entry ->
                 editorController.goToLine(entry.lineNumber)
                 drawerLayout.closeDrawer(GravityCompat.START)
