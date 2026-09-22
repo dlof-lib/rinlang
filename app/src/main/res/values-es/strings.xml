@@ -53,6 +53,7 @@
     <string name="menu_file_open">Abrir…</string>
     <string name="menu_file_save">Guardar</string>
     <string name="menu_file_projects">Proyectos</string>
+    <string name="menu_file_export_apk">Exportar APK</string>
     <string name="menu_edit_undo">Deshacer</string>
     <string name="menu_edit_redo">Rehacer</string>
     <string name="menu_edit_find">Buscar y reemplazar</string>
@@ -87,6 +88,7 @@
     <string name="menu_run_run">Ejecutar programa</string>
     <string name="menu_run_check_brackets">Comprobar paréntesis</string>
     <string name="menu_run_auto_run">Ejecución automática al escribir</string>
+    <string name="menu_run_export_apk">Exportar APK</string>
     <string name="auto_run_enabled_toast">Ejecución automática activada — la consola se actualiza poco después de dejar de escribir</string>
     <string name="auto_run_disabled_toast">Ejecución automática desactivada</string>
     <string name="new_file_name">sin_titulo.rin</string>
@@ -96,6 +98,7 @@
     <string name="desc_menu_view">Menú Ver</string>
     <string name="desc_run_quick">Ejecutar</string>
     <string name="desc_projects_quick">Proyectos</string>
+    <string name="desc_export_apk_quick">Exportar APK</string>
     <string name="editor_hint">Escribe tu código Rin aquí…</string>
     <string name="file_unsaved">sin_titulo.rin</string>
     <string name="file_open_error">No se pudo abrir el archivo</string>
@@ -220,6 +223,8 @@ print \"Hello, \" + name + \"!\";
     <string name="more_row_apk_export_subtitle">Exporta tu proyecto como un APK firmado e instalable</string>
 
     <string name="apk_export_screen_title">Exportar APK</string>
+    <string name="apk_export_editor_need_project">Abre un proyecto de Rin en el editor antes de exportarlo como APK</string>
+    <string name="apk_export_unsaved_file_warning">Este archivo libre tiene cambios sin guardar; la exportación usará la última copia guardada del proyecto</string>
     <string name="apk_export_terminal_label">rinlang — apk.export</string>
     <string name="apk_export_field_name_label">Nombre visible de la app</string>
     <string name="apk_export_field_name_hint">p. ej. App de Ventas</string>
@@ -245,7 +250,7 @@ print \"Hello, \" + name + \"!\";
     <string name="apk_export_no_entry_error">Este proyecto no tiene archivos .rin</string>
     <string name="apk_export_icon_load_error">No se pudo cargar el icono seleccionado</string>
     <string name="apk_export_sdk_range_error">El SDK mínimo no debe superar al SDK objetivo</string>
-    <string name="apk_export_note_limitation">Nota: el nombre e icono del paquete resultante en la pantalla de inicio siguen siendo los de RinStudio; la identidad real de tu proyecto aparece dentro de su pantalla de ejecución al abrirlo. La firma es real, con los esquemas v1 y v2 juntos (v2 se autoverifica automáticamente y se reemplaza por v1 solo si eso falla) para la máxima confianza de instalación.</string>
+    <string name="apk_export_note_limitation">El nombre de la aplicación, el ID del paquete y los archivos del proyecto se incluyen realmente en el APK resultante. Un icono personalizado reemplaza los iconos de inicio del paquete. La firma usa una clave RSA-2048 guardada en Android Keystore del dispositivo.</string>
 
     <string name="more_row_rin_apps_subtitle">Explora todas tus apps exportadas, instálalas, compártelas o vuelve a exportarlas</string>
     <string name="rin_apps_screen_title">Apps de Rin</string>
@@ -307,13 +312,4 @@ print \"Hello, \" + name + \"!\";
     <string name="action_rename_symbol">Cambiar nombre</string>
     <string name="rename_dialog_title">Cambiar nombre del símbolo</string>
     <string name="rename_dialog_hint">Nuevo nombre</string>
-
-    <string name="key_tab">Tab</string>
-    <string name="key_home">Home</string>
-    <string name="key_end">End</string>
-    <string name="key_left">Mover a la izquierda</string>
-    <string name="key_right">Mover a la derecha</string>
-    <string name="key_up">Mover arriba</string>
-    <string name="key_down">Mover abajo</string>
-    <string name="key_backspace">Retroceso</string>
 </resources>
