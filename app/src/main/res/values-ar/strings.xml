@@ -347,4 +347,14 @@ print \"Hello, \" + name + \"!\";
     <string name="action_rename_symbol">إعادة تسمية</string>
     <string name="rename_dialog_title">إعادة تسمية الرمز</string>
     <string name="rename_dialog_hint">الاسم الجديد</string>
+
+    <!-- لوحة مفاتيح المحرر (activity_main.xml): مفاتيح تنقّل عامة -->
+    <string name="key_tab">Tab</string>
+    <string name="key_home">Home</string>
+    <string name="key_end">End</string>
+    <string name="key_left">تحريك لليسار</string>
+    <string name="key_right">تحريك لليمين</string>
+    <string name="key_up">تحريك لأعلى</string>
+    <string name="key_down">تحريك لأسفل</string>
+    <string name="key_backspace">حذف للخلف</string>
 </resources>
