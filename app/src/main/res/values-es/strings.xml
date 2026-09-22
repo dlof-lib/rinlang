@@ -307,4 +307,13 @@ print \"Hello, \" + name + \"!\";
     <string name="action_rename_symbol">Cambiar nombre</string>
     <string name="rename_dialog_title">Cambiar nombre del símbolo</string>
     <string name="rename_dialog_hint">Nuevo nombre</string>
+
+    <string name="key_tab">Tab</string>
+    <string name="key_home">Home</string>
+    <string name="key_end">End</string>
+    <string name="key_left">Mover a la izquierda</string>
+    <string name="key_right">Mover a la derecha</string>
+    <string name="key_up">Mover arriba</string>
+    <string name="key_down">Mover abajo</string>
+    <string name="key_backspace">Retroceso</string>
 </resources>
