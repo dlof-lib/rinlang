@@ -20,6 +20,8 @@ class RinCodeEditorController(
     private val scrollView: ScrollView? = null
 ) {
     var caseSensitiveSearch: Boolean = false
+    /** بحث بتعبير نمطي (regex) بدل نص حرفي؛ محسوب في Kotlin بلا أي تعديل للمحرك C++. */
+    var regexSearch: Boolean = false
 
     init {
         updateLineNumbers()
@@ -76,6 +78,12 @@ class RinCodeEditorController(
     fun toggleLineComment() = editorView.toggleLineComment()
     fun indentSelection() = editorView.indentSelection()
     fun unindentSelection() = editorView.unindentSelection()
+    fun sortLines(): Boolean = editorView.sortLines()
+    fun joinCurrentLine(): Boolean = editorView.joinCurrentLine()
+    fun trimTrailingWhitespaceNow(): Boolean = editorView.trimTrailingWhitespaceNow()
+    fun convertTabsToSpacesNow(tabSize: Int): Boolean = editorView.convertTabsToSpacesNow(tabSize)
+    fun statusInfo() = editorView.statusInfo()
+    fun addCursorStateChangeListener(listener: () -> Unit) = editorView.addCursorStateChangeListener(listener)
 
     fun lineCount(): Int = editorView.lineCount()
 
@@ -122,24 +130,26 @@ class RinCodeEditorController(
 
     // --- بحث/استبدال ---
     fun findNext(query: String): Boolean {
-        val y = editorView.findNext(query, caseSensitiveSearch) ?: return false
+        val y = editorView.findNext(query, caseSensitiveSearch, regexSearch) ?: return false
         scrollToY(y)
         return true
     }
 
     fun findPrevious(query: String): Boolean {
-        val y = editorView.findPrevious(query, caseSensitiveSearch) ?: return false
+        val y = editorView.findPrevious(query, caseSensitiveSearch, regexSearch) ?: return false
         scrollToY(y)
         return true
     }
 
-    fun replaceOne(query: String, replacement: String) = editorView.replaceOne(query, replacement, caseSensitiveSearch)
-    fun replaceAll(query: String, replacement: String): Int = editorView.replaceAll(query, replacement, caseSensitiveSearch)
-    fun matchInfo(query: String): Pair<Int, Int> = editorView.matchInfo(query, caseSensitiveSearch)
+    fun replaceOne(query: String, replacement: String) = editorView.replaceOne(query, replacement, caseSensitiveSearch, regexSearch)
+    fun replaceAll(query: String, replacement: String): Int = editorView.replaceAll(query, replacement, caseSensitiveSearch, regexSearch)
+    fun matchInfo(query: String): Pair<Int, Int> = editorView.matchInfo(query, caseSensitiveSearch, regexSearch)
+    /** true إن كان [query] نمط regex صالح (أو ليس وضع regex أصلًا) — لتلوين شريط البحث عند نمط خاطئ. */
+    fun isValidQuery(query: String): Boolean = editorView.isValidPattern(query, regexSearch)
 
     fun highlightMatches(query: String) {
-        if (query.isEmpty()) { editorView.setFindHighlights(null); return }
-        editorView.setFindHighlights(editorView.engine.findAll(query, caseSensitiveSearch))
+        if (query.isEmpty() || !isValidQuery(query)) { editorView.setFindHighlights(null); return }
+        editorView.setFindHighlights(editorView.findAllForHighlight(query, caseSensitiveSearch, regexSearch))
     }
 
     fun clearMatchHighlights() = editorView.setFindHighlights(null)
