@@ -100,6 +100,9 @@ dependencies {
     implementation("com.google.zxing:core:3.5.3")
     implementation("androidx.constraintlayout:constraintlayout:2.1.4")
     implementation("androidx.recyclerview:recyclerview:1.3.2")
+    // درج "مستكشف المشروع" المدمج في المحرر (شجرة الملفات/المجلدات + شجرة الحاويات) — انظر
+    // activity_main.xml (DrawerLayout) و MainActivity.kt (btnExplorer).
+    implementation("androidx.drawerlayout:drawerlayout:1.2.0")
 
     // Firebase — Realtime Database + Authentication (Email/Password) فقط، وكلاهما ضمن
     // خطة Spark المجانية بدون بطاقة دفع. لا نستخدم Cloud Functions ولا Storage المدفوع.
