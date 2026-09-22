@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
@@ -24,6 +25,7 @@
 
         <!-- الصف الأول: هوية المحرر (أيقونة التطبيق الحقيقية) + اسم الملف + وصول سريع -->
         <LinearLayout
+            android:id="@+id/editorHeaderRow"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
@@ -107,6 +109,7 @@
 
         <!-- فاصل رفيع شبه شفاف بين صف الهوية وصف القوائم، يفصل بصرياً بين المنطقتين -->
         <View
+            android:id="@+id/editorHeaderDivider"
             android:layout_width="match_parent"
             android:layout_height="1dp"
             android:background="@color/rin_menubar_divider"
@@ -374,6 +377,7 @@
 
     <!-- ===== المحرر: عمود أرقام الأسطر + النص القابل للتمرير أفقياً بلا التفاف ===== -->
     <LinearLayout
+        android:id="@+id/editorSurface"
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="3"
@@ -385,7 +389,8 @@
         <ScrollView
             android:id="@+id/scrollEditor"
             android:layout_width="match_parent"
-            android:layout_height="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
             android:scrollbars="vertical"
             android:overScrollMode="never">
 
@@ -447,9 +452,40 @@
                 </HorizontalScrollView>
             </LinearLayout>
         </ScrollView>
+
+        <!-- شريط حالة رفيع: موضع المؤشر (سطر/عمود)، طول التحديد إن وُجد، وعدد أسطر المستند. -->
+        <LinearLayout
+            android:id="@+id/editorStatusBar"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:background="@color/rin_console_header"
+            android:paddingStart="10dp"
+            android:paddingEnd="10dp"
+            android:paddingTop="3dp"
+            android:paddingBottom="3dp">
+
+            <TextView
+                android:id="@+id/txtCursorPosition"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:textColor="@color/rin_editor_hint"
+                android:textSize="10sp"
+                tools:text="Ln 1, Col 1" />
+
+            <TextView
+                android:id="@+id/txtDocumentInfo"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textColor="@color/rin_editor_hint"
+                android:textSize="10sp"
+                tools:text="12 lines" />
+        </LinearLayout>
     </LinearLayout>
 
     <View
+        android:id="@+id/editorConsoleDivider"
         android:layout_width="match_parent"
         android:layout_height="1dp"
         android:background="@color/rin_divider" />
