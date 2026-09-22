@@ -2,10 +2,14 @@ package com.dlof.rinlang
 
 import android.net.Uri
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.provider.OpenableColumns
 import android.text.Editable
 import android.text.TextWatcher
 import android.view.ContextThemeWrapper
+import android.view.View
+import android.view.WindowManager
 import android.widget.Button
 import android.widget.EditText
 import android.widget.ImageButton
@@ -15,6 +19,7 @@ import android.widget.PopupMenu
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
@@ -46,6 +51,11 @@ class MainActivity : AppCompatActivity() {
         const val EXTRA_FILE_NAME = "extra_file_name"
         /** اسم مكتبة .og.rin (اختياري) داخل lib/ الخاصة بذلك المشروع، تُفتَح للتعديل في نفس المحرر. */
         const val EXTRA_LIBRARY_NAME = "extra_library_name"
+
+        /** مهلة التوقف عن الكتابة قبل التشغيل التلقائي (إعداد "التشغيل التلقائي"). */
+        private const val AUTO_RUN_DELAY_MS = 1_200L
+        /** مهلة دفع التعديلات إلى المعاينة الحية بعد آخر ضغطة مفتاح. */
+        private const val LIVE_PREVIEW_DELAY_MS = 200L
     }
 
     /** المشروع الحالي إن جاء التطبيق من شاشة الملفات، وإلا null (وضع الملف الحر عبر SAF كما كان سابقاً). */
@@ -65,12 +75,29 @@ class MainActivity : AppCompatActivity() {
     private lateinit var txtReplace: EditText
     private lateinit var txtFindCount: TextView
     private lateinit var scrollEditor: ScrollView
+    private lateinit var txtCursorPosition: TextView
+    private lateinit var txtDocumentInfo: TextView
 
     private lateinit var editorController: RinCodeEditorController
     private lateinit var jobAdapter: RinJobAdapter
 
     /** URI of the file currently open, if any. Null means "unsaved / new file". */
     private var currentUri: Uri? = null
+
+    // --- حالة التعديل والمهام المؤجَّلة (حفظ تلقائي / تشغيل تلقائي / معاينة حية) ---
+    private val uiHandler = Handler(Looper.getMainLooper())
+    private var livePreviewTask: Runnable? = null
+    private var autoSaveTask: Runnable? = null
+    private var autoRunTask: Runnable? = null
+    private var lastAutoRunSource: String? = null
+
+    /** نص المحرر لحظة آخر تحميل أو حفظ؛ أي اختلاف عنه = تعديلات غير محفوظة. */
+    private var savedSnapshot: String = ""
+
+    /** true أثناء تغيير النص برمجيًا (فتح ملف، ملف جديد، تنسيق عند الحفظ) كي لا يُعامَل كتعديل من المستخدم. */
+    private var programmaticChange = false
+
+    private lateinit var backCallback: OnBackPressedCallback
 
     // --- Storage Access Framework launchers ---
 
@@ -124,6 +151,8 @@ class MainActivity : AppCompatActivity() {
         txtReplace = findViewById(R.id.txtReplace)
         txtFindCount = findViewById(R.id.txtFindCount)
         scrollEditor = findViewById(R.id.scrollEditor)
+        txtCursorPosition = findViewById(R.id.txtCursorPosition)
+        txtDocumentInfo = findViewById(R.id.txtDocumentInfo)
 
         applyStoredEditorSettings()
         RinLogoLoadingOverlay.setProgress(0.34f)
@@ -175,11 +204,14 @@ class MainActivity : AppCompatActivity() {
                 else -> editCode.setText(getString(R.string.sample_program))
             }
         }
+        markClean()
 
         // أرقام الأسطر + تراجع/إعادة + مسافة بادئة تلقائية + أقواس مغلقة تلقائياً + تظليل الأقواس/السطر الحالي
         // + تلوين نحوي حقيقي (Kotlin خالص عبر RinSyntax، بلا أي C++/JNI) يتبدّل تلقائيًا حسب امتداد الملف.
         editorController = RinCodeEditorController(this, editCode, txtLineNumbers, scrollEditor)
         editorController.setLanguage(initialLanguageExtension)
+        editorController.addCursorStateChangeListener { updateStatusBar() }
+        updateStatusBar()
         // حركة القرص (pinch-to-zoom) داخل المحرر تُغيّر حجم خطه مباشرة؛ نُزامن هنا عمود أرقام
         // الأسطر (لا يملكه RinCodeEditorView) ونحفظ القيمة الجديدة، تمامًا مثل أزرار +/- الحالية.
         editCode.onFontSizeChangeListener = { newSp ->
@@ -188,24 +220,12 @@ class MainActivity : AppCompatActivity() {
         }
         RinLogoLoadingOverlay.setProgress(0.78f)
 
-        // كل تعديل في المحرر يُدفع مباشرةً (بعد تهدئة/debounce قصيرة) إلى جلسة المعاينة الحية
-        // إن كانت مفتوحة — نفس فكرة "on each keystroke... updateSource(newSource)" الموثّقة في
-        // RinEngine.IndsinSession، لكن مُطلَقة من هنا بدل زر Run حتى تصبح المعاينة حيّة فعلاً.
+        // كل تعديل في المحرر يمرّ من هنا مرة واحدة: دفع للمعاينة الحية، ثم الحفظ التلقائي، ثم التشغيل التلقائي
+        // (انظر onEditorTextChanged) — بدل مراقب مستقل لكل ميزة.
         editCode.addTextChangedListener(object : TextWatcher {
-            private val handler = android.os.Handler(android.os.Looper.getMainLooper())
-            private var pending: Runnable? = null
-
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
-
-            override fun afterTextChanged(s: Editable?) {
-                if (!IndsinPreviewManager.isRunning) return
-                pending?.let { handler.removeCallbacks(it) }
-                val src = s?.toString().orEmpty()
-                val task = Runnable { IndsinPreviewManager.pushLiveEdit(src) }
-                pending = task
-                handler.postDelayed(task, 200L)
-            }
+            override fun afterTextChanged(s: Editable?) = onEditorTextChanged()
         })
 
         // قائمة التشغيل المجدولة (job queue): كل عملية Run بطاقة مستقلة
@@ -267,8 +287,20 @@ class MainActivity : AppCompatActivity() {
             editorController.caseSensitiveSearch = !editorController.caseSensitiveSearch
             val msg = if (editorController.caseSensitiveSearch) R.string.find_case_sensitive_on_toast else R.string.find_case_sensitive_off_toast
             Toast.makeText(this, getString(msg), Toast.LENGTH_SHORT).show()
+            refreshFindModeIndicator(btnFindCase)
             editorController.highlightMatches(txtFind.text.toString())
             updateFindCount()
+        }
+        // اضغط مطولاً على زر "حساسية الأحرف" لتبديل وضع البحث بتعبير نمطي (regex) — بلا حاجة لزر
+        // إضافي في شريط ضيّق أصلاً على شاشة الهاتف؛ الوضعان مستقلّان (يمكن الجمع بينهما).
+        btnFindCase.setOnLongClickListener {
+            editorController.regexSearch = !editorController.regexSearch
+            val msg = if (editorController.regexSearch) R.string.find_regex_on_toast else R.string.find_regex_off_toast
+            Toast.makeText(this, getString(msg), Toast.LENGTH_SHORT).show()
+            refreshFindModeIndicator(btnFindCase)
+            editorController.highlightMatches(txtFind.text.toString())
+            updateFindCount()
+            true
         }
         btnReplaceOne.setOnClickListener {
             editorController.replaceOne(txtFind.text.toString(), txtReplace.text.toString())
@@ -297,6 +329,109 @@ class MainActivity : AppCompatActivity() {
         btnMenuView.setOnClickListener { showViewMenu(it) }
         btnMenuRun.setOnClickListener { showRunMenu(it) }
         btnMenuLibraries.setOnClickListener { openLibrariesScreen() }
+
+        // زر الرجوع: يسأل قبل المغادرة فقط عند تفعيل "تأكيد قبل الخروج" ووجود تعديلات غير محفوظة.
+        backCallback = object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() = onBackRequested()
+        }
+        onBackPressedDispatcher.addCallback(this, backCallback)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // الإعدادات تتغيّر من شاشة الإعدادات والمحرر ما زال حيًا في المكدّس (singleTop)؛ نعيد تطبيقها هنا.
+        applyStoredEditorSettings()
+        editCode.invalidate()
+    }
+
+    override fun onPause() {
+        super.onPause()
+        // المهام المؤجَّلة لا معنى لها والمحرر خارج الشاشة: الحفظ يتم هنا مباشرة، والتشغيل التلقائي يُلغى.
+        autoSaveTask?.let { uiHandler.removeCallbacks(it) }
+        autoRunTask?.let { uiHandler.removeCallbacks(it) }
+        if (AppSettings.isSaveOnPause(this) && hasSaveTarget() && hasUnsavedChanges()) saveSilently()
+    }
+
+    // ---- تتبّع التعديل والحفظ/التشغيل التلقائيان --------------------------------------------
+
+    private fun hasUnsavedChanges(): Boolean = editCode.text.toString() != savedSnapshot
+
+    private fun markClean() { savedSnapshot = editCode.text.toString() }
+
+    /** هل للمحرر وجهة حفظ معروفة (ملف مشروع/مكتبة/URI)؟ الملف الجديد بلا وجهة يحتاج حوار SAF فلا يُحفَظ صامتًا. */
+    private fun hasSaveTarget(): Boolean =
+        currentProjectLibrary != null || currentProjectFile != null || currentUri != null
+
+    /** يحمّل نصًا في المحرر برمجيًا (لا يُحتسب تعديلًا من المستخدم) ثم يعدّه "نظيفًا". */
+    private fun loadIntoEditor(text: String) {
+        programmaticChange = true
+        try { editCode.setText(text) } finally { programmaticChange = false }
+        markClean()
+        lastAutoRunSource = null
+    }
+
+    private fun onEditorTextChanged() {
+        scheduleLivePreviewPush()
+        if (programmaticChange) return
+        scheduleAutoSave()
+        scheduleAutoRun()
+    }
+
+    /** دفع التعديلات (بعد تهدئة قصيرة) إلى جلسة المعاينة الحية إن كانت مفتوحة (IndsinPreviewManager.pushLiveEdit). */
+    private fun scheduleLivePreviewPush() {
+        if (!IndsinPreviewManager.isRunning) return
+        livePreviewTask?.let { uiHandler.removeCallbacks(it) }
+        val source = editCode.text.toString()
+        val task = Runnable { IndsinPreviewManager.pushLiveEdit(source) }
+        livePreviewTask = task
+        uiHandler.postDelayed(task, LIVE_PREVIEW_DELAY_MS)
+    }
+
+    private fun scheduleAutoSave() {
+        autoSaveTask?.let { uiHandler.removeCallbacks(it) }
+        val delayMs = AppSettings.getAutoSaveDelayMs(this)
+        if (delayMs <= 0 || !hasSaveTarget()) return
+        val task = Runnable { if (hasUnsavedChanges()) saveSilently() }
+        autoSaveTask = task
+        uiHandler.postDelayed(task, delayMs.toLong())
+    }
+
+    private fun scheduleAutoRun() {
+        autoRunTask?.let { uiHandler.removeCallbacks(it) }
+        if (!AppSettings.isAutoRunEnabled(this)) return
+        val task = Runnable { autoRunNow() }
+        autoRunTask = task
+        uiHandler.postDelayed(task, AUTO_RUN_DELAY_MS)
+    }
+
+    /** تشغيل صامت للكود الحالي: لا معاينة ولا Snackbar، ولا يُشغَّل كود غير مكتمل أو لم يتغيّر منذ آخر تشغيل تلقائي. */
+    private fun autoRunNow() {
+        val source = editCode.text.toString()
+        if (source.isBlank() || source == lastAutoRunSource) return
+        // أقواس/وسوم غير متوازنة = كود ما زال قيد الكتابة؛ تشغيله يملأ الكونسول بأخطاء لا فائدة منها.
+        if (editorController.checkBracketBalance() != null || editorController.checkTagBalance() != null) return
+        lastAutoRunSource = source
+        if (AppSettings.isClearConsoleOnRun(this)) RinJobScheduler.clear()
+        RinJobScheduler.submit(source) // الطابور ممتلئ → يُتجاهَل بصمت (هذا تشغيل لم يطلبه المستخدم صراحةً)
+    }
+
+    private fun onBackRequested() {
+        if (!AppSettings.isConfirmExit(this) || !hasUnsavedChanges()) { leaveEditor(); return }
+        val builder = AlertDialog.Builder(this)
+            .setTitle(R.string.exit_unsaved_title)
+            .setMessage(R.string.exit_unsaved_message)
+            .setNegativeButton(R.string.exit_unsaved_stay, null)
+            .setPositiveButton(R.string.exit_unsaved_discard) { _, _ -> leaveEditor() }
+        if (hasSaveTarget()) {
+            builder.setNeutralButton(R.string.exit_unsaved_save) { _, _ -> if (saveSilently()) leaveEditor() }
+        }
+        builder.show()
+    }
+
+    /** ينفّذ الرجوع الافتراضي للنظام (نعطّل معالجنا أولًا كي لا يعيد الطلب إلى نفسه). */
+    private fun leaveEditor() {
+        backCallback.isEnabled = false
+        onBackPressedDispatcher.onBackPressed()
     }
 
     /** يبني PopupMenu ببطاقة داكنة دائرية الزوايا وظل واضح (bg_popup_menu)، بدل مستطيل النظام
@@ -358,6 +493,10 @@ class MainActivity : AppCompatActivity() {
         popup.menu.add(0, 11, 10, R.string.menu_edit_indent)
         popup.menu.add(0, 12, 11, R.string.menu_edit_unindent)
         popup.menu.add(0, 13, 12, R.string.menu_edit_insert_snippet)
+        popup.menu.add(0, 14, 13, R.string.menu_edit_sort_lines)
+        popup.menu.add(0, 15, 14, R.string.menu_edit_join_line)
+        popup.menu.add(0, 16, 15, R.string.menu_edit_trim_now)
+        popup.menu.add(0, 17, 16, R.string.menu_edit_convert_tabs_now)
         popup.setOnMenuItemClickListener { item ->
             when (item.itemId) {
                 1 -> editorController.undo()
@@ -376,10 +515,20 @@ class MainActivity : AppCompatActivity() {
                 11 -> editorController.indentSelection()
                 12 -> editorController.unindentSelection()
                 13 -> showSnippetsDialog()
+                14 -> toastChanged(editorController.sortLines(), R.string.lines_sorted_toast)
+                15 -> toastChanged(editorController.joinCurrentLine(), R.string.lines_joined_toast)
+                16 -> toastChanged(editorController.trimTrailingWhitespaceNow(), R.string.trailing_trimmed_toast)
+                17 -> toastChanged(editorController.convertTabsToSpacesNow(AppSettings.getTabSize(this)), R.string.tabs_converted_toast)
             }
             true
         }
         popup.show()
+    }
+
+    /** رسالة سريعة موحَّدة لأفعال Edit الفورية: [changed] يحدّد أي رسالة تُعرَض (نجاح أم "لا تغييرات"). */
+    private fun toastChanged(changed: Boolean, successMessage: Int) {
+        val message = if (changed) successMessage else R.string.no_changes_toast
+        Toast.makeText(this, getString(message), Toast.LENGTH_SHORT).show()
     }
 
     /**
@@ -411,6 +560,8 @@ class MainActivity : AppCompatActivity() {
         popup.menu.add(0, 7, 6, R.string.menu_view_fold_current)
         popup.menu.add(0, 8, 7, R.string.menu_view_fold_all)
         popup.menu.add(0, 9, 8, R.string.menu_view_unfold_all)
+        popup.menu.add(0, 10, 9, R.string.menu_view_toggle_whitespace)
+        popup.menu.add(0, 11, 10, R.string.menu_view_settings)
         popup.setOnMenuItemClickListener { item ->
             when (item.itemId) {
                 1 -> changeEditorFontSize(1f)
@@ -422,6 +573,8 @@ class MainActivity : AppCompatActivity() {
                 7 -> editCode.foldCurrentLevel()
                 8 -> editCode.foldAll()
                 9 -> editCode.unfoldAll()
+                10 -> toggleWhitespace()
+                11 -> startActivity(android.content.Intent(this, SettingsActivity::class.java))
             }
             true
         }
@@ -488,6 +641,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun runProgram() {
         val source = editCode.text.toString()
+        if (AppSettings.isClearConsoleOnRun(this)) RinJobScheduler.clear()
         val job = RinJobScheduler.submit(source)
         if (job == null) {
             Toast.makeText(this, getString(R.string.job_queue_full_toast), Toast.LENGTH_SHORT).show()
@@ -543,7 +697,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun newFile() {
-        editCode.setText("")
+        loadIntoEditor("")
         currentUri = null
         currentProjectFile = null
         currentProjectLibrary = null
@@ -553,14 +707,20 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun saveFile() {
+        if (!hasSaveTarget()) { createDocumentLauncher.launch(suggestedFileName()); return }
+        saveSilently()
+    }
+
+    /** يحفظ إلى الوجهة المعروفة الحالية (ملف مشروع/مكتبة/URI) بلا حوار SAF. false إن لم توجد وجهة أو فشل الحفظ. */
+    private fun saveSilently(): Boolean {
         val projectLibrary = currentProjectLibrary
         val projectFile = currentProjectFile
         val existingUri = currentUri
-        when {
+        return when {
             projectLibrary != null -> saveToProjectLibrary(projectLibrary)
             projectFile != null -> saveToProjectFile(projectFile)
             existingUri != null -> writeToUri(existingUri)
-            else -> createDocumentLauncher.launch(suggestedFileName())
+            else -> false
         }
     }
 
@@ -639,6 +799,62 @@ class MainActivity : AppCompatActivity() {
 
         lineNumbersVisible = AppSettings.getShowLineNumbers(this)
         txtLineNumbers.visibility = if (lineNumbersVisible) android.view.View.VISIBLE else android.view.View.GONE
+
+        applyInterfaceSettings()
+    }
+
+    /** شريط الأدوات، الكونسول، تخطيط المحرر، وإبقاء الشاشة مضاءة — كلها من شاشة الإعدادات. */
+    private fun applyInterfaceSettings() {
+        // "شريط الأدوات" = صف الهوية (شعار/اسم الملف/اختصارات) فقط. صف القوائم File/Edit/View/Run يبقى دائمًا
+        // كي لا يفقد المستخدم الحفظ والتشغيل حين يُخفي الشريط.
+        val header = if (AppSettings.isShowToolbar(this)) View.VISIBLE else View.GONE
+        findViewById<View>(R.id.editorHeaderRow).visibility = header
+        findViewById<View>(R.id.editorHeaderDivider).visibility = header
+
+        // قياسي: محرر 3 : كونسول 2 — مضغوط: 4 : 1 — تركيز: بلا كونسول أصلًا (وكذلك إن عُطِّل "إظهار الطرفية").
+        val layout = AppSettings.getEditorLayout(this)
+        val console = if (AppSettings.isShowConsole(this) && layout != AppSettings.LAYOUT_FOCUS) View.VISIBLE else View.GONE
+        for (id in listOf(R.id.editorConsoleDivider, R.id.editorConsoleRoot, R.id.rvJobs)) {
+            findViewById<View>(id).visibility = console
+        }
+        val compact = layout == AppSettings.LAYOUT_COMPACT
+        setLayoutWeight(R.id.editorSurface, if (compact) 4f else 3f)
+        setLayoutWeight(R.id.rvJobs, if (compact) 1f else 2f)
+
+        if (AppSettings.isKeepScreenOn(this)) window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        else window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+    }
+
+    private fun setLayoutWeight(viewId: Int, weight: Float) {
+        val view = findViewById<View>(viewId)
+        val params = view.layoutParams as LinearLayout.LayoutParams
+        if (params.weight != weight) {
+            params.weight = weight
+            view.layoutParams = params
+        }
+    }
+
+    private fun toggleWhitespace() {
+        AppSettings.setBoolean(this, AppSettings.Key.SHOW_WHITESPACE, !AppSettings.isShowWhitespace(this))
+        editCode.invalidate()
+    }
+
+    /** يلوّن زر "حساسية الأحرف/regex" بخلفية بارزة عندما يكون أي من الوضعين مفعَّلًا، ليكون
+     *  للمستخدم مؤشر بصري دائم على حالة البحث الحالية، لا مجرد Toast يختفي. */
+    private fun refreshFindModeIndicator(button: ImageButton) {
+        val active = editorController.caseSensitiveSearch || editorController.regexSearch
+        button.setBackgroundResource(if (active) R.drawable.bg_icon_btn_accent else R.drawable.bg_toolbar_btn_ghost)
+    }
+
+    /** يحدّث شريط الحالة الرفيع أسفل المحرر: موضع المؤشر، طول التحديد إن وُجد، وعدد أسطر المستند. */
+    private fun updateStatusBar() {
+        val info = editorController.statusInfo()
+        txtCursorPosition.text = if (info.selectedChars > 0) {
+            getString(R.string.status_cursor_position_selection, info.line, info.col, info.selectedChars)
+        } else {
+            getString(R.string.status_cursor_position, info.line, info.col)
+        }
+        txtDocumentInfo.text = getString(R.string.status_line_count, info.totalLines)
     }
 
     private fun toggleLineNumbers() {
@@ -655,31 +871,48 @@ class MainActivity : AppCompatActivity() {
         AppSettings.setEditorFontSizeSp(this, newSp)
     }
 
-    /** يحفظ محتوى المحرر مباشرة داخل ملف المشروع الحالي (بدون المرور بحوار SAF). */
-    private fun saveToProjectFile(file: RinFile) {
-        try {
+    /**
+     * يجهّز محتوى المحرر للحفظ: يطبّق تحويلات "تنسيق عند الحفظ" (حسب إعدادات الحفظ الحالية —
+     * انظر [AppSettings.saveOptions] و[EditorTextTransforms]) ويحدّث المحرر نفسه إن تغيّر شيء،
+     * حتى يرى المستخدم فورًا ما كُتِب فعليًا في الملف بدل فرق صامت بين الشاشة والقرص.
+     */
+    private fun contentForSave(): String {
+        val original = editCode.text.toString()
+        val transformed = EditorTextTransforms.applyOnSave(original, AppSettings.saveOptions(this))
+        if (transformed != original) loadIntoEditor(transformed)
+        return transformed
+    }
+
+    /** يحفظ محتوى المحرر مباشرة داخل ملف المشروع الحالي (بدون المرور بحوار SAF). يُرجع نجاح العملية. */
+    private fun saveToProjectFile(file: RinFile): Boolean {
+        return try {
             // نكتب مباشرة إلى مسار الملف الحقيقي (file.file) بدل إعادة بنائه من اسمه المجرّد في
             // جذر المشروع — وإلا كان حفظ ملف داخل مجلد فرعي يُنشئ نسخة جديدة في الجذر (أو، الأسوأ،
             // يستبدل محتوى ملف آخر غير مرتبط يحمل نفس الاسم هناك) بدل تحديث الملف الأصلي مكانه.
-            val content = editCode.text.toString()
-            file.file.writeText(content)
+            file.file.writeText(contentForSave())
             val updated = RinFile(file.name, file.file, file.file.length(), file.file.lastModified(), file.relPath)
             currentProjectFile = updated
+            markClean()
             Toast.makeText(this, getString(R.string.file_saved_toast, updated.name), Toast.LENGTH_SHORT).show()
+            true
         } catch (t: Throwable) {
             Toast.makeText(this, "${getString(R.string.file_save_error)}: ${t.message}", Toast.LENGTH_LONG).show()
+            false
         }
     }
 
-    /** يحفظ محتوى المحرر مباشرة داخل ملف المكتبة الحالي (lib/ *.og.rin) بدون المرور بحوار SAF. */
-    private fun saveToProjectLibrary(library: RinLibrary) {
-        val project = currentProject ?: return
-        try {
-            val updated = ProjectManager.writeLibrary(project, library, editCode.text.toString())
+    /** يحفظ محتوى المحرر مباشرة داخل ملف المكتبة الحالي (lib/ *.og.rin) بدون المرور بحوار SAF. يُرجع نجاح العملية. */
+    private fun saveToProjectLibrary(library: RinLibrary): Boolean {
+        val project = currentProject ?: return false
+        return try {
+            val updated = ProjectManager.writeLibrary(project, library, contentForSave())
             currentProjectLibrary = updated
+            markClean()
             Toast.makeText(this, getString(R.string.file_saved_toast, updated.name), Toast.LENGTH_SHORT).show()
+            true
         } catch (t: Throwable) {
             Toast.makeText(this, "${getString(R.string.file_save_error)}: ${t.message}", Toast.LENGTH_LONG).show()
+            false
         }
     }
 
@@ -696,7 +929,7 @@ class MainActivity : AppCompatActivity() {
             contentResolver.openInputStream(uri)?.use { input ->
                 BufferedReader(InputStreamReader(input)).use { reader ->
                     val text = reader.readText()
-                    editCode.setText(text)
+                    loadIntoEditor(text)
                 }
             }
             currentUri = uri
@@ -711,19 +944,22 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun writeToUri(uri: Uri) {
-        try {
+    private fun writeToUri(uri: Uri): Boolean {
+        return try {
             contentResolver.openOutputStream(uri, "wt")?.use { output ->
                 OutputStreamWriter(output).use { writer ->
-                    writer.write(editCode.text.toString())
+                    writer.write(contentForSave())
                 }
             }
             currentUri = uri
+            markClean()
             val name = queryDisplayName(uri) ?: uri.lastPathSegment ?: "program.rin"
             txtFileName.text = name
             Toast.makeText(this, getString(R.string.file_saved_toast, name), Toast.LENGTH_SHORT).show()
+            true
         } catch (t: Throwable) {
             Toast.makeText(this, "${getString(R.string.file_save_error)}: ${t.message}", Toast.LENGTH_LONG).show()
+            false
         }
     }
 
@@ -745,6 +981,7 @@ class MainActivity : AppCompatActivity() {
         // that outlives this Activity; without this the lambda above would keep the destroyed
         // Activity reachable (and every view it holds) for as long as the process stays alive.
         RinExecutionManager.detach()
+        uiHandler.removeCallbacksAndMessages(null)
         super.onDestroy()
     }
 }
