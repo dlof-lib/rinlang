@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- أيقونة "مستكشف المشروع" (لوحة جانبية): مستطيل خارجي + خط عمودي يفصل عموداً جانبياً ضيقاً،
+     بنفس أسلوب الخطوط (stroke) المستخدم في ic_close/ic_chevron_end بدل أيقونة مملوءة. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="16dp"
+    android:height="16dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M4,5 L20,5 L20,19 L4,19 Z" />
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:pathData="M9.5,5 L9.5,19" />
+</vector>
