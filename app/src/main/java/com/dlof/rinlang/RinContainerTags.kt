@@ -115,8 +115,21 @@ object RinContainerTags {
         return stack.lastOrNull()?.line
     }
 
-    /** عنصر واحد في قائمة "بنية الملف": رقم سطره الأصلي، عمق تعشيشه، ونص العرض. */
-    data class OutlineEntry(val lineNumber: Int, val depth: Int, val label: String)
+    /**
+     * عنصر واحد في قائمة "بنية الملف": رقم سطر فتحه، عمق تعشيشه، ونص العرض (سطر الفتح كاملاً).
+     * [endLine] رقم سطر الإغلاق `.end/...` المطابق فعلياً (1-based)، أو null إن كان الوسم لم
+     * يُغلق حتى نهاية الملف بعد (كود قيد الكتابة — نفس تسامح [checkTagBalance]/[buildFoldRegions]
+     * مع الكود غير المكتمل). [childCount] عدد العناصر الفرعية *المباشرة* فقط (عمق أعمق بمستوى
+     * واحد بالضبط، لا كل الأحفاد المتداخلة) المتفرّعة داخل هذا الوسم — يُحسَب مع بناء القائمة
+     * نفسها بلا مسح إضافي، فلا تكلفة أداء زائدة على ملفات كبيرة.
+     */
+    data class OutlineEntry(
+        val lineNumber: Int,
+        val depth: Int,
+        val label: String,
+        val endLine: Int? = null,
+        val childCount: Int = 0
+    )
 
     /**
      * كتلة وسم واحدة قابلة للطيّ (Code Folding) — تُستهلَك من [RinCodeEditorView] لبناء خريطة
@@ -181,26 +194,39 @@ object RinContainerTags {
 
     /**
      * يبني قائمة مسطّحة (بترتيب الظهور في الملف) بكل وسوم الفتح في [text] مع رقم سطرها
-     * الأصلي وعمق تعشيشها، لعرضها في حوار "بنية الملف" (Outline) والتنقّل السريع بينها.
+     * الأصلي، عمق تعشيشها، سطر إغلاقها المطابق ([OutlineEntry.endLine])، وعدد عناصرها الفرعية
+     * المباشرة ([OutlineEntry.childCount])، لعرضها في لوحة "مستكشف المشروع" (تبويب البنية)
+     * والتنقّل السريع بينها.
      * لا يفشل على وسوم غير متوازنة أو غير معروفة: أي سطر لا يطابق وسماً معروفاً، أو `.end/`
      * لا يطابق قمة المكدّس، يُتجاهَل بصمت بدل رمي استثناء — الميزة تبقى مفيدة أثناء الكتابة
-     * حتى قبل اكتمال الملف.
+     * حتى قبل اكتمال الملف (وفي هذه الحالة [OutlineEntry.endLine] يبقى null لذلك الوسم تحديداً).
      */
     fun buildOutline(text: String): List<OutlineEntry> {
-        val entries = mutableListOf<OutlineEntry>()
-        val stack = ArrayDeque<String>()
+        // نسخة قابلة للتعديل أثناء البناء فقط (endLine/childCount يُملآن لاحقاً عند مصادفة
+        // الإغلاق المطابق أو عنصر فرعي جديد)، تُحوَّل إلى [OutlineEntry] غير القابل للتعديل في
+        // النهاية — نفس نتيجة الدالة كما كانت قبل إضافة الحقلين الجديدين، بلا مسح إضافي للنص.
+        data class MutableEntry(val lineNumber: Int, val depth: Int, val label: String, var endLine: Int?, var childCount: Int)
+        data class Open(val tag: String, val entryIndex: Int)
+
+        val entries = mutableListOf<MutableEntry>()
+        val stack = ArrayDeque<Open>()
         text.lines().forEachIndexed { index, rawLine ->
             val trimmed = rawLine.trim()
             val closingName = closingTagNameIn(trimmed)
             if (closingName != null) {
-                if (stack.isNotEmpty() && stack.last() == closingName) stack.removeLast()
+                if (stack.isNotEmpty() && stack.last().tag == closingName) {
+                    val open = stack.removeLast()
+                    entries[open.entryIndex].endLine = index + 1
+                }
                 return@forEachIndexed
             }
             val tag = closingTagFor(trimmed) ?: return@forEachIndexed
-            entries.add(OutlineEntry(lineNumber = index + 1, depth = stack.size, label = trimmed))
-            stack.addLast(tag)
+            val entryIndex = entries.size
+            entries.add(MutableEntry(lineNumber = index + 1, depth = stack.size, label = trimmed, endLine = null, childCount = 0))
+            if (stack.isNotEmpty()) entries[stack.last().entryIndex].childCount++
+            stack.addLast(Open(tag, entryIndex))
         }
-        return entries
+        return entries.map { OutlineEntry(it.lineNumber, it.depth, it.label, it.endLine, it.childCount) }
     }
 }
 
