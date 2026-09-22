@@ -107,11 +107,24 @@
     <string name="upload_media">Subir multimedia</string>
     <string name="delete_file_title">Eliminar archivo</string>
     <string name="delete_file_confirm">¿Eliminar el archivo \"%1$s\"?</string>
-    <string name="file_name_hint">Nombre del archivo (ej.: main.rin)</string>
+    <string name="file_name_hint">Nombre del archivo (ej.: main.rin o layout.indsin)</string>
     <string name="no_files_yet">Aún no hay archivos. Crea uno nuevo, o sube un archivo o multimedia desde tu dispositivo.</string>
     <string name="file_uploaded_toast">Archivo subido: %1$s</string>
     <string name="file_meta_format">%1$s • %2$s</string>
     <string name="no_app_to_open_file">No hay ninguna app instalada que pueda abrir este tipo de archivo</string>
+    <string name="more_actions">Más</string>
+    <string name="action_duplicate">Duplicar</string>
+    <string name="action_move">Mover a...</string>
+    <string name="action_copy_path">Copiar ruta</string>
+    <string name="file_duplicated_toast">Copia creada: %1$s</string>
+    <string name="path_copied_toast">Ruta copiada</string>
+    <string name="move_dialog_title">Mover \"%1$s\" a carpeta</string>
+    <string name="move_root_option">(raíz del proyecto)</string>
+    <string name="move_no_folders">Aún no hay otras carpetas a las que mover este archivo</string>
+    <string name="file_moved_toast">Movido a: %1$s</string>
+    <string name="search_files_hint">🔍 Buscar en los archivos del proyecto...</string>
+    <string name="search_no_results">Sin resultados</string>
+    <string name="search_result_meta_format">%1$s</string>
 
     <!-- Subcarpetas y renombrado -->
     <string name="new_folder_title">Nueva carpeta</string>
