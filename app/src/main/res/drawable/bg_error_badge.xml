@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- دائرة حمراء صغيرة خلف علامة "!" (خطأ صياغة حقيقي عبر rin::Lexer/Parser، انظر
+     FilesActivity.scanForErrors) فوق الزاوية السفلية من أيقونة الملف في مستكشف المشروع. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="oval">
+    <solid android:color="#F14C4C" />
+    <stroke android:width="1dp" android:color="@color/rin_background" />
+</shape>
