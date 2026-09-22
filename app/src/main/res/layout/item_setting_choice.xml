@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- صف اختيار من عدة قيم (أزرار متجاورة): عنوان + تلميح اختياري + صف خيارات يملؤه الكود. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginBottom="8dp"
+    android:background="@drawable/bg_list_card"
+    android:orientation="vertical"
+    android:padding="14dp">
+
+    <TextView
+        android:id="@+id/settingTitle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:textColor="@color/rin_on_toolbar"
+        android:textSize="13.5sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/settingHint"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="2dp"
+        android:textColor="@color/rin_editor_hint"
+        android:textSize="11sp" />
+
+    <LinearLayout
+        android:id="@+id/settingOptions"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:gravity="center"
+        android:orientation="horizontal" />
+</LinearLayout>
