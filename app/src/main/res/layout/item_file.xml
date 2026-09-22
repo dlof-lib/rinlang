@@ -11,14 +11,34 @@
     android:layout_marginBottom="5dp"
     android:padding="12dp">
 
-    <!-- أيقونة الملف: rin/الصورة/الفيديو/شعار اللغة الحقيقي حسب النوع (انظر FileIconResolver) -->
-    <ImageView
-        android:id="@+id/imgFileIcon"
+    <!-- أيقونة الملف: rin/الصورة/الفيديو/شعار اللغة الحقيقي حسب النوع (انظر FileIconResolver)،
+         مع علامة "!" حقيقية (خطأ صياغة فعلي عبر rin::Lexer/Parser، لا مؤشر وهمي — انظر
+         FilesActivity.scanForErrors) تظهر فوق زاويتها السفلية عند الحاجة فقط. -->
+    <FrameLayout
         android:layout_width="42dp"
-        android:layout_height="42dp"
-        android:scaleType="fitCenter"
-        android:src="@drawable/ic_rin_file"
-        android:contentDescription="@null" />
+        android:layout_height="42dp">
+
+        <ImageView
+            android:id="@+id/imgFileIcon"
+            android:layout_width="42dp"
+            android:layout_height="42dp"
+            android:scaleType="fitCenter"
+            android:src="@drawable/ic_rin_file"
+            android:contentDescription="@null" />
+
+        <TextView
+            android:id="@+id/txtErrorBadge"
+            android:layout_width="16dp"
+            android:layout_height="16dp"
+            android:layout_gravity="bottom|end"
+            android:background="@drawable/bg_error_badge"
+            android:gravity="center"
+            android:text="!"
+            android:textColor="@android:color/white"
+            android:textSize="10sp"
+            android:textStyle="bold"
+            android:visibility="gone" />
+    </FrameLayout>
 
     <LinearLayout
         android:layout_width="0dp"
@@ -27,16 +47,35 @@
         android:layout_marginStart="12dp"
         android:orientation="vertical">
 
-        <TextView
-            android:id="@+id/txtFileNameItem"
+        <LinearLayout
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:textSize="15.5sp"
-            android:textStyle="bold"
-            android:fontFamily="monospace"
-            android:textColor="@color/rin_on_toolbar"
-            android:ellipsize="end"
-            android:maxLines="1" />
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+            <TextView
+                android:id="@+id/txtFileNameItem"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textSize="15.5sp"
+                android:textStyle="bold"
+                android:fontFamily="monospace"
+                android:textColor="@color/rin_on_toolbar"
+                android:ellipsize="end"
+                android:maxLines="1" />
+
+            <!-- نقطة "تعديل غير محفوظ" حقيقية (EditorDirtyState — مصدرها MainActivity الفعلي
+                 أثناء التحرير، لا حالة وهمية)، لا تظهر إلا لملف فيه تغيير فعلي لم يُحفَظ بعد. -->
+            <TextView
+                android:id="@+id/txtDirtyDot"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="6dp"
+                android:text="●"
+                android:textColor="@color/rin_accent"
+                android:textSize="10sp"
+                android:visibility="gone" />
+        </LinearLayout>
 
         <TextView
             android:id="@+id/txtFileMeta"
