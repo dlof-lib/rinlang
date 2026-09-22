@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- صف مجلد داخل شجرة "مستكشف المشروع" المدمجة في المحرر (انظر ProjectExplorerAdapter):
+     [سهم توسيع/طي] [أيقونة مجلد] [اسم المجلد]. المسافة البادئة الفعلية (عمق التعشيش) تُضبَط
+     برمجياً عند الربط عبر paddingStart، إذ يتغيّر عمق كل صف حسب موقعه في الشجرة. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:minHeight="42dp"
+    android:orientation="horizontal"
+    android:gravity="center_vertical"
+    android:background="@drawable/bg_icon_btn"
+    android:paddingStart="6dp"
+    android:paddingEnd="10dp">
+
+    <ImageView
+        android:id="@+id/imgExplorerChevron"
+        android:layout_width="16dp"
+        android:layout_height="16dp"
+        android:layout_marginEnd="4dp"
+        android:src="@drawable/ic_chevron_end"
+        android:tint="@color/rin_on_toolbar_dim"
+        android:contentDescription="@null" />
+
+    <ImageView
+        android:layout_width="18dp"
+        android:layout_height="18dp"
+        android:layout_marginEnd="8dp"
+        android:src="@drawable/ic_folder_solid"
+        android:tint="@color/rin_accent"
+        android:contentDescription="@null" />
+
+    <TextView
+        android:id="@+id/txtExplorerFolderName"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:ellipsize="end"
+        android:maxLines="1"
+        android:textSize="13.5sp"
+        android:textStyle="bold"
+        android:textColor="@color/rin_on_toolbar" />
+
+</LinearLayout>
