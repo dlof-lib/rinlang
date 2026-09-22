@@ -100,6 +100,14 @@ object FileIconResolver {
             return
         }
 
+        // 1.6) .indsin -> أيقونة indsin المحلية المخصصة (شاشة + كتل تخطيط)، فوراً وبلا شبكة —
+        //      نفس فلسفة .rin/.illust أعلاه؛ indsin نظام واجهات رسمي داخل Rin (سابقاً Loom)
+        //      لا امتداد ملفات عام يُطلَب من Iconify.
+        if (ext == "indsin") {
+            imageView.setImageResource(R.drawable.ic_indsin_file)
+            return
+        }
+
         // نضع أيقونة افتراضية فوراً (بلا وميض فراغ) بينما يُحضَّر أي شيء أدق بالخلفية.
         imageView.setImageResource(R.drawable.ic_rin_stack)
         // نربط الطلب بالـ ImageView نفسه لتفادي "تسرّب" نتيجة متأخرة لعنصر أعيد تدويره لملف آخر.
