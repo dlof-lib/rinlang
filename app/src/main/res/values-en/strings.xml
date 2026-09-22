@@ -53,6 +53,7 @@
     <string name="menu_file_open">Open…</string>
     <string name="menu_file_save">Save</string>
     <string name="menu_file_projects">Projects</string>
+    <string name="menu_file_export_apk">Export APK</string>
     <string name="menu_edit_undo">Undo</string>
     <string name="menu_edit_redo">Redo</string>
     <string name="menu_edit_find">Find &amp; Replace</string>
@@ -90,6 +91,7 @@
     <string name="menu_run_check_brackets">Check brackets</string>
     <string name="menu_run_check_tags">Check container tags</string>
     <string name="menu_run_auto_run">Auto-run while typing</string>
+    <string name="menu_run_export_apk">Export APK</string>
     <string name="auto_run_enabled_toast">Auto-run enabled — the console refreshes shortly after you stop typing</string>
     <string name="auto_run_disabled_toast">Auto-run disabled</string>
     <string name="snippets_dialog_title">Insert Rin snippet</string>
@@ -105,6 +107,7 @@
     <string name="desc_menu_view">View menu</string>
     <string name="desc_run_quick">Run</string>
     <string name="desc_projects_quick">Projects</string>
+    <string name="desc_export_apk_quick">Export APK</string>
     <string name="editor_hint">Write Rin code here…</string>
     <string name="file_unsaved">untitled.rin</string>
     <string name="file_open_error">Could not open file</string>
@@ -229,6 +232,8 @@ print \"Hello, \" + name + \"!\";
     <string name="more_row_apk_export_subtitle">Export your project as a signed, installable APK</string>
 
     <string name="apk_export_screen_title">Export APK</string>
+    <string name="apk_export_editor_need_project">Open a Rin project in the editor before exporting it as an APK</string>
+    <string name="apk_export_unsaved_file_warning">This free file has unsaved changes; the export will use the latest saved project copy</string>
     <string name="apk_export_terminal_label">rinlang — apk.export</string>
     <string name="apk_export_field_name_label">Displayed app name</string>
     <string name="apk_export_field_name_hint">e.g. Sales App</string>
@@ -255,7 +260,7 @@ print \"Hello, \" + name + \"!\";
     <string name="apk_export_no_entry_error">This project has no .rin files</string>
     <string name="apk_export_icon_load_error">Failed to load the selected icon</string>
     <string name="apk_export_sdk_range_error">Minimum SDK must not exceed the target SDK</string>
-    <string name="apk_export_note_limitation">Note: the resulting package’s home-screen app name and icon stay RinStudio’s own — your project’s real identity shows up inside its run screen after opening it. Signing is real, using both v1 and v2 schemes together (v2 is self-verified automatically, falling back to v1 alone if that fails) for maximum install trust.</string>
+    <string name="apk_export_note_limitation">The app name, package ID, and project files are embedded in the resulting APK. A custom icon replaces the launcher icons in the package. Signing uses an RSA-2048 key stored in Android Keystore on the device.</string>
 
     <string name="more_row_rin_apps_subtitle">Browse every app you\'ve exported before, install, share, or re-export it</string>
     <string name="rin_apps_screen_title">Rin Apps</string>
@@ -347,13 +352,4 @@ print \"Hello, \" + name + \"!\";
     <string name="action_rename_symbol">Rename</string>
     <string name="rename_dialog_title">Rename symbol</string>
     <string name="rename_dialog_hint">New name</string>
-
-    <string name="key_tab">Tab</string>
-    <string name="key_home">Home</string>
-    <string name="key_end">End</string>
-    <string name="key_left">Move left</string>
-    <string name="key_right">Move right</string>
-    <string name="key_up">Move up</string>
-    <string name="key_down">Move down</string>
-    <string name="key_backspace">Backspace</string>
 </resources>
