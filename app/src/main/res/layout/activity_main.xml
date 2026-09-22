@@ -544,4 +544,118 @@
 
     <include layout="@layout/bottom_nav_bar" />
 
+    <!-- ===== لوحة مفاتيح المحرر: صف رموز برمجة شائعة + أسهم تنقل، تظهر فقط عند تركيز المحرر =====
+         آخر عنصر في العمود الرأسي الجذر عمداً: بفضل windowSoftInputMode="adjustResize" لهذا
+         الـActivity (AndroidManifest)، تنكمش نافذة التطبيق بالكامل فوق لوحة مفاتيح النظام عند
+         ظهورها، فيطفو هذا الصف تلقائياً مباشرة فوقها بلا أي حساب WindowInsets يدوي. كل زر
+         focusable="false" حتى لا يسرق تركيز المحرر (editCode) عند اللمس فتختفي اللوحة نفسها. -->
+    <LinearLayout
+        android:id="@+id/editorKeyboardPanel"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:visibility="gone"
+        tools:visibility="visible">
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="@color/rin_divider" />
+
+        <HorizontalScrollView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layoutDirection="ltr"
+            android:scrollbars="none"
+            android:overScrollMode="never"
+            android:background="@color/rin_console_header">
+
+            <LinearLayout
+                android:id="@+id/editorKeyboardPanelRow"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:paddingStart="6dp"
+                android:paddingEnd="6dp"
+                android:paddingTop="4dp"
+                android:paddingBottom="4dp">
+
+                <Button android:id="@+id/btnKeyTab" style="@style/RinEditorKeyButton" android:minWidth="40dp" android:text="@string/key_tab" android:contentDescription="@string/key_tab" />
+                <View style="@style/RinEditorKeyDivider" />
+                <Button android:id="@+id/btnKeyBraceOpen" style="@style/RinEditorKeyButton" android:text="{" android:contentDescription="{" />
+                <Button android:id="@+id/btnKeyBraceClose" style="@style/RinEditorKeyButton" android:text="}" android:contentDescription="}" />
+                <Button android:id="@+id/btnKeyParenOpen" style="@style/RinEditorKeyButton" android:text="(" android:contentDescription="(" />
+                <Button android:id="@+id/btnKeyParenClose" style="@style/RinEditorKeyButton" android:text=")" android:contentDescription=")" />
+                <Button android:id="@+id/btnKeyBracketOpen" style="@style/RinEditorKeyButton" android:text="[" android:contentDescription="[" />
+                <Button android:id="@+id/btnKeyBracketClose" style="@style/RinEditorKeyButton" android:text="]" android:contentDescription="]" />
+                <Button android:id="@+id/btnKeySemicolon" style="@style/RinEditorKeyButton" android:text=";" android:contentDescription=";" />
+                <Button android:id="@+id/btnKeyColon" style="@style/RinEditorKeyButton" android:text=":" android:contentDescription=":" />
+                <Button android:id="@+id/btnKeyDquote" style="@style/RinEditorKeyButton" android:text="&quot;" android:contentDescription="&quot;" />
+                <Button android:id="@+id/btnKeySquote" style="@style/RinEditorKeyButton" android:text="'" android:contentDescription="'" />
+                <Button android:id="@+id/btnKeyLt" style="@style/RinEditorKeyButton" android:text="&lt;" android:contentDescription="&lt;" />
+                <Button android:id="@+id/btnKeyGt" style="@style/RinEditorKeyButton" android:text="&gt;" android:contentDescription="&gt;" />
+                <Button android:id="@+id/btnKeyEq" style="@style/RinEditorKeyButton" android:text="=" android:contentDescription="=" />
+                <Button android:id="@+id/btnKeyPlus" style="@style/RinEditorKeyButton" android:text="+" android:contentDescription="+" />
+                <Button android:id="@+id/btnKeyMinus" style="@style/RinEditorKeyButton" android:text="-" android:contentDescription="-" />
+                <Button android:id="@+id/btnKeyStar" style="@style/RinEditorKeyButton" android:text="*" android:contentDescription="*" />
+                <Button android:id="@+id/btnKeySlash" style="@style/RinEditorKeyButton" android:text="/" android:contentDescription="/" />
+                <Button android:id="@+id/btnKeyPercent" style="@style/RinEditorKeyButton" android:text="%" android:contentDescription="%" />
+                <Button android:id="@+id/btnKeyBang" style="@style/RinEditorKeyButton" android:text="!" android:contentDescription="!" />
+                <Button android:id="@+id/btnKeyAmp" style="@style/RinEditorKeyButton" android:text="&amp;" android:contentDescription="&amp;" />
+                <Button android:id="@+id/btnKeyPipe" style="@style/RinEditorKeyButton" android:text="|" android:contentDescription="|" />
+                <Button android:id="@+id/btnKeyBackslash" style="@style/RinEditorKeyButton" android:text="\\" android:contentDescription="\\" />
+                <Button android:id="@+id/btnKeyBacktick" style="@style/RinEditorKeyButton" android:text="`" android:contentDescription="`" />
+                <Button android:id="@+id/btnKeyTilde" style="@style/RinEditorKeyButton" android:text="~" android:contentDescription="~" />
+                <Button android:id="@+id/btnKeyHash" style="@style/RinEditorKeyButton" android:text="#" android:contentDescription="#" />
+                <Button android:id="@+id/btnKeyAt" style="@style/RinEditorKeyButton" android:text="\@" android:contentDescription="@" />
+                <Button android:id="@+id/btnKeyDollar" style="@style/RinEditorKeyButton" android:text="$" android:contentDescription="$" />
+                <Button android:id="@+id/btnKeyCaret" style="@style/RinEditorKeyButton" android:text="^" android:contentDescription="^" />
+                <Button android:id="@+id/btnKeyUnderscore" style="@style/RinEditorKeyButton" android:text="_" android:contentDescription="_" />
+                <Button android:id="@+id/btnKeyDot" style="@style/RinEditorKeyButton" android:text="." android:contentDescription="." />
+                <Button android:id="@+id/btnKeyComma" style="@style/RinEditorKeyButton" android:text="," android:contentDescription="," />
+                <View style="@style/RinEditorKeyDivider" />
+                <Button android:id="@+id/btnKeyUndo" style="@style/RinEditorKeyButton" android:text="↶" android:contentDescription="@string/action_undo" />
+                <Button android:id="@+id/btnKeyRedo" style="@style/RinEditorKeyButton" android:text="↷" android:contentDescription="@string/action_redo" />
+                <View style="@style/RinEditorKeyDivider" />
+                <Button android:id="@+id/btnKeyHome" style="@style/RinEditorKeyButton" android:minWidth="44dp" android:text="@string/key_home" android:contentDescription="@string/key_home" />
+                <Button android:id="@+id/btnKeyLeft" style="@style/RinEditorKeyButton" android:text="←" android:contentDescription="@string/key_left" />
+                <Button android:id="@+id/btnKeyUp" style="@style/RinEditorKeyButton" android:text="↑" android:contentDescription="@string/key_up" />
+                <Button android:id="@+id/btnKeyDown" style="@style/RinEditorKeyButton" android:text="↓" android:contentDescription="@string/key_down" />
+                <Button android:id="@+id/btnKeyRight" style="@style/RinEditorKeyButton" android:text="→" android:contentDescription="@string/key_right" />
+                <Button android:id="@+id/btnKeyEnd" style="@style/RinEditorKeyButton" android:minWidth="40dp" android:text="@string/key_end" android:contentDescription="@string/key_end" />
+                <Button android:id="@+id/btnKeyBackspace" style="@style/RinEditorKeyButton" android:layout_marginEnd="0dp" android:text="⌫" android:contentDescription="@string/key_backspace" />
+
+            </LinearLayout>
+        </HorizontalScrollView>
+
+        <!-- صف ثانٍ منفصل: كلمات Rin المحجوزة الحقيقية (let/fun/if/container/...)، تُملأ
+             برمجيًا في MainActivity من RinKeywordDocs.allKeywords (نفس مصدر توثيق hover) بدل
+             تكرارها يدويًا هنا — فتبقى القائمة مطابقة دومًا لـrin_lexer.cpp الحقيقي. حبّاتها
+             بلون هوية التطبيق لتمييزها بصريًا عن رموز الترقيم العامة في الصف الأول. -->
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="@color/rin_divider" />
+
+        <HorizontalScrollView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layoutDirection="ltr"
+            android:scrollbars="none"
+            android:overScrollMode="never"
+            android:background="@color/rin_console_header">
+
+            <LinearLayout
+                android:id="@+id/editorKeyboardKeywordsRow"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:paddingStart="6dp"
+                android:paddingEnd="6dp"
+                android:paddingTop="4dp"
+                android:paddingBottom="6dp" />
+        </HorizontalScrollView>
+    </LinearLayout>
 </LinearLayout>
