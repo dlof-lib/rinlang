@@ -53,5 +53,29 @@
     <string name="settings_confirm_exit_hint">Pide confirmación antes de salir.</string>
     <string name="settings_format_save">Formatear al guardar</string>
     <string name="settings_format_save_hint">Prepara el editor para flujos de formato automático al guardar.</string>
+
+    <string name="settings_assist_section_title">Asistencia de edición</string>
+    <string name="settings_saving_section_title">Guardado</string>
+    <string name="settings_run_section_title">Ejecución</string>
+    <string name="settings_interface_section_title">Interfaz</string>
+
+    <string name="settings_trim_trailing">Recortar espacios finales</string>
+    <string name="settings_trim_trailing_hint">Elimina los espacios al final de cada línea al guardar.</string>
+    <string name="settings_final_newline">Línea final</string>
+    <string name="settings_final_newline_hint">Asegura que el archivo termine con una sola línea nueva al guardar.</string>
+    <string name="settings_auto_save">Guardado automático</string>
+    <string name="settings_auto_save_hint">Guarda automáticamente tras dejar de escribir durante este tiempo.</string>
+    <string name="settings_off">Desactivado</string>
+    <string name="settings_seconds_format">%1$ds</string>
+
+    <string name="settings_auto_run">Ejecución automática</string>
+    <string name="settings_auto_run_hint">Vuelve a ejecutar el código automáticamente tras una breve pausa.</string>
+    <string name="settings_clear_console_on_run">Limpiar consola antes de ejecutar</string>
+    <string name="settings_clear_console_on_run_hint">Borra automáticamente el historial anterior en cada nueva ejecución.</string>
+
+    <string name="settings_layout_hint">Estándar: editor más grande con consola. Compacto: más espacio para código. Enfoque: sin consola.</string>
+    <string name="settings_keep_screen_on">Mantener la pantalla encendida</string>
+    <string name="settings_keep_screen_on_hint">Evita que la pantalla se apague mientras usas el editor.</string>
+    <string name="settings_project_sort">Ordenar por</string>
 <string name="settings_language_current">Español 🇪🇸</string><string name="language_picker_title">Elegir idioma</string><string name="language_picker_subtitle">Elige idioma y país</string><string name="language_picker_search">Buscar idioma o país…</string><string name="language_picker_applied">Aplicado: %1$s</string><string name="language_group_arabic">العربية • Países árabes</string><string name="language_group_english">English • Países anglófonos</string><string name="language_group_spanish">Español • Países hispanohablantes</string>
 </resources>
