@@ -123,8 +123,8 @@ class ProjectsActivity : AppCompatActivity() {
     private fun refresh() {
         sortedProjects = ProjectManager.listProjects(this).let { list ->
             when (AppSettings.getProjectSort(this)) {
-                "name" -> list.sortedBy { it.name.lowercase() }
-                "type" -> list.sortedWith(compareBy<Project> { it.type.id }.thenBy { it.name.lowercase() })
+                AppSettings.SORT_NAME -> list.sortedBy { it.name.lowercase() }
+                AppSettings.SORT_TYPE -> list.sortedWith(compareBy<Project> { it.type.id }.thenBy { it.name.lowercase() })
                 else -> list
             }
         }
