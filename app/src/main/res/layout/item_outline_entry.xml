@@ -50,4 +50,21 @@
         android:textColor="@color/rin_on_toolbar_dim"
         android:textSize="11sp" />
 
+    <!-- عدد العناصر الفرعية المباشرة (RinContainerTags.OutlineEntry.childCount) — تظهر فقط
+         للوسوم التي تحوي عنصراً فرعياً واحداً على الأقل. -->
+    <TextView
+        android:id="@+id/outlineChildChip"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="6dp"
+        android:background="@drawable/bg_outline_chip"
+        android:paddingStart="8dp"
+        android:paddingEnd="8dp"
+        android:paddingTop="3dp"
+        android:paddingBottom="3dp"
+        android:textColor="@color/rin_accent"
+        android:textSize="11sp"
+        android:textStyle="bold"
+        android:visibility="gone" />
+
 </LinearLayout>
