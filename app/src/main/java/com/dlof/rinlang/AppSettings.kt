@@ -2,127 +2,211 @@ package com.dlof.rinlang
 
 import android.content.Context
 
-/** Persistent editor/application preferences. */
+/**
+ * تفضيلات المحرر والتطبيق المحفوظة.
+ *
+ * مصدر واحد للحقيقة: كل مفتاح منطقي يُعرَّف مرة واحدة في [Key]، وقيمته الافتراضية مرة واحدة في
+ * [BOOL_DEFAULTS] (أو ثابت مسمّى لغير المنطقي). لذلك [resetToDefaults] مجرد مسح للتفضيلات —
+ * غياب المفتاح يعني القيمة الافتراضية — بدل إعادة سرد كل قيمة يدويًا (وهو ما كان يتفرّع عن
+ * القيم الفعلية كلما أُضيف إعداد جديد).
+ *
+ * كل إعداد هنا له مستهلِك حقيقي في الكود؛ لا تُضِف مفتاحًا لا يقرؤه أحد.
+ */
 object AppSettings {
     const val MIN_FONT_SIZE_SP = 10f
     const val MAX_FONT_SIZE_SP = 22f
-    // خُفِّض الحجم الافتراضي من 17f إلى 13f لمظهر محرر أكثر إحكامًا وأصغر حجمًا (أسطر كود أكثر
-    // ظهورًا على الشاشة دفعة واحدة)، مع إبقاء التكبير/التصغير من الإعدادات كما هو دون تغيير حدوده.
+    // خُفِّض الحجم الافتراضي من 17f إلى 13f لمظهر محرر أكثر إحكامًا (أسطر كود أكثر ظهورًا في الشاشة).
     const val DEFAULT_FONT_SIZE_SP = 13f
     const val DEFAULT_SHOW_LINE_NUMBERS = true
 
+    const val DEFAULT_TAB_SIZE = 4
+    const val MIN_TAB_SIZE = 2
+    const val MAX_TAB_SIZE = 8
+
+    /** قيم "تخطيط المحرر" المسموحة (تُخزَّن كنص). */
+    const val LAYOUT_STANDARD = "standard"
+    const val LAYOUT_FOCUS = "focus"
+    const val LAYOUT_COMPACT = "compact"
+
+    /** قيم ترتيب المشاريع. */
+    const val SORT_RECENT = "recent"
+    const val SORT_NAME = "name"
+    const val SORT_TYPE = "type"
+
+    /** الحفظ التلقائي بعد التوقف عن الكتابة، بالميلي ثانية؛ 0 = معطّل. */
+    val AUTO_SAVE_DELAYS_MS = listOf(0, 2_000, 5_000, 10_000)
+
+    /** مفاتيح التخزين — عامة كي تبني شاشة الإعدادات صفوفها منها مباشرة. */
+    object Key {
+        const val FONT_SIZE = "editor_font_size_sp"
+        const val LINE_NUMBERS = "show_line_numbers"
+        const val TAB_SIZE = "tab_size"
+        const val SHOW_WHITESPACE = "show_whitespace"
+        const val CURRENT_LINE = "current_line_highlight"
+        const val SMOOTH_CURSOR = "smooth_cursor"
+
+        const val SYNTAX = "syntax_highlighting"
+        const val BRACKETS = "bracket_matching"
+        const val LIVE_DIAGNOSTICS = "live_diagnostics"
+        const val AUTOCOMPLETE = "autocomplete"
+        const val AUTO_CLOSE = "auto_close_brackets"
+        const val AUTO_INDENT = "auto_indent"
+
+        const val SAVE_ON_PAUSE = "save_on_pause"
+        const val AUTO_SAVE_DELAY = "auto_save_delay_ms"
+        const val CONFIRM_EXIT = "confirm_exit"
+        const val FORMAT_ON_SAVE = "format_on_save"
+        const val TRIM_TRAILING = "trim_trailing_whitespace"
+        const val FINAL_NEWLINE = "ensure_final_newline"
+
+        const val AUTO_RUN = "auto_run_on_type"
+        const val CLEAR_CONSOLE_ON_RUN = "clear_console_on_run"
+
+        const val THEME_MODE = "theme_mode"
+        const val EDITOR_LAYOUT = "editor_layout"
+        const val SHOW_TOOLBAR = "show_toolbar"
+        const val SHOW_CONSOLE = "show_console"
+        const val KEEP_SCREEN_ON = "keep_screen_on"
+        const val HAPTIC = "haptic_feedback"
+
+        const val PROJECT_SORT = "project_sort"
+    }
+
+    /** القيمة الافتراضية لكل إعداد منطقي. أي مفتاح منطقي غير مذكور هنا افتراضيه false. */
+    private val BOOL_DEFAULTS: Map<String, Boolean> = mapOf(
+        Key.LINE_NUMBERS to DEFAULT_SHOW_LINE_NUMBERS,
+        Key.SHOW_WHITESPACE to false,
+        Key.CURRENT_LINE to true,
+        Key.SMOOTH_CURSOR to true,
+        Key.SYNTAX to true,
+        Key.BRACKETS to true,
+        Key.LIVE_DIAGNOSTICS to true,
+        Key.AUTOCOMPLETE to true,
+        Key.AUTO_CLOSE to true,
+        Key.AUTO_INDENT to true,
+        Key.SAVE_ON_PAUSE to true,
+        Key.CONFIRM_EXIT to false,
+        Key.FORMAT_ON_SAVE to false,
+        Key.TRIM_TRAILING to false,
+        Key.FINAL_NEWLINE to false,
+        // تشغيل تلقائي: معطّل افتراضيًا حتى لا يمتلئ طابور العمل بمحاولات تشغيل لم يطلبها المستخدم.
+        Key.AUTO_RUN to false,
+        Key.CLEAR_CONSOLE_ON_RUN to false,
+        Key.SHOW_TOOLBAR to true,
+        Key.SHOW_CONSOLE to true,
+        Key.KEEP_SCREEN_ON to false,
+        Key.HAPTIC to true
+    )
+
     private const val PREFS_NAME = "rin_app_settings"
-    private const val KEY_FONT_SIZE = "editor_font_size_sp"
-    private const val KEY_SHOW_LINE_NUMBERS = "show_line_numbers"
-    private const val KEY_SYNTAX = "syntax_highlighting"
-    private const val KEY_BRACKETS = "bracket_matching"
-    private const val KEY_LIVE_DIAGNOSTICS = "live_diagnostics"
-    private const val KEY_AUTOCOMPLETE = "autocomplete"
-    private const val KEY_AUTO_CLOSE = "auto_close_brackets"
-    private const val KEY_AUTO_INDENT = "auto_indent"
-    private const val KEY_WORD_WRAP = "word_wrap"
-    private const val KEY_WHITESPACE = "show_whitespace"
-    private const val KEY_CURRENT_LINE = "current_line_highlight"
-    private const val KEY_SMOOTH_CURSOR = "smooth_cursor"
-    private const val KEY_MINIMAP = "minimap"
-    private const val KEY_TAB_SIZE = "tab_size"
-    private const val KEY_HAPTIC = "haptic_feedback"
-    private const val KEY_SAVE_PAUSE = "save_on_pause"
-    private const val KEY_CONFIRM_EXIT = "confirm_exit"
-    private const val KEY_FORMAT_SAVE = "format_on_save"
-    private const val KEY_THEME_MODE = "theme_mode"
-    private const val KEY_EDITOR_LAYOUT = "editor_layout"
-    private const val KEY_PROJECT_SORT = "project_sort"
-    private const val KEY_SHOW_CONSOLE = "show_console"
-    private const val KEY_SHOW_TOOLBAR = "show_toolbar"
-    private const val KEY_AUTO_RUN = "auto_run_on_type"
 
     private fun prefs(context: Context) =
         context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
-    fun getEditorFontSizeSp(context: Context) = prefs(context).getFloat(KEY_FONT_SIZE, DEFAULT_FONT_SIZE_SP).coerceIn(MIN_FONT_SIZE_SP, MAX_FONT_SIZE_SP)
-    fun setEditorFontSizeSp(context: Context, value: Float) = prefs(context).edit().putFloat(KEY_FONT_SIZE, value.coerceIn(MIN_FONT_SIZE_SP, MAX_FONT_SIZE_SP)).apply()
-    fun getShowLineNumbers(context: Context) = prefs(context).getBoolean(KEY_SHOW_LINE_NUMBERS, DEFAULT_SHOW_LINE_NUMBERS)
-    fun setShowLineNumbers(context: Context, value: Boolean) = prefs(context).edit().putBoolean(KEY_SHOW_LINE_NUMBERS, value).apply()
+    // ---- وصول عام بالمفتاح (تستعمله شاشة الإعدادات) ----------------------------------------
 
-    fun isSyntaxHighlighting(context: Context) = prefs(context).getBoolean(KEY_SYNTAX, true)
-    fun setSyntaxHighlighting(context: Context, v: Boolean) = put(context, KEY_SYNTAX, v)
-    fun isBracketMatching(context: Context) = prefs(context).getBoolean(KEY_BRACKETS, true)
-    fun setBracketMatching(context: Context, v: Boolean) = put(context, KEY_BRACKETS, v)
+    fun getBoolean(context: Context, key: String): Boolean =
+        prefs(context).getBoolean(key, BOOL_DEFAULTS[key] ?: false)
+
+    fun setBoolean(context: Context, key: String, value: Boolean) {
+        prefs(context).edit().putBoolean(key, value).apply()
+    }
+
+    private fun getString(context: Context, key: String, default: String, allowed: Set<String>): String {
+        val stored = prefs(context).getString(key, default) ?: default
+        return if (stored in allowed) stored else default
+    }
+
+    private fun setString(context: Context, key: String, value: String) {
+        prefs(context).edit().putString(key, value).apply()
+    }
+
+    // ---- المحرر ---------------------------------------------------------------------------
+
+    fun getEditorFontSizeSp(context: Context): Float =
+        prefs(context).getFloat(Key.FONT_SIZE, DEFAULT_FONT_SIZE_SP).coerceIn(MIN_FONT_SIZE_SP, MAX_FONT_SIZE_SP)
+
+    fun setEditorFontSizeSp(context: Context, value: Float) {
+        prefs(context).edit().putFloat(Key.FONT_SIZE, value.coerceIn(MIN_FONT_SIZE_SP, MAX_FONT_SIZE_SP)).apply()
+    }
+
+    fun getShowLineNumbers(context: Context) = getBoolean(context, Key.LINE_NUMBERS)
+    fun setShowLineNumbers(context: Context, value: Boolean) = setBoolean(context, Key.LINE_NUMBERS, value)
+
+    fun getTabSize(context: Context): Int =
+        prefs(context).getInt(Key.TAB_SIZE, DEFAULT_TAB_SIZE).coerceIn(MIN_TAB_SIZE, MAX_TAB_SIZE)
+
+    fun setTabSize(context: Context, value: Int) {
+        prefs(context).edit().putInt(Key.TAB_SIZE, value.coerceIn(MIN_TAB_SIZE, MAX_TAB_SIZE)).apply()
+    }
+
+    fun isShowWhitespace(context: Context) = getBoolean(context, Key.SHOW_WHITESPACE)
+    fun isCurrentLineHighlight(context: Context) = getBoolean(context, Key.CURRENT_LINE)
+    fun isSmoothCursor(context: Context) = getBoolean(context, Key.SMOOTH_CURSOR)
+
+    // ---- المساعدة أثناء الكتابة -------------------------------------------------------------
+
+    fun isSyntaxHighlighting(context: Context) = getBoolean(context, Key.SYNTAX)
+    fun isBracketMatching(context: Context) = getBoolean(context, Key.BRACKETS)
     /** تشخيص أخطاء الصياغة الحي: خط متعرّج تحت الأخطاء/التحذيرات أثناء الكتابة (rin::Lexer + rin::Parser). */
-    fun isLiveDiagnostics(context: Context) = prefs(context).getBoolean(KEY_LIVE_DIAGNOSTICS, true)
-    fun setLiveDiagnostics(context: Context, v: Boolean) = put(context, KEY_LIVE_DIAGNOSTICS, v)
-    fun isAutocomplete(context: Context) = prefs(context).getBoolean(KEY_AUTOCOMPLETE, true)
-    fun setAutocomplete(context: Context, v: Boolean) = put(context, KEY_AUTOCOMPLETE, v)
-    fun isAutoCloseBrackets(context: Context) = prefs(context).getBoolean(KEY_AUTO_CLOSE, true)
-    fun setAutoCloseBrackets(context: Context, v: Boolean) = put(context, KEY_AUTO_CLOSE, v)
-    fun isAutoIndent(context: Context) = prefs(context).getBoolean(KEY_AUTO_INDENT, true)
-    fun setAutoIndent(context: Context, v: Boolean) = put(context, KEY_AUTO_INDENT, v)
-    fun isWordWrap(context: Context) = prefs(context).getBoolean(KEY_WORD_WRAP, false)
-    fun setWordWrap(context: Context, v: Boolean) = put(context, KEY_WORD_WRAP, v)
-    fun isShowWhitespace(context: Context) = prefs(context).getBoolean(KEY_WHITESPACE, false)
-    fun setShowWhitespace(context: Context, v: Boolean) = put(context, KEY_WHITESPACE, v)
-    fun isCurrentLineHighlight(context: Context) = prefs(context).getBoolean(KEY_CURRENT_LINE, true)
-    fun setCurrentLineHighlight(context: Context, v: Boolean) = put(context, KEY_CURRENT_LINE, v)
-    fun isSmoothCursor(context: Context) = prefs(context).getBoolean(KEY_SMOOTH_CURSOR, true)
-    fun setSmoothCursor(context: Context, v: Boolean) = put(context, KEY_SMOOTH_CURSOR, v)
-    fun isMinimap(context: Context) = prefs(context).getBoolean(KEY_MINIMAP, false)
-    fun setMinimap(context: Context, v: Boolean) = put(context, KEY_MINIMAP, v)
-    fun getTabSize(context: Context) = prefs(context).getInt(KEY_TAB_SIZE, 4).coerceIn(2, 8)
-    fun setTabSize(context: Context, v: Int) = prefs(context).edit().putInt(KEY_TAB_SIZE, v.coerceIn(2, 8)).apply()
-    fun isHapticFeedback(context: Context) = prefs(context).getBoolean(KEY_HAPTIC, true)
-    fun setHapticFeedback(context: Context, v: Boolean) = put(context, KEY_HAPTIC, v)
-    fun isSaveOnPause(context: Context) = prefs(context).getBoolean(KEY_SAVE_PAUSE, true)
-    fun setSaveOnPause(context: Context, v: Boolean) = put(context, KEY_SAVE_PAUSE, v)
-    fun isConfirmExit(context: Context) = prefs(context).getBoolean(KEY_CONFIRM_EXIT, false)
-    fun setConfirmExit(context: Context, v: Boolean) = put(context, KEY_CONFIRM_EXIT, v)
-    fun isFormatOnSave(context: Context) = prefs(context).getBoolean(KEY_FORMAT_SAVE, false)
-    fun setFormatOnSave(context: Context, v: Boolean) = put(context, KEY_FORMAT_SAVE, v)
+    fun isLiveDiagnostics(context: Context) = getBoolean(context, Key.LIVE_DIAGNOSTICS)
+    fun isAutocomplete(context: Context) = getBoolean(context, Key.AUTOCOMPLETE)
+    fun isAutoCloseBrackets(context: Context) = getBoolean(context, Key.AUTO_CLOSE)
+    fun isAutoIndent(context: Context) = getBoolean(context, Key.AUTO_INDENT)
 
-    fun getThemeMode(context: Context) = prefs(context).getString(KEY_THEME_MODE, "system") ?: "system"
-    fun setThemeMode(context: Context, value: String) = prefs(context).edit().putString(KEY_THEME_MODE, value).apply()
-    fun getEditorLayout(context: Context) = prefs(context).getString(KEY_EDITOR_LAYOUT, "standard") ?: "standard"
-    fun setEditorLayout(context: Context, value: String) = prefs(context).edit().putString(KEY_EDITOR_LAYOUT, value).apply()
-    fun getProjectSort(context: Context) = prefs(context).getString(KEY_PROJECT_SORT, "recent") ?: "recent"
-    fun setProjectSort(context: Context, value: String) = prefs(context).edit().putString(KEY_PROJECT_SORT, value).apply()
-    fun isShowConsole(context: Context) = prefs(context).getBoolean(KEY_SHOW_CONSOLE, true)
-    fun setShowConsole(context: Context, v: Boolean) = put(context, KEY_SHOW_CONSOLE, v)
-    fun isShowToolbar(context: Context) = prefs(context).getBoolean(KEY_SHOW_TOOLBAR, true)
-    fun setShowToolbar(context: Context, v: Boolean) = put(context, KEY_SHOW_TOOLBAR, v)
-    /** تشغيل تلقائي (live output): يُعيد تنفيذ الكود في الطابور بعد توقّف قصير عن الكتابة،
-     *  بدل انتظار ضغط زر Run. مُعطَّل افتراضياً حتى لا يفاجَأ المستخدمون الحاليون بطابور
-     *  عمل يمتلئ بمحاولات تشغيل لم يطلبوها صراحةً. */
-    fun isAutoRunEnabled(context: Context) = prefs(context).getBoolean(KEY_AUTO_RUN, false)
-    fun setAutoRunEnabled(context: Context, v: Boolean) = put(context, KEY_AUTO_RUN, v)
+    // ---- الحفظ ----------------------------------------------------------------------------
 
-    private fun put(context: Context, key: String, value: Boolean) = prefs(context).edit().putBoolean(key, value).apply()
+    fun isSaveOnPause(context: Context) = getBoolean(context, Key.SAVE_ON_PAUSE)
+    fun isConfirmExit(context: Context) = getBoolean(context, Key.CONFIRM_EXIT)
+    fun isFormatOnSave(context: Context) = getBoolean(context, Key.FORMAT_ON_SAVE)
+    fun isTrimTrailingWhitespace(context: Context) = getBoolean(context, Key.TRIM_TRAILING)
+    fun isEnsureFinalNewline(context: Context) = getBoolean(context, Key.FINAL_NEWLINE)
 
+    fun getAutoSaveDelayMs(context: Context): Int {
+        val stored = prefs(context).getInt(Key.AUTO_SAVE_DELAY, 0)
+        return if (stored in AUTO_SAVE_DELAYS_MS) stored else 0
+    }
+
+    fun setAutoSaveDelayMs(context: Context, value: Int) {
+        prefs(context).edit().putInt(Key.AUTO_SAVE_DELAY, if (value in AUTO_SAVE_DELAYS_MS) value else 0).apply()
+    }
+
+    /** خيارات تحويل النص عند الحفظ مجمَّعة من الإعدادات الحالية. */
+    fun saveOptions(context: Context) = EditorTextTransforms.SaveOptions(
+        format = isFormatOnSave(context),
+        trimTrailingWhitespace = isTrimTrailingWhitespace(context),
+        ensureFinalNewline = isEnsureFinalNewline(context),
+        tabSize = getTabSize(context)
+    )
+
+    // ---- التشغيل --------------------------------------------------------------------------
+
+    /** تشغيل تلقائي (live output): يُعيد تنفيذ الكود في الطابور بعد توقّف قصير عن الكتابة. */
+    fun isAutoRunEnabled(context: Context) = getBoolean(context, Key.AUTO_RUN)
+    fun isClearConsoleOnRun(context: Context) = getBoolean(context, Key.CLEAR_CONSOLE_ON_RUN)
+
+    // ---- الواجهة --------------------------------------------------------------------------
+
+    fun getThemeMode(context: Context) = getString(context, Key.THEME_MODE, ThemeManager.SYSTEM, ThemeManager.MODES)
+    fun setThemeMode(context: Context, value: String) = setString(context, Key.THEME_MODE, value)
+
+    fun getEditorLayout(context: Context) =
+        getString(context, Key.EDITOR_LAYOUT, LAYOUT_STANDARD, setOf(LAYOUT_STANDARD, LAYOUT_FOCUS, LAYOUT_COMPACT))
+    fun setEditorLayout(context: Context, value: String) = setString(context, Key.EDITOR_LAYOUT, value)
+
+    fun isShowToolbar(context: Context) = getBoolean(context, Key.SHOW_TOOLBAR)
+    fun isShowConsole(context: Context) = getBoolean(context, Key.SHOW_CONSOLE)
+    fun isKeepScreenOn(context: Context) = getBoolean(context, Key.KEEP_SCREEN_ON)
+    fun isHapticFeedback(context: Context) = getBoolean(context, Key.HAPTIC)
+
+    // ---- المشاريع -------------------------------------------------------------------------
+
+    fun getProjectSort(context: Context) =
+        getString(context, Key.PROJECT_SORT, SORT_RECENT, setOf(SORT_RECENT, SORT_NAME, SORT_TYPE))
+    fun setProjectSort(context: Context, value: String) = setString(context, Key.PROJECT_SORT, value)
+
+    /** يمسح كل التفضيلات فتعود جميعها إلى قيمها الافتراضية (غياب المفتاح = الافتراضي). */
     fun resetToDefaults(context: Context) {
-        prefs(context).edit().clear()
-            .putFloat(KEY_FONT_SIZE, DEFAULT_FONT_SIZE_SP)
-            .putBoolean(KEY_SHOW_LINE_NUMBERS, DEFAULT_SHOW_LINE_NUMBERS)
-            .putBoolean(KEY_SYNTAX, true)
-            .putBoolean(KEY_BRACKETS, true)
-            .putBoolean(KEY_LIVE_DIAGNOSTICS, true)
-            .putBoolean(KEY_AUTOCOMPLETE, true)
-            .putBoolean(KEY_AUTO_CLOSE, true)
-            .putBoolean(KEY_AUTO_INDENT, true)
-            .putBoolean(KEY_WORD_WRAP, false)
-            .putBoolean(KEY_WHITESPACE, false)
-            .putBoolean(KEY_CURRENT_LINE, true)
-            .putBoolean(KEY_SMOOTH_CURSOR, true)
-            .putBoolean(KEY_MINIMAP, false)
-            .putInt(KEY_TAB_SIZE, 4)
-            .putBoolean(KEY_HAPTIC, true)
-            .putBoolean(KEY_SAVE_PAUSE, true)
-            .putBoolean(KEY_CONFIRM_EXIT, false)
-            .putBoolean(KEY_FORMAT_SAVE, false)
-            .putString(KEY_THEME_MODE, "system")
-            .putString(KEY_EDITOR_LAYOUT, "standard")
-            .putString(KEY_PROJECT_SORT, "recent")
-            .putBoolean(KEY_SHOW_CONSOLE, true)
-            .putBoolean(KEY_SHOW_TOOLBAR, true)
-            .putBoolean(KEY_AUTO_RUN, false)
-            .apply()
+        prefs(context).edit().clear().apply()
     }
 }
