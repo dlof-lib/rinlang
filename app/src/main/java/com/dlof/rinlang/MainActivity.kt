@@ -460,7 +460,14 @@ class MainActivity : AppCompatActivity() {
 
     private fun hasUnsavedChanges(): Boolean = editCode.text.toString() != savedSnapshot
 
-    private fun markClean() { savedSnapshot = editCode.text.toString() }
+    private fun markClean() {
+        savedSnapshot = editCode.text.toString()
+        // انصهار كل مسارات الحفظ في نقطة واحدة: أي حفظ ناجح (يدوي/تلقائي/onPause) يمر من هنا،
+        // فهذا المكان الوحيد الكافي لإزالة علامة "تعديل غير محفوظ" الحقيقية من مستكشف المشروع.
+        val proj = currentProject
+        val file = currentProjectFile
+        if (proj != null && file != null) EditorDirtyState.unmark(proj.name, file.relPath)
+    }
 
     /** هل للمحرر وجهة حفظ معروفة (ملف مشروع/مكتبة/URI)؟ الملف الجديد بلا وجهة يحتاج حوار SAF فلا يُحفَظ صامتًا. */
     private fun hasSaveTarget(): Boolean =
@@ -477,6 +484,11 @@ class MainActivity : AppCompatActivity() {
     private fun onEditorTextChanged() {
         scheduleLivePreviewPush()
         if (programmaticChange) return
+        // تعديل حقيقي من المستخدم (لا فتح ملف برمجياً): علِّم الملف "غير محفوظ" فوراً لمستكشف
+        // المشروع (EditorDirtyState)، حتى قبل أن يمرّ التهدئة القصيرة للحفظ التلقائي.
+        val proj = currentProject
+        val file = currentProjectFile
+        if (proj != null && file != null) EditorDirtyState.mark(proj.name, file.relPath)
         scheduleAutoSave()
         scheduleAutoRun()
     }
