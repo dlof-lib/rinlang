@@ -93,6 +93,12 @@ class RinCodeEditorView @JvmOverloads constructor(
         textSize = textPaint.textSize
         isFakeBoldText = true
     }
+    // علامات المسافات/التبويبات (إعداد "Whitespace markers"): نقطة للمسافة وسهم للتبويب بلون التعليقات الباهت.
+    private val whitespacePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = ContextCompat.getColor(context, R.color.syntax_comment)
+        alpha = 110
+        strokeWidth = max(1f, resources.displayMetrics.density)
+    }
 
     // --- نظام تلوين الصيغة النحوية الموحَّد (Unified Syntax Palette) --------------------
     // ست هويات لونية ثابتة فقط، كل واحدة تمثّل "مفهوماً" واحداً في الكود، معرَّفة مركزياً في
@@ -195,6 +201,12 @@ class RinCodeEditorView @JvmOverloads constructor(
     private val visibleLinesChangeListeners = mutableListOf<() -> Unit>()
     fun addVisibleLinesChangeListener(listener: () -> Unit) { visibleLinesChangeListeners.add(listener) }
     private fun notifyVisibleLinesChanged() { for (l in visibleLinesChangeListeners) l() }
+
+    /** مستمعو "تغيّر حالة المؤشر/التحديد" — يُستدعَون من [afterEngineMutation] في كل تعديل/تحريك
+     *  مؤشر، ليعرض المستدعي (مثال: شريط حالة "Ln X, Col Y") الموضع الحالي بلا استقصاء مستمر. */
+    private val cursorStateChangeListeners = mutableListOf<() -> Unit>()
+    fun addCursorStateChangeListener(listener: () -> Unit) { cursorStateChangeListeners.add(listener) }
+    private fun notifyCursorStateChanged() { for (l in cursorStateChangeListeners) l() }
 
     /** يعيد بناء ذاكرتي التلوين والتشخيص معًا من المحرك — نقطة واحدة بدل تكرار نفس الحلقتين
      *  في init/afterEngineMutation/setLanguage (كانت التشخيصات غائبة تمامًا سابقًا). [text] يُمرَّر
@@ -565,6 +577,7 @@ class RinCodeEditorView @JvmOverloads constructor(
         if (changed) requestLayout()
         invalidate()
         scrollCursorIntoView()
+        notifyCursorStateChanged()
     }
 
     /**
@@ -725,6 +738,8 @@ class RinCodeEditorView @JvmOverloads constructor(
         val sel = engine.getSelection()
         val highlightsByLine = cachedHighlightsByLine
         val bracketInfo = if (AppSettings.isBracketMatching(context)) cachedBracketInfo else null
+        val showWhitespace = AppSettings.isShowWhitespace(context)
+        val clip = canvas.clipBounds
 
         var y = paddingTop.toFloat()
         for (line in visibleLines) {
@@ -773,6 +788,11 @@ class RinCodeEditorView @JvmOverloads constructor(
             // النص الملوَّن نحويًا
             drawHighlightedLine(canvas, lineText, if (AppSettings.isSyntaxHighlighting(context)) highlightsByLine[line] else null, paddingLeft.toFloat(), baseline)
 
+            // علامات المسافات (للأسطر الظاهرة فقط، حتى لا يكلّف الملف الكبير رسمًا لا يراه أحد)
+            if (showWhitespace && lineText.isNotEmpty() && y + lineHeight >= clip.top && y <= clip.bottom) {
+                drawWhitespaceMarkers(canvas, lineText, y)
+            }
+
             // خط تشخيص الأخطاء الحي المتعرّج (تحت النص مباشرة، فوق تظليلات الخلفية أعلاه ولا يغطّي الحروف)
             cachedDiagnosticsByLine[line]?.let { diags ->
                 for (d in diags) {
@@ -809,6 +829,26 @@ class RinCodeEditorView @JvmOverloads constructor(
             }
 
             y += lineHeight
+        }
+    }
+
+    /** نقطة صغيرة وسط كل مسافة، وسهم أفقي لكل تبويب (الخط أحادي العرض، فموضع الخلية = العمود × charWidth). */
+    private fun drawWhitespaceMarkers(canvas: Canvas, lineText: String, top: Float) {
+        val centerY = top + lineHeight / 2f
+        val dotRadius = max(1f, charWidth * 0.11f)
+        for (col in lineText.indices) {
+            val cellLeft = paddingLeft + col * charWidth
+            when (lineText[col]) {
+                ' ' -> canvas.drawCircle(cellLeft + charWidth / 2f, centerY, dotRadius, whitespacePaint)
+                '\t' -> {
+                    val from = cellLeft + charWidth * 0.15f
+                    val to = cellLeft + charWidth * 0.85f
+                    val head = charWidth * 0.2f
+                    canvas.drawLine(from, centerY, to, centerY, whitespacePaint)
+                    canvas.drawLine(to - head, centerY - head, to, centerY, whitespacePaint)
+                    canvas.drawLine(to - head, centerY + head, to, centerY, whitespacePaint)
+                }
+            }
         }
     }
 
@@ -1436,6 +1476,71 @@ class RinCodeEditorView @JvmOverloads constructor(
     fun checkBracketBalance(): Int = engine.checkBracketBalance()
     fun lineCount(): Int = engine.lineCount()
 
+    /** موضع المؤشر الحالي (1-based للعرض) وطول التحديد الحالي إن وُجد — لشريط الحالة. */
+    data class StatusInfo(val line: Int, val col: Int, val totalLines: Int, val selectedChars: Int)
+    fun statusInfo(): StatusInfo {
+        val cur = engine.getCursor()
+        val sel = engine.getSelection()
+        val selected = if (sel.hasSelection) textOfSelection(sel).length else 0
+        return StatusInfo(cur.line + 1, cur.col + 1, engine.lineCount(), selected)
+    }
+
+    /**
+     * يرتّب الأسطر التي يشملها التحديد الحالي أبجديًا تصاعديًا (أو كل أسطر المستند إن لم يوجد
+     * تحديد متعدد الأسطر) — استبدال كامل عبر [RinNativeEditor.replaceRange] فيبقى قابلاً للتراجع
+     * كأي تعديل آخر. يُرجع false إن لم يتغيّر الترتيب أصلاً (لتفادي إدخال غير ضروري في سجل التراجع).
+     */
+    fun sortLines(): Boolean {
+        val sel = engine.getSelection()
+        val totalLines = engine.lineCount()
+        val (from, to) = if (sel.hasSelection && sel.end.line > sel.start.line) sel.start.line to sel.end.line
+                          else 0 to totalLines - 1
+        if (to <= from) return false
+        val original = (from..to).map { engine.getLine(it) }
+        val sorted = original.sorted()
+        if (sorted == original) return false
+        val lastLineLen = engine.getLine(to).length
+        engine.replaceRange(from, 0, to, lastLineLen, sorted.joinToString("\n"))
+        afterEngineMutation()
+        return true
+    }
+
+    /**
+     * يدمج السطر التالي في نهاية سطر المؤشر الحالي (حذف فاصل السطر بينهما)، ويقلّص المسافات
+     * البادئة للسطر المدموج إلى مسافة واحدة فقط — تمامًا كأمر "Join Lines" المعتاد في محررات الكود.
+     */
+    fun joinCurrentLine(): Boolean {
+        val cur = engine.getCursor()
+        if (cur.line >= engine.lineCount() - 1) return false
+        val currentLine = engine.getLine(cur.line)
+        val nextLine = engine.getLine(cur.line + 1)
+        val trimmedNext = nextLine.trimStart()
+        val joiner = if (currentLine.isNotEmpty() && trimmedNext.isNotEmpty()) " " else ""
+        val joinCol = currentLine.length
+        engine.replaceRange(cur.line, currentLine.length, cur.line + 1, nextLine.length, joiner + trimmedNext)
+        engine.setCursor(cur.line, joinCol, false)
+        afterEngineMutation()
+        return true
+    }
+
+    /** يطبّق [transform] على كامل نص المستند عبر استبدال واحد قابل للتراجع؛ false إن لم يتغيّر شيء. */
+    private fun applyDocumentTransform(transform: (String) -> String): Boolean {
+        val original = engine.getText()
+        val transformed = transform(original)
+        if (transformed == original) return false
+        val lastLine = engine.lineCount() - 1
+        val lastLineLen = engine.getLine(lastLine).length
+        engine.replaceRange(0, 0, lastLine, lastLineLen, transformed)
+        afterEngineMutation()
+        return true
+    }
+
+    /** حذف فوري للمسافات الزائدة في نهاية كل سطر (بخلاف الإعداد المكافئ، هذا يعمل الآن فورًا بضغطة قائمة). */
+    fun trimTrailingWhitespaceNow(): Boolean = applyDocumentTransform { EditorTextTransforms.trimTrailingWhitespace(it) }
+
+    /** تحويل فوري لكل التبويبات البادئة في المستند إلى مسافات حسب [tabSize]. */
+    fun convertTabsToSpacesNow(tabSize: Int): Boolean = applyDocumentTransform { EditorTextTransforms.leadingTabsToSpaces(it, tabSize) }
+
     /** يُدرج [textToInsert] عند المؤشر (مستبدلاً أي تحديد حالي) بلا سلوك "ذكي" (بلا إغلاق أقواس تلقائي). */
     fun insertAtCursor(textToInsert: String) {
         engine.insertText(textToInsert, smart = false)
@@ -1451,10 +1556,43 @@ class RinCodeEditorView @JvmOverloads constructor(
         return yOfLine(pos.line)
     }
 
+    /**
+     * كل مطابقة نص للبحث: إمّا مباشرة عبر محرك C++ (بحث حرفي)، أو محسوبة هنا بـ[Regex] كوتلن على
+     * كل سطر — لا حاجة لتعديل المحرك الأصلي لدعم التعابير النمطية. نمط غير صالح يُعيد قائمة فارغة
+     * بدل رمي استثناء يُسقط المحرر (انظر [isValidPattern] لتمييز "غير صالح" عن "لا تطابقات").
+     */
+    private fun computeMatches(query: String, caseSensitive: Boolean, regex: Boolean): List<RinNativeEditor.FindMatch> {
+        if (query.isEmpty()) return emptyList()
+        if (!regex) return engine.findAll(query, caseSensitive)
+        val pattern = compileRegex(query, caseSensitive) ?: return emptyList()
+        val out = ArrayList<RinNativeEditor.FindMatch>()
+        for (line in 0 until engine.lineCount()) {
+            val lineText = engine.getLine(line)
+            for (m in pattern.findAll(lineText)) {
+                if (m.range.isEmpty() && m.value.isEmpty()) continue // تطابق فارغ (مثال: "a*") لا معنى لتحديده
+                out.add(RinNativeEditor.FindMatch(line, m.range.first, m.range.last + 1))
+            }
+        }
+        return out
+    }
+
+    private fun compileRegex(query: String, caseSensitive: Boolean): Regex? = try {
+        Regex(query, if (caseSensitive) emptySet() else setOf(RegexOption.IGNORE_CASE))
+    } catch (e: java.util.regex.PatternSyntaxException) {
+        null
+    }
+
+    /** true إن كان [query] (في وضع regex) نمطًا صالحًا أو نصًا حرفيًا عاديًا (دائمًا صالح). لعرض تنبيه فوري في الشريط. */
+    fun isValidPattern(query: String, regex: Boolean): Boolean =
+        query.isEmpty() || !regex || compileRegex(query, false) != null
+
+    /** واجهة عامة لـ[computeMatches] لأجل تظليل كل التطابقات (المتحكم لا يصل إلى [engine] مباشرة في وضع regex). */
+    fun findAllForHighlight(query: String, caseSensitive: Boolean, regex: Boolean): List<RinNativeEditor.FindMatch> =
+        computeMatches(query, caseSensitive, regex)
+
     /** يحدّد التطابق التالي لـ[query] بعد المؤشر (بحث دائري)؛ يُرجع النجاح، ويعيد y بالبكسل عند النجاح. */
-    fun findNext(query: String, caseSensitive: Boolean): Int? {
-        if (query.isEmpty()) return null
-        val matches = engine.findAll(query, caseSensitive)
+    fun findNext(query: String, caseSensitive: Boolean, regex: Boolean = false): Int? {
+        val matches = computeMatches(query, caseSensitive, regex)
         if (matches.isEmpty()) return null
         val cur = engine.getCursor()
         val next = matches.firstOrNull { it.line > cur.line || (it.line == cur.line && it.startCol >= cur.col) } ?: matches.first()
@@ -1464,9 +1602,8 @@ class RinCodeEditorView @JvmOverloads constructor(
         return yOfLine(next.line)
     }
 
-    fun findPrevious(query: String, caseSensitive: Boolean): Int? {
-        if (query.isEmpty()) return null
-        val matches = engine.findAll(query, caseSensitive)
+    fun findPrevious(query: String, caseSensitive: Boolean, regex: Boolean = false): Int? {
+        val matches = computeMatches(query, caseSensitive, regex)
         if (matches.isEmpty()) return null
         val cur = engine.getCursor()
         val prev = matches.lastOrNull { it.line < cur.line || (it.line == cur.line && it.endCol <= cur.col) } ?: matches.last()
@@ -1477,24 +1614,25 @@ class RinCodeEditorView @JvmOverloads constructor(
     }
 
     /** يستبدل التحديد الحالي إن كان يطابق [query] بالضبط، ثم ينتقل للتطابق التالي. */
-    fun replaceOne(query: String, replacement: String, caseSensitive: Boolean) {
+    fun replaceOne(query: String, replacement: String, caseSensitive: Boolean, regex: Boolean = false) {
         if (query.isEmpty()) return
         val sel = engine.getSelection()
         if (sel.hasSelection) {
             val selectedText = textOfSelection(sel)
-            val matchesQuery = if (caseSensitive) selectedText == query else selectedText.equals(query, ignoreCase = true)
+            val matchesQuery = if (regex) {
+                compileRegex(query, caseSensitive)?.matches(selectedText) == true
+            } else if (caseSensitive) selectedText == query else selectedText.equals(query, ignoreCase = true)
             if (matchesQuery) {
                 engine.replaceRange(sel.start.line, sel.start.col, sel.end.line, sel.end.col, replacement)
                 afterEngineMutation()
             }
         }
-        findNext(query, caseSensitive)
+        findNext(query, caseSensitive, regex)
     }
 
     /** يستبدل كل تطابقات [query] بـ[replacement]؛ يُرجع عدد الاستبدالات. */
-    fun replaceAll(query: String, replacement: String, caseSensitive: Boolean): Int {
-        if (query.isEmpty()) return 0
-        val matches = engine.findAll(query, caseSensitive)
+    fun replaceAll(query: String, replacement: String, caseSensitive: Boolean, regex: Boolean = false): Int {
+        val matches = computeMatches(query, caseSensitive, regex)
         // طبّق من الأخير للأول حتى لا تتغيّر إحداثيات التطابقات السابقة مع كل استبدال
         for (m in matches.asReversed()) {
             engine.replaceRange(m.line, m.startCol, m.line, m.endCol, replacement)
@@ -1504,9 +1642,8 @@ class RinCodeEditorView @JvmOverloads constructor(
     }
 
     /** فهرس (1-based) التطابق عند/بعد المؤشر، وإجمالي عدد التطابقات — لعرض "N/M". */
-    fun matchInfo(query: String, caseSensitive: Boolean): Pair<Int, Int> {
-        if (query.isEmpty()) return 0 to 0
-        val matches = engine.findAll(query, caseSensitive)
+    fun matchInfo(query: String, caseSensitive: Boolean, regex: Boolean = false): Pair<Int, Int> {
+        val matches = computeMatches(query, caseSensitive, regex)
         if (matches.isEmpty()) return 0 to 0
         val cur = engine.getCursor()
         val idx = matches.indexOfFirst { it.line > cur.line || (it.line == cur.line && it.startCol >= cur.col) }
