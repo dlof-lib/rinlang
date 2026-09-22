@@ -1,7 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<!-- الجذر أصبح DrawerLayout بدل LinearLayout مباشر: يحوي محتوى المحرر كما كان تماماً
+     (drawerMainContent) بالإضافة إلى لوحة "مستكشف المشروع" (view_project_explorer.xml) كدرج
+     جانبي مدمج، بدل الانتقال إلى شاشة FilesActivity منفصلة لتصفّح ملفات/مجلدات المشروع أو
+     لعرض شجرة الحاويات (انظر MainActivity.drawerLayout / btnExplorer / showOutlineDialog). -->
+<androidx.drawerlayout.widget.DrawerLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/drawerLayout"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+<LinearLayout
+    android:id="@+id/drawerMainContent"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
@@ -85,6 +96,18 @@
                 android:layout_marginEnd="8dp"
                 android:visibility="gone"
                 app:rinSpinnerStrokeWidth="2.5dp" />
+
+            <!-- يفتح لوحة "مستكشف المشروع" المدمجة (شجرة الملفات/المجلدات + شجرة الحاويات)
+                 كدرج جانبي فوق المحرر، بدل الانتقال إلى شاشة منفصلة (انظر MainActivity.drawerLayout). -->
+            <ImageButton
+                android:id="@+id/btnExplorer"
+                android:layout_width="30dp"
+                android:layout_height="30dp"
+                android:padding="6dp"
+                android:layout_marginEnd="6dp"
+                android:src="@drawable/ic_explorer"
+                android:contentDescription="@string/desc_explorer_quick"
+                android:background="@drawable/bg_icon_btn" />
 
             <ImageButton
                 android:id="@+id/btnProjects"
@@ -659,3 +682,10 @@
         </HorizontalScrollView>
     </LinearLayout>
 </LinearLayout>
+
+    <!-- لوحة "مستكشف المشروع" (ملفات/مجلدات + بنية الحاويات) كدرج جانبي مدمج في المحرر نفسه. -->
+    <include
+        android:id="@+id/explorerPanel"
+        layout="@layout/view_project_explorer" />
+
+</androidx.drawerlayout.widget.DrawerLayout>
