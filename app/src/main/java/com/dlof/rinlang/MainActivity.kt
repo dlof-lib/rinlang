@@ -26,6 +26,9 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import androidx.core.view.GravityCompat
+import androidx.core.view.isVisible
+import androidx.drawerlayout.widget.DrawerLayout
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.R as MaterialR
@@ -85,6 +88,25 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var editorController: RinCodeEditorController
     private lateinit var jobAdapter: RinJobAdapter
+
+    // --- درج "مستكشف المشروع" المدمج في المحرر (view_project_explorer.xml داخل DrawerLayout
+    // في activity_main.xml): شجرة ملفات/مجلدات + شجرة بنية الحاويات، بدل شاشة FilesActivity
+    // منفصلة أو حوار AlertDialog منفصل لكل منهما. انظر setupExplorerDrawer(). ---
+    private lateinit var drawerLayout: DrawerLayout
+    private lateinit var btnExplorer: ImageButton
+    private lateinit var txtExplorerProjectName: TextView
+    private lateinit var btnExplorerClose: ImageButton
+    private lateinit var btnExplorerTabFiles: TextView
+    private lateinit var btnExplorerTabOutline: TextView
+    private lateinit var rvExplorerFiles: RecyclerView
+    private lateinit var rvExplorerOutline: RecyclerView
+    private lateinit var txtExplorerEmpty: TextView
+    private lateinit var btnExplorerOpenProjects: TextView
+    private lateinit var explorerFilesAdapter: ProjectExplorerAdapter
+    /** مسارات المجلدات (relPath) الموسَّعة حالياً في شجرة المستكشف؛ تُصفَّر بإعادة إنشاء الشاشة. */
+    private val expandedExplorerFolders = mutableSetOf<String>()
+    /** true = تبويب "الملفات" ظاهر حالياً في الدرج، false = تبويب "البنية" (الحاويات). */
+    private var explorerShowingFiles = true
 
     /** URI of the file currently open, if any. Null means "unsaved / new file". */
     private var currentUri: Uri? = null
@@ -158,6 +180,17 @@ class MainActivity : AppCompatActivity() {
         scrollEditor = findViewById(R.id.scrollEditor)
         txtCursorPosition = findViewById(R.id.txtCursorPosition)
         txtDocumentInfo = findViewById(R.id.txtDocumentInfo)
+
+        drawerLayout = findViewById(R.id.drawerLayout)
+        btnExplorer = findViewById(R.id.btnExplorer)
+        txtExplorerProjectName = findViewById(R.id.txtExplorerProjectName)
+        btnExplorerClose = findViewById(R.id.btnExplorerClose)
+        btnExplorerTabFiles = findViewById(R.id.btnExplorerTabFiles)
+        btnExplorerTabOutline = findViewById(R.id.btnExplorerTabOutline)
+        rvExplorerFiles = findViewById(R.id.rvExplorerFiles)
+        rvExplorerOutline = findViewById(R.id.rvExplorerOutline)
+        txtExplorerEmpty = findViewById(R.id.txtExplorerEmpty)
+        btnExplorerOpenProjects = findViewById(R.id.btnExplorerOpenProjects)
 
         applyStoredEditorSettings()
         RinLogoLoadingOverlay.setProgress(0.34f)
@@ -336,6 +369,7 @@ class MainActivity : AppCompatActivity() {
         btnMenuLibraries.setOnClickListener { openLibrariesScreen() }
 
         setupEditorKeyboardPanel()
+        setupExplorerDrawer()
 
         // زر الرجوع: يسأل قبل المغادرة فقط عند تفعيل "تأكيد قبل الخروج" ووجود تعديلات غير محفوظة.
         backCallback = object : OnBackPressedCallback(true) {
@@ -531,7 +565,154 @@ class MainActivity : AppCompatActivity() {
         RinJobScheduler.submit(source) // الطابور ممتلئ → يُتجاهَل بصمت (هذا تشغيل لم يطلبه المستخدم صراحةً)
     }
 
+    // ---- درج "مستكشف المشروع" المدمج: شجرة الملفات/المجلدات + شجرة بنية الحاويات -----------
+
+    /**
+     * يهيّئ درج "مستكشف المشروع" (view_project_explorer.xml داخل DrawerLayout في
+     * activity_main.xml) مرة واحدة: شجرة ملفات حقيقية عبر [ProjectExplorerAdapter] في تبويب
+     * "الملفات"، وشجرة بنية الحاويات (نفس [OutlineDialogAdapter] الذي كان يُستخدَم سابقاً داخل
+     * حوار [showOutlineDialog] فقط) في تبويب "البنية" — كلاهما الآن داخل المحرر نفسه بلا أي
+     * Activity أو Dialog منفصل.
+     */
+    private fun setupExplorerDrawer() {
+        txtExplorerProjectName.text = currentProject?.name ?: getString(R.string.file_unsaved)
+
+        explorerFilesAdapter = ProjectExplorerAdapter(
+            onFolderToggled = { folder ->
+                if (!expandedExplorerFolders.add(folder.relPath)) expandedExplorerFolders.remove(folder.relPath)
+                refreshExplorerFiles()
+            },
+            onFileClicked = { file -> openProjectFileFromExplorer(file) }
+        )
+        rvExplorerFiles.layoutManager = LinearLayoutManager(this)
+        rvExplorerFiles.adapter = explorerFilesAdapter
+        rvExplorerOutline.layoutManager = LinearLayoutManager(this)
+
+        btnExplorer.setOnClickListener { openExplorerDrawer(preferOutlineTab = false) }
+        btnExplorerClose.setOnClickListener { drawerLayout.closeDrawer(GravityCompat.START) }
+        btnExplorerTabFiles.setOnClickListener { switchExplorerTab(showFiles = true) }
+        btnExplorerTabOutline.setOnClickListener { switchExplorerTab(showFiles = false) }
+        btnExplorerOpenProjects.setOnClickListener {
+            startActivity(android.content.Intent(this, ProjectsActivity::class.java))
+        }
+
+        // يعيد بناء التبويب الظاهر حالياً في كل مرة يُفتَح فيها الدرج (زر شريط الأدوات، أو
+        // سحبة إصبع من حافة الشاشة)، حتى يعكس أي تعديل حدث بعد آخر فتح (كتابة تجعل ملفاً "متسخاً"،
+        // حفظ يزيل العلامة، إلخ) دون الحاجة لتحديث حيّ مكلف مع كل ضغطة مفتاح.
+        drawerLayout.addDrawerListener(object : DrawerLayout.SimpleDrawerListener() {
+            override fun onDrawerOpened(drawerView: View) {
+                if (explorerShowingFiles) refreshExplorerFiles() else refreshExplorerOutline()
+            }
+        })
+    }
+
+    private fun openExplorerDrawer(preferOutlineTab: Boolean) {
+        switchExplorerTab(showFiles = !preferOutlineTab)
+        drawerLayout.openDrawer(GravityCompat.START)
+    }
+
+    private fun switchExplorerTab(showFiles: Boolean) {
+        explorerShowingFiles = showFiles
+        rvExplorerFiles.isVisible = showFiles
+        rvExplorerOutline.isVisible = !showFiles
+        btnExplorerTabFiles.setBackgroundResource(if (showFiles) R.drawable.bg_explorer_tab_selected else R.drawable.bg_menubar_btn)
+        btnExplorerTabFiles.setTextColor(ContextCompat.getColor(this, if (showFiles) R.color.rin_on_toolbar else R.color.rin_on_toolbar_dim))
+        btnExplorerTabOutline.setBackgroundResource(if (!showFiles) R.drawable.bg_explorer_tab_selected else R.drawable.bg_menubar_btn)
+        btnExplorerTabOutline.setTextColor(ContextCompat.getColor(this, if (!showFiles) R.color.rin_on_toolbar else R.color.rin_on_toolbar_dim))
+        if (showFiles) refreshExplorerFiles() else refreshExplorerOutline()
+    }
+
+    /**
+     * يعيد بناء شجرة الملفات/المجلدات من القرص فعلياً في كل مرة (لا كاش وسيط) حتى تعكس أي تعديل
+     * خارجي (رفع ملف، إنشاء مجلد من شاشة "الملفات" الكاملة...) فوراً عند فتح الدرج. في وضع
+     * "الملف الحر" (بلا مشروع، عبر SAF) تُستبدَل الشجرة برسالة توضيحية بدل قائمة فارغة صامتة.
+     */
+    private fun refreshExplorerFiles() {
+        val project = currentProject
+        txtExplorerEmpty.isVisible = false
+        btnExplorerOpenProjects.isVisible = false
+        if (project == null) {
+            rvExplorerFiles.isVisible = false
+            txtExplorerEmpty.text = getString(R.string.explorer_no_project)
+            txtExplorerEmpty.isVisible = true
+            btnExplorerOpenProjects.isVisible = true
+            return
+        }
+        val nodes = ProjectExplorerTree.build(project, expandedExplorerFolders)
+        explorerFilesAdapter.submit(nodes, currentProjectFile?.relPath, EditorDirtyState.dirtyPaths(project.name))
+        if (nodes.isEmpty()) {
+            rvExplorerFiles.isVisible = false
+            txtExplorerEmpty.text = getString(R.string.explorer_empty_folder)
+            txtExplorerEmpty.isVisible = true
+        } else {
+            rvExplorerFiles.isVisible = true
+        }
+    }
+
+    /** يعيد بناء شجرة بنية الحاويات ([RinContainerTags.buildOutline]) لنص المحرر الحالي — بنفس
+     *  البيانات التي كانت تُعرَض سابقاً داخل حوار [showOutlineDialog] فقط. */
+    private fun refreshExplorerOutline() {
+        val entries = editorController.buildOutline()
+        btnExplorerOpenProjects.isVisible = false
+        if (entries.isEmpty()) {
+            rvExplorerOutline.isVisible = false
+            txtExplorerEmpty.text = getString(R.string.explorer_outline_empty)
+            txtExplorerEmpty.isVisible = true
+            return
+        }
+        txtExplorerEmpty.isVisible = false
+        rvExplorerOutline.isVisible = true
+        rvExplorerOutline.adapter = OutlineDialogAdapter(
+            entries = entries,
+            lineLabel = { line -> "(" + getString(R.string.outline_line_format, line) + ")" },
+            onEntryClick = { entry ->
+                editorController.goToLine(entry.lineNumber)
+                drawerLayout.closeDrawer(GravityCompat.START)
+            }
+        )
+    }
+
+    /**
+     * يفتح ملف مشروع آخر مباشرة في نفس نسخة [MainActivity] الحالية — هذا صلب طلب الدمج: قبل هذا
+     * التعديل كان أي نقر على ملف في شاشة "الملفات" يفتح Activity جديدة بالكامل عبر Intent
+     * ([FilesActivity] → EXTRA_PROJECT_NAME/EXTRA_FILE_NAME). يسأل أولاً عن التعديلات غير
+     * المحفوظة بنفس حوار [onBackRequested] وخياراته الثلاثة (إلغاء/تجاهل/حفظ)، ثم يحمّل نص
+     * الملف الجديد ويحدّث اسم/لغة المحرر وشريط الحالة، ويصفّر [currentProjectLibrary] لأن
+     * المستكشف يفتح ملفات .rin عادية فقط (لا مكتبات lib/*.og.rin).
+     */
+    private fun openProjectFileFromExplorer(file: RinFile) {
+        if (currentProjectLibrary == null && currentProjectFile?.relPath == file.relPath) {
+            drawerLayout.closeDrawer(GravityCompat.START)
+            return
+        }
+        fun proceed() {
+            currentProjectLibrary = null
+            currentProjectFile = file
+            loadIntoEditor(ProjectManager.readFile(file))
+            txtFileName.text = file.name
+            editorController.setLanguage(extensionOf(file.name))
+            updateStatusBar()
+            drawerLayout.closeDrawer(GravityCompat.START)
+            refreshExplorerFiles()
+        }
+        if (hasUnsavedChanges() && hasSaveTarget()) {
+            AlertDialog.Builder(this)
+                .setTitle(R.string.exit_unsaved_title)
+                .setMessage(R.string.exit_unsaved_message)
+                .setNegativeButton(R.string.exit_unsaved_stay, null)
+                .setPositiveButton(R.string.exit_unsaved_discard) { _, _ -> proceed() }
+                .setNeutralButton(R.string.exit_unsaved_save) { _, _ -> if (saveSilently()) proceed() }
+                .show()
+        } else {
+            proceed()
+        }
+    }
+
     private fun onBackRequested() {
+        if (drawerLayout.isDrawerOpen(GravityCompat.START)) {
+            drawerLayout.closeDrawer(GravityCompat.START)
+            return
+        }
         if (!AppSettings.isConfirmExit(this) || !hasUnsavedChanges()) { leaveEditor(); return }
         val builder = AlertDialog.Builder(this)
             .setTitle(R.string.exit_unsaved_title)
@@ -702,39 +883,12 @@ class MainActivity : AppCompatActivity() {
      * سطرها وعمق تعشيشها، والنقر على أي عنصر يقفز إليه مباشرة عبر
      * [RinCodeEditorController.goToLine] — تنقّل أسرع من التمرير اليدوي في الملفات الطويلة.
      *
-     * كل صف مُصنَّف ومُلوَّن حسب نوع وسمه (حاوية/عرض/ثيم/عنصر/لوب/كائن/قسم) ومتّصل بخطوط إرشاد
-     * شجرية حقيقية بعمق التعشيش الفعلي ([OutlineDialogAdapter]، [OutlineTreeGuideView]) بدل
-     * سطر نصي مسطّح بمسافات بادئة يدوية. لاحظ أيضاً استخدام `AlertDialog.Builder(this)` مباشرة
-     * (بلا ContextThemeWrapper بثيم Material العام) كي يرث الحوار بطاقة bg_dialog_card الموحَّدة
-     * (Theme.RinLang.AlertDialog) التي تستخدمها بقية حوارات التطبيق، بدل حوار النظام المسطّح.
+     * كانت هذه الشجرة تُعرَض سابقاً داخل [AlertDialog] منفصل قائم بذاته. الآن تُعرَض داخل تبويب
+     * "البنية" في درج "مستكشف المشروع" المدمج في المحرر نفسه (انظر [openExplorerDrawer]،
+     * [refreshExplorerOutline]) بدل نافذة منبثقة منفصلة، فيبقى المستخدم داخل سياق المحرر دائماً.
      */
     private fun showOutlineDialog() {
-        val entries = editorController.buildOutline()
-        if (entries.isEmpty()) {
-            Toast.makeText(this, getString(R.string.outline_empty_toast), Toast.LENGTH_SHORT).show()
-            return
-        }
-        val content = layoutInflater.inflate(R.layout.dialog_outline_content, null) as MaxHeightFrameLayout
-        content.maxHeightPx = (resources.displayMetrics.heightPixels * 0.55f).toInt()
-        val recyclerView = content.findViewById<RecyclerView>(R.id.outlineRecyclerView)
-        recyclerView.layoutManager = LinearLayoutManager(this)
-
-        var dialog: AlertDialog? = null
-        recyclerView.adapter = OutlineDialogAdapter(
-            entries = entries,
-            lineLabel = { line -> "(" + getString(R.string.outline_line_format, line) + ")" },
-            onEntryClick = { entry ->
-                editorController.goToLine(entry.lineNumber)
-                dialog?.dismiss()
-            }
-        )
-
-        dialog = AlertDialog.Builder(this)
-            .setTitle(R.string.outline_dialog_title)
-            .setView(content)
-            .setNegativeButton(R.string.go_to_line_cancel) { d, _ -> d.dismiss() }
-            .create()
-        dialog.show()
+        openExplorerDrawer(preferOutlineTab = true)
     }
 
     private fun showRunMenu(anchor: android.view.View) {
