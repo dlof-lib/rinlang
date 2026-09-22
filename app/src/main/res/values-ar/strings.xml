@@ -106,6 +106,8 @@
     <string name="explorer_empty_folder">هذا المجلد فارغ.</string>
     <string name="explorer_outline_empty">لا توجد كتل @container أو Section أو Translations.</string>
     <string name="explorer_current_file_badge">مفتوح</string>
+    <string name="outline_line_range_format">الأسطر %1$d–%2$d</string>
+    <string name="outline_child_count_format">%1$d فرعي</string>
     <string name="tags_balanced_toast">وسوم الحاويات متوازنة ✓</string>
     <string name="tags_unbalanced_toast">وسم حاوية غير متوازن قرب السطر %1$d</string>
     <string name="new_file_name">untitled.rin</string>
