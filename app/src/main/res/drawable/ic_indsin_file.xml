@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- أيقونة ملفات .indsin (واجهات/تخطيطات indsin — سابقاً Loom): شاشة جهاز مبسّطة تحوي شريط
+     علوي وكتلتي محتوى، بلون هوية التطبيق rin_accent (#7C5CFF) نفسه المستخدم في كل شارات
+     "الرسمي" الأخرى، إشارةً إلى أن indsin نظام أساسي في Rin لا مجرد امتداد ملفات عرضي.
+     تُستخدم في FileIconResolver لملفات .indsin مباشرة بلا أي طلب شبكة، بنفس أسلوب ic_illust_file. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- إطار الشاشة الخارجي -->
+    <path
+        android:strokeColor="#7C5CFF"
+        android:strokeWidth="1.6"
+        android:pathData="M4,4.5 L20,4.5 L20,19.5 L4,19.5 Z" />
+    <!-- الشريط العلوي (شريط عنوان/تنقّل داخل الواجهة) -->
+    <path android:fillColor="#7C5CFF" android:pathData="M5.4,5.9 L18.6,5.9 L18.6,8.3 L5.4,8.3 Z" />
+    <!-- كتلة محتوى يسرى (مكوّن) -->
+    <path android:fillColor="#B3A0FF" android:pathData="M5.4,9.9 L11.2,9.9 L11.2,18.1 L5.4,18.1 Z" />
+    <!-- كتلتا محتوى يمنى (مكوّنان أصغر مكدّسان) -->
+    <path android:fillColor="#B3A0FF" android:pathData="M12.6,9.9 L18.6,9.9 L18.6,13.6 L12.6,13.6 Z" />
+    <path android:fillColor="#B3A0FF" android:pathData="M12.6,15 L18.6,15 L18.6,18.1 L12.6,18.1 Z" />
+</vector>
