@@ -4,10 +4,12 @@ import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.provider.OpenableColumns
 import android.text.Editable
 import android.text.TextWatcher
 import android.view.ContextThemeWrapper
+import android.view.KeyEvent
 import android.view.View
 import android.view.WindowManager
 import android.widget.Button
@@ -30,6 +32,7 @@ import com.google.android.material.R as MaterialR
 import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.io.OutputStreamWriter
+import kotlin.math.roundToInt
 
 /**
  * IDE-style activity for the Rin language:
@@ -65,6 +68,8 @@ class MainActivity : AppCompatActivity() {
     private var currentProjectLibrary: RinLibrary? = null
 
     private lateinit var editCode: RinCodeEditorView
+    /** شريط رموز البرمجة/الأسهم أسفل المحرر (activity_main.xml)؛ يظهر فقط عند تركيز [editCode]. */
+    private lateinit var editorKeyboardPanel: LinearLayout
     private lateinit var txtLineNumbers: TextView
     private lateinit var txtEngineVersion: TextView
     private lateinit var txtFileName: TextView
@@ -330,11 +335,110 @@ class MainActivity : AppCompatActivity() {
         btnMenuRun.setOnClickListener { showRunMenu(it) }
         btnMenuLibraries.setOnClickListener { openLibrariesScreen() }
 
+        setupEditorKeyboardPanel()
+
         // زر الرجوع: يسأل قبل المغادرة فقط عند تفعيل "تأكيد قبل الخروج" ووجود تعديلات غير محفوظة.
         backCallback = object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() = onBackRequested()
         }
         onBackPressedDispatcher.addCallback(this, backCallback)
+    }
+
+    // ---- لوحة مفاتيح المحرر: شريط رموز برمجة شائعة + أسهم تنقل ------------------------------
+
+    /**
+     * يربط كل زر في [R.id.editorKeyboardPanel] (activity_main.xml) إمّا بإدراج نصّه عند مؤشر
+     * [editCode] مباشرة ([insertEditorSymbol]، بلا إغلاق أقواس تلقائي — تمامًا كالكتابة اليدوية)
+     * أو بمحاكاة ضغطة مفتاح فعلي ([sendEditorKey]) لمفاتيح التنقل/Tab/Backspace التي يتعامل معها
+     * [RinCodeEditorView.onKeyDown] أصلاً (نفس مسار لوحة مفاتيح خارجية بلوتوث). اللوحة نفسها
+     * تظهر/تختفي تبعًا لتركيز [editCode] فقط: أزرارها كلها focusable="false" حتى لا تسرق التركيز
+     * منه عند اللمس (وإلا اختفت اللوحة قبل تنفيذ الضغطة).
+     */
+    private fun setupEditorKeyboardPanel() {
+        editorKeyboardPanel = findViewById(R.id.editorKeyboardPanel)
+
+        val symbolButtons = listOf(
+            R.id.btnKeyBraceOpen to "{", R.id.btnKeyBraceClose to "}",
+            R.id.btnKeyParenOpen to "(", R.id.btnKeyParenClose to ")",
+            R.id.btnKeyBracketOpen to "[", R.id.btnKeyBracketClose to "]",
+            R.id.btnKeySemicolon to ";", R.id.btnKeyColon to ":",
+            R.id.btnKeyDquote to "\"", R.id.btnKeySquote to "'",
+            R.id.btnKeyLt to "<", R.id.btnKeyGt to ">",
+            R.id.btnKeyEq to "=", R.id.btnKeyPlus to "+", R.id.btnKeyMinus to "-",
+            R.id.btnKeyStar to "*", R.id.btnKeySlash to "/", R.id.btnKeyPercent to "%",
+            R.id.btnKeyBang to "!", R.id.btnKeyAmp to "&", R.id.btnKeyPipe to "|",
+            R.id.btnKeyBackslash to "\\", R.id.btnKeyBacktick to "`", R.id.btnKeyTilde to "~",
+            R.id.btnKeyHash to "#", R.id.btnKeyAt to "@", R.id.btnKeyDollar to "$",
+            R.id.btnKeyCaret to "^", R.id.btnKeyUnderscore to "_",
+            R.id.btnKeyDot to ".", R.id.btnKeyComma to ","
+        )
+        symbolButtons.forEach { (id, symbol) ->
+            findViewById<Button>(id).setOnClickListener { insertEditorSymbol(symbol) }
+        }
+
+        val navButtons = listOf(
+            R.id.btnKeyTab to KeyEvent.KEYCODE_TAB,
+            R.id.btnKeyHome to KeyEvent.KEYCODE_MOVE_HOME,
+            R.id.btnKeyLeft to KeyEvent.KEYCODE_DPAD_LEFT,
+            R.id.btnKeyUp to KeyEvent.KEYCODE_DPAD_UP,
+            R.id.btnKeyDown to KeyEvent.KEYCODE_DPAD_DOWN,
+            R.id.btnKeyRight to KeyEvent.KEYCODE_DPAD_RIGHT,
+            R.id.btnKeyEnd to KeyEvent.KEYCODE_MOVE_END,
+            R.id.btnKeyBackspace to KeyEvent.KEYCODE_DEL
+        )
+        navButtons.forEach { (id, keyCode) ->
+            findViewById<Button>(id).setOnClickListener { sendEditorKey(keyCode) }
+        }
+
+        // تراجع/إعادة (Undo/Redo): عبر دالتي editCode.undo()/redo() الحقيقيتين مباشرة (نفس ما
+        // يستدعيه btnMenuEdit)، لا محاكاة KeyEvent — أبسط وأدق لأنهما ليستا KeyEvent أصلاً.
+        findViewById<Button>(R.id.btnKeyUndo).setOnClickListener {
+            if (!editCode.hasFocus()) editCode.requestFocus()
+            editCode.undo()
+        }
+        findViewById<Button>(R.id.btnKeyRedo).setOnClickListener {
+            if (!editCode.hasFocus()) editCode.requestFocus()
+            editCode.redo()
+        }
+
+        // صف ثانٍ خاص بلغة Rin نفسها: حبّة لكل كلمة محجوزة حقيقية في rin_lexer.cpp (نفس مصدر
+        // توثيق hover في RinKeywordDocs)، بدل الاكتفاء برموز ترقيم عامة كأي محرر نصوص. تُنشأ
+        // برمجيًا لا في XML حتى تبقى قائمة الأزرار متزامنة دومًا مع RinKeywordDocs.allKeywords
+        // بلا تكرار يدوي قد يفوته تحديث مستقبلي للغة.
+        val keywordsRow: LinearLayout = findViewById(R.id.editorKeyboardKeywordsRow)
+        val chipHeightPx = (30 * resources.displayMetrics.density).roundToInt()
+        val chipMarginEndPx = (5 * resources.displayMetrics.density).roundToInt()
+        RinKeywordDocs.allKeywords.forEach { keyword ->
+            val chip = Button(this, null, 0, R.style.RinEditorKeywordChip)
+            chip.text = keyword
+            chip.layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, chipHeightPx
+            ).apply { marginEnd = chipMarginEndPx }
+            // مسافة زائدة بعد الكلمة (وليس قبلها) تسهّل متابعة الكتابة مباشرة بعد إدراجها.
+            chip.setOnClickListener { insertEditorSymbol("$keyword ") }
+            keywordsRow.addView(chip)
+        }
+
+        // اللوحة تظهر فقط أثناء تركيز المحرر (أي أثناء ظهور لوحة مفاتيح النظام أو التركيز
+        // البرمجي)، بدل شغل مساحة دائمة على شاشة هاتف صغيرة. بفضل windowSoftInputMode=
+        // "adjustResize" لهذا الـActivity وكونها آخر عنصر في العمود الرأسي الجذر، تطفو تلقائياً
+        // مباشرة فوق لوحة مفاتيح النظام دون أي حساب WindowInsets يدوي.
+        editCode.setOnFocusChangeListener { _, hasFocus ->
+            editorKeyboardPanel.visibility = if (hasFocus) View.VISIBLE else View.GONE
+        }
+        if (editCode.hasFocus()) editorKeyboardPanel.visibility = View.VISIBLE
+    }
+
+    private fun insertEditorSymbol(symbol: String) {
+        if (!editCode.hasFocus()) editCode.requestFocus()
+        editCode.insertAtCursor(symbol)
+    }
+
+    private fun sendEditorKey(keyCode: Int) {
+        if (!editCode.hasFocus()) editCode.requestFocus()
+        val now = SystemClock.uptimeMillis()
+        editCode.dispatchKeyEvent(KeyEvent(now, now, KeyEvent.ACTION_DOWN, keyCode, 0))
+        editCode.dispatchKeyEvent(KeyEvent(now, now, KeyEvent.ACTION_UP, keyCode, 0))
     }
 
     override fun onResume() {
