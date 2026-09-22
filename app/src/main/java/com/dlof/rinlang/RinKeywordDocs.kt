@@ -53,4 +53,9 @@ object RinKeywordDocs {
      *  عادية/معرّف من صنع المستخدم). المطابقة حسّاسة لحالة الأحرف (نفس lexer الحقيقي: "Section"
      *  كلمة محجوزة، "section" معرِّف عادي). */
     fun lookup(word: String): String? = docs[word]
+
+    /** كل الكلمات المحجوزة الموثَّقة أعلاه، بنفس ترتيب تعريفها (لغة أساسية أولاً ثم حاويات/بيانات).
+     *  يستهلكها [MainActivity.setupEditorKeyboardPanel] لبناء صف "كلمات Rin" في لوحة مفاتيح
+     *  المحرر برمجيًا — مصدر واحد لقائمة الكلمات المحجوزة بدل تكرارها يدويًا في مكان آخر. */
+    val allKeywords: List<String> = docs.keys.toList()
 }
