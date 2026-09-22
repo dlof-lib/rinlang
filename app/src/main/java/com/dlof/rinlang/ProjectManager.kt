@@ -349,8 +349,30 @@ object ProjectManager {
         File(dir, "main.rin").writeText(
             mainRinTemplateFor(type, trimmed, uiOptions, containerOptions, tableOptions, freeOptions)
         )
+        // indsin جزء أساسي من أي مشروع Rin حديث (لا مجرد مجلد اختياري): كل مشروع جديد يبدأ
+        // بمجلد indsin/ فيه واجهة ابتدائية حقيقية بصياغة @view.* الفعلية (نفس محرّك المعاينة
+        // الحية)، لا ملف نائم فارغ.
+        val indsinDir = File(dir, "indsin").apply { mkdirs() }
+        File(indsinDir, "main.indsin").writeText(indsinStarterTemplateFor(trimmed))
         return Project(trimmed, dir, dir.lastModified(), type)
     }
+
+    /** واجهة ابتدائية حقيقية لمجلد indsin/ لأي مشروع جديد (بصياغة @view.* الفعلية التي يفهمها
+     *  محرّك indsin/rin_indsin_*.h نفسه، لا نص وهمي) — تُفتح مباشرة في المحرر وفي المعاينة الحية. */
+    private fun indsinStarterTemplateFor(projectName: String): String =
+        "// indsin/main.indsin — نقطة الدخول لواجهة مشروع \"$projectName\" (محرّك indsin، @view.*)\n" +
+            "// افتح هذا الملف في \"المعاينة الحية\" لرؤيته مرسوماً فعلياً داخل إطار جهاز.\n\n" +
+            "@view.Column=root\n" +
+            "    padding=16;\n" +
+            "    gap=12;\n\n" +
+            "    @view.Text=heading\n" +
+            "        text=\"$projectName\";\n" +
+            "        size=\"title\";\n" +
+            "    .end/view\n\n" +
+            "    @view.Text=subheading\n" +
+            "        text=\"Built with indsin\";\n" +
+            "    .end/view\n" +
+            ".end/view\n"
 
     fun deleteProject(project: Project): Boolean = project.dir.deleteRecursively()
 
@@ -520,9 +542,78 @@ object ProjectManager {
         return RinFolder(trimmed, newRelPath, target, target.lastModified())
     }
 
+    /**
+     * ينسخ [rinFile] داخل مجلده الحالي نفسه باسم فريد تلقائياً: "name (2).ext" ثم "name (3).ext"
+     * وهكذا إن كانت النسخة السابقة موجودة أصلاً (نفس تعارف "نسخ" في مستكشفات الملفات المعروفة).
+     */
+    fun duplicateFile(rinFile: RinFile): RinFile {
+        val parentDir = rinFile.file.parentFile ?: throw IllegalStateException("لا يوجد مجلد أب للملف")
+        val dot = rinFile.name.lastIndexOf('.')
+        val base = if (dot > 0) rinFile.name.substring(0, dot) else rinFile.name
+        val ext = if (dot > 0) rinFile.name.substring(dot) else ""
+        var candidate: File
+        var n = 2
+        do {
+            candidate = File(parentDir, "$base ($n)$ext")
+            n++
+        } while (candidate.exists())
+        rinFile.file.copyTo(candidate)
+        val parentRelPath = rinFile.relPath.substringBeforeLast('/', "")
+        val newRelPath = if (parentRelPath.isEmpty()) candidate.name else "$parentRelPath/${candidate.name}"
+        return RinFile(candidate.name, candidate, candidate.length(), candidate.lastModified(), newRelPath)
+    }
+
+    /**
+     * ينقل [rinFile] إلى مجلد آخر [destRelDir] (فارغ = جذر المشروع) بنفس اسمه. يفشل صراحةً إن
+     * وُجد ملف بنفس الاسم في الوجهة، أو كانت الوجهة نفس المجلد الحالي (نقل بلا فائدة).
+     */
+    fun moveFile(project: Project, rinFile: RinFile, destRelDir: String): RinFile {
+        val destDir = resolveDir(project, destRelDir)
+        destDir.mkdirs()
+        val target = File(destDir, rinFile.name)
+        require(target.canonicalPath != rinFile.file.canonicalPath) { "الملف موجود بالفعل في هذا المجلد" }
+        require(!target.exists()) { "يوجد ملف بهذا الاسم في المجلد الوجهة بالفعل" }
+        val ok = rinFile.file.renameTo(target)
+        require(ok) { "تعذّر نقل الملف" }
+        val prefix = if (destRelDir.isBlank()) "" else "${destRelDir.trim('/')}/"
+        return RinFile(rinFile.name, target, target.length(), target.lastModified(), "$prefix${rinFile.name}")
+    }
+
+    /**
+     * بحث عن الملفات داخل المشروع كله (بكل مجلداته الفرعية، لا مستوى واحد فقط كـ[listEntries])
+     * بمطابقة جزئية غير حسّاسة لحالة الأحرف على اسم الملف، لدعم شريط "🔍 البحث في الملفات" في
+     * مستكشف المشروع. نتيجة فارغة لاستعلام فارغ (لا تُرجع كل الملفات دفعة واحدة بلا داعٍ).
+     */
+    fun searchFiles(project: Project, query: String): List<RinFile> {
+        val trimmed = query.trim()
+        if (trimmed.isEmpty()) return emptyList()
+        val results = mutableListOf<RinFile>()
+        fun walk(dir: File, relDir: String) {
+            val children = dir.listFiles() ?: return
+            val prefix = if (relDir.isBlank()) "" else "${relDir.trim('/')}/"
+            for (child in children.sortedBy { it.name }) {
+                if (child.isDirectory) {
+                    walk(child, "$prefix${child.name}")
+                } else if (child.name.contains(trimmed, ignoreCase = true)) {
+                    results += RinFile(child.name, child, child.length(), child.lastModified(), "$prefix${child.name}")
+                }
+            }
+        }
+        walk(project.dir, "")
+        return results
+    }
+
+    /**
+     * إن كتب المستخدم امتداداً صريحاً (نقطة قبل جزء أخير غير فارغ، مثل "layout.indsin" أو
+     * "sketch.illust") يبقى كما هو — قبل هذا الإصلاح كان أي اسم لا ينتهي حرفياً بـ".rin" يُقحَم
+     * ".rin" في آخره (فـ"layout.indsin" كان يصبح "layout.indsin.rin" خطأً)، ما كان يمنع إنشاء
+     * أي نوع ملف آخر (.indsin، .illust...) من زر "ملف جديد" فعلياً. بلا امتداد إطلاقاً -> ".rin"
+     * افتراضياً كما كان دائماً (لا كسر لأي سلوك حالي لملفات .rin العادية).
+     */
     private fun ensureRinExtension(name: String): String {
         val trimmed = name.trim()
-        return if (trimmed.endsWith(RIN_EXTENSION)) trimmed else "$trimmed$RIN_EXTENSION"
+        val dot = trimmed.lastIndexOf('.')
+        return if (dot > 0 && dot < trimmed.length - 1) trimmed else "$trimmed$RIN_EXTENSION"
     }
 
     /**
