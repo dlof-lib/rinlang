@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- خلفية صف الملف المفتوح حالياً في محرّر المشروع (درج المستكشف): تلوين خفيف بلون هوية
+     التطبيق (rin_accent) بدل تظليل رمادي عام، ليتضح فوراً أي ملف هو المفتوح في المحرر الآن. -->
+<ripple xmlns:android="http://schemas.android.com/apk/res/android"
+    android:color="@color/rin_ghost_ripple">
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="@color/rin_accent_border_subtle" />
+            <corners android:radius="8dp" />
+        </shape>
+    </item>
+</ripple>
