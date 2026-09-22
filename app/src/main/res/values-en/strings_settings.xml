@@ -53,5 +53,29 @@
     <string name="settings_confirm_exit_hint">Ask before leaving when this option is enabled.</string>
     <string name="settings_format_save">Format on save</string>
     <string name="settings_format_save_hint">Prepare the editor for automatic formatting workflows on save.</string>
+
+    <string name="settings_assist_section_title">Editing Assist</string>
+    <string name="settings_saving_section_title">Saving</string>
+    <string name="settings_run_section_title">Run</string>
+    <string name="settings_interface_section_title">Interface</string>
+
+    <string name="settings_trim_trailing">Trim trailing whitespace</string>
+    <string name="settings_trim_trailing_hint">Remove trailing spaces from every line on save.</string>
+    <string name="settings_final_newline">Final newline</string>
+    <string name="settings_final_newline_hint">Make sure the file ends with exactly one newline on save.</string>
+    <string name="settings_auto_save">Auto-save</string>
+    <string name="settings_auto_save_hint">Save automatically after you stop typing for this long.</string>
+    <string name="settings_off">Off</string>
+    <string name="settings_seconds_format">%1$ds</string>
+
+    <string name="settings_auto_run">Auto-run</string>
+    <string name="settings_auto_run_hint">Re-run the code automatically after a short pause in typing.</string>
+    <string name="settings_clear_console_on_run">Clear console before each run</string>
+    <string name="settings_clear_console_on_run_hint">Automatically clear the previous run history on each new Run.</string>
+
+    <string name="settings_layout_hint">Standard: bigger editor with a console. Compact: more room for code. Focus: no console.</string>
+    <string name="settings_keep_screen_on">Keep screen on</string>
+    <string name="settings_keep_screen_on_hint">Prevent the screen from turning off while using the editor.</string>
+    <string name="settings_project_sort">Sort by</string>
 <string name="settings_language_current">English 🇺🇸</string><string name="language_picker_title">Choose language</string><string name="language_picker_subtitle">Choose a language and country</string><string name="language_picker_search">Search a language or country…</string><string name="language_picker_applied">Applied %1$s</string><string name="language_group_arabic">Arabic • Arab countries</string><string name="language_group_english">English • English-speaking countries</string><string name="language_group_spanish">Español • Spanish-speaking countries</string>
 </resources>
