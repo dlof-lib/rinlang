@@ -53,7 +53,6 @@
     <string name="menu_file_open">Open…</string>
     <string name="menu_file_save">Save</string>
     <string name="menu_file_projects">Projects</string>
-    <string name="menu_file_export_apk">Export APK</string>
     <string name="menu_edit_undo">Undo</string>
     <string name="menu_edit_redo">Redo</string>
     <string name="menu_edit_find">Find &amp; Replace</string>
@@ -90,7 +89,6 @@
     <string name="menu_run_run">Run program</string>
     <string name="menu_run_check_brackets">Check brackets</string>
     <string name="menu_run_check_tags">Check container tags</string>
-    <string name="menu_run_export_apk">Export APK</string>
     <string name="menu_run_auto_run">Auto-run while typing</string>
     <string name="auto_run_enabled_toast">Auto-run enabled — the console refreshes shortly after you stop typing</string>
     <string name="auto_run_disabled_toast">Auto-run disabled</string>
@@ -98,6 +96,16 @@
     <string name="outline_dialog_title">File outline</string>
     <string name="outline_empty_toast">No @container/Section/Translations blocks found</string>
     <string name="outline_line_format">line %1$d</string>
+    <string name="desc_explorer_quick">Project explorer</string>
+    <string name="explorer_panel_title">Explorer</string>
+    <string name="explorer_close">Close explorer</string>
+    <string name="explorer_tab_files">Files</string>
+    <string name="explorer_tab_outline">Outline</string>
+    <string name="explorer_no_project">Open a project to browse its files.</string>
+    <string name="explorer_open_projects_action">Open projects…</string>
+    <string name="explorer_empty_folder">This folder is empty.</string>
+    <string name="explorer_outline_empty">No @container/Section/Translations blocks found.</string>
+    <string name="explorer_current_file_badge">open</string>
     <string name="tags_balanced_toast">Container tags are balanced ✓</string>
     <string name="tags_unbalanced_toast">Unbalanced container tag near line %1$d</string>
     <string name="new_file_name">untitled.rin</string>
@@ -107,7 +115,6 @@
     <string name="desc_menu_view">View menu</string>
     <string name="desc_run_quick">Run</string>
     <string name="desc_projects_quick">Projects</string>
-    <string name="desc_export_apk_quick">Export APK</string>
     <string name="editor_hint">Write Rin code here…</string>
     <string name="file_unsaved">untitled.rin</string>
     <string name="file_open_error">Could not open file</string>
@@ -232,8 +239,6 @@ print \"Hello, \" + name + \"!\";
     <string name="more_row_apk_export_subtitle">صدّر مشروعك كملف APK موقّع وقابل للتثبيت</string>
 
     <string name="apk_export_screen_title">تصدير APK</string>
-    <string name="apk_export_editor_need_project">افتح المشروع من محرر Rin ثم صدّره كـ APK</string>
-    <string name="apk_export_unsaved_file_warning">لديك تعديلات غير محفوظة على ملف حر؛ سيتم تصدير آخر نسخة محفوظة من المشروع</string>
     <string name="apk_export_terminal_label">rinlang — apk.export</string>
     <string name="apk_export_field_name_label">اسم التطبيق المعروض</string>
     <string name="apk_export_field_name_hint">مثال: تطبيق المبيعات</string>
@@ -260,7 +265,7 @@ print \"Hello, \" + name + \"!\";
     <string name="apk_export_no_entry_error">لا يوجد ملف .rin واحد على الأقل في هذا المشروع</string>
     <string name="apk_export_icon_load_error">تعذّر تحميل الأيقونة المحدَّدة</string>
     <string name="apk_export_sdk_range_error">الحد الأدنى لإصدار SDK يجب ألا يتجاوز الإصدار المستهدف</string>
-    <string name="apk_export_note_limitation">اسم التطبيق ومعرّف الحزمة وملفات المشروع تُضمَّن فعلياً في APK الناتج. عند اختيار أيقونة مخصصة تُستبدل أيقونات الإطلاق في الحزمة. التوقيع يتم بمفتاح RSA-2048 محفوظ في Android Keystore على الجهاز.</string>
+    <string name="apk_export_note_limitation">ملاحظة: اسم التطبيق المعروض أعلاه يُكتب فعلياً داخل بيان الحزمة الناتجة. الأيقونة فقط تبقى كما في RinStudio (resources.arsc لا يُعدَّل حالياً). التوقيع حقيقي بمخطّطي v1 (JAR) وv2 معاً (تُضاف كتلة v2 وتُتحقَّق ذاتياً تلقائياً، وتتراجع v1 وحدها إن تعذّر ذلك) بمفتاح RSA-2048 خاص بجهازك — لأقصى ثقة تثبيت على أندرويد الحديث.</string>
 
     <string name="more_row_rin_apps_subtitle">تصفّح كل تطبيقاتك المُصدَّرة سابقاً، ثبّتها أو شاركها أو أعد تصديرها</string>
     <string name="rin_apps_screen_title">تطبيقات Rin</string>
@@ -353,4 +358,14 @@ print \"Hello, \" + name + \"!\";
     <string name="action_rename_symbol">Rename</string>
     <string name="rename_dialog_title">Rename symbol</string>
     <string name="rename_dialog_hint">New name</string>
+
+    <!-- لوحة مفاتيح المحرر (activity_main.xml): مفاتيح تنقّل عامة، توصف بالنص نفسه المعروض على الزر. -->
+    <string name="key_tab">Tab</string>
+    <string name="key_home">Home</string>
+    <string name="key_end">End</string>
+    <string name="key_left">Move left</string>
+    <string name="key_right">Move right</string>
+    <string name="key_up">Move up</string>
+    <string name="key_down">Move down</string>
+    <string name="key_backspace">Backspace</string>
 </resources>
