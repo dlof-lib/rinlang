@@ -10,6 +10,29 @@
 
     <include layout="@layout/toolbar_app" />
 
+    <!-- شريط البحث داخل ملفات المشروع كله (كل المجلدات الفرعية)؛ نفس نمط بحث المشاريع
+         (bg_projects_search) لتناسق بصري. فارغ = تصفّح عادي مستوى بمستوى كما كان؛ أي نص
+         يُبدّل القائمة إلى نتائج بحث مسطّحة عبر المشروع كله (انظر FilesActivity.performSearch). -->
+    <EditText
+        android:id="@+id/inputSearchFiles"
+        android:layout_width="match_parent"
+        android:layout_height="46dp"
+        android:layout_marginStart="10dp"
+        android:layout_marginEnd="10dp"
+        android:layout_marginTop="10dp"
+        android:background="@drawable/bg_projects_search"
+        android:drawableStart="@android:drawable/ic_menu_search"
+        android:drawableTint="@color/rin_editor_hint"
+        android:hint="@string/search_files_hint"
+        android:paddingStart="14dp"
+        android:paddingEnd="14dp"
+        android:textColor="@color/rin_on_toolbar"
+        android:textColorHint="@color/rin_editor_hint"
+        android:textSize="13sp"
+        android:singleLine="true"
+        android:inputType="text"
+        android:imeOptions="actionDone" />
+
     <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"
@@ -41,6 +64,7 @@
                 android:contentDescription="@null" />
 
             <TextView
+                android:id="@+id/txtEmptyFilesMessage"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="14dp"
