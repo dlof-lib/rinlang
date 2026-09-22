@@ -285,21 +285,65 @@ class FilesActivity : AppCompatActivity() {
         refresh()
     }
 
+    /** يزداد مع كل refresh() جديد؛ يمنع نتيجة فحص أخطاء خلفي متأخرة (لمجلد/بحث سابق غادره
+     *  المستخدم فعلاً) من الكتابة فوق نتائج القائمة الحالية. */
+    private var scanToken: Int = 0
+
     private fun refresh() {
         if (searchQuery.isNotBlank()) {
             val results = ProjectManager.searchFiles(project, searchQuery)
             adapter.submit(emptyList(), results, searchMode = true)
+            adapter.setDirtyPaths(EditorDirtyState.dirtyPaths(project.name))
             txtEmptyMessage.setText(R.string.search_no_results)
             txtEmpty.visibility = if (results.isEmpty()) View.VISIBLE else View.GONE
+            scanForErrors(results)
             return
         }
         txtEmptyMessage.setText(R.string.no_files_yet)
         val (folders, files) = ProjectManager.listEntries(project, currentRelDir)
         adapter.submit(folders, files)
+        adapter.setDirtyPaths(EditorDirtyState.dirtyPaths(project.name))
         txtEmpty.visibility = if (folders.isEmpty() && files.isEmpty()) View.VISIBLE else View.GONE
+        scanForErrors(files)
 
         findViewById<TextView>(R.id.txtToolbarSubtitle).text =
             if (currentRelDir.isBlank()) project.name else "${project.name} / $currentRelDir"
+    }
+
+    /**
+     * يفحص كل ملف نصّي (لا صور/فيديو/صوت...) في [files] بخيط خلفي عبر محرّك rin::Lexer/Parser
+     * الحقيقي نفسه (RinNativeEditor.getDiagnostics — نفس ما يرسم الخط الأحمر المتعرّج في المحرر
+     * الفعلي، هنا على نسخة معزولة مؤقتة من كل ملف بلا أي واجهة)، ويعلّم "!" فقط لما فيه تشخيص
+     * ERROR فعلي — لا مؤشر وهمي أو تخمين شكل الامتداد. تُهمَل نتيجة وصلت بعد أن غادر المستخدم
+     * هذه القائمة (عبر [scanToken]).
+     */
+    private fun scanForErrors(files: List<RinFile>) {
+        val myToken = ++scanToken
+        val candidates = files.filter { !ProjectManager.isBinaryFile(it.name) }
+        if (candidates.isEmpty()) {
+            adapter.setErrorPaths(emptySet())
+            return
+        }
+        val mainHandler = Handler(Looper.getMainLooper())
+        Thread {
+            val found = mutableSetOf<String>()
+            for (f in candidates) {
+                try {
+                    val probe = RinNativeEditor()
+                    probe.setText(f.file.readText())
+                    val hasError = probe.getDiagnostics()
+                        .any { it.severity == RinNativeEditor.DiagnosticSeverity.ERROR }
+                    probe.destroy()
+                    if (hasError) found += f.relPath
+                } catch (_: Throwable) {
+                    // ملف لا يُقرأ كنص أو فشل الفحص لأي سبب: يُستبعَد بصمت، لا يظهر "!" خطأً
+                    // (تفضيل عدم التنبيه الكاذب على تنبيه زائف).
+                }
+            }
+            mainHandler.post {
+                if (myToken == scanToken) adapter.setErrorPaths(found)
+            }
+        }.start()
     }
 
     private fun showMoreFileActions(file: RinFile, anchor: View) {
@@ -520,11 +564,26 @@ private class FilesAdapter(
     /** أثناء البحث في المشروع كله نعرض المسار النسبي الكامل مكان الحجم/التاريخ (تمييز ملفات
      *  متشابهة الاسم في مجلدات مختلفة)، وإلا فالتصفّح العادي مستوى بمستوى كالمعتاد. */
     private var searchMode: Boolean = false
+    /** مسارات نسبية فيها خطأ صياغة حقيقي (rin::Lexer/Parser عبر FilesActivity.scanForErrors)
+     *  ومسارات فيها تعديل غير محفوظ حقيقي (EditorDirtyState) — كلاهما يُحدَّث بعد الرسم الأول
+     *  فور توفّر النتيجة (الخطأ يُفحَص بخيط خلفي)، فـ[notifyDataSetChanged] عند تحديثهما متوقَّع. */
+    private var errorPaths: Set<String> = emptySet()
+    private var dirtyPaths: Set<String> = emptySet()
     private val dateFormat = DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT)
 
     fun submit(folders: List<RinFolder>, files: List<RinFile>, searchMode: Boolean = false) {
         this.searchMode = searchMode
         items = folders.map { FileRow.FolderRow(it) } + files.map { FileRow.FileRowItem(it) }
+        notifyDataSetChanged()
+    }
+
+    fun setErrorPaths(paths: Set<String>) {
+        errorPaths = paths
+        notifyDataSetChanged()
+    }
+
+    fun setDirtyPaths(paths: Set<String>) {
+        dirtyPaths = paths
         notifyDataSetChanged()
     }
 
@@ -537,7 +596,9 @@ private class FilesAdapter(
 
     class FileVH(view: View) : RecyclerView.ViewHolder(view) {
         val imgIcon: android.widget.ImageView = view.findViewById(R.id.imgFileIcon)
+        val txtErrorBadge: View = view.findViewById(R.id.txtErrorBadge)
         val txtName: TextView = view.findViewById(R.id.txtFileNameItem)
+        val txtDirtyDot: View = view.findViewById(R.id.txtDirtyDot)
         val txtMeta: TextView = view.findViewById(R.id.txtFileMeta)
         val btnMore: View = view.findViewById(R.id.btnMoreFile)
         val btnRename: View = view.findViewById(R.id.btnRenameFile)
@@ -585,6 +646,8 @@ private class FilesAdapter(
                     )
                 }
                 FileIconResolver.load(holder.imgIcon, file.file)
+                holder.txtErrorBadge.visibility = if (file.relPath in errorPaths) View.VISIBLE else View.GONE
+                holder.txtDirtyDot.visibility = if (file.relPath in dirtyPaths) View.VISIBLE else View.GONE
                 holder.itemView.setOnClickListener { onOpenFile(file) }
                 holder.btnMore.setOnClickListener { onMoreFile(file, holder.btnMore) }
                 holder.btnRename.setOnClickListener { onRenameFile(file) }
