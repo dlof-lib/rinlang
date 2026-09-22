@@ -79,4 +79,55 @@
         <item name="android:background">@drawable/bg_list_card</item>
         <item name="android:padding">14dp</item>
     </style>
+
+    <!-- زر رمز واحد في "لوحة مفاتيح المحرر" (activity_main.xml): مربّع صغير ثابت العرض ضمن صف
+         أفقي قابل للتمرير. focusable="false" مقصود: بلمسه يجب ألا يسرق تركيز المحرر (editCode)
+         وإلا تختفي اللوحة نفسها (مربوطة بمستمع تركيز المحرر في MainActivity). -->
+    <style name="RinEditorKeyButton">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">34dp</item>
+        <item name="android:layout_marginEnd">3dp</item>
+        <item name="android:minWidth">32dp</item>
+        <item name="android:minHeight">0dp</item>
+        <item name="android:insetTop">0dp</item>
+        <item name="android:insetBottom">0dp</item>
+        <item name="android:paddingStart">8dp</item>
+        <item name="android:paddingEnd">8dp</item>
+        <item name="android:textAllCaps">false</item>
+        <item name="android:textSize">14sp</item>
+        <item name="android:fontFamily">monospace</item>
+        <item name="android:focusable">false</item>
+        <item name="android:background">@drawable/bg_toolbar_btn_ghost</item>
+        <item name="android:textColor">@color/rin_on_toolbar</item>
+    </style>
+
+    <!-- فاصل رفيع بين مجموعات لوحة مفاتيح المحرر (رموز / أسهم تنقل). -->
+    <style name="RinEditorKeyDivider">
+        <item name="android:layout_width">1dp</item>
+        <item name="android:layout_height">20dp</item>
+        <item name="android:layout_marginStart">2dp</item>
+        <item name="android:layout_marginEnd">5dp</item>
+        <item name="android:background">@color/rin_divider</item>
+    </style>
+
+    <!-- حبّة كلمة محجوزة من لغة Rin نفسها (let/fun/if/container...) في صف ثانٍ منفصل ضمن لوحة
+         مفاتيح المحرر — تمييزًا بصريًا (تعبئة بلون الهوية) عن صف رموز الترقيم العامة أعلاه؛
+         الأزرار تُنشأ برمجيًا في MainActivity.setupEditorKeyboardPanel من RinKeywordDocs.allKeywords
+         (نفس مصدر توثيق الكلمات المحجوزة، فتبقى القائمة مطابقة دومًا لـrin_lexer.cpp الحقيقي) عبر
+         مُنشئ Button(context, null, 0, R.style.RinEditorKeywordChip)، لذا لا layout_* هنا عمداً
+         (LayoutParams تُضبط في الكود نفسه؛ سمات هذا الأسلوب تنطبق فقط على الـView لا الحاوية). -->
+    <style name="RinEditorKeywordChip">
+        <item name="android:minWidth">0dp</item>
+        <item name="android:minHeight">0dp</item>
+        <item name="android:insetTop">0dp</item>
+        <item name="android:insetBottom">0dp</item>
+        <item name="android:paddingStart">10dp</item>
+        <item name="android:paddingEnd">10dp</item>
+        <item name="android:textAllCaps">false</item>
+        <item name="android:textSize">12.5sp</item>
+        <item name="android:fontFamily">monospace</item>
+        <item name="android:focusable">false</item>
+        <item name="android:background">@drawable/bg_keyword_chip</item>
+        <item name="android:textColor">@color/rin_accent</item>
+    </style>
 </resources>
