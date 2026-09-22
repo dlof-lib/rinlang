@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- صف ملف داخل شجرة "مستكشف المشروع" (ProjectExplorerAdapter): [أيقونة الملف الحقيقية عبر
+     FileIconResolver] [اسم الملف] [نقطة "تعديل غير محفوظ" من EditorDirtyState]. النقر يحمّل
+     الملف مباشرة في نفس نسخة المحرر (MainActivity.openProjectFileFromExplorer) بلا Activity
+     جديدة. الخلفية تتبدّل إلى bg_explorer_row_selected لو كان هذا هو الملف المفتوح حالياً. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:minHeight="42dp"
+    android:orientation="horizontal"
+    android:gravity="center_vertical"
+    android:background="@drawable/bg_icon_btn"
+    android:paddingStart="26dp"
+    android:paddingEnd="10dp">
+
+    <ImageView
+        android:id="@+id/imgExplorerFileIcon"
+        android:layout_width="20dp"
+        android:layout_height="20dp"
+        android:layout_marginEnd="8dp"
+        android:scaleType="fitCenter"
+        android:src="@drawable/ic_file_solid"
+        android:contentDescription="@null" />
+
+    <TextView
+        android:id="@+id/txtExplorerFileName"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:ellipsize="end"
+        android:maxLines="1"
+        android:fontFamily="monospace"
+        android:textSize="13sp"
+        android:textColor="@color/rin_on_toolbar" />
+
+    <TextView
+        android:id="@+id/txtExplorerDirtyDot"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="6dp"
+        android:text="●"
+        android:textColor="@color/rin_accent"
+        android:textSize="9sp"
+        android:visibility="gone" />
+
+</LinearLayout>
