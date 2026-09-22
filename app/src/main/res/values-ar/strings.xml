@@ -53,7 +53,6 @@
     <string name="menu_file_open">Open…</string>
     <string name="menu_file_save">Save</string>
     <string name="menu_file_projects">Projects</string>
-    <string name="menu_file_export_apk">تصدير APK</string>
     <string name="menu_edit_undo">Undo</string>
     <string name="menu_edit_redo">Redo</string>
     <string name="menu_edit_find">Find &amp; Replace</string>
@@ -91,13 +90,22 @@
     <string name="menu_run_check_brackets">Check brackets</string>
     <string name="menu_run_check_tags">فحص توازن وسوم الحاويات</string>
     <string name="menu_run_auto_run">التشغيل التلقائي أثناء الكتابة</string>
-    <string name="menu_run_export_apk">تصدير APK</string>
     <string name="auto_run_enabled_toast">تم تفعيل التشغيل التلقائي — تُحدَّث وحدة التحكم بعد توقفك عن الكتابة بقليل</string>
     <string name="auto_run_disabled_toast">تم إيقاف التشغيل التلقائي</string>
     <string name="snippets_dialog_title">إدراج مقتطف Rin</string>
     <string name="outline_dialog_title">بنية الملف</string>
     <string name="outline_empty_toast">لا توجد كتل @container أو Section أو Translations</string>
     <string name="outline_line_format">السطر %1$d</string>
+    <string name="desc_explorer_quick">مستكشف المشروع</string>
+    <string name="explorer_panel_title">المستكشف</string>
+    <string name="explorer_close">إغلاق المستكشف</string>
+    <string name="explorer_tab_files">الملفات</string>
+    <string name="explorer_tab_outline">البنية</string>
+    <string name="explorer_no_project">افتح مشروعاً لتصفّح ملفاته.</string>
+    <string name="explorer_open_projects_action">فتح المشاريع…</string>
+    <string name="explorer_empty_folder">هذا المجلد فارغ.</string>
+    <string name="explorer_outline_empty">لا توجد كتل @container أو Section أو Translations.</string>
+    <string name="explorer_current_file_badge">مفتوح</string>
     <string name="tags_balanced_toast">وسوم الحاويات متوازنة ✓</string>
     <string name="tags_unbalanced_toast">وسم حاوية غير متوازن قرب السطر %1$d</string>
     <string name="new_file_name">untitled.rin</string>
@@ -107,7 +115,6 @@
     <string name="desc_menu_view">View menu</string>
     <string name="desc_run_quick">Run</string>
     <string name="desc_projects_quick">Projects</string>
-    <string name="desc_export_apk_quick">تصدير APK</string>
     <string name="editor_hint">Write Rin code here…</string>
     <string name="file_unsaved">untitled.rin</string>
     <string name="file_open_error">Could not open file</string>
@@ -232,8 +239,6 @@ print \"Hello, \" + name + \"!\";
     <string name="more_row_apk_export_subtitle">صدّر مشروعك كملف APK موقّع وقابل للتثبيت</string>
 
     <string name="apk_export_screen_title">تصدير APK</string>
-    <string name="apk_export_editor_need_project">افتح المشروع من محرر Rin ثم صدّره كـ APK</string>
-    <string name="apk_export_unsaved_file_warning">لديك تعديلات غير محفوظة على ملف حر؛ سيتم تصدير آخر نسخة محفوظة من المشروع</string>
     <string name="apk_export_terminal_label">rinlang — apk.export</string>
     <string name="apk_export_field_name_label">اسم التطبيق المعروض</string>
     <string name="apk_export_field_name_hint">مثال: تطبيق المبيعات</string>
@@ -260,7 +265,7 @@ print \"Hello, \" + name + \"!\";
     <string name="apk_export_no_entry_error">لا يوجد ملف .rin واحد على الأقل في هذا المشروع</string>
     <string name="apk_export_icon_load_error">تعذّر تحميل الأيقونة المحدَّدة</string>
     <string name="apk_export_sdk_range_error">الحد الأدنى لإصدار SDK يجب ألا يتجاوز الإصدار المستهدف</string>
-    <string name="apk_export_note_limitation">ملاحظة: اسم التطبيق ومعرّف الحزمة وملفات المشروع تُضمَّن فعلياً في APK الناتج. عند اختيار أيقونة مخصصة تُستبدل أيقونات الإطلاق في الحزمة. التوقيع يتم بمفتاح RSA-2048 محفوظ في Android Keystore على الجهاز.</string>
+    <string name="apk_export_note_limitation">ملاحظة: اسم التطبيق وأيقونته على الشاشة الرئيسية للحزمة الناتجة يبقيان كما في RinStudio — هوية مشروعك الفعلية تظهر داخل شاشة تشغيله بعد فتحه. التوقيع حقيقي بمخطّطي v1 وv2 معاً (v2 يُتحقَّق ذاتياً تلقائياً، ويتراجع لـ v1 وحدها إن تعذّر ذلك) لأقصى ثقة تثبيت.</string>
 
     <string name="more_row_rin_apps_subtitle">تصفّح كل تطبيقاتك المُصدَّرة سابقاً، ثبّتها أو شاركها أو أعد تصديرها</string>
     <string name="rin_apps_screen_title">تطبيقات Rin</string>
@@ -352,4 +357,14 @@ print \"Hello, \" + name + \"!\";
     <string name="action_rename_symbol">إعادة تسمية</string>
     <string name="rename_dialog_title">إعادة تسمية الرمز</string>
     <string name="rename_dialog_hint">الاسم الجديد</string>
+
+    <!-- لوحة مفاتيح المحرر (activity_main.xml): مفاتيح تنقّل عامة -->
+    <string name="key_tab">Tab</string>
+    <string name="key_home">Home</string>
+    <string name="key_end">End</string>
+    <string name="key_left">تحريك لليسار</string>
+    <string name="key_right">تحريك لليمين</string>
+    <string name="key_up">تحريك لأعلى</string>
+    <string name="key_down">تحريك لأسفل</string>
+    <string name="key_backspace">حذف للخلف</string>
 </resources>
