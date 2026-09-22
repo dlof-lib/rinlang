@@ -685,7 +685,7 @@ class MainActivity : AppCompatActivity() {
      * ([FilesActivity] → EXTRA_PROJECT_NAME/EXTRA_FILE_NAME). يسأل أولاً عن التعديلات غير
      * المحفوظة بنفس حوار [onBackRequested] وخياراته الثلاثة (إلغاء/تجاهل/حفظ)، ثم يحمّل نص
      * الملف الجديد ويحدّث اسم/لغة المحرر وشريط الحالة، ويصفّر [currentProjectLibrary] لأن
-     * المستكشف يفتح ملفات .rin عادية فقط (لا مكتبات lib/*.og.rin).
+     * المستكشف يفتح ملفات .rin عادية فقط (لا مكتبات lib/ *.og.rin).
      */
     private fun openProjectFileFromExplorer(file: RinFile) {
         if (currentProjectLibrary == null && currentProjectFile?.relPath == file.relPath) {
