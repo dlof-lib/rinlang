@@ -1,0 +1,172 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- لوحة "مستكشف المشروع" المدمجة في محرّر Rin (MainActivity): تُفتَح كدرج جانبي فوق المحرر
+     نفسه (androidx.drawerlayout.widget.DrawerLayout في activity_main.xml) بدل الانتقال إلى
+     شاشة FilesActivity المنفصلة. تبويبان:
+       • "الملفات": شجرة ملفات/مجلدات المشروع الحقيقية (ProjectExplorerAdapter + ProjectManager)،
+         قابلة للتوسيع/الطي، والنقر على أي ملف يحمّله في نفس نسخة المحرر مباشرة.
+       • "البنية": نفس شجرة "بنية الملف" (الحاويات/الأقسام) التي كانت سابقاً حواراً منفصلاً
+         (OutlineDialogAdapter, RinContainerTags.buildOutline)، معروضة هنا داخل الدرج نفسه. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="300dp"
+    android:layout_height="match_parent"
+    android:layout_gravity="start"
+    android:orientation="vertical"
+    android:background="@color/rin_toolbar"
+    android:elevation="8dp">
+
+    <!-- رأس اللوحة: أيقونة + عنوان "المستكشف" + اسم المشروع الحالي + زر إغلاق -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:background="@drawable/bg_toolbar_card"
+        android:paddingStart="14dp"
+        android:paddingEnd="6dp"
+        android:paddingTop="14dp"
+        android:paddingBottom="12dp">
+
+        <ImageView
+            android:layout_width="16dp"
+            android:layout_height="16dp"
+            android:layout_marginEnd="8dp"
+            android:src="@drawable/ic_explorer"
+            android:contentDescription="@null" />
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:text="@string/explorer_panel_title"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textColor="@color/rin_on_toolbar"
+                android:textSize="14sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/txtExplorerProjectName"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textColor="@color/rin_on_toolbar_dim"
+                android:textSize="11.5sp"
+                android:ellipsize="middle"
+                android:singleLine="true" />
+        </LinearLayout>
+
+        <ImageButton
+            android:id="@+id/btnExplorerClose"
+            android:layout_width="30dp"
+            android:layout_height="30dp"
+            android:padding="7dp"
+            android:src="@drawable/ic_close"
+            android:tint="@color/rin_on_toolbar"
+            android:background="@drawable/bg_icon_btn"
+            android:contentDescription="@string/explorer_close" />
+    </LinearLayout>
+
+    <!-- مفتاح التبويبين: الملفات / البنية -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:paddingStart="10dp"
+        android:paddingEnd="10dp"
+        android:paddingTop="8dp"
+        android:paddingBottom="6dp">
+
+        <TextView
+            android:id="@+id/btnExplorerTabFiles"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginEnd="4dp"
+            android:gravity="center"
+            android:paddingTop="8dp"
+            android:paddingBottom="8dp"
+            android:text="@string/explorer_tab_files"
+            android:textSize="12.5sp"
+            android:textStyle="bold"
+            android:textColor="@color/rin_on_toolbar"
+            android:background="@drawable/bg_explorer_tab_selected" />
+
+        <TextView
+            android:id="@+id/btnExplorerTabOutline"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginStart="4dp"
+            android:gravity="center"
+            android:paddingTop="8dp"
+            android:paddingBottom="8dp"
+            android:text="@string/explorer_tab_outline"
+            android:textSize="12.5sp"
+            android:textStyle="bold"
+            android:textColor="@color/rin_on_toolbar_dim"
+            android:background="@drawable/bg_menubar_btn" />
+    </LinearLayout>
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="@color/rin_divider" />
+
+    <!-- منطقة المحتوى: تبديل ظهور بين شجرة الملفات وشجرة البنية بدل صفحتين منفصلتين -->
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1">
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/rvExplorerFiles"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:clipToPadding="false"
+            android:paddingTop="4dp"
+            android:paddingBottom="24dp"
+            android:overScrollMode="ifContentScrolls" />
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/rvExplorerOutline"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:clipToPadding="false"
+            android:paddingTop="4dp"
+            android:paddingBottom="24dp"
+            android:overScrollMode="ifContentScrolls"
+            android:visibility="gone" />
+
+        <!-- حالة فارغة موحَّدة: "لا مشروع مفتوح"، "المجلد فارغ"، أو "لا بنية في الملف" -->
+        <TextView
+            android:id="@+id/txtExplorerEmpty"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:gravity="center"
+            android:padding="28dp"
+            android:textSize="13sp"
+            android:textColor="@color/rin_on_toolbar_dim"
+            android:visibility="gone" />
+
+        <TextView
+            android:id="@+id/btnExplorerOpenProjects"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center|bottom"
+            android:layout_marginBottom="64dp"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
+            android:paddingTop="10dp"
+            android:paddingBottom="10dp"
+            android:text="@string/explorer_open_projects_action"
+            android:textColor="@color/rin_accent"
+            android:textStyle="bold"
+            android:textSize="13sp"
+            android:background="@drawable/bg_icon_btn"
+            android:visibility="gone" />
+    </FrameLayout>
+
+</LinearLayout>
