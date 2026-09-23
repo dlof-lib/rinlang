@@ -53,6 +53,13 @@
     <string name="project_type_illust">Illust</string>
     <string name="project_type_illust_desc">لغة رسم/SVG جاهزة فوق Rin</string>
 
+    <string name="indsin_template_label">قالب indsin جاهز (اختياري)</string>
+    <string name="indsin_template_calculator">آلة حاسبة</string>
+    <string name="indsin_template_blog">مدونة</string>
+    <string name="indsin_template_buttons">أزرار</string>
+    <string name="indsin_template_gallery">معرض صور</string>
+    <string name="indsin_template_webview">ويب فيو</string>
+
     <!-- خيارات "رسم الواجهة" داخل حوار مشروع UI جديد: تظهر فقط عند اختيار نوع UI،
          وتسمح باختيار توب بار/بلا توب بار، قائمة جانبية/بلا قائمة جانبية، ولون أساسي،
          قبل توليد main.rin (انظر ProjectManager.UiDesignOptions). -->
