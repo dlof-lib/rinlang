@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- خط فاصل خفيف تحت عنوان كل قسم بشاشة الإعدادات فقط (item_setting_section.xml) — طبقتين:
+     شفاف بالكامل، وخط رفيع بلون بنفسجي فاتح جداً مثبّت أسفل العنصر عبر layer inset. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:gravity="bottom" android:height="1.5dp">
+        <shape android:shape="rectangle">
+            <solid android:color="@color/rin_setting_section_divider" />
+        </shape>
+    </item>
+</layer-list>
