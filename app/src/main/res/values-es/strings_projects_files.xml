@@ -47,6 +47,13 @@
     <string name="project_type_illust">Illust</string>
     <string name="project_type_illust_desc">Un lenguaje de dibujo/SVG listo sobre Rin</string>
 
+    <string name="indsin_template_label">Plantilla indsin lista (opcional)</string>
+    <string name="indsin_template_calculator">Calculadora</string>
+    <string name="indsin_template_blog">Blog</string>
+    <string name="indsin_template_buttons">Botones</string>
+    <string name="indsin_template_gallery">Galería de fotos</string>
+    <string name="indsin_template_webview">WebView</string>
+
     <!-- Opciones de "dibujar la interfaz" en el diálogo de nuevo proyecto UI: solo aparecen al
          elegir el tipo UI. Permiten activar/desactivar la barra superior, activar/desactivar el
          menú lateral y elegir un color principal, antes de generar main.rin (ver
