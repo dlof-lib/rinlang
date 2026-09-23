@@ -22,6 +22,41 @@
     <color name="rin_ghost_pressed_bg">#14000000</color>
     <color name="rin_logo_badge_bg">#7C5CFF</color>
 
+    <!-- ============================================================================
+         نظام أنماط الأزرار الموحّد (Button Styles) — راجع drawable/bg_btn_*.xml.
+         ست هويات جاهزة لإعادة الاستخدام بأي مكان بالتطبيق: primary/secondary/outline/
+         outline_danger/danger/success، بدل كل شاشة تعرّف خلفية زر خاصة فيها متل قبل.
+         ============================================================================ -->
+    <color name="rin_btn_secondary">#0E9AA7</color>
+    <color name="rin_btn_secondary_pressed">#0B7A85</color>
+    <color name="rin_btn_danger">#F14C4C</color>
+    <color name="rin_btn_danger_pressed">#D63B3B</color>
+    <color name="rin_btn_success">#22C88E</color>
+    <color name="rin_btn_success_pressed">#1CA877</color>
+    <color name="rin_btn_disabled_bg">#3A3550</color>
+    <color name="rin_btn_disabled_text">#8A8698</color>
+    <color name="rin_btn_outline_ripple">#1F7C5CFF</color>
+    <color name="rin_btn_outline_danger_ripple">#1FF14C4C</color>
+
+    <!-- ============================================================================
+         شاشة الإعدادات المطوَّرة (SettingsActivity) — بطاقات الصفوف، الفاصل القطعي
+         (segmented control) للاختيارات، أيقونة الروابط الدائرية، وتلوين المفتاح.
+         ============================================================================ -->
+    <color name="rin_setting_card_bg">#FFFFFF</color>
+    <color name="rin_setting_card_border">#E7E9F0</color>
+    <color name="rin_setting_card_pressed">#F3F1FF</color>
+    <color name="rin_setting_section_divider">#EDE9FF</color>
+    <color name="rin_segment_selected_bg">#7C5CFF</color>
+    <color name="rin_segment_selected_text">#FFFFFF</color>
+    <color name="rin_segment_unselected_bg">#F2F3F7</color>
+    <color name="rin_segment_unselected_text">#54586B</color>
+    <color name="rin_setting_icon_avatar_bg">#EFEAFF</color>
+    <color name="rin_switch_track_on">#B7A9FF</color>
+    <color name="rin_switch_track_off">#D6D9E2</color>
+    <color name="rin_switch_thumb_on">#7C5CFF</color>
+    <color name="rin_switch_thumb_off">#FFFFFF</color>
+
+
     <!-- الشريط العلوي المطوَّر: تدرّج + إطار أيقونة التطبيق + فاصل ظل -->
     <color name="rin_toolbar_gradient_top">#24262D</color>
     <color name="rin_toolbar_gradient_bottom">#FFFFFF</color>
