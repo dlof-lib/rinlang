@@ -630,9 +630,20 @@ class IndsinFabricView @JvmOverloads constructor(
             Kind.IMAGE -> drawImage(canvas, rect, attrs)
             Kind.BUTTON -> {
                 drawBox(canvas, rect, attrs, resolved ?: defaultButton, defaultRadius = 10f)
-                drawText(canvas, rect, attrs, attrs.optString("label"), Color.WHITE, centered = true, boldHint = true, singleLine = true)
+                // The .rin language's documented Button syntax writes the caption as `text=`
+                // (see examples/elements_container_loop.rin: `@element.button=run text="Run";`)
+                // and the native engine's own buttonDisplayLabel() (rin_indsin_paint.h) reads
+                // `label=` first and falls back to `text=` -- so a Button written the documented
+                // way renders correctly in the real export. This preview was missing that same
+                // fallback and only ever read `label`, so any Button using `text=` (the common
+                // case) rendered with no caption at all here, even though it worked everywhere else.
+                val label = attrs.optString("label").ifBlank { attrs.optString("text") }
+                drawText(canvas, rect, attrs, label, Color.WHITE, centered = true, boldHint = true, singleLine = true)
             }
-            Kind.CARD -> drawBox(canvas, rect, attrs, resolved ?: defaultCard, defaultRadius = 14f)
+            Kind.CARD -> {
+                drawBox(canvas, rect, attrs, resolved ?: defaultCard, defaultRadius = 14f)
+                drawCardContent(canvas, rect, attrs)
+            }
             Kind.OBJECT -> drawBox(canvas, rect, attrs, resolved ?: defaultCard, defaultRadius = 12f)
 
             // ---- new kinds ----
@@ -878,6 +889,51 @@ class IndsinFabricView @JvmOverloads constructor(
             val strokeRect = RectF(rect.left + inset, rect.top + inset, rect.right - inset, rect.bottom - inset)
             val strokeRadius = max(0f, radius - inset)
             canvas.drawRoundRect(strokeRect, strokeRadius, strokeRadius, strokePaint)
+        }
+    }
+
+    /**
+     * Card: title=/subtitle=/value=/description= were parsed onto the node's attrs but never
+     * painted anywhere -- there was no text-drawing call at all in the old Kind.CARD case (nor
+     * in the native Dye rasterizer's own CARD handling in rin_indsin_paint.h, now fixed the same
+     * way there), so a Card rendered as an empty colored box regardless of what the .rin source
+     * gave it. Stacks a bold title, then an optional large value= (the stat-card idiom this
+     * dashboard demo uses for Projects/Components/Runtime/Storage), then a muted
+     * subtitle=/description= wrapped into whatever space is left — mirrors the native fix exactly.
+     */
+    private fun drawCardContent(canvas: Canvas, rect: RectF, attrs: JSONObject) {
+        val title = attrs.optString("title")
+        val value = attrs.optString("value")
+        val subtitle = attrs.optString("subtitle").ifBlank { attrs.optString("description") }
+        if (title.isEmpty() && value.isEmpty() && subtitle.isEmpty()) return
+
+        val pad = 14f
+        val inner = RectF(rect.left + pad, rect.top + pad, rect.right - pad, rect.bottom - pad)
+        if (inner.width() <= 0f || inner.height() <= 0f) return
+
+        var cursorY = inner.top
+        val titleSize = 15.0
+        val valueSize = 22.0
+        val subtitleSize = 13.0
+        val mutedText = Color.argb(180, Color.red(defaultText), Color.green(defaultText), Color.blue(defaultText))
+
+        if (title.isNotEmpty() && cursorY < inner.bottom) {
+            val lineH = (titleSize * 1.4).toFloat()
+            val titleAttrs = JSONObject(attrs.toString()).apply { put("size", titleSize) }
+            drawText(canvas, RectF(inner.left, cursorY, inner.right, cursorY + lineH), titleAttrs, title,
+                defaultText, boldHint = true, singleLine = true)
+            cursorY += lineH + 4f
+        }
+        if (value.isNotEmpty() && cursorY < inner.bottom) {
+            val lineH = (valueSize * 1.4).toFloat()
+            val valueAttrs = JSONObject(attrs.toString()).apply { put("size", valueSize) }
+            drawText(canvas, RectF(inner.left, cursorY, inner.right, cursorY + lineH), valueAttrs, value,
+                defaultText, boldHint = true, singleLine = true)
+            cursorY += lineH + 2f
+        }
+        if (subtitle.isNotEmpty() && cursorY < inner.bottom) {
+            val subtitleAttrs = JSONObject(attrs.toString()).apply { put("size", subtitleSize) }
+            drawText(canvas, RectF(inner.left, cursorY, inner.right, inner.bottom), subtitleAttrs, subtitle, mutedText)
         }
     }
 
