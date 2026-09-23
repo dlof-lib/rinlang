@@ -281,6 +281,52 @@ struct Dye {
         // paint case needed, the generic container path right below (background+border, then
         // recurse) already does the right thing for a plain Row-shaped box.
 
+        // Card conveniences: title=/subtitle=/value=/description= were parsed onto the Strand's
+        // attrs but never painted anywhere -- there was no dedicated CARD case here at all, so a
+        // Card fell into the generic container path below (background+border only) and rendered
+        // as an empty, unlabeled colored box, no matter what title=/subtitle=/value=/description=
+        // the .rin source gave it. Mirrors the "draw my own box, then stack plain text runs, then
+        // recurse into any hand-authored children" shape Tag/Banner already use just above: a bold
+        // title first, then an optional large value= (the stat-card idiom used throughout the
+        // dashboard demo), then a muted subtitle=/description= wrapped into whatever vertical
+        // space remains. IndsinFabricView.kt's Kind.CARD case mirrors this exactly.
+        if (s->kind == StrandKind::CARD) {
+            list.push_back({DrawOp::FILL_RECT, s->geometry, resolveColor(s), "", s->id, r, 0});
+            double borderWidth = s->attrNum("border", 0);
+            if (borderWidth > 0)
+                list.push_back({DrawOp::STROKE_RECT, s->geometry, resolveBorderColor(s), "", s->id, r, borderWidth});
+
+            const Theme& th = themeRegistry().active();
+            double pad = 14;
+            double innerX = s->geometry.x + pad;
+            double innerW = std::max(0.0, s->geometry.w - pad * 2);
+            double bottom = s->geometry.y + s->geometry.h - pad;
+            double cursorY = s->geometry.y + pad;
+
+            std::string title = s->attrStr("title", "");
+            std::string value = s->attrStr("value", "");
+            std::string subtitle = s->attrStr("subtitle", "");
+            if (subtitle.empty()) subtitle = s->attrStr("description", "");
+
+            if (!title.empty() && cursorY < bottom) {
+                double lineH = 15 * 1.4;
+                list.push_back({DrawOp::TEXT_RUN, {innerX, cursorY, innerW, lineH}, th.text, title, s->id, 0, 0});
+                cursorY += lineH + 4;
+            }
+            if (!value.empty() && cursorY < bottom) {
+                double lineH = 22 * 1.4;
+                list.push_back({DrawOp::TEXT_RUN, {innerX, cursorY, innerW, lineH}, th.text, value, s->id, 0, 0});
+                cursorY += lineH + 2;
+            }
+            if (!subtitle.empty() && cursorY < bottom) {
+                list.push_back({DrawOp::TEXT_RUN, {innerX, cursorY, innerW, std::max(0.0, bottom - cursorY)},
+                                 th.text_muted, subtitle, s->id, 0, 0});
+            }
+
+            for (auto& c : s->children) paintInto(c, list);
+            return;
+        }
+
         if (s->kind != StrandKind::TEXT) {
             list.push_back({DrawOp::FILL_RECT, s->geometry, resolveColor(s), "", s->id, r, 0});
             // `border=` was already a real padding contributor (rin_indsin_layout.h) but never
