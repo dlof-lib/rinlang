@@ -186,6 +186,59 @@
             </LinearLayout>
         </GridLayout>
 
+        <!-- صفّ "قوالب indsin جاهزة" (اختياري، مستقل عن نوع المشروع أعلاه): عند اختيار إحدى
+             الشرائح الخمس يُستبدَل indsin/main.indsin الافتراضي بواجهة جاهزة تعمل فوراً
+             (آلة حاسبة/مدونة/أزرار/معرض صور/ويب فيو — انظر ProjectManager.indsinTemplateContentFor
+             و ProjectsActivity.selectIndsinTemplateChip). التحديد اختياري: الضغط على شريحة
+             محدَّدة مسبقاً يلغي التحديد ويعود القالب الافتراضي. -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:layout_marginBottom="8dp"
+            android:text="@string/indsin_template_label"
+            android:textSize="12.5sp"
+            android:textColor="@color/rin_editor_hint" />
+
+        <HorizontalScrollView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:scrollbars="none"
+            android:clipToPadding="false">
+
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:id="@+id/chipIndsinCalculator"
+                    style="@style/IndsinTemplateChip"
+                    android:text="@string/indsin_template_calculator" />
+
+                <TextView
+                    android:id="@+id/chipIndsinBlog"
+                    style="@style/IndsinTemplateChip"
+                    android:text="@string/indsin_template_blog" />
+
+                <TextView
+                    android:id="@+id/chipIndsinButtons"
+                    style="@style/IndsinTemplateChip"
+                    android:text="@string/indsin_template_buttons" />
+
+                <TextView
+                    android:id="@+id/chipIndsinGallery"
+                    style="@style/IndsinTemplateChip"
+                    android:text="@string/indsin_template_gallery" />
+
+                <TextView
+                    android:id="@+id/chipIndsinWebview"
+                    style="@style/IndsinTemplateChip"
+                    android:layout_marginEnd="0dp"
+                    android:text="@string/indsin_template_webview" />
+            </LinearLayout>
+        </HorizontalScrollView>
+
         <!-- قسم "رسم الواجهة": يظهر فقط عند اختيار نوع المشروع UI (يُتحكَّم بـ visibility من
              ProjectsActivity.selectChip). يجمع خيارات توب بار/بلا توب بار، قائمة جانبية/بلا
              قائمة جانبية، ولون أساسي، لتُستخدم عند توليد main.rin (انظر
