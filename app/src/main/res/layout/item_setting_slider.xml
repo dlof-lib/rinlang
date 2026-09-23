@@ -3,22 +3,24 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:layout_marginBottom="8dp"
-    android:background="@drawable/bg_list_card"
+    android:layout_marginBottom="10dp"
+    android:background="@drawable/bg_setting_row"
     android:orientation="vertical"
-    android:padding="14dp">
+    android:padding="15dp">
 
     <TextView
         android:id="@+id/settingTitle"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:textColor="@color/rin_on_toolbar"
-        android:textSize="13.5sp"
+        android:textSize="14sp"
         android:textStyle="bold" />
 
     <SeekBar
         android:id="@+id/settingSeek"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="4dp" />
+        android:layout_marginTop="6dp"
+        android:progressTint="@color/rin_accent"
+        android:thumbTint="@color/rin_accent" />
 </LinearLayout>
