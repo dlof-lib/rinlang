@@ -108,6 +108,61 @@ inline Theme builtinLightTheme() {
     return t;
 }
 
+// ---- Additional built-in themes ----------------------------------------------------------------
+// Four more ready-made Pattern Books alongside Dark/Light, so a project can switch its whole
+// palette to one of these with a plain `@theme=Midnight active=true; .end/theme` (no color
+// overrides needed -- see registerThemesFromProgram() below for why that now works) instead of
+// hand-rolling twelve role colors from scratch. Each still fills every Theme role (not just
+// primary/secondary) so every existing colorForKind()/resolveColor() default keeps working
+// unchanged no matter which one is active.
+inline Theme builtinMidnightTheme() {
+    Theme t; t.name = "Midnight";
+    t.primary   = {94, 106, 255}; t.secondary = {56, 189, 248};
+    t.success   = {52, 211, 153}; t.danger    = {248, 113, 113};
+    t.warning   = {251, 191, 36}; t.info      = {96, 165, 250};
+    t.neutral   = {100, 105, 130};
+    t.surface   = {24, 26, 42};   t.background= {13, 14, 24};
+    t.text      = {236, 238, 250};t.text_muted= {148, 152, 176};
+    t.border    = {40, 43, 66};
+    return t;
+}
+inline Theme builtinOceanTheme() {
+    Theme t; t.name = "Ocean";
+    t.primary   = {14, 165, 233}; t.secondary = {45, 212, 191};
+    t.success   = {34, 197, 145}; t.danger    = {248, 113, 113};
+    t.warning   = {250, 204, 21}; t.info      = {56, 189, 248};
+    t.neutral   = {100, 116, 130};
+    t.surface   = {15, 35, 48};   t.background= {8, 22, 32};
+    t.text      = {224, 242, 246};t.text_muted= {138, 164, 176};
+    t.border    = {26, 58, 74};
+    return t;
+}
+inline Theme builtinSunsetTheme() {
+    Theme t; t.name = "Sunset";
+    t.primary   = {251, 113, 133}; t.secondary = {251, 146, 60};
+    t.success   = {74, 222, 128};  t.danger    = {239, 68, 68};
+    t.warning   = {250, 204, 21};  t.info      = {192, 132, 252};
+    t.neutral   = {130, 116, 120};
+    t.surface   = {42, 27, 38};    t.background= {26, 16, 26};
+    t.text      = {250, 235, 232}; t.text_muted= {186, 154, 160};
+    t.border    = {68, 42, 54};
+    return t;
+}
+// The one light theme of the extra four -- a clean, low-saturation "corporate" palette for
+// projects that want a professional light UI without reusing the built-in Light theme's more
+// generic purple/cyan pairing.
+inline Theme builtinSlateTheme() {
+    Theme t; t.name = "Slate";
+    t.primary   = {59, 82, 222};  t.secondary = {13, 148, 136};
+    t.success   = {22, 163, 74};  t.danger    = {220, 38, 38};
+    t.warning   = {180, 130, 10}; t.info      = {37, 99, 235};
+    t.neutral   = {100, 105, 120};
+    t.surface   = {255, 255, 255};t.background= {241, 244, 249};
+    t.text      = {23, 27, 38};   t.text_muted= {100, 107, 125};
+    t.border    = {223, 227, 236};
+    return t;
+}
+
 // ---- Pattern Book: the registry of themes + which one is active -------------------------------
 struct ThemeRegistry {
     std::unordered_map<std::string, Theme> themes;
@@ -116,6 +171,10 @@ struct ThemeRegistry {
     ThemeRegistry() {
         themes["Dark"] = builtinDarkTheme();
         themes["Light"] = builtinLightTheme();
+        themes["Midnight"] = builtinMidnightTheme();
+        themes["Ocean"] = builtinOceanTheme();
+        themes["Sunset"] = builtinSunsetTheme();
+        themes["Slate"] = builtinSlateTheme();
     }
     void registerTheme(Theme t) { std::string n = t.name; themes[n] = std::move(t); }
     void setActive(const std::string& n) { if (themes.count(n)) activeName = n; }
@@ -263,14 +322,21 @@ inline double resolveFontSize(const Strand& s, const std::string& key, double de
 // ---- Registering @theme=... declarations from a parsed program --------------------------------
 // Called once by the cold pipeline (see rin_indsin_pipeline.h) after parsing, before the Fabric is
 // built, so that any @theme block earlier in the source is already active by the time Strand
-// colors get resolved. New theme starts as a copy of the currently-active theme (usually the
-// built-in Dark) so a source theme only needs to override the roles it actually wants to change —
-// e.g. a `@theme=Midnight primary="#7C5CFF"; .end/theme` doesn't need to restate all 12 roles.
+// colors get resolved. A `@theme=Name ... .end/theme` block starts from whichever Theme is
+// *already registered* under that exact name (Dark/Light/Midnight/Ocean/Sunset/Slate all ship
+// pre-registered -- see the ThemeRegistry constructor above) so `@theme=Midnight active=true;
+// .end/theme` with no color overrides at all just switches the whole palette to the built-in
+// Midnight theme intact. Only a genuinely new name falls back to cloning the currently-active
+// theme, same as before. Either way only the roles actually given get overridden -- e.g.
+// `@theme=Midnight primary="#7C5CFF"; .end/theme` keeps the rest of Midnight's palette and only
+// swaps its primary.
 inline void registerThemesFromProgram(const std::vector<rin::StmtPtr>& program, WarpScope& warp) {
     for (auto& stmt : program) {
         auto t = std::dynamic_pointer_cast<rin::ThemeStmt>(stmt);
         if (!t) continue;
-        Theme theme = themeRegistry().active();
+        auto& reg = themeRegistry();
+        auto existing = reg.themes.find(t->name);
+        Theme theme = (existing != reg.themes.end()) ? existing->second : reg.active();
         theme.name = t->name;
         bool makeActive = false;
         for (auto& a : t->attrs) {
@@ -278,8 +344,8 @@ inline void registerThemesFromProgram(const std::vector<rin::StmtPtr>& program, 
             if (a.key == "active") { makeActive = (v.asString() == "true"); continue; }
             if (looksLikeHexColor(v.asString())) theme.setSlot(a.key, parseHexColor(v.asString(), {0,0,0}));
         }
-        themeRegistry().registerTheme(theme);
-        if (makeActive) themeRegistry().setActive(theme.name);
+        reg.registerTheme(theme);
+        if (makeActive) reg.setActive(theme.name);
     }
 }
 
