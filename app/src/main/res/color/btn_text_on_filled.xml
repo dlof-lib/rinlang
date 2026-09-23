@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- لون نص أي زر ممتلئ (bg_btn_primary/secondary/danger/success): أبيض دايماً، خافت شوي لما
+     الزر معطّل عشان يتماشى مع خلفية rin_btn_disabled_bg الرمادية. -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:color="@color/rin_btn_disabled_text" android:state_enabled="false" />
+    <item android:color="#FFFFFF" />
+</selector>
