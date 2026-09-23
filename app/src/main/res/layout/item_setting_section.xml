@@ -1,10 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- عنوان قسم في شاشة الإعدادات (يُنشأ من مخطط SettingsActivity). -->
+<!-- عنوان قسم في شاشة الإعدادات (يُنشأ من مخطط SettingsActivity). حروف كبيرة + تباعد أحرف
+     يقلّد نمط أقسام إعدادات iOS/Material الاحترافي، مع فاصل خفيف تحته يفصل القسم عن اللي قبله. -->
 <TextView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:layout_marginTop="22dp"
-    android:layout_marginBottom="8dp"
+    android:layout_marginTop="26dp"
+    android:layout_marginBottom="10dp"
+    android:background="@drawable/bg_setting_section_divider"
+    android:paddingBottom="8dp"
+    android:letterSpacing="0.08"
+    android:textAllCaps="true"
     android:textColor="@color/rin_accent"
     android:textStyle="bold"
-    android:textSize="14sp" />
+    android:textSize="12.5sp" />
