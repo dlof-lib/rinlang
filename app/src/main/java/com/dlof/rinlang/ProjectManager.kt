@@ -338,7 +338,11 @@ object ProjectManager {
         uiOptions: UiDesignOptions = UiDesignOptions(),
         containerOptions: ContainerOptions = ContainerOptions(),
         tableOptions: TableOptions = TableOptions(),
-        freeOptions: FreeOptions = FreeOptions()
+        freeOptions: FreeOptions = FreeOptions(),
+        // قالب indsin جاهز اختياري (انظر [indsinTemplateContentFor]): "calculator"/"blog"/
+        // "buttons"/"gallery"/"webview"، أو null للقالب الترحيبي الافتراضي كما كان الحال دائماً.
+        // مستقل تماماً عن [type] (يعمل فوق أي نوع مشروع).
+        indsinTemplate: String? = null
     ): Project {
         val trimmed = name.trim()
         require(isValidProjectName(trimmed)) { "اسم المشروع غير صالح" }
@@ -353,9 +357,208 @@ object ProjectManager {
         // بمجلد indsin/ فيه واجهة ابتدائية حقيقية بصياغة @view.* الفعلية (نفس محرّك المعاينة
         // الحية)، لا ملف نائم فارغ.
         val indsinDir = File(dir, "indsin").apply { mkdirs() }
-        File(indsinDir, "main.indsin").writeText(indsinStarterTemplateFor(trimmed))
+        File(indsinDir, "main.indsin").writeText(indsinTemplateContentFor(indsinTemplate, trimmed))
         return Project(trimmed, dir, dir.lastModified(), type)
     }
+
+    /**
+     * محتوى indsin/main.indsin لمشروع جديد: إمّا أحد القوالب الجاهزة الخمسة الجاهزة للاستخدام
+     * فعلياً (لا مجرد عرض ثابت — كل واحد يستخدم warp/fun حقيقية تعمل مع محرّك indsin نفسه)،
+     * أو القالب الترحيبي الافتراضي [indsinStarterTemplateFor] عند [template] فارغ/غير معروف.
+     */
+    private fun indsinTemplateContentFor(template: String?, projectName: String): String = when (template) {
+        "calculator" -> indsinCalculatorTemplate()
+        "blog" -> indsinBlogTemplate(projectName)
+        "buttons" -> indsinButtonsTemplate()
+        "gallery" -> indsinGalleryTemplate()
+        "webview" -> indsinWebViewTemplate()
+        else -> indsinStarterTemplateFor(projectName)
+    }
+
+    /** آلة حاسبة تفاعلية كاملة: جمع/طرح/ضرب/قسمة حقيقية عبر warp + fun، لا واجهة ثابتة. */
+    private fun indsinCalculatorTemplate(): String =
+        "// indsin/main.indsin — قالب \"آلة حاسبة\" جاهز (محرّك indsin، @view.*)\n\n" +
+            "warp display = \"0\";\n" +
+            "warp stored = 0;\n" +
+            "warp pendingOp = \"\";\n" +
+            "warp freshEntry = true;\n\n" +
+            "fun inputDigit(d) {\n" +
+            "    if (freshEntry) { display = d; freshEntry = false; }\n" +
+            "    else if (display == \"0\") { display = d; }\n" +
+            "    else { display = display + d; }\n" +
+            "}\n\n" +
+            "fun inputDot() {\n" +
+            "    if (freshEntry) { display = \"0.\"; freshEntry = false; }\n" +
+            "    else if (!contains(display, \".\")) { display = display + \".\"; }\n" +
+            "}\n\n" +
+            "fun applyPending() {\n" +
+            "    let current = toNumber(display);\n" +
+            "    if (pendingOp == \"+\") { stored = stored + current; }\n" +
+            "    else if (pendingOp == \"-\") { stored = stored - current; }\n" +
+            "    else if (pendingOp == \"*\") { stored = stored * current; }\n" +
+            "    else if (pendingOp == \"/\") {\n" +
+            "        if (current == 0) { stored = 0; } else { stored = stored / current; }\n" +
+            "    }\n" +
+            "    else { stored = current; }\n" +
+            "}\n\n" +
+            "fun chooseOp(op) {\n" +
+            "    applyPending();\n" +
+            "    pendingOp = op;\n" +
+            "    freshEntry = true;\n" +
+            "    display = toString(stored);\n" +
+            "}\n\n" +
+            "fun pressEquals() {\n" +
+            "    applyPending();\n" +
+            "    display = toString(stored);\n" +
+            "    pendingOp = \"\";\n" +
+            "    freshEntry = true;\n" +
+            "}\n\n" +
+            "fun clearAll() {\n" +
+            "    display = \"0\"; stored = 0; pendingOp = \"\"; freshEntry = true;\n" +
+            "}\n\n" +
+            "@view.Column=root\n" +
+            "    padding=16;\n" +
+            "    gap=10;\n\n" +
+            "    @view.Text=heading text=\"Calculator App\"; size=\"title\"; .end/view\n\n" +
+            "    @view.Card=screen\n" +
+            "        padding=18;\n" +
+            "        @view.Text=out text=display; size=32; .end/view\n" +
+            "    .end/view\n\n" +
+            "    @view.Row=row1 gap=8;\n" +
+            "        @view.Button=b7 label=\"7\"; onTap=inputDigit(\"7\"); .end/view\n" +
+            "        @view.Button=b8 label=\"8\"; onTap=inputDigit(\"8\"); .end/view\n" +
+            "        @view.Button=b9 label=\"9\"; onTap=inputDigit(\"9\"); .end/view\n" +
+            "        @view.Button=bDiv label=\"÷\"; onTap=chooseOp(\"/\"); .end/view\n" +
+            "    .end/view\n\n" +
+            "    @view.Row=row2 gap=8;\n" +
+            "        @view.Button=b4 label=\"4\"; onTap=inputDigit(\"4\"); .end/view\n" +
+            "        @view.Button=b5 label=\"5\"; onTap=inputDigit(\"5\"); .end/view\n" +
+            "        @view.Button=b6 label=\"6\"; onTap=inputDigit(\"6\"); .end/view\n" +
+            "        @view.Button=bMul label=\"×\"; onTap=chooseOp(\"*\"); .end/view\n" +
+            "    .end/view\n\n" +
+            "    @view.Row=row3 gap=8;\n" +
+            "        @view.Button=b1 label=\"1\"; onTap=inputDigit(\"1\"); .end/view\n" +
+            "        @view.Button=b2 label=\"2\"; onTap=inputDigit(\"2\"); .end/view\n" +
+            "        @view.Button=b3 label=\"3\"; onTap=inputDigit(\"3\"); .end/view\n" +
+            "        @view.Button=bSub label=\"-\"; onTap=chooseOp(\"-\"); .end/view\n" +
+            "    .end/view\n\n" +
+            "    @view.Row=row4 gap=8;\n" +
+            "        @view.Button=bClear label=\"C\"; onTap=clearAll(); .end/view\n" +
+            "        @view.Button=b0 label=\"0\"; onTap=inputDigit(\"0\"); .end/view\n" +
+            "        @view.Button=bDot label=\".\"; onTap=inputDot(); .end/view\n" +
+            "        @view.Button=bAdd label=\"+\"; onTap=chooseOp(\"+\"); .end/view\n" +
+            "    .end/view\n\n" +
+            "    @view.Button=bEquals label=\"=\"; onTap=pressEquals(); .end/view\n" +
+            ".end/view\n"
+
+    /** مدونة بسيطة: 3 تدوينات، كل واحدة قابلة للطيّ/التوسيع عبر warp bool + visible=. */
+    private fun indsinBlogTemplate(projectName: String): String =
+        "// indsin/main.indsin — قالب \"مدونة\" جاهز (محرّك indsin، @view.*)\n\n" +
+            "warp post1Open = false;\n" +
+            "warp post2Open = false;\n" +
+            "warp post3Open = false;\n\n" +
+            "fun toggle1() { post1Open = !post1Open; }\n" +
+            "fun toggle2() { post2Open = !post2Open; }\n" +
+            "fun toggle3() { post3Open = !post3Open; }\n\n" +
+            "@view.Column=root\n" +
+            "    padding=16;\n" +
+            "    gap=14;\n\n" +
+            "    @view.Text=heading text=\"مدونة $projectName\"; size=\"title\"; .end/view\n\n" +
+            "    @view.Card=post1\n" +
+            "        padding=16;\n" +
+            "        @view.Text=p1title text=\"كيف تبدأ رحلتك في تعلّم البرمجة\"; size=18; .end/view\n" +
+            "        @view.Text=p1meta text=\"12 سبتمبر · 4 دقائق قراءة\"; size=12; .end/view\n" +
+            "        @view.Text=p1excerpt text=\"نصائح عملية لأي شخص يريد الانطلاق في عالم البرمجة من الصفر...\"; size=14; .end/view\n" +
+            "        @view.Text=p1full text=\"ابدأ بمشروع صغير، لا تنتظر إتقان كل شيء أولاً، اكتب كوداً كل يوم ولو لخمس دقائق، وشارك ما تتعلّمه مع الآخرين.\"; size=14; visible=post1Open; .end/view\n" +
+            "        @view.Button=p1btn label=\"اقرأ المزيد\"; onTap=toggle1(); .end/view\n" +
+            "    .end/view\n\n" +
+            "    @view.Card=post2\n" +
+            "        padding=16;\n" +
+            "        @view.Text=p2title text=\"جولة سريعة في محرّك indsin\"; size=18; .end/view\n" +
+            "        @view.Text=p2meta text=\"18 سبتمبر · 6 دقائق قراءة\"; size=12; .end/view\n" +
+            "        @view.Text=p2excerpt text=\"كيف يحوّل indsin وصف @view.* إلى شاشة فعلية عبر القياس والرسم...\"; size=14; .end/view\n" +
+            "        @view.Text=p2full text=\"المحرّك يبني شجرة عناصر مقاسة (Fabric) من مصدر @view/@element/@loop، ثم ينتج عمليات رسم (paint ops) يرسمها كل مضيف (أندرويد/سطح المكتب/CLI) بنفس المسار تماماً.\"; size=14; visible=post2Open; .end/view\n" +
+            "        @view.Button=p2btn label=\"اقرأ المزيد\"; onTap=toggle2(); .end/view\n" +
+            "    .end/view\n\n" +
+            "    @view.Card=post3\n" +
+            "        padding=16;\n" +
+            "        @view.Text=p3title text=\"5 نصائح لكتابة كود Rin أنظف\"; size=18; .end/view\n" +
+            "        @view.Text=p3meta text=\"22 سبتمبر · 3 دقائق قراءة\"; size=12; .end/view\n" +
+            "        @view.Text=p3excerpt text=\"من تسمية المتغيرات إلى تقسيم الدوال — عادات صغيرة بفرق كبير...\"; size=14; .end/view\n" +
+            "        @view.Text=p3full text=\"سمِّ الدوال بأفعال والمتغيرات بأسماء واضحة، اجعل كل دالة تفعل شيئاً واحداً، واستخدم warp فقط لما يحتاج فعلاً إعادة رسم.\"; size=14; visible=post3Open; .end/view\n" +
+            "        @view.Button=p3btn label=\"اقرأ المزيد\"; onTap=toggle3(); .end/view\n" +
+            "    .end/view\n" +
+            ".end/view\n"
+
+    /** استعراض أنماط أزرار مختلفة: أساسي/إطار/معطّل + زر عدّاد تفاعلي حقيقي. */
+    private fun indsinButtonsTemplate(): String =
+        "// indsin/main.indsin — قالب \"أزرار\" جاهز (محرّك indsin، @view.*)\n\n" +
+            "warp tapCount = 0;\n\n" +
+            "fun bump() { tapCount = tapCount + 1; }\n\n" +
+            "@view.Column=root\n" +
+            "    padding=16;\n" +
+            "    gap=14;\n\n" +
+            "    @view.Text=heading text=\"معرض الأزرار\"; size=\"title\"; .end/view\n\n" +
+            "    @view.Text=lbl1 text=\"زر أساسي (Filled)\"; size=12; .end/view\n" +
+            "    @view.Button=btnPrimary label=\"زر أساسي\"; bg=\"#7c5cff\"; color=\"#ffffff\"; radius=12; .end/view\n\n" +
+            "    @view.Text=lbl2 text=\"زر بإطار (Outline)\"; size=12; .end/view\n" +
+            "    @view.Button=btnOutline label=\"زر بإطار\"; borderColor=\"#7c5cff\"; borderWidth=1; radius=12; .end/view\n\n" +
+            "    @view.Text=lbl3 text=\"زر مُعطَّل (Disabled)\"; size=12; .end/view\n" +
+            "    @view.Button=btnDisabled label=\"زر معطّل\"; state=\"disabled\"; radius=12; .end/view\n\n" +
+            "    @view.Text=lbl4 text=\"زر أيقونة\"; size=12; .end/view\n" +
+            "    @view.Button=btnIcon label=\"🔔 تنبيه\"; radius=20; .end/view\n\n" +
+            "    @view.Text=lbl5 text=\"زر عدّاد تفاعلي\"; size=12; .end/view\n" +
+            "    @view.Button=btnCounter label=\"اضغط هنا\"; onTap=bump(); radius=12; .end/view\n" +
+            "    @view.Text=counterOut text=\"تم الضغط \" + tapCount + \" مرة\"; size=14; .end/view\n" +
+            ".end/view\n"
+
+    /** معرض صور: صورة معاينة كبيرة + شبكة مصغّرات قابلة للنقر (تبديل المعاينة عبر warp). */
+    private fun indsinGalleryTemplate(): String =
+        "// indsin/main.indsin — قالب \"معرض صور\" جاهز (محرّك indsin، @view.*)\n" +
+            "// استبدل قيم src= بروابط/أسماء ملفات صورك الفعلية داخل مجلد المشروع.\n\n" +
+            "warp selected = \"photo1.jpg\";\n\n" +
+            "fun selectImage(src) { selected = src; }\n\n" +
+            "@view.Column=root\n" +
+            "    padding=16;\n" +
+            "    gap=12;\n\n" +
+            "    @view.Text=heading text=\"معرض الصور\"; size=\"title\"; .end/view\n\n" +
+            "    @view.Card=preview\n" +
+            "        padding=8;\n" +
+            "        @view.Image=big src=selected; width=340; height=220; .end/view\n" +
+            "    .end/view\n\n" +
+            "    @view.Wrap=grid gap=8;\n" +
+            "        @view.Image=t1 src=\"photo1.jpg\"; width=100; height=100; onTap=selectImage(\"photo1.jpg\"); .end/view\n" +
+            "        @view.Image=t2 src=\"photo2.jpg\"; width=100; height=100; onTap=selectImage(\"photo2.jpg\"); .end/view\n" +
+            "        @view.Image=t3 src=\"photo3.jpg\"; width=100; height=100; onTap=selectImage(\"photo3.jpg\"); .end/view\n" +
+            "        @view.Image=t4 src=\"photo4.jpg\"; width=100; height=100; onTap=selectImage(\"photo4.jpg\"); .end/view\n" +
+            "        @view.Image=t5 src=\"photo5.jpg\"; width=100; height=100; onTap=selectImage(\"photo5.jpg\"); .end/view\n" +
+            "        @view.Image=t6 src=\"photo6.jpg\"; width=100; height=100; onTap=selectImage(\"photo6.jpg\"); .end/view\n" +
+            "    .end/view\n" +
+            ".end/view\n"
+
+    /** ويب فيو مدموج بشريط تنقّل بسيط: أزرار تبدّل الرابط عبر warp url. */
+    private fun indsinWebViewTemplate(): String =
+        "// indsin/main.indsin — قالب \"ويب فيو\" جاهز (محرّك indsin، @view.*)\n" +
+            "// استبدل روابط url= أدناه بروابطك الفعلية.\n\n" +
+            "warp url = \"https://example.com\";\n\n" +
+            "fun openHome() { url = \"https://example.com\"; }\n" +
+            "fun openDocs() { url = \"https://example.com/docs\"; }\n" +
+            "fun openBlog() { url = \"https://example.com/blog\"; }\n\n" +
+            "@view.Column=root\n" +
+            "    padding=16;\n" +
+            "    gap=10;\n\n" +
+            "    @view.Text=heading text=\"متصفّح داخل التطبيق\"; size=\"title\"; .end/view\n\n" +
+            "    @view.Row=nav gap=8;\n" +
+            "        @view.Button=bHome label=\"الرئيسية\"; onTap=openHome(); .end/view\n" +
+            "        @view.Button=bDocs label=\"التوثيق\"; onTap=openDocs(); .end/view\n" +
+            "        @view.Button=bBlog label=\"المدونة\"; onTap=openBlog(); .end/view\n" +
+            "    .end/view\n\n" +
+            "    @view.Text=urlLabel text=url; size=12; .end/view\n\n" +
+            "    @view.Card=frame\n" +
+            "        padding=4;\n" +
+            "        @view.WebView=browser url=url; width=360; height=480; .end/view\n" +
+            "    .end/view\n" +
+            ".end/view\n"
 
     /** واجهة ابتدائية حقيقية لمجلد indsin/ لأي مشروع جديد (بصياغة @view.* الفعلية التي يفهمها
      *  محرّك indsin/rin_indsin_*.h نفسه، لا نص وهمي) — تُفتح مباشرة في المحرر وفي المعاينة الحية. */
