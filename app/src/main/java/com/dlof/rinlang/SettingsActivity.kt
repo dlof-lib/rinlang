@@ -202,23 +202,34 @@ class SettingsActivity : AppCompatActivity() {
         if (row.hint != null) hint.setText(row.hint) else hint.visibility = View.GONE
 
         val optionsBar = view.findViewById<LinearLayout>(R.id.settingOptions)
+        // Segmented control: كل خيار TextView بخلفية/لون نص/سماكة تتبدّل بين bg_segment_selected
+        // (بنفسجي ممتلئ + نص أبيض عريض) وbg_segment_unselected (رمادي محايد + نص خافت) بدل
+        // إبقاء لون/سماكة النص ثابتين وتبديل الخلفية بس — كانت الحالة المختارة قبل هيك ما
+        // تبيّن بوضوح كافي.
         val buttons = row.options.map { option ->
             TextView(this).apply {
                 text = option.labelText ?: getString(option.labelRes)
                 gravity = Gravity.CENTER
-                setTextColor(ContextCompat.getColor(this@SettingsActivity, R.color.rin_on_toolbar))
+                textSize = 12.5f
             }
         }
         fun refresh() {
             val current = row.read()
             buttons.forEachIndexed { index, button ->
                 val selected = row.options[index].value == current
-                button.setBackgroundResource(if (selected) R.drawable.bg_lang_option_selected else R.drawable.bg_list_card)
+                button.setBackgroundResource(if (selected) R.drawable.bg_segment_selected else R.drawable.bg_segment_unselected)
+                button.setTextColor(
+                    ContextCompat.getColor(
+                        this@SettingsActivity,
+                        if (selected) R.color.rin_segment_selected_text else R.color.rin_segment_unselected_text
+                    )
+                )
+                button.setTypeface(button.typeface, if (selected) android.graphics.Typeface.BOLD else android.graphics.Typeface.NORMAL)
             }
         }
         buttons.forEachIndexed { index, button ->
-            val params = LinearLayout.LayoutParams(0, dp(42), 1f)
-            if (index > 0) params.marginStart = dp(8)
+            val params = LinearLayout.LayoutParams(0, dp(40), 1f)
+            if (index > 0) params.marginStart = dp(4)
             optionsBar.addView(button, params)
             button.setOnClickListener {
                 row.write(row.options[index].value)
