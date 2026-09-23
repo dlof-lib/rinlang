@@ -353,8 +353,31 @@ inline StrandPtr buildFabric(const std::shared_ptr<rin::ViewStmt>& node, WarpSco
     if (node->role == rin::UiRole::ELEMENT && !inheritedLoopVisual.empty()) {
         std::unordered_set<std::string> ownKeys;
         for (auto& a : node->attrs) ownKeys.insert(a.key);
+        // COLOR-BUG FIX: a Loop that sets both `element_color=` (meant as the default *text*
+        // color, per its everyday use — see the dashboard demo, which sets element_color and
+        // separately element_background specifically so text and box-fill defaults can differ)
+        // and `element_background=` (meant as the default box-*fill* color) used to inherit BOTH
+        // onto every single Element, text or not, as plain "color"/"background" attrs. But
+        // resolveColor() (rin_indsin_paint.h) always checks `color=` before `background=` — by
+        // design, for a single element's own explicit attrs (§ the "one-off override" doc
+        // comment there) — so once both were inherited, "color" silently won on *every* Card/
+        // Button/Badge/Box/etc. in the whole Loop, and "background" became permanently
+        // unreachable dead code. That's why a whole dashboard of Cards/Buttons/Badges painted as
+        // flat, identical, near-white boxes (element_color's value) instead of their intended
+        // element_background fill, while only plain Text (which *should* use element_color)
+        // looked right. Fix: an inherited "color" default only applies to the handful of kinds
+        // that actually paint it as a *text*/glyph tint (Text/Link/Icon) — every other kind
+        // (Card/Button/Badge/Box/Column/Row/...) only inherits "background", leaving `color=`
+        // free for resolveColor() to keep checking as the one-off override it was always meant
+        // to be. An element's own explicit `color=`/`background=` in source is untouched either
+        // way (ownKeys already skips those).
+        static const std::unordered_set<StrandKind> textLikeKinds = {
+            StrandKind::TEXT, StrandKind::LINK, StrandKind::ICON
+        };
+        bool isTextLike = textLikeKinds.count(s->kind) != 0;
         for (auto& a : inheritedLoopVisual) {
             if (ownKeys.count(a.key)) continue;
+            if (a.key == "color" && !isTextLike) continue;
             std::vector<std::string> reads;
             Value v = evalAttrExpr(a.value, warp, &reads);
             for (auto& w : reads) subs.record(w, s->id);
