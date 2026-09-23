@@ -405,6 +405,25 @@ class ProjectsActivity : AppCompatActivity() {
         chips.keys.forEach { chip -> chip.setOnClickListener { selectChip(chip) } }
         selectChip(chipFree)
 
+        // صفّ "قوالب indsin جاهزة" (اختياري، مستقل تماماً عن شرائح نوع المشروع أعلاه):
+        // خريطة معرّف نصّي -> شريحة، تُمرَّر لـ ProjectManager.createProject لتوليد
+        // indsin/main.indsin جاهز بدل القالب الترحيبي الافتراضي. null = بلا قالب (الافتراضي).
+        val indsinTemplateChips = mapOf(
+            view.findViewById<TextView>(R.id.chipIndsinCalculator) to "calculator",
+            view.findViewById<TextView>(R.id.chipIndsinBlog) to "blog",
+            view.findViewById<TextView>(R.id.chipIndsinButtons) to "buttons",
+            view.findViewById<TextView>(R.id.chipIndsinGallery) to "gallery",
+            view.findViewById<TextView>(R.id.chipIndsinWebview) to "webview"
+        )
+        var selectedIndsinTemplate: String? = null
+        fun selectIndsinTemplateChip(chip: TextView) {
+            // الضغط على شريحة محدَّدة مسبقاً يلغي التحديد (اختياري بطبيعته، بخلاف نوع المشروع
+            // الإلزامي أعلاه) — يعود القالب الافتراضي.
+            selectedIndsinTemplate = if (chip.isSelected) null else indsinTemplateChips.getValue(chip)
+            indsinTemplateChips.keys.forEach { it.isSelected = it === chip && selectedIndsinTemplate != null }
+        }
+        indsinTemplateChips.keys.forEach { chip -> chip.setOnClickListener { selectIndsinTemplateChip(chip) } }
+
         AlertDialog.Builder(this)
             .setTitle(R.string.new_project_title)
             .setView(view)
@@ -424,7 +443,7 @@ class ProjectsActivity : AppCompatActivity() {
                 )
                 ProjectCreationProgressDialog(this).run(
                     work = {
-                        val project = ProjectManager.createProject(this, name, selectedType, uiOptions)
+                        val project = ProjectManager.createProject(this, name, selectedType, uiOptions, indsinTemplate = selectedIndsinTemplate)
                         if (selectedType == ProjectType.ILLUST) {
                             com.dlof.rinlang.store.languages.CustomLanguageProjectScaffolder
                                 .installBundledIllust(this, project.dir)
