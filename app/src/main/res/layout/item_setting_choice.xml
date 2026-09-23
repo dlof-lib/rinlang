@@ -3,32 +3,35 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:layout_marginBottom="8dp"
-    android:background="@drawable/bg_list_card"
+    android:layout_marginBottom="10dp"
+    android:background="@drawable/bg_setting_row"
     android:orientation="vertical"
-    android:padding="14dp">
+    android:padding="15dp">
 
     <TextView
         android:id="@+id/settingTitle"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:textColor="@color/rin_on_toolbar"
-        android:textSize="13.5sp"
+        android:textSize="14sp"
         android:textStyle="bold" />
 
     <TextView
         android:id="@+id/settingHint"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="2dp"
+        android:layout_marginTop="3dp"
+        android:lineSpacingExtra="1.5dp"
         android:textColor="@color/rin_editor_hint"
-        android:textSize="11sp" />
+        android:textSize="11.5sp" />
 
     <LinearLayout
         android:id="@+id/settingOptions"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="10dp"
+        android:layout_marginTop="12dp"
+        android:background="@color/rin_segment_unselected_bg"
         android:gravity="center"
-        android:orientation="horizontal" />
+        android:orientation="horizontal"
+        android:padding="3dp" />
 </LinearLayout>
