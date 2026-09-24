@@ -278,7 +278,7 @@
   function renderTop() {
     clear($.top);
     var acct = h('div', { class: 'rs-acct' }); $.acct = acct;
-    $.top.appendChild(h('button', { class: 'rs-btn ghost', text: S.route && S.route.kind !== 'list' ? '← ' + tr('back') : '← ' + tr('home'),
+    $.top.appendChild(h('button', { class: 'rs-btn ghost', text: S.lang === 'ar' ? '→' : '←', 'aria-label': S.route && S.route.kind !== 'list' ? tr('back') : tr('home'), title: S.route && S.route.kind !== 'list' ? tr('back') : tr('home'),
       onclick: function () { if (S.route && S.route.kind !== 'list') go({ kind: 'list' }); else closeStore(); } }));
     $.top.appendChild(h('div', { class: 'rs-brand', text: '⧉ ' + tr('title') }));
     $.top.appendChild(h('button', { class: 'rs-btn ghost', 'aria-label': 'language', text: S.lang === 'ar' ? 'EN' : 'ع',
@@ -344,14 +344,15 @@
   function renderList() {
     var searchEl = h('input', { class: 'rs-search', type: 'search', value: S.term, placeholder: tr('search'), 'aria-label': tr('search'),
       oninput: function (e) { S.term = e.target.value; clearTimeout(renderList.t); renderList.t = setTimeout(fill, 120); } });
-    var tabs = h('div', { class: 'rs-chips' }), sorts = h('div', { class: 'rs-chips' }), cats = h('div', { class: 'rs-chips' }), out = h('div', { class: 'rs-results' });
+    var tabs = h('div', { class: 'rs-chips' }), cats = h('div', { class: 'rs-chips' }), out = h('div', { class: 'rs-results' });
     $.body.appendChild(h('div', { class: 'rs-hero' }, [h('div', { class: 'rs-hero-t', text: tr('heroT') }), h('p', { class: 'rs-hero-s', text: tr('heroS') })]));
-    $.body.appendChild(h('div', { class: 'rs-tools' }, [searchEl, tabs, sorts, cats])); $.body.appendChild(out);
+    $.body.appendChild(h('div', { class: 'rs-tools' }, [searchEl, tabs, cats])); $.body.appendChild(out);
     function chip(box, label, on, fn) { box.appendChild(h('button', { class: 'rs-chip' + (on ? ' on' : ''), text: label, onclick: fn })); }
     function fill() {
-      clear(tabs); clear(sorts); clear(cats); clear(out);
+      clear(tabs); clear(cats); clear(out);
       [['all', 'all'], ['official', 'official'], ['community', 'community']].concat(S.user ? [['mine', 'mine']] : []).forEach(function (t) { chip(tabs, tr(t[1]), S.tab === t[0], function () { S.tab = t[0]; fill(); }); });
-      [['latest', 'latest'], ['popular', 'popular']].forEach(function (t) { chip(sorts, tr(t[1]), S.sort === t[0], function () { S.sort = t[0]; fill(); }); });
+      tabs.appendChild(h('span', { class: 'rs-sep' }));
+      [['latest', 'latest'], ['popular', 'popular']].forEach(function (t) { chip(tabs, tr(t[1]), S.sort === t[0], function () { S.sort = t[0]; fill(); }); });
       var all = (S.officialList || []).concat(S.communityList || []), seen = {};
       chip(cats, tr('categories') + ': ' + tr('all'), !S.cat, function () { S.cat = ''; fill(); });
       all.forEach(function (i) { if (!seen[i.category]) { seen[i.category] = 1; chip(cats, i.category, S.cat === i.category, function () { S.cat = S.cat === i.category ? '' : i.category; fill(); }); } });
