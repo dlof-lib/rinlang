@@ -148,6 +148,8 @@ jobs:
           cp web/index.html dist/index.html
           # متجر المكتبات (طبقة Firebase/ويب) — نفس التطبيق، بلا صفحات HTML لكل مكتبة.
           cp web/libraries.js web/libraries.css dist/
+          # 404.html = محوّل SPA لروابط /@user/library.og.rin (GitHub Pages بلا rewrite)
+          cp web/404.html dist/404.html
 
       - name: Verify bundle
         run: |
@@ -157,6 +159,7 @@ jobs:
           test -f dist/rin.js
           test -f dist/libraries.js
           test -f dist/libraries.css
+          test -f dist/404.html
           echo "Bundle contents:"
           ls -la dist
 
