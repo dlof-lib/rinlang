@@ -3,7 +3,9 @@ package com.dlof.rinlang.store
 import com.dlof.rinlang.auth.FirebaseDbConfig
 import com.google.firebase.database.DataSnapshot
 import com.google.firebase.database.DatabaseError
+import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.FirebaseDatabase
+import com.google.firebase.database.ServerValue
 import com.google.firebase.database.ValueEventListener
 
 /**
@@ -173,12 +175,24 @@ object PackageRepository {
         })
     }
 
+    /**
+     * يسجّل تنزيلاً للمستخدم الحالي: marker واحد لكل uid في downloaders/{uid} + زيادة downloadCount
+     * بـ ServerValue.increment(1) في نفس multi-path update (ذرّي). قواعد Firebase تقبل الزيادة
+     * فقط إذا أُنشئ marker المستخدم معها، فلا يمكن تزوير العدّاد أو زيادته أكثر من مرة لكل مستخدم.
+     * (downloadCount = عدد المنزِّلين الفريدين.) بلا مستخدم مسجَّل لا يُحتسب شيء.
+     */
     fun incrementDownloadCount(packageId: String) {
-        val ref = packagesRef().child(packageId).child("downloadCount")
-        ref.addListenerForSingleValueEvent(object : ValueEventListener {
+        val uid = FirebaseAuth.getInstance().currentUser?.uid ?: return
+        val pkgRef = packagesRef().child(packageId)
+        pkgRef.child("downloaders").child(uid).addListenerForSingleValueEvent(object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
-                val current = snapshot.getValue(Long::class.java) ?: 0L
-                ref.setValue(current + 1)
+                if (snapshot.exists()) return // محتسَب سابقاً لهذا المستخدم
+                pkgRef.updateChildren(
+                    mapOf(
+                        "downloaders/$uid" to ServerValue.TIMESTAMP,
+                        "downloadCount" to ServerValue.increment(1)
+                    )
+                )
             }
 
             override fun onCancelled(error: DatabaseError) {}
@@ -285,27 +299,22 @@ object PackageRepository {
      * ونجاح العملية من عدمه، حتى تُحدَّث الواجهة فوراً بشكل متفائل (optimistic) أو تتراجع عند الفشل.
      */
     fun toggleLike(packageId: String, uid: String, callback: (liked: Boolean, success: Boolean) -> Unit) {
-        val likeRef = packagesRef().child(packageId).child("likes").child(uid)
-        likeRef.addListenerForSingleValueEvent(object : ValueEventListener {
+        val pkgRef = packagesRef().child(packageId)
+        pkgRef.child("likes").child(uid).addListenerForSingleValueEvent(object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
                 val alreadyLiked = snapshot.exists()
                 val newState = !alreadyLiked
-                val writeTask = if (newState) likeRef.setValue(true) else likeRef.removeValue()
-                writeTask
-                    .addOnSuccessListener {
-                        val countRef = packagesRef().child(packageId).child("likeCount")
-                        countRef.addListenerForSingleValueEvent(object : ValueEventListener {
-                            override fun onDataChange(countSnap: DataSnapshot) {
-                                val current = countSnap.getValue(Long::class.java) ?: 0L
-                                val updated = if (newState) current + 1 else (current - 1).coerceAtLeast(0L)
-                                countRef.setValue(updated)
-                                callback(newState, true)
-                            }
-                            override fun onCancelled(error: DatabaseError) = callback(alreadyLiked, false)
-                        })
-                    }
+                // multi-path update ذرّي: علامة الإعجاب + likeCount معاً. القواعد ترفض أي likeCount
+                // لا يطابق تغيّر علامة هذا المستخدم بالضبط (±1)، فلا يمكن تزوير العدّاد.
+                val updates = mapOf<String, Any?>(
+                    "likes/$uid" to (if (newState) true else null),
+                    "likeCount" to ServerValue.increment(if (newState) 1L else -1L)
+                )
+                pkgRef.updateChildren(updates)
+                    .addOnSuccessListener { callback(newState, true) }
                     .addOnFailureListener { callback(alreadyLiked, false) }
             }
+
             override fun onCancelled(error: DatabaseError) = callback(false, false)
         })
     }
