@@ -329,4 +329,7 @@ print \"Hello, \" + name + \"!\";
     <string name="explorer_current_file_badge">abierto</string>
     <string name="outline_line_range_format">líneas %1$d–%2$d</string>
     <string name="outline_child_count_format">%1$d anidados</string>
+    <string name="link_copied">Copiado</string>
+    <string name="link_share">Compartir</string>
+    <string name="link_copy">Copiar</string>
 </resources>
