@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  إطار منطقة "المعاينة الحيّة" أسفل كل كتلة كود ```rin ```/```indsin ``` داخل README — حدّ بلون
+  هوية التطبيق (accent) بدل الحدّ المحايد المستخدم في بطاقات الكود/الجداول العادية
+  (bg_detail_section_card)، ليُقرأ بصرياً كمنطقة "تفاعلية/حيّة" مختلفة عن نص ثابت.
+-->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="@color/rin_job_card_bg" />
+    <stroke android:width="1dp" android:color="@color/rin_accent_border_subtle" />
+    <corners android:radius="12dp" />
+</shape>
