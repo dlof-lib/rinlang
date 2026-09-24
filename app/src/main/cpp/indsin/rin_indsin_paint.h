@@ -1,5 +1,6 @@
 // indsin/rin_indsin_paint.h — Dye: paint engine (Strand geometry -> DrawList -> raster/JSON).
 #pragma once
+#include "rin_indsin_font.h"
 #include "rin_indsin_strand.h"
 #include "rin_indsin_tokens.h"
 #include "rin_indsin_layout.h" // splitCsv() -- reused here for DonutChart's data=/colors= parsing, same as Breadcrumb/Pagination already reuse it via rin_indsin_components_ext.h
@@ -142,6 +143,8 @@ inline Color resolveColor(const StrandPtr& s) {
         Color c;
         if (tone->kind == Value::Kind::STRING && resolveSemanticColor(tone->str, c)) { resolved = c; found = true; }
     }
+    // `bg=` is the explicit fill spelling: it wins over color= (which, on a text-bearing box, is then its text color).
+    if (!found && resolveColorAttr(s, "bg", resolved)) found = true;
     if (!found && resolveColorAttr(s, "color", resolved)) found = true;
     if (!found && resolveColorAttr(s, "background", resolved)) found = true;
 
@@ -173,7 +176,9 @@ enum class DrawOp { FILL_RECT, STROKE_RECT, TEXT_RUN, SCRIM_RECT, STROKE_ARC };
 // straight through -- see its drawArcCommand()/drawSpinner()/drawDonutChart()). Every other op
 // ignores them (left at their defaults), same as radius/strokeWidth already sit unused on
 // TEXT_RUN today.
-struct DrawCommand { DrawOp op; Rect bounds; Color color; std::string text; StrandId owner; double radius = 0; double strokeWidth = 0; double startAngleDeg = 0; double sweepAngleDeg = 360; };
+struct DrawCommand { DrawOp op; Rect bounds; Color color; std::string text; StrandId owner; double radius = 0; double strokeWidth = 0; double startAngleDeg = 0; double sweepAngleDeg = 360;
+    // TEXT_RUN style (filled by Dye::paintInto's post-pass; 0 = unset): px font size, align 0=start(auto RTL) 1=center 2=end, bold, single-line (ellipsize) vs wrapped.
+    double fontSize = 0; int align = 0; bool bold = false; bool singleLine = false; };
 using DrawList = std::vector<DrawCommand>;
 
 // The scrim's color, ~55% black — a fixed near-black rather than a Theme role, since a scrim
@@ -200,7 +205,28 @@ struct Dye {
         }
         return list;
     }
+    // Post-pass wrapper: every TEXT_RUN a strand emits gets the strand's real text style so no backend
+    // (native rasterizer, HTML export) has to guess font size / alignment / weight from the box height.
     void paintInto(const StrandPtr& s, DrawList& list) {
+        size_t first = list.size();
+        paintIntoImpl(s, list);
+        bool centered = s->kind == StrandKind::BUTTON || s->kind == StrandKind::ICONBUTTON || s->kind == StrandKind::TABITEM ||
+                        s->kind == StrandKind::BADGE || s->kind == StrandKind::AVATAR || s->kind == StrandKind::TAG;
+        bool single = centered || s->kind == StrandKind::INPUT || s->kind == StrandKind::SEARCH || s->kind == StrandKind::SELECT ||
+                      s->kind == StrandKind::LINK;
+        for (size_t i = first; i < list.size(); i++) {
+            auto& d = list[i];
+            if (d.op != DrawOp::TEXT_RUN || d.owner != s->id || d.fontSize > 0) continue;
+            d.fontSize = resolveFontSize(*s, s->kind == StrandKind::BUTTON ? "labelSize" : "size", 14);
+            d.align = centered ? 1 : 0;
+            std::string ta = s->attrStr("textAlign", s->attrStr("text_align", ""));
+            if (ta == "center") d.align = 1; else if (ta == "right" || ta == "end") d.align = 2; else if (ta == "left" || ta == "start") d.align = 0;
+            std::string wt = s->attrStr("weight", s->attrStr("fontWeight", ""));
+            d.bold = centered || wt == "bold" || wt == "700" || wt == "600" || s->attrStr("bold", "") == "true";
+            d.singleLine = single;
+        }
+    }
+    void paintIntoImpl(const StrandPtr& s, DrawList& list) {
         double r = std::min(resolveRadius(*s, 0), std::min(s->geometry.w, s->geometry.h) / 2.0);
 
         if (s->kind == StrandKind::BUTTON || s->kind == StrandKind::TABITEM) { paintButton(s, list, r); for (auto& c : s->children) paintInto(c, list); return; }
@@ -691,6 +717,7 @@ struct Dye {
                 textColor = tone; // no box at all, ever -- see docs/indsintime/RIN_INDSIN_TOKENS.md
                 break;
         }
+        { Color tc = textColor; if ((s->attr("bg") && resolveColorAttr(s, "color", tc)) || resolveColorAttr(s, "textColor", tc)) textColor = tc; }
         list.push_back({DrawOp::TEXT_RUN, s->geometry, textColor, buttonDisplayLabel(s), s->id, 0, 0});
     }
 
@@ -723,31 +750,146 @@ struct Dye {
 inline std::vector<unsigned char> rasterizeToBuffer(const DrawList& list, int W, int H) {
     std::vector<unsigned char> buf((size_t)W*H*3, 18);
     if (W <= 0 || H <= 0) return buf;
-    // Real alpha compositing (rin_color.h's alphaBlend): a translucent DrawCommand (a SCRIM_RECT,
-    // an explicit rgba()/hsla() color=, an opacity= attribute) now actually blends with whatever
-    // is already in the buffer instead of overwriting it outright -- this is what makes this the
-    // ONE rasterizer (§21/§36) genuinely correct for alpha rather than silently ignoring it.
-    auto setPx = [&](int x,int y, Color c){
-        if (x<0||y<0||x>=W||y>=H) return;
+    // Coverage-based compositing: `cov` (0..1, from anti-aliasing) times the color's own alpha,
+    // blended through rincolor::alphaBlend so opacity=/rgba()/scrims compose exactly as before.
+    auto plot = [&](int x, int y, Color c, double cov) {
+        if (x<0||y<0||x>=W||y>=H || cov <= 0.0 || c.a == 0) return;
         size_t i=((size_t)y*W+x)*3;
-        if (c.a == 255) { buf[i]=c.r; buf[i+1]=c.g; buf[i+2]=c.b; return; }
-        if (c.a == 0) return;
-        Color bg{buf[i], buf[i+1], buf[i+2], 255};
-        Color blended = rincolor::alphaBlend(c, bg);
-        buf[i]=blended.r; buf[i+1]=blended.g; buf[i+2]=blended.b;
+        double a = cov * (c.a / 255.0);
+        if (a >= 0.999) { buf[i]=c.r; buf[i+1]=c.g; buf[i+2]=c.b; return; }
+        buf[i]   = (unsigned char)(buf[i]  *(1-a) + c.r*a + 0.5);
+        buf[i+1] = (unsigned char)(buf[i+1]*(1-a) + c.g*a + 0.5);
+        buf[i+2] = (unsigned char)(buf[i+2]*(1-a) + c.b*a + 0.5);
+    };
+    auto clamp01 = [](double v){ return v < 0 ? 0.0 : (v > 1 ? 1.0 : v); };
+    // Signed distance (px, negative inside) from a rounded rect centered (cx,cy) with half-size (hw,hh).
+    auto sdRound = [](double px, double py, double cx, double cy, double hw, double hh, double r) {
+        double dx = std::max(std::fabs(px-cx) - (hw - r), 0.0), dy = std::max(std::fabs(py-cy) - (hh - r), 0.0);
+        double inside = std::min(std::max(std::fabs(px-cx) - (hw - r), std::fabs(py-cy) - (hh - r)), 0.0);
+        return std::sqrt(dx*dx + dy*dy) + inside - r;
+    };
+    auto fillRound = [&](const Rect& b, double radius, Color c) {
+        double x0=b.x, y0=b.y, x1=b.x+b.w, y1=b.y+b.h;
+        if (radius <= 0.5) { // square corners: snap to whole pixels so neighbours never show seams
+            x0=std::round(x0); y0=std::round(y0); x1=std::round(x1); y1=std::round(y1);
+            for (int y=(int)y0;y<(int)y1;y++) for (int x=(int)x0;x<(int)x1;x++) plot(x,y,c,1.0);
+            return;
+        }
+        double cx=(x0+x1)/2, cy=(y0+y1)/2, hw=(x1-x0)/2, hh=(y1-y0)/2, r=std::min(radius, std::min(hw,hh));
+        for (int y=(int)std::floor(y0);y<(int)std::ceil(y1);y++) for (int x=(int)std::floor(x0);x<(int)std::ceil(x1);x++)
+            plot(x,y,c,clamp01(0.5 - sdRound(x+0.5,y+0.5,cx,cy,hw,hh,r)));
+    };
+    auto strokeRound = [&](const Rect& b, double radius, double t, Color c) {
+        double x0=b.x, y0=b.y, x1=b.x+b.w, y1=b.y+b.h; t = std::max(1.0, t);
+        double cx=(x0+x1)/2, cy=(y0+y1)/2, hw=(x1-x0)/2, hh=(y1-y0)/2, r=std::min(radius, std::min(hw,hh));
+        for (int y=(int)std::floor(y0);y<(int)std::ceil(y1);y++) for (int x=(int)std::floor(x0);x<(int)std::ceil(x1);x++) {
+            double d = sdRound(x+0.5,y+0.5,cx,cy,hw,hh,r);
+            plot(x,y,c,clamp01(0.5 - d) - clamp01(0.5 - (d + t)));
+        }
+    };
+    auto arc = [&](const DrawCommand& cmd) {
+        double cx=cmd.bounds.x+cmd.bounds.w/2, cy=cmd.bounds.y+cmd.bounds.h/2, sw=std::max(1.0,cmd.strokeWidth);
+        double R = std::min(cmd.bounds.w, cmd.bounds.h)/2 - sw/2;
+        if (R <= 0) return;
+        for (int y=(int)std::floor(cmd.bounds.y);y<(int)std::ceil(cmd.bounds.y+cmd.bounds.h);y++)
+            for (int x=(int)std::floor(cmd.bounds.x);x<(int)std::ceil(cmd.bounds.x+cmd.bounds.w);x++) {
+                double dx=x+0.5-cx, dy=y+0.5-cy, dist=std::sqrt(dx*dx+dy*dy);
+                double cov = clamp01(sw/2 + 0.5 - std::fabs(dist - R));
+                if (cov <= 0) continue;
+                if (cmd.sweepAngleDeg < 359.9) {
+                    double ang = std::atan2(dy,dx)*180.0/3.14159265358979; // 0 = 3 o'clock, clockwise (y is down)
+                    double rel = std::fmod(ang - cmd.startAngleDeg + 720.0, 360.0);
+                    if (rel > cmd.sweepAngleDeg) continue;
+                }
+                plot(x,y,cmd.color,cov);
+            }
+    };
+    // ---- text ------------------------------------------------------------------------------------
+    auto asciiFor = [](uint32_t cp) -> int {
+        if (cp >= 0x20 && cp <= 0x7E) return (int)cp;
+        switch (cp) {
+            case 0xD7: return 'x'; case 0x2013: case 0x2014: case 0x2212: return '-'; case 0x2190: return '<'; case 0x2192: return '>';
+            case 0x2605: case 0x2606: case 0x2022: return '*'; case 0x2713: return 'v'; case 0xF7: return '/';
+            case 0x2018: case 0x2019: return '\''; case 0x201C: case 0x201D: return '"'; case 0xA0: return ' ';
+        }
+        return -1;
+    };
+    auto drawGlyph = [&](int ascii, double gx, double gy, double unit, Color c, bool bold) {
+        const uint8_t* g = font::glyph5x7((unsigned char)ascii);
+        if (!g) return;
+        int px0=(int)std::floor(gx), px1=(int)std::ceil(gx + 5*unit + (bold?unit*0.5:0)), py0=(int)std::floor(gy), py1=(int)std::ceil(gy + 7*unit);
+        for (int y=py0;y<py1;y++) for (int x=px0;x<px1;x++) {
+            int hit=0;
+            for (int sy=0;sy<4;sy++) for (int sx=0;sx<4;sx++) {
+                double u=((x+(sx+0.5)/4.0)-gx)/unit, v=((y+(sy+0.5)/4.0)-gy)/unit;
+                for (int pass=0; pass<(bold?2:1); pass++) {
+                    double uu = u - pass*0.5;
+                    int col=(int)std::floor(uu), row=(int)std::floor(v);
+                    if (col>=0 && col<5 && row>=0 && row<7 && ((g[col]>>row)&1)) { hit++; break; }
+                }
+            }
+            if (hit) plot(x,y,c,hit/16.0);
+        }
+    };
+    auto drawText = [&](const DrawCommand& cmd) {
+        if (cmd.text.empty() || cmd.bounds.w <= 0 || cmd.bounds.h <= 0) return;
+        double fs = cmd.fontSize > 0 ? cmd.fontSize : std::min(28.0, std::max(8.0, cmd.bounds.h * 0.35));
+        double unit = font::unitFor(fs), adv = font::advanceFor(fs), lineH = fs * 1.4, pad = (cmd.align == 1 ? 4.0 : 1.0);
+        double avail = std::max(4.0, cmd.bounds.w - pad*2);
+        bool rtl = font::isRtlText(cmd.text);
+        auto cps = font::decodeUtf8(cmd.text);
+        // Split into words (on space / newline) and greedily wrap by the real advance.
+        std::vector<std::vector<uint32_t>> lines; std::vector<uint32_t> cur;
+        auto width = [&](size_t n){ return n * adv; };
+        size_t maxLines = cmd.singleLine ? 1 : std::max<size_t>(1, (size_t)(cmd.bounds.h / lineH + 0.0001));
+        std::vector<uint32_t> word;
+        auto flushWord = [&]() {
+            if (word.empty()) return;
+            size_t need = cur.empty() ? word.size() : cur.size() + 1 + word.size();
+            if (!cmd.singleLine && !cur.empty() && width(need) > avail) { lines.push_back(cur); cur.clear(); }
+            if (!cur.empty()) cur.push_back(' ');
+            cur.insert(cur.end(), word.begin(), word.end()); word.clear();
+        };
+        for (uint32_t cp : cps) {
+            if (cp == '\n') { flushWord(); lines.push_back(cur); cur.clear(); }
+            else if (cp == ' ') flushWord();
+            else word.push_back(cp);
+        }
+        flushWord(); lines.push_back(cur);
+        if (lines.size() > maxLines) { lines.resize(maxLines); lines.back().push_back(0x2026); }
+        for (size_t li=0; li<lines.size(); li++) {
+            auto& ln = lines[li];
+            if (width(ln.size()) > avail) { // ellipsize with "..." so long single lines don't spill
+                size_t keep = (size_t)std::max(0.0, std::floor(avail/adv) - 3);
+                if (keep < ln.size()) { ln.resize(keep); ln.push_back('.'); ln.push_back('.'); ln.push_back('.'); }
+            }
+            double w = width(ln.size());
+            double x = cmd.bounds.x + pad;
+            int al = cmd.align == 0 && rtl ? 2 : cmd.align;
+            if (al == 1) x = cmd.bounds.x + (cmd.bounds.w - w)/2; else if (al == 2) x = cmd.bounds.x + cmd.bounds.w - pad - w;
+            double blockH = cmd.singleLine ? lineH : lineH * lines.size();
+            double top = cmd.singleLine ? cmd.bounds.y + (cmd.bounds.h - lineH)/2 : cmd.bounds.y;
+            (void)blockH;
+            double gy = top + li*lineH + (lineH - 7*unit)/2;
+            for (size_t k=0;k<ln.size();k++) {
+                uint32_t cp = ln[k]; int a = asciiFor(cp);
+                double gx = x + k*adv;
+                if (cp == 0x2026) { for (int d=0;d<3;d++) drawGlyph('.', gx + d*adv, gy, unit, cmd.color, false); continue; }
+                if (a > 0) drawGlyph(a, gx, gy, unit, cmd.color, cmd.bold);
+                else { // no embedded glyph (Arabic/CJK/emoji...): soft "skeleton" bar so layout stays readable
+                    Rect bar{gx + adv*0.12, gy + 7*unit*0.38, adv*0.76, std::max(1.5, 7*unit*0.3)};
+                    Color sc = cmd.color; sc.a = (unsigned char)(sc.a * 0.55);
+                    fillRound(bar, bar.h/2, sc);
+                }
+            }
+        }
     };
     for (auto& cmd : list) {
-        if (cmd.op == DrawOp::FILL_RECT) {
-            int x0=(int)cmd.bounds.x, y0=(int)cmd.bounds.y, x1=(int)(cmd.bounds.x+cmd.bounds.w), y1=(int)(cmd.bounds.y+cmd.bounds.h);
-            for (int y=y0;y<y1;y++) for (int x=x0;x<x1;x++) setPx(x,y,cmd.color);
-        } else if (cmd.op == DrawOp::STROKE_RECT) {
-            int x0=(int)cmd.bounds.x, y0=(int)cmd.bounds.y, x1=(int)(cmd.bounds.x+cmd.bounds.w), y1=(int)(cmd.bounds.y+cmd.bounds.h);
-            int t = std::max(1, (int)cmd.strokeWidth);
-            for (int y=y0;y<y1;y++) for (int x=x0;x<x1;x++)
-                if (x<x0+t || x>=x1-t || y<y0+t || y>=y1-t) setPx(x,y,cmd.color);
-        } else {
-            int x0=(int)cmd.bounds.x+4, y=(int)(cmd.bounds.y + cmd.bounds.h/2);
-            for (size_t i=0;i<cmd.text.size();i++) for (int dx=0; dx<6; dx++) setPx(x0 + (int)i*8 + dx, y, cmd.color);
+        switch (cmd.op) {
+            case DrawOp::FILL_RECT: case DrawOp::SCRIM_RECT: fillRound(cmd.bounds, cmd.radius, cmd.color); break;
+            case DrawOp::STROKE_RECT: strokeRound(cmd.bounds, cmd.radius, cmd.strokeWidth, cmd.color); break;
+            case DrawOp::STROKE_ARC: arc(cmd); break;
+            case DrawOp::TEXT_RUN: drawText(cmd); break;
         }
     }
     return buf;
@@ -922,6 +1064,7 @@ inline const char* drawOpName(DrawOp op) {
         case DrawOp::STROKE_RECT: return "stroke_rect";
         case DrawOp::TEXT_RUN: return "text";
         case DrawOp::SCRIM_RECT: return "scrim";
+        case DrawOp::STROKE_ARC: return "stroke_arc";
         default: return "unknown";
     }
 }
@@ -944,6 +1087,8 @@ inline std::string drawListToJsonString(const DrawList& list) {
            << ",\"alpha\":" << colorAlphaUnit(d.color)
            << ",\"radius\":" << d.radius
            << ",\"strokeWidth\":" << d.strokeWidth;
+        if (d.op == DrawOp::STROKE_ARC) os << ",\"start\":" << d.startAngleDeg << ",\"sweep\":" << d.sweepAngleDeg;
+        if (d.op == DrawOp::TEXT_RUN) os << ",\"fontSize\":" << d.fontSize << ",\"align\":" << d.align << ",\"bold\":" << (d.bold?"true":"false") << ",\"singleLine\":" << (d.singleLine?"true":"false");
         if (!d.text.empty()) os << ",\"text\":\"" << jsonEscape(d.text) << "\"";
         os << "}";
     }
