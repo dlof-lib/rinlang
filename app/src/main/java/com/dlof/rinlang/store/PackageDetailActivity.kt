@@ -277,27 +277,72 @@ class PackageDetailActivity : BaseConnectivityActivity() {
         }
     }
 
+    /**
+     * يعرض قسم "ملفات الحزمة" كشجرة مجلدات/ملفات حقيقية (عبر [PackagingUtils.buildFileTree])
+     * بدل قائمة مسطَّحة بمسار كامل مكرَّر في كل سطر (مثال: "lib/table_utils.og.og.rin" السابق
+     * يظهر الآن كرأس مجلد "lib" واحد يحوي سطر ملف باسمه المجرَّد "table_utils.og.og.rin" فقط) —
+     * أقرب لشكل مستكشف ملفات احترافي حقيقي (VS Code / GitHub) منه لقائمة مسارات خام.
+     */
     private fun bindFiles() {
         val container = findViewById<LinearLayout>(R.id.containerDetailFiles)
         container.removeAllViews()
         val contents = PackagingUtils.readContents(pkg)
+        val tree = PackagingUtils.buildFileTree(contents.files)
         val inflater = LayoutInflater.from(this)
-        for ((index, file) in contents.files.withIndex()) {
+        renderFileTree(container, inflater, tree, depth = 0, rowIndex = intArrayOf(0))
+    }
+
+    /**
+     * يرسم مجلدات وملفات [folder] المباشرة داخل [container] بترتيب: كل المجلدات الفرعية
+     * (مرتَّبة أبجدياً) ثم كل الملفات المباشرة (مرتَّبة أبجدياً)، مع نزول عودي داخل كل مجلد
+     * فرعي مباشرة بعد رأسه (بلا طيّ/فتح — الشجرة كاملة مفتوحة دائماً لتبقى كل الملفات مرئية
+     * بضغطة تمرير واحدة). [depth] يحدِّد مقدار الإزاحة البادئة الإضافية (18dp لكل مستوى) التي
+     * تُضاف فوق حشوة الصفّ الأصلية عبر [View.setPaddingRelative] — تُحترَم اتجاهية RTL/LTR
+     * تلقائياً لأنها تُضبَط على البداية (start) لا اليسار الثابت.
+     */
+    private fun renderFileTree(
+        container: LinearLayout,
+        inflater: LayoutInflater,
+        folder: FileTreeFolder,
+        depth: Int,
+        rowIndex: IntArray
+    ) {
+        val indentPx = (depth * 18 * resources.displayMetrics.density).toInt()
+
+        for (subFolder in folder.folders.values) {
+            val row = inflater.inflate(R.layout.item_package_folder, container, false)
+            row.setPaddingRelative(row.paddingStart + indentPx, row.paddingTop, row.paddingEnd, row.paddingBottom)
+            row.findViewById<TextView>(R.id.txtFolderName).text = subFolder.name
+            row.findViewById<TextView>(R.id.txtFolderCount).text =
+                getString(R.string.package_detail_folder_file_count, subFolder.totalFileCount())
+            if (rowIndex[0] % 2 == 1) {
+                row.setBackgroundColor(withAlpha(getColor(R.color.rin_on_toolbar), 8))
+            }
+            rowIndex[0]++
+            container.addView(row)
+
+            renderFileTree(container, inflater, subFolder, depth + 1, rowIndex)
+        }
+
+        for (leaf in folder.files) {
             val row = inflater.inflate(R.layout.item_package_file, container, false)
-            val tint = getColor(PackagingUtils.iconColorResFor(file.name))
+            row.setPaddingRelative(row.paddingStart + indentPx, row.paddingTop, row.paddingEnd, row.paddingBottom)
+            val tint = getColor(PackagingUtils.iconColorResFor(leaf.entry.name))
             row.findViewById<ImageView>(R.id.imgFileIcon).apply {
-                setImageResource(PackagingUtils.iconResFor(file.name))
+                setImageResource(PackagingUtils.iconResFor(leaf.entry.name))
                 imageTintList = android.content.res.ColorStateList.valueOf(tint)
             }
             row.findViewById<View>(R.id.bgFileIconCircle).backgroundTintList =
                 android.content.res.ColorStateList.valueOf(withAlpha(tint, 38))
-            row.findViewById<TextView>(R.id.txtFileName).text = file.name
-            row.findViewById<TextView>(R.id.txtFileSize).text = formatSize(file.sizeBytes)
+            row.findViewById<TextView>(R.id.txtFileName).text = leaf.simpleName
+            row.findViewById<TextView>(R.id.txtFileSize).text = formatSize(leaf.entry.sizeBytes)
             // تباين خفيف بين الصفوف الزوجية/الفردية بدل خلفية واحدة موحّدة مسطّحة، لتحسين قابلية
-            // المسح البصري (scannability) في القوائم الطويلة.
-            if (index % 2 == 1) {
+            // المسح البصري (scannability) في القوائم الطويلة — العدّاد مشترك بين المجلدات
+            // والملفات معاً حتى يبقى التناوب متّسقاً عبر الشجرة كاملة لا داخل كل مستوى وحده.
+            if (rowIndex[0] % 2 == 1) {
                 row.setBackgroundColor(withAlpha(getColor(R.color.rin_on_toolbar), 8))
             }
+            rowIndex[0]++
             container.addView(row)
         }
     }
