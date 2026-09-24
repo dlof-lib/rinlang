@@ -32,59 +32,72 @@ object RinLinks {
         data class Extension(val user: String, val key: String) : Target()
     }
 
-    fun slug(s: String): String = s.trim().removePrefix("@").replace(Regex("\\s+"), "-").replace(Regex("-+"), "-").trim('-')
+    fun slug(s: String): String = s.trim().replace(Regex("\\s+"), "-")
 
+    /** مفتاح مقارنة موحَّد (بلا لاحقة، بلا مسافات، أحرف صغيرة) — مطابق لـ libKey في libraries.js. */
     fun key(s: String): String = s.trim()
         .replace(Regex("\\.(og\\.rin(sdk)?|rinex)$", RegexOption.IGNORE_CASE), "")
-        .replace(Regex("\\s+"), "-").replace(Regex("-+"), "-").trim('-').lowercase()
+        .replace(Regex("\\s+"), "-").lowercase()
 
-    private fun validSegment(s: String): Boolean = s.length in 1..100 && s.matches(Regex("[A-Za-z0-9._~-]+"))
-    private fun enc(s: String): String = Uri.encode(s).replace("%40", "@")
+    private fun seg(s: String) = Uri.encode(slug(s))
 
-    fun profile(username: String): String {
-        val u = slug(username); require(validSegment(u)) { "Invalid Rin username" }; return "$BASE@${enc(u)}"
-    }
+    fun profile(username: String) = "$BASE@${seg(username)}"
+    fun library(publisher: String, name: String) = "$BASE@${seg(publisher)}/${seg(name)}$LIB_SUFFIX"
+    fun extension(developer: String, name: String) = "$BASE@${seg(developer)}/${seg(name)}$EXT_SUFFIX"
 
-    fun library(publisher: String, name: String): String {
-        val u = slug(publisher); val n = slug(name.replace(Regex("\\.og\\.rin$", RegexOption.IGNORE_CASE), ""))
-        require(validSegment(u) && validSegment(n)) { "Invalid Rin library reference" }; return "$BASE@${enc(u)}/${enc(n)}$LIB_SUFFIX"
-    }
-
-    fun extension(developer: String, name: String): String {
-        val u = slug(developer); val n = slug(name.replace(Regex("\\.rinex$", RegexOption.IGNORE_CASE), ""))
-        require(validSegment(u) && validSegment(n)) { "Invalid Rin extension reference" }; return "$BASE@${enc(u)}/${enc(n)}$EXT_SUFFIX"
-    }
-
+    /** الحزم القديمة بلا publisherUsername تستخدم اسم العرض (يجده الموقع والتطبيق عبر publisherName). */
     fun forPackage(pkg: RinPackage) = library(pkg.publisherUsername.ifBlank { pkg.publisherName }, pkg.name)
-    fun forExtension(ext: RinExtension) = extension(ext.developerUsername.ifBlank { ext.developer }, ext.name)
+    fun forExtension(ext: RinExtension) = extension(ext.developer, ext.name)
 
+    /** يحلّل رابطاً واردًا؛ null إن لم يكن رابط Rin مفهوماً. يقبل المسار الجميل والصيغة القديمة ?@user/lib. */
     fun parse(uri: Uri?): Target? {
         if (uri == null || !HOST.equals(uri.host, ignoreCase = true)) return null
-        val path = uri.pathSegments.orEmpty(); val at = path.indexOfFirst { it.startsWith("@") }
-        val segs = if (at >= 0) path.drop(at) else {
-            val q = uri.encodedQuery.orEmpty(); if (!q.startsWith("@")) return null
-            q.substringBefore('&').split('/').filter { it.isNotEmpty() }.map(Uri::decode)
+        var segs = (uri.pathSegments ?: emptyList())
+        var at = segs.indexOfFirst { it.startsWith("@") }
+        if (at < 0) {
+            val q = uri.encodedQuery.orEmpty()
+            if (!q.startsWith("@")) return null
+            segs = q.substringBefore('&').split('/').map { Uri.decode(it) }
+            at = 0
         }
-        if (segs.isEmpty()) return null
-        val user = Uri.decode(segs[0]).removePrefix("@").trim(); if (!validSegment(slug(user))) return null
-        val lib = segs.getOrNull(1)?.let(Uri::decode)?.trim().orEmpty(); if (lib.isEmpty()) return Target.Profile(user)
-        val k = key(lib); if (!validSegment(k)) return null
-        return if (lib.endsWith(EXT_SUFFIX, true)) Target.Extension(user, k) else Target.Library(user, k)
+        val user = segs[at].removePrefix("@").trim()
+        if (user.isEmpty() || user.length > 100) return null
+        val lib = segs.getOrNull(at + 1)?.trim().orEmpty()
+        if (lib.isEmpty()) return Target.Profile(user)
+        val k = key(lib)
+        if (k.isEmpty()) return null
+        return if (lib.endsWith(EXT_SUFFIX, ignoreCase = true)) Target.Extension(user, k) else Target.Library(user, k)
     }
 
     fun copy(context: Context, url: String) {
         val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        cm.setPrimaryClip(ClipData.newPlainText("Rin link", url)); Toast.makeText(context, R.string.link_copied, Toast.LENGTH_SHORT).show()
+        cm.setPrimaryClip(ClipData.newPlainText("Rin link", url))
+        Toast.makeText(context, R.string.link_copied, Toast.LENGTH_SHORT).show()
     }
 
+    /**
+     * الموقع يولّد الآن صفحة معاينة ثابتة + صورة OG لكل رابط (scripts/build_share_pages.py)، فتُظهر واتساب/تيليجرام
+     * بطاقة فيها اسم المكتبة والوصف والإصدار والأرقام. لذلك نرسل «العنوان + الرابط» فقط؛ [subtitle] يبقى في التوقيع
+     * للتوافق، ولا يُكرَّر في النص لأن البطاقة تحمله أصلاً.
+     */
     fun share(context: Context, url: String, title: String, @Suppress("UNUSED_PARAMETER") subtitle: String = "") {
-        val send = Intent(Intent.ACTION_SEND).apply { type = "text/plain"; putExtra(Intent.EXTRA_SUBJECT, title); putExtra(Intent.EXTRA_TEXT, title.trim() + "\n" + url) }
+        val body = title.trim() + "\n" + url
+        val send = Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_SUBJECT, title)
+            putExtra(Intent.EXTRA_TEXT, body)
+        }
         context.startActivity(Intent.createChooser(send, context.getString(R.string.link_share)))
     }
 
+    /** حوار موحّد: نسخ الرابط / مشاركته. يُستدعى من زر المشاركة في الشريط العلوي لكل شاشة تفاصيل. */
     fun showDialog(context: Context, title: String, url: String, subtitle: String = "") {
-        AlertDialog.Builder(context).setTitle(title).setMessage(url)
+        AlertDialog.Builder(context)
+            .setTitle(title)
+            .setMessage(url)
             .setPositiveButton(R.string.link_share) { _, _ -> share(context, url, title, subtitle) }
-            .setNeutralButton(R.string.link_copy) { _, _ -> copy(context, url) }.setNegativeButton(R.string.cancel, null).show()
+            .setNeutralButton(R.string.link_copy) { _, _ -> copy(context, url) }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
     }
 }
