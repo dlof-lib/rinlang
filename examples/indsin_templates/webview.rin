@@ -1,0 +1,28 @@
+// indsin/main.indsin — قالب "ويب فيو" جاهز (محرّك indsin، @view.*)
+// استبدل روابط url= أدناه بروابطك الفعلية.
+
+warp url = "https://example.com";
+
+fun openHome() { url = "https://example.com"; }
+fun openDocs() { url = "https://example.com/docs"; }
+fun openBlog() { url = "https://example.com/blog"; }
+
+@view.Column=root
+    padding=16;
+    gap=10;
+
+    @view.Text=heading text="متصفّح داخل التطبيق"; size="title"; .end/view
+
+    @view.Row=nav gap=8;
+        @view.Button=bHome label="الرئيسية"; onTap=openHome(); .end/view
+        @view.Button=bDocs label="التوثيق"; onTap=openDocs(); .end/view
+        @view.Button=bBlog label="المدونة"; onTap=openBlog(); .end/view
+    .end/view
+
+    @view.Text=urlLabel text=url; size=12; .end/view
+
+    @view.Card=frame
+        padding=4;
+        @view.WebView=browser url=url; width=360; height=480; .end/view
+    .end/view
+.end/view
