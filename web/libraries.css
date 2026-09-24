@@ -1,7 +1,7 @@
 /* Rin Library Store — احترافي، موبايل أولاً ثم سطح مكتب. داكن/فاتح، RTL/LTR، هياكل تحميل (skeleton). */
 html.rs-lock{overflow:hidden}
 #rin-store{--bg:#060807;--panel:#0d100d;--panel2:#141a15;--line:#1f2821;--fg:#f4f6f3;--mut:#9aa39c;--acc:#22c55e;--acc2:#4ade80;--accfg:#04130a;--err:#ff8a8a;
-  --glow:rgba(34,197,94,.14);--shadow:0 12px 32px -16px rgba(0,0,0,.7);--sk1:#141a15;--sk2:#1d271f;--r:16px;
+  --glow:rgba(34,197,94,.14);--shadow:0 12px 32px -16px rgba(0,0,0,.7);--sk1:#19211b;--sk2:#2a382d;--r:16px;
   position:fixed;inset:0;z-index:1000;display:none;flex-direction:column;color:var(--fg);font-size:15px;line-height:1.55;
   font-family:system-ui,-apple-system,"Segoe UI","Noto Sans Arabic",Tahoma,sans-serif;-webkit-font-smoothing:antialiased;
   background:radial-gradient(900px 420px at 85% -120px,var(--glow),transparent 70%),var(--bg)}
@@ -14,7 +14,7 @@ html.rs-lock{overflow:hidden}
 /* الشريط العلوي */
 .rs-top{display:flex;align-items:center;gap:8px;padding:10px max(12px,env(safe-area-inset-right)) 10px max(12px,env(safe-area-inset-left));
   background:color-mix(in srgb,var(--panel) 82%,transparent);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:5}
-.rs-brand{flex:1;font-weight:800;font-size:17px;letter-spacing:.2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rs-top .rs-btn{padding:6px 12px}.rs-brand{flex:1;min-width:0;font-weight:800;font-size:17px;letter-spacing:.2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .rs-main{flex:1;overflow:auto;padding:16px 14px 64px;width:100%;max-width:1240px;margin:0 auto;-webkit-overflow-scrolling:touch;scroll-behavior:smooth}
 .rs-btn{font:inherit;font-weight:700;font-size:14px;min-height:40px;padding:6px 16px;border:1px solid var(--acc);border-radius:11px;background:linear-gradient(180deg,var(--acc2),var(--acc));color:var(--accfg);cursor:pointer;transition:transform .12s,box-shadow .2s,filter .2s}
 .rs-btn:hover{filter:brightness(1.07);box-shadow:0 6px 18px -8px var(--acc)}
@@ -26,7 +26,9 @@ html.rs-lock{overflow:hidden}
 .rs-hero{padding:22px 18px;border:1px solid var(--line);border-radius:22px;margin-bottom:14px;background:linear-gradient(135deg,var(--glow),transparent 60%),var(--panel)}
 .rs-hero-t{font-size:26px;font-weight:900;line-height:1.2;background:linear-gradient(90deg,var(--fg),var(--acc2));-webkit-background-clip:text;background-clip:text;color:transparent}
 .rs-hero-s{margin:6px 0 0;color:var(--mut);max-width:60ch}
-.rs-tools{position:sticky;top:0;z-index:4;padding:8px 0 2px;margin-bottom:6px;background:linear-gradient(var(--bg) 78%,transparent)}
+.rs-tools{padding:4px 0 0;margin-bottom:6px}
+@media(min-width:960px){.rs-tools{position:sticky;top:60px;z-index:4;padding:10px 0 2px;background:linear-gradient(var(--bg) 80%,transparent)}}
+.rs-sep{flex:none;width:1px;background:var(--line);margin:4px 4px}
 .rs-search{width:100%;font:inherit;padding:13px 16px;border-radius:14px;border:1px solid var(--line);background:var(--panel);color:var(--fg);margin-bottom:8px;transition:border-color .2s,box-shadow .2s}
 .rs-search:focus{outline:none;border-color:var(--acc);box-shadow:0 0 0 4px var(--glow)}
 .rs-chips{display:flex;gap:6px;overflow-x:auto;padding:2px 0 8px;scrollbar-width:none}.rs-chips::-webkit-scrollbar{display:none}
@@ -75,7 +77,7 @@ html.rs-lock{overflow:hidden}
 
 /* هياكل التحميل */
 .sk-b{background:linear-gradient(90deg,var(--sk1) 25%,var(--sk2) 50%,var(--sk1) 75%);background-size:200% 100%;animation:rs-shimmer 1.3s ease-in-out infinite;border-radius:8px}
-.sk-l{height:12px;margin:2px 0}.sk-l.tall{height:44px;border-radius:10px}.sk-h2{height:20px;width:200px;margin:26px 0 12px}.sk-btn{height:38px;border-radius:11px;margin-top:auto;flex:1;min-width:90px}
+.sk-l{height:12px;margin:2px 0}.sk-l.tall{height:44px;border-radius:10px}.sk-h2{height:20px;width:200px;margin:26px 0 12px}.sk-btn{height:40px;border-radius:11px;margin-top:auto;flex:none;width:100%}.rs-actions.wrap .sk-btn{width:110px;margin:0}
 .sk-grow{flex:1;gap:8px}.sk .rs-ico{border-radius:13px}.rs-card.sk{cursor:default;pointer-events:none}.rs-card.sk:hover{transform:none;border-color:var(--line);box-shadow:none}
 .w20{width:20%}.w30{width:30%}.w40{width:40%}.w50{width:50%}.w60{width:60%}.w70{width:70%}.w80{width:80%}.w90{width:90%}.w100{width:100%}
 .rs-viewer.sk{padding:14px;display:flex;flex-direction:column;gap:8px}
