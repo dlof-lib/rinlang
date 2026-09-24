@@ -370,4 +370,7 @@ print \"Hello, \" + name + \"!\";
     <string name="key_up">Move up</string>
     <string name="key_down">Move down</string>
     <string name="key_backspace">Backspace</string>
+    <string name="link_copied">Copied</string>
+    <string name="link_share">Share</string>
+    <string name="link_copy">Copy</string>
 </resources>
