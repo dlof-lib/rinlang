@@ -54,7 +54,7 @@ L10N = {
         "def_ext": "إضافة {n} لبيئة Rin — تُثبَّت من تطبيق Rin.",
         "def_prof": "حساب @{n} على Rin — {c}",
         "pkgs": "{n} مكتبة", "pkg1": "مكتبة واحدة", "exts": "{n} إضافة", "ext1": "إضافة واحدة", "noscript": "هذه الصفحة تعمل بأفضل شكل مع JavaScript.",
-        "tag": "لغة برمجة صغيرة، حقيقية بالكامل",
+        "tag": "لغة برمجة صغيرة",
     },
     "en": {
         "official": "Official library", "community": "Community library", "extension": "Extension", "profile": "Profile",
@@ -63,7 +63,7 @@ L10N = {
         "def_ext": "{n}, an extension for the Rin environment — install it from the Rin app.",
         "def_prof": "@{n} on Rin — {c}",
         "pkgs": "{n} libraries", "pkg1": "1 library", "exts": "{n} extensions", "ext1": "1 extension", "noscript": "This page works best with JavaScript.",
-        "tag": "A small, fully real programming language",
+        "tag": "A small programming language",
     },
 }
 BADGE = {"store": "official", "official": "official", "community": "community", "library": "community", "extension": "extension", "profile": "profile"}
@@ -571,6 +571,8 @@ PAGE = """<!doctype html>
 <meta name="description" content="{desc}"/>
 <link rel="canonical" href="{url}"/>
 <meta name="robots" content="index,follow,max-image-preview:large"/>
+<meta name="keywords" content="{keywords}"/>
+<meta name="author" content="{author}"/>
 <meta name="theme-color" content="#060807"/>
 <meta name="color-scheme" content="dark light"/>
 <meta property="og:type" content="{og_type}"/>
@@ -636,6 +638,19 @@ PAGE = """<!doctype html>
 """
 
 
+def keywords_of(e, lang):
+    base = {"ar": ["Rin", "لغة Rin", "مكتبات Rin", "Rin libraries"], "en": ["Rin", "Rin language", "Rin libraries", "Rin programming language"]}[lang]
+    kind = {"official": ["مكتبة رسمية", "official library"], "community": ["حزمة مجتمع", "community package"],
+            "extension": ["إضافة Rin", "Rin extension", ".rinex"], "profile": ["حساب Rin", "Rin publisher"]}[e["kind"]]
+    own = [e["name"].lstrip("@"), "@" + e["user"], e.get("category") or ""] + ([] if e["kind"] == "profile" else [e["slug"]])
+    seen, out = set(), []
+    for k in own + kind + base:
+        k = clean_text(k, 60)
+        if k and k.lower() not in seen:
+            seen.add(k.lower()); out.append(k)
+    return ", ".join(out)
+
+
 def render_page(e, img_url, lang=None):
     lang = lang or lang_of(e["desc"], e["name"])
     t = L10N[lang]
@@ -658,6 +673,7 @@ def render_page(e, img_url, lang=None):
     ref = f"@{e['user']}" + ("" if kind == "profile" else f"/{e['slug']}")
     name = e["name"]
     return PAGE.format(
+        keywords=html.escape(keywords_of(e, lang), True), author=html.escape(e["user"], True),
         lang=lang, dir="rtl" if lang == "ar" else "ltr", title=html.escape(title_of(e, lang), True), desc=html.escape(desc, True), url=html.escape(url, True),
         img=html.escape(img_url, True), alt=html.escape(f"{name} — Rin", True), locale="ar_AR" if lang == "ar" else "en_US",
         og_type="profile" if kind == "profile" else "website", extra_og=extra, site=SITE, jsonld=jld(jsonld_for(e, url, img_url, desc, lang)),
