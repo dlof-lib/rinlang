@@ -47,13 +47,40 @@
   // ------------------------------- دوال نقية (قابلة للاختبار) -------------------------------
   var RE_LIB = /^[A-Za-z0-9_.\-]{1,80}$/, RE_ID = /^[A-Za-z0-9_\-]{1,128}$/;
 
+  // رابط مقروء: ?@publisher/library.og.rin  (الرسمية: ?@rin/math.og.rin)  —  و ?@publisher لصفحة الناشر
+  var RE_REF = /^\?@([^\/&#?]{1,100})(?:\/([^&#?\/]{1,140}))?(?:[&#].*)?$/;
+  function slug(s) { return String(s || '').trim().replace(/\s+/g, '-'); }
+  function libKey(s) { return String(s || '').replace(/\.og\.rin(sdk)?$/i, '').replace(/\s+/g, '-').toLowerCase(); }
+  function refPath(user, lib) { return '@' + encodeURIComponent(slug(user)) + (lib ? '/' + encodeURIComponent(slug(lib) + '.og.rin') : ''); }
+  function mkRef(m) {
+    if (!m) return null;
+    try {
+      var u = decodeURIComponent(m[1]), l = m[2] ? decodeURIComponent(m[2]) : null;
+      if (/[\u0000-\u001f\/\\]/.test(u + (l || ''))) return null;
+      return { user: u, lib: l };
+    } catch (e) { return null; }
+  }
+  function parseRef(search) { return mkRef(RE_REF.exec(search || '')); }
+  // المسار الجميل: https://host/rinlang/@user/library.og.rin  (تخدمه 404.html عبر إعادة توجيه إلى ?@user/library.og.rin)
+  var RE_PATH = /\/@([^\/?#]{1,100})(?:\/([^\/?#]{1,140}))?\/?$/;
+  function parsePathRef(pathname) { return mkRef(RE_PATH.exec(pathname || '')); }
+  function baseOf(pathname) {
+    var i = String(pathname || '/').indexOf('/@');
+    return i >= 0 ? pathname.slice(0, i + 1) : String(pathname || '/').replace(/[^\/]*$/, '');
+  }
+  function parseLocation(pathname, search) {
+    var r = parsePathRef(pathname);
+    return r ? { ref: r, library: null, package: null, publisher: null, view: null } : parseQuery(search);
+  }
   function parseQuery(search) {
+    var ref = parseRef(search);
+    if (ref) return { library: null, package: null, publisher: null, view: null, ref: ref };
     var p = new URLSearchParams(search || '');
     function pick(k, re) { var v = p.get(k); return v && re.test(v) ? v : null; }
-    return { library: pick('library', RE_LIB), package: pick('package', RE_ID), publisher: pick('publisher', RE_ID),
+    return { ref: null, library: pick('library', RE_LIB), package: pick('package', RE_ID), publisher: pick('publisher', RE_ID),
       view: p.get('view') === 'libraries' || p.get('view') === 'mine' ? p.get('view') : null };
   }
-  function isStoreRoute(q) { return !!(q.library || q.package || q.publisher || q.view); }
+  function isStoreRoute(q) { return !!(q.ref || q.library || q.package || q.publisher || q.view); }
   function keyFor(fileName) { return String(fileName).replace(/[.$#\[\]\/]/g, '_'); }
   function num(v) { v = Number(v); return isFinite(v) && v > 0 ? Math.floor(v) : 0; }
   function fmtCount(n) { n = num(n); return n >= 1e6 ? (n / 1e6).toFixed(1).replace(/\.0$/, '') + 'M' : n >= 1e3 ? (n / 1e3).toFixed(1).replace(/\.0$/, '') + 'K' : String(n); }
@@ -139,7 +166,7 @@
     return { kind: 'official', id: key, name: String(v.name || key), fileName: String(v.fileName || key), version: String(v.version || '1.0.0'),
       description: String(v.description || ''), category: 'Official', publisher: 'Rin', size: num(v.sizeBytes), downloads: num(v.downloadCount),
       likes: num(v.likeCount), ts: num(v.updatedAt), content: typeof v.content === 'string' ? v.content : '', ref: 'libraries/' + key,
-      share: '?library=' + encodeURIComponent(String(v.name || key)), deps: {}, license: 'MIT', rating: 0, ratingCount: 0 };
+      share: refPath('rin', String(v.name || key)), deps: {}, license: 'MIT', rating: 0, ratingCount: 0 };
   }
   function normPackage(id, v) {
     v = v || {};
@@ -147,13 +174,13 @@
     return { kind: 'community', id: id, name: String(v.name || id), fileName: String(v.fileName || id), version: String(v.version || '1.0.0'),
       description: String(v.description || ''), category: String(v.category || 'عام'), publisher: String(v.publisherName || ''), publisherUid: String(v.publisherUid || ''),
       size: num(v.sizeBytes), downloads: num(v.downloadCount), likes: num(v.likeCount), ts: num(v.createdAt), b64: typeof v.base64Data === 'string' ? v.base64Data : '',
-      icon: iconSrc(v.iconBase64), ref: 'packages/' + id, share: '?package=' + encodeURIComponent(id),
+      icon: iconSrc(v.iconBase64), ref: 'packages/' + id, share: v.publisherName && v.name ? refPath(String(v.publisherName), String(v.name)) : '?package=' + encodeURIComponent(id),
       deps: v.dependencies && typeof v.dependencies === 'object' ? v.dependencies : {}, license: String(v.license || ''),
       rating: rc ? num(v.ratingSum) / rc : 0, ratingCount: rc };
   }
 
   // ------------------------------- الحالة والواجهة -------------------------------
-  var S = { lang: 'ar', theme: 'dark', officialList: null, communityList: null, mineList: null, user: null, tab: 'all', sort: 'latest',
+  var S = { base: '/', lang: 'ar', theme: 'dark', officialList: null, communityList: null, mineList: null, user: null, tab: 'all', sort: 'latest',
     cat: '', term: '', route: null, el: null, fb: null, fbP: null, likeState: {}, srcCache: {} };
   var $ = {};
   function tr(k) { return (T[S.lang] || T.en)[k] || k; }
@@ -217,6 +244,19 @@
       var out = []; snap.forEach(function (c) { out.push(normPackage(c.key, c.val())); }); return out;
     });
   }
+  function loadByPublisherName(name) {
+    function q(n) { return fbReady().then(function () { return dbRef('packages').orderByChild('publisherName').equalTo(n).once('value'); }).then(function (snap) { var out = []; snap.forEach(function (c) { out.push(normPackage(c.key, c.val())); }); return out.filter(function (i) { return slug(i.publisher).toLowerCase() === slug(n).toLowerCase(); }); }); }
+    return q(name).then(function (l) { return l.length || name.indexOf('-') < 0 ? l : q(name.replace(/-/g, ' ')); }).then(function (l) {
+      if (l.length) return l;
+      return loadCommunity().then(function (all) { return all.filter(function (i) { return slug(i.publisher).toLowerCase() === slug(name).toLowerCase(); }); });
+    });
+  }
+  function loadByRef(user, lib) {
+    var k = libKey(lib);
+    function community() { return loadByPublisherName(user).then(function (l) { return l.filter(function (i) { return libKey(i.name) === k; })[0] || null; }); }
+    if (user.toLowerCase() === 'rin') return loadLibraryByName(k).then(function (it) { return it || community(); });
+    return community();
+  }
   function loadPackage(id) {
     return fbReady().then(function () { return dbRef('packages/' + id).once('value'); }).then(function (s) { return s.exists() ? normPackage(id, s.val()) : null; });
   }
@@ -229,26 +269,34 @@
 
   // ---- التوجيه (query parameters فقط) ----
   function routeFromQuery(q) {
+    if (q.ref) return q.ref.lib ? { kind: 'detail', type: 'ref', user: q.ref.user, id: q.ref.lib } : { kind: 'publisher', name: q.ref.user };
     if (q.package) return { kind: 'detail', type: 'package', id: q.package };
     if (q.library) return { kind: 'detail', type: 'library', id: q.library };
     if (q.publisher) return { kind: 'publisher', id: q.publisher };
     return { kind: 'list' };
   }
   function urlFor(r) {
+    if (r.kind === 'detail' && r.item && r.item.share) return r.item.share;
+    if (r.kind === 'detail' && r.type === 'ref') return refPath(r.user, r.id);
+    if (r.kind === 'publisher' && r.name) return refPath(r.name);
     if (r.kind === 'detail') return r.type === 'package' ? '?package=' + encodeURIComponent(r.id) : '?library=' + encodeURIComponent(r.id);
     if (r.kind === 'publisher') return '?publisher=' + encodeURIComponent(r.id);
     return '?view=libraries';
   }
   function go(r, push) {
     S.route = r;
-    if (push !== false) { try { root.history.pushState({ rin: 1 }, '', urlFor(r)); } catch (e) {} }
+    if (push !== false) { try { root.history.pushState({ rin: 1 }, '', S.base + urlFor(r)); } catch (e) {} }
     S.el.classList.add('open'); document.documentElement.classList.add('rs-lock');
     render();
   }
   function openDetail(it) { go({ kind: 'detail', type: it.kind === 'official' ? 'library' : 'package', id: it.kind === 'official' ? it.name : it.id, item: it }); }
+  function canon(r, rel) {
+    var to = S.base + rel;
+    if (S.route === r && rel && root.location.pathname + root.location.search !== to) { try { root.history.replaceState({ rin: 1 }, '', to); } catch (e) {} }
+  }
   function closeStore() {
     S.el.classList.remove('open'); document.documentElement.classList.remove('rs-lock');
-    try { root.history.pushState({}, '', root.location.pathname); } catch (e) {}
+    try { root.history.pushState({}, '', S.base); } catch (e) {}
   }
   function navigate(url) {
     var q = parseQuery(String(url).replace(/^[^?]*/, ''));
@@ -256,7 +304,7 @@
     mount(); go(routeFromQuery(q)); return true;
   }
   function onPop() {
-    var q = parseQuery(root.location.search);
+    var q = parseLocation(root.location.pathname, root.location.search);
     if (isStoreRoute(q)) { mount(); go(routeFromQuery(q), false); }
     else if (S.el) { S.el.classList.remove('open'); document.documentElement.classList.remove('rs-lock'); }
   }
@@ -371,8 +419,10 @@
   }
   function renderPublisher(r) {
     $.body.appendChild(skelSection(3));
-    loadByPublisher(r.id).then(function (list) {
-      clear($.body); var nm = list[0] ? list[0].publisher : r.id;
+    (r.name && !r.id ? loadByPublisherName(r.name) : loadByPublisher(r.id)).then(function (list) {
+      if (S.route !== r) return;
+      clear($.body); var nm = list[0] ? list[0].publisher : (r.name || r.id);
+      if (nm && (list[0] || r.name)) canon(r, refPath(nm));
       $.body.appendChild(h('h1', { class: 'rs-h1', text: '@' + nm }));
       $.body.appendChild(section(tr('communityLibs'), sortItems(list, S.sort)));
     }).catch(function () { clear($.body); $.body.appendChild(h('p', { class: 'rs-note err', text: tr('loadErr') })); });
@@ -380,10 +430,10 @@
   function renderDetail(r) {
     if (r.item) return drawDetail(r.item);
     $.body.appendChild(skelDetail());
-    (r.type === 'package' ? loadPackage(r.id) : loadLibraryByName(r.id)).then(function (it) {
+    (r.type === 'ref' ? loadByRef(r.user, r.id) : r.type === 'package' ? loadPackage(r.id) : loadLibraryByName(r.id)).then(function (it) {
       if (S.route !== r) return; clear($.body);
       if (!it) { $.body.appendChild(h('p', { class: 'rs-note err', text: tr('notFound') })); return; }
-      r.item = it; drawDetail(it);
+      r.item = it; canon(r, it.share); drawDetail(it);
     }).catch(function () { clear($.body); $.body.appendChild(h('p', { class: 'rs-note err', text: tr('loadErr') })); });
   }
   function row(k, v) { return h('div', { class: 'rs-row' }, [h('span', { class: 'k', text: tr(k) }), v instanceof Node ? v : h('span', { class: 'v', text: v })]); }
@@ -391,20 +441,21 @@
     var likeBtn = h('button', { class: 'rs-btn like', id: 'rs-like', onclick: function () { toggleLike(it); } });
     var srcBox = h('div', { class: 'rs-src' });
     var by = it.kind === 'official' ? h('span', { class: 'v', text: tr('officialBy') })
-      : h('a', { class: 'v link', href: '?publisher=' + encodeURIComponent(it.publisherUid), text: tr('publishedBy') + ' @' + (it.publisher || '—'),
-        onclick: function (e) { e.preventDefault(); go({ kind: 'publisher', id: it.publisherUid }); } });
+      : h('a', { class: 'v link', href: S.base + (it.publisher ? refPath(it.publisher) : '?publisher=' + encodeURIComponent(it.publisherUid)), text: tr('publishedBy') + ' @' + (it.publisher || '—'),
+        onclick: function (e) { e.preventDefault(); go({ kind: 'publisher', id: it.publisherUid, name: it.publisher }); } });
     var deps = Object.keys(it.deps || {}).map(function (k) { return k + ' ' + it.deps[k]; }).join(', ') || tr('none');
     var rating = it.ratingCount ? '★ ' + it.rating.toFixed(1) + ' (' + it.ratingCount + ')' : tr('none');
     $.body.appendChild(h('article', { class: 'rs-detail' }, [
       h('div', { class: 'rs-dmain' }, [
-      h('div', { class: 'rs-card-h big' }, [iconEl(it), h('div', { class: 'rs-card-t' }, [h('h1', { class: 'rs-h1', text: it.name }), badge(it), by])]),
+      h('div', { class: 'rs-card-h big' }, [iconEl(it), h('div', { class: 'rs-card-t' }, [h('h1', { class: 'rs-h1', text: it.name }), badge(it), by,
+        h('button', { class: 'rs-ref', type: 'button', title: tr('share'), text: decodeURIComponent(it.share.replace(/^\?/, '')), dir: 'ltr', onclick: function () { copyText(root.location.origin + S.base + it.share); } })])]),
       h('p', { class: 'rs-desc full', text: it.description || '—' }),
       h('div', { class: 'rs-actions wrap' }, [
         h('button', { class: 'rs-btn', text: '↓ ' + tr('download'), onclick: function () { download(it); } }),
         h('button', { class: 'rs-btn', text: '⧉ ' + tr('copy'), onclick: function () { getSource(it).then(function (s) { copyText(s.text); }).catch(function () { toast(tr('zipErr')); }); } }),
         likeBtn,
         h('button', { class: 'rs-btn', text: '</> ' + tr('source'), onclick: function () { showSource(it, srcBox); } }),
-        h('button', { class: 'rs-btn ghost', text: '🔗 ' + tr('share'), onclick: function () { copyText(root.location.origin + root.location.pathname + it.share); } })
+        h('button', { class: 'rs-btn ghost', text: '🔗 ' + tr('share'), onclick: function () { copyText(root.location.origin + S.base + it.share); } })
       ]),
       srcBox
       ]),
@@ -516,13 +567,14 @@
 
   // ---- نقطة الدخول ----
   function boot() {
-    var q = parseQuery(root.location.search);
+    S.base = baseOf(root.location.pathname);
+    var q = parseLocation(root.location.pathname, root.location.search);
     root.addEventListener('popstate', onPop);
     if (isStoreRoute(q)) { mount(); go(routeFromQuery(q), false); }
   }
   var api = { open: function () { mount(); go({ kind: 'list' }); }, navigate: navigate, boot: boot,
     _t: { parseQuery: parseQuery, isStoreRoute: isStoreRoute, keyFor: keyFor, fmtCount: fmtCount, fmtSize: fmtSize, iconSrc: iconSrc, extractSource: extractSource,
-      zipEntries: zipEntries, pickSource: pickSource, tokenizeLine: tokenizeLine, filterItems: filterItems, sortItems: sortItems, normOfficial: normOfficial, normPackage: normPackage, b64ToBytes: b64ToBytes, urlFor: urlFor, routeFromQuery: routeFromQuery } };
+      zipEntries: zipEntries, pickSource: pickSource, tokenizeLine: tokenizeLine, filterItems: filterItems, sortItems: sortItems, normOfficial: normOfficial, normPackage: normPackage, b64ToBytes: b64ToBytes, urlFor: urlFor, routeFromQuery: routeFromQuery, parseRef: parseRef, parsePathRef: parsePathRef, parseLocation: parseLocation, baseOf: baseOf, refPath: refPath, libKey: libKey, slug: slug } };
   root.RinStore = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else if (root.document) { if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot(); }
