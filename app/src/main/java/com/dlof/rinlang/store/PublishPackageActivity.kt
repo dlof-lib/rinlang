@@ -315,6 +315,7 @@ class PublishPackageActivity : BaseConnectivityActivity() {
         dependencies: Map<String, String>
     ) {
             AuthRepository.fetchProfile(uid) { profile ->
+                val publisherUsername = profile?.username?.trim()?.removePrefix("@").orEmpty()
                 val publisherName = profile?.name?.ifBlank { profile.username } ?: "مستخدم Rin"
                 try {
                     val zip = PackagingUtils.buildPackageZip(
@@ -347,6 +348,7 @@ class PublishPackageActivity : BaseConnectivityActivity() {
                         description = description,
                         license = license,
                         publisherUid = uid,
+                        publisherUsername = publisherUsername,
                         publisherName = publisherName,
                         fileName = fileName,
                         base64Data = base64,
