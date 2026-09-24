@@ -158,7 +158,7 @@ jobs:
           # الأيقونات وبيان التطبيق (PWA) — favicon.ico + PNGs + apple-touch + maskable
           cp web/og-image.png web/icon-192.png web/icon-512.png web/icon-maskable-512.png \
              web/apple-touch-icon.png web/favicon.ico web/favicon.png web/favicon-16.png web/favicon-32.png \
-             web/manifest.webmanifest dist/
+             web/manifest.webmanifest web/llms.txt dist/
 
       # ------------------------------------------------------------------
       # 3) معاينة الروابط (Open Graph) لكل مكتبة/إضافة/حساب: صفحات ثابتة + صورة 1200x630 لكل كيان
