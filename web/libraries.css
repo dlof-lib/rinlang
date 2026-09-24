@@ -63,6 +63,7 @@ html.rs-lock{overflow:hidden}
 .rs-rows{display:grid;gap:1px;background:var(--line);border:1px solid var(--line);border-radius:14px;overflow:hidden}
 .rs-row{display:flex;justify-content:space-between;gap:12px;padding:10px 14px;background:var(--panel)}
 .rs-row .k{color:var(--mut)}.rs-row .v{font-weight:600;text-align:end;overflow-wrap:anywhere}
+.rs-ref{font:600 12.5px ui-monospace,Consolas,monospace;color:var(--acc);background:var(--panel2);border:1px dashed var(--line);border-radius:8px;padding:3px 9px;cursor:pointer;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:4px}.rs-ref:hover{border-color:var(--acc)}
 .link{color:var(--acc);text-decoration:none}.link:hover{text-decoration:underline}
 .rs-src{margin-top:6px}
 .rs-viewer{border:1px solid var(--line);border-radius:14px;overflow:hidden;background:var(--panel2)}
