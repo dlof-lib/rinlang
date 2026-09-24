@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<meta name="robots" content="noindex"/>
+<title>Rin</title>
+<!--
+  GitHub Pages لا يملك «rewrite»؛ أي مسار غير موجود يُخدَّم بهذا الملف. هذه ليست صفحة مكتبة:
+  هي محوِّل واحد فقط يحوّل  /rinlang/@user/library.og.rin  إلى  /rinlang/?@user/library.og.rin
+  ثم يعيد libraries.js كتابة العنوان في شريط المتصفح إلى المسار الجميل (history.replaceState).
+  التطبيق الوحيد يبقى index.html — لا HTML لكل مكتبة.
+-->
+<style>
+  html,body{height:100%;margin:0;background:#060807;color:#f4f6f3;font-family:system-ui,-apple-system,"Segoe UI",Tahoma,sans-serif}
+  body{display:flex;align-items:center;justify-content:center;text-align:center;padding:24px}
+  a{color:#22c55e;font-weight:700}
+</style>
+</head>
+<body>
+<div><p id="msg">…</p><p><a id="home" href="./">Rin</a></p></div>
+<script>
+(function () {
+  var segs = location.pathname.split('/');
+  var at = -1;
+  for (var i = 1; i < segs.length; i++) { if (segs[i].charAt(0) === '@' || segs[i].slice(0, 3).toLowerCase() === '%40') { at = i; break; } }
+  // القاعدة = ما قبل أول جزء يبدأ بـ @ ؛ وإلا (مسار غير معروف) نعود لجذر المشروع: أول جزء على github.io
+  var base;
+  if (at > 0) base = segs.slice(0, at).join('/') + '/';
+  else base = /\.github\.io$/i.test(location.hostname) && segs.length > 1 && segs[1] ? '/' + segs[1] + '/' : '/';
+  base = base.replace(/^\/+/, '/');                       // يمنع //evil.com (open redirect)
+  document.getElementById('home').setAttribute('href', base);
+  if (at > 0) {
+    var rest = segs.slice(at).join('/').replace(/\/+$/, '');
+    location.replace(base + '?' + rest + location.hash);
+  } else {
+    document.getElementById('msg').textContent = 'الصفحة غير موجودة / Page not found';
+  }
+})();
+</script>
+</body>
+</html>
