@@ -126,6 +126,10 @@ RIN_API void rin_indsin_free_buffer(unsigned char* buf);
 // success, 0 on failure (no Fabric, or the file could not be written).
 RIN_API int rin_indsin_session_export_png(void* session, const char* path);
 
+// Standalone HTML preview of the session's current frame (same Dye paint plan as the PNG path, but text is
+// laid out by the browser so Arabic/RTL/emoji render correctly). Free with rin_free_string(). NULL if no Fabric.
+RIN_API char* rin_indsin_session_export_html(void* session);
+
 #ifdef __cplusplus
 }
 #endif
