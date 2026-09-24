@@ -28,18 +28,17 @@
       ".indexOn": [
         "category",
         "createdAt",
-        "publisherUid"
+        "publisherUid",
+        "likeCount",
+        "downloadCount"
       ],
       "$packageId": {
-        ".write": "auth != null && (!data.exists() || data.child('publisherUid').val() === auth.uid)",
+        ".write": "(auth != null && auth.token.firebase.sign_in_provider !== 'anonymous') && ((!data.exists() && newData.child('publisherUid').val() === auth.uid) || data.child('publisherUid').val() === auth.uid)",
         "name": {
           ".validate": "newData.isString() && newData.val().length <= 40"
         },
         "base64Data": {
           ".validate": "newData.isString() && newData.val().length <= 8000000"
-        },
-        "downloadCount": {
-          ".write": "auth != null"
         },
         "ratingSum": {
           ".write": "auth != null"
@@ -60,12 +59,55 @@
             ".write": "auth != null && auth.uid === $uid"
           }
         },
+        ".validate": "newData.hasChildren(['name','version','publisherUid','fileName','base64Data']) && newData.child('publisherUid').val() === (data.exists() ? data.child('publisherUid').val() : auth.uid)",
+        "version": {
+          ".validate": "newData.isString() && newData.val().length <= 64"
+        },
+        "description": {
+          ".validate": "newData.isString() && newData.val().length <= 20000"
+        },
+        "publisherUid": {
+          ".validate": "newData.isString()"
+        },
+        "publisherName": {
+          ".validate": "newData.isString() && newData.val().length <= 100"
+        },
+        "fileName": {
+          ".validate": "newData.isString() && newData.val().length <= 160"
+        },
+        "category": {
+          ".validate": "newData.isString() && newData.val().length <= 80"
+        },
+        "sizeBytes": {
+          ".validate": "newData.isNumber()"
+        },
+        "createdAt": {
+          ".validate": "newData.isNumber()"
+        },
+        "iconBase64": {
+          ".validate": "newData.isString() && newData.val().length <= 2000000"
+        },
+        "thumbnailBase64": {
+          ".validate": "newData.isString() && newData.val().length <= 4000000"
+        },
         "likeCount": {
-          ".write": "auth != null"
+          ".write": "auth != null",
+          ".validate": "newData.isNumber() && newData.val() === (data.exists() ? data.val() : 0) + (newData.parent().child('likes').child(auth.uid).exists() ? 1 : 0) - (data.parent().child('likes').child(auth.uid).exists() ? 1 : 0)"
         },
         "likes": {
           "$uid": {
-            ".write": "auth != null && auth.uid === $uid"
+            ".write": "auth != null && auth.token.firebase.sign_in_provider !== 'anonymous' && auth.uid === $uid",
+            ".validate": "newData.val() === true"
+          }
+        },
+        "downloadCount": {
+          ".write": "auth != null",
+          ".validate": "newData.isNumber() && newData.val() === (data.exists() ? data.val() : 0) + (newData.parent().child('downloaders').child(auth.uid).exists() ? 1 : 0) - (data.parent().child('downloaders').child(auth.uid).exists() ? 1 : 0)"
+        },
+        "downloaders": {
+          "$uid": {
+            ".write": "auth != null && auth.uid === $uid && !data.exists()",
+            ".validate": "newData.isNumber()"
           }
         }
       }
@@ -112,6 +154,37 @@
         "isOfficial": {
           ".write": "auth != null",
           ".validate": "newData.isBoolean() && (newData.val() === false || (data.exists() && data.child('isOfficial').val() === true))"
+        }
+      }
+    },
+    "libraries": {
+      ".read": true,
+      ".write": false,
+      ".indexOn": [
+        "updatedAt",
+        "name"
+      ],
+      "$libKey": {
+        ".write": false,
+        "likeCount": {
+          ".write": "auth != null",
+          ".validate": "newData.isNumber() && newData.val() === (data.exists() ? data.val() : 0) + (newData.parent().child('likes').child(auth.uid).exists() ? 1 : 0) - (data.parent().child('likes').child(auth.uid).exists() ? 1 : 0)"
+        },
+        "likes": {
+          "$uid": {
+            ".write": "auth != null && auth.token.firebase.sign_in_provider !== 'anonymous' && auth.uid === $uid",
+            ".validate": "newData.val() === true"
+          }
+        },
+        "downloadCount": {
+          ".write": "auth != null",
+          ".validate": "newData.isNumber() && newData.val() === (data.exists() ? data.val() : 0) + (newData.parent().child('downloaders').child(auth.uid).exists() ? 1 : 0) - (data.parent().child('downloaders').child(auth.uid).exists() ? 1 : 0)"
+        },
+        "downloaders": {
+          "$uid": {
+            ".write": "auth != null && auth.uid === $uid && !data.exists()",
+            ".validate": "newData.isNumber()"
+          }
         }
       }
     }
