@@ -45,13 +45,17 @@
   };
 
   // ------------------------------- دوال نقية (قابلة للاختبار) -------------------------------
-  var RE_LIB = /^[A-Za-z0-9_.\-]{1,80}$/, RE_ID = /^[A-Za-z0-9_\-]{1,128}$/;
+  var RE_LIB = /^[A-Za-z0-9_.\-~]{1,100}$/, RE_ID = /^[A-Za-z0-9_\-]{1,128}$/;
 
   // رابط مقروء: ?@publisher/library.og.rin  (الرسمية: ?@rin/math.og.rin)  —  و ?@publisher لصفحة الناشر
   var RE_REF = /^\?@([^\/&#?]{1,100})(?:\/([^&#?\/]{1,140}))?(?:[&#].*)?$/;
-  function slug(s) { return String(s || '').trim().replace(/\s+/g, '-'); }
-  function libKey(s) { return String(s || '').replace(/\.og\.rin(sdk)?$/i, '').replace(/\s+/g, '-').toLowerCase(); }
-  function refPath(user, lib) { return '@' + encodeURIComponent(slug(user)) + (lib ? '/' + encodeURIComponent(slug(lib) + '.og.rin') : ''); }
+  // رابط Rin الرسمي: /@اسم-المستخدم/اسم-المكتبة.og.rin
+  // نُبقي @ جزءاً من المسار، ونضيف .og.rin مرة واحدة فقط.
+  function slug(s) { return String(s || '').trim().replace(/^@+/, '').replace(/\s+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, ''); }
+  function libKey(s) { return String(s || '').replace(/\.og\.rin(sdk)?$/i, '').replace(/\s+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '').toLowerCase(); }
+  function cleanLibName(s) { return slug(String(s || '').replace(/\.og\.rin(sdk)?$/i, '')); }
+  function safeSegment(s) { return /^[A-Za-z0-9._~-]{1,100}$/.test(String(s || '')); }
+  function refPath(user, lib) { var u = slug(user), l = lib ? cleanLibName(lib) : ''; if (!safeSegment(u) || (l && !safeSegment(l))) return ''; return '@' + encodeURIComponent(u) + (l ? '/' + encodeURIComponent(l) + '.og.rin' : ''); }
   function mkRef(m) {
     if (!m) return null;
     try {
@@ -172,9 +176,9 @@
     v = v || {};
     var rc = num(v.ratingCount);
     return { kind: 'community', id: id, name: String(v.name || id), fileName: String(v.fileName || id), version: String(v.version || '1.0.0'),
-      description: String(v.description || ''), category: String(v.category || 'عام'), publisher: String(v.publisherName || ''), publisherUid: String(v.publisherUid || ''),
+      description: String(v.description || ''), category: String(v.category || 'عام'), publisher: String(v.publisherName || ''), publisherUsername: String(v.publisherUsername || ''), publisherUid: String(v.publisherUid || ''),
       size: num(v.sizeBytes), downloads: num(v.downloadCount), likes: num(v.likeCount), ts: num(v.createdAt), b64: typeof v.base64Data === 'string' ? v.base64Data : '',
-      icon: iconSrc(v.iconBase64), ref: 'packages/' + id, share: v.publisherName && v.name ? refPath(String(v.publisherName), String(v.name)) : '?package=' + encodeURIComponent(id),
+      icon: iconSrc(v.iconBase64), ref: 'packages/' + id, share: (v.publisherUsername || v.publisherName) && v.name ? refPath(String(v.publisherUsername || v.publisherName), String(v.name)) : '?package=' + encodeURIComponent(id),
       deps: v.dependencies && typeof v.dependencies === 'object' ? v.dependencies : {}, license: String(v.license || ''),
       rating: rc ? num(v.ratingSum) / rc : 0, ratingCount: rc };
   }
