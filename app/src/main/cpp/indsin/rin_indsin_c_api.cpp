@@ -1,5 +1,6 @@
 // indsin/rin_indsin_c_api.cpp
 #include "rin_indsin_c_api.h"
+#include "rin_indsin_html.h"
 #include "rin_indsin_pipeline.h"
 #include "rin_indsin_needle.h"
 #include "rin_indsin_effects.h"
@@ -54,7 +55,8 @@ double nowMsFor(IndsinSession* sess) {
 void relayout(IndsinSession* sess) {
     if (!sess->state.ok || !sess->state.fabric) return;
     sess->indsinEngine = indsin::Indsin{}; // fresh stats per call; Tension caching lives on the Strands themselves
-    sess->indsinEngine.layout(sess->state.fabric, indsin::Constraints{0, (double)sess->rootWidth, 0, 1e9}, 0, 0);
+    sess->state.fabric->screenRoot = true;
+    sess->indsinEngine.layout(sess->state.fabric, indsin::Constraints{(double)sess->rootWidth, (double)sess->rootWidth, 0, 1e9}, 0, 0);
     // Overlay Engine second pass: re-homes every open Dialog / anchored Tooltip against the
     // viewport now that the whole tree (including their own content boxes) has been measured.
     sess->overlayLayer = indsin::buildOverlayLayer(sess->indsinEngine, sess->state.fabric,
@@ -132,7 +134,8 @@ RIN_API char* rin_indsin_render_json(const char* source, int rootWidth) {
     }
 
     indsin::Indsin indsinEngine;
-    indsinEngine.layout(r.fabric, indsin::Constraints{0, (double)rootWidth, 0, 1e9}, 0, 0);
+    r.fabric->screenRoot = true;
+    indsinEngine.layout(r.fabric, indsin::Constraints{(double)rootWidth, (double)rootWidth, 0, 1e9}, 0, 0);
 
     indsin::Dye dye;
     auto draw = dye.paint(r.fabric);
@@ -157,7 +160,8 @@ RIN_API char* rin_indsin_render_container_json(const char* source, const char* c
     }
 
     indsin::Indsin indsinEngine;
-    indsinEngine.layout(r.fabric, indsin::Constraints{0, (double)rootWidth, 0, 1e9}, 0, 0);
+    r.fabric->screenRoot = true;
+    indsinEngine.layout(r.fabric, indsin::Constraints{(double)rootWidth, (double)rootWidth, 0, 1e9}, 0, 0);
 
     std::ostringstream os;
     os << "{\"ok\":true,\"container\":\"" << indsin::jsonEscape(name) << "\""
@@ -386,6 +390,16 @@ RIN_API int rin_indsin_session_export_png(void* sessionPtr, const char* path) {
     if (H <= 0) H = sess->viewportHeight;
     auto buf = indsin::rasterizeToBuffer(draw, W, H);
     return indsin::writePNG(path, W, H, buf) ? 1 : 0;
+}
+
+RIN_API char* rin_indsin_session_export_html(void* sessionPtr) {
+    auto* sess = static_cast<IndsinSession*>(sessionPtr);
+    if (!sess || !sess->state.ok || !sess->state.fabric) return nullptr;
+    indsin::Dye dye;
+    auto draw = dye.paintWithOverlay(sess->state.fabric, sess->overlayLayer);
+    int H = (int)std::ceil(sess->state.fabric->geometry.h);
+    if (H <= 0) H = sess->viewportHeight;
+    return dupToC(indsin::drawListToHtml(draw, sess->rootWidth, H));
 }
 
 RIN_API void rin_indsin_session_set_viewport(void* sessionPtr, int viewportHeight) {
