@@ -93,6 +93,7 @@
     <string name="package_detail_section_readme">README.md</string>
     <string name="package_detail_section_license">License</string>
     <string name="package_detail_section_files">Package Files</string>
+    <string name="package_detail_folder_file_count">%1$d files</string>
     <string name="package_detail_no_readme">This package has no README.md file.</string>
     <string name="package_detail_no_license">This package has no license file.</string>
     <string name="package_detail_meta_format">%1$s • %2$s • %3$d downloads • ★ %4$.1f (%5$d ratings)</string>
