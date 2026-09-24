@@ -5,11 +5,14 @@ import android.os.Bundle
 import android.util.Base64
 import android.view.LayoutInflater
 import android.view.View
+import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
+import com.dlof.rinlang.IndsinFabricView
 import com.dlof.rinlang.R
+import com.dlof.rinlang.RinEngine
 import com.dlof.rinlang.auth.AuthRepository
 import com.dlof.rinlang.network.BaseConnectivityActivity
 
@@ -50,6 +53,16 @@ class PackageDetailActivity : BaseConnectivityActivity() {
 
         findViewById<View>(R.id.btnToolbarBack).setOnClickListener { finish() }
         findViewById<TextView>(R.id.txtToolbarTitle).text = pkg.name
+
+        // احترازي: هذه الشاشة قد تُفتح مباشرة من تبويب المتجر بلا مرور سابق بـMainActivity في
+        // نفس دورة حياة العملية، فيبقى RinEngine.baseDir فارغاً — ما يهمّ فقط لمقاطع كود Rin
+        // الحيّة في README التي تستخدم save/installation/file (نادر في كود README توضيحي).
+        // الشرط هنا مقصود: لا نستدعي init() إن كان baseDir مضبوطاً أصلاً (مثلاً MainActivity ربطه
+        // بمشروع حقيقي محدد ولا يزال في الخلفية)، لتفادي إفساد ذلك المسار لبقية جلسة التطبيق —
+        // نملأ الفراغ فقط، لا نستبدل قيمة موجودة.
+        if (RinEngine.currentBaseDir().isBlank()) {
+            RinEngine.init(applicationContext)
+        }
 
         bindHeader()
         bindPublisher()
@@ -253,15 +266,33 @@ class PackageDetailActivity : BaseConnectivityActivity() {
         btn.setTextColor(getColor(if (isSubscribed) android.R.color.white else R.color.rin_accent))
     }
 
+    /**
+     * يعرض قسم README.md كسلسلة مقاطع (عبر [MarkdownLite.splitLiveCodeBlocks]) بدل TextView
+     * واحد ثابت: كل مقطع نصي عادي يُعرَض كالمعتاد، وكل كتلة كود ```rin ```/```indsin ``` تُستخرَج
+     * إلى بطاقة "معاينة حية" منفصلة (عبر [buildLivePreviewCard]) — تشغيل حقيقي للكود عبر المحرّك
+     * الأصلي، لا مجرّد نص كود ثابت.
+     */
     private fun bindReadmeAndLicense() {
         val contents = PackagingUtils.readContents(pkg)
 
-        val txtReadme = findViewById<TextView>(R.id.txtDetailReadme)
+        val containerReadme = findViewById<LinearLayout>(R.id.containerDetailReadme)
+        containerReadme.removeAllViews()
         val readme = contents.readme
         if (readme.isNullOrBlank()) {
-            txtReadme.text = getString(R.string.package_detail_no_readme)
+            containerReadme.addView(buildReadmeTextSegment(getString(R.string.package_detail_no_readme)))
         } else {
-            MarkdownLite.applyTo(txtReadme, readme)
+            for (segment in MarkdownLite.splitLiveCodeBlocks(readme)) {
+                when (segment) {
+                    is MarkdownLite.MarkdownSegment.Text -> {
+                        if (segment.markdown.isNotBlank()) {
+                            containerReadme.addView(buildReadmeTextSegment(segment.markdown))
+                        }
+                    }
+                    is MarkdownLite.MarkdownSegment.LiveCode -> {
+                        containerReadme.addView(buildLivePreviewCard(segment.code))
+                    }
+                }
+            }
         }
 
         val txtLicenseTitle = findViewById<TextView>(R.id.txtDetailLicenseTitle)
@@ -276,6 +307,147 @@ class PackageDetailActivity : BaseConnectivityActivity() {
             txtLicense.text = license
         }
     }
+
+    /** مقطع نصّ Markdown عادي واحد داخل قسم README (انظر [bindReadmeAndLicense]) — بنفس تنسيق
+     *  الـTextView الوحيد السابق تماماً (حجم/تباعد سطر/لون/روابط قابلة للنقر). */
+    private fun buildReadmeTextSegment(markdown: String): TextView = TextView(this).apply {
+        layoutParams = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
+        ).apply { if (containerReadmeHasContent) topMargin = dp(4f) }
+        textSize = 13f
+        setLineSpacing(dp(3f).toFloat(), 1f)
+        setTextColor(getColor(R.color.rin_editor_text))
+        autoLinkMask = android.text.util.Linkify.WEB_URLS
+        MarkdownLite.applyTo(this, markdown)
+    }
+
+    /** يبقى false فقط قبل أول مقطع يُضاف فعلياً — يُستخدَم فقط لتفادي هامش علوي زائد لأول مقطع. */
+    private val containerReadmeHasContent: Boolean
+        get() = findViewById<LinearLayout>(R.id.containerDetailReadme).childCount > 0
+
+    /**
+     * يبني بطاقة "معاينة حية" واحدة لكتلة كود Rin/indsin مستخرَجة من README: كود المقطع نفسه
+     * (بنفس تنسيق كتلة الكود القياسي في [MarkdownLite])، ثم شارة حالة + إطار معاينة يُملأ فعلياً
+     * عبر [renderLivePreviewFrame] — لا شيء هنا مُحاكى أو ثابت مسبقاً.
+     */
+    private fun buildLivePreviewCard(code: String): View {
+        val card = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { if (containerReadmeHasContent) topMargin = dp(4f) }
+        }
+
+        val txtCode = TextView(this).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
+            )
+            textSize = 13f
+            setLineSpacing(dp(3f).toFloat(), 1f)
+            text = MarkdownLite.toSpannable("```rin\n$code\n```")
+        }
+        card.addView(txtCode)
+
+        val badge = TextView(this).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { topMargin = dp(10f) }
+            setBackgroundResource(R.drawable.bg_live_preview_badge)
+            setPadding(dp(10f), dp(4f), dp(10f), dp(4f))
+            textSize = 10.5f
+            setTextColor(getColor(R.color.rin_accent))
+            setTypeface(typeface, android.graphics.Typeface.BOLD)
+            text = getString(R.string.package_detail_live_preview_label)
+        }
+        card.addView(badge)
+
+        val frame = FrameLayout(this).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { topMargin = dp(8f) }
+            setBackgroundResource(R.drawable.bg_live_preview_frame)
+            clipToOutline = true
+        }
+        card.addView(frame)
+
+        renderLivePreviewFrame(frame, badge, code)
+        return card
+    }
+
+    /**
+     * يحاول تشغيل [code] فعلياً كوجهة/صفحة Loom عبر [RinEngine.renderView]
+     * (نفس مسار المعاينة الحيّة الحقيقي في المحرّر) ويرسمها كمعاينة حقيقية داخل [frame] عبر
+     * [com.dlof.rinlang.IndsinFabricView] عند وجود `@view` قابل للعرض. إن لم يوجد (حاوية
+     * `@container` بلا واجهة، كود جدولة/منطق عادي...) ينزل إلى [renderExecutionOutput] لعرض
+     * نتيجة تنفيذ حقيقية بدل إطار فارغ لا يعني شيئاً. أي فشل (خطأ لغوي، استثناء JNI...) يُعرَض
+     * كنص خطأ واضح داخل الإطار نفسه بدل ترك المستخدم أمام معاينة صامتة.
+     */
+    private fun renderLivePreviewFrame(frame: FrameLayout, badge: TextView, code: String) {
+        val previewWidthPx = dp(280f)
+        try {
+            val result = org.json.JSONObject(RinEngine.renderView(code, previewWidthPx))
+            val fabric = result.optJSONObject("fabric")
+            if (fabric != null) {
+                badge.text = getString(R.string.package_detail_live_preview_label)
+                val h = fabric.optDouble("h", 480.0).toInt().coerceIn(120, 900)
+                val fabricView = IndsinFabricView(this)
+                frame.addView(
+                    fabricView,
+                    FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, dp(h.toFloat()))
+                )
+                fabricView.setFabric(fabric, previewWidthPx, h, result.optJSONArray("overlays"))
+            } else {
+                renderExecutionOutput(frame, badge, code)
+            }
+        } catch (t: Throwable) {
+            badge.text = getString(R.string.package_detail_live_preview_error_label)
+            frame.addView(buildLivePreviewOutputText(t.message ?: t.toString(), isError = true))
+        }
+    }
+
+    /**
+     * ينزل إليه [renderLivePreviewFrame] عندما لا تحوي كتلة الكود `@view` قابلاً للعرض — يُشغِّل
+     * [code] فعلياً عبر مسار التنفيذ الهيكلي [RinEngine.runSourceStructured]
+     * (نفس محرّك التشغيل الحقيقي، وينجح مع أي كود Rin صحيح: حاوية `@container`، جدولة، منطق عادي)
+     * ويعرض ناتجه المطبوع الحقيقي، أو رسالة الخطأ الحقيقية إن فشل التنفيذ.
+     */
+    private fun renderExecutionOutput(frame: FrameLayout, badge: TextView, code: String) {
+        try {
+            val result = RinEngine.runSourceStructured(code)
+            if (result.success) {
+                badge.text = getString(R.string.package_detail_live_preview_output_label)
+                val text = result.output.ifBlank { getString(R.string.package_detail_live_preview_no_output) }
+                frame.addView(buildLivePreviewOutputText(text, isError = false))
+            } else {
+                badge.text = getString(R.string.package_detail_live_preview_error_label)
+                val message = result.errorMessage ?: result.diagnosticText ?: getString(R.string.indsin_unknown_error)
+                val text = if (result.errorLine > 0) {
+                    getString(R.string.indsin_error_line_format, result.errorLine, message)
+                } else {
+                    getString(R.string.indsin_error_format, message)
+                }
+                frame.addView(buildLivePreviewOutputText(text, isError = true))
+            }
+        } catch (t: Throwable) {
+            badge.text = getString(R.string.package_detail_live_preview_error_label)
+            frame.addView(buildLivePreviewOutputText(t.message ?: t.toString(), isError = true))
+        }
+    }
+
+    private fun buildLivePreviewOutputText(text: String, isError: Boolean): TextView = TextView(this).apply {
+        layoutParams = FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT
+        )
+        setPadding(dp(12f), dp(12f), dp(12f), dp(12f))
+        typeface = android.graphics.Typeface.MONOSPACE
+        textSize = 12f
+        setTextColor(getColor(if (isError) R.color.status_error else R.color.rin_editor_text))
+        this.text = text
+    }
+
+    /** يحوّل [value] (dp) إلى بكسل فعلي حسب كثافة الشاشة الحالية — تُستخدَم في كل القياسات
+     *  المبنية بالكود لبطاقات README/ملفات الحزمة أعلاه. */
+    private fun dp(value: Float): Int = (value * resources.displayMetrics.density).toInt()
 
     /**
      * يعرض قسم "ملفات الحزمة" كشجرة مجلدات/ملفات حقيقية (عبر [PackagingUtils.buildFileTree])
