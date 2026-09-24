@@ -53,6 +53,7 @@ jobs:
             app/src/main/cpp/rin_lexer.cpp \
             app/src/main/cpp/rin_parser.cpp \
             app/src/main/cpp/rin_make.cpp \
+            app/src/main/cpp/rin_container_sql.cpp \
             app/src/main/cpp/rin_interpreter.cpp \
             app/src/main/cpp/rin_artifact.cpp \
             app/src/main/cpp/binfmt/elf_format.cpp \
@@ -104,6 +105,7 @@ jobs:
             app/src/main/cpp/rin_lexer.cpp \
             app/src/main/cpp/rin_parser.cpp \
             app/src/main/cpp/rin_make.cpp \
+            app/src/main/cpp/rin_container_sql.cpp \
             app/src/main/cpp/rin_interpreter.cpp \
             app/src/main/cpp/rin_artifact.cpp \
             app/src/main/cpp/binfmt/elf_format.cpp \
@@ -144,6 +146,8 @@ jobs:
           cp web/site.rin dist/site.rin
           # المحمّل العام (bootloader) الذي يشغّل rin.wasm ويرسم أي Fabric يُعيده.
           cp web/index.html dist/index.html
+          # متجر المكتبات (طبقة Firebase/ويب) — نفس التطبيق، بلا صفحات HTML لكل مكتبة.
+          cp web/libraries.js web/libraries.css dist/
 
       - name: Verify bundle
         run: |
@@ -151,6 +155,8 @@ jobs:
           test -f dist/site.rin
           test -f dist/rin.wasm
           test -f dist/rin.js
+          test -f dist/libraries.js
+          test -f dist/libraries.css
           echo "Bundle contents:"
           ls -la dist
 
