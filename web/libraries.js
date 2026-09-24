@@ -30,7 +30,7 @@
       login: 'دخول', logout: 'خروج', email: 'البريد الإلكتروني', password: 'كلمة السر', signin: 'تسجيل الدخول',
       needLogin: 'سجّل الدخول أولاً', authErr: 'بيانات الدخول غير صحيحة', loginHint: 'أنشئ حسابك من تطبيق Rin ثم ادخل هنا.',
       share: 'نسخ الرابط', mineHint: 'تُنشر الحزم من RinStudio (RinPM) وتظهر هنا تلقائياً.', mineLogin: 'سجّل الدخول لعرض منشوراتك.',
-      more: 'عرض المزيد', none: 'لا يوجد', lines: 'سطر', zipErr: 'تعذّر فك الأرشيف — نزّل الحزمة بدلاً من ذلك.', by: 'بواسطة' },
+      more: 'عرض المزيد', heroT: 'مكتبات Rin', heroS: 'مكتبات رسمية ومن المجتمع — تصفّح، انسخ، حمّل، وشارك رابطاً مباشراً لأي مكتبة.', none: 'لا يوجد', lines: 'سطر', zipErr: 'تعذّر فك الأرشيف — نزّل الحزمة بدلاً من ذلك.', by: 'بواسطة' },
     en: { title: 'Rin Libraries', back: 'Back', home: 'Site', search: 'Search by name, description, category or publisher…',
       all: 'All', official: 'Official', community: 'Community', mine: 'My Published', latest: 'Latest', popular: 'Popular',
       categories: 'Categories', officialLibs: 'Official Libraries', communityLibs: 'Community Libraries', noResults: 'No results',
@@ -41,7 +41,7 @@
       login: 'Sign in', logout: 'Sign out', email: 'Email', password: 'Password', signin: 'Sign in',
       needLogin: 'Please sign in first', authErr: 'Invalid credentials', loginHint: 'Create your account in the Rin app, then sign in here.',
       share: 'Copy link', mineHint: 'Packages published from RinStudio (RinPM) show up here automatically.', mineLogin: 'Sign in to see your published packages.',
-      more: 'Show more', none: 'None', lines: 'lines', zipErr: 'Could not unpack the archive — download the package instead.', by: 'by' }
+      more: 'Show more', heroT: 'Rin Libraries', heroS: 'Official and community libraries — browse, copy, download and share a direct link to any of them.', none: 'None', lines: 'lines', zipErr: 'Could not unpack the archive — download the package instead.', by: 'by' }
   };
 
   // ------------------------------- دوال نقية (قابلة للاختبار) -------------------------------
@@ -311,6 +311,23 @@
       ])
     ]);
   }
+  // ---- هياكل التحميل (skeleton) ----
+  function bar(cls) { return h('div', { class: 'sk-b ' + cls }); }
+  function skelCards(n) {
+    var g = h('div', { class: 'rs-grid' });
+    for (var i = 0; i < n; i++) g.appendChild(h('div', { class: 'rs-card sk', 'aria-hidden': 'true' }, [
+      h('div', { class: 'rs-card-h' }, [h('div', { class: 'rs-ico sk-b' }), h('div', { class: 'rs-card-t sk-grow' }, [bar('sk-l w60'), bar('sk-l w30')])]),
+      bar('sk-l w100'), bar('sk-l w80'), h('div', { class: 'rs-stats' }, [bar('sk-l w30'), bar('sk-l w20')]), bar('sk-btn')]));
+    return g;
+  }
+  function skelSection(n) { return h('section', { 'aria-busy': 'true' }, [bar('sk-h2'), skelCards(n)]); }
+  function skelDetail() {
+    return h('article', { class: 'rs-detail sk', 'aria-busy': 'true' }, [
+      h('div', { class: 'rs-dmain' }, [h('div', { class: 'rs-card-h big' }, [h('div', { class: 'rs-ico sk-b' }), h('div', { class: 'rs-card-t sk-grow' }, [bar('sk-l w60'), bar('sk-l w30')])]),
+        bar('sk-l w100'), bar('sk-l w90'), bar('sk-l w50'), h('div', { class: 'rs-actions wrap' }, [bar('sk-btn'), bar('sk-btn'), bar('sk-btn')])]),
+      h('aside', { class: 'rs-dside' }, [bar('sk-l w100 tall'), bar('sk-l w100 tall'), bar('sk-l w100 tall'), bar('sk-l w100 tall')])]);
+  }
+
   function section(title, items, note) {
     var grid = h('div', { class: 'rs-grid' });
     items.forEach(function (it) { grid.appendChild(card(it)); });
@@ -328,6 +345,7 @@
     var searchEl = h('input', { class: 'rs-search', type: 'search', value: S.term, placeholder: tr('search'), 'aria-label': tr('search'),
       oninput: function (e) { S.term = e.target.value; clearTimeout(renderList.t); renderList.t = setTimeout(fill, 120); } });
     var tabs = h('div', { class: 'rs-chips' }), sorts = h('div', { class: 'rs-chips' }), cats = h('div', { class: 'rs-chips' }), out = h('div', { class: 'rs-results' });
+    $.body.appendChild(h('div', { class: 'rs-hero' }, [h('div', { class: 'rs-hero-t', text: tr('heroT') }), h('p', { class: 'rs-hero-s', text: tr('heroS') })]));
     $.body.appendChild(h('div', { class: 'rs-tools' }, [searchEl, tabs, sorts, cats])); $.body.appendChild(out);
     function chip(box, label, on, fn) { box.appendChild(h('button', { class: 'rs-chip' + (on ? ' on' : ''), text: label, onclick: fn })); }
     function fill() {
@@ -339,10 +357,10 @@
       all.forEach(function (i) { if (!seen[i.category]) { seen[i.category] = 1; chip(cats, i.category, S.cat === i.category, function () { S.cat = S.cat === i.category ? '' : i.category; fill(); }); } });
       if (S.tab === 'mine') {
         if (!S.user) { out.appendChild(h('p', { class: 'rs-note', text: tr('mineLogin') })); return; }
-        if (!S.mineList) { out.appendChild(h('p', { class: 'rs-note', text: tr('loading') })); loadByPublisher(S.user.uid).then(function (l) { S.mineList = l; if (S.route.kind === 'list') fill(); }); return; }
+        if (!S.mineList) { out.appendChild(skelSection(3)); loadByPublisher(S.user.uid).then(function (l) { S.mineList = l; if (S.route.kind === 'list') fill(); }); return; }
         out.appendChild(section(tr('mine'), sortItems(filterItems(S.mineList, S.term, S.cat), S.sort), tr('mineHint'))); return;
       }
-      if (!S.officialList && !S.communityList) out.appendChild(h('p', { class: 'rs-note', text: tr('loading') }));
+      if (!S.officialList && !S.communityList) { out.appendChild(skelSection(6)); out.appendChild(skelSection(3)); return; }
       if (S.tab !== 'community') out.appendChild(section(tr('officialLibs'), sortItems(filterItems(S.officialList || [], S.term, S.cat), S.sort)));
       if (S.tab !== 'official') out.appendChild(section(tr('communityLibs'), sortItems(filterItems(S.communityList || [], S.term, S.cat), S.sort)));
     }
@@ -351,7 +369,7 @@
       .catch(function () { clear(out); out.appendChild(h('p', { class: 'rs-note err', text: tr('loadErr') })); });
   }
   function renderPublisher(r) {
-    $.body.appendChild(h('p', { class: 'rs-note', text: tr('loading') }));
+    $.body.appendChild(skelSection(3));
     loadByPublisher(r.id).then(function (list) {
       clear($.body); var nm = list[0] ? list[0].publisher : r.id;
       $.body.appendChild(h('h1', { class: 'rs-h1', text: '@' + nm }));
@@ -360,7 +378,7 @@
   }
   function renderDetail(r) {
     if (r.item) return drawDetail(r.item);
-    $.body.appendChild(h('p', { class: 'rs-note', text: tr('loading') }));
+    $.body.appendChild(skelDetail());
     (r.type === 'package' ? loadPackage(r.id) : loadLibraryByName(r.id)).then(function (it) {
       if (S.route !== r) return; clear($.body);
       if (!it) { $.body.appendChild(h('p', { class: 'rs-note err', text: tr('notFound') })); return; }
@@ -377,6 +395,7 @@
     var deps = Object.keys(it.deps || {}).map(function (k) { return k + ' ' + it.deps[k]; }).join(', ') || tr('none');
     var rating = it.ratingCount ? '★ ' + it.rating.toFixed(1) + ' (' + it.ratingCount + ')' : tr('none');
     $.body.appendChild(h('article', { class: 'rs-detail' }, [
+      h('div', { class: 'rs-dmain' }, [
       h('div', { class: 'rs-card-h big' }, [iconEl(it), h('div', { class: 'rs-card-t' }, [h('h1', { class: 'rs-h1', text: it.name }), badge(it), by])]),
       h('p', { class: 'rs-desc full', text: it.description || '—' }),
       h('div', { class: 'rs-actions wrap' }, [
@@ -386,13 +405,14 @@
         h('button', { class: 'rs-btn', text: '</> ' + tr('source'), onclick: function () { showSource(it, srcBox); } }),
         h('button', { class: 'rs-btn ghost', text: '🔗 ' + tr('share'), onclick: function () { copyText(root.location.origin + root.location.pathname + it.share); } })
       ]),
-      h('div', { class: 'rs-rows' }, [
+      srcBox
+      ]),
+      h('aside', { class: 'rs-dside' }, [h('div', { class: 'rs-rows' }, [
         row('version', 'v' + it.version), row('category', it.category), row('size', fmtSize(it.size)),
         row('downloads', h('span', { class: 'v', id: 'rs-dl', text: fmtCount(it.downloads) })), row('likes', h('span', { class: 'v', id: 'rs-lk', text: fmtCount(it.likes) })),
         row('rating', rating), row('deps', deps), row('license', it.license || '—'),
         row('date', it.ts ? new Date(it.ts).toLocaleDateString(S.lang === 'ar' ? 'ar' : 'en') : '—')
-      ]),
-      srcBox
+      ])])
     ]));
     refreshLike();
   }
@@ -405,7 +425,7 @@
   }
   function showSource(it, box) {
     if (box.firstChild) { clear(box); return; }
-    box.appendChild(h('p', { class: 'rs-note', text: tr('loading') }));
+    box.appendChild(h('div', { class: 'rs-viewer sk', 'aria-busy': 'true' }, [bar('sk-l w40 tall'), bar('sk-l w90'), bar('sk-l w70'), bar('sk-l w80'), bar('sk-l w60')]));
     getSource(it).then(function (s) { clear(box); box.appendChild(codeViewer(s)); }).catch(function () { clear(box); box.appendChild(h('p', { class: 'rs-note err', text: tr('zipErr') })); });
   }
   function codeViewer(s) {
