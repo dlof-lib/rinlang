@@ -165,7 +165,8 @@ struct Indsin {
 
     Rect layout(StrandPtr s, Constraints cIncoming, double originXIncoming, double originYIncoming) {
         bool sameConstraints = s->hasLastConstraints &&
-            s->lastConstraints.maxW == cIncoming.maxW && s->lastConstraints.maxH == cIncoming.maxH;
+            s->lastConstraints.maxW == cIncoming.maxW && s->lastConstraints.maxH == cIncoming.maxH &&
+            s->lastConstraints.minW == cIncoming.minW && s->lastConstraints.minH == cIncoming.minH;
         bool sameContent = s->hasLastContentHash && s->lastContentHash == s->contentHash;
         if (sameConstraints && sameContent && s->geometry.w > 0) {
             stats.cacheHits++;
@@ -576,7 +577,10 @@ struct Indsin {
         double innerMaxW = std::max(0.0, c.maxW - pad*2), innerMaxH = std::max(0.0, c.maxH - pad*2);
         double contentW=0, contentH=0;
         for (auto& child : s->children) {
-            Rect r = layout(child, {0, innerMaxW, 0, innerMaxH}, originX + pad, originY + pad + contentH);
+            // A Card that its parent stretched (c.minW > 0, e.g. Column align=stretch / screen root) hands that
+            // width on: its children fill the inner box instead of shrink-wrapping inside a wide card.
+            double childMinW = (c.minW > 0 && innerMaxW < 1e8) ? std::max(0.0, std::min(innerMaxW, c.minW - pad*2)) : 0.0;
+            Rect r = layout(child, {childMinW, innerMaxW, 0, innerMaxH}, originX + pad, originY + pad + contentH);
             contentW = std::max(contentW, r.w); contentH += r.h + 8;
         }
         if (!s->children.empty()) contentH -= 8;
@@ -603,7 +607,7 @@ struct Indsin {
         // Cross-axis alignment: Column (axis=Y) aligns children horizontally via `align`;
         // Row (axis=X) aligns children vertically via `valign`. Default is left/top (offset 0),
         // matching the previous unaligned behavior exactly, so existing .rin files don't move.
-        std::string crossMode = (axis == Axis::Y) ? s->attrStr("align", "left") : s->attrStr("valign", "top");
+        std::string crossMode = (axis == Axis::Y) ? s->attrStr("align", s->screenRoot ? "stretch" : "left") : s->attrStr("valign", "top");
         double innerCross = (axis == Axis::Y) ? innerMaxW : innerMaxH;
 
         // Two-pass flex distribution (needed for Spacer/fill children to share the main axis
@@ -646,6 +650,11 @@ struct Indsin {
             flexible[i] = !unboundedMain && isMainAxisFlexible(s->children[i], axis);
             if (flexible[i]) { flexCount++; continue; }
             Constraints probeC = (axis==Axis::Y) ? Constraints{0, innerMaxW, 0, 1e9} : Constraints{0, 1e9, 0, innerMaxH};
+            // align/valign="stretch": the child claims the container's full (bounded) cross extent.
+            if (crossMode == "stretch" && !s->children[i]->attr(axis==Axis::Y ? "width" : "height")) {
+                if (axis==Axis::Y && innerMaxW < 1e8) probeC.minW = innerMaxW;
+                if (axis==Axis::X && innerMaxH < 1e8) probeC.minH = innerMaxH;
+            }
             Rect probe = layout(s->children[i], probeC, 0, 0);
             mainSizeOf[i] = (axis==Axis::Y) ? probe.h : probe.w;
             fixedMainUsed += mainSizeOf[i];
@@ -692,6 +701,10 @@ struct Indsin {
             Constraints cc = flexible[i]
                 ? Constraints{(axis==Axis::Y)?0:mainBudget, childMaxW, (axis==Axis::Y)?mainBudget:0, childMaxH} // flexible: min==max==its share
                 : Constraints{0, childMaxW, 0, childMaxH};
+            if (crossMode == "stretch" && !implicitSpacerExpand && !child->attr(axis==Axis::Y ? "width" : "height")) {
+                if (axis==Axis::Y && innerMaxW < 1e8) cc.minW = innerMaxW;
+                if (axis==Axis::X && innerMaxH < 1e8) cc.minH = innerMaxH;
+            }
             double localX = (axis==Axis::Y) ? padding : cursorMain;
             double localY = (axis==Axis::Y) ? cursorMain : padding;
             Rect r = layout(child, cc, originX + localX, originY + localY);
