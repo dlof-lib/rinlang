@@ -108,6 +108,7 @@ warp copyHtml   = "false";
     @view.Column=drawerCol
       gap=2; padding=20;
       @view.Text=drawerLabel text="التنقّل"; size=12; color="#5b655d"; weight="700"; .end/view
+      @view.MenuItem=dm0  label="📚 مكتبات Rin";      url="?view=libraries"; onTap=toggle(navOpen); color="#22c55e"; .end/view
       @view.MenuItem=dm1  label="لماذا Rin";        url="#features";   onTap=toggle(navOpen); color="#f4f6f3"; .end/view
       @view.MenuItem=dm2  label="جولة في اللغة";     url="#tour";       onTap=toggle(navOpen); color="#f4f6f3"; .end/view
       @view.MenuItem=dm3  label="هذه الصفحة كودها"; url="#code";       onTap=toggle(navOpen); color="#f4f6f3"; .end/view
@@ -164,6 +165,11 @@ warp copyHtml   = "false";
         @view.Button=ctaRepo
           label="افتح المستودع على GitHub";
           url="https://github.com/dlof-lib/rinlang";
+          bg="#22c55e"; color="#0a0c0a"; weight="800";
+        .end/view
+        @view.Button=ctaLibraries
+          label="📚 مكتبات Rin";
+          url="?view=libraries";
           bg="#22c55e"; color="#0a0c0a"; weight="800";
         .end/view
         @view.Button=ctaQuickstart
