@@ -425,28 +425,28 @@ object ProjectManager {
             "        @view.Text=out text=display; size=32; .end/view\n" +
             "    .end/view\n\n" +
             "    @view.Row=row1 gap=8;\n" +
-            "        @view.Button=b7 label=\"7\"; onTap=inputDigit(\"7\"); .end/view\n" +
-            "        @view.Button=b8 label=\"8\"; onTap=inputDigit(\"8\"); .end/view\n" +
-            "        @view.Button=b9 label=\"9\"; onTap=inputDigit(\"9\"); .end/view\n" +
-            "        @view.Button=bDiv label=\"÷\"; onTap=chooseOp(\"/\"); .end/view\n" +
+            "        @view.Button=b7 label=\"7\"; sizing=\"expand\"; onTap=inputDigit(\"7\"); .end/view\n" +
+            "        @view.Button=b8 label=\"8\"; sizing=\"expand\"; onTap=inputDigit(\"8\"); .end/view\n" +
+            "        @view.Button=b9 label=\"9\"; sizing=\"expand\"; onTap=inputDigit(\"9\"); .end/view\n" +
+            "        @view.Button=bDiv label=\"÷\"; sizing=\"expand\"; onTap=chooseOp(\"/\"); .end/view\n" +
             "    .end/view\n\n" +
             "    @view.Row=row2 gap=8;\n" +
-            "        @view.Button=b4 label=\"4\"; onTap=inputDigit(\"4\"); .end/view\n" +
-            "        @view.Button=b5 label=\"5\"; onTap=inputDigit(\"5\"); .end/view\n" +
-            "        @view.Button=b6 label=\"6\"; onTap=inputDigit(\"6\"); .end/view\n" +
-            "        @view.Button=bMul label=\"×\"; onTap=chooseOp(\"*\"); .end/view\n" +
+            "        @view.Button=b4 label=\"4\"; sizing=\"expand\"; onTap=inputDigit(\"4\"); .end/view\n" +
+            "        @view.Button=b5 label=\"5\"; sizing=\"expand\"; onTap=inputDigit(\"5\"); .end/view\n" +
+            "        @view.Button=b6 label=\"6\"; sizing=\"expand\"; onTap=inputDigit(\"6\"); .end/view\n" +
+            "        @view.Button=bMul label=\"×\"; sizing=\"expand\"; onTap=chooseOp(\"*\"); .end/view\n" +
             "    .end/view\n\n" +
             "    @view.Row=row3 gap=8;\n" +
-            "        @view.Button=b1 label=\"1\"; onTap=inputDigit(\"1\"); .end/view\n" +
-            "        @view.Button=b2 label=\"2\"; onTap=inputDigit(\"2\"); .end/view\n" +
-            "        @view.Button=b3 label=\"3\"; onTap=inputDigit(\"3\"); .end/view\n" +
-            "        @view.Button=bSub label=\"-\"; onTap=chooseOp(\"-\"); .end/view\n" +
+            "        @view.Button=b1 label=\"1\"; sizing=\"expand\"; onTap=inputDigit(\"1\"); .end/view\n" +
+            "        @view.Button=b2 label=\"2\"; sizing=\"expand\"; onTap=inputDigit(\"2\"); .end/view\n" +
+            "        @view.Button=b3 label=\"3\"; sizing=\"expand\"; onTap=inputDigit(\"3\"); .end/view\n" +
+            "        @view.Button=bSub label=\"-\"; sizing=\"expand\"; onTap=chooseOp(\"-\"); .end/view\n" +
             "    .end/view\n\n" +
             "    @view.Row=row4 gap=8;\n" +
-            "        @view.Button=bClear label=\"C\"; onTap=clearAll(); .end/view\n" +
-            "        @view.Button=b0 label=\"0\"; onTap=inputDigit(\"0\"); .end/view\n" +
-            "        @view.Button=bDot label=\".\"; onTap=inputDot(); .end/view\n" +
-            "        @view.Button=bAdd label=\"+\"; onTap=chooseOp(\"+\"); .end/view\n" +
+            "        @view.Button=bClear label=\"C\"; sizing=\"expand\"; onTap=clearAll(); .end/view\n" +
+            "        @view.Button=b0 label=\"0\"; sizing=\"expand\"; onTap=inputDigit(\"0\"); .end/view\n" +
+            "        @view.Button=bDot label=\".\"; sizing=\"expand\"; onTap=inputDot(); .end/view\n" +
+            "        @view.Button=bAdd label=\"+\"; sizing=\"expand\"; onTap=chooseOp(\"+\"); .end/view\n" +
             "    .end/view\n\n" +
             "    @view.Button=bEquals label=\"=\"; onTap=pressEquals(); .end/view\n" +
             ".end/view\n"
@@ -502,7 +502,7 @@ object ProjectManager {
             "    @view.Text=lbl1 text=\"زر أساسي (Filled)\"; size=12; .end/view\n" +
             "    @view.Button=btnPrimary label=\"زر أساسي\"; bg=\"#7c5cff\"; color=\"#ffffff\"; radius=12; .end/view\n\n" +
             "    @view.Text=lbl2 text=\"زر بإطار (Outline)\"; size=12; .end/view\n" +
-            "    @view.Button=btnOutline label=\"زر بإطار\"; borderColor=\"#7c5cff\"; borderWidth=1; radius=12; .end/view\n\n" +
+            "    @view.Button=btnOutline label=\"زر بإطار\"; variant=\"outline\"; tone=\"primary\"; radius=12; .end/view\n\n" +
             "    @view.Text=lbl3 text=\"زر مُعطَّل (Disabled)\"; size=12; .end/view\n" +
             "    @view.Button=btnDisabled label=\"زر معطّل\"; state=\"disabled\"; radius=12; .end/view\n\n" +
             "    @view.Text=lbl4 text=\"زر أيقونة\"; size=12; .end/view\n" +
