@@ -32,7 +32,7 @@ class Share(unittest.TestCase):
     def test_library_page_has_full_preview_meta(self):
         h = self.page("@rin/math.og.rin")
         for needle in ('<link rel="canonical" href="https://dlof-lib.github.io/rinlang/@rin/math.og.rin/"/>', 'property="og:title"', 'property="og:image:width" content="1200"',
-                       'name="twitter:card" content="summary_large_image"', 'rel="icon"', 'application/ld+json', 'Math helpers for Rin', "v2.1.0"):
+                       'name="twitter:card" content="summary_large_image"', 'rel="icon"', 'application/ld+json', 'Math helpers for Rin', "v2.1.0", 'name="keywords" content="math, @rin, Official'):
             self.assertIn(needle, h)
         self.assertIn("location.replace(", h); self.assertIn("?@rin/math.og.rin", h)
 
