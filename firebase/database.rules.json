@@ -30,7 +30,8 @@
         "createdAt",
         "publisherUid",
         "likeCount",
-        "downloadCount"
+        "downloadCount",
+        "publisherName"
       ],
       "$packageId": {
         ".write": "(auth != null && auth.token.firebase.sign_in_provider !== 'anonymous') && ((!data.exists() && newData.child('publisherUid').val() === auth.uid) || data.child('publisherUid').val() === auth.uid)",
