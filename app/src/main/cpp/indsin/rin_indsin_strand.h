@@ -271,6 +271,7 @@ struct Strand {
     rin::UiRole role = rin::UiRole::VIEW;
     std::string name, customTag, sourceTag, mask;
     int sourceLine = 0;
+    bool screenRoot = false; // set by the host on the render root: fills the viewport width, Column children stretch by default
     std::vector<ResolvedAttr> attrs;
     std::vector<std::shared_ptr<Strand>> children;
 
