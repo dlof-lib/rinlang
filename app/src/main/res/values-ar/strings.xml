@@ -369,4 +369,7 @@ print \"Hello, \" + name + \"!\";
     <string name="key_up">تحريك لأعلى</string>
     <string name="key_down">تحريك لأسفل</string>
     <string name="key_backspace">حذف للخلف</string>
+    <string name="link_copied">تم النسخ</string>
+    <string name="link_share">مشاركة</string>
+    <string name="link_copy">نسخ</string>
 </resources>
