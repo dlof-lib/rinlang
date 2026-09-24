@@ -21,6 +21,7 @@
 <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png"/>
 <link rel="icon" type="image/png" sizes="16x16" href="favicon-16.png"/>
 <link rel="shortcut icon" type="image/png" href="favicon.png"/>
+<link rel="stylesheet" href="libraries.css"/>
 <style>
   /* ---- تنسيق عام للمحمِّل ومسرح الرسم فقط — لا شيء منه خاص بمحتوى site.rin ---- */
   html,body{margin:0;background:#060807;color:#f4f6f3;font-family:system-ui,sans-serif}
@@ -77,6 +78,7 @@
   </div>
 
   <script src="rin.js"></script>
+  <script src="libraries.js"></script>
   <script>
   (function () {
     var DESIGN_WIDTH = 420; // rootWidth: عرض التصميم الذي يخطّط عنده محرّك Indsin نفسه
@@ -160,7 +162,11 @@
           }
           if (hasTap) dispatchTapAt(node.x + node.w / 2, node.y + node.h / 2);
           if (hasUrl) {
-            if (a.url.charAt(0) === '#') {
+            if (a.url.charAt(0) === '?') {
+              // رابط داخلي لمتجر المكتبات (libraries.js): نفس الصفحة، بلا HTML جديد
+              if (window.RinStore && window.RinStore.navigate(a.url)) return;
+              window.location.search = a.url;
+            } else if (a.url.charAt(0) === '#') {
               var target = document.getElementById(a.url.slice(1));
               if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
             } else {
