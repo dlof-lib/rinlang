@@ -13,8 +13,13 @@ on:
       - "app/src/main/cpp/rin_c_api.*"
       - "app/src/main/cpp/indsin/**"
       - "tools/rin_run.cpp"
+      - "scripts/build_share_pages.py"
       - ".github/workflows/pages.yml"
   workflow_dispatch: {}
+  # تحديث دوري: صفحات معاينة الروابط تُبنى من Firebase وقت النشر، فنعيد النشر كل 3 ساعات
+  # لتظهر المكتبات/الحسابات الجديدة بمعاينة غنية (GitHub Pages لا يملك rewrite ديناميكياً).
+  schedule:
+    - cron: "17 */3 * * *"
 
 permissions:
   contents: read
@@ -150,6 +155,29 @@ jobs:
           cp web/libraries.js web/libraries.css dist/
           # 404.html = محوّل SPA لروابط /@user/library.og.rin (GitHub Pages بلا rewrite)
           cp web/404.html dist/404.html
+          # الأيقونات وبيان التطبيق (PWA) — favicon.ico + PNGs + apple-touch + maskable
+          cp web/og-image.png web/icon-192.png web/icon-512.png web/icon-maskable-512.png \
+             web/apple-touch-icon.png web/favicon.ico web/favicon.png web/favicon-16.png web/favicon-32.png \
+             web/manifest.webmanifest dist/
+
+      # ------------------------------------------------------------------
+      # 3) معاينة الروابط (Open Graph) لكل مكتبة/إضافة/حساب: صفحات ثابتة + صورة 1200x630 لكل كيان
+      #    + sitemap.xml + robots.txt. تُقرأ بيانات Firebase العامة عبر REST. إن تعذّر الاتصال يُنشر
+      #    الموقع بلا هذه الصفحات (تحذير) بدل أن يفشل النشر كله.
+      # ------------------------------------------------------------------
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install image dependencies (Pillow + Arabic shaping + fonts)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq fonts-dejavu-core libfribidi0 libraqm0
+          pip install --quiet pillow arabic-reshaper python-bidi
+
+      - name: Build link-preview pages (per library / extension / account)
+        run: python3 scripts/build_share_pages.py --out dist
 
       - name: Verify bundle
         run: |
@@ -160,6 +188,14 @@ jobs:
           test -f dist/libraries.js
           test -f dist/libraries.css
           test -f dist/404.html
+          test -f dist/og-image.png
+          test -f dist/favicon-32.png
+          test -f dist/favicon.ico
+          test -f dist/apple-touch-icon.png
+          test -f dist/manifest.webmanifest
+          test -f dist/og-store.png
+          test -f dist/sitemap.xml
+          test -f dist/robots.txt
           echo "Bundle contents:"
           ls -la dist
 
