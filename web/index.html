@@ -17,11 +17,51 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Rin</title>
+<title>Rin — لغة برمجة صغيرة، حقيقية بالكامل</title>
+<meta name="description" content="Lexer وParser وInterpreter حقيقية بمحرّك C++17 واحد: سطر أوامر، IDE أندرويد كامل، والمتصفح عبر WebAssembly. مكتبات رسمية وحزم المجتمع في Rin Libraries."/>
+<meta name="theme-color" content="#060807"/>
+<meta property="og:type" content="website"/>
+<meta property="og:site_name" content="Rin"/>
+<meta property="og:title" content="Rin — لغة برمجة صغيرة، حقيقية بالكامل"/>
+<meta property="og:description" content="Lexer وParser وInterpreter حقيقية بمحرّك C++17 واحد: سطر أوامر، IDE أندرويد كامل، والمتصفح عبر WebAssembly. مكتبات رسمية وحزم المجتمع في Rin Libraries."/>
+<meta property="og:url" content="https://dlof-lib.github.io/rinlang/"/>
+<meta property="og:image" content="https://dlof-lib.github.io/rinlang/og-image.png"/>
+<meta property="og:image:type" content="image/png"/>
+<meta property="og:image:width" content="1200"/>
+<meta property="og:image:height" content="630"/>
+<meta property="og:image:alt" content="Rin — لغة برمجة صغيرة، حقيقية بالكامل"/>
+<meta property="og:locale" content="ar_AR"/>
+<meta property="og:locale:alternate" content="en_US"/>
+<meta name="twitter:card" content="summary_large_image"/>
+<meta name="twitter:title" content="Rin — لغة برمجة صغيرة، حقيقية بالكامل"/>
+<meta name="twitter:description" content="Lexer وParser وInterpreter حقيقية بمحرّك C++17 واحد: سطر أوامر، IDE أندرويد كامل، والمتصفح عبر WebAssembly. مكتبات رسمية وحزم المجتمع في Rin Libraries."/>
+<meta name="twitter:image" content="https://dlof-lib.github.io/rinlang/og-image.png"/>
+<link rel="canonical" href="https://dlof-lib.github.io/rinlang/"/>
+<meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1"/>
+<meta name="keywords" content="Rin, لغة Rin, لغة برمجة, Rin programming language, Rin libraries, مكتبات Rin, RinStudio, Indsintime, WebAssembly, C++17, Android IDE, interpreter"/>
+<meta name="author" content="dlof"/>
+<meta name="application-name" content="Rin"/>
+<meta name="apple-mobile-web-app-title" content="Rin"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="color-scheme" content="dark"/>
+<meta property="og:image:secure_url" content="https://dlof-lib.github.io/rinlang/og-image.png"/>
+<meta name="twitter:image:alt" content="Rin — لغة برمجة صغيرة، حقيقية بالكامل"/>
+<link rel="icon" href="favicon.ico" sizes="any"/>
 <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png"/>
 <link rel="icon" type="image/png" sizes="16x16" href="favicon-16.png"/>
 <link rel="shortcut icon" type="image/png" href="favicon.png"/>
-<link rel="stylesheet" href="libraries.css?v=5"/>
+<link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png"/>
+<link rel="manifest" href="manifest.webmanifest"/>
+<link rel="sitemap" type="application/xml" href="sitemap.xml"/>
+<script type="application/ld+json">
+{"@context":"https://schema.org","@graph":[
+ {"@type":"WebSite","@id":"https://dlof-lib.github.io/rinlang/#site","url":"https://dlof-lib.github.io/rinlang/","name":"Rin","alternateName":["Rin Language","لغة Rin","Rin Libraries"],"inLanguage":["ar","en"],"description":"Lexer وParser وInterpreter حقيقية بمحرّك C++17 واحد: سطر أوامر، IDE أندرويد كامل، والمتصفح عبر WebAssembly."},
+ {"@type":"ComputerLanguage","@id":"https://dlof-lib.github.io/rinlang/#language","name":"Rin","url":"https://dlof-lib.github.io/rinlang/","description":"لغة برمجة صغيرة، حقيقية بالكامل — محرّك C++17 واحد."},
+ {"@type":"SoftwareApplication","name":"Rin","applicationCategory":"DeveloperApplication","operatingSystem":"Android, Web (WebAssembly)","image":"https://dlof-lib.github.io/rinlang/og-image.png","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"}},
+ {"@type":"CollectionPage","name":"Rin Libraries","url":"https://dlof-lib.github.io/rinlang/?view=libraries","isPartOf":{"@id":"https://dlof-lib.github.io/rinlang/#site"},"description":"مكتبات رسمية وحزم المجتمع وإضافات Rin."}
+]}
+</script>
+<link rel="stylesheet" href="libraries.css?v=7"/>
 <style>
   /* ---- تنسيق عام للمحمِّل ومسرح الرسم فقط — لا شيء منه خاص بمحتوى site.rin ---- */
   html,body{margin:0;background:#060807;color:#f4f6f3;font-family:system-ui,sans-serif}
@@ -63,6 +103,16 @@
 </style>
 </head>
 <body>
+  <noscript>
+    <style>#boot,#stage-outer{display:none!important}</style>
+    <main style="max-width:640px;margin:48px auto;padding:0 20px;line-height:1.8;font-family:system-ui,sans-serif">
+      <h1>Rin — لغة برمجة صغيرة، حقيقية بالكامل</h1>
+      <p>Lexer وParser وInterpreter حقيقية بمحرّك C++17 واحد: سطر أوامر، IDE أندرويد كامل، والمتصفح عبر WebAssembly.
+         Rin is a small, fully real programming language with one C++17 engine for the CLI, Android IDE and the browser.</p>
+      <p><a href="?view=libraries">مكتبات Rin / Rin Libraries</a> — مكتبات رسمية وحزم المجتمع وإضافات.</p>
+      <p>يتطلّب عرض هذه الصفحة تفعيل JavaScript (محرّك Rin يعمل داخل المتصفح عبر WebAssembly).</p>
+    </main>
+  </noscript>
   <div id="boot">
     <div class="inner">
       <div><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
@@ -78,7 +128,7 @@
   </div>
 
   <script src="rin.js"></script>
-  <script src="libraries.js?v=5"></script>
+  <script src="libraries.js?v=7"></script>
   <script>
   (function () {
     var DESIGN_WIDTH = 420; // rootWidth: عرض التصميم الذي يخطّط عنده محرّك Indsin نفسه
