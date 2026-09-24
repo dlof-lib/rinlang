@@ -54,6 +54,9 @@ import android.widget.TextView
  *   [RectF] مباشرة)، بحدّ خفيف حول البطاقة، فتبدو أقرب لمكوّن Material Design من نص خام.
  * - **جديد: اقتباسات بعلامة تنصيص** — كل كتلة `>` تبدأ الآن بعلامة اقتباس مزخرفة كبيرة بلون
  *   الشريط الجانبي، لتمييزها بصرياً كـ"مقتطف مُقتبَس" لا مجرّد سطر مائل.
+ * - **جديد: كتل كود Rin/indsin حيّة** — [splitLiveCodeBlocks] يفصل ```rin ```/```indsin ``` عن
+ *   بقية النص Markdown العادي، ليعرضها المستدعي (PackageDetailActivity) ببطاقة معاينة حيّة
+ *   حقيقية (وجهة مُصيَّرة، أو نتيجة تنفيذ فعلية لغير ذلك) بدل نص كود ثابت.
  *
  * الاستخدام المباشر: `textView.text = MarkdownLite.toSpannable(md)`.
  * الاستخدام الموصى به عند وجود روابط قابلة للنقر: `MarkdownLite.applyTo(textView, md)`.
@@ -348,6 +351,48 @@ object MarkdownLite {
      * يبني نص Markdown مباشرة داخل [textView]، ويُفعِّل [LinkMovementMethod] ولون الروابط حتى
      * تعمل روابط `[نص](رابط)` فعلياً بالنقر — الاستخدام المُوصى به بدل تعيين `.text` يدوياً.
      */
+    /**
+     * مقطع واحد من مقاطع [splitLiveCodeBlocks]: إمّا نص Markdown عادي يُعرَض عبر [toSpannable]
+     * كالمعتاد، أو كتلة كود Rin/indsin مستخرَجة لتُعرَض ببطاقة "معاينة حية" منفصلة (كودها +
+     * محاولة تشغيلها فعلياً عبر المحرّك الأصلي) بدل نص كود ثابت داخل نفس مسار العرض العادي.
+     */
+    sealed class MarkdownSegment {
+        data class Text(val markdown: String) : MarkdownSegment()
+        data class LiveCode(val language: String, val code: String) : MarkdownSegment()
+    }
+
+    private val liveCodeBlockRegex = Regex(
+        "```(rin|indsin)[ \\t]*\\r?\\n([\\s\\S]*?)```",
+        RegexOption.IGNORE_CASE
+    )
+
+    /**
+     * يقسّم [markdown] إلى مقاطع نصية عادية ومقاطع كود Rin/indsin حيّة منفصلة (```rin ... ```
+     * أو ```indsin ... ```)، حتى يمكن لـ[com.dlof.rinlang.store.PackageDetailActivity.bindReadmeAndLicense]
+     * عرض معاينة حيّة حقيقية أسفل كل كتلة كود Rin (وجهة/صفحة مُصيَّرة فعلياً عبر المحرّك الأصلي إن
+     * وُجد `@view` قابل للعرض، وإلا نتيجة تنفيذ فعلية — يناسب هذا أي نوع كود آخر: حاوية `@container`
+     * بلا واجهة، جدولة، منطق عادي...) بدل أن تبقى مجرد نص كود ثابت كباقي لغات الكود الأخرى (التي
+     * تُعرَض كالمعتاد بلا أي تغيير ضمن مقاطع [MarkdownSegment.Text] العادية عبر [toSpannable]).
+     * كتل الكود بأي لغة أخرى غير rin/indsin لا تُقتطَع هنا إطلاقاً وتبقى ضمن نص Markdown العادي.
+     */
+    fun splitLiveCodeBlocks(markdown: String): List<MarkdownSegment> {
+        val segments = mutableListOf<MarkdownSegment>()
+        var lastEnd = 0
+        for (match in liveCodeBlockRegex.findAll(markdown)) {
+            if (match.range.first > lastEnd) {
+                segments.add(MarkdownSegment.Text(markdown.substring(lastEnd, match.range.first)))
+            }
+            val lang = match.groupValues[1].lowercase()
+            val code = match.groupValues[2].trimEnd('\n')
+            segments.add(MarkdownSegment.LiveCode(lang, code))
+            lastEnd = match.range.last + 1
+        }
+        if (lastEnd < markdown.length) {
+            segments.add(MarkdownSegment.Text(markdown.substring(lastEnd)))
+        }
+        return segments
+    }
+
     fun applyTo(textView: TextView, markdown: String) {
         textView.text = toSpannable(markdown)
         textView.movementMethod = LinkMovementMethod.getInstance()
