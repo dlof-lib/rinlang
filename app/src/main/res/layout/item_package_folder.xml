@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  صفّ "مجلد" واحد داخل شجرة "ملفات الحزمة" — أخو item_package_file.xml لكن بهوية بصرية مميَّزة
+  (أيقونة مجلد بلون ذهبي بدل لون كل ملف، اسم بخط أثقل لإبراز كونه عنوان تجميع لا ملفاً ورقياً)
+  وحبّة صغيرة تُظهر عدد الملفات داخله (مباشرة + كل ما تحته من مجلدات فرعية)، حتى يُقرأ المجلد
+  فوراً كرأس قسم قابل للتفريق عن الملفات المتفرّعة عنه أسفله (التي تُزاح بمسافة بادئة إضافية
+  حسب عمقها عبر PackageDetailActivity.bindFiles، بلا حاجة لأي تغيير هنا).
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal"
+    android:gravity="center_vertical"
+    android:paddingHorizontal="14dp"
+    android:paddingVertical="12dp">
+
+    <FrameLayout
+        android:layout_width="30dp"
+        android:layout_height="30dp">
+
+        <View
+            android:id="@+id/bgFolderIconCircle"
+            android:layout_width="30dp"
+            android:layout_height="30dp"
+            android:background="@drawable/bg_section_icon_circle" />
+
+        <ImageView
+            android:layout_width="15dp"
+            android:layout_height="15dp"
+            android:layout_gravity="center"
+            android:src="@drawable/ic_folder_solid"
+            app:tint="@color/rin_star_gold"
+            android:contentDescription="@null" />
+    </FrameLayout>
+
+    <TextView
+        android:id="@+id/txtFolderName"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:layout_marginStart="12dp"
+        android:fontFamily="monospace"
+        android:textStyle="bold"
+        android:textSize="12.5sp"
+        android:textColor="@color/rin_on_toolbar"
+        android:ellipsize="middle"
+        android:singleLine="true" />
+
+    <TextView
+        android:id="@+id/txtFolderCount"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="8dp"
+        android:background="@drawable/bg_stat_pill"
+        android:paddingHorizontal="8dp"
+        android:paddingVertical="3dp"
+        android:textSize="10.5sp"
+        android:textColor="@color/rin_editor_hint" />
+
+</LinearLayout>
