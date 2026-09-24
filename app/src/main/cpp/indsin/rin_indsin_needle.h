@@ -52,6 +52,10 @@ inline bool hitTestPath(const StrandPtr& s, double x, double y, std::vector<Stra
 
 inline rin::Value indsinValueToRin(const Value& v) {
     if (v.kind == Value::Kind::NUMBER) return rin::Value::num(v.number);
+    // Warp cells store booleans as the text "true"/"false" (see rinValueToIndsin). Hand them back to the
+    // interpreter as real booleans, otherwise `if (flag)` / `!flag` see a non-empty (truthy) string and a
+    // handler like `open = !open` or `if (freshEntry)` can never see the value false.
+    if (v.str == "true" || v.str == "false") return rin::Value::boolean_(v.str == "true");
     return rin::Value::string(v.str);
 }
 inline Value rinValueToIndsin(const rin::Value& v) {
