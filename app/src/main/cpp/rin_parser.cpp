@@ -2672,6 +2672,9 @@ ExprPtr Parser::primary() {
         goalDepth--;
         return e;
     }
+    // `show(x)` is lexed as PRINT (keyword synonym of print) but in EXPRESSION position followed by '('
+    // it is the built-in indsin action show(warpCell) (onTap=show(dialogOpen);) -- treat as identifier.
+    if (check(TokenType::PRINT) && peek().lexeme == "show" && checkNext(TokenType::LPAREN)) tokens[current].type = TokenType::IDENT;
     if (match({TokenType::IDENT, TokenType::CONTAINER})) {
         auto e = std::make_shared<VariableExpr>();
         e->name = previous().lexeme;
