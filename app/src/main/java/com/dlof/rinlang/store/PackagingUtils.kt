@@ -283,6 +283,32 @@ object PackagingUtils {
         }
     }
 
+    /**
+     * يبني شجرة مجلدات/ملفات حقيقية من [files] (قائمة مسطَّحة مساراتها الكاملة مثل
+     * "lib/table_utils.og.og.rin") بدل عرضها كقائمة مسطَّحة بمسار كامل مكرَّر في كل سطر —
+     * تُستخدَم في قسم "ملفات الحزمة" بشاشة تفاصيل الحزمة ([PackageDetailActivity.bindFiles])
+     * لعرض شكل مرتَّب شبيه بمستكشف ملفات حقيقي: كل مجلد رأس قسم واحد يظهر مرّة واحدة، والملفات
+     * تحته باسمها المجرَّد فقط (بلا تكرار بادئة المسار). المجلدات مرتَّبة أبجدياً قبل الملفات في
+     * كل مستوى (تماماً كمستكشف ملفات المشروع في التطبيق)، وكلاهما مرتَّب أبجدياً ضمن نوعه.
+     */
+    fun buildFileTree(files: List<PackageFileEntry>): FileTreeFolder {
+        val root = FileTreeFolder(name = "", path = "")
+        for (file in files) {
+            val parts = file.name.split("/").filter { it.isNotEmpty() }
+            if (parts.isEmpty()) continue
+            var current = root
+            for (i in 0 until parts.size - 1) {
+                val part = parts[i]
+                current = current.folders.getOrPut(part) {
+                    FileTreeFolder(name = part, path = if (current.path.isEmpty()) part else "${current.path}/$part")
+                }
+            }
+            current.files.add(FileTreeLeaf(simpleName = parts.last(), entry = file))
+        }
+        root.sortRecursively()
+        return root
+    }
+
     private fun buildLicense(publisherName: String): String {
         val year = Calendar.getInstance().get(Calendar.YEAR)
         return """
@@ -335,6 +361,27 @@ object PackagingUtils {
 
 /** ملف واحد داخل أرشيف الحزمة: مساره الكامل داخل الـ zip (مثال: "lib/mylib.og.rin") وحجمه. */
 data class PackageFileEntry(val name: String, val sizeBytes: Long)
+
+/** ملف واحد داخل شجرة الملفات ([PackagingUtils.buildFileTree]): اسمه المجرَّد وسجله الكامل. */
+data class FileTreeLeaf(val simpleName: String, val entry: PackageFileEntry)
+
+/**
+ * مجلد واحد داخل شجرة الملفات ([PackagingUtils.buildFileTree]): مجلداته الفرعية المباشرة
+ * (بالاسم) وملفاته المباشرة. الجذر (بلا اسم ولا مسار) يمثّل الحزمة نفسها.
+ */
+class FileTreeFolder(val name: String, val path: String) {
+    val folders = sortedMapOf<String, FileTreeFolder>(String.CASE_INSENSITIVE_ORDER)
+    val files = mutableListOf<FileTreeLeaf>()
+
+    /** يرتّب ملفات هذا المجلد أبجدياً (المجلدات مرتَّبة أصلاً عبر sortedMapOf)، بعمق كامل. */
+    fun sortRecursively() {
+        files.sortWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.simpleName })
+        folders.values.forEach { it.sortRecursively() }
+    }
+
+    /** إجمالي عدد الملفات داخل هذا المجلد وكل ما تحته من مجلدات فرعية (لعرضه في حبّة العدّاد). */
+    fun totalFileCount(): Int = files.size + folders.values.sumOf { it.totalFileCount() }
+}
 
 /** محتوى حزمة مُستخرَج من أرشيفها، جاهز للعرض في صفحة تفاصيل شبيهة بصفحة مستودع GitHub. */
 data class PackageContents(
