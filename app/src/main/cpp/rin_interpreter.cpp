@@ -4351,7 +4351,7 @@ void Interpreter::registerNatives() {
     auto maskKnown = [this](const std::string& m) -> bool {
         return !m.empty() && (containerMasks.count(m) || groupMasks.count(m) || volumeMasks.count(m));
     };
-    auto maskResolveInternal = [this, &maskKnown](std::string token) -> std::string {
+    auto maskResolveInternal = [this, maskKnown](std::string token) -> std::string {
         if (maskKnown(token)) return token;
         std::unordered_set<std::string> seen;
         for (int i = 0; i < 64 && !token.empty(); ++i) {
