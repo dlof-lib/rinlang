@@ -18,6 +18,8 @@ data class RinPackage(
     val description: String = "",
     val license: String = "MIT",
     val publisherUid: String = "",
+    /** اسم المستخدم العام المستخدم في روابط المشاركة، مثل @dlof. */
+    val publisherUsername: String = "",
     val publisherName: String = "",
     val fileName: String = "",   // مثال: mylib.og.rinsdk
     val sizeBytes: Long = 0L,
