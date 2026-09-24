@@ -321,17 +321,13 @@
                 android:textStyle="bold"
                 android:textColor="@color/rin_on_toolbar" />
 
-            <TextView
-                android:id="@+id/txtDetailReadme"
+            <LinearLayout
+                android:id="@+id/containerDetailReadme"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:orientation="vertical"
                 android:background="@drawable/bg_detail_section_card"
-                android:padding="15dp"
-                android:textSize="13sp"
-                android:lineSpacingExtra="3dp"
-                android:textColor="@color/rin_editor_text"
-                android:textColorLink="@color/rin_accent"
-                android:autoLink="web" />
+                android:padding="15dp" />
 
             <!-- قسم الترخيص -->
             <TextView
