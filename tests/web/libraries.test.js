@@ -128,6 +128,8 @@ global.firebase = { apps: [], initializeApp() { this.apps.push(1); }, auth: () =
   ok(body.textContent.includes('Official Libraries (1)') && body.textContent.includes('Community Libraries (2)'), 'list shows Official + Community sections');
   const search = find(n => n.cls().includes('rs-search')); search.value = 'other'; search.fire('input'); await tick(200); ok(body.textContent.includes('Community Libraries (1)') && body.textContent.includes('Official Libraries (0)'), 'search filters both sections without new pages');
   RS.navigate('?publisher=u9'); await tick(60); ok(body.textContent.includes('@sara') && body.textContent.includes('MyLib') && !body.textContent.includes('Other'), '?publisher=u9 lists only that publisher');
+  RS.navigate('?package=P2'); ok(find(n => n.cls().includes('sk-b')) && find(n => n.attrs['aria-busy'] === 'true'), 'skeleton placeholders render while a detail loads'); await tick(60); ok(!find(n => n.cls().includes('sk-b')) && find(n => n.tag === 'h1' && n.textContent === 'Other'), 'skeleton replaced by real content');
+  location.search = '?view=libraries'; store = {}; RS.navigate('?view=libraries'); ok(find(n => n.cls().includes('rs-hero')), 'list shows hero banner'); await tick(60);
   RS.navigate('?package=NOPE'); await tick(60); ok(body.textContent.includes('Library not found'), 'unknown id => friendly not-found');
   eq(RS.navigate('?foo=1'), false, 'unrelated query ignored (site home unaffected)');
   console.log(`\nALL PASSED (${passed} checks)`);
