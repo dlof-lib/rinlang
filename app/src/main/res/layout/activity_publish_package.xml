@@ -263,6 +263,16 @@
                 android:textColor="@color/rin_on_toolbar"
                 android:textSize="13sp" />
 
+            <!-- توضيح أن الاختيار متعدد وغير مقيَّد بنوع ملف واحد (صور فقط سابقاً) -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:gravity="center"
+                android:text="@string/hint_package_assets_multi"
+                android:textColor="@color/rin_editor_hint"
+                android:textSize="11.5sp" />
+
             <TextView
                 android:id="@+id/txtAssetsSelected"
                 android:layout_width="match_parent"
