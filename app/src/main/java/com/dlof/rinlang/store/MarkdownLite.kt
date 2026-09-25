@@ -77,8 +77,10 @@ import android.widget.Toast
  *   رابط خارجي صغير ↗ بعد النص، أقرب لأسلوب شارات الروابط الاحترافية.
  * - **جديد: شارات/أزرار وصفية عبر `[* ... *]`** — صياغة عامة جديدة بأجزاء مفصولة بـ`/` (انظر
  *   [appendMetaBadge]): `[*الإصدار/1*]` لشارة إصدار ثنائية اللون (تسمية خافتة + قيمة بارزة)،
- *   `[*زر تثبيت/link=(رابط)*]` لزر رابط حقيقي قابل للنقر يفتح المتصفح عند الضغط، و
- *   `[*Pin/link=(رابط)/icon=(اسم)*]` لنفس الزر مع أيقونة مصغَّرة قبل النص.
+ *   `[*زر تثبيت/link=(رابط)*]` لزر رابط حقيقي قابل للنقر يفتح المتصفح عند الضغط،
+ *   `[*Pin/link=(رابط)/icon=(اسم)*]` لنفس الزر مع أيقونة مصغَّرة قبل النص، و`[*#7C5CFF*]` (أو
+ *   `[*Accent/#7C5CFF*]`، أو `color=(#hex)` مدمَجاً مع أي من الصيغتين أعلاه) لنقطة لون حقيقية
+ *   مدمَجة داخل الحبّة نفسها عبر [ColorSwatchSpan] — لا عنصر منفصل قائم بذاته.
  *
  * الاستخدام المباشر: `textView.text = MarkdownLite.toSpannable(md)`.
  * الاستخدام الموصى به عند وجود روابط قابلة للنقر: `MarkdownLite.applyTo(textView, md)`.
@@ -90,6 +92,11 @@ object MarkdownLite {
     private const val COLOR_BULLET_L2 = 0xFF22C88E.toInt()       // rin_accent_green
     private const val COLOR_BULLET_L3 = 0xFFFFC94D.toInt()       // rin_star_gold
     private val BULLET_DEPTH_COLORS = intArrayOf(COLOR_BULLET, COLOR_BULLET_L2, COLOR_BULLET_L3)
+
+    /** لون طبقة رقم [index] داخل وسام "الهرم الهيكلي" ([PyramidBadgeSpan]) — نفس تدرّج ألوان
+     *  أعماق القوائم المتعشِّشة [BULLET_DEPTH_COLORS] بالضبط، فتبقى هوية "العمق البصري" موحَّدة
+     *  عبر كل عناصر الملف (قوائم متعشِّشة/هرم هيكلي) لا لوحة مستقلة مختلَقة هنا. */
+    private fun pyramidTierColor(index: Int): Int = BULLET_DEPTH_COLORS[index % BULLET_DEPTH_COLORS.size]
 
     private const val COLOR_RULE = 0xFF2D2D30.toInt()            // rin_job_card_border
     private const val COLOR_CARD_BORDER = 0x26FFFFFF             // حدّ خفيف موحّد لبطاقات الكود/الاقتباس/الجدول
@@ -633,6 +640,34 @@ object MarkdownLite {
     /** يلتقط مقاطع `مفتاح=(قيمة)` داخل صياغة `[* ... *]` — انظر [appendMetaBadge]. */
     private val metaBadgeKeyValueRegex = Regex("^(\\w+)\\s*=\\s*\\(([^)]*)\\)$")
 
+    /** لون سداسي عشري صريح `#RGB` أو `#RRGGBB` — يُقبَل في أي جزء من `[* ... *]` (تسمية مجرَّدة
+     *  أولى، قيمة ثانية مجرَّدة، أو `color=(#hex)`) — انظر [appendMetaBadge]. */
+    private val hexColorRegex = Regex("^#([0-9A-Fa-f]{6}|[0-9A-Fa-f]{3})$")
+
+    /** يحوّل نصاً كـ`#7C5CFF`/`#7CF` إلى (لون ARGB كامل الشفافية، نص العرض الموحَّد `#RRGGBB`)،
+     *  أو null إن لم يطابق صيغة لون سداسي عشري صحيحة — يسقط بهدوء إلى المعالجة العادية حينها. */
+    private fun parseHexColor(raw: String): Pair<Int, String>? {
+        val m = hexColorRegex.find(raw.trim()) ?: return null
+        var hex = m.groupValues[1]
+        if (hex.length == 3) hex = hex.map { "$it$it" }.joinToString("")
+        return try {
+            val color = (0xFF000000.toInt()) or Integer.parseInt(hex, 16)
+            color to "#${hex.uppercase()}"
+        } catch (t: Throwable) {
+            null
+        }
+    }
+
+    /** نص/خلفية بيضاء أو داكنة (بحسب سطوع [bgColor]) — يضمن مقروئية زر برابط بلون مخصَّص
+     *  [appendMetaBadge] مهما كان اللون المُدخَل فاتحاً أو داكناً. */
+    private fun contrastingTextColor(bgColor: Int): Int {
+        val r = (bgColor shr 16) and 0xFF
+        val g = (bgColor shr 8) and 0xFF
+        val b = bgColor and 0xFF
+        val luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255.0
+        return if (luminance > 0.6) 0xFF15161A.toInt() else 0xFFFFFFFF.toInt()
+    }
+
     /** رموز أيقونات مصغَّرة لصياغة `icon=(اسم)` — مطابقة نصّية بالاحتواء على اسم الملف/المعرِّف
      *  بلا امتداد (فـ`icon(pin.png)` أو `icon(ic_pin)` كلاهما يطابق "pin")، تسقط بهدوء لبلا أيقونة
      *  إن لم يُعرَف الاسم، فلا يتعطّل عرض الزر أبداً بسبب اسم أيقونة غير مدعوم. */
@@ -657,8 +692,9 @@ object MarkdownLite {
 
     /**
      * "شارة/زر وصفي" عام عبر صياغة `[* ... *]` بأجزاء مفصولة بـ`/`: الجزء الأول دائماً هو
-     * النص الظاهر، وما بعده إمّا `مفتاح=(قيمة)` (المفتاحان المدعومان: `link` و`icon`) أو قيمة
-     * مجرَّدة. ثلاث صيغ عملية:
+     * النص الظاهر (أو لون سداسي عشري مجرَّد بلا تسمية — انظر صياغة اللون أدناه)، وما بعده إمّا
+     * `مفتاح=(قيمة)` (المفاتيح المدعومة: `link`، `icon`، `color`) أو قيمة مجرَّدة (رقم إصدار، أو
+     * لون سداسي عشري). أربع صيغ عملية:
      * - `[*الإصدار/1*]` → شارة إصدار ثنائية اللون (تسمية خافتة + قيمة بارزة بلون الهوية) داخل
      *   حبّة واحدة، عبر [BadgeTwoToneSpan] — بلا أي تفاعل (عرض فقط).
      * - `[*زر تثبيت/link=(رابط)*]` → زر حقيقي قابل للنقر (حبّة مملوءة بلون الهوية + نص أبيض
@@ -666,49 +702,107 @@ object MarkdownLite {
      *   "تثبيت"/"تحميل"/"زيارة الموقع" داخل README.
      * - `[*Pin/link=(رابط)/icon=(اسم)*]` → نفس زر الرابط أعلاه، مع أيقونة مصغَّرة (عبر
      *   [iconGlyphFor]) قبل النص مباشرة — مناسب لأزرار "تثبيت"/"تنزيل" المصحوبة برمز.
-     * لا رابط ولا قيمة مجرَّدة (مثال: `[*جديد*]` وحدها) → يسقط بهدوء إلى ستيكر عادي بلون الهوية
-     * الافتراضي عبر [appendSticker]، فلا يُفقَد المحتوى صمتاً بسبب صياغة ناقصة.
+     * - **لون مدمَج (`color`)** — ثلاث طرق مكافئة كلها تُفعِّل نفس السلوك عبر [ColorSwatchSpan]
+     *   أو تُلوِّن الزر/الشارة الحاليين مباشرة، بدل عنصر منفصل قائم بذاته:
+     *   • `[*#7C5CFF*]` — نقطة لون حقيقية + رمزه السداسي، بلا تسمية.
+     *   • `[*Accent/#7C5CFF*]` — نفس النقطة، مع تسمية نصية قبلها.
+     *   • `[*تحميل/link=(رابط)/color=(#22C88E)*]` — الزر نفسه أعلاه لكن بخلفية [color] المُحدَّد
+     *     بدل لون الهوية الافتراضي (مع اختيار نص أبيض/داكن تلقائياً عبر [contrastingTextColor]
+     *     لضمان التباين مهما كان اللون).
+     *   • `[*الإصدار/2/color=(#FFA95C)*]` — شارة الإصدار نفسها أعلاه، لكن بقيمة ملوَّنة بـ[color]
+     *     بدل لون الهوية الافتراضي.
+     * - **وسام الهرم الهيكلي (`hierarchy`)** — `[*بنية الصفحة/hierarchy=(4)*]` → وسام بأيقونة هرم
+     *   حقيقية مرسومة (قمّة ضيّقة أعلى إلى قاعدة عريضة أسفل، بعدد طبقات = القيمة المُعطاة، كل
+     *   طبقة بلون عمق مختلف عبر [pyramidTierColor]) عبر [PyramidBadgeSpan] — يمثّل بصرياً عدد
+     *   مستويات تعشيش عناصر صفحة (مثال: `Scaffold ← TopBar/Column/BottomBar ← عناصرها الداخلية`
+     *   = 3 مستويات). `hierarchy=(N)` مقبولة أيضاً باسم `pyramid=(N)`؛ N تُحصَر تلقائياً بين 1 و6
+     *   طبقات (سقف معقول للرسم داخل حبّة نصّية واحدة). بلا تسمية منفصلة، يُستخدَم عنوان افتراضي
+     *   "البنية الهيكلية".
+     * لا رابط ولا قيمة مجرَّدة ولا لون ولا هرم (مثال: `[*جديد*]` وحدها) → يسقط بهدوء إلى ستيكر
+     * عادي بلون الهوية الافتراضي عبر [appendSticker]، فلا يُفقَد المحتوى صمتاً بسبب صياغة ناقصة.
      */
     private fun appendMetaBadge(out: SpannableStringBuilder, raw: String) {
         val parts = raw.split("/").map { it.trim() }.filter { it.isNotEmpty() }
         if (parts.isEmpty()) return
-        val label = parts[0]
+        var label = parts[0]
 
         var linkUrl: String? = null
         var iconRaw: String? = null
         var plainValue: String? = null
+        var color: Pair<Int, String>? = null
+        var hierarchyLevels: Int? = null
+
+        // التسمية الأولى نفسها قد تكون لوناً مجرَّداً بلا نص (`[*#7C5CFF*]`) — عندها لا توجد
+        // تسمية نصية منفصلة أصلاً.
+        parseHexColor(label)?.let { color = it; label = "" }
+
         for (part in parts.drop(1)) {
             val m = metaBadgeKeyValueRegex.find(part)
             if (m != null) {
                 when (m.groupValues[1].lowercase()) {
                     "link" -> linkUrl = m.groupValues[2].trim()
                     "icon" -> iconRaw = m.groupValues[2].trim()
+                    "color" -> parseHexColor(m.groupValues[2].trim())?.let { color = it }
+                    "hierarchy", "pyramid" -> hierarchyLevels = m.groupValues[2].trim().toIntOrNull()?.coerceIn(1, 6)
                 }
-            } else if (plainValue == null) {
-                plainValue = part
+            } else {
+                val asColor = parseHexColor(part)
+                when {
+                    asColor != null -> color = asColor
+                    plainValue == null -> plainValue = part
+                }
             }
         }
 
         when {
             linkUrl != null -> {
+                val bg = color?.first ?: COLOR_BULLET
+                val fg = if (color != null) contrastingTextColor(bg) else 0xFFFFFFFF.toInt()
                 val glyph = iconGlyphFor(iconRaw)
-                val buttonText = if (glyph != null) "$glyph  $label" else label
+                val shownLabel = label.ifBlank { color?.second.orEmpty() }
+                val buttonText = if (glyph != null) "$glyph  $shownLabel" else shownLabel
                 val start = out.length
                 out.append(buttonText)
                 val end = out.length
-                out.setSpan(StickerSpan(COLOR_BULLET, 0xFFFFFFFF.toInt()), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                out.setSpan(StickerSpan(bg, fg), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
                 out.setSpan(StyleSpan(Typeface.BOLD), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
                 out.setSpan(RelativeSizeSpan(0.9f), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
                 out.setSpan(LinkButtonClickSpan(linkUrl), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
             }
+            hierarchyLevels != null -> {
+                val shownLabel = label.ifBlank { "\u0627\u0644\u0628\u0646\u064A\u0629 \u0627\u0644\u0647\u064A\u0643\u0644\u064A\u0629" } // "البنية الهيكلية"
+                val start = out.length
+                out.append("$shownLabel  $hierarchyLevels")
+                val end = out.length
+                out.setSpan(
+                    PyramidBadgeSpan(hierarchyLevels, COLOR_INLINE_CODE_BG, COLOR_CODE_TEXT),
+                    start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                )
+                out.setSpan(StyleSpan(Typeface.BOLD), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                out.setSpan(RelativeSizeSpan(0.84f), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            }
             plainValue != null -> {
+                val valueColor = color?.first ?: COLOR_BULLET
                 val start = out.length
                 out.append("$label $plainValue")
                 val end = out.length
                 out.setSpan(
-                    BadgeTwoToneSpan(label, plainValue, COLOR_INLINE_CODE_BG, COLOR_H_DIM, COLOR_BULLET),
+                    BadgeTwoToneSpan(label, plainValue, COLOR_INLINE_CODE_BG, COLOR_H_DIM, valueColor),
                     start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
                 )
+            }
+            color != null -> {
+                val (swatchColor, hexDisplay) = color!!
+                val text = if (label.isNotBlank()) "$label  $hexDisplay" else hexDisplay
+                val start = out.length
+                out.append(text)
+                val end = out.length
+                out.setSpan(
+                    ColorSwatchSpan(swatchColor, COLOR_INLINE_CODE_BG, COLOR_CODE_TEXT),
+                    start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                )
+                out.setSpan(TypefaceSpan("monospace"), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                out.setSpan(RelativeSizeSpan(0.84f), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
             }
             else -> appendSticker(out, label)
         }
@@ -1102,6 +1196,151 @@ object MarkdownLite {
             paint.style = savedStyle
             paint.isAntiAlias = savedAA
             paint.isFakeBoldText = savedBold
+        }
+    }
+
+    /**
+     * "نقطة لون مدمَجة" داخل حبّة واحدة: دائرة مملوءة بلون [swatchColor] الحقيقي (المُستخرَج من
+     * صياغة `#RRGGBB` في [appendMetaBadge]) + نص (تسمية و/أو الرمز السداسي) بجانبها مباشرة —
+     * كل ذلك عنصر بصري واحد مُدمَج (لا نقطة منفصلة عن حبّة نصّية أخرى)، بحدّ رفيع شبه شفاف حول
+     * الدائرة لتبقى مقروءة حتى لو قارب لونها لون خلفية البطاقة نفسها.
+     */
+    private class ColorSwatchSpan(
+        private val swatchColor: Int,
+        private val bgColor: Int,
+        private val textColor: Int
+    ) : ReplacementSpan() {
+        private val horizontalPad = 14f
+        private val verticalPad = 5f
+        private val cornerRadius = 14f
+        private val dotRadius = 6f
+        private val dotGap = 8f
+
+        override fun getSize(paint: Paint, text: CharSequence, start: Int, end: Int, fm: Paint.FontMetricsInt?): Int {
+            if (fm != null) {
+                val orig = paint.fontMetricsInt
+                fm.ascent = orig.ascent - verticalPad.toInt()
+                fm.descent = orig.descent + verticalPad.toInt()
+                fm.top = fm.ascent
+                fm.bottom = fm.descent
+            }
+            return (horizontalPad * 2 + dotRadius * 2 + dotGap + paint.measureText(text, start, end)).toInt()
+        }
+
+        override fun draw(
+            canvas: Canvas, text: CharSequence, start: Int, end: Int,
+            x: Float, top: Int, y: Int, bottom: Int, paint: Paint
+        ) {
+            val textW = paint.measureText(text, start, end)
+            val totalW = horizontalPad * 2 + dotRadius * 2 + dotGap + textW
+            val rect = RectF(x, top.toFloat() + 1f, x + totalW, bottom.toFloat() - 1f)
+
+            val savedColor = paint.color
+            val savedStyle = paint.style
+            val savedAA = paint.isAntiAlias
+            val savedWidth = paint.strokeWidth
+            paint.isAntiAlias = true
+
+            paint.style = Paint.Style.FILL
+            paint.color = bgColor
+            canvas.drawRoundRect(rect, cornerRadius, cornerRadius, paint)
+
+            val centerY = (top + bottom) / 2f
+            val dotCx = x + horizontalPad + dotRadius
+            paint.color = swatchColor
+            canvas.drawCircle(dotCx, centerY, dotRadius, paint)
+            paint.style = Paint.Style.STROKE
+            paint.strokeWidth = 1.5f
+            paint.color = 0x40FFFFFF
+            canvas.drawCircle(dotCx, centerY, dotRadius, paint)
+
+            paint.style = Paint.Style.FILL
+            paint.color = textColor
+            canvas.drawText(text, start, end, x + horizontalPad + dotRadius * 2 + dotGap, y.toFloat(), paint)
+
+            paint.color = savedColor
+            paint.style = savedStyle
+            paint.isAntiAlias = savedAA
+            paint.strokeWidth = savedWidth
+        }
+    }
+
+    /**
+     * "وسام الهرم الهيكلي": أيقونة هرم حقيقية مرسومة داخل الحبّة — قمّة ضيّقة أعلى الهرم إلى
+     * قاعدة عريضة أسفله، مقسَّمة أفقياً إلى [levels] طبقة (كل طبقة شبه منحرف عُرضه يتّسع من
+     * القمة للقاعدة، بلون عمق مختلف عبر [pyramidTierColor]) — تمثيل بصري مباشر لعدد مستويات
+     * التعشيش في بنية صفحة أو تخطيط عناصر (مثال Rin: `Scaffold ← TopBar/Column ← عناصرها`).
+     * انظر صياغة `[*تسمية/hierarchy=(N)*]` في [appendMetaBadge].
+     */
+    private class PyramidBadgeSpan(
+        private val levels: Int,
+        private val bgColor: Int,
+        private val textColor: Int
+    ) : ReplacementSpan() {
+        private val horizontalPad = 14f
+        private val verticalPad = 5f
+        private val cornerRadius = 14f
+        private val iconW = 16f
+        private val iconH = 14f
+        private val iconGap = 8f
+
+        override fun getSize(paint: Paint, text: CharSequence, start: Int, end: Int, fm: Paint.FontMetricsInt?): Int {
+            if (fm != null) {
+                val orig = paint.fontMetricsInt
+                fm.ascent = orig.ascent - verticalPad.toInt()
+                fm.descent = orig.descent + verticalPad.toInt()
+                fm.top = fm.ascent
+                fm.bottom = fm.descent
+            }
+            return (horizontalPad * 2 + iconW + iconGap + paint.measureText(text, start, end)).toInt()
+        }
+
+        override fun draw(
+            canvas: Canvas, text: CharSequence, start: Int, end: Int,
+            x: Float, top: Int, y: Int, bottom: Int, paint: Paint
+        ) {
+            val textW = paint.measureText(text, start, end)
+            val totalW = horizontalPad * 2 + iconW + iconGap + textW
+            val rect = RectF(x, top.toFloat() + 1f, x + totalW, bottom.toFloat() - 1f)
+
+            val savedColor = paint.color
+            val savedStyle = paint.style
+            val savedAA = paint.isAntiAlias
+            paint.isAntiAlias = true
+
+            paint.style = Paint.Style.FILL
+            paint.color = bgColor
+            canvas.drawRoundRect(rect, cornerRadius, cornerRadius, paint)
+
+            // الهرم نفسه: [levels] شبه منحرف مكدَّسة رأسياً — القمّة (i=0) بلا عرض تقريباً،
+            // القاعدة (i=levels-1) بعرض iconW كاملاً، بفاصل رفيع شبه شفاف بين كل طبقتين.
+            val centerY = (top + bottom) / 2f
+            val iconTop = centerY - iconH / 2f
+            val iconCx = x + horizontalPad + iconW / 2f
+            val bandHeight = iconH / levels
+            for (i in 0 until levels) {
+                val bandTopY = iconTop + i * bandHeight
+                val bandBottomY = iconTop + (i + 1) * bandHeight
+                val topHalfW = (iconW / 2f) * (i * bandHeight / iconH)
+                val bottomHalfW = (iconW / 2f) * ((i + 1) * bandHeight / iconH)
+                val path = Path().apply {
+                    moveTo(iconCx - topHalfW, bandTopY)
+                    lineTo(iconCx + topHalfW, bandTopY)
+                    lineTo(iconCx + bottomHalfW, bandBottomY)
+                    lineTo(iconCx - bottomHalfW, bandBottomY)
+                    close()
+                }
+                paint.color = pyramidTierColor(i)
+                canvas.drawPath(path, paint)
+            }
+
+            paint.style = Paint.Style.FILL
+            paint.color = textColor
+            canvas.drawText(text, start, end, x + horizontalPad + iconW + iconGap, y.toFloat(), paint)
+
+            paint.color = savedColor
+            paint.style = savedStyle
+            paint.isAntiAlias = savedAA
         }
     }
 }
