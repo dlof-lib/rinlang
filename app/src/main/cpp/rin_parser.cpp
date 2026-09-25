@@ -750,6 +750,18 @@ StmtPtr Parser::statement() {
         advance(); // 'log'
         return logStatement(printTok);
     }
+    // print.image(...) -> صورة فعلية مُضمَّنة في الكونسول (انظر PrintImageStmt في rin_ast.h)، بنفس
+    // أسلوب فحص print.log أعلاه بالضبط: PRINT '.' IDENT("image") هو الشكل الوحيد الذي يُحوَّل لعبارة
+    // PrintImageStmt؛ أي 'print' أخرى تبقى كما كانت بلا أي تغيير.
+    if (check(TokenType::PRINT) && checkNext(TokenType::DOT) &&
+        current + 2 < tokens.size() && tokens[current + 2].type == TokenType::IDENT &&
+        tokens[current + 2].lexeme == "image") {
+        Token printTok = peek();
+        advance(); // 'print'
+        advance(); // '.'
+        advance(); // 'image'
+        return imageStatement(printTok);
+    }
     if (match({TokenType::PRINT})) return printStatement();
     if (match({TokenType::IF})) return ifStatement();
     if (match({TokenType::WHILE})) return whileStatement();
@@ -1016,6 +1028,71 @@ StmtPtr Parser::logStatement(const Token& printTok) {
     }
     consume(TokenType::RPAREN, "Expected ')' after 'print.log' arguments");
     consume(TokenType::SEMICOLON, "Expected ';' after 'print.log' statement");
+    stmt->line = printTok.line;
+    return stmt;
+}
+
+// print.image(path [, caption=expr] [, width=expr] [, if=expr]);
+// نفس أسلوب logStatement() أعلاه تماماً: عنصر موضعي واحد (مسار الصورة، إلزامي) مقروء عبر pipeline()
+// (وليس expression()، لنفس سبب تجنّب ابتلاع "caption=..." كتعبير إسناد كامل)، بالإضافة لسمات
+// key=value اختيارية بأي ترتيب، كل واحدة مرة على الأكثر. يُستدعى بعد أن يكون statement() قد استهلك
+// بالفعل 'print' '.' 'image'.
+StmtPtr Parser::imageStatement(const Token& printTok) {
+    auto stmt = std::make_shared<PrintImageStmt>();
+    consume(TokenType::LPAREN, "Expected '(' after 'print.image'");
+    static const std::unordered_set<std::string> imgAttrs = {"caption", "width"};
+    std::unordered_set<std::string> seenAttrs;
+    bool havePath = false;
+    if (!check(TokenType::RPAREN)) {
+        for (;;) {
+            std::string attr;
+            if (check(TokenType::IF) && checkNext(TokenType::EQUAL)) {
+                attr = "if"; // 'if' كلمة محجوزة (TokenType::IF)، تماماً كما في logStatement() أعلاه
+            } else if (check(TokenType::IDENT) && imgAttrs.count(peek().lexeme) && checkNext(TokenType::EQUAL)) {
+                attr = peek().lexeme;
+            }
+            if (!attr.empty()) {
+                advance(); // استهلاك توكن اسم السمة
+                if (seenAttrs.count(attr)) {
+                    throw errRich(diag::Code::E0016_InvalidProperty, printTok,
+                                   "'print.image': `" + attr + "` attribute repeated",
+                                   "each attribute (`caption`, `width`, `if`) may only be set once "
+                                   "per `print.image(...)` call; the parser found `" + attr +
+                                   "=` a second time in the same call",
+                                   "remove the duplicate `" + attr + "=...` — keep only the first "
+                                   "occurrence, or the last one if that's the value you actually want");
+                }
+                seenAttrs.insert(attr);
+                advance(); // '='
+                ExprPtr value = expression();
+                if (attr == "if") stmt->ifCond = value;
+                else if (attr == "caption") stmt->caption = value;
+                else if (attr == "width") stmt->width = value;
+            } else {
+                if (havePath) {
+                    throw errRich(diag::Code::E0016_InvalidProperty, printTok,
+                                   "'print.image': only one image path is allowed per call",
+                                   "`print.image(...)` takes exactly one positional value (the image "
+                                   "path) — a second bare value was found where an attribute "
+                                   "(`caption=`/`width=`/`if=`) or ')' was expected",
+                                   "remove the extra value, or move it into `caption=\"...\"` if you "
+                                   "meant it as a label for the image");
+                }
+                stmt->path = pipeline();
+                havePath = true;
+            }
+            if (!match({TokenType::COMMA})) break;
+        }
+    }
+    if (!havePath) {
+        throw errRich(diag::Code::E0012_MissingToken, printTok,
+                       "'print.image' requires an image path",
+                       "the image file to display is mandatory — there is nothing to print without it",
+                       "call it as `print.image(\"path/to/file.png\")`, optionally with "
+                       "`caption=\"...\"` and/or `width=...`");
+    }
+    consume(TokenType::RPAREN, "Expected ')' after 'print.image' arguments");
+    consume(TokenType::SEMICOLON, "Expected ';' after 'print.image' statement");
     stmt->line = printTok.line;
     return stmt;
 }
