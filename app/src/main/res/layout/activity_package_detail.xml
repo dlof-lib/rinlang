@@ -329,23 +329,45 @@
                 android:orientation="vertical"
                 android:background="@drawable/bg_detail_section_card">
 
-                <!-- شريط المسار (breadcrumb) — دائم أعلى القائمة، يُعاد ملؤه ديناميكياً في كل
-                     تنقّل عبر PackageDetailActivity.renderFilesBreadcrumb، بنفس مبدأ شريط المسار
-                     القابل للنقر أعلى صفحة ملفات GitHub. -->
-                <HorizontalScrollView
+                <!-- شارة "rin" صغيرة + شريط المسار (breadcrumb) — دائم أعلى القائمة، يُعاد ملء
+                     containerFilesBreadcrumb ديناميكياً في كل تنقّل عبر
+                     PackageDetailActivity.renderFilesBreadcrumb. الشارة ثابتة (تمييز هوية
+                     التطبيق واضح فوق متصفّح الملفات، لا مجرّد نسخة من شكل GitHub العام). -->
+                <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:scrollbars="none">
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:paddingHorizontal="14dp"
+                    android:paddingVertical="10dp">
 
-                    <LinearLayout
-                        android:id="@+id/containerFilesBreadcrumb"
+                    <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:orientation="horizontal"
-                        android:gravity="center_vertical"
-                        android:paddingHorizontal="14dp"
-                        android:paddingVertical="10dp" />
-                </HorizontalScrollView>
+                        android:background="@drawable/bg_toolbar_logo_badge"
+                        android:paddingHorizontal="6dp"
+                        android:paddingVertical="2dp"
+                        android:fontFamily="monospace"
+                        android:textStyle="bold"
+                        android:textSize="10sp"
+                        android:textColor="@android:color/white"
+                        android:text="rin" />
+
+                    <HorizontalScrollView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:layout_marginStart="8dp"
+                        android:scrollbars="none">
+
+                        <LinearLayout
+                            android:id="@+id/containerFilesBreadcrumb"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical" />
+                    </HorizontalScrollView>
+                </LinearLayout>
 
                 <View
                     android:layout_width="match_parent"
@@ -359,6 +381,24 @@
                     android:orientation="vertical"
                     android:divider="@drawable/divider_hairline"
                     android:showDividers="middle" />
+
+                <!-- شريط "تركيبة ملفات الحزمة" — محسوب من الحجم الحقيقي لكل نوع ملف (انظر
+                     PackagingUtils.languageBreakdown)، بنفس مبدأ شريط تركيبة اللغات في GitHub
+                     لكن بألوان/تصنيفات Rin نفسها المستخدَمة أعلاه لأيقونات الملفات — يُخفَى
+                     بالكامل تلقائياً إن كانت الحزمة بنوع ملف واحد فقط. -->
+                <View
+                    android:id="@+id/dividerFilesLanguageBar"
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:background="@color/rin_divider" />
+
+                <LinearLayout
+                    android:id="@+id/containerFilesLanguageBar"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:paddingHorizontal="14dp"
+                    android:paddingVertical="12dp" />
             </LinearLayout>
 
             <!-- قسم README.md -->
