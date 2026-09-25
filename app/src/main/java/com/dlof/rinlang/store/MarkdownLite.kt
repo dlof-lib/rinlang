@@ -81,9 +81,24 @@ import android.widget.Toast
  *   `[*Pin/link=(رابط)/icon=(اسم)*]` لنفس الزر مع أيقونة مصغَّرة قبل النص، و`[*#7C5CFF*]` (أو
  *   `[*Accent/#7C5CFF*]`، أو `color=(#hex)` مدمَجاً مع أي من الصيغتين أعلاه) لنقطة لون حقيقية
  *   مدمَجة داخل الحبّة نفسها عبر [ColorSwatchSpan] — لا عنصر منفصل قائم بذاته.
+ * - **جديد: خلفية صفحة مخصَّصة** — سطر مستقل بصياغة `[*Page_background/#7C5CFF*]` لا يُعرَض
+ *   كمحتوى مرئي إطلاقاً؛ يُستخرَج عبر [extractPageBackground] ليُطبَّق لوناً لخلفية الحاوية
+ *   المستدعية (مثال: `containerReadme` في PackageDetailActivity).
+ * - **جديد: شارتا التنزيل** — ضمن نفس صياغة `[* ... *]`: `[*تنزيلات/downloads=(15420)*]`
+ *   لشارة عدد تنزيلات ثابتة (رقم مختصَر تلقائياً K/M/B عبر [formatCompactCount])، و
+ *   `[*تحميل/downloading=(true)*]` (أو `state=(downloading)`) لشارة "جاري التحميل" مؤقّتة.
+ * - **جديد: قسم وصف قابل للطي** — كتلة جديدة `[~عنوان]` ... `[~/]`: رأس قابل للنقر (عبر
+ *   [ToggleSectionSpan]) يعرض △ عند الإغلاق (اضغط للفتح) و▽ عند الفتح (اضغط للإغلاق)، ومحتوى
+ *   القسم لا يُعرَض إلا في الحالة المفتوحة، محفوظة في `expandedSections`.
+ * - **جديد: شارات shields.io حقيقية** — `![نص](https://img.shields.io/badge/LABEL-MESSAGE-COLOR)`
+ *   تُرسَم محلياً عبر [ShieldsBadgeSpan] بنفس شكل شارات shields.io المألوفة (جزء تسمية رمادي
+ *   داكن ملاصِق لجزء رسالة ملوَّن)، بلا أي طلب شبكة لجلب صورة حقيقية — يدعم الألوان المُسمّاة
+ *   الشائعة (brightgreen/red/blue/orange...) والسداسية العشرية، وصياغتَي `MESSAGE-COLOR` (بلا
+ *   تسمية) و`LABEL-MESSAGE-COLOR` كلتيهما؛ رابط لا يطابق shields.io يسقط بهدوء لزر رابط عادي.
  *
  * الاستخدام المباشر: `textView.text = MarkdownLite.toSpannable(md)`.
- * الاستخدام الموصى به عند وجود روابط قابلة للنقر: `MarkdownLite.applyTo(textView, md)`.
+ * الاستخدام الموصى به عند وجود روابط قابلة للنقر (أو أقسام قابلة للطي/خلفية صفحة):
+ * `MarkdownLite.applyTo(textView, md, pageContainer)`.
  */
 object MarkdownLite {
 
@@ -218,10 +233,10 @@ object MarkdownLite {
     //  1) escape حرف مُفلَت حرفياً        8) [[ستيكر]] أو [[ستيكر|لون]]
     //  2) ***تشديد+مائل***                9) [*شارة/قيمة*] أو [*نص/link=(رابط)*] أو
     //  3) **تشديد**                          [*نص/link=(رابط)/icon=(اسم)*] — انظر [appendMetaBadge]
-    //  4) __تشديد بديل__                  10/11) [نص](رابط)
-    //  5) ~~يتوسّطه خط~~                  12) *مائل*
-    //  6) `كود مضمَّن`                    13) _مائل بديل_
-    //  7) ==تمييز==
+    //  4) __تشديد بديل__                  10/11) ![نص](رابط shields.io/badge) — انظر [appendShieldsBadge]
+    //  5) ~~يتوسّطه خط~~                  12/13) [نص](رابط)
+    //  6) `كود مضمَّن`                    14) *مائل*
+    //  7) ==تمييز==                       15) _مائل بديل_
     private val inlineRegex = Regex(
         "\\\\([\\\\`*_{}\\[\\]()#+.!~=>-])" +
             "|\\*\\*\\*([^*]+?)\\*\\*\\*" +
@@ -232,6 +247,7 @@ object MarkdownLite {
             "|==([^=]+?)==" +
             "|\\[\\[([^\\]]+?)\\]\\]" +
             "|\\[\\*([^\\]]+?)\\*\\]" +
+            "|!\\[([^\\]]*?)\\]\\((https?://img\\.shields\\.io/[^)\\s]+)\\)" +
             "|\\[([^\\]]+?)\\]\\(([^)\\s]+?)\\)" +
             "|\\*([^*]+?)\\*" +
             "|_([^_]+?)_"
@@ -242,8 +258,43 @@ object MarkdownLite {
     private val bulletListRegex = Regex("^[-*+]\\s+(.*)$")
     private val tableSeparatorRegex = Regex("^:?-{2,}:?$")
 
-    /** يبني معاينة Markdown حقيقية جاهزة لعرضها مباشرة عبر `textView.text = MarkdownLite.toSpannable(md)`. */
-    fun toSpannable(markdown: String): CharSequence {
+    /** سطر مستقل `[*Page_background/#hex*]` بالضبط (لا محتوى آخر معه بنفس السطر) — يُستهلَك
+     *  بصمت دون أي عرض مرئي في [toSpannable] (انظر [appendMetaBadge] أيضاً لضمان عدم ظهوره
+     *  حتى لو استُخدم داخل سطر مختلط). */
+    private val pageBackgroundLineRegex =
+        Regex("^\\[\\*\\s*page[_ ]background\\s*/\\s*#[0-9A-Fa-f]{3,6}\\s*\\*\\]$", RegexOption.IGNORE_CASE)
+
+    /** نفس الصياغة أعلاه لكن بلا تثبيت على السطر كاملاً — يُستخدَم فقط لاستخراج اللون عبر
+     *  [extractPageBackground]، فيعمل حتى لو وُضع السطر وسط فقرة أخرى. */
+    private val pageBackgroundRegex =
+        Regex("\\[\\*\\s*page[_ ]background\\s*/\\s*(#[0-9A-Fa-f]{3,6})\\s*\\*\\]", RegexOption.IGNORE_CASE)
+
+    /** يستخرج لون خلفية الصفحة من صياغة `[*Page_background/#hex*]` إن وُجدت في [markdown]، أو
+     *  null إن لم توجد. لا يُعدِّل [markdown] نفسه؛ الاستدعاء المُوصى به هو تمرير الناتج مباشرة
+     *  لـ `container.setBackgroundColor(...)`، أو تمرير [View] الحاوية إلى [applyTo] مباشرة عبر
+     *  معامل `pageContainer` ليُطبَّق تلقائياً. */
+    fun extractPageBackground(markdown: String): Int? {
+        val m = pageBackgroundRegex.find(markdown) ?: return null
+        return parseHexColor(m.groupValues[1])?.first
+    }
+
+    /** بادئة كتلة الوصف القابلة للطي `[~عنوان]` ... `[~/]` — انظر [appendCollapsibleSection]. */
+    private const val COLLAPSIBLE_CLOSE_MARKER = "[~/]"
+
+    /**
+     * يبني معاينة Markdown حقيقية جاهزة لعرضها مباشرة عبر `textView.text = MarkdownLite.toSpannable(md)`.
+     *
+     * @param expandedSections مجموعة قابلة للتعديل بمعرِّفات أقسام `[~عنوان]` ... `[~/]` المفتوحة
+     * حالياً (انظر [appendCollapsibleSection]) — نفس المجموعة يجب تمريرها في كل إعادة بناء لنفس
+     * TextView حتى تبقى حالة الفتح/الإغلاق محفوظة بين استدعاء وآخر؛ [applyTo] يتكفّل بهذا تلقائياً.
+     * @param onToggle يُستدعى بعد كل نقرة على رأس قسم قابل للطي (بعد تحديث [expandedSections])؛
+     * المستدعي مسؤول عن إعادة بناء النص (مثال: استدعاء [applyTo] مجدَّداً بنفس TextView/المجموعة).
+     */
+    fun toSpannable(
+        markdown: String,
+        expandedSections: MutableSet<String> = mutableSetOf(),
+        onToggle: (() -> Unit)? = null
+    ): CharSequence {
         val out = SpannableStringBuilder()
         val lines = markdown.lines()
         var i = 0
@@ -252,6 +303,7 @@ object MarkdownLite {
         var codeLang = ""
         val codeBuffer = StringBuilder()
         var lastWasListItem = false
+        var collapsibleAutoIndex = 0
 
         fun blockGap() {
             if (out.isNotEmpty()) out.append("\n\n")
@@ -307,6 +359,29 @@ object MarkdownLite {
 
             when {
                 trimmed.isEmpty() -> { lastWasListItem = false; i++ }
+
+                // سطر خلفية الصفحة المستقل — يُستهلَك بصمت، لا يُعرَض كمحتوى مرئي إطلاقاً.
+                // اللون الفعلي يُستخرَج لاحقاً عبر [extractPageBackground] من النص الخام كاملاً.
+                pageBackgroundLineRegex.matches(trimmed) -> { lastWasListItem = false; i++ }
+
+                // قسم وصف قابل للطي: `[~عنوان]` يبدأ الكتلة، `[~/]` وحدها على سطر مستقل تُنهيها.
+                trimmed.startsWith("[~") && trimmed.endsWith("]") && trimmed != COLLAPSIBLE_CLOSE_MARKER -> {
+                    val title = trimmed.removePrefix("[~").removeSuffix("]").trim()
+                    val bodyLines = mutableListOf<String>()
+                    var j = i + 1
+                    while (j < lines.size && lines[j].trim() != COLLAPSIBLE_CLOSE_MARKER) {
+                        bodyLines.add(lines[j]); j++
+                    }
+                    blockGap()
+                    val sectionId = "sec${collapsibleAutoIndex++}:${title.ifBlank { "وصف" }}"
+                    val isOpen = expandedSections.contains(sectionId)
+                    appendCollapsibleSection(out, title, bodyLines.joinToString("\n"), isOpen) {
+                        if (!expandedSections.remove(sectionId)) expandedSections.add(sectionId)
+                        onToggle?.invoke()
+                    }
+                    lastWasListItem = false
+                    i = if (j < lines.size) j + 1 else j // يتخطّى سطر [~/] الختامي إن وُجد
+                }
 
                 trimmed == "---" || trimmed == "***" || trimmed == "___" -> {
                     blockGap()
@@ -513,11 +588,28 @@ object MarkdownLite {
         return segments
     }
 
-    fun applyTo(textView: TextView, markdown: String) {
-        textView.text = toSpannable(markdown)
+    /**
+     * @param pageContainer إن مُرِّرت (مثال: `containerReadme` الحاوي لكل مقاطع README)، يُطبَّق
+     * تلقائياً عليها لون `[*Page_background/#hex*]` إن وُجد في [markdown] (انظر [extractPageBackground]).
+     * @param expandedSections حالة الأقسام القابلة للطي المفتوحة حالياً؛ الافتراضي مجموعة جديدة
+     * فارغة تبقى حيّة عبر إغلاقات النقر (closures) التي يبنيها هذا الاستدعاء، فتُعاد نفس الحالة
+     * تلقائياً عند إعادة بناء النص بعد كل نقرة — لا حاجة لتمريرها يدوياً في الاستخدام العادي.
+     */
+    fun applyTo(
+        textView: TextView,
+        markdown: String,
+        pageContainer: View? = null,
+        expandedSections: MutableSet<String> = mutableSetOf()
+    ) {
+        textView.text = toSpannable(markdown, expandedSections) {
+            applyTo(textView, markdown, pageContainer, expandedSections)
+        }
         textView.movementMethod = LinkMovementMethod.getInstance()
         textView.setLinkTextColor(COLOR_LINK)
         textView.highlightColor = COLOR_HIGHLIGHT_BG
+        pageContainer?.let { container ->
+            extractPageBackground(markdown)?.let { container.setBackgroundColor(it) }
+        }
     }
 
     /**
@@ -564,9 +656,10 @@ object MarkdownLite {
                 g[7] != null -> appendHighlight(out, g[7]!!.value)
                 g[8] != null -> appendSticker(out, g[8]!!.value)
                 g[9] != null -> appendMetaBadge(out, g[9]!!.value)
-                g[10] != null && g[11] != null -> appendLink(out, g[10]!!.value, g[11]!!.value)
-                g[12] != null -> appendStyled(out, g[12]!!.value, Typeface.ITALIC)
-                g[13] != null -> appendStyled(out, g[13]!!.value, Typeface.ITALIC)
+                g[10] != null && g[11] != null -> appendShieldsBadge(out, g[10]!!.value, g[11]!!.value)
+                g[12] != null && g[13] != null -> appendLink(out, g[12]!!.value, g[13]!!.value)
+                g[14] != null -> appendStyled(out, g[14]!!.value, Typeface.ITALIC)
+                g[15] != null -> appendStyled(out, g[15]!!.value, Typeface.ITALIC)
             }
             idx = match.range.last + 1
         }
@@ -619,9 +712,111 @@ object MarkdownLite {
         out.setSpan(StyleSpan(Typeface.BOLD), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
     }
 
+    /** يطابق رابط شارة shields.io: `https://img.shields.io/badge/<مقاطع>` — امتداد `.svg`/`.png`
+     *  ومعاملات الاستعلام (`?style=...`) اختياريان ويُتجاهَلان (انظر [parseShieldsBadgeUrl]). */
+    private val shieldsBadgeUrlRegex = Regex(
+        "^https?://img\\.shields\\.io/badge/(.+?)(?:\\.svg|\\.png)?(?:\\?.*)?$",
+        RegexOption.IGNORE_CASE
+    )
+
+    /** أسماء ألوان shields.io الشائعة → قيمتها السداسية القياسية (من توثيق/مصدر shields.io نفسه)
+     *  — لون غير مدرَج يسقط بهدوء إلى رمادي محايد عبر [shieldsColorToInt]. */
+    private val SHIELDS_COLOR_NAMES: Map<String, String> = mapOf(
+        "brightgreen" to "4C1", "success" to "4C1",
+        "green" to "97CA00",
+        "yellowgreen" to "A4A61D",
+        "yellow" to "DFB317",
+        "orange" to "FE7D37", "important" to "FE7D37",
+        "red" to "E05D44", "critical" to "E05D44",
+        "blue" to "007EC6", "informational" to "007EC6",
+        "lightgrey" to "9F9F9F", "lightgray" to "9F9F9F", "inactive" to "9F9F9F",
+        "grey" to "555555", "gray" to "555555",
+        "black" to "000000", "white" to "FFFFFF",
+        "blueviolet" to "8833D7", "purple" to "9B59B6", "pink" to "FF69B4"
+    )
+
+    /** يحوّل مقطع لون شارة (اسم مثل `brightgreen`، أو سداسي عشري بلا/مع `#`) إلى لون ARGB كامل
+     *  الشفافية — رمادي شارات shields.io القياسي (`#9F9F9F`) عند عدم التعرّف على المقطع، فلا
+     *  تتعطّل الشارة أبداً بسبب اسم لون غير مدعوم. */
+    private fun shieldsColorToInt(raw: String): Int {
+        val key = raw.trim().lowercase()
+        var hex = SHIELDS_COLOR_NAMES[key] ?: run {
+            val cleaned = key.removePrefix("#")
+            when {
+                cleaned.matches(Regex("^[0-9a-f]{6}$")) -> cleaned
+                cleaned.matches(Regex("^[0-9a-f]{3}$")) -> cleaned.map { "$it$it" }.joinToString("")
+                else -> "9F9F9F"
+            }
+        }
+        if (hex.length == 3) hex = hex.map { "$it$it" }.joinToString("")
+        return try {
+            (0xFF000000.toInt()) or Integer.parseInt(hex, 16)
+        } catch (t: Throwable) {
+            0xFF9F9F9F.toInt()
+        }
+    }
+
     /**
-     * "ستيكر Rin": بادج/شارة ملوَّنة حقيقية الشكل عبر `[[نص]]` أو `[[نص|لون]]`. الألوان المتاحة:
-     * accent (افتراضي)، green، gold، danger، info، like — راجع [STICKER_VARIANTS]. اسم لون غير
+     * يحلّل رابط شارة shields.io إلى (تسمية اختيارية، رسالة، لون) — الصياغة الرسمية تفصل
+     * المقاطع بـ`-`، مع `--` للشرطة الحرفية داخل مقطع، و`_`/ترميز URL للمسافة:
+     * - 3 مقاطع فأكثر `LABEL-MESSAGE-COLOR` (مثال: `build-passing-brightgreen`) → تسمية + رسالة
+     *   ملوَّنة، بأسلوب شارة shields.io ثنائية اللون الحقيقي (جزء رمادي داكن + جزء ملوَّن).
+     * - مقطعان `MESSAGE-COLOR` (مثال: `passing-brightgreen`) → شارة أحادية اللون بلا تسمية.
+     * - مقطع واحد فقط → رسالة بلا تسمية ولا لون محدَّد (رمادي افتراضي).
+     * يعيد null إن لم يطابق الرابط صياغة شارة shields.io أصلاً — عندها [appendShieldsBadge] يسقط
+     * بهدوء إلى زر رابط عادي بدل عنصر مكسور.
+     */
+    private fun parseShieldsBadgeUrl(url: String): Triple<String?, String, Int>? {
+        val m = shieldsBadgeUrlRegex.find(url.trim()) ?: return null
+        val placeholder = "\u0001" // يحمي `--` (شرطة حرفية) من التقسيم قبل فكّ ترميزها لاحقاً
+        val segments = m.groupValues[1].replace("--", placeholder).split("-").map { seg ->
+            val decoded = try {
+                java.net.URLDecoder.decode(seg.replace(placeholder, "-").replace("_", " "), "UTF-8")
+            } catch (t: Throwable) {
+                seg.replace(placeholder, "-").replace("_", " ")
+            }
+            decoded
+        }
+        return when {
+            segments.isEmpty() || segments[0].isBlank() -> null
+            segments.size == 1 -> Triple(null, segments[0], shieldsColorToInt("lightgrey"))
+            segments.size == 2 -> Triple(null, segments[0], shieldsColorToInt(segments[1]))
+            else -> Triple(
+                segments[0],
+                segments.subList(1, segments.size - 1).joinToString("-"),
+                shieldsColorToInt(segments.last())
+            )
+        }
+    }
+
+    /**
+     * شارة `![نص](https://img.shields.io/badge/...)` — تُرسَم محلياً عبر [ShieldsBadgeSpan] بنفس
+     * الشكل البصري القياسي لشارات shields.io الحقيقية (جزء تسمية رمادي داكن مُلاصِق لجزء رسالة
+     * ملوَّن)، لا بجلب صورة حقيقية عبر الشبكة — يبقى العرض فورياً وبلا اتصال بالإنترنت. رابط لا
+     * يطابق صياغة `img.shields.io/badge/...` يسقط بهدوء إلى زر رابط عادي بنص [alt] (أو الرابط
+     * نفسه إن كان [alt] فارغاً) عبر [appendLink]، فلا يُفقَد المحتوى صمتاً برابط شارة غير مدعوم.
+     */
+    private fun appendShieldsBadge(out: SpannableStringBuilder, alt: String, url: String) {
+        val parsed = parseShieldsBadgeUrl(url)
+        if (parsed == null) {
+            appendLink(out, alt.ifBlank { url }, url)
+            return
+        }
+        val (label, message, messageColor) = parsed
+        val labelBg = 0xFF555555.toInt() // رمادي داكن قياسي لجزء التسمية في شارات shields.io الحقيقية
+        val messageFg = contrastingTextColor(messageColor)
+        val start = out.length
+        out.append(if (label != null) "$label $message" else message)
+        val end = out.length
+        out.setSpan(
+            ShieldsBadgeSpan(label, message, labelBg, messageColor, messageFg),
+            start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+        )
+        out.setSpan(RelativeSizeSpan(0.8f), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        out.setSpan(StyleSpan(Typeface.BOLD), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+    }
+
+
      * معروف يسقط بهدوء إلى accent، فلا يتعطّل العرض أبداً بسبب خطأ إملائي بسيط في الاسم.
      */
     private fun appendSticker(out: SpannableStringBuilder, raw: String) {
@@ -666,6 +861,22 @@ object MarkdownLite {
         val b = bgColor and 0xFF
         val luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255.0
         return if (luminance > 0.6) 0xFF15161A.toInt() else 0xFFFFFFFF.toInt()
+    }
+
+    /** يختصر عدداً كبيراً لصيغة عرض مقروءة (K/M/B) لشارة `downloads=(N)` — مثال: 15420 → "15.4K"،
+     *  2300000 → "2.3M". أرقام أقل من 1000 تُعرَض كاملة بلا اختصار. */
+    private fun formatCompactCount(value: Long): String {
+        val absValue = kotlin.math.abs(value)
+        val (divisor, suffix) = when {
+            absValue >= 1_000_000_000L -> 1_000_000_000.0 to "B"
+            absValue >= 1_000_000L -> 1_000_000.0 to "M"
+            absValue >= 1_000L -> 1_000.0 to "K"
+            else -> return value.toString()
+        }
+        val scaled = value / divisor
+        val rounded = Math.round(scaled * 10) / 10.0
+        val text = if (rounded == Math.floor(rounded)) rounded.toLong().toString() else String.format("%.1f", rounded)
+        return "$text$suffix"
     }
 
     /** رموز أيقونات مصغَّرة لصياغة `icon=(اسم)` — مطابقة نصّية بالاحتواء على اسم الملف/المعرِّف
@@ -724,6 +935,11 @@ object MarkdownLite {
     private fun appendMetaBadge(out: SpannableStringBuilder, raw: String) {
         val parts = raw.split("/").map { it.trim() }.filter { it.isNotEmpty() }
         if (parts.isEmpty()) return
+        // `[*Page_background/#hex*]` مُعالَجة حصرياً عبر [extractPageBackground] على مستوى السطر
+        // في [toSpannable] (و[pageBackgroundLineRegex] يمنع وصولها لهنا أصلاً في الاستخدام العادي،
+        // سطراً مستقلاً)؛ هذا الحارس تحسُّب إضافي لبقاء الصياغة بلا أي أثر مرئي حتى لو استُخدمت
+        // مضمَّنة وسط سطر آخر بدل أن تُعرَض خطأً كشارة/نقطة لون عادية.
+        if (parts[0].replace(' ', '_').equals("page_background", ignoreCase = true)) return
         var label = parts[0]
 
         var linkUrl: String? = null
@@ -731,6 +947,8 @@ object MarkdownLite {
         var plainValue: String? = null
         var color: Pair<Int, String>? = null
         var hierarchyLevels: Int? = null
+        var downloadsCount: Long? = null
+        var isDownloading = false
 
         // التسمية الأولى نفسها قد تكون لوناً مجرَّداً بلا نص (`[*#7C5CFF*]`) — عندها لا توجد
         // تسمية نصية منفصلة أصلاً.
@@ -744,6 +962,9 @@ object MarkdownLite {
                     "icon" -> iconRaw = m.groupValues[2].trim()
                     "color" -> parseHexColor(m.groupValues[2].trim())?.let { color = it }
                     "hierarchy", "pyramid" -> hierarchyLevels = m.groupValues[2].trim().toIntOrNull()?.coerceIn(1, 6)
+                    "downloads" -> downloadsCount = m.groupValues[2].trim().replace(",", "").toLongOrNull()
+                    "downloading" -> isDownloading = m.groupValues[2].trim().equals("true", ignoreCase = true)
+                    "state" -> if (m.groupValues[2].trim().equals("downloading", ignoreCase = true)) isDownloading = true
                 }
             } else {
                 val asColor = parseHexColor(part)
@@ -781,6 +1002,32 @@ object MarkdownLite {
                 out.setSpan(StyleSpan(Typeface.BOLD), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
                 out.setSpan(RelativeSizeSpan(0.84f), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
             }
+            // شارة "عدد التنزيلات": `[*تنزيلات/downloads=(15420)*]` → ⬇ تنزيلات 15.4K، عرض فقط
+            // بلا أي تفاعل — رقم مختصَر تلقائياً عبر [formatCompactCount] (K/M/B).
+            downloadsCount != null -> {
+                val bg = color?.first ?: COLOR_INLINE_CODE_BG
+                val fg = COLOR_CODE_TEXT
+                val shownLabel = label.ifBlank { "\u062A\u0646\u0632\u064A\u0644\u0627\u062A" } // "تنزيلات"
+                val start = out.length
+                out.append("\u2B07 $shownLabel ${formatCompactCount(downloadsCount!!)}")
+                val end = out.length
+                out.setSpan(StickerSpan(bg, fg), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                out.setSpan(StyleSpan(Typeface.BOLD), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                out.setSpan(RelativeSizeSpan(0.84f), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            }
+            // شارة "جاري التحميل": `[*تحميل/downloading=(true)*]` أو `[*تحميل/state=(downloading)*]`
+            // → شارة ملوَّنة بهوية التطبيق تشير لتنزيل قيد التقدُّم (عرض ثابت، بلا انيميشن حقيقي).
+            isDownloading -> {
+                val bg = color?.first ?: COLOR_BULLET
+                val fg = if (color != null) contrastingTextColor(bg) else 0xFFFFFFFF.toInt()
+                val shownLabel = label.ifBlank { "\u062C\u0627\u0631\u064A \u0627\u0644\u062A\u062D\u0645\u064A\u0644" } // "جاري التحميل"
+                val start = out.length
+                out.append("\u21BB $shownLabel\u2026")
+                val end = out.length
+                out.setSpan(StickerSpan(bg, fg), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                out.setSpan(StyleSpan(Typeface.BOLD), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                out.setSpan(RelativeSizeSpan(0.86f), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            }
             plainValue != null -> {
                 val valueColor = color?.first ?: COLOR_BULLET
                 val start = out.length
@@ -806,6 +1053,68 @@ object MarkdownLite {
             }
             else -> appendSticker(out, label)
         }
+    }
+
+    /**
+     * قسم وصف قابل للطي واحد: `[~عنوان]` ... `[~/]` (انظر موضع الاستدعاء في [toSpannable]).
+     * الرأس سطر واحد قابل للنقر بالكامل عبر [ToggleSectionSpan]: يعرض △ (مثلث لأعلى) + "فتح"
+     * عندما القسم مغلقاً، أو ▽ (مثلث لأسفل) + "إغلاق" عندما يكون مفتوحاً — نفس اصطلاح "أقسام
+     * قابلة للطي" الشائع في وثائق GitHub/التطبيقات، بلا الاعتماد على وسم HTML `<details>` غير
+     * المدعوم هنا. محتوى القسم [body] لا يُعرَض إطلاقاً إلا عندما [isOpen] صحيحة، فيبقى النص
+     * الناتج أقصر بكثير حين يكون القسم مغلقاً بدل إخفائه بصرياً فقط. كل ذلك داخل بطاقة واحدة
+     * بزوايا مدوَّرة عبر [RoundedCardSpan]، تماماً كبطاقات الاقتباس/الكود الأخرى في هذا الملف.
+     */
+    private fun appendCollapsibleSection(
+        out: SpannableStringBuilder,
+        title: String,
+        body: String,
+        isOpen: Boolean,
+        onToggle: () -> Unit
+    ) {
+        val cardStart = out.length
+        val headerStart = out.length
+        val glyph = if (isOpen) "\u25BD" else "\u25B3" // ▽ مفتوح / △ مغلق
+        val stateLabel = if (isOpen) "\u0625\u063A\u0644\u0627\u0642" else "\u0641\u062A\u062D" // "إغلاق"/"فتح"
+        val shownTitle = title.ifBlank { "\u0627\u0644\u0648\u0635\u0641" } // "الوصف"
+        out.append("$glyph  $shownTitle  ")
+        val stateStart = out.length
+        out.append("($stateLabel)")
+        out.setSpan(ForegroundColorSpan(COLOR_H_DIM), stateStart, out.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        out.setSpan(RelativeSizeSpan(0.85f), stateStart, out.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        val headerEnd = out.length
+        out.setSpan(StyleSpan(Typeface.BOLD), headerStart, headerEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        out.setSpan(ForegroundColorSpan(COLOR_BULLET), headerStart, stateStart, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        out.setSpan(ToggleSectionSpan(onToggle), headerStart, headerEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+
+        if (isOpen && body.isNotBlank()) {
+            out.append('\n')
+            val bodyStart = out.length
+            val bodyLines = body.lines()
+            bodyLines.forEachIndexed { idx, line ->
+                if (idx > 0) out.append('\n')
+                appendInline(out, line.trim())
+            }
+            out.setSpan(ForegroundColorSpan(COLOR_QUOTE_TEXT), bodyStart, out.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        }
+        val cardEnd = out.length
+        out.setSpan(
+            RoundedCardSpan(COLOR_QUOTE_BG, COLOR_CARD_BORDER, cardStart, cardEnd),
+            cardStart, cardEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+        )
+    }
+
+    /**
+     * [ClickableSpan] رأس قسم الوصف القابل للطي: عند النقر يستدعي [onToggle] فقط (المستدعي في
+     * [toSpannable]/[appendCollapsibleSection] هو من يُحدِّث `expandedSections` ويُعيد بناء النص
+     * عبر `onToggle` الممرَّر لـ[applyTo]) — بلا لون/خط رابط افتراضي، فالشكل مُتحكَّم به بالكامل
+     * عبر Spans النص المرافقة لنفس النطاق في [appendCollapsibleSection].
+     */
+    private class ToggleSectionSpan(private val onToggle: () -> Unit) : ClickableSpan() {
+        override fun onClick(widget: View) {
+            onToggle()
+        }
+
+        override fun updateDrawState(ds: TextPaint) {}
     }
 
     /**
@@ -1087,6 +1396,88 @@ object MarkdownLite {
             canvas.drawRect(barX, top.toFloat(), barX + barWidthPx, bottom.toFloat(), paint)
             paint.color = savedColor
             paint.style = savedStyle
+        }
+    }
+
+    /**
+     * شارة شكل shields.io حقيقية: جزء تسمية (اختياري) بخلفية رمادية داكنة قياسية [labelBg]
+     * ملاصِق مباشرة لجزء رسالة بخلفية [messageBg] (اللون المُستخرَج من مقطع اللون في الرابط) —
+     * قطعتان متلاصقتان بلا فراغ بينهما، بزوايا مدوَّرة فقط على الطرفين الخارجيين (يسار الجزء
+     * الأول ويمين الجزء الأخير)، تماماً كشكل شارات shields.io المألوف في ملفات README. بلا جزء
+     * تسمية (`label == null`) تُرسَم كحبّة واحدة كاملة الاستدارة بلون الرسالة فقط. انظر
+     * [appendShieldsBadge]/[parseShieldsBadgeUrl].
+     */
+    private class ShieldsBadgeSpan(
+        private val label: String?,
+        private val message: String,
+        private val labelBg: Int,
+        private val messageBg: Int,
+        private val messageFg: Int
+    ) : ReplacementSpan() {
+        private val horizontalPad = 12f
+        private val verticalPad = 5f
+        private val cornerRadius = 12f
+        private val labelFg = 0xFFFFFFFF.toInt()
+
+        override fun getSize(paint: Paint, text: CharSequence, start: Int, end: Int, fm: Paint.FontMetricsInt?): Int {
+            if (fm != null) {
+                val orig = paint.fontMetricsInt
+                fm.ascent = orig.ascent - verticalPad.toInt()
+                fm.descent = orig.descent + verticalPad.toInt()
+                fm.top = fm.ascent
+                fm.bottom = fm.descent
+            }
+            val labelW = if (label != null) horizontalPad * 2 + paint.measureText(label) else 0f
+            val messageW = horizontalPad * 2 + paint.measureText(message)
+            return (labelW + messageW).toInt()
+        }
+
+        override fun draw(
+            canvas: Canvas, text: CharSequence, start: Int, end: Int,
+            x: Float, top: Int, y: Int, bottom: Int, paint: Paint
+        ) {
+            val savedColor = paint.color
+            val savedStyle = paint.style
+            val savedAA = paint.isAntiAlias
+            paint.isAntiAlias = true
+            paint.style = Paint.Style.FILL
+
+            val hasLabel = label != null
+            val labelW = if (hasLabel) horizontalPad * 2 + paint.measureText(label) else 0f
+            val messageW = horizontalPad * 2 + paint.measureText(message)
+            val rectTop = top.toFloat() + 1f
+            val rectBottom = bottom.toFloat() - 1f
+
+            if (hasLabel) {
+                val leftRect = RectF(x, rectTop, x + labelW, rectBottom)
+                // مدوَّرة عند أعلى/أسفل-يسار فقط (الطرف الخارجي)، مستقيمة عند اليمين (يلاصق جزء الرسالة)
+                val leftRadii = floatArrayOf(
+                    cornerRadius, cornerRadius, 0f, 0f, 0f, 0f, cornerRadius, cornerRadius
+                )
+                paint.color = labelBg
+                canvas.drawPath(Path().apply { addRoundRect(leftRect, leftRadii, Path.Direction.CW) }, paint)
+                paint.color = labelFg
+                canvas.drawText(label!!, x + horizontalPad, y.toFloat(), paint)
+            }
+
+            val rightRect = RectF(x + labelW, rectTop, x + labelW + messageW, rectBottom)
+            val rightRadii = if (hasLabel) {
+                // مدوَّرة عند أعلى/أسفل-يمين فقط (الطرف الخارجي)، مستقيمة عند اليسار (تلاصق التسمية)
+                floatArrayOf(0f, 0f, cornerRadius, cornerRadius, cornerRadius, cornerRadius, 0f, 0f)
+            } else {
+                floatArrayOf(
+                    cornerRadius, cornerRadius, cornerRadius, cornerRadius,
+                    cornerRadius, cornerRadius, cornerRadius, cornerRadius
+                )
+            }
+            paint.color = messageBg
+            canvas.drawPath(Path().apply { addRoundRect(rightRect, rightRadii, Path.Direction.CW) }, paint)
+            paint.color = messageFg
+            canvas.drawText(message, x + labelW + horizontalPad, y.toFloat(), paint)
+
+            paint.color = savedColor
+            paint.style = savedStyle
+            paint.isAntiAlias = savedAA
         }
     }
 
