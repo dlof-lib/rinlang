@@ -309,6 +309,54 @@ object PackagingUtils {
         return root
     }
 
+    /**
+     * يصنِّف كل ملف داخل شجرة الحزمة إلى تسمية/لون "نوع محتوى" (بنفس تصنيف [iconColorResFor]
+     * تماماً، فتبقى الألوان متّسقة بصرياً بين أيقونات الملفات وشريط التركيبة) — تُستخدَم في
+     * [languageBreakdown] فقط، ومنفصلة عنه لتبقى [iconColorResFor] نفسها بلا أي تغيير.
+     */
+    private fun languageLabelAndColorFor(fileName: String): Pair<String, Int> {
+        val lower = fileName.lowercase()
+        return when {
+            lower.endsWith(".og.rin") || lower.endsWith(".rin") -> "Rin" to R.color.rin_accent
+            lower.endsWith(".png") || lower.endsWith(".jpg") || lower.endsWith(".jpeg") ||
+                lower.endsWith(".webp") || lower.endsWith(".gif") || lower.endsWith(".bmp") -> "صور" to R.color.rin_like_active
+            lower.endsWith(".svg") -> "SVG" to R.color.rin_star_gold
+            lower.endsWith(".json") -> "JSON" to R.color.syntax_tag
+            lower.endsWith(".txt") -> "نصوص" to R.color.rin_editor_hint
+            lower.endsWith(".zip") || lower.endsWith(".rinsdk") -> "أرشيف" to R.color.rin_star_gold
+            lower.endsWith(".mp3") || lower.endsWith(".wav") || lower.endsWith(".ogg") -> "صوت" to R.color.rin_accent_green
+            lower.endsWith(".mp4") || lower.endsWith(".webm") -> "فيديو" to R.color.rin_like_active
+            lower.endsWith(".ttf") || lower.endsWith(".otf") -> "خطوط" to R.color.syntax_tag
+            else -> "أخرى" to R.color.rin_editor_hint
+        }
+    }
+
+    /**
+     * يحسب "تركيبة ملفات الحزمة" الفعلية (بنفس مبدأ شريط تركيبة اللغات في GitHub) من الحجم
+     * الحقيقي بالبايت لكل نوع ملف — لا نسب وهمية. يستثني README.md وLICENSE عمداً (تماماً كما
+     * يستثني GitHub التوثيق من إحصاء اللغات) حتى لا يطغى حجم نص التوثيق على حصة كود Rin الفعلي،
+     * ولتُبرِز الحصيلة النهائية حصة "Rin" (البنفسجي، هوية التطبيق) بوضوح في أي حزمة كودها Rin
+     * أصلاً — انظر PackageDetailActivity.renderFilesLanguageBar.
+     */
+    fun languageBreakdown(files: List<PackageFileEntry>): List<FileLanguageSlice> {
+        val counted = files.filterNot {
+            val lower = it.name.lowercase()
+            lower == "readme.md" || lower == "license" || lower == "license.txt"
+        }
+        if (counted.isEmpty()) return emptyList()
+
+        val totals = linkedMapOf<String, Pair<Int, Long>>() // label -> (colorRes, bytes)
+        for (file in counted) {
+            val (label, colorRes) = languageLabelAndColorFor(file.name)
+            val previousBytes = totals[label]?.second ?: 0L
+            totals[label] = colorRes to (previousBytes + file.sizeBytes.coerceAtLeast(1))
+        }
+        val totalBytes = totals.values.sumOf { it.second }.coerceAtLeast(1)
+        return totals.entries
+            .map { (label, pair) -> FileLanguageSlice(label, pair.first, pair.second, pair.second * 100f / totalBytes) }
+            .sortedByDescending { it.bytes }
+    }
+
     private fun buildLicense(publisherName: String): String {
         val year = Calendar.getInstance().get(Calendar.YEAR)
         return """
@@ -358,6 +406,10 @@ object PackagingUtils {
         null
     }
 }
+
+/** حصة واحدة من [PackagingUtils.languageBreakdown]: تسمية نوع المحتوى، لون تمييزه (نفس لون
+ *  [PackagingUtils.iconColorResFor] لهذا النوع)، إجمالي بايتاته الحقيقية، ونسبته المئوية. */
+data class FileLanguageSlice(val label: String, val colorRes: Int, val bytes: Long, val percent: Float)
 
 /** ملف واحد داخل أرشيف الحزمة: مساره الكامل داخل الـ zip (مثال: "lib/mylib.og.rin") وحجمه. */
 data class PackageFileEntry(val name: String, val sizeBytes: Long)
