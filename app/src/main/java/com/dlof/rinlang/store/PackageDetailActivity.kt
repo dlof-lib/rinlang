@@ -318,9 +318,14 @@ class PackageDetailActivity : BaseConnectivityActivity() {
     private fun buildReadmeTextSegment(markdown: String): TextView = TextView(this).apply {
         layoutParams = LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
-        ).apply { if (containerReadmeHasContent) topMargin = dp(4f) }
-        textSize = 13f
-        setLineSpacing(dp(3f).toFloat(), 1f)
+            // فراغ أكبر قليلاً بين مقاطع README (كان 4dp) — يفصل الفقرات/الكتل بصرياً بوضوح
+            // أكبر، بنفس روح تباعد فقرات GitHub README، بدل أن تبدو مقاطع متلاصقة.
+        ).apply { if (containerReadmeHasContent) topMargin = dp(10f) }
+        // حجم أكبر قليلاً (كان 13sp) وتباعد سطر أوسع (كان 3dp/×1) لراحة قراءة أطول بلا إجهاد
+        // للعين، خصوصاً في النصوص الطويلة — أقرب لتجربة قراءة مستندات فعلية من نص مضغوط.
+        textSize = 14.5f
+        setLineSpacing(dp(6f).toFloat(), 1.12f)
+        letterSpacing = 0.005f
         setTextColor(getColor(R.color.rin_editor_text))
         autoLinkMask = android.text.util.Linkify.WEB_URLS
         MarkdownLite.applyTo(this, markdown)
@@ -347,8 +352,8 @@ class PackageDetailActivity : BaseConnectivityActivity() {
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
             )
-            textSize = 13f
-            setLineSpacing(dp(3f).toFloat(), 1f)
+            textSize = 13.5f
+            setLineSpacing(dp(5f).toFloat(), 1.08f)
             text = MarkdownLite.toSpannable("```rin\n$code\n```")
         }
         card.addView(txtCode)
