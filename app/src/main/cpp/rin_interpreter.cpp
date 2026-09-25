@@ -2237,6 +2237,88 @@ void Interpreter::registerNatives() {
         return Value::string(rincolor::toHex6(rincolor::bestTextColor(parseColorArg(a[0], "colorTextOn", line))));
     };
 
+    // colorAnsi(text, colorLiteral) -> نفس "text" لكن ملفوفاً بأكواد ANSI (truecolor 24-bit) بحيث
+    // يظهر ملوّناً في الطرفيّة عند طباعته. يقبل نفس صياغات الألوان التي تقبلها colorParse/colorRgb
+    // (اسم CSS، #rrggbb، rgb()، ...). لا يفعل شيئاً في طرفيات لا تدعم ANSI (تُطبع الأكواد كنص خام).
+    natives["colorAnsi"] = [parseColorArg](std::vector<Value>& a, int line) -> Value {
+        expectArgs("colorAnsi", a, 2, line);
+        std::string text = asString(a[0], "colorAnsi", line);
+        rincolor::Color c = parseColorArg(a[1], "colorAnsi", line);
+        std::ostringstream buf;
+        buf << "\x1b[38;2;" << (int)c.r << ";" << (int)c.g << ";" << (int)c.b << "m" << text << "\x1b[0m";
+        return Value::string(buf.str());
+    };
+
+    // pattern(shape, size, symbol?, color?) -> بديل جاهز عن حلقات for المتداخلة (i,j) التي
+    // تُستخدَم عادة في بايثون لرسم أشكال نجمية (مثلث/هرم/معيّن/مربع/قلب) — استدعاء واحد بدل
+    // حلقتين متداخلتين وشروط i==0/j==n-1/... . يطبع الشكل مباشرة (مثل print) ولا يُعيد قيمة.
+    //   pattern("pyramid", 5)                    -> هرم من 5 صفوف بـ "*"
+    //   pattern("heart", 6, "❤")                 -> قلب بحجم 6 برمز "❤"
+    //   pattern("diamond", 5, "*", "tomato")      -> معيّن ملوّن (يقبل أي صياغة لون صالحة)
+    // الأشكال المتاحة: triangle, invertedTriangle, pyramid, diamond, square, hollowSquare, heart.
+    natives["pattern"] = [this, parseColorArg](std::vector<Value>& a, int line) -> Value {
+        expectArgsRange("pattern", a, 2, 4, line);
+        std::string shape = asString(a[0], "pattern", line);
+        int n = (int)std::lround(asNumber(a[1], "pattern", line));
+        if (n < 1) n = 1;
+        if (n > 200) n = 200; // حماية بسيطة من طلب حجم ضخم يُغرق المخرجات
+        std::string sym = (a.size() > 2 && a[2].type != Value::Type::NIL) ? asString(a[2], "pattern", line) : std::string("*");
+        if (sym.empty()) sym = "*";
+        bool hasColor = a.size() > 3 && a[3].type != Value::Type::NIL;
+        std::string colorOn, colorOff;
+        if (hasColor) {
+            rincolor::Color c = parseColorArg(a[3], "pattern", line);
+            std::ostringstream cbuf;
+            cbuf << "\x1b[38;2;" << (int)c.r << ";" << (int)c.g << ";" << (int)c.b << "m";
+            colorOn = cbuf.str();
+            colorOff = "\x1b[0m";
+        }
+
+        std::ostringstream buf;
+        auto rep = [&](int count) { for (int k = 0; k < count; k++) buf << sym; };
+        auto pad = [&](int count) { for (int k = 0; k < count; k++) buf << ' '; };
+
+        if (shape == "triangle" || shape == "rightTriangle") {
+            for (int i = 1; i <= n; i++) { rep(i); buf << "\n"; }
+        } else if (shape == "invertedTriangle") {
+            for (int i = n; i >= 1; i--) { rep(i); buf << "\n"; }
+        } else if (shape == "pyramid") {
+            for (int i = 1; i <= n; i++) { pad(n - i); rep(2 * i - 1); buf << "\n"; }
+        } else if (shape == "diamond") {
+            for (int i = 1; i <= n; i++) { pad(n - i); rep(2 * i - 1); buf << "\n"; }
+            for (int i = n - 1; i >= 1; i--) { pad(n - i); rep(2 * i - 1); buf << "\n"; }
+        } else if (shape == "square") {
+            for (int i = 0; i < n; i++) { rep(n); buf << "\n"; }
+        } else if (shape == "hollowSquare") {
+            for (int i = 0; i < n; i++) {
+                for (int j = 0; j < n; j++) buf << ((i == 0 || i == n - 1 || j == 0 || j == n - 1) ? sym : " ");
+                buf << "\n";
+            }
+        } else if (shape == "heart") {
+            // معادلة القلب الكلاسيكية (x²+y²-1)³ - x²y³ ≤ 0، مرسومة على شبكة نصّية تتوسّع مع n
+            // (عكس صورة بايثون التي كانت مقاسها ثابتاً 9x13 بشروط i/j يدوية).
+            const double range = 1.3;
+            int rows = 2 * n, cols = 4 * n;
+            for (int iy = 0; iy <= rows; iy++) {
+                double yf = range - (2.0 * range * iy) / rows;
+                for (int ix = 0; ix <= cols; ix++) {
+                    double xf = (-2.0 * range + (4.0 * range * ix) / cols) / 2.0;
+                    double val = std::pow(xf * xf + yf * yf - 1.0, 3) - xf * xf * yf * yf * yf;
+                    buf << (val <= 0.0 ? sym : " ");
+                }
+                buf << "\n";
+            }
+        } else {
+            throw diagErr(diag::Code::E0035_RuntimeError, line,
+                "'pattern': شكل غير معروف \"" + shape + "\" — المتاح: triangle, invertedTriangle, pyramid, diamond, square, hollowSquare, heart");
+        }
+
+        std::string body = buf.str();
+        if (hasColor) this->output << colorOn << body << colorOff;
+        else this->output << body;
+        return Value::nil();
+    };
+
     // ---- إحصاء (statistics) - مصمّمة للعمل مع خطوط الأنابيب |> و container.pipe ----
     // مرحلة "تجميع" (Aggregation): تُلخّص مصفوفة أرقام إلى قيمة واحدة.
     natives["sum"] = [](std::vector<Value>& a, int line) {
