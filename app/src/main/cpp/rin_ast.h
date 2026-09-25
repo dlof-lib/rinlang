@@ -188,7 +188,7 @@ struct CallValueExpr : Expr {
 // (dynamic_pointer_cast<ContainerStmt> كان يُطابق كائنات MakeStmt أيضاً)، فلا وسم Kind خاصاً به هنا
 // عمداً -- يبقى stmtKind = ContainerStmt لكائنات MakeStmt (مُنشئ MakeStmt لا يُعدِّله).
 enum class StmtKind {
-    ExpressionStmt, PrintStmt, LogStmt, LetStmt, ReckonStmt, BlockStmt, IfStmt, WhileStmt,
+    ExpressionStmt, PrintStmt, LogStmt, PrintImageStmt, LetStmt, ReckonStmt, BlockStmt, IfStmt, WhileStmt,
     ForStmt, ForInStmt, PlusConditionStmt, FunctionStmt, ClassStmt, EnumStmt, MatchStmt,
     AchieveStmt, ReturnStmt, BreakStmt, ContinueStmt, TryCatchStmt, ThrowStmt, TextStmt,
     ContainerStmt, MaskStmt, LifecycleHookStmt, StateDeclStmt, SlotDeclStmt, EmitStmt,
@@ -288,6 +288,28 @@ struct LogStmt : Stmt { LogStmt() { stmtKind = StmtKind::LogStmt; }
     ExprPtr ifCond; // nullptr = يُسجَّل دائماً (بلا بوابة شرط)
     ExprPtr label;  // nullptr = بلا وسم إضافي
     ExprPtr source; // nullptr = يُستخدم sourceFile الحالي للمفسِّر
+};
+// print.image(path [, caption=expr] [, width=expr] [, if=expr]);
+// إضافة مستقلة تماماً عن print/print.log أعلاه (لا تُعدِّل أي سلوك موجود)، بنفس أسلوب print.log
+// النحوي بالضبط: PRINT '.' IDENT("image") '(' args ')' ';' يتعرّف عليها المحلل عند بداية العبارة.
+// الفرق الجوهري عن أي أمر print آخر: لا يُنتج سطراً نصياً بأيقونة فقط، بل صورة فعلية مُضمَّنة
+// (inline thumbnail) داخل كونسول تطبيق أندرويد (انظر RinConsoleFormatter.kt / RinJobAdapter.kt) —
+// أول مرة تعرض اللغة محتوى غير نصي داخل ناتج التنفيذ نفسه. 'path' مسار حقيقي على القرص (نسبي
+// لمجلد المشروع المعزول، يمرّ عبر resolvePath() كبقية عمليات الملفات) لملف صورة *موجود بالفعل*؛
+// على عكس save/installation، print.image لا يكتب أي شيء على القرص إطلاقاً — فقط يقرأ ويعرض. إن لم
+// يكن الملف موجوداً وقت التنفيذ يُرمى خطأ تشغيل صريح (نفس فلسفة أي عملية ملف أخرى في اللغة).
+//   1) path    : (الوسيطة الموضعية الوحيدة، إلزامية) مسار ملف الصورة
+//   2) caption : نص اختياري يُعرض كتسمية توضيحية أسفل الصورة داخل الكونسول
+//   3) width   : عرض أقصى مقترح للمصغّرة داخل الكونسول، بوحدة dp (Android فقط)؛ nullptr = عرض
+//                افتراضي تحدّده الواجهة (انظر IMAGE_THUMB_DEFAULT_WIDTH_DP في RinJobAdapter.kt)
+//   4) if      : بوابة تنفيذ — نفس دلالة if= في print العادي تماماً (falsy = no-op تام)
+// ملاحظة عن rin_run/CLI الطرفي: خارج تطبيق أندرويد يبقى الناتج سطراً نصياً عادياً بلا صورة فعلية
+// (طرفية نصية بحتة لا تعرض صوراً) — تماماً كما تتصرف بقية أسطر save/installation هناك أصلاً.
+struct PrintImageStmt : Stmt { PrintImageStmt() { stmtKind = StmtKind::PrintImageStmt; }
+    ExprPtr path;     // إلزامي — يُتحقَّق من وجوده وقت التحليل (خطأ Parser إن غاب)
+    ExprPtr caption;  // nullptr = بلا تعليق
+    ExprPtr width;    // nullptr = عرض افتراضي تحدّده واجهة Android
+    ExprPtr ifCond;   // nullptr = يُطبع دائماً (بلا بوابة شرط)
 };
 struct LetStmt : Stmt { LetStmt() { stmtKind = StmtKind::LetStmt; }
     std::string name;
