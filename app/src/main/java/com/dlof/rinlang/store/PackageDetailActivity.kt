@@ -35,6 +35,11 @@ class PackageDetailActivity : BaseConnectivityActivity() {
 
     private lateinit var pkg: RinPackage
 
+    /** جذر شجرة ملفات الحزمة الحالية (يُبنى مرة واحدة في [bindFiles])، وموقع التصفّح الحالي
+     *  داخلها — انظر [renderCurrentFilesFolder]/[renderFilesBreadcrumb] لسلوك تصفّح GitHub. */
+    private lateinit var fileTreeRoot: FileTreeFolder
+    private var currentFilesPath: List<String> = emptyList()
+
     /** حالة الإعجاب المحلية (متفائلة): تُحدَّث فوراً عند الضغط قبل استلام تأكيد Firebase. */
     private var isLiked = false
     private var likeCount = 0L
@@ -450,55 +455,54 @@ class PackageDetailActivity : BaseConnectivityActivity() {
     private fun dp(value: Float): Int = (value * resources.displayMetrics.density).toInt()
 
     /**
-     * يعرض قسم "ملفات الحزمة" كشجرة مجلدات/ملفات حقيقية (عبر [PackagingUtils.buildFileTree])
-     * بدل قائمة مسطَّحة بمسار كامل مكرَّر في كل سطر (مثال: "lib/table_utils.og.og.rin" السابق
-     * يظهر الآن كرأس مجلد "lib" واحد يحوي سطر ملف باسمه المجرَّد "table_utils.og.og.rin" فقط) —
-     * أقرب لشكل مستكشف ملفات احترافي حقيقي (VS Code / GitHub) منه لقائمة مسارات خام.
+     * يعرض قسم "ملفات الحزمة" بتصفّح شبيه بمستكشف ملفات GitHub الحقيقي: مستوى واحد من
+     * المجلدات/الملفات في كل مرة (لا شجرة مفتوحة بالكامل بإزاحة متدرّجة كما كان سابقاً) — لمس
+     * صفّ مجلد "يدخل" إليه فعلياً ويستبدل القائمة بمحتواه، وشريط المسار (breadcrumb) أعلى القائمة
+     * (عبر [renderFilesBreadcrumb]) يبقى يعرض المسار الحالي بأكمله وكل جزء منه قابل للمس للعودة
+     * إليه مباشرة — تماماً كسلوك "food/img/example.png" القابل للنقر في أعلى صفحة ملفات GitHub.
      */
     private fun bindFiles() {
-        val container = findViewById<LinearLayout>(R.id.containerDetailFiles)
-        container.removeAllViews()
         val contents = PackagingUtils.readContents(pkg)
-        val tree = PackagingUtils.buildFileTree(contents.files)
-        val inflater = LayoutInflater.from(this)
-        renderFileTree(container, inflater, tree, depth = 0, rowIndex = intArrayOf(0))
+        fileTreeRoot = PackagingUtils.buildFileTree(contents.files)
+        currentFilesPath = emptyList()
+        renderCurrentFilesFolder()
     }
 
-    /**
-     * يرسم مجلدات وملفات [folder] المباشرة داخل [container] بترتيب: كل المجلدات الفرعية
-     * (مرتَّبة أبجدياً) ثم كل الملفات المباشرة (مرتَّبة أبجدياً)، مع نزول عودي داخل كل مجلد
-     * فرعي مباشرة بعد رأسه (بلا طيّ/فتح — الشجرة كاملة مفتوحة دائماً لتبقى كل الملفات مرئية
-     * بضغطة تمرير واحدة). [depth] يحدِّد مقدار الإزاحة البادئة الإضافية (18dp لكل مستوى) التي
-     * تُضاف فوق حشوة الصفّ الأصلية عبر [View.setPaddingRelative] — تُحترَم اتجاهية RTL/LTR
-     * تلقائياً لأنها تُضبَط على البداية (start) لا اليسار الثابت.
-     */
-    private fun renderFileTree(
-        container: LinearLayout,
-        inflater: LayoutInflater,
-        folder: FileTreeFolder,
-        depth: Int,
-        rowIndex: IntArray
-    ) {
-        val indentPx = (depth * 18 * resources.displayMetrics.density).toInt()
+    /** المجلد المطابق لـ[currentFilesPath] الحالي داخل [fileTreeRoot] (الجذر نفسه إن كان المسار فارغاً). */
+    private fun currentFilesFolder(): FileTreeFolder {
+        var node = fileTreeRoot
+        for (segment in currentFilesPath) {
+            node = node.folders[segment] ?: return node
+        }
+        return node
+    }
+
+    /** يعيد رسم شريط المسار وقائمة المستوى الحالي معاً — نقطة الدخول الوحيدة بعد أي تنقّل. */
+    private fun renderCurrentFilesFolder() {
+        renderFilesBreadcrumb()
+
+        val container = findViewById<LinearLayout>(R.id.containerDetailFiles)
+        container.removeAllViews()
+        val folder = currentFilesFolder()
+        val inflater = LayoutInflater.from(this)
+        var rowIndex = 0
 
         for (subFolder in folder.folders.values) {
             val row = inflater.inflate(R.layout.item_package_folder, container, false)
-            row.setPaddingRelative(row.paddingStart + indentPx, row.paddingTop, row.paddingEnd, row.paddingBottom)
             row.findViewById<TextView>(R.id.txtFolderName).text = subFolder.name
             row.findViewById<TextView>(R.id.txtFolderCount).text =
                 getString(R.string.package_detail_folder_file_count, subFolder.totalFileCount())
-            if (rowIndex[0] % 2 == 1) {
-                row.setBackgroundColor(withAlpha(getColor(R.color.rin_on_toolbar), 8))
+            if (rowIndex % 2 == 1) row.setBackgroundColor(withAlpha(getColor(R.color.rin_on_toolbar), 8))
+            rowIndex++
+            row.setOnClickListener {
+                currentFilesPath = currentFilesPath + subFolder.name
+                renderCurrentFilesFolder()
             }
-            rowIndex[0]++
             container.addView(row)
-
-            renderFileTree(container, inflater, subFolder, depth + 1, rowIndex)
         }
 
         for (leaf in folder.files) {
             val row = inflater.inflate(R.layout.item_package_file, container, false)
-            row.setPaddingRelative(row.paddingStart + indentPx, row.paddingTop, row.paddingEnd, row.paddingBottom)
             val tint = getColor(PackagingUtils.iconColorResFor(leaf.entry.name))
             row.findViewById<ImageView>(R.id.imgFileIcon).apply {
                 setImageResource(PackagingUtils.iconResFor(leaf.entry.name))
@@ -509,14 +513,68 @@ class PackageDetailActivity : BaseConnectivityActivity() {
             row.findViewById<TextView>(R.id.txtFileName).text = leaf.simpleName
             row.findViewById<TextView>(R.id.txtFileSize).text = formatSize(leaf.entry.sizeBytes)
             // تباين خفيف بين الصفوف الزوجية/الفردية بدل خلفية واحدة موحّدة مسطّحة، لتحسين قابلية
-            // المسح البصري (scannability) في القوائم الطويلة — العدّاد مشترك بين المجلدات
-            // والملفات معاً حتى يبقى التناوب متّسقاً عبر الشجرة كاملة لا داخل كل مستوى وحده.
-            if (rowIndex[0] % 2 == 1) {
-                row.setBackgroundColor(withAlpha(getColor(R.color.rin_on_toolbar), 8))
-            }
-            rowIndex[0]++
+            // المسح البصري (scannability) — العدّاد مشترك بين المجلدات والملفات معاً حتى يبقى
+            // التناوب متّسقاً عبر المستوى الحالي كاملاً لا داخل كل نوع وحده.
+            if (rowIndex % 2 == 1) row.setBackgroundColor(withAlpha(getColor(R.color.rin_on_toolbar), 8))
+            rowIndex++
             container.addView(row)
         }
+    }
+
+    /**
+     * يبني شريط المسار (breadcrumb) أعلى قائمة الملفات: اسم الحزمة كجذر قابل للمس للعودة إليه
+     * مباشرة، ثم كل جزء من [currentFilesPath] كصفّ منفصل قابل للمس بدوره للقفز لذلك المستوى
+     * تحديداً — آخر جزء (المستوى الحالي) بلون مختلف وغير قابل للمس لأنه هو المعروض أصلاً.
+     */
+    private fun renderFilesBreadcrumb() {
+        val container = findViewById<LinearLayout>(R.id.containerFilesBreadcrumb)
+        container.removeAllViews()
+
+        addBreadcrumbCrumb(container, pkg.name, isCurrent = currentFilesPath.isEmpty()) {
+            currentFilesPath = emptyList()
+            renderCurrentFilesFolder()
+        }
+
+        for (i in currentFilesPath.indices) {
+            addBreadcrumbSeparator(container)
+            val pathUpToHere = currentFilesPath.subList(0, i + 1).toList()
+            addBreadcrumbCrumb(container, currentFilesPath[i], isCurrent = i == currentFilesPath.lastIndex) {
+                currentFilesPath = pathUpToHere
+                renderCurrentFilesFolder()
+            }
+        }
+    }
+
+    private fun addBreadcrumbCrumb(container: LinearLayout, label: String, isCurrent: Boolean, onCrumbTap: () -> Unit) {
+        val crumb = TextView(this).apply {
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+            text = label
+            textSize = 12.5f
+            fontFamily = "monospace"
+            if (isCurrent) {
+                setTextColor(getColor(R.color.rin_on_toolbar))
+                setTypeface(typeface, android.graphics.Typeface.BOLD)
+            } else {
+                setTextColor(getColor(R.color.rin_accent))
+                setPadding(dp(4f), dp(4f), dp(4f), dp(4f))
+                isClickable = true
+                isFocusable = true
+                setOnClickListener { onCrumbTap() }
+            }
+        }
+        container.addView(crumb)
+    }
+
+    private fun addBreadcrumbSeparator(container: LinearLayout) {
+        val sep = TextView(this).apply {
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                marginStart = dp(2f); marginEnd = dp(2f)
+            }
+            text = "/"
+            textSize = 12.5f
+            setTextColor(getColor(R.color.rin_editor_hint))
+        }
+        container.addView(sep)
     }
 
     /** يُرجع [color] بنفس قيمة الشفافية [alpha] (0-255) بدل ألفا اللون الأصلية، لخلفيات خفيفة متّسقة. */
