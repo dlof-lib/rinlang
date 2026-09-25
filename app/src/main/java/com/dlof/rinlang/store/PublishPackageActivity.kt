@@ -63,7 +63,15 @@ class PublishPackageActivity : BaseConnectivityActivity() {
     private val pickAssetsLauncher =
         registerForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
             selectedAssetUris = uris
-            txtAssetsSelected.text = getString(R.string.assets_selected_format, uris.size)
+            // مع عدد قليل من الملفات نعرض أسماءها فعلياً (تأكيد بصري واضح لما اختاره المستخدم
+            // فعلاً)، وإلا نرجع للعدّاد المختصر كي لا يطول النص بلا داعٍ عند اختيار ملفات كثيرة.
+            txtAssetsSelected.text = if (uris.isEmpty()) {
+                ""
+            } else if (uris.size <= 4) {
+                uris.mapNotNull { fileDisplayName(it) }.joinToString(", ")
+            } else {
+                getString(R.string.assets_selected_format, uris.size)
+            }
         }
 
     private val pickReadmeLauncher =
@@ -167,7 +175,10 @@ class PublishPackageActivity : BaseConnectivityActivity() {
         }
 
         findViewById<View>(R.id.btnPickAssets).setOnClickListener {
-            pickAssetsLauncher.launch(arrayOf("image/*"))
+            // "*/*" بدل "image/*" السابقة: يسمح الآن باختيار عدة ملفات من أي نوع دفعة واحدة
+            // (صور، ملفات .rin إضافية، بيانات JSON، خطوط...) لا الصور فقط — نفس منتقي النظام
+            // (OpenMultipleDocuments) يبقى داعماً للاختيار المتعدد أصلاً، فقط كان مُقيَّداً بنوع الملف.
+            pickAssetsLauncher.launch(arrayOf("*/*"))
         }
 
         findViewById<View>(R.id.btnPickReadme).setOnClickListener {
