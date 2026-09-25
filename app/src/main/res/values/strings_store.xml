@@ -61,7 +61,8 @@
     <string name="hint_package_dependencies_example">مثال:\nmathlib:^1.0.0\nstrings:2.0.0</string>
     <string name="hint_package_license">الترخيص</string>
     <string name="hint_package_custom_docs">اختياري: ارفع ملف README.md وملف ترخيص خاصّين بك بدل التوليد التلقائي</string>
-    <string name="action_pick_assets">إضافة صور/أيقونات (اختياري)</string>
+    <string name="action_pick_assets">إضافة ملفات إضافية (اختياري)</string>
+    <string name="hint_package_assets_multi">يمكنك اختيار أكثر من ملف من أي نوع دفعة واحدة (صور، ملفات كود، بيانات...)</string>
     <string name="action_pick_readme">رفع ملف README.md خاص بي</string>
     <string name="action_pick_license">رفع ملف ترخيص خاص بي</string>
     <string name="file_selected_generic">تم اختيار الملف ✓</string>
