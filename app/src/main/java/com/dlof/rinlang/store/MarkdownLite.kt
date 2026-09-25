@@ -3,11 +3,13 @@ package com.dlof.rinlang.store
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.RectF
 import android.graphics.Typeface
+import android.net.Uri
 import android.text.SpannableStringBuilder
 import android.text.Spanned
 import android.text.TextPaint
@@ -24,7 +26,6 @@ import android.text.style.StrikethroughSpan
 import android.text.style.StyleSpan
 import android.text.style.TypefaceSpan
 import android.text.style.URLSpan
-import android.text.style.UnderlineSpan
 import android.view.View
 import android.widget.TextView
 import android.widget.Toast
@@ -72,6 +73,12 @@ import android.widget.Toast
  *   نقطة ملوَّنة بهوية اللغة + اسمها، ثم زر "نسخ" حقيقي قابل للنقر (عبر [CopyCodeSpan]) ينسخ
  *   الكود الخام كاملاً للحافظة (Clipboard) مع تنبيه تأكيد قصير، وخط فاصل رفيع أسفل الرأس يفصله
  *   بصرياً عن جسم الكود — تماماً كرأس نافذة كود في IDE احترافي، لا مجرد وسم عائم أعلى الكتلة.
+ * - **جديد: شكل روابط محسَّن** — روابط `[نص](رابط)` بلا خط تحتها بعد الآن، بتشديد كامل وسهم
+ *   رابط خارجي صغير ↗ بعد النص، أقرب لأسلوب شارات الروابط الاحترافية.
+ * - **جديد: شارات/أزرار وصفية عبر `[* ... *]`** — صياغة عامة جديدة بأجزاء مفصولة بـ`/` (انظر
+ *   [appendMetaBadge]): `[*الإصدار/1*]` لشارة إصدار ثنائية اللون (تسمية خافتة + قيمة بارزة)،
+ *   `[*زر تثبيت/link=(رابط)*]` لزر رابط حقيقي قابل للنقر يفتح المتصفح عند الضغط، و
+ *   `[*Pin/link=(رابط)/icon=(اسم)*]` لنفس الزر مع أيقونة مصغَّرة قبل النص.
  *
  * الاستخدام المباشر: `textView.text = MarkdownLite.toSpannable(md)`.
  * الاستخدام الموصى به عند وجود روابط قابلة للنقر: `MarkdownLite.applyTo(textView, md)`.
@@ -201,12 +208,12 @@ object MarkdownLite {
 
     // مجموعة تعابير نمطية للأنماط السطرية بترتيب أولوية يحلّ التعارض بين ** و * و __ و _ وغيرها.
     // ملاحظة الفهارس (مطابقة لترتيب المجموعات أدناه):
-    //  1) escape حرف مُفلَت حرفياً        7) [[ستيكر]] أو [[ستيكر|لون]]
-    //  2) ***تشديد+مائل***                8/9) [نص](رابط)
-    //  3) **تشديد**                       10) *مائل*
-    //  4) __تشديد بديل__                  11) _مائل بديل_
-    //  5) ~~يتوسّطه خط~~
-    //  6) `كود مضمَّن`
+    //  1) escape حرف مُفلَت حرفياً        8) [[ستيكر]] أو [[ستيكر|لون]]
+    //  2) ***تشديد+مائل***                9) [*شارة/قيمة*] أو [*نص/link=(رابط)*] أو
+    //  3) **تشديد**                          [*نص/link=(رابط)/icon=(اسم)*] — انظر [appendMetaBadge]
+    //  4) __تشديد بديل__                  10/11) [نص](رابط)
+    //  5) ~~يتوسّطه خط~~                  12) *مائل*
+    //  6) `كود مضمَّن`                    13) _مائل بديل_
     //  7) ==تمييز==
     private val inlineRegex = Regex(
         "\\\\([\\\\`*_{}\\[\\]()#+.!~=>-])" +
@@ -217,6 +224,7 @@ object MarkdownLite {
             "|`([^`]+?)`" +
             "|==([^=]+?)==" +
             "|\\[\\[([^\\]]+?)\\]\\]" +
+            "|\\[\\*([^\\]]+?)\\*\\]" +
             "|\\[([^\\]]+?)\\]\\(([^)\\s]+?)\\)" +
             "|\\*([^*]+?)\\*" +
             "|_([^_]+?)_"
@@ -548,9 +556,10 @@ object MarkdownLite {
                 g[6] != null -> appendCode(out, g[6]!!.value)
                 g[7] != null -> appendHighlight(out, g[7]!!.value)
                 g[8] != null -> appendSticker(out, g[8]!!.value)
-                g[9] != null && g[10] != null -> appendLink(out, g[9]!!.value, g[10]!!.value)
-                g[11] != null -> appendStyled(out, g[11]!!.value, Typeface.ITALIC)
+                g[9] != null -> appendMetaBadge(out, g[9]!!.value)
+                g[10] != null && g[11] != null -> appendLink(out, g[10]!!.value, g[11]!!.value)
                 g[12] != null -> appendStyled(out, g[12]!!.value, Typeface.ITALIC)
+                g[13] != null -> appendStyled(out, g[13]!!.value, Typeface.ITALIC)
             }
             idx = match.range.last + 1
         }
@@ -588,13 +597,19 @@ object MarkdownLite {
         out.setSpan(BackgroundColorSpan(COLOR_INLINE_CODE_BG), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
     }
 
+    /**
+     * رابط `[نص](رابط)` — بشكل احترافي جديد: بلا خط تحته (كان UnderlineSpan)، تشديد كامل، وسهم
+     * رابط خارجي صغير ↗ بعد النص، بنفس أسلوب شارات الروابط في READMEs الاحترافية (GitHub/npm).
+     * يبقى قابلاً للنقر فعلياً عبر [URLSpan] القياسي (يفتح المتصفح تلقائياً) — لا تغيير سلوكي.
+     */
     private fun appendLink(out: SpannableStringBuilder, label: String, url: String) {
         val start = out.length
         appendInline(out, label)
+        out.append(" \u2197")
         val end = out.length
         out.setSpan(URLSpan(url), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
         out.setSpan(ForegroundColorSpan(COLOR_LINK), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-        out.setSpan(UnderlineSpan(), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        out.setSpan(StyleSpan(Typeface.BOLD), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
     }
 
     /**
@@ -613,6 +628,107 @@ object MarkdownLite {
         out.setSpan(StickerSpan(bg, fg), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
         out.setSpan(StyleSpan(Typeface.BOLD), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
         out.setSpan(RelativeSizeSpan(0.86f), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+    }
+
+    /** يلتقط مقاطع `مفتاح=(قيمة)` داخل صياغة `[* ... *]` — انظر [appendMetaBadge]. */
+    private val metaBadgeKeyValueRegex = Regex("^(\\w+)\\s*=\\s*\\(([^)]*)\\)$")
+
+    /** رموز أيقونات مصغَّرة لصياغة `icon=(اسم)` — مطابقة نصّية بالاحتواء على اسم الملف/المعرِّف
+     *  بلا امتداد (فـ`icon(pin.png)` أو `icon(ic_pin)` كلاهما يطابق "pin")، تسقط بهدوء لبلا أيقونة
+     *  إن لم يُعرَف الاسم، فلا يتعطّل عرض الزر أبداً بسبب اسم أيقونة غير مدعوم. */
+    private val ICON_GLYPHS: List<Pair<String, String>> = listOf(
+        "pin" to "\uD83D\uDCCC",       // 📌
+        "install" to "\u2B07\uFE0F",   // ⬇️
+        "download" to "\u2B07\uFE0F",  // ⬇️
+        "link" to "\uD83D\uDD17",      // 🔗
+        "star" to "\u2605",            // ★
+        "check" to "\u2713",           // ✓
+        "play" to "\u25B6",            // ▶
+        "web" to "\uD83C\uDF10",       // 🌐
+        "arrow" to "\u2192",           // →
+        "github" to "\u2318"
+    )
+
+    private fun iconGlyphFor(rawIcon: String?): String? {
+        if (rawIcon.isNullOrBlank()) return null
+        val base = rawIcon.substringAfterLast('/').substringBeforeLast('.').lowercase()
+        return ICON_GLYPHS.firstOrNull { (key, _) -> base.contains(key) }?.second
+    }
+
+    /**
+     * "شارة/زر وصفي" عام عبر صياغة `[* ... *]` بأجزاء مفصولة بـ`/`: الجزء الأول دائماً هو
+     * النص الظاهر، وما بعده إمّا `مفتاح=(قيمة)` (المفتاحان المدعومان: `link` و`icon`) أو قيمة
+     * مجرَّدة. ثلاث صيغ عملية:
+     * - `[*الإصدار/1*]` → شارة إصدار ثنائية اللون (تسمية خافتة + قيمة بارزة بلون الهوية) داخل
+     *   حبّة واحدة، عبر [BadgeTwoToneSpan] — بلا أي تفاعل (عرض فقط).
+     * - `[*زر تثبيت/link=(رابط)*]` → زر حقيقي قابل للنقر (حبّة مملوءة بلون الهوية + نص أبيض
+     *   بارز) يفتح [رابط] في المتصفح عند الضغط عبر [LinkButtonClickSpan] — مثالي لأزرار
+     *   "تثبيت"/"تحميل"/"زيارة الموقع" داخل README.
+     * - `[*Pin/link=(رابط)/icon=(اسم)*]` → نفس زر الرابط أعلاه، مع أيقونة مصغَّرة (عبر
+     *   [iconGlyphFor]) قبل النص مباشرة — مناسب لأزرار "تثبيت"/"تنزيل" المصحوبة برمز.
+     * لا رابط ولا قيمة مجرَّدة (مثال: `[*جديد*]` وحدها) → يسقط بهدوء إلى ستيكر عادي بلون الهوية
+     * الافتراضي عبر [appendSticker]، فلا يُفقَد المحتوى صمتاً بسبب صياغة ناقصة.
+     */
+    private fun appendMetaBadge(out: SpannableStringBuilder, raw: String) {
+        val parts = raw.split("/").map { it.trim() }.filter { it.isNotEmpty() }
+        if (parts.isEmpty()) return
+        val label = parts[0]
+
+        var linkUrl: String? = null
+        var iconRaw: String? = null
+        var plainValue: String? = null
+        for (part in parts.drop(1)) {
+            val m = metaBadgeKeyValueRegex.find(part)
+            if (m != null) {
+                when (m.groupValues[1].lowercase()) {
+                    "link" -> linkUrl = m.groupValues[2].trim()
+                    "icon" -> iconRaw = m.groupValues[2].trim()
+                }
+            } else if (plainValue == null) {
+                plainValue = part
+            }
+        }
+
+        when {
+            linkUrl != null -> {
+                val glyph = iconGlyphFor(iconRaw)
+                val buttonText = if (glyph != null) "$glyph  $label" else label
+                val start = out.length
+                out.append(buttonText)
+                val end = out.length
+                out.setSpan(StickerSpan(COLOR_BULLET, 0xFFFFFFFF.toInt()), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                out.setSpan(StyleSpan(Typeface.BOLD), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                out.setSpan(RelativeSizeSpan(0.9f), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                out.setSpan(LinkButtonClickSpan(linkUrl), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            }
+            plainValue != null -> {
+                val start = out.length
+                out.append("$label $plainValue")
+                val end = out.length
+                out.setSpan(
+                    BadgeTwoToneSpan(label, plainValue, COLOR_INLINE_CODE_BG, COLOR_H_DIM, COLOR_BULLET),
+                    start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                )
+            }
+            else -> appendSticker(out, label)
+        }
+    }
+
+    /**
+     * زر رابط حقيقي: [ClickableSpan] يفتح [url] في المتصفح (Intent.ACTION_VIEW) عند النقر، عبر
+     * سياق [widget] الممرَّر تلقائياً — بلا حاجة لتمرير Context لهذا الملف، بنفس أسلوب
+     * [CopyCodeSpan]. رابط غير صالح أو غياب أي تطبيق قادر على فتحه يُسقَط بهدوء بلا انهيار.
+     */
+    private class LinkButtonClickSpan(private val url: String) : ClickableSpan() {
+        override fun onClick(widget: View) {
+            try {
+                widget.context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+            } catch (t: Throwable) {
+                // رابط غير صالح، أو لا يوجد تطبيق على الجهاز قادر على فتحه — نتجاهل بهدوء
+            }
+        }
+
+        override fun updateDrawState(ds: TextPaint) {}
     }
 
     /** لون هوية اللغة (نقطة + وسم الاسم)، محايد للغات غير المدرَجة في [LANGUAGE_ACCENTS]. */
@@ -925,6 +1041,67 @@ object MarkdownLite {
             paint.color = savedColor
             paint.style = savedStyle
             paint.isAntiAlias = savedAA
+        }
+    }
+
+    /**
+     * شارة إصدار ثنائية اللون داخل حبّة واحدة (مثال: `الإصدار` بلون خافت + `1` بلون الهوية
+     * بارزاً) — تُستخدَم لصياغة `[*تسمية/قيمة*]` (انظر [appendMetaBadge]). بخلاف [StickerSpan]
+     * (لون نص واحد)، هذا الصنف يرسم النص بلونَين منفصلَين صراحةً داخل [draw] بدل الاعتماد على
+     * Spans متداخلة (تُتجاهَل داخل نطاق أي [ReplacementSpan] لأن الرسم يُسلَّم إليه كاملاً).
+     */
+    private class BadgeTwoToneSpan(
+        private val label: String,
+        private val value: String,
+        private val bgColor: Int,
+        private val labelColor: Int,
+        private val valueColor: Int
+    ) : ReplacementSpan() {
+        private val horizontalPad = 14f
+        private val verticalPad = 5f
+        private val cornerRadius = 14f
+        private val gap = 6f
+
+        override fun getSize(paint: Paint, text: CharSequence, start: Int, end: Int, fm: Paint.FontMetricsInt?): Int {
+            if (fm != null) {
+                val orig = paint.fontMetricsInt
+                fm.ascent = orig.ascent - verticalPad.toInt()
+                fm.descent = orig.descent + verticalPad.toInt()
+                fm.top = fm.ascent
+                fm.bottom = fm.descent
+            }
+            return (horizontalPad * 2 + paint.measureText(label) + gap + paint.measureText(value)).toInt()
+        }
+
+        override fun draw(
+            canvas: Canvas, text: CharSequence, start: Int, end: Int,
+            x: Float, top: Int, y: Int, bottom: Int, paint: Paint
+        ) {
+            val labelW = paint.measureText(label)
+            val valueW = paint.measureText(value)
+            val rect = RectF(x, top.toFloat() + 1f, x + horizontalPad * 2 + labelW + gap + valueW, bottom.toFloat() - 1f)
+
+            val savedColor = paint.color
+            val savedStyle = paint.style
+            val savedAA = paint.isAntiAlias
+            val savedBold = paint.isFakeBoldText
+
+            paint.isAntiAlias = true
+            paint.style = Paint.Style.FILL
+            paint.color = bgColor
+            canvas.drawRoundRect(rect, cornerRadius, cornerRadius, paint)
+
+            paint.color = labelColor
+            canvas.drawText(label, x + horizontalPad, y.toFloat(), paint)
+
+            paint.color = valueColor
+            paint.isFakeBoldText = true
+            canvas.drawText(value, x + horizontalPad + labelW + gap, y.toFloat(), paint)
+
+            paint.color = savedColor
+            paint.style = savedStyle
+            paint.isAntiAlias = savedAA
+            paint.isFakeBoldText = savedBold
         }
     }
 }
