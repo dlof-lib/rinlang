@@ -8,7 +8,10 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.Typeface
+import android.net.Uri
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
@@ -29,7 +32,9 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
 import androidx.recyclerview.widget.RecyclerView
+import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -41,6 +46,12 @@ private enum class JobTab { OUTPUT, EVENTS, DIAGNOSTICS }
 /** Wall-clock "queued at" stamp shown next to each job's duration. Only ever touched from the
  *  main thread (RecyclerView bind), so a single shared formatter is safe here. */
 private val TIME_FORMAT = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
+
+/** Fallback thumbnail width (dp) for a `print.image(...)` line that didn't pass `width=` —
+ *  matches the comment referencing this exact name in PrintImageStmt (rin_ast.h). */
+private const val IMAGE_THUMB_DEFAULT_WIDTH_DP = 220f
+private const val IMAGE_THUMB_MIN_WIDTH_DP = 60f
+private const val IMAGE_THUMB_MAX_WIDTH_DP = 320f
 
 class RinJobAdapter(private val context: Context) : RecyclerView.Adapter<RinJobAdapter.JobViewHolder>() {
 
@@ -559,6 +570,10 @@ class RinJobAdapter(private val context: Context) : RecyclerView.Adapter<RinJobA
         }
 
         private fun buildLineRow(line: RinLogLine, highlightQuery: String = ""): View {
+            // `print.image(...)` renders as an actual inline thumbnail, not an icon+text row --
+            // handled entirely separately since it has its own layout (header + image + caption).
+            if (line.kind == LogKind.PRINT_IMAGE) return buildImageLineRow(line)
+
             val row = LinearLayout(context).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = android.view.Gravity.TOP
@@ -596,6 +611,119 @@ class RinJobAdapter(private val context: Context) : RecyclerView.Adapter<RinJobA
             }
             row.addView(text)
             return row
+        }
+
+        /** Renders one `print.image(...)` line: header (icon + file name) — actual decoded
+         *  thumbnail, framed and tappable to open full-screen — optional caption underneath.
+         *  Never throws: a missing/corrupt file falls back to a small inline error line instead
+         *  of breaking the rest of this run's output. */
+        private fun buildImageLineRow(line: RinLogLine): View {
+            val column = LinearLayout(context).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(0, (4 * dp).toInt(), 0, (4 * dp).toInt())
+            }
+            val tint = ContextCompat.getColor(context, line.kind.colorRes)
+            val relPath = line.imageRelPath.orEmpty()
+
+            val header = LinearLayout(context).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = android.view.Gravity.CENTER_VERTICAL
+            }
+            line.kind.icon?.let { iconRes ->
+                header.addView(ImageView(context).apply {
+                    setImageResource(iconRes)
+                    imageTintList = android.content.res.ColorStateList.valueOf(tint)
+                    layoutParams = LinearLayout.LayoutParams((16 * dp).toInt(), (16 * dp).toInt()).apply {
+                        marginEnd = (8 * dp).toInt()
+                    }
+                })
+            }
+            header.addView(TextView(context).apply {
+                text = "print.image  " + File(relPath).name
+                textSize = 12.5f
+                typeface = Typeface.MONOSPACE
+                setTextColor(tint)
+                setTextIsSelectable(true)
+            })
+            column.addView(header)
+
+            val baseDir = try { RinEngine.currentBaseDir() } catch (t: Throwable) { "" }
+            val file = RinConsoleFormatter.resolveExistingFile(relPath, baseDir)
+            val requestedWidthDp = (line.imageWidthDp ?: IMAGE_THUMB_DEFAULT_WIDTH_DP)
+                .coerceIn(IMAGE_THUMB_MIN_WIDTH_DP, IMAGE_THUMB_MAX_WIDTH_DP)
+            val maxWidthPx = (requestedWidthDp * dp).toInt()
+            val bitmap = file?.let { decodeSampledBitmap(it, maxWidthPx) }
+
+            if (file != null && bitmap != null) {
+                column.addView(ImageView(context).apply {
+                    setImageBitmap(bitmap)
+                    adjustViewBounds = true
+                    scaleType = ImageView.ScaleType.FIT_CENTER
+                    setBackgroundResource(R.drawable.bg_detail_hero_frame)
+                    val pad = (4 * dp).toInt()
+                    setPadding(pad, pad, pad, pad)
+                    layoutParams = LinearLayout.LayoutParams(maxWidthPx, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                        topMargin = (6 * dp).toInt()
+                    }
+                    isClickable = true
+                    isFocusable = true
+                    contentDescription = line.imageCaption ?: file.name
+                    setOnClickListener { openImageFullscreen(file) }
+                })
+            } else {
+                column.addView(TextView(context).apply {
+                    text = context.getString(R.string.print_image_load_failed_fmt, relPath)
+                    textSize = 11.5f
+                    setTextColor(ContextCompat.getColor(context, R.color.log_kind_error))
+                    setPadding(0, (4 * dp).toInt(), 0, 0)
+                })
+            }
+
+            line.imageCaption?.let { caption ->
+                column.addView(TextView(context).apply {
+                    text = caption
+                    textSize = 11.5f
+                    setTextColor(ContextCompat.getColor(context, R.color.rin_on_toolbar_dim))
+                    setTextIsSelectable(true)
+                    setPadding(0, (4 * dp).toInt(), 0, 0)
+                })
+            }
+            return column
+        }
+
+        /** Decodes [file] downsampled to roughly [reqWidthPx] wide instead of loading it at full
+         *  resolution — a run could `print.image` a large PNG repeatedly, and each row's bitmap
+         *  otherwise costs far more memory than the thumbnail actually needs. Returns null (never
+         *  throws) if the file isn't a decodable image. */
+        private fun decodeSampledBitmap(file: File, reqWidthPx: Int): Bitmap? {
+            return try {
+                val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                BitmapFactory.decodeFile(file.absolutePath, bounds)
+                if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
+                var sample = 1
+                while (bounds.outWidth / (sample * 2) >= reqWidthPx) sample *= 2
+                val opts = BitmapFactory.Options().apply { inSampleSize = sample }
+                BitmapFactory.decodeFile(file.absolutePath, opts)
+            } catch (t: Throwable) {
+                null
+            }
+        }
+
+        /** Opens the printed image at full resolution in whatever app the device offers for
+         *  ACTION_VIEW, via the same FileProvider authority [RinDownloadManager] already declares
+         *  (the project files directory is covered by res/xml/file_paths.xml's `projects` entry). */
+        private fun openImageFullscreen(file: File) {
+            try {
+                val uri: Uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+                val intent = Intent(Intent.ACTION_VIEW).apply {
+                    setDataAndType(uri, "image/*")
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                context.startActivity(intent)
+            } catch (e: android.content.ActivityNotFoundException) {
+                Toast.makeText(context, context.getString(R.string.download_no_app_toast), Toast.LENGTH_SHORT).show()
+            }
         }
 
         /** يُبرِز كل تطابقات [query] داخل [text] (خلفية صفراء + عريض) بدل الاكتفاء بترشيح
