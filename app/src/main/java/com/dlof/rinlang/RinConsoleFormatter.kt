@@ -27,11 +27,24 @@ enum class LogKind(@DrawableRes val icon: Int?, @ColorRes val colorRes: Int) {
     INFO(R.drawable.ic_log_info, R.color.log_kind_info),
     WARNING(R.drawable.ic_status_warning, R.color.log_kind_warning),
     DEBUG(R.drawable.ic_log_debug, R.color.log_kind_debug),
+    // خاصة بسطر `print.image(...)` الجديد (انظر PrintImageStmt في rin_ast.h وrin_interpreter.cpp) —
+    // على عكس أي LogKind آخر، هذا السطر لا يُعرَض كنص فقط: RinJobAdapter.kt يفكّ [RinLogLine.imageRelPath]
+    // ويعرض مصغّرة (thumbnail) فعلية من ملف الصورة، مع [RinLogLine.imageCaption] كتسمية أسفلها.
+    PRINT_IMAGE(R.drawable.ic_log_image, R.color.log_kind_export),
     PLAIN(null, R.color.log_kind_plain)
 }
 
-/** One line of a job's console output, ready to be rendered as an icon + styled text row. */
-data class RinLogLine(val kind: LogKind, val text: String)
+/** One line of a job's console output, ready to be rendered as an icon + styled text row.
+ *  [imageRelPath]/[imageCaption]/[imageWidthDp] are non-null only for [LogKind.PRINT_IMAGE] lines
+ *  (see [RinConsoleFormatter.RE_PRINT_IMAGE]) — everything else keeps using [text] alone, exactly
+ *  as before this field was added. */
+data class RinLogLine(
+    val kind: LogKind,
+    val text: String,
+    val imageRelPath: String? = null,
+    val imageCaption: String? = null,
+    val imageWidthDp: Float? = null
+)
 
 /** File kinds save/installation can actually write to disk, and how to open/share them afterwards. */
 enum class ArtifactKind(val mime: String, @DrawableRes val icon: Int) {
@@ -96,6 +109,14 @@ object RinConsoleFormatter {
         "🔄" to LogKind.DOC_UPDATE
     )
 
+    // `print.image(...)` (انظر PrintImageStmt/rin_interpreter.cpp): يطابق تماماً السطر الذي يكتبه
+    // المفسِّر: "🖨️ print.image -> <path> (<size> بايت[، عرض <w>dp])[ — <caption>]". الثلاثة أدناه
+    // تُستخرَج معاً من نفس السطر: المسار (نسبي لمجلد المشروع، تماماً كـ RE_SAVE_PNG/RE_SAVE_RIN)،
+    // عرض العرض الاختياري بالـ dp (width= في اللغة)، والتعليق الاختياري (caption=) بعد "— ".
+    private val RE_PRINT_IMAGE = Regex("""^🖨️\s*print\.image\s*->\s*(.+?)\s*\(""")
+    private val RE_PRINT_IMAGE_WIDTH = Regex("""عرض\s*([0-9]+(?:\.[0-9]+)?)dp""")
+    private val RE_PRINT_IMAGE_CAPTION = Regex("""\)\s*—\s*(.*)$""")
+
     private val RE_SAVE_PNG = Regex("""^🖼️\s*save\s*\(png\)\s*->\s*(.+?)\s*\(""")
     private val RE_SAVE_ZIP = Regex("""^🗜️\s*save\s*\(zip\)\s*->\s*(.+?)\s*\(""")
     private val RE_SAVE_RIN = Regex("""^💾\s*save(?:\s*\(simplified\))?\s*->\s*(.+?)\s*\(""")
@@ -125,7 +146,19 @@ object RinConsoleFormatter {
             .map { rawLine ->
                 val line = rawLine.trimEnd()
                 val trimmedStart = line.trimStart()
-                if (isErrorLine(trimmedStart)) {
+                val imgMatch = if (trimmedStart.startsWith("🖨️")) RE_PRINT_IMAGE.find(trimmedStart) else null
+                if (imgMatch != null) {
+                    val relPath = imgMatch.groupValues[1].trim().trim('"')
+                    val widthDp = RE_PRINT_IMAGE_WIDTH.find(trimmedStart)?.groupValues?.get(1)?.toFloatOrNull()
+                    val caption = RE_PRINT_IMAGE_CAPTION.find(trimmedStart)?.groupValues?.get(1)?.trim()?.takeIf { it.isNotEmpty() }
+                    RinLogLine(
+                        kind = LogKind.PRINT_IMAGE,
+                        text = caption ?: relPath,
+                        imageRelPath = relPath,
+                        imageCaption = caption,
+                        imageWidthDp = widthDp
+                    )
+                } else if (isErrorLine(trimmedStart)) {
                     RinLogLine(LogKind.ERROR, trimmedStart)
                 } else {
                     val match = PREFIX_ORDER.firstOrNull { (prefix, _) -> trimmedStart.startsWith(prefix) }
@@ -167,6 +200,16 @@ object RinConsoleFormatter {
             RE_INSTALL_RIN.find(line)?.let { consider(it.groupValues[1], ArtifactKind.RIN_DOC) }
         }
         return found.values.toList()
+    }
+
+    /** Resolves a `print.image`/artifact relative path against the engine's real base directory,
+     *  returning the file only if it genuinely exists on disk — never a path that merely looks
+     *  plausible. Shared by [extractArtifacts] and [RinJobAdapter]'s inline image thumbnail so both
+     *  use the exact same existence check. */
+    fun resolveExistingFile(relPath: String, baseDir: String): File? {
+        if (relPath.isBlank() || baseDir.isBlank()) return null
+        val file = File(baseDir, relPath.trim().trim('"'))
+        return if (file.exists() && file.isFile) file else null
     }
 
     /** Human friendly "12.4 MB" / "512 KB" / "180 بايت" formatting for progress UI. */
