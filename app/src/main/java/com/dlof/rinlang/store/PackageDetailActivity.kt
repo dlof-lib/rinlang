@@ -1,6 +1,8 @@
 package com.dlof.rinlang.store
 
 import android.graphics.BitmapFactory
+import android.graphics.drawable.ColorDrawable
+import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.util.Base64
 import android.view.LayoutInflater
@@ -287,7 +289,13 @@ class PackageDetailActivity : BaseConnectivityActivity() {
         // حاوية القسم كاملة قبل بناء المقاطع، فلا أثر مرئي لسطر الصياغة نفسه (انظر
         // MarkdownLite.extractPageBackground / pageBackgroundLineRegex).
         if (!readme.isNullOrBlank()) {
-            MarkdownLite.extractPageBackground(readme)?.let { containerReadme.setBackgroundColor(it) }
+            when (val bg = MarkdownLite.extractPageBackground(readme)) {
+                is MarkdownLite.PageBackground.Solid -> containerReadme.background = ColorDrawable(bg.color)
+                is MarkdownLite.PageBackground.Gradient -> containerReadme.background = GradientDrawable(
+                    GradientDrawable.Orientation.TOP_BOTTOM, bg.colors
+                )
+                null -> {}
+            }
         }
         if (readme.isNullOrBlank()) {
             containerReadme.addView(buildReadmeTextSegment(getString(R.string.package_detail_no_readme)))
