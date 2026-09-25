@@ -379,7 +379,7 @@ object MarkdownLite {
             out.append('\n')
 
             val start = out.length
-            appendHighlightedCode(out, content)
+            appendHighlightedCode(out, forceLtrPerLine(content))
             val end = out.length
             out.setSpan(TypefaceSpan("monospace"), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
             out.setSpan(RelativeSizeSpan(0.9f), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
@@ -749,7 +749,9 @@ object MarkdownLite {
 
     private fun appendCode(out: SpannableStringBuilder, value: String) {
         val start = out.length
-        out.append(value) // محتوى الكود يبقى حرفياً دوماً، بلا تحليل تعشيش
+        // نفس إصلاح اتجاه [forceLtrPerLine] لكتل الكود الكاملة، مطبَّق هنا لأن الكود المضمَّن
+        // `` `...` `` معرَّض لنفس مشكلة انعكاس الأقواس/الفواصل إن بدأ بمحرف عربي (مثال: `` `متغيّر=1` ``).
+        out.append(forceLtrPerLine(value)) // محتوى الكود يبقى حرفياً دوماً، بلا تحليل تعشيش
         val end = out.length
         out.setSpan(TypefaceSpan("monospace"), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
         out.setSpan(RelativeSizeSpan(0.92f), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
@@ -1253,11 +1255,30 @@ object MarkdownLite {
     }
 
     /**
+    /**
+     * **إصلاح شكل/ستايل: اتجاه صحيح لكتل الكود داخل صفحة عربية RTL** — كود Rin غالباً يحتوي
+     * سلاسل نصّية عربية (`articleMeta("عنوان المقال", ...)`)، وأول محرف قوي الاتجاه في السطر هو
+     * من يقرِّر اتجاه الفقرة كاملاً عند Android؛ فإذا كان أول محرف عربياً يصبح السطر كله فقرة RTL،
+     * فتُعاد الأقواس/الفواصل بصرياً بترتيب معكوس (المشكلة الظاهرة في الصورة: `;[` بدل `];`،
+     * وسلاسل مثل `"2026-07-27"،` تظهر مقلوبة). الحل: نُطوِّق كل سطر كود بـ
+     * LRE (`\u202A`) ... PDF (`\u202C`) — "تضمين" اتجاه، لا "تجاوز" — فتُثبَّت الفقرة كلّها LTR
+     * بينما تبقى كل سلسلة عربية مُضمَّنة بداخلها تُرسَم صحيحة الاتجاه (RTL) ومقروءة كما كُتبت،
+     * تماماً كما تعرض محرِّرات الأكواد المحترفة كوداً بلغة LTR ضمن مستند RTL. يُطبَّق على مستوى كل
+     * سطر منفرد (لا الكتلة كاملة) لأن Android يحسب اتجاه كل سطر بين فواصل الأسطر (`\n`) بشكل
+     * مستقل، فتضمين واحد يلفّ الكتلة كلها لن يبقى نافذاً عبر أسطرها.
+     */
+    private fun forceLtrPerLine(code: String): String =
+        code.lines().joinToString("\n") { "\u202A$it\u202C" }
+
+    /**
      * يحوّل كود [code] الخام إلى نص مُصنَّف الرموز عبر [codeTokenRegex]: تعليقات (مائلة، رمادية)،
      * نصوص حرفية (أخضر)، أرقام (برتقالي)، توجيهات `@...` (بنفسجي فاتح)، وسوم إغلاق `.end/...`
      * (ذهبي)، كلمات مفتاحية (أزرق، بارز)، استدعاءات دوال (ذهبي)، وأسماء مُسنَدة قبل `=` (برتقالي
      * فاتح) — كل رمز بلون منفصل صريح (لا نطاق لون عام يغطّي الكتلة) لتفادي أي تعارض بين Span
-     * لون شامل وSpans الألوان الجزئية لكل رمز.
+     * لون شامل وSpans الألوان الجزئية لكل رمز. [code] يصل هنا مُطوَّقاً بالفعل عبر
+     * [forceLtrPerLine] (انظر موضع الاستدعاء في `flushCodeBlock`)، فمحارف LRE/PDF تمرّ بلا تلوين
+     * (لا تُطابِق أي رمز في [codeTokenRegex]، فتقع ضمن الأجزاء "العادية" وتُلوَّن بلون النص الافتراضي
+     * كأي محرف غير مرئي آخر — لا أثر بصري لها).
      */
     private fun appendHighlightedCode(out: SpannableStringBuilder, code: String) {
         var idx = 0
