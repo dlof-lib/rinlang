@@ -817,6 +817,7 @@ object MarkdownLite {
     }
 
 
+    /** يعرض «ملصقاً» ملوّناً بصياغة `[لصق:نص|متغير]` — انظر [STICKER_VARIANTS]. متغير غير
      * معروف يسقط بهدوء إلى accent، فلا يتعطّل العرض أبداً بسبب خطأ إملائي بسيط في الاسم.
      */
     private fun appendSticker(out: SpannableStringBuilder, raw: String) {
