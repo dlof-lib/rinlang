@@ -304,6 +304,7 @@ print \"Hello, \" + name + \"!\";
     <string name="job_filter_error">Error</string>
     <string name="job_filter_debug">Depuración</string>
     <string name="job_no_results">Sin coincidencias para esta búsqueda/filtro.</string>
+    <string name="print_image_load_failed_fmt">No se pudo mostrar la imagen: %1$s (archivo ausente o dañado)</string>
     <string name="action_rename_symbol">Cambiar nombre</string>
     <string name="rename_dialog_title">Cambiar nombre del símbolo</string>
     <string name="rename_dialog_hint">Nuevo nombre</string>
