@@ -183,6 +183,10 @@ object PackagingUtils {
         val year = Calendar.getInstance().get(Calendar.YEAR)
         val cleanDescription = description.ifBlank { "مكتبة Rin جاهزة للاستيراد والاستخدام داخل مشاريع Rin." }
         val importPath = "lib/$libraryFileName"
+        val badgeName = name.replace("-", "--").replace("_", "--").replace(" ", "_")
+        val badgeVersion = version.replace("-", "--").replace("_", "--").replace(" ", "_")
+        val badgeLicense = license.replace("-", "--").replace("_", "--").replace(" ", "_")
+        val badgePublisher = publisherName.replace("-", "--").replace("_", "--").replace(" ", "_")
 
         val dependencyRows = if (dependencies.isEmpty()) {
             "| — | لا توجد تبعيات خارجية | — |"
@@ -201,22 +205,113 @@ object PackagingUtils {
         }
 
         return """
-        # ◈ $name
-        
-        > **RIN PACKAGE** · `$version` · **$license**
-        >
-        > $cleanDescription
-        
-        <div align="center">
-        
-        **Rin Library Identity**  ·  `$name`  ·  `$version`
-        
+        <style>
+        .rin-readme {
+          --rin-accent: #8b5cf6;
+          --rin-cyan: #06b6d4;
+          --rin-bg: #0b0f19;
+          --rin-card: #111827;
+          --rin-text: #e5e7eb;
+          --rin-muted: #94a3b8;
+          --rin-radius: 14px;
+          --rin-speed: 2.8s;
+          color: var(--rin-text);
+        }
+        .rin-readme .rin-hero {
+          padding: 24px;
+          border: 1px solid #293244;
+          border-radius: var(--rin-radius);
+          background: linear-gradient(135deg, var(--rin-bg), var(--rin-card));
+          box-shadow: 0 0 0 1px rgba(139,92,246,.08), 0 12px 36px rgba(0,0,0,.18);
+          animation: rin-card-in .7s ease-out both;
+        }
+        .rin-readme .rin-title {
+          font-size: 28px;
+          font-weight: 800;
+          letter-spacing: .02em;
+          margin: 0 0 8px;
+        }
+        .rin-readme .rin-subtitle { color: var(--rin-muted); margin-bottom: 18px; }
+        .rin-readme .rin-badges {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 8px;
+          align-items: center;
+        }
+        .rin-readme .rin-badge {
+          display: inline-flex;
+          border-radius: 8px;
+          overflow: hidden;
+          transform: translateY(0) scale(1);
+          transition: transform .2s ease, filter .2s ease;
+          animation: rin-float var(--rin-speed) ease-in-out infinite;
+        }
+        .rin-readme .rin-badge:nth-child(2) { animation-delay: .18s; }
+        .rin-readme .rin-badge:nth-child(3) { animation-delay: .36s; }
+        .rin-readme .rin-badge:nth-child(4) { animation-delay: .54s; }
+        .rin-readme .rin-badge:hover {
+          transform: translateY(-3px) scale(1.04);
+          filter: drop-shadow(0 0 10px rgba(139,92,246,.55));
+        }
+        .rin-readme .rin-badge img { display: block; }
+        .rin-readme .rin-import {
+          padding: 14px 16px;
+          border-left: 3px solid var(--rin-accent);
+          border-radius: 10px;
+          background: rgba(139,92,246,.08);
+        }
+        .rin-readme .rin-shine {
+          position: relative;
+          overflow: hidden;
+        }
+        .rin-readme .rin-shine::after {
+          content: "";
+          position: absolute;
+          top: 0;
+          left: -120%;
+          width: 55%;
+          height: 100%;
+          transform: skewX(-20deg);
+          background: linear-gradient(90deg, transparent, rgba(255,255,255,.28), transparent);
+          animation: rin-shine 4.5s ease-in-out infinite;
+          pointer-events: none;
+        }
+        @keyframes rin-float {
+          0%, 100% { transform: translateY(0); }
+          50% { transform: translateY(-2px); }
+        }
+        @keyframes rin-shine {
+          0%, 55% { left: -120%; }
+          75%, 100% { left: 140%; }
+        }
+        @keyframes rin-card-in {
+          from { opacity: 0; transform: translateY(8px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .rin-readme .rin-hero,
+          .rin-readme .rin-badge,
+          .rin-readme .rin-shine::after { animation: none !important; }
+        }
+        </style>
+
+        <div class="rin-readme">
+          <div class="rin-hero rin-shine">
+            <div class="rin-title">◈ $name</div>
+            <div class="rin-subtitle">Rin Package · $cleanDescription</div>
+            <div class="rin-badges">
+              <span class="rin-badge"><img alt="Rin Package" src="https://img.shields.io/badge/Rin-Package-8B5CF6?style=for-the-badge&logo=android&logoColor=white"></span>
+              <span class="rin-badge"><img alt="Version" src="https://img.shields.io/badge/version-$badgeVersion-06B6D4?style=for-the-badge"></span>
+              <span class="rin-badge"><img alt="License" src="https://img.shields.io/badge/license-$badgeLicense-22C55E?style=for-the-badge"></span>
+              <span class="rin-badge"><img alt="Publisher" src="https://img.shields.io/badge/publisher-$badgePublisher-F59E0B?style=for-the-badge"></span>
+            </div>
+          </div>
         </div>
-        
+
         ---
-        
+
         ## 01 · Pulse
-        
+
         | العنصر | القيمة |
         |---|---|
         | **Package** | `$name` |
@@ -225,82 +320,80 @@ object PackagingUtils {
         | **License** | `$license` |
         | **Rin file** | `$libraryFileName` |
         | **Year** | `$year` |
-        
+
         ## 02 · Enter Rin
-        
-        هذه هي بوابة المكتبة داخل Rin. استوردها أولاً، ثم استخدم الواجهات التي توفرها المكتبة.
-        
+
+        <div class="rin-readme">
+          <div class="rin-import">
+            **Import path** · `$importPath`
+          </div>
+        </div>
+
         ```rin
         @import "$importPath";
         ```
-        
-        **Import path**
-        
-        ```text
-        $importPath
-        ```
-        
+
         ## 03 · Quick Start
-        
+
         ```rin
         @import "$importPath";
-        
+
         # ابدأ باستخدام API الخاص بالمكتبة هنا
         # ثم أضف الكود الخاص بمشروعك
         ```
-        
+
         > **Rin rule:** يبقى ملف المكتبة داخل `lib/` حتى يعمل الاستيراد بنفس بنية المشروع المحلية.
-        
+
         ## 04 · Package Map
-        
+
         ```text
         $name/
         ├── lib/
         │   └── $libraryFileName
         ├── README.md
         ├── LICENSE
-        ${if (assetFileNames.isEmpty()) "└── assets/              (optional)" else "└── assets/              (optional)"}
+        └── assets/
         ```
-        
+
         ### Files
-        
+
         | Path | Role | State |
         |---|---|---|
         | `lib/$libraryFileName` | كود مكتبة Rin | core |
-        | `README.md` | توثيق الحزمة | docs |
+        | `README.md` | توثيق الحزمة + هوية Rin + badges + CSS motion | docs |
         | `LICENSE` | شروط الاستخدام | legal |
         $assetRows
-        
+
         ## 05 · Dependencies
-        
+
         | Package | Requirement | Role |
         |---|---|---|
         $dependencyRows
-        
+
         ## 06 · Compatibility
-        
+
         | Layer | Expected |
         |---|---|
         | Language | **Rin** |
         | Library format | `.og.rin` |
         | Package format | `.og.rinsdk` |
         | Import root | `lib/` |
-        
+
         ## 07 · About
-        
+
         $cleanDescription
-        
+
         هذه الحزمة منشورة ضمن **Rin Store**. يمكن تثبيتها وإدارتها من داخل بيئة Rin،
         مع الاحتفاظ ببنية المكتبة وملفاتها المرافقة داخل الحزمة.
-        
+
         ## 08 · Publisher
-        
+
         **$publisherName**  
         Package: `$name`  
-        Release: `$version`  
-        
+        Release: `$version`
+
         ---
-        
+
         <sub>Generated with the Rin Package README format · $year</sub>
         """.trimIndent()
     }
