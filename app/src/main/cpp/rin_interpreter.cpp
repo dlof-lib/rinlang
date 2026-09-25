@@ -6648,6 +6648,75 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
         output << message << "\n";
         return;
     }
+    // print.image(path, caption=, width=, if=) -> صورة فعلية مُضمَّنة في كونسول تطبيق أندرويد
+    // (انظر PrintImageStmt في rin_ast.h وRinConsoleFormatter.kt/RinJobAdapter.kt). على عكس أي أمر
+    // print آخر، لا يُنشئ أي ملف جديد ولا يكتب شيئاً على القرص — فقط يتحقّق من وجود ملف صورة موجود
+    // بالفعل على القرص ويُصدِر سطر ناتج مميَّز (بادئة 🖨️) يلتقطه RinConsoleFormatter.kt ليعرض
+    // مصغَّرة (thumbnail) فعلية بدل مجرد أيقونة+نص. الصيغة تطابق أسلوب save/installation تماماً:
+    // "🖨️ print.image -> <rawPath> (<حجم> بايت)[ — caption]\n" — الجزء "-> <rawPath> (" يلتقطه
+    // RE_PRINT_IMAGE في RinConsoleFormatter.kt (نفس منطق RE_SAVE_PNG/RE_SAVE_RIN تماماً).
+    case StmtKind::PrintImageStmt: { auto s = std::static_pointer_cast<PrintImageStmt>(stmt);
+        // if= : نفس دلالة print/print.log تماماً — عند falsy لا شيء يُقيَّم إطلاقاً ولا يُطبع سطر.
+        if (s->ifCond) {
+            Value condVal = evaluate(s->ifCond, env);
+            if (!condVal.isTruthy()) return;
+        }
+
+        Value pathVal = evaluate(s->path, env);
+        if (pathVal.type != Value::Type::STRING) {
+            throw diagErr(diag::Code::E0004_InvalidType, stmt->line, "'print.image': مسار الصورة يجب أن يكون نصاً (string)، لكن وُجد نوع " + pathVal.typeName());
+        }
+        std::string rawPath = pathVal.str;
+        if (rawPath.empty()) {
+            throw diagErr(diag::Code::E0035_RuntimeError, stmt->line, "'print.image': مسار الصورة فارغ");
+        }
+
+        std::string caption;
+        if (s->caption) {
+            Value capVal = evaluate(s->caption, env);
+            if (capVal.type != Value::Type::STRING) {
+                throw diagErr(diag::Code::E0004_InvalidType, stmt->line, "'print.image': 'caption' يجب أن يكون نصاً، لكن وُجد نوع " + capVal.typeName());
+            }
+            caption = capVal.str;
+        }
+        bool hasWidth = false;
+        double widthDp = 0.0;
+        if (s->width) {
+            Value wv = evaluate(s->width, env);
+            if (wv.type != Value::Type::NUMBER) {
+                throw diagErr(diag::Code::E0004_InvalidType, stmt->line, "'print.image': 'width' يجب أن يكون رقماً، لكن وُجد نوع " + wv.typeName());
+            }
+            if (wv.number <= 0) {
+                throw diagErr(diag::Code::E0035_RuntimeError, stmt->line, "'print.image': 'width' يجب أن يكون أكبر من صفر");
+            }
+            hasWidth = true;
+            widthDp = wv.number;
+        }
+
+        // الملف يجب أن يكون موجوداً بالفعل -- print.image يعرض فقط، لا يكتب (على عكس save/installation).
+        std::string fullPath = resolvePath(rawPath, stmt->line);
+        std::ifstream in(fullPath, std::ios::binary | std::ios::ate);
+        if (!in) {
+            throw diagErr(diag::Code::E0036_IOFailure, stmt->line, "'print.image': تعذّر العثور على ملف الصورة '" + rawPath + "' (تأكّد من حفظه أولاً عبر 'save format=png' أو أنّه موجود ضمن مجلد المشروع)");
+        }
+        std::streamsize sizeBytes = in.tellg();
+        in.close();
+
+        // width= يُضمَّن داخل السطر النصي نفسه (بصيغة "، عرض <رقم>dp" داخل نفس القوسين) بدل أن
+        // يبقى مُتحقَّقاً منه فقط دون أثر -- RinConsoleFormatter.kt (RE_PRINT_IMAGE_WIDTH) يستخرجه
+        // ليحدّد العرض الأقصى الفعلي للمصغّرة المعروضة في الكونسول.
+        output << "\U0001F5A8\uFE0F print.image -> " << rawPath << " (" << sizeBytes << " بايت";
+        if (hasWidth) {
+            std::ostringstream wss;
+            if (widthDp == static_cast<long long>(widthDp)) wss << static_cast<long long>(widthDp);
+            else wss << widthDp;
+            output << "\u060C \u0639\u0631\u0636 " << wss.str() << "dp";
+        }
+        output << ")";
+        if (!caption.empty()) output << " \u2014 " << caption;
+        output << "\n";
+        return;
+    }
     // @view...=name ... .end/view -- Indsintime UI markup. Not executable code (no side effect on
     // env/output), but observed via viewReachedCb_ if a caller registered one: this is how a
     // `@view` sitting inside a real `if`/`while`/`for` branch (see setViewReachedCallback()'s
