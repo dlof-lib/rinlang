@@ -163,13 +163,6 @@ object PackagingUtils {
      * ```كتل كود```، ---). أيقونات الملفات الفعلية (الرسومات الحقيقية) تُعرَض بدلاً من ذلك في
      * قائمة "ملفات الحزمة" الأصلية داخل شاشة تفاصيل الحزمة عبر [iconResFor].
      */
-    /**
-     * يولّد هوية README خاصة بحزم Rin.
-     *
-     * التصميم ليس README عاماً شبيهاً بمستودعات أخرى: يبدأ ببطاقة RIN PACKAGE،
-     * ثم "Pulse" مختصر، بوابة الاستيراد، Quick Start، خريطة الحزمة، التبعيات،
-     * التوافق والترخيص. الهدف أن يستطيع المطوّر فهم الحزمة خلال ثوانٍ قبل قراءة التفاصيل.
-     */
     private fun buildReadme(
         name: String,
         version: String,
@@ -181,221 +174,159 @@ object PackagingUtils {
         assetFileNames: List<String> = emptyList()
     ): String {
         val year = Calendar.getInstance().get(Calendar.YEAR)
-        val cleanDescription = description.ifBlank { "مكتبة Rin جاهزة للاستيراد والاستخدام داخل مشاريع Rin." }
-        val importPath = "lib/$libraryFileName"
-        val badgeName = name.replace("-", "--").replace("_", "--").replace(" ", "_")
-        val badgeVersion = version.replace("-", "--").replace("_", "--").replace(" ", "_")
-        val badgeLicense = license.replace("-", "--").replace("_", "--").replace(" ", "_")
-        val badgePublisher = publisherName.replace("-", "--").replace("_", "--").replace(" ", "_")
+        val cleanName = name.trim().ifBlank { "Rin Package" }
+        val cleanVersion = version.trim().ifBlank { "0.0.0" }
+        val cleanPublisher = publisherName.trim().ifBlank { "Rin Community" }
+        val cleanLicense = license.trim().ifBlank { "MIT" }
+        val cleanDescription = description.trim().ifBlank {
+            "مكتبة Rin جاهزة للاستيراد والاستخدام داخل مشاريع Rin."
+        }
+        val safeLibraryName = libraryFileName.trim().ifBlank { "library.og.rin" }
+        val importTarget = "lib/$safeLibraryName"
+
+        val badges = buildString {
+            append("[![Rin](https://img.shields.io/badge/Rin-Package-8B5CF6?style=for-the-badge&logoColor=white)]")
+            append("(https://github.com/dlof-lib/rinlang) ")
+            append("[![Version](https://img.shields.io/badge/version-$cleanVersion-06B6D4?style=for-the-badge)]")
+            append("(README.md) ")
+            append("[![License](https://img.shields.io/badge/license-${cleanLicense.replace(\" \", \"%20\")}-22C55E?style=for-the-badge)]")
+            append("(LICENSE)")
+        }
 
         val dependencyRows = if (dependencies.isEmpty()) {
             "| — | لا توجد تبعيات خارجية | — |"
         } else {
-            dependencies.entries.joinToString("\n") { (depName, depVersion) ->
-                "| `$depName` | `$depVersion` | مطلوبة |"
+            dependencies.entries.sortedBy { it.key.lowercase() }.joinToString("\n") { (depName, depVersion) ->
+                "| `$depName` | `$depVersion` | Required |"
             }
         }
+
+        val dependencySection = """
+            |## 05 — Dependencies
+            |
+            || Package | Version | Type |
+            || :--- | :---: | :---: |
+            |$dependencyRows
+            |""".trimMargin()
 
         val assetRows = if (assetFileNames.isEmpty()) {
-            "| — | لا توجد أصول إضافية | — |"
+            "| `assets/` | — | No additional assets |"
         } else {
-            assetFileNames.joinToString("\n") { assetName ->
-                "| `assets/$assetName` | أصل مرفق | اختياري |"
+            assetFileNames.sortedBy { it.lowercase() }.joinToString("\n") { asset ->
+                val type = when {
+                    asset.endsWith(".png", true) || asset.endsWith(".jpg", true) || asset.endsWith(".webp", true) -> "Image"
+                    asset.endsWith(".svg", true) -> "Vector"
+                    asset.endsWith(".json", true) -> "Metadata"
+                    else -> "Asset"
+                }
+                "| `assets/$asset` | `$type` | Package asset |"
             }
         }
 
+        val tree = buildString {
+            append("```text\n")
+            append("$cleanName/\n")
+            append("├── lib/\n")
+            append("│   └── $safeLibraryName\n")
+            append("├── assets/\n")
+            if (assetFileNames.isEmpty()) append("│   └── (optional)\n")
+            else assetFileNames.sortedBy { it.lowercase() }.forEachIndexed { index, asset ->
+                val branch = if (index == assetFileNames.lastIndex) "└──" else "├──"
+                append("│   $branch $asset\n")
+            }
+            append("├── README.md\n")
+            append("└── LICENSE\n")
+            append("```")
+        }
+
+        val fileRows = buildString {
+            append("| `lib/$safeLibraryName` | Rin source | Entry library |\n")
+            append("| `README.md` | Markdown | Package documentation |\n")
+            append("| `LICENSE` | Text | $cleanLicense |\n")
+            assetFileNames.sortedBy { it.lowercase() }.forEach { asset ->
+                append("| `assets/$asset` | Asset | Optional package resource |\n")
+            }
+        }.trimEnd()
+
         return """
-        <style>
-        .rin-readme {
-          --rin-accent: #8b5cf6;
-          --rin-cyan: #06b6d4;
-          --rin-bg: #0b0f19;
-          --rin-card: #111827;
-          --rin-text: #e5e7eb;
-          --rin-muted: #94a3b8;
-          --rin-radius: 14px;
-          --rin-speed: 2.8s;
-          color: var(--rin-text);
-        }
-        .rin-readme .rin-hero {
-          padding: 24px;
-          border: 1px solid #293244;
-          border-radius: var(--rin-radius);
-          background: linear-gradient(135deg, var(--rin-bg), var(--rin-card));
-          box-shadow: 0 0 0 1px rgba(139,92,246,.08), 0 12px 36px rgba(0,0,0,.18);
-          animation: rin-card-in .7s ease-out both;
-        }
-        .rin-readme .rin-title {
-          font-size: 28px;
-          font-weight: 800;
-          letter-spacing: .02em;
-          margin: 0 0 8px;
-        }
-        .rin-readme .rin-subtitle { color: var(--rin-muted); margin-bottom: 18px; }
-        .rin-readme .rin-badges {
-          display: flex;
-          flex-wrap: wrap;
-          gap: 8px;
-          align-items: center;
-        }
-        .rin-readme .rin-badge {
-          display: inline-flex;
-          border-radius: 8px;
-          overflow: hidden;
-          transform: translateY(0) scale(1);
-          transition: transform .2s ease, filter .2s ease;
-          animation: rin-float var(--rin-speed) ease-in-out infinite;
-        }
-        .rin-readme .rin-badge:nth-child(2) { animation-delay: .18s; }
-        .rin-readme .rin-badge:nth-child(3) { animation-delay: .36s; }
-        .rin-readme .rin-badge:nth-child(4) { animation-delay: .54s; }
-        .rin-readme .rin-badge:hover {
-          transform: translateY(-3px) scale(1.04);
-          filter: drop-shadow(0 0 10px rgba(139,92,246,.55));
-        }
-        .rin-readme .rin-badge img { display: block; }
-        .rin-readme .rin-import {
-          padding: 14px 16px;
-          border-left: 3px solid var(--rin-accent);
-          border-radius: 10px;
-          background: rgba(139,92,246,.08);
-        }
-        .rin-readme .rin-shine {
-          position: relative;
-          overflow: hidden;
-        }
-        .rin-readme .rin-shine::after {
-          content: "";
-          position: absolute;
-          top: 0;
-          left: -120%;
-          width: 55%;
-          height: 100%;
-          transform: skewX(-20deg);
-          background: linear-gradient(90deg, transparent, rgba(255,255,255,.28), transparent);
-          animation: rin-shine 4.5s ease-in-out infinite;
-          pointer-events: none;
-        }
-        @keyframes rin-float {
-          0%, 100% { transform: translateY(0); }
-          50% { transform: translateY(-2px); }
-        }
-        @keyframes rin-shine {
-          0%, 55% { left: -120%; }
-          75%, 100% { left: 140%; }
-        }
-        @keyframes rin-card-in {
-          from { opacity: 0; transform: translateY(8px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-        @media (prefers-reduced-motion: reduce) {
-          .rin-readme .rin-hero,
-          .rin-readme .rin-badge,
-          .rin-readme .rin-shine::after { animation: none !important; }
-        }
-        </style>
-
-        <div class="rin-readme">
-          <div class="rin-hero rin-shine">
-            <div class="rin-title">◈ $name</div>
-            <div class="rin-subtitle">Rin Package · $cleanDescription</div>
-            <div class="rin-badges">
-              <span class="rin-badge"><img alt="Rin Package" src="https://img.shields.io/badge/Rin-Package-8B5CF6?style=for-the-badge&logo=android&logoColor=white"></span>
-              <span class="rin-badge"><img alt="Version" src="https://img.shields.io/badge/version-$badgeVersion-06B6D4?style=for-the-badge"></span>
-              <span class="rin-badge"><img alt="License" src="https://img.shields.io/badge/license-$badgeLicense-22C55E?style=for-the-badge"></span>
-              <span class="rin-badge"><img alt="Publisher" src="https://img.shields.io/badge/publisher-$badgePublisher-F59E0B?style=for-the-badge"></span>
-            </div>
-          </div>
-        </div>
-
-        ---
-
-        ## 01 · Pulse
-
-        | العنصر | القيمة |
-        |---|---|
-        | **Package** | `$name` |
-        | **Version** | `$version` |
-        | **Publisher** | $publisherName |
-        | **License** | `$license` |
-        | **Rin file** | `$libraryFileName` |
-        | **Year** | `$year` |
-
-        ## 02 · Enter Rin
-
-        <div class="rin-readme">
-          <div class="rin-import">
-            **Import path** · `$importPath`
-          </div>
-        </div>
-
-        ```rin
-        @import "$importPath";
-        ```
-
-        ## 03 · Quick Start
-
-        ```rin
-        @import "$importPath";
-
-        # ابدأ باستخدام API الخاص بالمكتبة هنا
-        # ثم أضف الكود الخاص بمشروعك
-        ```
-
-        > **Rin rule:** يبقى ملف المكتبة داخل `lib/` حتى يعمل الاستيراد بنفس بنية المشروع المحلية.
-
-        ## 04 · Package Map
-
-        ```text
-        $name/
-        ├── lib/
-        │   └── $libraryFileName
-        ├── README.md
-        ├── LICENSE
-        └── assets/
-        ```
-
-        ### Files
-
-        | Path | Role | State |
-        |---|---|---|
-        | `lib/$libraryFileName` | كود مكتبة Rin | core |
-        | `README.md` | توثيق الحزمة + هوية Rin + badges + CSS motion | docs |
-        | `LICENSE` | شروط الاستخدام | legal |
-        $assetRows
-
-        ## 05 · Dependencies
-
-        | Package | Requirement | Role |
-        |---|---|---|
-        $dependencyRows
-
-        ## 06 · Compatibility
-
-        | Layer | Expected |
-        |---|---|
-        | Language | **Rin** |
-        | Library format | `.og.rin` |
-        | Package format | `.og.rinsdk` |
-        | Import root | `lib/` |
-
-        ## 07 · About
-
-        $cleanDescription
-
-        هذه الحزمة منشورة ضمن **Rin Store**. يمكن تثبيتها وإدارتها من داخل بيئة Rin،
-        مع الاحتفاظ ببنية المكتبة وملفاتها المرافقة داخل الحزمة.
-
-        ## 08 · Publisher
-
-        **$publisherName**  
-        Package: `$name`  
-        Release: `$version`
-
-        ---
-
-        <sub>Generated with the Rin Package README format · $year</sub>
-        """.trimIndent()
+        |# $cleanName
+        |
+        |$badges
+        |
+        |> **$cleanDescription**
+        |
+        |---
+        |
+        |## 01 — Package Pulse
+        |
+        || Field | Value |
+        || :--- | :--- |
+        || **Package** | `$cleanName` |
+        || **Version** | `$cleanVersion` |
+        || **Publisher** | `$cleanPublisher` |
+        || **License** | `$cleanLicense` |
+        || **Runtime** | Rin |
+        || **Format** | `.og.rin` / `.og.rinsdk` |
+        || **Published** | $year |
+        |
+        |## 02 — What is it?
+        |
+        |$cleanDescription
+        |
+        |This package follows the **Rin Package** structure and is designed to be imported directly from a Rin project.
+        |
+        |## 03 — Install / Import
+        |
+        |```rin
+        |@import "$importTarget";
+        |```
+        |
+        |After importing the library, use the functions and values exposed by the package normally in your Rin source.
+        |
+        |## 04 — Quick Start
+        |
+        |```rin
+        |@import "$importTarget";
+        |
+        |print("Rin package loaded: $cleanName");
+        |```
+        |
+        |$dependencySection
+        |
+        |## 06 — Package Map
+        |
+        |$tree
+        |
+        |## 07 — Files
+        |
+        || Path | Type | Purpose |
+        || :--- | :---: | :--- |
+        |$fileRows
+        |
+        |## 08 — Assets
+        |
+        || Path | Type | Description |
+        || :--- | :---: | :--- |
+        |$assetRows
+        |
+        |## 09 — Rin Compatibility
+        |
+        |- **Language:** Rin
+        |- **Library format:** `.og.rin`
+        |- **Package format:** `.og.rinsdk`
+        |- **Import model:** `@import`
+        |- **Distribution:** Rin Store / local package
+        |
+        |## 10 — Developer Notes
+        |
+        |This README is generated by the Rin package builder. A publisher-provided `README.md` always takes priority over this generated document.
+        |
+        |For a custom package, keep the public API small, document exported functions, and keep examples directly runnable in Rin.
+        |
+        |---
+        |
+        |**Rin Package** · `$cleanName` · `$cleanVersion` · `$cleanPublisher`
+        """.trimMargin()
     }
 
     /**
