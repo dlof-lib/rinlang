@@ -802,6 +802,8 @@ static std::string serializeValueLiteral(const Value& v) {
         case Value::Type::BOOL: return v.boolean ? "true" : "false";
         case Value::Type::STRING: return "\"" + escapeStringLiteral(v.str) + "\"";
         case Value::Type::FUNCTION: return "nil";
+        // Instances are runtime objects, not Rin literals. Keep literal serialization safe.
+        case Value::Type::INSTANCE: return "nil";
         case Value::Type::ARRAY: {
             std::string out = "[";
             if (v.array) {
