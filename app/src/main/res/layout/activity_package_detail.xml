@@ -1,9 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  صفحة "تفاصيل الحزمة" — نسخة مطوَّرة بصرياً: رأس (hero) بخلفية متدرّجة خفيفة يجمع الاسم
-  والوصف والناشر وشريط إحصائيات + زر تثبيت بارز، تليه بطاقات أقسام (README / الترخيص /
-  الملفات) موحّدة الشكل بعناوين مرفقة بأيقونة. كل معرّفات العناصر المرتبطة بـ
-  PackageDetailActivity.kt بقيت كما هي بلا أي تغيير.
+  صفحة "تفاصيل الحزمة" — نسخة مطوَّرة بصرياً على غرار صفحة مستودع GitHub: رأس (hero) بخلفية
+  متدرّجة خفيفة يجمع الاسم والوصف والناشر وشريط إحصائيات + زر تثبيت بارز، يليه مباشرة متصفّح
+  ملفات حقيقي بشريط مسار (breadcrumb) قابل للنقر يدخل/يخرج من المجلدات فعلياً (كترتيب GitHub:
+  الملفات أولاً)، ثم بطاقة README.md بشريط عنوان ثابت باسم الملف، ثم الترخيص أخيراً. كل معرّفات
+  العناصر المرتبطة بـPackageDetailActivity.kt بقيت كما هي بلا أي تغيير.
 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
@@ -307,6 +308,59 @@
             </LinearLayout>
             </FrameLayout>
 
+            <!-- قسم ملفات الحزمة — أولاً، قبل README (كترتيب صفحة مستودع GitHub الفعلي: قائمة
+                 الملفات أعلى الصفحة، وREADME مُصيَّراً أسفلها). -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="20dp"
+                android:layout_marginBottom="8dp"
+                android:drawableStart="@drawable/ic_files_stack"
+                android:drawablePadding="8dp"
+                android:gravity="center_vertical"
+                android:text="@string/package_detail_section_files"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:textColor="@color/rin_on_toolbar" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:background="@drawable/bg_detail_section_card">
+
+                <!-- شريط المسار (breadcrumb) — دائم أعلى القائمة، يُعاد ملؤه ديناميكياً في كل
+                     تنقّل عبر PackageDetailActivity.renderFilesBreadcrumb، بنفس مبدأ شريط المسار
+                     القابل للنقر أعلى صفحة ملفات GitHub. -->
+                <HorizontalScrollView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:scrollbars="none">
+
+                    <LinearLayout
+                        android:id="@+id/containerFilesBreadcrumb"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical"
+                        android:paddingHorizontal="14dp"
+                        android:paddingVertical="10dp" />
+                </HorizontalScrollView>
+
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:background="@color/rin_divider" />
+
+                <LinearLayout
+                    android:id="@+id/containerDetailFiles"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:divider="@drawable/divider_hairline"
+                    android:showDividers="middle" />
+            </LinearLayout>
+
             <!-- قسم README.md -->
             <TextView
                 android:layout_width="wrap_content"
@@ -322,12 +376,51 @@
                 android:textColor="@color/rin_on_toolbar" />
 
             <LinearLayout
-                android:id="@+id/containerDetailReadme"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="vertical"
-                android:background="@drawable/bg_detail_section_card"
-                android:padding="15dp" />
+                android:background="@drawable/bg_detail_section_card">
+
+                <!-- شريط عنوان ثابت باسم الملف داخل البطاقة (icon + "README.md") — نفس شكل
+                     شريط عنوان بطاقة الـREADME في صفحة مستودع GitHub. -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:paddingHorizontal="14dp"
+                    android:paddingVertical="10dp">
+
+                    <ImageView
+                        android:layout_width="16dp"
+                        android:layout_height="16dp"
+                        android:src="@drawable/ic_readme_doc"
+                        app:tint="@color/rin_editor_hint"
+                        android:contentDescription="@null" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:fontFamily="monospace"
+                        android:textStyle="bold"
+                        android:textSize="12.5sp"
+                        android:textColor="@color/rin_on_toolbar"
+                        android:text="README.md" />
+                </LinearLayout>
+
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:background="@color/rin_divider" />
+
+                <LinearLayout
+                    android:id="@+id/containerDetailReadme"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="15dp" />
+            </LinearLayout>
 
             <!-- قسم الترخيص -->
             <TextView
@@ -354,29 +447,6 @@
                 android:textSize="11.5sp"
                 android:lineSpacingExtra="3dp"
                 android:textColor="@color/rin_editor_hint" />
-
-            <!-- قسم ملفات الحزمة -->
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="20dp"
-                android:layout_marginBottom="8dp"
-                android:drawableStart="@drawable/ic_files_stack"
-                android:drawablePadding="8dp"
-                android:gravity="center_vertical"
-                android:text="@string/package_detail_section_files"
-                android:textSize="14sp"
-                android:textStyle="bold"
-                android:textColor="@color/rin_on_toolbar" />
-
-            <LinearLayout
-                android:id="@+id/containerDetailFiles"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:background="@drawable/bg_detail_section_card"
-                android:divider="@drawable/divider_hairline"
-                android:showDividers="middle" />
 
         </LinearLayout>
     </androidx.core.widget.NestedScrollView>
