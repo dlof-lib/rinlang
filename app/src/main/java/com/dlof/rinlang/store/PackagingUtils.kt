@@ -163,6 +163,13 @@ object PackagingUtils {
      * ```كتل كود```، ---). أيقونات الملفات الفعلية (الرسومات الحقيقية) تُعرَض بدلاً من ذلك في
      * قائمة "ملفات الحزمة" الأصلية داخل شاشة تفاصيل الحزمة عبر [iconResFor].
      */
+    /**
+     * يولّد هوية README خاصة بحزم Rin.
+     *
+     * التصميم ليس README عاماً شبيهاً بمستودعات أخرى: يبدأ ببطاقة RIN PACKAGE،
+     * ثم "Pulse" مختصر، بوابة الاستيراد، Quick Start، خريطة الحزمة، التبعيات،
+     * التوافق والترخيص. الهدف أن يستطيع المطوّر فهم الحزمة خلال ثوانٍ قبل قراءة التفاصيل.
+     */
     private fun buildReadme(
         name: String,
         version: String,
@@ -174,64 +181,128 @@ object PackagingUtils {
         assetFileNames: List<String> = emptyList()
     ): String {
         val year = Calendar.getInstance().get(Calendar.YEAR)
-        val cleanDescription = description.ifBlank { "حزمة Rin جاهزة للاستيراد والاستخدام مباشرة في مشروعك." }
+        val cleanDescription = description.ifBlank { "مكتبة Rin جاهزة للاستيراد والاستخدام داخل مشاريع Rin." }
+        val importPath = "lib/$libraryFileName"
 
-        val dependenciesSection = if (dependencies.isEmpty()) "" else buildString {
-            append("\n## التبعيات\n\n")
-            append("تحتاج هذه الحزمة قبل تثبيتها إلى توفّر الحزم التالية:\n\n")
-            dependencies.entries.forEach { (depName, depVersion) ->
-                append("- **$depName** — الإصدار `$depVersion`\n")
+        val dependencyRows = if (dependencies.isEmpty()) {
+            "| — | لا توجد تبعيات خارجية | — |"
+        } else {
+            dependencies.entries.joinToString("\n") { (depName, depVersion) ->
+                "| `$depName` | `$depVersion` | مطلوبة |"
             }
         }
 
-        // قائمة "محتويات الحزمة": ملف المكتبة نفسه أولاً، ثم README وLICENSE، ثم كل الأصول
-        // الاختيارية. أيقونات هذه الملفات الحقيقية تظهر لاحقاً في قائمة الملفات الأصلية بالتطبيق.
-        val contentsSection = buildString {
-            append("\n## محتويات الحزمة\n\n")
-            append("- `lib/$libraryFileName` — الكود المصدري للمكتبة\n")
-            append("- `README.md` — هذا الملف\n")
-            append("- `LICENSE` — نص الترخيص\n")
-            assetFileNames.forEach { assetName ->
-                append("- `assets/$assetName`\n")
+        val assetRows = if (assetFileNames.isEmpty()) {
+            "| — | لا توجد أصول إضافية | — |"
+        } else {
+            assetFileNames.joinToString("\n") { assetName ->
+                "| `assets/$assetName` | أصل مرفق | اختياري |"
             }
         }
 
         return """
-        |# $name
-        |
-        |**$cleanDescription**
-        |
-        |---
-        |
-        |## معلومات الحزمة
-        |
-        |- **الاسم:** `$name`
-        |- **الإصدار:** `$version`
-        |- **الناشر:** $publisherName
-        |- **الترخيص:** $license
-        |- **سنة النشر:** $year
-        |
-        |## الوصف
-        |
-        |$cleanDescription
-        |$dependenciesSection
-        |## طريقة الاستخدام
-        |
-        |أضف سطر الاستيراد التالي في أعلى ملف Rin الخاص بك:
-        |
-        |```
-        |@import "lib/$libraryFileName";
-        |```
-        |
-        |بعد ذلك، يمكنك مباشرة استخدام كل ما تُصدِّره هذه المكتبة من دوال وعناصر داخل كودك.
-        |$contentsSection
-        |---
-        |
-        |### عن هذه الحزمة
-        |
-        |تم إعداد هذا الملف تلقائياً ونشر الحزمة عبر **متجر Rin (Rin Store)** — تصفّح وثبّت
-        |وشارك حزم مجتمع Rin مباشرة من داخل التطبيق، بلا حاجة لأي أداة خارجية.
-    """.trimMargin()
+        # ◈ $name
+        
+        > **RIN PACKAGE** · `$version` · **$license**
+        >
+        > $cleanDescription
+        
+        <div align="center">
+        
+        **Rin Library Identity**  ·  `$name`  ·  `$version`
+        
+        </div>
+        
+        ---
+        
+        ## 01 · Pulse
+        
+        | العنصر | القيمة |
+        |---|---|
+        | **Package** | `$name` |
+        | **Version** | `$version` |
+        | **Publisher** | $publisherName |
+        | **License** | `$license` |
+        | **Rin file** | `$libraryFileName` |
+        | **Year** | `$year` |
+        
+        ## 02 · Enter Rin
+        
+        هذه هي بوابة المكتبة داخل Rin. استوردها أولاً، ثم استخدم الواجهات التي توفرها المكتبة.
+        
+        ```rin
+        @import "$importPath";
+        ```
+        
+        **Import path**
+        
+        ```text
+        $importPath
+        ```
+        
+        ## 03 · Quick Start
+        
+        ```rin
+        @import "$importPath";
+        
+        # ابدأ باستخدام API الخاص بالمكتبة هنا
+        # ثم أضف الكود الخاص بمشروعك
+        ```
+        
+        > **Rin rule:** يبقى ملف المكتبة داخل `lib/` حتى يعمل الاستيراد بنفس بنية المشروع المحلية.
+        
+        ## 04 · Package Map
+        
+        ```text
+        $name/
+        ├── lib/
+        │   └── $libraryFileName
+        ├── README.md
+        ├── LICENSE
+        ${if (assetFileNames.isEmpty()) "└── assets/              (optional)" else "└── assets/              (optional)"}
+        ```
+        
+        ### Files
+        
+        | Path | Role | State |
+        |---|---|---|
+        | `lib/$libraryFileName` | كود مكتبة Rin | core |
+        | `README.md` | توثيق الحزمة | docs |
+        | `LICENSE` | شروط الاستخدام | legal |
+        $assetRows
+        
+        ## 05 · Dependencies
+        
+        | Package | Requirement | Role |
+        |---|---|---|
+        $dependencyRows
+        
+        ## 06 · Compatibility
+        
+        | Layer | Expected |
+        |---|---|
+        | Language | **Rin** |
+        | Library format | `.og.rin` |
+        | Package format | `.og.rinsdk` |
+        | Import root | `lib/` |
+        
+        ## 07 · About
+        
+        $cleanDescription
+        
+        هذه الحزمة منشورة ضمن **Rin Store**. يمكن تثبيتها وإدارتها من داخل بيئة Rin،
+        مع الاحتفاظ ببنية المكتبة وملفاتها المرافقة داخل الحزمة.
+        
+        ## 08 · Publisher
+        
+        **$publisherName**  
+        Package: `$name`  
+        Release: `$version`  
+        
+        ---
+        
+        <sub>Generated with the Rin Package README format · $year</sub>
+        """.trimIndent()
     }
 
     /**
