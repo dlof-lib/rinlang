@@ -354,8 +354,11 @@ class PackageDetailActivity : BaseConnectivityActivity() {
             )
             textSize = 13.5f
             setLineSpacing(dp(5f).toFloat(), 1.08f)
-            text = MarkdownLite.toSpannable("```rin\n$code\n```")
         }
+        // نستخدم applyTo بدل تعيين .text مباشرة: يُفعِّل LinkMovementMethod، وهو ما يجعل زر
+        // "نسخ" الجديد أعلى بطاقة الكود (MarkdownLite.CopyCodeSpan) قابلاً للنقر فعلياً هنا أيضاً،
+        // لا فقط داخل مقاطع README النصية العادية (buildReadmeTextSegment).
+        MarkdownLite.applyTo(txtCode, "```rin\n$code\n```")
         card.addView(txtCode)
 
         val badge = TextView(this).apply {
