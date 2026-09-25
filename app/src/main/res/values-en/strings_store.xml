@@ -98,6 +98,7 @@
     <string name="package_detail_live_preview_output_label">Execution Output</string>
     <string name="package_detail_live_preview_error_label">Preview unavailable</string>
     <string name="package_detail_live_preview_no_output">The code ran successfully with no UI or printed output to show.</string>
+    <string name="package_detail_language_chip_format">%1$s %2$.0f%%</string>
     <string name="package_detail_no_readme">This package has no README.md file.</string>
     <string name="package_detail_no_license">This package has no license file.</string>
     <string name="package_detail_meta_format">%1$s • %2$s • %3$d downloads • ★ %4$.1f (%5$d ratings)</string>
