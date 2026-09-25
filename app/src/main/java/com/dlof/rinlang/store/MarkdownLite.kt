@@ -1,5 +1,8 @@
 package com.dlof.rinlang.store
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.Path
@@ -7,9 +10,11 @@ import android.graphics.RectF
 import android.graphics.Typeface
 import android.text.SpannableStringBuilder
 import android.text.Spanned
+import android.text.TextPaint
 import android.text.method.LinkMovementMethod
 import android.text.style.BackgroundColorSpan
 import android.text.style.BulletSpan
+import android.text.style.ClickableSpan
 import android.text.style.ForegroundColorSpan
 import android.text.style.LeadingMarginSpan
 import android.text.style.LineBackgroundSpan
@@ -20,7 +25,9 @@ import android.text.style.StyleSpan
 import android.text.style.TypefaceSpan
 import android.text.style.URLSpan
 import android.text.style.UnderlineSpan
+import android.view.View
 import android.widget.TextView
+import android.widget.Toast
 
 /**
  * محوّل Markdown → معاينة حقيقية داخل TextView واحد، عبر بناء [SpannableStringBuilder] مباشرة
@@ -57,6 +64,14 @@ import android.widget.TextView
  * - **جديد: كتل كود Rin/indsin حيّة** — [splitLiveCodeBlocks] يفصل ```rin ```/```indsin ``` عن
  *   بقية النص Markdown العادي، ليعرضها المستدعي (PackageDetailActivity) ببطاقة معاينة حيّة
  *   حقيقية (وجهة مُصيَّرة، أو نتيجة تنفيذ فعلية لغير ذلك) بدل نص كود ثابت.
+ * - **جديد: تلوين نحوي حقيقي (Syntax Highlighting)** — كل كتلة كود ```لغة ``` تُحلَّل الآن عبر
+ *   [appendHighlightedCode] إلى رموز مصنَّفة (تعليقات/نصوص حرفية/أرقام/كلمات مفتاحية/استدعاءات
+ *   دوال/أسماء مُسنَدة/توجيهات @/وسوم .end) بنفس لوحة ألوان محرِّر Rin الحقيقي (Night theme)،
+ *   بدل كتلة رمادية موحَّدة اللون — لتقارب تجربة قراءة كتل الكود من محرِّرات الأكواد الاحترافية.
+ * - **جديد: رأس بطاقة كود احترافي** — كل كتلة كود تُعرَض الآن داخل بطاقة موحَّدة برأس علوي:
+ *   نقطة ملوَّنة بهوية اللغة + اسمها، ثم زر "نسخ" حقيقي قابل للنقر (عبر [CopyCodeSpan]) ينسخ
+ *   الكود الخام كاملاً للحافظة (Clipboard) مع تنبيه تأكيد قصير، وخط فاصل رفيع أسفل الرأس يفصله
+ *   بصرياً عن جسم الكود — تماماً كرأس نافذة كود في IDE احترافي، لا مجرد وسم عائم أعلى الكتلة.
  *
  * الاستخدام المباشر: `textView.text = MarkdownLite.toSpannable(md)`.
  * الاستخدام الموصى به عند وجود روابط قابلة للنقر: `MarkdownLite.applyTo(textView, md)`.
@@ -91,6 +106,87 @@ object MarkdownLite {
     private const val COLOR_TABLE_HEADER = 0xFF7C5CFF.toInt()    // rin_accent
     private const val COLOR_TABLE_BORDER = 0xFF6E7480.toInt()    // rin_editor_hint
     private const val COLOR_TABLE_BG = 0x14FFFFFF                // أخفّ من خلفية كتلة الكود
+
+    // لوحة تلوين نحوي (Syntax Palette) — نفس ألوان محرِّر Rin الحقيقي بالضبط (values-night/colors.xml)
+    // حتى تبدو معاينة README جزءاً من هوية المحرِّر البصرية نفسها، لا لوحة مستقلة مختلَقة هنا.
+    private const val COLOR_SYNTAX_KEYWORD = 0xFF569CD6.toInt()    // syntax_keyword
+    private const val COLOR_SYNTAX_DIRECTIVE = 0xFFC586C0.toInt()  // syntax_container_keyword / syntax_make_directive
+    private const val COLOR_SYNTAX_STRING = 0xFF6FDC9E.toInt()     // syntax_string
+    private const val COLOR_SYNTAX_NUMBER = 0xFFFFA95C.toInt()     // syntax_number
+    private const val COLOR_SYNTAX_COMMENT = 0xFF9AA0AB.toInt()    // syntax_comment
+    private const val COLOR_SYNTAX_BUILTIN = 0xFFE6C260.toInt()    // syntax_builtin / syntax_tag
+    private const val COLOR_SYNTAX_ATTR = 0xFFF2A65A.toInt()       // syntax_style_keyword
+
+    // خط الفصل الرفيع أسفل رأس بطاقة الكود
+    private const val COLOR_COPY_BUTTON_BG = 0x33FFFFFF
+    private const val COLOR_HEADER_RULE = 0x1FFFFFFF
+
+    /** لون هوية بصرية مميَّز لكل لغة (نقطة + وسم اسمها أعلى بطاقة الكود) — يسقط بهدوء إلى لون
+     *  محايد للغات غير المدرَجة، فلا يتعطّل عرض أي كتلة كود بسبب اسم لغة غير معروف. */
+    private val LANGUAGE_ACCENTS: Map<String, Int> = mapOf(
+        "rin" to 0xFF7C5CFF.toInt(),
+        "indsin" to 0xFF7C5CFF.toInt(),
+        "kotlin" to 0xFFB197FC.toInt(),
+        "kt" to 0xFFB197FC.toInt(),
+        "java" to 0xFFEA9B4C.toInt(),
+        "swift" to 0xFFF2784B.toInt(),
+        "python" to 0xFFE6C260.toInt(),
+        "py" to 0xFFE6C260.toInt(),
+        "javascript" to 0xFFE9D85C.toInt(),
+        "js" to 0xFFE9D85C.toInt(),
+        "typescript" to 0xFF5C9DE9.toInt(),
+        "ts" to 0xFF5C9DE9.toInt(),
+        "json" to 0xFF9AA0AB.toInt(),
+        "xml" to 0xFFE6C260.toInt(),
+        "html" to 0xFFF2784B.toInt(),
+        "css" to 0xFF5C9DE9.toInt(),
+        "bash" to 0xFF6FDC9E.toInt(),
+        "sh" to 0xFF6FDC9E.toInt(),
+        "shell" to 0xFF6FDC9E.toInt(),
+        "c" to 0xFF5C9DE9.toInt(),
+        "cpp" to 0xFF5C9DE9.toInt(),
+        "c++" to 0xFF5C9DE9.toInt(),
+        "go" to 0xFF5CD6E9.toInt(),
+        "rust" to 0xFFEA9B4C.toInt(),
+        "sql" to 0xFF6FDC9E.toInt(),
+        "yaml" to 0xFFEA9B4C.toInt(),
+        "yml" to 0xFFEA9B4C.toInt()
+    )
+    private val LANGUAGE_ACCENT_DEFAULT = COLOR_CODE_TEXT
+
+    /** مجموعة موحَّدة من الكلمات المفتاحية: كلمات لغة Rin الحقيقية (من rin_lexer.cpp) + مجموعة
+     *  عامة شائعة عبر أكثر اللغات ذكراً في ملفات README (Kotlin/Python/JS/TS/C/C++/Java/Swift/Go/
+     *  Rust/Bash) — قائمة واحدة كافية عملياً بدل تفريع منطق كامل لكل لغة على حدة. */
+    private val KEYWORDS: Set<String> = setOf(
+        // Rin (rin_lexer.cpp)
+        "and", "or", "break", "container", "continue", "data", "else", "end", "false", "file",
+        "for", "fun", "if", "import", "installation", "let", "link", "merge", "nil", "pipe",
+        "print", "return", "rinopen", "route", "save", "show", "simplified", "text", "translation",
+        "true", "tying", "while",
+        // شائعة عبر لغات أخرى
+        "def", "class", "struct", "enum", "interface", "trait", "impl", "extends", "implements",
+        "package", "namespace", "using", "include", "module", "export", "async", "await", "yield",
+        "in", "is", "as", "self", "this", "super", "new", "try", "catch", "finally", "throw",
+        "throws", "switch", "case", "default", "public", "private", "protected", "static", "final",
+        "const", "var", "val", "function", "fn", "void", "int", "float", "double", "bool",
+        "boolean", "string", "char", "null", "none", "None", "lambda", "with", "from", "elif",
+        "pass", "raise", "except", "global", "typeof", "instanceof", "override", "abstract",
+        "sealed", "companion", "object", "when", "do", "unsigned", "signed", "typedef", "template"
+    )
+
+    /** رموز محاطة بالخوارزمية أدناه بترتيب أولوية: تعليق كتلة، تعليق سطر، نص حرفي، توجيه @،
+     *  وسم إغلاق .end/، رقم، كلمة مفتاحية، استدعاء دالة، اسم مُسنَد قبل =. */
+    private val codeTokenRegex = Regex(
+        "(/\\*[\\s\\S]*?\\*/)" +
+            "|(//[^\n]*|#[^\n]*)" +
+            "|(\"(?:\\\\.|[^\"\\\\\n])*\"|'(?:\\\\.|[^'\\\\\n])*'|`(?:\\\\.|[^`\\\\])*`)" +
+            "|(@[A-Za-z_][A-Za-z0-9_.]*)" +
+            "|(\\.end/[A-Za-z_]+)" +
+            "|\\b(\\d+(?:\\.\\d+)?)\\b" +
+            "|\\b(" + KEYWORDS.joinToString("|") + ")\\b" +
+            "|\\b([A-Za-z_][A-Za-z0-9_]*)(?=\\()" +
+            "|\\b([A-Za-z_][A-Za-z0-9_]*)\\b(?=\\s*=(?!=))"
+    )
 
     /** ألوان "ستيكر Rin": كل صيغة اسم → (خلفية، نص). الافتراضي "accent" عند عدم ذكر أي اسم. */
     private val STICKER_VARIANTS: Map<String, Pair<Int, Int>> = mapOf(
@@ -149,18 +245,27 @@ object MarkdownLite {
         fun flushCodeBlock() {
             if (codeBuffer.isEmpty() && codeLang.isBlank()) return
             blockGap()
-            if (codeLang.isNotBlank()) appendLanguageChip(out, codeLang)
             val content = codeBuffer.toString().trimEnd('\n')
+
+            // بداية البطاقة الكاملة (رأس + خط فاصل + جسم الكود) — نطاق واحد متّصل حتى تُرسَم
+            // الزوايا المدوَّرة والحدّ الخفيف حول الكل معاً، لا حول جسم الكود وحده.
+            val cardStart = out.length
+            appendCodeHeader(out, codeLang, content)
+            out.append('\n')
+            val ruleStart = out.length
+            out.append('\u00A0')
+            out.setSpan(RuleSpan(COLOR_HEADER_RULE, 1.5f), ruleStart, out.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            out.append('\n')
+
             val start = out.length
-            out.append(content)
+            appendHighlightedCode(out, content)
             val end = out.length
             out.setSpan(TypefaceSpan("monospace"), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
             out.setSpan(RelativeSizeSpan(0.9f), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-            out.setSpan(ForegroundColorSpan(COLOR_CODE_TEXT), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
             out.setSpan(LeadingMarginSpan.Standard(18), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
             out.setSpan(
-                RoundedCardSpan(COLOR_CODE_BLOCK_BG, COLOR_CARD_BORDER, start, end),
-                start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                RoundedCardSpan(COLOR_CODE_BLOCK_BG, COLOR_CARD_BORDER, cardStart, end),
+                cardStart, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
             )
             codeBuffer.clear()
             codeLang = ""
@@ -510,14 +615,98 @@ object MarkdownLite {
         out.setSpan(RelativeSizeSpan(0.86f), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
     }
 
-    /** وسم صغير باسم اللغة أعلى كتلة كود، معاد استخدامه بنفس مكوّن StickerSpan لبقاء الهوية موحّدة. */
-    private fun appendLanguageChip(out: SpannableStringBuilder, lang: String) {
-        val start = out.length
-        out.append(lang.uppercase())
-        val end = out.length
-        out.setSpan(StickerSpan(0x33FFFFFF, COLOR_CODE_TEXT), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-        out.setSpan(RelativeSizeSpan(0.68f), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-        out.append("\n")
+    /** لون هوية اللغة (نقطة + وسم الاسم)، محايد للغات غير المدرَجة في [LANGUAGE_ACCENTS]. */
+    private fun languageAccentColor(lang: String): Int =
+        LANGUAGE_ACCENTS[lang.trim().lowercase()] ?: LANGUAGE_ACCENT_DEFAULT
+
+    /**
+     * رأس بطاقة كود احترافي واحد: نقطة ملوَّنة بهوية اللغة + اسمها (إن ذُكرت لغة، وإلا وسم عام
+     * "CODE")، ثم مسافة، ثم زر "نسخ" حقيقي قابل للنقر عبر [CopyCodeSpan] — ينسخ [code] الخام
+     * كاملاً (بلا أي تنسيق) للحافظة عند النقر، تماماً كزر النسخ في كتل كود GitHub/محرِّرات IDE.
+     */
+    private fun appendCodeHeader(out: SpannableStringBuilder, lang: String, code: String) {
+        val accent = languageAccentColor(lang)
+        val dotStart = out.length
+        out.append("\u25CF ") // نقطة ملوَّنة صغيرة قبل اسم اللغة
+        out.setSpan(ForegroundColorSpan(accent), dotStart, out.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        out.setSpan(RelativeSizeSpan(0.62f), dotStart, out.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+
+        val labelStart = out.length
+        out.append(if (lang.isNotBlank()) lang.uppercase() else "CODE")
+        out.setSpan(ForegroundColorSpan(accent), labelStart, out.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        out.setSpan(StyleSpan(Typeface.BOLD), labelStart, out.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        out.setSpan(TypefaceSpan("monospace"), labelStart, out.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        out.setSpan(RelativeSizeSpan(0.68f), labelStart, out.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+
+        out.append("  ")
+
+        val copyStart = out.length
+        out.append("\u29C9 \u0646\u0633\u062E") // "⧉ نسخ"
+        val copyEnd = out.length
+        out.setSpan(StickerSpan(COLOR_COPY_BUTTON_BG, COLOR_CODE_TEXT), copyStart, copyEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        out.setSpan(RelativeSizeSpan(0.66f), copyStart, copyEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        out.setSpan(CopyCodeSpan(code), copyStart, copyEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+    }
+
+    /**
+     * زر نسخ حقيقي: [ClickableSpan] ينسخ [code] الخام كاملاً إلى حافظة الجهاز عند النقر (عبر
+     * سياق [widget] الممرَّر تلقائياً من TextView، بلا حاجة لتمرير Context لهذا الملف بأكمله)،
+     * مع رسالة تأكيد قصيرة (Toast). يعمل فقط إن كان TextView مُفعَّلاً بـ[LinkMovementMethod]
+     * (يتم ذلك تلقائياً عبر [applyTo]).
+     */
+    private class CopyCodeSpan(private val code: String) : ClickableSpan() {
+        override fun onClick(widget: View) {
+            val ctx = widget.context
+            val clipboard = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+            clipboard?.setPrimaryClip(ClipData.newPlainText("code", code))
+            Toast.makeText(ctx, "\u062A\u0645 \u0646\u0633\u062E \u0627\u0644\u0643\u0648\u062F", Toast.LENGTH_SHORT).show()
+        }
+
+        // بلا تسطير/لون رابط افتراضي — الشكل مُتحكَّم به بالكامل عبر StickerSpan المرافق لنفس النطاق.
+        override fun updateDrawState(ds: TextPaint) {}
+    }
+
+    /**
+     * يحوّل كود [code] الخام إلى نص مُصنَّف الرموز عبر [codeTokenRegex]: تعليقات (مائلة، رمادية)،
+     * نصوص حرفية (أخضر)، أرقام (برتقالي)، توجيهات `@...` (بنفسجي فاتح)، وسوم إغلاق `.end/...`
+     * (ذهبي)، كلمات مفتاحية (أزرق، بارز)، استدعاءات دوال (ذهبي)، وأسماء مُسنَدة قبل `=` (برتقالي
+     * فاتح) — كل رمز بلون منفصل صريح (لا نطاق لون عام يغطّي الكتلة) لتفادي أي تعارض بين Span
+     * لون شامل وSpans الألوان الجزئية لكل رمز.
+     */
+    private fun appendHighlightedCode(out: SpannableStringBuilder, code: String) {
+        var idx = 0
+        for (match in codeTokenRegex.findAll(code)) {
+            if (match.range.first > idx) {
+                val plain = code.substring(idx, match.range.first)
+                val plainStart = out.length
+                out.append(plain)
+                out.setSpan(ForegroundColorSpan(COLOR_CODE_TEXT), plainStart, out.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            }
+            val g = match.groups
+            val (value, color, style) = when {
+                g[1] != null -> Triple(g[1]!!.value, COLOR_SYNTAX_COMMENT, Typeface.ITALIC)
+                g[2] != null -> Triple(g[2]!!.value, COLOR_SYNTAX_COMMENT, Typeface.ITALIC)
+                g[3] != null -> Triple(g[3]!!.value, COLOR_SYNTAX_STRING, Typeface.NORMAL)
+                g[4] != null -> Triple(g[4]!!.value, COLOR_SYNTAX_DIRECTIVE, Typeface.BOLD)
+                g[5] != null -> Triple(g[5]!!.value, COLOR_SYNTAX_BUILTIN, Typeface.NORMAL)
+                g[6] != null -> Triple(g[6]!!.value, COLOR_SYNTAX_NUMBER, Typeface.NORMAL)
+                g[7] != null -> Triple(g[7]!!.value, COLOR_SYNTAX_KEYWORD, Typeface.BOLD)
+                g[8] != null -> Triple(g[8]!!.value, COLOR_SYNTAX_BUILTIN, Typeface.NORMAL)
+                g[9] != null -> Triple(g[9]!!.value, COLOR_SYNTAX_ATTR, Typeface.NORMAL)
+                else -> Triple(match.value, COLOR_CODE_TEXT, Typeface.NORMAL)
+            }
+            val start = out.length
+            out.append(value)
+            val end = out.length
+            out.setSpan(ForegroundColorSpan(color), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            if (style != Typeface.NORMAL) out.setSpan(StyleSpan(style), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            idx = match.range.last + 1
+        }
+        if (idx < code.length) {
+            val plainStart = out.length
+            out.append(code.substring(idx))
+            out.setSpan(ForegroundColorSpan(COLOR_CODE_TEXT), plainStart, out.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        }
     }
 
     private fun isTableSeparator(line: String): Boolean {
