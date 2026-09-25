@@ -466,6 +466,87 @@ class PackageDetailActivity : BaseConnectivityActivity() {
         fileTreeRoot = PackagingUtils.buildFileTree(contents.files)
         currentFilesPath = emptyList()
         renderCurrentFilesFolder()
+        renderFilesLanguageBar(contents.files)
+    }
+
+    /**
+     * يعرض شريط "تركيبة ملفات الحزمة" أسفل القائمة (انظر [PackagingUtils.languageBreakdown]) —
+     * قطعة ملوَّنة بعرض نسبي لكل نوع ملف فوق شريط رفيع مدوَّر الحواف، وصف حبّات (chips) تحته
+     * (نقطة ملوَّنة + تسمية + نسبة%) داخل تمرير أفقي. يُخفي القسم كاملاً (الشريط + الفاصل) عند
+     * وجود نوع ملف واحد أو أقل (لا فائدة بصرية من شريط بلون واحد).
+     */
+    private fun renderFilesLanguageBar(files: List<PackageFileEntry>) {
+        val footer = findViewById<LinearLayout>(R.id.containerFilesLanguageBar)
+        val divider = findViewById<View>(R.id.dividerFilesLanguageBar)
+        footer.removeAllViews()
+
+        val slices = PackagingUtils.languageBreakdown(files)
+        if (slices.size < 2) {
+            footer.visibility = View.GONE
+            divider.visibility = View.GONE
+            return
+        }
+        footer.visibility = View.VISIBLE
+        divider.visibility = View.VISIBLE
+
+        val trackFrame = FrameLayout(this).apply {
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(6f))
+            setBackgroundResource(R.drawable.bg_language_bar_track)
+            clipToOutline = true
+        }
+        val segmentsRow = LinearLayout(this).apply {
+            layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)
+            orientation = LinearLayout.HORIZONTAL
+        }
+        for (slice in slices) {
+            val segment = View(this).apply {
+                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, slice.percent.coerceAtLeast(0.5f))
+                setBackgroundColor(getColor(slice.colorRes))
+            }
+            segmentsRow.addView(segment)
+        }
+        trackFrame.addView(segmentsRow)
+        footer.addView(trackFrame)
+
+        val legendScroll = android.widget.HorizontalScrollView(this).apply {
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                topMargin = dp(10f)
+            }
+            isHorizontalScrollBarEnabled = false
+        }
+        val legendRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = android.view.Gravity.CENTER_VERTICAL
+        }
+        for ((index, slice) in slices.withIndex()) {
+            val chip = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = android.view.Gravity.CENTER_VERTICAL
+                layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                    if (index > 0) marginStart = dp(14f)
+                }
+            }
+            val dot = View(this).apply {
+                layoutParams = LinearLayout.LayoutParams(dp(8f), dp(8f))
+                background = android.graphics.drawable.GradientDrawable().apply {
+                    shape = android.graphics.drawable.GradientDrawable.OVAL
+                    setColor(getColor(slice.colorRes))
+                }
+            }
+            chip.addView(dot)
+            val label = TextView(this).apply {
+                layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                    marginStart = dp(6f)
+                }
+                textSize = 11f
+                setTextColor(getColor(R.color.rin_editor_hint))
+                text = getString(R.string.package_detail_language_chip_format, slice.label, slice.percent)
+            }
+            chip.addView(label)
+            legendRow.addView(chip)
+        }
+        legendScroll.addView(legendRow)
+        footer.addView(legendScroll)
     }
 
     /** المجلد المطابق لـ[currentFilesPath] الحالي داخل [fileTreeRoot] (الجذر نفسه إن كان المسار فارغاً). */
