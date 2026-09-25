@@ -454,12 +454,15 @@
                     android:layout_height="1dp"
                     android:background="@color/rin_divider" />
 
+                <!-- حشو أوسع قليلاً (كان 15dp) — نص README لا يلامس حواف البطاقة، أقرب لتجربة
+                     قراءة مستند حقيقي وأريح للعين من نص مكدَّس عند الحافة مباشرة. -->
                 <LinearLayout
                     android:id="@+id/containerDetailReadme"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:orientation="vertical"
-                    android:padding="15dp" />
+                    android:paddingHorizontal="18dp"
+                    android:paddingVertical="16dp" />
             </LinearLayout>
 
             <!-- قسم الترخيص -->
