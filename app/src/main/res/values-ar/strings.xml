@@ -356,6 +356,7 @@ print \"Hello, \" + name + \"!\";
     <string name="job_filter_error">خطأ</string>
     <string name="job_filter_debug">تصحيح</string>
     <string name="job_no_results">لا نتائج مطابقة لهذا البحث/الفلتر.</string>
+    <string name="print_image_load_failed_fmt">تعذّر عرض الصورة: %1$s (الملف غير موجود أو تالف)</string>
     <string name="action_rename_symbol">إعادة تسمية</string>
     <string name="rename_dialog_title">إعادة تسمية الرمز</string>
     <string name="rename_dialog_hint">الاسم الجديد</string>
