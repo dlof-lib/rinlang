@@ -98,6 +98,7 @@
     <string name="package_detail_live_preview_output_label">Resultado de ejecución</string>
     <string name="package_detail_live_preview_error_label">Vista previa no disponible</string>
     <string name="package_detail_live_preview_no_output">El código se ejecutó correctamente sin interfaz ni salida impresa que mostrar.</string>
+    <string name="package_detail_language_chip_format">%1$s %2$.0f%%</string>
     <string name="package_detail_no_readme">Este paquete no tiene archivo README.md.</string>
     <string name="package_detail_no_license">Este paquete no tiene archivo de licencia.</string>
     <string name="package_detail_meta_format">%1$s • %2$s • %3$d descargas • ★ %4$.1f (%5$d valoraciones)</string>
