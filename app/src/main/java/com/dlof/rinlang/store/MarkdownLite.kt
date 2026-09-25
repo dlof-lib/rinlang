@@ -9,6 +9,8 @@ import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.RectF
 import android.graphics.Typeface
+import android.graphics.drawable.ColorDrawable
+import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.text.SpannableStringBuilder
 import android.text.Spanned
@@ -81,9 +83,16 @@ import android.widget.Toast
  *   `[*Pin/link=(رابط)/icon=(اسم)*]` لنفس الزر مع أيقونة مصغَّرة قبل النص، و`[*#7C5CFF*]` (أو
  *   `[*Accent/#7C5CFF*]`، أو `color=(#hex)` مدمَجاً مع أي من الصيغتين أعلاه) لنقطة لون حقيقية
  *   مدمَجة داخل الحبّة نفسها عبر [ColorSwatchSpan] — لا عنصر منفصل قائم بذاته.
- * - **جديد: خلفية صفحة مخصَّصة** — سطر مستقل بصياغة `[*Page_background/#7C5CFF*]` لا يُعرَض
- *   كمحتوى مرئي إطلاقاً؛ يُستخرَج عبر [extractPageBackground] ليُطبَّق لوناً لخلفية الحاوية
- *   المستدعية (مثال: `containerReadme` في PackageDetailActivity).
+ * - **جديد: خلفية صفحة مخصَّصة (صلبة أو متدرّجة)** — سطر مستقل بصياغة `[*Page_background/...*]`
+ *   لا يُعرَض كمحتوى مرئي إطلاقاً؛ يُستخرَج عبر [extractPageBackground] ليُطبَّق خلفيةً حقيقية
+ *   للحاوية المستدعية (مثال: `containerReadme` في PackageDetailActivity)، بثلاث صيغ:
+ *   `#7C5CFF` (لون صلب، كما كان)، أو `#346739,#79AE6F,#9FCB98,#F2EDC2` (تدرّج حقيقي من الأعلى
+ *   للأسفل بأي عدد ألوان)، أو اسم إحدى [NAMED_PALETTES] الجاهزة (`forest`/`harbor`/`lagoon`)
+ *   لتدرّج بأربع درجات دون كتابة الرموز يدوياً.
+ * - **جديد: لوحات تدرّج مُسمّاة لطبقات وسام الهرم الهيكلي** — `hierarchy=(N)` يقبل الآن
+ *   `palette=(forest|harbor|lagoon)` إضافياً ليرسم كل طبقة بدرجة حقيقية من نفس اللوحة (بدل تكرار
+ *   ثلاث ألوان الهوية الافتراضية فقط) — نفس [NAMED_PALETTES] المستخدَمة لخلفية الصفحة، فيمكن
+ *   لصفحة واحدة أن تبقى متّسقة بصرياً إن اختارت نفس اللوحة للاثنين.
  * - **جديد: شارتا التنزيل** — ضمن نفس صياغة `[* ... *]`: `[*تنزيلات/downloads=(15420)*]`
  *   لشارة عدد تنزيلات ثابتة (رقم مختصَر تلقائياً K/M/B عبر [formatCompactCount])، و
  *   `[*تحميل/downloading=(true)*]` (أو `state=(downloading)`) لشارة "جاري التحميل" مؤقّتة.
@@ -108,10 +117,30 @@ object MarkdownLite {
     private const val COLOR_BULLET_L3 = 0xFFFFC94D.toInt()       // rin_star_gold
     private val BULLET_DEPTH_COLORS = intArrayOf(COLOR_BULLET, COLOR_BULLET_L2, COLOR_BULLET_L3)
 
-    /** لون طبقة رقم [index] داخل وسام "الهرم الهيكلي" ([PyramidBadgeSpan]) — نفس تدرّج ألوان
-     *  أعماق القوائم المتعشِّشة [BULLET_DEPTH_COLORS] بالضبط، فتبقى هوية "العمق البصري" موحَّدة
-     *  عبر كل عناصر الملف (قوائم متعشِّشة/هرم هيكلي) لا لوحة مستقلة مختلَقة هنا. */
-    private fun pyramidTierColor(index: Int): Int = BULLET_DEPTH_COLORS[index % BULLET_DEPTH_COLORS.size]
+    /**
+     * **جديد: لوحات تدرّج مسمّاة (Palettes)** — كل لوحة 4 درجات (غامق ← فاتح/لهجة) تُستخدَم في
+     * مكانين معاً حتى تبقى هوية "الخلفية" و"طبقات الوسام" متّسقة إن اختِيرت نفس اللوحة للاثنين:
+     * 1. خلفية صفحة متدرّجة حقيقية عبر `[*Page_background/اسم اللوحة*]` (انظر [extractPageBackground]).
+     * 2. ألوان طبقات وسام الهرم الهيكلي عبر `[*تسمية/hierarchy=(N)/palette=(اسم اللوحة)*]`
+     *    (انظر [pyramidTierColor] و[appendMetaBadge]) — بديل عن اللوحة الافتراضية الثلاثية
+     *    [BULLET_DEPTH_COLORS] حين يريد المستخدم أكثر من 3 درجات مميَّزة فعلاً بدل تكرارها.
+     * الاسم غير حسّاس لحالة الأحرف؛ لوحة غير معروفة تُتجاهَل بصمت (يبقى السلوك الافتراضي القديم).
+     */
+    private val NAMED_PALETTES: Map<String, IntArray> = mapOf(
+        // غابة: أخضر غامق → أخضر متوسط → نعناعي فاتح → كريمي (دافئ/طبيعي)
+        "forest" to intArrayOf(0xFF346739.toInt(), 0xFF79AE6F.toInt(), 0xFF9FCB98.toInt(), 0xFFF2EDC2.toInt()),
+        // ميناء: كحلي غامق → أزرق متوسط → أزرق رمادي فاتح → برتقالي (لهجة تباين حادة)
+        "harbor" to intArrayOf(0xFF253C6D.toInt(), 0xFF30497D.toInt(), 0xFF455B8A.toInt(), 0xFFF2842F.toInt()),
+        // بحيرة: أخضر مزرق غامق → تركوازي متوسط → فيروزي فاتح → كهرماني (لهجة تباين حادة)
+        "lagoon" to intArrayOf(0xFF224248.toInt(), 0xFF325E6A.toInt(), 0xFF44A1A4.toInt(), 0xFFFF9A00.toInt())
+    )
+
+    /** لون طبقة رقم [index] داخل وسام "الهرم الهيكلي" ([PyramidBadgeSpan])، من [palette] المُعطاة
+     *  (افتراضياً نفس تدرّج ألوان أعماق القوائم المتعشِّشة [BULLET_DEPTH_COLORS] كما كان)، فتبقى
+     *  هوية "العمق البصري" موحَّدة عبر كل عناصر الملف عندما لا تُطلب لوحة صريحة، مع إمكانية اختيار
+     *  إحدى [NAMED_PALETTES] (4 درجات حقيقية بدل تكرار 3) عبر `palette=(...)`. */
+    private fun pyramidTierColor(index: Int, palette: IntArray = BULLET_DEPTH_COLORS): Int =
+        palette[index % palette.size]
 
     private const val COLOR_RULE = 0xFF2D2D30.toInt()            // rin_job_card_border
     private const val COLOR_CARD_BORDER = 0x26FFFFFF             // حدّ خفيف موحّد لبطاقات الكود/الاقتباس/الجدول
@@ -258,24 +287,49 @@ object MarkdownLite {
     private val bulletListRegex = Regex("^[-*+]\\s+(.*)$")
     private val tableSeparatorRegex = Regex("^:?-{2,}:?$")
 
-    /** سطر مستقل `[*Page_background/#hex*]` بالضبط (لا محتوى آخر معه بنفس السطر) — يُستهلَك
+    /** قيمة صالحة بعد `/`: إمّا لون سداسي مفرد (خلفية صلبة قديمة، بلا تغيير)، أو عدّة ألوان
+     *  سداسية مفصولة بفواصل (تدرّج حقيقي من الأعلى للأسفل)، أو اسم إحدى [NAMED_PALETTES]
+     *  (تدرّج جاهز بأربع درجات). كل هذا ضمن مجموعة أحرف واحدة تكفي للتحقّق من شكل السطر. */
+    private const val PAGE_BG_VALUE = "[#0-9A-Za-z,\\s]+"
+
+    /** سطر مستقل `[*Page_background/...*]` بالضبط (لا محتوى آخر معه بنفس السطر) — يُستهلَك
      *  بصمت دون أي عرض مرئي في [toSpannable] (انظر [appendMetaBadge] أيضاً لضمان عدم ظهوره
      *  حتى لو استُخدم داخل سطر مختلط). */
     private val pageBackgroundLineRegex =
-        Regex("^\\[\\*\\s*page[_ ]background\\s*/\\s*#[0-9A-Fa-f]{3,6}\\s*\\*\\]$", RegexOption.IGNORE_CASE)
+        Regex("^\\[\\*\\s*page[_ ]background\\s*/\\s*$PAGE_BG_VALUE\\s*\\*\\]$", RegexOption.IGNORE_CASE)
 
-    /** نفس الصياغة أعلاه لكن بلا تثبيت على السطر كاملاً — يُستخدَم فقط لاستخراج اللون عبر
+    /** نفس الصياغة أعلاه لكن بلا تثبيت على السطر كاملاً — يُستخدَم فقط لاستخراج القيمة عبر
      *  [extractPageBackground]، فيعمل حتى لو وُضع السطر وسط فقرة أخرى. */
     private val pageBackgroundRegex =
-        Regex("\\[\\*\\s*page[_ ]background\\s*/\\s*(#[0-9A-Fa-f]{3,6})\\s*\\*\\]", RegexOption.IGNORE_CASE)
+        Regex("\\[\\*\\s*page[_ ]background\\s*/\\s*($PAGE_BG_VALUE)\\s*\\*\\]", RegexOption.IGNORE_CASE)
 
-    /** يستخرج لون خلفية الصفحة من صياغة `[*Page_background/#hex*]` إن وُجدت في [markdown]، أو
-     *  null إن لم توجد. لا يُعدِّل [markdown] نفسه؛ الاستدعاء المُوصى به هو تمرير الناتج مباشرة
-     *  لـ `container.setBackgroundColor(...)`، أو تمرير [View] الحاوية إلى [applyTo] مباشرة عبر
-     *  معامل `pageContainer` ليُطبَّق تلقائياً. */
-    fun extractPageBackground(markdown: String): Int? {
-        val m = pageBackgroundRegex.find(markdown) ?: return null
-        return parseHexColor(m.groupValues[1])?.first
+    /** خلفية صفحة مُستخرَجة: إمّا [Solid] (سلوك قديم، لون واحد) أو [Gradient] (لوحة/قائمة درجات،
+     *  تُرسَم من الأعلى للأسفل). [applyTo] يبني `Drawable` مناسباً من أيّهما دون أن يعرف المستدعي
+     *  الفرق. */
+    sealed class PageBackground {
+        data class Solid(val color: Int) : PageBackground()
+        data class Gradient(val colors: IntArray) : PageBackground()
+    }
+
+    /** يستخرج خلفية الصفحة من صياغة `[*Page_background/...*]` إن وُجدت في [markdown]، أو null إن
+     *  لم توجد:
+     *  - `[*Page_background/#7C5CFF*]` (سلوك قديم بلا تغيير) → [PageBackground.Solid].
+     *  - `[*Page_background/#346739,#79AE6F,#9FCB98,#F2EDC2*]` (٢-٤ ألوان بفواصل) → [PageBackground.Gradient]
+     *    من الأعلى للأسفل بنفس ترتيبها.
+     *  - `[*Page_background/forest*]` (أو `harbor`/`lagoon`، أحد [NAMED_PALETTES]) → نفس التدرّج
+     *    الجاهز لتلك اللوحة، بلا حاجة لكتابة أربعة رموز سداسية يدوياً.
+     *  لا يُعدِّل [markdown] نفسه؛ الاستدعاء المُوصى به هو تمرير [View] الحاوية إلى [applyTo]
+     *  مباشرة عبر معامل `pageContainer` ليُطبَّق تلقائياً. */
+    fun extractPageBackground(markdown: String): PageBackground? {
+        val raw = pageBackgroundRegex.find(markdown)?.groupValues?.get(1)?.trim() ?: return null
+        NAMED_PALETTES[raw.lowercase()]?.let { return PageBackground.Gradient(it) }
+        val stops = raw.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+            .mapNotNull { parseHexColor(it)?.first }
+        return when {
+            stops.size >= 2 -> PageBackground.Gradient(stops.toIntArray())
+            stops.size == 1 -> PageBackground.Solid(stops[0])
+            else -> null
+        }
     }
 
     /** بادئة كتلة الوصف القابلة للطي `[~عنوان]` ... `[~/]` — انظر [appendCollapsibleSection]. */
@@ -608,7 +662,13 @@ object MarkdownLite {
         textView.setLinkTextColor(COLOR_LINK)
         textView.highlightColor = COLOR_HIGHLIGHT_BG
         pageContainer?.let { container ->
-            extractPageBackground(markdown)?.let { container.setBackgroundColor(it) }
+            when (val bg = extractPageBackground(markdown)) {
+                is PageBackground.Solid -> container.background = ColorDrawable(bg.color)
+                is PageBackground.Gradient -> container.background = GradientDrawable(
+                    GradientDrawable.Orientation.TOP_BOTTOM, bg.colors
+                )
+                null -> {}
+            }
         }
     }
 
@@ -929,7 +989,8 @@ object MarkdownLite {
      *   مستويات تعشيش عناصر صفحة (مثال: `Scaffold ← TopBar/Column/BottomBar ← عناصرها الداخلية`
      *   = 3 مستويات). `hierarchy=(N)` مقبولة أيضاً باسم `pyramid=(N)`؛ N تُحصَر تلقائياً بين 1 و6
      *   طبقات (سقف معقول للرسم داخل حبّة نصّية واحدة). بلا تسمية منفصلة، يُستخدَم عنوان افتراضي
-     *   "البنية الهيكلية".
+     *   "البنية الهيكلية". يقبل أيضاً `palette=(forest|harbor|lagoon)` (انظر [NAMED_PALETTES])
+     *   لرسم الطبقات بدرجات حقيقية من تلك اللوحة بدل الهوية الافتراضية الثلاثية.
      * لا رابط ولا قيمة مجرَّدة ولا لون ولا هرم (مثال: `[*جديد*]` وحدها) → يسقط بهدوء إلى ستيكر
      * عادي بلون الهوية الافتراضي عبر [appendSticker]، فلا يُفقَد المحتوى صمتاً بسبب صياغة ناقصة.
      */
@@ -948,6 +1009,7 @@ object MarkdownLite {
         var plainValue: String? = null
         var color: Pair<Int, String>? = null
         var hierarchyLevels: Int? = null
+        var hierarchyPalette: IntArray? = null
         var downloadsCount: Long? = null
         var isDownloading = false
 
@@ -963,6 +1025,7 @@ object MarkdownLite {
                     "icon" -> iconRaw = m.groupValues[2].trim()
                     "color" -> parseHexColor(m.groupValues[2].trim())?.let { color = it }
                     "hierarchy", "pyramid" -> hierarchyLevels = m.groupValues[2].trim().toIntOrNull()?.coerceIn(1, 6)
+                    "palette" -> hierarchyPalette = NAMED_PALETTES[m.groupValues[2].trim().lowercase()]
                     "downloads" -> downloadsCount = m.groupValues[2].trim().replace(",", "").toLongOrNull()
                     "downloading" -> isDownloading = m.groupValues[2].trim().equals("true", ignoreCase = true)
                     "state" -> if (m.groupValues[2].trim().equals("downloading", ignoreCase = true)) isDownloading = true
@@ -997,7 +1060,10 @@ object MarkdownLite {
                 out.append("$shownLabel  $hierarchyLevels")
                 val end = out.length
                 out.setSpan(
-                    PyramidBadgeSpan(hierarchyLevels, COLOR_INLINE_CODE_BG, COLOR_CODE_TEXT),
+                    PyramidBadgeSpan(
+                        hierarchyLevels, COLOR_INLINE_CODE_BG, COLOR_CODE_TEXT,
+                        hierarchyPalette ?: BULLET_DEPTH_COLORS
+                    ),
                     start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
                 )
                 out.setSpan(StyleSpan(Typeface.BOLD), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
@@ -1667,7 +1733,8 @@ object MarkdownLite {
     private class PyramidBadgeSpan(
         private val levels: Int,
         private val bgColor: Int,
-        private val textColor: Int
+        private val textColor: Int,
+        private val tierColors: IntArray = BULLET_DEPTH_COLORS
     ) : ReplacementSpan() {
         private val horizontalPad = 14f
         private val verticalPad = 5f
@@ -1722,7 +1789,7 @@ object MarkdownLite {
                     lineTo(iconCx - bottomHalfW, bandBottomY)
                     close()
                 }
-                paint.color = pyramidTierColor(i)
+                paint.color = pyramidTierColor(i, tierColors)
                 canvas.drawPath(path, paint)
             }
 
