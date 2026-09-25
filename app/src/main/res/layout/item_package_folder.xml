@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  صفّ "مجلد" واحد داخل شجرة "ملفات الحزمة" — أخو item_package_file.xml لكن بهوية بصرية مميَّزة
+  صفّ "مجلد" واحد داخل قائمة "ملفات الحزمة" — أخو item_package_file.xml لكن بهوية بصرية مميَّزة
   (أيقونة مجلد بلون ذهبي بدل لون كل ملف، اسم بخط أثقل لإبراز كونه عنوان تجميع لا ملفاً ورقياً)
-  وحبّة صغيرة تُظهر عدد الملفات داخله (مباشرة + كل ما تحته من مجلدات فرعية)، حتى يُقرأ المجلد
-  فوراً كرأس قسم قابل للتفريق عن الملفات المتفرّعة عنه أسفله (التي تُزاح بمسافة بادئة إضافية
-  حسب عمقها عبر PackageDetailActivity.bindFiles، بلا حاجة لأي تغيير هنا).
+  وحبّة صغيرة تُظهر عدد الملفات داخله (مباشرة + كل ما تحته من مجلدات فرعية). قابل للمس فعلياً
+  (تأثير موجي + سهم اتجاه في النهاية) — لمسه "يدخل" إلى المجلد ويستبدل القائمة بمحتواه، تماماً
+  كتصفّح الملفات في GitHub، عبر PackageDetailActivity.renderCurrentFilesFolder.
 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
@@ -12,6 +12,9 @@
     android:layout_height="wrap_content"
     android:orientation="horizontal"
     android:gravity="center_vertical"
+    android:clickable="true"
+    android:focusable="true"
+    android:foreground="?attr/selectableItemBackground"
     android:paddingHorizontal="14dp"
     android:paddingVertical="12dp">
 
@@ -57,5 +60,13 @@
         android:paddingVertical="3dp"
         android:textSize="10.5sp"
         android:textColor="@color/rin_editor_hint" />
+
+    <ImageView
+        android:layout_width="14dp"
+        android:layout_height="14dp"
+        android:layout_marginStart="8dp"
+        android:src="@drawable/ic_chevron_end"
+        app:tint="@color/rin_editor_hint"
+        android:contentDescription="@null" />
 
 </LinearLayout>
