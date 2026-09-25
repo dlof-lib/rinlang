@@ -631,7 +631,7 @@ class PackageDetailActivity : BaseConnectivityActivity() {
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT)
             text = label
             textSize = 12.5f
-            fontFamily = "monospace"
+            typeface = android.graphics.Typeface.MONOSPACE
             if (isCurrent) {
                 setTextColor(getColor(R.color.rin_on_toolbar))
                 setTypeface(typeface, android.graphics.Typeface.BOLD)
