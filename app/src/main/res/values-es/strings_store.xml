@@ -57,7 +57,8 @@
     <string name="hint_package_dependencies_example">Ejemplo:\nmathlib:^1.0.0\nstrings:2.0.0</string>
     <string name="hint_package_license">Licencia</string>
     <string name="hint_package_custom_docs">Opcional: sube tu propio archivo README.md y de licencia en lugar de la generación automática</string>
-    <string name="action_pick_assets">Añadir imágenes/iconos (opcional)</string>
+    <string name="action_pick_assets">Añadir archivos adicionales (opcional)</string>
+    <string name="hint_package_assets_multi">Puedes seleccionar más de un archivo de cualquier tipo a la vez (imágenes, código, datos...)</string>
     <string name="action_pick_readme">Subir mi propio README.md</string>
     <string name="action_pick_license">Subir mi propio archivo de licencia</string>
     <string name="file_selected_generic">Archivo seleccionado ✓</string>
