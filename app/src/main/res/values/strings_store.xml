@@ -102,6 +102,7 @@
     <string name="package_detail_live_preview_output_label">نتيجة التنفيذ</string>
     <string name="package_detail_live_preview_error_label">تعذّرت المعاينة</string>
     <string name="package_detail_live_preview_no_output">تم تنفيذ الكود بنجاح بلا أي واجهة أو ناتج مطبوع لعرضه.</string>
+    <string name="package_detail_language_chip_format">%1$s %2$.0f%%</string>
     <string name="package_detail_no_readme">لا يوجد ملف README.md في هذه الحزمة.</string>
     <string name="package_detail_no_license">لا يوجد ملف ترخيص في هذه الحزمة.</string>
     <string name="package_detail_meta_format">%1$s • %2$s • %3$d تنزيل • ★ %4$.1f (%5$d تقييم)</string>
