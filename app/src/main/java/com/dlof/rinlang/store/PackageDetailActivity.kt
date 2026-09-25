@@ -283,6 +283,12 @@ class PackageDetailActivity : BaseConnectivityActivity() {
         val containerReadme = findViewById<LinearLayout>(R.id.containerDetailReadme)
         containerReadme.removeAllViews()
         val readme = contents.readme
+        // خلفية صفحة مخصَّصة عبر `[*Page_background/#hex*]` في أي مكان من README — تُطبَّق على
+        // حاوية القسم كاملة قبل بناء المقاطع، فلا أثر مرئي لسطر الصياغة نفسه (انظر
+        // MarkdownLite.extractPageBackground / pageBackgroundLineRegex).
+        if (!readme.isNullOrBlank()) {
+            MarkdownLite.extractPageBackground(readme)?.let { containerReadme.setBackgroundColor(it) }
+        }
         if (readme.isNullOrBlank()) {
             containerReadme.addView(buildReadmeTextSegment(getString(R.string.package_detail_no_readme)))
         } else {
