@@ -99,6 +99,7 @@ class LibrariesActivity : AppCompatActivity() {
 
         userAdapter = UserLibraryAdapter(
             onEdit = { lib -> openLibraryInEditor(lib) },
+            onRename = { lib -> showRenameLibraryDialog(lib) },
             onDelete = { lib -> showDeleteConfirm(lib) },
             onInsert = { lib -> finishWithImport("@import \"${ProjectManagerLibPrefix}${lib.name}\";") },
             onPublish = { lib ->
@@ -187,6 +188,32 @@ class LibrariesActivity : AppCompatActivity() {
             .show()
     }
 
+    private fun showRenameLibraryDialog(lib: RinLibrary) {
+        // نفس أسلوب showRenameFileDialog/showRenameFolderDialog تماماً في FilesActivity.kt، مع فارق
+        // واحد: نُحدِّد الاسم الأساسي فقط (بلا امتداد ".og.rin" المزدوج) مسبقاً في الحقل، لأن
+        // ProjectManager.renameLibrary() يُسقِط هذا الامتداد ويعيد إضافته دائماً بنفسه.
+        val baseName = lib.name.removeSuffix(".og.rin")
+        val input = EditText(this)
+        input.setText(baseName)
+        input.setSelection(0, baseName.length)
+        AlertDialog.Builder(this)
+            .setTitle(R.string.rename_library_title)
+            .setView(input)
+            .setPositiveButton(R.string.rename) { _, _ ->
+                val newName = input.text.toString().trim()
+                if (newName.isEmpty() || newName == baseName) return@setPositiveButton
+                try {
+                    val renamed = ProjectManager.renameLibrary(project, lib, newName)
+                    refresh()
+                    Toast.makeText(this, getString(R.string.library_renamed_toast, renamed.name), Toast.LENGTH_SHORT).show()
+                } catch (t: Throwable) {
+                    Toast.makeText(this, "${t.message}", Toast.LENGTH_LONG).show()
+                }
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
+
     private fun showDeleteConfirm(lib: RinLibrary) {
         AlertDialog.Builder(this)
             .setTitle(R.string.delete_library_title)
@@ -221,6 +248,7 @@ private const val ProjectManagerLibPrefix = "lib/"
 
 private class UserLibraryAdapter(
     val onEdit: (RinLibrary) -> Unit,
+    val onRename: (RinLibrary) -> Unit,
     val onDelete: (RinLibrary) -> Unit,
     val onInsert: (RinLibrary) -> Unit,
     val onPublish: (RinLibrary) -> Unit
@@ -238,6 +266,7 @@ private class UserLibraryAdapter(
         val txtName: TextView = view.findViewById(R.id.txtLibraryNameItem)
         val txtMeta: TextView = view.findViewById(R.id.txtLibraryMeta)
         val btnDelete: View = view.findViewById(R.id.btnDeleteLibrary)
+        val btnRename: View = view.findViewById(R.id.btnRenameLibrary)
         val btnEdit: View = view.findViewById(R.id.btnEditLibrary)
         val btnInsert: View = view.findViewById(R.id.btnInsertLibrary)
         val btnPublish: View = view.findViewById(R.id.btnPublishLibrary)
@@ -257,6 +286,7 @@ private class UserLibraryAdapter(
             dateFormat.format(Date(lib.lastModified))
         )
         holder.btnEdit.setOnClickListener { onEdit(lib) }
+        holder.btnRename.setOnClickListener { onRename(lib) }
         holder.btnDelete.setOnClickListener { onDelete(lib) }
         holder.btnInsert.setOnClickListener { onInsert(lib) }
         holder.btnPublish.setOnClickListener { onPublish(lib) }
