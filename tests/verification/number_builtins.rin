@@ -1,0 +1,16 @@
+print isEven(10);
+print isOdd(7);
+print isInteger(3.0);
+print mod(17, 5);
+print frac(-3.75);
+print gcd(84, 30);
+print lcm(12, 18);
+print factorial(6);
+print isPrime(97);
+print hypot(3, 4);
+print root(27, 3);
+print degrees(3.141592653589793);
+print radians(180);
+print mapRange(5, 0, 10, 0, 100);
+print approx(0.3, 0.3000000001);
+print sumRange(1, 5);
