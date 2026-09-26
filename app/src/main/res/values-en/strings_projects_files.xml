@@ -140,8 +140,10 @@
     <string name="delete_folder_confirm">Delete the folder \"%1$s\" and everything inside it?</string>
     <string name="rename_file_title">Rename File</string>
     <string name="rename_folder_title">Rename Folder</string>
+    <string name="rename_library_title">Rename Library</string>
     <string name="file_renamed_toast">Renamed to: %1$s</string>
     <string name="folder_renamed_toast">Renamed to: %1$s</string>
+    <string name="library_renamed_toast">Renamed to: %1$s</string>
 
     <!-- ZIP archive tools: upload and extract, or download the project as an archive -->
     <string name="zip_tools_title">ZIP Archive</string>
