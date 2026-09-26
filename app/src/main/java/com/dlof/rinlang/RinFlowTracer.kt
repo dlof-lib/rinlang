@@ -217,6 +217,7 @@ object RinFlowTracer {
         LogKind.LINK -> "Link"
         LogKind.EXPORT -> "Save"
         LogKind.IMAGE -> "Image"
+        LogKind.PRINT_IMAGE -> "Image"
         LogKind.ARCHIVE -> "Archive"
         LogKind.FILE -> "File"
         LogKind.GRID -> "Row"
