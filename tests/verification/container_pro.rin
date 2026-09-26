@@ -1,0 +1,21 @@
+@container=App
+    @container=Users
+        let name = "Ali";
+        let age = 20;
+    .end/container
+
+    @container=Logs
+        let level = "info";
+    .end/container
+.end/container
+
+print container.count();
+print container.path("Users");
+print container.descendants("App");
+print container.byKind("container");
+print container.fieldNames("Users");
+print container.fields("Users");
+print container.info("Users");
+print container.mergeFields("Users", {city: "Beirut"});
+print container.deleteField("Users", "age");
+print hasField("Users", "city");
