@@ -165,6 +165,28 @@ StmtPtr Parser::declaration() {
 
     // مفاهيم لغة الحاويات/البيانات
     if (match({TokenType::TEXT})) return textDeclaration();
+    // KEY_TERMS: declarative vocabulary registry.
+    // `.KEY_TERMS = { "when": "if", ... };` registers semantic names without reserving them globally.
+    // `.KEY_TERMS == { ... };` validates the current registry against the supplied map.
+    // Both forms are parsed into ordinary native calls so execution stays inside the existing runtime.
+    if (check(TokenType::DOT) && checkNext(TokenType::IDENT) &&
+        current + 1 < tokens.size() && tokens[current + 1].lexeme == "KEY_TERMS") {
+        Token keyTok = advance(); // '.'
+        advance();                // KEY_TERMS
+        bool validate = false;
+        if (match({TokenType::EQUAL_EQUAL})) validate = true;
+        else consume(TokenType::EQUAL, "Expected '=' or '==' after '.KEY_TERMS'");
+        auto value = expression();
+        consume(TokenType::SEMICOLON, "Expected ';' after .KEY_TERMS declaration");
+        auto call = std::make_shared<CallExpr>();
+        call->callee = validate ? "__key_terms.check" : "__key_terms.set";
+        call->args.push_back(value);
+        call->line = keyTok.line;
+        auto stmt = std::make_shared<ExpressionStmt>();
+        stmt->expr = call;
+        stmt->line = keyTok.line;
+        return stmt;
+    }
     if (check(TokenType::DOT) && checkNext(TokenType::IDENT) && current + 2 < tokens.size() && tokens[current + 1].lexeme == "object") return objectFieldStatement();
     // '@import "..."' هو عبارة مستقلة وأبسط من كتل '@container...': نتحقق من الشكل قبل تفويض
     // الأمر لـ atBlock() (الذي يتعامل حصراً مع container/Containers.Group/Volume). 'import' هنا
@@ -761,6 +783,51 @@ StmtPtr Parser::statement() {
         advance(); // '.'
         advance(); // 'image'
         return imageStatement(printTok);
+    }
+    // Key-condition forms: `=if=(condition) statement`, `=unless=(condition) statement`,
+    // and `=when=(condition) statement`. They are syntax sugar for existing IfStmt nodes.
+    // Keeping them here (rather than changing TokenType/lexer keywords) preserves compatibility.
+    if (check(TokenType::EQUAL) && current + 3 < tokens.size() &&
+        (tokens[current + 1].type == TokenType::IDENT || tokens[current + 1].type == TokenType::IF) &&
+        tokens[current + 2].type == TokenType::EQUAL &&
+        (tokens[current + 1].lexeme == "if" ||
+         tokens[current + 1].lexeme == "unless" ||
+         tokens[current + 1].lexeme == "when")) {
+        advance(); // =
+        std::string term = advance().lexeme;
+        advance(); // =
+        consume(TokenType::LPAREN, "Expected '(' after key condition '=" + term + "='");
+        auto condition = expression();
+        consume(TokenType::RPAREN, "Expected ')' after key condition");
+        auto thenBranch = statement();
+        StmtPtr elseBranch = nullptr;
+        if (check(TokenType::ELSE)) {
+            advance();
+            elseBranch = statement();
+        } else if (check(TokenType::EQUAL) && current + 3 < tokens.size() &&
+                   (tokens[current + 1].type == TokenType::IDENT || tokens[current + 1].type == TokenType::ELSE) &&
+                   tokens[current + 1].lexeme == "else" &&
+                   tokens[current + 2].type == TokenType::EQUAL) {
+            advance(); advance(); advance(); // = else =
+            elseBranch = statement();
+        }
+        if (term == "unless") {
+            auto neg = std::make_shared<UnaryExpr>();
+            neg->op = TokenType::BANG;
+            neg->right = condition;
+            neg->line = condition->line;
+            condition = neg;
+        }
+        // `=when=` is intentionally the same semantic operation as `if`.
+        if (term == "when") {
+            // no transformation required
+        }
+        auto st = std::make_shared<IfStmt>();
+        st->condition = condition;
+        st->thenBranch = thenBranch;
+        st->elseBranch = elseBranch;
+        st->line = thenBranch ? thenBranch->line : 0;
+        return st;
     }
     if (match({TokenType::PRINT})) return printStatement();
     if (match({TokenType::IF})) return ifStatement();
