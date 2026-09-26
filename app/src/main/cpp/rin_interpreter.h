@@ -586,6 +586,9 @@ private:
     EnvPtr globals;
     std::ostringstream output;
     std::string sourceFile = "<input>"; // نظام Diagnostics — انظر setSourceFile() أعلاه
+    // KEY_TERMS: vocabulary/semantic aliases declared by `.KEY_TERMS = {...};`.
+    // This registry is intentionally runtime metadata; it never mutates the lexer/parser keyword table.
+    std::unordered_map<std::string, std::string> keyTerms_;
 
     // ---- Structured result state for the last run() (see hadError()/lastDiagnostic() above) ----
     std::optional<diag::Diagnostic> lastDiagnostic_;
