@@ -238,7 +238,7 @@ object RinExecutionManager {
         LogKind.STRUCTURE, LogKind.GRID -> RinEventType.CONTAINER
         LogKind.DOC_INSERT, LogKind.DOC_UPDATE -> RinEventType.VOLUME
         LogKind.IMPORT, LogKind.LINK -> RinEventType.IMPORT
-        LogKind.EXPORT, LogKind.IMAGE, LogKind.ARCHIVE -> RinEventType.ARTIFACT
+        LogKind.EXPORT, LogKind.IMAGE, LogKind.ARCHIVE, LogKind.PRINT_IMAGE -> RinEventType.ARTIFACT
         LogKind.FILE -> RinEventType.FILE
         LogKind.STYLE -> RinEventType.VIEW
         LogKind.NETWORK -> RinEventType.NETWORK
