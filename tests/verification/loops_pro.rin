@@ -1,0 +1,22 @@
+let values = [10, 20, 30];
+each value in values {
+    print value;
+}
+
+repeat 2 {
+    print "repeat";
+}
+
+let i = 0;
+loop (i < 3) {
+    print i;
+    i = i + 1;
+}
+
+let n = 0;
+repeat 10 {
+    n = n + 1;
+    if (n == 3) { continue; }
+    if (n == 6) { break; }
+}
+print n;
