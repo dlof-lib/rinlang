@@ -1,0 +1,14 @@
+print container.exists("Users");
+print container.kind("Users");
+print container.size("Users");
+print container.empty("Users");
+print container.childCount("Users");
+print container.hasChildren("Users");
+print container.depth("Users");
+print container.roots();
+print container.leaves();
+print container.stats();
+print container.snapshot("Users");
+print container.fieldType("Users", "name");
+print container.findField("name", "Ali");
+print container.find("container.doc");
