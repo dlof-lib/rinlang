@@ -4,22 +4,30 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.RectF
 import android.graphics.Typeface
+import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.GradientDrawable
 import android.net.Uri
+import android.os.Handler
+import android.os.Looper
+import android.text.Spannable
 import android.text.SpannableStringBuilder
 import android.text.Spanned
 import android.text.TextPaint
 import android.text.method.LinkMovementMethod
 import android.text.style.BackgroundColorSpan
 import android.text.style.BulletSpan
+import android.text.style.CharacterStyle
 import android.text.style.ClickableSpan
 import android.text.style.ForegroundColorSpan
+import android.text.style.ImageSpan
 import android.text.style.LeadingMarginSpan
 import android.text.style.LineBackgroundSpan
 import android.text.style.RelativeSizeSpan
@@ -31,6 +39,11 @@ import android.text.style.URLSpan
 import android.view.View
 import android.widget.TextView
 import android.widget.Toast
+import java.io.File
+import java.net.HttpURLConnection
+import java.net.URL
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.Executors
 
 /**
  * محوّل Markdown → معاينة حقيقية داخل TextView واحد، عبر بناء [SpannableStringBuilder] مباشرة
@@ -104,12 +117,36 @@ import android.widget.Toast
  *   داكن ملاصِق لجزء رسالة ملوَّن)، بلا أي طلب شبكة لجلب صورة حقيقية — يدعم الألوان المُسمّاة
  *   الشائعة (brightgreen/red/blue/orange...) والسداسية العشرية، وصياغتَي `MESSAGE-COLOR` (بلا
  *   تسمية) و`LABEL-MESSAGE-COLOR` كلتيهما؛ رابط لا يطابق shields.io يسقط بهدوء لزر رابط عادي.
+ * - **جديد: صور Markdown حقيقية `![نص](مسار/رابط)`** — أول فجوة حقيقية عن CommonMark كانت هذه
+ *   الصياغة (لغير شارات shields.io) تسقط بصمت إلى رابط نصّي عادي بلا أي صورة معروضة فعلياً. الآن:
+ *   مسار محلي (مطلق، أو `file://`، أو نسبي لمعامل `baseDir` الجديد في [toSpannable]/[applyTo])
+ *   يُفكّ ويُدرَج فوراً كـ[ImageSpan] حقيقي (انظر [appendImage]/[decodeLocalImage])، ورابط بعيد
+ *   http(s) يُحمَّل غير متزامن عبر [loadRemoteImageAsync] ويستبدل عنصره النائب المؤقت بصورة حقيقية
+ *   فور الاكتمال (انظر [applyTo]/[loadPendingRemoteImages]) — بذاكرة تخزين مؤقت تتفادى إعادة
+ *   التنزيل عند كل إعادة بناء لنفس الشاشة. أي مسار آخر غير قابل للحلّ يسقط كما كان لزر رابط عادي.
+ * - **جديد: تنبيهات GitHub Flavored Markdown** — `> [!NOTE]`/`[!TIP]`/`[!IMPORTANT]`/`[!WARNING]`/
+ *   `[!CAUTION]` كأول سطر داخل اقتباس `>` يحوِّله لبطاقة تنبيه ملوَّنة بأيقونة مميِّزة لكل نوع (انظر
+ *   [appendCallout])، بدل بقائه اقتباساً محايداً — نفس الصياغة الشائعة في READMEs حديثة على GitHub.
  *
  * الاستخدام المباشر: `textView.text = MarkdownLite.toSpannable(md)`.
- * الاستخدام الموصى به عند وجود روابط قابلة للنقر (أو أقسام قابلة للطي/خلفية صفحة):
- * `MarkdownLite.applyTo(textView, md, pageContainer)`.
+ * الاستخدام الموصى به عند وجود روابط قابلة للنقر (أو أقسام قابلة للطي/خلفية صفحة/صور محلية):
+ * `MarkdownLite.applyTo(textView, md, pageContainer, baseDir = ...)`.
  */
 object MarkdownLite {
+
+    /** مجلد الأساس الحالي لحلّ مسارات صور محلية نسبية (انظر معامل baseDir في [toSpannable]) —
+     *  متغيّر على مستوى الكائن (Object) لا معامل مُمرَّر عبر عشرات استدعاءات [appendInline]
+     *  المتداخلة (تشديد داخل قائمة داخل اقتباس...)؛ يُضبَط مرة واحدة في بداية [toSpannable] فقط.
+     *  آمن هنا لأن كل استدعاء لـ[toSpannable]/[applyTo] في هذا التطبيق يحدث من UI thread الرئيسي
+     *  بشكل متزامن (لا تعشيش/تزامن فعلي)، تماماً كبقية حالة "أثناء التحليل" الأخرى في هذا الملف. */
+    private var currentBaseDir: String? = null
+
+    /** ذاكرة تخزين مؤقت بسيطة (بلا حدّ أقصى/انتهاء صلاحية — كافية لعمر شاشة واحدة) للصور البعيدة
+     *  المحمَّلة فعلاً، لتفادي إعادة تنزيل نفس الرابط عند كل إعادة بناء (مثال: كل نقرة على قسم قابل
+     *  للطي تُعيد بناء النص كاملاً عبر [applyTo] → [toSpannable] من جديد). */
+    private val remoteImageCache = ConcurrentHashMap<String, Bitmap>()
+    private val remoteImageExecutor = Executors.newFixedThreadPool(2)
+    private val mainHandler = Handler(Looper.getMainLooper())
 
     // ألوان مأخوذة من نفس لوحة التطبيق (colors.xml) لتبدو المعاينة جزءاً من التطبيق لا دخيلة عليه
     private const val COLOR_BULLET = 0xFF7C5CFF.toInt()          // rin_accent
@@ -266,6 +303,11 @@ object MarkdownLite {
     //  5) ~~يتوسّطه خط~~                  12/13) [نص](رابط)
     //  6) `كود مضمَّن`                    14) *مائل*
     //  7) ==تمييز==                       15) _مائل بديل_
+    //                                     16/17) ![نص](أي رابط/مسار آخر) — صورة حقيقية، انظر [appendImage]
+    // ملاحظة الترتيب: 16/17 مُلحَقة في نهاية السلسلة لا وسطها؛ هذا آمن رغم مجيء 12/13 (الرابط
+    // العادي) قبلها لأن كلتيهما لا يمكن أن تتطابقا عند نفس موضع البداية أصلاً — الصورة تبدأ حرفياً
+    // بـ"!" والرابط العادي يبدأ بـ"[" فقط، فمحرك المطابقة (الذي يجرّب كل موضع بداية بالترتيب من
+    // اليسار) لا يصل إطلاقاً لتجربة بديل الرابط العادي عند موضع "!" مادام بديل الصورة يطابقه أولاً.
     private val inlineRegex = Regex(
         "\\\\([\\\\`*_{}\\[\\]()#+.!~=>-])" +
             "|\\*\\*\\*([^*]+?)\\*\\*\\*" +
@@ -279,8 +321,14 @@ object MarkdownLite {
             "|!\\[([^\\]]*?)\\]\\((https?://img\\.shields\\.io/[^)\\s]+)\\)" +
             "|\\[([^\\]]+?)\\]\\(([^)\\s]+?)\\)" +
             "|\\*([^*]+?)\\*" +
-            "|_([^_]+?)_"
+            "|_([^_]+?)_" +
+            "|!\\[([^\\]]*?)\\]\\(([^)\\s]+?)\\)"
     )
+
+    /** رأس كتلة اقتباس GFM: `[!NOTE]`/`[!TIP]`/`[!IMPORTANT]`/`[!WARNING]`/`[!CAUTION]` بمفردها على
+     *  أول سطر داخل الاقتباس (بعد إسقاط "> ") — نفس صياغة GitHub Flavored Markdown الشائعة في
+     *  READMEs، انظر [appendCallout]. */
+    private val calloutMarkerRegex = Regex("^\\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)]\\s*$", RegexOption.IGNORE_CASE)
 
     private val orderedListRegex = Regex("^(\\d{1,4})[.)]\\s+(.*)$")
     private val taskListRegex = Regex("^[-*+]\\s+\\[([ xX])]\\s+(.*)$")
@@ -335,9 +383,56 @@ object MarkdownLite {
     /** بادئة كتلة الوصف القابلة للطي `[~عنوان]` ... `[~/]` — انظر [appendCollapsibleSection]. */
     private const val COLLAPSIBLE_CLOSE_MARKER = "[~/]"
 
+    /** نمط عرض تنبيه GFM واحد (لون الهوية، أيقونة، تسمية العرض) — انظر [appendCallout]. الألوان
+     *  الخمسة نفسها المستخدَمة في "ستيكر Rin" ([STICKER_VARIANTS]) أعلاه، فيبقى شعور اللوحة اللونية
+     *  موحَّداً عبر كل عناصر الملف بدل تعريف طاقم ألوان مستقل لهذه الميزة وحدها. */
+    private data class CalloutStyle(val color: Int, val icon: String, val label: String)
+    private val CALLOUT_STYLES: Map<String, CalloutStyle> = mapOf(
+        "NOTE" to CalloutStyle(0xFF3B9EFF.toInt(), "\u2139\uFE0F", "Note"),
+        "TIP" to CalloutStyle(0xFF22C88E.toInt(), "\uD83D\uDCA1", "Tip"),
+        "IMPORTANT" to CalloutStyle(0xFF7C5CFF.toInt(), "\u2757", "Important"),
+        "WARNING" to CalloutStyle(0xFFFFC94D.toInt(), "\u26A0\uFE0F", "Warning"),
+        "CAUTION" to CalloutStyle(0xFFF14C4C.toInt(), "\uD83D\uDED1", "Caution")
+    )
+
+    /**
+     * **إضافة "معاينة Markdown حقيقية": تنبيهات GitHub Flavored Markdown** — صياغة شائعة جداً في
+     * READMEs حديثة: `> [!NOTE]` / `[!TIP]` / `[!IMPORTANT]` / `[!WARNING]` / `[!CAUTION]` كأول
+     * سطر داخل اقتباس `>`، فيتحوّل الاقتباس كاملاً من علامة تنصيص محايدة إلى بطاقة تنبيه ملوَّنة
+     * (لون + أيقونة مميِّزان لكل نوع) بدل بقائها اقتباساً عادياً بلا تمييز دلالي — يُكتشَف هذا في
+     * معالج `>` بـ[toSpannable] عبر [calloutMarkerRegex] على أول سطر فقط، وتُستدعى هذه الدالة
+     * بدلاً من رسم الاقتباس العادي متى ما طابَقه.
+     */
+    private fun appendCallout(out: SpannableStringBuilder, type: String, bodyLines: List<String>) {
+        val style = CALLOUT_STYLES.getValue(type.uppercase())
+        val start = out.length
+        val headerStart = out.length
+        out.append(style.icon).append(' ').append(style.label)
+        out.setSpan(StyleSpan(Typeface.BOLD), headerStart, out.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        out.setSpan(ForegroundColorSpan(style.color), headerStart, out.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        val textStart = out.length
+        val nonBlankBody = bodyLines.filter { it.isNotBlank() || bodyLines.size == 1 }
+        if (nonBlankBody.isNotEmpty()) {
+            out.append('\n')
+            nonBlankBody.forEachIndexed { idx, line -> if (idx > 0) out.append('\n'); appendInline(out, line) }
+        }
+        val end = out.length
+        if (end > textStart) {
+            out.setSpan(ForegroundColorSpan(COLOR_QUOTE_TEXT), textStart, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        }
+        out.setSpan(QuoteBarSpan(style.color), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        out.setSpan(
+            RoundedCardSpan(COLOR_QUOTE_BG, style.color, start, end),
+            start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+        )
+    }
+
     /**
      * يبني معاينة Markdown حقيقية جاهزة لعرضها مباشرة عبر `textView.text = MarkdownLite.toSpannable(md)`.
      *
+     * @param baseDir مجلد أساس اختياري (مثال: `RinEngine.currentBaseDir()`) لحلّ مسارات صور محلية
+     * نسبية في `![نص](مسار)` — انظر [appendImage]/[decodeLocalImage]. null = لا حلّ نسبي (صور بمسار
+     * مطلق أو `file://` فقط)، بلا أي تغيير في السلوك القديم لأي استدعاء لا يمرِّره.
      * @param expandedSections مجموعة قابلة للتعديل بمعرِّفات أقسام `[~عنوان]` ... `[~/]` المفتوحة
      * حالياً (انظر [appendCollapsibleSection]) — نفس المجموعة يجب تمريرها في كل إعادة بناء لنفس
      * TextView حتى تبقى حالة الفتح/الإغلاق محفوظة بين استدعاء وآخر؛ [applyTo] يتكفّل بهذا تلقائياً.
@@ -347,8 +442,10 @@ object MarkdownLite {
     fun toSpannable(
         markdown: String,
         expandedSections: MutableSet<String> = mutableSetOf(),
+        baseDir: String? = null,
         onToggle: (() -> Unit)? = null
     ): CharSequence {
+        currentBaseDir = baseDir
         val out = SpannableStringBuilder()
         val lines = markdown.lines()
         var i = 0
@@ -457,30 +554,38 @@ object MarkdownLite {
                         } else break
                     }
                     blockGap()
-                    val start = out.length
-                    val glyphStart = out.length
-                    out.append("\u201C ") // علامة تنصيص مزخرفة لتمييز المقتطف المُقتبَس بصرياً
-                    val glyphEnd = out.length
-                    out.setSpan(RelativeSizeSpan(1.3f), glyphStart, glyphEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-                    out.setSpan(StyleSpan(Typeface.BOLD), glyphStart, glyphEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-                    out.setSpan(ForegroundColorSpan(COLOR_QUOTE_BAR), glyphStart, glyphEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-                    val textStart = out.length
-                    quoteLines.forEachIndexed { idx, ql ->
-                        if (idx > 0) out.append("\n")
-                        appendInline(out, ql)
+                    val calloutType = quoteLines.firstOrNull()?.let { calloutMarkerRegex.find(it) }
+                        ?.groupValues?.get(1)?.uppercase()
+                    if (calloutType != null) {
+                        appendCallout(out, calloutType, quoteLines.drop(1))
+                        lastWasListItem = false
+                        i = j
+                    } else {
+                        val start = out.length
+                        val glyphStart = out.length
+                        out.append("\u201C ") // علامة تنصيص مزخرفة لتمييز المقتطف المُقتبَس بصرياً
+                        val glyphEnd = out.length
+                        out.setSpan(RelativeSizeSpan(1.3f), glyphStart, glyphEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                        out.setSpan(StyleSpan(Typeface.BOLD), glyphStart, glyphEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                        out.setSpan(ForegroundColorSpan(COLOR_QUOTE_BAR), glyphStart, glyphEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                        val textStart = out.length
+                        quoteLines.forEachIndexed { idx, ql ->
+                            if (idx > 0) out.append("\n")
+                            appendInline(out, ql)
+                        }
+                        val end = out.length
+                        // نطاقات منفصلة غير متداخلة (بدل نطاق واحد شامل) حتى لا يطغى لون النص العام
+                        // على لون علامة التنصيص المميّزة أعلاه عند تطبيق الـSpans بالترتيب.
+                        out.setSpan(QuoteBarSpan(COLOR_QUOTE_BAR), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                        out.setSpan(
+                            RoundedCardSpan(COLOR_QUOTE_BG, COLOR_CARD_BORDER, start, end),
+                            start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                        )
+                        out.setSpan(ForegroundColorSpan(COLOR_QUOTE_TEXT), textStart, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                        out.setSpan(StyleSpan(Typeface.ITALIC), textStart, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                        lastWasListItem = false
+                        i = j
                     }
-                    val end = out.length
-                    // نطاقات منفصلة غير متداخلة (بدل نطاق واحد شامل) حتى لا يطغى لون النص العام
-                    // على لون علامة التنصيص المميّزة أعلاه عند تطبيق الـSpans بالترتيب.
-                    out.setSpan(QuoteBarSpan(COLOR_QUOTE_BAR), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-                    out.setSpan(
-                        RoundedCardSpan(COLOR_QUOTE_BG, COLOR_CARD_BORDER, start, end),
-                        start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
-                    )
-                    out.setSpan(ForegroundColorSpan(COLOR_QUOTE_TEXT), textStart, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-                    out.setSpan(StyleSpan(Typeface.ITALIC), textStart, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-                    lastWasListItem = false
-                    i = j
                 }
 
                 trimmed.contains("|") && i + 1 < lines.size && isTableSeparator(lines[i + 1]) -> {
@@ -648,15 +753,23 @@ object MarkdownLite {
      * @param expandedSections حالة الأقسام القابلة للطي المفتوحة حالياً؛ الافتراضي مجموعة جديدة
      * فارغة تبقى حيّة عبر إغلاقات النقر (closures) التي يبنيها هذا الاستدعاء، فتُعاد نفس الحالة
      * تلقائياً عند إعادة بناء النص بعد كل نقرة — لا حاجة لتمريرها يدوياً في الاستخدام العادي.
+     * @param baseDir انظر معامل baseDir في [toSpannable] — يُمرَّر كما هو، افتراضياً null (لا تغيير
+     * في أي استدعاء قديم لا يمرِّره).
      */
     fun applyTo(
         textView: TextView,
         markdown: String,
         pageContainer: View? = null,
-        expandedSections: MutableSet<String> = mutableSetOf()
+        expandedSections: MutableSet<String> = mutableSetOf(),
+        baseDir: String? = null
     ) {
-        textView.text = toSpannable(markdown, expandedSections) {
-            applyTo(textView, markdown, pageContainer, expandedSections)
+        // عرض حقيقي للصور المضمَّنة يناسب TextView الفعلي بدل قيمة تقديرية ثابتة دوماً؛ عرض الشاشة
+        // الكامل كحدّ أقصى احتياطي إن لم يكن TextView قد قِيس بعد (width == 0 قبل أول تخطيط).
+        currentImageMaxWidthPx = textView.width.takeIf { it > 0 }
+            ?: (textView.resources.displayMetrics.widthPixels - (32 * textView.resources.displayMetrics.density).toInt())
+                .coerceAtLeast(DEFAULT_IMAGE_MAX_WIDTH_PX)
+        textView.text = toSpannable(markdown, expandedSections, baseDir) {
+            applyTo(textView, markdown, pageContainer, expandedSections, baseDir)
         }
         textView.movementMethod = LinkMovementMethod.getInstance()
         textView.setLinkTextColor(COLOR_LINK)
@@ -668,6 +781,40 @@ object MarkdownLite {
                     GradientDrawable.Orientation.TOP_BOTTOM, bg.colors
                 )
                 null -> {}
+            }
+        }
+        loadPendingRemoteImages(textView)
+    }
+
+    /**
+     * يبحث في نص [textView] الحالي عن كل [PendingImageSpan] (عناصر نائبة لصور بعيدة قيد التحميل،
+     * انظر [appendImage])، ويطلب تحميل كل رابط منها عبر [loadRemoteImageAsync]، فإن نجح يستبدل
+     * نطاق العنصر النائب بـ[ImageSpan] حقيقي مباشرة داخل [Spannable] المُعلَّق فعلياً على
+     * [textView] (لا نص جديد يُبنى من الصفر). يتحقّق أولاً أن [textView] لم يُعِد بناء نصّه لسبب
+     * آخر (نقرة على قسم قابل للطي مثلاً) بين لحظة الطلب واكتمال التنزيل عبر `getSpanStart` -- قيمة
+     * سالبة تعني أن الوسم لم يعد جزءاً من النص الحالي، فيُسقَط الاستبدال بصمت بلا أي أثر.
+     */
+    private fun loadPendingRemoteImages(textView: TextView) {
+        val spannable = textView.text as? Spannable ?: return
+        val pendings = spannable.getSpans(0, spannable.length, PendingImageSpan::class.java)
+        val maxWidthPx = currentImageMaxWidthPx
+        for (pending in pendings) {
+            loadRemoteImageAsync(pending.url) { bitmap ->
+                if (bitmap == null) return@loadRemoteImageAsync
+                val current = textView.text as? Spannable ?: return@loadRemoteImageAsync
+                val start = current.getSpanStart(pending)
+                val end = current.getSpanEnd(pending)
+                if (start < 0 || end <= start) return@loadRemoteImageAsync // نص أُعيد بناؤه؛ لم يعد هذا الوسم موجوداً
+                val (w, h) = if (bitmap.width > maxWidthPx) {
+                    val scale = maxWidthPx.toFloat() / bitmap.width
+                    maxWidthPx to (bitmap.height * scale).toInt().coerceAtLeast(1)
+                } else {
+                    bitmap.width to bitmap.height
+                }
+                val drawable = BitmapDrawable(textView.resources, bitmap).apply { setBounds(0, 0, w, h) }
+                current.setSpan(ImageSpan(drawable, ImageSpan.ALIGN_BOTTOM), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                current.removeSpan(pending)
+                textView.text = current // يُجبر TextView على إعادة القياس/الرسم بالأبعاد الجديدة للصورة
             }
         }
     }
@@ -720,6 +867,7 @@ object MarkdownLite {
                 g[12] != null && g[13] != null -> appendLink(out, g[12]!!.value, g[13]!!.value)
                 g[14] != null -> appendStyled(out, g[14]!!.value, Typeface.ITALIC)
                 g[15] != null -> appendStyled(out, g[15]!!.value, Typeface.ITALIC)
+                g[16] != null && g[17] != null -> appendImage(out, g[16]!!.value, g[17]!!.value)
             }
             idx = match.range.last + 1
         }
@@ -772,6 +920,127 @@ object MarkdownLite {
         out.setSpan(URLSpan(url), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
         out.setSpan(ForegroundColorSpan(COLOR_LINK), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
         out.setSpan(StyleSpan(Typeface.BOLD), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+    }
+
+    /** أقصى عرض افتراضي (px) لصورة Markdown مضمَّنة حين لا يُمرَّر عرض فعلي من [applyTo] (مثال:
+     *  استدعاء [toSpannable] المباشر بلا TextView) — قيمة معقولة تناسب معظم عروض الشاشات. */
+    private const val DEFAULT_IMAGE_MAX_WIDTH_PX = 480
+
+    /** عرض العرض الأقصى الفعلي الحالي (px) لصور Markdown المضمَّنة — [applyTo] يضبطه على عرض
+     *  [TextView] الحقيقي قبل الاستدعاء، لتناسب الصورة الشاشة بدقّة بدل قيمة تقديرية ثابتة دوماً؛
+     *  نفس أسلوب [currentBaseDir] أعلاه (حالة كائن مؤقتة، آمنة لأن كل استدعاء متزامن من UI thread). */
+    private var currentImageMaxWidthPx = DEFAULT_IMAGE_MAX_WIDTH_PX
+
+    /** وسم "تعليق" غير مرئي بذاته (لا يرسم شيئاً — [updateDrawState] فارغ عمداً) يُثبَّت فوق نص
+     *  العنصر النائب لصورة بعيدة قيد التحميل، ليتمكّن [applyTo] لاحقاً من تحديد مكانها بدقّة عبر
+     *  `Spannable.getSpanStart/End(this)` واستبدالها بـ[ImageSpan] حقيقي فور اكتمال التنزيل —
+     *  بلا حاجة لأي قناة بيانات جانبية بين [toSpannable] و[applyTo]. */
+    private class PendingImageSpan(val url: String) : CharacterStyle() {
+        override fun updateDrawState(tp: TextPaint) {}
+    }
+
+    /**
+     * صورة Markdown حقيقية `![نص](مسار/رابط)` — **إضافة "معاينة Markdown حقيقية"**: حتى الآن كانت
+     * هذه الصياغة (لغير شارات shields.io) تسقط بصمت إلى [appendLink] عادي (نص + سهم ↗ يفتح
+     * الرابط)، بلا أي صورة فعلية معروضة — أول فجوة حقيقية عن CommonMark القياسي في هذا الملف.
+     * الآن:
+     * 1. **مسار محلي** (مطلق، أو `file://`، أو نسبي لـ[currentBaseDir] إن مُرِّر) — يُفكّ فوراً
+     *    ومتزامناً عبر [decodeLocalImage] ويُدرَج كـ[ImageSpan] حقيقي في نفس الاستدعاء، بلا أي
+     *    تأخير أو حالة تحميل (نفس فلسفة `print.image` تماماً: عرض ملف موجود بالفعل على القرص).
+     * 2. **رابط بعيد http(s)** — لا يمكن تنزيله متزامناً هنا (لا Thread/Context متاحين داخل
+     *    [toSpannable] الخالصة، وحظرُ الشبكة على UI thread غير مقبول أصلاً)؛ يُدرَج بدلاً منه نص
+     *    عنصر نائب مؤقت (أيقونة 🖼 + النص البديل) موسوماً بـ[PendingImageSpan]، يستبدله [applyTo]
+     *    بصورة حقيقية فور اكتمال التنزيل غير المتزامن عبر [loadRemoteImageAsync] — التوليف الوحيد
+     *    الممكن بين "بناء متزامن للنص" و"تحميل شبكي غير متزامن للصورة" دون كسر توقيع الدالة الحالي.
+     * 3. **أي شيء آخر** (مسار غير قابل للحلّ محلياً بلا baseDir، مخطّط بروتوكول غريب...) — سلوك
+     *    قديم بلا تغيير: زر رابط عادي عبر [appendLink].
+     */
+    private fun appendImage(out: SpannableStringBuilder, alt: String, url: String) {
+        val trimmedUrl = url.trim()
+        val local = decodeLocalImage(trimmedUrl, currentBaseDir, currentImageMaxWidthPx)
+        if (local != null) {
+            appendBitmap(out, local)
+            return
+        }
+        if (trimmedUrl.startsWith("http://", ignoreCase = true) || trimmedUrl.startsWith("https://", ignoreCase = true)) {
+            val start = out.length
+            out.append("\uD83D\uDDBC ") // 🖼 — يوحي بصورة قيد التحميل قبل استبدالها فعلياً
+            out.append(alt.ifBlank { "\u0635\u0648\u0631\u0629" }) // "صورة"
+            val end = out.length
+            out.setSpan(ForegroundColorSpan(COLOR_LINK), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            out.setSpan(StyleSpan(Typeface.ITALIC), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            out.setSpan(PendingImageSpan(trimmedUrl), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            return
+        }
+        // لا صورة محلية ولا رابط بعيد صالح -- نفس السلوك القديم قبل هذه الإضافة تماماً.
+        appendLink(out, alt.ifBlank { url }, url)
+    }
+
+    /** يُدرِج [bitmap] كـ[ImageSpan] حقيقي واحد، بأبعاد مُصغَّرة لتُناسب [currentImageMaxWidthPx]
+     *  مع الحفاظ على نسبة العرض/الارتفاع الأصلية (بلا تكبير أبداً إن كانت الصورة أصغر أصلاً). */
+    private fun appendBitmap(out: SpannableStringBuilder, bitmap: Bitmap) {
+        val maxW = currentImageMaxWidthPx
+        val (w, h) = if (bitmap.width > maxW) {
+            val scale = maxW.toFloat() / bitmap.width
+            maxW to (bitmap.height * scale).toInt().coerceAtLeast(1)
+        } else {
+            bitmap.width to bitmap.height
+        }
+        val drawable = BitmapDrawable(null, bitmap).apply { setBounds(0, 0, w, h) }
+        val start = out.length
+        out.append('\uFFFC') // Object Replacement Character -- المحرف القياسي الذي يستبدله ImageSpan بصرياً
+        out.setSpan(ImageSpan(drawable, ImageSpan.ALIGN_BOTTOM), start, out.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+    }
+
+    /**
+     * يفكّ صورة محلية إن أمكن حلّ [url] كملف موجود فعلاً على القرص، بتصغير ذكي (inSampleSize) بدل
+     * تحميلها بالحجم الكامل في الذاكرة دوماً — نفس أسلوب [RinJobAdapter.decodeSampledBitmap]
+     * (`print.image`) تماماً. يرجع null بهدوء (بلا استثناء) لأي رابط بعيد أو مسار غير موجود، حتى
+     * يتابع [appendImage] للمسار البعيد/الاحتياطي التالي بأمان.
+     */
+    private fun decodeLocalImage(url: String, baseDir: String?, maxWidthPx: Int): Bitmap? {
+        if (url.startsWith("http://", ignoreCase = true) || url.startsWith("https://", ignoreCase = true)) return null
+        val path = when {
+            url.startsWith("file://") -> Uri.parse(url).path
+            url.startsWith("/") -> url
+            !baseDir.isNullOrBlank() -> File(baseDir, url).absolutePath
+            else -> null
+        } ?: return null
+        val file = File(path)
+        if (!file.exists() || !file.isFile) return null
+        return try {
+            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            BitmapFactory.decodeFile(file.absolutePath, bounds)
+            if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
+            var sample = 1
+            while (bounds.outWidth / (sample * 2) >= maxWidthPx) sample *= 2
+            BitmapFactory.decodeFile(file.absolutePath, BitmapFactory.Options().apply { inSampleSize = sample })
+        } catch (t: Throwable) {
+            null
+        }
+    }
+
+    /**
+     * يُنزِّل صورة [url] البعيدة على thread خلفي (مع مهلة 8 ثوانٍ)، ثم يستدعي [onLoaded] على UI
+     * thread دوماً (عبر [mainHandler]) بالـ[Bitmap] الناتج أو null عند أي فشل (رابط ميت، ليس صورة،
+     * انقطاع شبكة...) — لا يرمي أبداً. النتائج الناجحة تُخزَّن في [remoteImageCache] لتفادي إعادة
+     * التنزيل عند كل إعادة بناء لنفس الشاشة (كل نقرة على قسم قابل للطي).
+     */
+    private fun loadRemoteImageAsync(url: String, onLoaded: (Bitmap?) -> Unit) {
+        remoteImageCache[url]?.let { mainHandler.post { onLoaded(it) }; return }
+        remoteImageExecutor.execute {
+            val bitmap = try {
+                (URL(url).openConnection() as HttpURLConnection).apply {
+                    connectTimeout = 8000
+                    readTimeout = 8000
+                    instanceFollowRedirects = true
+                }.inputStream.use { BitmapFactory.decodeStream(it) }
+            } catch (t: Throwable) {
+                null
+            }
+            if (bitmap != null) remoteImageCache[url] = bitmap
+            mainHandler.post { onLoaded(bitmap) }
+        }
     }
 
     /** يطابق رابط شارة shields.io: `https://img.shields.io/badge/<مقاطع>` — امتداد `.svg`/`.png`
