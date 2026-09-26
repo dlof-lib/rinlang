@@ -1187,7 +1187,107 @@ ArrayPtr Interpreter::sqlExecute(const std::string& rawArg, int line) const {
 }
 
 void Interpreter::registerNatives() {
+    // ========================================================================
+    // KEY_TERMS + built-in conditions
+    // ------------------------------------------------------------------------
+    // KEY_TERMS is deliberately a runtime registry, not a second parser.
+    // It lets libraries describe their preferred vocabulary while keeping Rin's
+    // core syntax stable. Key-condition forms (`=if=`, `=unless=`, `=when=`) are
+    // parser sugar over the existing IfStmt.
+    // ========================================================================
+    natives["__key_terms.set"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("__key_terms.set", a, 1, line);
+        if (a[0].type != Value::Type::MAP)
+            throw diagErr(diag::Code::E0004_InvalidType, line, "'.KEY_TERMS' يجب أن تكون map من الاسم إلى المصطلح");
+        keyTerms_.clear();
+        for (const auto& kv : *a[0].map) {
+            if (kv.first.type != Value::Type::STRING || kv.second.type != Value::Type::STRING)
+                throw diagErr(diag::Code::E0004_InvalidType, line, "'.KEY_TERMS' يقبل أزواج string -> string فقط");
+            keyTerms_[kv.first.str] = kv.second.str;
+        }
+        return Value::boolean_(true);
+    };
 
+    natives["__key_terms.check"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("__key_terms.check", a, 1, line);
+        if (a[0].type != Value::Type::MAP)
+            throw diagErr(diag::Code::E0004_InvalidType, line, "'.KEY_TERMS == {...}' يتطلب map");
+        if (keyTerms_.size() != a[0].map->size()) return Value::boolean_(false);
+        for (const auto& kv : *a[0].map) {
+            if (kv.first.type != Value::Type::STRING || kv.second.type != Value::Type::STRING)
+                throw diagErr(diag::Code::E0004_InvalidType, line, "'.KEY_TERMS' يقبل أزواج string -> string فقط");
+            auto it = keyTerms_.find(kv.first.str);
+            if (it == keyTerms_.end() || it->second != kv.second.str) return Value::boolean_(false);
+        }
+        return Value::boolean_(true);
+    };
+
+    natives["key_terms"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("key_terms", a, 0, line);
+        auto m = std::make_shared<MapData>();
+        for (const auto& kv : keyTerms_)
+            m->push_back({Value::string(kv.first), Value::string(kv.second)});
+        return Value::makeMap(m);
+    };
+
+    // Generic condition helpers. They return bool and are safe to compose with if/when/loops.
+    natives["is"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("is", a, 2, line);
+        return Value::boolean_(valuesEqual(a[0], a[1]));
+    };
+    natives["isNot"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("isNot", a, 2, line);
+        return Value::boolean_(!valuesEqual(a[0], a[1]));
+    };
+    natives["empty"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("empty", a, 1, line);
+        const Value& v = a[0];
+        if (v.type == Value::Type::NIL) return Value::boolean_(true);
+        if (v.type == Value::Type::STRING) return Value::boolean_(v.str.empty());
+        if (v.type == Value::Type::ARRAY) return Value::boolean_(!v.array || v.array->empty());
+        if (v.type == Value::Type::MAP) return Value::boolean_(!v.map || v.map->empty());
+        return Value::boolean_(false);
+    };
+    natives["typeIs"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("typeIs", a, 2, line);
+        if (a[1].type != Value::Type::STRING)
+            throw diagErr(diag::Code::E0004_InvalidType, line, "'typeIs' يتطلب اسم النوع كنص");
+        return Value::boolean_(a[0].typeName() == a[1].str);
+    };
+    natives["between"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("between", a, 3, line);
+        double x = asNumber(a[0], "between", line);
+        double lo = asNumber(a[1], "between", line);
+        double hi = asNumber(a[2], "between", line);
+        if (lo > hi) std::swap(lo, hi);
+        return Value::boolean_(x >= lo && x <= hi);
+    };
+    natives["all"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("all", a, 1, line);
+        if (a[0].type != Value::Type::ARRAY)
+            throw diagErr(diag::Code::E0004_InvalidType, line, "'all' يتطلب array");
+        for (const auto& v : *a[0].array) if (!v.isTruthy()) return Value::boolean_(false);
+        return Value::boolean_(true);
+    };
+    natives["any"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("any", a, 1, line);
+        if (a[0].type != Value::Type::ARRAY)
+            throw diagErr(diag::Code::E0004_InvalidType, line, "'any' يتطلب array");
+        for (const auto& v : *a[0].array) if (v.isTruthy()) return Value::boolean_(true);
+        return Value::boolean_(false);
+    };
+    natives["none"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("none", a, 1, line);
+        if (a[0].type != Value::Type::ARRAY)
+            throw diagErr(diag::Code::E0004_InvalidType, line, "'none' يتطلب array");
+        for (const auto& v : *a[0].array) if (v.isTruthy()) return Value::boolean_(false);
+        return Value::boolean_(true);
+    };
+    natives["coalesce"] = [](std::vector<Value>& a, int line) -> Value {
+        if (a.empty()) return Value::nil();
+        for (const auto& v : a) if (v.type != Value::Type::NIL) return v;
+        return Value::nil();
+    };
     // ========================================================================
     // Rin Artifact / Container Factory
     // إنشاء ملفات وQR/Barcode/IDs/Hash مرتبطة بالحاوية الحالية. كل Artifact يُحفظ
@@ -5217,9 +5317,19 @@ void Interpreter::registerNatives() {
     };
     natives["has"] = [](std::vector<Value>& a, int line) -> Value {
         expectArgs("has", a, 2, line);
-        if (a[0].type != Value::Type::MAP) throw diagErr(diag::Code::E0004_InvalidType, line, "'has' expects a map");
-        for (auto& kv : *a[0].map) if (valuesEqual(kv.first, a[1])) return Value::boolean_(true);
-        return Value::boolean_(false);
+        const Value& collection = a[0];
+        const Value& needle = a[1];
+        if (collection.type == Value::Type::MAP) {
+            for (const auto& kv : *collection.map) if (valuesEqual(kv.first, needle)) return Value::boolean_(true);
+            return Value::boolean_(false);
+        }
+        if (collection.type == Value::Type::ARRAY) {
+            for (const auto& v : *collection.array) if (valuesEqual(v, needle)) return Value::boolean_(true);
+            return Value::boolean_(false);
+        }
+        if (collection.type == Value::Type::STRING && needle.type == Value::Type::STRING)
+            return Value::boolean_(collection.str.find(needle.str) != std::string::npos);
+        throw diagErr(diag::Code::E0004_InvalidType, line, "'has' يتطلب map أو array، أو string مع string");
     };
     natives["remove"] = [](std::vector<Value>& a, int line) -> Value {
         expectArgs("remove", a, 2, line);
