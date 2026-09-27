@@ -6,6 +6,14 @@
         <item name="colorAccent">@color/rin_accent</item>
         <item name="android:windowBackground">@color/rin_background</item>
         <item name="android:statusBarColor">@color/rin_toolbar</item>
+        <!-- نمط الزر الافتراضي لكل <Button> عادي بالتطبيق (نظام Widget.RinLang.Button.* في
+             styles.xml): يرفع أي زر لم يُحدَّد له style أو background خاص تلقائياً لنفس
+             المظهر الاحترافي الموحَّد (خلفية بنفسجية مدوَّرة الزوايا 12dp + حالة ضغط/تعطيل
+             واضحة) بلا الحاجة للمس عشرات ملفات الـlayout واحداً واحداً. أزرار لها style= أو
+             background صريح بالـlayout (زي RinEditorKeyButton) تبقى كما هي لأن قيم الـlayout
+             الصريحة تتفوّق دائماً على نمط الثيم الافتراضي. -->
+        <item name="materialButtonStyle">@style/Widget.RinLang.Button</item>
+        <item name="materialButtonOutlinedStyle">@style/Widget.RinLang.Button.Outline</item>
         <!-- كل AlertDialog.Builder(this) عبر التطبيق (الألبومات/المشاريع/التأكيدات...) يرث
              تلقائياً هذا الثيم الموحّد بدل حوار النظام المسطّح الافتراضي — انظر
              Theme.RinLang.AlertDialog أسفله. تغيير واحد هنا يُحدِّث كل الحوارات دفعة واحدة. -->
