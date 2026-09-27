@@ -1781,4 +1781,28 @@ object MarkdownLite {
         }
     }
 
-    /** شريط جانبي ملوَّن حقيقي (لا مجرّد مسافة بادئة) يُرسم على طول كل سطر من كتلة اقتباس `
+    /** شريط جانبي ملوَّن حقيقي (لا مجرّد مسافة بادئة) يُرسم على طول كل سطر من كتلة اقتباس `>`. */
+    private class QuoteBarSpan(
+        private val barColor: Int,
+        private val barWidth: Float = 6f,
+        private val gap: Float = 12f
+    ) : LineBackgroundSpan {
+        override fun drawBackground(
+            canvas: Canvas, paint: Paint,
+            left: Int, right: Int, top: Int, baseline: Int, bottom: Int,
+            text: CharSequence, start: Int, end: Int, lnum: Int
+        ) {
+            val savedColor = paint.color
+            val savedStyle = paint.style
+            val savedAA = paint.isAntiAlias
+            paint.isAntiAlias = true
+            paint.style = Paint.Style.FILL
+            paint.color = barColor
+            val barLeft = left.toFloat() + gap
+            canvas.drawRect(barLeft, top.toFloat(), barLeft + barWidth, bottom.toFloat(), paint)
+            paint.color = savedColor
+            paint.style = savedStyle
+            paint.isAntiAlias = savedAA
+        }
+    }
+}
