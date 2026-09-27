@@ -147,4 +147,68 @@
         <item name="android:background">@drawable/bg_keyword_chip</item>
         <item name="android:textColor">@color/rin_accent</item>
     </style>
+
+    <!-- ============================================================================
+         أنماط الأزرار الموحّدة (Widget.RinLang.Button.*) — الحلقة الناقصة بين خلفيات
+         drawable/bg_btn_*.xml وألوان نصوصها color/btn_text_*.xml (الجاهزتين مسبقاً) وبين
+         الاستخدام الفعلي: بدل ضبط background + textColor + padding + حجم النص يدوياً بكل
+         Button (كما كان يحدث في activity_settings.xml)، تكفي إضافة style= واحدة. Primary هو
+         الأساس (راجع Theme.RinLang.materialButtonStyle في themes.xml)، فأي <Button> عادي بأي
+         شاشة يرث تلقائياً هذا المظهر الاحترافي بلا لمس الـlayout إطلاقاً ما لم يفرض style
+         مختلفاً أو background خاصاً به. rippleColor مُفرَّغ عمداً في كل الأنماط: أزرار
+         primary/secondary/danger/success ترسم حالة الضغط بنفسها كلون خلفية بديل داخل
+         bg_btn_*.xml (selector عادي، لا ripple)، وoutline/outline_danger/ghost أصلاً تُغلِّف
+         <ripple> خاصاً بها — فتفعيل ripple إضافي من MaterialButton فوقها يُنتج طبقتين متداخلتين. -->
+    <style name="Widget.RinLang.Button" parent="Widget.MaterialComponents.Button">
+        <item name="android:background">@drawable/bg_btn_primary</item>
+        <item name="android:textColor">@color/btn_text_on_filled</item>
+        <item name="backgroundTint">@null</item>
+        <item name="rippleColor">@android:color/transparent</item>
+        <item name="elevation">0dp</item>
+        <item name="android:stateListAnimator">@null</item>
+        <item name="android:insetTop">0dp</item>
+        <item name="android:insetBottom">0dp</item>
+        <item name="android:minHeight">46dp</item>
+        <item name="android:minWidth">0dp</item>
+        <item name="android:paddingStart">20dp</item>
+        <item name="android:paddingEnd">20dp</item>
+        <item name="android:textAllCaps">false</item>
+        <item name="android:textSize">14.5sp</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:letterSpacing">0</item>
+    </style>
+
+    <!-- إجراء مساعد بنفس وزن Primary البصري لكن بهوية لون مختلفة (تيل) — راجع bg_btn_secondary.xml. -->
+    <style name="Widget.RinLang.Button.Secondary">
+        <item name="android:background">@drawable/bg_btn_secondary</item>
+    </style>
+
+    <!-- إجراء هدّام فوري (حذف نهائي) — خلفية حمراء ممتلئة، راجع bg_btn_danger.xml. -->
+    <style name="Widget.RinLang.Button.Danger">
+        <item name="android:background">@drawable/bg_btn_danger</item>
+    </style>
+
+    <!-- تأكيد إيجابي (تم الحفظ/التصدير نجح/نشر) — راجع bg_btn_success.xml. -->
+    <style name="Widget.RinLang.Button.Success">
+        <item name="android:background">@drawable/bg_btn_success</item>
+    </style>
+
+    <!-- إجراء ثانوي (إلغاء/رجوع/خيار بديل): خلفية شفافة + إطار بنفسجي — راجع bg_btn_outline.xml. -->
+    <style name="Widget.RinLang.Button.Outline">
+        <item name="android:background">@drawable/bg_btn_outline</item>
+        <item name="android:textColor">@color/btn_text_outline</item>
+    </style>
+
+    <!-- إجراء هدّام غير فوري (زي "استعادة الإعدادات الافتراضية"): إطار أحمر بدل خلفية حمراء
+         كاملة — راجع bg_btn_outline_danger.xml. -->
+    <style name="Widget.RinLang.Button.OutlineDanger" parent="Widget.RinLang.Button.Outline">
+        <item name="android:background">@drawable/bg_btn_outline_danger</item>
+        <item name="android:textColor">@color/btn_text_outline_danger</item>
+    </style>
+
+    <!-- أدنى أهمية (تجاهل/رابط نصّي): شفاف تماماً بلا إطار — راجع bg_btn_ghost.xml. -->
+    <style name="Widget.RinLang.Button.Ghost" parent="Widget.RinLang.Button.Outline">
+        <item name="android:background">@drawable/bg_btn_ghost</item>
+        <item name="android:textColor">@color/rin_on_toolbar_dim</item>
+    </style>
 </resources>
