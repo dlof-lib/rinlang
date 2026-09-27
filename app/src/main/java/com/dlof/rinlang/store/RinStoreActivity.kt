@@ -18,6 +18,7 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import com.dlof.rinlang.BottomNavHelper
 import com.dlof.rinlang.BottomNavTab
 import com.dlof.rinlang.Project
@@ -54,6 +55,7 @@ class RinStoreActivity : BaseConnectivityActivity() {
     private lateinit var project: Project
     private lateinit var rvPackages: RecyclerView
     private lateinit var shimmerSkeleton: ShimmerLayout
+    private lateinit var swipeRefresh: SwipeRefreshLayout
     private lateinit var txtEmpty: View
     private lateinit var txtResultsCount: TextView
     private lateinit var adapter: PackageAdapter
@@ -83,6 +85,7 @@ class RinStoreActivity : BaseConnectivityActivity() {
 
         rvPackages = findViewById(R.id.rvPackages)
         shimmerSkeleton = findViewById(R.id.shimmerStoreSkeleton)
+        swipeRefresh = findViewById(R.id.swipeRefreshStore)
         txtEmpty = findViewById(R.id.txtEmptyStore)
         txtResultsCount = findViewById(R.id.txtStoreResultsCount)
         edtSearch = findViewById(R.id.edtStoreSearch)
@@ -108,6 +111,18 @@ class RinStoreActivity : BaseConnectivityActivity() {
 
         btnSort.setOnClickListener { showSortMenu() }
 
+        // سحب-للتحديث: يعيد جلب القائمة من الصفر دون إظهار الهيكل التغبيشي الكامل مجدداً (القائمة
+        // الحالية تبقى ظاهرة تحت مؤشّر السحب أثناء الانتظار) — انظر loadPackages(showSkeletonOnLoad).
+        swipeRefresh.setColorSchemeResources(R.color.rin_accent)
+        swipeRefresh.setOnRefreshListener {
+            if (!isOnline()) {
+                swipeRefresh.isRefreshing = false
+                showOfflineOverlay()
+                return@setOnRefreshListener
+            }
+            loadPackages(showSkeletonOnLoad = false)
+        }
+
         runIfOnline { loadPackages() }
     }
 
@@ -116,10 +131,15 @@ class RinStoreActivity : BaseConnectivityActivity() {
         loadPackages()
     }
 
-    private fun loadPackages() {
-        showSkeleton()
+    /**
+     * @param showSkeletonOnLoad أثناء التحميل الأول للشاشة تُعرَض الهياكل التغبيشية كاملة؛ أما مع
+     * سحب-للتحديث (القائمة معروضة أصلاً) فتكتفي بمؤشّر السحب الدائري وحده، فتبقى البطاقات
+     * الحالية ظاهرة بلا أي وميض حتى تصل النتيجة الجديدة.
+     */
+    private fun loadPackages(showSkeletonOnLoad: Boolean = true) {
+        if (showSkeletonOnLoad) showSkeleton()
         PackageRepository.fetchAllPackages { packages ->
-            hideSkeleton()
+            if (showSkeletonOnLoad) hideSkeleton() else swipeRefresh.isRefreshing = false
             allPackages = packages
             verifiedPublisherUids = PublisherBadgeUtils.eligiblePublisherUids(packages)
             rebuildCategoryChips()
