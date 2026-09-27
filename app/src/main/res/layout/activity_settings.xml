@@ -51,15 +51,11 @@
 
             <Button
                 android:id="@+id/btnResetDefaults"
+                style="@style/Widget.RinLang.Button.OutlineDanger"
                 android:layout_width="match_parent"
                 android:layout_height="48dp"
                 android:layout_marginTop="20dp"
-                android:background="@drawable/bg_btn_outline_danger"
-                android:text="@string/action_reset_defaults"
-                android:textAllCaps="false"
-                android:textColor="@color/btn_text_outline_danger"
-                android:textSize="13.5sp"
-                android:textStyle="bold" />
+                android:text="@string/action_reset_defaults" />
         </LinearLayout>
     </LinearLayout>
 </ScrollView>
