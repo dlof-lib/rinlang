@@ -8,8 +8,9 @@ import android.text.TextWatcher
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.view.animation.AnimationUtils
+import android.widget.Button
 import android.widget.EditText
-import android.widget.ImageButton
 import android.widget.ImageView
 import android.widget.PopupMenu
 import android.widget.RatingBar
@@ -54,10 +55,11 @@ class RinStoreActivity : BaseConnectivityActivity() {
     private lateinit var rvPackages: RecyclerView
     private lateinit var shimmerSkeleton: ShimmerLayout
     private lateinit var txtEmpty: View
+    private lateinit var txtResultsCount: TextView
     private lateinit var adapter: PackageAdapter
     private lateinit var edtSearch: EditText
     private lateinit var chipGroupCategory: ChipGroup
-    private lateinit var btnSort: ImageButton
+    private lateinit var btnSort: Button
 
     private var allPackages: List<RinPackage> = emptyList()
     /** ناشرون مؤهَّلون لشارة التوثيق (يُعاد حسابها بعد كل تحميل لقائمة المتجر، دون طلب شبكة إضافي). */
@@ -82,9 +84,11 @@ class RinStoreActivity : BaseConnectivityActivity() {
         rvPackages = findViewById(R.id.rvPackages)
         shimmerSkeleton = findViewById(R.id.shimmerStoreSkeleton)
         txtEmpty = findViewById(R.id.txtEmptyStore)
+        txtResultsCount = findViewById(R.id.txtStoreResultsCount)
         edtSearch = findViewById(R.id.edtStoreSearch)
         chipGroupCategory = findViewById(R.id.chipGroupStoreCategory)
         btnSort = findViewById(R.id.btnStoreSort)
+        btnSort.text = getString(sortMode.labelRes)
 
         adapter = PackageAdapter(
             isVerified = { pkg -> pkg.publisherUid in verifiedPublisherUids },
@@ -124,16 +128,36 @@ class RinStoreActivity : BaseConnectivityActivity() {
     }
 
     private fun showSkeleton() {
+        shimmerSkeleton.animate().cancel()
+        shimmerSkeleton.alpha = 1f
         shimmerSkeleton.visibility = View.VISIBLE
         shimmerSkeleton.startShimmer()
         rvPackages.visibility = View.GONE
+        rvPackages.alpha = 0f
         txtEmpty.visibility = View.GONE
+        txtResultsCount.visibility = View.INVISIBLE
     }
 
+    /**
+     * تلاشٍ متبادل بين الهيكل التغبيشي والقائمة الحقيقية (بدل التبديل الفوري بـGONE/VISIBLE):
+     * الهيكل يتلاشى للخارج فيُخفى فعلياً بعدها، والقائمة تظهر بالتوازي مع حركة دخول متتابعة لكل
+     * بطاقة عبر [RecyclerView.scheduleLayoutAnimation] (انظر layout_animation_store_list.xml).
+     */
     private fun hideSkeleton() {
         shimmerSkeleton.stopShimmer()
-        shimmerSkeleton.visibility = View.GONE
+        shimmerSkeleton.animate()
+            .alpha(0f)
+            .setDuration(180L)
+            .withEndAction {
+                shimmerSkeleton.visibility = View.GONE
+                shimmerSkeleton.alpha = 1f
+            }
+            .start()
+
         rvPackages.visibility = View.VISIBLE
+        rvPackages.animate().alpha(1f).setDuration(220L).start()
+        rvPackages.layoutAnimation = AnimationUtils.loadLayoutAnimation(this, R.anim.layout_animation_store_list)
+        rvPackages.scheduleLayoutAnimation()
     }
 
     private fun rebuildCategoryChips() {
@@ -162,6 +186,7 @@ class RinStoreActivity : BaseConnectivityActivity() {
         SortMode.values().forEach { mode -> popup.menu.add(0, mode.ordinal, 0, getString(mode.labelRes)) }
         popup.setOnMenuItemClickListener { item ->
             sortMode = SortMode.values()[item.itemId]
+            btnSort.text = getString(sortMode.labelRes)
             applyFilters()
             true
         }
@@ -185,6 +210,16 @@ class RinStoreActivity : BaseConnectivityActivity() {
         }
         adapter.submit(result)
         txtEmpty.visibility = if (result.isEmpty()) View.VISIBLE else View.GONE
+        // العدّاد يبقى مخفياً أثناء الهيكل التغبيشي (راجع showSkeleton)، ويظهر فقط بعد وصول
+        // نتيجة حقيقية — لا داعي لإظهاره فوق حالة "لا نتائج" (رسالتها كافية وحدها).
+        if (result.isEmpty()) {
+            txtResultsCount.visibility = View.INVISIBLE
+        } else {
+            txtResultsCount.visibility = View.VISIBLE
+            txtResultsCount.text = resources.getQuantityString(
+                R.plurals.store_results_count, result.size, result.size
+            )
+        }
     }
 
     /** يفتح صفحة تفاصيل الحزمة (شبيهة بصفحة مستودع GitHub)؛ ضغط "تثبيت" هناك يُعيد معرّف الحزمة هنا. */
