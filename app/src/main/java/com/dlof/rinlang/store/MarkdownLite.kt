@@ -1699,6 +1699,315 @@ object MarkdownLite {
     }
 
     /**
+     * شريحة نصّية بخلفية مُدوَّرة موحَّدة اللون ("ستيكر") — يقيس النص فعلياً عبر [Paint.measureText]
+     * ويرسم خلفه مستطيلاً مدوَّر الزوايا، ثم يرسم النص فوقه بلون [fg] — نفس أسلوب القياس/الرسم
+     * المتّبع في [RoundedCardSpan] أدناه لكن لعنصر سطري (inline) لا كتلة كاملة.
+     */
+    private class StickerSpan(
+        private val bg: Int,
+        private val fg: Int,
+        private val cornerRadius: Float = 10f,
+        private val paddingH: Float = 14f,
+        private val paddingV: Float = 4f
+    ) : ReplacementSpan() {
+        override fun getSize(paint: Paint, text: CharSequence, start: Int, end: Int, fm: Paint.FontMetricsInt?): Int {
+            fm?.let {
+                val orig = paint.fontMetricsInt
+                it.ascent = orig.ascent; it.descent = orig.descent; it.top = orig.top; it.bottom = orig.bottom
+            }
+            return (paint.measureText(text, start, end) + paddingH * 2).toInt()
+        }
+
+        override fun draw(
+            canvas: Canvas, text: CharSequence, start: Int, end: Int,
+            x: Float, top: Int, y: Int, bottom: Int, paint: Paint
+        ) {
+            val savedColor = paint.color
+            val savedStyle = paint.style
+            val savedAA = paint.isAntiAlias
+            paint.isAntiAlias = true
+
+            val textWidth = paint.measureText(text, start, end)
+            val rect = RectF(x, top.toFloat() + paddingV, x + textWidth + paddingH * 2, bottom.toFloat() - paddingV)
+            paint.style = Paint.Style.FILL
+            paint.color = bg
+            canvas.drawRoundRect(rect, cornerRadius, cornerRadius, paint)
+
+            paint.color = fg
+            canvas.drawText(text, start, end, x + paddingH, y.toFloat(), paint)
+
+            paint.color = savedColor
+            paint.style = savedStyle
+            paint.isAntiAlias = savedAA
+        }
+    }
+
+    /**
+     * شارة بجزأين حقيقية بأسلوب شارات shields.io (جزء تسمية [label] رمادي داكن مُلاصِق مباشرة
+     * لجزء رسالة [message] ملوَّن) — التقويس يظهر فقط على الطرفين الخارجيين (يسار التسمية/يمين
+     * الرسالة) بينما يلتقي الجزءان بحافة مستقيمة في المنتصف، تماماً كصورة شارة shields.io حقيقية.
+     * [label] الفارغ (null) يرسم شارة بجزء واحد فقط بلون [messageBg].
+     */
+    private class ShieldsBadgeSpan(
+        private val label: String?,
+        private val message: String,
+        private val labelBg: Int,
+        private val messageBg: Int,
+        private val messageFg: Int,
+        private val cornerRadius: Float = 8f,
+        private val paddingH: Float = 10f,
+        private val paddingV: Float = 3f
+    ) : ReplacementSpan() {
+        private val labelFg = 0xFFFFFFFF.toInt()
+
+        private fun labelWidth(paint: Paint): Float =
+            if (label != null) paint.measureText(label) + paddingH * 2 else 0f
+
+        private fun messageWidth(paint: Paint): Float =
+            paint.measureText(message) + paddingH * 2
+
+        override fun getSize(paint: Paint, text: CharSequence, start: Int, end: Int, fm: Paint.FontMetricsInt?): Int {
+            fm?.let {
+                val orig = paint.fontMetricsInt
+                it.ascent = orig.ascent; it.descent = orig.descent; it.top = orig.top; it.bottom = orig.bottom
+            }
+            return (labelWidth(paint) + messageWidth(paint)).toInt()
+        }
+
+        override fun draw(
+            canvas: Canvas, text: CharSequence, start: Int, end: Int,
+            x: Float, top: Int, y: Int, bottom: Int, paint: Paint
+        ) {
+            val savedColor = paint.color
+            val savedStyle = paint.style
+            val savedAA = paint.isAntiAlias
+            paint.isAntiAlias = true
+            paint.style = Paint.Style.FILL
+
+            val lw = labelWidth(paint)
+            val mw = messageWidth(paint)
+            val topF = top.toFloat() + paddingV
+            val bottomF = bottom.toFloat() - paddingV
+
+            if (label != null) {
+                val labelRect = RectF(x, topF, x + lw, bottomF)
+                val labelPath = Path().apply {
+                    addRoundRect(
+                        labelRect,
+                        floatArrayOf(cornerRadius, cornerRadius, 0f, 0f, 0f, 0f, cornerRadius, cornerRadius),
+                        Path.Direction.CW
+                    )
+                }
+                paint.color = labelBg
+                canvas.drawPath(labelPath, paint)
+                paint.color = labelFg
+                canvas.drawText(label, x + paddingH, y.toFloat(), paint)
+            }
+
+            val messageRect = RectF(x + lw, topF, x + lw + mw, bottomF)
+            val messagePath = Path().apply {
+                val radii = if (label != null)
+                    floatArrayOf(0f, 0f, cornerRadius, cornerRadius, cornerRadius, cornerRadius, 0f, 0f)
+                else
+                    floatArrayOf(
+                        cornerRadius, cornerRadius, cornerRadius, cornerRadius,
+                        cornerRadius, cornerRadius, cornerRadius, cornerRadius
+                    )
+                addRoundRect(messageRect, radii, Path.Direction.CW)
+            }
+            paint.color = messageBg
+            canvas.drawPath(messagePath, paint)
+            paint.color = messageFg
+            canvas.drawText(message, x + lw + paddingH, y.toFloat(), paint)
+
+            paint.color = savedColor
+            paint.style = savedStyle
+            paint.isAntiAlias = savedAA
+        }
+    }
+
+    /**
+     * شارة "ثنائية اللون" بخلفية واحدة موحَّدة [bg]: جزء التسمية [label] بلون خافت [labelColor]
+     * (عادة [COLOR_H_DIM])، متبوعاً مباشرة بجزء القيمة [value] بلون بارز [valueColor] — عكس
+     * [ShieldsBadgeSpan] لا خلفيتين منفصلتين بل خلفية واحدة ولونَي نص فقط، لشارات "مفتاح: قيمة"
+     * العادية مثل `[* إصدار = (1.2.0) *]`.
+     */
+    private class BadgeTwoToneSpan(
+        private val label: String,
+        private val value: String,
+        private val bg: Int,
+        private val labelColor: Int,
+        private val valueColor: Int,
+        private val cornerRadius: Float = 10f,
+        private val paddingH: Float = 12f,
+        private val paddingV: Float = 4f
+    ) : ReplacementSpan() {
+        override fun getSize(paint: Paint, text: CharSequence, start: Int, end: Int, fm: Paint.FontMetricsInt?): Int {
+            fm?.let {
+                val orig = paint.fontMetricsInt
+                it.ascent = orig.ascent; it.descent = orig.descent; it.top = orig.top; it.bottom = orig.bottom
+            }
+            return (paint.measureText(text, start, end) + paddingH * 2).toInt()
+        }
+
+        override fun draw(
+            canvas: Canvas, text: CharSequence, start: Int, end: Int,
+            x: Float, top: Int, y: Int, bottom: Int, paint: Paint
+        ) {
+            val savedColor = paint.color
+            val savedStyle = paint.style
+            val savedAA = paint.isAntiAlias
+            paint.isAntiAlias = true
+
+            val textWidth = paint.measureText(text, start, end)
+            val rect = RectF(x, top.toFloat() + paddingV, x + textWidth + paddingH * 2, bottom.toFloat() - paddingV)
+            paint.style = Paint.Style.FILL
+            paint.color = bg
+            canvas.drawRoundRect(rect, cornerRadius, cornerRadius, paint)
+
+            val labelPart = "$label "
+            paint.color = labelColor
+            canvas.drawText(labelPart, x + paddingH, y.toFloat(), paint)
+            val labelPartWidth = paint.measureText(labelPart)
+            paint.color = valueColor
+            canvas.drawText(value, x + paddingH + labelPartWidth, y.toFloat(), paint)
+
+            paint.color = savedColor
+            paint.style = savedStyle
+            paint.isAntiAlias = savedAA
+        }
+    }
+
+    /**
+     * شارة "بنية هيكلية" (`hierarchy=(N)` أو `pyramid=(N)`): أيقونة أعمدة متصاعدة الارتفاع
+     * (N منها، N بين 1 و6) تمثّل بصرياً عدد المستويات، مرسومة بألوان [palette] بالتناوب (تكرار
+     * الدورة إن كان عدد المستويات أكبر من طول [palette])، متبوعة بنص الشارة بلون [textColor] على
+     * خلفية موحَّدة [bg].
+     */
+    private class PyramidBadgeSpan(
+        private val levels: Int,
+        private val bg: Int,
+        private val textColor: Int,
+        private val palette: IntArray,
+        private val cornerRadius: Float = 10f,
+        private val paddingH: Float = 12f,
+        private val paddingV: Float = 4f,
+        private val barWidth: Float = 5f,
+        private val barGap: Float = 2f,
+        private val iconTextGap: Float = 6f
+    ) : ReplacementSpan() {
+        private fun barsCount(): Int = levels.coerceIn(1, 6)
+
+        private fun iconWidth(): Float {
+            val bars = barsCount()
+            return bars * barWidth + (bars - 1) * barGap
+        }
+
+        override fun getSize(paint: Paint, text: CharSequence, start: Int, end: Int, fm: Paint.FontMetricsInt?): Int {
+            fm?.let {
+                val orig = paint.fontMetricsInt
+                it.ascent = orig.ascent; it.descent = orig.descent; it.top = orig.top; it.bottom = orig.bottom
+            }
+            val textWidth = paint.measureText(text, start, end)
+            return (paddingH * 2 + iconWidth() + iconTextGap + textWidth).toInt()
+        }
+
+        override fun draw(
+            canvas: Canvas, text: CharSequence, start: Int, end: Int,
+            x: Float, top: Int, y: Int, bottom: Int, paint: Paint
+        ) {
+            val savedColor = paint.color
+            val savedStyle = paint.style
+            val savedAA = paint.isAntiAlias
+            paint.isAntiAlias = true
+
+            val textWidth = paint.measureText(text, start, end)
+            val bars = barsCount()
+            val iconW = iconWidth()
+            val pillWidth = paddingH * 2 + iconW + iconTextGap + textWidth
+            val rect = RectF(x, top.toFloat() + paddingV, x + pillWidth, bottom.toFloat() - paddingV)
+            paint.style = Paint.Style.FILL
+            paint.color = bg
+            canvas.drawRoundRect(rect, cornerRadius, cornerRadius, paint)
+
+            val iconBottom = bottom.toFloat() - paddingV - 3f
+            val maxBarHeight = (bottom - top).toFloat() - paddingV * 2 - 6f
+            for (i in 0 until bars) {
+                val barHeight = maxBarHeight * (i + 1) / bars
+                val barLeft = x + paddingH + i * (barWidth + barGap)
+                val barTop = iconBottom - barHeight
+                paint.color = palette[i % palette.size]
+                canvas.drawRoundRect(RectF(barLeft, barTop, barLeft + barWidth, iconBottom), 1.5f, 1.5f, paint)
+            }
+
+            paint.color = textColor
+            canvas.drawText(text, start, end, x + paddingH + iconW + iconTextGap, y.toFloat(), paint)
+
+            paint.color = savedColor
+            paint.style = savedStyle
+            paint.isAntiAlias = savedAA
+        }
+    }
+
+    /**
+     * شارة "عيّنة لون" (`color=(#hex)`): دائرة صغيرة مملوءة بلون [swatchColor] الفعلي (بحدّ رفيع
+     * شبه شفّاف يبقيها مرئية حتى فوق خلفية فاتحة قريبة اللون) متبوعة بنص الشارة (تسمية اختيارية +
+     * الكود السداسي) بلون [textColor] على خلفية موحَّدة [bg].
+     */
+    private class ColorSwatchSpan(
+        private val swatchColor: Int,
+        private val bg: Int,
+        private val textColor: Int,
+        private val cornerRadius: Float = 10f,
+        private val paddingH: Float = 12f,
+        private val paddingV: Float = 4f,
+        private val swatchSize: Float = 14f,
+        private val swatchGap: Float = 8f
+    ) : ReplacementSpan() {
+        override fun getSize(paint: Paint, text: CharSequence, start: Int, end: Int, fm: Paint.FontMetricsInt?): Int {
+            fm?.let {
+                val orig = paint.fontMetricsInt
+                it.ascent = orig.ascent; it.descent = orig.descent; it.top = orig.top; it.bottom = orig.bottom
+            }
+            val textWidth = paint.measureText(text, start, end)
+            return (paddingH * 2 + swatchSize + swatchGap + textWidth).toInt()
+        }
+
+        override fun draw(
+            canvas: Canvas, text: CharSequence, start: Int, end: Int,
+            x: Float, top: Int, y: Int, bottom: Int, paint: Paint
+        ) {
+            val savedColor = paint.color
+            val savedStyle = paint.style
+            val savedAA = paint.isAntiAlias
+            paint.isAntiAlias = true
+
+            val textWidth = paint.measureText(text, start, end)
+            val pillWidth = paddingH * 2 + swatchSize + swatchGap + textWidth
+            val rect = RectF(x, top.toFloat() + paddingV, x + pillWidth, bottom.toFloat() - paddingV)
+            paint.style = Paint.Style.FILL
+            paint.color = bg
+            canvas.drawRoundRect(rect, cornerRadius, cornerRadius, paint)
+
+            val centerY = (top + bottom) / 2f
+            paint.color = swatchColor
+            canvas.drawCircle(x + paddingH + swatchSize / 2f, centerY, swatchSize / 2f, paint)
+            paint.style = Paint.Style.STROKE
+            paint.strokeWidth = 1.5f
+            paint.color = 0x33000000
+            canvas.drawCircle(x + paddingH + swatchSize / 2f, centerY, swatchSize / 2f, paint)
+
+            paint.style = Paint.Style.FILL
+            paint.color = textColor
+            canvas.drawText(text, start, end, x + paddingH + swatchSize + swatchGap, y.toFloat(), paint)
+
+            paint.color = savedColor
+            paint.style = savedStyle
+            paint.isAntiAlias = savedAA
+        }
+    }
+
+    /**
      * بطاقة خلفية بزوايا مدوَّرة حقيقية (لا مستطيل خام) تمتد بعرض السطر خلف كل كتلة (كود/اقتباس/
      * جدول)، مع حدّ خفيف حول كامل البطاقة — التقويس يظهر فقط عند السطر الأول والسطر الأخير من
      * الكتلة (يُكتشَفان بمقارنة نطاق كل سطر مُمرَّر من [drawBackground] بحدود الـSpan نفسه
