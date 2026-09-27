@@ -189,6 +189,7 @@ object MarkdownLite {
     private const val COLOR_RULE = 0xFFDDE2E8.toInt()             // rin_divider — فاصل هادئ تحت H2
     private const val COLOR_CARD_BORDER = 0xFFE2E6ED.toInt()      // حدّ واضح موحّد لبطاقات الكود/الاقتباس/الجدول
     private const val COLOR_CODE_TEXT = 0xFF20252B.toInt()        // rin_editor_text (فاتح)
+    private const val COLOR_HEADING = 0xFF12151A.toInt()          // أسود "حبري" أعمق من نص الجسم — تدرّج هرمي أوضح للعناوين
     private const val COLOR_CODE_BLOCK_BG = 0xFFF4F2FB.toInt()    // بطاقة فاتحة بلمسة بنفسجية خفيفة
     private const val COLOR_INLINE_CODE_BG = 0xFFEAE6F7.toInt()   // أغمق قليلاً لتمييز الكود المضمَّن عن السطر
 
@@ -208,6 +209,7 @@ object MarkdownLite {
     private const val COLOR_TABLE_HEADER = 0xFF6A47E8.toInt()     // rin_accent_pressed
     private const val COLOR_TABLE_BORDER = 0xFFDDE2E8.toInt()     // rin_divider
     private const val COLOR_TABLE_BG = 0xFFF6F5FB.toInt()         // أخفّ قليلاً من خلفية كتلة الكود
+    private const val COLOR_TABLE_ROW_ALT = 0xFFEDEAF7.toInt()    // تظليل تناوبي (Zebra) خفيف لصفوف البيانات الزوجية
 
     // لوحة تلوين نحوي (Syntax Palette) — نفس اللوحة الفعلية المستخدَمة في محرِّر Rin على الثيم
     // الفاتح (values/colors.xml: syntax_keyword/syntax_string/...)، مصمَّمة أصلاً لتحقّق تباين
@@ -475,14 +477,15 @@ object MarkdownLite {
             if (out.isNotEmpty()) out.append("\n\n")
         }
 
-        // فراغ إضافي أوسع قبل عنوان قسم رئيسي (H1) تحديداً — يُفصَل بصرياً عن الفقرة السابقة بأكثر
-        // من مجرّد سطر فارغ عادي، بنفس شعور الفصل الواضح بين أقسام مستند طويل احترافي (بدل تباعد
-        // مُوحَّد لكل شيء بلا تمييز بين "فقرة جديدة" و"قسم جديد كامل").
-        fun sectionGap() {
+        // فراغ إضافي أوسع قبل عنوان قسم رئيسي (H1)، وأصغر قبل قسم فرعي (H2) — يُفصَلان بصرياً عن
+        // الفقرة السابقة بأكثر من مجرّد سطر فارغ عادي، بنفس شعور الفصل الواضح بين أقسام/أقسام
+        // فرعية في مستند طويل احترافي (بدل تباعد مُوحَّد لكل شيء بلا تمييز بين "فقرة جديدة"
+        // و"قسم جديد").
+        fun sectionGap(relativeHeight: Float = 0.55f) {
             if (out.isNotEmpty()) {
                 val gapStart = out.length
                 out.append("\n")
-                out.setSpan(RelativeSizeSpan(0.55f), gapStart, out.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                out.setSpan(RelativeSizeSpan(relativeHeight), gapStart, out.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
             }
         }
 
@@ -641,7 +644,7 @@ object MarkdownLite {
                     blockGap(); appendHeading(out, trimmed.removePrefix("### "), 1.15f, level = 3); lastWasListItem = false; i++
                 }
                 trimmed.startsWith("## ") -> {
-                    blockGap(); appendHeading(out, trimmed.removePrefix("## "), 1.28f, level = 2); lastWasListItem = false; i++
+                    sectionGap(0.3f); blockGap(); appendHeading(out, trimmed.removePrefix("## "), 1.28f, level = 2); lastWasListItem = false; i++
                 }
                 trimmed.startsWith("# ") -> {
                     sectionGap(); blockGap(); appendHeading(out, trimmed.removePrefix("# "), 1.6f, level = 1); lastWasListItem = false; i++
@@ -856,7 +859,23 @@ object MarkdownLite {
         val end = out.length
         out.setSpan(StyleSpan(Typeface.BOLD), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
         out.setSpan(RelativeSizeSpan(scale), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-        if (dim) out.setSpan(ForegroundColorSpan(COLOR_H_DIM), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        out.setSpan(
+            ForegroundColorSpan(if (dim) COLOR_H_DIM else COLOR_HEADING),
+            start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+        )
+
+        // عنوان القسم الرئيسي (H1) يحصل على "لافتة" خلفية بلون الهوية خافتة خلف نصّه مباشرة —
+        // ليست مجرّد نص أسود عريض فوق الصفحة، بل شريط عنوان مميَّز بصرياً (بنفس روح لافتات عنوان
+        // المستندات الاحترافية)، إلى جانب الخط البنفسجي السفلي الموجود أصلاً.
+        if (level == 1) {
+            out.setSpan(
+                RoundedCardSpan(
+                    tintedBackground(COLOR_BULLET, 0x14), COLOR_BULLET, start, end,
+                    cornerRadius = 10f, insetTop = 6f, insetBottom = 6f, borderWidth = 0f
+                ),
+                start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+            )
+        }
 
         if (level == 1 || level == 2) {
             out.append("\n")
@@ -1655,7 +1674,13 @@ object MarkdownLite {
 
         out.append(border("├─", "─┼─", "─┤", "─")).append('\n')
         rows.forEachIndexed { idx, row ->
+            val rowStart = out.length
             out.append(dataRow(row))
+            if (idx % 2 == 1) {
+                out.setSpan(
+                    BackgroundColorSpan(COLOR_TABLE_ROW_ALT), rowStart, out.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                )
+            }
             if (idx != rows.lastIndex) out.append('\n')
         }
         out.append('\n').append(border("└─", "─┴─", "─┘", "─"))
@@ -1685,8 +1710,8 @@ object MarkdownLite {
         private val spanStart: Int,
         private val spanEnd: Int,
         private val cornerRadius: Float = 16f,
-        private val insetTop: Float = 3f,
-        private val insetBottom: Float = 3f,
+        private val insetTop: Float = 5f,
+        private val insetBottom: Float = 5f,
         private val borderWidth: Float = 2f
     ) : LineBackgroundSpan {
         override fun drawBackground(
@@ -1756,33 +1781,4 @@ object MarkdownLite {
         }
     }
 
-    /** شريط جانبي ملوَّن حقيقي (لا مجرّد مسافة بادئة) يُرسم على طول كل سطر من كتلة اقتباس `>`. */
-    private class QuoteBarSpan(
-        private val color: Int,
-        private val barWidthPx: Int = 6,
-        private val gapPx: Int = 18
-    ) : LeadingMarginSpan {
-        override fun getLeadingMargin(first: Boolean): Int = barWidthPx + gapPx
-
-        override fun drawLeadingMargin(
-            canvas: Canvas, paint: Paint, x: Int, dir: Int,
-            top: Int, baseline: Int, bottom: Int,
-            text: CharSequence?, start: Int, end: Int,
-            first: Boolean, layout: android.text.Layout?
-        ) {
-            val savedColor = paint.color
-            val savedStyle = paint.style
-            paint.color = color
-            paint.style = Paint.Style.FILL
-            val barX = x.toFloat()
-            canvas.drawRect(barX, top.toFloat(), barX + barWidthPx, bottom.toFloat(), paint)
-            paint.color = savedColor
-            paint.style = savedStyle
-        }
-    }
-
-    /**
-     * شارة شكل shields.io حقيقية: جزء تسمية (اختياري) بخلفية رمادية داكنة قياسية [labelBg]
-     * ملاصِق مباشرة لجزء رسالة بخلفية [messageBg] (اللون المُستخرَج من مقطع اللون في الرابط) —
-     * قطعتان متلاصقتان بلا فراغ بينهما، بزوايا مدوَّرة فقط على الطرفين الخارجيين (يسار الجزء
-     * الأول ويمين الجزء الأخير)، تماماً كشكل شارات shields.io المألوف في ملفا
+    /** شريط جانبي ملوَّن حقيقي (لا مجرّد مسافة بادئة) يُرسم على طول كل سطر من كتلة اقتباس `
