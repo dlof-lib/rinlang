@@ -37,6 +37,10 @@
         <item>⭐⭐⭐⭐⭐ Excelente</item>
     </string-array>
     <string name="store_dependencies_format">Requiere: %1$s</string>
+    <plurals name="store_results_count">
+        <item quantity="one">%1$d paquete disponible</item>
+        <item quantity="other">%1$d paquetes disponibles</item>
+    </plurals>
 
     <!-- Advertencia de dependencias al instalar -->
     <string name="dependency_check_title">Dependencias de este paquete</string>
