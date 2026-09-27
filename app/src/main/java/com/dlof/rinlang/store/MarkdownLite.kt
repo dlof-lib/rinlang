@@ -179,73 +179,88 @@ object MarkdownLite {
     private fun pyramidTierColor(index: Int, palette: IntArray = BULLET_DEPTH_COLORS): Int =
         palette[index % palette.size]
 
-    private const val COLOR_RULE = 0xFF2D2D30.toInt()            // rin_job_card_border
-    private const val COLOR_CARD_BORDER = 0x26FFFFFF             // حدّ خفيف موحّد لبطاقات الكود/الاقتباس/الجدول
-    private const val COLOR_CODE_TEXT = 0xFFE3E5E8.toInt()       // rin_editor_text
-    private const val COLOR_CODE_BLOCK_BG = 0x26FFFFFF           // خلفية محايدة خفيفة لكتلة الكود
-    private const val COLOR_INLINE_CODE_BG = 0x33FFFFFF          // أغمق قليلاً لتمييز الكود المضمَّن عن السطر
+    // ملاحظة مهمّة: كل الألوان أدناه كانت منقولة حرفياً من values-night/colors.xml (الثيم الداكن)
+    // رغم أنّ ثيم التطبيق الافتراضي الفعلي هو الفاتح (values/colors.xml: rin_background فاتح،
+    // rin_editor_text غامق) — ما كان يجعل بطاقات الكود/الاقتباس/الجدول شبه شفّافة (أبيض فوق أبيض)
+    // ونص الكود شبه غير مرئي (رمادي فاتح جداً فوق خلفية فاتحة). أُعيد ضبط كل قيمة هنا لتُقرأ
+    // بوضوح فوق الثيم الفاتح تحديداً، مع إعادة استخدام نفس رموز التطبيق (syntax_*، rin_editor_text،
+    // rin_divider، rin_accent_pressed...) حتى تبقى المعاينة متّسقة بصرياً مع بقية الشاشات، ونسبة
+    // تباين حقيقية (WCAG AA تقريباً) بدل الاعتماد على الشفافية فوق خلفية داكنة لم تعد موجودة.
+    private const val COLOR_RULE = 0xFFDDE2E8.toInt()             // rin_divider — فاصل هادئ تحت H2
+    private const val COLOR_CARD_BORDER = 0xFFE2E6ED.toInt()      // حدّ واضح موحّد لبطاقات الكود/الاقتباس/الجدول
+    private const val COLOR_CODE_TEXT = 0xFF20252B.toInt()        // rin_editor_text (فاتح)
+    private const val COLOR_CODE_BLOCK_BG = 0xFFF4F2FB.toInt()    // بطاقة فاتحة بلمسة بنفسجية خفيفة
+    private const val COLOR_INLINE_CODE_BG = 0xFFEAE6F7.toInt()   // أغمق قليلاً لتمييز الكود المضمَّن عن السطر
 
-    private const val COLOR_QUOTE_BAR = 0xFF7C5CFF.toInt()       // rin_accent
-    private const val COLOR_QUOTE_BG = 0x1FFFFFFF                // rin_current_line_bg
-    private const val COLOR_QUOTE_TEXT = 0xFF9198A3.toInt()      // rin_on_toolbar_dim
+    private const val COLOR_QUOTE_BAR = 0xFF7C5CFF.toInt()        // rin_accent
+    private const val COLOR_QUOTE_BG = 0x147C5CFF                 // rin_current_line_bg (فاتح) — بنفسجي 8%
+    private const val COLOR_QUOTE_TEXT = 0xFF54586B.toInt()       // rin_segment_unselected_text
 
-    private const val COLOR_LINK = 0xFF3B9EFF.toInt()            // rin_verified_badge
-    private const val COLOR_HIGHLIGHT_BG = 0x4DFFC94D             // rin_star_gold_dim
-    private const val COLOR_STRIKE_TEXT = 0xFF6E7480.toInt()     // rin_editor_hint
+    private const val COLOR_LINK = 0xFF6A47E8.toInt()             // rin_accent_pressed — بنفسجي أعمق، تباين كافٍ
+    private const val COLOR_HIGHLIGHT_BG = 0x4DFFC94D              // rin_star_gold_dim (يعمل فوق أي خلفية)
+    private const val COLOR_STRIKE_TEXT = 0xFF667085.toInt()      // rin_editor_hint (فاتح)
 
-    private const val COLOR_TASK_DONE = 0xFF22C88E.toInt()       // rin_accent_green
-    private const val COLOR_TASK_PENDING = 0xFF6E7480.toInt()    // rin_editor_hint
-    private const val COLOR_H_DIM = 0xFF9198A3.toInt()           // rin_on_toolbar_dim
+    private const val COLOR_TASK_DONE = 0xFF1CA877.toInt()        // rin_accent_green_pressed (أغمق، تباين أفضل)
+    private const val COLOR_TASK_PENDING = 0xFF667085.toInt()     // rin_editor_hint (فاتح)
+    private const val COLOR_H_DIM = 0xFF54586B.toInt()            // عناوين H5/H6 خافتة لكن مقروءة بوضوح
 
-    private const val COLOR_TABLE_TEXT = 0xFFE3E5E8.toInt()      // rin_editor_text
-    private const val COLOR_TABLE_HEADER = 0xFF7C5CFF.toInt()    // rin_accent
-    private const val COLOR_TABLE_BORDER = 0xFF6E7480.toInt()    // rin_editor_hint
-    private const val COLOR_TABLE_BG = 0x14FFFFFF                // أخفّ من خلفية كتلة الكود
+    private const val COLOR_TABLE_TEXT = 0xFF20252B.toInt()       // rin_editor_text (فاتح)
+    private const val COLOR_TABLE_HEADER = 0xFF6A47E8.toInt()     // rin_accent_pressed
+    private const val COLOR_TABLE_BORDER = 0xFFDDE2E8.toInt()     // rin_divider
+    private const val COLOR_TABLE_BG = 0xFFF6F5FB.toInt()         // أخفّ قليلاً من خلفية كتلة الكود
 
-    // لوحة تلوين نحوي (Syntax Palette) — نفس ألوان محرِّر Rin الحقيقي بالضبط (values-night/colors.xml)
-    // حتى تبدو معاينة README جزءاً من هوية المحرِّر البصرية نفسها، لا لوحة مستقلة مختلَقة هنا.
-    private const val COLOR_SYNTAX_KEYWORD = 0xFF569CD6.toInt()    // syntax_keyword
-    private const val COLOR_SYNTAX_DIRECTIVE = 0xFFC586C0.toInt()  // syntax_container_keyword / syntax_make_directive
-    private const val COLOR_SYNTAX_STRING = 0xFF6FDC9E.toInt()     // syntax_string
-    private const val COLOR_SYNTAX_NUMBER = 0xFFFFA95C.toInt()     // syntax_number
-    private const val COLOR_SYNTAX_COMMENT = 0xFF9AA0AB.toInt()    // syntax_comment
-    private const val COLOR_SYNTAX_BUILTIN = 0xFFE6C260.toInt()    // syntax_builtin / syntax_tag
-    private const val COLOR_SYNTAX_ATTR = 0xFFF2A65A.toInt()       // syntax_style_keyword
+    // لوحة تلوين نحوي (Syntax Palette) — نفس اللوحة الفعلية المستخدَمة في محرِّر Rin على الثيم
+    // الفاتح (values/colors.xml: syntax_keyword/syntax_string/...)، مصمَّمة أصلاً لتحقّق تباين
+    // ≥4.5:1 فوق خلفية بيضاء (انظر تعليق اللوحة هناك) — لا لوحة الثيم الداكن الباهتة السابقة.
+    private const val COLOR_SYNTAX_KEYWORD = 0xFF0B4FCC.toInt()    // syntax_keyword
+    private const val COLOR_SYNTAX_DIRECTIVE = 0xFF6A1B9A.toInt()  // syntax_container_keyword / syntax_make_directive
+    private const val COLOR_SYNTAX_STRING = 0xFF1D7A4C.toInt()     // syntax_string
+    private const val COLOR_SYNTAX_NUMBER = 0xFFB45F06.toInt()     // syntax_number
+    private const val COLOR_SYNTAX_COMMENT = 0xFF6B7280.toInt()    // syntax_comment
+    private const val COLOR_SYNTAX_BUILTIN = 0xFF8A6D00.toInt()    // syntax_builtin / syntax_tag
+    private const val COLOR_SYNTAX_ATTR = 0xFF9C5700.toInt()       // syntax_style_keyword
 
-    // خط الفصل الرفيع أسفل رأس بطاقة الكود
-    private const val COLOR_COPY_BUTTON_BG = 0x33FFFFFF
-    private const val COLOR_HEADER_RULE = 0x1FFFFFFF
+    // خلفية زر "نسخ" وخط الفصل الرفيع أسفل رأس بطاقة الكود — بنفسجي فاتح جداً/حدّ فاتح واضحان
+    // فوق البطاقة الفاتحة، بدل تراكب أبيض شبه شفاف كان يختفي تماماً فوق خلفية بيضاء.
+    private const val COLOR_COPY_BUTTON_BG = 0x1F7C5CFF
+    private const val COLOR_HEADER_RULE = 0xFFE2E6ED.toInt()
+
+    /** خلفية "معتّمة" (Tint) بلون [color] عند شفافية [alphaHex] (افتراضياً ~12%) — تُستخدَم لإعطاء
+     *  كل نوع تنبيه GFM ([appendCallout]) خلفية فاتحة بلون هويته الخاص بدل خلفية محايدة موحَّدة
+     *  للجميع، فتبدو بطاقات NOTE/TIP/WARNING... متمايزة فعلاً كما في READMEs الاحترافية. */
+    private fun tintedBackground(color: Int, alphaHex: Int = 0x1E): Int =
+        (alphaHex shl 24) or (color and 0x00FFFFFF)
 
     /** لون هوية بصرية مميَّز لكل لغة (نقطة + وسم اسمها أعلى بطاقة الكود) — يسقط بهدوء إلى لون
      *  محايد للغات غير المدرَجة، فلا يتعطّل عرض أي كتلة كود بسبب اسم لغة غير معروف. */
     private val LANGUAGE_ACCENTS: Map<String, Int> = mapOf(
-        "rin" to 0xFF7C5CFF.toInt(),
-        "indsin" to 0xFF7C5CFF.toInt(),
-        "kotlin" to 0xFFB197FC.toInt(),
-        "kt" to 0xFFB197FC.toInt(),
-        "java" to 0xFFEA9B4C.toInt(),
-        "swift" to 0xFFF2784B.toInt(),
-        "python" to 0xFFE6C260.toInt(),
-        "py" to 0xFFE6C260.toInt(),
-        "javascript" to 0xFFE9D85C.toInt(),
-        "js" to 0xFFE9D85C.toInt(),
-        "typescript" to 0xFF5C9DE9.toInt(),
-        "ts" to 0xFF5C9DE9.toInt(),
-        "json" to 0xFF9AA0AB.toInt(),
-        "xml" to 0xFFE6C260.toInt(),
-        "html" to 0xFFF2784B.toInt(),
-        "css" to 0xFF5C9DE9.toInt(),
-        "bash" to 0xFF6FDC9E.toInt(),
-        "sh" to 0xFF6FDC9E.toInt(),
-        "shell" to 0xFF6FDC9E.toInt(),
-        "c" to 0xFF5C9DE9.toInt(),
-        "cpp" to 0xFF5C9DE9.toInt(),
-        "c++" to 0xFF5C9DE9.toInt(),
-        "go" to 0xFF5CD6E9.toInt(),
-        "rust" to 0xFFEA9B4C.toInt(),
-        "sql" to 0xFF6FDC9E.toInt(),
-        "yaml" to 0xFFEA9B4C.toInt(),
-        "yml" to 0xFFEA9B4C.toInt()
+        "rin" to 0xFF6A47E8.toInt(),
+        "indsin" to 0xFF6A47E8.toInt(),
+        "kotlin" to 0xFF7F3FBF.toInt(),
+        "kt" to 0xFF7F3FBF.toInt(),
+        "java" to 0xFFB35900.toInt(),
+        "swift" to 0xFFC1440E.toInt(),
+        "python" to 0xFF2B5FA8.toInt(),
+        "py" to 0xFF2B5FA8.toInt(),
+        "javascript" to 0xFF9C7A00.toInt(),
+        "js" to 0xFF9C7A00.toInt(),
+        "typescript" to 0xFF1D4ED8.toInt(),
+        "ts" to 0xFF1D4ED8.toInt(),
+        "json" to 0xFF55606F.toInt(),
+        "xml" to 0xFF9C5700.toInt(),
+        "html" to 0xFFB33A1C.toInt(),
+        "css" to 0xFF2B4FD6.toInt(),
+        "bash" to 0xFF1D7A4C.toInt(),
+        "sh" to 0xFF1D7A4C.toInt(),
+        "shell" to 0xFF1D7A4C.toInt(),
+        "c" to 0xFF2E5AAC.toInt(),
+        "cpp" to 0xFF2E5AAC.toInt(),
+        "c++" to 0xFF2E5AAC.toInt(),
+        "go" to 0xFF0E7C86.toInt(),
+        "rust" to 0xFFB1481C.toInt(),
+        "sql" to 0xFF0F766E.toInt(),
+        "yaml" to 0xFFA05A12.toInt(),
+        "yml" to 0xFFA05A12.toInt()
     )
     private val LANGUAGE_ACCENT_DEFAULT = COLOR_CODE_TEXT
 
@@ -388,11 +403,11 @@ object MarkdownLite {
      *  موحَّداً عبر كل عناصر الملف بدل تعريف طاقم ألوان مستقل لهذه الميزة وحدها. */
     private data class CalloutStyle(val color: Int, val icon: String, val label: String)
     private val CALLOUT_STYLES: Map<String, CalloutStyle> = mapOf(
-        "NOTE" to CalloutStyle(0xFF3B9EFF.toInt(), "\u2139\uFE0F", "Note"),
-        "TIP" to CalloutStyle(0xFF22C88E.toInt(), "\uD83D\uDCA1", "Tip"),
-        "IMPORTANT" to CalloutStyle(0xFF7C5CFF.toInt(), "\u2757", "Important"),
-        "WARNING" to CalloutStyle(0xFFFFC94D.toInt(), "\u26A0\uFE0F", "Warning"),
-        "CAUTION" to CalloutStyle(0xFFF14C4C.toInt(), "\uD83D\uDED1", "Caution")
+        "NOTE" to CalloutStyle(0xFF1A56C7.toInt(), "\u2139\uFE0F", "Note"),
+        "TIP" to CalloutStyle(0xFF1D7A4C.toInt(), "\uD83D\uDCA1", "Tip"),
+        "IMPORTANT" to CalloutStyle(0xFF6A47E8.toInt(), "\u2757", "Important"),
+        "WARNING" to CalloutStyle(0xFFB45F06.toInt(), "\u26A0\uFE0F", "Warning"),
+        "CAUTION" to CalloutStyle(0xFFC0392B.toInt(), "\uD83D\uDED1", "Caution")
     )
 
     /**
@@ -422,7 +437,7 @@ object MarkdownLite {
         }
         out.setSpan(QuoteBarSpan(style.color), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
         out.setSpan(
-            RoundedCardSpan(COLOR_QUOTE_BG, style.color, start, end),
+            RoundedCardSpan(tintedBackground(style.color), style.color, start, end),
             start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
         )
     }
@@ -458,6 +473,17 @@ object MarkdownLite {
 
         fun blockGap() {
             if (out.isNotEmpty()) out.append("\n\n")
+        }
+
+        // فراغ إضافي أوسع قبل عنوان قسم رئيسي (H1) تحديداً — يُفصَل بصرياً عن الفقرة السابقة بأكثر
+        // من مجرّد سطر فارغ عادي، بنفس شعور الفصل الواضح بين أقسام مستند طويل احترافي (بدل تباعد
+        // مُوحَّد لكل شيء بلا تمييز بين "فقرة جديدة" و"قسم جديد كامل").
+        fun sectionGap() {
+            if (out.isNotEmpty()) {
+                val gapStart = out.length
+                out.append("\n")
+                out.setSpan(RelativeSizeSpan(0.55f), gapStart, out.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            }
         }
 
         fun flushCodeBlock() {
@@ -618,7 +644,7 @@ object MarkdownLite {
                     blockGap(); appendHeading(out, trimmed.removePrefix("## "), 1.28f, level = 2); lastWasListItem = false; i++
                 }
                 trimmed.startsWith("# ") -> {
-                    blockGap(); appendHeading(out, trimmed.removePrefix("# "), 1.6f, level = 1); lastWasListItem = false; i++
+                    sectionGap(); blockGap(); appendHeading(out, trimmed.removePrefix("# "), 1.6f, level = 1); lastWasListItem = false; i++
                 }
 
                 taskListRegex.matches(trimmed) -> {
@@ -1759,336 +1785,4 @@ object MarkdownLite {
      * شارة شكل shields.io حقيقية: جزء تسمية (اختياري) بخلفية رمادية داكنة قياسية [labelBg]
      * ملاصِق مباشرة لجزء رسالة بخلفية [messageBg] (اللون المُستخرَج من مقطع اللون في الرابط) —
      * قطعتان متلاصقتان بلا فراغ بينهما، بزوايا مدوَّرة فقط على الطرفين الخارجيين (يسار الجزء
-     * الأول ويمين الجزء الأخير)، تماماً كشكل شارات shields.io المألوف في ملفات README. بلا جزء
-     * تسمية (`label == null`) تُرسَم كحبّة واحدة كاملة الاستدارة بلون الرسالة فقط. انظر
-     * [appendShieldsBadge]/[parseShieldsBadgeUrl].
-     */
-    private class ShieldsBadgeSpan(
-        private val label: String?,
-        private val message: String,
-        private val labelBg: Int,
-        private val messageBg: Int,
-        private val messageFg: Int
-    ) : ReplacementSpan() {
-        private val horizontalPad = 12f
-        private val verticalPad = 5f
-        private val cornerRadius = 12f
-        private val labelFg = 0xFFFFFFFF.toInt()
-
-        override fun getSize(paint: Paint, text: CharSequence, start: Int, end: Int, fm: Paint.FontMetricsInt?): Int {
-            if (fm != null) {
-                val orig = paint.fontMetricsInt
-                fm.ascent = orig.ascent - verticalPad.toInt()
-                fm.descent = orig.descent + verticalPad.toInt()
-                fm.top = fm.ascent
-                fm.bottom = fm.descent
-            }
-            val labelW = if (label != null) horizontalPad * 2 + paint.measureText(label) else 0f
-            val messageW = horizontalPad * 2 + paint.measureText(message)
-            return (labelW + messageW).toInt()
-        }
-
-        override fun draw(
-            canvas: Canvas, text: CharSequence, start: Int, end: Int,
-            x: Float, top: Int, y: Int, bottom: Int, paint: Paint
-        ) {
-            val savedColor = paint.color
-            val savedStyle = paint.style
-            val savedAA = paint.isAntiAlias
-            paint.isAntiAlias = true
-            paint.style = Paint.Style.FILL
-
-            val hasLabel = label != null
-            val labelW = if (hasLabel) horizontalPad * 2 + paint.measureText(label) else 0f
-            val messageW = horizontalPad * 2 + paint.measureText(message)
-            val rectTop = top.toFloat() + 1f
-            val rectBottom = bottom.toFloat() - 1f
-
-            if (hasLabel) {
-                val leftRect = RectF(x, rectTop, x + labelW, rectBottom)
-                // مدوَّرة عند أعلى/أسفل-يسار فقط (الطرف الخارجي)، مستقيمة عند اليمين (يلاصق جزء الرسالة)
-                val leftRadii = floatArrayOf(
-                    cornerRadius, cornerRadius, 0f, 0f, 0f, 0f, cornerRadius, cornerRadius
-                )
-                paint.color = labelBg
-                canvas.drawPath(Path().apply { addRoundRect(leftRect, leftRadii, Path.Direction.CW) }, paint)
-                paint.color = labelFg
-                canvas.drawText(label!!, x + horizontalPad, y.toFloat(), paint)
-            }
-
-            val rightRect = RectF(x + labelW, rectTop, x + labelW + messageW, rectBottom)
-            val rightRadii = if (hasLabel) {
-                // مدوَّرة عند أعلى/أسفل-يمين فقط (الطرف الخارجي)، مستقيمة عند اليسار (تلاصق التسمية)
-                floatArrayOf(0f, 0f, cornerRadius, cornerRadius, cornerRadius, cornerRadius, 0f, 0f)
-            } else {
-                floatArrayOf(
-                    cornerRadius, cornerRadius, cornerRadius, cornerRadius,
-                    cornerRadius, cornerRadius, cornerRadius, cornerRadius
-                )
-            }
-            paint.color = messageBg
-            canvas.drawPath(Path().apply { addRoundRect(rightRect, rightRadii, Path.Direction.CW) }, paint)
-            paint.color = messageFg
-            canvas.drawText(message, x + labelW + horizontalPad, y.toFloat(), paint)
-
-            paint.color = savedColor
-            paint.style = savedStyle
-            paint.isAntiAlias = savedAA
-        }
-    }
-
-    /**
-     * "ستيكر Rin": بادج ملوَّن بخلفية حقيقية بزوايا مدوَّرة يُرسم عبر Canvas مباشرة (لا مجرّد
-     * تلوين نص)، بنفس روح شارات "موثّق"/إحصاءات التطبيق — مكوّن بصري جديد كلياً في هذا الملف.
-     */
-    private class StickerSpan(
-        private val bgColor: Int,
-        private val textColor: Int
-    ) : ReplacementSpan() {
-        private val horizontalPad = 16f
-        private val verticalPad = 5f
-        private val cornerRadius = 16f
-
-        override fun getSize(paint: Paint, text: CharSequence, start: Int, end: Int, fm: Paint.FontMetricsInt?): Int {
-            if (fm != null) {
-                val orig = paint.fontMetricsInt
-                fm.ascent = orig.ascent - verticalPad.toInt()
-                fm.descent = orig.descent + verticalPad.toInt()
-                fm.top = fm.ascent
-                fm.bottom = fm.descent
-            }
-            return (paint.measureText(text, start, end) + horizontalPad * 2).toInt()
-        }
-
-        override fun draw(
-            canvas: Canvas, text: CharSequence, start: Int, end: Int,
-            x: Float, top: Int, y: Int, bottom: Int, paint: Paint
-        ) {
-            val width = paint.measureText(text, start, end)
-            val rect = RectF(x, top.toFloat() + 1f, x + width + horizontalPad * 2, bottom.toFloat() - 1f)
-
-            val savedColor = paint.color
-            val savedStyle = paint.style
-            val savedAA = paint.isAntiAlias
-
-            paint.isAntiAlias = true
-            paint.style = Paint.Style.FILL
-            paint.color = bgColor
-            canvas.drawRoundRect(rect, cornerRadius, cornerRadius, paint)
-
-            paint.color = textColor
-            canvas.drawText(text, start, end, x + horizontalPad, y.toFloat(), paint)
-
-            paint.color = savedColor
-            paint.style = savedStyle
-            paint.isAntiAlias = savedAA
-        }
-    }
-
-    /**
-     * شارة إصدار ثنائية اللون داخل حبّة واحدة (مثال: `الإصدار` بلون خافت + `1` بلون الهوية
-     * بارزاً) — تُستخدَم لصياغة `[*تسمية/قيمة*]` (انظر [appendMetaBadge]). بخلاف [StickerSpan]
-     * (لون نص واحد)، هذا الصنف يرسم النص بلونَين منفصلَين صراحةً داخل [draw] بدل الاعتماد على
-     * Spans متداخلة (تُتجاهَل داخل نطاق أي [ReplacementSpan] لأن الرسم يُسلَّم إليه كاملاً).
-     */
-    private class BadgeTwoToneSpan(
-        private val label: String,
-        private val value: String,
-        private val bgColor: Int,
-        private val labelColor: Int,
-        private val valueColor: Int
-    ) : ReplacementSpan() {
-        private val horizontalPad = 14f
-        private val verticalPad = 5f
-        private val cornerRadius = 14f
-        private val gap = 6f
-
-        override fun getSize(paint: Paint, text: CharSequence, start: Int, end: Int, fm: Paint.FontMetricsInt?): Int {
-            if (fm != null) {
-                val orig = paint.fontMetricsInt
-                fm.ascent = orig.ascent - verticalPad.toInt()
-                fm.descent = orig.descent + verticalPad.toInt()
-                fm.top = fm.ascent
-                fm.bottom = fm.descent
-            }
-            return (horizontalPad * 2 + paint.measureText(label) + gap + paint.measureText(value)).toInt()
-        }
-
-        override fun draw(
-            canvas: Canvas, text: CharSequence, start: Int, end: Int,
-            x: Float, top: Int, y: Int, bottom: Int, paint: Paint
-        ) {
-            val labelW = paint.measureText(label)
-            val valueW = paint.measureText(value)
-            val rect = RectF(x, top.toFloat() + 1f, x + horizontalPad * 2 + labelW + gap + valueW, bottom.toFloat() - 1f)
-
-            val savedColor = paint.color
-            val savedStyle = paint.style
-            val savedAA = paint.isAntiAlias
-            val savedBold = paint.isFakeBoldText
-
-            paint.isAntiAlias = true
-            paint.style = Paint.Style.FILL
-            paint.color = bgColor
-            canvas.drawRoundRect(rect, cornerRadius, cornerRadius, paint)
-
-            paint.color = labelColor
-            canvas.drawText(label, x + horizontalPad, y.toFloat(), paint)
-
-            paint.color = valueColor
-            paint.isFakeBoldText = true
-            canvas.drawText(value, x + horizontalPad + labelW + gap, y.toFloat(), paint)
-
-            paint.color = savedColor
-            paint.style = savedStyle
-            paint.isAntiAlias = savedAA
-            paint.isFakeBoldText = savedBold
-        }
-    }
-
-    /**
-     * "نقطة لون مدمَجة" داخل حبّة واحدة: دائرة مملوءة بلون [swatchColor] الحقيقي (المُستخرَج من
-     * صياغة `#RRGGBB` في [appendMetaBadge]) + نص (تسمية و/أو الرمز السداسي) بجانبها مباشرة —
-     * كل ذلك عنصر بصري واحد مُدمَج (لا نقطة منفصلة عن حبّة نصّية أخرى)، بحدّ رفيع شبه شفاف حول
-     * الدائرة لتبقى مقروءة حتى لو قارب لونها لون خلفية البطاقة نفسها.
-     */
-    private class ColorSwatchSpan(
-        private val swatchColor: Int,
-        private val bgColor: Int,
-        private val textColor: Int
-    ) : ReplacementSpan() {
-        private val horizontalPad = 14f
-        private val verticalPad = 5f
-        private val cornerRadius = 14f
-        private val dotRadius = 6f
-        private val dotGap = 8f
-
-        override fun getSize(paint: Paint, text: CharSequence, start: Int, end: Int, fm: Paint.FontMetricsInt?): Int {
-            if (fm != null) {
-                val orig = paint.fontMetricsInt
-                fm.ascent = orig.ascent - verticalPad.toInt()
-                fm.descent = orig.descent + verticalPad.toInt()
-                fm.top = fm.ascent
-                fm.bottom = fm.descent
-            }
-            return (horizontalPad * 2 + dotRadius * 2 + dotGap + paint.measureText(text, start, end)).toInt()
-        }
-
-        override fun draw(
-            canvas: Canvas, text: CharSequence, start: Int, end: Int,
-            x: Float, top: Int, y: Int, bottom: Int, paint: Paint
-        ) {
-            val textW = paint.measureText(text, start, end)
-            val totalW = horizontalPad * 2 + dotRadius * 2 + dotGap + textW
-            val rect = RectF(x, top.toFloat() + 1f, x + totalW, bottom.toFloat() - 1f)
-
-            val savedColor = paint.color
-            val savedStyle = paint.style
-            val savedAA = paint.isAntiAlias
-            val savedWidth = paint.strokeWidth
-            paint.isAntiAlias = true
-
-            paint.style = Paint.Style.FILL
-            paint.color = bgColor
-            canvas.drawRoundRect(rect, cornerRadius, cornerRadius, paint)
-
-            val centerY = (top + bottom) / 2f
-            val dotCx = x + horizontalPad + dotRadius
-            paint.color = swatchColor
-            canvas.drawCircle(dotCx, centerY, dotRadius, paint)
-            paint.style = Paint.Style.STROKE
-            paint.strokeWidth = 1.5f
-            paint.color = 0x40FFFFFF
-            canvas.drawCircle(dotCx, centerY, dotRadius, paint)
-
-            paint.style = Paint.Style.FILL
-            paint.color = textColor
-            canvas.drawText(text, start, end, x + horizontalPad + dotRadius * 2 + dotGap, y.toFloat(), paint)
-
-            paint.color = savedColor
-            paint.style = savedStyle
-            paint.isAntiAlias = savedAA
-            paint.strokeWidth = savedWidth
-        }
-    }
-
-    /**
-     * "وسام الهرم الهيكلي": أيقونة هرم حقيقية مرسومة داخل الحبّة — قمّة ضيّقة أعلى الهرم إلى
-     * قاعدة عريضة أسفله، مقسَّمة أفقياً إلى [levels] طبقة (كل طبقة شبه منحرف عُرضه يتّسع من
-     * القمة للقاعدة، بلون عمق مختلف عبر [pyramidTierColor]) — تمثيل بصري مباشر لعدد مستويات
-     * التعشيش في بنية صفحة أو تخطيط عناصر (مثال Rin: `Scaffold ← TopBar/Column ← عناصرها`).
-     * انظر صياغة `[*تسمية/hierarchy=(N)*]` في [appendMetaBadge].
-     */
-    private class PyramidBadgeSpan(
-        private val levels: Int,
-        private val bgColor: Int,
-        private val textColor: Int,
-        private val tierColors: IntArray = BULLET_DEPTH_COLORS
-    ) : ReplacementSpan() {
-        private val horizontalPad = 14f
-        private val verticalPad = 5f
-        private val cornerRadius = 14f
-        private val iconW = 16f
-        private val iconH = 14f
-        private val iconGap = 8f
-
-        override fun getSize(paint: Paint, text: CharSequence, start: Int, end: Int, fm: Paint.FontMetricsInt?): Int {
-            if (fm != null) {
-                val orig = paint.fontMetricsInt
-                fm.ascent = orig.ascent - verticalPad.toInt()
-                fm.descent = orig.descent + verticalPad.toInt()
-                fm.top = fm.ascent
-                fm.bottom = fm.descent
-            }
-            return (horizontalPad * 2 + iconW + iconGap + paint.measureText(text, start, end)).toInt()
-        }
-
-        override fun draw(
-            canvas: Canvas, text: CharSequence, start: Int, end: Int,
-            x: Float, top: Int, y: Int, bottom: Int, paint: Paint
-        ) {
-            val textW = paint.measureText(text, start, end)
-            val totalW = horizontalPad * 2 + iconW + iconGap + textW
-            val rect = RectF(x, top.toFloat() + 1f, x + totalW, bottom.toFloat() - 1f)
-
-            val savedColor = paint.color
-            val savedStyle = paint.style
-            val savedAA = paint.isAntiAlias
-            paint.isAntiAlias = true
-
-            paint.style = Paint.Style.FILL
-            paint.color = bgColor
-            canvas.drawRoundRect(rect, cornerRadius, cornerRadius, paint)
-
-            // الهرم نفسه: [levels] شبه منحرف مكدَّسة رأسياً — القمّة (i=0) بلا عرض تقريباً،
-            // القاعدة (i=levels-1) بعرض iconW كاملاً، بفاصل رفيع شبه شفاف بين كل طبقتين.
-            val centerY = (top + bottom) / 2f
-            val iconTop = centerY - iconH / 2f
-            val iconCx = x + horizontalPad + iconW / 2f
-            val bandHeight = iconH / levels
-            for (i in 0 until levels) {
-                val bandTopY = iconTop + i * bandHeight
-                val bandBottomY = iconTop + (i + 1) * bandHeight
-                val topHalfW = (iconW / 2f) * (i * bandHeight / iconH)
-                val bottomHalfW = (iconW / 2f) * ((i + 1) * bandHeight / iconH)
-                val path = Path().apply {
-                    moveTo(iconCx - topHalfW, bandTopY)
-                    lineTo(iconCx + topHalfW, bandTopY)
-                    lineTo(iconCx + bottomHalfW, bandBottomY)
-                    lineTo(iconCx - bottomHalfW, bandBottomY)
-                    close()
-                }
-                paint.color = pyramidTierColor(i, tierColors)
-                canvas.drawPath(path, paint)
-            }
-
-            paint.style = Paint.Style.FILL
-            paint.color = textColor
-            canvas.drawText(text, start, end, x + horizontalPad + iconW + iconGap, y.toFloat(), paint)
-
-            paint.color = savedColor
-            paint.style = savedStyle
-            paint.isAntiAlias = savedAA
-        }
-    }
-}
+     * الأول ويمين الجزء الأخير)، تماماً كشكل شارات shields.io المألوف في ملفا
