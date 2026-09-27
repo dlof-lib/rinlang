@@ -41,6 +41,14 @@
         <item>⭐⭐⭐⭐⭐ ممتاز</item>
     </string-array>
     <string name="store_dependencies_format">يتطلب: %1$s</string>
+    <plurals name="store_results_count">
+        <item quantity="zero">لا حزم متاحة</item>
+        <item quantity="one">حزمة واحدة متاحة</item>
+        <item quantity="two">حزمتان متاحتان</item>
+        <item quantity="few">%1$d حزم متاحة</item>
+        <item quantity="many">%1$d حزمة متاحة</item>
+        <item quantity="other">%1$d حزمة متاحة</item>
+    </plurals>
 
     <!-- تحذير التبعيات عند التثبيت -->
     <string name="dependency_check_title">تبعيات هذه الحزمة</string>
