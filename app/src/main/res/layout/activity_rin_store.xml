@@ -6,6 +6,7 @@
 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
@@ -39,15 +40,28 @@
             android:textColorHint="@color/rin_editor_hint"
             android:textSize="13.5sp" />
 
-        <ImageButton
+        <!-- زر فرز نصّي (أيقونة + تسمية الوضع الحالي) بدل أيقونة مجرّدة، ليكون واضحاً دون حاجة
+             لفتح القائمة لمعرفة الفرز الحالي — النص يتحدّث فوراً مع كل اختيار (انظر
+             RinStoreActivity.showSortMenu). -->
+        <Button
             android:id="@+id/btnStoreSort"
-            android:layout_width="46dp"
+            android:layout_width="wrap_content"
             android:layout_height="46dp"
-            android:padding="11dp"
-            android:background="@drawable/bg_icon_btn_accent"
-            android:src="@android:drawable/ic_menu_sort_by_size"
-            app:tint="@color/rin_accent"
-            android:contentDescription="@string/store_sort_newest" />
+            android:minWidth="0dp"
+            android:minHeight="0dp"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            android:paddingHorizontal="14dp"
+            android:background="@drawable/bg_sort_pill_button"
+            android:drawableStart="@android:drawable/ic_menu_sort_by_size"
+            android:drawableTint="@color/rin_accent"
+            android:drawablePadding="6dp"
+            android:gravity="center"
+            android:textAllCaps="false"
+            android:textSize="12.5sp"
+            android:textStyle="bold"
+            android:textColor="@color/rin_accent"
+            android:text="@string/store_sort_newest" />
     </LinearLayout>
 
     <!-- تصنيفات المتجر: تُبنى ديناميكياً من الحزم المُحمَّلة -->
@@ -66,6 +80,20 @@
             app:singleSelection="true"
             app:chipSpacingHorizontal="6dp" />
     </HorizontalScrollView>
+
+    <!-- عدّاد النتائج: يظهر فقط بعد انتهاء التحميل (يبقى فارغاً أثناء عرض الهيكل التغبيشي)،
+         يمنح إحساساً أوضح بحجم القائمة قبل التمرير فيها. -->
+    <TextView
+        android:id="@+id/txtStoreResultsCount"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingStart="14dp"
+        android:paddingEnd="14dp"
+        android:paddingBottom="4dp"
+        android:textSize="11.5sp"
+        android:textColor="@color/rin_editor_hint"
+        android:visibility="invisible"
+        tools:text="24 حزمة متاحة" />
 
     <androidx.core.widget.NestedScrollView
         android:layout_width="match_parent"
@@ -88,12 +116,19 @@
                 <include layout="@layout/layout_skeleton_store_package" />
                 <include layout="@layout/layout_skeleton_store_package" />
                 <include layout="@layout/layout_skeleton_store_package" />
+                <include layout="@layout/layout_skeleton_store_package" />
             </com.dlof.rinlang.widgets.ShimmerLayout>
 
+            <!-- layoutAnimation: كل بطاقة تظهر بتلاشٍ + ارتفاع خفيف متتابع (انظر
+                 anim/layout_animation_store_list.xml) بدل الظهور الدفعي المفاجئ فور استبدال
+                 الهيكل التغبيشي بالقائمة الحقيقية — RinStoreActivity.hideSkeleton يستدعي
+                 scheduleLayoutAnimation() صراحةً بعد كل submit جديد. -->
             <androidx.recyclerview.widget.RecyclerView
                 android:id="@+id/rvPackages"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:layoutAnimation="@anim/layout_animation_store_list"
+                android:alpha="0"
                 android:visibility="gone"
                 android:nestedScrollingEnabled="false" />
 
