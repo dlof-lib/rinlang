@@ -43,10 +43,9 @@
         .end/view
     .end/view
 
-    print "✔ Home جاهزة —", "hasView:", containerHasView("Home"),
-          "view:", containerViewName("Home"),
-          "warps:", containerWarpNames("Home"),
-          "themes:", containerThemeNames("Home");
+    print "✔ Home جاهزة —\n", "exists:", container.exists("Home"),
+          "warps:", container.fieldNames("Home"),
+          "fields:", container.fields("Home");
 .end/container
 
 
