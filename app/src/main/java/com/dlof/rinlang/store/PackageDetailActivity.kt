@@ -288,15 +288,10 @@ class PackageDetailActivity : BaseConnectivityActivity() {
         // خلفية صفحة مخصَّصة عبر `[*Page_background/#hex*]` في أي مكان من README — تُطبَّق على
         // حاوية القسم كاملة قبل بناء المقاطع، فلا أثر مرئي لسطر الصياغة نفسه (انظر
         // MarkdownLite.extractPageBackground / pageBackgroundLineRegex).
-        if (!readme.isNullOrBlank()) {
-            when (val bg = MarkdownLite.extractPageBackground(readme)) {
-                is MarkdownLite.PageBackground.Solid -> containerReadme.background = ColorDrawable(bg.color)
-                is MarkdownLite.PageBackground.Gradient -> containerReadme.background = GradientDrawable(
-                    GradientDrawable.Orientation.TOP_BOTTOM, bg.colors
-                )
-                null -> {}
-            }
-        }
+        // الصفحة دائماً بطاقة مدوَّرة بحشوة مريحة: خلفية README المخصَّصة (صلبة/متدرّجة) أو بطاقة
+        // افتراضية بحدّ خفيف تناسب الثيم الفاتح/الداكن (سابقاً: لا حشوة ولا زوايا، فيلاصق النصُّ الحافة).
+        val customBg = if (!readme.isNullOrBlank()) MarkdownLite.extractPageBackground(readme) else null
+        applyReadmePageStyle(containerReadme, customBg)
         if (readme.isNullOrBlank()) {
             containerReadme.addView(buildReadmeTextSegment(getString(R.string.package_detail_no_readme)))
         } else {
@@ -333,6 +328,28 @@ class PackageDetailActivity : BaseConnectivityActivity() {
         }
     }
 
+    /** يطبّق شكل "الصفحة" على حاوية README: زوايا مدوَّرة + حشوة + (بلا خلفية مخصَّصة) بطاقة بلون
+     *  سطح وحدّ رفيع يتبعان الثيم الحالي. */
+    private fun applyReadmePageStyle(container: LinearLayout, customBg: MarkdownLite.PageBackground?) {
+        val dark = (resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) ==
+            android.content.res.Configuration.UI_MODE_NIGHT_YES
+        val drawable: GradientDrawable = when (customBg) {
+            is MarkdownLite.PageBackground.Solid -> GradientDrawable().apply { setColor(customBg.color) }
+            is MarkdownLite.PageBackground.Gradient ->
+                GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, customBg.colors)
+            else -> GradientDrawable().apply {
+                setColor(if (dark) 0xFF1C1E25.toInt() else 0xFFFFFFFF.toInt())
+                setStroke(
+                    dp(1f).coerceAtLeast(1),
+                    if (dark) 0xFF2A2D34.toInt() else 0xFFE2E6ED.toInt()
+                )
+            }
+        }
+        drawable.cornerRadius = dp(16f).toFloat()
+        container.background = drawable
+        container.setPadding(dp(16f), dp(16f), dp(16f), dp(18f))
+    }
+
     /** مقطع نصّ Markdown عادي واحد داخل قسم README (انظر [bindReadmeAndLicense]) — بنفس تنسيق
      *  الـTextView الوحيد السابق تماماً (حجم/تباعد سطر/لون/روابط قابلة للنقر). */
     private fun buildReadmeTextSegment(markdown: String): TextView = TextView(this).apply {
@@ -340,7 +357,7 @@ class PackageDetailActivity : BaseConnectivityActivity() {
             LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
             // فراغ أكبر قليلاً بين مقاطع README (كان 4dp) — يفصل الفقرات/الكتل بصرياً بوضوح
             // أكبر، بنفس روح تباعد فقرات GitHub README، بدل أن تبدو مقاطع متلاصقة.
-        ).apply { if (containerReadmeHasContent) topMargin = dp(10f) }
+        ).apply { if (containerReadmeHasContent) topMargin = dp(8f) }
         // حجم أكبر قليلاً (كان 13sp) وتباعد سطر أوسع (كان 3dp/×1) لراحة قراءة أطول بلا إجهاد
         // للعين، خصوصاً في النصوص الطويلة — أقرب لتجربة قراءة مستندات فعلية من نص مضغوط.
         textSize = 14.5f
@@ -365,7 +382,7 @@ class PackageDetailActivity : BaseConnectivityActivity() {
             orientation = LinearLayout.VERTICAL
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
-            ).apply { if (containerReadmeHasContent) topMargin = dp(4f) }
+            ).apply { if (containerReadmeHasContent) topMargin = dp(12f) }
         }
 
         val txtCode = TextView(this).apply {
@@ -373,7 +390,8 @@ class PackageDetailActivity : BaseConnectivityActivity() {
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
             )
             textSize = 13.5f
-            setLineSpacing(dp(5f).toFloat(), 1.08f)
+            setLineSpacing(dp(4f).toFloat(), 1.06f)
+            setTextColor(getColor(R.color.rin_editor_text))
         }
         // نستخدم applyTo بدل تعيين .text مباشرة: يُفعِّل LinkMovementMethod، وهو ما يجعل زر
         // "نسخ" الجديد أعلى بطاقة الكود (MarkdownLite.CopyCodeSpan) قابلاً للنقر فعلياً هنا أيضاً،
