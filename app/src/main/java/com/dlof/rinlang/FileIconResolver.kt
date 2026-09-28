@@ -108,6 +108,12 @@ object FileIconResolver {
             return
         }
 
+        // 1.7) .rdoc -> أيقونة Documentation Container المضمَّنة (صفحة + قوسا حاوية)، لا Iconify.
+        if (ext == com.dlof.rinlang.store.DocumentationContainer.EXTENSION) {
+            imageView.setImageResource(R.drawable.ic_doc_container_file)
+            return
+        }
+
         // نضع أيقونة افتراضية فوراً (بلا وميض فراغ) بينما يُحضَّر أي شيء أدق بالخلفية.
         imageView.setImageResource(R.drawable.ic_rin_stack)
         // نربط الطلب بالـ ImageView نفسه لتفادي "تسرّب" نتيجة متأخرة لعنصر أعيد تدويره لملف آخر.
