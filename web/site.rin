@@ -686,18 +686,18 @@ warp copyHtml   = "false";
       @view.Column=lessonLinks gap=10; padding=14; bg="#0f140f"; radius=14;
         @view.Text=lessonLinksTitle text="روابط مباشرة للدروس"; size=15; weight="850"; color="#f4f6f3"; .end/view
         @view.Wrap=lessonLinksWrap gap=7;
-          @view.Button=lessonLink1 label="01 البداية" url="#learn-1"; bg="#141a15"; color="#f4f6f3"; .end/view
-          @view.Button=lessonLink2 label="02 الصياغة" url="#learn-2"; bg="#141a15"; color="#f4f6f3"; .end/view
-          @view.Button=lessonLink3 label="03 البيانات" url="#learn-3"; bg="#141a15"; color="#f4f6f3"; .end/view
-          @view.Button=lessonLink4 label="04 التحكم" url="#learn-4"; bg="#141a15"; color="#f4f6f3"; .end/view
-          @view.Button=lessonLink5 label="05 الدوال" url="#learn-5"; bg="#141a15"; color="#f4f6f3"; .end/view
-          @view.Button=lessonLink6 label="06 الواجهة" url="#learn-6"; bg="#141a15"; color="#f4f6f3"; .end/view
-          @view.Button=lessonLink7 label="07 البيانات والتدفق" url="#learn-7"; bg="#141a15"; color="#f4f6f3"; .end/view
-          @view.Button=lessonLink8 label="08 المكتبات" url="#learn-8"; bg="#141a15"; color="#f4f6f3"; .end/view
-          @view.Button=lessonLink9 label="09 الأخطاء" url="#learn-9"; bg="#141a15"; color="#f4f6f3"; .end/view
-          @view.Button=lessonLink10 label="10 المشاريع" url="#learn-10"; bg="#141a15"; color="#f4f6f3"; .end/view
-          @view.Button=lessonLink11 label="11 المتصفح" url="#learn-11"; bg="#141a15"; color="#f4f6f3"; .end/view
-          @view.Button=lessonLink12 label="12 التطبيق" url="#learn-12"; bg="#141a15"; color="#f4f6f3"; .end/view
+          @view.Button=lessonLink1 label="01 البداية"; url="#learn-1"; bg="#141a15"; color="#f4f6f3"; .end/view
+          @view.Button=lessonLink2 label="02 الصياغة"; url="#learn-2"; bg="#141a15"; color="#f4f6f3"; .end/view
+          @view.Button=lessonLink3 label="03 البيانات"; url="#learn-3"; bg="#141a15"; color="#f4f6f3"; .end/view
+          @view.Button=lessonLink4 label="04 التحكم"; url="#learn-4"; bg="#141a15"; color="#f4f6f3"; .end/view
+          @view.Button=lessonLink5 label="05 الدوال"; url="#learn-5"; bg="#141a15"; color="#f4f6f3"; .end/view
+          @view.Button=lessonLink6 label="06 الواجهة"; url="#learn-6"; bg="#141a15"; color="#f4f6f3"; .end/view
+          @view.Button=lessonLink7 label="07 البيانات والتدفق"; url="#learn-7"; bg="#141a15"; color="#f4f6f3"; .end/view
+          @view.Button=lessonLink8 label="08 المكتبات"; url="#learn-8"; bg="#141a15"; color="#f4f6f3"; .end/view
+          @view.Button=lessonLink9 label="09 الأخطاء"; url="#learn-9"; bg="#141a15"; color="#f4f6f3"; .end/view
+          @view.Button=lessonLink10 label="10 المشاريع"; url="#learn-10"; bg="#141a15"; color="#f4f6f3"; .end/view
+          @view.Button=lessonLink11 label="11 المتصفح"; url="#learn-11"; bg="#141a15"; color="#f4f6f3"; .end/view
+          @view.Button=lessonLink12 label="12 التطبيق"; url="#learn-12"; bg="#141a15"; color="#f4f6f3"; .end/view
         .end/view
       .end/view
 
@@ -709,7 +709,7 @@ warp copyHtml   = "false";
       .end/view
 
       // ------------------------------ الدرس 1 ------------------------------
-      @view.Card=learn1 id="learn-1" padding=16; bg="#10130f"; radius=16; shadow="true";
+      @view.Card=learn1 id="learn-1"; padding=16; bg="#10130f"; radius=16; shadow="true";
         @view.Column=learn1c gap=8;
           @view.Text=learn1n text="01 — أول برنامج"; size=17; weight="850"; color="#f4f6f3"; .end/view
           @view.Text=learn1d text="تعلم نقطة البداية: كل عبارة تنتهي بـ ;، وprint تطبع قيمة. شغّل الملف بالمفسر الرسمي."; size=13; color="#9aa39c"; .end/view
@@ -720,7 +720,7 @@ warp copyHtml   = "false";
       .end/view
 
       // ------------------------------ الدرس 2 ------------------------------
-      @view.Card=learn2 id="learn-2" padding=16; bg="#10130f"; radius=16; shadow="true";
+      @view.Card=learn2 id="learn-2"; padding=16; bg="#10130f"; radius=16; shadow="true";
         @view.Column=learn2c gap=8;
           @view.Text=learn2n text="02 — قواعد اللغة والتعابير"; size=17; weight="850"; color="#f4f6f3"; .end/view
           @view.Text=learn2d text="الأرقام والنصوص والمنطق وnil والمصفوفات والقواميس. العوامل الحسابية والمقارنة والمنطقية تستخدم لبناء التعابير."; size=13; color="#9aa39c"; .end/view
@@ -730,7 +730,7 @@ warp copyHtml   = "false";
       .end/view
 
       // ------------------------------ الدرس 3 ------------------------------
-      @view.Card=learn3 id="learn-3" padding=16; bg="#10130f"; radius=16; shadow="true";
+      @view.Card=learn3 id="learn-3"; padding=16; bg="#10130f"; radius=16; shadow="true";
         @view.Column=learn3c gap=8;
           @view.Text=learn3n text="03 — المتغيرات والبيانات"; size=17; weight="850"; color="#f4f6f3"; .end/view
           @view.Text=learn3d text="let هو تعريف المتغير. يمكن استخدام نوع معلَن اختياريًا مثل Number وString وBool وArray وMap، مع فهرسة المصفوفات والقواميس."; size=13; color="#9aa39c"; .end/view
@@ -740,7 +740,7 @@ warp copyHtml   = "false";
       .end/view
 
       // ------------------------------ الدرس 4 ------------------------------
-      @view.Card=learn4 id="learn-4" padding=16; bg="#10130f"; radius=16; shadow="true";
+      @view.Card=learn4 id="learn-4"; padding=16; bg="#10130f"; radius=16; shadow="true";
         @view.Column=learn4c gap=8;
           @view.Text=learn4n text="04 — الشروط والحلقات"; size=17; weight="850"; color="#f4f6f3"; .end/view
           @view.Text=learn4d text="استخدم if/else أو when/otherwise، ثم while وfor وfor...in. break وcontinue للتحكم في الحلقة، وmatch/case لمطابقة الحالات."; size=13; color="#9aa39c"; .end/view
@@ -750,7 +750,7 @@ warp copyHtml   = "false";
       .end/view
 
       // ------------------------------ الدرس 5 ------------------------------
-      @view.Card=learn5 id="learn-5" padding=16; bg="#10130f"; radius=16; shadow="true";
+      @view.Card=learn5 id="learn-5"; padding=16; bg="#10130f"; radius=16; shadow="true";
         @view.Column=learn5c gap=8;
           @view.Text=learn5n text="05 — الدوال والأنواع"; size=17; weight="850"; color="#f4f6f3"; .end/view
           @view.Text=learn5d text="fun لتعريف الدوال، return للإرجاع، ويمكن للدالة أن تكون قيمة أو تستدعي نفسها. بعد الأساسيات انتقل إلى enum وclass وstruct والطرق."; size=13; color="#9aa39c"; .end/view
@@ -761,7 +761,7 @@ warp copyHtml   = "false";
       .end/view
 
       // ------------------------------ الدرس 6 ------------------------------
-      @view.Card=learn6 id="learn-6" padding=16; bg="#10130f"; radius=16; shadow="true";
+      @view.Card=learn6 id="learn-6"; padding=16; bg="#10130f"; radius=16; shadow="true";
         @view.Column=learn6c gap=8;
           @view.Text=learn6n text="06 — الحاويات والواجهة"; size=17; weight="850"; color="#f4f6f3"; .end/view
           @view.Text=learn6d text="طبقة Rin الممتدة تفصل السلوك والبيانات عن شكل الواجهة: @container للسلوك، @loop للتنظيم/التنسيق، و@element للعناصر البصرية. اقرأ التعريفات قبل بناء واجهة كبيرة."; size=13; color="#9aa39c"; .end/view
@@ -772,7 +772,7 @@ warp copyHtml   = "false";
       .end/view
 
       // ------------------------------ الدرس 7 ------------------------------
-      @view.Card=learn7 id="learn-7" padding=16; bg="#10130f"; radius=16; shadow="true";
+      @view.Card=learn7 id="learn-7"; padding=16; bg="#10130f"; radius=16; shadow="true";
         @view.Column=learn7c gap=8;
           @view.Text=learn7n text="07 — البيانات، الأنابيب، وRinFlow"; size=17; weight="850"; color="#f4f6f3"; .end/view
           @view.Text=learn7d text="|> يبني سلسلة تحويل واضحة. reckon للحسابات الإحصائية، وRinFlow طبقة اختيارية للرؤية والتحكم في تدفق التنفيذ دون تغيير النتيجة."; size=13; color="#9aa39c"; .end/view
@@ -783,7 +783,7 @@ warp copyHtml   = "false";
       .end/view
 
       // ------------------------------ الدرس 8 ------------------------------
-      @view.Card=learn8 id="learn-8" padding=16; bg="#10130f"; radius=16; shadow="true";
+      @view.Card=learn8 id="learn-8"; padding=16; bg="#10130f"; radius=16; shadow="true";
         @view.Column=learn8c gap=8;
           @view.Text=learn8n text="08 — المكتبات والملفات"; size=17; weight="850"; color="#f4f6f3"; .end/view
           @view.Text=learn8d text="المكتبات القياسية في lib/ تُستورد عبر @import. تعلّم أيضًا فصل الحاويات بين الملفات، ثم storage وhttp عندما يحتاج البرنامج إلى ملفات أو اتصال خارجي."; size=13; color="#9aa39c"; .end/view
@@ -795,7 +795,7 @@ warp copyHtml   = "false";
       .end/view
 
       // ------------------------------ الدرس 9 ------------------------------
-      @view.Card=learn9 id="learn-9" padding=16; bg="#10130f"; radius=16; shadow="true";
+      @view.Card=learn9 id="learn-9"; padding=16; bg="#10130f"; radius=16; shadow="true";
         @view.Column=learn9c gap=8;
           @view.Text=learn9n text="09 — الأخطاء والفحص"; size=17; weight="850"; color="#f4f6f3"; .end/view
           @view.Text=learn9d text="افصل بين الخطأ النحوي، خطأ الاسم/النوع، وخطأ التشغيل. استخدم rin check للفحص دون تشغيل، وtry/catch/throw عندما تحتاج معالجة أخطاء وقت التشغيل."; size=13; color="#9aa39c"; .end/view
@@ -806,7 +806,7 @@ warp copyHtml   = "false";
       .end/view
 
       // ------------------------------ الدرس 10 ------------------------------
-      @view.Card=learn10 id="learn-10" padding=16; bg="#10130f"; radius=16; shadow="true";
+      @view.Card=learn10 id="learn-10"; padding=16; bg="#10130f"; radius=16; shadow="true";
         @view.Column=learn10c gap=8;
           @view.Text=learn10n text="10 — تشغيل، بناء، ومشاريع"; size=17; weight="850"; color="#f4f6f3"; .end/view
           @view.Text=learn10d text="rin run هو المسار الكامل لتشغيل اللغة في هذا التوزيع. rin build عبر rinc يدعم مجموعة فرعية من اللغة حاليًا؛ لا تفترض أن كل ميزات المفسر قابلة للبناء الأصلي."; size=13; color="#9aa39c"; .end/view
@@ -816,7 +816,7 @@ warp copyHtml   = "false";
       .end/view
 
       // ------------------------------ الدرس 11 ------------------------------
-      @view.Card=learn11 id="learn-11" padding=16; bg="#10130f"; radius=16; shadow="true";
+      @view.Card=learn11 id="learn-11"; padding=16; bg="#10130f"; radius=16; shadow="true";
         @view.Column=learn11c gap=8;
           @view.Text=learn11n text="11 — Rin في المتصفح"; size=17; weight="850"; color="#f4f6f3"; .end/view
           @view.Text=learn11d text="RinHTML يربط ملف Rin بعناصر HTML عبر سمات مثل rin-click وrin-text. أما الموقع الرسمي نفسه فيمرر site.rin إلى محرك Rin/Indsintime ثم يرسم شجرة الواجهة."; size=13; color="#9aa39c"; .end/view
@@ -827,7 +827,7 @@ warp copyHtml   = "false";
       .end/view
 
       // ------------------------------ الدرس 12 ------------------------------
-      @view.Card=learn12 id="learn-12" padding=16; bg="#10130f"; radius=16; shadow="true";
+      @view.Card=learn12 id="learn-12"; padding=16; bg="#10130f"; radius=16; shadow="true";
         @view.Column=learn12c gap=8;
           @view.Text=learn12n text="12 — مسار التطبيق الحقيقي"; size=17; weight="850"; color="#f4f6f3"; .end/view
           @view.Text=learn12d text="بعد إتقان الأساسيات: صمّم البيانات، افصل المنطق في دوال، أضف الحاويات عند الحاجة، استورد المكتبات، افحص البرنامج، ثم اختبره وشغّله. لا تبدأ بالمزايا الكبيرة قبل تثبيت الأساس."; size=13; color="#9aa39c"; .end/view
