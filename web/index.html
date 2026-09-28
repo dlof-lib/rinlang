@@ -148,6 +148,7 @@
 
   <script src="rin.js"></script>
   <script src="libraries.js?v=7"></script>
+  <script src="rin-academy.js"></script>
   <script>
   (function () {
     var DESIGN_WIDTH = 420; // rootWidth: عرض التصميم الذي يخطّط عنده محرّك Indsin نفسه
@@ -279,6 +280,7 @@
       try { data = JSON.parse(jsonText); } catch (e) { fail('تعذّر قراءة ناتج المحرّك (JSON):', String(e)); return; }
       if (!data.ok) { fail('خطأ في site.rin:', (data.error || 'unknown') + (data.line ? ' (سطر ' + data.line + ')' : '')); return; }
       renderFabric(data.fabric);
+      window.dispatchEvent(new CustomEvent('rin:rendered'));
     }
 
     var Module;
@@ -288,6 +290,16 @@
           throw new Error('rin.js لم يُحمَّل بشكل صحيح (تأكد أن rin.js وrin.wasm منشوران بجانب هذا الملف).');
         }
         Module = await RinModule();
+        window.RinSiteRuntime = {
+          getModule: function () { return Module; },
+          getSession: function () { return session; },
+          runSource: function (source) {
+            if (!Module) throw new Error('محرك Rin لم يجهز بعد.');
+            if (typeof Module.ccall !== 'function') throw new Error('واجهة WASM غير متاحة.');
+            return Module.ccall('rin_run_source', 'string', ['string'], [String(source || '')]);
+          }
+        };
+        window.dispatchEvent(new CustomEvent('rin:ready'));
 
         bootMsg.textContent = 'fetching site.rin…';
         var res = await fetch('site.rin', { cache: 'no-store' });
