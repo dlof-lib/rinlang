@@ -18,6 +18,7 @@ import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.text.Spannable
 import android.text.SpannableStringBuilder
 import android.text.Spanned
@@ -34,6 +35,9 @@ import android.text.style.LineBackgroundSpan
 import android.text.style.RelativeSizeSpan
 import android.text.style.ReplacementSpan
 import android.text.style.StrikethroughSpan
+import android.text.style.SubscriptSpan
+import android.text.style.SuperscriptSpan
+import android.text.style.UnderlineSpan
 import android.text.style.StyleSpan
 import android.text.style.TypefaceSpan
 import android.text.style.URLSpan
@@ -144,6 +148,12 @@ import java.util.concurrent.Executors
  * - **جديد: عناصر إضافية** — روابط تلقائية `<https://...>`، فاصل `<br>`، ورموز `:rocket:` `:tada:`...
  * - **إصلاح: روابط `[نص](رابط)` صارت ClickableSpan** بدل URLSpan لأن autoLinkMask في TextView كان
  *   يحذف كل URLSpan فتفقد الروابط النقر.
+ *
+ * - **جديد: HTML شائع في READMEs** — `<b> <i> <u> <s> <code> <kbd> <mark> <sub> <sup>`، `<a href>`،
+ *   `<img src alt>` (وشارات shields تُرسَم محلياً)، `<details><summary>` كقسم قابل للطي، وإسقاط
+ *   الوسوم الغلافية (`<p align>` `<div>` `<center>`...) بدل ظهورها كنص خام.
+ * - **جديد: شريط Marquee متحرّك** عبر `[*نص/marquee*]` (يُرسَم بـ[MarqueeSpan] ويحرّكه [MarqueeTicker]).
+ * - **جديد: روابط مرجعية** `[نص][id]` + `[id]: https://...` (تعريفاتها لا تُعرَض).
  *
  * الاستخدام المباشر: `textView.text = MarkdownLite.toSpannable(md)`.
  * الاستخدام الموصى به عند وجود روابط قابلة للنقر (أو أقسام قابلة للطي/خلفية صفحة/صور محلية):
@@ -420,6 +430,8 @@ object MarkdownLite {
     // (تحديث) إصلاحات: `_`/`__` لا تُنشئ مائلاً/تشديداً داخل الكلمات (snake_case_name)، و`*`/`**` تتطلّبان
     // أن يلي الفاتحُ حرفاً غير مسافة وأن يسبق الخاتمَ حرفٌ غير مسافة (2 * 3 * 4 تبقى حرفية)، مطابقةً لـGFM.
     // مجموعات جديدة في الآخر (فهارس 1-17 لم تتغيّر): 18) رابط تلقائي <https://...>  19) <br>  20) :emoji:
+    // مجموعات HTML/مراجع جديدة (21-35): <b>/<strong> <i>/<em> <s>/<del> <u> <code> <kbd> <mark> <sub> <sup>،
+    // <a href>، <img>، وسوم غلافية تُسقَط (p/div/center/span/table...)، و`[نص][معرّف]` روابط مرجعية.
     //  1) escape حرف مُفلَت حرفياً        8) [[ستيكر]] أو [[ستيكر|لون]]
     //  2) ***تشديد+مائل***                9) [*شارة/قيمة*] أو [*نص/link=(رابط)*] أو
     //  3) **تشديد**                          [*نص/link=(رابط)/icon=(اسم)*] — انظر [appendMetaBadge]
@@ -449,7 +461,20 @@ object MarkdownLite {
             "|!\\[([^\\]]*?)\\]\\(([^)\\s]+?)\\)" +
             "|<(https?://[^>\\s]+)>" +
             "|(<[bB][rR]\\s*/?>)" +
-            "|(?<![\\p{L}\\p{N}:]):([a-z0-9_+-]{2,}):(?![\\p{L}\\p{N}:])"
+            "|(?<![\\p{L}\\p{N}:]):([a-z0-9_+-]{2,}):(?![\\p{L}\\p{N}:])" +
+            "|(?i:<(?:b|strong)>(.+?)</(?:b|strong)>)" +
+            "|(?i:<(?:i|em)>(.+?)</(?:i|em)>)" +
+            "|(?i:<(?:s|del|strike)>(.+?)</(?:s|del|strike)>)" +
+            "|(?i:<u>(.+?)</u>)" +
+            "|(?i:<code>(.+?)</code>)" +
+            "|(?i:<kbd>(.+?)</kbd>)" +
+            "|(?i:<mark>(.+?)</mark>)" +
+            "|(?i:<sub>(.+?)</sub>)" +
+            "|(?i:<sup>(.+?)</sup>)" +
+            "|(?i:<a\\s[^>]*?href\\s*=\\s*[\"']([^\"']+)[\"'][^>]*>(.+?)</a>)" +
+            "|(?i:(<img\\b[^>]*>))" +
+            "|(?i:(</?(?:p|div|center|span|section|picture|source|figure|figcaption|font|table|thead|tbody|tr|td|th|hr)\\b[^>]*>))" +
+            "|\\[([^\\]]+?)\\]\\[([^\\]]*)\\]"
     )
 
     /** رأس كتلة اقتباس GFM: `[!NOTE]`/`[!TIP]`/`[!IMPORTANT]`/`[!WARNING]`/`[!CAUTION]` بمفردها على
@@ -576,6 +601,7 @@ object MarkdownLite {
         onToggle: (() -> Unit)? = null
     ): CharSequence {
         currentBaseDir = baseDir
+        currentLinkRefs = collectLinkRefs(markdown)
         applyPalette(dark)
         val out = SpannableStringBuilder()
         val lines = markdown.lines()
@@ -674,6 +700,34 @@ object MarkdownLite {
                 // سطر خلفية الصفحة المستقل — يُستهلَك بصمت، لا يُعرَض كمحتوى مرئي إطلاقاً.
                 // اللون الفعلي يُستخرَج لاحقاً عبر [extractPageBackground] من النص الخام كاملاً.
                 pageBackgroundLineRegex.matches(trimmed) -> { lastWasListItem = false; i++ }
+
+                // تعريف رابط مرجعي `[id]: url` — يُستهلَك بصمت (يُستخدَم عبر `[نص][id]`).
+                linkRefDefRegex.matches(rawLine) -> { lastWasListItem = false; i++ }
+
+                // `<details><summary>عنوان</summary> ... </details>` بأسلوب GitHub → نفس القسم القابل للطي.
+                trimmed.startsWith("<details", ignoreCase = true) -> {
+                    val blockLines = mutableListOf<String>()
+                    var j = i
+                    while (j < lines.size) {
+                        blockLines.add(lines[j])
+                        if (lines[j].contains("</details>", ignoreCase = true)) break
+                        j++
+                    }
+                    val block = blockLines.joinToString("\n")
+                    val summary = detailsSummaryRegex.find(block)
+                    val title = plainInlineText(summary?.groupValues?.get(1).orEmpty()).trim()
+                    val rest = if (summary != null) block.substring(summary.range.last + 1) else block
+                    val bodyText = rest.replace(detailsTagRegex, "").trim()
+                    blockGap()
+                    val sectionId = "det${collapsibleAutoIndex++}:${title.ifBlank { "details" }}"
+                    val isOpen = expandedSections.contains(sectionId)
+                    appendCollapsibleSection(out, title, bodyText, isOpen) {
+                        if (!expandedSections.remove(sectionId)) expandedSections.add(sectionId)
+                        onToggle?.invoke()
+                    }
+                    lastWasListItem = false
+                    i = j + 1
+                }
 
                 // قسم وصف قابل للطي: `[~عنوان]` يبدأ الكتلة، `[~/]` وحدها على سطر مستقل تُنهيها.
                 trimmed.startsWith("[~") && trimmed.endsWith("]") && trimmed != COLLAPSIBLE_CLOSE_MARKER -> {
@@ -948,6 +1002,8 @@ object MarkdownLite {
             } else if (!inFence) {
                 if (t.startsWith("[~") && t.endsWith("]") && t != COLLAPSIBLE_CLOSE_MARKER) inSection = true
                 else if (t == COLLAPSIBLE_CLOSE_MARKER) inSection = false
+                else if (t.startsWith("<details", ignoreCase = true)) inSection = !t.contains("</details>", ignoreCase = true)
+                else if (inSection && t.contains("</details>", ignoreCase = true)) inSection = false
             }
             if (!inFence && !inSection && t.contains("|") && i + 1 < lines.size && isTableSeparator(lines[i + 1])) {
                 val header = splitTableRow(t)
@@ -1056,6 +1112,7 @@ object MarkdownLite {
     ) {
         // عرض حقيقي للصور المضمَّنة يناسب TextView الفعلي بدل قيمة تقديرية ثابتة دوماً؛ عرض الشاشة
         // الكامل كحدّ أقصى احتياطي إن لم يكن TextView قد قِيس بعد (width == 0 قبل أول تخطيط).
+        currentDensity = textView.resources.displayMetrics.density
         currentImageMaxWidthPx = textView.width.takeIf { it > 0 }
             ?: (textView.resources.displayMetrics.widthPixels - (32 * textView.resources.displayMetrics.density).toInt())
                 .coerceAtLeast(DEFAULT_IMAGE_MAX_WIDTH_PX)
@@ -1076,6 +1133,7 @@ object MarkdownLite {
             }
         }
         loadPendingRemoteImages(textView)
+        startMarqueeIfNeeded(textView)
     }
 
     /**
@@ -1182,6 +1240,19 @@ object MarkdownLite {
                 g[18] != null -> appendAutolink(out, g[18]!!.value)
                 g[19] != null -> out.append('\n')
                 g[20] != null -> appendEmoji(out, g[20]!!.value, match.value)
+                g[21] != null -> appendStyled(out, g[21]!!.value, Typeface.BOLD)
+                g[22] != null -> appendStyled(out, g[22]!!.value, Typeface.ITALIC)
+                g[23] != null -> appendStrike(out, g[23]!!.value)
+                g[24] != null -> appendUnderline(out, g[24]!!.value)
+                g[25] != null -> appendCode(out, g[25]!!.value)
+                g[26] != null -> appendKeycap(out, g[26]!!.value)
+                g[27] != null -> appendHighlight(out, g[27]!!.value)
+                g[28] != null -> appendScript(out, g[28]!!.value, superscript = false)
+                g[29] != null -> appendScript(out, g[29]!!.value, superscript = true)
+                g[30] != null && g[31] != null -> appendLink(out, g[31]!!.value, g[30]!!.value)
+                g[32] != null -> appendHtmlImage(out, g[32]!!.value)
+                g[33] != null -> {} // وسم HTML غلافي (p/div/center/span...) يُسقَط بصمت بدل ظهوره حرفياً
+                g[34] != null -> appendRefLink(out, g[34]!!.value, g[35]?.value.orEmpty(), match.value)
             }
             idx = match.range.last + 1
         }
@@ -1258,6 +1329,72 @@ object MarkdownLite {
         appendInline(tmp, md)
         return tmp.toString().replace('\n', ' ')
     }
+
+    private fun appendUnderline(out: SpannableStringBuilder, value: String) {
+        val start = out.length
+        appendInline(out, value)
+        out.setSpan(UnderlineSpan(), start, out.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+    }
+
+    /** `<sub>`/`<sup>`: أسفل/أعلى السطر بحجم مصغَّر. */
+    private fun appendScript(out: SpannableStringBuilder, value: String, superscript: Boolean) {
+        val start = out.length
+        appendInline(out, value)
+        val end = out.length
+        out.setSpan(if (superscript) SuperscriptSpan() else SubscriptSpan(), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        out.setSpan(RelativeSizeSpan(0.75f), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+    }
+
+    /** `<kbd>Ctrl</kbd>` → مفتاح لوحة مفاتيح بإطار مدوَّر وخط أحادي المسافة. */
+    private fun appendKeycap(out: SpannableStringBuilder, value: String) {
+        val start = out.length
+        out.append(value)
+        val end = out.length
+        out.setSpan(
+            StickerSpan(
+                COLOR_INLINE_CODE_BG, COLOR_CODE_TEXT,
+                cornerRadius = 8f, paddingH = 8f, paddingV = 2f,
+                strokeColor = COLOR_CARD_BORDER, strokeWidth = 2f
+            ),
+            start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+        )
+        out.setSpan(TypefaceSpan("monospace"), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        out.setSpan(RelativeSizeSpan(0.85f), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+    }
+
+    private val htmlSrcRegex = Regex("(?i)\\bsrc\\s*=\\s*[\"']([^\"']+)[\"']")
+    private val htmlAltRegex = Regex("(?i)\\balt\\s*=\\s*[\"']([^\"']*)[\"']")
+
+    /** `<img src="..." alt="...">` → نفس معالجة `![alt](src)` (شارات shields.io تُرسَم محلياً). */
+    private fun appendHtmlImage(out: SpannableStringBuilder, tag: String) {
+        val src = htmlSrcRegex.find(tag)?.groupValues?.get(1) ?: return
+        val alt = htmlAltRegex.find(tag)?.groupValues?.get(1).orEmpty()
+        if (parseShieldsBadgeUrl(src) != null) appendShieldsBadge(out, alt, src) else appendImage(out, alt, src)
+    }
+
+    /** تعريفات الروابط المرجعية `[id]: https://...` في المستند الحالي (تُجمَع مرة واحدة في [toSpannable]). */
+    private var currentLinkRefs: Map<String, String> = emptyMap()
+
+    private val linkRefDefRegex = Regex("^\\s{0,3}\\[([\\p{L}\\p{N}][^\\]]*)\\]:\\s+<?([^\\s>]+)>?.*$")
+
+    private fun collectLinkRefs(markdown: String): Map<String, String> {
+        val refs = HashMap<String, String>()
+        for (line in markdown.lines()) {
+            val m = linkRefDefRegex.find(line) ?: continue
+            refs.putIfAbsent(m.groupValues[1].trim().lowercase(), m.groupValues[2])
+        }
+        return refs
+    }
+
+    /** `[نص][معرّف]` أو `[نص][]` → رابط عادي إن وُجد تعريفه، وإلا يبقى النص كما كُتب. */
+    private fun appendRefLink(out: SpannableStringBuilder, label: String, id: String, original: String) {
+        val key = (if (id.isBlank()) label else id).trim().lowercase()
+        val url = currentLinkRefs[key]
+        if (url == null) out.append(original) else appendLink(out, label, url)
+    }
+
+    private val detailsSummaryRegex = Regex("(?is)<summary[^>]*>(.*?)</summary>")
+    private val detailsTagRegex = Regex("(?i)</?details[^>]*>")
 
     private fun appendStyled(out: SpannableStringBuilder, value: String, style: Int) {
         val start = out.length
@@ -1668,6 +1805,8 @@ object MarkdownLite {
  *   • `copy=(نص)` زر ينسخ للحافظة، `status=(ok|warn|error|info|beta|new|stable|deprecated)` شارة حالة،
  *     `rating=(4.5)` نجوم، `progress=(70)` شريط تقدّم حقيقي ([ProgressBadgeSpan]).
  *   • أيقونات إضافية: copy/docs/home/mail/settings/bug/heart/tag/rocket/lock/open/share.
+ * - **جديد: Marquee** — `[*نص/marquee*]` أو `marquee=(60)`: شريط نص يتحرّك بلا توقّف (انظر [appendMarquee]؛
+ *   `width`/`direction`/`style`/`color`/`icon`/`link` اختيارية).
  * لا رابط ولا قيمة مجرَّدة ولا لون ولا هرم (مثال: `[*جديد*]` وحدها) → يسقط بهدوء إلى ستيكر
      * عادي بلون الهوية الافتراضي عبر [appendSticker]، فلا يُفقَد المحتوى صمتاً بسبب صياغة ناقصة.
      */
@@ -1695,6 +1834,10 @@ object MarkdownLite {
         var statusKey: String? = null
         var ratingValue: Double? = null
         var progressValue: Int? = null
+        var marquee = false
+        var marqueeSpeedDp: Float? = null
+        var marqueeWidthDp: Float? = null
+        var directionKey: String? = null
 
         // التسمية الأولى نفسها قد تكون لوناً مجرَّداً بلا نص (`[*#7C5CFF*]`) — عندها لا توجد
         // تسمية نصية منفصلة أصلاً.
@@ -1708,6 +1851,10 @@ object MarkdownLite {
                     "icon" -> iconRaw = m.groupValues[2].trim()
                     "color" -> parseColorValue(m.groupValues[2].trim())?.let { color = it }
                     "copy" -> copyText = m.groupValues[2].trim()
+                    "marquee" -> { marquee = true; m.groupValues[2].trim().toFloatOrNull()?.let { marqueeSpeedDp = it } }
+                    "speed" -> m.groupValues[2].trim().toFloatOrNull()?.let { marqueeSpeedDp = it }
+                    "width" -> marqueeWidthDp = m.groupValues[2].trim().toFloatOrNull()
+                    "direction", "dir" -> directionKey = m.groupValues[2].trim()
                     "style" -> styleKey = m.groupValues[2].trim()
                     "size" -> sizeKey = m.groupValues[2].trim()
                     "status" -> statusKey = m.groupValues[2].trim()
@@ -1722,6 +1869,7 @@ object MarkdownLite {
             } else {
                 val asColor = parseHexColor(part)
                 when {
+                    part.equals("marquee", ignoreCase = true) -> marquee = true
                     asColor != null -> color = asColor
                     plainValue == null -> plainValue = part
                 }
@@ -1729,6 +1877,11 @@ object MarkdownLite {
         }
 
         when {
+            // شريط نص متحرّك (Marquee): `[*عرض خاص — اطلب الآن/marquee*]` أو `marquee=(60)` (السرعة dp/ثانية).
+            marquee && label.isNotBlank() -> appendMarquee(
+                out, label, color, iconRaw, styleKey, marqueeSpeedDp, marqueeWidthDp, directionKey,
+                linkUrl?.let { LinkButtonClickSpan(it) }
+            )
             linkUrl != null -> {
                 appendActionButton(out, label, color, iconRaw, styleKey, sizeKey, LinkButtonClickSpan(linkUrl!!))
             }
@@ -1948,6 +2101,180 @@ object MarkdownLite {
         out.setSpan(StyleSpan(Typeface.BOLD), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
         out.setSpan(RelativeSizeSpan(scale), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
         out.setSpan(clickSpan, start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+    }
+
+    /** كثافة الشاشة الحالية (لتحويل dp→px داخل Spans لا تملك سياقاً) — يضبطها [applyTo] مع [currentImageMaxWidthPx]. */
+    private var currentDensity = 2f
+
+    /**
+     * **Marquee**: شريط بنص يتحرّك أفقياً بلا توقّف داخل حبّة واحدة (يُقصّ النص عند حدودها ويتكرّر بفاصل
+     * حتى يبدو الشريط متّصلاً). الصياغة: `[*النص/marquee*]` أو `[*النص/marquee=(60)*]` (السرعة dp/ثانية،
+     * الافتراضي 40)، ومعها اختيارياً: `width=(dp)` (الافتراضي عرض النص كاملاً تقريباً)، `direction=(right)`
+     * (الافتراضي يتحرّك لليسار)، `style=(soft|solid|outline)` (الافتراضي soft)، `color=(...)`، `icon=(...)`،
+     * و`link=(رابط)` لجعل الشريط كله قابلاً للنقر. التحريك يقوده [MarqueeTicker] عبر [applyTo].
+     */
+    private fun appendMarquee(
+        out: SpannableStringBuilder,
+        label: String,
+        color: Pair<Int, String>?,
+        iconRaw: String?,
+        styleKey: String?,
+        speedDp: Float?,
+        widthDp: Float?,
+        directionKey: String?,
+        clickSpan: ClickableSpan?
+    ) {
+        val base = color?.first ?: COLOR_BULLET
+        val bg: Int
+        val fg: Int
+        val stroke: Int
+        when (styleKey?.lowercase()) {
+            "solid" -> {
+                bg = base
+                fg = if (color != null) contrastingTextColor(base) else 0xFFFFFFFF.toInt()
+                stroke = 0
+            }
+            "outline" -> { bg = 0x00000000; fg = softTextColor(base); stroke = base }
+            else -> { bg = tintedBackground(base, 0x26); fg = softTextColor(base); stroke = 0 }
+        }
+        val glyph = iconGlyphFor(iconRaw)
+        val shown = if (glyph != null) "$glyph  $label" else label
+        val density = currentDensity
+        val widthPx = if (widthDp != null && widthDp > 0f) widthDp * density else currentImageMaxWidthPx * 0.96f
+        val leftward = directionKey?.lowercase() != "right"
+        val speedPx = (speedDp ?: 40f).coerceIn(5f, 400f) * density
+
+        val start = out.length
+        // مسافات غير قابلة للكسر: النص الأصلي للنطاق لا يُرسَم (الرسم كله داخل [MarqueeSpan])، لكنه يقرّر
+        // فرص كسر السطر — بلا NBSP قد ينكسر السطر داخل الشريط عند أي مسافة.
+        out.append(shown.replace(' ', '\u00A0'))
+        val end = out.length
+        out.setSpan(
+            MarqueeSpan(shown, bg, fg, stroke, if (stroke != 0) 2.5f else 0f, widthPx, speedPx, leftward),
+            start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+        )
+        out.setSpan(StyleSpan(Typeface.BOLD), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        out.setSpan(RelativeSizeSpan(0.9f), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        if (clickSpan != null) out.setSpan(clickSpan, start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+    }
+
+    /** يدفع إعادة رسم [TextView] كل إطار ما دام يحوي [MarqueeSpan] ومتّصلاً بالنافذة (يتوقف تلقائياً عند
+     *  فصله ويستأنف عند إعادة ربطه). يُخزَّن واحد لكل TextView فلا تتراكم مؤقّتات عند إعادة البناء. */
+    private class MarqueeTicker(view: TextView) : Runnable, View.OnAttachStateChangeListener {
+        private val ref = java.lang.ref.WeakReference(view)
+        private var stopped = false
+
+        override fun run() {
+            val v = ref.get() ?: return
+            if (stopped) return
+            v.invalidate()
+            v.postOnAnimation(this)
+        }
+
+        override fun onViewAttachedToWindow(v: View) {
+            if (!stopped) v.postOnAnimation(this)
+        }
+
+        override fun onViewDetachedFromWindow(v: View) {
+            v.removeCallbacks(this)
+        }
+
+        fun stop(v: View) {
+            stopped = true
+            v.removeCallbacks(this)
+            v.removeOnAttachStateChangeListener(this)
+        }
+    }
+
+    /** مفتاح ضعيف (WeakHashMap) وقيمة تحمل مرجعاً ضعيفاً للـView — لا تسريب ذاكرة. UI thread فقط. */
+    private val marqueeTickers = java.util.WeakHashMap<TextView, MarqueeTicker>()
+
+    private fun startMarqueeIfNeeded(textView: TextView) {
+        marqueeTickers.remove(textView)?.stop(textView)
+        val spanned = textView.text as? Spanned ?: return
+        if (spanned.getSpans(0, spanned.length, MarqueeSpan::class.java).isEmpty()) return
+        val ticker = MarqueeTicker(textView)
+        marqueeTickers[textView] = ticker
+        textView.addOnAttachStateChangeListener(ticker)
+        if (textView.isAttachedToWindow) textView.postOnAnimation(ticker)
+    }
+
+    /**
+     * حبّة بعرض ثابت [widthPx] يمرّ فيها [label] بسرعة [speedPxPerSec] (بكسل/ثانية): موضع النص يُحسَب
+     * من ساعة النظام مباشرة عند كل رسم (لا حالة داخلية)، فيكفي أن يستدعي [MarqueeTicker] `invalidate()`.
+     * يُقصّ الرسم داخل الحبّة عبر `clipRect` ويتكرّر النص بفاصل [gapPx] ليمتلئ العرض دائماً.
+     */
+    private class MarqueeSpan(
+        private val label: String,
+        private val bg: Int,
+        private val fg: Int,
+        private val strokeColor: Int,
+        private val strokeWidth: Float,
+        private val widthPx: Float,
+        private val speedPxPerSec: Float,
+        private val leftward: Boolean,
+        private val cornerRadius: Float = 10f,
+        private val paddingH: Float = 14f,
+        private val paddingV: Float = 4f,
+        private val gapPx: Float = 48f
+    ) : ReplacementSpan() {
+        override fun getSize(paint: Paint, text: CharSequence, start: Int, end: Int, fm: Paint.FontMetricsInt?): Int {
+            fm?.let {
+                val orig = paint.fontMetricsInt
+                it.ascent = orig.ascent; it.descent = orig.descent; it.top = orig.top; it.bottom = orig.bottom
+            }
+            return widthPx.toInt()
+        }
+
+        override fun draw(
+            canvas: Canvas, text: CharSequence, start: Int, end: Int,
+            x: Float, top: Int, y: Int, bottom: Int, paint: Paint
+        ) {
+            val savedColor = paint.color
+            val savedStyle = paint.style
+            val savedAA = paint.isAntiAlias
+            paint.isAntiAlias = true
+
+            val rect = RectF(x, top.toFloat() + paddingV, x + widthPx, bottom.toFloat() - paddingV)
+            paint.style = Paint.Style.FILL
+            paint.color = bg
+            canvas.drawRoundRect(rect, cornerRadius, cornerRadius, paint)
+            if (strokeWidth > 0f) {
+                val savedStroke = paint.strokeWidth
+                val half = strokeWidth / 2f
+                paint.style = Paint.Style.STROKE
+                paint.strokeWidth = strokeWidth
+                paint.color = strokeColor
+                canvas.drawRoundRect(
+                    RectF(rect.left + half, rect.top + half, rect.right - half, rect.bottom - half),
+                    cornerRadius, cornerRadius, paint
+                )
+                paint.strokeWidth = savedStroke
+                paint.style = Paint.Style.FILL
+            }
+
+            val left = x + paddingH
+            val right = x + widthPx - paddingH
+            val textWidth = paint.measureText(label)
+            val cycle = textWidth + gapPx
+            // بالساعة (لا بعدّاد داخلي) وباقتطاع ساعة كاملة لتفادي فقد دقّة الـFloat؛ القفزة عند الاقتطاع غير ملحوظة.
+            val seconds = (SystemClock.uptimeMillis() % 3_600_000L) / 1000f
+            val offset = (seconds * speedPxPerSec) % cycle
+
+            canvas.save()
+            canvas.clipRect(left, top.toFloat(), right, bottom.toFloat())
+            paint.color = fg
+            var px = if (leftward) left - offset else left + offset - cycle
+            while (px < right) {
+                if (px + textWidth > left) canvas.drawText(label, px, y.toFloat(), paint)
+                px += cycle
+            }
+            canvas.restore()
+
+            paint.color = savedColor
+            paint.style = savedStyle
+            paint.isAntiAlias = savedAA
+        }
     }
 
     /**
