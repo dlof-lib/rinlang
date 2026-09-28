@@ -310,4 +310,5 @@
     <color name="project_card_border">#E2E6ED</color>
     <color name="project_icon_bg">#F0ECFF</color>
     <color name="project_delete_color">#D6455D</color>
+    <color name="rin_doc_container">#14B8A6</color>
 </resources>
