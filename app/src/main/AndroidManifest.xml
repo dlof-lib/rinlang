@@ -166,6 +166,17 @@
             android:exported="false"
             android:windowSoftInputMode="adjustResize" />
 
+        <!-- تعديل مكتبة منشورة (بيانات + README + ملفات ومجلدات) ومحرر ملف داخل الحزمة -->
+        <activity
+            android:name=".store.EditPackageActivity"
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize" />
+
+        <activity
+            android:name=".store.PackageFileEditorActivity"
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize" />
+
         <activity
             android:name=".store.AccountActivity"
             android:exported="false"
