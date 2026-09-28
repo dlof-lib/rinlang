@@ -98,6 +98,8 @@ dependencies {
     implementation 'com.google.zxing:core:3.5.3'
     implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
     implementation 'androidx.recyclerview:recyclerview:1.3.2'
+    // سحب-للتحديث (Pull-to-refresh) في شاشة متجر Rin — مكتبة AndroidX قياسية مستقرة.
+    implementation 'androidx.swiperefreshlayout:swiperefreshlayout:1.1.0'
     // درج "مستكشف المشروع" المدمج في المحرر (شجرة الملفات/المجلدات + شجرة الحاويات) — انظر
     // activity_main.xml (DrawerLayout) و MainActivity.kt (btnExplorer).
     implementation 'androidx.drawerlayout:drawerlayout:1.2.0'
