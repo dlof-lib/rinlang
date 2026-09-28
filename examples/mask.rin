@@ -10,6 +10,10 @@ mask = "ui-root";
 mask = "assets-root";
 .end/Volume
 
+// Note: mask= on a @view element is accepted syntactically but is NOT registered
+// anywhere -- only @container/@Containers.Group/@Volume masks are (see findMask/
+// maskOf/maskExists in app/src/main/cpp/rin_interpreter.cpp). findMask("screen-root")
+// will therefore always return nil; this is a known engine limitation, not a bug here.
 @view.Column="screen"
 mask="screen-root";
 .end/view
@@ -31,6 +35,10 @@ print maskMembers("ui-root");
 print maskParent("child-root");
 print maskChildren("app-root");
 
+@container="toolbar"
+mask="save-button";
+.end/container
+
 // Mask v1
 maskAlias("save", "save-button");
 maskTag("save-button", "primary");
@@ -42,6 +50,10 @@ print maskRefs("save-button");
 print maskSummary("save");
 
 // Mask v1 registry demo
+@container="mainApp"
+mask="app.main";
+.end/container
+
 let m = "app.main";
 print maskExists(m);
 maskNamespace(m, "ui/app");
