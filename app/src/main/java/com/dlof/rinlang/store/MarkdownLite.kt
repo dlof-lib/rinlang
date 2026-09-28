@@ -4,6 +4,7 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
@@ -36,7 +37,13 @@ import android.text.style.StrikethroughSpan
 import android.text.style.StyleSpan
 import android.text.style.TypefaceSpan
 import android.text.style.URLSpan
+import android.view.Gravity
 import android.view.View
+import android.widget.FrameLayout
+import android.widget.HorizontalScrollView
+import android.widget.LinearLayout
+import android.widget.TableLayout
+import android.widget.TableRow
 import android.widget.TextView
 import android.widget.Toast
 import java.io.File
@@ -128,6 +135,16 @@ import java.util.concurrent.Executors
  *   `[!CAUTION]` كأول سطر داخل اقتباس `>` يحوِّله لبطاقة تنبيه ملوَّنة بأيقونة مميِّزة لكل نوع (انظر
  *   [appendCallout])، بدل بقائه اقتباساً محايداً — نفس الصياغة الشائعة في READMEs حديثة على GitHub.
  *
+ * - **جديد: ثيم داكن حقيقي** — كل الألوان تتبدّل تلقائياً بين قيم الثيم الفاتح والداكن للتطبيق (انظر
+ *   [applyPalette])، بعد أن كانت العناوين شبه سوداء فوق الخلفية الداكنة وبطاقات الكود ساطعة.
+ * - **جديد: جداول حقيقية** عبر [splitReadmeSegments] + [buildTableView] (التفاف بدل القصّ، تمرير
+ *   أفقي، محاذاة أعمدة `:---:`، تنسيق داخل الخلايا، `\|` حرفية) — مع تحسين الصندوق النصّي الاحتياطي.
+ * - **جديد: إصلاحات تحليل** — `snake_case_name` لم تعد تُنتج مائلاً، و`2 * 3 * 4` تبقى حرفية،
+ *   وتعشيش القوائم صار بمكدّس مسافات (2 أو 4 أو تاب حتى 5 مستويات)، وإغلاق العناوين `## عنوان ##`.
+ * - **جديد: عناصر إضافية** — روابط تلقائية `<https://...>`، فاصل `<br>`، ورموز `:rocket:` `:tada:`...
+ * - **إصلاح: روابط `[نص](رابط)` صارت ClickableSpan** بدل URLSpan لأن autoLinkMask في TextView كان
+ *   يحذف كل URLSpan فتفقد الروابط النقر.
+ *
  * الاستخدام المباشر: `textView.text = MarkdownLite.toSpannable(md)`.
  * الاستخدام الموصى به عند وجود روابط قابلة للنقر (أو أقسام قابلة للطي/خلفية صفحة/صور محلية):
  * `MarkdownLite.applyTo(textView, md, pageContainer, baseDir = ...)`.
@@ -186,46 +203,134 @@ object MarkdownLite {
     // بوضوح فوق الثيم الفاتح تحديداً، مع إعادة استخدام نفس رموز التطبيق (syntax_*، rin_editor_text،
     // rin_divider، rin_accent_pressed...) حتى تبقى المعاينة متّسقة بصرياً مع بقية الشاشات، ونسبة
     // تباين حقيقية (WCAG AA تقريباً) بدل الاعتماد على الشفافية فوق خلفية داكنة لم تعد موجودة.
-    private const val COLOR_RULE = 0xFFDDE2E8.toInt()             // rin_divider — فاصل هادئ تحت H2
-    private const val COLOR_CARD_BORDER = 0xFFE2E6ED.toInt()      // حدّ واضح موحّد لبطاقات الكود/الاقتباس/الجدول
-    private const val COLOR_CODE_TEXT = 0xFF20252B.toInt()        // rin_editor_text (فاتح)
-    private const val COLOR_HEADING = 0xFF12151A.toInt()          // أسود "حبري" أعمق من نص الجسم — تدرّج هرمي أوضح للعناوين
-    private const val COLOR_CODE_BLOCK_BG = 0xFFF4F2FB.toInt()    // بطاقة فاتحة بلمسة بنفسجية خفيفة
-    private const val COLOR_INLINE_CODE_BG = 0xFFEAE6F7.toInt()   // أغمق قليلاً لتمييز الكود المضمَّن عن السطر
+    private var COLOR_RULE: Int = 0xFFDDE2E8.toInt()             // rin_divider — فاصل هادئ تحت H2
+    private var COLOR_CARD_BORDER: Int = 0xFFE2E6ED.toInt()      // حدّ واضح موحّد لبطاقات الكود/الاقتباس/الجدول
+    private var COLOR_CODE_TEXT: Int = 0xFF20252B.toInt()        // rin_editor_text (فاتح)
+    private var COLOR_HEADING: Int = 0xFF12151A.toInt()          // أسود "حبري" أعمق من نص الجسم — تدرّج هرمي أوضح للعناوين
+    private var COLOR_CODE_BLOCK_BG: Int = 0xFFF4F2FB.toInt()    // بطاقة فاتحة بلمسة بنفسجية خفيفة
+    private var COLOR_INLINE_CODE_BG: Int = 0xFFEAE6F7.toInt()   // أغمق قليلاً لتمييز الكود المضمَّن عن السطر
 
     private const val COLOR_QUOTE_BAR = 0xFF7C5CFF.toInt()        // rin_accent
-    private const val COLOR_QUOTE_BG = 0x147C5CFF                 // rin_current_line_bg (فاتح) — بنفسجي 8%
-    private const val COLOR_QUOTE_TEXT = 0xFF54586B.toInt()       // rin_segment_unselected_text
+    private var COLOR_QUOTE_BG: Int = 0x147C5CFF                 // rin_current_line_bg (فاتح) — بنفسجي 8%
+    private var COLOR_QUOTE_TEXT: Int = 0xFF54586B.toInt()       // rin_segment_unselected_text
 
-    private const val COLOR_LINK = 0xFF6A47E8.toInt()             // rin_accent_pressed — بنفسجي أعمق، تباين كافٍ
+    private var COLOR_LINK: Int = 0xFF6A47E8.toInt()             // rin_accent_pressed — بنفسجي أعمق، تباين كافٍ
     private const val COLOR_HIGHLIGHT_BG = 0x4DFFC94D              // rin_star_gold_dim (يعمل فوق أي خلفية)
-    private const val COLOR_STRIKE_TEXT = 0xFF667085.toInt()      // rin_editor_hint (فاتح)
+    private var COLOR_STRIKE_TEXT: Int = 0xFF667085.toInt()      // rin_editor_hint (فاتح)
 
     private const val COLOR_TASK_DONE = 0xFF1CA877.toInt()        // rin_accent_green_pressed (أغمق، تباين أفضل)
-    private const val COLOR_TASK_PENDING = 0xFF667085.toInt()     // rin_editor_hint (فاتح)
-    private const val COLOR_H_DIM = 0xFF54586B.toInt()            // عناوين H5/H6 خافتة لكن مقروءة بوضوح
+    private var COLOR_TASK_PENDING: Int = 0xFF667085.toInt()     // rin_editor_hint (فاتح)
+    private var COLOR_H_DIM: Int = 0xFF54586B.toInt()            // عناوين H5/H6 خافتة لكن مقروءة بوضوح
 
-    private const val COLOR_TABLE_TEXT = 0xFF20252B.toInt()       // rin_editor_text (فاتح)
-    private const val COLOR_TABLE_HEADER = 0xFF6A47E8.toInt()     // rin_accent_pressed
-    private const val COLOR_TABLE_BORDER = 0xFFDDE2E8.toInt()     // rin_divider
-    private const val COLOR_TABLE_BG = 0xFFF6F5FB.toInt()         // أخفّ قليلاً من خلفية كتلة الكود
-    private const val COLOR_TABLE_ROW_ALT = 0xFFEDEAF7.toInt()    // تظليل تناوبي (Zebra) خفيف لصفوف البيانات الزوجية
+    private var COLOR_TABLE_TEXT: Int = 0xFF20252B.toInt()       // rin_editor_text (فاتح)
+    private var COLOR_TABLE_HEADER: Int = 0xFF6A47E8.toInt()     // rin_accent_pressed
+    private var COLOR_TABLE_BORDER: Int = 0xFFDDE2E8.toInt()     // rin_divider
+    private var COLOR_TABLE_BG: Int = 0xFFF6F5FB.toInt()         // أخفّ قليلاً من خلفية كتلة الكود
+    private var COLOR_TABLE_ROW_ALT: Int = 0xFFEDEAF7.toInt()    // تظليل تناوبي (Zebra) خفيف لصفوف البيانات الزوجية
 
     // لوحة تلوين نحوي (Syntax Palette) — نفس اللوحة الفعلية المستخدَمة في محرِّر Rin على الثيم
     // الفاتح (values/colors.xml: syntax_keyword/syntax_string/...)، مصمَّمة أصلاً لتحقّق تباين
     // ≥4.5:1 فوق خلفية بيضاء (انظر تعليق اللوحة هناك) — لا لوحة الثيم الداكن الباهتة السابقة.
-    private const val COLOR_SYNTAX_KEYWORD = 0xFF0B4FCC.toInt()    // syntax_keyword
-    private const val COLOR_SYNTAX_DIRECTIVE = 0xFF6A1B9A.toInt()  // syntax_container_keyword / syntax_make_directive
-    private const val COLOR_SYNTAX_STRING = 0xFF1D7A4C.toInt()     // syntax_string
-    private const val COLOR_SYNTAX_NUMBER = 0xFFB45F06.toInt()     // syntax_number
-    private const val COLOR_SYNTAX_COMMENT = 0xFF6B7280.toInt()    // syntax_comment
-    private const val COLOR_SYNTAX_BUILTIN = 0xFF8A6D00.toInt()    // syntax_builtin / syntax_tag
-    private const val COLOR_SYNTAX_ATTR = 0xFF9C5700.toInt()       // syntax_style_keyword
+    private var COLOR_SYNTAX_KEYWORD: Int = 0xFF0B4FCC.toInt()    // syntax_keyword
+    private var COLOR_SYNTAX_DIRECTIVE: Int = 0xFF6A1B9A.toInt()  // syntax_container_keyword / syntax_make_directive
+    private var COLOR_SYNTAX_STRING: Int = 0xFF1D7A4C.toInt()     // syntax_string
+    private var COLOR_SYNTAX_NUMBER: Int = 0xFFB45F06.toInt()     // syntax_number
+    private var COLOR_SYNTAX_COMMENT: Int = 0xFF6B7280.toInt()    // syntax_comment
+    private var COLOR_SYNTAX_BUILTIN: Int = 0xFF8A6D00.toInt()    // syntax_builtin / syntax_tag
+    private var COLOR_SYNTAX_ATTR: Int = 0xFF9C5700.toInt()       // syntax_style_keyword
 
     // خلفية زر "نسخ" وخط الفصل الرفيع أسفل رأس بطاقة الكود — بنفسجي فاتح جداً/حدّ فاتح واضحان
     // فوق البطاقة الفاتحة، بدل تراكب أبيض شبه شفاف كان يختفي تماماً فوق خلفية بيضاء.
-    private const val COLOR_COPY_BUTTON_BG = 0x1F7C5CFF
-    private const val COLOR_HEADER_RULE = 0xFFE2E6ED.toInt()
+    private var COLOR_COPY_BUTTON_BG: Int = 0x1F7C5CFF
+    private var COLOR_HEADER_RULE: Int = 0xFFE2E6ED.toInt()
+
+    /** هل الباليت الحالي داكن — يُضبَط عبر [applyPalette] (انظر [adaptForTheme]). */
+    private var darkMode = false
+
+    /**
+     * **جديد: ثيم داكن حقيقي** — كل الألوان أعلاه كانت مكتوبة للثيم الفاتح فقط، بينما التطبيق يدعم
+     * ثيماً داكناً فعلياً (ThemeManager + values-night، خلفية #17181C): كانت العناوين تظهر شبه سوداء
+     * فوق خلفية داكنة بلا أي تباين، وبطاقات الكود/الجدول بيضاء ساطعة، والروابط بنفسجي قاتم.
+     * هذه الدالة تبدّل كل ألوان المعاينة دفعة واحدة بين قيم الثيم الفاتح (values/colors.xml) وقيم
+     * الثيم الداكن الحقيقية للتطبيق (values-night/colors.xml: syntax_* وrin_editor_text...). تُستدعى
+     * في بداية [toSpannable] و[buildTableView]؛ آمنة لأن كل الاستدعاءات من UI thread (نفس مبدأ
+     * [currentBaseDir]).
+     */
+    private fun applyPalette(dark: Boolean) {
+        darkMode = dark
+        if (dark) {
+            COLOR_RULE = 0xFF2A2D34.toInt()
+            COLOR_CARD_BORDER = 0xFF33363F.toInt()
+            COLOR_CODE_TEXT = 0xFFE3E5E8.toInt()
+            COLOR_HEADING = 0xFFF4F5F7.toInt()
+            COLOR_CODE_BLOCK_BG = 0xFF1E2027.toInt()
+            COLOR_INLINE_CODE_BG = 0xFF2B2840.toInt()
+            COLOR_QUOTE_BG = 0x267C5CFF
+            COLOR_QUOTE_TEXT = 0xFFB4B8C5.toInt()
+            COLOR_LINK = 0xFF9C85FF.toInt()
+            COLOR_STRIKE_TEXT = 0xFF8B92A0.toInt()
+            COLOR_TASK_PENDING = 0xFF8B92A0.toInt()
+            COLOR_H_DIM = 0xFF9AA0AB.toInt()
+            COLOR_TABLE_TEXT = 0xFFE3E5E8.toInt()
+            COLOR_TABLE_HEADER = 0xFFB39DFF.toInt()
+            COLOR_TABLE_BORDER = 0xFF33363F.toInt()
+            COLOR_TABLE_BG = 0xFF1C1E25.toInt()
+            COLOR_TABLE_ROW_ALT = 0xFF242733.toInt()
+            COLOR_SYNTAX_KEYWORD = 0xFF569CD6.toInt()
+            COLOR_SYNTAX_DIRECTIVE = 0xFFC586C0.toInt()
+            COLOR_SYNTAX_STRING = 0xFF6FDC9E.toInt()
+            COLOR_SYNTAX_NUMBER = 0xFFFFA95C.toInt()
+            COLOR_SYNTAX_COMMENT = 0xFF9AA0AB.toInt()
+            COLOR_SYNTAX_BUILTIN = 0xFFE6C260.toInt()
+            COLOR_SYNTAX_ATTR = 0xFFF2A65A.toInt()
+            COLOR_COPY_BUTTON_BG = 0x337C5CFF
+            COLOR_HEADER_RULE = 0xFF33363F.toInt()
+        } else {
+            COLOR_RULE = 0xFFDDE2E8.toInt()
+            COLOR_CARD_BORDER = 0xFFE2E6ED.toInt()
+            COLOR_CODE_TEXT = 0xFF20252B.toInt()
+            COLOR_HEADING = 0xFF12151A.toInt()
+            COLOR_CODE_BLOCK_BG = 0xFFF4F2FB.toInt()
+            COLOR_INLINE_CODE_BG = 0xFFEAE6F7.toInt()
+            COLOR_QUOTE_BG = 0x147C5CFF
+            COLOR_QUOTE_TEXT = 0xFF54586B.toInt()
+            COLOR_LINK = 0xFF6A47E8.toInt()
+            COLOR_STRIKE_TEXT = 0xFF667085.toInt()
+            COLOR_TASK_PENDING = 0xFF667085.toInt()
+            COLOR_H_DIM = 0xFF54586B.toInt()
+            COLOR_TABLE_TEXT = 0xFF20252B.toInt()
+            COLOR_TABLE_HEADER = 0xFF6A47E8.toInt()
+            COLOR_TABLE_BORDER = 0xFFDDE2E8.toInt()
+            COLOR_TABLE_BG = 0xFFF6F5FB.toInt()
+            COLOR_TABLE_ROW_ALT = 0xFFEDEAF7.toInt()
+            COLOR_SYNTAX_KEYWORD = 0xFF0B4FCC.toInt()
+            COLOR_SYNTAX_DIRECTIVE = 0xFF6A1B9A.toInt()
+            COLOR_SYNTAX_STRING = 0xFF1D7A4C.toInt()
+            COLOR_SYNTAX_NUMBER = 0xFFB45F06.toInt()
+            COLOR_SYNTAX_COMMENT = 0xFF6B7280.toInt()
+            COLOR_SYNTAX_BUILTIN = 0xFF8A6D00.toInt()
+            COLOR_SYNTAX_ATTR = 0xFF9C5700.toInt()
+            COLOR_COPY_BUTTON_BG = 0x1F7C5CFF
+            COLOR_HEADER_RULE = 0xFFE2E6ED.toInt()
+        }
+    }
+
+    /** يفتّح [color] بمزجه ~45% نحو الأبيض في الثيم الداكن (ألوان هوية اللغات وأنواع التنبيهات
+     *  مكتوبة أصلاً لتُقرأ فوق خلفية فاتحة)؛ في الثيم الفاتح يعيده كما هو. */
+    private fun adaptForTheme(color: Int): Int {
+        if (!darkMode) return color
+        fun lift(c: Int): Int = (c * 0.55 + 255 * 0.45).toInt().coerceIn(0, 255)
+        val r = lift((color shr 16) and 0xFF)
+        val g = lift((color shr 8) and 0xFF)
+        val b = lift(color and 0xFF)
+        return (0xFF shl 24) or (r shl 16) or (g shl 8) or b
+    }
+
+    /** هل يعمل [context] الآن بالثيم الداكن؟ يحترم اختيار المستخدم في ThemeManager لأن
+     *  AppCompatDelegate ينعكس على uiMode لسياق الـActivity نفسه. */
+    private fun isDarkMode(context: Context): Boolean =
+        (context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) ==
+            Configuration.UI_MODE_NIGHT_YES
 
     /** خلفية "معتّمة" (Tint) بلون [color] عند شفافية [alphaHex] (افتراضياً ~12%) — تُستخدَم لإعطاء
      *  كل نوع تنبيه GFM ([appendCallout]) خلفية فاتحة بلون هويته الخاص بدل خلفية محايدة موحَّدة
@@ -264,7 +369,6 @@ object MarkdownLite {
         "yaml" to 0xFFA05A12.toInt(),
         "yml" to 0xFFA05A12.toInt()
     )
-    private val LANGUAGE_ACCENT_DEFAULT = COLOR_CODE_TEXT
 
     /** مجموعة موحَّدة من الكلمات المفتاحية: كلمات لغة Rin الحقيقية (من rin_lexer.cpp) + مجموعة
      *  عامة شائعة عبر أكثر اللغات ذكراً في ملفات README (Kotlin/Python/JS/TS/C/C++/Java/Swift/Go/
@@ -313,6 +417,9 @@ object MarkdownLite {
 
     // مجموعة تعابير نمطية للأنماط السطرية بترتيب أولوية يحلّ التعارض بين ** و * و __ و _ وغيرها.
     // ملاحظة الفهارس (مطابقة لترتيب المجموعات أدناه):
+    // (تحديث) إصلاحات: `_`/`__` لا تُنشئ مائلاً/تشديداً داخل الكلمات (snake_case_name)، و`*`/`**` تتطلّبان
+    // أن يلي الفاتحُ حرفاً غير مسافة وأن يسبق الخاتمَ حرفٌ غير مسافة (2 * 3 * 4 تبقى حرفية)، مطابقةً لـGFM.
+    // مجموعات جديدة في الآخر (فهارس 1-17 لم تتغيّر): 18) رابط تلقائي <https://...>  19) <br>  20) :emoji:
     //  1) escape حرف مُفلَت حرفياً        8) [[ستيكر]] أو [[ستيكر|لون]]
     //  2) ***تشديد+مائل***                9) [*شارة/قيمة*] أو [*نص/link=(رابط)*] أو
     //  3) **تشديد**                          [*نص/link=(رابط)/icon=(اسم)*] — انظر [appendMetaBadge]
@@ -327,9 +434,9 @@ object MarkdownLite {
     // اليسار) لا يصل إطلاقاً لتجربة بديل الرابط العادي عند موضع "!" مادام بديل الصورة يطابقه أولاً.
     private val inlineRegex = Regex(
         "\\\\([\\\\`*_{}\\[\\]()#+.!~=>-])" +
-            "|\\*\\*\\*([^*]+?)\\*\\*\\*" +
-            "|\\*\\*([^*]+?)\\*\\*" +
-            "|__([^_]+?)__" +
+            "|\\*\\*\\*(?!\\s)([^*]+?)(?<!\\s)\\*\\*\\*" +
+            "|\\*\\*(?!\\s)([^*]+?)(?<!\\s)\\*\\*" +
+            "|(?<![\\p{L}\\p{N}_])__([^_]+?)__(?![\\p{L}\\p{N}_])" +
             "|~~([^~]+?)~~" +
             "|`([^`]+?)`" +
             "|==([^=]+?)==" +
@@ -337,9 +444,12 @@ object MarkdownLite {
             "|\\[\\*([^\\]]+?)\\*\\]" +
             "|!\\[([^\\]]*?)\\]\\((https?://img\\.shields\\.io/[^)\\s]+)\\)" +
             "|\\[([^\\]]+?)\\]\\(([^)\\s]+?)\\)" +
-            "|\\*([^*]+?)\\*" +
-            "|_([^_]+?)_" +
-            "|!\\[([^\\]]*?)\\]\\(([^)\\s]+?)\\)"
+            "|\\*(?![\\s*])([^*]+?)(?<!\\s)\\*" +
+            "|(?<![\\p{L}\\p{N}_])_([^_]+?)_(?![\\p{L}\\p{N}_])" +
+            "|!\\[([^\\]]*?)\\]\\(([^)\\s]+?)\\)" +
+            "|<(https?://[^>\\s]+)>" +
+            "|(<[bB][rR]\\s*/?>)" +
+            "|(?<![\\p{L}\\p{N}:]):([a-z0-9_+-]{2,}):(?![\\p{L}\\p{N}:])"
     )
 
     /** رأس كتلة اقتباس GFM: `[!NOTE]`/`[!TIP]`/`[!IMPORTANT]`/`[!WARNING]`/`[!CAUTION]` بمفردها على
@@ -422,11 +532,12 @@ object MarkdownLite {
      */
     private fun appendCallout(out: SpannableStringBuilder, type: String, bodyLines: List<String>) {
         val style = CALLOUT_STYLES.getValue(type.uppercase())
+        val accent = adaptForTheme(style.color)
         val start = out.length
         val headerStart = out.length
         out.append(style.icon).append(' ').append(style.label)
         out.setSpan(StyleSpan(Typeface.BOLD), headerStart, out.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-        out.setSpan(ForegroundColorSpan(style.color), headerStart, out.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        out.setSpan(ForegroundColorSpan(accent), headerStart, out.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
         val textStart = out.length
         val nonBlankBody = bodyLines.filter { it.isNotBlank() || bodyLines.size == 1 }
         if (nonBlankBody.isNotEmpty()) {
@@ -437,9 +548,9 @@ object MarkdownLite {
         if (end > textStart) {
             out.setSpan(ForegroundColorSpan(COLOR_QUOTE_TEXT), textStart, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
         }
-        out.setSpan(QuoteBarSpan(style.color), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        out.setSpan(QuoteBarSpan(accent), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
         out.setSpan(
-            RoundedCardSpan(tintedBackground(style.color), style.color, start, end),
+            RoundedCardSpan(tintedBackground(accent), accent, start, end),
             start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
         )
     }
@@ -453,6 +564,7 @@ object MarkdownLite {
      * @param expandedSections مجموعة قابلة للتعديل بمعرِّفات أقسام `[~عنوان]` ... `[~/]` المفتوحة
      * حالياً (انظر [appendCollapsibleSection]) — نفس المجموعة يجب تمريرها في كل إعادة بناء لنفس
      * TextView حتى تبقى حالة الفتح/الإغلاق محفوظة بين استدعاء وآخر؛ [applyTo] يتكفّل بهذا تلقائياً.
+     * @param dark يختار الباليت الداكن (انظر [applyPalette]) — [applyTo] يحدِّده تلقائياً من ثيم الشاشة.
      * @param onToggle يُستدعى بعد كل نقرة على رأس قسم قابل للطي (بعد تحديث [expandedSections])؛
      * المستدعي مسؤول عن إعادة بناء النص (مثال: استدعاء [applyTo] مجدَّداً بنفس TextView/المجموعة).
      */
@@ -460,9 +572,11 @@ object MarkdownLite {
         markdown: String,
         expandedSections: MutableSet<String> = mutableSetOf(),
         baseDir: String? = null,
+        dark: Boolean = false,
         onToggle: (() -> Unit)? = null
     ): CharSequence {
         currentBaseDir = baseDir
+        applyPalette(dark)
         val out = SpannableStringBuilder()
         val lines = markdown.lines()
         var i = 0
@@ -472,6 +586,21 @@ object MarkdownLite {
         val codeBuffer = StringBuilder()
         var lastWasListItem = false
         var collapsibleAutoIndex = 0
+
+        // مكدّس مسافات بادئة لعناصر القوائم: عمق العنصر = موضعه في المكدّس (نسبياً لما قبله) بدل قسمة
+        // ثابتة /2 كانت تقفز بمستوى التعشيش بمسافة 4 (المعتادة) مباشرة للمستوى الثالث؛ والتاب = 4 مسافات.
+        val listIndentStack = mutableListOf<Int>()
+        fun listDepthFor(rawLine: String): Int {
+            var indent = 0
+            for (ch in rawLine) {
+                if (ch == ' ') indent++ else if (ch == '\t') indent += 4 else break
+            }
+            while (listIndentStack.isNotEmpty() && listIndentStack.last() > indent) {
+                listIndentStack.removeAt(listIndentStack.size - 1)
+            }
+            if (listIndentStack.isEmpty() || listIndentStack.last() < indent) listIndentStack.add(indent)
+            return (listIndentStack.size - 1).coerceIn(0, 4)
+        }
 
         fun blockGap() {
             if (out.isNotEmpty()) out.append("\n\n")
@@ -534,8 +663,10 @@ object MarkdownLite {
             if (inCodeBlock) { codeBuffer.append(rawLine).append('\n'); i++; continue }
 
             val trimmed = rawLine.trim()
-            val indentSpaces = rawLine.length - rawLine.trimStart(' ').length
-            val depth = (indentSpaces / 2).coerceIn(0, 2)
+            val isListLine = taskListRegex.matches(trimmed) || orderedListRegex.matches(trimmed) ||
+                bulletListRegex.matches(trimmed)
+            if (!isListLine && trimmed.isNotEmpty()) listIndentStack.clear()
+            val depth = if (isListLine) listDepthFor(rawLine) else 0
 
             when {
                 trimmed.isEmpty() -> { lastWasListItem = false; i++ }
@@ -742,6 +873,13 @@ object MarkdownLite {
     sealed class MarkdownSegment {
         data class Text(val markdown: String) : MarkdownSegment()
         data class LiveCode(val language: String, val code: String) : MarkdownSegment()
+
+        /** جدول Markdown مُستخرَج ليُعرَض كجدول حقيقي عبر [buildTableView] بدل صندوق نصّي مقصوص. */
+        data class Table(
+            val headers: List<String>,
+            val aligns: List<Int>,
+            val rows: List<List<String>>
+        ) : MarkdownSegment()
     }
 
     private val liveCodeBlockRegex = Regex(
@@ -777,6 +915,130 @@ object MarkdownLite {
     }
 
     /**
+     * **جديد: جداول حقيقية** — يقسّم [markdown] إلى نص عادي وكتل كود Rin حيّة (كما [splitLiveCodeBlocks])
+     * وجداول Markdown ([MarkdownSegment.Table]) لتُعرَض عبر [buildTableView]: خلايا تلتفّ بدل القصّ
+     * عند 24 حرفاً، تمرير أفقي للجداول العريضة، محاذاة أعمدة، وتنسيق سطري داخل الخلايا (تشديد/روابط/كود)،
+     * وتعمل مع العربية (الصندوق النصّي الأحادي المسافة كان ينحرف مع الحروف العربية). الجداول داخل كتل
+     * الكود الأخرى أو داخل قسم قابل للطي `[~...]` تبقى ضمن النص كما كانت.
+     */
+    fun splitReadmeSegments(markdown: String): List<MarkdownSegment> {
+        val result = mutableListOf<MarkdownSegment>()
+        for (seg in splitLiveCodeBlocks(markdown)) {
+            if (seg is MarkdownSegment.Text) result.addAll(splitTables(seg.markdown)) else result.add(seg)
+        }
+        return result
+    }
+
+    private fun splitTables(markdown: String): List<MarkdownSegment> {
+        val lines = markdown.lines()
+        val out = mutableListOf<MarkdownSegment>()
+        val pending = StringBuilder()
+        fun flushText() {
+            if (pending.isNotBlank()) out.add(MarkdownSegment.Text(pending.toString()))
+            pending.setLength(0)
+        }
+        var inFence = false
+        var inSection = false
+        var i = 0
+        while (i < lines.size) {
+            val line = lines[i]
+            val t = line.trim()
+            if (t.startsWith("```")) {
+                inFence = !inFence
+            } else if (!inFence) {
+                if (t.startsWith("[~") && t.endsWith("]") && t != COLLAPSIBLE_CLOSE_MARKER) inSection = true
+                else if (t == COLLAPSIBLE_CLOSE_MARKER) inSection = false
+            }
+            if (!inFence && !inSection && t.contains("|") && i + 1 < lines.size && isTableSeparator(lines[i + 1])) {
+                val header = splitTableRow(t)
+                val aligns = parseTableAligns(lines[i + 1])
+                val rows = mutableListOf<List<String>>()
+                var j = i + 2
+                while (j < lines.size && lines[j].isNotBlank() && lines[j].trim().contains("|")) {
+                    rows.add(splitTableRow(lines[j].trim()))
+                    j++
+                }
+                flushText()
+                out.add(MarkdownSegment.Table(header, aligns, rows))
+                i = j
+                continue
+            }
+            pending.append(line).append('\n')
+            i++
+        }
+        flushText()
+        return out
+    }
+
+    /**
+     * يبني جدولاً حقيقياً من [table]: بطاقة بزوايا مدوَّرة وحدّ خفيف، صف رأس بلون الهوية، تظليل
+     * تناوبي، خلايا تلتفّ عند 220dp، وتمرير أفقي تلقائي للجداول الأعرض من الشاشة. كل خلية تُعرَض
+     * عبر [applyTo] فتعمل الروابط والتشديد والكود المضمَّن والإيموجي داخلها، ويُختار الباليت
+     * الفاتح/الداكن من ثيم [context]. [topMarginPx] هامش علوي بالبكسل (الحاوية LinearLayout).
+     */
+    fun buildTableView(context: Context, table: MarkdownSegment.Table, topMarginPx: Int = 0): View {
+        applyPalette(isDarkMode(context))
+        val density = context.resources.displayMetrics.density
+        fun dp(v: Float): Int = (v * density + 0.5f).toInt()
+
+        val colCount = maxOf(table.headers.size, table.rows.maxOfOrNull { it.size } ?: 0).coerceAtLeast(1)
+
+        val dividerLine = GradientDrawable().apply {
+            setColor(COLOR_TABLE_BORDER)
+            setSize(dp(1f), dp(1f))
+        }
+
+        val grid = TableLayout(context).apply {
+            isStretchAllColumns = true
+            showDividers = LinearLayout.SHOW_DIVIDER_MIDDLE
+            dividerDrawable = dividerLine
+            background = GradientDrawable().apply {
+                setColor(COLOR_TABLE_BG)
+                cornerRadius = dp(12f).toFloat()
+                setStroke(dp(1f), COLOR_CARD_BORDER)
+            }
+            clipToOutline = true
+        }
+
+        fun addRow(cells: List<String>, isHeader: Boolean, zebra: Boolean) {
+            val row = TableRow(context).apply {
+                showDividers = LinearLayout.SHOW_DIVIDER_MIDDLE
+                dividerDrawable = dividerLine
+                if (isHeader) setBackgroundColor(tintedBackground(COLOR_BULLET, 0x24))
+                else if (zebra) setBackgroundColor(COLOR_TABLE_ROW_ALT)
+            }
+            for (c in 0 until colCount) {
+                val cell = TextView(context).apply {
+                    textSize = 13f
+                    setPadding(dp(12f), dp(9f), dp(12f), dp(9f))
+                    maxWidth = dp(220f)
+                    gravity = Gravity.CENTER_VERTICAL or table.aligns.getOrElse(c) { Gravity.START }
+                    setTextColor(if (isHeader) COLOR_TABLE_HEADER else COLOR_TABLE_TEXT)
+                    if (isHeader) setTypeface(typeface, Typeface.BOLD)
+                }
+                applyTo(cell, cells.getOrNull(c).orEmpty())
+                row.addView(cell)
+            }
+            grid.addView(row)
+        }
+
+        addRow(table.headers, isHeader = true, zebra = false)
+        table.rows.forEachIndexed { idx, r -> addRow(r, isHeader = false, zebra = idx % 2 == 1) }
+
+        return HorizontalScrollView(context).apply {
+            isHorizontalScrollBarEnabled = false
+            isFillViewport = true
+            overScrollMode = View.OVER_SCROLL_NEVER
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { topMargin = topMarginPx }
+            addView(grid, FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT
+            ))
+        }
+    }
+
+    /**
      * @param pageContainer إن مُرِّرت (مثال: `containerReadme` الحاوي لكل مقاطع README)، يُطبَّق
      * تلقائياً عليها لون `[*Page_background/#hex*]` إن وُجد في [markdown] (انظر [extractPageBackground]).
      * @param expandedSections حالة الأقسام القابلة للطي المفتوحة حالياً؛ الافتراضي مجموعة جديدة
@@ -797,7 +1059,8 @@ object MarkdownLite {
         currentImageMaxWidthPx = textView.width.takeIf { it > 0 }
             ?: (textView.resources.displayMetrics.widthPixels - (32 * textView.resources.displayMetrics.density).toInt())
                 .coerceAtLeast(DEFAULT_IMAGE_MAX_WIDTH_PX)
-        textView.text = toSpannable(markdown, expandedSections, baseDir) {
+        val dark = isDarkMode(textView.context)
+        textView.text = toSpannable(markdown, expandedSections, baseDir, dark) {
             applyTo(textView, markdown, pageContainer, expandedSections, baseDir)
         }
         textView.movementMethod = LinkMovementMethod.getInstance()
@@ -848,6 +1111,8 @@ object MarkdownLite {
         }
     }
 
+    private val headingClosingHashesRegex = Regex("\\s+#+\\s*$")
+
     /**
      * يضيف نص عنوان بحجم [scale] النسبي وتشديد كامل، مع تطبيق تشديد أو كود داخلي إن وُجد.
      * العنوانان الأول والثاني ([level] 1 أو 2) يحصلان إضافياً على خط فاصل تحتهما — تماماً كأسلوب
@@ -855,7 +1120,8 @@ object MarkdownLite {
      */
     private fun appendHeading(out: SpannableStringBuilder, text: String, scale: Float, level: Int, dim: Boolean = false) {
         val start = out.length
-        appendInline(out, text)
+        // `## عنوان ##` → يُسقَط تسلسل الإغلاق (يسبقه فراغ فقط، فلا يمسّ `C#`) كما في CommonMark
+        appendInline(out, text.replace(headingClosingHashesRegex, ""))
         val end = out.length
         out.setSpan(StyleSpan(Typeface.BOLD), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
         out.setSpan(RelativeSizeSpan(scale), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
@@ -913,10 +1179,84 @@ object MarkdownLite {
                 g[14] != null -> appendStyled(out, g[14]!!.value, Typeface.ITALIC)
                 g[15] != null -> appendStyled(out, g[15]!!.value, Typeface.ITALIC)
                 g[16] != null && g[17] != null -> appendImage(out, g[16]!!.value, g[17]!!.value)
+                g[18] != null -> appendAutolink(out, g[18]!!.value)
+                g[19] != null -> out.append('\n')
+                g[20] != null -> appendEmoji(out, g[20]!!.value, match.value)
             }
             idx = match.range.last + 1
         }
         if (idx < text.length) out.append(text.substring(idx))
+    }
+
+    /** أشهر رموز `:emoji:` بأسلوب GitHub → رمزها الفعلي (رمز غير مدرَج يبقى نصاً حرفياً كما كُتب). */
+    private val EMOJI_SHORTCODES: Map<String, String> = mapOf(
+        "rocket" to "\uD83D\uDE80",
+        "sparkles" to "\u2728",
+        "fire" to "\uD83D\uDD25",
+        "tada" to "\uD83C\uDF89",
+        "warning" to "\u26A0\uFE0F",
+        "white_check_mark" to "\u2705",
+        "heavy_check_mark" to "\u2714\uFE0F",
+        "x" to "\u274C",
+        "star" to "\u2B50",
+        "bulb" to "\uD83D\uDCA1",
+        "book" to "\uD83D\uDCD6",
+        "books" to "\uD83D\uDCDA",
+        "zap" to "\u26A1",
+        "bug" to "\uD83D\uDC1B",
+        "wrench" to "\uD83D\uDD27",
+        "hammer" to "\uD83D\uDD28",
+        "package" to "\uD83D\uDCE6",
+        "lock" to "\uD83D\uDD12",
+        "key" to "\uD83D\uDD11",
+        "link" to "\uD83D\uDD17",
+        "heart" to "\u2764\uFE0F",
+        "thumbsup" to "\uD83D\uDC4D",
+        "+1" to "\uD83D\uDC4D",
+        "eyes" to "\uD83D\uDC40",
+        "memo" to "\uD83D\uDCDD",
+        "pushpin" to "\uD83D\uDCCC",
+        "bell" to "\uD83D\uDD14",
+        "gear" to "\u2699\uFE0F",
+        "construction" to "\uD83D\uDEA7",
+        "checkered_flag" to "\uD83C\uDFC1",
+        "globe_with_meridians" to "\uD83C\uDF10",
+        "computer" to "\uD83D\uDCBB",
+        "iphone" to "\uD83D\uDCF1",
+        "art" to "\uD83C\uDFA8",
+        "mag" to "\uD83D\uDD0D",
+        "smile" to "\uD83D\uDE04",
+        "point_right" to "\uD83D\uDC49",
+        "trophy" to "\uD83C\uDFC6",
+        "arrow_right" to "\u27A1\uFE0F",
+        "information_source" to "\u2139\uFE0F",
+        "question" to "\u2753",
+        "exclamation" to "\u2757",
+        "no_entry_sign" to "\uD83D\uDEAB",
+        "shield" to "\uD83D\uDEE1\uFE0F",
+        "recycle" to "\u267B\uFE0F",
+        "hourglass" to "\u231B"
+    )
+
+    private fun appendEmoji(out: SpannableStringBuilder, name: String, original: String) {
+        out.append(EMOJI_SHORTCODES[name.lowercase()] ?: original)
+    }
+
+    /** رابط تلقائي `<https://...>` — نفس شكل [appendLink] بلا سهم، والنص هو الرابط نفسه. */
+    private fun appendAutolink(out: SpannableStringBuilder, url: String) {
+        val start = out.length
+        out.append(url)
+        val end = out.length
+        out.setSpan(LinkButtonClickSpan(url), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        out.setSpan(ForegroundColorSpan(COLOR_LINK), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        out.setSpan(StyleSpan(Typeface.BOLD), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+    }
+
+    /** النص المرئي لسطر Markdown سطري بلا رموز التنسيق (لعرض خلايا الجدول النصّي الأحادي المسافة). */
+    private fun plainInlineText(md: String): String {
+        val tmp = SpannableStringBuilder()
+        appendInline(tmp, md)
+        return tmp.toString().replace('\n', ' ')
     }
 
     private fun appendStyled(out: SpannableStringBuilder, value: String, style: Int) {
@@ -962,7 +1302,9 @@ object MarkdownLite {
         appendInline(out, label)
         out.append(" \u2197")
         val end = out.length
-        out.setSpan(URLSpan(url), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        // LinkButtonClickSpan (ClickableSpan) بدل URLSpan: TextView.autoLinkMask (مضبوط في README) يستدعي
+        // Linkify.addLinks الذي يحذف كل URLSpan موجودة قبل إعادة الربط، فكانت الروابط تفقد النقر.
+        out.setSpan(LinkButtonClickSpan(url), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
         out.setSpan(ForegroundColorSpan(COLOR_LINK), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
         out.setSpan(StyleSpan(Typeface.BOLD), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
     }
@@ -1519,7 +1861,7 @@ object MarkdownLite {
 
     /** لون هوية اللغة (نقطة + وسم الاسم)، محايد للغات غير المدرَجة في [LANGUAGE_ACCENTS]. */
     private fun languageAccentColor(lang: String): Int =
-        LANGUAGE_ACCENTS[lang.trim().lowercase()] ?: LANGUAGE_ACCENT_DEFAULT
+        LANGUAGE_ACCENTS[lang.trim().lowercase()]?.let { adaptForTheme(it) } ?: COLOR_CODE_TEXT
 
     /**
      * رأس بطاقة كود احترافي واحد: نقطة ملوَّنة بهوية اللغة + اسمها (إن ذُكرت لغة، وإلا وسم عام
@@ -1637,19 +1979,33 @@ object MarkdownLite {
         return cells.all { tableSeparatorRegex.matches(it.trim()) }
     }
 
+    /** فاصل خلايا `|` غير المسبوق بـ`\` — `\|` تُعرَض `|` حرفياً داخل الخلية. */
+    private val unescapedPipeRegex = Regex("(?<!\\\\)\\|")
+
     private fun splitTableRow(line: String): List<String> {
         var l = line.trim()
         if (l.startsWith("|")) l = l.drop(1)
-        if (l.endsWith("|")) l = l.dropLast(1)
-        return l.split("|").map { it.trim() }
+        if (l.endsWith("|") && !l.endsWith("\\|")) l = l.dropLast(1)
+        return l.split(unescapedPipeRegex).map { it.trim().replace("\\|", "|") }
     }
+
+    /** محاذاة كل عمود من سطر الفاصل: `:---` بداية، `---:` نهاية، `:---:` وسط (START/END تحترمان RTL). */
+    private fun parseTableAligns(separatorLine: String): List<Int> =
+        splitTableRow(separatorLine).map { cell ->
+            val c = cell.trim()
+            when {
+                c.length > 1 && c.startsWith(":") && c.endsWith(":") -> Gravity.CENTER_HORIZONTAL
+                c.endsWith(":") -> Gravity.END
+                else -> Gravity.START
+            }
+        }
 
     /** يبني جدول Markdown كامل كصندوق نصّي أحادي المسافة بخطوط اتصال حقيقية (┌─┬─┐ ...). */
     private fun appendTable(out: SpannableStringBuilder, header: List<String>, rows: List<List<String>>) {
         val colCount = header.size
         val maxCellLen = 24
         fun cell(row: List<String>, col: Int): String {
-            val raw = row.getOrNull(col).orEmpty()
+            val raw = plainInlineText(row.getOrNull(col).orEmpty())
             return if (raw.length > maxCellLen) raw.take(maxCellLen - 1) + "…" else raw
         }
         val widths = IntArray(colCount) { col ->
