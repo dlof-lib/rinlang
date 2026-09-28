@@ -216,6 +216,18 @@
       if (a.mono === 'true') el.style.fontFamily = "'JetBrains Mono', ui-monospace, Consolas, monospace";
       if (a.shadow) el.style.boxShadow = '0 10px 30px -12px rgba(0,0,0,.5)';
 
+      // ---- Image: يقرأ src (رابط أو data: URI) ويرسمه كخلفية داخل مربع الـ
+      // Strand — kind='Image' كان بلا أي معالجة هنا فيُرسَم كمربع فارغ ----
+      if (node.kind === 'Image' && a.src) {
+        el.style.backgroundImage = "url('" + a.src.replace(/'/g, "%27") + "')";
+        el.style.backgroundSize = (a.fit === 'contain') ? 'contain' : 'cover';
+        el.style.backgroundPosition = 'center';
+        el.style.backgroundRepeat = 'no-repeat';
+        if (!a.radius) el.style.borderRadius = '10px';
+        el.setAttribute('role', 'img');
+        if (a.alt) el.setAttribute('aria-label', a.alt);
+      }
+
       // ---- نص العرض بحسب نوع الـ Strand ----
       if (node.kind === 'Text' || node.kind === 'MenuItem') el.textContent = a.text || a.label || '';
       if (node.kind === 'Button') el.textContent = a.label || '';
