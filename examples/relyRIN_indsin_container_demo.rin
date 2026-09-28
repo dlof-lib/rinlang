@@ -29,7 +29,7 @@
         .end/view
 
         @view.WebView=Preview
-            html=relyMdRender(source);
+            html=relyRenderMarkdown(source);
         .end/view
     .end/view
 .end/container
