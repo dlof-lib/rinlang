@@ -300,7 +300,7 @@ class PackageDetailActivity : BaseConnectivityActivity() {
         if (readme.isNullOrBlank()) {
             containerReadme.addView(buildReadmeTextSegment(getString(R.string.package_detail_no_readme)))
         } else {
-            for (segment in MarkdownLite.splitLiveCodeBlocks(readme)) {
+            for (segment in MarkdownLite.splitReadmeSegments(readme)) {
                 when (segment) {
                     is MarkdownLite.MarkdownSegment.Text -> {
                         if (segment.markdown.isNotBlank()) {
@@ -309,6 +309,12 @@ class PackageDetailActivity : BaseConnectivityActivity() {
                     }
                     is MarkdownLite.MarkdownSegment.LiveCode -> {
                         containerReadme.addView(buildLivePreviewCard(segment.code))
+                    }
+                    // جدول Markdown حقيقي (خلايا تلتفّ + تمرير أفقي + ثيم فاتح/داكن) بدل صندوق نصّي مقصوص.
+                    is MarkdownLite.MarkdownSegment.Table -> {
+                        containerReadme.addView(
+                            MarkdownLite.buildTableView(this, segment, if (containerReadmeHasContent) dp(10f) else 0)
+                        )
                     }
                 }
             }
