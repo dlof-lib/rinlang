@@ -656,10 +656,15 @@ object PackagingUtils {
             }
 
         var readme: String? = null
+        // README.rdoc (Documentation Container) يتقدّم على README.md إن وُجد الاثنان معاً.
+        var readmeRdoc: String? = null
         var license: String? = null
 
         val files =
             mutableListOf<PackageFileEntry>()
+
+        val folders =
+            mutableListOf<String>()
 
         ZipInputStream(
             bytes.inputStream()
@@ -669,6 +674,11 @@ object PackagingUtils {
                 zip.nextEntry
 
             while (entry != null) {
+
+                if (entry.isDirectory) {
+                    val folderPath = entry.name.trim('/')
+                    if (folderPath.isNotEmpty()) folders.add(folderPath)
+                }
 
                 if (!entry.isDirectory) {
 
@@ -683,6 +693,16 @@ object PackagingUtils {
                     )
 
                     when {
+
+                        entry.name.equals(
+                            "README.${DocumentationContainer.EXTENSION}",
+                            ignoreCase = true
+                        ) -> {
+                            readmeRdoc =
+                                content.toString(
+                                    Charsets.UTF_8
+                                )
+                        }
 
                         entry.name.equals(
                             "README.md",
@@ -716,11 +736,12 @@ object PackagingUtils {
         }
 
         return PackageContents(
-            readme,
+            readmeRdoc ?: readme,
             license,
             files.sortedBy {
                 it.name
-            }
+            },
+            folders
         )
     }
 
@@ -1071,6 +1092,9 @@ object PackagingUtils {
             lower.endsWith(".json") ->
                 R.drawable.ic_log_grid
 
+            lower.endsWith(".${DocumentationContainer.EXTENSION}") ->
+                R.drawable.ic_doc_container_file
+
             lower.endsWith(".md") ->
                 R.drawable.ic_readme_doc
 
@@ -1130,6 +1154,9 @@ object PackagingUtils {
             lower.endsWith(".json") ->
                 R.color.syntax_tag
 
+            lower.endsWith(".${DocumentationContainer.EXTENSION}") ->
+                R.color.rin_doc_container
+
             lower.endsWith(".md") ->
                 R.color.rin_accent
 
@@ -1159,7 +1186,8 @@ object PackagingUtils {
     }
 
     fun buildFileTree(
-        files: List<PackageFileEntry>
+        files: List<PackageFileEntry>,
+        extraFolders: List<String> = emptyList()
     ): FileTreeFolder {
 
         val root =
@@ -1167,6 +1195,19 @@ object PackagingUtils {
                 name = "",
                 path = ""
             )
+
+        // المجلدات الفارغة (لا ملفات تحتها) لا تظهر من الملفات وحدها — نُنشئها صراحةً هنا.
+        for (folderPath in extraFolders) {
+            var current = root
+            for (part in folderPath.split("/").filter { it.isNotEmpty() }) {
+                current = current.folders.getOrPut(part) {
+                    FileTreeFolder(
+                        name = part,
+                        path = if (current.path.isEmpty()) part else "${current.path}/$part"
+                    )
+                }
+            }
+        }
 
         for (file in files) {
 
@@ -1246,6 +1287,9 @@ object PackagingUtils {
 
             lower.endsWith(".json") ->
                 "JSON" to R.color.syntax_tag
+
+            lower.endsWith(".${DocumentationContainer.EXTENSION}") ->
+                "Docs" to R.color.rin_doc_container
 
             lower.endsWith(".txt") ->
                 "نصوص" to R.color.rin_editor_hint
@@ -1491,5 +1535,7 @@ class FileTreeFolder(
 data class PackageContents(
     val readme: String?,
     val license: String?,
-    val files: List<PackageFileEntry>
+    val files: List<PackageFileEntry>,
+    /** مسارات المجلدات المسجَّلة صراحةً في الأرشيف (تشمل المجلدات الفارغة التي أنشأها الناشر). */
+    val folders: List<String> = emptyList()
 )
