@@ -4927,6 +4927,202 @@ void Interpreter::registerNatives() {
     };
 
     // hasField(container, key) -> true إن كان الحقل key معرَّفاً (مباشرة أو عبر أي بيئة أب) بداخل container
+    // ------------------------------------------------------------------------------------------
+    // candle — علاقة موجَّهة id -> id (انظر docs/candle.md). لا تستبدل mask ولا id: تضيف طبقة
+    // علاقات فوقهما، وكل طرف يُقبل كـ mask (يُحل عبر maskResolveInternal) أو كمعرّف خام مباشر إذا
+    // لم يكن قناعاً معروفاً (تحديداً عناصر @view/@element، التي لا تُسجَّل حالياً في أي سجل mask).
+    // ------------------------------------------------------------------------------------------
+    auto candleId = [maskResolveInternal](const std::string& token) -> std::string {
+        std::string resolved = maskResolveInternal(token);
+        return resolved.empty() ? token : resolved;
+    };
+    auto candleTargetsOf = [this](const std::string& id) -> std::vector<std::string> {
+        std::vector<std::string> out;
+        for (auto& e : candleEdges) if (std::get<0>(e) == id) out.push_back(std::get<1>(e));
+        return out;
+    };
+    auto candleSourcesOf = [this](const std::string& id) -> std::vector<std::string> {
+        std::vector<std::string> out;
+        for (auto& e : candleEdges) if (std::get<1>(e) == id) out.push_back(std::get<0>(e));
+        return out;
+    };
+
+    natives["light"] = [this, candleId](std::vector<Value>& a, int line) -> Value {
+        expectArgsRange("light", a, 2, 3, line);
+        std::string from = candleId(asString(a[0], "light", line));
+        std::string to = candleId(asString(a[1], "light", line));
+        std::string relation = a.size() > 2 ? asString(a[2], "light", line) : "";
+        if (from.empty() || to.empty() || from == to) return Value::boolean_(false);
+        for (auto& e : candleEdges) {
+            if (std::get<0>(e) == from && std::get<1>(e) == to) { std::get<2>(e) = relation; return Value::boolean_(true); }
+        }
+        candleEdges.push_back({from, to, relation});
+        return Value::boolean_(true);
+    };
+    natives["candleExists"] = [this, candleId](std::vector<Value>& a, int line) -> Value {
+        expectArgs("candleExists", a, 2, line);
+        std::string from = candleId(asString(a[0], "candleExists", line));
+        std::string to = candleId(asString(a[1], "candleExists", line));
+        for (auto& e : candleEdges) if (std::get<0>(e) == from && std::get<1>(e) == to) return Value::boolean_(true);
+        return Value::boolean_(false);
+    };
+    natives["candleTargets"] = [this, candleId, candleTargetsOf](std::vector<Value>& a, int line) -> Value {
+        expectArgs("candleTargets", a, 1, line);
+        auto out = std::make_shared<ArrayData>();
+        for (auto& t : candleTargetsOf(candleId(asString(a[0], "candleTargets", line)))) out->push_back(Value::string(t));
+        return Value::makeArray(out);
+    };
+    natives["candleSources"] = [this, candleId, candleSourcesOf](std::vector<Value>& a, int line) -> Value {
+        expectArgs("candleSources", a, 1, line);
+        auto out = std::make_shared<ArrayData>();
+        for (auto& t : candleSourcesOf(candleId(asString(a[0], "candleSources", line)))) out->push_back(Value::string(t));
+        return Value::makeArray(out);
+    };
+    natives["candleCount"] = [this, candleId, candleTargetsOf](std::vector<Value>& a, int line) -> Value {
+        expectArgs("candleCount", a, 1, line);
+        return Value::num(static_cast<double>(candleTargetsOf(candleId(asString(a[0], "candleCount", line))).size()));
+    };
+    natives["candleInfo"] = [this, candleId, candleTargetsOf, candleSourcesOf](std::vector<Value>& a, int line) -> Value {
+        expectArgs("candleInfo", a, 1, line);
+        std::string id = candleId(asString(a[0], "candleInfo", line));
+        auto targets = candleTargetsOf(id);
+        auto sources = candleSourcesOf(id);
+        auto m = std::make_shared<MapData>();
+        auto tArr = std::make_shared<ArrayData>(); for (auto& t : targets) tArr->push_back(Value::string(t));
+        auto sArr = std::make_shared<ArrayData>(); for (auto& s : sources) sArr->push_back(Value::string(s));
+        m->push_back({Value::string("targets"), Value::makeArray(tArr)});
+        m->push_back({Value::string("sources"), Value::makeArray(sArr)});
+        m->push_back({Value::string("isRoot"), Value::boolean_(sources.empty())});
+        m->push_back({Value::string("isLeaf"), Value::boolean_(targets.empty())});
+        return Value::makeMap(m);
+    };
+    natives["candleRelation"] = [this, candleId](std::vector<Value>& a, int line) -> Value {
+        expectArgs("candleRelation", a, 2, line);
+        std::string from = candleId(asString(a[0], "candleRelation", line));
+        std::string to = candleId(asString(a[1], "candleRelation", line));
+        for (auto& e : candleEdges) if (std::get<0>(e) == from && std::get<1>(e) == to) return Value::string(std::get<2>(e));
+        return Value::nil();
+    };
+    natives["candleByRelation"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("candleByRelation", a, 1, line);
+        std::string relation = asString(a[0], "candleByRelation", line);
+        auto out = std::make_shared<ArrayData>();
+        for (auto& e : candleEdges) {
+            if (std::get<2>(e) != relation) continue;
+            auto m = std::make_shared<MapData>();
+            m->push_back({Value::string("from"), Value::string(std::get<0>(e))});
+            m->push_back({Value::string("to"), Value::string(std::get<1>(e))});
+            out->push_back(Value::makeMap(m));
+        }
+        return Value::makeArray(out);
+    };
+    // candleChain(from, to) -> أقصر مسار (BFS) من from إلى to عبر candle edges، أو [] إن تعذّر.
+    natives["candleChain"] = [this, candleId, candleTargetsOf](std::vector<Value>& a, int line) -> Value {
+        expectArgs("candleChain", a, 2, line);
+        std::string from = candleId(asString(a[0], "candleChain", line));
+        std::string to = candleId(asString(a[1], "candleChain", line));
+        auto out = std::make_shared<ArrayData>();
+        if (from == to) { out->push_back(Value::string(from)); return Value::makeArray(out); }
+        std::unordered_map<std::string, std::string> cameFrom;
+        std::vector<std::string> queue{from};
+        std::unordered_set<std::string> seen{from};
+        bool found = false;
+        for (size_t i = 0; i < queue.size() && !found; ++i) {
+            for (auto& nxt : candleTargetsOf(queue[i])) {
+                if (!seen.insert(nxt).second) continue;
+                cameFrom[nxt] = queue[i];
+                if (nxt == to) { found = true; break; }
+                queue.push_back(nxt);
+            }
+        }
+        if (!found) return Value::makeArray(out);
+        std::vector<std::string> path;
+        std::string cur = to;
+        while (cur != from) { path.push_back(cur); cur = cameFrom[cur]; }
+        path.push_back(from);
+        for (auto it = path.rbegin(); it != path.rend(); ++it) out->push_back(Value::string(*it));
+        return Value::makeArray(out);
+    };
+    // candleDepth(id) -> أقصر مسافة BFS من أقرب جذر (عقدة بلا مصادر) إلى id، أو nil إن لم تكن مرتبطة.
+    natives["candleDepth"] = [this, candleId, candleSourcesOf, candleTargetsOf](std::vector<Value>& a, int line) -> Value {
+        expectArgs("candleDepth", a, 1, line);
+        std::string id = candleId(asString(a[0], "candleDepth", line));
+        std::unordered_set<std::string> nodes;
+        for (auto& e : candleEdges) { nodes.insert(std::get<0>(e)); nodes.insert(std::get<1>(e)); }
+        if (!nodes.count(id)) return Value::nil();
+        std::vector<std::string> roots;
+        for (auto& n : nodes) if (candleSourcesOf(n).empty()) roots.push_back(n);
+        std::unordered_map<std::string, int> dist;
+        std::vector<std::string> queue;
+        for (auto& r : roots) { dist[r] = 0; queue.push_back(r); }
+        for (size_t i = 0; i < queue.size(); ++i) {
+            for (auto& nxt : candleTargetsOf(queue[i])) {
+                if (dist.count(nxt)) continue;
+                dist[nxt] = dist[queue[i]] + 1;
+                queue.push_back(nxt);
+            }
+        }
+        auto it = dist.find(id);
+        return it == dist.end() ? Value::nil() : Value::num(static_cast<double>(it->second));
+    };
+    natives["candleRoots"] = [this, candleSourcesOf](std::vector<Value>& a, int line) -> Value {
+        expectArgs("candleRoots", a, 0, line);
+        std::unordered_set<std::string> nodes;
+        for (auto& e : candleEdges) { nodes.insert(std::get<0>(e)); nodes.insert(std::get<1>(e)); }
+        auto out = std::make_shared<ArrayData>();
+        for (auto& n : nodes) if (candleSourcesOf(n).empty()) out->push_back(Value::string(n));
+        return Value::makeArray(out);
+    };
+    natives["candleLeaves"] = [this, candleTargetsOf](std::vector<Value>& a, int line) -> Value {
+        expectArgs("candleLeaves", a, 0, line);
+        std::unordered_set<std::string> nodes;
+        for (auto& e : candleEdges) { nodes.insert(std::get<0>(e)); nodes.insert(std::get<1>(e)); }
+        auto out = std::make_shared<ArrayData>();
+        for (auto& n : nodes) if (candleTargetsOf(n).empty()) out->push_back(Value::string(n));
+        return Value::makeArray(out);
+    };
+    // candleTree(id) -> {id, relation, children:[...]} متداخلة؛ يحمي من الحلقات بمسار الزيارة الحالي.
+    {
+        auto buildTree = std::make_shared<std::function<Value(const std::string&, const std::string&, std::unordered_set<std::string>)>>();
+        *buildTree = [this, buildTree](const std::string& id, const std::string& relation, std::unordered_set<std::string> path) -> Value {
+            auto m = std::make_shared<MapData>();
+            m->push_back({Value::string("id"), Value::string(id)});
+            m->push_back({Value::string("relation"), relation.empty() ? Value::nil() : Value::string(relation)});
+            auto children = std::make_shared<ArrayData>();
+            if (path.insert(id).second) {
+                for (auto& e : candleEdges) {
+                    if (std::get<0>(e) != id) continue;
+                    children->push_back((*buildTree)(std::get<1>(e), std::get<2>(e), path));
+                }
+            }
+            m->push_back({Value::string("children"), Value::makeArray(children)});
+            return Value::makeMap(m);
+        };
+        natives["candleTree"] = [this, candleId, buildTree](std::vector<Value>& a, int line) -> Value {
+            expectArgs("candleTree", a, 1, line);
+            std::string id = candleId(asString(a[0], "candleTree", line));
+            return (*buildTree)(id, "", {});
+        };
+    }
+    natives["extinguish"] = [this, candleId](std::vector<Value>& a, int line) -> Value {
+        expectArgs("extinguish", a, 2, line);
+        std::string from = candleId(asString(a[0], "extinguish", line));
+        std::string to = candleId(asString(a[1], "extinguish", line));
+        for (auto it = candleEdges.begin(); it != candleEdges.end(); ++it) {
+            if (std::get<0>(*it) == from && std::get<1>(*it) == to) { candleEdges.erase(it); return Value::boolean_(true); }
+        }
+        return Value::boolean_(false);
+    };
+    natives["extinguishAll"] = [this, candleId](std::vector<Value>& a, int line) -> Value {
+        expectArgs("extinguishAll", a, 1, line);
+        std::string from = candleId(asString(a[0], "extinguishAll", line));
+        int removed = 0;
+        for (auto it = candleEdges.begin(); it != candleEdges.end();) {
+            if (std::get<0>(*it) == from) { it = candleEdges.erase(it); ++removed; } else ++it;
+        }
+        return Value::num(static_cast<double>(removed));
+    };
+
     natives["hasField"] = [this](std::vector<Value>& a, int line) -> Value {
         expectArgs("hasField", a, 2, line);
         std::string name = asString(a[0], "hasField", line);
@@ -4934,6 +5130,282 @@ void Interpreter::registerNatives() {
         if (it == containers.end()) return Value::boolean_(false);
         Value out;
         return Value::boolean_(it->second->get(asString(a[1], "hasField", line), out));
+    };
+
+    // ------------------------------------------------------------------------------------------
+    // container.* — dot-syntax API documented in docs/container_advanced.md and
+    // docs/container_pro.md. These are thin wrappers over the state and natives already above
+    // (containers/containerKinds/containerParent/containerChildren, parentOf/childrenOf/
+    // siblingsOf/hasField/setField/getField) -- no new tracked state, just the entry points the
+    // docs (and tests/verification/container_advanced.rin, tests/verification/container_pro.rin)
+    // already assume exist. Missing-container behavior follows container_pro.md's stated design:
+    // inspection/query APIs return nil, mutation APIs return false.
+    // ------------------------------------------------------------------------------------------
+
+    // kindNameOf(name) -> النوع المعروض (نفس منطق kindOf أعلاه لكن بلا throw ولا Value wrapping)
+    auto kindNameOf = [this](const std::string& name) -> std::string {
+        auto customIt = containerCustomKind.find(name);
+        if (customIt != containerCustomKind.end()) return customIt->second;
+        auto k = containerKinds.find(name);
+        return containerTagName(k != containerKinds.end() ? k->second : ContainerKind::PLAIN);
+    };
+    // ancestorsOf(name) -> من الأب المباشر صعوداً حتى الجذر (لا يشمل name نفسها)
+    auto ancestorsOf = [this](const std::string& name) -> std::vector<std::string> {
+        std::vector<std::string> out;
+        std::string cur = name;
+        std::unordered_set<std::string> seen; // حماية من حلقة أب-ابن غير متوقعة
+        while (true) {
+            auto it = containerParent.find(cur);
+            if (it == containerParent.end() || !seen.insert(it->second).second) break;
+            out.push_back(it->second);
+            cur = it->second;
+        }
+        return out;
+    };
+    // descendantsOf(name) -> كل الأحفاد على أي عمق، بترتيب BFS (الأبناء المباشرون أولاً)
+    auto descendantsOf = [this](const std::string& name) -> std::vector<std::string> {
+        std::vector<std::string> out;
+        std::vector<std::string> queue;
+        auto first = containerChildren.find(name);
+        if (first != containerChildren.end()) queue = first->second;
+        for (size_t i = 0; i < queue.size(); ++i) {
+            out.push_back(queue[i]);
+            auto it = containerChildren.find(queue[i]);
+            if (it != containerChildren.end()) {
+                for (auto& g : it->second) queue.push_back(g);
+            }
+        }
+        return out;
+    };
+
+    natives["container.exists"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("container.exists", a, 1, line);
+        return Value::boolean_(containers.count(asString(a[0], "container.exists", line)) > 0);
+    };
+    natives["container.kind"] = [this, kindNameOf](std::vector<Value>& a, int line) -> Value {
+        expectArgs("container.kind", a, 1, line);
+        std::string name = asString(a[0], "container.kind", line);
+        if (!containers.count(name)) return Value::nil();
+        return Value::string(kindNameOf(name));
+    };
+    natives["container.size"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("container.size", a, 1, line);
+        std::string name = asString(a[0], "container.size", line);
+        auto it = containers.find(name);
+        if (it == containers.end()) return Value::nil();
+        return Value::num(static_cast<double>(it->second->values.size()));
+    };
+    natives["container.empty"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("container.empty", a, 1, line);
+        std::string name = asString(a[0], "container.empty", line);
+        auto it = containers.find(name);
+        if (it == containers.end()) return Value::nil();
+        return Value::boolean_(it->second->values.empty());
+    };
+    natives["container.childCount"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("container.childCount", a, 1, line);
+        std::string name = asString(a[0], "container.childCount", line);
+        auto it = containerChildren.find(name);
+        return Value::num(it == containerChildren.end() ? 0.0 : static_cast<double>(it->second.size()));
+    };
+    natives["container.hasChildren"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("container.hasChildren", a, 1, line);
+        std::string name = asString(a[0], "container.hasChildren", line);
+        auto it = containerChildren.find(name);
+        return Value::boolean_(it != containerChildren.end() && !it->second.empty());
+    };
+    natives["container.depth"] = [this, ancestorsOf](std::vector<Value>& a, int line) -> Value {
+        expectArgs("container.depth", a, 1, line);
+        std::string name = asString(a[0], "container.depth", line);
+        if (!containers.count(name)) return Value::nil();
+        return Value::num(static_cast<double>(ancestorsOf(name).size()));
+    };
+    natives["container.roots"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("container.roots", a, 0, line);
+        auto out = std::make_shared<ArrayData>();
+        for (auto& kv : containers) if (!containerParent.count(kv.first)) out->push_back(Value::string(kv.first));
+        return Value::makeArray(out);
+    };
+    natives["container.leaves"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("container.leaves", a, 0, line);
+        auto out = std::make_shared<ArrayData>();
+        for (auto& kv : containers) {
+            auto it = containerChildren.find(kv.first);
+            if (it == containerChildren.end() || it->second.empty()) out->push_back(Value::string(kv.first));
+        }
+        return Value::makeArray(out);
+    };
+    natives["container.parent"] = natives["parentOf"];
+    natives["container.childrenOf"] = natives["childrenOf"];
+    natives["container.siblings"] = natives["siblingsOf"];
+    natives["container.ancestors"] = [this, ancestorsOf](std::vector<Value>& a, int line) -> Value {
+        expectArgs("container.ancestors", a, 1, line);
+        std::string name = asString(a[0], "container.ancestors", line);
+        auto out = std::make_shared<ArrayData>();
+        for (auto& n : ancestorsOf(name)) out->push_back(Value::string(n));
+        return Value::makeArray(out);
+    };
+    natives["container.descendants"] = [this, descendantsOf](std::vector<Value>& a, int line) -> Value {
+        expectArgs("container.descendants", a, 1, line);
+        std::string name = asString(a[0], "container.descendants", line);
+        auto out = std::make_shared<ArrayData>();
+        for (auto& n : descendantsOf(name)) out->push_back(Value::string(n));
+        return Value::makeArray(out);
+    };
+    natives["container.path"] = [this, ancestorsOf](std::vector<Value>& a, int line) -> Value {
+        expectArgs("container.path", a, 1, line);
+        std::string name = asString(a[0], "container.path", line);
+        if (!containers.count(name)) return Value::nil();
+        auto chain = ancestorsOf(name); // من الأب المباشر صعوداً حتى الجذر
+        auto out = std::make_shared<ArrayData>();
+        for (auto it = chain.rbegin(); it != chain.rend(); ++it) out->push_back(Value::string(*it));
+        out->push_back(Value::string(name));
+        return Value::makeArray(out);
+    };
+    natives["container.info"] = [this, kindNameOf](std::vector<Value>& a, int line) -> Value {
+        expectArgs("container.info", a, 1, line);
+        std::string name = asString(a[0], "container.info", line);
+        auto it = containers.find(name);
+        if (it == containers.end()) return Value::nil();
+        auto m = std::make_shared<MapData>();
+        m->push_back({Value::string("name"), Value::string(name)});
+        m->push_back({Value::string("kind"), Value::string(kindNameOf(name))});
+        m->push_back({Value::string("size"), Value::num(static_cast<double>(it->second->values.size()))});
+        auto parentIt = containerParent.find(name);
+        m->push_back({Value::string("parent"), parentIt == containerParent.end() ? Value::nil() : Value::string(parentIt->second)});
+        auto childIt = containerChildren.find(name);
+        m->push_back({Value::string("childCount"), Value::num(childIt == containerChildren.end() ? 0.0 : static_cast<double>(childIt->second.size()))});
+        return Value::makeMap(m);
+    };
+    natives["container.fields"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("container.fields", a, 1, line);
+        std::string name = asString(a[0], "container.fields", line);
+        auto it = containers.find(name);
+        if (it == containers.end()) return Value::nil();
+        auto m = std::make_shared<MapData>();
+        for (auto& kv : it->second->values) m->push_back({Value::string(kv.first), kv.second});
+        return Value::makeMap(m);
+    };
+    natives["container.snapshot"] = natives["container.fields"];
+    natives["container.fieldNames"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("container.fieldNames", a, 1, line);
+        std::string name = asString(a[0], "container.fieldNames", line);
+        auto it = containers.find(name);
+        if (it == containers.end()) return Value::nil();
+        auto out = std::make_shared<ArrayData>();
+        for (auto& kv : it->second->values) out->push_back(Value::string(kv.first));
+        return Value::makeArray(out);
+    };
+    natives["container.fieldType"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("container.fieldType", a, 2, line);
+        std::string name = asString(a[0], "container.fieldType", line);
+        auto it = containers.find(name);
+        if (it == containers.end()) return Value::nil();
+        Value out;
+        if (!it->second->get(asString(a[1], "container.fieldType", line), out)) return Value::nil();
+        return Value::string(out.typeName());
+    };
+    natives["container.byKind"] = [this, kindNameOf](std::vector<Value>& a, int line) -> Value {
+        expectArgs("container.byKind", a, 1, line);
+        std::string kind = asString(a[0], "container.byKind", line);
+        auto out = std::make_shared<ArrayData>();
+        for (auto& kv : containers) if (kindNameOf(kv.first) == kind) out->push_back(Value::string(kv.first));
+        return Value::makeArray(out);
+    };
+    natives["container.find"] = [this, kindNameOf](std::vector<Value>& a, int line) -> Value {
+        expectArgsRange("container.find", a, 1, 2, line);
+        std::string kind = asString(a[0], "container.find", line);
+        const MapData* filter = nullptr;
+        if (a.size() == 2 && a[1].type == Value::Type::MAP) filter = a[1].map.get();
+        auto out = std::make_shared<ArrayData>();
+        for (auto& kv : containers) {
+            if (kindNameOf(kv.first) != kind) continue;
+            bool ok = true;
+            if (filter) {
+                for (auto& f : *filter) {
+                    Value have;
+                    if (!kv.second->get(f.first.toDisplayString(), have) || !valuesEqual(have, f.second)) { ok = false; break; }
+                }
+            }
+            if (ok) out->push_back(Value::string(kv.first));
+        }
+        return Value::makeArray(out);
+    };
+    natives["container.findField"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("container.findField", a, 2, line);
+        std::string field = asString(a[0], "container.findField", line);
+        Value target = a[1];
+        auto out = std::make_shared<ArrayData>();
+        for (auto& kv : containers) {
+            Value have;
+            if (kv.second->get(field, have) && valuesEqual(have, target)) out->push_back(Value::string(kv.first));
+        }
+        return Value::makeArray(out);
+    };
+    natives["container.set"] = natives["setField"];
+    natives["container.get"] = natives["getField"];
+    natives["container.has"] = natives["hasField"];
+    natives["container.renameField"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("container.renameField", a, 3, line);
+        std::string name = asString(a[0], "container.renameField", line);
+        auto it = containers.find(name);
+        if (it == containers.end()) return Value::boolean_(false);
+        std::string oldKey = asString(a[1], "container.renameField", line);
+        std::string newKey = asString(a[2], "container.renameField", line);
+        auto& vals = it->second->values;
+        auto found = vals.find(oldKey);
+        if (found == vals.end()) return Value::boolean_(false);
+        vals[newKey] = found->second;
+        vals.erase(found);
+        return Value::boolean_(true);
+    };
+    natives["container.deleteField"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("container.deleteField", a, 2, line);
+        std::string name = asString(a[0], "container.deleteField", line);
+        auto it = containers.find(name);
+        if (it == containers.end()) return Value::boolean_(false);
+        return Value::boolean_(it->second->values.erase(asString(a[1], "container.deleteField", line)) > 0);
+    };
+    natives["container.mergeFields"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgsRange("container.mergeFields", a, 2, 3, line);
+        std::string name = asString(a[0], "container.mergeFields", line);
+        auto it = containers.find(name);
+        if (it == containers.end()) return Value::boolean_(false);
+        if (a[1].type != Value::Type::MAP) throw diagErr(diag::Code::E0004_InvalidType, line, "`container.mergeFields` expects a map as its second argument");
+        bool overwrite = a.size() < 3 || a[2].isTruthy();
+        for (auto& kv : *a[1].map) {
+            std::string key = kv.first.toDisplayString();
+            if (!overwrite && it->second->values.count(key)) continue;
+            it->second->values[key] = kv.second;
+        }
+        return Value::boolean_(true);
+    };
+    natives["container.clearFields"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("container.clearFields", a, 1, line);
+        std::string name = asString(a[0], "container.clearFields", line);
+        auto it = containers.find(name);
+        if (it == containers.end()) return Value::boolean_(false);
+        it->second->values.clear();
+        return Value::boolean_(true);
+    };
+    natives["container.count"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("container.count", a, 0, line);
+        return Value::num(static_cast<double>(containers.size()));
+    };
+    natives["container.current"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("container.current", a, 0, line);
+        return containerStack.empty() ? Value::nil() : Value::string(containerStack.back());
+    };
+    natives["container.stats"] = [this, kindNameOf](std::vector<Value>& a, int line) -> Value {
+        expectArgs("container.stats", a, 0, line);
+        auto m = std::make_shared<MapData>();
+        m->push_back({Value::string("count"), Value::num(static_cast<double>(containers.size()))});
+        std::unordered_map<std::string, int> byKind;
+        for (auto& kv : containers) byKind[kindNameOf(kv.first)]++;
+        auto kinds = std::make_shared<MapData>();
+        for (auto& kv : byKind) kinds->push_back({Value::string(kv.first), Value::num(kv.second)});
+        m->push_back({Value::string("byKind"), Value::makeMap(kinds)});
+        return Value::makeMap(m);
     };
 
     // callFn(fn, args?) -> يستدعي أي قيمة دالة Rin (FUNCTION) — سواء أتت من getField()، أو من متغيّر
@@ -7407,6 +7879,12 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
             //    بنفس أسلوب container.import. هذا هو نفس المسار الذي يكتب فيه قسم "المكتبات" في
             //    المحرر أي مكتبة ينشئها أو يرفعها المستخدم، فتُستورَد بنفس عبارة @import مباشرة.
             std::ifstream in(resolvePath(libPath), std::ios::binary);
+            // 2b) استيراد نسبي صريح (./ أو ../) لم يوجد نسبةً إلى CWD: جرّب نسبةً إلى مجلد الملف
+            //     المُستورِد نفسه (عند غياب basePath المعزول فقط، فلا يُمسّ سلوك العزل على أندرويد).
+            if (!in && basePath.empty() && (rawPath.rfind("./", 0) == 0 || rawPath.rfind("../", 0) == 0)) {
+                size_t slash = sourceFile.find_last_of('/');
+                if (slash != std::string::npos) in.open(sourceFile.substr(0, slash + 1) + rawPath, std::ios::binary);
+            }
             if (in) {
                 std::ostringstream buf;
                 buf << in.rdbuf();
@@ -8125,11 +8603,11 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
                                                             : containerKinds[containerStack.back()];
         bool allowed = currentKind == ContainerKind::TABLE || currentKind == ContainerKind::OBJECT ||
                         currentKind == ContainerKind::PORTAL || currentKind == ContainerKind::BLOCK ||
-                        currentKind == ContainerKind::STICKER;
+                        currentKind == ContainerKind::STICKER || currentKind == ContainerKind::AUKT;
         if (containerStack.empty() || !allowed) {
             throw diagErr(diag::Code::E0014_InvalidContainer, s->line, "عبارة 'style' يجب أن تُستخدم داخل @container.table/@table أو "
                             "@container.object/@Object أو @container.portal/@portal أو @container.block/@block "
-                            "أو @container.sticker/@sticker");
+                            "أو @container.sticker/@sticker أو @AUKT");
         }
         Value v = evaluate(s->value, env);
         if (v.type != Value::Type::STRING) {
