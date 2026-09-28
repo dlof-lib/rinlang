@@ -50,7 +50,9 @@ data class RinPackage(
      * صورة مصغّرة (thumbnail) اختيارية للحزمة، تُعرَض كبانر أعلى صفحة تفاصيل الحزمة بدل خلفية
      * الخلايا السداسية الافتراضية. فارغة يعني: لم يرفع الناشر صورة مصغّرة.
      */
-    val thumbnailBase64: String = ""
+    val thumbnailBase64: String = "",
+    /** وقت آخر تعديل أجراه الناشر على الحزمة (0 = لم تُعدَّل منذ نشرها). */
+    val updatedAt: Long = 0L
 ) : java.io.Serializable {
     /** متوسط التقييم من 0 إلى 5، أو 0 إن لم يقيّمه أحد بعد. */
     val averageRating: Double
