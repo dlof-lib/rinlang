@@ -1,14 +1,17 @@
 // ============================================================================
 //  examples/use_from_demo/sidebar.rin
-//  A file that defines two named, reusable things — one UI element and one
-//  data container — meant to be called from another file with
-//  `use ... from "...";`. See docs/cross-file-containers.md.
+//  Reusable declarations shared with main.rin. See docs/cross-file-containers.md:
+//  the only real cross-file mechanism in this version of Rin is @import, which
+//  runs this whole file inline in the importer (so every `fun`/`@container` here
+//  becomes directly usable in main.rin after the @import line). There is no
+//  named/selective import, and a previously-defined @view cannot be re-called
+//  later by bare name as a reusable component -- so the sidebar UI itself is
+//  built directly in main.rin, and this file only supplies shared data/logic.
 // ============================================================================
 
-@view.Column=Sidebar width = 220 bg = "#0F0F14"
-    @view.Text=navHome text = "Home";
-    @view.Text=navSettings text = "Settings";
-.end/view
+fun sidebarLabel() {
+    return "Sidebar";
+}
 
 @container=SidebarState
     let open = true;
