@@ -1,20 +1,30 @@
 // ============================================================================
 //  examples/use_from_demo/main.rin
-//  Calls one UI element (Sidebar) and one data container (SidebarState) that
-//  both live in sidebar.rin, by name, with a single `use ... from` line.
-//  See docs/cross-file-containers.md for the full write-up of this concept.
+//  See docs/cross-file-containers.md: `use A, B from "file.rin";` is not real
+//  Rin syntax (there is no named/selective import), and a previously-defined
+//  @view cannot be called again later by bare name as a reusable component.
+//  @import is the only real cross-file mechanism, and it simply runs the whole
+//  target file inline -- so everything sidebar.rin defines (fun/@container)
+//  becomes directly usable here after the @import line.
 // ============================================================================
-
-use Sidebar, SidebarState from "sidebar.rin";
+@import "examples/use_from_demo/sidebar.rin";
 
 @view.Scaffold=page
-    @view.Row=top role = "topbar"
-        @view.Text=title text = "My App";
+    @view.Row=top role="topbar";
+        @view.Text=title text="My App"; .end/view
     .end/view
 
-    Sidebar role = "sidebar" open = SidebarState.open;
+    @view.Column=sidebar
+        width=220;
+        bg="#0F0F14";
+        @view.Text=sidebarTitle text=sidebarLabel(); .end/view
+        @view.Text=navHome text="Home"; .end/view
+        @view.Text=navSettings text="Settings"; .end/view
+    .end/view
 
-    @view.Column=content role = "content"
-        @view.Text=hello text = "Hello!";
+    @view.Column=content role="content";
+        @view.Text=hello text="Hello!"; .end/view
     .end/view
 .end/view
+
+print "sidebar open:", container.get("SidebarState", "open");
