@@ -1611,7 +1611,19 @@ object MarkdownLite {
         "play" to "\u25B6",            // ▶
         "web" to "\uD83C\uDF10",       // 🌐
         "arrow" to "\u2192",           // →
-        "github" to "\u2318"
+        "github" to "\u2318",
+        "copy" to "\u29C9",
+        "docs" to "\uD83D\uDCC4",
+        "home" to "\uD83C\uDFE0",
+        "mail" to "\u2709",
+        "settings" to "\u2699",
+        "bug" to "\uD83D\uDC1B",
+        "heart" to "\u2665",
+        "tag" to "\uD83C\uDFF7",
+        "rocket" to "\uD83D\uDE80",
+        "lock" to "\uD83D\uDD12",
+        "open" to "\u2197",
+        "share" to "\u2934"
     )
 
     private fun iconGlyphFor(rawIcon: String?): String? {
@@ -1649,11 +1661,18 @@ object MarkdownLite {
      *   طبقات (سقف معقول للرسم داخل حبّة نصّية واحدة). بلا تسمية منفصلة، يُستخدَم عنوان افتراضي
      *   "البنية الهيكلية". يقبل أيضاً `palette=(forest|harbor|lagoon)` (انظر [NAMED_PALETTES])
      *   لرسم الطبقات بدرجات حقيقية من تلك اللوحة بدل الهوية الافتراضية الثلاثية.
-     * لا رابط ولا قيمة مجرَّدة ولا لون ولا هرم (مثال: `[*جديد*]` وحدها) → يسقط بهدوء إلى ستيكر
+     * - **جديد (تطوير احترافي لـ`[* *]`):**
+ *   • إصلاح: `link=(https://a.b/c)` لم يعد يتمزّق عند `/` داخل الأقواس ([splitMetaParts]).
+ *   • `style=(solid|soft|outline)` و`size=(sm|md|lg)` لأزرار `link`/`copy` ([appendActionButton]).
+ *   • `color=(green)` بأسماء الألوان (accent/green/gold/danger/info/like + red/blue/orange...) لا سداسي فقط.
+ *   • `copy=(نص)` زر ينسخ للحافظة، `status=(ok|warn|error|info|beta|new|stable|deprecated)` شارة حالة،
+ *     `rating=(4.5)` نجوم، `progress=(70)` شريط تقدّم حقيقي ([ProgressBadgeSpan]).
+ *   • أيقونات إضافية: copy/docs/home/mail/settings/bug/heart/tag/rocket/lock/open/share.
+ * لا رابط ولا قيمة مجرَّدة ولا لون ولا هرم (مثال: `[*جديد*]` وحدها) → يسقط بهدوء إلى ستيكر
      * عادي بلون الهوية الافتراضي عبر [appendSticker]، فلا يُفقَد المحتوى صمتاً بسبب صياغة ناقصة.
      */
     private fun appendMetaBadge(out: SpannableStringBuilder, raw: String) {
-        val parts = raw.split("/").map { it.trim() }.filter { it.isNotEmpty() }
+        val parts = splitMetaParts(raw)
         if (parts.isEmpty()) return
         // `[*Page_background/#hex*]` مُعالَجة حصرياً عبر [extractPageBackground] على مستوى السطر
         // في [toSpannable] (و[pageBackgroundLineRegex] يمنع وصولها لهنا أصلاً في الاستخدام العادي،
@@ -1670,6 +1689,12 @@ object MarkdownLite {
         var hierarchyPalette: IntArray? = null
         var downloadsCount: Long? = null
         var isDownloading = false
+        var copyText: String? = null
+        var styleKey: String? = null
+        var sizeKey: String? = null
+        var statusKey: String? = null
+        var ratingValue: Double? = null
+        var progressValue: Int? = null
 
         // التسمية الأولى نفسها قد تكون لوناً مجرَّداً بلا نص (`[*#7C5CFF*]`) — عندها لا توجد
         // تسمية نصية منفصلة أصلاً.
@@ -1681,7 +1706,13 @@ object MarkdownLite {
                 when (m.groupValues[1].lowercase()) {
                     "link" -> linkUrl = m.groupValues[2].trim()
                     "icon" -> iconRaw = m.groupValues[2].trim()
-                    "color" -> parseHexColor(m.groupValues[2].trim())?.let { color = it }
+                    "color" -> parseColorValue(m.groupValues[2].trim())?.let { color = it }
+                    "copy" -> copyText = m.groupValues[2].trim()
+                    "style" -> styleKey = m.groupValues[2].trim()
+                    "size" -> sizeKey = m.groupValues[2].trim()
+                    "status" -> statusKey = m.groupValues[2].trim()
+                    "rating" -> ratingValue = m.groupValues[2].trim().replace(',', '.').toDoubleOrNull()
+                    "progress" -> progressValue = m.groupValues[2].trim().trimEnd('%').toDoubleOrNull()?.toInt()?.coerceIn(0, 100)
                     "hierarchy", "pyramid" -> hierarchyLevels = m.groupValues[2].trim().toIntOrNull()?.coerceIn(1, 6)
                     "palette" -> hierarchyPalette = NAMED_PALETTES[m.groupValues[2].trim().lowercase()]
                     "downloads" -> downloadsCount = m.groupValues[2].trim().replace(",", "").toLongOrNull()
@@ -1699,18 +1730,61 @@ object MarkdownLite {
 
         when {
             linkUrl != null -> {
-                val bg = color?.first ?: COLOR_BULLET
-                val fg = if (color != null) contrastingTextColor(bg) else 0xFFFFFFFF.toInt()
-                val glyph = iconGlyphFor(iconRaw)
-                val shownLabel = label.ifBlank { color?.second.orEmpty() }
-                val buttonText = if (glyph != null) "$glyph  $shownLabel" else shownLabel
+                appendActionButton(out, label, color, iconRaw, styleKey, sizeKey, LinkButtonClickSpan(linkUrl!!))
+            }
+            // زر نسخ نص: `[*نسخ الأمر/copy=(pip install x)*]` — ينسخ النص للحافظة عند النقر.
+            copyText != null -> {
+                appendActionButton(
+                    out, label, color, iconRaw ?: "copy", styleKey, sizeKey,
+                    CopyCodeSpan(copyText!!, "\u062A\u0645 \u0627\u0644\u0646\u0633\u062E"), "\u0646\u0633\u062E"
+                )
+            }
+            // شارة حالة: `[*الخدمة/status=(ok)*]` → ● الخدمة: يعمل (ok/warn/error/info/beta/new/stable/deprecated).
+            statusKey != null -> {
+                val (stColor, stLabel) = STATUS_STYLES[statusKey!!.lowercase()] ?: (COLOR_BULLET to statusKey!!)
+                val base = color?.first ?: stColor
+                val shown = if (label.isNotBlank()) "$label: $stLabel" else stLabel
                 val start = out.length
-                out.append(buttonText)
+                out.append("\u25CF $shown")
                 val end = out.length
-                out.setSpan(StickerSpan(bg, fg), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                out.setSpan(
+                    StickerSpan(tintedBackground(base, 0x26), softTextColor(base)),
+                    start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                )
                 out.setSpan(StyleSpan(Typeface.BOLD), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-                out.setSpan(RelativeSizeSpan(0.9f), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-                out.setSpan(LinkButtonClickSpan(linkUrl), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                out.setSpan(RelativeSizeSpan(0.84f), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            }
+            // شارة تقييم: `[*التقييم/rating=(4.5)*]` → التقييم ★★★★★ 4.5 (نجوم مُقرَّبة لأقرب عدد صحيح، من 5).
+            ratingValue != null -> {
+                val v = ratingValue!!.coerceIn(0.0, 5.0)
+                val full = Math.round(v).toInt().coerceIn(0, 5)
+                val stars = "\u2605".repeat(full) + "\u2606".repeat(5 - full)
+                val valueText = if (v == Math.floor(v)) v.toInt().toString() else String.format(java.util.Locale.US, "%.1f", v)
+                val start = out.length
+                out.append(if (label.isNotBlank()) "$label  $stars $valueText" else "$stars $valueText")
+                val end = out.length
+                out.setSpan(
+                    StickerSpan(tintedBackground(0xFFFFC94D.toInt(), 0x33), COLOR_SYNTAX_BUILTIN),
+                    start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                )
+                out.setSpan(StyleSpan(Typeface.BOLD), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                out.setSpan(RelativeSizeSpan(0.84f), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            }
+            // شريط تقدّم حقيقي: `[*الإنجاز/progress=(70)*]` → التسمية + شريط مملوء 70% + النسبة.
+            progressValue != null -> {
+                val pct = progressValue!!
+                val start = out.length
+                out.append(if (label.isNotBlank()) "$label $pct%" else "$pct%")
+                val end = out.length
+                out.setSpan(
+                    ProgressBadgeSpan(
+                        label, pct, COLOR_INLINE_CODE_BG, COLOR_H_DIM,
+                        COLOR_TABLE_BORDER, color?.first ?: COLOR_BULLET, COLOR_CODE_TEXT
+                    ),
+                    start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                )
+                out.setSpan(StyleSpan(Typeface.BOLD), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                out.setSpan(RelativeSizeSpan(0.84f), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
             }
             hierarchyLevels != null -> {
                 val shownLabel = label.ifBlank { "\u0627\u0644\u0628\u0646\u064A\u0629 \u0627\u0644\u0647\u064A\u0643\u0644\u064A\u0629" } // "البنية الهيكلية"
@@ -1778,6 +1852,102 @@ object MarkdownLite {
             }
             else -> appendSticker(out, label)
         }
+    }
+
+    /** يقسّم [raw] على `/` عند عمق أقواس صفر فقط — فيبقى `link=(https://a.b/c)` و`copy=(a/b)` قطعة
+     *  واحدة (كان `split("/")` البسيط يقطع كل رابط عند أول `//` فيُعرَض الزر كشارة معطوبة). */
+    private fun splitMetaParts(raw: String): List<String> {
+        val parts = mutableListOf<String>()
+        val cur = StringBuilder()
+        var depth = 0
+        for (ch in raw) {
+            when {
+                ch == '(' -> { depth++; cur.append(ch) }
+                ch == ')' -> { if (depth > 0) depth--; cur.append(ch) }
+                ch == '/' && depth == 0 -> { parts.add(cur.toString()); cur.setLength(0) }
+                else -> cur.append(ch)
+            }
+        }
+        parts.add(cur.toString())
+        return parts.map { it.trim() }.filter { it.isNotEmpty() }
+    }
+
+    /** لون سداسي، أو اسم لون (ألوان الستيكر accent/green/gold/danger/info/like + أسماء shields.io
+     *  الشائعة مثل red/blue/orange) — `null` إن لم يُعرَف فيُتجاهَل بصمت. */
+    private fun parseColorValue(raw: String): Pair<Int, String>? {
+        parseHexColor(raw)?.let { return it }
+        val key = raw.trim().lowercase()
+        STICKER_VARIANTS[key]?.let { return it.first to key }
+        SHIELDS_COLOR_NAMES[key]?.let { hex -> return parseHexColor("#" + hex) }
+        return null
+    }
+
+    /** نص بلون [color] مقروء فوق خلفيته الفاتحة الشفافة (tint): يُغمَّق في الثيم الفاتح ويُفتَّح في الداكن. */
+    private fun softTextColor(color: Int): Int {
+        if (darkMode) return adaptForTheme(color)
+        fun dim(c: Int): Int = (c * 0.68).toInt().coerceIn(0, 255)
+        return (0xFF shl 24) or (dim((color shr 16) and 0xFF) shl 16) or
+            (dim((color shr 8) and 0xFF) shl 8) or dim(color and 0xFF)
+    }
+
+    /** ألوان/تسميات افتراضية لـ`status=(...)`؛ اسم غير معروف يُعرَض كما كُتب بلون الهوية. */
+    private val STATUS_STYLES: Map<String, Pair<Int, String>> = mapOf(
+        "ok" to (0xFF1CA877.toInt() to "\u064A\u0639\u0645\u0644"),
+        "warn" to (0xFFB45F06.toInt() to "\u062A\u062D\u0630\u064A\u0631"),
+        "error" to (0xFFC0392B.toInt() to "\u062E\u0637\u0623"),
+        "info" to (0xFF1A56C7.toInt() to "\u0645\u0639\u0644\u0648\u0645\u0629"),
+        "beta" to (0xFF6A47E8.toInt() to "\u062A\u062C\u0631\u064A\u0628\u064A"),
+        "new" to (0xFF22C88E.toInt() to "\u062C\u062F\u064A\u062F"),
+        "stable" to (0xFF1CA877.toInt() to "\u0645\u0633\u062A\u0642\u0631"),
+        "deprecated" to (0xFF667085.toInt() to "\u0645\u062A\u0648\u0642\u0651\u0641")
+    )
+
+    /**
+     * زر إجراء موحَّد لـ`link=(...)` و`copy=(...)`: [styleKey] يختار `solid` (الافتراضي، خلفية مملوءة) أو
+     * `soft` (خلفية شفافة فاتحة + نص ملوَّن) أو `outline` (إطار فقط)؛ [sizeKey] يختار `sm`/`md`/`lg`؛
+     * [color] لون الزر (هوية التطبيق افتراضياً)؛ [iconRaw] أيقونة مصغَّرة اختيارية.
+     */
+    private fun appendActionButton(
+        out: SpannableStringBuilder,
+        label: String,
+        color: Pair<Int, String>?,
+        iconRaw: String?,
+        styleKey: String?,
+        sizeKey: String?,
+        clickSpan: ClickableSpan,
+        defaultLabel: String = ""
+    ) {
+        val base = color?.first ?: COLOR_BULLET
+        val glyph = iconGlyphFor(iconRaw)
+        val shownLabel = label.ifBlank { color?.second.orEmpty().ifBlank { defaultLabel } }
+        val text = if (glyph != null) "$glyph  $shownLabel" else shownLabel
+        val bg: Int
+        val fg: Int
+        val stroke: Int
+        when (styleKey?.lowercase()) {
+            "soft" -> { bg = tintedBackground(base, 0x26); fg = softTextColor(base); stroke = 0 }
+            "outline" -> { bg = 0x00000000; fg = softTextColor(base); stroke = base }
+            else -> {
+                bg = base
+                fg = if (color != null) contrastingTextColor(base) else 0xFFFFFFFF.toInt()
+                stroke = 0
+            }
+        }
+        val scale = when (sizeKey?.lowercase()) {
+            "sm", "small" -> 0.78f
+            "lg", "large" -> 1.05f
+            else -> 0.9f
+        }
+        val start = out.length
+        out.append(text)
+        val end = out.length
+        out.setSpan(
+            StickerSpan(bg, fg, strokeColor = stroke, strokeWidth = if (stroke != 0) 2.5f else 0f),
+            start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+        )
+        out.setSpan(StyleSpan(Typeface.BOLD), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        out.setSpan(RelativeSizeSpan(scale), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        out.setSpan(clickSpan, start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
     }
 
     /**
@@ -1898,12 +2068,15 @@ object MarkdownLite {
      * مع رسالة تأكيد قصيرة (Toast). يعمل فقط إن كان TextView مُفعَّلاً بـ[LinkMovementMethod]
      * (يتم ذلك تلقائياً عبر [applyTo]).
      */
-    private class CopyCodeSpan(private val code: String) : ClickableSpan() {
+    private class CopyCodeSpan(
+        private val code: String,
+        private val toastText: String = "\u062A\u0645 \u0646\u0633\u062E \u0627\u0644\u0643\u0648\u062F"
+    ) : ClickableSpan() {
         override fun onClick(widget: View) {
             val ctx = widget.context
             val clipboard = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
             clipboard?.setPrimaryClip(ClipData.newPlainText("code", code))
-            Toast.makeText(ctx, "\u062A\u0645 \u0646\u0633\u062E \u0627\u0644\u0643\u0648\u062F", Toast.LENGTH_SHORT).show()
+            Toast.makeText(ctx, toastText, Toast.LENGTH_SHORT).show()
         }
 
         // بلا تسطير/لون رابط افتراضي — الشكل مُتحكَّم به بالكامل عبر StickerSpan المرافق لنفس النطاق.
@@ -2064,7 +2237,9 @@ object MarkdownLite {
         private val fg: Int,
         private val cornerRadius: Float = 10f,
         private val paddingH: Float = 14f,
-        private val paddingV: Float = 4f
+        private val paddingV: Float = 4f,
+        private val strokeColor: Int = 0,
+        private val strokeWidth: Float = 0f
     ) : ReplacementSpan() {
         override fun getSize(paint: Paint, text: CharSequence, start: Int, end: Int, fm: Paint.FontMetricsInt?): Int {
             fm?.let {
@@ -2089,8 +2264,98 @@ object MarkdownLite {
             paint.color = bg
             canvas.drawRoundRect(rect, cornerRadius, cornerRadius, paint)
 
+            if (strokeWidth > 0f) {
+                val savedStroke = paint.strokeWidth
+                paint.style = Paint.Style.STROKE
+                paint.strokeWidth = strokeWidth
+                paint.color = strokeColor
+                val half = strokeWidth / 2f
+                canvas.drawRoundRect(
+                    RectF(rect.left + half, rect.top + half, rect.right - half, rect.bottom - half),
+                    cornerRadius, cornerRadius, paint
+                )
+                paint.strokeWidth = savedStroke
+                paint.style = Paint.Style.FILL
+            }
+
             paint.color = fg
             canvas.drawText(text, start, end, x + paddingH, y.toFloat(), paint)
+
+            paint.color = savedColor
+            paint.style = savedStyle
+            paint.isAntiAlias = savedAA
+        }
+    }
+
+    /**
+     * شارة تقدّم: نص [label] اختياري + شريط تقدّم مدوَّر مملوء بنسبة [percent] (0-100) + النسبة كنص —
+     * كلها داخل حبّة واحدة بخلفية [bg]. تقيس عرضها بنفسها (لا تعتمد على النص الأصلي للنطاق).
+     */
+    private class ProgressBadgeSpan(
+        private val label: String,
+        private val percent: Int,
+        private val bg: Int,
+        private val labelColor: Int,
+        private val trackColor: Int,
+        private val fillColor: Int,
+        private val textColor: Int,
+        private val cornerRadius: Float = 10f,
+        private val paddingH: Float = 12f,
+        private val paddingV: Float = 4f,
+        private val barWidth: Float = 64f,
+        private val barHeight: Float = 7f,
+        private val gap: Float = 8f
+    ) : ReplacementSpan() {
+        private val pctText: String get() = "$percent%"
+
+        private fun labelPartWidth(paint: Paint): Float =
+            if (label.isBlank()) 0f else paint.measureText(label) + gap
+
+        private fun totalWidth(paint: Paint): Float =
+            paddingH * 2 + labelPartWidth(paint) + barWidth + gap + paint.measureText(pctText)
+
+        override fun getSize(paint: Paint, text: CharSequence, start: Int, end: Int, fm: Paint.FontMetricsInt?): Int {
+            fm?.let {
+                val orig = paint.fontMetricsInt
+                it.ascent = orig.ascent; it.descent = orig.descent; it.top = orig.top; it.bottom = orig.bottom
+            }
+            return totalWidth(paint).toInt()
+        }
+
+        override fun draw(
+            canvas: Canvas, text: CharSequence, start: Int, end: Int,
+            x: Float, top: Int, y: Int, bottom: Int, paint: Paint
+        ) {
+            val savedColor = paint.color
+            val savedStyle = paint.style
+            val savedAA = paint.isAntiAlias
+            paint.isAntiAlias = true
+            paint.style = Paint.Style.FILL
+
+            val pill = RectF(x, top.toFloat() + paddingV, x + totalWidth(paint), bottom.toFloat() - paddingV)
+            paint.color = bg
+            canvas.drawRoundRect(pill, cornerRadius, cornerRadius, paint)
+
+            var cx = x + paddingH
+            if (label.isNotBlank()) {
+                paint.color = labelColor
+                canvas.drawText(label, cx, y.toFloat(), paint)
+                cx += paint.measureText(label) + gap
+            }
+            val cy = (top + bottom) / 2f
+            val track = RectF(cx, cy - barHeight / 2f, cx + barWidth, cy + barHeight / 2f)
+            paint.color = trackColor
+            canvas.drawRoundRect(track, barHeight / 2f, barHeight / 2f, paint)
+            if (percent > 0) {
+                val fillWidth = (barWidth * percent / 100f).coerceAtLeast(barHeight)
+                paint.color = fillColor
+                canvas.drawRoundRect(
+                    RectF(cx, track.top, cx + fillWidth, track.bottom), barHeight / 2f, barHeight / 2f, paint
+                )
+            }
+            cx += barWidth + gap
+            paint.color = textColor
+            canvas.drawText(pctText, cx, y.toFloat(), paint)
 
             paint.color = savedColor
             paint.style = savedStyle
