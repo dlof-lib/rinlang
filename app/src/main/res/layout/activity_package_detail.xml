@@ -304,6 +304,26 @@
                     android:textStyle="bold"
                     android:background="@drawable/bg_install_button_premium"
                     android:textColor="@android:color/white" />
+
+                <!-- يظهر لناشر الحزمة فقط: يفتح شاشة تعديل المكتبة (بيانات + README + ملفات ومجلدات) -->
+                <Button
+                    android:id="@+id/btnDetailEdit"
+                    android:layout_width="match_parent"
+                    android:layout_height="44dp"
+                    android:layout_marginTop="10dp"
+                    android:minWidth="0dp"
+                    android:minHeight="0dp"
+                    android:insetTop="0dp"
+                    android:insetBottom="0dp"
+                    android:drawableStart="@drawable/ic_edit_pencil"
+                    android:drawablePadding="8dp"
+                    android:text="@string/action_edit_package"
+                    android:textAllCaps="false"
+                    android:textSize="13sp"
+                    android:textStyle="bold"
+                    android:background="@drawable/bg_btn_outline"
+                    android:textColor="@color/rin_accent"
+                    android:visibility="gone" />
             </LinearLayout>
             </LinearLayout>
             </FrameLayout>
