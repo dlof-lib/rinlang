@@ -229,7 +229,12 @@ bool runSource(const std::string& source, const std::string& sourceName, rin::In
         interp.setSourceFile(sourceName);
         std::string out = interp.run(statements);
         if (printOutput) std::cout << out;
-        return true;
+        // interp.run() catches RinError/ThrowSignal/ReturnSignal internally and appends the
+        // rendered diagnostic to `out` instead of rethrowing -- so a runtime failure never
+        // reaches the catch clauses below. hadError() is the interpreter's own accessor for
+        // exactly this case (see rin_interpreter.h): without checking it, this function
+        // reported success for any script that merely parsed, even if it failed at runtime.
+        return !interp.hadError();
     } catch (rin::RinError& e) {
         if (e.diagnostic) {
             std::cerr << "\n" << rin::diag::renderPlain(*e.diagnostic, rin::diag::globalSourceManager());
