@@ -54,6 +54,17 @@
         </LinearLayout>
 
         <ImageButton
+            android:id="@+id/btnEditMyPackage"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:layout_marginStart="8dp"
+            android:background="@drawable/bg_toolbar_btn_ghost"
+            android:src="@drawable/ic_edit_pencil"
+            android:scaleType="center"
+            android:padding="8dp"
+            android:contentDescription="@string/action_edit_package" />
+
+        <ImageButton
             android:id="@+id/btnDeleteMyPackage"
             android:layout_width="40dp"
             android:layout_height="40dp"
