@@ -76,6 +76,12 @@ class AccountActivity : BaseConnectivityActivity() {
         refresh()
     }
 
+    /** عند العودة من شاشة تعديل حزمة: حدّث قائمة «حزمي المنشورة» (الإصدار/الاسم قد تغيّرا). */
+    override fun onRestart() {
+        super.onRestart()
+        AuthRepository.currentUid()?.let { loadMyPackages(it) }
+    }
+
     /** يُستدعى تلقائياً عند عودة الاتصال بعد انقطاعه أثناء وجود المستخدم في شاشة الحساب. */
     override fun onConnectionRestored() {
         refresh()
@@ -276,6 +282,15 @@ class AccountActivity : BaseConnectivityActivity() {
             row.findViewById<TextView>(R.id.txtMyPackageName).text = pkg.name
             row.findViewById<TextView>(R.id.txtMyPackageMeta).text =
                 getString(R.string.my_package_meta_format, pkg.version, pkg.downloadCount)
+            row.findViewById<ImageButton>(R.id.btnEditMyPackage).setOnClickListener {
+                if (!isOnline()) { showOfflineOverlay(); return@setOnClickListener }
+                EditPackageActivity.start(this, pkg.id)
+            }
+            // الضغط على الصف نفسه يفتح التعديل أيضاً (اختصار أسرع من الزر الصغير).
+            row.setOnClickListener {
+                if (!isOnline()) { showOfflineOverlay(); return@setOnClickListener }
+                EditPackageActivity.start(this, pkg.id)
+            }
             row.findViewById<ImageButton>(R.id.btnDeleteMyPackage).setOnClickListener {
                 confirmDeletePackage(uid, pkg)
             }
