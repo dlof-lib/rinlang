@@ -257,6 +257,9 @@ object MarkdownLite {
     // شريط رأس بطاقة الكود (أغمق قليلاً من جسم البطاقة) + لون أرقام الأسطر الخافت في هامش الكود.
     private var COLOR_CODE_HEADER_BG: Int = 0xFFE9E5F6.toInt()
     private var COLOR_CODE_GUTTER: Int = 0xFF9AA0B5.toInt()
+    // خريطة الشجرة (Tree Map): لون أيقونة المجلد ولون أيقونة الملف الافتراضي (لملف بلا امتداد معروف).
+    private var COLOR_TREE_FOLDER: Int = 0xFFD9930D.toInt()
+    private var COLOR_TREE_FILE: Int = 0xFF7A8299.toInt()
 
     /** إزاحة عنصر قائمة بحسب عمق التعشيش (بكسل). */
     private fun listIndentPx(depth: Int): Float = dpPx(4f) + depth * dpPx(20f)
@@ -307,6 +310,8 @@ object MarkdownLite {
             COLOR_HEADER_RULE = 0xFF33363F.toInt()
             COLOR_CODE_HEADER_BG = 0xFF272A34.toInt()
             COLOR_CODE_GUTTER = 0xFF6B7280.toInt()
+            COLOR_TREE_FOLDER = 0xFFFFC94D.toInt()
+            COLOR_TREE_FILE = 0xFF9AA3B8.toInt()
         } else {
             COLOR_RULE = 0xFFDDE2E8.toInt()
             COLOR_CARD_BORDER = 0xFFE2E6ED.toInt()
@@ -336,6 +341,8 @@ object MarkdownLite {
             COLOR_HEADER_RULE = 0xFFE2E6ED.toInt()
             COLOR_CODE_HEADER_BG = 0xFFE9E5F6.toInt()
             COLOR_CODE_GUTTER = 0xFF9AA0B5.toInt()
+            COLOR_TREE_FOLDER = 0xFFD9930D.toInt()
+            COLOR_TREE_FILE = 0xFF7A8299.toInt()
         }
     }
 
@@ -662,6 +669,16 @@ object MarkdownLite {
             if (codeBuffer.isEmpty() && codeLang.isBlank()) return
             blockGap()
             val content = codeBuffer.toString().trimEnd('\n')
+
+            // خريطة شجرة (├── └── │): بطاقة "MAP" بخطوط توجيه مرسومة فعلياً وأيقونات مجلد/ملف
+            // بدل عرضها ككود عادي (انظر [appendTreeCard]).
+            if (isTreeBlock(codeLang, content)) {
+                appendTreeCard(out, content)
+                codeBuffer.clear()
+                codeLang = ""
+                lastWasListItem = false
+                return
+            }
 
             // بطاقة كود واحدة متّصلة: [رأس (نقطة اللغة + اسمها + نسخ) على شريط مميَّز] ثم [فراغ صغير]
             // ثم [أسطر الكود بأرقام أسطر خافتة] ثم [فراغ سفلي صغير] — يُرسَم حولها كلها إطار مدوَّر
@@ -2462,6 +2479,272 @@ object MarkdownLite {
         override fun updateDrawState(ds: TextPaint) {}
     }
 
+    // ───────────────────────────── خريطة الشجرة (Tree Map) ─────────────────────────────
+
+    /** سطر واحد من خريطة الشجرة بعد التحليل. [depth]: 0 للجذر، 1 لأبناء الجذر... [cont] (المفتاح k): هل يمرّ
+     *  خط المستوى k الرأسي عبر هذا السطر (أي أنّ سلفاً في ذلك المستوى له أشقّاء لاحقون). */
+    private class TreeLine(
+        val depth: Int,
+        val cont: BooleanArray,
+        val hasElbow: Boolean,
+        val isLast: Boolean,
+        val name: String,
+        val comment: String,
+        val note: Boolean,
+        val blank: Boolean,
+        var isDir: Boolean = false,
+        var hasChildren: Boolean = false
+    )
+
+    private class TreeParse(val lines: List<TreeLine>, val dirs: Int, val files: Int)
+
+    private const val TREE_VERTICALS = "│|¦┃║"
+    private const val TREE_LAST_CONNECTORS = "└┗╚╙`\\"
+
+    private val TREE_LANGS = setOf(
+        "tree", "map", "treemap", "tree-map", "filetree", "file-tree", "dirtree", "structure", "files", "folders"
+    )
+    private val TREE_NEUTRAL_LANGS = setOf("text", "txt", "plain", "plaintext", "console")
+
+    private val treeConnectorRegex = Regex(
+        "^([│|¦┃║ ]*)([├┣╠╟]|[└┗╚╙]|\\+(?=-)|`(?=-)|\\\\(?=-)|\\|(?=-))[─━═\\-]*>?[ ]?(.*)$"
+    )
+    private val treePrefixRegex = Regex("^([│|¦┃║ ]*)(.*)$")
+    private val treeUnicodeLineRegex = Regex("^[│|¦┃║ ]*[├└┣┗╠╚╟╙]")
+    private val treeAsciiLineRegex = Regex("^[|\\s]*[|+`\\\\]-{2,}\\s+[^|\\s-]")
+    private val treeCommentRegex = Regex("(?:^|\\s)(#|//|<-+|←|→|—|–|--)(?=\\s|$)")
+
+    /** هل الكتلة خريطة شجرة؟ صريحاً عبر لغة (tree/map/...) أو تلقائياً لكتلة بلا لغة (أو text) تحوي
+     *  ≥2 سطر بموصّلات `├`/`└` (وبلا رموز جداول `┼ ┤ ┬`) أو ≥3 أسطر ASCII بأسلوب `|--` / `+--`. */
+    private fun isTreeBlock(lang: String, content: String): Boolean {
+        val l = lang.trim().lowercase()
+        if (l in TREE_LANGS) return content.isNotBlank()
+        if (l.isNotEmpty() && l !in TREE_NEUTRAL_LANGS) return false
+        val lines = content.replace("\t", "    ").lines()
+        if (lines.any { it.contains('┼') || it.contains('┤') || it.contains('┬') }) return false
+        if (lines.count { treeUnicodeLineRegex.containsMatchIn(it) } >= 2) return true
+        return lines.count { treeAsciiLineRegex.containsMatchIn(it) } >= 3
+    }
+
+    private fun splitTreeComment(rest: String): Pair<String, String> {
+        val m = treeCommentRegex.find(rest) ?: return rest.trim() to ""
+        val idx = m.groups[1]!!.range.first
+        return rest.substring(0, idx).trim() to rest.substring(idx).trim()
+    }
+
+    private fun parseTreeLines(raw: String): TreeParse {
+        val src = raw.replace("\t", "    ").lines()
+
+        // خطوة المستوى (عدد الأعمدة بين مستوى وآخر): أصغر إزاحة موجبة لموصّل، وإلا 4.
+        var step = 0
+        for (line in src) {
+            val m = treeConnectorRegex.find(line) ?: continue
+            val p = m.groupValues[1].length
+            if (p > 0 && (step == 0 || p < step)) step = p
+        }
+        if (step < 2) step = 4
+
+        val list = ArrayList<TreeLine>()
+        for (line in src) {
+            val m = treeConnectorRegex.find(line)
+            if (m != null) {
+                val prefix = m.groupValues[1]
+                val level = prefix.length / step
+                val depth = level + 1
+                val cont = BooleanArray(depth) { k ->
+                    k < level && (prefix.getOrNull(k * step)?.let { it in TREE_VERTICALS } == true)
+                }
+                val (name, comment) = splitTreeComment(m.groupValues[3])
+                list.add(
+                    TreeLine(
+                        depth, cont, hasElbow = true, isLast = m.groupValues[2][0] in TREE_LAST_CONNECTORS,
+                        name = name, comment = comment, note = false, blank = false
+                    )
+                )
+                continue
+            }
+            val t = line.trimEnd()
+            if (t.isBlank()) {
+                list.add(TreeLine(0, BooleanArray(0), false, false, "", "", note = false, blank = true))
+                continue
+            }
+            val pm = treePrefixRegex.find(t)!!
+            val prefix = pm.groupValues[1]
+            val (name, comment) = splitTreeComment(pm.groupValues[2])
+            if (prefix.isEmpty()) {
+                list.add(TreeLine(0, BooleanArray(1), false, false, name, comment, note = false, blank = false))
+            } else {
+                // سطر ملاحظة داخل الشجرة (نص بلا موصّل): يحافظ على استمرار الخطوط الرأسية فقط.
+                val lvl = prefix.length / step
+                val cont = BooleanArray(lvl + 1) { k -> k < lvl && (prefix.getOrNull(k * step)?.let { it in TREE_VERTICALS } == true) }
+                list.add(TreeLine(lvl, cont, false, false, name, comment, note = true, blank = false))
+            }
+        }
+
+        for (i in list.indices) {
+            val ln = list[i]
+            val next = list.getOrNull(i + 1)
+            ln.hasChildren = !ln.note && !ln.blank && next != null && next.hasElbow && next.depth > ln.depth
+            val plain = !ln.note && !ln.blank
+            ln.isDir = plain && (ln.hasChildren || ln.name.endsWith("/") || ln.name.endsWith("\\"))
+        }
+        val named = list.filter { !it.note && !it.blank && it.name.isNotEmpty() }
+        return TreeParse(list, named.count { it.isDir }, named.count { !it.isDir })
+    }
+
+    /** لون امتداد الملف (يُستخدم لأيقونة الملف ولاحقته): كود/إعدادات/وسائط/سكربتات/وثائق. */
+    private fun treeExtColor(ext: String): Int = when (ext.lowercase()) {
+        "kt", "kts", "java", "rin", "indsin", "cpp", "cc", "c", "h", "hpp", "py", "js", "ts", "tsx", "jsx",
+        "cs", "go", "rs", "swift", "dart", "html", "css" -> COLOR_SYNTAX_KEYWORD
+        "xml", "json", "yml", "yaml", "toml", "ini", "properties", "csv" -> COLOR_SYNTAX_STRING
+        "png", "jpg", "jpeg", "webp", "gif", "svg", "ico", "mp3", "mp4", "ttf", "otf", "apk", "aab" -> COLOR_SYNTAX_NUMBER
+        "sh", "bat", "cmd", "mk", "cmake", "gradle", "sln" -> COLOR_SYNTAX_DIRECTIVE
+        "md", "txt", "rst", "pdf" -> COLOR_SYNTAX_COMMENT
+        else -> COLOR_TREE_FILE
+    }
+
+    private fun treeAlpha(color: Int, alpha: Int): Int = (color and 0x00FFFFFF) or (alpha shl 24)
+
+    /**
+     * **خريطة الشجرة (Tree Map)**: بدل عرض `├── └── │` كنص أحادي المسافة داخل كتلة كود، تُرسَم بطاقة
+     * "MAP" بخطوط توجيه حقيقية ([TreeGuideSpan]: خطوط رأسية ملوَّنة بحسب المستوى، وصلات مدوَّرة الزاوية
+     * عند آخر الأشقّاء، أيقونات مجلد/ملف)، مجلدات عريضة، امتدادات ملفات ملوَّنة، وتعليقات (`# ...`)
+     * مائلة خافتة، مع عدّاد مجلدات/ملفات في الرأس. النسخ يبقى للنص الخام الأصلي.
+     */
+    private fun appendTreeCard(out: SpannableStringBuilder, content: String) {
+        val parsed = parseTreeLines(content)
+        val pad = dpPx(14f)
+        val step = dpPx(20f)
+        val gap = dpPx(5f)
+        val stroke = dpPx(1.4f).coerceAtLeast(1f)
+        val guideColors = IntArray(BULLET_DEPTH_COLORS.size) { treeAlpha(adaptForTheme(BULLET_DEPTH_COLORS[it]), 0xB8) }
+
+        val cardStart = out.length
+        appendMapHeader(out, parsed.dirs, parsed.files, content)
+        out.append('\n')
+        val headerEnd = out.length
+
+        val topPadStart = out.length
+        out.append("\u00A0\n")
+        out.setSpan(RelativeSizeSpan(0.45f), topPadStart, out.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+
+        val bodyStart = out.length
+
+        fun seg(text: String, color: Int, style: Int = Typeface.NORMAL) {
+            if (text.isEmpty()) return
+            val s = out.length
+            out.append(text)
+            out.setSpan(ForegroundColorSpan(color), s, out.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            if (style != Typeface.NORMAL) out.setSpan(StyleSpan(style), s, out.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        }
+
+        parsed.lines.forEachIndexed { idx, ln ->
+            val lineStart = out.length
+            out.append('\u202A') // LRE: نفس تثبيت اتجاه أسطر الكود داخل صفحة RTL (انظر forceLtrPerLine)
+            var iconKind = 0
+            var iconColor = COLOR_TREE_FILE
+
+            if (ln.blank) {
+                out.append('\u00A0')
+            } else if (ln.name.isEmpty()) {
+                out.append('\u00A0')
+                iconKind = if (ln.note) 0 else if (ln.isDir) 1 else 3
+                iconColor = if (ln.isDir) COLOR_TREE_FOLDER else COLOR_CODE_GUTTER
+            } else if (ln.note) {
+                seg(ln.name, COLOR_CODE_TEXT)
+            } else if (ln.isDir) {
+                val base = ln.name.trimEnd('/', '\\')
+                seg(base, COLOR_HEADING, Typeface.BOLD)
+                if (base.length < ln.name.length) seg("/", COLOR_SYNTAX_COMMENT)
+                iconKind = 1
+                iconColor = COLOR_TREE_FOLDER
+            } else {
+                val dot = ln.name.lastIndexOf('.')
+                if (dot > 0 && dot < ln.name.length - 1) {
+                    val ext = ln.name.substring(dot + 1)
+                    iconColor = treeExtColor(ext)
+                    seg(ln.name.substring(0, dot), COLOR_CODE_TEXT)
+                    seg(ln.name.substring(dot), iconColor)
+                } else {
+                    seg(ln.name, COLOR_CODE_TEXT)
+                }
+                iconKind = 2
+            }
+            if (ln.comment.isNotEmpty()) {
+                seg("  ", COLOR_CODE_TEXT)
+                seg(ln.comment, COLOR_SYNTAX_COMMENT, Typeface.ITALIC)
+            }
+            out.append('\u202C')
+            val lineEnd = out.length
+            out.setSpan(
+                TreeGuideSpan(
+                    ln.depth, ln.cont, ln.hasElbow, ln.isLast, ln.hasChildren, iconKind, iconColor,
+                    guideColors, pad, step, gap, stroke
+                ),
+                lineStart, lineEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+            )
+            if (idx < parsed.lines.size - 1) out.append('\n')
+        }
+        val bodyEnd = out.length
+        out.setSpan(TypefaceSpan("monospace"), bodyStart, bodyEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        out.setSpan(RelativeSizeSpan(0.9f), bodyStart, bodyEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+
+        out.append('\n')
+        val bottomPadStart = out.length
+        out.append('\u00A0')
+        out.setSpan(RelativeSizeSpan(0.45f), bottomPadStart, out.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        val cardEnd = out.length
+
+        out.setSpan(LeadingMarginSpan.Standard(pad.toInt()), cardStart, bodyStart, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        out.setSpan(LeadingMarginSpan.Standard(pad.toInt()), bottomPadStart, cardEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        out.setSpan(
+            RoundedCardSpan(
+                COLOR_CODE_BLOCK_BG, COLOR_CARD_BORDER, cardStart, cardEnd,
+                cornerRadius = dpPx(12f), insetTop = dpPx(7f), insetBottom = dpPx(6f),
+                borderWidth = dpPx(1f).coerceAtLeast(1f),
+                headerBg = COLOR_CODE_HEADER_BG, headerEnd = headerEnd, headerDivider = COLOR_HEADER_RULE
+            ),
+            cardStart, cardEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+        )
+    }
+
+    /** رأس بطاقة الخريطة: نقطة خضراء + "MAP" + عدّاد (مجلد/ملف) خافت + زر نسخ للنص الخام. */
+    private fun appendMapHeader(out: SpannableStringBuilder, dirs: Int, files: Int, code: String) {
+        val accent = adaptForTheme(COLOR_BULLET_L2)
+        val dotStart = out.length
+        out.append("\u25CF ")
+        out.setSpan(ForegroundColorSpan(accent), dotStart, out.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        out.setSpan(RelativeSizeSpan(0.62f), dotStart, out.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+
+        val labelStart = out.length
+        out.append("MAP")
+        out.setSpan(ForegroundColorSpan(accent), labelStart, out.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        out.setSpan(StyleSpan(Typeface.BOLD), labelStart, out.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        out.setSpan(TypefaceSpan("monospace"), labelStart, out.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        out.setSpan(RelativeSizeSpan(0.68f), labelStart, out.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+
+        if (dirs + files > 0) {
+            out.append("  ")
+            val metaStart = out.length
+            // "N مجلد · M ملف"
+            out.append("$dirs \u0645\u062C\u0644\u062F \u00B7 $files \u0645\u0644\u0641")
+            out.setSpan(ForegroundColorSpan(COLOR_SYNTAX_COMMENT), metaStart, out.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            out.setSpan(RelativeSizeSpan(0.62f), metaStart, out.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        }
+
+        out.append("  ")
+        val copyStart = out.length
+        out.append("\u29C9 \u0646\u0633\u062E")
+        val copyEnd = out.length
+        out.setSpan(StickerSpan(COLOR_COPY_BUTTON_BG, COLOR_CODE_TEXT), copyStart, copyEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        out.setSpan(RelativeSizeSpan(0.66f), copyStart, copyEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        // "تم نسخ الخريطة"
+        out.setSpan(
+            CopyCodeSpan(code, "\u062A\u0645 \u0646\u0633\u062E \u0627\u0644\u062E\u0631\u064A\u0637\u0629"),
+            copyStart, copyEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+        )
+    }
+
     /**
      * **إصلاح شكل/ستايل: اتجاه صحيح لكتل الكود داخل صفحة عربية RTL** — كود Rin غالباً يحتوي
      * سلاسل نصّية عربية (`articleMeta("عنوان المقال", ...)`)، وأول محرف قوي الاتجاه في السطر هو
@@ -3272,6 +3555,152 @@ object MarkdownLite {
             p.style = savedStyle
             p.typeface = savedTypeface
             p.textSize = savedSize
+        }
+    }
+
+    /**
+     * هامش خريطة الشجرة: يرسم لكل سطر (1) الخطوط الرأسية للأسلاف المستمرّة، (2) وصلة السطر نفسه
+     * (├ مستقيمة أو └ بزاوية مدوَّرة) نحو الأيقونة، (3) أيقونة مجلد/ملف/نقطة، (4) بداية خط أبنائه
+     * إن كان له أبناء. الخطوط تمتدّ من [top] إلى [bottom] فتتّصل بين الأسطر بلا فجوات، وتستمرّ على
+     * الأسطر الملتفّة. لكل مستوى لون من [guideColors]. الهامش ثابت الحجم بحسب [depth].
+     * [icon]: 0 بلا، 1 مجلد، 2 ملف، 3 نقطة (عقدة بلا اسم).
+     */
+    private class TreeGuideSpan(
+        private val depth: Int,
+        private val cont: BooleanArray,
+        private val hasElbow: Boolean,
+        private val isLast: Boolean,
+        private val hasChildren: Boolean,
+        private val icon: Int,
+        private val iconColor: Int,
+        private val guideColors: IntArray,
+        private val padPx: Float,
+        private val stepPx: Float,
+        private val gapPx: Float,
+        private val strokePx: Float
+    ) : LeadingMarginSpan {
+        override fun getLeadingMargin(first: Boolean): Int = (padPx + (depth + 1) * stepPx + gapPx).toInt()
+
+        override fun drawLeadingMargin(
+            c: Canvas, p: Paint, x: Int, dir: Int, top: Int, baseline: Int, bottom: Int,
+            text: CharSequence, start: Int, end: Int, first: Boolean, layout: Layout?
+        ) {
+            val savedColor = p.color
+            val savedStyle = p.style
+            val savedAA = p.isAntiAlias
+            val savedWidth = p.strokeWidth
+            val savedCap = p.strokeCap
+            p.isAntiAlias = true
+            p.style = Paint.Style.STROKE
+            p.strokeWidth = strokePx
+            p.strokeCap = Paint.Cap.BUTT
+
+            val t = top.toFloat()
+            val b = bottom.toFloat()
+            val cy = baseline - p.textSize * 0.32f
+            val x0 = x + dir * padPx
+            val iw = stepPx * 0.62f
+            val ih = iw * 0.82f
+            fun cx(level: Int): Float = x0 + dir * (level * stepPx + stepPx / 2f)
+            fun guide(level: Int): Int = guideColors[level % guideColors.size]
+
+            // (1) خطوط الأسلاف المستمرّة
+            val ancestors = if (hasElbow) depth - 1 else depth
+            for (k in 0 until ancestors) {
+                if (k < cont.size && cont[k]) {
+                    p.color = guide(k)
+                    c.drawLine(cx(k), t, cx(k), b, p)
+                }
+            }
+
+            // (2) وصلة السطر نفسه
+            if (hasElbow && depth >= 1) {
+                val e = depth - 1
+                val ex = cx(e)
+                p.color = guide(e)
+                if (first) {
+                    val hEnd = cx(depth) - dir * (iw / 2f + strokePx * 1.5f)
+                    if (isLast) {
+                        val r = minOf(stepPx * 0.35f, (cy - t).coerceAtLeast(0f))
+                        val path = Path()
+                        path.moveTo(ex, t)
+                        path.lineTo(ex, cy - r)
+                        path.quadTo(ex, cy, ex + dir * r, cy)
+                        path.lineTo(hEnd, cy)
+                        c.drawPath(path, p)
+                    } else {
+                        c.drawLine(ex, t, ex, b, p)
+                        c.drawLine(ex, cy, hEnd, cy, p)
+                    }
+                } else if (!isLast) {
+                    c.drawLine(ex, t, ex, b, p)
+                }
+            }
+
+            // (3) الأيقونة
+            if (first && icon != 0) {
+                val ix = cx(depth)
+                when (icon) {
+                    1 -> {
+                        p.style = Paint.Style.FILL
+                        p.color = iconColor
+                        val tabH = ih * 0.32f
+                        c.drawRoundRect(
+                            RectF(ix - iw / 2f, cy - ih / 2f, ix - iw / 2f + iw * 0.45f, cy - ih / 2f + tabH * 1.6f),
+                            ih * 0.14f, ih * 0.14f, p
+                        )
+                        c.drawRoundRect(
+                            RectF(ix - iw / 2f, cy - ih / 2f + ih * 0.18f, ix + iw / 2f, cy + ih / 2f),
+                            ih * 0.16f, ih * 0.16f, p
+                        )
+                    }
+                    2 -> {
+                        val w = iw * 0.78f
+                        val h = ih * 1.18f
+                        val l = ix - w / 2f
+                        val r = ix + w / 2f
+                        val tp = cy - h / 2f
+                        val bt = cy + h / 2f
+                        val fold = w * 0.38f
+                        val doc = Path()
+                        doc.moveTo(l, tp)
+                        doc.lineTo(r - fold, tp)
+                        doc.lineTo(r, tp + fold)
+                        doc.lineTo(r, bt)
+                        doc.lineTo(l, bt)
+                        doc.close()
+                        p.style = Paint.Style.FILL
+                        p.color = treeAlpha(iconColor, 0x26)
+                        c.drawPath(doc, p)
+                        p.style = Paint.Style.STROKE
+                        p.strokeWidth = strokePx
+                        p.color = iconColor
+                        c.drawPath(doc, p)
+                        c.drawLine(r - fold, tp, r - fold, tp + fold, p)
+                        c.drawLine(r - fold, tp + fold, r, tp + fold, p)
+                    }
+                    else -> {
+                        p.style = Paint.Style.FILL
+                        p.color = iconColor
+                        c.drawCircle(ix, cy, iw * 0.16f, p)
+                    }
+                }
+            }
+
+            // (4) بداية خط الأبناء أسفل الأيقونة (يستمرّ على الأسطر الملتفّة أيضاً)
+            if (hasChildren) {
+                p.style = Paint.Style.STROKE
+                p.strokeWidth = strokePx
+                p.color = guide(depth)
+                val y0 = if (first) cy + ih / 2f + strokePx else t
+                c.drawLine(cx(depth), y0, cx(depth), b, p)
+            }
+
+            p.color = savedColor
+            p.style = savedStyle
+            p.isAntiAlias = savedAA
+            p.strokeWidth = savedWidth
+            p.strokeCap = savedCap
         }
     }
 
