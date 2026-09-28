@@ -49,6 +49,20 @@ class PackageDetailActivity : BaseConnectivityActivity() {
     /** حالة الانتساب لناشر الحزمة (متفائلة أيضاً، بنفس أسلوب [isLiked]). */
     private var isSubscribed = false
 
+    /** بعد حفظ ناشر الحزمة لتعديلاته نجلب النسخة المحدَّثة ونعيد رسم الصفحة كلها. */
+    private val editPackageLauncher =
+        registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()) { result ->
+            if (result.resultCode != RESULT_OK) return@registerForActivityResult
+            PackageRepository.fetchPackage(pkg.id) { fresh ->
+                if (fresh == null || isFinishing || isDestroyed) return@fetchPackage
+                pkg = fresh
+                findViewById<TextView>(R.id.txtToolbarTitle).text = pkg.name
+                bindHeader()
+                bindReadmeAndLicense()
+                bindFiles()
+            }
+        }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_package_detail)
@@ -77,6 +91,7 @@ class PackageDetailActivity : BaseConnectivityActivity() {
         bindFiles()
         bindLike()
         bindSubscribe()
+        bindEditButton()
 
         // لا مشروع محدَّد داخل هذه الشاشة (شاشة استعراض فقط)؛ التثبيت الفعلي (مع التحقق من
         // التبعيات) يبقى مسؤولية شاشة المتجر التي فتحت هذه الشاشة، فقط نُعيد معرّف الحزمة إليها.
@@ -90,6 +105,21 @@ class PackageDetailActivity : BaseConnectivityActivity() {
 
     override fun onConnectionRestored() {
         bindPublisher()
+    }
+
+    /** زر «تعديل الحزمة»: مرئي لناشرها فقط (المستخدم الحالي == pkg.publisherUid). */
+    private fun bindEditButton() {
+        val btn = findViewById<View>(R.id.btnDetailEdit)
+        val uid = AuthRepository.currentUid()
+        if (uid == null || uid != pkg.publisherUid) { btn.visibility = View.GONE; return }
+        btn.visibility = View.VISIBLE
+        btn.setOnClickListener {
+            if (!isOnline()) { showOfflineOverlay(); return@setOnClickListener }
+            editPackageLauncher.launch(
+                android.content.Intent(this, EditPackageActivity::class.java)
+                    .putExtra(EditPackageActivity.EXTRA_PACKAGE_ID, pkg.id)
+            )
+        }
     }
 
     private fun bindHeader() {
@@ -274,7 +304,7 @@ class PackageDetailActivity : BaseConnectivityActivity() {
     }
 
     /**
-     * يعرض قسم README.md كسلسلة مقاطع (عبر [MarkdownLite.splitLiveCodeBlocks]) بدل TextView
+     * يعرض قسم README.md كسلسلة مقاطع (عبر [DocumentationContainer.splitLiveCodeBlocks]) بدل TextView
      * واحد ثابت: كل مقطع نصي عادي يُعرَض كالمعتاد، وكل كتلة كود ```rin ```/```indsin ``` تُستخرَج
      * إلى بطاقة "معاينة حية" منفصلة (عبر [buildLivePreviewCard]) — تشغيل حقيقي للكود عبر المحرّك
      * الأصلي، لا مجرّد نص كود ثابت.
@@ -287,28 +317,28 @@ class PackageDetailActivity : BaseConnectivityActivity() {
         val readme = contents.readme
         // خلفية صفحة مخصَّصة عبر `[*Page_background/#hex*]` في أي مكان من README — تُطبَّق على
         // حاوية القسم كاملة قبل بناء المقاطع، فلا أثر مرئي لسطر الصياغة نفسه (انظر
-        // MarkdownLite.extractPageBackground / pageBackgroundLineRegex).
+        // DocumentationContainer.extractPageBackground / pageBackgroundLineRegex).
         // الصفحة دائماً بطاقة مدوَّرة بحشوة مريحة: خلفية README المخصَّصة (صلبة/متدرّجة) أو بطاقة
         // افتراضية بحدّ خفيف تناسب الثيم الفاتح/الداكن (سابقاً: لا حشوة ولا زوايا، فيلاصق النصُّ الحافة).
-        val customBg = if (!readme.isNullOrBlank()) MarkdownLite.extractPageBackground(readme) else null
+        val customBg = if (!readme.isNullOrBlank()) DocumentationContainer.extractPageBackground(readme) else null
         applyReadmePageStyle(containerReadme, customBg)
         if (readme.isNullOrBlank()) {
             containerReadme.addView(buildReadmeTextSegment(getString(R.string.package_detail_no_readme)))
         } else {
-            for (segment in MarkdownLite.splitReadmeSegments(readme)) {
+            for (segment in DocumentationContainer.splitReadmeSegments(readme)) {
                 when (segment) {
-                    is MarkdownLite.MarkdownSegment.Text -> {
+                    is DocumentationContainer.MarkdownSegment.Text -> {
                         if (segment.markdown.isNotBlank()) {
                             containerReadme.addView(buildReadmeTextSegment(segment.markdown))
                         }
                     }
-                    is MarkdownLite.MarkdownSegment.LiveCode -> {
+                    is DocumentationContainer.MarkdownSegment.LiveCode -> {
                         containerReadme.addView(buildLivePreviewCard(segment.code))
                     }
                     // جدول Markdown حقيقي (خلايا تلتفّ + تمرير أفقي + ثيم فاتح/داكن) بدل صندوق نصّي مقصوص.
-                    is MarkdownLite.MarkdownSegment.Table -> {
+                    is DocumentationContainer.MarkdownSegment.Table -> {
                         containerReadme.addView(
-                            MarkdownLite.buildTableView(this, segment, if (containerReadmeHasContent) dp(10f) else 0)
+                            DocumentationContainer.buildTableView(this, segment, if (containerReadmeHasContent) dp(10f) else 0)
                         )
                     }
                 }
@@ -330,12 +360,12 @@ class PackageDetailActivity : BaseConnectivityActivity() {
 
     /** يطبّق شكل "الصفحة" على حاوية README: زوايا مدوَّرة + حشوة + (بلا خلفية مخصَّصة) بطاقة بلون
      *  سطح وحدّ رفيع يتبعان الثيم الحالي. */
-    private fun applyReadmePageStyle(container: LinearLayout, customBg: MarkdownLite.PageBackground?) {
+    private fun applyReadmePageStyle(container: LinearLayout, customBg: DocumentationContainer.PageBackground?) {
         val dark = (resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) ==
             android.content.res.Configuration.UI_MODE_NIGHT_YES
         val drawable: GradientDrawable = when (customBg) {
-            is MarkdownLite.PageBackground.Solid -> GradientDrawable().apply { setColor(customBg.color) }
-            is MarkdownLite.PageBackground.Gradient ->
+            is DocumentationContainer.PageBackground.Solid -> GradientDrawable().apply { setColor(customBg.color) }
+            is DocumentationContainer.PageBackground.Gradient ->
                 GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, customBg.colors)
             else -> GradientDrawable().apply {
                 setColor(if (dark) 0xFF1C1E25.toInt() else 0xFFFFFFFF.toInt())
@@ -365,7 +395,7 @@ class PackageDetailActivity : BaseConnectivityActivity() {
         letterSpacing = 0.005f
         setTextColor(getColor(R.color.rin_editor_text))
         autoLinkMask = android.text.util.Linkify.WEB_URLS
-        MarkdownLite.applyTo(this, markdown)
+        DocumentationContainer.applyTo(this, markdown)
     }
 
     /** يبقى false فقط قبل أول مقطع يُضاف فعلياً — يُستخدَم فقط لتفادي هامش علوي زائد لأول مقطع. */
@@ -374,7 +404,7 @@ class PackageDetailActivity : BaseConnectivityActivity() {
 
     /**
      * يبني بطاقة "معاينة حية" واحدة لكتلة كود Rin/indsin مستخرَجة من README: كود المقطع نفسه
-     * (بنفس تنسيق كتلة الكود القياسي في [MarkdownLite])، ثم شارة حالة + إطار معاينة يُملأ فعلياً
+     * (بنفس تنسيق كتلة الكود القياسي في [DocumentationContainer])، ثم شارة حالة + إطار معاينة يُملأ فعلياً
      * عبر [renderLivePreviewFrame] — لا شيء هنا مُحاكى أو ثابت مسبقاً.
      */
     private fun buildLivePreviewCard(code: String): View {
@@ -394,9 +424,9 @@ class PackageDetailActivity : BaseConnectivityActivity() {
             setTextColor(getColor(R.color.rin_editor_text))
         }
         // نستخدم applyTo بدل تعيين .text مباشرة: يُفعِّل LinkMovementMethod، وهو ما يجعل زر
-        // "نسخ" الجديد أعلى بطاقة الكود (MarkdownLite.CopyCodeSpan) قابلاً للنقر فعلياً هنا أيضاً،
+        // "نسخ" الجديد أعلى بطاقة الكود (DocumentationContainer.CopyCodeSpan) قابلاً للنقر فعلياً هنا أيضاً،
         // لا فقط داخل مقاطع README النصية العادية (buildReadmeTextSegment).
-        MarkdownLite.applyTo(txtCode, "```rin\n$code\n```")
+        DocumentationContainer.applyTo(txtCode, "```rin\n$code\n```")
         card.addView(txtCode)
 
         val badge = TextView(this).apply {
@@ -509,7 +539,7 @@ class PackageDetailActivity : BaseConnectivityActivity() {
      */
     private fun bindFiles() {
         val contents = PackagingUtils.readContents(pkg)
-        fileTreeRoot = PackagingUtils.buildFileTree(contents.files)
+        fileTreeRoot = PackagingUtils.buildFileTree(contents.files, contents.folders)
         currentFilesPath = emptyList()
         renderCurrentFilesFolder()
         renderFilesLanguageBar(contents.files)
