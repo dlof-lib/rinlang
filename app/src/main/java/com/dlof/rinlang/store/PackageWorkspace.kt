@@ -146,7 +146,7 @@ class PackageWorkspace(val root: File) {
     fun allFiles(): List<String> =
         root.walkTopDown().filter { it.isFile }.map { relOf(it) }.sorted().toList()
 
-    /** ملفات المكتبة (lib/*.og.rin) — يجب أن يبقى واحد منها على الأقل ليعمل التثبيت. */
+    /** ملفات المكتبة (داخل lib، بامتداد og.rin.) — يجب أن يبقى واحد منها على الأقل ليعمل التثبيت. */
     fun libraryFiles(): List<String> =
         allFiles().filter { it.startsWith("lib/") && it.endsWith(".og.rin") }
 
