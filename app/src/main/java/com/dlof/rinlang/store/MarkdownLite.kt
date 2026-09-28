@@ -21,6 +21,7 @@ import android.os.Looper
 import android.os.SystemClock
 import android.text.Spannable
 import android.text.SpannableStringBuilder
+import android.text.Layout
 import android.text.Spanned
 import android.text.TextPaint
 import android.text.method.LinkMovementMethod
@@ -253,6 +254,15 @@ object MarkdownLite {
     // فوق البطاقة الفاتحة، بدل تراكب أبيض شبه شفاف كان يختفي تماماً فوق خلفية بيضاء.
     private var COLOR_COPY_BUTTON_BG: Int = 0x1F7C5CFF
     private var COLOR_HEADER_RULE: Int = 0xFFE2E6ED.toInt()
+    // شريط رأس بطاقة الكود (أغمق قليلاً من جسم البطاقة) + لون أرقام الأسطر الخافت في هامش الكود.
+    private var COLOR_CODE_HEADER_BG: Int = 0xFFE9E5F6.toInt()
+    private var COLOR_CODE_GUTTER: Int = 0xFF9AA0B5.toInt()
+
+    /** إزاحة عنصر قائمة بحسب عمق التعشيش (بكسل). */
+    private fun listIndentPx(depth: Int): Float = dpPx(4f) + depth * dpPx(20f)
+
+    /** يحوّل [v] (dp) إلى بكسل بكثافة الشاشة الحالية ([currentDensity] تُضبَط في [applyTo]). */
+    private fun dpPx(v: Float): Float = v * currentDensity
 
     /** هل الباليت الحالي داكن — يُضبَط عبر [applyPalette] (انظر [adaptForTheme]). */
     private var darkMode = false
@@ -295,6 +305,8 @@ object MarkdownLite {
             COLOR_SYNTAX_ATTR = 0xFFF2A65A.toInt()
             COLOR_COPY_BUTTON_BG = 0x337C5CFF
             COLOR_HEADER_RULE = 0xFF33363F.toInt()
+            COLOR_CODE_HEADER_BG = 0xFF272A34.toInt()
+            COLOR_CODE_GUTTER = 0xFF6B7280.toInt()
         } else {
             COLOR_RULE = 0xFFDDE2E8.toInt()
             COLOR_CARD_BORDER = 0xFFE2E6ED.toInt()
@@ -322,6 +334,8 @@ object MarkdownLite {
             COLOR_SYNTAX_ATTR = 0xFF9C5700.toInt()
             COLOR_COPY_BUTTON_BG = 0x1F7C5CFF
             COLOR_HEADER_RULE = 0xFFE2E6ED.toInt()
+            COLOR_CODE_HEADER_BG = 0xFFE9E5F6.toInt()
+            COLOR_CODE_GUTTER = 0xFF9AA0B5.toInt()
         }
     }
 
@@ -649,25 +663,69 @@ object MarkdownLite {
             blockGap()
             val content = codeBuffer.toString().trimEnd('\n')
 
-            // بداية البطاقة الكاملة (رأس + خط فاصل + جسم الكود) — نطاق واحد متّصل حتى تُرسَم
-            // الزوايا المدوَّرة والحدّ الخفيف حول الكل معاً، لا حول جسم الكود وحده.
+            // بطاقة كود واحدة متّصلة: [رأس (نقطة اللغة + اسمها + نسخ) على شريط مميَّز] ثم [فراغ صغير]
+            // ثم [أسطر الكود بأرقام أسطر خافتة] ثم [فراغ سفلي صغير] — يُرسَم حولها كلها إطار مدوَّر
+            // واحد بلا خطوط فاصلة داخلية (انظر RoundedCardSpan).
             val cardStart = out.length
             appendCodeHeader(out, codeLang, content)
             out.append('\n')
-            val ruleStart = out.length
-            out.append('\u00A0')
-            out.setSpan(RuleSpan(COLOR_HEADER_RULE, 1.5f), ruleStart, out.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-            out.append('\n')
+            val headerEnd = out.length
+
+            // فراغ علوي بين الرأس وأول سطر كود (سطر مصغَّر بما فيه محرف السطر الجديد).
+            val topPadStart = out.length
+            out.append("\u00A0\n")
+            out.setSpan(RelativeSizeSpan(0.45f), topPadStart, out.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
 
             val start = out.length
             appendHighlightedCode(out, forceLtrPerLine(content))
             val end = out.length
             out.setSpan(TypefaceSpan("monospace"), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
             out.setSpan(RelativeSizeSpan(0.9f), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-            out.setSpan(LeadingMarginSpan.Standard(18), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+
+            // أرقام الأسطر: هامش حقيقي لكل سطر منطقي (تُرسَم في أول سطر مرئي منه فقط، فلا تتكرّر
+            // على الأسطر الملتفّة)، وتُعرَض فقط للكتل التي تتجاوز سطرين حتى لا تثقل المقاطع القصيرة.
+            val logicalLines = content.lines().size
+            val pad = dpPx(14f)
+            if (logicalLines >= 3) {
+                val gutter = dpPx(10f) + logicalLines.toString().length * dpPx(8f)
+                var lineStart = start
+                var number = 1
+                while (lineStart < end) {
+                    var lineEnd = lineStart
+                    while (lineEnd < end && out[lineEnd] != '\n') lineEnd++
+                    if (lineEnd > lineStart) {
+                        out.setSpan(
+                            CodeLineNumberSpan(number.toString(), COLOR_CODE_GUTTER, pad, gutter, dpPx(8f)),
+                            lineStart, lineEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                        )
+                    }
+                    number++
+                    lineStart = lineEnd + 1
+                }
+            } else {
+                out.setSpan(LeadingMarginSpan.Standard(pad.toInt()), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            }
+
+            // فراغ سفلي مصغَّر يمنح آخر سطر كود هامشاً قبل حافة البطاقة.
+            out.append('\n')
+            val bottomPadStart = out.length
+            out.append('\u00A0')
+            out.setSpan(RelativeSizeSpan(0.45f), bottomPadStart, out.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            val cardEnd = out.length
+
+            // حشوة أفقية موحَّدة للرأس والفراغين (كان الرأس بلا أي حشوة يلاصق الحافة). أسطر الكود
+            // تحمل حشوتها بنفسها (داخل CodeLineNumberSpan أو Standard أعلاه) كي لا يتوقف موضع الرقم
+            // على ترتيب رسم عدّة LeadingMarginSpan على الفقرة نفسها.
+            out.setSpan(LeadingMarginSpan.Standard(pad.toInt()), cardStart, start, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            out.setSpan(LeadingMarginSpan.Standard(pad.toInt()), bottomPadStart, cardEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
             out.setSpan(
-                RoundedCardSpan(COLOR_CODE_BLOCK_BG, COLOR_CARD_BORDER, cardStart, end),
-                cardStart, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                RoundedCardSpan(
+                    COLOR_CODE_BLOCK_BG, COLOR_CARD_BORDER, cardStart, cardEnd,
+                    cornerRadius = dpPx(12f), insetTop = dpPx(7f), insetBottom = dpPx(6f),
+                    borderWidth = dpPx(1f).coerceAtLeast(1f),
+                    headerBg = COLOR_CODE_HEADER_BG, headerEnd = headerEnd, headerDivider = COLOR_HEADER_RULE
+                ),
+                cardStart, cardEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
             )
             codeBuffer.clear()
             codeLang = ""
@@ -841,20 +899,16 @@ object MarkdownLite {
                     val content = m.groupValues[2]
                     if (lastWasListItem) out.append("\n") else blockGap()
                     val lineStart = out.length
-                    val glyphStart = out.length
-                    out.append(if (checked) "\u2611 " else "\u2610 ")
-                    out.setSpan(
-                        ForegroundColorSpan(if (checked) COLOR_TASK_DONE else COLOR_TASK_PENDING),
-                        glyphStart, out.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
-                    )
                     val textStart = out.length
                     appendInline(out, content)
                     if (checked) {
                         out.setSpan(StrikethroughSpan(), textStart, out.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
                         out.setSpan(ForegroundColorSpan(COLOR_TASK_PENDING), textStart, out.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
                     }
+                    // مربّع اختيار مرسوم فعلياً (بدل حرف ☐/☑): مربّع مدوَّر بحدّ للمعلَّق، ومملوء بلون
+                    // النجاح مع علامة صحّ بيضاء للمُنجَز — يتحاذى مع أول سطر ويبقى الالتفاف معلَّقاً.
                     out.setSpan(
-                        LeadingMarginSpan.Standard(depth * 24, depth * 24 + 30),
+                        TaskBoxSpan(checked, COLOR_TASK_DONE, COLOR_TASK_PENDING, listIndentPx(depth), dpPx(26f)),
                         lineStart, out.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
                     )
                     lastWasListItem = true
@@ -867,16 +921,15 @@ object MarkdownLite {
                     val content = m.groupValues[2]
                     if (lastWasListItem) out.append("\n") else blockGap()
                     val lineStart = out.length
-                    val numStart = out.length
-                    out.append("$number. ")
-                    out.setSpan(StyleSpan(Typeface.BOLD), numStart, out.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-                    out.setSpan(
-                        ForegroundColorSpan(BULLET_DEPTH_COLORS[depth % BULLET_DEPTH_COLORS.size]),
-                        numStart, out.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
-                    )
                     appendInline(out, content)
+                    // الرقم يُرسَم في الهامش بعرض ثابت محاذى نحو النص (الأرقام 1..99 تتراصّ عمودياً)،
+                    // وتبقى الأسطر الملتفّة معلَّقة تماماً تحت أول حرف من النص لا تحت الرقم.
+                    val label = "$number."
                     out.setSpan(
-                        LeadingMarginSpan.Standard(depth * 24, depth * 24 + 34),
+                        OrderedMarkerSpan(
+                            label, BULLET_DEPTH_COLORS[depth % BULLET_DEPTH_COLORS.size],
+                            listIndentPx(depth), dpPx(8f) + label.length * dpPx(8f), dpPx(8f)
+                        ),
                         lineStart, out.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
                     )
                     lastWasListItem = true
@@ -889,16 +942,15 @@ object MarkdownLite {
                     if (lastWasListItem) out.append("\n") else blockGap()
                     val lineStart = out.length
                     appendInline(out, content)
+                    // علامة بحسب العمق: دائرة ممتلئة ← حلقة مفرغة ← مربّع مدوَّر (بدل نقطة BulletSpan
+                    // الصغيرة الموحَّدة الشكل)، بنفس ألوان الأعماق، مع هامش معلَّق واحد متّسق.
                     out.setSpan(
-                        BulletSpan(22, BULLET_DEPTH_COLORS[depth % BULLET_DEPTH_COLORS.size]),
+                        ListMarkerSpan(
+                            BULLET_DEPTH_COLORS[depth % BULLET_DEPTH_COLORS.size], depth,
+                            listIndentPx(depth), dpPx(20f)
+                        ),
                         lineStart, out.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
                     )
-                    if (depth > 0) {
-                        out.setSpan(
-                            LeadingMarginSpan.Standard(depth * 24, depth * 24),
-                            lineStart, out.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
-                        )
-                    }
                     lastWasListItem = true
                     i++
                 }
@@ -2969,7 +3021,12 @@ object MarkdownLite {
         private val cornerRadius: Float = 16f,
         private val insetTop: Float = 5f,
         private val insetBottom: Float = 5f,
-        private val borderWidth: Float = 2f
+        private val borderWidth: Float = 2f,
+        // اختياري (بطاقات الكود): شريط رأس بلون مختلف يغطّي الأسطر التي تبدأ قبل [headerEnd]،
+        // مع خط فاصل رفيع بلون [headerDivider] أسفل آخر سطر منه. 0 = بلا رأس (سلوك قديم).
+        private val headerBg: Int = 0,
+        private val headerEnd: Int = -1,
+        private val headerDivider: Int = 0
     ) : LineBackgroundSpan {
         override fun drawBackground(
             canvas: Canvas, paint: Paint,
@@ -2978,7 +3035,15 @@ object MarkdownLite {
         ) {
             val isFirst = start <= spanStart
             val isLast = end >= spanEnd
-            val rect = RectF(left.toFloat(), top - insetTop, right.toFloat(), bottom + insetBottom)
+            val hasHeader = headerBg != 0 && headerEnd > spanStart
+            val isHeaderLine = hasHeader && start < headerEnd
+
+            // الأسطر متجاورة تماماً في Layout؛ الامتداد الإضافي (inset) لأول سطر وآخر سطر فقط، وإلا
+            // تراكبت خلفيات الأسطر الوسطى فغطّت جزءاً من حدّ الجانبين وحدّ الرأس عند كل التقاء.
+            val half = borderWidth / 2f
+            val rectTop = if (isFirst) top - insetTop else top.toFloat()
+            val rectBottom = if (isLast) bottom + insetBottom else bottom.toFloat()
+            val rect = RectF(left.toFloat() + half, rectTop, right.toFloat() - half, rectBottom)
             val corner = cornerRadius
             val radii = floatArrayOf(
                 if (isFirst) corner else 0f, if (isFirst) corner else 0f, // أعلى-يسار
@@ -2991,22 +3056,222 @@ object MarkdownLite {
             val savedColor = paint.color
             val savedStyle = paint.style
             val savedAA = paint.isAntiAlias
+            val savedWidth = paint.strokeWidth
             paint.isAntiAlias = true
 
             paint.style = Paint.Style.FILL
-            paint.color = bgColor
+            paint.color = if (isHeaderLine) headerBg else bgColor
             canvas.drawPath(path, paint)
 
-            if (isFirst || isLast) {
+            // خط فاصل الرأس: يُرسَم أعلى أول سطر من الجسم (بعد تعبئته) كي لا تُغطّي تعبئة السطر
+            // التالي نصفه.
+            if (hasHeader && headerDivider != 0 && start == headerEnd) {
+                paint.style = Paint.Style.STROKE
+                paint.strokeWidth = borderWidth
+                paint.color = headerDivider
+                val y = rect.top + borderWidth / 2f
+                canvas.drawLine(rect.left, y, rect.right, y, paint)
+            }
+
+            // الحدّ: يُرسَم لكل سطر (الجانبان دائماً، والأعلى/الأسفل لأول/آخر سطر فقط) بقصّ المنطقة
+            // بحيث لا تظهر خطوط أفقية داخلية بين الأسطر — سابقاً كان الحدّ يُرسَم حول أول وآخر سطر
+            // فقط فيظهر خط فاصل تحت السطر الأول وتغيب الجوانب عن الأسطر الوسطى.
+            if (borderWidth > 0f) {
+                canvas.save()
+                val clipTop = if (isFirst) rect.top - borderWidth else rect.top + borderWidth
+                val clipBottom = if (isLast) rect.bottom + borderWidth else rect.bottom - borderWidth
+                canvas.clipRect(rect.left - borderWidth, clipTop, rect.right + borderWidth, clipBottom)
                 paint.style = Paint.Style.STROKE
                 paint.strokeWidth = borderWidth
                 paint.color = borderColor
                 canvas.drawPath(path, paint)
+                canvas.restore()
             }
 
             paint.color = savedColor
             paint.style = savedStyle
             paint.isAntiAlias = savedAA
+            paint.strokeWidth = savedWidth
+        }
+    }
+
+    /** علامة قائمة نقطية تُرسَم في هامش أول سطر من العنصر: دائرة ممتلئة (عمق 0)، حلقة مفرغة
+     *  (عمق 1)، مربّع مدوَّر (عمق 2)، تدور بعدها. ينفرد هذا الـSpan بالإزاحة والهامش المعلَّق
+     *  معاً (بدل BulletSpan + LeadingMarginSpan.Standard المتراكبين سابقاً)، ويحترم RTL عبر [dir]. */
+    private class ListMarkerSpan(
+        private val color: Int,
+        private val depth: Int,
+        private val indentPx: Float,
+        private val gutterPx: Float
+    ) : LeadingMarginSpan {
+        override fun getLeadingMargin(first: Boolean): Int = (indentPx + gutterPx).toInt()
+
+        override fun drawLeadingMargin(
+            c: Canvas, p: Paint, x: Int, dir: Int, top: Int, baseline: Int, bottom: Int,
+            text: CharSequence, start: Int, end: Int, first: Boolean, layout: Layout?
+        ) {
+            if (!first) return
+            val savedColor = p.color
+            val savedStyle = p.style
+            val savedAA = p.isAntiAlias
+            val savedWidth = p.strokeWidth
+            p.isAntiAlias = true
+            p.color = color
+
+            val radius = (p.textSize * 0.17f).coerceAtLeast(2.5f)
+            val cx = x + dir * (indentPx + (gutterPx - dpPx(6f)) / 2f)
+            val cy = baseline - p.textSize * 0.32f
+            when (depth % 3) {
+                0 -> {
+                    p.style = Paint.Style.FILL
+                    c.drawCircle(cx, cy, radius, p)
+                }
+                1 -> {
+                    p.style = Paint.Style.STROKE
+                    p.strokeWidth = (radius * 0.5f).coerceAtLeast(1.5f)
+                    c.drawCircle(cx, cy, radius - p.strokeWidth / 2f, p)
+                }
+                else -> {
+                    p.style = Paint.Style.FILL
+                    val side = radius * 0.95f
+                    c.drawRoundRect(RectF(cx - side, cy - side, cx + side, cy + side), side * 0.3f, side * 0.3f, p)
+                }
+            }
+
+            p.color = savedColor
+            p.style = savedStyle
+            p.isAntiAlias = savedAA
+            p.strokeWidth = savedWidth
+        }
+    }
+
+    /** رقم عنصر قائمة مرقَّمة يُرسَم في هامش أول سطر بخط عريض ملوَّن، محاذى نحو النص (الأرقام
+     *  متراصّة على الحافة نفسها مهما اختلف عدد خاناتها)، مع هامش معلَّق ثابت للأسطر الملتفّة. */
+    private class OrderedMarkerSpan(
+        private val label: String,
+        private val color: Int,
+        private val indentPx: Float,
+        private val gutterPx: Float,
+        private val gapPx: Float
+    ) : LeadingMarginSpan {
+        override fun getLeadingMargin(first: Boolean): Int = (indentPx + gutterPx).toInt()
+
+        override fun drawLeadingMargin(
+            c: Canvas, p: Paint, x: Int, dir: Int, top: Int, baseline: Int, bottom: Int,
+            text: CharSequence, start: Int, end: Int, first: Boolean, layout: Layout?
+        ) {
+            if (!first) return
+            val savedColor = p.color
+            val savedStyle = p.style
+            val savedBold = p.isFakeBoldText
+            p.color = color
+            p.style = Paint.Style.FILL
+            p.isFakeBoldText = true
+            val w = p.measureText(label)
+            val drawX = if (dir > 0) x + indentPx + gutterPx - gapPx - w else x - indentPx - gutterPx + gapPx
+            c.drawText(label, drawX, baseline.toFloat(), p)
+            p.color = savedColor
+            p.style = savedStyle
+            p.isFakeBoldText = savedBold
+        }
+    }
+
+    /** مربّع اختيار حقيقي لعنصر مهمّة `- [ ]`/`- [x]`: مربّع مدوَّر بحدّ للمعلَّق، ومملوء مع علامة
+     *  صحّ بيضاء للمُنجَز. يُرسَم في هامش أول سطر ويحاذي وسط الخط عمودياً. */
+    private class TaskBoxSpan(
+        private val checked: Boolean,
+        private val doneColor: Int,
+        private val pendingColor: Int,
+        private val indentPx: Float,
+        private val gutterPx: Float
+    ) : LeadingMarginSpan {
+        override fun getLeadingMargin(first: Boolean): Int = (indentPx + gutterPx).toInt()
+
+        override fun drawLeadingMargin(
+            c: Canvas, p: Paint, x: Int, dir: Int, top: Int, baseline: Int, bottom: Int,
+            text: CharSequence, start: Int, end: Int, first: Boolean, layout: Layout?
+        ) {
+            if (!first) return
+            val savedColor = p.color
+            val savedStyle = p.style
+            val savedAA = p.isAntiAlias
+            val savedWidth = p.strokeWidth
+            val savedCap = p.strokeCap
+            val savedJoin = p.strokeJoin
+            p.isAntiAlias = true
+
+            val size = p.textSize * 0.8f
+            val cx = x + dir * (indentPx + size / 2f)
+            val cy = baseline - p.textSize * 0.32f
+            val box = RectF(cx - size / 2f, cy - size / 2f, cx + size / 2f, cy + size / 2f)
+            val corner = size * 0.24f
+            if (checked) {
+                p.style = Paint.Style.FILL
+                p.color = doneColor
+                c.drawRoundRect(box, corner, corner, p)
+                p.style = Paint.Style.STROKE
+                p.color = 0xFFFFFFFF.toInt()
+                p.strokeWidth = (size * 0.13f).coerceAtLeast(2f)
+                p.strokeCap = Paint.Cap.ROUND
+                p.strokeJoin = Paint.Join.ROUND
+                val check = Path().apply {
+                    moveTo(box.left + size * 0.24f, cy)
+                    lineTo(box.left + size * 0.43f, cy + size * 0.2f)
+                    lineTo(box.left + size * 0.78f, cy - size * 0.22f)
+                }
+                c.drawPath(check, p)
+            } else {
+                val bw = (size * 0.1f).coerceAtLeast(1.5f)
+                p.style = Paint.Style.STROKE
+                p.color = pendingColor
+                p.strokeWidth = bw
+                val inset = bw / 2f
+                c.drawRoundRect(
+                    RectF(box.left + inset, box.top + inset, box.right - inset, box.bottom - inset),
+                    corner, corner, p
+                )
+            }
+
+            p.color = savedColor
+            p.style = savedStyle
+            p.isAntiAlias = savedAA
+            p.strokeWidth = savedWidth
+            p.strokeCap = savedCap
+            p.strokeJoin = savedJoin
+        }
+    }
+
+    /** رقم سطر خافت في هامش كتلة الكود، مُحاذى لليمين نحو الكود، يُرسَم في أول سطر مرئي من كل سطر
+     *  منطقي فقط (فلا يتكرّر على الأسطر الملتفّة) ويُحجَز له [gutterPx] كاملة دائماً. */
+    private class CodeLineNumberSpan(
+        private val label: String,
+        private val color: Int,
+        private val padPx: Float,
+        private val gutterPx: Float,
+        private val gapPx: Float
+    ) : LeadingMarginSpan {
+        override fun getLeadingMargin(first: Boolean): Int = (padPx + gutterPx + gapPx).toInt()
+
+        override fun drawLeadingMargin(
+            c: Canvas, p: Paint, x: Int, dir: Int, top: Int, baseline: Int, bottom: Int,
+            text: CharSequence, start: Int, end: Int, first: Boolean, layout: Layout?
+        ) {
+            if (!first) return
+            val savedColor = p.color
+            val savedStyle = p.style
+            val savedTypeface = p.typeface
+            val savedSize = p.textSize
+            p.color = color
+            p.style = Paint.Style.FILL
+            p.typeface = Typeface.MONOSPACE
+            p.textSize = savedSize * 0.78f
+            val w = p.measureText(label)
+            val drawX = if (dir > 0) x + padPx + gutterPx - w else x - padPx - gutterPx
+            c.drawText(label, drawX, baseline.toFloat(), p)
+            p.color = savedColor
+            p.style = savedStyle
+            p.typeface = savedTypeface
+            p.textSize = savedSize
         }
     }
 
