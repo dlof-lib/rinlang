@@ -1,0 +1,48 @@
+<svg viewBox="0 0 760 460" xmlns="http://www.w3.org/2000/svg" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif">
+  <rect width="760" height="460" fill="#0b0f0c"/>
+  <text x="20" y="30" fill="#9aa39c" font-size="13">معاينة Indsin الحيّة — Strand tree مرسومة فعليًا</text>
+
+  <!-- phone frame -->
+  <rect x="270" y="46" width="220" height="400" rx="30" fill="#04120a" stroke="#22c55e" stroke-width="2"/>
+  <rect x="282" y="70" width="196" height="352" rx="6" fill="#0e130f"/>
+  <rect x="330" y="56" width="60" height="10" rx="5" fill="#04120a"/>
+
+  <!-- topbar strand -->
+  <rect x="282" y="70" width="196" height="34" fill="#141a15"/>
+  <text x="380" y="92" text-anchor="middle" fill="#f4f6f3" font-size="12" font-weight="700">App</text>
+
+  <!-- card strand -->
+  <rect x="296" y="120" width="168" height="98" rx="12" fill="#10130f" stroke="#1c231d"/>
+  <text x="312" y="142" fill="#f4f6f3" font-size="12" font-weight="700">العدّاد</text>
+  <text x="312" y="164" fill="#22c55e" font-size="22" font-weight="800">3</text>
+  <rect x="312" y="180" width="82" height="26" rx="7" fill="#22c55e"/>
+  <text x="353" y="197" text-anchor="middle" fill="#0a0c0a" font-size="11" font-weight="800">زيادة +1</text>
+
+  <!-- list strands -->
+  <g>
+    <rect x="296" y="230" width="168" height="20" rx="6" fill="#10130f"/>
+    <rect x="296" y="256" width="168" height="20" rx="6" fill="#10130f"/>
+    <rect x="296" y="282" width="168" height="20" rx="6" fill="#10130f"/>
+  </g>
+
+  <!-- bottombar strand -->
+  <rect x="282" y="388" width="196" height="34" fill="#141a15"/>
+  <circle cx="330" cy="405" r="7" fill="#22c55e"/>
+  <circle cx="380" cy="405" r="7" fill="#586158"/>
+  <circle cx="430" cy="405" r="7" fill="#586158"/>
+
+  <!-- side annotation: strand tree -->
+  <g font-size="12" fill="#9aa39c">
+    <text x="530" y="120">Strand tree (JSON):</text>
+    <text x="530" y="146" fill="#4fc1ff">Scaffold</text>
+    <text x="548" y="168">├─ TopBar "App"</text>
+    <text x="548" y="190">├─ Card</text>
+    <text x="566" y="212">│   ├─ Text "العدّاد"</text>
+    <text x="566" y="234">│   └─ Button "زيادة +1"</text>
+    <text x="548" y="256">├─ Column (3× Box)</text>
+    <text x="548" y="278">└─ BottomBar</text>
+    <text x="530" y="312" fill="#586158">x/y/w/h مطلقة يحسبها</text>
+    <text x="530" y="330" fill="#586158">rin_indsin_layout.h، ثم</text>
+    <text x="530" y="348" fill="#586158">renderFabric() يرسمها DOM.</text>
+  </g>
+</svg>
