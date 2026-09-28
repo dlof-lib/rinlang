@@ -1,6 +1,14 @@
+// ============================================================================
+//  examples/relyRIN_live_preview.rin
+//  relyRIN turns Markdown (with ::image/::youtube/::audio/::video directives)
+//  into a self-contained, styled HTML live-preview document. Style overrides
+//  go through relyTheme(overrides), which layers them onto relyThemeDefault();
+//  relyWritePreviewStyled writes the rendered page straight to disk.
+//  See lib/relyRIN.og.rin for the full API (relyLive/relyDocument/relyMedia/...).
+// ============================================================================
 @import "lib/relyRIN.og.rin";
 
-let markdown = """
+let markdown = "
 # RelyRIN
 
 **Live Markdown Preview** from Rin.
@@ -12,19 +20,16 @@ let markdown = """
 ::audio audio.mp3
 
 ::video video.mp4
-""";
+";
 
-let style = relyStyle({
+let style = relyTheme({
     "accent": "#22c88e",
     "accent2": "#d4af37",
     "bg": "#ffffff",
     "maxWidth": "960px"
 });
 
-let preview = relyLiveDocument(
-    markdown,
-    style
-);
+let preview = relyLiveStyled(markdown, style);
 
 writeFile(
     "rely_preview.html",
