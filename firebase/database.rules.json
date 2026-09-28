@@ -85,6 +85,9 @@
         "createdAt": {
           ".validate": "newData.isNumber()"
         },
+        "updatedAt": {
+          ".validate": "newData.isNumber()"
+        },
         "iconBase64": {
           ".validate": "newData.isString() && newData.val().length <= 2000000"
         },
