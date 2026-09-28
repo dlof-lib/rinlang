@@ -164,6 +164,46 @@ object PackageRepository {
             .addOnFailureListener { e -> callback(false, e.message) }
     }
 
+    /** يجلب حزمة واحدة بمعرّفها (مع base64Data)، أو null إن لم تعد موجودة. */
+    fun fetchPackage(packageId: String, callback: (RinPackage?) -> Unit) {
+        packagesRef().child(packageId).addListenerForSingleValueEvent(object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                callback(snapshot.getValue(RinPackage::class.java))
+            }
+
+            override fun onCancelled(error: DatabaseError) = callback(null)
+        })
+    }
+
+    /**
+     * يحدّث حقول حزمة موجودة ([updates]: اسم الحقل -> القيمة الجديدة) عبر updateChildren، فتبقى
+     * الإعجابات والتقييمات والتنزيلات والبلاغات كما هي (لا تُمسّ). يتحقق أولاً أن [uid] هو الناشر
+     * الفعلي؛ وقاعدة الأمان في database.rules.json تمنع أي تعديل من غير صاحب الحزمة أصلاً.
+     * يُضاف تلقائياً الحقل updatedAt.
+     */
+    fun updatePackage(
+        packageId: String,
+        uid: String,
+        updates: Map<String, Any?>,
+        callback: (success: Boolean, error: String?) -> Unit
+    ) {
+        val ref = packagesRef().child(packageId)
+        ref.child("publisherUid").addListenerForSingleValueEvent(object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                val owner = snapshot.getValue(String::class.java)
+                if (owner == null) { callback(false, "الحزمة غير موجودة"); return }
+                if (owner != uid) { callback(false, "لا يمكنك تعديل حزمة لا تخصّك"); return }
+                val payload = HashMap<String, Any?>(updates)
+                payload["updatedAt"] = System.currentTimeMillis()
+                ref.updateChildren(payload)
+                    .addOnSuccessListener { callback(true, null) }
+                    .addOnFailureListener { e -> callback(false, e.message) }
+            }
+
+            override fun onCancelled(error: DatabaseError) = callback(false, error.message)
+        })
+    }
+
     /** يجلب كل الحزم المنشورة، الأحدث أولاً. تحذير: يقرأ كامل الحقل base64Data لكل حزمة. */
     fun fetchAllPackages(callback: (List<RinPackage>) -> Unit) {
         packagesRef().addListenerForSingleValueEvent(object : ValueEventListener {
