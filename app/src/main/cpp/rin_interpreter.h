@@ -20,6 +20,7 @@
 #include <variant>
 #include <functional>
 #include <vector>
+#include <tuple>
 #include <utility>
 #include <chrono>
 #include <mutex>
@@ -632,6 +633,10 @@ private:
     std::unordered_map<std::string, std::string> maskVersions;   // mask -> user-defined identity version
     std::unordered_map<std::string, bool> maskEnabled;           // mask -> active/inactive identity
     std::unordered_map<std::string, std::string> maskNotes;     // mask -> short developer note
+
+    // candle: علاقة موجَّهة id -> id (فوق mask/id خام مباشرة)، مستقلة تماماً عن mask.
+    // كل عنصر: (from, to, relation) — relation قد تكون فارغة (بلا وسم).
+    std::vector<std::tuple<std::string, std::string, std::string>> candleEdges;
     // Candle: طبقة علاقات id-to-id فوق mask/id مباشرة، غير محدودة الصادر (∞ من id).
     // مستقلة تماماً عن mask نفسه؛ أطراف light()/الاستعلامات تُحل عبر candleResolve أولاً
     // (مطابقة تامة لمنطق mask v3/v4: mask معروف -> targetها، وإلا تُعامَل كـ id خام). انظر
