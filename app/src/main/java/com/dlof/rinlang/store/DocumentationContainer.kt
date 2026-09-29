@@ -1,5 +1,6 @@
 package com.dlof.rinlang.store
 
+import android.app.AlertDialog
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -44,6 +45,10 @@ import android.text.style.TypefaceSpan
 import android.text.style.URLSpan
 import android.view.Gravity
 import android.view.View
+import android.webkit.WebResourceRequest
+import android.webkit.WebSettings
+import android.webkit.WebView
+import android.webkit.WebViewClient
 import android.widget.FrameLayout
 import android.widget.HorizontalScrollView
 import android.widget.LinearLayout
@@ -634,12 +639,43 @@ object DocumentationContainer {
         expandedSections: MutableSet<String> = mutableSetOf(),
         baseDir: String? = null,
         dark: Boolean = false,
+        rdoc: Boolean = false,
         onToggle: (() -> Unit)? = null
     ): CharSequence {
         currentBaseDir = baseDir
-        currentLinkRefs = collectLinkRefs(markdown)
+        rdocMode = rdoc
+        collapsibleCounter = 0
+        containerDepth = 0
+        suppressNextGap = false
+        val truncated = rdoc && markdown.length > RDOC_MAX_CHARS
+        val raw = if (truncated) markdown.substring(0, RDOC_MAX_CHARS) else markdown
+        currentMeta = if (rdoc) docMeta + extractMeta(raw) else emptyMap()
+        // `{{مفتاح}}` تُستبدَل بقيم بلوك meta قبل أي تحليل (خارج كتل الكود)؛ `\\{{x}}` تبقى حرفية.
+        val source = if (rdoc) expandVariables(raw, currentMeta) else raw
+        currentHeadings = if (rdoc) docHeadings.ifEmpty { collectHeadings(source) } else emptyList()
+        currentLinkRefs = collectLinkRefs(source)
+        currentElementRefs = if (rdoc) docElementRefs + collectElementRefs(source) else emptyMap()
         applyPalette(dark)
         val out = SpannableStringBuilder()
+        renderBlocks(out, source, expandedSections, onToggle)
+        if (truncated) {
+            out.append("\n\n")
+            appendDiagnosticChip(out, "اقتُطع المستند لتجاوزه الحد المسموح")
+        }
+        return out
+    }
+
+    /**
+     * حلقة بناء الكتل الفعلية (فقرات، عناوين، قوائم، كود، اقتباس، جداول، حاويات rdoc...) على [out] نفسه —
+     * فصلها عن [toSpannable] يسمح لحاويات `:::` بإعادة استدعائها لجسمها على نفس الـbuilder، فتبقى مواضع
+     * البطاقات المدوَّرة ([RoundedCardSpan]) مطلقة وصحيحة داخل الحاوية بلا نسخ Spans بإزاحات خاطئة.
+     */
+    private fun renderBlocks(
+        out: SpannableStringBuilder,
+        markdown: String,
+        expandedSections: MutableSet<String>,
+        onToggle: (() -> Unit)?
+    ) {
         val lines = markdown.lines()
         var i = 0
 
@@ -647,7 +683,6 @@ object DocumentationContainer {
         var codeLang = ""
         val codeBuffer = StringBuilder()
         var lastWasListItem = false
-        var collapsibleAutoIndex = 0
 
         // مكدّس مسافات بادئة لعناصر القوائم: عمق العنصر = موضعه في المكدّس (نسبياً لما قبله) بدل قسمة
         // ثابتة /2 كانت تقفز بمستوى التعشيش بمسافة 4 (المعتادة) مباشرة للمستوى الثالث؛ والتاب = 4 مسافات.
@@ -665,6 +700,8 @@ object DocumentationContainer {
         }
 
         fun blockGap() {
+            // أول كتلة داخل حاوية rdoc تلتصق برأسها بلا سطر فارغ (انظر appendRdocContainer).
+            if (suppressNextGap) { suppressNextGap = false; return }
             if (out.isNotEmpty()) out.append("\n\n")
         }
 
@@ -794,6 +831,57 @@ object DocumentationContainer {
                 // تعريف رابط مرجعي `[id]: url` — يُستهلَك بصمت (يُستخدَم عبر `[نص][id]`).
                 linkRefDefRegex.matches(rawLine) -> { lastWasListItem = false; i++ }
 
+                // ── rdoc: تعليق سطر كامل `؛؛ نص` (لا يُعرَض إطلاقاً) ──
+                rdocMode && trimmed.startsWith("\u061B\u061B") && !trimmed.startsWith("\u061B\u061B\u061B") -> {
+                    i++
+                }
+
+                // ── rdoc: عناوين بأسلوب `= عنوان` … `====== عنوان` (بديل `#`) ──
+                rdocMode && rdocHeadingRegex.matches(trimmed) -> {
+                    val hm = rdocHeadingRegex.find(trimmed)!!
+                    val text = hm.groupValues[2]
+                    when (hm.groupValues[1].length) {
+                        1 -> { sectionGap(); blockGap(); appendHeading(out, text, 1.6f, level = 1) }
+                        2 -> { sectionGap(0.3f); blockGap(); appendHeading(out, text, 1.28f, level = 2) }
+                        3 -> { blockGap(); appendHeading(out, text, 1.15f, level = 3) }
+                        4 -> { blockGap(); appendHeading(out, text, 1.05f, level = 4) }
+                        5 -> { blockGap(); appendHeading(out, text, 0.95f, level = 5, dim = true) }
+                        else -> { blockGap(); appendHeading(out, text, 0.85f, level = 6, dim = true) }
+                    }
+                    lastWasListItem = false
+                    i++
+                }
+
+                // ── rdoc: حاوية `:::` قابلة للتعشيش (انظر appendRdocContainer) ──
+                rdocMode && colonFenceOpenRegex.matches(trimmed) -> {
+                    val header = colonFenceOpenRegex.find(trimmed)!!.groupValues[1]
+                    val scan = scanFence(lines, i, colonFenceOpenRegex, colonFenceCloseRegex)
+                    blockGap()
+                    appendRdocContainer(out, header, scan.body, scan.closed, expandedSections, onToggle)
+                    lastWasListItem = false
+                    i = scan.next
+                }
+
+                // ── rdoc: بلوك بيانات `؛؛؛` (حقائق/meta/مراجع) ──
+                rdocMode && arSemiFenceOpenRegex.matches(trimmed) -> {
+                    val header = arSemiFenceOpenRegex.find(trimmed)!!.groupValues[1]
+                    val scan = scanDataFence(lines, i)
+                    val dataType = header.trim().split(whitespaceRegex)[0].lowercase()
+                    // الصامتة المغلقة (meta/rdoc/مراجع) لا تترك أي فراغ؛ ما سواها يظهر شيء مرئي.
+                    if (dataType !in SILENT_DATA_TYPES || !scan.closed) blockGap()
+                    appendRdocDataBlock(out, header, scan)
+                    lastWasListItem = false
+                    i = if (scan.next > i) scan.next else i + 1
+                }
+
+                // ── rdoc: إغلاق سياج بلا فتح → خطأ مرئي بدل الصمت ──
+                rdocMode && (colonFenceCloseRegex.matches(trimmed) || arSemiFenceCloseRegex.matches(trimmed)) -> {
+                    blockGap()
+                    appendDiagnosticChip(out, "إغلاق سياج بلا فتح")
+                    lastWasListItem = false
+                    i++
+                }
+
                 // `<details><summary>عنوان</summary> ... </details>` بأسلوب GitHub → نفس القسم القابل للطي.
                 trimmed.startsWith("<details", ignoreCase = true) -> {
                     val blockLines = mutableListOf<String>()
@@ -809,7 +897,7 @@ object DocumentationContainer {
                     val rest = if (summary != null) block.substring(summary.range.last + 1) else block
                     val bodyText = rest.replace(detailsTagRegex, "").trim()
                     blockGap()
-                    val sectionId = "det${collapsibleAutoIndex++}:${title.ifBlank { "details" }}"
+                    val sectionId = "det${collapsibleCounter++}:${title.ifBlank { "details" }}"
                     val isOpen = expandedSections.contains(sectionId)
                     appendCollapsibleSection(out, title, bodyText, isOpen) {
                         if (!expandedSections.remove(sectionId)) expandedSections.add(sectionId)
@@ -828,7 +916,7 @@ object DocumentationContainer {
                         bodyLines.add(lines[j]); j++
                     }
                     blockGap()
-                    val sectionId = "sec${collapsibleAutoIndex++}:${title.ifBlank { "وصف" }}"
+                    val sectionId = "sec${collapsibleCounter++}:${title.ifBlank { "وصف" }}"
                     val isOpen = expandedSections.contains(sectionId)
                     appendCollapsibleSection(out, title, bodyLines.joinToString("\n"), isOpen) {
                         if (!expandedSections.remove(sectionId)) expandedSections.add(sectionId)
@@ -996,7 +1084,6 @@ object DocumentationContainer {
             }
         }
         if (inCodeBlock) flushCodeBlock()
-        return out
     }
 
     /**
@@ -1017,6 +1104,16 @@ object DocumentationContainer {
             val headers: List<String>,
             val aligns: List<Int>,
             val rows: List<List<String>>
+        ) : MarkdownSegment()
+
+        /** سطر `:; … ;:` مستقل (rdoc) — يُعرَض عبر [buildMediaView] كملصق تشغيل يفتح WebView مقيَّداً عند النقر.
+         *  [kind] `video`/`web`، [url] الرابط الأصلي (https)، [embedUrl] صفحة التضمين، [heightDp] ارتفاع البطاقة. */
+        data class Media(
+            val kind: String,
+            val url: String,
+            val embedUrl: String,
+            val title: String,
+            val heightDp: Int
         ) : MarkdownSegment()
     }
 
@@ -1060,14 +1157,27 @@ object DocumentationContainer {
      * الكود الأخرى أو داخل قسم قابل للطي `[~...]` تبقى ضمن النص كما كانت.
      */
     fun splitReadmeSegments(markdown: String): List<MarkdownSegment> {
+        val rdoc = isRdocDocument(markdown)
+        // مراجع `*"id"*` على مستوى المستند كله: كل مقطع نصي يُرسَم لاحقاً بشكل مستقل ويحتاج رؤية تعريفات غيره.
+        docElementRefs = if (rdoc) collectElementRefs(markdown) else emptyMap()
+        docMeta = if (rdoc) extractMeta(markdown) else emptyMap()
+        docHeadings = if (rdoc) collectHeadings(markdown) else emptyList()
         val result = mutableListOf<MarkdownSegment>()
-        for (seg in splitLiveCodeBlocks(markdown)) {
-            if (seg is MarkdownSegment.Text) result.addAll(splitTables(seg.markdown)) else result.add(seg)
+        // حاويات `:::` لا تُقطَع بين مقاطع العرض (جدول/معاينة حيّة/وسائط داخلها تبقى في بطاقتها كنص).
+        val chunks = if (rdoc) splitContainerChunks(markdown) else listOf(markdown to false)
+        for ((chunk, isContainer) in chunks) {
+            if (isContainer) {
+                result.add(MarkdownSegment.Text(chunk))
+                continue
+            }
+            for (seg in splitLiveCodeBlocks(chunk)) {
+                if (seg is MarkdownSegment.Text) result.addAll(splitTables(seg.markdown, rdoc)) else result.add(seg)
+            }
         }
         return result
     }
 
-    private fun splitTables(markdown: String): List<MarkdownSegment> {
+    private fun splitTables(markdown: String, rdoc: Boolean = false): List<MarkdownSegment> {
         val lines = markdown.lines()
         val out = mutableListOf<MarkdownSegment>()
         val pending = StringBuilder()
@@ -1088,6 +1198,16 @@ object DocumentationContainer {
                 else if (t == COLLAPSIBLE_CLOSE_MARKER) inSection = false
                 else if (t.startsWith("<details", ignoreCase = true)) inSection = !t.contains("</details>", ignoreCase = true)
                 else if (inSection && t.contains("</details>", ignoreCase = true)) inSection = false
+            }
+            // rdoc: سطر `:; … ;:` مستقل → بطاقة وسائط (فيديو/ويب فيو) بدل نص.
+            if (rdoc && !inFence && !inSection && t.length > 4 && t.startsWith(":;") && t.endsWith(";:")) {
+                val media = parseMedia(t.substring(2, t.length - 2))
+                if (media != null) {
+                    flushText()
+                    out.add(media)
+                    i++
+                    continue
+                }
             }
             if (!inFence && !inSection && t.contains("|") && i + 1 < lines.size && isTableSeparator(lines[i + 1])) {
                 val header = splitTableRow(t)
@@ -1116,7 +1236,7 @@ object DocumentationContainer {
      * عبر [applyTo] فتعمل الروابط والتشديد والكود المضمَّن والإيموجي داخلها، ويُختار الباليت
      * الفاتح/الداكن من ثيم [context]. [topMarginPx] هامش علوي بالبكسل (الحاوية LinearLayout).
      */
-    fun buildTableView(context: Context, table: MarkdownSegment.Table, topMarginPx: Int = 0): View {
+    fun buildTableView(context: Context, table: MarkdownSegment.Table, topMarginPx: Int = 0, rdoc: Boolean = false): View {
         applyPalette(isDarkMode(context))
         val density = context.resources.displayMetrics.density
         fun dp(v: Float): Int = (v * density + 0.5f).toInt()
@@ -1156,7 +1276,7 @@ object DocumentationContainer {
                     setTextColor(if (isHeader) COLOR_TABLE_HEADER else COLOR_TABLE_TEXT)
                     if (isHeader) setTypeface(typeface, Typeface.BOLD)
                 }
-                applyTo(cell, cells.getOrNull(c).orEmpty())
+                applyTo(cell, cells.getOrNull(c).orEmpty(), rdoc = rdoc)
                 row.addView(cell)
             }
             grid.addView(row)
@@ -1192,7 +1312,8 @@ object DocumentationContainer {
         markdown: String,
         pageContainer: View? = null,
         expandedSections: MutableSet<String> = mutableSetOf(),
-        baseDir: String? = null
+        baseDir: String? = null,
+        rdoc: Boolean = false
     ) {
         // عرض حقيقي للصور المضمَّنة يناسب TextView الفعلي بدل قيمة تقديرية ثابتة دوماً؛ عرض الشاشة
         // الكامل كحدّ أقصى احتياطي إن لم يكن TextView قد قِيس بعد (width == 0 قبل أول تخطيط).
@@ -1201,8 +1322,8 @@ object DocumentationContainer {
             ?: (textView.resources.displayMetrics.widthPixels - (32 * textView.resources.displayMetrics.density).toInt())
                 .coerceAtLeast(DEFAULT_IMAGE_MAX_WIDTH_PX)
         val dark = isDarkMode(textView.context)
-        textView.text = toSpannable(markdown, expandedSections, baseDir, dark) {
-            applyTo(textView, markdown, pageContainer, expandedSections, baseDir)
+        textView.text = toSpannable(markdown, expandedSections, baseDir, dark, rdoc) {
+            applyTo(textView, markdown, pageContainer, expandedSections, baseDir, rdoc)
         }
         textView.movementMethod = LinkMovementMethod.getInstance()
         textView.setLinkTextColor(COLOR_LINK)
@@ -1303,40 +1424,47 @@ object DocumentationContainer {
      */
     private fun appendInline(out: SpannableStringBuilder, text: String) {
         var idx = 0
-        for (match in inlineRegex.findAll(text)) {
+        val b = if (rdocMode) RDOC_GROUP_OFFSET else 0
+        for (match in (if (rdocMode) inlineRegexRdoc else inlineRegex).findAll(text)) {
             if (match.range.first > idx) out.append(text.substring(idx, match.range.first))
             val g = match.groups
             when {
-                g[1] != null -> out.append(g[1]!!.value) // \x حرف مُفلَت → حرفي بلا تنسيق
-                g[2] != null -> appendStyled(out, g[2]!!.value, Typeface.BOLD_ITALIC)
-                g[3] != null -> appendStyled(out, g[3]!!.value, Typeface.BOLD)
-                g[4] != null -> appendStyled(out, g[4]!!.value, Typeface.BOLD)
-                g[5] != null -> appendStrike(out, g[5]!!.value)
-                g[6] != null -> appendCode(out, g[6]!!.value)
-                g[7] != null -> appendHighlight(out, g[7]!!.value)
-                g[8] != null -> appendSticker(out, g[8]!!.value)
-                g[9] != null -> appendMetaBadge(out, g[9]!!.value)
-                g[10] != null && g[11] != null -> appendShieldsBadge(out, g[10]!!.value, g[11]!!.value)
-                g[12] != null && g[13] != null -> appendLink(out, g[12]!!.value, g[13]!!.value)
-                g[14] != null -> appendStyled(out, g[14]!!.value, Typeface.ITALIC)
-                g[15] != null -> appendStyled(out, g[15]!!.value, Typeface.ITALIC)
-                g[16] != null && g[17] != null -> appendImage(out, g[16]!!.value, g[17]!!.value)
-                g[18] != null -> appendAutolink(out, g[18]!!.value)
-                g[19] != null -> out.append('\n')
-                g[20] != null -> appendEmoji(out, g[20]!!.value, match.value)
-                g[21] != null -> appendStyled(out, g[21]!!.value, Typeface.BOLD)
-                g[22] != null -> appendStyled(out, g[22]!!.value, Typeface.ITALIC)
-                g[23] != null -> appendStrike(out, g[23]!!.value)
-                g[24] != null -> appendUnderline(out, g[24]!!.value)
-                g[25] != null -> appendCode(out, g[25]!!.value)
-                g[26] != null -> appendKeycap(out, g[26]!!.value)
-                g[27] != null -> appendHighlight(out, g[27]!!.value)
-                g[28] != null -> appendScript(out, g[28]!!.value, superscript = false)
-                g[29] != null -> appendScript(out, g[29]!!.value, superscript = true)
-                g[30] != null && g[31] != null -> appendLink(out, g[31]!!.value, g[30]!!.value)
-                g[32] != null -> appendHtmlImage(out, g[32]!!.value)
-                g[33] != null -> {} // وسم HTML غلافي (p/div/center/span...) يُسقَط بصمت بدل ظهوره حرفياً
-                g[34] != null -> appendRefLink(out, g[34]!!.value, g[35]?.value.orEmpty(), match.value)
+                // بدائل rdoc تسبق القديمة (فهارسها 1..6 مستقلة، وفهارس القديمة مُزاحة بـb): انظر RDOC_INLINE_PREFIX.
+                rdocMode && g[1] != null -> out.append(g[1]!!.value)
+                rdocMode && g[2] != null -> appendElementLink(out, g[2]!!.value)
+                rdocMode && g[3] != null -> appendPayment(out, "", g[3]!!.value, null, null, null)
+                rdocMode && g[4] != null -> appendMediaInline(out, g[4]!!.value)
+                rdocMode && g[5] != null && g[6] != null -> appendTypedBracket(out, g[5]!!.value, g[6]!!.value, match.value)
+                g[b + 1] != null -> out.append(g[b + 1]!!.value) // \x حرف مُفلَت → حرفي بلا تنسيق
+                g[b + 2] != null -> appendStyled(out, g[b + 2]!!.value, Typeface.BOLD_ITALIC)
+                g[b + 3] != null -> appendStyled(out, g[b + 3]!!.value, Typeface.BOLD)
+                g[b + 4] != null -> appendStyled(out, g[b + 4]!!.value, Typeface.BOLD)
+                g[b + 5] != null -> appendStrike(out, g[b + 5]!!.value)
+                g[b + 6] != null -> appendCode(out, g[b + 6]!!.value)
+                g[b + 7] != null -> appendHighlight(out, g[b + 7]!!.value)
+                g[b + 8] != null -> appendSticker(out, g[b + 8]!!.value)
+                g[b + 9] != null -> appendMetaBadge(out, g[b + 9]!!.value)
+                g[b + 10] != null && g[b + 11] != null -> appendShieldsBadge(out, g[b + 10]!!.value, g[b + 11]!!.value)
+                g[b + 12] != null && g[b + 13] != null -> appendLink(out, g[b + 12]!!.value, g[b + 13]!!.value)
+                g[b + 14] != null -> appendStyled(out, g[b + 14]!!.value, Typeface.ITALIC)
+                g[b + 15] != null -> appendStyled(out, g[b + 15]!!.value, Typeface.ITALIC)
+                g[b + 16] != null && g[b + 17] != null -> appendImage(out, g[b + 16]!!.value, g[b + 17]!!.value)
+                g[b + 18] != null -> appendAutolink(out, g[b + 18]!!.value)
+                g[b + 19] != null -> out.append('\n')
+                g[b + 20] != null -> appendEmoji(out, g[b + 20]!!.value, match.value)
+                g[b + 21] != null -> appendStyled(out, g[b + 21]!!.value, Typeface.BOLD)
+                g[b + 22] != null -> appendStyled(out, g[b + 22]!!.value, Typeface.ITALIC)
+                g[b + 23] != null -> appendStrike(out, g[b + 23]!!.value)
+                g[b + 24] != null -> appendUnderline(out, g[b + 24]!!.value)
+                g[b + 25] != null -> appendCode(out, g[b + 25]!!.value)
+                g[b + 26] != null -> appendKeycap(out, g[b + 26]!!.value)
+                g[b + 27] != null -> appendHighlight(out, g[b + 27]!!.value)
+                g[b + 28] != null -> appendScript(out, g[b + 28]!!.value, superscript = false)
+                g[b + 29] != null -> appendScript(out, g[b + 29]!!.value, superscript = true)
+                g[b + 30] != null && g[b + 31] != null -> appendLink(out, g[b + 31]!!.value, g[b + 30]!!.value)
+                g[b + 32] != null -> appendHtmlImage(out, g[b + 32]!!.value)
+                g[b + 33] != null -> {} // وسم HTML غلافي (p/div/center/span...) يُسقَط بصمت بدل ظهوره حرفياً
+                g[b + 34] != null -> appendRefLink(out, g[b + 34]!!.value, g[b + 35]?.value.orEmpty(), match.value)
             }
             idx = match.range.last + 1
         }
@@ -1922,12 +2050,18 @@ object DocumentationContainer {
         var marqueeSpeedDp: Float? = null
         var marqueeWidthDp: Float? = null
         var directionKey: String? = null
+        var paymentRaw: String? = null
 
         // التسمية الأولى نفسها قد تكون لوناً مجرَّداً بلا نص (`[*#7C5CFF*]`) — عندها لا توجد
         // تسمية نصية منفصلة أصلاً.
         parseHexColor(label)?.let { color = it; label = "" }
 
         for (part in parts.drop(1)) {
+            // `؛: … :؛` — دفع/تبرّع مضمَّن كجزء من الشارة (انظر appendPayment و splitMetaParts).
+            if (part.length >= 5 && part.startsWith("\u061B:") && part.endsWith(":\u061B")) {
+                paymentRaw = part.substring(2, part.length - 2)
+                continue
+            }
             val m = metaBadgeKeyValueRegex.find(part)
             if (m != null) {
                 when (m.groupValues[1].lowercase()) {
@@ -1935,6 +2069,7 @@ object DocumentationContainer {
                     "icon" -> iconRaw = m.groupValues[2].trim()
                     "color" -> parseColorValue(m.groupValues[2].trim())?.let { color = it }
                     "copy" -> copyText = m.groupValues[2].trim()
+                    "pay", "donate" -> paymentRaw = m.groupValues[2].trim()
                     "marquee" -> { marquee = true; m.groupValues[2].trim().toFloatOrNull()?.let { marqueeSpeedDp = it } }
                     "speed" -> m.groupValues[2].trim().toFloatOrNull()?.let { marqueeSpeedDp = it }
                     "width" -> marqueeWidthDp = m.groupValues[2].trim().toFloatOrNull()
@@ -1966,6 +2101,8 @@ object DocumentationContainer {
                 out, label, color, iconRaw, styleKey, marqueeSpeedDp, marqueeWidthDp, directionKey,
                 linkUrl?.let { LinkButtonClickSpan(it) }
             )
+            // دفع/تبرّع: `[*ادعمنا/؛:paypal|ahmad|5 USD:؛*]` أو `[*تبرّع/donate=(patreon|rin)*]`.
+            paymentRaw != null -> appendPayment(out, label, paymentRaw!!, color, styleKey, sizeKey)
             linkUrl != null -> {
                 appendActionButton(out, label, color, iconRaw, styleKey, sizeKey, LinkButtonClickSpan(linkUrl!!))
             }
@@ -2097,13 +2234,19 @@ object DocumentationContainer {
         val parts = mutableListOf<String>()
         val cur = StringBuilder()
         var depth = 0
-        for (ch in raw) {
+        var payDepth = 0 // داخل `؛: … :؛` لا يُقسَم على `/` أيضاً (روابط الدفع تحوي `/`)
+        var k = 0
+        while (k < raw.length) {
+            val ch = raw[k]
             when {
+                ch == '\u061B' && k + 1 < raw.length && raw[k + 1] == ':' -> { payDepth++; cur.append("\u061B:"); k++ }
+                ch == ':' && k + 1 < raw.length && raw[k + 1] == '\u061B' && payDepth > 0 -> { payDepth--; cur.append(":\u061B"); k++ }
                 ch == '(' -> { depth++; cur.append(ch) }
                 ch == ')' -> { if (depth > 0) depth--; cur.append(ch) }
-                ch == '/' && depth == 0 -> { parts.add(cur.toString()); cur.setLength(0) }
+                ch == '/' && depth == 0 && payDepth == 0 -> { parts.add(cur.toString()); cur.setLength(0) }
                 else -> cur.append(ch)
             }
+            k++
         }
         parts.add(cur.toString())
         return parts.map { it.trim() }.filter { it.isNotEmpty() }
@@ -2492,6 +2635,1321 @@ object DocumentationContainer {
 
         // بلا تسطير/لون رابط افتراضي — الشكل مُتحكَّم به بالكامل عبر StickerSpan المرافق لنفس النطاق.
         override fun updateDrawState(ds: TextPaint) {}
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════════════════════
+    //                    لهجة rdoc — Documentation Container (README.rdoc)
+    // ═══════════════════════════════════════════════════════════════════════════════════════════
+    // ملف `.rdoc` لم يعد "Markdown موسَّعاً" فحسب، بل لهجة مستقلة تُفعَّل بترويسة صريحة في أول المستند
+    // (`؛؛؛ rdoc` ثم `؛؛؛`، وتُضاف تلقائياً لأي README.rdoc عبر [ensureRdocHeader]). بدون الترويسة يبقى
+    // المستند Markdown خالصاً، فلا تتأثر ملفات README.md القديمة (مثل `*"نص"*` المائل بين علامتي تنصيص).
+    //
+    // الرموز الجديدة (لا وجود لها في Markdown):
+    //   1) `:::` حاويات تخطيط قابلة للتعشيش:   ::: تحذير عنوان … :::   (note/tip/warning/danger/card/steps/spoiler…)
+    //   2) `؛؛؛` بلوكات بيانات منظَّمة:          ؛؛؛ حقائق … ؛؛؛   |   ؛؛؛ meta … ؛؛؛   |   ؛؛؛ مراجع … ؛؛؛
+    //   3) `*"…"*` استدعاء رابط عنصر بمعرِّفه:   *"install"*  أو  *"install|نص مخصّص"*  أو  *"@user/lib"*
+    //   وأزواج مفتوحة/مغلقة:
+    //   • `؛:` … `:؛` دفع/تبرّع:               ؛:paypal|ahmad|5 USD|ادعمنا:؛   (ويعمل داخل `[* … *]` أيضاً)
+    //   • `:;` … `;:` فيديو/ويب فيو:            :;video https://youtu.be/ID|عنوان;:
+    //   • `[نوع: قيمة]` أنواع للأقواس المربّعة:  [tag: rin] [key: Ctrl] [cmd: rin run x] [date: 2026-09-29] …
+    //
+    // "أصعب وأقوى": حدود صارمة (عمق حاويات ≤ 4، حجم مستند، https فقط للدفع/الوسائط، قوائم بيضاء لمزوّدي
+    // الدفع، تأكيد قبل فتح أي رابط دفع، WebView بلا ملفات ولا JavaScript إلا لمضيفي فيديو موثوقين)،
+    // وأخطاء مرئية بدل الصمت (مرجع مفقود، حاوية غير مغلقة…) + [validate] لفحص المستند كاملاً.
+
+    /** أساس الروابط القانونية لـRin (انظر web/RIN_LINKS.md): ملف شخصي `@user` ومكتبة `@user/lib`. */
+    private const val RIN_LINKS_BASE = "https://dlof-lib.github.io/rinlang/"
+
+    /** أقصى عمق لتعشيش حاويات `:::`؛ ما بعده يُعرَض نصاً مع تنبيه. */
+    private const val RDOC_MAX_CONTAINER_DEPTH = 4
+
+    /** أقصى حجم لمستند rdoc (بالأحرف)؛ ما بعده يُقتطَع مع تنبيه. */
+    private const val RDOC_MAX_CHARS = 400_000
+
+    /** عدد المجموعات الملتقِطة في [RDOC_INLINE_PREFIX] — إزاحة فهارس مجموعات [inlineRegex] القديمة. */
+    private const val RDOC_GROUP_OFFSET = 6
+
+    private var rdocMode = false
+    private var collapsibleCounter = 0
+    private var containerDepth = 0
+    private var suppressNextGap = false
+
+    /** مرجع عنصر قابل للاستدعاء عبر `*"id"*`: رابطه + تسميته الافتراضية. */
+    private class ElementRef(val url: String, val label: String)
+
+    private var currentElementRefs: Map<String, ElementRef> = emptyMap()
+    private var docElementRefs: Map<String, ElementRef> = emptyMap()
+
+    /** متغيّرات المستند (من بلوك `؛؛؛ meta`) و عناوينه — على مستوى المستند كله لأن كل مقطع يُرسَم بمعزل. */
+    private var docMeta: Map<String, String> = emptyMap()
+    private var docHeadings: List<Pair<Int, String>> = emptyList()
+    private var currentMeta: Map<String, String> = emptyMap()
+    private var currentHeadings: List<Pair<Int, String>> = emptyList()
+
+    /** نتيجة مسح سياج (`:::` أو `؛؛؛`): أسطر الجسم، فهرس السطر التالي للسياج، وهل وُجد الإغلاق. */
+    private class FenceScan(val body: List<String>, val next: Int, val closed: Boolean)
+
+    private val colonFenceOpenRegex = Regex("^:{3,}[ \\t]*([^\\s:].*)$")
+    private val colonFenceCloseRegex = Regex("^:{3,}[ \\t]*$")
+    private val arSemiFenceOpenRegex = Regex("^\u061B{3,}[ \\t]*(\\S.*)$")
+    private val arSemiFenceCloseRegex = Regex("^\u061B{3,}[ \\t]*$")
+    private val rdocHeaderRegex = Regex("(?m)^\\s*\u061B{3,}[ \\t]*(?:rdoc|meta|بيانات)(?=[ \\t]|$)", RegexOption.IGNORE_CASE)
+    private val whitespaceRegex = Regex("\\s+")
+    private val metaBadgeScanRegex = Regex("\\[\\*([^\\]]+?)\\*\\]")
+    private val refLineRegex = Regex("^([\\p{L}\\p{N}_.-]+)\\s*=\\s*(\\S.*)$")
+    private val stepItemRegex = Regex("^(?:[-*+]|\\d{1,3}[.)])\\s+(.*)$")
+    private val elementLinkScanRegex = Regex("(?<![*\\\\])\\*\"([^\"\\n]+?)\"\\*(?!\\*)")
+    private val paymentScanRegex = Regex("\u061B:(.+?):\u061B")
+    private val mediaScanRegex = Regex(":;(.+?);:")
+    private val elementIdScanRegex = Regex("\\[\\*[^\\]]*?/\\s*id\\s*=\\s*\\(([^)]*)\\)")
+
+    private val rdocHeadingRegex = Regex("^(={1,6})[ \\t]+(\\S.*)$")
+    private val headingScanRegex = Regex("^(#{1,6}|={1,6})[ \\t]+(\\S.*)$")
+    private val variableRegex = Regex("(\\\\)?\\{\\{\\s*([\\p{L}\\p{N}_.-]+)\\s*\\}\\}")
+    private val changelogLineRegex = Regex("^([+~!-])\\s+(.+)$")
+    private val timelineLineRegex = Regex("^([^:|]{1,30}?)\\s*[:|]\\s+(.+)$")
+    private val faqQuestionRegex = Regex("^(?:\u0633|Q|q)\\s*[:\uFF1A]\\s*(.+)$")
+    private val faqAnswerRegex = Regex("^(?:\u062C|A|a)\\s*[:\uFF1A]\\s*(.+)$")
+    private val linkItemRegex = Regex("^(.+?)\\s*=\\s*(\\S.*)$")
+    private val badgeItemRegex = Regex("^(.+?)\\s*:\\s+(\\S.*)$")
+
+    private val DATA_BLOCK_TYPES = setOf(
+        "rdoc", "meta", "بيانات", "refs", "مراجع", "facts", "حقائق",
+        "links", "روابط", "badges", "شارات", "support", "دعم"
+    )
+private val SILENT_DATA_TYPES = setOf("rdoc", "meta", "بيانات", "refs", "مراجع")
+
+    /** هل [text] مستند rdoc (يحوي ترويسة `؛؛؛ rdoc` أو `؛؛؛ meta`)؟ */
+    fun isRdocDocument(text: String): Boolean = rdocHeaderRegex.containsMatchIn(text)
+
+    /** يضمن وجود ترويسة rdoc في [text] (تُضاف صامتة في أوله إن غابت) — تُستدعى لكل README.rdoc عند القراءة. */
+    fun ensureRdocHeader(text: String): String =
+        if (isRdocDocument(text)) text else "\u061B\u061B\u061B rdoc\n\u061B\u061B\u061B\n\n$text"
+
+    // ─────────────────────────── أنواع الحاويات `:::` ───────────────────────────
+
+    private class ContainerStyle(val color: Int, val icon: String, val label: String, val bar: Boolean)
+
+    private val CONTAINER_STYLES: Map<String, ContainerStyle> = mapOf(
+        "note" to ContainerStyle(0xFF1A56C7.toInt(), "\u2139\uFE0F", "ملاحظة", true),
+        "tip" to ContainerStyle(0xFF1D7A4C.toInt(), "\uD83D\uDCA1", "نصيحة", true),
+        "important" to ContainerStyle(0xFF6A47E8.toInt(), "\u2757", "مهم", true),
+        "warning" to ContainerStyle(0xFFB45F06.toInt(), "\u26A0\uFE0F", "تحذير", true),
+        "danger" to ContainerStyle(0xFFC0392B.toInt(), "\uD83D\uDED1", "خطر", true),
+        "success" to ContainerStyle(0xFF1CA877.toInt(), "\u2705", "تم", true),
+        "quote" to ContainerStyle(0xFF7C5CFF.toInt(), "\u275D", "اقتباس", true),
+        "steps" to ContainerStyle(0xFF22C88E.toInt(), "\u2630", "خطوات", false),
+        "card" to ContainerStyle(0xFF7A8299.toInt(), "\u25A3", "", false),
+        "timeline" to ContainerStyle(0xFF3B9EFF.toInt(), "\u25F7", "الخط الزمني", false),
+        "changelog" to ContainerStyle(0xFF22C88E.toInt(), "\u27F3", "سجل التغييرات", false),
+        "faq" to ContainerStyle(0xFF6A47E8.toInt(), "\u2753", "أسئلة شائعة", false),
+        "toc" to ContainerStyle(0xFF7A8299.toInt(), "\u2630", "الفهرس", false)
+    )
+
+    private val CONTAINER_ALIASES: Map<String, String> = mapOf(
+        "note" to "note", "ملاحظة" to "note", "info" to "note", "معلومة" to "note",
+        "tip" to "tip", "نصيحة" to "tip",
+        "important" to "important", "مهم" to "important",
+        "warning" to "warning", "warn" to "warning", "تحذير" to "warning",
+        "danger" to "danger", "caution" to "danger", "خطر" to "danger",
+        "success" to "success", "نجاح" to "success", "تم" to "success",
+        "quote" to "quote", "اقتباس" to "quote",
+        "steps" to "steps", "خطوات" to "steps",
+        "card" to "card", "بطاقة" to "card",
+        "timeline" to "timeline", "زمني" to "timeline", "جدول-زمني" to "timeline",
+        "changelog" to "changelog", "تغييرات" to "changelog", "سجل-التغييرات" to "changelog",
+        "faq" to "faq", "أسئلة" to "faq",
+        "toc" to "toc", "فهرس" to "toc",
+        "spoiler" to "spoiler", "مخفي" to "spoiler", "طي" to "spoiler"
+    )
+
+    // ─────────────────────────── أنواع الأقواس المربّعة `[نوع: قيمة]` ───────────────────────────
+
+    private val TYPED_BRACKET_TYPES: Map<String, String> = mapOf(
+        "tag" to "tag", "وسم" to "tag",
+        "user" to "user", "mention" to "user", "مستخدم" to "user",
+        "lib" to "lib", "مكتبة" to "lib",
+        "key" to "key", "kbd" to "key", "مفتاح" to "key",
+        "file" to "file", "ملف" to "file",
+        "date" to "date", "تاريخ" to "date",
+        "version" to "version", "إصدار" to "version",
+        "price" to "price", "سعر" to "price",
+        "abbr" to "abbr", "اختصار" to "abbr",
+        "note" to "note", "ملاحظة" to "note",
+        "cmd" to "cmd", "أمر" to "cmd",
+        "email" to "email", "بريد" to "email",
+        "progress" to "progress", "تقدم" to "progress",
+        "rating" to "rating", "تقييم" to "rating",
+        "status" to "status", "حالة" to "status",
+        "color" to "color", "لون" to "color",
+        "link" to "link", "رابط" to "link",
+        "download" to "download", "تحميل" to "download",
+        "count" to "count", "عدد" to "count",
+        "pay" to "pay", "دفع" to "pay",
+        "badge" to "badge", "شارة" to "badge",
+        "icon" to "icon", "أيقونة" to "icon",
+        "time" to "time", "وقت" to "time",
+        "size" to "size", "حجم" to "size",
+        "license" to "license", "ترخيص" to "license",
+        "platform" to "platform", "منصة" to "platform",
+        "lang" to "lang", "لغة" to "lang",
+        "copy" to "copy", "نسخ" to "copy",
+        "phone" to "phone", "هاتف" to "phone",
+        "video" to "video", "فيديو" to "video",
+        "web" to "web", "ويب" to "web",
+        // اختصارات حالة: `[ok: يعمل]` `[warn: تنبيه]` `[error: فشل]` `[new: جديد]`...
+        "ok" to "status:ok", "warn" to "status:warn", "error" to "status:error", "info" to "status:info",
+        "new" to "status:new", "beta" to "status:beta", "stable" to "status:stable",
+        "deprecated" to "status:deprecated", "متوقف" to "status:deprecated"
+    )
+
+    /** يلتقط `[نوع: قيمة]` بأنواع [TYPED_BRACKET_TYPES] في سطر (لـ[validate]). */
+    private val typedBracketScanRegex = Regex(
+        "\\[((?i:" + TYPED_BRACKET_TYPES.keys.joinToString("|") + ")):[ \\t]*([^\\]\\n]+?)\\](?![(\\[])"
+    )
+
+    /**
+     * مقدّمة تعبير [inlineRegexRdoc]: بدائل rdoc تسبق بدائل [inlineRegex] القديمة (فتغلب `*"…"*` على المائل).
+     * مجموعاتها الست (عدد [RDOC_GROUP_OFFSET]): 1 حرف مُفلَت، 2 `*"id"*`، 3 `؛:…:؛`، 4 `:;…;:`، 5/6 `[نوع: قيمة]`.
+     * النوع في 5/6 لا يطابق إلا الأنواع المعروفة، وبعد `]` لا يجوز `(` أو `[` (كي لا يُخطَف رابط عادي).
+     */
+    private val RDOC_INLINE_PREFIX: String =
+        "\\\\([*:;\u061B\\[])" +
+            "|(?<![*\\\\])\\*\"([^\"\\n]+?)\"\\*(?!\\*)" +
+            "|\u061B:(.+?):\u061B" +
+            "|:;(.+?);:" +
+            "|\\[((?i:" + TYPED_BRACKET_TYPES.keys.joinToString("|") + ")):[ \\t]*([^\\]\\n]+?)\\](?![(\\[])"
+
+    private val inlineRegexRdoc = Regex(RDOC_INLINE_PREFIX + "|" + inlineRegex.pattern)
+
+    // ─────────────────────────── مساعدات الروابط ───────────────────────────
+
+    private fun isSafeLinkUrl(url: String): Boolean {
+        val u = url.trim().lowercase()
+        return u.startsWith("https://") || u.startsWith("http://") || u.startsWith("mailto:")
+    }
+
+    private fun isHttpsUrl(url: String): Boolean = url.trim().startsWith("https://", ignoreCase = true)
+
+    private fun hostOf(url: String): String =
+        try {
+            Uri.parse(url.trim()).host.orEmpty().lowercase().removePrefix("www.")
+        } catch (t: Throwable) {
+            ""
+        }
+
+    private val rinHandleRegex = Regex("^@[A-Za-z0-9._-]{1,40}$")
+    private val rinLibRegex = Regex("^[A-Za-z0-9._-]{1,80}$")
+
+    /** `@user` → صفحة الناشر، `@user/lib` → صفحة المكتبة (`.og.rin` تُضاف مرة واحدة، المسافات → `-`). */
+    private fun canonicalRinUrl(handle: String): String? {
+        val h = handle.trim()
+        val slash = h.indexOf('/')
+        val user = if (slash < 0) h else h.substring(0, slash)
+        if (!rinHandleRegex.matches(user)) return null
+        if (slash < 0) return RIN_LINKS_BASE + user
+        val lib = h.substring(slash + 1).trim().replace(' ', '-').removeSuffix(".og.rin")
+        if (!rinLibRegex.matches(lib)) return null
+        return "$RIN_LINKS_BASE$user/$lib.og.rin"
+    }
+
+    private fun resolveElement(key: String, refs: Map<String, ElementRef>): ElementRef? {
+        val k = key.trim()
+        if (k.startsWith("@")) {
+            val url = canonicalRinUrl(k) ?: return null
+            return ElementRef(url, k)
+        }
+        return refs[k.lowercase()]
+    }
+
+    /**
+     * يجمع كل العناصر القابلة للاستدعاء في [markdown]: (أ) أزرار/شارات `[*نص/link=(رابط)/id=(معرّف)*]`،
+     * و(ب) بلوكات `؛؛؛ مراجع` بأسطر `معرّف = رابط | تسمية`. يتجاهل كتل الكود. أول تعريف لمعرّف يفوز.
+     */
+    private fun collectElementRefs(markdown: String): Map<String, ElementRef> {
+        val refs = LinkedHashMap<String, ElementRef>()
+        var inFence = false
+        var inRefs = false
+        for (raw in markdown.lines()) {
+            val t = raw.trim()
+            if (t.startsWith("```")) { inFence = !inFence; continue }
+            if (inFence) continue
+            if (inRefs) {
+                if (arSemiFenceCloseRegex.matches(t) || t.isEmpty()) { inRefs = false; continue }
+                val m = refLineRegex.find(t) ?: continue
+                val parts = m.groupValues[2].split("|", limit = 2)
+                val url = parts[0].trim()
+                if (isSafeLinkUrl(url)) {
+                    refs.putIfAbsent(m.groupValues[1].trim().lowercase(), ElementRef(url, parts.getOrNull(1)?.trim().orEmpty()))
+                }
+                continue
+            }
+            val open = arSemiFenceOpenRegex.find(t)
+            if (open != null) {
+                val type = open.groupValues[1].trim().split(whitespaceRegex)[0].lowercase()
+                if (type == "refs" || type == "مراجع") inRefs = true
+                continue
+            }
+            for (bm in metaBadgeScanRegex.findAll(t)) {
+                val parts = splitMetaParts(bm.groupValues[1])
+                if (parts.size < 2) continue
+                var id: String? = null
+                var link: String? = null
+                for (p in parts.drop(1)) {
+                    val kv = metaBadgeKeyValueRegex.find(p) ?: continue
+                    when (kv.groupValues[1].lowercase()) {
+                        "id" -> id = kv.groupValues[2].trim().lowercase()
+                        "link" -> link = kv.groupValues[2].trim()
+                    }
+                }
+                val idValue = id
+                val linkValue = link
+                if (!idValue.isNullOrEmpty() && linkValue != null && isSafeLinkUrl(linkValue)) {
+                    refs.putIfAbsent(idValue, ElementRef(linkValue, parts[0]))
+                }
+            }
+        }
+        return refs
+    }
+
+    // ─────────────────────────── مسح الأسوار ───────────────────────────
+
+    /** يمسح جسم حاوية `:::` من السطر [start] (سطر الفتح) — كل `:::` فارغ يغلق أقرب حاوية مفتوحة، وتُتجاهَل كتل الكود. */
+    private fun scanFence(lines: List<String>, start: Int, openRegex: Regex, closeRegex: Regex): FenceScan {
+        val body = mutableListOf<String>()
+        var depth = 1
+        var inFence = false
+        var j = start + 1
+        while (j < lines.size) {
+            val t = lines[j].trim()
+            if (t.startsWith("```")) {
+                inFence = !inFence
+            } else if (!inFence) {
+                if (closeRegex.matches(t)) {
+                    depth--
+                    if (depth == 0) return FenceScan(body, j + 1, true)
+                } else if (openRegex.matches(t)) {
+                    depth++
+                }
+            }
+            body.add(lines[j])
+            j++
+        }
+        return FenceScan(body, j, false)
+    }
+
+    /** يمسح بلوك `؛؛؛`: ينتهي عند `؛؛؛` أو عند أول سطر فارغ (غير مغلق) — فلا يبتلع نسيانُ الإغلاق بقية المستند. */
+    private fun scanDataFence(lines: List<String>, start: Int): FenceScan {
+        val body = mutableListOf<String>()
+        var j = start + 1
+        while (j < lines.size) {
+            val t = lines[j].trim()
+            if (arSemiFenceCloseRegex.matches(t)) return FenceScan(body, j + 1, true)
+            if (t.isEmpty()) return FenceScan(body, j, false)
+            body.add(lines[j])
+            j++
+        }
+        return FenceScan(body, j, false)
+    }
+
+    /** يقسّم المستند إلى (نص، هل هو حاوية `:::` كاملة) — الحاوية لا تُقطَع أبداً بين مقاطع العرض. */
+    private fun splitContainerChunks(markdown: String): List<Pair<String, Boolean>> {
+        val lines = markdown.lines()
+        val chunks = mutableListOf<Pair<String, Boolean>>()
+        val pending = StringBuilder()
+        fun flush() {
+            if (pending.isNotBlank()) chunks.add(pending.toString() to false)
+            pending.setLength(0)
+        }
+        var inFence = false
+        var i = 0
+        while (i < lines.size) {
+            val t = lines[i].trim()
+            if (t.startsWith("```")) {
+                inFence = !inFence
+            } else if (!inFence && colonFenceOpenRegex.matches(t)) {
+                val scan = scanFence(lines, i, colonFenceOpenRegex, colonFenceCloseRegex)
+                flush()
+                val block = StringBuilder()
+                for (k in i until scan.next) block.append(lines[k]).append('\n')
+                chunks.add(block.toString() to true)
+                i = scan.next
+                continue
+            }
+            pending.append(lines[i]).append('\n')
+            i++
+        }
+        flush()
+        return chunks
+    }
+
+    // ─────────────────────────── عرض الحاويات `:::` ───────────────────────────
+
+    /** يحوّل بنود القائمة العلوية إلى ترقيم متسلسل (لحاوية `steps`). */
+    private fun numberSteps(body: List<String>): String {
+        var n = 0
+        return body.joinToString("\n") { line ->
+            val m = stepItemRegex.find(line)
+            if (m != null) {
+                n++
+                "$n. ${m.groupValues[1]}"
+            } else {
+                line
+            }
+        }
+    }
+
+    /** `+ أضيف` `~ عُدّل` `! أُصلح` `- حُذف` → بند قائمة بستيكر ملوَّن؛ أي سطر آخر (مثل عنوان الإصدار) يمرّ كما هو. */
+    private fun changelogText(body: List<String>): String = body.joinToString("\n") { line ->
+        val m = changelogLineRegex.find(line.trim())
+        if (m == null) line else {
+            val tag = when (m.groupValues[1]) {
+                "+" -> "[[إضافة|green]]"
+                "~" -> "[[تغيير|info]]"
+                "!" -> "[[إصلاح|gold]]"
+                else -> "[[حذف|danger]]"
+            }
+            "- $tag ${m.groupValues[2]}"
+        }
+    }
+
+    /** `2026-09-29: نص` أو `v1 | نص` → بند بتاريخ/مرحلة عريضة. */
+    private fun timelineText(body: List<String>): String = body.joinToString("\n") { line ->
+        val m = timelineLineRegex.find(line.trim())
+        if (m == null) line else "- **${m.groupValues[1].trim()}** \u2014 ${m.groupValues[2]}"
+    }
+
+    /** `س: سؤال` / `ج: جواب` (أو Q:/A:) → سؤال عريض وجواب متعشِّش تحته. */
+    private fun faqText(body: List<String>): String = body.joinToString("\n") { line ->
+        val t = line.trim()
+        val q = faqQuestionRegex.find(t)
+        val a = faqAnswerRegex.find(t)
+        when {
+            q != null -> "- **\u2753 ${q.groupValues[1]}**"
+            a != null -> "    - ${a.groupValues[1]}"
+            else -> line
+        }
+    }
+
+    /** فهرس تلقائي من عناوين المستند كله (`#` و`=`)، متعشِّش بحسب المستوى. */
+    private fun tocText(): String {
+        if (currentHeadings.isEmpty()) return "لا عناوين في المستند."
+        return currentHeadings.joinToString("\n") { (level, text) ->
+            "    ".repeat((level - 1).coerceIn(0, 4)) + "- " + expandVariables(text, currentMeta)
+        }
+    }
+
+    /** يستبدل `{{مفتاح}}` بقيمة [meta] خارج كتل الكود؛ مفتاح مجهول يبقى كما كُتب (ويُبلِّغ عنه [validate]). */
+    private fun expandVariables(text: String, meta: Map<String, String>): String {
+        if (!text.contains("{{")) return text
+        var inFence = false
+        return text.lines().joinToString("\n") { line ->
+            if (line.trim().startsWith("```")) {
+                inFence = !inFence
+                line
+            } else if (inFence) {
+                line
+            } else {
+                variableRegex.replace(line) { m ->
+                    if (m.groupValues[1].isNotEmpty()) m.value.substring(1)
+                    else meta[m.groupValues[2].lowercase()] ?: m.value
+                }
+            }
+        }
+    }
+
+    /** عناوين المستند (مستوى، نص) من `#` و`=` خارج كتل الكود. */
+    private fun collectHeadings(markdown: String): List<Pair<Int, String>> {
+        val list = ArrayList<Pair<Int, String>>()
+        var inFence = false
+        for (raw in markdown.lines()) {
+            val t = raw.trim()
+            if (t.startsWith("```")) { inFence = !inFence; continue }
+            if (inFence) continue
+            val m = headingScanRegex.find(t) ?: continue
+            list.add(m.groupValues[1].length to m.groupValues[2].replace(headingClosingHashesRegex, "").trim())
+        }
+        return list
+    }
+
+    private fun appendRdocContainer(
+        out: SpannableStringBuilder,
+        header: String,
+        body: List<String>,
+        closed: Boolean,
+        expandedSections: MutableSet<String>,
+        onToggle: (() -> Unit)?
+    ) {
+        val tokens = header.trim().split(whitespaceRegex, limit = 2)
+        val rawType = tokens[0].lowercase()
+        val title = tokens.getOrNull(1)?.trim().orEmpty()
+        val key = CONTAINER_ALIASES[rawType]
+        val danger = 0xFFC0392B.toInt()
+
+        if (containerDepth >= RDOC_MAX_CONTAINER_DEPTH) {
+            appendDiagnosticChip(out, "عمق الحاويات يتجاوز $RDOC_MAX_CONTAINER_DEPTH")
+            body.forEach { line -> out.append('\n'); appendInline(out, line.trim()) }
+            return
+        }
+
+        if (key == "spoiler") {
+            val sectionId = "cnt${collapsibleCounter++}:${title.ifBlank { "spoiler" }}"
+            val isOpen = expandedSections.contains(sectionId)
+            appendCollapsibleSection(out, title.ifBlank { "مخفي" }, body.joinToString("\n"), isOpen) {
+                if (!expandedSections.remove(sectionId)) expandedSections.add(sectionId)
+                onToggle?.invoke()
+            }
+            return
+        }
+
+        val style = CONTAINER_STYLES[key ?: "card"] ?: CONTAINER_STYLES.getValue("card")
+        val accent = adaptForTheme(style.color)
+        val shownTitle = if (key == null) header.trim() else title.ifBlank { style.label }
+        val hasHeader = shownTitle.isNotBlank() || !closed
+
+        val cardStart = out.length
+        if (hasHeader) {
+            val headerStart = out.length
+            out.append(if (shownTitle.isNotBlank()) "${style.icon} $shownTitle" else style.icon)
+            val headerEnd = out.length
+            out.setSpan(StyleSpan(Typeface.BOLD), headerStart, headerEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            out.setSpan(ForegroundColorSpan(if (key == null) COLOR_H_DIM else accent), headerStart, headerEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            if (key == null) {
+                val s = out.length
+                out.append("  \u2716 نوع غير معروف")
+                out.setSpan(ForegroundColorSpan(adaptForTheme(danger)), s, out.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            }
+            if (!closed) {
+                val s = out.length
+                out.append("  \u2716 حاوية غير مغلقة")
+                out.setSpan(ForegroundColorSpan(adaptForTheme(danger)), s, out.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            }
+        }
+        val bodyText = when (key) {
+            "steps" -> numberSteps(body)
+            "changelog" -> changelogText(body)
+            "timeline" -> timelineText(body)
+            "faq" -> faqText(body)
+            "toc" -> tocText()
+            else -> body.joinToString("\n")
+        }
+        if (bodyText.isNotBlank()) {
+            if (hasHeader) out.append('\n')
+            suppressNextGap = true
+            containerDepth++
+            try {
+                renderBlocks(out, bodyText, expandedSections, onToggle)
+            } finally {
+                containerDepth--
+                suppressNextGap = false
+            }
+        }
+        val cardEnd = out.length
+        if (cardEnd <= cardStart) return
+        if (style.bar) out.setSpan(QuoteBarSpan(accent), cardStart, cardEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        out.setSpan(
+            RoundedCardSpan(tintedBackground(accent), accent, cardStart, cardEnd),
+            cardStart, cardEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+        )
+    }
+
+    // ─────────────────────────── عرض بلوكات `؛؛؛` ───────────────────────────
+
+    /** بلوك بيانات `؛؛؛`: `rdoc`/`meta`/`مراجع` صامتة (تُقرأ عبر [extractMeta]/`*"id"*`)، و`حقائق` بطاقة مفتاح: قيمة.
+     *  الفراغ قبل البلوك يضيفه المستدعي (blockGap) فقط عند ظهور شيء مرئي — انظر [renderBlocks]. */
+    private fun appendRdocDataBlock(out: SpannableStringBuilder, header: String, scan: FenceScan) {
+        val tokens = header.trim().split(whitespaceRegex, limit = 2)
+        val type = tokens[0].lowercase()
+        val title = tokens.getOrNull(1)?.trim().orEmpty()
+        if (type !in DATA_BLOCK_TYPES) {
+            appendDiagnosticChip(out, "بلوك ؛؛؛ غير معروف: $type")
+            return
+        }
+        if (type in SILENT_DATA_TYPES) {
+            if (!scan.closed) appendDiagnosticChip(out, "بلوك ؛؛؛ $type غير مغلق")
+            return
+        }
+        if (type == "links" || type == "روابط" || type == "badges" || type == "شارات" || type == "support" || type == "دعم") {
+            appendFlowBlock(out, type, scan)
+            return
+        }
+        val cardStart = out.length
+        val hs = out.length
+        out.append("\u25A4 ${title.ifBlank { "حقائق" }}")
+        out.setSpan(StyleSpan(Typeface.BOLD), hs, out.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        out.setSpan(ForegroundColorSpan(COLOR_HEADING), hs, out.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        for (line in scan.body) {
+            val t = line.trim()
+            if (t.isEmpty() || t.startsWith("\u061B\u061B")) continue
+            out.append('\n')
+            val idx = t.indexOf(':')
+            if (idx > 0 && idx < t.length - 1) {
+                val ks = out.length
+                out.append(t.substring(0, idx).trim())
+                out.setSpan(StyleSpan(Typeface.BOLD), ks, out.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                out.setSpan(ForegroundColorSpan(COLOR_H_DIM), ks, out.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                out.append("   ")
+                appendInline(out, t.substring(idx + 1).trim())
+            } else {
+                appendInline(out, t)
+            }
+        }
+        if (!scan.closed) {
+            out.append("  ")
+            appendDiagnosticChip(out, "بلوك ؛؛؛ غير مغلق")
+        }
+        val cardEnd = out.length
+        out.setSpan(
+            RoundedCardSpan(COLOR_TABLE_BG, COLOR_CARD_BORDER, cardStart, cardEnd),
+            cardStart, cardEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+        )
+    }
+
+    private class LinkItem(val label: String, val url: String, val icon: String?)
+
+    /** سطر بلوك `روابط`: `تسمية = رابط [| أيقونة]` — الطرف الأيمن رابط http(s)/mailto أو معرّف عنصر/`@user`. */
+    private fun parseLinkItem(line: String): LinkItem? {
+        val m = linkItemRegex.find(line.trim()) ?: return null
+        val parts = m.groupValues[2].split("|", limit = 2).map { it.trim() }
+        val target = parts[0]
+        val url = if (isSafeLinkUrl(target)) target else resolveElement(target.trim('"', '*'), currentElementRefs)?.url ?: return null
+        return LinkItem(m.groupValues[1].trim(), url, parts.getOrNull(1)?.takeIf { it.isNotEmpty() })
+    }
+
+    /**
+     * بلوكات "تدفّق" بلا بطاقة: `؛؛؛ روابط` (أزرار روابط)، `؛؛؛ شارات` (`تسمية: قيمة | لون` شارات ثنائية)،
+     * `؛؛؛ دعم` (كل سطر مواصفة دفع/تبرّع كما داخل `؛: :؛`) — عناصرها متجاورة في فقرة واحدة وتلتفّ.
+     */
+    private fun appendFlowBlock(out: SpannableStringBuilder, type: String, scan: FenceScan) {
+        var first = true
+        fun gap() { if (!first) out.append("  ") ; first = false }
+        for (line in scan.body) {
+            val t = line.trim()
+            if (t.isEmpty() || t.startsWith("\u061B\u061B")) continue
+            gap()
+            when (type) {
+                "links", "روابط" -> {
+                    val item = parseLinkItem(t)
+                    if (item == null) appendDiagnosticChip(out, "رابط غير صالح: ${t.take(30)}")
+                    else appendActionButton(out, item.label, null, item.icon, "soft", null, LinkButtonClickSpan(item.url))
+                }
+                "badges", "شارات" -> {
+                    val m = badgeItemRegex.find(t)
+                    if (m == null) appendDiagnosticChip(out, "شارة غير صالحة: ${t.take(30)}")
+                    else {
+                        val vp = m.groupValues[2].split("|", limit = 2).map { it.trim() }
+                        val color = vp.getOrNull(1)?.takeIf { it.isNotEmpty() }
+                        val raw = m.groupValues[1].replace('/', '\u2215') + "/" + vp[0].replace('/', '\u2215') +
+                            (if (color != null) "/color=($color)" else "")
+                        appendMetaBadge(out, raw)
+                    }
+                }
+                else -> appendPayment(out, "", t, null, null, null)
+            }
+        }
+        if (!scan.closed) {
+            out.append("  ")
+            appendDiagnosticChip(out, "بلوك ؛؛؛ غير مغلق")
+        }
+    }
+
+    /** يقرأ بيانات بلوك `؛؛؛ meta`/`بيانات`/`rdoc` (سطر `مفتاح: قيمة`، المفاتيح بأحرف صغيرة) — مثال: title/version/author. */
+    fun extractMeta(markdown: String): Map<String, String> {
+        val meta = LinkedHashMap<String, String>()
+        val lines = markdown.lines()
+        var i = 0
+        while (i < lines.size) {
+            val open = arSemiFenceOpenRegex.find(lines[i].trim())
+            if (open == null) { i++; continue }
+            val scan = scanDataFence(lines, i)
+            val type = open.groupValues[1].trim().split(whitespaceRegex)[0].lowercase()
+            if (type == "rdoc" || type == "meta" || type == "بيانات") {
+                for (line in scan.body) {
+                    val idx = line.indexOf(':')
+                    if (idx > 0) meta.putIfAbsent(line.substring(0, idx).trim().lowercase(), line.substring(idx + 1).trim())
+                }
+            }
+            i = if (scan.next > i) scan.next else i + 1
+        }
+        return meta
+    }
+
+    // ─────────────────────────── عناصر سطرية: مرجع/تشخيص/أنواع الأقواس ───────────────────────────
+
+    /** شريحة خطأ حمراء مرئية (بدل الصمت) — مرجع مفقود، دفع غير صالح، بلوك غير مغلق... */
+    private fun appendDiagnosticChip(out: SpannableStringBuilder, message: String) {
+        val base = 0xFFC0392B.toInt()
+        val start = out.length
+        out.append("\u2716 $message")
+        val end = out.length
+        out.setSpan(StickerSpan(tintedBackground(base, 0x26), softTextColor(base)), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        out.setSpan(StyleSpan(Typeface.BOLD), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        out.setSpan(RelativeSizeSpan(0.84f), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+    }
+
+    /** `*"id"*` أو `*"id|نص"*` أو `*"@user/lib"*` → رابط العنصر؛ معرّف غير معروف → شريحة خطأ مرئية. */
+    private fun appendElementLink(out: SpannableStringBuilder, raw: String) {
+        val parts = raw.split("|", limit = 3)
+        val key = parts[0].trim()
+        val ref = resolveElement(key, currentElementRefs)
+        if (ref == null) {
+            appendDiagnosticChip(out, "مرجع مفقود: $key")
+            return
+        }
+        val shown = parts.getOrNull(1)?.trim().orEmpty().ifBlank { ref.label.ifBlank { key } }
+        // الجزء الثالث اختياري: button/زر (زر ممتلئ) أو soft/outline/solid — وإلا رابط نصي عادي.
+        when (val style = parts.getOrNull(2)?.trim()?.lowercase()) {
+            null, "" -> appendLink(out, shown, ref.url)
+            "button", "زر" -> appendActionButton(out, shown, null, null, null, null, LinkButtonClickSpan(ref.url))
+            "soft", "outline", "solid" -> appendActionButton(out, shown, null, null, style, null, LinkButtonClickSpan(ref.url))
+            else -> appendLink(out, shown, ref.url)
+        }
+    }
+
+    private fun appendChip(
+        out: SpannableStringBuilder, text: String, bg: Int, fg: Int,
+        mono: Boolean = false, extra: CharacterStyle? = null
+    ) {
+        val start = out.length
+        out.append(text)
+        val end = out.length
+        out.setSpan(StickerSpan(bg, fg), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        out.setSpan(StyleSpan(Typeface.BOLD), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        if (mono) out.setSpan(TypefaceSpan("monospace"), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        out.setSpan(RelativeSizeSpan(0.86f), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        if (extra != null) out.setSpan(extra, start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+    }
+
+    private val emailRegex = Regex("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$")
+
+    /** `[نوع: قيمة]` — النوع من [TYPED_BRACKET_TYPES]؛ قيمة فارغة أو نوع غير معروف يبقى نصاً كما كُتب. */
+    private fun appendTypedBracket(out: SpannableStringBuilder, rawType: String, value: String, original: String) {
+        val kind = TYPED_BRACKET_TYPES[rawType.trim().lowercase()]
+        val v = value.trim()
+        if (kind == null || v.isEmpty()) { out.append(original); return }
+        fun bad() = appendDiagnosticChip(out, "قيمة غير صالحة: $original")
+        val accentBg = tintedBackground(COLOR_BULLET, 0x26)
+        val accentFg = softTextColor(COLOR_BULLET)
+        when (kind) {
+            "tag" -> appendChip(out, "#$v", accentBg, accentFg)
+            "user" -> {
+                val url = canonicalRinUrl(if (v.startsWith("@")) v else "@$v")
+                if (url == null) bad()
+                else appendChip(out, if (v.startsWith("@")) v else "@$v", accentBg, accentFg, extra = LinkButtonClickSpan(url))
+            }
+            "lib" -> {
+                val url = canonicalRinUrl(if (v.startsWith("@")) v else "@$v")
+                if (url == null) bad()
+                else appendChip(out, "\uD83D\uDCE6 ${if (v.startsWith("@")) v else "@$v"}", accentBg, accentFg, extra = LinkButtonClickSpan(url))
+            }
+            "key" -> {
+                val keys = v.split("+").map { it.trim() }.filter { it.isNotEmpty() }
+                if (keys.isEmpty()) bad()
+                keys.forEachIndexed { idx, k -> if (idx > 0) out.append(" + "); appendKeycap(out, k) }
+            }
+            "file" -> appendChip(out, "\uD83D\uDCC4 $v", COLOR_INLINE_CODE_BG, COLOR_CODE_TEXT, mono = true)
+            "date" -> appendChip(out, "\uD83D\uDCC5 $v", COLOR_INLINE_CODE_BG, COLOR_CODE_TEXT)
+            "version" -> {
+                val label = "إصدار"
+                val start = out.length
+                out.append("$label $v")
+                out.setSpan(
+                    BadgeTwoToneSpan(label, v, COLOR_INLINE_CODE_BG, COLOR_H_DIM, COLOR_BULLET),
+                    start, out.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                )
+            }
+            "price" -> {
+                val gold = 0xFFFFC94D.toInt()
+                appendChip(out, "\uD83D\uDCB2 $v", tintedBackground(gold, 0x33), COLOR_SYNTAX_BUILTIN)
+            }
+            "abbr" -> {
+                val parts = v.split("|", limit = 2)
+                val term = parts[0].trim()
+                val meaning = parts.getOrNull(1)?.trim().orEmpty()
+                val start = out.length
+                out.append(term)
+                if (meaning.isNotEmpty()) {
+                    out.setSpan(UnderlineSpan(), start, out.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                    out.setSpan(ForegroundColorSpan(COLOR_LINK), start, out.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                    out.setSpan(ToastClickSpan(meaning), start, out.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                }
+            }
+            "note" -> appendChip(out, "\u24D8 $v", tintedBackground(0xFF3B9EFF.toInt(), 0x26), softTextColor(0xFF3B9EFF.toInt()))
+            "cmd" -> appendChip(
+                out, "$ $v", COLOR_INLINE_CODE_BG, COLOR_CODE_TEXT, mono = true,
+                extra = CopyCodeSpan(v, "تم نسخ الأمر")
+            )
+            "email" -> {
+                if (emailRegex.matches(v)) appendChip(out, "\u2709 $v", accentBg, accentFg, extra = LinkButtonClickSpan("mailto:$v"))
+                else bad()
+            }
+            "progress", "rating", "status", "count" -> {
+                val parts = v.split("|", limit = 2).map { it.trim() }
+                val num = parts[0]
+                val lbl = parts.getOrNull(1).orEmpty().replace('/', '\u2215')
+                val ok = when (kind) {
+                    "status" -> num.isNotEmpty()
+                    "count" -> num.replace(",", "").toLongOrNull() != null
+                    else -> num.replace(',', '.').toDoubleOrNull() != null
+                }
+                if (!ok) { bad(); return }
+                when (kind) {
+                    "progress" -> appendMetaBadge(out, "${lbl.ifBlank { "التقدم" }}/progress=($num)")
+                    "rating" -> appendMetaBadge(out, "${lbl.ifBlank { "التقييم" }}/rating=($num)")
+                    "status" -> appendMetaBadge(out, "${lbl.ifBlank { "الحالة" }}/status=($num)")
+                    else -> appendMetaBadge(out, "${lbl.ifBlank { "تنزيلات" }}/downloads=($num)")
+                }
+            }
+            "color" -> {
+                val parts = v.split("|", limit = 2).map { it.trim() }
+                val hex = parts.last()
+                if (parseHexColor(hex) == null) { bad(); return }
+                appendMetaBadge(out, if (parts.size == 2) "${parts[0].replace('/', '\u2215')}/$hex" else hex)
+            }
+            "link", "download" -> {
+                val parts = v.split("|", limit = 2).map { it.trim() }
+                val url = parts[0]
+                if (!isSafeLinkUrl(url)) { bad(); return }
+                val text = parts.getOrNull(1).orEmpty()
+                if (kind == "link") appendLink(out, text.ifBlank { url }, url)
+                else appendActionButton(out, text.ifBlank { "تحميل" }, null, "download", null, null, LinkButtonClickSpan(url))
+            }
+            "badge" -> {
+                val p = v.split("|").map { it.trim() }.filter { it.isNotEmpty() }
+                if (p.isEmpty()) { bad(); return }
+                var label: String? = null
+                val message: String
+                var colorRaw: String? = null
+                when {
+                    p.size >= 3 -> { label = p[0]; message = p[1]; colorRaw = p[2] }
+                    p.size == 2 -> { label = p[0]; message = p[1] }
+                    else -> message = p[0]
+                }
+                val mc = if (colorRaw == null) COLOR_BULLET else (parseColorValue(colorRaw)?.first ?: run { bad(); return })
+                val start = out.length
+                out.append(if (label != null) "$label $message" else message)
+                out.setSpan(
+                    ShieldsBadgeSpan(label, message, 0xFF555555.toInt(), mc, contrastingTextColor(mc)),
+                    start, out.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                )
+                out.setSpan(RelativeSizeSpan(0.8f), start, out.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                out.setSpan(StyleSpan(Typeface.BOLD), start, out.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            }
+            "icon" -> {
+                val p = v.split("|", limit = 2).map { it.trim() }
+                val glyph = iconGlyphFor(p[0]) ?: run { bad(); return }
+                val text = p.getOrNull(1).orEmpty()
+                appendChip(out, if (text.isBlank()) glyph else "$glyph $text", COLOR_INLINE_CODE_BG, COLOR_CODE_TEXT)
+            }
+            "time" -> appendChip(out, "\u23F1 $v", COLOR_INLINE_CODE_BG, COLOR_CODE_TEXT)
+            "size" -> appendChip(out, "\uD83D\uDCBE $v", COLOR_INLINE_CODE_BG, COLOR_CODE_TEXT)
+            "license" -> appendChip(out, "\u2696 $v", tintedBackground(0xFF22C88E.toInt(), 0x26), softTextColor(0xFF22C88E.toInt()))
+            "platform" -> {
+                val names = v.split("|", ",").map { it.trim() }.filter { it.isNotEmpty() }
+                if (names.isEmpty()) { bad(); return }
+                names.forEachIndexed { idx, n ->
+                    if (idx > 0) out.append(" ")
+                    appendChip(out, "${PLATFORM_GLYPHS[n.lowercase()] ?: "\u25CF"} $n", COLOR_INLINE_CODE_BG, COLOR_CODE_TEXT)
+                }
+            }
+            "lang" -> {
+                val accent = LANGUAGE_ACCENTS[v.lowercase()]?.let { adaptForTheme(it) } ?: COLOR_CODE_TEXT
+                appendChip(out, "\u25CF $v", tintedBackground(accent, 0x26), softTextColor(accent), mono = true)
+            }
+            "copy" -> {
+                val p = v.split("|", limit = 2).map { it.trim() }
+                val label = p.getOrNull(1).orEmpty().ifBlank { p[0] }
+                appendChip(out, "\u29C9 $label", COLOR_COPY_BUTTON_BG, COLOR_CODE_TEXT, extra = CopyCodeSpan(p[0], "تم النسخ"))
+            }
+            "phone" -> {
+                if (phoneRegex.matches(v)) {
+                    appendChip(out, "\u260E $v", accentBg, accentFg, extra = LinkButtonClickSpan("tel:" + v.filter { it.isDigit() || it == '+' }))
+                } else bad()
+            }
+            "video", "web" -> appendMediaInline(out, "$kind $v")
+            "pay" -> appendPayment(out, "", v, null, null, null)
+            else -> {
+                if (kind.startsWith("status:")) appendStatusChip(out, kind.removePrefix("status:"), v)
+                else out.append(original)
+            }
+        }
+    }
+
+    private val PLATFORM_GLYPHS: Map<String, String> = mapOf(
+        "android" to "\uD83E\uDD16", "linux" to "\uD83D\uDC27", "windows" to "\u229E",
+        "macos" to "\u2318", "ios" to "\u2318", "web" to "\uD83C\uDF10", "cli" to "\u25B8"
+    )
+
+    private val phoneRegex = Regex("^\\+?[0-9][0-9 ()-]{4,19}$")
+
+    /** شريحة حالة بنص مخصّص (`[ok: يعمل]`): لون وتسمية افتراضية من [STATUS_STYLES]. */
+    private fun appendStatusChip(out: SpannableStringBuilder, key: String, text: String) {
+        val (base, defLabel) = STATUS_STYLES[key] ?: (COLOR_BULLET to key)
+        val start = out.length
+        out.append("\u25CF ${text.ifBlank { defLabel }}")
+        val end = out.length
+        out.setSpan(StickerSpan(tintedBackground(base, 0x26), softTextColor(base)), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        out.setSpan(StyleSpan(Typeface.BOLD), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        out.setSpan(RelativeSizeSpan(0.84f), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+    }
+
+    /** نص ينبثق كتنبيه قصير عند النقر (لنوع `[abbr: HTML|المعنى]`). */
+    private class ToastClickSpan(private val text: String) : ClickableSpan() {
+        override fun onClick(widget: View) {
+            Toast.makeText(widget.context, text, Toast.LENGTH_LONG).show()
+        }
+
+        override fun updateDrawState(ds: TextPaint) {}
+    }
+
+    // ─────────────────────────── الدفع والتبرّع `؛: … :؛` ───────────────────────────
+
+    private class PaymentSpec(
+        val url: String, val host: String, val label: String, val icon: String, val amount: String,
+        val copy: String? = null
+    )
+
+    /** مزوّدو "انسخ العنوان" (عملات رقمية/IBAN): لا رابط ولا شبكة، النقر ينسخ القيمة للحافظة. */
+    private val COPY_PROVIDERS = setOf("btc", "eth", "usdt", "ltc", "sol", "xmr", "crypto", "copy", "iban")
+    private val copyTargetRegex = Regex("^[A-Za-z0-9:_+.\\- ]{8,120}$")
+
+    /** مزوّدو الدفع المعروفون → المضيفون المسموح بها لو أُعطي رابط كامل بدل اسم مستخدم. */
+    private val PAYMENT_HOSTS: Map<String, List<String>> = mapOf(
+        "paypal" to listOf("paypal.com", "paypal.me"),
+        "patreon" to listOf("patreon.com"),
+        "kofi" to listOf("ko-fi.com"),
+        "coffee" to listOf("buymeacoffee.com"),
+        "github" to listOf("github.com"),
+        "liberapay" to listOf("liberapay.com"),
+        "opencollective" to listOf("opencollective.com"),
+        "wise" to listOf("wise.com")
+    )
+
+    private val PAYMENT_ALIASES: Map<String, String> = mapOf(
+        "ko-fi" to "kofi", "buymeacoffee" to "coffee", "bmc" to "coffee", "sponsors" to "github",
+        "بايبال" to "paypal", "باي_بال" to "paypal",
+        "url" to "url", "link" to "url", "stripe" to "url", "pay" to "url", "رابط" to "url"
+    )
+
+    private val paymentHandleRegex = Regex("^[A-Za-z0-9._-]{1,60}$")
+    private val paymentAmountRegex = Regex("^(\\d{1,7}(?:[.,]\\d{1,2})?)\\s*([A-Za-z]{3}|[\$€£])?$")
+
+    private fun buildPaymentUrl(provider: String, target: String, amount: Pair<String, String>?): String? {
+        val t = target.trim()
+        if (t.startsWith("http", ignoreCase = true)) {
+            if (!isHttpsUrl(t)) return null
+            if (provider == "url") return t
+            val allowed = PAYMENT_HOSTS[provider] ?: return null
+            val host = hostOf(t)
+            return if (allowed.any { host == it || host.endsWith(".$it") }) t else null
+        }
+        if (provider == "url" || !paymentHandleRegex.matches(t)) return null
+        return when (provider) {
+            "paypal" -> {
+                val suffix = if (amount != null && amount.second.isNotEmpty()) "/${amount.first.replace(',', '.')}${amount.second}" else ""
+                "https://www.paypal.me/$t$suffix"
+            }
+            "patreon" -> "https://www.patreon.com/$t"
+            "kofi" -> "https://ko-fi.com/$t"
+            "coffee" -> "https://www.buymeacoffee.com/$t"
+            "github" -> "https://github.com/sponsors/$t"
+            "liberapay" -> "https://liberapay.com/$t"
+            "opencollective" -> "https://opencollective.com/$t"
+            "wise" -> "https://wise.com/pay/me/$t"
+            else -> null
+        }
+    }
+
+    /**
+     * `مزوّد | هدف [| مبلغ [عملة]] [| نص الزر] [| type=(donate|pay|subscribe)]` — الهدف اسم مستخدم أو رابط https.
+     * أمثلة: `paypal|ahmad|5 USD|ادعمنا` · `patreon|rin` · `url|https://buy.stripe.com/xyz|اشترِ الآن|type=(pay)`.
+     */
+    private fun parsePayment(raw: String): PaymentSpec? {
+        val parts = raw.split("|").map { it.trim() }.filter { it.isNotEmpty() }
+        if (parts.size < 2) return null
+        val provider = PAYMENT_ALIASES[parts[0].lowercase()] ?: parts[0].lowercase()
+        if (provider in COPY_PROVIDERS) {
+            if (!copyTargetRegex.matches(parts[1])) return null
+            val lbl = parts.drop(2).firstOrNull { !metaBadgeKeyValueRegex.matches(it) }.orEmpty()
+            return PaymentSpec("", provider.uppercase(), lbl.ifBlank { "انسخ العنوان" }, "copy", "", parts[1])
+        }
+        var amount: Pair<String, String>? = null
+        var label = ""
+        var type = "donate"
+        for (p in parts.drop(2)) {
+            val kv = metaBadgeKeyValueRegex.find(p)
+            if (kv != null) {
+                if (kv.groupValues[1].equals("type", ignoreCase = true)) type = kv.groupValues[2].trim().lowercase()
+                continue
+            }
+            val am = paymentAmountRegex.find(p)
+            if (am != null && amount == null) {
+                val cur = when (am.groupValues[2]) {
+                    "\$" -> "USD"
+                    "€" -> "EUR"
+                    "£" -> "GBP"
+                    else -> am.groupValues[2].uppercase()
+                }
+                amount = am.groupValues[1] to cur
+            } else if (label.isEmpty()) {
+                label = p
+            }
+        }
+        val url = buildPaymentUrl(provider, parts[1], amount) ?: return null
+        val host = hostOf(url)
+        if (host.isEmpty()) return null
+        val defaultLabel = when (type) {
+            "pay" -> "ادفع"
+            "subscribe" -> "اشترك"
+            else -> "تبرّع"
+        }
+        val icon = when (type) {
+            "pay" -> "lock"
+            "subscribe" -> "star"
+            else -> "heart"
+        }
+        val amountText = amount?.let { (n, c) -> if (c.isNotEmpty()) "$n $c" else n }.orEmpty()
+        return PaymentSpec(url, host, label.ifBlank { defaultLabel }, icon, amountText)
+    }
+
+    /** زر دفع/تبرّع: يعرض المضيف الحقيقي على الزر نفسه، وعند النقر يطلب تأكيداً قبل فتح الرابط. */
+    private fun appendPayment(
+        out: SpannableStringBuilder, label: String, raw: String,
+        color: Pair<Int, String>?, styleKey: String?, sizeKey: String?
+    ) {
+        val spec = parsePayment(raw)
+        if (spec == null) {
+            appendDiagnosticChip(out, "دفع غير صالح")
+            return
+        }
+        if (spec.copy != null) {
+            appendActionButton(
+                out, "${label.ifBlank { spec.label }} \u00B7 ${spec.host}", color ?: (0xFFFFC94D.toInt() to "gold"),
+                "copy", styleKey, sizeKey, CopyCodeSpan(spec.copy, "تم نسخ العنوان")
+            )
+            return
+        }
+        val amountPart = if (spec.amount.isNotEmpty()) " ${spec.amount}" else ""
+        val shown = "${label.ifBlank { spec.label }}$amountPart \u00B7 ${spec.host}"
+        appendActionButton(
+            out, shown, color ?: (0xFFFFC94D.toInt() to "gold"), spec.icon, styleKey, sizeKey,
+            PaymentClickSpan(spec.url, spec.host)
+        )
+    }
+
+    private class PaymentClickSpan(private val url: String, private val host: String) : ClickableSpan() {
+        override fun onClick(widget: View) {
+            val ctx = widget.context
+            try {
+                AlertDialog.Builder(ctx)
+                    .setTitle("متابعة إلى صفحة دفع خارجية؟")
+                    .setMessage(
+                        "الوجهة: $host\n\n$url\n\nوضع هذا الرابطَ ناشرُ الحزمة ولا تتحقق Rin منه. " +
+                            "لا تُدخل بيانات بطاقتك إلا إن كنت تثق بالناشر."
+                    )
+                    .setPositiveButton("متابعة") { _, _ ->
+                        try {
+                            ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                        } catch (t: Throwable) {
+                        }
+                    }
+                    .setNegativeButton("إلغاء", null)
+                    .show()
+            } catch (t: Throwable) {
+            }
+        }
+
+        override fun updateDrawState(ds: TextPaint) {}
+    }
+
+    // ─────────────────────────── الفيديو وويب فيو `:; … ;:` ───────────────────────────
+
+    private val MEDIA_KIND_ALIASES: Map<String, String> = mapOf(
+        "video" to "video", "فيديو" to "video", "web" to "web", "ويب" to "web", "frame" to "web"
+    )
+    private val TRUSTED_VIDEO_HOSTS = listOf(
+        "youtube.com", "youtube-nocookie.com", "youtu.be", "player.vimeo.com", "vimeo.com", "dailymotion.com"
+    )
+    private val mediaKindPrefixRegex = Regex("^(\\S+)\\s+(https?://\\S+)$")
+    private val ytIdRegex = Regex("^[A-Za-z0-9_-]{6,20}$")
+
+    private fun isTrustedVideoHost(host: String): Boolean =
+        TRUSTED_VIDEO_HOSTS.any { host == it || host.endsWith(".$it") }
+
+    private fun toEmbedUrl(url: String, host: String): String {
+        val u = Uri.parse(url)
+        return when (host) {
+            "youtu.be" -> u.lastPathSegment?.takeIf { ytIdRegex.matches(it) }
+                ?.let { "https://www.youtube-nocookie.com/embed/$it" } ?: url
+            "youtube.com", "m.youtube.com" -> u.getQueryParameter("v")?.takeIf { ytIdRegex.matches(it) }
+                ?.let { "https://www.youtube-nocookie.com/embed/$it" } ?: url
+            "vimeo.com" -> u.lastPathSegment?.takeIf { s -> s.isNotEmpty() && s.all { c -> c.isDigit() } }
+                ?.let { "https://player.vimeo.com/video/$it" } ?: url
+            else -> url
+        }
+    }
+
+    /**
+     * `[نوع] رابط [| عنوان] [| height=(dp)]` — النوع `video`/`فيديو`/`web`/`ويب` اختياري (يُستنتَج من المضيف).
+     * https فقط؛ روابط يوتيوب/فيميو تُحوَّل تلقائياً إلى صفحة التضمين. null إن كان الرابط غير صالح.
+     */
+    private fun parseMedia(raw: String): MarkdownSegment.Media? {
+        val parts = raw.split("|").map { it.trim() }.filter { it.isNotEmpty() }
+        if (parts.isEmpty()) return null
+        var kind: String? = null
+        var urlPart = parts[0]
+        val pm = mediaKindPrefixRegex.find(urlPart)
+        if (pm != null) {
+            kind = MEDIA_KIND_ALIASES[pm.groupValues[1].lowercase()] ?: return null
+            urlPart = pm.groupValues[2]
+        }
+        if (!isHttpsUrl(urlPart)) return null
+        val host = hostOf(urlPart)
+        if (host.isEmpty()) return null
+        var title = ""
+        var height = 0
+        for (p in parts.drop(1)) {
+            val kv = metaBadgeKeyValueRegex.find(p)
+            if (kv != null) {
+                if (kv.groupValues[1].equals("height", ignoreCase = true)) height = kv.groupValues[2].trim().toIntOrNull() ?: 0
+                continue
+            }
+            if (title.isEmpty()) title = p
+        }
+        val finalKind = kind ?: if (isTrustedVideoHost(host)) "video" else "web"
+        val h = (if (height > 0) height else if (finalKind == "video") 210 else 320).coerceIn(120, 640)
+        return MarkdownSegment.Media(finalKind, urlPart, toEmbedUrl(urlPart, host), title, h)
+    }
+
+    /** `:; … ;:` داخل فقرة (لا على سطر مستقل): زر يفتح الرابط في المتصفح — التضمين الحيّ للأسطر المستقلة فقط. */
+    private fun appendMediaInline(out: SpannableStringBuilder, raw: String) {
+        val m = parseMedia(raw)
+        if (m == null) {
+            appendDiagnosticChip(out, "رابط وسائط غير صالح")
+            return
+        }
+        val label = (if (m.kind == "video") "\u25B6 " else "\uD83C\uDF10 ") + m.title.ifBlank { hostOf(m.url) }
+        appendActionButton(out, label, null, null, "soft", null, LinkButtonClickSpan(m.url))
+    }
+
+    /**
+     * يبني بطاقة وسائط لسطر `:; … ;:` مستقل: ملصق تشغيل أولاً (لا تحميل ولا شبكة قبل النقر)، وعند النقر
+     * يُنشأ WebView مقيَّد: بلا وصول ملفات/محتوى، بلا محتوى مختلط، JavaScript فقط لمضيفي الفيديو الموثوقين،
+     * والتنقّل محصور في مضيف التضمين نفسه. زر ✕ يُغلق المشغّل ويُعيد الملصق.
+     */
+    fun buildMediaView(context: Context, media: MarkdownSegment.Media, topMarginPx: Int = 0): View {
+        applyPalette(isDarkMode(context))
+        val density = context.resources.displayMetrics.density
+        fun dp(v: Float): Int = (v * density + 0.5f).toInt()
+        val isVideo = media.kind == "video"
+        val host = hostOf(media.url)
+        val embedHost = hostOf(media.embedUrl)
+
+        val card = FrameLayout(context).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, dp(media.heightDp.toFloat())
+            ).apply { topMargin = topMarginPx }
+            background = GradientDrawable().apply {
+                setColor(0xFF15171C.toInt())
+                cornerRadius = dp(14f).toFloat()
+                setStroke(dp(1f), COLOR_CARD_BORDER)
+            }
+            clipToOutline = true
+        }
+
+        var loadPlayer: () -> Unit = {}
+
+        fun buildPoster(): View = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            layoutParams = FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT
+            )
+            addView(TextView(context).apply {
+                text = if (isVideo) "\u25B6" else "\uD83C\uDF10"
+                textSize = 36f
+                setTextColor(0xFFFFFFFF.toInt())
+                gravity = Gravity.CENTER
+            })
+            addView(TextView(context).apply {
+                text = listOf(media.title, host).filter { it.isNotBlank() }.joinToString(" \u00B7 ")
+                textSize = 12.5f
+                setTextColor(0xFFB4B8C5.toInt())
+                gravity = Gravity.CENTER
+                setPadding(dp(16f), dp(8f), dp(16f), 0)
+            })
+            addView(TextView(context).apply {
+                text = if (isVideo) "اضغط للتشغيل" else "اضغط للتحميل"
+                textSize = 11f
+                setTextColor(0xFF8B92A0.toInt())
+                gravity = Gravity.CENTER
+                setPadding(0, dp(4f), 0, 0)
+            })
+            setOnClickListener { loadPlayer() }
+        }
+
+        loadPlayer = {
+            card.removeAllViews()
+            val trusted = isTrustedVideoHost(host) || isTrustedVideoHost(embedHost)
+            val web = WebView(context)
+            web.settings.javaScriptEnabled = trusted
+            web.settings.domStorageEnabled = trusted
+            web.settings.allowFileAccess = false
+            web.settings.allowContentAccess = false
+            web.settings.mediaPlaybackRequiresUserGesture = true
+            web.settings.mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
+            web.settings.setSupportZoom(false)
+            web.setBackgroundColor(0xFF15171C.toInt())
+            web.webViewClient = object : WebViewClient() {
+                override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
+                    val target = request.url
+                    val h = hostOf(target.toString())
+                    val sameSite = target.scheme.equals("https", ignoreCase = true) &&
+                        (h == embedHost || h.endsWith(".$embedHost"))
+                    return !sameSite
+                }
+            }
+            web.loadUrl(media.embedUrl)
+            card.addView(
+                web,
+                FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)
+            )
+            val close = TextView(context).apply {
+                text = "\u2715"
+                textSize = 16f
+                setTextColor(0xFFFFFFFF.toInt())
+                setPadding(dp(12f), dp(6f), dp(12f), dp(6f))
+                background = GradientDrawable().apply {
+                    setColor(0x99000000.toInt())
+                    cornerRadius = dp(16f).toFloat()
+                }
+                setOnClickListener {
+                    try {
+                        web.stopLoading()
+                        web.loadUrl("about:blank")
+                        web.destroy()
+                    } catch (t: Throwable) {
+                    }
+                    card.removeAllViews()
+                    card.addView(buildPoster())
+                }
+            }
+            card.addView(
+                close,
+                FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT,
+                    Gravity.TOP or Gravity.END
+                ).apply { setMargins(dp(8f), dp(8f), dp(8f), dp(8f)) }
+            )
+        }
+
+        card.addView(buildPoster())
+        return card
+    }
+
+    // ─────────────────────────── الفحص الصارم ───────────────────────────
+
+    /** مشكلة وجدها [validate]: رقم السطر (من 1)، الخطورة (`error`/`warning`)، الوصف. */
+    class RdocIssue(val line: Int, val severity: String, val message: String)
+
+    /**
+     * يفحص مستند rdoc كاملاً بلا رسم: حجم، أسوار `:::`/`؛؛؛` (غير مغلقة/زائدة/نوع مجهول/عمق)، مراجع `*"id"*` المفقودة،
+     * معرّفات مكرّرة، روابط دفع ووسائط غير صالحة. يعيد قائمة فارغة إن كان المستند سليماً.
+     */
+    fun validate(markdown: String): List<RdocIssue> {
+        val issues = ArrayList<RdocIssue>()
+        if (markdown.length > RDOC_MAX_CHARS) {
+            issues.add(RdocIssue(1, "error", "المستند أكبر من الحد المسموح ($RDOC_MAX_CHARS حرفاً)"))
+        }
+        val lines = markdown.lines()
+        val refs = collectElementRefs(markdown)
+        val metaAll = extractMeta(markdown)
+        val ids = HashMap<String, Int>()
+        var inFence = false
+        var depth = 0
+        var i = 0
+        while (i < lines.size) {
+            val t = lines[i].trim()
+            val ln = i + 1
+            if (t.startsWith("```")) {
+                inFence = !inFence
+                i++
+                continue
+            }
+            if (inFence) {
+                i++
+                continue
+            }
+            if (t.startsWith("\u061B\u061B") && !t.startsWith("\u061B\u061B\u061B")) {
+                i++
+                continue
+            }
+            if (arSemiFenceOpenRegex.matches(t)) {
+                val scan = scanDataFence(lines, i)
+                val type = arSemiFenceOpenRegex.find(t)!!.groupValues[1].trim().split(whitespaceRegex)[0].lowercase()
+                if (type !in DATA_BLOCK_TYPES) issues.add(RdocIssue(ln, "error", "بلوك ؛؛؛ غير معروف: $type"))
+                if (!scan.closed) issues.add(RdocIssue(ln, "error", "بلوك ؛؛؛ $type غير مغلق"))
+                for ((k, bl) in scan.body.withIndex()) {
+                    val bt = bl.trim()
+                    if (bt.isEmpty() || bt.startsWith("\u061B\u061B")) continue
+                    val at = ln + k + 1
+                    when (type) {
+                        "links", "روابط" -> {
+                            val lm = linkItemRegex.find(bt)
+                            val target = lm?.groupValues?.get(2)?.split("|")?.get(0)?.trim().orEmpty()
+                            val ok = lm != null && (isSafeLinkUrl(target) || resolveElement(target.trim('"', '*'), refs) != null)
+                            if (!ok) issues.add(RdocIssue(at, "error", "رابط غير صالح في بلوك روابط: ${bt.take(40)}"))
+                        }
+                        "support", "دعم" -> if (parsePayment(bt) == null) issues.add(RdocIssue(at, "error", "مواصفة دفع غير صالحة: ${bt.take(40)}"))
+                        "badges", "شارات" -> if (badgeItemRegex.find(bt) == null) issues.add(RdocIssue(at, "error", "شارة غير صالحة: ${bt.take(40)}"))
+                    }
+                }
+                i = if (scan.next > i) scan.next else i + 1
+                continue
+            }
+            if (colonFenceOpenRegex.matches(t)) {
+                depth++
+                val type = colonFenceOpenRegex.find(t)!!.groupValues[1].trim().split(whitespaceRegex)[0].lowercase()
+                if (depth > RDOC_MAX_CONTAINER_DEPTH) {
+                    issues.add(RdocIssue(ln, "error", "عمق الحاويات $depth يتجاوز الحد $RDOC_MAX_CONTAINER_DEPTH"))
+                }
+                if (CONTAINER_ALIASES[type] == null) issues.add(RdocIssue(ln, "error", "نوع حاوية غير معروف: $type"))
+            } else if (colonFenceCloseRegex.matches(t)) {
+                if (depth == 0) issues.add(RdocIssue(ln, "error", "إغلاق ::: بلا فتح")) else depth--
+            } else if (arSemiFenceCloseRegex.matches(t)) {
+                issues.add(RdocIssue(ln, "error", "إغلاق ؛؛؛ بلا فتح"))
+            }
+            for (m in variableRegex.findAll(t)) {
+                if (m.groupValues[1].isEmpty() && !metaAll.containsKey(m.groupValues[2].lowercase())) {
+                    issues.add(RdocIssue(ln, "warning", "متغير غير معرّف: ${m.groupValues[2]}"))
+                }
+            }
+            for (m in elementLinkScanRegex.findAll(t)) {
+                val key = m.groupValues[1].split("|", limit = 3)[0].trim()
+                if (resolveElement(key, refs) == null) issues.add(RdocIssue(ln, "error", "مرجع مفقود: $key"))
+            }
+            for (m in paymentScanRegex.findAll(t)) {
+                if (parsePayment(m.groupValues[1]) == null) issues.add(RdocIssue(ln, "error", "رابط دفع غير صالح: ${m.groupValues[1]}"))
+            }
+            for (m in mediaScanRegex.findAll(t)) {
+                if (parseMedia(m.groupValues[1]) == null) issues.add(RdocIssue(ln, "error", "رابط وسائط غير صالح (https فقط): ${m.groupValues[1]}"))
+            }
+            for (m in typedBracketScanRegex.findAll(t)) {
+                val tmp = SpannableStringBuilder()
+                appendTypedBracket(tmp, m.groupValues[1], m.groupValues[2], m.value)
+                if (tmp.startsWith("\u2716")) {
+                    issues.add(RdocIssue(ln, "error", "قيمة غير صالحة في [${m.groupValues[1]}: …]: ${m.groupValues[2].trim()}"))
+                }
+            }
+            for (m in elementIdScanRegex.findAll(t)) {
+                val id = m.groupValues[1].trim().lowercase()
+                if (id.isEmpty()) continue
+                if (ids.containsKey(id)) issues.add(RdocIssue(ln, "warning", "معرّف مكرّر: $id (الأول هو المعتمد)")) else ids[id] = ln
+            }
+            i++
+        }
+        if (depth > 0) issues.add(RdocIssue(lines.size, "error", "$depth حاوية ::: غير مغلقة"))
+        return issues
     }
 
     // ───────────────────────────── خريطة الشجرة (Tree Map) ─────────────────────────────
