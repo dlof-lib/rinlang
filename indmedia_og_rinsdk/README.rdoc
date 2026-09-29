@@ -1,0 +1,353 @@
+؛؛؛ rdoc
+title: IND Media
+version: 1.0.0
+author: john
+license: MIT
+؛؛؛
+
+؛؛؛ مراجع
+repo = https://github.com/dlof-lib/rinlang | مستودع Rin
+؛؛؛
+
+# IND Media
+
+**مكتبة وسائط وتضمين متعددة المنصات، مكتوبة بلغة Rin الخالصة.** تعطيها رابط فيديو أو صوت فتعيد لك صفحة HTML آمنة جاهزة لـ `@view.WebView`.
+
+؛؛؛ شارات
+الإصدار: 1.0.0 | #7C5CFF
+الرخصة: MIT | #22C88E
+Runtime: Rin 1.x | #3B9EFF
+الاعتماديات: بلا | #7A8299
+؛؛؛
+
+[ok: مستقر] [lang: rin] [platform: android] [size: 42 KB] [tag: media] [tag: embed]
+
+[*نسخ الاستيراد/copy=(@import "indmedia";)/icon=(copy)/style=(soft)*] [*مستودع Rin/link=(https://github.com/dlof-lib/rinlang)/id=(repo)/icon=(github)/style=(outline)*]
+
+::: نصيحة سطر واحد يكفي
+مرّر الرابط إلى `indmedia_html` ثم ضع الناتج في `html=` لعقدة `@view.WebView`. لا Kotlin ولا C++ ولا JNI ولا تعديل على Gradle.
+:::
+
+::: فهرس
+:::
+
+## نظرة سريعة
+
+تتعرّف `IND Media` على المنصة من الرابط، وتستخرج معرّف المحتوى، وتبني رابط التضمين الصحيح، ثم تولّد صفحة HTML كاملة. كل المنطق داخل ملف واحد: `lib/indmedia.og.rin`.
+
+؛؛؛ حقائق الحزمة
+الاسم: indmedia
+الإصدار: [version: 1.0.0]
+الرخصة: [license: MIT]
+الملف الرئيسي: [file: lib/indmedia.og.rin]
+الاستيراد: [cmd: @import "indmedia";]
+المنصات: تسع منصات + فيديو وصوت مباشر
+الاعتماديات: لا شيء
+؛؛؛
+
+مثال كامل يعمل مباشرة:
+
+```rin
+@import "indmedia";
+
+@container=Demo
+    warp youtube = "https://www.youtube.com/watch?v=dQw4w9WgXcQ";
+
+    @view.Column=Root
+        padding=16;
+        gap=16;
+
+        @view.WebView=Player
+            html=indmedia_html(youtube, "YouTube", "16 / 9");
+            width=360;
+            height=203;
+        .end/view
+    .end/view
+.end/container
+```
+
+## المميزات
+
+- **Rin خالصة:** ملف واحد بلا اعتماديات خارجية.
+- **تسع منصات وروابط مباشرة:** YouTube وTikTok وInstagram وFacebook وVimeo وDailymotion وStreamable وLoom وSoundCloud.
+- **آمنة ضد الحقن:** كل قيمة تُهرَّب قبل دخولها في HTML أو URL أو CSS.
+- **ذكية:** تختار نسبة الأبعاد المناسبة لكل منصة؛ الطولي `9:16` والصوت بشريط رفيع.
+- **مرنة:** لكل دالة رئيسية نسخة `_ex` تقبل خيارات مثل autoplay وloop وstart وposter.
+- **ثنائية اللغة:** رسائل الخطأ بالعربية والإنجليزية.
+- **وقت البدء من الرابط:** تقرأ `?t=1m30s` أو `?start=` أو `#t=` تلقائياً.
+
+## المنصات المدعومة
+
+| المنصة | الروابط المدعومة | النسبة الافتراضية |
+| --- | --- | --- |
+| YouTube | `watch` و`youtu.be` و`shorts` و`live` و`embed` وقوائم التشغيل | `16:9`، وShorts بنسبة `9:16` |
+| TikTok | `/video/ID` | `9:16` |
+| Instagram | المنشورات `/p/` والريلز `/reel/` و`/reels/` وIGTV `/tv/` | `4:5`، والريل `9:16` |
+| Facebook | `watch/?v=` وvideos وreel و`fb.watch` | `16:9` |
+| Vimeo | يدعم الفيديوهات الخاصة عبر hash الرابط | `16:9` |
+| Dailymotion | `dailymotion.com` و`dai.ly` | `16:9` |
+| Streamable | `streamable.com/ID` و`/e/ID` | `16:9` |
+| Loom | `loom.com/share/ID` و`/embed/ID` | `16:9` |
+| SoundCloud | `soundcloud.com/المستخدم/المقطع` | `5:1` |
+| فيديو مباشر | mp4 وwebm وogv وmov وm4v وm3u8 و3gp | `16:9` |
+| صوت مباشر | mp3 وwav وm4a وaac وoga وogg وflac وopus وweba | `5:1` |
+
+::: ملاحظة روابط TikTok المختصرة
+الروابط `vm.` و`vt.` و`/t/` لا تُضمَّن مباشرة وتُرجع الخطأ `short_link`. افتح الرابط الكامل أولاً ثم مرّره للمكتبة.
+:::
+
+## التثبيت
+
+::: خطوات
+- انسخ الملف [file: lib/indmedia.og.rin] إلى مشروعك.
+- أضف الاستيراد في أي ملف `.rin`: [cmd: @import "indmedia";]
+- استدعِ `indmedia_html` وضع الناتج في `html=` لعقدة `@view.WebView`.
+:::
+
+::: مخفي هل أحتاج مجلد lib في المثال؟
+لا. الملف `Examples/indmedia_demo.rin` مستقل ويحوي المكتبة داخله؛ الصقه كاملاً في المحرّر وشغّله بلا `@import`.
+:::
+
+## البدء السريع
+
+فيديو مباشر بصيغة mp4 عبر `@view.Video`:
+
+```rin
+@view.Video=Player
+    video_url="https://example.com/video.mp4";
+    ratio="16:9";
+    width=360;
+    height=203;
+.end/view
+```
+
+فيديو طولي (TikTok أو Reels أو Shorts):
+
+```rin
+@view.WebView=Vertical
+    html=indmedia_html(tiktok, "TikTok", "9 / 16");
+    width=360;
+    height=640;
+.end/view
+```
+
+حساب الارتفاع تلقائياً حسب المنصة:
+
+```rin
+warp size = indmedia_size(url, 360);
+// size["width"] و size["height"] و size["ratio"]
+
+@view.WebView=Auto
+    html=indmedia_html(url, "Media", size["ratio"]);
+    width=size["width"];
+    height=size["height"];
+.end/view
+```
+
+## أمثلة متقدمة
+
+تشغيل تلقائي مع وقت بدء وإعادة:
+
+```rin
+warp page = indmedia_html_ex(url, {
+    "title": "Intro",
+    "autoplay": true,
+    "loop": true,
+    "start": 90,
+    "background": "#101010",
+    "lang": "en"
+});
+```
+
+::: مهم عن autoplay
+الخيار `autoplay` يفرض كتم الصوت تلقائياً لأن المتصفحات تمنع غير ذلك. وإن لم تحدد `start` فالمكتبة تقرؤه من الرابط نفسه.
+:::
+
+بطاقة قابلة للتضمين داخل صفحة:
+
+```rin
+warp card = indmedia_card_ex(url, {
+    "title": "Demo",
+    "ratio": "16:9",
+    "radius": 16
+});
+```
+
+معرض فيديوهات في صفحة واحدة:
+
+```rin
+warp gallery = indmedia_gallery(
+    [youtube, tiktok, direct],
+    ["YouTube", "TikTok", "Direct"],
+    { "radius": 14 }
+);
+```
+
+استخراج الروابط المدعومة من نص حر:
+
+```rin
+warp message = "شاهد https://youtu.be/dQw4w9WgXcQ و https://vimeo.com/76979871";
+
+warp links = indmedia_extract(message);
+warp infos = indmedia_find_all(message);
+```
+
+معلومات كاملة عن رابط:
+
+```rin
+warp info = indmedia_info("https://youtu.be/dQw4w9WgXcQ?t=1m30s");
+
+// info["provider"]  => "youtube"
+// info["id"]        => "dQw4w9WgXcQ"
+// info["start"]     => 90
+// info["embed"]     => رابط التضمين
+// info["watch_url"] => رابط المشاهدة الأصلي
+// info["supported"] => true
+```
+
+التحقق قبل العرض:
+
+```rin
+if (indmedia_is_supported(url)) {
+    // اعرض المشغّل
+} else {
+    // اعرض نصاً أو زر "فتح الرابط"
+}
+```
+
+## الخيارات
+
+تُمرَّر إلى دوال `_ex` ككائن. كل المفاتيح اختيارية، وقيم `nil` تُتجاهل.
+
+| الخيار | الوصف | الافتراضي |
+| --- | --- | --- |
+| `title` | عنوان الـ iframe للوصولية | `"IND Media"` |
+| `ratio` | `"16:9"` أو `"16/9"` أو `"16 / 9"` أو `"9x16"` | تلقائي حسب المنصة |
+| `autoplay` | تشغيل تلقائي ويفرض كتم الصوت | `false` |
+| `muted` | كتم الصوت | `false` |
+| `loop` | إعادة التشغيل | `false` |
+| `controls` | إظهار أزرار التحكم | `true` |
+| `start` | ثانية البدء، و`-1` تعني من الرابط | `-1` |
+| `poster` | صورة غلاف للفيديو المباشر (http أو https فقط) | فارغ |
+| `background` | لون خلفية الصفحة (hex أو اسم لون) | `"#000000"` |
+| `radius` | نصف قطر زوايا البطاقة بالبكسل من 0 إلى 64 | `0` |
+| `kind` | `"video"` أو `"audio"` لمعاملة رابط بلا امتداد كملف مباشر | فارغ |
+| `sandbox` | تفعيل sandbox على iframe، وقد يعطّل بعض المشغّلات | `false` |
+| `lang` | لغة رسائل الخطأ `"ar"` أو `"en"` | `"ar"` |
+
+صيغ وقت البدء المقبولة: `90` و`90s` و`1m30s` و`1h2m3s` و`1:02:03`.
+
+## مرجع الدوال
+
+### التوليد
+
+| الدالة | الوظيفة |
+| --- | --- |
+| `indmedia_html(url, title, ratio)` | صفحة HTML كاملة لـ `@view.WebView` |
+| `indmedia_html_ex(url, opts)` | نفس الدالة مع كل الخيارات |
+| `indmedia_card(url, title, ratio)` | بطاقة HTML بنسبة أبعاد وزوايا مستديرة |
+| `indmedia_card_ex(url, opts)` | بطاقة مع كل الخيارات |
+| `indmedia_gallery(urls, titles, opts)` | صفحة معرض بشبكة متجاوبة |
+
+### التحليل والمعلومات
+
+| الدالة | الوظيفة |
+| --- | --- |
+| `indmedia_info(url)` | كائن معلومات كامل، وله نسخة `indmedia_info_ex(url, opts)` |
+| `indmedia_provider(url)` | اسم المنصة، أو `direct` أو `unknown` أو `invalid` |
+| `indmedia_id(url, provider)` | معرّف المحتوى |
+| `indmedia_embed_url(url)` | رابط التضمين، أو نص فارغ إن لم يُدعم، وله نسخة `indmedia_embed_url_ex` |
+| `indmedia_watch_url(url)` | رابط المشاهدة الأصلي النظيف |
+| `indmedia_thumbnail(url)` | صورة مصغّرة (YouTube وDailymotion فقط) |
+| `indmedia_is_supported(url)` | هل الرابط قابل للتضمين؟ |
+| `indmedia_is_direct(url)` | هل هو ملف وسائط مباشر؟ |
+| `indmedia_extract(content)` | الروابط المدعومة من نص حر، بلا تكرار |
+| `indmedia_find_all(content)` | مثل السابقة مع `indmedia_info` لكل رابط |
+
+مفاتيح كائن `indmedia_info`: `url` و`valid` و`supported` و`error` و`provider` و`kind` و`id` و`embed` و`direct` و`host` و`start` و`ratio` و`watch_url` و`thumbnail`.
+
+### الأبعاد والأدوات
+
+| الدالة | الوظيفة |
+| --- | --- |
+| `indmedia_default_ratio(url)` | النسبة الافتراضية للمنصة |
+| `indmedia_height(width, ratio)` | الارتفاع الصحيح لعرض ونسبة معيّنين |
+| `indmedia_size(url, width)` | كائن بمفاتيح width وheight وratio، وله نسخة `indmedia_size_ex` |
+| `indmedia_parse(url)` | تحليل الرابط إلى scheme وhost وsegments وquery |
+| `indmedia_parse_time(s)` | تحويل صيغ الوقت إلى ثوانٍ |
+| `indmedia_defaults()` | الخيارات الافتراضية |
+| `indmedia_providers()` | قائمة المنصات المدعومة |
+| `indmedia_version()` | رقم الإصدار |
+
+## رموز الأخطاء
+
+عند فشل الرابط تُرجع `indmedia_info` الحقل `error` بأحد هذه الرموز، ويعرض `indmedia_html` رسالة بديلة مع رابط "فتح الرابط".
+
+| الرمز | المعنى |
+| --- | --- |
+| `empty` | الرابط فارغ |
+| `too_long` | أطول من 2048 حرفاً |
+| `chars` | يحتوي مسافات أو محارف خطرة |
+| `scheme` | بروتوكول غير مسموح (المسموح http وhttps فقط) |
+| `port` | منفذ غير صالح |
+| `host` | اسم مضيف غير صالح |
+| `unsupported` | المنصة غير مدعومة |
+| `no_id` | تعذّر استخراج معرّف المحتوى |
+| `short_link` | رابط TikTok مختصر |
+
+## الأمان
+
+- كل نص يدخل HTML يُهرَّب عبر `indmedia_escape`.
+- البروتوكولات المسموحة `http` و`https` فقط؛ غيرها مثل `javascript:` يُرفض برمز `scheme`.
+- ألوان الخلفية تمر عبر قائمة سماح، وأي قيمة غير آمنة ترجع للافتراضي.
+- روابط الـ poster تُقبل إذا كانت http أو https فقط.
+- الخيار `sandbox` يضيف تحصيناً إضافياً على الـ iframe.
+
+::: تحذير حدود المكتبة
+المكتبة لا تستخرج روابط البث الداخلية ولا تتجاوز قيود المنصات. تستخدم فقط مشغّلات التضمين الرسمية، أما الملفات المباشرة فتُعرض بوسم `video` أو `audio` أو بمشغّل Indsin الأصلي.
+:::
+
+::: أسئلة
+س: هل تعمل المكتبة بلا إنترنت؟
+ج: توليد الصفحة يتم محلياً، لكن تشغيل المنصات (YouTube وغيرها) يحتاج اتصالاً داخل الـ WebView.
+
+س: لماذا يرجع رابط TikTok الخطأ short_link؟
+ج: الروابط المختصرة تحتاج فتحاً أولاً؛ مرّر الرابط الكامل بعد التحويل.
+
+س: كيف أتعامل مع رابط غير مدعوم؟
+ج: افحصه بـ indmedia_is_supported ثم اعرض زر "فتح الرابط" بدل المشغّل.
+:::
+
+## بنية الحزمة
+
+```text
+indmedia/
+├── package.rin.json        # بيانات الحزمة
+├── LICENSE                 # رخصة MIT
+├── README.rdoc             # هذا الملف
+├── lib/
+│   └── indmedia.og.rin     # المكتبة كاملة
+└── Examples/
+    └── indmedia_demo.rin   # مثال مستقل (المكتبة + المشغّل)
+```
+
+## الاستقلالية
+
+المكتبة لا تضيف أي ملف إلى تطبيقك، ولا تتطلب تعديل أي من: `IndsinFabricView.kt` و`rin_stdlib_libs.h` وJNI وC++ وGradle وAndroidManifest.
+
+::: مخفي ملاحظات عن لغة Rin أُخذت بالحسبان
+- المعامِل `/` قسمة عشرية، لذلك تُستخدم `floor()` عند الحاجة لقسمة صحيحة.
+- الدالة `indexOf()` لا تقبل موضع بدء، لذلك توجد `indmedia_find()`.
+- عدد الوسائط في استدعاء الدالة ثابت، لذلك لكل دالة نسخة `_ex` تقبل خيارات.
+- النصوص بين علامتي تنصيص مزدوجتين فقط، وعناصر HTML تستخدم علامة مفردة داخل السمات.
+:::
+
+::: تغييرات
++ 1.0.0: الإصدار الأول — تسع منصات وفيديو/صوت مباشر.
++ 1.0.0: دوال `_ex` بخيارات autoplay وloop وstart وposter وradius.
++ 1.0.0: تهريب شامل للنصوص والروابط والألوان.
+:::
+
+## الرخصة
+
+MIT License. Copyright (c) 2026 john. راجع ملف `LICENSE` للنص الكامل. للمستودع الأم: *"repo"*.
