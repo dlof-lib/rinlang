@@ -325,12 +325,20 @@ class PackageDetailActivity : BaseConnectivityActivity() {
         if (readme.isNullOrBlank()) {
             containerReadme.addView(buildReadmeTextSegment(getString(R.string.package_detail_no_readme)))
         } else {
+            // لهجة rdoc (`:::` `؛؛؛` `*"…"*` `؛:…:؛` `:;…;:`) تُفعَّل فقط لمستند بترويسة `؛؛؛ rdoc`.
+            val isRdoc = DocumentationContainer.isRdocDocument(readme)
             for (segment in DocumentationContainer.splitReadmeSegments(readme)) {
                 when (segment) {
                     is DocumentationContainer.MarkdownSegment.Text -> {
                         if (segment.markdown.isNotBlank()) {
-                            containerReadme.addView(buildReadmeTextSegment(segment.markdown))
+                            containerReadme.addView(buildReadmeTextSegment(segment.markdown, isRdoc))
                         }
+                    }
+                    // rdoc: فيديو/ويب فيو مستقل `:; … ;:` — ملصق تشغيل يفتح WebView مقيَّداً عند النقر فقط.
+                    is DocumentationContainer.MarkdownSegment.Media -> {
+                        containerReadme.addView(
+                            DocumentationContainer.buildMediaView(this, segment, if (containerReadmeHasContent) dp(10f) else 0)
+                        )
                     }
                     is DocumentationContainer.MarkdownSegment.LiveCode -> {
                         containerReadme.addView(buildLivePreviewCard(segment.code))
@@ -338,7 +346,7 @@ class PackageDetailActivity : BaseConnectivityActivity() {
                     // جدول Markdown حقيقي (خلايا تلتفّ + تمرير أفقي + ثيم فاتح/داكن) بدل صندوق نصّي مقصوص.
                     is DocumentationContainer.MarkdownSegment.Table -> {
                         containerReadme.addView(
-                            DocumentationContainer.buildTableView(this, segment, if (containerReadmeHasContent) dp(10f) else 0)
+                            DocumentationContainer.buildTableView(this, segment, if (containerReadmeHasContent) dp(10f) else 0, isRdoc)
                         )
                     }
                 }
@@ -382,7 +390,7 @@ class PackageDetailActivity : BaseConnectivityActivity() {
 
     /** مقطع نصّ Markdown عادي واحد داخل قسم README (انظر [bindReadmeAndLicense]) — بنفس تنسيق
      *  الـTextView الوحيد السابق تماماً (حجم/تباعد سطر/لون/روابط قابلة للنقر). */
-    private fun buildReadmeTextSegment(markdown: String): TextView = TextView(this).apply {
+    private fun buildReadmeTextSegment(markdown: String, rdoc: Boolean = false): TextView = TextView(this).apply {
         layoutParams = LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
             // فراغ أكبر قليلاً بين مقاطع README (كان 4dp) — يفصل الفقرات/الكتل بصرياً بوضوح
@@ -395,7 +403,7 @@ class PackageDetailActivity : BaseConnectivityActivity() {
         letterSpacing = 0.005f
         setTextColor(getColor(R.color.rin_editor_text))
         autoLinkMask = android.text.util.Linkify.WEB_URLS
-        DocumentationContainer.applyTo(this, markdown)
+        DocumentationContainer.applyTo(this, markdown, rdoc = rdoc)
     }
 
     /** يبقى false فقط قبل أول مقطع يُضاف فعلياً — يُستخدَم فقط لتفادي هامش علوي زائد لأول مقطع. */
