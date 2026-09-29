@@ -17,6 +17,7 @@ import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.GradientDrawable
 import android.net.Uri
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
@@ -656,6 +657,12 @@ object DocumentationContainer {
         currentLinkRefs = collectLinkRefs(source)
         currentElementRefs = if (rdoc) docElementRefs + collectElementRefs(source) else emptyMap()
         applyPalette(dark)
+        if (rdoc) {
+            // ألوان العناوين/الروابط من `؛؛؛ صفحة` (تُعاد كل مرة لأن applyPalette يصفّرها).
+            val pg = parsePageSettings(source, null) ?: docPageSettings
+            pg?.headingColor?.let { COLOR_HEADING = it }
+            pg?.linkColor?.let { COLOR_LINK = it }
+        }
         val out = SpannableStringBuilder()
         renderBlocks(out, source, expandedSections, onToggle)
         if (truncated) {
@@ -1161,6 +1168,7 @@ object DocumentationContainer {
         // مراجع `*"id"*` على مستوى المستند كله: كل مقطع نصي يُرسَم لاحقاً بشكل مستقل ويحتاج رؤية تعريفات غيره.
         docElementRefs = if (rdoc) collectElementRefs(markdown) else emptyMap()
         docMeta = if (rdoc) extractMeta(markdown) else emptyMap()
+        docPageSettings = if (rdoc) parsePageSettings(markdown, null) else null
         docHeadings = if (rdoc) collectHeadings(markdown) else emptyList()
         val result = mutableListOf<MarkdownSegment>()
         // حاويات `:::` لا تُقطَع بين مقاطع العرض (جدول/معاينة حيّة/وسائط داخلها تبقى في بطاقتها كنص).
@@ -1237,7 +1245,7 @@ object DocumentationContainer {
      * الفاتح/الداكن من ثيم [context]. [topMarginPx] هامش علوي بالبكسل (الحاوية LinearLayout).
      */
     fun buildTableView(context: Context, table: MarkdownSegment.Table, topMarginPx: Int = 0, rdoc: Boolean = false): View {
-        applyPalette(isDarkMode(context))
+        applyPalette(paletteDark(context, if (rdoc) docPageSettings else null))
         val density = context.resources.displayMetrics.density
         fun dp(v: Float): Int = (v * density + 0.5f).toInt()
 
@@ -1276,7 +1284,7 @@ object DocumentationContainer {
                     setTextColor(if (isHeader) COLOR_TABLE_HEADER else COLOR_TABLE_TEXT)
                     if (isHeader) setTypeface(typeface, Typeface.BOLD)
                 }
-                applyTo(cell, cells.getOrNull(c).orEmpty(), rdoc = rdoc)
+                applyTo(cell, cells.getOrNull(c).orEmpty(), rdoc = rdoc, pageStyle = false)
                 row.addView(cell)
             }
             grid.addView(row)
@@ -1313,7 +1321,8 @@ object DocumentationContainer {
         pageContainer: View? = null,
         expandedSections: MutableSet<String> = mutableSetOf(),
         baseDir: String? = null,
-        rdoc: Boolean = false
+        rdoc: Boolean = false,
+        pageStyle: Boolean = true
     ) {
         // عرض حقيقي للصور المضمَّنة يناسب TextView الفعلي بدل قيمة تقديرية ثابتة دوماً؛ عرض الشاشة
         // الكامل كحدّ أقصى احتياطي إن لم يكن TextView قد قِيس بعد (width == 0 قبل أول تخطيط).
@@ -1321,13 +1330,15 @@ object DocumentationContainer {
         currentImageMaxWidthPx = textView.width.takeIf { it > 0 }
             ?: (textView.resources.displayMetrics.widthPixels - (32 * textView.resources.displayMetrics.density).toInt())
                 .coerceAtLeast(DEFAULT_IMAGE_MAX_WIDTH_PX)
-        val dark = isDarkMode(textView.context)
+        val page = if (rdoc) (parsePageSettings(markdown, null) ?: docPageSettings) else null
+        val dark = paletteDark(textView.context, page)
         textView.text = toSpannable(markdown, expandedSections, baseDir, dark, rdoc) {
-            applyTo(textView, markdown, pageContainer, expandedSections, baseDir, rdoc)
+            applyTo(textView, markdown, pageContainer, expandedSections, baseDir, rdoc, pageStyle)
         }
         textView.movementMethod = LinkMovementMethod.getInstance()
         textView.setLinkTextColor(COLOR_LINK)
         textView.highlightColor = COLOR_HIGHLIGHT_BG
+        if (page != null && pageStyle) applyPageTextStyle(textView, page, dark)
         pageContainer?.let { container ->
             when (val bg = extractPageBackground(markdown)) {
                 is PageBackground.Solid -> container.background = ColorDrawable(bg.color)
@@ -2419,7 +2430,10 @@ object DocumentationContainer {
     private fun startMarqueeIfNeeded(textView: TextView) {
         marqueeTickers.remove(textView)?.stop(textView)
         val spanned = textView.text as? Spanned ?: return
-        if (spanned.getSpans(0, spanned.length, MarqueeSpan::class.java).isEmpty()) return
+        if (spanned.getSpans(0, spanned.length, MarqueeSpan::class.java).isEmpty() &&
+            spanned.getSpans(0, spanned.length, RdocTickerSpan::class.java).isEmpty() &&
+            spanned.getSpans(0, spanned.length, RdocVerticalTickerSpan::class.java).isEmpty()
+        ) return
         val ticker = MarqueeTicker(textView)
         marqueeTickers[textView] = ticker
         textView.addOnAttachStateChangeListener(ticker)
@@ -2715,9 +2729,9 @@ object DocumentationContainer {
 
     private val DATA_BLOCK_TYPES = setOf(
         "rdoc", "meta", "بيانات", "refs", "مراجع", "facts", "حقائق",
-        "links", "روابط", "badges", "شارات", "support", "دعم"
+        "links", "روابط", "badges", "شارات", "support", "دعم", "page", "صفحة"
     )
-private val SILENT_DATA_TYPES = setOf("rdoc", "meta", "بيانات", "refs", "مراجع")
+    private val SILENT_DATA_TYPES = setOf("rdoc", "meta", "بيانات", "refs", "مراجع", "page", "صفحة")
 
     /** هل [text] مستند rdoc (يحوي ترويسة `؛؛؛ rdoc` أو `؛؛؛ meta`)؟ */
     fun isRdocDocument(text: String): Boolean = rdocHeaderRegex.containsMatchIn(text)
@@ -2760,7 +2774,8 @@ private val SILENT_DATA_TYPES = setOf("rdoc", "meta", "بيانات", "refs", "�
         "changelog" to "changelog", "تغييرات" to "changelog", "سجل-التغييرات" to "changelog",
         "faq" to "faq", "أسئلة" to "faq",
         "toc" to "toc", "فهرس" to "toc",
-        "spoiler" to "spoiler", "مخفي" to "spoiler", "طي" to "spoiler"
+        "spoiler" to "spoiler", "مخفي" to "spoiler", "طي" to "spoiler",
+        "marquee" to "marquee", "ticker" to "marquee", "شريط" to "marquee", "متحرك" to "marquee", "شريط-متحرك" to "marquee"
     )
 
     // ─────────────────────────── أنواع الأقواس المربّعة `[نوع: قيمة]` ───────────────────────────
@@ -2800,7 +2815,21 @@ private val SILENT_DATA_TYPES = setOf("rdoc", "meta", "بيانات", "refs", "�
         // اختصارات حالة: `[ok: يعمل]` `[warn: تنبيه]` `[error: فشل]` `[new: جديد]`...
         "ok" to "status:ok", "warn" to "status:warn", "error" to "status:error", "info" to "status:info",
         "new" to "status:new", "beta" to "status:beta", "stable" to "status:stable",
-        "deprecated" to "status:deprecated", "متوقف" to "status:deprecated"
+        "deprecated" to "status:deprecated", "متوقف" to "status:deprecated",
+        // أماكن
+        "place" to "place", "location" to "place", "مكان" to "place", "موقع" to "place",
+        "coords" to "place", "إحداثيات" to "place",
+        "flag" to "flag", "country" to "flag", "علم" to "flag", "دولة" to "flag",
+        "address" to "address", "عنوان" to "address",
+        "zone" to "zone", "توقيت" to "zone",
+        // أحجام وقياسات
+        "dim" to "dim", "أبعاد" to "dim",
+        "distance" to "distance", "مسافة" to "distance",
+        "weight" to "weight", "وزن" to "weight",
+        "temp" to "temp", "حرارة" to "temp",
+        "percent" to "percent", "نسبة" to "percent",
+        "hash" to "hash", "بصمة" to "hash",
+        "marquee" to "marquee", "ticker" to "marquee", "شريط" to "marquee"
     )
 
     /** يلتقط `[نوع: قيمة]` بأنواع [TYPED_BRACKET_TYPES] في سطر (لـ[validate]). */
@@ -3102,6 +3131,11 @@ private val SILENT_DATA_TYPES = setOf("rdoc", "meta", "بيانات", "refs", "�
             return
         }
 
+        if (key == "marquee") {
+            appendRdocMarquee(out, title, body, closed)
+            return
+        }
+
         val style = CONTAINER_STYLES[key ?: "card"] ?: CONTAINER_STYLES.getValue("card")
         val accent = adaptForTheme(style.color)
         val shownTitle = if (key == null) header.trim() else title.ifBlank { style.label }
@@ -3306,14 +3340,94 @@ private val SILENT_DATA_TYPES = setOf("rdoc", "meta", "بيانات", "refs", "�
         }
     }
 
+    /** ستايل وسم `[نوع: قيمة|size=(lg)|style=(outline)…]` — يُقرأ من [appendChip] أثناء رسم القوس الحالي فقط. */
+    private class TagStyle(
+        val size: Float,
+        val style: String?,
+        val color: Int?,
+        val shape: String?,
+        val icon: String?,
+        val iconEnd: Boolean
+    )
+
+    private var activeTagStyle: TagStyle? = null
+
+    private val TAG_OPTION_KEYS = setOf("size", "style", "color", "shape", "icon", "pos")
+
+    private val TAG_SIZES: Map<String, Float> = mapOf(
+        "xs" to 0.8f, "sm" to 0.9f, "md" to 1f, "lg" to 1.25f, "xl" to 1.5f, "xxl" to 1.8f,
+        "صغير" to 0.9f, "متوسط" to 1f, "كبير" to 1.25f, "ضخم" to 1.5f
+    )
+    private val TAG_STYLES: Map<String, String> = mapOf(
+        "soft" to "soft", "outline" to "outline", "solid" to "solid", "ghost" to "ghost",
+        "خفيف" to "soft", "إطار" to "outline", "ممتلئ" to "solid", "شفاف" to "ghost"
+    )
+    private val TAG_SHAPES: Map<String, String> = mapOf(
+        "pill" to "pill", "round" to "round", "square" to "square",
+        "كبسولة" to "pill", "مدور" to "round", "مربع" to "square"
+    )
+
+    /** يفصل أجزاء `key=(قيمة)` الخاصة بالستايل عن قيمة القوس، ويُبقي غيرها (مثل height/type) كما هي. */
+    private fun splitTagOptions(value: String): Pair<String, Map<String, String>> {
+        if (!value.contains('=')) return value to emptyMap()
+        val opts = LinkedHashMap<String, String>()
+        val kept = ArrayList<String>()
+        for (part in value.split("|")) {
+            val kv = metaBadgeKeyValueRegex.find(part.trim())
+            if (kv != null && kv.groupValues[1].lowercase() in TAG_OPTION_KEYS) {
+                opts[kv.groupValues[1].lowercase()] = kv.groupValues[2].trim()
+            } else {
+                kept.add(part)
+            }
+        }
+        return kept.joinToString("|").trim() to opts
+    }
+
+    /** يبني [TagStyle] من الخيارات؛ null إن كانت قيمة أي خيار غير صالحة. */
+    private fun buildTagStyle(opts: Map<String, String>): TagStyle? {
+        var size = 1f
+        opts["size"]?.let { raw ->
+            val key = raw.lowercase()
+            size = TAG_SIZES[key] ?: (key.removeSuffix("%").toFloatOrNull()?.takeIf { it in 50f..300f }?.div(100f)) ?: return null
+        }
+        val style = opts["style"]?.let { TAG_STYLES[it.lowercase()] ?: return null }
+        val shape = opts["shape"]?.let { TAG_SHAPES[it.lowercase()] ?: return null }
+        val color = opts["color"]?.let { (parseColorValue(it) ?: return null).first }
+        val icon = opts["icon"]?.let { iconGlyphFor(it) ?: return null }
+        val iconEnd = when (opts["pos"]?.lowercase()) {
+            null, "start", "بداية" -> false
+            "end", "نهاية" -> true
+            else -> return null
+        }
+        return TagStyle(size, style, color, shape, icon, iconEnd)
+    }
+
     private fun appendChip(
         out: SpannableStringBuilder, text: String, bg: Int, fg: Int,
         mono: Boolean = false, extra: CharacterStyle? = null
     ) {
+        val ts = activeTagStyle
+        var bgc = bg
+        var fgc = fg
+        var strokeC = 0
+        var strokeW = 0f
+        var radius = 10f
+        var shown = text
+        if (ts != null) {
+            val base = ts.color
+            when (ts.style) {
+                "outline" -> { val c = base ?: fg; bgc = 0; fgc = c; strokeC = c; strokeW = 2f }
+                "solid" -> { val c = base ?: fg; bgc = c; fgc = contrastingTextColor(c) }
+                "ghost" -> { bgc = 0; fgc = base ?: fg }
+                else -> if (base != null) { bgc = tintedBackground(base, 0x26); fgc = softTextColor(base) }
+            }
+            radius = when (ts.shape) { "square" -> 3f; "round" -> 8f; "pill" -> 40f; else -> 10f }
+            if (ts.icon != null) shown = if (ts.iconEnd) "$text ${ts.icon}" else "${ts.icon} $text"
+        }
         val start = out.length
-        out.append(text)
+        out.append(shown)
         val end = out.length
-        out.setSpan(StickerSpan(bg, fg), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        out.setSpan(StickerSpan(bgc, fgc, radius, 14f, 4f, strokeC, strokeW), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
         out.setSpan(StyleSpan(Typeface.BOLD), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
         if (mono) out.setSpan(TypefaceSpan("monospace"), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
         out.setSpan(RelativeSizeSpan(0.86f), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
@@ -3323,7 +3437,57 @@ private val SILENT_DATA_TYPES = setOf("rdoc", "meta", "بيانات", "refs", "�
     private val emailRegex = Regex("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$")
 
     /** `[نوع: قيمة]` — النوع من [TYPED_BRACKET_TYPES]؛ قيمة فارغة أو نوع غير معروف يبقى نصاً كما كُتب. */
+    /**
+     * `[نوع: قيمة]` مع ستايل اختياري بعد `|` على شكل `key=(قيمة)`:
+     * `size` (xs/sm/md/lg/xl/xxl أو 50–300%)، `style` (soft/outline/solid/ghost)، `color`، `shape` (pill/round/square)،
+     * `icon` (اسم أيقونة)، `pos` (start/end لمكان الأيقونة). الحجم يسري على كل الأنواع؛ اللون والستايل والشكل والأيقونة
+     * على الأنواع المرسومة كشرائح (tag/user/lib/file/date/place/flag/dim…). خيار غير صالح → شريحة خطأ حمراء.
+     */
     private fun appendTypedBracket(out: SpannableStringBuilder, rawType: String, value: String, original: String) {
+        val kind = TYPED_BRACKET_TYPES[rawType.trim().lowercase()]
+        if (kind == null || value.isBlank()) { out.append(original); return }
+        val (clean, opts) = splitTagOptions(value.trim())
+        val style = if (opts.isEmpty()) null else (buildTagStyle(opts) ?: run {
+            appendDiagnosticChip(out, "خيار ستايل غير صالح: $original")
+            return
+        })
+        val start = out.length
+        activeTagStyle = style
+        try {
+            renderTypedBracket(out, rawType, clean, original)
+        } finally {
+            activeTagStyle = null
+        }
+        if (style != null && style.size != 1f && out.length > start) {
+            out.setSpan(RelativeSizeSpan(style.size), start, out.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        }
+    }
+
+    private val sizeUnitRegex = Regex("^\\d+(?:[.,]\\d+)?\\s*(?:B|KB|MB|GB|TB|KiB|MiB|GiB|TiB|بايت|كب|ميغا|جيجا)$", RegexOption.IGNORE_CASE)
+    private val dimRegex = Regex("^\\d+(?:[.,]\\d+)?\\s*[x\u00D7*]\\s*\\d+(?:[.,]\\d+)?(?:\\s*[x\u00D7*]\\s*\\d+(?:[.,]\\d+)?)?\\s*(?:px|cm|mm|m|in|dp|سم|مم)?$", RegexOption.IGNORE_CASE)
+    private val distanceRegex = Regex("^\\d+(?:[.,]\\d+)?\\s*(?:km|m|mi|cm|mm|ft|كم|م|ميل)$", RegexOption.IGNORE_CASE)
+    private val weightRegex = Regex("^\\d+(?:[.,]\\d+)?\\s*(?:kg|g|mg|lb|oz|t|كجم|جم)$", RegexOption.IGNORE_CASE)
+    private val tempRegex = Regex("^-?\\d+(?:[.,]\\d+)?\\s*(?:\u00B0\\s*[CFK]?|[CFK]|\u00B0)$", RegexOption.IGNORE_CASE)
+    private val percentRegex = Regex("^\\d{1,4}(?:[.,]\\d+)?\\s*%?$")
+    private val zoneRegex = Regex("^(?:(?:UTC|GMT)\\s*)?[+-]\\d{1,2}(?::\\d{2})?$|^[A-Za-z]+(?:/[A-Za-z_+-]+)+$|^(?:UTC|GMT)$", RegexOption.IGNORE_CASE)
+    private val hashRegex = Regex("^[A-Fa-f0-9]{7,128}$")
+    private val coordsRegex = Regex("^-?\\d{1,3}(?:\\.\\d+)?\\s*[, ]\\s*-?\\d{1,3}(?:\\.\\d+)?$")
+    private val flagCodeRegex = Regex("^[A-Za-z]{2}$")
+
+    private fun parseLatLng(raw: String): Pair<Double, Double>? {
+        val parts = raw.trim().split(Regex("[,\\s]+")).filter { it.isNotEmpty() }
+        if (parts.size != 2) return null
+        val lat = parts[0].toDoubleOrNull() ?: return null
+        val lon = parts[1].toDoubleOrNull() ?: return null
+        return if (lat in -90.0..90.0 && lon in -180.0..180.0) lat to lon else null
+    }
+
+    private fun flagEmoji(code: String): String {
+        val c = code.uppercase()
+        return String(Character.toChars(0x1F1E6 + (c[0] - 'A'))) + String(Character.toChars(0x1F1E6 + (c[1] - 'A')))
+    }
+
+    private fun renderTypedBracket(out: SpannableStringBuilder, rawType: String, value: String, original: String) {
         val kind = TYPED_BRACKET_TYPES[rawType.trim().lowercase()]
         val v = value.trim()
         if (kind == null || v.isEmpty()) { out.append(original); return }
@@ -3442,7 +3606,40 @@ private val SILENT_DATA_TYPES = setOf("rdoc", "meta", "بيانات", "refs", "�
                 appendChip(out, if (text.isBlank()) glyph else "$glyph $text", COLOR_INLINE_CODE_BG, COLOR_CODE_TEXT)
             }
             "time" -> appendChip(out, "\u23F1 $v", COLOR_INLINE_CODE_BG, COLOR_CODE_TEXT)
-            "size" -> appendChip(out, "\uD83D\uDCBE $v", COLOR_INLINE_CODE_BG, COLOR_CODE_TEXT)
+            "size" -> when {
+                sizeUnitRegex.matches(v) -> appendChip(out, "\uD83D\uDCBE $v", COLOR_INLINE_CODE_BG, COLOR_CODE_TEXT)
+                dimRegex.matches(v) -> appendChip(out, "\uD83D\uDCD0 $v", COLOR_INLINE_CODE_BG, COLOR_CODE_TEXT)
+                else -> bad()
+            }
+            "dim" -> if (dimRegex.matches(v)) appendChip(out, "\uD83D\uDCD0 $v", COLOR_INLINE_CODE_BG, COLOR_CODE_TEXT) else bad()
+            "distance" -> if (distanceRegex.matches(v)) appendChip(out, "\uD83D\uDCCF $v", COLOR_INLINE_CODE_BG, COLOR_CODE_TEXT) else bad()
+            "weight" -> if (weightRegex.matches(v)) appendChip(out, "\uD83D\uDCE6 $v", COLOR_INLINE_CODE_BG, COLOR_CODE_TEXT) else bad()
+            "temp" -> if (tempRegex.matches(v)) appendChip(out, "\uD83C\uDF21 $v", COLOR_INLINE_CODE_BG, COLOR_CODE_TEXT) else bad()
+            "percent" -> if (percentRegex.matches(v)) appendChip(out, "${v.trimEnd('%').trim()}%", COLOR_INLINE_CODE_BG, COLOR_CODE_TEXT) else bad()
+            "zone" -> if (zoneRegex.matches(v)) appendChip(out, "\uD83D\uDD52 $v", COLOR_INLINE_CODE_BG, COLOR_CODE_TEXT) else bad()
+            "hash" -> if (hashRegex.matches(v)) {
+                appendChip(out, "\u2318 ${v.take(8)}", COLOR_INLINE_CODE_BG, COLOR_CODE_TEXT, mono = true, extra = CopyCodeSpan(v, "تم نسخ البصمة"))
+            } else bad()
+            "address" -> appendChip(out, "\uD83C\uDFE0 $v", accentBg, accentFg, extra = CopyCodeSpan(v, "تم نسخ العنوان"))
+            "flag" -> {
+                val p = v.split("|", limit = 2).map { it.trim() }
+                if (!flagCodeRegex.matches(p[0])) { bad(); return }
+                appendChip(out, "${flagEmoji(p[0])} ${p.getOrNull(1).orEmpty().ifBlank { p[0].uppercase() }}", COLOR_INLINE_CODE_BG, COLOR_CODE_TEXT)
+            }
+            "place" -> {
+                val p = v.split("|", limit = 2).map { it.trim() }
+                var name = p[0]
+                var coordRaw = p.getOrNull(1).orEmpty()
+                if (coordRaw.isEmpty() && coordsRegex.matches(name)) { coordRaw = name; name = "" }
+                val ll = if (coordRaw.isNotEmpty()) (parseLatLng(coordRaw) ?: run { bad(); return }) else null
+                val url = if (ll != null) {
+                    "https://www.openstreetmap.org/?mlat=${ll.first}&mlon=${ll.second}#map=15/${ll.first}/${ll.second}"
+                } else {
+                    "https://www.openstreetmap.org/search?query=${Uri.encode(name)}"
+                }
+                val label = name.ifBlank { ll?.let { "${it.first}, ${it.second}" } ?: v }
+                appendChip(out, "\uD83D\uDCCD $label", accentBg, accentFg, extra = LinkButtonClickSpan(url))
+            }
             "license" -> appendChip(out, "\u2696 $v", tintedBackground(0xFF22C88E.toInt(), 0x26), softTextColor(0xFF22C88E.toInt()))
             "platform" -> {
                 val names = v.split("|", ",").map { it.trim() }.filter { it.isNotEmpty() }
@@ -3467,6 +3664,20 @@ private val SILENT_DATA_TYPES = setOf("rdoc", "meta", "بيانات", "refs", "�
                 } else bad()
             }
             "video", "web" -> appendMediaInline(out, "$kind $v")
+            "marquee" -> {
+                val opts = LinkedHashMap<String, String>()
+                val texts = ArrayList<String>()
+                for (pt in v.split("|").map { it.trim() }.filter { it.isNotEmpty() }) {
+                    val kv = metaBadgeKeyValueRegex.find(pt)
+                    if (kv != null) opts[kv.groupValues[1].lowercase()] = kv.groupValues[2] else texts.add(pt)
+                }
+                val (o, err) = parseTickerOptions(opts, activeTagStyle)
+                if (o == null || texts.isEmpty()) {
+                    appendDiagnosticChip(out, "شريط غير صالح" + (err?.let { ": $it" } ?: ""))
+                    return
+                }
+                appendRdocTicker(out, texts, o)
+            }
             "pay" -> appendPayment(out, "", v, null, null, null)
             else -> {
                 if (kind.startsWith("status:")) appendStatusChip(out, kind.removePrefix("status:"), v)
@@ -3738,7 +3949,7 @@ private val SILENT_DATA_TYPES = setOf("rdoc", "meta", "بيانات", "refs", "�
      * والتنقّل محصور في مضيف التضمين نفسه. زر ✕ يُغلق المشغّل ويُعيد الملصق.
      */
     fun buildMediaView(context: Context, media: MarkdownSegment.Media, topMarginPx: Int = 0): View {
-        applyPalette(isDarkMode(context))
+        applyPalette(paletteDark(context, docPageSettings))
         val density = context.resources.displayMetrics.density
         fun dp(v: Float): Int = (v * density + 0.5f).toInt()
         val isVideo = media.kind == "video"
@@ -3847,6 +4058,719 @@ private val SILENT_DATA_TYPES = setOf("rdoc", "meta", "بيانات", "refs", "�
         return card
     }
 
+
+    // ═══════════════════════════════════════════════════════════════════════════════════════════
+    //            إعدادات الصفحة في rdoc: `؛؛؛ صفحة` (حجم، مساحة، خلفية، ألوان، محاذاة، اتجاه…)
+    // ═══════════════════════════════════════════════════════════════════════════════════════════
+    //   ؛؛؛ صفحة
+    //   background: #0F1115,#1C1E25        (لون | 2–6 ألوان | اسم لوحة: forest/harbor/lagoon)
+    //   bg-dir: down                       (down/up/right/left/diag/diag-rev)
+    //   theme: dark                        (light/dark/auto)
+    //   text-color / heading-color / link-color
+    //   font-size: lg                      (xs/sm/md/lg/xl/xxl أو 10–32 أو 70%–200%)
+    //   line-height: 1.6   letter-spacing: 0.02   font: serif (sans/serif/mono)
+    //   padding: 20 16                     (dp، كـCSS: 1–4 قيم)   radius: 24   border: #7C5CFF 2
+    //   max-width: 720                     (dp)   align: justify   direction: rtl
+    //   ؛؛؛
+    // المفاتيح تُقبل أيضاً داخل بلوك `؛؛؛ rdoc` نفسه، ولها أسماء عربية (خلفية، مساحة، حجم-الخط، محاذاة…).
+
+    /** إعدادات صفحة مستخرَجة؛ كل حقل null = "لا تغيير" (يبقى الافتراضي). */
+    class PageSettings(
+        val background: PageBackground?,
+        val bgOrientation: GradientDrawable.Orientation,
+        val textColor: Int?,
+        val headingColor: Int?,
+        val linkColor: Int?,
+        val fontSizeSp: Float?,
+        val lineHeight: Float?,
+        val letterSpacing: Float?,
+        /** [يسار، أعلى، يمين، أسفل] بالـdp. */
+        val padding: IntArray?,
+        val radiusDp: Float?,
+        val borderColor: Int?,
+        val borderDp: Float,
+        val maxWidthDp: Int?,
+        val align: String?,
+        val direction: String?,
+        val font: String?,
+        val theme: String?
+    )
+
+    private var docPageSettings: PageSettings? = null
+
+    private val PAGE_KEYS: Map<String, String> = mapOf(
+        "background" to "background", "bg" to "background", "خلفية" to "background",
+        "bg-dir" to "bg-dir", "اتجاه-الخلفية" to "bg-dir",
+        "text-color" to "text-color", "color" to "text-color", "لون-النص" to "text-color",
+        "heading-color" to "heading-color", "لون-العناوين" to "heading-color",
+        "link-color" to "link-color", "لون-الروابط" to "link-color",
+        "font-size" to "font-size", "حجم-الخط" to "font-size",
+        "line-height" to "line-height", "تباعد-الأسطر" to "line-height",
+        "letter-spacing" to "letter-spacing", "تباعد-الحروف" to "letter-spacing",
+        "padding" to "padding", "مساحة" to "padding", "حشوة" to "padding", "مساحة-الصفحة" to "padding",
+        "radius" to "radius", "زوايا" to "radius",
+        "border" to "border", "إطار" to "border",
+        "max-width" to "max-width", "أقصى-عرض" to "max-width", "عرض" to "max-width",
+        "align" to "align", "محاذاة" to "align",
+        "direction" to "direction", "اتجاه" to "direction",
+        "font" to "font", "خط" to "font",
+        "theme" to "theme", "سمة" to "theme"
+    )
+
+    private val PAGE_FONT_SIZES: Map<String, Float> = mapOf(
+        "xs" to 11f, "sm" to 13f, "md" to 14.5f, "lg" to 17f, "xl" to 20f, "xxl" to 24f,
+        "صغير" to 13f, "متوسط" to 14.5f, "كبير" to 17f, "ضخم" to 20f
+    )
+    private val PAGE_BG_DIRS: Map<String, GradientDrawable.Orientation> = mapOf(
+        "down" to GradientDrawable.Orientation.TOP_BOTTOM, "أسفل" to GradientDrawable.Orientation.TOP_BOTTOM,
+        "up" to GradientDrawable.Orientation.BOTTOM_TOP, "أعلى" to GradientDrawable.Orientation.BOTTOM_TOP,
+        "right" to GradientDrawable.Orientation.LEFT_RIGHT, "يمين" to GradientDrawable.Orientation.LEFT_RIGHT,
+        "left" to GradientDrawable.Orientation.RIGHT_LEFT, "يسار" to GradientDrawable.Orientation.RIGHT_LEFT,
+        "diag" to GradientDrawable.Orientation.TL_BR, "قطري" to GradientDrawable.Orientation.TL_BR,
+        "diag-rev" to GradientDrawable.Orientation.TR_BL, "قطري-معكوس" to GradientDrawable.Orientation.TR_BL
+    )
+    private val PAGE_ALIGNS: Map<String, String> = mapOf(
+        "start" to "start", "center" to "center", "end" to "end", "justify" to "justify",
+        "بداية" to "start", "وسط" to "center", "نهاية" to "end", "ضبط" to "justify"
+    )
+    private val PAGE_FONTS: Map<String, String> = mapOf(
+        "sans" to "sans", "serif" to "serif", "mono" to "mono", "monospace" to "mono",
+        "عادي" to "sans", "مزخرف" to "serif", "ثابت" to "mono"
+    )
+
+    /** يستخرج إعدادات الصفحة من [markdown] (أو null إن لم توجد أي مفاتيح). للمستندات rdoc فقط. */
+    fun extractPageSettings(markdown: String): PageSettings? = parsePageSettings(markdown, null)
+
+    private fun paletteDark(context: Context, page: PageSettings?): Boolean =
+        when (page?.theme) {
+            "dark" -> true
+            "light" -> false
+            else -> isDarkMode(context)
+        }
+
+    /**
+     * يقرأ بلوكات `؛؛؛ صفحة`/`page` (صارمة: مفتاح مجهول → تحذير) ومفاتيح الصفحة داخل `؛؛؛ rdoc`/`meta` (متساهلة:
+     * مفتاح غير صفحة يُتجاهل). إن مُرِّر [issues] تُسجَّل القيم غير الصالحة بأرقام الأسطر؛ وإلا تُتجاهل بصمت.
+     * أول تعريف لمفتاح يفوز.
+     */
+    private fun parsePageSettings(markdown: String, issues: MutableList<RdocIssue>?): PageSettings? {
+        var background: PageBackground? = null
+        var bgDir = GradientDrawable.Orientation.TOP_BOTTOM
+        var textColor: Int? = null
+        var headingColor: Int? = null
+        var linkColor: Int? = null
+        var fontSize: Float? = null
+        var lineHeight: Float? = null
+        var letterSpacing: Float? = null
+        var padding: IntArray? = null
+        var radius: Float? = null
+        var borderColor: Int? = null
+        var borderDp = 0f
+        var maxWidth: Int? = null
+        var align: String? = null
+        var direction: String? = null
+        var font: String? = null
+        var theme: String? = null
+        val seen = HashSet<String>()
+        var found = false
+
+        val lines = markdown.lines()
+        var inFence = false
+        var i = 0
+        while (i < lines.size) {
+            val t = lines[i].trim()
+            if (t.startsWith("```")) { inFence = !inFence; i++; continue }
+            val open = if (inFence) null else arSemiFenceOpenRegex.find(t)
+            if (open == null) { i++; continue }
+            val scan = scanDataFence(lines, i)
+            val type = open.groupValues[1].trim().split(whitespaceRegex)[0].lowercase()
+            val strict = type == "page" || type == "صفحة"
+            if (strict || type == "rdoc" || type == "meta" || type == "بيانات") {
+                for ((off, line) in scan.body.withIndex()) {
+                    val idx = line.indexOf(':')
+                    if (idx <= 0) continue
+                    val rawKey = line.substring(0, idx).trim().lowercase().replace('_', '-').replace(' ', '-')
+                    val value = line.substring(idx + 1).trim()
+                    val key = PAGE_KEYS[rawKey]
+                    val ln = i + 2 + off
+                    if (key == null) {
+                        if (strict) issues?.add(RdocIssue(ln, "warning", "مفتاح صفحة غير معروف: $rawKey"))
+                        continue
+                    }
+                    found = true
+                    if (!seen.add(key)) {
+                        issues?.add(RdocIssue(ln, "warning", "مفتاح مكرّر: $rawKey (الأول هو المعتمد)"))
+                        continue
+                    }
+                    val v = value.lowercase()
+                    var ok = true
+                    when (key) {
+                        "background" -> {
+                            val named = NAMED_PALETTES[v]
+                            if (named != null) {
+                                background = PageBackground.Gradient(named)
+                            } else {
+                                val stops = value.split(",").map { it.trim() }.filter { it.isNotEmpty() }.map { parseColorValue(it)?.first }
+                                if (stops.isEmpty() || stops.size > 6 || stops.any { it == null }) {
+                                    ok = false
+                                } else {
+                                    val cs = stops.filterNotNull().toIntArray()
+                                    background = if (cs.size >= 2) PageBackground.Gradient(cs) else PageBackground.Solid(cs[0])
+                                }
+                            }
+                        }
+                        "bg-dir" -> { val d = PAGE_BG_DIRS[v]; if (d == null) ok = false else bgDir = d }
+                        "text-color" -> { val c = parseColorValue(value)?.first; if (c == null) ok = false else textColor = c }
+                        "heading-color" -> { val c = parseColorValue(value)?.first; if (c == null) ok = false else headingColor = c }
+                        "link-color" -> { val c = parseColorValue(value)?.first; if (c == null) ok = false else linkColor = c }
+                        "font-size" -> {
+                            val f = PAGE_FONT_SIZES[v]
+                                ?: v.removeSuffix("sp").trim().toFloatOrNull()?.takeIf { it in 10f..32f }
+                                ?: v.takeIf { it.endsWith("%") }?.removeSuffix("%")?.toFloatOrNull()?.takeIf { it in 70f..200f }?.let { it / 100f * 14.5f }
+                            if (f == null) ok = false else fontSize = f
+                        }
+                        "line-height" -> { val f = v.toFloatOrNull()?.takeIf { it in 1f..3f }; if (f == null) ok = false else lineHeight = f }
+                        "letter-spacing" -> { val f = v.toFloatOrNull()?.takeIf { it in -0.05f..0.5f }; if (f == null) ok = false else letterSpacing = f }
+                        "padding" -> {
+                            val nums = v.replace("dp", "").split(Regex("[,\\s]+")).filter { it.isNotEmpty() }.map { it.toIntOrNull() }
+                            if (nums.isEmpty() || nums.size > 4 || nums.any { it == null || it !in 0..64 }) {
+                                ok = false
+                            } else {
+                                val n = nums.filterNotNull()
+                                // كـCSS: قيمة (الكل) | رأسي أفقي | أعلى أفقي أسفل | أعلى يمين أسفل يسار
+                                val (top, right, bottom, left) = when (n.size) {
+                                    1 -> listOf(n[0], n[0], n[0], n[0])
+                                    2 -> listOf(n[0], n[1], n[0], n[1])
+                                    3 -> listOf(n[0], n[1], n[2], n[1])
+                                    else -> listOf(n[0], n[1], n[2], n[3])
+                                }
+                                padding = intArrayOf(left, top, right, bottom)
+                            }
+                        }
+                        "radius" -> { val f = v.removeSuffix("dp").trim().toFloatOrNull()?.takeIf { it in 0f..48f }; if (f == null) ok = false else radius = f }
+                        "border" -> {
+                            val toks = value.split(whitespaceRegex).filter { it.isNotEmpty() }
+                            var c: Int? = null
+                            var w: Float? = null
+                            for (tk in toks) {
+                                val num = tk.lowercase().removeSuffix("dp").toFloatOrNull()
+                                if (num != null) w = num else c = parseColorValue(tk)?.first ?: run { ok = false; null }
+                            }
+                            if (!ok || c == null || w == null || w !in 0f..8f) {
+                                ok = false
+                            } else {
+                                borderColor = c
+                                borderDp = w
+                            }
+                        }
+                        "max-width" -> { val n = v.removeSuffix("dp").trim().toIntOrNull()?.takeIf { it in 240..1200 }; if (n == null) ok = false else maxWidth = n }
+                        "align" -> { val a = PAGE_ALIGNS[v]; if (a == null) ok = false else align = a }
+                        "direction" -> { if (v == "rtl" || v == "ltr" || v == "auto") direction = v else ok = false }
+                        "font" -> { val f = PAGE_FONTS[v]; if (f == null) ok = false else font = f }
+                        "theme" -> { if (v == "light" || v == "dark" || v == "auto") theme = v.takeIf { it != "auto" } else ok = false }
+                    }
+                    if (!ok) issues?.add(RdocIssue(ln, "error", "قيمة غير صالحة لـ$rawKey: $value"))
+                }
+            }
+            i = if (scan.next > i) scan.next else i + 1
+        }
+        if (!found) return null
+        return PageSettings(
+            background, bgDir, textColor, headingColor, linkColor, fontSize, lineHeight, letterSpacing,
+            padding, radius, borderColor, borderDp, maxWidth, align, direction, font, theme
+        )
+    }
+
+    /** يطبّق إعدادات النص (لون، حجم، تباعد، محاذاة، اتجاه، خط) على [tv] — تُستدعى من [applyTo] لمقاطع rdoc النصية. */
+    private fun applyPageTextStyle(tv: TextView, page: PageSettings, dark: Boolean) {
+        val tc = page.textColor
+        if (tc != null) {
+            tv.setTextColor(tc)
+        } else if (page.theme != null) {
+            tv.setTextColor(if (dark) 0xFFE3E5E8.toInt() else 0xFF20252B.toInt())
+        }
+        page.fontSizeSp?.let { tv.textSize = it }
+        page.lineHeight?.let { tv.setLineSpacing(tv.lineSpacingExtra, it) }
+        page.letterSpacing?.let { tv.letterSpacing = it }
+        when (page.align) {
+            "start" -> tv.textAlignment = View.TEXT_ALIGNMENT_VIEW_START
+            "center" -> tv.textAlignment = View.TEXT_ALIGNMENT_CENTER
+            "end" -> tv.textAlignment = View.TEXT_ALIGNMENT_VIEW_END
+            "justify" -> {
+                tv.textAlignment = View.TEXT_ALIGNMENT_VIEW_START
+                if (Build.VERSION.SDK_INT >= 26) tv.justificationMode = Layout.JUSTIFICATION_MODE_INTER_WORD
+            }
+        }
+        when (page.direction) {
+            "rtl" -> tv.textDirection = View.TEXT_DIRECTION_RTL
+            "ltr" -> tv.textDirection = View.TEXT_DIRECTION_LTR
+            "auto" -> tv.textDirection = View.TEXT_DIRECTION_FIRST_STRONG
+        }
+        when (page.font) {
+            "sans" -> tv.typeface = Typeface.SANS_SERIF
+            "serif" -> tv.typeface = Typeface.SERIF
+            "mono" -> tv.typeface = Typeface.MONOSPACE
+        }
+    }
+
+    /**
+     * يطبّق إعدادات الحاوية (خلفية متدرّجة/صلبة، زوايا، إطار، مساحة/حشوة، أقصى عرض) على [container] — تستدعيها
+     * الشاشة الحاضنة لـREADME بعد بناء بطاقة الصفحة الافتراضية، فتغلب قيم `؛؛؛ صفحة` على الافتراضي وعلى `Page_background`.
+     */
+    fun applyPageContainer(container: View, page: PageSettings) {
+        val density = container.resources.displayMetrics.density
+        fun dp(v: Float): Int = (v * density + 0.5f).toInt()
+        val dark = paletteDark(container.context, page)
+        if (page.background != null || page.borderColor != null || page.radiusDp != null || page.theme != null) {
+            val drawable = when (val bg = page.background) {
+                is PageBackground.Solid -> GradientDrawable().apply { setColor(bg.color) }
+                is PageBackground.Gradient -> GradientDrawable(page.bgOrientation, bg.colors)
+                null -> GradientDrawable().apply { setColor(if (dark) 0xFF1C1E25.toInt() else 0xFFFFFFFF.toInt()) }
+            }
+            drawable.cornerRadius = dp(page.radiusDp ?: 16f).toFloat()
+            val bc = page.borderColor
+            if (bc != null && page.borderDp > 0f) {
+                drawable.setStroke(dp(page.borderDp).coerceAtLeast(1), bc)
+            } else if (page.background == null) {
+                drawable.setStroke(dp(1f).coerceAtLeast(1), if (dark) 0xFF2A2D34.toInt() else 0xFFE2E6ED.toInt())
+            }
+            container.background = drawable
+        }
+        page.padding?.let { p -> container.setPadding(dp(p[0].toFloat()), dp(p[1].toFloat()), dp(p[2].toFloat()), dp(p[3].toFloat())) }
+        page.maxWidthDp?.let { mw ->
+            container.post {
+                val maxPx = dp(mw.toFloat())
+                val lp = container.layoutParams ?: return@post
+                val parentWidth = (container.parent as? View)?.width ?: 0
+                if (parentWidth > maxPx && lp.width != maxPx) {
+                    lp.width = maxPx
+                    if (lp is LinearLayout.LayoutParams) lp.gravity = Gravity.CENTER_HORIZONTAL
+                    else if (lp is FrameLayout.LayoutParams) lp.gravity = Gravity.CENTER_HORIZONTAL
+                    container.layoutParams = lp
+                }
+            }
+        }
+    }
+
+
+    // ═══════════════════════════════════════════════════════════════════════════════════════════
+    //                        شريط rdoc المتحرّك: `::: شريط` و`[marquee: …]`
+    // ═══════════════════════════════════════════════════════════════════════════════════════════
+    //   ::: شريط speed=(60) style=(solid) color=(#7C5CFF) icon=(star) dir=(right) sep=(★) link=(repo)
+    //   إصدار جديد متاح الآن
+    //   دعم أكثر من 10 منصات
+    //   :::
+    //   [marquee: عرض خاص|خبر ثانٍ|speed=(45)|style=(outline)|color=(#22C88E)]
+    // كل سطر (أو كل جزء `|`) عنصر، تفصل بينها `sep`. يختلف عن `[*نص/marquee*]` القديم: عدة عناصر، إيقاف/استئناف
+    // بالنقر (`pause=(tap)` الافتراضي إن لم يوجد `link`)، `link` رابط أو معرّف عنصر، وستايل الأقواس (size/style/color/icon).
+
+    private class TickerOptions(
+        val speedDp: Float,
+        val leftward: Boolean,
+        val style: String,
+        val color: Int?,
+        val sep: String,
+        val icon: String?,
+        val widthDp: Float?,
+        val pauseOnTap: Boolean,
+        val linkUrl: String?,
+        val size: Float,
+        /** true = حركة رأسية (`dir=(up|down)`): عناصر في أسطر داخل صندوق بارتفاع ثابت. */
+        val vertical: Boolean,
+        val upward: Boolean,
+        val heightDp: Float?,
+        /** true = `mode=(step)`: عنصر واحد يظهر ثم ينزلق للتالي بعد [holdSec]. */
+        val step: Boolean,
+        val holdSec: Float
+    )
+
+    private val tickerOptionRegex = Regex("(\\w+)\\s*=\\s*\\(([^)]*)\\)")
+    private val tickerBulletRegex = Regex("^[-*+]\\s+")
+
+    /** حالة تحريك مشتركة بين رسم الشريط ونقرة الإيقاف (موضع تراكمي بالبكسل + آخر توقيت رسم). */
+    private class TickerState {
+        var paused = false
+        var pos = 0f
+        var last = 0L
+    }
+
+    private class TickerToggleSpan(private val state: TickerState) : ClickableSpan() {
+        override fun onClick(widget: View) {
+            state.paused = !state.paused
+            widget.invalidate()
+        }
+
+        override fun updateDrawState(ds: TextPaint) {}
+    }
+
+    /** يحوّل خيارات `key=(قيمة)` إلى [TickerOptions]؛ [base] ستايل الوسم الفعّال (style/color/icon) للقوس السطري. */
+    private fun parseTickerOptions(
+        opts: Map<String, String>,
+        base: TagStyle?,
+        refs: Map<String, ElementRef> = currentElementRefs
+    ): Pair<TickerOptions?, String?> {
+        var speed = 50f
+        var left = true
+        var style = base?.style ?: "soft"
+        var color = base?.color
+        var sep = "  \u2022  "
+        var icon = base?.icon
+        var width: Float? = null
+        var pause = true
+        var link: String? = null
+        var size = 1f
+        var vertical = false
+        var upward = true
+        var height: Float? = null
+        var step = false
+        var hold = 2f
+        var verticalOnly = false
+        for ((k, raw) in opts) {
+            val v = raw.trim()
+            val lv = v.lowercase()
+            when (k) {
+                "speed" -> speed = lv.toFloatOrNull()?.takeIf { it in 5f..400f } ?: return null to "speed=($v)"
+                "dir" -> when (lv) {
+                    "left", "يسار" -> { left = true; vertical = false }
+                    "right", "يمين" -> { left = false; vertical = false }
+                    "up", "أعلى" -> { vertical = true; upward = true }
+                    "down", "أسفل" -> { vertical = true; upward = false }
+                    else -> return null to "dir=($v)"
+                }
+                "height" -> {
+                    height = lv.removeSuffix("dp").trim().toFloatOrNull()?.takeIf { it in 24f..400f } ?: return null to "height=($v)"
+                    verticalOnly = true
+                }
+                "mode" -> {
+                    step = when (lv) {
+                        "step", "خطوة" -> true
+                        "scroll", "تمرير" -> false
+                        else -> return null to "mode=($v)"
+                    }
+                    verticalOnly = true
+                }
+                "hold" -> {
+                    hold = lv.toFloatOrNull()?.takeIf { it in 0.5f..30f } ?: return null to "hold=($v)"
+                    verticalOnly = true
+                }
+                "style" -> style = TAG_STYLES[lv] ?: return null to "style=($v)"
+                "color" -> color = (parseColorValue(v) ?: return null to "color=($v)").first
+                "sep" -> sep = if (v.isBlank()) sep else "  ${v.take(6)}  "
+                "icon" -> icon = iconGlyphFor(v) ?: return null to "icon=($v)"
+                "width" -> width = lv.removeSuffix("dp").trim().toFloatOrNull()?.takeIf { it in 120f..1200f } ?: return null to "width=($v)"
+                "pause" -> pause = when (lv) {
+                    "tap", "نقر" -> true
+                    "none", "no", "بلا" -> false
+                    else -> return null to "pause=($v)"
+                }
+                "link" -> link = if (isSafeLinkUrl(v)) v else (resolveElement(v, refs)?.url ?: return null to "link=($v)")
+                "size" -> size = TAG_SIZES[lv] ?: lv.removeSuffix("%").toFloatOrNull()?.takeIf { it in 50f..300f }?.div(100f) ?: return null to "size=($v)"
+                "shape", "pos" -> {}
+                else -> return null to "خيار شريط غير معروف: $k"
+            }
+        }
+        if (verticalOnly && !vertical) return null to "height/mode/hold تحتاج dir=(up) أو dir=(down)"
+        return TickerOptions(speed, left, style, color, sep, icon, width, pause, link, size, vertical, upward, height, step, hold) to null
+    }
+
+    /** يرسم شريطاً واحداً يمرّر [items] مفصولة بـ`sep` داخل حبّة بعرض ثابت، ويربطه بنقرة إيقاف أو رابط. */
+    private fun appendRdocTicker(out: SpannableStringBuilder, items: List<String>, o: TickerOptions) {
+        val base = o.color ?: COLOR_BULLET
+        val bg: Int
+        val fg: Int
+        val stroke: Int
+        when (o.style) {
+            "solid" -> { bg = base; fg = if (o.color != null) contrastingTextColor(base) else 0xFFFFFFFF.toInt(); stroke = 0 }
+            "outline" -> { bg = 0; fg = softTextColor(base); stroke = base }
+            "ghost" -> { bg = 0; fg = softTextColor(base); stroke = 0 }
+            else -> { bg = tintedBackground(base, 0x26); fg = softTextColor(base); stroke = 0 }
+        }
+        val glyph = o.icon
+        val label = items.joinToString(o.sep) { if (glyph != null) "$glyph $it" else it }
+        val density = currentDensity
+        val customWidth = o.widthDp
+        val widthPx = if (customWidth != null) customWidth * density else currentImageMaxWidthPx * 0.96f
+        val state = TickerState()
+        val start = out.length
+        out.append("\u00A0")
+        val end = out.length
+        val span: ReplacementSpan = if (o.vertical) {
+            RdocVerticalTickerSpan(
+                items.map { if (glyph != null) "$glyph $it" else it }, bg, fg, stroke, if (stroke != 0) 2.5f else 0f,
+                widthPx, (o.heightDp ?: 0f) * density, o.speedDp * density, o.upward, o.step, (o.holdSec * 1000f).toLong(), state
+            )
+        } else {
+            RdocTickerSpan(label, bg, fg, stroke, if (stroke != 0) 2.5f else 0f, widthPx, o.speedDp * density, o.leftward, state)
+        }
+        out.setSpan(span, start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        out.setSpan(StyleSpan(Typeface.BOLD), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        out.setSpan(RelativeSizeSpan(0.9f * o.size), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        val linkUrl = o.linkUrl
+        if (linkUrl != null) {
+            out.setSpan(LinkButtonClickSpan(linkUrl), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        } else if (o.pauseOnTap) {
+            out.setSpan(TickerToggleSpan(state), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        }
+    }
+
+    /**
+     * شريط رأسي: [items] أسطر داخل صندوق بارتفاع ثابت ([heightPx]، أو 3 أسطر للتمرير/سطر للخطوة إن كان 0).
+     * `scroll` تمرير مستمر (لأعلى إن [upward] وإلا لأسفل)، و`step` يعرض عنصراً واحداً [holdMs] ثم ينزلق للتالي.
+     * الموضع في [TickerState] (بكسل للتمرير، مللي ثانية للخطوة) فيتوقف/يستأنف بلا قفزة، ويخفت النص أثناء الإيقاف.
+     */
+    private class RdocVerticalTickerSpan(
+        private val items: List<String>,
+        private val bg: Int,
+        private val fg: Int,
+        private val strokeColor: Int,
+        private val strokeWidth: Float,
+        private val widthPx: Float,
+        private val heightPx: Float,
+        private val speedPxPerSec: Float,
+        private val upward: Boolean,
+        private val step: Boolean,
+        private val holdMs: Long,
+        private val state: TickerState,
+        private val cornerRadius: Float = 10f,
+        private val paddingH: Float = 14f,
+        private val paddingV: Float = 4f
+    ) : ReplacementSpan() {
+        private var cacheWidth = -1f
+        private var cacheSize = -1f
+        private var cacheItems: List<String> = items
+
+        private fun lineHeight(paint: Paint): Float = paint.fontSpacing * 1.35f
+
+        private fun boxHeight(paint: Paint): Float {
+            val visible = if (heightPx > 0f) heightPx else lineHeight(paint) * (if (step) 1f else 3f)
+            return visible + paddingV * 2f
+        }
+
+        override fun getSize(paint: Paint, text: CharSequence, start: Int, end: Int, fm: Paint.FontMetricsInt?): Int {
+            fm?.let {
+                val h = boxHeight(paint)
+                it.ascent = -(h * 0.8f).toInt()
+                it.descent = (h * 0.2f).toInt()
+                it.top = it.ascent
+                it.bottom = it.descent
+            }
+            return widthPx.toInt()
+        }
+
+        override fun draw(
+            canvas: Canvas, text: CharSequence, start: Int, end: Int,
+            x: Float, top: Int, y: Int, bottom: Int, paint: Paint
+        ) {
+            val savedColor = paint.color
+            val savedStyle = paint.style
+            val savedAA = paint.isAntiAlias
+            val savedAlign = paint.textAlign
+            paint.isAntiAlias = true
+
+            val rect = RectF(x, top.toFloat() + paddingV, x + widthPx, bottom.toFloat() - paddingV)
+            if (bg != 0) {
+                paint.style = Paint.Style.FILL
+                paint.color = bg
+                canvas.drawRoundRect(rect, cornerRadius, cornerRadius, paint)
+            }
+            if (strokeWidth > 0f) {
+                val savedStroke = paint.strokeWidth
+                val half = strokeWidth / 2f
+                paint.style = Paint.Style.STROKE
+                paint.strokeWidth = strokeWidth
+                paint.color = strokeColor
+                canvas.drawRoundRect(
+                    RectF(rect.left + half, rect.top + half, rect.right - half, rect.bottom - half),
+                    cornerRadius, cornerRadius, paint
+                )
+                paint.strokeWidth = savedStroke
+            }
+
+            val availW = (widthPx - paddingH * 2f).coerceAtLeast(1f)
+            if (cacheWidth != availW || cacheSize != paint.textSize) {
+                val tp = TextPaint(paint)
+                cacheItems = items.map { android.text.TextUtils.ellipsize(it, tp, availW, android.text.TextUtils.TruncateAt.END).toString() }
+                cacheWidth = availW
+                cacheSize = paint.textSize
+            }
+            val lines = cacheItems
+            val n = lines.size
+            if (n == 0) return
+            val lineH = lineHeight(paint)
+            val boxTop = rect.top
+            val boxBottom = rect.bottom
+            val boxH = boxBottom - boxTop
+
+            val now = SystemClock.uptimeMillis()
+            val dt = if (state.last != 0L && !state.paused) (now - state.last).coerceIn(0L, 100L) else 0L
+            state.last = now
+            val slotMs = holdMs + SLIDE_MS
+            val cycle = maxOf(n * lineH, boxH + lineH)
+            if (dt > 0L) {
+                state.pos = if (step) {
+                    (state.pos + dt) % (slotMs * n).toFloat()
+                } else {
+                    (state.pos + dt / 1000f * speedPxPerSec) % cycle
+                }
+            }
+
+            val fmv = paint.fontMetrics
+            val centerShift = (fmv.ascent + fmv.descent) / 2f
+            val cx = x + widthPx / 2f
+            paint.style = Paint.Style.FILL
+            paint.textAlign = Paint.Align.CENTER
+            paint.color = if (state.paused) (fg and 0x00FFFFFF) or (0x99 shl 24) else fg
+
+            canvas.save()
+            canvas.clipRect(x + paddingH, boxTop, x + widthPx - paddingH, boxBottom)
+            if (step) {
+                val t = state.pos
+                val idx = (t / slotMs).toInt().coerceIn(0, n - 1)
+                val local = t - idx * slotMs
+                val cy = boxTop + boxH / 2f
+                val dir = if (upward) -1f else 1f
+                if (local < holdMs) {
+                    canvas.drawText(lines[idx], cx, cy - centerShift, paint)
+                } else {
+                    val p = ((local - holdMs) / SLIDE_MS.toFloat()).coerceIn(0f, 1f)
+                    val e = p * p * (3f - 2f * p)
+                    canvas.drawText(lines[idx], cx, cy + dir * e * boxH - centerShift, paint)
+                    canvas.drawText(lines[(idx + 1) % n], cx, cy - dir * (1f - e) * boxH - centerShift, paint)
+                }
+            } else {
+                val offset = state.pos % cycle
+                var yTop = if (upward) boxTop - offset else boxTop + offset - cycle
+                while (yTop < boxBottom) {
+                    for (i in 0 until n) {
+                        val lineTop = yTop + i * lineH
+                        if (lineTop + lineH > boxTop && lineTop < boxBottom) {
+                            canvas.drawText(lines[i], cx, lineTop + lineH / 2f - centerShift, paint)
+                        }
+                    }
+                    yTop += cycle
+                }
+            }
+            canvas.restore()
+
+            paint.color = savedColor
+            paint.style = savedStyle
+            paint.isAntiAlias = savedAA
+            paint.textAlign = savedAlign
+        }
+
+        private companion object {
+            const val SLIDE_MS = 450L
+        }
+    }
+
+    /** حاوية `::: شريط …`: خيارات `key=(v)` في رأسها، وكل سطر غير فارغ في جسمها عنصر. */
+    private fun appendRdocMarquee(out: SpannableStringBuilder, title: String, body: List<String>, closed: Boolean) {
+        val opts = LinkedHashMap<String, String>()
+        for (m in tickerOptionRegex.findAll(title)) opts[m.groupValues[1].lowercase()] = m.groupValues[2]
+        val (o, err) = parseTickerOptions(opts, null)
+        if (o == null) {
+            appendDiagnosticChip(out, "شريط: $err")
+            return
+        }
+        val items = body.map { tickerBulletRegex.replace(it.trim(), "").replace("**", "").replace("__", "").replace("`", "") }
+            .filter { it.isNotBlank() }
+        if (items.isEmpty()) {
+            appendDiagnosticChip(out, "شريط فارغ")
+            return
+        }
+        appendRdocTicker(out, items, o)
+        if (!closed) {
+            out.append("  ")
+            appendDiagnosticChip(out, "حاوية غير مغلقة")
+        }
+    }
+
+    /**
+     * حبّة الشريط: كـ[MarqueeSpan] لكن الموضع تراكمي في [TickerState] (يتوقف عند الإيقاف بلا قفزة عند الاستئناف)،
+     * ويخفت النص أثناء الإيقاف. الفرق الزمني بين رسمين يُقيَّد بـ100ms كي لا يقفز الشريط بعد غياب طويل.
+     */
+    private class RdocTickerSpan(
+        private val label: String,
+        private val bg: Int,
+        private val fg: Int,
+        private val strokeColor: Int,
+        private val strokeWidth: Float,
+        private val widthPx: Float,
+        private val speedPxPerSec: Float,
+        private val leftward: Boolean,
+        private val state: TickerState,
+        private val cornerRadius: Float = 10f,
+        private val paddingH: Float = 14f,
+        private val paddingV: Float = 4f,
+        private val gapPx: Float = 24f
+    ) : ReplacementSpan() {
+        override fun getSize(paint: Paint, text: CharSequence, start: Int, end: Int, fm: Paint.FontMetricsInt?): Int {
+            fm?.let {
+                val orig = paint.fontMetricsInt
+                it.ascent = orig.ascent; it.descent = orig.descent; it.top = orig.top; it.bottom = orig.bottom
+            }
+            return widthPx.toInt()
+        }
+
+        override fun draw(
+            canvas: Canvas, text: CharSequence, start: Int, end: Int,
+            x: Float, top: Int, y: Int, bottom: Int, paint: Paint
+        ) {
+            val savedColor = paint.color
+            val savedStyle = paint.style
+            val savedAA = paint.isAntiAlias
+            paint.isAntiAlias = true
+
+            val rect = RectF(x, top.toFloat() + paddingV, x + widthPx, bottom.toFloat() - paddingV)
+            if (bg != 0) {
+                paint.style = Paint.Style.FILL
+                paint.color = bg
+                canvas.drawRoundRect(rect, cornerRadius, cornerRadius, paint)
+            }
+            if (strokeWidth > 0f) {
+                val savedStroke = paint.strokeWidth
+                val half = strokeWidth / 2f
+                paint.style = Paint.Style.STROKE
+                paint.strokeWidth = strokeWidth
+                paint.color = strokeColor
+                canvas.drawRoundRect(
+                    RectF(rect.left + half, rect.top + half, rect.right - half, rect.bottom - half),
+                    cornerRadius, cornerRadius, paint
+                )
+                paint.strokeWidth = savedStroke
+                paint.style = Paint.Style.FILL
+            }
+
+            val left = x + paddingH
+            val right = x + widthPx - paddingH
+            val textWidth = paint.measureText(label)
+            val cycle = textWidth + gapPx
+
+            val now = SystemClock.uptimeMillis()
+            if (state.last != 0L && !state.paused) {
+                val dt = (now - state.last).coerceIn(0L, 100L) / 1000f
+                state.pos = (state.pos + dt * speedPxPerSec) % cycle
+            }
+            state.last = now
+            val offset = state.pos % cycle
+
+            canvas.save()
+            canvas.clipRect(left, top.toFloat(), right, bottom.toFloat())
+            paint.style = Paint.Style.FILL
+            paint.color = if (state.paused) (fg and 0x00FFFFFF) or (0x99 shl 24) else fg
+            var px = if (leftward) left - offset else left + offset - cycle
+            while (px < right) {
+                if (px + textWidth > left) canvas.drawText(label, px, y.toFloat(), paint)
+                px += cycle
+            }
+            canvas.restore()
+
+            paint.color = savedColor
+            paint.style = savedStyle
+            paint.isAntiAlias = savedAA
+        }
+    }
+
     // ─────────────────────────── الفحص الصارم ───────────────────────────
 
     /** مشكلة وجدها [validate]: رقم السطر (من 1)، الخطورة (`error`/`warning`)، الوصف. */
@@ -3863,6 +4787,7 @@ private val SILENT_DATA_TYPES = setOf("rdoc", "meta", "بيانات", "refs", "�
         }
         val lines = markdown.lines()
         val refs = collectElementRefs(markdown)
+        parsePageSettings(markdown, issues)
         val metaAll = extractMeta(markdown)
         val ids = HashMap<String, Int>()
         var inFence = false
@@ -3914,6 +4839,14 @@ private val SILENT_DATA_TYPES = setOf("rdoc", "meta", "بيانات", "refs", "�
                     issues.add(RdocIssue(ln, "error", "عمق الحاويات $depth يتجاوز الحد $RDOC_MAX_CONTAINER_DEPTH"))
                 }
                 if (CONTAINER_ALIASES[type] == null) issues.add(RdocIssue(ln, "error", "نوع حاوية غير معروف: $type"))
+                if (CONTAINER_ALIASES[type] == "marquee") {
+                    val header = colonFenceOpenRegex.find(t)!!.groupValues[1]
+                    val title = header.trim().split(whitespaceRegex, limit = 2).getOrNull(1).orEmpty()
+                    val opts = LinkedHashMap<String, String>()
+                    for (m in tickerOptionRegex.findAll(title)) opts[m.groupValues[1].lowercase()] = m.groupValues[2]
+                    val (o, err) = parseTickerOptions(opts, null, refs)
+                    if (o == null) issues.add(RdocIssue(ln, "error", "خيار شريط غير صالح: $err"))
+                }
             } else if (colonFenceCloseRegex.matches(t)) {
                 if (depth == 0) issues.add(RdocIssue(ln, "error", "إغلاق ::: بلا فتح")) else depth--
             } else if (arSemiFenceCloseRegex.matches(t)) {
