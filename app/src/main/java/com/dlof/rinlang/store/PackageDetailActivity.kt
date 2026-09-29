@@ -322,6 +322,10 @@ class PackageDetailActivity : BaseConnectivityActivity() {
         // افتراضية بحدّ خفيف تناسب الثيم الفاتح/الداكن (سابقاً: لا حشوة ولا زوايا، فيلاصق النصُّ الحافة).
         val customBg = if (!readme.isNullOrBlank()) DocumentationContainer.extractPageBackground(readme) else null
         applyReadmePageStyle(containerReadme, customBg)
+        // rdoc: `؛؛؛ صفحة` (خلفية/مساحة/زوايا/إطار/أقصى عرض) تغلب على الافتراضي وعلى Page_background.
+        if (!readme.isNullOrBlank() && DocumentationContainer.isRdocDocument(readme)) {
+            DocumentationContainer.extractPageSettings(readme)?.let { DocumentationContainer.applyPageContainer(containerReadme, it) }
+        }
         if (readme.isNullOrBlank()) {
             containerReadme.addView(buildReadmeTextSegment(getString(R.string.package_detail_no_readme)))
         } else {
