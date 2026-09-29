@@ -443,7 +443,9 @@ object PackagingUtils {
                     out.closeEntry()
                 }
 
-            if (!readmeFile.isFile) {
+            // README.rdoc (Documentation Container) يُنسَخ مع بقية الملفات أعلاه ويكفي كتوثيق للحزمة.
+            val hasRdocReadme = File(sourceDir, "README.${DocumentationContainer.EXTENSION}").isFile
+            if (!readmeFile.isFile && !hasRdocReadme) {
 
                 val generated =
                     buildReadme(
@@ -736,7 +738,8 @@ object PackagingUtils {
         }
 
         return PackageContents(
-            readmeRdoc ?: readme,
+            // README.rdoc يتقدّم على README.md، ويُضاف له ترويسة rdoc تلقائياً (لهجة rdoc لا Markdown).
+            readmeRdoc?.let { DocumentationContainer.ensureRdocHeader(it) } ?: readme,
             license,
             files.sortedBy {
                 it.name
@@ -1327,6 +1330,7 @@ object PackagingUtils {
                     it.name.lowercase()
 
                 lower == "readme.md" ||
+                    lower == "readme.${DocumentationContainer.EXTENSION}" ||
                     lower == "license" ||
                     lower == "license.txt"
             }
