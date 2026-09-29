@@ -6,6 +6,22 @@ author: @example
 
 ؛؛ هذا تعليق: لا يظهر في العرض أبداً.
 
+؛؛؛ صفحة
+background: #0F1115,#1C1E25
+bg-dir: diag
+theme: dark
+heading-color: #FFFFFF
+link-color: #9C85FF
+font-size: lg
+line-height: 1.7
+padding: 20 16
+radius: 24
+border: #7C5CFF 1
+max-width: 720
+align: start
+direction: rtl
+؛؛؛
+
 ؛؛؛ مراجع
 docs = https://dlof-lib.github.io/rinlang/ | التوثيق الرسمي
 issues = https://github.com/dlof-lib/rinlang/issues | تتبّع المشاكل
@@ -121,3 +137,53 @@ btc|bc1qexampleaddress0000000000000000|عنوان بيتكوين
 [rating: 4.5|التقييم] [progress: 70|الإنجاز] [color: #22C88E] [icon: rocket|انطلق] [key: Ctrl+Shift+P]
 
 [copy: rin install example|انسخ الأمر] [link: https://dlof-lib.github.io/rinlang/|الموقع] [email: hello@example.com] [phone: +966 50 000 0000]
+
+## ستايل الأقواس
+
+الحجم: [tag: rin|size=(xs)] [tag: rin|size=(sm)] [tag: rin|size=(lg)] [tag: rin|size=(xl)] [tag: rin|size=(150%)]
+
+النمط: [tag: rin|style=(outline)] [tag: rin|style=(solid)|color=(#7C5CFF)] [tag: rin|style=(ghost)] [tag: rin|color=(#22C88E)]
+
+الشكل والأيقونة: [tag: rin|shape=(square)] [tag: rin|shape=(pill)|icon=(star)] [tag: rin|icon=(star)|pos=(end)]
+
+## أماكن وقياسات
+
+[place: الرياض|24.7136,46.6753] [place: 21.4225,39.8262] [flag: SA|السعودية] [zone: Asia/Riyadh] [address: شارع الملك فهد، الرياض]
+
+[dim: 1920x1080 px] [distance: 5 km] [weight: 2 kg] [temp: 25°C] [percent: 80%] [size: 2 MB|size=(lg)] [hash: 9fceb02d0ae598e9]
+
+## إعدادات الصفحة
+
+هذا المستند نفسه يستخدم بلوك `؛؛؛ صفحة` في أعلاه: خلفية متدرّجة قطرية، سمة داكنة، حجم خط كبير، تباعد أسطر 1.7، مساحة 20×16، زوايا 24، إطار بنفسجي، وأقصى عرض 720dp.
+
+## شريط متحرك
+
+::: شريط speed=(60) style=(solid) color=(#7C5CFF) icon=(star)
+إصدار جديد 1.0.0 متاح الآن
+دعم أكثر من 10 منصات
+تحديثات أسبوعية
+:::
+
+::: شريط dir=(right) style=(outline) color=(#22C88E) link=(repo) sep=(★)
+اضغط لفتح المستودع
+تابع آخر التحديثات
+:::
+
+[marquee: عرض خاص — اطلب الآن|خبر ثانٍ|speed=(45)|style=(soft)|color=(#FFC94D)]
+
+### شريط رأسي
+
+::: شريط dir=(up) height=(72) style=(solid) color=(#7C5CFF)
+خبر عاجل أول
+خبر ثانٍ
+خبر ثالث
+:::
+
+::: شريط dir=(down) mode=(step) hold=(2) style=(outline) color=(#22C88E)
+عرض اليوم
+خصم 20%
+تحديث جديد
+:::
+
+[marquee: نص 1|نص 2|نص 3|dir=(up)|height=(60)|style=(soft)|color=(#FFC94D)]
+
