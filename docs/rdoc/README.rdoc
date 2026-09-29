@@ -1,0 +1,123 @@
+؛؛؛ rdoc
+title: مكتبة المثال
+version: 1.0.0
+author: @example
+؛؛؛
+
+؛؛ هذا تعليق: لا يظهر في العرض أبداً.
+
+؛؛؛ مراجع
+docs = https://dlof-lib.github.io/rinlang/ | التوثيق الرسمي
+issues = https://github.com/dlof-lib/rinlang/issues | تتبّع المشاكل
+؛؛؛
+
+= {{title}}
+
+ملف **rdoc** — ليس Markdown. الترويسة في أعلاه تفعّل اللهجة، والعناوين بـ `=` بدل `#`. [version: {{version}}] [tag: rin] [status: stable] [progress: 80|اكتمال التوثيق]
+
+؛؛؛ شارات
+الإصدار: {{version}} | green
+المنصة: Android
+الترخيص: MIT | #7C5CFF
+؛؛؛
+
+::: فهرس
+:::
+
+::: نصيحة ابدأ من هنا
+راجع *"docs"* أو أبلغ عن مشكلة عبر *"issues|صفحة المشاكل|button"*.
+:::
+
+== حقائق سريعة
+
+؛؛؛ حقائق المكتبة
+الناشر: [user: example]
+آخر تحديث: [date: 2026-09-29]
+التقييم: [rating: 4.5]
+؛؛؛
+
+؛؛؛ روابط
+التوثيق = docs | docs
+المشاكل = issues
+المتجر = https://dlof-lib.github.io/rinlang/?view=libraries | install
+؛؛؛
+
+== التثبيت
+
+::: خطوات
+- شغّل [cmd: rin install example]
+- أضف `@import "lib/example.og.rin";` إلى مشروعك
+- اضغط [key: Ctrl] + [key: S] ثم شغّل
+:::
+
+[*تثبيت من المتجر/link=(https://dlof-lib.github.io/rinlang/?view=libraries)/id=(install)/icon=(install)*]
+
+استدعِ الزر لاحقاً: *"install"* — أو بنص مخصّص: *"install|افتح المتجر"* — أو مكتبة مباشرة: *"@example/example-lib"* — أو [link: https://example.org|رابط سريع] — أو [download: https://example.org/file.zip|نزّل الملف].
+
+== شاهد
+
+:;video https://youtu.be/abcDEF12345|عرض توضيحي قصير|height=(220);:
+
+:;web https://dlof-lib.github.io/rinlang/|الموقع الرسمي;:
+
+== سجل التغييرات
+
+::: تغييرات
+## {{version}}
++ دعم لهجة rdoc
++ أزرار الدفع والتبرع
+~ تحسين عرض الجداول
+! إصلاح الروابط المرجعية
+- إزالة الأزرار القديمة
+:::
+
+::: جدول-زمني
+2026-06: أول نسخة
+2026-09: إطلاق rdoc
+v2 | التوسع القادم
+:::
+
+::: أسئلة
+س: هل تعمل rdoc خارج التطبيق؟
+ج: تُعرض كنص عادي مع الترويسة، وتعمل كاملة داخل RinStudio.
+س: كيف أتحقق من ملفي؟
+ج: استدعِ `DocumentationContainer.validate()`.
+:::
+
+== حاويات متداخلة
+
+::::: مهم
+خارجية.
+
+::: تحذير
+داخلية — الحد الأقصى للتعشيش 4 مستويات.
+:::
+
+::: مخفي تفاصيل إضافية
+تظهر عند الضغط فقط.
+:::
+:::::
+
+== ادعم المشروع
+
+؛؛؛ دعم
+paypal|example|5 USD|تبرّع عبر باي بال
+patreon|example|كن داعماً
+btc|bc1qexampleaddress0000000000000000|عنوان بيتكوين
+؛؛؛
+
+[*ادعمنا/؛:kofi|example|قهوة:؛*] [pay: url|https://buy.stripe.com/test_placeholder|اشترِ الآن|type=(pay)]
+
+::: خطر
+كل رابط دفع يعرض مضيفه الحقيقي ويطلب تأكيداً قبل الفتح، وعناوين النسخ لا تفتح شبكة.
+:::
+
+## أنواع الأقواس `[نوع: قيمة]`
+
+[badge: build|passing|green] [badge: الإصدار|1.0.0|#7C5CFF] [status: ok|يعمل] [ok: مستقر] [warn: تجريبي] [new: ميزة جديدة]
+
+[lang: rin] [platform: android|linux|web] [license: MIT] [size: 2 MB] [time: 5 دقائق] [count: 15420|تنزيلات]
+
+[rating: 4.5|التقييم] [progress: 70|الإنجاز] [color: #22C88E] [icon: rocket|انطلق] [key: Ctrl+Shift+P]
+
+[copy: rin install example|انسخ الأمر] [link: https://dlof-lib.github.io/rinlang/|الموقع] [email: hello@example.com] [phone: +966 50 000 0000]
