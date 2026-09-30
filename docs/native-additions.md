@@ -1,102 +1,151 @@
-# دوال Rin الأصلية الجديدة (Rin 1.0) 
-أُضيفت هذه الدوال في `app/src/main/cpp/rin_extra_natives.cpp` (مُضمَّن في نهاية `rin_interpreter.cpp`
-فيدخل تلقائياً في كل أهداف البناء). كلها مغطّاة باختبارات فعلية:
+# دوال Rin الأصلية الجديدة (Rin 1.0)
+
+أُضيفت هذه الدوال في `app/src/main/cpp/rin_extra_natives2.cpp` (مُضمَّن بعد
+`rin_extra_natives.cpp` في نهاية `rin_interpreter.cpp`، فيدخل تلقائياً في كل أهداف
+البناء: APK/CLI/WASM/CI) دون تعديل أي ملف موجود. كلها مغطّاة باختبار فعلي:
 
 ```text
-rin_run tests/verification/extra_natives.rin
-rin_run tests/verification/container_extra.rin
+rin_run tests/verification/extra_natives2.rin
 ```
 
-كل اختبار يطبع `ALL PASSED (...)` عند النجاح، وأي فشل يوقف التشغيل برمز خروج `1`.
+يطبع `ALL PASSED (extra_natives2)` عند النجاح، وأي فشل يوقف التشغيل برمز خروج `1`.
 
-## فحص الأنواع
+> ملاحظة تسمية: الكلمتان `file` و`pipe` محجوزتان في Rin (لبنية `@file` وتاريخياً في
+> `container.pipe`)، فاستُخدم `fs.*` بدل `file.*` و`automation.chain` بدل
+> `automation.pipe` تفادياً للتعارض مع المحلّل اللغوي.
 
-| الدالة | الناتج |
-|---|---|
-| `isNil(v)` · `isNumber(v)` · `isString(v)` · `isArray(v)` · `isMap(v)` · `isFunction(v)` | `true`/`false` (وتكمّل `isBool` الموجودة) |
-
-## الاختبار والتأكيد
+## `sec.*` — أدوات أمن (تجزئة، ترميز، تحقق)
 
 | الدالة | الوصف |
 |---|---|
-| `assert(cond, msg?)` | يرمي خطأ `E0035` إن كانت `cond` غير صحيحة |
-| `assertEq(actual, expected, msg?)` | مقارنة تركيبية (عميقة)؛ الخطأ يعرض القيمتين |
-| `fail(msg?)` | يرمي خطأ تشغيل فوراً |
-
-## النصوص
-
-| الدالة | الوصف |
-|---|---|
-| `lastIndexOf(s, sub)` | آخر موضع (بالبايت كـ`indexOf`) أو `-1` |
-| `padStart(s, n, pad?)` · `padEnd(s, n, pad?)` | حشو حتى طول `n` محرفاً (يدعم UTF-8 والعربية) |
-| `repeat(s, n)` | تكرار النص (الحد الأقصى 10MB) |
-| `trimStart(s)` · `trimEnd(s)` | قص المسافات من جهة واحدة |
-
-## المصفوفات
-
-| الدالة | الوصف |
-|---|---|
-| `slice(x, start, end?)` | شريحة من مصفوفة أو نص (UTF-8)؛ الفهارس السالبة من النهاية؛ لا تعدّل الأصل |
-| `reverse(x)` | نسخة معكوسة من مصفوفة أو نص |
-| `concat(a, b, ...)` | دمج مصفوفات (وغير المصفوفات تُضاف كعناصر) |
-| `flatten(arr, depth?)` | تسطيح بعمق `depth` (الافتراضي 1؛ سالب = كامل) |
-
-## القواميس والمسارات
-
-| الدالة | الوصف |
-|---|---|
-| `entries(m)` / `fromEntries(pairs)` | تحويل قاموس ⇄ `[[k, v], ...]` |
-| `mergeMaps(a, b, ...)` | دمج سطحي، الأخير يغلب |
-| `deepMerge(a, b)` | دمج عميق للقواميس المتداخلة |
-| `deepCopy(v)` | نسخة عميقة من مصفوفات وقواميس |
-| `pickKeys(m, keys)` / `omitKeys(m, keys)` | اختيار أو استبعاد مفاتيح |
-| `getPath(v, "a.b.0", default?)` | قراءة آمنة بمسار نقطي أو مصفوفة؛ تُرجع `default`/`nil` عند الغياب |
-| `setPath(v, "a.b.c", value)` | كتابة في المكان وإنشاء القواميس الوسيطة؛ تُرجع الجذر |
+| `sec.sha256(s)` | بصمة SHA-256 (hex، 64 محرفاً) — تُعيد استخدام `clc::sha256` الموجودة أصلاً في المشروع |
+| `sec.md5(s)` | بصمة MD5 (hex، 32 محرفاً) — توافقية/checksum فقط، ليست لأي استخدام أمني حديث |
+| `sec.crc32(s)` | CRC-32 كرقم (للتحقق السريع من سلامة بيانات، ليست أمنية) |
+| `sec.hmacSha256(key, msg)` | HMAC-SHA256 (hex) — للتحقق من أصالة رسالة بمفتاح مشترك |
+| `sec.base64Encode(s)` / `sec.base64Decode(s)` | ترميز/فك Base64 القياسي |
+| `sec.hexEncode(s)` / `sec.hexDecode(s)` | ترميز/فك Hex |
+| `sec.randomToken(bytes?)` | رمز عشوائي (hex) بطول `bytes` بايت (افتراضي 16)، عبر `std::random_device` |
+| `sec.constantTimeEqual(a, b)` | مقارنة نصّين بزمن ثابت (تفادي هجمات التوقيت عند مقارنة أسرار) |
+| `sec.xorCipher(s, key)` | XOR بسيط قابل للعكس بنفس الاستدعاء — للتعتيم فقط، **ليس تشفيراً آمناً** |
+| `sec.rot13(s)` | ROT13 الكلاسيكي |
+| `sec.passwordStrength(s)` | `{score:0..4, length, hasUpper, hasLower, hasDigit, hasSymbol, feedback:[...]}` |
 
 ```rin
-let cfg = {};
-setPath(cfg, "db.host", "localhost");
-print getPath(cfg, "db.host");            // localhost
-print getPath(cfg, "db.port", 5432);      // 5432
+let token = sec.randomToken(16);
+let sig = sec.hmacSha256("shared-secret", "payload");
+assert(sec.constantTimeEqual(sig, expectedSig));
 ```
 
-## الحاويات (`container.*`)
+## `fs.*` — تحليل ملفات ومجلدات
+
+كل المسارات تمرّ عبر `resolvePath()` نفسها المستخدمة في `readFile`/`writeFile`، فتبقى
+معزولة داخل مجلد المشروع (`basePath`) بنفس سياسة بقية اللغة.
 
 | الدالة | الوصف |
 |---|---|
-| `container.ensure(kind, name)` | تنشئ الحاوية إن لم توجد، وتُرجع اسمها دائماً |
-| `container.clone(src, dst)` | نسخة عميقة من الحقول والنوع (بلا الأبناء)؛ `false` إن كان الهدف موجوداً |
-| `container.rename(old, new)` | تعيد التسمية وتحدّث الشجرة والمجموعات والأحداث ودورة الحياة |
-| `container.getOr(name, field, default)` | قراءة حقل بقيمة افتراضية |
-| `container.incr(name, field, by?)` | زيادة حقل رقمي (يبدأ من 0) وتُرجع القيمة الجديدة |
-| `container.append(name, field, value)` | إضافة لمصفوفة حقل (تُنشأ إن غابت)؛ تُرجع الطول |
-| `container.update(name, field, fn)` | `field = fn(field)` وتُرجع القيمة الجديدة |
-| `container.pick(name, fields)` / `container.omit(name, fields)` | حقول مختارة/مستبعدة كقاموس |
-| `container.toJson(name)` / `container.fromJson(name, json, overwrite?)` | تصدير/استيراد الحقول (الدوال تُتجاهل) |
-| `container.diff(a, b)` | `{same, added, removed, changed:{f:{from,to}}}` |
-| `container.each(kind, fn)` | تستدعي `fn(name)` لكل حاوية من النوع؛ تُرجع العدد |
-| `container.pluck(kind, field)` | `{اسم: قيمة الحقل}` |
-| `container.sum(kind, field)` | مجموع حقل رقمي عبر الحاويات |
-| `container.groupBy(kind, field)` | `{قيمة: [أسماء]}` |
-| `container.query(kind, conds?, opts?)` | استعلام (أدناه) |
-| `container.tree(name)` | شجرة متداخلة `{name, kind, fields, children}` |
-
-`kind` قد تكون `"*"` أو `""` لكل الأنواع. الحاوية غير الموجودة تُرجع `nil` لدوال القراءة و`false` لدوال الكتابة
-(نفس سياسة `container_pro.md`).
-
-### `container.query`
+| `fs.hash(path, algo?)` | بصمة محتوى ملف كامل؛ `algo` من `"sha256"` (افتراضي) / `"md5"` / `"crc32"` |
+| `fs.lineCount(path)` | عدد الأسطر، أو `nil` إن تعذّر فتح الملف |
+| `fs.tail(path, n)` | آخر `n` سطراً كمصفوفة (نافذة دائرية، بلا تحميل الملف كاملاً في الذاكرة) |
+| `fs.grep(path, pattern)` | `[{line, text}, ...]` لأسطر تطابق نمط regex (نفس صيغة `regexTest`، تدعم بادئة `i:`/`m:`) |
+| `fs.scanDir(path, recursive?)` | `[{name, path, isDir, size, extension}, ...]` |
+| `fs.extensionStats(path, recursive?)` | `{".ext": عدد, ...}` |
+| `fs.find(path, namePattern, recursive?)` | مسارات الملفات التي يطابق **اسمها** نمط regex |
 
 ```rin
-container.query("item", {cat:"tech"});                       // مساواة
-container.query("item", {price:{gte:10, lt:40}});             // مقارنات
-container.query("item", {cat:{in:["food","tech"]}});          // انتماء
-container.query("item", {name:{startsWith:"a"}});             // نصوص
-container.query("item", nil, {sortBy:"price", desc:true, limit:3});
+let bigLogs = fs.find("logs", "\\.log$", true);
+for (let p of bigLogs) {
+    let hits = fs.grep(p, "i:error");
+    if (len(hits) > 0) print p + ": " + len(hits) + " error line(s)";
+}
 ```
 
-العوامل: `eq` `ne` `gt` `gte` `lt` `lte` `in` `contains` `startsWith` `endsWith` `exists`.
-عامل غير معروف يجعل الشرط فاشلاً بدل أن يُتجاهل بصمت. النتائج مرتّبة أبجدياً ما لم يُحدَّد `sortBy`.
+## `net.*` — تحليل بيانات شبكية (بلا اتصال فعلي بالشبكة)
 
-## أداة `rin_run`
+دوال تفكيك/تحقق/حساب فقط — لا تفتح أي مقبس (socket) ولا تجري أي اتصال حقيقي؛
+مناسبة لتحليل عناوين ومدخلات واردة من سجلات أو طلبات محفوظة مسبقاً.
 
-أصبح `tools/rin_run.cpp` يُرجع رمز خروج `1` عند أي خطأ تشغيل (سابقاً كان `0` دائماً، فتمرّ الاختبارات الفاشلة في CI).
+| الدالة | الوصف |
+|---|---|
+| `net.parseUrl(url)` | `{scheme, host, port, path, query, fragment}` أو `nil` إن كان الرابط غير صالح (يتطلب `scheme://`) |
+| `net.parseQuery(qs)` | يفكّك `a=1&b=2` إلى قاموس (يدعم `%XX` و`+`) |
+| `net.buildQuery(map)` | يبني نص query من قاموس |
+| `net.isValidIPv4(s)` / `net.isValidIPv6(s)` | تحقق من صيغة العنوان |
+| `net.ipToInt(ipv4)` / `net.intToIp(n)` | تحويل IPv4 ⇄ رقم 32-bit |
+| `net.cidrContains(cidr, ip)` | هل عنوان IPv4 ضمن مدى CIDR (مثل `"10.0.0.0/8"`) |
+| `net.isPrivateIp(ip)` | عناوين خاصة/loopback/link-local (RFC 1918 + `127.0.0.0/8` + `169.254.0.0/16`) |
+
+```rin
+let u = net.parseUrl("https://api.example.com:8443/v1/users?active=true");
+print u.host;                              // api.example.com
+print net.isPrivateIp("192.168.1.5");      // true
+print net.cidrContains("10.0.0.0/8", "10.2.3.4"); // true
+```
+
+## `log.*` — تحليل سجلات (logs)
+
+| الدالة | الوصف |
+|---|---|
+| `log.parseLines(text)` | يفكّك نصاً كاملاً إلى مصفوفة أسطر (يدعم `\r\n`) |
+| `log.parseCommonLog(line)` | يفكّك سطر Apache/Nginx Common/Combined Log Format إلى `{ip, ident, user, time, method, path, protocol, status, size}`، أو `nil` إن لم يطابق |
+| `log.extractIPs(text)` | كل عناوين IPv4 الفريدة الموجودة في نص، بترتيب ظهورها |
+| `log.extractTimestamps(text, pattern?)` | طوابع زمنية مطابقة (افتراضياً صيغ ISO8601 و`[dd/Mon/yyyy:HH:MM:SS]` الشائعة، أو نمط مخصّص) |
+| `log.countBy(lines, fn)` | `{مفتاح: عدد}` حيث `fn(line)` تُرجع المفتاح لكل سطر |
+| `log.topN(countsMap, n)` | أعلى `n` أزواج `[مفتاح, عدد]` مرتّبة تنازلياً |
+| `log.filterLines(lines, pattern)` | الأسطر المطابقة لنمط regex فقط |
+| `log.levelCounts(lines)` | `{FATAL, ERROR, WARN, INFO, DEBUG, TRACE, OTHER}` — عدّ حسب أول كلمة مستوى موجودة (case-insensitive) |
+| `log.detectSpikes(counts, factor?)` | فهارس عناصر مصفوفة أرقام تتجاوز `متوسط × factor` (افتراضي `2.0`) — كشف ارتفاعات بسيط |
+
+```rin
+let lines = log.parseLines(readFile("access.log"));
+let byStatus = log.countBy(lines, fun(l) {
+    let rec = log.parseCommonLog(l);
+    return rec == nil ? "unparsed" : rec.status;
+});
+print log.topN(byStatus, 5);
+```
+
+## `automation.*` — أتمتة سير العمل
+
+| الدالة | الوصف |
+|---|---|
+| `automation.retry(fn, times, delayMs?)` | يستدعي `fn()` حتى النجاح أو استنفاد `times` محاولة؛ يعيد رمي آخر خطأ عند الفشل الكامل؛ `delayMs` (سقف 60000) إيقاف فعلي بين المحاولات |
+| `automation.chain(value, [fn1, fn2, ...])` | أنبوب دوال: `fnN(...fn2(fn1(value)))` |
+| `automation.timeIt(fn)` | `{result, ms}` — قيمة `fn()` مع مدة التنفيذ بالميلي‑ثانية |
+| `automation.batch(items, size)` | يقسّم مصفوفة إلى دفعات بحجم `size` |
+| `automation.sequence([fn1, fn2, ...])` | يشغّل الدوال بالترتيب ويجمع نتائجها في مصفوفة؛ يتوقف عند أول خطأ |
+| `automation.sleepMs(ms)` | إيقاف فعلي محدود السقف (60000 مللي‑ثانية كحد أقصى) |
+
+```rin
+let data = automation.retry(fun() { return fetchSomething(); }, 3, 500);
+let pipeline = automation.chain(rawInput, [normalize, validate, save]);
+```
+
+## امتدادات `container.*`
+
+فوق ما ورد في `native-additions.md` (Rin 1.1):
+
+| الدالة | الوصف |
+|---|---|
+| `container.snapshot(name)` | نسخة عميقة من كل الحقول (بلا الدوال) كقاموس، أو `nil` إن غابت الحاوية |
+| `container.restore(name, snap)` | يكتب حقول `snap` فوق الحاوية (لا يحذف حقولاً غائبة من `snap`)؛ `false` إن غابت |
+| `container.lock(name)` / `container.unlock(name)` / `container.isLocked(name)` | علم قفل بسيط (حقل داخلي `__locked`) |
+| `container.logEvent(name, msg)` | يضيف `{t, msg}` إلى سجل أحداث الحاوية (`__events`)؛ يُعيد الطول الجديد |
+| `container.history(name)` | يُعيد مصفوفة أحداث `container.logEvent` (فارغة إن لا شيء) |
+| `container.filter(kind, fn)` | أسماء الحاويات من `kind` حيث `fn(fieldsMap)` صحيحة |
+| `container.stats(kind)` | `{count, fields: {field: {count, numeric, min?, max?, sum?, avg?}}}` — الحقول الداخلية (`__`) مُستبعدة |
+| `container.validate(name, schema)` | `{valid, errors:[...]}`؛ `schema` قاموس `{field: "type"}`، أضف `؟` (`"number?"`) لحقل اختياري؛ الأنواع: `number/string/bool/array/map/function/any` |
+| `container.exportToFile(name, path)` | يكتب حقول الحاوية JSON فعلياً على القرص (عبر `container.toJson` + الكتابة المعزولة) |
+| `container.importFromFile(name, path, overwrite?)` | يقرأ JSON من القرص ويدمجه داخل حاوية موجودة (عبر `container.fromJson`) |
+
+```rin
+spawn("host", "srv1");
+setField("srv1", "cpu", 10);
+let before = container.snapshot("srv1");
+container.incr("srv1", "cpu", 90);
+container.restore("srv1", before);          // cpu = 10 من جديد
+
+let check = container.validate("srv1", {cpu: "number", name: "string?"});
+if (!check.valid) print check.errors;
+
+container.exportToFile("srv1", "backups/srv1.json");
+```
