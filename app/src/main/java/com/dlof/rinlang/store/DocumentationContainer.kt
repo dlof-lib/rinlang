@@ -46,12 +46,14 @@ import android.text.style.TypefaceSpan
 import android.text.style.URLSpan
 import android.view.Gravity
 import android.view.View
+import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.FrameLayout
 import android.widget.HorizontalScrollView
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TableLayout
 import android.widget.TableRow
@@ -654,6 +656,7 @@ object DocumentationContainer {
         // `{{مفتاح}}` تُستبدَل بقيم بلوك meta قبل أي تحليل (خارج كتل الكود)؛ `\\{{x}}` تبقى حرفية.
         val source = if (rdoc) expandVariables(raw, currentMeta) else raw
         currentHeadings = if (rdoc) docHeadings.ifEmpty { collectHeadings(source) } else emptyList()
+        currentApis = if (rdoc) docApis.ifEmpty { collectApis(source) } else emptyList()
         currentLinkRefs = collectLinkRefs(source)
         currentElementRefs = if (rdoc) docElementRefs + collectElementRefs(source) else emptyMap()
         applyPalette(dark)
@@ -1120,7 +1123,15 @@ object DocumentationContainer {
             val url: String,
             val embedUrl: String,
             val title: String,
-            val heightDp: Int
+            val heightDp: Int,
+            /** عرض/ارتفاع؛ 0 = استخدم [heightDp]. يوتيوب: 16:9 افتراضياً، وshorts بـ9:16. */
+            val ratio: Float = 0f,
+            val youtube: Boolean = false,
+            /** رابط المشاهدة الأصلي للفتح الخارجي (يوتيوب: بوقت البدء). */
+            val watchUrl: String = "",
+            val startSec: Int = 0,
+            val thumbId: String? = null,
+            val thumb: Boolean = false
         ) : MarkdownSegment()
     }
 
@@ -1170,6 +1181,7 @@ object DocumentationContainer {
         docMeta = if (rdoc) extractMeta(markdown) else emptyMap()
         docPageSettings = if (rdoc) parsePageSettings(markdown, null) else null
         docHeadings = if (rdoc) collectHeadings(markdown) else emptyList()
+        docApis = if (rdoc) collectApis(markdown) else emptyList()
         val result = mutableListOf<MarkdownSegment>()
         // حاويات `:::` لا تُقطَع بين مقاطع العرض (جدول/معاينة حيّة/وسائط داخلها تبقى في بطاقتها كنص).
         val chunks = if (rdoc) splitContainerChunks(markdown) else listOf(markdown to false)
@@ -2729,7 +2741,8 @@ object DocumentationContainer {
 
     private val DATA_BLOCK_TYPES = setOf(
         "rdoc", "meta", "بيانات", "refs", "مراجع", "facts", "حقائق",
-        "links", "روابط", "badges", "شارات", "support", "دعم", "page", "صفحة"
+        "links", "روابط", "badges", "شارات", "support", "دعم", "page", "صفحة",
+        "package", "حزمة", "deps", "dependencies", "تبعيات"
     )
     private val SILENT_DATA_TYPES = setOf("rdoc", "meta", "بيانات", "refs", "مراجع", "page", "صفحة")
 
@@ -2757,7 +2770,11 @@ object DocumentationContainer {
         "timeline" to ContainerStyle(0xFF3B9EFF.toInt(), "\u25F7", "الخط الزمني", false),
         "changelog" to ContainerStyle(0xFF22C88E.toInt(), "\u27F3", "سجل التغييرات", false),
         "faq" to ContainerStyle(0xFF6A47E8.toInt(), "\u2753", "أسئلة شائعة", false),
-        "toc" to ContainerStyle(0xFF7A8299.toInt(), "\u2630", "الفهرس", false)
+        "toc" to ContainerStyle(0xFF7A8299.toInt(), "\u2630", "الفهرس", false),
+        "api" to ContainerStyle(0xFF7C5CFF.toInt(), "\u0192", "دالة", true),
+        "apiindex" to ContainerStyle(0xFF7A8299.toInt(), "\u0192", "فهرس الدوال", false),
+        "install" to ContainerStyle(0xFF22C88E.toInt(), "\u2B07", "تثبيت", true),
+        "example" to ContainerStyle(0xFF3B9EFF.toInt(), "\u25B6", "مثال", true)
     )
 
     private val CONTAINER_ALIASES: Map<String, String> = mapOf(
@@ -2775,7 +2792,11 @@ object DocumentationContainer {
         "faq" to "faq", "أسئلة" to "faq",
         "toc" to "toc", "فهرس" to "toc",
         "spoiler" to "spoiler", "مخفي" to "spoiler", "طي" to "spoiler",
-        "marquee" to "marquee", "ticker" to "marquee", "شريط" to "marquee", "متحرك" to "marquee", "شريط-متحرك" to "marquee"
+        "marquee" to "marquee", "ticker" to "marquee", "شريط" to "marquee", "متحرك" to "marquee", "شريط-متحرك" to "marquee",
+        "api" to "api", "fn" to "api", "function" to "api", "class" to "api", "دالة" to "api", "صنف" to "api",
+        "api-index" to "apiindex", "فهرس-الدوال" to "apiindex",
+        "install" to "install", "تثبيت" to "install",
+        "example" to "example", "مثال" to "example"
     )
 
     // ─────────────────────────── أنواع الأقواس المربّعة `[نوع: قيمة]` ───────────────────────────
@@ -2829,7 +2850,14 @@ object DocumentationContainer {
         "temp" to "temp", "حرارة" to "temp",
         "percent" to "percent", "نسبة" to "percent",
         "hash" to "hash", "بصمة" to "hash",
-        "marquee" to "marquee", "ticker" to "marquee", "شريط" to "marquee"
+        "marquee" to "marquee", "ticker" to "marquee", "شريط" to "marquee",
+        // حزم وتوثيق
+        "since" to "since", "منذ" to "since",
+        "requires" to "requires", "يتطلب" to "requires",
+        "dep" to "dep", "تبعية" to "dep",
+        "install" to "install", "تثبيت" to "install",
+        "author" to "author", "ناشر" to "author",
+        "repo" to "repo", "مستودع" to "repo"
     )
 
     /** يلتقط `[نوع: قيمة]` بأنواع [TYPED_BRACKET_TYPES] في سطر (لـ[validate]). */
@@ -3148,6 +3176,10 @@ object DocumentationContainer {
             val headerEnd = out.length
             out.setSpan(StyleSpan(Typeface.BOLD), headerStart, headerEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
             out.setSpan(ForegroundColorSpan(if (key == null) COLOR_H_DIM else accent), headerStart, headerEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            // توقيع الدالة بخط ثابت (بعد الأيقونة والمسافة).
+            if (key == "api" && title.isNotBlank()) {
+                out.setSpan(TypefaceSpan("monospace"), headerStart + style.icon.length + 1, headerEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            }
             if (key == null) {
                 val s = out.length
                 out.append("  \u2716 نوع غير معروف")
@@ -3165,6 +3197,9 @@ object DocumentationContainer {
             "timeline" -> timelineText(body)
             "faq" -> faqText(body)
             "toc" -> tocText()
+            "api" -> apiText(body)
+            "apiindex" -> apiIndexText()
+            "install" -> installText(body)
             else -> body.joinToString("\n")
         }
         if (bodyText.isNotBlank()) {
@@ -3201,6 +3236,14 @@ object DocumentationContainer {
         }
         if (type in SILENT_DATA_TYPES) {
             if (!scan.closed) appendDiagnosticChip(out, "بلوك ؛؛؛ $type غير مغلق")
+            return
+        }
+        if (type == "package" || type == "حزمة") {
+            appendPackageCard(out, scan)
+            return
+        }
+        if (type == "deps" || type == "dependencies" || type == "تبعيات") {
+            appendDepsCard(out, title, scan)
             return
         }
         if (type == "links" || type == "روابط" || type == "badges" || type == "شارات" || type == "support" || type == "دعم") {
@@ -3302,6 +3345,9 @@ object DocumentationContainer {
                     val idx = line.indexOf(':')
                     if (idx > 0) meta.putIfAbsent(line.substring(0, idx).trim().lowercase(), line.substring(idx + 1).trim())
                 }
+            } else if (type == "package" || type == "حزمة") {
+                // متغيّرات {{name}} {{version}} … من بلوك الحزمة (بمفاتيحها القانونية).
+                for ((k, v) in packageKeys(scan.body, null)) meta.putIfAbsent(k, v)
             }
             i = if (scan.next > i) scan.next else i + 1
         }
@@ -3664,6 +3710,39 @@ object DocumentationContainer {
                 } else bad()
             }
             "video", "web" -> appendMediaInline(out, "$kind $v")
+            "since" -> if (versionRegex.matches(v)) appendChip(out, "\uD83C\uDFF7 منذ ${v.removePrefix("v")}", COLOR_INLINE_CODE_BG, COLOR_CODE_TEXT) else bad()
+            "requires" -> if (requiresRegex.matches(v)) appendChip(out, "\u2699 $v", COLOR_INLINE_CODE_BG, COLOR_CODE_TEXT) else bad()
+            "dep" -> {
+                val dm = depValueRegex.find(v)
+                if (dm == null) { bad(); return }
+                val depName = dm.groupValues[1]
+                val constraint = dm.groupValues[2]
+                if (constraint.isNotEmpty() && !constraintRegex.matches(constraint)) { bad(); return }
+                val label = "\uD83D\uDD17 $depName" + (if (constraint.isNotEmpty()) " $constraint" else "")
+                if (depName.startsWith("@")) {
+                    val url = canonicalRinUrl(depName)
+                    if (url == null) bad() else appendChip(out, label, accentBg, accentFg, extra = LinkButtonClickSpan(url))
+                } else {
+                    appendChip(out, label, accentBg, accentFg)
+                }
+            }
+            "install" -> if (pkgNameRegex.matches(v)) {
+                appendChip(out, "$ rin install $v", COLOR_INLINE_CODE_BG, COLOR_CODE_TEXT, mono = true, extra = CopyCodeSpan("rin install $v", "تم نسخ الأمر"))
+            } else bad()
+            "author" -> {
+                if (v.startsWith("@")) {
+                    val url = canonicalRinUrl(v)
+                    if (url == null) bad() else appendChip(out, "\uD83D\uDC64 $v", accentBg, accentFg, extra = LinkButtonClickSpan(url))
+                } else {
+                    appendChip(out, "\uD83D\uDC64 $v", COLOR_INLINE_CODE_BG, COLOR_CODE_TEXT)
+                }
+            }
+            "repo" -> {
+                val p = v.split("|", limit = 2).map { it.trim() }
+                if (!isHttpsUrl(p[0])) { bad(); return }
+                val label = p.getOrNull(1).orEmpty().ifBlank { hostOf(p[0]).ifBlank { p[0] } }
+                appendChip(out, "\uD83D\uDDC2 $label", accentBg, accentFg, extra = LinkButtonClickSpan(p[0]))
+            }
             "marquee" -> {
                 val opts = LinkedHashMap<String, String>()
                 val texts = ArrayList<String>()
@@ -3874,6 +3953,10 @@ object DocumentationContainer {
     }
 
     // ─────────────────────────── الفيديو وويب فيو `:; … ;:` ───────────────────────────
+    // يوتيوب احترافي: يحلّل كل صيغ الروابط (watch/youtu.be/shorts/live/embed/playlist/music)، يقرأ وقت البدء من الرابط
+    // (`?t=1m30s`)، ويدعم خيارات التضمين (start/end/autoplay/mute/loop/captions/lang/related/controls/privacy) ونسبة أبعاد
+    // حقيقية (16:9، وshorts بـ9:16)، وملصقاً بزر تشغيل أحمر (+ صورة مصغّرة اختيارية thumb=(true))، وملء الشاشة، وزر
+    // "فتح في يوتيوب"، وإيقاف المشغّل عند مغادرة الشاشة. الصفحة تُحمَّل عبر iframe بأصل https صحيح (تفادي خطأ 153).
 
     private val MEDIA_KIND_ALIASES: Map<String, String> = mapOf(
         "video" to "video", "فيديو" to "video", "web" to "web", "ويب" to "web", "frame" to "web"
@@ -3882,71 +3965,292 @@ object DocumentationContainer {
         "youtube.com", "youtube-nocookie.com", "youtu.be", "player.vimeo.com", "vimeo.com", "dailymotion.com"
     )
     private val mediaKindPrefixRegex = Regex("^(\\S+)\\s+(https?://\\S+)$")
-    private val ytIdRegex = Regex("^[A-Za-z0-9_-]{6,20}$")
+    private val ytIdRegex = Regex("^[A-Za-z0-9_-]{11}$")
+    private val ytListRegex = Regex("^[A-Za-z0-9_-]{10,64}$")
+    private val ytTimeRegex = Regex("^(?:(\\d{1,3})h)?(?:(\\d{1,2})m)?(?:(\\d{1,2})s)?$")
+    private val ytClockRegex = Regex("^(\\d{1,3}):(\\d{1,2})(?::(\\d{1,2}))?$")
+    private val ytFragmentTimeRegex = Regex("(?:^|&)t=([^&]+)")
+    private val mediaLangRegex = Regex("^[a-z]{2}(?:-[a-z]{2})?$")
+    private val mediaRatioRegex = Regex("^(\\d{1,2}(?:\\.\\d+)?)\\s*[:/x]\\s*(\\d{1,2}(?:\\.\\d+)?)$")
+
+    private const val YT_MAX_SECONDS = 172_800
+    private const val YT_ORIGIN = "https://dlof-lib.github.io"
+    private val YT_ONLY_KEYS = setOf("start", "end", "autoplay", "mute", "loop", "captions", "lang", "related", "controls", "privacy", "thumb")
+
+    private val ytThumbCache = android.util.LruCache<String, Bitmap>(8)
 
     private fun isTrustedVideoHost(host: String): Boolean =
         TRUSTED_VIDEO_HOSTS.any { host == it || host.endsWith(".$it") }
 
+    private fun isYoutubeHost(host: String): Boolean =
+        host == "youtu.be" || host == "youtube.com" || host.endsWith(".youtube.com") ||
+            host == "youtube-nocookie.com" || host.endsWith(".youtube-nocookie.com")
+
     private fun toEmbedUrl(url: String, host: String): String {
         val u = Uri.parse(url)
         return when (host) {
-            "youtu.be" -> u.lastPathSegment?.takeIf { ytIdRegex.matches(it) }
-                ?.let { "https://www.youtube-nocookie.com/embed/$it" } ?: url
-            "youtube.com", "m.youtube.com" -> u.getQueryParameter("v")?.takeIf { ytIdRegex.matches(it) }
-                ?.let { "https://www.youtube-nocookie.com/embed/$it" } ?: url
             "vimeo.com" -> u.lastPathSegment?.takeIf { s -> s.isNotEmpty() && s.all { c -> c.isDigit() } }
                 ?.let { "https://player.vimeo.com/video/$it" } ?: url
             else -> url
         }
     }
 
+    /** `90` · `90s` · `1m30s` · `1h2m3s` · `1:30` · `1:02:03` → ثوانٍ (0..48h)، أو null. */
+    private fun parseYtTime(raw: String): Int? {
+        val s = raw.trim().lowercase()
+        if (s.isEmpty()) return null
+        s.toIntOrNull()?.let { return it.takeIf { v -> v in 0..YT_MAX_SECONDS } }
+        ytClockRegex.find(s)?.let { m ->
+            val a = m.groupValues[1].toInt()
+            val b = m.groupValues[2].toInt()
+            val c = m.groupValues[3].toIntOrNull()
+            val total = if (c == null) a * 60 + b else a * 3600 + b * 60 + c
+            return total.takeIf { it in 0..YT_MAX_SECONDS }
+        }
+        val m = ytTimeRegex.find(s) ?: return null
+        if (m.value.isEmpty()) return null
+        val total = (m.groupValues[1].toIntOrNull() ?: 0) * 3600 +
+            (m.groupValues[2].toIntOrNull() ?: 0) * 60 + (m.groupValues[3].toIntOrNull() ?: 0)
+        return total.takeIf { it in 0..YT_MAX_SECONDS }
+    }
+
+    private fun formatClock(sec: Int): String {
+        val h = sec / 3600
+        val m = (sec % 3600) / 60
+        val s = sec % 60
+        return if (h > 0) "%d:%02d:%02d".format(h, m, s) else "%d:%02d".format(m, s)
+    }
+
+    private fun parseBool(v: String): Boolean? = when (v.trim().lowercase()) {
+        "true", "yes", "1", "on", "نعم" -> true
+        "false", "no", "0", "off", "لا" -> false
+        else -> null
+    }
+
+    private fun parseRatio(v: String): Float? {
+        val s = v.trim()
+        val m = mediaRatioRegex.find(s)
+        val r = if (m != null) {
+            val a = m.groupValues[1].toFloat()
+            val b = m.groupValues[2].toFloat()
+            if (b == 0f) return null
+            a / b
+        } else {
+            s.toFloatOrNull() ?: return null
+        }
+        return r.takeIf { it in 0.4f..3f }
+    }
+
+    private class YtRef(val videoId: String?, val listId: String?, val startSec: Int?, val short: Boolean)
+
+    /** يستخرج معرّف الفيديو/القائمة/وقت البدء من أي صيغة رابط يوتيوب؛ null إن لم يوجد فيديو أو قائمة صالحان. */
+    private fun parseYoutubeRef(url: String, host: String): YtRef? {
+        val u = Uri.parse(url)
+        val seg = u.pathSegments
+        var id: String? = null
+        var short = false
+        if (host == "youtu.be") {
+            id = seg.firstOrNull()
+        } else {
+            when (seg.firstOrNull()) {
+                "watch" -> id = u.getQueryParameter("v")
+                "embed", "v", "live" -> id = seg.getOrNull(1)
+                "shorts" -> { id = seg.getOrNull(1); short = true }
+                else -> {}
+            }
+        }
+        val list = u.getQueryParameter("list")?.takeIf { ytListRegex.matches(it) }
+        val tRaw = u.getQueryParameter("t") ?: u.getQueryParameter("start")
+            ?: u.fragment?.let { f -> ytFragmentTimeRegex.find(f)?.groupValues?.get(1) }
+        val vid = id?.takeIf { ytIdRegex.matches(it) }
+        if (vid == null && list == null) return null
+        return YtRef(vid, list, tRaw?.let { parseYtTime(it) }, short)
+    }
+
     /**
-     * `[نوع] رابط [| عنوان] [| height=(dp)]` — النوع `video`/`فيديو`/`web`/`ويب` اختياري (يُستنتَج من المضيف).
-     * https فقط؛ روابط يوتيوب/فيميو تُحوَّل تلقائياً إلى صفحة التضمين. null إن كان الرابط غير صالح.
+     * `[نوع] رابط [| عنوان] [| key=(قيمة)…]` — النوع `video`/`فيديو`/`web`/`ويب` اختياري. https فقط.
+     * الخيارات العامة: `height` `ratio`. خيارات يوتيوب: `start` `end` `autoplay` `mute` `loop` `captions` `lang` `related`
+     * `controls` `privacy` (nocookie الافتراضي) `thumb`. يعيد (الوسائط، null) أو (null، سبب الخطأ).
      */
-    private fun parseMedia(raw: String): MarkdownSegment.Media? {
+    private fun parseMediaEx(raw: String): Pair<MarkdownSegment.Media?, String?> {
         val parts = raw.split("|").map { it.trim() }.filter { it.isNotEmpty() }
-        if (parts.isEmpty()) return null
+        if (parts.isEmpty()) return null to "رابط فارغ"
         var kind: String? = null
         var urlPart = parts[0]
         val pm = mediaKindPrefixRegex.find(urlPart)
         if (pm != null) {
-            kind = MEDIA_KIND_ALIASES[pm.groupValues[1].lowercase()] ?: return null
+            kind = MEDIA_KIND_ALIASES[pm.groupValues[1].lowercase()] ?: return null to "نوع وسائط مجهول: ${pm.groupValues[1]}"
             urlPart = pm.groupValues[2]
         }
-        if (!isHttpsUrl(urlPart)) return null
+        if (!isHttpsUrl(urlPart)) return null to "https فقط: $urlPart"
         val host = hostOf(urlPart)
-        if (host.isEmpty()) return null
+        if (host.isEmpty()) return null to "مضيف غير صالح"
+
         var title = ""
-        var height = 0
+        val opts = LinkedHashMap<String, String>()
         for (p in parts.drop(1)) {
             val kv = metaBadgeKeyValueRegex.find(p)
-            if (kv != null) {
-                if (kv.groupValues[1].equals("height", ignoreCase = true)) height = kv.groupValues[2].trim().toIntOrNull() ?: 0
-                continue
-            }
-            if (title.isEmpty()) title = p
+            if (kv != null) opts[kv.groupValues[1].lowercase()] = kv.groupValues[2].trim()
+            else if (title.isEmpty()) title = p
         }
+
+        var yt: YtRef? = null
+        if (isYoutubeHost(host)) {
+            yt = parseYoutubeRef(urlPart, host) ?: return null to "رابط يوتيوب بلا معرّف فيديو (11 خانة) أو قائمة صالحة"
+        }
+        if (yt == null) {
+            val bad = opts.keys.firstOrNull { it in YT_ONLY_KEYS }
+            if (bad != null) return null to "الخيار $bad لروابط يوتيوب فقط"
+        }
+
+        var height = 0
+        var ratio = 0f
+        var start = yt?.startSec ?: 0
+        var end = 0
+        var autoplay = true
+        var mute = false
+        var loop = false
+        var captions = false
+        var lang: String? = null
+        var related = false
+        var controls = true
+        var thumb = false
+        var privacy = true
+        for ((k, v) in opts) {
+            when (k) {
+                "height" -> height = v.removeSuffix("dp").trim().toIntOrNull()?.takeIf { it in 120..640 } ?: return null to "height=($v)"
+                "ratio" -> ratio = parseRatio(v) ?: return null to "ratio=($v)"
+                "start" -> start = parseYtTime(v) ?: return null to "start=($v)"
+                "end" -> end = parseYtTime(v) ?: return null to "end=($v)"
+                "autoplay" -> autoplay = parseBool(v) ?: return null to "autoplay=($v)"
+                "mute" -> mute = parseBool(v) ?: return null to "mute=($v)"
+                "loop" -> loop = parseBool(v) ?: return null to "loop=($v)"
+                "captions" -> captions = parseBool(v) ?: return null to "captions=($v)"
+                "related" -> related = parseBool(v) ?: return null to "related=($v)"
+                "controls" -> controls = parseBool(v) ?: return null to "controls=($v)"
+                "thumb" -> thumb = parseBool(v) ?: return null to "thumb=($v)"
+                "lang" -> lang = v.lowercase().takeIf { mediaLangRegex.matches(it) } ?: return null to "lang=($v)"
+                "privacy" -> privacy = when (v.lowercase()) {
+                    "nocookie", "private", "خاص" -> true
+                    "standard", "عادي" -> false
+                    else -> return null to "privacy=($v)"
+                }
+                else -> return null to "خيار وسائط غير معروف: $k"
+            }
+        }
+        if (end in 1..start) return null to "end يجب أن يأتي بعد start"
+
         val finalKind = kind ?: if (isTrustedVideoHost(host)) "video" else "web"
-        val h = (if (height > 0) height else if (finalKind == "video") 210 else 320).coerceIn(120, 640)
-        return MarkdownSegment.Media(finalKind, urlPart, toEmbedUrl(urlPart, host), title, h)
+        var embed: String
+        var watch = urlPart
+        var thumbId: String? = null
+        val ref = yt
+        if (ref != null) {
+            val base = if (privacy) "https://www.youtube-nocookie.com" else "https://www.youtube.com"
+            val vid = ref.videoId
+            val list = ref.listId
+            val q = ArrayList<String>()
+            if (list != null) q.add("list=$list")
+            q.add("playsinline=1")
+            q.add("modestbranding=1")
+            q.add("iv_load_policy=3")
+            if (!related) q.add("rel=0")
+            if (autoplay) q.add("autoplay=1")
+            if (mute) q.add("mute=1")
+            if (start > 0) q.add("start=$start")
+            if (end > 0) q.add("end=$end")
+            if (loop) {
+                q.add("loop=1")
+                if (vid != null && list == null) q.add("playlist=$vid")
+            }
+            if (captions) q.add("cc_load_policy=1")
+            lang?.let { q.add("hl=$it"); q.add("cc_lang_pref=$it") }
+            if (!controls) q.add("controls=0")
+            q.add("origin=$YT_ORIGIN")
+            embed = base + (if (vid != null) "/embed/$vid" else "/embed/videoseries") + "?" + q.joinToString("&")
+            watch = if (vid != null) {
+                "https://www.youtube.com/watch?v=$vid" + (if (start > 0) "&t=${start}s" else "") + (if (list != null) "&list=$list" else "")
+            } else {
+                "https://www.youtube.com/playlist?list=$list"
+            }
+            thumbId = vid
+            if (ratio == 0f && height == 0) ratio = if (ref.short) 9f / 16f else 16f / 9f
+        } else {
+            embed = toEmbedUrl(urlPart, host)
+        }
+        val h = if (height > 0) height else if (finalKind == "video") 210 else 320
+        return MarkdownSegment.Media(finalKind, urlPart, embed, title, h, ratio, ref != null, watch, start, thumbId, thumb) to null
     }
 
-    /** `:; … ;:` داخل فقرة (لا على سطر مستقل): زر يفتح الرابط في المتصفح — التضمين الحيّ للأسطر المستقلة فقط. */
+    private fun parseMedia(raw: String): MarkdownSegment.Media? = parseMediaEx(raw).first
+
+    /** `:; … ;:` داخل فقرة (لا على سطر مستقل): زر يفتح الرابط (يوتيوب: بوقت البدء) — التضمين الحيّ للأسطر المستقلة فقط. */
     private fun appendMediaInline(out: SpannableStringBuilder, raw: String) {
-        val m = parseMedia(raw)
+        val (m, err) = parseMediaEx(raw)
         if (m == null) {
-            appendDiagnosticChip(out, "رابط وسائط غير صالح")
+            appendDiagnosticChip(out, "وسائط غير صالحة: $err")
             return
         }
-        val label = (if (m.kind == "video") "\u25B6 " else "\uD83C\uDF10 ") + m.title.ifBlank { hostOf(m.url) }
-        appendActionButton(out, label, null, null, "soft", null, LinkButtonClickSpan(m.url))
+        val name = m.title.ifBlank { if (m.youtube) "YouTube" else hostOf(m.url) }
+        val at = if (m.startSec > 0) " \u00B7 ${formatClock(m.startSec)}" else ""
+        val label = (if (m.kind == "video") "\u25B6 " else "\uD83C\uDF10 ") + name + at
+        appendActionButton(out, label, null, null, "soft", null, LinkButtonClickSpan(m.watchUrl.ifBlank { m.url }))
+    }
+
+    private fun escapeHtmlAttr(s: String): String =
+        s.replace("&", "&amp;").replace("\"", "&quot;").replace("<", "&lt;").replace(">", "&gt;")
+
+    /** صفحة تغلّف iframe التضمين؛ تُحمَّل بأصل https (loadDataWithBaseURL) وسياسة referrer صحيحة لقبول يوتيوب للتضمين. */
+    private fun ytWrapperHtml(embedUrl: String, title: String): String {
+        val src = escapeHtmlAttr(embedUrl)
+        val name = escapeHtmlAttr(title.ifBlank { "YouTube video" })
+        return "<!doctype html><html><head><meta charset=\"utf-8\">" +
+            "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">" +
+            "<style>html,body{margin:0;height:100%;background:#000;overflow:hidden}" +
+            "iframe{position:absolute;top:0;left:0;width:100%;height:100%;border:0}</style></head><body>" +
+            "<iframe src=\"$src\" title=\"$name\" " +
+            "allow=\"accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share\" " +
+            "referrerpolicy=\"strict-origin-when-cross-origin\" allowfullscreen></iframe></body></html>"
+    }
+
+    private fun findActivity(ctx: Context): android.app.Activity? {
+        var c: Context? = ctx
+        while (c is android.content.ContextWrapper) {
+            if (c is android.app.Activity) return c
+            c = c.baseContext
+        }
+        return null
+    }
+
+    /** صورة مصغّرة يوتيوب (اختيارية `thumb=(true)`): تُجلب في خيط خلفي وتُخزَّن مؤقتاً، ولا شيء يُجلب بدونها. */
+    private fun loadYoutubeThumb(id: String, iv: ImageView) {
+        ytThumbCache.get(id)?.let { iv.setImageBitmap(it); return }
+        Thread {
+            try {
+                val conn = java.net.URL("https://i.ytimg.com/vi/$id/hqdefault.jpg").openConnection() as java.net.HttpURLConnection
+                conn.connectTimeout = 6000
+                conn.readTimeout = 6000
+                try {
+                    if (conn.responseCode == 200 && conn.contentLength <= 600_000) {
+                        val bmp = BitmapFactory.decodeStream(conn.inputStream)
+                        if (bmp != null) {
+                            ytThumbCache.put(id, bmp)
+                            iv.post { iv.setImageBitmap(bmp) }
+                        }
+                    }
+                } finally {
+                    conn.disconnect()
+                }
+            } catch (t: Throwable) {
+            }
+        }.start()
     }
 
     /**
-     * يبني بطاقة وسائط لسطر `:; … ;:` مستقل: ملصق تشغيل أولاً (لا تحميل ولا شبكة قبل النقر)، وعند النقر
-     * يُنشأ WebView مقيَّد: بلا وصول ملفات/محتوى، بلا محتوى مختلط، JavaScript فقط لمضيفي الفيديو الموثوقين،
-     * والتنقّل محصور في مضيف التضمين نفسه. زر ✕ يُغلق المشغّل ويُعيد الملصق.
+     * يبني بطاقة وسائط لسطر `:; … ;:` مستقل: ملصق تشغيل أولاً (لا شبكة قبل النقر إلا الصورة المصغّرة الاختيارية)، وعند
+     * النقر يُنشأ WebView مقيَّد: بلا وصول ملفات/محتوى، بلا محتوى مختلط، JavaScript لمضيفي الفيديو الموثوقين فقط،
+     * التنقّل الرئيسي محصور بمضيف التضمين. أعلى المشغّل: ↗ فتح خارجي و✕ إغلاق. ملء الشاشة مدعوم، ويتوقف المشغّل
+     * ويُدمَّر عند مغادرة الشاشة (لا صوت خلفي). الارتفاع من نسبة الأبعاد ([MarkdownSegment.Media.ratio]) إن وُجدت.
      */
     fun buildMediaView(context: Context, media: MarkdownSegment.Media, topMarginPx: Int = 0): View {
         applyPalette(paletteDark(context, docPageSettings))
@@ -3955,98 +4259,247 @@ object DocumentationContainer {
         val isVideo = media.kind == "video"
         val host = hostOf(media.url)
         val embedHost = hostOf(media.embedUrl)
+        val ratio = media.ratio
+        val portrait = ratio in 0.01f..0.99f
+        val openUrl = media.watchUrl.ifBlank { media.url }
+        val white = 0xFFFFFFFF.toInt()
 
-        val card = FrameLayout(context).apply {
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, dp(media.heightDp.toFloat())
-            ).apply { topMargin = topMarginPx }
-            background = GradientDrawable().apply {
-                setColor(0xFF15171C.toInt())
-                cornerRadius = dp(14f).toFloat()
-                setStroke(dp(1f), COLOR_CARD_BORDER)
+        val card = object : FrameLayout(context) {
+            override fun onMeasure(widthSpec: Int, heightSpec: Int) {
+                if (ratio > 0f) {
+                    val w = View.MeasureSpec.getSize(widthSpec)
+                    super.onMeasure(widthSpec, View.MeasureSpec.makeMeasureSpec((w / ratio).toInt(), View.MeasureSpec.EXACTLY))
+                } else {
+                    super.onMeasure(widthSpec, heightSpec)
+                }
             }
-            clipToOutline = true
         }
+        card.layoutParams = if (ratio > 0f) {
+            LinearLayout.LayoutParams(
+                if (portrait) dp(300f) else LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                topMargin = topMarginPx
+                if (portrait) gravity = Gravity.CENTER_HORIZONTAL
+            }
+        } else {
+            LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(media.heightDp.toFloat())).apply { topMargin = topMarginPx }
+        }
+        card.background = GradientDrawable().apply {
+            setColor(0xFF15171C.toInt())
+            cornerRadius = dp(14f).toFloat()
+            setStroke(dp(1f), COLOR_CARD_BORDER)
+        }
+        card.clipToOutline = true
 
         var loadPlayer: () -> Unit = {}
+        var web: WebView? = null
+        var exitFullscreen: (() -> Unit)? = null
 
-        fun buildPoster(): View = LinearLayout(context).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER
-            layoutParams = FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT
+        fun openExternal() {
+            try {
+                val i = Intent(Intent.ACTION_VIEW, Uri.parse(openUrl))
+                if (findActivity(context) == null) i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                context.startActivity(i)
+            } catch (t: Throwable) {
+            }
+        }
+
+        fun buildPoster(): View {
+            val root = FrameLayout(context)
+            root.layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)
+            val tid = media.thumbId
+            if (media.thumb && tid != null) {
+                val iv = ImageView(context)
+                iv.scaleType = ImageView.ScaleType.CENTER_CROP
+                root.addView(iv, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+                loadYoutubeThumb(tid, iv)
+            }
+            val scrim = View(context)
+            scrim.background = GradientDrawable(
+                GradientDrawable.Orientation.TOP_BOTTOM,
+                intArrayOf(0x33000000, 0x00000000, 0xCC000000.toInt())
             )
-            addView(TextView(context).apply {
-                text = if (isVideo) "\u25B6" else "\uD83C\uDF10"
-                textSize = 36f
-                setTextColor(0xFFFFFFFF.toInt())
-                gravity = Gravity.CENTER
-            })
-            addView(TextView(context).apply {
-                text = listOf(media.title, host).filter { it.isNotBlank() }.joinToString(" \u00B7 ")
-                textSize = 12.5f
-                setTextColor(0xFFB4B8C5.toInt())
-                gravity = Gravity.CENTER
-                setPadding(dp(16f), dp(8f), dp(16f), 0)
-            })
-            addView(TextView(context).apply {
-                text = if (isVideo) "اضغط للتشغيل" else "اضغط للتحميل"
-                textSize = 11f
-                setTextColor(0xFF8B92A0.toInt())
-                gravity = Gravity.CENTER
-                setPadding(0, dp(4f), 0, 0)
-            })
-            setOnClickListener { loadPlayer() }
+            root.addView(scrim, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+
+            val playBtn = TextView(context)
+            playBtn.text = if (isVideo) "\u25B6" else "\uD83C\uDF10"
+            playBtn.textSize = 22f
+            playBtn.setTextColor(white)
+            playBtn.gravity = Gravity.CENTER
+            playBtn.background = GradientDrawable().apply {
+                setColor(if (media.youtube) 0xFFFF0033.toInt() else 0xCC7C5CFF.toInt())
+                cornerRadius = dp(12f).toFloat()
+            }
+            root.addView(playBtn, FrameLayout.LayoutParams(dp(64f), dp(44f), Gravity.CENTER))
+
+            val badge = TextView(context)
+            badge.text = if (media.youtube) "YouTube" else host
+            badge.textSize = 11f
+            badge.setTextColor(white)
+            badge.setPadding(dp(8f), dp(3f), dp(8f), dp(3f))
+            badge.background = GradientDrawable().apply {
+                setColor(0x99000000.toInt())
+                cornerRadius = dp(10f).toFloat()
+            }
+            root.addView(
+                badge,
+                FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT,
+                    Gravity.TOP or Gravity.START
+                ).apply { setMargins(dp(10f), dp(10f), dp(10f), dp(10f)) }
+            )
+
+            val sub = listOfNotNull(
+                if (media.startSec > 0) "\u25B6 ${formatClock(media.startSec)}" else null,
+                host
+            ).joinToString(" \u00B7 ")
+            val caption = TextView(context)
+            caption.text = if (media.title.isNotBlank()) "${media.title}\n$sub" else sub
+            caption.textSize = 12.5f
+            caption.setTextColor(white)
+            caption.maxLines = 3
+            caption.ellipsize = android.text.TextUtils.TruncateAt.END
+            caption.setPadding(dp(12f), dp(8f), dp(12f), dp(10f))
+            root.addView(
+                caption,
+                FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM)
+            )
+            root.contentDescription = if (isVideo) "تشغيل الفيديو ${media.title}" else "تحميل ${media.title}"
+            root.setOnClickListener { loadPlayer() }
+            return root
+        }
+
+        fun stopPlayer() {
+            exitFullscreen?.invoke()
+            web?.let { w ->
+                try {
+                    w.stopLoading()
+                    w.loadUrl("about:blank")
+                    w.removeAllViews()
+                    w.destroy()
+                } catch (t: Throwable) {
+                }
+            }
+            web = null
+        }
+
+        fun showPoster() {
+            card.removeAllViews()
+            card.addView(buildPoster())
+        }
+
+        fun showFallback() {
+            card.post {
+                stopPlayer()
+                card.removeAllViews()
+                val tv = TextView(context)
+                tv.text = "تعذّر تحميل المشغّل — اضغط لفتح الرابط خارج التطبيق"
+                tv.setTextColor(0xFFB4B8C5.toInt())
+                tv.textSize = 13f
+                tv.gravity = Gravity.CENTER
+                tv.setPadding(dp(16f), dp(16f), dp(16f), dp(16f))
+                tv.setOnClickListener { openExternal() }
+                card.addView(tv, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+            }
         }
 
         loadPlayer = {
             card.removeAllViews()
             val trusted = isTrustedVideoHost(host) || isTrustedVideoHost(embedHost)
-            val web = WebView(context)
-            web.settings.javaScriptEnabled = trusted
-            web.settings.domStorageEnabled = trusted
-            web.settings.allowFileAccess = false
-            web.settings.allowContentAccess = false
-            web.settings.mediaPlaybackRequiresUserGesture = true
-            web.settings.mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
-            web.settings.setSupportZoom(false)
-            web.setBackgroundColor(0xFF15171C.toInt())
-            web.webViewClient = object : WebViewClient() {
+            val w = WebView(context)
+            web = w
+            w.settings.javaScriptEnabled = trusted
+            w.settings.domStorageEnabled = trusted
+            w.settings.allowFileAccess = false
+            w.settings.allowContentAccess = false
+            // المستخدم نقر الملصق عن قصد، فيُسمح بالتشغيل التلقائي لمضيفي الفيديو الموثوقين فقط.
+            w.settings.mediaPlaybackRequiresUserGesture = !trusted
+            w.settings.mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
+            w.settings.setSupportZoom(false)
+            w.setBackgroundColor(0xFF000000.toInt())
+            w.webViewClient = object : WebViewClient() {
                 override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
+                    if (!request.isForMainFrame) return false
                     val target = request.url
                     val h = hostOf(target.toString())
                     val sameSite = target.scheme.equals("https", ignoreCase = true) &&
                         (h == embedHost || h.endsWith(".$embedHost"))
                     return !sameSite
                 }
+
+                override fun onReceivedError(view: WebView, request: WebResourceRequest, error: android.webkit.WebResourceError) {
+                    if (request.isForMainFrame) showFallback()
+                }
             }
-            web.loadUrl(media.embedUrl)
-            card.addView(
-                web,
-                FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)
-            )
-            val close = TextView(context).apply {
-                text = "\u2715"
-                textSize = 16f
-                setTextColor(0xFFFFFFFF.toInt())
-                setPadding(dp(12f), dp(6f), dp(12f), dp(6f))
-                background = GradientDrawable().apply {
+            w.webChromeClient = object : WebChromeClient() {
+                private var custom: View? = null
+                private var callback: WebChromeClient.CustomViewCallback? = null
+
+                override fun onShowCustomView(view: View, cb: WebChromeClient.CustomViewCallback) {
+                    val act = findActivity(context)
+                    val decor = act?.window?.decorView as? FrameLayout
+                    if (act == null || decor == null) {
+                        cb.onCustomViewHidden()
+                        return
+                    }
+                    if (custom != null) hide()
+                    view.setBackgroundColor(0xFF000000.toInt())
+                    decor.addView(view, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+                    custom = view
+                    callback = cb
+                    @Suppress("DEPRECATION")
+                    decor.systemUiVisibility = View.SYSTEM_UI_FLAG_FULLSCREEN or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or
+                        View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY or View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                    exitFullscreen = { hide() }
+                }
+
+                override fun onHideCustomView() {
+                    hide()
+                }
+
+                private fun hide() {
+                    val v = custom ?: return
+                    (v.parent as? FrameLayout)?.removeView(v)
+                    custom = null
+                    val act = findActivity(context)
+                    @Suppress("DEPRECATION")
+                    act?.window?.decorView?.systemUiVisibility = View.SYSTEM_UI_FLAG_VISIBLE
+                    callback?.onCustomViewHidden()
+                    callback = null
+                    exitFullscreen = null
+                }
+            }
+            if (media.youtube) {
+                w.loadDataWithBaseURL(RIN_LINKS_BASE, ytWrapperHtml(media.embedUrl, media.title), "text/html", "utf-8", null)
+            } else {
+                w.loadUrl(media.embedUrl)
+            }
+            card.addView(w, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+
+            fun pill(label: String, onClick: () -> Unit): TextView {
+                val tv = TextView(context)
+                tv.text = label
+                tv.textSize = 15f
+                tv.setTextColor(white)
+                tv.setPadding(dp(12f), dp(6f), dp(12f), dp(6f))
+                tv.background = GradientDrawable().apply {
                     setColor(0x99000000.toInt())
                     cornerRadius = dp(16f).toFloat()
                 }
-                setOnClickListener {
-                    try {
-                        web.stopLoading()
-                        web.loadUrl("about:blank")
-                        web.destroy()
-                    } catch (t: Throwable) {
-                    }
-                    card.removeAllViews()
-                    card.addView(buildPoster())
-                }
+                tv.setOnClickListener { onClick() }
+                return tv
             }
+            val bar = LinearLayout(context)
+            bar.orientation = LinearLayout.HORIZONTAL
+            bar.addView(pill("\u2197") { openExternal() })
+            bar.addView(
+                pill("\u2715") { stopPlayer(); showPoster() },
+                LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+                    .apply { marginStart = dp(6f) }
+            )
             card.addView(
-                close,
+                bar,
                 FrameLayout.LayoutParams(
                     FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT,
                     Gravity.TOP or Gravity.END
@@ -4054,10 +4507,21 @@ object DocumentationContainer {
             )
         }
 
+        // مغادرة الشاشة: أوقف المشغّل ودمّره (لا صوت خلفي، ولا تسرّب WebView).
+        card.addOnAttachStateChangeListener(object : View.OnAttachStateChangeListener {
+            override fun onViewAttachedToWindow(v: View) {}
+
+            override fun onViewDetachedFromWindow(v: View) {
+                if (web != null) {
+                    stopPlayer()
+                    showPoster()
+                }
+            }
+        })
+
         card.addView(buildPoster())
         return card
     }
-
 
     // ═══════════════════════════════════════════════════════════════════════════════════════════
     //            إعدادات الصفحة في rdoc: `؛؛؛ صفحة` (حجم، مساحة، خلفية، ألوان، محاذاة، اتجاه…)
@@ -4771,6 +5235,353 @@ object DocumentationContainer {
         }
     }
 
+
+    // ═══════════════════════════════════════════════════════════════════════════════════════════
+    //                     ميزات الحزم والتوثيق: `؛؛؛ حزمة` `؛؛؛ تبعيات` `::: دالة` `::: تثبيت` …
+    // ═══════════════════════════════════════════════════════════════════════════════════════════
+    //   ؛؛؛ حزمة                         بطاقة الحزمة (اسم/إصدار/وصف/ناشر/رخصة/يتطلب/منصات/كلمات/تثبيت/مستودع)
+    //   ؛؛؛ تبعيات                        `@user/lib = ^1.2 | ملاحظة` — كل سطر تبعية بقيد إصدار
+    //   ::: دالة indmedia_html(url, title)  توثيق API: @param @return @throws @since @deprecated @see @example
+    //   ::: فهرس-الدوال                    فهرس تلقائي بتواقيع كل ::: دالة في المستند
+    //   ::: تثبيت                          أوامر قابلة للنسخ (فارغة → rin install <اسم الحزمة>)
+    //   ::: مثال عنوان                      بطاقة مثال
+    //   [since: 1.0] [requires: rin>=1.0] [dep: @u/lib@^1.2] [install: @u/lib] [author: @u] [repo: https://…|نص]
+
+    private val PKG_KEYS: Map<String, String> = mapOf(
+        "name" to "name", "الاسم" to "name", "اسم" to "name",
+        "version" to "version", "الإصدار" to "version", "إصدار" to "version",
+        "description" to "description", "desc" to "description", "الوصف" to "description", "وصف" to "description",
+        "author" to "author", "المؤلف" to "author", "الناشر" to "author",
+        "license" to "license", "الرخصة" to "license", "ترخيص" to "license",
+        "repo" to "repo", "repository" to "repo", "المستودع" to "repo",
+        "homepage" to "homepage", "الموقع" to "homepage",
+        "requires" to "requires", "يتطلب" to "requires",
+        "platforms" to "platforms", "المنصات" to "platforms",
+        "keywords" to "keywords", "الكلمات" to "keywords",
+        "install" to "install", "التثبيت" to "install"
+    )
+
+    private val pkgNameRegex = Regex("^@?[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)?$")
+    private val versionRegex = Regex("^v?\\d+(?:\\.\\d+){0,2}(?:[-+][A-Za-z0-9.]+)?$")
+    private val constraintRegex = Regex("^(?:\\*|(?:>=|<=|>|<|=|\\^|~)?\\s*v?\\d+(?:\\.\\d+){0,2}(?:[-+][A-Za-z0-9.]+)?)$")
+    private val requiresRegex = Regex("^[A-Za-z][A-Za-z0-9._-]*\\s*(?:>=|<=|>|<|=|\\^|~)?\\s*v?\\d+(?:\\.\\d+){0,2}$")
+    private val depValueRegex = Regex("^(@?[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)?)(?:@([^\\s@]+))?$")
+    private val depLineRegex = Regex("^(\\S+?)\\s*=\\s*([^|]+?)\\s*(?:\\|\\s*(.*))?$")
+    private val apiDirectiveRegex = Regex("^@(\\w+)\\s*:?\\s*(.*)$")
+    private val apiParamRegex = Regex("^([A-Za-z_][\\w.]*)\\s*(?:\\(([^)]*)\\))?\\s*(?:[:\\-\\u2014]\\s*)?(.*)$")
+    private val apiSigParamsRegex = Regex("\\(([^)]*)\\)")
+    private val identRegex = Regex("[A-Za-z_][A-Za-z0-9_]*")
+
+    private val API_DIRECTIVES = setOf(
+        "param", "معامل", "return", "returns", "يعيد", "throws", "يرمي",
+        "since", "منذ", "deprecated", "متوقف", "see", "انظر", "example", "مثال"
+    )
+
+    private var docApis: List<String> = emptyList()
+    private var currentApis: List<String> = emptyList()
+
+    /** يقرأ أسطر `مفتاح: قيمة` من بلوك حزمة إلى مفاتيح قانونية؛ المفاتيح المجهولة تُجمَع في [unknown] (سطر نسبي، مفتاح). */
+    private fun packageKeys(body: List<String>, unknown: MutableList<Pair<Int, String>>?): LinkedHashMap<String, String> {
+        val kv = LinkedHashMap<String, String>()
+        for ((idx, line) in body.withIndex()) {
+            val t = line.trim()
+            if (t.isEmpty() || t.startsWith("\u061B\u061B")) continue
+            val c = t.indexOf(':')
+            if (c <= 0) continue
+            val raw = t.substring(0, c).trim().lowercase().replace('_', '-').replace(' ', '-')
+            val key = PKG_KEYS[raw]
+            if (key == null) { unknown?.add(idx to raw); continue }
+            kv.putIfAbsent(key, t.substring(c + 1).trim())
+        }
+        return kv
+    }
+
+    /** معلومات الحزمة القانونية (name/version/description/author/license/repo/…) من بلوك `؛؛؛ حزمة` في [markdown]؛ فارغة إن غاب. */
+    fun extractPackageInfo(markdown: String): Map<String, String> {
+        val lines = markdown.lines()
+        var i = 0
+        while (i < lines.size) {
+            val open = arSemiFenceOpenRegex.find(lines[i].trim())
+            if (open == null) { i++; continue }
+            val scan = scanDataFence(lines, i)
+            val type = open.groupValues[1].trim().split(whitespaceRegex)[0].lowercase()
+            if (type == "package" || type == "حزمة") return packageKeys(scan.body, null)
+            i = if (scan.next > i) scan.next else i + 1
+        }
+        return emptyMap()
+    }
+
+    /** يقارن اسم/إصدار README (`؛؛؛ حزمة`) بقيم manifest الحزمة (package.rin.json)؛ أي اختلاف يعود كخطأ. */
+    fun crossCheckPackage(markdown: String, manifestName: String, manifestVersion: String): List<RdocIssue> {
+        val info = extractPackageInfo(markdown)
+        val issues = ArrayList<RdocIssue>()
+        if (info.isEmpty()) {
+            issues.add(RdocIssue(1, "warning", "لا يوجد بلوك ؛؛؛ حزمة في README"))
+            return issues
+        }
+        info["name"]?.let { if (!it.equals(manifestName, ignoreCase = true)) issues.add(RdocIssue(1, "error", "اسم README ($it) يخالف manifest ($manifestName)")) }
+        info["version"]?.let { if (it.removePrefix("v") != manifestVersion.removePrefix("v")) issues.add(RdocIssue(1, "error", "إصدار README ($it) يخالف manifest ($manifestVersion)")) }
+        return issues
+    }
+
+    private fun collectApis(markdown: String): List<String> {
+        val res = ArrayList<String>()
+        var inFence = false
+        for (raw in markdown.lines()) {
+            val t = raw.trim()
+            if (t.startsWith("```")) { inFence = !inFence; continue }
+            if (inFence) continue
+            val m = colonFenceOpenRegex.find(t) ?: continue
+            val tokens = m.groupValues[1].trim().split(whitespaceRegex, limit = 2)
+            if (CONTAINER_ALIASES[tokens[0].lowercase()] == "api") {
+                val sig = tokens.getOrNull(1)?.trim().orEmpty()
+                if (sig.isNotEmpty()) res.add(sig)
+            }
+        }
+        return res
+    }
+
+    private fun apiIndexText(): String =
+        if (currentApis.isEmpty()) "لا دوال موثَّقة في المستند." else currentApis.joinToString("\n") { "- `$it`" }
+
+    private fun installText(body: List<String>): String {
+        val cmds = body.map { it.trim() }.filter { it.isNotEmpty() && !it.startsWith("\u061B\u061B") }
+        val list = if (cmds.isNotEmpty()) cmds else {
+            val name = currentMeta["name"]
+            if (name.isNullOrBlank()) emptyList() else listOf("rin install $name")
+        }
+        if (list.isEmpty()) return "\u2716 لا أوامر ولا اسم حزمة (`؛؛؛ حزمة`) لاستنتاج أمر التثبيت"
+        return list.joinToString("\n") { "- [cmd: $it]" }
+    }
+
+    /** يحوّل توجيهات `@param/@return/@throws/@since/@deprecated/@see/@example` في جسم `::: دالة` إلى Markdown مقروء. */
+    private fun apiText(body: List<String>): String {
+        val res = ArrayList<String>()
+        var inFence = false
+        var paramsOpen = false
+        fun blank() { if (res.isNotEmpty() && res.last().isNotBlank()) res.add("") }
+        for (line in body) {
+            val t = line.trim()
+            if (t.startsWith("```")) { inFence = !inFence; res.add(line); continue }
+            if (inFence) { res.add(line); continue }
+            val m = apiDirectiveRegex.find(t)
+            val d = m?.groupValues?.get(1)?.lowercase()
+            if (m == null || d == null || d !in API_DIRECTIVES) {
+                if (t.isNotEmpty()) paramsOpen = false
+                res.add(line)
+                continue
+            }
+            val v = m.groupValues[2].trim()
+            when (d) {
+                "param", "معامل" -> {
+                    if (!paramsOpen) { blank(); res.add("**المعاملات**"); res.add(""); paramsOpen = true }
+                    val pm = apiParamRegex.find(v)
+                    if (pm == null) {
+                        res.add("- $v")
+                    } else {
+                        val type = pm.groupValues[2].trim()
+                        val desc = pm.groupValues[3].trim()
+                        res.add("- `${pm.groupValues[1]}`" + (if (type.isNotEmpty()) " *($type)*" else "") + (if (desc.isNotEmpty()) " \u2014 $desc" else ""))
+                    }
+                }
+                "return", "returns", "يعيد" -> { paramsOpen = false; blank(); res.add("**يعيد:** $v"); res.add("") }
+                "throws", "يرمي" -> { paramsOpen = false; blank(); res.add("**يرمي:** $v"); res.add("") }
+                "since", "منذ" -> { paramsOpen = false; blank(); res.add("[since: $v]"); res.add("") }
+                "deprecated", "متوقف" -> { paramsOpen = false; blank(); res.add("[deprecated: ${v.ifBlank { "متوقفة" }}]"); res.add("") }
+                "see", "انظر" -> { paramsOpen = false; blank(); res.add("**انظر:** *\"$v\"*"); res.add("") }
+                else -> { paramsOpen = false; blank(); res.add("**مثال:**"); if (v.isNotEmpty()) res.add(v); res.add("") }
+            }
+        }
+        return res.joinToString("\n")
+    }
+
+    /** بطاقة `؛؛؛ حزمة`: اسم + إصدار، وصف، ثم صفوف الناشر/الرخصة/المتطلبات/المنصات/الكلمات/أمر التثبيت/الروابط. */
+    private fun appendPackageCard(out: SpannableStringBuilder, scan: FenceScan) {
+        val kv = packageKeys(scan.body, null)
+        val name = kv["name"]
+        val cardStart = out.length
+        val hs = out.length
+        out.append("\uD83D\uDCE6 ${name ?: "حزمة"}")
+        out.setSpan(StyleSpan(Typeface.BOLD), hs, out.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        out.setSpan(ForegroundColorSpan(COLOR_HEADING), hs, out.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        kv["version"]?.let { v -> out.append("  "); appendTypedBracket(out, "version", v, v) }
+        kv["description"]?.let { v -> out.append('\n'); appendInline(out, v) }
+        fun row(label: String, block: () -> Unit) {
+            out.append('\n')
+            val ks = out.length
+            out.append(label)
+            out.setSpan(StyleSpan(Typeface.BOLD), ks, out.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            out.setSpan(ForegroundColorSpan(COLOR_H_DIM), ks, out.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            out.append("   ")
+            block()
+        }
+        kv["author"]?.let { v -> row("الناشر") { appendTypedBracket(out, "author", v, v) } }
+        kv["license"]?.let { v -> row("الرخصة") { appendTypedBracket(out, "license", v, v) } }
+        kv["requires"]?.let { v -> row("يتطلب") { appendTypedBracket(out, "requires", v, v) } }
+        kv["platforms"]?.let { v -> row("المنصات") { appendTypedBracket(out, "platform", v.replace(",", "|"), v) } }
+        kv["keywords"]?.let { v ->
+            row("الكلمات") {
+                v.split(",").map { it.trim() }.filter { it.isNotEmpty() }.forEachIndexed { idx, k ->
+                    if (idx > 0) out.append(" ")
+                    appendTypedBracket(out, "tag", k, k)
+                }
+            }
+        }
+        val install = kv["install"] ?: name?.let { "rin install $it" }
+        install?.let { v -> row("التثبيت") { appendTypedBracket(out, "cmd", v, v) } }
+        kv["repo"]?.let { v -> row("المستودع") { appendTypedBracket(out, "repo", v, v) } }
+        kv["homepage"]?.let { v -> row("الموقع") { appendTypedBracket(out, "repo", v, v) } }
+        if (name == null || kv["version"] == null) {
+            out.append("  ")
+            appendDiagnosticChip(out, "حزمة بلا name/version")
+        }
+        if (!scan.closed) {
+            out.append("  ")
+            appendDiagnosticChip(out, "بلوك ؛؛؛ غير مغلق")
+        }
+        val cardEnd = out.length
+        out.setSpan(
+            RoundedCardSpan(COLOR_TABLE_BG, COLOR_CARD_BORDER, cardStart, cardEnd),
+            cardStart, cardEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+        )
+    }
+
+    /** بطاقة `؛؛؛ تبعيات`: سطر لكل تبعية `اسم = قيد [| ملاحظة]`؛ أسماء `@user/lib` روابط. */
+    private fun appendDepsCard(out: SpannableStringBuilder, title: String, scan: FenceScan) {
+        val cardStart = out.length
+        val hs = out.length
+        out.append("\uD83D\uDD17 ${title.ifBlank { "التبعيات" }}")
+        out.setSpan(StyleSpan(Typeface.BOLD), hs, out.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        out.setSpan(ForegroundColorSpan(COLOR_HEADING), hs, out.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        var any = false
+        for (line in scan.body) {
+            val t = line.trim()
+            if (t.isEmpty() || t.startsWith("\u061B\u061B")) continue
+            any = true
+            out.append('\n')
+            val m = depLineRegex.find(t)
+            if (m == null) {
+                appendDiagnosticChip(out, "تبعية غير صالحة: ${t.take(30)}")
+                continue
+            }
+            val depName = m.groupValues[1]
+            val constraint = m.groupValues[2].replace(whitespaceRegex, "")
+            appendTypedBracket(out, "dep", "$depName@$constraint", t)
+            val note = m.groupValues[3].trim()
+            if (note.isNotEmpty()) {
+                out.append("  ")
+                appendInline(out, note)
+            }
+        }
+        if (!any) {
+            out.append('\n')
+            appendDiagnosticChip(out, "بلوك تبعيات فارغ")
+        }
+        if (!scan.closed) {
+            out.append("  ")
+            appendDiagnosticChip(out, "بلوك ؛؛؛ غير مغلق")
+        }
+        val cardEnd = out.length
+        out.setSpan(
+            RoundedCardSpan(COLOR_TABLE_BG, COLOR_CARD_BORDER, cardStart, cardEnd),
+            cardStart, cardEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+        )
+    }
+
+    /** يفحص بلوكات `؛؛؛ حزمة` و`؛؛؛ تبعيات` (اسم/إصدار/صيغ/روابط https/قيود) ويُسجّل المشاكل بأرقام الأسطر. */
+    private fun validatePackageBlocks(lines: List<String>, issues: MutableList<RdocIssue>) {
+        var inFence = false
+        var i = 0
+        while (i < lines.size) {
+            val t = lines[i].trim()
+            if (t.startsWith("```")) { inFence = !inFence; i++; continue }
+            val open = if (inFence) null else arSemiFenceOpenRegex.find(t)
+            if (open == null) { i++; continue }
+            val scan = scanDataFence(lines, i)
+            val type = open.groupValues[1].trim().split(whitespaceRegex)[0].lowercase()
+            val ln = i + 1
+            if (type == "package" || type == "حزمة") {
+                val unknown = ArrayList<Pair<Int, String>>()
+                val kv = packageKeys(scan.body, unknown)
+                for ((off, k) in unknown) issues.add(RdocIssue(ln + 1 + off, "warning", "مفتاح حزمة غير معروف: $k"))
+                val name = kv["name"]
+                val version = kv["version"]
+                if (name == null) issues.add(RdocIssue(ln, "error", "بلوك حزمة بلا name"))
+                else if (!pkgNameRegex.matches(name)) issues.add(RdocIssue(ln, "error", "اسم حزمة غير صالح: $name"))
+                if (version == null) issues.add(RdocIssue(ln, "error", "بلوك حزمة بلا version"))
+                else if (!versionRegex.matches(version)) issues.add(RdocIssue(ln, "error", "إصدار غير صالح: $version"))
+                kv["requires"]?.let { if (!requiresRegex.matches(it)) issues.add(RdocIssue(ln, "error", "يتطلب غير صالح: $it")) }
+                kv["repo"]?.let { if (!isHttpsUrl(it.substringBefore('|').trim())) issues.add(RdocIssue(ln, "error", "repo يجب أن يكون https: $it")) }
+                kv["homepage"]?.let { if (!isHttpsUrl(it.substringBefore('|').trim())) issues.add(RdocIssue(ln, "error", "homepage يجب أن يكون https: $it")) }
+                kv["author"]?.let { if (it.startsWith("@") && canonicalRinUrl(it) == null) issues.add(RdocIssue(ln, "error", "ناشر غير صالح: $it")) }
+                if (!scan.closed) issues.add(RdocIssue(ln, "error", "بلوك حزمة غير مغلق"))
+            } else if (type == "deps" || type == "dependencies" || type == "تبعيات") {
+                val seen = HashSet<String>()
+                for ((off, line) in scan.body.withIndex()) {
+                    val l = line.trim()
+                    if (l.isEmpty() || l.startsWith("\u061B\u061B")) continue
+                    val at = ln + 1 + off
+                    val m = depLineRegex.find(l)
+                    if (m == null) { issues.add(RdocIssue(at, "error", "تبعية غير صالحة (اسم = قيد): ${l.take(40)}")); continue }
+                    val depName = m.groupValues[1]
+                    if (!pkgNameRegex.matches(depName) || (depName.startsWith("@") && canonicalRinUrl(depName) == null)) {
+                        issues.add(RdocIssue(at, "error", "اسم تبعية غير صالح: $depName"))
+                    }
+                    if (!constraintRegex.matches(m.groupValues[2].trim())) issues.add(RdocIssue(at, "error", "قيد إصدار غير صالح: ${m.groupValues[2].trim()}"))
+                    if (!seen.add(depName.lowercase())) issues.add(RdocIssue(at, "warning", "تبعية مكرّرة: $depName"))
+                }
+                if (!scan.closed) issues.add(RdocIssue(ln, "error", "بلوك تبعيات غير مغلق"))
+            }
+            i = if (scan.next > i) scan.next else i + 1
+        }
+    }
+
+    /** يفحص حاويات `::: دالة`: توقيع مطلوب، @param مقابل معاملات التوقيع (ناقص/زائد)، وتوجيهات @ مجهولة. */
+    private fun validateApiDocs(lines: List<String>, issues: MutableList<RdocIssue>) {
+        var inFence = false
+        var i = 0
+        while (i < lines.size) {
+            val t = lines[i].trim()
+            if (t.startsWith("```")) { inFence = !inFence; i++; continue }
+            val m = if (inFence) null else colonFenceOpenRegex.find(t)
+            if (m == null) { i++; continue }
+            val tokens = m.groupValues[1].trim().split(whitespaceRegex, limit = 2)
+            if (CONTAINER_ALIASES[tokens[0].lowercase()] != "api") { i++; continue }
+            val ln = i + 1
+            val sig = tokens.getOrNull(1)?.trim().orEmpty()
+            val scan = scanFence(lines, i, colonFenceOpenRegex, colonFenceCloseRegex)
+            if (sig.isEmpty()) issues.add(RdocIssue(ln, "error", "دالة بلا توقيع"))
+            val sigParams = apiSigParamsRegex.find(sig)?.groupValues?.get(1)?.split(",")
+                ?.mapNotNull { identRegex.find(it.trim())?.value }?.toSet()
+            val documented = LinkedHashSet<String>()
+            var bodyFence = false
+            for ((off, line) in scan.body.withIndex()) {
+                val b = line.trim()
+                if (b.startsWith("```")) { bodyFence = !bodyFence; continue }
+                if (bodyFence) continue
+                val dm = apiDirectiveRegex.find(b) ?: continue
+                val d = dm.groupValues[1].lowercase()
+                val at = ln + 1 + off
+                if (d !in API_DIRECTIVES) {
+                    issues.add(RdocIssue(at, "warning", "توجيه غير معروف: @$d"))
+                } else if (d == "param" || d == "معامل") {
+                    val pn = apiParamRegex.find(dm.groupValues[2].trim())?.groupValues?.get(1)
+                    if (pn == null) {
+                        issues.add(RdocIssue(at, "error", "@param بلا اسم"))
+                    } else {
+                        if (!documented.add(pn)) issues.add(RdocIssue(at, "warning", "معامل مكرّر: $pn"))
+                        if (sigParams != null && pn !in sigParams) issues.add(RdocIssue(at, "warning", "معامل غير موجود في التوقيع: $pn"))
+                    }
+                }
+            }
+            if (sigParams != null) {
+                for (p in sigParams) if (p !in documented) issues.add(RdocIssue(ln, "warning", "معامل بلا توثيق: $p"))
+            }
+            if (!scan.closed) issues.add(RdocIssue(ln, "error", "حاوية دالة غير مغلقة"))
+            i++
+        }
+    }
+
     // ─────────────────────────── الفحص الصارم ───────────────────────────
 
     /** مشكلة وجدها [validate]: رقم السطر (من 1)، الخطورة (`error`/`warning`)، الوصف. */
@@ -4788,6 +5599,8 @@ object DocumentationContainer {
         val lines = markdown.lines()
         val refs = collectElementRefs(markdown)
         parsePageSettings(markdown, issues)
+        validatePackageBlocks(markdown.lines(), issues)
+        validateApiDocs(markdown.lines(), issues)
         val metaAll = extractMeta(markdown)
         val ids = HashMap<String, Int>()
         var inFence = false
@@ -4865,7 +5678,8 @@ object DocumentationContainer {
                 if (parsePayment(m.groupValues[1]) == null) issues.add(RdocIssue(ln, "error", "رابط دفع غير صالح: ${m.groupValues[1]}"))
             }
             for (m in mediaScanRegex.findAll(t)) {
-                if (parseMedia(m.groupValues[1]) == null) issues.add(RdocIssue(ln, "error", "رابط وسائط غير صالح (https فقط): ${m.groupValues[1]}"))
+                val mediaErr = parseMediaEx(m.groupValues[1]).second
+                if (mediaErr != null) issues.add(RdocIssue(ln, "error", "وسائط غير صالحة: $mediaErr"))
             }
             for (m in typedBracketScanRegex.findAll(t)) {
                 val tmp = SpannableStringBuilder()
