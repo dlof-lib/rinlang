@@ -1,0 +1,116 @@
+// Rin 1.0 — اختبار دوال container الجديدة
+// التشغيل:  rin_run tests/verification/container_extra.rin
+
+// ---- ensure / getOr / incr / append ----
+assertEq(container.ensure("table", "Users"), "Users");
+assertEq(container.ensure("table", "Users"), "Users");     // لا تنشئ نسخة ثانية
+assertEq(container.count(), 1);
+assertEq(container.kind("Users"), "table");
+
+assertEq(container.getOr("Users", "visits", 0), 0);
+assertEq(container.incr("Users", "visits"), 1);
+assertEq(container.incr("Users", "visits", 4), 5);
+assertEq(container.getOr("Users", "visits", 0), 5);
+assertEq(container.incr("Nope", "x"), nil);
+
+assertEq(container.append("Users", "log", "a"), 1);
+assertEq(container.append("Users", "log", "b"), 2);
+assertEq(getField("Users", "log"), ["a", "b"]);
+assertEq(container.append("Nope", "log", 1), false);
+
+// ---- update بدالة ----
+fun double(v) { if (v == nil) { return 1; } return v * 2; }
+assertEq(container.update("Users", "score", double), 1);
+assertEq(container.update("Users", "score", double), 2);
+assertEq(container.update("Users", "score", double), 4);
+assertEq(container.update("Nope", "score", double), nil);
+
+// ---- pick / omit / toJson / fromJson ----
+setField("Users", "name", "Ali");
+assertEq(container.pick("Users", ["name", "visits"]), {name:"Ali", visits:5});
+assertEq(container.omit("Users", ["log", "score"]), {name:"Ali", visits:5});
+assertEq(container.pick("Nope", ["a"]), nil);
+
+let js = container.toJson("Users");
+assertEq(jsonDecode(js)["name"], "Ali");
+assertEq(jsonDecode(js)["visits"], 5);
+
+container.ensure("table", "Fresh");
+assertEq(container.fromJson("Fresh", "{\"a\":1,\"b\":[1,2]}"), true);
+assertEq(getField("Fresh", "a"), 1);
+assertEq(container.fromJson("Fresh", "{\"a\":99,\"c\":3}", false), true);   // لا يستبدل الموجود
+assertEq(getField("Fresh", "a"), 1);
+assertEq(getField("Fresh", "c"), 3);
+assertEq(container.fromJson("Fresh", "[1,2]"), false);                      // ليس كائناً
+assertEq(container.fromJson("Nope", "{}"), false);
+
+// ---- clone (نسخة عميقة) ----
+assertEq(container.clone("Users", "UsersCopy"), "UsersCopy");
+assertEq(container.kind("UsersCopy"), "table");
+push(getField("UsersCopy", "log"), "c");
+assertEq(getField("Users", "log"), ["a", "b"]);               // الأصل لم يتأثر
+assertEq(container.clone("Users", "UsersCopy"), false);       // الهدف موجود
+assertEq(container.clone("Nope", "X"), false);
+
+// ---- diff ----
+setField("UsersCopy", "visits", 6);
+container.deleteField("UsersCopy", "score");
+setField("UsersCopy", "extra", true);
+let d = container.diff("Users", "UsersCopy");
+assertEq(d["same"], false);
+assertEq(d["changed"]["visits"], {from:5, to:6});
+assertEq(d["removed"], {score:4});
+assertEq(d["added"]["extra"], true);
+assertEq(container.diff("Users", "Users")["same"], true);
+assertEq(container.diff("Users", "Nope"), nil);
+
+// ---- query / pluck / sum / groupBy على مجموعة بيانات ----
+container.ensure("item", "i1"); setField("i1", "price", 10); setField("i1", "cat", "food");
+container.ensure("item", "i2"); setField("i2", "price", 25); setField("i2", "cat", "tech");
+container.ensure("item", "i3"); setField("i3", "price", 40); setField("i3", "cat", "tech");
+container.ensure("item", "i4"); setField("i4", "cat", "food");
+
+assertEq(container.query("item", {cat:"tech"}), ["i2", "i3"]);
+assertEq(container.query("item", {price:{gt:10}}), ["i2", "i3"]);
+assertEq(container.query("item", {price:{gte:10, lt:40}}), ["i1", "i2"]);
+assertEq(container.query("item", {price:{exists:false}}), ["i4"]);
+assertEq(container.query("item", {cat:{in:["food"]}}), ["i1", "i4"]);
+assertEq(container.query("item", {cat:{startsWith:"te"}}), ["i2", "i3"]);
+assertEq(container.query("item", {cat:{ne:"tech"}}), ["i1", "i4"]);
+assertEq(container.query("item", {cat:"tech"}, {sortBy:"price", desc:true}), ["i3", "i2"]);
+assertEq(container.query("item", nil, {sortBy:"price", limit:2}), ["i4", "i1"]);
+assertEq(container.query("item", {cat:"nothing"}), []);
+
+assertEq(container.pluck("item", "price"), {i1:10, i2:25, i3:40});
+assertEq(container.sum("item", "price"), 75);
+assertEq(container.groupBy("item", "cat"), {food:["i1", "i4"], tech:["i2", "i3"]});
+
+// ---- each ----
+let seen = [];
+fun collect(name) { push(seen, name); }
+assertEq(container.each("item", collect), 4);
+assertEq(seen, ["i1", "i2", "i3", "i4"]);
+
+// ---- rename + tree ----
+@container=Root
+    @container=Child
+        let label = "kid";
+    .end/container
+.end/container
+assertEq(parentOf("Child"), "Root");
+assertEq(container.rename("Child", "Kid"), true);
+assertEq(container.exists("Child"), false);
+assertEq(container.exists("Kid"), true);
+assertEq(getField("Kid", "label"), "kid");
+assertEq(parentOf("Kid"), "Root");
+assertEq(childrenOf("Root"), ["Kid"]);
+assertEq(container.rename("Kid", "Root"), false);      // الاسم مأخوذ
+assertEq(container.rename("Nope", "Z"), false);
+
+let tree = container.tree("Root");
+assertEq(tree["name"], "Root");
+assertEq(tree["children"][0]["name"], "Kid");
+assertEq(tree["children"][0]["fields"]["label"], "kid");
+assertEq(container.tree("Nope"), nil);
+
+print "ALL PASSED (container_extra)";
