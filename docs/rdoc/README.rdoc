@@ -187,3 +187,57 @@ btc|bc1qexampleaddress0000000000000000|عنوان بيتكوين
 
 [marquee: نص 1|نص 2|نص 3|dir=(up)|height=(60)|style=(soft)|color=(#FFC94D)]
 
+## حزمة وتوثيق
+
+؛؛؛ حزمة
+name: example-lib
+version: 1.0.0
+description: مكتبة مثال لتوضيح ميزات الحزم في rdoc.
+author: @example
+license: MIT
+requires: rin>=1.0
+platforms: android, linux, web
+keywords: media, embed, rin
+repo: https://github.com/dlof-lib/rinlang
+؛؛؛
+
+؛؛؛ تبعيات
+@example/core = ^1.2 | النواة
+json-utils = >=1.0
+؛؛؛
+
+::: تثبيت
+:::
+
+::: دالة example_open(url, title)
+تفتح رابط وسائط وتعيد صفحة HTML جاهزة.
+
+@param url (نص): رابط الوسائط
+@param title: عنوان الصفحة
+@return: نص HTML كامل
+@throws: unsupported إن لم تُدعم المنصة
+@since: 1.0
+@example
+```rin
+warp page = example_open(link, "عرض");
+```
+:::
+
+::: دالة example_close(handle)
+@param handle: مقبض الصفحة
+@deprecated: استخدم example_open
+:::
+
+::: فهرس-الدوال
+:::
+
+الإصدار الحالي {{version}} من {{name}}: [since: 1.0] [requires: rin>=1.0] [dep: @example/core@^1.2] [install: example-lib]
+
+## يوتيوب احترافي
+
+:;video https://youtu.be/dQw4w9WgXcQ?t=1m30s|عرض توضيحي|thumb=(true)|captions=(true)|lang=(ar)|end=(2:30);:
+
+:;video https://www.youtube.com/shorts/abcDEF12345|مقطع قصير;:
+
+فتح سريع من الفقرة: :;video https://youtu.be/dQw4w9WgXcQ?t=45|النسخة التجريبية;:
+
