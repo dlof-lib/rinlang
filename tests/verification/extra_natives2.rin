@@ -1,0 +1,148 @@
+// اختبار دوال Rin  الجديدة (sec./fs./net./log./automation. + container.* extras)
+
+// ---------------- sec.* ----------------
+assertEq(sec.sha256("abc"), "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad", "sha256");
+assertEq(sec.md5(""), "d41d8cd98f00b204e9800998ecf8427e", "md5 empty");
+assertEq(sec.md5("abc"), "900150983cd24fb0d6963f7d28e17f72", "md5 abc");
+assert(sec.crc32("abc") > 0, "crc32");
+let enc = sec.base64Encode("hello world");
+assertEq(enc, "aGVsbG8gd29ybGQ=", "base64 encode");
+assertEq(sec.base64Decode(enc), "hello world", "base64 decode");
+assertEq(sec.hexEncode("AB"), "4142", "hex encode");
+assertEq(sec.hexDecode("4142"), "AB", "hex decode");
+assertEq(len(sec.randomToken(8)), 16, "randomToken length");
+assert(sec.constantTimeEqual("abc", "abc"), "constantTimeEqual true");
+assert(!sec.constantTimeEqual("abc", "abd"), "constantTimeEqual false");
+let x = sec.xorCipher("secret", "key");
+assertEq(sec.xorCipher(x, "key"), "secret", "xorCipher roundtrip");
+assertEq(sec.rot13(sec.rot13("Hello")), "Hello", "rot13 roundtrip");
+let strength = sec.passwordStrength("Aa1!aaaaaaaa");
+assert(strength.score >= 3, "passwordStrength score");
+assertEq(len(sec.hmacSha256("key", "msg")), 64, "hmacSha256 hex length");
+print "sec.* OK";
+
+// ---------------- fs.* ----------------
+writeFile("t2/a.txt", "line1\nline2\nline3\n");
+writeFile("t2/b.log", "hello\n");
+assertEq(fs.lineCount("t2/a.txt"), 3, "lineCount");
+let tail2 = fs.tail("t2/a.txt", 2);
+assertEq(tail2, ["line2", "line3"], "tail");
+let grepped = fs.grep("t2/a.txt", "line[13]");
+assertEq(len(grepped), 2, "grep matches");
+let h = fs.hash("t2/a.txt", "sha256");
+assertEq(len(h), 64, "fs.hash sha256 length");
+let scanned = fs.scanDir("t2");
+assert(len(scanned) >= 2, "scanDir count");
+let extStats = fs.extensionStats("t2");
+assertEq(extStats[".txt"], 1, "extensionStats .txt");
+let found = fs.find("t2", "\\.log$");
+assertEq(len(found), 1, "fs.find");
+print "fs.* OK";
+
+// ---------------- net.* ----------------
+let u = net.parseUrl("https://user@example.com:8080/path/x?a=1&b=two#frag");
+assertEq(u.scheme, "https", "url scheme");
+assertEq(u.host, "example.com", "url host");
+assertEq(u.port, 8080, "url port");
+assertEq(u.path, "/path/x", "url path");
+assertEq(u.fragment, "frag", "url fragment");
+let q = net.parseQuery(u.query);
+assertEq(q.a, "1", "query a");
+assertEq(q.b, "two", "query b");
+assert(net.isValidIPv4("192.168.1.10"), "valid ipv4");
+assert(!net.isValidIPv4("999.1.1.1"), "invalid ipv4");
+assert(net.isValidIPv6("::1"), "valid ipv6");
+let ipnum = net.ipToInt("192.168.1.1");
+assertEq(net.intToIp(ipnum), "192.168.1.1", "ip roundtrip");
+assert(net.cidrContains("192.168.1.0/24", "192.168.1.55"), "cidrContains true");
+assert(!net.cidrContains("192.168.1.0/24", "192.168.2.55"), "cidrContains false");
+assert(net.isPrivateIp("10.0.0.5"), "isPrivateIp true");
+assert(!net.isPrivateIp("8.8.8.8"), "isPrivateIp false");
+print "net.* OK";
+
+// ---------------- log.* ----------------
+let logText = "1.2.3.4 - - [10/Oct/2023:13:55:36 -0700] \"GET /x HTTP/1.1\" 200 2326\n5.6.7.8 - - [10/Oct/2023:13:56:00 -0700] \"POST /y HTTP/1.1\" 404 100\n";
+let lines = log.parseLines(logText);
+assertEq(len(lines), 2, "parseLines count");
+let rec = log.parseCommonLog(lines[0]);
+assertEq(rec.ip, "1.2.3.4", "CLF ip");
+assertEq(rec.status, 200, "CLF status");
+assertEq(rec.method, "GET", "CLF method");
+let ips = log.extractIPs(logText);
+assertEq(len(ips), 2, "extractIPs");
+let levels = log.levelCounts(["ERROR: bad", "INFO: ok", "error again", "no level"]);
+assertEq(levels.ERROR, 2, "levelCounts ERROR");
+assertEq(levels.INFO, 1, "levelCounts INFO");
+assertEq(levels.OTHER, 1, "levelCounts OTHER");
+let spikes = log.detectSpikes([1,2,1,50,2], 3);
+assertEq(spikes, [3], "detectSpikes");
+let filtered = log.filterLines(lines, "404");
+assertEq(len(filtered), 1, "filterLines");
+print "log.* OK";
+
+// ---------------- automation.* ----------------
+let attempts = 0;
+let result = automation.retry(fun() {
+    attempts = attempts + 1;
+    if (attempts < 3) { fail("not yet"); }
+    return "done";
+}, 5, 0);
+assertEq(result, "done", "retry result");
+assertEq(attempts, 3, "retry attempts");
+
+let piped = automation.chain(3, [fun(x){return x+1;}, fun(x){return x*2;}]);
+assertEq(piped, 8, "chain");
+
+let timed = automation.timeIt(fun() { return 42; });
+assertEq(timed.result, 42, "timeIt result");
+assert(timed.ms >= 0, "timeIt ms");
+
+let batches = automation.batch([1,2,3,4,5], 2);
+assertEq(batches, [[1,2],[3,4],[5]], "batch");
+
+let seq = automation.sequence([fun(){return 1;}, fun(){return 2;}]);
+assertEq(seq, [1,2], "sequence");
+print "automation.* OK";
+
+// ---------------- container.* extras ----------------
+spawn("host", "srv1");
+setField("srv1", "cpu", 10);
+setField("srv1", "name", "web");
+let snap = container.snapshot("srv1");
+container.incr("srv1", "cpu", 90);
+assertEq(getField("srv1", "cpu"), 100, "incr before restore");
+container.restore("srv1", snap);
+assertEq(getField("srv1", "cpu"), 10, "restore reverts");
+
+container.lock("srv1");
+assert(container.isLocked("srv1"), "lock");
+container.unlock("srv1");
+assert(!container.isLocked("srv1"), "unlock");
+
+container.logEvent("srv1", "started");
+container.logEvent("srv1", "ready");
+assertEq(len(container.history("srv1")), 2, "history length");
+
+spawn("host", "srv2");
+setField("srv2", "cpu", 50);
+setField("srv2", "name", "db");
+let stats = container.stats("host");
+assertEq(stats.count, 2, "stats count");
+assertEq(stats.fields.cpu.sum, 60, "stats sum");
+
+let filtered2 = container.filter("host", fun(f) { return f.cpu > 20; });
+assertEq(filtered2, ["srv2"], "container.filter");
+
+let v = container.validate("srv1", {cpu: "number", name: "string", missing_field: "string?"});
+assert(v.valid, "validate valid");
+let v2 = container.validate("srv1", {cpu: "string"});
+assert(!v2.valid, "validate invalid type");
+
+container.exportToFile("srv1", "t2/srv1.json");
+assert(fileExists("t2/srv1.json"), "exportToFile wrote file");
+spawn("host", "srv3");
+container.importFromFile("srv3", "t2/srv1.json");
+assertEq(getField("srv3", "name"), "web", "importFromFile");
+print "container.* extras OK";
+
+print "ALL PASSED (extra_natives2)";
