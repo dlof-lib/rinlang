@@ -896,6 +896,7 @@ private:
     std::unordered_map<std::string, NativeFn> natives;
     void registerNatives();
     void registerNativesExtra(); // rin_extra_natives.cpp — Rin 1.1 additions (core helpers + container API)
+    void registerNativesExtra2(); // rin_extra_natives2.cpp — Rin 1.2 additions (sec./file./net./log./automation. + container extras)
 
     void execute(const StmtPtr& stmt, EnvPtr env);
     void executeBlock(const std::vector<StmtPtr>& statements, EnvPtr env);
