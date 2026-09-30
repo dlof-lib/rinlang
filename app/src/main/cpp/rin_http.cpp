@@ -29,6 +29,49 @@ void setAndroidBinaryGetBridge(std::function<HttpResult(const std::string&, int)
     g_androidBinaryGetBridge = std::move(bridge);
 }
 
+
+// ---- التقاط ترويسات الرد (اختياري) -----------------------------------------------------------
+// الترويسة الوهمية kCaptureHeadersKey في قائمة ترويسات الطلب تطلب من هذه الطبقة إعادة ترويسات
+// الرد الفعلية في HttpResult::headers (تُزال قبل الإرسال ولا تصل للخادوم). تعمل على مسارات curl
+// (لينكس/macOS/ويندوز). على أندرويد تُزال فقط وتبقى headers فارغة (الجسر لا يعيدها).
+// طلب HEAD يُنفَّذ عبر curl -I (وليس -X HEAD الذي يعلّق انتظاراً لجسم لن يصل).
+static const char* kCaptureHeadersKey = "X-Rin-Capture-Headers";
+
+static bool takeCaptureFlag(const HeaderList& in, HeaderList& out) {
+    bool capture = false;
+    for (auto& h : in) {
+        if (h.first == kCaptureHeadersKey) { capture = true; continue; }
+        out.push_back(h);
+    }
+    return capture;
+}
+
+// يفكّ كتل ترويسات "HTTP/..." من بداية [out] (كتلة لكل تحويل redirect)؛ الكتلة الأخيرة هي النهائية.
+static void parseHeaderBlocks(std::string& out, HeaderList& hdrs) {
+    while (out.compare(0, 5, "HTTP/") == 0) {
+        size_t e = out.find("\r\n\r\n");
+        size_t sepLen = 4;
+        if (e == std::string::npos) { e = out.find("\n\n"); sepLen = 2; }
+        std::string block = (e == std::string::npos) ? out : out.substr(0, e);
+        out.erase(0, e == std::string::npos ? out.size() : e + sepLen);
+        hdrs.clear();
+        size_t pos = 0; bool first = true;
+        while (pos <= block.size()) {
+            size_t nl = block.find('\n', pos);
+            std::string line = block.substr(pos, nl == std::string::npos ? std::string::npos : nl - pos);
+            pos = (nl == std::string::npos) ? block.size() + 1 : nl + 1;
+            while (!line.empty() && (line.back() == '\r' || line.back() == ' ')) line.pop_back();
+            if (first) { first = false; continue; }
+            size_t c = line.find(':');
+            if (c == std::string::npos || c == 0) continue;
+            size_t v = c + 1;
+            while (v < line.size() && line[v] == ' ') ++v;
+            hdrs.push_back({line.substr(0, c), line.substr(v)});
+        }
+        if (e == std::string::npos) break;
+    }
+}
+
 // يستخرج "<<<RIN_HTTP_STATUS:NNN>>>" المُلحَقة بنهاية stdout عبر curl -w (انظر buildCurlArgs)،
 // ويُعيد الجسم الحقيقي (بدون هذه اللاحقة) + رمز الحالة المستخرَج منها. status=0 إن لم توجد.
 static long extractStatusMarker(std::string& combined) {
@@ -45,9 +88,11 @@ static long extractStatusMarker(std::string& combined) {
 
 #if !defined(__ANDROID__)
 static std::vector<std::string> buildCurlArgs(const std::string& method, const std::string& url,
-                                               const HeaderList& headers, const std::string& body, int timeoutMs) {
+                                               const HeaderList& headers, const std::string& body, int timeoutMs,
+                                               bool captureHeaders = false) {
     std::vector<std::string> args = {"curl", "-s", "-S", "-L"};
-    args.push_back("-X"); args.push_back(method.empty() ? "GET" : method);
+    if (method == "HEAD") { args.push_back("-I"); }
+    else { args.push_back("-X"); args.push_back(method.empty() ? "GET" : method); if (captureHeaders) { args.push_back("-D"); args.push_back("-"); } }
     int seconds = timeoutMs > 0 ? (timeoutMs + 999) / 1000 : 15;
     args.push_back("--max-time"); args.push_back(std::to_string(seconds));
     for (auto& h : headers) { args.push_back("-H"); args.push_back(h.first + ": " + h.second); }
@@ -66,7 +111,9 @@ HttpResult performRequest(const std::string& method, const std::string& url,
     if (!g_androidBridge) {
         HttpResult r; r.ok = false; r.error = "جسر HTTP الخاص بأندرويد غير مُهيَّأ بعد (JNI_OnLoad لم يُسجِّله)"; return r;
     }
-    return g_androidBridge(method, url, headers, body, timeoutMs);
+    HeaderList clean;
+    takeCaptureFlag(headers, clean); // الجسر لا يعيد ترويسات الرد؛ نزيل الترويسة الوهمية فقط
+    return g_androidBridge(method, url, clean, body, timeoutMs);
 }
 
 #elif defined(_WIN32)
@@ -82,13 +129,18 @@ static std::string winQuote(const std::string& s) {
 }
 
 HttpResult performRequest(const std::string& method, const std::string& url,
-                           const HeaderList& headers, const std::string& body, int timeoutMs) {
+                           const HeaderList& headersIn, const std::string& body, int timeoutMs) {
     HttpResult r;
+    HeaderList hdrs;
+    bool capture = takeCaptureFlag(headersIn, hdrs);
+    bool isHead = (method == "HEAD");
     std::ostringstream cmd;
-    cmd << "curl -s -S -L -X " << winQuote(method.empty() ? "GET" : method);
+    cmd << "curl -s -S -L";
+    if (isHead) cmd << " -I";
+    else { cmd << " -X " << winQuote(method.empty() ? "GET" : method); if (capture) cmd << " -D -"; }
     int seconds = timeoutMs > 0 ? (timeoutMs + 999) / 1000 : 15;
     cmd << " --max-time " << seconds;
-    for (auto& h : headers) cmd << " -H " << winQuote(h.first + ": " + h.second);
+    for (auto& h : hdrs) cmd << " -H " << winQuote(h.first + ": " + h.second);
     if (!body.empty()) cmd << " --data-binary " << winQuote(body);
     cmd << " -w " << winQuote("<<<RIN_HTTP_STATUS:%{http_code}>>>");
     cmd << " -- " << winQuote(url);
@@ -101,6 +153,7 @@ HttpResult performRequest(const std::string& method, const std::string& url,
     int rc = _pclose(pipe);
 
     long status = extractStatusMarker(out);
+    if (capture || isHead) parseHeaderBlocks(out, r.headers);
     r.body = out;
     r.status = status;
     r.ok = (rc == 0) && status > 0;
@@ -111,9 +164,12 @@ HttpResult performRequest(const std::string& method, const std::string& url,
 #else // POSIX desktop (Linux/macOS CLI tools)
 
 HttpResult performRequest(const std::string& method, const std::string& url,
-                           const HeaderList& headers, const std::string& body, int timeoutMs) {
+                           const HeaderList& headersIn, const std::string& body, int timeoutMs) {
     HttpResult r;
-    auto argsVec = buildCurlArgs(method, url, headers, body, timeoutMs);
+    HeaderList headers;
+    bool capture = takeCaptureFlag(headersIn, headers);
+    bool isHead = (method == "HEAD");
+    auto argsVec = buildCurlArgs(method, url, headers, body, timeoutMs, capture);
 
     int outPipe[2];
     if (pipe(outPipe) != 0) { r.ok = false; r.error = "تعذّر إنشاء pipe لالتقاط رد curl"; return r; }
@@ -156,6 +212,7 @@ HttpResult performRequest(const std::string& method, const std::string& url,
     }
 
     long httpStatus = extractStatusMarker(out);
+    if (capture || isHead) parseHeaderBlocks(out, r.headers);
     r.body = out;
     r.status = httpStatus;
     r.ok = WIFEXITED(status) && WEXITSTATUS(status) == 0 && httpStatus > 0;
