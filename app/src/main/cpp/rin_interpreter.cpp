@@ -5970,6 +5970,8 @@ void Interpreter::registerNatives() {
         writeRealFile(path, binfmt::ar::build({m}), line, "buildLib");
         return Value::boolean_(true);
     };
+
+    registerNativesExtra(); // Rin 1.1: دوال إضافية (rin_extra_natives.cpp)
 }
 
 // ================= تخزين حقيقي على القرص (save/file/installation) =================
@@ -10371,3 +10373,8 @@ std::optional<Interpreter::FlowRunResult> Interpreter::replayFlow(const std::str
 }
 
 } // namespace rin
+
+// ---- Rin 1.1: دوال إضافية (core helpers + container API) — انظر رأس الملف لسبب التضمين المباشر ----
+#ifndef RIN_EXTRA_NATIVES_SEPARATE
+#include "rin_extra_natives.cpp"
+#endif
