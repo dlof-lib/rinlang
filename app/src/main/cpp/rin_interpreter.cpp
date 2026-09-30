@@ -5973,6 +5973,7 @@ void Interpreter::registerNatives() {
 
     registerNativesExtra(); // Rin 1.1: دوال إضافية (rin_extra_natives.cpp)
     registerNativesExtra2(); // Rin 1.2: sec./file./net./log./automation. + امتدادات container.* (rin_extra_natives2.cpp)
+    registerNativesExtra3(); // Rin 1.3: net.* بشبكة حقيقية + container.* إضافية (rin_extra_natives3.cpp)
 }
 
 // ================= تخزين حقيقي على القرص (save/file/installation) =================
@@ -10379,4 +10380,5 @@ std::optional<Interpreter::FlowRunResult> Interpreter::replayFlow(const std::str
 #ifndef RIN_EXTRA_NATIVES_SEPARATE
 #include "rin_extra_natives.cpp"
 #include "rin_extra_natives2.cpp"
+#include "rin_extra_natives3.cpp"
 #endif
