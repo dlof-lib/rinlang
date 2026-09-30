@@ -895,6 +895,7 @@ private:
     using NativeFn = std::function<Value(std::vector<Value>&, int)>;
     std::unordered_map<std::string, NativeFn> natives;
     void registerNatives();
+    void registerNativesExtra(); // rin_extra_natives.cpp — Rin 1.1 additions (core helpers + container API)
 
     void execute(const StmtPtr& stmt, EnvPtr env);
     void executeBlock(const std::vector<StmtPtr>& statements, EnvPtr env);
