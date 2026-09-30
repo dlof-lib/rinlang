@@ -59,10 +59,10 @@ for (let p of bigLogs) {
 }
 ```
 
-## `net.*` — تحليل بيانات شبكية (بلا اتصال فعلي بالشبكة)
+## `net.*` — الشبكة: تحليل + اتصال حقيقي بالإنترنت
 
-دوال تفكيك/تحقق/حساب فقط — لا تفتح أي مقبس (socket) ولا تجري أي اتصال حقيقي؛
-مناسبة لتحليل عناوين ومدخلات واردة من سجلات أو طلبات محفوظة مسبقاً.
+مجموعتان: (أ) دوال تحليل بلا اتصال (هذا الجدول)، و(ب) دوال **تتصل فعلياً بالإنترنت** موثّقة أدناه
+في [`net.*` — الاتصال الحقيقي](#net--الاتصال-الحقيقي-بالإنترنت). لا تُرمى أخطاء عند فشل الشبكة، بل تُرجَع نتيجة `ok: false`.
 
 | الدالة | الوصف |
 |---|---|
@@ -79,6 +79,67 @@ let u = net.parseUrl("https://api.example.com:8443/v1/users?active=true");
 print u.host;                              // api.example.com
 print net.isPrivateIp("192.168.1.5");      // true
 print net.cidrContains("10.0.0.0/8", "10.2.3.4"); // true
+```
+
+## `net.*` — الاتصال الحقيقي بالإنترنت
+
+كل الدوال التالية تُجري **اتصالاً شبكياً فعلياً** (لا محاكاة). لا ترمي خطأً عند انقطاع الشبكة:
+تُرجع `{ok: false, error: "..."}` (أو `nil` للدوال التي تُرجع قيمة واحدة). HTTP مقصور على
+`http://` و`https://` (أي مخطط آخر مثل `file://` يُرفض).
+
+### HTTP / HTTPS (يعمل على CLI وأندرويد عبر نفس عميل `httpGet`)
+| الدالة | الوصف |
+|---|---|
+| `net.fetch(url, opts?)` | طلب كامل. `opts`: `{method, headers, body, timeout, retries}` (`retries` حتى 5). يُرجع `{ok, status, statusText, body, json, error, ms, size, headers, url}` |
+| `net.get(url, headers?)` / `net.head(url, headers?)` | GET / HEAD |
+| `net.post(url, body, headers?)` | POST (قاموس/مصفوفة تُرمَّز JSON تلقائياً) |
+| `net.getJson(url, headers?)` / `net.postJson(url, body, headers?)` | القيمة المُحلَّلة مباشرة، أو `nil` عند الفشل/رد غير JSON/حالة غير 2xx |
+| `net.headers(url)` | قاموس ترويسات الرد (مفاتيح بحروف صغيرة) أو `nil` |
+| `net.status(url)` | رمز الحالة (0 عند الفشل) |
+| `net.isUp(url)` | هل يستجيب الخادوم (أي رد بحالة < 500) |
+| `net.measure(url, count=3)` | زمن استجابة فعلي: `{ok, failed, minMs, avgMs, medianMs, maxMs}` |
+| `net.checkUrls([urls])` | فحص حتى 50 رابطاً: `[{url, ok, status, ms, error}]` |
+| `net.download(url, path)` | تنزيل حقيقي إلى ملف → `{ok, bytes, path, status, ms, error}` |
+| `net.publicIp()` | عنوانك العام كما يراه الإنترنت |
+| `net.ipInfo(ip?)` | معلومات عنوان (بلد/مدينة/مزوّد) عبر ipinfo.io |
+| `net.dnsQuery(name, type="A")` | سجلات DNS حقيقية عبر DNS-over-HTTPS (A, AAAA, MX, TXT, NS, CNAME, SOA, CAA, PTR, SRV) |
+| `net.setTimeout(ms)` / `net.getTimeout()` | مهلة الطلبات (100–60000، افتراضي 10000) |
+
+> `net.headers` وحقل `headers` في `net.fetch` يعملان على CLI (curl). على أندرويد يكون `headers` فارغاً
+> لأن جسر JNI الحالي لا يُعيد ترويسات الرد.
+
+### مقابس TCP / DNS / النظام (لينكس، macOS، أندرويد — تُرجع خطأً واضحاً على غيرها)
+| الدالة | الوصف |
+|---|---|
+| `net.resolve(host)` | حلّ DNS محلي: `{ok, addresses, ipv4, ipv6, ms}` |
+| `net.reverseDns(ip)` | اسم المضيف لعنوان، أو `nil` |
+| `net.tcpCheck(host, port, timeoutMs=3000)` | اتصال TCP واحد إلى منفذ واحد: `{ok, ip, ms, error}` |
+| `net.tcpPing(host, port=443, count=4, timeoutMs=2000)` | "ping" عبر TCP: `{sent, received, lossPct, minMs, avgMs, maxMs}` (ICMP يتطلب root) |
+| `net.tcpSend(host, port, data, timeoutMs=5000)` | يرسل بايتات خاماً ويقرأ الرد (حتى 64KB) |
+| `net.whois(domain)` | WHOIS حقيقي (IANA ثم خادوم السجل): `{ok, server, text}` |
+| `net.isOnline()` | اتصال TCP فعلي بـ 1.1.1.1 / 8.8.8.8 / 9.9.9.9 |
+| `net.localIPs()` / `net.hostname()` | واجهات الجهاز وعناوينها / اسم الجهاز |
+
+### مساعدات بلا اتصال
+`net.urlEncode/urlDecode`، `net.joinUrl(base, rel)`، `net.isValidUrl/isValidDomain/isValidEmail/isValidPort/isValidMac`،
+`net.ipVersion(ip)` (4/6/nil)، `net.domainOf(url)`، `net.cidrInfo("192.168.1.0/24")`
+(`{network, broadcast, netmask, first, last, prefix, total, hosts}`)، `net.httpStatusText(code)`،
+`net.portService(443)` → `"https"` / `net.servicePort("ssh")` → `22`، `net.parseHeaders(text)`، `net.basicAuth(user, pass)`.
+
+```rin
+if (net.isOnline()) {
+    let r = net.fetch("https://api.github.com/repos/torvalds/linux",
+                      {headers: {"User-Agent": "rin"}, retries: 2});
+    print r.status + " in " + r.ms + "ms";
+    print r.json.stargazers_count;
+
+    let dns = net.dnsQuery("example.com", "A");
+    for (let rec of dns.answers) print rec.data;
+
+    let chk = net.tcpCheck("example.com", 443);
+    print chk.ok;
+    net.download("https://example.com/", "example.html");
+}
 ```
 
 ## `log.*` — تحليل سجلات (logs)
@@ -149,3 +210,21 @@ if (!check.valid) print check.errors;
 
 container.exportToFile("srv1", "backups/srv1.json");
 ```
+
+## دوال `container.*` الإضافية (Rin 1.3)
+
+الدوال المُعدِّلة هنا تحترم `container.lock(name)`: تُرمى `E0035` عند الكتابة على حاوية مقفلة.
+
+| المجموعة | الدوال |
+|---|---|
+| إدارة | `container.names(kind?)`، `container.remove(name)`، `container.removeAll(kind)` |
+| نسخ/نقل حقول | `container.copyField(src, field, dst, as?)`، `container.moveField(src, field, dst)`، `container.mergeFrom(dst, src, overwrite=true)` |
+| مسارات متداخلة | `container.getPath(name, "a.b.0.c", default?)`، `container.setPath(name, "a.b.0.c", value)` |
+| قيم افتراضية/تعديل | `container.setDefault(name, field, v)`، `container.defaults(name, {..})`، `container.decr(name, field, by?)`، `container.toggle(name, field)` |
+| مصفوفات | `container.push(name, field, v)`، `container.pop(name, field)`، `container.contains(name, field, x)` |
+| استعلام | `container.search(text, kind?)`، `container.sortBy(kind, field, desc?)`، `container.top(kind, field, n)`، `container.paginate(kind, page, size)` |
+| تجميع | `container.avg/min/max(kind, field)`، `container.distinct(kind, field)`، `container.countBy(kind, field)` |
+| فحص | `container.equals(a, b)`، `container.checksum(name)` (SHA-256)، `container.requireFields(name, [..])`، `container.fieldsOfType(name, type)`، `container.summary()` |
+| تصدير | `container.entries(name)`، `container.valuesOf(name)`، `container.toRows(kind, fields?)`، `container.toCsv(kind, fields?)`، `container.exportCsv(kind, path, fields?)` |
+
+`toCsv/exportCsv` تُسبق النصوص التي تبدأ بـ `= + - @` بفاصلة عليا لمنع حقن الصيغ في Excel.
