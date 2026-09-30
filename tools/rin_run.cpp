@@ -51,6 +51,10 @@ int main(int argc, char** argv) {
         rin::Interpreter interp;
         std::string out = interp.run(statements);
         std::cout << out;
+        // interp.run() يلتقط أخطاء التنفيذ داخلياً ويكتبها في الناتج، فلا يصل أي استثناء إلى هنا؛
+        // hadError() هو المصدر الصحيح لنجاح/فشل التشغيل، وبدونه يُرجع المُشغِّل 0 حتى عند فشل
+        // assert/assertEq أو أي خطأ تنفيذ (فتمرّ الاختبارات الفاشلة في CI).
+        if (interp.hadError()) return 1;
     } catch (rin::RinError& e) {
         std::cerr << "خطأ في " << sourceName << " عند السطر " << e.line << ": " << e.message << std::endl;
         return 1;
