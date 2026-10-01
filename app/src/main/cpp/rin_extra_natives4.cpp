@@ -1,5 +1,5 @@
 // ============================================================================
-//  rin_extra_natives4.cpp — Rin 1.5: أدوات بناء المكتبات والحزم + JSON كامل + جسر C++
+//  rin_extra_natives4.cpp — Rin 1.0: أدوات بناء المكتبات والحزم + JSON كامل + جسر C++
 // ----------------------------------------------------------------------------
 //  دفعة رابعة فوق rin_extra_natives.cpp / 2 / 3 دون تعديل أي منها. تُسجَّل من
 //  Interpreter::registerNativesExtra4() وتُضمَّن (#include) في نهاية rin_interpreter.cpp،
@@ -1226,6 +1226,31 @@ static int& libCounter() { static int c = 0; return c; }
 // ============================================================================
 void Interpreter::registerNativesExtra4() {
     using namespace extra4;
+
+    // ================================================================ 0) lang.* — فحص صياغة مصدر Rin
+    // lang.check(src) -> {ok, line, message}: يمرّر المصدر على نفس Lexer/Parser الحقيقيين دون تنفيذه.
+    natives["lang.check"] = [](Args& a, int line) -> Value {
+        need("lang.check", a, 1, 1, line);
+        std::string src = str(a[0], "lang.check", line);
+        try {
+            Lexer lexer(src, "<lang.check>");
+            auto tokens = lexer.scanTokens();
+            Parser parser(tokens, "<lang.check>");
+            parser.parse();
+            return M4({{"ok", B4(true)}, {"line", N4(0)}, {"message", S4("")}});
+        } catch (RinError& e) {
+            std::string msg = e.diagnostic ? e.diagnostic->message : e.message;
+            return M4({{"ok", B4(false)}, {"line", N4(e.line)}, {"message", S4(msg)}});
+        } catch (std::exception& e) {
+            return M4({{"ok", B4(false)}, {"line", N4(0)}, {"message", S4(e.what())}});
+        }
+    };
+
+    // lang.isBuiltin(name) -> هل الاسم دالة مدمجة في المحرك (تعريف fun بنفس الاسم يرفضه المحرك E0002)
+    natives["lang.isBuiltin"] = [this](Args& a, int line) -> Value {
+        need("lang.isBuiltin", a, 1, 1, line);
+        return B4(natives.find(str(a[0], "lang.isBuiltin", line)) != natives.end());
+    };
 
     // ================================================================ 1) json.*
     natives["json.parse"] = [](Args& a, int line) -> Value {
