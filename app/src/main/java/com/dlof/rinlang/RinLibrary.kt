@@ -61,6 +61,11 @@ object BuiltinLibraries {
             "isEmpty • isNumeric • isEmail • isInRange • isStrongPassword"
         ),
         BuiltinLibraryInfo(
+            "lib/inputkit.og.rin", "inputkit",
+            "أصناف OOP للتحقق من الإدخال تُمرَّر كـ validator أو في مخطّط النموذج",
+            "Required • Length • Range • Integer • OneOf • Matches • Email • Every"
+        ),
+        BuiltinLibraryInfo(
             "lib/functional.og.rin", "functional",
             "دوال ترتيبية عليا (map/filter/reduce) على المصفوفات",
             "mapArr • filterArr • reduceArr • forEachArr • findArr • composeApply"
