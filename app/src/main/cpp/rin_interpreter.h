@@ -141,6 +141,28 @@ struct OopObserver {
     Value transform;              // دالة اختيارية تحوّل القيمة قبل الكتابة (أو nil)
 };
 
+// ---- Rin 1.0: روابط الكائنات بالحاويات وخلايا Warp الخاصة بـ Indsin (oop.bindContainer / oop.bindWarp ...) ----
+// رابط = ربط حقل كائن (OOP) بهدف خارجي:
+//   Container: حقل بيئة حاوية (يُقرأ/يُكتب عبر نفس مسار الإسناد المراعي لـ state فيُطلَق on update).
+//   Warp     : خلية Warp في Indsin (= متغيّر عام في المفسّر؛ Indsin ينقلها من/إلى المعالجات عند كل tap).
+//   Watch    : مراقبة بحتة لحقل حاوية بـ callback (بلا كائن).
+// mode: 0 = push (الكائن -> الهدف) ، 1 = pull (الهدف -> الكائن) ، 2 = اتجاهان.
+struct OopLink {
+    enum class Target { Container, Warp, Watch };
+    int id = 0;
+    Target target = Target::Container;
+    std::weak_ptr<InstanceData> obj;   // فارغ لـ Watch
+    std::string field;                 // حقل الكائن
+    std::string container;             // اسم الحاوية (Container/Watch)
+    std::string key;                   // مفتاح الحاوية، أو اسم خلية Warp، أو "*" لـ Watch
+    int mode = 0;
+    Value transform;                   // اختياري: يُطبَّق على القيمة العابرة (push أو pull فقط، لا two-way)
+    Value fn;                          // callback الـ Watch: (new, old, key, container)
+    Value lastSeen;                    // آخر قيمة نُقلت (تمنع الصدى بين الاتجاهين)
+    bool hasSeen = false;
+    bool busy = false;                 // حارس إعادة الدخول
+};
+
 // نقطة API واحدة مُسجَّلة داخل @container.api عبر عبارة route؛ يُستخدَم لمطابقة استدعاءات call()/callApi()
 // بأسلوب "API حقيقي قابل للاختبار" (mock/stub) دون الحاجة لاتصال شبكة فعلي.
 struct ApiRoute {
@@ -999,6 +1021,19 @@ public: // Rin 1.0: واجهة OOP الموسَّعة (يستدعيها Value::t
     bool skipInit_ = false;               // يُضبَط مؤقتاً من oop.fromMap لإنشاء كائن بلا استدعاء init
     Value bindStaticFn(const std::shared_ptr<FunctionStmt>& m, const std::string& owner);
     void registerNativesOop();            // rin_oop_natives.cpp
+    void registerNativesOopLink();        // rin_oop_link.cpp — روابط الحاويات وIndsin (Warp)
+    std::vector<OopLink> links_;
+    int nextLinkId_ = 1;
+    bool linksExist_ = false;             // false => كلفة صفر في assignStateAware/setField/callTopLevelFunction
+    // الكائن تغيّر -> ادفع إلى الأهداف (حاويات/Warp). تُستدعى من notifyObservers.
+    void pushLinks(const Value& obj, const std::string& field, const Value& newV, int line);
+    // حقل حاوية كُتب -> اسحب إلى الكائنات واستدعِ المراقبين. تُستدعى من assignStateAware/setField.
+    void onContainerWrite(const std::string& container, const std::string& key, const Value& oldV, const Value& newV, int line);
+    // قيم خلايا Warp (المتغيّرات العامة) تغيّرت من Indsin -> اسحب إلى الكائنات. تُستدعى من callTopLevelFunction.
+    void syncWarpLinks(int line);
+    bool applyPullLink(int id, const Value& incoming, int line); // يكتب قيمة الهدف في حقل الكائن (مع منع الصدى)
+    // سحب يدوي شامل (يغطي الكتابات الخام التي لا تمر بمسارات الإسناد).
+    int syncAllLinks(int line);
     void registerNativesOopBind();        // rin_oop_bind.cpp — دوال الربط (bind/partial/curry/observe/bindProperty/on)
     std::vector<OopObserver> observers_;
     int nextObserverId_ = 1;
