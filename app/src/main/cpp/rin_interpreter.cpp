@@ -131,7 +131,7 @@ static std::string prettyPrintValue(const Value& v, int indent) {
     return reprValue(v);
 }
 
-// ---- Rin 1.4: المفسّر "الحالي" لهذا الخيط -- يلزم فقط كي تستطيع Value::toDisplayString (دالة عضو في
+// ---- Rin 1.0: المفسّر "الحالي" لهذا الخيط -- يلزم فقط كي تستطيع Value::toDisplayString (دالة عضو في
 // Value بلا وصول إلى Interpreter) استدعاء __str__/toString المعرَّفة من المستخدم على كائنات class. يُضبَط
 // بحارس RAII داخل run()/callTopLevelFunction()/callFunction() ويُستعاد السابق عند الخروج، فلا مؤشّر
 // معلّقاً أبداً (خارج أي تنفيذ يبقى nullptr فيعود العرض الافتراضي كما كان).
@@ -255,7 +255,7 @@ std::string Value::toDisplayString() const {
         }
         case Type::INSTANCE: {
             if (!instance) return "nil";
-            // Rin 1.4: __str__ / toString() المعرَّفة في الصنف تتحكّم بالعرض (print + الدمج النصي + str()).
+            // Rin 1.0: __str__ / toString() المعرَّفة في الصنف تتحكّم بالعرض (print + الدمج النصي + str()).
             { std::string custom; if (g_currentInterp && g_currentInterp->tryInstanceToString(*this, custom)) return custom; }
             std::ostringstream ss;
             ss << instance->className << " { ";
@@ -5984,11 +5984,11 @@ void Interpreter::registerNatives() {
         return Value::boolean_(true);
     };
 
-    registerNativesExtra(); // Rin 1.1: دوال إضافية (rin_extra_natives.cpp)
-    registerNativesExtra2(); // Rin 1.2: sec./file./net./log./automation. + امتدادات container.* (rin_extra_natives2.cpp)
-    registerNativesExtra3(); // Rin 1.3: net.* بشبكة حقيقية + container.* إضافية (rin_extra_natives3.cpp)
-    registerNativesExtra4(); // Rin 1.5: json./semver./pkg./cpp. (rin_extra_natives4.cpp)
-    registerNativesOop(); // Rin 1.4: oop.* — استبطان الأصناف والكائنات + أدوات OOP (rin_oop_natives.cpp)
+    registerNativesExtra(); // Rin 1.0: دوال إضافية (rin_extra_natives.cpp)
+    registerNativesExtra2(); // Rin 1.0: sec./file./net./log./automation. + امتدادات container.* (rin_extra_natives2.cpp)
+    registerNativesExtra3(); // Rin 1.0: net.* بشبكة حقيقية + container.* إضافية (rin_extra_natives3.cpp)
+    registerNativesExtra4(); // Rin 1.0: json./semver./pkg./cpp. (rin_extra_natives4.cpp)
+    registerNativesOop(); // Rin 1.0: oop.* — استبطان الأصناف والكائنات + أدوات OOP (rin_oop_natives.cpp)
 }
 
 // ================= تخزين حقيقي على القرص (save/file/installation) =================
@@ -6861,7 +6861,7 @@ bool Interpreter::callTopLevelFunction(const std::vector<StmtPtr>& program,
                                         const std::vector<std::string>& paramAliases,
                                         std::unordered_map<std::string, Value>& globalsInOut,
                                         std::string& errorOut) {
-    CurrentInterpGuard interpGuard(this); // Rin 1.4
+    CurrentInterpGuard interpGuard(this); // Rin 1.0
     callDepth = 0;
 
     // Hoist every top-level function first (mirrors run()'s hoist pass) so the callee -- and
@@ -6945,7 +6945,7 @@ bool Interpreter::callTopLevelFunction(const std::vector<StmtPtr>& program,
 }
 
 std::string Interpreter::run(const std::vector<StmtPtr>& statements) {
-    CurrentInterpGuard interpGuard(this); // Rin 1.4: لأجل __str__ داخل Value::toDisplayString
+    CurrentInterpGuard interpGuard(this); // Rin 1.0: لأجل __str__ داخل Value::toDisplayString
     g_diagFile = sourceFile; // مزامنة نظام Diagnostics: الدوال الحرة/lambdas تستخدم g_diagFile
     loadInstalledIndex(); // يحمّل أسماء أي تثبيتات فعلية سابقة على نفس basePath (استمرارية عبر التشغيلات)
     importedPaths.clear(); // كل تشغيل جديد يبدأ بسجل @import نظيف (لا يرث استيرادات تشغيل سابق)
@@ -7529,7 +7529,7 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
             items.reserve(iterableVal.str.size());
             for (char c : iterableVal.str) items.push_back(Value::string(std::string(1, c)));
         } else if (iterableVal.type == Value::Type::INSTANCE && hasMagic(iterableVal, "__iter__")) {
-            // Rin 1.4: كائن يعرّف __iter__() يُرجع مصفوفة (أو قاموساً -> مفاتيحه) قابل للتكرار بـ for..in.
+            // Rin 1.0: كائن يعرّف __iter__() يُرجع مصفوفة (أو قاموساً -> مفاتيحه) قابل للتكرار بـ for..in.
             std::vector<Value> noArgs;
             Value produced = *callMagic(iterableVal, "__iter__", noArgs, s->line);
             if (produced.type == Value::Type::ARRAY) items = *produced.array;
@@ -8895,7 +8895,7 @@ void Interpreter::registerClassStmt(const std::shared_ptr<ClassStmt>& s) {
                                  "then silently resolve to only one of them instead of the class");
         }
     }
-    // Rin 1.4: وراثة صنف final تُرفَض فوراً إن كان الأب مسجَّلاً (وإلا يلتقطها validateInstantiable لاحقاً).
+    // Rin 1.0: وراثة صنف final تُرفَض فوراً إن كان الأب مسجَّلاً (وإلا يلتقطها validateInstantiable لاحقاً).
     if (s->kind == ClassKind::Class && !s->superclass.empty()) {
         auto pit = classes.find(s->superclass);
         if (pit != classes.end() && pit->second.isFinal) {
@@ -8939,7 +8939,7 @@ void Interpreter::registerClassStmt(const std::shared_ptr<ClassStmt>& s) {
     validatedClasses_.clear(); // أي تعريف/إعادة تعريف يُبطِل نتائج فحص abstract/interface/final السابقة
 }
 
-// ---- Rin 1.4: أدوات البحث داخل ClassDef/السمات (traits) ----
+// ---- Rin 1.0: أدوات البحث داخل ClassDef/السمات (traits) ----
 // kind: 0 = method، 1 = getter، 2 = setter. الدوال abstract (توقيعات بلا جسم) تُتجاهَل دائماً هنا:
 // البحث يريد التنفيذ الفعلي فقط؛ التحقق من أن كل abstract لها تنفيذ يتم في validateInstantiable.
 static std::shared_ptr<FunctionStmt> oopPickFn(const ClassDef& d, const std::string& n, int kind) {
@@ -8972,7 +8972,7 @@ std::shared_ptr<FunctionStmt> Interpreter::findMethod(const std::string& classNa
             if (ownerOut) *ownerOut = cur;
             return f;
         }
-        // Rin 1.4: دوال السمات (uses) تأتي بعد دوال الصنف نفسه وقبل دوال الأب. owner = الصنف المستخدِم
+        // Rin 1.0: دوال السمات (uses) تأتي بعد دوال الصنف نفسه وقبل دوال الأب. owner = الصنف المستخدِم
         // (فيعمل super.method() داخلها نسبةً إليه، وتُفحَص صلاحياتها نسبةً إليه).
         if (!it->second.traits.empty()) {
             std::unordered_set<std::string> seenTraits;
@@ -8992,7 +8992,7 @@ Value Interpreter::bindMethod(const Value& receiver, const std::shared_ptr<Funct
     auto closureEnv = std::make_shared<Environment>(globals);
     closureEnv->define("self", receiver);
     if (!ownerClass.empty()) closureEnv->define("__class__", Value::string(ownerClass));
-    // Rin 1.4: اسم الدالة الجارية — يلزم لحقول final (تُكتب داخل init فقط) ولمنع التكرار اللانهائي داخل get/set.
+    // Rin 1.0: اسم الدالة الجارية — يلزم لحقول final (تُكتب داخل init فقط) ولمنع التكرار اللانهائي داخل get/set.
     closureEnv->define("__method__", Value::string(
         (method->accessorKind == 1 ? "get " : method->accessorKind == 2 ? "set " : "") + method->name));
     callable->closure = closureEnv;
@@ -9080,7 +9080,7 @@ void Interpreter::checkDeclaredType(const Value& v, const std::string& typeName,
     else {
         // اسم صنف/بنية: مطابقة "is-a" عبر سلسلة الوراثة -- نفس منطق findMethod بالضبط، فأي كائن من
         // صنف فرعي (Dog) يمرّ فحص نوع أبيه (Animal) بلا الحاجة لأي قواعد subtyping إضافية.
-        // Rin 1.4: الآن "is-a" تشمل أيضاً الواجهات (implements) والسمات (uses) وليس سلسلة extends فقط.
+        // Rin 1.0: الآن "is-a" تشمل أيضاً الواجهات (implements) والسمات (uses) وليس سلسلة extends فقط.
         ok = isInstanceOf(v, typeName);
     }
 
@@ -9144,7 +9144,7 @@ Value Interpreter::instantiateClass(const std::string& className, std::vector<Va
     }
     std::reverse(chain.begin(), chain.end()); // الجذر أولاً، الصنف المطلوب أخيراً
 
-    // Rin 1.4: abstract/interface/trait/final/override — يُفحَص مرة واحدة لكل صنف (نتيجة مخزَّنة).
+    // Rin 1.0: abstract/interface/trait/final/override — يُفحَص مرة واحدة لكل صنف (نتيجة مخزَّنة).
     validateInstantiable(className, line);
 
     auto inst = std::make_shared<InstanceData>();
@@ -9183,7 +9183,7 @@ Value Interpreter::instantiateClass(const std::string& className, std::vector<Va
 
     std::string initOwner;
     auto initMethod = findMethod(className, "init", &initOwner);
-    // Rin 1.4: مُنشئ private/protected (مثلاً Singleton) — يُفحَص سياق المستدعي.
+    // Rin 1.0: مُنشئ private/protected (مثلاً Singleton) — يُفحَص سياق المستدعي.
     if (initMethod && restrictedMembers_ && callerEnv && !initMethod->access.empty()) {
         checkMemberAccess(initOwner, initMethod->access, "init", "constructor", callerEnv, line);
     }
@@ -9229,7 +9229,7 @@ Value Interpreter::callFunction(const std::shared_ptr<Callable>& fn, std::vector
         int& depth;
         ~DepthGuard() { depth--; }
     } guard{callDepth};
-    CurrentInterpGuard interpGuard(this); // Rin 1.4: لأجل __str__ داخل Value::toDisplayString
+    CurrentInterpGuard interpGuard(this); // Rin 1.0: لأجل __str__ داخل Value::toDisplayString
 
     auto callEnv = std::make_shared<Environment>(fn->closure);
     for (size_t i = 0; i < args.size(); i++) {
@@ -9326,7 +9326,7 @@ Value Interpreter::invokeCallee(const std::string& callee, std::vector<Value>& a
     {
         size_t dot = callee.find('.');
         if (dot != std::string::npos) {
-            // Rin 1.4: مسار نقطي بأي طول: root.seg1.seg2...method(args). كان يُدعم فقط مقطع واحد (a.m())،
+            // Rin 1.0: مسار نقطي بأي طول: root.seg1.seg2...method(args). كان يُدعم فقط مقطع واحد (a.m())،
             // فكان `self.engine.start()` يفشل بـ "is not a function". الآن تُقرأ المقاطع الوسيطة كحقول/خصائص
             // (بنفس readMember المستعمل في GetExpr) ثم تُنادى الدالة الأخيرة على القيمة الناتجة.
             std::vector<std::string> segs;
@@ -9652,7 +9652,7 @@ Value Interpreter::evaluate(const ExprPtr& expr, EnvPtr env) {
                 requireNumbers(left, right, "<=", e->line);
                 return Value::boolean_(left.number <= right.number);
             case TokenType::EQUAL_EQUAL:
-                // Rin 1.4: __eq__ بين كائنين (مقارنة مع nil/أنواع أخرى لا تستدعي كود المستخدم أبداً).
+                // Rin 1.0: __eq__ بين كائنين (مقارنة مع nil/أنواع أخرى لا تستدعي كود المستخدم أبداً).
                 if (left.type == Value::Type::INSTANCE && right.type == Value::Type::INSTANCE) {
                     if (auto r = tryEqOverload(left, right, false, e->line)) return Value::boolean_(*r);
                 }
@@ -9752,7 +9752,7 @@ Value Interpreter::evaluate(const ExprPtr& expr, EnvPtr env) {
         }
         if (obj.type == Value::Type::INSTANCE && hasMagic(obj, "__getitem__")) {
             std::vector<Value> a{idx};
-            return *callMagic(obj, "__getitem__", a, e->line); // Rin 1.4: obj[i]
+            return *callMagic(obj, "__getitem__", a, e->line); // Rin 1.0: obj[i]
         }
         throw diagErr(diag::Code::E0004_InvalidType, e->line, "cannot index a value of type `" + obj.typeName() + "`");
     }
@@ -9787,7 +9787,7 @@ Value Interpreter::evaluate(const ExprPtr& expr, EnvPtr env) {
         }
         if (obj.type == Value::Type::INSTANCE && hasMagic(obj, "__setitem__")) {
             std::vector<Value> a{idx, val};
-            callMagic(obj, "__setitem__", a, e->line); // Rin 1.4: obj[i] = v
+            callMagic(obj, "__setitem__", a, e->line); // Rin 1.0: obj[i] = v
             return val;
         }
         throw diagErr(diag::Code::E0004_InvalidType, e->line, "cannot assign into a value of type `" + obj.typeName() + "` via `[]`");
@@ -9801,7 +9801,7 @@ Value Interpreter::evaluate(const ExprPtr& expr, EnvPtr env) {
         // مباشرة *قبل* تقييمه، لأن تقييمها كـ VariableExpr عادية كان سيرمي دائماً "متغيّر غير معرَّف".
         if (auto ve = std::dynamic_pointer_cast<VariableExpr>(e->object)) {
             if (ve->name == "super") return evaluateSuperGet(e->name, env, e->line);
-            // Rin 1.4: ClassName.member -> عضو static (إن لم يكن هناك متغيّر محلي بنفس الاسم يظلّله).
+            // Rin 1.0: ClassName.member -> عضو static (إن لم يكن هناك متغيّر محلي بنفس الاسم يظلّله).
             if (!classes.empty() && classes.count(ve->name)) {
                 Value shadow;
                 if (!env->get(ve->name, shadow)) return staticGet(ve->name, e->name, env, e->line);
@@ -9822,7 +9822,7 @@ Value Interpreter::evaluate(const ExprPtr& expr, EnvPtr env) {
     }
     // OOP: object.name = value -> كتابة/تعديل حقل (class/struct instance) أو مفتاح (map).
     case ExprKind::Set: { auto e = std::static_pointer_cast<SetExpr>(expr);
-        // Rin 1.4: ClassName.field = value -> كتابة حقل static.
+        // Rin 1.0: ClassName.field = value -> كتابة حقل static.
         if (auto sve = std::dynamic_pointer_cast<VariableExpr>(e->object)) {
             if (!classes.empty() && classes.count(sve->name)) {
                 Value shadow;
@@ -10517,7 +10517,7 @@ std::optional<Interpreter::FlowRunResult> Interpreter::replayFlow(const std::str
 
 } // namespace rin
 
-// ---- Rin 1.1: دوال إضافية (core helpers + container API) — انظر رأس الملف لسبب التضمين المباشر ----
+// ---- Rin 1.0: دوال إضافية (core helpers + container API) — انظر رأس الملف لسبب التضمين المباشر ----
 #ifndef RIN_EXTRA_NATIVES_SEPARATE
 #include "rin_extra_natives.cpp"
 #include "rin_extra_natives2.cpp"
@@ -10525,7 +10525,7 @@ std::optional<Interpreter::FlowRunResult> Interpreter::replayFlow(const std::str
 #include "rin_extra_natives4.cpp"
 #endif
 
-// ---- Rin 1.4: OOP الموسَّع (interface/trait/abstract/static/private/get-set + دوال oop.*) ----
+// ---- Rin 1.0: OOP الموسَّع (interface/trait/abstract/static/private/get-set + دوال oop.*) ----
 // نفس أسلوب التضمين المباشر أعلاه: لا حاجة لتعديل أي قائمة ملفات في CMake/Gradle/CI.
 #include "rin_oop.cpp"
 #include "rin_oop_natives.cpp"
