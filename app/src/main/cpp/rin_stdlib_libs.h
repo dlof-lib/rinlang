@@ -11072,6 +11072,489 @@ fun archInfo() {
 
 )ARCHIVEKITOGRIN";
 
+static const char* kLib_rintest_og_rin = R"RINTESTOGRIN(
+// rintest — إطار اختبارات Rin (rintests)
+// ---------------------------------------------------------------------------
+//   @import "rintest";
+//
+//   rt_describe("الحساب", fun() {
+//       rt_test("الجمع", fun() { rt_expect(1 + 1).toBe(2); });
+//       rt_test("خطأ متوقَّع", fun() { rt_expectThrows(fun() { fail("boom"); }, "boom"); });
+//   });
+//   rt_done();            // يطبع الملخص ويُفشل الملف (rin test) إن فشل أي اختبار
+//
+// Matchers:  toBe toEqual toBeTrue toBeFalse toBeNil toBeTruthy toBeFalsy toContain
+//            toHaveLength toBeGreaterThan toBeLessThan toBeCloseTo toMatch toHaveKey
+//            toBeType toThrow       (rt_expectNot(x) يعكس كل matcher)
+// Hooks:     rt_beforeEach(fn) rt_afterEach(fn)        Tools: rt_skip rt_each rt_bench(name,fn,times) rt_bench1(name,fn)
+// ملاحظة: دوال Rin تتطلب عدد وسائط مطابقاً تماماً، لذا مرّر nil للوسيط الاختياري (toThrow(nil) أو toThrowAny()).
+// ---------------------------------------------------------------------------
+
+let __rt = {
+    passed: 0, failed: 0, skipped: 0,
+    failures: [], stack: [], beforeEach: [], afterEach: [],
+    verbose: true, startedAt: now()
+};
+
+fun rt_show(v) {
+    if (type(v) == "string") { return "\"" + v + "\""; }
+    if (type(v) == "function") { return "<function>"; }
+    return json.stringify(v);
+}
+
+fun rt_fullName(name) {
+    let parts = __rt["stack"];
+    if (len(parts) == 0) { return name; }
+    return join(parts, " › ") + " › " + name;
+}
+
+fun rt_quiet(flag) { __rt["verbose"] = flag; }
+
+fun rt_reset() {
+    __rt["passed"] = 0; __rt["failed"] = 0; __rt["skipped"] = 0;
+    __rt["failures"] = []; __rt["stack"] = [];
+    __rt["beforeEach"] = []; __rt["afterEach"] = [];
+    __rt["startedAt"] = now();
+}
+
+fun rt_stats() {
+    return {
+        passed: __rt["passed"], failed: __rt["failed"], skipped: __rt["skipped"],
+        total: __rt["passed"] + __rt["failed"] + __rt["skipped"],
+        failures: __rt["failures"]
+    };
+}
+
+fun rt_beforeEach(fn) { push(__rt["beforeEach"], fn); }
+fun rt_afterEach(fn) { push(__rt["afterEach"], fn); }
+
+fun rt_describe(name, fn) {
+    if (__rt["verbose"]) { print name; }
+    push(__rt["stack"], name);
+    let saveB = __rt["beforeEach"];
+    let saveA = __rt["afterEach"];
+    __rt["beforeEach"] = slice(saveB, 0);
+    __rt["afterEach"] = slice(saveA, 0);
+    try { fn(); } catch (e) {
+        __rt["failed"] = __rt["failed"] + 1;
+        push(__rt["failures"], {name: rt_fullName("(describe body)"), message: rt_errText(e)});
+        print "  ✗ (describe body) — " + rt_errText(e);
+    }
+    __rt["beforeEach"] = saveB;
+    __rt["afterEach"] = saveA;
+    pop(__rt["stack"]);
+}
+
+fun rt_errText(e) {
+    let msg = "" + e;
+    if (type(e) == "map" and has(e, "message")) { msg = e["message"]; }
+    return regexReplace(msg, "^\\[E[0-9]+\\] ", "");
+}
+
+fun rt_test(name, fn) {
+    let t0 = now();
+    let err = nil;
+    try {
+        for (let h in __rt["beforeEach"]) { h(); }
+        fn();
+    } catch (e) { err = rt_errText(e); }
+    try {
+        for (let h in __rt["afterEach"]) { h(); }
+    } catch (e2) { if (err == nil) { err = "afterEach: " + rt_errText(e2); } }
+    let ms = now() - t0;
+    if (err == nil) {
+        __rt["passed"] = __rt["passed"] + 1;
+        if (__rt["verbose"]) { print "  ✓ " + name + " (" + round(ms) + "ms)"; }
+        return true;
+    }
+    __rt["failed"] = __rt["failed"] + 1;
+    push(__rt["failures"], {name: rt_fullName(name), message: err});
+    print "  ✗ " + name;
+    print "      " + err;
+    return false;
+}
+
+fun rt_skip(name, fn) {
+    __rt["skipped"] = __rt["skipped"] + 1;
+    if (__rt["verbose"]) { print "  - " + name + " (skipped)"; }
+}
+
+// اختبار بجدول حالات: rt_each("جمع", [[1,2,3],[2,2,4]], fun(a,b,c){ ... })
+fun rt_each(name, cases, fn) {
+    let i = 0;
+    for (let c in cases) {
+        let label = name + " #" + i + " " + json.stringify(c);
+        rt_test(label, fun() { callFn(fn, c); });
+        i = i + 1;
+    }
+}
+
+fun rt_bench1(name, fn) { return rt_bench(name, fn, 100); }
+
+fun rt_bench(name, fn, times) {
+    let n = times;
+    if (n == nil) { n = 100; }
+    let t0 = now();
+    let i = 0;
+    while (i < n) { fn(); i = i + 1; }
+    let total = now() - t0;
+    print "  ⏱ " + name + ": " + total + "ms / " + n + " runs";
+    return total;
+}
+
+// ------------------------------------------------------------------ matchers
+fun rt_check(ok, negate, msgPositive, msgNegative) {
+    let pass = ok;
+    if (negate) { pass = !ok; }
+    if (!pass) {
+        if (negate) { fail(msgNegative); }
+        fail(msgPositive);
+    }
+    return true;
+}
+
+fun rt_threwNote(threw, etxt) {
+    if (threw) { return " (it threw: " + etxt + ")"; }
+    return " (it did not throw)";
+}
+
+fun rt_makeExpect(actual, negate) {
+    let m = {};
+    m["toBe"] = fun(expected) {
+        return rt_check(actual == expected, negate,
+            "expected " + rt_show(expected) + " but got " + rt_show(actual),
+            "expected value not to be " + rt_show(expected));
+    };
+    m["toEqual"] = m["toBe"];
+    m["toBeTrue"] = fun() { return rt_check(actual == true, negate, "expected true but got " + rt_show(actual), "expected not true"); };
+    m["toBeFalse"] = fun() { return rt_check(actual == false, negate, "expected false but got " + rt_show(actual), "expected not false"); };
+    m["toBeNil"] = fun() { return rt_check(actual == nil, negate, "expected nil but got " + rt_show(actual), "expected a non-nil value"); };
+    m["toBeTruthy"] = fun() {
+        let t = false;
+        if (actual) { t = true; }
+        return rt_check(t, negate, "expected a truthy value but got " + rt_show(actual), "expected a falsy value but got " + rt_show(actual));
+    };
+    m["toBeFalsy"] = fun() {
+        let t = true;
+        if (actual) { t = false; }
+        return rt_check(t, negate, "expected a falsy value but got " + rt_show(actual), "expected a truthy value but got " + rt_show(actual));
+    };
+    m["toContain"] = fun(item) {
+        return rt_check(contains(actual, item), negate,
+            rt_show(actual) + " should contain " + rt_show(item),
+            rt_show(actual) + " should not contain " + rt_show(item));
+    };
+    m["toHaveLength"] = fun(n) {
+        return rt_check(len(actual) == n, negate,
+            "expected length " + n + " but got " + len(actual),
+            "expected length not to be " + n);
+    };
+    m["toBeGreaterThan"] = fun(x) { return rt_check(actual > x, negate, rt_show(actual) + " should be > " + rt_show(x), rt_show(actual) + " should not be > " + rt_show(x)); };
+    m["toBeLessThan"] = fun(x) { return rt_check(actual < x, negate, rt_show(actual) + " should be < " + rt_show(x), rt_show(actual) + " should not be < " + rt_show(x)); };
+    m["toBeCloseTo"] = fun(x, eps) {
+        let e = eps;
+        if (e == nil) { e = 0.000001; }
+        return rt_check(abs(actual - x) <= e, negate,
+            rt_show(actual) + " should be within " + e + " of " + rt_show(x),
+            rt_show(actual) + " should not be within " + e + " of " + rt_show(x));
+    };
+    m["toMatch"] = fun(pattern) {
+        return rt_check(regexTest(actual, pattern), negate,
+            rt_show(actual) + " should match /" + pattern + "/",
+            rt_show(actual) + " should not match /" + pattern + "/");
+    };
+    m["toHaveKey"] = fun(k) { return rt_check(has(actual, k), negate, "expected key " + rt_show(k) + " in " + rt_show(actual), "unexpected key " + rt_show(k)); };
+    m["toBeType"] = fun(t) { return rt_check(type(actual) == t, negate, "expected type " + t + " but got " + type(actual), "expected type not to be " + t); };
+    m["toThrow"] = fun(fragment) {
+        let threw = false;
+        let etxt = "";
+        try { actual(); } catch (e) { threw = true; etxt = rt_errText(e); }
+        let ok = threw;
+        if (threw and fragment != nil) { ok = contains(etxt, fragment); }
+        let want = "";
+        if (fragment != nil) { want = " containing " + rt_show(fragment); }
+        return rt_check(ok, negate, "expected function to throw" + want + rt_threwNote(threw, etxt), "expected function not to throw" + want);
+    };
+    m["toThrowAny"] = fun() { return m["toThrow"](nil); };
+    return m;
+}
+
+fun rt_expect(actual) { return rt_makeExpect(actual, false); }
+fun rt_expectNot(actual) { return rt_makeExpect(actual, true); }
+
+fun rt_expectThrows(fn, fragment) {
+    let threw = false;
+    let etxt = "";
+    try { fn(); } catch (e) { threw = true; etxt = rt_errText(e); }
+    if (!threw) { fail("expected function to throw but it did not"); }
+    if (fragment != nil and !contains(etxt, fragment)) {
+        fail("expected error containing " + rt_show(fragment) + " but got: " + etxt);
+    }
+    return etxt;
+}
+
+// ------------------------------------------------------------------ summary
+fun rt_done() {
+    let s = rt_stats();
+    let ms = now() - __rt["startedAt"];
+    print "";
+    print "rintest: " + s["passed"] + " passed, " + s["failed"] + " failed, " + s["skipped"] + " skipped (" + s["total"] + " total, " + ms + "ms)";
+    if (s["failed"] > 0) {
+        print "Failures:";
+        for (let f in s["failures"]) { print "  - " + f["name"] + ": " + f["message"]; }
+        fail("rintest: " + s["failed"] + " test(s) failed");
+    }
+    print "ALL PASSED";
+    return true;
+}
+)RINTESTOGRIN";
+
+static const char* kLib_packkit_og_rin = R"PACKKITOGRIN(
+// packkit — نظام مكتبات/حزم/إضافات داخل Rin نفسها (بلا ملفات، بلا شبكة)
+// ---------------------------------------------------------------------------
+//   @import "packkit";
+//
+//   pk_define("mathx", "1.2.0", {
+//       description: "دوال رياضية",
+//       exports: fun(ctx) { return { twice: fun(x) { return x * 2; } }; }
+//   });
+//   pk_define("app", "0.1.0", {
+//       deps: { mathx: "^1.0.0" },
+//       exports: fun(ctx) { let m = ctx["deps"]["mathx"]; return { run: fun() { return m.twice(21); } }; }
+//   });
+//   let app = pk_require("app");   // يحمّل mathx أولاً تلقائياً (مرة واحدة فقط)
+//   print app.run();               // 42
+//
+// يعتمد على: semver.* و pkg.depOrder و json.mergeDeep (دوال المحرك الأصلية، Rin 1.5).
+// ---------------------------------------------------------------------------
+
+let __pk = { defs: {}, loaded: {}, loading: [], hooks: {}, config: {}, warned: {}, nextId: 1 };
+
+fun pk_reset() {
+    __pk["defs"] = {}; __pk["loaded"] = {}; __pk["loading"] = [];
+    __pk["hooks"] = {}; __pk["config"] = {}; __pk["warned"] = {}; __pk["nextId"] = 1;
+}
+
+// ------------------------------------------------------------------ define
+fun pk_define(name, version, spec) {
+    if (type(name) != "string" or !regexTest(name, "^[a-z][a-z0-9_-]{1,63}$")) {
+        fail("pk_define: invalid package name " + json.stringify(name) + " (lowercase, digits, - and _)");
+    }
+    if (!semver.valid(version)) { fail("pk_define: invalid version '" + version + "' for " + name); }
+    let s = spec;
+    if (s == nil) { s = {}; }
+    if (has(s, "deps")) {
+        for (let d in keys(s["deps"])) {
+            if (!semver.validRange(s["deps"][d])) {
+                fail("pk_define: " + name + " has an invalid constraint for '" + d + "': " + s["deps"][d]);
+            }
+            if (d == name) { fail("pk_define: " + name + " cannot depend on itself"); }
+        }
+    }
+    if (!has(__pk["defs"], name)) { __pk["defs"][name] = {}; }
+    if (has(__pk["defs"][name], version) and !(has(s, "replace") and s["replace"])) {
+        fail("pk_define: " + name + "@" + version + " is already defined (pass replace: true to override)");
+    }
+    __pk["defs"][name][version] = s;
+    if (has(__pk["loaded"], name + "@" + version)) { remove(__pk["loaded"], name + "@" + version); }
+    pk_emit("define", { name: name, version: version });
+    return name + "@" + version;
+}
+
+// يعرّف حزمة من rin.toml (أو من قاموس المانيفست) مع صادراتها
+fun pk_defineFromManifest(manifest, exportsOrFn) {
+    let m = manifest;
+    if (type(m) == "string") { m = pkg.readManifest(m); }
+    if (m == nil) { fail("pk_defineFromManifest: manifest not found"); }
+    let v = pkg.validateManifest(m);
+    if (!v["valid"]) { fail("pk_defineFromManifest: " + join(v["errors"], "; ")); }
+    let deps = json.get(m, "dependencies", {});
+    let spec = { deps: deps, exports: exportsOrFn, description: json.get(m, "package.description", "") };
+    return pk_define(m["package"]["name"], m["package"]["version"], spec);
+}
+
+// ------------------------------------------------------------------ query
+fun pk_has(name, constraint) {
+    if (!has(__pk["defs"], name)) { return false; }
+    if (constraint == nil) { return true; }
+    return semver.maxSatisfying(keys(__pk["defs"][name]), constraint) != nil;
+}
+
+fun pk_versions(name) {
+    if (!has(__pk["defs"], name)) { return []; }
+    return semver.sort(keys(__pk["defs"][name]), true);
+}
+
+fun pk_latest(name, constraint) {
+    if (!has(__pk["defs"], name)) { return nil; }
+    let c = constraint;
+    if (c == nil) { c = "*"; }
+    return semver.maxSatisfying(keys(__pk["defs"][name]), c);
+}
+
+fun pk_info(name, constraint) {
+    let v = pk_latest(name, constraint);
+    if (v == nil) { return nil; }
+    let spec = __pk["defs"][name][v];
+    return {
+        name: name, version: v,
+        description: json.get(spec, "description", ""),
+        deps: json.get(spec, "deps", {}),
+        loaded: has(__pk["loaded"], name + "@" + v),
+        versions: pk_versions(name)
+    };
+}
+
+fun pk_list() {
+    let out = [];
+    for (let n in sort(keys(__pk["defs"]))) { push(out, pk_info(n, nil)); }
+    return out;
+}
+
+// ترتيب التحميل الصحيح لكل الحزم المعرّفة (تبعيات أولاً) + كشف الدورات
+fun pk_order() {
+    let g = {};
+    for (let n in keys(__pk["defs"])) {
+        let v = pk_latest(n, nil);
+        g[n] = keys(json.get(__pk["defs"][n][v], "deps", {}));
+    }
+    return pkg.depOrder(g);
+}
+
+// ------------------------------------------------------------------ load
+fun pk_require(name, constraint) {
+    if (!has(__pk["defs"], name)) { fail("pk_require: package '" + name + "' is not defined"); }
+    let c = constraint;
+    if (c == nil) { c = "*"; }
+    let v = semver.maxSatisfying(keys(__pk["defs"][name]), c);
+    if (v == nil) {
+        fail("pk_require: no version of '" + name + "' satisfies " + c + " (available: " + join(pk_versions(name), ", ") + ")");
+    }
+    let key = name + "@" + v;
+    if (has(__pk["loaded"], key)) { return __pk["loaded"][key]; }
+    if (contains(__pk["loading"], key)) {
+        fail("pk_require: circular dependency: " + join(__pk["loading"], " -> ") + " -> " + key);
+    }
+    push(__pk["loading"], key);
+    let spec = __pk["defs"][name][v];
+    let ctx = { name: name, version: v, deps: {}, config: pk_configOf(name, json.get(spec, "config", {})) };
+    try {
+        let deps = json.get(spec, "deps", {});
+        for (let d in keys(deps)) { ctx["deps"][d] = pk_require(d, deps[d]); }
+        let ex = json.get(spec, "exports", {});
+        let result = ex;
+        if (type(ex) == "function") { result = ex(ctx); }
+        if (has(spec, "init")) { spec["init"](ctx); }
+        __pk["loaded"][key] = result;
+    } catch (e) {
+        pop(__pk["loading"]);
+        fail(rt_msgOf(e));
+    }
+    pop(__pk["loading"]);
+    pk_emit("load", { name: name, version: v });
+    return __pk["loaded"][key];
+}
+
+fun rt_msgOf(e) {
+    if (type(e) == "map" and has(e, "message")) { return regexReplace(e["message"], "^\\[E[0-9]+\\] ", ""); }
+    return "" + e;
+}
+
+fun pk_loadAll() {
+    let ord = pk_order();
+    if (!ord["ok"]) { fail("pk_loadAll: circular dependency: " + join(ord["cycle"], " -> ")); }
+    for (let n in ord["order"]) { pk_require(n, nil); }
+    return ord["order"];
+}
+
+fun pk_call(name, fnName, args) {
+    let ex = pk_require(name, nil);
+    if (!has(ex, fnName)) { fail("pk_call: '" + name + "' has no export '" + fnName + "'"); }
+    let a = args;
+    if (a == nil) { a = []; }
+    return callFn(ex[fnName], a);
+}
+
+fun pk_undefine(name) {
+    if (!has(__pk["defs"], name)) { return false; }
+    for (let v in keys(__pk["defs"][name])) {
+        if (has(__pk["loaded"], name + "@" + v)) { remove(__pk["loaded"], name + "@" + v); }
+    }
+    remove(__pk["defs"], name);
+    return true;
+}
+
+// ------------------------------------------------------------------ config
+fun pk_configOf(name, defaults) {
+    let over = {};
+    if (has(__pk["config"], name)) { over = __pk["config"][name]; }
+    return json.mergeDeep(defaults, over);
+}
+fun pk_setConfig(name, values) {
+    let cur = {};
+    if (has(__pk["config"], name)) { cur = __pk["config"][name]; }
+    __pk["config"][name] = json.mergeDeep(cur, values);
+    return __pk["config"][name];
+}
+
+// ------------------------------------------------------------------ hooks / plugins
+fun pk_on(event, fn) {
+    if (!has(__pk["hooks"], event)) { __pk["hooks"][event] = []; }
+    let id = __pk["nextId"];
+    __pk["nextId"] = id + 1;
+    push(__pk["hooks"][event], { id: id, fn: fn });
+    return id;
+}
+fun pk_off(event, id) {
+    if (!has(__pk["hooks"], event)) { return false; }
+    let keep = [];
+    let removed = false;
+    for (let h in __pk["hooks"][event]) {
+        if (h["id"] == id) { removed = true; } else { push(keep, h); }
+    }
+    __pk["hooks"][event] = keep;
+    return removed;
+}
+fun pk_emit(event, data) {
+    if (!has(__pk["hooks"], event)) { return 0; }
+    let n = 0;
+    for (let h in __pk["hooks"][event]) { h["fn"](data); n = n + 1; }
+    return n;
+}
+
+// ------------------------------------------------------------------ utilities
+// تخزين مؤقت لدالة بوسيط واحد أو أكثر (المفتاح = JSON الوسائط)
+fun pk_memoize(fn) {
+    let cache = {};
+    let wrapper = fun(a) {
+        let k = json.canonical(a);
+        if (!has(cache, k)) { cache[k] = fn(a); }
+        return cache[k];
+    };
+    return wrapper;
+}
+
+// يطبع تحذير إهمال مرة واحدة فقط لكل رسالة
+fun pk_deprecated(message) {
+    if (has(__pk["warned"], message)) { return false; }
+    __pk["warned"][message] = true;
+    print "⚠ deprecated: " + message;
+    return true;
+}
+
+// يتحقق أن ما صدّرته الحزمة يطابق الأسماء المتوقعة (عقد واجهة)
+fun pk_implements(exportsMap, names) {
+    let missing = [];
+    for (let n in names) { if (!has(exportsMap, n)) { push(missing, n); } }
+    return { ok: len(missing) == 0, missing: missing };
+}
+
+// اختصارات بوسيط واحد (دوال Rin تتطلب عدد وسائط مطابقاً تماماً — مرّر nil حيث لا قيد)
+fun pk_use(name) { return pk_require(name, nil); }
+fun pk_ver(name) { return pk_latest(name, nil); }
+fun pk_get(name) { return pk_info(name, nil); }
+)PACKKITOGRIN";
+
 inline const std::unordered_map<std::string, std::string>& embeddedRinLibraries() {
     static const std::unordered_map<std::string, std::string> libs = {
         {"lib/math.og.rin", kLib_math_og_rin},
@@ -11103,6 +11586,8 @@ inline const std::unordered_map<std::string, std::string>& embeddedRinLibraries(
         {"lib/requirekit.og.rin", kLib_requirekit_og_rin},
         {"lib/physics.og.rin", kLib_physics_og_rin},
         {"lib/archivekit.og.rin", kLib_archivekit_og_rin},
+        {"lib/rintest.og.rin", kLib_rintest_og_rin},
+        {"lib/packkit.og.rin", kLib_packkit_og_rin},
     };
     return libs;
 }
