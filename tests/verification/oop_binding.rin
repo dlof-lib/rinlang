@@ -1,0 +1,138 @@
+// اختبار Rin 1.4 — دوال الربط
+fun fails(f) { try { f(); } catch (e) { return true; } return false; }
+
+class Counter {
+    let n = 0;
+    private let secret = 42;
+    fun inc() { self.n = self.n + 1; return self.n; }
+    fun add(a, b) { return self.n + a + b; }
+    private fun hidden() { return 1; }
+    fun reveal() { return self.secret; }
+}
+let c = Counter();
+
+// ---------- bind: method -> bound function ----------
+let inc = oop.bind(c, "inc");
+inc(); inc();
+assertEq(c.n, 2, "bound method keeps self");
+assert(oop.isBound(inc), "isBound");
+assert(oop.same(oop.boundTo(inc), c), "boundTo");
+assert(fails(fun() { oop.bind(c, "hidden"); }), "private method cannot be bound from outside");
+assert(fails(fun() { oop.bind(c, "nope"); }), "unknown method");
+
+// ---------- bind: plain function -> object ----------
+fun getN() { return self.n; }
+let g = oop.bind(getN, c);
+assertEq(g(), 2, "plain fn bound to object sees self");
+let other = Counter(); other.n = 50;
+assertEq(oop.callWith(getN, other, []), 50, "callWith");
+assertEq(oop.apply(c.add, [1, 2]), 5, "apply");
+
+// ---------- unbind + rebind ----------
+let loose = oop.unbind(inc);
+assert(!oop.isBound(loose), "unbind drops self");
+let rebound = oop.bind(loose, other);
+assertEq(rebound(), 51, "rebind to another object");
+assertEq(c.n, 2, "original untouched");
+
+// ---------- bindAll ----------
+let all = oop.bindAll(c);
+assertEq(all["add"](10, 20), 32, "bindAll function works");
+assertEq(all["hidden"], nil, "bindAll skips private");
+assertEq(all["init"], nil, "bindAll skips init");
+assertEq(oop.bindAll(c, ["inc"])["inc"](), 3, "bindAll with explicit names");
+
+// ---------- partial ----------
+fun vol(a, b, c) { return a * b * c; }
+let p1 = oop.partial(vol, 2);
+assertEq(p1(3, 4), 24, "partial 1 preset");
+let p2 = oop.partial(vol, 2, 3);
+assertEq(p2(4), 24, "partial 2 preset");
+let p3 = oop.partial(vol, 2, 3, 4);
+assertEq(p3(), 24, "partial all preset");
+assert(fails(fun() { oop.partial(vol, 1, 2, 3, 4); }), "too many presets");
+assertEq(oop.partial(c.add, 5)(6), 3 + 5 + 6, "partial on bound method");
+
+// ---------- curry ----------
+let cu = oop.curry(vol);
+assertEq(cu(2)(3)(4), 24, "curry");
+let step = cu(2);
+assertEq(step(5)(5), 50, "curry reuse of partial step");
+assertEq(step(1)(1), 2, "curry steps are independent");
+
+// ---------- observe ----------
+class Model { let name = "a"; let age = 1; let _c = 0;
+    get f() { return self._c * 2; }
+    set f(v) { self._c = v / 2; } }
+let m = Model();
+let log = [];
+let id = oop.observe(m, "name", fun(nv, ov) { push(log, ov + ">" + nv); });
+m.name = "b"; m.name = "b"; m.name = "c";
+assertEq(log, ["a>b", "b>c"], "observe fires only on real change");
+m.age = 5;
+assertEq(len(log), 2, "other fields not observed");
+assert(oop.unobserve(id), "unobserve");
+m.name = "z";
+assertEq(len(log), 2, "stopped after unobserve");
+
+let any = [];
+oop.observe(m, "*", fun(nv, ov, obj, field) { push(any, field); });
+m.age = 6; m.name = "q"; oop.set(m, "age", 7); oop.poke(m, "age", 8);
+assertEq(any, ["age", "name", "age", "age"], "wildcard sees set/poke/assign");
+
+let fl = [];
+oop.observe(m, "f", fun(nv, ov) { push(fl, str(ov) + ">" + str(nv)); });
+m.f = 10;
+assertEq(fl, ["0>10"], "observing a computed property (setter)");
+
+// ---------- bindProperty ----------
+class Src { let v = 1; } class Dst { let w = 0; let label = ""; }
+let s = Src(); let d = Dst();
+oop.bindProperty(s, "v", d, "w");
+assertEq(d.w, 1, "initial sync");
+s.v = 9;
+assertEq(d.w, 9, "one-way binding");
+d.w = 100;
+assertEq(s.v, 9, "one-way: no reverse flow");
+oop.bindProperty(s, "v", d, "label", fun(x) { return "v=" + str(x); });
+assertEq(d.label, "v=9", "transform initial");
+s.v = 3;
+assertEq(d.label, "v=3", "transform on change");
+
+// ---------- bindTwoWay (must terminate) ----------
+let a = Src(); let b = Dst();
+let ids = oop.bindTwoWay(a, "v", b, "w");
+assertEq(len(ids), 2, "two ids");
+a.v = 7; assertEq(b.w, 7, "a -> b");
+b.w = 8; assertEq(a.v, 8, "b -> a");
+assertEq(len(oop.observers(a)), 1, "observers(a)");
+assertEq(oop.unobserveAll(a), 1, "unobserveAll(a) removes a's observers");
+a.v = 1; assertEq(b.w, 8, "a no longer pushes");
+b.w = 2; assertEq(a.v, 2, "b -> a binding of b still alive");
+
+// ---------- events ----------
+class Button { let label = "ok"; }
+let btn = Button();
+let got = [];
+oop.on(btn, "click", fun(x, y) { push(got, "A" + str(x) + str(y)); });
+oop.once(btn, "click", fun(x) { push(got, "once" + str(x)); });
+assertEq(oop.listeners(btn, "click"), 2, "listeners");
+assertEq(oop.emit(btn, "click", 1, 2), 2, "emit returns count");
+assertEq(oop.emit(btn, "click", 3, 4), 1, "once removed");
+assertEq(got, ["A12", "once1", "A34"], "event payloads");
+assertEq(oop.emit(btn, "none"), 0, "no listeners");
+assertEq(oop.off(btn, "click"), 1, "off");
+assertEq(oop.listeners(btn), 0, "none left");
+
+// ---------- observers don't keep objects alive ----------
+fun scoped() { let tmp = Src(); oop.observe(tmp, "v", fun(n) {}); return 1; }
+scoped();
+let z = Src(); oop.observe(z, "v", fun(n) {});   // addObserver prunes expired ones
+assertEq(len(oop.observers(z)), 1, "expired observers pruned");
+
+// ---------- frozen object cannot be written through binding ----------
+let fr = oop.freeze(Dst());
+let s2 = Src();
+assert(fails(fun() { oop.bindProperty(s2, "v", fr, "w"); }), "binding into frozen object rejected");
+
+print "OOP BINDING OK";
