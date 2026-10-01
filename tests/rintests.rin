@@ -1,0 +1,296 @@
+// rintests.rin — الاختبار الشامل لإضافات Rin 1.5 (json / semver / pkg / cpp / packkit / rintest)
+//   rin tests/rintests.rin              (أو: rin test)
+//   rin --allow-native tests/rintests.rin   لتفعيل اختبارات جسر C++ أيضاً
+@import "rintest";
+@import "packkit";
+
+// ============================================================ json
+rt_describe("json.parse/stringify", fun() {
+    rt_test("parse + get", fun() {
+        let v = json.parse("{\"a\":[1,2,{\"b\":\"x\"}],\"n\":1.5}");
+        rt_expect(json.get(v, "a[2].b")).toBe("x");
+        rt_expect(json.get(v, "n")).toBe(1.5);
+    });
+    rt_test("tryParse / valid", fun() {
+        rt_expect(json.tryParse("{bad").ok).toBeFalse();
+        rt_expect(json.tryParse("[1]").ok).toBeTrue();
+        rt_expect(json.valid("{\"a\":1}")).toBeTrue();
+        rt_expect(json.valid("nope")).toBeFalse();
+    });
+    rt_test("parse يرمي عند JSON تالف", fun() {
+        rt_expectThrows(fun() { json.parse("{"); }, "invalid JSON");
+    });
+    rt_test("canonical: مفاتيح مرتبة وثابتة", fun() {
+        rt_expect(json.canonical({b: 1, a: 2})).toBe("{\"a\":2,\"b\":1}");
+    });
+    rt_test("pretty / minify دورة كاملة", fun() {
+        let p = json.pretty({a: [1, 2]}, 2);
+        rt_expect(p).toContain("\n");
+        rt_expect(json.minify(p)).toBe("{\"a\":[1,2]}");
+    });
+    rt_test("Unicode/عربي يبقى سليماً", fun() {
+        rt_expect(json.parse(json.stringify({k: "مرحبا é"})).k).toBe("مرحبا é");
+        rt_expect(json.parse("\"\\u0645\"")).toBe("م");
+    });
+    rt_test("json.type", fun() {
+        rt_expect(json.type([])).toBe("array");
+        rt_expect(json.type({})).toBe("object");
+        rt_expect(json.type(nil)).toBe("null");
+    });
+});
+
+rt_describe("json paths", fun() {
+    rt_test("query مع *", fun() {
+        let d = {users: [{name: "A"}, {name: "B"}]};
+        rt_expect(json.query(d, "users[*].name")).toEqual(["A", "B"]);
+    });
+    rt_test("get مع قيمة افتراضية", fun() {
+        rt_expect(json.get({a: 1}, "x.y", "dflt")).toBe("dflt");
+    });
+    rt_test("set ينشئ المسار ولا يعدّل الأصل", fun() {
+        let a = {a: 1};
+        let b = json.set(a, "b.c[1]", 5);
+        rt_expect(a).toEqual({a: 1});
+        rt_expect(json.get(b, "b.c[1]")).toBe(5);
+    });
+    rt_test("remove (مفتاح وعنصر مصفوفة)", fun() {
+        rt_expect(json.remove({a: 1, b: 2}, "a")).toEqual({b: 2});
+        rt_expect(json.remove({l: [1, 2, 3]}, "l[1]")).toEqual({l: [1, 3]});
+    });
+    rt_test("has", fun() {
+        rt_expect(json.has({a: {b: 1}}, "a.b")).toBeTrue();
+        rt_expect(json.has({a: {b: 1}}, "a.c")).toBeFalse();
+    });
+});
+
+rt_describe("json transforms", fun() {
+    rt_test("mergeDeep", fun() {
+        rt_expect(json.mergeDeep({a: {x: 1}}, {a: {y: 2}, b: 3})).toEqual({a: {x: 1, y: 2}, b: 3});
+    });
+    rt_test("flatten / unflatten", fun() {
+        let f = json.flatten({a: {b: 1, c: [1, 2]}});
+        rt_expect(f).toEqual({"a.b": 1, "a.c.0": 1, "a.c.1": 2});
+        rt_expect(json.unflatten({"a.b": 1, "a.c.0": 2})).toEqual({a: {b: 1, c: [2]}});
+    });
+    rt_test("diff + patch يعيدان الهدف", fun() {
+        let a = {a: 1, b: [1, 2]};
+        let b = {a: 2, b: [1, 2, 3], c: 1};
+        rt_expect(json.patch(a, json.diff(a, b))).toEqual(b);
+    });
+    rt_test("patch يرمي على مسار غير موجود", fun() {
+        rt_expectThrows(fun() { json.patch({a: 1}, [{op: "remove", path: "/zzz"}]); }, "path not found");
+    });
+});
+
+rt_describe("json.validate", fun() {
+    let schema = {
+        type: "object", required: ["name", "age"],
+        properties: {
+            name: {type: "string", minLength: 2},
+            age: {type: "integer", minimum: 0, maximum: 150},
+            tags: {type: "array", items: {type: "string"}, uniqueItems: true}
+        },
+        additionalProperties: false
+    };
+    rt_test("صالح", fun() {
+        rt_expect(json.validate({name: "Jo", age: 30, tags: ["a"]}, schema).valid).toBeTrue();
+    });
+    rt_test("أخطاء متعددة بمسارات", fun() {
+        let r = json.validate({name: "J", age: -1, extra: 1}, schema);
+        rt_expect(r.valid).toBeFalse();
+        rt_expect(len(r.errors)).toBe(3);
+    });
+    rt_test("enum / pattern", fun() {
+        rt_expect(json.validate("x", {enum: ["a", "b"]}).valid).toBeFalse();
+        rt_expect(json.validate("ab12", {type: "string", pattern: "^[a-z]+[0-9]+$"}).valid).toBeTrue();
+    });
+});
+
+// ============================================================ semver
+rt_describe("semver", fun() {
+    rt_test("parse / valid", fun() {
+        rt_expect(semver.parse("1.2.3-rc.1+b5").major).toBe(1);
+        rt_expect(semver.valid("1.2")).toBeFalse();
+        rt_expect(semver.valid("01.2.3")).toBeFalse();
+    });
+    rt_test("compare + ترتيب الإصدارات التجريبية", fun() {
+        rt_expect(semver.compare("1.0.0-alpha", "1.0.0")).toBe(-1);
+        rt_expect(semver.sort(["1.10.0", "1.2.0", "1.2.0-rc.1"])).toEqual(["1.2.0-rc.1", "1.2.0", "1.10.0"]);
+    });
+    rt_each("satisfies", [
+        ["1.4.2", "^1.2.0", true], ["2.0.0", "^1.2.0", false], ["0.2.5", "^0.2.3", true],
+        ["0.3.0", "^0.2.3", false], ["1.2.9", "~1.2", true], ["1.3.0", "~1.2.3", false],
+        ["1.5.0", ">=1.0.0 <2.0.0", true], ["3.1.0", "^1 || ^3", true], ["1.0.0-rc.1", "^1.0.0", false],
+        ["1.2.3", "1.2.x", true], ["1.3.0", "1.2.x", false], ["9.9.9", "*", true]
+    ], fun(v, range, want) { rt_expect(semver.satisfies(v, range)).toBe(want); });
+    rt_test("bump", fun() {
+        rt_expect(semver.bump("1.2.3", "major")).toBe("2.0.0");
+        rt_expect(semver.bump("1.2.3", "minor")).toBe("1.3.0");
+        rt_expect(semver.bump("1.2.3", "prerelease", "rc")).toBe("1.2.4-rc.0");
+        rt_expect(semver.bump("1.3.0-rc.1", "patch", "rc")).toBe("1.3.0");
+    });
+    rt_test("maxSatisfying / diff / validRange", fun() {
+        rt_expect(semver.maxSatisfying(["1.0.0", "1.4.0", "2.0.0"], "^1.0.0")).toBe("1.4.0");
+        rt_expect(semver.diff("1.2.3", "1.3.0")).toBe("minor");
+        rt_expect(semver.validRange("^1.2")).toBeTrue();
+        rt_expect(semver.validRange("??")).toBeFalse();
+    });
+});
+
+// ============================================================ pkg
+rt_describe("pkg.*", fun() {
+    let toml = "[package]\nname = \"demo\"\nversion = \"0.1.0\"\nauthors = [\"A\", \"B\"]\n\n[dependencies]\njson-x = \"^1.2\"\n";
+    rt_test("parseManifest + manifest دورة كاملة", fun() {
+        let m = pkg.parseManifest(toml);
+        rt_expect(m.package.name).toBe("demo");
+        rt_expect(m.dependencies["json-x"]).toBe("^1.2");
+        rt_expect(pkg.parseManifest(pkg.manifest(m))).toEqual(m);
+    });
+    rt_test("validateManifest", fun() {
+        rt_expect(pkg.validateManifest(pkg.parseManifest(toml)).valid).toBeTrue();
+        let bad = pkg.parseManifest("[package]\nname = \"Bad Name\"\nversion = \"1\"\n");
+        rt_expect(pkg.validateManifest(bad).valid).toBeFalse();
+        rt_expect(len(pkg.validateManifest(bad).errors)).toBe(2);
+    });
+    rt_test("parseManifest يرمي مع رقم السطر", fun() {
+        rt_expectThrows(fun() { pkg.parseManifest("[package]\nname = \n"); }, "line 2");
+    });
+    rt_test("depOrder: تبعيات أولاً", fun() {
+        let r = pkg.depOrder({app: ["a", "b"], a: ["c"], b: ["c"], c: []});
+        rt_expect(r.ok).toBeTrue();
+        rt_expect(r.order).toEqual(["c", "a", "b", "app"]);
+    });
+    rt_test("depOrder يكشف الدورة والمفقود", fun() {
+        let r = pkg.depOrder({a: ["b"], b: ["a"]});
+        rt_expect(r.ok).toBeFalse();
+        rt_expect(r.cycle).toEqual(["a", "b", "a"]);
+        rt_expect(pkg.depOrder({a: ["zzz"]}).missing).toEqual(["zzz"]);
+    });
+    rt_test("api: استخراج الدوال مع الوثائق", fun() {
+        let api = pkg.api("/// يجمع رقمين\nfun add(a, b) { return a + b; }\nexport class Box {}\n");
+        rt_expect(api[0].name).toBe("add");
+        rt_expect(api[0].doc).toBe("يجمع رقمين");
+        rt_expect(api[0].params).toEqual(["a", "b"]);
+        rt_expect(api[1].kind).toBe("class");
+        rt_expect(api[1].exported).toBeTrue();
+    });
+});
+
+// ============================================================ packkit
+rt_describe("packkit", fun() {
+    rt_beforeEach(fun() { pk_reset(); });
+    rt_test("تبعيات وإصدارات: أحدث نسخة متوافقة", fun() {
+        pk_define("mathx", "1.2.0", {exports: fun(ctx) { return {twice: fun(x) { return x * 2; }}; }});
+        pk_define("mathx", "2.0.0", {exports: {twice: fun(x) { return -1; }}});
+        pk_define("app", "0.1.0", {deps: {mathx: "^1.0.0"}, exports: fun(ctx) {
+            let m = ctx["deps"]["mathx"];
+            return {run: fun() { return m.twice(21); }};
+        }});
+        rt_expect(pk_use("app").run()).toBe(42);
+        rt_expect(pk_versions("mathx")).toEqual(["2.0.0", "1.2.0"]);
+    });
+    rt_test("تحميل مرة واحدة فقط", fun() {
+        let counter = {n: 0};
+        pk_define("once", "1.0.0", {exports: fun(ctx) { counter["n"] = counter["n"] + 1; return {}; }});
+        pk_use("once"); pk_use("once");
+        rt_expect(counter.n).toBe(1);
+    });
+    rt_test("دورة تبعيات تُكشف", fun() {
+        pk_define("c1", "1.0.0", {deps: {c2: "*"}});
+        pk_define("c2", "1.0.0", {deps: {c1: "*"}});
+        rt_expectThrows(fun() { pk_use("c1"); }, "circular dependency");
+    });
+    rt_test("لا إصدار مطابق", fun() {
+        pk_define("mm", "1.0.0", {});
+        rt_expectThrows(fun() { pk_require("mm", "^3.0.0"); }, "no version");
+    });
+    rt_test("اسم/إصدار/قيد غير صالح", fun() {
+        rt_expectThrows(fun() { pk_define("Bad", "1.0.0", {}); }, "invalid package name");
+        rt_expectThrows(fun() { pk_define("ok", "1.0", {}); }, "invalid version");
+        rt_expectThrows(fun() { pk_define("ok", "1.0.0", {deps: {x: "??"}}); }, "invalid constraint");
+    });
+    rt_test("hooks + config", fun() {
+        let seen = [];
+        let id = pk_on("load", fun(d) { push(seen, d["name"]); });
+        pk_define("cfg", "1.0.0", {config: {level: 1}, exports: fun(ctx) { return {level: ctx["config"]["level"]}; }});
+        pk_setConfig("cfg", {level: 5});
+        rt_expect(pk_use("cfg").level).toBe(5);
+        rt_expect(seen).toEqual(["cfg"]);
+        rt_expect(pk_off("load", id)).toBeTrue();
+    });
+    rt_test("pk_loadAll بترتيب صحيح", fun() {
+        pk_define("bb", "1.0.0", {deps: {aa: "*"}});
+        pk_define("aa", "1.0.0", {});
+        rt_expect(pk_loadAll()).toEqual(["aa", "bb"]);
+    });
+    rt_test("memoize", fun() {
+        let calls = {n: 0};
+        let f = pk_memoize(fun(x) { calls["n"] = calls["n"] + 1; return x * x; });
+        rt_expect(f(4) + f(4)).toBe(32);
+        rt_expect(calls.n).toBe(1);
+    });
+});
+
+// ============================================================ cpp (اختياري)
+rt_describe("cpp bridge", fun() {
+    rt_test("مقفل افتراضياً ما لم يُفعَّل", fun() {
+        if (!cpp.enabled()) {
+            let r = cpp.eval("1+1", nil);
+            rt_expect(r.ok).toBeFalse();
+            rt_expect(r.error).toContain("RIN_ALLOW_NATIVE");
+        }
+    });
+    rt_test("header/info", fun() {
+        rt_expect(cpp.header()).toContain("RIN_FN");
+        rt_expect(cpp.info().abi).toBe("json-v1");
+    });
+    if (cpp.enabled() and cpp.info().compiler != nil) {
+        rt_test("eval", fun() {
+            rt_expect(cpp.eval("6*7", nil).value).toBe(42);
+        });
+        rt_test("lib + call (JSON ABI) + callNum", fun() {
+            let src = "#include \"rin_abi.h\"\nRIN_FN(sumAll){double t=0;for(auto&v:args.arr)t+=v.num;return rin::Json::number(t);}\nRIN_FN(greet){return rin::Json::string(\"hi \"+args.arr[0].str);}\nextern \"C\" double hyp(double a,double b){return std::sqrt(a*a+b*b);}\nextern \"C\" long long addi(long long a,long long b){return a+b;}";
+            let l = cpp.lib(src, nil);
+            rt_expect(l.ok).toBeTrue();
+            rt_expect(cpp.call(l.handle, "sumAll", [1, 2, 3.5]).value).toBe(6.5);
+            rt_expect(cpp.call(l.handle, "greet", ["مرحبا"]).value).toBe("hi مرحبا");
+            rt_expect(cpp.callNum(l.handle, "hyp", [3, 4], "double").value).toBe(5);
+            rt_expect(cpp.callNum(l.handle, "addi", [40, 2], "int").value).toBe(42);
+            rt_expect(cpp.call(l.handle, "nope", []).ok).toBeFalse();
+            rt_expect(cpp.unload(l.handle)).toBeTrue();
+        });
+        rt_test("run مع stdin وargs", fun() {
+            let r = cpp.run("#include <iostream>\nint main(int c,char**v){std::string s;std::cin>>s;std::cout<<s<<c;}", {stdin: "hey", args: ["x"]});
+            rt_expect(r.stdout).toBe("hey2");
+        });
+        rt_test("أخطاء المترجم تُعاد كاملة", fun() {
+            let r = cpp.compile("int x = ;", nil);
+            rt_expect(r.ok).toBeFalse();
+            rt_expect(r.stderr).toContain("error");
+        });
+    }
+});
+
+// ============================================================ rintest نفسها
+rt_describe("rintest matchers", fun() {
+    rt_test("المقارنات", fun() {
+        rt_expect(5).toBeGreaterThan(3);
+        rt_expect(1).toBeLessThan(2);
+        rt_expect(0.1 + 0.2).toBeCloseTo(0.3, 0.000001);
+        rt_expect("abc123").toMatch("^[a-z]+[0-9]+$");
+        rt_expect({a: 1}).toHaveKey("a");
+        rt_expect([1, 2, 3]).toHaveLength(3);
+        rt_expect("x").toBeType("string");
+        rt_expect(nil).toBeNil();
+        rt_expectNot(1).toBe(2);
+    });
+    rt_test("toThrow / toThrowAny", fun() {
+        rt_expect(fun() { fail("boom"); }).toThrow("boom");
+        rt_expect(fun() { fail("x"); }).toThrowAny();
+    });
+    rt_test("matcher فاشل يرمي فعلاً", fun() {
+        rt_expectThrows(fun() { rt_expect(1).toBe(2); }, "expected 2 but got 1");
+    });
+});
+
+rt_done();
