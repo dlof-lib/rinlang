@@ -88,6 +88,10 @@ private:
     // OOP: class Name [extends Base] { fields/methods }  |  struct Name { fields/methods }
     // (يُستدعى بعد استهلاك 'class' أو 'struct' في declaration(); isStruct يفرّق بينهما)
     StmtPtr classDeclaration(bool isStruct);
+    // Rin 1.4: صيغة موسَّعة — kind (class/interface/trait) + abstract/final.
+    StmtPtr classDeclarationEx(bool isStruct, ClassKind kind, bool isAbstract, bool isFinal);
+    // 'fun name(params)[: T] { body }' أو (حين allowBodyless) 'fun name(params)[: T];' بلا جسم.
+    std::shared_ptr<FunctionStmt> memberFunction(bool allowBodyless);
     // enum Name { CaseA, CaseB = expr, ... }  (يُستدعى بعد استهلاك 'enum' في declaration())
     StmtPtr enumDeclaration();
     // match (subject) { case v1, v2 { .. } case v3 { .. } else { .. } }  (يُستدعى بعد استهلاك
