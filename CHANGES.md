@@ -7,6 +7,24 @@ container/pipeline/namespace natives).
 
 ---
 
+## Rin 1.4 — OOP الموسَّع
+
+ملفات جديدة: `rin_oop.cpp` (النواة) و`rin_oop_natives.cpp` (دوال `oop.*`) — تُضمَّنان تلقائياً في نهاية
+`rin_interpreter.cpp` كبقية ملفات natives، فلا تغيير في أي CMake/Gradle/CI.
+التفاصيل والأمثلة: [`docs/oop.md`](./docs/oop.md).
+
+- **جديد:** `interface` + `implements`، `trait` + `uses`، `abstract class/fun`، `final class/fun/let`، `override`.
+- **جديد:** `static let/fun` (تهيئة كسولة)، `public/private/protected`، خصائص `get`/`set`.
+- **جديد:** `__eq__ __ne__ __lt__ __le__ __gt__ __ge__ __cmp__ __str__/toString __len__ __contains__ __getitem__ __setitem__ __call__ __iter__`.
+- **جديد:** `instanceof`، وفحص الأنواع `x: Interface/Trait` صار يشمل الواجهات والسمات.
+- **جديد:** 70+ دالة `oop.*` (استبطان، ديناميكية، clone/freeze/hash/equals، singleton، فرز/تجميع كائنات).
+- **إصلاح:** النداء المتسلسل `self.engine.start()` / `a.b.c()` كان يفشل بـ "is not a function".
+- **جديد (دوال الربط، `rin_oop_bind.cpp`):** `oop.bind/bindAll/unbind/isBound/boundTo/apply/callWith`، `oop.partial/curry`، `oop.observe/bindProperty/bindTwoWay/unobserve/unobserveAll/observers`، `oop.on/once/off/emit/listeners`. اختبار: `tests/verification/oop_binding.rin`.
+- التوافق: كل الكلمات سياقية غير محجوزة؛ حزمة `tests/verification` بلا أي تغيير في نتائجها (الفشل الوحيد `container_advanced.rin` قائم قبل هذه الجولة).
+- اختبار جديد: `tests/verification/oop_advanced.rin` · مثال: `examples/oop/bank.rin`.
+
+---
+
 ## الجولة 1 (سابقاً)
 
 ### 1) إصلاح: `obj.method()` على متغيّر عادي كان يفشل دائماً
