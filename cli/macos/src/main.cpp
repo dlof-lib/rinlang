@@ -26,6 +26,7 @@
 #include <string>
 #include <vector>
 #include <cstring>
+#include <cstdlib>
 #include <unistd.h>
 
 namespace {
@@ -127,6 +128,15 @@ int runRepl() {
 } // namespace
 
 int main(int argc, char** argv) {
+    // --allow-native: يفعّل جسر C++ (cpp.*) لهذا التشغيل فقط (Rin 1.5). قرار المستخدم لا الكود.
+    {
+        int w = 1;
+        for (int i = 1; i < argc; ++i) {
+            if (std::strcmp(argv[i], "--allow-native") == 0) { ::setenv("RIN_ALLOW_NATIVE", "1", 1); continue; }
+            argv[w++] = argv[i];
+        }
+        argc = w;
+    }
     // --import-progress: علم اختياري يعمل مع أي شكل استدعاء أدناه (ملف/-c/stdin)، فيُزال من
     // قائمة الوسائط قبل أي معالجة أخرى حتى لا يتعارض مع argv[1]==check/-c/... الحالية. غيابه
     // (الحالة الافتراضية) يعني سلوكاً مطابقاً تماماً لما قبل إضافة هذه الميزة — بلا أي فرق.
