@@ -22,6 +22,7 @@
 #pragma once
 #include "rin_indsin_eval.h"
 #include "../rin_ast.h"
+#include <algorithm>
 #include <string>
 #include <vector>
 #include <unordered_map>
@@ -248,6 +249,109 @@ inline void ActionRegistry::registerBuiltins() {
             if (!stepOut.error.empty()) { out.error = stepOut.error; return out; }
             for (auto& n : stepOut.changedWarpNames) out.changedWarpNames.push_back(n);
         }
+        return out;
+    });
+
+    // ---- Design System v2: data-shaping actions ------------------------------------------------
+    // Same contract as every action above: `actionCellArg` names the Warp cell(s), values come from
+    // evalAttrExpr, and every mutated cell is reported in changedWarpNames so the Shuttle re-resolves
+    // exactly the Strands bound to it.
+
+    // copy(dst, src): dst := current value of src.
+    registerAction("copy", [](const std::vector<rin::ExprPtr>& a, WarpScope& w) -> ActionOutcome {
+        ActionOutcome out;
+        std::string dst = actionCellArg(a, 0, w), src = actionCellArg(a, 1, w);
+        if (dst.empty() || src.empty()) { out.error = "copy() needs copy(dstCell, srcCell)"; return out; }
+        out.recognized = true;
+        w.set(dst, w.get(src));
+        out.changedWarpNames.push_back(dst);
+        return out;
+    });
+    // swap(a, b): exchange two cells' values.
+    registerAction("swap", [](const std::vector<rin::ExprPtr>& a, WarpScope& w) -> ActionOutcome {
+        ActionOutcome out;
+        std::string x = actionCellArg(a, 0, w), y = actionCellArg(a, 1, w);
+        if (x.empty() || y.empty()) { out.error = "swap() needs swap(cellA, cellB)"; return out; }
+        out.recognized = true;
+        Value vx = w.get(x), vy = w.get(y);
+        w.set(x, vy); w.set(y, vx);
+        out.changedWarpNames.push_back(x);
+        if (y != x) out.changedWarpNames.push_back(y);
+        return out;
+    });
+    // cycle(cell, v1, v2, ...): advance to the value after the current one (wraps; unknown -> v1).
+    // e.g. onTap=cycle(mode,"list","grid","table").
+    registerAction("cycle", [](const std::vector<rin::ExprPtr>& a, WarpScope& w) -> ActionOutcome {
+        ActionOutcome out;
+        std::string cell = actionCellArg(a, 0, w);
+        if (cell.empty() || a.size() < 3) { out.error = "cycle() needs cycle(cell, value1, value2, ...)"; return out; }
+        out.recognized = true;
+        std::string cur = w.get(cell).asString();
+        size_t next = 0;
+        for (size_t i = 1; i < a.size(); i++) {
+            if (evalAttrExpr(a[i], w, nullptr).asString() == cur) { next = (i % (a.size() - 1)); break; }
+        }
+        w.set(cell, evalAttrExpr(a[1 + next], w, nullptr));
+        out.changedWarpNames.push_back(cell);
+        return out;
+    });
+    // clamp(cell, min, max): pin a numeric cell into [min, max].
+    registerAction("clamp", [](const std::vector<rin::ExprPtr>& a, WarpScope& w) -> ActionOutcome {
+        ActionOutcome out;
+        std::string cell = actionCellArg(a, 0, w);
+        if (cell.empty() || a.size() < 3) { out.error = "clamp() needs clamp(cell, min, max)"; return out; }
+        out.recognized = true;
+        double lo = actionNumberArg(a, 1, w, 0), hi = actionNumberArg(a, 2, w, 0);
+        if (lo > hi) std::swap(lo, hi);
+        double v = w.get(cell).asNumber();
+        w.set(cell, Value::num(v < lo ? lo : (v > hi ? hi : v)));
+        out.changedWarpNames.push_back(cell);
+        return out;
+    });
+    // multiply(cell[, factor=2]) / negate(cell): numeric helpers for calculators and steppers.
+    registerAction("multiply", [](const std::vector<rin::ExprPtr>& a, WarpScope& w) -> ActionOutcome {
+        ActionOutcome out;
+        std::string cell = actionCellArg(a, 0, w);
+        if (cell.empty()) { out.error = "multiply() needs a Warp-cell argument"; return out; }
+        out.recognized = true;
+        w.set(cell, Value::num(w.get(cell).asNumber() * actionNumberArg(a, 1, w, 2)));
+        out.changedWarpNames.push_back(cell);
+        return out;
+    });
+    registerAction("negate", [](const std::vector<rin::ExprPtr>& a, WarpScope& w) -> ActionOutcome {
+        ActionOutcome out;
+        std::string cell = actionCellArg(a, 0, w);
+        if (cell.empty()) { out.error = "negate() needs a Warp-cell argument"; return out; }
+        out.recognized = true;
+        w.set(cell, Value::num(-w.get(cell).asNumber()));
+        out.changedWarpNames.push_back(cell);
+        return out;
+    });
+    // append(cell, text): string concatenation (keypads, chips, tag inputs).
+    registerAction("append", [](const std::vector<rin::ExprPtr>& a, WarpScope& w) -> ActionOutcome {
+        ActionOutcome out;
+        std::string cell = actionCellArg(a, 0, w);
+        if (cell.empty() || a.size() < 2) { out.error = "append() needs append(cell, text)"; return out; }
+        out.recognized = true;
+        w.set(cell, Value::txt(w.get(cell).asString() + evalAttrExpr(a[1], w, nullptr).asString()));
+        out.changedWarpNames.push_back(cell);
+        return out;
+    });
+    // backspace(cell): remove the last *character* (UTF-8 aware, so Arabic/emoji are not split).
+    registerAction("backspace", [](const std::vector<rin::ExprPtr>& a, WarpScope& w) -> ActionOutcome {
+        ActionOutcome out;
+        std::string cell = actionCellArg(a, 0, w);
+        if (cell.empty()) { out.error = "backspace() needs a Warp-cell argument"; return out; }
+        out.recognized = true;
+        std::string str = w.get(cell).asString();
+        if (!str.empty()) {
+            size_t n = str.size();
+            while (n > 0 && (((unsigned char)str[n - 1]) & 0xC0) == 0x80) n--; // skip continuation bytes
+            if (n > 0) n--;                                                   // drop the lead byte
+            str.resize(n);
+        }
+        w.set(cell, Value::txt(str));
+        out.changedWarpNames.push_back(cell);
         return out;
     });
 }
