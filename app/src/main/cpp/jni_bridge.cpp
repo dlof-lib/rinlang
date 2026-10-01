@@ -671,6 +671,74 @@ Java_com_dlof_rinlang_RinEngine_indsinSessionSetViewportNative(JNIEnv* /* env */
     rin_indsin_session_set_viewport(reinterpret_cast<void*>(handle), (int)viewportHeight);
 }
 
+// ---- Design System v2 / Audit / Introspection (rin_indsin_system.h, _audit.h, _query.h) ----------
+// ثماني دوال C جديدة (انظر docs/indsin_expansion.md §8) تُرجع كلها JSON/نصاً مُخصَّصاً بـ malloc.
+// نمط واحد موحَّد: نقرأ النص المُمرَّر بأمان (null -> "")، نستدعي الدالة C، ننسخ الناتج إلى jstring
+// ثم نحرّره دائماً بـ rin_free_string -- حتى عند فشل NewStringUTF -- فلا يتسرّب شيء عبر JNI.
+// ملاحظة: NewStringUTF يتوقع Modified-UTF8؛ ناتج المحرّك JSON بـ ASCII/UTF-8 عادي (الحروف غير
+// ASCII تأتي مُهرَّبة أو UTF-8 صالحاً بلا رموز إضافية، ونفس الافتراض تعتمده كل دوال هذا الملف).
+
+static std::string indsinJStringToStd(JNIEnv* env, jstring s) {
+    if (!s) return std::string();
+    const char* c = env->GetStringUTFChars(s, nullptr);
+    std::string out(c ? c : "");
+    if (c) env->ReleaseStringUTFChars(s, c);
+    return out;
+}
+
+// يحوّل نتيجة C المملوكة (malloc) إلى jstring ويحرّرها. [fallback] JSON خطأ آمن عند null.
+static jstring indsinTakeResult(JNIEnv* env, char* owned, const char* fallback) {
+    jstring result = env->NewStringUTF(owned ? owned : fallback);
+    if (owned) rin_free_string(owned);
+    return result;
+}
+
+static const char* const kIndsinNullJson = "{\"error\":\"null result\"}";
+
+extern "C" JNIEXPORT jstring JNICALL
+Java_com_dlof_rinlang_RinEngine_indsinSessionAuditJsonNative(JNIEnv* env, jobject /* this */, jlong handle) {
+    return indsinTakeResult(env, rin_indsin_session_audit_json(reinterpret_cast<void*>(handle)), kIndsinNullJson);
+}
+
+extern "C" JNIEXPORT jstring JNICALL
+Java_com_dlof_rinlang_RinEngine_indsinSessionStatsJsonNative(JNIEnv* env, jobject /* this */, jlong handle) {
+    return indsinTakeResult(env, rin_indsin_session_stats_json(reinterpret_cast<void*>(handle)), kIndsinNullJson);
+}
+
+extern "C" JNIEXPORT jstring JNICALL
+Java_com_dlof_rinlang_RinEngine_indsinSessionOutlineNative(JNIEnv* env, jobject /* this */, jlong handle) {
+    // المخطط نص عادي لا JSON؛ الـ fallback الفارغ يعني "لا شيء لعرضه".
+    return indsinTakeResult(env, rin_indsin_session_outline(reinterpret_cast<void*>(handle)), "");
+}
+
+extern "C" JNIEXPORT jstring JNICALL
+Java_com_dlof_rinlang_RinEngine_indsinTokensJsonNative(JNIEnv* env, jobject /* this */) {
+    return indsinTakeResult(env, rin_indsin_tokens_json(), kIndsinNullJson);
+}
+
+extern "C" JNIEXPORT jstring JNICALL
+Java_com_dlof_rinlang_RinEngine_indsinCatalogJsonNative(JNIEnv* env, jobject /* this */) {
+    return indsinTakeResult(env, rin_indsin_catalog_json(), "[]");
+}
+
+extern "C" JNIEXPORT jstring JNICALL
+Java_com_dlof_rinlang_RinEngine_indsinPaletteJsonNative(JNIEnv* env, jobject /* this */, jstring seedJStr) {
+    std::string seed = indsinJStringToStd(env, seedJStr);
+    return indsinTakeResult(env, rin_indsin_palette_json(seed.c_str()), kIndsinNullJson);
+}
+
+extern "C" JNIEXPORT jstring JNICALL
+Java_com_dlof_rinlang_RinEngine_indsinThemeFromSeedJsonNative(JNIEnv* env, jobject /* this */, jstring seedJStr, jboolean dark) {
+    std::string seed = indsinJStringToStd(env, seedJStr);
+    return indsinTakeResult(env, rin_indsin_theme_from_seed_json(seed.c_str(), dark ? 1 : 0), kIndsinNullJson);
+}
+
+extern "C" JNIEXPORT jstring JNICALL
+Java_com_dlof_rinlang_RinEngine_indsinValidateThemeJsonNative(JNIEnv* env, jobject /* this */, jstring nameJStr) {
+    std::string name = indsinJStringToStd(env, nameJStr);
+    return indsinTakeResult(env, rin_indsin_validate_theme_json(name.c_str()), kIndsinNullJson);
+}
+
 // ================= جسر HTTP الحقيقي: JNI_OnLoad + native -> Kotlin (RinHttpBridge) =================
 // لماذا هنا تحديداً وليس داخل rin_http.cpp؟ rin_http.h/.cpp مصمَّمان عمداً بلا أي اعتماد على
 // <jni.h> (انظر تعليق rin_http.h) حتى يبقيا قابلين للبناء كأداة سطر أوامر عادية بلا NDK. كل ما
