@@ -5987,6 +5987,7 @@ void Interpreter::registerNatives() {
     registerNativesExtra(); // Rin 1.1: دوال إضافية (rin_extra_natives.cpp)
     registerNativesExtra2(); // Rin 1.2: sec./file./net./log./automation. + امتدادات container.* (rin_extra_natives2.cpp)
     registerNativesExtra3(); // Rin 1.3: net.* بشبكة حقيقية + container.* إضافية (rin_extra_natives3.cpp)
+    registerNativesExtra4(); // Rin 1.5: json./semver./pkg./cpp. (rin_extra_natives4.cpp)
     registerNativesOop(); // Rin 1.4: oop.* — استبطان الأصناف والكائنات + أدوات OOP (rin_oop_natives.cpp)
 }
 
@@ -10521,6 +10522,7 @@ std::optional<Interpreter::FlowRunResult> Interpreter::replayFlow(const std::str
 #include "rin_extra_natives.cpp"
 #include "rin_extra_natives2.cpp"
 #include "rin_extra_natives3.cpp"
+#include "rin_extra_natives4.cpp"
 #endif
 
 // ---- Rin 1.4: OOP الموسَّع (interface/trait/abstract/static/private/get-set + دوال oop.*) ----
