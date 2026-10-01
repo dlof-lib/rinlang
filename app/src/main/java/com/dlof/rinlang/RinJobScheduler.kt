@@ -190,9 +190,19 @@ object RinJobScheduler {
             }
         }
 
-        val future = workerPool.submit(Callable { RinEngine.runSourceStructuredStreaming(job.source, listener) })
+        // دوال الإدخال (input/...): تحجب ترد التشغيل حتى يجيب المستخدم عبر نافذة في الواجهة. أثناء
+        // الانتظار تتوقف ساعة المهلة (انظر awaitActive) كي لا يُحسب وقت تفكير المستخدم ضد البرنامج.
+        val inputHandler = RinEngine.RinInputHandler { prompt ->
+            job.waitingForInput = true
+            try {
+                RinInputBridge.request(prompt)
+            } finally {
+                job.waitingForInput = false
+            }
+        }
+        val future = workerPool.submit(Callable { RinEngine.runSourceInteractive(job.source, listener, inputHandler) })
         try {
-            val result = future.get(TIMEOUT_MS, TimeUnit.MILLISECONDS)
+            val result = awaitActive(future, job)
             synchronized(job) {
                 // Runtime errors already have their rustc-style diagnostic text folded into
                 // result.output by Interpreter::run() itself, same as before. A lexer/parser/
@@ -230,6 +240,23 @@ object RinJobScheduler {
             job.liveLines = emptyList()
         }
         notifyChanged()
+    }
+
+    /**
+     * مثل future.get(TIMEOUT_MS) لكن ساعة المهلة لا تتقدّم أثناء [RinJob.waitingForInput]؛ يرمي
+     * TimeoutException فقط بعد TIMEOUT_MS من وقت التنفيذ *الفعلي* (بدون انتظار المستخدم).
+     */
+    private fun <T> awaitActive(future: java.util.concurrent.Future<T>, job: RinJob): T {
+        val tickMs = 200L
+        var activeMs = 0L
+        while (true) {
+            try {
+                return future.get(tickMs, TimeUnit.MILLISECONDS)
+            } catch (e: TimeoutException) {
+                if (!job.waitingForInput) activeMs += tickMs
+                if (activeMs >= TIMEOUT_MS) throw e
+            }
+        }
     }
 
     /** Drops the oldest *finished, unpinned* jobs once history exceeds [MAX_HISTORY]; queued,
