@@ -4,6 +4,10 @@
 #include "rin_indsin_pipeline.h"
 #include "rin_indsin_needle.h"
 #include "rin_indsin_effects.h"
+#include "rin_indsin_system.h"     // Design System v2: tokens/themes/palette
+#include "rin_indsin_query.h"      // Fabric introspection (stats/outline/catalog)
+#include "rin_indsin_audit.h"      // accessibility + layout audit
+#include "rin_indsin_responsive.h" // <key>_<breakpoint> attribute overrides
 #include <cstring>
 #include <cstdlib>
 #include <sstream>
@@ -56,6 +60,9 @@ void relayout(IndsinSession* sess) {
     if (!sess->state.ok || !sess->state.fabric) return;
     sess->indsinEngine = indsin::Indsin{}; // fresh stats per call; Tension caching lives on the Strands themselves
     sess->state.fabric->screenRoot = true;
+    // Responsive attrs (rin_indsin_responsive.h): apply columns_md=/gap_lg=/... for the current width
+    // BEFORE measuring. Idempotent, so running it on every relayout (tap, edit, resize) is safe.
+    indsin::applyResponsiveAttrs(sess->state.fabric, (double)sess->rootWidth);
     sess->indsinEngine.layout(sess->state.fabric, indsin::Constraints{(double)sess->rootWidth, (double)sess->rootWidth, 0, 1e9}, 0, 0);
     // Overlay Engine second pass: re-homes every open Dialog / anchored Tooltip against the
     // viewport now that the whole tree (including their own content boxes) has been measured.
@@ -135,6 +142,7 @@ RIN_API char* rin_indsin_render_json(const char* source, int rootWidth) {
 
     indsin::Indsin indsinEngine;
     r.fabric->screenRoot = true;
+    indsin::applyResponsiveAttrs(r.fabric, (double)rootWidth);
     indsinEngine.layout(r.fabric, indsin::Constraints{(double)rootWidth, (double)rootWidth, 0, 1e9}, 0, 0);
 
     indsin::Dye dye;
@@ -407,6 +415,57 @@ RIN_API void rin_indsin_session_set_viewport(void* sessionPtr, int viewportHeigh
     if (!sess) return;
     sess->viewportHeight = viewportHeight > 0 ? viewportHeight : 844;
     relayout(sess); // Dialog centering / Tooltip clamping depends on this -- redo immediately
+}
+
+
+// ---- Design System v2 / Audit / Introspection exports (see docs/indsin_expansion.md) ----------
+
+// Accessibility + layout audit of the session's current (laid-out) Fabric. JSON shape:
+// {"ok","score","nodes","errors","warnings","issues":[{code,severity,strandId,kind,name,path,line,message,hint}]}.
+RIN_API char* rin_indsin_session_audit_json(void* sessionPtr) {
+    auto* sess = static_cast<IndsinSession*>(sessionPtr);
+    if (!sess || !sess->state.ok) return dupToC(sessionErrorJson(sess));
+    indsin::AuditOptions opt;
+    opt.screenWidth = (double)sess->rootWidth;
+    return dupToC(indsin::auditReportToJson(indsin::auditFabric(sess->state.fabric, opt)));
+}
+// Node/depth/kind/category statistics of the current Fabric.
+RIN_API char* rin_indsin_session_stats_json(void* sessionPtr) {
+    auto* sess = static_cast<IndsinSession*>(sessionPtr);
+    if (!sess || !sess->state.ok) return dupToC(sessionErrorJson(sess));
+    return dupToC(indsin::fabricStatsJson(indsin::fabricStats(sess->state.fabric)));
+}
+// Plain-text indented outline of the current Fabric (debugging / CI logs).
+RIN_API char* rin_indsin_session_outline(void* sessionPtr) {
+    auto* sess = static_cast<IndsinSession*>(sessionPtr);
+    if (!sess || !sess->state.ok) return dupToC(sessionErrorJson(sess));
+    return dupToC(indsin::fabricOutline(sess->state.fabric));
+}
+// Every design-token scale + the active theme + registered theme names.
+RIN_API char* rin_indsin_tokens_json(void) { return dupToC(indsin::tokensToJson()); }
+// Component taxonomy (kind, category, a11y role, interactive/overlay flags).
+RIN_API char* rin_indsin_catalog_json(void) { return dupToC(indsin::kindCatalogJson()); }
+// Tonal palette (50..900) around a seed color literal; invalid seed -> error object.
+RIN_API char* rin_indsin_palette_json(const char* seedLiteral) {
+    indsin::Color c;
+    if (!seedLiteral || !rincolor::tryParseColor(seedLiteral, c)) return dupToC("{\"error\":\"invalid color\"}");
+    return dupToC(indsin::paletteToJson(indsin::tonalPalette(c)));
+}
+// Full theme generated from one seed color, plus its WCAG report: {"theme":{...},"report":{...}}.
+RIN_API char* rin_indsin_theme_from_seed_json(const char* seedLiteral, int dark) {
+    indsin::Color c;
+    if (!seedLiteral || !rincolor::tryParseColor(seedLiteral, c)) return dupToC("{\"error\":\"invalid color\"}");
+    indsin::Theme t = indsin::themeFromSeed(dark ? "GeneratedDark" : "GeneratedLight", c, dark != 0);
+    std::ostringstream os;
+    os << "{\"theme\":" << indsin::themeToJson(t) << ",\"report\":" << indsin::themeReportToJson(indsin::validateTheme(t)) << "}";
+    return dupToC(os.str());
+}
+// WCAG report for a REGISTERED theme by name (built-in or @theme-declared).
+RIN_API char* rin_indsin_validate_theme_json(const char* themeName) {
+    auto& reg = indsin::themeRegistry();
+    auto it = reg.themes.find(themeName ? themeName : "");
+    if (it == reg.themes.end()) return dupToC("{\"error\":\"unknown theme\"}");
+    return dupToC(indsin::themeReportToJson(indsin::validateTheme(it->second)));
 }
 
 } // extern "C"
