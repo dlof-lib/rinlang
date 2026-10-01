@@ -437,8 +437,16 @@ class RinJobAdapter(private val context: Context) : RecyclerView.Adapter<RinJobA
          *  real search query (substring match on the printed text, case-insensitive). */
         private fun renderOutputTab(job: RinJob, query: String) {
             outputLines.removeAllViews()
-            val lines = RinConsoleFormatter.formatLines(job.output)
+            val allLines = RinConsoleFormatter.formatLines(job.output)
+            val lines = allLines
                 .filter { query.isEmpty() || it.text.contains(query, ignoreCase = true) }
+                .collapseRepeats()
+            // عنوان ملخّص للتشغيل المنتهي (يُحسب على كل الأسطر لا على نتيجة البحث فقط).
+            if (query.isEmpty() && allLines.isNotEmpty() &&
+                job.status != JobStatus.RUNNING && job.status != JobStatus.QUEUED
+            ) {
+                outputLines.addView(buildSummaryRow(job, RinOutputSummary.of(allLines)))
+            }
             if (lines.isEmpty() && query.isNotEmpty()) {
                 outputLines.addView(buildEmptyStateRow(context.getString(R.string.job_no_results)))
             } else {
@@ -549,8 +557,9 @@ class RinJobAdapter(private val context: Context) : RecyclerView.Adapter<RinJobA
             }
             session.diagnostics.forEach { diagnostic ->
                 val summary = TextView(context).apply {
-                    text = "${diagnostic.severity.uppercase()} [${diagnostic.code}] ${diagnostic.message}\n" +
-                        "${diagnostic.file}:${diagnostic.line}:${diagnostic.column}"
+                    text = RinDiagnosticRenderer.render(
+                        diagnostic, RinDiagnosticRenderer.snippetSource(diagnostic, job.source), contextLines = 2
+                    )
                     textSize = 12.5f
                     typeface = Typeface.MONOSPACE
                     setTextColor(ContextCompat.getColor(context, R.color.log_kind_error))
@@ -560,6 +569,25 @@ class RinJobAdapter(private val context: Context) : RecyclerView.Adapter<RinJobA
                 diagnosticsTab.addView(summary)
                 diagnosticsTab.addView(buildDiagnosticActionsRow(job, diagnostic))
             }
+        }
+
+        /** عنوان ملخّص التشغيل: «اكتمل التشغيل بنجاح — 12 سطراً» / «فشل التشغيل — خطأ واحد (السطر 4)». */
+        private fun buildSummaryRow(job: RinJob, summary: RinOutputSummary): View = TextView(context).apply {
+            val ok = job.status == JobStatus.SUCCESS
+            text = summary.headline(ok)
+            textSize = 12f
+            setTypeface(typeface, Typeface.BOLD)
+            setTextColor(
+                ContextCompat.getColor(
+                    context,
+                    when {
+                        !ok -> R.color.log_kind_error
+                        summary.warnings > 0 -> R.color.log_kind_warning
+                        else -> R.color.log_kind_success
+                    }
+                )
+            )
+            setPadding(0, (2 * dp).toInt(), 0, (6 * dp).toInt())
         }
 
         private fun buildEmptyStateRow(text: String): View = TextView(context).apply {
@@ -602,7 +630,9 @@ class RinJobAdapter(private val context: Context) : RecyclerView.Adapter<RinJobA
             }
 
             val text = TextView(context).apply {
-                text = highlightMatches(line.text, highlightQuery)
+                val shown = highlightMatches(line.text, highlightQuery)
+                text = if (line.repeat > 1) android.text.TextUtils.concat(shown, "  ×${line.repeat}") else shown
+                if (line.indent > 0) setPadding((line.indent * 4 * dp).toInt(), 0, 0, 0)
                 textSize = 12.5f
                 typeface = Typeface.MONOSPACE
                 setTextColor(if (line.kind == LogKind.PLAIN) ContextCompat.getColor(context, R.color.rin_console_text) else tint)
@@ -845,8 +875,11 @@ class RinJobAdapter(private val context: Context) : RecyclerView.Adapter<RinJobA
         private fun showDiagnosticDetails(job: RinJob, d: RinDiagnostic) {
             val body = buildString {
                 append(context.getString(R.string.job_title_fmt, job.number)).append("\n\n")
-                append(d.severity.uppercase()).append(" [").append(d.code).append("] ").append(d.message).append("\n")
-                append(d.file).append(":").append(d.line).append(":").append(d.column).append("\n")
+                append(
+                    RinDiagnosticRenderer.renderSnippet(
+                        d, RinDiagnosticRenderer.snippetSource(d, job.source), contextLines = 2
+                    )
+                ).append("\n")
                 d.reason?.let { append("\n").append(context.getString(R.string.diag_reason_label)).append(": ").append(it).append("\n") }
                 d.expected?.let { append("\n").append(context.getString(R.string.diag_expected_label)).append(": ").append(it).append("\n") }
                 d.found?.let { append(context.getString(R.string.diag_found_label)).append(": ").append(it).append("\n") }
@@ -884,6 +917,10 @@ class RinJobAdapter(private val context: Context) : RecyclerView.Adapter<RinJobA
                 append("\n**help:**\n")
                 d.hints.forEach { append("- $it\n") }
             }
+            val report = RinDiagnosticRenderer.render(d, RinDiagnosticRenderer.snippetSource(d, job.source), 2)
+            val longestRun = Regex("`+").findAll(report).maxOfOrNull { it.value.length } ?: 0
+            val fence = "`".repeat(maxOf(3, longestRun + 1))
+            append("\n").append(fence).append("\n").append(report).append("\n").append(fence).append("\n")
         }
 
         private fun copyToClipboard(label: String, text: String, toastRes: Int) {
