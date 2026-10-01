@@ -2186,6 +2186,7 @@ void Interpreter::registerNatives() {
         std::string prompt;
         bool hasValidator = false; Value validator;
         bool hasTarget = false;    Value target; std::string key;
+        bool form = false;         // input(prompt, "Container"): املأ كل حقول الحاوية
     };
     // askRaw: نقطة واحدة تقرأ سطراً من المستخدم — عبر InputProvider (نافذة على أندرويد) أو stdin (CLI).
     // يعيد false إذا ألغى المستخدم/انتهى الإدخال بلا بيانات (EOF في stdin يُعامَل كإلغاء فقط حين
@@ -2226,6 +2227,9 @@ void Interpreter::registerNatives() {
         }
         size_t rest = a.size() > i ? a.size() - i : 0;
         if (rest == 0) return ia;
+        if (rest == 1 && fn == "input" && a[i].type == Value::Type::STRING && containers.count(a[i].str)) {
+            ia.hasTarget = true; ia.target = a[i]; ia.form = true; return ia;
+        }
         if (rest != 2)
             throw diagErr(diag::Code::E0007_InvalidArguments, line,
                           "'" + fn + "': الوسائط الإضافية إمّا (target, key) أو " + (allowValidator ? "(validator) أو (validator, target, key)" : "لا شيء"));
@@ -2256,24 +2260,59 @@ void Interpreter::registerNatives() {
     // deliver: يسلّم القيمة للهدف عبر الدوال الموجودة (إن وُجد هدف) ثم يعيدها.
     auto deliver = [callNat](const InArgs& ia, const Value& v, int line) -> Value {
         if (!ia.hasTarget) return v;
-        if (ia.target.type == Value::Type::STRING) callNat("setField", {ia.target, Value::string(ia.key), v}, line);
+        // setState = setField + إطلاق on update(prev) إن كان الحقل `state` — فتتفاعل الحاوية مع الإدخال.
+        if (ia.target.type == Value::Type::STRING) callNat("setState", {ia.target, Value::string(ia.key), v}, line);
         else                                       callNat("oop.set",  {ia.target, Value::string(ia.key), v}, line);
         return v;
+    };
+    // curOf: القيمة الحالية للحقل في الهدف (nil إن لم توجد) — getField للحاوية، oop.get لغيرها.
+    auto curOf = [callNat](const InArgs& ia, int line) -> Value {
+        if (!ia.hasTarget || ia.form) return Value::nil();
+        try {
+            if (ia.target.type == Value::Type::STRING) return callNat("getField", {ia.target, Value::string(ia.key)}, line);
+            return callNat("oop.get", {ia.target, Value::string(ia.key), Value::nil()}, line);
+        } catch (const RinError&) { return Value::nil(); }
+    };
+    // shownPrompt: يُلحِق القيمة الحالية بين [ ] (الإجابة الفارغة تُبقيها).
+    auto shownPrompt = [](const std::string& p, const Value& cur) -> std::string {
+        if (cur.type == Value::Type::NIL || cur.type == Value::Type::MAP || cur.type == Value::Type::ARRAY ||
+            cur.type == Value::Type::INSTANCE || cur.type == Value::Type::FUNCTION) return p;
+        std::string d = cur.toDisplayString();
+        return d.empty() ? p : p + "[" + d + "] ";
+    };
+    // fillForm: لكل حقل في الحاوية (مرتباً) يستدعي input/inputNumber/confirm نفسها حسب container.fieldType.
+    auto fillForm = [this, callNat](const InArgs& ia, int line) -> Value {
+        Value names = callNat("container.fieldNames", {ia.target}, line);
+        std::vector<std::string> ks;
+        if (names.type == Value::Type::ARRAY && names.array) for (auto& n : *names.array) ks.push_back(n.str);
+        std::sort(ks.begin(), ks.end());
+        for (const auto& k : ks) {
+            std::string ty = callNat("container.fieldType", {ia.target, Value::string(k)}, line).str;
+            const char* fn = ty == "number" ? "inputNumber" : ty == "bool" ? "confirm" : ty == "string" ? "input" : nullptr;
+            if (!fn) continue;                                  // مصفوفات/قواميس/دوال: خارج النموذج
+            Value lbl = Value::string(ia.prompt + k + ": ");
+            callNat(fn, {lbl, ia.target, Value::string(k)}, line);
+        }
+        return callNat("container.snapshot", {ia.target}, line);
     };
     auto cancelErr = [](const char* fn, int line) {
         return diagErr(diag::Code::E0035_RuntimeError, line, std::string("تم إلغاء الإدخال (") + fn + ")");
     };
 
     // input(prompt?, validator?, target?, key?) -> string
-    natives["input"] = [askRaw, parseArgs, validate, deliver, cancelErr](std::vector<Value>& a, int line) -> Value {
+    natives["input"] = [askRaw, parseArgs, validate, deliver, cancelErr, curOf, shownPrompt, fillForm](std::vector<Value>& a, int line) -> Value {
         InArgs ia = parseArgs("input", a, 1, true, line);
+        if (ia.form) return fillForm(ia, line);
+        const Value cur = curOf(ia, line);
         const int attempts = ia.hasValidator ? 5 : 1;
         std::string why;
         for (int attempt = 0; attempt < attempts; ++attempt) {
             std::string ans; bool eof = false;
-            std::string shown = attempt == 0 ? ia.prompt : ("[" + why + "] " + ia.prompt);
+            std::string base = shownPrompt(ia.prompt, cur);
+            std::string shown = attempt == 0 ? base : ("[" + why + "] " + base);
             if (!askRaw(shown, ans, eof)) throw cancelErr("input", line);
             if (eof && ia.hasValidator) throw cancelErr("input", line);
+            if (ans.empty() && cur.type == Value::Type::STRING && !cur.str.empty()) return cur;   // Enter = أبقِ الحالي
             Value v = Value::string(ans);
             if (validate(ia, v, why, line)) return deliver(ia, v, line);
             if (why.empty()) why = "قيمة غير مقبولة";
@@ -2281,17 +2320,19 @@ void Interpreter::registerNatives() {
         throw diagErr(diag::Code::E0035_RuntimeError, line, "'input': لم تُقبل القيمة بعد 5 محاولات");
     };
     // inputNumber(prompt?, validator?, target?, key?) -> number — النص يمرّ عبر trim ثم toNumber الموجودتين.
-    natives["inputNumber"] = [askRaw, callNat, parseArgs, validate, deliver, cancelErr](std::vector<Value>& a, int line) -> Value {
+    natives["inputNumber"] = [askRaw, callNat, parseArgs, validate, deliver, cancelErr, curOf, shownPrompt](std::vector<Value>& a, int line) -> Value {
         InArgs ia = parseArgs("inputNumber", a, 1, true, line);
+        const Value cur = curOf(ia, line);
         std::string why;
         for (int attempt = 0; attempt < 5; ++attempt) {
             std::string ans; bool eof = false;
-            std::string shown = attempt == 0 ? ia.prompt
-                              : ("[" + (why.empty() ? std::string("أدخل رقماً صالحاً") : why) + "] " + ia.prompt);
+            std::string base = shownPrompt(ia.prompt, cur);
+            std::string shown = attempt == 0 ? base
+                              : ("[" + (why.empty() ? std::string("أدخل رقماً صالحاً") : why) + "] " + base);
             if (!askRaw(shown, ans, eof) || eof) throw cancelErr("inputNumber", line);
             Value t = callNat("trim", {Value::string(ans)}, line);
             why.clear();
-            if (t.str.empty()) continue;
+            if (t.str.empty()) { if (cur.type == Value::Type::NUMBER) return cur; continue; }   // Enter = أبقِ الحالي
             Value num;
             try { num = callNat("toNumber", {t}, line); } catch (const RinError&) { continue; }
             // toNumber تقبل بادئة رقمية ("12abc" => 12)؛ هنا نطلب نصاً رقمياً كاملاً.
@@ -2302,11 +2343,13 @@ void Interpreter::registerNatives() {
         throw diagErr(diag::Code::E0035_RuntimeError, line, "'inputNumber': لم يُدخَل رقم صالح بعد 5 محاولات");
     };
     // confirm(prompt?, target?, key?) -> bool — trim + lower + contains(كلمات الموافقة).
-    natives["confirm"] = [askRaw, callNat, parseArgs, deliver, cancelErr](std::vector<Value>& a, int line) -> Value {
+    natives["confirm"] = [askRaw, callNat, parseArgs, deliver, cancelErr, curOf, shownPrompt](std::vector<Value>& a, int line) -> Value {
         InArgs ia = parseArgs("confirm", a, 1, false, line);
+        const Value cur = curOf(ia, line);
         std::string ans; bool eof = false;
-        if (!askRaw(ia.prompt, ans, eof) || eof) throw cancelErr("confirm", line);
+        if (!askRaw(shownPrompt(ia.prompt, cur), ans, eof) || eof) throw cancelErr("confirm", line);
         Value t = callNat("lower", {callNat("trim", {Value::string(ans)}, line)}, line);
+        if (t.str.empty() && cur.type == Value::Type::BOOL) return cur;                      // Enter = أبقِ الحالي
         auto yes = std::make_shared<ArrayData>();
         for (const char* w : {"y", "yes", "true", "1", "نعم", "ن"}) yes->push_back(Value::string(w));
         return deliver(ia, callNat("contains", {Value::makeArray(yes), t}, line), line);
