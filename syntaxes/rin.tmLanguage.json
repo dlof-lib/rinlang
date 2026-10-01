@@ -13,6 +13,7 @@
     { "include": "#link-id-attribute" },
     { "include": "#block-tags" },
     { "include": "#section-tags" },
+    { "include": "#oop-keywords" },
     { "include": "#keywords-control" },
     { "include": "#keywords-logical" },
     { "include": "#keywords-storage" },
@@ -32,6 +33,19 @@
     { "include": "#punctuation" }
   ],
   "repository": {
+    "oop-keywords": {
+      "comment": "Rin 1.4 OOP: contextual (non-reserved) words. Declarations are only recognised when followed by a name, modifiers only inside class bodies.",
+      "patterns": [
+        { "match": "\\b(abstract|final)(?=\\s+(?:abstract\\s+|final\\s+)*class\\b)", "name": "storage.modifier.rin" },
+        { "match": "\\b(class|struct|interface|trait|enum)(?=\\s+[A-Za-z_])", "name": "storage.type.class.rin" },
+        { "match": "\\b(extends|implements|uses|instanceof)(?=\\s+[A-Za-z_])", "name": "keyword.operator.word.rin" },
+        { "match": "\\b(public|private|protected|static|abstract|final|override)(?=\\s+(?:let|fun|get|set|public|private|protected|static|abstract|final|override)\\b)", "name": "storage.modifier.rin" },
+        { "match": "\\b(get|set)(?=\\s+[A-Za-z_][A-Za-z0-9_]*\\s*\\()", "name": "storage.modifier.accessor.rin" },
+        { "match": "\\b(self|super)\\b", "name": "variable.language.rin" },
+        { "match": "\\b__(?:add|sub|mul|div|mod|neg|eq|ne|lt|le|gt|ge|cmp|str|len|getitem|setitem|call|iter|contains)__\\b", "name": "support.function.magic.rin" }
+      ]
+    },
+
     "comments": {
       "patterns": [
         {
