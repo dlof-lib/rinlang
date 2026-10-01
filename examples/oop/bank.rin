@@ -1,0 +1,61 @@
+// مثال Rin 1.4 — نظام حسابات بنكية يجمع معظم ميزات OOP الجديدة.
+
+interface Describable { fun describe(); }
+
+trait Loggable {
+    let history = [];
+    fun log(msg) { push(self.history, msg); }
+}
+
+abstract class Account implements Describable uses Loggable {
+    static let count = 0;
+    private let _balance = 0;
+    protected let owner = "";
+    final let id = 0;
+
+    fun init(owner, opening) {
+        self.owner = owner;
+        self._balance = opening;
+        Account.count = Account.count + 1;
+        self.id = Account.count;
+        self.log("opened with " + str(opening));
+    }
+
+    get balance() { return self._balance; }
+    get ownerName() { return self.owner; }
+
+    fun deposit(x) {
+        self._balance = self._balance + x;
+        self.log("deposit " + str(x));
+        return self;
+    }
+
+    abstract fun fee();
+
+    fun withdraw(x) {
+        let total = x + self.fee();
+        if (total > self._balance) { return false; }
+        self._balance = self._balance - total;
+        self.log("withdraw " + str(x));
+        return true;
+    }
+
+    fun describe() { return "#" + str(self.id) + " " + self.owner + ": " + str(self._balance); }
+    fun __str__() { return self.describe(); }
+    fun __lt__(o) { return self._balance < o.balance; }
+}
+
+class Basic extends Account { override fun fee() { return 2; } }
+class Premium extends Account { override fun fee() { return 0; } }
+
+let accounts = [Basic("Ali", 100), Premium("Sara", 500), Basic("Omar", 50)];
+accounts[0].deposit(25).deposit(10);
+accounts[2].withdraw(100);          // يفشل: الرصيد لا يكفي
+accounts[1].withdraw(120);
+
+for (let a in oop.sort(accounts, true)) { print a; }   // __str__ + الفرز عبر __lt__
+print "total accounts: " + str(Account.count);
+print "richest: " + oop.max(accounts).ownerName;
+print oop.pluck(accounts, "balance");
+print accounts[0].history;
+print oop.describe("Basic");
