@@ -285,6 +285,9 @@ class MainActivity : AppCompatActivity() {
             if (anyRunning) progressRunning.start() else progressRunning.stop()
         }
 
+        // نافذة إدخال المستخدم لدوال Rin (input/inputNumber/confirm/choose) — انظر RinInputBridge.
+        RinInputBridge.setPresenter(rinInputPresenter)
+
         RinLogoLoadingOverlay.setProgress(0.94f)
         window.decorView.post { RinLogoLoadingOverlay.finish() }
 
@@ -1014,6 +1017,53 @@ class MainActivity : AppCompatActivity() {
         else getString(R.string.find_count_format, current, total)
     }
 
+    /** النافذة الحالية لسؤال إدخال Rin (إن وُجدت)، لإغلاقها بهدوء عند إغلاق الـ Activity. */
+    private var rinInputDialog: AlertDialog? = null
+
+    private val rinInputPresenter: RinInputPresenter = { prompt, deliver -> showRinInputDialog(prompt, deliver) }
+
+    /**
+     * يعرض سؤال إدخال صادراً من برنامج Rin قيد التشغيل. [deliver] تُستدعى بالنص عند "موافق"،
+     * وبـ null عند الإلغاء (زر إلغاء / Back / لمس خارج النافذة) فيُوقَف البرنامج بخطأ واضح.
+     */
+    private fun showRinInputDialog(prompt: String, deliver: (String?) -> Unit) {
+        if (isFinishing || isDestroyed) return
+        rinInputDialog?.dismiss()
+        val field = EditText(this).apply {
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
+            imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_DONE
+            setSingleLine(true)
+            hint = getString(R.string.rin_input_hint)
+            setTextColor(ContextCompat.getColor(this@MainActivity, R.color.rin_on_toolbar))
+            setHintTextColor(ContextCompat.getColor(this@MainActivity, R.color.rin_editor_hint))
+            setPadding(48, 24, 48, 24)
+        }
+        val themedContext = ContextThemeWrapper(this, MaterialR.style.ThemeOverlay_MaterialComponents_Dark)
+        val dialog = AlertDialog.Builder(themedContext)
+            .setTitle(R.string.rin_input_title)
+            .setMessage(prompt.ifBlank { getString(R.string.rin_input_default_prompt) })
+            .setView(field)
+            .setCancelable(true)
+            .setPositiveButton(android.R.string.ok) { d, _ ->
+                deliver(field.text.toString())
+                d.dismiss()
+            }
+            .setNegativeButton(android.R.string.cancel) { _, _ -> deliver(null) }
+            .setOnCancelListener { deliver(null) }
+            .create()
+        field.setOnEditorActionListener { _, actionId, _ ->
+            if (actionId == android.view.inputmethod.EditorInfo.IME_ACTION_DONE) {
+                dialog.getButton(AlertDialog.BUTTON_POSITIVE)?.performClick()
+                true
+            } else false
+        }
+        dialog.setCanceledOnTouchOutside(false)
+        dialog.window?.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE)
+        rinInputDialog = dialog
+        dialog.show()
+        field.requestFocus()
+    }
+
     /** يفتح حواراً بسيطاً لإدخال رقم سطر والقفز إليه مباشرة، مع تمرير المحرر لإظهاره. */
     private fun showGoToLineDialog() {
         val input = EditText(this).apply {
@@ -1258,6 +1308,10 @@ class MainActivity : AppCompatActivity() {
         // that outlives this Activity; without this the lambda above would keep the destroyed
         // Activity reachable (and every view it holds) for as long as the process stays alive.
         RinExecutionManager.detach()
+        // أغلق نافذة الإدخال بلا إلغاء السؤال: يبقى معلّقاً في RinInputBridge وتعرضه الواجهة التالية.
+        rinInputDialog?.dismiss()
+        rinInputDialog = null
+        RinInputBridge.clearPresenter(rinInputPresenter)
         uiHandler.removeCallbacksAndMessages(null)
         super.onDestroy()
     }
