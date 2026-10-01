@@ -50,7 +50,9 @@ data class RinLogLine(
     /** إزاحة السطر الأصلية (Tab = 4)؛ [text] نفسه يبقى مقصوصاً كما كان، فلا يتأثر أي عارض قائم. */
     val indent: Int = 0,
     /** عدد مرات تكرار هذا السطر متتالياً بعد [collapseRepeats] (1 = غير مكرَّر). */
-    val repeat: Int = 1
+    val repeat: Int = 1,
+    /** غير null لأسطر فتح/إغلاق الحاويات (`@container...`/Group/Volume/Section) — يُبنى منها العرض المميَّز. */
+    val container: RinContainerMark? = null
 )
 
 /** File kinds save/installation can actually write to disk, and how to open/share them afterwards. */
@@ -174,12 +176,22 @@ object RinConsoleFormatter {
                     val errLine = RE_ERROR_LINE_NO.find(trimmedStart)?.groupValues?.get(1)?.toIntOrNull()
                     RinLogLine(LogKind.ERROR, trimmedStart, errorLine = errLine, indent = indent)
                 } else {
-                    val match = PREFIX_ORDER.firstOrNull { (prefix, _) -> trimmedStart.startsWith(prefix) }
-                    if (match != null) {
-                        val (prefix, kind) = match
-                        RinLogLine(kind, trimmedStart.removePrefix(prefix).trim(), indent = indent)
+                    val mark = RinContainerParser.parse(trimmedStart)
+                    if (mark != null && mark.role == ContainerRole.OPEN) {
+                        // سطر فتح حاوية: يُصنَّف دائماً STRUCTURE (كان 🧾/📦 يُصنَّفان DOC_INSERT/IMPORT خطأً
+                        // فيظهر حدث الحاوية في تبويب Events بنوع خاطئ) والنص بلا الأيقونة الأولى.
+                        RinLogLine(
+                            LogKind.STRUCTURE, trimmedStart.substringAfter(' ').trim(),
+                            indent = indent, container = mark
+                        )
                     } else {
-                        RinLogLine(LogKind.PLAIN, trimmedStart, indent = indent)
+                        val match = PREFIX_ORDER.firstOrNull { (prefix, _) -> trimmedStart.startsWith(prefix) }
+                        if (match != null) {
+                            val (prefix, kind) = match
+                            RinLogLine(kind, trimmedStart.removePrefix(prefix).trim(), indent = indent, container = mark)
+                        } else {
+                            RinLogLine(LogKind.PLAIN, trimmedStart, indent = indent, container = mark)
+                        }
                     }
                 }
             }
