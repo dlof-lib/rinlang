@@ -373,4 +373,7 @@ print \"Hello, \" + name + \"!\";
     <string name="link_copied">تم النسخ</string>
     <string name="link_share">مشاركة</string>
     <string name="link_copy">نسخ</string>
+    <string name="rin_input_title">إدخال</string>
+    <string name="rin_input_hint">اكتب إجابتك</string>
+    <string name="rin_input_default_prompt">البرنامج ينتظر إدخالاً</string>
 </resources>
