@@ -127,7 +127,9 @@ StmtPtr Parser::declaration() {
         bool followedByDeclaration =
             after.type == TokenType::LET || after.type == TokenType::FUN ||
             (after.type == TokenType::IDENT &&
-             (after.lexeme == "class" || after.lexeme == "struct" || after.lexeme == "enum"));
+             (after.lexeme == "class" || after.lexeme == "struct" || after.lexeme == "enum" ||
+              after.lexeme == "interface" || after.lexeme == "trait" ||
+              after.lexeme == "abstract" || after.lexeme == "final"));
         if (followedByDeclaration) {
             advance(); // 'export'
             StmtPtr inner = declaration();
@@ -140,6 +142,37 @@ StmtPtr Parser::declaration() {
     // OOP: 'class'/'struct'/'enum' كلمات سياقية غير محجوزة (بنفس أسلوب route/row/document/warp/
     // state أعلاه بالضبط)، مُميَّزة بالنظر خطوة إضافية للأمام (IDENT — اسم الصنف/التعداد — مباشرة
     // بعدها) حتى لا تصطدم باستخدام أي منها اسم متغيّر عادي في أي سياق آخر.
+    // Rin 1.4: 'abstract class X' / 'final class X' / 'abstract final class X' (المعدِّلات قبل 'class' فقط).
+    // نمسح للأمام فوق كلمات abstract/final المتتالية، ثم يجب أن نجد IDENT("class") يتبعها اسم الصنف،
+    // وإلا فهي مجرد اسم متغيّر/دالة عادي (مثلاً نداء `final(x)`) فلا نتدخّل.
+    if (check(TokenType::IDENT) && (peek().lexeme == "abstract" || peek().lexeme == "final")) {
+        size_t k = current;
+        bool abs = false, fin = false;
+        while (k < tokens.size() && tokens[k].type == TokenType::IDENT &&
+               (tokens[k].lexeme == "abstract" || tokens[k].lexeme == "final")) {
+            if (tokens[k].lexeme == "abstract") abs = true; else fin = true;
+            k++;
+        }
+        if (k + 1 < tokens.size() && tokens[k].type == TokenType::IDENT && tokens[k].lexeme == "class" &&
+            tokens[k + 1].type == TokenType::IDENT) {
+            if (abs && fin) {
+                throw errRich(diag::Code::E0013_InvalidExpression, peek(),
+                              "a class cannot be both 'abstract' and 'final'",
+                              "an abstract class exists only to be extended, while a final class can never be extended",
+                              "remove one of the two modifiers", "'abstract' or 'final'");
+            }
+            current = k + 1; // تجاوز المعدِّلات و'class'
+            return classDeclarationEx(false, ClassKind::Class, abs, fin);
+        }
+    }
+    if (check(TokenType::IDENT) && peek().lexeme == "interface" && checkNext(TokenType::IDENT)) {
+        advance(); // 'interface'
+        return classDeclarationEx(false, ClassKind::Interface, false, false);
+    }
+    if (check(TokenType::IDENT) && peek().lexeme == "trait" && checkNext(TokenType::IDENT)) {
+        advance(); // 'trait'
+        return classDeclarationEx(false, ClassKind::Trait, false, false);
+    }
     if (check(TokenType::IDENT) && peek().lexeme == "class" && checkNext(TokenType::IDENT)) {
         advance(); // 'class'
         return classDeclaration(false);
@@ -692,44 +725,204 @@ StmtPtr Parser::functionDeclaration() {
 // class Name [extends Base] { let field = expr; ... fun method(...) { ... } ... }
 // struct Name { ... }  -> نفس الصياغة بالضبط (isStruct يفرّق بينهما دلالياً وقت التشغيل فقط).
 StmtPtr Parser::classDeclaration(bool isStruct) {
-    auto name = consume(TokenType::IDENT,
-                         isStruct ? "Expected struct name after 'struct'" : "Expected class name after 'class'");
+    return classDeclarationEx(isStruct, ClassKind::Class, false, false);
+}
+
+// 'fun name(params)[: T] { body }'  أو، حين allowBodyless، 'fun name(params)[: T];' (توقيع بلا جسم:
+// دالة abstract أو توقيع داخل interface). يُستدعى بعد استهلاك 'fun' (أو 'get'/'set').
+std::shared_ptr<FunctionStmt> Parser::memberFunction(bool allowBodyless) {
+    if (!allowBodyless) return std::dynamic_pointer_cast<FunctionStmt>(functionDeclaration());
+    auto name = consume(TokenType::IDENT, "Expected method name after 'fun'");
+    consume(TokenType::LPAREN, "Expected '(' after method name");
+    std::vector<std::string> params;
+    std::vector<std::string> paramTypes;
+    if (!check(TokenType::RPAREN)) {
+        do {
+            params.push_back(consume(TokenType::IDENT, "Expected parameter name").lexeme);
+            std::string paramType;
+            if (match({TokenType::COLON})) paramType = consume(TokenType::IDENT, "Expected a type name after ':'").lexeme;
+            paramTypes.push_back(paramType);
+        } while (match({TokenType::COMMA}));
+    }
+    consume(TokenType::RPAREN, "Expected ')' after parameters");
+    std::string returnType;
+    if (match({TokenType::COLON})) returnType = consume(TokenType::IDENT, "Expected a type name after ':'").lexeme;
+    consume(TokenType::SEMICOLON, "Expected ';' after an abstract method signature (a signature has no body)");
+    auto fn = std::make_shared<FunctionStmt>();
+    fn->name = name.lexeme;
+    fn->params = params;
+    fn->paramTypes = paramTypes;
+    fn->returnType = returnType;
+    fn->body = std::make_shared<BlockStmt>();
+    fn->isAbstract = true;
+    fn->line = name.line;
+    return fn;
+}
+
+// صيغة موسَّعة (Rin 1.4):
+//   [abstract|final] class Name [extends Base] [implements A, B] [uses T1, T2] { ... }
+//   interface Name [extends A, B] { fun sig(a, b); ... }
+//   trait Name [uses T1] { let f = 1; fun m() { ... } ... }
+// وداخل الجسم تسبق let/fun المعدِّلات: public private protected static abstract final override،
+// ودوال الخصائص:  get name() { ... }   set name(v) { ... }
+StmtPtr Parser::classDeclarationEx(bool isStruct, ClassKind kind, bool isAbstract, bool isFinal) {
+    const char* what = kind == ClassKind::Interface ? "interface" : kind == ClassKind::Trait ? "trait"
+                       : isStruct ? "struct" : "class";
+    auto name = consume(TokenType::IDENT, std::string("Expected ") + what + " name after '" + what + "'");
     auto cls = std::make_shared<ClassStmt>();
     cls->name = name.lexeme;
     cls->isStruct = isStruct;
+    cls->kind = kind;
+    cls->isAbstract = isAbstract;
+    cls->isFinal = isFinal;
     cls->line = name.line;
 
-    // 'extends' كلمة سياقية غير محجوزة أيضاً، مُميَّزة بالنظر خطوة إضافية للأمام (IDENT اسم الصنف
-    // الأب مباشرة بعدها) — بلا فرق سلوكي بين class/struct هنا: كلاهما يقبل extends.
-    if (check(TokenType::IDENT) && peek().lexeme == "extends" && checkNext(TokenType::IDENT)) {
-        advance(); // 'extends'
-        cls->superclass = advance().lexeme;
+    auto readNameList = [&](std::vector<std::string>& out, const char* clause) {
+        do {
+            out.push_back(consume(TokenType::IDENT, std::string("Expected a name after '") + clause + "'").lexeme);
+        } while (match({TokenType::COMMA}));
+    };
+
+    // عبارات الترويسة: extends / implements / uses — كلمات سياقية غير محجوزة (يجب أن يتبعها IDENT).
+    while (check(TokenType::IDENT) && checkNext(TokenType::IDENT) &&
+           (peek().lexeme == "extends" || peek().lexeme == "implements" || peek().lexeme == "uses")) {
+        std::string clause = advance().lexeme;
+        if (clause == "extends") {
+            if (kind == ClassKind::Interface) {
+                readNameList(cls->interfaces, "extends");          // interface A extends B, C
+            } else if (kind == ClassKind::Trait) {
+                throw errRich(diag::Code::E0013_InvalidExpression, previous(),
+                              "a trait cannot use 'extends'", "traits are composed with 'uses', not inheritance",
+                              "write `trait Name uses Other { ... }` instead", "'uses'");
+            } else {
+                cls->superclass = advance().lexeme;                 // class B extends A
+            }
+        } else if (clause == "implements") {
+            if (kind != ClassKind::Class) {
+                throw errRich(diag::Code::E0013_InvalidExpression, previous(),
+                              std::string("'implements' is only valid on a class or struct, not on a ") + what,
+                              "an interface extends other interfaces; a class implements them",
+                              "use 'extends' for interfaces", "'extends'");
+            }
+            readNameList(cls->interfaces, "implements");
+        } else { // uses
+            if (kind == ClassKind::Interface) {
+                throw errRich(diag::Code::E0013_InvalidExpression, previous(),
+                              "an interface cannot use traits", "interfaces only declare signatures",
+                              "move 'uses' to the implementing class", "'extends'");
+            }
+            readNameList(cls->traits, "uses");
+        }
     }
 
-    consume(TokenType::LBRACE, isStruct ? "Expected '{' before struct body" : "Expected '{' before class body");
+    consume(TokenType::LBRACE, std::string("Expected '{' before ") + what + " body");
     while (!check(TokenType::RBRACE) && !isAtEnd()) {
+        // ---- المعدِّلات ----
+        std::string access;
+        bool mStatic = false, mAbstract = false, mFinal = false, mOverride = false;
+        int modCount = 0;
+        Token modTok = peek();
+        auto isModifierWord = [](const std::string& w) {
+            return w == "public" || w == "private" || w == "protected" || w == "static" ||
+                   w == "abstract" || w == "final" || w == "override";
+        };
+        while (check(TokenType::IDENT) && isModifierWord(peek().lexeme) && current + 1 < tokens.size() &&
+               (tokens[current + 1].type == TokenType::LET || tokens[current + 1].type == TokenType::FUN ||
+                tokens[current + 1].type == TokenType::IDENT)) {
+            Token m = advance();
+            modCount++;
+            if (m.lexeme == "public" || m.lexeme == "private" || m.lexeme == "protected") {
+                access = (m.lexeme == "public") ? std::string() : m.lexeme;
+            } else if (m.lexeme == "static") mStatic = true;
+            else if (m.lexeme == "abstract") mAbstract = true;
+            else if (m.lexeme == "final") mFinal = true;
+            else mOverride = true;
+        }
+
+        // ---- دوال الخصائص: get name() { } / set name(v) { } ----
+        if (check(TokenType::IDENT) && (peek().lexeme == "get" || peek().lexeme == "set") &&
+            checkNext(TokenType::IDENT) && current + 2 < tokens.size() &&
+            tokens[current + 2].type == TokenType::LPAREN) {
+            if (kind != ClassKind::Class && kind != ClassKind::Trait) {
+                throw errRich(diag::Code::E0013_InvalidExpression, peek(),
+                              std::string("property accessors are not allowed inside a ") + what,
+                              "'get'/'set' define computed properties with a body",
+                              "move the accessor into a class or trait", "'fun'");
+            }
+            Token kw = advance();
+            auto fn = memberFunction(mAbstract);
+            fn->accessorKind = (kw.lexeme == "get") ? 1 : 2;
+            if (fn->accessorKind == 1 && !fn->params.empty())
+                throw errRich(diag::Code::E0013_InvalidExpression, kw, "a getter takes no parameters",
+                              "`get " + fn->name + "()` is read as `obj." + fn->name + "`", "remove the parameters", "')'");
+            if (fn->accessorKind == 2 && fn->params.size() != 1)
+                throw errRich(diag::Code::E0013_InvalidExpression, kw, "a setter takes exactly one parameter",
+                              "`set " + fn->name + "(v)` is called by `obj." + fn->name + " = v`", "declare one parameter", "')'");
+            if (mStatic)
+                throw errRich(diag::Code::E0013_InvalidExpression, modTok, "static properties are not supported",
+                              "'get'/'set' work on instances", "use a `static fun` instead", "'fun'");
+            fn->access = access; fn->isFinal = mFinal; fn->isOverride = mOverride; fn->isAbstract = mAbstract;
+            cls->methods.push_back(fn);
+            continue;
+        }
+
         if (match({TokenType::FUN})) {
-            auto fn = std::dynamic_pointer_cast<FunctionStmt>(functionDeclaration());
+            bool bodyless = mAbstract || kind == ClassKind::Interface;
+            auto fn = memberFunction(bodyless);
+            fn->access = access; fn->isStatic = mStatic; fn->isFinal = mFinal; fn->isOverride = mOverride;
+            if (kind == ClassKind::Interface) {
+                if (modCount > 0 && (mStatic || mFinal || mOverride || !access.empty()))
+                    throw errRich(diag::Code::E0013_InvalidExpression, modTok,
+                                  "interface methods are always public abstract signatures",
+                                  "an interface only lists the methods an implementing class must provide",
+                                  "remove the modifiers", "'fun'");
+                fn->isAbstract = true;
+            } else if (mAbstract) {
+                if (kind == ClassKind::Class && !isAbstract)
+                    throw errRich(diag::Code::E0013_InvalidExpression, modTok,
+                                  "abstract method `" + fn->name + "` declared in non-abstract class `" + cls->name + "`",
+                                  "only an abstract class (or a trait) may declare abstract methods",
+                                  "write `abstract class " + cls->name + " { ... }`", "'abstract class'");
+                if (mStatic || mFinal)
+                    throw errRich(diag::Code::E0013_InvalidExpression, modTok,
+                                  "an abstract method cannot be static or final",
+                                  "abstract methods exist to be overridden by subclasses", "remove the modifier", "'fun'");
+                fn->isAbstract = true;
+            }
+            if (kind == ClassKind::Trait && mStatic)
+                throw errRich(diag::Code::E0013_InvalidExpression, modTok, "static members are not supported inside a trait",
+                              "a trait is mixed into instances", "declare the static member in the class itself", "'fun'");
             cls->methods.push_back(fn);
             continue;
         }
         if (match({TokenType::LET})) {
+            if (kind == ClassKind::Interface)
+                throw errRich(diag::Code::E0013_InvalidExpression, previous(), "an interface cannot declare fields",
+                              "an interface is a contract of methods only",
+                              "declare the field in the implementing class", "'fun'");
+            if (mAbstract || mOverride)
+                throw errRich(diag::Code::E0013_InvalidExpression, modTok, "'abstract'/'override' apply to methods, not fields",
+                              "fields have no body to override", "remove the modifier", "'let'");
+            if (kind == ClassKind::Trait && mStatic)
+                throw errRich(diag::Code::E0013_InvalidExpression, modTok, "static members are not supported inside a trait",
+                              "a trait is mixed into instances", "declare the static member in the class itself", "'let'");
             auto letStmt = std::dynamic_pointer_cast<LetStmt>(letDeclaration());
             ClassFieldDecl fd;
             fd.name = letStmt->name;
             fd.initializer = letStmt->initializer;
+            fd.access = access; fd.isStatic = mStatic; fd.isFinal = mFinal;
             cls->fields.push_back(std::move(fd));
             continue;
         }
         throw errRich(diag::Code::E0013_InvalidExpression, peek(),
-                      "expected a field ('let') or method ('fun') inside " +
-                          std::string(isStruct ? "struct" : "class") + " body",
-                      "only field declarations (`let name = value;`) and method declarations "
-                      "(`fun name(...) { ... }`) are allowed directly inside a class/struct body",
+                      std::string("expected a field ('let') or method ('fun') inside ") + what + " body",
+                      "only field declarations (`let name = value;`), method declarations "
+                      "(`fun name(...) { ... }`) and property accessors (`get name() { ... }`) are allowed directly "
+                      "inside a class/struct/trait body (modifiers: public private protected static abstract final override)",
                       "add 'let' before a field or 'fun' before a method",
                       "'let' or 'fun'");
     }
-    consume(TokenType::RBRACE, isStruct ? "Expected '}' after struct body" : "Expected '}' after class body");
+    consume(TokenType::RBRACE, std::string("Expected '}' after ") + what + " body");
     return cls;
 }
 
@@ -2584,12 +2777,32 @@ ExprPtr Parser::equality() {
 
 ExprPtr Parser::comparison() {
     auto expr = term();
-    while (match({TokenType::LESS, TokenType::LESS_EQUAL, TokenType::GREATER, TokenType::GREATER_EQUAL})) {
-        auto op = previous().type;
-        auto right = term();
-        auto b = std::make_shared<BinaryExpr>();
-        b->left = expr; b->op = op; b->right = right;
-        expr = b;
+    for (;;) {
+        if (match({TokenType::LESS, TokenType::LESS_EQUAL, TokenType::GREATER, TokenType::GREATER_EQUAL})) {
+            auto op = previous().type;
+            auto right = term();
+            auto b = std::make_shared<BinaryExpr>();
+            b->left = expr; b->op = op; b->right = right;
+            expr = b;
+            continue;
+        }
+        // Rin 1.4: `value instanceof ClassName` -> oop.isInstance(value, "ClassName")
+        // كلمة سياقية (IDENT) يتبعها اسم نوع، فلا تتعارض مع أي متغيّر يحمل الاسم نفسه.
+        if (check(TokenType::IDENT) && peek().lexeme == "instanceof" && checkNext(TokenType::IDENT)) {
+            Token kw = advance();
+            Token cls = advance();
+            auto c = std::make_shared<CallExpr>();
+            c->callee = "oop.isInstance";
+            c->line = kw.line;
+            auto lit = std::make_shared<LiteralExpr>();
+            lit->kind = LiteralExpr::Kind::STRING;
+            lit->str = cls.lexeme;
+            c->args.push_back(expr);
+            c->args.push_back(lit);
+            expr = c;
+            continue;
+        }
+        break;
     }
     return expr;
 }
