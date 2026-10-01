@@ -122,7 +122,8 @@ struct StructuredRunOutcome {
 // rin_interpreter.h/.cpp). فارغة (nullptr) => نفس سلوك runSourceStructuredNative القديم تمامًا،
 // بلا أي تغيير في التوقيت أو الناتج.
 StructuredRunOutcome runStructuredCore(const std::string& source, const std::string& baseDir,
-                                        rin::Interpreter::StreamSink sink) {
+                                        rin::Interpreter::StreamSink sink,
+                                        rin::Interpreter::InputProvider inputProvider = nullptr) {
     StructuredRunOutcome r;
     try {
         rin::Lexer lexer(source);
@@ -135,6 +136,9 @@ StructuredRunOutcome runStructuredCore(const std::string& source, const std::str
         }
         if (sink) {
             interpreter.setStreamSink(std::move(sink));
+        }
+        if (inputProvider) {
+            interpreter.setInputProvider(std::move(inputProvider));
         }
         r.output = interpreter.run(statements);
         if (interpreter.hadError()) {
@@ -249,6 +253,67 @@ Java_com_dlof_rinlang_RinEngine_runSourceStructuredStreamingNative(JNIEnv* env, 
     }
 
     StructuredRunOutcome outcome = runStructuredCore(source, baseDir, std::move(sink));
+    return env->NewStringUTF(structuredOutcomeToJson(outcome).c_str());
+}
+
+// runSourceInteractiveNative(source, baseDir, listener, inputHandler) -> نفس JSON النتيجة الذي تعيده
+// runSourceStructuredStreamingNative تماماً، لكن مع دعم دوال الإدخال في لغة Rin
+// (input / inputNumber / confirm / choose): كلما احتاج البرنامج إدخالاً يستدعي المحرك
+// inputHandler.onInput(prompt) *بشكل متزامن على نفس الترد* (نفس عقد onChunk: لا AttachCurrentThread
+// ولا GlobalRef)، فتحجب الدالة ترد التشغيل حتى يجيب المستخدم (أو يُلغي: تعيد Kotlin null).
+// [listener] و[inputHandler] كلاهما اختياري (null => يتصرف كأنه غير موجود).
+extern "C" JNIEXPORT jstring JNICALL
+Java_com_dlof_rinlang_RinEngine_runSourceInteractiveNative(JNIEnv* env, jobject /* this */,
+                                                            jstring sourceJStr, jstring baseDirJStr,
+                                                            jobject listener, jobject inputHandler) {
+    std::string source = jstringOrEmpty(env, sourceJStr);
+    std::string baseDir = jstringOrEmpty(env, baseDirJStr);
+
+    jmethodID onChunkMethod = nullptr;
+    if (listener != nullptr) {
+        jclass listenerClass = env->GetObjectClass(listener);
+        onChunkMethod = env->GetMethodID(listenerClass, "onChunk", "(ILjava/lang/String;)V");
+        env->DeleteLocalRef(listenerClass);
+        if (onChunkMethod == nullptr) env->ExceptionClear();
+    }
+    jmethodID onInputMethod = nullptr;
+    if (inputHandler != nullptr) {
+        jclass handlerClass = env->GetObjectClass(inputHandler);
+        onInputMethod = env->GetMethodID(handlerClass, "onInput", "(Ljava/lang/String;)Ljava/lang/String;");
+        env->DeleteLocalRef(handlerClass);
+        if (onInputMethod == nullptr) env->ExceptionClear();
+    }
+
+    int seq = 0;
+    rin::Interpreter::StreamSink sink;
+    if (onChunkMethod != nullptr) {
+        sink = [env, listener, onChunkMethod, &seq](const std::string& chunk) {
+            ++seq;
+            jstring jchunk = env->NewStringUTF(chunk.c_str());
+            env->CallVoidMethod(listener, onChunkMethod, static_cast<jint>(seq), jchunk);
+            env->DeleteLocalRef(jchunk);
+            if (env->ExceptionCheck()) env->ExceptionClear();
+        };
+    }
+
+    rin::Interpreter::InputProvider provider;
+    if (onInputMethod != nullptr) {
+        provider = [env, inputHandler, onInputMethod](const std::string& prompt, std::string& answer) -> bool {
+            jstring jprompt = env->NewStringUTF(prompt.c_str());
+            jobject res = env->CallObjectMethod(inputHandler, onInputMethod, jprompt);
+            env->DeleteLocalRef(jprompt);
+            if (env->ExceptionCheck()) {  // استثناء داخل المعالج => عامله كإلغاء (لا تُسقط المحرك)
+                env->ExceptionClear();
+                return false;
+            }
+            if (res == nullptr) return false;  // null = ألغى المستخدم الإدخال
+            answer = jstringOrEmpty(env, static_cast<jstring>(res));
+            env->DeleteLocalRef(res);
+            return true;
+        };
+    }
+
+    StructuredRunOutcome outcome = runStructuredCore(source, baseDir, std::move(sink), std::move(provider));
     return env->NewStringUTF(structuredOutcomeToJson(outcome).c_str());
 }
 
