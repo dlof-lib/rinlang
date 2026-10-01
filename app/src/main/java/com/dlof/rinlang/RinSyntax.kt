@@ -160,51 +160,88 @@ private data class LineState(val inBlockComment: Boolean = false)
 // لغة Rin — الماسح الأغنى (كلمات اللغة الأساسية + لغة الحاويات + دوال مدمجة + وسوم @).
 // ====================================================================================
 private object RinLexer {
+    // <rin-keywords:begin> — مُولَّد بـ scripts/gen_keywords.py من المحرّك (rin_lexer.cpp + natives)؛ لا تعدّل يدوياً
     val coreKeywords = setOf(
-        "let", "print", "show", "rinopen", "if", "else", "while", "for", "fun", "return", "break",
-        "continue", "true", "false", "nil", "and", "or", "reckon", "where"
+        "if", "else", "while", "for", "return", "break", "continue", "rinopen", "and", "or", "let",
+        "fun", "text", "print", "show", "true", "false", "nil", "reckon", "where"
     )
     val containerKeywords = setOf(
-        "text",
-        // 'warp' is a contextual reactive-state declaration (same role as 'let'); 'set'/'define'/
-        // 'declare'/'create'/'var' are further contextual synonyms for 'let' itself (Parser::
-        // declaration(), rin_parser.cpp — same file/pattern as 'make' below, only recognized when
-        // directly followed by an identifier) — all storage.type.rin in syntaxes/rin.tmLanguage.json.
-        "warp", "set", "define", "declare", "create", "var",
-        "container", "Containers", "Group", "Volume", "Section",
-        "Translations", "translation", "link", "tying", "merge",
-        "installation", "simplified", "save", "file", "end",
-        "row", "style", "document", "route",
-        "data", "api", "import", "table", "doc", "portal", "block", "pipe",
-        "plus", "condition", "loop", "function", "view", "chatbot", "element", "on",
-        "button", "input", "search", "image", "video", "audio", "progress",
-        "checkbox", "radio", "switch", "slider", "select", "list", "column", "box",
-        "card", "sidebar", "popup", "modal", "tabs", "code_editor", "calculator", "divider",
-        "date", "time", "dropdown", "range", "listitem", "direction",
-        "kind", "use", "need", "allow", "deny", "strict", "input", "output", "public", "private",
-        "version", "description", "item",
-        "txt", "img", "object", "Fonts", "background", "css3"
+        "make", "warp", "container", "Containers", "Group", "Volume", "Section", "Translations",
+        "translation", "link", "tying", "merge", "installation", "simplified", "save", "file", "end",
+        "pipe", "document", "route", "row", "table", "style", "data", "api", "import", "doc", "portal",
+        "block", "object", "kind", "use", "need", "allow", "deny", "strict", "input", "output",
+        "public", "private", "version", "description", "plus", "condition", "loop", "function", "view",
+        "chatbot", "element", "on", "button", "search", "image", "video", "audio", "progress",
+        "checkbox", "radio", "switch", "slider", "select", "list", "column", "box", "card", "sidebar",
+        "popup", "modal", "tabs", "code_editor", "calculator", "divider", "date", "time", "dropdown",
+        "listitem", "direction", "background", "state", "theme", "slot", "emit", "event", "class",
+        "struct", "interface", "trait", "enum", "extends", "implements", "uses", "instanceof",
+        "abstract", "final", "override", "static", "protected", "get", "set", "self", "super", "when",
+        "otherwise", "unless", "match", "case", "goal", "achieve", "item"
     )
     val builtins = setOf(
-        "Addition", "Subtraction", "Multiplication", "Equal",
-        "abs", "sqrt", "pow", "floor", "ceil", "round", "min", "max", "random",
-        "len", "upper", "lower", "trim", "substr", "split", "join",
-        "indexOf", "replace", "contains", "charAt", "toString", "toNumber", "toBool", "isBool",
-        "push", "pop", "sort", "keys", "values", "has", "remove",
-        "sum", "mean", "median", "variance", "stddev", "mode", "minOf", "maxOf",
-        "normalize", "scale", "shift", "product", "count", "range", "geometricMean",
-        "harmonicMean", "rms", "percentile", "iqr", "weightedMean", "zscore",
-        "cumulativeSum", "movingAverage", "clamp",
-        "groupContainers", "groupMembers", "sectionVars", "sectionNames", "hasSection",
-        "insertDoc", "updateDoc", "deleteDoc", "findDoc", "queryDocs", "queryOneDoc",
-        "docIds", "allDocs", "countDocs", "call", "callApi",
-        "writeFile", "appendFile", "readFile", "fileExists", "deleteFile",
-        "isInstalled", "listInstalled", "loadInstalled",
-        "chr", "ord", "bytesFromArray", "crc32", "adler32",
-        "make", "make.qr", "make.barcode", "make.file", "make.filename", "make.uuid", "make.hash",
-        "qr", "barcode", "filename", "uuid", "hash", "artifact.info", "container.make.qr",
-        "container.make.barcode", "container.make.file", "container.artifact.info"
+        "Addition", "Equal", "Multiplication", "Subtraction", "abs", "acos", "adler32", "all",
+        "allDocs", "any", "apiCall", "apiDelete", "apiGet", "apiHeader", "apiPatch", "apiPost",
+        "apiPut", "apiRegister", "appendFile", "appliedMigrations", "arabicNormalize",
+        "arabicStripDiacritics", "asin", "assert", "assertEq", "atan", "atan2", "attachToChat",
+        "bannerDismiss", "bannerError", "bannerInfo", "bannerSuccess", "bannerWarning", "barcode",
+        "beginTransaction", "between", "botReply", "botReplyCode", "botReplyMarkdown", "buildA",
+        "buildCom", "buildDll", "buildDylib", "buildExe", "buildLib", "buildSo", "bytesFromArray",
+        "cacheClear", "cacheDelete", "cacheGet", "cacheHas", "cacheKeys", "cacheSet", "call",
+        "callApi", "callFn", "candleByRelation", "candleChain", "candleCount", "candleDepth",
+        "candleExists", "candleInfo", "candleLeaves", "candleRelation", "candleRoots", "candleSources",
+        "candleTargets", "candleTree", "cbrt", "ceil", "charAt", "chatHistory", "chatMessageCount",
+        "childrenOf", "choose", "chr", "clamp", "clcContainerClose", "clcContainerFileCount",
+        "clcContainerFileName", "clcContainerMetaName", "clcContainerMetaVersion", "clcContainerOpen",
+        "clearChat", "closeChat", "coalesce", "colorAnsi", "colorBlend", "colorComponents",
+        "colorContrast", "colorDarken", "colorGrayscale", "colorHsl", "colorHsla", "colorInvert",
+        "colorIsLight", "colorLighten", "colorLuminance", "colorMix", "colorParse", "colorRgb",
+        "colorRgba", "colorTextOn", "colorToHsl", "colorToHslaString", "colorToRgbaString",
+        "colorValid", "colorWithAlpha", "commitTransaction", "concat", "confirm", "containerNames",
+        "contains", "cos", "count", "countDocs", "crc32", "create", "createIndex", "cumulativeSum",
+        "deepCopy", "deepMerge", "defineMigration", "defineRelation", "defineSchema", "deleteDoc",
+        "deleteFile", "destroyContainer", "detectScript", "docIds", "dropIndex", "dropSchema", "empty",
+        "entries", "exp", "exportChat", "extinguish", "extinguishAll", "fail", "fetchIcon",
+        "fetchImage", "fileExists", "filename", "findByIndex", "findDoc", "findMask", "flatten",
+        "floor", "fromEntries", "geometricMean", "getField", "getPath", "getSchema",
+        "groupContainerCount", "groupContainers", "groupHasContainer", "groupMembers", "groupNames",
+        "groupParent", "groupPath", "groupSnapshot", "groupVars", "harmonicMean", "has",
+        "hasContainer", "hasField", "hasGroup", "hasSection", "hasVolume", "hash", "httpDelete",
+        "httpGet", "httpPatch", "httpPost", "httpPut", "httpRequest", "httpSetTimeout",
+        "inTransaction", "indexOf", "inputNumber", "insertDoc", "iqr", "is", "isArray", "isBool",
+        "isChatTyping", "isFunction", "isInstalled", "isMap", "isNil", "isNot", "isNumber", "isString",
+        "join", "jsonDecode", "jsonEncode", "key_terms", "keys", "kindOf", "lastChatMessage",
+        "lastIndexOf", "len", "lerp", "levenshtein", "libraryExport", "light", "listIndexes",
+        "listInstalled", "listRelations", "ln", "loadInstalled", "log", "log10", "logClear",
+        "logHistory", "logSave", "lower", "mask", "maskActive", "maskAlias", "maskAliases",
+        "maskByNamespace", "maskByTag", "maskChildren", "maskChildrenOf", "maskClearRefs",
+        "maskClearTags", "maskCompare", "maskCount", "maskDepth", "maskDescendants", "maskDetach",
+        "maskDisable", "maskEnable", "maskExists", "maskHasAllTags", "maskHasAnyTag", "maskHasRef",
+        "maskHasTag", "maskInfo", "maskKind", "maskKindCount", "maskKinds", "maskLock", "maskLocked",
+        "maskMembers", "maskNames", "maskNamespace", "maskNote", "maskOf", "maskParent",
+        "maskParentGet", "maskParentSet", "maskRef", "maskRefs", "maskResolve", "maskRoot",
+        "maskSummary", "maskTag", "maskTags", "maskTarget", "maskUnref", "maskUntag", "maskVersion",
+        "max", "maxOf", "mean", "median", "mergeMaps", "min", "minOf", "mode", "movingAverage", "none",
+        "normalize", "now", "offChat", "omitKeys", "onChat", "openChat", "ord", "padEnd", "padStart",
+        "parentOf", "pattern", "pendingMigrations", "percentile", "pickKeys", "pop", "pow", "product",
+        "publish", "push", "qr", "queryDocs", "queryOneDoc", "random", "range", "readFile",
+        "regexFind", "regexFindAll", "regexGroups", "regexReplace", "regexSplit", "regexTest",
+        "relatedDocs", "remove", "repeat", "replace", "reverse", "rinEdition", "rinVersion", "rms",
+        "rollbackMigration", "rollbackTransaction", "round", "run", "runMigration", "scale",
+        "sectionNames", "sectionVars", "seed", "sendMessage", "setChatTyping", "setField", "setPath",
+        "setState", "shift", "siblingsOf", "sign", "sin", "slice", "slotsOf", "sort", "spawn", "split",
+        "splitSentences", "sql", "sqlAvg", "sqlCount", "sqlDelete", "sqlExists", "sqlExplain",
+        "sqlGroupBy", "sqlGroupSum", "sqlIds", "sqlMax", "sqlMin", "sqlOne", "sqlPluck", "sqlSum",
+        "sqlUpdate", "sqlValidate", "sqrt", "stddev", "str", "streamReply", "subscribe", "substr",
+        "sum", "tan", "toBool", "toHex", "toNumber", "toString", "tokenType", "tokenizeWords",
+        "tokens", "trim", "trimEnd", "trimStart", "trunc", "type", "typeIs", "unsubscribe", "unwatch",
+        "updateDoc", "upper", "utf8CharAt", "utf8Len", "utf8Reverse", "utf8Substr", "utf8ToArray",
+        "uuid", "validateDoc", "values", "variance", "volumeContainerCount", "volumeContainers",
+        "volumeHasContainer", "volumeMembers", "volumeNames", "volumeParent", "volumePath",
+        "volumeSnapshot", "volumeVars", "watch", "weightedMean", "writeFile", "zlibDeflateRaw",
+        "zlibInflateRaw", "zscore"
     )
+    // <rin-keywords:end>
 
     fun tokenize(lines: List<String>): List<RinEditorEngine.Highlight> {
         val out = ArrayList<RinEditorEngine.Highlight>()
