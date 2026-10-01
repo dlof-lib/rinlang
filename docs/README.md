@@ -15,6 +15,7 @@
 - [`functions.md`](./functions.md) — `fun`/`return`، التكرار الذاتي (recursion).
 - [`enums.md`](./enums.md) — `enum`: قوائم اختيار (options) مغلقة.
 - [`objects.md`](./objects.md) — `@Object`، `.object("id")`، القاموس الحرفي.
+- [`oop.md`](./oop.md) — OOP الموسَّع (Rin 1.4): `interface` · `trait` · `abstract/final/override` · `static` · `private/protected` · `get/set` · عوامل سحرية · دوال `oop.*`.
 - [`containers.md`](./containers.md) — `@container`، أقسام، ترجمات، مستندات NoSQL.
 - [`cross-file-containers.md`](./cross-file-containers.md) — `use ... from` (English) — calling a container/UI element from another file.
 - [`boat.md`](./boat.md)
