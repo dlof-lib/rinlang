@@ -2170,9 +2170,26 @@ void Interpreter::registerNatives() {
         }
     };
     // ====================== إدخال المستخدم ======================
+    // مبدأ التصميم: دوال الإدخال الأربع (input / inputNumber / confirm / choose) لا تخترع منطقاً جديداً —
+    // كل مرحلة تُفوَّض إلى مفهوم موجود أصلاً في اللغة (بالاستدعاء، لا بالنسخ):
+    //   • قراءة السطر      : askRaw — نقطة I/O وحيدة (نافذة أندرويد عبر InputProvider، أو stdin)
+    //   • تنظيف/تطبيع النص : natives["trim"] · natives["lower"]
+    //   • نص → رقم         : natives["toNumber"]
+    //   • نعم/لا           : natives["contains"] على مصفوفة كلمات الموافقة
+    //   • التحقق           : callValue(...) — أي `fun` أو كائن OOP يعرّف __call__
+    //   • مصادر الخيارات   : مصفوفة | قاموس | enum | كائن (oop.toMap) | حاوية (container.fieldNames + getField)
+    //   • تسمية الخيار     : oop.get على name/title/label (للكائنات والقواميس وحالات enum)
+    //   • تسليم النتيجة    : setField (حاوية) · oop.set (كائن/قاموس) — فتعمل الصلاحيات و`set` والتجميد
+    //                         والمراقبون وروابط OOP/Indsin كلها كما لو كُتبت القيمة يدوياً.
+    // التوقيعات القديمة تعمل كما هي حرفياً؛ كل ما أُضيف وسائط اختيارية في آخر القائمة.
+    struct InArgs {
+        std::string prompt;
+        bool hasValidator = false; Value validator;
+        bool hasTarget = false;    Value target; std::string key;
+    };
     // askRaw: نقطة واحدة تقرأ سطراً من المستخدم — عبر InputProvider (نافذة على أندرويد) أو stdin (CLI).
     // يعيد false إذا ألغى المستخدم/انتهى الإدخال بلا بيانات (EOF في stdin يُعامَل كإلغاء فقط حين
-    // يكون الإدخال مطلوباً رقماً أو اختياراً؛ أما input() العادية فتعيد "" عند EOF).
+    // يكون الإدخال مطلوباً رقماً أو اختياراً أو مُدقَّقاً؛ أما input() العادية فتعيد "" عند EOF).
     auto askRaw = [this](const std::string& prompt, std::string& answer, bool& eof) -> bool {
         eof = false;
         if (inputProvider_) {
@@ -2191,71 +2208,169 @@ void Interpreter::registerNatives() {
         if (!answer.empty() && answer.back() == '\r') answer.pop_back();
         return true;
     };
-    auto promptArg = [](std::vector<Value>& a, const std::string& fn, int line) -> std::string {
-        if (a.empty()) return "";
-        if (a.size() > 1) {
-            throw diagErr(diag::Code::E0007_InvalidArguments, line,
-                          "'" + fn + "' expects 0 or 1 argument(s) but got " + std::to_string(a.size()));
+    // callNat: استدعاء دالة مبنية موجودة بالاسم (نفس ما يفعله `name(args)` في كود Rin).
+    auto callNat = [this](const char* fn, std::vector<Value> args, int line) -> Value {
+        auto it = natives.find(fn);
+        if (it == natives.end())
+            throw diagErr(diag::Code::E0035_RuntimeError, line, std::string("input: الدالة المبنية '") + fn + "' غير مسجَّلة");
+        return it->second(args, line);
+    };
+    // parseArgs: [prompt] [validator] [target, key] — فهرس أول وسيط إضافي يحدده المستدعي.
+    auto parseArgs = [this](const std::string& fn, std::vector<Value>& a, size_t firstExtra, bool allowValidator, int line) -> InArgs {
+        InArgs ia;
+        if (!a.empty()) ia.prompt = a[0].type == Value::Type::STRING ? a[0].str : a[0].toDisplayString();
+        size_t i = firstExtra;
+        if (allowValidator && i < a.size() &&
+            (a[i].type == Value::Type::FUNCTION || (a[i].type == Value::Type::INSTANCE && hasMagic(a[i], "__call__")))) {
+            ia.hasValidator = true; ia.validator = a[i]; ++i;
         }
-        return a[0].type == Value::Type::STRING ? a[0].str : a[0].toDisplayString();
+        size_t rest = a.size() > i ? a.size() - i : 0;
+        if (rest == 0) return ia;
+        if (rest != 2)
+            throw diagErr(diag::Code::E0007_InvalidArguments, line,
+                          "'" + fn + "': الوسائط الإضافية إمّا (target, key) أو " + (allowValidator ? "(validator) أو (validator, target, key)" : "لا شيء"));
+        const Value& t = a[i]; const Value& k = a[i + 1];
+        if (k.type != Value::Type::STRING)
+            throw diagErr(diag::Code::E0004_InvalidType, line, "'" + fn + "': اسم الحقل (key) يجب أن يكون نصاً");
+        if (t.type == Value::Type::STRING) {
+            if (!containers.count(t.str))   // افحص قبل أن نسأل المستخدم، لا بعد أن يكتب إجابته
+                throw errWithReason(diag::Code::E0014_InvalidContainer, line,
+                                    "'" + t.str + "' is not a known container",
+                                    "create it first via `@container=" + t.str + "`");
+        } else if (t.type != Value::Type::MAP && t.type != Value::Type::INSTANCE) {
+            throw diagErr(diag::Code::E0004_InvalidType, line,
+                          "'" + fn + "': الهدف يجب أن يكون اسم حاوية أو كائناً أو قاموساً، لا " + t.typeName());
+        }
+        ia.hasTarget = true; ia.target = t; ia.key = k.str;
+        return ia;
     };
-    // input(prompt?) -> string : سطر نصي يكتبه المستخدم.
-    natives["input"] = [askRaw, promptArg](std::vector<Value>& a, int line) -> Value {
-        std::string prompt = promptArg(a, "input", line);
-        std::string ans; bool eof = false;
-        if (!askRaw(prompt, ans, eof)) throw diagErr(diag::Code::E0035_RuntimeError, line, "تم إلغاء الإدخال (input)");
-        return Value::string(ans);
+    // validate: true إن قُبلت القيمة. المُدقِّق يعيد true للقبول؛ نصاً => رفض مع سبب؛ أي شيء "كاذب" => رفض.
+    auto validate = [this](const InArgs& ia, const Value& v, std::string& why, int line) -> bool {
+        why.clear();
+        if (!ia.hasValidator) return true;
+        std::vector<Value> args{v};
+        Value r = callValue(ia.validator, args, line);
+        if (r.type == Value::Type::STRING) { why = r.str; return false; }
+        return r.isTruthy();
     };
-    // inputNumber(prompt?) -> number : يعيد السؤال حتى يُدخل المستخدم رقماً صالحاً (حتى 5 محاولات).
-    natives["inputNumber"] = [askRaw, promptArg](std::vector<Value>& a, int line) -> Value {
-        std::string prompt = promptArg(a, "inputNumber", line);
+    // deliver: يسلّم القيمة للهدف عبر الدوال الموجودة (إن وُجد هدف) ثم يعيدها.
+    auto deliver = [callNat](const InArgs& ia, const Value& v, int line) -> Value {
+        if (!ia.hasTarget) return v;
+        if (ia.target.type == Value::Type::STRING) callNat("setField", {ia.target, Value::string(ia.key), v}, line);
+        else                                       callNat("oop.set",  {ia.target, Value::string(ia.key), v}, line);
+        return v;
+    };
+    auto cancelErr = [](const char* fn, int line) {
+        return diagErr(diag::Code::E0035_RuntimeError, line, std::string("تم إلغاء الإدخال (") + fn + ")");
+    };
+
+    // input(prompt?, validator?, target?, key?) -> string
+    natives["input"] = [askRaw, parseArgs, validate, deliver, cancelErr](std::vector<Value>& a, int line) -> Value {
+        InArgs ia = parseArgs("input", a, 1, true, line);
+        const int attempts = ia.hasValidator ? 5 : 1;
+        std::string why;
+        for (int attempt = 0; attempt < attempts; ++attempt) {
+            std::string ans; bool eof = false;
+            std::string shown = attempt == 0 ? ia.prompt : ("[" + why + "] " + ia.prompt);
+            if (!askRaw(shown, ans, eof)) throw cancelErr("input", line);
+            if (eof && ia.hasValidator) throw cancelErr("input", line);
+            Value v = Value::string(ans);
+            if (validate(ia, v, why, line)) return deliver(ia, v, line);
+            if (why.empty()) why = "قيمة غير مقبولة";
+        }
+        throw diagErr(diag::Code::E0035_RuntimeError, line, "'input': لم تُقبل القيمة بعد 5 محاولات");
+    };
+    // inputNumber(prompt?, validator?, target?, key?) -> number — النص يمرّ عبر trim ثم toNumber الموجودتين.
+    natives["inputNumber"] = [askRaw, callNat, parseArgs, validate, deliver, cancelErr](std::vector<Value>& a, int line) -> Value {
+        InArgs ia = parseArgs("inputNumber", a, 1, true, line);
+        std::string why;
         for (int attempt = 0; attempt < 5; ++attempt) {
             std::string ans; bool eof = false;
-            std::string shown = attempt == 0 ? prompt : ("[أدخل رقماً صالحاً] " + prompt);
-            if (!askRaw(shown, ans, eof) || eof) throw diagErr(diag::Code::E0035_RuntimeError, line, "تم إلغاء الإدخال (inputNumber)");
-            size_t b = ans.find_first_not_of(" \t"), e = ans.find_last_not_of(" \t");
-            if (b == std::string::npos) continue;
-            ans = ans.substr(b, e - b + 1);
-            try {
-                size_t idx = 0;
-                double d = std::stod(ans, &idx);
-                if (idx == ans.size()) return Value::num(d);
-            } catch (...) {}
+            std::string shown = attempt == 0 ? ia.prompt
+                              : ("[" + (why.empty() ? std::string("أدخل رقماً صالحاً") : why) + "] " + ia.prompt);
+            if (!askRaw(shown, ans, eof) || eof) throw cancelErr("inputNumber", line);
+            Value t = callNat("trim", {Value::string(ans)}, line);
+            why.clear();
+            if (t.str.empty()) continue;
+            Value num;
+            try { num = callNat("toNumber", {t}, line); } catch (const RinError&) { continue; }
+            // toNumber تقبل بادئة رقمية ("12abc" => 12)؛ هنا نطلب نصاً رقمياً كاملاً.
+            { char* end = nullptr; std::strtod(t.str.c_str(), &end); if (!end || *end != '\0') continue; }
+            if (validate(ia, num, why, line)) return deliver(ia, num, line);
+            if (why.empty()) why = "قيمة غير مقبولة";
         }
         throw diagErr(diag::Code::E0035_RuntimeError, line, "'inputNumber': لم يُدخَل رقم صالح بعد 5 محاولات");
     };
-    // confirm(prompt?) -> bool : نعم/لا (y/yes/نعم/1/true => true).
-    natives["confirm"] = [askRaw, promptArg](std::vector<Value>& a, int line) -> Value {
-        std::string prompt = promptArg(a, "confirm", line);
+    // confirm(prompt?, target?, key?) -> bool — trim + lower + contains(كلمات الموافقة).
+    natives["confirm"] = [askRaw, callNat, parseArgs, deliver, cancelErr](std::vector<Value>& a, int line) -> Value {
+        InArgs ia = parseArgs("confirm", a, 1, false, line);
         std::string ans; bool eof = false;
-        if (!askRaw(prompt, ans, eof) || eof) throw diagErr(diag::Code::E0035_RuntimeError, line, "تم إلغاء الإدخال (confirm)");
-        std::string t;
-        for (unsigned char ch : ans) if (ch != ' ' && ch != '\t') t.push_back(static_cast<char>(std::tolower(ch)));
-        return Value::boolean_(t == "y" || t == "yes" || t == "true" || t == "1" || t == "نعم" || t == "ن");
+        if (!askRaw(ia.prompt, ans, eof) || eof) throw cancelErr("confirm", line);
+        Value t = callNat("lower", {callNat("trim", {Value::string(ans)}, line)}, line);
+        auto yes = std::make_shared<ArrayData>();
+        for (const char* w : {"y", "yes", "true", "1", "نعم", "ن"}) yes->push_back(Value::string(w));
+        return deliver(ia, callNat("contains", {Value::makeArray(yes), t}, line), line);
     };
-    // choose(prompt, options) -> العنصر المختار من المصفوفة (الإدخال: رقمه 1-based أو نصه بالضبط).
-    natives["choose"] = [askRaw](std::vector<Value>& a, int line) -> Value {
-        expectArgs("choose", a, 2, line);
+    // choose(prompt, options, target?, key?) — options: مصفوفة | قاموس | enum | كائن | اسم حاوية.
+    // يختار المستخدم برقم الخيار (من 1) أو بتسميته؛ والنتيجة هي *قيمة* الخيار (حالة enum نفسها، قيمة الحقل، …).
+    natives["choose"] = [this, askRaw, callNat, parseArgs, deliver, cancelErr](std::vector<Value>& a, int line) -> Value {
+        if (a.size() < 2)
+            throw diagErr(diag::Code::E0007_InvalidArguments, line, "'choose' expects at least 2 argument(s) but got " + std::to_string(a.size()));
+        InArgs ia = parseArgs("choose", a, 2, false, line);
         std::string prompt = asString(a[0], "choose", line);
-        if (a[1].type != Value::Type::ARRAY || !a[1].array || a[1].array->empty()) {
-            throw diagErr(diag::Code::E0004_InvalidType, line, "'choose' expects a non-empty array of options as its 2nd argument");
+
+        struct Item { std::string label; Value value; };
+        std::vector<Item> items;
+        // تسمية عنصر: name/title/label عبر oop.get للكائنات/القواميس/حالات enum، وإلا عرضه العادي.
+        auto labelOf = [&callNat, line](const Value& v) -> std::string {
+            if (v.type == Value::Type::MAP || v.type == Value::Type::INSTANCE) {
+                for (const char* k : {"name", "title", "label"}) {
+                    try {
+                        Value r = callNat("oop.get", {v, Value::string(k), Value::nil()}, line);
+                        if (r.type == Value::Type::STRING || r.type == Value::Type::NUMBER) return r.toDisplayString();
+                    } catch (const RinError&) {}
+                }
+            }
+            return v.toDisplayString();
+        };
+        auto fromMap = [&items](const Value& m) { for (auto& kv : *m.map) items.push_back({kv.first.toDisplayString(), kv.second}); };
+        const Value& src = a[1];
+        if (src.type == Value::Type::ARRAY && src.array) {
+            for (const auto& el : *src.array) items.push_back({labelOf(el), el});
+        } else if (src.type == Value::Type::MAP && src.map) {
+            fromMap(src);                                           // قاموس أو نوع enum كامل (Status)
+        } else if (src.type == Value::Type::INSTANCE) {
+            Value m = callNat("oop.toMap", {src}, line);            // حقول الكائن
+            fromMap(m);
+        } else if (src.type == Value::Type::STRING && containers.count(src.str)) {
+            Value names = callNat("container.fieldNames", {src}, line);   // حقول الحاوية
+            if (names.type == Value::Type::ARRAY && names.array)
+                for (const auto& n : *names.array) items.push_back({n.toDisplayString(), callNat("getField", {src, n}, line)});
+            // حقول الحاوية بلا ترتيب مضمون (جدول تجزئة) — رتّبها أبجدياً ليكون رقم كل خيار ثابتاً بين التشغيلات.
+            std::sort(items.begin(), items.end(), [](const Item& x, const Item& y) { return x.label < y.label; });
+        } else {
+            throw diagErr(diag::Code::E0004_InvalidType, line,
+                          "'choose' expects an array, map/enum, object or container name as its 2nd argument");
         }
-        const ArrayData& opts = *a[1].array;
+        if (items.empty())
+            throw diagErr(diag::Code::E0004_InvalidType, line, "'choose' expects a non-empty list of options as its 2nd argument");
+
         std::string menu = prompt;
-        for (size_t i = 0; i < opts.size(); ++i) menu += "\n" + std::to_string(i + 1) + ") " + opts[i].toDisplayString();
+        for (size_t i = 0; i < items.size(); ++i) menu += "\n" + std::to_string(i + 1) + ") " + items[i].label;
         for (int attempt = 0; attempt < 5; ++attempt) {
             std::string ans; bool eof = false;
             if (!askRaw(attempt == 0 ? menu : ("[اختر رقماً من القائمة]\n" + menu), ans, eof) || eof)
-                throw diagErr(diag::Code::E0035_RuntimeError, line, "تم إلغاء الإدخال (choose)");
-            size_t b = ans.find_first_not_of(" \t"), e = ans.find_last_not_of(" \t");
-            if (b == std::string::npos) continue;
-            ans = ans.substr(b, e - b + 1);
+                throw cancelErr("choose", line);
+            Value t = callNat("trim", {Value::string(ans)}, line);
+            if (t.str.empty()) continue;
+            const Item* picked = nullptr;
             try {
                 size_t idx = 0;
-                long n = std::stol(ans, &idx);
-                if (idx == ans.size() && n >= 1 && static_cast<size_t>(n) <= opts.size()) return opts[static_cast<size_t>(n) - 1];
+                long n = std::stol(t.str, &idx);
+                if (idx == t.str.size() && n >= 1 && static_cast<size_t>(n) <= items.size()) picked = &items[static_cast<size_t>(n) - 1];
             } catch (...) {}
-            for (const auto& o : opts) if (o.toDisplayString() == ans) return o;
+            if (!picked) for (const auto& it : items) if (it.label == t.str || it.value.toDisplayString() == t.str) { picked = &it; break; }
+            if (picked) return deliver(ia, picked->value, line);
         }
         throw diagErr(diag::Code::E0035_RuntimeError, line, "'choose': لم يُختَر خيار صالح بعد 5 محاولات");
     };
