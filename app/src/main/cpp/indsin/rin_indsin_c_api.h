@@ -130,6 +130,18 @@ RIN_API int rin_indsin_session_export_png(void* session, const char* path);
 // laid out by the browser so Arabic/RTL/emoji render correctly). Free with rin_free_string(). NULL if no Fabric.
 RIN_API char* rin_indsin_session_export_html(void* session);
 
+
+// ---- Design System v2 / Audit / Introspection (rin_indsin_system.h, _audit.h, _query.h) -------
+// All return malloc'd JSON/text (free with rin_free_string) except where noted.
+RIN_API char* rin_indsin_session_audit_json(void* session);   // a11y + layout audit of the live Fabric
+RIN_API char* rin_indsin_session_stats_json(void* session);   // nodes / depth / kinds / categories
+RIN_API char* rin_indsin_session_outline(void* session);      // indented plain-text tree
+RIN_API char* rin_indsin_tokens_json(void);                   // every token scale + active theme
+RIN_API char* rin_indsin_catalog_json(void);                  // component taxonomy
+RIN_API char* rin_indsin_palette_json(const char* seedColor); // tonal palette 50..900
+RIN_API char* rin_indsin_theme_from_seed_json(const char* seedColor, int dark); // theme + WCAG report
+RIN_API char* rin_indsin_validate_theme_json(const char* themeName);            // WCAG report for a theme
+
 #ifdef __cplusplus
 }
 #endif
