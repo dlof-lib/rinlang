@@ -25,14 +25,24 @@
 // not a one-shot-per-process fade.
 #pragma once
 #include "rin_indsin_strand.h"
+#include "rin_indsin_tokens.h" // resolveDurationToken
 #include <cmath>
 #include <unordered_map>
 #include <unordered_set>
 
 namespace indsin {
 
-enum class EffectKind { NONE, FADE, SCALE, SLIDE_UP, SLIDE_DOWN, SLIDE_LEFT, SLIDE_RIGHT };
-enum class Easing { LINEAR, EASE_IN, EASE_OUT, EASE_IN_OUT };
+// Design System v2 added PULSE/SHAKE/BOUNCE/GROW at the END so existing values never shift:
+//   pulse  -- a single soft scale-up-and-back "attention" beat (opacity untouched)
+//   shake  -- a damped horizontal wobble (e.g. a rejected form field)
+//   bounce -- a damped vertical hop
+//   grow   -- opacity 0 -> 1 AND scale 0 -> 1 about the centre (a "pop-in")
+enum class EffectKind { NONE, FADE, SCALE, SLIDE_UP, SLIDE_DOWN, SLIDE_LEFT, SLIDE_RIGHT, PULSE, SHAKE, BOUNCE, GROW };
+// The original four curves keep their values; v2 appends cubic/sine/back/bounce/elastic/spring.
+// BACK/ELASTIC/SPRING deliberately overshoot 1.0 mid-curve (that is the effect); evaluateEffect()
+// clamps any *opacity* it derives from them back into [0,1].
+enum class Easing { LINEAR, EASE_IN, EASE_OUT, EASE_IN_OUT,
+                    CUBIC_IN, CUBIC_OUT, CUBIC_IN_OUT, SINE_IN_OUT, BACK_OUT, BOUNCE_OUT, ELASTIC_OUT, SPRING };
 
 inline EffectKind effectKindFromString(const std::string& s) {
     if (s == "fade") return EffectKind::FADE;
@@ -41,6 +51,10 @@ inline EffectKind effectKindFromString(const std::string& s) {
     if (s == "slideDown" || s == "slide-down" || s == "slidedown") return EffectKind::SLIDE_DOWN;
     if (s == "slideLeft" || s == "slide-left" || s == "slideleft") return EffectKind::SLIDE_LEFT;
     if (s == "slideRight" || s == "slide-right" || s == "slideright") return EffectKind::SLIDE_RIGHT;
+    if (s == "pulse") return EffectKind::PULSE;
+    if (s == "shake") return EffectKind::SHAKE;
+    if (s == "bounce") return EffectKind::BOUNCE;
+    if (s == "grow" || s == "pop") return EffectKind::GROW;
     return EffectKind::NONE; // "none", "", or anything unrecognized -> no effect (safe default)
 }
 inline const char* effectKindName(EffectKind k) {
@@ -51,6 +65,10 @@ inline const char* effectKindName(EffectKind k) {
         case EffectKind::SLIDE_DOWN: return "slideDown";
         case EffectKind::SLIDE_LEFT: return "slideLeft";
         case EffectKind::SLIDE_RIGHT: return "slideRight";
+        case EffectKind::PULSE: return "pulse";
+        case EffectKind::SHAKE: return "shake";
+        case EffectKind::BOUNCE: return "bounce";
+        case EffectKind::GROW: return "grow";
         default: return "none";
     }
 }
@@ -58,6 +76,14 @@ inline Easing easingFromString(const std::string& s) {
     if (s == "linear") return Easing::LINEAR;
     if (s == "easeIn" || s == "ease-in") return Easing::EASE_IN;
     if (s == "easeInOut" || s == "ease-in-out") return Easing::EASE_IN_OUT;
+    if (s == "cubicIn" || s == "cubic-in") return Easing::CUBIC_IN;
+    if (s == "cubicOut" || s == "cubic-out") return Easing::CUBIC_OUT;
+    if (s == "cubicInOut" || s == "cubic-in-out") return Easing::CUBIC_IN_OUT;
+    if (s == "sine" || s == "sineInOut" || s == "sine-in-out") return Easing::SINE_IN_OUT;
+    if (s == "back" || s == "backOut" || s == "back-out") return Easing::BACK_OUT;
+    if (s == "bounce" || s == "bounceOut" || s == "bounce-out") return Easing::BOUNCE_OUT;
+    if (s == "elastic" || s == "elasticOut" || s == "elastic-out") return Easing::ELASTIC_OUT;
+    if (s == "spring") return Easing::SPRING;
     return Easing::EASE_OUT; // default, incl. "easeOut"/unset -- the most natural-feeling default
 }
 // Standard quadratic easing curves -- clamps `t` to [0,1] first so a caller never has to.
@@ -68,6 +94,31 @@ inline double applyEasing(Easing e, double t) {
         case Easing::EASE_IN: return t * t;
         case Easing::EASE_OUT: return 1.0 - (1.0 - t) * (1.0 - t);
         case Easing::EASE_IN_OUT: return t < 0.5 ? 2.0 * t * t : 1.0 - std::pow(-2.0 * t + 2.0, 2) / 2.0;
+        case Easing::CUBIC_IN:  return t * t * t;
+        case Easing::CUBIC_OUT: return 1.0 - std::pow(1.0 - t, 3);
+        case Easing::CUBIC_IN_OUT: return t < 0.5 ? 4.0 * t * t * t : 1.0 - std::pow(-2.0 * t + 2.0, 3) / 2.0;
+        case Easing::SINE_IN_OUT: return -(std::cos(3.14159265358979323846 * t) - 1.0) / 2.0;
+        case Easing::BACK_OUT: { // overshoots ~10% then settles (easings.net "easeOutBack")
+            const double c1 = 1.70158, c3 = c1 + 1.0;
+            return 1.0 + c3 * std::pow(t - 1.0, 3) + c1 * std::pow(t - 1.0, 2);
+        }
+        case Easing::BOUNCE_OUT: { // easings.net "easeOutBounce"
+            const double n1 = 7.5625, d1 = 2.75;
+            if (t < 1.0 / d1) return n1 * t * t;
+            if (t < 2.0 / d1) { t -= 1.5 / d1;   return n1 * t * t + 0.75; }
+            if (t < 2.5 / d1) { t -= 2.25 / d1;  return n1 * t * t + 0.9375; }
+            t -= 2.625 / d1; return n1 * t * t + 0.984375;
+        }
+        case Easing::ELASTIC_OUT: { // easings.net "easeOutElastic"
+            if (t <= 0.0) return 0.0;
+            if (t >= 1.0) return 1.0;
+            const double c4 = (2.0 * 3.14159265358979323846) / 3.0;
+            return std::pow(2.0, -10.0 * t) * std::sin((t * 10.0 - 0.75) * c4) + 1.0;
+        }
+        case Easing::SPRING: { // damped spring: settles at 1.0, small overshoot, exact at both ends
+            if (t >= 1.0) return 1.0;
+            return 1.0 - std::exp(-6.0 * t) * std::cos(10.0 * t);
+        }
     }
     return t;
 }
@@ -77,6 +128,10 @@ struct EffectSpec {
     Easing easing = Easing::EASE_OUT;
     double durationMs = 250;
     double delayMs = 0;
+    // `stagger=<ms>` on a CONTAINER: its direct children start their (inherited or own) effect
+    // i*stagger ms later than the first -- the classic cascading list/grid reveal. Read from the
+    // container's own attr by collectAndApplyEffects(); never inherited by grandchildren.
+    double staggerMs = 0;
 };
 // Reads a Strand's OWN effect=/easing=/duration=/delay= attrs -- does not consider inheritance
 // from an ancestor; see applyEffectsToFabric() below for that (a Card carrying effect="fade" once
@@ -85,7 +140,14 @@ inline EffectSpec effectSpecOf(const Strand& s) {
     EffectSpec spec;
     spec.kind = effectKindFromString(s.attrStr("effect", "none"));
     spec.easing = easingFromString(s.attrStr("easing", "easeOut"));
-    spec.durationMs = s.attrNum("duration", 250);
+    spec.durationMs = 250;
+    if (const Value* d = s.attr("duration")) {
+        double tok;
+        if (d->kind == Value::Kind::NUMBER) spec.durationMs = d->number;
+        else if (resolveDurationToken(d->str, tok)) spec.durationMs = tok; // duration="fast"/"slow"/...
+        else spec.durationMs = d->asNumber(250);
+    }
+    spec.staggerMs = s.attrNum("stagger", 0);
     spec.delayMs = s.attrNum("delay", 0);
     return spec;
 }
@@ -112,8 +174,23 @@ inline EffectFrame evaluateEffect(const EffectSpec& spec, double rawT) {
         case EffectKind::SLIDE_DOWN: f.opacity = t; f.dy = -(1.0 - t) * kSlideDistance; break;
         case EffectKind::SLIDE_LEFT: f.opacity = t; f.dx = (1.0 - t) * kSlideDistance; break;
         case EffectKind::SLIDE_RIGHT:f.opacity = t; f.dx = -(1.0 - t) * kSlideDistance; break;
+        case EffectKind::PULSE:  f.scale = 1.0 + 0.08 * std::sin(3.14159265358979323846 * (rawT < 0 ? 0 : (rawT > 1 ? 1 : rawT))); break;
+        case EffectKind::SHAKE: {
+            double r = rawT < 0 ? 0 : (rawT > 1 ? 1 : rawT);
+            f.dx = std::sin(r * 3.14159265358979323846 * 6.0) * (1.0 - r) * 8.0;
+            break;
+        }
+        case EffectKind::BOUNCE: {
+            double r = rawT < 0 ? 0 : (rawT > 1 ? 1 : rawT);
+            f.dy = -std::fabs(std::sin(r * 3.14159265358979323846 * 3.0)) * (1.0 - r) * 16.0;
+            break;
+        }
+        case EffectKind::GROW: f.opacity = t; f.scale = t < 0.01 ? 0.01 : t; break;
         default: break;
     }
+    // Overshooting easings (back/elastic/spring) may push t outside [0,1]; opacity must not follow.
+    if (f.opacity < 0) f.opacity = 0;
+    if (f.opacity > 1) f.opacity = 1;
     return f;
 }
 
@@ -181,7 +258,8 @@ private:
 // is what actually gets painted. Returns true if anything is still short of its full duration
 // (i.e. the host should keep ticking -- see rin_indsin_session_tick in rin_indsin_c_api.cpp).
 inline void collectAndApplyEffects(const StrandPtr& s, EffectRuntime& rt, double nowMs,
-                                    std::unordered_set<StrandId>& present, EffectSpec inherited) {
+                                    std::unordered_set<StrandId>& present, EffectSpec inherited,
+                                    double extraDelayMs = 0) {
     if (!s) return;
     EffectSpec own = effectSpecOf(*s);
     EffectSpec effective = (own.kind != EffectKind::NONE) ? own : inherited;
@@ -189,7 +267,7 @@ inline void collectAndApplyEffects(const StrandPtr& s, EffectRuntime& rt, double
     if (effective.kind != EffectKind::NONE) {
         present.insert(s->id);
         double currentAttrOpacity = s->attrNum("opacity", 1.0); // only meaningful the FIRST tick; see mark()'s doc comment
-        rt.mark(s->id, nowMs, effective.durationMs, effective.delayMs, currentAttrOpacity);
+        rt.mark(s->id, nowMs, effective.durationMs, effective.delayMs + extraDelayMs, currentAttrOpacity);
         double rawT = rt.progress(s->id, nowMs);
         EffectFrame frame = evaluateEffect(effective, rawT);
 
@@ -210,7 +288,9 @@ inline void collectAndApplyEffects(const StrandPtr& s, EffectRuntime& rt, double
             s->geometry.w = nw; s->geometry.h = nh;
         }
     }
-    for (auto& c : s->children) collectAndApplyEffects(c, rt, nowMs, present, effective);
+    double stagger = own.staggerMs; // this container's own stagger= (not inherited)
+    int idx = 0;
+    for (auto& c : s->children) collectAndApplyEffects(c, rt, nowMs, present, effective, stagger * idx++);
 }
 inline bool applyEffectsToFabric(const StrandPtr& root, EffectRuntime& rt, double nowMs) {
     std::unordered_set<StrandId> present;
