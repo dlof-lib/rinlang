@@ -142,7 +142,7 @@ StmtPtr Parser::declaration() {
     // OOP: 'class'/'struct'/'enum' كلمات سياقية غير محجوزة (بنفس أسلوب route/row/document/warp/
     // state أعلاه بالضبط)، مُميَّزة بالنظر خطوة إضافية للأمام (IDENT — اسم الصنف/التعداد — مباشرة
     // بعدها) حتى لا تصطدم باستخدام أي منها اسم متغيّر عادي في أي سياق آخر.
-    // Rin 1.4: 'abstract class X' / 'final class X' / 'abstract final class X' (المعدِّلات قبل 'class' فقط).
+    // Rin 1.0: 'abstract class X' / 'final class X' / 'abstract final class X' (المعدِّلات قبل 'class' فقط).
     // نمسح للأمام فوق كلمات abstract/final المتتالية، ثم يجب أن نجد IDENT("class") يتبعها اسم الصنف،
     // وإلا فهي مجرد اسم متغيّر/دالة عادي (مثلاً نداء `final(x)`) فلا نتدخّل.
     if (check(TokenType::IDENT) && (peek().lexeme == "abstract" || peek().lexeme == "final")) {
@@ -759,7 +759,7 @@ std::shared_ptr<FunctionStmt> Parser::memberFunction(bool allowBodyless) {
     return fn;
 }
 
-// صيغة موسَّعة (Rin 1.4):
+// صيغة موسَّعة (Rin 1.0):
 //   [abstract|final] class Name [extends Base] [implements A, B] [uses T1, T2] { ... }
 //   interface Name [extends A, B] { fun sig(a, b); ... }
 //   trait Name [uses T1] { let f = 1; fun m() { ... } ... }
@@ -2786,7 +2786,7 @@ ExprPtr Parser::comparison() {
             expr = b;
             continue;
         }
-        // Rin 1.4: `value instanceof ClassName` -> oop.isInstance(value, "ClassName")
+        // Rin 1.0: `value instanceof ClassName` -> oop.isInstance(value, "ClassName")
         // كلمة سياقية (IDENT) يتبعها اسم نوع، فلا تتعارض مع أي متغيّر يحمل الاسم نفسه.
         if (check(TokenType::IDENT) && peek().lexeme == "instanceof" && checkNext(TokenType::IDENT)) {
             Token kw = advance();
