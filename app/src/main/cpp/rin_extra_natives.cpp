@@ -1,5 +1,5 @@
 // ============================================================================
-//  rin_extra_natives.cpp — Rin 1.1 native library additions
+//  rin_extra_natives.cpp — Rin 1.0 native library additions
 // ----------------------------------------------------------------------------
 //  يضيف دوال أصلية جديدة دون لمس منطق المفسّر الأساسي. تُسجَّل من نهاية
 //  Interpreter::registerNatives() عبر registerNativesExtra().
