@@ -90,7 +90,7 @@ struct InstanceData {
     bool isStruct = false;
     std::unordered_map<std::string, Value> fields;
     std::vector<std::string> fieldOrder; // ترتيب أول ظهور لكل حقل (لأجل toDisplayString مرتّبة)
-    bool frozen = false; // Rin 1.4: oop.freeze(obj) — يمنع أي كتابة لاحقة على الحقول
+    bool frozen = false; // Rin 1.0: oop.freeze(obj) — يمنع أي كتابة لاحقة على الحقول
 };
 
 // مقارنة تركيبية (structural) بين قيمتين، تُستخدم في == != وفهرسة القواميس بالمفتاح.
@@ -106,7 +106,7 @@ struct ClassDef {
     std::unordered_map<std::string, std::shared_ptr<FunctionStmt>> methods; // تتضمن "init" إن عُرِّفت
     int line = 0;
 
-    // ---- Rin 1.4: OOP الموسَّع ----
+    // ---- Rin 1.0: OOP الموسَّع ----
     ClassKind kind = ClassKind::Class;           // class/struct | interface | trait
     bool isAbstract = false;
     bool isFinal = false;
@@ -126,7 +126,7 @@ struct ClassDef {
     std::unordered_map<std::string, std::shared_ptr<FunctionStmt>> setters;
 };
 
-// ---- Rin 1.4: مراقبون/روابط/مستمعو أحداث على الكائنات (oop.observe/bindProperty/on ...) ----
+// ---- Rin 1.0: مراقبون/روابط/مستمعو أحداث على الكائنات (oop.observe/bindProperty/on ...) ----
 // سجل واحد في Interpreter::observers_. المراقب يرتبط بكائن عبر weak_ptr (لا يُطيل عمر الكائن).
 struct OopObserver {
     int id = 0;
@@ -930,10 +930,10 @@ private:
     using NativeFn = std::function<Value(std::vector<Value>&, int)>;
     std::unordered_map<std::string, NativeFn> natives;
     void registerNatives();
-    void registerNativesExtra(); // rin_extra_natives.cpp — Rin 1.1 additions (core helpers + container API)
-    void registerNativesExtra4(); // rin_extra_natives4.cpp — Rin 1.5 (json.* / semver.* / pkg.* / cpp.* جسر C++)
-    void registerNativesExtra3(); // rin_extra_natives3.cpp — Rin 1.3 additions (net.* بشبكة حقيقية + container.* إضافية)
-    void registerNativesExtra2(); // rin_extra_natives2.cpp — Rin 1.2 additions (sec./file./net./log./automation. + container extras)
+    void registerNativesExtra(); // rin_extra_natives.cpp — Rin 1.0 additions (core helpers + container API)
+    void registerNativesExtra4(); // rin_extra_natives4.cpp — Rin 1.0 (json.* / semver.* / pkg.* / cpp.* جسر C++)
+    void registerNativesExtra3(); // rin_extra_natives3.cpp — Rin 1.0 additions (net.* بشبكة حقيقية + container.* إضافية)
+    void registerNativesExtra2(); // rin_extra_natives2.cpp — Rin 1.0 additions (sec./file./net./log./automation. + container extras)
 
     void execute(const StmtPtr& stmt, EnvPtr env);
     void executeBlock(const std::vector<StmtPtr>& statements, EnvPtr env);
@@ -957,7 +957,7 @@ private:
     // يبني كائناً جديداً من صنف [className]: يمشي سلسلة الوراثة من الجذر (الأب الأبعد) حتى الصنف
     // نفسه فيُهيّئ كل الحقول بترتيبها (فتُطغى قيم الابن على الأب عند تكرار نفس الاسم)، ثم يستدعي
     // 'init' الأقرب في سلسلة الوراثة إن عُرِّفت (بـ args)، أو يرفض أي وسيط إن لم تُعرَّف init إطلاقاً.
-    // [env] (اختياري، Rin 1.4): بيئة المستدعي — تُستخدم لفحص صلاحية مُنشئ private/protected (سياق الصنف).
+    // [env] (اختياري، Rin 1.0): بيئة المستدعي — تُستخدم لفحص صلاحية مُنشئ private/protected (سياق الصنف).
     Value instantiateClass(const std::string& className, std::vector<Value>& args, int line, const EnvPtr& env = nullptr);
     // يبحث عن دالة (method) باسم معيّن بدءاً من [className] ثم صعوداً عبر superclass (توريث بسيط
     // بترتيب أقرب تعريف يفوز)؛ nullptr إن لم توجد في السلسلة كاملة.
@@ -989,8 +989,8 @@ private:
     // كما هي بلا أي نسخ (سلوك المرجع المعتاد، بلا أي تغيير).
     Value copyForBinding(const Value& v) const;
 
-public: // Rin 1.4: واجهة OOP الموسَّعة (يستدعيها Value::toDisplayString وrin_oop*.cpp)
-    // ================= Rin 1.4: OOP الموسَّع (interface / trait / abstract / static / private / get-set ...) =================
+public: // Rin 1.0: واجهة OOP الموسَّعة (يستدعيها Value::toDisplayString وrin_oop*.cpp)
+    // ================= Rin 1.0: OOP الموسَّع (interface / trait / abstract / static / private / get-set ...) =================
     // ينفَّذ في rin_interpreter.cpp (قسم "OOP 1.4") وتُسجَّل دوال oop.* في rin_oop_natives.cpp.
     bool restrictedMembers_ = false;      // true إن استُخدم private/protected/final أي مرة (لتجاوز الفحص الكلفة صفر قبلها)
     bool accessorsExist_ = false;         // true إن عُرِّف أي get/set أي مرة
