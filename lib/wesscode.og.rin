@@ -1,0 +1,426 @@
+// wesscode — مساعد إنشاء المكتبات والحزم في Rin
+// ---------------------------------------------------------------------------
+//   @import "wesscode";
+//
+//   let lib = wc_new("mathx", "0.1.0", "دوال رياضية");
+//   wc_fn(lib, "twice", ["x"], "return x * 2;", "يضاعف الرقم");
+//   wc_const(lib, "PI2", "6.283185307179586", "ضعف باي");
+//   wc_test(lib, "twice يضاعف", "twice(21)", 42);
+//   let r = wc_write(lib, "out/mathx");        // حزمة كاملة: rin.toml + src + tests + docs
+//   wc_writeOg(lib, ".");                      // أو ./lib/mathx.og.rin لـ @import "mathx"
+//
+// قوالب جاهزة:  wc_template("math"|"strings"|"collections"|"validate", "اسم-المكتبة")
+// جسر C++:      wc_cpp(lib, "fast_sum", "double t=0; for(auto&v:args.arr) t+=v.num; return rin::Json::number(t);")
+// ملاحظة: دوال Rin تتطلب عدد وسائط مطابقاً تماماً — مرّر nil للاختياري.
+// يعتمد على: lang.check و json.* و semver.* و pkg.* (محرك Rin الأصلي).
+// ---------------------------------------------------------------------------
+
+let __wc_nl = "\n";
+
+// ------------------------------------------------------------------ helpers
+fun wc_ident(name) { return replace(name, "-", "_"); }
+
+fun wc_indent(code, n) {
+    let pad = "";
+    let i = 0;
+    while (i < n) { pad = pad + " "; i = i + 1; }
+    let out = [];
+    for (let ln in split(code, __wc_nl)) {
+        if (trim(ln) == "") { push(out, ""); } else { push(out, pad + ln); }
+    }
+    return join(out, __wc_nl);
+}
+
+// يحوّل قيمة Rin إلى نص مصدر Rin صالح
+fun wc_lit(v) {
+    let t = type(v);
+    if (t == "nil") { return "nil"; }
+    if (t == "bool") { if (v) { return "true"; } return "false"; }
+    if (t == "number") { return "" + v; }
+    if (t == "string") {
+        let s = replace(v, "\\", "\\\\");
+        s = replace(s, "\"", "\\\"");
+        s = replace(s, __wc_nl, "\\n");
+        return "\"" + s + "\"";
+    }
+    if (t == "array") {
+        let parts = [];
+        for (let x in v) { push(parts, wc_lit(x)); }
+        return "[" + join(parts, ", ") + "]";
+    }
+    if (t == "map") {
+        let parts = [];
+        for (let k in keys(v)) { push(parts, wc_lit(k) + ": " + wc_lit(v[k])); }
+        return "{" + join(parts, ", ") + "}";
+    }
+    fail("wc_lit: cannot render a value of type " + t);
+}
+
+fun wc_docLines(doc) {
+    if (doc == nil or doc == "") { return ""; }
+    let out = [];
+    for (let ln in split(doc, __wc_nl)) { push(out, "/// " + ln); }
+    return join(out, __wc_nl) + __wc_nl;
+}
+
+fun wc_msg(e) {
+    let m = "" + e;
+    if (type(e) == "map" and has(e, "message")) { m = e["message"]; }
+    return regexReplace(m, "^\\[E[0-9]+\\] ", "");
+}
+
+// اسم صالح فعلاً: يمرّ على نفس محلّل Rin (فتُكشف الكلمات المحجوزة مثل text/merge/file)
+fun wc_validIdent(name) {
+    if (type(name) != "string" or !regexTest(name, "^[A-Za-z_][A-Za-z0-9_]*$")) { return false; }
+    return lang.check("let " + name + " = 1;")["ok"];
+}
+
+// اسم دالة صالح: اسم صالح + لا يتعارض مع دالة مدمجة في المحرك (مثل clamp/len/max)
+fun wc_validFnName(name) {
+    return wc_validIdent(name) and !lang.isBuiltin(name);
+}
+
+fun wc_validName(name) {
+    return type(name) == "string" and regexTest(name, "^[a-z][a-z0-9_-]{1,63}$");
+}
+
+// ------------------------------------------------------------------ build the spec
+fun wc_new(name, version, description) {
+    if (!wc_validName(name)) { fail("wc_new: invalid library name '" + name + "' (lowercase, digits, - and _; 2+ chars)"); }
+    if (!semver.valid(version)) { fail("wc_new: invalid version '" + version + "'"); }
+    return {
+        name: name, version: version, description: description,
+        author: "", license: "MIT",
+        deps: {}, funcs: [], consts: [], classes: [], tests: [], cpp: [], raw: []
+    };
+}
+
+fun wc_meta(lib, author, license) {
+    lib["author"] = author;
+    lib["license"] = license;
+    return lib;
+}
+
+fun wc_dep(lib, depName, constraint) {
+    if (!semver.validRange(constraint)) { fail("wc_dep: invalid constraint '" + constraint + "' for " + depName); }
+    lib["deps"][depName] = constraint;
+    return lib;
+}
+
+fun wc_findIn(list, name) {
+    let i = 0;
+    for (let x in list) {
+        if (x["name"] == name) { return i; }
+        i = i + 1;
+    }
+    return -1;
+}
+
+fun wc_fn(lib, name, params, body, doc) {
+    if (!wc_validFnName(name)) { fail("wc_fn: '" + name + "' is invalid, reserved, or collides with a built-in function"); }
+    for (let p in params) {
+        if (!wc_validIdent(p)) { fail("wc_fn: invalid or reserved parameter name '" + p + "' in " + name); }
+    }
+    let entry = {name: name, params: params, body: body, doc: doc};
+    let i = wc_findIn(lib["funcs"], name);
+    if (i >= 0) { lib["funcs"][i] = entry; } else { push(lib["funcs"], entry); }
+    return lib;
+}
+
+fun wc_const(lib, name, expr, doc) {
+    if (!wc_validIdent(name)) { fail("wc_const: invalid or reserved name '" + name + "'"); }
+    let entry = {name: name, expr: expr, doc: doc};
+    let i = wc_findIn(lib["consts"], name);
+    if (i >= 0) { lib["consts"][i] = entry; } else { push(lib["consts"], entry); }
+    return lib;
+}
+
+fun wc_class(lib, name, fields, doc) {
+    if (!wc_validIdent(name)) { fail("wc_class: invalid or reserved class name '" + name + "'"); }
+    let entry = {name: name, fields: fields, doc: doc, methods: []};
+    let i = wc_findIn(lib["classes"], name);
+    if (i >= 0) { lib["classes"][i] = entry; } else { push(lib["classes"], entry); }
+    return lib;
+}
+
+// fields: قاموس {اسم: تعبير_القيمة_الافتراضية_كنص}
+fun wc_method(lib, className, name, params, body) {
+    let i = wc_findIn(lib["classes"], className);
+    if (i < 0) { fail("wc_method: class '" + className + "' is not defined"); }
+    push(lib["classes"][i]["methods"], {name: name, params: params, body: body});
+    return lib;
+}
+
+// expr: تعبير Rin كنص، expected: قيمة Rin عادية (تُحوَّل إلى مصدر تلقائياً)
+fun wc_test(lib, name, expr, expected) {
+    push(lib["tests"], {name: name, expr: expr, expected: expected, native: false});
+    return lib;
+}
+
+// اختبار يعتمد على جسر C++: يُتخطّى تلقائياً إن لم يُفعَّل (rin --allow-native)
+fun wc_testNative(lib, name, expr, expected) {
+    push(lib["tests"], {name: name, expr: expr, expected: expected, native: true});
+    return lib;
+}
+
+// يضيف مصدر Rin خاماً كما هو (لدمج كود موجود)
+fun wc_raw(lib, src) {
+    push(lib["raw"], src);
+    return lib;
+}
+
+// دالة C++ بنمط JSON ABI: body يرى args (مصفوفة) ويُرجع rin::Json
+fun wc_cpp(lib, name, body) {
+    if (!wc_validFnName(name)) { fail("wc_cpp: '" + name + "' is invalid, reserved, or collides with a built-in function"); }
+    push(lib["cpp"], {name: name, body: body});
+    return lib;
+}
+
+// ------------------------------------------------------------------ rendering
+fun wc_cppSource(lib) {
+    let src = "#include \"rin_abi.h\"" + __wc_nl + __wc_nl;
+    for (let c in lib["cpp"]) {
+        src = src + "RIN_FN(" + c["name"] + ") {" + __wc_nl + wc_indent(c["body"], 4) + __wc_nl + "}" + __wc_nl + __wc_nl;
+    }
+    return src;
+}
+
+fun wc_renderFn(f) {
+    return wc_docLines(f["doc"]) + "fun " + f["name"] + "(" + join(f["params"], ", ") + ") {" + __wc_nl
+         + wc_indent(f["body"], 4) + __wc_nl + "}" + __wc_nl;
+}
+
+fun wc_renderClass(c) {
+    let out = wc_docLines(c["doc"]) + "class " + c["name"] + " {" + __wc_nl;
+    for (let k in keys(c["fields"])) { out = out + "    let " + k + " = " + c["fields"][k] + ";" + __wc_nl; }
+    for (let m in c["methods"]) {
+        out = out + "    fun " + m["name"] + "(" + join(m["params"], ", ") + ") {" + __wc_nl
+            + wc_indent(m["body"], 8) + __wc_nl + "    }" + __wc_nl;
+    }
+    return out + "}" + __wc_nl;
+}
+
+fun wc_render(lib) {
+    let id = wc_ident(lib["name"]);
+    let out = "// " + lib["name"] + " " + lib["version"] + " — " + lib["description"] + __wc_nl
+            + "// مولَّدة بواسطة wesscode (Rin)" + __wc_nl + __wc_nl;
+    for (let c in lib["consts"]) { out = out + wc_docLines(c["doc"]) + "let " + c["name"] + " = " + c["expr"] + ";" + __wc_nl; }
+    if (len(lib["consts"]) > 0) { out = out + __wc_nl; }
+    for (let r in lib["raw"]) { out = out + r + __wc_nl + __wc_nl; }
+    for (let f in lib["funcs"]) { out = out + wc_renderFn(f) + __wc_nl; }
+    for (let c in lib["classes"]) { out = out + wc_renderClass(c) + __wc_nl; }
+    if (len(lib["cpp"]) > 0) {
+        out = out + "// ---- جسر C++ (يتطلب rin --allow-native) ----" + __wc_nl;
+        out = out + "let __" + id + "_native = {h: nil, src: " + wc_lit(wc_cppSource(lib)) + "};" + __wc_nl + __wc_nl;
+        out = out + "fun " + id + "_load() {" + __wc_nl
+            + "    if (__" + id + "_native[\"h\"] == nil) {" + __wc_nl
+            + "        let r = cpp.lib(__" + id + "_native[\"src\"], nil);" + __wc_nl
+            + "        if (!r[\"ok\"]) { fail(\"" + lib["name"] + ": C++ bridge unavailable: \" + r[\"error\"]); }" + __wc_nl
+            + "        __" + id + "_native[\"h\"] = r[\"handle\"];" + __wc_nl
+            + "    }" + __wc_nl
+            + "    return __" + id + "_native[\"h\"];" + __wc_nl + "}" + __wc_nl + __wc_nl;
+        for (let c in lib["cpp"]) {
+            out = out + "/// نداء الدالة الأصلية " + c["name"] + " (JSON ABI)" + __wc_nl
+                + "fun " + c["name"] + "(args) {" + __wc_nl
+                + "    return cpp.call(" + id + "_load(), \"" + c["name"] + "\", args)[\"value\"];" + __wc_nl + "}" + __wc_nl + __wc_nl;
+        }
+    }
+    out = out + "/// إصدار المكتبة." + __wc_nl + "fun " + id + "_version() {" + __wc_nl
+        + "    return \"" + lib["version"] + "\";" + __wc_nl + "}" + __wc_nl;
+    return out;
+}
+
+fun wc_renderTests(lib) {
+    let id = wc_ident(lib["name"]);
+    let out = "// اختبارات " + lib["name"] + " — rin tests/" + id + "_test.rin" + __wc_nl
+            + "@import \"rintest\";" + __wc_nl + "@import \"../src/lib.rin\";" + __wc_nl + __wc_nl;
+    out = out + "rt_describe(" + wc_lit(lib["name"]) + ", fun() {" + __wc_nl;
+    out = out + "    rt_test(\"version صالح\", fun() { rt_expect(semver.valid(" + id + "_version())).toBeTrue(); });" + __wc_nl;
+    for (let t in lib["tests"]) {
+        let line = "rt_test(" + wc_lit(t["name"]) + ", fun() { rt_expect(" + t["expr"] + ").toBe(" + wc_lit(t["expected"]) + "); });";
+        if (t["native"]) {
+            out = out + "    if (cpp.enabled()) { " + line + " } else { rt_skip(" + wc_lit(t["name"]) + ", fun() {}); }" + __wc_nl;
+        } else {
+            out = out + "    " + line + __wc_nl;
+        }
+    }
+    out = out + "});" + __wc_nl + __wc_nl + "rt_done();" + __wc_nl;
+    return out;
+}
+
+fun wc_manifest(lib) {
+    let pk = {name: lib["name"], version: lib["version"], description: lib["description"], license: lib["license"]};
+    if (lib["author"] != "") { pk["authors"] = [lib["author"]]; }
+    return pkg.manifest({package: pk, dependencies: lib["deps"]});
+}
+
+fun wc_docs(lib) {
+    let out = "# " + lib["name"] + " " + lib["version"] + __wc_nl + __wc_nl + lib["description"] + __wc_nl + __wc_nl;
+    out = out + "```rin" + __wc_nl + "@import \"" + lib["name"] + "\";" + __wc_nl + "```" + __wc_nl + __wc_nl;
+    if (len(lib["consts"]) > 0) {
+        out = out + "## الثوابت" + __wc_nl + __wc_nl;
+        for (let c in lib["consts"]) { out = out + "- `" + c["name"] + "` = `" + c["expr"] + "` — " + c["doc"] + __wc_nl; }
+        out = out + __wc_nl;
+    }
+    if (len(lib["funcs"]) + len(lib["cpp"]) > 0) {
+        out = out + "## الدوال" + __wc_nl + __wc_nl;
+        for (let f in lib["funcs"]) {
+            out = out + "### `" + f["name"] + "(" + join(f["params"], ", ") + ")`" + __wc_nl + f["doc"] + __wc_nl + __wc_nl;
+        }
+        for (let c in lib["cpp"]) { out = out + "### `" + c["name"] + "(args)` (C++)" + __wc_nl + "دالة أصلية بنمط JSON ABI." + __wc_nl + __wc_nl; }
+    }
+    if (len(lib["classes"]) > 0) {
+        out = out + "## الأصناف" + __wc_nl + __wc_nl;
+        for (let c in lib["classes"]) {
+            out = out + "### `" + c["name"] + "`" + __wc_nl + c["doc"] + __wc_nl + __wc_nl;
+            for (let m in c["methods"]) { out = out + "- `" + m["name"] + "(" + join(m["params"], ", ") + ")`" + __wc_nl; }
+            out = out + __wc_nl;
+        }
+    }
+    return out;
+}
+
+// ------------------------------------------------------------------ check
+fun wc_check(lib) {
+    let errors = [];
+    let warnings = [];
+    if (len(lib["funcs"]) + len(lib["classes"]) + len(lib["consts"]) + len(lib["cpp"]) + len(lib["raw"]) == 0) {
+        push(warnings, "المكتبة فارغة (لا دوال ولا أصناف ولا ثوابت)");
+    }
+    let seen = {};
+    for (let f in lib["funcs"]) {
+        if (has(seen, f["name"])) { push(errors, "اسم مكرر: " + f["name"]); }
+        seen[f["name"]] = true;
+        if (f["doc"] == nil or f["doc"] == "") { push(warnings, "الدالة " + f["name"] + " بلا وثيقة"); }
+        let one = lang.check(wc_renderFn(f));
+        if (!one["ok"]) { push(errors, "الدالة " + f["name"] + ": " + one["message"]); }
+    }
+    for (let c in lib["classes"]) {
+        if (has(seen, c["name"])) { push(errors, "اسم مكرر: " + c["name"]); }
+        seen[c["name"]] = true;
+        let one = lang.check(wc_renderClass(c));
+        if (!one["ok"]) { push(errors, "الصنف " + c["name"] + ": " + one["message"]); }
+    }
+    for (let c in lib["consts"]) {
+        if (has(seen, c["name"])) { push(errors, "اسم مكرر: " + c["name"]); }
+        seen[c["name"]] = true;
+    }
+    for (let c in lib["cpp"]) {
+        if (has(seen, c["name"])) { push(errors, "اسم مكرر: " + c["name"]); }
+        seen[c["name"]] = true;
+    }
+    if (len(errors) == 0) {
+        let all = lang.check(wc_render(lib));
+        if (!all["ok"]) { push(errors, "المصدر الكامل: سطر " + all["line"] + ": " + all["message"]); }
+        let tt = lang.check(wc_renderTests(lib));
+        if (!tt["ok"]) { push(errors, "الاختبارات: سطر " + tt["line"] + ": " + tt["message"]); }
+    }
+    if (len(lib["tests"]) == 0) { push(warnings, "لا اختبارات مضافة (wc_test)"); }
+    return {ok: len(errors) == 0, errors: errors, warnings: warnings};
+}
+
+// ------------------------------------------------------------------ write
+fun wc_write(lib, dir) {
+    let c = wc_check(lib);
+    if (!c["ok"]) { return {ok: false, errors: c["errors"], files: []}; }
+    let id = wc_ident(lib["name"]);
+    let files = [];
+    let out = {};
+    out["rin.toml"] = wc_manifest(lib);
+    out["src/lib.rin"] = wc_render(lib);
+    out["tests/" + id + "_test.rin"] = wc_renderTests(lib);
+    out["docs/API.md"] = wc_docs(lib);
+    out["README.md"] = "# " + lib["name"] + __wc_nl + __wc_nl + lib["description"] + __wc_nl + __wc_nl
+        + "راجع [docs/API.md](docs/API.md)." + __wc_nl + __wc_nl + "## الاختبار" + __wc_nl + __wc_nl + "```" + __wc_nl + "rin tests/" + id + "_test.rin" + __wc_nl + "```" + __wc_nl;
+    out[".gitignore"] = "build/" + __wc_nl + "dist/" + __wc_nl + "*.rcl" + __wc_nl;
+    if (len(lib["cpp"]) > 0) { out["native/" + id + ".cpp"] = wc_cppSource(lib); }
+    for (let p in keys(out)) {
+        if (!writeFile(dir + "/" + p, out[p])) { return {ok: false, errors: ["cannot write " + dir + "/" + p], files: files}; }
+        push(files, dir + "/" + p);
+    }
+    return {ok: true, errors: [], files: files, warnings: c["warnings"]};
+}
+
+// مكتبة واحدة بصيغة lib/<name>.og.rin ليعمل @import "<name>" داخل المشروع
+fun wc_writeOg(lib, projectDir) {
+    let c = wc_check(lib);
+    if (!c["ok"]) { return {ok: false, errors: c["errors"], files: []}; }
+    let path = projectDir + "/lib/" + lib["name"] + ".og.rin";
+    let ok = writeFile(path, wc_render(lib));
+    return {ok: ok, errors: [], files: [path]};
+}
+
+// ------------------------------------------------------------------ evolve
+fun wc_bump(lib, kind) {
+    lib["version"] = semver.bump(lib["version"], kind, "rc");
+    return lib;
+}
+
+fun wc_stats(lib) {
+    let methods = 0;
+    for (let c in lib["classes"]) { methods = methods + len(c["methods"]); }
+    return {
+        name: lib["name"], version: lib["version"], functions: len(lib["funcs"]), constants: len(lib["consts"]),
+        classes: len(lib["classes"]), methods: methods, native: len(lib["cpp"]), tests: len(lib["tests"]),
+        lines: len(split(wc_render(lib), __wc_nl))
+    };
+}
+
+// يبني مواصفة من مصدر Rin موجود (كل ما فيه يُنسخ كما هو + تُستخرج الواجهة للتوثيق)
+fun wc_fromSource(name, version, description, src) {
+    let lib = wc_new(name, version, description);
+    wc_raw(lib, src);
+    return lib;
+}
+
+fun wc_apiOf(lib) { return pkg.api(wc_render(lib)); }
+
+// ------------------------------------------------------------------ templates
+fun wc_template(kind, name) {
+    let lib = nil;
+    if (kind == "math") {
+        lib = wc_new(name, "0.1.0", "دوال رياضية مساعدة");
+        wc_fn(lib, "clampTo", ["x", "lo", "hi"], "if (x < lo) { return lo; }" + __wc_nl + "if (x > hi) { return hi; }" + __wc_nl + "return x;", "يقيّد x بين lo و hi");
+        wc_fn(lib, "lerpNum", ["a", "b", "t"], "return a + (b - a) * t;", "استيفاء خطي بين a و b");
+        wc_fn(lib, "sumList", ["xs"], "let t = 0;" + __wc_nl + "for (let x in xs) { t = t + x; }" + __wc_nl + "return t;", "مجموع عناصر مصفوفة");
+        wc_fn(lib, "meanOf", ["xs"], "if (len(xs) == 0) { return 0; }" + __wc_nl + "return " + wc_ident(name) + "_sum(xs) / len(xs);", "المتوسط الحسابي");
+        wc_fn(lib, wc_ident(name) + "_sum", ["xs"], "return sumList(xs);", "مرادف لـ sumList");
+        wc_test(lib, "clampTo أعلى", "clampTo(15, 0, 10)", 10);
+        wc_test(lib, "clampTo أدنى", "clampTo(-5, 0, 10)", 0);
+        wc_test(lib, "lerpNum", "lerpNum(0, 10, 0.5)", 5);
+        wc_test(lib, "sumList", "sumList([1, 2, 3])", 6);
+        wc_test(lib, "meanOf", "meanOf([2, 4, 6])", 4);
+    }
+    if (kind == "strings") {
+        lib = wc_new(name, "0.1.0", "أدوات نصوص");
+        wc_fn(lib, "slugify", ["s"], "let r = lower(trim(s));" + __wc_nl + "r = regexReplace(r, \"[^a-z0-9]+\", \"-\");" + __wc_nl + "return regexReplace(r, \"^-+|-+$\", \"\");", "يحوّل نصاً إلى slug صالح للروابط");
+        wc_fn(lib, "capitalize", ["s"], "if (len(s) == 0) { return s; }" + __wc_nl + "return upper(substr(s, 0, 1)) + substr(s, 1, len(s) - 1);", "يكبّر أول حرف");
+        wc_fn(lib, "countWord", ["s", "w"], "return len(split(s, w)) - 1;", "عدد مرات ظهور كلمة");
+        wc_test(lib, "slugify", "slugify(\"Hello World!\")", "hello-world");
+        wc_test(lib, "capitalize", "capitalize(\"rin\")", "Rin");
+        wc_test(lib, "countWord", "countWord(\"a b a c a\", \"a\")", 3);
+    }
+    if (kind == "collections") {
+        lib = wc_new(name, "0.1.0", "أدوات مصفوفات وقواميس");
+        wc_fn(lib, "uniq", ["xs"], "let out = [];" + __wc_nl + "for (let x in xs) { if (!contains(out, x)) { push(out, x); } }" + __wc_nl + "return out;", "يزيل التكرار مع حفظ الترتيب");
+        wc_fn(lib, "chunk", ["xs", "n"], "let out = [];" + __wc_nl + "let cur = [];" + __wc_nl + "for (let x in xs) {" + __wc_nl + "    push(cur, x);" + __wc_nl + "    if (len(cur) == n) { push(out, cur); cur = []; }" + __wc_nl + "}" + __wc_nl + "if (len(cur) > 0) { push(out, cur); }" + __wc_nl + "return out;", "يقسّم المصفوفة إلى أجزاء بطول n");
+        wc_fn(lib, "pluck", ["rows", "k"], "let out = [];" + __wc_nl + "for (let r in rows) { push(out, r[k]); }" + __wc_nl + "return out;", "يستخرج حقلاً من مصفوفة قواميس");
+        wc_test(lib, "uniq", "uniq([1, 2, 1, 3, 2])", [1, 2, 3]);
+        wc_test(lib, "chunk", "chunk([1, 2, 3, 4, 5], 2)", [[1, 2], [3, 4], [5]]);
+        wc_test(lib, "pluck", "pluck([{a: 1}, {a: 2}], \"a\")", [1, 2]);
+    }
+    if (kind == "validate") {
+        lib = wc_new(name, "0.1.0", "التحقق من البيانات بمخططات JSON");
+        wc_fn(lib, "isEmail", ["s"], "return net.isValidEmail(s);", "هل النص بريد صالح");
+        wc_fn(lib, "check", ["value", "schema"], "return json.validate(value, schema);", "يتحقق من قيمة بمخطط");
+        wc_fn(lib, "assertValid", ["value", "schema"], "let r = json.validate(value, schema);" + __wc_nl + "if (!r[\"valid\"]) { fail(\"invalid: \" + json.stringify(r[\"errors\"])); }" + __wc_nl + "return value;", "يرمي خطأ إن لم تطابق القيمة المخطط");
+        wc_test(lib, "isEmail صالح", "isEmail(\"a@b.com\")", true);
+        wc_test(lib, "isEmail فاسد", "isEmail(\"nope\")", false);
+        wc_test(lib, "check صالح", "check(5, {type: \"integer\"})[\"valid\"]", true);
+        wc_test(lib, "check فاسد", "check(\"x\", {type: \"integer\"})[\"valid\"]", false);
+    }
+    if (lib == nil) { fail("wc_template: unknown kind '" + kind + "' (math|strings|collections|validate)"); }
+    return lib;
+}
+
+fun wc_templates() { return ["math", "strings", "collections", "validate"]; }
