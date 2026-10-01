@@ -14,6 +14,14 @@
 `RinDiagnosticRendererTest` و`RinConsoleOutputTest` (JUnit، بلا JNI).
 يلزم: `testImplementation("junit:junit:4.13.2")` و`testImplementation("org.json:json:20240303")`.
 
+## مخرجات الـ container المميَّزة
+- `RinContainerOutput.kt` (جديد): `ContainerFamily` (17 عائلة: pipe/data/api/import/table/doc/object/portal/block/sticker/chatbot/make/sql + Group/Volume/Section + عامة) بأيقونة وتسمية عربية ولون مميّز لكل عائلة؛ `RinContainerParser` يتعرّف على أسطر `<icon> container.X = name` و`✅|◽ .end/X (name) [تحتوي: ...]` بنفس صيغ المفسِّر الحرفية؛ `RinContainerTree` يبني شجرة متداخلة (مطابقة بالوسم والاسم، وحاوية لم تُغلق بسبب خطأ تبقى ظاهرة بتحذير) و`toTreeText()` لنسخة نصية شجرية.
+- `RinLogLine.container` (حقل إضافي): يحمل علامة الفتح/الإغلاق.
+- أسطر فتح الحاويات تُصنَّف الآن `STRUCTURE` دائماً (كان `container.doc` يُصنَّف DOC_INSERT و`container` العامة IMPORT، فيظهر حدثها في تبويب Events بنوع خاطئ).
+- `RinJobAdapter`: كل حاوية تُعرض ككتلة بإطار وخلفية بلون عائلتها، رأس فيه الأيقونة والاسم وعدّاد الأسطر، سطر «تحتوي: ...»، ومحتوى متداخل قابل للطيّ بالنقر (الكبيرة > 40 سطراً تبدأ مطويّة). أثناء البحث يعود العرض مسطّحاً.
+- ملخّص التشغيل صار يذكر الحاويات: «اكتمل التشغيل بنجاح — 12 سطراً في 3 حاويات».
+- `collapseRepeats` لا يدمج أسطر الحاويات أبداً (فتح/إغلاق متكرر داخل حلقة يبقى كتلاً منفصلة).
+
 ## ربط الواجهة (RinJobAdapter.kt) — منفَّذ
 - تبويب Output: عنوان ملخّص ملوَّن للتشغيل المنتهي («اكتمل التشغيل بنجاح — 12 سطراً» / «فشل التشغيل — خطأ واحد (السطر 4)»)، ودمج الأسطر المكرّرة مع شارة `×N`، ومسافة بادئة للأسطر المزاحة.
 - تبويب Diagnostics: تقرير rustc الكامل (مقطع المصدر + الأسهم) بدل سطرين نصيين.
