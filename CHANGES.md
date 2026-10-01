@@ -7,6 +7,15 @@ container/pipeline/namespace natives).
 
 ---
 
+## Rin 1.5 — المكتبات والحزم وجسر C++ وJSON وrintest (فوق تحديث OOP)
+
+- **جديد:** `rin_extra_natives4.cpp`: `json.*` (مسارات/diff/patch/validate/canonical)، `semver.*`، `pkg.*` (rin.toml، ترتيب التبعيات، scaffold، api، checksum)، `cpp.*` (جسر C++ مقفل افتراضياً + `rin_abi.h`).
+- **جديد:** `lib/rintest.og.rin` و`lib/packkit.og.rin` (مضمَّنتان في `rin_stdlib_libs.h`، تعملان بلا ملفات على القرص).
+- **جديد:** `rin --allow-native` (linux/macos) و`${CMAKE_DL_LIBS}` في CMake. اختبار شامل: `tests/rintests.rin` (54 اختباراً، 58 مع `--allow-native`). التفاصيل: `docs/packages-and-interop.md`.
+- لا تغيير في أي سلوك سابق؛ اختبارات OOP وextra_natives 1/2 تمر كما كانت.
+
+---
+
 ## Rin 1.4 — OOP الموسَّع
 
 ملفات جديدة: `rin_oop.cpp` (النواة) و`rin_oop_natives.cpp` (دوال `oop.*`) — تُضمَّنان تلقائياً في نهاية
