@@ -673,6 +673,9 @@ class RinCodeEditorView @JvmOverloads constructor(
 
     /** يبدّل لغة التلوين النحوي الحالية (يُستدعى عند فتح ملف جديد بامتداد مختلف، مثال: "kt"، "cpp"). */
     fun setLanguage(extension: String) {
+        // .indsin محتواه صياغة Rin نفسها (يمرّ بنفس Lexer) فيُعامَل كـ Rin في الإكمال.
+        suggestionLanguage = if (extension.lowercase().removePrefix(".") == "indsin") SyntaxLanguage.RIN
+        else SyntaxLanguage.forExtension(extension)
         engine.setLanguage(extension)
         rebuildHighlightAndDiagnosticCaches()
         invalidate()
@@ -1688,10 +1691,28 @@ class RinCodeEditorView @JvmOverloads constructor(
         return prefix to start
     }
 
+    /** لغة ملف المحرر الحالية لأغراض الإكمال التلقائي (تتبع [setLanguage]؛ الافتراضي Rin). */
+    private var suggestionLanguage: SyntaxLanguage = SyntaxLanguage.RIN
+
+    /**
+     * أسماء الدوال المبنية في Rin (input / inputNumber / toNumber / ...) المطابقة لـ [prefix]. محرك
+     * الإكمال الأصلي يقترح الكلمات المحجوزة ومعرّفات المستند فقط، فكانت الدوال المبنية لا تُقترح أبداً.
+     * تُؤخذ من القائمة المولَّدة من المحرك نفسه (RinSyntax) فلا تنفصل عنه. بادئة من حرفين فأكثر.
+     */
+    private fun builtinSuggestions(prefix: String): List<String> {
+        if (suggestionLanguage != SyntaxLanguage.RIN || prefix.length < 2) return emptyList()
+        val p = prefix.lowercase()
+        return RinSyntax.keywordsFor(SyntaxLanguage.RIN)
+            .filter { it.length > prefix.length && it.lowercase().startsWith(p) }
+            .sorted()
+    }
+
     private fun updateSuggestionPopup() {
         if (!AppSettings.isAutocomplete(context) || !hasFocus() || !isAttachedToWindow) { dismissSuggestionPopup(); return }
         val (prefix, wordStartCol) = currentWordPrefix() ?: run { dismissSuggestionPopup(); return }
-        val suggestions = engine.collectSuggestions(prefix, maxSuggestionRows)
+        val base = engine.collectSuggestions(prefix, maxSuggestionRows)
+        val suggestions = if (base.size >= maxSuggestionRows) base
+        else (base + builtinSuggestions(prefix).filter { it !in base }).take(maxSuggestionRows)
         if (suggestions.isEmpty()) { dismissSuggestionPopup(); return }
         showSuggestionPopup(suggestions, wordStartCol)
     }
