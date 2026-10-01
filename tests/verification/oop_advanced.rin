@@ -1,0 +1,174 @@
+// اختبار Rin 1.4 — OOP الموسَّع
+
+fun fails(f) { try { f(); } catch (e) { return true; } return false; }
+
+// ---------- interface + abstract + override + final ----------
+interface Shape { fun area(); fun name(); }
+interface Printable { fun describe(); }
+
+abstract class Base implements Shape, Printable {
+    let label = "base";
+    abstract fun area();
+    fun name() { return "shape"; }
+    fun describe() { return self.name() + " area=" + str(self.area()); }
+    final fun id() { return "B1"; }
+}
+class Circle extends Base {
+    let r = 0;
+    fun init(r) { self.r = r; }
+    override fun area() { return 3 * self.r * self.r; }
+    override fun name() { return "circle"; }
+}
+let c = Circle(2);
+assertEq(c.area(), 12, "area");
+assertEq(c.describe(), "circle area=12", "describe");
+assert(c instanceof Shape, "instanceof interface");
+assert(c instanceof Base, "instanceof parent");
+assert(c instanceof Circle, "instanceof self");
+assert(!(c instanceof Printable) == false, "implements via parent");
+assert(oop.implements(c, "Shape"), "oop.implements");
+assertEq(oop.abstractMethods("Base"), ["area"], "abstractMethods Base = unimplemented only");
+assertEq(oop.abstractMethods("Circle"), [], "abstractMethods Circle = none left");
+
+// ---------- abstract / interface cannot be instantiated ----------
+fun tryNew(n) { return oop.newWith(n, []); }
+let r1 = fails(fun() { return tryNew("Base"); });
+assertEq(r1, true, "abstract class rejected");
+let r2 = fails(fun() { return tryNew("Shape"); });
+assertEq(r2, true, "interface rejected");
+
+// ---------- missing implementation ----------
+class Bad implements Shape { fun area() { return 1; } }
+let r3 = fails(fun() { return Bad(); });
+assertEq(r3, true, "missing interface method detected");
+
+// ---------- traits ----------
+trait Greets { let greeting = "hi"; fun greet() { return self.greeting + " " + self.who(); } }
+trait Counts { let n = 0; fun bump() { self.n = self.n + 1; return self.n; } }
+class Person uses Greets, Counts { let nm = "x"; fun init(nm) { self.nm = nm; } fun who() { return self.nm; } }
+let p = Person("Sara");
+assertEq(p.greet(), "hi Sara", "trait method + field");
+p.bump(); assertEq(p.bump(), 2, "second trait");
+assert(p instanceof Greets, "instanceof trait");
+assertEq(oop.traits(p), ["Counts", "Greets"], "oop.traits");
+
+// ---------- static ----------
+class Counter {
+    static let total = 0;
+    static let PREFIX = "C-";
+    let id = 0;
+    fun init() { Counter.total = Counter.total + 1; self.id = Counter.total; }
+    static fun make() { return Counter(); }
+    static fun label(n) { return Counter.PREFIX + str(n); }
+}
+Counter(); Counter.make();
+let c3 = Counter();
+assertEq(Counter.total, 3, "static field shared");
+assertEq(c3.id, 3, "instance id");
+assertEq(Counter.label(7), "C-7", "static method");
+
+// ---------- private / protected / final field ----------
+class Account {
+    private let balance = 0;
+    protected let owner = "none";
+    final let created = 100;
+    fun init(o, b) { self.owner = o; self.balance = b; }
+    fun deposit(x) { self.balance = self.balance + x; return self.balance; }
+    private fun secret() { return "s3"; }
+    fun reveal() { return self.secret(); }
+}
+class Savings extends Account { fun who() { return self.owner; } }
+let a = Account("Ali", 10);
+assertEq(a.deposit(5), 15, "private via method");
+assertEq(a.reveal(), "s3", "private method via public");
+assert(fails(fun() { return a.balance; }), "private field blocked");
+assert(fails(fun() { return a.secret(); }), "private method blocked");
+assert(fails(fun() { return a.owner; }), "protected blocked outside");
+assertEq(Savings("Omar", 1).who(), "Omar", "protected inside subclass");
+assert(fails(fun() { a.created = 5; return 1; }), "final field blocked");
+assertEq(oop.peek(a, "balance"), 15, "peek bypasses");
+
+// ---------- get / set ----------
+class Temp {
+    let _c = 0;
+    get f() { return self._c * 9 / 5 + 32; }
+    set f(v) { self._c = (v - 32) * 5 / 9; }
+    get c() { return self._c; }
+}
+let t = Temp();
+t.f = 212;
+assertEq(t.c, 100, "setter");
+assertEq(t.f, 212, "getter");
+assert(fails(fun() { t.c = 5; return 1; }), "read-only property");
+
+// ---------- final class / final fun / override typo ----------
+final class Leaf { fun x() { return 1; } }
+let r4 = fails(fun() { return oop.newWith("Leaf2", []); });
+assertEq(r4, true, "unknown class");
+class Par { final fun lock() { return 1; } }
+class Kid extends Par { fun lock() { return 2; } }
+assert(fails(fun() { return Kid(); }), "final method override blocked");
+class Typo { override fun nothing() { return 1; } }
+assert(fails(fun() { return Typo(); }), "override with no parent method");
+
+// ---------- magic methods ----------
+class V {
+    let x = 0;
+    fun init(x) { self.x = x; }
+    fun __eq__(o) { return self.x == o.x; }
+    fun __lt__(o) { return self.x < o.x; }
+    fun __str__() { return "V(" + str(self.x) + ")"; }
+    fun __add__(o) { return V(self.x + o.x); }
+    fun __len__() { return self.x; }
+    fun __getitem__(i) { return self.x * i; }
+    fun __call__(k) { return self.x + k; }
+    fun __iter__() { return [self.x, self.x + 1]; }
+}
+let v1 = V(1); let v2 = V(1); let v3 = V(5);
+assert(v1 == v2, "__eq__");
+assert(v1 != v3, "!= via __eq__");
+assert(v1 < v3, "__lt__");
+assert(v3 > v1, "> via swapped __lt__");
+assertEq(str(v1 + v3), "V(6)", "__str__ in str()");
+assertEq("" + v3, "V(5)", "__str__ in concat");
+assertEq(len(v3), 5, "__len__");
+assertEq(v3[2], 10, "__getitem__");
+assertEq(v3(4), 9, "__call__");
+let acc = 0; for (let x in v3) { acc = acc + x; }
+assertEq(acc, 11, "__iter__");
+
+// ---------- oop.* ----------
+let objs = [V(3), V(1), V(2)];
+assertEq(oop.pluck(oop.sort(objs), "x"), [1, 2, 3], "oop.sort + pluck");
+assertEq(oop.max(objs).x, 3, "oop.max");
+assertEq(oop.toMap(V(4)), {x: 4}, "toMap");
+assertEq(oop.fromMap("V", {x: 9}).x, 9, "fromMap");
+let cl = oop.clone(v3); cl.x = 99;
+assertEq(v3.x, 5, "clone independent");
+assert(oop.equals(V(1), V(1)), "deep equals");
+assertEq(oop.hash(V(1)), oop.hash(V(1)), "hash stable");
+let fz = oop.freeze(V(1));
+assert(fails(fun() { fz.x = 2; return 1; }), "frozen");
+assertEq(oop.get(v3, "x"), 5, "oop.get");
+assertEq(oop.call(v3, "__str__"), "V(5)", "oop.call");
+assertEq(oop.className(v3), "V", "className");
+assertEq(oop.parent("Circle"), "Base", "parent");
+assertEq(oop.ancestors("Circle"), ["Base"], "ancestors");
+assertEq(oop.descendants("Base"), ["Circle"], "descendants");
+assert(oop.hasMethod("Circle", "area"), "hasMethod");
+assertEq(oop.arity("Circle", "init"), 1, "arity");
+assertEq(oop.access("Account", "balance"), "private", "access");
+assertEq(oop.signature("V", "__add__"), "__add__(o)", "signature");
+
+// ---------- singleton ----------
+class Config { let v = 1; fun init(v) { self.v = v; } }
+let s1 = oop.singleton("Config", 7);
+let s2 = oop.singleton("Config", 99);
+assert(oop.same(s1, s2), "singleton");
+assertEq(s2.v, 7, "singleton keeps first args");
+
+// ---------- type-annotation with interface ----------
+fun areaOf(s: Shape) { return s.area(); }
+assertEq(areaOf(c), 12, "type check against interface");
+
+print "OOP ADVANCED OK";
