@@ -1,0 +1,24 @@
+short? [قيمة غير مقبولة] short? age? [خارج 0..120] age? [خارج 0..120] age? email? theme? volume? الدور:
+1) Admin
+2) Editor
+3) Viewerحقل:
+1) theme
+2) volume[اختر رقماً من القائمة]
+حقل:
+1) theme
+2) volumeمن؟
+1) سعد
+2) منىلون:
+1) أحمر
+2) أخضرموافق؟ 📦 container = Settings
+✅ .end/container (Settings)
+word=ok
+age=42
+email=me@example.com
+dark/7
+true
+محرر/مشاهد
+dark
+منى
+#0f0
+true
