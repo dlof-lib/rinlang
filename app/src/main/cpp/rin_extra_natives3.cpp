@@ -1,5 +1,5 @@
 // ============================================================================
-//  rin_extra_natives3.cpp — Rin 1.3 native library additions
+//  rin_extra_natives3.cpp — Rin 1.0 native library additions
 // ----------------------------------------------------------------------------
 //  دفعة ثالثة فوق rin_extra_natives.cpp و rin_extra_natives2.cpp دون تعديل أي منهما.
 //  تُسجَّل من Interpreter::registerNativesExtra3() التي تُستدعى بعد registerNativesExtra2().
