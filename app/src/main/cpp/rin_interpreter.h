@@ -90,6 +90,7 @@ struct InstanceData {
     bool isStruct = false;
     std::unordered_map<std::string, Value> fields;
     std::vector<std::string> fieldOrder; // ترتيب أول ظهور لكل حقل (لأجل toDisplayString مرتّبة)
+    bool frozen = false; // Rin 1.4: oop.freeze(obj) — يمنع أي كتابة لاحقة على الحقول
 };
 
 // مقارنة تركيبية (structural) بين قيمتين، تُستخدم في == != وفهرسة القواميس بالمفتاح.
@@ -104,6 +105,40 @@ struct ClassDef {
     std::vector<std::pair<std::string, ExprPtr>> fieldDefs; // (اسم الحقل، عبارة القيمة الافتراضية أو nullptr)
     std::unordered_map<std::string, std::shared_ptr<FunctionStmt>> methods; // تتضمن "init" إن عُرِّفت
     int line = 0;
+
+    // ---- Rin 1.4: OOP الموسَّع ----
+    ClassKind kind = ClassKind::Class;           // class/struct | interface | trait
+    bool isAbstract = false;
+    bool isFinal = false;
+    std::vector<std::string> interfaces;         // implements (class) / extends (interface)
+    std::vector<std::string> traits;             // uses
+    struct MemberMeta { std::string access; bool isFinal = false; };
+    std::unordered_map<std::string, MemberMeta> fieldMeta;   // صلاحيات/final للحقول (instance)
+    // حقول static: تُهيَّأ كسولاً عند أول وصول (ensureStatics) كي تستطيع إشارة أصنافاً مُعرَّفة لاحقاً.
+    std::vector<std::pair<std::string, ExprPtr>> staticFieldDefs;
+    std::unordered_map<std::string, MemberMeta> staticMeta;
+    std::unordered_map<std::string, Value> staticValues;
+    std::vector<std::string> staticOrder;
+    bool staticsInitialized = false;
+    std::unordered_map<std::string, std::shared_ptr<FunctionStmt>> staticMethods;
+    // خصائص محسوبة: get name() {...} / set name(v) {...}
+    std::unordered_map<std::string, std::shared_ptr<FunctionStmt>> getters;
+    std::unordered_map<std::string, std::shared_ptr<FunctionStmt>> setters;
+};
+
+// ---- Rin 1.4: مراقبون/روابط/مستمعو أحداث على الكائنات (oop.observe/bindProperty/on ...) ----
+// سجل واحد في Interpreter::observers_. المراقب يرتبط بكائن عبر weak_ptr (لا يُطيل عمر الكائن).
+struct OopObserver {
+    int id = 0;
+    std::weak_ptr<InstanceData> obj;
+    std::string field;            // اسم الحقل/الخاصية ("*" = أي حقل)، أو اسم الحدث إن isEvent
+    bool isEvent = false;         // true: مستمع حدث يُشغَّل بـ oop.emit
+    bool once = false;            // يُزال بعد أول تشغيل
+    Value fn;                     // callback: (new, old, obj) للمراقب — (args...) للحدث
+    bool isBinding = false;       // ربط خصائص: يكتب القيمة الجديدة في dst.dstField
+    Value dst;
+    std::string dstField;
+    Value transform;              // دالة اختيارية تحوّل القيمة قبل الكتابة (أو nil)
 };
 
 // نقطة API واحدة مُسجَّلة داخل @container.api عبر عبارة route؛ يُستخدَم لمطابقة استدعاءات call()/callApi()
@@ -921,7 +956,8 @@ private:
     // يبني كائناً جديداً من صنف [className]: يمشي سلسلة الوراثة من الجذر (الأب الأبعد) حتى الصنف
     // نفسه فيُهيّئ كل الحقول بترتيبها (فتُطغى قيم الابن على الأب عند تكرار نفس الاسم)، ثم يستدعي
     // 'init' الأقرب في سلسلة الوراثة إن عُرِّفت (بـ args)، أو يرفض أي وسيط إن لم تُعرَّف init إطلاقاً.
-    Value instantiateClass(const std::string& className, std::vector<Value>& args, int line);
+    // [env] (اختياري، Rin 1.4): بيئة المستدعي — تُستخدم لفحص صلاحية مُنشئ private/protected (سياق الصنف).
+    Value instantiateClass(const std::string& className, std::vector<Value>& args, int line, const EnvPtr& env = nullptr);
     // يبحث عن دالة (method) باسم معيّن بدءاً من [className] ثم صعوداً عبر superclass (توريث بسيط
     // بترتيب أقرب تعريف يفوز)؛ nullptr إن لم توجد في السلسلة كاملة.
     // يبحث عن دالة (method) باسم معيّن بدءاً من [className] ثم صعوداً عبر superclass (توريث بسيط
@@ -951,6 +987,62 @@ private:
     // shared_ptr كما تفعل class/array/map عادةً. أي قيمة أخرى (بما فيها class instance عادية) تُعاد
     // كما هي بلا أي نسخ (سلوك المرجع المعتاد، بلا أي تغيير).
     Value copyForBinding(const Value& v) const;
+
+public: // Rin 1.4: واجهة OOP الموسَّعة (يستدعيها Value::toDisplayString وrin_oop*.cpp)
+    // ================= Rin 1.4: OOP الموسَّع (interface / trait / abstract / static / private / get-set ...) =================
+    // ينفَّذ في rin_interpreter.cpp (قسم "OOP 1.4") وتُسجَّل دوال oop.* في rin_oop_natives.cpp.
+    bool restrictedMembers_ = false;      // true إن استُخدم private/protected/final أي مرة (لتجاوز الفحص الكلفة صفر قبلها)
+    bool accessorsExist_ = false;         // true إن عُرِّف أي get/set أي مرة
+    std::unordered_set<std::string> validatedClasses_; // أصناف اجتازت فحص abstract/interface/final/override
+    std::unordered_map<std::string, Value> singletons_;
+    bool skipInit_ = false;               // يُضبَط مؤقتاً من oop.fromMap لإنشاء كائن بلا استدعاء init
+    Value bindStaticFn(const std::shared_ptr<FunctionStmt>& m, const std::string& owner);
+    void registerNativesOop();            // rin_oop_natives.cpp
+    void registerNativesOopBind();        // rin_oop_bind.cpp — دوال الربط (bind/partial/curry/observe/bindProperty/on)
+    std::vector<OopObserver> observers_;
+    int nextObserverId_ = 1;
+    bool observersExist_ = false;         // false => كلفة صفر في writeMember
+    void notifyObservers(const Value& obj, const std::string& field, const Value& oldV, const Value& newV, int line);
+    // يستدعي fn مع قصّ/حشو (nil) الوسائط لتطابق عدد وسائطها المعلنة — فيقبل callback بوسيط واحد أو صفر.
+    Value callFlexible(const Value& fn, std::vector<Value> args, int line);
+
+    // ---- استعلامات الأنواع والوراثة ----
+    bool classIsSubclassOf(const std::string& cls, const std::string& base) const;   // يشمل التساوي (سلسلة extends فقط)
+    bool isInstanceOf(const Value& v, const std::string& typeName) const;             // class chain + interfaces + traits
+    bool typeNameIsAncestor(const std::string& cls, const std::string& typeName) const; // نفس السابقة لكن على اسم صنف
+    void collectInterfaces(const std::string& cls, std::vector<std::string>& out) const; // كل الواجهات (مع الموروثة)
+    void collectTraits(const std::string& cls, std::vector<std::string>& out) const;     // كل السمات (مع المتداخلة)
+    std::vector<std::string> classChain(const std::string& cls) const;                  // [cls, parent, grandparent...]
+    std::shared_ptr<FunctionStmt> findAccessor(const std::string& cls, const std::string& name, bool setter,
+                                                std::string* ownerOut = nullptr) const;
+    const ClassDef::MemberMeta* findFieldMeta(const std::string& cls, const std::string& name,
+                                               std::string* declOut = nullptr) const;
+    void validateInstantiable(const std::string& className, int line);
+
+    // ---- static ----
+    void ensureStatics(const std::string& cls);
+    ClassDef* findStaticFieldOwner(const std::string& cls, const std::string& name);
+    std::shared_ptr<FunctionStmt> findStaticMethod(const std::string& cls, const std::string& name, std::string* ownerOut = nullptr) const;
+    Value staticGet(const std::string& cls, const std::string& name, const EnvPtr& env, int line);
+    Value staticSet(const std::string& cls, const std::string& name, const Value& v, const EnvPtr& env, int line);
+    Value callStatic(const std::string& cls, const std::string& name, std::vector<Value>& args, const EnvPtr& env, int line);
+
+    // ---- الوصول للأعضاء (صلاحيات + خصائص + استدعاء) ----
+    std::string currentClassCtx(const EnvPtr& env) const;
+    void checkMemberAccess(const std::string& declClass, const std::string& access, const std::string& member,
+                           const char* what, const EnvPtr& env, int line) const;
+    Value readMember(const Value& obj, const std::string& name, const EnvPtr& env, int line);
+    Value writeMember(const Value& obj, const std::string& name, const Value& val, const EnvPtr& env, int line);
+    Value callMethodOn(const Value& obj, const std::string& method, std::vector<Value>& args, const EnvPtr& env, int line);
+    Value callValue(const Value& callee, std::vector<Value>& args, int line); // دالة أو كائن بـ __call__
+
+    // ---- العوامل السحرية الإضافية ----
+    std::optional<Value> tryCompareOverload(TokenType op, const Value& l, const Value& r, int line);
+    std::optional<bool> tryEqOverload(const Value& l, const Value& r, bool negate, int line);
+    std::optional<Value> callMagic(const Value& inst, const std::string& magic, std::vector<Value>& args, int line);
+    bool hasMagic(const Value& inst, const std::string& magic) const;
+    bool tryInstanceToString(const Value& v, std::string& out); // __str__ / toString
+private:
 
     // ---- Type System: أبسط تحقق ممكن (اختياري 100%، additive بحت) ----
     // 'let x: Type = ...' / 'fun f(a: Type): Type' -- typeName الفارغ يعني "بلا نوع معلَن"، فيعود
