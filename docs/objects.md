@@ -111,6 +111,7 @@ view.print/object(user01);     // أو معاينة قيمة كائن مباشر
 NoSQL — إدراج بنفس `id` موجود مسبقًا يُحدِّثه بدل تكراره.
 
 ## انظر أيضًا
+- [`oop.md`](./oop.md) — الامتداد الكامل لـ`class`: `interface`/`trait`/`abstract`/`static`/`private`/`get`/`set`/دوال `oop.*`.
 - [`containers.md`](./containers.md) — `@container` بكل أنواعه (`doc`, `data`,
   `table`, ...) ودوال الوصول الديناميكي العامة للحاويات.
 - [`variables.md`](./variables.md) — القواميس (map) التي تُبنى عليها كل هذه الأشكال.
