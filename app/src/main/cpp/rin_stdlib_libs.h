@@ -12368,12 +12368,126 @@ fun wc_convertFile(path, outDir, mode, strategy, opts) {
 }
 )WESSCODEOGRIN";
 
+static const char* kLib_inputkit_og_rin = R"INPUTKITOGRIN(
+// ============================================================================
+//  lib/inputkit.og.rin — أصناف (OOP) جاهزة للتحقق من إدخال المستخدم
+//  لا دوال مبنية جديدة: كل صنف يعرّف __call__ فيُمرَّر مباشرة كـ validator لدوال الإدخال:
+//      input(prompt, validator?, target?, key?)   inputNumber(prompt, validator?, target?, key?)
+//  أو كقيمة في مخطّط النموذج:  input(prompt, target, {"age": Range(0, 120)})
+//  استيراد:  @import "lib/inputkit.og.rin";
+//
+//  العقد: __call__(v) تعيد true للقبول، أو نصاً = سبب الرفض (يظهر للمستخدم).
+//  الحقل  type  ("string" | "number" | "bool") يخبر النموذج أي دالة إدخال يستدعي لهذا الحقل.
+// ============================================================================
+
+interface Check { fun __call__(v); }
+
+abstract class Rule implements Check {
+    let type = "string";
+    let message = "";
+    abstract fun __call__(v);
+    // رسالة مخصّصة تغلب الافتراضية:  Range(0,120).withMessage("العمر غير معقول")
+    fun withMessage(m) { self.message = m; return self; }
+    fun fail(fallback) {
+        if (self.message != "") { return self.message; }
+        return fallback;
+    }
+}
+
+// غير فارغ (بعد trim)
+class Required extends Rule {
+    fun __call__(v) {
+        if (trim(toString(v)) == "") { return self.fail("مطلوب"); }
+        return true;
+    }
+}
+
+// طول النص بالمحارف (utf8Len، فالعربية تُحسب صحيحاً لا بالبايتات)
+class Length extends Rule {
+    let lo = 0;
+    let hi = 1000000;
+    fun init(lo, hi) { self.lo = lo; self.hi = hi; }
+    fun __call__(v) {
+        let n = utf8Len(toString(v));
+        if (n < self.lo or n > self.hi) {
+            return self.fail("الطول يجب أن يكون بين " + self.lo + " و " + self.hi);
+        }
+        return true;
+    }
+}
+
+// رقم ضمن [lo, hi]
+class Range extends Rule {
+    let lo = 0;
+    let hi = 0;
+    fun init(lo, hi) { self.type = "number"; self.lo = lo; self.hi = hi; }
+    fun __call__(v) {
+        if (v < self.lo or v > self.hi) { return self.fail("خارج " + self.lo + ".." + self.hi); }
+        return true;
+    }
+}
+
+// رقم صحيح (بلا كسر)
+class Integer extends Rule {
+    fun init() { self.type = "number"; }
+    fun __call__(v) {
+        if (floor(v) != v) { return self.fail("يجب أن يكون عدداً صحيحاً"); }
+        return true;
+    }
+}
+
+// واحد من قائمة (مصفوفة)
+class OneOf extends Rule {
+    let options = [];
+    fun init(options) { self.options = options; }
+    fun __call__(v) {
+        if (!contains(self.options, v)) { return self.fail("اختر من: " + toString(self.options)); }
+        return true;
+    }
+}
+
+// يطابق تعبيراً نمطياً (regexTest)
+class Matches extends Rule {
+    let pattern = "";
+    fun init(pattern) { self.pattern = pattern; }
+    fun __call__(v) {
+        if (!regexTest(toString(v), self.pattern)) { return self.fail("صيغة غير صحيحة"); }
+        return true;
+    }
+}
+
+class Email extends Matches {
+    fun init() { self.pattern = "^[^@ ]+@[^@ ]+\\.[^@ ]+$"; }
+    fun __call__(v) {
+        if (!regexTest(toString(v), self.pattern)) { return self.fail("بريد إلكتروني غير صالح"); }
+        return true;
+    }
+}
+
+// تركيب عدة قواعد: أول رفض يُعاد؛ النوع يؤخذ من أول قاعدة
+class Every extends Rule {
+    let rules = [];
+    fun init(rules) {
+        self.rules = rules;
+        if (len(rules) > 0) { self.type = oop.get(rules[0], "type", "string"); }
+    }
+    fun __call__(v) {
+        for (let r in self.rules) {
+            let res = r(v);
+            if (res != true) { return res; }
+        }
+        return true;
+    }
+}
+)INPUTKITOGRIN";
+
 inline const std::unordered_map<std::string, std::string>& embeddedRinLibraries() {
     static const std::unordered_map<std::string, std::string> libs = {
         {"lib/math.og.rin", kLib_math_og_rin},
         {"lib/strings.og.rin", kLib_strings_og_rin},
         {"lib/data.og.rin", kLib_data_og_rin},
         {"lib/validate.og.rin", kLib_validate_og_rin},
+        {"lib/inputkit.og.rin", kLib_inputkit_og_rin},
         {"lib/functional.og.rin", kLib_functional_og_rin},
         {"lib/oglang.og.rin", kLib_oglang_og_rin},
         {"lib/ringo.og.rin", kLib_ringo_og_rin},
