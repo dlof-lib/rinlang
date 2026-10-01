@@ -128,7 +128,7 @@ int runRepl() {
 } // namespace
 
 int main(int argc, char** argv) {
-    // --allow-native: يفعّل جسر C++ (cpp.*) لهذا التشغيل فقط (Rin 1.5). قرار المستخدم لا الكود.
+    // --allow-native: يفعّل جسر C++ (cpp.*) لهذا التشغيل فقط (Rin 1.0). قرار المستخدم لا الكود.
     {
         int w = 1;
         for (int i = 1; i < argc; ++i) {
