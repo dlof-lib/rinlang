@@ -88,3 +88,10 @@ rin_indsin_preview file.rin --width 390 --png out.png --html out.html --tap 60,1
 ```
 الاختبار: `tools/test_indsin_preview.cpp`. قوالب المشاريع الخمسة (آلة حاسبة/مدونة/أزرار/معرض/ويب فيو)
 موجودة كملفات في `examples/indsin_templates/` ومولَّدة من `ProjectManager.kt`.
+
+## التوسعة الاحترافية (Design System v2)
+
+توكنز موسَّعة (elevation/z/breakpoints/duration/opacity)، ثيمات جديدة (HighContrast وSepia وForest وRose)،
+مولّد ثيم من لون واحد مع فحص WCAG، تصميم متجاوب بلاحقات `_md/_lg`، حركات متتابعة `stagger=`،
+8 actions جديدة، مدقّق إمكانية الوصول، وواجهة استعلام للشجرة — راجع
+[`docs/indsin_expansion.md`](./docs/indsin_expansion.md) والمثال `examples/samples/indsin_system_demo.rin`.
