@@ -1,7 +1,7 @@
 // ============================================================================
-//  rin_extra_natives2.cpp — Rin 1.2 native library additions
+//  rin_extra_natives2.cpp — Rin 1.0 native library additions
 // ----------------------------------------------------------------------------
-//  دفعة ثانية من الدوال الأصلية، فوق rin_extra_natives.cpp (Rin 1.1) دون تعديل أي
+//  دفعة ثانية من الدوال الأصلية، فوق rin_extra_natives.cpp (Rin 1.0) دون تعديل أي
 //  منهما. تُسجَّل من Interpreter::registerNativesExtra2()، تُستدعى مباشرة بعد
 //  registerNativesExtra() في registerNatives() (rin_interpreter.cpp).
 //
