@@ -2186,7 +2186,8 @@ void Interpreter::registerNatives() {
         std::string prompt;
         bool hasValidator = false; Value validator;
         bool hasTarget = false;    Value target; std::string key;
-        bool form = false;         // input(prompt, "Container"): املأ كل حقول الحاوية
+        bool form = false;         // input(prompt, target): املأ كل حقول الهدف (حاوية/كائن/قاموس)
+        bool hasSchema = false; Value schema;  // input(prompt, target, {حقل: مواصفة}) — يغطي حتى حقول nil
     };
     // askRaw: نقطة واحدة تقرأ سطراً من المستخدم — عبر InputProvider (نافذة على أندرويد) أو stdin (CLI).
     // يعيد false إذا ألغى المستخدم/انتهى الإدخال بلا بيانات (EOF في stdin يُعامَل كإلغاء فقط حين
@@ -2227,8 +2228,22 @@ void Interpreter::registerNatives() {
         }
         size_t rest = a.size() > i ? a.size() - i : 0;
         if (rest == 0) return ia;
-        if (rest == 1 && fn == "input" && a[i].type == Value::Type::STRING && containers.count(a[i].str)) {
+        if (rest == 1 && fn == "input" &&
+            ((a[i].type == Value::Type::STRING && containers.count(a[i].str)) ||
+             a[i].type == Value::Type::MAP || a[i].type == Value::Type::INSTANCE)) {
+            if (a[i].type == Value::Type::INSTANCE && a[i].instance && a[i].instance->frozen)   // افشل قبل السؤال لا بعده
+                throw errWithReason(diag::Code::E0035_RuntimeError, line, "cannot fill a frozen `" + a[i].instance->className + "` object",
+                                    "this object was frozen with `oop.freeze(...)`");
             ia.hasTarget = true; ia.target = a[i]; ia.form = true; return ia;
+        }
+        if (rest == 2 && fn == "input" && a[i + 1].type == Value::Type::MAP &&
+            ((a[i].type == Value::Type::STRING && containers.count(a[i].str)) ||
+             a[i].type == Value::Type::MAP || a[i].type == Value::Type::INSTANCE)) {
+            if (a[i].type == Value::Type::INSTANCE && a[i].instance && a[i].instance->frozen)
+                throw errWithReason(diag::Code::E0035_RuntimeError, line, "cannot fill a frozen `" + a[i].instance->className + "` object",
+                                    "this object was frozen with `oop.freeze(...)`");
+            ia.hasTarget = true; ia.target = a[i]; ia.form = true; ia.hasSchema = true; ia.schema = a[i + 1];
+            return ia;
         }
         if (rest != 2)
             throw diagErr(diag::Code::E0007_InvalidArguments, line,
@@ -2282,18 +2297,65 @@ void Interpreter::registerNatives() {
     };
     // fillForm: لكل حقل في الحاوية (مرتباً) يستدعي input/inputNumber/confirm نفسها حسب container.fieldType.
     auto fillForm = [this, callNat](const InArgs& ia, int line) -> Value {
-        Value names = callNat("container.fieldNames", {ia.target}, line);
+        const bool isCont = ia.target.type == Value::Type::STRING;
         std::vector<std::string> ks;
-        if (names.type == Value::Type::ARRAY && names.array) for (auto& n : *names.array) ks.push_back(n.str);
-        std::sort(ks.begin(), ks.end());
-        for (const auto& k : ks) {
-            std::string ty = callNat("container.fieldType", {ia.target, Value::string(k)}, line).str;
-            const char* fn = ty == "number" ? "inputNumber" : ty == "bool" ? "confirm" : ty == "string" ? "input" : nullptr;
-            if (!fn) continue;                                  // مصفوفات/قواميس/دوال: خارج النموذج
-            Value lbl = Value::string(ia.prompt + k + ": ");
-            callNat(fn, {lbl, ia.target, Value::string(k)}, line);
+        std::unordered_map<std::string, std::string> tys;           // اسم الحقل -> نوعه
+        if (isCont) {
+            Value names = callNat("container.fieldNames", {ia.target}, line);
+            if (names.type == Value::Type::ARRAY && names.array) for (auto& n : *names.array) ks.push_back(n.str);
+            std::sort(ks.begin(), ks.end());                         // ترتيب حقول الحاوية غير مضمون => أبجدي
+            for (const auto& k : ks) tys[k] = callNat("container.fieldType", {ia.target, Value::string(k)}, line).str;
+        } else {
+            // كائن أو قاموس: oop.toMap للكائن (بترتيب التعريف)، والقاموس نفسه بترتيب إدخاله.
+            Value m = ia.target.type == Value::Type::INSTANCE ? callNat("oop.toMap", {ia.target}, line) : ia.target;
+            for (auto& kv : *m.map) { ks.push_back(kv.first.toDisplayString()); tys[ks.back()] = kv.second.typeName(); }
         }
-        return callNat("container.snapshot", {ia.target}, line);
+        // مواصفات المخطّط: حقول المخطّط غير الموجودة في الهدف (مثل حقل nil) تُضاف بعد حقوله.
+        std::unordered_map<std::string, Value> spec;
+        if (ia.hasSchema) {
+            for (auto& kv : *ia.schema.map) {
+                std::string k = kv.first.toDisplayString();
+                spec[k] = kv.second;
+                if (!tys.count(k)) { ks.push_back(k); tys[k] = "nil"; }
+            }
+        }
+        for (const auto& k : ks) {
+            Value lbl = Value::string(ia.prompt + k + ": ");
+            Value kk = Value::string(k);
+            auto sp = spec.find(k);
+            // 1) بلا مواصفة: النوع من القيمة الحالية (nil/مركّب => يُتخطّى).
+            // 2) مواصفة نص "number"/"bool"/"string": النوع صراحةً.
+            // 3) مواصفة مصفوفة/قاموس/enum: choose.   4) مواصفة callable (fun/صنف __call__): validator.
+            std::string ty = tys[k];
+            const Value* validator = nullptr;
+            if (sp != spec.end()) {
+                const Value& v = sp->second;
+                if (v.type == Value::Type::NIL) continue;
+                if (v.type == Value::Type::STRING) {
+                    if (v.str != "number" && v.str != "bool" && v.str != "string" && v.str != "text")
+                        throw diagErr(diag::Code::E0007_InvalidArguments, line,
+                                      "input: نوع غير معروف '" + v.str + "' للحقل '" + k + "' (المتاح: number · bool · string)");
+                    ty = v.str == "text" ? "string" : v.str;
+                } else if (v.type == Value::Type::ARRAY || v.type == Value::Type::MAP) {
+                    callNat("choose", {lbl, v, ia.target, kk}, line);
+                    continue;
+                } else if (v.type == Value::Type::FUNCTION || (v.type == Value::Type::INSTANCE && hasMagic(v, "__call__"))) {
+                    validator = &v;
+                    // نوع الحقل: من حقل `type` في صنف المُدقِّق (انظر lib/inputkit)، وإلا من القيمة الحالية، وإلا نص.
+                    Value t = v.type == Value::Type::INSTANCE ? callNat("oop.get", {v, Value::string("type"), Value::nil()}, line) : Value::nil();
+                    if (t.type == Value::Type::STRING) ty = t.str;
+                    else if (ty == "nil") ty = "string";
+                } else {
+                    throw diagErr(diag::Code::E0004_InvalidType, line,
+                                  "input: مواصفة الحقل '" + k + "' يجب أن تكون نوعاً (نص) أو خيارات أو مُدقِّقاً، لا " + v.typeName());
+                }
+            }
+            const char* fn = ty == "number" ? "inputNumber" : ty == "bool" ? "confirm" : ty == "string" ? "input" : nullptr;
+            if (!fn) continue;                                  // مصفوفات/قواميس/دوال/nil بلا مواصفة: خارج النموذج
+            if (validator && ty != "bool") callNat(fn, {lbl, *validator, ia.target, kk}, line);
+            else                           callNat(fn, {lbl, ia.target, kk}, line);
+        }
+        return isCont ? callNat("container.snapshot", {ia.target}, line) : ia.target;
     };
     auto cancelErr = [](const char* fn, int line) {
         return diagErr(diag::Code::E0035_RuntimeError, line, std::string("تم إلغاء الإدخال (") + fn + ")");
