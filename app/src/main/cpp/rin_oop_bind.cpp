@@ -67,6 +67,7 @@ void Interpreter::notifyObservers(const Value& obj, const std::string& field, co
             callFlexible(o.fn, {newV, oldV, obj, Value::string(field)}, line);
         }
     }
+    if (linksExist_) pushLinks(obj, field, newV, line); // Rin 1.0: روابط الحاويات/Warp (rin_oop_link.cpp)
 }
 
 // ---------------------------------------------------------------------------
@@ -343,20 +344,26 @@ void Interpreter::registerNativesOopBind() {
     natives["oop.unobserve"] = [this, B](Args& a, int line) -> Value {
         need("oop.unobserve", a, 1, 1, line);
         int id = static_cast<int>(num(a[0], "oop.unobserve", line));
-        size_t before = observers_.size();
+        size_t before = observers_.size() + links_.size();
         observers_.erase(std::remove_if(observers_.begin(), observers_.end(), [id](const OopObserver& o) { return o.id == id; }), observers_.end());
-        return B(observers_.size() != before);
+        links_.erase(std::remove_if(links_.begin(), links_.end(), [id](const OopLink& l) { return l.id == id; }), links_.end());
+        return B(observers_.size() + links_.size() != before);
     };
     natives["oop.unobserveAll"] = [this, needInst, N](Args& a, int line) -> Value {
         need("oop.unobserveAll", a, 1, 1, line);
         needInst(a[0], "oop.unobserveAll", line);
-        size_t before = observers_.size();
+        size_t before = observers_.size() + links_.size();
         auto target = a[0].instance;
         observers_.erase(std::remove_if(observers_.begin(), observers_.end(), [&](const OopObserver& o) {
             auto sp = o.obj.lock();
             return !sp || sp == target;
         }), observers_.end());
-        return N(static_cast<double>(before - observers_.size()));
+        links_.erase(std::remove_if(links_.begin(), links_.end(), [&](const OopLink& l) {
+            if (l.target == OopLink::Target::Watch) return false; // Watch لا تخص كائناً
+            auto sp = l.obj.lock();
+            return !sp || sp == target;
+        }), links_.end());
+        return N(static_cast<double>(before - (observers_.size() + links_.size())));
     };
     natives["oop.observers"] = [this, needInst, S, N](Args& a, int line) -> Value {
         need("oop.observers", a, 1, 1, line);
@@ -369,6 +376,18 @@ void Interpreter::registerNativesOopBind() {
             m.push_back({S("id"), N(o.id)});
             m.push_back({S("kind"), S(o.isEvent ? "event" : (o.isBinding ? "binding" : "observer"))});
             m.push_back({S("field"), S(o.field)});
+            out.push_back(newMap(std::move(m)));
+        }
+        for (auto& l : links_) { // روابط الحاويات/Warp الخاصة بهذا الكائن
+            if (l.target == OopLink::Target::Watch) continue;
+            auto sp = l.obj.lock();
+            if (!sp || sp != a[0].instance) continue;
+            MapData m;
+            m.push_back({S("id"), N(l.id)});
+            m.push_back({S("kind"), S(l.target == OopLink::Target::Warp ? "warp" : "container")});
+            m.push_back({S("field"), S(l.field)});
+            m.push_back({S("target"), S(l.target == OopLink::Target::Warp ? l.key : l.container + "." + l.key)});
+            m.push_back({S("mode"), S(l.mode == 0 ? "push" : (l.mode == 1 ? "pull" : "two-way"))});
             out.push_back(newMap(std::move(m)));
         }
         return newArray(std::move(out));
@@ -433,6 +452,8 @@ void Interpreter::registerNativesOopBind() {
         }
         return N(n);
     };
+
+    registerNativesOopLink(); // روابط الحاويات وIndsin (rin_oop_link.cpp)
 }
 
 } // namespace rin
