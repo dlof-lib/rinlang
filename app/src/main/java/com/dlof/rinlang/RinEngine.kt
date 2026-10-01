@@ -94,6 +94,33 @@ object RinEngine {
         listener: RinStreamListener
     ): String
 
+    /**
+     * يستلم طلبات الإدخال من برنامج Rin (input / inputNumber / confirm / choose). يُستدعى
+     * متزامناً داخل النداء الأصلي على ترد التشغيل نفسه، وله أن يحجب الترد حتى يجيب المستخدم.
+     * يعيد null إذا ألغى المستخدم (يُوقَف البرنامج حينها بخطأ تشغيل واضح).
+     */
+    fun interface RinInputHandler {
+        fun onInput(prompt: String): String?
+    }
+
+    /**
+     * نفس [runSourceStructuredStreaming] تماماً، مع دعم دوال الإدخال عبر [inputHandler].
+     * الدالتان القديمتان لم تتغيّرا؛ هذه إضافة فقط.
+     */
+    fun runSourceInteractive(
+        source: String,
+        listener: RinStreamListener?,
+        inputHandler: RinInputHandler?
+    ): RinExecutionResult =
+        RinExecutionResult.parse(runSourceInteractiveNative(source, baseDir, listener, inputHandler))
+
+    private external fun runSourceInteractiveNative(
+        source: String,
+        baseDir: String,
+        listener: RinStreamListener?,
+        inputHandler: RinInputHandler?
+    ): String
+
     /** Returns a human readable version string for the native engine. */
     external fun engineVersion(): String
 
