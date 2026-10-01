@@ -372,4 +372,7 @@ print \"Hello, \" + name + \"!\";
     <string name="link_copied">Copied</string>
     <string name="link_share">Share</string>
     <string name="link_copy">Copy</string>
+    <string name="rin_input_title">Input</string>
+    <string name="rin_input_hint">Type your answer</string>
+    <string name="rin_input_default_prompt">The program is waiting for input</string>
 </resources>
