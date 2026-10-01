@@ -91,7 +91,8 @@ fun wc_new(name, version, description) {
     return {
         name: name, version: version, description: description,
         author: "", license: "MIT",
-        deps: {}, funcs: [], consts: [], classes: [], tests: [], cpp: [], raw: []
+        deps: {}, funcs: [], consts: [], classes: [], tests: [], cpp: [], raw: [],
+        layout: {mode: "single", strategy: "kind", opts: nil}
     };
 }
 
@@ -315,6 +316,11 @@ fun wc_check(lib) {
         let tt = lang.check(wc_renderTests(lib));
         if (!tt["ok"]) { push(errors, "الاختبارات: سطر " + tt["line"] + ": " + tt["message"]); }
     }
+    if (len(errors) == 0 and lib["layout"]["mode"] != "single") {
+        let cv = wc_convert(wc_render(lib), lib["name"], lib["layout"]["mode"], lib["layout"]["strategy"], lib["layout"]["opts"]);
+        if (!cv["ok"]) { push(errors, "التخطيط " + lib["layout"]["mode"] + ": " + cv["error"]); }
+        else { for (let w in cv["warnings"]) { push(warnings, w); } }
+    }
     if (len(lib["tests"]) == 0) { push(warnings, "لا اختبارات مضافة (wc_test)"); }
     return {ok: len(errors) == 0, errors: errors, warnings: warnings};
 }
@@ -327,7 +333,19 @@ fun wc_write(lib, dir) {
     let files = [];
     let out = {};
     out["rin.toml"] = wc_manifest(lib);
-    out["src/lib.rin"] = wc_render(lib);
+    let lay = lib["layout"];
+    let rendered = wc_render(lib);
+    if (lay["mode"] == "parts") {
+        let popts = {importBase: "src/"};
+        if (lay["opts"] != nil) { popts = json.mergeDeep(lay["opts"], popts); }
+        let pr = wc_toParts(rendered, lib["name"], lay["strategy"], popts);
+        out["src/lib.rin"] = pr["entry"];
+        for (let pp in pr["order"]) { out["src/" + pp] = pr["parts"][pp]; }
+    } else if (lay["mode"] == "sections") {
+        out["src/lib.rin"] = wc_toSections(rendered, lib["name"], lay["strategy"], lay["opts"])["source"];
+    } else {
+        out["src/lib.rin"] = rendered;
+    }
     out["tests/" + id + "_test.rin"] = wc_renderTests(lib);
     out["docs/API.md"] = wc_docs(lib);
     out["README.md"] = "# " + lib["name"] + __wc_nl + __wc_nl + lib["description"] + __wc_nl + __wc_nl
@@ -424,3 +442,369 @@ fun wc_template(kind, name) {
 }
 
 fun wc_templates() { return ["math", "strings", "collections", "validate"]; }
+
+// ===========================================================================
+//  التحويلتان: جزء (Parts) وقسم (Sections)
+// ---------------------------------------------------------------------------
+//  wc_toParts(src, name, strategy, opts)     → ملف واحد  ⇒  lib.rin + parts/*.rin (ملفات منفصلة تُستورد)
+//  wc_toSections(src, name, strategy, opts)  → ملف واحد  ⇒  ملف واحد بأقسام #region وفهرس
+//  العكس:  wc_mergeParts(entry, parts)  و  wc_fromSections(src)
+//  strategy:  "kind" (ثوابت/دوال/أنواع) | "prefix" (بادئة الاسم str_ / strTrim) | "size" (opts.size تصريحاً لكل جزء) | "map"
+//  opts:      nil أو {size: 8, map: {partName: ["اسم1","اسم2"]}, importBase: "src/"}   (مرّر nil حين لا حاجة)
+//  مهم: @import المتداخل يُحلّ نسبةً إلى مجلد التشغيل (CWD) لا مجلد الملف المستورِد؛ لذلك wc_write يكتب
+//  مسارات الأجزاء كـ "src/parts/x.rin" (شغّل الاختبارات من جذر المشروع). للمجلدات الأخرى استخدم opts.importBase.
+// ===========================================================================
+
+fun wc_concat(a, b) {
+    let out = [];
+    for (let x in a) { push(out, x); }
+    for (let x in b) { push(out, x); }
+    return out;
+}
+
+fun wc_slug(s) {
+    let r = lower(s);
+    r = regexReplace(r, "[^a-z0-9]+", "-");
+    r = regexReplace(r, "^-+|-+$", "");
+    if (r == "") { return "core"; }
+    return r;
+}
+
+fun wc_unit(ch) {
+    if (ch["lead"] == "") { return ch["text"]; }
+    return ch["lead"] + __wc_nl + ch["text"];
+}
+
+fun wc_isTypeKind(k) { return k == "class" or k == "interface" or k == "trait" or k == "enum" or k == "struct"; }
+
+// التصريحات التي تُنفَّذ فور التحميل (ترتيبها يهم): كل شيء عدا الدوال والاستيرادات
+fun wc_isEager(k) { return k != "fun" and k != "import"; }
+
+fun wc_prefixOf(name) {
+    if (name == "") { return "core"; }
+    let body = name;
+    if (regexTest(body, "^_+")) { body = regexReplace(body, "^_+", ""); }
+    if (contains(body, "_")) {
+        let first = split(body, "_")[0];
+        if (len(first) >= 2) { return wc_slug(first); }
+    }
+    let camel = regexReplace(body, "^([a-z]{2,}?)[A-Z].*$", "$1");
+    if (camel != body) { return wc_slug(camel); }
+    return "core";
+}
+
+fun wc_groupKey(ch, strategy, opts) {
+    if (strategy == "map") {
+        let m = {};
+        if (opts != nil and has(opts, "map")) { m = opts["map"]; }
+        for (let k in keys(m)) { if (contains(m[k], ch["name"])) { return wc_slug(k); } }
+        return "core";
+    }
+    if (strategy == "kind") {
+        if (ch["kind"] == "let") { return "constants"; }
+        if (ch["kind"] == "fun") { return "functions"; }
+        if (wc_isTypeKind(ch["kind"])) { return "types"; }
+        return "core";
+    }
+    if (strategy == "prefix") {
+        if (wc_isTypeKind(ch["kind"])) { return wc_slug(ch["name"]); }
+        return wc_prefixOf(ch["name"]);
+    }
+    fail("wesscode: unknown strategy '" + strategy + "' (kind|prefix|size|map)");
+}
+
+// يجمّع التصريحات في مجموعات بترتيب أول ظهور: [{key, items}]
+fun wc_group(decls, strategy, opts) {
+    let groups = [];
+    let index = {};
+    if (strategy == "size") {
+        let n = 8;
+        if (opts != nil and has(opts, "size")) { n = opts["size"]; }
+        if (n < 1) { fail("wesscode: size must be >= 1"); }
+        let i = 0;
+        for (let ch in decls) {
+            let g = floor(i / n);
+            let key = "part" + (g + 1);
+            if (!has(index, key)) { index[key] = len(groups); push(groups, {key: key, items: []}); }
+            push(groups[index[key]]["items"], ch);
+            i = i + 1;
+        }
+        return groups;
+    }
+    for (let ch in decls) {
+        let key = wc_groupKey(ch, strategy, opts);
+        if (!has(index, key)) { index[key] = len(groups); push(groups, {key: key, items: []}); }
+        push(groups[index[key]]["items"], ch);
+    }
+    return groups;
+}
+
+// يتحقق أن إعادة الترتيب لم تقدّم/تؤخّر تصريحاً فوري التنفيذ على آخر
+fun wc_orderWarnings(original, emitted) {
+    let warn = [];
+    let a = [];
+    let b = [];
+    for (let ch in original) { if (wc_isEager(ch["kind"])) { push(a, ch["line"]); } }
+    for (let ch in emitted) { if (wc_isEager(ch["kind"])) { push(b, ch["line"]); } }
+    let i = 0;
+    while (i < len(a)) {
+        if (a[i] != b[i]) {
+            let moved = "";
+            for (let ch in original) { if (ch["line"] == b[i]) { moved = ch["kind"] + " " + ch["name"]; } }
+            push(warn, "تغيّر ترتيب تصريح فوري التنفيذ (" + moved + " صار قبل موضعه الأصلي) — قد يعتمد على ما بعده؛ راجع الاستراتيجية أو استخدم map");
+            return warn;
+        }
+        i = i + 1;
+    }
+    return warn;
+}
+
+fun wc_splitSource(src) {
+    let r = lang.split(src);
+    if (!r["ok"]) { return {ok: false, error: "تعذّر تحليل المصدر: " + r["error"]}; }
+    return r;
+}
+
+fun wc_partsBanner(name, key) {
+    return "// " + name + " — جزء: " + key + __wc_nl + "// مولَّد بواسطة wesscode (wc_toParts)" + __wc_nl + __wc_nl;
+}
+
+// ------------------------------------------------------------------ تحويلة 1: جزء
+fun wc_toParts(src, name, strategy, opts) {
+    let r = wc_splitSource(src);
+    if (!r["ok"]) { return r; }
+    let imports = [];
+    let stmts = [];
+    let decls = [];
+    for (let ch in r["chunks"]) {
+        if (ch["kind"] == "import") { push(imports, ch); }
+        else if (ch["kind"] == "stmt") { push(stmts, ch); }
+        else { push(decls, ch); }
+    }
+    let groups = wc_group(decls, strategy, opts);
+    let importBase = "";
+    if (opts != nil and has(opts, "importBase")) { importBase = opts["importBase"]; }
+    let parts = {};
+    let order = [];
+    let emitted = [];
+    let used = {};
+    let entry = "";
+    if (r["header"] != "") { entry = r["header"] + __wc_nl + __wc_nl; }
+    for (let ch in imports) { entry = entry + wc_unit(ch) + __wc_nl; }
+    if (len(imports) > 0) { entry = entry + __wc_nl; }
+    for (let g in groups) {
+        let slug = wc_slug(g["key"]);
+        let path = "parts/" + slug + ".rin";
+        let n = 2;
+        while (has(used, path)) { path = "parts/" + slug + "-" + n + ".rin"; n = n + 1; }
+        used[path] = true;
+        let units = [];
+        for (let ch in g["items"]) { push(units, wc_unit(ch)); push(emitted, ch); }
+        parts[path] = wc_partsBanner(name, g["key"]) + join(units, __wc_nl + __wc_nl) + __wc_nl;
+        push(order, path);
+        entry = entry + "@import \"" + importBase + path + "\";" + __wc_nl;
+    }
+    if (len(stmts) > 0) {
+        entry = entry + __wc_nl;
+        for (let ch in stmts) { entry = entry + wc_unit(ch) + __wc_nl; push(emitted, ch); }
+    }
+    if (r["tail"] != "") { entry = entry + __wc_nl + r["tail"] + __wc_nl; }
+    let warnings = wc_orderWarnings(wc_concat(decls, stmts), emitted);
+    if (len(stmts) > 0) { push(warnings, len(stmts) + " تعليمة على المستوى الأعلى بقيت في الملف الرئيسي بعد الأجزاء"); }
+    // فحص كل ملف ناتج بالمحلّل الحقيقي
+    let chk = lang.check(entry);
+    if (!chk["ok"]) { return {ok: false, error: "الملف الرئيسي: سطر " + chk["line"] + ": " + chk["message"]}; }
+    for (let p in order) {
+        let c2 = lang.check(parts[p]);
+        if (!c2["ok"]) { return {ok: false, error: p + ": سطر " + c2["line"] + ": " + c2["message"]}; }
+    }
+    return {ok: true, entry: entry, parts: parts, order: order, warnings: warnings,
+            stats: {chunks: len(r["chunks"]), parts: len(order), imports: len(imports), statements: len(stmts)}};
+}
+
+// يعيد الأجزاء إلى ملف واحد (عكس wc_toParts). يطابق سطر الاستيراد بنهاية مسار الجزء فيصلح مع importBase.
+fun wc_partBody(body) {
+    let lines = split(body, __wc_nl);
+    let keep = [];
+    let i = 0;
+    let skipping = len(lines) > 1 and contains(lines[1], "wc_toParts");
+    for (let ln in lines) {
+        if (skipping and i < 3) { i = i + 1; } else { push(keep, ln); i = i + 1; }
+    }
+    return trim(join(keep, __wc_nl));
+}
+
+fun wc_endsWith(s, suffix) {
+    return len(s) >= len(suffix) and substr(s, len(s) - len(suffix), len(suffix)) == suffix;
+}
+
+fun wc_mergeParts(entry, parts) {
+    let out = [];
+    for (let ln in split(entry, __wc_nl)) {
+        let replaced = false;
+        if (regexTest(ln, "^@import \"[^\"]*\";$")) {
+            let path = regexReplace(ln, "^@import \"([^\"]*)\";$", "$1");
+            for (let p in keys(parts)) {
+                if (!replaced and wc_endsWith(path, p)) { push(out, wc_partBody(parts[p])); replaced = true; }
+            }
+        }
+        if (!replaced) { push(out, ln); }
+    }
+    return join(out, __wc_nl);
+}
+
+// ------------------------------------------------------------------ تحويلة 2: قسم
+fun wc_toSections(src, name, strategy, opts) {
+    let r = wc_splitSource(src);
+    if (!r["ok"]) { return r; }
+    let imports = [];
+    let stmts = [];
+    let decls = [];
+    for (let ch in r["chunks"]) {
+        if (ch["kind"] == "import") { push(imports, ch); }
+        else if (ch["kind"] == "stmt") { push(stmts, ch); }
+        else { push(decls, ch); }
+    }
+    let groups = wc_group(decls, strategy, opts);
+    if (len(stmts) > 0) { push(groups, {key: "main", items: stmts}); }
+    let emitted = [];
+    let toc = "// #toc" + __wc_nl + "// فهرس الأقسام — " + name + ":" + __wc_nl;
+    let i = 1;
+    let sections = [];
+    for (let g in groups) {
+        toc = toc + "//   " + i + ". " + g["key"] + " (" + len(g["items"]) + ")" + __wc_nl;
+        push(sections, {name: g["key"], count: len(g["items"])});
+        i = i + 1;
+    }
+    toc = toc + "// #endtoc";
+    let out = "";
+    if (r["header"] != "") { out = r["header"] + __wc_nl + __wc_nl; }
+    out = out + toc + __wc_nl + __wc_nl;
+    for (let ch in imports) { out = out + wc_unit(ch) + __wc_nl; }
+    if (len(imports) > 0) { out = out + __wc_nl; }
+    for (let g in groups) {
+        out = out + "// #region " + g["key"] + __wc_nl;
+        out = out + "// ───── قسم: " + g["key"] + " ─────" + __wc_nl + __wc_nl;
+        let units = [];
+        for (let ch in g["items"]) { push(units, wc_unit(ch)); if (ch["kind"] != "stmt") { push(emitted, ch); } }
+        out = out + join(units, __wc_nl + __wc_nl) + __wc_nl + "// #endregion" + __wc_nl + __wc_nl;
+    }
+    for (let ch in stmts) { push(emitted, ch); }
+    if (r["tail"] != "") { out = out + r["tail"] + __wc_nl; }
+    let warnings = wc_orderWarnings(wc_concat(decls, stmts), emitted);
+    let chk = lang.check(out);
+    if (!chk["ok"]) { return {ok: false, error: "المصدر الناتج: سطر " + chk["line"] + ": " + chk["message"]}; }
+    return {ok: true, source: out, sections: sections, warnings: warnings, stats: {chunks: len(r["chunks"]), sections: len(sections)}};
+}
+
+// أقسام موجودة في مصدر: [{name, line}]
+fun wc_sectionsOf(src) {
+    let out = [];
+    let n = 1;
+    for (let ln in split(src, __wc_nl)) {
+        if (regexTest(ln, "^// #region ")) { push(out, {name: replace(ln, "// #region ", ""), line: n}); }
+        n = n + 1;
+    }
+    return out;
+}
+
+// يزيل الفهرس وعلامات الأقسام فيعود المصدر كما كان قبل wc_toSections
+fun wc_fromSections(src) {
+    let keep = [];
+    let inToc = false;
+    for (let ln in split(src, __wc_nl)) {
+        if (ln == "// #toc") { inToc = true; }
+        else if (inToc) { if (ln == "// #endtoc") { inToc = false; } }
+        else if (regexTest(ln, "^// #region ") or ln == "// #endregion" or regexTest(ln, "^// ───── قسم: ")) { }
+        else { push(keep, ln); }
+    }
+    return trim(regexReplace(join(keep, __wc_nl), "\n{3,}", "\n\n")) + __wc_nl;
+}
+
+// ------------------------------------------------------------------ أدوات مساندة
+fun wc_convert(src, name, mode, strategy, opts) {
+    if (mode == "parts") { return wc_toParts(src, name, strategy, opts); }
+    if (mode == "sections") { return wc_toSections(src, name, strategy, opts); }
+    if (mode == "single") {
+        let r = wc_splitSource(src);
+        if (!r["ok"]) { return r; }
+        return {ok: true, source: src, warnings: [], stats: {chunks: len(r["chunks"])}};
+    }
+    fail("wc_convert: unknown mode '" + mode + "' (parts|sections|single)");
+}
+
+// هل مصدران متكافئان؟ نفس التصريحات (النوع/الاسم/النص) بغض النظر عن الترتيب والفواصل
+fun wc_equivalent(a, b) {
+    let ra = wc_splitSource(a);
+    let rb = wc_splitSource(b);
+    if (!ra["ok"] or !rb["ok"]) { return false; }
+    if (len(ra["chunks"]) != len(rb["chunks"])) { return false; }
+    let sa = [];
+    let sb = [];
+    for (let ch in ra["chunks"]) { push(sa, ch["kind"] + "|" + ch["name"] + "|" + ch["text"]); }
+    for (let ch in rb["chunks"]) { push(sb, ch["kind"] + "|" + ch["name"] + "|" + ch["text"]); }
+    return json.canonical(sort(sa)) == json.canonical(sort(sb));
+}
+
+// يحلّل مصدراً ويقترح التخطيط الأنسب
+fun wc_suggest(src) {
+    let r = wc_splitSource(src);
+    if (!r["ok"]) { return r; }
+    let funcs = 0;
+    let types = 0;
+    let consts = 0;
+    let stmts = 0;
+    let documented = 0;
+    for (let ch in r["chunks"]) {
+        if (ch["kind"] == "fun") { funcs = funcs + 1; }
+        else if (wc_isTypeKind(ch["kind"])) { types = types + 1; }
+        else if (ch["kind"] == "let") { consts = consts + 1; }
+        else if (ch["kind"] == "stmt") { stmts = stmts + 1; }
+        if (regexTest(ch["lead"], "^///")) { documented = documented + 1; }
+    }
+    let total = funcs + types + consts;
+    let mode = "single";
+    let why = "الملف صغير (" + total + " تصريحاً) — يكفي ملف واحد";
+    if (total > 12) { mode = "sections"; why = total + " تصريحاً — أقسام داخل ملف واحد تسهّل التنقل"; }
+    if (total > 40) { mode = "parts"; why = total + " تصريحاً — الأفضل تقسيمه إلى أجزاء منفصلة"; }
+    let cover = 0;
+    if (funcs + types > 0) { cover = round(100 * documented / (funcs + types)); }
+    return {ok: true, functions: funcs, types: types, constants: consts, statements: stmts,
+            docCoverage: cover, mode: mode, reason: why, lines: len(split(src, __wc_nl))};
+}
+
+// يقرأ ملف Rin موجوداً ويحوّله إلى مواصفة مكتبة (المحتوى يُنسخ كما هو)
+fun wc_fromFile(name, version, description, path) {
+    if (!fileExists(path)) { fail("wc_fromFile: file not found: " + path); }
+    let src = readFile(path);
+    let chk = lang.check(src);
+    if (!chk["ok"]) { fail("wc_fromFile: " + path + ": سطر " + chk["line"] + ": " + chk["message"]); }
+    return wc_fromSource(name, version, description, src);
+}
+
+// يختار تخطيط مخرجات المكتبة: single | sections | parts
+fun wc_layout(lib, mode, strategy, opts) {
+    if (mode != "single" and mode != "sections" and mode != "parts") { fail("wc_layout: mode must be single|sections|parts"); }
+    lib["layout"] = {mode: mode, strategy: strategy, opts: opts};
+    return lib;
+}
+
+// يحوّل ملف على القرص ويكتب الناتج: outDir/<base>.rin (+ outDir/parts/*.rin)
+fun wc_convertFile(path, outDir, mode, strategy, opts) {
+    if (!fileExists(path)) { return {ok: false, error: "file not found: " + path}; }
+    let base = regexReplace(path, "^.*/", "");
+    let name = wc_slug(replace(base, ".rin", ""));
+    let r = wc_convert(readFile(path), name, mode, strategy, opts);
+    if (!r["ok"]) { return r; }
+    let files = [];
+    if (mode == "parts") {
+        writeFile(outDir + "/" + base, r["entry"]);
+        push(files, outDir + "/" + base);
+        for (let p in r["order"]) { writeFile(outDir + "/" + p, r["parts"][p]); push(files, outDir + "/" + p); }
+    } else {
+        writeFile(outDir + "/" + base, r["source"]);
+        push(files, outDir + "/" + base);
+    }
+    r["files"] = files;
+    return r;
+}
