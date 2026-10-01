@@ -183,7 +183,7 @@ let pipeline = automation.chain(rawInput, [normalize, validate, save]);
 
 ## امتدادات `container.*`
 
-فوق ما ورد في `native-additions.md` (Rin 1.1):
+فوق ما ورد في `native-additions.md` (Rin 1.0):
 
 | الدالة | الوصف |
 |---|---|
@@ -211,7 +211,7 @@ if (!check.valid) print check.errors;
 container.exportToFile("srv1", "backups/srv1.json");
 ```
 
-## دوال `container.*` الإضافية (Rin 1.3)
+## دوال `container.*` الإضافية (Rin 1.0)
 
 الدوال المُعدِّلة هنا تحترم `container.lock(name)`: تُرمى `E0035` عند الكتابة على حاوية مقفلة.
 
