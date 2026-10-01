@@ -58,6 +58,7 @@
 | `app/src/main/cpp/loom/` | `app/src/main/cpp/indsin/` |
 
 ## انظر أيضاً
+- [`docs/oop.md`](./docs/oop.md) §12 — ربط كائنات OOP بخلايا Warp (`oop.bindWarpTwoWay` / `oop.bindView`) وبحقول الحاويات.
 - [`docs/containers.md`](./docs/containers.md) — `@container`، `@element`، `@loop` بالتفصيل.
 - [`docs/RIN_ELEMENTS.md`](./docs/RIN_ELEMENTS.md) — كتالوج `@element.*` الكامل.
 - [`docs/language.html`](./docs/language.html) — "جولة في لغة Rin": جولة عامة في اللغة
