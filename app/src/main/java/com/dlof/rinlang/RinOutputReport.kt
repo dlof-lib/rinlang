@@ -26,6 +26,7 @@ fun List<RinLogLine>.collapseRepeats(): List<RinLogLine> {
     for (line in this) {
         val last = out.lastOrNull()
         if (last != null &&
+            last.container == null && line.container == null &&
             last.kind == line.kind &&
             last.text == line.text &&
             last.imageRelPath == line.imageRelPath &&
@@ -68,7 +69,9 @@ data class RinOutputSummary(
     val debugs: Int,
     val images: Int,
     val countsByKind: Map<LogKind, Int>,
-    val firstErrorLine: Int?
+    val firstErrorLine: Int?,
+    /** عدد الحاويات التي فُتحت أثناء التشغيل (أسطر الفتح فقط). */
+    val containers: Int = 0
 ) {
     val hasProblems: Boolean get() = errors > 0 || warnings > 0
 
@@ -76,7 +79,11 @@ data class RinOutputSummary(
     fun headline(success: Boolean): String {
         val lines = arabicCount(totalLines, "سطر واحد", "سطران", "أسطر", "سطراً")
         if (success && errors == 0) {
-            val base = if (totalLines == 0) "اكتمل التشغيل بنجاح بلا مخرجات" else "اكتمل التشغيل بنجاح — $lines"
+            val inContainers = if (containers > 0) {
+                " في " + arabicCount(containers, "حاوية واحدة", "حاويتين", "حاويات", "حاوية")
+            } else ""
+            val base = if (totalLines == 0) "اكتمل التشغيل بنجاح بلا مخرجات"
+            else "اكتمل التشغيل بنجاح — $lines$inContainers"
             return if (warnings > 0) {
                 base + " مع " + arabicCount(warnings, "تحذير واحد", "تحذيران", "تحذيرات", "تحذيراً")
             } else base
@@ -94,12 +101,14 @@ data class RinOutputSummary(
             var infos = 0
             var debugs = 0
             var images = 0
+            var containers = 0
             var firstError: Int? = null
             val byKind = LinkedHashMap<LogKind, Int>()
             for (line in lines) {
                 val n = maxOf(line.repeat, 1)
                 total += n
                 byKind[line.kind] = (byKind[line.kind] ?: 0) + n
+                if (line.container?.role == ContainerRole.OPEN) containers += n
                 when (line.kind) {
                     LogKind.ERROR -> {
                         errors += n
@@ -112,7 +121,7 @@ data class RinOutputSummary(
                     else -> Unit
                 }
             }
-            return RinOutputSummary(total, errors, warnings, infos, debugs, images, byKind, firstError)
+            return RinOutputSummary(total, errors, warnings, infos, debugs, images, byKind, firstError, containers)
         }
     }
 }
