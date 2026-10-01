@@ -180,17 +180,28 @@ object RinEngine {
         private var handle: Long =
             if (containerName == null) indsinSessionCreateNative(source, rootWidth)
             else indsinSessionCreateForContainerNative(source, containerName, rootWidth)
-        private var closed = false
+        private val lock = Any()
+        @Volatile private var closed = false
+
+        /**
+         * كل نداء أصلي يمرّ من هنا: القفل يمنع سباق close() مع tap()/tick() من خيطين مختلفين
+         * (use-after-free على المؤشر الأصلي)، ومن أُغلقت جلسته يحصل على JSON خطأ آمن بدل انهيار.
+         */
+        private inline fun guarded(block: (Long) -> String): String =
+            synchronized(lock) { if (closed) CLOSED_SESSION_JSON else block(handle) }
+
+        /** True once [close] ran; every call afterwards returns a `session closed` error envelope. */
+        val isClosed: Boolean get() = closed
 
         /** Current Fabric snapshot -- same JSON shape [renderView] returns. */
-        fun currentJson(): String = indsinSessionRenderJsonNative(handle)
+        fun currentJson(): String = guarded { indsinSessionRenderJsonNative(it) }
 
         /**
          * Dispatches a tap at ([x], [y]) in the same pixel space as [rootWidth]. Returns
          * `{"ok":true,"handled":bool,"targetId":N,"changed":[...],"fabric":{...}}` (plus an
          * `"error"` field if a handler was found but failed at runtime).
          */
-        fun tap(x: Double, y: Double): String = indsinSessionTapNative(handle, x, y)
+        fun tap(x: Double, y: Double): String = guarded { indsinSessionTapNative(it, x, y) }
 
         /**
          * Events (spec §events): long-press / double-tap / hover, same envelope shape [tap]
@@ -200,11 +211,11 @@ object RinEngine {
          * `onDoubleTap=`/`onHoverEnter=`/`onHoverExit=` simply reports `"handled":false`, so it's
          * always safe to call these on every detected gesture without checking first.
          */
-        fun longPress(x: Double, y: Double): String = indsinSessionLongPressNative(handle, x, y)
-        fun doubleTap(x: Double, y: Double): String = indsinSessionDoubleTapNative(handle, x, y)
+        fun longPress(x: Double, y: Double): String = guarded { indsinSessionLongPressNative(it, x, y) }
+        fun doubleTap(x: Double, y: Double): String = guarded { indsinSessionDoubleTapNative(it, x, y) }
 
         /** [entering] true = pointer just entered this Strand, false = it just left. */
-        fun hover(x: Double, y: Double, entering: Boolean): String = indsinSessionHoverNative(handle, x, y, entering)
+        fun hover(x: Double, y: Double, entering: Boolean): String = guarded { indsinSessionHoverNative(it, x, y, entering) }
 
         /**
          * Effects (spec §effects): advances the session's animation clock to "now" and re-applies
@@ -214,10 +225,10 @@ object RinEngine {
          * back `false` -- nothing is left mid-animation at that point. Same envelope shape as
          * [tap]/[longPress]/etc (with `"handled":false`), plus that `"animating":bool` field.
          */
-        fun tick(): String = indsinSessionTickNative(handle)
+        fun tick(): String = guarded { indsinSessionTickNative(it) }
 
         /** Re-parses [newSource] and diffs it in place, preserving current Warp state. */
-        fun updateSource(newSource: String): String = indsinSessionUpdateSourceNative(handle, newSource)
+        fun updateSource(newSource: String): String = guarded { indsinSessionUpdateSourceNative(it, newSource) }
 
         /**
          * Tells the Overlay Engine (Dialog centering / Tooltip clamping — see
@@ -230,7 +241,7 @@ object RinEngine {
          * result will simply reflect it once one is.
          */
         fun setViewport(viewportHeight: Int) {
-            if (!closed) indsinSessionSetViewportNative(handle, viewportHeight)
+            synchronized(lock) { if (!closed) indsinSessionSetViewportNative(handle, viewportHeight) }
         }
 
         // ---- Design System v2 / Audit / Introspection (docs/indsin_expansion.md §8) ----
@@ -238,17 +249,17 @@ object RinEngine {
         // JSON خطأ آمناً يفهمه المحلّل المطبَّع في IndsinDesignSystem.kt.
 
         /** Raw JSON of the a11y + layout audit of the current Fabric. Prefer the typed [audit] extension. */
-        fun auditJson(): String = if (closed) CLOSED_SESSION_JSON else indsinSessionAuditJsonNative(handle)
+        fun auditJson(): String = guarded { indsinSessionAuditJsonNative(it) }
 
         /** Raw JSON of node/depth/kind/category statistics. Prefer the typed [stats] extension. */
-        fun statsJson(): String = if (closed) CLOSED_SESSION_JSON else indsinSessionStatsJsonNative(handle)
+        fun statsJson(): String = guarded { indsinSessionStatsJsonNative(it) }
 
         /** Plain-text indented outline of the current Fabric (debug / CI logs). Empty once closed. */
-        fun outline(): String = if (closed) "" else indsinSessionOutlineNative(handle)
+        fun outline(): String = synchronized(lock) { if (closed) "" else indsinSessionOutlineNative(handle) }
 
         /** Releases the native session. Safe to call more than once. */
         fun close() {
-            if (!closed) { indsinSessionFreeNative(handle); closed = true }
+            synchronized(lock) { if (!closed) { closed = true; indsinSessionFreeNative(handle) } }
         }
 
         protected fun finalize() { close() }
