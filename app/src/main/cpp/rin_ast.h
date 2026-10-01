@@ -400,6 +400,14 @@ struct FunctionStmt : Stmt { FunctionStmt() { stmtKind = StmtKind::FunctionStmt;
     // نوع إرجاع معلَن. انظر checkDeclaredType في rin_interpreter.cpp.
     std::vector<std::string> paramTypes;
     std::string returnType;
+    // ---- OOP modifiers (Rin 1.4 — كلها اختيارية وافتراضيتها "لا شيء" فلا تغيّر أي كود قديم) ----
+    // تُملأ فقط عند تحليل دالة داخل جسم class/struct/interface/trait. انظر Parser::classDeclaration.
+    std::string access;        // "" (= public) | "private" | "protected"
+    bool isStatic = false;     // static fun: تُنادى على الصنف نفسه (ClassName.f()) بلا self
+    bool isAbstract = false;   // abstract fun f(a);  أو توقيع داخل interface (بلا جسم)
+    bool isFinal = false;      // final fun: لا يجوز إعادة تعريفها في صنف فرعي
+    bool isOverride = false;   // override fun: يجب أن تُعيد تعريف دالة موجودة في الأب
+    int accessorKind = 0;      // 0 = دالة عادية، 1 = getter (get name() {...})، 2 = setter (set name(v) {...})
 };
 
 // ---- OOP: class / struct / enum declarations (additive language layer) ----
@@ -412,13 +420,25 @@ struct FunctionStmt : Stmt { FunctionStmt() { stmtKind = StmtKind::FunctionStmt;
 struct ClassFieldDecl {
     std::string name;
     ExprPtr initializer; // قد تكون فارغة (nullptr) => القيمة الافتراضية nil
+    // ---- Rin 1.4: معدِّلات الحقل (اختيارية) ----
+    std::string access;     // "" (= public) | "private" | "protected"
+    bool isStatic = false;  // static let x = ...;  -> حقل مشترك على الصنف نفسه
+    bool isFinal = false;   // final let x = ...;   -> للقراءة فقط خارج init
 };
+// نوع التصريح: class/struct (الأساس القديم) + interface (عقد: توقيعات فقط) + trait (سمة: كود قابل لإعادة الاستخدام).
+enum class ClassKind { Class, Interface, Trait };
 struct ClassStmt : Stmt { ClassStmt() { stmtKind = StmtKind::ClassStmt; }
     std::string name;
     std::string superclass; // فارغ = بلا وراثة
     bool isStruct = false;
     std::vector<ClassFieldDecl> fields;
     std::vector<std::shared_ptr<FunctionStmt>> methods; // تتضمن 'init' إن عُرِّفت (المُنشئ/constructor)
+    // ---- Rin 1.4 ----
+    ClassKind kind = ClassKind::Class;
+    bool isAbstract = false;              // abstract class X { ... }  -> لا يمكن إنشاء نسخة منه مباشرة
+    bool isFinal = false;                 // final class X { ... }     -> لا يمكن الوراثة منه
+    std::vector<std::string> interfaces;  // class X implements A, B   |  interface I extends A, B
+    std::vector<std::string> traits;      // class X uses T1, T2       |  trait T uses U
 };
 
 // enum Name { CaseA, CaseB = expr, ... }
