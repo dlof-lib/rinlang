@@ -64,6 +64,7 @@ Matchers: `toBe toEqual toBeTrue toBeFalse toBeNil toBeTruthy toBeFalsy toContai
 
 ## `lang.*` — فحص المصدر
 - `lang.check(src)` → `{ok, line, message}`: يمرّر المصدر على نفس Lexer/Parser الحقيقيين **دون تنفيذه**.
+- `lang.split(src)` → `{ok, header, chunks:[{kind,name,lead,text,line,endLine,exported}], tail, error}`: يقسّم المصدر إلى تصريحات المستوى الأعلى (يفهم النصوص والتعليقات و`else/catch`).
 - `lang.isBuiltin(name)` → هل الاسم دالة مدمجة في المحرك (تعريف `fun` بنفس اسمها يُرفض بالخطأ E0002، مثل `lerp` و`mean` و`clamp`).
 
 ## `wesscode` — مساعد إنشاء المكتبات (`@import "wesscode";`)
@@ -92,4 +93,27 @@ wc_writeOg(lib, ".");                   // ./lib/mathx.og.rin ليعمل @import
 | تطوير | `wc_bump wc_stats wc_apiOf` |
 | قوالب | `wc_template(kind, name)` مع `math strings collections validate`، و`wc_templates()` |
 
-الاختبار: `rin tests/wesscode_tests.rin` (21 اختباراً).
+الاختبار: `rin tests/wesscode_tests.rin` (42 اختباراً).
+
+### التحويلتان: جزء وقسم
+تحوّلان مصدر Rin موجوداً (أو ناتج `wc_render`) إلى بنية أنظف، وتفحصان كل ناتج بالمحلّل الحقيقي.
+
+| التحويلة | الدالة | الناتج | العكس |
+|---|---|---|---|
+| **جزء** (Parts) | `wc_toParts(src, name, strategy, opts)` | ملف رئيسي `lib.rin` + `parts/*.rin` تُستورد بـ `@import` | `wc_mergeParts(entry, parts)` |
+| **قسم** (Sections) | `wc_toSections(src, name, strategy, opts)` | ملف واحد بأقسام `// #region` وفهرس `// #toc` | `wc_fromSections(src)` وقائمة `wc_sectionsOf(src)` |
+
+- **الاستراتيجيات:** `"kind"` (ثوابت/دوال/أنواع)، `"prefix"` (بادئة الاسم `str_trim` أو `strTrim` ← `str`، وكل صنف في جزء باسمه)، `"size"` (`opts.size` تصريحاً لكل جزء)، `"map"` (`opts.map = {اسم_الجزء: ["اسم1", ...]}`).
+- **ما يبقى في الملف الرئيسي:** ترويسة الملف والـ `@import` والتعليمات التنفيذية على المستوى الأعلى (مع تنبيه).
+- **تحذير الترتيب:** إن غيّر التجميع ترتيب تصريحات فورية التنفيذ (`let` وأصناف) يُرجع `warnings` بذلك.
+- **مسارات الاستيراد:** `@import` المتداخل في Rin يُحلّ نسبةً إلى **مجلد التشغيل** لا إلى ملف المستورِد، لذلك يكتب `wc_write` مسارات مثل `src/parts/str.rin` (شغّل `rin tests/...` من جذر المشروع). لمجلدات أخرى مرّر `{importBase: "المسار/"}`.
+- **أدوات:** `wc_convert(src, name, mode, strategy, opts)` (`parts|sections|single`)، `wc_equivalent(a, b)` (تكافؤ التصريحات)، `wc_suggest(src)` (يقترح التخطيط حسب الحجم وتغطية التوثيق)، `wc_convertFile(path, outDir, mode, strategy, opts)`، `wc_fromFile(name, version, desc, path)`.
+- **تخطيط مكتبة كاملة:** `wc_layout(lib, "parts"|"sections"|"single", strategy, opts)` ثم `wc_write(lib, dir)` يكتب `src/lib.rin` و`src/parts/*.rin` ويعمل `wc_check` على التخطيط.
+
+```rin
+let lib = wc_template("strings", "textx");
+wc_layout(lib, "parts", "prefix", nil);
+wc_write(lib, "out/textx");                       // src/lib.rin + src/parts/*.rin
+let p = wc_toParts(readFile("big.rin"), "big", "prefix", nil);   // تقسيم ملف موجود
+let s = wc_toSections(readFile("big.rin"), "big", "kind", nil);  // أقسام داخل ملف واحد
+```
