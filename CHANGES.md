@@ -10,8 +10,9 @@ container/pipeline/namespace natives).
 ## Rin 1.0 — مساعد المكتبات wesscode (فوق تحديثات OOP والكونسول وindsin)
 
 - **جديد:** `lib/wesscode.og.rin` (مضمَّنة في `rin_stdlib_libs.h`): مساعد لإنشاء المكتبات والحزم — بناء مواصفة، فحص بالمحلّل الحقيقي، قوالب جاهزة، كتابة حزمة كاملة، وتوليد جسر C++.
-- **جديد:** `lang.check(src)` و`lang.isBuiltin(name)` في `rin_extra_natives4.cpp`.
-- **جديد:** `tests/wesscode_tests.rin` (21 اختباراً). التفاصيل: `docs/packages-and-interop.md`.
+- **جديد:** `lang.check(src)` و`lang.split(src)` و`lang.isBuiltin(name)` في `rin_extra_natives4.cpp`.
+- **جديد (wesscode):** تحويلتان: **جزء** `wc_toParts` (ملف رئيسي + `parts/*.rin`) و**قسم** `wc_toSections` (أقسام `#region` وفهرس)، مع العكس `wc_mergeParts`/`wc_fromSections`، واستراتيجيات `kind|prefix|size|map`، و`wc_layout` لتخطيط مكتبة كاملة، و`wc_suggest` و`wc_convertFile` و`wc_fromFile`.
+- **جديد:** `tests/wesscode_tests.rin` (42 اختباراً). التفاصيل: `docs/packages-and-interop.md`.
 - الإصدار يبقى `1.0.0`؛ وُحِّدت كل تسميات "Rin 1.x" القديمة إلى "Rin 1.0".
 
 ---
