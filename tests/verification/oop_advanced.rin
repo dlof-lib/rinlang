@@ -1,4 +1,4 @@
-// اختبار Rin 1.4 — OOP الموسَّع
+// اختبار Rin 1.0 — OOP الموسَّع
 
 fun fails(f) { try { f(); } catch (e) { return true; } return false; }
 
