@@ -34,7 +34,9 @@ data class RinJob(
      * remains the single source of truth for the finished view, exactly as before this field
      * existed.
      */
-    @Volatile var liveLines: List<RinLogLine> = emptyList()
+    @Volatile var liveLines: List<RinLogLine> = emptyList(),
+    /** true أثناء انتظار البرنامج لإجابة المستخدم (input/confirm/...)؛ مهلة التنفيذ لا تجري حينها. */
+    @Volatile var waitingForInput: Boolean = false
 ) {
     /** Wall-clock duration of the run so far, in milliseconds. */
     fun durationMs(): Long {
