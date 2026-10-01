@@ -400,7 +400,7 @@ struct FunctionStmt : Stmt { FunctionStmt() { stmtKind = StmtKind::FunctionStmt;
     // نوع إرجاع معلَن. انظر checkDeclaredType في rin_interpreter.cpp.
     std::vector<std::string> paramTypes;
     std::string returnType;
-    // ---- OOP modifiers (Rin 1.4 — كلها اختيارية وافتراضيتها "لا شيء" فلا تغيّر أي كود قديم) ----
+    // ---- OOP modifiers (Rin 1.0 — كلها اختيارية وافتراضيتها "لا شيء" فلا تغيّر أي كود قديم) ----
     // تُملأ فقط عند تحليل دالة داخل جسم class/struct/interface/trait. انظر Parser::classDeclaration.
     std::string access;        // "" (= public) | "private" | "protected"
     bool isStatic = false;     // static fun: تُنادى على الصنف نفسه (ClassName.f()) بلا self
@@ -420,7 +420,7 @@ struct FunctionStmt : Stmt { FunctionStmt() { stmtKind = StmtKind::FunctionStmt;
 struct ClassFieldDecl {
     std::string name;
     ExprPtr initializer; // قد تكون فارغة (nullptr) => القيمة الافتراضية nil
-    // ---- Rin 1.4: معدِّلات الحقل (اختيارية) ----
+    // ---- Rin 1.0: معدِّلات الحقل (اختيارية) ----
     std::string access;     // "" (= public) | "private" | "protected"
     bool isStatic = false;  // static let x = ...;  -> حقل مشترك على الصنف نفسه
     bool isFinal = false;   // final let x = ...;   -> للقراءة فقط خارج init
@@ -433,7 +433,7 @@ struct ClassStmt : Stmt { ClassStmt() { stmtKind = StmtKind::ClassStmt; }
     bool isStruct = false;
     std::vector<ClassFieldDecl> fields;
     std::vector<std::shared_ptr<FunctionStmt>> methods; // تتضمن 'init' إن عُرِّفت (المُنشئ/constructor)
-    // ---- Rin 1.4 ----
+    // ---- Rin 1.0 ----
     ClassKind kind = ClassKind::Class;
     bool isAbstract = false;              // abstract class X { ... }  -> لا يمكن إنشاء نسخة منه مباشرة
     bool isFinal = false;                 // final class X { ... }     -> لا يمكن الوراثة منه
