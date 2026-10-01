@@ -13,7 +13,7 @@
 //   let app = pk_require("app");   // يحمّل mathx أولاً تلقائياً (مرة واحدة فقط)
 //   print app.run();               // 42
 //
-// يعتمد على: semver.* و pkg.depOrder و json.mergeDeep (دوال المحرك الأصلية، Rin 1.5).
+// يعتمد على: semver.* و pkg.depOrder و json.mergeDeep (دوال المحرك الأصلية، Rin 1.0).
 // ---------------------------------------------------------------------------
 
 let __pk = { defs: {}, loaded: {}, loading: [], hooks: {}, config: {}, warned: {}, nextId: 1 };
