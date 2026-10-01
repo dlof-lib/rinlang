@@ -34,7 +34,7 @@
   ],
   "repository": {
     "oop-keywords": {
-      "comment": "Rin 1.4 OOP: contextual (non-reserved) words. Declarations are only recognised when followed by a name, modifiers only inside class bodies.",
+      "comment": "Rin 1.0 OOP: contextual (non-reserved) words. Declarations are only recognised when followed by a name, modifiers only inside class bodies.",
       "patterns": [
         { "match": "\\b(abstract|final)(?=\\s+(?:abstract\\s+|final\\s+)*class\\b)", "name": "storage.modifier.rin" },
         { "match": "\\b(class|struct|interface|trait|enum)(?=\\s+[A-Za-z_])", "name": "storage.type.class.rin" },
