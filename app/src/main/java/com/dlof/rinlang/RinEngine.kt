@@ -233,6 +233,19 @@ object RinEngine {
             if (!closed) indsinSessionSetViewportNative(handle, viewportHeight)
         }
 
+        // ---- Design System v2 / Audit / Introspection (docs/indsin_expansion.md §8) ----
+        // الدوال الثلاث أدناه لا تلمس المؤشر الأصلي بعد [close] (تفادياً لـ use-after-free) بل تُعيد
+        // JSON خطأ آمناً يفهمه المحلّل المطبَّع في IndsinDesignSystem.kt.
+
+        /** Raw JSON of the a11y + layout audit of the current Fabric. Prefer the typed [audit] extension. */
+        fun auditJson(): String = if (closed) CLOSED_SESSION_JSON else indsinSessionAuditJsonNative(handle)
+
+        /** Raw JSON of node/depth/kind/category statistics. Prefer the typed [stats] extension. */
+        fun statsJson(): String = if (closed) CLOSED_SESSION_JSON else indsinSessionStatsJsonNative(handle)
+
+        /** Plain-text indented outline of the current Fabric (debug / CI logs). Empty once closed. */
+        fun outline(): String = if (closed) "" else indsinSessionOutlineNative(handle)
+
         /** Releases the native session. Safe to call more than once. */
         fun close() {
             if (!closed) { indsinSessionFreeNative(handle); closed = true }
@@ -240,6 +253,36 @@ object RinEngine {
 
         protected fun finalize() { close() }
     }
+
+    private const val CLOSED_SESSION_JSON = "{\"ok\":false,\"error\":\"session closed\"}"
+
+    // ---- Design System v2: stateless introspection (no session needed) ----
+    // JSON خام؛ الواجهة المطبَّعة (data classes) في IndsinDesignSystem.kt -- استخدم IndsinDesign
+    // من كود الواجهة بدل هذه الدوال مباشرة.
+
+    /** Every token scale + active theme + registered theme names. */
+    fun designTokensJson(): String = indsinTokensJsonNative()
+
+    /** Component taxonomy (kind / category / role / interactive / overlay), as a JSON array. */
+    fun componentCatalogJson(): String = indsinCatalogJsonNative()
+
+    /** Tonal palette 50..900 around [seed] (`#RRGGBB`); `{"error":...}` for an invalid color. */
+    fun tonalPaletteJson(seed: String): String = indsinPaletteJsonNative(seed)
+
+    /** `{"theme":{...},"report":{...}}` generated from [seed]; `{"error":...}` for an invalid color. */
+    fun themeFromSeedJson(seed: String, dark: Boolean): String = indsinThemeFromSeedJsonNative(seed, dark)
+
+    /** WCAG report for a registered theme name; `{"error":"unknown theme"}` otherwise. */
+    fun validateThemeJson(themeName: String): String = indsinValidateThemeJsonNative(themeName)
+
+    private external fun indsinSessionAuditJsonNative(handle: Long): String
+    private external fun indsinSessionStatsJsonNative(handle: Long): String
+    private external fun indsinSessionOutlineNative(handle: Long): String
+    private external fun indsinTokensJsonNative(): String
+    private external fun indsinCatalogJsonNative(): String
+    private external fun indsinPaletteJsonNative(seed: String): String
+    private external fun indsinThemeFromSeedJsonNative(seed: String, dark: Boolean): String
+    private external fun indsinValidateThemeJsonNative(themeName: String): String
 
     private external fun indsinSessionCreateNative(source: String, rootWidth: Int): Long
     private external fun indsinSessionCreateForContainerNative(source: String, containerName: String, rootWidth: Int): Long
