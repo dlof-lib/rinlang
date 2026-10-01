@@ -25,6 +25,7 @@
 #include <unordered_set>
 #include <algorithm>
 #include <cctype>
+#include <iostream>
 #include <cstdlib>
 #include <ctime>
 #include <sys/stat.h>
@@ -2168,6 +2169,97 @@ void Interpreter::registerNatives() {
             throw diagErr(diag::Code::E0035_RuntimeError, line, "'toNumber': \"" + s + "\" ليست رقماً صالحاً");
         }
     };
+    // ====================== إدخال المستخدم ======================
+    // askRaw: نقطة واحدة تقرأ سطراً من المستخدم — عبر InputProvider (نافذة على أندرويد) أو stdin (CLI).
+    // يعيد false إذا ألغى المستخدم/انتهى الإدخال بلا بيانات (EOF في stdin يُعامَل كإلغاء فقط حين
+    // يكون الإدخال مطلوباً رقماً أو اختياراً؛ أما input() العادية فتعيد "" عند EOF).
+    auto askRaw = [this](const std::string& prompt, std::string& answer, bool& eof) -> bool {
+        eof = false;
+        if (inputProvider_) {
+            // أظهِر للمستخدم كل ما طُبع حتى الآن قبل أن يرى سؤال الإدخال (بث حي فقط إن وُجد sink).
+            if (streamSink_) {
+                std::streamoff now = output.tellp();
+                if (now > streamMark_) {
+                    streamSink_(output.str().substr(static_cast<size_t>(streamMark_), static_cast<size_t>(now - streamMark_)));
+                    streamMark_ = now;
+                }
+            }
+            return inputProvider_(prompt, answer);
+        }
+        if (!prompt.empty()) { std::cout << prompt; std::cout.flush(); }
+        if (!std::getline(std::cin, answer)) { eof = true; answer.clear(); return true; }
+        if (!answer.empty() && answer.back() == '\r') answer.pop_back();
+        return true;
+    };
+    auto promptArg = [](std::vector<Value>& a, const std::string& fn, int line) -> std::string {
+        if (a.empty()) return "";
+        if (a.size() > 1) {
+            throw diagErr(diag::Code::E0007_InvalidArguments, line,
+                          "'" + fn + "' expects 0 or 1 argument(s) but got " + std::to_string(a.size()));
+        }
+        return a[0].type == Value::Type::STRING ? a[0].str : a[0].toDisplayString();
+    };
+    // input(prompt?) -> string : سطر نصي يكتبه المستخدم.
+    natives["input"] = [askRaw, promptArg](std::vector<Value>& a, int line) -> Value {
+        std::string prompt = promptArg(a, "input", line);
+        std::string ans; bool eof = false;
+        if (!askRaw(prompt, ans, eof)) throw diagErr(diag::Code::E0035_RuntimeError, line, "تم إلغاء الإدخال (input)");
+        return Value::string(ans);
+    };
+    // inputNumber(prompt?) -> number : يعيد السؤال حتى يُدخل المستخدم رقماً صالحاً (حتى 5 محاولات).
+    natives["inputNumber"] = [askRaw, promptArg](std::vector<Value>& a, int line) -> Value {
+        std::string prompt = promptArg(a, "inputNumber", line);
+        for (int attempt = 0; attempt < 5; ++attempt) {
+            std::string ans; bool eof = false;
+            std::string shown = attempt == 0 ? prompt : ("[أدخل رقماً صالحاً] " + prompt);
+            if (!askRaw(shown, ans, eof) || eof) throw diagErr(diag::Code::E0035_RuntimeError, line, "تم إلغاء الإدخال (inputNumber)");
+            size_t b = ans.find_first_not_of(" \t"), e = ans.find_last_not_of(" \t");
+            if (b == std::string::npos) continue;
+            ans = ans.substr(b, e - b + 1);
+            try {
+                size_t idx = 0;
+                double d = std::stod(ans, &idx);
+                if (idx == ans.size()) return Value::num(d);
+            } catch (...) {}
+        }
+        throw diagErr(diag::Code::E0035_RuntimeError, line, "'inputNumber': لم يُدخَل رقم صالح بعد 5 محاولات");
+    };
+    // confirm(prompt?) -> bool : نعم/لا (y/yes/نعم/1/true => true).
+    natives["confirm"] = [askRaw, promptArg](std::vector<Value>& a, int line) -> Value {
+        std::string prompt = promptArg(a, "confirm", line);
+        std::string ans; bool eof = false;
+        if (!askRaw(prompt, ans, eof) || eof) throw diagErr(diag::Code::E0035_RuntimeError, line, "تم إلغاء الإدخال (confirm)");
+        std::string t;
+        for (unsigned char ch : ans) if (ch != ' ' && ch != '\t') t.push_back(static_cast<char>(std::tolower(ch)));
+        return Value::boolean_(t == "y" || t == "yes" || t == "true" || t == "1" || t == "نعم" || t == "ن");
+    };
+    // choose(prompt, options) -> العنصر المختار من المصفوفة (الإدخال: رقمه 1-based أو نصه بالضبط).
+    natives["choose"] = [askRaw](std::vector<Value>& a, int line) -> Value {
+        expectArgs("choose", a, 2, line);
+        std::string prompt = asString(a[0], "choose", line);
+        if (a[1].type != Value::Type::ARRAY || !a[1].array || a[1].array->empty()) {
+            throw diagErr(diag::Code::E0004_InvalidType, line, "'choose' expects a non-empty array of options as its 2nd argument");
+        }
+        const ArrayData& opts = *a[1].array;
+        std::string menu = prompt;
+        for (size_t i = 0; i < opts.size(); ++i) menu += "\n" + std::to_string(i + 1) + ") " + opts[i].toDisplayString();
+        for (int attempt = 0; attempt < 5; ++attempt) {
+            std::string ans; bool eof = false;
+            if (!askRaw(attempt == 0 ? menu : ("[اختر رقماً من القائمة]\n" + menu), ans, eof) || eof)
+                throw diagErr(diag::Code::E0035_RuntimeError, line, "تم إلغاء الإدخال (choose)");
+            size_t b = ans.find_first_not_of(" \t"), e = ans.find_last_not_of(" \t");
+            if (b == std::string::npos) continue;
+            ans = ans.substr(b, e - b + 1);
+            try {
+                size_t idx = 0;
+                long n = std::stol(ans, &idx);
+                if (idx == ans.size() && n >= 1 && static_cast<size_t>(n) <= opts.size()) return opts[static_cast<size_t>(n) - 1];
+            } catch (...) {}
+            for (const auto& o : opts) if (o.toDisplayString() == ans) return o;
+        }
+        throw diagErr(diag::Code::E0035_RuntimeError, line, "'choose': لم يُختَر خيار صالح بعد 5 محاولات");
+    };
+
     // toBool(value) -> يحوّل صراحةً إلى Boolean:
     //   - BOOL تُعاد كما هي.
     //   - NUMBER: 0 -> false، أي رقم آخر -> true (نفس قاعدة isTruthy لكن بشكل صريح ومقروء بالكود).
@@ -6996,12 +7088,15 @@ std::string Interpreter::run(const std::vector<StmtPtr>& statements) {
             // الداخلية المتناثرة في هذا الملف (كل منها ما زال يكتب إلى نفس [output] كما كان دائماً).
             const bool streaming = static_cast<bool>(streamSink_);
             std::streamoff before = streaming ? static_cast<std::streamoff>(output.tellp()) : 0;
+            streamMark_ = before;
             execute(s, globals);
             if (streaming) {
                 std::streamoff after = output.tellp();
-                if (after > before) {
-                    streamSink_(output.str().substr(static_cast<size_t>(before), static_cast<size_t>(after - before)));
+                // streamMark_ قد يكون تقدّم أثناء الـ statement (تفريغ ما قبل input())؛ نبثّ الباقي فقط.
+                if (after > streamMark_) {
+                    streamSink_(output.str().substr(static_cast<size_t>(streamMark_), static_cast<size_t>(after - streamMark_)));
                 }
+                streamMark_ = after;
             }
         }
     } catch (RinError& e) {
