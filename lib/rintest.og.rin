@@ -1,0 +1,234 @@
+// rintest — إطار اختبارات Rin (rintests)
+// ---------------------------------------------------------------------------
+//   @import "rintest";
+//
+//   rt_describe("الحساب", fun() {
+//       rt_test("الجمع", fun() { rt_expect(1 + 1).toBe(2); });
+//       rt_test("خطأ متوقَّع", fun() { rt_expectThrows(fun() { fail("boom"); }, "boom"); });
+//   });
+//   rt_done();            // يطبع الملخص ويُفشل الملف (rin test) إن فشل أي اختبار
+//
+// Matchers:  toBe toEqual toBeTrue toBeFalse toBeNil toBeTruthy toBeFalsy toContain
+//            toHaveLength toBeGreaterThan toBeLessThan toBeCloseTo toMatch toHaveKey
+//            toBeType toThrow       (rt_expectNot(x) يعكس كل matcher)
+// Hooks:     rt_beforeEach(fn) rt_afterEach(fn)        Tools: rt_skip rt_each rt_bench(name,fn,times) rt_bench1(name,fn)
+// ملاحظة: دوال Rin تتطلب عدد وسائط مطابقاً تماماً، لذا مرّر nil للوسيط الاختياري (toThrow(nil) أو toThrowAny()).
+// ---------------------------------------------------------------------------
+
+let __rt = {
+    passed: 0, failed: 0, skipped: 0,
+    failures: [], stack: [], beforeEach: [], afterEach: [],
+    verbose: true, startedAt: now()
+};
+
+fun rt_show(v) {
+    if (type(v) == "string") { return "\"" + v + "\""; }
+    if (type(v) == "function") { return "<function>"; }
+    return json.stringify(v);
+}
+
+fun rt_fullName(name) {
+    let parts = __rt["stack"];
+    if (len(parts) == 0) { return name; }
+    return join(parts, " › ") + " › " + name;
+}
+
+fun rt_quiet(flag) { __rt["verbose"] = flag; }
+
+fun rt_reset() {
+    __rt["passed"] = 0; __rt["failed"] = 0; __rt["skipped"] = 0;
+    __rt["failures"] = []; __rt["stack"] = [];
+    __rt["beforeEach"] = []; __rt["afterEach"] = [];
+    __rt["startedAt"] = now();
+}
+
+fun rt_stats() {
+    return {
+        passed: __rt["passed"], failed: __rt["failed"], skipped: __rt["skipped"],
+        total: __rt["passed"] + __rt["failed"] + __rt["skipped"],
+        failures: __rt["failures"]
+    };
+}
+
+fun rt_beforeEach(fn) { push(__rt["beforeEach"], fn); }
+fun rt_afterEach(fn) { push(__rt["afterEach"], fn); }
+
+fun rt_describe(name, fn) {
+    if (__rt["verbose"]) { print name; }
+    push(__rt["stack"], name);
+    let saveB = __rt["beforeEach"];
+    let saveA = __rt["afterEach"];
+    __rt["beforeEach"] = slice(saveB, 0);
+    __rt["afterEach"] = slice(saveA, 0);
+    try { fn(); } catch (e) {
+        __rt["failed"] = __rt["failed"] + 1;
+        push(__rt["failures"], {name: rt_fullName("(describe body)"), message: rt_errText(e)});
+        print "  ✗ (describe body) — " + rt_errText(e);
+    }
+    __rt["beforeEach"] = saveB;
+    __rt["afterEach"] = saveA;
+    pop(__rt["stack"]);
+}
+
+fun rt_errText(e) {
+    let msg = "" + e;
+    if (type(e) == "map" and has(e, "message")) { msg = e["message"]; }
+    return regexReplace(msg, "^\\[E[0-9]+\\] ", "");
+}
+
+fun rt_test(name, fn) {
+    let t0 = now();
+    let err = nil;
+    try {
+        for (let h in __rt["beforeEach"]) { h(); }
+        fn();
+    } catch (e) { err = rt_errText(e); }
+    try {
+        for (let h in __rt["afterEach"]) { h(); }
+    } catch (e2) { if (err == nil) { err = "afterEach: " + rt_errText(e2); } }
+    let ms = now() - t0;
+    if (err == nil) {
+        __rt["passed"] = __rt["passed"] + 1;
+        if (__rt["verbose"]) { print "  ✓ " + name + " (" + round(ms) + "ms)"; }
+        return true;
+    }
+    __rt["failed"] = __rt["failed"] + 1;
+    push(__rt["failures"], {name: rt_fullName(name), message: err});
+    print "  ✗ " + name;
+    print "      " + err;
+    return false;
+}
+
+fun rt_skip(name, fn) {
+    __rt["skipped"] = __rt["skipped"] + 1;
+    if (__rt["verbose"]) { print "  - " + name + " (skipped)"; }
+}
+
+// اختبار بجدول حالات: rt_each("جمع", [[1,2,3],[2,2,4]], fun(a,b,c){ ... })
+fun rt_each(name, cases, fn) {
+    let i = 0;
+    for (let c in cases) {
+        let label = name + " #" + i + " " + json.stringify(c);
+        rt_test(label, fun() { callFn(fn, c); });
+        i = i + 1;
+    }
+}
+
+fun rt_bench1(name, fn) { return rt_bench(name, fn, 100); }
+
+fun rt_bench(name, fn, times) {
+    let n = times;
+    if (n == nil) { n = 100; }
+    let t0 = now();
+    let i = 0;
+    while (i < n) { fn(); i = i + 1; }
+    let total = now() - t0;
+    print "  ⏱ " + name + ": " + total + "ms / " + n + " runs";
+    return total;
+}
+
+// ------------------------------------------------------------------ matchers
+fun rt_check(ok, negate, msgPositive, msgNegative) {
+    let pass = ok;
+    if (negate) { pass = !ok; }
+    if (!pass) {
+        if (negate) { fail(msgNegative); }
+        fail(msgPositive);
+    }
+    return true;
+}
+
+fun rt_threwNote(threw, etxt) {
+    if (threw) { return " (it threw: " + etxt + ")"; }
+    return " (it did not throw)";
+}
+
+fun rt_makeExpect(actual, negate) {
+    let m = {};
+    m["toBe"] = fun(expected) {
+        return rt_check(actual == expected, negate,
+            "expected " + rt_show(expected) + " but got " + rt_show(actual),
+            "expected value not to be " + rt_show(expected));
+    };
+    m["toEqual"] = m["toBe"];
+    m["toBeTrue"] = fun() { return rt_check(actual == true, negate, "expected true but got " + rt_show(actual), "expected not true"); };
+    m["toBeFalse"] = fun() { return rt_check(actual == false, negate, "expected false but got " + rt_show(actual), "expected not false"); };
+    m["toBeNil"] = fun() { return rt_check(actual == nil, negate, "expected nil but got " + rt_show(actual), "expected a non-nil value"); };
+    m["toBeTruthy"] = fun() {
+        let t = false;
+        if (actual) { t = true; }
+        return rt_check(t, negate, "expected a truthy value but got " + rt_show(actual), "expected a falsy value but got " + rt_show(actual));
+    };
+    m["toBeFalsy"] = fun() {
+        let t = true;
+        if (actual) { t = false; }
+        return rt_check(t, negate, "expected a falsy value but got " + rt_show(actual), "expected a truthy value but got " + rt_show(actual));
+    };
+    m["toContain"] = fun(item) {
+        return rt_check(contains(actual, item), negate,
+            rt_show(actual) + " should contain " + rt_show(item),
+            rt_show(actual) + " should not contain " + rt_show(item));
+    };
+    m["toHaveLength"] = fun(n) {
+        return rt_check(len(actual) == n, negate,
+            "expected length " + n + " but got " + len(actual),
+            "expected length not to be " + n);
+    };
+    m["toBeGreaterThan"] = fun(x) { return rt_check(actual > x, negate, rt_show(actual) + " should be > " + rt_show(x), rt_show(actual) + " should not be > " + rt_show(x)); };
+    m["toBeLessThan"] = fun(x) { return rt_check(actual < x, negate, rt_show(actual) + " should be < " + rt_show(x), rt_show(actual) + " should not be < " + rt_show(x)); };
+    m["toBeCloseTo"] = fun(x, eps) {
+        let e = eps;
+        if (e == nil) { e = 0.000001; }
+        return rt_check(abs(actual - x) <= e, negate,
+            rt_show(actual) + " should be within " + e + " of " + rt_show(x),
+            rt_show(actual) + " should not be within " + e + " of " + rt_show(x));
+    };
+    m["toMatch"] = fun(pattern) {
+        return rt_check(regexTest(actual, pattern), negate,
+            rt_show(actual) + " should match /" + pattern + "/",
+            rt_show(actual) + " should not match /" + pattern + "/");
+    };
+    m["toHaveKey"] = fun(k) { return rt_check(has(actual, k), negate, "expected key " + rt_show(k) + " in " + rt_show(actual), "unexpected key " + rt_show(k)); };
+    m["toBeType"] = fun(t) { return rt_check(type(actual) == t, negate, "expected type " + t + " but got " + type(actual), "expected type not to be " + t); };
+    m["toThrow"] = fun(fragment) {
+        let threw = false;
+        let etxt = "";
+        try { actual(); } catch (e) { threw = true; etxt = rt_errText(e); }
+        let ok = threw;
+        if (threw and fragment != nil) { ok = contains(etxt, fragment); }
+        let want = "";
+        if (fragment != nil) { want = " containing " + rt_show(fragment); }
+        return rt_check(ok, negate, "expected function to throw" + want + rt_threwNote(threw, etxt), "expected function not to throw" + want);
+    };
+    m["toThrowAny"] = fun() { return m["toThrow"](nil); };
+    return m;
+}
+
+fun rt_expect(actual) { return rt_makeExpect(actual, false); }
+fun rt_expectNot(actual) { return rt_makeExpect(actual, true); }
+
+fun rt_expectThrows(fn, fragment) {
+    let threw = false;
+    let etxt = "";
+    try { fn(); } catch (e) { threw = true; etxt = rt_errText(e); }
+    if (!threw) { fail("expected function to throw but it did not"); }
+    if (fragment != nil and !contains(etxt, fragment)) {
+        fail("expected error containing " + rt_show(fragment) + " but got: " + etxt);
+    }
+    return etxt;
+}
+
+// ------------------------------------------------------------------ summary
+fun rt_done() {
+    let s = rt_stats();
+    let ms = now() - __rt["startedAt"];
+    print "";
+    print "rintest: " + s["passed"] + " passed, " + s["failed"] + " failed, " + s["skipped"] + " skipped (" + s["total"] + " total, " + ms + "ms)";
+    if (s["failed"] > 0) {
+        print "Failures:";
+        for (let f in s["failures"]) { print "  - " + f["name"] + ": " + f["message"]; }
+        fail("rintest: " + s["failed"] + " test(s) failed");
+    }
+    print "ALL PASSED";
+    return true;
+}
