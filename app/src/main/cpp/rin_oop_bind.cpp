@@ -1,5 +1,5 @@
 // ============================================================================
-//  rin_oop_bind.cpp — Rin 1.4: دوال الربط (binding)
+//  rin_oop_bind.cpp — Rin 1.0: دوال الربط (binding)
 // ----------------------------------------------------------------------------
 //  يُضمَّن (#include) في نهاية rin_interpreter.cpp بعد rin_oop_natives.cpp، ويُسجَّل من
 //  Interpreter::registerNativesOopBind() (تُستدعى في نهاية registerNativesOop).
