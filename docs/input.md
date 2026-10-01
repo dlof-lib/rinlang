@@ -4,7 +4,7 @@
 
 **مبدأ التصميم:** لا توجد هنا دوال أو مفاهيم جديدة. الدوال الأربع **تستدعي** مفاهيم اللغة الموجودة
 (`trim` · `lower` · `toNumber` · `contains` · `callValue` · `oop.get` · `oop.set` · `setField` ·
-`container.fieldNames` · `getField` · `oop.toMap`)، لذلك تعمل مع `enum` و`class` و`@container` و`fun`
+`container.fieldNames` · `container.fieldType` · `container.snapshot` · `getField` · `setState` · `oop.toMap`)، لذلك تعمل مع `enum` و`class` و`@container` و`fun`
 بنفس قواعدها (الصلاحيات، `set`، التجميد، المراقبون، الروابط) دون أي كود خاص.
 
 | الدالة | تعيد | التوقيع الكامل |
@@ -49,7 +49,7 @@ let age = inputNumber("العمر؟ ", Range(0, 120));
 | `target` | ما يُستدعى | يعني |
 |---|---|---|
 | كائن `class`/`struct` أو قاموس | `oop.set(target, key, value)` | تُحترم `private`/`final`/`set`/`freeze` والمراقبون |
-| نص = اسم حاوية | `setField(container, key, value)` | تُطلَق روابط OOP/Indsin كأنك كتبت الحقل يدوياً |
+| نص = اسم حاوية | `setState(container, key, value)` | تُطلَق روابط OOP/Indsin كأنك كتبت الحقل يدوياً |
 
 تُفحَص الحاوية **قبل** سؤال المستخدم؛ والدالة تعيد القيمة نفسها كي تبقى قابلة للاستخدام في تعبير أو `|>`.
 
@@ -58,6 +58,23 @@ let u = User();
 input("البريد؟ ", u, "email");            // يمرّ عبر set email(v) المعرّفة في الصنف
 inputNumber("الصوت؟ ", "Settings", "volume");
 confirm("موافق؟ ", flags, "ok");
+```
+
+### الحاويات بعمق
+- **`setState` لا `setField`:** الكتابة في حاوية تمرّ عبر `setState`، فإن كان الحقل مُعلَناً `state` يُطلَق `on update(prev)` تلقائياً — تتفاعل الحاوية مع إجابة المستخدم كما لو أُسنِد الحقل داخلها.
+- **القيمة الحالية:** مع `target, key` تظهر القيمة الحالية للحقل بين `[ ]` أمام السؤال، والإجابة الفارغة (Enter) **تُبقيها** دون كتابة (نصاً في `input`، رقماً في `inputNumber`، منطقياً في `confirm`). لا تظهر للقيم الفارغة/`nil`.
+- **وضع النموذج:** `input(prompt, "Container")` (وسيط واحد = اسم حاوية معروفة) يسأل عن **كل حقول الحاوية** مرتبة أبجدياً، ويختار الدالة حسب `container.fieldType` لكل حقل: `number` ← `inputNumber`، `bool` ← `confirm`، `string` ← `input`؛ وتُتخطّى المصفوفات والقواميس والدوال. تعيد `container.snapshot` بعد الملء.
+
+```rin
+@container=Profile
+    state name = "Ali";
+    state age = 30;
+    let subscribed = false;
+    on update(prev) { print "changed"; }
+.end/container
+
+let snap = input("Profile> ", "Profile");     // age ثم name ثم subscribed
+input("الاسم؟ ", "Profile", "name");           // يعرض [Sara]؛ Enter يُبقيه
 ```
 
 ## 3) `choose` — مصادر الخيارات
