@@ -914,6 +914,140 @@ static bool writeTextFile(const std::string& full, const std::string& content) {
     return static_cast<bool>(f);
 }
 
+
+// ============================================================================
+//  lang.split: تقسيم مصدر Rin إلى تصريحات المستوى الأعلى (للتحويل إلى أجزاء/أقسام)
+// ============================================================================
+struct TopChunk {
+    std::string kind, name, lead, text;
+    int line = 0, endLine = 0;
+    bool exported = false;
+};
+static bool isIdentCh(unsigned char c) { return std::isalnum(c) || c == '_' || c >= 0x80; }
+static std::string nextWord(const std::string& s, size_t& p) {
+    while (p < s.size() && std::isspace(static_cast<unsigned char>(s[p]))) ++p;
+    size_t b = p;
+    while (p < s.size() && isIdentCh(static_cast<unsigned char>(s[p]))) ++p;
+    return s.substr(b, p - b);
+}
+static void classifyChunk(TopChunk& c) {
+    const std::string& t = c.text;
+    size_t p = 0;
+    if (t.compare(0, 7, "@import") == 0) {
+        c.kind = "import";
+        size_t q = t.find('"');
+        if (q != std::string::npos) { size_t e = t.find('"', q + 1); if (e != std::string::npos) c.name = t.substr(q + 1, e - q - 1); }
+        return;
+    }
+    std::string w = nextWord(t, p);
+    if (w == "export") { c.exported = true; w = nextWord(t, p); }
+    while (w == "abstract" || w == "final" || w == "static") w = nextWord(t, p);
+    if (w == "fun" || w == "class" || w == "interface" || w == "trait" || w == "enum" || w == "struct") {
+        c.kind = w;
+        c.name = nextWord(t, p);
+    } else if (w == "let" || w == "const" || w == "var") {
+        c.kind = "let";
+        c.name = nextWord(t, p);
+    } else { c.kind = "stmt"; }
+}
+// يُرجع false عند عدم توازن الأقواس/الاقتباس (مصدر ناقص).
+static bool splitTopLevel(const std::string& src, std::string& header, std::vector<TopChunk>& out, std::string& tail, std::string& err) {
+    size_t n = src.size(), i = 0, chunkStart = 0, leadStart = 0;
+    int depth = 0, line = 1;
+    bool inChunk = false, blockKind = false;
+    int startLine = 0;
+    auto lineAt = [&](size_t upto) { int l = 1; for (size_t k = 0; k < upto && k < n; ++k) if (src[k] == '\n') ++l; return l; };
+    auto startsWith = [&](size_t at, const char* w) { size_t L = std::strlen(w); return src.compare(at, L, w) == 0 && (at + L >= n || !isIdentCh(static_cast<unsigned char>(src[at + L]))); };
+    auto finish = [&](size_t endExclusive) {
+        // امتد حتى نهاية السطر إن كان ما بعده فراغ أو تعليق سطري فقط
+        size_t e = endExclusive, k = e;
+        while (k < n && (src[k] == ' ' || src[k] == '\t' || src[k] == '\r')) ++k;
+        if (k >= n || src[k] == '\n') e = k;
+        else if (src.compare(k, 2, "//") == 0) { while (k < n && src[k] != '\n') ++k; e = k; }
+        TopChunk c;
+        c.text = src.substr(chunkStart, e - chunkStart);
+        while (!c.text.empty() && std::isspace(static_cast<unsigned char>(c.text.back()))) c.text.pop_back();
+        c.lead = src.substr(leadStart, chunkStart - leadStart);
+        c.line = startLine;
+        c.endLine = lineAt(e);
+        classifyChunk(c);
+        out.push_back(c);
+        leadStart = e;
+        inChunk = false; depth = 0;
+        return e;
+    };
+    while (i < n) {
+        char c = src[i];
+        if (!inChunk) {
+            if (c == '\n') { ++line; ++i; continue; }
+            if (std::isspace(static_cast<unsigned char>(c))) { ++i; continue; }
+            if (src.compare(i, 2, "//") == 0) { while (i < n && src[i] != '\n') ++i; continue; }
+            if (src.compare(i, 2, "/*") == 0) { size_t e = src.find("*/", i + 2); if (e == std::string::npos) { err = "unterminated block comment"; return false; } for (size_t k = i; k < e; ++k) if (src[k] == '\n') ++line; i = e + 2; continue; }
+            if (c == ';') { ++i; leadStart = i; continue; }    // فاصلة منقوطة زائدة
+            inChunk = true; chunkStart = i; startLine = line; depth = 0;
+            {   // هل يبدأ بتصريح كتلة؟ (ينتهي عند } لا عند ;)
+                size_t p = i;
+                std::string w = nextWord(src, p);
+                if (w == "export") w = nextWord(src, p);
+                while (w == "abstract" || w == "final" || w == "static") w = nextWord(src, p);
+                blockKind = (w == "fun" || w == "class" || w == "interface" || w == "trait" || w == "enum" || w == "struct" ||
+                             w == "if" || w == "while" || w == "for" || w == "try" || w == "switch" || w == "match");
+            }
+            continue;
+        }
+        // داخل تصريح
+        if (c == '\n') { ++line; ++i; continue; }
+        if (src.compare(i, 2, "//") == 0) { while (i < n && src[i] != '\n') ++i; continue; }
+        if (src.compare(i, 2, "/*") == 0) { size_t e = src.find("*/", i + 2); if (e == std::string::npos) { err = "unterminated block comment"; return false; } for (size_t k = i; k < e; ++k) if (src[k] == '\n') ++line; i = e + 2; continue; }
+        if (c == '"' || c == '\'') {
+            char q = c; ++i;
+            while (i < n && src[i] != q) { if (src[i] == '\\' && i + 1 < n) ++i; if (src[i] == '\n') ++line; ++i; }
+            if (i >= n) { err = "unterminated string starting at line " + std::to_string(startLine); return false; }
+            ++i; continue;
+        }
+        if (c == '(' || c == '[' || c == '{') { ++depth; ++i; continue; }
+        if (c == ')' || c == ']' || c == '}') {
+            --depth; ++i;
+            if (depth < 0) { err = "unbalanced '" + std::string(1, c) + "' at line " + std::to_string(line); return false; }
+            if (depth == 0 && c == '}' && blockKind) {
+                size_t k = i;
+                while (k < n && std::isspace(static_cast<unsigned char>(src[k]))) ++k;
+                if (startsWith(k, "else") || startsWith(k, "catch") || startsWith(k, "finally")) continue;
+                if (k < n && src[k] == ';' ) { /* } ; */ size_t j = i; while (j < k) ++j; i = k + 1; }
+                i = finish(i);
+            }
+            continue;
+        }
+        if (c == ';' && depth == 0) { ++i; i = finish(i); continue; }
+        ++i;
+    }
+    if (inChunk) { err = "incomplete statement starting at line " + std::to_string(startLine); return false; }
+    tail = src.substr(leadStart);
+    while (!tail.empty() && std::isspace(static_cast<unsigned char>(tail.back()))) tail.pop_back();
+    size_t a = 0; while (a < tail.size() && std::isspace(static_cast<unsigned char>(tail[a]))) ++a; tail = tail.substr(a);
+    // ترويسة الملف: كتلة التعليقات العليا المفصولة بسطر فارغ عن بقية ما قبل أول تصريح
+    if (!out.empty()) {
+        std::string& lead = out[0].lead;
+        size_t pos = std::string::npos;
+        for (size_t k = 0; k + 1 < lead.size(); ++k) {
+            if (lead[k] == '\n') {
+                size_t m = k + 1;
+                while (m < lead.size() && (lead[m] == ' ' || lead[m] == '\t' || lead[m] == '\r')) ++m;
+                if (m < lead.size() && lead[m] == '\n') pos = m;
+            }
+        }
+        if (pos != std::string::npos) { header = lead.substr(0, pos); lead = lead.substr(pos + 1); }
+    }
+    auto trimBlank = [](std::string& s) {
+        size_t a = 0; while (a < s.size() && std::isspace(static_cast<unsigned char>(s[a]))) ++a;
+        size_t b = s.size(); while (b > a && std::isspace(static_cast<unsigned char>(s[b - 1]))) --b;
+        s = s.substr(a, b - a);
+    };
+    trimBlank(header);
+    for (auto& c : out) trimBlank(c.lead);
+    return true;
+}
+
 // ============================================================================
 //  cpp.* — مساعدات الجسر الأصلي
 // ============================================================================
@@ -1244,6 +1378,20 @@ void Interpreter::registerNativesExtra4() {
         } catch (std::exception& e) {
             return M4({{"ok", B4(false)}, {"line", N4(0)}, {"message", S4(e.what())}});
         }
+    };
+
+    // lang.split(src) -> {ok, header, chunks:[{kind,name,lead,text,line,endLine,exported}], tail, error}
+    natives["lang.split"] = [](Args& a, int line) -> Value {
+        need("lang.split", a, 1, 1, line);
+        std::string header, tail, err;
+        std::vector<TopChunk> chunks;
+        if (!splitTopLevel(str(a[0], "lang.split", line), header, chunks, tail, err))
+            return M4({{"ok", B4(false)}, {"header", S4("")}, {"chunks", A4({})}, {"tail", S4("")}, {"error", S4(err)}});
+        ArrayData items;
+        for (auto& c : chunks)
+            items.push_back(M4({{"kind", S4(c.kind)}, {"name", S4(c.name)}, {"lead", S4(c.lead)}, {"text", S4(c.text)},
+                                {"line", N4(c.line)}, {"endLine", N4(c.endLine)}, {"exported", B4(c.exported)}}));
+        return M4({{"ok", B4(true)}, {"header", S4(header)}, {"chunks", A4(std::move(items))}, {"tail", S4(tail)}, {"error", S4("")}});
     };
 
     // lang.isBuiltin(name) -> هل الاسم دالة مدمجة في المحرك (تعريف fun بنفس الاسم يرفضه المحرك E0002)
