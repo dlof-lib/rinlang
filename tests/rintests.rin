@@ -1,4 +1,4 @@
-// rintests.rin — الاختبار الشامل لإضافات Rin 1.5 (json / semver / pkg / cpp / packkit / rintest)
+// rintests.rin — الاختبار الشامل لإضافات Rin 1.0 (json / semver / pkg / cpp / packkit / rintest)
 //   rin tests/rintests.rin              (أو: rin test)
 //   rin --allow-native tests/rintests.rin   لتفعيل اختبارات جسر C++ أيضاً
 @import "rintest";
