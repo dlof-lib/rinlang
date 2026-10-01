@@ -11,6 +11,7 @@ import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Typeface
+import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.os.Build
 import android.os.Handler
@@ -449,7 +450,13 @@ class RinJobAdapter(private val context: Context) : RecyclerView.Adapter<RinJobA
             }
             if (lines.isEmpty() && query.isNotEmpty()) {
                 outputLines.addView(buildEmptyStateRow(context.getString(R.string.job_no_results)))
+            } else if (query.isEmpty()) {
+                // بلا بحث: الحاويات تُعرض ككتل متداخلة مميَّزة (لون/أيقونة لكل نوع، قابلة للطيّ).
+                for (node in RinContainerTree.build(lines)) {
+                    outputLines.addView(buildNodeView(node))
+                }
             } else {
+                // أثناء البحث تبقى النتائج مسطّحة كي لا تُخفي المطابقات داخل كتل مطويّة.
                 for (line in lines) {
                     outputLines.addView(buildLineRow(line, query))
                 }
@@ -569,6 +576,113 @@ class RinJobAdapter(private val context: Context) : RecyclerView.Adapter<RinJobA
                 diagnosticsTab.addView(summary)
                 diagnosticsTab.addView(buildDiagnosticActionsRow(job, diagnostic))
             }
+        }
+
+        private fun withAlpha(color: Int, alpha: Int): Int = (color and 0x00FFFFFF) or (alpha shl 24)
+
+        private fun buildNodeView(node: RinOutputNode): View = when (node) {
+            is RinOutputNode.Leaf -> buildLineRow(node.line)
+            is RinOutputNode.Block -> buildContainerBlock(node)
+        }
+
+        /**
+         * كتلة حاوية مميَّزة: إطار وخلفية بلون عائلتها (أنبوب/جدول/مستند/...)، رأس فيه أيقونة العائلة
+         * واسم الحاوية وعدّاد أسطرها، وأعضاؤها `[تحتوي: ...]` تحت الرأس، ومحتواها (وقد يحوي كتلاً
+         * متداخلة) يُطوى بالنقر على الرأس. الحاوية الكبيرة (> 40 سطراً) تبدأ مطويّة. حاوية لم تُغلق
+         * (توقّف التنفيذ داخلها) تُعلَّم بتحذير بدل أن يختفي إطارها.
+         */
+        private fun buildContainerBlock(block: RinOutputNode.Block): View {
+            val mark = block.mark
+            val family = mark.family
+            val accent = family.accent
+            val count = block.contentLineCount()
+
+            val root = LinearLayout(context).apply {
+                orientation = LinearLayout.VERTICAL
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+                ).apply {
+                    topMargin = (4 * dp).toInt()
+                    bottomMargin = (4 * dp).toInt()
+                }
+                background = GradientDrawable().apply {
+                    setColor(withAlpha(accent, 0x14))
+                    cornerRadius = 8 * dp
+                    setStroke(maxOf(1, dp.toInt()), withAlpha(accent, 0x66))
+                }
+                setPadding((10 * dp).toInt(), (6 * dp).toInt(), (10 * dp).toInt(), (6 * dp).toInt())
+            }
+
+            val chevron = TextView(context).apply {
+                textSize = 12f
+                setTextColor(accent)
+                setPadding(0, 0, (6 * dp).toInt(), 0)
+            }
+            val title = TextView(context).apply {
+                text = buildString {
+                    append(family.glyph).append("  ").append(family.label)
+                    if (mark.name != null) append(" · ").append(mark.name)
+                }
+                textSize = 13f
+                setTypeface(typeface, Typeface.BOLD)
+                setTextColor(accent)
+                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+            }
+            val counter = TextView(context).apply {
+                text = count.toString()
+                textSize = 11f
+                setTextColor(accent)
+                setPadding((8 * dp).toInt(), (1 * dp).toInt(), (8 * dp).toInt(), (1 * dp).toInt())
+                background = GradientDrawable().apply {
+                    setColor(withAlpha(accent, 0x26))
+                    cornerRadius = 10 * dp
+                }
+            }
+            val header = LinearLayout(context).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = android.view.Gravity.CENTER_VERTICAL
+                isClickable = true
+                isFocusable = true
+                contentDescription = "${family.label} ${mark.name.orEmpty()}"
+                addView(chevron)
+                addView(title)
+                addView(counter)
+            }
+            root.addView(header)
+
+            val members = block.closeMark?.members.orEmpty()
+            if (members.isNotEmpty()) {
+                root.addView(TextView(context).apply {
+                    text = "تحتوي: " + members.joinToString("، ")
+                    textSize = 11f
+                    setTextColor(ContextCompat.getColor(context, R.color.rin_on_toolbar_dim))
+                    setPadding(0, (2 * dp).toInt(), 0, 0)
+                })
+            }
+            if (!block.isClosed) {
+                root.addView(TextView(context).apply {
+                    text = "⚠ لم تُغلق هذه الحاوية — توقّف التنفيذ قبل نهايتها"
+                    textSize = 11f
+                    setTextColor(ContextCompat.getColor(context, R.color.log_kind_warning))
+                    setPadding(0, (2 * dp).toInt(), 0, 0)
+                })
+            }
+
+            val body = LinearLayout(context).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(0, (4 * dp).toInt(), 0, 0)
+            }
+            for (child in block.children) body.addView(buildNodeView(child))
+            root.addView(body)
+
+            var expanded = count <= 40
+            fun refresh() {
+                chevron.text = if (expanded) "▾" else "▸"
+                body.visibility = if (expanded && block.children.isNotEmpty()) View.VISIBLE else View.GONE
+            }
+            refresh()
+            header.setOnClickListener { expanded = !expanded; refresh() }
+            return root
         }
 
         /** عنوان ملخّص التشغيل: «اكتمل التشغيل بنجاح — 12 سطراً» / «فشل التشغيل — خطأ واحد (السطر 4)». */
