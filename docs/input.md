@@ -63,7 +63,36 @@ confirm("موافق؟ ", flags, "ok");
 ### الحاويات بعمق
 - **`setState` لا `setField`:** الكتابة في حاوية تمرّ عبر `setState`، فإن كان الحقل مُعلَناً `state` يُطلَق `on update(prev)` تلقائياً — تتفاعل الحاوية مع إجابة المستخدم كما لو أُسنِد الحقل داخلها.
 - **القيمة الحالية:** مع `target, key` تظهر القيمة الحالية للحقل بين `[ ]` أمام السؤال، والإجابة الفارغة (Enter) **تُبقيها** دون كتابة (نصاً في `input`، رقماً في `inputNumber`، منطقياً في `confirm`). لا تظهر للقيم الفارغة/`nil`.
-- **وضع النموذج:** `input(prompt, "Container")` (وسيط واحد = اسم حاوية معروفة) يسأل عن **كل حقول الحاوية** مرتبة أبجدياً، ويختار الدالة حسب `container.fieldType` لكل حقل: `number` ← `inputNumber`، `bool` ← `confirm`، `string` ← `input`؛ وتُتخطّى المصفوفات والقواميس والدوال. تعيد `container.snapshot` بعد الملء.
+- **وضع النموذج:** `input(prompt, "Container")` (وسيط واحد = اسم حاوية معروفة، أو كائناً، أو قاموساً) يسأل عن **كل حقول الحاوية** مرتبة أبجدياً، ويختار الدالة حسب `container.fieldType` لكل حقل: `number` ← `inputNumber`، `bool` ← `confirm`، `string` ← `input`؛ وتُتخطّى المصفوفات والقواميس والدوال. تعيد `container.snapshot` بعد الملء.
+
+- **الكائنات والقواميس:** نفس وضع النموذج: `input(prompt, obj)` أو `input(prompt, map)` يسأل عن كل حقل بترتيب تعريفه/إدخاله، ويختار الدالة من نوع القيمة الحالية (`number`/`bool`/`string`)، ويتخطى الحقول `nil` أو المركّبة ما لم يُعطَ لها مخطّط (انظر أدناه). كل حقل يُكتب عبر `oop.set` فيُطبَّق `set` المعرَّف في الصنف والصلاحيات؛ ويُرفض الكائن المجمَّد *قبل* أول سؤال. تعيد الكائن/القاموس نفسه (وهو مُعدَّل مكانه).
+
+### المخطّط (schema) — حقول `nil` وأنواع وقواعد لكل حقل
+`input(prompt, target, {حقل: مواصفة, ...})` — الهدف حاوية/كائن/قاموس، والمخطّط قاموس يضيف أو يُعدّل مواصفة كل حقل. حقول المخطّط غير الموجودة في الهدف (مثل `nil`) تُسأل بعد حقوله. المواصفة:
+
+| المواصفة | تُستدعى |
+|---|---|
+| `"number"` · `"bool"` · `"string"` | `inputNumber` · `confirm` · `input` صراحةً |
+| مصفوفة · قاموس · `enum` | `choose(label, spec, target, key)` — النتيجة قيمة الخيار (حالة enum نفسها) |
+| `fun` أو كائن بـ `__call__` (مثل أصناف inputkit) | `validator`؛ ونوع الحقل من حقل `type` في صنف المُدقِّق |
+| `nil` | يُتخطّى الحقل |
+
+```rin
+@import "lib/inputkit.og.rin";
+let u = User();                       // age/email/role = nil
+input("User> ", u, {
+    "name":  Every([Required(), Length(2, 20)]),
+    "age":   Every([Integer(), Range(1, 120)]),
+    "email": Email(),
+    "role":  Role,                    // enum => choose
+    "vip":   "bool"
+});
+```
+
+### أصناف التحقق `lib/inputkit.og.rin`
+مكتوبة بـ Rin نفسها (`interface Check` ← `abstract class Rule` ← الأصناف)، بلا أي دالة مبنية جديدة. كل صنف يعيد `true` أو **نصاً** هو سبب الرفض، ويقبل `.withMessage("...")` لرسالة مخصّصة:
+`Required()` · `Length(min,max)` (بالمحارف عبر `utf8Len` فالعربية صحيحة) · `Range(lo,hi)` · `Integer()` · `OneOf([..])` · `Matches(regex)` · `Email()` · `Every([rules])`.
+لإضافة قاعدتك: `class Even extends Rule { fun init() { self.type = "number"; } fun __call__(v) { if (v % 2 != 0) { return self.fail("يجب أن يكون زوجياً"); } return true; } }`
 
 ```rin
 @container=Profile
