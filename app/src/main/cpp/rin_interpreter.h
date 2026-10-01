@@ -503,6 +503,15 @@ public:
     using StreamSink = std::function<void(const std::string& incrementalChunk)>;
     void setStreamSink(StreamSink sink) { streamSink_ = std::move(sink); }
 
+    // ---- إدخال المستخدم (input / inputNumber / confirm / choose) ----
+    // [InputProvider] يُستدعى من دوال الإدخال الأصلية أثناء التنفيذ (متزامناً، على نفس الترد، تماماً
+    // كـ StreamSink). يستلم نص السؤال [prompt] ويملأ [answer] بما كتبه المستخدم؛ يعيد false إذا ألغى
+    // المستخدم الإدخال (فيُوقَف البرنامج بخطأ تشغيل واضح). إن لم يُضبط أي provider: يقرأ المحرك من
+    // stdin (سلوك CLI)، وعند نهاية stdin يعيد النص الفارغ — فلا يتغير شيء لأي مستهلك قديم.
+    // على أندرويد يربطه jni_bridge.cpp بنافذة إدخال حقيقية (انظر RinInputBridge.kt).
+    using InputProvider = std::function<bool(const std::string& prompt, std::string& answer)>;
+    void setInputProvider(InputProvider p) { inputProvider_ = std::move(p); }
+
     // ---- Library Loader UI (see loader_ui/library_loader_ui.h) ----
     // [importUISink_] اختياري، غير مفعّل افتراضياً (nullptr)، لذا @import يتصرف حرفياً كما كان قبل
     // هذه الميزة متى لم يُضبط أي sink (نفس فلسفة streamSink_ أعلاه). عند ضبطه، تُبلَّغ كل مرحلة من
@@ -653,6 +662,8 @@ private:
     std::optional<std::string> lastErrorMessage_;
     int lastErrorLine_ = 0;
     StreamSink streamSink_; // انظر setStreamSink() أعلاه — فارغ افتراضياً (no-op)
+    InputProvider inputProvider_; // انظر setInputProvider() أعلاه — فارغ افتراضياً (stdin)
+    std::streamoff streamMark_ = 0; // كل ما قبل هذا الموضع في [output] سبق بثّه عبر streamSink_ (يمنع التكرار عند تفريغ ما قبل الإدخال)
 
     std::shared_ptr<loaderui::ILoadSink> importUISink_; // انظر setImportUISink()/setImportUIMode() أعلاه — nullptr افتراضياً (no-op)
     std::size_t importDepth_ = 0; // عمق @import الحالي (0 = أعلى مستوى)، يُمرَّر إلى LoadSession في execute()
