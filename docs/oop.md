@@ -226,7 +226,70 @@ oop.listeners(btn, "click")   oop.off(btn, "click")   oop.off(btn)   // كل أ�
 **ملاحظات:** يُرفض الربط داخل كائن مجمَّد (`oop.freeze`). المراقبون على كائنات `struct` ينطبقون على *النسخة* التي سُجّل عليها فقط، لأن `struct` تُنسخ عند الإسناد.
 ---
 
-## 12) حدود معروفة (بصراحة)
+## 12) الربط بالحاويات (container) وبـ Indsin
+
+يربط **حقل كائن** بهدف خارجي، وكل كتابة على أحد الطرفين تنتقل إلى الآخر تلقائياً. الأمثلة المرجعية:
+[`tests/verification/oop_links.rin`](../tests/verification/oop_links.rin) (حاويات + Warp عبر CLI) و
+[`tests/tools/test_indsin_oop_bind.cpp`](../tests/tools/test_indsin_oop_bind.cpp) (جلسة Indsin حقيقية + tap).
+
+### أ) الحاويات
+```rin
+@container=Store
+    state counter = 0;
+    on update(prev) { print "changed from " + str(prev); }
+.end/container
+
+let m = Model();
+oop.bindContainer(m, "n", "Store", "counter");          // الكائن -> الحاوية
+oop.bindContainerFrom(m, "n", "Store", "counter");      // الحاوية -> الكائن
+oop.bindContainerTwoWay(m, "n", "Store", "counter");    // اتجاهان
+```
+- الكتابة في الحاوية تمر بنفس مسار الإسناد المراعي لـ `state`، فيُطلَق `on update(prev)` تلقائياً.
+- المسارات التي تُلتقط عند الحاوية: الإسناد داخلها (`x = v`)، و`setState` و`setField`/`container.set`.
+- مراقبة بحتة بلا كائن: `oop.watchContainer("Store", "counter" | "*", fun(new, old, key, container) { ... })` → id.
+- نسخ لمرة واحدة: `oop.toContainer(obj, "Store", [fields]?)` (حقول الكائن **العامة** فقط ما لم تُحدَّد أسماء) و
+  `oop.fromContainer(obj, "Store", [fields]?)` (الحقول الموجودة أصلاً في الكائن). كلاهما يعيد عدد الحقول المنسوخة.
+
+### ب) Indsin (خلايا Warp)
+خلايا `warp name = ...;` هي متغيّرات عامة في مفسّر الجلسة، وIndsin ينقلها إلى المفسّر قبل كل معالج
+(`onTap` وغيره) ويقرؤها بعده. الربط يستفيد من هذا مباشرة:
+```rin
+warp count = 0;
+let model = Model();
+oop.bindWarpTwoWay(model, "n", "count");          // اتجاهان — الأنسب للواجهات التفاعلية
+oop.bindWarp(model, "msg", "label");              // الكائن -> الشاشة فقط
+oop.bindWarpFrom(model, "flag", "on");            // الشاشة -> الكائن فقط
+oop.bindView(form, "ui_");                        // كل حقل بدائي عام f مع الخلية ui_f (إن كانت معرَّفة)
+oop.bindView(form, {title: "ui_title"});          // أو خريطة صريحة {حقل: خلية}
+
+fun inc() { model.n = model.n + 1; }              // معالج عادي: الخلية count تتغيّر وIndsin يُعيد رسم ما يعتمد عليها
+```
+- **كتابة الكائن** تظهر في `changedWarpNames` لنفس الـ tap، فتُحلَّل العناصر المشتركة في الخلية من جديد.
+- **كتابة الشاشة** (خلية غيّرها Indsin) تُسحَب إلى الكائن **قبل** تشغيل المعالج التالي، فيرى المعالج حالة متّسقة.
+- في تشغيل `rin run` العادي (بلا Indsin) لا أحد ينقل الخلايا، فاستدعِ `oop.syncLinks()` بعد أي كتابة خام على خلية.
+- حدّ Warp: Indsin يخزّن الخلايا أرقاماً أو نصوصاً (والمنطقي نصاً "true"/"false" يُعاد منطقياً) — اربط حقولاً بدائية.
+  `nil` تُعامَل كنص فارغ في الاتجاهين. الحاويات تقبل أي قيمة.
+
+### ج) الخيارات المشتركة `opts`
+```rin
+oop.bindContainer(m, "name", "Store", "title", {transform: fun(v) { return "Hi " + v; }, init: "object"});
+```
+| الخيار | المعنى |
+|---|---|
+| `transform: fn(value, obj)` | تحويل القيمة العابرة في الاتجاه الوحيد (push أو pull). **مرفوض مع two-way** لأن لا معكوس له. |
+| `init` | المزامنة الأولية: `"object"` (الافتراضي لـ push وtwo-way: الكائن مصدر الحقيقة)، `"target"` (الافتراضي لـ pull: القيمة تُنسخ من الهدف إلى الكائن)، `"none"` (لا شيء). |
+
+### د) السلوك الدقيق
+- **لا حلقات:** الاتجاهان يمنعان الصدى بتذكّر آخر قيمة نُقلت، والنقل لا يحدث إلا عند تغيّر القيمة فعلاً.
+- الحقول `private`/`protected` والخصائص `get`/`set` تُربَط (الربط يعمل بسياق صنف الكائن). حقول `final` والكائنات المجمَّدة
+  (`oop.freeze`) ترفض السحب إليها بخطأ — وكتابة الحاوية نفسها **تكون قد تمت** قبل أن يُرفَض السحب إلى الكائن.
+- الإلغاء: `oop.unobserve(id)` و`oop.unobserveAll(obj)`؛ وتظهر الروابط في `oop.observers(obj)` بأنواع `container`/`warp`.
+- الربط لا يُبقي الكائن حياً (`weak_ptr`)، وتُنظَّف الروابط المنتهية تلقائياً. كلفة صفر على الحاويات والـ tap ما لم يُنشأ رابط.
+- `oop.syncLinks()` يسحب يدوياً كل الروابط التي تقرأ من حاوية/خلية (مفيد بعد كتابات خام لا تمر بمسارات الإسناد، مثل `container.restore`).
+
+---
+
+## 13) حدود معروفة (بصراحة)
 
 - الصلاحيات و`abstract` و`final` و`override` تُفحَص **وقت التشغيل** (عند الوصول/الإنشاء)، لا ساكنياً؛
   لكن مخالفات الوراثة من `final class` تُكتشف عند التعريف.
@@ -234,3 +297,5 @@ oop.listeners(btn, "click")   oop.off(btn, "click")   oop.off(btn)   // كل أ�
 - وراثة واحدة فقط (`extends`)، والتعدد عبر `implements`/`uses`.
 - لا generics، ولا `protected` خاصة بالحزمة (package)، ولا `static get/set`، ولا `static` داخل `trait`.
 - `struct` تبقى بدلالة القيمة؛ `oop.freeze` على نسخة struct يجمّد تلك النسخة فقط.
+- الربط بالحاويات يلتقط الكتابات التي تمر بمسارات الإسناد (`x = v` داخل الحاوية، `setState`، `setField`)؛ أما الكتابات الخام مثل `container.restore` فتحتاج `oop.syncLinks()`.
+- الربط بـ Indsin يتم على مستوى **خلايا Warp** (لا على سمات العناصر مباشرة): العنصر يقرأ الخلية بـ `{cell}` والكائن مربوط بالخلية.
