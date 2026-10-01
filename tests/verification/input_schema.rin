@@ -1,0 +1,29 @@
+// input_schema.rin — مخطّط النموذج + أصناف inputkit (Required/Length/Range/Integer/Email/Every) على كائن بحقول nil وenum وحاوية state
+@import "lib/inputkit.og.rin";
+enum Role { Admin, Editor, Viewer }
+class User {
+    let name = "";
+    let age = nil;
+    let email = nil;
+    let role = nil;
+    let vip = nil;
+    let tags = [];
+}
+let u = User();
+let schema = {
+    "name":  Every([Required(), Length(2, 20)]),
+    "age":   Every([Integer(), Range(1, 120)]),
+    "email": Email(),
+    "role":  Role,
+    "vip":   "bool"
+};
+input("User> ", u, schema);
+print u.name + "|" + u.age + "|" + u.email + "|" + (u.role == Role.Viewer) + "|" + u.vip;
+
+@container=Cfg
+    state port = nil;
+    let host = "localhost";
+    on update(prev) { print "[hook]"; }
+.end/container
+input("Cfg> ", "Cfg", {"port": Range(1, 65535), "host": Required()});
+print getField("Cfg", "host") + ":" + getField("Cfg", "port");
