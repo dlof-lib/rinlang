@@ -4889,7 +4889,10 @@ void Interpreter::registerNatives() {
                                  "'" + name + "' is not a known container",
                                  "create it first via `@container=" + name + "` or `spawn(kind, \"" + name + "\")`");
         }
+        Value linkOld;
+        if (linksExist_) it->second->get(key, linkOld);
         it->second->define(key, a[2]);
+        if (linksExist_) onContainerWrite(name, key, linkOld, a[2], line); // Rin 1.0: روابط OOP/Indsin
         return Value::boolean_(true);
     };
 
@@ -6901,6 +6904,11 @@ bool Interpreter::callTopLevelFunction(const std::vector<StmtPtr>& program,
     // Seed every known Warp cell as a plain global, so a zero-arg handler that mutates a
     // same-named global directly (rather than via a parameter) also works.
     for (auto& kv : globalsInOut) globals->define(kv.first, kv.second);
+    // Rin 1.0: خلايا Warp التي غيّرها Indsin (tap/handler) تُسحَب إلى الكائنات المربوطة بـ oop.bindWarp*
+    // قبل تنفيذ المعالج، فيرى المعالج حالة الكائن مطابقة لما على الشاشة.
+    if (linksExist_) {
+        try { syncWarpLinks(0); } catch (RinError& e) { errorOut = e.message; return false; }
+    }
 
     Value target;
     if (!globals->get(fnName, target) || target.type != Value::Type::FUNCTION) {
@@ -8819,9 +8827,17 @@ void Interpreter::assignStateAware(Environment* owner, const std::string& name, 
     }
     if (containerKey.empty()) { owner->values[name] = newValue; return; }
 
+    // Rin 1.0: روابط OOP/Indsin — نلتقط القيمة السابقة قبل الكتابة (فقط حين توجد روابط، فكلفة صفر قبلها).
+    Value linkOld;
+    if (linksExist_) { auto lit = owner->values.find(name); if (lit != owner->values.end()) linkOld = lit->second; }
+
     auto namesIt = containerStateNames.find(containerKey);
     bool isState = namesIt != containerStateNames.end() && namesIt->second.count(name) > 0;
-    if (!isState) { owner->values[name] = newValue; return; }
+    if (!isState) {
+        owner->values[name] = newValue;
+        if (linksExist_) onContainerWrite(containerKey, name, linkOld, newValue, line);
+        return;
+    }
 
     auto hooksIt = containerLifecycle.find(containerKey);
     bool hasUpdateHook = hooksIt != containerLifecycle.end() &&
@@ -8846,6 +8862,7 @@ void Interpreter::assignStateAware(Environment* owner, const std::string& name, 
         std::vector<Value> args{prevSnapshot};
         fireLifecycleHook(containerKey, hooksIt->second.update, args, line);
     }
+    if (linksExist_) onContainerWrite(containerKey, name, linkOld, newValue, line);
 }
 
 // ---- RCS-1.0 §3.5 Tree (Phase 2) ----
@@ -10530,3 +10547,4 @@ std::optional<Interpreter::FlowRunResult> Interpreter::replayFlow(const std::str
 #include "rin_oop.cpp"
 #include "rin_oop_natives.cpp"
 #include "rin_oop_bind.cpp"
+#include "rin_oop_link.cpp"
