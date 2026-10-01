@@ -41,6 +41,11 @@ container/pipeline/namespace natives).
 - **جديد (دوال الربط، `rin_oop_bind.cpp`):** `oop.bind/bindAll/unbind/isBound/boundTo/apply/callWith`، `oop.partial/curry`، `oop.observe/bindProperty/bindTwoWay/unobserve/unobserveAll/observers`، `oop.on/once/off/emit/listeners`. اختبار: `tests/verification/oop_binding.rin`.
 - التوافق: كل الكلمات سياقية غير محجوزة؛ حزمة `tests/verification` بلا أي تغيير في نتائجها (الفشل الوحيد `container_advanced.rin` قائم قبل هذه الجولة).
 - اختبار جديد: `tests/verification/oop_advanced.rin` · مثال: `examples/oop/bank.rin`.
+- **جديد (الربط بالحاويات وIndsin، `rin_oop_link.cpp`):** `oop.bindContainer/bindContainerFrom/bindContainerTwoWay`، `oop.watchContainer`،
+  `oop.toContainer/fromContainer`، `oop.bindWarp/bindWarpFrom/bindWarpTwoWay`، `oop.bindView`، `oop.syncLinks` — حقل كائن مربوط
+  بحقل حاوية (يُطلق `on update`) أو بخلية Warp في Indsin (تُنقل من/إلى المعالجات عند كل tap). منع صدى بين الاتجاهين،
+  خيارات `transform`/`init`. خطّافات صغيرة في `assignStateAware` و`setField` و`callTopLevelFunction` بكلفة صفر ما لم يُنشأ رابط.
+  اختبارات: `tests/verification/oop_links.rin` و`tests/tools/test_indsin_oop_bind.cpp` (جلسة Indsin حقيقية). التفاصيل: `docs/oop.md` §12.
 
 ---
 
