@@ -1,4 +1,4 @@
-# Rin 1.5 — المكتبات والحزم وجسر C++ وJSON واختبارات rintest
+# Rin 1.0 — المكتبات والحزم وجسر C++ وJSON واختبارات rintest
 
 > ملف المصدر: `app/src/main/cpp/rin_extra_natives4.cpp` (مُضمَّن تلقائياً في `rin_interpreter.cpp`).
 > الاختبار الشامل: `rin tests/rintests.rin` → `ALL PASSED`.
@@ -61,3 +61,35 @@ rt_done();   // ملخص + يفشل الملف عند وجود إخفاق (يع�
 ```
 Matchers: `toBe toEqual toBeTrue toBeFalse toBeNil toBeTruthy toBeFalsy toContain toHaveLength toBeGreaterThan toBeLessThan toBeCloseTo(x,eps) toMatch toHaveKey toBeType toThrow(fragment|nil) toThrowAny`.
 العكس: `rt_expectNot(x)`. أخرى: `rt_expectThrows rt_skip rt_beforeEach rt_afterEach rt_bench rt_quiet rt_reset rt_stats`.
+
+## `lang.*` — فحص المصدر
+- `lang.check(src)` → `{ok, line, message}`: يمرّر المصدر على نفس Lexer/Parser الحقيقيين **دون تنفيذه**.
+- `lang.isBuiltin(name)` → هل الاسم دالة مدمجة في المحرك (تعريف `fun` بنفس اسمها يُرفض بالخطأ E0002، مثل `lerp` و`mean` و`clamp`).
+
+## `wesscode` — مساعد إنشاء المكتبات (`@import "wesscode";`)
+يبني مكتبة/حزمة Rin كاملة من الكود، يفحصها بالمحلّل الحقيقي قبل أي كتابة، ثم يكتبها على القرص.
+
+```rin
+let lib = wc_new("mathx", "0.1.0", "دوال رياضية");
+wc_fn(lib, "twice", ["x"], "return x * 2;", "يضاعف الرقم");
+wc_const(lib, "TAU", "6.283185307179586", "ضعف باي");
+wc_class(lib, "Box", {v: "0"}, "صندوق");
+wc_method(lib, "Box", "get", [], "return self.v;");
+wc_dep(lib, "other", "^1.0.0");
+wc_test(lib, "twice يضاعف", "twice(21)", 42);
+wc_cpp(lib, "fast_sum", "double t=0; for(auto&v:args.arr) t+=v.num; return rin::Json::number(t);");
+wc_testNative(lib, "native", "fast_sum([1,2,3.5])", 6.5);   // يُتخطّى تلقائياً بدون --allow-native
+print wc_check(lib);                    // {ok, errors, warnings}
+wc_write(lib, "out/mathx");             // rin.toml + src/lib.rin + tests + docs/API.md + README + native/*.cpp
+wc_writeOg(lib, ".");                   // ./lib/mathx.og.rin ليعمل @import "mathx"
+```
+| الفئة | الدوال |
+|---|---|
+| بناء | `wc_new wc_meta wc_dep wc_fn wc_const wc_class wc_method wc_test wc_testNative wc_raw wc_cpp wc_fromSource` |
+| توليد | `wc_render wc_renderTests wc_manifest wc_docs wc_cppSource wc_lit` |
+| فحص | `wc_check wc_validIdent wc_validFnName wc_validName` (يكشف الكلمات المحجوزة والتعارض مع المدمجة والكود الفاسد) |
+| إخراج | `wc_write wc_writeOg` |
+| تطوير | `wc_bump wc_stats wc_apiOf` |
+| قوالب | `wc_template(kind, name)` مع `math strings collections validate`، و`wc_templates()` |
+
+الاختبار: `rin tests/wesscode_tests.rin` (21 اختباراً).
