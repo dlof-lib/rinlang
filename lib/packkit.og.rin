@@ -1,0 +1,243 @@
+// packkit — نظام مكتبات/حزم/إضافات داخل Rin نفسها (بلا ملفات، بلا شبكة)
+// ---------------------------------------------------------------------------
+//   @import "packkit";
+//
+//   pk_define("mathx", "1.2.0", {
+//       description: "دوال رياضية",
+//       exports: fun(ctx) { return { twice: fun(x) { return x * 2; } }; }
+//   });
+//   pk_define("app", "0.1.0", {
+//       deps: { mathx: "^1.0.0" },
+//       exports: fun(ctx) { let m = ctx["deps"]["mathx"]; return { run: fun() { return m.twice(21); } }; }
+//   });
+//   let app = pk_require("app");   // يحمّل mathx أولاً تلقائياً (مرة واحدة فقط)
+//   print app.run();               // 42
+//
+// يعتمد على: semver.* و pkg.depOrder و json.mergeDeep (دوال المحرك الأصلية، Rin 1.5).
+// ---------------------------------------------------------------------------
+
+let __pk = { defs: {}, loaded: {}, loading: [], hooks: {}, config: {}, warned: {}, nextId: 1 };
+
+fun pk_reset() {
+    __pk["defs"] = {}; __pk["loaded"] = {}; __pk["loading"] = [];
+    __pk["hooks"] = {}; __pk["config"] = {}; __pk["warned"] = {}; __pk["nextId"] = 1;
+}
+
+// ------------------------------------------------------------------ define
+fun pk_define(name, version, spec) {
+    if (type(name) != "string" or !regexTest(name, "^[a-z][a-z0-9_-]{1,63}$")) {
+        fail("pk_define: invalid package name " + json.stringify(name) + " (lowercase, digits, - and _)");
+    }
+    if (!semver.valid(version)) { fail("pk_define: invalid version '" + version + "' for " + name); }
+    let s = spec;
+    if (s == nil) { s = {}; }
+    if (has(s, "deps")) {
+        for (let d in keys(s["deps"])) {
+            if (!semver.validRange(s["deps"][d])) {
+                fail("pk_define: " + name + " has an invalid constraint for '" + d + "': " + s["deps"][d]);
+            }
+            if (d == name) { fail("pk_define: " + name + " cannot depend on itself"); }
+        }
+    }
+    if (!has(__pk["defs"], name)) { __pk["defs"][name] = {}; }
+    if (has(__pk["defs"][name], version) and !(has(s, "replace") and s["replace"])) {
+        fail("pk_define: " + name + "@" + version + " is already defined (pass replace: true to override)");
+    }
+    __pk["defs"][name][version] = s;
+    if (has(__pk["loaded"], name + "@" + version)) { remove(__pk["loaded"], name + "@" + version); }
+    pk_emit("define", { name: name, version: version });
+    return name + "@" + version;
+}
+
+// يعرّف حزمة من rin.toml (أو من قاموس المانيفست) مع صادراتها
+fun pk_defineFromManifest(manifest, exportsOrFn) {
+    let m = manifest;
+    if (type(m) == "string") { m = pkg.readManifest(m); }
+    if (m == nil) { fail("pk_defineFromManifest: manifest not found"); }
+    let v = pkg.validateManifest(m);
+    if (!v["valid"]) { fail("pk_defineFromManifest: " + join(v["errors"], "; ")); }
+    let deps = json.get(m, "dependencies", {});
+    let spec = { deps: deps, exports: exportsOrFn, description: json.get(m, "package.description", "") };
+    return pk_define(m["package"]["name"], m["package"]["version"], spec);
+}
+
+// ------------------------------------------------------------------ query
+fun pk_has(name, constraint) {
+    if (!has(__pk["defs"], name)) { return false; }
+    if (constraint == nil) { return true; }
+    return semver.maxSatisfying(keys(__pk["defs"][name]), constraint) != nil;
+}
+
+fun pk_versions(name) {
+    if (!has(__pk["defs"], name)) { return []; }
+    return semver.sort(keys(__pk["defs"][name]), true);
+}
+
+fun pk_latest(name, constraint) {
+    if (!has(__pk["defs"], name)) { return nil; }
+    let c = constraint;
+    if (c == nil) { c = "*"; }
+    return semver.maxSatisfying(keys(__pk["defs"][name]), c);
+}
+
+fun pk_info(name, constraint) {
+    let v = pk_latest(name, constraint);
+    if (v == nil) { return nil; }
+    let spec = __pk["defs"][name][v];
+    return {
+        name: name, version: v,
+        description: json.get(spec, "description", ""),
+        deps: json.get(spec, "deps", {}),
+        loaded: has(__pk["loaded"], name + "@" + v),
+        versions: pk_versions(name)
+    };
+}
+
+fun pk_list() {
+    let out = [];
+    for (let n in sort(keys(__pk["defs"]))) { push(out, pk_info(n, nil)); }
+    return out;
+}
+
+// ترتيب التحميل الصحيح لكل الحزم المعرّفة (تبعيات أولاً) + كشف الدورات
+fun pk_order() {
+    let g = {};
+    for (let n in keys(__pk["defs"])) {
+        let v = pk_latest(n, nil);
+        g[n] = keys(json.get(__pk["defs"][n][v], "deps", {}));
+    }
+    return pkg.depOrder(g);
+}
+
+// ------------------------------------------------------------------ load
+fun pk_require(name, constraint) {
+    if (!has(__pk["defs"], name)) { fail("pk_require: package '" + name + "' is not defined"); }
+    let c = constraint;
+    if (c == nil) { c = "*"; }
+    let v = semver.maxSatisfying(keys(__pk["defs"][name]), c);
+    if (v == nil) {
+        fail("pk_require: no version of '" + name + "' satisfies " + c + " (available: " + join(pk_versions(name), ", ") + ")");
+    }
+    let key = name + "@" + v;
+    if (has(__pk["loaded"], key)) { return __pk["loaded"][key]; }
+    if (contains(__pk["loading"], key)) {
+        fail("pk_require: circular dependency: " + join(__pk["loading"], " -> ") + " -> " + key);
+    }
+    push(__pk["loading"], key);
+    let spec = __pk["defs"][name][v];
+    let ctx = { name: name, version: v, deps: {}, config: pk_configOf(name, json.get(spec, "config", {})) };
+    try {
+        let deps = json.get(spec, "deps", {});
+        for (let d in keys(deps)) { ctx["deps"][d] = pk_require(d, deps[d]); }
+        let ex = json.get(spec, "exports", {});
+        let result = ex;
+        if (type(ex) == "function") { result = ex(ctx); }
+        if (has(spec, "init")) { spec["init"](ctx); }
+        __pk["loaded"][key] = result;
+    } catch (e) {
+        pop(__pk["loading"]);
+        fail(rt_msgOf(e));
+    }
+    pop(__pk["loading"]);
+    pk_emit("load", { name: name, version: v });
+    return __pk["loaded"][key];
+}
+
+fun rt_msgOf(e) {
+    if (type(e) == "map" and has(e, "message")) { return regexReplace(e["message"], "^\\[E[0-9]+\\] ", ""); }
+    return "" + e;
+}
+
+fun pk_loadAll() {
+    let ord = pk_order();
+    if (!ord["ok"]) { fail("pk_loadAll: circular dependency: " + join(ord["cycle"], " -> ")); }
+    for (let n in ord["order"]) { pk_require(n, nil); }
+    return ord["order"];
+}
+
+fun pk_call(name, fnName, args) {
+    let ex = pk_require(name, nil);
+    if (!has(ex, fnName)) { fail("pk_call: '" + name + "' has no export '" + fnName + "'"); }
+    let a = args;
+    if (a == nil) { a = []; }
+    return callFn(ex[fnName], a);
+}
+
+fun pk_undefine(name) {
+    if (!has(__pk["defs"], name)) { return false; }
+    for (let v in keys(__pk["defs"][name])) {
+        if (has(__pk["loaded"], name + "@" + v)) { remove(__pk["loaded"], name + "@" + v); }
+    }
+    remove(__pk["defs"], name);
+    return true;
+}
+
+// ------------------------------------------------------------------ config
+fun pk_configOf(name, defaults) {
+    let over = {};
+    if (has(__pk["config"], name)) { over = __pk["config"][name]; }
+    return json.mergeDeep(defaults, over);
+}
+fun pk_setConfig(name, values) {
+    let cur = {};
+    if (has(__pk["config"], name)) { cur = __pk["config"][name]; }
+    __pk["config"][name] = json.mergeDeep(cur, values);
+    return __pk["config"][name];
+}
+
+// ------------------------------------------------------------------ hooks / plugins
+fun pk_on(event, fn) {
+    if (!has(__pk["hooks"], event)) { __pk["hooks"][event] = []; }
+    let id = __pk["nextId"];
+    __pk["nextId"] = id + 1;
+    push(__pk["hooks"][event], { id: id, fn: fn });
+    return id;
+}
+fun pk_off(event, id) {
+    if (!has(__pk["hooks"], event)) { return false; }
+    let keep = [];
+    let removed = false;
+    for (let h in __pk["hooks"][event]) {
+        if (h["id"] == id) { removed = true; } else { push(keep, h); }
+    }
+    __pk["hooks"][event] = keep;
+    return removed;
+}
+fun pk_emit(event, data) {
+    if (!has(__pk["hooks"], event)) { return 0; }
+    let n = 0;
+    for (let h in __pk["hooks"][event]) { h["fn"](data); n = n + 1; }
+    return n;
+}
+
+// ------------------------------------------------------------------ utilities
+// تخزين مؤقت لدالة بوسيط واحد أو أكثر (المفتاح = JSON الوسائط)
+fun pk_memoize(fn) {
+    let cache = {};
+    let wrapper = fun(a) {
+        let k = json.canonical(a);
+        if (!has(cache, k)) { cache[k] = fn(a); }
+        return cache[k];
+    };
+    return wrapper;
+}
+
+// يطبع تحذير إهمال مرة واحدة فقط لكل رسالة
+fun pk_deprecated(message) {
+    if (has(__pk["warned"], message)) { return false; }
+    __pk["warned"][message] = true;
+    print "⚠ deprecated: " + message;
+    return true;
+}
+
+// يتحقق أن ما صدّرته الحزمة يطابق الأسماء المتوقعة (عقد واجهة)
+fun pk_implements(exportsMap, names) {
+    let missing = [];
+    for (let n in names) { if (!has(exportsMap, n)) { push(missing, n); } }
+    return { ok: len(missing) == 0, missing: missing };
+}
+
+// اختصارات بوسيط واحد (دوال Rin تتطلب عدد وسائط مطابقاً تماماً — مرّر nil حيث لا قيد)
+fun pk_use(name) { return pk_require(name, nil); }
+fun pk_ver(name) { return pk_latest(name, nil); }
+fun pk_get(name) { return pk_info(name, nil); }
