@@ -131,6 +131,17 @@ static std::string prettyPrintValue(const Value& v, int indent) {
     return reprValue(v);
 }
 
+// ---- Rin 1.4: المفسّر "الحالي" لهذا الخيط -- يلزم فقط كي تستطيع Value::toDisplayString (دالة عضو في
+// Value بلا وصول إلى Interpreter) استدعاء __str__/toString المعرَّفة من المستخدم على كائنات class. يُضبَط
+// بحارس RAII داخل run()/callTopLevelFunction()/callFunction() ويُستعاد السابق عند الخروج، فلا مؤشّر
+// معلّقاً أبداً (خارج أي تنفيذ يبقى nullptr فيعود العرض الافتراضي كما كان).
+static thread_local Interpreter* g_currentInterp = nullptr;
+struct CurrentInterpGuard {
+    Interpreter* prev;
+    explicit CurrentInterpGuard(Interpreter* i) : prev(g_currentInterp) { g_currentInterp = i; }
+    ~CurrentInterpGuard() { g_currentInterp = prev; }
+};
+
 bool valuesEqual(const Value& a, const Value& b) {
     if (a.type != b.type) return false;
     switch (a.type) {
@@ -244,6 +255,8 @@ std::string Value::toDisplayString() const {
         }
         case Type::INSTANCE: {
             if (!instance) return "nil";
+            // Rin 1.4: __str__ / toString() المعرَّفة في الصنف تتحكّم بالعرض (print + الدمج النصي + str()).
+            { std::string custom; if (g_currentInterp && g_currentInterp->tryInstanceToString(*this, custom)) return custom; }
             std::ostringstream ss;
             ss << instance->className << " { ";
             bool first = true;
@@ -5974,6 +5987,7 @@ void Interpreter::registerNatives() {
     registerNativesExtra(); // Rin 1.1: دوال إضافية (rin_extra_natives.cpp)
     registerNativesExtra2(); // Rin 1.2: sec./file./net./log./automation. + امتدادات container.* (rin_extra_natives2.cpp)
     registerNativesExtra3(); // Rin 1.3: net.* بشبكة حقيقية + container.* إضافية (rin_extra_natives3.cpp)
+    registerNativesOop(); // Rin 1.4: oop.* — استبطان الأصناف والكائنات + أدوات OOP (rin_oop_natives.cpp)
 }
 
 // ================= تخزين حقيقي على القرص (save/file/installation) =================
@@ -6846,6 +6860,7 @@ bool Interpreter::callTopLevelFunction(const std::vector<StmtPtr>& program,
                                         const std::vector<std::string>& paramAliases,
                                         std::unordered_map<std::string, Value>& globalsInOut,
                                         std::string& errorOut) {
+    CurrentInterpGuard interpGuard(this); // Rin 1.4
     callDepth = 0;
 
     // Hoist every top-level function first (mirrors run()'s hoist pass) so the callee -- and
@@ -6929,6 +6944,7 @@ bool Interpreter::callTopLevelFunction(const std::vector<StmtPtr>& program,
 }
 
 std::string Interpreter::run(const std::vector<StmtPtr>& statements) {
+    CurrentInterpGuard interpGuard(this); // Rin 1.4: لأجل __str__ داخل Value::toDisplayString
     g_diagFile = sourceFile; // مزامنة نظام Diagnostics: الدوال الحرة/lambdas تستخدم g_diagFile
     loadInstalledIndex(); // يحمّل أسماء أي تثبيتات فعلية سابقة على نفس basePath (استمرارية عبر التشغيلات)
     importedPaths.clear(); // كل تشغيل جديد يبدأ بسجل @import نظيف (لا يرث استيرادات تشغيل سابق)
@@ -7511,6 +7527,14 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
         } else if (iterableVal.type == Value::Type::STRING) {
             items.reserve(iterableVal.str.size());
             for (char c : iterableVal.str) items.push_back(Value::string(std::string(1, c)));
+        } else if (iterableVal.type == Value::Type::INSTANCE && hasMagic(iterableVal, "__iter__")) {
+            // Rin 1.4: كائن يعرّف __iter__() يُرجع مصفوفة (أو قاموساً -> مفاتيحه) قابل للتكرار بـ for..in.
+            std::vector<Value> noArgs;
+            Value produced = *callMagic(iterableVal, "__iter__", noArgs, s->line);
+            if (produced.type == Value::Type::ARRAY) items = *produced.array;
+            else if (produced.type == Value::Type::MAP) { for (auto& kv : *produced.map) items.push_back(kv.first); }
+            else throw diagErr(diag::Code::E0004_InvalidType, s->line,
+                               "`__iter__` of `" + iterableVal.typeName() + "` must return an array or map, found `" + produced.typeName() + "`");
         } else {
             throw diagErr(diag::Code::E0004_InvalidType, s->line,
                           "`for...in` requires an array, map, or string; found a `" +
@@ -8870,14 +8894,70 @@ void Interpreter::registerClassStmt(const std::shared_ptr<ClassStmt>& s) {
                                  "then silently resolve to only one of them instead of the class");
         }
     }
+    // Rin 1.4: وراثة صنف final تُرفَض فوراً إن كان الأب مسجَّلاً (وإلا يلتقطها validateInstantiable لاحقاً).
+    if (s->kind == ClassKind::Class && !s->superclass.empty()) {
+        auto pit = classes.find(s->superclass);
+        if (pit != classes.end() && pit->second.isFinal) {
+            throw errWithReason(diag::Code::E0035_RuntimeError, s->line,
+                                 "class `" + s->name + "` cannot extend final class `" + s->superclass + "`",
+                                 "`" + s->superclass + "` is declared `final class`, so it can never be extended");
+        }
+    }
     ClassDef def;
     def.name = s->name;
     def.superclass = s->superclass;
     def.isStruct = s->isStruct;
     def.line = s->line;
-    for (auto& f : s->fields) def.fieldDefs.push_back({f.name, f.initializer});
-    for (auto& m : s->methods) def.methods[m->name] = m;
+    def.kind = s->kind;
+    def.isAbstract = s->isAbstract;
+    def.isFinal = s->isFinal;
+    def.interfaces = s->interfaces;
+    def.traits = s->traits;
+    for (auto& f : s->fields) {
+        ClassDef::MemberMeta mm;
+        mm.access = f.access;
+        mm.isFinal = f.isFinal;
+        if (!f.access.empty() || f.isFinal) restrictedMembers_ = true;
+        if (f.isStatic) {
+            def.staticFieldDefs.push_back({f.name, f.initializer});
+            def.staticMeta[f.name] = mm;
+            def.staticOrder.push_back(f.name);
+        } else {
+            def.fieldDefs.push_back({f.name, f.initializer});
+            def.fieldMeta[f.name] = mm;
+        }
+    }
+    for (auto& m : s->methods) {
+        if (!m->access.empty()) restrictedMembers_ = true;
+        if (m->accessorKind == 1) { def.getters[m->name] = m; accessorsExist_ = true; }
+        else if (m->accessorKind == 2) { def.setters[m->name] = m; accessorsExist_ = true; }
+        else if (m->isStatic) def.staticMethods[m->name] = m;
+        else def.methods[m->name] = m;
+    }
     classes[s->name] = std::move(def);
+    validatedClasses_.clear(); // أي تعريف/إعادة تعريف يُبطِل نتائج فحص abstract/interface/final السابقة
+}
+
+// ---- Rin 1.4: أدوات البحث داخل ClassDef/السمات (traits) ----
+// kind: 0 = method، 1 = getter، 2 = setter. الدوال abstract (توقيعات بلا جسم) تُتجاهَل دائماً هنا:
+// البحث يريد التنفيذ الفعلي فقط؛ التحقق من أن كل abstract لها تنفيذ يتم في validateInstantiable.
+static std::shared_ptr<FunctionStmt> oopPickFn(const ClassDef& d, const std::string& n, int kind) {
+    const auto& m = kind == 0 ? d.methods : (kind == 1 ? d.getters : d.setters);
+    auto it = m.find(n);
+    if (it != m.end() && !it->second->isAbstract) return it->second;
+    return nullptr;
+}
+static std::shared_ptr<FunctionStmt> oopFindInTraits(const std::unordered_map<std::string, ClassDef>& classes,
+                                                      const ClassDef& d, const std::string& n, int kind,
+                                                      std::unordered_set<std::string>& seen) {
+    for (auto& t : d.traits) {
+        if (!seen.insert(t).second) continue;
+        auto it = classes.find(t);
+        if (it == classes.end()) continue;
+        if (auto f = oopPickFn(it->second, n, kind)) return f;
+        if (auto f = oopFindInTraits(classes, it->second, n, kind, seen)) return f;
+    }
+    return nullptr;
 }
 
 std::shared_ptr<FunctionStmt> Interpreter::findMethod(const std::string& className, const std::string& methodName, std::string* ownerOut) const {
@@ -8887,10 +8967,18 @@ std::shared_ptr<FunctionStmt> Interpreter::findMethod(const std::string& classNa
         auto it = classes.find(cur);
         if (it == classes.end()) break;
         if (!seen.insert(cur).second) break; // وراثة دائرية: توقّف بلا خطأ هنا (يُكتشف صراحة في instantiateClass)
-        auto mIt = it->second.methods.find(methodName);
-        if (mIt != it->second.methods.end()) {
+        if (auto f = oopPickFn(it->second, methodName, 0)) {
             if (ownerOut) *ownerOut = cur;
-            return mIt->second;
+            return f;
+        }
+        // Rin 1.4: دوال السمات (uses) تأتي بعد دوال الصنف نفسه وقبل دوال الأب. owner = الصنف المستخدِم
+        // (فيعمل super.method() داخلها نسبةً إليه، وتُفحَص صلاحياتها نسبةً إليه).
+        if (!it->second.traits.empty()) {
+            std::unordered_set<std::string> seenTraits;
+            if (auto f = oopFindInTraits(classes, it->second, methodName, 0, seenTraits)) {
+                if (ownerOut) *ownerOut = cur;
+                return f;
+            }
         }
         cur = it->second.superclass;
     }
@@ -8903,6 +8991,9 @@ Value Interpreter::bindMethod(const Value& receiver, const std::shared_ptr<Funct
     auto closureEnv = std::make_shared<Environment>(globals);
     closureEnv->define("self", receiver);
     if (!ownerClass.empty()) closureEnv->define("__class__", Value::string(ownerClass));
+    // Rin 1.4: اسم الدالة الجارية — يلزم لحقول final (تُكتب داخل init فقط) ولمنع التكرار اللانهائي داخل get/set.
+    closureEnv->define("__method__", Value::string(
+        (method->accessorKind == 1 ? "get " : method->accessorKind == 2 ? "set " : "") + method->name));
     callable->closure = closureEnv;
     Value v;
     v.type = Value::Type::FUNCTION;
@@ -8988,18 +9079,8 @@ void Interpreter::checkDeclaredType(const Value& v, const std::string& typeName,
     else {
         // اسم صنف/بنية: مطابقة "is-a" عبر سلسلة الوراثة -- نفس منطق findMethod بالضبط، فأي كائن من
         // صنف فرعي (Dog) يمرّ فحص نوع أبيه (Animal) بلا الحاجة لأي قواعد subtyping إضافية.
-        ok = false;
-        if (v.type == Value::Type::INSTANCE && v.instance) {
-            std::string cur = v.instance->className;
-            std::unordered_set<std::string> seen;
-            while (!cur.empty()) {
-                if (cur == typeName) { ok = true; break; }
-                if (!seen.insert(cur).second) break;
-                auto it = classes.find(cur);
-                if (it == classes.end()) break;
-                cur = it->second.superclass;
-            }
-        }
+        // Rin 1.4: الآن "is-a" تشمل أيضاً الواجهات (implements) والسمات (uses) وليس سلسلة extends فقط.
+        ok = isInstanceOf(v, typeName);
     }
 
     if (!ok) {
@@ -9034,7 +9115,9 @@ std::optional<Value> Interpreter::tryOperatorOverload(const std::string& magicNa
     return std::nullopt;
 }
 
-Value Interpreter::instantiateClass(const std::string& className, std::vector<Value>& args, int line) {
+Value Interpreter::instantiateClass(const std::string& className, std::vector<Value>& args, int line, const EnvPtr& callerEnv) {
+    const bool skipInit = skipInit_; // oop.fromMap: إنشاء بلا استدعاء init (يُصفَّر فوراً حتى لا يتسرّب للتداخل)
+    skipInit_ = false;
     // يبني سلسلة الوراثة من الجذر (الأب الأبعد) إلى الصنف نفسه، فيكتشف أي وراثة دائرية أو صنفاً
     // أباً غير معرَّف بخطأ واضح بدل الدخول في حلقة لا نهائية أو تجاهل صامت.
     std::vector<const ClassDef*> chain;
@@ -9060,6 +9143,9 @@ Value Interpreter::instantiateClass(const std::string& className, std::vector<Va
     }
     std::reverse(chain.begin(), chain.end()); // الجذر أولاً، الصنف المطلوب أخيراً
 
+    // Rin 1.4: abstract/interface/trait/final/override — يُفحَص مرة واحدة لكل صنف (نتيجة مخزَّنة).
+    validateInstantiable(className, line);
+
     auto inst = std::make_shared<InstanceData>();
     inst->className = className;
     inst->isStruct = chain.back()->isStruct;
@@ -9069,17 +9155,40 @@ Value Interpreter::instantiateClass(const std::string& className, std::vector<Va
     // (عبر self) — بترتيب من الأب إلى الابن، فيطغى تعريف الابن على الأب عند تكرار نفس الاسم.
     auto fieldEnv = std::make_shared<Environment>(globals);
     fieldEnv->define("self", instVal);
-    for (auto* def : chain) {
-        for (auto& fd : def->fieldDefs) {
+    auto applyFields = [&](const ClassDef& d) {
+        for (auto& fd : d.fieldDefs) {
             Value fv = fd.second ? copyForBinding(evaluate(fd.second, fieldEnv)) : Value::nil();
             if (!inst->fields.count(fd.first)) inst->fieldOrder.push_back(fd.first);
             inst->fields[fd.first] = fv;
         }
+    };
+    // حقول السمات (uses) تُهيَّأ قبل حقول الصنف المستخدِم (فيطغى الصنف عند تكرار الاسم)، والسمات المتداخلة أولاً.
+    std::function<void(const ClassDef&, std::unordered_set<std::string>&)> applyTraitFields =
+        [&](const ClassDef& d, std::unordered_set<std::string>& seenTraits) {
+            for (auto& t : d.traits) {
+                if (!seenTraits.insert(t).second) continue;
+                auto tit = classes.find(t);
+                if (tit == classes.end()) continue;
+                applyTraitFields(tit->second, seenTraits);
+                applyFields(tit->second);
+            }
+        };
+    for (auto* def : chain) {
+        fieldEnv->define("__class__", Value::string(def->name));
+        std::unordered_set<std::string> seenTraits;
+        applyTraitFields(*def, seenTraits);
+        applyFields(*def);
     }
 
     std::string initOwner;
     auto initMethod = findMethod(className, "init", &initOwner);
-    if (initMethod) {
+    // Rin 1.4: مُنشئ private/protected (مثلاً Singleton) — يُفحَص سياق المستدعي.
+    if (initMethod && restrictedMembers_ && callerEnv && !initMethod->access.empty()) {
+        checkMemberAccess(initOwner, initMethod->access, "init", "constructor", callerEnv, line);
+    }
+    if (skipInit) {
+        // لا شيء: الكائن يحمل حقوله الافتراضية فقط (يُكمل المستدعي ملأها)
+    } else if (initMethod) {
         Value bound = bindMethod(instVal, initMethod, initOwner);
         callFunction(bound.function, args, line);
     } else if (!args.empty()) {
@@ -9119,6 +9228,7 @@ Value Interpreter::callFunction(const std::shared_ptr<Callable>& fn, std::vector
         int& depth;
         ~DepthGuard() { depth--; }
     } guard{callDepth};
+    CurrentInterpGuard interpGuard(this); // Rin 1.4: لأجل __str__ داخل Value::toDisplayString
 
     auto callEnv = std::make_shared<Environment>(fn->closure);
     for (size_t i = 0; i < args.size(); i++) {
@@ -9200,7 +9310,7 @@ Value Interpreter::invokeCallee(const std::string& callee, std::vector<Value>& a
     // تماماً (call() في الـ parser لا يفرّق بين اسم دالة واسم صنف، كلاهما مجرد IDENT قبل '(').
     auto classIt = classes.find(callee);
     if (classIt != classes.end()) {
-        return instantiateClass(callee, args, line);
+        return instantiateClass(callee, args, line, env);
     }
 
     // OOP fix: `obj.method(args...)` where `obj` is a plain variable (e.g. `let a = Animal();
@@ -9214,13 +9324,21 @@ Value Interpreter::invokeCallee(const std::string& callee, std::vector<Value>& a
     // incorrectly reporting a perfectly valid method call as an unknown function.
     {
         size_t dot = callee.find('.');
-        if (dot != std::string::npos && dot == callee.rfind('.')) {
-            std::string root = callee.substr(0, dot);
-            std::string method = callee.substr(dot + 1);
-            // super.method(args...): same ambiguity as above ('super' parses as a VariableExpr
-            // root too), so it never reaches the MethodCallExpr super-branch either. 'super' is
-            // never an actual variable in env, so this is checked first and unconditionally.
-            if (root == "super") {
+        if (dot != std::string::npos) {
+            // Rin 1.4: مسار نقطي بأي طول: root.seg1.seg2...method(args). كان يُدعم فقط مقطع واحد (a.m())،
+            // فكان `self.engine.start()` يفشل بـ "is not a function". الآن تُقرأ المقاطع الوسيطة كحقول/خصائص
+            // (بنفس readMember المستعمل في GetExpr) ثم تُنادى الدالة الأخيرة على القيمة الناتجة.
+            std::vector<std::string> segs;
+            for (size_t st = 0;;) {
+                size_t d = callee.find('.', st);
+                if (d == std::string::npos) { segs.push_back(callee.substr(st)); break; }
+                segs.push_back(callee.substr(st, d - st));
+                st = d + 1;
+            }
+            const std::string root = segs.front();
+            const std::string method = segs.back();
+            // super.method(args...): 'super' ليس متغيّراً حقيقياً أبداً في env، فيُفحَص أولاً وبلا شرط.
+            if (segs.size() == 2 && root == "super") {
                 Value bound = evaluateSuperGet(method, env, line);
                 if (bound.type != Value::Type::FUNCTION) {
                     throw diagErr(diag::Code::E0004_InvalidType, line,
@@ -9228,26 +9346,25 @@ Value Interpreter::invokeCallee(const std::string& callee, std::vector<Value>& a
                 }
                 return callFunction(bound.function, args, line);
             }
-            Value obj;
-            if (env->get(root, obj)) {
-                if (obj.type == Value::Type::INSTANCE) {
-                    auto& inst = *obj.instance;
-                    auto fIt = inst.fields.find(method);
-                    if (fIt != inst.fields.end() && fIt->second.type == Value::Type::FUNCTION) {
-                        return callFunction(fIt->second.function, args, line);
-                    }
-                    std::string owner;
-                    auto m = findMethod(inst.className, method, &owner);
-                    if (m) {
-                        Value bound = bindMethod(obj, m, owner);
-                        return callFunction(bound.function, args, line);
-                    }
-                    throw errWithReason(diag::Code::E0006_UnknownFunction, line,
-                                         "`" + inst.className + "` has no method `" + method + "`",
-                                         "no method or callable field named `" + method + "` exists on `" + inst.className + "`");
+            Value cur;
+            bool haveRoot = false;
+            size_t i = 1;
+            if (env->get(root, cur)) {
+                haveRoot = true;
+            } else if (!classes.empty() && classes.count(root)) {
+                // ClassName.staticMethod(args) | ClassName.staticField.method(args)
+                if (segs.size() == 2) return callStatic(root, method, args, env, line);
+                cur = staticGet(root, segs[1], env, line);
+                haveRoot = true;
+                i = 2;
+            }
+            if (haveRoot) {
+                for (; i + 1 < segs.size(); ++i) cur = readMember(cur, segs[i], env, line);
+                if (cur.type == Value::Type::INSTANCE) {
+                    return callMethodOn(cur, method, args, env, line);
                 }
-                if (obj.type == Value::Type::MAP) {
-                    for (auto& kv : *obj.map) {
+                if (cur.type == Value::Type::MAP) {
+                    for (auto& kv : *cur.map) {
                         if (kv.first.type == Value::Type::STRING && kv.first.str == method && kv.second.type == Value::Type::FUNCTION) {
                             return callFunction(kv.second.function, args, line);
                         }
@@ -9258,10 +9375,12 @@ Value Interpreter::invokeCallee(const std::string& callee, std::vector<Value>& a
     }
 
     Value calleeVal;
-    if (!env->get(callee, calleeVal) || calleeVal.type != Value::Type::FUNCTION) {
+    if (!env->get(callee, calleeVal) ||
+        (calleeVal.type != Value::Type::FUNCTION &&
+         !(calleeVal.type == Value::Type::INSTANCE && hasMagic(calleeVal, "__call__")))) {
         throw unknownFunctionErr(callee, line);
     }
-    return callFunction(calleeVal.function, args, line);
+    return callValue(calleeVal, args, line); // دالة، أو كائن يعرّف __call__
 }
 
 // executeLibraryContainerBytes: منطق مشترك بث حقيقي بلا قرص — يأخذ بايتات حاوية .rcl (أياً كان
@@ -9508,20 +9627,39 @@ Value Interpreter::evaluate(const ExprPtr& expr, EnvPtr env) {
                                                             "division by zero", "the right-hand side of `%` evaluated to 0");
                 return Value::num(std::fmod(left.number, right.number));
             case TokenType::GREATER:
+                if (left.type == Value::Type::INSTANCE || right.type == Value::Type::INSTANCE) {
+                    if (auto r = tryCompareOverload(e->op, left, right, e->line)) return *r; // __lt__/__le__/__gt__/__ge__/__cmp__
+                }
                 requireNumbers(left, right, ">", e->line);
                 return Value::boolean_(left.number > right.number);
             case TokenType::GREATER_EQUAL:
+                if (left.type == Value::Type::INSTANCE || right.type == Value::Type::INSTANCE) {
+                    if (auto r = tryCompareOverload(e->op, left, right, e->line)) return *r; // __lt__/__le__/__gt__/__ge__/__cmp__
+                }
                 requireNumbers(left, right, ">=", e->line);
                 return Value::boolean_(left.number >= right.number);
             case TokenType::LESS:
+                if (left.type == Value::Type::INSTANCE || right.type == Value::Type::INSTANCE) {
+                    if (auto r = tryCompareOverload(e->op, left, right, e->line)) return *r; // __lt__/__le__/__gt__/__ge__/__cmp__
+                }
                 requireNumbers(left, right, "<", e->line);
                 return Value::boolean_(left.number < right.number);
             case TokenType::LESS_EQUAL:
+                if (left.type == Value::Type::INSTANCE || right.type == Value::Type::INSTANCE) {
+                    if (auto r = tryCompareOverload(e->op, left, right, e->line)) return *r; // __lt__/__le__/__gt__/__ge__/__cmp__
+                }
                 requireNumbers(left, right, "<=", e->line);
                 return Value::boolean_(left.number <= right.number);
             case TokenType::EQUAL_EQUAL:
+                // Rin 1.4: __eq__ بين كائنين (مقارنة مع nil/أنواع أخرى لا تستدعي كود المستخدم أبداً).
+                if (left.type == Value::Type::INSTANCE && right.type == Value::Type::INSTANCE) {
+                    if (auto r = tryEqOverload(left, right, false, e->line)) return Value::boolean_(*r);
+                }
                 return Value::boolean_(valuesEqual(left, right));
             case TokenType::BANG_EQUAL:
+                if (left.type == Value::Type::INSTANCE && right.type == Value::Type::INSTANCE) {
+                    if (auto r = tryEqOverload(left, right, true, e->line)) return Value::boolean_(*r);
+                }
                 return Value::boolean_(!valuesEqual(left, right));
             default: break;
         }
@@ -9547,6 +9685,9 @@ Value Interpreter::evaluate(const ExprPtr& expr, EnvPtr env) {
         std::vector<Value> args;
         args.reserve(e->args.size());
         for (auto& a : e->args) args.push_back(evaluate(a, env));
+        if (callee.type == Value::Type::INSTANCE && hasMagic(callee, "__call__")) {
+            return callValue(callee, args, e->line);
+        }
         if (callee.type != Value::Type::FUNCTION || !callee.function) {
             throw diagErr(diag::Code::E0004_InvalidType, e->line,
                           "cannot call a value of type `" + callee.typeName() + "`");
@@ -9608,6 +9749,10 @@ Value Interpreter::evaluate(const ExprPtr& expr, EnvPtr env) {
             }
             return Value::string(std::string(1, obj.str[static_cast<size_t>(i)]));
         }
+        if (obj.type == Value::Type::INSTANCE && hasMagic(obj, "__getitem__")) {
+            std::vector<Value> a{idx};
+            return *callMagic(obj, "__getitem__", a, e->line); // Rin 1.4: obj[i]
+        }
         throw diagErr(diag::Code::E0004_InvalidType, e->line, "cannot index a value of type `" + obj.typeName() + "`");
     }
     case ExprKind::IndexSet: { auto e = std::static_pointer_cast<IndexSetExpr>(expr);
@@ -9639,6 +9784,11 @@ Value Interpreter::evaluate(const ExprPtr& expr, EnvPtr env) {
             obj.map->push_back({idx, val});
             return val;
         }
+        if (obj.type == Value::Type::INSTANCE && hasMagic(obj, "__setitem__")) {
+            std::vector<Value> a{idx, val};
+            callMagic(obj, "__setitem__", a, e->line); // Rin 1.4: obj[i] = v
+            return val;
+        }
         throw diagErr(diag::Code::E0004_InvalidType, e->line, "cannot assign into a value of type `" + obj.typeName() + "` via `[]`");
     }
     // OOP: object.name -> قراءة حقل/دالة مرتبطة (class/struct instance) أو قيمة مفتاح (map؛ يشمل
@@ -9650,18 +9800,15 @@ Value Interpreter::evaluate(const ExprPtr& expr, EnvPtr env) {
         // مباشرة *قبل* تقييمه، لأن تقييمها كـ VariableExpr عادية كان سيرمي دائماً "متغيّر غير معرَّف".
         if (auto ve = std::dynamic_pointer_cast<VariableExpr>(e->object)) {
             if (ve->name == "super") return evaluateSuperGet(e->name, env, e->line);
+            // Rin 1.4: ClassName.member -> عضو static (إن لم يكن هناك متغيّر محلي بنفس الاسم يظلّله).
+            if (!classes.empty() && classes.count(ve->name)) {
+                Value shadow;
+                if (!env->get(ve->name, shadow)) return staticGet(ve->name, e->name, env, e->line);
+            }
         }
         Value obj = evaluate(e->object, env);
         if (obj.type == Value::Type::INSTANCE) {
-            auto& inst = *obj.instance;
-            auto fIt = inst.fields.find(e->name);
-            if (fIt != inst.fields.end()) return fIt->second;
-            std::string owner;
-            auto method = findMethod(inst.className, e->name, &owner);
-            if (method) return bindMethod(obj, method, owner);
-            throw errWithReason(diag::Code::E0001_UndefinedVariable, e->line,
-                                 "no field or method named `" + e->name + "` on `" + inst.className + "`",
-                                 "`" + inst.className + "` has neither a field nor a method called `" + e->name + "`");
+            return readMember(obj, e->name, env, e->line); // خصائص get + صلاحيات + حقول + دوال مربوطة
         }
         if (obj.type == Value::Type::MAP) {
             for (auto& kv : *obj.map) {
@@ -9674,14 +9821,20 @@ Value Interpreter::evaluate(const ExprPtr& expr, EnvPtr env) {
     }
     // OOP: object.name = value -> كتابة/تعديل حقل (class/struct instance) أو مفتاح (map).
     case ExprKind::Set: { auto e = std::static_pointer_cast<SetExpr>(expr);
+        // Rin 1.4: ClassName.field = value -> كتابة حقل static.
+        if (auto sve = std::dynamic_pointer_cast<VariableExpr>(e->object)) {
+            if (!classes.empty() && classes.count(sve->name)) {
+                Value shadow;
+                if (!env->get(sve->name, shadow)) {
+                    Value sval = evaluate(e->value, env);
+                    return staticSet(sve->name, e->name, sval, env, e->line);
+                }
+            }
+        }
         Value obj = evaluate(e->object, env);
         Value val = evaluate(e->value, env);
         if (obj.type == Value::Type::INSTANCE) {
-            Value stored = copyForBinding(val);
-            auto& inst = *obj.instance;
-            if (!inst.fields.count(e->name)) inst.fieldOrder.push_back(e->name);
-            inst.fields[e->name] = stored;
-            return stored;
+            return writeMember(obj, e->name, val, env, e->line); // خصائص set + final + صلاحيات + freeze
         }
         if (obj.type == Value::Type::MAP) {
             for (auto& kv : *obj.map) {
@@ -9715,20 +9868,7 @@ Value Interpreter::evaluate(const ExprPtr& expr, EnvPtr env) {
         args.reserve(e->args.size());
         for (auto& a : e->args) args.push_back(evaluate(a, env));
         if (obj.type == Value::Type::INSTANCE) {
-            auto& inst = *obj.instance;
-            auto fIt = inst.fields.find(e->method);
-            if (fIt != inst.fields.end() && fIt->second.type == Value::Type::FUNCTION) {
-                return callFunction(fIt->second.function, args, e->line);
-            }
-            std::string owner;
-            auto method = findMethod(inst.className, e->method, &owner);
-            if (!method) {
-                throw errWithReason(diag::Code::E0006_UnknownFunction, e->line,
-                                     "`" + inst.className + "` has no method `" + e->method + "`",
-                                     "no method or callable field named `" + e->method + "` exists on `" + inst.className + "`");
-            }
-            Value bound = bindMethod(obj, method, owner);
-            return callFunction(bound.function, args, e->line);
+            return callMethodOn(obj, e->method, args, env, e->line);
         }
         if (obj.type == Value::Type::MAP) {
             for (auto& kv : *obj.map) {
@@ -10382,3 +10522,9 @@ std::optional<Interpreter::FlowRunResult> Interpreter::replayFlow(const std::str
 #include "rin_extra_natives2.cpp"
 #include "rin_extra_natives3.cpp"
 #endif
+
+// ---- Rin 1.4: OOP الموسَّع (interface/trait/abstract/static/private/get-set + دوال oop.*) ----
+// نفس أسلوب التضمين المباشر أعلاه: لا حاجة لتعديل أي قائمة ملفات في CMake/Gradle/CI.
+#include "rin_oop.cpp"
+#include "rin_oop_natives.cpp"
+#include "rin_oop_bind.cpp"
