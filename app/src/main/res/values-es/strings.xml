@@ -333,4 +333,7 @@ print \"Hello, \" + name + \"!\";
     <string name="link_copied">Copiado</string>
     <string name="link_share">Compartir</string>
     <string name="link_copy">Copiar</string>
+    <string name="rin_input_title">Entrada</string>
+    <string name="rin_input_hint">Escribe tu respuesta</string>
+    <string name="rin_input_default_prompt">El programa espera una entrada</string>
 </resources>
