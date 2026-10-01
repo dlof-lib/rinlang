@@ -3,6 +3,7 @@ package com.dlof.rinlang
 import androidx.annotation.ColorRes
 import androidx.annotation.DrawableRes
 import java.io.File
+import java.util.Locale
 
 /** Category of a single formatted output line (drives the icon + accent color used to render it). */
 enum class LogKind(@DrawableRes val icon: Int?, @ColorRes val colorRes: Int) {
@@ -43,7 +44,13 @@ data class RinLogLine(
     val text: String,
     val imageRelPath: String? = null,
     val imageCaption: String? = null,
-    val imageWidthDp: Float? = null
+    val imageWidthDp: Float? = null,
+    /** رقم السطر المصدري لأخطاء `[Error line N]:` (null لغيرها) — يتيح «اذهب إلى السطر» من الكونسول. */
+    val errorLine: Int? = null,
+    /** إزاحة السطر الأصلية (Tab = 4)؛ [text] نفسه يبقى مقصوصاً كما كان، فلا يتأثر أي عارض قائم. */
+    val indent: Int = 0,
+    /** عدد مرات تكرار هذا السطر متتالياً بعد [collapseRepeats] (1 = غير مكرَّر). */
+    val repeat: Int = 1
 )
 
 /** File kinds save/installation can actually write to disk, and how to open/share them afterwards. */
@@ -133,6 +140,8 @@ object RinConsoleFormatter {
      * from docIds/allDocs/queryDocs, or `[]`) also starts with '[' but is NOT an error, and must
      * never be misclassified as one.
      */
+    private val RE_ERROR_LINE_NO = Regex("""^\[Error\s+line\s+(\d+)]:""")
+
     private val RE_RUNTIME_ERROR = Regex("""^\[(?:Error(?:\s+line\s+\d+)?|Timeout|Fatal error)]:""")
 
     /** True only for a genuine interpreter error line, never for ordinary array/object output. */
@@ -146,6 +155,8 @@ object RinConsoleFormatter {
             .map { rawLine ->
                 val line = rawLine.trimEnd()
                 val trimmedStart = line.trimStart()
+                val indent = line.takeWhile { it == ' ' || it == '\t' }
+                    .fold(0) { acc, c -> acc + if (c == '\t') 4 else 1 }
                 val imgMatch = if (trimmedStart.startsWith("🖨️")) RE_PRINT_IMAGE.find(trimmedStart) else null
                 if (imgMatch != null) {
                     val relPath = imgMatch.groupValues[1].trim().trim('"')
@@ -156,17 +167,19 @@ object RinConsoleFormatter {
                         text = caption ?: relPath,
                         imageRelPath = relPath,
                         imageCaption = caption,
-                        imageWidthDp = widthDp
+                        imageWidthDp = widthDp,
+                        indent = indent
                     )
                 } else if (isErrorLine(trimmedStart)) {
-                    RinLogLine(LogKind.ERROR, trimmedStart)
+                    val errLine = RE_ERROR_LINE_NO.find(trimmedStart)?.groupValues?.get(1)?.toIntOrNull()
+                    RinLogLine(LogKind.ERROR, trimmedStart, errorLine = errLine, indent = indent)
                 } else {
                     val match = PREFIX_ORDER.firstOrNull { (prefix, _) -> trimmedStart.startsWith(prefix) }
                     if (match != null) {
                         val (prefix, kind) = match
-                        RinLogLine(kind, trimmedStart.removePrefix(prefix).trim())
+                        RinLogLine(kind, trimmedStart.removePrefix(prefix).trim(), indent = indent)
                     } else {
-                        RinLogLine(LogKind.PLAIN, trimmedStart)
+                        RinLogLine(LogKind.PLAIN, trimmedStart, indent = indent)
                     }
                 }
             }
@@ -214,12 +227,13 @@ object RinConsoleFormatter {
 
     /** Human friendly "12.4 MB" / "512 KB" / "180 بايت" formatting for progress UI. */
     fun formatBytes(bytes: Long): String {
-        if (bytes < 1024) return "$bytes بايت"
+        // Locale.ROOT: بدون ذلك قد تُنتج لغة الجهاز العربية أرقاماً هندية أو فاصلة عشرية «٫».
+        if (bytes < 1024) return "${maxOf(bytes, 0L)} بايت"
         val kb = bytes / 1024.0
-        if (kb < 1024) return String.format("%.1f KB", kb)
+        if (kb < 1024) return String.format(Locale.ROOT, "%.1f KB", kb)
         val mb = kb / 1024.0
-        if (mb < 1024) return String.format("%.1f MB", mb)
+        if (mb < 1024) return String.format(Locale.ROOT, "%.1f MB", mb)
         val gb = mb / 1024.0
-        return String.format("%.2f GB", gb)
+        return String.format(Locale.ROOT, "%.2f GB", gb)
     }
 }
