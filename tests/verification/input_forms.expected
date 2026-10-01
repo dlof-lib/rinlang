@@ -1,0 +1,13 @@
+P> name: [Ali] P> age: [30] P> active: [false] Pt> x: [1] Pt> y: [2] cfg> host: [localhost] cfg> port: [80] [أدخل رقماً صالحاً] cfg> port: [80] cfg> tls: [false] Sara,30,true,true
+12
+5:80:true
+
+error[E0035]: cannot fill a frozen `Person` object
+  --> input_forms.rin:20:1
+
+ 20 | input("again> ", p);
+    | ^
+
+reason:
+  this object was frozen with `oop.freeze(...)`
+
