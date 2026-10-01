@@ -163,6 +163,68 @@ inline Theme builtinSlateTheme() {
     return t;
 }
 
+// ---- Extended built-in themes (Design System v2, see rin_indsin_system.h + docs/indsin_expansion.md) ----
+// Five more ready-made Pattern Books: two WCAG-AAA high-contrast themes for accessibility (every
+// text/background pair >= 7:1), a warm "paper" Sepia reading theme, a dark Forest theme and a
+// light Rose theme. Each fills every Theme role exactly like Dark/Light do, so any existing
+// colorForKind()/resolveColor() default keeps working unchanged under them. They are selected the
+// same way as the older themes: `@theme=Sepia active=true; .end/theme`.
+inline Theme builtinHighContrastDarkTheme() {
+    Theme t; t.name = "HighContrastDark";
+    t.primary   = {255, 221, 0};  t.secondary = {0, 229, 255};
+    t.success   = {0, 230, 118};  t.danger    = {255, 110, 110};
+    t.warning   = {255, 193, 7};  t.info      = {130, 190, 255};
+    t.neutral   = {189, 189, 189};
+    t.surface   = {10, 10, 10};   t.background= {0, 0, 0};
+    t.text      = {255, 255, 255};t.text_muted= {220, 220, 220};
+    t.border    = {255, 255, 255};
+    return t;
+}
+inline Theme builtinHighContrastLightTheme() {
+    Theme t; t.name = "HighContrastLight";
+    t.primary   = {0, 0, 204};    t.secondary = {0, 90, 100};
+    t.success   = {0, 100, 0};    t.danger    = {176, 0, 0};
+    t.warning   = {122, 74, 0};   t.info      = {0, 64, 160};
+    t.neutral   = {64, 64, 64};
+    t.surface   = {255, 255, 255};t.background= {255, 255, 255};
+    t.text      = {0, 0, 0};      t.text_muted= {51, 51, 51};
+    t.border    = {0, 0, 0};
+    return t;
+}
+inline Theme builtinSepiaTheme() {
+    Theme t; t.name = "Sepia";
+    t.primary   = {140, 82, 40};  t.secondary = {70, 105, 85};
+    t.success   = {62, 100, 42};  t.danger    = {165, 45, 35};
+    t.warning   = {140, 92, 10};  t.info      = {50, 90, 130};
+    t.neutral   = {120, 108, 92};
+    t.surface   = {251, 245, 230};t.background= {244, 236, 216};
+    t.text      = {59, 47, 35};   t.text_muted= {105, 89, 70};
+    t.border    = {222, 210, 184};
+    return t;
+}
+inline Theme builtinForestTheme() {
+    Theme t; t.name = "Forest";
+    t.primary   = {74, 222, 128}; t.secondary = {45, 212, 191};
+    t.success   = {52, 211, 120}; t.danger    = {248, 113, 113};
+    t.warning   = {250, 204, 21}; t.info      = {96, 165, 250};
+    t.neutral   = {110, 130, 118};
+    t.surface   = {22, 34, 28};   t.background= {14, 22, 18};
+    t.text      = {226, 240, 230};t.text_muted= {150, 176, 160};
+    t.border    = {38, 58, 48};
+    return t;
+}
+inline Theme builtinRoseTheme() {
+    Theme t; t.name = "Rose";
+    t.primary   = {205, 30, 105}; t.secondary = {126, 34, 206};
+    t.success   = {21, 128, 61};  t.danger    = {200, 30, 30};
+    t.warning   = {180, 83, 9};   t.info      = {29, 78, 216};
+    t.neutral   = {120, 100, 108};
+    t.surface   = {255, 255, 255};t.background= {255, 247, 249};
+    t.text      = {42, 20, 28};   t.text_muted= {118, 86, 98};
+    t.border    = {245, 218, 228};
+    return t;
+}
+
 // ---- Pattern Book: the registry of themes + which one is active -------------------------------
 struct ThemeRegistry {
     std::unordered_map<std::string, Theme> themes;
@@ -175,6 +237,11 @@ struct ThemeRegistry {
         themes["Ocean"] = builtinOceanTheme();
         themes["Sunset"] = builtinSunsetTheme();
         themes["Slate"] = builtinSlateTheme();
+        themes["HighContrastDark"] = builtinHighContrastDarkTheme();
+        themes["HighContrastLight"] = builtinHighContrastLightTheme();
+        themes["Sepia"] = builtinSepiaTheme();
+        themes["Forest"] = builtinForestTheme();
+        themes["Rose"] = builtinRoseTheme();
     }
     void registerTheme(Theme t) { std::string n = t.name; themes[n] = std::move(t); }
     void setActive(const std::string& n) { if (themes.count(n)) activeName = n; }
@@ -294,6 +361,18 @@ inline double resolveRadius(const Strand& s, double def = 0) {
     double t;
     if (resolveRadiusToken(v->str, t)) return t;
     return v->asNumber(def);
+}
+
+// ---- Motion duration tokens (Design System v2) -------------------------------------------------
+// instant/fast/normal/slow/slower => 0/120/250/400/600 ms. Lives here (not in rin_indsin_system.h)
+// so the Effects Engine can accept `duration="fast"` without depending on the larger system header.
+inline bool resolveDurationToken(const std::string& name, double& out) {
+    if (name == "instant") { out = 0;   return true; }
+    if (name == "fast")    { out = 120; return true; }
+    if (name == "normal")  { out = 250; return true; }
+    if (name == "slow")    { out = 400; return true; }
+    if (name == "slower")  { out = 600; return true; }
+    return false;
 }
 
 // ---- Typography tokens (§12) -----------------------------------------------------------------
