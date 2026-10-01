@@ -1,4 +1,4 @@
-short? [قيمة غير مقبولة] short? age? [خارج 0..120] age? [خارج 0..120] age? email? theme? volume? الدور:
+short? [قيمة غير مقبولة] short? age? [0] [خارج 0..120] age? [0] [خارج 0..120] age? [0] email? theme? [light] volume? [5] الدور:
 1) Admin
 2) Editor
 3) Viewerحقل:
