@@ -199,6 +199,7 @@ void printUsage() {
         "الاستخدام:\n"
         "  rin new <name> [--template console]   إنشاء مشروع Rin جديد\n"
         "  rin pkg <command> [...]                RinPM: مدير حزم Rin (rin pkg --help)\n"
+        "  rin --allow-native file.rin            تفعيل جسر C++ (cpp.*) لهذا التشغيل\n"
         "  rin build [file] [-o out] [--release]  بناء تنفيذي أصلي (عبر rinc)\n"
         "  rin run [file] [--import-progress]     تشغيل برنامج Rin (شريط تحميل حي لـ @import)\n"
         "  rin check <file> [--format=plain|short|json|lsp]\n"
@@ -705,6 +706,15 @@ int cmdDoctor() {
 } // namespace
 
 int main(int argc, char** argv) {
+    // --allow-native: يفعّل جسر C++ (cpp.*) لهذا التشغيل فقط (Rin 1.5). قرار المستخدم لا الكود.
+    {
+        int w = 1;
+        for (int i = 1; i < argc; ++i) {
+            if (std::strcmp(argv[i], "--allow-native") == 0) { ::setenv("RIN_ALLOW_NATIVE", "1", 1); continue; }
+            argv[w++] = argv[i];
+        }
+        argc = w;
+    }
     if (argc >= 2) {
         std::string cmd = argv[1];
         std::vector<std::string> rest(argv + 2, argv + argc);
