@@ -1,0 +1,22 @@
+// living_trial.rin — اختبار تحقّق لـ docs/living-variables.md
+let a = 100; let b = 0;
+trial { a = a - 30; b = b + 30; abort; }
+print a; print b;
+trial { a = a - 30; b = b + 30; }
+print a; print b;
+fun risky() { b = 1000; throw "boom"; }
+trial { a = 0; risky(); } else { print "failed, a=" + a + " b=" + b; }
+try { trial { a = 1; undefined_fn(); } } catch (e) { print "outer caught; a=" + a; }
+tape t = 1; gauge g = 5 within 0 to 10;
+trial { t = 2; t = 3; g = 9; abort; }
+print t; print t.past; print g;
+trial { a = 1; trial { a = 2; abort; } print "inner a=" + a; abort; }
+print a;
+trial { a = 5; trial { a = 6; } abort; }
+print a;
+try { abort; } catch (e) { print e.code; }
+fun f() { trial { a = 7; return 1; } }
+f(); print a;
+let i = 0; let acc = 0;
+while (i < 3) { i = i + 1; trial { acc = acc + i; if (i == 2) { abort; } } }
+print acc;
