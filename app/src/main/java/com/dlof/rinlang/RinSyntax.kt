@@ -163,7 +163,9 @@ private object RinLexer {
     // <rin-keywords:begin> — مُولَّد بـ scripts/gen_keywords.py من المحرّك (rin_lexer.cpp + natives)؛ لا تعدّل يدوياً
     val coreKeywords = setOf(
         "if", "else", "while", "for", "return", "break", "continue", "rinopen", "and", "or", "let",
-        "fun", "text", "print", "show", "true", "false", "nil", "reckon", "where"
+        "fun", "text", "print", "show", "true", "false", "nil", "reckon", "where",
+        // Living Variables (docs/living-variables.md): contextual words, highlighted like `reckon`.
+        "stone", "gauge", "tape", "lens", "fuse", "bell", "trial", "undo", "redo", "rearm", "unbell", "abort"
     )
     val containerKeywords = setOf(
         "make", "warp", "container", "Containers", "Group", "Volume", "Section", "Translations",
