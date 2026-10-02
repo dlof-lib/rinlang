@@ -1,0 +1,11 @@
+// hash_ignorance.rin — #ignorance
+#ignorance { print 1 / 0; print "after"; }
+print "survived";
+#ignorance { let v = missingVar + 1; }
+print "survived 2";
+#ignorance print nope();
+let n = 0;
+#for (let i #in 1 #to 3) { #ignorance { n = n + i; throw "x"; } }
+print n;
+fun f() { #ignorance { #return 5; } return 0; }
+print f();
