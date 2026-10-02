@@ -1,175 +1,366 @@
-name: Build APP RIN 
+name: Build APP RIN
 
-# نسخة احترافية من بناء الـ APK: تُنتج ملف release *موقَّعاً* رقمياً (لا debug)، وتُولِّد أسرار
-# التوقيع (keystore + كلمتا مرور) بنفسها تلقائياً — لا حاجة لإضافة أي GitHub Secret يدوياً مسبقاً.
+# ───────────────────────────────────────────────────────────────────────────────
+# بناء APK موقَّع (release) لمشروع Rin Lang — نسخة سريعة وصارمة.
 #
-# **مفتاح توقيع واحد دائم، يُولَّد مرّة واحدة فقط في تاريخ المستودع كله:**
-# أول تشغيل يُولِّد ملفَي signing/release.keystore و signing/keystore-credentials.txt، ثم يحفظهما
-# بـ commit مباشر على نفس الفرع (main/master) — بلا أي فرع Git إضافي. كل تشغيل تالٍ يجدهما موجودَين
-# أصلاً ضمن الملفات التي يسحبها actions/checkout، فيستخدمهما كما هما فوراً دون توليد شيء جديد.
-# الـ commit يحمل وسم [skip ci] حتى لا يُشغِّل نفسه من جديد عند الدفع.
+# المفتاح الدائم: أول تشغيل ناجح يُولِّد signing/release.keystore و
+# signing/keystore-credentials.txt ويحفظهما بـ commit واحد [skip ci] على نفس الفرع،
+# وكل تشغيل تالٍ يستخدمهما كما هما. (يُفضَّل أن يبقى المستودع Private — كلمتا المرور
+# محفوظتان بنص صريح داخل المستودع.)
 #
-# ⚠️ تنبيه أمني مهم: ملف keystore-credentials.txt يُحفَظ داخل المستودع نفسه بنص صريح. أي شخص
-# يملك صلاحية قراءة على هذا المستودع (git clone/fetch) يرى كلمتَي المرور ويقدر يوقّع بنفس
-# المفتاح. هذا مقبول تماماً لمستودع خاص (Private) — وهو الوضع الموصى به بشدة هنا — أمّا لو كان
-# المستودع عاماً (Public) فتوقيع تطبيقك يصبح قابلاً للانتحال من أي أحد يطّلع على الكود. لو
-# مستودعك عام، إمّا حوّله خاصاً، أو استخدم مفتاح توقيع حقيقي عبر GitHub Secrets يدوياً بدل هذا.
+# إعداد لمرة واحدة: Settings ← Actions ← General ← Workflow permissions ←
+# "Read and write permissions" (لازم فقط لحفظ المفتاح أول مرة).
 #
-# طريقة الاستخدام:
-#   1) ارفع المستودع (بما فيه هذا الملف) إلى GitHub، ويُفضَّل أن يكون Private (راجع التنبيه فوق).
-#   2) Settings ← Actions ← General ← Workflow permissions ← اختر "Read and write permissions"
-#      (مطلوبة مرّة واحدة فقط حتى يقدر الـ workflow يحفظ ملفَي التوقيع في أول تشغيل).
-#   3) شغّل "Build Signed Release APK (Rin Lang)" (أو انتظر push تلقائياً على main/master).
-#   4) بعد الاكتمال: Artifacts ← نزّل "rin-lang-release-apk" وهو APK الموقَّع جاهزاً للتثبيت.
-#      ملفَا التوقيع نفسهما يبقيان محفوظين ضمن المستودع تحت مجلد signing/ للاستخدام الدائم.
+# أين أجد الناتج؟ Actions ← التشغيل ← Artifacts ← rin-lang-release-apk
+# (يحتوي الـ APK + ملف SHA-256) وملخص البناء يظهر في صفحة التشغيل نفسها.
+# ───────────────────────────────────────────────────────────────────────────────
 
 on:
   push:
     branches: [ "main", "master" ]
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+      - "web/**"
+      - "user-site/**"
+      - "firebase/**"
+      - "LICENSE"
+      - "NOTICE"
+      - "COPYRIGHT"
   workflow_dispatch:
     inputs:
       package_name:
-        description: "الاسم الظاهر لملف الـ APK الناتج (بدون .apk)"
+        description: "الاسم الأساسي لملف الـ APK (بدون .apk)"
         required: false
         default: "RinStudio"
+      abis:
+        description: "معماريات المعالج: all = الأربع (الأبطأ)، أو اختر واحدة لبناء أسرع"
+        required: false
+        type: choice
+        default: "all"
+        options:
+          - "all"
+          - "arm64-v8a"
+          - "armeabi-v7a"
+          - "x86_64"
+
+# إلغاء التشغيل القديم عند وصول push جديد على نفس الفرع — يوفّر دقائق الـ runner.
+concurrency:
+  group: rin-apk-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
-  contents: write   # لازمة فقط لحفظ ملفَي التوقيع داخل المستودع في أول تشغيل
+  contents: read
+
+env:
+  # ccache يُسرّع تجميع C++ بشكل كبير في التشغيلات التالية (يُمرَّر لـ CMake عبر البيئة).
+  CMAKE_C_COMPILER_LAUNCHER: ccache
+  CMAKE_CXX_COMPILER_LAUNCHER: ccache
+  GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=-Xmx3g"
 
 jobs:
   build-signed-release:
     name: Build & sign release APK
     runs-on: ubuntu-latest
-    # يمنع تشغيل الـ workflow على الـ commit الذي يحفظ ملفَي التوقيع نفسه (رغم وجود [skip ci]
-    # كطبقة حماية أولى، هذا الشرط طبقة إضافية تمنع أي حلقة تكرار غير متوقّعة).
+    timeout-minutes: 60
+    # contents: write لازمة فقط لحفظ المفتاح في أول تشغيل على الإطلاق.
+    permissions:
+      contents: write
+    # طبقة حماية إضافية ضد حلقة التشغيل الذاتي بعد commit المفتاح.
     if: "!contains(github.event.head_commit.message, '[skip ci]')"
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
 
-      # يحذف بقايا ملفات Loom القديمة (تسبّب فشل aapt2: resource loom_* not found)
-      # حتى لو رُفع المشروع كـ ZIP فوق نسخة قديمة. آمن للتكرار.
+      # ── فحوصات مبكرة (ثوانٍ) حتى لا تُهدَر 20 دقيقة على بناء محكوم عليه بالفشل ──
+      - name: Validate inputs & project consistency
+        id: meta
+        env:
+          INPUT_NAME: ${{ inputs.package_name }}
+          INPUT_ABIS: ${{ inputs.abis }}
+        run: |
+          set -euo pipefail
+
+          # 1) الإصدار: ملف VERSION يجب أن يطابق RIN_VERSION_STRING (انظر docs/VERSIONING.md).
+          version="$(tr -d '[:space:]' < VERSION)"
+          if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error file=VERSION::صيغة الإصدار غير صالحة: '$version' (المتوقع MAJOR.MINOR.PATCH)"
+            exit 1
+          fi
+          header_version="$(grep -oP '#define\s+RIN_VERSION_STRING\s+"\K[^"]+' app/src/main/cpp/rin_version.h || true)"
+          if [ "$header_version" != "$version" ]; then
+            echo "::error file=VERSION::VERSION ($version) لا يطابق RIN_VERSION_STRING ($header_version) في rin_version.h"
+            exit 1
+          fi
+
+          # 2) إصدارات NDK/CMake تُقرأ من ملف Gradle نفسه (مصدر حقيقة واحد، بلا تكرار هنا).
+          ndk="$(grep -oP 'ndkVersion\s*=?\s*"\K[^"]+' app/build.gradle.kts | head -n1 || true)"
+          cmake="$(grep -oP '\bversion\s*=?\s*"\K[0-9.]+' app/build.gradle.kts | head -n1 || true)"
+          ndk="${ndk:-26.1.10909125}"
+          cmake="${cmake:-3.22.1}"
+
+          # 3) اسم الملف: تنقية صارمة (الإدخال لا يُدمَج في الشِّل مباشرة أبداً).
+          base="$(printf '%s' "${INPUT_NAME:-RinStudio}" | tr -cd 'A-Za-z0-9._-')"
+          base="${base:-RinStudio}"
+          apk_name="${base}-v${version}-build${GITHUB_RUN_NUMBER}"
+
+          # 4) المعماريات.
+          abis="${INPUT_ABIS:-all}"
+          if ! [[ "$abis" =~ ^(all|arm64-v8a|armeabi-v7a|x86_64|x86)$ ]]; then
+            echo "::error::قيمة abis غير مدعومة: $abis"
+            exit 1
+          fi
+
+          {
+            echo "version=$version"
+            echo "ndk=$ndk"
+            echo "cmake=$cmake"
+            echo "apk_name=$apk_name"
+            echo "abis=$abis"
+          } >> "$GITHUB_OUTPUT"
+          echo "Rin $version | NDK $ndk | CMake $cmake | ABIs: $abis | → $apk_name.apk"
+
+      # يحذف بقايا Loom القديمة (تسبّب فشل aapt2). آمن للتكرار.
       - name: Remove legacy Loom files
         run: bash .github/scripts/delete_loom.sh apply
 
       - name: Set up JDK 17
         uses: actions/setup-java@v6
         with:
-          distribution: 'temurin'
-          java-version: '17'
+          distribution: temurin
+          java-version: "17"
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v4
         with:
-          # setup-android v4 defaults to the obsolete `tools` package; install only
-          # command-line tools here and let sdkmanager install the exact build deps below.
-          packages: ''
+          # فقط command-line tools وقبول التراخيص؛ الحزم المطلوبة تُثبَّت أدناه بدقة.
+          packages: ""
+
+      # NDK (~1 GB) و CMake يُحمَّلان مرة واحدة فقط ثم يُستعادان من الكاش في ثوانٍ.
+      - name: Cache NDK & CMake
+        id: sdk-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ env.ANDROID_HOME }}/ndk/${{ steps.meta.outputs.ndk }}
+            ${{ env.ANDROID_HOME }}/cmake/${{ steps.meta.outputs.cmake }}
+          key: android-sdk-${{ runner.os }}-ndk${{ steps.meta.outputs.ndk }}-cmake${{ steps.meta.outputs.cmake }}
 
       - name: Install NDK & CMake
         run: |
-          set -e
-          sdkmanager --install "platform-tools" "ndk;26.1.10909125" "cmake;3.22.1"
+          set -euo pipefail
+          sdkmanager --install "platform-tools" \
+            "ndk;${{ steps.meta.outputs.ndk }}" \
+            "cmake;${{ steps.meta.outputs.cmake }}" > /dev/null
+          echo "NDK/CMake جاهزان."
+
+      - name: Set up ccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: ccache-${{ runner.os }}-${{ steps.meta.outputs.ndk }}-${{ steps.meta.outputs.abis }}
+          restore-keys: |
+            ccache-${{ runner.os }}-${{ steps.meta.outputs.ndk }}-
+          max-size: 600M
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: 8.13
+          gradle-version: "8.13"
+          # الفروع غير الرئيسية تقرأ الكاش فقط ولا تُلوِّثه.
+          cache-read-only: ${{ github.ref_name != 'main' && github.ref_name != 'master' }}
 
-      - name: Verify Gradle/AGP toolchain
-        run: gradle --version
-
-      - name: Grant execute permission (if wrapper is present)
-        run: chmod +x ./gradlew || true
-
-      # يتحقّق أولاً هل ملفَا التوقيع موجودان أصلاً ضمن المستودع (من تشغيل سابق) — إن كانا
-      # موجودَين لا يُولَّد شيء جديد إطلاقاً. لا يُولَّد keystore جديد إلا في المرة الأولى
-      # على الإطلاق في تاريخ المستودع كله، بمفتاح RSA 4096-بت وكلمتَي مرور عشوائيتين (32 بايت
-      # لكل منها)، ولا تُطبع أيّ منها في السجلّ إطلاقاً.
-      - name: Generate the permanent signing keystore (only if it never existed)
+      # لا يُولَّد keystore جديد إلا إن لم يكن موجوداً أصلاً في المستودع.
+      # PKCS12 لا يدعم كلمة مرور منفصلة للمفتاح، لذا KEY_PASS = STORE_PASS عمداً.
+      - name: Ensure permanent signing keystore
         id: keystore
         run: |
-          set -e
+          set -euo pipefail
           mkdir -p signing
-          if [ -f signing/release.keystore ] && [ -f signing/keystore-credentials.txt ]; then
-            echo "لا حاجة للتوليد — keystore دائم موجود مسبقاً من تشغيل سابق."
+          if [ -s signing/release.keystore ] && [ -s signing/keystore-credentials.txt ]; then
+            echo "keystore دائم موجود — لا توليد."
             echo "generated=false" >> "$GITHUB_OUTPUT"
-          else
-            STORE_PASS="$(openssl rand -base64 32 | tr -d '\n/+=' | cut -c1-40)"
-            # ملاحظة مهمة: نوع الـ keystore الافتراضي في JDK الحديث هو PKCS12، وهو لا يدعم كلمة
-            # مرور منفصلة للمفتاح عن كلمة مرور الـ store (keytool يتجاهل -keypass بصمت مع تحذير
-            # "Different store and key passwords not supported for PKCS12 KeyStores"). لذلك يجب
-            # أن تكون KEY_PASS مطابقة لـ STORE_PASS تماماً، وإلا يفشل التوقيع لاحقاً بخطأ
-            # "Given final block not properly padded" عند محاولة Gradle فك تشفير المفتاح
-            # بكلمة مرور مختلفة عن التي استُخدمت فعلياً في التشفير.
-            KEY_PASS="$STORE_PASS"
-            KEY_ALIAS="rinlang"
-
-            keytool -genkeypair -v \
-              -keystore signing/release.keystore \
-              -alias "$KEY_ALIAS" \
-              -keyalg RSA -keysize 4096 -validity 36500 \
-              -storepass "$STORE_PASS" -keypass "$KEY_PASS" \
-              -dname "CN=RinLang, OU=RinLang App, O=DLoF, L=NA, S=NA, C=SA"
-
-            {
-              echo "keystore_password=$STORE_PASS"
-              echo "key_alias=$KEY_ALIAS"
-              echo "key_password=$KEY_PASS"
-            } > signing/keystore-credentials.txt
-
-            echo "generated=true" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
 
-      # تُقرأ كلمات المرور من ملف signing/keystore-credentials.txt (سواء وُلِّد للتو أو كان
-      # محفوظاً مسبقاً في المستودع) وتُصدَّر كمتغيّرات بيئة لخطوة البناء، مع تقنيعها بالسجلّ.
-      - name: Load signing credentials into environment
-        run: |
-          set -e
-          source <(sed 's/^/export /' signing/keystore-credentials.txt)
-          echo "::add-mask::$keystore_password"
-          echo "::add-mask::$key_password"
+          if [ "${GITHUB_REF_TYPE}" != "branch" ]; then
+            echo "::error::لا يمكن توليد مفتاح جديد على وسم (tag) — شغّل الـ workflow على فرع أولاً."
+            exit 1
+          fi
+
+          STORE_PASS="$(openssl rand -base64 48 | tr -dc 'A-Za-z0-9' | cut -c1-40)"
+          echo "::add-mask::$STORE_PASS"
+          KEY_ALIAS="rinlang"
+
+          keytool -genkeypair \
+            -keystore signing/release.keystore \
+            -alias "$KEY_ALIAS" \
+            -keyalg RSA -keysize 4096 -validity 36500 \
+            -storepass "$STORE_PASS" -keypass "$STORE_PASS" \
+            -dname "CN=RinLang, OU=RinLang App, O=DLoF, L=NA, S=NA, C=SA" > /dev/null 2>&1
+
           {
-            echo "RIN_KEYSTORE_PATH=$(pwd)/signing/release.keystore"
+            echo "keystore_password=$STORE_PASS"
+            echo "key_alias=$KEY_ALIAS"
+            echo "key_password=$STORE_PASS"
+          } > signing/keystore-credentials.txt
+
+          echo "generated=true" >> "$GITHUB_OUTPUT"
+          echo "::notice::وُلِّد مفتاح التوقيع الدائم لأول مرة وسيُحفَظ في المستودع بعد نجاح البناء."
+
+      # قراءة آمنة (بدون source) ثم تقنيع كلمات المرور وتصديرها لخطوة البناء فقط.
+      - name: Load signing credentials
+        run: |
+          set -euo pipefail
+          get() { grep -m1 "^$1=" signing/keystore-credentials.txt | cut -d= -f2-; }
+          store_pass="$(get keystore_password)"
+          key_pass="$(get key_password)"
+          key_alias="$(get key_alias)"
+          if [ -z "$store_pass" ] || [ -z "$key_pass" ] || [ -z "$key_alias" ]; then
+            echo "::error file=signing/keystore-credentials.txt::ملف بيانات التوقيع ناقص أو تالف."
+            exit 1
+          fi
+          echo "::add-mask::$store_pass"
+          echo "::add-mask::$key_pass"
+          {
+            echo "RIN_KEYSTORE_PATH=$GITHUB_WORKSPACE/signing/release.keystore"
             echo "RIN_KEY_ALIAS=$key_alias"
-            echo "RIN_KEYSTORE_PASSWORD=$keystore_password"
-            echo "RIN_KEY_PASSWORD=$key_password"
+            echo "RIN_KEYSTORE_PASSWORD=$store_pass"
+            echo "RIN_KEY_PASSWORD=$key_pass"
           } >> "$GITHUB_ENV"
 
       - name: Build signed release APK
-        run: gradle assembleRelease --no-daemon --stacktrace
-
-      - name: Rename output APK
-        id: rename
+        env:
+          ABIS: ${{ steps.meta.outputs.abis }}
         run: |
-          name="${{ github.event.inputs.package_name }}"
-          if [ -z "$name" ]; then name="RinLang-release"; fi
-          src=$(find app/build/outputs/apk/release -maxdepth 1 -name "*.apk" | head -n1)
+          set -euo pipefail
+          args=(assembleRelease --build-cache --parallel --stacktrace)
+          if [ "$ABIS" != "all" ]; then
+            args+=("-Pandroid.injected.build.abi=$ABIS")
+          fi
+          gradle "${args[@]}"
+
+      - name: Locate & rename APK
+        id: apk
+        env:
+          APK_NAME: ${{ steps.meta.outputs.apk_name }}
+        run: |
+          set -euo pipefail
+          dir=app/build/outputs/apk/release
+          src="$(find "$dir" -maxdepth 1 -name '*.apk' | head -n1)"
           if [ -z "$src" ]; then
-            echo "لم يُعثر على APK ناتج — راجع سجلّ خطوة البناء أعلاه."
+            echo "::error::لم يُعثر على APK ناتج — راجع سجلّ خطوة البناء."
             exit 1
           fi
-          dest="app/build/outputs/apk/release/${name}.apk"
-          mv "$src" "$dest"
-          echo "apk_path=$dest" >> "$GITHUB_OUTPUT"
+          case "$src" in
+            *unsigned*)
+              echo "::error::الـ APK غير موقَّع — لم تُطبَّق إعدادات التوقيع."
+              exit 1 ;;
+          esac
+          mkdir -p dist
+          dest="dist/${APK_NAME}.apk"
+          cp "$src" "$dest"
+          ( cd dist && sha256sum "${APK_NAME}.apk" > "${APK_NAME}.apk.sha256" )
+          echo "path=$dest" >> "$GITHUB_OUTPUT"
+
+      # تحقّق فعلي من التوقيع (v2/v3) وأن الشهادة هي شهادتنا وليست debug.
+      - name: Verify APK signature
+        id: verify
+        env:
+          APK_PATH: ${{ steps.apk.outputs.path }}
+        run: |
+          set -euo pipefail
+          apksigner="$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -n1)"
+          [ -n "$apksigner" ] || { echo "::error::apksigner غير موجود."; exit 1; }
+
+          "$apksigner" verify --verbose --print-certs "$APK_PATH" > verify.txt
+          cat verify.txt
+          if grep -qi "Android Debug" verify.txt; then
+            echo "::error::الـ APK موقَّع بمفتاح debug وليس مفتاح الإصدار."
+            exit 1
+          fi
+          cert_sha="$(grep -m1 'certificate SHA-256 digest' verify.txt | awk '{print $NF}')"
+          echo "cert_sha=$cert_sha" >> "$GITHUB_OUTPUT"
+
+      - name: Build summary
+        if: always() && steps.verify.outcome == 'success'
+        env:
+          APK_PATH: ${{ steps.apk.outputs.path }}
+          VERSION: ${{ steps.meta.outputs.version }}
+          CERT_SHA: ${{ steps.verify.outputs.cert_sha }}
+        run: |
+          size="$(du -h "$APK_PATH" | cut -f1)"
+          sha="$(sha256sum "$APK_PATH" | cut -d' ' -f1)"
+          abis="$(unzip -Z1 "$APK_PATH" 'lib/*' | cut -d/ -f2 | sort -u | paste -sd, -)"
+          {
+            echo "### ✅ Rin Lang $VERSION — APK موقَّع"
+            echo ""
+            echo "| العنصر | القيمة |"
+            echo "|---|---|"
+            echo "| الملف | \`$(basename "$APK_PATH")\` |"
+            echo "| الحجم | $size |"
+            echo "| المعماريات | ${abis:-—} |"
+            echo "| SHA-256 (APK) | \`$sha\` |"
+            echo "| SHA-256 (الشهادة) | \`$CERT_SHA\` |"
+            echo "| Commit | \`${GITHUB_SHA::7}\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload signed APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: rin-lang-release-apk
-          path: ${{ steps.rename.outputs.apk_path }}
+          path: dist/
           if-no-files-found: error
+          retention-days: 30
+          compression-level: 0   # الـ APK مضغوط أصلاً — رفع أسرع بلا فائدة من ضغط إضافي
 
-      # يُحفَظ ملفَا التوقيع داخل المستودع نفسه (نفس الفرع) بـ commit *مرّة واحدة فقط* — أول
-      # تشغيل ناجح على الإطلاق. الوسم [skip ci] يمنع هذا الدفع من تشغيل الـ workflow من جديد.
-      # كل تشغيل تالٍ يجد signing/release.keystore موجوداً أصلاً عبر actions/checkout العادي،
-      # فلا حاجة لأي commit إضافي بعد ذلك — مصدر الحقيقة الدائم هو المستودع نفسه.
-      - name: Commit the permanent keystore to the repo (only the first time ever)
-        if: steps.keystore.outputs.generated == 'true'
+      # عند الفشل: سجلات CMake والتقارير للتشخيص بدون إعادة تشغيل.
+      - name: Upload build diagnostics (on failure)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rin-build-diagnostics
+          path: |
+            app/build/reports/
+            app/.cxx/**/*.txt
+            app/.cxx/**/*.log
+          if-no-files-found: ignore
+          retention-days: 7
+
+      # يُحفَظ المفتاح مرة واحدة فقط (أول تشغيل ناجح). يعيد المزامنة مع الفرع قبل الدفع
+      # ويعيد المحاولة، فلا يفشل لو تقدّم الفرع أثناء البناء الطويل.
+      - name: Commit the permanent keystore (first run only)
+        if: success() && steps.keystore.outputs.generated == 'true'
+        env:
+          BRANCH: ${{ github.ref_name }}
         run: |
-          set -e
-          git config user.name "github-actions[bot]"
+          set -euo pipefail
+          git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add -f signing/release.keystore signing/keystore-credentials.txt
-          git commit -m "chore: store permanent auto-generated release signing keystore [skip ci]"
-          git push origin "HEAD:${{ github.ref_name }}"
+
+          stash="$(mktemp -d)"
+          cp signing/release.keystore signing/keystore-credentials.txt "$stash/"
+
+          for attempt in 1 2 3; do
+            git fetch --depth=1 origin "$BRANCH"
+            git reset --hard FETCH_HEAD
+
+            if git cat-file -e "FETCH_HEAD:signing/release.keystore" 2>/dev/null; then
+              echo "::warning::مفتاح دائم موجود أصلاً على الفرع (تشغيل متزامن سبقنا) — لن يُستبدَل."
+              exit 0
+            fi
+
+            mkdir -p signing
+            cp "$stash/release.keystore" "$stash/keystore-credentials.txt" signing/
+            git add -f signing/release.keystore signing/keystore-credentials.txt
+            git commit -m "chore: store permanent auto-generated release signing keystore [skip ci]"
+
+            if git push origin "HEAD:$BRANCH"; then
+              echo "حُفظ المفتاح الدائم في المستودع."
+              exit 0
+            fi
+            echo "فشل الدفع (محاولة $attempt) — إعادة المحاولة..."
+            sleep $((attempt * 4))
+          done
+          echo "::error::تعذّر حفظ المفتاح بعد 3 محاولات."
+          exit 1
