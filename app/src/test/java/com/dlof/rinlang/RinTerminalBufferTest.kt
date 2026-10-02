@@ -89,4 +89,70 @@ class RinTerminalBufferTest {
         b.clear()
         assertTrue(b.isEmpty())
     }
+
+    // ---- REPL / روابط الأخطاء / grep / التاريخ ----
+
+    @Test fun replJobHasNoHeaderAndSilentSuccess() {
+        val b = RinTerminalBuffer()
+        b.startJob(5, repl = true)
+        b.onChunk("3\n")
+        b.finishJob(JobStatus.SUCCESS, "3\n", 2)
+        assertEquals(listOf("3"), texts(b))
+    }
+
+    @Test fun replJobFailureIsStillReportedButNotLinkedToEditor() {
+        val b = RinTerminalBuffer()
+        b.startJob(6, repl = true)
+        b.finishJob(JobStatus.ERROR, "[Error line 2]: boom\n", 1)
+        val lines = b.snapshot().lines
+        assertEquals(listOf("[Error line 2]: boom", "✗ failed after 1 ms"), lines.map { it.text })
+        assertEquals(null, lines.first().errorLine)
+    }
+
+    @Test fun fileRunErrorLineIsLinkedToEditorLine() {
+        val b = RinTerminalBuffer()
+        b.startJob(1)
+        b.finishJob(JobStatus.ERROR, "[Error line 7]: boom\n", 1)
+        assertEquals(7, b.snapshot().lines.first { it.text.startsWith("[Error") }.errorLine)
+    }
+
+    @Test fun replFlagDoesNotLeakIntoNextFileRun() {
+        val b = RinTerminalBuffer()
+        b.startJob(1, repl = true)
+        b.finishJob(JobStatus.SUCCESS, "", 1)
+        b.startJob(2)
+        assertEquals("── run #2 ──", b.snapshot().lines.last().text)
+    }
+
+    @Test fun grepIsCaseInsensitiveAndSkipsTypedCommands() {
+        val b = RinTerminalBuffer()
+        b.onChunk("Alpha\nbeta\n")
+        b.command("alpha")
+        assertEquals(listOf("1: Alpha"), b.grep("ALPHA"))
+        assertTrue(b.grep("zzz").isEmpty())
+        assertTrue(b.grep("").isEmpty())
+    }
+
+    @Test fun echoDoesNotTouchHistoryButRememberDoes() {
+        val b = RinTerminalBuffer()
+        b.echo("let x = 1;", TermRole.COMMAND)
+        assertTrue(b.history().isEmpty())
+        b.remember("let x = 1;"); b.remember("let x = 1;")
+        assertEquals(listOf("let x = 1;"), b.history())
+    }
+
+    @Test fun continuationLinesAreCopiedWithEllipsisPrefix() {
+        val b = RinTerminalBuffer()
+        b.echo("fun f() {", TermRole.COMMAND)
+        b.echo("}", TermRole.CONT)
+        assertEquals("$ fun f() {\n… }", b.toPlainText())
+    }
+
+    @Test fun restoreHistoryOnlyFillsAnEmptyHistory() {
+        val b = RinTerminalBuffer()
+        b.restoreHistory(listOf("a", "b"))
+        assertEquals(listOf("a", "b"), b.history())
+        b.restoreHistory(listOf("c"))
+        assertEquals(listOf("a", "b"), b.history())
+    }
 }
