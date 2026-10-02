@@ -1,0 +1,11 @@
+// let_forin.rin — اختبار تحقّق لـ docs/let-plus.md
+let pairs = [["a", 1], ["b", 2], ["c", 3]];
+for (let [k, v] in pairs) { print k + "=" + v; }
+let rows = [{"id": 1, "tag": "x"}, {"id": 2}];
+for (let {id, tag = "-"} in rows) { print id + tag; }
+for (let [a, ...rest] in [[1, 2, 3], [4]]) { print a; print rest; }
+for (let [i, c] = [0, "a"]; i < 2; i = i + 1) { print i; }
+try { for (let [k, v] in [1, 2]) { print k; } } catch (e) { print e.code; }
+let total = 0;
+for (let [k, v] in pairs) { if (v == 2) { continue; } if (v == 3) { break; } total = total + v; }
+print total;
