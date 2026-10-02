@@ -185,6 +185,19 @@ StmtPtr Parser::declaration() {
         advance(); // 'enum'
         return enumDeclaration();
     }
+    // ---- المتغيرات الحيّة (Living Variables) — كلمات سياقية غير محجوزة بنفس أسلوب make/class/enum ----
+    // كل كلمة تُميَّز بشكل ما يليها تحديداً، فتبقى أسماء عادية في أي سياق آخر (نداء `tape(x)`، إسناد
+    // `fuse = 1;`، إلخ): stone/gauge/tape/lens/fuse/bell + IDENT (اسم)، trial + '{'، undo/redo/rearm/unbell
+    // + IDENT، abort + ';'. التفاصيل الكاملة في docs/living-variables.md.
+    if (check(TokenType::IDENT) && checkNext(TokenType::IDENT)) {
+        const std::string& kw = peek().lexeme;
+        if (kw == "stone" || kw == "gauge" || kw == "tape" || kw == "lens" || kw == "fuse") return liveDeclaration();
+        if (kw == "bell") return bellDeclaration();
+        if (kw == "undo" || kw == "redo" || kw == "rearm" || kw == "unbell") return liveActionStatement();
+    }
+    if (check(TokenType::IDENT) && peek().lexeme == "trial" && checkNext(TokenType::LBRACE)) return trialStatement();
+    if (check(TokenType::IDENT) && peek().lexeme == "abort" && checkNext(TokenType::SEMICOLON)) return liveActionStatement();
+
     // 'make name = expr;' / 'make name;' -> صيغة إنجليزية مبسّطة سهلة التعلّم، مرادف كامل لِـ
     // 'let name = expr;' (يفوّض مباشرة إلى letDeclaration() نفسها، فيرث كل سلوكها بلا أي فرق).
     // 'make' كلمة سياقية غير محجوزة (تُقرأ IDENT عادي، بنفس أسلوب route/row/style/document/warp
@@ -497,6 +510,140 @@ StmtPtr Parser::letDeclaration() {
     stmt->typeName = typeName;
     stmt->line = name.line;
     return stmt;
+}
+
+
+// ============================================================================
+// المتغيرات الحيّة (Living Variables) — انظر الشرح الكامل في rin_ast.h (LiveDeclStmt) وdocs/living-variables.md
+// ============================================================================
+// stone|gauge|tape|lens|fuse  NAME = expr [modifiers] ;
+// المُعدِّلات (كلمات سياقية بعد التهيئة، بأي ترتيب): within A to B | strict | wrap | keep N | burns N
+StmtPtr Parser::liveDeclaration() {
+    Token kw = advance(); // الكلمة المفتاحية (stone/gauge/...)
+    const std::string kind = kw.lexeme;
+    Token name = consume(TokenType::IDENT, "Expected a variable name after '" + kind + "'");
+    auto st = std::make_shared<LiveDeclStmt>();
+    st->name = name.lexeme;
+    st->line = name.line;
+    st->kind = kind == "stone" ? LiveKind::Stone : kind == "gauge" ? LiveKind::Gauge
+             : kind == "tape" ? LiveKind::Tape : kind == "lens" ? LiveKind::Lens : LiveKind::Fuse;
+
+    if (match({TokenType::EQUAL})) {
+        st->initializer = expression();
+    } else if (st->kind != LiveKind::Tape) {
+        throw errRich(diag::Code::E0012_MissingToken, peek(),
+                      "'" + kind + " " + name.lexeme + "' needs an initial value",
+                      kind == "lens" ? "a lens is defined by the expression it is computed from"
+                                     : "a " + kind + " variable must start with a value",
+                      "write `" + kind + " " + name.lexeme + " = <value>;`", "'='");
+    }
+
+    bool sawWithin = false;
+    while (check(TokenType::IDENT)) {
+        const std::string mod = peek().lexeme;
+        const Token modTok = peek();
+        auto reject = [&](const std::string& why) {
+            return errRich(diag::Code::E0013_InvalidExpression, modTok,
+                           "'" + mod + "' cannot be used with '" + kind + "'", why,
+                           "remove `" + mod + "` or pick the variable kind that supports it", "");
+        };
+        if (mod == "within") {
+            if (st->kind != LiveKind::Gauge) throw reject("only `gauge` has a range (`within A to B`)");
+            advance();
+            st->lo = expression();
+            Token to = peek();
+            if (!(to.type == TokenType::IDENT && to.lexeme == "to"))
+                throw errRich(diag::Code::E0012_MissingToken, to, "expected 'to' in `within A to B`",
+                              "a gauge range is written with two ends separated by `to`",
+                              "e.g. `gauge hp = 80 within 0 to 100;`", "'to'");
+            advance();
+            st->hi = expression();
+            sawWithin = true;
+        } else if (mod == "strict" || mod == "wrap") {
+            if (st->kind != LiveKind::Gauge) throw reject("only `gauge` has an out-of-range policy (strict/wrap)");
+            if (!st->rangeMode.empty()) throw reject("a gauge takes only one of `strict` / `wrap`");
+            advance();
+            st->rangeMode = mod;
+        } else if (mod == "keep") {
+            if (st->kind != LiveKind::Tape && st->kind != LiveKind::Gauge)
+                throw reject("only `tape` (and `gauge`) keep a history");
+            advance();
+            st->keep = expression();
+        } else if (mod == "burns") {
+            if (st->kind != LiveKind::Fuse) throw reject("only `fuse` burns after a number of reads");
+            advance();
+            st->burns = expression();
+        } else {
+            break; // ليس مُعدِّلاً: اتركه لـ consume(';') ليُبلِّغ الخطأ الطبيعي
+        }
+    }
+    if (st->kind == LiveKind::Gauge && !sawWithin)
+        throw errRich(diag::Code::E0012_MissingToken, peek(),
+                      "gauge '" + name.lexeme + "' needs a range", "a gauge exists to keep a value inside a range",
+                      "add `within <min> to <max>`, e.g. `gauge " + name.lexeme + " = 50 within 0 to 100;`", "'within'");
+    if (st->rangeMode.empty()) st->rangeMode = "clamp";
+    consume(TokenType::SEMICOLON, "Expected ';' after '" + kind + "' declaration");
+    return st;
+}
+
+// bell NAME [ (old, new) ] { body }  — 0 وسائط، أو 1 (= القيمة الجديدة)، أو 2 (= القديمة ثم الجديدة).
+StmtPtr Parser::bellDeclaration() {
+    advance(); // 'bell'
+    Token target = consume(TokenType::IDENT, "Expected the variable to watch after 'bell'");
+    std::vector<std::string> params;
+    if (match({TokenType::LPAREN})) {
+        if (!check(TokenType::RPAREN)) {
+            do { params.push_back(consume(TokenType::IDENT, "Expected parameter name").lexeme); }
+            while (match({TokenType::COMMA}));
+        }
+        consume(TokenType::RPAREN, "Expected ')' after bell parameters");
+    }
+    if (params.size() > 2)
+        throw errRich(diag::Code::E0013_InvalidExpression, target, "a bell takes at most two parameters (old, new)",
+                      "a bell is told what the value was and what it became", "use `bell x (old, new) { ... }`", "");
+    consume(TokenType::LBRACE, "Expected '{' before bell body");
+    int savedLoopDepth = loopDepth, savedGoalDepth = goalDepth;
+    loopDepth = 0; goalDepth = 0;
+    auto body = block();
+    loopDepth = savedLoopDepth; goalDepth = savedGoalDepth;
+    auto fn = std::make_shared<FunctionStmt>();
+    fn->name = "bell " + target.lexeme;
+    fn->params = params;
+    fn->body = body;
+    fn->line = target.line;
+    auto st = std::make_shared<BellStmt>();
+    st->target = target.lexeme;
+    st->handler = fn;
+    st->line = target.line;
+    return st;
+}
+
+// trial { ... } [else { ... }]
+StmtPtr Parser::trialStatement() {
+    Token kw = advance(); // 'trial'
+    consume(TokenType::LBRACE, "Expected '{' after 'trial'");
+    auto st = std::make_shared<TrialStmt>();
+    st->line = kw.line;
+    st->body = block();
+    if (match({TokenType::ELSE})) {
+        consume(TokenType::LBRACE, "Expected '{' after 'else' of a trial");
+        st->elseBranch = block();
+    }
+    return st;
+}
+
+// undo x [n]; | redo x [n]; | rearm x; | unbell x; | abort;
+StmtPtr Parser::liveActionStatement() {
+    Token kw = advance();
+    auto st = std::make_shared<LiveActionStmt>();
+    st->action = kw.lexeme;
+    st->line = kw.line;
+    if (kw.lexeme != "abort") {
+        st->target = consume(TokenType::IDENT, "Expected a variable name after '" + kw.lexeme + "'").lexeme;
+        if ((kw.lexeme == "undo" || kw.lexeme == "redo") && !check(TokenType::SEMICOLON)) st->count = expression();
+    }
+    consume(TokenType::SEMICOLON, "Expected ';' after '" + kw.lexeme + "'");
+    return st;
 }
 
 // RCS-1.0 §3.2 Lifecycle: on init/mount/update/destroy/error(params) { body }  (يُستدعى بعد
