@@ -14,7 +14,7 @@
 → `control-flow.md` (`if`/`while`/`for`/`match`/`goal`) → `functions.md` (`fun`)
 → `enums.md` (`enum`) → `objects.md` (`class`/`struct`/`.object()`/`@Object`).
 
-بعدها [`living-variables.md`](./living-variables.md): المتغيرات الحيّة
+وتتوسّع `let` نفسها في [`let-plus.md`](./let-plus.md) (تفكيك وحراسة وتبديل). بعدها [`living-variables.md`](./living-variables.md): المتغيرات الحيّة
 (`stone`/`gauge`/`tape`/`lens`/`fuse`/`bell`/`trial`) — إضافة اختيارية فوق `let`.
 
 هذه الستة تكفي وحدها لقراءة/كتابة أي برنامج Rin إجرائي عادي.
