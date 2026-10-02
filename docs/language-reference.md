@@ -14,6 +14,9 @@
 → `control-flow.md` (`if`/`while`/`for`/`match`/`goal`) → `functions.md` (`fun`)
 → `enums.md` (`enum`) → `objects.md` (`class`/`struct`/`.object()`/`@Object`).
 
+بعدها [`living-variables.md`](./living-variables.md): المتغيرات الحيّة
+(`stone`/`gauge`/`tape`/`lens`/`fuse`/`bell`/`trial`) — إضافة اختيارية فوق `let`.
+
 هذه الستة تكفي وحدها لقراءة/كتابة أي برنامج Rin إجرائي عادي.
 
 ## 2) الحاويات — حيث يلتقي المنطق بالبيانات والواجهة
