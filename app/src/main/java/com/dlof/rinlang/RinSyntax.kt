@@ -167,6 +167,9 @@ private object RinLexer {
         // Living Variables (docs/living-variables.md): contextual words, highlighted like `reckon`.
         "stone", "gauge", "tape", "lens", "fuse", "bell", "trial", "undo", "redo", "rearm", "unbell", "abort"
     )
+    // عائلة # (docs/hash-family.md)
+    val hashKeywords = setOf("#for", "#while", "#return", "#in", "#to", "#do", "#done", "#ban", "#ignorance")
+    val hashFunctions = setOf("#sed", "#sum", "#diff", "#add", "#swap", "#to")
     val containerKeywords = setOf(
         "make", "warp", "container", "Containers", "Group", "Volume", "Section", "Translations",
         "translation", "link", "tying", "merge", "installation", "simplified", "save", "file", "end",
@@ -283,6 +286,18 @@ private object RinLexer {
                         val start = i; i += 4
                         while (i < n && (text[i].isLetterOrDigit() || text[i] == '_' || text[i] == '/' || text[i] == '.')) i++
                         out.add(hl(li, start, i, HighlightKind.AT))
+                    }
+                    // عائلة # (docs/hash-family.md): #sed #for #in #done #while #sum #do #swap #return #diff #add #ban #to #ignorance
+                    c == '#' && i + 1 < n && (text[i + 1].isLetter() || text[i + 1] == '_') -> {
+                        val start = i; i++
+                        while (i < n && (text[i].isLetterOrDigit() || text[i] == '_')) i++
+                        val word = text.substring(start, i)
+                        val kind = when {
+                            word in hashKeywords -> HighlightKind.KEYWORD
+                            word in hashFunctions -> HighlightKind.CALL
+                            else -> HighlightKind.IDENT
+                        }
+                        out.add(hl(li, start, i, kind))
                     }
                     c.isDigit() -> { val end = scanNumber(text, i); out.add(hl(li, i, end, HighlightKind.NUMBER)); i = end }
                     c.isLetter() || c == '_' -> {
