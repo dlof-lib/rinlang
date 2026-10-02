@@ -31,7 +31,7 @@ on:
       package_name:
         description: "الاسم الظاهر لملف الـ APK الناتج (بدون .apk)"
         required: false
-        default: "RinLang-release"
+        default: "RinStudio"
 
 permissions:
   contents: write   # لازمة فقط لحفظ ملفَي التوقيع داخل المستودع في أول تشغيل
