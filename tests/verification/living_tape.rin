@@ -1,0 +1,14 @@
+// living_tape.rin — اختبار تحقّق لـ docs/living-variables.md
+tape score = 0 keep 3;
+score = 10; score = 20; score = 30; score = 40;
+print score; print score.past; print score.canUndo; print score.canRedo;
+undo score; print score;
+undo score 2; print score; print score.undone; 
+redo score; print score;
+score = 99; print score.canRedo; print score.past;
+undo score 10; print score;
+tape name;
+print name; name = "a"; name = "b"; undo name; print name;
+let plain = 1;
+try { undo plain; } catch (e) { print e.code + " " + e.message; }
+tape same = 5; same = 5; print same.canUndo;
