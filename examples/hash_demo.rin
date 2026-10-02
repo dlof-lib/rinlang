@@ -1,0 +1,22 @@
+// hash_demo.rin — عائلة # (docs/hash-family.md)
+#for (let i #in 1 #to 3) { print "i = " + i; } #done { print "انتهت الحلقة طبيعياً"; }
+
+let n = 0;
+#do { n = n + 1; } #while (n < 3);
+print "n = " + n;
+
+let a = 1; let b = 2;
+#swap a, b;
+print [a, b];
+
+print #sed("2026-10-02", "([0-9]+)-([0-9]+)-([0-9]+)", "\\3/\\2/\\1");
+print #sum([1, 2], 3);
+print #diff([1, 2, 3], [2]);
+
+let xs = [1];
+#add(xs, 2, 3);
+print xs;
+
+#ban a;
+#ignorance { a = 5; }
+print a;
