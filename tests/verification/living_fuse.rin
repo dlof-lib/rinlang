@@ -1,0 +1,8 @@
+// living_fuse.rin — اختبار تحقّق لـ docs/living-variables.md
+fuse otp = "4821" burns 2;
+print otp.left;
+print otp; print otp; print otp;
+print otp.burnt; print otp.left;
+rearm otp; print otp; print otp.left;
+otp = "9999"; print otp.left; print otp;
+fuse once = "x"; print once; print once;
