@@ -151,6 +151,31 @@ void Lexer::scanIdentifier() {
     }
 }
 
+// عائلة `#` — كل مفهوم/متغيّر/دالة جديدة تبدأ بعلامة `#` (مثل #sed #do #done #swap #ban ...).
+// `#` وحدها لم تكن صالحة سابقاً (كانت خطأ E0011)، فلا تعارض مع أي كود موجود.
+//   - #for / #while / #return  -> نفس توكنات for / while / return حرفياً (مرادفات كاملة).
+//   - #in / #to                 -> تُقرأ كالكلمتين السياقيتين in / to (IDENT بنصّ in / to).
+//   - أي #name آخر              -> IDENT يحتفظ بعلامة # في نصّه ("#sed", "#do", "#ban", "#x1" ...)،
+//                                 فيمكن استعماله اسم دالة أصلية أو كلمة سياقية في المحلل النحوي
+//                                 أو اسم متغيّر عادي (let #total = 0;).
+void Lexer::scanHashWord() {
+    if (!(isalpha((unsigned char)peek()) || peek() == '_')) {
+        diag::Diagnostic d(diag::Code::E0011_UnexpectedToken, "unexpected character `#`",
+                            diag::SourceLocation::point(file, line, columnOf(start)));
+        d.withReason("`#` must be followed directly by a name, e.g. `#sed`, `#do`, `#swap`")
+         .withHint("write the name right after `#` with no space");
+        throw RinError(std::move(d));
+    }
+    while (isalnum((unsigned char)peek()) || peek() == '_') advance();
+    std::string text = src.substr(start, current - start); // يشمل '#'
+    const std::string word = text.substr(1);
+    if (word == "for")        { addToken(TokenType::FOR, text); return; }
+    if (word == "while")      { addToken(TokenType::WHILE, text); return; }
+    if (word == "return")     { addToken(TokenType::RETURN, text); return; }
+    if (word == "in") { addToken(TokenType::IDENT, word); return; } // #to يبقى "#to" (دالة أصلية + كلمة المدى في for ... in)
+    addToken(TokenType::IDENT, text);
+}
+
 void Lexer::scanToken() {
     char c = advance();
     switch (c) {
@@ -167,6 +192,7 @@ void Lexer::scanToken() {
         case '-': addToken(TokenType::MINUS); break;
         case '*': addToken(TokenType::STAR); break;
         case '%': addToken(TokenType::PERCENT); break;
+        case '#': scanHashWord(); break;
         case '@': addToken(TokenType::AT); break;
         case '.': addToken(TokenType::DOT); break;
         case '?': addToken(TokenType::QUESTION); break;
