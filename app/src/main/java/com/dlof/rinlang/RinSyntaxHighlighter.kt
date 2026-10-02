@@ -178,7 +178,8 @@ object RinSyntaxHighlighter {
     )
 
     private val rinProfile = LangProfile(
-        keyword = wordsPattern(rinCoreKeywords),
+        // عائلة # (docs/hash-family.md): #sed #for #in #done #while #sum #do #swap #return #diff #add #ban #to #ignorance (وأي #اسم)
+        keyword = Pattern.compile(wordsPattern(rinCoreKeywords).pattern() + "|#[A-Za-z_][A-Za-z0-9_]*"),
         secondaryKeyword = wordsPattern(rinContainerKeywords),
         styleField = wordsPattern(rinStyleFieldKeywords),
         makeDirective = wordsPattern(rinMakeDirectiveKeywords),
