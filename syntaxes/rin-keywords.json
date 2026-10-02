@@ -58,6 +58,9 @@
     "reckon",
     "where"
   ],
+  "hash": [
+    "#sed", "#for", "#in", "#done", "#while", "#sum", "#do", "#swap", "#return", "#diff", "#add", "#ban", "#to", "#ignorance"
+  ],
   "living": [
     "stone",
     "gauge",
