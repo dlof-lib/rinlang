@@ -82,6 +82,11 @@ private:
     // statements
     StmtPtr declaration();
     StmtPtr letDeclaration();
+    // المتغيرات الحيّة (docs/living-variables.md): stone/gauge/tape/lens/fuse + bell + trial + undo/redo/rearm/unbell/abort
+    StmtPtr liveDeclaration();
+    StmtPtr bellDeclaration();
+    StmtPtr trialStatement();
+    StmtPtr liveActionStatement();
     StmtPtr reckonDeclaration();
     StmtPtr setDeclaration(); // 'set' name 'to' expr ';'  -> صياغة إنجليزية مبسّطة (sugar) لِـ LetStmt، مطابقة تماماً لـ let من ناحية الدلالة
     StmtPtr functionDeclaration();
