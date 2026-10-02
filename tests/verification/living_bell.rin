@@ -1,0 +1,20 @@
+// living_bell.rin — اختبار تحقّق لـ docs/living-variables.md
+let hp = 100;
+bell hp (old, new) { print "hp " + old + " -> " + new; }
+hp = 90; hp = 90; hp = 70;
+bell hp (n) { print "also: " + n; }
+hp = 50;
+print hp.bells;
+unbell hp;
+hp = 10;
+gauge g = 5 within 0 to 10;
+bell g (o, n) { if (n == 10) { print "FULL"; } }
+g = 99; g = 3; g = 10;
+tape t = 1;
+bell t (o, n) { print "t: " + o + "->" + n; }
+t = 2; undo t; redo t;
+let x = 0;
+bell x (o, n) { x = n + 1; }
+try { x = 1; } catch (e) { print e.code; }
+lens L = 1;
+try { bell L { print 1; } } catch (e) { print e.code; }
