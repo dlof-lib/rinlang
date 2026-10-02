@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Terminal داخل المحرر (RinTerminalView) -->
+    <string name="terminal_tab_terminal">Terminal</string>
+    <string name="terminal_tab_runs">Runs</string>
+    <string name="terminal_clear">Clear</string>
+    <string name="terminal_copy">Copy</string>
+    <string name="terminal_copied">Terminal copied</string>
+    <string name="terminal_hint_shell">Command or Rin code…</string>
+    <string name="terminal_hint_input">Type your answer, then Enter</string>
+    <string name="terminal_welcome">Rin terminal — type help for commands</string>
+    <string name="terminal_nothing_waiting">No program is waiting for input.</string>
+    <string name="terminal_help">Commands:\n  run       run the open file\n  clear     clear the screen\n  history   previous commands\n  version   engine version\n  &lt;code&gt;    anything else runs as Rin code, e.g. print 1 + 2;\nWhen a program asks for input, answer on the line below. ^C cancels it.</string>
+</resources>
