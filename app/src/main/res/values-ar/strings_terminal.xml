@@ -8,7 +8,17 @@
     <string name="terminal_copied">تم نسخ محتوى الطرفية</string>
     <string name="terminal_hint_shell">أمر أو شيفرة Rin…</string>
     <string name="terminal_hint_input">اكتب إجابتك ثم Enter</string>
+    <string name="terminal_hint_continue">أكمل الأمر… (^C للإلغاء)</string>
     <string name="terminal_welcome">طرفية Rin — اكتب help لعرض الأوامر</string>
     <string name="terminal_nothing_waiting">لا يوجد برنامج ينتظر إدخالاً.</string>
-    <string name="terminal_help">الأوامر:\n  run       تشغيل الملف المفتوح\n  clear     مسح الشاشة\n  history   الأوامر السابقة\n  version   إصدار المحرّك\n  &lt;code&gt;    أي نص آخر يُنفَّذ كشيفرة Rin، مثل: print 1 + 2;\nعندما يطلب البرنامج إدخالاً أجب في السطر السفلي. ^C يلغي السؤال.</string>
+    <string name="terminal_stopped">تم الإيقاف.</string>
+    <string name="terminal_empty">(فارغ)</string>
+    <string name="terminal_history_none">لا يوجد أمر بهذا الرقم في التاريخ.</string>
+    <string name="terminal_session_reset">تم مسح الجلسة — نُسيت كل التصريحات.</string>
+    <string name="terminal_session_empty">لا توجد تصريحات في هذه الجلسة بعد.</string>
+    <string name="terminal_grep_usage">الاستخدام: grep &lt;نص&gt;</string>
+    <string name="terminal_grep_none">لا توجد أسطر تطابق \"%1$s\".</string>
+    <string name="terminal_goto_usage">الاستخدام: goto &lt;رقم السطر&gt;</string>
+    <string name="terminal_hidden_lines">… %1$d سطراً أقدم مخفي (النسخ والمشاركة وgrep تشملها)</string>
+    <string name="terminal_help">الأوامر:\n  run         تشغيل الملف المفتوح\n  stop        إيقاف البرنامج الجاري (و^C كذلك)\n  clear       مسح الشاشة\n  history     الأوامر السابقة (‎!!‎ تعيد آخر أمر، و!N تعيد الأمر رقم N)\n  version     إصدار المحرّك\n  session     الأسماء المصرَّح بها في هذه الجلسة\n  reset       نسيان تصريحات الجلسة\n  grep &lt;نص&gt;  بحث في الشاشة\n  goto &lt;n&gt;    الانتقال إلى السطر n في المحرر\n  copy / share   نسخ أو مشاركة كل الشاشة\n  &lt;code&gt;      أي نص آخر يُنفَّذ كشيفرة Rin، مثل: let x = 5; ثم x * 2\nالتصريحات (let / fun / class…) تبقى بين الأوامر، والأمر الناقص يكمل في السطر التالي.\nTab للإكمال، ↑/↓ للتاريخ، وقرص بإصبعين لتغيير الخط. عندما يطلب البرنامج إدخالاً أجب في السطر السفلي؛ ^C يلغي.</string>
 </resources>
