@@ -29,6 +29,7 @@ private:
     void scanString();
     void scanNumber();
     void scanIdentifier();
+    void scanHashWord(); // عائلة #name (انظر rin_lexer.cpp)
 };
 
 // كل الكلمات المحجوزة الفعلية التي يتعرف عليها Lexer (مصدرها خريطة keywords الداخلية في
