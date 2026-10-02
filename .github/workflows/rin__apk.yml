@@ -1,23 +1,31 @@
 name: Build APP RIN
 
 # ───────────────────────────────────────────────────────────────────────────────
-# بناء APK موقَّع (release) لمشروع Rin Lang — نسخة سريعة وصارمة.
+# خط بناء Rin Lang: فحص مبكر ← (اختبارات المحرّك ‖ بناء APK موقَّع) بالتوازي ← إصدار GitHub Release.
 #
-# المفتاح الدائم: أول تشغيل ناجح يُولِّد signing/release.keystore و
-# signing/keystore-credentials.txt ويحفظهما بـ commit واحد [skip ci] على نفس الفرع،
-# وكل تشغيل تالٍ يستخدمهما كما هما. (يُفضَّل أن يبقى المستودع Private — كلمتا المرور
-# محفوظتان بنص صريح داخل المستودع.)
+#   preflight     (1) يؤجّل البدء حتى يهدأ الرفع (debounce) فيعمل التشغيل مرة واحدة بعد آخر ملف،
+#                 (2) ثم يتحقق من الإصدار/المدخلات في ثوانٍ ويفشل قبل أي بناء ثقيل.
+#   engine-tests  يبني مفسِّر rin (CLI) ويشغّل tests/rintests.rin و tests/wesscode_tests.rin.
+#   build-apk     يبني APK موقَّعاً (+ AAB اختيارياً) ويتحقق من توقيعه فعلياً.
+#   release       ينشر Release (APK + SHA-256 [+ AAB]) فقط إن نجح الاثنان السابقان.
 #
-# إعداد لمرة واحدة: Settings ← Actions ← General ← Workflow permissions ←
-# "Read and write permissions" (لازم فقط لحفظ المفتاح أول مرة).
+# مفتاح التوقيع الدائم: أول تشغيل ناجح على فرع يُولِّد signing/release.keystore و
+# signing/keystore-credentials.txt ويحفظهما بـ commit واحد [skip ci]؛ كل تشغيل تالٍ يستخدمهما.
+# ⚠️ كلمتا المرور بنص صريح داخل المستودع — أبقِ المستودع Private.
 #
-# أين أجد الناتج؟ Actions ← التشغيل ← Artifacts ← rin-lang-release-apk
-# (يحتوي الـ APK + ملف SHA-256) وملخص البناء يظهر في صفحة التشغيل نفسها.
+# إعداد لمرة واحدة: Settings ← Actions ← General ← Workflow permissions ← Read and write.
+#
+# طرق التشغيل:
+#   • push على main/master        → ينتظر هدوء الرفع ثم اختبارات + APK (مرة واحدة لكل دفعة رفع)
+#   • pull_request                → اختبارات المحرّك فقط (بدون APK)
+#   • وسم v1.2.3                  → اختبارات + APK + Release (الوسم يجب أن يطابق ملف VERSION)
+#   • يدوي (Run workflow)         → خيارات: الاسم، المعماريات، AAB، نشر Release
 # ───────────────────────────────────────────────────────────────────────────────
 
 on:
   push:
     branches: [ "main", "master" ]
+    tags: [ "v*" ]
     paths-ignore:
       - "**.md"
       - "docs/**"
@@ -27,6 +35,14 @@ on:
       - "LICENSE"
       - "NOTICE"
       - "COPYRIGHT"
+  pull_request:
+    branches: [ "main", "master" ]
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+      - "web/**"
+      - "user-site/**"
+      - "firebase/**"
   workflow_dispatch:
     inputs:
       package_name:
@@ -34,7 +50,7 @@ on:
         required: false
         default: "RinStudio"
       abis:
-        description: "معماريات المعالج: all = الأربع (الأبطأ)، أو اختر واحدة لبناء أسرع"
+        description: "معماريات المعالج: all = الأربع (الأبطأ)، أو واحدة لبناء أسرع"
         required: false
         type: choice
         default: "all"
@@ -43,46 +59,110 @@ on:
           - "arm64-v8a"
           - "armeabi-v7a"
           - "x86_64"
+      build_aab:
+        description: "ابنِ حزمة AAB (لـ Google Play) إلى جانب الـ APK"
+        required: false
+        type: boolean
+        default: false
+      publish_release:
+        description: "انشر النتائج كـ GitHub Release (pre-release) بعد نجاح كل الفحوصات"
+        required: false
+        type: boolean
+        default: false
 
-# إلغاء التشغيل القديم عند وصول push جديد على نفس الفرع — يوفّر دقائق الـ runner.
+# إلغاء التشغيل القديم عند وصول push/commit جديد على نفس المرجع.
 concurrency:
-  group: rin-apk-${{ github.ref }}
+  group: rin-apk-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
   contents: read
 
 env:
-  # ccache يُسرّع تجميع C++ بشكل كبير في التشغيلات التالية (يُمرَّر لـ CMake عبر البيئة).
+  # مدة الهدوء (بالثواني) المطلوبة بعد آخر push قبل بدء البناء. ارفعها لو كان رفعك على دفعات بطيئة.
+  DEBOUNCE_SECONDS: 90
+  # ccache يُسرّع تجميع C++ (للـ CLI وللـ NDK) في التشغيلات التالية.
   CMAKE_C_COMPILER_LAUNCHER: ccache
   CMAKE_CXX_COMPILER_LAUNCHER: ccache
-  GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=-Xmx3g"
 
 jobs:
-  build-signed-release:
-    name: Build & sign release APK
+  # ═════════════════════════════════════════════════════════════════════════════
+  preflight:
+    name: Preflight checks
     runs-on: ubuntu-latest
-    timeout-minutes: 60
-    # contents: write لازمة فقط لحفظ المفتاح في أول تشغيل على الإطلاق.
-    permissions:
-      contents: write
-    # طبقة حماية إضافية ضد حلقة التشغيل الذاتي بعد commit المفتاح.
+    timeout-minutes: 10
+    # حماية من حلقة التشغيل الذاتي بعد commit المفتاح. إن تخطّاه فكل ما بعده يُتخطّى.
     if: "!contains(github.event.head_commit.message, '[skip ci]')"
-
+    outputs:
+      proceed: ${{ steps.debounce.outputs.proceed }}
+      version: ${{ steps.meta.outputs.version }}
+      ndk: ${{ steps.meta.outputs.ndk }}
+      cmake: ${{ steps.meta.outputs.cmake }}
+      apk_name: ${{ steps.meta.outputs.apk_name }}
+      abis: ${{ steps.meta.outputs.abis }}
+      build_aab: ${{ steps.meta.outputs.build_aab }}
+      release: ${{ steps.meta.outputs.release }}
+      release_tag: ${{ steps.meta.outputs.release_tag }}
+      prerelease: ${{ steps.meta.outputs.prerelease }}
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v7
+      # ── Debounce: يبدأ البناء بعد آخر ملف يُرفع ──────────────────────────────
+      # رفع ZIP فيه 50 ملفاً (أو عدة commits متتالية) لا يجب أن يُنتج 50 تشغيلاً.
+      # الخطوة تنتظر فترة هدوء؛ إن وصل push أحدث على نفس الفرع في أثناء ذلك:
+      #   • concurrency يُلغي هذا التشغيل القديم تلقائياً، و
+      #   • الفحص أدناه يتخطّاه بأمان لو لم يُلغَ بعد.
+      # فيبقى التشغيل الأخير فقط، وهو الذي يرى الحالة النهائية الكاملة للملفات.
+      # يسري على push لفرع فقط؛ التشغيل اليدوي والوسوم وPR تبدأ فوراً.
+      - name: Wait for uploads to settle
+        id: debounce
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -uo pipefail
+          if [ "$GITHUB_EVENT_NAME" != "push" ] || [ "$GITHUB_REF_TYPE" != "branch" ]; then
+            echo "proceed=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
 
-      # ── فحوصات مبكرة (ثوانٍ) حتى لا تُهدَر 20 دقيقة على بناء محكوم عليه بالفشل ──
+          wait_s="${DEBOUNCE_SECONDS:-90}"
+          echo "انتظار $wait_s ثانية من الهدوء بعد commit ${GITHUB_SHA::7} ..."
+          elapsed=0
+          while [ "$elapsed" -lt "$wait_s" ]; do
+            sleep 10
+            elapsed=$((elapsed + 10))
+            head="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/${GITHUB_REF_NAME}" --jq .object.sha 2>/dev/null || true)"
+            if [ -n "$head" ] && [ "$head" != "$GITHUB_SHA" ]; then
+              echo "وصل commit أحدث (${head::7}) — يُتخطّى هذا التشغيل وسيتولّى الأحدث البناء."
+              echo "proceed=false" >> "$GITHUB_OUTPUT"
+              echo "### ⏭️ تم التخطي — يوجد push أحدث (\`${head::7}\`)" >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+          done
+          echo "هدأ الرفع — يبدأ البناء."
+          echo "proceed=true" >> "$GITHUB_OUTPUT"
+
+      # سحب جزئي: الملفات الثلاثة اللازمة فقط → ثوانٍ.
+      - name: Checkout (sparse)
+        if: steps.debounce.outputs.proceed == 'true'
+        uses: actions/checkout@v7
+        with:
+          sparse-checkout: |
+            VERSION
+            app/build.gradle.kts
+            app/src/main/cpp/rin_version.h
+          sparse-checkout-cone-mode: false
+
       - name: Validate inputs & project consistency
         id: meta
+        if: steps.debounce.outputs.proceed == 'true'
         env:
           INPUT_NAME: ${{ inputs.package_name }}
           INPUT_ABIS: ${{ inputs.abis }}
+          INPUT_AAB: ${{ inputs.build_aab }}
+          INPUT_RELEASE: ${{ inputs.publish_release }}
         run: |
           set -euo pipefail
 
-          # 1) الإصدار: ملف VERSION يجب أن يطابق RIN_VERSION_STRING (انظر docs/VERSIONING.md).
+          # 1) الإصدار: VERSION يجب أن يطابق RIN_VERSION_STRING (انظر docs/VERSIONING.md).
           version="$(tr -d '[:space:]' < VERSION)"
           if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             echo "::error file=VERSION::صيغة الإصدار غير صالحة: '$version' (المتوقع MAJOR.MINOR.PATCH)"
@@ -94,23 +174,38 @@ jobs:
             exit 1
           fi
 
-          # 2) إصدارات NDK/CMake تُقرأ من ملف Gradle نفسه (مصدر حقيقة واحد، بلا تكرار هنا).
+          # 2) وسم الإصدار يجب أن يطابق VERSION (v1.2.3 ↔ 1.2.3).
+          release=false; prerelease=false; release_tag=""
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            if [ "${GITHUB_REF_NAME#v}" != "$version" ]; then
+              echo "::error::الوسم $GITHUB_REF_NAME لا يطابق VERSION=$version"
+              exit 1
+            fi
+            release=true; release_tag="$GITHUB_REF_NAME"
+          elif [ "${INPUT_RELEASE:-false}" = "true" ]; then
+            release=true; prerelease=true
+            release_tag="v${version}-build${GITHUB_RUN_NUMBER}"
+          fi
+
+          # 3) NDK/CMake من ملف Gradle نفسه (مصدر حقيقة واحد).
           ndk="$(grep -oP 'ndkVersion\s*=?\s*"\K[^"]+' app/build.gradle.kts | head -n1 || true)"
           cmake="$(grep -oP '\bversion\s*=?\s*"\K[0-9.]+' app/build.gradle.kts | head -n1 || true)"
           ndk="${ndk:-26.1.10909125}"
           cmake="${cmake:-3.22.1}"
 
-          # 3) اسم الملف: تنقية صارمة (الإدخال لا يُدمَج في الشِّل مباشرة أبداً).
+          # 4) اسم الملف: تنقية صارمة، والإدخال لا يُدمَج في الشِّل مباشرة.
           base="$(printf '%s' "${INPUT_NAME:-RinStudio}" | tr -cd 'A-Za-z0-9._-')"
           base="${base:-RinStudio}"
           apk_name="${base}-v${version}-build${GITHUB_RUN_NUMBER}"
 
-          # 4) المعماريات.
+          # 5) المعماريات.
           abis="${INPUT_ABIS:-all}"
           if ! [[ "$abis" =~ ^(all|arm64-v8a|armeabi-v7a|x86_64|x86)$ ]]; then
             echo "::error::قيمة abis غير مدعومة: $abis"
             exit 1
           fi
+          # الإصدارات الرسمية (وسم) دائماً بكل المعماريات.
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then abis=all; fi
 
           {
             echo "version=$version"
@@ -118,8 +213,88 @@ jobs:
             echo "cmake=$cmake"
             echo "apk_name=$apk_name"
             echo "abis=$abis"
+            echo "build_aab=$([ "${INPUT_AAB:-false}" = "true" ] || [ "$GITHUB_REF_TYPE" = "tag" ] && echo true || echo false)"
+            echo "release=$release"
+            echo "release_tag=$release_tag"
+            echo "prerelease=$prerelease"
           } >> "$GITHUB_OUTPUT"
-          echo "Rin $version | NDK $ndk | CMake $cmake | ABIs: $abis | → $apk_name.apk"
+          echo "Rin $version | NDK $ndk | CMake $cmake | ABIs: $abis | release=$release"
+
+  # ═════════════════════════════════════════════════════════════════════════════
+  engine-tests:
+    name: Engine tests (rin CLI)
+    needs: preflight
+    if: needs.preflight.outputs.proceed == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Set up ccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: ccache-cli-${{ runner.os }}
+          max-size: 300M
+
+      - name: Build rin CLI
+        run: |
+          set -euo pipefail
+          cmake -B cli/linux/build -S cli/linux -DCMAKE_BUILD_TYPE=Release
+          cmake --build cli/linux/build -- -j"$(nproc)"
+
+      # الحزمتان معروفتان بنجاح كامل؛ أي فشل هنا يعني انحداراً حقيقياً في المحرّك.
+      - name: Run test suites
+        run: |
+          set -uo pipefail
+          mkdir -p test-logs
+          status=0
+          {
+            echo "### 🧪 اختبارات المحرّك"
+            echo ""
+            echo "| الحزمة | النتيجة |"
+            echo "|---|---|"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          for suite in tests/rintests.rin tests/wesscode_tests.rin; do
+            log="test-logs/$(basename "$suite" .rin).log"
+            timeout 600 ./cli/linux/build/rin "$suite" 2>&1 | tee "$log"
+            rc=${PIPESTATUS[0]}
+            line="$(grep -E '^rintest: ' "$log" | tail -n1 || true)"
+            if [ "$rc" -ne 0 ] || ! grep -q 'ALL PASSED' "$log"; then
+              echo "::error file=$suite::فشلت الحزمة (exit=$rc) — ${line:-بلا ملخص}"
+              echo "| \`$suite\` | ❌ ${line:-فشل} |" >> "$GITHUB_STEP_SUMMARY"
+              status=1
+            else
+              echo "| \`$suite\` | ✅ ${line#rintest: } |" >> "$GITHUB_STEP_SUMMARY"
+            fi
+          done
+          exit $status
+
+      - name: Upload test logs (on failure)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rin-test-logs
+          path: test-logs/
+          if-no-files-found: ignore
+          retention-days: 7
+
+  # ═════════════════════════════════════════════════════════════════════════════
+  build-apk:
+    name: Build & sign release APK
+    needs: preflight
+    if: needs.preflight.outputs.proceed == 'true' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    # contents: write لازمة فقط لحفظ المفتاح في أول تشغيل على الإطلاق.
+    permissions:
+      contents: write
+    env:
+      GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=-Xmx3g"
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
 
       # يحذف بقايا Loom القديمة (تسبّب فشل aapt2). آمن للتكرار.
       - name: Remove legacy Loom files
@@ -134,44 +309,42 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v4
         with:
-          # فقط command-line tools وقبول التراخيص؛ الحزم المطلوبة تُثبَّت أدناه بدقة.
-          packages: ""
+          packages: ""   # command-line tools وقبول التراخيص فقط؛ الحزم تُثبَّت بدقة أدناه.
 
-      # NDK (~1 GB) و CMake يُحمَّلان مرة واحدة فقط ثم يُستعادان من الكاش في ثوانٍ.
+      # NDK (~1 GB) و CMake يُحمَّلان مرة واحدة ثم يُستعادان من الكاش في ثوانٍ.
       - name: Cache NDK & CMake
-        id: sdk-cache
         uses: actions/cache@v4
         with:
           path: |
-            ${{ env.ANDROID_HOME }}/ndk/${{ steps.meta.outputs.ndk }}
-            ${{ env.ANDROID_HOME }}/cmake/${{ steps.meta.outputs.cmake }}
-          key: android-sdk-${{ runner.os }}-ndk${{ steps.meta.outputs.ndk }}-cmake${{ steps.meta.outputs.cmake }}
+            ${{ env.ANDROID_HOME }}/ndk/${{ needs.preflight.outputs.ndk }}
+            ${{ env.ANDROID_HOME }}/cmake/${{ needs.preflight.outputs.cmake }}
+          key: android-sdk-${{ runner.os }}-ndk${{ needs.preflight.outputs.ndk }}-cmake${{ needs.preflight.outputs.cmake }}
 
       - name: Install NDK & CMake
         run: |
           set -euo pipefail
           sdkmanager --install "platform-tools" \
-            "ndk;${{ steps.meta.outputs.ndk }}" \
-            "cmake;${{ steps.meta.outputs.cmake }}" > /dev/null
+            "ndk;${{ needs.preflight.outputs.ndk }}" \
+            "cmake;${{ needs.preflight.outputs.cmake }}" > /dev/null
           echo "NDK/CMake جاهزان."
 
       - name: Set up ccache
         uses: hendrikmuhs/ccache-action@v1.2
         with:
-          key: ccache-${{ runner.os }}-${{ steps.meta.outputs.ndk }}-${{ steps.meta.outputs.abis }}
+          key: ccache-ndk-${{ runner.os }}-${{ needs.preflight.outputs.ndk }}-${{ needs.preflight.outputs.abis }}
           restore-keys: |
-            ccache-${{ runner.os }}-${{ steps.meta.outputs.ndk }}-
+            ccache-ndk-${{ runner.os }}-${{ needs.preflight.outputs.ndk }}-
           max-size: 600M
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.13"
-          # الفروع غير الرئيسية تقرأ الكاش فقط ولا تُلوِّثه.
-          cache-read-only: ${{ github.ref_name != 'main' && github.ref_name != 'master' }}
+          # غير main/master والوسوم: قراءة الكاش فقط حتى لا تُلوَّث.
+          cache-read-only: ${{ !(github.ref_type == 'branch' && (github.ref_name == 'main' || github.ref_name == 'master')) }}
 
-      # لا يُولَّد keystore جديد إلا إن لم يكن موجوداً أصلاً في المستودع.
-      # PKCS12 لا يدعم كلمة مرور منفصلة للمفتاح، لذا KEY_PASS = STORE_PASS عمداً.
+      # لا يُولَّد keystore جديد إلا إن لم يكن موجوداً. PKCS12 لا يدعم كلمة مرور منفصلة
+      # للمفتاح، لذا KEY_PASS = STORE_PASS عمداً.
       - name: Ensure permanent signing keystore
         id: keystore
         run: |
@@ -229,64 +402,76 @@ jobs:
             echo "RIN_KEY_PASSWORD=$key_pass"
           } >> "$GITHUB_ENV"
 
-      - name: Build signed release APK
+      - name: Build signed release
         env:
-          ABIS: ${{ steps.meta.outputs.abis }}
+          ABIS: ${{ needs.preflight.outputs.abis }}
+          BUILD_AAB: ${{ needs.preflight.outputs.build_aab }}
         run: |
           set -euo pipefail
           args=(assembleRelease --build-cache --parallel --stacktrace)
-          if [ "$ABIS" != "all" ]; then
-            args+=("-Pandroid.injected.build.abi=$ABIS")
-          fi
+          if [ "$BUILD_AAB" = "true" ]; then args+=(bundleRelease); fi
+          if [ "$ABIS" != "all" ]; then args+=("-Pandroid.injected.build.abi=$ABIS"); fi
           gradle "${args[@]}"
 
-      - name: Locate & rename APK
-        id: apk
+      - name: Collect outputs
+        id: collect
         env:
-          APK_NAME: ${{ steps.meta.outputs.apk_name }}
+          APK_NAME: ${{ needs.preflight.outputs.apk_name }}
+          BUILD_AAB: ${{ needs.preflight.outputs.build_aab }}
         run: |
           set -euo pipefail
-          dir=app/build/outputs/apk/release
-          src="$(find "$dir" -maxdepth 1 -name '*.apk' | head -n1)"
+          src="$(find app/build/outputs/apk/release -maxdepth 1 -name '*.apk' | head -n1)"
           if [ -z "$src" ]; then
             echo "::error::لم يُعثر على APK ناتج — راجع سجلّ خطوة البناء."
             exit 1
           fi
           case "$src" in
-            *unsigned*)
-              echo "::error::الـ APK غير موقَّع — لم تُطبَّق إعدادات التوقيع."
-              exit 1 ;;
+            *unsigned*) echo "::error::الـ APK غير موقَّع — لم تُطبَّق إعدادات التوقيع."; exit 1 ;;
           esac
-          mkdir -p dist
-          dest="dist/${APK_NAME}.apk"
-          cp "$src" "$dest"
-          ( cd dist && sha256sum "${APK_NAME}.apk" > "${APK_NAME}.apk.sha256" )
-          echo "path=$dest" >> "$GITHUB_OUTPUT"
 
-      # تحقّق فعلي من التوقيع (v2/v3) وأن الشهادة هي شهادتنا وليست debug.
-      - name: Verify APK signature
+          mkdir -p dist
+          cp "$src" "dist/${APK_NAME}.apk"
+
+          if [ "$BUILD_AAB" = "true" ]; then
+            aab="$(find app/build/outputs/bundle/release -maxdepth 1 -name '*.aab' | head -n1)"
+            [ -n "$aab" ] || { echo "::error::لم يُعثر على AAB ناتج."; exit 1; }
+            cp "$aab" "dist/${APK_NAME}.aab"
+          fi
+
+          # الإخراج لملف مؤقت أولاً حتى لا يدخل ملف الـ checksum نفسه في قائمة الحساب.
+          ( cd dist && for f in *.apk *.aab; do if [ -f "$f" ]; then sha256sum -- "$f"; fi; done > ../sums.tmp )
+          mv sums.tmp "dist/${APK_NAME}.sha256"
+          echo "apk=dist/${APK_NAME}.apk" >> "$GITHUB_OUTPUT"
+          echo "aab=dist/${APK_NAME}.aab" >> "$GITHUB_OUTPUT"
+
+      # تحقّق فعلي من التوقيع (v2/v3) وأن الشهادة ليست debug.
+      - name: Verify signature
         id: verify
         env:
-          APK_PATH: ${{ steps.apk.outputs.path }}
+          APK_PATH: ${{ steps.collect.outputs.apk }}
+          AAB_PATH: ${{ steps.collect.outputs.aab }}
+          BUILD_AAB: ${{ needs.preflight.outputs.build_aab }}
         run: |
           set -euo pipefail
           apksigner="$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -n1)"
           [ -n "$apksigner" ] || { echo "::error::apksigner غير موجود."; exit 1; }
 
-          "$apksigner" verify --verbose --print-certs "$APK_PATH" > verify.txt
-          cat verify.txt
+          "$apksigner" verify --verbose --print-certs "$APK_PATH" | tee verify.txt
           if grep -qi "Android Debug" verify.txt; then
             echo "::error::الـ APK موقَّع بمفتاح debug وليس مفتاح الإصدار."
             exit 1
           fi
-          cert_sha="$(grep -m1 'certificate SHA-256 digest' verify.txt | awk '{print $NF}')"
-          echo "cert_sha=$cert_sha" >> "$GITHUB_OUTPUT"
+          echo "cert_sha=$(grep -m1 'certificate SHA-256 digest' verify.txt | awk '{print $NF}')" >> "$GITHUB_OUTPUT"
+
+          if [ "$BUILD_AAB" = "true" ]; then
+            jarsigner -verify "$AAB_PATH" | tee aab-verify.txt
+            grep -q 'jar verified' aab-verify.txt || { echo "::error::توقيع AAB غير صالح."; exit 1; }
+          fi
 
       - name: Build summary
-        if: always() && steps.verify.outcome == 'success'
         env:
-          APK_PATH: ${{ steps.apk.outputs.path }}
-          VERSION: ${{ steps.meta.outputs.version }}
+          APK_PATH: ${{ steps.collect.outputs.apk }}
+          VERSION: ${{ needs.preflight.outputs.version }}
           CERT_SHA: ${{ steps.verify.outputs.cert_sha }}
         run: |
           size="$(du -h "$APK_PATH" | cut -f1)"
@@ -305,14 +490,14 @@ jobs:
             echo "| Commit | \`${GITHUB_SHA::7}\` |"
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Upload signed APK artifact
+      - name: Upload signed artifacts
         uses: actions/upload-artifact@v4
         with:
           name: rin-lang-release-apk
           path: dist/
           if-no-files-found: error
           retention-days: 30
-          compression-level: 0   # الـ APK مضغوط أصلاً — رفع أسرع بلا فائدة من ضغط إضافي
+          compression-level: 0   # الـ APK/AAB مضغوط أصلاً
 
       # عند الفشل: سجلات CMake والتقارير للتشخيص بدون إعادة تشغيل.
       - name: Upload build diagnostics (on failure)
@@ -364,3 +549,42 @@ jobs:
           done
           echo "::error::تعذّر حفظ المفتاح بعد 3 محاولات."
           exit 1
+
+  # ═════════════════════════════════════════════════════════════════════════════
+  release:
+    name: Publish GitHub Release
+    needs: [ preflight, engine-tests, build-apk ]
+    if: needs.preflight.outputs.proceed == 'true' && needs.preflight.outputs.release == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      TAG: ${{ needs.preflight.outputs.release_tag }}
+      VERSION: ${{ needs.preflight.outputs.version }}
+      PRERELEASE: ${{ needs.preflight.outputs.prerelease }}
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: rin-lang-release-apk
+          path: dist
+
+      - name: Create or update release
+        run: |
+          set -euo pipefail
+          ls -la dist
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            echo "الإصدار $TAG موجود — تحديث الملفات المرفقة."
+            gh release upload "$TAG" dist/* --clobber
+          else
+            flags=(--title "Rin Lang v$VERSION" --generate-notes)
+            if [ "$PRERELEASE" = "true" ]; then flags+=(--prerelease); fi
+            # على وسم موجود لا حاجة لـ --target؛ على تشغيل يدوي نُنشئ الوسم عند هذا الـ commit.
+            if [ "$GITHUB_REF_TYPE" != "tag" ]; then flags+=(--target "$GITHUB_SHA"); fi
+            gh release create "$TAG" dist/* "${flags[@]}"
+          fi
+          echo "### 🚀 Release: $TAG" >> "$GITHUB_STEP_SUMMARY"
+          echo "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/tag/${TAG}" >> "$GITHUB_STEP_SUMMARY"
