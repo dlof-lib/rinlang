@@ -77,6 +77,10 @@ class MainActivity : AppCompatActivity() {
     private lateinit var txtEngineVersion: TextView
     private lateinit var txtFileName: TextView
     private lateinit var rvJobs: RecyclerView
+    private lateinit var rinTerminal: RinTerminalView
+    private lateinit var tabTerminal: TextView
+    private lateinit var tabRuns: TextView
+    private lateinit var btnCopyTerminal: Button
     private lateinit var progressRunning: RinSpinner
     private lateinit var findBar: LinearLayout
     private lateinit var txtFind: EditText
@@ -172,6 +176,10 @@ class MainActivity : AppCompatActivity() {
         txtEngineVersion = findViewById(R.id.txtEngineVersion)
         txtFileName = findViewById(R.id.txtFileName)
         rvJobs = findViewById(R.id.rvJobs)
+        rinTerminal = findViewById(R.id.rinTerminal)
+        tabTerminal = findViewById(R.id.tabTerminal)
+        tabRuns = findViewById(R.id.tabRuns)
+        btnCopyTerminal = findViewById(R.id.btnCopyTerminal)
         progressRunning = findViewById(R.id.progressRunning)
         findBar = findViewById(R.id.findBar)
         txtFind = findViewById(R.id.txtFind)
@@ -286,6 +294,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         // نافذة إدخال المستخدم لدوال Rin (input/inputNumber/confirm/choose) — انظر RinInputBridge.
+        setupTerminal()
         RinInputBridge.setPresenter(rinInputPresenter)
 
         RinLogoLoadingOverlay.setProgress(0.94f)
@@ -303,7 +312,9 @@ class MainActivity : AppCompatActivity() {
             startActivity(android.content.Intent(this, ProjectsActivity::class.java))
         }
 
-        btnClearConsole.setOnClickListener { RinJobScheduler.clear() }
+        btnClearConsole.setOnClickListener {
+            if (RinTerminal.terminalTabSelected) RinTerminal.clear() else RinJobScheduler.clear()
+        }
 
         // ----- شريط البحث والاستبدال -----
         btnFindClose.setOnClickListener {
@@ -564,7 +575,7 @@ class MainActivity : AppCompatActivity() {
         // أقواس/وسوم غير متوازنة = كود ما زال قيد الكتابة؛ تشغيله يملأ الكونسول بأخطاء لا فائدة منها.
         if (editorController.checkBracketBalance() != null || editorController.checkTagBalance() != null) return
         lastAutoRunSource = source
-        if (AppSettings.isClearConsoleOnRun(this)) RinJobScheduler.clear()
+        if (AppSettings.isClearConsoleOnRun(this)) { RinJobScheduler.clear(); RinTerminal.clear() }
         RinJobScheduler.submit(source) // الطابور ممتلئ → يُتجاهَل بصمت (هذا تشغيل لم يطلبه المستخدم صراحةً)
     }
 
@@ -921,12 +932,14 @@ class MainActivity : AppCompatActivity() {
 
     private fun runProgram() {
         val source = editCode.text.toString()
-        if (AppSettings.isClearConsoleOnRun(this)) RinJobScheduler.clear()
+        if (AppSettings.isClearConsoleOnRun(this)) { RinJobScheduler.clear(); RinTerminal.clear() }
         val job = RinJobScheduler.submit(source)
         if (job == null) {
             Toast.makeText(this, getString(R.string.job_queue_full_toast), Toast.LENGTH_SHORT).show()
             return
         }
+        // تشغيل صريح من المستخدم: أظهِر الـ terminal ليرى المخرجات ويجيب عن input() فيه.
+        showConsoleTab(terminal = true)
 
         // لا نشغّل الأنبوب فعلياً هنا (ذلك يحدث داخل شاشة RinFlow نفسها عبر PipelineTracer)؛
         // فقط نتحقّق بسرعة هل يحتوي الكود على كتلة @container.pipe لنعرض خيار الانتقال إليها.
@@ -1020,7 +1033,56 @@ class MainActivity : AppCompatActivity() {
     /** النافذة الحالية لسؤال إدخال Rin (إن وُجدت)، لإغلاقها بهدوء عند إغلاق الـ Activity. */
     private var rinInputDialog: AlertDialog? = null
 
-    private val rinInputPresenter: RinInputPresenter = { prompt, deliver -> showRinInputDialog(prompt, deliver) }
+    /**
+     * الإدخال يحدث داخل الـ terminal (سطر الإدخال أسفل المخرجات) بدل النافذة المنبثقة. تبقى النافذة
+     * احتياطاً فقط حين يكون الكونسول مخفياً بالكامل (إعداد "إظهار الطرفية" معطّل أو تخطيط التركيز).
+     */
+    private val rinInputPresenter: RinInputPresenter = { prompt, deliver ->
+        if (isConsoleVisible()) {
+            showConsoleTab(terminal = true)
+            rinTerminal.beginProgramInput(prompt, deliver)
+        } else {
+            showRinInputDialog(prompt, deliver)
+        }
+    }
+
+    private fun isConsoleVisible(): Boolean =
+        AppSettings.isShowConsole(this) && AppSettings.getEditorLayout(this) != AppSettings.LAYOUT_FOCUS
+
+    /** يربط الـ terminal بالمحرر: أمر run، تنفيذ شيفرة Rin من سطر الأوامر، والتبويبان. */
+    private fun setupTerminal() {
+        rinTerminal.onRunRequested = { runProgram() }
+        rinTerminal.onExecuteRequested = { code ->
+            if (RinJobScheduler.submit(code) == null) {
+                RinTerminal.system(getString(R.string.job_queue_full_toast), TermRole.ERROR)
+            }
+        }
+        tabTerminal.setOnClickListener { showConsoleTab(terminal = true) }
+        tabRuns.setOnClickListener { showConsoleTab(terminal = false) }
+        btnCopyTerminal.setOnClickListener { rinTerminal.copyTranscript() }
+        showConsoleTab(RinTerminal.terminalTabSelected)
+    }
+
+    /** يبدّل ذيل المحرر بين Terminal وقائمة Runs ويحدّث شكل التبويبين وزرّي النسخ/المسح. */
+    private fun showConsoleTab(terminal: Boolean) {
+        RinTerminal.terminalTabSelected = terminal
+        val console = isConsoleVisible()
+        rinTerminal.visibility = if (console && terminal) View.VISIBLE else View.GONE
+        rvJobs.visibility = if (console && !terminal) View.VISIBLE else View.GONE
+        btnCopyTerminal.visibility = if (terminal) View.VISIBLE else View.GONE
+        findViewById<Button>(R.id.btnClearConsole).text = getString(if (terminal) R.string.terminal_clear else R.string.action_clear_console)
+        styleTab(tabTerminal, terminal)
+        styleTab(tabRuns, !terminal)
+    }
+
+    private fun styleTab(tab: TextView, active: Boolean) {
+        tab.setTextColor(ContextCompat.getColor(this, if (active) R.color.rin_accent else R.color.rin_editor_hint))
+        tab.background = if (active) android.graphics.drawable.GradientDrawable().apply {
+            cornerRadius = 8f * resources.displayMetrics.density
+            setColor(ContextCompat.getColor(this@MainActivity, R.color.rin_accent))
+            alpha = 36
+        } else null
+    }
 
     /**
      * يعرض سؤال إدخال صادراً من برنامج Rin قيد التشغيل. [deliver] تُستدعى بالنص عند "موافق"،
@@ -1141,12 +1203,15 @@ class MainActivity : AppCompatActivity() {
         // قياسي: محرر 3 : كونسول 2 — مضغوط: 4 : 1 — تركيز: بلا كونسول أصلًا (وكذلك إن عُطِّل "إظهار الطرفية").
         val layout = AppSettings.getEditorLayout(this)
         val console = if (AppSettings.isShowConsole(this) && layout != AppSettings.LAYOUT_FOCUS) View.VISIBLE else View.GONE
-        for (id in listOf(R.id.editorConsoleDivider, R.id.editorConsoleRoot, R.id.rvJobs)) {
+        for (id in listOf(R.id.editorConsoleDivider, R.id.editorConsoleRoot)) {
             findViewById<View>(id).visibility = console
         }
+        // rvJobs و rinTerminal يتشاركان نفس المساحة؛ الظاهر منهما يحدّده التبويب المختار.
+        showConsoleTab(RinTerminal.terminalTabSelected)
         val compact = layout == AppSettings.LAYOUT_COMPACT
         setLayoutWeight(R.id.editorSurface, if (compact) 4f else 3f)
         setLayoutWeight(R.id.rvJobs, if (compact) 1f else 2f)
+        setLayoutWeight(R.id.rinTerminal, if (compact) 1f else 2f)
 
         if (AppSettings.isKeepScreenOn(this)) window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         else window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
