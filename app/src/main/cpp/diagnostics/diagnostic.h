@@ -79,6 +79,7 @@ enum class Code {
     E0045_DerivedReadOnly,  // إسناد إلى lens (مشتق للقراءة فقط) أو lens يعتمد على نفسه
     E0046_LiveMisuse,       // استعمال خاطئ: undo بلا tape، bell على lens، abort خارج trial، خاصية لا تخص هذا النوع
     E0047_BellLoop,         // جرس (bell) يعيد تفعيل نفسه بلا نهاية (عمق التداخل > 16)
+    E0048_LetElseFallthrough, // let ... else { ... }: كتلة else انتهت دون مغادرة النطاق (return/break/continue/throw/abort)
 
     W0001_UnusedVariable,
     W0002_UnusedImport,
