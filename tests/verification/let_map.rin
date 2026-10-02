@@ -1,0 +1,15 @@
+// let_map.rin — اختبار تحقّق لـ docs/let-plus.md
+let user = {"name": "Sara", "age": 30, "city": "Riyadh", "role": "admin"};
+let {name, age} = user;
+print name + " " + age;
+let {city: town, missing = "n/a"} = user;
+print town; print missing;
+let {name: nm, ...others} = user;
+print nm; print others;
+let {"role": r} = user;
+print r;
+let {profile: {lang = "ar", tz}} = {"profile": {"tz": "UTC+3"}};
+print lang + " " + tz;
+class Pt { let x = 3; let y = 4; }
+let {x, y} = Pt();
+print x * y;
