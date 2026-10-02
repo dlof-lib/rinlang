@@ -7666,6 +7666,11 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
         env->define(s->name, v);
         return;
     }
+    // المتغيرات الحيّة (Living Variables): stone/gauge/tape/lens/fuse + bell + trial + undo/redo/rearm/unbell/abort
+    case StmtKind::LiveDeclStmt:   liveExecDecl(std::static_pointer_cast<LiveDeclStmt>(stmt), env); return;
+    case StmtKind::BellStmt:       liveExecBell(std::static_pointer_cast<BellStmt>(stmt), env); return;
+    case StmtKind::TrialStmt:      liveExecTrial(std::static_pointer_cast<TrialStmt>(stmt), env); return;
+    case StmtKind::LiveActionStmt: liveExecAction(std::static_pointer_cast<LiveActionStmt>(stmt), env); return;
     // OOP: class/struct declaration -> تسجيل/استبدال تعريفها في classes (انظر registerClassStmt).
     // نفس الفلسفة تماماً كـ FunctionStmt أدناه: يُسجَّل أيضاً عبر hoisting في run()/
     // callTopLevelFunction لأجل استخدام على مستوى أعلى/وراثة أمامية (forward reference)، وهنا مرة
@@ -9844,6 +9849,13 @@ Value Interpreter::evaluate(const ExprPtr& expr, EnvPtr env) {
         return v;
     }
     case ExprKind::Variable: { auto e = std::static_pointer_cast<VariableExpr>(expr);
+        if (liveActive_) { // المتغيرات الحيّة: lens/fuse/عدّادات القراءة (كلفة صفر قبل أول استعمال)
+            Environment* liveOwner = findLiveOwner(env, e->name);
+            if (liveOwner && !liveOwner->live.empty()) {
+                auto lit = liveOwner->live.find(e->name);
+                if (lit != liveOwner->live.end()) return liveRead(liveOwner, lit->second, e->name, e->line);
+            }
+        }
         Value v;
         if (!env->get(e->name, v)) {
             throw undefinedVariableErr(e->name, e->line, env);
@@ -9866,6 +9878,7 @@ Value Interpreter::evaluate(const ExprPtr& expr, EnvPtr env) {
             throw undefinedVariableErr(e->name, e->line, env);
         }
         Value stored = copyForBinding(v);
+        if (liveActive_) return liveAssign(owner, e->name, stored, e->line); // stone/gauge/tape/lens/fuse/bell + trial
         assignStateAware(owner, e->name, stored, e->line);
         return stored;
     }
@@ -10090,6 +10103,7 @@ Value Interpreter::evaluate(const ExprPtr& expr, EnvPtr env) {
         throw diagErr(diag::Code::E0004_InvalidType, e->line, "cannot index a value of type `" + obj.typeName() + "`");
     }
     case ExprKind::IndexSet: { auto e = std::static_pointer_cast<IndexSetExpr>(expr);
+        if (liveActive_) liveGuardWrite(env, e->object, e->line);
         Value obj = evaluate(e->object, env);
         Value idx = evaluate(e->index, env);
         Value val = evaluate(e->value, env);
@@ -10139,6 +10153,10 @@ Value Interpreter::evaluate(const ExprPtr& expr, EnvPtr env) {
                 Value shadow;
                 if (!env->get(ve->name, shadow)) return staticGet(ve->name, e->name, env, e->line);
             }
+            if (liveActive_) { // x.fill / x.past / x.vitals ... على متغيّر حيّ
+                Value liveProp;
+                if (livePropertyGet(env, ve->name, e->name, e->line, liveProp)) return liveProp;
+            }
         }
         Value obj = evaluate(e->object, env);
         if (obj.type == Value::Type::INSTANCE) {
@@ -10155,6 +10173,7 @@ Value Interpreter::evaluate(const ExprPtr& expr, EnvPtr env) {
     }
     // OOP: object.name = value -> كتابة/تعديل حقل (class/struct instance) أو مفتاح (map).
     case ExprKind::Set: { auto e = std::static_pointer_cast<SetExpr>(expr);
+        if (liveActive_) liveGuardWrite(env, e->object, e->line);
         // Rin 1.0: ClassName.field = value -> كتابة حقل static.
         if (auto sve = std::dynamic_pointer_cast<VariableExpr>(e->object)) {
             if (!classes.empty() && classes.count(sve->name)) {
@@ -10847,6 +10866,372 @@ std::optional<Interpreter::FlowRunResult> Interpreter::replayFlow(const std::str
     activeFlowSession_.reset();
     return result;
 }
+
+
+// ============================================================================
+// المتغيرات الحيّة (Living Variables) — التنفيذ. الشرح الكامل: docs/living-variables.md
+// ----------------------------------------------------------------------------
+// المبدأ: لا نغيّر نموذج القيم إطلاقاً. بيانات "حياة" المتغيّر (LiveMeta) تُعلَّق باسمه داخل
+// Environment::live، وتُستشار في أربع نقاط فقط: قراءة متغيّر (ExprKind::Variable)، إسناد (ExprKind::Assign)،
+// قراءة خاصية (x.fill ...)، وكتابة داخل المحتوى (x[i]=.. / x.f=..). وكلها خلف الراية liveActive_ التي لا
+// تصير true قبل أول stone/gauge/tape/lens/fuse/bell/trial، فبرنامج لا يستعملها لا يدفع أي كلفة.
+// ============================================================================
+namespace {
+struct LiveAbortSignal {}; // abort; داخل trial — يلتقطها liveExecTrial فقط
+
+RinError liveErr(diag::Code code, int line, const std::string& msg, const std::string& hint = "") {
+    diag::Diagnostic d(code, msg, diag::SourceLocation::point(g_diagFile, line, 1));
+    if (!hint.empty()) d.withHint(hint);
+    return RinError(std::move(d));
+}
+std::string liveNum(double x) { return Value::num(x).toDisplayString(); }
+} // namespace
+
+Environment* Interpreter::findLiveOwner(const EnvPtr& env, const std::string& name) const {
+    for (Environment* cur = env.get(); cur; cur = cur->parent.get())
+        if (cur->values.count(name)) return cur;
+    return nullptr;
+}
+
+Value Interpreter::liveApplyRange(const LiveMeta& m, const std::string& name, const Value& v, int line) const {
+    if (v.type != Value::Type::NUMBER || std::isnan(v.number))
+        throw liveErr(diag::Code::E0044_RangeViolation, line,
+                      "gauge `" + name + "` holds numbers only, but got " + (v.type == Value::Type::NUMBER ? std::string("NaN") : "a " + v.typeName()),
+                      "assign a number; a gauge keeps it between " + liveNum(m.lo) + " and " + liveNum(m.hi));
+    double x = v.number;
+    if (m.rangeMode == 1) { // strict
+        if (x < m.lo || x > m.hi)
+            throw liveErr(diag::Code::E0044_RangeViolation, line,
+                          "gauge `" + name + "` accepts " + liveNum(m.lo) + " to " + liveNum(m.hi) + ", but got " + liveNum(x),
+                          "drop `strict` to clamp automatically, or use `wrap` if values should loop around");
+        return v;
+    }
+    if (m.rangeMode == 2) { // wrap: نصف مفتوح [lo, hi)
+        if (!std::isfinite(x)) throw liveErr(diag::Code::E0044_RangeViolation, line, "gauge `" + name + "` cannot wrap a non-finite number");
+        double span = m.hi - m.lo;
+        double r = std::fmod(x - m.lo, span);
+        if (r < 0) r += span;
+        return Value::num(m.lo + r);
+    }
+    return Value::num(std::min(std::max(x, m.lo), m.hi)); // clamp
+}
+
+void Interpreter::liveJournal(Environment* owner, const std::string& name) {
+    if (trialStack_.empty()) return;
+    EnvPtr keep = owner->weak_from_this().lock();
+    if (!keep) return;
+    TrialEntry te;
+    te.env = keep; te.name = name;
+    auto vit = owner->values.find(name);
+    if (vit != owner->values.end()) te.oldValue = vit->second;
+    auto lit = owner->live.find(name);
+    if (lit != owner->live.end()) te.metaSnapshot = std::make_shared<LiveMeta>(*lit->second);
+    trialStack_.back().push_back(std::move(te));
+}
+
+void Interpreter::liveFireBells(const std::shared_ptr<LiveMeta>& m, const Value& oldV, const Value& newV, int line) {
+    struct DepthGuard { int& d; explicit DepthGuard(int& x) : d(x) { ++d; } ~DepthGuard() { --d; } } guard(bellDepth_);
+    if (bellDepth_ > 16)
+        throw liveErr(diag::Code::E0047_BellLoop, line, "a bell keeps re-triggering itself (nested more than 16 levels)",
+                      "a bell that assigns to the variable it watches must stop at some value");
+    std::vector<Value> bells = m->bells; // نسخة: قد يُسجِّل جرس جرساً آخر أثناء الرنين
+    for (auto& b : bells) {
+        if (b.type != Value::Type::FUNCTION || !b.function) continue;
+        size_t n = b.function->declaration ? b.function->declaration->params.size() : 0;
+        std::vector<Value> args;
+        if (n == 1) args = {newV};
+        else if (n >= 2) args = {oldV, newV};
+        callFunction(b.function, args, line);
+    }
+}
+
+Value Interpreter::liveRead(Environment* owner, const std::shared_ptr<LiveMeta>& m, const std::string& name, int line) {
+    m->reads++;
+    if (m->derived) { // lens: يُحسب من جديد عند كل قراءة داخل البيئة التي صُرِّح فيها
+        if (m->evaluating)
+            throw liveErr(diag::Code::E0045_DerivedReadOnly, line, "lens `" + name + "` depends on itself",
+                          "a lens may read other variables, but never itself (directly or through another lens)");
+        EnvPtr scope = m->scope.lock();
+        if (!scope) throw liveErr(diag::Code::E0045_DerivedReadOnly, line, "lens `" + name + "` outlived the scope it was declared in");
+        m->evaluating = true;
+        Value r;
+        try { r = evaluate(m->expr, scope); } catch (...) { m->evaluating = false; throw; }
+        m->evaluating = false;
+        owner->values[name] = r; // مرآة لمن يقرأ الـ Environment مباشرة (exportGlobals ...)
+        return r;
+    }
+    auto it = owner->values.find(name);
+    Value cur = it != owner->values.end() ? it->second : Value::nil();
+    if (m->fused) {
+        if (m->burnt || m->left <= 0) return Value::nil();
+        if (--m->left <= 0) { m->burnt = true; owner->values[name] = Value::nil(); }
+        return cur;
+    }
+    return cur;
+}
+
+Value Interpreter::liveAssign(Environment* owner, const std::string& name, Value v, int line) {
+    std::shared_ptr<LiveMeta> m;
+    if (!owner->live.empty()) { auto it = owner->live.find(name); if (it != owner->live.end()) m = it->second; }
+    if (m) {
+        if (m->frozen)
+            throw liveErr(diag::Code::E0043_FrozenVariable, line, "cannot assign to `" + name + "`: it is a stone",
+                          "a stone is frozen at its declaration; declare `" + name + "` with `let` (or `tape`) if it must change");
+        if (m->derived)
+            throw liveErr(diag::Code::E0045_DerivedReadOnly, line, "cannot assign to `" + name + "`: it is a lens (computed from other variables)",
+                          "change the variables `" + name + "` is computed from instead");
+        if (m->ranged) v = liveApplyRange(*m, name, v, line);
+    }
+    liveJournal(owner, name); // قبل أي تغيير (قيمة + تاريخ tape)
+    Value old;
+    { auto it = owner->values.find(name); if (it != owner->values.end()) old = it->second; }
+    bool changed = !valuesEqual(old, v);
+    if (m) {
+        m->writes++;
+        if (m->taped && changed) {
+            m->past.push_back(old);
+            if (m->past.size() > m->keep) m->past.erase(m->past.begin());
+            m->future.clear(); // كتابة جديدة تقطع مسار redo (كأي محرّر)
+        }
+        if (m->fused) { m->armed = v; m->left = m->burns; m->burnt = false; }
+    }
+    assignStateAware(owner, name, v, line);
+    if (m && changed && !m->bells.empty()) liveFireBells(m, old, v, line);
+    return v;
+}
+
+void Interpreter::liveGuardWrite(const EnvPtr& env, const ExprPtr& objectExpr, int line) const {
+    auto ve = std::dynamic_pointer_cast<VariableExpr>(objectExpr);
+    if (!ve) return;
+    Environment* owner = findLiveOwner(env, ve->name);
+    if (!owner || owner->live.empty()) return;
+    auto it = owner->live.find(ve->name);
+    if (it == owner->live.end()) return;
+    if (it->second->frozen)
+        throw liveErr(diag::Code::E0043_FrozenVariable, line, "cannot modify the contents of `" + ve->name + "`: it is a stone",
+                      "a stone protects both the variable and its direct contents (`x[i] = ..`, `x.field = ..`)");
+    if (it->second->derived)
+        throw liveErr(diag::Code::E0045_DerivedReadOnly, line, "cannot modify `" + ve->name + "`: it is a lens (read-only)");
+}
+
+void Interpreter::liveExecDecl(const std::shared_ptr<LiveDeclStmt>& s, const EnvPtr& env) {
+    liveActive_ = true;
+    auto m = std::make_shared<LiveMeta>();
+    Value v = Value::nil();
+    auto evalNumber = [&](const ExprPtr& e, const char* what) -> double {
+        Value x = evaluate(e, env);
+        if (x.type != Value::Type::NUMBER || std::isnan(x.number))
+            throw liveErr(diag::Code::E0004_InvalidType, s->line, std::string(what) + " of `" + s->name + "` must be a number, got " + x.typeName());
+        return x.number;
+    };
+    auto evalCount = [&](const ExprPtr& e, const char* what, long dflt) -> long {
+        if (!e) return dflt;
+        double n = evalNumber(e, what);
+        if (n < 1 || n > 100000 || n != std::floor(n))
+            throw liveErr(diag::Code::E0046_LiveMisuse, s->line, std::string(what) + " of `" + s->name + "` must be a whole number from 1 to 100000, got " + liveNum(n));
+        return static_cast<long>(n);
+    };
+    if (s->kind != LiveKind::Lens && s->initializer) v = copyForBinding(evaluate(s->initializer, env));
+    switch (s->kind) {
+        case LiveKind::Stone: m->kind = "stone"; m->frozen = true; break;
+        case LiveKind::Gauge: {
+            m->kind = "gauge"; m->ranged = true;
+            m->lo = evalNumber(s->lo, "the lower end"); m->hi = evalNumber(s->hi, "the upper end");
+            if (!(m->lo < m->hi))
+                throw liveErr(diag::Code::E0044_RangeViolation, s->line, "gauge `" + s->name + "` has an empty range: " + liveNum(m->lo) + " to " + liveNum(m->hi),
+                              "the lower end must be smaller than the upper end");
+            m->rangeMode = s->rangeMode == "strict" ? 1 : s->rangeMode == "wrap" ? 2 : 0;
+            if (s->keep) { m->taped = true; m->keep = static_cast<size_t>(evalCount(s->keep, "`keep`", 10)); }
+            v = liveApplyRange(*m, s->name, v, s->line);
+            break;
+        }
+        case LiveKind::Tape:
+            m->kind = "tape"; m->taped = true; m->keep = static_cast<size_t>(evalCount(s->keep, "`keep`", 10)); break;
+        case LiveKind::Lens:
+            m->kind = "lens"; m->derived = true; m->expr = s->initializer; m->scope = env; v = Value::nil(); break;
+        case LiveKind::Fuse:
+            m->kind = "fuse"; m->fused = true; m->burns = evalCount(s->burns, "`burns`", 1); m->left = m->burns; m->armed = v; break;
+    }
+    env->define(s->name, v);       // define() يمحو أي حياة سابقة بنفس الاسم في هذه البيئة
+    env->live[s->name] = m;
+}
+
+void Interpreter::liveExecBell(const std::shared_ptr<BellStmt>& s, const EnvPtr& env) {
+    Environment* owner = findLiveOwner(env, s->target);
+    if (!owner) throw undefinedVariableErr(s->target, s->line, env);
+    liveActive_ = true;
+    auto& slot = owner->live[s->target];
+    if (!slot) { slot = std::make_shared<LiveMeta>(); }
+    if (slot->derived)
+        throw liveErr(diag::Code::E0046_LiveMisuse, s->line, "cannot ring a bell on `" + s->target + "`: it is a lens",
+                      "a lens is recomputed on every read, so it never 'changes'; put the bell on the variables it is computed from");
+    auto callable = std::make_shared<Callable>();
+    callable->declaration = s->handler;
+    callable->closure = env;
+    Value fn; fn.type = Value::Type::FUNCTION; fn.function = callable;
+    slot->bells.push_back(fn);
+}
+
+void Interpreter::liveExecTrial(const std::shared_ptr<TrialStmt>& s, const EnvPtr& env) {
+    liveActive_ = true;
+    trialStack_.emplace_back();
+    auto rollback = [&]() {
+        auto journal = std::move(trialStack_.back());
+        trialStack_.pop_back();
+        for (auto it = journal.rbegin(); it != journal.rend(); ++it) {
+            it->env->values[it->name] = it->oldValue;
+            if (it->metaSnapshot) {
+                auto f = it->env->live.find(it->name);
+                if (f != it->env->live.end()) *f->second = *it->metaSnapshot;
+            }
+        }
+    };
+    auto commit = [&]() {
+        auto journal = std::move(trialStack_.back());
+        trialStack_.pop_back();
+        if (!trialStack_.empty())  // trial متداخلة: ما ثبّتناه يبقى قابلاً للتراجع مع الأب
+            for (auto& e : journal) trialStack_.back().push_back(std::move(e));
+    };
+    try {
+        execute(s->body, env);
+    } catch (LiveAbortSignal&) {
+        rollback();
+        if (s->elseBranch) execute(s->elseBranch, env);
+        return;
+    } catch (RinError&) {
+        rollback();
+        if (s->elseBranch) { execute(s->elseBranch, env); return; }
+        throw;
+    } catch (ThrowSignal&) {
+        rollback();
+        if (s->elseBranch) { execute(s->elseBranch, env); return; }
+        throw;
+    } catch (...) { // return/break/continue/achieve: خروج عادي من التجربة => نُثبّت التغييرات
+        commit();
+        throw;
+    }
+    commit();
+}
+
+void Interpreter::liveExecAction(const std::shared_ptr<LiveActionStmt>& s, const EnvPtr& env) {
+    if (s->action == "abort") {
+        if (trialStack_.empty())
+            throw liveErr(diag::Code::E0046_LiveMisuse, s->line, "`abort` can only be used inside a `trial { ... }` block",
+                          "wrap the risky assignments in `trial { ... }` so there is something to roll back");
+        throw LiveAbortSignal{};
+    }
+    Environment* owner = findLiveOwner(env, s->target);
+    if (!owner) throw undefinedVariableErr(s->target, s->line, env);
+    std::shared_ptr<LiveMeta> m;
+    { auto it = owner->live.find(s->target); if (it != owner->live.end()) m = it->second; }
+    auto need = [&](bool ok, const std::string& what) {
+        if (!ok) throw liveErr(diag::Code::E0046_LiveMisuse, s->line,
+                               "`" + s->action + " " + s->target + "` needs " + what + ", but `" + s->target + "` is " +
+                               (m ? "a " + m->kind : std::string("a plain variable")),
+                               s->action == "rearm" ? "declare it with `fuse " + s->target + " = ...;`"
+                               : s->action == "unbell" ? "ring one first with `bell " + s->target + " { ... }`"
+                               : "declare it with `tape " + s->target + " = ...;` (or add `keep N` to a gauge)");
+    };
+    if (s->action == "unbell") { need(m && !m->bells.empty(), "a bell"); m->bells.clear(); return; }
+    if (s->action == "rearm") {
+        need(m && m->fused, "a fuse");
+        liveJournal(owner, s->target);
+        m->left = m->burns; m->burnt = false;
+        assignStateAware(owner, s->target, m->armed, s->line);
+        return;
+    }
+    // undo / redo
+    need(m && m->taped, "a tape");
+    long n = 1;
+    if (s->count) {
+        Value c = evaluate(s->count, env);
+        if (c.type != Value::Type::NUMBER || c.number < 1 || c.number != std::floor(c.number))
+            throw liveErr(diag::Code::E0046_LiveMisuse, s->line, "`" + s->action + "` count must be a whole number >= 1");
+        n = static_cast<long>(c.number);
+    }
+    bool isUndo = s->action == "undo";
+    auto& from = isUndo ? m->past : m->future;
+    auto& to = isUndo ? m->future : m->past;
+    if (from.empty()) return; // لا شيء للتراجع/الإعادة: لا أثر (x.canUndo / x.canRedo للاستعلام)
+    liveJournal(owner, s->target);
+    Value before = owner->values[s->target];
+    Value cur = before;
+    while (n-- > 0 && !from.empty()) {
+        to.push_back(cur);
+        if (to.size() > m->keep) to.erase(to.begin());
+        cur = from.back(); from.pop_back();
+        m->writes++;
+    }
+    assignStateAware(owner, s->target, cur, s->line);
+    if (!m->bells.empty() && !valuesEqual(before, cur)) liveFireBells(m, before, cur, s->line);
+}
+
+bool Interpreter::livePropertyGet(const EnvPtr& env, const std::string& name, const std::string& prop, int line, Value& out) {
+    static const std::unordered_set<std::string> props = {
+        "kind", "reads", "writes", "bells", "vitals", "past", "undone", "canUndo", "canRedo", "keep",
+        "min", "max", "mode", "fill", "full", "empty", "left", "burnt"};
+    if (!props.count(prop)) return false;
+    Environment* owner = findLiveOwner(env, name);
+    if (!owner || owner->live.empty()) return false;
+    auto mit = owner->live.find(name);
+    if (mit == owner->live.end()) return false;
+    const auto& m = mit->second;
+    Value cur = owner->values[name];
+    // حقل بيانات حقيقي بنفس الاسم يغلب الخاصية الحيّة (قاموس/كائن يحمل مفتاح "kind" مثلاً)
+    if (cur.type == Value::Type::MAP && cur.map)
+        for (auto& kv : *cur.map) if (kv.first.type == Value::Type::STRING && kv.first.str == prop) return false;
+    if (cur.type == Value::Type::INSTANCE && cur.instance && cur.instance->fields.count(prop)) return false;
+
+    auto only = [&](bool ok, const char* kinds) {
+        if (!ok) throw liveErr(diag::Code::E0046_LiveMisuse, line,
+                               "`" + name + "." + prop + "` is only available on " + kinds + " variables, but `" + name + "` is " +
+                               (m->kind == "plain" ? std::string("a plain variable (with a bell)") : "a " + m->kind));
+    };
+    auto arr = [](const std::vector<Value>& src) {
+        auto a = std::make_shared<ArrayData>(src.begin(), src.end());
+        return Value::makeArray(a);
+    };
+    auto modeName = [&]() { return std::string(m->rangeMode == 1 ? "strict" : m->rangeMode == 2 ? "wrap" : "clamp"); };
+    if (prop == "kind")   { out = Value::string(m->kind); return true; }
+    if (prop == "reads")  { out = Value::num(static_cast<double>(m->reads)); return true; }
+    if (prop == "writes") { out = Value::num(static_cast<double>(m->writes)); return true; }
+    if (prop == "bells")  { out = Value::num(static_cast<double>(m->bells.size())); return true; }
+    if (prop == "past")    { only(m->taped, "tape (or gauge ... keep)"); out = arr(m->past); return true; }
+    if (prop == "undone")  { only(m->taped, "tape (or gauge ... keep)"); out = arr(m->future); return true; }
+    if (prop == "canUndo") { only(m->taped, "tape (or gauge ... keep)"); out = Value::boolean_(!m->past.empty()); return true; }
+    if (prop == "canRedo") { only(m->taped, "tape (or gauge ... keep)"); out = Value::boolean_(!m->future.empty()); return true; }
+    if (prop == "keep")    { only(m->taped, "tape (or gauge ... keep)"); out = Value::num(static_cast<double>(m->keep)); return true; }
+    if (prop == "min")  { only(m->ranged, "gauge"); out = Value::num(m->lo); return true; }
+    if (prop == "max")  { only(m->ranged, "gauge"); out = Value::num(m->hi); return true; }
+    if (prop == "mode") { only(m->ranged, "gauge"); out = Value::string(modeName()); return true; }
+    if (prop == "fill") { only(m->ranged, "gauge"); out = Value::num(cur.type == Value::Type::NUMBER ? (cur.number - m->lo) / (m->hi - m->lo) : 0); return true; }
+    if (prop == "full") { only(m->ranged, "gauge"); out = Value::boolean_(cur.type == Value::Type::NUMBER && cur.number >= m->hi); return true; }
+    if (prop == "empty"){ only(m->ranged, "gauge"); out = Value::boolean_(cur.type == Value::Type::NUMBER && cur.number <= m->lo); return true; }
+    if (prop == "left")  { only(m->fused, "fuse"); out = Value::num(m->burnt ? 0 : static_cast<double>(m->left)); return true; }
+    if (prop == "burnt") { only(m->fused, "fuse"); out = Value::boolean_(m->burnt); return true; }
+    // vitals: خريطة بكل ما يخص هذا المتغيّر
+    auto vm = std::make_shared<MapData>();
+    auto put = [&](const char* k, Value v) { vm->push_back({Value::string(k), std::move(v)}); };
+    put("kind", Value::string(m->kind));
+    put("reads", Value::num(static_cast<double>(m->reads)));
+    put("writes", Value::num(static_cast<double>(m->writes)));
+    put("bells", Value::num(static_cast<double>(m->bells.size())));
+    if (m->frozen) put("frozen", Value::boolean_(true));
+    if (m->derived) put("derived", Value::boolean_(true));
+    if (m->ranged) {
+        put("min", Value::num(m->lo)); put("max", Value::num(m->hi)); put("mode", Value::string(modeName()));
+        put("fill", Value::num(cur.type == Value::Type::NUMBER ? (cur.number - m->lo) / (m->hi - m->lo) : 0));
+    }
+    if (m->taped) {
+        put("keep", Value::num(static_cast<double>(m->keep)));
+        put("past", Value::num(static_cast<double>(m->past.size())));
+        put("undone", Value::num(static_cast<double>(m->future.size())));
+    }
+    if (m->fused) { put("burns", Value::num(static_cast<double>(m->burns))); put("left", Value::num(m->burnt ? 0 : static_cast<double>(m->left))); put("burnt", Value::boolean_(m->burnt)); }
+    out = Value::makeMap(vm);
+    return true;
+}
+
 
 } // namespace rin
 
