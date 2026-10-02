@@ -663,6 +663,7 @@ private:
     int lastErrorLine_ = 0;
     StreamSink streamSink_; // انظر setStreamSink() أعلاه — فارغ افتراضياً (no-op)
     InputProvider inputProvider_; // انظر setInputProvider() أعلاه — فارغ افتراضياً (stdin)
+    bool inputAtEof_ = false;     // آخر سؤال إدخال انتهى بنهاية stdin (يقرؤه محرّك النماذج rin_input.cpp لإيقاف إعادة السؤال)
     std::streamoff streamMark_ = 0; // كل ما قبل هذا الموضع في [output] سبق بثّه عبر streamSink_ (يمنع التكرار عند تفريغ ما قبل الإدخال)
 
     std::shared_ptr<loaderui::ILoadSink> importUISink_; // انظر setImportUISink()/setImportUIMode() أعلاه — nullptr افتراضياً (no-op)
@@ -1032,6 +1033,7 @@ public: // Rin 1.0: واجهة OOP الموسَّعة (يستدعيها Value::t
     bool skipInit_ = false;               // يُضبَط مؤقتاً من oop.fromMap لإنشاء كائن بلا استدعاء init
     Value bindStaticFn(const std::shared_ptr<FunctionStmt>& m, const std::string& owner);
     void registerNativesOop();            // rin_oop_natives.cpp
+    void registerNativesInput();          // rin_input.cpp — مفسِّر/مترجم/منفِّذ نماذج الإدخال (معاملة، تداخل، مُدقِّق النموذج)
     void registerNativesOopLink();        // rin_oop_link.cpp — روابط الحاويات وIndsin (Warp)
     std::vector<OopLink> links_;
     int nextLinkId_ = 1;
