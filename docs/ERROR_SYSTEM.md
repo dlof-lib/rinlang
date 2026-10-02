@@ -92,3 +92,5 @@ schema/index/relation/transaction...) تُصدر أخطاءها بإحدى طر�
   الرسالة الغنيّة، بأمثلة حقيقية.
 - `app/src/main/cpp/diagnostics/` — التنفيذ الكامل (`diagnostic.h`/`.cpp`،
   `diagnostic_engine.h`/`.cpp`، `diagnostic_renderer.h`/`.cpp`، `source_manager.h`/`.cpp`).
+
+- E0043 يشمل أيضاً `#ban` (انظر [hash-family.md](hash-family.md)).
