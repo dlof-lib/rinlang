@@ -213,12 +213,30 @@ struct CacheEntry {
     long long expiresAt = 0; // 0 أو أقل = بلا انتهاء صلاحية؛ غير ذلك = طابع زمني Unix بالثواني (انظر std::time)
 };
 
+// ---- المتغيرات الحيّة (Living Variables) — docs/living-variables.md ----
+// بيانات وصفية اختيارية تُلحَق باسم متغيّر داخل Environment التي تملكه (Environment::live). المتغيّر العادي
+// لا يملك أي مُدخَل هنا أبداً، فتكلفته صفر. كل "نوع" (stone/gauge/tape/lens/fuse) مجرّد إعداد مسبق لنفس الحقول
+// القابلة للتركيب (مثلاً gauge + keep = مقياس بذاكرة؛ وأي متغيّر يقبل bell). الحياة مرتبطة بالـ Environment نفسها،
+// فلا تتسرّب بيانات وصفية قديمة إن أُعيد استعمال عنوان بيئة محذوفة.
+struct LiveMeta {
+    std::string kind = "plain";               // "stone" | "gauge" | "tape" | "lens" | "fuse" | "plain" (لمتغيّر عادي عليه bell فقط)
+    bool frozen = false;                       // stone
+    bool ranged = false; double lo = 0, hi = 0; int rangeMode = 0; // gauge: 0 clamp، 1 strict، 2 wrap
+    bool taped = false; size_t keep = 10; std::vector<Value> past, future; // tape: التاريخ وما أُلغي (للإعادة)
+    bool derived = false; ExprPtr expr; std::weak_ptr<Environment> scope; bool evaluating = false; // lens
+    bool fused = false; long burns = 1, left = 1; bool burnt = false; Value armed; // fuse
+    std::vector<Value> bells;                  // دوال الأجراس (Callable) بترتيب التسجيل
+    long reads = 0, writes = 0;
+};
+
 struct Environment : std::enable_shared_from_this<Environment> {
     std::unordered_map<std::string, Value> values;
+    std::unordered_map<std::string, std::shared_ptr<LiveMeta>> live; // المتغيرات الحيّة فقط (غالباً فارغة)
     EnvPtr parent;
     explicit Environment(EnvPtr parentEnv = nullptr) : parent(std::move(parentEnv)) {}
 
-    void define(const std::string& name, const Value& v) { values[name] = v; }
+    // إعادة التعريف (let جديدة/معامل دالة) بنفس الاسم في نفس البيئة تُنهي حياة المتغيّر الحيّ السابق.
+    void define(const std::string& name, const Value& v) { values[name] = v; if (!live.empty()) live.erase(name); }
     bool assign(const std::string& name, const Value& v) {
         auto it = values.find(name);
         if (it != values.end()) { it->second = v; return true; }
@@ -1038,6 +1056,23 @@ public: // Rin 1.0: واجهة OOP الموسَّعة (يستدعيها Value::t
     std::vector<OopLink> links_;
     int nextLinkId_ = 1;
     bool linksExist_ = false;             // false => كلفة صفر في assignStateAware/setField/callTopLevelFunction
+    // ---- المتغيرات الحيّة (Living Variables) — التنفيذ في آخر rin_interpreter.cpp ----
+    bool liveActive_ = false;                 // false => كلفة صفر على كل قراءة/إسناد (لا يصير true إلا عند أول استعمال)
+    struct TrialEntry { EnvPtr env; std::string name; Value oldValue; std::shared_ptr<LiveMeta> metaSnapshot; };
+    std::vector<std::vector<TrialEntry>> trialStack_; // سجل تراجع لكل trial نشِطة (الأعمق في النهاية)
+    int bellDepth_ = 0;                       // حماية من جرس يعيد تفعيل نفسه بلا نهاية
+    Environment* findLiveOwner(const EnvPtr& env, const std::string& name) const; // أول بيئة تملك الاسم (أو nullptr)
+    Value liveRead(Environment* owner, const std::shared_ptr<LiveMeta>& m, const std::string& name, int line);
+    Value liveAssign(Environment* owner, const std::string& name, Value v, int line);
+    Value liveApplyRange(const LiveMeta& m, const std::string& name, const Value& v, int line) const;
+    void liveFireBells(const std::shared_ptr<LiveMeta>& m, const Value& oldV, const Value& newV, int line);
+    void liveJournal(Environment* owner, const std::string& name); // يلتقط (قيمة + بيانات وصفية) قبل أي تغيير داخل trial نشِطة
+    bool livePropertyGet(const EnvPtr& env, const std::string& name, const std::string& prop, int line, Value& out);
+    void liveExecDecl(const std::shared_ptr<LiveDeclStmt>& s, const EnvPtr& env);
+    void liveExecBell(const std::shared_ptr<BellStmt>& s, const EnvPtr& env);
+    void liveExecTrial(const std::shared_ptr<TrialStmt>& s, const EnvPtr& env);
+    void liveExecAction(const std::shared_ptr<LiveActionStmt>& s, const EnvPtr& env);
+    void liveGuardWrite(const EnvPtr& env, const ExprPtr& objectExpr, int line) const; // stone/lens: منع x[i]=.. وx.f=..
     // الكائن تغيّر -> ادفع إلى الأهداف (حاويات/Warp). تُستدعى من notifyObservers.
     void pushLinks(const Value& obj, const std::string& field, const Value& newV, int line);
     // حقل حاوية كُتب -> اسحب إلى الكائنات واستدعِ المراقبين. تُستدعى من assignStateAware/setField.
