@@ -69,3 +69,5 @@
 | الواجهة | `../indsin.md` `RIN_ELEMENTS` `banner` `android` |
 | API | `api` |
 | البداية | `getting-started` |
+
+- عائلة `#`: انظر [hash-family.md](hash-family.md).
