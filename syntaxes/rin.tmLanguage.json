@@ -21,6 +21,7 @@
     { "include": "#make-unit" },
     { "include": "#reckon-unit" },
     { "include": "#living-variables" },
+    { "include": "#hash-family" },
     { "include": "#container-statement-keywords" },
     { "include": "#relation-keywords" },
     { "include": "#attribute-keywords" },
@@ -227,6 +228,15 @@
           "match": "(?<=\\b(?:use|need|allow|deny)\\s)\\s*(container|loop|function|condition|return|view|data|api|import|table|doc|chatbot|reckon)\\b",
           "name": "support.type.capability.make.rin"
         }
+      ]
+    },
+
+    "hash-family": {
+      "comment": "# family: #sed #for #in #done #while #sum #do #swap #return #diff #add #ban #to #ignorance. See docs/hash-family.md.",
+      "patterns": [
+        { "match": "#(for|while|return|in|to|do|done|ban|ignorance)\\b", "name": "keyword.control.hash.rin" },
+        { "match": "#(sed|sum|diff|add|swap)\\b", "name": "support.function.hash.rin" },
+        { "match": "#[A-Za-z_][A-Za-z0-9_]*", "name": "variable.other.hash.rin" }
       ]
     },
 
