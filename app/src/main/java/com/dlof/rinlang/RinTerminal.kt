@@ -5,18 +5,20 @@ import android.os.Looper
 import java.util.concurrent.atomic.AtomicBoolean
 
 /** دور السطر داخل الـ terminal؛ يحدّد نمط العرض (اللون/الخط). */
-enum class TermRole { OUTPUT, COMMAND, SYSTEM, SUCCESS, ERROR }
+enum class TermRole { OUTPUT, COMMAND, CONT, SYSTEM, SUCCESS, ERROR }
 
 /**
  * سطر واحد في سجل الـ terminal.
  * [kind] يلوّن أسطر [TermRole.OUTPUT] بنفس تصنيف [RinConsoleFormatter] (خطأ/نجاح/حاوية...)،
- * و[answerFrom] ≥ 0 يعني أن النص من هذا الفهرس هو ما كتبه المستخدم جواباً لـ input().
+ * و[answerFrom] ≥ 0 يعني أن النص من هذا الفهرس هو ما كتبه المستخدم جواباً لـ input()،
+ * و[errorLine] ≠ null يعني سطر `[Error line N]` من تشغيل الملف المفتوح (قابل للنقر للقفز إلى N).
  */
 data class TermLine(
     val text: String,
     val role: TermRole,
     val kind: LogKind = LogKind.PLAIN,
-    val answerFrom: Int = -1
+    val answerFrom: Int = -1,
+    val errorLine: Int? = null
 )
 
 /** لقطة ثابتة من السجل لرسمها: الأسطر المكتملة + السطر الجاري كتابته (مثل سؤال بلا سطر جديد بعد). */
@@ -44,6 +46,9 @@ class RinTerminalBuffer(
     private var trackOverflow = false
     private var version = 0L
 
+    // المهمة الجارية صادرة من سطر الأوامر (REPL)؟ أسطر أخطائها تُحسب بعد prelude الجلسة، فلا تُربط بالمحرر.
+    private var jobIsRepl = false
+
     @Synchronized
     fun snapshot(): TermSnapshot = TermSnapshot(lines.toList(), partial.toString(), version)
 
@@ -58,7 +63,11 @@ class RinTerminalBuffer(
     fun toPlainText(): String {
         val sb = StringBuilder()
         for (l in lines) {
-            if (l.role == TermRole.COMMAND) sb.append("$ ")
+            when (l.role) {
+                TermRole.COMMAND -> sb.append("$ ")
+                TermRole.CONT -> sb.append("… ")
+                else -> Unit
+            }
             sb.append(l.text).append('\n')
         }
         if (partial.isNotEmpty()) sb.append(partial).append('\n')
@@ -95,13 +104,15 @@ class RinTerminalBuffer(
         }
     }
 
+    /** بداية مهمة. أوامر الـ REPL ([repl]) بلا ترويسة `run #N` كي يبدو السجل كجلسة تفاعلية. */
     @Synchronized
-    fun startJob(number: Int) {
+    fun startJob(number: Int, repl: Boolean = false) {
         flushPartial()
         streamed = StringBuilder()
         streamedChars = 0
         trackOverflow = false
-        addLine(TermLine("── run #$number ──", TermRole.SYSTEM))
+        jobIsRepl = repl
+        if (!repl) addLine(TermLine("── run #$number ──", TermRole.SYSTEM))
         touch()
     }
 
@@ -147,7 +158,8 @@ class RinTerminalBuffer(
         }
         val ms = "${durationMs} ms"
         when (status) {
-            JobStatus.SUCCESS -> addLine(TermLine("✓ finished in $ms", TermRole.SUCCESS))
+            // نجاح أمر REPL صامت (كأي REPL)؛ الفشل/المهلة/الإلغاء تظهر دائماً.
+            JobStatus.SUCCESS -> if (!jobIsRepl) addLine(TermLine("✓ finished in $ms", TermRole.SUCCESS))
             JobStatus.ERROR -> addLine(TermLine("✗ failed after $ms", TermRole.ERROR))
             JobStatus.TIMEOUT -> addLine(TermLine("⏱ timed out after $ms", TermRole.ERROR))
             JobStatus.CANCELLED -> addLine(TermLine("cancelled", TermRole.SYSTEM))
@@ -155,21 +167,59 @@ class RinTerminalBuffer(
         }
         streamed = StringBuilder()
         streamedChars = 0
+        jobIsRepl = false
         touch()
     }
 
     // ---- أوامر الواجهة ----
 
-    /** أمر كتبه المستخدم في سطر الأوامر؛ يُحفظ في التاريخ (بلا تكرار متتالٍ). */
+    /** أمر كتبه المستخدم في سطر الأوامر؛ يُسجَّل في السجل ويُحفظ في التاريخ (بلا تكرار متتالٍ). */
     @Synchronized
     fun command(text: String) {
+        echo(text, TermRole.COMMAND)
+        remember(text)
+    }
+
+    /** يكتب صدى ما طُبع في سطر الأوامر ([TermRole.COMMAND] أو سطر متابعة [TermRole.CONT]) بلا حفظه في التاريخ. */
+    @Synchronized
+    fun echo(text: String, role: TermRole = TermRole.COMMAND) {
         flushPartial()
-        addLine(TermLine(text, TermRole.COMMAND))
-        if (history.lastOrNull() != text) {
-            history.add(text)
+        addLine(TermLine(text, role))
+        touch()
+    }
+
+    /** يحفظ [text] في تاريخ الأوامر (↑/↓ و`history`) بلا تكرار متتالٍ. */
+    @Synchronized
+    fun remember(text: String) {
+        val t = text.trim()
+        if (t.isEmpty()) return
+        if (history.lastOrNull() != t) {
+            history.add(t)
             if (history.size > maxHistory) history.removeAt(0)
         }
         touch()
+    }
+
+    /** يستعيد تاريخاً محفوظاً (من التخزين) إن كان تاريخ الجلسة فارغاً. */
+    @Synchronized
+    fun restoreHistory(saved: List<String>) {
+        if (history.isNotEmpty()) return
+        history.addAll(saved.filter { it.isNotBlank() }.takeLast(maxHistory))
+    }
+
+    /**
+     * بحث نصي (غير حسّاس للحالة) في سجل الشاشة؛ كل نتيجة `رقم: سطر`. أسطر الأوامر المكتوبة لا تُحتسب
+     * (وإلا ظهر أمر grep نفسه). الحد الأقصى [limit] نتيجة، ويُقتطع الأقدم عند التجاوز.
+     */
+    @Synchronized
+    fun grep(pattern: String, limit: Int = 200): List<String> {
+        if (pattern.isEmpty()) return emptyList()
+        val hits = ArrayList<String>()
+        for ((i, l) in lines.withIndex()) {
+            if (l.role == TermRole.COMMAND || l.role == TermRole.CONT) continue
+            if (l.text.contains(pattern, ignoreCase = true)) hits.add("${i + 1}: ${l.text}")
+        }
+        return if (hits.size > limit) hits.takeLast(limit) else hits
     }
 
     @Synchronized
@@ -207,7 +257,10 @@ class RinTerminalBuffer(
         val s = partial.toString()
         partial.setLength(0)
         val kind = if (role == TermRole.OUTPUT) kindOf(s) else LogKind.PLAIN
-        addLine(TermLine(s, role, kind, answerFrom))
+        val errLine = if (role == TermRole.OUTPUT && !jobIsRepl) {
+            ERROR_LINE_RE.find(s)?.groupValues?.get(1)?.toIntOrNull()
+        } else null
+        addLine(TermLine(s, role, kind, answerFrom, errLine))
     }
 
     private fun addLine(line: TermLine) {
@@ -223,6 +276,11 @@ class RinTerminalBuffer(
     private fun kindOf(line: String): LogKind =
         if (line.isBlank()) LogKind.PLAIN
         else RinConsoleFormatter.formatLines(line).firstOrNull()?.kind ?: LogKind.PLAIN
+
+    private companion object {
+        /** نفس صيغة المحرك: `[Error line N]: ...` (انظر RE_ERROR_LINE_NO في RinConsoleFormatter). */
+        val ERROR_LINE_RE = Regex("^\\s*\\[Error\\s+line\\s+(\\d+)]:")
+    }
 }
 
 /**
@@ -235,6 +293,9 @@ object RinTerminal {
     private const val NOTIFY_BATCH_MS = 60L
 
     val buffer = RinTerminalBuffer()
+
+    /** جلسة REPL الوحيدة (تبقى بعد تدوير الشاشة مثل السجل). */
+    val repl = RinReplSession()
 
     /** يضبطها [RinTerminalView] عند الإرفاق وتُصفَّر عند الفصل. تُستدعى على الترد الرئيسي. */
     @Volatile var onChanged: (() -> Unit)? = null
@@ -255,7 +316,7 @@ object RinTerminal {
     }
 
     // ---- تُستدعى من RinJobScheduler (ترد التشغيل) ----
-    fun onJobStart(number: Int) { buffer.startJob(number); notifyChanged() }
+    fun onJobStart(number: Int, repl: Boolean = false) { buffer.startJob(number, repl); notifyChanged() }
     fun onChunk(chunk: String) { buffer.onChunk(chunk); notifyChanged() }
     fun onPrompt(prompt: String) { buffer.prompt(prompt); notifyChanged() }
     fun onAnswer(answer: String?) { buffer.answer(answer); notifyChanged() }
@@ -265,6 +326,8 @@ object RinTerminal {
 
     // ---- تُستدعى من الواجهة ----
     fun command(text: String) { buffer.command(text); notifyChanged() }
+    fun echo(text: String, role: TermRole = TermRole.COMMAND) { buffer.echo(text, role); notifyChanged() }
+    fun remember(text: String) { buffer.remember(text) }
     fun system(text: String, role: TermRole = TermRole.SYSTEM) { buffer.system(text, role); notifyChanged() }
     fun clear() { buffer.clear(); notifyChanged() }
 }
