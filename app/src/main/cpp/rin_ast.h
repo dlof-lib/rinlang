@@ -197,6 +197,7 @@ enum class StmtKind {
     MergeStmt, InstallationStmt, SaveStmt, RowStmt, StyleStmt, DocumentStmt, FileStmt,
     RouteStmt, ImportStmt, ImportSelectedStmt, ViewStmt, UiBindingStmt, WarpStmt, ThemeStmt,
     ObjectLiteralStmt, ViewPrintObjectStmt,
+    LiveDeclStmt, BellStmt, TrialStmt, LiveActionStmt, // المتغيرات الحيّة (docs/living-variables.md)
     Unknown // فرع احتياطي (dynamic_pointer_cast) لأي نوع غير موسوم -- لا يوجد حالياً
 };
 
@@ -337,6 +338,43 @@ struct ReckonStmt : Stmt { ReckonStmt() { stmtKind = StmtKind::ReckonStmt; }
     ExprPtr whereCond; // nullable
     std::vector<std::shared_ptr<CallExpr>> stages;
 };
+
+// ============================================================================
+// المتغيرات الحيّة (Living Variables) — عائلة من سبع كلمات سياقية غير محجوزة (تُقرأ IDENT عادي):
+//   stone  x = v;                         ثابت: يُمنع الإسناد إليه.
+//   gauge  x = v within A to B [strict|wrap] [keep N];   مقياس محصور في مدى.
+//   tape   x = v [keep N];                متغيّر بذاكرة: undo/redo وx.past.
+//   lens   x = expr;                      مشتق: يُحسب من جديد عند كل قراءة، للقراءة فقط.
+//   fuse   x = v [burns N];               فتيل: يحترق (nil) بعد N قراءة.
+//   bell   x (old, new) { ... }           جرس: يرنّ بعد كل تغيّر فعلي لقيمة x.
+//   trial { ... } [else { ... }]          تجربة: كل إسناد داخلها يُتراجَع عنه عند الفشل/abort.
+//   undo x [n]; redo x [n]; rearm x; unbell x; abort;     أفعال.
+// كلها additive بحت: برنامج Rin لا يستعملها يعمل حرفياً كما كان (كلفة صفر؛ انظر Interpreter::liveActive_).
+// ============================================================================
+enum class LiveKind { Stone, Gauge, Tape, Lens, Fuse };
+struct LiveDeclStmt : Stmt { LiveDeclStmt() { stmtKind = StmtKind::LiveDeclStmt; }
+    LiveKind kind = LiveKind::Stone;
+    std::string name;
+    ExprPtr initializer;      // إلزامي لكل الأنواع عدا tape (nil إن غاب)
+    ExprPtr lo, hi;           // gauge: within lo to hi
+    std::string rangeMode;    // gauge: "clamp" (افتراضي) | "strict" | "wrap"
+    ExprPtr keep;             // tape/gauge: عمق الذاكرة (nullable؛ tape الافتراضي 10)
+    ExprPtr burns;            // fuse: عدد القراءات قبل الاحتراق (nullable؛ الافتراضي 1)
+};
+struct BellStmt : Stmt { BellStmt() { stmtKind = StmtKind::BellStmt; }
+    std::string target;
+    std::shared_ptr<struct FunctionStmt> handler; // يُبنى داخلياً كدالة عادية (0 وسائط، 1 = new، 2 = old,new)
+};
+struct TrialStmt : Stmt { TrialStmt() { stmtKind = StmtKind::TrialStmt; }
+    StmtPtr body;
+    StmtPtr elseBranch;       // nullable: يُنفَّذ بعد التراجع إن فشلت التجربة أو أُجهضت
+};
+struct LiveActionStmt : Stmt { LiveActionStmt() { stmtKind = StmtKind::LiveActionStmt; }
+    std::string action;       // "undo" | "redo" | "rearm" | "unbell" | "abort"
+    std::string target;       // اسم المتغيّر (فارغ لـ abort)
+    ExprPtr count;            // undo/redo فقط (nullable = 1)
+};
+
 struct BlockStmt : Stmt { BlockStmt() { stmtKind = StmtKind::BlockStmt; } std::vector<StmtPtr> statements; };
 struct IfStmt : Stmt { IfStmt() { stmtKind = StmtKind::IfStmt; }
     ExprPtr condition;
