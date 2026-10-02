@@ -69,7 +69,9 @@ object RinSyntaxHighlighter {
         "if", "else", "while", "for", "fun", "return", "break", "continue",
         "true", "false", "nil", "and", "or",
         // Reckon (docs/RECKON.md): a two-line computed value; "where" is its filter clause.
-        "reckon", "where"
+        "reckon", "where",
+        // Living Variables (docs/living-variables.md)
+        "stone", "gauge", "tape", "lens", "fuse", "bell", "trial", "undo", "redo", "rearm", "unbell", "abort"
     )
 
     // كلمات لغة الحاويات/البيانات (data container language) - حساسة لحالة الأحرف كما في المحرّك.
