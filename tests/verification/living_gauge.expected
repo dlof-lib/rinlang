@@ -1,0 +1,19 @@
+100
+0
+true
+false
+0
+true
+E0044 [E0044] gauge `ammo` accepts 0 to 10, but got 11
+7
+20
+350
+100
+0
+100
+clamp
+strict
+wrap
+E0044
+[5, 6]
+{"kind": "gauge", "reads": 3, "writes": 3, "bells": 0, "min": 0, "max": 100, "mode": "clamp", "fill": 1}
