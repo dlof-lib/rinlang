@@ -525,15 +525,59 @@
         android:paddingBottom="8dp"
         android:background="@color/rin_console_header">
 
-        <TextView
+        <!-- تبويبان: Terminal (الافتراضي: مخرجات حيّة + إدخال + أوامر) و Runs (بطاقات الطابور القديمة) -->
+        <LinearLayout
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="@string/console_title"
-            android:textColor="@color/rin_on_toolbar"
-            android:textSize="13sp"
-            android:letterSpacing="0.02"
-            android:textStyle="bold" />
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+            <TextView
+                android:id="@+id/tabTerminal"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/terminal_tab_terminal"
+                android:textSize="13sp"
+                android:letterSpacing="0.02"
+                android:textStyle="bold"
+                android:paddingStart="10dp"
+                android:paddingEnd="10dp"
+                android:paddingTop="4dp"
+                android:paddingBottom="4dp"
+                android:textColor="@color/rin_on_toolbar" />
+
+            <TextView
+                android:id="@+id/tabRuns"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="4dp"
+                android:text="@string/terminal_tab_runs"
+                android:textSize="13sp"
+                android:letterSpacing="0.02"
+                android:textStyle="bold"
+                android:paddingStart="10dp"
+                android:paddingEnd="10dp"
+                android:paddingTop="4dp"
+                android:paddingBottom="4dp"
+                android:textColor="@color/rin_editor_hint" />
+        </LinearLayout>
+
+        <Button
+            android:id="@+id/btnCopyTerminal"
+            android:layout_width="wrap_content"
+            android:layout_height="28dp"
+            android:minWidth="0dp"
+            android:minHeight="0dp"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            android:text="@string/terminal_copy"
+            android:textAllCaps="false"
+            android:textSize="11sp"
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp"
+            android:background="@drawable/bg_toolbar_btn_ghost"
+            android:textColor="@color/rin_editor_hint" />
 
         <Button
             android:id="@+id/btnClearConsole"
@@ -554,9 +598,17 @@
             android:textColor="@color/rin_editor_hint" />
     </LinearLayout>
 
-    <!-- سجل التشغيل: كل عملية Run تظهر كبطاقة مستقلة ومجدولة بالترتيب -->
+    <!-- Terminal: مخرجات حيّة، إدخال input() داخل الـ terminal، وسطر أوامر -->
+    <com.dlof.rinlang.RinTerminalView
+        android:id="@+id/rinTerminal"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="2" />
+
+    <!-- سجل التشغيل: كل عملية Run تظهر كبطاقة مستقلة ومجدولة بالترتيب (تبويب Runs) -->
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/rvJobs"
+        android:visibility="gone"
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="2"
