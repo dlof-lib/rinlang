@@ -14,6 +14,7 @@ namespace rin {
 enum class ExprKind {
     Literal, Variable, Assign, Binary, Logical, Conditional, Unary, Call, Array, Map,
     Index, IndexSet, Get, Set, MethodCall, Lambda, CallValue, Goal,
+    PatternAssign, // [a, b] = [b, a];  (let+: docs/let-plus.md)
     Unknown // للأنواع غير المُوسَّمة (لا يوجد حالياً)؛ يقع في الفرع الاحتياطي (dynamic_pointer_cast)
 };
 
@@ -198,6 +199,7 @@ enum class StmtKind {
     RouteStmt, ImportStmt, ImportSelectedStmt, ViewStmt, UiBindingStmt, WarpStmt, ThemeStmt,
     ObjectLiteralStmt, ViewPrintObjectStmt,
     LiveDeclStmt, BellStmt, TrialStmt, LiveActionStmt, // المتغيرات الحيّة (docs/living-variables.md)
+    LetPatternStmt, LetGroupStmt,                       // let+ (docs/let-plus.md)
     Unknown // فرع احتياطي (dynamic_pointer_cast) لأي نوع غير موسوم -- لا يوجد حالياً
 };
 
@@ -320,6 +322,45 @@ struct LetStmt : Stmt { LetStmt() { stmtKind = StmtKind::LetStmt; }
     // فحص). انظر التعليق الكبير أعلى Interpreter::checkDeclaredType في rin_interpreter.cpp لشرح
     // كامل الفلسفة (لماذا هذا أبسط ما يمكن من نظام أنواع، بلا generics/inference/nullability).
     std::string typeName;
+    // let+ (docs/let-plus.md): 'let x = expr else { ... };' — إن كانت القيمة nil تُنفَّذ كتلة else، ويجب أن
+    // تغادر النطاق (return/break/continue/throw/abort) وإلا E0048. nullable؛ غيابها = السلوك القديم بالضبط.
+    std::shared_ptr<struct BlockStmt> elseBlock;
+};
+
+// ---- let+ : أنماط التفكيك (destructuring) — docs/let-plus.md ----
+//   [a, b = 0, _, ...rest]        نمط مصفوفة   (_ يتخطّى خانة، ...rest يجمع الباقي)
+//   {name, age = 0, city: town}   نمط قاموس/كائن (key: pattern لإعادة التسمية أو التعشيش، ...rest للباقي)
+// defaultValue يُطبَّق حين تكون القيمة المفقودة أو nil، ويُقيَّم عند الحاجة فقط ويرى ما رُبط قبله في النمط نفسه.
+struct LetPattern {
+    enum class Kind { Name, Skip, Array, Map } kind = Kind::Name;
+    std::string name;                 // Name
+    ExprPtr defaultValue;             // nullable
+    std::vector<LetPattern> items;    // Array: العناصر بالترتيب | Map: المدخلات (كل واحدة تحمل key)
+    std::string key;                  // Map: مفتاح هذا المدخل
+    bool hasRest = false;             // Array/Map: وجود ...rest
+    std::string restName;             // اسم rest (فارغ = يُهمَل)
+    // إسناد تفكيكي فقط: هدف من نوع arr[i] أو obj.f — تعبير IndexSet/Set جاهز قيمته المتغيّر المؤقت __pa_value.
+    ExprPtr assignExpr;
+    int line = 0;
+};
+inline void letPatternNames(const LetPattern& p, std::vector<std::string>& out) {
+    if (p.kind == LetPattern::Kind::Name && !p.name.empty()) out.push_back(p.name);
+    for (auto& it : p.items) letPatternNames(it, out);
+    if (p.hasRest && !p.restName.empty()) out.push_back(p.restName);
+}
+struct PatternAssignExpr : Expr {
+    LetPattern pattern;
+    ExprPtr value;
+    PatternAssignExpr() { exprKind = ExprKind::PatternAssign; }
+};
+struct LetPatternStmt : Stmt { LetPatternStmt() { stmtKind = StmtKind::LetPatternStmt; }
+    LetPattern pattern;
+    ExprPtr initializer;
+    std::shared_ptr<struct BlockStmt> elseBlock; // nullable: يُنفَّذ إن كانت القيمة nil أو لا تطابق شكل النمط
+};
+// let a = 1, b = a + 1, [c, d] = pair;  — تنفَّذ العناصر تتابعيًا في نفس النطاق (لا تفتح نطاقًا).
+struct LetGroupStmt : Stmt { LetGroupStmt() { stmtKind = StmtKind::LetGroupStmt; }
+    std::vector<StmtPtr> items;
 };
 
 // reckon <name>(<collection>)
@@ -406,6 +447,7 @@ struct ForStmt : Stmt { ForStmt() { stmtKind = StmtKind::ForStmt; }
 // تلك التكرارة تحديداً بشكل صحيح. break/continue يعملان بداخلها بنفس دلالة for/while العادية.
 struct ForInStmt : Stmt { ForInStmt() { stmtKind = StmtKind::ForInStmt; }
     std::string varName;
+    std::shared_ptr<LetPattern> pattern; // let+: for (let [k, v] in pairs) — nullable؛ إن وُجد يُهمَل varName
     ExprPtr iterable;
     StmtPtr body;
 };
