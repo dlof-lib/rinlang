@@ -1056,6 +1056,12 @@ public: // Rin 1.0: واجهة OOP الموسَّعة (يستدعيها Value::t
     std::vector<OopLink> links_;
     int nextLinkId_ = 1;
     bool linksExist_ = false;             // false => كلفة صفر في assignStateAware/setField/callTopLevelFunction
+    // ---- let+ (docs/let-plus.md) — التنفيذ في آخر rin_interpreter.cpp ----
+    using LetBindings = std::vector<std::pair<std::string, Value>>;
+    bool letBindPattern(const LetPattern& p, const Value& v, const EnvPtr& env, LetBindings& out, std::string& why);
+    void letRunElse(const std::shared_ptr<BlockStmt>& blk, const EnvPtr& env, int line, const std::string& what);
+    void letExecPattern(const std::shared_ptr<LetPatternStmt>& s, const EnvPtr& env);
+    Value letPatternAssign(const std::shared_ptr<PatternAssignExpr>& e, const EnvPtr& env);
     // ---- المتغيرات الحيّة (Living Variables) — التنفيذ في آخر rin_interpreter.cpp ----
     bool liveActive_ = false;                 // false => كلفة صفر على كل قراءة/إسناد (لا يصير true إلا عند أول استعمال)
     struct TrialEntry { EnvPtr env; std::string name; Value oldValue; std::shared_ptr<LiveMeta> metaSnapshot; };
