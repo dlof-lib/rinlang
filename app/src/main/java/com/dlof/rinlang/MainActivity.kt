@@ -1052,11 +1052,14 @@ class MainActivity : AppCompatActivity() {
     /** يربط الـ terminal بالمحرر: أمر run، تنفيذ شيفرة Rin من سطر الأوامر، والتبويبان. */
     private fun setupTerminal() {
         rinTerminal.onRunRequested = { runProgram() }
-        rinTerminal.onExecuteRequested = { code ->
-            if (RinJobScheduler.submit(code) == null) {
-                RinTerminal.system(getString(R.string.job_queue_full_toast), TermRole.ERROR)
-            }
+        // أوامر سطر الـ terminal تُنفَّذ كتشغيل REPL: بلا ترويسة run#N، وتُحفَظ تصريحاتها في الجلسة عند النجاح فقط.
+        rinTerminal.onExecuteRequested = { source, onSuccess ->
+            RinJobScheduler.submit(source, repl = true) { status ->
+                if (status == JobStatus.SUCCESS) onSuccess()
+            } != null
         }
+        // النقر على سطر [Error line N] في الـ terminal (أو أمر goto N) ينقل المحرر إلى ذلك السطر.
+        rinTerminal.onGoToLine = { line -> editorController.goToLine(line) }
         tabTerminal.setOnClickListener { showConsoleTab(terminal = true) }
         tabRuns.setOnClickListener { showConsoleTab(terminal = false) }
         btnCopyTerminal.setOnClickListener { rinTerminal.copyTranscript() }
