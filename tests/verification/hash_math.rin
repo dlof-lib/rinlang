@@ -1,0 +1,20 @@
+// hash_math.rin — #sum #diff #add
+print #sum(1, 2, 3);
+print #sum([1, 2], [3, [4]], 5);
+print #sum({"a": 1, "b": 2});
+print #sum();
+print [1, 2, 3] |> #sum;
+print #diff(10, 4);
+print #diff([1, 2, 3, 4], [2, 4]);
+print #diff({"a": 1, "b": 2}, {"a": 1, "b": 3, "c": 4});
+print #add(1, 2, 3);
+print #add("a", "b", 1);
+let xs = [1];
+#add(xs, 2, 3);
+print xs;
+let m = {"k": 1};
+#add(m, "z", 26);
+#add(m, {"k": 2, "w": 0});
+print m;
+try { #sum("x"); } catch (e) { print e.code; }
+try { #diff(1, "a"); } catch (e) { print e.code; }
