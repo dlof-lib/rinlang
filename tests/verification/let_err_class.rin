@@ -1,0 +1,2 @@
+// let_err_class.rin — اختبار تحقّق لـ docs/let-plus.md
+class B { let [a, b] = [1, 2]; }
