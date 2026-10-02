@@ -82,6 +82,10 @@ private:
     // statements
     StmtPtr declaration();
     StmtPtr letDeclaration();
+    StmtPtr letDeclarator();      // let+: عنصر واحد من `let a = 1, [b, c] = pair;`
+    LetPattern letPattern();      // let+: نمط تفكيك كامل
+    LetPattern letPatternPrimary();
+    void checkPatternDuplicates(const LetPattern& p, const Token& at) const;
     // المتغيرات الحيّة (docs/living-variables.md): stone/gauge/tape/lens/fuse + bell + trial + undo/redo/rearm/unbell/abort
     StmtPtr liveDeclaration();
     StmtPtr bellDeclaration();
