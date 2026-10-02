@@ -1,0 +1,54 @@
+// living_variables_demo.rin — المتغيرات الحيّة: ثابت، مقياس، شريط، مشتق، فتيل، جرس، تجربة
+// التشغيل: rin examples/living_variables_demo.rin   (انظر docs/living-variables.md)
+
+// ---- 1) لعبة: مقياس صحة + جرس + شريط تراجع ----
+stone MAX_HP = 100;
+gauge hp = 80 within 0 to MAX_HP;
+tape pos = 0 keep 3;
+bell hp (old, new) {
+    if (new < old) { print "  ouch: " + old + " -> " + new; }
+    if (hp.empty)  { print "  GAME OVER"; }
+}
+print "== game ==";
+hp = hp - 30;
+hp = hp - 90;       // يُقصّ عند 0
+pos = 1; pos = 2; pos = 3; pos = 4;
+undo pos 2;
+print "pos=" + pos + " past=" + pos.past;
+
+// ---- 2) سلة مشتريات: lens يتبع المتغيرات تلقائياً ----
+print "== cart ==";
+let price = 20; let qty = 2;
+lens total = price * qty;
+lens label = "Total: " + total + " SAR";
+print label;
+qty = 5;
+print label;
+
+// ---- 3) رمز تحقق يُستعمل مرتين فقط ----
+print "== otp ==";
+fuse otp = "4821" burns 2;
+print "try 1: " + otp;
+print "try 2: " + otp;
+print "try 3: " + otp;      // nil: احترق
+rearm otp;
+print "new code window: " + otp;
+
+// ---- 4) تحويل مصرفي آمن: trial يتراجع عن كل شيء عند الفشل ----
+print "== bank ==";
+gauge from = 100 within 0 to 1000 strict;
+gauge to = 50 within 0 to 1000 strict;
+fun transfer(amount) {
+    trial {
+        from = from - amount;   // strict: يرمي إن نزل تحت 0
+        to = to + amount;
+    } else {
+        print "  transfer of " + amount + " failed, rolled back";
+    }
+}
+transfer(30);  print "from=" + from + " to=" + to;
+transfer(500); print "from=" + from + " to=" + to;
+
+// ---- 5) نظرة على الأعماق ----
+print "== vitals ==";
+print hp.vitals;
