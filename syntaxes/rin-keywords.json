@@ -58,6 +58,22 @@
     "reckon",
     "where"
   ],
+  "living": [
+    "stone",
+    "gauge",
+    "tape",
+    "lens",
+    "fuse",
+    "bell",
+    "trial",
+    "undo",
+    "redo",
+    "rearm",
+    "unbell",
+    "abort",
+    "within",
+    "burns"
+  ],
   "storage": [
     "let",
     "fun",
