@@ -6310,6 +6310,7 @@ void Interpreter::registerNatives() {
     registerNativesExtra2(); // Rin 1.0: sec./file./net./log./automation. + امتدادات container.* (rin_extra_natives2.cpp)
     registerNativesExtra3(); // Rin 1.0: net.* بشبكة حقيقية + container.* إضافية (rin_extra_natives3.cpp)
     registerNativesExtra4(); // Rin 1.0: json./semver./pkg./cpp. (rin_extra_natives4.cpp)
+    registerNativesExtra5(); // عائلة #: #sed #sum #diff #add #to #swap (rin_extra_natives5.cpp)
     registerNativesOop(); // Rin 1.0: oop.* — استبطان الأصناف والكائنات + أدوات OOP (rin_oop_natives.cpp)
     registerNativesInput(); // Rin 1.0: نماذج الإدخال (معاملة/تداخل/مُدقِّق النموذج) فوق input() — بعد oop.* لأنها تستدعيها (rin_input.cpp)
 }
@@ -7800,15 +7801,18 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
         return;
     }
     case StmtKind::WhileStmt: { auto s = std::static_pointer_cast<WhileStmt>(stmt);
+        bool broke = false;
         while (evaluate(s->condition, env).isTruthy()) {
             try {
                 execute(s->body, env);
             } catch (BreakSignal&) {
+                broke = true;
                 break;
             } catch (ContinueSignal&) {
                 continue;
             }
         }
+        if (!broke && s->doneBlock) execute(s->doneBlock, env); // #done { } — انتهت الحلقة طبيعياً
         return;
     }
     // for (initializer; condition; increment) body -> حلقة for على طراز C (إضافة جديدة additive بحتة)
@@ -7818,6 +7822,7 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
     case StmtKind::ForStmt: { auto s = std::static_pointer_cast<ForStmt>(stmt);
         auto forEnv = std::make_shared<Environment>(env);
         if (s->initializer) execute(s->initializer, forEnv);
+        bool broke = false;
         while (!s->condition || evaluate(s->condition, forEnv).isTruthy()) {
             // Fresh per-iteration environment that snapshots the loop variable(s) declared in
             // forEnv (e.g. `i` from `for (let i = 0; ...)`), so a closure created inside the body
@@ -7838,6 +7843,7 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
                 for (auto& kv : iterEnv->values) {
                     if (forEnv->values.count(kv.first)) forEnv->values[kv.first] = kv.second;
                 }
+                broke = true;
                 break;
             } catch (ContinueSignal&) {
                 // لا شيء إضافي هنا: increment أدناه ينفَّذ دائماً بعد الـ catch، سواء بـ continue أو
@@ -7853,6 +7859,7 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
             }
             if (s->increment) evaluate(s->increment, forEnv);
         }
+        if (!broke && s->doneBlock) execute(s->doneBlock, env); // #done { } — انتهت الحلقة طبيعياً
         return;
     }
     // for (let NAME in iterable) { body } -> حلقة تكرار حقيقية (انظر ForInStmt في rin_ast.h).
@@ -7884,6 +7891,7 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
                           "`for...in` requires an array, map, or string; found a `" +
                               iterableVal.typeName() + "`");
         }
+        bool broke = false;
         for (auto& item : items) {
             auto iterEnv = std::make_shared<Environment>(env);
             if (s->pattern) { // let+: for (let [k, v] in pairs)
@@ -7898,11 +7906,13 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
             try {
                 execute(s->body, iterEnv);
             } catch (BreakSignal&) {
+                broke = true;
                 break;
             } catch (ContinueSignal&) {
                 // لا شيء إضافي: ننتقل للعنصر التالي مباشرة، تماماً كـ continue في أي حلقة أخرى.
             }
         }
+        if (!broke && s->doneBlock) execute(s->doneBlock, env); // #done { } — انتهت الحلقة طبيعياً
         return;
     }
     // plus.condition (condition) { trueBranch } / { falseBranch } -> شرط ثلاثي عام: يقيّم condition
@@ -11131,8 +11141,10 @@ Value Interpreter::liveAssign(Environment* owner, const std::string& name, Value
     if (!owner->live.empty()) { auto it = owner->live.find(name); if (it != owner->live.end()) m = it->second; }
     if (m) {
         if (m->frozen)
-            throw liveErr(diag::Code::E0043_FrozenVariable, line, "cannot assign to `" + name + "`: it is a stone",
-                          "a stone is frozen at its declaration; declare `" + name + "` with `let` (or `tape`) if it must change");
+            throw liveErr(diag::Code::E0043_FrozenVariable, line,
+                          "cannot assign to `" + name + "`: it is " + (m->kind == "banned" ? "banned (#ban)" : "a stone"),
+                          m->kind == "banned" ? "`#ban " + name + ";` froze it for good; remove the `#ban` if it must change"
+                                              : "a stone is frozen at its declaration; declare `" + name + "` with `let` (or `tape`) if it must change");
         if (m->derived)
             throw liveErr(diag::Code::E0045_DerivedReadOnly, line, "cannot assign to `" + name + "`: it is a lens (computed from other variables)",
                           "change the variables `" + name + "` is computed from instead");
@@ -11164,8 +11176,9 @@ void Interpreter::liveGuardWrite(const EnvPtr& env, const ExprPtr& objectExpr, i
     auto it = owner->live.find(ve->name);
     if (it == owner->live.end()) return;
     if (it->second->frozen)
-        throw liveErr(diag::Code::E0043_FrozenVariable, line, "cannot modify the contents of `" + ve->name + "`: it is a stone",
-                      "a stone protects both the variable and its direct contents (`x[i] = ..`, `x.field = ..`)");
+        throw liveErr(diag::Code::E0043_FrozenVariable, line,
+                      "cannot modify the contents of `" + ve->name + "`: it is " + (it->second->kind == "banned" ? "banned (#ban)" : "a stone"),
+                      "a stone/#ban protects both the variable and its direct contents (`x[i] = ..`, `x.field = ..`)");
     if (it->second->derived)
         throw liveErr(diag::Code::E0045_DerivedReadOnly, line, "cannot modify `" + ve->name + "`: it is a lens (read-only)");
 }
@@ -11278,6 +11291,17 @@ void Interpreter::liveExecAction(const std::shared_ptr<LiveActionStmt>& s, const
     }
     Environment* owner = findLiveOwner(env, s->target);
     if (!owner) throw undefinedVariableErr(s->target, s->line, env);
+    // #ban x; — يمنع أي كتابة لاحقة على متغيّر موجود (الإسناد وتعديل محتواه المباشر x[i]= / x.f=)؛
+    // القراءة تبقى كما هي. نفس آلية stone (E0043) لكن على متغيّر صُرِّح به مسبقاً، ولا رجعة فيه.
+    if (s->action == "ban") {
+        liveActive_ = true;
+        auto& slot = owner->live[s->target];
+        if (!slot) slot = std::make_shared<LiveMeta>();
+        if (slot->derived) return; // lens للقراءة فقط أصلاً
+        if (!slot->frozen && slot->kind == "plain") slot->kind = "banned";
+        slot->frozen = true;
+        return;
+    }
     std::shared_ptr<LiveMeta> m;
     { auto it = owner->live.find(s->target); if (it != owner->live.end()) m = it->second; }
     auto need = [&](bool ok, const std::string& what) {
@@ -11397,6 +11421,7 @@ bool Interpreter::livePropertyGet(const EnvPtr& env, const std::string& name, co
 #include "rin_extra_natives2.cpp"
 #include "rin_extra_natives3.cpp"
 #include "rin_extra_natives4.cpp"
+#include "rin_extra_natives5.cpp"
 #endif
 
 // ---- Rin 1.0: OOP الموسَّع (interface/trait/abstract/static/private/get-set + دوال oop.*) ----
