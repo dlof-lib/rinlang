@@ -8,7 +8,17 @@
     <string name="terminal_copied">Terminal copiada</string>
     <string name="terminal_hint_shell">Comando o código Rin…</string>
     <string name="terminal_hint_input">Escribe tu respuesta y pulsa Enter</string>
+    <string name="terminal_hint_continue">Continúa el comando… (^C cancela)</string>
     <string name="terminal_welcome">Terminal de Rin — escribe help para ver los comandos</string>
     <string name="terminal_nothing_waiting">Ningún programa espera una entrada.</string>
-    <string name="terminal_help">Comandos:\n  run       ejecuta el archivo abierto\n  clear     limpia la pantalla\n  history   comandos anteriores\n  version   versión del motor\n  &lt;code&gt;    cualquier otro texto se ejecuta como código Rin, p. ej. print 1 + 2;\nCuando un programa pida una entrada, responde en la línea inferior. ^C la cancela.</string>
+    <string name="terminal_stopped">Detenido.</string>
+    <string name="terminal_empty">(vacío)</string>
+    <string name="terminal_history_none">No existe ese comando en el historial.</string>
+    <string name="terminal_session_reset">Sesión borrada — se olvidaron todas las declaraciones.</string>
+    <string name="terminal_session_empty">Aún no hay declaraciones en esta sesión.</string>
+    <string name="terminal_grep_usage">Uso: grep &lt;texto&gt;</string>
+    <string name="terminal_grep_none">Ninguna línea coincide con \"%1$s\".</string>
+    <string name="terminal_goto_usage">Uso: goto &lt;número de línea&gt;</string>
+    <string name="terminal_hidden_lines">… %1$d líneas anteriores ocultas (copiar / compartir / grep las incluyen)</string>
+    <string name="terminal_help">Comandos:\n  run         ejecuta el archivo abierto\n  stop        detiene el programa en ejecución (también ^C)\n  clear       limpia la pantalla\n  history     comandos anteriores (!! repite el último, !N el número N)\n  version     versión del motor\n  session     nombres declarados en esta sesión\n  reset       olvida las declaraciones de la sesión\n  grep &lt;t&gt;   busca en la pantalla\n  goto &lt;n&gt;    salta a la línea n del editor\n  copy / share   copia o comparte toda la pantalla\n  &lt;code&gt;      cualquier otro texto se ejecuta como código Rin, p. ej. let x = 5; y luego x * 2\nLas declaraciones (let / fun / class…) se conservan entre comandos; un comando incompleto continúa en la línea siguiente.\nTab completa, ↑/↓ recorren el historial, pellizca para hacer zoom. Cuando un programa pida una entrada, responde en la línea inferior; ^C la cancela.</string>
 </resources>
