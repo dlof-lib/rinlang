@@ -213,3 +213,7 @@ Program   ─► FormExecutor    ─► النتيجة   (دفتر المعام�
 - `confirm` تقبل: `y` · `yes` · `true` · `1` · `نعم` · `ن`؛ غير ذلك لا.
 
 انظر أيضاً: [`variables.md`](./variables.md) · [`enums.md`](./enums.md) · [`oop.md`](./oop.md) · [`containers.md`](./containers.md) · [`errors.md`](./errors.md)
+
+
+## الإدخال في تطبيق الأندرويد (المحرر)
+في RinStudio يظهر سؤال `input`/`inputNumber`/`confirm`/`choose` داخل **Terminal** المحرر (سطر إدخال أسفل المخرجات، و`^C` للإلغاء) بدل نافذة منبثقة. التفاصيل: `CHANGES_TERMINAL.md`.
