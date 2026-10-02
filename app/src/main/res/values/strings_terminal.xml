@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Terminal داخل المحرر (RinTerminalView) -->
+    <!-- Terminal inside the editor (RinTerminalView) -->
     <string name="terminal_tab_terminal">Terminal</string>
     <string name="terminal_tab_runs">Runs</string>
     <string name="terminal_clear">Clear</string>
@@ -8,7 +8,17 @@
     <string name="terminal_copied">Terminal copied</string>
     <string name="terminal_hint_shell">Command or Rin code…</string>
     <string name="terminal_hint_input">Type your answer, then Enter</string>
+    <string name="terminal_hint_continue">Continue the command… (^C to cancel)</string>
     <string name="terminal_welcome">Rin terminal — type help for commands</string>
     <string name="terminal_nothing_waiting">No program is waiting for input.</string>
-    <string name="terminal_help">Commands:\n  run       run the open file\n  clear     clear the screen\n  history   previous commands\n  version   engine version\n  &lt;code&gt;    anything else runs as Rin code, e.g. print 1 + 2;\nWhen a program asks for input, answer on the line below. ^C cancels it.</string>
+    <string name="terminal_stopped">Stopped.</string>
+    <string name="terminal_empty">(empty)</string>
+    <string name="terminal_history_none">No such command in history.</string>
+    <string name="terminal_session_reset">Session cleared — all declarations were forgotten.</string>
+    <string name="terminal_session_empty">No declarations in this session yet.</string>
+    <string name="terminal_grep_usage">Usage: grep &lt;text&gt;</string>
+    <string name="terminal_grep_none">No lines match \"%1$s\".</string>
+    <string name="terminal_goto_usage">Usage: goto &lt;line number&gt;</string>
+    <string name="terminal_hidden_lines">… %1$d earlier lines hidden (copy / share / grep still include them)</string>
+    <string name="terminal_help">Commands:\n  run         run the open file\n  stop        stop the running program (also ^C)\n  clear       clear the screen\n  history     previous commands (!! repeats the last, !N repeats number N)\n  version     engine version\n  session     names declared in this session\n  reset       forget the session declarations\n  grep &lt;t&gt;   search the screen\n  goto &lt;n&gt;    jump to line n in the editor\n  copy / share   copy or share the whole screen\n  &lt;code&gt;      anything else runs as Rin code, e.g. let x = 5; then x * 2\nDeclarations (let / fun / class...) stay between commands; an unfinished command continues on the next line.\nTab completes, ↑/↓ browse history, pinch to zoom. When a program asks for input, answer on the line below; ^C cancels.</string>
 </resources>
