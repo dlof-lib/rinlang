@@ -1,0 +1,12 @@
+S> pw: S> pw2: [كلمتا المرور مختلفتان] S> pw: [abc] S> pw2: [abd] T> from: [1] T> to: [5] [البداية بعد النهاية] T> from: [9] T> to: [2] N> a: [x] [مرفوض دائماً] N> a: [q] [مرفوض دائماً] N> a: [q] [مرفوض دائماً] N> a: [q] [مرفوض دائماً] N> a: [q] 📦 container = Signup
+✅ .end/container (Signup)
+abc|abc
+3..7
+📦 container = Never
+✅ .end/container (Never)
+
+true|x
+📦 container = Locked
+✅ .end/container (Locked)
+locked: true
+frozen: true|c
