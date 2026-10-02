@@ -1,0 +1,15 @@
+// living_lens.rin — اختبار تحقّق لـ docs/living-variables.md
+let price = 10; let qty = 3;
+lens total = price * qty;
+print total;
+qty = 5; print total;
+price = 2; print total;
+try { total = 1; } catch (e) { print e.code; }
+lens label = "Total: " + total;
+print label;
+fun show_total() { return total + 1; }
+print show_total();
+lens a = b + 1; lens b = a + 1;
+try { print a; } catch (e) { print e.code + " " + e.message; }
+print total.kind;
+print total.reads > 0;
