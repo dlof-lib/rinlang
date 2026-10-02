@@ -117,6 +117,15 @@ private:
                              // أو for (let NAME in iterable) body -> ForInStmt (انظر rin_ast.h)
     StmtPtr plusConditionStatement(); // plus.condition(cond) { .. } / { .. } -> شرط ثلاثي عام
     StmtPtr returnStatement();
+    // ---- عائلة # (docs/hash-family.md): عبارات #do #done #ban #ignorance #swap ----
+    StmtPtr hashStatement();                 // nullptr إن لم تكن العبارة الحالية من العائلة (فتُقرأ كتعبير عادي)
+    StmtPtr hashDoStatement();               // #do body #while (cond);
+    StmtPtr hashBanStatement();              // #ban x[, y]; | #ban x = expr;
+    StmtPtr hashIgnoranceStatement();        // #ignorance { ... } | #ignorance stmt
+    StmtPtr hashSwapStatement();             // #swap a, b;  |  #swap(a, b);   (nullptr إن كانت الصيغة الدالّية ذات 3 وسائط)
+    void attachDoneBlock(StmtPtr& done);     // يقرأ  #done { ... }  اختيارياً بعد جسم حلقة
+    ExprPtr maybeHashRange(ExprPtr first);   // A #to B [step C]  ->  #to(A, B[, C])
+    int hashCounter = 0;
     StmtPtr breakStatement();
     StmtPtr continueStatement();
     StmtPtr rinopenStatement();
