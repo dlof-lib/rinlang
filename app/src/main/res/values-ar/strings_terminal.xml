@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Terminal داخل المحرر (RinTerminalView) -->
+    <string name="terminal_tab_terminal">الطرفية</string>
+    <string name="terminal_tab_runs">التشغيلات</string>
+    <string name="terminal_clear">مسح</string>
+    <string name="terminal_copy">نسخ</string>
+    <string name="terminal_copied">تم نسخ محتوى الطرفية</string>
+    <string name="terminal_hint_shell">أمر أو شيفرة Rin…</string>
+    <string name="terminal_hint_input">اكتب إجابتك ثم Enter</string>
+    <string name="terminal_welcome">طرفية Rin — اكتب help لعرض الأوامر</string>
+    <string name="terminal_nothing_waiting">لا يوجد برنامج ينتظر إدخالاً.</string>
+    <string name="terminal_help">الأوامر:\n  run       تشغيل الملف المفتوح\n  clear     مسح الشاشة\n  history   الأوامر السابقة\n  version   إصدار المحرّك\n  &lt;code&gt;    أي نص آخر يُنفَّذ كشيفرة Rin، مثل: print 1 + 2;\nعندما يطلب البرنامج إدخالاً أجب في السطر السفلي. ^C يلغي السؤال.</string>
+</resources>
