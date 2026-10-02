@@ -1298,6 +1298,9 @@ StmtPtr Parser::statement() {
         st->line = thenBranch ? thenBranch->line : 0;
         return st;
     }
+    if (check(TokenType::IDENT) && !peek().lexeme.empty() && peek().lexeme[0] == '#') {
+        if (auto hs = hashStatement()) return hs; // عائلة #: #do #done #ban #ignorance #swap
+    }
     if (match({TokenType::PRINT})) return printStatement();
     if (match({TokenType::IF})) return ifStatement();
     if (match({TokenType::WHILE})) return whileStatement();
@@ -1677,6 +1680,7 @@ StmtPtr Parser::whileStatement() {
     auto stmt = std::make_shared<WhileStmt>();
     stmt->condition = condition;
     stmt->body = body;
+    attachDoneBlock(stmt->doneBlock);
     return stmt;
 }
 
@@ -1705,7 +1709,7 @@ StmtPtr Parser::forStatement() {
         if (check(TokenType::IDENT) && peek().lexeme == "in") {
             advance(); // 'in'
             checkPatternDuplicates(pat, letTok);
-            auto iterable = expression();
+            auto iterable = maybeHashRange(expression());
             consume(TokenType::RPAREN, "Expected ')' after 'for...in' iterable");
             loopDepth++;
             auto body = statement();
@@ -1715,6 +1719,7 @@ StmtPtr Parser::forStatement() {
             stmt->iterable = iterable;
             stmt->body = body;
             stmt->line = forTok.line;
+            attachDoneBlock(stmt->doneBlock);
             return stmt;
         }
         current = save;
@@ -1725,7 +1730,7 @@ StmtPtr Parser::forStatement() {
         advance(); // 'let'
         Token nameTok = advance(); // NAME
         advance(); // 'in'
-        auto iterable = expression();
+        auto iterable = maybeHashRange(expression());
         consume(TokenType::RPAREN, "Expected ')' after 'for...in' iterable");
         loopDepth++;
         auto body = statement();
@@ -1735,6 +1740,7 @@ StmtPtr Parser::forStatement() {
         stmt->iterable = iterable;
         stmt->body = body;
         stmt->line = forTok.line;
+        attachDoneBlock(stmt->doneBlock);
         return stmt;
     }
 
@@ -1765,6 +1771,7 @@ StmtPtr Parser::forStatement() {
     stmt->increment = increment;
     stmt->body = body;
     stmt->line = forTok.line;
+    attachDoneBlock(stmt->doneBlock);
     return stmt;
 }
 
@@ -1791,6 +1798,200 @@ StmtPtr Parser::plusConditionStatement() {
     stmt->falseBranch = falseBranch;
     stmt->line = tok.line;
     return stmt;
+}
+
+// ============================================================================
+// عائلة # — انظر docs/hash-family.md
+// ============================================================================
+
+// #done { ... } اختيارية بعد while/for/for-in/#do: تُنفَّذ إن انتهت الحلقة طبيعياً (دون break/#done;).
+void Parser::attachDoneBlock(StmtPtr& done) {
+    if (check(TokenType::IDENT) && peek().lexeme == "#done" && checkNext(TokenType::LBRACE)) {
+        advance(); // #done
+        advance(); // {
+        done = block();
+    }
+}
+
+// A #to B [step C] داخل for (let i in ...) -> نداء #to(A, B[, C]) (مدى شامل للطرفين).
+ExprPtr Parser::maybeHashRange(ExprPtr first) {
+    if (!(check(TokenType::IDENT) && (peek().lexeme == "to" || peek().lexeme == "#to"))) return first;
+    Token toTok = advance();
+    auto call = std::make_shared<CallExpr>();
+    call->callee = "#to";
+    call->line = toTok.line;
+    call->args.push_back(first);
+    call->args.push_back(expression());
+    if (check(TokenType::IDENT) && peek().lexeme == "step") {
+        advance();
+        call->args.push_back(expression());
+    }
+    return call;
+}
+
+StmtPtr Parser::hashStatement() {
+    const std::string kw = peek().lexeme;
+    if (kw == "#do") return hashDoStatement();
+    if (kw == "#ban") return hashBanStatement();
+    if (kw == "#ignorance") return hashIgnoranceStatement();
+    if (kw == "#swap") return hashSwapStatement();
+    if (kw == "#done") {
+        Token tok = advance();
+        if (check(TokenType::LBRACE))
+            throw errRich(diag::Code::E0011_UnexpectedToken, tok, "'#done { ... }' must directly follow a loop",
+                          "a `#done` block runs when a loop finishes normally, so it belongs right after the loop body",
+                          "write `#while (c) { ... } #done { ... }` or `for (...) { ... } #done { ... }`");
+        if (loopDepth == 0)
+            throw errRich(diag::Code::E0011_UnexpectedToken, tok, "'#done;' used outside of a loop",
+                          "`#done;` leaves the innermost enclosing loop (like `break`) and marks the loop as finished early",
+                          "move this `#done;` inside a loop body");
+        consume(TokenType::SEMICOLON, "Expected ';' after '#done'");
+        auto st = std::make_shared<BreakStmt>(); // #done; = خروج مبكّر من الحلقة (بلا تشغيل كتلة #done)
+        st->line = tok.line;
+        return st;
+    }
+    return nullptr;
+}
+
+// #do body #while (cond);  — تنفّذ الجسم مرة واحدة على الأقل ثم تكرر ما دام الشرط صحيحاً.
+// تُفكَّك إلى ForStmt بمتغيّر "أول مرة" مخفي:  for (let #first = true; #first or cond; #first = false) body
+// (فتعمل continue بالضبط كما في do-while الحقيقية: تنتقل إلى فحص الشرط، لا إلى أول الجسم).
+StmtPtr Parser::hashDoStatement() {
+    Token doTok = advance(); // #do
+    loopDepth++;
+    auto body = statement();
+    loopDepth--;
+    if (!check(TokenType::WHILE))
+        throw errRich(diag::Code::E0012_MissingToken, peek(), "expected '#while' after the '#do' body",
+                      "a do-loop is written `#do { ... } #while (condition);`",
+                      "add `#while (condition);` right after the body", "'#while'");
+    advance(); // #while (أو while)
+    consume(TokenType::LPAREN, "Expected '(' after '#while'");
+    auto cond = expression();
+    consume(TokenType::RPAREN, "Expected ')' after '#while' condition");
+    consume(TokenType::SEMICOLON, "Expected ';' after '#do ... #while (...)'");
+
+    const std::string flag = "#first" + std::to_string(hashCounter++);
+    auto lit = [&](bool b) { auto l = std::make_shared<LiteralExpr>(); l->kind = LiteralExpr::Kind::BOOL; l->boolean = b; l->line = doTok.line; return l; };
+    auto var = [&]() { auto v = std::make_shared<VariableExpr>(); v->name = flag; v->line = doTok.line; return v; };
+    auto init = std::make_shared<LetStmt>();
+    init->name = flag; init->initializer = lit(true); init->line = doTok.line;
+    auto orExpr = std::make_shared<LogicalExpr>();
+    orExpr->left = var(); orExpr->op = TokenType::OR; orExpr->right = cond; orExpr->line = doTok.line;
+    auto inc = std::make_shared<AssignExpr>();
+    inc->name = flag; inc->value = lit(false); inc->line = doTok.line;
+    auto st = std::make_shared<ForStmt>();
+    st->initializer = init; st->condition = orExpr; st->increment = inc; st->body = body; st->line = doTok.line;
+    attachDoneBlock(st->doneBlock);
+    return st;
+}
+
+// #ban x;  #ban x, y;  -> يمنع الكتابة على متغيّرات موجودة (E0043) | #ban x = expr; -> يعلن متغيّراً ممنوع التعديل.
+StmtPtr Parser::hashBanStatement() {
+    Token kw = advance(); // #ban
+    std::vector<StmtPtr> items;
+    do {
+        Token name = consume(TokenType::IDENT, "Expected a variable name after '#ban'");
+        if (match({TokenType::EQUAL})) {
+            auto st = std::make_shared<LiveDeclStmt>();
+            st->kind = LiveKind::Stone;
+            st->name = name.lexeme;
+            st->initializer = expression();
+            st->line = name.line;
+            items.push_back(st);
+        } else {
+            auto st = std::make_shared<LiveActionStmt>();
+            st->action = "ban";
+            st->target = name.lexeme;
+            st->line = name.line;
+            items.push_back(st);
+        }
+    } while (match({TokenType::COMMA}));
+    consume(TokenType::SEMICOLON, "Expected ';' after '#ban'");
+    if (items.size() == 1) return items[0];
+    auto group = std::make_shared<LetGroupStmt>();
+    group->items = std::move(items);
+    group->line = kw.line;
+    return group;
+}
+
+// #ignorance { ... } أو #ignorance stmt — يتجاهل أي خطأ وقت التشغيل داخلها ويكمل البرنامج بصمت
+// (try { ... } catch { } مختصر). break/continue/return تعمل عبرها كالمعتاد.
+StmtPtr Parser::hashIgnoranceStatement() {
+    Token kw = advance(); // #ignorance
+    auto st = std::make_shared<TryCatchStmt>();
+    st->line = kw.line;
+    if (match({TokenType::LBRACE})) {
+        st->tryBranch = block();
+    } else {
+        auto blk = std::make_shared<BlockStmt>();
+        blk->statements.push_back(statement());
+        st->tryBranch = blk;
+    }
+    st->catchBranch = std::make_shared<BlockStmt>();
+    return st;
+}
+
+// #swap a, b;  أو  #swap(a, b);  -> تبديل هدفين قابلين للإسناد (متغيّر، arr[i]، obj.f) فعلاً.
+// تُفكَّك على مستوى التوكنات إلى الإسناد التفكيكي الموجود أصلاً:  [a, b] = [b, a];
+// (فتعمل مع المتغيرات الحيّة وstone/#ban كأي إسناد عادي). #swap(arr, i, j) بثلاث وسائط = الدالة الأصلية.
+StmtPtr Parser::hashSwapStatement() {
+    const size_t at = current;
+    const Token swapTok = tokens[at];
+    size_t i = at + 1;
+    bool paren = i < tokens.size() && tokens[i].type == TokenType::LPAREN;
+    if (paren) i++;
+    const size_t argStart = i;
+    int depth = 0;
+    std::vector<size_t> commas;
+    size_t end = tokens.size();
+    for (; i < tokens.size(); ++i) {
+        TokenType t = tokens[i].type;
+        if (t == TokenType::END_OF_FILE) break;
+        if (t == TokenType::LPAREN || t == TokenType::LBRACKET || t == TokenType::LBRACE) depth++;
+        else if (t == TokenType::RPAREN || t == TokenType::RBRACKET || t == TokenType::RBRACE) {
+            if (depth == 0) { if (paren && t == TokenType::RPAREN) { end = i; break; } break; }
+            depth--;
+        } else if (t == TokenType::COMMA && depth == 0) commas.push_back(i);
+        else if (t == TokenType::SEMICOLON && depth == 0) { if (!paren) { end = i; } break; }
+    }
+    size_t semi = end;
+    if (paren) {
+        if (end >= tokens.size() || tokens[end].type != TokenType::RPAREN) return nullptr;
+        semi = end + 1;
+        if (!(semi < tokens.size() && tokens[semi].type == TokenType::SEMICOLON)) return nullptr; // جزء من تعبير أكبر
+        if (commas.size() != 1) return nullptr; // 3 وسائط (arr, i, j) -> الدالة الأصلية
+    } else {
+        if (end >= tokens.size() || tokens[end].type != TokenType::SEMICOLON || commas.size() != 1)
+            throw errRich(diag::Code::E0012_MissingToken, swapTok, "'#swap' needs exactly two targets",
+                          "the statement form swaps two variables (or elements) with each other",
+                          "write `#swap a, b;` or `#swap arr[i], arr[j];`");
+    }
+    const size_t comma = commas[0];
+    const size_t aEnd = comma, bStart = comma + 1, bEnd = paren ? end : end;
+    if (aEnd <= argStart || bEnd <= bStart)
+        throw errRich(diag::Code::E0013_InvalidExpression, swapTok, "'#swap' has an empty target",
+                      "both sides of the comma must be something that can be assigned to",
+                      "write `#swap a, b;`");
+    std::vector<Token> A(tokens.begin() + argStart, tokens.begin() + aEnd);
+    std::vector<Token> B(tokens.begin() + bStart, tokens.begin() + bEnd);
+    auto mk = [&](TokenType t, const char* lex) { Token x = swapTok; x.type = t; x.lexeme = lex; return x; };
+    std::vector<Token> out;
+    out.push_back(mk(TokenType::LBRACKET, "["));
+    out.insert(out.end(), A.begin(), A.end());
+    out.push_back(mk(TokenType::COMMA, ","));
+    out.insert(out.end(), B.begin(), B.end());
+    out.push_back(mk(TokenType::RBRACKET, "]"));
+    out.push_back(mk(TokenType::EQUAL, "="));
+    out.push_back(mk(TokenType::LBRACKET, "["));
+    out.insert(out.end(), B.begin(), B.end());
+    out.push_back(mk(TokenType::COMMA, ","));
+    out.insert(out.end(), A.begin(), A.end());
+    out.push_back(mk(TokenType::RBRACKET, "]"));
+    size_t replaceEnd = paren ? semi : end; // الفاصلة المنقوطة تبقى لتُستهلك من expressionStatement
+    tokens.erase(tokens.begin() + at, tokens.begin() + replaceEnd);
+    tokens.insert(tokens.begin() + at, out.begin(), out.end());
+    return expressionStatement();
 }
 
 StmtPtr Parser::returnStatement() {
