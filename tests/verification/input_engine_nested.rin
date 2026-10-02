@@ -1,0 +1,31 @@
+// input_engine_nested.rin — نماذج متداخلة: كائن داخل كائن (تركيب OOP، يُملأ في مكانه) وحاوية داخل قاموس/كائن (تُسلَّم لقطتها)
+class Address { let city = "Riyadh"; let zip = 11564; }
+class User { let name = "Ali"; let home = nil; }
+let u = User();
+u.home = Address();
+let same = u.home;
+input("U> ", u, {"home": u.home});
+print u.name + "|" + u.home.city + "|" + u.home.zip + "|" + (same == u.home);
+
+// كائن جديد في مواصفة حقل nil: يُملأ ثم يُسلَّم للحقل الأب
+let v = User();
+input("V> ", v, {"home": Address()});
+print v.name + "|" + v.home.city + "|" + v.home.zip;
+
+// حاوية متداخلة: تُملأ (state + on update تعمل) ثم تُسلَّم لقطتها إلى الحقل
+@container=Geo
+    state lat = 0;
+    let lng = 0;
+    on update(prev) { print "[geo] lat=" + getField("Geo", "lat"); }
+.end/container
+let cfg = {"title": "t"};
+input("C> ", cfg, {"geo": "Geo"});
+print cfg.title + "|" + cfg.geo.lat + "|" + cfg.geo.lng + "|" + getField("Geo", "lat");
+
+// فشل في المتداخل يعيد الأب والابن معاً
+let w = User();
+w.home = Address();
+let failed = false;
+try { input("W> ", w, {"home": w.home}); } catch (e) { failed = true; }
+print "";
+print failed + "|" + w.name + "|" + w.home.city + "|" + w.home.zip;
