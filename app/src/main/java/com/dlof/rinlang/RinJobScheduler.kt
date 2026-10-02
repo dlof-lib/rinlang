@@ -4,6 +4,8 @@ import android.os.Handler
 import android.os.Looper
 import java.util.Collections
 import java.util.concurrent.Callable
+import java.util.concurrent.CancellationException
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 import java.util.concurrent.RejectedExecutionException
 import java.util.concurrent.ThreadFactory
@@ -57,6 +59,9 @@ object RinJobScheduler {
     private val counter = AtomicInteger(0)
     private val jobs = Collections.synchronizedList(mutableListOf<RinJob>())
 
+    /** نداءات انتهاء اختيارية لكل تشغيل (يستعملها الـ terminal لحفظ تصريحات جلسة REPL بعد النجاح). */
+    private val finishCallbacks = ConcurrentHashMap<Int, (JobStatus) -> Unit>()
+
     /** Invoked on the main thread whenever the job list changes. */
     var onJobsChanged: ((List<RinJob>) -> Unit)? = null
 
@@ -65,13 +70,14 @@ object RinJobScheduler {
      * [MAX_PENDING] is already reached, so a caller mashing the Run button
      * gets clear back-pressure instead of an ever-growing silent backlog.
      */
-    fun submit(source: String): RinJob? {
+    fun submit(source: String, repl: Boolean = false, onFinished: ((JobStatus) -> Unit)? = null): RinJob? {
         synchronized(jobs) {
             val pending = jobs.count { it.status == JobStatus.QUEUED || it.status == JobStatus.RUNNING }
             if (pending >= MAX_PENDING) return null
         }
 
-        val job = RinJob(number = counter.incrementAndGet(), source = source)
+        val job = RinJob(number = counter.incrementAndGet(), source = source, repl = repl)
+        if (onFinished != null) finishCallbacks[job.number] = onFinished
         jobs.add(job)
         trimHistoryLocked()
         notifyChanged()
@@ -82,6 +88,7 @@ object RinJobScheduler {
             job.status = JobStatus.ERROR
             job.output = "[Fatal error]: job queue rejected this run: ${e.message}"
             job.finishedAt = System.currentTimeMillis()
+            finishCallbacks.remove(job.number)
             notifyChanged()
         }
         return job
@@ -106,8 +113,29 @@ object RinJobScheduler {
                 true
             }
         }
-        if (cancelled) notifyChanged()
+        if (cancelled) {
+            finishCallbacks.remove(number)
+            notifyChanged()
+        }
         return cancelled
+    }
+
+    /** true إن كان هناك تشغيل يعمل الآن (يستعمله الـ terminal لتلوين ^C وللإيقاف). */
+    fun isRunning(): Boolean = synchronized(jobs) { jobs.any { it.status == JobStatus.RUNNING } }
+
+    /**
+     * يوقف ما يعمل الآن ويسحب كل ما ينتظر في الطابور. التشغيل الجاري لا يمكن مقاطعته داخل المحرك
+     * الأصلي، فيُترك خيطه ليكمل وحده (كما في حالة المهلة) ويُعلَّم CANCELLED فوراً ويُتجاهل ما يبثّه بعد ذلك.
+     * يعيد true إن وُجد شيء لإيقافه.
+     */
+    fun stopAll(): Boolean {
+        val (running, queued) = synchronized(jobs) {
+            jobs.filter { it.status == JobStatus.RUNNING } to
+                jobs.filter { it.status == JobStatus.QUEUED }.map { it.number }
+        }
+        running.forEach { it.stopRequested = true }
+        queued.forEach { cancel(it) }
+        return running.isNotEmpty() || queued.isNotEmpty()
     }
 
     /**
@@ -160,7 +188,7 @@ object RinJobScheduler {
             job.status = JobStatus.RUNNING
             job.startedAt = System.currentTimeMillis()
         }
-        RinTerminal.onJobStart(job.number)
+        RinTerminal.onJobStart(job.number, job.repl)
         notifyChanged()
 
         // Live Output (section 7): classify each incremental chunk through the same
@@ -226,6 +254,12 @@ object RinJobScheduler {
                 // when earlier prints already appear in the combined output.
                 job.status = if (result.success) JobStatus.SUCCESS else JobStatus.ERROR
             }
+        } catch (e: CancellationException) {
+            future.cancel(true)
+            synchronized(job) {
+                job.output = "[Cancelled]: stopped by user"
+                job.status = JobStatus.CANCELLED
+            }
         } catch (e: TimeoutException) {
             future.cancel(true)
             synchronized(job) {
@@ -247,6 +281,8 @@ object RinJobScheduler {
             job.liveLines = emptyList()
         }
         RinTerminal.onJobFinish(job.status, job.output, job.durationMs())
+        val status = job.status
+        finishCallbacks.remove(job.number)?.let { cb -> mainHandler.post { cb(status) } }
         notifyChanged()
     }
 
@@ -261,6 +297,7 @@ object RinJobScheduler {
             try {
                 return future.get(tickMs, TimeUnit.MILLISECONDS)
             } catch (e: TimeoutException) {
+                if (job.stopRequested) throw CancellationException("stopped by user")
                 if (!job.waitingForInput) activeMs += tickMs
                 if (activeMs >= TIMEOUT_MS) throw e
             }
