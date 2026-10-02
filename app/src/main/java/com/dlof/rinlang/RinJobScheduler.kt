@@ -160,6 +160,7 @@ object RinJobScheduler {
             job.status = JobStatus.RUNNING
             job.startedAt = System.currentTimeMillis()
         }
+        RinTerminal.onJobStart(job.number)
         notifyChanged()
 
         // Live Output (section 7): classify each incremental chunk through the same
@@ -182,6 +183,7 @@ object RinJobScheduler {
                 }
             }
             if (!stillRunning) return@RinStreamListener
+            RinTerminal.onChunk(chunk)
             if (streamNotifyPending.compareAndSet(false, true)) {
                 mainHandler.postDelayed({
                     streamNotifyPending.set(false)
@@ -194,11 +196,16 @@ object RinJobScheduler {
         // الانتظار تتوقف ساعة المهلة (انظر awaitActive) كي لا يُحسب وقت تفكير المستخدم ضد البرنامج.
         val inputHandler = RinEngine.RinInputHandler { prompt ->
             job.waitingForInput = true
-            try {
+            // السؤال يُكتب في سجل الـ terminal أولاً (المحرك أفرغ كل مخرجاته قبل أن يسأل)، ثم يُعرض
+            // الإدخال في سطر الـ terminal عبر RinInputBridge، وأخيراً يُسجَّل الجواب (أو ^C) بعد السؤال.
+            RinTerminal.onPrompt(prompt)
+            val answer: String? = try {
                 RinInputBridge.request(prompt)
             } finally {
                 job.waitingForInput = false
             }
+            RinTerminal.onAnswer(answer)
+            answer
         }
         val future = workerPool.submit(Callable { RinEngine.runSourceInteractive(job.source, listener, inputHandler) })
         try {
@@ -239,6 +246,7 @@ object RinJobScheduler {
             // (section 25: Memory Safety).
             job.liveLines = emptyList()
         }
+        RinTerminal.onJobFinish(job.status, job.output, job.durationMs())
         notifyChanged()
     }
 
