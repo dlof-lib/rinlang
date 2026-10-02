@@ -1,0 +1,17 @@
+// living_gauge.rin — اختبار تحقّق لـ docs/living-variables.md
+gauge hp = 80 within 0 to 100;
+hp = hp + 50; print hp;
+hp = -20; print hp;
+print hp.empty; print hp.full; print hp.fill;
+hp = 100; print hp.full;
+gauge ammo = 5 within 0 to 10 strict;
+try { ammo = 11; } catch (e) { print e.code + " " + e.message; }
+ammo = 7; print ammo;
+gauge angle = 350 within 0 to 360 wrap;
+angle = angle + 30; print angle;
+angle = -10; print angle;
+gauge xp = 150 within 0 to 100; print xp;
+print hp.min; print hp.max; print hp.mode; print ammo.mode; print angle.mode;
+try { hp = "lots"; } catch (e) { print e.code; }
+gauge m = 5 within 0 to 10 keep 3; m = 6; m = 7; print m.past;
+print hp.vitals;
