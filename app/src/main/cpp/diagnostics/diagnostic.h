@@ -73,6 +73,12 @@ enum class Code {
     E0040_UnsupportedFeature,
     E0041_MissingDependency, // RCS-1.0 §3.14 Dependency: 'requires X;' حيث X غير موجودة في الشجرة وقت الفحص
     E0042_InvalidSql, // RIN CONTAINER SQL: خطأ تركيبي في نص استعلام RCSQL، أو رمز خارج القائمة المسموحة (/ : & () #)
+    // ---- المتغيرات الحيّة (Living Variables): stone/gauge/tape/lens/fuse/bell/trial — docs/living-variables.md ----
+    E0043_FrozenVariable,   // إسناد/تعديل لمتغيّر stone (مُجمَّد عند التصريح)
+    E0044_RangeViolation,   // gauge ... strict: قيمة خارج المدى المسموح (أو gauge يحمل غير الأرقام)
+    E0045_DerivedReadOnly,  // إسناد إلى lens (مشتق للقراءة فقط) أو lens يعتمد على نفسه
+    E0046_LiveMisuse,       // استعمال خاطئ: undo بلا tape، bell على lens، abort خارج trial، خاصية لا تخص هذا النوع
+    E0047_BellLoop,         // جرس (bell) يعيد تفعيل نفسه بلا نهاية (عمق التداخل > 16)
 
     W0001_UnusedVariable,
     W0002_UnusedImport,
