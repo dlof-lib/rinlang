@@ -36,7 +36,11 @@ data class RinJob(
      */
     @Volatile var liveLines: List<RinLogLine> = emptyList(),
     /** true أثناء انتظار البرنامج لإجابة المستخدم (input/confirm/...)؛ مهلة التنفيذ لا تجري حينها. */
-    @Volatile var waitingForInput: Boolean = false
+    @Volatile var waitingForInput: Boolean = false,
+    /** تشغيل صادر من سطر أوامر الـ terminal (جلسة REPL) لا من زر Run: لا ترويسة `run #N` ولا سطر نجاح. */
+    val repl: Boolean = false,
+    /** طلب المستخدم إيقاف هذا التشغيل (أمر `stop` أو ^C)؛ يقرؤه المجدول أثناء الانتظار. */
+    @Volatile var stopRequested: Boolean = false
 ) {
     /** Wall-clock duration of the run so far, in milliseconds. */
     fun durationMs(): Long {
