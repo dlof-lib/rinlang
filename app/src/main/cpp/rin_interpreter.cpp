@@ -2193,7 +2193,7 @@ void Interpreter::registerNatives() {
     // يعيد false إذا ألغى المستخدم/انتهى الإدخال بلا بيانات (EOF في stdin يُعامَل كإلغاء فقط حين
     // يكون الإدخال مطلوباً رقماً أو اختياراً أو مُدقَّقاً؛ أما input() العادية فتعيد "" عند EOF).
     auto askRaw = [this](const std::string& prompt, std::string& answer, bool& eof) -> bool {
-        eof = false;
+        eof = false; inputAtEof_ = false;
         if (inputProvider_) {
             // أظهِر للمستخدم كل ما طُبع حتى الآن قبل أن يرى سؤال الإدخال (بث حي فقط إن وُجد sink).
             if (streamSink_) {
@@ -2206,7 +2206,7 @@ void Interpreter::registerNatives() {
             return inputProvider_(prompt, answer);
         }
         if (!prompt.empty()) { std::cout << prompt; std::cout.flush(); }
-        if (!std::getline(std::cin, answer)) { eof = true; answer.clear(); return true; }
+        if (!std::getline(std::cin, answer)) { eof = true; inputAtEof_ = true; answer.clear(); return true; }
         if (!answer.empty() && answer.back() == '\r') answer.pop_back();
         return true;
     };
@@ -6304,6 +6304,7 @@ void Interpreter::registerNatives() {
     registerNativesExtra3(); // Rin 1.0: net.* بشبكة حقيقية + container.* إضافية (rin_extra_natives3.cpp)
     registerNativesExtra4(); // Rin 1.0: json./semver./pkg./cpp. (rin_extra_natives4.cpp)
     registerNativesOop(); // Rin 1.0: oop.* — استبطان الأصناف والكائنات + أدوات OOP (rin_oop_natives.cpp)
+    registerNativesInput(); // Rin 1.0: نماذج الإدخال (معاملة/تداخل/مُدقِّق النموذج) فوق input() — بعد oop.* لأنها تستدعيها (rin_input.cpp)
 }
 
 // ================= تخزين حقيقي على القرص (save/file/installation) =================
@@ -10863,3 +10864,6 @@ std::optional<Interpreter::FlowRunResult> Interpreter::replayFlow(const std::str
 #include "rin_oop_natives.cpp"
 #include "rin_oop_bind.cpp"
 #include "rin_oop_link.cpp"
+
+// ---- Rin 1.0: محرّك نماذج الإدخال (مفسِّر + مترجم + منفِّذ مخصّص لـ input) — انظر rin_input.h ----
+#include "rin_input.cpp"
