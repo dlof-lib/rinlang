@@ -425,6 +425,7 @@ struct IfStmt : Stmt { IfStmt() { stmtKind = StmtKind::IfStmt; }
 struct WhileStmt : Stmt { WhileStmt() { stmtKind = StmtKind::WhileStmt; }
     ExprPtr condition;
     StmtPtr body;
+    StmtPtr doneBlock; // #done { ... } — يُنفَّذ إذا انتهت الحلقة طبيعياً (لا break)؛ nullable
 };
 // for (initializer; condition; increment) body -> حلقة for على طراز C (إضافة جديدة additive بحتة،
 // نفس روح إضافة AUKT: لا تغيير على أي عقدة/سلوك موجود مسبقاً). الثلاثة أجزاء اختيارية تماماً كـ C:
@@ -437,6 +438,7 @@ struct ForStmt : Stmt { ForStmt() { stmtKind = StmtKind::ForStmt; }
     ExprPtr condition;   // may be null -> يُعامل كـ true
     ExprPtr increment;   // may be null
     StmtPtr body;
+    StmtPtr doneBlock;   // #done { ... } — يُنفَّذ إذا انتهت الحلقة طبيعياً (لا break)؛ nullable
 };
 // for (let NAME in iterable) { body } -> حلقة تكرار حقيقية (لم تكن موجودة سابقاً؛ الوسيلة الوحيدة
 // للتكرار على مصفوفة/قاموس كانت for القياسية على طراز C مع فهرس عددي يدوي). iterable: مصفوفة (كل
@@ -450,6 +452,7 @@ struct ForInStmt : Stmt { ForInStmt() { stmtKind = StmtKind::ForInStmt; }
     std::shared_ptr<LetPattern> pattern; // let+: for (let [k, v] in pairs) — nullable؛ إن وُجد يُهمَل varName
     ExprPtr iterable;
     StmtPtr body;
+    StmtPtr doneBlock;   // #done { ... } — يُنفَّذ إذا انتهت الحلقة طبيعياً (لا break)؛ nullable
 };
 // plus.condition (condition) { trueBranch } / { falseBranch } -> "شرط ثلاثي" عام على مستوى
 // العبارات (statement-level ternary)، إضافة جديدة additive بحتة فوق if/else الموجودة أصلاً.
