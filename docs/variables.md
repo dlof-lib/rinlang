@@ -66,6 +66,7 @@ print y; // 10 -- لم يتأثر
 ```
 
 ## انظر أيضًا
+- [`living-variables.md`](./living-variables.md) — متغيرات بسلوك: ثابت، مقياس، شريط ذاكرة، مشتق، فتيل، جرس، تجربة.
 - [`syntax.md`](./syntax.md) — القواعد العامة، العوامل.
 - [`control-flow.md`](./control-flow.md) — التكرار على مصفوفة/قاموس عبر `for (let x in ...)`.
 - [`functions.md`](./functions.md) — تمرير القيم كوسائط.
