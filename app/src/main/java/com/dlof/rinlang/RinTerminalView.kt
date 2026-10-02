@@ -3,16 +3,21 @@ package com.dlof.rinlang
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.text.InputType
 import android.text.Spannable
 import android.text.SpannableStringBuilder
+import android.text.TextPaint
+import android.text.method.LinkMovementMethod
+import android.text.style.ClickableSpan
 import android.text.style.ForegroundColorSpan
 import android.text.style.StyleSpan
 import android.util.AttributeSet
 import android.view.Gravity
 import android.view.KeyEvent
+import android.view.ScaleGestureDetector
 import android.view.View
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
@@ -24,15 +29,19 @@ import android.widget.Toast
 import androidx.core.content.ContextCompat
 
 /**
- * terminal داخل المحرر: سجل مخرجات حيّ + سطر واحد في الأسفل له وضعان:
+ * terminal داخل المحرر: سجل مخرجات حيّ + سطر واحد في الأسفل له ثلاثة أوضاع:
  *
- *  - **shell** (لا برنامج ينتظر): الموجّه `$`. أوامر: help · run · clear · history · version،
- *    وأي نص آخر يُنفَّذ كشيفرة Rin (مثل `print 1 + 2;`) عبر [onExecuteRequested].
- *  - **input** (برنامج Rin توقّف عند input/inputNumber/confirm/choose): الموجّه `›` وإطار مضيء؛
- *    ما يُكتب يُسلَّم للبرنامج مباشرةً، و`^C` يُلغي السؤال (يتوقف البرنامج بخطأ "تم إلغاء الإدخال").
+ *  - **shell** (`$`): أوامر `help run stop clear history version reset session grep goto share copy`، و`!!`/`!N` لإعادة أمر سابق، وأي نص آخر
+ *    يُنفَّذ كشيفرة Rin ضمن **جلسة REPL** (انظر [RinReplSession]): التصريحات تبقى بين الأوامر،
+ *    والتعبير بلا `;` (مثل `1 + 2`) يُطبع ناتجه، وأمر ناقص الأقواس (`fun f() {`) يكمل على أسطر `…`.
+ *  - **continuation** (`…`): نفس السطر لكن بانتظار إكمال أمر متعدد الأسطر.
+ *  - **input** (`›`، إطار مضيء): برنامج Rin متوقف عند input/inputNumber/confirm/choose؛ ما يُكتب يُسلَّم له.
  *
- * السجل نفسه في [RinTerminal] (لا يضيع بتدوير الشاشة)؛ هذا الصنف عرض فقط. السؤال يصله من
- * [RinInputBridge] عبر [beginProgramInput]، وجوابه يعود عبر `deliver` ثم يُسجَّله المُجدوِل في السجل.
+ * ميزات الواجهة: ⇥ إكمال تلقائي (أوامر + كلمات Rin + أسماء الجلسة) · ↑/↓ تاريخ (محفوظ بين الجلسات) ·
+ * ^C إلغاء السؤال/الأمر المعلّق أو إيقاف التشغيل الجاري (كذلك أمر `stop`) ·
+ * قرص بإصبعين لتغيير الخط (يُحفظ) · النقر على سطر `[Error line N]` يقفز لذلك السطر في المحرر.
+ *
+ * السجل والجلسة في [RinTerminal] (لا يضيعان بتدوير الشاشة)؛ هذا الصنف عرض فقط.
  */
 class RinTerminalView @JvmOverloads constructor(
     context: Context,
@@ -42,14 +51,22 @@ class RinTerminalView @JvmOverloads constructor(
     /** أمر `run`: تشغيل الملف المفتوح في المحرر. */
     var onRunRequested: (() -> Unit)? = null
 
-    /** أي نص آخر في وضع shell: شيفرة Rin جاهزة للتنفيذ (أُضيفت لها `;` إن لزم). */
-    var onExecuteRequested: ((String) -> Unit)? = null
+    /**
+     * أمر Rin جاهز للتنفيذ ([source] يشمل prelude الجلسة). يعيد false إن امتلأ الطابور.
+     * [onSuccess] يُستدعى عند نجاحه (لحفظ تصريحات الجلسة).
+     */
+    var onExecuteRequested: ((source: String, onSuccess: () -> Unit) -> Boolean)? = null
 
+    /** النقر على خطأ `[Error line N]`: انتقل للسطر N في المحرر. */
+    var onGoToLine: ((Int) -> Unit)? = null
+
+    private val prefs = context.getSharedPreferences("rin_terminal", Context.MODE_PRIVATE)
     private val scroll = ScrollView(context)
     private val screen = TextView(context)
     private val promptLabel = TextView(context)
     private val field = EditText(context)
     private val btnCtrlC = chip("^C")
+    private val btnTab = chip("⇥")
     private val btnUp = chip("↑")
     private val btnDown = chip("↓")
     private val btnSend = chip("⏎")
@@ -60,8 +77,24 @@ class RinTerminalView @JvmOverloads constructor(
     private var historyIndex = -1
     private var lastVersion = -1L
     private var stickToBottom = true
+    private var fontSp = prefs.getFloat(KEY_FONT, 12.5f).coerceIn(FONT_MIN, FONT_MAX)
+    private var lastTabPrefix: String? = null
 
     private val changeListener: () -> Unit = { refresh() }
+
+    private val scaleDetector = ScaleGestureDetector(context, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
+        override fun onScale(d: ScaleGestureDetector): Boolean {
+            val next = (fontSp * d.scaleFactor).coerceIn(FONT_MIN, FONT_MAX)
+            if (kotlin.math.abs(next - fontSp) >= 0.05f) {
+                fontSp = next
+                screen.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, fontSp)
+            }
+            return true
+        }
+        override fun onScaleEnd(d: ScaleGestureDetector) {
+            prefs.edit().putFloat(KEY_FONT, fontSp).apply()
+        }
+    })
 
     init {
         orientation = VERTICAL
@@ -69,12 +102,14 @@ class RinTerminalView @JvmOverloads constructor(
         setBackgroundColor(BG)
 
         screen.apply {
-            setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 12.5f)
+            setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, fontSp)
             typeface = Typeface.MONOSPACE
             setTextColor(FG)
             setLineSpacing(0f, 1.12f)
             textDirection = View.TEXT_DIRECTION_FIRST_STRONG
             setPadding(dp(12), dp(8), dp(12), dp(8))
+            movementMethod = LinkMovementMethod.getInstance()   // أسطر الأخطاء قابلة للنقر
+            highlightColor = 0x00000000
             setOnClickListener { focusInput() }
         }
         scroll.apply {
@@ -88,6 +123,11 @@ class RinTerminalView @JvmOverloads constructor(
                 val content = getChildAt(0) ?: return@setOnScrollChangeListener
                 // "ملتصق بالأسفل" ما دام المستخدم لم يصعد أكثر من ~48dp؛ عندها تتبّع المخرجات الجديدة.
                 stickToBottom = content.bottom - (height + scrollY) < dp(48)
+            }
+            // قرص بإصبعين = تكبير/تصغير الخط. نمرّر الحدث للكاشف دائماً ونستهلكه فقط أثناء القرص.
+            setOnTouchListener { _, ev ->
+                scaleDetector.onTouchEvent(ev)
+                scaleDetector.isInProgress
             }
         }
         addView(scroll, LayoutParams(LayoutParams.MATCH_PARENT, 0, 1f))
@@ -116,6 +156,7 @@ class RinTerminalView @JvmOverloads constructor(
         }
 
         btnCtrlC.setOnClickListener { cancelOrClear() }
+        btnTab.setOnClickListener { complete() }
         btnUp.setOnClickListener { stepHistory(+1) }
         btnDown.setOnClickListener { stepHistory(-1) }
         btnSend.setOnClickListener { submit() }
@@ -125,7 +166,7 @@ class RinTerminalView @JvmOverloads constructor(
             gravity = Gravity.CENTER_VERTICAL
             addView(promptLabel, LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT))
             addView(field, LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f))
-            for (b in listOf(btnCtrlC, btnUp, btnDown, btnSend)) {
+            for (b in listOf(btnCtrlC, btnTab, btnUp, btnDown, btnSend)) {
                 addView(b, LayoutParams(LayoutParams.WRAP_CONTENT, dp(30)).apply { marginEnd = dp(4) })
             }
             setPadding(0, 0, dp(4), 0)
@@ -143,6 +184,8 @@ class RinTerminalView @JvmOverloads constructor(
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
         RinTerminal.onChanged = changeListener
+        RinTerminal.buffer.restoreHistory(loadHistory())
+        updateMode()
         refresh(force = true)
     }
 
@@ -183,6 +226,18 @@ class RinTerminalView @JvmOverloads constructor(
         Toast.makeText(context, R.string.terminal_copied, Toast.LENGTH_SHORT).show()
     }
 
+    fun shareTranscript() {
+        val text = RinTerminal.buffer.toPlainText()
+        if (text.isEmpty()) return
+        val send = Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_TEXT, text)
+        }
+        val chooser = Intent.createChooser(send, null)
+        if (context !is android.app.Activity) chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        try { context.startActivity(chooser) } catch (_: Throwable) { /* لا تطبيق مشاركة */ }
+    }
+
     // ---- الإدخال ----
 
     private fun submit() {
@@ -198,6 +253,7 @@ class RinTerminalView @JvmOverloads constructor(
         }
         field.setText("")
         historyIndex = -1
+        lastTabPrefix = null
         runShell(text)
     }
 
@@ -208,6 +264,16 @@ class RinTerminalView @JvmOverloads constructor(
             field.setText("")
             updateMode()
             d(null)
+        } else if (RinTerminal.repl.isContinuing) {
+            RinTerminal.repl.cancelPending()
+            field.setText("")
+            RinTerminal.system("^C")
+            updateMode()
+        } else if (RinJobScheduler.isRunning()) {
+            // ^C أثناء تشغيل لا ينتظر إدخالاً: أوقفه (وأفرغ الطابور خلفه).
+            field.setText("")
+            RinTerminal.system("^C")
+            RinJobScheduler.stopAll()
         } else {
             field.setText("")
             historyIndex = -1
@@ -224,46 +290,175 @@ class RinTerminalView @JvmOverloads constructor(
         field.setSelection(text.length)
     }
 
+    // ---- shell ----
+
     private fun runShell(raw: String) {
-        val cmd = raw.trim()
-        if (cmd.isEmpty()) return
-        RinTerminal.command(cmd)
-        when (cmd.lowercase()) {
+        val repl = RinTerminal.repl
+        var line = raw.trimEnd()
+        if (line.isBlank() && !repl.isContinuing) return
+
+        // أوامر الـ shell لا تُقبل في منتصف أمر متعدد الأسطر (قد تكون جزءاً من الشيفرة).
+        if (!repl.isContinuing) {
+            // `!!` = آخر أمر، `!N` = الأمر رقم N في `history` (يُعرض الأمر المُوسَّع قبل تنفيذه).
+            expandHistory(line)?.let { expanded ->
+                if (expanded.isEmpty()) {
+                    RinTerminal.command(line)
+                    RinTerminal.system(context.getString(R.string.terminal_history_none), TermRole.ERROR)
+                    return
+                }
+                line = expanded
+            }
+            val parts = line.trim().split(Regex("\\s+"), limit = 2)
+            val cmd = parts[0].lowercase()
+            val arg = parts.getOrNull(1)?.trim().orEmpty()
+            if (cmd in SHELL_COMMANDS && (arg.isEmpty() || cmd in COMMANDS_WITH_ARG)) {
+                RinTerminal.command(line.trim())
+                saveHistory()
+                runBuiltin(cmd, arg)
+                return
+            }
+        }
+
+        RinTerminal.echo(line, if (repl.isContinuing) TermRole.CONT else TermRole.COMMAND)
+        when (val r = repl.feed(line)) {
+            is RinReplSession.Feed.NeedMore -> Unit
+            is RinReplSession.Feed.Ready -> {
+                RinTerminal.remember(r.display.replace('\n', ' ').trim())
+                saveHistory()
+                val source = repl.buildSource(r.code)
+                val accepted = onExecuteRequested?.invoke(source) { repl.commit(r.code) } ?: false
+                if (!accepted) RinTerminal.system(context.getString(R.string.job_queue_full_toast), TermRole.ERROR)
+            }
+        }
+        updateMode()
+    }
+
+    /** null = ليس أمر تاريخ؛ "" = أمر تاريخ لكن لا يوجد ما يطابقه؛ غير ذلك = الأمر المُوسَّع. */
+    private fun expandHistory(line: String): String? {
+        val m = HISTORY_REF.matchEntire(line.trim()) ?: return null
+        val h = RinTerminal.buffer.history()
+        val ref = m.groupValues[1]
+        return if (ref == "!") h.lastOrNull().orEmpty()
+        else h.getOrNull((ref.toIntOrNull() ?: 0) - 1).orEmpty()
+    }
+
+    private fun runBuiltin(cmd: String, arg: String) {
+        when (cmd) {
             "help", "?" -> RinTerminal.system(context.getString(R.string.terminal_help))
             "clear", "cls" -> RinTerminal.clear()
             "run" -> onRunRequested?.invoke()
             "history" -> {
                 val h = RinTerminal.buffer.history()
                 RinTerminal.system(
-                    if (h.isEmpty()) "(empty)"
+                    if (h.isEmpty()) context.getString(R.string.terminal_empty)
                     else h.mapIndexed { i, s -> "${(i + 1).toString().padStart(3)}  $s" }.joinToString("\n")
                 )
             }
             "version" -> RinTerminal.system(
                 try { RinEngine.engineVersion() } catch (t: Throwable) { "engine unavailable" }
             )
-            "stop", "cancel" -> RinTerminal.system(context.getString(R.string.terminal_nothing_waiting))
-            else -> {
-                val code = if (cmd.endsWith(";") || cmd.endsWith("}")) cmd else "$cmd;"
-                onExecuteRequested?.invoke(code)
+            "reset" -> {
+                RinTerminal.repl.reset()
+                RinTerminal.system(context.getString(R.string.terminal_session_reset))
+            }
+            "session", "vars" -> {
+                val names = RinTerminal.repl.declaredNames()
+                RinTerminal.system(
+                    if (names.isEmpty()) context.getString(R.string.terminal_session_empty)
+                    else names.joinToString("  ")
+                )
+            }
+            "grep" -> {
+                if (arg.isEmpty()) RinTerminal.system(context.getString(R.string.terminal_grep_usage))
+                else {
+                    val hits = RinTerminal.buffer.grep(arg)
+                    RinTerminal.system(if (hits.isEmpty()) context.getString(R.string.terminal_grep_none, arg) else hits.joinToString("\n"))
+                }
+            }
+            "goto" -> {
+                val n = arg.toIntOrNull()
+                if (n == null || n < 1) RinTerminal.system(context.getString(R.string.terminal_goto_usage), TermRole.ERROR)
+                else onGoToLine?.invoke(n)
+            }
+            "share" -> shareTranscript()
+            "copy" -> copyTranscript()
+            "stop", "cancel" -> {
+                RinTerminal.system(
+                    context.getString(
+                        if (RinJobScheduler.stopAll()) R.string.terminal_stopped else R.string.terminal_nothing_waiting
+                    )
+                )
             }
         }
     }
+
+    // ---- تاريخ الأوامر المحفوظ بين الجلسات ----
+
+    private fun loadHistory(): List<String> =
+        prefs.getString(KEY_HISTORY, null)?.split(HISTORY_SEP)?.filter { it.isNotBlank() }.orEmpty()
+
+    private fun saveHistory() {
+        prefs.edit().putString(KEY_HISTORY, RinTerminal.buffer.history().joinToString(HISTORY_SEP)).apply()
+    }
+
+    // ---- الإكمال التلقائي (⇥) ----
+
+    private fun complete() {
+        if (deliver != null) return
+        val text = field.text.toString()
+        val cursor = field.selectionStart.coerceIn(0, text.length)
+        val before = text.substring(0, cursor)
+        val prefix = Regex("[\\p{L}\\p{N}_]*$").find(before)?.value.orEmpty()
+        if (prefix.isEmpty()) return
+
+        val pool = LinkedHashSet<String>()
+        if (before.trim() == prefix) pool.addAll(SHELL_COMMANDS.filter { it.length > 1 && it !in ALIAS_ONLY })   // الكلمة الأولى فقط
+        pool.addAll(rinWords())
+        val matches = RinTerminal.repl.complete(prefix, pool)
+        if (matches.isEmpty()) return
+
+        val common = matches.reduce { a, b -> a.commonPrefixWith(b) }
+        if (common.length > prefix.length) {
+            val start = cursor - prefix.length
+            field.setText(text.substring(0, start) + common + text.substring(cursor))
+            field.setSelection(start + common.length)
+            lastTabPrefix = null
+        } else if (lastTabPrefix == prefix || matches.size == 1) {
+            // ضغطة ثانية بلا تقدّم (أو مرشّح واحد مطابق تماماً): اعرض الخيارات.
+            RinTerminal.system(matches.take(40).joinToString("  "))
+            lastTabPrefix = null
+        } else {
+            lastTabPrefix = prefix
+        }
+    }
+
+    private var cachedWords: List<String>? = null
+
+    private fun rinWords(): List<String> =
+        cachedWords ?: (try { RinSyntax.keywordsFor(SyntaxLanguage.RIN) } catch (t: Throwable) { emptyList() }).also { cachedWords = it }
 
     // ---- الرسم ----
 
     private fun updateMode() {
         val waiting = deliver != null
-        promptLabel.text = if (waiting) "›" else "$"
-        promptLabel.setTextColor(if (waiting) ACCENT else PROMPT_GREEN)
-        field.hint = context.getString(if (waiting) R.string.terminal_hint_input else R.string.terminal_hint_shell)
-        btnUp.visibility = if (waiting) View.GONE else View.VISIBLE
-        btnDown.visibility = if (waiting) View.GONE else View.VISIBLE
-        btnCtrlC.setTextColor(if (waiting) ERROR_RED else DIM)
+        val continuing = !waiting && RinTerminal.repl.isContinuing
+        promptLabel.text = when { waiting -> "›"; continuing -> "…"; else -> "$" }
+        promptLabel.setTextColor(
+            when { waiting -> ACCENT; continuing -> CONT_YELLOW; else -> PROMPT_GREEN }
+        )
+        field.hint = context.getString(
+            when { waiting -> R.string.terminal_hint_input; continuing -> R.string.terminal_hint_continue; else -> R.string.terminal_hint_shell }
+        )
+        val shellOnly = if (waiting) View.GONE else View.VISIBLE
+        btnTab.visibility = shellOnly
+        btnUp.visibility = shellOnly
+        btnDown.visibility = shellOnly
+        val running = !waiting && RinJobScheduler.isRunning()
+        btnCtrlC.setTextColor(if (waiting || running) ERROR_RED else if (continuing) CONT_YELLOW else DIM)
         inputBox.background = GradientDrawable().apply {
             cornerRadius = dp(10).toFloat()
             setColor(INPUT_BG)
-            setStroke(dp(if (waiting) 2 else 1), if (waiting) ACCENT else BORDER)
+            setStroke(dp(if (waiting) 2 else 1), if (waiting) ACCENT else if (continuing) CONT_YELLOW else BORDER)
         }
     }
 
@@ -272,6 +467,7 @@ class RinTerminalView @JvmOverloads constructor(
         if (!force && snap.version == lastVersion) return
         lastVersion = snap.version
         screen.text = render(snap)
+        updateMode()
         if (stickToBottom) scroll.post { scroll.fullScroll(View.FOCUS_DOWN) }
     }
 
@@ -281,10 +477,18 @@ class RinTerminalView @JvmOverloads constructor(
             sb.span(context.getString(R.string.terminal_welcome), DIM)
             return sb
         }
-        for (line in snap.lines) {
+        // الرسم على آخر RENDER_MAX سطراً فقط (سجل ضخم يُعاد بناؤه كل ~60ms أثناء البث)؛ Copy/Share يأخذان الكل.
+        val hidden = (snap.lines.size - RENDER_MAX).coerceAtLeast(0)
+        if (hidden > 0) sb.span(context.getString(R.string.terminal_hidden_lines, hidden) + "\n", DIM)
+        for (idx in hidden until snap.lines.size) {
+            val line = snap.lines[idx]
             when (line.role) {
                 TermRole.COMMAND -> {
                     sb.span("$ ", PROMPT_GREEN, bold = true)
+                    sb.span(line.text, WHITE)
+                }
+                TermRole.CONT -> {
+                    sb.span("… ", CONT_YELLOW, bold = true)
                     sb.span(line.text, WHITE)
                 }
                 TermRole.SYSTEM -> sb.span(line.text, DIM)
@@ -292,7 +496,10 @@ class RinTerminalView @JvmOverloads constructor(
                 TermRole.ERROR -> sb.span(line.text, ERROR_RED)
                 TermRole.OUTPUT -> {
                     val color = colorFor(line.kind)
-                    if (line.answerFrom in 0..line.text.length) {
+                    val errLine = line.errorLine
+                    if (errLine != null) {
+                        sb.link(line.text, ERROR_RED) { onGoToLine?.invoke(errLine) }
+                    } else if (line.answerFrom in 0..line.text.length) {
                         sb.span(line.text.substring(0, line.answerFrom), color)
                         sb.span(line.text.substring(line.answerFrom), ANSWER_BLUE, bold = true)
                     } else {
@@ -319,6 +526,20 @@ class RinTerminalView @JvmOverloads constructor(
         if (bold) setSpan(StyleSpan(Typeface.BOLD), start, length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
     }
 
+    /** نص قابل للنقر بلون ثابت وتحته خط (لا لون الرابط الافتراضي). */
+    private fun SpannableStringBuilder.link(text: String, color: Int, onClick: () -> Unit) {
+        if (text.isEmpty()) return
+        val start = length
+        append(text)
+        setSpan(object : ClickableSpan() {
+            override fun onClick(widget: View) = onClick()
+            override fun updateDrawState(ds: TextPaint) {
+                ds.color = color
+                ds.isUnderlineText = true
+            }
+        }, start, length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+    }
+
     private fun chip(label: String): TextView = TextView(context).apply {
         text = label
         gravity = Gravity.CENTER
@@ -328,7 +549,7 @@ class RinTerminalView @JvmOverloads constructor(
         minWidth = dp(34)
         setPadding(dp(8), 0, dp(8), 0)
         isClickable = true
-        isFocusable = false   // لا يسرق التركيز من الحقل فيختفي لوحة المفاتيح
+        isFocusable = false   // لا يسرق التركيز من الحقل فتختفي لوحة المفاتيح
         background = GradientDrawable().apply {
             cornerRadius = dp(8).toFloat()
             setColor(CHIP_BG)
@@ -338,7 +559,26 @@ class RinTerminalView @JvmOverloads constructor(
     private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()
 
     private companion object {
-        // الـ terminal داكن دائماً (مثل أي terminal) بغضّ النظر عن سمة التطبيق.
+        const val KEY_FONT = "font_sp"
+        const val FONT_MIN = 9f
+        const val FONT_MAX = 24f
+        const val RENDER_MAX = 800
+
+        const val KEY_HISTORY = "history"
+        const val HISTORY_SEP = "\u0001"
+
+        /** `!!` أو `!N` فقط (لا يلتبس مع نفي Rin `!flag`). */
+        val HISTORY_REF = Regex("^!(!|\\d+)$")
+
+        /** الأوامر الأساسية تُقترح بالإكمال؛ البدائل (cls/vars/cancel/?) تُقبل عند الكتابة فقط. */
+        val SHELL_COMMANDS = listOf(
+            "help", "run", "stop", "clear", "history", "version", "reset", "session", "grep", "goto", "share", "copy",
+            "cls", "vars", "cancel", "?"
+        )
+        val COMMANDS_WITH_ARG = setOf("grep", "goto")
+        val ALIAS_ONLY = setOf("cls", "vars", "cancel")
+
+        // الterminal داكن دائماً (مثل أي terminal) بغضّ النظر عن سمة التطبيق.
         const val BG = 0xFF0D1117.toInt()
         const val INPUT_BG = 0xFF161B22.toInt()
         const val CHIP_BG = 0xFF21262D.toInt()
@@ -351,5 +591,6 @@ class RinTerminalView @JvmOverloads constructor(
         const val PROMPT_GREEN = 0xFF56D364.toInt()
         const val OK_GREEN = 0xFF3FB950.toInt()
         const val ERROR_RED = 0xFFF85149.toInt()
+        const val CONT_YELLOW = 0xFFD29922.toInt()
     }
 }
