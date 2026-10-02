@@ -1,0 +1,2 @@
+// let_err_eq.rin — اختبار تحقّق لـ docs/let-plus.md
+let [a, b] [1, 2];
