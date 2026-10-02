@@ -70,6 +70,13 @@ RinError diagErr(diag::Code code, int line, std::string message) {
 }
 
 
+// let+: كل الأسماء التي يعرّفها تصريح let (بسيط/مجموعة/نمط) — تُستعمل لتصدير export وللاستيراد الانتقائي.
+static void letDeclaredNames(const StmtPtr& st, std::vector<std::string>& out) {
+    if (auto ls = std::dynamic_pointer_cast<LetStmt>(st)) { out.push_back(ls->name); return; }
+    if (auto lp = std::dynamic_pointer_cast<LetPatternStmt>(st)) { letPatternNames(lp->pattern, out); return; }
+    if (auto lg = std::dynamic_pointer_cast<LetGroupStmt>(st)) for (auto& it : lg->items) letDeclaredNames(it, out);
+}
+
 // تصريحات أمامية (forward declarations): تُستخدَم هذه الدوال داخل registerNatives() أدناه
 // (natives["httpRequest"]... إلخ) قبل تعريفها الفعلي في نهاية الملف (قسم "أدوات HTTP الحقيقي")،
 // وبلا هذه التصريحات لن يُبنى الملف (استخدام قبل التعريف). عرّفها هنا فقط، اترك التعريف الفعلي
@@ -7662,8 +7669,15 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
     case StmtKind::LetStmt: { auto s = std::static_pointer_cast<LetStmt>(stmt);
         Value v = Value::nil();
         if (s->initializer) v = copyForBinding(evaluate(s->initializer, env));
+        if (s->elseBlock && v.type == Value::Type::NIL) letRunElse(s->elseBlock, env, s->line, "`" + s->name + "` was nil");
         if (!s->typeName.empty()) checkDeclaredType(v, s->typeName, "variable `" + s->name + "`", s->line);
         env->define(s->name, v);
+        return;
+    }
+    // let+ (docs/let-plus.md): let [a, b] = ...; | let {x, y} = ...; | let a = 1, b = 2;
+    case StmtKind::LetPatternStmt: letExecPattern(std::static_pointer_cast<LetPatternStmt>(stmt), env); return;
+    case StmtKind::LetGroupStmt: {
+        for (auto& item : std::static_pointer_cast<LetGroupStmt>(stmt)->items) execute(item, env);
         return;
     }
     // المتغيرات الحيّة (Living Variables): stone/gauge/tape/lens/fuse + bell + trial + undo/redo/rearm/unbell/abort
@@ -7872,7 +7886,15 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
         }
         for (auto& item : items) {
             auto iterEnv = std::make_shared<Environment>(env);
-            iterEnv->define(s->varName, item);
+            if (s->pattern) { // let+: for (let [k, v] in pairs)
+                LetBindings binds; std::string why;
+                if (item.type == Value::Type::NIL || !letBindPattern(*s->pattern, item, env, binds, why))
+                    throw diagErr(diag::Code::E0004_InvalidType, s->line,
+                                  "cannot destructure a `for...in` item: " + (item.type == Value::Type::NIL ? std::string("the item is nil") : why));
+                for (auto& b : binds) iterEnv->define(b.first, b.second);
+            } else {
+                iterEnv->define(s->varName, item);
+            }
             try {
                 execute(s->body, iterEnv);
             } catch (BreakSignal&) {
@@ -8355,6 +8377,13 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
                         if (auto ls = std::dynamic_pointer_cast<LetStmt>(st)) name = ls->name;
                         else if (auto fs = std::dynamic_pointer_cast<FunctionStmt>(st)) name = fs->name;
                         else if (auto es = std::dynamic_pointer_cast<EnumStmt>(st)) name = es->name;
+                        else if (st->stmtKind == StmtKind::LetGroupStmt || st->stmtKind == StmtKind::LetPatternStmt) {
+                            // let+: export let a = 1, b = 2;  /  export let [x, y] = pair;  -> كل أسماء التصريح
+                            std::vector<std::string> names;
+                            letDeclaredNames(st, names);
+                            for (auto& n : names) { Value nv; if (libEnv->get(n, nv)) env->define(n, nv); }
+                            continue;
+                        }
                         else continue; // ClassStmt: مسجَّلة عالمياً فعلاً (انظر التعليق أعلاه)، لا شيء يُنسَخ
                         Value v;
                         if (libEnv->get(name, v)) env->define(name, v);
@@ -8528,6 +8557,10 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
                 else if (auto fs = std::dynamic_pointer_cast<FunctionStmt>(st)) name = fs->name;
                 else if (auto es = std::dynamic_pointer_cast<EnumStmt>(st)) name = es->name;
                 else if (auto cs = std::dynamic_pointer_cast<ClassStmt>(st)) name = cs->name;
+                else if (st->stmtKind == StmtKind::LetGroupStmt || st->stmtKind == StmtKind::LetPatternStmt) {
+                    std::vector<std::string> names; letDeclaredNames(st, names); // let+
+                    for (auto& n : names) if (n == requestedName) { name = n; break; }
+                }
                 if (name == requestedName) { found = st; break; }
             }
             if (!found) {
@@ -9882,6 +9915,7 @@ Value Interpreter::evaluate(const ExprPtr& expr, EnvPtr env) {
         assignStateAware(owner, e->name, stored, e->line);
         return stored;
     }
+    case ExprKind::PatternAssign: return letPatternAssign(std::static_pointer_cast<PatternAssignExpr>(expr), env);
     case ExprKind::Conditional: { auto e = std::static_pointer_cast<ConditionalExpr>(expr);
         if (evaluate(e->condition, env).isTruthy()) return evaluate(e->whenTrue, env);
         return evaluate(e->whenFalse, env);
@@ -10867,6 +10901,128 @@ std::optional<Interpreter::FlowRunResult> Interpreter::replayFlow(const std::str
     return result;
 }
 
+
+
+// ============================================================================
+// let+ — تفكيك الأنماط، عدة تصريحات، let ... else، وإسناد تفكيكي. الشرح: docs/let-plus.md
+// ----------------------------------------------------------------------------
+// المبدأ: نجمع كل الارتباطات أولاً في قائمة (LetBindings) ولا نعرّف شيئًا إلا بعد نجاح النمط كاملاً،
+// فلا يبقى نصف-ارتباط إن فشلت مطابقة الشكل في منتصف النمط.
+// ============================================================================
+bool Interpreter::letBindPattern(const LetPattern& p, const Value& vIn, const EnvPtr& env, LetBindings& out, std::string& why) {
+    Value v = vIn;
+    if (p.defaultValue && v.type == Value::Type::NIL) { // القيمة الافتراضية: عند الغياب أو nil، وترى ما رُبط قبلها
+        EnvPtr dEnv = env;
+        if (!out.empty()) {
+            dEnv = std::make_shared<Environment>(env);
+            for (auto& b : out) dEnv->define(b.first, b.second);
+        }
+        v = copyForBinding(evaluate(p.defaultValue, dEnv));
+    }
+    switch (p.kind) {
+        case LetPattern::Kind::Skip: return true;
+        case LetPattern::Kind::Name:
+            // هدف arr[i] / obj.f في إسناد تفكيكي: اسم داخلي فريد يُحلّ في letPatternAssign
+            out.push_back({p.assignExpr ? "\x01" + std::to_string(reinterpret_cast<uintptr_t>(&p)) : p.name, copyForBinding(v)});
+            return true;
+        case LetPattern::Kind::Array: {
+            if (v.type != Value::Type::ARRAY || !v.array) {
+                why = "expected an array to take apart with `[...]`, but got " + (v.type == Value::Type::NIL ? std::string("nil") : "`" + v.typeName() + "`");
+                return false;
+            }
+            const ArrayData& arr = *v.array;
+            for (size_t i = 0; i < p.items.size(); ++i) {
+                Value elem = i < arr.size() ? arr[i] : Value::nil();
+                if (!letBindPattern(p.items[i], elem, env, out, why)) return false;
+            }
+            if (p.hasRest && !p.restName.empty()) {
+                auto rest = std::make_shared<ArrayData>();
+                for (size_t i = p.items.size(); i < arr.size(); ++i) rest->push_back(arr[i]);
+                out.push_back({p.restName, Value::makeArray(rest)});
+            }
+            return true;
+        }
+        case LetPattern::Kind::Map: {
+            bool isMap = v.type == Value::Type::MAP && v.map;
+            bool isInst = v.type == Value::Type::INSTANCE && v.instance;
+            if (!isMap && !isInst) {
+                why = "expected a map or object to take apart with `{...}`, but got " + (v.type == Value::Type::NIL ? std::string("nil") : "`" + v.typeName() + "`");
+                return false;
+            }
+            std::unordered_set<std::string> used;
+            for (auto& item : p.items) {
+                Value got = Value::nil();
+                if (isMap) {
+                    for (auto& kv : *v.map)
+                        if (kv.first.type == Value::Type::STRING && kv.first.str == item.key) { got = kv.second; break; }
+                } else {
+                    auto it = v.instance->fields.find(item.key);
+                    if (it != v.instance->fields.end()) got = it->second;
+                }
+                used.insert(item.key);
+                if (!letBindPattern(item, got, env, out, why)) return false;
+            }
+            if (p.hasRest && !p.restName.empty()) {
+                if (!isMap) { why = "`...rest` in a `{...}` pattern needs a map (an object has no 'remaining keys')"; return false; }
+                auto rest = std::make_shared<MapData>();
+                for (auto& kv : *v.map)
+                    if (!(kv.first.type == Value::Type::STRING && used.count(kv.first.str))) rest->push_back(kv);
+                out.push_back({p.restName, Value::makeMap(rest)});
+            }
+            return true;
+        }
+    }
+    return true;
+}
+
+void Interpreter::letRunElse(const std::shared_ptr<BlockStmt>& blk, const EnvPtr& env, int line, const std::string& what) {
+    execute(blk, env); // return/break/continue/throw/abort تخرج هنا كاستثناءات التحكم المعتادة
+    throw diagErr(diag::Code::E0048_LetElseFallthrough, line,
+                  "the `else` block of `let` must leave the current scope, but it finished normally (" + what + ")");
+}
+
+void Interpreter::letExecPattern(const std::shared_ptr<LetPatternStmt>& s, const EnvPtr& env) {
+    Value v = evaluate(s->initializer, env);
+    LetBindings binds;
+    std::string why;
+    bool ok = v.type != Value::Type::NIL && letBindPattern(s->pattern, v, env, binds, why);
+    if (!ok) {
+        if (s->elseBlock) letRunElse(s->elseBlock, env, s->line, "the value was nil or did not match the pattern");
+        throw diagErr(diag::Code::E0004_InvalidType, s->line,
+                      "cannot destructure: " + (v.type == Value::Type::NIL ? std::string("the value is nil") : why));
+    }
+    for (auto& b : binds) env->define(b.first, b.second);
+}
+
+Value Interpreter::letPatternAssign(const std::shared_ptr<PatternAssignExpr>& e, const EnvPtr& env) {
+    Value v = evaluate(e->value, env); // الطرف الأيمن كاملاً أولاً: هذا ما يجعل [a, b] = [b, a] تبديلاً صحيحاً
+    LetBindings binds;
+    std::string why;
+    if (v.type == Value::Type::NIL || !letBindPattern(e->pattern, v, env, binds, why))
+        throw diagErr(diag::Code::E0004_InvalidType, e->line,
+                      "cannot destructure: " + (v.type == Value::Type::NIL ? std::string("the value is nil") : why));
+    std::unordered_map<std::string, const LetPattern*> targets; // arr[i] / obj.f
+    std::function<void(const LetPattern&)> collect = [&](const LetPattern& p) {
+        if (p.assignExpr) targets["\x01" + std::to_string(reinterpret_cast<uintptr_t>(&p))] = &p;
+        for (auto& sub : p.items) collect(sub);
+    };
+    collect(e->pattern);
+    for (auto& b : binds) {
+        auto tg = targets.find(b.first);
+        if (tg != targets.end()) {
+            auto tmpEnv = std::make_shared<Environment>(env);
+            tmpEnv->define("__pa_value", copyForBinding(b.second));
+            evaluate(tg->second->assignExpr, tmpEnv);
+            continue;
+        }
+        Environment* owner = findLiveOwner(env, b.first);
+        if (!owner) throw undefinedVariableErr(b.first, e->line, env);
+        Value stored = copyForBinding(b.second);
+        if (liveActive_) liveAssign(owner, b.first, stored, e->line); // stone/gauge/tape/bell/trial تعمل هنا أيضًا
+        else assignStateAware(owner, b.first, stored, e->line);
+    }
+    return v;
+}
 
 // ============================================================================
 // المتغيرات الحيّة (Living Variables) — التنفيذ. الشرح الكامل: docs/living-variables.md
