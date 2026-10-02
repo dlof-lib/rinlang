@@ -493,6 +493,35 @@ StmtPtr Parser::achieveStatement() {
 }
 
 StmtPtr Parser::letDeclaration() {
+    // let+ (docs/let-plus.md): عنصر واحد أو أكثر مفصولة بفاصلة؛ كل عنصر اسم بسيط أو نمط تفكيك.
+    // الشكل القديم `let x = 5;` يمرّ هنا بنفس رسائل الخطأ السابقة حرفيًا ويُرجع LetStmt كما كان.
+    int firstLine = peek().line;
+    std::vector<StmtPtr> items;
+    items.push_back(letDeclarator());
+    while (match({TokenType::COMMA})) items.push_back(letDeclarator());
+    consume(TokenType::SEMICOLON, "Expected ';' after variable declaration");
+    if (items.size() == 1) return items[0];
+    auto group = std::make_shared<LetGroupStmt>();
+    group->items = std::move(items);
+    group->line = firstLine;
+    return group;
+}
+
+StmtPtr Parser::letDeclarator() {
+    if (check(TokenType::LBRACKET) || check(TokenType::LBRACE)) {
+        Token startTok = peek();
+        auto st = std::make_shared<LetPatternStmt>();
+        st->line = startTok.line;
+        st->pattern = letPattern();
+        checkPatternDuplicates(st->pattern, startTok);
+        consume(TokenType::EQUAL, "Expected '=' after a destructuring pattern (a pattern needs a value to take apart)");
+        st->initializer = expression();
+        if (match({TokenType::ELSE})) {
+            consume(TokenType::LBRACE, "Expected '{' after 'else' of a `let` declaration");
+            st->elseBlock = block();
+        }
+        return st;
+    }
     auto name = consume(TokenType::IDENT, "Expected variable name after 'let'");
     // Type System: 'let name: Type = expr;' — ':' اختيارية بالكامل (additive صرف؛ أي برنامج Rin
     // صالح سابقاً لا يحتوي ':' هنا أصلاً فيبقى يعمل حرفياً بلا أي تغيير). التحقق الفعلي وقت التشغيل
@@ -502,16 +531,111 @@ StmtPtr Parser::letDeclaration() {
         typeName = consume(TokenType::IDENT, "Expected a type name after ':'").lexeme;
     }
     ExprPtr initializer = nullptr;
-    if (match({TokenType::EQUAL})) initializer = expression();
-    consume(TokenType::SEMICOLON, "Expected ';' after variable declaration");
+    std::shared_ptr<BlockStmt> elseBlock;
+    if (match({TokenType::EQUAL})) {
+        initializer = expression();
+        if (match({TokenType::ELSE})) {
+            consume(TokenType::LBRACE, "Expected '{' after 'else' of a `let` declaration");
+            elseBlock = block();
+        }
+    }
     auto stmt = std::make_shared<LetStmt>();
     stmt->name = name.lexeme;
     stmt->initializer = initializer;
     stmt->typeName = typeName;
+    stmt->elseBlock = elseBlock;
     stmt->line = name.line;
     return stmt;
 }
 
+// ---- let+ patterns ----
+static bool atEllipsis(const std::vector<Token>& t, size_t i) {
+    return i + 2 < t.size() && t[i].type == TokenType::DOT && t[i + 1].type == TokenType::DOT && t[i + 2].type == TokenType::DOT;
+}
+
+LetPattern Parser::letPatternPrimary() {
+    LetPattern p;
+    p.line = peek().line;
+    if (check(TokenType::IDENT)) {
+        Token n = advance();
+        p.kind = (n.lexeme == "_") ? LetPattern::Kind::Skip : LetPattern::Kind::Name;
+        p.name = n.lexeme;
+        return p;
+    }
+    if (check(TokenType::LBRACKET) || check(TokenType::LBRACE)) return letPattern();
+    throw errRich(diag::Code::E0013_InvalidExpression, peek(), "expected a name or a nested pattern inside a destructuring pattern",
+                  "a pattern is made of names, `_` (skip), and nested `[...]` / `{...}` patterns",
+                  "write a variable name, e.g. `let [first, second] = pair;`", "a name");
+}
+
+LetPattern Parser::letPattern() {
+    LetPattern p;
+    p.line = peek().line;
+    auto parseRest = [&](TokenType closer, const char* closerText) {
+        advance(); advance(); advance(); // '...'
+        p.hasRest = true;
+        p.restName = consume(TokenType::IDENT, "Expected a name after '...'").lexeme;
+        if (p.restName == "_") p.restName.clear();
+        if (!check(closer))
+            throw errRich(diag::Code::E0013_InvalidExpression, peek(), "'...rest' must be the last item of a pattern",
+                          "the rest collects everything that is left, so nothing can come after it",
+                          std::string("move `...") + p.restName + "` to the end, before `" + closerText + "`", closerText);
+    };
+    if (match({TokenType::LBRACKET})) {
+        p.kind = LetPattern::Kind::Array;
+        while (!check(TokenType::RBRACKET) && !isAtEnd()) {
+            if (atEllipsis(tokens, current)) { parseRest(TokenType::RBRACKET, "]"); break; }
+            if (check(TokenType::COMMA)) { // خانة فارغة: [a, , c]
+                LetPattern skip; skip.kind = LetPattern::Kind::Skip; skip.name = "_"; skip.line = peek().line;
+                p.items.push_back(skip); advance(); continue;
+            }
+            LetPattern sub = letPatternPrimary();
+            if (match({TokenType::EQUAL})) sub.defaultValue = expression();
+            p.items.push_back(std::move(sub));
+            if (!match({TokenType::COMMA})) break;
+        }
+        consume(TokenType::RBRACKET, "Expected ']' to close the destructuring pattern");
+        return p;
+    }
+    consume(TokenType::LBRACE, "Expected '[' or '{' to start a destructuring pattern");
+    p.kind = LetPattern::Kind::Map;
+    while (!check(TokenType::RBRACE) && !isAtEnd()) {
+        if (atEllipsis(tokens, current)) { parseRest(TokenType::RBRACE, "}"); break; }
+        Token k = peek();
+        if (k.type != TokenType::IDENT && k.type != TokenType::STRING)
+            throw errRich(diag::Code::E0013_InvalidExpression, k, "expected a key name inside a `{ ... }` pattern",
+                          "a map pattern lists the keys to pull out, e.g. `{name, age}` or `{city: town}`",
+                          "write a key name", "a key");
+        advance();
+        LetPattern sub;
+        if (match({TokenType::COLON})) {
+            sub = letPatternPrimary();
+        } else {
+            if (k.type != TokenType::IDENT)
+                throw errRich(diag::Code::E0013_InvalidExpression, k, "a quoted key needs a name to bind to",
+                              "`{\"my key\"}` has no variable name", "write `{\"my key\": name}`", "':'");
+            sub.kind = LetPattern::Kind::Name; sub.name = k.lexeme; sub.line = k.line;
+        }
+        if (match({TokenType::EQUAL})) sub.defaultValue = expression();
+        sub.key = k.lexeme;
+        p.items.push_back(std::move(sub));
+        if (!match({TokenType::COMMA})) break;
+    }
+    consume(TokenType::RBRACE, "Expected '}' to close the destructuring pattern");
+    return p;
+}
+
+void Parser::checkPatternDuplicates(const LetPattern& p, const Token& at) const {
+    std::vector<std::string> names;
+    letPatternNames(p, names);
+    std::unordered_set<std::string> seen;
+    for (auto& n : names) {
+        if (!seen.insert(n).second)
+            throw errRich(diag::Code::E0002_DuplicateVariable, at, "`" + n + "` appears twice in the same pattern",
+                          "each name in a pattern becomes one variable, so it can only be used once",
+                          "rename one of them, or use `_` to skip a position", "a unique name");
+    }
+}
 
 // ============================================================================
 // المتغيرات الحيّة (Living Variables) — انظر الشرح الكامل في rin_ast.h (LiveDeclStmt) وdocs/living-variables.md
@@ -1054,6 +1178,11 @@ StmtPtr Parser::classDeclarationEx(bool isStruct, ClassKind kind, bool isAbstrac
                 throw errRich(diag::Code::E0013_InvalidExpression, modTok, "static members are not supported inside a trait",
                               "a trait is mixed into instances", "declare the static member in the class itself", "'let'");
             auto letStmt = std::dynamic_pointer_cast<LetStmt>(letDeclaration());
+            if (!letStmt || letStmt->elseBlock)
+                throw errRich(diag::Code::E0013_InvalidExpression, previous(),
+                              "a class field takes exactly one plain `let name = value;`",
+                              "destructuring patterns, several names in one `let`, and `let ... else` apply to code, not to field declarations",
+                              "declare each field on its own line", "'let name = value;'");
             ClassFieldDecl fd;
             fd.name = letStmt->name;
             fd.initializer = letStmt->initializer;
@@ -1566,6 +1695,30 @@ StmtPtr Parser::forStatement() {
     // C-style أدناه: 'let' + IDENT + IDENT("in") تحديداً (نظرة ثلاث خطوات للأمام) يُميِّزه عن
     // `for (let i = 0; ...)` العادية بلا أي غموض -- 'in' كلمة سياقية غير محجوزة (بنفس أسلوب
     // extends/try/catch أعلاه)، فاستخدامها اسم متغيّر عادي في أي سياق آخر يبقى يعمل بلا تغيير.
+    // let+: for (let [k, v] in pairs) / for (let {name} in rows) — نمط تفكيك لكل عنصر. إن لم يتبع النمطَ
+    // 'in' (مثلاً `for (let [a, b] = pair; ...)`) نرجع إلى مسار C-style العادي.
+    if (check(TokenType::LET) && current + 1 < tokens.size() &&
+        (tokens[current + 1].type == TokenType::LBRACKET || tokens[current + 1].type == TokenType::LBRACE)) {
+        size_t save = current;
+        Token letTok = advance(); // 'let'
+        LetPattern pat = letPattern();
+        if (check(TokenType::IDENT) && peek().lexeme == "in") {
+            advance(); // 'in'
+            checkPatternDuplicates(pat, letTok);
+            auto iterable = expression();
+            consume(TokenType::RPAREN, "Expected ')' after 'for...in' iterable");
+            loopDepth++;
+            auto body = statement();
+            loopDepth--;
+            auto stmt = std::make_shared<ForInStmt>();
+            stmt->pattern = std::make_shared<LetPattern>(std::move(pat));
+            stmt->iterable = iterable;
+            stmt->body = body;
+            stmt->line = forTok.line;
+            return stmt;
+        }
+        current = save;
+    }
     if (check(TokenType::LET) && current + 2 < tokens.size() &&
         tokens[current + 1].type == TokenType::IDENT &&
         tokens[current + 2].type == TokenType::IDENT && tokens[current + 2].lexeme == "in") {
@@ -2785,6 +2938,42 @@ StmtPtr Parser::simplifiedStatement() {
 
 ExprPtr Parser::expression() { return assignment(); }
 
+// let+: يحوّل تعبير مصفوفة (الطرف الأيسر من `=`) إلى LetPattern لإسناد تفكيكي.
+static bool exprToAssignPattern(const ExprPtr& e, LetPattern& out, std::string& why) {
+    if (auto v = std::dynamic_pointer_cast<VariableExpr>(e)) {
+        out.kind = (v->name == "_") ? LetPattern::Kind::Skip : LetPattern::Kind::Name;
+        out.name = v->name; out.line = v->line; return true;
+    }
+    if (auto a = std::dynamic_pointer_cast<AssignExpr>(e)) { // [a = 1] -> قيمة افتراضية
+        out.kind = LetPattern::Kind::Name; out.name = a->name; out.defaultValue = a->value; out.line = a->line; return true;
+    }
+    if (auto arr = std::dynamic_pointer_cast<ArrayExpr>(e)) {
+        out.kind = LetPattern::Kind::Array; out.line = arr->line;
+        for (auto& el : arr->elements) {
+            LetPattern sub;
+            if (!exprToAssignPattern(el, sub, why)) return false;
+            out.items.push_back(std::move(sub));
+        }
+        return true;
+    }
+    if (auto ix = std::dynamic_pointer_cast<IndexExpr>(e)) { // [arr[0], arr[1]] = [arr[1], arr[0]];
+        auto set = std::make_shared<IndexSetExpr>();
+        set->object = ix->object; set->index = ix->index; set->line = ix->line;
+        auto tmp = std::make_shared<VariableExpr>(); tmp->name = "__pa_value"; tmp->line = ix->line;
+        set->value = tmp;
+        out.kind = LetPattern::Kind::Name; out.assignExpr = set; out.line = ix->line; return true;
+    }
+    if (auto ge = std::dynamic_pointer_cast<GetExpr>(e)) {   // [p.x, p.y] = [p.y, p.x];
+        auto set = std::make_shared<SetExpr>();
+        set->object = ge->object; set->name = ge->name; set->line = ge->line;
+        auto tmp = std::make_shared<VariableExpr>(); tmp->name = "__pa_value"; tmp->line = ge->line;
+        set->value = tmp;
+        out.kind = LetPattern::Kind::Name; out.assignExpr = set; out.line = ge->line; return true;
+    }
+    why = "only existing variables, `arr[i]`, `obj.field`, and nested `[...]` lists of them can be assigned this way";
+    return false;
+}
+
 ExprPtr Parser::assignment() {
     auto expr = pipeline();
     if (match({TokenType::QUESTION})) {
@@ -2823,6 +3012,22 @@ ExprPtr Parser::assignment() {
             set->value = value;
             set->line = eq.line;
             return set;
+        }
+        // let+: [a, b] = [b, a];  تفكيك على متغيّرات موجودة (تبديل القيم). الطرف الأيسر يُحوَّل من ArrayExpr
+        // إلى LetPattern: أسماء، `_` للتخطّي، `[x = 1]` لقيمة افتراضية، وقوائم متداخلة.
+        if (auto arr = std::dynamic_pointer_cast<ArrayExpr>(expr)) {
+            LetPattern pat; std::string why;
+            if (exprToAssignPattern(arr, pat, why)) {
+                checkPatternDuplicates(pat, eq);
+                auto pa = std::make_shared<PatternAssignExpr>();
+                pa->pattern = std::move(pat);
+                pa->value = value;
+                pa->line = eq.line;
+                return pa;
+            }
+            throw errRich(diag::Code::E0003_InvalidAssignment, eq, "invalid destructuring assignment target", why,
+                          "use variables, `arr[i]`, `obj.field`, `_`, and nested `[...]` lists, e.g. `[a, b] = [b, a];`",
+                          "a list of variable names");
         }
         throw errRich(diag::Code::E0003_InvalidAssignment, eq, "invalid assignment target",
                       "only a plain variable (`x = ...`), an index expression (`x[i] = ...`), or a "
