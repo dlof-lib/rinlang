@@ -46,6 +46,11 @@ std::string codeString(Code c) {
         case Code::E0040_UnsupportedFeature:     return "E0040";
         case Code::E0041_MissingDependency:      return "E0041";
         case Code::E0042_InvalidSql:             return "E0042";
+        case Code::E0043_FrozenVariable:         return "E0043";
+        case Code::E0044_RangeViolation:         return "E0044";
+        case Code::E0045_DerivedReadOnly:        return "E0045";
+        case Code::E0046_LiveMisuse:             return "E0046";
+        case Code::E0047_BellLoop:               return "E0047";
 
         case Code::W0001_UnusedVariable:         return "W0001";
         case Code::W0002_UnusedImport:           return "W0002";
@@ -103,6 +108,11 @@ std::string codeName(Code c) {
         case Code::E0040_UnsupportedFeature:     return "UnsupportedFeature";
         case Code::E0041_MissingDependency:      return "MissingDependency";
         case Code::E0042_InvalidSql:             return "InvalidSql";
+        case Code::E0043_FrozenVariable:         return "FrozenVariable";
+        case Code::E0044_RangeViolation:         return "RangeViolation";
+        case Code::E0045_DerivedReadOnly:        return "DerivedReadOnly";
+        case Code::E0046_LiveMisuse:             return "LiveMisuse";
+        case Code::E0047_BellLoop:               return "BellLoop";
 
         case Code::W0001_UnusedVariable:         return "UnusedVariable";
         case Code::W0002_UnusedImport:           return "UnusedImport";
