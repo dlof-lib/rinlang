@@ -20,6 +20,7 @@
     { "include": "#keyword-print" },
     { "include": "#make-unit" },
     { "include": "#reckon-unit" },
+    { "include": "#living-variables" },
     { "include": "#container-statement-keywords" },
     { "include": "#relation-keywords" },
     { "include": "#attribute-keywords" },
@@ -226,6 +227,29 @@
           "match": "(?<=\\b(?:use|need|allow|deny)\\s)\\s*(container|loop|function|condition|return|view|data|api|import|table|doc|chatbot|reckon)\\b",
           "name": "support.type.capability.make.rin"
         }
+      ]
+    },
+
+    "living-variables": {
+      "comment": "Living Variables: stone/gauge/tape/lens/fuse declarations, bell, trial, undo/redo/rearm/unbell/abort. See docs/living-variables.md.",
+      "patterns": [
+        {
+          "match": "\\b(stone|gauge|tape|lens|fuse|bell)\\b\\s+([A-Za-z_][A-Za-z0-9_]*)",
+          "captures": {
+            "1": { "name": "keyword.control.living.rin" },
+            "2": { "name": "variable.other.living.rin" }
+          }
+        },
+        {
+          "match": "\\b(undo|redo|rearm|unbell)\\b\\s+([A-Za-z_][A-Za-z0-9_]*)",
+          "captures": {
+            "1": { "name": "keyword.control.living.rin" },
+            "2": { "name": "variable.other.living.rin" }
+          }
+        },
+        { "match": "\\b(trial)\\b(?=\\s*\\{)", "name": "keyword.control.living.rin" },
+        { "match": "\\b(abort)\\b(?=\\s*;)", "name": "keyword.control.living.rin" },
+        { "match": "(?<=\\s)(within|burns)(?=\\s)", "name": "keyword.other.living.rin" }
       ]
     },
 
