@@ -19,6 +19,7 @@
 - [`indsin_expansion.md`](./indsin_expansion.md) — Indsin Design System v2: توكنز، ثيمات، تجاوب، حركات، actions، مدقّق.
 - [`oop.md`](./oop.md) — OOP الموسَّع (Rin 1.0): `interface` · `trait` · `abstract/final/override` · `static` · `private/protected` · `get/set` · عوامل سحرية · دوال `oop.*`.
 - [`containers.md`](./containers.md) — `@container`، أقسام، ترجمات، مستندات NoSQL.
+- [`table.md`](./table.md) — الجدول `@table`: حقول `rows`/`columns`/`style` ودوال اللغة وعائلة `#` عليه.
 - [`cross-file-containers.md`](./cross-file-containers.md) — `use ... from` (English) — calling a container/UI element from another file.
 - [`boat.md`](./boat.md)
 
