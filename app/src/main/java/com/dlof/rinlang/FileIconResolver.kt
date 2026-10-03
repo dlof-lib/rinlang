@@ -87,6 +87,21 @@ object FileIconResolver {
             return
         }
 
+        // 0.5) ملفات مشروع HTML: container.rin (منطق الصفحة) و.html و.css بأيقونات محلية فورية بلا شبكة
+        //      (بدل جلب شعارات Iconify التي تفشل دون اتصال).
+        if (file.name == "container.rin") {
+            imageView.setImageResource(R.drawable.ic_container_rin_file)
+            return
+        }
+        if (ext == "html" || ext == "htm") {
+            imageView.setImageResource(R.drawable.ic_html_file)
+            return
+        }
+        if (ext == "css") {
+            imageView.setImageResource(R.drawable.ic_css_file)
+            return
+        }
+
         // 1) .rin -> الأيقونة المضمَّنة كما كانت دائماً، بلا أي عمل إضافي.
         if (ext == "rin" || ext.isEmpty()) {
             imageView.setImageResource(R.drawable.ic_rin_file)
