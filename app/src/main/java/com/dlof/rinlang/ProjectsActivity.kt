@@ -241,7 +241,8 @@ class ProjectsActivity : AppCompatActivity() {
             chipTable to ProjectType.TABLE,
             chipUi to ProjectType.UI,
             chipFree to ProjectType.FREE,
-            chipIllust to ProjectType.ILLUST
+            chipIllust to ProjectType.ILLUST,
+            view.findViewById<View>(R.id.chipTypeHtml) to ProjectType.HTML
         )
 
         // قسم "رسم الواجهة" (يظهر فقط عند اختيار نوع UI): توب بار/بلا توب بار، قائمة جانبية/بلا
@@ -702,6 +703,7 @@ private class ProjectsAdapter(
         ProjectType.UI -> context.getString(R.string.project_type_ui)
         ProjectType.FREE -> context.getString(R.string.project_type_free)
         ProjectType.ILLUST -> context.getString(R.string.project_type_illust)
+        ProjectType.HTML -> context.getString(R.string.project_type_html)
     }
 
     /** أيقونة + لون هوية شارة نوع المشروع، بنفس الأيقونات المستخدمة في حوار "مشروع جديد". */
@@ -711,5 +713,6 @@ private class ProjectsAdapter(
         ProjectType.UI -> R.drawable.ic_type_ui to R.color.project_type_ui_color
         ProjectType.FREE -> R.drawable.ic_type_free to R.color.project_type_free_color
         ProjectType.ILLUST -> R.drawable.ic_illust_file to R.color.project_type_illust_color
+        ProjectType.HTML -> R.drawable.ic_type_html to R.color.project_type_html_color
     }
 }
