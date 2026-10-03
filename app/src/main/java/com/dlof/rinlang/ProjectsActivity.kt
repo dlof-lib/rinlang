@@ -221,8 +221,8 @@ class ProjectsActivity : AppCompatActivity() {
     }
 
     /**
-     * حوار "مشروع جديد": اسم المشروع + شبكة 2×2 من شرائح اختيار النوع (Container/Table/UI/
-     * Free Project، انظر [ProjectType]). عند الضغط على "إنشاء" تظهر مراحل الإنشاء
+     * حوار "مشروع جديد": اسم المشروع + صفوف اختيار النوع في قسمين — الويب (HTML + Rin / HTML + JS)
+     * وRin (Free/Container/Table/UI/Illust، انظر [ProjectType]). عند الضغط على "إنشاء" تظهر مراحل الإنشاء
      * (جاري التحميل.. / يتم التجهيز.. / تم..) عبر [ProjectCreationProgressDialog]، ثم يُفتح
      * المشروع تلقائياً في [FilesActivity].
      */
@@ -242,7 +242,8 @@ class ProjectsActivity : AppCompatActivity() {
             chipUi to ProjectType.UI,
             chipFree to ProjectType.FREE,
             chipIllust to ProjectType.ILLUST,
-            view.findViewById<View>(R.id.chipTypeHtml) to ProjectType.HTML
+            view.findViewById<View>(R.id.chipTypeHtml) to ProjectType.HTML,
+            view.findViewById<View>(R.id.chipTypeHtmlJs) to ProjectType.HTML_JS
         )
 
         // قسم "رسم الواجهة" (يظهر فقط عند اختيار نوع UI): توب بار/بلا توب بار، قائمة جانبية/بلا
@@ -704,6 +705,7 @@ private class ProjectsAdapter(
         ProjectType.FREE -> context.getString(R.string.project_type_free)
         ProjectType.ILLUST -> context.getString(R.string.project_type_illust)
         ProjectType.HTML -> context.getString(R.string.project_type_html)
+        ProjectType.HTML_JS -> context.getString(R.string.project_type_html_js)
     }
 
     /** أيقونة + لون هوية شارة نوع المشروع، بنفس الأيقونات المستخدمة في حوار "مشروع جديد". */
@@ -714,5 +716,6 @@ private class ProjectsAdapter(
         ProjectType.FREE -> R.drawable.ic_type_free to R.color.project_type_free_color
         ProjectType.ILLUST -> R.drawable.ic_illust_file to R.color.project_type_illust_color
         ProjectType.HTML -> R.drawable.ic_type_html to R.color.project_type_html_color
+        ProjectType.HTML_JS -> R.drawable.ic_type_html to R.color.project_type_html_js_color
     }
 }
