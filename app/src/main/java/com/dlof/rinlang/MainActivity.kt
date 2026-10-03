@@ -921,6 +921,8 @@ class MainActivity : AppCompatActivity() {
         if (currentProject?.let { HtmlRunActivity.isHtmlProject(it) } == true) {
             popup.menu.add(0, 5, 4, R.string.menu_run_html_page)
         }
+        // معاينة المشروع (HTML أو Rin) في متصفح الجهاز على http://localhost:7700/
+        if (currentProject != null) popup.menu.add(0, 6, 5, R.string.menu_run_open_localhost)
         popup.setOnMenuItemClickListener { item ->
             when (item.itemId) {
                 1 -> runProgram()
@@ -928,6 +930,7 @@ class MainActivity : AppCompatActivity() {
                 3 -> openLivePreviewManually()
                 4 -> checkContainerTags()
                 5 -> runAsHtmlPage()
+                6 -> openOnLocalhost()
             }
             true
         }
@@ -948,8 +951,9 @@ class MainActivity : AppCompatActivity() {
             file != null && HtmlRunActivity.isHtmlProject(project)) {
             return openHtmlPage(logicFile = file.relPath)
         }
+        val isWebType = project.type == ProjectType.HTML || project.type == ProjectType.HTML_JS
         val isHtmlSide = name == HtmlRunActivity.ENTRY_HTML || name == "style.css" ||
-            (project.type == ProjectType.HTML && (name == null || name == "main.rin"))
+            (isWebType && (name == null || name == "main.rin" || name.endsWith(".js")))
         if (!isHtmlSide) return false
         return openHtmlPage(logicFile = null)
     }
@@ -968,6 +972,13 @@ class MainActivity : AppCompatActivity() {
         if (hasSaveTarget()) saveSilently()
         HtmlRunActivity.start(this, project.name, logicFile)
         return true
+    }
+
+    /** «فتح على localhost:7700»: يحفظ الملف الحالي ثم يفتح المشروع في المتصفح عبر [RinLocalServer]. */
+    private fun openOnLocalhost() {
+        val project = currentProject ?: return
+        if (hasSaveTarget()) saveSilently()
+        RinLocalServer.openInBrowser(this, project.name)
     }
 
     /** «تشغيل كصفحة HTML» من قائمة Run: يستعمل الملف .rin المفتوح كملف المنطق (أي اسم، لا container.rin فقط). */
