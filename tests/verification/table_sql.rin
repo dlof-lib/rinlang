@@ -32,7 +32,7 @@ container.set("staff", "records", [{"id": 1, "tag": "a"}, {"id": 2}]);
 print getField("staff", "rows");
 container.set("staff", "header", ["ID", "TAG"]);
 print getField("staff", "header");
-try { container.set("staff", "body", []); } catch (e) { print e.code; }
+try { container.set("staff", "body", 5); } catch (e) { print e.code; }
 try { container.set("staff", "records", [1]); } catch (e) { print e.code; }
 
 // جدول بلا رأس نصي: الأعمدة c1,c2
