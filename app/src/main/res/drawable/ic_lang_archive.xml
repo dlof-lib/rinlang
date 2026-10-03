@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- ملفات مضغوطة (zip/rar/7z/tar/gz): صندوق ذهبي بسحّاب — محلية بلا شبكة. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path android:fillColor="#F2B632"
+        android:pathData="M5.5,2.5 L18.5,2.5 C20.2,2.5 21.5,3.8 21.5,5.5 L21.5,18.5 C21.5,20.2 20.2,21.5 18.5,21.5 L5.5,21.5 C3.8,21.5 2.5,20.2 2.5,18.5 L2.5,5.5 C2.5,3.8 3.8,2.5 5.5,2.5 Z" />
+    <path android:fillColor="#7A4B00" android:pathData="M10.5,2.5 L12,2.5 L12,4.2 L10.5,4.2 Z M12,4.2 L13.5,4.2 L13.5,5.9 L12,5.9 Z M10.5,5.9 L12,5.9 L12,7.6 L10.5,7.6 Z M12,7.6 L13.5,7.6 L13.5,9.3 L12,9.3 Z M10.5,9.3 L12,9.3 L12,11 L10.5,11 Z" />
+    <path android:fillColor="#FFF4D6" android:pathData="M9.5,11.8 L14.5,11.8 L14.5,17.8 C14.5,18.6 13.8,19.2 13,19.2 L11,19.2 C10.2,19.2 9.5,18.6 9.5,17.8 Z" />
+    <path android:fillColor="#7A4B00" android:pathData="M11,13.6 L13,13.6 L13,15.4 L11,15.4 Z" />
+</vector>
