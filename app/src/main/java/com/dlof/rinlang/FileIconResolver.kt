@@ -87,9 +87,10 @@ object FileIconResolver {
             return
         }
 
-        // 0.5) ملفات مشروع HTML: container.rin (منطق الصفحة) و.html و.css بأيقونات محلية فورية بلا شبكة
+        // 0.5) ملفات مشروع HTML: ملف حاوية الويب الموقَّع (منطق الصفحة) و.html و.css بأيقونات محلية فورية بلا شبكة
         //      (بدل جلب شعارات Iconify التي تفشل دون اتصال).
-        if (file.name == "container.rin") {
+        // ملف حاوية الويب يُعرَّف بتوقيعه (//! rin:container web) لا باسمه: أي مستخدم قد يسمّي ملفاً container.rin.
+        if (ext == "rin" && RinContainerFile.isWebContainer(file)) {
             imageView.setImageResource(R.drawable.ic_container_rin_file)
             return
         }
