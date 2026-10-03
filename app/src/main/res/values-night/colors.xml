@@ -140,6 +140,7 @@
     <color name="project_type_free_color">#7C5CFF</color>
     <color name="project_type_illust_color">#E67E22</color>
     <color name="project_type_html_color">#FF7A59</color>
+    <color name="project_type_html_js_color">#F7DF1E</color>
     <color name="status_queued">#8A8A8A</color>
     <color name="status_running">#569CD6</color>
     <color name="status_success">#4EC9B0</color>
