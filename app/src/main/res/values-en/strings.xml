@@ -88,6 +88,7 @@
     <string name="exit_unsaved_save">Save</string>
     <string name="menu_run_run">Run program</string>
     <string name="menu_run_check_brackets">Check brackets</string>
+    <string name="menu_run_html_page">Run as HTML page</string>
     <string name="menu_run_check_tags">Check container tags</string>
     <string name="menu_run_auto_run">Auto-run while typing</string>
     <string name="auto_run_enabled_toast">Auto-run enabled — the console refreshes shortly after you stop typing</string>
