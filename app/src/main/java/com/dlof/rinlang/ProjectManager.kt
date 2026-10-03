@@ -598,25 +598,39 @@ object ProjectManager {
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>$name</title>
   <link rel="stylesheet" href="style.css">
+  <!-- ملف المنطق: أي ملف .rin يبدأ بالتوقيع //! rin:container web، أو سمِّه صراحةً بوسم link من نوع rin (انظر docs/html-projects.md) -->
 </head>
 <body>
   <main class="card">
     <h1>$name</h1>
-    <p class="hint">الواجهة من index.html والمنطق من container.rin</p>
+    <p class="hint">الواجهة من index.html والمنطق من ملف الحاوية</p>
 
+    <!-- عدّاد: rin-text يعرض متغيّراً، rin-click يستدعي دالة Rin -->
     <div class="count" rin-text="count">0</div>
-
     <div class="row">
       <button rin-click="add()">+1</button>
       <button rin-click="addBy(5)">+5</button>
       <button class="secondary" rin-click="reset()">تصفير</button>
     </div>
+    <p class="note" rin-if="isHigh">وصل العدّاد إلى 10 أو أكثر 🎉</p>
 
-    <input type="text" placeholder="اكتب اسمك" rin-model="userName">
-    <p class="greeting" rin-text="greeting">مرحباً</p>
-    <button rin-click="greet()">حيِّني</button>
+    <hr>
 
-    <p class="note" rin-show="isHigh">وصل العدّاد إلى 10 أو أكثر 🎉</p>
+    <!-- قائمة مهام: rin-for يكرّر العنصر، rin-class/rin-if/rin-else بحسب حالة كل مهمة -->
+    <div class="add-row">
+      <input type="text" placeholder="مهمة جديدة" rin-model="newTodo">
+      <button rin-click="addTodo()">إضافة</button>
+    </div>
+    <ul class="todos">
+      <li rin-for="t in todos" rin-class="done:t.done">
+        <span class="title" rin-click="toggle(t.id)" rin-text="t.title"></span>
+        <small rin-if="t.done">منجزة</small>
+        <small rin-else>قيد التنفيذ</small>
+        <button class="x" rin-click="removeTodo(t.id)">✕</button>
+      </li>
+    </ul>
+    <p class="hint" rin-if="todos.length == 0">لا توجد مهام بعد</p>
+    <p class="hint" rin-else>المتبقي: <span rin-text="remaining"></span> من <span rin-text="todos.length"></span></p>
   </main>
 </body>
 </html>
@@ -637,7 +651,7 @@ body {
 }
 
 .card {
-  width: min(92vw, 380px);
+  width: min(92vw, 400px);
   padding: 28px 24px;
   border-radius: 16px;
   background: #14141c;
@@ -645,9 +659,10 @@ body {
 }
 
 h1 { margin: 0 0 6px; font-size: 20px; }
-.hint { margin: 0 0 18px; font-size: 13px; color: #9a9ab0; }
+.hint { margin: 8px 0; font-size: 13px; color: #9a9ab0; }
 .count { margin: 10px 0 16px; font-size: 56px; font-weight: bold; }
-.row { display: flex; gap: 8px; justify-content: center; margin-bottom: 18px; }
+.row { display: flex; gap: 8px; justify-content: center; margin-bottom: 12px; }
+hr { border: none; border-top: 1px solid #2a2a38; margin: 18px 0; }
 
 button {
   padding: 10px 18px;
@@ -659,10 +674,11 @@ button {
 }
 button:active { filter: brightness(1.15); }
 button.secondary { background: #2a2a38; }
+button.x { padding: 4px 9px; background: transparent; color: #9a9ab0; }
 
 input {
-  width: 100%;
-  margin-bottom: 10px;
+  flex: 1;
+  min-width: 0;
   padding: 10px 12px;
   border: 1px solid #2a2a38;
   border-radius: 8px;
@@ -671,24 +687,38 @@ input {
   font-size: 15px;
 }
 
-.greeting { min-height: 1.4em; margin: 4px 0 10px; color: #b9a8ff; }
-.note { margin-top: 14px; color: #7fe3a1; }
+.add-row { display: flex; gap: 8px; margin-bottom: 10px; }
+.todos { list-style: none; margin: 0; padding: 0; text-align: start; }
+.todos li { display: flex; align-items: center; gap: 8px; padding: 8px 4px; border-bottom: 1px solid #1f1f2b; }
+.todos .title { flex: 1; }
+.todos li small { color: #9a9ab0; font-size: 11px; }
+.todos li.done .title { text-decoration: line-through; color: #7fe3a1; }
+.note { margin-top: 10px; color: #7fe3a1; }
 """
 
-    private fun htmlContainerTemplate(name: String): String = """// container.rin — منطق مشروع "$name"
-// المتغيرات العامة هنا هي "حالة" الصفحة، والدوال العلوية تُستدعى من index.html عبر rin-click.
-//   rin-text="count"      يعرض قيمة count
-//   rin-click="add()"     يستدعي fun add()
-//   rin-model="userName"  يربط حقل إدخال بالمتغير userName
-//   rin-show="isHigh"     يُظهر العنصر عندما تكون isHigh صحيحة
+    private fun htmlContainerTemplate(name: String): String = """${RinContainerFile.SIGNATURE} persist=count,todos,nextId
+// container.rin — منطق مشروع "$name"
+// السطر الأول توقيع «حاوية الويب»: به (لا باسم الملف) يتعرّف التطبيق على هذا الملف. persist= يحفظ تلك المتغيرات بين التشغيلات.
+// المتغيرات العامة هنا هي "حالة" الصفحة، والدوال العلوية تُستدعى من index.html:
+//   rin-text="count"          يعرض count          rin-click="add()"       يستدعي fun add()
+//   rin-model="newTodo"       يربط حقل إدخال      rin-for="t in todos"    يكرّر عنصراً لكل مهمة
+//   rin-if="isHigh"           يُظهر بشرط          rin-class="done:t.done" يضيف صنفاً بشرط
 
 let count = 0;
-let userName = "";
-let greeting = "مرحباً";
 let isHigh = false;
+
+let todos = [];
+let nextId = 1;
+let newTodo = "";
+let remaining = 0;
 
 fun refresh() {
     isHigh = count >= 10;
+    let left = 0;
+    for (let t in todos) {
+        if (!t["done"]) { left = left + 1; }
+    }
+    remaining = left;
 }
 
 fun add() {
@@ -706,12 +736,29 @@ fun reset() {
     refresh();
 }
 
-fun greet() {
-    if (userName == "") {
-        greeting = "اكتب اسمك أولاً";
-    } else {
-        greeting = "أهلاً يا " + userName + "!";
+fun addTodo() {
+    if (newTodo != "") {
+        push(todos, {"id": nextId, "title": newTodo, "done": false});
+        nextId = nextId + 1;
+        newTodo = "";
     }
+    refresh();
+}
+
+fun toggle(id) {
+    for (let t in todos) {
+        if (t["id"] == id) { t["done"] = !t["done"]; }
+    }
+    refresh();
+}
+
+fun removeTodo(id) {
+    let kept = [];
+    for (let t in todos) {
+        if (t["id"] != id) { push(kept, t); }
+    }
+    todos = kept;
+    refresh();
 }
 """
 
@@ -776,7 +823,7 @@ fun greet() {
     fun listEntries(project: Project, relDir: String): Pair<List<RinFolder>, List<RinFile>> {
         val dir = resolveDir(project, relDir)
         val prefix = if (relDir.isBlank()) "" else "${relDir.trim('/')}/"
-        val children = dir.listFiles() ?: emptyArray()
+        val children = (dir.listFiles() ?: emptyArray()).filter { it.name != ".rin_state" } // حالة حاويات الويب المحفوظة
         val folders = children.filter { it.isDirectory }
             .map { RinFolder(it.name, "$prefix${it.name}", it, it.lastModified()) }
             .sortedByDescending { it.lastModified }
