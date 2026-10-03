@@ -3322,6 +3322,7 @@ void Interpreter::registerNatives() {
 
     // insertDoc(collection, id, fields) -> true إن كان إدراجاً جديداً، false إن استبدل مستنداً موجوداً (upsert كامل)
     natives["insertDoc"] = [this](std::vector<Value>& a, int line) -> Value {
+        { Value tv_; if (tableNative("insertDoc", a, line, tv_)) return tv_; } // جدول (rin_table.cpp)
         expectArgs("insertDoc", a, 3, line);
         std::string container = asString(a[0], "insertDoc", line);
         std::string id = asString(a[1], "insertDoc", line);
@@ -3352,6 +3353,7 @@ void Interpreter::registerNatives() {
 
     // updateDoc(collection, id, partialFields) -> true إن وُجد ودُمجت الحقول الجديدة (تحديث جزئي/patch)، false إن لم يوجد
     natives["updateDoc"] = [this](std::vector<Value>& a, int line) -> Value {
+        { Value tv_; if (tableNative("updateDoc", a, line, tv_)) return tv_; } // جدول (rin_table.cpp)
         expectArgs("updateDoc", a, 3, line);
         std::string container = asString(a[0], "updateDoc", line);
         std::string id = asString(a[1], "updateDoc", line);
@@ -3390,6 +3392,7 @@ void Interpreter::registerNatives() {
 
     // deleteDoc(collection, id) -> true إن حُذف فعلاً، false إن لم يوجد أصلاً
     natives["deleteDoc"] = [this](std::vector<Value>& a, int line) -> Value {
+        { Value tv_; if (tableNative("deleteDoc", a, line, tv_)) return tv_; } // جدول (rin_table.cpp)
         expectArgs("deleteDoc", a, 2, line);
         std::string container = asString(a[0], "deleteDoc", line);
         std::string id = asString(a[1], "deleteDoc", line);
@@ -3411,6 +3414,7 @@ void Interpreter::registerNatives() {
 
     // findDoc(collection, id) -> حقول المستند (map) أو nil إن لم يوجد
     natives["findDoc"] = [this](std::vector<Value>& a, int line) -> Value {
+        { Value tv_; if (tableNative("findDoc", a, line, tv_)) return tv_; } // جدول (rin_table.cpp)
         expectArgs("findDoc", a, 2, line);
         std::string container = asString(a[0], "findDoc", line);
         std::string id = asString(a[1], "findDoc", line);
@@ -3423,6 +3427,7 @@ void Interpreter::registerNatives() {
 
     // queryDocs(collection, field, value) -> مصفوفة كل المستندات (map) التي يساوي فيها field القيمة المعطاة
     natives["queryDocs"] = [this](std::vector<Value>& a, int line) -> Value {
+        { Value tv_; if (tableNative("queryDocs", a, line, tv_)) return tv_; } // جدول (rin_table.cpp)
         expectArgs("queryDocs", a, 3, line);
         std::string container = asString(a[0], "queryDocs", line);
         std::string field = asString(a[1], "queryDocs", line);
@@ -3446,6 +3451,7 @@ void Interpreter::registerNatives() {
 
     // queryOneDoc(collection, field, value) -> أول مستند مطابق (map) أو nil
     natives["queryOneDoc"] = [this](std::vector<Value>& a, int line) -> Value {
+        { Value tv_; if (tableNative("queryOneDoc", a, line, tv_)) return tv_; } // جدول (rin_table.cpp)
         expectArgs("queryOneDoc", a, 3, line);
         std::string container = asString(a[0], "queryOneDoc", line);
         std::string field = asString(a[1], "queryOneDoc", line);
@@ -3841,6 +3847,7 @@ void Interpreter::registerNatives() {
 
     // docIds(collection) -> مصفوفة أسماء (ids) كل المستندات بترتيب الإدخال
     natives["docIds"] = [this](std::vector<Value>& a, int line) -> Value {
+        { Value tv_; if (tableNative("docIds", a, line, tv_)) return tv_; } // جدول (rin_table.cpp)
         expectArgs("docIds", a, 1, line);
         std::string container = asString(a[0], "docIds", line);
         auto result = std::make_shared<ArrayData>();
@@ -3851,6 +3858,7 @@ void Interpreter::registerNatives() {
 
     // allDocs(collection) -> مصفوفة كل المستندات (كل عنصر map) بترتيب الإدخال
     natives["allDocs"] = [this](std::vector<Value>& a, int line) -> Value {
+        { Value tv_; if (tableNative("allDocs", a, line, tv_)) return tv_; } // جدول (rin_table.cpp)
         expectArgs("allDocs", a, 1, line);
         std::string container = asString(a[0], "allDocs", line);
         auto result = std::make_shared<ArrayData>();
@@ -3861,6 +3869,7 @@ void Interpreter::registerNatives() {
 
     // countDocs(collection) -> عدد المستندات
     natives["countDocs"] = [this](std::vector<Value>& a, int line) -> Value {
+        { Value tv_; if (tableNative("countDocs", a, line, tv_)) return tv_; } // جدول (rin_table.cpp)
         expectArgs("countDocs", a, 1, line);
         std::string container = asString(a[0], "countDocs", line);
         auto it = docStore.find(container);
@@ -4690,6 +4699,7 @@ void Interpreter::registerNatives() {
             }
         }
         containers.erase(name);
+        tableForget(name); // جدول: صفوفه ونمطه
         containerKinds.erase(name);
         containerCustomKind.erase(name);
         containerLifecycle.erase(name);
@@ -5748,6 +5758,7 @@ void Interpreter::registerNatives() {
     natives["container.get"] = natives["getField"];
     natives["container.has"] = natives["hasField"];
     natives["container.renameField"] = [this](std::vector<Value>& a, int line) -> Value {
+        { Value tv_; if (tableNative("container.renameField", a, line, tv_)) return tv_; } // جدول (rin_table.cpp)
         expectArgs("container.renameField", a, 3, line);
         std::string name = asString(a[0], "container.renameField", line);
         auto it = containers.find(name);
@@ -7056,6 +7067,14 @@ bool Interpreter::tableVirtualGet(const std::string& name, const std::string& ke
         out = Value::string(st->second);
         return true;
     }
+    { // عمود باسمه (من الرأس النصي): قيم الجسم كمصفوفة (نسخة). الأسماء المحجوزة أعلاه تغلب اسم العمود.
+        std::vector<std::string> hdr;
+        std::vector<Value> vals;
+        if (tableHeader(name, hdr) && tableColumnValues(name, key, vals)) {
+            out = Value::makeArray(std::make_shared<ArrayData>(vals.begin(), vals.end()));
+            return true;
+        }
+    }
     return false;
 }
 
@@ -7116,16 +7135,66 @@ bool Interpreter::tableVirtualSet(const std::string& name, const std::string& ke
         *tableRowsOf(name) = std::move(rows);
         return true;
     }
-    if (key == "body")
-        throw diagErr(diag::Code::E0004_InvalidType, line, "'body' مشتقّة من 'rows' (للقراءة فقط) — عدّل 'rows' أو 'records'");
+    if (key == "body") { // استبدال صفوف الجسم مع بقاء الرأس (إن وُجد)
+        if (v.type != Value::Type::ARRAY || !v.array)
+            throw diagErr(diag::Code::E0004_InvalidType, line, "الحقل 'body' في الجدول يجب أن يكون مصفوفة صفوف (مثال: [[1, 2], [3, 4]])");
+        for (auto& r : *v.array)
+            if (r.type != Value::Type::ARRAY || !r.array)
+                throw diagErr(diag::Code::E0004_InvalidType, line, "كل صف في 'body' يجب أن يكون مصفوفة خلايا، وُجد `" + r.typeName() + "`");
+        auto dst = tableRowsOf(name);
+        std::vector<std::string> names;
+        bool named = tableHeader(name, names);
+        std::vector<Value> rebuilt;
+        if (named) rebuilt.push_back((*dst)[0]);
+        for (auto& r : *v.array) rebuilt.push_back(Value::makeArray(std::make_shared<ArrayData>(*r.array)));
+        *dst = std::move(rebuilt);
+        return true;
+    }
     if (key == "style") {
         if (v.type != Value::Type::STRING)
             throw diagErr(diag::Code::E0004_InvalidType, line, "الحقل 'style' في الجدول يجب أن يكون نصاً (مثال: \"style://dark\")");
         containerStyles[name] = v.str;
         return true;
     }
-    if (key == "columns")
-        throw diagErr(diag::Code::E0004_InvalidType, line, "'columns' مشتقّة من 'rows' (للقراءة فقط) — عدّل 'rows' بدلاً منها");
+    if (key == "columns") { // مصفوفة أعمدة (عمود = مصفوفة خلايا، أولها عنوانه) -> تُقلَب إلى صفوف؛ بها تُضاف الأعمدة وتُحذف وتُرتَّب
+        if (v.type != Value::Type::ARRAY || !v.array)
+            throw diagErr(diag::Code::E0004_InvalidType, line, "الحقل 'columns' في الجدول يجب أن يكون مصفوفة أعمدة (كل عمود مصفوفة خلايا)");
+        size_t height = 0;
+        for (auto& c : *v.array) {
+            if (c.type != Value::Type::ARRAY || !c.array)
+                throw diagErr(diag::Code::E0004_InvalidType, line, "كل عمود في 'columns' يجب أن يكون مصفوفة خلايا، وُجد `" + c.typeName() + "`");
+            height = std::max(height, c.array->size());
+        }
+        std::vector<Value> rebuilt;
+        for (size_t r = 0; r < height; ++r) {
+            auto cells = std::make_shared<ArrayData>();
+            for (auto& c : *v.array) cells->push_back(r < c.array->size() ? (*c.array)[r] : Value::nil());
+            rebuilt.push_back(Value::makeArray(cells));
+        }
+        *tableRowsOf(name) = std::move(rebuilt);
+        return true;
+    }
+    { // كتابة عمود موجود باسمه: مصفوفة بطول الجسم (أو قيمة مفردة تملأ العمود كله). عمود جديد يُضاف عبر columns/records.
+        std::vector<std::string> hdr;
+        std::vector<Value> cur;
+        if (tableHeader(name, hdr) && tableColumnValues(name, key, cur)) {
+            size_t ci = std::find(hdr.begin(), hdr.end(), key) - hdr.begin();
+            std::vector<Value> vals;
+            if (v.type == Value::Type::ARRAY && v.array) {
+                if (v.array->size() != cur.size())
+                    throw diagErr(diag::Code::E0007_InvalidArguments, line, "العمود '" + key + "': عدد القيم (" + std::to_string(v.array->size()) +
+                                  ") يجب أن يساوي عدد صفوف الجسم (" + std::to_string(cur.size()) + ")");
+                vals.assign(v.array->begin(), v.array->end());
+            } else vals.assign(cur.size(), v);
+            auto rows = tableRowsOf(name);
+            for (size_t i = 0; i < vals.size(); ++i) {
+                auto cells = (*rows)[i + 1].array;
+                while (cells->size() <= ci) cells->push_back(Value::nil());
+                (*cells)[ci] = vals[i];
+            }
+            return true;
+        }
+    }
     return false;
 }
 
@@ -7135,6 +7204,17 @@ bool Interpreter::tableVirtualDelete(const std::string& name, const std::string&
     if (env != containers.end() && env->second && env->second->values.count(key)) return false; // متغيّر حقيقي في الجدول نفسه له الأولوية
     if (key == "rows") { tableRowsOf(name)->clear(); return true; }
     if (key == "style") return containerStyles.erase(name) > 0;
+    { // حذف عمود باسمه: عنوانه وخلاياه من كل الصفوف
+        std::vector<std::string> hdr;
+        if (tableHeader(name, hdr)) {
+            size_t ci = std::find(hdr.begin(), hdr.end(), key) - hdr.begin();
+            if (ci < hdr.size()) {
+                for (auto& r : *tableRowsOf(name))
+                    if (r.type == Value::Type::ARRAY && r.array && ci < r.array->size()) r.array->erase(r.array->begin() + ci);
+                return true;
+            }
+        }
+    }
     return false;
 }
 
@@ -9182,6 +9262,19 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
             return;
         }
 
+        // table.save/csv|json|md|html|txt : تصدير نصي حقيقي للصفوف الحالية (نفس مبدأ png: للجدول فقط)
+        if (s->format == "csv" || s->format == "json" || s->format == "md" || s->format == "html" || s->format == "txt") {
+            if (kind != ContainerKind::TABLE) {
+                throw diagErr(diag::Code::E0014_InvalidContainer, s->line, "save format=" + s->format + " متاحة فقط لحاوية جدول (@container.table أو @table)، وليس لـ '" +
+                                containerTagName(kind) + "'");
+            }
+            std::string rawPath = s->path ? evaluate(s->path, env).toDisplayString() : key + "." + s->format;
+            std::string text = tableExport(key, s->format, s->line);
+            writeRealFile(rawPath, text, s->line, "save (" + s->format + ")");
+            output << "📄 save (" << s->format << ") -> " << rawPath << " (" << text.size() << " بايت)\n";
+            return;
+        }
+
         // save format=zip : يعمل لجميع المفاهيم (أي نوع حاوية)، ويُغلِّف نسخة حاوية واحدة كأرشيف zip.
         if (s->format == "zip") {
             std::string rawPath;
@@ -9252,20 +9345,7 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
             throw diagErr(diag::Code::E0014_InvalidContainer, s->line, "عبارة 'row' يجب أن تُستخدم داخل @container.table أو @table");
         }
         Value cells = evaluate(s->cells, env);
-        if (cells.type == Value::Type::MAP && cells.map) {
-            // row cells={عمود: قيمة} -> تُرتَّب الخلايا حسب رأس الجدول (الغائب nil)؛ عمود غير موجود في الرأس خطأ.
-            std::vector<std::string> hdr;
-            if (!tableHeader(containerStack.back(), hdr) || hdr.empty())
-                throw diagErr(diag::Code::E0004_InvalidType, s->line, "row بقاموس يحتاج رأساً: اجعل أول صف في الجدول مصفوفة عناوين نصية");
-            auto ordered = std::make_shared<ArrayData>(hdr.size(), Value::nil());
-            for (auto& kv : *cells.map) {
-                size_t c = std::find(hdr.begin(), hdr.end(), kv.first.toDisplayString()) - hdr.begin();
-                if (c >= hdr.size())
-                    throw diagErr(diag::Code::E0007_InvalidArguments, s->line, "row: العمود '" + kv.first.toDisplayString() + "' غير موجود في رأس الجدول");
-                (*ordered)[c] = kv.second;
-            }
-            cells = Value::makeArray(ordered);
-        }
+        if (cells.type == Value::Type::MAP && cells.map) cells = tableOrderRecord(containerStack.back(), cells, s->line); // row cells={عمود: قيمة}
         if (cells.type != Value::Type::ARRAY) {
             throw diagErr(diag::Code::E0004_InvalidType, s->line, "row: قيمة 'cells' يجب أن تكون مصفوفة (مثال: row cells=[1, 2, 3];)");
         }
@@ -11700,6 +11780,7 @@ bool Interpreter::livePropertyGet(const EnvPtr& env, const std::string& name, co
 #include "rin_extra_natives3.cpp"
 #include "rin_extra_natives4.cpp"
 #include "rin_extra_natives5.cpp"
+#include "rin_table.cpp" // توسعة الجدول: دوال اللغة الموجودة تفهم الجدول (انظر رأس الملف)
 #endif
 
 // ---- Rin 1.0: OOP الموسَّع (interface/trait/abstract/static/private/get-set + دوال oop.*) ----
