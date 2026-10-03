@@ -1057,6 +1057,7 @@ void Interpreter::registerNativesExtra2() {
     };
     // container.stats(kind) -> {count, fields: {field: {count, numeric, min?, max?, sum?, avg?}}}
     natives["container.stats"] = [this, sortedNames2, kindMatches2](Args& a, int line) -> Value {
+        { Value tv_; if (tableNative("container.stats", a, line, tv_)) return tv_; } // جدول (rin_table.cpp)
         need("container.stats", a, 1, 1, line);
         std::string kind = str(a[0], "container.stats", line);
         double count = 0;
@@ -1136,6 +1137,7 @@ void Interpreter::registerNativesExtra2() {
     };
     // container.exportToFile(name, path) — يكتب حقول الحاوية كـ JSON فعلي على القرص (عبر container.toJson + writeFile المعزولة بـ resolvePath)
     natives["container.exportToFile"] = [this](Args& a, int line) -> Value {
+        { Value tv_; if (tableNative("container.exportToFile", a, line, tv_)) return tv_; } // جدول (rin_table.cpp)
         need("container.exportToFile", a, 2, 2, line);
         std::string name = str(a[0], "container.exportToFile", line);
         std::string path = str(a[1], "container.exportToFile", line);
@@ -1147,6 +1149,7 @@ void Interpreter::registerNativesExtra2() {
     };
     // container.importFromFile(name, path, overwrite?) — يقرأ JSON من القرص ويدمجه في الحاوية (تُنشأ إن غابت عبر container.ensure أولاً من كود Rin)
     natives["container.importFromFile"] = [this](Args& a, int line) -> Value {
+        { Value tv_; if (tableNative("container.importFromFile", a, line, tv_)) return tv_; } // جدول (rin_table.cpp)
         need("container.importFromFile", a, 2, 3, line);
         std::string name = str(a[0], "container.importFromFile", line);
         std::string path = str(a[1], "container.importFromFile", line);
