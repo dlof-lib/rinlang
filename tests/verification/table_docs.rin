@@ -1,0 +1,44 @@
+// table_docs.rin — دوال المستندات الموجودة (insertDoc/updateDoc/...) تعمل على الجدول؛ المعرّف = رقم صف الجسم
+@table=staff
+    row cells=["name", "dept", "score"];
+    row cells=["sara", "dev", 95];
+    row cells=["yusuf", "ops", 88];
+.end/table
+
+print countDocs("staff");
+print docIds("staff");
+print allDocs("staff");
+print findDoc("staff", "2");
+print findDoc("staff", 1);
+print findDoc("staff", 9);
+print queryDocs("staff", "dept", "dev");
+print queryOneDoc("staff", "name", "yusuf");
+print queryOneDoc("staff", "name", "nobody");
+
+// إلحاق (true) · استبدال (false) · ترتيب حسب الرأس · الغائب nil
+print insertDoc("staff", "3", {"score": 70, "name": "omar"});
+print insertDoc("staff", "3", {"name": "omar", "dept": "ops", "score": 71});
+print getField("staff", "rows")[3];
+
+// تحديث جزئي
+print updateDoc("staff", "1", {"score": 99});
+print updateDoc("staff", "9", {"score": 1});
+print findDoc("staff", "1");
+
+// حذف
+print deleteDoc("staff", "2");
+print deleteDoc("staff", "9");
+print countDocs("staff");
+print docIds("staff");
+
+// متّسقة مع RCSQL
+print sqlCount("staff & dept:eq(ops)");
+
+// أخطاء
+try { insertDoc("staff", "1", {"nope": 1}); } catch (e) { print e.code; }
+try { updateDoc("staff", "1", {"nope": 1}); } catch (e) { print e.code; }
+try { insertDoc("staff", "1", 5); } catch (e) { print e.code; }
+@table=bare
+    row cells=[1, 2];
+.end/table
+try { insertDoc("bare", "1", {"a": 1}); } catch (e) { print e.code; }
