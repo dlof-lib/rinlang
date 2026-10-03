@@ -47,6 +47,51 @@ object RinEngine {
     private external fun runSourceNative(source: String, baseDir: String): String
 
     /**
+     * جلسة RinHTML حيّة: تُشغِّل container.rin مرة واحدة وتُبقي المفسِّر وقيم المتغيّرات العامة حيّة،
+     * فتستدعي صفحة index.html (داخل WebView) دوال Rin الحقيقية باسمها [call] وتقرأ الحالة الجديدة.
+     * نظير web/rinhtml_bridge.cpp (WASM) لكن على JNI. القفل يمنع سباق close() مع call().
+     */
+    class HtmlSession private constructor(private var handle: Long, val bootOutput: String) {
+        private val lock = Any()
+        @Volatile private var closed = false
+
+        /** كل المتغيرات العامة كـ JSON مسطّح {name: value} (الدوال مستثناة). */
+        fun globalsJson(): String = synchronized(lock) { if (closed) "{}" else htmlGlobalsNative(handle) }
+
+        /** يستدعي دالة Rin علوية؛ يعيد {"ok":..,"error"?:..,"globals":{..}}. */
+        fun call(fn: String, argsJson: String): String = synchronized(lock) {
+            if (closed) "{\"ok\":false,\"error\":\"closed\",\"globals\":{}}"
+            else htmlCallNative(handle, fn, argsJson)
+        }
+
+        /** يضبط متغيراً عاماً محلياً (لربط حقول الإدخال rin-model) بلا تشغيل أي كود Rin. */
+        fun setGlobal(name: String, valueJson: String) = synchronized(lock) {
+            if (!closed) htmlSetGlobalNative(handle, name, valueJson)
+        }
+
+        fun close() = synchronized(lock) {
+            if (!closed) { closed = true; htmlFreeNative(handle); handle = 0L }
+        }
+
+        companion object {
+            /** يُنشئ جلسة من نص container.rin، أو يرمي IllegalStateException برسالة الخطأ. */
+            fun create(source: String, baseDir: String): HtmlSession {
+                val h = htmlCreateNative(source, baseDir)
+                if (h == 0L) throw IllegalStateException(htmlLastErrorNative().ifBlank { "تعذّر تشغيل container.rin" })
+                return HtmlSession(h, htmlBootOutputNative(h))
+            }
+        }
+    }
+
+    private external fun htmlCreateNative(source: String, baseDir: String): Long
+    private external fun htmlLastErrorNative(): String
+    private external fun htmlBootOutputNative(handle: Long): String
+    private external fun htmlGlobalsNative(handle: Long): String
+    private external fun htmlCallNative(handle: Long, fn: String, argsJson: String): String
+    private external fun htmlSetGlobalNative(handle: Long, name: String, valueJson: String)
+    private external fun htmlFreeNative(handle: Long)
+
+    /**
      * Structured sibling of [runSource]: same lexer/parser/interpreter pipeline, but the
      * SUCCESS/ERROR outcome comes from the engine's own execution state (see
      * `Interpreter::hadError()` in rin_interpreter.h) instead of being guessed from the text of
