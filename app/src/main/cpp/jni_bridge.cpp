@@ -4,6 +4,8 @@
 #include <jni.h>
 #include "rin_version.h"
 #include <string>
+#include <cctype>
+#include <sstream>
 #include <vector>
 #include <chrono>
 #include <mutex>
@@ -1061,6 +1063,239 @@ rin::http::HttpResult callKotlinHttpBridgeBinaryGet(const std::string& url, int 
 }
 
 } // namespace (anonymous)
+
+// ================= جلسة RinHTML الحيّة (HtmlRunActivity) =================
+// نفس فكرة web/rinhtml_bridge.cpp (WASM) بالضبط لكن على JNI: جلسة واحدة = برنامج مُحلَّل (AST) +
+// مفسِّر حيّ + آخر قيم عامة معروفة. صفحة index.html المعروضة في WebView تستدعي دوال container.rin
+// الحقيقية (rin-click="add()") عبر Interpreter::callTopLevelFunction، ثم تقرأ الحالة الجديدة
+// (rin-text="count"). لا يُعاد تنفيذ البرنامج من الصفر عند كل نقرة، وكل دلالات اللغة محفوظة.
+// غلاف (glue) بحت: لا يضيف أي دلالة جديدة إلى Rin نفسها.
+namespace {
+
+struct HtmlSession {
+    std::vector<rin::StmtPtr> program;
+    std::unique_ptr<rin::Interpreter> interp;
+    std::unordered_map<std::string, rin::Value> globals;
+    std::string bootOutput;
+};
+
+std::string g_htmlLastError;
+
+std::string htmlJsonEscape(const std::string& s) {
+    std::string out;
+    out.reserve(s.size() + 8);
+    for (char c : s) {
+        switch (c) {
+            case '"': out += "\\\""; break;
+            case '\\': out += "\\\\"; break;
+            case '\n': out += "\\n"; break;
+            case '\r': out += "\\r"; break;
+            case '\t': out += "\\t"; break;
+            default: if (static_cast<unsigned char>(c) >= 0x20) out += c;
+        }
+    }
+    return out;
+}
+
+std::string htmlNumToJson(double n) {
+    if (n == static_cast<long long>(n) && n < 1e15 && n > -1e15) {
+        return std::to_string(static_cast<long long>(n));
+    }
+    std::ostringstream o;
+    o << n;
+    return o.str();
+}
+
+std::string htmlValueToJson(const rin::Value& v) {
+    switch (v.type) {
+        case rin::Value::Type::NUMBER: return htmlNumToJson(v.number);
+        case rin::Value::Type::STRING: return "\"" + htmlJsonEscape(v.str) + "\"";
+        case rin::Value::Type::BOOL:   return v.boolean ? "true" : "false";
+        case rin::Value::Type::NIL:    return "null";
+        default:                       return "\"" + htmlJsonEscape(v.toDisplayString()) + "\"";
+    }
+}
+
+std::string htmlGlobalsToJson(const std::unordered_map<std::string, rin::Value>& g) {
+    std::ostringstream o;
+    o << "{";
+    bool first = true;
+    for (auto& kv : g) {
+        if (kv.second.type == rin::Value::Type::FUNCTION) continue; // الدوال ليست "حالة"
+        if (!first) o << ",";
+        first = false;
+        o << "\"" << htmlJsonEscape(kv.first) << "\":" << htmlValueToJson(kv.second);
+    }
+    o << "}";
+    return o.str();
+}
+
+// قارئ JSON مصغّر: مصفوفة/قيمة بدائية فقط (أرقام / "نص" / true / false / null).
+struct HtmlJsonReader {
+    const std::string& s;
+    size_t i = 0;
+    explicit HtmlJsonReader(const std::string& src) : s(src) {}
+    void skipWs() { while (i < s.size() && std::isspace(static_cast<unsigned char>(s[i]))) i++; }
+    rin::Value parseValue() {
+        skipWs();
+        if (i >= s.size()) return rin::Value::nil();
+        char c = s[i];
+        if (c == '"') return parseString();
+        if (c == 't' && s.compare(i, 4, "true") == 0) { i += 4; return rin::Value::boolean_(true); }
+        if (c == 'f' && s.compare(i, 5, "false") == 0) { i += 5; return rin::Value::boolean_(false); }
+        if (c == 'n' && s.compare(i, 4, "null") == 0) { i += 4; return rin::Value::nil(); }
+        return parseNumber();
+    }
+    rin::Value parseString() {
+        std::string out;
+        i++;
+        while (i < s.size() && s[i] != '"') {
+            char c = s[i++];
+            if (c == '\\' && i < s.size()) {
+                char e = s[i++];
+                switch (e) {
+                    case 'n': out += '\n'; break;
+                    case 't': out += '\t'; break;
+                    case 'r': out += '\r'; break;
+                    default: out += e;
+                }
+            } else out += c;
+        }
+        if (i < s.size()) i++;
+        return rin::Value::string(out);
+    }
+    rin::Value parseNumber() {
+        size_t start = i;
+        if (i < s.size() && (s[i] == '-' || s[i] == '+')) i++;
+        while (i < s.size() && (std::isdigit(static_cast<unsigned char>(s[i])) || s[i] == '.' ||
+                                 s[i] == 'e' || s[i] == 'E' || s[i] == '-' || s[i] == '+')) i++;
+        if (i == start) { i++; return rin::Value::nil(); }
+        try { return rin::Value::num(std::stod(s.substr(start, i - start))); }
+        catch (...) { return rin::Value::nil(); }
+    }
+    std::vector<rin::Value> parseArray() {
+        std::vector<rin::Value> out;
+        skipWs();
+        if (i >= s.size() || s[i] != '[') return out;
+        i++;
+        skipWs();
+        if (i < s.size() && s[i] == ']') { i++; return out; }
+        while (i < s.size()) {
+            out.push_back(parseValue());
+            skipWs();
+            if (i < s.size() && s[i] == ',') { i++; continue; }
+            break;
+        }
+        return out;
+    }
+};
+
+std::string jstr(JNIEnv* env, jstring js) {
+    if (!js) return "";
+    const char* c = env->GetStringUTFChars(js, nullptr);
+    std::string s(c ? c : "");
+    if (c) env->ReleaseStringUTFChars(js, c);
+    return s;
+}
+
+} // namespace
+
+// يعيد مؤشر الجلسة (jlong) أو 0 عند الفشل (انظر htmlLastErrorNative).
+extern "C" JNIEXPORT jlong JNICALL
+Java_com_dlof_rinlang_RinEngine_htmlCreateNative(JNIEnv* env, jobject, jstring sourceJ, jstring baseDirJ) {
+    std::string source = jstr(env, sourceJ);
+    std::string baseDir = jstr(env, baseDirJ);
+    auto sess = std::make_unique<HtmlSession>();
+    try {
+        rin::Lexer lexer(source);
+        auto tokens = lexer.scanTokens();
+        rin::Parser parser(tokens);
+        sess->program = parser.parse();
+        sess->interp = std::make_unique<rin::Interpreter>();
+        if (!baseDir.empty()) sess->interp->setBasePath(baseDir);
+        sess->bootOutput = sess->interp->run(sess->program);
+        if (sess->interp->hadError()) {
+            g_htmlLastError = sess->interp->lastErrorMessage().value_or("خطأ غير معروف أثناء التشغيل الأولي");
+            return 0;
+        }
+        sess->globals = sess->interp->exportGlobals();
+    } catch (rin::RinError& e) {
+        g_htmlLastError = "[Syntax error, line " + std::to_string(e.line) + "]: " + e.message;
+        return 0;
+    } catch (std::exception& e) {
+        g_htmlLastError = e.what();
+        return 0;
+    } catch (...) {
+        g_htmlLastError = "خطأ غير معروف أثناء إنشاء جلسة HTML";
+        return 0;
+    }
+    return reinterpret_cast<jlong>(sess.release());
+}
+
+extern "C" JNIEXPORT jstring JNICALL
+Java_com_dlof_rinlang_RinEngine_htmlLastErrorNative(JNIEnv* env, jobject) {
+    return env->NewStringUTF(g_htmlLastError.c_str());
+}
+
+extern "C" JNIEXPORT jstring JNICALL
+Java_com_dlof_rinlang_RinEngine_htmlBootOutputNative(JNIEnv* env, jobject, jlong handle) {
+    auto* s = reinterpret_cast<HtmlSession*>(handle);
+    return env->NewStringUTF(s ? s->bootOutput.c_str() : "");
+}
+
+extern "C" JNIEXPORT jstring JNICALL
+Java_com_dlof_rinlang_RinEngine_htmlGlobalsNative(JNIEnv* env, jobject, jlong handle) {
+    auto* s = reinterpret_cast<HtmlSession*>(handle);
+    std::string j = s ? htmlGlobalsToJson(s->globals) : "{}";
+    return env->NewStringUTF(j.c_str());
+}
+
+// {"ok":true,"globals":{...}} أو {"ok":false,"error":"...","globals":{...}}
+extern "C" JNIEXPORT jstring JNICALL
+Java_com_dlof_rinlang_RinEngine_htmlCallNative(JNIEnv* env, jobject, jlong handle, jstring fnJ, jstring argsJ) {
+    auto* s = reinterpret_cast<HtmlSession*>(handle);
+    if (!s) return env->NewStringUTF("{\"ok\":false,\"error\":\"invalid session\",\"globals\":{}}");
+    std::string fn = jstr(env, fnJ);
+    std::string argsJson = jstr(env, argsJ);
+    HtmlJsonReader reader(argsJson);
+    std::vector<rin::Value> args = reader.parseArray();
+    std::vector<std::string> aliases(args.size(), std::string());
+    std::unordered_map<std::string, rin::Value> attempt = s->globals;
+    std::string err;
+    bool ok = false;
+    try {
+        ok = s->interp->callTopLevelFunction(s->program, fn, args, aliases, attempt, err);
+    } catch (rin::RinError& e) {
+        ok = false;
+        err = std::to_string(e.line) + ": " + e.message;
+    } catch (std::exception& e) {
+        ok = false;
+        err = e.what();
+    }
+    if (ok) s->globals = attempt;
+    std::ostringstream o;
+    o << "{\"ok\":" << (ok ? "true" : "false");
+    if (!ok) o << ",\"error\":\"" << htmlJsonEscape(err.empty() ? ("لا توجد دالة باسم '" + fn + "'") : err) << "\"";
+    o << ",\"globals\":" << htmlGlobalsToJson(s->globals) << "}";
+    std::string out = o.str();
+    return env->NewStringUTF(out.c_str());
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_com_dlof_rinlang_RinEngine_htmlSetGlobalNative(JNIEnv* env, jobject, jlong handle, jstring nameJ, jstring valueJ) {
+    auto* s = reinterpret_cast<HtmlSession*>(handle);
+    if (!s) return;
+    std::string name = jstr(env, nameJ);
+    std::string valueJson = jstr(env, valueJ);
+    if (name.empty()) return;
+    HtmlJsonReader reader(valueJson);
+    s->globals[name] = reader.parseValue();
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_com_dlof_rinlang_RinEngine_htmlFreeNative(JNIEnv*, jobject, jlong handle) {
+    delete reinterpret_cast<HtmlSession*>(handle);
+}
 
 extern "C" JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void* /* reserved */) {
     g_javaVm = vm;
