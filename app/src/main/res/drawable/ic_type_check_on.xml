@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- مؤشر «محدَّد» في صفوف نوع المشروع: دائرة بلون الهوية مع علامة صح بيضاء. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="22dp"
+    android:height="22dp"
+    android:viewportWidth="22"
+    android:viewportHeight="22">
+    <path android:fillColor="#7C5CFF" android:pathData="M11,1 A10,10 0 1,0 11,21 A10,10 0 1,0 11,1 Z" />
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M6.6,11.4 L9.6,14.4 L15.4,8.2" />
+</vector>
