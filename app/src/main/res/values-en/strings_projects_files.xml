@@ -46,6 +46,13 @@
     <string name="project_type_free_desc">A blank code file</string>
     <string name="project_type_illust">Illust</string>
     <string name="project_type_illust_desc">A ready-made drawing/SVG language on Rin</string>
+    <string name="project_type_html">HTML</string>
+    <string name="project_type_html_desc">index.html + style.css + container.rin</string>
+    <string name="html_run_title">Run HTML — %1$s</string>
+    <string name="html_run_reload">Reload</string>
+    <string name="html_run_close">Close</string>
+    <string name="html_run_no_index">This project has no index.html.</string>
+    <string name="html_run_rin_error">Could not run container.rin: %1$s</string>
 
     <string name="indsin_template_label">Ready indsin template (optional)</string>
     <string name="indsin_template_calculator">Calculator</string>
