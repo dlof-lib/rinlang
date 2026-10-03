@@ -274,6 +274,12 @@ object ProjectManager {
                 "// نوع المشروع: HTML — الواجهة في index.html والتنسيق في style.css والمنطق في container.rin.\n" +
                 "// اضغط تشغيل (Run) لفتح الصفحة داخل التطبيق مربوطةً بـ container.rin.\n"
 
+        // main.rin رمزي أيضاً: المنطق الفعلي JavaScript في script.js (لا يحتاج المشروع إلى ملف Rin).
+        ProjectType.HTML_JS ->
+            "// مشروع: $name\n" +
+                "// نوع المشروع: HTML + JS — الواجهة في index.html والتنسيق في style.css والمنطق في script.js، وcontainer.rin حاوية Rin اختيارية تستدعيها JS عبر rin.call().\n" +
+                "// اضغط تشغيل (Run) لفتح الصفحة داخل التطبيق، أو افتحها في المتصفح على http://localhost:7700/\n"
+
         // يُستبدَل فوراً بعد الإنشاء عبر CustomLanguageProjectScaffolder.installBundledIllust
         // (انظر ProjectsActivity)؛ هذا المحتوى احتياطي فقط في حال لم يُستدعَ ذلك لأي سبب.
         ProjectType.ILLUST ->
@@ -394,6 +400,13 @@ object ProjectManager {
         File(dir, "main.rin").writeText(
             mainRinTemplateFor(type, trimmed, uiOptions, containerOptions, tableOptions, freeOptions)
         )
+        if (type == ProjectType.HTML_JS) {
+            File(dir, "index.html").writeText(htmlJsIndexTemplate(trimmed))
+            File(dir, "style.css").writeText(htmlStyleTemplate())
+            File(dir, "script.js").writeText(htmlJsScriptTemplate(trimmed))
+            File(dir, "container.rin").writeText(htmlJsContainerTemplate(trimmed))
+            return Project(trimmed, dir, dir.lastModified(), type)
+        }
         if (type == ProjectType.HTML) {
             File(dir, "index.html").writeText(htmlIndexTemplate(trimmed))
             File(dir, "style.css").writeText(htmlStyleTemplate())
@@ -669,6 +682,157 @@ object ProjectManager {
   </main>
 </body>
 </html>
+"""
+
+    /** قالب «HTML + JS»: نفس مظهر قالب Rin (عدّاد + قائمة مهام) لكن المنطق JavaScript في script.js. */
+    private fun htmlJsIndexTemplate(name: String): String = """<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>$name</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main class="card">
+    <h1>$name</h1>
+    <p class="hint">الواجهة من index.html والمنطق من script.js (JavaScript)</p>
+
+    <div class="count" id="count">0</div>
+    <div class="row">
+      <button data-add="1">+1</button>
+      <button data-add="5">+5</button>
+      <button class="secondary" id="reset">تصفير</button>
+    </div>
+    <p class="note" id="note" hidden>وصل العدّاد إلى 10 أو أكثر 🎉</p>
+
+    <hr>
+
+    <form class="add-row" id="addForm">
+      <input type="text" id="newTodo" placeholder="مهمة جديدة" autocomplete="off">
+      <button type="submit">إضافة</button>
+    </form>
+    <ul class="todos" id="todos"></ul>
+    <p class="hint" id="empty">لا توجد مهام بعد</p>
+    <p class="hint" id="left" hidden></p>
+
+    <hr>
+
+    <!-- جسر JS ↔ Rin: الزر يستدعي fun greet() في container.rin عبر rin.call، والنتيجة من rin.get -->
+    <button id="callRin">نداء Rin</button>
+    <p class="note" id="rinMessage"></p>
+  </main>
+
+  <script src="script.js"></script>
+</body>
+</html>
+"""
+
+    private fun htmlJsScriptTemplate(name: String): String = """// script.js — منطق مشروع "$name" بلغة JavaScript
+// يُدمَج هذا الملف تلقائياً في الصفحة عند التشغيل (داخل التطبيق أو على http://localhost:7700/).
+// المهام تُحفظ في localStorage فتبقى بعد إعادة التشغيل.
+(function () {
+  'use strict';
+
+  var KEY = 'todos:' + document.title;
+  var count = 0;
+  var todos = load();
+  var nextId = todos.reduce(function (m, t) { return Math.max(m, t.id); }, 0) + 1;
+
+  var ui = {
+    count: document.getElementById('count'),
+    note: document.getElementById('note'),
+    input: document.getElementById('newTodo'),
+    list: document.getElementById('todos'),
+    empty: document.getElementById('empty'),
+    left: document.getElementById('left')
+  };
+
+  function load() {
+    try { return JSON.parse(localStorage.getItem(KEY)) || []; } catch (e) { return []; }
+  }
+
+  function save() {
+    try { localStorage.setItem(KEY, JSON.stringify(todos)); } catch (e) { /* التخزين غير متاح */ }
+  }
+
+  function render() {
+    ui.count.textContent = count;
+    ui.note.hidden = count < 10;
+
+    ui.list.textContent = '';
+    todos.forEach(function (t) {
+      var li = document.createElement('li');
+      if (t.done) li.className = 'done';
+
+      var title = document.createElement('span');
+      title.className = 'title';
+      title.textContent = t.title;
+      title.addEventListener('click', function () { t.done = !t.done; save(); render(); });
+
+      var state = document.createElement('small');
+      state.textContent = t.done ? 'منجزة' : 'قيد التنفيذ';
+
+      var remove = document.createElement('button');
+      remove.className = 'x';
+      remove.textContent = '✕';
+      remove.addEventListener('click', function () {
+        todos = todos.filter(function (x) { return x.id !== t.id; });
+        save(); render();
+      });
+
+      li.appendChild(title);
+      li.appendChild(state);
+      li.appendChild(remove);
+      ui.list.appendChild(li);
+    });
+
+    var remaining = todos.filter(function (t) { return !t.done; }).length;
+    ui.empty.hidden = todos.length > 0;
+    ui.left.hidden = todos.length === 0;
+    ui.left.textContent = 'المتبقي: ' + remaining + ' من ' + todos.length;
+  }
+
+  Array.prototype.forEach.call(document.querySelectorAll('[data-add]'), function (btn) {
+    btn.addEventListener('click', function () { count += Number(btn.getAttribute('data-add')); render(); });
+  });
+
+  // JS ↔ Rin: container.rin حاوية جاهزة؛ نستدعي دالتها greet ثم نقرأ المتغير message (rin يُحقن عند التشغيل).
+  document.getElementById('callRin').addEventListener('click', function () {
+    var box = document.getElementById('rinMessage');
+    if (!window.rin) { box.textContent = 'جسر Rin غير متاح'; return; }
+    window.rin.call('greet', ui.input.value.trim() || 'زائر');
+    box.textContent = window.rin.get('message');
+  });
+
+  document.getElementById('reset').addEventListener('click', function () { count = 0; render(); });
+
+  document.getElementById('addForm').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var text = ui.input.value.trim();
+    if (!text) return;
+    todos.push({ id: nextId++, title: text, done: false });
+    ui.input.value = '';
+    save(); render();
+  });
+
+  render();
+})();
+"""
+
+    /** container.rin لمشروع «HTML + JS»: حاوية Rin موقَّعة تستدعيها JavaScript عبر rin.call / rin.get. */
+    private fun htmlJsContainerTemplate(name: String): String = """${RinContainerFile.SIGNATURE}
+// container.rin — حاوية Rin لمشروع "$name" (المنطق الرئيسي في script.js بلغة JavaScript)
+// من JavaScript:  rin.call("greet", "اسم")   ثم   rin.get("message")
+// المتغيرات العامة هنا هي حالة تقرؤها الصفحة، والدوال العلوية تُستدعى منها.
+
+let message = "مرحباً من Rin";
+let calls = 0;
+
+fun greet(who) {
+    calls = calls + 1;
+    message = "مرحباً " + who + " — نداء رقم " + toString(calls) + " من Rin";
+}
 """
 
     private fun htmlStyleTemplate(): String = """/* style.css — تنسيق index.html */
