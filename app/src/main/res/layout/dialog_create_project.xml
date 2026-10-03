@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- محتوى حوار "مشروع جديد": حقل اسم المشروع + شبكة 2×2 من شرائح اختيار النوع
-     (Container / Table / UI / Free Project). التحديد الفعلي يُدار من ProjectsActivity
-     بتبديل isSelected على كل شريحة (انظر bg_project_type_chip.xml). -->
+<!-- محتوى حوار "مشروع جديد": حقل اسم المشروع + صفوف اختيار النوع مقسّمة إلى قسمين:
+     الويب (HTML + Rin / HTML + JS) وRin (Free / Container / Table / UI / Illust).
+     كل صف: بلاطة أيقونة ملوّنة + عنوان ووصف + مؤشر اختيار. التحديد الفعلي يُدار من ProjectsActivity
+     بتبديل isSelected على كل صف (انظر bg_project_type_chip.xml وic_type_check.xml). -->
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
@@ -33,196 +34,405 @@
             android:maxLines="1"
             android:inputType="text" />
 
+        <!-- ===== قسم الويب ===== -->
         <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="18dp"
-            android:layout_marginBottom="8dp"
-            android:text="@string/project_type_label"
-            android:textSize="12.5sp"
-            android:textColor="@color/rin_editor_hint" />
+            style="@style/ProjectSectionLabel"
+            android:text="@string/create_section_web" />
 
-        <GridLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:columnCount="2"
-            android:rowCount="4"
-            android:useDefaultMargins="false">
+        <LinearLayout
+            android:id="@+id/chipTypeHtml"
+            style="@style/ProjectTypeRow">
 
-            <LinearLayout
-                android:id="@+id/chipTypeContainer"
-                style="@style/ProjectTypeChip"
-                android:layout_row="0"
-                android:layout_column="0">
+            <FrameLayout
+                style="@style/ProjectTypeTile"
+                android:backgroundTint="@color/type_tile_html">
 
                 <ImageView
-                    android:layout_width="24dp"
-                    android:layout_height="24dp"
-                    android:src="@drawable/ic_type_container"
-                    android:tint="@color/selector_project_type_chip_text"
-                    android:duplicateParentState="true"
+                    android:layout_width="26dp"
+                    android:layout_height="26dp"
+                    android:layout_gravity="center"
+                    android:src="@drawable/ic_html_file"
                     android:contentDescription="@null" />
-
-                <TextView
-                    style="@style/ProjectTypeChipTitle"
-                    android:duplicateParentState="true"
-                    android:text="@string/project_type_container" />
-
-                <TextView
-                    style="@style/ProjectTypeChipSubtitle"
-                    android:text="@string/project_type_container_desc" />
-            </LinearLayout>
+            </FrameLayout>
 
             <LinearLayout
-                android:id="@+id/chipTypeTable"
-                style="@style/ProjectTypeChip"
-                android:layout_row="0"
-                android:layout_column="1">
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginStart="12dp"
+                android:layout_marginEnd="12dp"
+                android:duplicateParentState="true"
+                android:orientation="vertical">
+
+                <TextView
+                    style="@style/ProjectTypeRowTitle"
+                    android:duplicateParentState="true"
+                    android:text="@string/project_type_html" />
+
+                <TextView
+                    style="@style/ProjectTypeRowDesc"
+                    android:text="@string/project_type_html_desc" />
+
+                    <LinearLayout
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical">
+                        <ImageView
+                            android:layout_width="14dp"
+                            android:layout_height="14dp"
+                            android:src="@drawable/ic_html_file"
+                            android:contentDescription="@null" />
+                        <TextView
+                            style="@style/ProjectFileChipText"
+                            android:text="index.html" />
+                        <ImageView
+                            android:layout_width="14dp"
+                            android:layout_height="14dp"
+                            android:src="@drawable/ic_css_file"
+                            android:contentDescription="@null" />
+                        <TextView
+                            style="@style/ProjectFileChipText"
+                            android:text="style.css" />
+                        <ImageView
+                            android:layout_width="14dp"
+                            android:layout_height="14dp"
+                            android:src="@drawable/ic_container_rin_file"
+                            android:contentDescription="@null" />
+                        <TextView
+                            style="@style/ProjectFileChipText"
+                            android:text="container.rin" />
+                    </LinearLayout>
+            </LinearLayout>
+
+            <ImageView
+                android:layout_width="22dp"
+                android:layout_height="22dp"
+                android:src="@drawable/ic_type_check"
+                android:duplicateParentState="true"
+                android:contentDescription="@null" />
+        </LinearLayout>
+        <LinearLayout
+            android:id="@+id/chipTypeHtmlJs"
+            style="@style/ProjectTypeRow">
+
+            <FrameLayout
+                style="@style/ProjectTypeTile"
+                android:backgroundTint="@color/type_tile_html_js">
 
                 <ImageView
-                    android:layout_width="24dp"
-                    android:layout_height="24dp"
-                    android:src="@drawable/ic_type_table"
-                    android:tint="@color/selector_project_type_chip_text"
-                    android:duplicateParentState="true"
+                    android:layout_width="26dp"
+                    android:layout_height="26dp"
+                    android:layout_gravity="center"
+                    android:src="@drawable/ic_js_file"
                     android:contentDescription="@null" />
-
-                <TextView
-                    style="@style/ProjectTypeChipTitle"
-                    android:duplicateParentState="true"
-                    android:text="@string/project_type_table" />
-
-                <TextView
-                    style="@style/ProjectTypeChipSubtitle"
-                    android:text="@string/project_type_table_desc" />
-            </LinearLayout>
+            </FrameLayout>
 
             <LinearLayout
-                android:id="@+id/chipTypeUi"
-                style="@style/ProjectTypeChip"
-                android:layout_row="1"
-                android:layout_column="0">
-
-                <!-- بدل أيقونة عامة: صورة مصغّرة فعلية من واجهة UI حقيقية (شريط علوي + قائمة
-                     جانبية)، لتُظهر للمستخدم شكل النتيجة قبل الاختيار، بلا أيقونة. -->
-                <com.google.android.material.imageview.ShapeableImageView
-                    android:layout_width="match_parent"
-                    android:layout_height="52dp"
-                    android:scaleType="centerCrop"
-                    android:src="@drawable/thumb_type_ui"
-                    app:shapeAppearanceOverlay="@style/ProjectTypeUiThumbShape"
-                    android:contentDescription="@null" />
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginStart="12dp"
+                android:layout_marginEnd="12dp"
+                android:duplicateParentState="true"
+                android:orientation="vertical">
 
                 <TextView
-                    style="@style/ProjectTypeChipTitle"
+                    style="@style/ProjectTypeRowTitle"
                     android:duplicateParentState="true"
-                    android:text="@string/project_type_ui" />
+                    android:text="@string/project_type_html_js" />
 
                 <TextView
-                    style="@style/ProjectTypeChipSubtitle"
-                    android:text="@string/project_type_ui_desc" />
+                    style="@style/ProjectTypeRowDesc"
+                    android:text="@string/project_type_html_js_desc" />
+
+                    <LinearLayout
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical">
+                        <ImageView
+                            android:layout_width="14dp"
+                            android:layout_height="14dp"
+                            android:src="@drawable/ic_html_file"
+                            android:contentDescription="@null" />
+                        <TextView
+                            style="@style/ProjectFileChipText"
+                            android:text="index.html" />
+                        <ImageView
+                            android:layout_width="14dp"
+                            android:layout_height="14dp"
+                            android:src="@drawable/ic_css_file"
+                            android:contentDescription="@null" />
+                        <TextView
+                            style="@style/ProjectFileChipText"
+                            android:text="style.css" />
+                        <ImageView
+                            android:layout_width="14dp"
+                            android:layout_height="14dp"
+                            android:src="@drawable/ic_js_file"
+                            android:contentDescription="@null" />
+                        <TextView
+                            style="@style/ProjectFileChipText"
+                            android:text="script.js" />
+                    </LinearLayout>
             </LinearLayout>
 
-            <LinearLayout
-                android:id="@+id/chipTypeFree"
-                style="@style/ProjectTypeChip"
-                android:layout_row="1"
-                android:layout_column="1">
+            <ImageView
+                android:layout_width="22dp"
+                android:layout_height="22dp"
+                android:src="@drawable/ic_type_check"
+                android:duplicateParentState="true"
+                android:contentDescription="@null" />
+        </LinearLayout>
+
+        <!-- ===== قسم Rin ===== -->
+        <TextView
+            style="@style/ProjectSectionLabel"
+            android:text="@string/create_section_rin" />
+
+        <LinearLayout
+            android:id="@+id/chipTypeFree"
+            style="@style/ProjectTypeRow">
+
+            <FrameLayout
+                style="@style/ProjectTypeTile"
+                android:backgroundTint="@color/type_tile_free">
 
                 <ImageView
-                    android:layout_width="24dp"
-                    android:layout_height="24dp"
+                    android:layout_width="26dp"
+                    android:layout_height="26dp"
+                    android:layout_gravity="center"
                     android:src="@drawable/ic_type_free"
-                    android:tint="@color/selector_project_type_chip_text"
-                    android:duplicateParentState="true"
+                    android:tint="@color/project_type_free_color"
                     android:contentDescription="@null" />
+            </FrameLayout>
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginStart="12dp"
+                android:layout_marginEnd="12dp"
+                android:duplicateParentState="true"
+                android:orientation="vertical">
 
                 <TextView
-                    style="@style/ProjectTypeChipTitle"
+                    style="@style/ProjectTypeRowTitle"
                     android:duplicateParentState="true"
                     android:text="@string/project_type_free" />
 
                 <TextView
-                    style="@style/ProjectTypeChipSubtitle"
+                    style="@style/ProjectTypeRowDesc"
                     android:text="@string/project_type_free_desc" />
             </LinearLayout>
 
-            <!-- شريحة خامسة بعرض الصفّين معاً: نوع مشروع "Illust" الجاهز — لغة رسم/SVG
-                 مضمَّنة كاملة (راجع BundledIllustLanguage.kt)، تُنشئ مشروعاً يعمل فوراً
-                 (شغّل run.rin) بدل main.rin ترحيبي فارغ. -->
-            <LinearLayout
-                android:id="@+id/chipTypeIllust"
-                style="@style/ProjectTypeChip"
-                android:layout_row="2"
-                android:layout_column="0"
-                android:layout_columnSpan="2"
-                android:orientation="horizontal"
-                android:gravity="center_vertical">
+            <ImageView
+                android:layout_width="22dp"
+                android:layout_height="22dp"
+                android:src="@drawable/ic_type_check"
+                android:duplicateParentState="true"
+                android:contentDescription="@null" />
+        </LinearLayout>
+        <LinearLayout
+            android:id="@+id/chipTypeContainer"
+            style="@style/ProjectTypeRow">
+
+            <FrameLayout
+                style="@style/ProjectTypeTile"
+                android:backgroundTint="@color/type_tile_container">
 
                 <ImageView
-                    android:layout_width="24dp"
-                    android:layout_height="24dp"
-                    android:layout_marginEnd="10dp"
+                    android:layout_width="26dp"
+                    android:layout_height="26dp"
+                    android:layout_gravity="center"
+                    android:src="@drawable/ic_type_container"
+                    android:tint="@color/project_type_container_color"
+                    android:contentDescription="@null" />
+            </FrameLayout>
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginStart="12dp"
+                android:layout_marginEnd="12dp"
+                android:duplicateParentState="true"
+                android:orientation="vertical">
+
+                <TextView
+                    style="@style/ProjectTypeRowTitle"
+                    android:duplicateParentState="true"
+                    android:text="@string/project_type_container" />
+
+                <TextView
+                    style="@style/ProjectTypeRowDesc"
+                    android:text="@string/project_type_container_desc" />
+            </LinearLayout>
+
+            <ImageView
+                android:layout_width="22dp"
+                android:layout_height="22dp"
+                android:src="@drawable/ic_type_check"
+                android:duplicateParentState="true"
+                android:contentDescription="@null" />
+        </LinearLayout>
+        <LinearLayout
+            android:id="@+id/chipTypeTable"
+            style="@style/ProjectTypeRow">
+
+            <FrameLayout
+                style="@style/ProjectTypeTile"
+                android:backgroundTint="@color/type_tile_table">
+
+                <ImageView
+                    android:layout_width="26dp"
+                    android:layout_height="26dp"
+                    android:layout_gravity="center"
+                    android:src="@drawable/ic_type_table"
+                    android:tint="@color/project_type_table_color"
+                    android:contentDescription="@null" />
+            </FrameLayout>
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginStart="12dp"
+                android:layout_marginEnd="12dp"
+                android:duplicateParentState="true"
+                android:orientation="vertical">
+
+                <TextView
+                    style="@style/ProjectTypeRowTitle"
+                    android:duplicateParentState="true"
+                    android:text="@string/project_type_table" />
+
+                <TextView
+                    style="@style/ProjectTypeRowDesc"
+                    android:text="@string/project_type_table_desc" />
+            </LinearLayout>
+
+            <ImageView
+                android:layout_width="22dp"
+                android:layout_height="22dp"
+                android:src="@drawable/ic_type_check"
+                android:duplicateParentState="true"
+                android:contentDescription="@null" />
+        </LinearLayout>
+        <LinearLayout
+            android:id="@+id/chipTypeUi"
+            style="@style/ProjectTypeRow">
+
+            <FrameLayout
+                style="@style/ProjectTypeTile"
+                android:backgroundTint="@color/type_tile_ui">
+
+                <ImageView
+                    android:layout_width="26dp"
+                    android:layout_height="26dp"
+                    android:layout_gravity="center"
+                    android:src="@drawable/ic_type_ui"
+                    android:tint="@color/project_type_ui_color"
+                    android:contentDescription="@null" />
+            </FrameLayout>
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginStart="12dp"
+                android:layout_marginEnd="12dp"
+                android:duplicateParentState="true"
+                android:orientation="vertical">
+
+                <TextView
+                    style="@style/ProjectTypeRowTitle"
+                    android:duplicateParentState="true"
+                    android:text="@string/project_type_ui" />
+
+                <TextView
+                    style="@style/ProjectTypeRowDesc"
+                    android:text="@string/project_type_ui_desc" />
+            </LinearLayout>
+
+            <ImageView
+                android:layout_width="22dp"
+                android:layout_height="22dp"
+                android:src="@drawable/ic_type_check"
+                android:duplicateParentState="true"
+                android:contentDescription="@null" />
+        </LinearLayout>
+        <LinearLayout
+            android:id="@+id/chipTypeIllust"
+            style="@style/ProjectTypeRow">
+
+            <FrameLayout
+                style="@style/ProjectTypeTile"
+                android:backgroundTint="@color/type_tile_illust">
+
+                <ImageView
+                    android:layout_width="26dp"
+                    android:layout_height="26dp"
+                    android:layout_gravity="center"
                     android:src="@drawable/ic_illust_file"
-                    android:duplicateParentState="true"
                     android:contentDescription="@null" />
+            </FrameLayout>
 
-                <LinearLayout
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:orientation="vertical">
-
-                    <TextView
-                        style="@style/ProjectTypeChipTitle"
-                        android:duplicateParentState="true"
-                        android:layout_marginTop="0dp"
-                        android:text="@string/project_type_illust" />
-
-                    <TextView
-                        style="@style/ProjectTypeChipSubtitle"
-                        android:text="@string/project_type_illust_desc" />
-                </LinearLayout>
-            </LinearLayout>
-
-            <!-- شريحة سادسة بعرض الصفّين: مشروع HTML — index.html + style.css + container.rin يعمل داخل
-                 WebView مربوطاً بـ Rin (انظر HtmlRunActivity.kt). -->
             <LinearLayout
-                android:id="@+id/chipTypeHtml"
-                style="@style/ProjectTypeChip"
-                android:layout_row="3"
-                android:layout_column="0"
-                android:layout_columnSpan="2"
-                android:orientation="horizontal"
-                android:gravity="center_vertical">
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginStart="12dp"
+                android:layout_marginEnd="12dp"
+                android:duplicateParentState="true"
+                android:orientation="vertical">
 
-                <ImageView
-                    android:layout_width="24dp"
-                    android:layout_height="24dp"
-                    android:layout_marginEnd="10dp"
-                    android:src="@drawable/ic_type_html"
-                    android:tint="@color/selector_project_type_chip_text"
+                <TextView
+                    style="@style/ProjectTypeRowTitle"
                     android:duplicateParentState="true"
-                    android:contentDescription="@null" />
+                    android:text="@string/project_type_illust" />
 
-                <LinearLayout
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:orientation="vertical">
-
-                    <TextView
-                        style="@style/ProjectTypeChipTitle"
-                        android:duplicateParentState="true"
-                        android:layout_marginTop="0dp"
-                        android:text="@string/project_type_html" />
-
-                    <TextView
-                        style="@style/ProjectTypeChipSubtitle"
-                        android:text="@string/project_type_html_desc" />
-                </LinearLayout>
+                <TextView
+                    style="@style/ProjectTypeRowDesc"
+                    android:text="@string/project_type_illust_desc" />
             </LinearLayout>
-        </GridLayout>
+
+            <ImageView
+                android:layout_width="22dp"
+                android:layout_height="22dp"
+                android:src="@drawable/ic_type_check"
+                android:duplicateParentState="true"
+                android:contentDescription="@null" />
+        </LinearLayout>
+
+        <!-- تلميح المعاينة المحلية: ينطبق على مشاريع HTML وRin معاً. -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+            <ImageView
+                android:layout_width="16dp"
+                android:layout_height="16dp"
+                android:src="@drawable/ic_globe_link"
+                android:tint="@color/rin_editor_hint"
+                android:contentDescription="@null" />
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginStart="8dp"
+                android:text="@string/create_local_preview_hint"
+                android:textIsSelectable="true"
+                android:textSize="11.5sp"
+                android:textColor="@color/rin_editor_hint" />
+        </LinearLayout>
 
         <!-- صفّ "قوالب indsin جاهزة" (اختياري، مستقل عن نوع المشروع أعلاه): عند اختيار إحدى
              الشرائح الخمس يُستبدَل indsin/main.indsin الافتراضي بواجهة جاهزة تعمل فوراً
