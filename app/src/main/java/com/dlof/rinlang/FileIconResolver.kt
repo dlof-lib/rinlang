@@ -127,8 +127,80 @@ object FileIconResolver {
         "scala" to R.drawable.ic_lang_scala, "sc" to R.drawable.ic_lang_scala,
         "ex" to R.drawable.ic_lang_elixir, "exs" to R.drawable.ic_lang_elixir,
         "zig" to R.drawable.ic_lang_zig, "cjs" to R.drawable.ic_lang_node,
+        "gitignore" to R.drawable.ic_lang_git, "gitattributes" to R.drawable.ic_lang_git, "gitmodules" to R.drawable.ic_lang_git,
+        "gitconfig" to R.drawable.ic_lang_git, "gitkeep" to R.drawable.ic_lang_git, "dockerfile" to R.drawable.ic_lang_docker,
+        "dockerignore" to R.drawable.ic_lang_docker, "graphql" to R.drawable.ic_lang_graphql, "gql" to R.drawable.ic_lang_graphql,
+        "jl" to R.drawable.ic_lang_julia, "clj" to R.drawable.ic_lang_clojure, "cljs" to R.drawable.ic_lang_clojure,
+        "cljc" to R.drawable.ic_lang_clojure, "edn" to R.drawable.ic_lang_clojure, "erl" to R.drawable.ic_lang_erlang,
+        "hrl" to R.drawable.ic_lang_erlang, "ml" to R.drawable.ic_lang_ocaml, "mli" to R.drawable.ic_lang_ocaml,
+        "nim" to R.drawable.ic_lang_nim, "nims" to R.drawable.ic_lang_nim, "cr" to R.drawable.ic_lang_crystal,
+        "f90" to R.drawable.ic_lang_fortran, "f95" to R.drawable.ic_lang_fortran, "f03" to R.drawable.ic_lang_fortran,
+        "f08" to R.drawable.ic_lang_fortran, "for" to R.drawable.ic_lang_fortran, "f" to R.drawable.ic_lang_fortran,
+        "cmake" to R.drawable.ic_lang_cmake, "mk" to R.drawable.ic_lang_make, "mak" to R.drawable.ic_lang_make,
+        "tf" to R.drawable.ic_lang_terraform, "tfvars" to R.drawable.ic_lang_terraform, "sol" to R.drawable.ic_lang_solidity,
+        "wasm" to R.drawable.ic_lang_wasm, "wat" to R.drawable.ic_lang_wasm, "tex" to R.drawable.ic_lang_latex,
+        "sty" to R.drawable.ic_lang_latex, "cls" to R.drawable.ic_lang_latex, "bib" to R.drawable.ic_lang_latex,
+        "ipynb" to R.drawable.ic_lang_jupyter, "svelte" to R.drawable.ic_lang_svelte, "astro" to R.drawable.ic_lang_astro,
+        "less" to R.drawable.ic_lang_less, "styl" to R.drawable.ic_lang_stylus, "stylus" to R.drawable.ic_lang_stylus,
+        "hbs" to R.drawable.ic_lang_handlebars, "handlebars" to R.drawable.ic_lang_handlebars, "pug" to R.drawable.ic_lang_pug,
+        "jade" to R.drawable.ic_lang_pug, "ejs" to R.drawable.ic_lang_ejs, "coffee" to R.drawable.ic_lang_coffee,
+        "elm" to R.drawable.ic_lang_elm, "purs" to R.drawable.ic_lang_purescript, "env" to R.drawable.ic_lang_dotenv,
+        "blend" to R.drawable.ic_lang_blender, "fig" to R.drawable.ic_lang_figma, "sketch" to R.drawable.ic_lang_sketch,
+        "unity" to R.drawable.ic_lang_unity, "prefab" to R.drawable.ic_lang_unity, "asset" to R.drawable.ic_lang_unity,
+        "gd" to R.drawable.ic_lang_godot, "tscn" to R.drawable.ic_lang_godot, "tres" to R.drawable.ic_lang_godot,
+        "godot" to R.drawable.ic_lang_godot, "csproj" to R.drawable.ic_lang_dotnet, "fsproj" to R.drawable.ic_lang_dotnet,
+        "vbproj" to R.drawable.ic_lang_dotnet, "sln" to R.drawable.ic_lang_dotnet, "props" to R.drawable.ic_lang_dotnet,
+        "razor" to R.drawable.ic_lang_dotnet, "cshtml" to R.drawable.ic_lang_dotnet, "nupkg" to R.drawable.ic_lang_nuget,
+        "npmrc" to R.drawable.ic_lang_npm, "npmignore" to R.drawable.ic_lang_npm, "yarnrc" to R.drawable.ic_lang_yarn,
+        "eslintrc" to R.drawable.ic_lang_eslint, "eslintignore" to R.drawable.ic_lang_eslint, "prettierrc" to R.drawable.ic_lang_prettier,
+        "prettierignore" to R.drawable.ic_lang_prettier, "babelrc" to R.drawable.ic_lang_babel, "psql" to R.drawable.ic_lang_postgres,
+        "pgsql" to R.drawable.ic_lang_postgres, "mysql" to R.drawable.ic_lang_mysql, "ino" to R.drawable.ic_lang_arduino,
+        "pde" to R.drawable.ic_lang_arduino, "mdx" to R.drawable.ic_lang_mdx, "adoc" to R.drawable.ic_lang_asciidoc,
+        "asciidoc" to R.drawable.ic_lang_asciidoc, "odt" to R.drawable.ic_lang_libreoffice, "ods" to R.drawable.ic_lang_libreoffice,
+        "odp" to R.drawable.ic_lang_libreoffice, "odg" to R.drawable.ic_lang_libreoffice, "ps1" to R.drawable.ic_lang_powershell,
+        "psm1" to R.drawable.ic_lang_powershell, "psd1" to R.drawable.ic_lang_powershell, "bat" to R.drawable.ic_lang_batch,
+        "cmd" to R.drawable.ic_lang_batch, "epub" to R.drawable.ic_lang_ebook, "mobi" to R.drawable.ic_lang_ebook,
+        "azw3" to R.drawable.ic_lang_ebook, "rtf" to R.drawable.ic_lang_doc_generic, "exe" to R.drawable.ic_lang_binary,
+        "dll" to R.drawable.ic_lang_binary, "msi" to R.drawable.ic_lang_binary, "bin" to R.drawable.ic_lang_binary,
+        "so" to R.drawable.ic_lang_binary, "o" to R.drawable.ic_lang_binary, "a" to R.drawable.ic_lang_binary,
+        "dylib" to R.drawable.ic_lang_binary, "iso" to R.drawable.ic_lang_disc, "img" to R.drawable.ic_lang_disc,
+        "dmg" to R.drawable.ic_lang_disc, "deb" to R.drawable.ic_lang_package, "rpm" to R.drawable.ic_lang_package,
+        "pkg" to R.drawable.ic_lang_package, "whl" to R.drawable.ic_lang_package, "gem" to R.drawable.ic_lang_package,
+        "aab" to R.drawable.ic_lang_package, "pem" to R.drawable.ic_lang_certificate, "crt" to R.drawable.ic_lang_certificate,
+        "cer" to R.drawable.ic_lang_certificate, "csr" to R.drawable.ic_lang_certificate, "key" to R.drawable.ic_lang_key,
+        "pub" to R.drawable.ic_lang_key, "jks" to R.drawable.ic_lang_key, "keystore" to R.drawable.ic_lang_key,
+        "p12" to R.drawable.ic_lang_key, "pfx" to R.drawable.ic_lang_key, "gpg" to R.drawable.ic_lang_key,
+        "obj" to R.drawable.ic_lang_3d, "stl" to R.drawable.ic_lang_3d, "fbx" to R.drawable.ic_lang_3d,
+        "glb" to R.drawable.ic_lang_3d, "gltf" to R.drawable.ic_lang_3d, "3ds" to R.drawable.ic_lang_3d,
+        "dwg" to R.drawable.ic_lang_cad, "dxf" to R.drawable.ic_lang_cad, "lock" to R.drawable.ic_lang_lock,
+        "eml" to R.drawable.ic_lang_email, "msg" to R.drawable.ic_lang_email,
         "mp3" to R.drawable.ic_lang_audio, "wav" to R.drawable.ic_lang_audio, "ogg" to R.drawable.ic_lang_audio,
         "m4a" to R.drawable.ic_lang_audio, "flac" to R.drawable.ic_lang_audio
+    )
+
+    /** أسماء ملفات كاملة (بلا امتداد معروف أو يتقدّم اسمها على امتدادها) → أيقونتها. */
+    private val fileNameToLocalIcon: Map<String, Int> = mapOf(
+        "dockerfile" to R.drawable.ic_lang_docker, "makefile" to R.drawable.ic_lang_make,
+        "gnumakefile" to R.drawable.ic_lang_make, "cmakelists.txt" to R.drawable.ic_lang_cmake,
+        "package.json" to R.drawable.ic_lang_npm, "package-lock.json" to R.drawable.ic_lang_npm,
+        "yarn.lock" to R.drawable.ic_lang_yarn, "pnpm-lock.yaml" to R.drawable.ic_lang_pnpm,
+        "readme" to R.drawable.ic_lang_markdown, "license" to R.drawable.ic_lang_certificate,
+        "licence" to R.drawable.ic_lang_certificate, "gradlew" to R.drawable.ic_lang_gradle,
+        "build.gradle" to R.drawable.ic_lang_gradle, "build.gradle.kts" to R.drawable.ic_lang_gradle,
+        "settings.gradle.kts" to R.drawable.ic_lang_gradle
+    )
+
+    /** بادئات أسماء ملفات الإعداد الشائعة (vite.config.ts، .eslintrc.json، .env.local ...). */
+    private val fileNamePrefixToLocalIcon: List<Pair<String, Int>> = listOf(
+        ".env" to R.drawable.ic_lang_dotenv,
+        "vite.config." to R.drawable.ic_lang_vite,
+        "webpack.config." to R.drawable.ic_lang_webpack,
+        ".eslintrc" to R.drawable.ic_lang_eslint, "eslint.config." to R.drawable.ic_lang_eslint,
+        ".prettierrc" to R.drawable.ic_lang_prettier, "prettier.config." to R.drawable.ic_lang_prettier,
+        ".babelrc" to R.drawable.ic_lang_babel, "babel.config." to R.drawable.ic_lang_babel,
+        "tailwind.config." to R.drawable.ic_lang_tailwind,
+        "dockerfile." to R.drawable.ic_lang_docker, "docker-compose" to R.drawable.ic_lang_docker,
+        "readme." to R.drawable.ic_lang_markdown
     )
 
     private val imageExtensions = setOf("jpg", "jpeg", "png", "webp", "gif", "bmp", "heic")
@@ -142,6 +214,14 @@ object FileIconResolver {
         //    .rin عادي حتى يتضح أنه يُدار تلقائياً وليس كوداً يُعدَّل يدوياً.
         if (file.name == "project.og.urin") {
             imageView.setImageResource(R.drawable.ic_project_meta_container)
+            return
+        }
+
+        // 0.4) أسماء ملفات معروفة (Dockerfile، package.json، vite.config.ts، .env ...): تتقدّم على الامتداد.
+        val lowerName = file.name.lowercase()
+        (fileNameToLocalIcon[lowerName]
+            ?: fileNamePrefixToLocalIcon.firstOrNull { lowerName.startsWith(it.first) }?.second)?.let {
+            imageView.setImageResource(it)
             return
         }
 
