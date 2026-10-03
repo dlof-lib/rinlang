@@ -57,6 +57,8 @@
     <string name="html_run_title">تشغيل HTML — %1$s</string>
     <string name="html_run_reload">إعادة تحميل</string>
     <string name="html_run_close">إغلاق</string>
+    <string name="html_run_no_logic">لا يوجد ملف Rin للمنطق: أضف container.rin أو حدّد ملفاً عبر &lt;link rel=\"rin\" href=\"app.rin\"&gt; في index.html.</string>
+    <string name="html_run_state_cleared">تم مسح الحالة المحفوظة</string>
     <string name="html_run_no_index">لا يوجد ملف index.html في هذا المشروع.</string>
     <string name="html_run_rin_error">تعذّر تشغيل container.rin: %1$s</string>
 
