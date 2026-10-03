@@ -185,6 +185,28 @@ object ProjectManager {
         containerOptions: ContainerOptions = ContainerOptions(),
         tableOptions: TableOptions = TableOptions(),
         freeOptions: FreeOptions = FreeOptions()
+    ): String {
+        // القالب «الفارغ» لمشروع Free يبقى فارغاً تماماً بطلب المستخدم؛ كل غيره يبدأ بهوية Rin.
+        if (type == ProjectType.FREE && freeOptions.template == "empty") return ""
+        return rinIdentityPrologue(name) + mainRinBodyFor(type, name, uiOptions, containerOptions, tableOptions, freeOptions)
+    }
+
+    /**
+     * أول ما في كل main.rin جديد: كود Rin حقيقي (لا تعليق) يعرّف اللغة نفسها — اسمها ونسختها وإصدارها
+     * من المحرّك الفعلي (rinVersion()/rinEdition()) ثم اسم المشروع — فيكون أول ما يراه المستخدم عند Run
+     * هو توقيع Rin، ويُعرف الملف بصرياً أنه Rin قبل أي تعليق.
+     */
+    private fun rinIdentityPrologue(name: String): String =
+        "print \"◆ Rin \" + rinVersion() + \" · \" + rinEdition();\n" +
+            "print \"▸ $name\";\n\n"
+
+    private fun mainRinBodyFor(
+        type: ProjectType,
+        name: String,
+        uiOptions: UiDesignOptions,
+        containerOptions: ContainerOptions,
+        tableOptions: TableOptions,
+        freeOptions: FreeOptions
     ): String = when (type) {
         ProjectType.CONTAINER -> {
             val varName = containerOptions.varName.trim().ifEmpty { "counter" }
@@ -230,7 +252,20 @@ object ProjectManager {
                     "print \"يعمل هذا المشروع على Rin \" + rinVersion() + \" (\" + rinEdition() + \")\";\n"
             else ->
                 "// مشروع: $name\n" +
-                    "print \"مرحباً من مشروع $name\";\n"
+                    "// جولة سريعة في ما يميّز Rin — احذف ما لا تحتاجه.\n\n" +
+                    "// 1) warp: متغيّر حيّ، تتحدّث أي واجهة مرتبطة به عند تغيّره\n" +
+                    "warp score = 0;\n" +
+                    "score = score + 10;\n" +
+                    "print \"score:\", score;\n\n" +
+                    "// 2) الأنابيب |> : مرّر القيمة عبر سلسلة دوال\n" +
+                    "fun double(x) { return x * 2; }\n" +
+                    "fun inc(x) { return x + 1; }\n" +
+                    "print \"pipeline:\", 5 |> double() |> inc();\n\n" +
+                    "// 3) الحاويات @container: بيانات وسلوك داخل كتلة مسمّاة\n" +
+                    "@container=Main\n" +
+                    "    warp counter = 0;\n" +
+                    "    print \"counter:\", counter;\n" +
+                    ".end/container\n"
         }
 
         // main.rin نقطة دخول رمزية فقط (مطلوبة لتصدير/استيراد .rinproj)؛ المنطق الفعلي في container.rin.
