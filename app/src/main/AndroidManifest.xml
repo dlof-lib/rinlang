@@ -92,6 +92,11 @@
             android:exported="false" />
 
         <activity
+            android:name=".HtmlRunActivity"
+            android:exported="false"
+            android:theme="@style/Theme.RinLang" />
+
+        <activity
             android:name=".IndsinPreviewActivity"
             android:exported="false"
             android:launchMode="singleTask"
