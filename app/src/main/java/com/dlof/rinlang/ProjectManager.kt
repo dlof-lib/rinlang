@@ -233,6 +233,12 @@ object ProjectManager {
                     "print \"مرحباً من مشروع $name\";\n"
         }
 
+        // main.rin نقطة دخول رمزية فقط (مطلوبة لتصدير/استيراد .rinproj)؛ المنطق الفعلي في container.rin.
+        ProjectType.HTML ->
+            "// مشروع: $name\n" +
+                "// نوع المشروع: HTML — الواجهة في index.html والتنسيق في style.css والمنطق في container.rin.\n" +
+                "// اضغط تشغيل (Run) لفتح الصفحة داخل التطبيق مربوطةً بـ container.rin.\n"
+
         // يُستبدَل فوراً بعد الإنشاء عبر CustomLanguageProjectScaffolder.installBundledIllust
         // (انظر ProjectsActivity)؛ هذا المحتوى احتياطي فقط في حال لم يُستدعَ ذلك لأي سبب.
         ProjectType.ILLUST ->
@@ -353,6 +359,12 @@ object ProjectManager {
         File(dir, "main.rin").writeText(
             mainRinTemplateFor(type, trimmed, uiOptions, containerOptions, tableOptions, freeOptions)
         )
+        if (type == ProjectType.HTML) {
+            File(dir, "index.html").writeText(htmlIndexTemplate(trimmed))
+            File(dir, "style.css").writeText(htmlStyleTemplate())
+            File(dir, "container.rin").writeText(htmlContainerTemplate(trimmed))
+            return Project(trimmed, dir, dir.lastModified(), type)
+        }
         // indsin جزء أساسي من أي مشروع Rin حديث (لا مجرد مجلد اختياري): كل مشروع جديد يبدأ
         // بمجلد indsin/ فيه واجهة ابتدائية حقيقية بصياغة @view.* الفعلية (نفس محرّك المعاينة
         // الحية)، لا ملف نائم فارغ.
@@ -576,6 +588,132 @@ object ProjectManager {
             "        text=\"Built with indsin\";\n" +
             "    .end/view\n" +
             ".end/view\n"
+
+    // ---- قوالب مشروع HTML ----
+
+    private fun htmlIndexTemplate(name: String): String = """<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>$name</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main class="card">
+    <h1>$name</h1>
+    <p class="hint">الواجهة من index.html والمنطق من container.rin</p>
+
+    <div class="count" rin-text="count">0</div>
+
+    <div class="row">
+      <button rin-click="add()">+1</button>
+      <button rin-click="addBy(5)">+5</button>
+      <button class="secondary" rin-click="reset()">تصفير</button>
+    </div>
+
+    <input type="text" placeholder="اكتب اسمك" rin-model="userName">
+    <p class="greeting" rin-text="greeting">مرحباً</p>
+    <button rin-click="greet()">حيِّني</button>
+
+    <p class="note" rin-show="isHigh">وصل العدّاد إلى 10 أو أكثر 🎉</p>
+  </main>
+</body>
+</html>
+"""
+
+    private fun htmlStyleTemplate(): String = """/* style.css — تنسيق index.html */
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: system-ui, sans-serif;
+  background: #0a0a10;
+  color: #eceef7;
+}
+
+.card {
+  width: min(92vw, 380px);
+  padding: 28px 24px;
+  border-radius: 16px;
+  background: #14141c;
+  text-align: center;
+}
+
+h1 { margin: 0 0 6px; font-size: 20px; }
+.hint { margin: 0 0 18px; font-size: 13px; color: #9a9ab0; }
+.count { margin: 10px 0 16px; font-size: 56px; font-weight: bold; }
+.row { display: flex; gap: 8px; justify-content: center; margin-bottom: 18px; }
+
+button {
+  padding: 10px 18px;
+  border: none;
+  border-radius: 8px;
+  background: #7c5cff;
+  color: #fff;
+  font-size: 15px;
+}
+button:active { filter: brightness(1.15); }
+button.secondary { background: #2a2a38; }
+
+input {
+  width: 100%;
+  margin-bottom: 10px;
+  padding: 10px 12px;
+  border: 1px solid #2a2a38;
+  border-radius: 8px;
+  background: #0a0a10;
+  color: inherit;
+  font-size: 15px;
+}
+
+.greeting { min-height: 1.4em; margin: 4px 0 10px; color: #b9a8ff; }
+.note { margin-top: 14px; color: #7fe3a1; }
+"""
+
+    private fun htmlContainerTemplate(name: String): String = """// container.rin — منطق مشروع "$name"
+// المتغيرات العامة هنا هي "حالة" الصفحة، والدوال العلوية تُستدعى من index.html عبر rin-click.
+//   rin-text="count"      يعرض قيمة count
+//   rin-click="add()"     يستدعي fun add()
+//   rin-model="userName"  يربط حقل إدخال بالمتغير userName
+//   rin-show="isHigh"     يُظهر العنصر عندما تكون isHigh صحيحة
+
+let count = 0;
+let userName = "";
+let greeting = "مرحباً";
+let isHigh = false;
+
+fun refresh() {
+    isHigh = count >= 10;
+}
+
+fun add() {
+    count = count + 1;
+    refresh();
+}
+
+fun addBy(n) {
+    count = count + n;
+    refresh();
+}
+
+fun reset() {
+    count = 0;
+    refresh();
+}
+
+fun greet() {
+    if (userName == "") {
+        greeting = "اكتب اسمك أولاً";
+    } else {
+        greeting = "أهلاً يا " + userName + "!";
+    }
+}
+"""
 
     fun deleteProject(project: Project): Boolean = project.dir.deleteRecursively()
 
