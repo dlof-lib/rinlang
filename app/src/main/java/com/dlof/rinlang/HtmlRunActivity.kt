@@ -245,7 +245,7 @@ class HtmlRunActivity : AppCompatActivity() {
         if (!linkRe.containsMatchIn(html)) {
             readProjectText("style.css")?.let { css ->
                 val tag = "<style>\n$css\n</style>"
-                out = if (out.contains("</head>", true)) out.replaceFirst(Regex("</head>", RegexOption.IGNORE_CASE)) { tag + "</head>" } // lambda: النص حرفي (لا تفسير لـ $ أو \)
+                out = if (out.contains("</head>", true)) insertBeforeFirst(out, "</head>", tag)  // إدراج حرفي (لا تفسير لـ $ أو \)
                 else tag + out
             }
         }
@@ -253,8 +253,14 @@ class HtmlRunActivity : AppCompatActivity() {
             catch (t: Throwable) { log("تعذّر تحميل rin_html_runtime.js"); "" }
         val script = "<script>$runtime</script>"
         return if (out.contains("</body>", true))
-            out.replaceFirst(Regex("</body>", RegexOption.IGNORE_CASE)) { script + "</body>" }
+            insertBeforeFirst(out, "</body>", script)
         else out + script
+    }
+
+    /** يُدرج [insert] قبل أول ظهور لـ [marker] (دون حساسية لحالة الأحرف) كنص حرفي. */
+    private fun insertBeforeFirst(src: String, marker: String, insert: String): String {
+        val i = src.indexOf(marker, ignoreCase = true)
+        return if (i < 0) src + insert else src.substring(0, i) + insert + src.substring(i)
     }
 
     /** يقرأ ملفاً نصياً من داخل المشروع فقط (يمنع الخروج منه عبر ../ أو مسار مطلق/URL). */
