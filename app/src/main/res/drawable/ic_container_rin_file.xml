@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- أيقونة container.rin (منطق صفحة HTML المربوطة بـ Rin): صفحة بنفسجية (لون هوية Rin) داخل قوسي حاوية،
+     للتمييز عن ملف .rin العادي. تُستخدم في FileIconResolver لملف اسمه container.rin فقط. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:strokeColor="#7C5CFF"
+        android:strokeWidth="1.8"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M8,4 L4.5,4 L4.5,20 L8,20 M16,4 L19.5,4 L19.5,20 L16,20" />
+    <path android:fillColor="#7C5CFF" android:pathData="M8.2,8 L15.8,8 L15.8,9.6 L8.2,9.6 Z" />
+    <path android:fillColor="#B3A0FF" android:pathData="M8.2,11.2 L15.8,11.2 L15.8,12.8 L8.2,12.8 Z" />
+    <path android:fillColor="#B3A0FF" android:pathData="M8.2,14.4 L13,14.4 L13,16 L8.2,16 Z" />
+</vector>
