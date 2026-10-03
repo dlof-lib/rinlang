@@ -48,4 +48,4 @@ print len(rows);
 // 6) أخطاء الأنواع
 try { container.set("scores", "rows", 5); } catch (e) { print e.code; }
 try { container.set("scores", "rows", [1, 2]); } catch (e) { print e.code; }
-try { container.set("scores", "columns", []); } catch (e) { print e.code; }
+try { container.set("scores", "columns", 5); } catch (e) { print e.code; }
