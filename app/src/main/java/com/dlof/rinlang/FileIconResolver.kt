@@ -66,11 +66,69 @@ object FileIconResolver {
         "md" to ("vscode-icons" to "file-type-markdown"),
         "sql" to ("vscode-icons" to "file-type-sql"),
         "sh" to ("vscode-icons" to "file-type-shell"),
+        "zip" to ("vscode-icons" to "file-type-zip"),
+        "rar" to ("vscode-icons" to "file-type-zip"),
+        "7z" to ("vscode-icons" to "file-type-zip"),
+        "tar" to ("vscode-icons" to "file-type-zip"),
+        "gz" to ("vscode-icons" to "file-type-zip"),
+        "pdf" to ("vscode-icons" to "file-type-pdf2"),
+        "txt" to ("vscode-icons" to "file-type-text"),
+        "toml" to ("vscode-icons" to "file-type-toml"),
+        "svg" to ("vscode-icons" to "file-type-svg"),
+        "dart" to ("logos" to "dart"),
+        "lua" to ("vscode-icons" to "file-type-lua"),
+        "scss" to ("logos" to "sass"),
+        "vue" to ("logos" to "vue"),
         // خطوط: لا شعار "لغة" لها، لكن نستخدم أيقونة خط حقيقية موحّدة من نفس المزوّد
         "ttf" to ("vscode-icons" to "file-type-font"),
         "otf" to ("vscode-icons" to "file-type-font"),
         "woff" to ("vscode-icons" to "file-type-font"),
         "woff2" to ("vscode-icons" to "file-type-font")
+    )
+
+    /**
+     * الشعارات الرسمية المعروفة للغات وأنواع الملفات كـ vector محلي بلون هوية كل منها (المسارات من
+     * Simple Icons CC0 وMaterial Design Icons وFont Awesome Free): فورية وبلا شبكة. ما له أيقونة هنا
+     * لا يُجلب من الشبكة؛ أما [extensionToIconifyIcon] فاحتياط لامتدادات بلا أيقونة محلية.
+     */
+    private val extensionToLocalIcon: Map<String, Int> = mapOf(
+        "py" to R.drawable.ic_lang_python, "pyw" to R.drawable.ic_lang_python,
+        "ts" to R.drawable.ic_lang_ts, "jsx" to R.drawable.ic_lang_react, "tsx" to R.drawable.ic_lang_react,
+        "java" to R.drawable.ic_lang_java,
+        "kt" to R.drawable.ic_lang_kotlin, "kts" to R.drawable.ic_lang_kotlin,
+        "swift" to R.drawable.ic_lang_swift, "go" to R.drawable.ic_lang_go, "rs" to R.drawable.ic_lang_rust,
+        "rb" to R.drawable.ic_lang_ruby, "php" to R.drawable.ic_lang_php, "cs" to R.drawable.ic_lang_csharp,
+        "c" to R.drawable.ic_lang_c, "cpp" to R.drawable.ic_lang_cpp, "cc" to R.drawable.ic_lang_cpp,
+        "cxx" to R.drawable.ic_lang_cpp, "h" to R.drawable.ic_lang_header, "hpp" to R.drawable.ic_lang_header,
+        "dart" to R.drawable.ic_lang_dart, "lua" to R.drawable.ic_lang_lua,
+        "scss" to R.drawable.ic_lang_scss, "sass" to R.drawable.ic_lang_scss, "vue" to R.drawable.ic_lang_vue,
+        "svg" to R.drawable.ic_lang_svg,
+        "json" to R.drawable.ic_lang_json, "xml" to R.drawable.ic_lang_xml,
+        "yml" to R.drawable.ic_lang_yaml, "yaml" to R.drawable.ic_lang_yaml,
+        "toml" to R.drawable.ic_lang_toml,
+        "ini" to R.drawable.ic_lang_ini, "cfg" to R.drawable.ic_lang_ini, "conf" to R.drawable.ic_lang_ini,
+        "md" to R.drawable.ic_lang_markdown, "markdown" to R.drawable.ic_lang_markdown,
+        "txt" to R.drawable.ic_lang_txt, "log" to R.drawable.ic_lang_log,
+        "csv" to R.drawable.ic_lang_csv, "tsv" to R.drawable.ic_lang_csv,
+        "sql" to R.drawable.ic_lang_sql, "sh" to R.drawable.ic_lang_shell, "bash" to R.drawable.ic_lang_shell,
+        "zip" to R.drawable.ic_lang_archive, "rar" to R.drawable.ic_lang_archive, "7z" to R.drawable.ic_lang_archive,
+        "tar" to R.drawable.ic_lang_archive, "gz" to R.drawable.ic_lang_archive, "tgz" to R.drawable.ic_lang_archive,
+        "bz2" to R.drawable.ic_lang_archive, "xz" to R.drawable.ic_lang_archive, "rinproj" to R.drawable.ic_lang_archive,
+        "pdf" to R.drawable.ic_lang_pdf,
+        "doc" to R.drawable.ic_lang_word, "docx" to R.drawable.ic_lang_word,
+        "xls" to R.drawable.ic_lang_excel, "xlsx" to R.drawable.ic_lang_excel,
+        "ppt" to R.drawable.ic_lang_ppt, "pptx" to R.drawable.ic_lang_ppt,
+        "apk" to R.drawable.ic_lang_apk,
+        "ttf" to R.drawable.ic_lang_font, "otf" to R.drawable.ic_lang_font,
+        "woff" to R.drawable.ic_lang_font, "woff2" to R.drawable.ic_lang_font,
+        "sqlite" to R.drawable.ic_lang_sqlite, "sqlite3" to R.drawable.ic_lang_sqlite, "db" to R.drawable.ic_lang_sqlite,
+        "gradle" to R.drawable.ic_lang_gradle, "pl" to R.drawable.ic_lang_perl, "pm" to R.drawable.ic_lang_perl,
+        "r" to R.drawable.ic_lang_r, "hs" to R.drawable.ic_lang_haskell,
+        "scala" to R.drawable.ic_lang_scala, "sc" to R.drawable.ic_lang_scala,
+        "ex" to R.drawable.ic_lang_elixir, "exs" to R.drawable.ic_lang_elixir,
+        "zig" to R.drawable.ic_lang_zig, "cjs" to R.drawable.ic_lang_node,
+        "mp3" to R.drawable.ic_lang_audio, "wav" to R.drawable.ic_lang_audio, "ogg" to R.drawable.ic_lang_audio,
+        "m4a" to R.drawable.ic_lang_audio, "flac" to R.drawable.ic_lang_audio
     )
 
     private val imageExtensions = setOf("jpg", "jpeg", "png", "webp", "gif", "bmp", "heic")
@@ -135,6 +193,8 @@ object FileIconResolver {
         }
 
         // نضع أيقونة افتراضية فوراً (بلا وميض فراغ) بينما يُحضَّر أي شيء أدق بالخلفية.
+        // الشعار الرسمي المحلي إن وُجد: يُعرض فوراً وينتهي الأمر (بلا شبكة).
+        extensionToLocalIcon[ext]?.let { imageView.setImageResource(it); return }
         imageView.setImageResource(R.drawable.ic_rin_stack)
         // نربط الطلب بالـ ImageView نفسه لتفادي "تسرّب" نتيجة متأخرة لعنصر أعيد تدويره لملف آخر.
         val requestTag = file.absolutePath
