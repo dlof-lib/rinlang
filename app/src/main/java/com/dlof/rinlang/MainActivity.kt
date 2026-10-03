@@ -930,7 +930,24 @@ class MainActivity : AppCompatActivity() {
         popup.show()
     }
 
+    /**
+     * مشروع HTML (أو مشروع فيه index.html وكان الملف المفتوح من ملفات الواجهة: index.html/style.css/
+     * container.rin): التشغيل يحفظ التعديلات ثم يفتح الصفحة في [HtmlRunActivity] مربوطةً بـ container.rin.
+     * يعيد true إن تولّى التشغيل.
+     */
+    private fun runHtmlProjectIfApplicable(): Boolean {
+        val project = currentProject ?: return false
+        val name = currentProjectFile?.name?.lowercase()
+        val isHtmlSide = name == HtmlRunActivity.ENTRY_HTML || name == "style.css" || name == HtmlRunActivity.ENTRY_LOGIC
+        if (project.type != ProjectType.HTML && !isHtmlSide) return false
+        if (!HtmlRunActivity.isHtmlProject(project)) return false
+        if (hasSaveTarget()) saveSilently()
+        HtmlRunActivity.start(this, project.name)
+        return true
+    }
+
     private fun runProgram() {
+        if (runHtmlProjectIfApplicable()) return
         val source = editCode.text.toString()
         if (AppSettings.isClearConsoleOnRun(this)) { RinJobScheduler.clear(); RinTerminal.clear() }
         val job = RinJobScheduler.submit(source)
