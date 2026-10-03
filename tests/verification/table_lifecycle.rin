@@ -1,0 +1,26 @@
+// table_lifecycle.rin — clone/rename/remove تحمل صفوف الجدول ونمطه (كانت الصفوف تضيع)
+@table=t
+    style value="style://dark";
+    row cells=["a", "b"];
+    row cells=[1, 2];
+.end/table
+
+print container.clone("t", "t2");
+print getField("t2", "rows");
+print getField("t2", "style");
+#add(getField("t2", "rows"), [3, 4]);
+print len(getField("t", "rows"));
+print len(getField("t2", "rows"));
+
+print container.rename("t2", "t3");
+print getField("t3", "rows");
+print container.kind("t3");
+print sqlCount("t3");
+
+print container.remove("t3");
+print container.exists("t3");
+// اسم مُعاد استعماله لا يرث صفوف الجدول المحذوف
+@table=t3
+.end/table
+print getField("t3", "rows");
+print getField("t3", "style");
