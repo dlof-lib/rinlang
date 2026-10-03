@@ -12,7 +12,9 @@ enum class ProjectType(val id: String) {
     TABLE("table"),
     UI("ui"),
     FREE("free"),
-    ILLUST("illust");
+    ILLUST("illust"),
+    /** مشروع HTML: index.html + style.css + container.rin، يعمل داخل WebView مربوطاً بـ Rin ([HtmlRunActivity]). */
+    HTML("html");
 
     companion object {
         /** يحوّل معرّفاً نصياً (كما يُقرأ من project.og.urin) إلى [ProjectType]، أو FREE لأي قيمة غير معروفة/غائبة. */
