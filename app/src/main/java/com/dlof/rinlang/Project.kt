@@ -14,7 +14,9 @@ enum class ProjectType(val id: String) {
     FREE("free"),
     ILLUST("illust"),
     /** مشروع HTML: index.html + style.css + container.rin، يعمل داخل WebView مربوطاً بـ Rin ([HtmlRunActivity]). */
-    HTML("html");
+    HTML("html"),
+    /** مشروع HTML + JavaScript: index.html + style.css + script.js، يعمل داخل WebView كصفحة عادية بلا ملف Rin. */
+    HTML_JS("html_js");
 
     companion object {
         /** يحوّل معرّفاً نصياً (كما يُقرأ من project.og.urin) إلى [ProjectType]، أو FREE لأي قيمة غير معروفة/غائبة. */
