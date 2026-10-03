@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- LibreOffice — الشعار/الرمز المعروف بلون هويته؛ المسارات من Simple Icons (CC0) أو Material Design Icons. محلي بلا شبكة. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <group
+        android:scaleX="0.83333"
+        android:scaleY="0.83333"
+        android:translateX="2.000"
+        android:translateY="2.000">
+        <path android:fillColor="#18A303"
+            android:pathData="M16.365 0a.6.6 0 0 0-.555.352.58.58 0 0 0 .128.635l4.985 4.996a.6.6 0 0 0 .635.133.59.59 0 0 0 .363-.53V.577A.605.605 0 0 0 21.335 0zM2.661 0a.59.59 0 0 0-.582.59v22.82a.59.59 0 0 0 .582.59h18.67a.59.59 0 0 0 .59-.59V8.716a.6.6 0 0 0-.17-.42L13.674.182a.6.6 0 0 0-.42-.181zm.59 1.184h9.754l7.733 7.77v13.863H3.251z" />
+    </group>
+</vector>
