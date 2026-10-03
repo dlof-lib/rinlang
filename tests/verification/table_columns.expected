@@ -1,0 +1,40 @@
+📊 container.table = staff
+▦ row -> ["name", "dept", "score"]
+▦ row -> ["sara", "dev", 95]
+▦ row -> ["yusuf", "ops", 88]
+▦ row -> ["huda", "dev", 99]
+✅ .end/container.table (staff)
+[95, 88, 99]
+["sara", "yusuf", "huda"]
+true
+false
+array
+["yusuf", "ops", 2]
+["all", "all", "all"]
+E0007
+true
+["name", "dept", "points"]
+false
+false
+6
+true
+["name", "points"]
+["sara", 1]
+[["name", "points", "flag"], ["sara", 1, true], ["yusuf", 2, false], ["huda", 3, true]]
+[["name", "points", "flag"], ["ali", 7, false]]
+📊 container.table = t2
+▦ row -> ["name", "v"]
+▦ row -> ["x", 1]
+✅ .end/container.table (t2)
+var
+[1]
+📊 container.table = t3
+▦ row -> ["a", "b"]
+✅ .end/container.table (t3)
+2
+3
+[["a", "b"], [1, 2], [nil, 9]]
+[nil, 9]
+[1]
+none
+true
