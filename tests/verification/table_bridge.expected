@@ -1,0 +1,28 @@
+📊 container.table = scores
+🎨 style -> style://dark
+▦ row -> ["name", "score"]
+▦ row -> ["sara", 95]
+▦ row -> ["yusuf", 88]
+✅ .end/container.table (scores)
+3
+style://dark
+["rows", "header", "body", "records", "columns", "style"]
+true
+3
+2
+["score", 95, 88]
+4
+183
+253
+["omar", 70]
+[70, 88, 95]
+2
+[["a", "b"], [1, 2]]
+style://light
+[0, 1]
+false
+true
+0
+E0004
+E0004
+E0004
