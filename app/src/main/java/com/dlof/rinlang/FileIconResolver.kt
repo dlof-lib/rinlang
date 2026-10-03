@@ -102,6 +102,10 @@ object FileIconResolver {
             imageView.setImageResource(R.drawable.ic_css_file)
             return
         }
+        if (ext == "js" || ext == "mjs") {
+            imageView.setImageResource(R.drawable.ic_js_file)
+            return
+        }
 
         // 1) .rin -> الأيقونة المضمَّنة كما كانت دائماً، بلا أي عمل إضافي.
         if (ext == "rin" || ext.isEmpty()) {
