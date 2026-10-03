@@ -1029,6 +1029,7 @@ void Interpreter::registerNativesExtra3() {
         if (it == containers.end()) return B(false);
         guardWrite(it->second, "container.remove", name, line);
         containers.erase(it);
+        tableForget(name); // جدول: صفوفه ونمطه
         containerKinds.erase(name); containerCustomKind.erase(name); containerLifecycle.erase(name);
         containerStateNames.erase(name); containerSlots.erase(name); eventHandlers.erase(name);
         auto par = containerParent.find(name);
@@ -1152,6 +1153,7 @@ void Interpreter::registerNativesExtra3() {
     };
     // container.push(name, field, value) -> الطول الجديد (ينشئ المصفوفة إن غابت)
     natives["container.push"] = [this, guardWrite](Args& a, int line) -> Value {
+        { Value tv_; if (tableNative("container.push", a, line, tv_)) return tv_; } // جدول (rin_table.cpp)
         need("container.push", a, 3, 3, line);
         std::string name = str(a[0], "container.push", line), field = str(a[1], "container.push", line);
         auto it = containers.find(name);
@@ -1165,6 +1167,7 @@ void Interpreter::registerNativesExtra3() {
         return N(static_cast<double>(slot.array->size()));
     };
     natives["container.pop"] = [this, guardWrite](Args& a, int line) -> Value {
+        { Value tv_; if (tableNative("container.pop", a, line, tv_)) return tv_; } // جدول (rin_table.cpp)
         need("container.pop", a, 2, 2, line);
         std::string name = str(a[0], "container.pop", line), field = str(a[1], "container.pop", line);
         auto it = containers.find(name);
@@ -1178,6 +1181,7 @@ void Interpreter::registerNativesExtra3() {
     };
     // container.contains(name, field, x) — عنصر في مصفوفة / جزء نص / مفتاح في قاموس
     natives["container.contains"] = [this](Args& a, int line) -> Value {
+        { Value tv_; if (tableNative("container.contains", a, line, tv_)) return tv_; } // جدول (rin_table.cpp)
         need("container.contains", a, 3, 3, line);
         auto it = containers.find(str(a[0], "container.contains", line));
         if (it == containers.end()) return B(false);
@@ -1227,6 +1231,7 @@ void Interpreter::registerNativesExtra3() {
         return newArray(std::move(missing));
     };
     natives["container.equals"] = [this, publicFields](Args& a, int line) -> Value {
+        { Value tv_; if (tableNative("container.equals", a, line, tv_)) return tv_; } // جدول (rin_table.cpp)
         need("container.equals", a, 2, 2, line);
         auto x = containers.find(str(a[0], "container.equals", line)), y = containers.find(str(a[1], "container.equals", line));
         if (x == containers.end() || y == containers.end()) return B(false);
@@ -1236,6 +1241,7 @@ void Interpreter::registerNativesExtra3() {
         return B(true);
     };
     natives["container.mergeFrom"] = [this, publicFields, guardWrite](Args& a, int line) -> Value {
+        { Value tv_; if (tableNative("container.mergeFrom", a, line, tv_)) return tv_; } // جدول (rin_table.cpp)
         need("container.mergeFrom", a, 2, 3, line);
         std::string dn = str(a[0], "container.mergeFrom", line), sn = str(a[1], "container.mergeFrom", line);
         bool overwrite = a.size() > 2 ? a[2].isTruthy() : true;
@@ -1252,6 +1258,7 @@ void Interpreter::registerNativesExtra3() {
     };
     // container.checksum(name) -> SHA-256 لمحتوى الحقول العامة (مرتّبة)؛ مفيد لكشف التغيير
     natives["container.checksum"] = [this, publicFields](Args& a, int line) -> Value {
+        { Value tv_; if (tableNative("container.checksum", a, line, tv_)) return tv_; } // جدول (rin_table.cpp)
         need("container.checksum", a, 1, 1, line);
         auto it = containers.find(str(a[0], "container.checksum", line));
         if (it == containers.end()) return Value::nil();
@@ -1272,25 +1279,29 @@ void Interpreter::registerNativesExtra3() {
         }
         return out;
     };
-    natives["container.avg"] = [collect](Args& a, int line) -> Value {
+    natives["container.avg"] = [this, collect](Args& a, int line) -> Value {
+        { Value tv_; if (tableNative("container.avg", a, line, tv_)) return tv_; } // جدول (rin_table.cpp)
         need("container.avg", a, 2, 2, line);
         double sum = 0; int n = 0;
         for (auto& v : collect(str(a[0], "container.avg", line), str(a[1], "container.avg", line))) if (v.type == Value::Type::NUMBER) { sum += v.number; ++n; }
         return n ? N(sum / n) : Value::nil();
     };
-    natives["container.min"] = [collect](Args& a, int line) -> Value {
+    natives["container.min"] = [this, collect](Args& a, int line) -> Value {
+        { Value tv_; if (tableNative("container.min", a, line, tv_)) return tv_; } // جدول (rin_table.cpp)
         need("container.min", a, 2, 2, line);
         bool any = false; double m = 0;
         for (auto& v : collect(str(a[0], "container.min", line), str(a[1], "container.min", line))) if (v.type == Value::Type::NUMBER && (!any || v.number < m)) { m = v.number; any = true; }
         return any ? N(m) : Value::nil();
     };
-    natives["container.max"] = [collect](Args& a, int line) -> Value {
+    natives["container.max"] = [this, collect](Args& a, int line) -> Value {
+        { Value tv_; if (tableNative("container.max", a, line, tv_)) return tv_; } // جدول (rin_table.cpp)
         need("container.max", a, 2, 2, line);
         bool any = false; double m = 0;
         for (auto& v : collect(str(a[0], "container.max", line), str(a[1], "container.max", line))) if (v.type == Value::Type::NUMBER && (!any || v.number > m)) { m = v.number; any = true; }
         return any ? N(m) : Value::nil();
     };
-    natives["container.distinct"] = [collect](Args& a, int line) -> Value {
+    natives["container.distinct"] = [this, collect](Args& a, int line) -> Value {
+        { Value tv_; if (tableNative("container.distinct", a, line, tv_)) return tv_; } // جدول (rin_table.cpp)
         need("container.distinct", a, 2, 2, line);
         ArrayData out;
         for (auto& v : collect(str(a[0], "container.distinct", line), str(a[1], "container.distinct", line))) {
@@ -1300,7 +1311,8 @@ void Interpreter::registerNativesExtra3() {
         }
         return newArray(std::move(out));
     };
-    natives["container.countBy"] = [collect](Args& a, int line) -> Value {
+    natives["container.countBy"] = [this, collect](Args& a, int line) -> Value {
+        { Value tv_; if (tableNative("container.countBy", a, line, tv_)) return tv_; } // جدول (rin_table.cpp)
         need("container.countBy", a, 2, 2, line);
         MapData out;
         for (auto& v : collect(str(a[0], "container.countBy", line), str(a[1], "container.countBy", line))) {
@@ -1312,6 +1324,7 @@ void Interpreter::registerNativesExtra3() {
     };
     // container.sortBy(kind, field, desc=false) -> أسماء مرتّبة (من لا يملك الحقل يأتي أخيراً)
     natives["container.sortBy"] = [this, namesOfKind](Args& a, int line) -> Value {
+        { Value tv_; if (tableNative("container.sortBy", a, line, tv_)) return tv_; } // جدول (rin_table.cpp)
         need("container.sortBy", a, 2, 3, line);
         std::string field = str(a[1], "container.sortBy", line);
         bool desc = a.size() > 2 && a[2].isTruthy();
@@ -1330,6 +1343,7 @@ void Interpreter::registerNativesExtra3() {
         return newArray(std::move(out));
     };
     natives["container.top"] = [this](Args& a, int line) -> Value {
+        { Value tv_; if (tableNative("container.top", a, line, tv_)) return tv_; } // جدول (rin_table.cpp)
         need("container.top", a, 3, 3, line);
         Args sa{a[0], a[1], B(true)};
         Value sorted = natives["container.sortBy"](sa, line);
@@ -1340,6 +1354,7 @@ void Interpreter::registerNativesExtra3() {
     };
     // container.search(text, kind?) — بحث نصي غير حسّاس للحالة في الأسماء وقيم الحقول
     natives["container.search"] = [this, namesOfKind, publicFields](Args& a, int line) -> Value {
+        { Value tv_; if (tableNative("container.search", a, line, tv_)) return tv_; } // جدول (rin_table.cpp)
         need("container.search", a, 1, 2, line);
         std::string q = lowerAscii(str(a[0], "container.search", line));
         ArrayData out;
@@ -1366,6 +1381,7 @@ void Interpreter::registerNativesExtra3() {
         return names;
     };
     natives["container.toRows"] = [this, rowsOf](Args& a, int line) -> Value {
+        { Value tv_; if (tableNative("container.toRows", a, line, tv_)) return tv_; } // جدول (rin_table.cpp)
         need("container.toRows", a, 1, 2, line);
         std::vector<std::string> cols;
         auto names = rowsOf(str(a[0], "container.toRows", line), a.size() > 1 ? &a[1] : nullptr, "container.toRows", line, cols);
@@ -1395,18 +1411,21 @@ void Interpreter::registerNativesExtra3() {
         }
         return out;
     };
-    natives["container.toCsv"] = [buildCsv](Args& a, int line) -> Value {
+    natives["container.toCsv"] = [this, buildCsv](Args& a, int line) -> Value {
+        { Value tv_; if (tableNative("container.toCsv", a, line, tv_)) return tv_; } // جدول (rin_table.cpp)
         need("container.toCsv", a, 1, 2, line);
         return S(buildCsv(str(a[0], "container.toCsv", line), a.size() > 1 ? &a[1] : nullptr, "container.toCsv", line));
     };
     natives["container.exportCsv"] = [this, buildCsv](Args& a, int line) -> Value {
+        { Value tv_; if (tableNative("container.exportCsv", a, line, tv_)) return tv_; } // جدول (rin_table.cpp)
         need("container.exportCsv", a, 2, 3, line);
         std::string csv = buildCsv(str(a[0], "container.exportCsv", line), a.size() > 2 ? &a[2] : nullptr, "container.exportCsv", line);
         writeRealFile(str(a[1], "container.exportCsv", line), csv, line, "container.exportCsv");
         return B(true);
     };
     // container.paginate(kind, page=1, size=10) -> {items, page, size, total, pages}
-    natives["container.paginate"] = [namesOfKind](Args& a, int line) -> Value {
+    natives["container.paginate"] = [this, namesOfKind](Args& a, int line) -> Value {
+        { Value tv_; if (tableNative("container.paginate", a, line, tv_)) return tv_; } // جدول (rin_table.cpp)
         need("container.paginate", a, 1, 3, line);
         auto names = namesOfKind(str(a[0], "container.paginate", line));
         double page = a.size() > 1 ? num(a[1], "container.paginate", line) : 1;
