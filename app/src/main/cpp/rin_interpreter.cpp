@@ -1108,12 +1108,18 @@ Interpreter::SqlRawResult Interpreter::sqlRunRaw(const std::string& rawArg, int 
     result.selectFields = q.selectFields;
     result.container = sqlResolveTargetContainer(q);
     if (result.container.empty()) return result;
+    // جدول (@table): يُكشَف لـ RCSQL كمستندات {عنوان العمود: خلية} (الرأس = أول صف نصي)،
+    // فتعمل عليه كل نواتج sql/sqlOne/sqlCount/sqlSum/sqlGroupBy/... بلا أي دالة جديدة.
+    std::vector<std::pair<std::string, Value>> tableDocs;
+    const std::vector<std::pair<std::string, Value>>* source = nullptr;
     auto it = docStore.find(result.container);
-    if (it == docStore.end()) return result;
+    if (it != docStore.end()) source = &it->second;
+    else if (isTableContainer(result.container)) { tableDocs = tableAsDocs(result.container); source = &tableDocs; }
+    if (!source) return result;
 
     // 1) فلترة (AND بين q.predicates، كل عنصر قد يكون بدوره مجموعة OR داخلية)
     std::vector<std::pair<std::string, Value>> rows;
-    for (auto& entry : it->second) {
+    for (auto& entry : *source) {
         bool ok = true;
         for (auto& pr : q.predicates) {
             if (!sqlMatchPredicate(entry.second, pr)) { ok = false; break; }
@@ -3135,6 +3141,7 @@ void Interpreter::registerNatives() {
             auto it = containers.find(cname);
             if (it == containers.end()) continue;
             auto m = envVarsAsMap(it->second);
+            { Value tv; if (tableVirtualGet(cname, "rows", tv)) m->push_back({Value::string("rows"), tv}); } // جدول: + صفوفه
             m->push_back({Value::string("__container"), Value::string(cname)});
             auto kindIt = containerKinds.find(cname);
             m->push_back({Value::string("__kind"), Value::string(kindIt != containerKinds.end() ? containerTagName(kindIt->second) : std::string("container"))});
@@ -3261,6 +3268,7 @@ void Interpreter::registerNatives() {
             auto it = containers.find(cname);
             if (it == containers.end()) continue;
             auto m = envVarsAsMap(it->second);
+            { Value tv; if (tableVirtualGet(cname, "rows", tv)) m->push_back({Value::string("rows"), tv}); } // جدول: + صفوفه
             m->push_back({Value::string("__container"), Value::string(cname)});
             auto kindIt = containerKinds.find(cname);
             m->push_back({Value::string("__kind"), Value::string(kindIt != containerKinds.end() ? containerTagName(kindIt->second) : std::string("container"))});
@@ -3589,6 +3597,18 @@ void Interpreter::registerNatives() {
         std::string raw = asString(a[0], "sqlDelete", line);
         auto matched = sqlRunRaw(raw, line);
         if (matched.container.empty() || matched.rows.empty()) return Value::num(0.0);
+        if (docStore.find(matched.container) == docStore.end() && isTableContainer(matched.container)) {
+            // جدول: المعرّف = رقم صف الجسم (1-based)؛ تُحذف الصفوف من الأعلى فهرساً حتى لا تنزاح الباقية.
+            std::vector<std::string> hdr;
+            size_t off = tableHeader(matched.container, hdr) ? 1 : 0;
+            std::vector<size_t> idx;
+            for (auto& row : matched.rows) idx.push_back(static_cast<size_t>(std::stoul(row.id)) - 1 + off);
+            std::sort(idx.begin(), idx.end(), std::greater<size_t>());
+            auto rowsPtr = tableRowsOf(matched.container);
+            long n = 0;
+            for (size_t i : idx) if (i < rowsPtr->size()) { rowsPtr->erase(rowsPtr->begin() + i); ++n; }
+            return Value::num(static_cast<double>(n));
+        }
         auto storeIt = docStore.find(matched.container);
         if (storeIt == docStore.end()) return Value::num(0.0);
         long deleted = 0;
@@ -3622,6 +3642,25 @@ void Interpreter::registerNatives() {
         auto matched = sqlRunRaw(raw, line);
         if (matched.container.empty() || matched.rows.empty()) return Value::num(0.0);
 
+        if (docStore.find(matched.container) == docStore.end() && isTableContainer(matched.container)) {
+            // جدول: field يجب أن يكون عنواناً موجوداً في الرأس (لا حقول متداخلة)؛ تُكتب الخلية في الصف نفسه.
+            std::vector<std::string> hdr;
+            size_t off = tableHeader(matched.container, hdr) ? 1 : 0;
+            size_t col = std::find(hdr.begin(), hdr.end(), field) - hdr.begin();
+            if (path.size() != 1 || col >= hdr.size())
+                throw diagErr(diag::Code::E0035_RuntimeError, line, "sqlUpdate على جدول: العمود '" + field + "' غير موجود في الرأس");
+            auto rowsPtr = tableRowsOf(matched.container);
+            long n = 0;
+            for (auto& row : matched.rows) {
+                size_t i = static_cast<size_t>(std::stoul(row.id)) - 1 + off;
+                if (i >= rowsPtr->size() || (*rowsPtr)[i].type != Value::Type::ARRAY) continue;
+                auto cells = (*rowsPtr)[i].array;
+                while (cells->size() <= col) cells->push_back(Value::nil());
+                (*cells)[col] = newVal;
+                ++n;
+            }
+            return Value::num(static_cast<double>(n));
+        }
         std::vector<std::pair<std::string, Value>> merged;
         merged.reserve(matched.rows.size());
         for (auto& row : matched.rows) {
@@ -5208,6 +5247,7 @@ void Interpreter::registerNatives() {
                                  "'" + name + "' is not a known container",
                                  "create it first via `@container=" + name + "` or `spawn(kind, \"" + name + "\")`");
         }
+        if (tableVirtualSet(name, key, a[2], line)) return Value::boolean_(true); // rows/style لحاوية الجدول
         Value linkOld;
         if (linksExist_) it->second->get(key, linkOld);
         it->second->define(key, a[2]);
@@ -5257,6 +5297,9 @@ void Interpreter::registerNatives() {
                                  "create it first via `@container=" + name + "` or `spawn(kind, \"" + name + "\")`");
         }
         Value out;
+        auto own = it->second->values.find(key);
+        if (own != it->second->values.end()) return own->second;
+        if (tableVirtualGet(name, key, out)) return out; // rows/columns/style لحاوية الجدول (قبل البيئة الأم)
         if (it->second->get(key, out)) return out;
         return Value::nil();
     };
@@ -5464,7 +5507,9 @@ void Interpreter::registerNatives() {
         auto it = containers.find(name);
         if (it == containers.end()) return Value::boolean_(false);
         Value out;
-        return Value::boolean_(it->second->get(asString(a[1], "hasField", line), out));
+        std::string key = asString(a[1], "hasField", line);
+        if (it->second->values.count(key) || tableVirtualGet(name, key, out)) return Value::boolean_(true);
+        return Value::boolean_(it->second->get(key, out));
     };
 
     // ------------------------------------------------------------------------------------------
@@ -5535,6 +5580,10 @@ void Interpreter::registerNatives() {
         std::string name = asString(a[0], "container.empty", line);
         auto it = containers.find(name);
         if (it == containers.end()) return Value::nil();
+        if (isTableContainer(name)) { // جدول فارغ = بلا متغيّرات وبلا صفوف
+            auto rit = tableRows.find(name);
+            if (rit != tableRows.end() && rit->second && !rit->second->empty()) return Value::boolean_(false);
+        }
         return Value::boolean_(it->second->values.empty());
     };
     natives["container.childCount"] = [this](std::vector<Value>& a, int line) -> Value {
@@ -5610,6 +5659,13 @@ void Interpreter::registerNatives() {
         m->push_back({Value::string("parent"), parentIt == containerParent.end() ? Value::nil() : Value::string(parentIt->second)});
         auto childIt = containerChildren.find(name);
         m->push_back({Value::string("childCount"), Value::num(childIt == containerChildren.end() ? 0.0 : static_cast<double>(childIt->second.size()))});
+        if (isTableContainer(name)) { // جدول: عدد الصفوف وعرض الجدول (أكبر عدد خلايا في صف)
+            auto rows = tableRowsOf(name);
+            size_t width = 0;
+            for (auto& r : *rows) if (r.type == Value::Type::ARRAY && r.array) width = std::max(width, r.array->size());
+            m->push_back({Value::string("rows"), Value::num(static_cast<double>(rows->size()))});
+            m->push_back({Value::string("columns"), Value::num(static_cast<double>(width))});
+        }
         return Value::makeMap(m);
     };
     natives["container.fields"] = [this](std::vector<Value>& a, int line) -> Value {
@@ -5619,6 +5675,10 @@ void Interpreter::registerNatives() {
         if (it == containers.end()) return Value::nil();
         auto m = std::make_shared<MapData>();
         for (auto& kv : it->second->values) m->push_back({Value::string(kv.first), kv.second});
+        for (auto& k : tableVirtualKeys(name)) { // جدول: + rows (حيّ) / columns / style
+            Value v;
+            if (tableVirtualGet(name, k, v)) m->push_back({Value::string(k), v});
+        }
         return Value::makeMap(m);
     };
     natives["container.snapshot"] = natives["container.fields"];
@@ -5629,6 +5689,10 @@ void Interpreter::registerNatives() {
         if (it == containers.end()) return Value::nil();
         auto out = std::make_shared<ArrayData>();
         for (auto& kv : it->second->values) out->push_back(Value::string(kv.first));
+        for (auto& k : tableVirtualKeys(name)) {
+            Value v;
+            if (tableVirtualGet(name, k, v)) out->push_back(Value::string(k));
+        }
         return Value::makeArray(out);
     };
     natives["container.fieldType"] = [this](std::vector<Value>& a, int line) -> Value {
@@ -5637,7 +5701,10 @@ void Interpreter::registerNatives() {
         auto it = containers.find(name);
         if (it == containers.end()) return Value::nil();
         Value out;
-        if (!it->second->get(asString(a[1], "container.fieldType", line), out)) return Value::nil();
+        std::string key = asString(a[1], "container.fieldType", line);
+        auto own = it->second->values.find(key);
+        if (own != it->second->values.end()) out = own->second;
+        else if (!tableVirtualGet(name, key, out) && !it->second->get(key, out)) return Value::nil();
         return Value::string(out.typeName());
     };
     natives["container.byKind"] = [this, kindNameOf](std::vector<Value>& a, int line) -> Value {
@@ -5699,7 +5766,9 @@ void Interpreter::registerNatives() {
         std::string name = asString(a[0], "container.deleteField", line);
         auto it = containers.find(name);
         if (it == containers.end()) return Value::boolean_(false);
-        return Value::boolean_(it->second->values.erase(asString(a[1], "container.deleteField", line)) > 0);
+        std::string key = asString(a[1], "container.deleteField", line);
+        if (it->second->values.erase(key) > 0) return Value::boolean_(true);
+        return Value::boolean_(tableVirtualDelete(name, key)); // rows -> تفريغ الصفوف · style -> إزالة النمط
     };
     natives["container.mergeFields"] = [this](std::vector<Value>& a, int line) -> Value {
         expectArgsRange("container.mergeFields", a, 2, 3, line);
@@ -5721,6 +5790,7 @@ void Interpreter::registerNatives() {
         auto it = containers.find(name);
         if (it == containers.end()) return Value::boolean_(false);
         it->second->values.clear();
+        if (isTableContainer(name)) { tableRowsOf(name)->clear(); containerStyles.erase(name); } // الجدول: + الصفوف والنمط
         return Value::boolean_(true);
     };
     natives["container.count"] = [this](std::vector<Value>& a, int line) -> Value {
@@ -6874,11 +6944,205 @@ static std::string buildZipArchive(const std::vector<std::pair<std::string, std:
     return out;
 }
 
+// ================= جسر الجدول مع دوال الحاويات الموجودة أصلاً =================
+// لا دوال جديدة بأسماء table*: الجدول يُقرأ ويُعدَّل عبر نفس دوال اللغة الموجودة
+// (getField/setField/hasField/container.get/set/has/fields/snapshot/fieldNames/fieldType/
+// deleteField/clearFields/info/empty) كحقول افتراضية، ثم تعمل عليها كل دوال المصفوفات الموجودة
+// ودوال عائلة # (#add/#swap/#diff/#sum/#to/#sed) مباشرةً.
+bool Interpreter::isTableContainer(const std::string& name) const {
+    auto k = containerKinds.find(name);
+    return k != containerKinds.end() && k->second == ContainerKind::TABLE;
+}
+
+std::shared_ptr<ArrayData> Interpreter::tableRowsOf(const std::string& name) {
+    auto& slot = tableRows[name];
+    if (!slot) slot = std::make_shared<ArrayData>();
+    return slot;
+}
+
+std::vector<std::string> Interpreter::tableVirtualKeys(const std::string& name) const {
+    std::vector<std::string> keys{"rows", "header", "body", "records", "columns"};
+    if (containerStyles.count(name)) keys.push_back("style");
+    return keys;
+}
+
+bool Interpreter::tableHeader(const std::string& name, std::vector<std::string>& header) const {
+    header.clear();
+    auto it = tableRows.find(name);
+    size_t width = 0;
+    if (it != tableRows.end() && it->second)
+        for (auto& r : *it->second) if (r.type == Value::Type::ARRAY && r.array) width = std::max(width, r.array->size());
+    bool named = false;
+    if (it != tableRows.end() && it->second && !it->second->empty()) {
+        const Value& first = (*it->second)[0];
+        if (first.type == Value::Type::ARRAY && first.array && !first.array->empty()) {
+            named = true;
+            for (auto& c : *first.array) if (c.type != Value::Type::STRING) { named = false; break; }
+        }
+    }
+    if (named) for (auto& c : *(*it->second)[0].array) header.push_back(c.str);
+    else for (size_t c = 0; c < width; ++c) header.push_back("c" + std::to_string(c + 1));
+    return named;
+}
+
+// صفوف الجسم كمستندات {عمود: خلية} بمعرّف = رقم الصف في الجسم (1-based) — هذا ما تراه استعلامات RCSQL.
+std::vector<std::pair<std::string, Value>> Interpreter::tableAsDocs(const std::string& name) const {
+    std::vector<std::pair<std::string, Value>> docs;
+    auto it = tableRows.find(name);
+    if (it == tableRows.end() || !it->second) return docs;
+    std::vector<std::string> header;
+    bool named = tableHeader(name, header);
+    for (size_t r = named ? 1 : 0; r < it->second->size(); ++r) {
+        const Value& row = (*it->second)[r];
+        auto m = std::make_shared<MapData>();
+        for (size_t c = 0; c < header.size(); ++c) {
+            bool has = row.type == Value::Type::ARRAY && row.array && c < row.array->size();
+            m->push_back({Value::string(header[c]), has ? (*row.array)[c] : Value::nil()});
+        }
+        docs.push_back({std::to_string(r - (named ? 1 : 0) + 1), Value::makeMap(m)});
+    }
+    return docs;
+}
+
+// rows = مقبض حيّ على صفوف الجدول · columns = أعمدة الجدول كمصفوفة مصفوفات (نسخة، الخلية الناقصة nil)
+// · style = آخر style value=... مسجَّل. المتغيّر الحقيقي بنفس الاسم داخل الحاوية له الأولوية دائماً.
+bool Interpreter::tableVirtualGet(const std::string& name, const std::string& key, Value& out) {
+    if (!isTableContainer(name)) return false;
+    auto env = containers.find(name);
+    if (env != containers.end() && env->second && env->second->values.count(key)) return false; // متغيّر حقيقي في الجدول نفسه له الأولوية
+    if (key == "rows") { out = Value::makeArray(tableRowsOf(name)); return true; }
+    if (key == "header") {
+        auto rows = tableRowsOf(name);
+        auto h = std::make_shared<ArrayData>();
+        std::vector<std::string> names;
+        if (tableHeader(name, names) && !rows->empty()) *h = *(*rows)[0].array;
+        out = Value::makeArray(h);
+        return true;
+    }
+    if (key == "body") {
+        auto rows = tableRowsOf(name);
+        std::vector<std::string> names;
+        bool named = tableHeader(name, names);
+        auto b = std::make_shared<ArrayData>();
+        for (size_t r = named ? 1 : 0; r < rows->size(); ++r) b->push_back((*rows)[r]);
+        out = Value::makeArray(b);
+        return true;
+    }
+    if (key == "records") {
+        auto recs = std::make_shared<ArrayData>();
+        for (auto& d : tableAsDocs(name)) recs->push_back(d.second);
+        out = Value::makeArray(recs);
+        return true;
+    }
+    if (key == "columns") {
+        auto rows = tableRowsOf(name);
+        size_t width = 0;
+        for (auto& r : *rows) if (r.type == Value::Type::ARRAY && r.array) width = std::max(width, r.array->size());
+        auto cols = std::make_shared<ArrayData>();
+        for (size_t c = 0; c < width; ++c) {
+            auto col = std::make_shared<ArrayData>();
+            for (auto& r : *rows) {
+                bool has = r.type == Value::Type::ARRAY && r.array && c < r.array->size();
+                col->push_back(has ? (*r.array)[c] : Value::nil());
+            }
+            cols->push_back(Value::makeArray(col));
+        }
+        out = Value::makeArray(cols);
+        return true;
+    }
+    if (key == "style") {
+        auto st = containerStyles.find(name);
+        if (st == containerStyles.end()) return false;
+        out = Value::string(st->second);
+        return true;
+    }
+    return false;
+}
+
+bool Interpreter::tableVirtualSet(const std::string& name, const std::string& key, const Value& v, int line) {
+    if (!isTableContainer(name)) return false;
+    auto env = containers.find(name);
+    if (env != containers.end() && env->second && env->second->values.count(key)) return false; // متغيّر حقيقي في الجدول نفسه له الأولوية
+    if (key == "rows") {
+        if (v.type != Value::Type::ARRAY || !v.array)
+            throw diagErr(diag::Code::E0004_InvalidType, line, "الحقل 'rows' في الجدول يجب أن يكون مصفوفة صفوف (مثال: [[1, 2], [3, 4]])");
+        for (auto& r : *v.array)
+            if (r.type != Value::Type::ARRAY || !r.array)
+                throw diagErr(diag::Code::E0004_InvalidType, line, "كل صف في 'rows' يجب أن يكون مصفوفة خلايا، وُجد `" + r.typeName() + "`");
+        auto dst = tableRowsOf(name);
+        if (dst != v.array) { std::vector<Value> copy(*v.array); *dst = std::move(copy); } // يبقى أي مقبض rows سابق صالحاً
+        return true;
+    }
+    if (key == "header") {
+        if (v.type != Value::Type::ARRAY || !v.array)
+            throw diagErr(diag::Code::E0004_InvalidType, line, "الحقل 'header' في الجدول يجب أن يكون مصفوفة عناوين نصية");
+        for (auto& c : *v.array)
+            if (c.type != Value::Type::STRING)
+                throw diagErr(diag::Code::E0004_InvalidType, line, "كل عنوان في 'header' يجب أن يكون نصاً، وُجد `" + c.typeName() + "`");
+        auto dst = tableRowsOf(name);
+        std::vector<std::string> names;
+        bool named = tableHeader(name, names);
+        Value row = Value::makeArray(std::make_shared<ArrayData>(*v.array));
+        if (named) (*dst)[0] = row; else dst->insert(dst->begin(), row);
+        return true;
+    }
+    if (key == "records") { // قائمة قواميس -> جدول: الرأس = اتحاد المفاتيح بترتيب ظهورها، والخلية الغائبة nil
+        if (v.type != Value::Type::ARRAY || !v.array)
+            throw diagErr(diag::Code::E0004_InvalidType, line, "الحقل 'records' في الجدول يجب أن يكون مصفوفة قواميس");
+        std::vector<std::string> keys;
+        for (auto& r : *v.array) {
+            if (r.type != Value::Type::MAP || !r.map)
+                throw diagErr(diag::Code::E0004_InvalidType, line, "كل عنصر في 'records' يجب أن يكون قاموساً، وُجد `" + r.typeName() + "`");
+            for (auto& kv : *r.map) {
+                std::string k = kv.first.toDisplayString();
+                if (std::find(keys.begin(), keys.end(), k) == keys.end()) keys.push_back(k);
+            }
+        }
+        std::vector<Value> rows;
+        if (!keys.empty()) {
+            auto h = std::make_shared<ArrayData>();
+            for (auto& k : keys) h->push_back(Value::string(k));
+            rows.push_back(Value::makeArray(h));
+            for (auto& r : *v.array) {
+                auto cells = std::make_shared<ArrayData>();
+                for (auto& k : keys) {
+                    Value cell = Value::nil();
+                    for (auto& kv : *r.map) if (kv.first.toDisplayString() == k) { cell = kv.second; break; }
+                    cells->push_back(cell);
+                }
+                rows.push_back(Value::makeArray(cells));
+            }
+        }
+        *tableRowsOf(name) = std::move(rows);
+        return true;
+    }
+    if (key == "body")
+        throw diagErr(diag::Code::E0004_InvalidType, line, "'body' مشتقّة من 'rows' (للقراءة فقط) — عدّل 'rows' أو 'records'");
+    if (key == "style") {
+        if (v.type != Value::Type::STRING)
+            throw diagErr(diag::Code::E0004_InvalidType, line, "الحقل 'style' في الجدول يجب أن يكون نصاً (مثال: \"style://dark\")");
+        containerStyles[name] = v.str;
+        return true;
+    }
+    if (key == "columns")
+        throw diagErr(diag::Code::E0004_InvalidType, line, "'columns' مشتقّة من 'rows' (للقراءة فقط) — عدّل 'rows' بدلاً منها");
+    return false;
+}
+
+bool Interpreter::tableVirtualDelete(const std::string& name, const std::string& key) {
+    if (!isTableContainer(name)) return false;
+    auto env = containers.find(name);
+    if (env != containers.end() && env->second && env->second->values.count(key)) return false; // متغيّر حقيقي في الجدول نفسه له الأولوية
+    if (key == "rows") { tableRowsOf(name)->clear(); return true; }
+    if (key == "style") return containerStyles.erase(name) > 0;
+    return false;
+}
+
 // يرسم الجدول (صفوفه المسجَّلة عبر row + نمطه المسجَّل عبر style إن وُجد) كصورة PNG حقيقية
 // تُظهر نص كل خلية فعلياً (عبر rinfont)، وليس مجرد تلوين اعتباطي للخلايا.
 std::string Interpreter::buildTablePng(const std::string& key) const {
     auto rowsIt = tableRows.find(key);
-    const std::vector<Value>* rows = (rowsIt != tableRows.end()) ? &rowsIt->second : nullptr;
+    const std::vector<Value>* rows = (rowsIt != tableRows.end() && rowsIt->second) ? rowsIt->second.get() : nullptr;
 
     size_t rowCount = rows ? rows->size() : 0;
     size_t colCount = 1;
@@ -7100,8 +7364,8 @@ std::string Interpreter::buildSaveDocument(const std::string& key, const EnvPtr&
     // عند إعادة تنفيذ عبارات row/style بداخله).
     if (kind == ContainerKind::TABLE) {
         auto rowsIt = tableRows.find(key);
-        if (rowsIt != tableRows.end()) {
-            for (auto& row : rowsIt->second) {
+        if (rowsIt != tableRows.end() && rowsIt->second) {
+            for (auto& row : *rowsIt->second) {
                 std::string cellsLit = serializeValueLiteral(row);
                 body += simplified ? ("row cells=" + cellsLit + ";")
                                     : ("    row cells=" + cellsLit + ";\n");
@@ -8988,10 +9252,24 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
             throw diagErr(diag::Code::E0014_InvalidContainer, s->line, "عبارة 'row' يجب أن تُستخدم داخل @container.table أو @table");
         }
         Value cells = evaluate(s->cells, env);
+        if (cells.type == Value::Type::MAP && cells.map) {
+            // row cells={عمود: قيمة} -> تُرتَّب الخلايا حسب رأس الجدول (الغائب nil)؛ عمود غير موجود في الرأس خطأ.
+            std::vector<std::string> hdr;
+            if (!tableHeader(containerStack.back(), hdr) || hdr.empty())
+                throw diagErr(diag::Code::E0004_InvalidType, s->line, "row بقاموس يحتاج رأساً: اجعل أول صف في الجدول مصفوفة عناوين نصية");
+            auto ordered = std::make_shared<ArrayData>(hdr.size(), Value::nil());
+            for (auto& kv : *cells.map) {
+                size_t c = std::find(hdr.begin(), hdr.end(), kv.first.toDisplayString()) - hdr.begin();
+                if (c >= hdr.size())
+                    throw diagErr(diag::Code::E0007_InvalidArguments, s->line, "row: العمود '" + kv.first.toDisplayString() + "' غير موجود في رأس الجدول");
+                (*ordered)[c] = kv.second;
+            }
+            cells = Value::makeArray(ordered);
+        }
         if (cells.type != Value::Type::ARRAY) {
             throw diagErr(diag::Code::E0004_InvalidType, s->line, "row: قيمة 'cells' يجب أن تكون مصفوفة (مثال: row cells=[1, 2, 3];)");
         }
-        tableRows[containerStack.back()].push_back(cells);
+        tableRowsOf(containerStack.back())->push_back(cells);
         output << "▦ row -> " << cells.toDisplayString() << "\n";
         return;
     }
