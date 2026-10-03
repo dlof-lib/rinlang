@@ -1106,13 +1106,55 @@ std::string htmlNumToJson(double n) {
     return o.str();
 }
 
-std::string htmlValueToJson(const rin::Value& v) {
+// قيم الحالة المنقولة للصفحة: أرقام/نصوص/منطقية/null، وكذلك المصفوفات (→ JSON array) والقواميس
+// والكائنات (→ JSON object، مفاتيحها نصوص) بعمق أقصى 8 مستويات (ما بعده يُقطع إلى null) لتفادي الدوران.
+// تُستعمل في الصفحة عبر rin-for / rin-text="item.name" / rin-if...
+std::string htmlValueToJson(const rin::Value& v, int depth = 0) {
+    if (depth > 8) return "null";
     switch (v.type) {
         case rin::Value::Type::NUMBER: return htmlNumToJson(v.number);
         case rin::Value::Type::STRING: return "\"" + htmlJsonEscape(v.str) + "\"";
         case rin::Value::Type::BOOL:   return v.boolean ? "true" : "false";
         case rin::Value::Type::NIL:    return "null";
-        default:                       return "\"" + htmlJsonEscape(v.toDisplayString()) + "\"";
+        case rin::Value::Type::FUNCTION: return "null";
+        case rin::Value::Type::ARRAY: {
+            std::string o = "[";
+            if (v.array) {
+                for (size_t i = 0; i < v.array->size(); i++) {
+                    if (i) o += ",";
+                    o += htmlValueToJson((*v.array)[i], depth + 1);
+                }
+            }
+            return o + "]";
+        }
+        case rin::Value::Type::MAP: {
+            std::string o = "{";
+            bool first = true;
+            if (v.map) {
+                for (auto& kv : *v.map) {
+                    if (!first) o += ",";
+                    first = false;
+                    std::string key = kv.first.type == rin::Value::Type::STRING ? kv.first.str : kv.first.toDisplayString();
+                    o += "\"" + htmlJsonEscape(key) + "\":" + htmlValueToJson(kv.second, depth + 1);
+                }
+            }
+            return o + "}";
+        }
+        case rin::Value::Type::INSTANCE: {
+            std::string o = "{";
+            if (v.instance) {
+                bool first = true;
+                for (auto& name : v.instance->fieldOrder) {
+                    auto it = v.instance->fields.find(name);
+                    if (it == v.instance->fields.end() || it->second.type == rin::Value::Type::FUNCTION) continue;
+                    if (!first) o += ",";
+                    first = false;
+                    o += "\"" + htmlJsonEscape(name) + "\":" + htmlValueToJson(it->second, depth + 1);
+                }
+            }
+            return o + "}";
+        }
+        default: return "\"" + htmlJsonEscape(v.toDisplayString()) + "\"";
     }
 }
 
@@ -1130,16 +1172,21 @@ std::string htmlGlobalsToJson(const std::unordered_map<std::string, rin::Value>&
     return o.str();
 }
 
-// قارئ JSON مصغّر: مصفوفة/قيمة بدائية فقط (أرقام / "نص" / true / false / null).
+// قارئ JSON مصغّر: أرقام / "نص" / true / false / null / مصفوفات / كائنات (عمق ≤ 8).
 struct HtmlJsonReader {
     const std::string& s;
     size_t i = 0;
     explicit HtmlJsonReader(const std::string& src) : s(src) {}
     void skipWs() { while (i < s.size() && std::isspace(static_cast<unsigned char>(s[i]))) i++; }
-    rin::Value parseValue() {
+    rin::Value parseValue(int depth = 0) {
         skipWs();
-        if (i >= s.size()) return rin::Value::nil();
+        if (i >= s.size() || depth > 8) return rin::Value::nil();
         char c = s[i];
+        if (c == '[') {
+            auto arr = std::make_shared<rin::ArrayData>(parseArray(depth + 1));
+            return rin::Value::makeArray(arr);
+        }
+        if (c == '{') return parseObject(depth + 1);
         if (c == '"') return parseString();
         if (c == 't' && s.compare(i, 4, "true") == 0) { i += 4; return rin::Value::boolean_(true); }
         if (c == 'f' && s.compare(i, 5, "false") == 0) { i += 5; return rin::Value::boolean_(false); }
@@ -1173,7 +1220,27 @@ struct HtmlJsonReader {
         try { return rin::Value::num(std::stod(s.substr(start, i - start))); }
         catch (...) { return rin::Value::nil(); }
     }
-    std::vector<rin::Value> parseArray() {
+    rin::Value parseObject(int depth) {
+        auto m = std::make_shared<rin::MapData>();
+        i++; // {
+        skipWs();
+        if (i < s.size() && s[i] == '}') { i++; return rin::Value::makeMap(m); }
+        while (i < s.size()) {
+            skipWs();
+            if (i >= s.size() || s[i] != '"') break;
+            rin::Value key = parseString();
+            skipWs();
+            if (i < s.size() && s[i] == ':') i++;
+            rin::Value val = parseValue(depth);
+            m->emplace_back(key, val);
+            skipWs();
+            if (i < s.size() && s[i] == ',') { i++; continue; }
+            if (i < s.size() && s[i] == '}') { i++; }
+            break;
+        }
+        return rin::Value::makeMap(m);
+    }
+    std::vector<rin::Value> parseArray(int depth = 0) {
         std::vector<rin::Value> out;
         skipWs();
         if (i >= s.size() || s[i] != '[') return out;
@@ -1181,9 +1248,10 @@ struct HtmlJsonReader {
         skipWs();
         if (i < s.size() && s[i] == ']') { i++; return out; }
         while (i < s.size()) {
-            out.push_back(parseValue());
+            out.push_back(parseValue(depth));
             skipWs();
             if (i < s.size() && s[i] == ',') { i++; continue; }
+            if (i < s.size() && s[i] == ']') { i++; }
             break;
         }
         return out;
