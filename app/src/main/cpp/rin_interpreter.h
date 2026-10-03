@@ -801,6 +801,24 @@ private:
     // يُستعمل لكشف الجدول لاستعلامات RCSQL الموجودة (sql/sqlCount/sqlSum/sqlUpdate/sqlDelete...).
     bool tableHeader(const std::string& name, std::vector<std::string>& header) const;
     std::vector<std::pair<std::string, Value>> tableAsDocs(const std::string& name) const;
+    // ---- توسعة الجدول (rin_table.cpp): كل ما يلي يعمل *داخل* دوال اللغة الموجودة (insertDoc/allDocs/container.sum/
+    //      container.toCsv/renameField/clone/rename/...) و`save format=csv|json|md|html|txt` — بلا أي اسم دالة جديد. ----
+    // خطّاف واحد تستدعيه الدوال الموجودة في أول سطر منها: يرجع true (ومعه out) إن كان الوسيط الأول جدولاً وعالجتها بدلاً منه.
+    bool tableNative(const std::string& fn, std::vector<Value>& a, int line, Value& out);
+    // عمود باسمه (من الرأس النصي، أو c1,c2.. إن لم يوجد رأس) -> قيم الجسم؛ false إن لم يوجد العمود.
+    bool tableColumnValues(const std::string& name, const std::string& col, std::vector<Value>& out) const;
+    // ترتيب سجلّ (قاموس) حسب رأس الجدول: الغائب nil · عمود غير موجود E0007 · بلا رأس E0004.
+    Value tableOrderRecord(const std::string& name, const Value& rec, int line);
+    // تصدير نصي: csv · json · md · html · txt
+    std::string tableExport(const std::string& name, const std::string& fmt, int line);
+    // CSV -> صفوف (الخلايا الرقمية تتحوّل لأرقام، الفارغة nil)
+    void tableLoadCsv(const std::string& name, const std::string& text);
+    // تفريغ حالة الجدول عند حذف الحاوية / نقلها عند إعادة التسمية / نسخها عند الاستنساخ
+    void tableForget(const std::string& name);
+    void tableMove(const std::string& from, const std::string& to);
+    void tableCopy(const std::string& from, const std::string& to);
+    // يُلحق سجلّات (قواميس) بالجدول؛ الأعمدة الجديدة تُضاف للرأس (والصفوف السابقة nil). يُرجع عدد المُلحَق.
+    size_t tableAppendRecords(const std::string& name, const std::vector<Value>& records, int line);
     // مفتاح الحاوية -> آخر "style value=" مسجَّل (مثال: "style://dark"). كانت خاصة بالجداول فقط،
     // وعُمِّمت الآن لتُستخدم أيضاً داخل container.object/Object، container.portal/portal،
     // container.block/block (مفاهيم التنسيق والستايل)، وليس container.table/table حصراً.
