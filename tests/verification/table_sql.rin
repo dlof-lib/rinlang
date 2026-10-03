@@ -1,0 +1,44 @@
+// table_sql.rin — الجدول مع استعلامات RCSQL الموجودة + حقول header/body/records
+@table=staff
+    row cells=["name", "dept", "score"];
+    row cells=["sara", "dev", 95];
+    row cells=["yusuf", "ops", 88];
+    row cells=["omar", "dev", 70];
+    row cells={"name": "huda", "score": 99, "dept": "ops"};
+.end/table
+
+// حقول مشتقّة
+print container.get("staff", "header");
+print len(container.get("staff", "body"));
+print container.get("staff", "records")[3];
+print container.info("staff").rows;
+
+// RCSQL على الجدول (الأعمدة = الرأس، _id = رقم صف الجسم)
+print sqlCount("staff & dept:eq(dev)");
+print sqlOne("staff & order:desc(score) & limit:eq(1)");
+print sqlSum("staff & dept:eq(ops)", "score");
+print sqlGroupBy("staff", "dept");
+print sql("staff & score:gte(90) & order:asc(name) & select:has(name)");
+
+// تعديل/حذف عبر RCSQL ينعكس على rows
+print sqlUpdate("staff & name:eq(omar)", "score", 75);
+print getField("staff", "rows")[3];
+print sqlDelete("staff & dept:eq(ops)");
+print getField("staff", "rows");
+try { sqlUpdate("staff", "nope", 1); } catch (e) { print e.code; }
+
+// records -> جدول
+container.set("staff", "records", [{"id": 1, "tag": "a"}, {"id": 2}]);
+print getField("staff", "rows");
+container.set("staff", "header", ["ID", "TAG"]);
+print getField("staff", "header");
+try { container.set("staff", "body", []); } catch (e) { print e.code; }
+try { container.set("staff", "records", [1]); } catch (e) { print e.code; }
+
+// جدول بلا رأس نصي: الأعمدة c1,c2
+@table=nums
+    row cells=[1, 2];
+    row cells=[3, 4];
+.end/table
+print sqlSum("nums", "c2");
+print #sum(getField("nums", "rows"));
