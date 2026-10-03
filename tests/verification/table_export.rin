@@ -1,0 +1,58 @@
+// table_export.rin — تصدير/استيراد الجدول: save format=csv|json|md|html|txt + دوال container.* الموجودة
+@table=staff
+    style value="style://dark";
+    row cells=["name", "note", "score"];
+    row cells=["sara", "a,b", 95];
+    row cells=["yusuf", "say \"hi\"", 88.5];
+    row cells=["=cmd", nil, -3];
+    save path="/tmp/rin_tbl_export.csv" format=csv;
+    save path="/tmp/rin_tbl_export.json" format=json;
+    save path="/tmp/rin_tbl_export.md" format=md;
+    save path="/tmp/rin_tbl_export.html" format=html;
+    save path="/tmp/rin_tbl_export.txt" format=txt;
+.end/table
+
+print readFile("/tmp/rin_tbl_export.csv");
+print readFile("/tmp/rin_tbl_export.json");
+print readFile("/tmp/rin_tbl_export.md");
+print readFile("/tmp/rin_tbl_export.html");
+print readFile("/tmp/rin_tbl_export.txt");
+
+// نصوص بلا ملفات
+print container.toCsv("staff", ["name", "score"]);
+print container.toJson("staff");
+
+// CSV ذهاباً وإياباً عبر exportCsv/importFromFile (أرقام ← أرقام، فارغ ← nil، حماية = ← تُعكس)
+container.exportCsv("staff", "/tmp/rin_tbl_rt.csv");
+@table=copy
+.end/table
+container.importFromFile("copy", "/tmp/rin_tbl_rt.csv");
+print getField("copy", "rows");
+print container.equals("staff", "copy");
+
+// JSON: fromJson يقبل مصفوفة قواميس؛ overwrite=false يُلحِق
+@table=j
+.end/table
+print container.fromJson("j", "[{\"a\": 1, \"b\": \"x\"}, {\"a\": 2, \"c\": true}]");
+print getField("j", "rows");
+print container.fromJson("j", "[{\"a\": 3}]", false);
+print getField("j", "rows");
+container.exportToFile("j", "/tmp/rin_tbl_j.json");
+print readFile("/tmp/rin_tbl_j.json");
+
+// JSON ليس مصفوفة سجلّات -> false بلا تغيير
+print container.fromJson("j", "{\"a\": 1}");
+print len(getField("j", "rows"));
+
+// جدول فارغ/بلا رأس
+@table=empty
+.end/table
+print container.toCsv("empty");
+print container.toJson("empty");
+@table=nums
+    row cells=[1, 2];
+    row cells=[3, 4];
+.end/table
+print container.toJson("nums");
+print container.toCsv("nums");
+print container.sum("nums", "c2");
