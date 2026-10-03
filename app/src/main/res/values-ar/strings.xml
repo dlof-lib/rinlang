@@ -88,6 +88,7 @@
     <string name="exit_unsaved_save">حفظ</string>
     <string name="menu_run_run">Run program</string>
     <string name="menu_run_check_brackets">Check brackets</string>
+    <string name="menu_run_html_page">تشغيل كصفحة HTML</string>
     <string name="menu_run_check_tags">فحص توازن وسوم الحاويات</string>
     <string name="menu_run_auto_run">التشغيل التلقائي أثناء الكتابة</string>
     <string name="auto_run_enabled_toast">تم تفعيل التشغيل التلقائي — تُحدَّث وحدة التحكم بعد توقفك عن الكتابة بقليل</string>
