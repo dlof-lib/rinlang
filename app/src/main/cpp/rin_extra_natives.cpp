@@ -493,6 +493,7 @@ void Interpreter::registerNativesExtra() {
 
     // --------------------------------------------------------- 6) containers
     natives["container.getOr"] = [this](Args& a, int line) -> Value {
+        { Value tv_; if (tableNative("container.getOr", a, line, tv_)) return tv_; } // جدول (rin_table.cpp)
         need("container.getOr", a, 3, 3, line);
         auto it = containers.find(str(a[0], "container.getOr", line));
         if (it == containers.end()) return a[2];
@@ -518,6 +519,7 @@ void Interpreter::registerNativesExtra() {
         auto env = std::make_shared<Environment>(globals);
         for (const auto& kv : it->second->values) env->values[kv.first] = deepCopyValue(kv.second);
         containers[dst] = env;
+        tableCopy(src, dst); // جدول: صفوفه ونمطه (نسخة عميقة)
         auto kindIt = containerKinds.find(src);
         if (kindIt != containerKinds.end()) containerKinds[dst] = kindIt->second;
         auto customIt = containerCustomKind.find(src);
@@ -546,6 +548,7 @@ void Interpreter::registerNativesExtra() {
         moveKey(eventHandlers);
         moveKey(containerChildren);
         moveKey(containerParent);
+        tableMove(from, to); // جدول: صفوفه ونمطه تتبع الاسم الجديد
         // الأب يشير إليها كابن، والأبناء يشيرون إليها كأب
         auto parentIt = containerParent.find(to);
         if (parentIt != containerParent.end()) {
@@ -652,6 +655,7 @@ void Interpreter::registerNativesExtra() {
     natives["container.omit"] = pickOmit("container.omit", false);
 
     natives["container.toJson"] = [this](Args& a, int line) -> Value {
+        { Value tv_; if (tableNative("container.toJson", a, line, tv_)) return tv_; } // جدول (rin_table.cpp)
         need("container.toJson", a, 1, 1, line);
         auto it = containers.find(str(a[0], "container.toJson", line));
         if (it == containers.end()) return Value::nil();
@@ -669,6 +673,7 @@ void Interpreter::registerNativesExtra() {
 
     // container.fromJson(name, json, overwrite=true) — يدمج حقول كائن JSON داخل حاوية موجودة.
     natives["container.fromJson"] = [this](Args& a, int line) -> Value {
+        { Value tv_; if (tableNative("container.fromJson", a, line, tv_)) return tv_; } // جدول (rin_table.cpp)
         need("container.fromJson", a, 2, 3, line);
         auto it = containers.find(str(a[0], "container.fromJson", line));
         if (it == containers.end()) return Value::boolean_(false);
@@ -685,6 +690,7 @@ void Interpreter::registerNativesExtra() {
 
     // container.diff(a, b) -> {same, added, removed, changed:{field:{from,to}}} (added = موجود في b فقط)
     natives["container.diff"] = [this](Args& a, int line) -> Value {
+        { Value tv_; if (tableNative("container.diff", a, line, tv_)) return tv_; } // جدول (rin_table.cpp)
         need("container.diff", a, 2, 2, line);
         auto ia = containers.find(str(a[0], "container.diff", line));
         auto ib = containers.find(str(a[1], "container.diff", line));
@@ -712,6 +718,7 @@ void Interpreter::registerNativesExtra() {
     };
 
     natives["container.pluck"] = [this, sortedNames, kindMatches](Args& a, int line) -> Value {
+        { Value tv_; if (tableNative("container.pluck", a, line, tv_)) return tv_; } // جدول (rin_table.cpp)
         need("container.pluck", a, 2, 2, line);
         std::string kind = str(a[0], "container.pluck", line), field = str(a[1], "container.pluck", line);
         MapData out;
@@ -725,6 +732,7 @@ void Interpreter::registerNativesExtra() {
 
     // container.sum(kind, field) — مجموع الحقول الرقمية فقط (غير الرقمي يُتجاهل).
     natives["container.sum"] = [this, kindMatches](Args& a, int line) -> Value {
+        { Value tv_; if (tableNative("container.sum", a, line, tv_)) return tv_; } // جدول (rin_table.cpp)
         need("container.sum", a, 2, 2, line);
         std::string kind = str(a[0], "container.sum", line), field = str(a[1], "container.sum", line);
         double total = 0;
@@ -738,6 +746,7 @@ void Interpreter::registerNativesExtra() {
 
     // container.groupBy(kind, field) -> {قيمة الحقل: [أسماء الحاويات]}
     natives["container.groupBy"] = [this, sortedNames, kindMatches](Args& a, int line) -> Value {
+        { Value tv_; if (tableNative("container.groupBy", a, line, tv_)) return tv_; } // جدول (rin_table.cpp)
         need("container.groupBy", a, 2, 2, line);
         std::string kind = str(a[0], "container.groupBy", line), field = str(a[1], "container.groupBy", line);
         MapData out;
@@ -757,6 +766,7 @@ void Interpreter::registerNativesExtra() {
     //   conditions: {field: value} للمساواة، أو {field: {gt:5, contains:"x", in:[...], exists:true, ...}}
     //   options   : {sortBy:"field", desc:true, limit:n}
     natives["container.query"] = [this, sortedNames, kindMatches](Args& a, int line) -> Value {
+        { Value tv_; if (tableNative("container.query", a, line, tv_)) return tv_; } // جدول (rin_table.cpp)
         need("container.query", a, 1, 3, line);
         std::string kind = str(a[0], "container.query", line);
         const MapData* conds = nullptr;
