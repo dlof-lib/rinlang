@@ -198,6 +198,16 @@
     <color name="project_type_free_color">#7C5CFF</color>
     <color name="project_type_illust_color">#D2691E</color>
     <color name="project_type_html_color">#E44D26</color>
+    <color name="project_type_html_js_color">#C9A400</color>
+
+    <!-- خلفيات بلاطات أيقونات أنواع المشاريع في حوار «مشروع جديد»: لون النوع بشفافية منخفضة، تصلح للفاتح والداكن. -->
+    <color name="type_tile_free">#247C5CFF</color>
+    <color name="type_tile_container">#240E9488</color>
+    <color name="type_tile_table">#24B8802E</color>
+    <color name="type_tile_ui">#242F80E0</color>
+    <color name="type_tile_illust">#24D2691E</color>
+    <color name="type_tile_html">#26E44D26</color>
+    <color name="type_tile_html_js">#33F7DF1E</color>
     <color name="status_queued">#8A8A8A</color>
     <color name="status_running">#569CD6</color>
     <color name="status_success">#4EC9B0</color>
