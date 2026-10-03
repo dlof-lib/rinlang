@@ -45,3 +45,17 @@ fun add() { count = count + 1; }
 - القيم المنقولة إلى الصفحة بدائية فقط (رقم/نص/منطقي/null)؛ المصفوفات والكائنات تُعرض كنص.
 - `print` أثناء التشغيل الأولي فقط يظهر في لوحة المخرجات السفلية.
 - لم يُبنَ APK في هذه البيئة (لا Android SDK/NDK)؛ منطق الجلسة اختُبر على Linux بنفس واجهة المحرّك.
+
+## تعديل: container.rin ليس خاصاً بـ HTML
+- Run على `container.rin`/أي `.rin` = تشغيل Rin عادي في أي مشروع؛ فتح الصفحة يكون من `index.html`/`style.css`/`main.rin` (مشروع HTML) أو من قائمة Run ← «تشغيل كصفحة HTML».
+- ملف المنطق للصفحة اختياري التسمية: `<link rel="rin" href="app.rin">` أو `<meta name="rin" content="app.rin">`، وإلا `container.rin` ثم `main.rin`.
+
+## تعديل: ملف الحاوية يُعرَّف بالتوقيع + قدرات أقوى
+- **التوقيع**: `//! rin:container web [persist=a,b|*]` في أول سطر غير فارغ (`RinContainerFile.kt`). الأيقونة وRun والاختيار
+  التلقائي والحفظ تعتمد عليه لا على اسم الملف. `container.rin` بلا توقيع = ملف Rin عادي.
+- **HTML**: `rin-for`، `rin-if`/`rin-else`، `rin-attr`، `rin-class`، وتعابير (`== != < > <= >= ! && ||`) ومسارات (`t.title`، `list.length`).
+  الاسم الجديد للسكربت: `app/src/main/assets/rin_html_runtime.js` (كان مضمَّناً في Kotlin).
+- **الجسر (JNI)**: نقل المصفوفات والقواميس والكائنات بالاتجاهين (JSON) بعمق ≤ 8.
+- **حفظ الحالة**: `persist=` ← `.rin_state/<ملف>.json`، ضغطة مطوّلة على إعادة التحميل تمسحها، و`rin.clearState()`.
+- القوالب (index.html/style.css/container.rin) تعرض الآن عدّاداً + قائمة مهام محفوظة.
+- اختبارات: 18 حالة لسكربت الصفحة (jsdom)، واختبار منطق القالب والجسر على محرّك Rin الحقيقي على Linux.
