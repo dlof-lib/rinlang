@@ -783,7 +783,24 @@ private:
     std::unordered_map<std::string, Value> objectRegistry;
 
     // ---- مفهوم الجدول (container.table / table المستقلة) ----
-    std::unordered_map<std::string, std::vector<Value>> tableRows;  // مفتاح الحاوية -> صفوفها (كل صف Value::ARRAY)
+    // مفتاح الحاوية -> صفوفها (كل صف Value::ARRAY). مصفوفة مشتركة (shared_ptr) عمداً: الحقل الافتراضي
+    // `rows` الذي تُرجعه getField/container.get/container.fields مقبض *حيّ* على نفس المصفوفة، فكل دالة
+    // موجودة أصلاً في اللغة تعدّل مصفوفة في مكانها (push/pop/sort/reverse/remove و #add و #swap)
+    // تعدّل الجدول نفسه مباشرة بلا أي دالة جدول جديدة.
+    std::unordered_map<std::string, std::shared_ptr<ArrayData>> tableRows;
+    // ---- جسر الجدول مع دوال الحاويات الموجودة (getField/setField/hasField/container.fields/...) ----
+    // الحقول الافتراضية لجدول: rows (مقبض حيّ) · columns (نسخة مقلوبة من الصفوف) · style (إن وُجد).
+    // أي متغيّر حقيقي بنفس الاسم داخل الجدول له الأولوية (لا يُحجَب بحقل افتراضي).
+    bool isTableContainer(const std::string& name) const;
+    std::shared_ptr<ArrayData> tableRowsOf(const std::string& name);
+    bool tableVirtualGet(const std::string& name, const std::string& key, Value& out);
+    bool tableVirtualSet(const std::string& name, const std::string& key, const Value& v, int line);
+    bool tableVirtualDelete(const std::string& name, const std::string& key);
+    std::vector<std::string> tableVirtualKeys(const std::string& name) const;
+    // رأس الجدول = أول صف إن كانت كل خلاياه نصوصاً (وإلا تُسمّى الأعمدة c1,c2,... وكل الصفوف جسم).
+    // يُستعمل لكشف الجدول لاستعلامات RCSQL الموجودة (sql/sqlCount/sqlSum/sqlUpdate/sqlDelete...).
+    bool tableHeader(const std::string& name, std::vector<std::string>& header) const;
+    std::vector<std::pair<std::string, Value>> tableAsDocs(const std::string& name) const;
     // مفتاح الحاوية -> آخر "style value=" مسجَّل (مثال: "style://dark"). كانت خاصة بالجداول فقط،
     // وعُمِّمت الآن لتُستخدم أيضاً داخل container.object/Object، container.portal/portal،
     // container.block/block (مفاهيم التنسيق والستايل)، وليس container.table/table حصراً.
