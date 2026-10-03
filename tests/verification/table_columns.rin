@@ -1,0 +1,62 @@
+// table_columns.rin — أعمدة الجدول كحقول عبر getField/setField/hasField/deleteField/renameField (بلا دوال جديدة)
+@table=staff
+    row cells=["name", "dept", "score"];
+    row cells=["sara", "dev", 95];
+    row cells=["yusuf", "ops", 88];
+    row cells=["huda", "dev", 99];
+.end/table
+
+// 1) قراءة عمود باسمه = قيم الجسم (نسخة)
+print getField("staff", "score");
+print container.get("staff", "name");
+print container.has("staff", "dept");
+print container.has("staff", "nope");
+print container.fieldType("staff", "score");
+
+// 2) كتابة عمود موجود: مصفوفة بطول الجسم، أو قيمة تملأ العمود
+setField("staff", "score", [1, 2, 3]);
+print getField("staff", "rows")[2];
+setField("staff", "dept", "all");
+print getField("staff", "dept");
+try { setField("staff", "score", [1, 2]); } catch (e) { print e.code; }
+
+// 3) إعادة تسمية عمود = تغيير عنوانه
+print container.renameField("staff", "score", "points");
+print container.get("staff", "header");
+print container.renameField("staff", "nope", "x");
+print container.renameField("staff", "name", "dept");
+print sqlSum("staff", "points");
+
+// 4) حذف عمود
+print container.deleteField("staff", "dept");
+print container.get("staff", "header");
+print getField("staff", "rows")[1];
+
+// 5) columns/body قابلان للكتابة: بهما تُضاف الأعمدة وتُستبدل صفوف الجسم
+let cols = container.get("staff", "columns");
+cols = concat(cols, [["flag", true, false, true]]);
+container.set("staff", "columns", cols);
+print getField("staff", "rows");
+container.set("staff", "body", [["ali", 7, false]]);
+print getField("staff", "rows");
+
+// 6) متغيّر حقيقي بنفس اسم العمود له الأولوية
+@table=t2
+    text name = "var";
+    row cells=["name", "v"];
+    row cells=["x", 1];
+.end/table
+print getField("t2", "name");
+print getField("t2", "v");
+
+// 7) container.push/pop على rows و getOr
+@table=t3
+    row cells=["a", "b"];
+.end/table
+print container.push("t3", "rows", [1, 2]);
+print container.push("t3", "rows", {"b": 9});
+print getField("t3", "rows");
+print container.pop("t3", "rows");
+print container.getOr("t3", "a", "none");
+print container.getOr("t3", "zzz", "none");
+print container.contains("t3", "a", 1);
