@@ -918,12 +918,16 @@ class MainActivity : AppCompatActivity() {
         popup.menu.add(0, 2, 1, R.string.menu_run_check_brackets)
         popup.menu.add(0, 3, 2, R.string.menu_run_live_preview)
         popup.menu.add(0, 4, 3, R.string.menu_run_check_tags)
+        if (currentProject?.let { HtmlRunActivity.isHtmlProject(it) } == true) {
+            popup.menu.add(0, 5, 4, R.string.menu_run_html_page)
+        }
         popup.setOnMenuItemClickListener { item ->
             when (item.itemId) {
                 1 -> runProgram()
                 2 -> checkBrackets()
                 3 -> openLivePreviewManually()
                 4 -> checkContainerTags()
+                5 -> runAsHtmlPage()
             }
             true
         }
@@ -931,19 +935,47 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * مشروع HTML (أو مشروع فيه index.html وكان الملف المفتوح من ملفات الواجهة: index.html/style.css/
-     * container.rin): التشغيل يحفظ التعديلات ثم يفتح الصفحة في [HtmlRunActivity] مربوطةً بـ container.rin.
+     * Run: ملف حاوية الويب (يبدأ بتوقيع `//! rin:container web`، انظر [RinContainerFile]) داخل مشروع فيه
+     * index.html يفتح الصفحة مربوطةً به؛ كذلك index.html / style.css، وmain.rin داخل مشروع من نوع HTML.
+     * أي ملف .rin آخر — حتى لو سُمّي container.rin بلا توقيع — يعمل كبرنامج Rin عادي في الـ terminal.
      * يعيد true إن تولّى التشغيل.
      */
     private fun runHtmlProjectIfApplicable(): Boolean {
         val project = currentProject ?: return false
-        val name = currentProjectFile?.name?.lowercase()
-        val isHtmlSide = name == HtmlRunActivity.ENTRY_HTML || name == "style.css" || name == HtmlRunActivity.ENTRY_LOGIC
-        if (project.type != ProjectType.HTML && !isHtmlSide) return false
-        if (!HtmlRunActivity.isHtmlProject(project)) return false
+        val file = currentProjectFile
+        val name = file?.name?.lowercase()
+        if (RinContainerFile.parseHeader(editCode.text.toString()) != null &&
+            file != null && HtmlRunActivity.isHtmlProject(project)) {
+            return openHtmlPage(logicFile = file.relPath)
+        }
+        val isHtmlSide = name == HtmlRunActivity.ENTRY_HTML || name == "style.css" ||
+            (project.type == ProjectType.HTML && (name == null || name == "main.rin"))
+        if (!isHtmlSide) return false
+        return openHtmlPage(logicFile = null)
+    }
+
+    /**
+     * يفتح index.html في [HtmlRunActivity] مربوطاً بملف منطق Rin: [logicFile] (مسار نسبي) إن مُرِّر،
+     * وإلا ما يحدده index.html نفسه (<link rel="rin" href="..."> أو <meta name="rin" content="...">)،
+     * وإلا container.rin ثم main.rin. من قائمة التشغيل: «تشغيل كصفحة HTML» يمرّر الملف .rin المفتوح حالياً.
+     */
+    private fun openHtmlPage(logicFile: String?): Boolean {
+        val project = currentProject ?: return false
+        if (!HtmlRunActivity.isHtmlProject(project)) {
+            Toast.makeText(this, getString(R.string.html_run_no_index), Toast.LENGTH_SHORT).show()
+            return false
+        }
         if (hasSaveTarget()) saveSilently()
-        HtmlRunActivity.start(this, project.name)
+        HtmlRunActivity.start(this, project.name, logicFile)
         return true
+    }
+
+    /** «تشغيل كصفحة HTML» من قائمة Run: يستعمل الملف .rin المفتوح كملف المنطق (أي اسم، لا container.rin فقط). */
+    private fun runAsHtmlPage() {
+        val file = currentProjectFile
+        val logic = file?.takeIf { it.name.endsWith(".rin", ignoreCase = true) && !it.name.endsWith(".og.rin", ignoreCase = true) }
+            ?.relPath
+        openHtmlPage(logic)
     }
 
     private fun runProgram() {
