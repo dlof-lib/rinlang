@@ -36,6 +36,8 @@ fun add() { count = count + 1; }
 - `RinEngine.kt`: الصنف `RinEngine.HtmlSession`.
 - `HtmlRunActivity.kt` (جديد) + تسجيله في `AndroidManifest.xml`.
 - `Project.kt` (`ProjectType.HTML`)، `ProjectManager.kt` (القوالب)، `ProjectsActivity.kt`، `MainActivity.kt` (ربط Run).
+- أيقونات ملفات محلية بلا شبكة: `ic_html_file`, `ic_css_file`, `ic_container_rin_file` (يربطها `FileIconResolver.kt`).
+- دليل الربط الكامل: `docs/html-projects.md`.
 - موارد: شريحة النوع في `dialog_create_project.xml`، `ic_type_html.xml`، نصوص ar/en/es، ألوان.
 - `schemas/rin-project.schema.json`: إضافة `html` إلى أنواع المشروع.
 
