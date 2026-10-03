@@ -36,3 +36,7 @@
 ## أمثلة
 
 انظر `examples/hash_demo.rin` والاختبارات `tests/verification/hash_*.rin`.
+
+## مع الجداول
+
+`#add` و`#swap` و`#diff` و`#sum` تعمل على صفوف/أعمدة `@table` عبر الحقل الحيّ `rows` والحقل `columns` — انظر [`table.md`](./table.md).
