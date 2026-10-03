@@ -72,13 +72,10 @@ class HtmlRunActivity : AppCompatActivity() {
     }
 
     private lateinit var project: Project
+    private lateinit var runtime: HtmlProjectRuntime
     private lateinit var web: WebView
     private lateinit var consoleScroll: ScrollView
     private lateinit var consoleText: TextView
-    private var session: RinEngine.HtmlSession? = null
-    private var logicFile: File? = null
-    private var header: RinContainerFile.Header? = null
-    private var lastSavedState: String? = null
     private val consoleLines = ArrayList<String>()
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -89,6 +86,7 @@ class HtmlRunActivity : AppCompatActivity() {
         val found = name?.let { n -> ProjectManager.listProjects(this).find { it.name == n } }
         if (found == null) { finish(); return }
         project = found
+        runtime = HtmlProjectRuntime(this, project, intent.getStringExtra(EXTRA_LOGIC_FILE)) { log(it) }
         title = getString(R.string.html_run_title, project.name)
 
         val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
@@ -107,6 +105,13 @@ class HtmlRunActivity : AppCompatActivity() {
             maxLines = 1
             layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
         }
+        // فتح المشروع في متصفح الجهاز على http://localhost:7700 (خادم محلي، انظر RinLocalServer).
+        val browser = ImageButton(this).apply {
+            setImageResource(R.drawable.ic_globe_link)
+            setBackgroundColor(Color.TRANSPARENT)
+            contentDescription = getString(R.string.html_run_open_browser)
+            setOnClickListener { RinLocalServer.openInBrowser(this@HtmlRunActivity, project.name) }
+        }
         val reload = ImageButton(this).apply {
             setImageResource(android.R.drawable.ic_popup_sync)
             setBackgroundColor(Color.TRANSPARENT)
@@ -114,7 +119,7 @@ class HtmlRunActivity : AppCompatActivity() {
             setOnClickListener { loadProject() }
             // ضغطة مطوّلة: مسح الحالة المحفوظة (persist=) ثم إعادة التحميل من جديد.
             setOnLongClickListener {
-                clearSavedState()
+                runtime.clearSavedState()
                 Toast.makeText(this@HtmlRunActivity, getString(R.string.html_run_state_cleared), Toast.LENGTH_SHORT).show()
                 loadProject()
                 true
@@ -127,6 +132,7 @@ class HtmlRunActivity : AppCompatActivity() {
             setOnClickListener { finish() }
         }
         bar.addView(titleView)
+        bar.addView(browser, LinearLayout.LayoutParams(dp(44), dp(44)))
         bar.addView(reload, LinearLayout.LayoutParams(dp(44), dp(44)))
         bar.addView(close, LinearLayout.LayoutParams(dp(44), dp(44)))
         root.addView(bar, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
@@ -175,154 +181,19 @@ class HtmlRunActivity : AppCompatActivity() {
         loadProject()
     }
 
-    /** يعيد إنشاء جلسة Rin من container.rin ويعيد تحميل الصفحة (حالة نظيفة). */
+    /** يعيد فتح المشروع (جلسة Rin جديدة إن وُجد منطق Rin) ويعيد تحميل الصفحة بحالة نظيفة. */
     private fun loadProject() {
         consoleLines.clear()
         consoleScroll.visibility = View.GONE
-        session?.close()
-        session = null
 
-        val htmlFile = File(project.dir, ENTRY_HTML)
-        if (!htmlFile.isFile) { showFatal(getString(R.string.html_run_no_index)); return }
-
-        val logic = resolveLogicFile(htmlFile.readText())
-        if (logic == null) { showFatal(getString(R.string.html_run_no_logic)); return }
-        logicFile = logic
-        try {
-            val source = logic.readText()
-            header = RinContainerFile.parseHeader(source)
-            val s = RinEngine.HtmlSession.create(source, project.dir.absolutePath)
-            session = s
-            if (s.bootOutput.isNotBlank()) log(s.bootOutput.trimEnd())
-            restoreState(s)
-        } catch (t: Throwable) {
-            showFatal(getString(R.string.html_run_rin_error, t.message ?: ""))
-            return
-        }
+        val error = runtime.open()
+        if (error != null) { showFatal(error); return }
 
         web.removeJavascriptInterface("RinBridge")
-        web.addJavascriptInterface(Bridge(), "RinBridge")
-        val page = buildPage(htmlFile.readText())
+        // مشروع HTML + JS: صفحة عادية، لا جسر Rin ولا runtime.
+        if (!runtime.isPlainPage) web.addJavascriptInterface(Bridge(), "RinBridge")
+        val page = runtime.buildPage()
         web.loadDataWithBaseURL(Uri.fromFile(project.dir).toString() + "/", page, "text/html", "UTF-8", null)
-    }
-
-    /**
-     * أي ملف .rin يصلح كمنطق للصفحة، لا container.rin فقط. الأولوية:
-     *  1) EXTRA_LOGIC_FILE (من قائمة Run)،
-     *  2) <link rel="rin" href="app.rin"> أو <meta name="rin" content="app.rin"> في index.html،
-     *  3) ملف حاوية موقَّع (//! rin:container web) في جذر المشروع، ثم container.rin ثم main.rin.
-     * كل المسارات محصورة داخل مجلد المشروع.
-     */
-    private fun resolveLogicFile(html: String): File? {
-        val root = project.dir.canonicalFile
-        fun inside(rel: String?): File? {
-            if (rel.isNullOrBlank() || rel.contains("://") || rel.startsWith("/")) return null
-            val f = File(project.dir, rel.trim()).canonicalFile
-            return f.takeIf { it.path.startsWith(root.path + File.separator) && it.isFile }
-        }
-        inside(intent.getStringExtra(EXTRA_LOGIC_FILE))?.let { return it }
-        val linkRe = Regex("""<link\b[^>]*rel\s*=\s*["']rin["'][^>]*>""", RegexOption.IGNORE_CASE)
-        val hrefRe = Regex("""href\s*=\s*["']([^"']+)["']""", RegexOption.IGNORE_CASE)
-        val metaRe = Regex("""<meta\b[^>]*name\s*=\s*["']rin["'][^>]*>""", RegexOption.IGNORE_CASE)
-        val contentRe = Regex("""content\s*=\s*["']([^"']+)["']""", RegexOption.IGNORE_CASE)
-        val declared = linkRe.find(html)?.value?.let { hrefRe.find(it)?.groupValues?.get(1) }
-            ?: metaRe.find(html)?.value?.let { contentRe.find(it)?.groupValues?.get(1) }
-        inside(declared)?.let { return it }
-        RinContainerFile.findIn(project.dir)?.let { return it }
-        return inside(ENTRY_LOGIC) ?: inside("main.rin")
-    }
-
-    /** يدمج style.css (أو أي <link rel=stylesheet> محلي) داخل الصفحة ويحقن سكربت الربط. */
-    private fun buildPage(html: String): String {
-        val linkRe = Regex("""<link\b[^>]*rel\s*=\s*["']stylesheet["'][^>]*>""", RegexOption.IGNORE_CASE)
-        val hrefRe = Regex("""href\s*=\s*["']([^"']+)["']""", RegexOption.IGNORE_CASE)
-        var out = linkRe.replace(html) { m ->
-            val href = hrefRe.find(m.value)?.groupValues?.get(1)
-            val css = href?.let { readProjectText(it) }
-            if (css != null) "<style>\n$css\n</style>" else m.value
-        }
-        // لا رابط style.css في الصفحة؟ طبّق style.css تلقائياً إن وُجد.
-        if (!linkRe.containsMatchIn(html)) {
-            readProjectText("style.css")?.let { css ->
-                val tag = "<style>\n$css\n</style>"
-                out = if (out.contains("</head>", true)) insertBeforeFirst(out, "</head>", tag)  // إدراج حرفي (لا تفسير لـ $ أو \)
-                else tag + out
-            }
-        }
-        val runtime = try { assets.open("rin_html_runtime.js").bufferedReader().use { it.readText() } }
-            catch (t: Throwable) { log("تعذّر تحميل rin_html_runtime.js"); "" }
-        val script = "<script>$runtime</script>"
-        return if (out.contains("</body>", true))
-            insertBeforeFirst(out, "</body>", script)
-        else out + script
-    }
-
-    /** يُدرج [insert] قبل أول ظهور لـ [marker] (دون حساسية لحالة الأحرف) كنص حرفي. */
-    private fun insertBeforeFirst(src: String, marker: String, insert: String): String {
-        val i = src.indexOf(marker, ignoreCase = true)
-        return if (i < 0) src + insert else src.substring(0, i) + insert + src.substring(i)
-    }
-
-    /** يقرأ ملفاً نصياً من داخل المشروع فقط (يمنع الخروج منه عبر ../ أو مسار مطلق/URL). */
-    private fun readProjectText(rel: String): String? {
-        if (rel.contains("://") || rel.startsWith("/") || rel.startsWith("data:")) return null
-        val f = File(project.dir, rel.substringBefore('?').substringBefore('#')).canonicalFile
-        val root = project.dir.canonicalFile
-        if (!f.path.startsWith(root.path + File.separator) || !f.isFile) return null
-        return f.readText()
-    }
-
-    // ---- حفظ الحالة (persist=) ----
-
-    private fun stateFile(): File? = logicFile?.let { File(File(project.dir, ".rin_state"), it.name + ".json") }
-
-    /** هل يُحفظ المتغيّر [name] وفق ترويسة ملف الحاوية؟ */
-    private fun shouldPersist(name: String): Boolean {
-        val h = header ?: return false
-        return if (h.persistAll) name !in RinContainerFile.BUILTIN_GLOBALS else name in h.persist
-    }
-
-    /** يعيد القيم المحفوظة إلى الجلسة الجديدة (لمتغيّرات موجودة أصلاً فقط). */
-    private fun restoreState(s: RinEngine.HtmlSession) {
-        val file = stateFile()?.takeIf { header?.persists == true && it.isFile } ?: return
-        try {
-            val saved = JSONObject(file.readText())
-            val current = JSONObject(s.globalsJson())
-            val keys = saved.keys()
-            while (keys.hasNext()) {
-                val k = keys.next()
-                if (!current.has(k) || !shouldPersist(k)) continue
-                val v = saved.get(k)
-                s.setGlobal(k, if (v is String) JSONObject.quote(v) else v.toString())
-            }
-            lastSavedState = file.readText()
-        } catch (t: Throwable) {
-            log("تعذّرت استعادة الحالة المحفوظة: ${t.message}")
-        }
-    }
-
-    /** يحفظ المتغيّرات المطلوبة من [globalsJson] إن تغيّرت منذ آخر حفظ. */
-    private fun saveState(globalsJson: String) {
-        if (header?.persists != true) return
-        val file = stateFile() ?: return
-        try {
-            val all = JSONObject(globalsJson)
-            val out = JSONObject()
-            val keys = all.keys()
-            while (keys.hasNext()) { val k = keys.next(); if (shouldPersist(k)) out.put(k, all.get(k)) }
-            val text = out.toString()
-            if (text == lastSavedState) return
-            file.parentFile?.mkdirs()
-            file.writeText(text)
-            lastSavedState = text
-        } catch (t: Throwable) {
-            log("تعذّر حفظ الحالة: ${t.message}")
-        }
-    }
-
-    private fun clearSavedState() {
-        stateFile()?.delete()
-        lastSavedState = null
     }
 
     private fun showFatal(msg: String) {
@@ -346,25 +217,15 @@ class HtmlRunActivity : AppCompatActivity() {
 
     /** الواجهة الوحيدة المكشوفة للصفحة (window.RinBridge). تعمل على خيط WebView الخلفي. */
     private inner class Bridge {
-        @JavascriptInterface fun globals(): String = session?.globalsJson() ?: "{}"
-        @JavascriptInterface fun call(fn: String, argsJson: String): String {
-            val s = session ?: return "{\"ok\":false,\"error\":\"no session\",\"globals\":{}}"
-            val result = s.call(fn, argsJson)
-            if (header?.persists == true) saveState(s.globalsJson())
-            return result
-        }
-        @JavascriptInterface fun set(name: String, valueJson: String) {
-            val s = session ?: return
-            s.setGlobal(name, valueJson)
-            if (header?.persists == true && shouldPersist(name)) saveState(s.globalsJson())
-        }
-        @JavascriptInterface fun clearState() { clearSavedState() }
+        @JavascriptInterface fun globals(): String = runtime.globalsJson()
+        @JavascriptInterface fun call(fn: String, argsJson: String): String = runtime.call(fn, argsJson)
+        @JavascriptInterface fun set(name: String, valueJson: String) { runtime.setGlobal(name, valueJson) }
+        @JavascriptInterface fun clearState() { runtime.clearSavedState() }
         @JavascriptInterface fun error(msg: String) { log(msg) }
     }
 
     override fun onDestroy() {
-        session?.close()
-        session = null
+        runtime.close()
         web.removeJavascriptInterface("RinBridge")
         web.destroy()
         super.onDestroy()
