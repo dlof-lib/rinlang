@@ -1,0 +1,51 @@
+// table_bridge.rin — الجدول عبر دوال اللغة الموجودة + عائلة # (بلا أي دالة جدول جديدة)
+@table=scores
+    style value="style://dark";
+    row cells=["name", "score"];
+    row cells=["sara", 95];
+    row cells=["yusuf", 88];
+.end/table
+
+// 1) قراءة: rows مقبض حيّ، columns نسخة، style من الحقول
+let rows = getField("scores", "rows");
+print len(rows);
+print container.get("scores", "style");
+print container.fieldNames("scores");
+print container.has("scores", "rows");
+print container.info("scores").rows;
+print container.info("scores").columns;
+let cols = container.get("scores", "columns");
+print cols[1];
+
+// 2) # على الجدول: #add يضيف صفاً في مكانه، #sum لعمود (بعد slice للرأس)
+#add(rows, ["omar", 70]);
+print len(getField("scores", "rows"));
+print #sum(slice(cols[1], 1));
+cols = container.get("scores", "columns");
+print #sum(slice(cols[1], 1));
+
+// 3) #swap يبدّل صفّين فعلاً، و sort الموجودة تفرز الجدول نفسه
+#swap(rows, 1, 3);
+print getField("scores", "rows")[1];
+let nums = container.get("scores", "columns")[1];
+print #diff(slice(nums, 1), ["sara"]);
+
+// 4) كتابة عبر setField/container.set: استبدال الصفوف + النمط
+container.set("scores", "rows", [["a", 1], ["b", 2]]);
+print len(rows);
+print container.get("scores", "columns");
+container.set("scores", "style", "style://light");
+print getField("scores", "style");
+print #to(0, len(rows) - 1);
+
+// 5) حذف/تفريغ
+container.deleteField("scores", "style");
+print container.has("scores", "style");
+container.clearFields("scores");
+print container.empty("scores");
+print len(rows);
+
+// 6) أخطاء الأنواع
+try { container.set("scores", "rows", 5); } catch (e) { print e.code; }
+try { container.set("scores", "rows", [1, 2]); } catch (e) { print e.code; }
+try { container.set("scores", "columns", []); } catch (e) { print e.code; }
