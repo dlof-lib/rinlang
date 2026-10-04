@@ -4448,9 +4448,11 @@ object DocumentationContainer {
                     decor.addView(view, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
                     custom = view
                     callback = cb
-                    @Suppress("DEPRECATION")
-                    decor.systemUiVisibility = View.SYSTEM_UI_FLAG_FULLSCREEN or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or
-                        View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY or View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                    // بديل systemUiVisibility المُهمَل (لا يعمل بشكل موثوق على Android 11+ / 15+ / 16).
+                    androidx.core.view.WindowCompat.getInsetsController(act.window, decor).apply {
+                        systemBarsBehavior = androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                        hide(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+                    }
                     exitFullscreen = { hide() }
                 }
 
@@ -4463,8 +4465,10 @@ object DocumentationContainer {
                     (v.parent as? FrameLayout)?.removeView(v)
                     custom = null
                     val act = findActivity(context)
-                    @Suppress("DEPRECATION")
-                    act?.window?.decorView?.systemUiVisibility = View.SYSTEM_UI_FLAG_VISIBLE
+                    act?.let {
+                        androidx.core.view.WindowCompat.getInsetsController(it.window, it.window.decorView)
+                            .show(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+                    }
                     callback?.onCustomViewHidden()
                     callback = null
                     exitFullscreen = null
