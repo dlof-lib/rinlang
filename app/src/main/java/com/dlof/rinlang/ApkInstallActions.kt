@@ -19,6 +19,19 @@ object ApkInstallActions {
 
     fun install(activity: Activity, file: File) {
         try {
+            // Android 8.0+ (API 26+): التثبيت من مصدر غير معروف إذن لكل تطبيق. نوجّه المستخدم لصفحته
+            // مباشرة بدل أن يفشل التثبيت بصمت (الأجهزة الأقدم Android 7.x تستخدم إعداداً عاماً وتعرضه النظام نفسه).
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O &&
+                !activity.packageManager.canRequestPackageInstalls()
+            ) {
+                val settings = Intent(
+                    android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                    Uri.parse("package:${activity.packageName}")
+                )
+                activity.startActivity(settings)
+                Toast.makeText(activity, R.string.apk_install_allow_unknown_sources, Toast.LENGTH_LONG).show()
+                return
+            }
             val uri = apkUri(activity, file)
             val intent = Intent(Intent.ACTION_VIEW).apply {
                 setDataAndType(uri, "application/vnd.android.package-archive")
