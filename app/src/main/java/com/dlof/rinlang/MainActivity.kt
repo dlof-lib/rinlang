@@ -48,7 +48,7 @@ import kotlin.math.roundToInt
  *    (mirroring how the Rin language itself organizes data into containers).
  *  - Open/Save buttons that read and write `.rin` files via SAF.
  */
-class MainActivity : AppCompatActivity() {
+class MainActivity : RinBaseActivity() {
 
     companion object {
         /** اسم مشروع (اختياري) جاء من شاشة الملفات/المشاريع؛ يحدّد basePath خاصاً بهذا المشروع. */
