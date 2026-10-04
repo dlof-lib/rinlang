@@ -17,7 +17,7 @@ import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 
 /** Dedicated, visual album browser. Albums are presented as physical-style covers. */
-class AlbumsActivity : AppCompatActivity() {
+class AlbumsActivity : RinBaseActivity() {
     private lateinit var adapter: AlbumsAdapter
     private lateinit var empty: View
 
