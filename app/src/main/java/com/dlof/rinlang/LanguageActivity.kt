@@ -8,9 +8,11 @@ import android.view.Gravity
 import android.view.View
 import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
+import com.dlof.rinlang.packs.LanguagePacks
+import com.dlof.rinlang.packs.PackDownloadDialog
 
 /** Professional language picker with language families, country flags, search and instant locale switching. */
-class LanguageActivity : AppCompatActivity() {
+class LanguageActivity : RinBaseActivity() {
     data class LanguageCountry(val flag:String, val name:String, val nativeName:String, val tag:String, val group:String)
 
     private lateinit var list: LinearLayout
@@ -89,6 +91,29 @@ class LanguageActivity : AppCompatActivity() {
         val col=LinearLayout(this); col.orientation=LinearLayout.VERTICAL; col.layoutParams=LinearLayout.LayoutParams(0,-2,1f); val name=TextView(this); name.text=item.name; name.textSize=15f; name.setTextColor(getColor(R.color.rin_on_toolbar)); name.setTypeface(null,1); val native=TextView(this); native.text=item.nativeName+"  •  "+item.tag; native.textSize=11f; native.setTextColor(getColor(R.color.rin_editor_hint)); native.setPadding(0,3,0,0); col.addView(name); col.addView(native); card.addView(col)
         val check=TextView(this); check.text=if(LocaleHelper.getCurrentAppLocaleTag()==item.tag.substringBefore('-')) "✓" else ""; check.textSize=20f; check.setTextColor(getColor(R.color.rin_accent)); check.gravity=Gravity.CENTER; card.addView(check,LinearLayout.LayoutParams(40,52))
         val lp=LinearLayout.LayoutParams(-1,68); lp.setMargins(0,4,0,4); list.addView(card,lp)
-        card.setOnClickListener { LocaleHelper.setAppLocale(item.tag.substringBefore('-')); Toast.makeText(this,getString(R.string.language_picker_applied,item.nativeName),Toast.LENGTH_SHORT).show(); finish() }
+        card.setOnClickListener { selectLanguage(item) }
+    }
+
+    /**
+     * العربية مدمجة في التطبيق فتُطبَّق فوراً؛ أي لغة أخرى (الإنجليزية/الإسبانية) تُنزَّل كحزمة لغة أولاً
+     * (لتقليل حجم التطبيق) ثم تُطبَّق عند اكتمال التنزيل.
+     */
+    private fun selectLanguage(item: LanguageCountry) {
+        val lang = item.tag.substringBefore('-')
+        val applyNow = {
+            LocaleHelper.setAppLocale(lang)
+            Toast.makeText(this, getString(R.string.language_picker_applied, item.nativeName), Toast.LENGTH_SHORT).show()
+            finish()
+        }
+        if (LanguagePacks.isAvailable(this, lang)) {
+            applyNow()
+        } else {
+            val name = when (lang) {
+                LocaleHelper.LANG_ENGLISH -> getString(R.string.lang_name_en)
+                LocaleHelper.LANG_SPANISH -> getString(R.string.lang_name_es)
+                else -> item.nativeName
+            }
+            PackDownloadDialog.ensure(this, LanguagePacks.packId(lang), name) { applyNow() }
+        }
     }
 }
