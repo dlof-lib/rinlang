@@ -315,6 +315,12 @@ object RinSnippets {
         ),
         Snippet("Artifact: QR داخل Container", "@container=Product\n    let id = uuid();\n    let qr = container.make.qr(id, \"product-qr\", 512);\n    $CURSOR_MARKER\n.end/container\n"),
         Snippet("Artifact: Barcode داخل Container", "@container=Product\n    let barcode = container.make.barcode(\"RIN-001\", \"product-barcode\", \"code128\");\n    $CURSOR_MARKER\n.end/container\n"),
-        Snippet("Artifact: File + Hash", "@container=Data\n    let f = container.make.file(\"data.txt\", \"Rin\");\n    let h = hash(\"Rin\");\n    print h;\n    $CURSOR_MARKER\n.end/container\n")
+        Snippet("Artifact: File + Hash", "@container=Data\n    let f = container.make.file(\"data.txt\", \"Rin\");\n    let h = hash(\"Rin\");\n    print h;\n    $CURSOR_MARKER\n.end/container\n"),
+        Snippet("Media: API (make.api)", "let r = make.api(\"https://api.example.com/items\", {\"query\": {\"page\": 1}, \"retries\": 2, \"cache\": 30, \"path\": \"data\"});\nprint r.ok;\nprint r.data;\n$CURSOR_MARKER\n"),
+        Snippet("Media: فيديو (make.video)", "let v = make.video.info(\"clip.mp4\");\nprint v.duration;\nmake.video(\"clip.mp4\", {\"fullscreen\": true});\n$CURSOR_MARKER\n"),
+        Snippet("Media: صوت (make.audio)", "make.audio(\"sound.mp3\", {\"volume\": 80});\n$CURSOR_MARKER\n"),
+        Snippet("Media: إزالة الخلفية (make.image.removeBg)", "let r = make.image.removeBg(\"photo.png\", \"photo.nobg.png\", {\"tolerance\": 12, \"trim\": true});\nprint r.ok;\n$CURSOR_MARKER\n"),
+        Snippet("Media: قراءة النص (make.ocr)", "let o = make.ocr(\"scan.png\", {\"lang\": \"ara+eng\", \"enhance\": true});\nprint o.text;\n$CURSOR_MARKER\n"),
+        Snippet("Media: وحدة make بقدرات وسائط", "@make.(media_task)\n    kind task;\n    use image; use ocr; use io;\n    need image;\n    strict;\n    $CURSOR_MARKER\n.end/make=media_task\n")
     )
 }
