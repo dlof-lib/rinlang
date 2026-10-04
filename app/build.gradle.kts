@@ -19,6 +19,15 @@ val rinVersionCode = (rinVersionParts[0].toInt() * 10000) +
                      (rinVersionParts[1].toInt() * 100) +
                       rinVersionParts[2].toInt()
 
+// ---- تقليص حجم التطبيق ---------------------------------------------------------------------
+// خصائص gradle (gradle.properties أو -P): rin.minify=false يعطّل R8/shrinkResources في release،
+// و rin.abis="" يبني كل المعماريات (الافتراضي arm64-v8a و armeabi-v7a لـ release فقط؛ debug يبني الكل
+// ليعمل على المحاكيات x86). اللغات الإضافية (en/es) ومحتوى مثل لغة Illust لا تُشحن في الـ APK أصلاً:
+// تُنزَّل كحزم عند الحاجة (انظر content-packs/ و app/src/main/java/com/dlof/rinlang/packs/).
+val rinMinify = (findProperty("rin.minify") ?: "true").toString().toBoolean()
+val rinReleaseAbis = (findProperty("rin.abis") ?: "arm64-v8a,armeabi-v7a").toString()
+    .split(",").map { it.trim() }.filter { it.isNotEmpty() }
+
 android {
     namespace = "com.dlof.rinlang"
     compileSdk = 34
@@ -30,6 +39,11 @@ android {
         targetSdk = 34
         versionCode = rinVersionCode
         versionName = rinVersionName
+
+        // موارد المكتبات (Material/AppCompat/Firebase...) بعشرات اللغات لا حاجة لها: نُبقي لغات التطبيق فقط.
+        // (en/es تأتي من حزم اللغة المنزَّلة وقت التشغيل، لكن نصوص المكتبات الافتراضية بالإنجليزية تكفيها.)
+        @Suppress("DEPRECATION")
+        resourceConfigurations += listOf("ar", "en", "es")
 
         externalNativeBuild {
             cmake {
@@ -66,8 +80,12 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = rinMinify
+            isShrinkResources = rinMinify
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            if (rinReleaseAbis.isNotEmpty()) {
+                ndk { abiFilters += rinReleaseAbis }
+            }
             if (hasReleaseSigning) {
                 signingConfig = signingConfigs.getByName("release")
             }
@@ -117,4 +135,10 @@ dependencies {
     // المُصدَّرة بتوقيع Android رسمي فعلي (Signature Scheme v1 + v2 + v3)، بلا اعتماد على
     // أدوات بناء خارجية أو خادم بعيد. لا تعتمد على أي API داخلي في OpenJDK فتعمل على أندرويد.
     implementation("com.android.tools.build:apksig:8.5.2")
+
+    // OCR على أندرويد لـ make.ocr / make.image.text (RinMediaBridge: image.ocr). النموذج اللاتيني مضمَّن
+    // في الحزمة (يعمل بلا إنترنت). للاتينية فقط (لا يدعم العربية) — العربية عبر Tesseract أدناه.
+    implementation("com.google.mlkit:text-recognition:16.0.1")
+    // العربية: ML Kit لا يدعمها، فتمر عبر Tesseract (مع ara.traineddata/eng.traineddata — انظر scripts/fetch_tessdata.sh).
+    implementation("cz.adaptech.tesseract4android:tesseract4android:4.7.0")
 }
