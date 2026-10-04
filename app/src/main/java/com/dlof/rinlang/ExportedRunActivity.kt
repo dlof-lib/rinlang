@@ -26,7 +26,7 @@ import java.util.concurrent.Executors
  *
  * [SplashActivity] هو من يوجّه هنا تلقائياً عند رصد وجود هذا البيان في assets.
  */
-class ExportedRunActivity : AppCompatActivity() {
+class ExportedRunActivity : RinBaseActivity() {
 
     private val mainHandler = Handler(Looper.getMainLooper())
     private val runExecutor = Executors.newSingleThreadExecutor()
