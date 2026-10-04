@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="action_settings">Settings</string>
+    <string name="settings_title">Settings</string>
+
+    <string name="settings_editor_section_title">Editor</string>
+    <string name="settings_font_size_label">Font size: %1$.0f</string>
+    <string name="settings_show_line_numbers">Show line numbers</string>
+    <string name="settings_show_line_numbers_hint">Turn off to give the code more space</string>
+    <string name="action_reset_defaults">Restore Default Settings</string>
+    <string name="settings_reset_toast">Default settings restored</string>
+
+    <!-- App language section -->
+    <string name="settings_language_section_title">Language</string>
+    <string name="settings_language_hint">Choose the app interface language</string>
+    <string name="lang_name_ar">العربية</string>
+    <string name="lang_name_en">English</string>
+    <string name="lang_name_es">Español</string>
+    <string name="settings_language_changed_toast">Language updated</string>
+
+    <string name="settings_hero_title">Rin Editor Settings</string>
+    <string name="settings_hero_hint">Tune the editor for speed, clarity and comfortable coding.</string>
+    <string name="settings_indentation_title">Indentation</string>
+    <string name="settings_tab_size">Tab size</string>
+    <string name="settings_tab_size_hint">Choose the number of spaces inserted by Tab.</string>
+    <string name="settings_syntax">Syntax highlighting</string>
+    <string name="settings_syntax_hint">Use the real Rin lexer colors from the native engine.</string>
+    <string name="settings_brackets">Bracket matching</string>
+    <string name="settings_brackets_hint">Highlight the matching bracket or an unmatched bracket.</string>
+    <string name="settings_live_diagnostics">Live error diagnostics</string>
+    <string name="settings_live_diagnostics_hint">Underline syntax errors and warnings as you type, using the real Rin lexer/parser.</string>
+    <string name="settings_autocomplete">Code completion</string>
+    <string name="settings_autocomplete_hint">Show Rin suggestions while typing identifiers.</string>
+    <string name="settings_auto_close">Auto-close brackets</string>
+    <string name="settings_auto_close_hint">Automatically close pairs such as (), [], and {}.</string>
+    <string name="settings_auto_indent">Auto indentation</string>
+    <string name="settings_auto_indent_hint">Keep indentation consistent while editing code.</string>
+    <string name="settings_word_wrap">Word wrap</string>
+    <string name="settings_word_wrap_hint">Wrap long lines instead of requiring horizontal scrolling.</string>
+    <string name="settings_whitespace">Whitespace markers</string>
+    <string name="settings_whitespace_hint">Reveal spaces and tabs while reviewing formatting.</string>
+    <string name="settings_current_line">Current-line highlight</string>
+    <string name="settings_current_line_hint">Keep the active line visually easy to follow.</string>
+    <string name="settings_smooth_cursor">Smooth cursor</string>
+    <string name="settings_smooth_cursor_hint">Use the refined cursor blink behavior in the editor.</string>
+    <string name="settings_minimap">Code minimap</string>
+    <string name="settings_minimap_hint">Reserve a compact overview for large source files.</string>
+    <string name="settings_haptic">Haptic feedback</string>
+    <string name="settings_haptic_hint">Give subtle touch feedback for editor interactions.</string>
+    <string name="settings_save_pause">Save on pause</string>
+    <string name="settings_save_pause_hint">Save the current project when the editor is paused.</string>
+    <string name="settings_confirm_exit">Confirm before exit</string>
+    <string name="settings_confirm_exit_hint">Ask before leaving when this option is enabled.</string>
+    <string name="settings_format_save">Format on save</string>
+    <string name="settings_format_save_hint">Prepare the editor for automatic formatting workflows on save.</string>
+
+    <string name="settings_assist_section_title">Editing Assist</string>
+    <string name="settings_saving_section_title">Saving</string>
+    <string name="settings_run_section_title">Run</string>
+    <string name="settings_interface_section_title">Interface</string>
+
+    <string name="settings_trim_trailing">Trim trailing whitespace</string>
+    <string name="settings_trim_trailing_hint">Remove trailing spaces from every line on save.</string>
+    <string name="settings_final_newline">Final newline</string>
+    <string name="settings_final_newline_hint">Make sure the file ends with exactly one newline on save.</string>
+    <string name="settings_auto_save">Auto-save</string>
+    <string name="settings_auto_save_hint">Save automatically after you stop typing for this long.</string>
+    <string name="settings_off">Off</string>
+    <string name="settings_seconds_format">%1$ds</string>
+
+    <string name="settings_auto_run">Auto-run</string>
+    <string name="settings_auto_run_hint">Re-run the code automatically after a short pause in typing.</string>
+    <string name="settings_clear_console_on_run">Clear console before each run</string>
+    <string name="settings_clear_console_on_run_hint">Automatically clear the previous run history on each new Run.</string>
+
+    <string name="settings_layout_hint">Standard: bigger editor with a console. Compact: more room for code. Focus: no console.</string>
+    <string name="settings_keep_screen_on">Keep screen on</string>
+    <string name="settings_keep_screen_on_hint">Prevent the screen from turning off while using the editor.</string>
+    <string name="settings_project_sort">Sort by</string>
+<string name="settings_language_current">English 🇺🇸</string><string name="language_picker_title">Choose language</string><string name="language_picker_subtitle">Choose a language and country</string><string name="language_picker_search">Search a language or country…</string><string name="language_picker_applied">Applied %1$s</string><string name="language_group_arabic">Arabic • Arab countries</string><string name="language_group_english">English • English-speaking countries</string><string name="language_group_spanish">Español • Spanish-speaking countries</string>
+</resources>
