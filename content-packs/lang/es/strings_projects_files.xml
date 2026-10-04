@@ -1,0 +1,203 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Botones comunes usados por los diálogos de proyectos/archivos -->
+    <string name="create">Crear</string>
+    <string name="cancel">Cancelar</string>
+    <string name="rename">Renombrar</string>
+    <string name="delete">Eliminar</string>
+
+    <!-- Barra superior unificada para las subpantallas -->
+    <string name="action_back">Atrás</string>
+    <string name="projects_screen_title">Proyectos</string>
+    <string name="files_screen_title">Archivos</string>
+
+    <!-- Pantalla de proyectos -->
+    <string name="new_project_title">Nuevo proyecto</string>
+    <string name="rename_project_title">Renombrar proyecto</string>
+    <string name="delete_project_title">Eliminar proyecto</string>
+    <string name="delete_project_confirm">¿Eliminar el proyecto \"%1$s\" y todos sus archivos?</string>
+    <string name="project_name_hint">Nombre del proyecto</string>
+    <string name="no_projects_yet">Aún no hay proyectos. Toca + para crear tu primer proyecto.</string>
+    <string name="no_projects_hint">Crea tu primer proyecto con el botón + de abajo</string>
+    <string name="projects_screen_heading">Proyectos</string>
+    <string name="projects_count_zero">No hay proyectos</string>
+    <string name="projects_count_format">%1$d proyectos</string>
+    <string name="search_projects_hint">Buscar proyectos</string>
+    <string name="open_project_action">Abrir proyecto</string>
+    <string name="project_more_actions">Opciones del proyecto</string>
+    <string name="project_not_found">Proyecto no encontrado</string>
+    <string name="no_search_results">No hay proyectos coincidentes</string>
+    <string name="project_meta_format">%1$d archivos</string>
+    <string name="project_meta_with_time_format">%1$d archivos • %2$s</string>
+    <string name="sort_projects_action">Ordenar proyectos</string>
+    <string name="projects_sort_recent">Editado recientemente</string>
+    <string name="projects_sort_name">Nombre</string>
+    <string name="projects_sort_type">Tipo</string>
+
+    <!-- Tipos de proyecto (se eligen al crear, se guardan en project.og.urin) -->
+    <string name="project_type_label">Elegir tipo</string>
+    <string name="project_type_container">Container</string>
+    <string name="project_type_table">Table</string>
+    <string name="project_type_ui">UI</string>
+    <string name="project_type_free">Free Project</string>
+    <string name="project_type_container_desc">Datos vivos en un contenedor</string>
+    <string name="project_type_table_desc">Filas y columnas</string>
+    <string name="project_type_ui_desc">Pantallas y vistas</string>
+    <string name="project_type_free_desc">Un archivo de código en blanco</string>
+    <string name="project_type_illust">Illust</string>
+    <string name="project_type_illust_desc">Un lenguaje de dibujo/SVG listo sobre Rin</string>
+    <string name="project_type_html">HTML + Rin</string>
+    <string name="project_type_html_desc">Interfaz HTML con lógica Rin</string>
+    <string name="project_type_html_js">HTML + JS</string>
+    <string name="project_type_html_js_desc">Interfaz HTML con lógica JavaScript</string>
+    <string name="create_section_web">Web</string>
+    <string name="create_section_rin">Proyectos Rin</string>
+    <string name="create_local_preview_hint">Tras crear, previsualiza proyectos HTML y Rin en tu navegador en http://localhost:7700/</string>
+    <string name="html_run_open_browser">Abrir en el navegador (localhost:7700)</string>
+    <string name="local_server_started">Servidor local activo en %1$s</string>
+    <string name="local_server_failed">No se pudo iniciar el servidor local (puertos 7700–7710 ocupados)</string>
+    <string name="menu_run_open_localhost">Abrir en localhost:7700</string>
+    <string name="html_run_title">Ejecutar HTML — %1$s</string>
+    <string name="html_run_reload">Recargar</string>
+    <string name="html_run_close">Cerrar</string>
+    <string name="html_run_no_logic">No hay archivo de lógica Rin: añade container.rin o indica uno con &lt;link rel=\"rin\" href=\"app.rin\"&gt; en index.html.</string>
+    <string name="html_run_state_cleared">Estado guardado borrado</string>
+    <string name="html_run_no_index">Este proyecto no tiene index.html.</string>
+    <string name="html_run_rin_error">No se pudo ejecutar container.rin: %1$s</string>
+
+    <string name="indsin_template_label">Plantilla indsin lista (opcional)</string>
+    <string name="indsin_template_calculator">Calculadora</string>
+    <string name="indsin_template_blog">Blog</string>
+    <string name="indsin_template_buttons">Botones</string>
+    <string name="indsin_template_gallery">Galería de fotos</string>
+    <string name="indsin_template_webview">WebView</string>
+
+    <!-- Opciones de "dibujar la interfaz" en el diálogo de nuevo proyecto UI: solo aparecen al
+         elegir el tipo UI. Permiten activar/desactivar la barra superior, activar/desactivar el
+         menú lateral y elegir un color principal, antes de generar main.rin (ver
+         ProjectManager.UiDesignOptions). -->
+    <string name="ui_design_section_title">Dibujar la interfaz</string>
+    <string name="ui_design_section_desc">Elige los elementos principales de la pantalla antes de crear el proyecto</string>
+    <string name="ui_design_topbar_label">Barra superior</string>
+    <string name="ui_design_topbar_desc">Una barra de título fija en la parte superior de la pantalla</string>
+    <string name="ui_design_sidebar_label">Menú lateral</string>
+    <string name="ui_design_sidebar_desc">Un menú de navegación lateral con sus elementos</string>
+    <string name="ui_design_colors_label">Colores</string>
+    <string name="color_picker_title">Elegir un color</string>
+    <string name="color_picker_custom_desc">Añadir un nuevo color</string>
+    <string name="color_picker_edit_desc">Color personalizado — mantén pulsado para eliminar</string>
+    <!-- Se llamaba "Atrás" aunque en realidad aplica el color — se corrigió una etiqueta confusa. -->
+    <string name="color_picker_back">Aplicar</string>
+    <string name="color_removed_toast">Color eliminado</string>
+
+    <!-- Sección "Opciones del contenedor" en el diálogo de nuevo proyecto Container: nombre y
+         valor inicial de la variable viva (warp) (ver ProjectManager.ContainerOptions). -->
+    <string name="container_options_section_title">Opciones del contenedor</string>
+    <string name="container_options_section_desc">Nombre y valor inicial de la variable viva dentro del contenedor</string>
+    <string name="container_var_name_label">Nombre de la variable</string>
+    <string name="container_var_value_label">Valor inicial</string>
+
+    <!-- Sección "Opciones de la tabla" en el diálogo de nuevo proyecto Table: número de
+         columnas y filas iniciales (ver ProjectManager.TableOptions). -->
+    <string name="table_options_section_title">Opciones de la tabla</string>
+    <string name="table_options_section_desc">Número de columnas y filas de datos de ejemplo al crear</string>
+    <string name="table_columns_label">Columnas</string>
+    <string name="table_rows_label">Filas</string>
+
+    <!-- Sección "Opciones del proyecto" en el diálogo de nuevo Free Project: plantilla inicial
+         (ver ProjectManager.FreeOptions). -->
+    <string name="free_options_section_title">Opciones del proyecto</string>
+    <string name="free_options_section_desc">Elige el contenido de main.rin al crearlo</string>
+    <string name="free_template_empty">Completamente vacío</string>
+    <string name="free_template_greeting">Comentario de bienvenida</string>
+    <string name="free_template_example">Ejemplos de aprendizaje</string>
+
+    <!-- Sección "Opciones de dibujo" en el diálogo de nuevo proyecto Illust: incluir un ejemplo
+         listo o empezar con un lienzo vacío (ver ProjectManager.IllustOptions +
+         CustomLanguageProjectScaffolder.installBundledIllust). -->
+    <string name="illust_options_section_title">Opciones de dibujo</string>
+    <string name="illust_options_section_desc">Empieza con un ejemplo listo o con un lienzo vacío</string>
+    <string name="illust_include_example_label">Incluir un ejemplo listo</string>
+    <string name="illust_include_example_desc">Un archivo hello.illust que explica lo básico del lenguaje</string>
+
+    <!-- Etapas de creación de un proyecto nuevo -->
+    <string name="project_creating_title">Creando proyecto</string>
+    <string name="project_stage_loading">Cargando..</string>
+    <string name="project_stage_preparing">Preparando..</string>
+    <string name="project_stage_done">Listo..</string>
+
+    <!-- Pantalla de archivos -->
+    <string name="new_file_title">Nuevo archivo</string>
+    <string name="upload_file">Subir archivo</string>
+    <string name="upload_media">Subir multimedia</string>
+    <string name="delete_file_title">Eliminar archivo</string>
+    <string name="delete_file_confirm">¿Eliminar el archivo \"%1$s\"?</string>
+    <string name="file_name_hint">Nombre del archivo (ej.: main.rin o layout.indsin)</string>
+    <string name="no_files_yet">Aún no hay archivos. Crea uno nuevo, o sube un archivo o multimedia desde tu dispositivo.</string>
+    <string name="file_uploaded_toast">Archivo subido: %1$s</string>
+    <string name="file_meta_format">%1$s • %2$s</string>
+    <string name="no_app_to_open_file">No hay ninguna app instalada que pueda abrir este tipo de archivo</string>
+    <string name="more_actions">Más</string>
+    <string name="action_duplicate">Duplicar</string>
+    <string name="action_move">Mover a...</string>
+    <string name="action_copy_path">Copiar ruta</string>
+    <string name="file_duplicated_toast">Copia creada: %1$s</string>
+    <string name="path_copied_toast">Ruta copiada</string>
+    <string name="move_dialog_title">Mover \"%1$s\" a carpeta</string>
+    <string name="move_root_option">(raíz del proyecto)</string>
+    <string name="move_no_folders">Aún no hay otras carpetas a las que mover este archivo</string>
+    <string name="file_moved_toast">Movido a: %1$s</string>
+    <string name="search_files_hint">🔍 Buscar en los archivos del proyecto...</string>
+    <string name="search_no_results">Sin resultados</string>
+    <string name="search_result_meta_format">%1$s</string>
+
+    <!-- Subcarpetas y renombrado -->
+    <string name="new_folder_title">Nueva carpeta</string>
+    <string name="folder_name_hint">Nombre de la carpeta</string>
+    <string name="folder_meta_format">Carpeta • %1$s</string>
+    <string name="delete_folder_title">Eliminar carpeta</string>
+    <string name="delete_folder_confirm">¿Eliminar la carpeta \"%1$s\" y todo su contenido?</string>
+    <string name="rename_file_title">Renombrar archivo</string>
+    <string name="rename_folder_title">Renombrar carpeta</string>
+    <string name="rename_library_title">Renombrar biblioteca</string>
+    <string name="file_renamed_toast">Renombrado a: %1$s</string>
+    <string name="folder_renamed_toast">Renombrado a: %1$s</string>
+    <string name="library_renamed_toast">Renombrado a: %1$s</string>
+
+    <!-- Herramientas de archivo ZIP: subir y extraer, o descargar el proyecto como archivo -->
+    <string name="zip_tools_title">Archivo ZIP</string>
+    <string name="zip_upload_extract">Sube un archivo comprimido y extráelo aquí</string>
+    <string name="zip_download_project">Descargar proyecto como archivo ZIP</string>
+    <string name="zip_extracted_toast">Se extrajeron %1$d archivo(s) en el proyecto</string>
+    <string name="zip_extract_error">No se pudo extraer el archivo</string>
+
+    <!-- Nuevo botón de navegación dentro del editor (MainActivity) -->
+    <string name="btn_projects">Proyectos</string>
+
+    <!-- Álbumes de proyectos (ProjectAlbumManager / ProjectsActivity) -->
+    <string name="album_new">Nuevo álbum</string>
+    <string name="album_name_hint">Nombre del álbum</string>
+    <string name="album_created">Álbum creado</string>
+    <string name="album_create_first">Crea un álbum primero</string>
+    <string name="album_uncategorized">Sin categorizar</string>
+    <string name="album_empty">No hay proyectos en este álbum</string>
+
+    <string name="ui_design_more_options">Opciones avanzadas de interfaz</string>
+    <string name="ui_design_bottom_nav">Barra de navegación inferior</string>
+    <string name="ui_design_button_style">Estilo de botón</string>
+    <string name="ui_design_button_filled">Relleno</string>
+    <string name="ui_design_button_soft">Suave</string>
+    <string name="ui_design_button_outline">Contorno</string>
+    <string name="ui_design_font">Fuente</string>
+    <string name="ui_design_typography">Tamaño de texto</string>
+    <string name="ui_design_radius">Radio de esquina</string>
+    <string name="ui_design_background">Color de fondo</string>
+    <string name="ui_design_text_color">Color de texto</string>
+    <string name="ui_design_preview">Vista previa en vivo</string>
+    <string-array name="ui_font_names"><item>Sans</item><item>Serif</item><item>Monoespaciada</item></string-array>
+    <string-array name="ui_font_values"><item>sans</item><item>serif</item><item>mono</item></string-array>
+    <string-array name="ui_typography_names"><item>Pequeño</item><item>Mediano</item><item>Grande</item></string-array>
+    <string-array name="ui_typography_values"><item>small</item><item>medium</item><item>large</item></string-array>
+    <string-array name="ui_radius_names"><item>0</item><item>10</item><item>14</item><item>22</item><item>30</item></string-array>
+    <integer-array name="ui_radius_values"><item>0</item><item>10</item><item>14</item><item>22</item><item>30</item></integer-array>
+</resources>
