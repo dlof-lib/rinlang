@@ -6,7 +6,6 @@ import android.graphics.Canvas
 import android.graphics.ColorFilter
 import android.graphics.PixelFormat
 import android.graphics.drawable.Drawable
-import android.os.Build
 import android.os.Bundle
 import android.util.TypedValue
 import android.view.View
@@ -19,17 +18,16 @@ import androidx.core.view.WindowInsetsCompat
 /**
  * يتعامل مع فرض edge-to-edge على Android 15+ (API 35+، ويشمل Android 16 / API 36).
  *
- * عند targetSdk >= 35 يرسم النظام التطبيق خلف شريط الحالة وشريط التنقل ولا يحترم
+ * عند targetSdk >= 35 (دائماً هنا) يرسم النظام التطبيق خلف شريط الحالة وشريط التنقل ولا يحترم
  * android:statusBarColor، ولا يُصغّر النافذة للوحة المفاتيح (adjustResize). بدل تعديل عشرات الـlayouts،
  * نُطبّق مرة واحدة على جذر المحتوى (android.R.id.content) حشواً يساوي insets النظام + لوحة المفاتيح،
  * ونرسم خلف الشريطين ألوان الثيم نفسها (statusBarColor / navigationBarColor) فيبقى المظهر كما كان.
  *
- * على Android 14 وأقدم (API 24–34) لا يفعل هذا الكلاس شيئاً: السلوك الأصلي للنظام يكفي.
+ * التطبيق يتطلب Android 15+ (minSdk 35) فيعمل هذا الكلاس دائماً.
  */
 object RinSystemBars {
 
     fun install(app: Application) {
-        if (Build.VERSION.SDK_INT < 35) return
         app.registerActivityLifecycleCallbacks(object : Application.ActivityLifecycleCallbacks {
             override fun onActivityStarted(activity: Activity) = applyInsets(activity)
             override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) {}
