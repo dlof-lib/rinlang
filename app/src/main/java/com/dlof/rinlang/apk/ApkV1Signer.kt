@@ -5,7 +5,7 @@ import java.security.MessageDigest
 import java.security.PrivateKey
 import java.security.Signature
 import java.security.cert.X509Certificate
-import java.util.Base64
+import android.util.Base64
 import java.util.zip.ZipEntry
 import java.util.zip.ZipFile
 import java.util.zip.ZipOutputStream
@@ -58,7 +58,7 @@ object ApkV1Signer {
         for ((name, digest) in digestOfEntry) {
             val section = buildString {
                 append(wrap("Name: $name"))
-                append(wrap("SHA-256-Digest: ${Base64.getEncoder().encodeToString(digest)}"))
+                append(wrap("SHA-256-Digest: ${Base64.encodeToString(digest, Base64.NO_WRAP)}"))
                 append("\r\n")
             }
             manifestSections[name] = section
@@ -70,13 +70,13 @@ object ApkV1Signer {
         // ---- CERT.SF ----
         val sfBody = StringBuilder()
         sfBody.append("Signature-Version: 1.0\r\n")
-        sfBody.append(wrap("SHA-256-Digest-Manifest: ${Base64.getEncoder().encodeToString(manifestDigest)}"))
+        sfBody.append(wrap("SHA-256-Digest-Manifest: ${Base64.encodeToString(manifestDigest, Base64.NO_WRAP)}"))
         sfBody.append("Created-By: RinApkExporter (RinStudio)\r\n\r\n")
         for ((name, section) in manifestSections) {
             val sectionDigest = MessageDigest.getInstance("SHA-256")
                 .digest(section.toByteArray(Charsets.UTF_8))
             sfBody.append(wrap("Name: $name"))
-            sfBody.append(wrap("SHA-256-Digest: ${Base64.getEncoder().encodeToString(sectionDigest)}"))
+            sfBody.append(wrap("SHA-256-Digest: ${Base64.encodeToString(sectionDigest, Base64.NO_WRAP)}"))
             sfBody.append("\r\n")
         }
         val sfBytes = sfBody.toString().toByteArray(Charsets.UTF_8)
