@@ -30,7 +30,7 @@ import java.util.regex.Pattern
  * the source through the native Rin engine — this screen is only responsible
  * for laying the result out as a flow diagram.
  */
-class PipelineRunnerActivity : AppCompatActivity() {
+class PipelineRunnerActivity : RinBaseActivity() {
 
     companion object {
         const val EXTRA_CODE = "code"
