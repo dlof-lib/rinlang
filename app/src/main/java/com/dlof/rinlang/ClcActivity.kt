@@ -42,7 +42,7 @@ import java.util.Date
  *    مع مساحة اختيارية لكتابة كود Rin إضافي يُشغَّل بعدها مباشرة (لاستدعاء دوال المكتبة المستورَدة)،
  *    ويعرض مخرجات التشغيل الحقيقية (أو رسالة الخطأ التشخيصية عند الفشل).
  */
-class ClcActivity : AppCompatActivity() {
+class ClcActivity : RinBaseActivity() {
 
     companion object {
         const val EXTRA_PROJECT_NAME = "extra_project_name"
