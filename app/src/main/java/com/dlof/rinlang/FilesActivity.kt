@@ -41,7 +41,7 @@ import java.util.Date
  *  - فتح ملف، أو الدخول إلى مجلد فرعي.
  *  - حذف ملف أو مجلد (مع كل محتوياته).
  */
-class FilesActivity : AppCompatActivity() {
+class FilesActivity : RinBaseActivity() {
 
     companion object {
         const val EXTRA_PROJECT_NAME = "extra_project_name"
