@@ -1019,6 +1019,7 @@ private:
     void registerNatives();
     void registerNativesExtra(); // rin_extra_natives.cpp — Rin 1.0 additions (core helpers + container API)
     void registerNativesExtra5(); // rin_extra_natives5.cpp — عائلة # (#sed #sum #diff #add #to #swap)
+    void registerNativesExtra6(); // rin_extra_natives6.cpp — make.video/audio/api/image.removeBg/ocr (docs/MAKE_MEDIA.md)
     void registerNativesExtra4(); // rin_extra_natives4.cpp — Rin 1.0 (json.* / semver.* / pkg.* / cpp.* جسر C++)
     void registerNativesExtra3(); // rin_extra_natives3.cpp — Rin 1.0 additions (net.* بشبكة حقيقية + container.* إضافية)
     void registerNativesExtra2(); // rin_extra_natives2.cpp — Rin 1.0 additions (sec./file./net./log./automation. + container extras)
