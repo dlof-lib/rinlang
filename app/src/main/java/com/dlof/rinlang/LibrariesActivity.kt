@@ -33,7 +33,7 @@ import java.util.Date
  *  - "إدراج" سطر @import المناسب مباشرة داخل كود المحرر بضغطة واحدة (تُغلق هذه الشاشة
  *    وتُعيد السطر إلى [MainActivity] عبر setResult، فيُدرَج عند مكان المؤشر في الكود).
  */
-class LibrariesActivity : AppCompatActivity() {
+class LibrariesActivity : RinBaseActivity() {
 
     companion object {
         const val EXTRA_PROJECT_NAME = "extra_project_name"
