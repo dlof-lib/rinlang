@@ -15,7 +15,7 @@ import androidx.appcompat.app.AppCompatActivity
  * AndroidManifest بدلاً من MainActivity). تعرض شعار التطبيق واسمه للحظات قصيرة
  * بحركة دخول احترافية (تكبير خفيف + تلاشي) ثم تنتقل تلقائياً إلى المحرر الرئيسي.
  */
-class SplashActivity : AppCompatActivity() {
+class SplashActivity : RinBaseActivity() {
 
     private val handler = Handler(Looper.getMainLooper())
     private val goToEditor = Runnable {
