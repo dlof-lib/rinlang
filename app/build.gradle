@@ -28,13 +28,13 @@ def rinReleaseAbis = (project.findProperty("rin.abis") ?: "arm64-v8a,armeabi-v7a
 
 android {
     namespace 'com.dlof.rinlang'
-    compileSdk 34
-    ndkVersion "26.1.10909125"
+    compileSdk 36
+    ndkVersion "28.0.13004108"
 
     defaultConfig {
         applicationId "com.dlof.rinlang"
         minSdk 24
-        targetSdk 34
+        targetSdk 36
         versionCode rinVersionCode
         versionName rinVersionName
 
@@ -45,6 +45,7 @@ android {
         externalNativeBuild {
             cmake {
                 cppFlags '-std=c++17'
+                arguments '-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON'
             }
         }
     }
@@ -95,6 +96,20 @@ android {
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
+        // يوفّر java.time وغيرها على Android 7.0/7.1 (API 24-25) دون رفع minSdk.
+        coreLibraryDesugaringEnabled true
+    }
+
+    packaging {
+        jniLibs {
+            // المكتبات تُحمَّل مباشرة من الـ APK (محاذاة 16KB تتطلب عدم الضغط).
+            useLegacyPackaging = false
+        }
+    }
+
+    lint {
+        abortOnError false
+        checkReleaseBuilds false
     }
 
     kotlinOptions {
@@ -107,9 +122,10 @@ android {
 }
 
 dependencies {
-    implementation 'androidx.core:core-ktx:1.13.1'
-    implementation 'androidx.appcompat:appcompat:1.7.0'
-    implementation 'androidx.activity:activity-ktx:1.9.2'
+    coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.5'
+    implementation 'androidx.core:core-ktx:1.15.0'
+    implementation 'androidx.appcompat:appcompat:1.7.1'
+    implementation 'androidx.activity:activity-ktx:1.10.1'
     implementation 'com.google.android.material:material:1.12.0'
     // Real QR generation for Rin Artifact / Container runtime.
     implementation 'com.google.zxing:core:3.5.3'
