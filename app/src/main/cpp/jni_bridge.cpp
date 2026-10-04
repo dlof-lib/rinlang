@@ -17,6 +17,7 @@
 #include "rin_interpreter.h"
 #include "rin_artifact.h"
 #include "rin_http.h"
+#include "rin_media.h" // rin::media::setBridge (make.video/audio/image/ocr على أندرويد)
 #include "diagnostics/diagnostic_renderer.h"
 #include "indsin/rin_indsin_c_api.h"
 
@@ -821,8 +822,11 @@ jmethodID g_httpBridgeRequestMethod = nullptr; // MethodID لـ RinHttpBridge.re
 jmethodID g_httpBridgeRequestBinaryGetMethod = nullptr; // MethodID لـ RinHttpBridge.requestBinaryGet(...) (fetchImage/fetchIcon)
 JNIEnv* attachEnv(bool* didAttach);
 std::string jstringToStd(JNIEnv* env, jstring s);
+jobjectArray buildStringArray(JNIEnv* env, const std::vector<std::string>& items);
 jclass g_artifactBridgeClass = nullptr;
 jmethodID g_artifactQrMethod = nullptr;
+jclass g_mediaBridgeClass = nullptr;           // com.dlof.rinlang.RinMediaBridge (make.video/audio/image/ocr)
+jmethodID g_mediaBridgeCallMethod = nullptr;
 
 bool ensureArtifactBridgeAttached(JNIEnv* env) {
     jclass local = env->FindClass("com/dlof/rinlang/RinArtifactBridge");
@@ -848,6 +852,50 @@ std::string callKotlinQrBridge(const std::string& data, int size, int margin) {
     if (obj) env->DeleteLocalRef(obj);
     if (didAttach) g_javaVm->DetachCurrentThread();
     return out;
+}
+
+bool ensureMediaBridgeAttached(JNIEnv* env) {
+    jclass local = env->FindClass("com/dlof/rinlang/RinMediaBridge");
+    if (local == nullptr) { env->ExceptionClear(); return false; }
+    g_mediaBridgeClass = reinterpret_cast<jclass>(env->NewGlobalRef(local));
+    env->DeleteLocalRef(local);
+    if (!g_mediaBridgeClass) return false;
+    g_mediaBridgeCallMethod = env->GetStaticMethodID(g_mediaBridgeClass, "call",
+        "(Ljava/lang/String;[Ljava/lang/String;[Ljava/lang/String;)[Ljava/lang/String;");
+    if (!g_mediaBridgeCallMethod) { env->ExceptionClear(); env->DeleteGlobalRef(g_mediaBridgeClass); g_mediaBridgeClass = nullptr; return false; }
+    return true;
+}
+
+// rin::media::setBridge: RinMediaBridge.call(op, keys, values) -> String[] [handled, ok, error, k1, v1, ...]
+rin::media::BridgeResult callKotlinMediaBridge(const std::string& op, const rin::media::KV& args) {
+    rin::media::BridgeResult r;
+    if (!g_javaVm || !g_mediaBridgeClass || !g_mediaBridgeCallMethod) return r;   // handled=false
+    bool didAttach = false;
+    JNIEnv* env = attachEnv(&didAttach);
+    if (!env) { r.handled = true; r.error = "تعذّر الوصول إلى JNIEnv لجسر الوسائط"; return r; }
+    std::vector<std::string> keys, vals;
+    for (auto& kv : args) { keys.push_back(kv.first); vals.push_back(kv.second); }
+    jstring jOp = env->NewStringUTF(op.c_str());
+    jobjectArray jKeys = buildStringArray(env, keys);
+    jobjectArray jVals = buildStringArray(env, vals);
+    auto jRes = static_cast<jobjectArray>(env->CallStaticObjectMethod(g_mediaBridgeClass, g_mediaBridgeCallMethod, jOp, jKeys, jVals));
+    if (env->ExceptionCheck()) {
+        env->ExceptionDescribe(); env->ExceptionClear();
+        r.handled = true; r.error = "استثناء غير متوقَّع في RinMediaBridge.call (انظر logcat)";
+    } else if (jRes == nullptr || env->GetArrayLength(jRes) < 3) {
+        r.handled = true; r.error = "رد غير صالح من RinMediaBridge.call";
+    } else {
+        jsize n = env->GetArrayLength(jRes);
+        auto at = [&](jsize i) { auto js = (jstring)env->GetObjectArrayElement(jRes, i); std::string s = jstringToStd(env, js); if (js) env->DeleteLocalRef(js); return s; };
+        r.handled = (at(0) == "1");
+        r.ok = (at(1) == "1");
+        r.error = at(2);
+        for (jsize i = 3; i + 1 < n; i += 2) r.fields.push_back({at(i), at(i + 1)});
+    }
+    if (jRes) env->DeleteLocalRef(jRes);
+    env->DeleteLocalRef(jOp); env->DeleteLocalRef(jKeys); env->DeleteLocalRef(jVals);
+    if (didAttach) g_javaVm->DetachCurrentThread();
+    return r;
 }
 
 // FindClass لا يعمل بأمان إلا من الترد (thread) الذي استُدعي منه System.loadLibrary أصلاً (أي هنا
@@ -1379,6 +1427,9 @@ extern "C" JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void* /* reserved */) {
     }
     if (ensureArtifactBridgeAttached(env)) {
         rin::artifact::setQrBridge(callKotlinQrBridge);
+    }
+    if (ensureMediaBridgeAttached(env)) {
+        rin::media::setBridge(callKotlinMediaBridge);
     }
     // else: RinHttpBridge.kt غير موجود بعد في هذه الحزمة/هذا البناء — httpGet/apiCall... ستُعيد
     // خطأً واضحاً بدل الانهيار (انظر رسالة "جسر HTTP ... غير مُهيَّأ بعد" في rin_http.cpp).
