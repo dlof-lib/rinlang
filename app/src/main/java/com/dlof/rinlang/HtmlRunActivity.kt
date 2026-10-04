@@ -51,7 +51,7 @@ import java.io.File
  * <المشروع>/.rin_state/<ملف>.json؛ ضغطة مطوّلة على زر إعادة التحميل تمسحها وتبدأ من جديد.
  * الملفات والشبكة: دوال Rin (readFile/writeFile/httpGet...) تعمل داخل ملف الحاوية كالمعتاد على مجلد المشروع.
  */
-class HtmlRunActivity : AppCompatActivity() {
+class HtmlRunActivity : RinBaseActivity() {
 
     companion object {
         const val EXTRA_PROJECT_NAME = "extra_project_name"
