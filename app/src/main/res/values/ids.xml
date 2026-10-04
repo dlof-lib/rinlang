@@ -7,4 +7,6 @@
 -->
 <resources>
     <item name="btnProjects" type="id"/>
+    <!-- علامة تمنع تثبيت مستمع insets أكثر من مرة على نفس الشاشة (RinSystemBars) -->
+    <item name="rin_insets_installed" type="id"/>
 </resources>
