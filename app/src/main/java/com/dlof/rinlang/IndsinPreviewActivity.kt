@@ -62,6 +62,7 @@ class IndsinPreviewActivity : RinBaseActivity(), IndsinPreviewManager.Listener {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_indsin_preview)
+        onBackPressedDispatcher.addCallback(this, backCallback)
         // ملاحظة: لا نستدعي RinEngine.init(...) هنا عمداً — هذه الشاشة تُفتح دائماً بعد أن يكون
         // المحرر (MainActivity) قد هيّأ الجذر الصحيح (عام أو خاص بمشروع) لكائن RinEngine الوحيد
         // المشترك في العملية؛ استدعاء init مجدداً هنا قد يعيده خطأً إلى الجذر العام في منتصف الجلسة.
@@ -236,9 +237,14 @@ class IndsinPreviewActivity : RinBaseActivity(), IndsinPreviewManager.Listener {
         return true
     }
 
-    @Suppress("DEPRECATION")
-    override fun onBackPressed() {
-        if (!navigateBack()) super.onBackPressed()
+    /** Android 16 (targetSdk 36) لا يستدعي onBackPressed() — نستخدم OnBackPressedCallback بدلاً منه. */
+    private val backCallback = object : androidx.activity.OnBackPressedCallback(true) {
+        override fun handleOnBackPressed() {
+            if (!navigateBack()) {
+                isEnabled = false
+                onBackPressedDispatcher.onBackPressed()
+            }
+        }
     }
 
     override fun onDestroy() {
