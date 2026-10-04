@@ -190,7 +190,7 @@ jobs:
           # 3) NDK/CMake من ملف Gradle نفسه (مصدر حقيقة واحد).
           ndk="$(grep -oP 'ndkVersion\s*=?\s*"\K[^"]+' app/build.gradle.kts | head -n1 || true)"
           cmake="$(grep -oP '\bversion\s*=?\s*"\K[0-9.]+' app/build.gradle.kts | head -n1 || true)"
-          ndk="${ndk:-26.1.10909125}"
+          ndk="${ndk:-28.0.13004108}"
           cmake="${cmake:-3.22.1}"
 
           # 4) اسم الملف: تنقية صارمة، والإدخال لا يُدمَج في الشِّل مباشرة.
@@ -324,6 +324,7 @@ jobs:
         run: |
           set -euo pipefail
           sdkmanager --install "platform-tools" \
+            "platforms;android-36" "build-tools;36.0.0" \
             "ndk;${{ needs.preflight.outputs.ndk }}" \
             "cmake;${{ needs.preflight.outputs.cmake }}" > /dev/null
           echo "NDK/CMake جاهزان."
