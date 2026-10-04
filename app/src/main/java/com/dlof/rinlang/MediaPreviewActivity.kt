@@ -17,7 +17,7 @@ import java.io.File
  * النصّي، أو الاعتماد على تطبيق خارجي لكل صورة/فيديو). تُفتَح من [FilesActivity] عند الضغط على
  * أي ملف يحدّده [ProjectManager.isImageFile] أو [ProjectManager.isVideoFile].
  */
-class MediaPreviewActivity : AppCompatActivity() {
+class MediaPreviewActivity : RinBaseActivity() {
 
     companion object {
         const val EXTRA_FILE_PATH = "extra_file_path"
