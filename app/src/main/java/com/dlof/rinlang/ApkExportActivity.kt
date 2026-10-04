@@ -35,7 +35,7 @@ import java.util.concurrent.Executors
  * المستخدم في RinFlow لعرض خطوات البناء والتوقيع سطراً سطراً — مُنظَّمة الآن في أقسام
  * واضحة: الهوية، الأيقونة، شاشة البداية، التوافق (إصدارات أندرويد)، والبناء.
  */
-class ApkExportActivity : AppCompatActivity() {
+class ApkExportActivity : RinBaseActivity() {
 
     private val mainHandler = Handler(Looper.getMainLooper())
     private val buildExecutor = Executors.newSingleThreadExecutor()
