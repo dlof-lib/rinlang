@@ -1,0 +1,220 @@
+name: RinStudio — APK لكل إصدار أندرويد
+
+# يبني حزمة APK مستقلة لكل من: Android 15 (API 35) و Android 16 (API 36) و Android 17 (API 37).
+# كل الحزم minSdk = 35؛ الفرق بينها هو targetSdk (السلوك الذي يطبّقه النظام على التطبيق).
+# التوقيع: إن وُجدت أسرار المستودع RIN_KEYSTORE_BASE64 / RIN_KEYSTORE_PASSWORD / RIN_KEY_ALIAS /
+# RIN_KEY_PASSWORD يُستخدم مفتاحك الدائم (مطلوب لتحديث التطبيق فوق نسخة سابقة)، وإلا يُولَّد مفتاح
+# مؤقت لهذه التشغيلة فقط (للتجربة).
+
+on:
+  push:
+    tags: [ "v*" ]
+  pull_request:
+    paths:
+      - "app/**"
+      - "build.gradle*"
+      - "settings.gradle.kts"
+      - "gradle.properties"
+      - "VERSION"
+      - ".github/workflows/build-android-versions.yml"
+  workflow_dispatch:
+    inputs:
+      publish_release:
+        description: "إنشاء GitHub Release وإرفاق الحزم (يتطلب تشغيلاً على وسم v*)"
+        type: boolean
+        default: false
+
+concurrency:
+  group: android-versions-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  JAVA_VERSION: "17"
+  GRADLE_VERSION: "8.13"
+  NDK_VERSION: "28.0.13004108"
+  CMAKE_VERSION: "3.22.1"
+  # مستوى الـ API المترجَم عليه. API 37 يحتاج AGP 9.1+ و Gradle 9.3+؛ مع AGP 8.13 نترجم على 36
+  # ونضبط targetSdk فقط (انظر docs/ANDROID_VERSIONS.md).
+  COMPILE_SDK: "36"
+
+jobs:
+  build:
+    name: ${{ matrix.label }} (API ${{ matrix.api }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { slug: android15, label: "Android 15", api: 35 }
+          - { slug: android16, label: "Android 16", api: 36 }
+          - { slug: android17, label: "Android 17", api: 37 }
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: ""
+
+      - name: Install SDK platform, build-tools, NDK, CMake
+        run: |
+          set -euo pipefail
+          yes | sdkmanager --licenses > /dev/null || true
+          sdkmanager --install \
+            "platform-tools" \
+            "platforms;android-${COMPILE_SDK}" \
+            "build-tools;36.0.0" \
+            "ndk;${NDK_VERSION}" \
+            "cmake;${CMAKE_VERSION}" > /dev/null
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: ${{ env.GRADLE_VERSION }}
+          cache-read-only: ${{ github.ref_type != 'tag' && github.ref_name != 'main' }}
+
+      - name: Prepare signing key
+        id: signing
+        env:
+          KS_B64: ${{ secrets.RIN_KEYSTORE_BASE64 }}
+          KS_PASS: ${{ secrets.RIN_KEYSTORE_PASSWORD }}
+          KS_ALIAS: ${{ secrets.RIN_KEY_ALIAS }}
+          KS_KEY_PASS: ${{ secrets.RIN_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/signing"
+          ks="$RUNNER_TEMP/signing/release.keystore"
+          if [ -n "${KS_B64:-}" ] && [ -n "${KS_PASS:-}" ]; then
+            echo "$KS_B64" | base64 -d > "$ks"
+            alias="${KS_ALIAS:-rin}"
+            key_pass="${KS_KEY_PASS:-$KS_PASS}"
+            store_pass="$KS_PASS"
+            echo "permanent=true" >> "$GITHUB_OUTPUT"
+          else
+            store_pass="$(openssl rand -hex 24)"
+            key_pass="$store_pass"
+            alias="rin"
+            keytool -genkeypair -keystore "$ks" -alias "$alias" \
+              -keyalg RSA -keysize 3072 -validity 3650 \
+              -storepass "$store_pass" -keypass "$key_pass" \
+              -dname "CN=RinStudio CI, O=DLoF, C=SA" > /dev/null 2>&1
+            echo "permanent=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::لم تُضبط أسرار التوقيع — استُخدم مفتاح مؤقت. لن يمكن تحديث هذه الحزم فوق حزم موقّعة بمفتاح آخر."
+          fi
+          echo "::add-mask::$store_pass"
+          echo "::add-mask::$key_pass"
+          {
+            echo "RIN_KEYSTORE_PATH=$ks"
+            echo "RIN_KEYSTORE_PASSWORD=$store_pass"
+            echo "RIN_KEY_ALIAS=$alias"
+            echo "RIN_KEY_PASSWORD=$key_pass"
+          } >> "$GITHUB_ENV"
+
+      - name: Build release APK (${{ matrix.label }})
+        run: |
+          gradle :app:assembleRelease \
+            -Prin.targetSdk=${{ matrix.api }} \
+            -Prin.compileSdk=${COMPILE_SDK} \
+            -Prin.versionSuffix=-${{ matrix.slug }} \
+            --build-cache --stacktrace
+
+      - name: Collect APK
+        id: collect
+        run: |
+          set -euo pipefail
+          version="$(tr -d '[:space:]' < VERSION)"
+          src="$(find app/build/outputs/apk/release -name '*.apk' | head -n1)"
+          [ -n "$src" ] || { echo "::error::لم يُنتَج أي APK."; exit 1; }
+          mkdir -p dist
+          out="dist/RinStudio-${version}-${{ matrix.slug }}-api${{ matrix.api }}.apk"
+          cp "$src" "$out"
+          echo "apk=$out" >> "$GITHUB_OUTPUT"
+
+      - name: Verify APK (signature, SDK levels, 16KB alignment)
+        env:
+          APK: ${{ steps.collect.outputs.apk }}
+        run: |
+          set -euo pipefail
+          bt="$ANDROID_HOME/build-tools/36.0.0"
+          "$bt/apksigner" verify --verbose --print-certs "$APK" | tee dist/verify-${{ matrix.slug }}.txt
+
+          badging="$("$bt/aapt2" dump badging "$APK")"
+          min="$(sed -n "s/.*minSdkVersion:'\([0-9]*\)'.*/\1/p" <<< "$badging" | head -n1)"
+          target="$(sed -n "s/.*targetSdkVersion:'\([0-9]*\)'.*/\1/p" <<< "$badging" | head -n1)"
+          echo "minSdk=$min targetSdk=$target"
+          [ "$min" = "35" ] || { echo "::error::minSdk المتوقع 35 والموجود $min"; exit 1; }
+          [ "$target" = "${{ matrix.api }}" ] || { echo "::error::targetSdk المتوقع ${{ matrix.api }} والموجود $target"; exit 1; }
+
+          # محاذاة صفحات 16KB للمكتبات الأصلية (شرط Google Play وأجهزة 16KB)
+          "$bt/zipalign" -c -P 16 -v 4 "$APK" > dist/zipalign-${{ matrix.slug }}.txt \
+            || { tail -n 20 dist/zipalign-${{ matrix.slug }}.txt; echo "::error::المكتبات الأصلية غير محاذاة لصفحات 16KB"; exit 1; }
+
+      - name: Checksum
+        env:
+          APK: ${{ steps.collect.outputs.apk }}
+        run: |
+          cd dist
+          sha256sum "$(basename "$APK")" | tee "$(basename "$APK").sha256"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: RinStudio-${{ matrix.slug }}-api${{ matrix.api }}
+          path: |
+            dist/*.apk
+            dist/*.sha256
+            dist/verify-${{ matrix.slug }}.txt
+          if-no-files-found: error
+          retention-days: 30
+
+  release:
+    name: GitHub Release
+    needs: build
+    if: github.ref_type == 'tag' && (github.event_name == 'push' || inputs.publish_release)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download all APKs
+        uses: actions/download-artifact@v4
+        with:
+          path: release
+          pattern: RinStudio-android*
+          merge-multiple: true
+
+      - name: Combined checksums
+        run: |
+          cd release
+          sha256sum *.apk > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            release/*.apk
+            release/SHA256SUMS.txt
+          generate_release_notes: true
+          body: |
+            ## RinStudio — حزمة لكل إصدار أندرويد
+
+            | الحزمة | يستهدف | الحد الأدنى |
+            |---|---|---|
+            | `*-android15-api35.apk` | Android 15 (API 35) | Android 15 |
+            | `*-android16-api36.apk` | Android 16 (API 36) | Android 15 |
+            | `*-android17-api37.apk` | Android 17 (API 37) | Android 15 |
+
+            اختر الحزمة المطابقة لإصدار جهازك (أو الأقرب إليه). كل الحزم تعمل على Android 15 وما فوق.
+            تحقّق من السلامة عبر `SHA256SUMS.txt`.
