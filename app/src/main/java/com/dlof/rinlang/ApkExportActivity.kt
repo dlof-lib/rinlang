@@ -68,7 +68,7 @@ class ApkExportActivity : RinBaseActivity() {
 
     /** مستويات API معروضة للاختيار — من 24 (أدنى ما يضمنه build.gradle للحزمة المضيفة، لا
      * يصحّ النزول تحته لأن classes.dex والمكتبات الأصلية المُعاد استخدامها بُنيت على أساسه)
-     * حتى 34 (compileSdk الحالي). */
+     * حتى 36 (Android 16، compileSdk الحالي). */
     private val sdkLevels = listOf(
         24 to "API 24 — Android 7.0",
         26 to "API 26 — Android 8.0",
@@ -77,7 +77,9 @@ class ApkExportActivity : RinBaseActivity() {
         30 to "API 30 — Android 11",
         31 to "API 31 — Android 12",
         33 to "API 33 — Android 13",
-        34 to "API 34 — Android 14"
+        34 to "API 34 — Android 14",
+        35 to "API 35 — Android 15",
+        36 to "API 36 — Android 16"
     )
 
     private val pickIconLauncher = registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
@@ -141,7 +143,7 @@ class ApkExportActivity : RinBaseActivity() {
         spinnerMinSdk.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, sdkLabels)
         spinnerTargetSdk.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, sdkLabels)
         spinnerMinSdk.setSelection(0) // API 24 — نفس الحد الأدنى الحقيقي للحزمة المضيفة
-        spinnerTargetSdk.setSelection(sdkLevels.lastIndex) // API 34 — نفس compileSdk الحالي
+        spinnerTargetSdk.setSelection(sdkLevels.lastIndex) // API 36 — Android 16، نفس compileSdk الحالي
 
         btnPickIcon.setOnClickListener { pickIconLauncher.launch("image/*") }
 
