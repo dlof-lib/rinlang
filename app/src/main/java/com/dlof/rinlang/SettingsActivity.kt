@@ -21,7 +21,7 @@ import kotlin.math.roundToInt
  *
  * ترتيب الأقسام: المحرر ← المساعدة أثناء الكتابة ← الحفظ ← التشغيل ← الواجهة ← المشاريع ← اللغة.
  */
-class SettingsActivity : AppCompatActivity() {
+class SettingsActivity : RinBaseActivity() {
 
     // ---- نموذج المخطط -----------------------------------------------------------------------
 
@@ -155,6 +155,9 @@ class SettingsActivity : AppCompatActivity() {
             Row.Section(R.string.settings_language_section_title),
             Row.Link("🌐", R.string.settings_language_current, R.string.settings_language_hint) {
                 startActivity(Intent(this, LanguageActivity::class.java))
+            },
+            Row.Link("📦", R.string.settings_packs_title, R.string.settings_packs_hint) {
+                startActivity(Intent(this, ContentPacksActivity::class.java))
             }
         )
     }
