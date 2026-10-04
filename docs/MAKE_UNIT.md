@@ -65,7 +65,12 @@ Make Unit:
 .end/make=reportCard
 ```
 
+## قدرات الوسائط (`video` `audio` `api` `image` `ocr`)
+استدعاء `make.video*` / `make.audio*` / `make.api*` / `make.image.removeBg` / `make.ocr` داخل أي تعبير يُسجَّل
+كقدرة، ويخضع لنفس `use/need/allow/deny/strict`. التفاصيل والأنواع المسموحة افتراضياً: [`MAKE_MEDIA.md`](./MAKE_MEDIA.md).
+
 ## انظر أيضًا
+- [`MAKE_MEDIA.md`](./MAKE_MEDIA.md) — دوال `make.video/audio/api/image/ocr`.
 - [`containers.md`](./containers.md) — `@container` بكل أنواعه، وكيف تُعمَّم نفس
   كلمات السياسة الأربع لأي حاوية عادية، لا فقط Make Unit.
 - [`RECKON.md`](./RECKON.md) — `reckon` يعمل بلا أي فرق داخل `@make.(name)`.
