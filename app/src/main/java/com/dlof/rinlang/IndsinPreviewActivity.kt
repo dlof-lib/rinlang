@@ -23,7 +23,7 @@ import org.json.JSONObject
  * Nothing drawn here is simulated: the Fabric tree, its geometry, the strand/cache-hit counters
  * in the footer and every Snag error message all come straight from [RinEngine.IndsinSession].
  */
-class IndsinPreviewActivity : AppCompatActivity(), IndsinPreviewManager.Listener {
+class IndsinPreviewActivity : RinBaseActivity(), IndsinPreviewManager.Listener {
 
     companion object {
         /** Rin source to render — a fresh "Run" always restarts the session with this. */
