@@ -1,5 +1,6 @@
 package com.dlof.rinlang.network
 
+import com.dlof.rinlang.RinBaseActivity
 import android.net.ConnectivityManager
 import android.os.Bundle
 import android.view.View
@@ -16,7 +17,7 @@ import androidx.appcompat.app.AppCompatActivity
  *
  * لا حاجة لأي تعديل في XML أو في onCreate الحالي؛ يكفي وراثة هذا الصف بدل AppCompatActivity.
  */
-abstract class BaseConnectivityActivity : AppCompatActivity() {
+abstract class BaseConnectivityActivity : RinBaseActivity() {
 
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
     private var overlay: NoConnectionOverlayView? = null
