@@ -3,6 +3,7 @@ package com.dlof.rinlang.store.languages
 import android.content.Context
 import com.dlof.rinlang.Project
 import com.dlof.rinlang.ProjectManager
+import com.dlof.rinlang.packs.PackStore
 import java.io.File
 
 /**
@@ -86,44 +87,59 @@ object CustomLanguageProjectScaffolder {
         return project
     }
 
+    /** معرّف حزمة الأصول التي تحمل ملفات لغة Illust (انظر content-packs/packs.json). */
+    const val ILLUST_PACK_ID = "illust-lang"
+
+    private const val ILLUST_LANGUAGE_ID = "illust"
+    private const val ILLUST_LANGUAGE_NAME = "Illust"
+    private const val ILLUST_FILE_EXTENSION = "illust"
+    private const val ILLUST_DEVELOPER = "Rin Team"
+    private const val ILLUST_DESCRIPTION =
+        "لغة رسم/جرافيكس صغيرة فوق Rin: أوامر نصية (canvas/rect/circle/ellipse/polygon/path/line/text/fill/stroke/group/rotate) " +
+            "مع متغيرات وشروط وحلقات ودوال قابلة لإعادة الاستخدام، تتحول لمخرجات SVG حقيقية."
+
+    private val ILLUST_FILES = listOf(
+        "Lexer.rin", "Parser.rin", "Interpreter.rin", "CodeGen.rin", "run.rin", "syntax.rinsyntax.json", "README.md"
+    )
+
     /**
-     * يثبّت لغة "Illust" المضمَّنة (راجع [BundledIllustLanguage]) داخل مشروع أُنشئ حديثاً:
-     * يحذف main.rin الترحيبي، يكتب كل ملفات اللغة الجاهزة والمُختبرة كما هي (بلا استبدال
-     * عناصر نائبة، فهي محتوى حقيقي ثابت وليست قالباً فارغاً)، ثم يسجّلها في
-     * [CustomLanguageRegistry] حتى تُلوَّن ملفات .illust فوراً من أول فتح.
-     */
-    /**
-     * [includeExample] يتحكّم بمحتوى examples/: true (الافتراضي) يثبّت مثال hello.illust
-     * الجاهز كما كان الحال دائماً؛ false يثبّت بدلاً منه canvas.illust فارغاً (تعليق توضيحي
-     * فقط)، لمن يفضّل البدء بلوحة رسم فارغة بدل مثال معبّأ مسبقاً.
+     * يثبّت لغة "Illust" داخل مشروع أُنشئ حديثاً من ملفات حزمة [ILLUST_PACK_ID] المنزَّلة (لم تعد مضمَّنة
+     * كسلاسل Kotlin داخل التطبيق لتقليل حجمه): يحذف main.rin الترحيبي، ينسخ ملفات اللغة الجاهزة والمُختبرة كما هي،
+     * ثم يسجّلها في [CustomLanguageRegistry] حتى تُلوَّن ملفات .illust فوراً من أول فتح.
+     *
+     * يجب أن تكون الحزمة مثبّتة قبل الاستدعاء (استعمل PackDownloadDialog.ensure)، وإلا يُرمى [IllegalStateException].
+     *
+     * [includeExample] يتحكّم بمحتوى examples/: true (الافتراضي) يثبّت مثال hello.illust الجاهز؛
+     * false يثبّت بدلاً منه canvas.illust فارغاً (تعليق توضيحي فقط).
      */
     fun installBundledIllust(context: Context, projectDir: File, includeExample: Boolean = true) {
-        File(projectDir, "main.rin").delete()
+        if (!PackStore.isInstalled(context, ILLUST_PACK_ID)) {
+            throw IllegalStateException("Illust pack ($ILLUST_PACK_ID) is not installed")
+        }
+        val pack = PackStore.dirOf(context, ILLUST_PACK_ID)
 
-        File(projectDir, "Lexer.rin").writeText(BundledIllustLanguage.LEXER_RIN, Charsets.UTF_8)
-        File(projectDir, "Parser.rin").writeText(BundledIllustLanguage.PARSER_RIN, Charsets.UTF_8)
-        File(projectDir, "Interpreter.rin").writeText(BundledIllustLanguage.INTERPRETER_RIN, Charsets.UTF_8)
-        File(projectDir, "CodeGen.rin").writeText(BundledIllustLanguage.CODEGEN_RIN, Charsets.UTF_8)
-        File(projectDir, "run.rin").writeText(BundledIllustLanguage.RUN_RIN, Charsets.UTF_8)
-        File(projectDir, "syntax.rinsyntax.json").writeText(BundledIllustLanguage.SYNTAX_JSON, Charsets.UTF_8)
-        File(projectDir, "README.md").writeText(BundledIllustLanguage.README_MD, Charsets.UTF_8)
+        File(projectDir, "main.rin").delete()
+        for (name in ILLUST_FILES) {
+            File(pack, name).copyTo(File(projectDir, name), overwrite = true)
+        }
 
         val examplesDir = File(projectDir, "examples").apply { mkdirs() }
-        if (includeExample) {
-            File(examplesDir, "hello.illust").writeText(BundledIllustLanguage.EXAMPLE_HELLO_ILLUST, Charsets.UTF_8)
+        val hello = File(pack, "examples/hello.illust")
+        if (includeExample && hello.isFile) {
+            hello.copyTo(File(examplesDir, "hello.illust"), overwrite = true)
         } else {
             File(examplesDir, "canvas.illust").writeText(
-                "// لوحة رسم فارغة — ابدأ الرسم هنا بلغة ${BundledIllustLanguage.LANGUAGE_NAME}\n",
+                "// لوحة رسم فارغة — ابدأ الرسم هنا بلغة $ILLUST_LANGUAGE_NAME\n",
                 Charsets.UTF_8
             )
         }
 
         val manifest = CustomLanguageManifest(
-            id = BundledIllustLanguage.LANGUAGE_ID,
-            name = BundledIllustLanguage.LANGUAGE_NAME,
-            developer = BundledIllustLanguage.DEVELOPER,
-            fileExtension = BundledIllustLanguage.FILE_EXTENSION,
-            description = BundledIllustLanguage.DESCRIPTION
+            id = ILLUST_LANGUAGE_ID,
+            name = ILLUST_LANGUAGE_NAME,
+            developer = ILLUST_DEVELOPER,
+            fileExtension = ILLUST_FILE_EXTENSION,
+            description = ILLUST_DESCRIPTION
         )
         manifest.write(projectDir)
 
