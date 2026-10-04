@@ -6392,6 +6392,7 @@ void Interpreter::registerNatives() {
     registerNativesExtra3(); // Rin 1.0: net.* بشبكة حقيقية + container.* إضافية (rin_extra_natives3.cpp)
     registerNativesExtra4(); // Rin 1.0: json./semver./pkg./cpp. (rin_extra_natives4.cpp)
     registerNativesExtra5(); // عائلة #: #sed #sum #diff #add #to #swap (rin_extra_natives5.cpp)
+    registerNativesExtra6(); // make.video/audio/api/image.removeBg/ocr (rin_extra_natives6.cpp)
     registerNativesOop(); // Rin 1.0: oop.* — استبطان الأصناف والكائنات + أدوات OOP (rin_oop_natives.cpp)
     registerNativesInput(); // Rin 1.0: نماذج الإدخال (معاملة/تداخل/مُدقِّق النموذج) فوق input() — بعد oop.* لأنها تستدعيها (rin_input.cpp)
 }
@@ -11780,6 +11781,7 @@ bool Interpreter::livePropertyGet(const EnvPtr& env, const std::string& name, co
 #include "rin_extra_natives3.cpp"
 #include "rin_extra_natives4.cpp"
 #include "rin_extra_natives5.cpp"
+#include "rin_extra_natives6.cpp" // make.video/audio/api/image/ocr (docs/MAKE_MEDIA.md)
 #include "rin_table.cpp" // توسعة الجدول: دوال اللغة الموجودة تفهم الجدول (انظر رأس الملف)
 #endif
 
