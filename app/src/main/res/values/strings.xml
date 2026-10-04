@@ -259,6 +259,7 @@ print \"Hello, \" + name + \"!\";
     <string name="apk_export_section_build">البناء</string>
     <string name="apk_export_action_build">بناء وتوقيع APK</string>
     <string name="apk_export_action_install">تثبيت</string>
+    <string name="apk_install_allow_unknown_sources">اسمح بالتثبيت من هذا المصدر ثم ارجع واضغط «تثبيت» مرة أخرى</string>
     <string name="apk_export_action_share">مشاركة</string>
     <string name="apk_export_action_save">حفظ في التنزيلات</string>
     <string name="apk_export_status_idle">جاهز للتصدير</string>
