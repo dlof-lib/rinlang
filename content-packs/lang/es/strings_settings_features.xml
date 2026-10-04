@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_theme_section_title">Tema</string>
+    <string name="theme_system">Sistema</string>
+    <string name="theme_dark">Oscuro</string>
+    <string name="theme_light">Claro</string>
+    <string name="settings_layout_section_title">Diseño del editor</string>
+    <string name="layout_standard">Estándar</string>
+    <string name="layout_focus">Enfoque</string>
+    <string name="layout_compact">Compacto</string>
+    <string name="settings_projects_section_title">Proyectos</string>
+    <string name="sort_recent">Recientes</string>
+    <string name="sort_name">Nombre</string>
+    <string name="sort_type">Tipo</string>
+    <string name="settings_show_console">Mostrar consola</string>
+    <string name="settings_show_console_hint">Mostrar el panel de consola dentro del editor</string>
+    <string name="settings_show_toolbar">Mostrar barra de herramientas</string>
+    <string name="settings_show_toolbar_hint">Mostrar la barra de herramientas del editor</string>
+</resources>
