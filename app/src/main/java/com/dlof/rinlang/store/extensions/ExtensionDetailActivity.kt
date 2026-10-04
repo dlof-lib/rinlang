@@ -1,5 +1,6 @@
 package com.dlof.rinlang.store.extensions
 
+import com.dlof.rinlang.RinBaseActivity
 import android.app.AlertDialog
 import android.graphics.BitmapFactory
 import android.os.Bundle
@@ -27,7 +28,7 @@ import java.util.Date
  * الحجم، التقييمات)، بالإضافة إلى شاشة أمان قبل التثبيت (الملفات/الأذونات/المطوّر/التوقيع
  * الرقمي) وأزرار تثبيت/تحديث/إزالة/تعطيل/تمكين.
  */
-class ExtensionDetailActivity : AppCompatActivity() {
+class ExtensionDetailActivity : RinBaseActivity() {
 
     companion object {
         const val EXTRA_EXTENSION = "extra_extension"
