@@ -11,7 +11,7 @@
 <p>
 <img alt="Version" src="https://img.shields.io/badge/Rin-1.0.0-1DB143?style=for-the-badge" />
 <img alt="Engine" src="https://img.shields.io/badge/engine-C%2B%2B17-00599C?style=for-the-badge&logo=cplusplus&logoColor=white" />
-<img alt="Android" src="https://img.shields.io/badge/RinStudio-Android%207.0%2B-3DDC84?style=for-the-badge&logo=android&logoColor=white" />
+<img alt="Android" src="https://img.shields.io/badge/RinStudio-Android%2015%2B-3DDC84?style=for-the-badge&logo=android&logoColor=white" />
 <img alt="WASM" src="https://img.shields.io/badge/Web-WebAssembly-654FF0?style=for-the-badge&logo=webassembly&logoColor=white" />
 <img alt="License" src="https://img.shields.io/badge/license-MIT-4E4E4E?style=for-the-badge" />
 </p>
@@ -32,8 +32,7 @@
 
 | | الإصدار |
 |---|---|
-| الحد الأدنى | Android 7.0 (API 24) |
-| الموصى به | Android 10+ (API 29) |
+| الحد الأدنى | Android 15 (API 35) |
 | الهدف | Android 16 (API 36) |
 
 التفاصيل الكاملة في [CHANGES_ANDROID16.md](CHANGES_ANDROID16.md).
