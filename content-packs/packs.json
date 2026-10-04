@@ -1,0 +1,32 @@
+{
+  "schema": 1,
+  "_comment": "مصدر الحقيقة لحزم المحتوى القابلة للتنزيل. يبنيها scripts/build_content_packs.py إلى zip + catalog.json. غيّر 'version' عند تعديل محتوى حزمة (الكشف الفعلي عن التحديث يتم عبر sha256).",
+  "packs": [
+    {
+      "id": "lang-en",
+      "type": "language",
+      "language": "en",
+      "version": 1,
+      "title": "English",
+      "description": "English interface strings",
+      "source": "lang/en"
+    },
+    {
+      "id": "lang-es",
+      "type": "language",
+      "language": "es",
+      "version": 1,
+      "title": "Español",
+      "description": "Cadenas de la interfaz en español",
+      "source": "lang/es"
+    },
+    {
+      "id": "illust-lang",
+      "type": "asset",
+      "version": 1,
+      "title": "Illust",
+      "description": "لغة Illust للرسم (Lexer/Parser/Interpreter/CodeGen + أمثلة) لمشاريع Illust الجديدة",
+      "source": "../examples/customlang/illust"
+    }
+  ]
+}
