@@ -15,7 +15,7 @@ import com.dlof.rinlang.store.extensions.RinExtensionsMarketplaceActivity
  * الملفات والمكتبات مرتبطتان بمشروع محدد (EXTRA_PROJECT_NAME)، لذا عند عدم وجود
  * مشروع مفتوح حالياً يتم توجيه المستخدم إلى شاشة المشاريع أولاً لاختيار واحد.
  */
-class MoreActivity : AppCompatActivity() {
+class MoreActivity : RinBaseActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
