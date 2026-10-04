@@ -28,7 +28,7 @@ import androidx.recyclerview.widget.RecyclerView
  * وتسمح بإنشاء مشروع جديد، إعادة تسميته، حذفه، أو فتحه (ينتقل لشاشة الملفات
  * الخاصة به عبر [FilesActivity]).
  */
-class ProjectsActivity : AppCompatActivity() {
+class ProjectsActivity : RinBaseActivity() {
 
     private lateinit var rvProjects: RecyclerView
     private lateinit var txtEmpty: View
@@ -443,6 +443,7 @@ class ProjectsActivity : AppCompatActivity() {
                     typography = currentTypography(),
                     cornerRadius = currentRadius()
                 )
+                val create = {
                 ProjectCreationProgressDialog(this).run(
                     work = {
                         val project = ProjectManager.createProject(this, name, selectedType, uiOptions, indsinTemplate = selectedIndsinTemplate)
@@ -461,6 +462,17 @@ class ProjectsActivity : AppCompatActivity() {
                         }
                     }
                 )
+                }
+                // لغة Illust لا تُشحن داخل الـ APK (لتقليل الحجم): تُنزَّل كحزمة أصول عند أول مشروع Illust.
+                if (selectedType == ProjectType.ILLUST) {
+                    com.dlof.rinlang.packs.PackDownloadDialog.ensure(
+                        this,
+                        com.dlof.rinlang.store.languages.CustomLanguageProjectScaffolder.ILLUST_PACK_ID,
+                        getString(R.string.project_type_illust)
+                    ) { create() }
+                } else {
+                    create()
+                }
             }
             .setNegativeButton(R.string.cancel, null)
             .show()
