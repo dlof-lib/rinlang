@@ -140,5 +140,6 @@ dependencies {
     // في الحزمة (يعمل بلا إنترنت). للاتينية فقط (لا يدعم العربية) — العربية عبر Tesseract أدناه.
     implementation("com.google.mlkit:text-recognition:16.0.1")
     // العربية: ML Kit لا يدعمها، فتمر عبر Tesseract (مع ara.traineddata/eng.traineddata — انظر scripts/fetch_tessdata.sh).
+    // المصدر: JitPack (مُعرَّف في settings.gradle.kts) — غير متاحة على Maven Central.
     implementation("cz.adaptech.tesseract4android:tesseract4android:4.9.0")
 }
