@@ -24,23 +24,35 @@ val rinVersionCode = (rinVersionParts[0].toInt() * 10000) +
 // و rin.abis="" يبني كل المعماريات (الافتراضي arm64-v8a و armeabi-v7a لـ release فقط؛ debug يبني الكل
 // ليعمل على المحاكيات x86). اللغات الإضافية (en/es) ومحتوى مثل لغة Illust لا تُشحن في الـ APK أصلاً:
 // تُنزَّل كحزم عند الحاجة (انظر content-packs/ و app/src/main/java/com/dlof/rinlang/packs/).
+// ---- نسخة لكل إصدار أندرويد --------------------------------------------------------------
+// -Prin.targetSdk=35|36|37  → السلوك الذي يطبّقه النظام على التطبيق (Android 15 / 16 / 17).
+// -Prin.compileSdk=36       → مكتبة API المترجَم عليها. الافتراضي 36 (يتوافق مع AGP 8.13)؛ ارفعه إلى 37
+//                             فقط مع AGP 9.1+ و Gradle 9.3+ (انظر docs/ANDROID_VERSIONS.md).
+// -Prin.versionSuffix=-android17 → لاحقة تُضاف لـ versionName لتمييز الحزم.
+// minSdk ثابت = 35 (Android 15) لكل النسخ.
+val rinTargetSdk = (findProperty("rin.targetSdk") ?: "36").toString().toInt()
+val rinCompileSdk = (findProperty("rin.compileSdk") ?: "36").toString().toInt()
+val rinVersionSuffix = (findProperty("rin.versionSuffix") ?: "").toString()
+require(rinTargetSdk in 35..37) { "rin.targetSdk يجب أن يكون 35 أو 36 أو 37 (وُجد $rinTargetSdk)" }
+
 val rinMinify = (findProperty("rin.minify") ?: "true").toString().toBoolean()
 val rinReleaseAbis = (findProperty("rin.abis") ?: "arm64-v8a,armeabi-v7a").toString()
     .split(",").map { it.trim() }.filter { it.isNotEmpty() }
 
 android {
     namespace = "com.dlof.rinlang"
-    // Android 16 (API 36): compileSdk/targetSdk. minSdk 24 = Android 7.0 (الحد الأدنى المدعوم)،
-    // والموصى به Android 10+ (API 29). NDK r28 يُولّد مكتبات native محاذاة لصفحات 16KB افتراضياً.
-    compileSdk = 36
+    // يدعم Android 15 (API 35) وما فوق: minSdk 35، و compileSdk/targetSdk 36 (Android 16).
+    // NDK r28 يُولّد مكتبات native محاذاة لصفحات 16KB افتراضياً.
+    compileSdk = rinCompileSdk
     ndkVersion = "28.0.13004108"
 
     defaultConfig {
         applicationId = "com.dlof.rinlang"
-        minSdk = 24
-        targetSdk = 36
+        minSdk = 35 // Android 15 وما فوق
+        targetSdk = rinTargetSdk
         versionCode = rinVersionCode
         versionName = rinVersionName
+        versionNameSuffix = rinVersionSuffix
 
         // موارد المكتبات (Material/AppCompat/Firebase...) بعشرات اللغات لا حاجة لها: نُبقي لغات التطبيق فقط.
         // (en/es تأتي من حزم اللغة المنزَّلة وقت التشغيل، لكن نصوص المكتبات الافتراضية بالإنجليزية تكفيها.)
@@ -102,8 +114,6 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
-        // يوفّر java.time وغيرها على Android 7.0/7.1 (API 24-25) دون رفع minSdk.
-        isCoreLibraryDesugaringEnabled = true
     }
 
     packaging {
@@ -129,7 +139,6 @@ android {
 }
 
 dependencies {
-    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
     implementation("androidx.core:core-ktx:1.15.0")
     implementation("androidx.appcompat:appcompat:1.7.1")
     implementation("androidx.activity:activity-ktx:1.10.1")
