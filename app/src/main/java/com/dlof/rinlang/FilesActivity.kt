@@ -76,6 +76,7 @@ class FilesActivity : RinBaseActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_files)
+        onBackPressedDispatcher.addCallback(this, backCallback)
 
         val projectName = intent.getStringExtra(EXTRA_PROJECT_NAME)
             ?: run { finish(); return }
@@ -159,12 +160,9 @@ class FilesActivity : RinBaseActivity() {
         }
     }
 
-    override fun onBackPressed() {
-        if (currentRelDir.isBlank()) {
-            super.onBackPressed()
-        } else {
-            handleBack()
-        }
+    /** Android 16 (targetSdk 36) لا يستدعي onBackPressed() إطلاقاً — نستخدم OnBackPressedCallback. */
+    private val backCallback = object : androidx.activity.OnBackPressedCallback(true) {
+        override fun handleOnBackPressed() = handleBack() // في الجذر يستدعي finish()
     }
 
     private fun enterFolder(folder: RinFolder) {
