@@ -11,6 +11,8 @@ class RinApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         CrashHandler.install(this)
+        // Android 15/16: edge-to-edge إجباري عند targetSdk >= 35 — حشوات النظام تُطبَّق مركزياً (RinSystemBars).
+        RinSystemBars.install(this)
         // قنوات الإشعارات يجب أن توجد قبل أول إشعار (أندرويد 8+)؛ الإنشاء المتكرر آمن.
         com.dlof.rinlang.permissions.RinNotifications.createChannels(this)
         // ينظّف بقايا تنزيلات/تثبيتات حزم انقطعت سابقاً — في خيط خلفي كي لا يؤخر الإقلاع.
