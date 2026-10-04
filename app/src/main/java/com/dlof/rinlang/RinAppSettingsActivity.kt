@@ -15,7 +15,7 @@ import java.util.Date
  * شاشة "إعدادات" تطبيق Rin واحد مُصدَّر مسبقاً (سجل [RinAppsRegistry]) — تفاصيله الكاملة
  * وإجراءاته. تُفتَح من بطاقة التطبيق في [RinAppsActivity].
  */
-class RinAppSettingsActivity : AppCompatActivity() {
+class RinAppSettingsActivity : RinBaseActivity() {
 
     private lateinit var record: RinAppRecord
 
