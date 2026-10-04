@@ -10,7 +10,7 @@ import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 
 /** Album contents screen: projects are shown like pages inside an album. */
-class AlbumDetailActivity : AppCompatActivity() {
+class AlbumDetailActivity : RinBaseActivity() {
     companion object { const val EXTRA_ALBUM_NAME = "extra_album_name" }
     private lateinit var album: String
     private lateinit var adapter: AlbumProjectsAdapter
