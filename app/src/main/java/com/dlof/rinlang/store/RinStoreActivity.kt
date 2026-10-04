@@ -42,7 +42,6 @@ class RinStoreActivity : BaseConnectivityActivity() {
         /** النتيجة المُعادة عند التثبيت: سطر (أو أسطر) @import الجاهزة، لتُدرَج مباشرة في المحرر. */
         const val EXTRA_IMPORT_STATEMENT = "extra_import_statement"
         private const val CATEGORY_ALL = "__all__"
-        private const val REQUEST_PACKAGE_DETAIL = 4171
     }
 
     private enum class SortMode(val labelRes: Int) {
@@ -247,15 +246,17 @@ class RinStoreActivity : BaseConnectivityActivity() {
         val intent = Intent(this, PackageDetailActivity::class.java)
         intent.putExtra(PackageDetailActivity.EXTRA_PACKAGE, pkg)
         intent.putExtra(PackageDetailActivity.EXTRA_PUBLISHER_VERIFIED, pkg.publisherUid in verifiedPublisherUids)
-        startActivityForResult(intent, REQUEST_PACKAGE_DETAIL)
+        packageDetailLauncher.launch(intent)
     }
 
-    @Deprecated("Deprecated in Java")
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode != REQUEST_PACKAGE_DETAIL || resultCode != RESULT_OK) return
-        val packageId = data?.getStringExtra(PackageDetailActivity.EXTRA_SELECTED_PACKAGE_ID) ?: return
-        val pkg = allPackages.find { it.id == packageId } ?: return
+    /** يستبدل startActivityForResult/onActivityResult (مُهمَلان) بواجهة Activity Result API. */
+    private val packageDetailLauncher = registerForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode != RESULT_OK) return@registerForActivityResult
+        val packageId = result.data?.getStringExtra(PackageDetailActivity.EXTRA_SELECTED_PACKAGE_ID)
+            ?: return@registerForActivityResult
+        val pkg = allPackages.find { it.id == packageId } ?: return@registerForActivityResult
         confirmAndInstall(pkg)
     }
 
