@@ -14,6 +14,11 @@ on:
       - "app/src/main/cpp/indsin/**"
       - "tools/rin_run.cpp"
       - "scripts/build_share_pages.py"
+      # حزم المحتوى القابلة للتنزيل (لغات + أصول) تُبنى وتُنشر مع الموقع تحت /packs/
+      - "content-packs/**"
+      - "scripts/build_content_packs.py"
+      - "examples/customlang/illust/**"
+      - "app/src/main/res/values/**"
       - ".github/workflows/pages.yml"
   workflow_dispatch: {}
   # تحديث دوري: صفحات معاينة الروابط تُبنى من Firebase وقت النشر، فنعيد النشر كل 3 ساعات
@@ -179,6 +184,15 @@ jobs:
       - name: Build link-preview pages (per library / extension / account)
         run: python3 scripts/build_share_pages.py --out dist
 
+      # ------------------------------------------------------------------
+      # 4) حزم المحتوى القابلة للتنزيل من التطبيق (حزم اللغات + حزمة Illust): zip حتمي لكل حزمة +
+      #    packs/catalog.json (id/حجم/sha256/رابط). يقرؤه التطبيق من
+      #    https://dlof-lib.github.io/rinlang/packs/catalog.json ويتحقق من sha256 قبل التثبيت.
+      #    مصدر الحزم في content-packs/ (انظر docs/CONTENT_PACKS.md) — لا تُشحن داخل الـ APK.
+      # ------------------------------------------------------------------
+      - name: Build downloadable content packs (languages + assets)
+        run: python3 scripts/build_content_packs.py --out dist/packs
+
       - name: Verify bundle
         run: |
           test -f dist/index.html
@@ -196,6 +210,7 @@ jobs:
           test -f dist/og-store.png
           test -f dist/sitemap.xml
           test -f dist/robots.txt
+          test -f dist/packs/catalog.json
           echo "Bundle contents:"
           ls -la dist
 
