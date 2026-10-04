@@ -64,7 +64,7 @@ object RinApkExporter {
         appDisplayName: String,
         entryFile: String = "main.rin",
         minSdkVersion: Int = 24,
-        targetSdkVersion: Int = 34,
+        targetSdkVersion: Int = 36,
         customIcon: Bitmap? = null,
         splash: SplashConfig = SplashConfig(),
         onProgress: (Progress) -> Unit
