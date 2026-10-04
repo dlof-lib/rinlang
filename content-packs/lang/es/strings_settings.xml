@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="action_settings">Ajustes</string>
+    <string name="settings_title">Ajustes</string>
+
+    <string name="settings_editor_section_title">Editor</string>
+    <string name="settings_font_size_label">Tamaño de fuente: %1$.0f</string>
+    <string name="settings_show_line_numbers">Mostrar números de línea</string>
+    <string name="settings_show_line_numbers_hint">Desactívalo para dar más espacio al código</string>
+    <string name="action_reset_defaults">Restaurar valores predeterminados</string>
+    <string name="settings_reset_toast">Se restauraron los valores predeterminados</string>
+
+    <!-- Sección de idioma de la app -->
+    <string name="settings_language_section_title">Idioma</string>
+    <string name="settings_language_hint">Elige el idioma de la interfaz de la app</string>
+    <string name="lang_name_ar">العربية</string>
+    <string name="lang_name_en">English</string>
+    <string name="lang_name_es">Español</string>
+    <string name="settings_language_changed_toast">Idioma actualizado</string>
+
+    <string name="settings_hero_title">Ajustes del editor Rin</string>
+    <string name="settings_hero_hint">Configura el editor para velocidad, claridad y comodidad.</string>
+    <string name="settings_indentation_title">Indentación</string>
+    <string name="settings_tab_size">Tamaño de Tab</string>
+    <string name="settings_tab_size_hint">Elige cuántos espacios inserta Tab.</string>
+    <string name="settings_syntax">Resaltado de sintaxis</string>
+    <string name="settings_syntax_hint">Usa los colores reales del lexer de Rin desde el motor nativo.</string>
+    <string name="settings_brackets">Coincidencia de corchetes</string>
+    <string name="settings_brackets_hint">Resalta el corchete correspondiente o uno sin cerrar.</string>
+    <string name="settings_live_diagnostics">Diagnóstico de errores en vivo</string>
+    <string name="settings_live_diagnostics_hint">Subraya errores y advertencias de sintaxis mientras escribes, usando el lexer/parser real de Rin.</string>
+    <string name="settings_autocomplete">Autocompletado</string>
+    <string name="settings_autocomplete_hint">Muestra sugerencias de Rin al escribir identificadores.</string>
+    <string name="settings_auto_close">Cerrar corchetes automáticamente</string>
+    <string name="settings_auto_close_hint">Cierra automáticamente pares como (), [] y {}.</string>
+    <string name="settings_auto_indent">Indentación automática</string>
+    <string name="settings_auto_indent_hint">Mantén la indentación consistente al editar.</string>
+    <string name="settings_word_wrap">Ajuste de línea</string>
+    <string name="settings_word_wrap_hint">Ajusta líneas largas en lugar de usar desplazamiento horizontal.</string>
+    <string name="settings_whitespace">Marcas de espacios</string>
+    <string name="settings_whitespace_hint">Muestra espacios y tabulaciones para revisar el formato.</string>
+    <string name="settings_current_line">Resaltar línea actual</string>
+    <string name="settings_current_line_hint">Mantén visible la línea activa.</string>
+    <string name="settings_smooth_cursor">Cursor suave</string>
+    <string name="settings_smooth_cursor_hint">Usa el parpadeo refinado del cursor.</string>
+    <string name="settings_minimap">Minimapa de código</string>
+    <string name="settings_minimap_hint">Muestra una vista compacta de archivos grandes.</string>
+    <string name="settings_haptic">Respuesta háptica</string>
+    <string name="settings_haptic_hint">Ofrece una respuesta táctil sutil al interactuar.</string>
+    <string name="settings_save_pause">Guardar al pausar</string>
+    <string name="settings_save_pause_hint">Guarda el proyecto actual al pausar el editor.</string>
+    <string name="settings_confirm_exit">Confirmar salida</string>
+    <string name="settings_confirm_exit_hint">Pide confirmación antes de salir.</string>
+    <string name="settings_format_save">Formatear al guardar</string>
+    <string name="settings_format_save_hint">Prepara el editor para flujos de formato automático al guardar.</string>
+
+    <string name="settings_assist_section_title">Asistencia de edición</string>
+    <string name="settings_saving_section_title">Guardado</string>
+    <string name="settings_run_section_title">Ejecución</string>
+    <string name="settings_interface_section_title">Interfaz</string>
+
+    <string name="settings_trim_trailing">Recortar espacios finales</string>
+    <string name="settings_trim_trailing_hint">Elimina los espacios al final de cada línea al guardar.</string>
+    <string name="settings_final_newline">Línea final</string>
+    <string name="settings_final_newline_hint">Asegura que el archivo termine con una sola línea nueva al guardar.</string>
+    <string name="settings_auto_save">Guardado automático</string>
+    <string name="settings_auto_save_hint">Guarda automáticamente tras dejar de escribir durante este tiempo.</string>
+    <string name="settings_off">Desactivado</string>
+    <string name="settings_seconds_format">%1$ds</string>
+
+    <string name="settings_auto_run">Ejecución automática</string>
+    <string name="settings_auto_run_hint">Vuelve a ejecutar el código automáticamente tras una breve pausa.</string>
+    <string name="settings_clear_console_on_run">Limpiar consola antes de ejecutar</string>
+    <string name="settings_clear_console_on_run_hint">Borra automáticamente el historial anterior en cada nueva ejecución.</string>
+
+    <string name="settings_layout_hint">Estándar: editor más grande con consola. Compacto: más espacio para código. Enfoque: sin consola.</string>
+    <string name="settings_keep_screen_on">Mantener la pantalla encendida</string>
+    <string name="settings_keep_screen_on_hint">Evita que la pantalla se apague mientras usas el editor.</string>
+    <string name="settings_project_sort">Ordenar por</string>
+<string name="settings_language_current">Español 🇪🇸</string><string name="language_picker_title">Elegir idioma</string><string name="language_picker_subtitle">Elige idioma y país</string><string name="language_picker_search">Buscar idioma o país…</string><string name="language_picker_applied">Aplicado: %1$s</string><string name="language_group_arabic">العربية • Países árabes</string><string name="language_group_english">English • Países anglófonos</string><string name="language_group_spanish">Español • Países hispanohablantes</string>
+</resources>
