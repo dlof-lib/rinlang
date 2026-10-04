@@ -143,7 +143,10 @@ object RinSyntaxHighlighter {
         "chr", "ord", "bytesFromArray", "crc32", "adler32",
         "make", "make.qr", "make.barcode", "make.file", "make.filename", "make.uuid", "make.hash",
         "qr", "barcode", "filename", "uuid", "hash", "artifact.info", "container.make.qr",
-        "container.make.barcode", "container.make.file", "container.artifact.info"
+        "container.make.barcode", "container.make.file", "container.artifact.info",
+        "make.media.tools", "make.video", "make.video.info", "make.video.thumbnail", "make.video.stop",
+        "make.audio", "make.audio.info", "make.audio.stop", "make.api", "make.api.download", "make.api.clearCache",
+        "make.image.removeBg", "make.image.text", "make.ocr"
     )
 
     // نص محاط بعلامتي تنصيص مع دعم التهريب (\" \\ \n ...) بنفس أسلوب rin_lexer.cpp::scanString.
