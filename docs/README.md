@@ -33,6 +33,7 @@
 - [`pipelines.md`](./pipelines.md) — عامل الأنابيب `|>`.
 - [`RECKON.md`](./RECKON.md) — `reckon`: مفهوم حسابي بسطرين، مبني فوق `|>`.
 - [`MAKE_UNIT.md`](./MAKE_UNIT.md) — `@make.(name)`، سياسة القدرات (`use`/`need`/`allow`/`deny`/`strict`).
+- [`MAKE_MEDIA.md`](./MAKE_MEDIA.md) — `make.video` `make.audio` `make.api` `make.image.removeBg` `make.ocr`: فيديو وصوت وAPI وإزالة الخلفية وقراءة النص.
 - [`rinflow.md`](./rinflow.md) — طبقة تنفيذ التدفّق المهيكل.
 
 ### الواجهة
