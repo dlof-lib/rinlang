@@ -20,7 +20,7 @@ import java.util.Date
  * مشاركة/حفظ/حذف/إعادة تصدير لكل تطبيق، وزر عائم لبدء تصدير مشروع جديد (يفتح
  * [ApkExportActivity] بعد اختيار المشروع من قائمة سريعة).
  */
-class RinAppsActivity : AppCompatActivity() {
+class RinAppsActivity : RinBaseActivity() {
 
     private lateinit var rv: RecyclerView
     private lateinit var txtEmpty: View
