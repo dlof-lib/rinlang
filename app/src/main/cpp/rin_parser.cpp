@@ -3439,7 +3439,9 @@ ExprPtr Parser::call() {
             // Namespace calls: make.qr(), container.make.qr(), artifact.info() ...
             // تُحوَّل إلى Callee string قبل إنشاء GetExpr، حتى تصل مباشرة إلى natives.
             Token dot = previous();
-            Token nameTok = check(TokenType::IDENT) ? advance() : consume(TokenType::FILE_KW, "Expected property or method name after '.'");
+            // TEXT مسموح أيضاً كاسم خاصية (r.text) -- ناتج make.ocr / make.image.text يحمل حقل "text"؛ كان
+            // يُرفَض سابقاً لأن `text` كلمة مفتاحية. إضافي بحت: لم يكن أي برنامج صالح يصل إلى هنا بهذا الرمز.
+            Token nameTok = check(TokenType::IDENT) ? advance() : (check(TokenType::TEXT) ? advance() : consume(TokenType::FILE_KW, "Expected property or method name after '.'"));
             if (auto root = std::dynamic_pointer_cast<VariableExpr>(expr)) {
                 std::string ns = root->name + "." + nameTok.lexeme;
                 if (check(TokenType::LPAREN)) {
