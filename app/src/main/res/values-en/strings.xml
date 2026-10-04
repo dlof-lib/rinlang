@@ -259,6 +259,7 @@ print \"Hello, \" + name + \"!\";
     <string name="apk_export_section_build">Build</string>
     <string name="apk_export_action_build">Build &amp; sign APK</string>
     <string name="apk_export_action_install">Install</string>
+    <string name="apk_install_allow_unknown_sources">Allow installs from this source, then come back and tap Install again</string>
     <string name="apk_export_action_share">Share</string>
     <string name="apk_export_action_save">Save to Downloads</string>
     <string name="apk_export_status_idle">Ready to export</string>
