@@ -223,6 +223,7 @@
                 android:resource="@xml/file_paths" />
         </provider>
         <activity android:name=".LanguageActivity" android:exported="false" />
+        <activity android:name=".ContentPacksActivity" android:exported="false" />
         <activity android:name=".AlbumsActivity" android:exported="false" />
         <activity android:name=".AlbumDetailActivity" android:exported="false" />
     </application>
