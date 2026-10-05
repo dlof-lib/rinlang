@@ -1,0 +1,21 @@
+Set{1, 2, 3}
+3 set 3
+Set{}
+Set{1, 2}
+Set{[1, 2]}
+Set{"ab"}
+Set{"a", "b", "c"}
+Set{"x", "y"}
+Set{1, "1", true, nil}
+Set{[1, 2], {"a": 1}}
+Set{5}
+E0004
+true true
+true
+true false true false
+[1,2,3]
+[1, 2, 3]
+10
+20
+30
+s=Set{1}
