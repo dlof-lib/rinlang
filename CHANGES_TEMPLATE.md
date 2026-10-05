@@ -36,3 +36,14 @@ backtick كانت خطأ E0011 سابقاً، والنصوص `" "` لم تتغي
 - **`render(template, data)`:** قوالب وقت التشغيل (مسارات `a.b.0`, `??` افتراضي، تنسيق، `{{}}`، `$${` للهروب)،
   آمنة (لا تنفّذ كوداً). المنطق في `templateFormat()`/`templateRender()` أعلى `rin_interpreter.cpp`.
 - اختبارات إضافية: 10 → المجموع 83 ناجحة.
+
+## الإصدار 4 — القوالب داخل مفاهيم اللغة
+- **`translation`**: `lang` و`text` يقبلان قوالب ديناميكية تُقيَّم وقت التنفيذ (`TranslationStmt::langExpr/textExpr`).
+- **`emit` و`on.event`**: اسم الحدث قالب ديناميكي (`EmitStmt/EventHandlerStmt::nameExpr`). التمييز عن دالة عادية اسمها
+  `emit` عبر علم `Token::tpl` على ( الافتتاحية للقالب (يضعه `Lexer::scanTemplateParts`).
+- **قالب بلا `${}`** صار رمز STRING واحداً، فيصلح في كل المواضع الثابتة (`@import`، `link.id`، `.object("id")`...)
+  ويدعم أسطراً متعددة وعلامات `"`.
+- **`${}` في موضع ثابت** يعطي خطأً واضحاً بدل رسالة عامة (`Parser::consumeStaticText`).
+- خصائص `@view`/`@element` و`text x = ...` كانت تقبل القوالب أصلاً (تعبيرات) — موثَّقة الآن.
+- ملفات: `rin_common.h` (Token::tpl)، `rin_ast.h`، `rin_parser.{h,cpp}`، `rin_lexer.cpp`، `rin_interpreter.cpp`،
+  اختبار جديد `tests/template_concepts.rin`.
