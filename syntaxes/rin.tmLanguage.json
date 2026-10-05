@@ -5,6 +5,7 @@
   "fileTypes": ["rin", "aak.rin"],
   "patterns": [
     { "include": "#comments" },
+    { "include": "#template-strings" },
     { "include": "#strings" },
     { "include": "#numbers" },
     { "include": "#import-statement" },
@@ -67,6 +68,23 @@
           "comment": "Rin's lexer supports \\n \\t \\r \\\" \\\\ and a backslash-newline continuation; any other escaped char is kept literally, so match generically.",
           "name": "constant.character.escape.rin",
           "match": "\\\\."
+        }
+      ]
+    },
+
+    "template-strings": {
+      "name": "string.template.rin",
+      "begin": "`",
+      "end": "`",
+      "patterns": [
+        { "name": "constant.character.escape.rin", "match": "\\\\." },
+        {
+          "name": "meta.template.expression.rin",
+          "begin": "\\$\\{",
+          "end": "\\}",
+          "beginCaptures": { "0": { "name": "punctuation.definition.template-expression.begin.rin" } },
+          "endCaptures": { "0": { "name": "punctuation.definition.template-expression.end.rin" } },
+          "patterns": [ { "include": "$self" } ]
         }
       ]
     },
