@@ -55,6 +55,8 @@ namespace RinLang.VSSDK.Classification
 
                 // Strings (with \" and \\ escapes).
                 (new Regex(@"""(?:\\.|[^""\\])*""", o), RinClassificationTypes.StringLiteral),
+                // Template strings: `Hello ${name}` (single-line per tokenizer call).
+                (new Regex(@"`(?:\\.|[^`\\])*`", o), RinClassificationTypes.StringLiteral),
 
                 // .end/Name closing tag.
                 (new Regex(@"\.end/[A-Za-z_][A-Za-z0-9_.]*", o), RinClassificationTypes.EndTag),
