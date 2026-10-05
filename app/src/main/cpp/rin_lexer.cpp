@@ -207,32 +207,116 @@ void Lexer::scanTemplate() {
             flushText(text, /*force=*/!emittedAnyText);
             text.clear();
             if (needPlus) pushToken(TokenType::PLUS, "+", exprLine, exprCol, exprCol + 2);
-            pushToken(TokenType::IDENT, "#str", exprLine, exprCol, exprCol + 2);
-            pushToken(TokenType::LPAREN, "(", exprLine, exprCol, exprCol + 2);
-            const size_t exprFirstToken = tokens.size();
 
-            // مسح التعبير بنفس scanToken() حتى الوصول إلى } المطابقة (مع تتبع أقواس { } المتداخلة).
-            int depth = 0;
-            while (true) {
+            // مسح التعبير بنفس scanToken() حتى الوصول إلى } المطابقة. أثناء ذلك نتتبّع:
+            //   depth   : عمق ( [ { المتداخلة
+            //   ternary : عدد ? المعلّقة (شرط ثلاثي) على العمق 0 -- لنميّز `:` الخاصة بالتنسيق عن `:` الشرط
+            //   `??`    : علامتا ? متجاورتان = قيمة افتراضية (لا تُحسب كشرط ثلاثي)
+            const size_t exprStart = tokens.size();
+            int depth = 0, ternary = 0;
+            bool hasSpec = false;
+            std::string spec;
+            bool closed = false;
+            while (!closed) {
                 if (isAtEnd()) unterminated();
                 start = current;
                 const size_t before = tokens.size();
                 scanToken();
-                if (tokens.size() > before) {
-                    TokenType tt = tokens.back().type;
-                    if (tt == TokenType::LBRACE) depth++;
+                for (size_t k = before; k < tokens.size() && !closed; k++) {
+                    TokenType tt = tokens[k].type;
+                    if (tt == TokenType::LBRACE || tt == TokenType::LPAREN || tt == TokenType::LBRACKET) depth++;
+                    else if (tt == TokenType::RPAREN || tt == TokenType::RBRACKET) depth--;
                     else if (tt == TokenType::RBRACE) {
-                        if (depth == 0) { tokens.pop_back(); break; }
-                        depth--;
+                        if (depth == 0) { tokens.erase(tokens.begin() + k); closed = true; }
+                        else depth--;
+                    } else if (tt == TokenType::QUESTION && depth == 0) {
+                        bool pair = k > 0 && tokens[k - 1].type == TokenType::QUESTION &&
+                                    tokens[k - 1].line == tokens[k].line && tokens[k - 1].endCol == tokens[k].col;
+                        if (pair) ternary--; else ternary++;
+                    } else if (tt == TokenType::COLON && depth == 0) {
+                        if (ternary > 0) ternary--;
+                        else {
+                            // بداية مواصفة التنسيق: نقرأ الحروف الخام حتى } (مثل .2f أو 08.1f أو upper)
+                            tokens.erase(tokens.begin() + k);
+                            while (peek() != '}') {
+                                if (isAtEnd() || peek() == '\n') unterminated();
+                                spec += advance();
+                            }
+                            advance(); // }
+                            size_t b0 = spec.find_first_not_of(" \t"), b1 = spec.find_last_not_of(" \t");
+                            spec = (b0 == std::string::npos) ? "" : spec.substr(b0, b1 - b0 + 1);
+                            hasSpec = true;
+                            closed = true;
+                        }
                     }
                 }
             }
-            if (tokens.size() == exprFirstToken) {
-                diag::Diagnostic d(diag::Code::E0011_UnexpectedToken, "empty `${}` in template string",
+            std::vector<Token> ex(tokens.begin() + exprStart, tokens.end());
+            tokens.resize(exprStart);
+            if (ex.empty() || (hasSpec && spec.empty())) {
+                diag::Diagnostic d(diag::Code::E0011_UnexpectedToken,
+                                    ex.empty() ? "empty `${}` in template string" : "empty format after `:` in template string",
                                     diag::SourceLocation::point(file, exprLine, exprCol));
-                d.withReason("nothing was written between `${` and `}`")
-                 .withHint("put a variable or expression inside, e.g. `${name}`");
+                d.withReason(ex.empty() ? "nothing was written between `${` and `}`" : "nothing was written after `:`")
+                 .withHint(ex.empty() ? "put a variable or expression inside, e.g. `${name}`"
+                                      : "write a format such as `${price:.2f}` or `${name:upper}`");
                 throw RinError(std::move(d));
+            }
+
+            auto tk = [&](TokenType ty, const std::string& lx) {
+                Token t; t.type = ty; t.lexeme = lx; t.line = exprLine; t.col = exprCol; t.endCol = exprCol + 2;
+                return t;
+            };
+
+            // القيم الجاهزة: ${#date} ${#time} ${#datetime} ${#year} ${#month} ${#day} ${#hour}
+            //                ${#minute} ${#second} ${#weekday} ${#version} ${#line} ${#file}
+            static const char* const kBuiltin[] = {"date", "time", "datetime", "year", "month", "day",
+                                                    "hour", "minute", "second", "weekday", "version"};
+            if (ex.size() == 1 && ex[0].type == TokenType::IDENT && ex[0].lexeme.size() > 1 && ex[0].lexeme[0] == '#') {
+                const std::string nm = ex[0].lexeme.substr(1);
+                if (nm == "line") {
+                    Token t = tk(TokenType::NUMBER, std::to_string(exprLine)); t.number = exprLine; ex = {t};
+                } else if (nm == "file") {
+                    ex = {tk(TokenType::STRING, file)};
+                } else {
+                    for (const char* b : kBuiltin) if (nm == b) {
+                        ex = {tk(TokenType::IDENT, "#now"), tk(TokenType::LPAREN, "("),
+                              tk(TokenType::STRING, nm), tk(TokenType::RPAREN, ")")};
+                        break;
+                    }
+                }
+            }
+
+            // القيمة الافتراضية: A ?? B  ->  #default(A, B)   (على العمق 0 وخارج أي شرط ثلاثي)
+            {
+                int dp = 0, tern = 0;
+                for (size_t k = 0; k + 1 < ex.size(); k++) {
+                    TokenType tt = ex[k].type;
+                    if (tt == TokenType::LBRACE || tt == TokenType::LPAREN || tt == TokenType::LBRACKET) dp++;
+                    else if (tt == TokenType::RBRACE || tt == TokenType::RPAREN || tt == TokenType::RBRACKET) dp--;
+                    else if (dp == 0 && tt == TokenType::QUESTION) {
+                        bool pair = ex[k + 1].type == TokenType::QUESTION && ex[k + 1].line == ex[k].line &&
+                                    ex[k + 1].col == ex[k].endCol;
+                        if (pair && tern == 0) {
+                            std::vector<Token> out{tk(TokenType::IDENT, "#default"), tk(TokenType::LPAREN, "(")};
+                            out.insert(out.end(), ex.begin(), ex.begin() + k);
+                            out.push_back(tk(TokenType::COMMA, ","));
+                            out.insert(out.end(), ex.begin() + k + 2, ex.end());
+                            out.push_back(tk(TokenType::RPAREN, ")"));
+                            ex = std::move(out);
+                            break;
+                        }
+                        if (pair) k++; else tern++;
+                    } else if (dp == 0 && tt == TokenType::COLON && tern > 0) tern--;
+                }
+            }
+
+            pushToken(TokenType::IDENT, hasSpec ? "#fmt" : "#str", exprLine, exprCol, exprCol + 2);
+            pushToken(TokenType::LPAREN, "(", exprLine, exprCol, exprCol + 2);
+            tokens.insert(tokens.end(), ex.begin(), ex.end());
+            if (hasSpec) {
+                pushToken(TokenType::COMMA, ",", exprLine, exprCol, exprCol + 2);
+                pushToken(TokenType::STRING, spec, exprLine, exprCol, exprCol + 2);
             }
             pushToken(TokenType::RPAREN, ")", line, columnOf(current) - 1, columnOf(current));
             needPlus = true;
