@@ -28,6 +28,7 @@ private:
     void scanToken();
     void scanString();
     void scanTemplate(); // نص قالبي: `مرحباً ${name}` (انظر rin_lexer.cpp)
+    void scanTemplateParts(char term); // term='`' قالب كامل ؛ term='}' مواصفة تنسيق متداخلة
     void pushToken(TokenType type, const std::string& lexeme, int ln, int col, int endCol);
     void scanNumber();
     void scanIdentifier();
