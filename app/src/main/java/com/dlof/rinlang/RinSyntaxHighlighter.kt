@@ -100,7 +100,9 @@ object RinSyntaxHighlighter {
         // Ready-elements expansion: date/time pickers, plus a few common tag aliases
         // (see strandKindFromTag() in rin_indsin_strand.h) so they highlight the same as their
         // canonical spellings above.
-        "date", "time", "dropdown", "range", "listitem", "direction"
+        "date", "time", "dropdown", "range", "listitem", "direction",
+        // نوع المجموعة Set (docs/set.md) وربط .env: Env (docs/env.md)
+        "Set", "Env"
     )
 
     // توجيهات سياسة وحدة make (@make.(name) ... kind/use/need/allow/deny/strict/...) —
