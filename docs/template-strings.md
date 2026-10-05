@@ -36,6 +36,37 @@ print `مرحباً ${name}، عمرك ${age} سنة`;
 كل القيم (أرقام، منطقي، مصفوفات، `nil`...) تُحوَّل تلقائياً إلى نص بنفس طريقة `toString`،
 فلا حاجة لتحويلها بنفسك.
 
+## أين تُستعمل القوالب في مفاهيم اللغة؟
+
+| المفهوم | يقبل `${}`؟ | مثال |
+|---|---|---|
+| `print` / `show` / `let` / `text x = ...` | نعم | `` print `مرحباً ${name}`; `` |
+| وسائط الدوال والتعبيرات عموماً | نعم | `` log(`خطأ في ${#file}:${#line}`) `` |
+| خصائص `@view` / `@element` | نعم | `` @view.Text=t text=`تم الضغط ${n} مرة`; .end/view `` |
+| `translation lang=… text=…` | نعم | `` translation lang="ar" text=`مرحباً ${user}`; `` |
+| `emit` | نعم (اسم الحدث) | `` emit `chat:${room}`, msg; `` |
+| `on.event` | نعم (اسم الحدث) | `` on.event `chat:${room}` (m) { ... } `` |
+| `@import` · `link.id` · `link id=` · `.object("id")` · `version/description` في make | **لا** (نص ثابت فقط) | يُقرأ هذا الموضع أثناء تحليل الملف، قبل وجود أي متغيّر |
+
+- في المواضع الثابتة يُسمح بقالب **بلا `${}`** (مفيد لنصوص متعددة الأسطر أو فيها علامة `"` بلا تهريب):
+  `` @import `lib/math.og.rin`; `` · `` translation lang="fr" text=`Salut "ami"`; ``
+- إن كتبت `${}` في موضع ثابت تظهر رسالة واضحة: ``` `${}` interpolation is not allowed here ```
+  مع اقتراح حساب القيمة في متغيّر واستعماله حيث تُقبل التعبيرات.
+- الدالة العادية المسمّاة `emit(...)` لا تتأثر: الأحداث تُميَّز فقط بوجود نص (أو قالب) مباشرة بعد `emit`.
+
+### أحداث بأسماء ديناميكية
+```rin
+@container=Parent
+    let room = "general";
+    on.event `chat:${room}` (msg) { print `[${room}] ${msg}`; }
+
+    @container=Child
+        fun send(msg) { emit `chat:general`, msg; }
+        send("أهلاً");          // [general] أهلاً
+    .end/container
+.end/container
+```
+
 ## تنسيق القيم: `${القيمة:التنسيق}`
 
 اكتب `:` ثم التنسيق بعد القيمة مباشرة:
