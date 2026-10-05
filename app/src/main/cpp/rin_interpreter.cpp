@@ -2217,6 +2217,118 @@ void Interpreter::registerNatives() {
     // #str(value) -> نفس toString لكن باسم لا يمكن لمتغيّر/دالة المستخدم أن تحجبه. يستعمله Lexer
     // عند تحويل النصوص القالبية `...${expr}...` إلى `"..." + #str(expr) + "..."`.
     natives["#str"] = natives["toString"];
+
+    // ── ملحقات النصوص القالبية (يولّدها Lexer::scanTemplate، انظر docs/template-strings.md) ──
+    // #default(a, b): `${name ?? "زائر"}` -> b إن كانت a تساوي nil، وإلا a.
+    natives["#default"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("#default", a, 2, line);
+        return a[0].type == Value::Type::NIL ? a[1] : a[0];
+    };
+    // #now(name): القيم الجاهزة `${#date}` `${#time}` ... من ساعة الجهاز.
+    natives["#now"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("#now", a, 1, line);
+        const std::string n = a[0].str;
+        if (n == "version") return Value::string(RIN_VERSION_STRING);
+        std::time_t t = std::time(nullptr);
+        std::tm tmv{};
+#if defined(_WIN32)
+        localtime_s(&tmv, &t);
+#else
+        localtime_r(&t, &tmv);
+#endif
+        auto fmt = [&](const char* f) { char buf[64]; std::strftime(buf, sizeof buf, f, &tmv); return Value::string(buf); };
+        if (n == "date")     return fmt("%Y-%m-%d");
+        if (n == "time")     return fmt("%H:%M:%S");
+        if (n == "datetime") return fmt("%Y-%m-%d %H:%M:%S");
+        if (n == "year")     return Value::num(tmv.tm_year + 1900);
+        if (n == "month")    return Value::num(tmv.tm_mon + 1);
+        if (n == "day")      return Value::num(tmv.tm_mday);
+        if (n == "hour")     return Value::num(tmv.tm_hour);
+        if (n == "minute")   return Value::num(tmv.tm_min);
+        if (n == "second")   return Value::num(tmv.tm_sec);
+        if (n == "weekday")  return Value::num(tmv.tm_wday); // 0 = الأحد
+        throw diagErr(diag::Code::E0007_InvalidArguments, line, "unknown built-in template value `#" + n + "`");
+    };
+    // #fmt(value, spec): `${value:spec}`
+    //   نص:    upper | lower | trim
+    //   تنسيق: [محاذاة < > ^][0][عرض][,][.دقة][نوع f d %]   مثل  .2f   08.1f   >10   ^12   ,d   .0%
+    natives["#fmt"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("#fmt", a, 2, line);
+        const Value& v = a[0];
+        std::string spec = a[1].str;
+        auto bad = [&](const std::string& why) {
+            return diagErr(diag::Code::E0007_InvalidArguments, line, "invalid format `:" + spec + "` in template string: " + why);
+        };
+        auto u8len = [](const std::string& s) { size_t n = 0; for (unsigned char c : s) if ((c & 0xC0) != 0x80) n++; return n; };
+
+        if (spec == "upper" || spec == "lower") {
+            std::string s = v.toDisplayString();
+            for (auto& c : s) c = (char)(spec == "upper" ? std::toupper((unsigned char)c) : std::tolower((unsigned char)c));
+            return Value::string(s);
+        }
+        if (spec == "trim") {
+            std::string s = v.toDisplayString();
+            size_t b = s.find_first_not_of(" \t\r\n"), e = s.find_last_not_of(" \t\r\n");
+            return Value::string(b == std::string::npos ? "" : s.substr(b, e - b + 1));
+        }
+
+        size_t i = 0;
+        char align = 0;
+        if (i < spec.size() && (spec[i] == '<' || spec[i] == '>' || spec[i] == '^')) align = spec[i++];
+        bool zero = false;
+        if (i < spec.size() && spec[i] == '0') { zero = true; i++; }
+        size_t width = 0;
+        while (i < spec.size() && isdigit((unsigned char)spec[i])) width = width * 10 + (spec[i++] - '0');
+        bool comma = false;
+        if (i < spec.size() && spec[i] == ',') { comma = true; i++; }
+        int prec = -1;
+        if (i < spec.size() && spec[i] == '.') {
+            i++;
+            if (i >= spec.size() || !isdigit((unsigned char)spec[i])) throw bad("expected digits after `.`");
+            prec = 0;
+            while (i < spec.size() && isdigit((unsigned char)spec[i])) prec = prec * 10 + (spec[i++] - '0');
+        }
+        char type = 0;
+        if (i < spec.size() && (spec[i] == 'f' || spec[i] == 'd' || spec[i] == '%')) type = spec[i++];
+        if (i != spec.size()) throw bad("unknown part `" + spec.substr(i) + "` (examples: .2f  08.1f  >10  ^12  ,d  .0%  upper  lower  trim)");
+
+        const bool isNum = v.type == Value::Type::NUMBER;
+        if ((type || comma || prec >= 0 || zero) && !isNum) throw bad("this format needs a number but got " + v.typeName());
+
+        std::string s;
+        if (isNum) {
+            char buf[512];
+            if (type == '%') snprintf(buf, sizeof buf, "%.*f%%", prec < 0 ? 0 : prec, v.number * 100.0);
+            else if (type == 'd') snprintf(buf, sizeof buf, "%.0f", std::round(v.number));
+            else if (type == 'f' || prec >= 0) snprintf(buf, sizeof buf, "%.*f", prec < 0 ? 6 : prec, v.number);
+            else buf[0] = 0;
+            s = buf[0] ? std::string(buf) : v.toDisplayString();
+            if (comma) { // فواصل الآلاف على الجزء الصحيح
+                size_t st = (s[0] == '-') ? 1 : 0, en = s.find_first_not_of("0123456789", st);
+                if (en == std::string::npos) en = s.size();
+                std::string ip = s.substr(st, en - st), out;
+                for (size_t k = 0; k < ip.size(); k++) { if (k && (ip.size() - k) % 3 == 0) out += ','; out += ip[k]; }
+                s = s.substr(0, st) + out + s.substr(en);
+            }
+        } else {
+            s = v.toDisplayString();
+        }
+
+        size_t len = u8len(s);
+        if (width > len) {
+            size_t pad = width - len;
+            if (zero) {
+                size_t st = (!s.empty() && (s[0] == '-' || s[0] == '+')) ? 1 : 0;
+                s.insert(st, std::string(pad, '0'));
+            } else {
+                char al = align ? align : (isNum ? '>' : '<');
+                if (al == '<') s += std::string(pad, ' ');
+                else if (al == '>') s = std::string(pad, ' ') + s;
+                else s = std::string(pad / 2, ' ') + s + std::string(pad - pad / 2, ' ');
+            }
+        }
+        return Value::string(s);
+    };
     natives["toNumber"] = [](std::vector<Value>& a, int line) -> Value {
         expectArgs("toNumber", a, 1, line);
         if (a[0].type == Value::Type::NUMBER) return a[0];
