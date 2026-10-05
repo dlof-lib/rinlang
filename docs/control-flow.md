@@ -32,6 +32,22 @@ plus.condition (5 > 3) {
 فهي "ثلاثية" فعليًا على مستوى العبارة، لا التعبير. الفاصل بين الكتلتين هو `/` فقط —
 يظهر حصرًا بين `}` الأولى و`{` الثانية.
 
+## صيغ الشروط المختصرة `=term=`
+صيغ مختصرة هي سكّر نحوي فوق `if`/`while` (نفس الدلالة بالضبط):
+```rin
+=if=(score > 95) { print "A+"; }
+=elif=(score > 80) { print "B"; }
+=else= { print "C"; }
+
+=all=(age >= 18, present(token)) { print "مسموح"; }   // a and b (short-circuit)
+=any=(isNil(a), isNil(b)) { print "ناقص"; }            // a or b
+=none=(failed, timedOut) { print "نظيف"; }             // !(a or b)
+=nil=(x) { print "فارغ"; }   =notnil=(x) { ... }       // x == nil / x != nil
+=while=(i < 3) { i = i + 1; }   =until=(i == 0) { i = i - 1; }
+```
+القائمة الكاملة ودوال الشروط الموسّعة (`present`، `oneOf`، `matches`، ...) في
+[`key_terms_and_builtins.md`](./key_terms_and_builtins.md).
+
 ## `while`
 ```rin
 let i = 0;
@@ -90,6 +106,19 @@ match (current) {
         print "الحالة: غير معروفة";
     }
 }
+```
+
+### حرّاس الشروط في `match` و`return`/`break`/`continue`
+```rin
+match (level) {
+    case Level.High when (vip) { print "vip"; }   // حارس إضافي على case
+    else { print "عادي"; }
+}
+match {                                           // بلا موضوع: أول شرط صحيح يُنفَّذ
+    case (score >= 90) { print "A"; }
+    else { print "F"; }
+}
+break when (i > 10);   continue unless (ok);   return x when (x > 0);
 ```
 
 ## `goal` / `achieve` — خروج مبكر بقيمة
