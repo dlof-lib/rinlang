@@ -106,7 +106,7 @@ static std::string prettyPrintValue(const Value& v, int indent) {
         for (size_t i = 0; i < v.array->size(); i++) {
             const Value& item = (*v.array)[i];
             ss << indInner;
-            if (item.type == Value::Type::ARRAY || item.type == Value::Type::MAP) {
+            if (item.type == Value::Type::ARRAY || item.type == Value::Type::MAP || item.type == Value::Type::SET) {
                 ss << prettyPrintValue(item, indent + 1);
             } else {
                 ss << reprValue(item);
@@ -125,12 +125,27 @@ static std::string prettyPrintValue(const Value& v, int indent) {
             const Value& key = (*v.map)[i].first;
             const Value& val = (*v.map)[i].second;
             ss << indInner << reprValue(key) << ": ";
-            if (val.type == Value::Type::ARRAY || val.type == Value::Type::MAP) {
+            if (val.type == Value::Type::ARRAY || val.type == Value::Type::MAP || val.type == Value::Type::SET) {
                 ss << prettyPrintValue(val, indent + 1);
             } else {
                 ss << reprValue(val);
             }
             if (i + 1 < v.map->size()) ss << ",";
+            ss << "\n";
+        }
+        ss << ind << "}";
+        return ss.str();
+    }
+    if (v.type == Value::Type::SET) {
+        if (!v.set || v.set->empty()) return "Set{}";
+        std::ostringstream ss;
+        ss << "Set{\n";
+        for (size_t i = 0; i < v.set->items.size(); i++) {
+            const Value& item = v.set->items[i];
+            ss << indInner;
+            if (item.type == Value::Type::ARRAY || item.type == Value::Type::MAP || item.type == Value::Type::SET) ss << prettyPrintValue(item, indent + 1);
+            else ss << reprValue(item);
+            if (i + 1 < v.set->items.size()) ss << ",";
             ss << "\n";
         }
         ss << ind << "}";
@@ -182,6 +197,11 @@ bool valuesEqual(const Value& a, const Value& b) {
             }
             return true;
         }
+        case Value::Type::SET: {
+            if (a.set == b.set) return true;
+            if (!a.set || !b.set) return false;
+            return setops::equal(*a.set, *b.set); // بلا اعتبار للترتيب
+        }
         case Value::Type::INSTANCE: {
             // class (reference semantics): مساواة فقط لنفس الكائن بالذات (نفس المؤشّر).
             // struct (value semantics): مساواة تركيبية (نفس الصنف + كل الحقول متساوية)، تماماً
@@ -210,6 +230,7 @@ std::string Value::typeName() const {
         case Type::FUNCTION: return "function";
         case Type::ARRAY: return "array";
         case Type::MAP: return "map";
+        case Type::SET: return "set";
         case Type::INSTANCE: return instance ? instance->className : "instance";
     }
     return "nil";
@@ -261,6 +282,7 @@ std::string Value::toDisplayString() const {
             ss << "}";
             return ss.str();
         }
+        case Type::SET: return set ? setops::display(*set) : std::string("Set{}");
         case Type::INSTANCE: {
             if (!instance) return "nil";
             // Rin 1.0: __str__ / toString() المعرَّفة في الصنف تتحكّم بالعرض (print + الدمج النصي + str()).
@@ -455,6 +477,7 @@ static bool valueMatchesSchemaType(const Value& v, const std::string& type) {
     if (type == "bool" || type == "boolean") return v.type == Value::Type::BOOL;
     if (type == "array") return v.type == Value::Type::ARRAY;
     if (type == "map" || type == "object") return v.type == Value::Type::MAP;
+    if (type == "set") return v.type == Value::Type::SET;
     return true; // اسم نوع غير معروف: يُتجاهَل التحقق منه بدل رفض الإدراج بلا سبب واضح للمستخدم
 }
 
@@ -488,6 +511,11 @@ static Value deepCloneValue(const Value& v) {
                 for (auto& kv : *v.map) m->push_back({deepCloneValue(kv.first), deepCloneValue(kv.second)});
             }
             return Value::makeMap(m);
+        }
+        case Value::Type::SET: {
+            auto st = std::make_shared<SetData>();
+            if (v.set) for (auto& e : v.set->items) st->add(deepCloneValue(e));
+            return Value::makeSet(st);
         }
         default:
             return v; // NUMBER/STRING/BOOL/NIL/FUNCTION: لا حالة مشتركة قابلة للتغيير، النسخ بالقيمة كافٍ
@@ -6395,6 +6423,7 @@ void Interpreter::registerNatives() {
     registerNativesExtra6(); // make.video/audio/api/image.removeBg/ocr (rin_extra_natives6.cpp)
     registerNativesOop(); // Rin 1.0: oop.* — استبطان الأصناف والكائنات + أدوات OOP (rin_oop_natives.cpp)
     registerNativesInput(); // Rin 1.0: نماذج الإدخال (معاملة/تداخل/مُدقِّق النموذج) فوق input() — بعد oop.* لأنها تستدعيها (rin_input.cpp)
+    registerNativesSet();   // نوع Set الأساسي: Set(...) و Set.* وتوسعة len/contains/has/remove/sum... (rin_set.cpp) — أخيراً كي تلفّ ما سبقها
 }
 
 // ================= تخزين حقيقي على القرص (save/file/installation) =================
@@ -8220,6 +8249,8 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
         } else if (iterableVal.type == Value::Type::MAP) {
             items.reserve(iterableVal.map->size());
             for (auto& kv : *iterableVal.map) items.push_back(kv.first);
+        } else if (iterableVal.type == Value::Type::SET) {
+            if (iterableVal.set) items = iterableVal.set->items; // لقطة: التعديل داخل الحلقة آمن
         } else if (iterableVal.type == Value::Type::STRING) {
             items.reserve(iterableVal.str.size());
             for (char c : iterableVal.str) items.push_back(Value::string(std::string(1, c)));
@@ -8233,7 +8264,7 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
                                "`__iter__` of `" + iterableVal.typeName() + "` must return an array or map, found `" + produced.typeName() + "`");
         } else {
             throw diagErr(diag::Code::E0004_InvalidType, s->line,
-                          "`for...in` requires an array, map, or string; found a `" +
+                          "`for...in` requires an array, set, map, or string; found a `" +
                               iterableVal.typeName() + "`");
         }
         bool broke = false;
@@ -9796,13 +9827,13 @@ void Interpreter::checkDeclaredType(const Value& v, const std::string& typeName,
     if (typeName.empty()) return; // بلا نوع معلَن -- بلا أي فحص، تماماً كما كانت اللغة قبل هذه الميزة
 
     static const std::unordered_set<std::string> builtins = {
-        "Any", "Number", "Int", "String", "Bool", "Array", "Map", "Function"
+        "Any", "Number", "Int", "String", "Bool", "Array", "Map", "Set", "Function"
     };
     if (!builtins.count(typeName) && !classes.count(typeName)) {
         throw errWithReason(diag::Code::E0001_UndefinedVariable, line,
                              "unknown type `" + typeName + "`",
                              "`" + typeName + "` is not a built-in type (Any, Number, Int, String, "
-                             "Bool, Array, Map, Function) and no class or struct with that name is "
+                             "Bool, Array, Map, Set, Function) and no class or struct with that name is "
                              "defined");
     }
 
@@ -9816,6 +9847,7 @@ void Interpreter::checkDeclaredType(const Value& v, const std::string& typeName,
     else if (typeName == "Bool") ok = v.type == Value::Type::BOOL;
     else if (typeName == "Array") ok = v.type == Value::Type::ARRAY;
     else if (typeName == "Map") ok = v.type == Value::Type::MAP;
+    else if (typeName == "Set") ok = v.type == Value::Type::SET;
     else if (typeName == "Function") ok = v.type == Value::Type::FUNCTION;
     else {
         // اسم صنف/بنية: مطابقة "is-a" عبر سلسلة الوراثة -- نفس منطق findMethod بالضبط، فأي كائن من
@@ -10043,7 +10075,8 @@ Value Interpreter::invokeCallee(const std::string& callee, std::vector<Value>& a
     }
 
     auto nativeIt = natives.find(callee);
-    if (nativeIt != natives.end()) {
+    // صنف من المستخدم باسم Set يغلب المُنشئ/الدوال الأصلية Set / Set.* (توافق مع الكود الموجود).
+    if (nativeIt != natives.end() && !(!classes.empty() && classes.count("Set") && (callee == "Set" || callee.compare(0, 4, "Set.") == 0))) {
         return nativeIt->second(args, line);
     }
 
@@ -10101,6 +10134,10 @@ Value Interpreter::invokeCallee(const std::string& callee, std::vector<Value>& a
             }
             if (haveRoot) {
                 for (; i + 1 < segs.size(); ++i) cur = readMember(cur, segs[i], env, line);
+                if (cur.type == Value::Type::SET) {
+                    Value out;
+                    if (tryCallSetMethod(cur, method, args, line, out)) return out;
+                }
                 if (cur.type == Value::Type::INSTANCE) {
                     return callMethodOn(cur, method, args, env, line);
                 }
@@ -10340,6 +10377,7 @@ Value Interpreter::evaluate(const ExprPtr& expr, EnvPtr env) {
                 }
                 if (left.type == Value::Type::NUMBER && right.type == Value::Type::NUMBER)
                     return Value::num(left.number + right.number);
+                if (left.type == Value::Type::SET || right.type == Value::Type::SET) return setops::binary(e->op, left, right, e->line);
                 // RMF §7/§8/§33/§41: vector + vector، matrix + matrix، إلخ عبر __add__ (انظر
                 // tryOperatorOverload) -- الأساس اللي كل نوع رياضي إضافي (Vector/Matrix/...) يُبنى
                 // فوقه بدل توسيع هذا المفسّر بحالة خاصة لكل نوع رياضي جديد يُضاف مستقبلاً.
@@ -10349,12 +10387,14 @@ Value Interpreter::evaluate(const ExprPtr& expr, EnvPtr env) {
                 throw diagErr(diag::Code::E0004_InvalidType, e->line,
                           "`+` operands must be numbers or strings, found `" + left.typeName() + "` and `" + right.typeName() + "`");
             case TokenType::MINUS:
+                if (left.type == Value::Type::SET || right.type == Value::Type::SET) return setops::binary(e->op, left, right, e->line);
                 if (left.type == Value::Type::INSTANCE || right.type == Value::Type::INSTANCE) {
                     if (auto r = tryOperatorOverload("__sub__", left, right, e->line)) return *r;
                 }
                 requireNumbers(left, right, "-", e->line);
                 return Value::num(left.number - right.number);
             case TokenType::STAR:
+                if (left.type == Value::Type::SET || right.type == Value::Type::SET) return setops::binary(e->op, left, right, e->line);
                 if (left.type == Value::Type::INSTANCE || right.type == Value::Type::INSTANCE) {
                     if (auto r = tryOperatorOverload("__mul__", left, right, e->line)) return *r;
                 }
@@ -10377,24 +10417,28 @@ Value Interpreter::evaluate(const ExprPtr& expr, EnvPtr env) {
                                                             "division by zero", "the right-hand side of `%` evaluated to 0");
                 return Value::num(std::fmod(left.number, right.number));
             case TokenType::GREATER:
+                if (left.type == Value::Type::SET || right.type == Value::Type::SET) return setops::binary(e->op, left, right, e->line);
                 if (left.type == Value::Type::INSTANCE || right.type == Value::Type::INSTANCE) {
                     if (auto r = tryCompareOverload(e->op, left, right, e->line)) return *r; // __lt__/__le__/__gt__/__ge__/__cmp__
                 }
                 requireNumbers(left, right, ">", e->line);
                 return Value::boolean_(left.number > right.number);
             case TokenType::GREATER_EQUAL:
+                if (left.type == Value::Type::SET || right.type == Value::Type::SET) return setops::binary(e->op, left, right, e->line);
                 if (left.type == Value::Type::INSTANCE || right.type == Value::Type::INSTANCE) {
                     if (auto r = tryCompareOverload(e->op, left, right, e->line)) return *r; // __lt__/__le__/__gt__/__ge__/__cmp__
                 }
                 requireNumbers(left, right, ">=", e->line);
                 return Value::boolean_(left.number >= right.number);
             case TokenType::LESS:
+                if (left.type == Value::Type::SET || right.type == Value::Type::SET) return setops::binary(e->op, left, right, e->line);
                 if (left.type == Value::Type::INSTANCE || right.type == Value::Type::INSTANCE) {
                     if (auto r = tryCompareOverload(e->op, left, right, e->line)) return *r; // __lt__/__le__/__gt__/__ge__/__cmp__
                 }
                 requireNumbers(left, right, "<", e->line);
                 return Value::boolean_(left.number < right.number);
             case TokenType::LESS_EQUAL:
+                if (left.type == Value::Type::SET || right.type == Value::Type::SET) return setops::binary(e->op, left, right, e->line);
                 if (left.type == Value::Type::INSTANCE || right.type == Value::Type::INSTANCE) {
                     if (auto r = tryCompareOverload(e->op, left, right, e->line)) return *r; // __lt__/__le__/__gt__/__ge__/__cmp__
                 }
@@ -10502,6 +10546,11 @@ Value Interpreter::evaluate(const ExprPtr& expr, EnvPtr env) {
         if (obj.type == Value::Type::INSTANCE && hasMagic(obj, "__getitem__")) {
             std::vector<Value> a{idx};
             return *callMagic(obj, "__getitem__", a, e->line); // Rin 1.0: obj[i]
+        }
+        if (obj.type == Value::Type::SET) {
+            auto d = diagErr(diag::Code::E0004_InvalidType, e->line, "cannot index a `set`: it has no positions");
+            d.diagnostic->withHint("use `s.has(x)` to test membership, or `s.toArray()[i]` to read by position");
+            throw d;
         }
         throw diagErr(diag::Code::E0004_InvalidType, e->line, "cannot index a value of type `" + obj.typeName() + "`");
     }
@@ -10623,6 +10672,10 @@ Value Interpreter::evaluate(const ExprPtr& expr, EnvPtr env) {
         std::vector<Value> args;
         args.reserve(e->args.size());
         for (auto& a : e->args) args.push_back(evaluate(a, env));
+        if (obj.type == Value::Type::SET) {
+            Value out;
+            if (tryCallSetMethod(obj, e->method, args, e->line, out)) return out;
+        }
         if (obj.type == Value::Type::INSTANCE) {
             return callMethodOn(obj, e->method, args, env, e->line);
         }
@@ -11783,6 +11836,7 @@ bool Interpreter::livePropertyGet(const EnvPtr& env, const std::string& name, co
 #include "rin_extra_natives5.cpp"
 #include "rin_extra_natives6.cpp" // make.video/audio/api/image/ocr (docs/MAKE_MEDIA.md)
 #include "rin_table.cpp" // توسعة الجدول: دوال اللغة الموجودة تفهم الجدول (انظر رأس الملف)
+#include "rin_set.cpp"   // نوع Set الأساسي (docs/set.md)
 #endif
 
 // ---- Rin 1.0: OOP الموسَّع (interface/trait/abstract/static/private/get-set + دوال oop.*) ----
