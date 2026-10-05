@@ -3318,7 +3318,7 @@ ExprPtr Parser::logicAnd() {
 
 ExprPtr Parser::equality() {
     auto expr = comparison();
-    while (match({TokenType::EQUAL_EQUAL, TokenType::BANG_EQUAL})) {
+    while (match({TokenType::EQUAL_EQUAL, TokenType::BANG_EQUAL, TokenType::NOT_SAME, TokenType::COPY_OF})) {
         auto op = previous().type;
         auto right = comparison();
         auto b = std::make_shared<BinaryExpr>();
