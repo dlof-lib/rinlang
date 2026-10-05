@@ -30,6 +30,7 @@
     { "include": "#math-constants" },
     { "include": "#explicit-math-functions" },
     { "include": "#builtin-functions" },
+    { "include": "#std-namespaces" },
     { "include": "#functions" },
     { "include": "#operators" },
     { "include": "#punctuation" }
@@ -335,6 +336,14 @@
       "name": "support.function.math.rin"
     },
 
+    "std-namespaces": {
+      "comment": "Set (docs/set.md) and Env (docs/env.md): type/namespace names and their members.",
+      "patterns": [
+        { "match": "\\b(Set|Env)\\b(?=\\s*[.(])", "name": "support.class.builtin.rin" },
+        { "match": "(?<=\\bSet\\.|\\bEnv\\.)[A-Za-z_][A-Za-z0-9_]*", "name": "support.function.builtin.rin" }
+      ]
+    },
+
     "builtin-functions": {
       "comment": "Rin standard-library functions.",
       "match": "(?<![\\w.])(clcContainerMetaVersion|arabicStripDiacritics|clcContainerFileCount|clcContainerFileName|clcContainerMetaName|volumeContainerCount|groupContainerCount|rollbackTransaction|volumeHasContainer|appliedMigrations|clcContainerClose|colorToHslaString|colorToRgbaString|commitTransaction|groupHasContainer|pendingMigrations|rollbackMigration|beginTransaction|botReplyMarkdown|candleByRelation|chatMessageCount|clcContainerOpen|destroyContainer|volumeContainers|arabicNormalize|colorComponents|defineMigration|groupContainers|lastChatMessage|maskByNamespace|maskDescendants|Multiplication|bytesFromArray|candleRelation|colorGrayscale|colorLuminance|colorWithAlpha|containerNames|defineRelation|httpSetTimeout|maskChildrenOf|maskHasAllTags|splitSentences|volumeSnapshot|zlibDeflateRaw|zlibInflateRaw|bannerDismiss|bannerSuccess|bannerWarning|candleSources|candleTargets|colorContrast|cumulativeSum|extinguishAll|geometricMean|groupSnapshot|inTransaction|libraryExport|listInstalled|listRelations|loadInstalled|maskClearRefs|maskClearTags|maskHasAnyTag|maskKindCount|maskNamespace|maskParentGet|maskParentSet|movingAverage|setChatTyping|tokenizeWords|volumeMembers|attachToChat|botReplyCode|candleExists|candleLeaves|colorIsLight|colorLighten|defineSchema|detectScript|groupMembers|harmonicMean|hasContainer|isChatTyping|maskChildren|regexFindAll|regexReplace|runMigration|sectionNames|volumeParent|weightedMean|Subtraction|apiRegister|bannerError|cacheDelete|candleChain|candleCount|candleDepth|candleRoots|chatHistory|colorDarken|colorInvert|colorTextOn|createIndex|findByIndex|fromEntries|groupParent|httpRequest|inputNumber|isInstalled|lastIndexOf|levenshtein|listIndexes|maskAliases|maskCompare|maskDisable|maskMembers|maskResolve|maskSummary|maskVersion|queryOneDoc|regexGroups|relatedDocs|sectionVars|sendMessage|sqlGroupSum|sqlValidate|streamReply|unsubscribe|utf8Reverse|utf8ToArray|validateDoc|volumeNames|appendFile|bannerInfo|buildDylib|cacheClear|candleInfo|candleTree|childrenOf|colorBlend|colorParse|colorToHsl|colorValid|deleteFile|dropSchema|exportChat|extinguish|fetchImage|fileExists|groupNames|hasSection|httpDelete|isFunction|jsonDecode|jsonEncode|logHistory|maskActive|maskDetach|maskEnable|maskExists|maskHasRef|maskHasTag|maskLocked|maskParent|maskTarget|percentile|regexSplit|rinEdition|rinVersion|siblingsOf|sqlExplain|sqlGroupBy|utf8CharAt|utf8Substr|volumePath|volumeVars|apiDelete|apiHeader|cacheKeys|clearChat|closeChat|colorAnsi|colorHsla|colorRgba|countDocs|deepMerge|deleteDoc|dropIndex|fetchIcon|getSchema|groupPath|groupVars|hasVolume|httpPatch|insertDoc|key_terms|maskAlias|maskByTag|maskCount|maskDepth|maskKinds|maskNames|maskUnref|maskUntag|mergeMaps|normalize|queryDocs|regexFind|regexTest|sqlDelete|sqlExists|sqlUpdate|subscribe|tokenType|trimStart|updateDoc|writeFile|Addition|apiPatch|assertEq|botReply|buildCom|buildDll|buildExe|buildLib|cacheGet|cacheHas|cacheSet|coalesce|colorHsl|colorMix|colorRgb|contains|deepCopy|filename|findMask|getField|hasField|hasGroup|httpPost|isNumber|isString|logClear|maskInfo|maskKind|maskLock|maskNote|maskRefs|maskRoot|maskTags|omitKeys|openChat|padStart|parentOf|pickKeys|readFile|setField|setState|sqlCount|sqlPluck|toNumber|toString|variance|adler32|allDocs|apiCall|apiPost|barcode|between|buildSo|callApi|confirm|entries|findDoc|flatten|getPath|httpGet|httpPut|indexOf|isArray|logSave|maskRef|maskTag|offChat|pattern|product|publish|replace|reverse|setPath|slotsOf|trimEnd|unwatch|utf8Len|apiGet|apiPut|assert|buildA|callFn|charAt|choose|concat|create|docIds|isBool|kindOf|maskOf|median|onChat|padEnd|random|remove|repeat|sqlAvg|sqlIds|sqlMax|sqlMin|sqlOne|sqlSum|stddev|substr|toBool|tokens|typeIs|values|zscore|Equal|atan2|clamp|count|crc32|empty|floor|isMap|isNil|isNot|light|log10|lower|maxOf|minOf|range|round|scale|shift|slice|spawn|split|toHex|trunc|upper|watch|acos|asin|atan|call|cbrt|ceil|fail|hash|join|keys|lerp|mask|mean|mode|none|push|seed|sign|sort|sqrt|trim|type|uuid|abs|all|any|chr|cos|exp|has|iqr|len|log|max|min|now|ord|pop|pow|rms|run|sin|sql|str|sum|tan|is|ln|qr)(?=\\s*\\()",
@@ -368,7 +377,7 @@
         },
         {
           "name": "keyword.operator.comparison.rin",
-          "match": "(==|!=|<=|>=|<|>)"
+          "match": "(=/=|=/(?![/*])|/=|==|!=|<=|>=|<|>)"
         },
         {
           "name": "keyword.operator.assignment.rin",
