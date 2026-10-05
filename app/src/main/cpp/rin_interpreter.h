@@ -48,11 +48,18 @@ using ArrayPtr = std::shared_ptr<ArrayData>;
 using MapData = std::vector<std::pair<Value, Value>>;
 using MapPtr = std::shared_ptr<MapData>;
 
+// مجموعة (set): عناصر فريدة بحسب valuesEqual (مقارنة تركيبية) مع حفظ ترتيب الإدراج؛ تُمرَّر بالمرجع
+// (shared_ptr) تماماً كالمصفوفة والقاموس، فتعمل add/remove بالتعديل المباشر. تعريف SetData الكامل
+// بعد Value مباشرة (يحتاج Value كاملة النوع)، والتنفيذ في rin_set.cpp (يُضمَّن في نهاية
+// rin_interpreter.cpp) — الشرح الكامل: docs/set.md
+struct SetData;
+using SetPtr = std::shared_ptr<SetData>;
+
 struct Value {
     // INSTANCE: كائن (class أو struct) — انظر InstanceData أدناه (تُعرَّف بعد Value لأنها تحتاج
     // Value كاملة النوع لأجل std::unordered_map<std::string, Value> حقولها؛ shared_ptr هنا لا
     // يحتاج نوعاً كاملاً فيعمل بلا مشكلة).
-    enum class Type { NIL, NUMBER, STRING, BOOL, FUNCTION, ARRAY, MAP, INSTANCE } type = Type::NIL;
+    enum class Type { NIL, NUMBER, STRING, BOOL, FUNCTION, ARRAY, MAP, INSTANCE, SET } type = Type::NIL;
     double number = 0.0;
     std::string str;
     bool boolean = false;
@@ -60,6 +67,7 @@ struct Value {
     ArrayPtr array;
     MapPtr map;
     std::shared_ptr<InstanceData> instance;
+    SetPtr set; // Type::SET
 
     static Value nil() { return Value{}; }
     static Value num(double n) { Value v; v.type = Type::NUMBER; v.number = n; return v; }
@@ -67,6 +75,7 @@ struct Value {
     static Value boolean_(bool b) { Value v; v.type = Type::BOOL; v.boolean = b; return v; }
     static Value makeArray(ArrayPtr a) { Value v; v.type = Type::ARRAY; v.array = std::move(a); return v; }
     static Value makeMap(MapPtr m) { Value v; v.type = Type::MAP; v.map = std::move(m); return v; }
+    static Value makeSet(SetPtr st) { Value v; v.type = Type::SET; v.set = std::move(st); return v; }
     static Value makeInstance(std::shared_ptr<InstanceData> inst) { Value v; v.type = Type::INSTANCE; v.instance = std::move(inst); return v; }
 
     bool isTruthy() const {
@@ -77,6 +86,26 @@ struct Value {
     }
     std::string toDisplayString() const;
     std::string typeName() const;
+};
+
+// محتوى المجموعة: items بترتيب الإدراج + فهرس تجزئة للقيم "البدائية" (رقم/نص/منطقي/nil) فيصبح
+// add/has/remove لها O(1) تقريباً بدل مسح خطّي؛ العناصر المركّبة (مصفوفة/قاموس/مجموعة/كائن/دالة)
+// تُقارَن بـ valuesEqual عبر قائمة comp. الفهرس "كسول": أي إزالة تُسقطه (indexed=false) ويُعاد
+// بناؤه عند أول بحث لاحق. لا تعدّل items مباشرة من خارج هذه الدوال وإلا فسد الفهرس.
+struct SetData {
+    std::vector<Value> items;
+    mutable std::unordered_map<std::string, size_t> pidx; // مفتاح بدائي -> موضعه في items
+    mutable std::vector<size_t> comp;                      // مواضع العناصر المركّبة
+    mutable bool indexed = true;
+
+    size_t size() const { return items.size(); }
+    bool empty() const { return items.empty(); }
+    bool contains(const Value& x) const;     // O(1) للبدائي، O(#composite) للمركّب
+    bool add(const Value& x);                // true إن أُضيف فعلاً
+    bool remove(const Value& x);             // true إن كان موجوداً وأُزيل
+    void clear() { items.clear(); pidx.clear(); comp.clear(); indexed = true; }
+    void reindex() const;
+    static bool primKey(const Value& v, std::string& key); // false = عنصر مركّب
 };
 
 // ---- OOP: بيانات كائن (instance) فعلي لصنف class/struct مُعرَّف عبر ClassStmt (rin_ast.h) ----
@@ -95,6 +124,18 @@ struct InstanceData {
 
 // مقارنة تركيبية (structural) بين قيمتين، تُستخدم في == != وفهرسة القواميس بالمفتاح.
 bool valuesEqual(const Value& a, const Value& b);
+
+// ---- Set: عمليات مجموعات حرّة (تُعرَّف في rin_set.cpp) تستعملها valuesEqual/المعاملات/التكرار ----
+namespace setops {
+bool equal(const SetData& a, const SetData& b);              // تساوٍ بلا اعتبار للترتيب
+bool subset(const SetData& a, const SetData& b);             // a ⊆ b
+SetPtr unite(const SetData& a, const SetData& b);            // a ∪ b (ترتيب: a ثم الجديد من b)
+SetPtr intersect(const SetData& a, const SetData& b);        // a ∩ b (ترتيب a)
+SetPtr subtract(const SetData& a, const SetData& b);         // a − b (ترتيب a)
+// معاملات + - * < <= > >= عندما يكون أحد الطرفين SET؛ يرمي E0004 برسالة واضحة إن كان الآخر ليس SET.
+Value binary(TokenType op, const Value& l, const Value& r, int line);
+std::string display(const SetData& s);                       // "Set{1, 2, 3}"
+} // namespace setops
 
 // ---- OOP: تعريف صنف (class/struct) واحد — مبني من ClassStmt عند تنفيذه/hoisting (انظر
 // Interpreter::registerClassStmt في rin_interpreter.cpp) ----
@@ -1020,6 +1061,9 @@ private:
     void registerNativesExtra(); // rin_extra_natives.cpp — Rin 1.0 additions (core helpers + container API)
     void registerNativesExtra5(); // rin_extra_natives5.cpp — عائلة # (#sed #sum #diff #add #to #swap)
     void registerNativesExtra6(); // rin_extra_natives6.cpp — make.video/audio/api/image.removeBg/ocr (docs/MAKE_MEDIA.md)
+    void registerNativesSet();    // rin_set.cpp — نوع Set الأساسي: Set(...) و Set.* + جعل len/contains/has/remove/sum/... تفهمه (docs/set.md)
+    // s.method(args...) على قيمة SET (طريقة نقطية). تُرجع true وتملأ out إن كان method من عمليات Set المعروفة.
+    bool tryCallSetMethod(const Value& obj, const std::string& method, std::vector<Value>& args, int line, Value& out);
     void registerNativesExtra4(); // rin_extra_natives4.cpp — Rin 1.0 (json.* / semver.* / pkg.* / cpp.* جسر C++)
     void registerNativesExtra3(); // rin_extra_natives3.cpp — Rin 1.0 additions (net.* بشبكة حقيقية + container.* إضافية)
     void registerNativesExtra2(); // rin_extra_natives2.cpp — Rin 1.0 additions (sec./file./net./log./automation. + container extras)
