@@ -38,6 +38,8 @@ enum class TokenType {
     // single/double char tokens
     PLUS, MINUS, STAR, SLASH, PERCENT,
     EQUAL, EQUAL_EQUAL, BANG, BANG_EQUAL,
+    NOT_SAME,   // =/=  ليس نفس الكائن (هوية مرجعية)
+    COPY_OF,    // =/   مساوٍ بالقيمة لكن كائن مختلف (نسخة)
     LESS, LESS_EQUAL, GREATER, GREATER_EQUAL,
     LPAREN, RPAREN, LBRACE, RBRACE,
     LBRACKET, RBRACKET, // [ ]  (مصفوفات وفهرسة arr[i])
