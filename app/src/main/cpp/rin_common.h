@@ -59,6 +59,7 @@ struct Token {
     int line = 0;
     int col = 0;     // 1-indexed، عمود أول حرف من الرمز (نظام Diagnostics — انظر diagnostics/)
     int endCol = 0;  // 1-indexed، حصري النهاية (عمود آخر حرف + 1)
+    bool tpl = false; // LPAREN افتتاحية لنص قالبي فيه ${} (يضعها Lexer::scanTemplateParts) -- يميّزها عن ( عادية
 };
 
 // Thrown by the lexer/parser/interpreter on any language error.
