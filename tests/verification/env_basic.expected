@@ -1,0 +1,12 @@
+rin 8080 Rin Lang a $b #c http://h:8080/x true fallback cost $5
+5 2
+rin nil dflt true false
+8080 7 8080 true false
+["a", "b", "c"] []
+sys
+rin
+v1 true false
+{} true
+E0007
+E0005
+E0036
