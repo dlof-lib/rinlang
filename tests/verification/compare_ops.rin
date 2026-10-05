@@ -1,0 +1,14 @@
+// معاملات المقارنة: /=  =/=  =/
+let a = [1, 2, 3];
+let b = a;
+let c = [1, 2, 3];
+let d = [9];
+print a /= c, a /= d, 1 /= 1, 1 /= 2, "x" /= "x";
+print a =/= b, a =/= c, a =/= d, 5 =/= 5, 5 =/= 6;
+print a =/ c, a =/ b, a =/ d, 5 =/ 5;
+let s = Set([1, 2]);
+let t = Set([1, 2]);
+print s =/ t, s =/= t, s =/= s, s /= t;
+let x =// تعليق بعد = بلا التباس
+7;
+print x, x != 8, x == 7;
