@@ -221,6 +221,20 @@ bool valuesEqual(const Value& a, const Value& b) {
     return false;
 }
 
+// هوية مرجعية: للأنواع المرجعية (ARRAY/MAP/SET/INSTANCE/FUNCTION) نفس المؤشّر بالذات؛
+// للأنواع القيمية (nil/number/string/bool) تساوي القيمة نفسها (لا معنى لـ"كائن آخر" لها).
+static bool sameReference(const Value& a, const Value& b) {
+    if (a.type != b.type) return false;
+    switch (a.type) {
+        case Value::Type::ARRAY:    return a.array == b.array;
+        case Value::Type::MAP:      return a.map == b.map;
+        case Value::Type::SET:      return a.set == b.set;
+        case Value::Type::INSTANCE: return a.instance == b.instance;
+        case Value::Type::FUNCTION: return a.function == b.function;
+        default:                    return valuesEqual(a, b);
+    }
+}
+
 std::string Value::typeName() const {
     switch (type) {
         case Type::NIL: return "nil";
@@ -423,6 +437,8 @@ static std::string tokenTypeName(TokenType t) {
         case TokenType::EQUAL_EQUAL: return "EQUAL_EQUAL";
         case TokenType::BANG: return "BANG";
         case TokenType::BANG_EQUAL: return "BANG_EQUAL";
+        case TokenType::NOT_SAME: return "NOT_SAME";
+        case TokenType::COPY_OF: return "COPY_OF";
         case TokenType::LESS: return "LESS";
         case TokenType::LESS_EQUAL: return "LESS_EQUAL";
         case TokenType::GREATER: return "GREATER";
@@ -6423,6 +6439,7 @@ void Interpreter::registerNatives() {
     registerNativesExtra6(); // make.video/audio/api/image.removeBg/ocr (rin_extra_natives6.cpp)
     registerNativesOop(); // Rin 1.0: oop.* — استبطان الأصناف والكائنات + أدوات OOP (rin_oop_natives.cpp)
     registerNativesInput(); // Rin 1.0: نماذج الإدخال (معاملة/تداخل/مُدقِّق النموذج) فوق input() — بعد oop.* لأنها تستدعيها (rin_input.cpp)
+    registerNativesEnv();   // ربط .env: Env.* (rin_env.cpp)
     registerNativesSet();   // نوع Set الأساسي: Set(...) و Set.* وتوسعة len/contains/has/remove/sum... (rin_set.cpp) — أخيراً كي تلفّ ما سبقها
 }
 
@@ -10455,6 +10472,10 @@ Value Interpreter::evaluate(const ExprPtr& expr, EnvPtr env) {
                     if (auto r = tryEqOverload(left, right, true, e->line)) return Value::boolean_(*r);
                 }
                 return Value::boolean_(!valuesEqual(left, right));
+            case TokenType::NOT_SAME:   // =/=  ليس نفس الكائن (القيم القيمية تُقارَن بالقيمة)
+                return Value::boolean_(!sameReference(left, right));
+            case TokenType::COPY_OF:    // =/   متساويان بالقيمة لكنهما كائنان مختلفان (نسخة)
+                return Value::boolean_(valuesEqual(left, right) && !sameReference(left, right));
             default: break;
         }
     }
@@ -11836,6 +11857,7 @@ bool Interpreter::livePropertyGet(const EnvPtr& env, const std::string& name, co
 #include "rin_extra_natives5.cpp"
 #include "rin_extra_natives6.cpp" // make.video/audio/api/image/ocr (docs/MAKE_MEDIA.md)
 #include "rin_table.cpp" // توسعة الجدول: دوال اللغة الموجودة تفهم الجدول (انظر رأس الملف)
+#include "rin_env.cpp"   // ربط ملف .env (docs/env.md)
 #include "rin_set.cpp"   // نوع Set الأساسي (docs/set.md)
 #endif
 
