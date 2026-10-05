@@ -50,6 +50,12 @@ inline void encode(const Value& v, std::ostringstream& os) {
             os << "]";
             break;
         }
+        case Value::Type::SET: { // مجموعة -> مصفوفة JSON بترتيب الإدراج
+            os << "[";
+            if (v.set) for (size_t i = 0; i < v.set->items.size(); i++) { if (i) os << ","; encode(v.set->items[i], os); }
+            os << "]";
+            break;
+        }
         case Value::Type::MAP: {
             os << "{";
             for (size_t i = 0; i < v.map->size(); i++) {
