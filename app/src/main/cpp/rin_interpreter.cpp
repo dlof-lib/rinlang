@@ -25,6 +25,7 @@
 #include <unordered_set>
 #include <algorithm>
 #include <cctype>
+#include <cstring>
 #include <iostream>
 #include <cstdlib>
 #include <ctime>
@@ -467,6 +468,238 @@ static std::string asString(const Value& v, const std::string& fn, int line) {
         throw diagErr(diag::Code::E0004_InvalidType, line, "'" + fn + "' expects a string but got " + v.typeName());
     }
     return v.str;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// النصوص القالبية: التنسيق وقوالب وقت التشغيل (docs/template-strings.md)
+// ─────────────────────────────────────────────────────────────────────────────
+namespace {
+
+size_t tplU8Len(const std::string& s) { size_t n = 0; for (unsigned char c : s) if ((c & 0xC0) != 0x80) n++; return n; }
+size_t tplCpBytes(unsigned char c) { return c < 0x80 ? 1 : (c >> 5) == 6 ? 2 : (c >> 4) == 14 ? 3 : (c >> 3) == 30 ? 4 : 1; }
+std::string tplTrim(const std::string& s) {
+    size_t b = s.find_first_not_of(" \t\r\n"), e = s.find_last_not_of(" \t\r\n");
+    return b == std::string::npos ? "" : s.substr(b, e - b + 1);
+}
+std::string tplPad(const std::string& body, size_t width, const std::string& fill, char align) {
+    size_t len = tplU8Len(body);
+    if (width <= len) return body;
+    size_t pad = width - len, left = align == '>' ? pad : align == '^' ? pad / 2 : 0, right = pad - left;
+    std::string out;
+    for (size_t i = 0; i < left; i++) out += fill;
+    out += body;
+    for (size_t i = 0; i < right; i++) out += fill;
+    return out;
+}
+std::string tplGroup(const std::string& s, char sep) { // فواصل الآلاف على الجزء الصحيح
+    size_t st = (!s.empty() && (s[0] == '-' || s[0] == '+' || s[0] == ' ')) ? 1 : 0;
+    size_t en = s.find_first_not_of("0123456789", st);
+    if (en == std::string::npos) en = s.size();
+    std::string ip = s.substr(st, en - st), out;
+    for (size_t k = 0; k < ip.size(); k++) { if (k && (ip.size() - k) % 3 == 0) out += sep; out += ip[k]; }
+    return s.substr(0, st) + out + s.substr(en);
+}
+std::string tplArabicDigits(const std::string& s) { // 0-9 . , % -> ٠-٩ ٫ ٬ ٪
+    static const char* d[] = {"\xD9\xA0","\xD9\xA1","\xD9\xA2","\xD9\xA3","\xD9\xA4","\xD9\xA5","\xD9\xA6","\xD9\xA7","\xD9\xA8","\xD9\xA9"};
+    std::string out;
+    for (char c : s) {
+        if (c >= '0' && c <= '9') out += d[c - '0'];
+        else if (c == '.') out += "\xD9\xAB";
+        else if (c == ',') out += "\xD9\xAC";
+        else if (c == '%') out += "\xD9\xAA";
+        else out += c;
+    }
+    return out;
+}
+
+// مرحلة واحدة من التنسيق. الصيغة:  [[حشو]محاذاة][إشارة][0][عرض][, أو _][.دقة][نوع]
+//   محاذاة < > ^ ؛ حشو = أي حرف قبلها (مثل *^10 أو -<8) ؛ إشارة + أو مسافة
+//   نوع: f ثابت · d صحيح · % نسبة · e علمي · x X ست‌عشري · b ثنائي · o ثماني · s نص
+//   كلمات: upper lower trim title cap ar (أرقام عربية-هندية)
+Value tplStage(const Value& v, const std::string& specIn, int line, const std::string& whole) {
+    const std::string spec = tplTrim(specIn);
+    auto bad = [&](const std::string& why) {
+        return diagErr(diag::Code::E0007_InvalidArguments, line, "invalid format `:" + whole + "` in template string: " + why);
+    };
+    if (spec.empty()) throw bad("empty format stage");
+    if (spec == "upper" || spec == "lower" || spec == "title" || spec == "cap") {
+        std::string s = v.toDisplayString();
+        bool startWord = true;
+        for (auto& c : s) {
+            unsigned char u = (unsigned char)c;
+            if (spec == "upper") c = (char)std::toupper(u);
+            else if (spec == "lower") c = (char)std::tolower(u);
+            else if (spec == "title") { c = startWord ? (char)std::toupper(u) : (char)std::tolower(u); startWord = (c == ' ' || c == '\t' || c == '\n'); }
+            else if (spec == "cap") { if (&c == &s[0]) c = (char)std::toupper(u); }
+        }
+        return Value::string(s);
+    }
+    if (spec == "trim") return Value::string(tplTrim(v.toDisplayString()));
+    if (spec == "ar")   return Value::string(tplArabicDigits(v.toDisplayString()));
+
+    size_t i = 0;
+    std::string fill = " ";
+    char align = 0;
+    {   // [[حشو]محاذاة]
+        size_t L = tplCpBytes((unsigned char)spec[0]);
+        if (L < spec.size() && (spec[L] == '<' || spec[L] == '>' || spec[L] == '^')) { fill = spec.substr(0, L); align = spec[L]; i = L + 1; }
+        else if (spec[0] == '<' || spec[0] == '>' || spec[0] == '^') { align = spec[0]; i = 1; }
+    }
+    char sign = 0;
+    if (i < spec.size() && (spec[i] == '+' || spec[i] == ' ')) sign = spec[i++];
+    bool zero = false;
+    if (i < spec.size() && spec[i] == '0') { zero = true; i++; }
+    size_t width = 0;
+    while (i < spec.size() && isdigit((unsigned char)spec[i])) width = width * 10 + (spec[i++] - '0');
+    char group = 0;
+    if (i < spec.size() && (spec[i] == ',' || spec[i] == '_')) group = spec[i++];
+    int prec = -1;
+    if (i < spec.size() && spec[i] == '.') {
+        i++;
+        if (i >= spec.size() || !isdigit((unsigned char)spec[i])) throw bad("expected digits after `.`");
+        prec = 0;
+        while (i < spec.size() && isdigit((unsigned char)spec[i])) prec = prec * 10 + (spec[i++] - '0');
+    }
+    char type = 0;
+    if (i < spec.size() && std::strchr("fd%exXbos", spec[i])) type = spec[i++];
+    if (i != spec.size())
+        throw bad("unknown part `" + spec.substr(i) + "` (examples: .2f  ,.2f  05  +d  *^10  >8  x  b  e  .0%  upper  lower  title  trim  ar  or chain with |)");
+
+    const bool isNum = v.type == Value::Type::NUMBER;
+    const bool numericType = type && type != 's';
+    if ((numericType || group || sign || zero) && !isNum) throw bad("this format needs a number but got " + v.typeName());
+
+    std::string s;
+    if (isNum) {
+        char buf[512];
+        double x = v.number;
+        if (type == 'x' || type == 'X' || type == 'o' || type == 'b') {
+            long long n = std::llround(x);
+            bool neg = n < 0; unsigned long long u = neg ? (unsigned long long)(-n) : (unsigned long long)n;
+            std::string d;
+            if (type == 'b') { if (!u) d = "0"; while (u) { d.insert(d.begin(), char('0' + (u & 1))); u >>= 1; } }
+            else { snprintf(buf, sizeof buf, type == 'x' ? "%llx" : type == 'X' ? "%llX" : "%llo", u); d = buf; }
+            s = (neg ? "-" : "") + d;
+        } else if (type == '%') { snprintf(buf, sizeof buf, "%.*f%%", prec < 0 ? 0 : prec, x * 100.0); s = buf; }
+        else if (type == 'd')   { snprintf(buf, sizeof buf, "%.0f", std::round(x)); s = buf; }
+        else if (type == 'e')   { snprintf(buf, sizeof buf, "%.*e", prec < 0 ? 6 : prec, x); s = buf; }
+        else if (type == 'f' || prec >= 0) { snprintf(buf, sizeof buf, "%.*f", prec < 0 ? 6 : prec, x); s = buf; }
+        else s = v.toDisplayString();
+        if (s == "-0") s = "0";
+        if (group && (type == 0 || type == 'f' || type == 'd' || type == '%')) s = tplGroup(s, group == '_' ? '_' : ',');
+        if (sign && !s.empty() && s[0] != '-') s.insert(s.begin(), sign);
+    } else {
+        s = v.toDisplayString();
+        if (prec >= 0) { // قصّ النص إلى prec حرفاً
+            size_t bytes = 0, cps = 0;
+            while (bytes < s.size() && cps < (size_t)prec) { bytes += tplCpBytes((unsigned char)s[bytes]); cps++; }
+            s = s.substr(0, bytes);
+        }
+    }
+
+    if (width > tplU8Len(s)) {
+        if (zero && isNum && !align) {
+            size_t st = (!s.empty() && (s[0] == '-' || s[0] == '+' || s[0] == ' ')) ? 1 : 0;
+            s.insert(st, std::string(width - tplU8Len(s), '0'));
+        } else {
+            s = tplPad(s, width, fill, align ? align : (isNum ? '>' : '<'));
+        }
+    }
+    return Value::string(s);
+}
+
+} // namespace
+
+// يطبّق تتابع مراحل مفصولة بـ | على القيمة:  "trim|upper|>10"
+static Value templateFormat(const Value& v, const std::string& spec, int line) {
+    Value cur = v;
+    size_t pos = 0;
+    while (true) {
+        size_t bar = spec.find('|', pos);
+        std::string part = spec.substr(pos, bar == std::string::npos ? std::string::npos : bar - pos);
+        cur = tplStage(cur, part, line, spec);
+        if (bar == std::string::npos) break;
+        pos = bar + 1;
+    }
+    return cur;
+}
+
+// قوالب وقت التشغيل: render("مرحباً ${user.name ?? \"زائر\"}، ${total:,.2f}", data)
+//   ${مسار}  ${مسار ?? بديل}  ${مسار:تنسيق}  ${مسار ?? بديل:تنسيق}  ويكافئها {{...}}
+//   المسار: مفاتيح مفصولة بنقطة، والأرقام فهارس للمصفوفات (items.0.name). الكتابة $${ تعطي ${ حرفياً.
+//   لا يُنفَّذ أي كود Rin داخل القالب (آمن لقوالب قادمة من ملفات/مستخدمين).
+static Value templateLookup(const Value& root, const std::string& path, bool& found) {
+    Value cur = root;
+    found = true;
+    size_t pos = 0;
+    while (pos <= path.size()) {
+        size_t dot = path.find('.', pos);
+        std::string seg = tplTrim(path.substr(pos, dot == std::string::npos ? std::string::npos : dot - pos));
+        pos = dot == std::string::npos ? path.size() + 1 : dot + 1;
+        if (seg.empty()) { found = false; return Value::nil(); }
+        if (cur.type == Value::Type::MAP) {
+            bool hit = false;
+            for (auto& kv : *cur.map) if (kv.first.type == Value::Type::STRING && kv.first.str == seg) { cur = kv.second; hit = true; break; }
+            if (!hit) { found = false; return Value::nil(); }
+        } else if (cur.type == Value::Type::ARRAY && std::all_of(seg.begin(), seg.end(), ::isdigit)) {
+            size_t idx = (size_t)std::stoull(seg);
+            if (idx >= cur.array->size()) { found = false; return Value::nil(); }
+            cur = (*cur.array)[idx];
+        } else { found = false; return Value::nil(); }
+    }
+    if (cur.type == Value::Type::NIL) found = false;
+    return cur;
+}
+static size_t templateFindOutsideQuotes(const std::string& s, const std::string& needle, size_t from = 0) {
+    char q = 0;
+    for (size_t i = from; i < s.size(); i++) {
+        if (q) { if (s[i] == '\\') i++; else if (s[i] == q) q = 0; continue; }
+        if (s[i] == '"' || s[i] == '\'') { q = s[i]; continue; }
+        if (s.compare(i, needle.size(), needle) == 0) return i;
+    }
+    return std::string::npos;
+}
+static Value templateLiteral(const std::string& raw) {
+    std::string t = tplTrim(raw);
+    if (t.size() >= 2 && (t[0] == '"' || t[0] == '\'') && t.back() == t[0]) return Value::string(t.substr(1, t.size() - 2));
+    if (t == "true" || t == "false") return Value::boolean_(t == "true");
+    if (t == "nil") return Value::nil();
+    char* endp = nullptr;
+    double d = std::strtod(t.c_str(), &endp);
+    if (!t.empty() && endp && *endp == 0) return Value::num(d);
+    return Value::string(t);
+}
+static std::string templateRender(const std::string& tpl, const Value& data, int line) {
+    std::string out;
+    size_t i = 0;
+    while (i < tpl.size()) {
+        if (tpl.compare(i, 3, "$${") == 0) { out += "${"; i += 3; continue; }
+        bool dollar = tpl.compare(i, 2, "${") == 0, braces = !dollar && tpl.compare(i, 2, "{{") == 0;
+        if (!dollar && !braces) { out += tpl[i++]; continue; }
+        const std::string close = dollar ? "}" : "}}";
+        size_t from = i + 2;
+        size_t end = tpl.find(close, from);
+        if (end == std::string::npos) throw diagErr(diag::Code::E0007_InvalidArguments, line, "render: unterminated placeholder starting at `" + tpl.substr(i, 12) + "`");
+        std::string inner = tpl.substr(from, end - from);
+        i = end + close.size();
+
+        std::string spec, head = inner;
+        size_t colon = templateFindOutsideQuotes(inner, ":");
+        if (colon != std::string::npos) { head = inner.substr(0, colon); spec = tplTrim(inner.substr(colon + 1)); }
+        std::string path = head, defText; bool hasDefault = false;
+        size_t dq = templateFindOutsideQuotes(head, "??");
+        if (dq != std::string::npos) { path = head.substr(0, dq); defText = head.substr(dq + 2); hasDefault = true; }
+        path = tplTrim(path);
+        if (path.empty()) throw diagErr(diag::Code::E0007_InvalidArguments, line, "render: empty placeholder `" + tpl.substr(i - inner.size() - close.size() - 2, inner.size() + close.size() + 2) + "`");
+        bool found = false;
+        Value val = templateLookup(data, path, found);
+        if (!found) {
+            if (!hasDefault) throw diagErr(diag::Code::E0001_UndefinedVariable, line, "render: no value for `" + path + "` in the data (add `?? default` to make it optional)");
+            val = templateLiteral(defText);
+        }
+        out += spec.empty() ? val.toDisplayString() : templateFormat(val, spec, line).str;
+    }
+    return out;
 }
 
 static void expectArgs(const std::string& fn, std::vector<Value>& args, size_t count, int line) {
@@ -2249,85 +2482,16 @@ void Interpreter::registerNatives() {
         if (n == "weekday")  return Value::num(tmv.tm_wday); // 0 = الأحد
         throw diagErr(diag::Code::E0007_InvalidArguments, line, "unknown built-in template value `#" + n + "`");
     };
-    // #fmt(value, spec): `${value:spec}`
-    //   نص:    upper | lower | trim
-    //   تنسيق: [محاذاة < > ^][0][عرض][,][.دقة][نوع f d %]   مثل  .2f   08.1f   >10   ^12   ,d   .0%
+    // #fmt(value, spec): `${value:spec}` -- انظر templateFormat() أعلاه (تتابع مراحل مفصولة بـ |).
     natives["#fmt"] = [](std::vector<Value>& a, int line) -> Value {
         expectArgs("#fmt", a, 2, line);
-        const Value& v = a[0];
-        std::string spec = a[1].str;
-        auto bad = [&](const std::string& why) {
-            return diagErr(diag::Code::E0007_InvalidArguments, line, "invalid format `:" + spec + "` in template string: " + why);
-        };
-        auto u8len = [](const std::string& s) { size_t n = 0; for (unsigned char c : s) if ((c & 0xC0) != 0x80) n++; return n; };
-
-        if (spec == "upper" || spec == "lower") {
-            std::string s = v.toDisplayString();
-            for (auto& c : s) c = (char)(spec == "upper" ? std::toupper((unsigned char)c) : std::tolower((unsigned char)c));
-            return Value::string(s);
-        }
-        if (spec == "trim") {
-            std::string s = v.toDisplayString();
-            size_t b = s.find_first_not_of(" \t\r\n"), e = s.find_last_not_of(" \t\r\n");
-            return Value::string(b == std::string::npos ? "" : s.substr(b, e - b + 1));
-        }
-
-        size_t i = 0;
-        char align = 0;
-        if (i < spec.size() && (spec[i] == '<' || spec[i] == '>' || spec[i] == '^')) align = spec[i++];
-        bool zero = false;
-        if (i < spec.size() && spec[i] == '0') { zero = true; i++; }
-        size_t width = 0;
-        while (i < spec.size() && isdigit((unsigned char)spec[i])) width = width * 10 + (spec[i++] - '0');
-        bool comma = false;
-        if (i < spec.size() && spec[i] == ',') { comma = true; i++; }
-        int prec = -1;
-        if (i < spec.size() && spec[i] == '.') {
-            i++;
-            if (i >= spec.size() || !isdigit((unsigned char)spec[i])) throw bad("expected digits after `.`");
-            prec = 0;
-            while (i < spec.size() && isdigit((unsigned char)spec[i])) prec = prec * 10 + (spec[i++] - '0');
-        }
-        char type = 0;
-        if (i < spec.size() && (spec[i] == 'f' || spec[i] == 'd' || spec[i] == '%')) type = spec[i++];
-        if (i != spec.size()) throw bad("unknown part `" + spec.substr(i) + "` (examples: .2f  08.1f  >10  ^12  ,d  .0%  upper  lower  trim)");
-
-        const bool isNum = v.type == Value::Type::NUMBER;
-        if ((type || comma || prec >= 0 || zero) && !isNum) throw bad("this format needs a number but got " + v.typeName());
-
-        std::string s;
-        if (isNum) {
-            char buf[512];
-            if (type == '%') snprintf(buf, sizeof buf, "%.*f%%", prec < 0 ? 0 : prec, v.number * 100.0);
-            else if (type == 'd') snprintf(buf, sizeof buf, "%.0f", std::round(v.number));
-            else if (type == 'f' || prec >= 0) snprintf(buf, sizeof buf, "%.*f", prec < 0 ? 6 : prec, v.number);
-            else buf[0] = 0;
-            s = buf[0] ? std::string(buf) : v.toDisplayString();
-            if (comma) { // فواصل الآلاف على الجزء الصحيح
-                size_t st = (s[0] == '-') ? 1 : 0, en = s.find_first_not_of("0123456789", st);
-                if (en == std::string::npos) en = s.size();
-                std::string ip = s.substr(st, en - st), out;
-                for (size_t k = 0; k < ip.size(); k++) { if (k && (ip.size() - k) % 3 == 0) out += ','; out += ip[k]; }
-                s = s.substr(0, st) + out + s.substr(en);
-            }
-        } else {
-            s = v.toDisplayString();
-        }
-
-        size_t len = u8len(s);
-        if (width > len) {
-            size_t pad = width - len;
-            if (zero) {
-                size_t st = (!s.empty() && (s[0] == '-' || s[0] == '+')) ? 1 : 0;
-                s.insert(st, std::string(pad, '0'));
-            } else {
-                char al = align ? align : (isNum ? '>' : '<');
-                if (al == '<') s += std::string(pad, ' ');
-                else if (al == '>') s = std::string(pad, ' ') + s;
-                else s = std::string(pad / 2, ' ') + s + std::string(pad - pad / 2, ' ');
-            }
-        }
-        return Value::string(s);
+        return templateFormat(a[0], a[1].type == Value::Type::STRING ? a[1].str : a[1].toDisplayString(), line);
+    };
+    // render(template, data): قوالب وقت التشغيل -- `${مسار.داخل.البيانات ?? بديل : تنسيق}` أو {{مسار}}.
+    natives["render"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("render", a, 2, line);
+        if (a[0].type != Value::Type::STRING) throw diagErr(diag::Code::E0004_InvalidType, line, "'render' expects a template string as first argument but got " + a[0].typeName());
+        return Value::string(templateRender(a[0].str, a[1], line));
     };
     natives["toNumber"] = [](std::vector<Value>& a, int line) -> Value {
         expectArgs("toNumber", a, 1, line);
