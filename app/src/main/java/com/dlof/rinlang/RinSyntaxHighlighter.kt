@@ -153,6 +153,8 @@ object RinSyntaxHighlighter {
 
     // نص محاط بعلامتي تنصيص مع دعم التهريب (\" \\ \n ...) بنفس أسلوب rin_lexer.cpp::scanString.
     private val defaultString = Pattern.compile("\"(?:\\\\.|[^\"\\\\])*\"")
+    // Rin فقط: نص عادي "..." أو نص قالبي `...${expr}...` (قد يمتد على عدة أسطر، التهريب بـ \\)
+    private val rinString = Pattern.compile("\"(?:\\\\.|[^\"\\\\])*\"|`(?:\\\\[\\s\\S]|[^`\\\\])*`")
     private val defaultNumber = Pattern.compile("\\b\\d+(\\.\\d+)?\\b")
     private val lineCommentSlash = Pattern.compile("//[^\\n]*")
     private val blockCommentCStyle = Pattern.compile("/\\*[\\s\\S]*?\\*/")
@@ -190,6 +192,7 @@ object RinSyntaxHighlighter {
         makeDirective = wordsPattern(rinMakeDirectiveKeywords),
         reckonItem = wordsPattern(rinReckonItemKeywords),
         builtin = wordsPattern(rinBuiltins),
+        string = rinString,
         tag = rinTag,
         lineComment = lineCommentSlash
     )
