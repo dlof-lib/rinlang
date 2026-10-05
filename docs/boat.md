@@ -35,6 +35,8 @@ dictSet(d, "extra", true);
 print dictKeys(d), dictValues(d); // ["name","version","extra"] ["Rin",1,true]
 ```
 
+> ملاحظة: يوجد الآن نوع أصلي `Set` في اللغة نفسها (أسرع، مع معاملات `+ * -`) — انظر [set.md](./set.md). مكتبة boat أدناه تبقى كما هي.
+
 ## `set` — بلا تكرار، مع عمليات مجموعات
 ```rin
 let s1 = set([1, 2, 2, 3]);
