@@ -210,12 +210,24 @@ void Lexer::scanToken() {
         case '/':
             if (match('/')) {
                 while (peek() != '\n' && !isAtEnd()) advance();
+            } else if (match('=')) {
+                addToken(TokenType::BANG_EQUAL); // `/=` مرادف `!=` (لا يوجد إسناد مركّب في Rin)
             } else {
                 addToken(TokenType::SLASH);
             }
             break;
         case '=':
-            addToken(match('=') ? TokenType::EQUAL_EQUAL : TokenType::EQUAL);
+            if (match('=')) {
+                addToken(TokenType::EQUAL_EQUAL);
+            } else if (peek() == '/' && peekNext() == '=') {
+                advance(); advance();
+                addToken(TokenType::NOT_SAME);   // =/=
+            } else if (peek() == '/' && peekNext() != '/') {
+                advance();
+                addToken(TokenType::COPY_OF);    // =/   (لا يلتقط `=//` تعليقاً)
+            } else {
+                addToken(TokenType::EQUAL);
+            }
             break;
         case '!':
             addToken(match('=') ? TokenType::BANG_EQUAL : TokenType::BANG);
