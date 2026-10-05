@@ -72,3 +72,19 @@ print `\u{1F600} \u{0645}\u{0631}\u{062D}\u{0628}\u{0627}`;
 let data = {"user": {"name": "ريم", "tags": ["a", "b"]}, "total": 1234.5};
 let tpl = "مرحباً ${user.name}! مجموعك ${total:,.2f} — وسمك ${user.tags.1} — عمرك ${user.age ?? 18}";
 print render(tpl, data);
+
+// ───────────── داخل مفاهيم اللغة: الأحداث والترجمات ─────────────
+@container=Chat
+    let room = "general";
+    on.event `chat:${room}` (msg) { print `[${room}] وصلت: ${msg}`; }
+
+    @container=Sender
+        fun send(msg) { emit `chat:general`, msg; }
+        send("أهلاً بالجميع");
+    .end/container
+
+    Translations
+        translation lang="ar" text=`مرحباً في غرفة ${room}`;
+        translation lang="en" text=`Welcome to ${room}`;
+    .end/Translations
+.end/container
