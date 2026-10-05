@@ -18,3 +18,11 @@ print `مرحباً ${name}!`;   // مرحباً ريم!
 ## التوافق
 backtick كانت خطأ E0011 سابقاً، والنصوص `" "` لم تتغيّر إطلاقاً → لا كسر لأي كود موجود.
 أخطاء جديدة: `unterminated template string`، ``empty `${}` in template string``.
+
+## الإصدار 2 — تنسيق وقيم افتراضية وقيم جاهزة
+- `${x:.2f}` `${x:,d}` `${x:05}` `${x:.1%}` `${s:>8}` `${s:<8}` `${s:^8}` `${s:upper|lower|trim}` → native `#fmt`.
+- `${a ?? b}` → native `#default` (يُستبدل فقط عند nil).
+- `${#date}` `#time` `#datetime` `#year` `#month` `#day` `#hour` `#minute` `#second` `#weekday` `#version` `#line` `#file`
+  → native `#now` (أو قيمة ثابتة في Lexer لـ `#line`/`#file`).
+- Lexer يميّز `:` التنسيق عن `:` الشرط الثلاثي والقاموس، و`??` عن `?` المفردة.
+- اختبارات إضافية: 9 في `tests/rintests.rin` (المجموع 73 ناجحة).
