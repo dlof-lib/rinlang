@@ -277,7 +277,7 @@ StmtPtr Parser::declaration() {
     if (check(TokenType::IDENT) && peek().lexeme == "on" && checkNext(TokenType::DOT) &&
         current + 2 < tokens.size() && tokens[current + 2].type == TokenType::IDENT &&
         tokens[current + 2].lexeme == "event" &&
-        current + 3 < tokens.size() && tokens[current + 3].type == TokenType::STRING) {
+        current + 3 < tokens.size() && (tokens[current + 3].type == TokenType::STRING || atTemplate(3))) {
         advance(); // 'on'
         advance(); // '.'
         advance(); // 'event'
@@ -318,7 +318,7 @@ StmtPtr Parser::declaration() {
     // RCS-1.0 §3.6 Events (Phase 2): 'emit' STRING (',' expr)? ('bubbles')? ';' -- كلمة سياقية
     // غير محجوزة أيضاً، مُميَّزة بالنظر خطوة إضافية للأمام (STRING مباشرة بعدها، لا أي شيء آخر)
     // حتى لا تصطدم باستخدام "emit" اسم متغيّر/دالة عادية في أي سياق آخر.
-    if (check(TokenType::IDENT) && peek().lexeme == "emit" && checkNext(TokenType::STRING)) {
+    if (check(TokenType::IDENT) && peek().lexeme == "emit" && (checkNext(TokenType::STRING) || atTemplate(1))) {
         advance(); // 'emit'
         return emitStatement();
     }
@@ -840,14 +840,42 @@ StmtPtr Parser::slotDeclaration() {
     return stmt;
 }
 
+bool Parser::atTemplate(size_t offset) const {
+    size_t i = current + offset;
+    return i < tokens.size() && tokens[i].type == TokenType::LPAREN && tokens[i].tpl;
+}
+
+ExprPtr Parser::templateNameExpr() {
+    consume(TokenType::LPAREN, "Expected a template string");
+    ExprPtr e = expression();
+    consume(TokenType::RPAREN, "Expected the end of the template string");
+    return e;
+}
+
+Token Parser::consumeStaticText(const std::string& msg) {
+    if (atTemplate()) {
+        throw errRich(diag::Code::E0013_InvalidExpression, peek(),
+                      "`${}` interpolation is not allowed here",
+                      "this position is read when the file is parsed, so it needs fixed text — a template string with `${...}` is only known when the program runs",
+                      "write plain text here (a template without `${}` is fine), or compute the value in a variable and use it where an expression is allowed",
+                      "a fixed text");
+    }
+    return consume(TokenType::STRING, msg);
+}
+
 // RCS-1.0 §3.6 Events (Phase 2): emit STRING ("," expr)? ("bubbles")? ";"  (يُستدعى بعد استهلاك
 // 'emit' من declaration()). 'bubbles' كلمة سياقية اختيارية بلا وسائط: تُقرأ IDENT عادي، لا تتعارض
 // مع أي استخدام آخر لهذا الاسم لأنها تُفحَص فقط في هذا الموضع الدقيق (بين payload اختياري و';').
 StmtPtr Parser::emitStatement() {
-    Token nameTok = consume(TokenType::STRING, "Expected an event name string after 'emit'");
     auto stmt = std::make_shared<EmitStmt>();
-    stmt->eventName = nameTok.lexeme;
-    stmt->line = nameTok.line;
+    if (atTemplate()) {
+        stmt->line = peek().line;
+        stmt->nameExpr = templateNameExpr();
+    } else {
+        Token nameTok = consume(TokenType::STRING, "Expected an event name string after 'emit'");
+        stmt->eventName = nameTok.lexeme;
+        stmt->line = nameTok.line;
+    }
     if (match({TokenType::COMMA})) {
         stmt->payload = expression();
     }
@@ -864,7 +892,10 @@ StmtPtr Parser::emitStatement() {
 // يُبنى كـ FunctionStmt عادي جاهز للاستدعاء عبر Interpreter::callFunction الموجودة فعلاً بلا أي
 // آلية استدعاء موازية جديدة.
 StmtPtr Parser::eventHandlerDeclaration() {
-    Token nameTok = consume(TokenType::STRING, "Expected an event name string after 'on.event'");
+    Token nameTok;
+    ExprPtr nameExpr;
+    if (atTemplate()) { nameTok = peek(); nameTok.lexeme = "<template>"; nameExpr = templateNameExpr(); }
+    else nameTok = consume(TokenType::STRING, "Expected an event name string after 'on.event'");
     consume(TokenType::LPAREN, "Expected '(' after event name in 'on.event \"" + nameTok.lexeme + "\"'");
     std::vector<std::string> params;
     if (!check(TokenType::RPAREN)) {
@@ -890,6 +921,7 @@ StmtPtr Parser::eventHandlerDeclaration() {
 
     auto s = std::make_shared<EventHandlerStmt>();
     s->eventName = nameTok.lexeme;
+    s->nameExpr = nameExpr;
     s->asFunction = fn;
     s->line = nameTok.line;
     return s;
@@ -1402,7 +1434,7 @@ StmtPtr Parser::objectFieldStatement() {
 // تُستهلَك بعد). objectTok هو توكن 'object' نفسه (لتحديد سطر الفتح في رسائل الخطأ/consumeEndTag).
 StmtPtr Parser::objectLiteralStatement(const Token& objectTok) {
     consume(TokenType::LPAREN, "Expected '(' after '.object'");
-    Token idTok = consume(TokenType::STRING, "Expected a quoted id, e.g. .object(\"user01\")");
+    Token idTok = consumeStaticText( "Expected a quoted id, e.g. .object(\"user01\")");
     consume(TokenType::RPAREN, "Expected ')' after the object id");
     auto stmt = std::make_shared<ObjectLiteralStmt>();
     stmt->id = idTok.lexeme;
@@ -2538,7 +2570,7 @@ StmtPtr Parser::makeUnitBlock() {
                     continue;
                 }
                 if (word == "version" || word == "description") {
-                    Token v = consume(TokenType::STRING, "Expected a string after Make metadata field");
+                    Token v = consumeStaticText( "Expected a string after Make metadata field");
                     if (word == "version") s->version = v.lexeme;
                     else s->description = v.lexeme;
                     consume(TokenType::SEMICOLON, "Expected ';' after Make metadata");
@@ -2716,7 +2748,7 @@ StmtPtr Parser::atBlock() {
 // @import "lib/data.og.rin" as data;  -> 'as' كلمة سياقية غير محجوزة أيضاً، تُقرأ يدوياً هنا فقط.
 StmtPtr Parser::importStatement() {
     Token kw = previous(); // 'import' (للحصول على رقم السطر)
-    Token pathTok = consume(TokenType::STRING,
+    Token pathTok = consumeStaticText(
         "Expected a string path after '@import', e.g. @import \"lib/data.og.rin\";");
     auto pathExpr = std::make_shared<LiteralExpr>();
     pathExpr->kind = LiteralExpr::Kind::STRING;
@@ -2757,7 +2789,7 @@ StmtPtr Parser::importSelectedStatement() {
                       "'from'");
     }
     advance(); // 'from'
-    Token pathTok = consume(TokenType::STRING, "Expected a string path after 'from'");
+    Token pathTok = consumeStaticText( "Expected a string path after 'from'");
     consume(TokenType::SEMICOLON, "Expected ';' after import statement");
 
     auto pathExpr = std::make_shared<LiteralExpr>();
@@ -2849,13 +2881,17 @@ StmtPtr Parser::translationStatement() {
                        "`translation lang=\"en\" text=\"Hello\";`",
                        "the literal word `lang`");
     consume(TokenType::EQUAL, "Expected '=' after 'lang'");
-    Token langVal = consume(TokenType::STRING, "Expected a text value for 'lang'");
+    auto s = std::make_shared<TranslationStmt>();
+    Token langVal;
+    if (atTemplate()) { s->langExpr = templateNameExpr(); }
+    else { langVal = consume(TokenType::STRING, "Expected a text value for 'lang'"); s->lang = langVal.lexeme; }
     consume(TokenType::TEXT, "Expected 'text' attribute after 'lang=\"...\"'");
     consume(TokenType::EQUAL, "Expected '=' after 'text'");
-    Token textVal = consume(TokenType::STRING, "Expected a text value for 'text'");
+    Token textVal;
+    if (atTemplate()) { s->textExpr = templateNameExpr(); }
+    else { textVal = consume(TokenType::STRING, "Expected a text value for 'text'"); s->text = textVal.lexeme; }
     consume(TokenType::SEMICOLON, "Expected ';' after translation statement");
-    auto s = std::make_shared<TranslationStmt>();
-    s->lang = langVal.lexeme; s->text = textVal.lexeme; s->line = tok.line;
+    s->line = tok.line;
     return s;
 }
 
@@ -2872,7 +2908,7 @@ StmtPtr Parser::linkStatement() {
             throw d;
         }
         consume(TokenType::EQUAL, "Expected '=' after 'link.id'");
-        Token val = consume(TokenType::STRING, "Expected a text value after 'link.id='");
+        Token val = consumeStaticText( "Expected a text value after 'link.id='");
         consume(TokenType::SEMICOLON, "Expected ';' after link.id statement");
         auto s = std::make_shared<LinkIdDeclStmt>();
         s->id = val.lexeme; s->line = tok.line;
@@ -2894,7 +2930,7 @@ StmtPtr Parser::linkStatement() {
     s->line = tok.line;
     if (key.lexeme == "id") {
         // link id="X";  -> ربط بمعرّف عام بدل اسم الحاوية (يعمل عبر الملفات)
-        Token val = consume(TokenType::STRING, "Expected a text value after 'id='");
+        Token val = consumeStaticText( "Expected a text value after 'id='");
         s->byId = val.lexeme;
     } else {
         // link to=name;  -> ربط باسم الحاوية (كما كان)
