@@ -342,4 +342,52 @@ ${n}`).toBe("أ\nس");
     });
 });
 
+rt_describe("template strings: تنسيق / قيم افتراضية / قيم جاهزة", fun() {
+    rt_test("تنسيق الأرقام", fun() {
+        rt_expect(`${1234.5:.2f}`).toBe("1234.50");
+        rt_expect(`${1234.5:,.2f}`).toBe("1,234.50");
+        rt_expect(`${7:03}`).toBe("007");
+        rt_expect(`${0.256:.1%}`).toBe("25.6%");
+        rt_expect(`${1234567:,d}`).toBe("1,234,567");
+        rt_expect(`${-5:04d}`).toBe("-005");
+    });
+    rt_test("محاذاة النصوص (يدعم العربية)", fun() {
+        rt_expect(`[${"ريم":>5}]`).toBe("[  ريم]");
+        rt_expect(`[${"ريم":<5}]`).toBe("[ريم  ]");
+        rt_expect(`[${"ab":^6}]`).toBe("[  ab  ]");
+    });
+    rt_test("upper / lower / trim", fun() {
+        rt_expect(`${"hi":upper}${"HI":lower}${"  x ":trim}`).toBe("HIhix");
+    });
+    rt_test("القيمة الافتراضية ??", fun() {
+        let a = nil;
+        let b = "ريم";
+        rt_expect(`${a ?? "زائر"}`).toBe("زائر");
+        rt_expect(`${b ?? "زائر"}`).toBe("ريم");
+        rt_expect(`${a ?? 2.5:.1f}`).toBe("2.5");
+    });
+    rt_test("الشرط الثلاثي مع التنسيق لا يتعارضان", fun() {
+        let age = 20;
+        rt_expect(`${age > 18 ? "yes" : "no"}`).toBe("yes");
+        rt_expect(`${age > 18 ? "yes" : "no":>4}`).toBe(" yes");
+    });
+    rt_test("قاموس حرفي داخل ${} لا يُفسَّر كتنسيق", fun() {
+        rt_expect(`${ {"k": 2}["k"] }`).toBe("2");
+    });
+    rt_test("القيم الجاهزة #date #time #version ...", fun() {
+        rt_expect(len(`${#date}`)).toBe(10);
+        rt_expect(len(`${#time}`)).toBe(8);
+        rt_expect(`${#version}`).toBe("1.0.0");
+        rt_expect(len(`${#year}`)).toBe(4);
+    });
+    rt_test("متغيّر باسم date لا يتأثر", fun() {
+        let date = "mine";
+        rt_expect(`${date}`).toBe("mine");
+    });
+    rt_test("تنسيق خاطئ يعطي خطأ واضحاً", fun() {
+        rt_expectThrows(fun() { let t = `${1:zz}`; }, "invalid format");
+        rt_expectThrows(fun() { let t = `${"a":.2f}`; }, "needs a number");
+    });
+});
+
 rt_done();
