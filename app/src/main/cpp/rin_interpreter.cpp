@@ -8728,7 +8728,7 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
         callable->declaration = s->asFunction;
         callable->closure = env;
         Value v; v.type = Value::Type::FUNCTION; v.function = callable;
-        eventHandlers[containerStack.back()].push_back({s->eventName, v});
+        eventHandlers[containerStack.back()].push_back({s->nameExpr ? evaluate(s->nameExpr, env).toDisplayString() : s->eventName, v});
         return;
     }
 
@@ -8741,6 +8741,7 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
     case StmtKind::EmitStmt: { auto s = std::static_pointer_cast<EmitStmt>(stmt);
         Value payload = Value::nil();
         if (s->payload) payload = evaluate(s->payload, env);
+        const std::string eventName = s->nameExpr ? evaluate(s->nameExpr, env).toDisplayString() : s->eventName;
         std::string emitterKey = containerKeyForEnv(env.get());
         std::string current = emitterKey;
         while (!current.empty()) {
@@ -8750,7 +8751,7 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
             auto handlersIt = eventHandlers.find(parentKey);
             if (handlersIt != eventHandlers.end()) {
                 for (auto& entry : handlersIt->second) {
-                    if (entry.first != s->eventName) continue;
+                    if (entry.first != eventName) continue;
                     if (entry.second.type != Value::Type::FUNCTION || !entry.second.function) continue;
                     std::vector<Value> cbArgs;
                     if (s->payload) cbArgs.push_back(payload);
@@ -9414,8 +9415,10 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
     }
 
     case StmtKind::TranslationStmt: { auto s = std::static_pointer_cast<TranslationStmt>(stmt);
-        translations[s->lang] = s->text;
-        output << "🌍 translation [" << s->lang << "] = \"" << s->text << "\"\n";
+        const std::string lang = s->langExpr ? evaluate(s->langExpr, env).toDisplayString() : s->lang;
+        const std::string text = s->textExpr ? evaluate(s->textExpr, env).toDisplayString() : s->text;
+        translations[lang] = text;
+        output << "🌍 translation [" << lang << "] = \"" << text << "\"\n";
         return;
     }
 
