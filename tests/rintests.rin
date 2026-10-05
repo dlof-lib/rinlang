@@ -390,4 +390,57 @@ rt_describe("template strings: تنسيق / قيم افتراضية / قيم ج�
     });
 });
 
+rt_describe("template strings: متقدّم (متداخل / x= / render)", fun() {
+    rt_test("تنسيق ديناميكي ${x:.${n}f}", fun() {
+        let p = 3; let w = 6;
+        rt_expect(`${3.14159:.${p}f}`).toBe("3.142");
+        rt_expect(`[${"ab":>${w}}]`).toBe("[    ab]");
+    });
+    rt_test("حشو بأي حرف + إشارة", fun() {
+        rt_expect(`${42:*^10}`).toBe("****42****");
+        rt_expect(`${42:-<6}`).toBe("42----");
+        rt_expect(`${"ريم":★>5}`).toBe("★★ريم");
+        rt_expect(`${42:+d}`).toBe("+42");
+    });
+    rt_test("أنواع x X b o e", fun() {
+        rt_expect(`${255:x} ${255:X} ${5:b} ${8:o}`).toBe("ff FF 101 10");
+        rt_expect(`${12345.678:.2e}`).toBe("1.23e+04");
+        rt_expect(`${1000000:_d}`).toBe("1_000_000");
+    });
+    rt_test("قصّ النص وtitle/cap وتتابع المراحل", fun() {
+        rt_expect(`${"abcdefgh":.3}`).toBe("abc");
+        rt_expect(`${"hello world":title}`).toBe("Hello World");
+        rt_expect(`${"  Hi ":trim|upper|>6}`).toBe("    HI");
+    });
+    rt_test("أرقام عربية-هندية :ar", fun() {
+        rt_expect(`${1234.5:,.2f|ar}`).toBe("١٬٢٣٤٫٥٠");
+        rt_expect(`${2026:ar}`).toBe("٢٠٢٦");
+    });
+    rt_test("وضع التصحيح ${x=}", fun() {
+        let x = 42;
+        rt_expect(`${x=}`).toBe("x=42");
+        rt_expect(`${x + 1=}`).toBe("x + 1=43");
+        rt_expect(`${3.14159=:.2f}`).toBe("3.14159=3.14");
+    });
+    rt_test("هروب \\u{hex}", fun() {
+        rt_expect(`\u{0645}`).toBe("م");
+        rt_expect(len(`\u{1F600}`)).toBeGreaterThan(0);
+    });
+    rt_test("مع عامل الأنبوب |>", fun() {
+        let name = "ريم";
+        rt_expect(`${[1, 2, 3] |> len}`).toBe("3");
+    });
+    rt_test("render: مسارات وبدائل وتنسيق", fun() {
+        let d = {"user": {"name": "ريم", "tags": ["a", "b"]}, "total": 1234.5};
+        rt_expect(render("${user.name}|${user.tags.1}|${total:,.2f}", d)).toBe("ريم|b|1,234.50");
+        rt_expect(render("{{user.name:upper}}", d)).toBe("ريم");
+        rt_expect(render("${x ?? \"بديل\"} ${y ?? 7:03}", d)).toBe("بديل 007");
+        rt_expect(render("$${raw} لا شيء", d)).toBe("${raw} لا شيء");
+    });
+    rt_test("render: قيمة ناقصة بلا بديل خطأ واضح", fun() {
+        rt_expectThrows(fun() { render("${nope}", {"a": 1}); }, "no value for `nope`");
+        rt_expectThrows(fun() { render("${a", {"a": 1}); }, "unterminated placeholder");
+    });
+});
+
 rt_done();
