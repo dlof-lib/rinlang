@@ -149,3 +149,23 @@ for (let c in "abc") { print c; }                     // a b c
 
 ثم أعد البناء بأي من المسارات الموجودة أصلاً (Gradle/NDK، `scripts/build_all.sh desktop`،
 أو `tools/rin_run.cpp` كمُشغِّل CLI مستقل للاختبار السريع).
+
+## Condition variables — expanded key conditions + helpers
+
+- **Key conditions** (`=term=(...)`) grew from `=if=` / `=unless=` / `=when=` to: `=ifnot=`, `=elif=` / `=elseif=` chains,
+  `=while=` / `=until=` loops, multi-condition `=all=` / `=any=` / `=none=`, and value tests `=nil=` / `=notnil=` /
+  `=empty=` / `=present=`. All are parser sugar over the existing `IfStmt` / `WhileStmt` (`rin_parser.cpp`,
+  `Parser::keyConditionStatement`). A stray `=elif=` now reports a dedicated error.
+- **New helpers** in `app/src/main/cpp/rin_conditions.cpp` (included from `rin_interpreter.cpp`): `notNil`, `present`, `blank`,
+  `isTrue`, `isFalse`, `xor`, `implies`, `oneOf`, `noneOf`, `exactly`, `atLeast`, `atMost`, `lengthIs`, `outside`,
+  `isInt`, `isZero`, `closeTo`, `matches`, `key_conditions`. `empty` now also understands `Set`.
+- Names already defined as functions in `lib/*.og.rin` (`isEven`, `inRange`, `startsWith`, ...) were deliberately not added natively.
+- Docs: `docs/key_terms_and_builtins.md`, `docs/control-flow.md`. Editor: `RinSyntax.kt`, `syntaxes/*.json`.
+- Test: `tests/verification/key_conditions_extended.rin` (+ `.expected`).
+
+### Conditions used inside other concepts
+- Trailing guards `when (c)` / `unless (c)` / `if (c)` on `return`, `break`, `continue`, `achieve`, `throw` (`Parser::trailingGuard`).
+- `match` case guards: `case A, B when (cond) { }` (`MatchCase::guard`, evaluated in `rin_interpreter.cpp`).
+- Subject-less `match { case (cond) { } ... else { } }` desugared to an if / else-if chain (`Parser::conditionMatchStatement`).
+- Test: `tests/verification/condition_guards.rin` (+ `.expected`). Docs: "Using conditions inside other concepts".
+- Predicate-based conditions: `every`, `some`, `countIf`, `findIf` (take a `fun` value; arrays and sets).
