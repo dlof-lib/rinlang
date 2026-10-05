@@ -109,12 +109,17 @@ private:
     // match (subject) { case v1, v2 { .. } case v3 { .. } else { .. } }  (يُستدعى بعد استهلاك
     // 'match' في declaration())
     StmtPtr matchStatement();
+    StmtPtr conditionMatchStatement();        // match { case (cond) {..} ... else {..} } -> if/else-if chain
+    ExprPtr trailingGuard();                  // `when (c)` / `unless (c)` / `if (c)` after return/break/continue/achieve/throw/case
+    StmtPtr guarded(StmtPtr inner, ExprPtr guard);
     // achieve expr; / achieve;  (يُستدعى بعد استهلاك 'achieve' في declaration())
     StmtPtr achieveStatement();
     StmtPtr statement();
     StmtPtr printStatement();
     StmtPtr ifStatement();
     StmtPtr whenStatement(); // 'when' (condition) thenBranch ['otherwise' elseBranch]  -> صياغة إنجليزية مبسّطة (sugar) لِـ IfStmt، مطابقة تماماً لـ if/else من ناحية الدلالة
+    bool atKeyCondition(size_t at, std::string& term) const; // `= term =(` at tokens[at]: =if= =when= =unless= =while= =all= ... (docs/key_terms_and_builtins.md)
+    StmtPtr keyConditionStatement(bool asElseIf = false);                       // compact key-condition forms -> IfStmt / WhileStmt
     StmtPtr whileStatement();
     StmtPtr forStatement(); // for (init; condition; increment) body  -> حلقة for على طراز C
                              // أو for (let NAME in iterable) body -> ForInStmt (انظر rin_ast.h)
