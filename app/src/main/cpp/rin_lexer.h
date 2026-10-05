@@ -27,6 +27,8 @@ private:
     void addToken(TokenType type, const std::string& lexeme);
     void scanToken();
     void scanString();
+    void scanTemplate(); // نص قالبي: `مرحباً ${name}` (انظر rin_lexer.cpp)
+    void pushToken(TokenType type, const std::string& lexeme, int ln, int col, int endCol);
     void scanNumber();
     void scanIdentifier();
     void scanHashWord(); // عائلة #name (انظر rin_lexer.cpp)
