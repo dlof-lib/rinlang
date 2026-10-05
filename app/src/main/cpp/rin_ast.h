@@ -820,6 +820,7 @@ struct SlotDeclStmt : Stmt { SlotDeclStmt() { stmtKind = StmtKind::SlotDeclStmt;
 // (STRING)، لا صياغة الـ EBNF المختصرة.
 struct EmitStmt : Stmt { EmitStmt() { stmtKind = StmtKind::EmitStmt; }
     std::string eventName;
+    ExprPtr nameExpr;     // اسم الحدث كقالب ديناميكي emit `chat:${room}` (يُقيَّم وقت التنفيذ؛ eventName فارغ حينها)
     ExprPtr payload;      // قد تكون nullptr (بلا payload) -- المعالج المطابق يُستدعى حينها بلا وسائط
     bool bubbles = false; // 'emit ... bubbles;' -- الصعود عبر كل مستويات الشجرة، لا الأب المباشر فقط
 };
@@ -829,6 +830,7 @@ struct EmitStmt : Stmt { EmitStmt() { stmtKind = StmtKind::EmitStmt; }
 // كـ FunctionStmt عادي جاهز للاستدعاء عبر Interpreter::callFunction الموجودة فعلاً.
 struct EventHandlerStmt : Stmt { EventHandlerStmt() { stmtKind = StmtKind::EventHandlerStmt; }
     std::string eventName;
+    ExprPtr nameExpr;     // on.event `chat:${room}` -- يُقيَّم عند تسجيل المعالج
     std::shared_ptr<FunctionStmt> asFunction;
 };
 
@@ -964,6 +966,8 @@ struct TranslationsStmt : Stmt { TranslationsStmt() { stmtKind = StmtKind::Trans
 struct TranslationStmt : Stmt { TranslationStmt() { stmtKind = StmtKind::TranslationStmt; }
     std::string lang;
     std::string text;
+    ExprPtr langExpr;     // translation lang=`..${}..` (قالب ديناميكي، يُقيَّم وقت التنفيذ)
+    ExprPtr textExpr;     // translation text=`مرحباً ${name}`
 };
 
 // link to=name;               -> ربط بلا نسخ عبر اسم الحاوية (كما كان)
