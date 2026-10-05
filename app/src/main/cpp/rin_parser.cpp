@@ -414,7 +414,7 @@ StmtPtr Parser::declaration() {
     // 'match' (subject) { case v1, v2 { .. } ... [else { .. }] } -> مطابقة أنماط (pattern
     // matching)، امتداد إضافي فوق if/else (انظر MatchStmt في rin_ast.h للشرح الكامل). 'match'
     // كلمة سياقية غير محجوزة، مُميَّزة عند ظهورها IDENT("match") متبوعة مباشرة بـ '('.
-    if (check(TokenType::IDENT) && peek().lexeme == "match" && checkNext(TokenType::LPAREN)) {
+    if (check(TokenType::IDENT) && peek().lexeme == "match" && (checkNext(TokenType::LPAREN) || checkNext(TokenType::LBRACE))) {
         advance(); // 'match'
         return matchStatement();
     }
@@ -432,6 +432,9 @@ StmtPtr Parser::declaration() {
 
 // match (subject) { case v1, v2 { .. } case v3 { .. } [else { .. }] }
 StmtPtr Parser::matchStatement() {
+    // match { case (c1) { ... } case (c2) { ... } else { ... } }
+    // Subject-less form: the first case whose condition is truthy runs (desugars to an if / else-if chain).
+    if (check(TokenType::LBRACE)) return conditionMatchStatement();
     consume(TokenType::LPAREN, "Expected '(' after 'match'");
     auto subject = expression();
     consume(TokenType::RPAREN, "Expected ')' after 'match' subject");
@@ -450,6 +453,7 @@ StmtPtr Parser::matchStatement() {
             MatchCase mc;
             mc.line = caseTok.line;
             do { mc.values.push_back(expression()); } while (match({TokenType::COMMA}));
+            mc.guard = trailingGuard(); // case A, B when (cond) { ... } : also needs cond to be truthy
             consume(TokenType::LBRACE, "Expected '{' to start 'case' body");
             mc.body = block(); // يستهلك '}' المطابقة بنفسه
             stmt->cases.push_back(std::move(mc));
@@ -473,6 +477,50 @@ StmtPtr Parser::matchStatement() {
     return stmt;
 }
 
+
+StmtPtr Parser::conditionMatchStatement() {
+    Token open = advance(); // '{'
+    struct Arm { ExprPtr cond; std::shared_ptr<BlockStmt> body; };
+    std::vector<Arm> arms;
+    std::shared_ptr<BlockStmt> elseBody;
+    while (!check(TokenType::RBRACE) && !isAtEnd()) {
+        if (elseBody) {
+            throw err(diag::Code::E0013_InvalidExpression, peek(),
+                      "'else' must be the last branch inside a 'match' block");
+        }
+        if (check(TokenType::IDENT) && peek().lexeme == "case") {
+            advance();
+            consume(TokenType::LPAREN, "Expected '(' after 'case' in a subject-less 'match'");
+            auto cond = expression();
+            consume(TokenType::RPAREN, "Expected ')' after 'case' condition");
+            consume(TokenType::LBRACE, "Expected '{' to start 'case' body");
+            arms.push_back({cond, block()});
+            continue;
+        }
+        if (check(TokenType::ELSE)) {
+            advance();
+            consume(TokenType::LBRACE, "Expected '{' to start 'match' else body");
+            elseBody = block();
+            continue;
+        }
+        throw err(diag::Code::E0013_InvalidExpression, peek(), "expected 'case' or 'else' inside a 'match' block");
+    }
+    consume(TokenType::RBRACE, "Expected '}' after 'match' body");
+    if (arms.empty()) {
+        throw err(diag::Code::E0013_InvalidExpression, previous(), "'match' must have at least one 'case'");
+    }
+    StmtPtr tail = elseBody;
+    for (size_t i = arms.size(); i-- > 0;) {
+        auto st = std::make_shared<IfStmt>();
+        st->condition = arms[i].cond;
+        st->thenBranch = arms[i].body;
+        st->elseBranch = tail;
+        st->line = arms[i].body->line ? arms[i].body->line : open.line;
+        tail = st;
+    }
+    return tail;
+}
+
 // achieve expr; / achieve;
 // achieve expr; / achieve;  -> يجب أن تظهر فقط داخل جسم 'goal { ... }' (مباشرة أو متداخلة عبر
 // if/match/block)؛ وإلا فهي خطأ وقت التحليل (نفس قيد break/continue خارج حلقة تماماً).
@@ -487,9 +535,10 @@ StmtPtr Parser::achieveStatement() {
                        "you meant to exit the enclosing function");
     auto stmt = std::make_shared<AchieveStmt>();
     stmt->line = tok.line;
-    if (!check(TokenType::SEMICOLON)) stmt->value = expression();
+    if (!check(TokenType::SEMICOLON) && !check(TokenType::IF)) stmt->value = expression();
+    ExprPtr guard = trailingGuard(); // achieve x when (c);
     consume(TokenType::SEMICOLON, "Expected ';' after 'achieve'");
-    return stmt;
+    return guarded(stmt, guard);
 }
 
 StmtPtr Parser::letDeclaration() {
@@ -1285,50 +1334,20 @@ StmtPtr Parser::statement() {
         advance(); // 'image'
         return imageStatement(printTok);
     }
-    // Key-condition forms: `=if=(condition) statement`, `=unless=(condition) statement`,
-    // and `=when=(condition) statement`. They are syntax sugar for existing IfStmt nodes.
-    // Keeping them here (rather than changing TokenType/lexer keywords) preserves compatibility.
-    if (check(TokenType::EQUAL) && current + 3 < tokens.size() &&
-        (tokens[current + 1].type == TokenType::IDENT || tokens[current + 1].type == TokenType::IF) &&
-        tokens[current + 2].type == TokenType::EQUAL &&
-        (tokens[current + 1].lexeme == "if" ||
-         tokens[current + 1].lexeme == "unless" ||
-         tokens[current + 1].lexeme == "when")) {
-        advance(); // =
-        std::string term = advance().lexeme;
-        advance(); // =
-        consume(TokenType::LPAREN, "Expected '(' after key condition '=" + term + "='");
-        auto condition = expression();
-        consume(TokenType::RPAREN, "Expected ')' after key condition");
-        auto thenBranch = statement();
-        StmtPtr elseBranch = nullptr;
-        if (check(TokenType::ELSE)) {
-            advance();
-            elseBranch = statement();
-        } else if (check(TokenType::EQUAL) && current + 3 < tokens.size() &&
-                   (tokens[current + 1].type == TokenType::IDENT || tokens[current + 1].type == TokenType::ELSE) &&
-                   tokens[current + 1].lexeme == "else" &&
-                   tokens[current + 2].type == TokenType::EQUAL) {
-            advance(); advance(); advance(); // = else =
-            elseBranch = statement();
+    // Key-condition forms (`=if=(c) stmt`, `=unless=(c) stmt`, `=while=(c) stmt`, `=all=(a, b) stmt`, ...).
+    // All of them are syntax sugar over the existing IfStmt / WhileStmt nodes — see keyConditionStatement().
+    {
+        std::string keyTerm;
+        if (atKeyCondition(current, keyTerm)) return keyConditionStatement();
+        if (check(TokenType::EQUAL) && current + 3 < tokens.size() &&
+            tokens[current + 2].type == TokenType::EQUAL && tokens[current + 3].type == TokenType::LPAREN &&
+            tokens[current + 1].type != TokenType::STRING && tokens[current + 1].type != TokenType::NUMBER &&
+            (tokens[current + 1].lexeme == "elif" || tokens[current + 1].lexeme == "elseif")) {
+            throw errRich(diag::Code::E0012_MissingToken, tokens[current + 1],
+                          "'=" + tokens[current + 1].lexeme + "=' has no key condition to continue",
+                          "=elif= only continues the chain of a preceding =if= / =when= / =unless= statement",
+                          "start the chain with `=if=(cond) { ... }`, or use `=if=` here instead of `=" + tokens[current + 1].lexeme + "=`");
         }
-        if (term == "unless") {
-            auto neg = std::make_shared<UnaryExpr>();
-            neg->op = TokenType::BANG;
-            neg->right = condition;
-            neg->line = condition->line;
-            condition = neg;
-        }
-        // `=when=` is intentionally the same semantic operation as `if`.
-        if (term == "when") {
-            // no transformation required
-        }
-        auto st = std::make_shared<IfStmt>();
-        st->condition = condition;
-        st->thenBranch = thenBranch;
-        st->elseBranch = elseBranch;
-        st->line = thenBranch ? thenBranch->line : 0;
-        return st;
     }
     if (check(TokenType::IDENT) && !peek().lexeme.empty() && peek().lexeme[0] == '#') {
         if (auto hs = hashStatement()) return hs; // عائلة #: #do #done #ban #ignorance #swap
@@ -1363,9 +1382,10 @@ StmtPtr Parser::statement() {
         Token t = advance();
         auto st = std::make_shared<ThrowStmt>();
         st->value = expression();
+        ExprPtr guard = trailingGuard(); // throw err when (c);
         consume(TokenType::SEMICOLON, "Expected ';' after throw value");
         st->line = t.line;
-        return st;
+        return guarded(st, guard);
     }
     if (match({TokenType::RINOPEN})) return rinopenStatement();
     if (check(TokenType::DOT) && checkNext(TokenType::IDENT) && current + 2 < tokens.size() && tokens[current + 1].lexeme == "object") return objectFieldStatement();
@@ -1666,6 +1686,167 @@ StmtPtr Parser::imageStatement(const Token& printTok) {
     consume(TokenType::SEMICOLON, "Expected ';' after 'print.image' statement");
     stmt->line = printTok.line;
     return stmt;
+}
+
+
+// ============================================================================
+// Trailing guards: `<statement> when (c);` / `unless (c);` / `if (c);`
+// Applies to return / break / continue / achieve / throw. Pure sugar: the statement is wrapped in an IfStmt.
+//     break when (i > 10);        ==>  if (i > 10) { break; }
+//     return x unless (empty(x)); ==>  if (!empty(x)) { return x; }
+// `when` / `unless` must be followed by '(' ; after `return` they only count as a guard when a value precedes
+// them, so `return when(x);` keeps its old meaning (a call to `when`).
+// ============================================================================
+ExprPtr Parser::trailingGuard() {
+    bool isIf = check(TokenType::IF);
+    bool isWhen = check(TokenType::IDENT) && (peek().lexeme == "when" || peek().lexeme == "unless") && checkNext(TokenType::LPAREN);
+    if (!isIf && !isWhen) return nullptr;
+    Token kw = advance();
+    consume(TokenType::LPAREN, "Expected '(' after '" + kw.lexeme + "' guard");
+    auto cond = expression();
+    consume(TokenType::RPAREN, "Expected ')' after guard condition");
+    if (kw.lexeme == "unless") {
+        auto neg = std::make_shared<UnaryExpr>();
+        neg->op = TokenType::BANG; neg->right = cond; neg->line = cond->line;
+        return neg;
+    }
+    return cond;
+}
+
+StmtPtr Parser::guarded(StmtPtr inner, ExprPtr guard) {
+    if (!guard) return inner;
+    auto st = std::make_shared<IfStmt>();
+    st->condition = guard;
+    st->thenBranch = inner;
+    st->line = inner ? inner->line : guard->line;
+    return st;
+}
+
+// ============================================================================
+// Key conditions: `=term=(...) statement` — compact condition forms (docs/key_terms_and_builtins.md)
+//
+//   branch  : =if= =when=                  if (c)
+//             =unless= =ifnot=             if (!c)
+//             =elif= =elseif=              continuation of a key-condition chain (else if (c))
+//   loops   : =while=                      while (c)
+//             =until=                      while (!c)
+//   multi   : =all=(a, b, ...)             a and b and ...      (short-circuit)
+//             =any=(a, b, ...)             a or b or ...        (short-circuit)
+//             =none=(a, b, ...)            !(a or b or ...)
+//   value   : =nil=(x)  =notnil=(x)        x == nil / x != nil
+//             =empty=(x)  =present=(x)     empty(x) / present(x)
+//
+// Every branch form accepts an optional tail: `else stmt`, `=else= stmt`, or `=elif=(c) stmt ...`.
+// Nothing here touches the lexer keyword table: a statement can never legally start with '=',
+// so the leading `= word =` shape is unambiguous.
+// ============================================================================
+static bool isKeyConditionTerm(const std::string& t, bool& startsStatement) {
+    static const char* starters[] = {"if", "when", "unless", "ifnot", "while", "until",
+                                     "all", "any", "none", "nil", "notnil", "empty", "present"};
+    static const char* continuers[] = {"elif", "elseif"};
+    for (const char* x : starters) if (t == x) { startsStatement = true; return true; }
+    for (const char* x : continuers) if (t == x) { startsStatement = false; return true; }
+    return false;
+}
+
+bool Parser::atKeyCondition(size_t at, std::string& term) const {
+    if (at + 3 >= tokens.size()) return false;
+    if (tokens[at].type != TokenType::EQUAL || tokens[at + 2].type != TokenType::EQUAL) return false;
+    TokenType mid = tokens[at + 1].type;
+    if (mid == TokenType::STRING || mid == TokenType::NUMBER) return false; // '= "if" =' is not a key term
+    bool starts = false;
+    if (!isKeyConditionTerm(tokens[at + 1].lexeme, starts)) return false;
+    if (tokens[at + 3].type != TokenType::LPAREN) return false;
+    term = tokens[at + 1].lexeme;
+    return starts; // =elif= alone is only valid as a continuation (handled inside keyConditionStatement)
+}
+
+StmtPtr Parser::keyConditionStatement(bool asElseIf) {
+    advance(); // =
+    std::string term = advance().lexeme;
+    if (asElseIf) term = "if"; // =elif= / =elseif= behave exactly like =if= (and chain further)
+    advance(); // =
+    const int line = previous().line;
+    consume(TokenType::LPAREN, "Expected '(' after key condition '=" + term + "='");
+
+    auto makeNot = [&](ExprPtr e) -> ExprPtr {
+        auto neg = std::make_shared<UnaryExpr>();
+        neg->op = TokenType::BANG; neg->right = e; neg->line = e->line;
+        return neg;
+    };
+    auto makeCall = [&](const std::string& fn, ExprPtr arg) -> ExprPtr {
+        auto call = std::make_shared<CallExpr>();
+        call->callee = fn; call->args.push_back(arg); call->line = arg->line;
+        return call;
+    };
+    auto makeNilCmp = [&](ExprPtr e, TokenType op) -> ExprPtr {
+        auto lit = std::make_shared<LiteralExpr>();
+        lit->kind = LiteralExpr::Kind::NIL; lit->line = e->line;
+        auto b = std::make_shared<BinaryExpr>();
+        b->left = e; b->op = op; b->right = lit; b->line = e->line;
+        return b;
+    };
+
+    ExprPtr condition;
+    if (term == "all" || term == "any" || term == "none") {
+        std::vector<ExprPtr> parts;
+        do { parts.push_back(expression()); } while (match({TokenType::COMMA}));
+        consume(TokenType::RPAREN, "Expected ')' after key condition");
+        condition = parts[0];
+        for (size_t i = 1; i < parts.size(); ++i) {
+            auto l = std::make_shared<LogicalExpr>();
+            l->left = condition; l->right = parts[i];
+            l->op = (term == "all") ? TokenType::AND : TokenType::OR;
+            l->line = parts[i]->line;
+            condition = l;
+        }
+        if (term == "none") condition = makeNot(condition);
+    } else {
+        condition = expression();
+        consume(TokenType::RPAREN, "Expected ')' after key condition");
+        if (term == "unless" || term == "ifnot" || term == "until") condition = makeNot(condition);
+        else if (term == "nil")     condition = makeNilCmp(condition, TokenType::EQUAL_EQUAL);
+        else if (term == "notnil")  condition = makeNilCmp(condition, TokenType::BANG_EQUAL);
+        else if (term == "empty")   condition = makeCall("empty", condition);
+        else if (term == "present") condition = makeCall("present", condition);
+    }
+
+    // ---- loops ----
+    if (term == "while" || term == "until") {
+        loopDepth++;
+        auto body = statement();
+        loopDepth--;
+        auto w = std::make_shared<WhileStmt>();
+        w->condition = condition;
+        w->body = body;
+        attachDoneBlock(w->doneBlock);
+        w->line = line;
+        return w;
+    }
+
+    // ---- branches ----
+    auto thenBranch = statement();
+    StmtPtr elseBranch = nullptr;
+    if (check(TokenType::ELSE)) {
+        advance();
+        elseBranch = statement();
+    } else if (check(TokenType::EQUAL) && current + 3 < tokens.size() &&
+               tokens[current + 1].lexeme == "else" && tokens[current + 2].type == TokenType::EQUAL) {
+        advance(); advance(); advance(); // = else =
+        elseBranch = statement();
+    } else if (check(TokenType::EQUAL) && current + 3 < tokens.size() &&
+               tokens[current + 2].type == TokenType::EQUAL && tokens[current + 3].type == TokenType::LPAREN &&
+               tokens[current + 1].type != TokenType::STRING && tokens[current + 1].type != TokenType::NUMBER &&
+               (tokens[current + 1].lexeme == "elif" || tokens[current + 1].lexeme == "elseif")) {
+        // =elif=(c) stmt ... : the rest of the chain becomes the else-branch (nested IfStmt)
+        elseBranch = keyConditionStatement(true);
+    }
+    auto st = std::make_shared<IfStmt>();
+    st->condition = condition;
+    st->thenBranch = thenBranch;
+    st->elseBranch = elseBranch;
+    st->line = thenBranch ? thenBranch->line : line;
+    return st;
 }
 
 StmtPtr Parser::ifStatement() {
@@ -2028,11 +2209,12 @@ StmtPtr Parser::hashSwapStatement() {
 
 StmtPtr Parser::returnStatement() {
     ExprPtr value = nullptr;
-    if (!check(TokenType::SEMICOLON)) value = expression();
+    if (!check(TokenType::SEMICOLON) && !check(TokenType::IF)) value = expression();
+    ExprPtr guard = trailingGuard(); // return x when (c);  /  return if (c);
     consume(TokenType::SEMICOLON, "Expected ';' after return value");
     auto stmt = std::make_shared<ReturnStmt>();
     stmt->value = value;
-    return stmt;
+    return guarded(stmt, guard);
 }
 
 // break; -> يجب أن تظهر فقط داخل جسم حلقة while (مباشرة أو متداخلة عبر if/block)؛
@@ -2046,10 +2228,11 @@ StmtPtr Parser::breakStatement() {
                        "`break` appears at a point where no loop is open",
                        "move this `break` inside a loop body, or remove it if it was left over from "
                        "refactoring");
+    ExprPtr guard = trailingGuard(); // break when (c);
     consume(TokenType::SEMICOLON, "Expected ';' after 'break'");
     auto stmt = std::make_shared<BreakStmt>();
     stmt->line = tok.line;
-    return stmt;
+    return guarded(stmt, guard);
 }
 
 // continue; -> نفس قيد break: صالحة فقط داخل جسم حلقة while.
@@ -2062,10 +2245,11 @@ StmtPtr Parser::continueStatement() {
                        "`rinopen` loop body; this `continue` appears at a point where no loop is open",
                        "move this `continue` inside a loop body, or remove it if it was left over "
                        "from refactoring");
+    ExprPtr guard = trailingGuard(); // continue unless (c);
     consume(TokenType::SEMICOLON, "Expected ';' after 'continue'");
     auto stmt = std::make_shared<ContinueStmt>();
     stmt->line = tok.line;
-    return stmt;
+    return guarded(stmt, guard);
 }
 
 std::shared_ptr<BlockStmt> Parser::block() {
