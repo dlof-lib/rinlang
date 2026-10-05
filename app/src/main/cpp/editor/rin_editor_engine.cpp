@@ -718,6 +718,13 @@ std::vector<std::string> EditorEngine::collectSuggestions(const std::string& pre
         if (kw == prefix) continue; // النص المطابق تمامًا لما كُتب بالفعل لا فائدة من اقتراحه
         keywordMatches.push_back(kw);
     }
+    // أسماء النوع/المساحات الأساسية التي ليست كلمات محجوزة: Set (docs/set.md) و Env (docs/env.md)
+    for (const char* ns : {"Set", "Env"}) {
+        std::string kw = ns;
+        if (!prefixLower.empty() && !startsWithPrefix(kw)) continue;
+        if (kw == prefix) continue;
+        if (std::find(keywordMatches.begin(), keywordMatches.end(), kw) == keywordMatches.end()) keywordMatches.push_back(kw);
+    }
     std::sort(keywordMatches.begin(), keywordMatches.end());
 
     // 2) المعرِّفات (IDENT) الفريدة الظاهرة فعلاً في المستند الحالي
