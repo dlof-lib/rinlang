@@ -47,7 +47,10 @@ private:
     const Token& previous() const;
     const Token& advance();
     bool check(TokenType type) const;
-    bool checkNext(TokenType type) const; // ينظر إلى التوكن التالي (current+1) دون استهلاكه
+    bool checkNext(TokenType type) const;
+    bool atTemplate(size_t offset = 0) const;       // هل التوكن (current+offset) بداية قالب نصي ديناميكي `..${}..`
+    ExprPtr templateNameExpr();                      // يقرأ قالباً ديناميكياً (بين أقواسه فقط، بلا call لاحق)
+    Token consumeStaticText(const std::string& msg); // نص ثابت فقط؛ ${} هنا خطأ بتلميح واضح // ينظر إلى التوكن التالي (current+1) دون استهلاكه
     // RCS-1.0 §3.13/§7 Phase 0: يحاول تحليل توجيه سياسة واحد (use/need/allow/deny/strict/
     // version/description) في بداية جسم أي @container عادية أو @Containers.Group (Phase 1:
     // عُمِّمت من @container فقط إلى @Containers.Group أيضاً -- انظر PolicyAccumulator أعلاه
