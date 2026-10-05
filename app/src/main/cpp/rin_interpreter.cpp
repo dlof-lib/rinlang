@@ -1550,6 +1550,7 @@ void Interpreter::registerNatives() {
         if (v.type == Value::Type::STRING) return Value::boolean_(v.str.empty());
         if (v.type == Value::Type::ARRAY) return Value::boolean_(!v.array || v.array->empty());
         if (v.type == Value::Type::MAP) return Value::boolean_(!v.map || v.map->empty());
+        if (v.type == Value::Type::SET) return Value::boolean_(!v.set || v.set->empty());
         return Value::boolean_(false);
     };
     natives["typeIs"] = [](std::vector<Value>& a, int line) -> Value {
@@ -6718,6 +6719,7 @@ void Interpreter::registerNatives() {
     registerNativesExtra6(); // make.video/audio/api/image.removeBg/ocr (rin_extra_natives6.cpp)
     registerNativesOop(); // Rin 1.0: oop.* — استبطان الأصناف والكائنات + أدوات OOP (rin_oop_natives.cpp)
     registerNativesInput(); // Rin 1.0: نماذج الإدخال (معاملة/تداخل/مُدقِّق النموذج) فوق input() — بعد oop.* لأنها تستدعيها (rin_input.cpp)
+    registerNativesConditions(); // متغيّرات الشروط الموسّعة (rin_conditions.cpp)
     registerNativesEnv();   // ربط .env: Env.* (rin_env.cpp)
     registerNativesSet();   // نوع Set الأساسي: Set(...) و Set.* وتوسعة len/contains/has/remove/sum... (rin_set.cpp) — أخيراً كي تلفّ ما سبقها
 }
@@ -8610,6 +8612,7 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
             for (auto& valExpr : mc.values) {
                 if (valuesEqual(subject, evaluate(valExpr, env))) { matched = true; break; }
             }
+            if (matched && mc.guard && !evaluate(mc.guard, env).isTruthy()) matched = false; // case ... when (cond)
             if (matched) {
                 auto caseEnv = std::make_shared<Environment>(env);
                 executeBlock(mc.body->statements, caseEnv);
@@ -12139,6 +12142,7 @@ bool Interpreter::livePropertyGet(const EnvPtr& env, const std::string& name, co
 #include "rin_extra_natives5.cpp"
 #include "rin_extra_natives6.cpp" // make.video/audio/api/image/ocr (docs/MAKE_MEDIA.md)
 #include "rin_table.cpp" // توسعة الجدول: دوال اللغة الموجودة تفهم الجدول (انظر رأس الملف)
+#include "rin_conditions.cpp" // متغيّرات الشروط الموسّعة (docs/key_terms_and_builtins.md)
 #include "rin_env.cpp"   // ربط ملف .env (docs/env.md)
 #include "rin_set.cpp"   // نوع Set الأساسي (docs/set.md)
 #endif
