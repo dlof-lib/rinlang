@@ -293,4 +293,53 @@ rt_describe("rintest matchers", fun() {
     });
 });
 
+// ============================================================ النصوص القالبية
+rt_describe("template strings `...${}`", fun() {
+    rt_test("متغيّر داخل النص", fun() {
+        let name = "ريم";
+        rt_expect(`مرحباً ${name}!`).toBe("مرحباً ريم!");
+    });
+    rt_test("تعبير حسابي واستدعاء دالة", fun() {
+        let age = 20;
+        fun twice(x) { return x * 2; }
+        rt_expect(`بعد سنة: ${age + 1}`).toBe("بعد سنة: 21");
+        rt_expect(`ضعف: ${twice(age)}`).toBe("ضعف: 40");
+    });
+    rt_test("قيمة وحيدة وقيمتان متجاورتان تُحوَّلان لنص", fun() {
+        let a = 7;
+        rt_expect(`${a}`).toBe("7");
+        rt_expect(`${a}${a}`).toBe("77");
+    });
+    rt_test("منطقي ومصفوفة وقاموس", fun() {
+        let m = {"k": "v"};
+        rt_expect(`${1 < 2}`).toBe("true");
+        rt_expect(`${[1, 2]}`).toBe("[1, 2]");
+        rt_expect(`${m["k"]}`).toBe("v");
+    });
+    rt_test("قالب داخل قالب", fun() {
+        let n = "x";
+        rt_expect(`أ ${`ب ${n}`} ج`).toBe("أ ب x ج");
+    });
+    rt_test("تهريب $ و backtick و \\", fun() {
+        rt_expect(`\${no} \` \\`).toBe("${no} ` \\");
+    });
+    rt_test("قالب فارغ وقالب بلا متغيّرات", fun() {
+        rt_expect(``).toBe("");
+        rt_expect(`نص عادي`).toBe("نص عادي");
+    });
+    rt_test("النص العادي بين \" \" لا يُفسَّر أبداً", fun() {
+        let name = "ريم";
+        rt_expect("${name} {name}").toBe("${name} {name}");
+    });
+    rt_test("لا يتأثر بمتغيّر اسمه str", fun() {
+        let str = "shadow";
+        rt_expect(`[${str}]`).toBe("[shadow]");
+    });
+    rt_test("يعمل على عدة أسطر", fun() {
+        let n = "س";
+        rt_expect(`أ
+${n}`).toBe("أ\nس");
+    });
+});
+
 rt_done();
