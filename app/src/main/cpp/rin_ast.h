@@ -551,6 +551,7 @@ struct EnumStmt : Stmt { EnumStmt() { stmtKind = StmtKind::EnumStmt; }
 // TokenType::ELSE المحجوزة أصلاً (تماماً كما في if/else)، وليست كلمة سياقية جديدة.
 struct MatchCase {
     std::vector<ExprPtr> values;         // قيمة واحدة أو أكثر (مفصولة بفواصل) لهذه الحالة
+    ExprPtr guard;                       // case A when (cond) { } — شرط إضافي (nullable): إن كان خاطئاً تُتخطى الحالة
     std::shared_ptr<BlockStmt> body;
     int line = 0;
 };
