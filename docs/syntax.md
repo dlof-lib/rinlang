@@ -19,16 +19,26 @@
 |---|---|
 | رقم | `5`, `3.14` |
 | نص | `"hello"` |
+| نص قالبي | `` `hello ${name}` `` |
 | منطقي | `true`, `false` |
 | عدمي | `nil` |
 | مصفوفة | `[1, 2, 3]` |
 | قاموس (map) | `{"x": 1, "y": 2}` |
 
-لا يوجد **string interpolation** في اللغة — الدمج يتم عبر عامل `+` فقط:
+## النصوص القالبية — متغيّرات داخل النص
+بدل دمج النصوص بـ `+`، اكتب النص بين علامتَي backtick (`` ` ``) وضع أي متغيّر أو تعبير
+داخل `${ ... }`:
 ```rin
 let name = "Rin";
+let age = 3;
+print `hello ${name}`;            // hello Rin
+print `بعد سنة: ${age + 1}`;       // بعد سنة: 4
+```
+الطريقة القديمة بـ `+` ما زالت تعمل كما هي:
+```rin
 print "hello " + name; // hello Rin
 ```
+التفاصيل الكاملة والأمثلة في [`template-strings.md`](./template-strings.md).
 
 ## المعرِّفات والكلمات السياقية
 المعرّف العادي (اسم متغيّر/دالة) يبدأ بحرف أو `_`. كلمات مثل `class`/`struct`/`enum`/
@@ -77,6 +87,7 @@ show "a"; // نفس الأثر تمامًا
 ```
 
 ## انظر أيضًا
+- [`template-strings.md`](./template-strings.md) — النصوص القالبية `${}`.
 - [`variables.md`](./variables.md) — `let`، مصفوفات، قواميس، نطاق.
 - [`control-flow.md`](./control-flow.md) — الشروط والحلقات.
 - [`functions.md`](./functions.md) — `fun`/`return`.
