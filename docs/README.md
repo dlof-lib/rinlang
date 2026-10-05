@@ -11,6 +11,7 @@
 - [`syntax.md`](./syntax.md) — القواعد النحوية العامة (فواصل، كتل، عوامل).
 - [`language-reference.md`](./language-reference.md) — المرجع الشامل وخريطة ترابط كل المفاهيم.
 - [`variables.md`](./variables.md) — `let`/`text`، مصفوفات، قواميس، نطاق.
+- [`template-strings.md`](./template-strings.md) — النصوص القالبية: `` `مرحباً ${name}` ``.
 - [`input.md`](./input.md) — إدخال المستخدم: `input` · `inputNumber` · `confirm` · `choose` — تستدعي enum وOOP والحاويات والمُدقِّقات (validator, target/key).
 - [`control-flow.md`](./control-flow.md) — **الشروط** (`if`/`else`/`when`/`otherwise`/`plus.condition`/`match`/`case`)، الحلقات (`while`/`for`)، و`goal`/`achieve`.
 - [`functions.md`](./functions.md) — `fun`/`return`، التكرار الذاتي (recursion).
