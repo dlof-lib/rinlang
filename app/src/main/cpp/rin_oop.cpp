@@ -525,6 +525,10 @@ Value Interpreter::callMethodOn(const Value& obj, const std::string& method, std
         Value bound = bindMethod(obj, m, owner);
         return callFunction(bound.function, args, line);
     }
+    if (obj.type == Value::Type::SET) {
+        Value out;
+        if (tryCallSetMethod(obj, method, args, line, out)) return out;
+    }
     if (obj.type == Value::Type::MAP) {
         for (auto& kv : *obj.map)
             if (kv.first.type == Value::Type::STRING && kv.first.str == method && kv.second.type == Value::Type::FUNCTION)
