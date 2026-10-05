@@ -1,0 +1,21 @@
+// Env: ربط Rin بملف .env
+let src = "# تعليق\nAPP=rin\nexport PORT=8080\nNAME=\"Rin Lang\"\nRAW='a $b #c'\nURL=http://h:${PORT}/x # inline\nEMPTY=\nDEF=${MISSING_ZZ:-fallback}\nMULTI=\"l1\\nl2\"\nESC=\"cost \\$5\"\nbad line\nDEBUG=true\nHOSTS= a, b ,c\n";
+let m = Env.parse(src);
+print m["APP"], m["PORT"], m["NAME"], m["RAW"], m["URL"], m["EMPTY"] == "", m["DEF"], m["ESC"];
+print len(m["MULTI"]), Env.parse("A=1\nA=2")["A"];
+writeFile("env_test.tmp", src);
+let r = Env.load("env_test.tmp");
+print Env.get("APP"), Env.get("NOPE_ZZ"), Env.get("NOPE_ZZ", "dflt"), Env.has("PORT"), Env.has("NOPE_ZZ");
+print Env.int("PORT"), Env.int("NOPE_ZZ", 7), Env.float("PORT"), Env.bool("DEBUG"), Env.bool("NOPE_ZZ", false);
+print Env.list("HOSTS"), Env.list("NOPE_ZZ");
+Env.set("APP", "sys");
+Env.load("env_test.tmp");
+print Env.get("APP");
+Env.load("env_test.tmp", true);
+print Env.get("APP");
+Env.set("K1", "v1"); print Env.get("K1"), Env.unset("K1"), Env.has("K1");
+print Env.load(), Env.load("env_test.tmp", true) != nil;
+try { Env.require("NOPE_ZZ"); } catch (e) { print e.code; }
+try { Env.int("NAME"); } catch (e) { print e.code; }
+try { Env.load("no_such_file.env"); } catch (e) { print e.code; }
+deleteFile("env_test.tmp");
