@@ -178,6 +178,8 @@ void Lexer::scanTemplateParts(char term) {
         throw RinError(std::move(d));
     };
 
+    const size_t openIdx = tokens.size();
+    bool hadExpr = false;
     pushToken(TokenType::LPAREN, "(", openLine, openCol, openCol + 1);
     bool needPlus = false;
     bool emittedAnyText = false;
@@ -235,6 +237,7 @@ void Lexer::scanTemplateParts(char term) {
             const int exprLine = line;
             const int exprCol = columnOf(current);
             advance(); advance(); // ${
+            hadExpr = true;
             flushText(text, /*force=*/!emittedAnyText);
             text.clear();
             if (needPlus) pushToken(TokenType::PLUS, "+", exprLine, exprCol, exprCol + 2);
@@ -366,7 +369,16 @@ void Lexer::scanTemplateParts(char term) {
         text += advance();
     }
     flushText(text, /*force=*/!emittedAnyText);
+    if (!hadExpr) {
+        // قالب بلا ${}: نص ثابت عادي -> رمز STRING واحد، فيصلح في كل المواضع التي تشترط نصاً ثابتاً
+        // (translation / link.id / @import / .object("id") / on.event ...) ويدعم أسطراً متعددة وعلامات " بلا تهريب.
+        std::string only = tokens[openIdx + 1].lexeme;
+        tokens.resize(openIdx);
+        pushToken(TokenType::STRING, only, openLine, openCol, columnOf(current));
+        return;
+    }
     pushToken(TokenType::RPAREN, ")", line, columnOf(current) - 1, columnOf(current));
+    if (term == '`') tokens[openIdx].tpl = true; // ( افتتاحية قالب ديناميكي: يتعرّف عليها المحلل في emit / on.event / translation
 }
 
 void Lexer::scanNumber() {
