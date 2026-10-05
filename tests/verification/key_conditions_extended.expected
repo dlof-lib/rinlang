@@ -1,0 +1,27 @@
+ifnot:ok
+chain:B
+chain:else
+while:3
+until:0
+all:ok
+all:else
+any:ok
+none:ok
+nil:ok
+notnil:ok
+empty:ok
+present:ok
+present:blank
+true false
+true false false true true
+true false true false
+true false false true
+true false true
+true true false
+true false true
+true false true
+true false false
+true false
+true false true
+true false
+true while-not
