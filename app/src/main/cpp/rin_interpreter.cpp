@@ -2214,6 +2214,9 @@ void Interpreter::registerNatives() {
     // rin_stdlib_libs.h) so it's available to every .rin source with no @import required, same
     // as toString/len/upper/... already are.
     natives["str"] = natives["toString"];
+    // #str(value) -> نفس toString لكن باسم لا يمكن لمتغيّر/دالة المستخدم أن تحجبه. يستعمله Lexer
+    // عند تحويل النصوص القالبية `...${expr}...` إلى `"..." + #str(expr) + "..."`.
+    natives["#str"] = natives["toString"];
     natives["toNumber"] = [](std::vector<Value>& a, int line) -> Value {
         expectArgs("toNumber", a, 1, line);
         if (a[0].type == Value::Type::NUMBER) return a[0];
