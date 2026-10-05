@@ -182,7 +182,7 @@ private object RinLexer {
         "listitem", "direction", "background", "state", "theme", "slot", "emit", "event", "class",
         "struct", "interface", "trait", "enum", "extends", "implements", "uses", "instanceof",
         "abstract", "final", "override", "static", "protected", "get", "set", "self", "super", "when",
-        "otherwise", "unless", "match", "case", "goal", "achieve", "item",
+        "otherwise", "unless", "elif", "elseif", "ifnot", "until", "match", "case", "goal", "achieve", "item",
         // أنواع/مساحات أسماء أساسية: Set (docs/set.md) و Env (docs/env.md)
         "Set", "Env"
     )
@@ -217,6 +217,8 @@ private object RinLexer {
         "httpGet", "httpPatch", "httpPost", "httpPut", "httpRequest", "httpSetTimeout",
         "inTransaction", "indexOf", "inputNumber", "insertDoc", "iqr", "is", "isArray", "isBool",
         "isChatTyping", "isFunction", "isInstalled", "isMap", "isNil", "isNot", "isNumber", "isString",
+        // متغيّرات الشروط الموسّعة (rin_conditions.cpp)
+        "notNil", "present", "blank", "isTrue", "isFalse", "xor", "implies", "oneOf", "noneOf", "exactly", "atLeast", "atMost", "lengthIs", "outside", "isInt", "isZero", "closeTo", "matches", "key_conditions", "every", "some", "countIf", "findIf",
         "join", "jsonDecode", "jsonEncode", "key_terms", "keys", "kindOf", "lastChatMessage",
         "lastIndexOf", "len", "lerp", "levenshtein", "libraryExport", "light", "listIndexes",
         "listInstalled", "listRelations", "ln", "loadInstalled", "log", "log10", "logClear",
