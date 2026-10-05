@@ -182,7 +182,9 @@ private object RinLexer {
         "listitem", "direction", "background", "state", "theme", "slot", "emit", "event", "class",
         "struct", "interface", "trait", "enum", "extends", "implements", "uses", "instanceof",
         "abstract", "final", "override", "static", "protected", "get", "set", "self", "super", "when",
-        "otherwise", "unless", "match", "case", "goal", "achieve", "item"
+        "otherwise", "unless", "match", "case", "goal", "achieve", "item",
+        // أنواع/مساحات أسماء أساسية: Set (docs/set.md) و Env (docs/env.md)
+        "Set", "Env"
     )
     val builtins = setOf(
         "Addition", "Equal", "Multiplication", "Subtraction", "abs", "acos", "adler32", "all",
@@ -277,6 +279,14 @@ private object RinLexer {
                         else { out.add(hl(li, i, end + 2, HighlightKind.COMMENT)); i = end + 2 }
                     }
                     c == '"' -> { val end = scanQuoted(text, i, '"'); out.add(hl(li, i, end, HighlightKind.STRING)); i = end }
+                    // معاملات المقارنة (docs/compare_ops.md): =/= (ليس نفس الكائن) · =/ (نسخة) · /= (≠)
+                    // `=//` تبقى = ثم تعليقاً، و `=/*` كذلك (لا تُعدّ =/)
+                    text.startsWith("=/=", i) -> { out.add(hl(li, i, i + 3, HighlightKind.OPERATOR)); i += 3 }
+                    c == '=' && i + 1 < n && text[i + 1] == '/' && (i + 2 >= n || (text[i + 2] != '/' && text[i + 2] != '*')) ->
+                        { out.add(hl(li, i, i + 2, HighlightKind.OPERATOR)); i += 2 }
+                    c == '/' && i + 1 < n && text[i + 1] == '=' -> { out.add(hl(li, i, i + 2, HighlightKind.OPERATOR)); i += 2 }
+                    (c == '=' || c == '!' || c == '<' || c == '>') && i + 1 < n && text[i + 1] == '=' ->
+                        { out.add(hl(li, i, i + 2, HighlightKind.OPERATOR)); i += 2 }
                     c == '@' -> {
                         val start = i; i++
                         while (i < n && (text[i].isLetterOrDigit() || text[i] == '_' || text[i] == '.')) i++
