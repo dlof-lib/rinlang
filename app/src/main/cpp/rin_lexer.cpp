@@ -123,6 +123,129 @@ void Lexer::scanString() {
     tokens.push_back(t);
 }
 
+void Lexer::pushToken(TokenType type, const std::string& lexeme, int ln, int col, int endCol) {
+    Token t;
+    t.type = type;
+    t.lexeme = lexeme;
+    t.line = ln;
+    t.col = col;
+    t.endCol = endCol;
+    tokens.push_back(t);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// النصوص القالبية (Template strings):   `مرحباً ${name}، عمرك ${age + 1}`
+//
+//   - تبدأ وتنتهي بعلامة backtick (`) — لم تكن صالحة سابقاً (كانت خطأ E0011)، فلا تعارض مع
+//     أي كود موجود، والنصوص العادية "..." تبقى حرفية تماماً (أي { أو $ داخلها لا تُفسَّر).
+//   - داخل ${ ... } يُكتب أي تعبير Rin صالح (متغيّر، عملية حسابية، استدعاء دالة، قالب متداخل...).
+//   - يُسمح بعدة أسطر داخل القالب. التهريب: \` \$ \\ \n \t \r \"
+//
+// التنفيذ "desugaring" داخل الـ Lexer فقط: يُحوَّل القالب إلى سلسلة رموز عادية
+//     ( "نص" + #str(تعبير) + "نص" ... )
+// فلا يحتاج المحلل النحوي ولا المفسِّر لأي تعديل، ويعمل في CLI وأندرويد والويب تلقائياً.
+// يبدأ التعبير دائماً بنص (ولو فارغ) لضمان أن `+` هي دمج نصوص وليست جمع أرقام.
+// ─────────────────────────────────────────────────────────────────────────────
+void Lexer::scanTemplate() {
+    const int openLine = line;
+    const int openCol = columnOf(start);
+    const size_t openOffset = start;
+
+    auto unterminated = [&]() {
+        diag::Diagnostic d(diag::Code::E0011_UnexpectedToken, "unterminated template string",
+                            diag::SourceLocation::point(file, openLine, openCol));
+        d.withReason("a backtick ` was opened here but never closed before the end of the file")
+         .withHint("close the template with a matching backtick `");
+        throw RinError(std::move(d));
+    };
+
+    pushToken(TokenType::LPAREN, "(", openLine, openCol, openCol + 1);
+    bool needPlus = false;      // هل يجب وضع + قبل القطعة التالية؟
+    bool emittedAnyText = false; // أول قطعة دائماً نص (حتى لو فارغ)
+
+    auto flushText = [&](const std::string& text, bool force) {
+        if (text.empty() && !force) return;
+        if (needPlus) pushToken(TokenType::PLUS, "+", line, columnOf(current), columnOf(current));
+        pushToken(TokenType::STRING, text, line, openCol, columnOf(current));
+        needPlus = true;
+        emittedAnyText = true;
+    };
+
+    std::string text;
+    while (true) {
+        if (isAtEnd()) unterminated();
+        char c = peek();
+        if (c == '`') { advance(); break; }
+        if (c == '\n') {
+            line++;
+            text += advance();
+            lineStartOffset = current;
+            continue;
+        }
+        if (c == '\\') {
+            advance();
+            if (isAtEnd()) unterminated();
+            char esc = advance();
+            switch (esc) {
+                case 'n': text += '\n'; break;
+                case 't': text += '\t'; break;
+                case 'r': text += '\r'; break;
+                case '`': text += '`'; break;
+                case '$': text += '$'; break;
+                case '"': text += '"'; break;
+                case '\\': text += '\\'; break;
+                case '\n': line++; lineStartOffset = current; break;
+                default: text += esc; break;
+            }
+            continue;
+        }
+        if (c == '$' && peekNext() == '{') {
+            const int exprLine = line;
+            const int exprCol = columnOf(current);
+            advance(); advance(); // استهلاك ${
+            // أول قطعة نص ولو فارغة، ثم النص المتراكم قبل التعبير
+            flushText(text, /*force=*/!emittedAnyText);
+            text.clear();
+            if (needPlus) pushToken(TokenType::PLUS, "+", exprLine, exprCol, exprCol + 2);
+            pushToken(TokenType::IDENT, "#str", exprLine, exprCol, exprCol + 2);
+            pushToken(TokenType::LPAREN, "(", exprLine, exprCol, exprCol + 2);
+            const size_t exprFirstToken = tokens.size();
+
+            // مسح التعبير بنفس scanToken() حتى الوصول إلى } المطابقة (مع تتبع أقواس { } المتداخلة).
+            int depth = 0;
+            while (true) {
+                if (isAtEnd()) unterminated();
+                start = current;
+                const size_t before = tokens.size();
+                scanToken();
+                if (tokens.size() > before) {
+                    TokenType tt = tokens.back().type;
+                    if (tt == TokenType::LBRACE) depth++;
+                    else if (tt == TokenType::RBRACE) {
+                        if (depth == 0) { tokens.pop_back(); break; }
+                        depth--;
+                    }
+                }
+            }
+            if (tokens.size() == exprFirstToken) {
+                diag::Diagnostic d(diag::Code::E0011_UnexpectedToken, "empty `${}` in template string",
+                                    diag::SourceLocation::point(file, exprLine, exprCol));
+                d.withReason("nothing was written between `${` and `}`")
+                 .withHint("put a variable or expression inside, e.g. `${name}`");
+                throw RinError(std::move(d));
+            }
+            pushToken(TokenType::RPAREN, ")", line, columnOf(current) - 1, columnOf(current));
+            needPlus = true;
+            continue;
+        }
+        text += advance();
+    }
+    // نهاية القالب: النص المتبقي (أو نص فارغ إن لم تُكتب أي قطعة إطلاقاً)
+    flushText(text, /*force=*/!emittedAnyText);
+    pushToken(TokenType::RPAREN, ")", line, columnOf(current) - 1, columnOf(current));
+    (void)openOffset;
+}
+
 void Lexer::scanNumber() {
     while (isdigit((unsigned char)peek())) advance();
     if (peek() == '.' && isdigit((unsigned char)peekNext())) {
@@ -248,6 +371,9 @@ void Lexer::scanToken() {
             break;
         case '"':
             scanString();
+            break;
+        case '`':
+            scanTemplate();
             break;
         default:
             if (isdigit((unsigned char)c)) {
