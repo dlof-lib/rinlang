@@ -328,7 +328,7 @@ inline StrandPtr buildFabric(const std::shared_ptr<rin::ViewStmt>& node, WarpSco
     uint64_t attrHash = 1469598103934665603ULL;
     for (auto& a : node->attrs) {
         std::vector<std::string> reads;
-        Value v = evalAttrExpr(a.value, warp, &reads);
+        Value v = evalAttrExprKeyed(a.key, a.value, warp, &reads);
         for (auto& w : reads) subs.record(w, s->id);
         s->attrs.push_back({a.key, a.value, v});
         if (a.key == "mask") s->mask = v.asString();
@@ -380,7 +380,7 @@ inline StrandPtr buildFabric(const std::shared_ptr<rin::ViewStmt>& node, WarpSco
             if (ownKeys.count(a.key)) continue;
             if (a.key == "color" && !isTextLike) continue;
             std::vector<std::string> reads;
-            Value v = evalAttrExpr(a.value, warp, &reads);
+            Value v = evalAttrExprKeyed(a.key, a.value, warp, &reads);
             for (auto& w : reads) subs.record(w, s->id);
             s->attrs.push_back({a.key, a.value, v});
             attrHash = fnv1a(a.key + "=" + v.asString(), attrHash);
@@ -479,7 +479,7 @@ inline void applyBannerConveniences(const StrandPtr& s, WarpScope& warp, WarpSub
             if (!userSetVisible) {
                 auto visVar = std::make_shared<rin::VariableExpr>(); visVar->name = cell;
                 std::vector<std::string> visReads;
-                Value visVal = evalAttrExpr(visVar, warp, &visReads);
+                Value visVal = evalAttrValue(visVar, warp, &visReads);
                 for (auto& w : visReads) subs.record(w, s->id);
                 s->attrs.push_back({"visible", visVar, visVal});
             }
