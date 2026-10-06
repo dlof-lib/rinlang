@@ -49,7 +49,7 @@ inline void registerObjectsFromProgram(const std::vector<rin::StmtPtr>& program,
         std::vector<std::pair<std::string, Value>> fields;
         fields.reserve(o->fields.size());
         for (auto& f : o->fields) {
-            Value v = f.value ? evalAttrExpr(f.value, warp, nullptr) : Value::txt("nil");
+            Value v = f.value ? evalAttrValue(f.value, warp, nullptr) : Value::txt("nil");
             fields.push_back({f.name, v});
         }
         objectLiteralRegistry().objects[o->id] = std::move(fields);
@@ -87,9 +87,9 @@ inline std::vector<std::pair<std::string, Value>> indsinExtractContainerFields(c
     std::vector<std::pair<std::string, Value>> fields;
     for (auto& st : body) {
         if (auto t = std::dynamic_pointer_cast<rin::TextStmt>(st)) {
-            fields.push_back({t->name, t->initializer ? evalAttrExpr(t->initializer, warp, nullptr) : Value::txt("nil")});
+            fields.push_back({t->name, t->initializer ? evalAttrValue(t->initializer, warp, nullptr) : Value::txt("nil")});
         } else if (auto l = std::dynamic_pointer_cast<rin::LetStmt>(st)) {
-            fields.push_back({l->name, l->initializer ? evalAttrExpr(l->initializer, warp, nullptr) : Value::txt("nil")});
+            fields.push_back({l->name, l->initializer ? evalAttrValue(l->initializer, warp, nullptr) : Value::txt("nil")});
         }
     }
     return fields;
