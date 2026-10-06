@@ -12145,6 +12145,7 @@ bool Interpreter::livePropertyGet(const EnvPtr& env, const std::string& name, co
 #include "rin_conditions.cpp" // متغيّرات الشروط الموسّعة (docs/key_terms_and_builtins.md)
 #include "rin_env.cpp"   // ربط ملف .env (docs/env.md)
 #include "rin_set.cpp"   // نوع Set الأساسي (docs/set.md)
+#include "rin_expr_host.cpp" // واجهة التقييم المعزول لـ indsin (docs/indsin_rin.md)
 #endif
 
 // ---- Rin 1.0: OOP الموسَّع (interface/trait/abstract/static/private/get-set + دوال oop.*) ----
