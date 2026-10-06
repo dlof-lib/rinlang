@@ -676,6 +676,22 @@ public:
         return it->second->values;
     }
 
+    // ---- Indsin <-> Rin: واجهة التقييم المعزول (rin_expr_host.cpp) ----
+    // تتيح لمحرّك indsin تقييم أي تعبير Rin داخل قيم خصائص @view (text=/color=/visible=...) بدلالات
+    // اللغة الحقيقية بدل المُقيِّم المصغَّر (أرقام/نصوص فقط). لا تنفّذ جُملاً ولا تغيّر حالة الأخطاء.
+    //  - lookupGlobal: قيمة متغيّر عام (let/const/warp) — من بيئة الحاوية أولاً إن سُمّيت ثم globals.
+    //  - isCallableName: اسم دالة أصلية (بما فيها Set.of/indsin.*) أو `fun` معرَّفة في المستوى الأعلى.
+    //  - evalExpression: يقيّم e في بيئة ابنة لبيئة globals/الحاوية، تُعرَّف فيها locals (خلايا warp).
+    //    يعيد false ويملأ err عند أي RinError/استثناء؛ لا يرمي أبداً.
+    //  - registerHostNative: يسجّل دالة أصلية من المضيف (مثلاً indsin.* من rin_indsin_rinlib.h).
+    bool lookupGlobal(const std::string& name, Value& out, const std::string& containerName = "") const;
+    bool isCallableName(const std::string& name) const;
+    bool evalExpression(const ExprPtr& e, const std::unordered_map<std::string, Value>& locals, Value& out,
+                        std::string& err, const std::string& containerName = "");
+    void registerHostNative(const std::string& name, std::function<Value(std::vector<Value>&, int)> fn) {
+        natives[name] = std::move(fn);
+    }
+
     // Caps the total number of statements execute() will run across this Interpreter's lifetime
     // (cumulative, not per-call -- callers that want a fresh budget per run() should construct a
     // fresh Interpreter, exactly like Live Preview's cold/hot pipeline does). 0 (the default)
