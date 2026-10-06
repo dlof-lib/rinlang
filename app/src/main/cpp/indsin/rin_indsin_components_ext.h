@@ -105,7 +105,7 @@ inline void applyTagConveniences(const StrandPtr& s, WarpScope& warp, WarpSubscr
             if (!userSetVisible) {
                 auto visVar = std::make_shared<rin::VariableExpr>(); visVar->name = cell;
                 std::vector<std::string> visReads;
-                Value visVal = evalAttrExpr(visVar, warp, &visReads);
+                Value visVal = evalAttrValue(visVar, warp, &visReads);
                 for (auto& w : visReads) subs.record(w, s->id);
                 s->attrs.push_back({"visible", visVar, visVal});
             }
