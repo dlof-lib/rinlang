@@ -92,7 +92,7 @@ inline std::string actionCellArg(const std::vector<rin::ExprPtr>& argExprs, size
 }
 inline double actionNumberArg(const std::vector<rin::ExprPtr>& argExprs, size_t i, WarpScope& warp, double def) {
     if (i >= argExprs.size()) return def;
-    return evalAttrExpr(argExprs[i], warp, nullptr).asNumber(def);
+    return evalAttrValue(argExprs[i], warp, nullptr).asNumber(def);
 }
 
 // A boolean-flag action: sets `cell` to a fixed "true"/"false" regardless of its current value.
@@ -144,7 +144,7 @@ inline void ActionRegistry::registerBuiltins() {
         std::string cell = actionCellArg(a, 0, w);
         if (cell.empty() || a.size() < 2) { out.error = "set() needs set(cell, value)"; return out; }
         out.recognized = true;
-        w.set(cell, evalAttrExpr(a[1], w, nullptr));
+        w.set(cell, evalAttrValue(a[1], w, nullptr));
         out.changedWarpNames.push_back(cell);
         return out;
     });
@@ -177,7 +177,7 @@ inline void ActionRegistry::registerBuiltins() {
         if (cell.empty()) { out.error = "reset() needs a Warp-cell argument"; return out; }
         out.recognized = true;
         if (a.size() >= 2) {
-            w.set(cell, evalAttrExpr(a[1], w, nullptr));
+            w.set(cell, evalAttrValue(a[1], w, nullptr));
         } else {
             Value cur = w.get(cell);
             w.set(cell, cur.kind == Value::Kind::NUMBER ? Value::num(0) : Value::txt(""));
@@ -289,9 +289,9 @@ inline void ActionRegistry::registerBuiltins() {
         std::string cur = w.get(cell).asString();
         size_t next = 0;
         for (size_t i = 1; i < a.size(); i++) {
-            if (evalAttrExpr(a[i], w, nullptr).asString() == cur) { next = (i % (a.size() - 1)); break; }
+            if (evalAttrValue(a[i], w, nullptr).asString() == cur) { next = (i % (a.size() - 1)); break; }
         }
-        w.set(cell, evalAttrExpr(a[1 + next], w, nullptr));
+        w.set(cell, evalAttrValue(a[1 + next], w, nullptr));
         out.changedWarpNames.push_back(cell);
         return out;
     });
@@ -333,7 +333,7 @@ inline void ActionRegistry::registerBuiltins() {
         std::string cell = actionCellArg(a, 0, w);
         if (cell.empty() || a.size() < 2) { out.error = "append() needs append(cell, text)"; return out; }
         out.recognized = true;
-        w.set(cell, Value::txt(w.get(cell).asString() + evalAttrExpr(a[1], w, nullptr).asString()));
+        w.set(cell, Value::txt(w.get(cell).asString() + evalAttrValue(a[1], w, nullptr).asString()));
         out.changedWarpNames.push_back(cell);
         return out;
     });
