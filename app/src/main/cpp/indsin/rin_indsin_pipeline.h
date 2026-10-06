@@ -6,6 +6,8 @@
 #include "../rin_lexer.h"
 #include "../rin_parser.h"
 #include "../rin_interpreter.h" // real-execution bridge -- see runColdPipelineWithRuntime() below
+#include "rin_indsin_rinbridge.h" // قيم الخصائص تُقيَّم بمفسّر Rin الحقيقي (docs/indsin_rin.md)
+#include "rin_indsin_rinlib.h"    // دوال indsin.* لكود Rin
 #include "rin_indsin.h"
 #include "rin_indsin_tokens.h"
 #include "rin_indsin_object.h"
@@ -164,12 +166,16 @@ inline PipelineResult runColdPipelineWithRuntime(const std::string& source, rin:
             else if (!reachedElementFallback) reachedElementFallback = v;
         });
 
+        registerIndsinRinLib(interp); // indsin.* متاحة لكود البرنامج نفسه
         interp.setExecutionBudget(instructionBudget);
         interp.run(program);
         if (interp.hadError()) {
             if (interp.lastDiagnostic()) throw rin::RinError(*interp.lastDiagnostic());
             throw rin::RinError(interp.lastErrorMessage().value_or("runtime error"), interp.lastErrorLine());
         }
+        // من هنا تُقيَّم قيم الخصائص (text=/visible=/color=...) بدلالات Rin الكاملة عبر هذا المفسّر.
+        InterpreterExprHost rinHost(interp, "");
+        ScopedRinHost rinHostScope(&rinHost);
 
         // Seed every top-level `warp name = expr;` from its *actual* post-execution global value
         // (falling back to a fresh evalAttrExpr() only in the defensive case that, somehow, the
@@ -314,12 +320,15 @@ inline PipelineResult runColdPipelineForContainerWithRuntime(const std::string& 
             else if (!reachedElementFallback) reachedElementFallback = v;
         });
 
+        registerIndsinRinLib(interp); // indsin.* متاحة لكود البرنامج نفسه
         interp.setExecutionBudget(instructionBudget);
         interp.run(program);
         if (interp.hadError()) {
             if (interp.lastDiagnostic()) throw rin::RinError(*interp.lastDiagnostic());
             throw rin::RinError(interp.lastErrorMessage().value_or("runtime error"), interp.lastErrorLine());
         }
+        InterpreterExprHost rinHost(interp, containerName);
+        ScopedRinHost rinHostScope(&rinHost);
 
         // `warp` cells declared directly inside this container's body live in the container's own
         // Environment (see ContainerStmt in execute()), not globals -- exportContainerGlobals()
