@@ -419,7 +419,7 @@ inline void registerThemesFromProgram(const std::vector<rin::StmtPtr>& program, 
         theme.name = t->name;
         bool makeActive = false;
         for (auto& a : t->attrs) {
-            Value v = evalAttrExpr(a.value, warp, nullptr);
+            Value v = evalAttrExprKeyed(a.key, a.value, warp, nullptr);
             if (a.key == "active") { makeActive = (v.asString() == "true"); continue; }
             if (looksLikeHexColor(v.asString())) theme.setSlot(a.key, parseHexColor(v.asString(), {0,0,0}));
         }
