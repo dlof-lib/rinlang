@@ -154,7 +154,7 @@ inline TapResult executeHandlerExpr(const rin::ExprPtr& handlerExpr, const Stran
             }
         }
         aliases.push_back("");
-        args.push_back(indsinValueToRin(evalAttrExpr(argExpr, warp, nullptr)));
+        args.push_back(indsinValueToRin(evalAttrValue(argExpr, warp, nullptr)));
     }
     std::ostringstream desc;
     desc << callee << "(";
@@ -209,10 +209,10 @@ inline TapResult executeHandlerExpr(const rin::ExprPtr& handlerExpr, const Stran
         }
         if (callee == "navigate") {
             if (argExprs.empty()) { result.error = "navigate() needs a route argument"; return result; }
-            nav->navigate(evalAttrExpr(argExprs[0], warp, nullptr).asString());
+            nav->navigate(evalAttrValue(argExprs[0], warp, nullptr).asString());
         } else if (callee == "replace") {
             if (argExprs.empty()) { result.error = "replace() needs a route argument"; return result; }
-            nav->replace(evalAttrExpr(argExprs[0], warp, nullptr).asString());
+            nav->replace(evalAttrValue(argExprs[0], warp, nullptr).asString());
         } else if (callee == "back") {
             nav->back(); // no-op (never a crash) when there's nothing to go back to
         }
@@ -242,9 +242,9 @@ inline TapResult executeHandlerExpr(const rin::ExprPtr& handlerExpr, const Stran
                     return result;
                 }
             }
-            path = evalAttrExpr(argExprs[1], warp, nullptr).asString();
+            path = evalAttrValue(argExprs[1], warp, nullptr).asString();
         } else {
-            path = evalAttrExpr(argExprs[0], warp, nullptr).asString();
+            path = evalAttrValue(argExprs[0], warp, nullptr).asString();
         }
         if (path.empty()) { result.error = callee + "(): empty file path"; return result; }
         if (!exportFabricToPNG(*exportDye, target, path)) {
