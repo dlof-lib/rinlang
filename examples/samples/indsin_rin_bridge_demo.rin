@@ -1,0 +1,62 @@
+// indsin_rin_bridge_demo.rin — indsin يعتمد على لغة Rin نفسها (docs/indsin_rin.md)
+//
+// كل قيمة خاصية في @view هنا هي تعبير Rin حقيقي يُقيَّم بمفسّر اللغة:
+//   • متغيّرات let عامة            text=title;
+//   • دوال Rin الأصلية والمعرَّفة  text=upper(title);  text=badge(count);
+//   • مقارنات ومنطق وثلاثي         visible=count > LIMIT and !loading;
+//   • فهرسة وقواميس وSet           text=user["name"];  text=Set(tags).size();
+//   • نظام التصميم كدوال Rin       color=indsin.themeColor("primary");
+// ويُعاد حساب كل شيء تلقائياً عند تغيّر أي warp يدخل التعبير.
+
+let title = "مرحباً من Rin";
+let LIMIT = 3;
+let tags = ["rin", "ui", "rin", "set"];
+let user = {"name": "ليلى", "plan": "pro"};
+let brand = "#6C5CE7";
+let pal = indsin.palette(brand);                         // سلّم 50..900 كقاموس Rin
+
+fun badge(n) { return "[" + n + "]"; }
+fun level(n) {
+    if (n > 10) { return "high"; }
+    if (n > LIMIT) { return "mid"; }
+    return "low";
+}
+
+warp count = 0;
+warp loading = false;
+
+@view.Column=Root
+  padding=comfortable; gap=normal;
+
+  @view.Text=Heading
+    text=upper(title); size=heading;
+    color=indsin.ensureContrast(brand, indsin.themeColor("background"));
+  .end/view
+
+  @view.Text=Greeting
+    text="أهلاً " + user["name"] + " — خطة " + user["plan"];
+  .end/view
+
+  @view.Text=Counter
+    text="العداد " + badge(count) + " (" + level(count) + ")";
+  .end/view
+
+  @view.Text=UniqueTags
+    text=Set(tags).size() + " وسوم فريدة من " + len(tags);
+    color=pal["700"];
+  .end/view
+
+  @view.Text=Warn
+    text="تجاوزت الحد";
+    visible=count > LIMIT and !loading;
+    color=indsin.themeColor("warning");
+  .end/view
+
+  @view.Button=Inc
+    text="+1";
+    bg=pal["500"]; textColor=indsin.onColor(pal["500"]);
+    onTap=increment(count);
+  .end/view
+.end/view
+
+fun increment(c) { c = c + 1; }
