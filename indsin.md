@@ -96,3 +96,9 @@ rin_indsin_preview file.rin --width 390 --png out.png --html out.html --tap 60,1
 مولّد ثيم من لون واحد مع فحص WCAG، تصميم متجاوب بلاحقات `_md/_lg`، حركات متتابعة `stagger=`،
 8 actions جديدة، مدقّق إمكانية الوصول، وواجهة استعلام للشجرة — راجع
 [`docs/indsin_expansion.md`](./docs/indsin_expansion.md) والمثال `examples/samples/indsin_system_demo.rin`.
+
+
+---
+## Rin كأساس لقيم الخصائص (جديد)
+قيم خصائص `@view` تُقيَّم الآن بمفسّر Rin الحقيقي: متغيرات `let`، دوال أصلية و`fun`، مقارنات و`and/or/!`، فهرسة، `Set`،
+ودوال `indsin.*` لنظام التصميم. التفاصيل والقيود (حارس النقاء): [docs/indsin_rin.md](docs/indsin_rin.md).
