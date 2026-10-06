@@ -12,6 +12,7 @@
 #include <unordered_map>
 #include <variant>
 #include <sstream>
+#include <cctype>
 
 namespace indsin {
 
@@ -50,6 +51,44 @@ struct WarpScope {
     void set(const std::string& name, Value v) { cells[name] = std::move(v); }
 };
 
+// ---------------------------------------------------------------------------------------------
+// جسر Rin الكامل (docs/indsin_rin.md): يجعل قيم خصائص @view تعتمد على لغة Rin نفسها.
+//
+// المُقيِّم المصغَّر أدناه يفهم الحرفيات + - * / وخلايا Warp والشرط الثلاثي. أي شيء آخر (مقارنات،
+// && || !، %، فهرسة x[i]، x.member، x.method()، استدعاء دوال Rin الأصلية/المعرَّفة، Set/Array/Map...)
+// كان يتحوّل إلى "<expr>" أو يُلصَق كنص. الآن إن وُجد مضيف (RinExprHost) يُفوَّض التعبير إلى مفسّر Rin
+// الحقيقي بدلالات اللغة الكاملة؛ وبلا مضيف يبقى السلوك القديم حرفياً (توافق خلفي كامل).
+// المضيف الفعلي (فوق rin::Interpreter) في rin_indsin_rinbridge.h؛ يُثبَّت لكل جلسة/تمريرة بـ ScopedRinHost.
+// ---------------------------------------------------------------------------------------------
+struct RinExprHost {
+    virtual ~RinExprHost() = default;
+    // متغيّر Rin عام (let/const/warp) غير دالة، باسم `name` وليس خلية warp؟ يملأ out ويعيد true.
+    virtual bool variable(const std::string& name, const WarpScope& warp, Value& out) = 0;
+    // هل `callee` دالة Rin (أصلية أو fun معرَّفة) مسموح بتقييمها كقيمة (ليست ذات أثر جانبي)؟
+    virtual bool canCall(const std::string& callee, const WarpScope& warp) = 0;
+    // يقيّم e بدلالات Rin الكاملة؛ يضيف أسماء المتغيرات الحرّة إلى reads. false = ممنوع/فشل (err يشرح).
+    virtual bool eval(const rin::ExprPtr& e, const WarpScope& warp, std::vector<std::string>* reads,
+                      Value& out, std::string* err) = 0;
+};
+inline RinExprHost*& currentRinHost() { static thread_local RinExprHost* h = nullptr; return h; }
+struct ScopedRinHost {
+    RinExprHost* prev;
+    explicit ScopedRinHost(RinExprHost* h) : prev(currentRinHost()) { currentRinHost() = h; }
+    ~ScopedRinHost() { currentRinHost() = prev; }
+};
+// "سياق قيمة": الاستدعاء f(x) يُحسَب قيمةً (لا وصف معالج حدث). يُفعَّل لكل الخصائص عدا on<Event>
+// ولوسائط المعالجات/الـ actions.
+inline bool& valueContextFlag() { static thread_local bool v = false; return v; }
+struct ScopedValueContext {
+    bool prev;
+    explicit ScopedValueContext(bool on = true) : prev(valueContextFlag()) { valueContextFlag() = on; }
+    ~ScopedValueContext() { valueContextFlag() = prev; }
+};
+// مفتاح معالج حدث (onTap/onLongPress/onChange...): on + حرف كبير.
+inline bool isHandlerKey(const std::string& k) {
+    return k.size() > 2 && k[0] == 'o' && k[1] == 'n' && std::isupper(static_cast<unsigned char>(k[2]));
+}
+
 // Evaluates the subset of rin::Expr that's meaningful inside a @view attribute value.
 // `readNames` (optional) collects every Warp cell name that was actually read, so the
 // Fabric builder can register this Strand as a subscriber (see buildFabric in rin_indsin_strand.h) —
@@ -69,11 +108,18 @@ inline Value evalAttrExpr(const rin::ExprPtr& e, const WarpScope& warp, std::vec
     if (auto var = std::dynamic_pointer_cast<rin::VariableExpr>(e)) {
         if (readNames) readNames->push_back(var->name);
         if (warp.has(var->name)) return warp.get(var->name);
+        // متغيّر Rin عام عادي (let/const) => قيمته الفعلية، لا اسمه (يتطلّب مضيفاً؛ الدوال تبقى أسماء معالجات).
+        if (auto* host = currentRinHost()) { Value gv; if (host->variable(var->name, warp, gv)) return gv; }
         // Not a known Warp cell (e.g. a plain identifier used as an event-handler reference,
         // such as onTap=increment;) — keep it as its own name so it can be dispatched by Needle.
         return Value::txt(var->name);
     }
     if (auto bin = std::dynamic_pointer_cast<rin::BinaryExpr>(e)) {
+        const bool basicOp = bin->op == rin::TokenType::PLUS || bin->op == rin::TokenType::MINUS ||
+                             bin->op == rin::TokenType::STAR || bin->op == rin::TokenType::SLASH;
+        if (!basicOp) { // مقارنات/== !=/% ...: كانت تُلصَق كنص خطأً؛ الآن بدلالات Rin الحقيقية
+            if (auto* host = currentRinHost()) { Value out; if (host->eval(e, warp, readNames, out, nullptr)) return out; }
+        }
         Value l = evalAttrExpr(bin->left, warp, readNames);
         Value r = evalAttrExpr(bin->right, warp, readNames);
         if (bin->op == rin::TokenType::PLUS) {
@@ -99,6 +145,13 @@ inline Value evalAttrExpr(const rin::ExprPtr& e, const WarpScope& warp, std::vec
                       : evalAttrExpr(cond->whenFalse, warp, readNames);
     }
     if (auto call = std::dynamic_pointer_cast<rin::CallExpr>(e)) {
+        // سياق قيمة (text=upper(name); visible=len(items) > 0): الاستدعاء حساب فعلي بدالة Rin.
+        if (valueContextFlag()) {
+            if (auto* host = currentRinHost()) {
+                Value out;
+                if (host->canCall(call->callee, warp) && host->eval(e, warp, readNames, out, nullptr)) return out;
+            }
+        }
         // Event-handler attributes (onTap=increment(count);) are captured as a raw descriptor
         // string "increment(count)" rather than invoked here — Needle (input dispatch) matches
         // against this descriptor. Full arbitrary-function dispatch is future work (Appendix A).
@@ -106,15 +159,30 @@ inline Value evalAttrExpr(const rin::ExprPtr& e, const WarpScope& warp, std::vec
         for (size_t i = 0; i < call->args.size(); i++) {
             if (i) os << ",";
             if (auto v = std::dynamic_pointer_cast<rin::VariableExpr>(call->args[i])) os << v->name;
-            else os << evalAttrExpr(call->args[i], warp, readNames).asString();
+            else { ScopedValueContext vc(true); os << evalAttrExpr(call->args[i], warp, readNames).asString(); }
         }
         os << ")";
         return Value::txt(os.str());
     }
+    // أي نوع تعبير آخر (unary/logical/index/member/method/array/map...): مفسّر Rin الحقيقي إن وُجد.
+    if (auto* host = currentRinHost()) { Value out; if (host->eval(e, warp, readNames, out, nullptr)) return out; }
     // Fallback for any other expression kind (unary/logical/etc.): stringify defensively rather
     // than throw — a Snag-worthy attribute should degrade to a visible placeholder, not crash
     // the whole render pass (see rin_indsin_c_api.cpp's error containment).
     return Value::txt("<expr>");
+}
+
+// قيمة خاصية بمفتاحها: on<Event> => وصف معالج (السلوك القديم)، غير ذلك => سياق قيمة.
+inline Value evalAttrExprKeyed(const std::string& key, const rin::ExprPtr& e, const WarpScope& warp,
+                               std::vector<std::string>* readNames = nullptr) {
+    if (isHandlerKey(key)) return evalAttrExpr(e, warp, readNames);
+    ScopedValueContext vc(true);
+    return evalAttrExpr(e, warp, readNames);
+}
+// وسيط معالج/action أو حقل كائن: دائماً قيمة.
+inline Value evalAttrValue(const rin::ExprPtr& e, const WarpScope& warp, std::vector<std::string>* readNames = nullptr) {
+    ScopedValueContext vc(true);
+    return evalAttrExpr(e, warp, readNames);
 }
 
 } // namespace indsin
