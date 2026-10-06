@@ -43,6 +43,7 @@ struct IndsinSession {
     // the pointee via std::make_unique sidesteps that entirely.
     std::unique_ptr<rin::Interpreter> interp = std::make_unique<rin::Interpreter>();
     bool interpSeeded = false;
+    std::string containerName; // جلسة create_for_container: بيئة الحاوية تُقرأ منها متغيّرات Rin لقيم الخصائص
 
     // Effects Engine (rin_indsin_effects.h): one animation clock per session, monotonic from
     // whenever the session was created — a plain elapsed-ms counter is all EffectRuntime needs
@@ -50,6 +51,15 @@ struct IndsinSession {
     std::chrono::steady_clock::time_point clockStart = std::chrono::steady_clock::now();
     indsin::EffectRuntime effectRuntime;
     bool animating = false; // set by relayout() below; read back into every JSON envelope
+};
+
+// يثبّت مضيف تقييم Rin لهذه الجلسة طوال نداء واحد: كل خاصية تُعاد قراءتها (نقرة/تحديث/تحميل ساخن)
+// تُقيَّم بمفسّر الجلسة الدائم. يقرأ المفسّر عبر sess لحظة الاستعمال (قد يُستبدل في update_source).
+struct SessionRinHost {
+    indsin::InterpreterExprHost host;
+    indsin::ScopedRinHost scope;
+    explicit SessionRinHost(IndsinSession* s)
+        : host([s] { return s->interp.get(); }, s->containerName), scope(&host) {}
 };
 
 double nowMsFor(IndsinSession* sess) {
@@ -201,6 +211,7 @@ RIN_API void* rin_indsin_session_create_for_container(const char* source, const 
     auto* sess = new (std::nothrow) IndsinSession();
     if (!sess) return nullptr;
     sess->rootWidth = rootWidth > 0 ? rootWidth : 390;
+    sess->containerName = containerName ? containerName : "";
     sess->state = indsin::runColdPipelineForContainerWithRuntime(source ? source : "", containerName ? containerName : "", *sess->interp);
     if (sess->state.ok) { sess->interpSeeded = true; relayout(sess); rebuildIndex(sess); } // see rin_indsin_session_create's comment
     return sess;
@@ -215,6 +226,7 @@ RIN_API char* rin_indsin_session_render_json(void* sessionPtr) {
 RIN_API char* rin_indsin_session_tap(void* sessionPtr, double x, double y) {
     auto* sess = static_cast<IndsinSession*>(sessionPtr);
     if (!sess || !sess->state.ok) return dupToC(sessionErrorJson(sess));
+    SessionRinHost rinHost(sess); // قيم الخصائص المُعاد حسابها تُقيَّم بمفسّر Rin للجلسة
 
     indsin::TapResult tap = indsin::dispatchTapWithOverlay(sess->state.fabric, sess->state.warp,
                                                         sess->state.program, sess->overlayLayer, x, y,
@@ -289,6 +301,7 @@ char* respondToGesture(IndsinSession* sess, const indsin::TapResult& g) {
 RIN_API char* rin_indsin_session_long_press(void* sessionPtr, double x, double y) {
     auto* sess = static_cast<IndsinSession*>(sessionPtr);
     if (!sess || !sess->state.ok) return dupToC(sessionErrorJson(sess));
+    SessionRinHost rinHost(sess); // قيم الخصائص المُعاد حسابها تُقيَّم بمفسّر Rin للجلسة
     indsin::TapResult g = indsin::dispatchLongPressWithOverlay(sess->state.fabric, sess->state.warp,
                                                             sess->state.program, sess->overlayLayer, x, y,
                                                             nullptr, nullptr,
@@ -299,6 +312,7 @@ RIN_API char* rin_indsin_session_long_press(void* sessionPtr, double x, double y
 RIN_API char* rin_indsin_session_double_tap(void* sessionPtr, double x, double y) {
     auto* sess = static_cast<IndsinSession*>(sessionPtr);
     if (!sess || !sess->state.ok) return dupToC(sessionErrorJson(sess));
+    SessionRinHost rinHost(sess); // قيم الخصائص المُعاد حسابها تُقيَّم بمفسّر Rin للجلسة
     indsin::TapResult g = indsin::dispatchDoubleTapWithOverlay(sess->state.fabric, sess->state.warp,
                                                             sess->state.program, sess->overlayLayer, x, y,
                                                             nullptr, nullptr,
@@ -309,6 +323,7 @@ RIN_API char* rin_indsin_session_double_tap(void* sessionPtr, double x, double y
 RIN_API char* rin_indsin_session_hover(void* sessionPtr, double x, double y, int entering) {
     auto* sess = static_cast<IndsinSession*>(sessionPtr);
     if (!sess || !sess->state.ok) return dupToC(sessionErrorJson(sess));
+    SessionRinHost rinHost(sess); // قيم الخصائص المُعاد حسابها تُقيَّم بمفسّر Rin للجلسة
     indsin::TapResult g = indsin::dispatchHoverWithOverlay(sess->state.fabric, sess->state.warp,
                                                         sess->state.program, sess->overlayLayer, x, y,
                                                         entering != 0, nullptr, nullptr,
@@ -327,6 +342,7 @@ RIN_API char* rin_indsin_session_update_source(void* sessionPtr, const char* new
     auto* sess = static_cast<IndsinSession*>(sessionPtr);
     if (!sess) return dupToC("{\"ok\":false,\"error\":\"null session\"}");
     std::string src = newSource ? newSource : "";
+    SessionRinHost rinHost(sess);
 
     if (!sess->state.ok) {
         // Never had a good Fabric to diff against -- just retry the cold pipeline outright, still
