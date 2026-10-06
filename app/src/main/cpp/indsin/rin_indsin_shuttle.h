@@ -26,7 +26,7 @@ struct Shuttle {
         std::vector<ResolvedAttr> newAttrs;
         for (auto& a : newNode->attrs) {
             std::vector<std::string> reads;
-            Value v = evalAttrExpr(a.value, warp, &reads);
+            Value v = evalAttrExprKeyed(a.key, a.value, warp, &reads);
             for (auto& w : reads) subs.record(w, oldStrand->id);
             newAttrs.push_back({a.key, a.value, v});
             auto old = oldStrand->attr(a.key);
@@ -85,7 +85,7 @@ struct Shuttle {
             std::vector<std::string> changed;
             for (auto& a : s->attrs) {
                 if (!a.rawExpr) continue;
-                Value newVal = evalAttrExpr(a.rawExpr, warp, nullptr);
+                Value newVal = evalAttrExprKeyed(a.key, a.rawExpr, warp, nullptr);
                 if (!(newVal == a.value)) { a.value = newVal; changed.push_back(a.key); }
             }
             if (!changed.empty())
