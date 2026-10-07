@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#8274F0"/>
+      <stop offset="1" stop-color="#4331B8"/>
+    </linearGradient>
+    <linearGradient id="chain" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#D9D4FF"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+  <!-- globe -->
+  <g fill="none" stroke="#FFFFFF" stroke-width="22" stroke-linecap="round" opacity="0.92">
+    <circle cx="232" cy="228" r="132"/>
+    <ellipse cx="232" cy="228" rx="56" ry="132"/>
+    <line x1="100" y1="228" x2="364" y2="228"/>
+    <path d="M118 158 Q232 188 346 158"/>
+    <path d="M118 298 Q232 268 346 298"/>
+  </g>
+  <!-- link badge -->
+  <circle cx="362" cy="362" r="96" fill="#2B1E86"/>
+  <circle cx="362" cy="362" r="96" fill="none" stroke="#FFFFFF" stroke-opacity="0.35" stroke-width="6"/>
+  <g transform="rotate(-45 362 362)" fill="none" stroke="url(#chain)" stroke-width="22" stroke-linecap="round">
+    <rect x="296" y="334" width="76" height="56" rx="28"/>
+    <rect x="352" y="334" width="76" height="56" rx="28"/>
+  </g>
+</svg>
