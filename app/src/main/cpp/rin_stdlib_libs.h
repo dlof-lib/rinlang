@@ -12481,6 +12481,1611 @@ class Every extends Rule {
 }
 )INPUTKITOGRIN";
 
+// ============================================================================
+// Embedded IndsinWeb — generated from lib/indsinweb.og.rin
+// ============================================================================
+static const char* kLib_indsinweb_og_rin = R"INDSINWEBOGRIN(
+// ============================================================================
+// lib/indsinweb.og.rin — IndsinWeb: مكتبة WebView والروابط لمحرّك indsin
+// ============================================================================
+// مكتبة مكتوبة بالكامل بلغة Rin (بلا Java/Kotlin/JS داخل المكتبة نفسها). تُجهّز كل ما يحتاجه
+// عنصر `WebView` في indsin (`url=` / `src=` / `html=` / `ratio=`) وكل أنواع الروابط، بأمان:
+//
+//   @import "lib/indsinweb.og.rin";
+//
+//   @container=Demo
+//       warp site = "youtube.com/watch?v=dQw4w9WgXcQ";
+//       @view.Column=Root
+//           @view.WebView=Player
+//               url=iwEmbedUrl(iwNormalize(site));   // رابط تضمين آمن
+//               ratio="16:9";
+//           .end/view
+//           @view.WebView=Card
+//               html=iwFragment(iwLinkHtml("Rin", "https://dlof-lib.github.io/rinlang/"), {"dir": "rtl"});
+//           .end/view
+//       .end/view
+//   .end/container
+//
+// الأقسام (كل الدوال بادئتها iw):
+//   1) نصوص وترميز      iwEscape · iwUrlEncode · iwUrlDecode
+//   2) تحليل الروابط     iwParseUrl · iwNormalize · iwHost · iwOrigin · iwScheme · iwJoin · iwDisplay
+//   3) الأمان            iwIsSafe · iwIsHttps · iwHostAllowed · iwSameOrigin · iwSanitizeHtml
+//   4) الاستعلام         iwQuery · iwParseQuery · iwWithParams · iwGetParam · iwRemoveParam
+//   5) أنواع الروابط     iwLinkKind · iwMailto · iwTel · iwSms · iwGeo · iwMapsUrl · iwWhatsApp
+//                        iwTelegram · iwPlayStore · iwAndroidIntent · iwDeepLink
+//   6) روابط Rin         iwRinProfile · iwRinLibrary · iwParseRinLink
+//   7) الفيديو/التضمين   iwYoutubeId · iwYoutubeEmbedUrl · iwYoutubeThumb · iwVimeoEmbedUrl · iwEmbedUrl
+//   8) HTML لـ html=     iwLinkHtml · iwIframeHtml · iwEmbedHtml · iwTapButton · iwFragment · iwPage
+//   9) عنصر WebView      iwRatio · iwWebViewAttrs · iwWebViewSource · iwYoutubeWebView
+//  10) سجل التنقّل       iwNavNew · iwNavVisit · iwNavBack · iwNavForward · iwNavCurrent
+//  11) تنظيف وكشف        iwStripTracking · iwIsPrivateHost · iwIsPublicWeb · iwExtension · iwMediaKind
+//  12) شريط العنوان      iwSearchUrl · iwResolveInput
+//  13) مشاركة            iwShareUrl
+//  14) مزوّدون إضافيون   iwSpotifyEmbedUrl · iwDailymotionEmbedUrl · iwDriveEmbedUrl · iwMapsEmbedUrl · iwIsEmbeddable
+//  15) توجيه عميق        iwRoute
+//  16) روابط في النصوص   iwExtractUrls · iwLinkify · iwAuditHtml
+//  17) خطة الفتح         iwOpenPlan  (webview / external / blocked)
+//  18) صفحات WebView     iwCardHtml · iwErrorHtml · iwLoadingHtml
+//  19) المفضّلة          iwBookmarksNew · iwBookmarkAdd/Remove/Has/List · iwBookmarksSave/Load
+//  20) شاشة الربط        iwLinkScreen · iwLinkScreenAttrs · iwLinkScreenSource  (فيديو/ويب/صورة/صوت/PDF/بريد/...)
+//
+// مبادئ الأمان: قائمة سماح للمخططات (https/http افتراضيًا؛ يُرفض javascript: و data: و file: ...)،
+// رفض الرموز التحكّمية والمسافات داخل المخطط، تنبيه على الرابط الذي يحمل userinfo
+// (https://google.com@evil.com)، وكل نص يدخل في HTML يُهرَّب. لا تنفيذ JavaScript من المكتبة.
+// ============================================================================
+
+@import "lib/strings.og.rin";
+
+// ----------------------------- ثوابت ----------------------------------------
+
+fun iwRinLinksBase() { return "https://dlof-lib.github.io/rinlang/"; }
+
+fun iwDefaultSchemes() { return ["https", "http"]; }
+
+// ----------------------------- 1) نصوص وترميز -------------------------------
+
+// تهريب HTML (للنصوص والقيم داخل السمات).
+fun iwEscape(s) {
+    let x = replace(toString(s), "&", "&amp;");
+    x = replace(x, "<", "&lt;");
+    x = replace(x, ">", "&gt;");
+    x = replace(x, "\"", "&quot;");
+    x = replace(x, "'", "&#39;");
+    return x;
+}
+
+fun iwHexDigit(n) { return charAt("0123456789ABCDEF", n); }
+
+fun iwHexValue(c) {
+    let o = ord(c);
+    if (o >= 48 and o <= 57) { return o - 48; }
+    if (o >= 65 and o <= 70) { return o - 55; }
+    if (o >= 97 and o <= 102) { return o - 87; }
+    return -1;
+}
+
+fun iwIsUnreserved(o) {
+    if (o >= 48 and o <= 57) { return true; }
+    if (o >= 65 and o <= 90) { return true; }
+    if (o >= 97 and o <= 122) { return true; }
+    return o == 45 or o == 46 or o == 95 or o == 126;
+}
+
+// ترميز نسبة مئوية على مستوى البايت (UTF-8 صحيح للعربية). keep: محارف إضافية تُترك كما هي.
+fun iwUrlEncodeKeep(s, keep) {
+    let src = toString(s);
+    let out = "";
+    let i = 0;
+    while (i < len(src)) {
+        let c = charAt(src, i);
+        let o = ord(c);
+        if (iwIsUnreserved(o) or indexOf(keep, c) >= 0) {
+            out = out + c;
+        } else {
+            out = out + "%" + iwHexDigit(floor(o / 16)) + iwHexDigit(o % 16);
+        }
+        i = i + 1;
+    }
+    return out;
+}
+
+fun iwUrlEncode(s) { return iwUrlEncodeKeep(s, ""); }
+
+// فكّ الترميز النسبي. plus=true يحوّل + إلى مسافة (نمط الاستعلام/النماذج).
+fun iwUrlDecodeEx(s, plus) {
+    let src = toString(s);
+    let out = "";
+    let i = 0;
+    while (i < len(src)) {
+        let c = charAt(src, i);
+        if (c == "%" and i + 2 < len(src) + 0 and iwHexValue(charAt(src, i + 1)) >= 0 and iwHexValue(charAt(src, i + 2)) >= 0) {
+            out = out + chr(iwHexValue(charAt(src, i + 1)) * 16 + iwHexValue(charAt(src, i + 2)));
+            i = i + 3;
+        } else {
+            if (plus and c == "+") { out = out + " "; } else { out = out + c; }
+            i = i + 1;
+        }
+    }
+    return out;
+}
+
+fun iwUrlDecode(s) { return iwUrlDecodeEx(s, false); }
+
+// ----------------------------- 2) تحليل الروابط -----------------------------
+
+fun iwHasControl(s) {
+    let i = 0;
+    while (i < len(s)) {
+        let o = ord(charAt(s, i));
+        if (o < 33 or o == 127) { return true; }
+        i = i + 1;
+    }
+    return false;
+}
+
+// يحلّل الرابط إلى: ok, raw, scheme, userinfo, host, port, path, query, fragment, hasAuthority.
+// لا يرمي أخطاء: رابط فارغ/تالف => ok=false.
+fun iwParseUrl(url) {
+    let raw = trim(toString(url));
+    let res = {"ok": false, "raw": raw, "scheme": "", "userinfo": "", "host": "", "port": "", "path": "", "query": "", "fragment": "", "hasAuthority": false};
+    if (raw == "") { return res; }
+    let rest = raw;
+    let h = indexOf(rest, "#");
+    if (h >= 0) { res["fragment"] = substr(rest, h + 1, len(rest) - h - 1); rest = substr(rest, 0, h); }
+    let q = indexOf(rest, "?");
+    if (q >= 0) { res["query"] = substr(rest, q + 1, len(rest) - q - 1); rest = substr(rest, 0, q); }
+    let c = indexOf(rest, ":");
+    if (c > 0 and regexTest(substr(rest, 0, c), "^[A-Za-z][A-Za-z0-9+.-]*$")) {
+        res["scheme"] = lower(substr(rest, 0, c));
+        rest = substr(rest, c + 1, len(rest) - c - 1);
+    }
+    if (startsWith(rest, "//")) {
+        res["hasAuthority"] = true;
+        rest = substr(rest, 2, len(rest) - 2);
+        let sl = indexOf(rest, "/");
+        let auth = rest;
+        if (sl >= 0) { auth = substr(rest, 0, sl); res["path"] = substr(rest, sl, len(rest) - sl); } else { res["path"] = ""; }
+        let at = lastIndexOf(auth, "@");
+        if (at >= 0) { res["userinfo"] = substr(auth, 0, at); auth = substr(auth, at + 1, len(auth) - at - 1); }
+        if (startsWith(auth, "[")) {
+            let rb = indexOf(auth, "]");
+            if (rb < 0) { return res; }
+            res["host"] = lower(substr(auth, 0, rb + 1));
+            let after = substr(auth, rb + 1, len(auth) - rb - 1);
+            if (startsWith(after, ":")) { res["port"] = substr(after, 1, len(after) - 1); }
+        } else {
+            let pc = lastIndexOf(auth, ":");
+            if (pc >= 0) {
+                res["host"] = lower(substr(auth, 0, pc));
+                res["port"] = substr(auth, pc + 1, len(auth) - pc - 1);
+            } else {
+                res["host"] = lower(auth);
+            }
+        }
+        if (res["port"] != "" and !regexTest(res["port"], "^[0-9]{1,5}$")) { return res; }
+        if (res["scheme"] != "" and res["host"] == "" and (res["scheme"] == "http" or res["scheme"] == "https")) { return res; }
+    } else {
+        res["path"] = rest;
+    }
+    res["ok"] = true;
+    return res;
+}
+
+fun iwScheme(url) { return iwParseUrl(url)["scheme"]; }
+fun iwHost(url) { return iwParseUrl(url)["host"]; }
+
+fun iwDefaultPort(scheme) {
+    if (scheme == "https") { return "443"; }
+    if (scheme == "http") { return "80"; }
+    return "";
+}
+
+// المصدر (origin) = scheme://host[:port]. فارغ لما لا مصدر له (mailto/tel...).
+fun iwOrigin(url) {
+    let p = iwParseUrl(url);
+    if (!p["ok"] or !p["hasAuthority"] or p["scheme"] == "" or p["host"] == "") { return ""; }
+    let o = p["scheme"] + "://" + p["host"];
+    if (p["port"] != "" and p["port"] != iwDefaultPort(p["scheme"])) { o = o + ":" + p["port"]; }
+    return o;
+}
+
+// يوحّد الرابط: يقصّ المسافات، يضيف https:// للنطاق المجرّد (example.com/x)، يصغّر المخطط والمضيف،
+// يحذف المنفذ الافتراضي. يعيد "" إن لم يكن رابطًا مفهومًا.
+fun iwNormalize(url) {
+    let raw = trim(toString(url));
+    if (raw == "") { return ""; }
+    if (startsWith(raw, "//")) { raw = "https:" + raw; }
+    if (regexTest(raw, "^localhost(:[0-9]{1,5})?([/?#].*)?$")) { raw = "https://" + raw; }
+    let p = iwParseUrl(raw);
+    if (p["scheme"] == "") {
+        if (regexTest(raw, "^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*\\.[A-Za-z]{2,}(:[0-9]{1,5})?([/?#].*)?$")
+            or regexTest(raw, "^localhost(:[0-9]{1,5})?([/?#].*)?$")) {
+            raw = "https://" + raw;
+            p = iwParseUrl(raw);
+        } else {
+            return "";
+        }
+    }
+    if (!p["ok"]) { return ""; }
+    if (!p["hasAuthority"]) { return raw; }
+    let out = p["scheme"] + "://";
+    if (p["userinfo"] != "") { out = out + p["userinfo"] + "@"; }
+    out = out + p["host"];
+    if (p["port"] != "" and p["port"] != iwDefaultPort(p["scheme"])) { out = out + ":" + p["port"]; }
+    let path = p["path"];
+    if (path == "" and (p["scheme"] == "http" or p["scheme"] == "https")) { path = "/"; }
+    out = out + path;
+    if (p["query"] != "") { out = out + "?" + p["query"]; }
+    if (p["fragment"] != "") { out = out + "#" + p["fragment"]; }
+    return out;
+}
+
+// يزيل المقاطع . و .. من مسار مطلق.
+fun iwRemoveDots(path) {
+    let parts = split(path, "/");
+    let out = [];
+    let i = 0;
+    while (i < len(parts)) {
+        let seg = parts[i];
+        if (seg == "..") {
+            if (len(out) > 1) { pop(out); }
+        } else {
+            if (seg != ".") { push(out, seg); }
+        }
+        i = i + 1;
+    }
+    let r = join(out, "/");
+    if (!startsWith(r, "/")) { r = "/" + r; }
+    let last = parts[len(parts) - 1];
+    if ((last == "." or last == "..") and !endsWith(r, "/")) { r = r + "/"; }
+    return r;
+}
+
+// حلّ رابط نسبي على رابط أساس (RFC 3986 مبسّط).
+fun iwJoin(base, rel) {
+    let r = trim(toString(rel));
+    if (r == "") { return toString(base); }
+    let rp = iwParseUrl(r);
+    if (rp["scheme"] != "") { return r; }
+    let bp = iwParseUrl(base);
+    if (!bp["ok"] or bp["scheme"] == "") { return ""; }
+    if (startsWith(r, "//")) { return bp["scheme"] + ":" + r; }
+    let origin = iwOrigin(base);
+    if (origin == "") { return ""; }
+    if (startsWith(r, "#")) {
+        let b = origin + bp["path"];
+        if (bp["query"] != "") { b = b + "?" + bp["query"]; }
+        return b + r;
+    }
+    if (startsWith(r, "?")) { return origin + bp["path"] + r; }
+    let tail = "";
+    let path = r;
+    let qi = indexOf(r, "?");
+    let hi = indexOf(r, "#");
+    let cut = -1;
+    if (qi >= 0) { cut = qi; }
+    if (hi >= 0 and (cut < 0 or hi < cut)) { cut = hi; }
+    if (cut >= 0) { tail = substr(r, cut, len(r) - cut); path = substr(r, 0, cut); }
+    if (startsWith(path, "/")) { return origin + iwRemoveDots(path) + tail; }
+    let bpath = bp["path"];
+    if (bpath == "") { bpath = "/"; }
+    let dir = substr(bpath, 0, lastIndexOf(bpath, "/") + 1);
+    return origin + iwRemoveDots(dir + path) + tail;
+}
+
+// نص مختصر للعرض: host + path بلا مخطط ولا "www." ولا "/" أخيرة.
+fun iwDisplay(url) {
+    let p = iwParseUrl(url);
+    if (!p["ok"]) { return toString(url); }
+    if (!p["hasAuthority"]) { return p["raw"]; }
+    let h = p["host"];
+    if (startsWith(h, "www.")) { h = substr(h, 4, len(h) - 4); }
+    let path = p["path"];
+    if (path == "/") { path = ""; }
+    let out = h + path;
+    if (p["query"] != "") { out = out + "?" + p["query"]; }
+    return out;
+}
+
+fun iwShorten(s, maxLen) {
+    let t = toString(s);
+    if (utf8Len(t) <= maxLen) { return t; }
+    return utf8Substr(t, 0, maxLen - 1) + "…";
+}
+
+// ----------------------------- 3) الأمان ------------------------------------
+
+// هل الرابط آمن للتحميل في WebView/الفتح؟ allowed = قائمة مخططات (الافتراضي https/http).
+// يرفض: فارغ، رموز تحكّم/مسافات، مخطط خارج القائمة، http(s) بلا مضيف، userinfo (تصيّد).
+fun iwIsSafeEx(url, allowed, allowUserinfo) {
+    let raw = trim(toString(url));
+    if (raw == "" or iwHasControl(raw)) { return false; }
+    let p = iwParseUrl(raw);
+    if (!p["ok"] or p["scheme"] == "") { return false; }
+    let okScheme = false;
+    let i = 0;
+    while (i < len(allowed)) {
+        if (lower(allowed[i]) == p["scheme"]) { okScheme = true; }
+        i = i + 1;
+    }
+    if (!okScheme) { return false; }
+    if ((p["scheme"] == "http" or p["scheme"] == "https") and p["host"] == "") { return false; }
+    if (p["userinfo"] != "" and !allowUserinfo) { return false; }
+    return true;
+}
+
+fun iwIsSafe(url) { return iwIsSafeEx(url, iwDefaultSchemes(), false); }
+fun iwIsHttps(url) { return iwIsSafeEx(url, ["https"], false); }
+
+// هل مضيف الرابط ضمن قائمة نطاقات؟ العنصر "example.com" يطابق example.com ومنه .example.com،
+// و"*.example.com" يطابق النطاقات الفرعية فقط.
+fun iwHostAllowed(url, hosts) {
+    let h = iwHost(url);
+    if (h == "") { return false; }
+    let i = 0;
+    while (i < len(hosts)) {
+        let e = lower(trim(hosts[i]));
+        if (startsWith(e, "*.")) {
+            if (endsWith(h, substr(e, 1, len(e) - 1))) { return true; }
+        } else {
+            if (h == e or endsWith(h, "." + e)) { return true; }
+        }
+        i = i + 1;
+    }
+    return false;
+}
+
+fun iwSameOrigin(a, b) {
+    let oa = iwOrigin(a);
+    return oa != "" and oa == iwOrigin(b);
+}
+
+// تنظيف HTML (دفاع إضافي، ليس بديلًا عن التهريب): يحذف script/iframe/object/embed/base/meta/link،
+// ومعالجات on*=، ومراجع javascript:/vbscript:/data:text/html. الأفضل دائمًا iwEscape للنص المجهول.
+fun iwSanitizeHtml(html) {
+    let x = toString(html);
+    x = regexReplace(x, "i:<!--[\\s\\S]*?-->", "");
+    x = regexReplace(x, "i:<(script|iframe|object|embed|applet|style)\\b[\\s\\S]*?</\\1\\s*>", "");
+    x = regexReplace(x, "i:<(script|iframe|object|embed|applet|base|meta|link|style)\\b[^>]*>", "");
+    x = regexReplace(x, "i:\\s+on[a-z]+\\s*=\\s*\"[^\"]*\"", "");
+    x = regexReplace(x, "i:\\s+on[a-z]+\\s*=\\s*'[^']*'", "");
+    x = regexReplace(x, "i:\\s+on[a-z]+\\s*=\\s*[^\\s>]+", "");
+    x = regexReplace(x, "i:(href|src|action|formaction|xlink:href|srcdoc)\\s*=\\s*(\"|')?\\s*(javascript|vbscript|data:text/html)[^\"'>\\s]*(\"|')?", "$1=\"#\"");
+    return x;
+}
+
+// ----------------------------- 4) الاستعلام ---------------------------------
+
+// map -> "a=1&b=x%20y" (بترتيب الإدراج). القيم الفارغة/nil تُحذف.
+fun iwQuery(params) {
+    let parts = [];
+    let ks = keys(params);
+    let i = 0;
+    while (i < len(ks)) {
+        let v = params[ks[i]];
+        if (!isNil(v) and toString(v) != "") {
+            push(parts, iwUrlEncode(ks[i]) + "=" + iwUrlEncode(toString(v)));
+        }
+        i = i + 1;
+    }
+    return join(parts, "&");
+}
+
+// "a=1&b=x%20y" -> {"a": "1", "b": "x y"} (آخر قيمة تغلب؛ يتجاهل ? في البداية).
+fun iwParseQuery(q) {
+    let s = toString(q);
+    if (startsWith(s, "?")) { s = substr(s, 1, len(s) - 1); }
+    let out = {};
+    if (s == "") { return out; }
+    let parts = split(s, "&");
+    let i = 0;
+    while (i < len(parts)) {
+        if (parts[i] != "") {
+            let e = indexOf(parts[i], "=");
+            if (e >= 0) {
+                out[iwUrlDecodeEx(substr(parts[i], 0, e), true)] = iwUrlDecodeEx(substr(parts[i], e + 1, len(parts[i]) - e - 1), true);
+            } else {
+                out[iwUrlDecodeEx(parts[i], true)] = "";
+            }
+        }
+        i = i + 1;
+    }
+    return out;
+}
+
+fun iwRebuild(p, query) {
+    let out = "";
+    if (p["scheme"] != "") { out = p["scheme"] + ":"; }
+    if (p["hasAuthority"]) {
+        out = out + "//";
+        if (p["userinfo"] != "") { out = out + p["userinfo"] + "@"; }
+        out = out + p["host"];
+        if (p["port"] != "") { out = out + ":" + p["port"]; }
+    }
+    out = out + p["path"];
+    if (query != "") { out = out + "?" + query; }
+    if (p["fragment"] != "") { out = out + "#" + p["fragment"]; }
+    return out;
+}
+
+// يضيف/يستبدل معاملات الاستعلام في رابط موجود ويحفظ الـ fragment.
+fun iwWithParams(url, params) {
+    let p = iwParseUrl(url);
+    if (!p["ok"]) { return toString(url); }
+    let cur = iwParseQuery(p["query"]);
+    let ks = keys(params);
+    let i = 0;
+    while (i < len(ks)) { cur[ks[i]] = params[ks[i]]; i = i + 1; }
+    return iwRebuild(p, iwQuery(cur));
+}
+
+fun iwGetParam(url, name, fallback) {
+    let q = iwParseQuery(iwParseUrl(url)["query"]);
+    if (has(q, name)) { return q[name]; }
+    return fallback;
+}
+
+fun iwRemoveParam(url, name) {
+    let p = iwParseUrl(url);
+    if (!p["ok"]) { return toString(url); }
+    let q = iwParseQuery(p["query"]);
+    let out = {};
+    let ks = keys(q);
+    let i = 0;
+    while (i < len(ks)) { if (ks[i] != name) { out[ks[i]] = q[ks[i]]; } i = i + 1; }
+    return iwRebuild(p, iwQuery(out));
+}
+
+// ----------------------------- 5) أنواع الروابط -----------------------------
+
+// يصنّف الرابط: web · mail · tel · sms · geo · whatsapp · telegram · rin · market · intent ·
+// file · script (javascript:/vbscript:) · data · anchor (#...) · relative · other · none
+fun iwLinkKind(url) {
+    let raw = trim(toString(url));
+    if (raw == "") { return "none"; }
+    if (startsWith(raw, "#")) { return "anchor"; }
+    let p = iwParseUrl(raw);
+    let s = p["scheme"];
+    if (s == "") { return "relative"; }
+    if (s == "http" or s == "https") {
+        let h = p["host"];
+        if (h == "wa.me" or h == "api.whatsapp.com" or h == "chat.whatsapp.com") { return "whatsapp"; }
+        if (h == "t.me" or h == "telegram.me") { return "telegram"; }
+        if (h == "dlof-lib.github.io" and startsWith(p["path"], "/rinlang/")) { return "rin"; }
+        return "web";
+    }
+    if (s == "mailto") { return "mail"; }
+    if (s == "tel") { return "tel"; }
+    if (s == "sms" or s == "smsto" or s == "mms") { return "sms"; }
+    if (s == "geo") { return "geo"; }
+    if (s == "whatsapp") { return "whatsapp"; }
+    if (s == "tg") { return "telegram"; }
+    if (s == "market") { return "market"; }
+    if (s == "intent") { return "intent"; }
+    if (s == "file" or s == "content") { return "file"; }
+    if (s == "javascript" or s == "vbscript") { return "script"; }
+    if (s == "data" or s == "blob") { return "data"; }
+    return "other";
+}
+
+fun iwDigits(s) { return regexReplace(toString(s), "[^0-9]", ""); }
+
+// mailto:addr?subject=..&body=..  — opts: subject, body, cc, bcc. يعيد "" إن لم يكن البريد صالحًا.
+fun iwMailto(addr0, opts) {
+    let addr = trim(toString(addr0));
+    if (!regexTest(addr, "^[^@\\s,;<>]+@[^@\\s,;<>]+\\.[A-Za-z]{2,}$")) { return ""; }
+    let q = {};
+    if (!isNil(opts)) {
+        if (has(opts, "cc")) { q["cc"] = opts["cc"]; }
+        if (has(opts, "bcc")) { q["bcc"] = opts["bcc"]; }
+        if (has(opts, "subject")) { q["subject"] = opts["subject"]; }
+        if (has(opts, "body")) { q["body"] = opts["body"]; }
+    }
+    let qs = iwQuery(q);
+    let out = "mailto:" + iwUrlEncodeKeep(addr, "@");
+    if (qs != "") { out = out + "?" + qs; }
+    return out;
+}
+
+// tel:+9611234567 — يحتفظ بـ + في البداية فقط ويحذف المسافات والشرطات. 3..15 رقمًا وإلا "".
+fun iwTel(number) {
+    let raw = trim(toString(number));
+    let d = iwDigits(raw);
+    if (len(d) < 3 or len(d) > 15) { return ""; }
+    if (startsWith(raw, "+")) { return "tel:+" + d; }
+    return "tel:" + d;
+}
+
+fun iwSms(number, body) {
+    let t = iwTel(number);
+    if (t == "") { return ""; }
+    let out = "sms:" + substr(t, 4, len(t) - 4);
+    if (!isNil(body) and toString(body) != "") { out = out + "?body=" + iwUrlEncode(toString(body)); }
+    return out;
+}
+
+fun iwValidLatLon(lat, lon) {
+    return isNumber(lat) and isNumber(lon) and lat >= -90 and lat <= 90 and lon >= -180 and lon <= 180;
+}
+
+// geo:lat,lon?q=lat,lon(label)
+fun iwGeo(lat, lon, label) {
+    if (!iwValidLatLon(lat, lon)) { return ""; }
+    let out = "geo:" + toString(lat) + "," + toString(lon);
+    if (!isNil(label) and toString(label) != "") {
+        out = out + "?q=" + toString(lat) + "," + toString(lon) + "(" + iwUrlEncode(toString(label)) + ")";
+    }
+    return out;
+}
+
+// رابط خرائط ويب: نص بحث أو إحداثيات.
+fun iwMapsUrl(query) {
+    if (isArray(query) and len(query) == 2 and iwValidLatLon(query[0], query[1])) {
+        return "https://www.google.com/maps/search/?api=1&query=" + toString(query[0]) + "%2C" + toString(query[1]);
+    }
+    return "https://www.google.com/maps/search/?api=1&query=" + iwUrlEncode(toString(query));
+}
+
+// https://wa.me/<digits>?text=...
+fun iwWhatsApp(phone, msg) {
+    let d = iwDigits(phone);
+    if (len(d) < 6 or len(d) > 15) { return ""; }
+    let out = "https://wa.me/" + d;
+    if (!isNil(msg) and toString(msg) != "") { out = out + "?text=" + iwUrlEncode(toString(msg)); }
+    return out;
+}
+
+fun iwTelegram(username) {
+    let u = toString(username);
+    if (startsWith(u, "@")) { u = substr(u, 1, len(u) - 1); }
+    if (!regexTest(u, "^[A-Za-z][A-Za-z0-9_]{4,31}$")) { return ""; }
+    return "https://t.me/" + u;
+}
+
+fun iwValidPackage(pkg) { return regexTest(toString(pkg), "^[A-Za-z][A-Za-z0-9_]*(\\.[A-Za-z][A-Za-z0-9_]*)+$"); }
+
+// market://details?id=pkg  (يفتح متجر Play) و iwPlayStoreWeb لنسخة الويب.
+fun iwPlayStore(pkg) {
+    if (!iwValidPackage(pkg)) { return ""; }
+    return "market://details?id=" + toString(pkg);
+}
+
+fun iwPlayStoreWeb(pkg) {
+    if (!iwValidPackage(pkg)) { return ""; }
+    return "https://play.google.com/store/apps/details?id=" + toString(pkg);
+}
+
+// intent://host/path#Intent;scheme=https;package=pkg;S.browser_fallback_url=...;end
+fun iwAndroidIntent(host, path, scheme, pkg, fallbackUrl) {
+    if (!iwValidPackage(pkg) or !regexTest(toString(scheme), "^[A-Za-z][A-Za-z0-9+.-]*$")) { return ""; }
+    let out = "intent://" + toString(host) + toString(path) + "#Intent;scheme=" + toString(scheme) + ";package=" + toString(pkg) + ";";
+    if (!isNil(fallbackUrl) and iwIsSafe(fallbackUrl)) { out = out + "S.browser_fallback_url=" + iwUrlEncode(toString(fallbackUrl)) + ";"; }
+    return out + "end";
+}
+
+// رابط عميق مخصّص: myapp://host/path?x=1
+fun iwDeepLink(scheme, host, path, params) {
+    if (!regexTest(toString(scheme), "^[A-Za-z][A-Za-z0-9+.-]*$")) { return ""; }
+    let p = toString(path);
+    if (p != "" and !startsWith(p, "/")) { p = "/" + p; }
+    let out = toString(scheme) + "://" + toString(host) + iwUrlEncodeKeep(p, "/");
+    if (!isNil(params)) {
+        let qs = iwQuery(params);
+        if (qs != "") { out = out + "?" + qs; }
+    }
+    return out;
+}
+
+// ----------------------------- 6) روابط Rin ---------------------------------
+
+fun iwSlug(s) {
+    let x = trim(toString(s));
+    x = regexReplace(x, "\\s+", "-");
+    return x;
+}
+
+// https://dlof-lib.github.io/rinlang/@username
+fun iwRinProfile(username) {
+    let u = iwSlug(username);
+    if (startsWith(u, "@")) { u = substr(u, 1, len(u) - 1); }
+    if (u == "" or !regexTest(u, "^[A-Za-z0-9_.-]+$")) { return ""; }
+    return iwRinLinksBase() + "@" + u;
+}
+
+// https://dlof-lib.github.io/rinlang/@username/library.og.rin  (تُضاف .og.rin مرة واحدة، والمسافات -)
+fun iwRinLibrary(username, library) {
+    let prof = iwRinProfile(username);
+    let l = iwSlug(library);
+    if (prof == "" or l == "" or !regexTest(l, "^[A-Za-z0-9_.-]+$")) { return ""; }
+    if (endsWith(lower(l), ".og.rin")) { l = substr(l, 0, len(l) - 7); }
+    return prof + "/" + l + ".og.rin";
+}
+
+// يفكّ رابط Rin (القانوني أو القديم ?@user/lib.og.rin) إلى {ok, user, library}.
+fun iwParseRinLink(url) {
+    let raw = trim(toString(url));
+    let res = {"ok": false, "user": "", "library": ""};
+    let base = iwRinLinksBase();
+    let rest = "";
+    if (startsWith(raw, base)) {
+        rest = substr(raw, len(base), len(raw) - len(base));
+    } else {
+        let qi = indexOf(raw, "?@");
+        if (qi >= 0 and startsWith(raw, "https://dlof-lib.github.io/")) { rest = substr(raw, qi + 1, len(raw) - qi - 1); }
+        else { return res; }
+    }
+    if (startsWith(rest, "?@")) { rest = substr(rest, 1, len(rest) - 1); }
+    let h = indexOf(rest, "#");
+    if (h >= 0) { rest = substr(rest, 0, h); }
+    let q = indexOf(rest, "?");
+    if (q >= 0) { rest = substr(rest, 0, q); }
+    if (!startsWith(rest, "@")) { return res; }
+    let parts = split(substr(rest, 1, len(rest) - 1), "/");
+    if (len(parts) == 0 or parts[0] == "") { return res; }
+    res["user"] = iwUrlDecode(parts[0]);
+    if (len(parts) >= 2 and parts[1] != "") {
+        let l = iwUrlDecode(parts[1]);
+        if (endsWith(lower(l), ".og.rin")) { l = substr(l, 0, len(l) - 7); }
+        res["library"] = l;
+    }
+    res["ok"] = true;
+    return res;
+}
+
+// ----------------------------- 7) الفيديو/التضمين ---------------------------
+
+// معرّف يوتيوب (11 محرفًا) من watch?v= / youtu.be / embed / shorts / live. يعيد "" إن لم يوجد.
+fun iwYoutubeId(url) {
+    let p = iwParseUrl(url);
+    if (!p["ok"]) { return ""; }
+    let h = p["host"];
+    if (startsWith(h, "www.")) { h = substr(h, 4, len(h) - 4); }
+    if (startsWith(h, "m.")) { h = substr(h, 2, len(h) - 2); }
+    let id = "";
+    if (h == "youtu.be") {
+        id = substr(p["path"], 1, len(p["path"]) - 1);
+    } else if (h == "youtube.com" or h == "youtube-nocookie.com" or h == "music.youtube.com") {
+        let pp = p["path"];
+        if (pp == "/watch") {
+            id = iwGetParam(url, "v", "");
+        } else {
+            let segs = split(pp, "/");
+            if (len(segs) >= 3 and (segs[1] == "embed" or segs[1] == "shorts" or segs[1] == "live" or segs[1] == "v")) { id = segs[2]; }
+        }
+    }
+    if (regexTest(id, "^[A-Za-z0-9_-]{11}$")) { return id; }
+    return "";
+}
+
+fun iwIsYoutube(url) { return iwYoutubeId(url) != ""; }
+
+// رابط تضمين youtube-nocookie. opts: start, autoplay, mute, loop, controls(false لإخفائها).
+fun iwYoutubeEmbedUrl(url, opts) {
+    let id = iwYoutubeId(url);
+    if (id == "") { return ""; }
+    let q = {"rel": "0", "playsinline": "1"};
+    if (isNil(opts)) { opts = {}; }
+    if (has(opts, "start") and isNumber(opts["start"]) and opts["start"] > 0) { q["start"] = toString(floor(opts["start"])); }
+    if (has(opts, "autoplay") and opts["autoplay"] == true) { q["autoplay"] = "1"; }
+    if (has(opts, "mute") and opts["mute"] == true) { q["mute"] = "1"; }
+    if (has(opts, "loop") and opts["loop"] == true) { q["loop"] = "1"; q["playlist"] = id; }
+    if (has(opts, "controls") and opts["controls"] == false) { q["controls"] = "0"; }
+    return "https://www.youtube-nocookie.com/embed/" + id + "?" + iwQuery(q);
+}
+
+fun iwYoutubeThumb(url) {
+    let id = iwYoutubeId(url);
+    if (id == "") { return ""; }
+    return "https://i.ytimg.com/vi/" + id + "/hqdefault.jpg";
+}
+
+fun iwVimeoId(url) {
+    let p = iwParseUrl(url);
+    if (!p["ok"]) { return ""; }
+    let h = p["host"];
+    if (startsWith(h, "www.")) { h = substr(h, 4, len(h) - 4); }
+    if (h != "vimeo.com" and h != "player.vimeo.com") { return ""; }
+    let segs = split(p["path"], "/");
+    let i = len(segs) - 1;
+    while (i >= 0) {
+        if (regexTest(segs[i], "^[0-9]{5,12}$")) { return segs[i]; }
+        i = i - 1;
+    }
+    return "";
+}
+
+fun iwVimeoEmbedUrl(url) {
+    let id = iwVimeoId(url);
+    if (id == "") { return ""; }
+    return "https://player.vimeo.com/video/" + id;
+}
+
+// رابط تضمين مناسب لمزوّد معروف (يوتيوب/Vimeo)، أو الرابط نفسه إن كان http(s) آمنًا، وإلا "".
+fun iwEmbedUrl(url) {
+    let y = iwYoutubeEmbedUrl(url, {});
+    if (y != "") { return y; }
+    let v = iwVimeoEmbedUrl(url);
+    if (v != "") { return v; }
+    let sp = iwSpotifyEmbedUrl(url);
+    if (sp != "") { return sp; }
+    let dm = iwDailymotionEmbedUrl(url);
+    if (dm != "") { return dm; }
+    let gd = iwDriveEmbedUrl(url);
+    if (gd != "") { return gd; }
+    if (iwIsSafe(url)) { return trim(toString(url)); }
+    return "";
+}
+
+// ----------------------------- 8) HTML لخاصية html= ------------------------
+
+// <a> آمن: الرابط غير الآمن يتحوّل إلى <span> بلا href. opts: target ("_blank" افتراضيًا), class, title.
+fun iwLinkHtml(label, url) { return iwLinkHtmlEx(label, url, {}); }
+
+fun iwLinkHtmlEx(label, url, opts) {
+    if (isNil(opts)) { opts = {}; }
+    let lbl = iwEscape(label);
+    let u = trim(toString(url));
+    let safeUrl = iwIsSafe(u);
+    let kind = iwLinkKind(u);
+    if (kind == "mail" or kind == "tel" or kind == "sms" or kind == "geo") { safeUrl = !iwHasControl(u); }
+    if (!safeUrl) { return "<span class=\"iw-link iw-link-blocked\">" + lbl + "</span>"; }
+    let out = "<a class=\"iw-link";
+    if (has(opts, "class")) { out = out + " " + iwEscape(opts["class"]); }
+    out = out + "\" href=\"" + iwEscape(u) + "\"";
+    if (kind == "web" or kind == "rin" or kind == "whatsapp" or kind == "telegram") {
+        let target = "_blank";
+        if (has(opts, "target")) { target = opts["target"]; }
+        out = out + " target=\"" + iwEscape(target) + "\" rel=\"noopener noreferrer\"";
+    }
+    if (has(opts, "title")) { out = out + " title=\"" + iwEscape(opts["title"]) + "\""; }
+    return out + ">" + lbl + "</a>";
+}
+
+// "16:9" | "16/9" | "1.5" | 1.5 -> رقم (العرض/الارتفاع)، أو 0 إن لم يُفهم.
+fun iwRatio(r) {
+    if (isNumber(r)) { if (r > 0) { return r; } return 0; }
+    let s = trim(toString(r));
+    let sep = indexOf(s, ":");
+    if (sep < 0) { sep = indexOf(s, "/"); }
+    if (sep > 0) {
+        let a = substr(s, 0, sep);
+        let b = substr(s, sep + 1, len(s) - sep - 1);
+        if (regexTest(a, "^[0-9]+(\\.[0-9]+)?$") and regexTest(b, "^[0-9]+(\\.[0-9]+)?$") and toNumber(b) > 0) { return toNumber(a) / toNumber(b); }
+        return 0;
+    }
+    if (regexTest(s, "^[0-9]+(\\.[0-9]+)?$") and toNumber(s) > 0) { return toNumber(s); }
+    return 0;
+}
+
+fun iwHeightForRatio(width, ratio) {
+    let r = iwRatio(ratio);
+    if (r <= 0) { return 0; }
+    return round(width / r);
+}
+
+// <iframe> متجاوب بنسبة ثابتة. يرفض الرابط غير الآمن (يعيد "").
+// opts: ratio ("16:9")، title، fullscreen (true)، lazy (true).
+fun iwIframeHtml(src, opts) {
+    if (isNil(opts)) { opts = {}; }
+    if (!iwIsSafe(src)) { return ""; }
+    let ratio = 16 / 9;
+    if (has(opts, "ratio") and iwRatio(opts["ratio"]) > 0) { ratio = iwRatio(opts["ratio"]); }
+    let pad = round(10000 / ratio) / 100;
+    let title = "Embedded content";
+    if (has(opts, "title")) { title = opts["title"]; }
+    let allow = "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture";
+    let out = "<div style=\"position:relative;width:100%;padding-top:" + toString(pad) + "%;overflow:hidden\">";
+    out = out + "<iframe src=\"" + iwEscape(trim(toString(src))) + "\" title=\"" + iwEscape(title) + "\"";
+    out = out + " style=\"position:absolute;top:0;left:0;width:100%;height:100%;border:0\"";
+    out = out + " loading=\"lazy\" referrerpolicy=\"strict-origin-when-cross-origin\" allow=\"" + allow + "\"";
+    if (!(has(opts, "fullscreen") and opts["fullscreen"] == false)) { out = out + " allowfullscreen"; }
+    return out + "></iframe></div>";
+}
+
+// تضمين تلقائي لرابط فيديو معروف أو رابط ويب آمن؛ "" إن لم يصلح.
+fun iwEmbedHtml(url, opts) {
+    let e = iwEmbedUrl(url);
+    if (e == "") { return ""; }
+    return iwIframeHtml(e, opts);
+}
+
+// زر داخل HTML يمرّر نقرة إلى حدث indsin الأصلي عبر جسر RinPreview.tap() (إن وُجد الجسر).
+fun iwTapButton(label, opts) {
+    if (isNil(opts)) { opts = {}; }
+    let sty = "padding:10px 18px;border:0;border-radius:10px;font:inherit;cursor:pointer;background:#6C5CE7;color:#fff";
+    if (has(opts, "style")) { sty = opts["style"]; }
+    return "<button type=\"button\" style=\"" + iwEscape(sty) + "\" onclick=\"if(window.RinPreview){window.RinPreview.tap();}\">" + iwEscape(label) + "</button>";
+}
+
+// يلفّ مقطع HTML في حاوية جاهزة لـ html=. opts: dir ("rtl"/"ltr")، lang، color، background، font، padding.
+fun iwFragment(bodyHtml, opts) {
+    if (isNil(opts)) { opts = {}; }
+    let dir = "auto";
+    if (has(opts, "dir")) { dir = opts["dir"]; }
+    let sty = "box-sizing:border-box;width:100%;height:100%;font-family:" + "system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;";
+    if (has(opts, "font")) { sty = "box-sizing:border-box;width:100%;height:100%;font-family:" + opts["font"] + ";"; }
+    if (has(opts, "theme") and opts["theme"] == "dark") { sty = sty + "color:#E6E6F0;background:#181920;"; }
+    if (has(opts, "theme") and opts["theme"] == "light") { sty = sty + "color:#202124;background:#ffffff;"; }
+    if (has(opts, "color")) { sty = sty + "color:" + opts["color"] + ";"; }
+    if (has(opts, "background")) { sty = sty + "background:" + opts["background"] + ";"; }
+    if (has(opts, "padding")) { sty = sty + "padding:" + toString(opts["padding"]) + "px;"; }
+    let lang = "";
+    if (has(opts, "lang")) { lang = " lang=\"" + iwEscape(opts["lang"]) + "\""; }
+    return "<div dir=\"" + iwEscape(dir) + "\"" + lang + " style=\"" + iwEscape(sty) + "\">" + bodyHtml + "</div>";
+}
+
+// صفحة HTML كاملة (للحفظ بـ writeFile أو HtmlRunActivity). opts كما في iwFragment + title، css.
+fun iwPage(bodyHtml, opts) {
+    if (isNil(opts)) { opts = {}; }
+    let title = "";
+    if (has(opts, "title")) { title = opts["title"]; }
+    let dir = "auto";
+    if (has(opts, "dir")) { dir = opts["dir"]; }
+    let css = "html,body{margin:0;padding:0}body{font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;line-height:1.6;padding:16px}a.iw-link{color:#6C5CE7}.iw-link-blocked{opacity:.6;text-decoration:line-through}";
+    if (has(opts, "css")) { css = css + opts["css"]; }
+    let out = "<!doctype html><html dir=\"" + iwEscape(dir) + "\"><head><meta charset=\"utf-8\">";
+    out = out + "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">";
+    out = out + "<meta http-equiv=\"Content-Security-Policy\" content=\"script-src 'none'; object-src 'none'; base-uri 'none'\">";
+    out = out + "<title>" + iwEscape(title) + "</title><style>" + css + "</style></head><body>" + bodyHtml + "</body></html>";
+    return out;
+}
+
+// ----------------------------- 9) عنصر WebView ------------------------------
+
+fun iwBlockedHtml(reason) {
+    return iwFragment("<p style=\"margin:0;padding:12px\">" + iwEscape(reason) + "</p>", {"dir": "auto"});
+}
+
+fun iwLooksLikeHtml(s) { return regexTest(toString(s), "^\\s*<[A-Za-z!/]"); }
+
+// يجهّز سمات @view.WebView من مصدر واحد: رابط (يُطبَّع ويُفحص) أو HTML (يُنظَّف).
+// opts: ratio، height، width، allow (قائمة نطاقات)، schemes (قائمة مخططات)، raw (true: لا تنظيف HTML)،
+//       embed (true: حوّل روابط الفيديو المعروفة إلى روابط تضمين).
+// الناتج: {"ok": bool, "mode": "url"|"html"|"blocked", "attrs": {...}, "error": "..."}
+// حتى عند الفشل تكون attrs صالحة (html يشرح السبب) فلا ينهار العنصر.
+fun iwWebViewAttrs(src, opts) {
+    if (isNil(opts)) { opts = {}; }
+    let attrs = {};
+    let res = {"ok": true, "mode": "html", "attrs": attrs, "error": ""};
+    let s = trim(toString(src));
+    if (s == "") {
+        res["ok"] = false; res["mode"] = "blocked"; res["error"] = "empty source";
+        attrs["html"] = iwBlockedHtml("No content");
+    } else if (iwLooksLikeHtml(s)) {
+        if (has(opts, "raw") and opts["raw"] == true) { attrs["html"] = s; } else { attrs["html"] = iwSanitizeHtml(s); }
+    } else {
+        let u = iwNormalize(s);
+        let schemes = iwDefaultSchemes();
+        if (has(opts, "schemes")) { schemes = opts["schemes"]; }
+        if (has(opts, "stripTracking") and opts["stripTracking"] == true) { u = iwStripTracking(u); }
+        if (u == "" or !iwIsSafeEx(u, schemes, false)) {
+            res["ok"] = false; res["mode"] = "blocked"; res["error"] = "unsafe or invalid url";
+            attrs["html"] = iwBlockedHtml("Blocked: unsafe or invalid link");
+        } else if (has(opts, "blockPrivate") and opts["blockPrivate"] == true and iwIsPrivateHost(iwHost(u))) {
+            res["ok"] = false; res["mode"] = "blocked"; res["error"] = "private or local address";
+            attrs["html"] = iwBlockedHtml("Blocked: local or private address");
+        } else if (has(opts, "allow") and !iwHostAllowed(u, opts["allow"])) {
+            res["ok"] = false; res["mode"] = "blocked"; res["error"] = "host !allowed";
+            attrs["html"] = iwBlockedHtml("Blocked: this site is !allowed here");
+        } else {
+            res["mode"] = "url";
+            if (has(opts, "embed") and opts["embed"] == true) {
+                let e = iwEmbedUrl(u);
+                if (e != "") { u = e; }
+            }
+            attrs["url"] = u;
+        }
+    }
+    if (has(opts, "ratio") and iwRatio(opts["ratio"]) > 0) { attrs["ratio"] = toString(opts["ratio"]); }
+    if (has(opts, "height")) { attrs["height"] = opts["height"]; }
+    if (has(opts, "width")) { attrs["width"] = opts["width"]; }
+    return res;
+}
+
+// نص Rin صحيح لقيمة سلسلة (يهرّب \ و " والأسطر).
+fun iwRinString(s) {
+    let x = replace(toString(s), "\\", "\\\\");
+    x = replace(x, "\"", "\\\"");
+    x = replace(x, "\r", "");
+    x = replace(x, "\n", "\\n");
+    x = replace(x, "\t", "\\t");
+    return "\"" + x + "\"";
+}
+
+fun iwIsIdent(s) { return regexTest(toString(s), "^[A-Za-z_][A-Za-z0-9_]*$"); }
+
+// يولّد كود Rin جاهزًا لعنصر WebView (يُلصق في ملفك أو يُكتب بـ writeFile).
+// opts كما في iwWebViewAttrs + dialect: "view" (الافتراضي) أو "element".
+fun iwWebViewSource(name, src, opts) {
+    if (isNil(opts)) { opts = {}; }
+    if (!iwIsIdent(name)) { return ""; }
+    let r = iwWebViewAttrs(src, opts);
+    let dialect = "view";
+    if (has(opts, "dialect") and opts["dialect"] == "element") { dialect = "element"; }
+    let out = "@" + dialect + ".WebView=" + name + "\n";
+    let order = ["url", "html", "ratio", "width", "height"];
+    let i = 0;
+    while (i < len(order)) {
+        let k = order[i];
+        if (has(r["attrs"], k)) {
+            let v = r["attrs"][k];
+            if (isNumber(v)) { out = out + "    " + k + "=" + toString(v) + ";\n"; }
+            else { out = out + "    " + k + "=" + iwRinString(v) + ";\n"; }
+        }
+        i = i + 1;
+    }
+    return out + ".end/" + dialect + "\n";
+}
+
+// اختصار: WebView لفيديو يوتيوب (تضمين nocookie، نسبة 16:9).
+fun iwYoutubeWebView(name, url, opts) {
+    if (isNil(opts)) { opts = {}; }
+    let e = iwYoutubeEmbedUrl(url, opts);
+    if (e == "") { return ""; }
+    let o = {"ratio": "16:9", "dialect": "view"};
+    if (has(opts, "dialect")) { o["dialect"] = opts["dialect"]; }
+    if (has(opts, "height")) { o["height"] = opts["height"]; }
+    return iwWebViewSource(name, e, o);
+}
+
+// ----------------------------- 10) سجل التنقّل ------------------------------
+// سجل تنقّل صغير (أمام/خلف) لواجهة متصفّح فوق WebView: خريطة قابلة للتعديل المباشر.
+
+fun iwNavNew() { return {"stack": [], "index": -1}; }
+
+fun iwNavCurrent(nav) {
+    if (nav["index"] < 0) { return ""; }
+    return nav["stack"][nav["index"]];
+}
+
+fun iwCanBack(nav) { return nav["index"] > 0; }
+fun iwCanForward(nav) { return nav["index"] < len(nav["stack"]) - 1; }
+
+// زيارة رابط جديد: يقصّ تاريخ "الأمام" ويتجاهل الرابط المكرّر المتتالي والروابط غير الآمنة.
+fun iwNavVisit(nav, url) {
+    let u = iwNormalize(url);
+    if (u == "" or !iwIsSafe(u)) { return false; }
+    if (iwNavCurrent(nav) == u) { return true; }
+    let keepN = nav["index"] + 1;
+    let ns = [];
+    let i = 0;
+    while (i < keepN) { push(ns, nav["stack"][i]); i = i + 1; }
+    push(ns, u);
+    nav["stack"] = ns;
+    nav["index"] = len(ns) - 1;
+    return true;
+}
+
+fun iwNavBack(nav) {
+    if (iwCanBack(nav)) { nav["index"] = nav["index"] - 1; }
+    return iwNavCurrent(nav);
+}
+
+fun iwNavForward(nav) {
+    if (iwCanForward(nav)) { nav["index"] = nav["index"] + 1; }
+    return iwNavCurrent(nav);
+}
+
+
+// ----------------------------- 11) تنظيف وكشف ------------------------------
+
+fun iwTrackingParams() { return ["fbclid", "gclid", "dclid", "msclkid", "mc_cid", "mc_eid", "igshid", "yclid", "_ga", "ref_src", "si"]; }
+
+// يحذف معاملات التتبّع (utm_* وfbclid وgclid ...) ويحفظ بقية الرابط.
+fun iwStripTracking(url) {
+    let p = iwParseUrl(url);
+    if (!p["ok"] or p["query"] == "") { return toString(url); }
+    let q = iwParseQuery(p["query"]);
+    let bad = iwTrackingParams();
+    let out = {};
+    let ks = keys(q);
+    let i = 0;
+    while (i < len(ks)) {
+        let k = ks[i];
+        let drop = startsWith(lower(k), "utm_");
+        let j = 0;
+        while (j < len(bad)) { if (lower(k) == bad[j]) { drop = true; } j = j + 1; }
+        if (!drop) { out[k] = q[k]; }
+        i = i + 1;
+    }
+    return iwRebuild(p, iwQuery(out));
+}
+
+fun iwIsIpv4(h) {
+    if (!regexTest(h, "^[0-9]{1,3}(\\.[0-9]{1,3}){3}$")) { return false; }
+    let parts = split(h, ".");
+    let i = 0;
+    while (i < 4) { if (toNumber(parts[i]) > 255) { return false; } i = i + 1; }
+    return true;
+}
+
+fun iwIsIp(host) { return iwIsIpv4(host) or startsWith(host, "["); }
+
+// عناوين محلية/خاصة: localhost و*.local و*.internal و127/10/192.168/172.16-31/169.254/0 و IPv6 المحلية.
+fun iwIsPrivateHost(host) {
+    let h = lower(toString(host));
+    if (h == "") { return true; }
+    if (h == "localhost" or endsWith(h, ".localhost") or endsWith(h, ".local") or endsWith(h, ".internal") or endsWith(h, ".lan")) { return true; }
+    if (iwIsIpv4(h)) {
+        let a = toNumber(split(h, ".")[0]);
+        let b = toNumber(split(h, ".")[1]);
+        if (a == 10 or a == 127 or a == 0) { return true; }
+        if (a == 192 and b == 168) { return true; }
+        if (a == 172 and b >= 16 and b <= 31) { return true; }
+        if (a == 169 and b == 254) { return true; }
+        if (a == 100 and b >= 64 and b <= 127) { return true; }
+        return false;
+    }
+    if (startsWith(h, "[")) {
+        return h == "[::1]" or h == "[::]" or startsWith(h, "[fc") or startsWith(h, "[fd") or startsWith(h, "[fe80") or startsWith(h, "[::ffff:");
+    }
+    return false;
+}
+
+// رابط ويب عام آمن: https/http صالح ومضيفه ليس محليًا/خاصًا.
+fun iwIsPublicWeb(url) { return iwIsSafe(url) and !iwIsPrivateHost(iwHost(url)); }
+
+fun iwFileName(url) {
+    let p = iwParseUrl(url);
+    let segs = split(p["path"], "/");
+    if (len(segs) == 0) { return ""; }
+    return iwUrlDecode(segs[len(segs) - 1]);
+}
+
+fun iwExtension(url) {
+    let f = iwFileName(url);
+    let d = lastIndexOf(f, ".");
+    if (d < 0 or d == len(f) - 1) { return ""; }
+    return lower(substr(f, d + 1, len(f) - d - 1));
+}
+
+fun iwInList(x, arr) {
+    let i = 0;
+    while (i < len(arr)) { if (arr[i] == x) { return true; } i = i + 1; }
+    return false;
+}
+
+// نوع المحتوى من الامتداد/المزوّد: image · video · audio · pdf · document · archive · page
+fun iwMediaKind(url) {
+    if (iwYoutubeId(url) != "" or iwVimeoId(url) != "") { return "video"; }
+    let e = iwExtension(url);
+    if (iwInList(e, ["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "avif", "ico"])) { return "image"; }
+    if (iwInList(e, ["mp4", "webm", "mkv", "mov", "m3u8", "3gp", "avi"])) { return "video"; }
+    if (iwInList(e, ["mp3", "wav", "ogg", "m4a", "aac", "flac", "opus"])) { return "audio"; }
+    if (e == "pdf") { return "pdf"; }
+    if (iwInList(e, ["doc", "docx", "xls", "xlsx", "ppt", "pptx", "txt", "csv", "odt", "rtf"])) { return "document"; }
+    if (iwInList(e, ["zip", "rar", "7z", "tar", "gz", "apk"])) { return "archive"; }
+    return "page";
+}
+
+// ----------------------------- 12) شريط العنوان والبحث ----------------------
+
+// رابط بحث. engine: google · duckduckgo · bing · brave · wikipedia · youtube (الافتراضي duckduckgo).
+fun iwSearchUrl(engine, query) {
+    let q = iwUrlEncode(trim(toString(query)));
+    let e = lower(toString(engine));
+    if (e == "google") { return "https://www.google.com/search?q=" + q; }
+    if (e == "bing") { return "https://www.bing.com/search?q=" + q; }
+    if (e == "brave") { return "https://search.brave.com/search?q=" + q; }
+    if (e == "wikipedia") { return "https://wikipedia.org/w/index.php?search=" + q; }
+    if (e == "youtube") { return "https://www.youtube.com/results?search_query=" + q; }
+    return "https://duckduckgo.com/?q=" + q;
+}
+
+// يتصرّف كشريط عنوان المتصفح: رابط صالح => url، نص عادي => بحث، مخطط خطر => blocked.
+// الناتج: {"kind": "url"|"search"|"blocked"|"empty", "url": "...", "reason": "..."}. opts: engine.
+fun iwResolveInput(input, opts) {
+    if (isNil(opts)) { opts = {}; }
+    let engine = "duckduckgo";
+    if (has(opts, "engine")) { engine = opts["engine"]; }
+    let raw = trim(toString(input));
+    if (raw == "") { return {"kind": "empty", "url": "", "reason": "empty input"}; }
+    let hasSpace = indexOf(raw, " ") >= 0;
+    if (!hasSpace) {
+        let u = iwNormalize(raw);
+        if (u != "") {
+            if (iwIsSafe(u)) { return {"kind": "url", "url": u, "reason": ""}; }
+            return {"kind": "blocked", "url": "", "reason": "unsafe link"};
+        }
+        let k = iwLinkKind(raw);
+        if (k == "script" or k == "data" or k == "file") { return {"kind": "blocked", "url": "", "reason": "scheme not allowed"}; }
+    }
+    return {"kind": "search", "url": iwSearchUrl(engine, raw), "reason": ""};
+}
+
+// ----------------------------- 13) مشاركة ------------------------------------
+
+// رابط مشاركة: twitter/x · facebook · linkedin · telegram · whatsapp · reddit · email · sms. "" إن كان الرابط غير آمن.
+fun iwShareUrl(network, url, msg) {
+    if (!iwIsSafe(url)) { return ""; }
+    let u = iwUrlEncode(trim(toString(url)));
+    let m = "";
+    if (!isNil(msg)) { m = iwUrlEncode(toString(msg)); }
+    let n = lower(toString(network));
+    if (n == "twitter" or n == "x") { return "https://twitter.com/intent/tweet?url=" + u + "&text=" + m; }
+    if (n == "facebook") { return "https://www.facebook.com/sharer/sharer.php?u=" + u; }
+    if (n == "linkedin") { return "https://www.linkedin.com/sharing/share-offsite/?url=" + u; }
+    if (n == "telegram") { return "https://t.me/share/url?url=" + u + "&text=" + m; }
+    if (n == "whatsapp") { return "https://wa.me/?text=" + iwUrlEncode(toString(msg) + " " + trim(toString(url))); }
+    if (n == "reddit") { return "https://www.reddit.com/submit?url=" + u + "&title=" + m; }
+    if (n == "email") { return "mailto:?subject=" + m + "&body=" + u; }
+    if (n == "sms") { return "sms:?body=" + iwUrlEncode(toString(msg) + " " + trim(toString(url))); }
+    return "";
+}
+
+// ----------------------------- 14) مزوّدو تضمين إضافيون ----------------------
+
+fun iwStripWww(h) {
+    if (startsWith(h, "www.")) { return substr(h, 4, len(h) - 4); }
+    return h;
+}
+
+// open.spotify.com/(track|album|playlist|episode|show|artist)/ID
+fun iwSpotifyEmbedUrl(url) {
+    let p = iwParseUrl(url);
+    if (!p["ok"] or iwStripWww(p["host"]) != "open.spotify.com") { return ""; }
+    let segs = split(p["path"], "/");
+    let i = 1;
+    if (len(segs) > 1 and startsWith(segs[1], "intl-")) { i = 2; }
+    if (len(segs) < i + 2) { return ""; }
+    if (!iwInList(segs[i], ["track", "album", "playlist", "episode", "show", "artist"])) { return ""; }
+    if (!regexTest(segs[i + 1], "^[A-Za-z0-9]{10,30}$")) { return ""; }
+    return "https://open.spotify.com/embed/" + segs[i] + "/" + segs[i + 1];
+}
+
+fun iwDailymotionEmbedUrl(url) {
+    let p = iwParseUrl(url);
+    if (!p["ok"]) { return ""; }
+    let h = iwStripWww(p["host"]);
+    let id = "";
+    if (h == "dai.ly") { id = substr(p["path"], 1, len(p["path"]) - 1); }
+    else if (h == "dailymotion.com") {
+        let segs = split(p["path"], "/");
+        if (len(segs) >= 3 and segs[1] == "video") { id = segs[2]; }
+    }
+    if (regexTest(id, "^[A-Za-z0-9]{5,12}$")) { return "https://www.dailymotion.com/embed/video/" + id; }
+    return "";
+}
+
+// drive.google.com/file/d/ID/view  ->  .../preview
+fun iwDriveEmbedUrl(url) {
+    let p = iwParseUrl(url);
+    if (!p["ok"] or p["host"] != "drive.google.com") { return ""; }
+    let segs = split(p["path"], "/");
+    if (len(segs) >= 4 and segs[1] == "file" and segs[2] == "d" and regexTest(segs[3], "^[A-Za-z0-9_-]{10,}$")) {
+        return "https://drive.google.com/file/d/" + segs[3] + "/preview";
+    }
+    return "";
+}
+
+// خريطة مضمَّنة: نص بحث أو [lat, lon].
+fun iwMapsEmbedUrl(query) {
+    if (isArray(query) and len(query) == 2 and iwValidLatLon(query[0], query[1])) {
+        return "https://www.google.com/maps?q=" + toString(query[0]) + "," + toString(query[1]) + "&output=embed";
+    }
+    return "https://www.google.com/maps?q=" + iwUrlEncode(toString(query)) + "&output=embed";
+}
+
+fun iwIsEmbeddable(url) {
+    return iwYoutubeId(url) != "" or iwVimeoId(url) != "" or iwSpotifyEmbedUrl(url) != "" or iwDailymotionEmbedUrl(url) != "" or iwDriveEmbedUrl(url) != "";
+}
+
+// ----------------------------- 15) توجيه الروابط العميقة ---------------------
+
+// يطابق رابطًا مع أنماط مثل "/item/:id" أو "open/item/:id" (الأخير يشمل المضيف: myapp://open/item/5).
+// الناتج: {"matched": bool, "pattern": "...", "params": {...}, "query": {...}}
+fun iwTrimSlash(s) { return regexReplace(toString(s), "^/+|/+$", ""); }
+
+fun iwRoute(url, patterns) {
+    let p = iwParseUrl(url);
+    let res = {"matched": false, "pattern": "", "params": {}, "query": {}};
+    if (!p["ok"]) { return res; }
+    let i = 0;
+    while (i < len(patterns)) {
+        let pat = patterns[i];
+        let target = p["path"];
+        if (!startsWith(pat, "/")) { target = p["host"] + p["path"]; }
+        let a = split(iwTrimSlash(target), "/");
+        let b = split(iwTrimSlash(pat), "/");
+        let params = {};
+        let ok = len(a) == len(b);
+        let j = 0;
+        while (ok and j < len(b)) {
+            if (startsWith(b[j], ":")) { params[substr(b[j], 1, len(b[j]) - 1)] = iwUrlDecode(a[j]); }
+            else if (b[j] != a[j]) { ok = false; }
+            j = j + 1;
+        }
+        if (ok) {
+            res["matched"] = true; res["pattern"] = pat; res["params"] = params; res["query"] = iwParseQuery(p["query"]);
+            return res;
+        }
+        i = i + 1;
+    }
+    return res;
+}
+
+// ----------------------------- 16) روابط داخل النصوص -------------------------
+
+// يستخرج روابط http(s) من نص (بدون علامات الترقيم الأخيرة).
+fun iwExtractUrls(txt) {
+    let found = regexFindAll(toString(txt), "https?://[^\\s<>\"']*[^\\s<>\"'.,;:!?)\\]،؛]");
+    let out = [];
+    let i = 0;
+    while (i < len(found)) { push(out, found[i]); i = i + 1; }
+    return out;
+}
+
+// يحوّل نصًا عاديًا إلى HTML مهرَّب مع تحويل الروابط الآمنة إلى <a> (الأسطر => <br>).
+fun iwLinkify(txt, opts) {
+    let rest = toString(txt);
+    let urls = iwExtractUrls(rest);
+    let out = "";
+    let i = 0;
+    while (i < len(urls)) {
+        let idx = indexOf(rest, urls[i]);
+        if (idx >= 0) {
+            out = out + iwEscape(substr(rest, 0, idx)) + iwLinkHtmlEx(iwShorten(urls[i], 60), urls[i], opts);
+            rest = substr(rest, idx + len(urls[i]), len(rest) - idx - len(urls[i]));
+        }
+        i = i + 1;
+    }
+    out = out + iwEscape(rest);
+    return replace(out, "\n", "<br>");
+}
+
+// يفحص كل href في HTML: [{"url", "kind", "safe"}] — لتدقيق محتوى قبل عرضه.
+fun iwAuditHtml(html) {
+    let found = regexFindAll(toString(html), "i:href\\s*=\\s*(\"[^\"]*\"|'[^']*')");
+    let out = [];
+    let i = 0;
+    while (i < len(found)) {
+        let m = found[i];
+        let eq = indexOf(m, "=");
+        let v = trim(substr(m, eq + 1, len(m) - eq - 1));
+        v = substr(v, 1, len(v) - 2);
+        let safe = iwIsSafe(v);
+        let k = iwLinkKind(v);
+        if (k == "mail" or k == "tel" or k == "sms" or k == "geo") { safe = true; }
+        push(out, {"url": v, "kind": k, "safe": safe});
+        i = i + 1;
+    }
+    return out;
+}
+
+// ----------------------------- 17) خطة الفتح ---------------------------------
+
+// يقرّر ماذا يُفعل برابط: {"action": "webview"|"external"|"blocked", "kind", "url", "reason"}.
+// webview: ويب عام آمن (opts.allow قائمة نطاقات، opts.allowPrivate=true يسمح بالمحلي)
+// external: تطبيق خارجي (بريد/اتصال/رسائل/خرائط/واتساب/تيليجرام/متجر؛ opts.allowIntent لـ intent:)
+fun iwOpenPlan(url, opts) {
+    if (isNil(opts)) { opts = {}; }
+    let u = trim(toString(url));
+    let k = iwLinkKind(u);
+    let res = {"action": "blocked", "kind": k, "url": u, "reason": ""};
+    if (k == "none") { res["reason"] = "empty link"; return res; }
+    if (iwHasControl(u)) { res["reason"] = "control characters"; return res; }
+    if (k == "web" or k == "rin" or k == "whatsapp" or k == "telegram") {
+        if (!iwIsSafe(u)) { res["reason"] = "unsafe link"; return res; }
+        if (!(has(opts, "allowPrivate") and opts["allowPrivate"] == true) and iwIsPrivateHost(iwHost(u))) { res["reason"] = "private or local address"; return res; }
+        if (has(opts, "allow") and !iwHostAllowed(u, opts["allow"])) { res["reason"] = "host not allowed"; return res; }
+        if (k == "whatsapp" or k == "telegram") { res["action"] = "external"; } else { res["action"] = "webview"; }
+        return res;
+    }
+    if (k == "mail" or k == "tel" or k == "sms" or k == "geo" or k == "market") { res["action"] = "external"; return res; }
+    if (k == "intent" and has(opts, "allowIntent") and opts["allowIntent"] == true) { res["action"] = "external"; return res; }
+    if (k == "anchor" or k == "relative") { res["reason"] = "relative link needs a base url"; return res; }
+    res["reason"] = "scheme not allowed";
+    return res;
+}
+
+// ----------------------------- 18) صفحات جاهزة لـ WebView --------------------
+
+fun iwCardHtml(title, desc, url, image) {
+    let out = "<a class=\"iw-card\" style=\"display:block;text-decoration:none;color:inherit;border:1px solid #8884;border-radius:14px;overflow:hidden\"";
+    if (iwIsSafe(url)) { out = out + " href=\"" + iwEscape(trim(toString(url))) + "\" target=\"_blank\" rel=\"noopener noreferrer\""; }
+    out = out + ">";
+    if (!isNil(image) and iwIsHttps(image)) {
+        out = out + "<img src=\"" + iwEscape(trim(toString(image))) + "\" alt=\"\" loading=\"lazy\" referrerpolicy=\"no-referrer\" style=\"display:block;width:100%;height:auto\">";
+    }
+    out = out + "<div style=\"padding:12px 14px\"><div style=\"font-weight:700\">" + iwEscape(title) + "</div>";
+    if (!isNil(desc) and toString(desc) != "") { out = out + "<div style=\"opacity:.75;margin-top:4px\">" + iwEscape(desc) + "</div>"; }
+    if (iwIsSafe(url)) { out = out + "<div style=\"opacity:.55;margin-top:6px;font-size:.85em\">" + iwEscape(iwDisplay(url)) + "</div>"; }
+    return out + "</div></a>";
+}
+
+// صفحة خطأ (اتصال/حجب) مع زر إعادة المحاولة عبر الجسر الأصلي RinPreview.tap().
+fun iwErrorHtml(title, message, opts) {
+    if (isNil(opts)) { opts = {}; }
+    let dir = "auto";
+    if (has(opts, "dir")) { dir = opts["dir"]; }
+    let body = "<div style=\"display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:10px;text-align:center;padding:20px\">";
+    body = body + "<div style=\"font-size:2.2em\">⚠️</div><div style=\"font-weight:700\">" + iwEscape(title) + "</div><div style=\"opacity:.75\">" + iwEscape(message) + "</div>";
+    if (has(opts, "retry")) { body = body + iwTapButton(opts["retry"], {}); }
+    body = body + "</div>";
+    let f = {"dir": dir};
+    if (has(opts, "theme")) { f["theme"] = opts["theme"]; }
+    return iwFragment(body, f);
+}
+
+fun iwLoadingHtml(message, opts) {
+    if (isNil(opts)) { opts = {}; }
+    let body = "<div style=\"display:flex;align-items:center;justify-content:center;height:100%;gap:10px\"><div style=\"width:18px;height:18px;border-radius:50%;border:3px solid #8886;border-top-color:#6C5CE7;animation:iwspin 1s linear infinite\"></div><span>" + iwEscape(message) + "</span></div><style>@keyframes iwspin{to{transform:rotate(360deg)}}</style>";
+    let f = {"dir": "auto"};
+    if (has(opts, "theme")) { f["theme"] = opts["theme"]; }
+    return iwFragment(body, f);
+}
+
+// ----------------------------- 19) المفضّلة ----------------------------------
+
+fun iwBookmarksNew() { return {"items": []}; }
+
+fun iwBookmarkIndex(b, url) {
+    let u = iwNormalize(url);
+    let i = 0;
+    while (i < len(b["items"])) { if (b["items"][i]["url"] == u) { return i; } i = i + 1; }
+    return -1;
+}
+
+// يضيف/يحدّث مفضّلة. يرفض الروابط غير الآمنة. العنوان الفارغ يصير host.
+fun iwBookmarkAdd(b, url, title) {
+    let u = iwNormalize(url);
+    if (u == "" or !iwIsSafe(u)) { return false; }
+    let t = trim(toString(title));
+    if (t == "") { t = iwDisplay(u); }
+    let idx = iwBookmarkIndex(b, u);
+    if (idx >= 0) { b["items"][idx]["title"] = t; return true; }
+    push(b["items"], {"url": u, "title": t});
+    return true;
+}
+
+fun iwBookmarkHas(b, url) { return iwBookmarkIndex(b, url) >= 0; }
+
+fun iwBookmarkRemove(b, url) {
+    let idx = iwBookmarkIndex(b, url);
+    if (idx < 0) { return false; }
+    let ns = [];
+    let i = 0;
+    while (i < len(b["items"])) { if (i != idx) { push(ns, b["items"][i]); } i = i + 1; }
+    b["items"] = ns;
+    return true;
+}
+
+// بحث في العنوان والرابط (غير حسّاس لحالة الأحرف). q فارغ => الكل.
+fun iwBookmarkList(b, q) {
+    let needle = lower(trim(toString(q)));
+    let out = [];
+    let i = 0;
+    while (i < len(b["items"])) {
+        let it = b["items"][i];
+        if (needle == "" or contains(lower(it["title"]), needle) or contains(lower(it["url"]), needle)) { push(out, it); }
+        i = i + 1;
+    }
+    return out;
+}
+
+fun iwBookmarksSave(b) { return jsonEncode(b["items"]); }
+
+// تحميل من JSON مع إعادة التحقق من كل رابط (يتجاهل التالف).
+fun iwBookmarksLoad(js) {
+    let b = iwBookmarksNew();
+    let arr = jsonDecode(js);
+    if (!isArray(arr)) { return b; }
+    let i = 0;
+    while (i < len(arr)) {
+        if (isMap(arr[i]) and has(arr[i], "url")) {
+            let t = "";
+            if (has(arr[i], "title")) { t = arr[i]["title"]; }
+            iwBookmarkAdd(b, arr[i]["url"], t);
+        }
+        i = i + 1;
+    }
+    return b;
+}
+
+fun iwNavList(nav) { return nav["stack"]; }
+
+
+// ----------------------------- 20) شاشة الربط (Link Screen) -------------------
+// شاشة جاهزة تعرض الرابط حسب نوعه قبل فتحه: فيديو (صورة مصغّرة + تشغيل أو مشغّل مضمَّن)، صفحة ويب،
+// صورة، صوت، PDF، مستند، ملف مضغوط، بريد، اتصال، رسالة، موقع، واتساب/تيليجرام، متجر، مكتبة Rin.
+// الروابط الخطرة تظهر كشاشة "محجوب" بدل الفتح. لا JavaScript (الأزرار روابط عادية).
+
+fun iwLabels(lang) {
+    if (lang == "ar") {
+        return {"web": "صفحة ويب", "video": "فيديو", "image": "صورة", "audio": "صوت", "pdf": "ملف PDF", "document": "مستند",
+                "archive": "ملف مضغوط", "mail": "بريد إلكتروني", "tel": "اتصال هاتفي", "sms": "رسالة", "geo": "موقع", "whatsapp": "واتساب",
+                "telegram": "تيليجرام", "market": "متجر التطبيقات", "rin": "مكتبة Rin", "intent": "تطبيق",
+                "a_open": "فتح", "a_play": "تشغيل", "a_call": "اتصال", "a_mail": "إرسال بريد", "a_sms": "إرسال رسالة",
+                "a_geo": "فتح الموقع", "a_download": "تنزيل", "a_store": "فتح المتجر", "a_app": "فتح في التطبيق",
+                "secure": "اتصال آمن (HTTPS)", "insecure": "غير مشفّر (HTTP)", "external": "يُفتح في تطبيق آخر",
+                "blocked": "الرابط محجوب", "dir": "rtl"};
+    }
+    return {"web": "Web page", "video": "Video", "image": "Image", "audio": "Audio", "pdf": "PDF file", "document": "Document",
+            "archive": "Archive", "mail": "Email", "tel": "Phone call", "sms": "Message", "geo": "Location", "whatsapp": "WhatsApp",
+            "telegram": "Telegram", "market": "App store", "rin": "Rin library", "intent": "App",
+            "a_open": "Open", "a_play": "Play", "a_call": "Call", "a_mail": "Send email", "a_sms": "Send message",
+            "a_geo": "Open location", "a_download": "Download", "a_store": "Open store", "a_app": "Open in app",
+            "secure": "Secure connection (HTTPS)", "insecure": "Not encrypted (HTTP)", "external": "Opens in another app",
+            "blocked": "Link blocked", "dir": "ltr"};
+}
+
+fun iwKindIcon(k) {
+    if (k == "video") { return "🎬"; }
+    if (k == "image") { return "🖼️"; }
+    if (k == "audio") { return "🎧"; }
+    if (k == "pdf") { return "📕"; }
+    if (k == "document") { return "📄"; }
+    if (k == "archive") { return "🗜️"; }
+    if (k == "mail") { return "✉️"; }
+    if (k == "tel") { return "📞"; }
+    if (k == "sms") { return "💬"; }
+    if (k == "geo") { return "📍"; }
+    if (k == "whatsapp") { return "🟢"; }
+    if (k == "telegram") { return "✈️"; }
+    if (k == "market") { return "🛍️"; }
+    if (k == "rin") { return "🌿"; }
+    if (k == "intent") { return "📱"; }
+    return "🌐";
+}
+
+// نوع الشاشة: يجمع kind الرابط مع نوع الوسائط. الناتج واحد من مفاتيح iwLabels.
+fun iwScreenKind(url) {
+    let k = iwLinkKind(url);
+    if (k == "web") {
+        let mk = iwMediaKind(url);
+        if (iwSpotifyEmbedUrl(url) != "") { return "audio"; }
+        if (iwDriveEmbedUrl(url) != "") { return "document"; }
+        if (iwDailymotionEmbedUrl(url) != "") { return "video"; }
+        if (mk == "page") { return "web"; }
+        return mk;
+    }
+    return k;
+}
+
+fun iwScreenBtn(label, href, primary) {
+    let bg = "background:#6C5CE7;color:#fff;";
+    if (!primary) { bg = "background:transparent;color:inherit;border:1px solid #8886;"; }
+    return "<a href=\"" + iwEscape(href) + "\" target=\"_blank\" rel=\"noopener noreferrer\" style=\"display:inline-block;padding:10px 22px;border-radius:12px;text-decoration:none;font-weight:700;" + bg + "\">" + iwEscape(label) + "</a>";
+}
+
+// شاشة الربط كـ HTML لخاصية html=. opts: lang ("en"|"ar")، theme ("dark"|"light")، title، mode ("preview"|"embed")،
+// allow / allowPrivate / allowIntent (كما في iwOpenPlan)، dir.
+fun iwLinkScreen(url, opts) {
+    if (isNil(opts)) { opts = {}; }
+    let lang = "en";
+    if (has(opts, "lang")) { lang = opts["lang"]; }
+    let L = iwLabels(lang);
+    let theme = "dark";
+    if (has(opts, "theme")) { theme = opts["theme"]; }
+    let fopts = {"theme": theme, "dir": L["dir"]};
+    if (has(opts, "dir")) { fopts["dir"] = opts["dir"]; }
+    let u = trim(toString(url));
+    let plan = iwOpenPlan(u, opts);
+    if (plan["action"] == "blocked") {
+        let eo = {"dir": fopts["dir"], "theme": theme};
+        return iwErrorHtml(L["blocked"], iwShorten(u, 80), eo);
+    }
+    let kind = iwScreenKind(u);
+    let label = L["web"];
+    if (has(L, kind)) { label = L[kind]; }
+    let isHttp = (plan["kind"] == "web" or plan["kind"] == "rin");
+    let host = iwHost(u);
+    let title = "";
+    if (has(opts, "title")) { title = opts["title"]; }
+    if (title == "") {
+        title = iwDisplay(u);
+        if (plan["kind"] == "mail") { title = substr(u, 7, len(u) - 7); let qi = indexOf(title, "?"); if (qi >= 0) { title = substr(title, 0, qi); } title = iwUrlDecode(title); }
+        if (plan["kind"] == "tel" or plan["kind"] == "sms") { title = iwUrlDecode(substr(u, indexOf(u, ":") + 1, len(u) - indexOf(u, ":") - 1)); let qj = indexOf(title, "?"); if (qj >= 0) { title = substr(title, 0, qj); } }
+        if (kind == "rin") { let rl = iwParseRinLink(u); if (rl["ok"]) { title = "@" + rl["user"]; if (rl["library"] != "") { title = title + " / " + rl["library"]; } } }
+        if (kind == "image" or kind == "pdf" or kind == "document" or kind == "archive" or kind == "audio") { let fnm = iwFileName(u); if (fnm != "") { title = fnm; } }
+    }
+    let primaryLabel = L["a_open"];
+    let primaryHref = u;
+    let media = "";
+    let embed = iwEmbedUrl(u);
+    let embeddable = iwIsEmbeddable(u);
+    let mode = "preview";
+    if (has(opts, "mode")) { mode = opts["mode"]; }
+
+    if (kind == "video" or kind == "audio" or (kind == "document" and embeddable)) {
+        if (embeddable and mode == "embed") {
+            media = "<div style=\"width:100%;max-width:560px\">" + iwIframeHtml(embed, {"ratio": "16:9", "title": title}) + "</div>";
+            primaryHref = u;
+        } else {
+            let thumb = iwYoutubeThumb(u);
+            let play = "<div style=\"position:absolute;inset:0;display:flex;align-items:center;justify-content:center\"><div style=\"width:64px;height:64px;border-radius:50%;background:#000a;color:#fff;font-size:28px;line-height:64px\">▶</div></div>";
+            let box = "position:relative;width:100%;max-width:560px;aspect-ratio:16/9;border-radius:14px;overflow:hidden;background:linear-gradient(135deg,#6C5CE7,#2d2a4a);display:flex;align-items:center;justify-content:center;font-size:48px";
+            let inner = iwKindIcon(kind);
+            if (thumb != "") { inner = "<img src=\"" + iwEscape(thumb) + "\" alt=\"\" loading=\"lazy\" referrerpolicy=\"no-referrer\" style=\"width:100%;height:100%;object-fit:cover\">"; }
+            media = "<div style=\"" + box + "\">" + inner + play + "</div>";
+            if (embeddable) { primaryHref = embed; }
+        }
+        primaryLabel = L["a_play"];
+    } else if (kind == "image") {
+        if (iwIsHttps(u)) {
+            media = "<img src=\"" + iwEscape(u) + "\" alt=\"\" loading=\"lazy\" referrerpolicy=\"no-referrer\" style=\"max-width:100%;max-height:55%;border-radius:14px;object-fit:contain\">";
+        } else {
+            media = "<div style=\"font-size:56px\">" + iwKindIcon(kind) + "</div>";
+        }
+    } else {
+        media = "<div style=\"font-size:56px\">" + iwKindIcon(kind) + "</div>";
+    }
+    if (kind == "pdf" or kind == "archive" or (kind == "document" and !embeddable)) { primaryLabel = L["a_download"]; }
+    if (kind == "mail") { primaryLabel = L["a_mail"]; }
+    if (kind == "tel") { primaryLabel = L["a_call"]; }
+    if (kind == "sms") { primaryLabel = L["a_sms"]; }
+    if (kind == "geo") { primaryLabel = L["a_geo"]; }
+    if (kind == "market") { primaryLabel = L["a_store"]; }
+    if (kind == "intent" or kind == "whatsapp" or kind == "telegram") { primaryLabel = L["a_app"]; }
+
+    let badge = "<div style=\"display:inline-block;padding:3px 12px;border-radius:99px;background:#6C5CE733;font-size:.8em;font-weight:700\">" + iwKindIcon(kind) + " " + iwEscape(label) + "</div>";
+    let info = "";
+    if (isHttp) {
+        let sec = "🔒 " + L["secure"];
+        if (!iwIsHttps(u)) { sec = "⚠️ " + L["insecure"]; }
+        info = "<div style=\"opacity:.65;font-size:.85em\">" + iwEscape(host) + " · " + iwEscape(sec) + "</div>";
+    } else {
+        info = "<div style=\"opacity:.65;font-size:.85em\">" + iwEscape(L["external"]) + "</div>";
+    }
+    let body = "<div class=\"iw-screen\" style=\"display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;min-height:100%;padding:20px;text-align:center;box-sizing:border-box\">";
+    body = body + media + badge;
+    body = body + "<div style=\"font-weight:800;font-size:1.15em;word-break:break-word;max-width:100%\">" + iwEscape(iwShorten(title, 90)) + "</div>" + info;
+    body = body + "<div style=\"display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin-top:4px\">" + iwScreenBtn(primaryLabel, primaryHref, true);
+    if (primaryHref != u and isHttp) { body = body + iwScreenBtn(L["a_open"], u, false); }
+    body = body + "</div></div>";
+    return iwFragment(body, fopts);
+}
+
+// سمات عنصر WebView لشاشة الربط (نفس شكل iwWebViewAttrs). opts تدعم height.
+fun iwLinkScreenAttrs(url, opts) {
+    if (isNil(opts)) { opts = {}; }
+    let plan = iwOpenPlan(url, opts);
+    let attrs = {"html": iwLinkScreen(url, opts)};
+    if (has(opts, "height")) { attrs["height"] = opts["height"]; }
+    if (has(opts, "ratio") and iwRatio(opts["ratio"]) > 0) { attrs["ratio"] = toString(opts["ratio"]); }
+    return {"ok": plan["action"] != "blocked", "mode": "html", "kind": iwScreenKind(url), "action": plan["action"], "attrs": attrs, "error": plan["reason"]};
+}
+
+// كود Rin جاهز لعنصر WebView يعرض شاشة الربط.
+fun iwLinkScreenSource(name, url, opts) {
+    if (isNil(opts)) { opts = {}; }
+    if (!iwIsIdent(name)) { return ""; }
+    let r = iwLinkScreenAttrs(url, opts);
+    let dialect = "view";
+    if (has(opts, "dialect") and opts["dialect"] == "element") { dialect = "element"; }
+    let out = "@" + dialect + ".WebView=" + name + "\n    html=" + iwRinString(r["attrs"]["html"]) + ";\n";
+    if (has(r["attrs"], "height")) { out = out + "    height=" + toString(r["attrs"]["height"]) + ";\n"; }
+    if (has(r["attrs"], "ratio")) { out = out + "    ratio=" + iwRinString(r["attrs"]["ratio"]) + ";\n"; }
+    return out + ".end/" + dialect + "\n";
+}
+
+// ----------------------------- معلومات --------------------------------------
+
+fun iwInfo() {
+    return {
+        "name": "indsinweb",
+        "version": "1.0.0",
+        "description": "WebView and link toolkit for Indsin: safe URLs, link kinds, embeds, html= builders, WebView source generation",
+        "features": [
+            "URL parse / normalize / join",
+            "Scheme allowlist, host allowlist, userinfo phishing guard",
+            "Query build / parse / edit",
+            "mailto / tel / sms / geo / WhatsApp / Telegram / Play Store / Android intent / deep links",
+            "Rin library and profile links",
+            "YouTube (nocookie) and Vimeo embeds",
+            "Safe link / iframe / fragment / page HTML",
+            "WebView attrs and Rin source generator",
+            "Back/forward navigation history",
+            "Omnibox resolver (URL or search), share links, bookmarks",
+            "Private/local host blocking, tracking-param stripping, media kind detection",
+            "Spotify / Dailymotion / Google Drive embeds, route matching, linkify, link audit",
+            "Card, error and loading pages for WebView",
+            "Link screen: video / web page / image / audio / PDF / mail / phone / location / Rin library"
+        ]
+    };
+}
+)INDSINWEBOGRIN";
+
 inline const std::unordered_map<std::string, std::string>& embeddedRinLibraries() {
     static const std::unordered_map<std::string, std::string> libs = {
         {"lib/math.og.rin", kLib_math_og_rin},
@@ -12516,6 +14121,7 @@ inline const std::unordered_map<std::string, std::string>& embeddedRinLibraries(
         {"lib/rintest.og.rin", kLib_rintest_og_rin},
         {"lib/packkit.og.rin", kLib_packkit_og_rin},
         {"lib/wesscode.og.rin", kLib_wesscode_og_rin},
+        {"lib/indsinweb.og.rin", kLib_indsinweb_og_rin},
     };
     return libs;
 }
