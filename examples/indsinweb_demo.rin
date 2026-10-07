@@ -1,0 +1,50 @@
+// ============================================================================
+// IndsinWeb demo — WebView + safe links inside an indsin @container
+// ============================================================================
+@import "lib/indsinweb.og.rin";
+
+@container=IndsinWebDemo
+    warp site = "youtube.com/watch?v=dQw4w9WgXcQ";
+    warp untrusted = "javascript:alert(1)";
+    warp address = "how to learn rin";
+
+    @view.Column=Root
+        padding=16;
+        gap=12;
+
+        @view.Text=Title
+            text="IndsinWeb";
+            size="title";
+        .end/view
+
+        @view.WebView=Player
+            url=iwEmbedUrl(iwNormalize(site));
+            ratio="16:9";
+        .end/view
+
+        @view.WebView=Browser
+            url=iwResolveInput(address, {"engine": "duckduckgo"})["url"];
+            height=220;
+        .end/view
+
+        @view.WebView=Card
+            html=iwFragment(iwCardHtml("Rin", "لغة واجهات", "https://dlof-lib.github.io/rinlang/", ""), {"theme": "dark", "padding": 8});
+            height=110;
+        .end/view
+
+        @view.WebView=VideoScreen
+            html=iwLinkScreen(site, {"lang": "ar"});
+            height=360;
+        .end/view
+
+        @view.WebView=PageScreen
+            html=iwLinkScreen("https://dlof-lib.github.io/rinlang/", {"lang": "ar", "theme": "light"});
+            height=260;
+        .end/view
+
+        @view.WebView=Links
+            html=iwFragment(iwLinkHtml("Rin library", iwRinLibrary("majd", "math")) + " · " + iwLinkHtml("Mail", iwMailto("hi@example.com", {"subject": "مرحبا"})) + " · " + iwLinkHtml("Blocked", untrusted), {"dir": "rtl", "padding": 12});
+            height=80;
+        .end/view
+    .end/view
+.end/container
