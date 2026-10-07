@@ -141,7 +141,7 @@ rin new myproj --template console   # مشروع جديد (rin.toml + src/main.r
 | ✅ التحقق والوظيفية | `validate` · `functional` · `requirekit` |
 | 🖥️ النظام والويب | `syskit` · `httpkit` · `urlkit` · `router` · `logger` · `rinzip` |
 | 🔁 الحلقات والتفاعل | `loopkit` · `gridkit` · `movingmask` · `behaviorkit` |
-| 🎨 الواجهات | `colors` · `layout` · `rinxg` · `relyRIN` · `boat` |
+| 🎨 الواجهات | `colors` · `layout` · `rinxg` · `relyRIN` · `indsinweb` · `boat` |
 | 🧬 صناعة اللغات | `langkit` · `lexkit` · `parsekit` · `astwalk` · `oglang` |
 
 ```rin
