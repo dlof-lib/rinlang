@@ -1,0 +1,13 @@
+:new demo
+:project
+:run
+:test
+:cd ..
+:new ui-demo --template indsin
+:project
+:indsin --plain --cols 50 --width 200
+:test
+:cd ..
+:new demo
+:new bad/name
+:new x --template zzz
