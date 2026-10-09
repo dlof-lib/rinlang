@@ -10106,6 +10106,4272 @@ fun requireFirstFailure(checks) {
     return { ok: true };
 }
 )REQUIREKITOGRIN";
+static const char* kLib_passkit_og_rin = R"PASSKITOGRIN(
+// ============================================================================
+//  lib/passkit.og.rin — Password kit (Password Kit): concepts + variables + functions
+//  Import:
+//    @import "lib/passkit.og.rin";
+//    @import "lib/passkit.og.rin" as pass;
+//
+//  Pure Rin library (with no change to the C++ engine) built on natives that already exist
+//  (sec.randomToken / sec.sha256 / sec.hmacSha256 / sec.constantTimeEqual).
+//  Every function returns {ok:true,...} or {ok:false, error/errors:...} using the same convention as
+//  validate / requirekit / syskit — with no sudden stop on errors.
+//
+//  Concepts (Concepts) it covers:
+//    1) Constants and variables: character sets, the common-password list, strength labels
+//    2) Policy (Policy)     : mergeable rules + 4 ready-made policies (pkPolicy*)
+//    3) Analysis and strength: entropy, weak patterns, guess time, feedback
+//    4) Secure generation: password / PIN / passphrase (passphrase) with secure randomness
+//    5) Storage: salted hash + key stretching (key stretching) + constant-time verification
+//    6) Lifecycle: password record, history, expiry, lockout after attempts
+//    7) Recovery: temporary reset tokens
+//    8) Masking: display mask + redaction (redact) for logs
+//
+//  Quick example:
+//    let p = pkPolicyStandard();
+//    let r = pkCheck("abc12345", p, { username: "Rima" });
+//    print r["errors"];
+//    let g = pkGenerate({ length: 18 });
+//    let h = pkHash(g["password"], {});
+//    print pkVerify(g["password"], h);   // true
+//
+//  Honest security notes:
+//    - Time: Rin has no wall clock (now() a monotonic clock), so every lifecycle function
+//      takes nowSec (seconds, e.g. an epoch from your app) explicitly; the default pkNow() is fine
+//      for a single session only and is not kept between runs.
+//    - pkHash A salted, stretched HMAC-SHA256 chain (a simplified PBKDF2-like construction), and it is
+//      much better than bare sha256, but it is not a replacement for bcrypt/scrypt/argon2
+//      on a high-risk production server.
+// ============================================================================
+
+// ---- 1) Constants and variables --------------------------------------------------
+
+let PK_LOWER = "abcdefghijklmnopqrstuvwxyz";
+let PK_UPPER = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+let PK_DIGITS = "0123456789";
+let PK_SYMBOLS = "!@#$%^&*()-_=+[]{};:,.?/";
+let PK_AMBIGUOUS = "O0oIl1|";                 // visually similar characters
+let PK_HEX = "0123456789abcdef";
+let PK_HASH_VERSION = "pk1";                  // storage format prefix
+let PK_DEFAULT_ITERATIONS = 3000;
+let PK_STRENGTH_LABELS = ["Very weak", "Weak", "Fair", "Strong", "Very strong"];
+let PK_KEYBOARD_ROWS = ["qwertyuiop", "asdfghjkl", "zxcvbnm", "1234567890"];
+let PK_SENSITIVE_KEYS = ["password", "passwd", "pwd", "pass", "secret", "token", "pin"];
+let PK_COMMON = [
+    "password", "123456", "12345678", "123456789", "1234567890", "12345", "111111",
+    "000000", "123123", "654321", "qwerty", "qwerty123", "qwertyuiop", "abc123",
+    "password1", "passw0rd", "p@ssw0rd", "letmein", "welcome", "admin", "admin123",
+    "root", "login", "master", "monkey", "dragon", "football", "iloveyou",
+    "sunshine", "princess", "1q2w3e4r", "1qaz2wsx", "test", "test123", "guest",
+    "changeme", "default", "secret", "pass", "user"
+];
+
+// word list for passphrases (128 words = 7 bits per word)
+let PK_WORDS = [
+    "apple", "river", "cloud", "stone", "tiger", "lemon", "panda", "storm",
+    "maple", "eagle", "ocean", "flame", "sugar", "piano", "robot", "cedar",
+    "amber", "coral", "daisy", "ember", "fable", "grape", "haven", "ivory",
+    "jolly", "karma", "lunar", "mango", "noble", "olive", "pearl", "quilt",
+    "raven", "solar", "tulip", "unity", "velvet", "willow", "xenon", "yacht",
+    "zebra", "anchor", "bridge", "candle", "desert", "engine", "forest", "garden",
+    "harbor", "island", "jungle", "kitten", "ladder", "meadow", "needle", "orange",
+    "pillow", "rabbit", "silver", "temple", "umbrella", "valley", "winter", "yellow",
+    "breeze", "castle", "dancer", "falcon", "glacier", "hammer", "insect", "jacket",
+    "kernel", "lantern", "marble", "nectar", "oyster", "pepper", "quartz", "rocket",
+    "saddle", "thunder", "uplift", "violet", "walnut", "zephyr", "acorn", "beacon",
+    "comet", "dolphin", "echo", "feather", "galaxy", "horizon", "indigo", "jasmine",
+    "koala", "lotus", "magnet", "nebula", "orchid", "phoenix", "quasar", "ripple",
+    "summit", "trophy", "orbit", "voyage", "whistle", "crystal", "yonder", "zenith",
+    "blossom", "compass", "diamond", "emerald", "firefly", "gazelle", "harvest", "iceberg",
+    "journey", "kingdom", "lullaby", "mystery", "network", "odyssey", "paradox", "rainbow"
+];
+
+// ---- Internal helpers -----------------------------------------------------------
+
+// Split text into real UTF-8 characters (len/charAt in Rin work on bytes, so a password
+// of 6 Arabic letters counts as 12). slice works with character indexes, so we walk it until it returns empty.
+fun pkChars(s) {
+    let out = [];
+    if (s == nil) { return out; }
+    let i = 0;
+    let c = slice(s, 0, 1);
+    while (c != "") {
+        push(out, c);
+        i = i + 1;
+        c = slice(s, i, i + 1);
+    }
+    return out;
+}
+
+fun pkLen(s) {
+    return len(pkChars(s));
+}
+
+
+fun pkNow() {
+    return now() / 1000;          // monotonic seconds (for a single session only)
+}
+
+fun pkCopyMap(m) {
+    let out = {};
+    for (let k in keys(m)) { out[k] = m[k]; }
+    return out;
+}
+
+fun pkCopyArr(a) {
+    let out = [];
+    let i = 0;
+    while (i < len(a)) { push(out, a[i]); i = i + 1; }
+    return out;
+}
+
+fun pkOpt(opts, key, fallback) {
+    if (opts == nil) { return fallback; }
+    if (has(opts, key)) { return opts[key]; }
+    return fallback;
+}
+
+fun pkLog2(x) {
+    if (x <= 1) { return 0; }
+    return log(x) / log(2);
+}
+
+// ---- 2) Policy (Policy) -------------------------------------------------------
+
+// Default policy (balanced). overrides are merged on top, and any unknown key is kept.
+fun pkPolicy(overrides) {
+    let p = {
+        minLength: 8, maxLength: 128,
+        requireLower: true, requireUpper: true, requireDigit: true, requireSymbol: false,
+        allowSpaces: true, minUnique: 4, maxRepeat: 3,
+        noSequence: true, noCommon: true, noPersonal: true,
+        minScore: 2,
+        historyCount: 5, maxAgeDays: 0,
+        maxAttempts: 5, lockSeconds: 900,
+        hashIterations: PK_DEFAULT_ITERATIONS
+    };
+    if (overrides != nil) {
+        for (let k in keys(overrides)) { p[k] = overrides[k]; }
+    }
+    return p;
+}
+
+// Basic: for low-risk apps (length only + reject common passwords)
+fun pkPolicyBasic() {
+    return pkPolicy({
+        minLength: 6, requireLower: false, requireUpper: false, requireDigit: false,
+        minUnique: 3, noSequence: false, minScore: 1, historyCount: 0
+    });
+}
+
+// Standard: the recommended default for most apps
+fun pkPolicyStandard() {
+    return pkPolicy({});
+}
+
+// Strict: for sensitive accounts (12+, symbols, expiry, longer lockout)
+fun pkPolicyStrict() {
+    return pkPolicy({
+        minLength: 12, requireSymbol: true, minUnique: 8, maxRepeat: 2, minScore: 3,
+        historyCount: 10, maxAgeDays: 90, maxAttempts: 3, lockSeconds: 1800,
+        hashIterations: 6000
+    });
+}
+
+// PIN PIN: digits only with a nearly fixed length
+fun pkPolicyPin(length) {
+    let n = 6;
+    if (length != nil) { n = length; }
+    return pkPolicy({
+        minLength: n, maxLength: n, requireLower: false, requireUpper: false,
+        requireDigit: true, requireSymbol: false, allowSpaces: false, minUnique: 3,
+        maxRepeat: 2, noCommon: false, noPersonal: false, minScore: 0, historyCount: 0,
+        maxAttempts: 3, lockSeconds: 600
+    });
+}
+
+// ---- 3) Analysis and strength ----------------------------------------------------------
+
+// Count of each character class inside the password
+fun pkCharClasses(pw) {
+    let c = { lower: 0, upper: 0, digit: 0, symbol: 0, space: 0, other: 0 };
+    let chars = pkChars(pw);
+    let i = 0;
+    while (i < len(chars)) {
+        let ch = chars[i];
+        if (contains(PK_LOWER, ch)) { c["lower"] = c["lower"] + 1; }
+        else if (contains(PK_UPPER, ch)) { c["upper"] = c["upper"] + 1; }
+        else if (contains(PK_DIGITS, ch)) { c["digit"] = c["digit"] + 1; }
+        else if (ch == " ") { c["space"] = c["space"] + 1; }
+        else if (contains(PK_SYMBOLS, ch)) { c["symbol"] = c["symbol"] + 1; }
+        else { c["other"] = c["other"] + 1; }
+        i = i + 1;
+    }
+    return c;
+}
+
+// Size of the possible character pool (to compute theoretical entropy)
+fun pkPoolSize(classes) {
+    let n = 0;
+    if (classes["lower"] > 0) { n = n + 26; }
+    if (classes["upper"] > 0) { n = n + 26; }
+    if (classes["digit"] > 0) { n = n + 10; }
+    if (classes["symbol"] > 0) { n = n + 24; }
+    if (classes["space"] > 0) { n = n + 1; }
+    if (classes["other"] > 0) { n = n + 64; }
+    return n;
+}
+
+// Number of distinct characters
+fun pkUniqueCount(pw) {
+    let chars = pkChars(pw);
+    let seen = [];
+    let i = 0;
+    while (i < len(chars)) {
+        if (contains(seen, chars[i]) == false) { push(seen, chars[i]); }
+        i = i + 1;
+    }
+    return len(seen);
+}
+
+// Longest consecutive run of the same character (aaaa → 4)
+fun pkLongestRepeat(pw) {
+    let chars = pkChars(pw);
+    let best = 0;
+    let run = 0;
+    let prev = "";
+    let i = 0;
+    while (i < len(chars)) {
+        if (i > 0 and chars[i] == prev) { run = run + 1; } else { run = 1; }
+        if (run > best) { best = run; }
+        prev = chars[i];
+        i = i + 1;
+    }
+    return best;
+}
+
+// Does it contain a sequence of 3+ characters (abc / 321 / qwe) ascending or descending?
+fun pkHasSequence(pw) {
+    let s = lower(pw);
+    let sources = [PK_LOWER, PK_DIGITS];
+    let r = 0;
+    while (r < len(PK_KEYBOARD_ROWS)) { push(sources, PK_KEYBOARD_ROWS[r]); r = r + 1; }
+    let i = 0;
+    while (i + 2 < len(s)) {
+        let tri = substr(s, i, 3);
+        let rev = "";
+        let j = 2;
+        while (j >= 0) { rev = rev + charAt(tri, j); j = j - 1; }
+        let k = 0;
+        while (k < len(sources)) {
+            if (contains(sources[k], tri) or contains(sources[k], rev)) { return true; }
+            k = k + 1;
+        }
+        i = i + 1;
+    }
+    return false;
+}
+
+// Simplify "leet": p@ssw0rd → password (to detect disguised common passwords)
+fun pkDeLeet(s) {
+    let t = lower(s);
+    t = replace(t, "@", "a");
+    t = replace(t, "0", "o");
+    t = replace(t, "1", "l");
+    t = replace(t, "3", "e");
+    t = replace(t, "$", "s");
+    t = replace(t, "5", "s");
+    t = replace(t, "7", "t");
+    return t;
+}
+
+// Is it (or very close to) a common password?
+fun pkIsCommon(pw) {
+    let a = lower(pw);
+    let b = pkDeLeet(pw);
+    let i = 0;
+    while (i < len(PK_COMMON)) {
+        let c = PK_COMMON[i];
+        if (a == c or b == c) { return true; }
+        // a common word + digits/symbol at the end only (password2024!)
+        if (len(c) >= 6 and (indexOf(a, c) == 0 or indexOf(b, c) == 0) and len(pw) <= len(c) + 4) { return true; }
+        i = i + 1;
+    }
+    return false;
+}
+
+// Does it contain personal info (username/email/name)? items = array of strings
+fun pkContainsPersonal(pw, items) {
+    if (items == nil) { return false; }
+    let a = lower(pw);
+    let i = 0;
+    while (i < len(items)) {
+        let it = items[i];
+        if (it != nil and len(it) >= 3) {
+            let low = lower(it);
+            if (contains(a, low)) { return true; }
+            // the part before @ in an email
+            let at = indexOf(low, "@");
+            if (at >= 3 and contains(a, substr(low, 0, at))) { return true; }
+        }
+        i = i + 1;
+    }
+    return false;
+}
+
+// Readable text for a duration in seconds
+fun pkHumanTime(sec) {
+    if (sec < 1) { return "instantly"; }
+    if (sec < 60) { return "under a minute"; }
+    if (sec < 3600) { return toString(floor(sec / 60)) + " minutes"; }
+    if (sec < 86400) { return toString(floor(sec / 3600)) + " hours"; }
+    if (sec < 2592000) { return toString(floor(sec / 86400)) + " days"; }
+    if (sec < 31536000) { return toString(floor(sec / 2592000)) + " months"; }
+    if (sec < 3153600000) { return toString(floor(sec / 31536000)) + " years"; }
+    return "many centuries";
+}
+
+// Approximate guess time for a fast offline attack (10 billion guesses/s, half of them on average)
+fun pkCrackSeconds(bits) {
+    if (bits >= 80) { return 3153600001; }
+    return pow(2, bits) / 10000000000 / 2;
+}
+
+// Full analysis. ctx is optional: { username, email, name, personal:[...] }
+fun pkAnalyze(pw, ctx) {
+    let classes = pkCharClasses(pw);
+    let pool = pkPoolSize(classes);
+    let length = pkLen(pw);
+    let rawBits = 0;
+    if (pool > 0) { rawBits = length * pkLog2(pool); }
+
+    let unique = pkUniqueCount(pw);
+    let longestRun = pkLongestRepeat(pw);
+    let hasSeq = pkHasSequence(pw);
+    let common = pkIsCommon(pw);
+
+    let personalItems = [];
+    if (ctx != nil) {
+        if (has(ctx, "username")) { push(personalItems, ctx["username"]); }
+        if (has(ctx, "email")) { push(personalItems, ctx["email"]); }
+        if (has(ctx, "name")) { push(personalItems, ctx["name"]); }
+        if (has(ctx, "personal")) {
+            let q = 0;
+            while (q < len(ctx["personal"])) { push(personalItems, ctx["personal"][q]); q = q + 1; }
+        }
+    }
+    let personal = pkContainsPersonal(pw, personalItems);
+
+    // Penalties: repetition, sequences and low variety reduce effective entropy
+    let bits = rawBits;
+    if (length > 0 and unique < length) { bits = bits * (unique / length) + (rawBits * 0.25); }
+    if (bits > rawBits) { bits = rawBits; }
+    if (hasSeq) { bits = bits - 12; }
+    if (longestRun >= 3) { bits = bits - (longestRun * 3); }
+    if (personal) { bits = bits - 15; }
+    if (common) { bits = 8; }
+    if (bits < 0) { bits = 0; }
+    bits = round(bits * 10) / 10;
+
+    let score = 0;
+    if (bits >= 28) { score = 1; }
+    if (bits >= 40) { score = 2; }
+    if (bits >= 60) { score = 3; }
+    if (bits >= 80) { score = 4; }
+    if (common) { score = 0; }
+
+    let feedback = [];
+    if (length < 8) { push(feedback, "short - use 12 or more characters"); }
+    if (common) { push(feedback, "a common password or close to one"); }
+    if (hasSeq) { push(feedback, "contains a predictable sequence (abc / 123 / qwe)"); }
+    if (longestRun >= 3) { push(feedback, "contains consecutive repeats of the same character"); }
+    if (personal) { push(feedback, "contains personal info that is easy to guess"); }
+    let variety = 0;
+    if (classes["lower"] > 0) { variety = variety + 1; }
+    if (classes["upper"] > 0) { variety = variety + 1; }
+    if (classes["digit"] > 0) { variety = variety + 1; }
+    if (classes["symbol"] > 0) { variety = variety + 1; }
+    if (variety < 3 and length < 16) { push(feedback, "mix upper and lower case, digits and symbols, or make the phrase longer"); }
+
+    return {
+        length: length, classes: classes, poolSize: pool, uniqueChars: unique,
+        longestRepeat: longestRun, hasSequence: hasSeq, isCommon: common, hasPersonal: personal,
+        rawEntropyBits: round(rawBits * 10) / 10, entropyBits: bits,
+        score: score, label: PK_STRENGTH_LABELS[score],
+        crackTime: pkHumanTime(pkCrackSeconds(bits)), feedback: feedback
+    };
+}
+
+// Shortcut: strength 0..4 only
+fun pkScore(pw) {
+    return pkAnalyze(pw, nil)["score"];
+}
+
+// ---- 4) Policy validation -------------------------------------------------------
+
+// Checks pw against policy and collects all violations at once.
+// ctx optional: { username, email, name, personal:[...], history:[array of previous hashes] }
+fun pkCheck(pw, policy, ctx) {
+    let p = policy;
+    if (p == nil) { p = pkPolicyStandard(); }
+    let a = pkAnalyze(pw, ctx);
+    let errors = [];
+    let failed = [];
+    let c = a["classes"];
+
+    if (a["length"] < p["minLength"]) {
+        push(errors, "Length is below the minimum (" + toString(p["minLength"]) + ")");
+        push(failed, "too_short");
+    }
+    if (a["length"] > p["maxLength"]) {
+        push(errors, "Length is above the maximum (" + toString(p["maxLength"]) + ")");
+        push(failed, "too_long");
+    }
+    if (p["requireLower"] and c["lower"] == 0) { push(errors, "At least one lowercase letter is required"); push(failed, "no_lower"); }
+    if (p["requireUpper"] and c["upper"] == 0) { push(errors, "At least one uppercase letter is required"); push(failed, "no_upper"); }
+    if (p["requireDigit"] and c["digit"] == 0) { push(errors, "At least one digit is required"); push(failed, "no_digit"); }
+    if (p["requireSymbol"] and c["symbol"] == 0) { push(errors, "At least one symbol is required"); push(failed, "no_symbol"); }
+    if (p["allowSpaces"] == false and c["space"] > 0) { push(errors, "Spaces are not allowed"); push(failed, "spaces"); }
+    if (a["uniqueChars"] < p["minUnique"]) {
+        push(errors, "Too few distinct characters (minimum " + toString(p["minUnique"]) + " distinct characters)");
+        push(failed, "low_unique");
+    }
+    if (a["longestRepeat"] > p["maxRepeat"]) {
+        push(errors, "Consecutive repeat of more than " + toString(p["maxRepeat"]) + " times for the same character");
+        push(failed, "repeat");
+    }
+    if (p["noSequence"] and a["hasSequence"]) { push(errors, "contains a predictable sequence such as abc or 123"); push(failed, "sequence"); }
+    if (p["noCommon"] and a["isCommon"]) { push(errors, "Common password"); push(failed, "common"); }
+    if (p["noPersonal"] and a["hasPersonal"]) { push(errors, "contains personal info (name/email)"); push(failed, "personal"); }
+    if (a["score"] < p["minScore"]) {
+        push(errors, "Strength (" + a["label"] + ") is below the required level (" + PK_STRENGTH_LABELS[p["minScore"]] + ")");
+        push(failed, "weak");
+    }
+
+    // Block reuse of previous passwords
+    if (ctx != nil and has(ctx, "history") and p["historyCount"] > 0) {
+        let h = ctx["history"];
+        let i = 0;
+        while (i < len(h) and i < p["historyCount"]) {
+            if (pkVerify(pw, h[i])) {
+                push(errors, "This password was used before - choose a new one");
+                push(failed, "reused");
+                i = len(h);
+            }
+            i = i + 1;
+        }
+    }
+
+    if (len(errors) == 0) { return { ok: true, analysis: a }; }
+    return { ok: false, errors: errors, failed: failed, analysis: a, error: join(errors, "; ") };
+}
+
+// Password confirmation (do both fields match?) with constant-time comparison
+fun pkConfirm(a, b) {
+    if (a == nil or b == nil) { return { ok: false, error: "pkConfirm: missing value" }; }
+    if (sec.constantTimeEqual(a, b)) { return { ok: true }; }
+    return { ok: false, error: "The passwords do not match" };
+}
+
+// ---- 5) Secure generation (CSPRNG via sec.randomToken, not random()) -----------------
+
+fun pkRandByte() {
+    let hx = sec.randomToken(1);
+    return indexOf(PK_HEX, charAt(hx, 0)) * 16 + indexOf(PK_HEX, charAt(hx, 1));
+}
+
+// uniform integer in [0, n) using rejection sampling to avoid bias
+fun pkRandInt(n) {
+    if (n <= 1) { return 0; }
+    if (n <= 256) {
+        let limit = floor(256 / n) * n;
+        let b = pkRandByte();
+        while (b >= limit) { b = pkRandByte(); }
+        return b % n;
+    }
+    let limit2 = floor(65536 / n) * n;
+    let v = pkRandByte() * 256 + pkRandByte();
+    while (v >= limit2) { v = pkRandByte() * 256 + pkRandByte(); }
+    return v % n;
+}
+
+fun pkPick(set) {
+    return charAt(set, pkRandInt(len(set)));
+}
+
+fun pkShuffle(arr) {
+    let a = pkCopyArr(arr);
+    let i = len(a) - 1;
+    while (i > 0) {
+        let j = pkRandInt(i + 1);
+        let t = a[i];
+        a[i] = a[j];
+        a[j] = t;
+        i = i - 1;
+    }
+    return a;
+}
+
+fun pkRemoveChars(set, bad) {
+    let out = "";
+    let i = 0;
+    while (i < len(set)) {
+        let ch = charAt(set, i);
+        if (contains(bad, ch) == false) { out = out + ch; }
+        i = i + 1;
+    }
+    return out;
+}
+
+// opts: { length:16, lower:true, upper:true, digits:true, symbols:true,
+//         avoidAmbiguous:false, exclude:"", custom:"" }
+// Guarantees at least one character from every enabled class, then shuffles the result.
+fun pkGenerate(opts) {
+    let length = pkOpt(opts, "length", 16);
+    let avoid = pkOpt(opts, "avoidAmbiguous", false);
+    let exclude = pkOpt(opts, "exclude", "");
+    let sets = [];
+    if (pkOpt(opts, "lower", true)) { push(sets, PK_LOWER); }
+    if (pkOpt(opts, "upper", true)) { push(sets, PK_UPPER); }
+    if (pkOpt(opts, "digits", true)) { push(sets, PK_DIGITS); }
+    if (pkOpt(opts, "symbols", true)) { push(sets, PK_SYMBOLS); }
+    let custom = pkOpt(opts, "custom", "");
+    if (len(custom) > 0) { push(sets, custom); }
+
+    let cleaned = [];
+    let pool = "";
+    let i = 0;
+    while (i < len(sets)) {
+        let s = sets[i];
+        if (avoid) { s = pkRemoveChars(s, PK_AMBIGUOUS); }
+        if (len(exclude) > 0) { s = pkRemoveChars(s, exclude); }
+        if (len(s) > 0) { push(cleaned, s); pool = pool + s; }
+        i = i + 1;
+    }
+    if (len(cleaned) == 0) { return { ok: false, error: "pkGenerate: No character classes are enabled" }; }
+    if (length < len(cleaned)) { return { ok: false, error: "pkGenerate: length is smaller than the number of required classes (" + toString(len(cleaned)) + ")" }; }
+    if (length > 1024) { return { ok: false, error: "pkGenerate: maximum length is 1024" }; }
+
+    let chars = [];
+    let j = 0;
+    while (j < len(cleaned)) { push(chars, pkPick(cleaned[j])); j = j + 1; }
+    while (len(chars) < length) { push(chars, pkPick(pool)); }
+    let out = join(pkShuffle(chars), "");
+    let bits = round(length * pkLog2(len(pool)) * 10) / 10;
+    return { ok: true, password: out, length: length, poolSize: len(pool), entropyBits: bits, strength: pkScore(out) };
+}
+
+// n several passwords at once (array of strings)
+fun pkGenerateMany(count, opts) {
+    let out = [];
+    let i = 0;
+    while (i < count) {
+        let g = pkGenerate(opts);
+        if (g["ok"] == false) { return g; }
+        push(out, g["password"]);
+        i = i + 1;
+    }
+    return { ok: true, passwords: out };
+}
+
+// PIN random digits; regenerates (up to 50 attempts) if it came out sequential or fully repeated
+fun pkGeneratePin(length) {
+    let n = 6;
+    if (length != nil) { n = length; }
+    if (n < 4 or n > 32) { return { ok: false, error: "pkGeneratePin: length must be between 4 and 32" }; }
+    let tries = 0;
+    while (tries < 50) {
+        let pin = "";
+        let i = 0;
+        while (i < n) { pin = pin + pkPick(PK_DIGITS); i = i + 1; }
+        if (pkHasSequence(pin) == false and pkLongestRepeat(pin) <= 2) {
+            return { ok: true, pin: pin, length: n, entropyBits: round(n * pkLog2(10) * 10) / 10 };
+        }
+        tries = tries + 1;
+    }
+    return { ok: false, error: "pkGeneratePin: could not generate a suitable PIN" };
+}
+
+// Passphrase (passphrase): opts { words:6, separator:"-", capitalize:false, number:false }
+fun pkPassphrase(opts) {
+    let n = pkOpt(opts, "words", 6);
+    let sep = pkOpt(opts, "separator", "-");
+    let cap = pkOpt(opts, "capitalize", false);
+    let addNum = pkOpt(opts, "number", false);
+    if (n < 3 or n > 20) { return { ok: false, error: "pkPassphrase: number of words must be between 3 and 20" }; }
+    let picked = [];
+    let i = 0;
+    while (i < n) {
+        let w = PK_WORDS[pkRandInt(len(PK_WORDS))];
+        if (cap) { w = upper(charAt(w, 0)) + substr(w, 1, len(w) - 1); }
+        push(picked, w);
+        i = i + 1;
+    }
+    let phrase = join(picked, sep);
+    let bits = n * pkLog2(len(PK_WORDS));
+    if (addNum) {
+        phrase = phrase + sep + toString(pkRandInt(100));
+        bits = bits + pkLog2(100);
+    }
+    return { ok: true, passphrase: phrase, words: n, entropyBits: round(bits * 10) / 10 };
+}
+
+// ---- 6) Storage: salted hash and key stretching + constant-time verification --------------------------
+
+fun pkSalt() {
+    return sec.randomToken(16);
+}
+
+// Returns a string in the format  pk1$<iterations>$<salt>$<hash>
+// opts optional: { iterations, salt }
+fun pkHash(pw, opts) {
+    let iter = pkOpt(opts, "iterations", PK_DEFAULT_ITERATIONS);
+    let salt = pkOpt(opts, "salt", pkSalt());
+    if (iter < 1) { iter = 1; }
+    let h = sec.hmacSha256(salt, pw);
+    let i = 1;
+    while (i < iter) {
+        h = sec.hmacSha256(h, salt + pw);
+        i = i + 1;
+    }
+    return PK_HASH_VERSION + "$" + toString(iter) + "$" + salt + "$" + h;
+}
+
+fun pkParseHash(stored) {
+    if (stored == nil) { return { ok: false, error: "pkParseHash: empty value" }; }
+    let parts = split(stored, "$");
+    if (len(parts) != 4 or parts[0] != PK_HASH_VERSION) {
+        return { ok: false, error: "pkParseHash: unknown hash format" };
+    }
+    // toNumber throws an error on non-numeric text, so check the digits first (corrupt hash => false, no crash)
+    if (len(parts[1]) == 0 or len(parts[1]) > 7) { return { ok: false, error: "pkParseHash: invalid iteration count" }; }
+    let d = 0;
+    while (d < len(parts[1])) {
+        if (contains(PK_DIGITS, charAt(parts[1], d)) == false) { return { ok: false, error: "pkParseHash: invalid iteration count" }; }
+        d = d + 1;
+    }
+    let iter = toNumber(parts[1]);
+    if (iter < 1) { return { ok: false, error: "pkParseHash: invalid iteration count" }; }
+    return { ok: true, version: parts[0], iterations: iter, salt: parts[2], hash: parts[3] };
+}
+
+// Constant-time check: does pw match the stored hash? (false on any corrupt format)
+fun pkVerify(pw, stored) {
+    let p = pkParseHash(stored);
+    if (p["ok"] == false) { return false; }
+    let again = pkHash(pw, { iterations: p["iterations"], salt: p["salt"] });
+    return sec.constantTimeEqual(again, stored);
+}
+
+// Should it be rehashed (iterations lower than today's policy)? call it after a successful login
+fun pkNeedsRehash(stored, policy) {
+    let p = pkParseHash(stored);
+    if (p["ok"] == false) { return true; }
+    let target = PK_DEFAULT_ITERATIONS;
+    if (policy != nil and has(policy, "hashIterations")) { target = policy["hashIterations"]; }
+    return p["iterations"] < target;
+}
+
+// ---- 7) Lifecycle: password record (state variables) -------------------------
+
+// Creates a new record after checking the policy. ctx is optional as in pkCheck.
+// The record: { hash, createdAt, changedAt, expiresAt, history[], failedAttempts, lockedUntil, mustChange }
+fun pkRecordNew(pw, policy, ctx, nowSec) {
+    let p = policy;
+    if (p == nil) { p = pkPolicyStandard(); }
+    let t = nowSec;
+    if (t == nil) { t = pkNow(); }
+    let chk = pkCheck(pw, p, ctx);
+    if (chk["ok"] == false) { return chk; }
+    let expires = 0;
+    if (p["maxAgeDays"] > 0) { expires = t + p["maxAgeDays"] * 86400; }
+    return {
+        ok: true,
+        record: {
+            hash: pkHash(pw, { iterations: p["hashIterations"] }),
+            createdAt: t, changedAt: t, expiresAt: expires,
+            history: [], failedAttempts: 0, lockedUntil: 0, mustChange: false
+        },
+        analysis: chk["analysis"]
+    };
+}
+
+fun pkIsLocked(record, nowSec) {
+    let t = nowSec;
+    if (t == nil) { t = pkNow(); }
+    return record["lockedUntil"] > t;
+}
+
+fun pkIsExpired(record, nowSec) {
+    let t = nowSec;
+    if (t == nil) { t = pkNow(); }
+    if (record["expiresAt"] <= 0) { return false; }
+    return t >= record["expiresAt"];
+}
+
+// Days left before expiry (-1 = no expiry), 0 = expired
+fun pkDaysLeft(record, nowSec) {
+    let t = nowSec;
+    if (t == nil) { t = pkNow(); }
+    if (record["expiresAt"] <= 0) { return -1; }
+    if (t >= record["expiresAt"]) { return 0; }
+    return ceil((record["expiresAt"] - t) / 86400);
+}
+
+// Login attempt: returns an updated record (does not modify the original) with the reason for the result.
+// reason: "ok" | "wrong" | "locked" | "expired" (ok:true with mustChange on expiry)
+fun pkLogin(record, pw, policy, nowSec) {
+    let p = policy;
+    if (p == nil) { p = pkPolicyStandard(); }
+    let t = nowSec;
+    if (t == nil) { t = pkNow(); }
+    let r = pkCopyMap(record);
+
+    if (pkIsLocked(r, t)) {
+        return { ok: false, reason: "locked", retryAfter: ceil(r["lockedUntil"] - t), record: r,
+                 error: "The account is temporarily locked because of failed attempts" };
+    }
+
+    if (pkVerify(pw, r["hash"]) == false) {
+        r["failedAttempts"] = r["failedAttempts"] + 1;
+        let left = p["maxAttempts"] - r["failedAttempts"];
+        if (left <= 0) {
+            r["lockedUntil"] = t + p["lockSeconds"];
+            r["failedAttempts"] = 0;
+            return { ok: false, reason: "locked", retryAfter: p["lockSeconds"], attemptsLeft: 0, record: r,
+                     error: "The account was locked after repeated failed attempts" };
+        }
+        return { ok: false, reason: "wrong", attemptsLeft: left, record: r, error: "Incorrect password" };
+    }
+
+    r["failedAttempts"] = 0;
+    r["lockedUntil"] = 0;
+    if (pkNeedsRehash(r["hash"], p)) {
+        r["hash"] = pkHash(pw, { iterations: p["hashIterations"] });
+    }
+    if (pkIsExpired(r, t)) {
+        r["mustChange"] = true;
+        return { ok: true, reason: "expired", mustChange: true, record: r };
+    }
+    return { ok: true, reason: "ok", mustChange: r["mustChange"], record: r };
+}
+
+// Change password: verifies the old one, applies the policy + blocks reuse, and updates the history.
+fun pkChange(record, oldPw, newPw, policy, ctx, nowSec) {
+    let p = policy;
+    if (p == nil) { p = pkPolicyStandard(); }
+    let t = nowSec;
+    if (t == nil) { t = pkNow(); }
+    if (pkVerify(oldPw, record["hash"]) == false) {
+        return { ok: false, error: "The current password is incorrect" };
+    }
+    if (sec.constantTimeEqual(oldPw, newPw)) {
+        return { ok: false, error: "The new password is the same as the current one" };
+    }
+    let c = {};
+    if (ctx != nil) { c = pkCopyMap(ctx); }
+    // stored history + the current password itself count as not reusable
+    let hist = pkCopyArr(record["history"]);
+    let all = [record["hash"]];
+    let i = 0;
+    while (i < len(hist)) { push(all, hist[i]); i = i + 1; }
+    c["history"] = all;
+    let chk = pkCheck(newPw, p, c);
+    if (chk["ok"] == false) { return chk; }
+
+    // the current one goes to the front of the history, and the history is trimmed to the last historyCount
+    let newHist = [record["hash"]];
+    let k = 0;
+    while (k < len(hist) and len(newHist) < p["historyCount"]) { push(newHist, hist[k]); k = k + 1; }
+    if (p["historyCount"] <= 0) { newHist = []; }
+
+    let r = pkCopyMap(record);
+    r["hash"] = pkHash(newPw, { iterations: p["hashIterations"] });
+    r["history"] = newHist;
+    r["changedAt"] = t;
+    r["failedAttempts"] = 0;
+    r["lockedUntil"] = 0;
+    r["mustChange"] = false;
+    if (p["maxAgeDays"] > 0) { r["expiresAt"] = t + p["maxAgeDays"] * 86400; } else { r["expiresAt"] = 0; }
+    return { ok: true, record: r, analysis: chk["analysis"] };
+}
+
+// ---- 8) Recovery: temporary reset tokens ---------------------------------
+
+// Returns token (sent to the user once) + tokenHash (only stored) + expiresAt
+fun pkResetToken(ttlSec, nowSec) {
+    let ttl = 900;
+    if (ttlSec != nil) { ttl = ttlSec; }
+    let t = nowSec;
+    if (t == nil) { t = pkNow(); }
+    let token = sec.randomToken(32);
+    return { ok: true, token: token, tokenHash: sec.sha256(token), expiresAt: t + ttl };
+}
+
+fun pkCheckResetToken(token, tokenHash, expiresAt, nowSec) {
+    let t = nowSec;
+    if (t == nil) { t = pkNow(); }
+    if (t >= expiresAt) { return { ok: false, reason: "expired", error: "The recovery token has expired" }; }
+    if (sec.constantTimeEqual(sec.sha256(token), tokenHash) == false) {
+        return { ok: false, reason: "invalid", error: "The recovery token is incorrect" };
+    }
+    return { ok: true };
+}
+
+// ---- 9) Masking: display mask + log redaction ---------------------------------
+
+// ●●●●●●●● same number of characters as the password (real characters, not bytes)
+fun pkMask(pw) {
+    if (pw == nil) { return ""; }
+    return repeat("•", pkLen(pw));
+}
+
+// Keeps the last keep characters visible: ••••••ab12
+fun pkMaskKeep(pw, keep) {
+    if (pw == nil) { return ""; }
+    let n = pkLen(pw);
+    let k = keep;
+    if (k > n - 4) { k = 0; }       // do not reveal most of a short password
+    if (k < 0) { k = 0; }
+    return repeat("•", n - k) + slice(pw, n - k, n);
+}
+
+// Is the field name sensitive (password/token/...)?
+fun pkIsSensitiveKey(key) {
+    let low = lower(toString(key));
+    let i = 0;
+    while (i < len(PK_SENSITIVE_KEYS)) {
+        if (contains(low, PK_SENSITIVE_KEYS[i])) { return true; }
+        i = i + 1;
+    }
+    return false;
+}
+
+// A copy of the map with sensitive fields hidden (redact logs before print/log)
+fun pkRedact(obj) {
+    let out = {};
+    for (let k in keys(obj)) {
+        if (pkIsSensitiveKey(k)) { out[k] = "***"; } else { out[k] = obj[k]; }
+    }
+    return out;
+}
+)PASSKITOGRIN";
+static const char* kLib_passkitcrypt_og_rin = R"PKCRYPTOGRIN(
+// ============================================================================
+//  lib/passkitcrypt.og.rin — Encryption, signing and key generation for the Passkit family (prefix pc)
+//  Import:  @import "lib/passkitcrypt.og.rin";
+//
+//  Built entirely on primitives that already exist in Rin: sec.hmacSha256 / sec.sha256 /
+//  sec.randomToken (CSPRNG) / sec.xorCipher / sec.hexEncode / sec.base64Encode.
+//  Does not modify the engine. All binary values are passed as hexadecimal text (hex) in lowercase.
+//
+//  What is standard and is verified with official RFC test vectors in the tests:
+//    HMAC-SHA256 (RFC 4231) · HKDF (RFC 5869) · PBKDF2-HMAC-SHA256 · TOTP-SHA256 (RFC 6238)
+//    Base32 (RFC 4648)
+//  and what is a "construction" (construction) and not a standard: pcSeal = a stream cipher with HMAC-CTR + an HMAC tag
+//  (Encrypt-then-MAC) with per-message subkeys via HKDF. Sound by design but it is not AES-GCM/ChaCha20;
+//  do not rely on it where you must comply with a specific standard.
+//
+//  Convention: every function returns {ok:true,...} or {ok:false,error:"..."} and never crashes on corrupt input.
+// ============================================================================
+
+let PC_HEXCHARS = "0123456789abcdef";
+let PC_B32 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+let PC_ZERO32 = "0000000000000000000000000000000000000000000000000000000000000000";
+
+// ---- 1) Encoding and numbers ----------------------------------------------------------------
+
+fun pcHexVal(c) { return indexOf(PC_HEXCHARS, lower(c)); }
+
+fun pcIsHex(s) {
+    if (type(s) != "string") { return false; }
+    if (len(s) % 2 != 0) { return false; }
+    let i = 0;
+    while (i < len(s)) {
+        if (pcHexVal(charAt(s, i)) < 0) { return false; }
+        i = i + 1;
+    }
+    return true;
+}
+
+// F: number -> hex with fixed width
+fun pcToHex(n, width) {
+    let s = "";
+    let v = floor(n);
+    while (v > 0) {
+        s = charAt(PC_HEXCHARS, v % 16) + s;
+        v = floor(v / 16);
+    }
+    while (len(s) < width) { s = "0" + s; }
+    if (len(s) == 0) { s = "0"; }
+    return s;
+}
+
+// F: hex -> number
+fun pcHexToNum(hex) {
+    let n = 0;
+    let i = 0;
+    while (i < len(hex)) { n = n * 16 + pcHexVal(charAt(hex, i)); i = i + 1; }
+    return n;
+}
+
+fun pcByteAt(hex, i) {
+    return pcHexVal(charAt(hex, i * 2)) * 16 + pcHexVal(charAt(hex, i * 2 + 1));
+}
+
+fun pcHexOf(txt) { return sec.hexEncode(toString(txt)); }
+
+// F: Base64 URL-safe (without = ) from hex
+fun pcB64UrlEncodeHex(hex) {
+    let b = sec.base64Encode(sec.hexDecode(hex));
+    b = replace(b, "+", "-");
+    b = replace(b, "/", "_");
+    return replace(b, "=", "");
+}
+
+fun pcB64UrlDecodeHex(s) {
+    if (type(s) != "string") { return nil; }
+    let i = 0;
+    while (i < len(s)) {
+        let c = charAt(s, i);
+        if (isAlnumChar(c) == false and c != "-" and c != "_") { return nil; }
+        i = i + 1;
+    }
+    let b = replace(replace(s, "-", "+"), "_", "/");
+    while (len(b) % 4 != 0) { b = b + "="; }
+    return sec.hexEncode(sec.base64Decode(b));
+}
+
+// F: Base64 URL-safe from text
+fun pcB64UrlEncode(txt) { return pcB64UrlEncodeHex(pcHexOf(txt)); }
+
+fun pcB64UrlDecode(s) {
+    let h = pcB64UrlDecodeHex(s);
+    if (h == nil) { return nil; }
+    return sec.hexDecode(h);
+}
+
+// F: Base32 (RFC 4648, no padding) from hex
+fun pcBase32EncodeHex(hex) {
+    let out = "";
+    let buf = 0;
+    let bits = 0;
+    let n = len(hex) / 2;
+    let i = 0;
+    while (i < n) {
+        buf = buf * 256 + pcByteAt(hex, i);
+        bits = bits + 8;
+        while (bits >= 5) {
+            let idx = floor(buf / pow(2, bits - 5)) % 32;
+            out = out + charAt(PC_B32, idx);
+            bits = bits - 5;
+            buf = buf % pow(2, bits);
+        }
+        i = i + 1;
+    }
+    if (bits > 0) { out = out + charAt(PC_B32, (buf * pow(2, 5 - bits)) % 32); }
+    return out;
+}
+
+fun pcBase32DecodeHex(s) {
+    let out = "";
+    let buf = 0;
+    let bits = 0;
+    let up = upper(s);
+    let i = 0;
+    while (i < len(up)) {
+        let c = charAt(up, i);
+        if (c != "=" and c != " " and c != "-") {
+            let v = indexOf(PC_B32, c);
+            if (v < 0) { return nil; }
+            buf = buf * 32 + v;
+            bits = bits + 5;
+            if (bits >= 8) {
+                out = out + pcToHex(floor(buf / pow(2, bits - 8)), 2);
+                bits = bits - 8;
+                buf = buf % pow(2, bits);
+            }
+        }
+        i = i + 1;
+    }
+    return out;
+}
+
+fun pcBase32Encode(txt) { return pcBase32EncodeHex(pcHexOf(txt)); }
+
+fun pcBase32Decode(s) {
+    let h = pcBase32DecodeHex(s);
+    if (h == nil) { return nil; }
+    return sec.hexDecode(h);
+}
+
+// ---- 2) Secure randomness ------------------------------------------------------------------
+
+// F: n secure random bytes (hex)
+fun pcRandomHex(n) { return sec.randomToken(n); }
+
+// F: uniform integer in [0,n) using rejection sampling
+fun pcRandomInt(n) {
+    if (n <= 1) { return 0; }
+    let range = 4294967296;
+    let limit = floor(range / n) * n;
+    let v = pcHexToNum(sec.randomToken(4));
+    while (v >= limit) { v = pcHexToNum(sec.randomToken(4)); }
+    return v % n;
+}
+
+// F: random id with a prefix: user_9f3a...
+fun pcRandomId(prefix, bytes) {
+    let b = 8;
+    if (bytes != nil) { b = bytes; }
+    return prefix + "_" + sec.randomToken(b);
+}
+
+// F: UUID v4
+fun pcUuid4() {
+    let h = sec.randomToken(16);
+    let variant = charAt("89ab", pcRandomInt(4));
+    return substr(h, 0, 8) + "-" + substr(h, 8, 4) + "-4" + substr(h, 13, 3) + "-" + variant + substr(h, 17, 3) + "-" + substr(h, 20, 12);
+}
+
+// F: XOR for two equal-length hex strings
+fun pcXorHex(a, b) {
+    if (len(a) != len(b)) { return nil; }
+    if (len(a) == 0) { return ""; }
+    return sec.hexEncode(sec.xorCipher(sec.hexDecode(a), sec.hexDecode(b)));
+}
+
+// F: constant-time comparison
+fun pcEqual(a, b) {
+    return sec.constantTimeEqual(toString(a), toString(b));
+}
+
+// ---- 3) HMAC and hashing ------------------------------------------------------------------
+
+// F: HMAC-SHA256 with a hex key and hex data (RFC 4231 vector, tested)
+fun pcHmacHex(keyHex, dataHex) {
+    let d = "";
+    if (len(dataHex) > 0) { d = sec.hexDecode(dataHex); }
+    let k = "";
+    if (len(keyHex) > 0) { k = sec.hexDecode(keyHex); }
+    return sec.hmacSha256(k, d);
+}
+
+fun pcHmacText(keyHex, txt) { return pcHmacHex(keyHex, pcHexOf(txt)); }
+
+fun pcSha256Hex(dataHex) {
+    if (len(dataHex) == 0) { return sec.sha256(""); }
+    return sec.sha256(sec.hexDecode(dataHex));
+}
+
+// F: sha256 double
+fun pcDoubleSha(txt) {
+    return pcSha256Hex(sec.sha256(toString(txt)));
+}
+
+// F: readable fingerprint ab:cd:ef:... (10 bytes)
+fun pcFingerprint(data) {
+    let h = sec.sha256(toString(data));
+    let parts = [];
+    let i = 0;
+    while (i < 10) { push(parts, substr(h, i * 2, 2)); i = i + 1; }
+    return join(parts, ":");
+}
+
+// F: short hash (n bytes)
+fun pcShortHash(data, bytes) {
+    return substr(sec.sha256(toString(data)), 0, bytes * 2);
+}
+
+// F: file hash
+fun pcHashFile(path) {
+    if (fileExists(path) == false) { return { ok: false, error: "File not found: " + path }; }
+    return { ok: true, sha256: sec.sha256(readFile(path)) };
+}
+
+// F: hash chain (hash chain) of items; any change breaks everything after it
+fun pcHashChain(items) {
+    let prev = PC_ZERO32;
+    let links = [];
+    let i = 0;
+    while (i < len(items)) {
+        let h = sec.sha256(prev + "|" + toString(items[i]));
+        push(links, { item: toString(items[i]), prev: prev, hash: h });
+        prev = h;
+        i = i + 1;
+    }
+    return { head: prev, links: links };
+}
+
+fun pcHashChainVerify(links) {
+    let prev = PC_ZERO32;
+    let i = 0;
+    while (i < len(links)) {
+        let l = links[i];
+        if (l["prev"] != prev) { return { ok: false, brokenAt: i }; }
+        if (sec.sha256(prev + "|" + l["item"]) != l["hash"]) { return { ok: false, brokenAt: i }; }
+        prev = l["hash"];
+        i = i + 1;
+    }
+    return { ok: true, head: prev };
+}
+
+// F: Merkle tree root (domain separation L:/N: against leaf/node attacks)
+fun pcMerkleLevel(nodes) {
+    let next = [];
+    let i = 0;
+    while (i < len(nodes)) {
+        if (i + 1 < len(nodes)) { push(next, sec.sha256("N:" + nodes[i] + nodes[i + 1])); }
+        else { push(next, nodes[i]); }
+        i = i + 2;
+    }
+    return next;
+}
+
+fun pcMerkleRoot(leaves) {
+    if (len(leaves) == 0) { return sec.sha256("empty"); }
+    let level = [];
+    let i = 0;
+    while (i < len(leaves)) { push(level, sec.sha256("L:" + toString(leaves[i]))); i = i + 1; }
+    while (len(level) > 1) { level = pcMerkleLevel(level); }
+    return level[0];
+}
+
+// F: proof that a leaf belongs (index) to the tree
+fun pcMerkleProof(leaves, index) {
+    if (index < 0 or index >= len(leaves)) { return nil; }
+    let level = [];
+    let i = 0;
+    while (i < len(leaves)) { push(level, sec.sha256("L:" + toString(leaves[i]))); i = i + 1; }
+    let proof = [];
+    let idx = index;
+    while (len(level) > 1) {
+        if (idx % 2 == 0) {
+            if (idx + 1 < len(level)) { push(proof, { side: "r", hash: level[idx + 1] }); }
+        } else {
+            push(proof, { side: "l", hash: level[idx - 1] });
+        }
+        level = pcMerkleLevel(level);
+        idx = floor(idx / 2);
+    }
+    return proof;
+}
+
+fun pcMerkleVerify(leaf, proof, root) {
+    let h = sec.sha256("L:" + toString(leaf));
+    let i = 0;
+    while (i < len(proof)) {
+        if (proof[i]["side"] == "r") { h = sec.sha256("N:" + h + proof[i]["hash"]); }
+        else { h = sec.sha256("N:" + proof[i]["hash"] + h); }
+        i = i + 1;
+    }
+    return sec.constantTimeEqual(h, root);
+}
+
+// ---- 4) Key derivation (KDF) -------------------------------------------------------------
+
+// F: HKDF-Extract (RFC 5869)
+fun pcHkdfExtract(saltHex, ikmHex) {
+    let s = saltHex;
+    if (s == nil or s == "") { s = PC_ZERO32; }
+    return pcHmacHex(s, ikmHex);
+}
+
+// F: HKDF-Expand (RFC 5869) — length in bytes
+fun pcHkdfExpand(prkHex, infoHex, length) {
+    let n = ceil(length / 32);
+    if (n > 255 or n < 1) { return nil; }
+    let t = "";
+    let okm = "";
+    let i = 1;
+    while (i <= n) {
+        t = pcHmacHex(prkHex, t + infoHex + pcToHex(i, 2));
+        okm = okm + t;
+        i = i + 1;
+    }
+    return substr(okm, 0, length * 2);
+}
+
+// F: HKDF complete
+fun pcHkdf(ikmHex, saltHex, infoHex, length) {
+    return pcHkdfExpand(pcHkdfExtract(saltHex, ikmHex), infoHex, length);
+}
+
+// F: PBKDF2-HMAC-SHA256 — password text, saltHex, result hex
+fun pcPbkdf2(password, saltHex, iterations, bytes) {
+    let blocks = ceil(bytes / 32);
+    let out = "";
+    let b = 1;
+    while (b <= blocks) {
+        let u = sec.hmacSha256(password, sec.hexDecode(saltHex + pcToHex(b, 8)));
+        let ru = sec.hexDecode(u);
+        let t = ru;
+        let i = 1;
+        while (i < iterations) {
+            u = sec.hmacSha256(password, ru);
+            ru = sec.hexDecode(u);
+            t = sec.xorCipher(t, ru);
+            i = i + 1;
+        }
+        out = out + sec.hexEncode(t);
+        b = b + 1;
+    }
+    return substr(out, 0, bytes * 2);
+}
+
+// F: random key (hex)
+fun pcGenerateKey(bytes) {
+    let b = 32;
+    if (bytes != nil) { b = bytes; }
+    return sec.randomToken(b);
+}
+
+// F: key id (kid) of 4 bytes that does not reveal the key
+fun pcKeyId(keyHex) {
+    return substr(sec.sha256("pc-kid:" + keyHex), 0, 8);
+}
+
+// F: sub-key for a specific purpose from the master key (domain separation)
+fun pcDeriveSubkey(masterHex, purpose) {
+    return pcHkdf(masterHex, "", pcHexOf("pc-sub:" + purpose), 32);
+}
+
+// F: key quality check (32 bytes, not repeated/zero)
+fun pcKeyCheck(keyHex) {
+    if (pcIsHex(keyHex) == false or len(keyHex) != 64) { return { ok: false, error: "The key must be 64 hex characters (32 bytes)" }; }
+    let seen = "";
+    let i = 0;
+    while (i < 64) {
+        let c = charAt(keyHex, i);
+        if (contains(seen, c) == false) { seen = seen + c; }
+        i = i + 1;
+    }
+    if (len(seen) < 6) { return { ok: false, error: "The key is weak (very low variety)" }; }
+    return { ok: true };
+}
+
+// F: key from a password (PBKDF2) — returns the salt and iterations so it can be re-derived
+fun pcKeyFromPassword(password, opts) {
+    let iter = 2000;
+    let saltHex = sec.randomToken(16);
+    if (opts != nil) {
+        if (has(opts, "iterations")) { iter = opts["iterations"]; }
+        if (has(opts, "salt")) { saltHex = opts["salt"]; }
+    }
+    if (iter < 1) { return { ok: false, error: "iterations must be >= 1" }; }
+    return { ok: true, key: pcPbkdf2(password, saltHex, iter, 32), salt: saltHex, iterations: iter };
+}
+
+// F: Pass the password through a "secret salt" (pepper) kept private before the stored hashing
+fun pcPepper(password, pepperHex) {
+    return pcHmacText(pepperHex, password);
+}
+
+// ---- 5) Authenticated encryption (AEAD composite) ---------------------------------------------------------
+
+fun pcSubkeys(keyHex, nonceHex) {
+    let prk = pcHkdfExtract(nonceHex, keyHex);
+    return { enc: pcHkdfExpand(prk, pcHexOf("pc-enc-v1"), 32), mac: pcHkdfExpand(prk, pcHexOf("pc-mac-v1"), 32) };
+}
+
+fun pcKeystream(encHex, nonceHex, nbytes) {
+    let blocks = ceil(nbytes / 32);
+    let ks = "";
+    let i = 0;
+    while (i < blocks) {
+        ks = ks + pcHmacHex(encHex, nonceHex + pcToHex(i, 8));
+        i = i + 1;
+    }
+    return substr(ks, 0, nbytes * 2);
+}
+
+fun pcTag(macHex, nonceHex, aadHex, ctHex) {
+    return pcHmacHex(macHex, pcHexOf("pc1|") + nonceHex + pcToHex(len(aadHex) / 2, 8) + aadHex + ctHex);
+}
+
+// F: authenticated encryption; aad (optional) = associated data that is signed but not encrypted (binds the ciphertext to its context)
+// Format: pc1.<nonce>.<ciphertext>.<tag>
+fun pcSeal(keyHex, plaintext, aad) {
+    let kc = pcKeyCheck(keyHex);
+    if (kc["ok"] == false) { return { ok: false, error: kc["error"] }; }
+    let nonce = sec.randomToken(16);
+    let sk = pcSubkeys(keyHex, nonce);
+    let ptHex = pcHexOf(plaintext);
+    let ct = "";
+    if (len(ptHex) > 0) { ct = pcXorHex(ptHex, pcKeystream(sk["enc"], nonce, len(ptHex) / 2)); }
+    let aadHex = "";
+    if (aad != nil) { aadHex = pcHexOf(aad); }
+    let tag = pcTag(sk["mac"], nonce, aadHex, ct);
+    return { ok: true, sealed: "pc1." + nonce + "." + ct + "." + tag };
+}
+
+// F: decrypt after verifying the tag in constant time (any tampering, different aad or wrong key fails)
+fun pcOpen(keyHex, sealed, aad) {
+    let kc = pcKeyCheck(keyHex);
+    if (kc["ok"] == false) { return { ok: false, error: kc["error"] }; }
+    if (type(sealed) != "string") { return { ok: false, error: "The ciphertext is invalid" }; }
+    let parts = split(sealed, ".");
+    if (len(parts) != 4 or parts[0] != "pc1") { return { ok: false, error: "Unknown format" }; }
+    let nonce = parts[1];
+    let ct = parts[2];
+    let tag = parts[3];
+    if (len(nonce) != 32 or pcIsHex(nonce) == false or pcIsHex(ct) == false or len(tag) != 64 or pcIsHex(tag) == false) {
+        return { ok: false, error: "Corrupt format" };
+    }
+    let sk = pcSubkeys(keyHex, nonce);
+    let aadHex = "";
+    if (aad != nil) { aadHex = pcHexOf(aad); }
+    if (sec.constantTimeEqual(pcTag(sk["mac"], nonce, aadHex, ct), tag) == false) {
+        return { ok: false, error: "Integrity check failed (wrong key, modified data or different context)" };
+    }
+    if (len(ct) == 0) { return { ok: true, plaintext: "" }; }
+    let ptHex = pcXorHex(ct, pcKeystream(sk["enc"], nonce, len(ct) / 2));
+    return { ok: true, plaintext: sec.hexDecode(ptHex) };
+}
+
+// F: encrypt an object (map/array) as JSON
+fun pcSealObject(keyHex, obj, aad) {
+    return pcSeal(keyHex, jsonEncode(obj), aad);
+}
+
+fun pcOpenObject(keyHex, sealed, aad) {
+    let r = pcOpen(keyHex, sealed, aad);
+    if (r["ok"] == false) { return r; }
+    return { ok: true, value: jsonDecode(r["plaintext"]) };
+}
+
+// F: encrypt with a password (PBKDF2 + salt embedded in the output): pcp1.<iter>.<salt>.<pc1...>
+fun pcSealWithPassword(password, plaintext, opts) {
+    let kd = pcKeyFromPassword(password, opts);
+    if (kd["ok"] == false) { return kd; }
+    let s = pcSeal(kd["key"], plaintext, "pcp1");
+    if (s["ok"] == false) { return s; }
+    return { ok: true, sealed: "pcp1." + toString(kd["iterations"]) + "." + kd["salt"] + "." + s["sealed"] };
+}
+
+fun pcOpenWithPassword(password, sealed) {
+    if (type(sealed) != "string") { return { ok: false, error: "The ciphertext is invalid" }; }
+    let parts = split(sealed, ".");
+    if (len(parts) != 7 or parts[0] != "pcp1") { return { ok: false, error: "Unknown format" }; }
+    let iterTxt = parts[1];
+    let i = 0;
+    while (i < len(iterTxt)) {
+        if (contains("0123456789", charAt(iterTxt, i)) == false) { return { ok: false, error: "Corrupt iteration count" }; }
+        i = i + 1;
+    }
+    if (len(iterTxt) == 0 or len(iterTxt) > 7 or pcIsHex(parts[2]) == false) { return { ok: false, error: "Corrupt format" }; }
+    let key = pcPbkdf2(password, parts[2], toNumber(iterTxt), 32);
+    return pcOpen(key, join([parts[3], parts[4], parts[5], parts[6]], "."), "pcp1");
+}
+
+// ---- 6) Keyring (Keyring) and key rotation ---------------------------------------------------
+
+// F: a new keyring with an active key
+fun pcKeyringNew() {
+    let k = pcGenerateKey(32);
+    let kid = pcKeyId(k);
+    let ring = { active: kid, keys: {} };
+    ring["keys"][kid] = k;
+    return ring;
+}
+
+// F: add a key (and optionally make it active)
+fun pcKeyringAdd(ring, keyHex, makeActive) {
+    let kc = pcKeyCheck(keyHex);
+    if (kc["ok"] == false) { return kc; }
+    let kid = pcKeyId(keyHex);
+    ring["keys"][kid] = keyHex;
+    if (makeActive == true) { ring["active"] = kid; }
+    return { ok: true, kid: kid };
+}
+
+// F: rotation: a new active key, and the old ones stay for decryption only
+fun pcKeyringRotate(ring) {
+    return pcKeyringAdd(ring, pcGenerateKey(32), true);
+}
+
+// F: encrypt with the active key and embed the kid: pck1.<kid>.<pc1...>
+fun pcKeyringSeal(ring, plaintext, aad) {
+    let kid = ring["active"];
+    let s = pcSeal(ring["keys"][kid], plaintext, aad);
+    if (s["ok"] == false) { return s; }
+    return { ok: true, sealed: "pck1." + kid + "." + s["sealed"], kid: kid };
+}
+
+fun pcKeyringKid(sealed) {
+    if (type(sealed) != "string") { return nil; }
+    let parts = split(sealed, ".");
+    if (len(parts) != 6 or parts[0] != "pck1") { return nil; }
+    return parts[1];
+}
+
+// F: decrypt, picking the right key automatically from the kid
+fun pcKeyringOpen(ring, sealed, aad) {
+    let kid = pcKeyringKid(sealed);
+    if (kid == nil) { return { ok: false, error: "Unknown keyring format" }; }
+    if (has(ring["keys"], kid) == false) { return { ok: false, error: "Unknown key in the keyring: " + kid }; }
+    let parts = split(sealed, ".");
+    let r = pcOpen(ring["keys"][kid], join([parts[2], parts[3], parts[4], parts[5]], "."), aad);
+    if (r["ok"]) { r["kid"] = kid; }
+    return r;
+}
+
+// F: re-encrypt with the active key (after rotation) without changing the content
+fun pcKeyringRewrap(ring, sealed, aad) {
+    let o = pcKeyringOpen(ring, sealed, aad);
+    if (o["ok"] == false) { return o; }
+    if (o["kid"] == ring["active"]) { return { ok: true, sealed: sealed, rewrapped: false }; }
+    let s = pcKeyringSeal(ring, o["plaintext"], aad);
+    if (s["ok"]) { s["rewrapped"] = true; }
+    return s;
+}
+
+// ---- 7) Envelope encryption (Envelope) ------------------------------------------------------------------
+
+// F: a random data key wrapped by a master key: pce1~<wrapped>~<body>
+fun pcEnvelopeSeal(masterHex, plaintext, aad) {
+    let dk = pcGenerateKey(32);
+    let w = pcSeal(masterHex, dk, "pc-wrap");
+    if (w["ok"] == false) { return w; }
+    let b = pcSeal(dk, plaintext, aad);
+    return { ok: true, sealed: "pce1~" + w["sealed"] + "~" + b["sealed"] };
+}
+
+fun pcEnvelopeOpen(masterHex, envelope, aad) {
+    if (type(envelope) != "string") { return { ok: false, error: "Invalid envelope" }; }
+    let parts = split(envelope, "~");
+    if (len(parts) != 3 or parts[0] != "pce1") { return { ok: false, error: "Unknown envelope format" }; }
+    let w = pcOpen(masterHex, parts[1], "pc-wrap");
+    if (w["ok"] == false) { return w; }
+    return pcOpen(w["plaintext"], parts[2], aad);
+}
+
+// F: master key rotation: only the data key is re-wrapped, the large body is untouched
+fun pcEnvelopeRewrap(oldMasterHex, newMasterHex, envelope) {
+    let parts = split(envelope, "~");
+    if (len(parts) != 3 or parts[0] != "pce1") { return { ok: false, error: "Unknown envelope format" }; }
+    let w = pcOpen(oldMasterHex, parts[1], "pc-wrap");
+    if (w["ok"] == false) { return w; }
+    let nw = pcSeal(newMasterHex, w["plaintext"], "pc-wrap");
+    if (nw["ok"] == false) { return nw; }
+    return { ok: true, sealed: "pce1~" + nw["sealed"] + "~" + parts[2] };
+}
+
+// ---- 8) Signing and tokens ---------------------------------------------------------------------------
+
+// F: detached signature (HMAC) in base64url format
+fun pcSign(keyHex, data) {
+    return pcB64UrlEncodeHex(pcHmacText(keyHex, toString(data)));
+}
+
+fun pcVerifySig(keyHex, data, sig) {
+    return sec.constantTimeEqual(pcSign(keyHex, data), toString(sig));
+}
+
+// F: signed token (JWT-HS256 simplified). opts: { now, ttl, iss, aud, nbf }
+fun pcTokenSign(claims, keyHex, opts) {
+    let kc = pcKeyCheck(keyHex);
+    if (kc["ok"] == false) { return { ok: false, error: kc["error"] }; }
+    let now = 0;
+    if (opts != nil and has(opts, "now")) { now = opts["now"]; }
+    let p = {};
+    for (let k in keys(claims)) { p[k] = claims[k]; }
+    p["iat"] = now;
+    p["jti"] = sec.randomToken(8);
+    if (opts != nil) {
+        if (has(opts, "ttl")) { p["exp"] = now + opts["ttl"]; }
+        if (has(opts, "nbf")) { p["nbf"] = opts["nbf"]; }
+        if (has(opts, "iss")) { p["iss"] = opts["iss"]; }
+        if (has(opts, "aud")) { p["aud"] = opts["aud"]; }
+    }
+    let h = pcB64UrlEncode("{\"alg\":\"HS256\",\"typ\":\"PCT\"}");
+    let b = pcB64UrlEncode(jsonEncode(p));
+    return { ok: true, token: h + "." + b + "." + pcSign(keyHex, h + "." + b), claims: p };
+}
+
+// F: verification: the HS256 algorithm only (rejects alg:none), signature, exp/nbf/iss/aud
+fun pcTokenVerify(token, keyHex, opts) {
+    if (type(token) != "string") { return { ok: false, reason: "malformed", error: "Invalid token" }; }
+    let parts = split(token, ".");
+    if (len(parts) != 3) { return { ok: false, reason: "malformed", error: "Invalid token" }; }
+    let hj = pcB64UrlDecode(parts[0]);
+    if (hj == nil) { return { ok: false, reason: "malformed", error: "Corrupt header" }; }
+    let header = jsonDecode(hj);
+    if (type(header) != "map" or has(header, "alg") == false or header["alg"] != "HS256") {
+        return { ok: false, reason: "alg", error: "Algorithm not allowed" };
+    }
+    if (pcVerifySig(keyHex, parts[0] + "." + parts[1], parts[2]) == false) {
+        return { ok: false, reason: "signature", error: "Incorrect signature" };
+    }
+    let pj = pcB64UrlDecode(parts[1]);
+    if (pj == nil) { return { ok: false, reason: "malformed", error: "Corrupt payload" }; }
+    let c = jsonDecode(pj);
+    if (type(c) != "map") { return { ok: false, reason: "malformed", error: "Corrupt payload" }; }
+    let now = 0;
+    if (opts != nil and has(opts, "now")) { now = opts["now"]; }
+    if (has(c, "exp") and now >= c["exp"]) { return { ok: false, reason: "expired", error: "The token has expired" }; }
+    if (has(c, "nbf") and now < c["nbf"]) { return { ok: false, reason: "nbf", error: "The token is not valid yet" }; }
+    if (opts != nil and has(opts, "iss") and (has(c, "iss") == false or c["iss"] != opts["iss"])) { return { ok: false, reason: "iss", error: "Unexpected issuer" }; }
+    if (opts != nil and has(opts, "aud") and (has(c, "aud") == false or c["aud"] != opts["aud"])) { return { ok: false, reason: "aud", error: "Unexpected audience" }; }
+    return { ok: true, claims: c };
+}
+
+// F: signed URL with expiry: ...?exp=N&sig=...
+fun pcSignUrl(url, keyHex, expiresAt) {
+    let sep = "?";
+    if (contains(url, "?")) { sep = "&"; }
+    let base = url + sep + "exp=" + toString(expiresAt);
+    return base + "&sig=" + pcSign(keyHex, base);
+}
+
+fun pcVerifyUrl(url, keyHex, nowSec) {
+    let parts = split(url, "&sig=");
+    if (len(parts) < 2) { return { ok: false, error: "No signature" }; }
+    let sig = parts[len(parts) - 1];
+    let base = parts[0];
+    let i = 1;
+    while (i < len(parts) - 1) { base = base + "&sig=" + parts[i]; i = i + 1; }
+    if (pcVerifySig(keyHex, base, sig) == false) { return { ok: false, error: "The URL signature is incorrect" }; }
+    let ep = split(base, "exp=");
+    let expTxt = ep[len(ep) - 1];
+    let j = 0;
+    if (len(expTxt) == 0) { return { ok: false, error: "Missing expiry" }; }
+    while (j < len(expTxt)) {
+        if (contains("0123456789", charAt(expTxt, j)) == false) { return { ok: false, error: "Corrupt expiry" }; }
+        j = j + 1;
+    }
+    if (nowSec >= toNumber(expTxt)) { return { ok: false, error: "The URL has expired" }; }
+    return { ok: true, expiresAt: toNumber(expTxt) };
+}
+
+// F: API request signing (canonical): METHOD\npath\nsha256(body)\nts\nnonce
+fun pcRequestCanonical(method, path, body, ts, nonce) {
+    return upper(method) + "\n" + path + "\n" + sec.sha256(toString(body)) + "\n" + toString(ts) + "\n" + nonce;
+}
+
+fun pcSignRequest(method, path, body, keyHex, ts, nonce) {
+    let n = nonce;
+    if (n == nil) { n = sec.randomToken(8); }
+    let sig = pcSign(keyHex, pcRequestCanonical(method, path, body, ts, n));
+    return { ok: true, ts: ts, nonce: n, sig: sig, headers: { "X-Pk-Timestamp": toString(ts), "X-Pk-Nonce": n, "X-Pk-Signature": sig } };
+}
+
+// F: verify with a time window and replay prevention (replay) via a shared nonces map (mutated in place)
+fun pcVerifyRequest(method, path, body, keyHex, ts, nonce, sig, nowSec, skewSec, seen) {
+    let d = nowSec - ts;
+    if (d < 0) { d = 0 - d; }
+    if (d > skewSec) { return { ok: false, reason: "skew", error: "The request is outside the time window" }; }
+    if (seen != nil and has(seen, nonce)) { return { ok: false, reason: "replay", error: "nonce already used (replay)" }; }
+    if (pcVerifySig(keyHex, pcRequestCanonical(method, path, body, ts, nonce), sig) == false) {
+        return { ok: false, reason: "signature", error: "Incorrect request signature" };
+    }
+    if (seen != nil) { seen[nonce] = ts; }
+    return { ok: true };
+}
+
+// ---- 9) One-time passwords (HOTP/TOTP) and recovery --------------------------------------------------------
+
+// F: HOTP (RFC 4226 with HMAC-SHA256)
+fun pcHotp(secretHex, counter, digits) {
+    let d = 6;
+    if (digits != nil) { d = digits; }
+    let mac = pcHmacHex(secretHex, pcToHex(counter, 16));
+    let off = pcByteAt(mac, 31) % 16;
+    let bin = (pcByteAt(mac, off) % 128) * 16777216 + pcByteAt(mac, off + 1) * 65536 + pcByteAt(mac, off + 2) * 256 + pcByteAt(mac, off + 3);
+    let code = toString(bin % pow(10, d));
+    while (len(code) < d) { code = "0" + code; }
+    return code;
+}
+
+// F: TOTP (RFC 6238 with SHA256)
+fun pcTotp(secretHex, nowSec, step, digits) {
+    let s = 30;
+    if (step != nil) { s = step; }
+    return pcHotp(secretHex, floor(nowSec / s), digits);
+}
+
+// F: verify with a window ±window (compensates for clock drift) in constant time
+fun pcTotpVerify(secretHex, code, nowSec, window, digits) {
+    let w = 1;
+    if (window != nil) { w = window; }
+    let found = false;
+    let at = 0;
+    let o = 0 - w;
+    while (o <= w) {
+        if (sec.constantTimeEqual(pcTotp(secretHex, nowSec + o * 30, 30, digits), toString(code))) { found = true; at = o; }
+        o = o + 1;
+    }
+    return { ok: found, offset: at };
+}
+
+fun pcUrlEncode(s) {
+    let hex = sec.hexEncode(toString(s));
+    let keep = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_.~";
+    let out = "";
+    let i = 0;
+    while (i < len(hex) / 2) {
+        let b = pcByteAt(hex, i);
+        if (b < 128 and contains(keep, chr(b))) { out = out + chr(b); }
+        else { out = out + "%" + upper(pcToHex(b, 2)); }
+        i = i + 1;
+    }
+    return out;
+}
+
+// F: an otpauth:// link for authenticator apps (QR)
+fun pcOtpAuthUri(issuer, account, secretHex, opts) {
+    let digits = 6;
+    let period = 30;
+    if (opts != nil) {
+        if (has(opts, "digits")) { digits = opts["digits"]; }
+        if (has(opts, "period")) { period = opts["period"]; }
+    }
+    return "otpauth://totp/" + pcUrlEncode(issuer) + ":" + pcUrlEncode(account) + "?secret=" + pcBase32EncodeHex(secretHex)
+        + "&issuer=" + pcUrlEncode(issuer) + "&algorithm=SHA256&digits=" + toString(digits) + "&period=" + toString(period);
+}
+
+fun pcRecoveryNormalize(code) {
+    return replace(replace(upper(toString(code)), "-", ""), " ", "");
+}
+
+// F: one-time recovery codes; shown once, only the hash is stored
+fun pcRecoveryCodes(n) {
+    let codes = [];
+    let hashes = [];
+    let i = 0;
+    while (i < n) {
+        let c = "";
+        let j = 0;
+        while (j < 10) { c = c + charAt(PC_B32, pcRandomInt(32)); j = j + 1; }
+        push(codes, substr(c, 0, 5) + "-" + substr(c, 5, 5));
+        push(hashes, sec.sha256("pcrc1:" + c));
+        i = i + 1;
+    }
+    return { codes: codes, hashes: hashes };
+}
+
+// F: consume a recovery code: returns the remaining list (the code is used once)
+fun pcRecoveryVerify(code, hashes) {
+    let h = sec.sha256("pcrc1:" + pcRecoveryNormalize(code));
+    let remaining = [];
+    let hit = false;
+    let i = 0;
+    while (i < len(hashes)) {
+        if (hit == false and sec.constantTimeEqual(hashes[i], h)) { hit = true; }
+        else { push(remaining, hashes[i]); }
+        i = i + 1;
+    }
+    return { ok: hit, remaining: remaining };
+}
+
+// ---- 10) Secret sharing (Shamir) over GF(256) -------------------------------------------------------------------
+
+let PC_GF = { exp: [], log: [], ready: false };
+
+fun pcGfAdd(a, b) {
+    let r = 0;
+    let p = 1;
+    let i = 0;
+    while (i < 8) {
+        let ba = floor(a / p) % 2;
+        let bb = floor(b / p) % 2;
+        if (ba != bb) { r = r + p; }
+        p = p * 2;
+        i = i + 1;
+    }
+    return r;
+}
+
+fun pcGfInit() {
+    if (PC_GF["ready"]) { return nil; }
+    let i = 0;
+    while (i < 256) { push(PC_GF["log"], 0); i = i + 1; }
+    let x = 1;
+    i = 0;
+    while (i < 255) {
+        push(PC_GF["exp"], x);
+        PC_GF["log"][x] = i;
+        let two = x * 2;
+        if (two >= 256) { two = pcGfAdd(two - 256, 27); }
+        x = pcGfAdd(x, two);
+        i = i + 1;
+    }
+    PC_GF["ready"] = true;
+    return nil;
+}
+
+fun pcGfMul(a, b) {
+    if (a == 0 or b == 0) { return 0; }
+    return PC_GF["exp"][(PC_GF["log"][a] + PC_GF["log"][b]) % 255];
+}
+
+fun pcGfDiv(a, b) {
+    if (a == 0) { return 0; }
+    return PC_GF["exp"][(PC_GF["log"][a] - PC_GF["log"][b] + 255) % 255];
+}
+
+// F: split a secret (hex) into n shares; k are enough to recover, and fewer than k reveal nothing
+fun pcShamirSplit(secretHex, n, k) {
+    if (pcIsHex(secretHex) == false or len(secretHex) == 0) { return { ok: false, error: "The secret must be non-empty hex" }; }
+    if (k < 2 or n < k or n > 255) { return { ok: false, error: "need 2 <= k <= n <= 255" }; }
+    pcGfInit();
+    let nb = len(secretHex) / 2;
+    let ys = [];
+    let s = 0;
+    while (s < n) { push(ys, ""); s = s + 1; }
+    let b = 0;
+    while (b < nb) {
+        let coef = [pcByteAt(secretHex, b)];
+        let c = 1;
+        while (c < k) { push(coef, pcRandomInt(256)); c = c + 1; }
+        let xi = 1;
+        while (xi <= n) {
+            let y = 0;
+            let d = k - 1;
+            while (d >= 0) {
+                y = pcGfAdd(pcGfMul(y, xi), coef[d]);
+                d = d - 1;
+            }
+            ys[xi - 1] = ys[xi - 1] + pcToHex(y, 2);
+            xi = xi + 1;
+        }
+        b = b + 1;
+    }
+    let shares = [];
+    let i = 0;
+    while (i < n) { push(shares, pcToHex(i + 1, 2) + "-" + ys[i]); i = i + 1; }
+    return { ok: true, shares: shares, threshold: k };
+}
+
+// F: recover the secret from k or more shares (Lagrange at zero)
+fun pcShamirCombine(shares) {
+    if (len(shares) < 2) { return { ok: false, error: "at least two shares" }; }
+    pcGfInit();
+    let xs = [];
+    let yh = [];
+    let i = 0;
+    while (i < len(shares)) {
+        let p = split(shares[i], "-");
+        if (len(p) != 2 or pcIsHex(p[0]) == false or len(p[0]) != 2 or pcIsHex(p[1]) == false) { return { ok: false, error: "Corrupt share" }; }
+        let x = pcHexToNum(p[0]);
+        if (x == 0 or contains(xs, x)) { return { ok: false, error: "Duplicate or invalid share" }; }
+        if (len(yh) > 0 and len(p[1]) != len(yh[0])) { return { ok: false, error: "Share lengths differ" }; }
+        push(xs, x);
+        push(yh, p[1]);
+        i = i + 1;
+    }
+    let nb = len(yh[0]) / 2;
+    let out = "";
+    let b = 0;
+    while (b < nb) {
+        let acc = 0;
+        let j = 0;
+        while (j < len(xs)) {
+            let num = 1;
+            let den = 1;
+            let m = 0;
+            while (m < len(xs)) {
+                if (m != j) {
+                    num = pcGfMul(num, xs[m]);
+                    den = pcGfMul(den, pcGfAdd(xs[m], xs[j]));
+                }
+                m = m + 1;
+            }
+            acc = pcGfAdd(acc, pcGfMul(pcByteAt(yh[j], b), pcGfDiv(num, den)));
+            j = j + 1;
+        }
+        out = out + pcToHex(acc, 2);
+        b = b + 1;
+    }
+    return { ok: true, secretHex: out };
+}
+)PKCRYPTOGRIN";
+static const char* kLib_passkitdb_og_rin = R"PKDBOGRIN(
+// ============================================================================
+//  lib/passkitdb.og.rin — Database and container layer for the Passkit family (prefix pd)
+//  Import:  @import "lib/passkitdb.og.rin";
+//
+//  Builds on Rin's native document containers (spawn("doc",...) + insertDoc/findDoc/queryDocs/
+//  updateDoc/deleteDoc/docIds + RCSQL) and on passkit (pk*) and passkitcrypt (pc*).
+//  Does not modify the engine. Time is always passed explicitly (nowSec) because Rin has no wall clock.
+//
+//  Sections:  1) CRUD and rules  2) Field encryption and the blind index  3) security models (users/sessions/
+//          API keys/audit/rate limiting/2FA)  4) Generic container (container) linking
+//  Convention: {ok:true,...} or {ok:false,error}.
+// ============================================================================
+
+@import "passkit";
+@import "passkitcrypt";
+
+let PDS = { tx: {} };
+
+// ---- Helpers ---------------------------------------------------------------------------
+
+fun pdOpt(opts, k, fallback) {
+    if (opts == nil) { return fallback; }
+    if (has(opts, k)) { return opts[k]; }
+    return fallback;
+}
+
+fun pdCopy(m) {
+    let out = {};
+    for (let k in keys(m)) { out[k] = m[k]; }
+    return out;
+}
+
+// Canonical text representation (sorted keys) of any value — the basis of integrity checks and hashing
+fun pdCanon(v) {
+    let t = type(v);
+    if (t == "map") {
+        let parts = [];
+        for (let k in sort(keys(v))) { push(parts, toString(k) + ":" + pdCanon(v[k])); }
+        return "{" + join(parts, ",") + "}";
+    }
+    if (t == "array") {
+        let parts = [];
+        let i = 0;
+        while (i < len(v)) { push(parts, pdCanon(v[i])); i = i + 1; }
+        return "[" + join(parts, ",") + "]";
+    }
+    if (t == "string") { return "\"" + v + "\""; }
+    return toString(v);
+}
+
+fun pdPad(n, width) {
+    let s = toString(n);
+    while (len(s) < width) { s = "0" + s; }
+    return s;
+}
+
+// ---- 1) CRUD and databases ------------------------------------------------------------------
+
+// F: create a table (a doc container) if it does not exist
+fun pdCreate(table) {
+    if (hasContainer(table)) { return { ok: true, created: false }; }
+    spawn("doc", table);
+    return { ok: true, created: true };
+}
+
+fun pdExists(table) { return hasContainer(table); }
+
+// F: drop a whole table
+fun pdDrop(table) {
+    if (hasContainer(table) == false) { return { ok: false, error: "Table not found: " + table }; }
+    container.remove(table);
+    return { ok: true };
+}
+
+// F: list of tables (doc containers only)
+fun pdTables() {
+    let out = [];
+    for (let n in container.names()) {
+        if (kindOf(n) == "doc") { push(out, n); }
+    }
+    return out;
+}
+
+fun pdCount(table) {
+    if (hasContainer(table) == false) { return 0; }
+    return len(docIds(table));
+}
+
+fun pdIds(table) {
+    if (hasContainer(table) == false) { return []; }
+    return docIds(table);
+}
+
+// F: insert a document; opts: { id, now, unique:"field" }
+fun pdInsert(table, rw, opts) {
+    pdCreate(table);
+    let id = pdOpt(opts, "id", sec.randomToken(8));
+    if (findDoc(table, id) != nil) { return { ok: false, error: "The id already exists: " + id }; }
+    let uf = pdOpt(opts, "unique", nil);
+    if (uf != nil and has(rw, uf) and len(queryDocs(table, uf, rw[uf])) > 0) {
+        return { ok: false, error: "Duplicate value in the unique field: " + uf };
+    }
+    let r = pdCopy(rw);
+    let t = pdOpt(opts, "now", nil);
+    if (t != nil) { r["createdAt"] = t; r["updatedAt"] = t; }
+    insertDoc(table, id, r);
+    return { ok: true, id: id };
+}
+
+// F: read a document by its id
+fun pdGet(table, id) {
+    if (hasContainer(table) == false) { return { ok: false, error: "Table not found: " + table }; }
+    let d = findDoc(table, id);
+    if (d == nil) { return { ok: false, error: "Not found: " + id }; }
+    let out = pdCopy(d);
+    out["_id"] = id;
+    return { ok: true, doc: out };
+}
+
+// F: update fields (opts.now opts.now updates updatedAt)
+fun pdUpdate(table, id, fields, opts) {
+    let g = pdGet(table, id);
+    if (g["ok"] == false) { return g; }
+    let f = pdCopy(fields);
+    let t = pdOpt(opts, "now", nil);
+    if (t != nil) { f["updatedAt"] = t; }
+    updateDoc(table, id, f);
+    return { ok: true, id: id };
+}
+
+// F: insert or update
+fun pdUpsert(table, id, rw, opts) {
+    if (hasContainer(table) and findDoc(table, id) != nil) { return pdUpdate(table, id, rw, opts); }
+    let o = {};
+    if (opts != nil) { o = pdCopy(opts); }
+    o["id"] = id;
+    return pdInsert(table, rw, o);
+}
+
+fun pdDelete(table, id) {
+    if (hasContainer(table) == false or findDoc(table, id) == nil) { return { ok: false, error: "Not found: " + id }; }
+    deleteDoc(table, id);
+    return { ok: true };
+}
+
+// F: all documents (with _id)
+fun pdAll(table) {
+    let out = [];
+    if (hasContainer(table) == false) { return out; }
+    for (let id in docIds(table)) {
+        let d = pdCopy(findDoc(table, id));
+        d["_id"] = id;
+        push(out, d);
+    }
+    return out;
+}
+
+// F: search by exact equality (accepts any characters such as @ and .)
+fun pdFind(table, field, value) {
+    if (hasContainer(table) == false) { return []; }
+    return queryDocs(table, field, value);
+}
+
+fun pdFindOne(table, field, value) {
+    let r = pdFind(table, field, value);
+    if (len(r) == 0) { return nil; }
+    return r[0];
+}
+
+// F: RCSQL query validated beforehand
+fun pdWhere(table, rcsql) {
+    if (hasContainer(table) == false) { return { ok: true, rows: [] }; }
+    let q = table;
+    if (rcsql != nil and rcsql != "") { q = table + " & " + rcsql; }
+    let v = sqlValidate(q);
+    if (v["ok"] == false) { return { ok: false, error: "RCSQL: " + toString(v["error"]) }; }
+    return { ok: true, rows: sql(q) };
+}
+
+// F: pagination (page starts from 1)
+fun pdPage(table, page, size) {
+    let all = pdAll(table);
+    let start = (page - 1) * size;
+    let rows = [];
+    let i = start;
+    while (i < len(all) and i < start + size) { push(rows, all[i]); i = i + 1; }
+    return { rows: rows, page: page, size: size, total: len(all), pages: ceil(len(all) / size) };
+}
+
+// F: insert with a unique field
+fun pdInsertUnique(table, rw, field, opts) {
+    let o = {};
+    if (opts != nil) { o = pdCopy(opts); }
+    o["unique"] = field;
+    return pdInsert(table, rw, o);
+}
+
+// F: validate a document against a schema: { field: { type, required, min, max, oneOf, startsWith } }
+fun pdValidate(rw, schema) {
+    let errors = [];
+    for (let f in keys(schema)) {
+        let rule = schema[f];
+        let present = has(rw, f) and rw[f] != nil;
+        if (present == false) {
+            if (has(rule, "required") and rule["required"]) { push(errors, f + ": required"); }
+        } else {
+            let v = rw[f];
+            if (has(rule, "type") and type(v) != rule["type"]) { push(errors, f + ": type must be " + rule["type"]); }
+            else {
+                let size = v;
+                if (type(v) == "string") { size = len(v); }
+                if (type(v) == "array") { size = len(v); }
+                if (type(size) == "number") {
+                    if (has(rule, "min") and size < rule["min"]) { push(errors, f + ": below the minimum " + toString(rule["min"])); }
+                    if (has(rule, "max") and size > rule["max"]) { push(errors, f + ": above the maximum " + toString(rule["max"])); }
+                }
+                if (has(rule, "oneOf") and contains(rule["oneOf"], v) == false) { push(errors, f + ": value not allowed"); }
+                if (has(rule, "startsWith") and type(v) == "string" and indexOf(v, rule["startsWith"]) != 0) { push(errors, f + ": must start with " + rule["startsWith"]); }
+            }
+        }
+    }
+    if (len(errors) == 0) { return { ok: true }; }
+    return { ok: false, errors: errors, error: join(errors, "; ") };
+}
+
+// F: soft delete, restore and cleanup
+fun pdSoftDelete(table, id, nowSec) {
+    return pdUpdate(table, id, { deletedAt: nowSec }, nil);
+}
+
+fun pdRestore(table, id) {
+    let g = pdGet(table, id);
+    if (g["ok"] == false) { return g; }
+    updateDoc(table, id, { deletedAt: nil });
+    return { ok: true, id: id };
+}
+
+fun pdActive(table) {
+    let out = [];
+    for (let d in pdAll(table)) {
+        if (has(d, "deletedAt") == false or d["deletedAt"] == nil) { push(out, d); }
+    }
+    return out;
+}
+
+// F: permanent delete of what was soft-deleted more than olderThanSec seconds ago
+fun pdPurgeDeleted(table, olderThanSec, nowSec) {
+    let n = 0;
+    for (let d in pdAll(table)) {
+        if (has(d, "deletedAt") and d["deletedAt"] != nil and nowSec - d["deletedAt"] >= olderThanSec) {
+            deleteDoc(table, d["_id"]);
+            n = n + 1;
+        }
+    }
+    return { ok: true, purged: n };
+}
+
+// F: persistent sequential counter per (table, name)
+fun pdNextId(table, name) {
+    pdCreate("_pd_seq");
+    let id = table + "." + name;
+    let d = findDoc("_pd_seq", id);
+    let n = 1;
+    if (d == nil) { insertDoc("_pd_seq", id, { n: 1 }); }
+    else { n = d["n"] + 1; updateDoc("_pd_seq", id, { n: n }); }
+    return n;
+}
+
+// F: transactions (Transactions) with snapshot and rollback
+fun pdBegin(table) {
+    if (hasContainer(table) == false) { return { ok: false, error: "Table not found" }; }
+    if (has(PDS["tx"], table)) { return { ok: false, error: "A transaction is already open" }; }
+    PDS["tx"][table] = pdAll(table);
+    return { ok: true };
+}
+
+fun pdInTx(table) { return has(PDS["tx"], table); }
+
+fun pdCommit(table) {
+    if (has(PDS["tx"], table) == false) { return { ok: false, error: "No transaction is open" }; }
+    let fresh = {};
+    for (let k in keys(PDS["tx"])) { if (k != table) { fresh[k] = PDS["tx"][k]; } }
+    PDS["tx"] = fresh;
+    return { ok: true };
+}
+
+fun pdRollback(table) {
+    if (has(PDS["tx"], table) == false) { return { ok: false, error: "No transaction is open" }; }
+    let snap = PDS["tx"][table];
+    for (let id in docIds(table)) { deleteDoc(table, id); }
+    for (let d in snap) {
+        let id = d["_id"];
+        let r = pdCopy(d);
+        let fresh = {};
+        for (let k in keys(r)) { if (k != "_id") { fresh[k] = r[k]; } }
+        insertDoc(table, id, fresh);
+    }
+    return pdCommit(table);
+}
+
+// F: full JSON snapshot and import
+fun pdExportJson(table) {
+    return jsonEncode(pdAll(table));
+}
+
+fun pdImportJson(table, json, replace) {
+    let rows = jsonDecode(json);
+    if (type(rows) != "array") { return { ok: false, error: "JSON must be an array of documents" }; }
+    pdCreate(table);
+    if (replace == true) { for (let id in docIds(table)) { deleteDoc(table, id); } }
+    let n = 0;
+    for (let r in rows) {
+        if (type(r) == "map" and has(r, "_id")) {
+            let f = {};
+            for (let k in keys(r)) { if (k != "_id") { f[k] = r[k]; } }
+            insertDoc(table, r["_id"], f);
+            n = n + 1;
+        }
+    }
+    return { ok: true, imported: n };
+}
+
+// F: integrity fingerprint for the whole table (id order does not matter)
+fun pdChecksum(table) {
+    let parts = [];
+    for (let d in pdAll(table)) { push(parts, d["_id"] + "=" + sec.sha256(pdCanon(d))); }
+    return sec.sha256(join(sort(parts), "|"));
+}
+
+// F: schema migrations (migrations): steps = [{version:1, run: fun(){...}}] are applied in order, once
+fun pdMigrate(name, steps) {
+    pdCreate("_pd_meta");
+    let id = "mig:" + name;
+    let cur = 0;
+    let d = findDoc("_pd_meta", id);
+    if (d != nil) { cur = d["version"]; }
+    let from = cur;
+    let applied = [];
+    for (let st in sort_by_version(steps)) {
+        if (st["version"] > cur) {
+            callFn(st["run"], []);
+            cur = st["version"];
+            push(applied, cur);
+        }
+    }
+    if (d == nil) { insertDoc("_pd_meta", id, { version: cur }); } else { updateDoc("_pd_meta", id, { version: cur }); }
+    return { ok: true, from: from, to: cur, applied: applied };
+}
+
+fun sort_by_version(steps) {
+    let out = [];
+    for (let s in steps) { push(out, s); }
+    let i = 0;
+    while (i < len(out)) {
+        let j = i + 1;
+        while (j < len(out)) {
+            if (out[j]["version"] < out[i]["version"]) { let t = out[i]; out[i] = out[j]; out[j] = t; }
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    return out;
+}
+
+// ---- 2) Field encryption and the blind index -------------------------------------------------------------
+
+// F: blind index: an HMAC of a normalized value with a sub-key — allows equality search without storing the plaintext
+fun pdBlindIndex(keyHex, field, value) {
+    let sub = pcDeriveSubkey(keyHex, "blind:" + field);
+    return substr(pcHmacText(sub, lower(trim(toString(value)))), 0, 32);
+}
+
+fun pdFieldAad(table, id, field) { return table + "." + id + "." + field; }
+
+// F: insert with encryption of certain fields (bound to the position through AAD so they cannot be moved between rows/fields)
+// opts: { id, now, blind:[fields] }
+fun pdInsertEnc(table, rw, keyHex, encFields, opts) {
+    let id = pdOpt(opts, "id", sec.randomToken(8));
+    let r = pdCopy(rw);
+    let blind = pdOpt(opts, "blind", []);
+    let done = [];
+    for (let f in encFields) {
+        if (has(r, f)) {
+            let s = pcSealObject(keyHex, { v: r[f] }, pdFieldAad(table, id, f));
+            if (s["ok"] == false) { return s; }
+            if (contains(blind, f)) { r[f + "_bi"] = pdBlindIndex(keyHex, f, r[f]); }
+            r[f] = s["sealed"];
+            push(done, f);
+        }
+    }
+    r["_enc"] = done;
+    let o = {};
+    if (opts != nil) { o = pdCopy(opts); }
+    o["id"] = id;
+    return pdInsert(table, r, o);
+}
+
+fun pdDecryptRow(table, id, rw, keyHex) {
+    let out = pdCopy(rw);
+    out["_id"] = id;
+    if (has(rw, "_enc")) {
+        for (let f in rw["_enc"]) {
+            let o = pcOpenObject(keyHex, rw[f], pdFieldAad(table, id, f));
+            if (o["ok"] == false) { return { ok: false, error: "Could not decrypt the field " + f + ": " + o["error"] }; }
+            out[f] = o["value"]["v"];
+        }
+    }
+    return { ok: true, doc: out };
+}
+
+// F: read with decryption
+fun pdGetDec(table, id, keyHex) {
+    let g = pdGet(table, id);
+    if (g["ok"] == false) { return g; }
+    return pdDecryptRow(table, id, g["doc"], keyHex);
+}
+
+// F: search by the blind index (the plain value is not stored)
+fun pdFindByBlind(table, field, value, keyHex) {
+    let rows = pdFind(table, field + "_bi", pdBlindIndex(keyHex, field, value));
+    let out = [];
+    for (let r in rows) { push(out, r); }
+    return out;
+}
+
+// F: database key rotation: re-encrypt all rows from an old key to a new one
+fun pdReencrypt(table, oldKey, newKey, encFields, blind) {
+    let n = 0;
+    for (let d in pdAll(table)) {
+        let id = d["_id"];
+        let dec = pdDecryptRow(table, id, d, oldKey);
+        if (dec["ok"] == false) { return dec; }
+        let upd = {};
+        for (let f in encFields) {
+            if (has(dec["doc"], f)) {
+                let s = pcSealObject(newKey, { v: dec["doc"][f] }, pdFieldAad(table, id, f));
+                upd[f] = s["sealed"];
+                if (contains(blind, f)) { upd[f + "_bi"] = pdBlindIndex(newKey, f, dec["doc"][f]); }
+            }
+        }
+        updateDoc(table, id, upd);
+        n = n + 1;
+    }
+    return { ok: true, reencrypted: n };
+}
+
+// F: encrypted backup of the whole table (authenticated and bound to the table name)
+fun pdExportEncrypted(table, keyHex) {
+    return pcSeal(keyHex, pdExportJson(table), "pdexport:" + table);
+}
+
+// sourceTable (optional): the table name the backup was exported from, when restoring under a new name
+fun pdImportEncrypted(table, keyHex, sealed, replace, sourceTable) {
+    let src = table;
+    if (sourceTable != nil) { src = sourceTable; }
+    let o = pcOpen(keyHex, sealed, "pdexport:" + src);
+    if (o["ok"] == false) { return o; }
+    return pdImportJson(table, o["plaintext"], replace);
+}
+
+// ---- 3) Ready-made security models ----------------------------------------------------------------------------
+
+fun pdEmailNorm(email) { return lower(trim(toString(email))); }
+
+fun pdEmailLooksValid(email) {
+    let p = split(email, "@");
+    if (len(p) != 2 or len(p[0]) < 1 or len(p[1]) < 3 or contains(p[1], ".") == false or contains(email, " ")) { return false; }
+    return true;
+}
+
+// F: users: the email is encrypted + a blind index for search, and the password is only a hash (pkHash) with a policy
+// opts: { policy, now, id, extra:{...} }
+fun pdUserCreate(table, keyHex, email, password, opts) {
+    let em = pdEmailNorm(email);
+    if (pdEmailLooksValid(em) == false) { return { ok: false, error: "Invalid email" }; }
+    if (hasContainer(table) and len(pdFindByBlind(table, "email", em, keyHex)) > 0) {
+        return { ok: false, error: "The email is already registered" };
+    }
+    let policy = pdOpt(opts, "policy", pkPolicyStandard());
+    let nowSec = pdOpt(opts, "now", 0);
+    let rec = pkRecordNew(password, policy, { email: em }, nowSec);
+    if (rec["ok"] == false) { return rec; }
+    let rw = pdCopy(rec["record"]);
+    rw["email"] = em;
+    let extra = pdOpt(opts, "extra", {});
+    for (let k in keys(extra)) { rw[k] = extra[k]; }
+    return pdInsertEnc(table, rw, keyHex, ["email"], { blind: ["email"], id: pdOpt(opts, "id", sec.randomToken(8)), now: nowSec });
+}
+
+fun pdUserRecord(d) {
+    return { hash: d["hash"], createdAt: d["createdAt"], changedAt: d["changedAt"], expiresAt: d["expiresAt"],
+             history: d["history"], failedAttempts: d["failedAttempts"], lockedUntil: d["lockedUntil"], mustChange: d["mustChange"] };
+}
+
+// F: login: a uniform message (does not reveal whether the email exists) + runs a dummy hash to equalize timing + lockout after attempts
+fun pdUserLogin(table, keyHex, email, password, opts) {
+    let em = pdEmailNorm(email);
+    let policy = pdOpt(opts, "policy", pkPolicyStandard());
+    let nowSec = pdOpt(opts, "now", 0);
+    let rows = [];
+    if (hasContainer(table)) { rows = pdFindByBlind(table, "email", em, keyHex); }
+    if (len(rows) == 0) {
+        pkVerify(password, pkHash("dummy", { iterations: policy["hashIterations"], salt: "00000000000000000000000000000000" }));
+        return { ok: false, reason: "wrong", error: "Incorrect login details" };
+    }
+    let rw = rows[0];
+    let id = "";
+    for (let d in pdAll(table)) { if (d["hash"] == rw["hash"]) { id = d["_id"]; } }
+    let r = pkLogin(pdUserRecord(rw), password, policy, nowSec);
+    let upd = {};
+    for (let k in keys(r["record"])) { upd[k] = r["record"][k]; }
+    updateDoc(table, id, upd);
+    if (r["ok"] == false) {
+        if (r["reason"] == "locked") { return { ok: false, reason: "locked", retryAfter: r["retryAfter"], error: "The account is temporarily locked" }; }
+        return { ok: false, reason: "wrong", error: "Incorrect login details" };
+    }
+    return { ok: true, id: id, reason: r["reason"], mustChange: r["mustChange"] };
+}
+
+// F: change password (policy + reuse prevention + history)
+fun pdUserChangePassword(table, keyHex, id, oldPw, newPw, opts) {
+    let g = pdGet(table, id);
+    if (g["ok"] == false) { return g; }
+    let policy = pdOpt(opts, "policy", pkPolicyStandard());
+    let nowSec = pdOpt(opts, "now", 0);
+    let c = pkChange(pdUserRecord(g["doc"]), oldPw, newPw, policy, nil, nowSec);
+    if (c["ok"] == false) { return c; }
+    updateDoc(table, id, c["record"]);
+    return { ok: true, id: id };
+}
+
+// F: sessions: the token is delivered once and only its sha256 is stored (a database leak does not reveal sessions)
+fun pdSessionCreate(table, userId, ttlSec, nowSec, meta) {
+    pdCreate(table);
+    let token = sec.randomToken(32);
+    let rw = { userId: userId, createdAt: nowSec, expiresAt: nowSec + ttlSec, revoked: false };
+    if (meta != nil) { for (let k in keys(meta)) { rw["meta_" + k] = meta[k]; } }
+    insertDoc(table, sec.sha256(token), rw);
+    return { ok: true, token: token, expiresAt: nowSec + ttlSec };
+}
+
+fun pdSessionCheck(table, token, nowSec) {
+    if (hasContainer(table) == false or type(token) != "string") { return { ok: false, reason: "invalid" }; }
+    let d = findDoc(table, sec.sha256(token));
+    if (d == nil) { return { ok: false, reason: "invalid" }; }
+    if (d["revoked"]) { return { ok: false, reason: "revoked" }; }
+    if (nowSec >= d["expiresAt"]) { return { ok: false, reason: "expired" }; }
+    return { ok: true, userId: d["userId"], expiresAt: d["expiresAt"] };
+}
+
+fun pdSessionRevoke(table, token) {
+    let id = sec.sha256(token);
+    if (hasContainer(table) == false or findDoc(table, id) == nil) { return { ok: false, error: "Session not found" }; }
+    updateDoc(table, id, { revoked: true });
+    return { ok: true };
+}
+
+// F: revoke all of a user's sessions (sign out from all devices)
+fun pdSessionRevokeUser(table, userId) {
+    let n = 0;
+    for (let d in pdFind(table, "userId", userId)) {
+        if (d["revoked"] == false) { n = n + 1; }
+    }
+    for (let id in pdIds(table)) {
+        let d = findDoc(table, id);
+        if (d["userId"] == userId and d["revoked"] == false) { updateDoc(table, id, { revoked: true }); }
+    }
+    return { ok: true, revoked: n };
+}
+
+fun pdSessionPurge(table, nowSec) {
+    let n = 0;
+    for (let id in pdIds(table)) {
+        let d = findDoc(table, id);
+        if (d["revoked"] or nowSec >= d["expiresAt"]) { deleteDoc(table, id); n = n + 1; }
+    }
+    return { ok: true, purged: n };
+}
+
+// F: API keys: <prefix>_<id>_<secret>; only sha256 is stored + scopes (scopes) + owner + expiry
+fun pdApiKeyCreate(table, owner, scopes, opts) {
+    pdCreate(table);
+    let prefix = pdOpt(opts, "prefix", "pk");
+    let nowSec = pdOpt(opts, "now", 0);
+    let id = sec.randomToken(4);
+    let key = prefix + "_" + id + "_" + sec.randomToken(24);
+    let rw = { owner: owner, scopes: scopes, hash: sec.sha256(key), createdAt: nowSec, revoked: false, expiresAt: 0 };
+    if (has(opts, "ttl")) { rw["expiresAt"] = nowSec + opts["ttl"]; }
+    insertDoc(table, id, rw);
+    return { ok: true, key: key, id: id };
+}
+
+fun pdApiKeyVerify(table, key, nowSec) {
+    if (type(key) != "string" or hasContainer(table) == false) { return { ok: false, reason: "invalid" }; }
+    // the prefix itself may contain underscores (sk_live), so read id and secret from the END
+    let parts = split(key, "_");
+    if (len(parts) < 3) { return { ok: false, reason: "invalid" }; }
+    let kid = parts[len(parts) - 2];
+    let d = findDoc(table, kid);
+    if (d == nil) { return { ok: false, reason: "invalid" }; }
+    if (sec.constantTimeEqual(sec.sha256(key), d["hash"]) == false) { return { ok: false, reason: "invalid" }; }
+    if (d["revoked"]) { return { ok: false, reason: "revoked" }; }
+    if (d["expiresAt"] > 0 and nowSec >= d["expiresAt"]) { return { ok: false, reason: "expired" }; }
+    return { ok: true, owner: d["owner"], scopes: d["scopes"], id: kid };
+}
+
+fun pdApiKeyHasScope(result, scope) {
+    if (result["ok"] == false) { return false; }
+    return contains(result["scopes"], scope) or contains(result["scopes"], "*");
+}
+
+fun pdApiKeyRevoke(table, id) {
+    if (hasContainer(table) == false or findDoc(table, id) == nil) { return { ok: false, error: "Key not found" }; }
+    updateDoc(table, id, { revoked: true });
+    return { ok: true };
+}
+
+// F: key rotation: a new one is created with the same scopes and the old one is revoked (replacedBy)
+fun pdApiKeyRotate(table, id, nowSec) {
+    let d = findDoc(table, id);
+    if (d == nil) { return { ok: false, error: "Key not found" }; }
+    let n = pdApiKeyCreate(table, d["owner"], d["scopes"], { now: nowSec });
+    updateDoc(table, id, { revoked: true, replacedBy: n["id"] });
+    return n;
+}
+
+// F: audit log linked by a hash chain (any edit/delete is detected)
+fun pdAuditLog(table, event, actor, data, nowSec) {
+    pdCreate(table);
+    pdCreate("_pd_meta");
+    let hid = "audit:" + table;
+    let head = findDoc("_pd_meta", hid);
+    let prev = PC_ZERO32;
+    if (head != nil) { prev = head["hash"]; }
+    let seq = pdNextId(table, "audit");
+    let entry = { seq: seq, event: event, actor: actor, data: data, at: nowSec, prev: prev };
+    let h = sec.sha256(prev + "|" + pdCanon(entry));
+    entry["hash"] = h;
+    insertDoc(table, pdPad(seq, 10), entry);
+    if (head == nil) { insertDoc("_pd_meta", hid, { hash: h }); } else { updateDoc("_pd_meta", hid, { hash: h }); }
+    return { ok: true, seq: seq, hash: h };
+}
+
+fun pdAuditVerify(table) {
+    let prev = PC_ZERO32;
+    let n = 0;
+    let ids = sort(pdIds(table));
+    for (let id in ids) {
+        let e = pdCopy(findDoc(table, id));
+        let stored = e["hash"];
+        let body = {};
+        for (let k in keys(e)) { if (k != "hash") { body[k] = e[k]; } }
+        if (e["prev"] != prev or sec.sha256(prev + "|" + pdCanon(body)) != stored) { return { ok: false, brokenAt: id }; }
+        prev = stored;
+        n = n + 1;
+    }
+    let head = findDoc("_pd_meta", "audit:" + table);
+    if (head != nil and head["hash"] != prev) { return { ok: false, brokenAt: "head (deleted from the end?)" }; }
+    return { ok: true, entries: n };
+}
+
+// F: rate limit with a fixed window per key (IP/user/API key)
+fun pdRateLimit(table, key, maxHits, windowSec, nowSec) {
+    pdCreate(table);
+    let id = substr(sec.sha256(toString(key)), 0, 16);
+    let d = findDoc(table, id);
+    if (d == nil or nowSec - d["start"] >= windowSec) {
+        if (d == nil) { insertDoc(table, id, { count: 1, start: nowSec }); }
+        else { updateDoc(table, id, { count: 1, start: nowSec }); }
+        return { ok: true, remaining: maxHits - 1, retryAfter: 0 };
+    }
+    if (d["count"] >= maxHits) { return { ok: false, remaining: 0, retryAfter: d["start"] + windowSec - nowSec }; }
+    updateDoc(table, id, { count: d["count"] + 1 });
+    return { ok: true, remaining: maxHits - d["count"] - 1, retryAfter: 0 };
+}
+
+// F: one-time reset tokens (stored hashed)
+fun pdResetCreate(table, userId, ttlSec, nowSec) {
+    pdCreate(table);
+    let token = sec.randomToken(32);
+    insertDoc(table, sec.sha256(token), { userId: userId, expiresAt: nowSec + ttlSec, used: false });
+    return { ok: true, token: token, expiresAt: nowSec + ttlSec };
+}
+
+fun pdResetConsume(table, token, nowSec) {
+    if (hasContainer(table) == false or type(token) != "string") { return { ok: false, reason: "invalid" }; }
+    let id = sec.sha256(token);
+    let d = findDoc(table, id);
+    if (d == nil) { return { ok: false, reason: "invalid" }; }
+    if (d["used"]) { return { ok: false, reason: "used" }; }
+    if (nowSec >= d["expiresAt"]) { return { ok: false, reason: "expired" }; }
+    updateDoc(table, id, { used: true });
+    return { ok: true, userId: d["userId"] };
+}
+
+// F: replay prevention: true only for the first use of a nonce
+fun pdNonceUse(table, nonce, nowSec, ttlSec) {
+    pdCreate(table);
+    let id = substr(sec.sha256(nonce), 0, 32);
+    let d = findDoc(table, id);
+    if (d != nil and nowSec < d["expiresAt"]) { return false; }
+    if (d == nil) { insertDoc(table, id, { expiresAt: nowSec + ttlSec }); }
+    else { updateDoc(table, id, { expiresAt: nowSec + ttlSec }); }
+    return true;
+}
+
+// F: enable 2FA (TOTP): the secret is encrypted with the key, and recovery codes are hashed
+fun pdTotpEnroll(table, keyHex, userId, issuer, account) {
+    pdCreate(table);
+    let secret = sec.randomToken(20);
+    let s = pcSeal(keyHex, secret, pdFieldAad(table, userId, "secret"));
+    let rc = pcRecoveryCodes(8);
+    let rw = { secret: s["sealed"], recovery: rc["hashes"], lastStep: 0, enabled: true };
+    if (findDoc(table, userId) == nil) { insertDoc(table, userId, rw); } else { updateDoc(table, userId, rw); }
+    return { ok: true, uri: pcOtpAuthUri(issuer, account, secret, nil), secretBase32: pcBase32EncodeHex(secret), recoveryCodes: rc["codes"] };
+}
+
+// F: 2FA check that prevents reuse of the same code (lastStep) or one-time recovery alternatives
+fun pdTotpCheck(table, keyHex, userId, code, nowSec) {
+    let d = findDoc(table, userId);
+    if (d == nil or d["enabled"] == false) { return { ok: false, reason: "not_enrolled" }; }
+    let o = pcOpen(keyHex, d["secret"], pdFieldAad(table, userId, "secret"));
+    if (o["ok"] == false) { return { ok: false, reason: "key" }; }
+    let step = floor(nowSec / 30);
+    let v = pcTotpVerify(o["plaintext"], code, nowSec, 1, 6);
+    if (v["ok"]) {
+        let used = step + v["offset"];
+        if (used <= d["lastStep"]) { return { ok: false, reason: "replay" }; }
+        updateDoc(table, userId, { lastStep: used });
+        return { ok: true, method: "totp" };
+    }
+    let rv = pcRecoveryVerify(code, d["recovery"]);
+    if (rv["ok"]) {
+        updateDoc(table, userId, { recovery: rv["remaining"] });
+        return { ok: true, method: "recovery", remaining: len(rv["remaining"]) };
+    }
+    return { ok: false, reason: "invalid" };
+}
+
+// ---- 4) Linking generic containers (container) ------------------------------------------------------------------
+
+// F: ensure a container of a kind exists (plain by default)
+fun pdContEnsure(name, kind) {
+    if (hasContainer(name)) { return { ok: true, created: false, kind: kindOf(name) }; }
+    let k = "plain";
+    if (kind != nil) { k = kind; }
+    spawn(k, name);
+    return { ok: true, created: true, kind: k };
+}
+
+fun pdContGet(name, field) {
+    if (hasContainer(name) == false) { return nil; }
+    return getField(name, field);
+}
+
+fun pdContSet(name, field, value) {
+    pdContEnsure(name, nil);
+    setField(name, field, value);
+    return { ok: true };
+}
+
+fun pdContHas(name, field) {
+    if (hasContainer(name) == false) { return false; }
+    return getField(name, field) != nil;
+}
+
+fun pdContDelete(name, field) {
+    if (hasContainer(name) == false) { return { ok: false, error: "The container does not exist" }; }
+    return { ok: container.deleteField(name, field) };
+}
+
+// F: all container fields as a map
+fun pdContToMap(name) {
+    let out = {};
+    if (hasContainer(name) == false) { return out; }
+    for (let e in container.entries(name)) { out[e[0]] = e[1]; }
+    return out;
+}
+
+// F: write a whole map into a container (prefix optional)
+fun pdContFromMap(name, m, prefix) {
+    pdContEnsure(name, nil);
+    let p = "";
+    if (prefix != nil) { p = prefix; }
+    let n = 0;
+    for (let k in keys(m)) { setField(name, p + k, m[k]); n = n + 1; }
+    return { ok: true, written: n };
+}
+
+fun pdContFields(name) {
+    return keys(pdContToMap(name));
+}
+
+fun pdContChecksum(name) {
+    return sec.sha256(pdCanon(pdContToMap(name)));
+}
+
+fun pdContExport(name) {
+    return jsonEncode(pdContToMap(name));
+}
+
+fun pdContImport(name, json) {
+    let m = jsonDecode(json);
+    if (type(m) != "map") { return { ok: false, error: "JSON must be an object" }; }
+    return pdContFromMap(name, m, nil);
+}
+
+fun pdContClone(name, newName) {
+    if (hasContainer(name) == false) { return { ok: false, error: "The container does not exist" }; }
+    pdContEnsure(newName, kindOf(name));
+    return pdContFromMap(newName, pdContToMap(name), nil);
+}
+
+// F: encrypt a field inside the container in place (AAD = container name.field) and decrypt it
+fun pdContSeal(name, field, keyHex) {
+    if (pdContHas(name, field) == false) { return { ok: false, error: "Field not found: " + field }; }
+    let s = pcSealObject(keyHex, { v: getField(name, field) }, name + "." + field);
+    if (s["ok"] == false) { return s; }
+    setField(name, field, s["sealed"]);
+    return { ok: true };
+}
+
+fun pdContOpen(name, field, keyHex) {
+    if (pdContHas(name, field) == false) { return { ok: false, error: "Field not found: " + field }; }
+    let o = pcOpenObject(keyHex, getField(name, field), name + "." + field);
+    if (o["ok"] == false) { return o; }
+    return { ok: true, value: o["value"]["v"] };
+}
+
+// F: encrypt all container fields at once / read them decrypted as a map without modifying the container
+fun pdContSealAll(name, keyHex) {
+    let n = 0;
+    for (let f in pdContFields(name)) {
+        let r = pdContSeal(name, f, keyHex);
+        if (r["ok"] == false) { return r; }
+        n = n + 1;
+    }
+    return { ok: true, sealed: n };
+}
+
+fun pdContOpenAll(name, keyHex) {
+    let out = {};
+    for (let f in pdContFields(name)) {
+        let r = pdContOpen(name, f, keyHex);
+        if (r["ok"] == false) { return r; }
+        out[f] = r["value"];
+    }
+    return { ok: true, values: out };
+}
+)PKDBOGRIN";
+static const char* kLib_passkitlang_og_rin = R"PASSKITLANGOGRIN(
+// ============================================================================
+//  lib/passkitlang.og.rin — interpreter of the <passkit> tag language as a library (auto-generated - do not edit by hand)
+//  Source: examples/customlang/passkit/  ·  Generator: tools/gen_passkitlang.py
+//  Import:
+//    @import "lib/passkitlang.og.rin";
+//
+//  From Rin:
+//    let r = passkitRun("signup.passkit", { email: "a@b.com" });   // {ok, output, vars, value, error, message}
+//    print passkitGet(r, "pw.strength");
+//    passkitRegister("double", fun(x) { return x * 2; });           // called from .passkit with <call fn="double" arg0="21"/>
+//  From .passkit:  <import file> · <run file name in.k=...> · <call fn=...> · <input> · <return>
+// ============================================================================
+
+@import "langkit";
+@import "passkit";
+@import "passkitcrypt";
+@import "passkitdb";
+
+// ───────── Lexer.rin ─────────
+// ============================================================================
+//  Lexer.rin — Stage 1 of the language "Passkit": text .passkit -> tokens
+//  Symbols: LT '<'  LTSLASH '</'  GT '>'  SLASHGT '/>'  IDENT  EQ  STRING
+// ============================================================================
+
+
+fun pkIdentChar(ch) {
+    return isAlnumChar(ch) or ch == "-" or ch == "." or ch == ":";
+}
+
+fun pkLex(source) {
+    let tokens = [];
+    let i = 0;
+    let line = 1;
+    let n = len(source);
+    let afterEq = false;
+
+    while (i < n) {
+        let ch = charAt(source, i);
+
+        if (isSpaceChar(ch)) {
+            i = i + 1;
+        } else if (isNewlineChar(ch)) {
+            line = line + 1;
+            i = i + 1;
+
+        // comment <!-- ... -->
+        } else if (ch == "<" and substr(source, i, 4) == "<!--") {
+            let close = indexOf(substr(source, i, n - i), "-->");
+            if (close < 0) {
+                push(tokens, langError("Lexer", "unterminated comment <!-- -->", line));
+                i = n;
+            } else {
+                let body = substr(source, i, close + 3);
+                let k = 0;
+                while (k < len(body)) { if (charAt(body, k) == "\n") { line = line + 1; } k = k + 1; }
+                i = i + close + 3;
+            }
+
+        } else if (ch == "<" and i + 1 < n and charAt(source, i + 1) == "/") {
+            push(tokens, makeToken("LTSLASH", "</", line)); i = i + 2; afterEq = false;
+        } else if (ch == "<") {
+            push(tokens, makeToken("LT", "<", line)); i = i + 1; afterEq = false;
+        } else if (ch == "/" and i + 1 < n and charAt(source, i + 1) == ">") {
+            push(tokens, makeToken("SLASHGT", "/>", line)); i = i + 2; afterEq = false;
+        } else if (ch == ">") {
+            push(tokens, makeToken("GT", ">", line)); i = i + 1; afterEq = false;
+        } else if (ch == "=") {
+            push(tokens, makeToken("EQ", "=", line)); i = i + 1; afterEq = true;
+
+        // attribute value between quotes "..." (supports any text including Arabic)
+        } else if (ch == "\"") {
+            let start = i + 1;
+            i = i + 1;
+            while (i < n and charAt(source, i) != "\"") {
+                if (charAt(source, i) == "\n") { line = line + 1; }
+                i = i + 1;
+            }
+            if (i >= n) {
+                push(tokens, langError("Lexer", "unterminated quoted string", line));
+            } else {
+                push(tokens, makeToken("STRING", substr(source, start, i - start), line));
+            }
+            i = i + 1;
+            afterEq = false;
+
+        // unquoted value after = (e.g. length=16)
+        } else if (afterEq) {
+            let start = i;
+            while (i < n and isSpaceChar(charAt(source, i)) == false and isNewlineChar(charAt(source, i)) == false
+                   and charAt(source, i) != ">" and pkNotSlashGt(source, i, n)) {
+                i = i + 1;
+            }
+            push(tokens, makeToken("STRING", substr(source, start, i - start), line));
+            afterEq = false;
+
+        // tag and attribute names: email / password / header.X-Key
+        } else if (isAlphaChar(ch)) {
+            let start = i;
+            while (i < n and pkIdentChar(charAt(source, i))) { i = i + 1; }
+            push(tokens, makeToken("IDENT", substr(source, start, i - start), line));
+
+        } else {
+            push(tokens, langError("Lexer", "unexpected character outside tags: '" + ch + "' (text is only written inside attribute values)", line));
+            i = i + 1;
+        }
+    }
+
+    push(tokens, eofToken(line));
+    return tokens;
+}
+
+fun pkNotSlashGt(source, i, n) {
+    if (charAt(source, i) == "/" and i + 1 < n and charAt(source, i + 1) == ">") { return false; }
+    return true;
+}
+
+// ───────── Parser.rin ─────────
+// ============================================================================
+//  Parser.rin — Stage 2 of "Passkit": tokens -> AST
+//
+//    program  -> element* EOF
+//    element  -> "<" IDENT attr* "/>"
+//              | "<" IDENT attr* ">" element* "</" IDENT ">"
+//    attr     -> IDENT ("=" STRING)?            // no value = flag (flag) with value "true"
+// ============================================================================
+
+
+fun pkKnownTags() {
+    return ["passkit", "set", "print", "if", "else", "for", "assert",
+            "email", "password", "apikey", "link", "api", "sql",
+            "input", "return", "import", "run", "call",
+            "crypt", "token", "otp", "db", "container"];
+}
+
+fun pkParseElement(tokens, pos) {
+    let line = pPeek(tokens, pos)["line"];
+    if (pCheck(tokens, pos, "LT") == false) {
+        let got = pPeek(tokens, pos);
+        return { node: langError("Parser", "expected a tag starting with '<' but found " + got["type"], got["line"]), pos: pos };
+    }
+    let a = pAdvance(tokens, pos); pos = a["pos"];
+    if (pCheck(tokens, pos, "IDENT") == false) {
+        return { node: langError("Parser", "expected a tag name after '<'", line), pos: pos };
+    }
+    let nameTok = pAdvance(tokens, pos); pos = nameTok["pos"];
+    let name = nameTok["tok"]["value"];
+    if (contains(pkKnownTags(), name) == false) {
+        return { node: langError("Parser", "unknown tag <" + name + ">", line), pos: pos };
+    }
+
+    let attrs = {};
+    while (pCheck(tokens, pos, "IDENT")) {
+        let k = pAdvance(tokens, pos); pos = k["pos"];
+        let key = k["tok"]["value"];
+        if (pCheck(tokens, pos, "EQ")) {
+            let e = pAdvance(tokens, pos); pos = e["pos"];
+            if (pCheck(tokens, pos, "STRING") == false) {
+                return { node: langError("Parser", "expected a string value for attribute '" + key + "'", line), pos: pos };
+            }
+            let v = pAdvance(tokens, pos); pos = v["pos"];
+            attrs[key] = v["tok"]["value"];
+        } else {
+            attrs[key] = "true";
+        }
+    }
+
+    if (pCheck(tokens, pos, "SLASHGT")) {
+        let c = pAdvance(tokens, pos);
+        return { node: astNode("Tag", line, { name: name, attrs: attrs, children: [] }), pos: c["pos"] };
+    }
+    if (pCheck(tokens, pos, "GT") == false) {
+        return { node: langError("Parser", "expected '>' or '/>' to end the tag <" + name + ">", line), pos: pos };
+    }
+    let g = pAdvance(tokens, pos); pos = g["pos"];
+
+    let children = [];
+    while (pCheck(tokens, pos, "LTSLASH") == false) {
+        if (pAtEnd(tokens, pos)) {
+            return { node: langError("Parser", "tag <" + name + "> is not closed, expected </" + name + ">", line), pos: pos };
+        }
+        let r = pkParseElement(tokens, pos);
+        if (isLangError(r["node"])) { return r; }
+        push(children, r["node"]);
+        pos = r["pos"];
+    }
+    let cl = pAdvance(tokens, pos); pos = cl["pos"];            // </
+    if (pCheck(tokens, pos, "IDENT") == false) {
+        return { node: langError("Parser", "expected a tag name after '</'", line), pos: pos };
+    }
+    let cn = pAdvance(tokens, pos); pos = cn["pos"];
+    if (cn["tok"]["value"] != name) {
+        return { node: langError("Parser", "closing </" + cn["tok"]["value"] + "> does not match <" + name + ">", cn["tok"]["line"]), pos: pos };
+    }
+    if (pCheck(tokens, pos, "GT") == false) {
+        return { node: langError("Parser", "expected '>' after </" + name, line), pos: pos };
+    }
+    let fin = pAdvance(tokens, pos);
+    return { node: astNode("Tag", line, { name: name, attrs: attrs, children: children }), pos: fin["pos"] };
+}
+
+fun pkParse(tokens) {
+    let pos = 0;
+    let body = [];
+    while (pAtEnd(tokens, pos) == false) {
+        let r = pkParseElement(tokens, pos);
+        if (isLangError(r["node"])) { return r["node"]; }
+        push(body, r["node"]);
+        pos = r["pos"];
+    }
+    return astNode("Program", 1, { body: body });
+}
+
+// ───────── Interpreter.rin ─────────
+// ============================================================================
+//  Interpreter.rin — Executing the language "Passkit" (tags <>): AST -> results
+//
+//  Tags:  <passkit> <set> <print> <if>/<else> <for> <assert>
+//           <email> <password> <apikey> <link> <api> <sql>
+//  every tag carries name="x" so that it stores its result in variable x, and it is read later with $x or $x.field
+//  and variables go inside the text in the form {x.field}.
+// ============================================================================
+
+
+let PKS = { vars: {}, out: [], handlers: {}, base: "", depth: 0, stack: [], returned: false, ret: nil, binds: [] };
+
+// ---- Values and variables ------------------------------------------------------------
+
+fun psReset() {
+    PKS["vars"] = {};
+    PKS["out"] = [];
+    PKS["returned"] = false;
+    PKS["ret"] = nil;
+}
+
+fun psIsPathChar(ch) {
+    return isAlnumChar(ch) or ch == ".";
+}
+
+fun psIsPath(s) {
+    if (len(s) == 0) { return false; }
+    let i = 0;
+    while (i < len(s)) {
+        if (psIsPathChar(charAt(s, i)) == false) { return false; }
+        i = i + 1;
+    }
+    return true;
+}
+
+fun psAllDigits(s) {
+    if (len(s) == 0) { return false; }
+    let i = 0;
+    while (i < len(s)) {
+        if (contains("0123456789", charAt(s, i)) == false) { return false; }
+        i = i + 1;
+    }
+    return true;
+}
+
+// x.y.z inside any root map (maps and arrays); returns nil if not found
+fun psLookupIn(root, path) {
+    let parts = split(path, ".");
+    let cur = root;
+    let i = 0;
+    while (i < len(parts)) {
+        let p = parts[i];
+        if (type(cur) == "map") {
+            if (has(cur, p) == false) { return nil; }
+            cur = cur[p];
+        } else if (type(cur) == "array") {
+            if (psAllDigits(p) == false) { return nil; }
+            let idx = toNumber(p);
+            if (idx >= len(cur)) { return nil; }
+            cur = cur[idx];
+        } else {
+            return nil;
+        }
+        i = i + 1;
+    }
+    return cur;
+}
+
+fun psLookup(path) {
+    return psLookupIn(PKS["vars"], path);
+}
+
+// "$x.y" as a whole => the value with its original type; "text {x} text" => text substitution
+fun psResolve(raw) {
+    if (type(raw) != "string") { return raw; }
+    if (len(raw) > 1 and charAt(raw, 0) == "$" and psIsPath(substr(raw, 1, len(raw) - 1))) {
+        return psLookup(substr(raw, 1, len(raw) - 1));
+    }
+    if (contains(raw, "{") == false) { return raw; }
+    let out = "";
+    let i = 0;
+    let n = len(raw);
+    while (i < n) {
+        let ch = charAt(raw, i);
+        if (ch == "{") {
+            let rest = substr(raw, i + 1, n - i - 1);
+            let close = indexOf(rest, "}");
+            if (close > 0 and psIsPath(substr(rest, 0, close))) {
+                let v = psLookup(substr(rest, 0, close));
+                if (v == nil) { out = out + ""; } else { out = out + toString(v); }
+                i = i + close + 2;
+            } else {
+                out = out + ch;
+                i = i + 1;
+            }
+        } else {
+            out = out + ch;
+            i = i + 1;
+        }
+    }
+    return out;
+}
+
+fun psNum(v, fallback) {
+    if (type(v) == "number") { return v; }
+    if (type(v) == "string") {
+        let t = trim(v);
+        if (psAllDigits(t)) { return toNumber(t); }
+        if (len(t) > 2 and charAt(t, 0) == "-" and psAllDigits(substr(t, 1, len(t) - 1))) { return toNumber(t); }
+        let dot = indexOf(t, ".");
+        if (dot > 0 and psAllDigits(substr(t, 0, dot)) and psAllDigits(substr(t, dot + 1, len(t) - dot - 1))) { return toNumber(t); }
+    }
+    return fallback;
+}
+
+fun psTruthy(v) {
+    if (v == nil) { return false; }
+    if (v == false) { return false; }
+    if (v == "" or v == "false" or v == 0) { return false; }
+    return true;
+}
+
+fun psIsFlag(v) {
+    return v == "true" or v == true;
+}
+
+// ---- Attribute helpers ---------------------------------------------------------------
+
+fun psHas(node, key) { return has(node["attrs"], key); }
+
+fun psAttr(node, key) {
+    if (has(node["attrs"], key) == false) { return nil; }
+    return psResolve(node["attrs"][key]);
+}
+
+fun psAttrOr(node, key, fallback) {
+    let v = psAttr(node, key);
+    if (v == nil) { return fallback; }
+    return v;
+}
+
+fun psFail(node, message) {
+    return langError("Interpreter", "<" + node["name"] + "> " + message, node["line"]);
+}
+
+fun psStore(node, value) {
+    if (has(node["attrs"], "name")) {
+        PKS["vars"][node["attrs"]["name"]] = value;
+    }
+}
+
+fun psEmit(msg) {
+    push(PKS["out"], msg);
+}
+
+// ---- URL encoding/decoding ---------------------------------------------------
+
+fun psUrlEncode(s) {
+    let keep = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_.~";
+    let chars = pkChars(s);
+    let out = "";
+    let i = 0;
+    while (i < len(chars)) {
+        let c = chars[i];
+        if (contains(keep, c)) {
+            out = out + c;
+        } else {
+            let hx = sec.hexEncode(c);            // the UTF-8 bytes of the whole character
+            let j = 0;
+            while (j < len(hx)) { out = out + "%" + upper(substr(hx, j, 2)); j = j + 2; }
+        }
+        i = i + 1;
+    }
+    return out;
+}
+
+fun psUrlDecode(s) {
+    let out = "";
+    let i = 0;
+    let n = len(s);
+    let bytes = "";
+    while (i < n) {
+        let ch = charAt(s, i);
+        if (ch == "+") { out = out + " "; i = i + 1; }
+        else if (ch == "%" and i + 2 < n + 0 and contains("0123456789abcdefABCDEF", charAt(s, i + 1)) and contains("0123456789abcdefABCDEF", charAt(s, i + 2))) {
+            out = out + sec.hexDecode(lower(substr(s, i + 1, 2)));
+            i = i + 3;
+        } else { out = out + ch; i = i + 1; }
+    }
+    return out;
+}
+
+// ---- <email> ----------------------------------------------------------------------
+
+fun psEmailCheck(raw) {
+    let a = lower(trim(raw));
+    let r = { ok: false, input: raw, address: a, local: "", domain: "", masked: "", error: "" };
+    let parts = split(a, "@");
+    if (len(parts) != 2) { r["error"] = "must contain exactly one @"; return r; }
+    let local = parts[0];
+    let domain = parts[1];
+    if (len(local) < 1 or len(local) > 64) { r["error"] = "the part before @ must be 1 to 64 long"; return r; }
+    if (len(domain) < 4 or len(domain) > 253) { r["error"] = "the domain is too short/long"; return r; }
+    let okLocal = "abcdefghijklmnopqrstuvwxyz0123456789._%+-";
+    let okDomain = "abcdefghijklmnopqrstuvwxyz0123456789.-";
+    let i = 0;
+    while (i < len(local)) {
+        if (contains(okLocal, charAt(local, i)) == false) { r["error"] = "Character not allowed before @: " + charAt(local, i); return r; }
+        i = i + 1;
+    }
+    i = 0;
+    while (i < len(domain)) {
+        if (contains(okDomain, charAt(domain, i)) == false) { r["error"] = "Character not allowed in the domain"; return r; }
+        i = i + 1;
+    }
+    if (charAt(local, 0) == "." or charAt(local, len(local) - 1) == ".") { r["error"] = "The local part must not start/end with a dot"; return r; }
+    if (contains(local, "..") or contains(domain, "..")) { r["error"] = "Two consecutive dots are not allowed"; return r; }
+    let labels = split(domain, ".");
+    if (len(labels) < 2) { r["error"] = "The domain has no extension (like .com)"; return r; }
+    let k = 0;
+    while (k < len(labels)) {
+        let lb = labels[k];
+        if (len(lb) == 0 or charAt(lb, 0) == "-" or charAt(lb, len(lb) - 1) == "-") { r["error"] = "Invalid domain part"; return r; }
+        k = k + 1;
+    }
+    if (len(labels[len(labels) - 1]) < 2) { r["error"] = "The domain extension is too short"; return r; }
+    r["ok"] = true;
+    r["local"] = local;
+    r["domain"] = domain;
+    r["tld"] = labels[len(labels) - 1];
+    r["masked"] = charAt(local, 0) + "***@" + domain;
+    r["error"] = "";
+    return r;
+}
+
+fun psTagEmail(node) {
+    // <email name="e" address="a@b.com" />   |   <email name="m" mailto="a@b.com" subject="..." body="..." />
+    if (psHas(node, "mailto")) {
+        let to = psAttr(node, "mailto");
+        if (to == nil) { return psFail(node, "mailto: the variable is not defined"); }
+        let chk = psEmailCheck(toString(to));
+        if (chk["ok"] == false) { psStore(node, { ok: false, error: chk["error"] }); return nil; }
+        let url = "mailto:" + chk["address"];
+        let sep = "?";
+        if (psHas(node, "subject")) { url = url + sep + "subject=" + psUrlEncode(toString(psAttr(node, "subject"))); sep = "&"; }
+        if (psHas(node, "body")) { url = url + sep + "body=" + psUrlEncode(toString(psAttr(node, "body"))); }
+        psStore(node, { ok: true, url: url, to: chk["address"] });
+        return nil;
+    }
+    let addr = psAttr(node, "address");
+    if (addr == nil) { return psFail(node, "The address attribute is required (or its variable is not defined)"); }
+    psStore(node, psEmailCheck(toString(addr)));
+    return nil;
+}
+
+// ---- <password> -------------------------------------------------------------------
+
+fun psPolicyByName(name) {
+    if (name == "basic") { return pkPolicyBasic(); }
+    if (name == "strict") { return pkPolicyStrict(); }
+    if (name == "pin") { return pkPolicyPin(6); }
+    return pkPolicyStandard();
+}
+
+fun psTagPassword(node) {
+    if (psHas(node, "generate")) {
+        let opts = { length: psNum(psAttr(node, "length"), 16) };
+        if (psAttr(node, "symbols") == "false") { opts["symbols"] = false; }
+        if (psAttr(node, "ambiguous") == "false") { opts["avoidAmbiguous"] = true; }
+        let g = pkGenerate(opts);
+        if (g["ok"] == false) { return psFail(node, g["error"]); }
+        psStore(node, g);
+        return nil;
+    }
+    if (psHas(node, "passphrase")) {
+        let g = pkPassphrase({ words: psNum(psAttr(node, "words"), 6), separator: psAttrOr(node, "separator", "-") });
+        if (g["ok"] == false) { return psFail(node, g["error"]); }
+        psStore(node, g);
+        return nil;
+    }
+    if (psHas(node, "pin")) {
+        let g = pkGeneratePin(psNum(psAttr(node, "length"), 6));
+        if (g["ok"] == false) { return psFail(node, g["error"]); }
+        psStore(node, g);
+        return nil;
+    }
+    if (psHas(node, "check") or psHas(node, "strength")) {
+        let key = "check";
+        if (psHas(node, "strength")) { key = "strength"; }
+        let pw = psAttr(node, key);
+        if (pw == nil) { return psFail(node, key + ": the variable is not defined"); }
+        let ctx = {};
+        if (psHas(node, "username")) { ctx["username"] = toString(psAttr(node, "username")); }
+        if (psHas(node, "email")) { ctx["email"] = toString(psAttr(node, "email")); }
+        if (key == "strength") { psStore(node, pkAnalyze(toString(pw), ctx)); return nil; }
+        psStore(node, pkCheck(toString(pw), psPolicyByName(psAttrOr(node, "policy", "standard")), ctx));
+        return nil;
+    }
+    if (psHas(node, "hash")) {
+        let pw = psAttr(node, "hash");
+        if (pw == nil) { return psFail(node, "hash: the variable is not defined"); }
+        psStore(node, { ok: true, hash: pkHash(toString(pw), { iterations: psNum(psAttr(node, "iterations"), PK_DEFAULT_ITERATIONS) }) });
+        return nil;
+    }
+    if (psHas(node, "verify")) {
+        let pw = psAttr(node, "verify");
+        let against = psAttr(node, "against");
+        if (pw == nil or against == nil) { return psFail(node, "verify needs the password and the against attribute (the hash)"); }
+        psStore(node, { ok: pkVerify(toString(pw), toString(against)) });
+        return nil;
+    }
+    if (psHas(node, "mask")) {
+        let pw = psAttr(node, "mask");
+        if (pw == nil) { return psFail(node, "mask: the variable is not defined"); }
+        psStore(node, { ok: true, masked: pkMask(toString(pw)) });
+        return nil;
+    }
+    return psFail(node, "choose an operation: generate | passphrase | pin | check | strength | hash | verify | mask");
+}
+
+// ---- <apikey> ---------------------------------------------------------------------
+
+fun psKeyMask(key) {
+    let n = len(key);
+    if (n <= 12) { return "****"; }
+    return substr(key, 0, 7) + "…" + substr(key, n - 4, 4);
+}
+
+fun psTagApikey(node) {
+    if (psHas(node, "generate")) {
+        let prefix = toString(psAttrOr(node, "prefix", "pk"));
+        let bytes = psNum(psAttr(node, "bytes"), 24);
+        if (bytes < 16 or bytes > 64) { return psFail(node, "bytes between 16 and 64"); }
+        let secret = sec.randomToken(bytes);
+        let key = prefix + "_" + secret;
+        psStore(node, { ok: true, key: key, id: substr(secret, 0, 8), hash: sec.sha256(key), masked: psKeyMask(key), prefix: prefix });
+        return nil;
+    }
+    if (psHas(node, "verify")) {
+        let key = psAttr(node, "verify");
+        let against = psAttr(node, "against");
+        if (key == nil or against == nil) { return psFail(node, "verify needs the key and the against attribute (hash)"); }
+        psStore(node, { ok: sec.constantTimeEqual(sec.sha256(toString(key)), toString(against)) });
+        return nil;
+    }
+    if (psHas(node, "check")) {
+        let key = psAttr(node, "check");
+        if (key == nil) { return psFail(node, "check: the variable is not defined"); }
+        let k = toString(key);
+        let prefix = toString(psAttrOr(node, "prefix", "pk"));
+        let ok = indexOf(k, prefix + "_") == 0 and len(k) >= len(prefix) + 1 + 32;
+        let r = { ok: ok };
+        if (ok == false) { r["error"] = "Invalid key format (must start with " + prefix + "_ and be followed by 32+ characters)"; }
+        psStore(node, r);
+        return nil;
+    }
+    if (psHas(node, "mask")) {
+        let key = psAttr(node, "mask");
+        if (key == nil) { return psFail(node, "mask: the variable is not defined"); }
+        psStore(node, { ok: true, masked: psKeyMask(toString(key)) });
+        return nil;
+    }
+    return psFail(node, "choose an operation: generate | verify | check | mask");
+}
+
+// ---- <link> -----------------------------------------------------------------------
+
+fun psLinkParse(url) {
+    let r = { ok: false, url: url, scheme: "", host: "", port: "", path: "", query: {}, fragment: "", secure: false, error: "" };
+    let u = trim(url);
+    let sp = indexOf(u, "://");
+    if (sp < 1) { r["error"] = "The link has no scheme (like https://)"; return r; }
+    let scheme = lower(substr(u, 0, sp));
+    if (scheme != "http" and scheme != "https") { r["error"] = "Unsupported scheme: " + scheme; return r; }
+    let rest = substr(u, sp + 3, len(u) - sp - 3);
+    if (contains(rest, " ")) { r["error"] = "The link contains a space (encode it as %20)"; return r; }
+    let frag = "";
+    let h = indexOf(rest, "#");
+    if (h >= 0) { frag = substr(rest, h + 1, len(rest) - h - 1); rest = substr(rest, 0, h); }
+    let q = "";
+    let qi = indexOf(rest, "?");
+    if (qi >= 0) { q = substr(rest, qi + 1, len(rest) - qi - 1); rest = substr(rest, 0, qi); }
+    let path = "";
+    let pi = indexOf(rest, "/");
+    let hostport = rest;
+    if (pi >= 0) { path = substr(rest, pi, len(rest) - pi); hostport = substr(rest, 0, pi); }
+    let host = hostport;
+    let port = "";
+    let ci = indexOf(hostport, ":");
+    if (ci >= 0) { host = substr(hostport, 0, ci); port = substr(hostport, ci + 1, len(hostport) - ci - 1); }
+    if (len(host) == 0 or contains(host, "@")) { r["error"] = "Invalid host"; return r; }
+    if (port != "" and psAllDigits(port) == false) { r["error"] = "Invalid port"; return r; }
+    let query = {};
+    if (len(q) > 0) {
+        let pairs = split(q, "&");
+        let i = 0;
+        while (i < len(pairs)) {
+            if (len(pairs[i]) > 0) {
+                let eq = indexOf(pairs[i], "=");
+                if (eq < 0) { query[psUrlDecode(pairs[i])] = ""; }
+                else { query[psUrlDecode(substr(pairs[i], 0, eq))] = psUrlDecode(substr(pairs[i], eq + 1, len(pairs[i]) - eq - 1)); }
+            }
+            i = i + 1;
+        }
+    }
+    r["ok"] = true;
+    r["scheme"] = scheme;
+    r["host"] = lower(host);
+    r["port"] = port;
+    r["path"] = path;
+    r["query"] = query;
+    r["fragment"] = frag;
+    r["secure"] = scheme == "https";
+    r["error"] = "";
+    return r;
+}
+
+fun psTagLink(node) {
+    // <link name="l" url="https://x.com/a?b=1" [https] />
+    // <link name="u" build base="https://x.com" path="/a" query.id="5" />
+    if (psHas(node, "build")) {
+        let base = psAttr(node, "base");
+        if (base == nil) { return psFail(node, "build needs base"); }
+        let url = toString(base);
+        while (len(url) > 0 and charAt(url, len(url) - 1) == "/") { url = substr(url, 0, len(url) - 1); }
+        if (psHas(node, "path")) {
+            let p = toString(psAttr(node, "path"));
+            if (len(p) > 0 and charAt(p, 0) != "/") { p = "/" + p; }
+            url = url + p;
+        }
+        let sep = "?";
+        for (let k in keys(node["attrs"])) {
+            if (indexOf(k, "query.") == 0) {
+                url = url + sep + psUrlEncode(substr(k, 6, len(k) - 6)) + "=" + psUrlEncode(toString(psResolve(node["attrs"][k])));
+                sep = "&";
+            }
+        }
+        let parsed = psLinkParse(url);
+        parsed["url"] = url;
+        psStore(node, parsed);
+        return nil;
+    }
+    let raw = psAttr(node, "url");
+    if (raw == nil) { return psFail(node, "The url attribute is required (or its variable is not defined)"); }
+    let r = psLinkParse(toString(raw));
+    if (r["ok"] and psHas(node, "https") and r["secure"] == false) {
+        r["ok"] = false;
+        r["error"] = "https is required";
+    }
+    psStore(node, r);
+    return nil;
+}
+
+// ---- <api> ------------------------------------------------------------------------
+
+fun psTagApi(node) {
+    let raw = psAttr(node, "url");
+    if (raw == nil) { return psFail(node, "The url attribute is required (or its variable is not defined)"); }
+    let url = toString(raw);
+    let method = upper(toString(psAttrOr(node, "method", "GET")));
+    if (contains(["GET", "POST", "PUT", "PATCH", "DELETE"], method) == false) { return psFail(node, "method is not supported: " + method); }
+    let headers = {};
+    let shown = {};
+    for (let k in keys(node["attrs"])) {
+        if (indexOf(k, "header.") == 0) {
+            let hn = substr(k, 7, len(k) - 7);
+            let hv = toString(psResolve(node["attrs"][k]));
+            headers[hn] = hv;
+            shown[hn] = hv;
+        }
+    }
+    let key = psAttr(node, "key");
+    let auth = toString(psAttrOr(node, "auth", "bearer"));
+    if (key != nil) {
+        let ks = toString(key);
+        if (auth == "bearer") { headers["Authorization"] = "Bearer " + ks; shown["Authorization"] = "Bearer " + psKeyMask(ks); }
+        else if (auth == "header") {
+            let hn = toString(psAttrOr(node, "header", "X-API-Key"));
+            headers[hn] = ks; shown[hn] = psKeyMask(ks);
+        } else if (auth == "query") {
+            let pn = toString(psAttrOr(node, "param", "api_key"));
+            let sepq = "?";
+            if (contains(url, "?")) { sepq = "&"; }
+            url = url + sepq + psUrlEncode(pn) + "=" + psUrlEncode(ks);
+        } else {
+            return psFail(node, "auth is unknown: " + auth + " (bearer | header | query)");
+        }
+    }
+    let chk = psLinkParse(url);
+    if (chk["ok"] == false) { psStore(node, { ok: false, error: chk["error"] }); return nil; }
+    if (chk["secure"] == false and psHas(node, "insecure") == false) {
+        psStore(node, { ok: false, error: "insecure http link — use https or add insecure explicitly" });
+        return nil;
+    }
+    let body = "";
+    if (psHas(node, "body")) { body = toString(psAttr(node, "body")); }
+    // copy for display/logging without secrets: the key in the URL is hidden
+    let shownUrl = url;
+    if (key != nil and auth == "query") { shownUrl = replace(url, psUrlEncode(toString(key)), psKeyMask(toString(key))); }
+    let request = { method: method, url: shownUrl, headers: shown, body: body };
+
+    if (psHas(node, "dry")) {
+        psStore(node, { ok: true, dry: true, request: request });
+        return nil;
+    }
+    let resp = httpRequest(method, url, headers, body);
+    psStore(node, { ok: true, dry: false, request: request, response: resp });
+    return nil;
+}
+
+// ---- <sql> — RCSQL link (doc containers in Rin) -------------------------------------------
+
+fun psSqlReserved() {
+    return ["table", "name", "id", "insert", "select", "find", "count", "exists", "update", "delete", "create",
+            "where", "order", "limit", "field", "equals"];
+}
+
+fun psSqlEnsure(table) {
+    if (hasContainer(table) == false) { spawn("doc", table); }
+}
+
+fun psSqlQuery(node, table) {
+    let q = table;
+    if (psHas(node, "where")) { q = q + " & " + toString(psAttr(node, "where")); }
+    if (psHas(node, "order")) { q = q + " & order:" + toString(psAttr(node, "order")); }
+    if (psHas(node, "limit")) { q = q + " & limit:eq(" + toString(psAttr(node, "limit")) + ")"; }
+    let v = sqlValidate(q);
+    if (v["ok"] == false) { return { ok: false, error: "RCSQL: " + toString(v["error"]), query: q }; }
+    return { ok: true, query: q };
+}
+
+fun psTagSql(node) {
+    let table = psAttr(node, "table");
+    if (table == nil) { return psFail(node, "The table attribute is required"); }
+    table = toString(table);
+
+    if (psHas(node, "create")) {
+        psSqlEnsure(table);
+        psStore(node, { ok: true, table: table });
+        return nil;
+    }
+
+    if (psHas(node, "insert") or psHas(node, "update")) {
+        let fields = {};
+        for (let k in keys(node["attrs"])) {
+            if (contains(psSqlReserved(), k) == false) {
+                let v = psResolve(node["attrs"][k]);
+                // we never store a raw password/secret — hash only (pk1$...) or sha256
+                if (pkIsSensitiveKey(k) and indexOf(toString(v), "pk1$") != 0) {
+                    return psFail(node, "Refusing to store the field '" + k + "' as raw text — pass its hash (<password hash=...> or <apikey ... hash>)");
+                }
+                fields[k] = v;
+            }
+        }
+        if (psHas(node, "insert")) {
+            psSqlEnsure(table);
+            let id = toString(psAttrOr(node, "id", sec.randomToken(6)));
+            insertDoc(table, id, fields);
+            psStore(node, { ok: true, id: id, table: table });
+            return nil;
+        }
+        let uid = psAttr(node, "id");
+        if (uid == nil) { return psFail(node, "update needs id"); }
+        if (hasContainer(table) == false) { psStore(node, { ok: false, error: "Table not found: " + table }); return nil; }
+        let done = updateDoc(table, toString(uid), fields);
+        psStore(node, { ok: done, id: toString(uid), table: table });
+        return nil;
+    }
+
+    // reading: a missing table => a silent empty result (like RCSQL behavior)
+    if (hasContainer(table) == false) {
+        if (psHas(node, "count")) { psStore(node, 0); }
+        else if (psHas(node, "exists")) { psStore(node, false); }
+        else { psStore(node, []); }
+        return nil;
+    }
+
+    if (psHas(node, "find")) {
+        // search by a value containing symbols the RCSQL text does not accept (like @ or .) => filtering inside Rin
+        let field = psAttr(node, "field");
+        let want = psAttr(node, "equals");
+        if (field == nil or want == nil) { return psFail(node, "find needs field and equals"); }
+        let rows = sql(table);
+        let hit = nil;
+        let i = 0;
+        while (i < len(rows) and hit == nil) {
+            if (has(rows[i], toString(field)) and toString(rows[i][toString(field)]) == toString(want)) { hit = rows[i]; }
+            i = i + 1;
+        }
+        psStore(node, { ok: hit != nil, found: hit != nil, row: hit });
+        return nil;
+    }
+
+    let qr = psSqlQuery(node, table);
+    if (qr["ok"] == false) { psStore(node, { ok: false, error: qr["error"] }); return nil; }
+    if (psHas(node, "count")) { psStore(node, sqlCount(qr["query"])); return nil; }
+    if (psHas(node, "exists")) { psStore(node, sqlExists(qr["query"])); return nil; }
+    if (psHas(node, "delete")) {
+        if (psHas(node, "where") == false) { return psFail(node, "delete without where is refused (prevents wiping the whole table by mistake)"); }
+        psStore(node, { ok: true, deleted: sqlDelete(qr["query"]) });
+        return nil;
+    }
+    psStore(node, sql(qr["query"]));          // select (the default)
+    return nil;
+}
+
+// ---- Core tags --------------------------------------------------------------
+
+fun psSplitElse(children) {
+    let thenPart = [];
+    let elsePart = [];
+    let seenElse = false;
+    let i = 0;
+    while (i < len(children)) {
+        if (children[i]["name"] == "else") { seenElse = true; }
+        else if (seenElse) { push(elsePart, children[i]); }
+        else { push(thenPart, children[i]); }
+        i = i + 1;
+    }
+    return { thenPart: thenPart, elsePart: elsePart };
+}
+
+fun psCondition(node) {
+    let v = psAttr(node, "var");
+    if (psHas(node, "eq")) { return toString(v) == toString(psAttr(node, "eq")); }
+    if (psHas(node, "neq")) { return toString(v) != toString(psAttr(node, "neq")); }
+    if (psHas(node, "gt")) { return psNum(v, 0) > psNum(psAttr(node, "gt"), 0); }
+    if (psHas(node, "gte")) { return psNum(v, 0) >= psNum(psAttr(node, "gte"), 0); }
+    if (psHas(node, "lt")) { return psNum(v, 0) < psNum(psAttr(node, "lt"), 0); }
+    if (psHas(node, "lte")) { return psNum(v, 0) <= psNum(psAttr(node, "lte"), 0); }
+    if (psHas(node, "has")) { return v != nil and contains(toString(v), toString(psAttr(node, "has"))); }
+    if (psHas(node, "empty")) { return v == nil or v == "" or (type(v) == "array" and len(v) == 0); }
+    return psTruthy(v);
+}
+
+fun psExecNodes(nodes) {
+    let i = 0;
+    while (i < len(nodes) and PKS["returned"] == false) {
+        let e = psExecTag(nodes[i]);
+        if (e != nil) { return e; }
+        i = i + 1;
+    }
+    return nil;
+}
+
+fun psExecTag(node) {
+    let n = node["name"];
+    if (n == "passkit") { return psExecNodes(node["children"]); }
+    if (n == "set") {
+        if (psHas(node, "name") == false) { return psFail(node, "The name attribute is required"); }
+        PKS["vars"][node["attrs"]["name"]] = psAttrOr(node, "value", "");
+        return nil;
+    }
+    if (n == "print") {
+        let v = psAttr(node, "value");
+        if (v == nil) { v = "(undefined)"; }
+        psEmit(toString(v));
+        return nil;
+    }
+    if (n == "assert") {
+        if (psCondition(node) == false) { return psFail(node, "Assertion failed: " + toString(psAttrOr(node, "message", "assert"))); }
+        return nil;
+    }
+    if (n == "if") {
+        let parts = psSplitElse(node["children"]);
+        if (psCondition(node)) { return psExecNodes(parts["thenPart"]); }
+        return psExecNodes(parts["elsePart"]);
+    }
+    if (n == "for") {
+        let list = psAttr(node, "in");
+        let loopVar = toString(psAttrOr(node, "each", "item"));
+        if (type(list) != "array") { return psFail(node, "in must point to an array (like $rows)"); }
+        let i = 0;
+        while (i < len(list) and i < 10000 and PKS["returned"] == false) {
+            PKS["vars"][loopVar] = list[i];
+            let e = psExecNodes(node["children"]);
+            if (e != nil) { return e; }
+            i = i + 1;
+        }
+        return nil;
+    }
+    if (n == "else") { return psFail(node, "<else/> outside <if>"); }
+    if (n == "email") { return psTagEmail(node); }
+    if (n == "password") { return psTagPassword(node); }
+    if (n == "apikey") { return psTagApikey(node); }
+    if (n == "link") { return psTagLink(node); }
+    if (n == "api") { return psTagApi(node); }
+    if (n == "sql") { return psTagSql(node); }
+    if (n == "input") { return psTagInput(node); }
+    if (n == "return") { return psTagReturn(node); }
+    if (n == "import") { return psTagImport(node); }
+    if (n == "run") { return psTagRun(node); }
+    if (n == "call") { return psTagCall(node); }
+    if (n == "crypt") { return psTagCrypt(node); }
+    if (n == "token") { return psTagToken(node); }
+    if (n == "otp") { return psTagOtp(node); }
+    if (n == "db") { return psTagDb(node); }
+    if (n == "container") { return psTagContainer(node); }
+    return psFail(node, "Unsupported tag");
+}
+
+// ============================================================================
+//  File linking (File Linking) — both directions
+//   .passkit -> .passkit :  <import file>  (include in the same scope)  /  <run file name in.k=...>  (isolated call)
+//   .passkit -> Rin      :  <call fn="x" arg0=...>  for functions that Rin registered explicitly via passkitRegister
+//   Rin -> .passkit      :  passkitRun(path, inputs) / passkitRunSource(src, inputs)
+//   File contract:  <input name default required/>  and  <return value="..."/>
+// ============================================================================
+
+// Safe relative path only: not absolute, no .., no scheme, no \ (an untrusted .passkit file cannot read outside its folder)
+fun psSafeRel(rel) {
+    if (rel == nil) { return false; }
+    let f = toString(rel);
+    if (len(f) == 0) { return false; }
+    if (charAt(f, 0) == "/" or contains(f, "..") or contains(f, ":") or contains(f, "\\")) { return false; }
+    return true;
+}
+
+fun psDirName(path) {
+    let last = -1;
+    let i = 0;
+    while (i < len(path)) {
+        if (charAt(path, i) == "/") { last = i; }
+        i = i + 1;
+    }
+    if (last < 0) { return ""; }
+    return substr(path, 0, last);
+}
+
+fun psJoinPath(base, rel) {
+    if (base == "") { return rel; }
+    return base + "/" + rel;
+}
+
+fun psSave() {
+    return { vars: PKS["vars"], out: PKS["out"], returned: PKS["returned"], ret: PKS["ret"], base: PKS["base"], depth: PKS["depth"], binds: PKS["binds"] };
+}
+
+fun psRestore(saved) {
+    PKS["vars"] = saved["vars"];
+    PKS["out"] = saved["out"];
+    PKS["returned"] = saved["returned"];
+    PKS["ret"] = saved["ret"];
+    PKS["base"] = saved["base"];
+    PKS["depth"] = saved["depth"];
+    PKS["binds"] = saved["binds"];
+}
+
+// parses the source and runs it on the current state; nil on success or a langError
+fun psParseExec(source) {
+    let tokens = pkLex(source);
+    let i = 0;
+    while (i < len(tokens)) {
+        if (isLangError(tokens[i])) { return tokens[i]; }
+        i = i + 1;
+    }
+    let ast = pkParse(tokens);
+    if (isLangError(ast)) { return ast; }
+    return psExecNodes(ast["body"]);
+}
+
+fun psFailResult(msg) {
+    let e = langError("Interpreter", msg, 0);
+    return { ok: false, output: [], vars: {}, value: nil, error: e, message: formatLangError(e) };
+}
+
+// isolated run with a new variable scope (state-protected: suits nested Rin<->passkit calls)
+fun psRunChild(source, inputs, base) {
+    if (PKS["depth"] >= 8) { return psFailResult("call depth between files is greater than 8 (a link cycle?)"); }
+    let saved = psSave();
+    PKS["vars"] = {};
+    if (inputs != nil) {
+        for (let k in keys(inputs)) { PKS["vars"][k] = inputs[k]; }
+    }
+    PKS["out"] = [];
+    PKS["returned"] = false;
+    PKS["ret"] = nil;
+    PKS["base"] = base;
+    PKS["depth"] = saved["depth"] + 1;
+    PKS["binds"] = [];
+    let e = psParseExec(source);
+    let res = { ok: e == nil, output: PKS["out"], vars: PKS["vars"], value: PKS["ret"], error: e, message: "" };
+    if (e != nil) { res["message"] = formatLangError(e); }
+    psRestore(saved);
+    return res;
+}
+
+// ---- Tags: <input> <return> ----------------------------------------------------
+
+fun psTagInput(node) {
+    if (psHas(node, "name") == false) { return psFail(node, "The name attribute is required"); }
+    let nm = node["attrs"]["name"];
+    if (has(PKS["vars"], nm)) { return nil; }
+    if (psHas(node, "default")) { PKS["vars"][nm] = psAttr(node, "default"); return nil; }
+    if (psHas(node, "required")) { return psFail(node, "The input '" + nm + "' is required and was not passed"); }
+    return nil;
+}
+
+fun psTagReturn(node) {
+    PKS["ret"] = psAttr(node, "value");
+    PKS["returned"] = true;
+    return nil;
+}
+
+// ---- <import file="x.passkit"/> : include in the same scope -------------------------------
+
+fun psLoadLinked(node) {
+    let rel = psAttr(node, "file");
+    if (psSafeRel(rel) == false) { return { err: psFail(node, "file must be a relative path inside the file's folder (with no / or .. or :)") }; }
+    let path = psJoinPath(PKS["base"], toString(rel));
+    if (fileExists(path) == false) { return { err: psFail(node, "File not found: " + path) }; }
+    if (contains(PKS["stack"], path)) { return { err: psFail(node, "Link cycle: the file calls itself (" + path + ")") }; }
+    return { path: path, source: readFile(path) };
+}
+
+fun psTagImport(node) {
+    let ld = psLoadLinked(node);
+    if (has(ld, "err")) { return ld["err"]; }
+    if (PKS["depth"] >= 8) { return psFail(node, "call depth between files is greater than 8"); }
+    let oldBase = PKS["base"];
+    PKS["base"] = psDirName(ld["path"]);
+    PKS["depth"] = PKS["depth"] + 1;
+    push(PKS["stack"], ld["path"]);
+    let e = psParseExec(ld["source"]);
+    pop(PKS["stack"]);
+    PKS["depth"] = PKS["depth"] - 1;
+    PKS["base"] = oldBase;
+    PKS["returned"] = false;                  // return inside an included file ends only that file
+    if (e != nil) { return psFail(node, ld["path"] + " → " + formatLangError(e)); }
+    return nil;
+}
+
+// ---- <run file name in.k="v" [quiet] [strict]/> : isolated call with inputs and output -------
+
+fun psTagRun(node) {
+    let ld = psLoadLinked(node);
+    if (has(ld, "err")) { return ld["err"]; }
+    let inputs = {};
+    for (let k in keys(node["attrs"])) {
+        if (indexOf(k, "in.") == 0) { inputs[substr(k, 3, len(k) - 3)] = psResolve(node["attrs"][k]); }
+    }
+    push(PKS["stack"], ld["path"]);
+    let r = psRunChild(ld["source"], inputs, psDirName(ld["path"]));
+    pop(PKS["stack"]);
+    if (psHas(node, "quiet") == false) {
+        let i = 0;
+        while (i < len(r["output"])) { psEmit(r["output"][i]); i = i + 1; }
+    }
+    if (r["ok"] == false and psHas(node, "strict")) { return psFail(node, ld["path"] + " → " + r["message"]); }
+    psStore(node, { ok: r["ok"], value: r["value"], vars: r["vars"], output: r["output"], message: r["message"] });
+    return nil;
+}
+
+// ---- <call fn="name" arg0=".." arg1=".." | args="$list" name="r"/> : call a Rin function ----
+
+fun psTagCall(node) {
+    let fname = psAttr(node, "fn");
+    if (fname == nil) { return psFail(node, "The fn attribute is required"); }
+    fname = toString(fname);
+    if (has(PKS["handlers"], fname) == false) {
+        if (psHas(node, "optional")) { psStore(node, { ok: false, error: "The function is not registered: " + fname }); return nil; }
+        return psFail(node, "The function '" + fname + "' is not registered from Rin (use passkitRegister)");
+    }
+    let args = [];
+    if (psHas(node, "args")) {
+        let a = psAttr(node, "args");
+        if (type(a) != "array") { return psFail(node, "args must point to an array (like $list)"); }
+        let j = 0;
+        while (j < len(a)) { push(args, a[j]); j = j + 1; }
+    } else {
+        let n = 0;
+        while (n < 10) {
+            if (psHas(node, "arg" + toString(n)) == false) { n = 10; }
+            else { push(args, psAttr(node, "arg" + toString(n))); n = n + 1; }
+        }
+    }
+    psStore(node, callFn(PKS["handlers"][fname], args));
+    return nil;
+}
+
+// ---- Rin API: register functions callable from .passkit ------------------------------------
+
+fun passkitRegister(name, handler) {
+    if (isFunction(handler) == false) { return false; }
+    PKS["handlers"][name] = handler;
+    return true;
+}
+
+// passkitHandlers({ double: dbl, greet: greetFn }) -> the number registered
+fun passkitHandlers(map) {
+    let n = 0;
+    for (let k in keys(map)) { if (passkitRegister(k, map[k])) { n = n + 1; } }
+    return n;
+}
+
+fun passkitUnregister(name) {
+    let fresh = {};
+    for (let k in keys(PKS["handlers"])) { if (k != name) { fresh[k] = PKS["handlers"][k]; } }
+    PKS["handlers"] = fresh;
+    return true;
+}
+
+fun passkitClearHandlers() {
+    PKS["handlers"] = {};
+    return true;
+}
+
+fun passkitHandlerNames() {
+    return keys(PKS["handlers"]);
+}
+
+// ---- Rin API: run .passkit ------------------------------------------------------
+// The result: { ok, output:[..], vars:{..}, return, error, message }
+
+fun passkitRunSource(source, inputs) {
+    return psRunChild(source, inputs, PKS["base"]);
+}
+
+fun passkitRun(path, inputs) {
+    if (fileExists(path) == false) { return psFailResult("File not found: " + path); }
+    if (contains(PKS["stack"], path)) { return psFailResult("Link cycle: " + path); }
+    push(PKS["stack"], path);
+    let r = psRunChild(readFile(path), inputs, psDirName(path));
+    pop(PKS["stack"]);
+    return r;
+}
+
+// read a value from a run result by a dotted path:  passkitGet(r, "e.address")
+fun passkitGet(result, path) {
+    if (type(result) != "map" or has(result, "vars") == false) { return nil; }
+    return psLookupIn(result["vars"], path);
+}
+
+// ---- language entry points (run.rin / test.rin) --------------------------------------------
+
+fun pkInterpret(ast) {
+    psReset();
+    let e = psExecNodes(ast["body"]);
+    if (e != nil) { return { ok: false, error: e, output: PKS["out"] }; }
+    return { ok: true, output: PKS["out"], vars: PKS["vars"] };
+}
+
+fun pkRunSource(source) {
+    return psRunChild(source, {}, PKS["base"]);
+}
+
+
+// ============================================================================
+//  Tags for encryption, databases and container linking
+//  <crypt op=...>  <token op=...>  <otp op=...>  <db table op=...>  <container of op=...>
+// ============================================================================
+
+fun psList(v) {
+    if (type(v) == "array") { return v; }
+    let out = [];
+    if (v == nil or toString(v) == "") { return out; }
+    for (let p in split(toString(v), ",")) { push(out, trim(p)); }
+    return out;
+}
+
+fun psOpOf(node) {
+    let op = psAttr(node, "op");
+    if (op == nil) { return nil; }
+    return toString(op);
+}
+
+fun psStrAttr(node, k) {
+    let v = psAttr(node, k);
+    if (v == nil) { return nil; }
+    return toString(v);
+}
+
+// a map from attributes starting with prefix. (like claim.sub="u1" or set.name="Rima")
+fun psPrefixed(node, prefix) {
+    let out = {};
+    for (let k in keys(node["attrs"])) {
+        if (indexOf(k, prefix) == 0) { out[substr(k, len(prefix), len(k) - len(prefix))] = psResolve(node["attrs"][k]); }
+    }
+    return out;
+}
+
+// ---- <crypt op=...> -----------------------------------------------------------------
+
+fun psTagCrypt(node) {
+    let op = psOpOf(node);
+    if (op == nil) { return psFail(node, "The op attribute is required: keygen|seal|open|sealpw|openpw|envelope|unenvelope|hmac|hkdf|pbkdf2|random|uuid|b64|b64d|b32|b32d|fingerprint|merkle|pepper|derive|shamir|combine"); }
+    let val = psStrAttr(node, "value");
+    let key = psStrAttr(node, "key");
+    let aad = psStrAttr(node, "aad");
+    let needKey = contains(["seal", "open", "envelope", "unenvelope", "hmac", "derive", "pepper"], op);
+    if (needKey and key == nil) { return psFail(node, "op=" + op + " needs key"); }
+    let needVal = contains(["seal", "open", "sealpw", "openpw", "envelope", "unenvelope", "hmac", "b64", "b64d", "b32", "b32d", "fingerprint"], op);
+    if (needVal and val == nil) { return psFail(node, "op=" + op + " needs value"); }
+
+    if (op == "keygen") { let k = pcGenerateKey(psNum(psAttr(node, "bytes"), 32)); psStore(node, { ok: true, key: k, id: pcKeyId(k) }); return nil; }
+    if (op == "seal") { psStore(node, pcSeal(key, val, aad)); return nil; }
+    if (op == "open") { psStore(node, pcOpen(key, val, aad)); return nil; }
+    if (op == "sealpw") {
+        let pw = psStrAttr(node, "password");
+        if (pw == nil) { return psFail(node, "sealpw needs password"); }
+        psStore(node, pcSealWithPassword(pw, val, { iterations: psNum(psAttr(node, "iterations"), 2000) }));
+        return nil;
+    }
+    if (op == "openpw") {
+        let pw2 = psStrAttr(node, "password");
+        if (pw2 == nil) { return psFail(node, "openpw needs password"); }
+        psStore(node, pcOpenWithPassword(pw2, val));
+        return nil;
+    }
+    if (op == "envelope") { psStore(node, pcEnvelopeSeal(key, val, aad)); return nil; }
+    if (op == "unenvelope") { psStore(node, pcEnvelopeOpen(key, val, aad)); return nil; }
+    if (op == "hmac") {
+        if (pcIsHex(key) == false) { psStore(node, { ok: false, error: "key must be hex" }); return nil; }
+        psStore(node, { ok: true, hmac: pcHmacText(key, val) });
+        return nil;
+    }
+    if (op == "derive") {
+        if (pcKeyCheck(key)["ok"] == false) { psStore(node, pcKeyCheck(key)); return nil; }
+        psStore(node, { ok: true, key: pcDeriveSubkey(key, toString(psAttrOr(node, "purpose", "default"))) });
+        return nil;
+    }
+    if (op == "pepper") {
+        let pw3 = psStrAttr(node, "password");
+        if (pw3 == nil or pcIsHex(key) == false) { psStore(node, { ok: false, error: "pepper needs password and key (hex)" }); return nil; }
+        psStore(node, { ok: true, peppered: pcPepper(pw3, key) });
+        return nil;
+    }
+    if (op == "hkdf") {
+        let ikm = psStrAttr(node, "ikm");
+        let salt = toString(psAttrOr(node, "salt", ""));
+        if (ikm == nil or pcIsHex(ikm) == false or pcIsHex(salt) == false) { psStore(node, { ok: false, error: "ikm/salt must be hex" }); return nil; }
+        let okm = pcHkdf(ikm, salt, pcHexOf(toString(psAttrOr(node, "info", ""))), psNum(psAttr(node, "length"), 32));
+        if (okm == nil) { psStore(node, { ok: false, error: "length invalid (1..8160)" }); return nil; }
+        psStore(node, { ok: true, okm: okm });
+        return nil;
+    }
+    if (op == "pbkdf2") {
+        let pw4 = psStrAttr(node, "password");
+        let saltHex = toString(psAttrOr(node, "salt", ""));
+        if (pw4 == nil or pcIsHex(saltHex) == false) { psStore(node, { ok: false, error: "pbkdf2 needs password and salt (hex)" }); return nil; }
+        psStore(node, { ok: true, key: pcPbkdf2(pw4, saltHex, psNum(psAttr(node, "iterations"), 2000), psNum(psAttr(node, "bytes"), 32)) });
+        return nil;
+    }
+    if (op == "random") { psStore(node, { ok: true, hex: pcRandomHex(psNum(psAttr(node, "bytes"), 16)) }); return nil; }
+    if (op == "uuid") { psStore(node, { ok: true, uuid: pcUuid4() }); return nil; }
+    if (op == "b64") { psStore(node, { ok: true, value: pcB64UrlEncode(val) }); return nil; }
+    if (op == "b64d") {
+        let d = pcB64UrlDecode(val);
+        if (d == nil) { psStore(node, { ok: false, error: "base64url invalid" }); return nil; }
+        psStore(node, { ok: true, value: d });
+        return nil;
+    }
+    if (op == "b32") { psStore(node, { ok: true, value: pcBase32Encode(val) }); return nil; }
+    if (op == "b32d") {
+        let d2 = pcBase32Decode(val);
+        if (d2 == nil) { psStore(node, { ok: false, error: "base32 invalid" }); return nil; }
+        psStore(node, { ok: true, value: d2 });
+        return nil;
+    }
+    if (op == "fingerprint") { psStore(node, { ok: true, fingerprint: pcFingerprint(val) }); return nil; }
+    if (op == "merkle") {
+        let leaves = psList(psAttr(node, "leaves"));
+        psStore(node, { ok: true, root: pcMerkleRoot(leaves), count: len(leaves) });
+        return nil;
+    }
+    if (op == "shamir") {
+        let sh = pcShamirSplit(toString(psAttrOr(node, "secret", "")), psNum(psAttr(node, "n"), 5), psNum(psAttr(node, "k"), 3));
+        psStore(node, sh);
+        return nil;
+    }
+    if (op == "combine") {
+        let shares = psAttr(node, "shares");
+        if (type(shares) != "array") { shares = psList(shares); }
+        psStore(node, pcShamirCombine(shares));
+        return nil;
+    }
+    return psFail(node, "op is unknown: " + op);
+}
+
+// ---- <token op=sign|verify|signurl|verifyurl> --------------------------------------------
+
+fun psTagToken(node) {
+    let op = psOpOf(node);
+    let key = psStrAttr(node, "key");
+    if (op == nil or key == nil) { return psFail(node, "The op and key attributes are required"); }
+    let nowv = psNum(psAttr(node, "now"), 0);
+    if (op == "sign") {
+        let opts = { now: nowv };
+        if (psHas(node, "ttl")) { opts["ttl"] = psNum(psAttr(node, "ttl"), 0); }
+        if (psHas(node, "iss")) { opts["iss"] = psStrAttr(node, "iss"); }
+        if (psHas(node, "aud")) { opts["aud"] = psStrAttr(node, "aud"); }
+        psStore(node, pcTokenSign(psPrefixed(node, "claim."), key, opts));
+        return nil;
+    }
+    if (op == "verify") {
+        let tok = psStrAttr(node, "value");
+        if (tok == nil) { return psFail(node, "verify needs value (the token)"); }
+        let opts2 = { now: nowv };
+        if (psHas(node, "iss")) { opts2["iss"] = psStrAttr(node, "iss"); }
+        if (psHas(node, "aud")) { opts2["aud"] = psStrAttr(node, "aud"); }
+        if (pcKeyCheck(key)["ok"] == false) { psStore(node, pcKeyCheck(key)); return nil; }
+        psStore(node, pcTokenVerify(tok, key, opts2));
+        return nil;
+    }
+    if (op == "signurl") {
+        let u = psStrAttr(node, "url");
+        if (u == nil) { return psFail(node, "signurl needs url"); }
+        psStore(node, { ok: true, url: pcSignUrl(u, key, nowv + psNum(psAttr(node, "ttl"), 300)) });
+        return nil;
+    }
+    if (op == "verifyurl") {
+        let u2 = psStrAttr(node, "url");
+        if (u2 == nil) { return psFail(node, "verifyurl needs url"); }
+        psStore(node, pcVerifyUrl(u2, key, nowv));
+        return nil;
+    }
+    return psFail(node, "op is unknown: " + op + " (sign|verify|signurl|verifyurl)");
+}
+
+// ---- <otp op=secret|code|verify|uri|recovery|recoverycheck> ---------------------------------
+
+fun psTagOtp(node) {
+    let op = psOpOf(node);
+    if (op == nil) { return psFail(node, "The op attribute is required: secret|code|verify|uri|recovery|recoverycheck"); }
+    if (op == "secret") { let sx = pcRandomHex(20); psStore(node, { ok: true, secret: sx, base32: pcBase32EncodeHex(sx) }); return nil; }
+    if (op == "recovery") { let rc = pcRecoveryCodes(psNum(psAttr(node, "n"), 8)); psStore(node, { ok: true, codes: rc["codes"], hashes: rc["hashes"] }); return nil; }
+    if (op == "recoverycheck") {
+        let hs = psAttr(node, "hashes");
+        if (type(hs) != "array") { return psFail(node, "hashes must point to an array"); }
+        let rv = pcRecoveryVerify(toString(psAttrOr(node, "code", "")), hs);
+        psStore(node, { ok: rv["ok"], remaining: rv["remaining"] });
+        return nil;
+    }
+    let secret = psStrAttr(node, "secret");
+    if (secret == nil or pcIsHex(secret) == false or len(secret) == 0) { psStore(node, { ok: false, error: "secret must be hex (from op=secret)" }); return nil; }
+    let digits = psNum(psAttr(node, "digits"), 6);
+    let nowv = psNum(psAttr(node, "now"), 0);
+    if (op == "code") { psStore(node, { ok: true, code: pcTotp(secret, nowv, 30, digits) }); return nil; }
+    if (op == "verify") {
+        let v = pcTotpVerify(secret, toString(psAttrOr(node, "code", "")), nowv, psNum(psAttr(node, "window"), 1), digits);
+        psStore(node, v);
+        return nil;
+    }
+    if (op == "uri") {
+        psStore(node, { ok: true, uri: pcOtpAuthUri(toString(psAttrOr(node, "issuer", "Passkit")), toString(psAttrOr(node, "account", "user")), secret, { digits: digits }) });
+        return nil;
+    }
+    return psFail(node, "op is unknown: " + op);
+}
+
+// ---- <db table=... op=...> ----------------------------------------------------------------------
+
+fun psTagDb(node) {
+    let op = psOpOf(node);
+    let table = psStrAttr(node, "table");
+    if (op == nil) { return psFail(node, "The op attribute is required"); }
+    let key = psStrAttr(node, "key");
+    let id = psStrAttr(node, "id");
+    let nowv = psNum(psAttr(node, "now"), 0);
+    if (op == "tables") { psStore(node, pdTables()); return nil; }
+    if (table == nil) { return psFail(node, "The table attribute is required"); }
+
+    if (op == "create") { psStore(node, pdCreate(table)); return nil; }
+    if (op == "drop") { psStore(node, pdDrop(table)); return nil; }
+    if (op == "exists") { psStore(node, pdExists(table)); return nil; }
+    if (op == "count") { psStore(node, pdCount(table)); return nil; }
+    if (op == "all") { psStore(node, pdAll(table)); return nil; }
+    if (op == "active") { psStore(node, pdActive(table)); return nil; }
+    if (op == "checksum") { psStore(node, pdChecksum(table)); return nil; }
+    if (op == "export") { psStore(node, pdExportJson(table)); return nil; }
+    if (op == "import") { psStore(node, pdImportJson(table, toString(psAttrOr(node, "json", "[]")), psHas(node, "replace"))); return nil; }
+    if (op == "begin") { psStore(node, pdBegin(table)); return nil; }
+    if (op == "commit") { psStore(node, pdCommit(table)); return nil; }
+    if (op == "rollback") { psStore(node, pdRollback(table)); return nil; }
+    if (op == "nextid") { psStore(node, pdNextId(table, toString(psAttrOr(node, "seq", "id")))); return nil; }
+    if (op == "where") { psStore(node, pdWhere(table, toString(psAttrOr(node, "where", "")))); return nil; }
+    if (op == "page") { psStore(node, pdPage(table, psNum(psAttr(node, "page"), 1), psNum(psAttr(node, "size"), 10))); return nil; }
+    if (op == "find" or op == "findone") {
+        let f = psStrAttr(node, "field");
+        let want = psAttr(node, "equals");
+        if (f == nil or want == nil) { return psFail(node, "find needs field and equals"); }
+        if (key != nil and psHas(node, "blind")) { psStore(node, pdFindByBlind(table, f, want, key)); return nil; }
+        if (op == "find") { psStore(node, pdFind(table, f, want)); return nil; }
+        psStore(node, pdFindOne(table, f, want));
+        return nil;
+    }
+
+    if (op == "insert" or op == "upsert") {
+        let fields = psPrefixed(node, "set.");
+        let opts = {};
+        if (id != nil) { opts["id"] = id; }
+        if (psHas(node, "now")) { opts["now"] = nowv; }
+        if (psHas(node, "unique")) { opts["unique"] = psStrAttr(node, "unique"); }
+        for (let fk in keys(fields)) {
+            if (pkIsSensitiveKey(fk) and indexOf(toString(fields[fk]), "pk1$") != 0 and psHas(node, "enc") == false) {
+                return psFail(node, "Refusing to store the field '" + fk + "' as raw text — pass its hash or encrypt it via enc= and key=");
+            }
+        }
+        if (psHas(node, "enc")) {
+            if (key == nil) { return psFail(node, "enc needs key"); }
+            opts["blind"] = psList(psAttr(node, "blind"));
+            psStore(node, pdInsertEnc(table, fields, key, psList(psAttr(node, "enc")), opts));
+            return nil;
+        }
+        if (op == "upsert") {
+            if (id == nil) { return psFail(node, "upsert needs id"); }
+            psStore(node, pdUpsert(table, id, fields, opts));
+            return nil;
+        }
+        psStore(node, pdInsert(table, fields, opts));
+        return nil;
+    }
+    if (op == "get") {
+        if (id == nil) { return psFail(node, "get needs id"); }
+        if (key != nil) { psStore(node, pdGetDec(table, id, key)); } else { psStore(node, pdGet(table, id)); }
+        return nil;
+    }
+    if (op == "update") {
+        if (id == nil) { return psFail(node, "update needs id"); }
+        psStore(node, pdUpdate(table, id, psPrefixed(node, "set."), { now: nowv }));
+        return nil;
+    }
+    if (op == "delete") {
+        if (id == nil) { return psFail(node, "delete needs id"); }
+        psStore(node, pdDelete(table, id));
+        return nil;
+    }
+    if (op == "softdelete") { if (id == nil) { return psFail(node, "softdelete needs id"); } psStore(node, pdSoftDelete(table, id, nowv)); return nil; }
+    if (op == "restore") { if (id == nil) { return psFail(node, "restore needs id"); } psStore(node, pdRestore(table, id)); return nil; }
+    if (op == "exportenc") { if (key == nil) { return psFail(node, "exportenc needs key"); } psStore(node, pdExportEncrypted(table, key)); return nil; }
+    if (op == "importenc") {
+        if (key == nil) { return psFail(node, "importenc needs key"); }
+        psStore(node, pdImportEncrypted(table, key, toString(psAttrOr(node, "sealed", "")), psHas(node, "replace"), psStrAttr(node, "source")));
+        return nil;
+    }
+    if (op == "reencrypt") {
+        let ok1 = psStrAttr(node, "oldkey");
+        let nk = psStrAttr(node, "newkey");
+        if (ok1 == nil or nk == nil) { return psFail(node, "reencrypt needs oldkey and newkey"); }
+        psStore(node, pdReencrypt(table, ok1, nk, psList(psAttr(node, "enc")), psList(psAttr(node, "blind"))));
+        return nil;
+    }
+
+    // ---- security models ----
+    if (op == "user.create") {
+        if (key == nil) { return psFail(node, "user.create needs key"); }
+        let pol = psPolicyByName(psAttrOr(node, "policy", "standard"));
+        psStore(node, pdUserCreate(table, key, toString(psAttrOr(node, "email", "")), toString(psAttrOr(node, "password", "")), { policy: pol, now: nowv, extra: psPrefixed(node, "set.") }));
+        return nil;
+    }
+    if (op == "user.login") {
+        if (key == nil) { return psFail(node, "user.login needs key"); }
+        let pol2 = psPolicyByName(psAttrOr(node, "policy", "standard"));
+        psStore(node, pdUserLogin(table, key, toString(psAttrOr(node, "email", "")), toString(psAttrOr(node, "password", "")), { policy: pol2, now: nowv }));
+        return nil;
+    }
+    if (op == "user.change") {
+        if (key == nil or id == nil) { return psFail(node, "user.change needs key and id"); }
+        let pol3 = psPolicyByName(psAttrOr(node, "policy", "standard"));
+        psStore(node, pdUserChangePassword(table, key, id, toString(psAttrOr(node, "old", "")), toString(psAttrOr(node, "new", "")), { policy: pol3, now: nowv }));
+        return nil;
+    }
+    if (op == "session.create") { psStore(node, pdSessionCreate(table, toString(psAttrOr(node, "user", "")), psNum(psAttr(node, "ttl"), 3600), nowv, nil)); return nil; }
+    if (op == "session.check") { psStore(node, pdSessionCheck(table, toString(psAttrOr(node, "token", "")), nowv)); return nil; }
+    if (op == "session.revoke") { psStore(node, pdSessionRevoke(table, toString(psAttrOr(node, "token", "")))); return nil; }
+    if (op == "session.revokeuser") { psStore(node, pdSessionRevokeUser(table, toString(psAttrOr(node, "user", "")))); return nil; }
+    if (op == "session.purge") { psStore(node, pdSessionPurge(table, nowv)); return nil; }
+    if (op == "apikey.create") {
+        let kopts = { now: nowv, prefix: toString(psAttrOr(node, "prefix", "pk")) };
+        if (psHas(node, "ttl")) { kopts["ttl"] = psNum(psAttr(node, "ttl"), 0); }
+        psStore(node, pdApiKeyCreate(table, toString(psAttrOr(node, "owner", "")), psList(psAttr(node, "scopes")), kopts));
+        return nil;
+    }
+    if (op == "apikey.verify") { psStore(node, pdApiKeyVerify(table, toString(psAttrOr(node, "apikey", "")), nowv)); return nil; }
+    if (op == "apikey.revoke") { if (id == nil) { return psFail(node, "apikey.revoke needs id"); } psStore(node, pdApiKeyRevoke(table, id)); return nil; }
+    if (op == "apikey.rotate") { if (id == nil) { return psFail(node, "apikey.rotate needs id"); } psStore(node, pdApiKeyRotate(table, id, nowv)); return nil; }
+    if (op == "audit") { psStore(node, pdAuditLog(table, toString(psAttrOr(node, "event", "")), toString(psAttrOr(node, "actor", "")), psAttrOr(node, "data", ""), nowv)); return nil; }
+    if (op == "audit.verify") { psStore(node, pdAuditVerify(table)); return nil; }
+    if (op == "ratelimit") {
+        psStore(node, pdRateLimit(table, toString(psAttrOr(node, "rlkey", "")), psNum(psAttr(node, "max"), 5), psNum(psAttr(node, "window"), 60), nowv));
+        return nil;
+    }
+    if (op == "reset.create") { psStore(node, pdResetCreate(table, toString(psAttrOr(node, "user", "")), psNum(psAttr(node, "ttl"), 900), nowv)); return nil; }
+    if (op == "reset.consume") { psStore(node, pdResetConsume(table, toString(psAttrOr(node, "token", "")), nowv)); return nil; }
+    if (op == "nonce") { psStore(node, { ok: pdNonceUse(table, toString(psAttrOr(node, "nonce", "")), nowv, psNum(psAttr(node, "ttl"), 300)) }); return nil; }
+    if (op == "totp.enroll") {
+        if (key == nil) { return psFail(node, "totp.enroll needs key"); }
+        psStore(node, pdTotpEnroll(table, key, toString(psAttrOr(node, "user", "")), toString(psAttrOr(node, "issuer", "Passkit")), toString(psAttrOr(node, "account", "user"))));
+        return nil;
+    }
+    if (op == "totp.check") {
+        if (key == nil) { return psFail(node, "totp.check needs key"); }
+        psStore(node, pdTotpCheck(table, key, toString(psAttrOr(node, "user", "")), toString(psAttrOr(node, "code", "")), nowv));
+        return nil;
+    }
+    return psFail(node, "op is unknown: " + op);
+}
+
+// ---- <container of=... op=...> : Link Rin containers to a .passkit file --------------------------------------
+
+fun psTagContainer(node) {
+    let op = psOpOf(node);
+    let cname = psStrAttr(node, "of");
+    if (op == nil) { return psFail(node, "The op attribute is required"); }
+    if (op == "names") { psStore(node, container.names()); return nil; }
+    if (op == "sync") { psStore(node, { ok: true, synced: psSyncBinds(toString(psAttrOr(node, "dir", "push"))) }); return nil; }
+    if (cname == nil) { return psFail(node, "The of attribute (the container name) is required"); }
+    let field = psStrAttr(node, "field");
+    let key = psStrAttr(node, "key");
+
+    if (op == "ensure") { psStore(node, pdContEnsure(cname, psStrAttr(node, "kind"))); return nil; }
+    if (op == "exists") { psStore(node, hasContainer(cname)); return nil; }
+    if (op == "kind") { if (hasContainer(cname) == false) { psStore(node, nil); return nil; } psStore(node, kindOf(cname)); return nil; }
+    if (op == "fields") { psStore(node, pdContFields(cname)); return nil; }
+    if (op == "tojson") { psStore(node, pdContExport(cname)); return nil; }
+    if (op == "fromjson") { psStore(node, pdContImport(cname, toString(psAttrOr(node, "json", "{}")))); return nil; }
+    if (op == "checksum") { psStore(node, pdContChecksum(cname)); return nil; }
+    if (op == "clone") { psStore(node, pdContClone(cname, toString(psAttrOr(node, "to", cname + "_copy")))); return nil; }
+    if (op == "sealall") { if (key == nil) { return psFail(node, "sealall needs key"); } psStore(node, pdContSealAll(cname, key)); return nil; }
+    if (op == "openall") { if (key == nil) { return psFail(node, "openall needs key"); } psStore(node, pdContOpenAll(cname, key)); return nil; }
+
+    // field -> variables (load) / variables -> container (save)
+    if (op == "load") {
+        let prefix = toString(psAttrOr(node, "prefix", ""));
+        let m = pdContToMap(cname);
+        let n = 0;
+        for (let k in keys(m)) { PKS["vars"][prefix + k] = m[k]; n = n + 1; }
+        psStore(node, { ok: true, loaded: n });
+        return nil;
+    }
+    if (op == "save") {
+        let names = psList(psAttr(node, "vars"));
+        let n2 = 0;
+        for (let vn in names) {
+            if (has(PKS["vars"], vn)) { pdContSet(cname, vn, PKS["vars"][vn]); n2 = n2 + 1; }
+        }
+        psStore(node, { ok: true, saved: n2 });
+        return nil;
+    }
+
+    if (field == nil) { return psFail(node, "op=" + op + " needs field"); }
+    if (op == "get") { psStore(node, pdContGet(cname, field)); return nil; }
+    if (op == "set") { psStore(node, pdContSet(cname, field, psAttrOr(node, "value", ""))); return nil; }
+    if (op == "has") { psStore(node, pdContHas(cname, field)); return nil; }
+    if (op == "delete") { psStore(node, pdContDelete(cname, field)); return nil; }
+    if (op == "seal") { if (key == nil) { return psFail(node, "seal needs key"); } psStore(node, pdContSeal(cname, field, key)); return nil; }
+    if (op == "open") { if (key == nil) { return psFail(node, "open needs key"); } psStore(node, pdContOpen(cname, field, key)); return nil; }
+
+    // run a .passkit source stored inside a container field (code as data)
+    if (op == "exec") {
+        let src = pdContGet(cname, field);
+        if (src == nil) { psStore(node, { ok: false, message: "The field is empty or missing" }); return nil; }
+        let r = psRunChild(toString(src), psPrefixed(node, "in."), PKS["base"]);
+        if (psHas(node, "quiet") == false) { let i = 0; while (i < len(r["output"])) { psEmit(r["output"][i]); i = i + 1; } }
+        psStore(node, { ok: r["ok"], value: r["value"], vars: r["vars"], output: r["output"], message: r["message"] });
+        return nil;
+    }
+
+    // two-way binding variable <-> field: bind registers and pulls the value, and sync pushes/pulls
+    if (op == "bind") {
+        let vn2 = psStrAttr(node, "var");
+        if (vn2 == nil) { return psFail(node, "bind needs var"); }
+        push(PKS["binds"], { of: cname, field: field, var: vn2 });
+        if (pdContHas(cname, field)) { PKS["vars"][vn2] = pdContGet(cname, field); }
+        psStore(node, { ok: true, bound: len(PKS["binds"]) });
+        return nil;
+    }
+    return psFail(node, "op is unknown: " + op);
+}
+
+// <container of="x" op="sync" dir="push|pull"/> without field: syncs all links registered with bind
+fun psSyncBinds(dir) {
+    let n = 0;
+    for (let b in PKS["binds"]) {
+        if (dir == "pull") {
+            if (pdContHas(b["of"], b["field"])) { PKS["vars"][b["var"]] = pdContGet(b["of"], b["field"]); n = n + 1; }
+        } else {
+            if (has(PKS["vars"], b["var"])) { pdContSet(b["of"], b["field"], PKS["vars"][b["var"]]); n = n + 1; }
+        }
+    }
+    return n;
+}
+
+// ---- Rin API for container linking ---------------------------------------------------------------------------
+
+// container fields as ready-made inputs for passkitRun
+fun passkitFromContainer(name) {
+    return pdContToMap(name);
+}
+
+// write the variables of a run result into a container (prefix optional)
+fun passkitToContainer(result, name, prefix) {
+    return pdContFromMap(name, result["vars"], prefix);
+}
+
+// run a source stored in a container field; inputs are optional (by default the container's other fields)
+fun passkitRunContainer(name, field, inputs) {
+    let src = pdContGet(name, field);
+    if (src == nil) { return psFailResult("Field not found: " + name + "." + field); }
+    let inp = inputs;
+    if (inp == nil) {
+        inp = {};
+        let m = pdContToMap(name);
+        for (let k in keys(m)) { if (k != field) { inp[k] = m[k]; } }
+    }
+    return passkitRunSource(toString(src), inp);
+}
+
+// run + write the outputs back into the container with the same names prefixed by outPrefix (default "out_")
+fun passkitRunLinked(name, field, outPrefix) {
+    let r = passkitRunContainer(name, field, nil);
+    if (r["ok"]) {
+        let p = "out_";
+        if (outPrefix != nil) { p = outPrefix; }
+        pdContFromMap(name, r["vars"], p);
+        if (r["value"] != nil) { pdContSet(name, p + "value", r["value"]); }
+    }
+    return r;
+}
+)PASSKITLANGOGRIN";
 static const char* kLib_physics_og_rin = R"PHYSICSOGRIN(
 // ============================================================================
 //  lib/physics.og.rin — مكتبة فيزياء متكاملة فوق stdlib الأساسية
@@ -14117,6 +18383,10 @@ inline const std::unordered_map<std::string, std::string>& embeddedRinLibraries(
         {"lib/syskit.og.rin", kLib_syskit_og_rin},
         {"lib/requirekit.og.rin", kLib_requirekit_og_rin},
         {"lib/physics.og.rin", kLib_physics_og_rin},
+        {"lib/passkitlang.og.rin", kLib_passkitlang_og_rin},
+        {"lib/passkitdb.og.rin", kLib_passkitdb_og_rin},
+        {"lib/passkitcrypt.og.rin", kLib_passkitcrypt_og_rin},
+        {"lib/passkit.og.rin", kLib_passkit_og_rin},
         {"lib/archivekit.og.rin", kLib_archivekit_og_rin},
         {"lib/rintest.og.rin", kLib_rintest_og_rin},
         {"lib/packkit.og.rin", kLib_packkit_og_rin},
