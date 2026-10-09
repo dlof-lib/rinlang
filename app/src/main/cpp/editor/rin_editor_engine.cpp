@@ -5,6 +5,7 @@
 #include "../rin_common.h"
 #include "../diagnostics/diagnostic.h"
 #include "../diagnostics/diagnostic_engine.h"
+#include "rin_passkit_highlight.h"
 #include <algorithm>
 #include <chrono>
 #include <unordered_map>
@@ -36,6 +37,13 @@ static std::vector<std::string> splitLines(const std::string& text) {
 }
 
 EditorEngine::EditorEngine() { lines_.push_back(""); }
+
+void EditorEngine::setLanguage(const std::string& extension) {
+    std::string ext = extension;
+    if (!ext.empty() && ext[0] == '.') ext.erase(0, 1);
+    for (auto& c : ext) c = (char)std::tolower((unsigned char)c);
+    language_ = (ext == "passkit") ? EditorLanguage::Passkit : EditorLanguage::Rin;
+}
 
 void EditorEngine::setText(const std::string& text) {
     lines_ = splitLines(text);
@@ -448,6 +456,39 @@ void EditorEngine::toggleLineComment() {
     int sl, sc, el, ec;
     if (hasSel_) getSelection(&sl, &sc, &el, &ec);
     else { sl = el = cursor_.line; sc = cursor_.col; ec = cursor_.col; }
+    sl = clampLine(sl); el = clampLine(el);
+    if (el < sl) std::swap(sl, el);
+
+    if (language_ == EditorLanguage::Passkit) {
+        // passkit لا يملك تعليق سطر: كل سطر يُغلَّف بـ <!-- ... --> ويُفكّ الغلاف بالعكس.
+        auto isWrapped = [](const std::string& l) {
+            size_t a = l.find_first_not_of(" \t");
+            if (a == std::string::npos) return true; // السطر الفارغ لا يُحتسَب
+            size_t b = l.find_last_not_of(" \t\r");
+            return b >= a + 6 && l.compare(a, 4, "<!--") == 0 && l.compare(b - 2, 3, "-->") == 0;
+        };
+        bool all = true;
+        for (int i = sl; i <= el; ++i) if (!isWrapped(lines_[i])) { all = false; break; }
+        std::vector<std::string> out;
+        for (int i = sl; i <= el; ++i) {
+            const std::string& l = lines_[i];
+            size_t a = l.find_first_not_of(" \t");
+            if (a == std::string::npos) { out.push_back(l); continue; }
+            size_t b = l.find_last_not_of(" \t\r");
+            if (all) {
+                std::string inner = l.substr(a + 4, b - 2 - (a + 4));
+                if (!inner.empty() && inner.front() == ' ') inner.erase(0, 1);
+                if (!inner.empty() && inner.back() == ' ') inner.pop_back();
+                out.push_back(l.substr(0, a) + inner + l.substr(b + 1));
+            } else {
+                out.push_back(l.substr(0, a) + "<!-- " + l.substr(a, b + 1 - a) + " -->" + l.substr(b + 1));
+            }
+        }
+        std::string block;
+        for (size_t i = 0; i < out.size(); ++i) { block += out[i]; if (i + 1 < out.size()) block += '\n'; }
+        applyReplaceTracked(sl, 0, el, (int)lines_[el].size(), block, false);
+        return;
+    }
 
     bool allCommented = true;
     for (int i = sl; i <= el; ++i) {
@@ -514,6 +555,8 @@ void EditorEngine::unindentSelection() {
 // --- فحص/بحث --------------------------------------------------------------
 
 int EditorEngine::checkBracketBalance() const {
+    // في passkit تظهر الأقواس والتنصيص داخل النصوص والتعليقات بحرية؛ فحص الأقواس على طريقة Rin مضلِّل.
+    if (language_ != EditorLanguage::Rin) return -1;
     struct Open { char ch; int line; };
     std::vector<Open> stack;
     for (int i = 0; i < (int)lines_.size(); ++i) {
@@ -663,6 +706,7 @@ static std::vector<HighlightSpan> computeCommentGaps(
 }
 
 std::vector<HighlightSpan> EditorEngine::computeHighlights() const {
+    if (language_ == EditorLanguage::Passkit) return computePasskitHighlights(lines_);
     std::vector<HighlightSpan> out;
     std::string source = getText();
     try {
@@ -713,13 +757,16 @@ std::vector<std::string> EditorEngine::collectSuggestions(const std::string& pre
 
     // 1) الكلمات المحجوزة الفعلية للغة
     std::vector<std::string> keywordMatches;
-    for (const std::string& kw : rin::keywordList()) {
+    std::vector<std::string> languageKeywords = (language_ == EditorLanguage::Passkit)
+        ? passkit::tagNames() : rin::keywordList();
+    for (const std::string& kw : languageKeywords) {
         if (!prefixLower.empty() && !startsWithPrefix(kw)) continue;
         if (kw == prefix) continue; // النص المطابق تمامًا لما كُتب بالفعل لا فائدة من اقتراحه
         keywordMatches.push_back(kw);
     }
     // أسماء النوع/المساحات الأساسية التي ليست كلمات محجوزة: Set (docs/set.md) و Env (docs/env.md)
     for (const char* ns : {"Set", "Env"}) {
+        if (language_ != EditorLanguage::Rin) break; // أسماء Rin فقط
         std::string kw = ns;
         if (!prefixLower.empty() && !startsWithPrefix(kw)) continue;
         if (kw == prefix) continue;
@@ -729,7 +776,25 @@ std::vector<std::string> EditorEngine::collectSuggestions(const std::string& pre
 
     // 2) المعرِّفات (IDENT) الفريدة الظاهرة فعلاً في المستند الحالي
     std::unordered_set<std::string> identSet;
-    try {
+    if (language_ == EditorLanguage::Passkit) {
+        // passkit ليس Rin: مسح بسيط للمعرِّفات (أسماء السمات/المتغيّرات) بدل rin::Lexer.
+        for (const std::string& ln : lines_) {
+            size_t i = 0;
+            while (i < ln.size()) {
+                size_t before = i;
+                if (passkit::isIdentStart((unsigned char)ln[i])) {
+                    size_t j = i;
+                    while (j < ln.size() && passkit::isIdentChar((unsigned char)ln[j])) ++j;
+                    std::string w = ln.substr(i, j - i);
+                    if (w != prefix && w.size() > 1 && (prefixLower.empty() || startsWithPrefix(w))) identSet.insert(w);
+                    i = j;
+                } else {
+                    ++i;
+                }
+                if (i <= before) i = before + 1;
+            }
+        }
+    } else try {
         rin::Lexer lexer(getText());
         for (const rin::Token& tok : lexer.scanTokens()) {
             if (tok.type != rin::TokenType::IDENT) continue;
@@ -749,6 +814,8 @@ std::vector<std::string> EditorEngine::collectSuggestions(const std::string& pre
     }
     for (const auto& id : identMatches) {
         if ((int)result.size() >= maxResults) return result;
+        // لا نكرّر اقتراحاً موجوداً أصلاً ضمن الكلمات المحجوزة (مثل وسم email المكتوب في المستند)
+        if (std::find(keywordMatches.begin(), keywordMatches.end(), id) != keywordMatches.end()) continue;
         result.push_back(id);
     }
     return result;
@@ -791,6 +858,8 @@ void EditorEngine::appendEditorDiagnostic_(std::vector<EditorDiagnostic>& out,
 
 std::vector<EditorDiagnostic> EditorEngine::computeDiagnostics() const {
     std::vector<EditorDiagnostic> out;
+    // ملف passkit ليس Rin: تشغيل rin::Parser عليه يُنتج أخطاء حمراء كاذبة على كل وسم.
+    if (language_ != EditorLanguage::Rin) return out;
     std::string source = getText();
     std::vector<rin::Token> tokens;
     try {
