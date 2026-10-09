@@ -1,0 +1,75 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Passkit",
+  "scopeName": "text.passkit",
+  "fileTypes": ["passkit"],
+  "comment": "Official passkit grammar. Mirrors the native editor highlighter (app/src/main/cpp/editor/rin_passkit_highlight.h) and examples/customlang/passkit/syntax.rinsyntax.json. Colors: tag #4EC9B0, attribute #9CDCFE, variable #DCDCAA, string #CE9178, comment #6A9955, brackets #F59E0B.",
+  "patterns": [
+    { "include": "#comment" },
+    { "include": "#directive" },
+    { "include": "#tag-close" },
+    { "include": "#tag-open" },
+    { "include": "#variable" }
+  ],
+  "repository": {
+    "comment": {
+      "name": "comment.block.passkit",
+      "begin": "<!--",
+      "end": "-->",
+      "beginCaptures": { "0": { "name": "punctuation.definition.comment.begin.passkit" } },
+      "endCaptures": { "0": { "name": "punctuation.definition.comment.end.passkit" } }
+    },
+    "directive": {
+      "name": "meta.preprocessor.passkit",
+      "begin": "<[?!]",
+      "end": ">",
+      "beginCaptures": { "0": { "name": "punctuation.definition.tag.begin.passkit" } },
+      "endCaptures": { "0": { "name": "punctuation.definition.tag.end.passkit" } }
+    },
+    "tag-close": {
+      "match": "(</)((?:passkit|set|print|if|else|for|assert|email|password|apikey|link|api|sql|input|return|import|run|call|crypt|token|otp|db|container)|[A-Za-z_][\\w:.-]*)\\s*(>)",
+      "captures": {
+        "1": { "name": "punctuation.definition.tag.begin.passkit" },
+        "2": { "name": "entity.name.tag.passkit" },
+        "3": { "name": "punctuation.definition.tag.end.passkit" }
+      }
+    },
+    "tag-open": {
+      "begin": "(<)((?:passkit|set|print|if|else|for|assert|email|password|apikey|link|api|sql|input|return|import|run|call|crypt|token|otp|db|container)(?![\\w:.-])|[A-Za-z_][\\w:.-]*)",
+      "end": "(/?>)",
+      "beginCaptures": {
+        "1": { "name": "punctuation.definition.tag.begin.passkit" },
+        "2": { "name": "entity.name.tag.passkit" }
+      },
+      "endCaptures": { "1": { "name": "punctuation.definition.tag.end.passkit" } },
+      "patterns": [
+        { "include": "#string-double" },
+        { "include": "#string-single" },
+        { "include": "#variable" },
+        {
+          "match": "[A-Za-z_][\\w:.-]*",
+          "name": "entity.other.attribute-name.passkit"
+        },
+        { "match": "=", "name": "punctuation.separator.key-value.passkit" }
+      ]
+    },
+    "string-double": {
+      "name": "string.quoted.double.passkit",
+      "begin": "\"",
+      "end": "\"",
+      "patterns": [{ "include": "#variable" }]
+    },
+    "string-single": {
+      "name": "string.quoted.single.passkit",
+      "begin": "'",
+      "end": "'",
+      "patterns": [{ "include": "#variable" }]
+    },
+    "variable": {
+      "patterns": [
+        { "match": "\\$[A-Za-z_][\\w]*(?:\\.[A-Za-z_][\\w]*)*", "name": "variable.other.passkit" },
+        { "match": "\\{[A-Za-z_][\\w.\\[\\]-]*\\}", "name": "variable.other.interpolation.passkit" }
+      ]
+    }
+  }
+}
