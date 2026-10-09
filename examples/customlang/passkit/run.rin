@@ -1,0 +1,31 @@
+// ============================================================================
+//  run.rin — Complete entry point for the language "Passkit": .passkit source -> tokens -> AST -> execution
+//
+//  Usage from the Rin command line:   rin run.rin
+//  or edit SOURCE_PATH below while developing inside the editor/IDE.
+// ============================================================================
+
+@import "./Interpreter.rin";
+@import "./CodeGen.rin";
+
+let SOURCE_PATH = "examples/hello.passkit";
+
+fun runFile(path) {
+    let result = passkitRun(path, {});
+
+    let i = 0;
+    while (i < len(result["output"])) {
+        print result["output"][i];
+        i = i + 1;
+    }
+    if (result["ok"] == false) {
+        print formatLangError(result["error"]);
+        return nil;
+    }
+
+    // optional: formatted source + standalone Rin script
+    // print generate(parse(lex(source)));
+    return nil;
+}
+
+runFile(SOURCE_PATH);
