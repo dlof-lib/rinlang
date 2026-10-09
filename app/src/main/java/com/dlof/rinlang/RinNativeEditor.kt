@@ -37,6 +37,7 @@ class RinNativeEditor {
         @JvmStatic private external fun nativeDestroy(handle: Long)
         @JvmStatic private external fun nativeSetText(handle: Long, text: String)
         @JvmStatic private external fun nativeGetText(handle: Long): String
+        @JvmStatic private external fun nativeSetLanguage(handle: Long, extension: String)
         @JvmStatic private external fun nativeGetLineCount(handle: Long): Int
         @JvmStatic private external fun nativeGetLine(handle: Long, line: Int): String
         @JvmStatic private external fun nativeGetCursor(handle: Long): IntArray
@@ -243,7 +244,17 @@ class RinNativeEditor {
 
     /** اقتراحات إكمال تلقائي (كلمات محجوزة للغة Rin + معرِّفات المستند) تبدأ بـ [prefix]. */
     /** توافق واجهة RinCodeEditorView القديمة. التلوين هنا Rin أصلاً من rin::Lexer في C++. */
-    fun setLanguage(extension: String) { /* Native Rin editor is intentionally language-source driven. */ }
+    /**
+     * يضبط لغة التلوين/التشخيص حسب امتداد الملف. فقط "passkit" يغيّر السلوك؛ كل امتداد آخر يبقى
+     * Rin كما كان (المحرك الأصلي يلوّن بـ rin::Lexer الحقيقي). فشل الاستدعاء الأصلي لا يُسقط التطبيق.
+     */
+    fun setLanguage(extension: String) {
+        try {
+            nativeSetLanguage(requireHandle(), extension)
+        } catch (t: Throwable) {
+            android.util.Log.w("RinNativeEditor", "setLanguage($extension) failed", t)
+        }
+    }
 
     fun collectSuggestions(prefix: String, maxResults: Int = 20): List<String> =
         getSuggestions(prefix, maxResults)
