@@ -1,0 +1,1423 @@
+// ============================================================================
+//  Interpreter.rin — Executing the language "Passkit" (tags <>): AST -> results
+//
+//  Tags:  <passkit> <set> <print> <if>/<else> <for> <assert>
+//           <email> <password> <apikey> <link> <api> <sql>
+//  every tag carries name="x" so that it stores its result in variable x, and it is read later with $x or $x.field
+//  and variables go inside the text in the form {x.field}.
+// ============================================================================
+
+@import "./Parser.rin";
+@import "passkit";
+@import "passkitcrypt";
+@import "passkitdb";
+
+let PKS = { vars: {}, out: [], handlers: {}, base: "", depth: 0, stack: [], returned: false, ret: nil, binds: [] };
+
+// ---- Values and variables ------------------------------------------------------------
+
+fun psReset() {
+    PKS["vars"] = {};
+    PKS["out"] = [];
+    PKS["returned"] = false;
+    PKS["ret"] = nil;
+}
+
+fun psIsPathChar(ch) {
+    return isAlnumChar(ch) or ch == ".";
+}
+
+fun psIsPath(s) {
+    if (len(s) == 0) { return false; }
+    let i = 0;
+    while (i < len(s)) {
+        if (psIsPathChar(charAt(s, i)) == false) { return false; }
+        i = i + 1;
+    }
+    return true;
+}
+
+fun psAllDigits(s) {
+    if (len(s) == 0) { return false; }
+    let i = 0;
+    while (i < len(s)) {
+        if (contains("0123456789", charAt(s, i)) == false) { return false; }
+        i = i + 1;
+    }
+    return true;
+}
+
+// x.y.z inside any root map (maps and arrays); returns nil if not found
+fun psLookupIn(root, path) {
+    let parts = split(path, ".");
+    let cur = root;
+    let i = 0;
+    while (i < len(parts)) {
+        let p = parts[i];
+        if (type(cur) == "map") {
+            if (has(cur, p) == false) { return nil; }
+            cur = cur[p];
+        } else if (type(cur) == "array") {
+            if (psAllDigits(p) == false) { return nil; }
+            let idx = toNumber(p);
+            if (idx >= len(cur)) { return nil; }
+            cur = cur[idx];
+        } else {
+            return nil;
+        }
+        i = i + 1;
+    }
+    return cur;
+}
+
+fun psLookup(path) {
+    return psLookupIn(PKS["vars"], path);
+}
+
+// "$x.y" as a whole => the value with its original type; "text {x} text" => text substitution
+fun psResolve(raw) {
+    if (type(raw) != "string") { return raw; }
+    if (len(raw) > 1 and charAt(raw, 0) == "$" and psIsPath(substr(raw, 1, len(raw) - 1))) {
+        return psLookup(substr(raw, 1, len(raw) - 1));
+    }
+    if (contains(raw, "{") == false) { return raw; }
+    let out = "";
+    let i = 0;
+    let n = len(raw);
+    while (i < n) {
+        let ch = charAt(raw, i);
+        if (ch == "{") {
+            let rest = substr(raw, i + 1, n - i - 1);
+            let close = indexOf(rest, "}");
+            if (close > 0 and psIsPath(substr(rest, 0, close))) {
+                let v = psLookup(substr(rest, 0, close));
+                if (v == nil) { out = out + ""; } else { out = out + toString(v); }
+                i = i + close + 2;
+            } else {
+                out = out + ch;
+                i = i + 1;
+            }
+        } else {
+            out = out + ch;
+            i = i + 1;
+        }
+    }
+    return out;
+}
+
+fun psNum(v, fallback) {
+    if (type(v) == "number") { return v; }
+    if (type(v) == "string") {
+        let t = trim(v);
+        if (psAllDigits(t)) { return toNumber(t); }
+        if (len(t) > 2 and charAt(t, 0) == "-" and psAllDigits(substr(t, 1, len(t) - 1))) { return toNumber(t); }
+        let dot = indexOf(t, ".");
+        if (dot > 0 and psAllDigits(substr(t, 0, dot)) and psAllDigits(substr(t, dot + 1, len(t) - dot - 1))) { return toNumber(t); }
+    }
+    return fallback;
+}
+
+fun psTruthy(v) {
+    if (v == nil) { return false; }
+    if (v == false) { return false; }
+    if (v == "" or v == "false" or v == 0) { return false; }
+    return true;
+}
+
+fun psIsFlag(v) {
+    return v == "true" or v == true;
+}
+
+// ---- Attribute helpers ---------------------------------------------------------------
+
+fun psHas(node, key) { return has(node["attrs"], key); }
+
+fun psAttr(node, key) {
+    if (has(node["attrs"], key) == false) { return nil; }
+    return psResolve(node["attrs"][key]);
+}
+
+fun psAttrOr(node, key, fallback) {
+    let v = psAttr(node, key);
+    if (v == nil) { return fallback; }
+    return v;
+}
+
+fun psFail(node, message) {
+    return langError("Interpreter", "<" + node["name"] + "> " + message, node["line"]);
+}
+
+fun psStore(node, value) {
+    if (has(node["attrs"], "name")) {
+        PKS["vars"][node["attrs"]["name"]] = value;
+    }
+}
+
+fun psEmit(msg) {
+    push(PKS["out"], msg);
+}
+
+// ---- URL encoding/decoding ---------------------------------------------------
+
+fun psUrlEncode(s) {
+    let keep = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_.~";
+    let chars = pkChars(s);
+    let out = "";
+    let i = 0;
+    while (i < len(chars)) {
+        let c = chars[i];
+        if (contains(keep, c)) {
+            out = out + c;
+        } else {
+            let hx = sec.hexEncode(c);            // the UTF-8 bytes of the whole character
+            let j = 0;
+            while (j < len(hx)) { out = out + "%" + upper(substr(hx, j, 2)); j = j + 2; }
+        }
+        i = i + 1;
+    }
+    return out;
+}
+
+fun psUrlDecode(s) {
+    let out = "";
+    let i = 0;
+    let n = len(s);
+    let bytes = "";
+    while (i < n) {
+        let ch = charAt(s, i);
+        if (ch == "+") { out = out + " "; i = i + 1; }
+        else if (ch == "%" and i + 2 < n + 0 and contains("0123456789abcdefABCDEF", charAt(s, i + 1)) and contains("0123456789abcdefABCDEF", charAt(s, i + 2))) {
+            out = out + sec.hexDecode(lower(substr(s, i + 1, 2)));
+            i = i + 3;
+        } else { out = out + ch; i = i + 1; }
+    }
+    return out;
+}
+
+// ---- <email> ----------------------------------------------------------------------
+
+fun psEmailCheck(raw) {
+    let a = lower(trim(raw));
+    let r = { ok: false, input: raw, address: a, local: "", domain: "", masked: "", error: "" };
+    let parts = split(a, "@");
+    if (len(parts) != 2) { r["error"] = "must contain exactly one @"; return r; }
+    let local = parts[0];
+    let domain = parts[1];
+    if (len(local) < 1 or len(local) > 64) { r["error"] = "the part before @ must be 1 to 64 long"; return r; }
+    if (len(domain) < 4 or len(domain) > 253) { r["error"] = "the domain is too short/long"; return r; }
+    let okLocal = "abcdefghijklmnopqrstuvwxyz0123456789._%+-";
+    let okDomain = "abcdefghijklmnopqrstuvwxyz0123456789.-";
+    let i = 0;
+    while (i < len(local)) {
+        if (contains(okLocal, charAt(local, i)) == false) { r["error"] = "Character not allowed before @: " + charAt(local, i); return r; }
+        i = i + 1;
+    }
+    i = 0;
+    while (i < len(domain)) {
+        if (contains(okDomain, charAt(domain, i)) == false) { r["error"] = "Character not allowed in the domain"; return r; }
+        i = i + 1;
+    }
+    if (charAt(local, 0) == "." or charAt(local, len(local) - 1) == ".") { r["error"] = "The local part must not start/end with a dot"; return r; }
+    if (contains(local, "..") or contains(domain, "..")) { r["error"] = "Two consecutive dots are not allowed"; return r; }
+    let labels = split(domain, ".");
+    if (len(labels) < 2) { r["error"] = "The domain has no extension (like .com)"; return r; }
+    let k = 0;
+    while (k < len(labels)) {
+        let lb = labels[k];
+        if (len(lb) == 0 or charAt(lb, 0) == "-" or charAt(lb, len(lb) - 1) == "-") { r["error"] = "Invalid domain part"; return r; }
+        k = k + 1;
+    }
+    if (len(labels[len(labels) - 1]) < 2) { r["error"] = "The domain extension is too short"; return r; }
+    r["ok"] = true;
+    r["local"] = local;
+    r["domain"] = domain;
+    r["tld"] = labels[len(labels) - 1];
+    r["masked"] = charAt(local, 0) + "***@" + domain;
+    r["error"] = "";
+    return r;
+}
+
+fun psTagEmail(node) {
+    // <email name="e" address="a@b.com" />   |   <email name="m" mailto="a@b.com" subject="..." body="..." />
+    if (psHas(node, "mailto")) {
+        let to = psAttr(node, "mailto");
+        if (to == nil) { return psFail(node, "mailto: the variable is not defined"); }
+        let chk = psEmailCheck(toString(to));
+        if (chk["ok"] == false) { psStore(node, { ok: false, error: chk["error"] }); return nil; }
+        let url = "mailto:" + chk["address"];
+        let sep = "?";
+        if (psHas(node, "subject")) { url = url + sep + "subject=" + psUrlEncode(toString(psAttr(node, "subject"))); sep = "&"; }
+        if (psHas(node, "body")) { url = url + sep + "body=" + psUrlEncode(toString(psAttr(node, "body"))); }
+        psStore(node, { ok: true, url: url, to: chk["address"] });
+        return nil;
+    }
+    let addr = psAttr(node, "address");
+    if (addr == nil) { return psFail(node, "The address attribute is required (or its variable is not defined)"); }
+    psStore(node, psEmailCheck(toString(addr)));
+    return nil;
+}
+
+// ---- <password> -------------------------------------------------------------------
+
+fun psPolicyByName(name) {
+    if (name == "basic") { return pkPolicyBasic(); }
+    if (name == "strict") { return pkPolicyStrict(); }
+    if (name == "pin") { return pkPolicyPin(6); }
+    return pkPolicyStandard();
+}
+
+fun psTagPassword(node) {
+    if (psHas(node, "generate")) {
+        let opts = { length: psNum(psAttr(node, "length"), 16) };
+        if (psAttr(node, "symbols") == "false") { opts["symbols"] = false; }
+        if (psAttr(node, "ambiguous") == "false") { opts["avoidAmbiguous"] = true; }
+        let g = pkGenerate(opts);
+        if (g["ok"] == false) { return psFail(node, g["error"]); }
+        psStore(node, g);
+        return nil;
+    }
+    if (psHas(node, "passphrase")) {
+        let g = pkPassphrase({ words: psNum(psAttr(node, "words"), 6), separator: psAttrOr(node, "separator", "-") });
+        if (g["ok"] == false) { return psFail(node, g["error"]); }
+        psStore(node, g);
+        return nil;
+    }
+    if (psHas(node, "pin")) {
+        let g = pkGeneratePin(psNum(psAttr(node, "length"), 6));
+        if (g["ok"] == false) { return psFail(node, g["error"]); }
+        psStore(node, g);
+        return nil;
+    }
+    if (psHas(node, "check") or psHas(node, "strength")) {
+        let key = "check";
+        if (psHas(node, "strength")) { key = "strength"; }
+        let pw = psAttr(node, key);
+        if (pw == nil) { return psFail(node, key + ": the variable is not defined"); }
+        let ctx = {};
+        if (psHas(node, "username")) { ctx["username"] = toString(psAttr(node, "username")); }
+        if (psHas(node, "email")) { ctx["email"] = toString(psAttr(node, "email")); }
+        if (key == "strength") { psStore(node, pkAnalyze(toString(pw), ctx)); return nil; }
+        psStore(node, pkCheck(toString(pw), psPolicyByName(psAttrOr(node, "policy", "standard")), ctx));
+        return nil;
+    }
+    if (psHas(node, "hash")) {
+        let pw = psAttr(node, "hash");
+        if (pw == nil) { return psFail(node, "hash: the variable is not defined"); }
+        psStore(node, { ok: true, hash: pkHash(toString(pw), { iterations: psNum(psAttr(node, "iterations"), PK_DEFAULT_ITERATIONS) }) });
+        return nil;
+    }
+    if (psHas(node, "verify")) {
+        let pw = psAttr(node, "verify");
+        let against = psAttr(node, "against");
+        if (pw == nil or against == nil) { return psFail(node, "verify needs the password and the against attribute (the hash)"); }
+        psStore(node, { ok: pkVerify(toString(pw), toString(against)) });
+        return nil;
+    }
+    if (psHas(node, "mask")) {
+        let pw = psAttr(node, "mask");
+        if (pw == nil) { return psFail(node, "mask: the variable is not defined"); }
+        psStore(node, { ok: true, masked: pkMask(toString(pw)) });
+        return nil;
+    }
+    return psFail(node, "choose an operation: generate | passphrase | pin | check | strength | hash | verify | mask");
+}
+
+// ---- <apikey> ---------------------------------------------------------------------
+
+fun psKeyMask(key) {
+    let n = len(key);
+    if (n <= 12) { return "****"; }
+    return substr(key, 0, 7) + "…" + substr(key, n - 4, 4);
+}
+
+fun psTagApikey(node) {
+    if (psHas(node, "generate")) {
+        let prefix = toString(psAttrOr(node, "prefix", "pk"));
+        let bytes = psNum(psAttr(node, "bytes"), 24);
+        if (bytes < 16 or bytes > 64) { return psFail(node, "bytes between 16 and 64"); }
+        let secret = sec.randomToken(bytes);
+        let key = prefix + "_" + secret;
+        psStore(node, { ok: true, key: key, id: substr(secret, 0, 8), hash: sec.sha256(key), masked: psKeyMask(key), prefix: prefix });
+        return nil;
+    }
+    if (psHas(node, "verify")) {
+        let key = psAttr(node, "verify");
+        let against = psAttr(node, "against");
+        if (key == nil or against == nil) { return psFail(node, "verify needs the key and the against attribute (hash)"); }
+        psStore(node, { ok: sec.constantTimeEqual(sec.sha256(toString(key)), toString(against)) });
+        return nil;
+    }
+    if (psHas(node, "check")) {
+        let key = psAttr(node, "check");
+        if (key == nil) { return psFail(node, "check: the variable is not defined"); }
+        let k = toString(key);
+        let prefix = toString(psAttrOr(node, "prefix", "pk"));
+        let ok = indexOf(k, prefix + "_") == 0 and len(k) >= len(prefix) + 1 + 32;
+        let r = { ok: ok };
+        if (ok == false) { r["error"] = "Invalid key format (must start with " + prefix + "_ and be followed by 32+ characters)"; }
+        psStore(node, r);
+        return nil;
+    }
+    if (psHas(node, "mask")) {
+        let key = psAttr(node, "mask");
+        if (key == nil) { return psFail(node, "mask: the variable is not defined"); }
+        psStore(node, { ok: true, masked: psKeyMask(toString(key)) });
+        return nil;
+    }
+    return psFail(node, "choose an operation: generate | verify | check | mask");
+}
+
+// ---- <link> -----------------------------------------------------------------------
+
+fun psLinkParse(url) {
+    let r = { ok: false, url: url, scheme: "", host: "", port: "", path: "", query: {}, fragment: "", secure: false, error: "" };
+    let u = trim(url);
+    let sp = indexOf(u, "://");
+    if (sp < 1) { r["error"] = "The link has no scheme (like https://)"; return r; }
+    let scheme = lower(substr(u, 0, sp));
+    if (scheme != "http" and scheme != "https") { r["error"] = "Unsupported scheme: " + scheme; return r; }
+    let rest = substr(u, sp + 3, len(u) - sp - 3);
+    if (contains(rest, " ")) { r["error"] = "The link contains a space (encode it as %20)"; return r; }
+    let frag = "";
+    let h = indexOf(rest, "#");
+    if (h >= 0) { frag = substr(rest, h + 1, len(rest) - h - 1); rest = substr(rest, 0, h); }
+    let q = "";
+    let qi = indexOf(rest, "?");
+    if (qi >= 0) { q = substr(rest, qi + 1, len(rest) - qi - 1); rest = substr(rest, 0, qi); }
+    let path = "";
+    let pi = indexOf(rest, "/");
+    let hostport = rest;
+    if (pi >= 0) { path = substr(rest, pi, len(rest) - pi); hostport = substr(rest, 0, pi); }
+    let host = hostport;
+    let port = "";
+    let ci = indexOf(hostport, ":");
+    if (ci >= 0) { host = substr(hostport, 0, ci); port = substr(hostport, ci + 1, len(hostport) - ci - 1); }
+    if (len(host) == 0 or contains(host, "@")) { r["error"] = "Invalid host"; return r; }
+    if (port != "" and psAllDigits(port) == false) { r["error"] = "Invalid port"; return r; }
+    let query = {};
+    if (len(q) > 0) {
+        let pairs = split(q, "&");
+        let i = 0;
+        while (i < len(pairs)) {
+            if (len(pairs[i]) > 0) {
+                let eq = indexOf(pairs[i], "=");
+                if (eq < 0) { query[psUrlDecode(pairs[i])] = ""; }
+                else { query[psUrlDecode(substr(pairs[i], 0, eq))] = psUrlDecode(substr(pairs[i], eq + 1, len(pairs[i]) - eq - 1)); }
+            }
+            i = i + 1;
+        }
+    }
+    r["ok"] = true;
+    r["scheme"] = scheme;
+    r["host"] = lower(host);
+    r["port"] = port;
+    r["path"] = path;
+    r["query"] = query;
+    r["fragment"] = frag;
+    r["secure"] = scheme == "https";
+    r["error"] = "";
+    return r;
+}
+
+fun psTagLink(node) {
+    // <link name="l" url="https://x.com/a?b=1" [https] />
+    // <link name="u" build base="https://x.com" path="/a" query.id="5" />
+    if (psHas(node, "build")) {
+        let base = psAttr(node, "base");
+        if (base == nil) { return psFail(node, "build needs base"); }
+        let url = toString(base);
+        while (len(url) > 0 and charAt(url, len(url) - 1) == "/") { url = substr(url, 0, len(url) - 1); }
+        if (psHas(node, "path")) {
+            let p = toString(psAttr(node, "path"));
+            if (len(p) > 0 and charAt(p, 0) != "/") { p = "/" + p; }
+            url = url + p;
+        }
+        let sep = "?";
+        for (let k in keys(node["attrs"])) {
+            if (indexOf(k, "query.") == 0) {
+                url = url + sep + psUrlEncode(substr(k, 6, len(k) - 6)) + "=" + psUrlEncode(toString(psResolve(node["attrs"][k])));
+                sep = "&";
+            }
+        }
+        let parsed = psLinkParse(url);
+        parsed["url"] = url;
+        psStore(node, parsed);
+        return nil;
+    }
+    let raw = psAttr(node, "url");
+    if (raw == nil) { return psFail(node, "The url attribute is required (or its variable is not defined)"); }
+    let r = psLinkParse(toString(raw));
+    if (r["ok"] and psHas(node, "https") and r["secure"] == false) {
+        r["ok"] = false;
+        r["error"] = "https is required";
+    }
+    psStore(node, r);
+    return nil;
+}
+
+// ---- <api> ------------------------------------------------------------------------
+
+fun psTagApi(node) {
+    let raw = psAttr(node, "url");
+    if (raw == nil) { return psFail(node, "The url attribute is required (or its variable is not defined)"); }
+    let url = toString(raw);
+    let method = upper(toString(psAttrOr(node, "method", "GET")));
+    if (contains(["GET", "POST", "PUT", "PATCH", "DELETE"], method) == false) { return psFail(node, "method is not supported: " + method); }
+    let headers = {};
+    let shown = {};
+    for (let k in keys(node["attrs"])) {
+        if (indexOf(k, "header.") == 0) {
+            let hn = substr(k, 7, len(k) - 7);
+            let hv = toString(psResolve(node["attrs"][k]));
+            headers[hn] = hv;
+            shown[hn] = hv;
+        }
+    }
+    let key = psAttr(node, "key");
+    let auth = toString(psAttrOr(node, "auth", "bearer"));
+    if (key != nil) {
+        let ks = toString(key);
+        if (auth == "bearer") { headers["Authorization"] = "Bearer " + ks; shown["Authorization"] = "Bearer " + psKeyMask(ks); }
+        else if (auth == "header") {
+            let hn = toString(psAttrOr(node, "header", "X-API-Key"));
+            headers[hn] = ks; shown[hn] = psKeyMask(ks);
+        } else if (auth == "query") {
+            let pn = toString(psAttrOr(node, "param", "api_key"));
+            let sepq = "?";
+            if (contains(url, "?")) { sepq = "&"; }
+            url = url + sepq + psUrlEncode(pn) + "=" + psUrlEncode(ks);
+        } else {
+            return psFail(node, "auth is unknown: " + auth + " (bearer | header | query)");
+        }
+    }
+    let chk = psLinkParse(url);
+    if (chk["ok"] == false) { psStore(node, { ok: false, error: chk["error"] }); return nil; }
+    if (chk["secure"] == false and psHas(node, "insecure") == false) {
+        psStore(node, { ok: false, error: "insecure http link — use https or add insecure explicitly" });
+        return nil;
+    }
+    let body = "";
+    if (psHas(node, "body")) { body = toString(psAttr(node, "body")); }
+    // copy for display/logging without secrets: the key in the URL is hidden
+    let shownUrl = url;
+    if (key != nil and auth == "query") { shownUrl = replace(url, psUrlEncode(toString(key)), psKeyMask(toString(key))); }
+    let request = { method: method, url: shownUrl, headers: shown, body: body };
+
+    if (psHas(node, "dry")) {
+        psStore(node, { ok: true, dry: true, request: request });
+        return nil;
+    }
+    let resp = httpRequest(method, url, headers, body);
+    psStore(node, { ok: true, dry: false, request: request, response: resp });
+    return nil;
+}
+
+// ---- <sql> — RCSQL link (doc containers in Rin) -------------------------------------------
+
+fun psSqlReserved() {
+    return ["table", "name", "id", "insert", "select", "find", "count", "exists", "update", "delete", "create",
+            "where", "order", "limit", "field", "equals"];
+}
+
+fun psSqlEnsure(table) {
+    if (hasContainer(table) == false) { spawn("doc", table); }
+}
+
+fun psSqlQuery(node, table) {
+    let q = table;
+    if (psHas(node, "where")) { q = q + " & " + toString(psAttr(node, "where")); }
+    if (psHas(node, "order")) { q = q + " & order:" + toString(psAttr(node, "order")); }
+    if (psHas(node, "limit")) { q = q + " & limit:eq(" + toString(psAttr(node, "limit")) + ")"; }
+    let v = sqlValidate(q);
+    if (v["ok"] == false) { return { ok: false, error: "RCSQL: " + toString(v["error"]), query: q }; }
+    return { ok: true, query: q };
+}
+
+fun psTagSql(node) {
+    let table = psAttr(node, "table");
+    if (table == nil) { return psFail(node, "The table attribute is required"); }
+    table = toString(table);
+
+    if (psHas(node, "create")) {
+        psSqlEnsure(table);
+        psStore(node, { ok: true, table: table });
+        return nil;
+    }
+
+    if (psHas(node, "insert") or psHas(node, "update")) {
+        let fields = {};
+        for (let k in keys(node["attrs"])) {
+            if (contains(psSqlReserved(), k) == false) {
+                let v = psResolve(node["attrs"][k]);
+                // we never store a raw password/secret — hash only (pk1$...) or sha256
+                if (pkIsSensitiveKey(k) and indexOf(toString(v), "pk1$") != 0) {
+                    return psFail(node, "Refusing to store the field '" + k + "' as raw text — pass its hash (<password hash=...> or <apikey ... hash>)");
+                }
+                fields[k] = v;
+            }
+        }
+        if (psHas(node, "insert")) {
+            psSqlEnsure(table);
+            let id = toString(psAttrOr(node, "id", sec.randomToken(6)));
+            insertDoc(table, id, fields);
+            psStore(node, { ok: true, id: id, table: table });
+            return nil;
+        }
+        let uid = psAttr(node, "id");
+        if (uid == nil) { return psFail(node, "update needs id"); }
+        if (hasContainer(table) == false) { psStore(node, { ok: false, error: "Table not found: " + table }); return nil; }
+        let done = updateDoc(table, toString(uid), fields);
+        psStore(node, { ok: done, id: toString(uid), table: table });
+        return nil;
+    }
+
+    // reading: a missing table => a silent empty result (like RCSQL behavior)
+    if (hasContainer(table) == false) {
+        if (psHas(node, "count")) { psStore(node, 0); }
+        else if (psHas(node, "exists")) { psStore(node, false); }
+        else { psStore(node, []); }
+        return nil;
+    }
+
+    if (psHas(node, "find")) {
+        // search by a value containing symbols the RCSQL text does not accept (like @ or .) => filtering inside Rin
+        let field = psAttr(node, "field");
+        let want = psAttr(node, "equals");
+        if (field == nil or want == nil) { return psFail(node, "find needs field and equals"); }
+        let rows = sql(table);
+        let hit = nil;
+        let i = 0;
+        while (i < len(rows) and hit == nil) {
+            if (has(rows[i], toString(field)) and toString(rows[i][toString(field)]) == toString(want)) { hit = rows[i]; }
+            i = i + 1;
+        }
+        psStore(node, { ok: hit != nil, found: hit != nil, row: hit });
+        return nil;
+    }
+
+    let qr = psSqlQuery(node, table);
+    if (qr["ok"] == false) { psStore(node, { ok: false, error: qr["error"] }); return nil; }
+    if (psHas(node, "count")) { psStore(node, sqlCount(qr["query"])); return nil; }
+    if (psHas(node, "exists")) { psStore(node, sqlExists(qr["query"])); return nil; }
+    if (psHas(node, "delete")) {
+        if (psHas(node, "where") == false) { return psFail(node, "delete without where is refused (prevents wiping the whole table by mistake)"); }
+        psStore(node, { ok: true, deleted: sqlDelete(qr["query"]) });
+        return nil;
+    }
+    psStore(node, sql(qr["query"]));          // select (the default)
+    return nil;
+}
+
+// ---- Core tags --------------------------------------------------------------
+
+fun psSplitElse(children) {
+    let thenPart = [];
+    let elsePart = [];
+    let seenElse = false;
+    let i = 0;
+    while (i < len(children)) {
+        if (children[i]["name"] == "else") { seenElse = true; }
+        else if (seenElse) { push(elsePart, children[i]); }
+        else { push(thenPart, children[i]); }
+        i = i + 1;
+    }
+    return { thenPart: thenPart, elsePart: elsePart };
+}
+
+fun psCondition(node) {
+    let v = psAttr(node, "var");
+    if (psHas(node, "eq")) { return toString(v) == toString(psAttr(node, "eq")); }
+    if (psHas(node, "neq")) { return toString(v) != toString(psAttr(node, "neq")); }
+    if (psHas(node, "gt")) { return psNum(v, 0) > psNum(psAttr(node, "gt"), 0); }
+    if (psHas(node, "gte")) { return psNum(v, 0) >= psNum(psAttr(node, "gte"), 0); }
+    if (psHas(node, "lt")) { return psNum(v, 0) < psNum(psAttr(node, "lt"), 0); }
+    if (psHas(node, "lte")) { return psNum(v, 0) <= psNum(psAttr(node, "lte"), 0); }
+    if (psHas(node, "has")) { return v != nil and contains(toString(v), toString(psAttr(node, "has"))); }
+    if (psHas(node, "empty")) { return v == nil or v == "" or (type(v) == "array" and len(v) == 0); }
+    return psTruthy(v);
+}
+
+fun psExecNodes(nodes) {
+    let i = 0;
+    while (i < len(nodes) and PKS["returned"] == false) {
+        let e = psExecTag(nodes[i]);
+        if (e != nil) { return e; }
+        i = i + 1;
+    }
+    return nil;
+}
+
+fun psExecTag(node) {
+    let n = node["name"];
+    if (n == "passkit") { return psExecNodes(node["children"]); }
+    if (n == "set") {
+        if (psHas(node, "name") == false) { return psFail(node, "The name attribute is required"); }
+        PKS["vars"][node["attrs"]["name"]] = psAttrOr(node, "value", "");
+        return nil;
+    }
+    if (n == "print") {
+        let v = psAttr(node, "value");
+        if (v == nil) { v = "(undefined)"; }
+        psEmit(toString(v));
+        return nil;
+    }
+    if (n == "assert") {
+        if (psCondition(node) == false) { return psFail(node, "Assertion failed: " + toString(psAttrOr(node, "message", "assert"))); }
+        return nil;
+    }
+    if (n == "if") {
+        let parts = psSplitElse(node["children"]);
+        if (psCondition(node)) { return psExecNodes(parts["thenPart"]); }
+        return psExecNodes(parts["elsePart"]);
+    }
+    if (n == "for") {
+        let list = psAttr(node, "in");
+        let loopVar = toString(psAttrOr(node, "each", "item"));
+        if (type(list) != "array") { return psFail(node, "in must point to an array (like $rows)"); }
+        let i = 0;
+        while (i < len(list) and i < 10000 and PKS["returned"] == false) {
+            PKS["vars"][loopVar] = list[i];
+            let e = psExecNodes(node["children"]);
+            if (e != nil) { return e; }
+            i = i + 1;
+        }
+        return nil;
+    }
+    if (n == "else") { return psFail(node, "<else/> outside <if>"); }
+    if (n == "email") { return psTagEmail(node); }
+    if (n == "password") { return psTagPassword(node); }
+    if (n == "apikey") { return psTagApikey(node); }
+    if (n == "link") { return psTagLink(node); }
+    if (n == "api") { return psTagApi(node); }
+    if (n == "sql") { return psTagSql(node); }
+    if (n == "input") { return psTagInput(node); }
+    if (n == "return") { return psTagReturn(node); }
+    if (n == "import") { return psTagImport(node); }
+    if (n == "run") { return psTagRun(node); }
+    if (n == "call") { return psTagCall(node); }
+    if (n == "crypt") { return psTagCrypt(node); }
+    if (n == "token") { return psTagToken(node); }
+    if (n == "otp") { return psTagOtp(node); }
+    if (n == "db") { return psTagDb(node); }
+    if (n == "container") { return psTagContainer(node); }
+    return psFail(node, "Unsupported tag");
+}
+
+// ============================================================================
+//  File linking (File Linking) — both directions
+//   .passkit -> .passkit :  <import file>  (include in the same scope)  /  <run file name in.k=...>  (isolated call)
+//   .passkit -> Rin      :  <call fn="x" arg0=...>  for functions that Rin registered explicitly via passkitRegister
+//   Rin -> .passkit      :  passkitRun(path, inputs) / passkitRunSource(src, inputs)
+//   File contract:  <input name default required/>  and  <return value="..."/>
+// ============================================================================
+
+// Safe relative path only: not absolute, no .., no scheme, no \ (an untrusted .passkit file cannot read outside its folder)
+fun psSafeRel(rel) {
+    if (rel == nil) { return false; }
+    let f = toString(rel);
+    if (len(f) == 0) { return false; }
+    if (charAt(f, 0) == "/" or contains(f, "..") or contains(f, ":") or contains(f, "\\")) { return false; }
+    return true;
+}
+
+fun psDirName(path) {
+    let last = -1;
+    let i = 0;
+    while (i < len(path)) {
+        if (charAt(path, i) == "/") { last = i; }
+        i = i + 1;
+    }
+    if (last < 0) { return ""; }
+    return substr(path, 0, last);
+}
+
+fun psJoinPath(base, rel) {
+    if (base == "") { return rel; }
+    return base + "/" + rel;
+}
+
+fun psSave() {
+    return { vars: PKS["vars"], out: PKS["out"], returned: PKS["returned"], ret: PKS["ret"], base: PKS["base"], depth: PKS["depth"], binds: PKS["binds"] };
+}
+
+fun psRestore(saved) {
+    PKS["vars"] = saved["vars"];
+    PKS["out"] = saved["out"];
+    PKS["returned"] = saved["returned"];
+    PKS["ret"] = saved["ret"];
+    PKS["base"] = saved["base"];
+    PKS["depth"] = saved["depth"];
+    PKS["binds"] = saved["binds"];
+}
+
+// parses the source and runs it on the current state; nil on success or a langError
+fun psParseExec(source) {
+    let tokens = lex(source);
+    let i = 0;
+    while (i < len(tokens)) {
+        if (isLangError(tokens[i])) { return tokens[i]; }
+        i = i + 1;
+    }
+    let ast = parse(tokens);
+    if (isLangError(ast)) { return ast; }
+    return psExecNodes(ast["body"]);
+}
+
+fun psFailResult(msg) {
+    let e = langError("Interpreter", msg, 0);
+    return { ok: false, output: [], vars: {}, value: nil, error: e, message: formatLangError(e) };
+}
+
+// isolated run with a new variable scope (state-protected: suits nested Rin<->passkit calls)
+fun psRunChild(source, inputs, base) {
+    if (PKS["depth"] >= 8) { return psFailResult("call depth between files is greater than 8 (a link cycle?)"); }
+    let saved = psSave();
+    PKS["vars"] = {};
+    if (inputs != nil) {
+        for (let k in keys(inputs)) { PKS["vars"][k] = inputs[k]; }
+    }
+    PKS["out"] = [];
+    PKS["returned"] = false;
+    PKS["ret"] = nil;
+    PKS["base"] = base;
+    PKS["depth"] = saved["depth"] + 1;
+    PKS["binds"] = [];
+    let e = psParseExec(source);
+    let res = { ok: e == nil, output: PKS["out"], vars: PKS["vars"], value: PKS["ret"], error: e, message: "" };
+    if (e != nil) { res["message"] = formatLangError(e); }
+    psRestore(saved);
+    return res;
+}
+
+// ---- Tags: <input> <return> ----------------------------------------------------
+
+fun psTagInput(node) {
+    if (psHas(node, "name") == false) { return psFail(node, "The name attribute is required"); }
+    let nm = node["attrs"]["name"];
+    if (has(PKS["vars"], nm)) { return nil; }
+    if (psHas(node, "default")) { PKS["vars"][nm] = psAttr(node, "default"); return nil; }
+    if (psHas(node, "required")) { return psFail(node, "The input '" + nm + "' is required and was not passed"); }
+    return nil;
+}
+
+fun psTagReturn(node) {
+    PKS["ret"] = psAttr(node, "value");
+    PKS["returned"] = true;
+    return nil;
+}
+
+// ---- <import file="x.passkit"/> : include in the same scope -------------------------------
+
+fun psLoadLinked(node) {
+    let rel = psAttr(node, "file");
+    if (psSafeRel(rel) == false) { return { err: psFail(node, "file must be a relative path inside the file's folder (with no / or .. or :)") }; }
+    let path = psJoinPath(PKS["base"], toString(rel));
+    if (fileExists(path) == false) { return { err: psFail(node, "File not found: " + path) }; }
+    if (contains(PKS["stack"], path)) { return { err: psFail(node, "Link cycle: the file calls itself (" + path + ")") }; }
+    return { path: path, source: readFile(path) };
+}
+
+fun psTagImport(node) {
+    let ld = psLoadLinked(node);
+    if (has(ld, "err")) { return ld["err"]; }
+    if (PKS["depth"] >= 8) { return psFail(node, "call depth between files is greater than 8"); }
+    let oldBase = PKS["base"];
+    PKS["base"] = psDirName(ld["path"]);
+    PKS["depth"] = PKS["depth"] + 1;
+    push(PKS["stack"], ld["path"]);
+    let e = psParseExec(ld["source"]);
+    pop(PKS["stack"]);
+    PKS["depth"] = PKS["depth"] - 1;
+    PKS["base"] = oldBase;
+    PKS["returned"] = false;                  // return inside an included file ends only that file
+    if (e != nil) { return psFail(node, ld["path"] + " → " + formatLangError(e)); }
+    return nil;
+}
+
+// ---- <run file name in.k="v" [quiet] [strict]/> : isolated call with inputs and output -------
+
+fun psTagRun(node) {
+    let ld = psLoadLinked(node);
+    if (has(ld, "err")) { return ld["err"]; }
+    let inputs = {};
+    for (let k in keys(node["attrs"])) {
+        if (indexOf(k, "in.") == 0) { inputs[substr(k, 3, len(k) - 3)] = psResolve(node["attrs"][k]); }
+    }
+    push(PKS["stack"], ld["path"]);
+    let r = psRunChild(ld["source"], inputs, psDirName(ld["path"]));
+    pop(PKS["stack"]);
+    if (psHas(node, "quiet") == false) {
+        let i = 0;
+        while (i < len(r["output"])) { psEmit(r["output"][i]); i = i + 1; }
+    }
+    if (r["ok"] == false and psHas(node, "strict")) { return psFail(node, ld["path"] + " → " + r["message"]); }
+    psStore(node, { ok: r["ok"], value: r["value"], vars: r["vars"], output: r["output"], message: r["message"] });
+    return nil;
+}
+
+// ---- <call fn="name" arg0=".." arg1=".." | args="$list" name="r"/> : call a Rin function ----
+
+fun psTagCall(node) {
+    let fname = psAttr(node, "fn");
+    if (fname == nil) { return psFail(node, "The fn attribute is required"); }
+    fname = toString(fname);
+    if (has(PKS["handlers"], fname) == false) {
+        if (psHas(node, "optional")) { psStore(node, { ok: false, error: "The function is not registered: " + fname }); return nil; }
+        return psFail(node, "The function '" + fname + "' is not registered from Rin (use passkitRegister)");
+    }
+    let args = [];
+    if (psHas(node, "args")) {
+        let a = psAttr(node, "args");
+        if (type(a) != "array") { return psFail(node, "args must point to an array (like $list)"); }
+        let j = 0;
+        while (j < len(a)) { push(args, a[j]); j = j + 1; }
+    } else {
+        let n = 0;
+        while (n < 10) {
+            if (psHas(node, "arg" + toString(n)) == false) { n = 10; }
+            else { push(args, psAttr(node, "arg" + toString(n))); n = n + 1; }
+        }
+    }
+    psStore(node, callFn(PKS["handlers"][fname], args));
+    return nil;
+}
+
+// ---- Rin API: register functions callable from .passkit ------------------------------------
+
+fun passkitRegister(name, handler) {
+    if (isFunction(handler) == false) { return false; }
+    PKS["handlers"][name] = handler;
+    return true;
+}
+
+// passkitHandlers({ double: dbl, greet: greetFn }) -> the number registered
+fun passkitHandlers(map) {
+    let n = 0;
+    for (let k in keys(map)) { if (passkitRegister(k, map[k])) { n = n + 1; } }
+    return n;
+}
+
+fun passkitUnregister(name) {
+    let fresh = {};
+    for (let k in keys(PKS["handlers"])) { if (k != name) { fresh[k] = PKS["handlers"][k]; } }
+    PKS["handlers"] = fresh;
+    return true;
+}
+
+fun passkitClearHandlers() {
+    PKS["handlers"] = {};
+    return true;
+}
+
+fun passkitHandlerNames() {
+    return keys(PKS["handlers"]);
+}
+
+// ---- Rin API: run .passkit ------------------------------------------------------
+// The result: { ok, output:[..], vars:{..}, return, error, message }
+
+fun passkitRunSource(source, inputs) {
+    return psRunChild(source, inputs, PKS["base"]);
+}
+
+fun passkitRun(path, inputs) {
+    if (fileExists(path) == false) { return psFailResult("File not found: " + path); }
+    if (contains(PKS["stack"], path)) { return psFailResult("Link cycle: " + path); }
+    push(PKS["stack"], path);
+    let r = psRunChild(readFile(path), inputs, psDirName(path));
+    pop(PKS["stack"]);
+    return r;
+}
+
+// read a value from a run result by a dotted path:  passkitGet(r, "e.address")
+fun passkitGet(result, path) {
+    if (type(result) != "map" or has(result, "vars") == false) { return nil; }
+    return psLookupIn(result["vars"], path);
+}
+
+// ---- language entry points (run.rin / test.rin) --------------------------------------------
+
+fun interpret(ast) {
+    psReset();
+    let e = psExecNodes(ast["body"]);
+    if (e != nil) { return { ok: false, error: e, output: PKS["out"] }; }
+    return { ok: true, output: PKS["out"], vars: PKS["vars"] };
+}
+
+fun runSource(source) {
+    return psRunChild(source, {}, PKS["base"]);
+}
+
+
+// ============================================================================
+//  Tags for encryption, databases and container linking
+//  <crypt op=...>  <token op=...>  <otp op=...>  <db table op=...>  <container of op=...>
+// ============================================================================
+
+fun psList(v) {
+    if (type(v) == "array") { return v; }
+    let out = [];
+    if (v == nil or toString(v) == "") { return out; }
+    for (let p in split(toString(v), ",")) { push(out, trim(p)); }
+    return out;
+}
+
+fun psOpOf(node) {
+    let op = psAttr(node, "op");
+    if (op == nil) { return nil; }
+    return toString(op);
+}
+
+fun psStrAttr(node, k) {
+    let v = psAttr(node, k);
+    if (v == nil) { return nil; }
+    return toString(v);
+}
+
+// a map from attributes starting with prefix. (like claim.sub="u1" or set.name="Rima")
+fun psPrefixed(node, prefix) {
+    let out = {};
+    for (let k in keys(node["attrs"])) {
+        if (indexOf(k, prefix) == 0) { out[substr(k, len(prefix), len(k) - len(prefix))] = psResolve(node["attrs"][k]); }
+    }
+    return out;
+}
+
+// ---- <crypt op=...> -----------------------------------------------------------------
+
+fun psTagCrypt(node) {
+    let op = psOpOf(node);
+    if (op == nil) { return psFail(node, "The op attribute is required: keygen|seal|open|sealpw|openpw|envelope|unenvelope|hmac|hkdf|pbkdf2|random|uuid|b64|b64d|b32|b32d|fingerprint|merkle|pepper|derive|shamir|combine"); }
+    let val = psStrAttr(node, "value");
+    let key = psStrAttr(node, "key");
+    let aad = psStrAttr(node, "aad");
+    let needKey = contains(["seal", "open", "envelope", "unenvelope", "hmac", "derive", "pepper"], op);
+    if (needKey and key == nil) { return psFail(node, "op=" + op + " needs key"); }
+    let needVal = contains(["seal", "open", "sealpw", "openpw", "envelope", "unenvelope", "hmac", "b64", "b64d", "b32", "b32d", "fingerprint"], op);
+    if (needVal and val == nil) { return psFail(node, "op=" + op + " needs value"); }
+
+    if (op == "keygen") { let k = pcGenerateKey(psNum(psAttr(node, "bytes"), 32)); psStore(node, { ok: true, key: k, id: pcKeyId(k) }); return nil; }
+    if (op == "seal") { psStore(node, pcSeal(key, val, aad)); return nil; }
+    if (op == "open") { psStore(node, pcOpen(key, val, aad)); return nil; }
+    if (op == "sealpw") {
+        let pw = psStrAttr(node, "password");
+        if (pw == nil) { return psFail(node, "sealpw needs password"); }
+        psStore(node, pcSealWithPassword(pw, val, { iterations: psNum(psAttr(node, "iterations"), 2000) }));
+        return nil;
+    }
+    if (op == "openpw") {
+        let pw2 = psStrAttr(node, "password");
+        if (pw2 == nil) { return psFail(node, "openpw needs password"); }
+        psStore(node, pcOpenWithPassword(pw2, val));
+        return nil;
+    }
+    if (op == "envelope") { psStore(node, pcEnvelopeSeal(key, val, aad)); return nil; }
+    if (op == "unenvelope") { psStore(node, pcEnvelopeOpen(key, val, aad)); return nil; }
+    if (op == "hmac") {
+        if (pcIsHex(key) == false) { psStore(node, { ok: false, error: "key must be hex" }); return nil; }
+        psStore(node, { ok: true, hmac: pcHmacText(key, val) });
+        return nil;
+    }
+    if (op == "derive") {
+        if (pcKeyCheck(key)["ok"] == false) { psStore(node, pcKeyCheck(key)); return nil; }
+        psStore(node, { ok: true, key: pcDeriveSubkey(key, toString(psAttrOr(node, "purpose", "default"))) });
+        return nil;
+    }
+    if (op == "pepper") {
+        let pw3 = psStrAttr(node, "password");
+        if (pw3 == nil or pcIsHex(key) == false) { psStore(node, { ok: false, error: "pepper needs password and key (hex)" }); return nil; }
+        psStore(node, { ok: true, peppered: pcPepper(pw3, key) });
+        return nil;
+    }
+    if (op == "hkdf") {
+        let ikm = psStrAttr(node, "ikm");
+        let salt = toString(psAttrOr(node, "salt", ""));
+        if (ikm == nil or pcIsHex(ikm) == false or pcIsHex(salt) == false) { psStore(node, { ok: false, error: "ikm/salt must be hex" }); return nil; }
+        let okm = pcHkdf(ikm, salt, pcHexOf(toString(psAttrOr(node, "info", ""))), psNum(psAttr(node, "length"), 32));
+        if (okm == nil) { psStore(node, { ok: false, error: "length invalid (1..8160)" }); return nil; }
+        psStore(node, { ok: true, okm: okm });
+        return nil;
+    }
+    if (op == "pbkdf2") {
+        let pw4 = psStrAttr(node, "password");
+        let saltHex = toString(psAttrOr(node, "salt", ""));
+        if (pw4 == nil or pcIsHex(saltHex) == false) { psStore(node, { ok: false, error: "pbkdf2 needs password and salt (hex)" }); return nil; }
+        psStore(node, { ok: true, key: pcPbkdf2(pw4, saltHex, psNum(psAttr(node, "iterations"), 2000), psNum(psAttr(node, "bytes"), 32)) });
+        return nil;
+    }
+    if (op == "random") { psStore(node, { ok: true, hex: pcRandomHex(psNum(psAttr(node, "bytes"), 16)) }); return nil; }
+    if (op == "uuid") { psStore(node, { ok: true, uuid: pcUuid4() }); return nil; }
+    if (op == "b64") { psStore(node, { ok: true, value: pcB64UrlEncode(val) }); return nil; }
+    if (op == "b64d") {
+        let d = pcB64UrlDecode(val);
+        if (d == nil) { psStore(node, { ok: false, error: "base64url invalid" }); return nil; }
+        psStore(node, { ok: true, value: d });
+        return nil;
+    }
+    if (op == "b32") { psStore(node, { ok: true, value: pcBase32Encode(val) }); return nil; }
+    if (op == "b32d") {
+        let d2 = pcBase32Decode(val);
+        if (d2 == nil) { psStore(node, { ok: false, error: "base32 invalid" }); return nil; }
+        psStore(node, { ok: true, value: d2 });
+        return nil;
+    }
+    if (op == "fingerprint") { psStore(node, { ok: true, fingerprint: pcFingerprint(val) }); return nil; }
+    if (op == "merkle") {
+        let leaves = psList(psAttr(node, "leaves"));
+        psStore(node, { ok: true, root: pcMerkleRoot(leaves), count: len(leaves) });
+        return nil;
+    }
+    if (op == "shamir") {
+        let sh = pcShamirSplit(toString(psAttrOr(node, "secret", "")), psNum(psAttr(node, "n"), 5), psNum(psAttr(node, "k"), 3));
+        psStore(node, sh);
+        return nil;
+    }
+    if (op == "combine") {
+        let shares = psAttr(node, "shares");
+        if (type(shares) != "array") { shares = psList(shares); }
+        psStore(node, pcShamirCombine(shares));
+        return nil;
+    }
+    return psFail(node, "op is unknown: " + op);
+}
+
+// ---- <token op=sign|verify|signurl|verifyurl> --------------------------------------------
+
+fun psTagToken(node) {
+    let op = psOpOf(node);
+    let key = psStrAttr(node, "key");
+    if (op == nil or key == nil) { return psFail(node, "The op and key attributes are required"); }
+    let nowv = psNum(psAttr(node, "now"), 0);
+    if (op == "sign") {
+        let opts = { now: nowv };
+        if (psHas(node, "ttl")) { opts["ttl"] = psNum(psAttr(node, "ttl"), 0); }
+        if (psHas(node, "iss")) { opts["iss"] = psStrAttr(node, "iss"); }
+        if (psHas(node, "aud")) { opts["aud"] = psStrAttr(node, "aud"); }
+        psStore(node, pcTokenSign(psPrefixed(node, "claim."), key, opts));
+        return nil;
+    }
+    if (op == "verify") {
+        let tok = psStrAttr(node, "value");
+        if (tok == nil) { return psFail(node, "verify needs value (the token)"); }
+        let opts2 = { now: nowv };
+        if (psHas(node, "iss")) { opts2["iss"] = psStrAttr(node, "iss"); }
+        if (psHas(node, "aud")) { opts2["aud"] = psStrAttr(node, "aud"); }
+        if (pcKeyCheck(key)["ok"] == false) { psStore(node, pcKeyCheck(key)); return nil; }
+        psStore(node, pcTokenVerify(tok, key, opts2));
+        return nil;
+    }
+    if (op == "signurl") {
+        let u = psStrAttr(node, "url");
+        if (u == nil) { return psFail(node, "signurl needs url"); }
+        psStore(node, { ok: true, url: pcSignUrl(u, key, nowv + psNum(psAttr(node, "ttl"), 300)) });
+        return nil;
+    }
+    if (op == "verifyurl") {
+        let u2 = psStrAttr(node, "url");
+        if (u2 == nil) { return psFail(node, "verifyurl needs url"); }
+        psStore(node, pcVerifyUrl(u2, key, nowv));
+        return nil;
+    }
+    return psFail(node, "op is unknown: " + op + " (sign|verify|signurl|verifyurl)");
+}
+
+// ---- <otp op=secret|code|verify|uri|recovery|recoverycheck> ---------------------------------
+
+fun psTagOtp(node) {
+    let op = psOpOf(node);
+    if (op == nil) { return psFail(node, "The op attribute is required: secret|code|verify|uri|recovery|recoverycheck"); }
+    if (op == "secret") { let sx = pcRandomHex(20); psStore(node, { ok: true, secret: sx, base32: pcBase32EncodeHex(sx) }); return nil; }
+    if (op == "recovery") { let rc = pcRecoveryCodes(psNum(psAttr(node, "n"), 8)); psStore(node, { ok: true, codes: rc["codes"], hashes: rc["hashes"] }); return nil; }
+    if (op == "recoverycheck") {
+        let hs = psAttr(node, "hashes");
+        if (type(hs) != "array") { return psFail(node, "hashes must point to an array"); }
+        let rv = pcRecoveryVerify(toString(psAttrOr(node, "code", "")), hs);
+        psStore(node, { ok: rv["ok"], remaining: rv["remaining"] });
+        return nil;
+    }
+    let secret = psStrAttr(node, "secret");
+    if (secret == nil or pcIsHex(secret) == false or len(secret) == 0) { psStore(node, { ok: false, error: "secret must be hex (from op=secret)" }); return nil; }
+    let digits = psNum(psAttr(node, "digits"), 6);
+    let nowv = psNum(psAttr(node, "now"), 0);
+    if (op == "code") { psStore(node, { ok: true, code: pcTotp(secret, nowv, 30, digits) }); return nil; }
+    if (op == "verify") {
+        let v = pcTotpVerify(secret, toString(psAttrOr(node, "code", "")), nowv, psNum(psAttr(node, "window"), 1), digits);
+        psStore(node, v);
+        return nil;
+    }
+    if (op == "uri") {
+        psStore(node, { ok: true, uri: pcOtpAuthUri(toString(psAttrOr(node, "issuer", "Passkit")), toString(psAttrOr(node, "account", "user")), secret, { digits: digits }) });
+        return nil;
+    }
+    return psFail(node, "op is unknown: " + op);
+}
+
+// ---- <db table=... op=...> ----------------------------------------------------------------------
+
+fun psTagDb(node) {
+    let op = psOpOf(node);
+    let table = psStrAttr(node, "table");
+    if (op == nil) { return psFail(node, "The op attribute is required"); }
+    let key = psStrAttr(node, "key");
+    let id = psStrAttr(node, "id");
+    let nowv = psNum(psAttr(node, "now"), 0);
+    if (op == "tables") { psStore(node, pdTables()); return nil; }
+    if (table == nil) { return psFail(node, "The table attribute is required"); }
+
+    if (op == "create") { psStore(node, pdCreate(table)); return nil; }
+    if (op == "drop") { psStore(node, pdDrop(table)); return nil; }
+    if (op == "exists") { psStore(node, pdExists(table)); return nil; }
+    if (op == "count") { psStore(node, pdCount(table)); return nil; }
+    if (op == "all") { psStore(node, pdAll(table)); return nil; }
+    if (op == "active") { psStore(node, pdActive(table)); return nil; }
+    if (op == "checksum") { psStore(node, pdChecksum(table)); return nil; }
+    if (op == "export") { psStore(node, pdExportJson(table)); return nil; }
+    if (op == "import") { psStore(node, pdImportJson(table, toString(psAttrOr(node, "json", "[]")), psHas(node, "replace"))); return nil; }
+    if (op == "begin") { psStore(node, pdBegin(table)); return nil; }
+    if (op == "commit") { psStore(node, pdCommit(table)); return nil; }
+    if (op == "rollback") { psStore(node, pdRollback(table)); return nil; }
+    if (op == "nextid") { psStore(node, pdNextId(table, toString(psAttrOr(node, "seq", "id")))); return nil; }
+    if (op == "where") { psStore(node, pdWhere(table, toString(psAttrOr(node, "where", "")))); return nil; }
+    if (op == "page") { psStore(node, pdPage(table, psNum(psAttr(node, "page"), 1), psNum(psAttr(node, "size"), 10))); return nil; }
+    if (op == "find" or op == "findone") {
+        let f = psStrAttr(node, "field");
+        let want = psAttr(node, "equals");
+        if (f == nil or want == nil) { return psFail(node, "find needs field and equals"); }
+        if (key != nil and psHas(node, "blind")) { psStore(node, pdFindByBlind(table, f, want, key)); return nil; }
+        if (op == "find") { psStore(node, pdFind(table, f, want)); return nil; }
+        psStore(node, pdFindOne(table, f, want));
+        return nil;
+    }
+
+    if (op == "insert" or op == "upsert") {
+        let fields = psPrefixed(node, "set.");
+        let opts = {};
+        if (id != nil) { opts["id"] = id; }
+        if (psHas(node, "now")) { opts["now"] = nowv; }
+        if (psHas(node, "unique")) { opts["unique"] = psStrAttr(node, "unique"); }
+        for (let fk in keys(fields)) {
+            if (pkIsSensitiveKey(fk) and indexOf(toString(fields[fk]), "pk1$") != 0 and psHas(node, "enc") == false) {
+                return psFail(node, "Refusing to store the field '" + fk + "' as raw text — pass its hash or encrypt it via enc= and key=");
+            }
+        }
+        if (psHas(node, "enc")) {
+            if (key == nil) { return psFail(node, "enc needs key"); }
+            opts["blind"] = psList(psAttr(node, "blind"));
+            psStore(node, pdInsertEnc(table, fields, key, psList(psAttr(node, "enc")), opts));
+            return nil;
+        }
+        if (op == "upsert") {
+            if (id == nil) { return psFail(node, "upsert needs id"); }
+            psStore(node, pdUpsert(table, id, fields, opts));
+            return nil;
+        }
+        psStore(node, pdInsert(table, fields, opts));
+        return nil;
+    }
+    if (op == "get") {
+        if (id == nil) { return psFail(node, "get needs id"); }
+        if (key != nil) { psStore(node, pdGetDec(table, id, key)); } else { psStore(node, pdGet(table, id)); }
+        return nil;
+    }
+    if (op == "update") {
+        if (id == nil) { return psFail(node, "update needs id"); }
+        psStore(node, pdUpdate(table, id, psPrefixed(node, "set."), { now: nowv }));
+        return nil;
+    }
+    if (op == "delete") {
+        if (id == nil) { return psFail(node, "delete needs id"); }
+        psStore(node, pdDelete(table, id));
+        return nil;
+    }
+    if (op == "softdelete") { if (id == nil) { return psFail(node, "softdelete needs id"); } psStore(node, pdSoftDelete(table, id, nowv)); return nil; }
+    if (op == "restore") { if (id == nil) { return psFail(node, "restore needs id"); } psStore(node, pdRestore(table, id)); return nil; }
+    if (op == "exportenc") { if (key == nil) { return psFail(node, "exportenc needs key"); } psStore(node, pdExportEncrypted(table, key)); return nil; }
+    if (op == "importenc") {
+        if (key == nil) { return psFail(node, "importenc needs key"); }
+        psStore(node, pdImportEncrypted(table, key, toString(psAttrOr(node, "sealed", "")), psHas(node, "replace"), psStrAttr(node, "source")));
+        return nil;
+    }
+    if (op == "reencrypt") {
+        let ok1 = psStrAttr(node, "oldkey");
+        let nk = psStrAttr(node, "newkey");
+        if (ok1 == nil or nk == nil) { return psFail(node, "reencrypt needs oldkey and newkey"); }
+        psStore(node, pdReencrypt(table, ok1, nk, psList(psAttr(node, "enc")), psList(psAttr(node, "blind"))));
+        return nil;
+    }
+
+    // ---- security models ----
+    if (op == "user.create") {
+        if (key == nil) { return psFail(node, "user.create needs key"); }
+        let pol = psPolicyByName(psAttrOr(node, "policy", "standard"));
+        psStore(node, pdUserCreate(table, key, toString(psAttrOr(node, "email", "")), toString(psAttrOr(node, "password", "")), { policy: pol, now: nowv, extra: psPrefixed(node, "set.") }));
+        return nil;
+    }
+    if (op == "user.login") {
+        if (key == nil) { return psFail(node, "user.login needs key"); }
+        let pol2 = psPolicyByName(psAttrOr(node, "policy", "standard"));
+        psStore(node, pdUserLogin(table, key, toString(psAttrOr(node, "email", "")), toString(psAttrOr(node, "password", "")), { policy: pol2, now: nowv }));
+        return nil;
+    }
+    if (op == "user.change") {
+        if (key == nil or id == nil) { return psFail(node, "user.change needs key and id"); }
+        let pol3 = psPolicyByName(psAttrOr(node, "policy", "standard"));
+        psStore(node, pdUserChangePassword(table, key, id, toString(psAttrOr(node, "old", "")), toString(psAttrOr(node, "new", "")), { policy: pol3, now: nowv }));
+        return nil;
+    }
+    if (op == "session.create") { psStore(node, pdSessionCreate(table, toString(psAttrOr(node, "user", "")), psNum(psAttr(node, "ttl"), 3600), nowv, nil)); return nil; }
+    if (op == "session.check") { psStore(node, pdSessionCheck(table, toString(psAttrOr(node, "token", "")), nowv)); return nil; }
+    if (op == "session.revoke") { psStore(node, pdSessionRevoke(table, toString(psAttrOr(node, "token", "")))); return nil; }
+    if (op == "session.revokeuser") { psStore(node, pdSessionRevokeUser(table, toString(psAttrOr(node, "user", "")))); return nil; }
+    if (op == "session.purge") { psStore(node, pdSessionPurge(table, nowv)); return nil; }
+    if (op == "apikey.create") {
+        let kopts = { now: nowv, prefix: toString(psAttrOr(node, "prefix", "pk")) };
+        if (psHas(node, "ttl")) { kopts["ttl"] = psNum(psAttr(node, "ttl"), 0); }
+        psStore(node, pdApiKeyCreate(table, toString(psAttrOr(node, "owner", "")), psList(psAttr(node, "scopes")), kopts));
+        return nil;
+    }
+    if (op == "apikey.verify") { psStore(node, pdApiKeyVerify(table, toString(psAttrOr(node, "apikey", "")), nowv)); return nil; }
+    if (op == "apikey.revoke") { if (id == nil) { return psFail(node, "apikey.revoke needs id"); } psStore(node, pdApiKeyRevoke(table, id)); return nil; }
+    if (op == "apikey.rotate") { if (id == nil) { return psFail(node, "apikey.rotate needs id"); } psStore(node, pdApiKeyRotate(table, id, nowv)); return nil; }
+    if (op == "audit") { psStore(node, pdAuditLog(table, toString(psAttrOr(node, "event", "")), toString(psAttrOr(node, "actor", "")), psAttrOr(node, "data", ""), nowv)); return nil; }
+    if (op == "audit.verify") { psStore(node, pdAuditVerify(table)); return nil; }
+    if (op == "ratelimit") {
+        psStore(node, pdRateLimit(table, toString(psAttrOr(node, "rlkey", "")), psNum(psAttr(node, "max"), 5), psNum(psAttr(node, "window"), 60), nowv));
+        return nil;
+    }
+    if (op == "reset.create") { psStore(node, pdResetCreate(table, toString(psAttrOr(node, "user", "")), psNum(psAttr(node, "ttl"), 900), nowv)); return nil; }
+    if (op == "reset.consume") { psStore(node, pdResetConsume(table, toString(psAttrOr(node, "token", "")), nowv)); return nil; }
+    if (op == "nonce") { psStore(node, { ok: pdNonceUse(table, toString(psAttrOr(node, "nonce", "")), nowv, psNum(psAttr(node, "ttl"), 300)) }); return nil; }
+    if (op == "totp.enroll") {
+        if (key == nil) { return psFail(node, "totp.enroll needs key"); }
+        psStore(node, pdTotpEnroll(table, key, toString(psAttrOr(node, "user", "")), toString(psAttrOr(node, "issuer", "Passkit")), toString(psAttrOr(node, "account", "user"))));
+        return nil;
+    }
+    if (op == "totp.check") {
+        if (key == nil) { return psFail(node, "totp.check needs key"); }
+        psStore(node, pdTotpCheck(table, key, toString(psAttrOr(node, "user", "")), toString(psAttrOr(node, "code", "")), nowv));
+        return nil;
+    }
+    return psFail(node, "op is unknown: " + op);
+}
+
+// ---- <container of=... op=...> : Link Rin containers to a .passkit file --------------------------------------
+
+fun psTagContainer(node) {
+    let op = psOpOf(node);
+    let cname = psStrAttr(node, "of");
+    if (op == nil) { return psFail(node, "The op attribute is required"); }
+    if (op == "names") { psStore(node, container.names()); return nil; }
+    if (op == "sync") { psStore(node, { ok: true, synced: psSyncBinds(toString(psAttrOr(node, "dir", "push"))) }); return nil; }
+    if (cname == nil) { return psFail(node, "The of attribute (the container name) is required"); }
+    let field = psStrAttr(node, "field");
+    let key = psStrAttr(node, "key");
+
+    if (op == "ensure") { psStore(node, pdContEnsure(cname, psStrAttr(node, "kind"))); return nil; }
+    if (op == "exists") { psStore(node, hasContainer(cname)); return nil; }
+    if (op == "kind") { if (hasContainer(cname) == false) { psStore(node, nil); return nil; } psStore(node, kindOf(cname)); return nil; }
+    if (op == "fields") { psStore(node, pdContFields(cname)); return nil; }
+    if (op == "tojson") { psStore(node, pdContExport(cname)); return nil; }
+    if (op == "fromjson") { psStore(node, pdContImport(cname, toString(psAttrOr(node, "json", "{}")))); return nil; }
+    if (op == "checksum") { psStore(node, pdContChecksum(cname)); return nil; }
+    if (op == "clone") { psStore(node, pdContClone(cname, toString(psAttrOr(node, "to", cname + "_copy")))); return nil; }
+    if (op == "sealall") { if (key == nil) { return psFail(node, "sealall needs key"); } psStore(node, pdContSealAll(cname, key)); return nil; }
+    if (op == "openall") { if (key == nil) { return psFail(node, "openall needs key"); } psStore(node, pdContOpenAll(cname, key)); return nil; }
+
+    // field -> variables (load) / variables -> container (save)
+    if (op == "load") {
+        let prefix = toString(psAttrOr(node, "prefix", ""));
+        let m = pdContToMap(cname);
+        let n = 0;
+        for (let k in keys(m)) { PKS["vars"][prefix + k] = m[k]; n = n + 1; }
+        psStore(node, { ok: true, loaded: n });
+        return nil;
+    }
+    if (op == "save") {
+        let names = psList(psAttr(node, "vars"));
+        let n2 = 0;
+        for (let vn in names) {
+            if (has(PKS["vars"], vn)) { pdContSet(cname, vn, PKS["vars"][vn]); n2 = n2 + 1; }
+        }
+        psStore(node, { ok: true, saved: n2 });
+        return nil;
+    }
+
+    if (field == nil) { return psFail(node, "op=" + op + " needs field"); }
+    if (op == "get") { psStore(node, pdContGet(cname, field)); return nil; }
+    if (op == "set") { psStore(node, pdContSet(cname, field, psAttrOr(node, "value", ""))); return nil; }
+    if (op == "has") { psStore(node, pdContHas(cname, field)); return nil; }
+    if (op == "delete") { psStore(node, pdContDelete(cname, field)); return nil; }
+    if (op == "seal") { if (key == nil) { return psFail(node, "seal needs key"); } psStore(node, pdContSeal(cname, field, key)); return nil; }
+    if (op == "open") { if (key == nil) { return psFail(node, "open needs key"); } psStore(node, pdContOpen(cname, field, key)); return nil; }
+
+    // run a .passkit source stored inside a container field (code as data)
+    if (op == "exec") {
+        let src = pdContGet(cname, field);
+        if (src == nil) { psStore(node, { ok: false, message: "The field is empty or missing" }); return nil; }
+        let r = psRunChild(toString(src), psPrefixed(node, "in."), PKS["base"]);
+        if (psHas(node, "quiet") == false) { let i = 0; while (i < len(r["output"])) { psEmit(r["output"][i]); i = i + 1; } }
+        psStore(node, { ok: r["ok"], value: r["value"], vars: r["vars"], output: r["output"], message: r["message"] });
+        return nil;
+    }
+
+    // two-way binding variable <-> field: bind registers and pulls the value, and sync pushes/pulls
+    if (op == "bind") {
+        let vn2 = psStrAttr(node, "var");
+        if (vn2 == nil) { return psFail(node, "bind needs var"); }
+        push(PKS["binds"], { of: cname, field: field, var: vn2 });
+        if (pdContHas(cname, field)) { PKS["vars"][vn2] = pdContGet(cname, field); }
+        psStore(node, { ok: true, bound: len(PKS["binds"]) });
+        return nil;
+    }
+    return psFail(node, "op is unknown: " + op);
+}
+
+// <container of="x" op="sync" dir="push|pull"/> without field: syncs all links registered with bind
+fun psSyncBinds(dir) {
+    let n = 0;
+    for (let b in PKS["binds"]) {
+        if (dir == "pull") {
+            if (pdContHas(b["of"], b["field"])) { PKS["vars"][b["var"]] = pdContGet(b["of"], b["field"]); n = n + 1; }
+        } else {
+            if (has(PKS["vars"], b["var"])) { pdContSet(b["of"], b["field"], PKS["vars"][b["var"]]); n = n + 1; }
+        }
+    }
+    return n;
+}
+
+// ---- Rin API for container linking ---------------------------------------------------------------------------
+
+// container fields as ready-made inputs for passkitRun
+fun passkitFromContainer(name) {
+    return pdContToMap(name);
+}
+
+// write the variables of a run result into a container (prefix optional)
+fun passkitToContainer(result, name, prefix) {
+    return pdContFromMap(name, result["vars"], prefix);
+}
+
+// run a source stored in a container field; inputs are optional (by default the container's other fields)
+fun passkitRunContainer(name, field, inputs) {
+    let src = pdContGet(name, field);
+    if (src == nil) { return psFailResult("Field not found: " + name + "." + field); }
+    let inp = inputs;
+    if (inp == nil) {
+        inp = {};
+        let m = pdContToMap(name);
+        for (let k in keys(m)) { if (k != field) { inp[k] = m[k]; } }
+    }
+    return passkitRunSource(toString(src), inp);
+}
+
+// run + write the outputs back into the container with the same names prefixed by outPrefix (default "out_")
+fun passkitRunLinked(name, field, outPrefix) {
+    let r = passkitRunContainer(name, field, nil);
+    if (r["ok"]) {
+        let p = "out_";
+        if (outPrefix != nil) { p = outPrefix; }
+        pdContFromMap(name, r["vars"], p);
+        if (r["value"] != nil) { pdContSet(name, p + "value", r["value"]); }
+    }
+    return r;
+}
