@@ -67,8 +67,8 @@ fun sum_ok(a) { let s = 0; let i = 0; while (i < len(a)) { s = s + a[i]; i = i +
 
 // ---- Storage ----
 let h = pkHash("Zt7!mQ4pLw", { iterations: 500 });
-check(startsWith_pk(h), "hash has pk1$ prefix");
-fun startsWith_pk(s) { return indexOf(s, "pk1$500$") == 0; }
+check(startsWith_pk(h), "hash has pk2$ prefix");
+fun startsWith_pk(s) { return indexOf(s, "pk2$500$") == 0; }
 check(pkVerify("Zt7!mQ4pLw", h) == true, "verify correct password");
 check(pkVerify("Zt7!mQ4pLx", h) == false, "verify wrong password");
 check(pkVerify("x", "garbage") == false, "verify garbage hash => false (no crash)");
