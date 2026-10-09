@@ -7951,6 +7951,12 @@ std::string Interpreter::run(const std::vector<StmtPtr>& statements) {
     loadInstalledIndex(); // يحمّل أسماء أي تثبيتات فعلية سابقة على نفس basePath (استمرارية عبر التشغيلات)
     importedPaths.clear(); // كل تشغيل جديد يبدأ بسجل @import نظيف (لا يرث استيرادات تشغيل سابق)
     callDepth = 0; // كل تشغيل جديد يبدأ بعدّاد عمق استدعاء نظيف (احتياطاً عند إعادة استخدام نفس الكائن)
+    // حالة الفشل خاصة بكل run(): كانت تبقى «عالقة» من تشغيل فاشل سابق على نفس الكائن، فيُبلَغ كل تشغيل
+    // لاحق ناجح بأنه فشل (hadError() == true). يظهر ذلك فقط عند إعادة استخدام Interpreter واحد عبر
+    // عدة run() (الطرفية التفاعلية rin terminal)؛ كل مستهلك آخر ينشئ Interpreter جديداً لكل تشغيل فلا يتأثر.
+    lastDiagnostic_.reset();
+    lastErrorMessage_.reset();
+    lastErrorLine_ = 0;
     try {
         // First pass: hoist function declarations so they can be called
         // regardless of source order (and support simple recursion).
