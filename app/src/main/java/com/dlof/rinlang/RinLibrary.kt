@@ -170,6 +170,26 @@ object BuiltinLibraries {
             "lib/physics.og.rin", "physics",
             "مكتبة فيزياء متكاملة: متجهات px*، حركة خطية وإسقاطية، قوى نيوتن، طاقة وزخم واصطدامات، حركة دائرية، نوابض واهتزاز توافقي، وسوائل/طفو",
             "pxVecAdd • pxProjectileRange • pxProjectilePositionAt • pxForceScalar • pxKineticEnergy • pxElasticCollision • pxCentripetalForce • pxSpringPeriod • pxBuoyantForce"
+        ),
+        BuiltinLibraryInfo(
+            "lib/passkit.og.rin", "passkit",
+            "Password kit: ready-made policies, strength and entropy analysis, secure generation (password/PIN/passphrase), salted hashing with constant-time verification, lifecycle (history/expiry/lockout), reset tokens and log redaction",
+            "pkPolicyStandard • pkCheck • pkAnalyze • pkGenerate • pkGeneratePin • pkPassphrase • pkHash • pkVerify • pkLogin • pkChange • pkResetToken • pkRedact"
+        ),
+        BuiltinLibraryInfo(
+            "lib/passkitlang.og.rin", "passkitlang",
+            "The <passkit> tag language as a library: run .passkit files from Rin, register Rin functions callable from .passkit, link .passkit files together (import/run) and link Rin containers",
+            "passkitRun • passkitRunSource • passkitGet • passkitRegister • passkitHandlers • passkitUnregister • passkitHandlerNames"
+        ),
+        BuiltinLibraryInfo(
+            "lib/passkitcrypt.og.rin", "passkitcrypt",
+            "Encryption and signing for the Passkit family: authenticated Seal/Open, keys (HKDF/PBKDF2/keyring/envelope), signed tokens, URLs and requests, TOTP, recovery codes and Shamir secret sharing, verified against RFC vectors",
+            "pcSeal • pcOpen • pcKeyringSeal • pcEnvelopeSeal • pcHkdf • pcPbkdf2 • pcTokenSign • pcTokenVerify • pcTotp • pcShamirSplit • pcMerkleRoot"
+        ),
+        BuiltinLibraryInfo(
+            "lib/passkitdb.og.rin", "passkitdb",
+            "Database and container layer for the Passkit family over RCSQL: CRUD, transactions, migrations, encrypted fields and blind index, users, sessions, API keys, hash-chained audit log, rate limit, 2FA and Rin container linking",
+            "pdInsert • pdFind • pdInsertEnc • pdFindByBlind • pdUserCreate • pdUserLogin • pdSessionCreate • pdApiKeyCreate • pdAuditLog • pdContSeal"
         )
     )
 }
