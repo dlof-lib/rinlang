@@ -1,0 +1,42 @@
+=> 10
+=> 11
+=> "hello rin"
+side effect
+
+error[E0001]: undefined variable `oops_undefined`
+  --> <repl:7>:1:1
+
+ 1 | oops_undefined;
+   | ^
+
+reason:
+  no variable named `oops_undefined` exists in this scope
+
+help:
+  define the variable before using it: `let oops_undefined = ...;`
+
+=> 2
+=> 6
+function  <function>
+number  18
+  f  function
+  x  number  6
+=> 3
+✓ timing = off
+error[E0012]: Expected variable name after 'let'
+  --> <check>:1:5
+
+ 1 | let = ;
+   |     ^
+
+reason:
+  the parser reached this point while still expecting the token above
+
+found:
+  `=`
+
+expected:
+  `let`
+
+1 error emitted
+unknown command: :nope   (try :help)
