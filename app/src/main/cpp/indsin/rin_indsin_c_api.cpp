@@ -129,6 +129,27 @@ std::string fabricEnvelope(IndsinSession* sess, const std::string& extraFields) 
        << ",\"fabric\":" << indsin::fabricToJsonString(sess->state.fabric) << "}";
     return os.str();
 }
+// Media: طلب المضيف (منتقي/رفع) كحقل "media" في الغلاف، أو "" إن لم يوجد.
+std::string mediaExtraJson(const indsin::TapResult& t) {
+    if (t.mediaPick)   return ",\"media\":" + indsin::media::pickRequestJson(t.pick);
+    if (t.mediaUpload) return ",\"media\":" + indsin::media::uploadRequestJson(t.upload);
+    if (t.mediaCancel) return ",\"media\":" + indsin::media::cancelRequestJson(t.cancelCell);
+    return "";
+}
+// يطبّق تغييرات Warp (من نتيجة المضيف) كما يفعل tap: Shuttle -> hashes -> relayout.
+void applyWarpNames(IndsinSession* sess, const std::vector<std::string>& names) {
+    if (!names.empty()) {
+        indsin::Shuttle shuttle;
+        for (auto& n : names) shuttle.applyWarpChange(n, sess->state.warp, sess->state.subs, sess->index);
+        indsin::recomputeHashes(sess->state.fabric);
+    }
+    relayout(sess);
+}
+std::string changedJson(const std::vector<std::string>& names) {
+    std::string o = ",\"changed\":[";
+    for (size_t i = 0; i < names.size(); i++) { if (i) o += ","; o += "\"" + indsin::jsonEscape(names[i]) + "\""; }
+    return o + "]";
+}
 std::string sessionErrorJson(IndsinSession* sess) {
     std::ostringstream os;
     os << "{\"ok\":false,\"error\":\"" << indsin::jsonEscape(sess ? sess->state.errorMessage : "null session")
@@ -259,6 +280,7 @@ RIN_API char* rin_indsin_session_tap(void* sessionPtr, double x, double y) {
     }
     extra << "]";
     if (!tap.error.empty()) extra << ",\"error\":\"" << indsin::jsonEscape(tap.error) << "\"";
+    extra << mediaExtraJson(tap);
 
     return dupToC(fabricEnvelope(sess, extra.str()));
 }
@@ -294,6 +316,7 @@ char* respondToGesture(IndsinSession* sess, const indsin::TapResult& g) {
     }
     extra << "]";
     if (!g.error.empty()) extra << ",\"error\":\"" << indsin::jsonEscape(g.error) << "\"";
+    extra << mediaExtraJson(g);
 
     return dupToC(fabricEnvelope(sess, extra.str()));
 }
@@ -485,3 +508,36 @@ RIN_API char* rin_indsin_validate_theme_json(const char* themeName) {
 }
 
 } // extern "C"
+
+
+// ---- Media: نتائج المضيف (rin_indsin_media.h) ------------------------------------------------------
+RIN_API char* rin_indsin_session_media_picked(void* sessionPtr, const char* cell, const char* itemsJson,
+                                              const char* kind, int multiple, double maxMb, int append) {
+    auto* sess = static_cast<IndsinSession*>(sessionPtr);
+    if (!sess || !sess->state.ok) return dupToC(sessionErrorJson(sess));
+    SessionRinHost rinHost(sess);
+    std::string c = cell ? cell : "";
+    if (c.empty()) return dupToC("{\"ok\":false,\"error\":\"empty media cell\"}");
+    indsin::media::Kind k = indsin::media::Kind::ANY;
+    if (kind) indsin::media::parseKind(kind, k);
+    std::string err;
+    auto changed = indsin::media::applyPicked(sess->state.warp, c, itemsJson ? itemsJson : "[]", k, maxMb,
+                                              multiple != 0, append != 0, err);
+    applyWarpNames(sess, changed);
+    std::string extra = ",\"handled\":true" + changedJson(changed);
+    if (!err.empty()) extra += ",\"error\":\"" + indsin::jsonEscape(err) + "\"";
+    return dupToC(fabricEnvelope(sess, extra));
+}
+
+RIN_API char* rin_indsin_session_media_progress(void* sessionPtr, const char* cell, const char* status,
+                                                double progress, const char* detail) {
+    auto* sess = static_cast<IndsinSession*>(sessionPtr);
+    if (!sess || !sess->state.ok) return dupToC(sessionErrorJson(sess));
+    SessionRinHost rinHost(sess);
+    std::string c = cell ? cell : "";
+    if (c.empty()) return dupToC("{\"ok\":false,\"error\":\"empty media cell\"}");
+    auto changed = indsin::media::applyProgress(sess->state.warp, c, status ? status : "error", progress,
+                                                detail ? detail : "");
+    applyWarpNames(sess, changed);
+    return dupToC(fabricEnvelope(sess, ",\"handled\":true" + changedJson(changed)));
+}
