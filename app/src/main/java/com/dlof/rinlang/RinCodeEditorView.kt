@@ -116,6 +116,14 @@ class RinCodeEditorView @JvmOverloads constructor(
     private val colorType = ContextCompat.getColor(context, R.color.syntax_container_keyword) // بنفسجي
     private val colorPreprocessor = ContextCompat.getColor(context, R.color.syntax_make_directive) // بنفسجي
     private val colorDefault = ContextCompat.getColor(context, R.color.rin_editor_text)
+    // ألوان passkit الرسمية (colors.xml / values-night) — تُستخدَم فقط لأنواع التلوين 13..19.
+    private val colorPkBracket = ContextCompat.getColor(context, R.color.passkit_bracket)
+    private val colorPkTag = ContextCompat.getColor(context, R.color.passkit_tag)
+    private val colorPkCustomTag = ContextCompat.getColor(context, R.color.passkit_tag_custom)
+    private val colorPkAttr = ContextCompat.getColor(context, R.color.passkit_attr)
+    private val colorPkVariable = ContextCompat.getColor(context, R.color.passkit_variable)
+    private val colorPkString = ContextCompat.getColor(context, R.color.passkit_string)
+    private val colorPkComment = ContextCompat.getColor(context, R.color.passkit_comment)
     // أحمر — خارج المنظومة الست عمداً: حالة تنبيه (خطأ نحوي) لا مفهوم لغوي، ويجب أن يبقى
     // قابلاً للتمييز الفوري عن الستة جميعاً بلا التباس.
     private val colorError = ContextCompat.getColor(context, R.color.syntax_error)
@@ -924,6 +932,13 @@ class RinCodeEditorView @JvmOverloads constructor(
         HighlightKind.COMMENT -> colorComment
         HighlightKind.TYPE -> colorType
         HighlightKind.PREPROCESSOR -> colorPreprocessor
+        HighlightKind.PK_BRACKET -> colorPkBracket
+        HighlightKind.PK_TAG -> colorPkTag
+        HighlightKind.PK_CUSTOM_TAG -> colorPkCustomTag
+        HighlightKind.PK_ATTR -> colorPkAttr
+        HighlightKind.PK_VARIABLE -> colorPkVariable
+        HighlightKind.PK_STRING -> colorPkString
+        HighlightKind.PK_COMMENT -> colorPkComment
         else -> colorDefault
     }
 
