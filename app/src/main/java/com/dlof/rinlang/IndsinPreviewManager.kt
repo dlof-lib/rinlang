@@ -221,6 +221,25 @@ object IndsinPreviewManager {
         }
     }
 
+    // ---- Media: answers from the host to a pickMedia()/uploadMedia() request (see IndsinMediaHost).
+    // Same worker + deliver path as a tap, so the preview repaints with the new Warp values. ----
+
+    fun mediaPicked(cell: String, itemsJson: String, kind: String, multiple: Boolean, maxMb: Double, append: Boolean = false) {
+        val current = session ?: return
+        worker.execute {
+            val json = try { current.mediaPicked(cell, itemsJson, kind, multiple, maxMb, append) } catch (t: Throwable) { errorJson(t) }
+            deliver(json, 0)
+        }
+    }
+
+    fun mediaProgress(cell: String, status: String, progress: Double, detail: String) {
+        val current = session ?: return
+        worker.execute {
+            val json = try { current.mediaProgress(cell, status, progress, detail) } catch (t: Throwable) { errorJson(t) }
+            deliver(json, 0)
+        }
+    }
+
     // ---- Effects: per-frame animation tick. Deliberately NOT wrapped in beginTrackedOperation/
     // endTrackedOperation like the gesture calls above -- that busy-indicator machinery exists for
     // an occasional slow network call inside a handler, and would just flicker uselessly if run
