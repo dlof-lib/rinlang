@@ -253,8 +253,13 @@ class IndsinPreviewActivity : RinBaseActivity(), IndsinPreviewManager.Listener {
         IndsinPreviewManager.detach(this)
     }
 
+    /** Media (docs/indsin_media.md): منتقي الوسائط + الرفع. حقل ليُسجَّل launcher قبل STARTED. */
+    private val mediaHost = IndsinMediaHost(this)
+
     override fun onFabricUpdated(resultJson: String, elapsedMs: Long) {
         renderResult(resultJson, elapsedMs)
+        // pickMedia()/uploadMedia() تُخرج طلباً في حقل "media" — المضيف وحده يفتح المنتقي/الشبكة.
+        try { JSONObject(resultJson).optJSONObject("media")?.let { mediaHost.handle(it) } } catch (_: Throwable) {}
         // Effects (spec §effects): every result envelope carries "animating" (see
         // rin_indsin_session_tick's doc comment) -- true means at least one Strand's effect=
         // transition is still short of its duration=, so schedule another per-frame tick; false
