@@ -1,0 +1,54 @@
+// main.rin — the Rin side of a small account system.
+// Rin owns the clock, the master key and the logging; auth.passkit owns the security rules.
+//
+// Run from the project root:   rin examples/passkit_app/main.rin
+@import "lib/passkitlang.og.rin";   // passkitRun, passkitRegister, ...
+@import "lib/passkitcrypt.og.rin";  // pcGenerateKey
+
+// 1) a Rin function the .passkit file may call with <call fn="appLog" .../>
+let LOG = [];
+fun appLog(msg) {
+    push(LOG, msg);
+    return true;
+}
+passkitRegister("appLog", appLog);
+
+// 2) master key (in a real app: load it from a secure store, never hard-code it)
+let KEY = pcGenerateKey(32);
+
+// 3) helper: run auth.passkit with an action
+let NOW = 1000;
+fun auth(action, email, password, token) {
+    return passkitRun("examples/passkit_app/auth.passkit", {
+        action: action, email: email, password: password, token: token, masterKey: KEY, now: NOW
+    });
+}
+
+// ---- register ----
+let r = auth("register", "Rima@Example.com", "Zt7!mQ4pLw-2024", "");
+print "register ok:      " + toString(r["ok"]);
+if (r["ok"] == false) { print r["message"]; }
+let parts = split(r["value"], "|");
+print "user id:          " + parts[0];
+print "API key (once):   " + parts[1];
+
+// weak password is rejected by the policy inside the .passkit file
+let weak = auth("register", "bob@example.com", "123456", "");
+print "weak password:    ok=" + toString(weak["ok"]) + "  " + weak["message"];
+
+// ---- login ----
+NOW = 1100;
+let bad = auth("login", "Rima@Example.com", "wrong password", "");
+print "wrong password:   " + bad["value"];
+
+let good = auth("login", "Rima@Example.com", "Zt7!mQ4pLw-2024", "");
+let token = good["value"];
+print "session token:    " + substr(token, 0, 12) + "...";
+
+// ---- session check (valid now, expired after one hour) ----
+print "session at 1100:  " + auth("session", "", "", token)["value"];
+NOW = 1100 + 3601;
+print "session +1h:      " + auth("session", "", "", token)["value"];
+
+// ---- what the .passkit file logged through <call fn="appLog"> ----
+print "log:              " + join(LOG, " | ");
