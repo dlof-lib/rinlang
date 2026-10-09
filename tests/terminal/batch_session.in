@@ -1,0 +1,21 @@
+let x = 5;
+x * 2
+fun f(a) {
+    return a + 1;
+}
+f(10)
+"hello" + " rin"
+print "side effect";
+oops_undefined
+1 + 1
+x = x + 1;
+x
+:type f
+:type x * 3
+:vars
+let long = 1 +
+  2;
+long
+:set timing off
+:check let = ;
+:nope
