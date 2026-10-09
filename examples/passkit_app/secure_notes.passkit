@@ -1,0 +1,34 @@
+<!-- secure_notes.passkit — encrypted notes + 2FA + signed share link + API key, in one file. -->
+<passkit>
+  <input name="now" default="5000" />
+
+  <!-- 1) a master key and an encrypted note (searchable by email without storing it in clear) -->
+  <crypt name="k" op="keygen" />
+  <db table="notes" op="insert" id="n1" key="$k.key" enc="owner,body" blind="owner"
+      set.owner="Rima@Example.com" set.body="bank PIN is 4821" />
+  <db name="raw"  table="notes" op="get" id="n1" />
+  <db name="mine" table="notes" op="find" key="$k.key" blind field="owner" equals="rima@example.com" />
+  <db name="plain" table="notes" op="get" id="n1" key="$k.key" />
+  <print value="stored body (ciphertext): {raw.doc.body}" />
+  <print value="matched by blind index (still encrypted): {mine.0.owner}" />
+  <print value="decrypted:                {plain.doc.body}" />
+
+  <!-- 2) 2FA: authenticator secret, a code, and verification (replay-safe time window) -->
+  <otp name="s" op="secret" />
+  <otp name="c" op="code"   secret="$s.secret" now="$now" />
+  <otp name="v" op="verify" secret="$s.secret" code="$c.code" now="$now" />
+  <print value="2FA code accepted:        {v.ok}" />
+
+  <!-- 3) signed token with expiry, and a signed share link that expires in 10 minutes -->
+  <token name="t" op="sign" key="$k.key" claim.sub="n1" claim.role="viewer" now="$now" ttl="600" />
+  <token name="chk" op="verify" key="$k.key" value="$t.token" now="5100" />
+  <token name="late" op="verify" key="$k.key" value="$t.token" now="6000" />
+  <print value="token valid at +100s:     {chk.ok}   at +1000s: {late.ok}" />
+  <token name="link" op="signurl" key="$k.key" url="https://notes.example.com/share?id=n1" now="$now" ttl="600" />
+  <print value="share link:               {link.url}" />
+
+  <!-- 4) API key: shown once, only the hash is stored -->
+  <apikey name="api" generate prefix="nk_live" />
+  <print value="API key (shown once):     {api.key}" />
+  <print value="stored hash only:         {api.hash}" />
+</passkit>
