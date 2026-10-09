@@ -173,7 +173,7 @@ object BuiltinLibraries {
         ),
         BuiltinLibraryInfo(
             "lib/passkit.og.rin", "passkit",
-            "Password kit: ready-made policies, strength and entropy analysis, secure generation (password/PIN/passphrase), salted hashing with constant-time verification, lifecycle (history/expiry/lockout), reset tokens and log redaction",
+            "Password kit: ready-made policies, strength and entropy analysis, secure generation (password/PIN/passphrase), PBKDF2-HMAC-SHA256 hashing (600k iterations) with constant-time verification, lifecycle (history/expiry/lockout), reset tokens and log redaction",
             "pkPolicyStandard • pkCheck • pkAnalyze • pkGenerate • pkGeneratePin • pkPassphrase • pkHash • pkVerify • pkLogin • pkChange • pkResetToken • pkRedact"
         ),
         BuiltinLibraryInfo(
@@ -183,7 +183,7 @@ object BuiltinLibraries {
         ),
         BuiltinLibraryInfo(
             "lib/passkitcrypt.og.rin", "passkitcrypt",
-            "Encryption and signing for the Passkit family: authenticated Seal/Open, keys (HKDF/PBKDF2/keyring/envelope), signed tokens, URLs and requests, TOTP, recovery codes and Shamir secret sharing, verified against RFC vectors",
+            "Encryption and signing for the Passkit family: AES-256-GCM Seal/Open (NIST-verified, native), keys (HKDF/PBKDF2/keyring/envelope), signed tokens, URLs and requests, TOTP, recovery codes and Shamir secret sharing",
             "pcSeal • pcOpen • pcKeyringSeal • pcEnvelopeSeal • pcHkdf • pcPbkdf2 • pcTokenSign • pcTokenVerify • pcTotp • pcShamirSplit • pcMerkleRoot"
         ),
         BuiltinLibraryInfo(
