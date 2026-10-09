@@ -68,7 +68,7 @@ feat("F031", "pcPepper: secret pepper before hashing", pcPepper("pw", K) == pcPe
 // ======================= Authenticated encryption =======================
 let s1 = pcSeal(K, "sëcret 日本語 🔐", nil);
 feat("F032", "pcSeal/pcOpen: round trip (non-ASCII + emoji)", s1["ok"] and pcOpen(K, s1["sealed"], nil)["plaintext"] == "sëcret 日本語 🔐");
-let bad = replace(s1["sealed"], "pc1.", "pc1.0");
+let bad = replace(s1["sealed"], "pc2.", "pc2.0");
 let flipped = substr(s1["sealed"], 0, len(s1["sealed"]) - 1) + (charAt(s1["sealed"], len(s1["sealed"]) - 1) == "0" ? "1" : "0");
 feat("F033", "pcOpen: rejects any change to the ciphertext", pcOpen(K, flipped, nil)["ok"] == false);
 feat("F034", "pcOpen: rejects the wrong key", pcOpen(pcGenerateKey(32), s1["sealed"], nil)["ok"] == false);
@@ -83,7 +83,7 @@ feat("F039", "pcSealObject/pcOpenObject: JSON objects", pcOpenObject(K, so["seal
 let sp = pcSealWithPassword("pässword", "message", { iterations: 100 });
 feat("F040", "pcSealWithPassword/Open: password-based encryption (embedded salt)", pcOpenWithPassword("pässword", sp["sealed"])["plaintext"] == "message");
 feat("F041", "pcOpenWithPassword: wrong password fails", pcOpenWithPassword("wrong", sp["sealed"])["ok"] == false);
-feat("F042", "Corrupt or truncated input returns ok:false without crashing", pcOpen(K, "pc1.zz", nil)["ok"] == false and pcOpen(K, "garbage", nil)["ok"] == false and pcOpen(K, nil, nil)["ok"] == false and pcOpenWithPassword("p", "pcp1.x.y")["ok"] == false);
+feat("F042", "Corrupt or truncated input returns ok:false without crashing", pcOpen(K, "pc2.zz", nil)["ok"] == false and pcOpen(K, "garbage", nil)["ok"] == false and pcOpen(K, nil, nil)["ok"] == false and pcOpenWithPassword("p", "pcp1.x.y")["ok"] == false);
 
 // ======================= Keyring / Envelope =======================
 let ring = pcKeyringNew();
@@ -193,7 +193,7 @@ feat("F090", "pdMigrate: migrations in order, once", migLog[0] == "m1" and migLo
 // ======================= Encrypted databases =======================
 let e1 = pdInsertEnc("pf_e", { email: "Rima@Example.com", age: 30, city: "Zürich" }, K, ["email", "city"], { blind: ["email"] });
 let raw = pdGet("pf_e", e1["id"])["doc"];
-feat("F091", "pdInsertEnc: encrypted fields do not appear in plain form in storage", e1["ok"] and indexOf(raw["email"], "pc1.") == 0 and contains(toString(raw), "Rima") == false and contains(toString(raw), "Zürich") == false and raw["age"] == 30);
+feat("F091", "pdInsertEnc: encrypted fields do not appear in plain form in storage", e1["ok"] and indexOf(raw["email"], "pc2.") == 0 and contains(toString(raw), "Rima") == false and contains(toString(raw), "Zürich") == false and raw["age"] == 30);
 feat("F092", "pdGetDec: read with decryption", pdGetDec("pf_e", e1["id"], K)["doc"]["email"] == "Rima@Example.com" and pdGetDec("pf_e", e1["id"], K)["doc"]["city"] == "Zürich");
 let e2 = pdInsertEnc("pf_e", { email: "other@example.com" }, K, ["email"], {});
 updateDoc("pf_e", e2["id"], { email: raw["email"] });
@@ -209,7 +209,7 @@ feat("F097", "pdImportEncrypted: wrong key or different table is rejected", pdIm
 // ======================= Security models =======================
 let uc = pdUserCreate("pf_users", K, "Rima@Example.com", "Zt7!mQ4pLw", { now: 100 });
 let urow = pdGet("pf_users", uc["id"])["doc"];
-feat("F098", "pdUserCreate: no plain email or password in storage", uc["ok"] and contains(toString(urow), "Zt7!mQ4pLw") == false and contains(toString(urow), "Example") == false and indexOf(urow["hash"], "pk1$") == 0);
+feat("F098", "pdUserCreate: no plain email or password in storage", uc["ok"] and contains(toString(urow), "Zt7!mQ4pLw") == false and contains(toString(urow), "Example") == false and indexOf(urow["hash"], "pk2$") == 0);
 feat("F099", "pdUserCreate: rejects a duplicate email (via the blind index)", pdUserCreate("pf_users", K, "rima@example.com", "Hn8@vR3kWb", { now: 101 })["ok"] == false);
 feat("F100", "pdUserCreate: the password policy is enforced", pdUserCreate("pf_users", K, "x@y.com", "abc", { now: 1 })["ok"] == false and pdUserCreate("pf_users", K, "not-an-email", "Hn8@vR3kWb", { now: 1 })["ok"] == false);
 let lg = pdUserLogin("pf_users", K, " RIMA@example.com ", "Zt7!mQ4pLw", { now: 200 });
@@ -289,7 +289,7 @@ pdContClone("pf_c2", "pf_c4");
 feat("F136", "pdContClone", pdContChecksum("pf_c4") == pdContChecksum("pf_c2"));
 pdContSet("pf_c5", "token", "tok-123");
 pdContSeal("pf_c5", "token", K);
-feat("F137", "pdContSeal/Open: encrypt a field inside the container in place", indexOf(getField("pf_c5", "token"), "pc1.") == 0 and pdContOpen("pf_c5", "token", K)["value"] == "tok-123");
+feat("F137", "pdContSeal/Open: encrypt a field inside the container in place", indexOf(getField("pf_c5", "token"), "pc2.") == 0 and pdContOpen("pf_c5", "token", K)["value"] == "tok-123");
 pdContSet("pf_c5", "other", pcSealObject(K, { v: "x" }, "pf_c5.token")["sealed"]);
 feat("F138", "Container AAD: moving ciphertext to another field fails", pdContOpen("pf_c5", "other", K)["ok"] == false);
 pdContSet("pf_c6", "a", "1");
@@ -341,7 +341,7 @@ pdContFromMap("pf_t2", { user: "rima", n: 5 }, nil);
 let t21 = run1("<container of=\"pf_t2\" op=\"load\" prefix=\"c_\"/><set name=\"extra\" value=\"x\"/><container of=\"pf_t2\" op=\"save\" vars=\"extra\"/><return value=\"{c_user}|{c_n}\"/>");
 feat("F160", "<container load/save> between container and variables", t21["value"] == "rima|5" and getField("pf_t2", "extra") == "x");
 let t22 = run1("<crypt name=\"k\" op=\"keygen\"/><container of=\"pf_t3\" op=\"set\" field=\"token\" value=\"abc\"/><container of=\"pf_t3\" op=\"seal\" field=\"token\" key=\"$k.key\"/><container name=\"o\" of=\"pf_t3\" op=\"open\" field=\"token\" key=\"$k.key\"/><return value=\"{o.value}\"/>");
-feat("F161", "<container seal/open>: an encrypted field in the container", t22["value"] == "abc" and indexOf(getField("pf_t3", "token"), "pc1.") == 0);
+feat("F161", "<container seal/open>: an encrypted field in the container", t22["value"] == "abc" and indexOf(getField("pf_t3", "token"), "pc2.") == 0);
 pdContSet("pf_t4", "script", "<input name=\"x\" default=\"1\"/><return value=\"got-{x}-{who}\"/>");
 let t23 = run1("<container name=\"r\" of=\"pf_t4\" op=\"exec\" field=\"script\" in.who=\"me\" in.x=\"7\"/><return value=\"{r.value}\"/>");
 feat("F162", "<container exec>: code as data inside a container", t23["value"] == "got-7-me");
@@ -358,6 +358,38 @@ let rc2 = passkitRunContainer("pf_t7", "code", nil);
 feat("F166", "passkitRunContainer: run a stored source with container fields as inputs", rc2["ok"] and rc2["value"] == "44");
 let rl = passkitRunLinked("pf_t7", "code", nil);
 feat("F167", "passkitRunLinked: run and write outputs back into the container", rl["ok"] and getField("pf_t7", "out_sq") == "44" and getField("pf_t7", "out_value") == "44");
+
+// ======================= Standard primitives: AES-GCM, PBKDF2, CSPRNG =======================
+let GK = "feffe9928665731c6d6a8f9467308308";
+let GN = "cafebabefacedbaddecaf888";
+let GP = "d9313225f88406e5a55909c5aff5269a86a7a9531534f7da2e4c303d8a318a721c3c0c95956809532fcf0e2449a6b525b16aedf5aa0de657ba637b39";
+let GA = "feedfacedeadbeeffeedfacedeadbeefabaddad2";
+let GC = sec.aesGcmSeal(GK, GN, GP, GA);
+feat("F168", "sec.aesGcmSeal: NIST SP 800-38D test case 4 (AES-128-GCM with AAD)", GC == "42831ec2217774244b7221b784d0d49ce3aa212f2c02a4e035c17e2329aca12e21d514b25466931c7d8f6a5aac84aa051ba30b396a0aac973d58e0915bc94fbc3221a5db94fae95ae7121a47");
+feat("F169", "sec.aesGcmSeal: NIST test case 1 (empty message, tag only)", sec.aesGcmSeal("00000000000000000000000000000000", "000000000000000000000000", "", "") == "58e2fccefa7e3061367f1d57a4e7455a");
+feat("F170", "sec.aesGcmSeal: NIST test case 15 (AES-256-GCM)", sec.aesGcmSeal("feffe9928665731c6d6a8f9467308308feffe9928665731c6d6a8f9467308308", GN, "d9313225f88406e5a55909c5aff5269a86a7a9531534f7da2e4c303d8a318a721c3c0c95956809532fcf0e2449a6b525b16aedf5aa0de657ba637b391aafd255", "") == "522dc1f099567d07f47f37a32a84427d643a8cdcbfe5c0c97598a2bd2555d1aa8cb08e48590dbb3da7b08b1056828838c5f61e6393ba7a0abcc9f662898015adb094dac5d93471bdec1a502270e3cc6c");
+feat("F171", "sec.aesGcmOpen: round trip returns the plaintext", sec.aesGcmOpen(GK, GN, GC, GA) == GP);
+feat("F172", "sec.aesGcmOpen: wrong AAD returns nil (authentication fails)", sec.aesGcmOpen(GK, GN, GC, "00") == nil);
+feat("F173", "sec.aesGcmOpen: a flipped ciphertext bit returns nil", sec.aesGcmOpen(GK, GN, "00" + substr(GC, 2, len(GC) - 2), GA) == nil);
+feat("F174", "sec.pbkdf2Sha256: RFC 7914 vector (c=1, 64 bytes)", sec.pbkdf2Sha256("passwd", sec.hexEncode("salt"), 1, 64) == "55ac046e56e3089fec1691c22544b605f94185216dde0465e68b9d57c20dacbc49ca9cccf179b645991664b39d77ef317c71b845b1e30bd509112041d3a19783");
+feat("F175", "sec.pbkdf2Sha256: RFC 7914 vector (c=80000)", sec.pbkdf2Sha256("Password", sec.hexEncode("NaCl"), 80000, 64) == "4ddcd8f60b98be21830cee5ef22701f9641a4418d04c0414aeff08876b34ab56a1d425a1225833549adb841b51c9b3176a272bdebba1d078478f62b397f33c8d");
+feat("F176", "pcPbkdf2 (Rin API) matches the native primitive", pcPbkdf2("passwd", sec.hexEncode("salt"), 1, 32) == "55ac046e56e3089fec1691c22544b605f94185216dde0465e68b9d57c20dacbc");
+let AK = pcGenerateKey(32);
+let AS = pcSeal(AK, "attack at dawn", "ctx");
+feat("F177", "pcSeal now produces AES-256-GCM (format pc2)", AS["ok"] and indexOf(AS["sealed"], "pc2.") == 0 and len(split(AS["sealed"], ".")[1]) == 24);
+feat("F178", "pcOpen opens pc2 and rejects a wrong AAD", pcOpen(AK, AS["sealed"], "ctx")["plaintext"] == "attack at dawn" and pcOpen(AK, AS["sealed"], "other")["ok"] == false);
+let ASP = split(AS["sealed"], ".");
+ASP[2] = "00" + substr(ASP[2], 2, len(ASP[2]) - 2);
+feat("F179", "pcOpen rejects a modified pc2 ciphertext", pcOpen(AK, join(ASP, "."), "ctx")["ok"] == false);
+let LG = pcSealLegacy(AK, "old data", nil);
+feat("F180", "pcOpen still reads legacy pc1 data (backward compatible)", LG["ok"] and indexOf(LG["sealed"], "pc1.") == 0 and pcOpen(AK, LG["sealed"], nil)["plaintext"] == "old data");
+feat("F181", "pcSeal uses a fresh random nonce each time", pcSeal(AK, "x", nil)["sealed"] != pcSeal(AK, "x", nil)["sealed"]);
+let HV = pkHash("Zt7!mQ4pLw", { iterations: 1000 });
+feat("F182", "pkHash now produces pk2 (PBKDF2-HMAC-SHA256) and verifies", indexOf(HV, "pk2$1000$") == 0 and pkVerify("Zt7!mQ4pLw", HV) and pkVerify("wrong", HV) == false);
+let HL = pkHash("Zt7!mQ4pLw", { iterations: 50, legacy: true });
+feat("F183", "legacy pk1 hashes still verify and are flagged for re-hash", indexOf(HL, "pk1$50$") == 0 and pkVerify("Zt7!mQ4pLw", HL) and pkNeedsRehash(HL, nil) == true);
+feat("F184", "pk2 hash with the default iterations is not flagged; lower iterations are", pkNeedsRehash(pkHash("a", { iterations: PK_DEFAULT_ITERATIONS }), nil) == false and pkNeedsRehash(HV, nil) == true);
+feat("F185", "sec.randomToken uses the OS CSPRNG: correct length, never repeats", len(sec.randomToken(32)) == 64 and sec.randomToken(16) != sec.randomToken(16));
 
 print "";
 print "FEATURES: " + toString(FEAT_TOTAL) + "  FAILED: " + toString(FEAT_FAIL);
