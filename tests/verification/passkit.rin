@@ -1,0 +1,136 @@
+// tests/verification/passkit.rin — Test of lib/passkit.og.rin on the real interpreter
+@import "lib/passkit.og.rin";
+
+let fails = 0;
+fun check(cond, label) {
+    if (cond) { print "PASS  " + label; }
+    else { print "FAIL  " + label; fails = fails + 1; }
+}
+
+// ---- Analysis and strength ----
+check(pkScore("password") == 0, "common password => score 0");
+check(pkScore("P@ssw0rd") == 0, "leet-disguised common => score 0");
+check(pkIsCommon("123456") == true, "123456 is common");
+check(pkHasSequence("xxabcxx") == true, "abc sequence detected");
+check(pkHasSequence("qwerty") == true, "keyboard row sequence detected");
+check(pkHasSequence("k7#Vn2!") == false, "no false sequence");
+check(pkLongestRepeat("aaabcc") == 3, "longest repeat");
+check(pkUniqueCount("aabbcc") == 3, "unique count");
+check(pkAnalyze("Tr0ub4dor&3xK9!zQ", nil)["score"] >= 3, "long mixed password scores >= 3");
+check(pkAnalyze("ab", nil)["score"] == 0, "tiny password scores 0");
+check(pkContainsPersonal("rima2024x", ["Rima"]) == true, "personal name detected");
+check(pkContainsPersonal("rimaa@mail.com", ["x"]) == false, "no personal match");
+
+// ---- Policy ----
+let std = pkPolicyStandard();
+let bad = pkCheck("abc", std, nil);
+check(bad["ok"] == false and contains(bad["failed"], "too_short"), "short rejected (too_short)");
+check(contains(bad["failed"], "no_upper") and contains(bad["failed"], "no_digit"), "collects ALL failures at once");
+check(pkCheck("Zt7!mQ4pLw", std, nil)["ok"] == true, "good password passes standard");
+check(pkCheck("Zt7!mQ4pLw", pkPolicyStrict(), nil)["ok"] == false, "10 chars fails strict (min 12)");
+check(pkCheck("Rima@2024Zq9", std, { username: "rima" })["ok"] == false, "personal info rejected");
+let pinOk = pkCheck("493158", pkPolicyPin(6), nil);
+check(pinOk["ok"] == true, "valid 6-digit PIN passes pin policy");
+check(pkCheck("12345", pkPolicyPin(6), nil)["ok"] == false, "5-digit PIN fails 6 pin policy");
+check(pkPolicy({ minLength: 20 })["minLength"] == 20 and pkPolicy({ minLength: 20 })["maxAttempts"] == 5, "policy merge keeps defaults");
+check(pkConfirm("a", "a")["ok"] == true and pkConfirm("a", "b")["ok"] == false, "confirm match/mismatch");
+
+// ---- Generation ----
+let g = pkGenerate({ length: 20 });
+check(g["ok"] and len(g["password"]) == 20, "generate length 20");
+let gc = pkCharClasses(g["password"]);
+check(gc["lower"] > 0 and gc["upper"] > 0 and gc["digit"] > 0 and gc["symbol"] > 0, "generated has every class");
+let g2 = pkGenerate({ length: 12, symbols: false, avoidAmbiguous: true });
+check(g2["ok"] and pkCharClasses(g2["password"])["symbol"] == 0, "symbols:false honoured");
+let amb = false;
+let ai = 0;
+while (ai < len(g2["password"])) { if (contains(PK_AMBIGUOUS, charAt(g2["password"], ai))) { amb = true; } ai = ai + 1; }
+check(amb == false, "avoidAmbiguous honoured");
+check(pkGenerate({ length: 2 })["ok"] == false, "length < classes rejected");
+check(pkGenerate({ lower: false, upper: false, digits: false, symbols: false })["ok"] == false, "no classes rejected");
+let many = pkGenerateMany(5, { length: 16 });
+check(many["ok"] and len(many["passwords"]) == 5 and many["passwords"][0] != many["passwords"][1], "generateMany distinct");
+let pin = pkGeneratePin(6);
+check(pin["ok"] and len(pin["pin"]) == 6 and pkCharClasses(pin["pin"])["digit"] == 6, "pin is 6 digits");
+let ph = pkPassphrase({ words: 5, capitalize: true, number: true });
+check(ph["ok"] and ph["entropyBits"] > 35, "passphrase entropy reported");
+check(len(split(ph["passphrase"], "-")) == 6, "passphrase 5 words + number");
+check(len(PK_WORDS) == 128, "wordlist is 128 words");
+// pkRandInt distribution within range
+let inRange = true;
+let ri = 0;
+while (ri < 200) { let v = pkRandInt(10); if (v < 0 or v > 9) { inRange = false; } ri = ri + 1; }
+check(inRange, "pkRandInt stays in [0,10)");
+let sh = pkShuffle([1, 2, 3, 4, 5]);
+check(len(sh) == 5 and sum_ok(sh), "shuffle preserves elements");
+fun sum_ok(a) { let s = 0; let i = 0; while (i < len(a)) { s = s + a[i]; i = i + 1; } return s == 15; }
+
+// ---- Storage ----
+let h = pkHash("Zt7!mQ4pLw", { iterations: 500 });
+check(startsWith_pk(h), "hash has pk1$ prefix");
+fun startsWith_pk(s) { return indexOf(s, "pk1$500$") == 0; }
+check(pkVerify("Zt7!mQ4pLw", h) == true, "verify correct password");
+check(pkVerify("Zt7!mQ4pLx", h) == false, "verify wrong password");
+check(pkVerify("x", "garbage") == false, "verify garbage hash => false (no crash)");
+check(pkHash("same", { iterations: 100 }) != pkHash("same", { iterations: 100 }), "unique salt per hash");
+check(pkHash("same", { iterations: 100, salt: "aa" }) == pkHash("same", { iterations: 100, salt: "aa" }), "deterministic with fixed salt");
+check(pkNeedsRehash(h, pkPolicyStandard()) == true, "low iterations needs rehash");
+check(pkParseHash(h)["iterations"] == 500, "parseHash iterations");
+
+// ---- Lifecycle ----
+let pol = pkPolicy({ hashIterations: 200, maxAttempts: 3, lockSeconds: 600, maxAgeDays: 30, historyCount: 3 });
+let created = pkRecordNew("Zt7!mQ4pLw", pol, nil, 1000);
+check(created["ok"], "record created");
+let rec = created["record"];
+check(rec["expiresAt"] == 1000 + 30 * 86400, "expiry computed from maxAgeDays");
+check(pkDaysLeft(rec, 1000) == 30, "daysLeft 30");
+check(pkRecordNew("abc", pol, nil, 1000)["ok"] == false, "weak password rejected at creation");
+
+let l1 = pkLogin(rec, "wrong1", pol, 1100);
+check(l1["ok"] == false and l1["reason"] == "wrong" and l1["attemptsLeft"] == 2, "1st wrong attempt => 2 left");
+let l2 = pkLogin(l1["record"], "wrong2", pol, 1110);
+let l3 = pkLogin(l2["record"], "wrong3", pol, 1120);
+check(l3["reason"] == "locked" and l3["retryAfter"] == 600, "3rd wrong attempt locks");
+let l4 = pkLogin(l3["record"], "Zt7!mQ4pLw", pol, 1200);
+check(l4["ok"] == false and l4["reason"] == "locked", "correct password still refused while locked");
+let l5 = pkLogin(l3["record"], "Zt7!mQ4pLw", pol, 1121 + 600);
+check(l5["ok"] == true and l5["reason"] == "ok", "login ok after lock expires");
+check(rec["failedAttempts"] == 0, "original record never mutated");
+let lExp = pkLogin(rec, "Zt7!mQ4pLw", pol, 1000 + 31 * 86400);
+check(lExp["ok"] == true and lExp["mustChange"] == true and lExp["reason"] == "expired", "expired => ok but mustChange");
+
+let ch1 = pkChange(rec, "Zt7!mQ4pLw", "Hn8@vR3kWb", pol, nil, 5000);
+check(ch1["ok"], "change password ok");
+check(len(ch1["record"]["history"]) == 1, "history holds previous hash");
+check(ch1["record"]["changedAt"] == 5000, "changedAt updated");
+let ch2 = pkChange(ch1["record"], "Hn8@vR3kWb", "Zt7!mQ4pLw", pol, nil, 6000);
+check(ch2["ok"] == false and contains(ch2["failed"], "reused"), "reusing old password blocked by history");
+check(pkChange(rec, "nope", "Hn8@vR3kWb", pol, nil, 5000)["ok"] == false, "change needs correct old password");
+check(pkChange(rec, "Zt7!mQ4pLw", "Zt7!mQ4pLw", pol, nil, 5000)["ok"] == false, "new == old rejected");
+
+// ---- Recovery ----
+let rt = pkResetToken(900, 1000);
+check(len(rt["token"]) == 64 and rt["expiresAt"] == 1900, "reset token 32 bytes hex + expiry");
+check(pkCheckResetToken(rt["token"], rt["tokenHash"], rt["expiresAt"], 1500)["ok"] == true, "reset token valid");
+check(pkCheckResetToken(rt["token"], rt["tokenHash"], rt["expiresAt"], 1900)["reason"] == "expired", "reset token expired");
+check(pkCheckResetToken("bad", rt["tokenHash"], rt["expiresAt"], 1500)["reason"] == "invalid", "reset token invalid");
+
+// ---- Masking ----
+check(pkMask("secret") == "••••••", "mask same length");
+check(pkMaskKeep("abcdefgh1234", 4) == "••••••••1234", "maskKeep last 4");
+check(pkMaskKeep("abcd", 4) == "••••", "short password never revealed");
+let red = pkRedact({ user: "rima", password: "x1", apiToken: "t", note: "hi" });
+check(red["password"] == "***" and red["apiToken"] == "***" and red["user"] == "rima" and red["note"] == "hi", "redact sensitive keys only");
+
+// ---- non-Latin (UTF-8 real) and a corrupted hash ----
+check(pkLen("日本語123") == 6, "non-latin length counts characters, not bytes");
+check(pkCharClasses("日本語123")["other"] == 3 and pkCharClasses("日本語123")["digit"] == 3, "non-latin chars counted as other class");
+check(pkUniqueCount("あああ") == 1 and pkLongestRepeat("あああ") == 3, "non-latin repeat/unique by character");
+check(pkMask("日本語") == "•••", "mask counts non-latin characters");
+check(pkMaskKeep("日本語パスワード12", 2) == "••••••••12", "maskKeep non-latin");
+check(pkVerify("x", "pk1$abc$salt$hash") == false, "non-numeric iterations => false, no crash");
+check(pkVerify("x", "pk1$$salt$hash") == false, "empty iterations => false, no crash");
+check(pkParseHash("pk1$99999999$s$h")["ok"] == false, "absurd iteration count rejected");
+
+print "";
+if (fails == 0) { print "ALL PASSED"; } else { print "FAILURES: " + toString(fails); }
