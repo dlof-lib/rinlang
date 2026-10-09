@@ -2,16 +2,18 @@
 //  lib/passkitcrypt.og.rin — Encryption, signing and key generation for the Passkit family (prefix pc)
 //  Import:  @import "lib/passkitcrypt.og.rin";
 //
-//  Built entirely on primitives that already exist in Rin: sec.hmacSha256 / sec.sha256 /
-//  sec.randomToken (CSPRNG) / sec.xorCipher / sec.hexEncode / sec.base64Encode.
-//  Does not modify the engine. All binary values are passed as hexadecimal text (hex) in lowercase.
+//  Built on standard primitives implemented natively in the engine (app/src/main/cpp/rin_crypto_aead.h) and
+//  verified against official vectors: AES-256-GCM (NIST SP 800-38D), PBKDF2-HMAC-SHA256 (RFC 7914),
+//  plus sec.hmacSha256 / sec.sha256 and sec.randomToken (OS CSPRNG, /dev/urandom).
+//  All binary values are passed as hexadecimal text (hex) in lowercase.
 //
-//  What is standard and is verified with official RFC test vectors in the tests:
-//    HMAC-SHA256 (RFC 4231) · HKDF (RFC 5869) · PBKDF2-HMAC-SHA256 · TOTP-SHA256 (RFC 6238)
-//    Base32 (RFC 4648)
-//  and what is a "construction" (construction) and not a standard: pcSeal = a stream cipher with HMAC-CTR + an HMAC tag
-//  (Encrypt-then-MAC) with per-message subkeys via HKDF. Sound by design but it is not AES-GCM/ChaCha20;
-//  do not rely on it where you must comply with a specific standard.
+//  Verified with official test vectors in the tests:
+//    AES-GCM (NIST) · HMAC-SHA256 (RFC 4231) · HKDF (RFC 5869) · PBKDF2-HMAC-SHA256 (RFC 7914) ·
+//    TOTP-SHA256 (RFC 6238) · Base32 (RFC 4648)
+//  pcSeal/pcOpen = AES-256-GCM (format pc2, per-message random 96-bit nonce, key separated by HKDF).
+//  The older HMAC-CTR construction (format pc1) is still readable by pcOpen and available as pcSealLegacy.
+//  Honest limits: AES uses lookup tables (not hardened against cache-timing attacks from a co-located attacker);
+//  keep a single key under ~2^32 messages (rotate with the keyring).
 //
 //  Convention: every function returns {ok:true,...} or {ok:false,error:"..."} and never crashes on corrupt input.
 // ============================================================================
@@ -338,26 +340,9 @@ fun pcHkdf(ikmHex, saltHex, infoHex, length) {
     return pcHkdfExpand(pcHkdfExtract(saltHex, ikmHex), infoHex, length);
 }
 
-// F: PBKDF2-HMAC-SHA256 — password text, saltHex, result hex
+// F: PBKDF2-HMAC-SHA256 — password text, saltHex, result hex (native C++ engine primitive, RFC 8018)
 fun pcPbkdf2(password, saltHex, iterations, bytes) {
-    let blocks = ceil(bytes / 32);
-    let out = "";
-    let b = 1;
-    while (b <= blocks) {
-        let u = sec.hmacSha256(password, sec.hexDecode(saltHex + pcToHex(b, 8)));
-        let ru = sec.hexDecode(u);
-        let t = ru;
-        let i = 1;
-        while (i < iterations) {
-            u = sec.hmacSha256(password, ru);
-            ru = sec.hexDecode(u);
-            t = sec.xorCipher(t, ru);
-            i = i + 1;
-        }
-        out = out + sec.hexEncode(t);
-        b = b + 1;
-    }
-    return substr(out, 0, bytes * 2);
+    return sec.pbkdf2Sha256(password, saltHex, iterations, bytes);
 }
 
 // F: random key (hex)
@@ -432,7 +417,45 @@ fun pcTag(macHex, nonceHex, aadHex, ctHex) {
 
 // F: authenticated encryption; aad (optional) = associated data that is signed but not encrypted (binds the ciphertext to its context)
 // Format: pc1.<nonce>.<ciphertext>.<tag>
+// ---- AES-256-GCM (NIST SP 800-38D) — the default since v2; the engine primitive is verified against NIST vectors ----
+// Format: pc2.<nonce:12 bytes hex>.<ciphertext hex>.<tag:16 bytes hex>   (random 96-bit nonce per message;
+// keep a single key under ~2^32 messages, or rotate with the keyring)
+fun pcAeadKey(keyHex) { return pcDeriveSubkey(keyHex, "aes-256-gcm"); }
+
 fun pcSeal(keyHex, plaintext, aad) {
+    let kc = pcKeyCheck(keyHex);
+    if (kc["ok"] == false) { return { ok: false, error: kc["error"] }; }
+    let nonce = sec.randomToken(12);
+    let aadHex = "";
+    if (aad != nil) { aadHex = pcHexOf(aad); }
+    let ctTag = sec.aesGcmSeal(pcAeadKey(keyHex), nonce, pcHexOf(plaintext), aadHex);
+    let n = len(ctTag);
+    return { ok: true, sealed: "pc2." + nonce + "." + substr(ctTag, 0, n - 32) + "." + substr(ctTag, n - 32, 32) };
+}
+
+// Opens pc2 (AES-GCM) and the legacy pc1 (HMAC-CTR) format, so data sealed by older versions stays readable
+fun pcOpen(keyHex, sealed, aad) {
+    if (type(sealed) == "string" and indexOf(sealed, "pc1.") == 0) { return pcOpenLegacy(keyHex, sealed, aad); }
+    let kc = pcKeyCheck(keyHex);
+    if (kc["ok"] == false) { return { ok: false, error: kc["error"] }; }
+    if (type(sealed) != "string") { return { ok: false, error: "The ciphertext is invalid" }; }
+    let parts = split(sealed, ".");
+    if (len(parts) != 4 or parts[0] != "pc2") { return { ok: false, error: "Unknown format" }; }
+    let nonce = parts[1];
+    let ct = parts[2];
+    let tag = parts[3];
+    if (len(nonce) != 24 or pcIsHex(nonce) == false or pcIsHex(ct) == false or len(tag) != 32 or pcIsHex(tag) == false) {
+        return { ok: false, error: "Corrupt format" };
+    }
+    let aadHex = "";
+    if (aad != nil) { aadHex = pcHexOf(aad); }
+    let pt = sec.aesGcmOpen(pcAeadKey(keyHex), nonce, ct + tag, aadHex);
+    if (pt == nil) { return { ok: false, error: "Integrity check failed (wrong key, modified data or different context)" }; }
+    return { ok: true, plaintext: sec.hexDecode(pt) };
+}
+
+// ---- legacy format (pc1): HMAC-SHA256 counter-mode stream + HMAC tag, kept for reading old data ----
+fun pcSealLegacy(keyHex, plaintext, aad) {
     let kc = pcKeyCheck(keyHex);
     if (kc["ok"] == false) { return { ok: false, error: kc["error"] }; }
     let nonce = sec.randomToken(16);
@@ -447,7 +470,7 @@ fun pcSeal(keyHex, plaintext, aad) {
 }
 
 // F: decrypt after verifying the tag in constant time (any tampering, different aad or wrong key fails)
-fun pcOpen(keyHex, sealed, aad) {
+fun pcOpenLegacy(keyHex, sealed, aad) {
     let kc = pcKeyCheck(keyHex);
     if (kc["ok"] == false) { return { ok: false, error: kc["error"] }; }
     if (type(sealed) != "string") { return { ok: false, error: "The ciphertext is invalid" }; }
