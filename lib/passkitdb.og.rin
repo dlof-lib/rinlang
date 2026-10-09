@@ -1,0 +1,849 @@
+// ============================================================================
+//  lib/passkitdb.og.rin — Database and container layer for the Passkit family (prefix pd)
+//  Import:  @import "lib/passkitdb.og.rin";
+//
+//  Builds on Rin's native document containers (spawn("doc",...) + insertDoc/findDoc/queryDocs/
+//  updateDoc/deleteDoc/docIds + RCSQL) and on passkit (pk*) and passkitcrypt (pc*).
+//  Does not modify the engine. Time is always passed explicitly (nowSec) because Rin has no wall clock.
+//
+//  Sections:  1) CRUD and rules  2) Field encryption and the blind index  3) security models (users/sessions/
+//          API keys/audit/rate limiting/2FA)  4) Generic container (container) linking
+//  Convention: {ok:true,...} or {ok:false,error}.
+// ============================================================================
+
+@import "passkit";
+@import "passkitcrypt";
+
+let PDS = { tx: {} };
+
+// ---- Helpers ---------------------------------------------------------------------------
+
+fun pdOpt(opts, k, fallback) {
+    if (opts == nil) { return fallback; }
+    if (has(opts, k)) { return opts[k]; }
+    return fallback;
+}
+
+fun pdCopy(m) {
+    let out = {};
+    for (let k in keys(m)) { out[k] = m[k]; }
+    return out;
+}
+
+// Canonical text representation (sorted keys) of any value — the basis of integrity checks and hashing
+fun pdCanon(v) {
+    let t = type(v);
+    if (t == "map") {
+        let parts = [];
+        for (let k in sort(keys(v))) { push(parts, toString(k) + ":" + pdCanon(v[k])); }
+        return "{" + join(parts, ",") + "}";
+    }
+    if (t == "array") {
+        let parts = [];
+        let i = 0;
+        while (i < len(v)) { push(parts, pdCanon(v[i])); i = i + 1; }
+        return "[" + join(parts, ",") + "]";
+    }
+    if (t == "string") { return "\"" + v + "\""; }
+    return toString(v);
+}
+
+fun pdPad(n, width) {
+    let s = toString(n);
+    while (len(s) < width) { s = "0" + s; }
+    return s;
+}
+
+// ---- 1) CRUD and databases ------------------------------------------------------------------
+
+// F: create a table (a doc container) if it does not exist
+fun pdCreate(table) {
+    if (hasContainer(table)) { return { ok: true, created: false }; }
+    spawn("doc", table);
+    return { ok: true, created: true };
+}
+
+fun pdExists(table) { return hasContainer(table); }
+
+// F: drop a whole table
+fun pdDrop(table) {
+    if (hasContainer(table) == false) { return { ok: false, error: "Table not found: " + table }; }
+    container.remove(table);
+    return { ok: true };
+}
+
+// F: list of tables (doc containers only)
+fun pdTables() {
+    let out = [];
+    for (let n in container.names()) {
+        if (kindOf(n) == "doc") { push(out, n); }
+    }
+    return out;
+}
+
+fun pdCount(table) {
+    if (hasContainer(table) == false) { return 0; }
+    return len(docIds(table));
+}
+
+fun pdIds(table) {
+    if (hasContainer(table) == false) { return []; }
+    return docIds(table);
+}
+
+// F: insert a document; opts: { id, now, unique:"field" }
+fun pdInsert(table, rw, opts) {
+    pdCreate(table);
+    let id = pdOpt(opts, "id", sec.randomToken(8));
+    if (findDoc(table, id) != nil) { return { ok: false, error: "The id already exists: " + id }; }
+    let uf = pdOpt(opts, "unique", nil);
+    if (uf != nil and has(rw, uf) and len(queryDocs(table, uf, rw[uf])) > 0) {
+        return { ok: false, error: "Duplicate value in the unique field: " + uf };
+    }
+    let r = pdCopy(rw);
+    let t = pdOpt(opts, "now", nil);
+    if (t != nil) { r["createdAt"] = t; r["updatedAt"] = t; }
+    insertDoc(table, id, r);
+    return { ok: true, id: id };
+}
+
+// F: read a document by its id
+fun pdGet(table, id) {
+    if (hasContainer(table) == false) { return { ok: false, error: "Table not found: " + table }; }
+    let d = findDoc(table, id);
+    if (d == nil) { return { ok: false, error: "Not found: " + id }; }
+    let out = pdCopy(d);
+    out["_id"] = id;
+    return { ok: true, doc: out };
+}
+
+// F: update fields (opts.now opts.now updates updatedAt)
+fun pdUpdate(table, id, fields, opts) {
+    let g = pdGet(table, id);
+    if (g["ok"] == false) { return g; }
+    let f = pdCopy(fields);
+    let t = pdOpt(opts, "now", nil);
+    if (t != nil) { f["updatedAt"] = t; }
+    updateDoc(table, id, f);
+    return { ok: true, id: id };
+}
+
+// F: insert or update
+fun pdUpsert(table, id, rw, opts) {
+    if (hasContainer(table) and findDoc(table, id) != nil) { return pdUpdate(table, id, rw, opts); }
+    let o = {};
+    if (opts != nil) { o = pdCopy(opts); }
+    o["id"] = id;
+    return pdInsert(table, rw, o);
+}
+
+fun pdDelete(table, id) {
+    if (hasContainer(table) == false or findDoc(table, id) == nil) { return { ok: false, error: "Not found: " + id }; }
+    deleteDoc(table, id);
+    return { ok: true };
+}
+
+// F: all documents (with _id)
+fun pdAll(table) {
+    let out = [];
+    if (hasContainer(table) == false) { return out; }
+    for (let id in docIds(table)) {
+        let d = pdCopy(findDoc(table, id));
+        d["_id"] = id;
+        push(out, d);
+    }
+    return out;
+}
+
+// F: search by exact equality (accepts any characters such as @ and .)
+fun pdFind(table, field, value) {
+    if (hasContainer(table) == false) { return []; }
+    return queryDocs(table, field, value);
+}
+
+fun pdFindOne(table, field, value) {
+    let r = pdFind(table, field, value);
+    if (len(r) == 0) { return nil; }
+    return r[0];
+}
+
+// F: RCSQL query validated beforehand
+fun pdWhere(table, rcsql) {
+    if (hasContainer(table) == false) { return { ok: true, rows: [] }; }
+    let q = table;
+    if (rcsql != nil and rcsql != "") { q = table + " & " + rcsql; }
+    let v = sqlValidate(q);
+    if (v["ok"] == false) { return { ok: false, error: "RCSQL: " + toString(v["error"]) }; }
+    return { ok: true, rows: sql(q) };
+}
+
+// F: pagination (page starts from 1)
+fun pdPage(table, page, size) {
+    let all = pdAll(table);
+    let start = (page - 1) * size;
+    let rows = [];
+    let i = start;
+    while (i < len(all) and i < start + size) { push(rows, all[i]); i = i + 1; }
+    return { rows: rows, page: page, size: size, total: len(all), pages: ceil(len(all) / size) };
+}
+
+// F: insert with a unique field
+fun pdInsertUnique(table, rw, field, opts) {
+    let o = {};
+    if (opts != nil) { o = pdCopy(opts); }
+    o["unique"] = field;
+    return pdInsert(table, rw, o);
+}
+
+// F: validate a document against a schema: { field: { type, required, min, max, oneOf, startsWith } }
+fun pdValidate(rw, schema) {
+    let errors = [];
+    for (let f in keys(schema)) {
+        let rule = schema[f];
+        let present = has(rw, f) and rw[f] != nil;
+        if (present == false) {
+            if (has(rule, "required") and rule["required"]) { push(errors, f + ": required"); }
+        } else {
+            let v = rw[f];
+            if (has(rule, "type") and type(v) != rule["type"]) { push(errors, f + ": type must be " + rule["type"]); }
+            else {
+                let size = v;
+                if (type(v) == "string") { size = len(v); }
+                if (type(v) == "array") { size = len(v); }
+                if (type(size) == "number") {
+                    if (has(rule, "min") and size < rule["min"]) { push(errors, f + ": below the minimum " + toString(rule["min"])); }
+                    if (has(rule, "max") and size > rule["max"]) { push(errors, f + ": above the maximum " + toString(rule["max"])); }
+                }
+                if (has(rule, "oneOf") and contains(rule["oneOf"], v) == false) { push(errors, f + ": value not allowed"); }
+                if (has(rule, "startsWith") and type(v) == "string" and indexOf(v, rule["startsWith"]) != 0) { push(errors, f + ": must start with " + rule["startsWith"]); }
+            }
+        }
+    }
+    if (len(errors) == 0) { return { ok: true }; }
+    return { ok: false, errors: errors, error: join(errors, "; ") };
+}
+
+// F: soft delete, restore and cleanup
+fun pdSoftDelete(table, id, nowSec) {
+    return pdUpdate(table, id, { deletedAt: nowSec }, nil);
+}
+
+fun pdRestore(table, id) {
+    let g = pdGet(table, id);
+    if (g["ok"] == false) { return g; }
+    updateDoc(table, id, { deletedAt: nil });
+    return { ok: true, id: id };
+}
+
+fun pdActive(table) {
+    let out = [];
+    for (let d in pdAll(table)) {
+        if (has(d, "deletedAt") == false or d["deletedAt"] == nil) { push(out, d); }
+    }
+    return out;
+}
+
+// F: permanent delete of what was soft-deleted more than olderThanSec seconds ago
+fun pdPurgeDeleted(table, olderThanSec, nowSec) {
+    let n = 0;
+    for (let d in pdAll(table)) {
+        if (has(d, "deletedAt") and d["deletedAt"] != nil and nowSec - d["deletedAt"] >= olderThanSec) {
+            deleteDoc(table, d["_id"]);
+            n = n + 1;
+        }
+    }
+    return { ok: true, purged: n };
+}
+
+// F: persistent sequential counter per (table, name)
+fun pdNextId(table, name) {
+    pdCreate("_pd_seq");
+    let id = table + "." + name;
+    let d = findDoc("_pd_seq", id);
+    let n = 1;
+    if (d == nil) { insertDoc("_pd_seq", id, { n: 1 }); }
+    else { n = d["n"] + 1; updateDoc("_pd_seq", id, { n: n }); }
+    return n;
+}
+
+// F: transactions (Transactions) with snapshot and rollback
+fun pdBegin(table) {
+    if (hasContainer(table) == false) { return { ok: false, error: "Table not found" }; }
+    if (has(PDS["tx"], table)) { return { ok: false, error: "A transaction is already open" }; }
+    PDS["tx"][table] = pdAll(table);
+    return { ok: true };
+}
+
+fun pdInTx(table) { return has(PDS["tx"], table); }
+
+fun pdCommit(table) {
+    if (has(PDS["tx"], table) == false) { return { ok: false, error: "No transaction is open" }; }
+    let fresh = {};
+    for (let k in keys(PDS["tx"])) { if (k != table) { fresh[k] = PDS["tx"][k]; } }
+    PDS["tx"] = fresh;
+    return { ok: true };
+}
+
+fun pdRollback(table) {
+    if (has(PDS["tx"], table) == false) { return { ok: false, error: "No transaction is open" }; }
+    let snap = PDS["tx"][table];
+    for (let id in docIds(table)) { deleteDoc(table, id); }
+    for (let d in snap) {
+        let id = d["_id"];
+        let r = pdCopy(d);
+        let fresh = {};
+        for (let k in keys(r)) { if (k != "_id") { fresh[k] = r[k]; } }
+        insertDoc(table, id, fresh);
+    }
+    return pdCommit(table);
+}
+
+// F: full JSON snapshot and import
+fun pdExportJson(table) {
+    return jsonEncode(pdAll(table));
+}
+
+fun pdImportJson(table, json, replace) {
+    let rows = jsonDecode(json);
+    if (type(rows) != "array") { return { ok: false, error: "JSON must be an array of documents" }; }
+    pdCreate(table);
+    if (replace == true) { for (let id in docIds(table)) { deleteDoc(table, id); } }
+    let n = 0;
+    for (let r in rows) {
+        if (type(r) == "map" and has(r, "_id")) {
+            let f = {};
+            for (let k in keys(r)) { if (k != "_id") { f[k] = r[k]; } }
+            insertDoc(table, r["_id"], f);
+            n = n + 1;
+        }
+    }
+    return { ok: true, imported: n };
+}
+
+// F: integrity fingerprint for the whole table (id order does not matter)
+fun pdChecksum(table) {
+    let parts = [];
+    for (let d in pdAll(table)) { push(parts, d["_id"] + "=" + sec.sha256(pdCanon(d))); }
+    return sec.sha256(join(sort(parts), "|"));
+}
+
+// F: schema migrations (migrations): steps = [{version:1, run: fun(){...}}] are applied in order, once
+fun pdMigrate(name, steps) {
+    pdCreate("_pd_meta");
+    let id = "mig:" + name;
+    let cur = 0;
+    let d = findDoc("_pd_meta", id);
+    if (d != nil) { cur = d["version"]; }
+    let from = cur;
+    let applied = [];
+    for (let st in sort_by_version(steps)) {
+        if (st["version"] > cur) {
+            callFn(st["run"], []);
+            cur = st["version"];
+            push(applied, cur);
+        }
+    }
+    if (d == nil) { insertDoc("_pd_meta", id, { version: cur }); } else { updateDoc("_pd_meta", id, { version: cur }); }
+    return { ok: true, from: from, to: cur, applied: applied };
+}
+
+fun sort_by_version(steps) {
+    let out = [];
+    for (let s in steps) { push(out, s); }
+    let i = 0;
+    while (i < len(out)) {
+        let j = i + 1;
+        while (j < len(out)) {
+            if (out[j]["version"] < out[i]["version"]) { let t = out[i]; out[i] = out[j]; out[j] = t; }
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    return out;
+}
+
+// ---- 2) Field encryption and the blind index -------------------------------------------------------------
+
+// F: blind index: an HMAC of a normalized value with a sub-key — allows equality search without storing the plaintext
+fun pdBlindIndex(keyHex, field, value) {
+    let sub = pcDeriveSubkey(keyHex, "blind:" + field);
+    return substr(pcHmacText(sub, lower(trim(toString(value)))), 0, 32);
+}
+
+fun pdFieldAad(table, id, field) { return table + "." + id + "." + field; }
+
+// F: insert with encryption of certain fields (bound to the position through AAD so they cannot be moved between rows/fields)
+// opts: { id, now, blind:[fields] }
+fun pdInsertEnc(table, rw, keyHex, encFields, opts) {
+    let id = pdOpt(opts, "id", sec.randomToken(8));
+    let r = pdCopy(rw);
+    let blind = pdOpt(opts, "blind", []);
+    let done = [];
+    for (let f in encFields) {
+        if (has(r, f)) {
+            let s = pcSealObject(keyHex, { v: r[f] }, pdFieldAad(table, id, f));
+            if (s["ok"] == false) { return s; }
+            if (contains(blind, f)) { r[f + "_bi"] = pdBlindIndex(keyHex, f, r[f]); }
+            r[f] = s["sealed"];
+            push(done, f);
+        }
+    }
+    r["_enc"] = done;
+    let o = {};
+    if (opts != nil) { o = pdCopy(opts); }
+    o["id"] = id;
+    return pdInsert(table, r, o);
+}
+
+fun pdDecryptRow(table, id, rw, keyHex) {
+    let out = pdCopy(rw);
+    out["_id"] = id;
+    if (has(rw, "_enc")) {
+        for (let f in rw["_enc"]) {
+            let o = pcOpenObject(keyHex, rw[f], pdFieldAad(table, id, f));
+            if (o["ok"] == false) { return { ok: false, error: "Could not decrypt the field " + f + ": " + o["error"] }; }
+            out[f] = o["value"]["v"];
+        }
+    }
+    return { ok: true, doc: out };
+}
+
+// F: read with decryption
+fun pdGetDec(table, id, keyHex) {
+    let g = pdGet(table, id);
+    if (g["ok"] == false) { return g; }
+    return pdDecryptRow(table, id, g["doc"], keyHex);
+}
+
+// F: search by the blind index (the plain value is not stored)
+fun pdFindByBlind(table, field, value, keyHex) {
+    let rows = pdFind(table, field + "_bi", pdBlindIndex(keyHex, field, value));
+    let out = [];
+    for (let r in rows) { push(out, r); }
+    return out;
+}
+
+// F: database key rotation: re-encrypt all rows from an old key to a new one
+fun pdReencrypt(table, oldKey, newKey, encFields, blind) {
+    let n = 0;
+    for (let d in pdAll(table)) {
+        let id = d["_id"];
+        let dec = pdDecryptRow(table, id, d, oldKey);
+        if (dec["ok"] == false) { return dec; }
+        let upd = {};
+        for (let f in encFields) {
+            if (has(dec["doc"], f)) {
+                let s = pcSealObject(newKey, { v: dec["doc"][f] }, pdFieldAad(table, id, f));
+                upd[f] = s["sealed"];
+                if (contains(blind, f)) { upd[f + "_bi"] = pdBlindIndex(newKey, f, dec["doc"][f]); }
+            }
+        }
+        updateDoc(table, id, upd);
+        n = n + 1;
+    }
+    return { ok: true, reencrypted: n };
+}
+
+// F: encrypted backup of the whole table (authenticated and bound to the table name)
+fun pdExportEncrypted(table, keyHex) {
+    return pcSeal(keyHex, pdExportJson(table), "pdexport:" + table);
+}
+
+// sourceTable (optional): the table name the backup was exported from, when restoring under a new name
+fun pdImportEncrypted(table, keyHex, sealed, replace, sourceTable) {
+    let src = table;
+    if (sourceTable != nil) { src = sourceTable; }
+    let o = pcOpen(keyHex, sealed, "pdexport:" + src);
+    if (o["ok"] == false) { return o; }
+    return pdImportJson(table, o["plaintext"], replace);
+}
+
+// ---- 3) Ready-made security models ----------------------------------------------------------------------------
+
+fun pdEmailNorm(email) { return lower(trim(toString(email))); }
+
+fun pdEmailLooksValid(email) {
+    let p = split(email, "@");
+    if (len(p) != 2 or len(p[0]) < 1 or len(p[1]) < 3 or contains(p[1], ".") == false or contains(email, " ")) { return false; }
+    return true;
+}
+
+// F: users: the email is encrypted + a blind index for search, and the password is only a hash (pkHash) with a policy
+// opts: { policy, now, id, extra:{...} }
+fun pdUserCreate(table, keyHex, email, password, opts) {
+    let em = pdEmailNorm(email);
+    if (pdEmailLooksValid(em) == false) { return { ok: false, error: "Invalid email" }; }
+    if (hasContainer(table) and len(pdFindByBlind(table, "email", em, keyHex)) > 0) {
+        return { ok: false, error: "The email is already registered" };
+    }
+    let policy = pdOpt(opts, "policy", pkPolicyStandard());
+    let nowSec = pdOpt(opts, "now", 0);
+    let rec = pkRecordNew(password, policy, { email: em }, nowSec);
+    if (rec["ok"] == false) { return rec; }
+    let rw = pdCopy(rec["record"]);
+    rw["email"] = em;
+    let extra = pdOpt(opts, "extra", {});
+    for (let k in keys(extra)) { rw[k] = extra[k]; }
+    return pdInsertEnc(table, rw, keyHex, ["email"], { blind: ["email"], id: pdOpt(opts, "id", sec.randomToken(8)), now: nowSec });
+}
+
+fun pdUserRecord(d) {
+    return { hash: d["hash"], createdAt: d["createdAt"], changedAt: d["changedAt"], expiresAt: d["expiresAt"],
+             history: d["history"], failedAttempts: d["failedAttempts"], lockedUntil: d["lockedUntil"], mustChange: d["mustChange"] };
+}
+
+// F: login: a uniform message (does not reveal whether the email exists) + runs a dummy hash to equalize timing + lockout after attempts
+fun pdUserLogin(table, keyHex, email, password, opts) {
+    let em = pdEmailNorm(email);
+    let policy = pdOpt(opts, "policy", pkPolicyStandard());
+    let nowSec = pdOpt(opts, "now", 0);
+    let rows = [];
+    if (hasContainer(table)) { rows = pdFindByBlind(table, "email", em, keyHex); }
+    if (len(rows) == 0) {
+        pkVerify(password, pkHash("dummy", { iterations: policy["hashIterations"], salt: "00000000000000000000000000000000" }));
+        return { ok: false, reason: "wrong", error: "Incorrect login details" };
+    }
+    let rw = rows[0];
+    let id = "";
+    for (let d in pdAll(table)) { if (d["hash"] == rw["hash"]) { id = d["_id"]; } }
+    let r = pkLogin(pdUserRecord(rw), password, policy, nowSec);
+    let upd = {};
+    for (let k in keys(r["record"])) { upd[k] = r["record"][k]; }
+    updateDoc(table, id, upd);
+    if (r["ok"] == false) {
+        if (r["reason"] == "locked") { return { ok: false, reason: "locked", retryAfter: r["retryAfter"], error: "The account is temporarily locked" }; }
+        return { ok: false, reason: "wrong", error: "Incorrect login details" };
+    }
+    return { ok: true, id: id, reason: r["reason"], mustChange: r["mustChange"] };
+}
+
+// F: change password (policy + reuse prevention + history)
+fun pdUserChangePassword(table, keyHex, id, oldPw, newPw, opts) {
+    let g = pdGet(table, id);
+    if (g["ok"] == false) { return g; }
+    let policy = pdOpt(opts, "policy", pkPolicyStandard());
+    let nowSec = pdOpt(opts, "now", 0);
+    let c = pkChange(pdUserRecord(g["doc"]), oldPw, newPw, policy, nil, nowSec);
+    if (c["ok"] == false) { return c; }
+    updateDoc(table, id, c["record"]);
+    return { ok: true, id: id };
+}
+
+// F: sessions: the token is delivered once and only its sha256 is stored (a database leak does not reveal sessions)
+fun pdSessionCreate(table, userId, ttlSec, nowSec, meta) {
+    pdCreate(table);
+    let token = sec.randomToken(32);
+    let rw = { userId: userId, createdAt: nowSec, expiresAt: nowSec + ttlSec, revoked: false };
+    if (meta != nil) { for (let k in keys(meta)) { rw["meta_" + k] = meta[k]; } }
+    insertDoc(table, sec.sha256(token), rw);
+    return { ok: true, token: token, expiresAt: nowSec + ttlSec };
+}
+
+fun pdSessionCheck(table, token, nowSec) {
+    if (hasContainer(table) == false or type(token) != "string") { return { ok: false, reason: "invalid" }; }
+    let d = findDoc(table, sec.sha256(token));
+    if (d == nil) { return { ok: false, reason: "invalid" }; }
+    if (d["revoked"]) { return { ok: false, reason: "revoked" }; }
+    if (nowSec >= d["expiresAt"]) { return { ok: false, reason: "expired" }; }
+    return { ok: true, userId: d["userId"], expiresAt: d["expiresAt"] };
+}
+
+fun pdSessionRevoke(table, token) {
+    let id = sec.sha256(token);
+    if (hasContainer(table) == false or findDoc(table, id) == nil) { return { ok: false, error: "Session not found" }; }
+    updateDoc(table, id, { revoked: true });
+    return { ok: true };
+}
+
+// F: revoke all of a user's sessions (sign out from all devices)
+fun pdSessionRevokeUser(table, userId) {
+    let n = 0;
+    for (let d in pdFind(table, "userId", userId)) {
+        if (d["revoked"] == false) { n = n + 1; }
+    }
+    for (let id in pdIds(table)) {
+        let d = findDoc(table, id);
+        if (d["userId"] == userId and d["revoked"] == false) { updateDoc(table, id, { revoked: true }); }
+    }
+    return { ok: true, revoked: n };
+}
+
+fun pdSessionPurge(table, nowSec) {
+    let n = 0;
+    for (let id in pdIds(table)) {
+        let d = findDoc(table, id);
+        if (d["revoked"] or nowSec >= d["expiresAt"]) { deleteDoc(table, id); n = n + 1; }
+    }
+    return { ok: true, purged: n };
+}
+
+// F: API keys: <prefix>_<id>_<secret>; only sha256 is stored + scopes (scopes) + owner + expiry
+fun pdApiKeyCreate(table, owner, scopes, opts) {
+    pdCreate(table);
+    let prefix = pdOpt(opts, "prefix", "pk");
+    let nowSec = pdOpt(opts, "now", 0);
+    let id = sec.randomToken(4);
+    let key = prefix + "_" + id + "_" + sec.randomToken(24);
+    let rw = { owner: owner, scopes: scopes, hash: sec.sha256(key), createdAt: nowSec, revoked: false, expiresAt: 0 };
+    if (has(opts, "ttl")) { rw["expiresAt"] = nowSec + opts["ttl"]; }
+    insertDoc(table, id, rw);
+    return { ok: true, key: key, id: id };
+}
+
+fun pdApiKeyVerify(table, key, nowSec) {
+    if (type(key) != "string" or hasContainer(table) == false) { return { ok: false, reason: "invalid" }; }
+    // the prefix itself may contain underscores (sk_live), so read id and secret from the END
+    let parts = split(key, "_");
+    if (len(parts) < 3) { return { ok: false, reason: "invalid" }; }
+    let kid = parts[len(parts) - 2];
+    let d = findDoc(table, kid);
+    if (d == nil) { return { ok: false, reason: "invalid" }; }
+    if (sec.constantTimeEqual(sec.sha256(key), d["hash"]) == false) { return { ok: false, reason: "invalid" }; }
+    if (d["revoked"]) { return { ok: false, reason: "revoked" }; }
+    if (d["expiresAt"] > 0 and nowSec >= d["expiresAt"]) { return { ok: false, reason: "expired" }; }
+    return { ok: true, owner: d["owner"], scopes: d["scopes"], id: kid };
+}
+
+fun pdApiKeyHasScope(result, scope) {
+    if (result["ok"] == false) { return false; }
+    return contains(result["scopes"], scope) or contains(result["scopes"], "*");
+}
+
+fun pdApiKeyRevoke(table, id) {
+    if (hasContainer(table) == false or findDoc(table, id) == nil) { return { ok: false, error: "Key not found" }; }
+    updateDoc(table, id, { revoked: true });
+    return { ok: true };
+}
+
+// F: key rotation: a new one is created with the same scopes and the old one is revoked (replacedBy)
+fun pdApiKeyRotate(table, id, nowSec) {
+    let d = findDoc(table, id);
+    if (d == nil) { return { ok: false, error: "Key not found" }; }
+    let n = pdApiKeyCreate(table, d["owner"], d["scopes"], { now: nowSec });
+    updateDoc(table, id, { revoked: true, replacedBy: n["id"] });
+    return n;
+}
+
+// F: audit log linked by a hash chain (any edit/delete is detected)
+fun pdAuditLog(table, event, actor, data, nowSec) {
+    pdCreate(table);
+    pdCreate("_pd_meta");
+    let hid = "audit:" + table;
+    let head = findDoc("_pd_meta", hid);
+    let prev = PC_ZERO32;
+    if (head != nil) { prev = head["hash"]; }
+    let seq = pdNextId(table, "audit");
+    let entry = { seq: seq, event: event, actor: actor, data: data, at: nowSec, prev: prev };
+    let h = sec.sha256(prev + "|" + pdCanon(entry));
+    entry["hash"] = h;
+    insertDoc(table, pdPad(seq, 10), entry);
+    if (head == nil) { insertDoc("_pd_meta", hid, { hash: h }); } else { updateDoc("_pd_meta", hid, { hash: h }); }
+    return { ok: true, seq: seq, hash: h };
+}
+
+fun pdAuditVerify(table) {
+    let prev = PC_ZERO32;
+    let n = 0;
+    let ids = sort(pdIds(table));
+    for (let id in ids) {
+        let e = pdCopy(findDoc(table, id));
+        let stored = e["hash"];
+        let body = {};
+        for (let k in keys(e)) { if (k != "hash") { body[k] = e[k]; } }
+        if (e["prev"] != prev or sec.sha256(prev + "|" + pdCanon(body)) != stored) { return { ok: false, brokenAt: id }; }
+        prev = stored;
+        n = n + 1;
+    }
+    let head = findDoc("_pd_meta", "audit:" + table);
+    if (head != nil and head["hash"] != prev) { return { ok: false, brokenAt: "head (deleted from the end?)" }; }
+    return { ok: true, entries: n };
+}
+
+// F: rate limit with a fixed window per key (IP/user/API key)
+fun pdRateLimit(table, key, maxHits, windowSec, nowSec) {
+    pdCreate(table);
+    let id = substr(sec.sha256(toString(key)), 0, 16);
+    let d = findDoc(table, id);
+    if (d == nil or nowSec - d["start"] >= windowSec) {
+        if (d == nil) { insertDoc(table, id, { count: 1, start: nowSec }); }
+        else { updateDoc(table, id, { count: 1, start: nowSec }); }
+        return { ok: true, remaining: maxHits - 1, retryAfter: 0 };
+    }
+    if (d["count"] >= maxHits) { return { ok: false, remaining: 0, retryAfter: d["start"] + windowSec - nowSec }; }
+    updateDoc(table, id, { count: d["count"] + 1 });
+    return { ok: true, remaining: maxHits - d["count"] - 1, retryAfter: 0 };
+}
+
+// F: one-time reset tokens (stored hashed)
+fun pdResetCreate(table, userId, ttlSec, nowSec) {
+    pdCreate(table);
+    let token = sec.randomToken(32);
+    insertDoc(table, sec.sha256(token), { userId: userId, expiresAt: nowSec + ttlSec, used: false });
+    return { ok: true, token: token, expiresAt: nowSec + ttlSec };
+}
+
+fun pdResetConsume(table, token, nowSec) {
+    if (hasContainer(table) == false or type(token) != "string") { return { ok: false, reason: "invalid" }; }
+    let id = sec.sha256(token);
+    let d = findDoc(table, id);
+    if (d == nil) { return { ok: false, reason: "invalid" }; }
+    if (d["used"]) { return { ok: false, reason: "used" }; }
+    if (nowSec >= d["expiresAt"]) { return { ok: false, reason: "expired" }; }
+    updateDoc(table, id, { used: true });
+    return { ok: true, userId: d["userId"] };
+}
+
+// F: replay prevention: true only for the first use of a nonce
+fun pdNonceUse(table, nonce, nowSec, ttlSec) {
+    pdCreate(table);
+    let id = substr(sec.sha256(nonce), 0, 32);
+    let d = findDoc(table, id);
+    if (d != nil and nowSec < d["expiresAt"]) { return false; }
+    if (d == nil) { insertDoc(table, id, { expiresAt: nowSec + ttlSec }); }
+    else { updateDoc(table, id, { expiresAt: nowSec + ttlSec }); }
+    return true;
+}
+
+// F: enable 2FA (TOTP): the secret is encrypted with the key, and recovery codes are hashed
+fun pdTotpEnroll(table, keyHex, userId, issuer, account) {
+    pdCreate(table);
+    let secret = sec.randomToken(20);
+    let s = pcSeal(keyHex, secret, pdFieldAad(table, userId, "secret"));
+    let rc = pcRecoveryCodes(8);
+    let rw = { secret: s["sealed"], recovery: rc["hashes"], lastStep: 0, enabled: true };
+    if (findDoc(table, userId) == nil) { insertDoc(table, userId, rw); } else { updateDoc(table, userId, rw); }
+    return { ok: true, uri: pcOtpAuthUri(issuer, account, secret, nil), secretBase32: pcBase32EncodeHex(secret), recoveryCodes: rc["codes"] };
+}
+
+// F: 2FA check that prevents reuse of the same code (lastStep) or one-time recovery alternatives
+fun pdTotpCheck(table, keyHex, userId, code, nowSec) {
+    let d = findDoc(table, userId);
+    if (d == nil or d["enabled"] == false) { return { ok: false, reason: "not_enrolled" }; }
+    let o = pcOpen(keyHex, d["secret"], pdFieldAad(table, userId, "secret"));
+    if (o["ok"] == false) { return { ok: false, reason: "key" }; }
+    let step = floor(nowSec / 30);
+    let v = pcTotpVerify(o["plaintext"], code, nowSec, 1, 6);
+    if (v["ok"]) {
+        let used = step + v["offset"];
+        if (used <= d["lastStep"]) { return { ok: false, reason: "replay" }; }
+        updateDoc(table, userId, { lastStep: used });
+        return { ok: true, method: "totp" };
+    }
+    let rv = pcRecoveryVerify(code, d["recovery"]);
+    if (rv["ok"]) {
+        updateDoc(table, userId, { recovery: rv["remaining"] });
+        return { ok: true, method: "recovery", remaining: len(rv["remaining"]) };
+    }
+    return { ok: false, reason: "invalid" };
+}
+
+// ---- 4) Linking generic containers (container) ------------------------------------------------------------------
+
+// F: ensure a container of a kind exists (plain by default)
+fun pdContEnsure(name, kind) {
+    if (hasContainer(name)) { return { ok: true, created: false, kind: kindOf(name) }; }
+    let k = "plain";
+    if (kind != nil) { k = kind; }
+    spawn(k, name);
+    return { ok: true, created: true, kind: k };
+}
+
+fun pdContGet(name, field) {
+    if (hasContainer(name) == false) { return nil; }
+    return getField(name, field);
+}
+
+fun pdContSet(name, field, value) {
+    pdContEnsure(name, nil);
+    setField(name, field, value);
+    return { ok: true };
+}
+
+fun pdContHas(name, field) {
+    if (hasContainer(name) == false) { return false; }
+    return getField(name, field) != nil;
+}
+
+fun pdContDelete(name, field) {
+    if (hasContainer(name) == false) { return { ok: false, error: "The container does not exist" }; }
+    return { ok: container.deleteField(name, field) };
+}
+
+// F: all container fields as a map
+fun pdContToMap(name) {
+    let out = {};
+    if (hasContainer(name) == false) { return out; }
+    for (let e in container.entries(name)) { out[e[0]] = e[1]; }
+    return out;
+}
+
+// F: write a whole map into a container (prefix optional)
+fun pdContFromMap(name, m, prefix) {
+    pdContEnsure(name, nil);
+    let p = "";
+    if (prefix != nil) { p = prefix; }
+    let n = 0;
+    for (let k in keys(m)) { setField(name, p + k, m[k]); n = n + 1; }
+    return { ok: true, written: n };
+}
+
+fun pdContFields(name) {
+    return keys(pdContToMap(name));
+}
+
+fun pdContChecksum(name) {
+    return sec.sha256(pdCanon(pdContToMap(name)));
+}
+
+fun pdContExport(name) {
+    return jsonEncode(pdContToMap(name));
+}
+
+fun pdContImport(name, json) {
+    let m = jsonDecode(json);
+    if (type(m) != "map") { return { ok: false, error: "JSON must be an object" }; }
+    return pdContFromMap(name, m, nil);
+}
+
+fun pdContClone(name, newName) {
+    if (hasContainer(name) == false) { return { ok: false, error: "The container does not exist" }; }
+    pdContEnsure(newName, kindOf(name));
+    return pdContFromMap(newName, pdContToMap(name), nil);
+}
+
+// F: encrypt a field inside the container in place (AAD = container name.field) and decrypt it
+fun pdContSeal(name, field, keyHex) {
+    if (pdContHas(name, field) == false) { return { ok: false, error: "Field not found: " + field }; }
+    let s = pcSealObject(keyHex, { v: getField(name, field) }, name + "." + field);
+    if (s["ok"] == false) { return s; }
+    setField(name, field, s["sealed"]);
+    return { ok: true };
+}
+
+fun pdContOpen(name, field, keyHex) {
+    if (pdContHas(name, field) == false) { return { ok: false, error: "Field not found: " + field }; }
+    let o = pcOpenObject(keyHex, getField(name, field), name + "." + field);
+    if (o["ok"] == false) { return o; }
+    return { ok: true, value: o["value"]["v"] };
+}
+
+// F: encrypt all container fields at once / read them decrypted as a map without modifying the container
+fun pdContSealAll(name, keyHex) {
+    let n = 0;
+    for (let f in pdContFields(name)) {
+        let r = pdContSeal(name, f, keyHex);
+        if (r["ok"] == false) { return r; }
+        n = n + 1;
+    }
+    return { ok: true, sealed: n };
+}
+
+fun pdContOpenAll(name, keyHex) {
+    let out = {};
+    for (let f in pdContFields(name)) {
+        let r = pdContOpen(name, f, keyHex);
+        if (r["ok"] == false) { return r; }
+        out[f] = r["value"];
+    }
+    return { ok: true, values: out };
+}
