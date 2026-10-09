@@ -28,6 +28,7 @@
 // ============================================================================
 #include "rin_interpreter.h"
 #include "clc/sha256.h"
+#include "rin_crypto_aead.h"
 #include <algorithm>
 #include <cctype>
 #include <chrono>
@@ -438,10 +439,44 @@ void Interpreter::registerNativesExtra2() {
         double n = a.empty() ? 16.0 : num(a[0], "sec.randomToken", line);
         if (n < 1 || n > 4096) throw diagErr(diag::Code::E0007_InvalidArguments, line, "'sec.randomToken' يقبل طول بايتات بين 1 و4096");
         size_t bytes = static_cast<size_t>(n);
-        std::uniform_int_distribution<int> dist(0, 255);
+        // OS CSPRNG (/dev/urandom): secrets must never come from a seeded Mersenne Twister
         std::string raw(bytes, '\0');
-        for (size_t i = 0; i < bytes; ++i) raw[i] = static_cast<char>(dist(secureRng()));
+        rincrypto::osRandomBytes(reinterpret_cast<uint8_t*>(&raw[0]), bytes);
         return Value::string(toHex(reinterpret_cast<const uint8_t*>(raw.data()), raw.size()));
+    };
+    // ---- AES-256-GCM / PBKDF2 (standard primitives; see rin_crypto_aead.h) ----
+    // sec.aesGcmSeal(keyHex, nonceHex(12 bytes), plaintextHex, aadHex) -> hex(ciphertext || 16-byte tag)
+    natives["sec.aesGcmSeal"] = [](Args& a, int line) -> Value {
+        need("sec.aesGcmSeal", a, 4, 4, line);
+        std::string key, nonce, pt, aad, out;
+        if (!fromHex(str(a[0], "sec.aesGcmSeal", line), key) || !fromHex(str(a[1], "sec.aesGcmSeal", line), nonce) ||
+            !fromHex(str(a[2], "sec.aesGcmSeal", line), pt) || !fromHex(str(a[3], "sec.aesGcmSeal", line), aad))
+            throw diagErr(diag::Code::E0007_InvalidArguments, line, "'sec.aesGcmSeal': all arguments must be hex strings");
+        if (!rincrypto::gcmSeal(key, nonce, pt, aad, out))
+            throw diagErr(diag::Code::E0007_InvalidArguments, line, "'sec.aesGcmSeal': key must be 16/24/32 bytes and nonce exactly 12 bytes");
+        return Value::string(toHex(reinterpret_cast<const uint8_t*>(out.data()), out.size()));
+    };
+    // sec.aesGcmOpen(keyHex, nonceHex, ciphertextTagHex, aadHex) -> plaintext hex, or nil if authentication fails
+    natives["sec.aesGcmOpen"] = [](Args& a, int line) -> Value {
+        need("sec.aesGcmOpen", a, 4, 4, line);
+        std::string key, nonce, ct, aad, out;
+        if (!fromHex(str(a[0], "sec.aesGcmOpen", line), key) || !fromHex(str(a[1], "sec.aesGcmOpen", line), nonce) ||
+            !fromHex(str(a[2], "sec.aesGcmOpen", line), ct) || !fromHex(str(a[3], "sec.aesGcmOpen", line), aad))
+            return Value::nil();
+        if (!rincrypto::gcmOpen(key, nonce, ct, aad, out)) return Value::nil();
+        return Value::string(toHex(reinterpret_cast<const uint8_t*>(out.data()), out.size()));
+    };
+    // sec.pbkdf2Sha256(password, saltHex, iterations, dkLenBytes) -> hex
+    natives["sec.pbkdf2Sha256"] = [](Args& a, int line) -> Value {
+        need("sec.pbkdf2Sha256", a, 4, 4, line);
+        std::string salt;
+        if (!fromHex(str(a[1], "sec.pbkdf2Sha256", line), salt))
+            throw diagErr(diag::Code::E0007_InvalidArguments, line, "'sec.pbkdf2Sha256': salt must be a hex string");
+        double it = num(a[2], "sec.pbkdf2Sha256", line), dk = num(a[3], "sec.pbkdf2Sha256", line);
+        if (it < 1 || it > 10000000 || dk < 1 || dk > 1024)
+            throw diagErr(diag::Code::E0007_InvalidArguments, line, "'sec.pbkdf2Sha256': iterations 1..10000000 and length 1..1024 bytes");
+        std::string out = rincrypto::pbkdf2Sha256(str(a[0], "sec.pbkdf2Sha256", line), salt, static_cast<uint32_t>(it), static_cast<size_t>(dk));
+        return Value::string(toHex(reinterpret_cast<const uint8_t*>(out.data()), out.size()));
     };
     natives["sec.constantTimeEqual"] = [](Args& a, int line) -> Value {
         need("sec.constantTimeEqual", a, 2, 2, line);
