@@ -10140,9 +10140,10 @@ static const char* kLib_passkit_og_rin = R"PASSKITOGRIN(
 //    - Time: Rin has no wall clock (now() a monotonic clock), so every lifecycle function
 //      takes nowSec (seconds, e.g. an epoch from your app) explicitly; the default pkNow() is fine
 //      for a single session only and is not kept between runs.
-//    - pkHash A salted, stretched HMAC-SHA256 chain (a simplified PBKDF2-like construction), and it is
-//      much better than bare sha256, but it is not a replacement for bcrypt/scrypt/argon2
-//      on a high-risk production server.
+//    - pkHash uses PBKDF2-HMAC-SHA256 (RFC 8018, native engine primitive, 600,000 iterations by default,
+//      the OWASP 2023 minimum for this algorithm) in the format pk2$<iterations>$<salt>$<hash>.
+//      Old pk1 hashes still verify and pkNeedsRehash flags them. PBKDF2 is NIST-approved but is not
+//      memory-hard: bcrypt/scrypt/argon2 resist GPU cracking better, so for a high-risk server prefer those.
 // ============================================================================
 
 // ---- 1) Constants and variables --------------------------------------------------
@@ -10153,8 +10154,9 @@ let PK_DIGITS = "0123456789";
 let PK_SYMBOLS = "!@#$%^&*()-_=+[]{};:,.?/";
 let PK_AMBIGUOUS = "O0oIl1|";                 // visually similar characters
 let PK_HEX = "0123456789abcdef";
-let PK_HASH_VERSION = "pk1";                  // storage format prefix
-let PK_DEFAULT_ITERATIONS = 3000;
+let PK_HASH_VERSION = "pk1";                  // legacy storage format prefix (HMAC chain, still verifiable)
+let PK_HASH_V2 = "pk2";                       // current format: PBKDF2-HMAC-SHA256 (native, RFC 8018)
+let PK_DEFAULT_ITERATIONS = 600000;            // OWASP 2023 minimum for PBKDF2-HMAC-SHA256
 let PK_STRENGTH_LABELS = ["Very weak", "Weak", "Fair", "Strong", "Very strong"];
 let PK_KEYBOARD_ROWS = ["qwertyuiop", "asdfghjkl", "zxcvbnm", "1234567890"];
 let PK_SENSITIVE_KEYS = ["password", "passwd", "pwd", "pass", "secret", "token", "pin"];
@@ -10275,7 +10277,7 @@ fun pkPolicyStrict() {
     return pkPolicy({
         minLength: 12, requireSymbol: true, minUnique: 8, maxRepeat: 2, minScore: 3,
         historyCount: 10, maxAgeDays: 90, maxAttempts: 3, lockSeconds: 1800,
-        hashIterations: 6000
+        hashIterations: 1000000
     });
 }
 
@@ -10723,10 +10725,10 @@ fun pkSalt() {
     return sec.randomToken(16);
 }
 
-// Returns a string in the format  pk1$<iterations>$<salt>$<hash>
+// Returns a string in the format  pk2$<iterations>$<salt hex>$<hash hex>  (PBKDF2-HMAC-SHA256)
 // opts optional: { iterations, salt }
-fun pkHash(pw, opts) {
-    let iter = pkOpt(opts, "iterations", PK_DEFAULT_ITERATIONS);
+fun pkHashLegacy(pw, opts) {
+    let iter = pkOpt(opts, "iterations", 3000);
     let salt = pkOpt(opts, "salt", pkSalt());
     if (iter < 1) { iter = 1; }
     let h = sec.hmacSha256(salt, pw);
@@ -10737,37 +10739,54 @@ fun pkHash(pw, opts) {
     }
     return PK_HASH_VERSION + "$" + toString(iter) + "$" + salt + "$" + h;
 }
-
+// pk2$<iterations>$<salt hex>$<PBKDF2-HMAC-SHA256 hex>.  opts: iterations, salt (hex), legacy (true => pk1)
+fun pkHash(pw, opts) {
+    if (opts != nil and has(opts, "legacy") and opts["legacy"] == true) { return pkHashLegacy(pw, opts); }
+    let iter = pkOpt(opts, "iterations", PK_DEFAULT_ITERATIONS);
+    let salt = pkOpt(opts, "salt", pkSalt());
+    if (iter < 1) { iter = 1; }
+    return PK_HASH_V2 + "$" + toString(iter) + "$" + salt + "$" + sec.pbkdf2Sha256(pw, salt, iter, 32);
+}
 fun pkParseHash(stored) {
     if (stored == nil) { return { ok: false, error: "pkParseHash: empty value" }; }
     let parts = split(stored, "$");
-    if (len(parts) != 4 or parts[0] != PK_HASH_VERSION) {
+    if (len(parts) != 4 or (parts[0] != PK_HASH_VERSION and parts[0] != PK_HASH_V2)) {
         return { ok: false, error: "pkParseHash: unknown hash format" };
     }
     // toNumber throws an error on non-numeric text, so check the digits first (corrupt hash => false, no crash)
-    if (len(parts[1]) == 0 or len(parts[1]) > 7) { return { ok: false, error: "pkParseHash: invalid iteration count" }; }
+    if (len(parts[1]) == 0 or len(parts[1]) > 8) { return { ok: false, error: "pkParseHash: invalid iteration count" }; }
     let d = 0;
     while (d < len(parts[1])) {
         if (contains(PK_DIGITS, charAt(parts[1], d)) == false) { return { ok: false, error: "pkParseHash: invalid iteration count" }; }
         d = d + 1;
     }
     let iter = toNumber(parts[1]);
-    if (iter < 1) { return { ok: false, error: "pkParseHash: invalid iteration count" }; }
+    if (iter < 1 or iter > 10000000) { return { ok: false, error: "pkParseHash: invalid iteration count" }; }
     return { ok: true, version: parts[0], iterations: iter, salt: parts[2], hash: parts[3] };
 }
 
 // Constant-time check: does pw match the stored hash? (false on any corrupt format)
+fun pcIsHexLocal(t) {
+    if (type(t) != "string" or len(t) == 0 or len(t) % 2 != 0) { return false; }
+    let i = 0;
+    while (i < len(t)) { if (contains("0123456789abcdefABCDEF", charAt(t, i)) == false) { return false; } i = i + 1; }
+    return true;
+}
 fun pkVerify(pw, stored) {
     let p = pkParseHash(stored);
     if (p["ok"] == false) { return false; }
-    let again = pkHash(pw, { iterations: p["iterations"], salt: p["salt"] });
-    return sec.constantTimeEqual(again, stored);
+    if (p["version"] == PK_HASH_V2) {
+        if (pcIsHexLocal(p["salt"]) == false) { return false; }
+        return sec.constantTimeEqual(pkHash(pw, { iterations: p["iterations"], salt: p["salt"] }), stored);
+    }
+    return sec.constantTimeEqual(pkHashLegacy(pw, { iterations: p["iterations"], salt: p["salt"] }), stored);
 }
 
 // Should it be rehashed (iterations lower than today's policy)? call it after a successful login
 fun pkNeedsRehash(stored, policy) {
     let p = pkParseHash(stored);
     if (p["ok"] == false) { return true; }
+    if (p["version"] != PK_HASH_V2) { return true; }   // legacy pk1 hashes are re-hashed to PBKDF2 at the next login
     let target = PK_DEFAULT_ITERATIONS;
     if (policy != nil and has(policy, "hashIterations")) { target = policy["hashIterations"]; }
     return p["iterations"] < target;
@@ -10962,16 +10981,18 @@ static const char* kLib_passkitcrypt_og_rin = R"PKCRYPTOGRIN(
 //  lib/passkitcrypt.og.rin — Encryption, signing and key generation for the Passkit family (prefix pc)
 //  Import:  @import "lib/passkitcrypt.og.rin";
 //
-//  Built entirely on primitives that already exist in Rin: sec.hmacSha256 / sec.sha256 /
-//  sec.randomToken (CSPRNG) / sec.xorCipher / sec.hexEncode / sec.base64Encode.
-//  Does not modify the engine. All binary values are passed as hexadecimal text (hex) in lowercase.
+//  Built on standard primitives implemented natively in the engine (app/src/main/cpp/rin_crypto_aead.h) and
+//  verified against official vectors: AES-256-GCM (NIST SP 800-38D), PBKDF2-HMAC-SHA256 (RFC 7914),
+//  plus sec.hmacSha256 / sec.sha256 and sec.randomToken (OS CSPRNG, /dev/urandom).
+//  All binary values are passed as hexadecimal text (hex) in lowercase.
 //
-//  What is standard and is verified with official RFC test vectors in the tests:
-//    HMAC-SHA256 (RFC 4231) · HKDF (RFC 5869) · PBKDF2-HMAC-SHA256 · TOTP-SHA256 (RFC 6238)
-//    Base32 (RFC 4648)
-//  and what is a "construction" (construction) and not a standard: pcSeal = a stream cipher with HMAC-CTR + an HMAC tag
-//  (Encrypt-then-MAC) with per-message subkeys via HKDF. Sound by design but it is not AES-GCM/ChaCha20;
-//  do not rely on it where you must comply with a specific standard.
+//  Verified with official test vectors in the tests:
+//    AES-GCM (NIST) · HMAC-SHA256 (RFC 4231) · HKDF (RFC 5869) · PBKDF2-HMAC-SHA256 (RFC 7914) ·
+//    TOTP-SHA256 (RFC 6238) · Base32 (RFC 4648)
+//  pcSeal/pcOpen = AES-256-GCM (format pc2, per-message random 96-bit nonce, key separated by HKDF).
+//  The older HMAC-CTR construction (format pc1) is still readable by pcOpen and available as pcSealLegacy.
+//  Honest limits: AES uses lookup tables (not hardened against cache-timing attacks from a co-located attacker);
+//  keep a single key under ~2^32 messages (rotate with the keyring).
 //
 //  Convention: every function returns {ok:true,...} or {ok:false,error:"..."} and never crashes on corrupt input.
 // ============================================================================
@@ -11298,26 +11319,9 @@ fun pcHkdf(ikmHex, saltHex, infoHex, length) {
     return pcHkdfExpand(pcHkdfExtract(saltHex, ikmHex), infoHex, length);
 }
 
-// F: PBKDF2-HMAC-SHA256 — password text, saltHex, result hex
+// F: PBKDF2-HMAC-SHA256 — password text, saltHex, result hex (native C++ engine primitive, RFC 8018)
 fun pcPbkdf2(password, saltHex, iterations, bytes) {
-    let blocks = ceil(bytes / 32);
-    let out = "";
-    let b = 1;
-    while (b <= blocks) {
-        let u = sec.hmacSha256(password, sec.hexDecode(saltHex + pcToHex(b, 8)));
-        let ru = sec.hexDecode(u);
-        let t = ru;
-        let i = 1;
-        while (i < iterations) {
-            u = sec.hmacSha256(password, ru);
-            ru = sec.hexDecode(u);
-            t = sec.xorCipher(t, ru);
-            i = i + 1;
-        }
-        out = out + sec.hexEncode(t);
-        b = b + 1;
-    }
-    return substr(out, 0, bytes * 2);
+    return sec.pbkdf2Sha256(password, saltHex, iterations, bytes);
 }
 
 // F: random key (hex)
@@ -11392,7 +11396,45 @@ fun pcTag(macHex, nonceHex, aadHex, ctHex) {
 
 // F: authenticated encryption; aad (optional) = associated data that is signed but not encrypted (binds the ciphertext to its context)
 // Format: pc1.<nonce>.<ciphertext>.<tag>
+// ---- AES-256-GCM (NIST SP 800-38D) — the default since v2; the engine primitive is verified against NIST vectors ----
+// Format: pc2.<nonce:12 bytes hex>.<ciphertext hex>.<tag:16 bytes hex>   (random 96-bit nonce per message;
+// keep a single key under ~2^32 messages, or rotate with the keyring)
+fun pcAeadKey(keyHex) { return pcDeriveSubkey(keyHex, "aes-256-gcm"); }
+
 fun pcSeal(keyHex, plaintext, aad) {
+    let kc = pcKeyCheck(keyHex);
+    if (kc["ok"] == false) { return { ok: false, error: kc["error"] }; }
+    let nonce = sec.randomToken(12);
+    let aadHex = "";
+    if (aad != nil) { aadHex = pcHexOf(aad); }
+    let ctTag = sec.aesGcmSeal(pcAeadKey(keyHex), nonce, pcHexOf(plaintext), aadHex);
+    let n = len(ctTag);
+    return { ok: true, sealed: "pc2." + nonce + "." + substr(ctTag, 0, n - 32) + "." + substr(ctTag, n - 32, 32) };
+}
+
+// Opens pc2 (AES-GCM) and the legacy pc1 (HMAC-CTR) format, so data sealed by older versions stays readable
+fun pcOpen(keyHex, sealed, aad) {
+    if (type(sealed) == "string" and indexOf(sealed, "pc1.") == 0) { return pcOpenLegacy(keyHex, sealed, aad); }
+    let kc = pcKeyCheck(keyHex);
+    if (kc["ok"] == false) { return { ok: false, error: kc["error"] }; }
+    if (type(sealed) != "string") { return { ok: false, error: "The ciphertext is invalid" }; }
+    let parts = split(sealed, ".");
+    if (len(parts) != 4 or parts[0] != "pc2") { return { ok: false, error: "Unknown format" }; }
+    let nonce = parts[1];
+    let ct = parts[2];
+    let tag = parts[3];
+    if (len(nonce) != 24 or pcIsHex(nonce) == false or pcIsHex(ct) == false or len(tag) != 32 or pcIsHex(tag) == false) {
+        return { ok: false, error: "Corrupt format" };
+    }
+    let aadHex = "";
+    if (aad != nil) { aadHex = pcHexOf(aad); }
+    let pt = sec.aesGcmOpen(pcAeadKey(keyHex), nonce, ct + tag, aadHex);
+    if (pt == nil) { return { ok: false, error: "Integrity check failed (wrong key, modified data or different context)" }; }
+    return { ok: true, plaintext: sec.hexDecode(pt) };
+}
+
+// ---- legacy format (pc1): HMAC-SHA256 counter-mode stream + HMAC tag, kept for reading old data ----
+fun pcSealLegacy(keyHex, plaintext, aad) {
     let kc = pcKeyCheck(keyHex);
     if (kc["ok"] == false) { return { ok: false, error: kc["error"] }; }
     let nonce = sec.randomToken(16);
@@ -11407,7 +11449,7 @@ fun pcSeal(keyHex, plaintext, aad) {
 }
 
 // F: decrypt after verifying the tag in constant time (any tampering, different aad or wrong key fails)
-fun pcOpen(keyHex, sealed, aad) {
+fun pcOpenLegacy(keyHex, sealed, aad) {
     let kc = pcKeyCheck(keyHex);
     if (kc["ok"] == false) { return { ok: false, error: kc["error"] }; }
     if (type(sealed) != "string") { return { ok: false, error: "The ciphertext is invalid" }; }
