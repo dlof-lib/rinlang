@@ -27,6 +27,9 @@ set(RIN_CORE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../../app/src/main/cpp)
 
 add_executable(rin
     src/main.cpp
+    # الطرفية التفاعلية الكاملة (rin terminal / rin بلا وسائط): محرّر سطر + تاريخ + إكمال + تلوين.
+    # تعتمد فقط على termios/POSIX وعلى واجهة المفسّر؛ لا مكتبات خارجية. انظر docs/terminal.md
+    src/terminal/rin_terminal.cpp
     ${RIN_CORE_DIR}/rin_lexer.cpp
     ${RIN_CORE_DIR}/rin_parser.cpp
     # rin_make.cpp: validateMakeUnit/validateContainerPolicy — يستدعيهما execute() في
@@ -43,6 +46,10 @@ add_executable(rin
     ${RIN_CORE_DIR}/binfmt/coff_obj.cpp
     ${RIN_CORE_DIR}/loader_ui/library_loader_ui.cpp
     ${RIN_CORE_DIR}/rin_http.cpp
+    # indsin داخل الطرفية (:indsin / rin indsin): نفس واجهة C للمحرّك (جلسة + rasterizer) التي تستخدمها
+    # مضيفات أندرويد وسطح المكتب؛ لا منطق رسم مكرّر. انظر docs/terminal.md
+    ${RIN_CORE_DIR}/rin_c_api.cpp
+    ${RIN_CORE_DIR}/indsin/rin_indsin_c_api.cpp
     ${RIN_CORE_DIR}/diagnostics/diagnostic.cpp
     ${RIN_CORE_DIR}/diagnostics/source_manager.cpp
     ${RIN_CORE_DIR}/diagnostics/diagnostic_engine.cpp
