@@ -42,7 +42,20 @@ enum class HighlightKind {
     // النحوي وغير آمن لمجرد إضافة تلوين في المحرر).
     Comment = 10,
     Type = 11, // كلمات لغة الحاويات/الأنواع (container/table/Section/Group/link/save/file/...)
+    // --- أنواع خاصة بلغة passkit (13..19) — تطابق HighlightKind في Kotlin حرفياً ---
+    Preprocessor = 12, // <?...?> و <!DOCTYPE ...>
+    PkBracket = 13,    // < </ > />
+    PkTagName = 14,    // وسم passkit معروف
+    PkAttr = 15,       // اسم سمة
+    PkVariable = 16,   // $var و {var}
+    PkCustomTag = 17,  // وسم غير معروف (قد يُسجَّل عبر passkitRegister)
+    PkString = 18,     // قيمة سمة
+    PkComment = 19,    // <!-- ... -->
 };
+
+// لغة التلوين/التشخيص للمستند الحالي. الافتراضي Rin (السلوك القديم لكل الامتدادات)؛ فقط
+// امتداد "passkit" يغيّر السلوك. أي امتداد آخر يبقى Rin كما كان تماماً.
+enum class EditorLanguage { Rin = 0, Passkit = 1 };
 
 struct HighlightSpan {
     int line;
@@ -97,6 +110,11 @@ struct EditRecord {
 class EditorEngine {
 public:
     EditorEngine();
+
+    // --- لغة المستند ---
+    // يقبل امتداد الملف (مع/بلا نقطة، أي حالة أحرف). غير معروف => Rin.
+    void setLanguage(const std::string& extension);
+    EditorLanguage language() const { return language_; }
 
     // --- نص كامل ---
     void setText(const std::string& text);
@@ -161,6 +179,7 @@ public:
     std::vector<EditorDiagnostic> computeDiagnostics() const;
 
 private:
+    EditorLanguage language_ = EditorLanguage::Rin;
     std::vector<std::string> lines_;
     Position cursor_;
     Position selAnchor_;
