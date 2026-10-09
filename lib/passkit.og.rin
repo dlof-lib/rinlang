@@ -1,0 +1,849 @@
+// ============================================================================
+//  lib/passkit.og.rin — Password kit (Password Kit): concepts + variables + functions
+//  Import:
+//    @import "lib/passkit.og.rin";
+//    @import "lib/passkit.og.rin" as pass;
+//
+//  Pure Rin library (with no change to the C++ engine) built on natives that already exist
+//  (sec.randomToken / sec.sha256 / sec.hmacSha256 / sec.constantTimeEqual).
+//  Every function returns {ok:true,...} or {ok:false, error/errors:...} using the same convention as
+//  validate / requirekit / syskit — with no sudden stop on errors.
+//
+//  Concepts (Concepts) it covers:
+//    1) Constants and variables: character sets, the common-password list, strength labels
+//    2) Policy (Policy)     : mergeable rules + 4 ready-made policies (pkPolicy*)
+//    3) Analysis and strength: entropy, weak patterns, guess time, feedback
+//    4) Secure generation: password / PIN / passphrase (passphrase) with secure randomness
+//    5) Storage: salted hash + key stretching (key stretching) + constant-time verification
+//    6) Lifecycle: password record, history, expiry, lockout after attempts
+//    7) Recovery: temporary reset tokens
+//    8) Masking: display mask + redaction (redact) for logs
+//
+//  Quick example:
+//    let p = pkPolicyStandard();
+//    let r = pkCheck("abc12345", p, { username: "Rima" });
+//    print r["errors"];
+//    let g = pkGenerate({ length: 18 });
+//    let h = pkHash(g["password"], {});
+//    print pkVerify(g["password"], h);   // true
+//
+//  Honest security notes:
+//    - Time: Rin has no wall clock (now() a monotonic clock), so every lifecycle function
+//      takes nowSec (seconds, e.g. an epoch from your app) explicitly; the default pkNow() is fine
+//      for a single session only and is not kept between runs.
+//    - pkHash A salted, stretched HMAC-SHA256 chain (a simplified PBKDF2-like construction), and it is
+//      much better than bare sha256, but it is not a replacement for bcrypt/scrypt/argon2
+//      on a high-risk production server.
+// ============================================================================
+
+// ---- 1) Constants and variables --------------------------------------------------
+
+let PK_LOWER = "abcdefghijklmnopqrstuvwxyz";
+let PK_UPPER = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+let PK_DIGITS = "0123456789";
+let PK_SYMBOLS = "!@#$%^&*()-_=+[]{};:,.?/";
+let PK_AMBIGUOUS = "O0oIl1|";                 // visually similar characters
+let PK_HEX = "0123456789abcdef";
+let PK_HASH_VERSION = "pk1";                  // storage format prefix
+let PK_DEFAULT_ITERATIONS = 3000;
+let PK_STRENGTH_LABELS = ["Very weak", "Weak", "Fair", "Strong", "Very strong"];
+let PK_KEYBOARD_ROWS = ["qwertyuiop", "asdfghjkl", "zxcvbnm", "1234567890"];
+let PK_SENSITIVE_KEYS = ["password", "passwd", "pwd", "pass", "secret", "token", "pin"];
+let PK_COMMON = [
+    "password", "123456", "12345678", "123456789", "1234567890", "12345", "111111",
+    "000000", "123123", "654321", "qwerty", "qwerty123", "qwertyuiop", "abc123",
+    "password1", "passw0rd", "p@ssw0rd", "letmein", "welcome", "admin", "admin123",
+    "root", "login", "master", "monkey", "dragon", "football", "iloveyou",
+    "sunshine", "princess", "1q2w3e4r", "1qaz2wsx", "test", "test123", "guest",
+    "changeme", "default", "secret", "pass", "user"
+];
+
+// word list for passphrases (128 words = 7 bits per word)
+let PK_WORDS = [
+    "apple", "river", "cloud", "stone", "tiger", "lemon", "panda", "storm",
+    "maple", "eagle", "ocean", "flame", "sugar", "piano", "robot", "cedar",
+    "amber", "coral", "daisy", "ember", "fable", "grape", "haven", "ivory",
+    "jolly", "karma", "lunar", "mango", "noble", "olive", "pearl", "quilt",
+    "raven", "solar", "tulip", "unity", "velvet", "willow", "xenon", "yacht",
+    "zebra", "anchor", "bridge", "candle", "desert", "engine", "forest", "garden",
+    "harbor", "island", "jungle", "kitten", "ladder", "meadow", "needle", "orange",
+    "pillow", "rabbit", "silver", "temple", "umbrella", "valley", "winter", "yellow",
+    "breeze", "castle", "dancer", "falcon", "glacier", "hammer", "insect", "jacket",
+    "kernel", "lantern", "marble", "nectar", "oyster", "pepper", "quartz", "rocket",
+    "saddle", "thunder", "uplift", "violet", "walnut", "zephyr", "acorn", "beacon",
+    "comet", "dolphin", "echo", "feather", "galaxy", "horizon", "indigo", "jasmine",
+    "koala", "lotus", "magnet", "nebula", "orchid", "phoenix", "quasar", "ripple",
+    "summit", "trophy", "orbit", "voyage", "whistle", "crystal", "yonder", "zenith",
+    "blossom", "compass", "diamond", "emerald", "firefly", "gazelle", "harvest", "iceberg",
+    "journey", "kingdom", "lullaby", "mystery", "network", "odyssey", "paradox", "rainbow"
+];
+
+// ---- Internal helpers -----------------------------------------------------------
+
+// Split text into real UTF-8 characters (len/charAt in Rin work on bytes, so a password
+// of 6 Arabic letters counts as 12). slice works with character indexes, so we walk it until it returns empty.
+fun pkChars(s) {
+    let out = [];
+    if (s == nil) { return out; }
+    let i = 0;
+    let c = slice(s, 0, 1);
+    while (c != "") {
+        push(out, c);
+        i = i + 1;
+        c = slice(s, i, i + 1);
+    }
+    return out;
+}
+
+fun pkLen(s) {
+    return len(pkChars(s));
+}
+
+
+fun pkNow() {
+    return now() / 1000;          // monotonic seconds (for a single session only)
+}
+
+fun pkCopyMap(m) {
+    let out = {};
+    for (let k in keys(m)) { out[k] = m[k]; }
+    return out;
+}
+
+fun pkCopyArr(a) {
+    let out = [];
+    let i = 0;
+    while (i < len(a)) { push(out, a[i]); i = i + 1; }
+    return out;
+}
+
+fun pkOpt(opts, key, fallback) {
+    if (opts == nil) { return fallback; }
+    if (has(opts, key)) { return opts[key]; }
+    return fallback;
+}
+
+fun pkLog2(x) {
+    if (x <= 1) { return 0; }
+    return log(x) / log(2);
+}
+
+// ---- 2) Policy (Policy) -------------------------------------------------------
+
+// Default policy (balanced). overrides are merged on top, and any unknown key is kept.
+fun pkPolicy(overrides) {
+    let p = {
+        minLength: 8, maxLength: 128,
+        requireLower: true, requireUpper: true, requireDigit: true, requireSymbol: false,
+        allowSpaces: true, minUnique: 4, maxRepeat: 3,
+        noSequence: true, noCommon: true, noPersonal: true,
+        minScore: 2,
+        historyCount: 5, maxAgeDays: 0,
+        maxAttempts: 5, lockSeconds: 900,
+        hashIterations: PK_DEFAULT_ITERATIONS
+    };
+    if (overrides != nil) {
+        for (let k in keys(overrides)) { p[k] = overrides[k]; }
+    }
+    return p;
+}
+
+// Basic: for low-risk apps (length only + reject common passwords)
+fun pkPolicyBasic() {
+    return pkPolicy({
+        minLength: 6, requireLower: false, requireUpper: false, requireDigit: false,
+        minUnique: 3, noSequence: false, minScore: 1, historyCount: 0
+    });
+}
+
+// Standard: the recommended default for most apps
+fun pkPolicyStandard() {
+    return pkPolicy({});
+}
+
+// Strict: for sensitive accounts (12+, symbols, expiry, longer lockout)
+fun pkPolicyStrict() {
+    return pkPolicy({
+        minLength: 12, requireSymbol: true, minUnique: 8, maxRepeat: 2, minScore: 3,
+        historyCount: 10, maxAgeDays: 90, maxAttempts: 3, lockSeconds: 1800,
+        hashIterations: 6000
+    });
+}
+
+// PIN PIN: digits only with a nearly fixed length
+fun pkPolicyPin(length) {
+    let n = 6;
+    if (length != nil) { n = length; }
+    return pkPolicy({
+        minLength: n, maxLength: n, requireLower: false, requireUpper: false,
+        requireDigit: true, requireSymbol: false, allowSpaces: false, minUnique: 3,
+        maxRepeat: 2, noCommon: false, noPersonal: false, minScore: 0, historyCount: 0,
+        maxAttempts: 3, lockSeconds: 600
+    });
+}
+
+// ---- 3) Analysis and strength ----------------------------------------------------------
+
+// Count of each character class inside the password
+fun pkCharClasses(pw) {
+    let c = { lower: 0, upper: 0, digit: 0, symbol: 0, space: 0, other: 0 };
+    let chars = pkChars(pw);
+    let i = 0;
+    while (i < len(chars)) {
+        let ch = chars[i];
+        if (contains(PK_LOWER, ch)) { c["lower"] = c["lower"] + 1; }
+        else if (contains(PK_UPPER, ch)) { c["upper"] = c["upper"] + 1; }
+        else if (contains(PK_DIGITS, ch)) { c["digit"] = c["digit"] + 1; }
+        else if (ch == " ") { c["space"] = c["space"] + 1; }
+        else if (contains(PK_SYMBOLS, ch)) { c["symbol"] = c["symbol"] + 1; }
+        else { c["other"] = c["other"] + 1; }
+        i = i + 1;
+    }
+    return c;
+}
+
+// Size of the possible character pool (to compute theoretical entropy)
+fun pkPoolSize(classes) {
+    let n = 0;
+    if (classes["lower"] > 0) { n = n + 26; }
+    if (classes["upper"] > 0) { n = n + 26; }
+    if (classes["digit"] > 0) { n = n + 10; }
+    if (classes["symbol"] > 0) { n = n + 24; }
+    if (classes["space"] > 0) { n = n + 1; }
+    if (classes["other"] > 0) { n = n + 64; }
+    return n;
+}
+
+// Number of distinct characters
+fun pkUniqueCount(pw) {
+    let chars = pkChars(pw);
+    let seen = [];
+    let i = 0;
+    while (i < len(chars)) {
+        if (contains(seen, chars[i]) == false) { push(seen, chars[i]); }
+        i = i + 1;
+    }
+    return len(seen);
+}
+
+// Longest consecutive run of the same character (aaaa → 4)
+fun pkLongestRepeat(pw) {
+    let chars = pkChars(pw);
+    let best = 0;
+    let run = 0;
+    let prev = "";
+    let i = 0;
+    while (i < len(chars)) {
+        if (i > 0 and chars[i] == prev) { run = run + 1; } else { run = 1; }
+        if (run > best) { best = run; }
+        prev = chars[i];
+        i = i + 1;
+    }
+    return best;
+}
+
+// Does it contain a sequence of 3+ characters (abc / 321 / qwe) ascending or descending?
+fun pkHasSequence(pw) {
+    let s = lower(pw);
+    let sources = [PK_LOWER, PK_DIGITS];
+    let r = 0;
+    while (r < len(PK_KEYBOARD_ROWS)) { push(sources, PK_KEYBOARD_ROWS[r]); r = r + 1; }
+    let i = 0;
+    while (i + 2 < len(s)) {
+        let tri = substr(s, i, 3);
+        let rev = "";
+        let j = 2;
+        while (j >= 0) { rev = rev + charAt(tri, j); j = j - 1; }
+        let k = 0;
+        while (k < len(sources)) {
+            if (contains(sources[k], tri) or contains(sources[k], rev)) { return true; }
+            k = k + 1;
+        }
+        i = i + 1;
+    }
+    return false;
+}
+
+// Simplify "leet": p@ssw0rd → password (to detect disguised common passwords)
+fun pkDeLeet(s) {
+    let t = lower(s);
+    t = replace(t, "@", "a");
+    t = replace(t, "0", "o");
+    t = replace(t, "1", "l");
+    t = replace(t, "3", "e");
+    t = replace(t, "$", "s");
+    t = replace(t, "5", "s");
+    t = replace(t, "7", "t");
+    return t;
+}
+
+// Is it (or very close to) a common password?
+fun pkIsCommon(pw) {
+    let a = lower(pw);
+    let b = pkDeLeet(pw);
+    let i = 0;
+    while (i < len(PK_COMMON)) {
+        let c = PK_COMMON[i];
+        if (a == c or b == c) { return true; }
+        // a common word + digits/symbol at the end only (password2024!)
+        if (len(c) >= 6 and (indexOf(a, c) == 0 or indexOf(b, c) == 0) and len(pw) <= len(c) + 4) { return true; }
+        i = i + 1;
+    }
+    return false;
+}
+
+// Does it contain personal info (username/email/name)? items = array of strings
+fun pkContainsPersonal(pw, items) {
+    if (items == nil) { return false; }
+    let a = lower(pw);
+    let i = 0;
+    while (i < len(items)) {
+        let it = items[i];
+        if (it != nil and len(it) >= 3) {
+            let low = lower(it);
+            if (contains(a, low)) { return true; }
+            // the part before @ in an email
+            let at = indexOf(low, "@");
+            if (at >= 3 and contains(a, substr(low, 0, at))) { return true; }
+        }
+        i = i + 1;
+    }
+    return false;
+}
+
+// Readable text for a duration in seconds
+fun pkHumanTime(sec) {
+    if (sec < 1) { return "instantly"; }
+    if (sec < 60) { return "under a minute"; }
+    if (sec < 3600) { return toString(floor(sec / 60)) + " minutes"; }
+    if (sec < 86400) { return toString(floor(sec / 3600)) + " hours"; }
+    if (sec < 2592000) { return toString(floor(sec / 86400)) + " days"; }
+    if (sec < 31536000) { return toString(floor(sec / 2592000)) + " months"; }
+    if (sec < 3153600000) { return toString(floor(sec / 31536000)) + " years"; }
+    return "many centuries";
+}
+
+// Approximate guess time for a fast offline attack (10 billion guesses/s, half of them on average)
+fun pkCrackSeconds(bits) {
+    if (bits >= 80) { return 3153600001; }
+    return pow(2, bits) / 10000000000 / 2;
+}
+
+// Full analysis. ctx is optional: { username, email, name, personal:[...] }
+fun pkAnalyze(pw, ctx) {
+    let classes = pkCharClasses(pw);
+    let pool = pkPoolSize(classes);
+    let length = pkLen(pw);
+    let rawBits = 0;
+    if (pool > 0) { rawBits = length * pkLog2(pool); }
+
+    let unique = pkUniqueCount(pw);
+    let longestRun = pkLongestRepeat(pw);
+    let hasSeq = pkHasSequence(pw);
+    let common = pkIsCommon(pw);
+
+    let personalItems = [];
+    if (ctx != nil) {
+        if (has(ctx, "username")) { push(personalItems, ctx["username"]); }
+        if (has(ctx, "email")) { push(personalItems, ctx["email"]); }
+        if (has(ctx, "name")) { push(personalItems, ctx["name"]); }
+        if (has(ctx, "personal")) {
+            let q = 0;
+            while (q < len(ctx["personal"])) { push(personalItems, ctx["personal"][q]); q = q + 1; }
+        }
+    }
+    let personal = pkContainsPersonal(pw, personalItems);
+
+    // Penalties: repetition, sequences and low variety reduce effective entropy
+    let bits = rawBits;
+    if (length > 0 and unique < length) { bits = bits * (unique / length) + (rawBits * 0.25); }
+    if (bits > rawBits) { bits = rawBits; }
+    if (hasSeq) { bits = bits - 12; }
+    if (longestRun >= 3) { bits = bits - (longestRun * 3); }
+    if (personal) { bits = bits - 15; }
+    if (common) { bits = 8; }
+    if (bits < 0) { bits = 0; }
+    bits = round(bits * 10) / 10;
+
+    let score = 0;
+    if (bits >= 28) { score = 1; }
+    if (bits >= 40) { score = 2; }
+    if (bits >= 60) { score = 3; }
+    if (bits >= 80) { score = 4; }
+    if (common) { score = 0; }
+
+    let feedback = [];
+    if (length < 8) { push(feedback, "short - use 12 or more characters"); }
+    if (common) { push(feedback, "a common password or close to one"); }
+    if (hasSeq) { push(feedback, "contains a predictable sequence (abc / 123 / qwe)"); }
+    if (longestRun >= 3) { push(feedback, "contains consecutive repeats of the same character"); }
+    if (personal) { push(feedback, "contains personal info that is easy to guess"); }
+    let variety = 0;
+    if (classes["lower"] > 0) { variety = variety + 1; }
+    if (classes["upper"] > 0) { variety = variety + 1; }
+    if (classes["digit"] > 0) { variety = variety + 1; }
+    if (classes["symbol"] > 0) { variety = variety + 1; }
+    if (variety < 3 and length < 16) { push(feedback, "mix upper and lower case, digits and symbols, or make the phrase longer"); }
+
+    return {
+        length: length, classes: classes, poolSize: pool, uniqueChars: unique,
+        longestRepeat: longestRun, hasSequence: hasSeq, isCommon: common, hasPersonal: personal,
+        rawEntropyBits: round(rawBits * 10) / 10, entropyBits: bits,
+        score: score, label: PK_STRENGTH_LABELS[score],
+        crackTime: pkHumanTime(pkCrackSeconds(bits)), feedback: feedback
+    };
+}
+
+// Shortcut: strength 0..4 only
+fun pkScore(pw) {
+    return pkAnalyze(pw, nil)["score"];
+}
+
+// ---- 4) Policy validation -------------------------------------------------------
+
+// Checks pw against policy and collects all violations at once.
+// ctx optional: { username, email, name, personal:[...], history:[array of previous hashes] }
+fun pkCheck(pw, policy, ctx) {
+    let p = policy;
+    if (p == nil) { p = pkPolicyStandard(); }
+    let a = pkAnalyze(pw, ctx);
+    let errors = [];
+    let failed = [];
+    let c = a["classes"];
+
+    if (a["length"] < p["minLength"]) {
+        push(errors, "Length is below the minimum (" + toString(p["minLength"]) + ")");
+        push(failed, "too_short");
+    }
+    if (a["length"] > p["maxLength"]) {
+        push(errors, "Length is above the maximum (" + toString(p["maxLength"]) + ")");
+        push(failed, "too_long");
+    }
+    if (p["requireLower"] and c["lower"] == 0) { push(errors, "At least one lowercase letter is required"); push(failed, "no_lower"); }
+    if (p["requireUpper"] and c["upper"] == 0) { push(errors, "At least one uppercase letter is required"); push(failed, "no_upper"); }
+    if (p["requireDigit"] and c["digit"] == 0) { push(errors, "At least one digit is required"); push(failed, "no_digit"); }
+    if (p["requireSymbol"] and c["symbol"] == 0) { push(errors, "At least one symbol is required"); push(failed, "no_symbol"); }
+    if (p["allowSpaces"] == false and c["space"] > 0) { push(errors, "Spaces are not allowed"); push(failed, "spaces"); }
+    if (a["uniqueChars"] < p["minUnique"]) {
+        push(errors, "Too few distinct characters (minimum " + toString(p["minUnique"]) + " distinct characters)");
+        push(failed, "low_unique");
+    }
+    if (a["longestRepeat"] > p["maxRepeat"]) {
+        push(errors, "Consecutive repeat of more than " + toString(p["maxRepeat"]) + " times for the same character");
+        push(failed, "repeat");
+    }
+    if (p["noSequence"] and a["hasSequence"]) { push(errors, "contains a predictable sequence such as abc or 123"); push(failed, "sequence"); }
+    if (p["noCommon"] and a["isCommon"]) { push(errors, "Common password"); push(failed, "common"); }
+    if (p["noPersonal"] and a["hasPersonal"]) { push(errors, "contains personal info (name/email)"); push(failed, "personal"); }
+    if (a["score"] < p["minScore"]) {
+        push(errors, "Strength (" + a["label"] + ") is below the required level (" + PK_STRENGTH_LABELS[p["minScore"]] + ")");
+        push(failed, "weak");
+    }
+
+    // Block reuse of previous passwords
+    if (ctx != nil and has(ctx, "history") and p["historyCount"] > 0) {
+        let h = ctx["history"];
+        let i = 0;
+        while (i < len(h) and i < p["historyCount"]) {
+            if (pkVerify(pw, h[i])) {
+                push(errors, "This password was used before - choose a new one");
+                push(failed, "reused");
+                i = len(h);
+            }
+            i = i + 1;
+        }
+    }
+
+    if (len(errors) == 0) { return { ok: true, analysis: a }; }
+    return { ok: false, errors: errors, failed: failed, analysis: a, error: join(errors, "; ") };
+}
+
+// Password confirmation (do both fields match?) with constant-time comparison
+fun pkConfirm(a, b) {
+    if (a == nil or b == nil) { return { ok: false, error: "pkConfirm: missing value" }; }
+    if (sec.constantTimeEqual(a, b)) { return { ok: true }; }
+    return { ok: false, error: "The passwords do not match" };
+}
+
+// ---- 5) Secure generation (CSPRNG via sec.randomToken, not random()) -----------------
+
+fun pkRandByte() {
+    let hx = sec.randomToken(1);
+    return indexOf(PK_HEX, charAt(hx, 0)) * 16 + indexOf(PK_HEX, charAt(hx, 1));
+}
+
+// uniform integer in [0, n) using rejection sampling to avoid bias
+fun pkRandInt(n) {
+    if (n <= 1) { return 0; }
+    if (n <= 256) {
+        let limit = floor(256 / n) * n;
+        let b = pkRandByte();
+        while (b >= limit) { b = pkRandByte(); }
+        return b % n;
+    }
+    let limit2 = floor(65536 / n) * n;
+    let v = pkRandByte() * 256 + pkRandByte();
+    while (v >= limit2) { v = pkRandByte() * 256 + pkRandByte(); }
+    return v % n;
+}
+
+fun pkPick(set) {
+    return charAt(set, pkRandInt(len(set)));
+}
+
+fun pkShuffle(arr) {
+    let a = pkCopyArr(arr);
+    let i = len(a) - 1;
+    while (i > 0) {
+        let j = pkRandInt(i + 1);
+        let t = a[i];
+        a[i] = a[j];
+        a[j] = t;
+        i = i - 1;
+    }
+    return a;
+}
+
+fun pkRemoveChars(set, bad) {
+    let out = "";
+    let i = 0;
+    while (i < len(set)) {
+        let ch = charAt(set, i);
+        if (contains(bad, ch) == false) { out = out + ch; }
+        i = i + 1;
+    }
+    return out;
+}
+
+// opts: { length:16, lower:true, upper:true, digits:true, symbols:true,
+//         avoidAmbiguous:false, exclude:"", custom:"" }
+// Guarantees at least one character from every enabled class, then shuffles the result.
+fun pkGenerate(opts) {
+    let length = pkOpt(opts, "length", 16);
+    let avoid = pkOpt(opts, "avoidAmbiguous", false);
+    let exclude = pkOpt(opts, "exclude", "");
+    let sets = [];
+    if (pkOpt(opts, "lower", true)) { push(sets, PK_LOWER); }
+    if (pkOpt(opts, "upper", true)) { push(sets, PK_UPPER); }
+    if (pkOpt(opts, "digits", true)) { push(sets, PK_DIGITS); }
+    if (pkOpt(opts, "symbols", true)) { push(sets, PK_SYMBOLS); }
+    let custom = pkOpt(opts, "custom", "");
+    if (len(custom) > 0) { push(sets, custom); }
+
+    let cleaned = [];
+    let pool = "";
+    let i = 0;
+    while (i < len(sets)) {
+        let s = sets[i];
+        if (avoid) { s = pkRemoveChars(s, PK_AMBIGUOUS); }
+        if (len(exclude) > 0) { s = pkRemoveChars(s, exclude); }
+        if (len(s) > 0) { push(cleaned, s); pool = pool + s; }
+        i = i + 1;
+    }
+    if (len(cleaned) == 0) { return { ok: false, error: "pkGenerate: No character classes are enabled" }; }
+    if (length < len(cleaned)) { return { ok: false, error: "pkGenerate: length is smaller than the number of required classes (" + toString(len(cleaned)) + ")" }; }
+    if (length > 1024) { return { ok: false, error: "pkGenerate: maximum length is 1024" }; }
+
+    let chars = [];
+    let j = 0;
+    while (j < len(cleaned)) { push(chars, pkPick(cleaned[j])); j = j + 1; }
+    while (len(chars) < length) { push(chars, pkPick(pool)); }
+    let out = join(pkShuffle(chars), "");
+    let bits = round(length * pkLog2(len(pool)) * 10) / 10;
+    return { ok: true, password: out, length: length, poolSize: len(pool), entropyBits: bits, strength: pkScore(out) };
+}
+
+// n several passwords at once (array of strings)
+fun pkGenerateMany(count, opts) {
+    let out = [];
+    let i = 0;
+    while (i < count) {
+        let g = pkGenerate(opts);
+        if (g["ok"] == false) { return g; }
+        push(out, g["password"]);
+        i = i + 1;
+    }
+    return { ok: true, passwords: out };
+}
+
+// PIN random digits; regenerates (up to 50 attempts) if it came out sequential or fully repeated
+fun pkGeneratePin(length) {
+    let n = 6;
+    if (length != nil) { n = length; }
+    if (n < 4 or n > 32) { return { ok: false, error: "pkGeneratePin: length must be between 4 and 32" }; }
+    let tries = 0;
+    while (tries < 50) {
+        let pin = "";
+        let i = 0;
+        while (i < n) { pin = pin + pkPick(PK_DIGITS); i = i + 1; }
+        if (pkHasSequence(pin) == false and pkLongestRepeat(pin) <= 2) {
+            return { ok: true, pin: pin, length: n, entropyBits: round(n * pkLog2(10) * 10) / 10 };
+        }
+        tries = tries + 1;
+    }
+    return { ok: false, error: "pkGeneratePin: could not generate a suitable PIN" };
+}
+
+// Passphrase (passphrase): opts { words:6, separator:"-", capitalize:false, number:false }
+fun pkPassphrase(opts) {
+    let n = pkOpt(opts, "words", 6);
+    let sep = pkOpt(opts, "separator", "-");
+    let cap = pkOpt(opts, "capitalize", false);
+    let addNum = pkOpt(opts, "number", false);
+    if (n < 3 or n > 20) { return { ok: false, error: "pkPassphrase: number of words must be between 3 and 20" }; }
+    let picked = [];
+    let i = 0;
+    while (i < n) {
+        let w = PK_WORDS[pkRandInt(len(PK_WORDS))];
+        if (cap) { w = upper(charAt(w, 0)) + substr(w, 1, len(w) - 1); }
+        push(picked, w);
+        i = i + 1;
+    }
+    let phrase = join(picked, sep);
+    let bits = n * pkLog2(len(PK_WORDS));
+    if (addNum) {
+        phrase = phrase + sep + toString(pkRandInt(100));
+        bits = bits + pkLog2(100);
+    }
+    return { ok: true, passphrase: phrase, words: n, entropyBits: round(bits * 10) / 10 };
+}
+
+// ---- 6) Storage: salted hash and key stretching + constant-time verification --------------------------
+
+fun pkSalt() {
+    return sec.randomToken(16);
+}
+
+// Returns a string in the format  pk1$<iterations>$<salt>$<hash>
+// opts optional: { iterations, salt }
+fun pkHash(pw, opts) {
+    let iter = pkOpt(opts, "iterations", PK_DEFAULT_ITERATIONS);
+    let salt = pkOpt(opts, "salt", pkSalt());
+    if (iter < 1) { iter = 1; }
+    let h = sec.hmacSha256(salt, pw);
+    let i = 1;
+    while (i < iter) {
+        h = sec.hmacSha256(h, salt + pw);
+        i = i + 1;
+    }
+    return PK_HASH_VERSION + "$" + toString(iter) + "$" + salt + "$" + h;
+}
+
+fun pkParseHash(stored) {
+    if (stored == nil) { return { ok: false, error: "pkParseHash: empty value" }; }
+    let parts = split(stored, "$");
+    if (len(parts) != 4 or parts[0] != PK_HASH_VERSION) {
+        return { ok: false, error: "pkParseHash: unknown hash format" };
+    }
+    // toNumber throws an error on non-numeric text, so check the digits first (corrupt hash => false, no crash)
+    if (len(parts[1]) == 0 or len(parts[1]) > 7) { return { ok: false, error: "pkParseHash: invalid iteration count" }; }
+    let d = 0;
+    while (d < len(parts[1])) {
+        if (contains(PK_DIGITS, charAt(parts[1], d)) == false) { return { ok: false, error: "pkParseHash: invalid iteration count" }; }
+        d = d + 1;
+    }
+    let iter = toNumber(parts[1]);
+    if (iter < 1) { return { ok: false, error: "pkParseHash: invalid iteration count" }; }
+    return { ok: true, version: parts[0], iterations: iter, salt: parts[2], hash: parts[3] };
+}
+
+// Constant-time check: does pw match the stored hash? (false on any corrupt format)
+fun pkVerify(pw, stored) {
+    let p = pkParseHash(stored);
+    if (p["ok"] == false) { return false; }
+    let again = pkHash(pw, { iterations: p["iterations"], salt: p["salt"] });
+    return sec.constantTimeEqual(again, stored);
+}
+
+// Should it be rehashed (iterations lower than today's policy)? call it after a successful login
+fun pkNeedsRehash(stored, policy) {
+    let p = pkParseHash(stored);
+    if (p["ok"] == false) { return true; }
+    let target = PK_DEFAULT_ITERATIONS;
+    if (policy != nil and has(policy, "hashIterations")) { target = policy["hashIterations"]; }
+    return p["iterations"] < target;
+}
+
+// ---- 7) Lifecycle: password record (state variables) -------------------------
+
+// Creates a new record after checking the policy. ctx is optional as in pkCheck.
+// The record: { hash, createdAt, changedAt, expiresAt, history[], failedAttempts, lockedUntil, mustChange }
+fun pkRecordNew(pw, policy, ctx, nowSec) {
+    let p = policy;
+    if (p == nil) { p = pkPolicyStandard(); }
+    let t = nowSec;
+    if (t == nil) { t = pkNow(); }
+    let chk = pkCheck(pw, p, ctx);
+    if (chk["ok"] == false) { return chk; }
+    let expires = 0;
+    if (p["maxAgeDays"] > 0) { expires = t + p["maxAgeDays"] * 86400; }
+    return {
+        ok: true,
+        record: {
+            hash: pkHash(pw, { iterations: p["hashIterations"] }),
+            createdAt: t, changedAt: t, expiresAt: expires,
+            history: [], failedAttempts: 0, lockedUntil: 0, mustChange: false
+        },
+        analysis: chk["analysis"]
+    };
+}
+
+fun pkIsLocked(record, nowSec) {
+    let t = nowSec;
+    if (t == nil) { t = pkNow(); }
+    return record["lockedUntil"] > t;
+}
+
+fun pkIsExpired(record, nowSec) {
+    let t = nowSec;
+    if (t == nil) { t = pkNow(); }
+    if (record["expiresAt"] <= 0) { return false; }
+    return t >= record["expiresAt"];
+}
+
+// Days left before expiry (-1 = no expiry), 0 = expired
+fun pkDaysLeft(record, nowSec) {
+    let t = nowSec;
+    if (t == nil) { t = pkNow(); }
+    if (record["expiresAt"] <= 0) { return -1; }
+    if (t >= record["expiresAt"]) { return 0; }
+    return ceil((record["expiresAt"] - t) / 86400);
+}
+
+// Login attempt: returns an updated record (does not modify the original) with the reason for the result.
+// reason: "ok" | "wrong" | "locked" | "expired" (ok:true with mustChange on expiry)
+fun pkLogin(record, pw, policy, nowSec) {
+    let p = policy;
+    if (p == nil) { p = pkPolicyStandard(); }
+    let t = nowSec;
+    if (t == nil) { t = pkNow(); }
+    let r = pkCopyMap(record);
+
+    if (pkIsLocked(r, t)) {
+        return { ok: false, reason: "locked", retryAfter: ceil(r["lockedUntil"] - t), record: r,
+                 error: "The account is temporarily locked because of failed attempts" };
+    }
+
+    if (pkVerify(pw, r["hash"]) == false) {
+        r["failedAttempts"] = r["failedAttempts"] + 1;
+        let left = p["maxAttempts"] - r["failedAttempts"];
+        if (left <= 0) {
+            r["lockedUntil"] = t + p["lockSeconds"];
+            r["failedAttempts"] = 0;
+            return { ok: false, reason: "locked", retryAfter: p["lockSeconds"], attemptsLeft: 0, record: r,
+                     error: "The account was locked after repeated failed attempts" };
+        }
+        return { ok: false, reason: "wrong", attemptsLeft: left, record: r, error: "Incorrect password" };
+    }
+
+    r["failedAttempts"] = 0;
+    r["lockedUntil"] = 0;
+    if (pkNeedsRehash(r["hash"], p)) {
+        r["hash"] = pkHash(pw, { iterations: p["hashIterations"] });
+    }
+    if (pkIsExpired(r, t)) {
+        r["mustChange"] = true;
+        return { ok: true, reason: "expired", mustChange: true, record: r };
+    }
+    return { ok: true, reason: "ok", mustChange: r["mustChange"], record: r };
+}
+
+// Change password: verifies the old one, applies the policy + blocks reuse, and updates the history.
+fun pkChange(record, oldPw, newPw, policy, ctx, nowSec) {
+    let p = policy;
+    if (p == nil) { p = pkPolicyStandard(); }
+    let t = nowSec;
+    if (t == nil) { t = pkNow(); }
+    if (pkVerify(oldPw, record["hash"]) == false) {
+        return { ok: false, error: "The current password is incorrect" };
+    }
+    if (sec.constantTimeEqual(oldPw, newPw)) {
+        return { ok: false, error: "The new password is the same as the current one" };
+    }
+    let c = {};
+    if (ctx != nil) { c = pkCopyMap(ctx); }
+    // stored history + the current password itself count as not reusable
+    let hist = pkCopyArr(record["history"]);
+    let all = [record["hash"]];
+    let i = 0;
+    while (i < len(hist)) { push(all, hist[i]); i = i + 1; }
+    c["history"] = all;
+    let chk = pkCheck(newPw, p, c);
+    if (chk["ok"] == false) { return chk; }
+
+    // the current one goes to the front of the history, and the history is trimmed to the last historyCount
+    let newHist = [record["hash"]];
+    let k = 0;
+    while (k < len(hist) and len(newHist) < p["historyCount"]) { push(newHist, hist[k]); k = k + 1; }
+    if (p["historyCount"] <= 0) { newHist = []; }
+
+    let r = pkCopyMap(record);
+    r["hash"] = pkHash(newPw, { iterations: p["hashIterations"] });
+    r["history"] = newHist;
+    r["changedAt"] = t;
+    r["failedAttempts"] = 0;
+    r["lockedUntil"] = 0;
+    r["mustChange"] = false;
+    if (p["maxAgeDays"] > 0) { r["expiresAt"] = t + p["maxAgeDays"] * 86400; } else { r["expiresAt"] = 0; }
+    return { ok: true, record: r, analysis: chk["analysis"] };
+}
+
+// ---- 8) Recovery: temporary reset tokens ---------------------------------
+
+// Returns token (sent to the user once) + tokenHash (only stored) + expiresAt
+fun pkResetToken(ttlSec, nowSec) {
+    let ttl = 900;
+    if (ttlSec != nil) { ttl = ttlSec; }
+    let t = nowSec;
+    if (t == nil) { t = pkNow(); }
+    let token = sec.randomToken(32);
+    return { ok: true, token: token, tokenHash: sec.sha256(token), expiresAt: t + ttl };
+}
+
+fun pkCheckResetToken(token, tokenHash, expiresAt, nowSec) {
+    let t = nowSec;
+    if (t == nil) { t = pkNow(); }
+    if (t >= expiresAt) { return { ok: false, reason: "expired", error: "The recovery token has expired" }; }
+    if (sec.constantTimeEqual(sec.sha256(token), tokenHash) == false) {
+        return { ok: false, reason: "invalid", error: "The recovery token is incorrect" };
+    }
+    return { ok: true };
+}
+
+// ---- 9) Masking: display mask + log redaction ---------------------------------
+
+// ●●●●●●●● same number of characters as the password (real characters, not bytes)
+fun pkMask(pw) {
+    if (pw == nil) { return ""; }
+    return repeat("•", pkLen(pw));
+}
+
+// Keeps the last keep characters visible: ••••••ab12
+fun pkMaskKeep(pw, keep) {
+    if (pw == nil) { return ""; }
+    let n = pkLen(pw);
+    let k = keep;
+    if (k > n - 4) { k = 0; }       // do not reveal most of a short password
+    if (k < 0) { k = 0; }
+    return repeat("•", n - k) + slice(pw, n - k, n);
+}
+
+// Is the field name sensitive (password/token/...)?
+fun pkIsSensitiveKey(key) {
+    let low = lower(toString(key));
+    let i = 0;
+    while (i < len(PK_SENSITIVE_KEYS)) {
+        if (contains(low, PK_SENSITIVE_KEYS[i])) { return true; }
+        i = i + 1;
+    }
+    return false;
+}
+
+// A copy of the map with sensitive fields hidden (redact logs before print/log)
+fun pkRedact(obj) {
+    let out = {};
+    for (let k in keys(obj)) {
+        if (pkIsSensitiveKey(k)) { out[k] = "***"; } else { out[k] = obj[k]; }
+    }
+    return out;
+}
