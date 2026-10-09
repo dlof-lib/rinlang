@@ -1,0 +1,95 @@
+// ============================================================================
+//  Parser.rin — Stage 2 of "Passkit": tokens -> AST
+//
+//    program  -> element* EOF
+//    element  -> "<" IDENT attr* "/>"
+//              | "<" IDENT attr* ">" element* "</" IDENT ">"
+//    attr     -> IDENT ("=" STRING)?            // no value = flag (flag) with value "true"
+// ============================================================================
+
+@import "./Lexer.rin";
+
+fun pkKnownTags() {
+    return ["passkit", "set", "print", "if", "else", "for", "assert",
+            "email", "password", "apikey", "link", "api", "sql",
+            "input", "return", "import", "run", "call",
+            "crypt", "token", "otp", "db", "container"];
+}
+
+fun parseElement(tokens, pos) {
+    let line = pPeek(tokens, pos)["line"];
+    if (pCheck(tokens, pos, "LT") == false) {
+        let got = pPeek(tokens, pos);
+        return { node: langError("Parser", "expected a tag starting with '<' but found " + got["type"], got["line"]), pos: pos };
+    }
+    let a = pAdvance(tokens, pos); pos = a["pos"];
+    if (pCheck(tokens, pos, "IDENT") == false) {
+        return { node: langError("Parser", "expected a tag name after '<'", line), pos: pos };
+    }
+    let nameTok = pAdvance(tokens, pos); pos = nameTok["pos"];
+    let name = nameTok["tok"]["value"];
+    if (contains(pkKnownTags(), name) == false) {
+        return { node: langError("Parser", "unknown tag <" + name + ">", line), pos: pos };
+    }
+
+    let attrs = {};
+    while (pCheck(tokens, pos, "IDENT")) {
+        let k = pAdvance(tokens, pos); pos = k["pos"];
+        let key = k["tok"]["value"];
+        if (pCheck(tokens, pos, "EQ")) {
+            let e = pAdvance(tokens, pos); pos = e["pos"];
+            if (pCheck(tokens, pos, "STRING") == false) {
+                return { node: langError("Parser", "expected a string value for attribute '" + key + "'", line), pos: pos };
+            }
+            let v = pAdvance(tokens, pos); pos = v["pos"];
+            attrs[key] = v["tok"]["value"];
+        } else {
+            attrs[key] = "true";
+        }
+    }
+
+    if (pCheck(tokens, pos, "SLASHGT")) {
+        let c = pAdvance(tokens, pos);
+        return { node: astNode("Tag", line, { name: name, attrs: attrs, children: [] }), pos: c["pos"] };
+    }
+    if (pCheck(tokens, pos, "GT") == false) {
+        return { node: langError("Parser", "expected '>' or '/>' to end the tag <" + name + ">", line), pos: pos };
+    }
+    let g = pAdvance(tokens, pos); pos = g["pos"];
+
+    let children = [];
+    while (pCheck(tokens, pos, "LTSLASH") == false) {
+        if (pAtEnd(tokens, pos)) {
+            return { node: langError("Parser", "tag <" + name + "> is not closed, expected </" + name + ">", line), pos: pos };
+        }
+        let r = parseElement(tokens, pos);
+        if (isLangError(r["node"])) { return r; }
+        push(children, r["node"]);
+        pos = r["pos"];
+    }
+    let cl = pAdvance(tokens, pos); pos = cl["pos"];            // </
+    if (pCheck(tokens, pos, "IDENT") == false) {
+        return { node: langError("Parser", "expected a tag name after '</'", line), pos: pos };
+    }
+    let cn = pAdvance(tokens, pos); pos = cn["pos"];
+    if (cn["tok"]["value"] != name) {
+        return { node: langError("Parser", "closing </" + cn["tok"]["value"] + "> does not match <" + name + ">", cn["tok"]["line"]), pos: pos };
+    }
+    if (pCheck(tokens, pos, "GT") == false) {
+        return { node: langError("Parser", "expected '>' after </" + name, line), pos: pos };
+    }
+    let fin = pAdvance(tokens, pos);
+    return { node: astNode("Tag", line, { name: name, attrs: attrs, children: children }), pos: fin["pos"] };
+}
+
+fun parse(tokens) {
+    let pos = 0;
+    let body = [];
+    while (pAtEnd(tokens, pos) == false) {
+        let r = parseElement(tokens, pos);
+        if (isLangError(r["node"])) { return r["node"]; }
+        push(body, r["node"]);
+        pos = r["pos"];
+    }
+    return astNode("Program", 1, { body: body });
+}
