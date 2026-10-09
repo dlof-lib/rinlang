@@ -289,6 +289,15 @@ object RinEngine {
         /** [entering] true = pointer just entered this Strand, false = it just left. */
         fun hover(x: Double, y: Double, entering: Boolean): String = guarded { indsinSessionHoverNative(it, x, y, entering) }
 
+        /** Media: the host's answer to a `pickMedia()` request — [itemsJson] is `[{"path","name","mime","size","kind"}]`
+         * with project-relative paths. Re-validated natively (kind/size/path). Returns the usual tap envelope. */
+        fun mediaPicked(cell: String, itemsJson: String, kind: String, multiple: Boolean, maxMb: Double, append: Boolean): String =
+            guarded { indsinSessionMediaPickedNative(it, cell, itemsJson, kind, multiple, maxMb, append) }
+
+        /** Media: upload progress for `uploadMedia()`. [status] = uploading|done|error; [detail] = server response (done) or error text. */
+        fun mediaProgress(cell: String, status: String, progress: Double, detail: String): String =
+            guarded { indsinSessionMediaProgressNative(it, cell, status, progress, detail) }
+
         /**
          * Effects (spec §effects): advances the session's animation clock to "now" and re-applies
          * every in-progress `effect=` transition's current opacity/translate/scale, with no gesture
@@ -374,6 +383,8 @@ object RinEngine {
     private external fun indsinSessionLongPressNative(handle: Long, x: Double, y: Double): String
     private external fun indsinSessionDoubleTapNative(handle: Long, x: Double, y: Double): String
     private external fun indsinSessionHoverNative(handle: Long, x: Double, y: Double, entering: Boolean): String
+    private external fun indsinSessionMediaPickedNative(handle: Long, cell: String, itemsJson: String, kind: String, multiple: Boolean, maxMb: Double, append: Boolean): String
+    private external fun indsinSessionMediaProgressNative(handle: Long, cell: String, status: String, progress: Double, detail: String): String
     private external fun indsinSessionTickNative(handle: Long): String
     private external fun indsinSessionUpdateSourceNative(handle: Long, newSource: String): String
     private external fun indsinSessionSetViewportNative(handle: Long, viewportHeight: Int)
