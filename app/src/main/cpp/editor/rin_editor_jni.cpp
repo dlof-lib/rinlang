@@ -4,6 +4,8 @@
 // كل نسخة من المحرر هي مؤشر C++ (rinedit::EditorEngine*) يُمرَّر إلى Kotlin كـ jlong (handle)؛
 // Kotlin مسؤول عن استدعاء nativeDestroy() عند التخلّص من المحرر (مثلاً في View.onDetachedFromWindow).
 #include <jni.h>
+#define RIN_JNI_UTF_WITH_JNI 1
+#include "../rin_jni_utf.h" // UTF-8 القياسي (لا MUTF-8): يحفظ توافق إزاحات البايت مع Kotlin عند الإيموجي
 #include <string>
 #include <vector>
 #include <memory>
@@ -20,15 +22,11 @@ using rinedit::Position;
 namespace {
 
 std::string jstringToUtf8(JNIEnv* env, jstring s) {
-    if (s == nullptr) return "";
-    const char* chars = env->GetStringUTFChars(s, nullptr);
-    std::string out(chars ? chars : "");
-    env->ReleaseStringUTFChars(s, chars);
-    return out;
+    return rin_jni::toStd(env, s);
 }
 
 jstring utf8ToJstring(JNIEnv* env, const std::string& s) {
-    return env->NewStringUTF(s.c_str());
+    return rin_jni::newJString(env, s);
 }
 
 EditorEngine* handleToEngine(jlong handle) {
@@ -48,6 +46,13 @@ jintArray cursorArray(JNIEnv* env, Position p) {
 } // namespace
 
 extern "C" {
+
+JNIEXPORT void JNICALL
+Java_com_dlof_rinlang_RinNativeEditor_nativeSetLanguage(JNIEnv* env, jclass, jlong handle, jstring extension) {
+    EditorEngine* e = handleToEngine(handle);
+    if (e == nullptr) return;
+    e->setLanguage(jstringToUtf8(env, extension));
+}
 
 JNIEXPORT jlong JNICALL
 Java_com_dlof_rinlang_RinNativeEditor_nativeCreate(JNIEnv*, jclass) {
