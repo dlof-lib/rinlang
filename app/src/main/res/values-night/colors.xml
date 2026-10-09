@@ -251,4 +251,13 @@
     <color name="project_icon_bg">#28233F</color>
     <color name="project_delete_color">#FF6B7D</color>
     <color name="rin_doc_container">#14B8A6</color>
+    <!-- ألوان لغة passkit الرسمية (examples/customlang/passkit/syntax.rinsyntax.json؛ أقواس <> بلون أيقونة passkit الكهرماني #F59E0B والوسوم بالأخضر المزرق).
+         الوضع الفاتح: نسخ أغمق من نفس الهويات لتحقيق تباين مقروء على الخلفية البيضاء. -->
+    <color name="passkit_bracket">#F59E0B</color>
+    <color name="passkit_tag">#4EC9B0</color>
+    <color name="passkit_tag_custom">#5EEAD4</color>
+    <color name="passkit_attr">#9CDCFE</color>
+    <color name="passkit_variable">#DCDCAA</color>
+    <color name="passkit_string">#CE9178</color>
+    <color name="passkit_comment">#6A9955</color>
 </resources>
