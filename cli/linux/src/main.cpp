@@ -18,7 +18,8 @@
 //    rin doctor                             فحص بيئة التطوير الفعلية
 //    rin -c "print 1+1;"                    تشغيل كود مباشر
 //    rin < file.rin                          قراءة الكود من stdin
-//    rin                                     REPL تفاعلي
+//    rin                                     الطرفية التفاعلية
+//    rin terminal|repl|shell [خيارات] [ملفات]  الطرفية التفاعلية الكاملة
 //    rin --version | -v ، --help | -h
 // ============================================================================
 #include "rin_version.h"
@@ -29,6 +30,7 @@
 #include "diagnostics/source_manager.h"
 #include "pkg/cli_pkg.h"
 #include "toolchain/rin_toolchain.h"
+#include "terminal/rin_terminal.h"
 
 #include <iostream>
 #include <fstream>
@@ -213,7 +215,9 @@ void printUsage() {
         "  rin doctor                             فحص بيئة التطوير\n"
         "  rin -c \"print 1+1;\"                    تشغيل كود مباشر\n"
         "  rin < file.rin                          قراءة الكود من stdin\n"
-        "  rin                                     REPL تفاعلي\n"
+        "  rin                                     الطرفية التفاعلية (rin terminal --help)\n"
+        "  rin terminal [-i file] [-e code] [...]  الطرفية التفاعلية الكاملة (أو rin repl / rin shell)\n"
+        "  rin indsin <file.rin> [--width N] [--dump]  تشغيل واجهة indsin داخل الطرفية\n"
         "  rin --version | -v ، --help | -h\n";
 }
 
@@ -268,21 +272,12 @@ int runCheck(const std::string& path, rin::diag::OutputFormat fmt) {
     return engine.hasErrors() ? 1 : 0;
 }
 
+// REPL التفاعلي = الطرفية الكاملة (terminal/rin_terminal.cpp): تحرير سطر حقيقي، تاريخ دائم، إكمال Tab،
+// تلوين صيغة، أسطر متتابعة، وحالة جلسة تبقى بين الأوامر. (كان هنا سابقاً حلقة getline من سطر واحد.)
 int runRepl() {
-    std::cout << "Rin v" << kVersion << " - وضع تفاعلي. اكتب سطر Rin ثم Enter لتنفيذه (exit للخروج).\n";
-    rin::Interpreter interp;
-    std::string line;
-    int lineNo = 1;
-    while (true) {
-        std::cout << "rin[" << lineNo << "]> ";
-        if (!std::getline(std::cin, line)) { std::cout << "\n"; break; }
-        if (line == "exit" || line == "quit") break;
-        if (line.empty()) continue;
-        runSource(line, "<repl>", interp);
-        std::cout << "\n";
-        ++lineNo;
-    }
-    return 0;
+    rin::terminal::Options o;
+    o.version = kVersion;
+    return rin::terminal::run(o);
 }
 
 // ---------------------------------------------------------------------------
@@ -751,6 +746,23 @@ int main(int argc, char** argv) {
         if (cmd == "--help" || cmd == "-h") { printUsage(); return 0; }
 
         if (cmd == "pkg") return rinpm::cli::run(rest, kVersion);
+
+        // rin indsin <file.rin> [--width N] [--dump|--plain]: واجهة indsin تُعرَض داخل الطرفية نفسها
+        // (نصف-كتل ملوّنة + فأرة + تحميل حيّ) — لا نافذة ولا Android.
+        if (cmd == "indsin") return rin::terminal::runIndsinCommand(rest);
+
+        if (cmd == "terminal" || cmd == "repl" || cmd == "shell") {
+            rin::terminal::Options topt;
+            topt.version = kVersion;
+            std::string terr;
+            bool thelp = false;
+            if (!rin::terminal::parseArgs(rest, topt, terr, thelp)) {
+                std::cerr << "rin " << cmd << ": " << terr << "\n";
+                return 2;
+            }
+            if (thelp) { rin::terminal::printUsage(); return 0; }
+            return rin::terminal::run(topt);
+        }
 
         if (cmd == "new") return cmdNew(rest.empty() ? "" : rest[0]);
         if (cmd == "build") return cmdBuild(rest);
