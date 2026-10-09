@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0.7" y2="1">
+      <stop offset="0" stop-color="#115E59"/>
+      <stop offset="1" stop-color="#042F2E"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.4" r="0.55">
+      <stop offset="0" stop-color="#2DD4BF" stop-opacity="0.30"/>
+      <stop offset="1" stop-color="#2DD4BF" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="shield" x1="0" y1="0" x2="0.3" y2="1">
+      <stop offset="0" stop-color="#F0FDFA"/>
+      <stop offset="0.6" stop-color="#99F6E4"/>
+      <stop offset="1" stop-color="#2DD4BF"/>
+    </linearGradient>
+    <linearGradient id="amber" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FCD34D"/>
+      <stop offset="1" stop-color="#F59E0B"/>
+    </linearGradient>
+    <clipPath id="tile"><rect width="512" height="512" rx="116"/></clipPath>
+  </defs>
+  <g clip-path="url(#tile)">
+    <rect width="512" height="512" fill="url(#bg)"/>
+    <rect width="512" height="512" fill="url(#glow)"/>
+    <!-- subtle grid -->
+    <g stroke="#5EEAD4" stroke-opacity="0.07" stroke-width="2">
+      <path d="M0 128H512M0 256H512M0 384H512M128 0V512M256 0V512M384 0V512"/>
+    </g>
+  </g>
+  <!-- tag brackets -->
+  <g fill="none" stroke="url(#amber)" stroke-width="30" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M104 190 L40 256 L104 322"/>
+    <path d="M408 190 L472 256 L408 322"/>
+  </g>
+  <!-- shield -->
+  <path d="M256 66 L370 108 C374 110 376 113 376 117 V250 C376 322 328 382 256 426 C184 382 136 322 136 250 V117 C136 113 138 110 142 108 Z" fill="#021F1E" opacity="0.45" transform="translate(0 10)"/>
+  <path d="M256 66 L370 108 C374 110 376 113 376 117 V250 C376 322 328 382 256 426 C184 382 136 322 136 250 V117 C136 113 138 110 142 108 Z" fill="url(#shield)"/>
+  <path d="M256 66 L370 108 C374 110 376 113 376 117 V250 C376 322 328 382 256 426 Z" fill="#0D9488" opacity="0.16"/>
+  <path d="M256 92 L352 126 V250 C352 308 314 356 256 392 C198 356 160 308 160 250 V126 Z" fill="none" stroke="#0F766E" stroke-opacity="0.35" stroke-width="5"/>
+  <!-- keyhole -->
+  <circle cx="256" cy="218" r="36" fill="#134E4A"/>
+  <path d="M240 244 H272 L284 316 H228 Z" fill="#134E4A" stroke="#134E4A" stroke-width="6" stroke-linejoin="round"/>
+</svg>
