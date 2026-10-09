@@ -2,6 +2,8 @@
 // Exposes the Rin C++ engine to Kotlin through JNI.
 // Kotlin side: RinEngine.kt declares the matching `external fun` signatures.
 #include <jni.h>
+#define RIN_JNI_UTF_WITH_JNI 1
+#include "rin_jni_utf.h" // تحويل UTF-8 <-> jstring آمن (انظر التعليق في الملف)
 #include "rin_version.h"
 #include <string>
 #include <cctype>
@@ -27,15 +29,11 @@
 // أي كود Kotlin قديم يستدعي RinEngine.runSource(source) بباراميتر واحد.
 extern "C" JNIEXPORT jstring JNICALL
 Java_com_dlof_rinlang_RinEngine_runSourceNative(JNIEnv* env, jobject /* this */, jstring sourceJStr, jstring baseDirJStr) {
-    const char* cSource = env->GetStringUTFChars(sourceJStr, nullptr);
-    std::string source(cSource ? cSource : "");
-    env->ReleaseStringUTFChars(sourceJStr, cSource);
+    std::string source = rin_jni::toStd(env, sourceJStr);
 
     std::string baseDir;
     if (baseDirJStr != nullptr) {
-        const char* cBaseDir = env->GetStringUTFChars(baseDirJStr, nullptr);
-        baseDir = cBaseDir ? cBaseDir : "";
-        env->ReleaseStringUTFChars(baseDirJStr, cBaseDir);
+        baseDir = rin_jni::toStd(env, baseDirJStr);
     }
 
     std::string result;
@@ -60,7 +58,7 @@ Java_com_dlof_rinlang_RinEngine_runSourceNative(JNIEnv* env, jobject /* this */,
         result = "[Unknown internal error]";
     }
 
-    return env->NewStringUTF(result.c_str());
+    return rin_jni::newJString(env, result);
 }
 
 // ---------------------------------------------------------------------------
@@ -194,10 +192,7 @@ std::string structuredOutcomeToJson(const StructuredRunOutcome& r) {
 // يحوّل jstring/jstring? إلى std::string مرة واحدة (يُستخدم من كلا الدالتين أدناه).
 std::string jstringOrEmpty(JNIEnv* env, jstring s) {
     if (s == nullptr) return std::string();
-    const char* c = env->GetStringUTFChars(s, nullptr);
-    std::string out(c ? c : "");
-    if (c) env->ReleaseStringUTFChars(s, c);
-    return out;
+    return rin_jni::toStd(env, s);
 }
 
 } // namespace
@@ -207,7 +202,7 @@ Java_com_dlof_rinlang_RinEngine_runSourceStructuredNative(JNIEnv* env, jobject /
     std::string source = jstringOrEmpty(env, sourceJStr);
     std::string baseDir = jstringOrEmpty(env, baseDirJStr);
     StructuredRunOutcome outcome = runStructuredCore(source, baseDir, nullptr);
-    return env->NewStringUTF(structuredOutcomeToJson(outcome).c_str());
+    return rin_jni::newJString(env, structuredOutcomeToJson(outcome));
 }
 
 // ---------------------------------------------------------------------------
@@ -244,7 +239,7 @@ Java_com_dlof_rinlang_RinEngine_runSourceStructuredStreamingNative(JNIEnv* env, 
     if (onChunkMethod != nullptr) {
         sink = [env, listener, onChunkMethod, &seq](const std::string& chunk) {
             ++seq;
-            jstring jchunk = env->NewStringUTF(chunk.c_str());
+            jstring jchunk = rin_jni::newJString(env, chunk);
             env->CallVoidMethod(listener, onChunkMethod, static_cast<jint>(seq), jchunk);
             env->DeleteLocalRef(jchunk);
             // خطأ Kotlin/RuntimeException داخل onChunk (مثلاً في مستمع مكتوب بشكل خاطئ) يجب ألا
@@ -256,7 +251,7 @@ Java_com_dlof_rinlang_RinEngine_runSourceStructuredStreamingNative(JNIEnv* env, 
     }
 
     StructuredRunOutcome outcome = runStructuredCore(source, baseDir, std::move(sink));
-    return env->NewStringUTF(structuredOutcomeToJson(outcome).c_str());
+    return rin_jni::newJString(env, structuredOutcomeToJson(outcome));
 }
 
 // runSourceInteractiveNative(source, baseDir, listener, inputHandler) -> نفس JSON النتيجة الذي تعيده
@@ -292,7 +287,7 @@ Java_com_dlof_rinlang_RinEngine_runSourceInteractiveNative(JNIEnv* env, jobject 
     if (onChunkMethod != nullptr) {
         sink = [env, listener, onChunkMethod, &seq](const std::string& chunk) {
             ++seq;
-            jstring jchunk = env->NewStringUTF(chunk.c_str());
+            jstring jchunk = rin_jni::newJString(env, chunk);
             env->CallVoidMethod(listener, onChunkMethod, static_cast<jint>(seq), jchunk);
             env->DeleteLocalRef(jchunk);
             if (env->ExceptionCheck()) env->ExceptionClear();
@@ -302,7 +297,7 @@ Java_com_dlof_rinlang_RinEngine_runSourceInteractiveNative(JNIEnv* env, jobject 
     rin::Interpreter::InputProvider provider;
     if (onInputMethod != nullptr) {
         provider = [env, inputHandler, onInputMethod](const std::string& prompt, std::string& answer) -> bool {
-            jstring jprompt = env->NewStringUTF(prompt.c_str());
+            jstring jprompt = rin_jni::newJString(env, prompt);
             jobject res = env->CallObjectMethod(inputHandler, onInputMethod, jprompt);
             env->DeleteLocalRef(jprompt);
             if (env->ExceptionCheck()) {  // استثناء داخل المعالج => عامله كإلغاء (لا تُسقط المحرك)
@@ -317,7 +312,7 @@ Java_com_dlof_rinlang_RinEngine_runSourceInteractiveNative(JNIEnv* env, jobject 
     }
 
     StructuredRunOutcome outcome = runStructuredCore(source, baseDir, std::move(sink), std::move(provider));
-    return env->NewStringUTF(structuredOutcomeToJson(outcome).c_str());
+    return rin_jni::newJString(env, structuredOutcomeToJson(outcome));
 }
 
 // ---------------------------------------------------------------------------
@@ -479,7 +474,7 @@ rin::flow::EventSink makeListenerSink(JNIEnv* env, jobject listener) {
     env->DeleteLocalRef(listenerClass);
     if (onFlowEventMethod == nullptr) { env->ExceptionClear(); return nullptr; }
     return [env, listener, onFlowEventMethod](const rin::flow::FlowEvent& e) {
-        jstring jjson = env->NewStringUTF(flowEventToJson(e).c_str());
+        jstring jjson = rin_jni::newJString(env, flowEventToJson(e));
         env->CallVoidMethod(listener, onFlowEventMethod, jjson);
         env->DeleteLocalRef(jjson);
         if (env->ExceptionCheck()) env->ExceptionClear();
@@ -530,7 +525,7 @@ Java_com_dlof_rinlang_RinEngine_runFlowNative(JNIEnv* env, jobject /* this */,
     } catch (std::exception& e) {
         resultJson = flowInternalErrorJson(std::string("Internal error: ") + e.what(), 0);
     }
-    return env->NewStringUTF(resultJson.c_str());
+    return rin_jni::newJString(env, resultJson);
 }
 
 // cancelFlowNative(sessionId) -> true if a RUNNING flow session with this id was found and its
@@ -559,7 +554,7 @@ Java_com_dlof_rinlang_RinEngine_replayFlowNative(JNIEnv* env, jobject /* this */
     std::string previousSessionId = jstringOrEmpty(env, previousSessionIdJStr);
     auto interp = lookupFlowInterpreter(previousSessionId);
     if (!interp) {
-        return env->NewStringUTF(flowInternalErrorJson(
+        return rin_jni::newJString(env, flowInternalErrorJson(
             "Unknown or expired flow session id (cannot replay): " + previousSessionId, 0).c_str());
     }
     rin::flow::EventSink sink = makeListenerSink(env, listener);
@@ -577,10 +572,10 @@ Java_com_dlof_rinlang_RinEngine_replayFlowNative(JNIEnv* env, jobject /* this */
     opts.timeoutMs = static_cast<long long>(timeoutMs);
     auto result = interp->replayFlow(previousSessionId, opts, wrappedSink);
     if (!result) {
-        return env->NewStringUTF(flowInternalErrorJson(
+        return rin_jni::newJString(env, flowInternalErrorJson(
             "Session " + previousSessionId + " never executed a |> pipeline; nothing to replay.", 0).c_str());
     }
-    return env->NewStringUTF(flowRunResultToJson(*result).c_str());
+    return rin_jni::newJString(env, flowRunResultToJson(*result));
 }
 
 
@@ -589,7 +584,7 @@ Java_com_dlof_rinlang_RinEngine_engineVersion(JNIEnv* env, jobject /* this */) {
     static const std::string kVersionString =
         std::string("Rin Engine ") + RIN_VERSION_STRING +
         " (C++17) — save/file/installation حقيقية على القرص، RinFlow حقيقي";
-    return env->NewStringUTF(kVersionString.c_str());
+    return rin_jni::newJString(env, kVersionString);
 }
 
 
@@ -600,12 +595,10 @@ Java_com_dlof_rinlang_RinEngine_engineVersion(JNIEnv* env, jobject /* this */) {
 // يُعاد JSON بالشكل {"error": "...", "line": N} بدل رمي استثناء عبر حدود JNI.
 extern "C" JNIEXPORT jstring JNICALL
 Java_com_dlof_rinlang_RinEngine_renderViewNative(JNIEnv* env, jobject /* this */, jstring sourceJStr, jint rootWidth) {
-    const char* cSource = env->GetStringUTFChars(sourceJStr, nullptr);
-    std::string source(cSource ? cSource : "");
-    env->ReleaseStringUTFChars(sourceJStr, cSource);
+    std::string source = rin_jni::toStd(env, sourceJStr);
 
     char* json = rin_indsin_render_json(source.c_str(), (int)rootWidth);
-    jstring result = env->NewStringUTF(json ? json : "{\"error\":\"null result\",\"line\":0}");
+    jstring result = rin_jni::newJString(env, json ? json : "{\"error\":\"null result\",\"line\":0}");
     rin_free_string(json);
     return result;
 }
@@ -617,15 +610,11 @@ Java_com_dlof_rinlang_RinEngine_renderViewNative(JNIEnv* env, jobject /* this */
 // الحاوية فقط. نفس شكل JSON الناتج (أو {"error":"...", "line":N} عند الفشل).
 extern "C" JNIEXPORT jstring JNICALL
 Java_com_dlof_rinlang_RinEngine_renderContainerViewNative(JNIEnv* env, jobject /* this */, jstring sourceJStr, jstring containerNameJStr, jint rootWidth) {
-    const char* cSource = env->GetStringUTFChars(sourceJStr, nullptr);
-    std::string source(cSource ? cSource : "");
-    env->ReleaseStringUTFChars(sourceJStr, cSource);
-    const char* cName = env->GetStringUTFChars(containerNameJStr, nullptr);
-    std::string containerName(cName ? cName : "");
-    env->ReleaseStringUTFChars(containerNameJStr, cName);
+    std::string source = rin_jni::toStd(env, sourceJStr);
+    std::string containerName = rin_jni::toStd(env, containerNameJStr);
 
     char* json = rin_indsin_render_container_json(source.c_str(), containerName.c_str(), (int)rootWidth);
-    jstring result = env->NewStringUTF(json ? json : "{\"error\":\"null result\",\"line\":0}");
+    jstring result = rin_jni::newJString(env, json ? json : "{\"error\":\"null result\",\"line\":0}");
     rin_free_string(json);
     return result;
 }
@@ -638,9 +627,7 @@ Java_com_dlof_rinlang_RinEngine_renderContainerViewNative(JNIEnv* env, jobject /
 
 extern "C" JNIEXPORT jlong JNICALL
 Java_com_dlof_rinlang_RinEngine_indsinSessionCreateNative(JNIEnv* env, jobject /* this */, jstring sourceJStr, jint rootWidth) {
-    const char* cSource = env->GetStringUTFChars(sourceJStr, nullptr);
-    std::string source(cSource ? cSource : "");
-    env->ReleaseStringUTFChars(sourceJStr, cSource);
+    std::string source = rin_jni::toStd(env, sourceJStr);
     void* session = rin_indsin_session_create(source.c_str(), (int)rootWidth);
     return reinterpret_cast<jlong>(session);
 }
@@ -650,12 +637,8 @@ Java_com_dlof_rinlang_RinEngine_indsinSessionCreateNative(JNIEnv* env, jobject /
 // tap لاحق (indsinSessionTapNative) أن يعمل بشكل طبيعي على warp/onTap الخاصين بتلك الحاوية فقط.
 extern "C" JNIEXPORT jlong JNICALL
 Java_com_dlof_rinlang_RinEngine_indsinSessionCreateForContainerNative(JNIEnv* env, jobject /* this */, jstring sourceJStr, jstring containerNameJStr, jint rootWidth) {
-    const char* cSource = env->GetStringUTFChars(sourceJStr, nullptr);
-    std::string source(cSource ? cSource : "");
-    env->ReleaseStringUTFChars(sourceJStr, cSource);
-    const char* cName = env->GetStringUTFChars(containerNameJStr, nullptr);
-    std::string containerName(cName ? cName : "");
-    env->ReleaseStringUTFChars(containerNameJStr, cName);
+    std::string source = rin_jni::toStd(env, sourceJStr);
+    std::string containerName = rin_jni::toStd(env, containerNameJStr);
     void* session = rin_indsin_session_create_for_container(source.c_str(), containerName.c_str(), (int)rootWidth);
     return reinterpret_cast<jlong>(session);
 }
@@ -663,7 +646,7 @@ Java_com_dlof_rinlang_RinEngine_indsinSessionCreateForContainerNative(JNIEnv* en
 extern "C" JNIEXPORT jstring JNICALL
 Java_com_dlof_rinlang_RinEngine_indsinSessionRenderJsonNative(JNIEnv* env, jobject /* this */, jlong handle) {
     char* json = rin_indsin_session_render_json(reinterpret_cast<void*>(handle));
-    jstring result = env->NewStringUTF(json ? json : "{\"ok\":false,\"error\":\"null result\"}");
+    jstring result = rin_jni::newJString(env, json ? json : "{\"ok\":false,\"error\":\"null result\"}");
     rin_free_string(json);
     return result;
 }
@@ -671,7 +654,7 @@ Java_com_dlof_rinlang_RinEngine_indsinSessionRenderJsonNative(JNIEnv* env, jobje
 extern "C" JNIEXPORT jstring JNICALL
 Java_com_dlof_rinlang_RinEngine_indsinSessionTapNative(JNIEnv* env, jobject /* this */, jlong handle, jdouble x, jdouble y) {
     char* json = rin_indsin_session_tap(reinterpret_cast<void*>(handle), (double)x, (double)y);
-    jstring result = env->NewStringUTF(json ? json : "{\"ok\":false,\"error\":\"null result\"}");
+    jstring result = rin_jni::newJString(env, json ? json : "{\"ok\":false,\"error\":\"null result\"}");
     rin_free_string(json);
     return result;
 }
@@ -683,7 +666,7 @@ Java_com_dlof_rinlang_RinEngine_indsinSessionTapNative(JNIEnv* env, jobject /* t
 extern "C" JNIEXPORT jstring JNICALL
 Java_com_dlof_rinlang_RinEngine_indsinSessionLongPressNative(JNIEnv* env, jobject /* this */, jlong handle, jdouble x, jdouble y) {
     char* json = rin_indsin_session_long_press(reinterpret_cast<void*>(handle), (double)x, (double)y);
-    jstring result = env->NewStringUTF(json ? json : "{\"ok\":false,\"error\":\"null result\"}");
+    jstring result = rin_jni::newJString(env, json ? json : "{\"ok\":false,\"error\":\"null result\"}");
     rin_free_string(json);
     return result;
 }
@@ -691,7 +674,7 @@ Java_com_dlof_rinlang_RinEngine_indsinSessionLongPressNative(JNIEnv* env, jobjec
 extern "C" JNIEXPORT jstring JNICALL
 Java_com_dlof_rinlang_RinEngine_indsinSessionDoubleTapNative(JNIEnv* env, jobject /* this */, jlong handle, jdouble x, jdouble y) {
     char* json = rin_indsin_session_double_tap(reinterpret_cast<void*>(handle), (double)x, (double)y);
-    jstring result = env->NewStringUTF(json ? json : "{\"ok\":false,\"error\":\"null result\"}");
+    jstring result = rin_jni::newJString(env, json ? json : "{\"ok\":false,\"error\":\"null result\"}");
     rin_free_string(json);
     return result;
 }
@@ -699,29 +682,25 @@ Java_com_dlof_rinlang_RinEngine_indsinSessionDoubleTapNative(JNIEnv* env, jobjec
 extern "C" JNIEXPORT jstring JNICALL
 Java_com_dlof_rinlang_RinEngine_indsinSessionHoverNative(JNIEnv* env, jobject /* this */, jlong handle, jdouble x, jdouble y, jboolean entering) {
     char* json = rin_indsin_session_hover(reinterpret_cast<void*>(handle), (double)x, (double)y, entering ? 1 : 0);
-    jstring result = env->NewStringUTF(json ? json : "{\"ok\":false,\"error\":\"null result\"}");
+    jstring result = rin_jni::newJString(env, json ? json : "{\"ok\":false,\"error\":\"null result\"}");
     rin_free_string(json);
     return result;
 }
 
 
 // ---- Indsin Media (rin_indsin_media.h): نتائج المنتقي/الرفع القادمة من المضيف ----
-static std::string jstr(JNIEnv* env, jstring s) {
-    if (!s) return "";
-    const char* c = env->GetStringUTFChars(s, nullptr);
-    std::string out = c ? c : "";
-    if (c) env->ReleaseStringUTFChars(s, c);
-    return out;
+static std::string mediaJStr(JNIEnv* env, jstring s) {
+    return rin_jni::toStd(env, s);
 }
 
 extern "C" JNIEXPORT jstring JNICALL
 Java_com_dlof_rinlang_RinEngine_indsinSessionMediaPickedNative(JNIEnv* env, jobject /* this */, jlong handle, jstring cell,
                                                                jstring itemsJson, jstring kind, jboolean multiple,
                                                                jdouble maxMb, jboolean append) {
-    std::string c = jstr(env, cell), items = jstr(env, itemsJson), k = jstr(env, kind);
+    std::string c = mediaJStr(env, cell), items = mediaJStr(env, itemsJson), k = mediaJStr(env, kind);
     char* json = rin_indsin_session_media_picked(reinterpret_cast<void*>(handle), c.c_str(), items.c_str(), k.c_str(),
                                                  multiple ? 1 : 0, (double)maxMb, append ? 1 : 0);
-    jstring result = env->NewStringUTF(json ? json : "{\"ok\":false,\"error\":\"null result\"}");
+    jstring result = rin_jni::newJString(env, json ? json : "{\"ok\":false,\"error\":\"null result\"}");
     rin_free_string(json);
     return result;
 }
@@ -729,9 +708,9 @@ Java_com_dlof_rinlang_RinEngine_indsinSessionMediaPickedNative(JNIEnv* env, jobj
 extern "C" JNIEXPORT jstring JNICALL
 Java_com_dlof_rinlang_RinEngine_indsinSessionMediaProgressNative(JNIEnv* env, jobject /* this */, jlong handle, jstring cell,
                                                                  jstring status, jdouble progress, jstring detail) {
-    std::string c = jstr(env, cell), st = jstr(env, status), d = jstr(env, detail);
+    std::string c = mediaJStr(env, cell), st = mediaJStr(env, status), d = mediaJStr(env, detail);
     char* json = rin_indsin_session_media_progress(reinterpret_cast<void*>(handle), c.c_str(), st.c_str(), (double)progress, d.c_str());
-    jstring result = env->NewStringUTF(json ? json : "{\"ok\":false,\"error\":\"null result\"}");
+    jstring result = rin_jni::newJString(env, json ? json : "{\"ok\":false,\"error\":\"null result\"}");
     rin_free_string(json);
     return result;
 }
@@ -739,18 +718,16 @@ Java_com_dlof_rinlang_RinEngine_indsinSessionMediaProgressNative(JNIEnv* env, jo
 extern "C" JNIEXPORT jstring JNICALL
 Java_com_dlof_rinlang_RinEngine_indsinSessionTickNative(JNIEnv* env, jobject /* this */, jlong handle) {
     char* json = rin_indsin_session_tick(reinterpret_cast<void*>(handle));
-    jstring result = env->NewStringUTF(json ? json : "{\"ok\":false,\"error\":\"null result\"}");
+    jstring result = rin_jni::newJString(env, json ? json : "{\"ok\":false,\"error\":\"null result\"}");
     rin_free_string(json);
     return result;
 }
 
 extern "C" JNIEXPORT jstring JNICALL
 Java_com_dlof_rinlang_RinEngine_indsinSessionUpdateSourceNative(JNIEnv* env, jobject /* this */, jlong handle, jstring newSourceJStr) {
-    const char* cSource = env->GetStringUTFChars(newSourceJStr, nullptr);
-    std::string source(cSource ? cSource : "");
-    env->ReleaseStringUTFChars(newSourceJStr, cSource);
+    std::string source = rin_jni::toStd(env, newSourceJStr);
     char* json = rin_indsin_session_update_source(reinterpret_cast<void*>(handle), source.c_str());
-    jstring result = env->NewStringUTF(json ? json : "{\"ok\":false,\"error\":\"null result\"}");
+    jstring result = rin_jni::newJString(env, json ? json : "{\"ok\":false,\"error\":\"null result\"}");
     rin_free_string(json);
     return result;
 }
@@ -780,15 +757,12 @@ Java_com_dlof_rinlang_RinEngine_indsinSessionSetViewportNative(JNIEnv* /* env */
 
 static std::string indsinJStringToStd(JNIEnv* env, jstring s) {
     if (!s) return std::string();
-    const char* c = env->GetStringUTFChars(s, nullptr);
-    std::string out(c ? c : "");
-    if (c) env->ReleaseStringUTFChars(s, c);
-    return out;
+    return rin_jni::toStd(env, s);
 }
 
 // يحوّل نتيجة C المملوكة (malloc) إلى jstring ويحرّرها. [fallback] JSON خطأ آمن عند null.
 static jstring indsinTakeResult(JNIEnv* env, char* owned, const char* fallback) {
-    jstring result = env->NewStringUTF(owned ? owned : fallback);
+    jstring result = rin_jni::newJString(env, owned ? owned : fallback);
     if (owned) rin_free_string(owned);
     return result;
 }
@@ -876,7 +850,7 @@ std::string callKotlinQrBridge(const std::string& data, int size, int margin) {
     bool didAttach = false;
     JNIEnv* env = attachEnv(&didAttach);
     if (!env) throw std::runtime_error("could not attach JNI environment for QR generation");
-    jstring jdata = env->NewStringUTF(data.c_str());
+    jstring jdata = rin_jni::newJString(env, data);
     jobject obj = env->CallStaticObjectMethod(g_artifactBridgeClass, g_artifactQrMethod, jdata, (jint)size, (jint)margin);
     env->DeleteLocalRef(jdata);
     if (env->ExceptionCheck()) { env->ExceptionDescribe(); env->ExceptionClear(); if (didAttach) g_javaVm->DetachCurrentThread(); throw std::runtime_error("Rin QR encoder failed"); }
@@ -907,7 +881,7 @@ rin::media::BridgeResult callKotlinMediaBridge(const std::string& op, const rin:
     if (!env) { r.handled = true; r.error = "تعذّر الوصول إلى JNIEnv لجسر الوسائط"; return r; }
     std::vector<std::string> keys, vals;
     for (auto& kv : args) { keys.push_back(kv.first); vals.push_back(kv.second); }
-    jstring jOp = env->NewStringUTF(op.c_str());
+    jstring jOp = rin_jni::newJString(env, op);
     jobjectArray jKeys = buildStringArray(env, keys);
     jobjectArray jVals = buildStringArray(env, vals);
     auto jRes = static_cast<jobjectArray>(env->CallStaticObjectMethod(g_mediaBridgeClass, g_mediaBridgeCallMethod, jOp, jKeys, jVals));
@@ -984,10 +958,7 @@ JNIEnv* attachEnv(bool* didAttach) {
 
 std::string jstringToStd(JNIEnv* env, jstring s) {
     if (s == nullptr) return std::string();
-    const char* chars = env->GetStringUTFChars(s, nullptr);
-    std::string out(chars ? chars : "");
-    if (chars) env->ReleaseStringUTFChars(s, chars);
-    return out;
+    return rin_jni::toStd(env, s);
 }
 
 jobjectArray buildStringArray(JNIEnv* env, const std::vector<std::string>& items) {
@@ -995,7 +966,7 @@ jobjectArray buildStringArray(JNIEnv* env, const std::vector<std::string>& items
     jobjectArray arr = env->NewObjectArray(static_cast<jsize>(items.size()), stringClass, nullptr);
     env->DeleteLocalRef(stringClass);
     for (size_t i = 0; i < items.size(); i++) {
-        jstring js = env->NewStringUTF(items[i].c_str());
+        jstring js = rin_jni::newJString(env, items[i]);
         env->SetObjectArrayElement(arr, static_cast<jsize>(i), js);
         env->DeleteLocalRef(js);
     }
@@ -1030,11 +1001,11 @@ rin::http::HttpResult callKotlinHttpBridge(const std::string& method, const std:
     values.reserve(headers.size());
     for (auto& h : headers) { keys.push_back(h.first); values.push_back(h.second); }
 
-    jstring jMethod = env->NewStringUTF(method.c_str());
-    jstring jUrl = env->NewStringUTF(url.c_str());
+    jstring jMethod = rin_jni::newJString(env, method);
+    jstring jUrl = rin_jni::newJString(env, url);
     jobjectArray jKeys = buildStringArray(env, keys);
     jobjectArray jValues = buildStringArray(env, values);
-    jstring jBody = env->NewStringUTF(body.c_str());
+    jstring jBody = rin_jni::newJString(env, body);
 
     auto jResult = static_cast<jobjectArray>(env->CallStaticObjectMethod(
         g_httpBridgeClass, g_httpBridgeRequestMethod, jMethod, jUrl, jKeys, jValues, jBody, (jint)timeoutMs));
@@ -1097,7 +1068,7 @@ rin::http::HttpResult callKotlinHttpBridgeBinaryGet(const std::string& url, int 
         return result;
     }
 
-    jstring jUrl = env->NewStringUTF(url.c_str());
+    jstring jUrl = rin_jni::newJString(env, url);
     auto jResult = static_cast<jobjectArray>(env->CallStaticObjectMethod(
         g_httpBridgeClass, g_httpBridgeRequestBinaryGetMethod, jUrl, (jint)timeoutMs));
 
@@ -1340,10 +1311,7 @@ struct HtmlJsonReader {
 
 std::string jstr(JNIEnv* env, jstring js) {
     if (!js) return "";
-    const char* c = env->GetStringUTFChars(js, nullptr);
-    std::string s(c ? c : "");
-    if (c) env->ReleaseStringUTFChars(js, c);
-    return s;
+    return rin_jni::toStd(env, js);
 }
 
 } // namespace
@@ -1382,27 +1350,27 @@ Java_com_dlof_rinlang_RinEngine_htmlCreateNative(JNIEnv* env, jobject, jstring s
 
 extern "C" JNIEXPORT jstring JNICALL
 Java_com_dlof_rinlang_RinEngine_htmlLastErrorNative(JNIEnv* env, jobject) {
-    return env->NewStringUTF(g_htmlLastError.c_str());
+    return rin_jni::newJString(env, g_htmlLastError);
 }
 
 extern "C" JNIEXPORT jstring JNICALL
 Java_com_dlof_rinlang_RinEngine_htmlBootOutputNative(JNIEnv* env, jobject, jlong handle) {
     auto* s = reinterpret_cast<HtmlSession*>(handle);
-    return env->NewStringUTF(s ? s->bootOutput.c_str() : "");
+    return rin_jni::newJString(env, s ? s->bootOutput.c_str() : "");
 }
 
 extern "C" JNIEXPORT jstring JNICALL
 Java_com_dlof_rinlang_RinEngine_htmlGlobalsNative(JNIEnv* env, jobject, jlong handle) {
     auto* s = reinterpret_cast<HtmlSession*>(handle);
     std::string j = s ? htmlGlobalsToJson(s->globals) : "{}";
-    return env->NewStringUTF(j.c_str());
+    return rin_jni::newJString(env, j);
 }
 
 // {"ok":true,"globals":{...}} أو {"ok":false,"error":"...","globals":{...}}
 extern "C" JNIEXPORT jstring JNICALL
 Java_com_dlof_rinlang_RinEngine_htmlCallNative(JNIEnv* env, jobject, jlong handle, jstring fnJ, jstring argsJ) {
     auto* s = reinterpret_cast<HtmlSession*>(handle);
-    if (!s) return env->NewStringUTF("{\"ok\":false,\"error\":\"invalid session\",\"globals\":{}}");
+    if (!s) return rin_jni::newJString(env, "{\"ok\":false,\"error\":\"invalid session\",\"globals\":{}}");
     std::string fn = jstr(env, fnJ);
     std::string argsJson = jstr(env, argsJ);
     HtmlJsonReader reader(argsJson);
@@ -1426,7 +1394,7 @@ Java_com_dlof_rinlang_RinEngine_htmlCallNative(JNIEnv* env, jobject, jlong handl
     if (!ok) o << ",\"error\":\"" << htmlJsonEscape(err.empty() ? ("لا توجد دالة باسم '" + fn + "'") : err) << "\"";
     o << ",\"globals\":" << htmlGlobalsToJson(s->globals) << "}";
     std::string out = o.str();
-    return env->NewStringUTF(out.c_str());
+    return rin_jni::newJString(env, out);
 }
 
 extern "C" JNIEXPORT void JNICALL
