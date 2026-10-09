@@ -1,0 +1,18 @@
+// indsin_media_demo.rin — اختيار صورة ومعاينتها ثم رفعها (docs/indsin_media.md)
+warp photo = "";
+
+@view.Column=root padding=16; gap=12;
+  @view.Text=title text="رفع صورة"; .end/view
+  @view.Image=preview src=photo; width=240; height=240; alt="الصورة المختارة"; .end/view
+  @view.Text=info text=photo_name; .end/view
+  @view.Text=sizeInfo text=photo_sizeText; .end/view
+  @view.Button=choose label="اختيار صورة"; onTap=pickMedia("image", photo, false, 10); .end/view
+  @view.Button=shoot label="التقاط بالكاميرا"; onTap=pickMedia("camera", photo, false, 10, 1600, 80); .end/view
+  @view.Button=send label="رفع"; onTap=uploadMedia(photo, "https://example.com/upload", "file", "", 3); .end/view
+  @view.Text=status text=photo_status; .end/view
+  @view.Text=pct text=photo_progress; .end/view
+  @view.Text=attempt text=photo_attempt; .end/view
+  @view.Button=stop label="إيقاف"; onTap=cancelUpload(photo); .end/view
+  @view.Text=err text=photo_error; .end/view
+  @view.Button=clear label="مسح"; onTap=clearMedia(photo); .end/view
+.end/view
