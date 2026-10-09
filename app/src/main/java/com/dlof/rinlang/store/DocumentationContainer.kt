@@ -397,6 +397,7 @@ object DocumentationContainer {
     private val LANGUAGE_ACCENTS: Map<String, Int> = mapOf(
         "rin" to 0xFF6A47E8.toInt(),
         "indsin" to 0xFF6A47E8.toInt(),
+        "passkit" to 0xFF2563EB.toInt(),
         "kotlin" to 0xFF7F3FBF.toInt(),
         "kt" to 0xFF7F3FBF.toInt(),
         "java" to 0xFFB35900.toInt(),
@@ -5818,7 +5819,7 @@ object DocumentationContainer {
 
     /** لون امتداد الملف (يُستخدم لأيقونة الملف ولاحقته): كود/إعدادات/وسائط/سكربتات/وثائق. */
     private fun treeExtColor(ext: String): Int = when (ext.lowercase()) {
-        "kt", "kts", "java", "rin", "indsin", "cpp", "cc", "c", "h", "hpp", "py", "js", "ts", "tsx", "jsx",
+        "kt", "kts", "java", "rin", "indsin", "passkit", "cpp", "cc", "c", "h", "hpp", "py", "js", "ts", "tsx", "jsx",
         "cs", "go", "rs", "swift", "dart", "html", "css" -> COLOR_SYNTAX_KEYWORD
         "xml", "json", "yml", "yaml", "toml", "ini", "properties", "csv" -> COLOR_SYNTAX_STRING
         "png", "jpg", "jpeg", "webp", "gif", "svg", "ico", "mp3", "mp4", "ttf", "otf", "apk", "aab" -> COLOR_SYNTAX_NUMBER
