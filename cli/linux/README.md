@@ -53,15 +53,20 @@ rin --version                # رقم الإصدار
 rin --help                   # المساعدة
 ```
 
-مثال REPL:
+مثال الطرفية (`rin` أو `rin terminal`):
 ```
 $ rin
-Rin v0.1.0 - وضع تفاعلي. اكتب سطر Rin ثم Enter لتنفيذه (exit للخروج).
-rin[1]> let x = 5;
-rin[2]> print x * 2;
-10
-rin[3]> exit
+  Rin 1.0.0  ·  طرفية تفاعلية
+rin[1]❯ let x = 5;
+rin[2]❯ x * 2
+=> 10
+rin[3]❯ fun f(a) {
+      ┆     return a + 1;
+      ┆ }
+rin[4]❯ f(x)
+=> 6
 ```
+تحرير سطر حقيقي، تاريخ دائم، Tab، Ctrl-R، تلوين، أوامر `:help`. التفاصيل في [docs/terminal.md](../../docs/terminal.md).
 
 ## ما هو خارج نطاق هذا الـCLI
 هذا يبني `rin` (**المفسِّر** فقط). لا علاقة له بـ:
