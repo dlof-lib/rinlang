@@ -704,6 +704,38 @@ Java_com_dlof_rinlang_RinEngine_indsinSessionHoverNative(JNIEnv* env, jobject /*
     return result;
 }
 
+
+// ---- Indsin Media (rin_indsin_media.h): نتائج المنتقي/الرفع القادمة من المضيف ----
+static std::string jstr(JNIEnv* env, jstring s) {
+    if (!s) return "";
+    const char* c = env->GetStringUTFChars(s, nullptr);
+    std::string out = c ? c : "";
+    if (c) env->ReleaseStringUTFChars(s, c);
+    return out;
+}
+
+extern "C" JNIEXPORT jstring JNICALL
+Java_com_dlof_rinlang_RinEngine_indsinSessionMediaPickedNative(JNIEnv* env, jobject /* this */, jlong handle, jstring cell,
+                                                               jstring itemsJson, jstring kind, jboolean multiple,
+                                                               jdouble maxMb, jboolean append) {
+    std::string c = jstr(env, cell), items = jstr(env, itemsJson), k = jstr(env, kind);
+    char* json = rin_indsin_session_media_picked(reinterpret_cast<void*>(handle), c.c_str(), items.c_str(), k.c_str(),
+                                                 multiple ? 1 : 0, (double)maxMb, append ? 1 : 0);
+    jstring result = env->NewStringUTF(json ? json : "{\"ok\":false,\"error\":\"null result\"}");
+    rin_free_string(json);
+    return result;
+}
+
+extern "C" JNIEXPORT jstring JNICALL
+Java_com_dlof_rinlang_RinEngine_indsinSessionMediaProgressNative(JNIEnv* env, jobject /* this */, jlong handle, jstring cell,
+                                                                 jstring status, jdouble progress, jstring detail) {
+    std::string c = jstr(env, cell), st = jstr(env, status), d = jstr(env, detail);
+    char* json = rin_indsin_session_media_progress(reinterpret_cast<void*>(handle), c.c_str(), st.c_str(), (double)progress, d.c_str());
+    jstring result = env->NewStringUTF(json ? json : "{\"ok\":false,\"error\":\"null result\"}");
+    rin_free_string(json);
+    return result;
+}
+
 extern "C" JNIEXPORT jstring JNICALL
 Java_com_dlof_rinlang_RinEngine_indsinSessionTickNative(JNIEnv* env, jobject /* this */, jlong handle) {
     char* json = rin_indsin_session_tick(reinterpret_cast<void*>(handle));
