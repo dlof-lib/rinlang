@@ -1,0 +1,928 @@
+// ============================================================================
+//  lib/passkitcrypt.og.rin — Encryption, signing and key generation for the Passkit family (prefix pc)
+//  Import:  @import "lib/passkitcrypt.og.rin";
+//
+//  Built entirely on primitives that already exist in Rin: sec.hmacSha256 / sec.sha256 /
+//  sec.randomToken (CSPRNG) / sec.xorCipher / sec.hexEncode / sec.base64Encode.
+//  Does not modify the engine. All binary values are passed as hexadecimal text (hex) in lowercase.
+//
+//  What is standard and is verified with official RFC test vectors in the tests:
+//    HMAC-SHA256 (RFC 4231) · HKDF (RFC 5869) · PBKDF2-HMAC-SHA256 · TOTP-SHA256 (RFC 6238)
+//    Base32 (RFC 4648)
+//  and what is a "construction" (construction) and not a standard: pcSeal = a stream cipher with HMAC-CTR + an HMAC tag
+//  (Encrypt-then-MAC) with per-message subkeys via HKDF. Sound by design but it is not AES-GCM/ChaCha20;
+//  do not rely on it where you must comply with a specific standard.
+//
+//  Convention: every function returns {ok:true,...} or {ok:false,error:"..."} and never crashes on corrupt input.
+// ============================================================================
+
+let PC_HEXCHARS = "0123456789abcdef";
+let PC_B32 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+let PC_ZERO32 = "0000000000000000000000000000000000000000000000000000000000000000";
+
+// ---- 1) Encoding and numbers ----------------------------------------------------------------
+
+fun pcHexVal(c) { return indexOf(PC_HEXCHARS, lower(c)); }
+
+fun pcIsHex(s) {
+    if (type(s) != "string") { return false; }
+    if (len(s) % 2 != 0) { return false; }
+    let i = 0;
+    while (i < len(s)) {
+        if (pcHexVal(charAt(s, i)) < 0) { return false; }
+        i = i + 1;
+    }
+    return true;
+}
+
+// F: number -> hex with fixed width
+fun pcToHex(n, width) {
+    let s = "";
+    let v = floor(n);
+    while (v > 0) {
+        s = charAt(PC_HEXCHARS, v % 16) + s;
+        v = floor(v / 16);
+    }
+    while (len(s) < width) { s = "0" + s; }
+    if (len(s) == 0) { s = "0"; }
+    return s;
+}
+
+// F: hex -> number
+fun pcHexToNum(hex) {
+    let n = 0;
+    let i = 0;
+    while (i < len(hex)) { n = n * 16 + pcHexVal(charAt(hex, i)); i = i + 1; }
+    return n;
+}
+
+fun pcByteAt(hex, i) {
+    return pcHexVal(charAt(hex, i * 2)) * 16 + pcHexVal(charAt(hex, i * 2 + 1));
+}
+
+fun pcHexOf(txt) { return sec.hexEncode(toString(txt)); }
+
+// F: Base64 URL-safe (without = ) from hex
+fun pcB64UrlEncodeHex(hex) {
+    let b = sec.base64Encode(sec.hexDecode(hex));
+    b = replace(b, "+", "-");
+    b = replace(b, "/", "_");
+    return replace(b, "=", "");
+}
+
+fun pcB64UrlDecodeHex(s) {
+    if (type(s) != "string") { return nil; }
+    let i = 0;
+    while (i < len(s)) {
+        let c = charAt(s, i);
+        if (isAlnumChar(c) == false and c != "-" and c != "_") { return nil; }
+        i = i + 1;
+    }
+    let b = replace(replace(s, "-", "+"), "_", "/");
+    while (len(b) % 4 != 0) { b = b + "="; }
+    return sec.hexEncode(sec.base64Decode(b));
+}
+
+// F: Base64 URL-safe from text
+fun pcB64UrlEncode(txt) { return pcB64UrlEncodeHex(pcHexOf(txt)); }
+
+fun pcB64UrlDecode(s) {
+    let h = pcB64UrlDecodeHex(s);
+    if (h == nil) { return nil; }
+    return sec.hexDecode(h);
+}
+
+// F: Base32 (RFC 4648, no padding) from hex
+fun pcBase32EncodeHex(hex) {
+    let out = "";
+    let buf = 0;
+    let bits = 0;
+    let n = len(hex) / 2;
+    let i = 0;
+    while (i < n) {
+        buf = buf * 256 + pcByteAt(hex, i);
+        bits = bits + 8;
+        while (bits >= 5) {
+            let idx = floor(buf / pow(2, bits - 5)) % 32;
+            out = out + charAt(PC_B32, idx);
+            bits = bits - 5;
+            buf = buf % pow(2, bits);
+        }
+        i = i + 1;
+    }
+    if (bits > 0) { out = out + charAt(PC_B32, (buf * pow(2, 5 - bits)) % 32); }
+    return out;
+}
+
+fun pcBase32DecodeHex(s) {
+    let out = "";
+    let buf = 0;
+    let bits = 0;
+    let up = upper(s);
+    let i = 0;
+    while (i < len(up)) {
+        let c = charAt(up, i);
+        if (c != "=" and c != " " and c != "-") {
+            let v = indexOf(PC_B32, c);
+            if (v < 0) { return nil; }
+            buf = buf * 32 + v;
+            bits = bits + 5;
+            if (bits >= 8) {
+                out = out + pcToHex(floor(buf / pow(2, bits - 8)), 2);
+                bits = bits - 8;
+                buf = buf % pow(2, bits);
+            }
+        }
+        i = i + 1;
+    }
+    return out;
+}
+
+fun pcBase32Encode(txt) { return pcBase32EncodeHex(pcHexOf(txt)); }
+
+fun pcBase32Decode(s) {
+    let h = pcBase32DecodeHex(s);
+    if (h == nil) { return nil; }
+    return sec.hexDecode(h);
+}
+
+// ---- 2) Secure randomness ------------------------------------------------------------------
+
+// F: n secure random bytes (hex)
+fun pcRandomHex(n) { return sec.randomToken(n); }
+
+// F: uniform integer in [0,n) using rejection sampling
+fun pcRandomInt(n) {
+    if (n <= 1) { return 0; }
+    let range = 4294967296;
+    let limit = floor(range / n) * n;
+    let v = pcHexToNum(sec.randomToken(4));
+    while (v >= limit) { v = pcHexToNum(sec.randomToken(4)); }
+    return v % n;
+}
+
+// F: random id with a prefix: user_9f3a...
+fun pcRandomId(prefix, bytes) {
+    let b = 8;
+    if (bytes != nil) { b = bytes; }
+    return prefix + "_" + sec.randomToken(b);
+}
+
+// F: UUID v4
+fun pcUuid4() {
+    let h = sec.randomToken(16);
+    let variant = charAt("89ab", pcRandomInt(4));
+    return substr(h, 0, 8) + "-" + substr(h, 8, 4) + "-4" + substr(h, 13, 3) + "-" + variant + substr(h, 17, 3) + "-" + substr(h, 20, 12);
+}
+
+// F: XOR for two equal-length hex strings
+fun pcXorHex(a, b) {
+    if (len(a) != len(b)) { return nil; }
+    if (len(a) == 0) { return ""; }
+    return sec.hexEncode(sec.xorCipher(sec.hexDecode(a), sec.hexDecode(b)));
+}
+
+// F: constant-time comparison
+fun pcEqual(a, b) {
+    return sec.constantTimeEqual(toString(a), toString(b));
+}
+
+// ---- 3) HMAC and hashing ------------------------------------------------------------------
+
+// F: HMAC-SHA256 with a hex key and hex data (RFC 4231 vector, tested)
+fun pcHmacHex(keyHex, dataHex) {
+    let d = "";
+    if (len(dataHex) > 0) { d = sec.hexDecode(dataHex); }
+    let k = "";
+    if (len(keyHex) > 0) { k = sec.hexDecode(keyHex); }
+    return sec.hmacSha256(k, d);
+}
+
+fun pcHmacText(keyHex, txt) { return pcHmacHex(keyHex, pcHexOf(txt)); }
+
+fun pcSha256Hex(dataHex) {
+    if (len(dataHex) == 0) { return sec.sha256(""); }
+    return sec.sha256(sec.hexDecode(dataHex));
+}
+
+// F: sha256 double
+fun pcDoubleSha(txt) {
+    return pcSha256Hex(sec.sha256(toString(txt)));
+}
+
+// F: readable fingerprint ab:cd:ef:... (10 bytes)
+fun pcFingerprint(data) {
+    let h = sec.sha256(toString(data));
+    let parts = [];
+    let i = 0;
+    while (i < 10) { push(parts, substr(h, i * 2, 2)); i = i + 1; }
+    return join(parts, ":");
+}
+
+// F: short hash (n bytes)
+fun pcShortHash(data, bytes) {
+    return substr(sec.sha256(toString(data)), 0, bytes * 2);
+}
+
+// F: file hash
+fun pcHashFile(path) {
+    if (fileExists(path) == false) { return { ok: false, error: "File not found: " + path }; }
+    return { ok: true, sha256: sec.sha256(readFile(path)) };
+}
+
+// F: hash chain (hash chain) of items; any change breaks everything after it
+fun pcHashChain(items) {
+    let prev = PC_ZERO32;
+    let links = [];
+    let i = 0;
+    while (i < len(items)) {
+        let h = sec.sha256(prev + "|" + toString(items[i]));
+        push(links, { item: toString(items[i]), prev: prev, hash: h });
+        prev = h;
+        i = i + 1;
+    }
+    return { head: prev, links: links };
+}
+
+fun pcHashChainVerify(links) {
+    let prev = PC_ZERO32;
+    let i = 0;
+    while (i < len(links)) {
+        let l = links[i];
+        if (l["prev"] != prev) { return { ok: false, brokenAt: i }; }
+        if (sec.sha256(prev + "|" + l["item"]) != l["hash"]) { return { ok: false, brokenAt: i }; }
+        prev = l["hash"];
+        i = i + 1;
+    }
+    return { ok: true, head: prev };
+}
+
+// F: Merkle tree root (domain separation L:/N: against leaf/node attacks)
+fun pcMerkleLevel(nodes) {
+    let next = [];
+    let i = 0;
+    while (i < len(nodes)) {
+        if (i + 1 < len(nodes)) { push(next, sec.sha256("N:" + nodes[i] + nodes[i + 1])); }
+        else { push(next, nodes[i]); }
+        i = i + 2;
+    }
+    return next;
+}
+
+fun pcMerkleRoot(leaves) {
+    if (len(leaves) == 0) { return sec.sha256("empty"); }
+    let level = [];
+    let i = 0;
+    while (i < len(leaves)) { push(level, sec.sha256("L:" + toString(leaves[i]))); i = i + 1; }
+    while (len(level) > 1) { level = pcMerkleLevel(level); }
+    return level[0];
+}
+
+// F: proof that a leaf belongs (index) to the tree
+fun pcMerkleProof(leaves, index) {
+    if (index < 0 or index >= len(leaves)) { return nil; }
+    let level = [];
+    let i = 0;
+    while (i < len(leaves)) { push(level, sec.sha256("L:" + toString(leaves[i]))); i = i + 1; }
+    let proof = [];
+    let idx = index;
+    while (len(level) > 1) {
+        if (idx % 2 == 0) {
+            if (idx + 1 < len(level)) { push(proof, { side: "r", hash: level[idx + 1] }); }
+        } else {
+            push(proof, { side: "l", hash: level[idx - 1] });
+        }
+        level = pcMerkleLevel(level);
+        idx = floor(idx / 2);
+    }
+    return proof;
+}
+
+fun pcMerkleVerify(leaf, proof, root) {
+    let h = sec.sha256("L:" + toString(leaf));
+    let i = 0;
+    while (i < len(proof)) {
+        if (proof[i]["side"] == "r") { h = sec.sha256("N:" + h + proof[i]["hash"]); }
+        else { h = sec.sha256("N:" + proof[i]["hash"] + h); }
+        i = i + 1;
+    }
+    return sec.constantTimeEqual(h, root);
+}
+
+// ---- 4) Key derivation (KDF) -------------------------------------------------------------
+
+// F: HKDF-Extract (RFC 5869)
+fun pcHkdfExtract(saltHex, ikmHex) {
+    let s = saltHex;
+    if (s == nil or s == "") { s = PC_ZERO32; }
+    return pcHmacHex(s, ikmHex);
+}
+
+// F: HKDF-Expand (RFC 5869) — length in bytes
+fun pcHkdfExpand(prkHex, infoHex, length) {
+    let n = ceil(length / 32);
+    if (n > 255 or n < 1) { return nil; }
+    let t = "";
+    let okm = "";
+    let i = 1;
+    while (i <= n) {
+        t = pcHmacHex(prkHex, t + infoHex + pcToHex(i, 2));
+        okm = okm + t;
+        i = i + 1;
+    }
+    return substr(okm, 0, length * 2);
+}
+
+// F: HKDF complete
+fun pcHkdf(ikmHex, saltHex, infoHex, length) {
+    return pcHkdfExpand(pcHkdfExtract(saltHex, ikmHex), infoHex, length);
+}
+
+// F: PBKDF2-HMAC-SHA256 — password text, saltHex, result hex
+fun pcPbkdf2(password, saltHex, iterations, bytes) {
+    let blocks = ceil(bytes / 32);
+    let out = "";
+    let b = 1;
+    while (b <= blocks) {
+        let u = sec.hmacSha256(password, sec.hexDecode(saltHex + pcToHex(b, 8)));
+        let ru = sec.hexDecode(u);
+        let t = ru;
+        let i = 1;
+        while (i < iterations) {
+            u = sec.hmacSha256(password, ru);
+            ru = sec.hexDecode(u);
+            t = sec.xorCipher(t, ru);
+            i = i + 1;
+        }
+        out = out + sec.hexEncode(t);
+        b = b + 1;
+    }
+    return substr(out, 0, bytes * 2);
+}
+
+// F: random key (hex)
+fun pcGenerateKey(bytes) {
+    let b = 32;
+    if (bytes != nil) { b = bytes; }
+    return sec.randomToken(b);
+}
+
+// F: key id (kid) of 4 bytes that does not reveal the key
+fun pcKeyId(keyHex) {
+    return substr(sec.sha256("pc-kid:" + keyHex), 0, 8);
+}
+
+// F: sub-key for a specific purpose from the master key (domain separation)
+fun pcDeriveSubkey(masterHex, purpose) {
+    return pcHkdf(masterHex, "", pcHexOf("pc-sub:" + purpose), 32);
+}
+
+// F: key quality check (32 bytes, not repeated/zero)
+fun pcKeyCheck(keyHex) {
+    if (pcIsHex(keyHex) == false or len(keyHex) != 64) { return { ok: false, error: "The key must be 64 hex characters (32 bytes)" }; }
+    let seen = "";
+    let i = 0;
+    while (i < 64) {
+        let c = charAt(keyHex, i);
+        if (contains(seen, c) == false) { seen = seen + c; }
+        i = i + 1;
+    }
+    if (len(seen) < 6) { return { ok: false, error: "The key is weak (very low variety)" }; }
+    return { ok: true };
+}
+
+// F: key from a password (PBKDF2) — returns the salt and iterations so it can be re-derived
+fun pcKeyFromPassword(password, opts) {
+    let iter = 2000;
+    let saltHex = sec.randomToken(16);
+    if (opts != nil) {
+        if (has(opts, "iterations")) { iter = opts["iterations"]; }
+        if (has(opts, "salt")) { saltHex = opts["salt"]; }
+    }
+    if (iter < 1) { return { ok: false, error: "iterations must be >= 1" }; }
+    return { ok: true, key: pcPbkdf2(password, saltHex, iter, 32), salt: saltHex, iterations: iter };
+}
+
+// F: Pass the password through a "secret salt" (pepper) kept private before the stored hashing
+fun pcPepper(password, pepperHex) {
+    return pcHmacText(pepperHex, password);
+}
+
+// ---- 5) Authenticated encryption (AEAD composite) ---------------------------------------------------------
+
+fun pcSubkeys(keyHex, nonceHex) {
+    let prk = pcHkdfExtract(nonceHex, keyHex);
+    return { enc: pcHkdfExpand(prk, pcHexOf("pc-enc-v1"), 32), mac: pcHkdfExpand(prk, pcHexOf("pc-mac-v1"), 32) };
+}
+
+fun pcKeystream(encHex, nonceHex, nbytes) {
+    let blocks = ceil(nbytes / 32);
+    let ks = "";
+    let i = 0;
+    while (i < blocks) {
+        ks = ks + pcHmacHex(encHex, nonceHex + pcToHex(i, 8));
+        i = i + 1;
+    }
+    return substr(ks, 0, nbytes * 2);
+}
+
+fun pcTag(macHex, nonceHex, aadHex, ctHex) {
+    return pcHmacHex(macHex, pcHexOf("pc1|") + nonceHex + pcToHex(len(aadHex) / 2, 8) + aadHex + ctHex);
+}
+
+// F: authenticated encryption; aad (optional) = associated data that is signed but not encrypted (binds the ciphertext to its context)
+// Format: pc1.<nonce>.<ciphertext>.<tag>
+fun pcSeal(keyHex, plaintext, aad) {
+    let kc = pcKeyCheck(keyHex);
+    if (kc["ok"] == false) { return { ok: false, error: kc["error"] }; }
+    let nonce = sec.randomToken(16);
+    let sk = pcSubkeys(keyHex, nonce);
+    let ptHex = pcHexOf(plaintext);
+    let ct = "";
+    if (len(ptHex) > 0) { ct = pcXorHex(ptHex, pcKeystream(sk["enc"], nonce, len(ptHex) / 2)); }
+    let aadHex = "";
+    if (aad != nil) { aadHex = pcHexOf(aad); }
+    let tag = pcTag(sk["mac"], nonce, aadHex, ct);
+    return { ok: true, sealed: "pc1." + nonce + "." + ct + "." + tag };
+}
+
+// F: decrypt after verifying the tag in constant time (any tampering, different aad or wrong key fails)
+fun pcOpen(keyHex, sealed, aad) {
+    let kc = pcKeyCheck(keyHex);
+    if (kc["ok"] == false) { return { ok: false, error: kc["error"] }; }
+    if (type(sealed) != "string") { return { ok: false, error: "The ciphertext is invalid" }; }
+    let parts = split(sealed, ".");
+    if (len(parts) != 4 or parts[0] != "pc1") { return { ok: false, error: "Unknown format" }; }
+    let nonce = parts[1];
+    let ct = parts[2];
+    let tag = parts[3];
+    if (len(nonce) != 32 or pcIsHex(nonce) == false or pcIsHex(ct) == false or len(tag) != 64 or pcIsHex(tag) == false) {
+        return { ok: false, error: "Corrupt format" };
+    }
+    let sk = pcSubkeys(keyHex, nonce);
+    let aadHex = "";
+    if (aad != nil) { aadHex = pcHexOf(aad); }
+    if (sec.constantTimeEqual(pcTag(sk["mac"], nonce, aadHex, ct), tag) == false) {
+        return { ok: false, error: "Integrity check failed (wrong key, modified data or different context)" };
+    }
+    if (len(ct) == 0) { return { ok: true, plaintext: "" }; }
+    let ptHex = pcXorHex(ct, pcKeystream(sk["enc"], nonce, len(ct) / 2));
+    return { ok: true, plaintext: sec.hexDecode(ptHex) };
+}
+
+// F: encrypt an object (map/array) as JSON
+fun pcSealObject(keyHex, obj, aad) {
+    return pcSeal(keyHex, jsonEncode(obj), aad);
+}
+
+fun pcOpenObject(keyHex, sealed, aad) {
+    let r = pcOpen(keyHex, sealed, aad);
+    if (r["ok"] == false) { return r; }
+    return { ok: true, value: jsonDecode(r["plaintext"]) };
+}
+
+// F: encrypt with a password (PBKDF2 + salt embedded in the output): pcp1.<iter>.<salt>.<pc1...>
+fun pcSealWithPassword(password, plaintext, opts) {
+    let kd = pcKeyFromPassword(password, opts);
+    if (kd["ok"] == false) { return kd; }
+    let s = pcSeal(kd["key"], plaintext, "pcp1");
+    if (s["ok"] == false) { return s; }
+    return { ok: true, sealed: "pcp1." + toString(kd["iterations"]) + "." + kd["salt"] + "." + s["sealed"] };
+}
+
+fun pcOpenWithPassword(password, sealed) {
+    if (type(sealed) != "string") { return { ok: false, error: "The ciphertext is invalid" }; }
+    let parts = split(sealed, ".");
+    if (len(parts) != 7 or parts[0] != "pcp1") { return { ok: false, error: "Unknown format" }; }
+    let iterTxt = parts[1];
+    let i = 0;
+    while (i < len(iterTxt)) {
+        if (contains("0123456789", charAt(iterTxt, i)) == false) { return { ok: false, error: "Corrupt iteration count" }; }
+        i = i + 1;
+    }
+    if (len(iterTxt) == 0 or len(iterTxt) > 7 or pcIsHex(parts[2]) == false) { return { ok: false, error: "Corrupt format" }; }
+    let key = pcPbkdf2(password, parts[2], toNumber(iterTxt), 32);
+    return pcOpen(key, join([parts[3], parts[4], parts[5], parts[6]], "."), "pcp1");
+}
+
+// ---- 6) Keyring (Keyring) and key rotation ---------------------------------------------------
+
+// F: a new keyring with an active key
+fun pcKeyringNew() {
+    let k = pcGenerateKey(32);
+    let kid = pcKeyId(k);
+    let ring = { active: kid, keys: {} };
+    ring["keys"][kid] = k;
+    return ring;
+}
+
+// F: add a key (and optionally make it active)
+fun pcKeyringAdd(ring, keyHex, makeActive) {
+    let kc = pcKeyCheck(keyHex);
+    if (kc["ok"] == false) { return kc; }
+    let kid = pcKeyId(keyHex);
+    ring["keys"][kid] = keyHex;
+    if (makeActive == true) { ring["active"] = kid; }
+    return { ok: true, kid: kid };
+}
+
+// F: rotation: a new active key, and the old ones stay for decryption only
+fun pcKeyringRotate(ring) {
+    return pcKeyringAdd(ring, pcGenerateKey(32), true);
+}
+
+// F: encrypt with the active key and embed the kid: pck1.<kid>.<pc1...>
+fun pcKeyringSeal(ring, plaintext, aad) {
+    let kid = ring["active"];
+    let s = pcSeal(ring["keys"][kid], plaintext, aad);
+    if (s["ok"] == false) { return s; }
+    return { ok: true, sealed: "pck1." + kid + "." + s["sealed"], kid: kid };
+}
+
+fun pcKeyringKid(sealed) {
+    if (type(sealed) != "string") { return nil; }
+    let parts = split(sealed, ".");
+    if (len(parts) != 6 or parts[0] != "pck1") { return nil; }
+    return parts[1];
+}
+
+// F: decrypt, picking the right key automatically from the kid
+fun pcKeyringOpen(ring, sealed, aad) {
+    let kid = pcKeyringKid(sealed);
+    if (kid == nil) { return { ok: false, error: "Unknown keyring format" }; }
+    if (has(ring["keys"], kid) == false) { return { ok: false, error: "Unknown key in the keyring: " + kid }; }
+    let parts = split(sealed, ".");
+    let r = pcOpen(ring["keys"][kid], join([parts[2], parts[3], parts[4], parts[5]], "."), aad);
+    if (r["ok"]) { r["kid"] = kid; }
+    return r;
+}
+
+// F: re-encrypt with the active key (after rotation) without changing the content
+fun pcKeyringRewrap(ring, sealed, aad) {
+    let o = pcKeyringOpen(ring, sealed, aad);
+    if (o["ok"] == false) { return o; }
+    if (o["kid"] == ring["active"]) { return { ok: true, sealed: sealed, rewrapped: false }; }
+    let s = pcKeyringSeal(ring, o["plaintext"], aad);
+    if (s["ok"]) { s["rewrapped"] = true; }
+    return s;
+}
+
+// ---- 7) Envelope encryption (Envelope) ------------------------------------------------------------------
+
+// F: a random data key wrapped by a master key: pce1~<wrapped>~<body>
+fun pcEnvelopeSeal(masterHex, plaintext, aad) {
+    let dk = pcGenerateKey(32);
+    let w = pcSeal(masterHex, dk, "pc-wrap");
+    if (w["ok"] == false) { return w; }
+    let b = pcSeal(dk, plaintext, aad);
+    return { ok: true, sealed: "pce1~" + w["sealed"] + "~" + b["sealed"] };
+}
+
+fun pcEnvelopeOpen(masterHex, envelope, aad) {
+    if (type(envelope) != "string") { return { ok: false, error: "Invalid envelope" }; }
+    let parts = split(envelope, "~");
+    if (len(parts) != 3 or parts[0] != "pce1") { return { ok: false, error: "Unknown envelope format" }; }
+    let w = pcOpen(masterHex, parts[1], "pc-wrap");
+    if (w["ok"] == false) { return w; }
+    return pcOpen(w["plaintext"], parts[2], aad);
+}
+
+// F: master key rotation: only the data key is re-wrapped, the large body is untouched
+fun pcEnvelopeRewrap(oldMasterHex, newMasterHex, envelope) {
+    let parts = split(envelope, "~");
+    if (len(parts) != 3 or parts[0] != "pce1") { return { ok: false, error: "Unknown envelope format" }; }
+    let w = pcOpen(oldMasterHex, parts[1], "pc-wrap");
+    if (w["ok"] == false) { return w; }
+    let nw = pcSeal(newMasterHex, w["plaintext"], "pc-wrap");
+    if (nw["ok"] == false) { return nw; }
+    return { ok: true, sealed: "pce1~" + nw["sealed"] + "~" + parts[2] };
+}
+
+// ---- 8) Signing and tokens ---------------------------------------------------------------------------
+
+// F: detached signature (HMAC) in base64url format
+fun pcSign(keyHex, data) {
+    return pcB64UrlEncodeHex(pcHmacText(keyHex, toString(data)));
+}
+
+fun pcVerifySig(keyHex, data, sig) {
+    return sec.constantTimeEqual(pcSign(keyHex, data), toString(sig));
+}
+
+// F: signed token (JWT-HS256 simplified). opts: { now, ttl, iss, aud, nbf }
+fun pcTokenSign(claims, keyHex, opts) {
+    let kc = pcKeyCheck(keyHex);
+    if (kc["ok"] == false) { return { ok: false, error: kc["error"] }; }
+    let now = 0;
+    if (opts != nil and has(opts, "now")) { now = opts["now"]; }
+    let p = {};
+    for (let k in keys(claims)) { p[k] = claims[k]; }
+    p["iat"] = now;
+    p["jti"] = sec.randomToken(8);
+    if (opts != nil) {
+        if (has(opts, "ttl")) { p["exp"] = now + opts["ttl"]; }
+        if (has(opts, "nbf")) { p["nbf"] = opts["nbf"]; }
+        if (has(opts, "iss")) { p["iss"] = opts["iss"]; }
+        if (has(opts, "aud")) { p["aud"] = opts["aud"]; }
+    }
+    let h = pcB64UrlEncode("{\"alg\":\"HS256\",\"typ\":\"PCT\"}");
+    let b = pcB64UrlEncode(jsonEncode(p));
+    return { ok: true, token: h + "." + b + "." + pcSign(keyHex, h + "." + b), claims: p };
+}
+
+// F: verification: the HS256 algorithm only (rejects alg:none), signature, exp/nbf/iss/aud
+fun pcTokenVerify(token, keyHex, opts) {
+    if (type(token) != "string") { return { ok: false, reason: "malformed", error: "Invalid token" }; }
+    let parts = split(token, ".");
+    if (len(parts) != 3) { return { ok: false, reason: "malformed", error: "Invalid token" }; }
+    let hj = pcB64UrlDecode(parts[0]);
+    if (hj == nil) { return { ok: false, reason: "malformed", error: "Corrupt header" }; }
+    let header = jsonDecode(hj);
+    if (type(header) != "map" or has(header, "alg") == false or header["alg"] != "HS256") {
+        return { ok: false, reason: "alg", error: "Algorithm not allowed" };
+    }
+    if (pcVerifySig(keyHex, parts[0] + "." + parts[1], parts[2]) == false) {
+        return { ok: false, reason: "signature", error: "Incorrect signature" };
+    }
+    let pj = pcB64UrlDecode(parts[1]);
+    if (pj == nil) { return { ok: false, reason: "malformed", error: "Corrupt payload" }; }
+    let c = jsonDecode(pj);
+    if (type(c) != "map") { return { ok: false, reason: "malformed", error: "Corrupt payload" }; }
+    let now = 0;
+    if (opts != nil and has(opts, "now")) { now = opts["now"]; }
+    if (has(c, "exp") and now >= c["exp"]) { return { ok: false, reason: "expired", error: "The token has expired" }; }
+    if (has(c, "nbf") and now < c["nbf"]) { return { ok: false, reason: "nbf", error: "The token is not valid yet" }; }
+    if (opts != nil and has(opts, "iss") and (has(c, "iss") == false or c["iss"] != opts["iss"])) { return { ok: false, reason: "iss", error: "Unexpected issuer" }; }
+    if (opts != nil and has(opts, "aud") and (has(c, "aud") == false or c["aud"] != opts["aud"])) { return { ok: false, reason: "aud", error: "Unexpected audience" }; }
+    return { ok: true, claims: c };
+}
+
+// F: signed URL with expiry: ...?exp=N&sig=...
+fun pcSignUrl(url, keyHex, expiresAt) {
+    let sep = "?";
+    if (contains(url, "?")) { sep = "&"; }
+    let base = url + sep + "exp=" + toString(expiresAt);
+    return base + "&sig=" + pcSign(keyHex, base);
+}
+
+fun pcVerifyUrl(url, keyHex, nowSec) {
+    let parts = split(url, "&sig=");
+    if (len(parts) < 2) { return { ok: false, error: "No signature" }; }
+    let sig = parts[len(parts) - 1];
+    let base = parts[0];
+    let i = 1;
+    while (i < len(parts) - 1) { base = base + "&sig=" + parts[i]; i = i + 1; }
+    if (pcVerifySig(keyHex, base, sig) == false) { return { ok: false, error: "The URL signature is incorrect" }; }
+    let ep = split(base, "exp=");
+    let expTxt = ep[len(ep) - 1];
+    let j = 0;
+    if (len(expTxt) == 0) { return { ok: false, error: "Missing expiry" }; }
+    while (j < len(expTxt)) {
+        if (contains("0123456789", charAt(expTxt, j)) == false) { return { ok: false, error: "Corrupt expiry" }; }
+        j = j + 1;
+    }
+    if (nowSec >= toNumber(expTxt)) { return { ok: false, error: "The URL has expired" }; }
+    return { ok: true, expiresAt: toNumber(expTxt) };
+}
+
+// F: API request signing (canonical): METHOD\npath\nsha256(body)\nts\nnonce
+fun pcRequestCanonical(method, path, body, ts, nonce) {
+    return upper(method) + "\n" + path + "\n" + sec.sha256(toString(body)) + "\n" + toString(ts) + "\n" + nonce;
+}
+
+fun pcSignRequest(method, path, body, keyHex, ts, nonce) {
+    let n = nonce;
+    if (n == nil) { n = sec.randomToken(8); }
+    let sig = pcSign(keyHex, pcRequestCanonical(method, path, body, ts, n));
+    return { ok: true, ts: ts, nonce: n, sig: sig, headers: { "X-Pk-Timestamp": toString(ts), "X-Pk-Nonce": n, "X-Pk-Signature": sig } };
+}
+
+// F: verify with a time window and replay prevention (replay) via a shared nonces map (mutated in place)
+fun pcVerifyRequest(method, path, body, keyHex, ts, nonce, sig, nowSec, skewSec, seen) {
+    let d = nowSec - ts;
+    if (d < 0) { d = 0 - d; }
+    if (d > skewSec) { return { ok: false, reason: "skew", error: "The request is outside the time window" }; }
+    if (seen != nil and has(seen, nonce)) { return { ok: false, reason: "replay", error: "nonce already used (replay)" }; }
+    if (pcVerifySig(keyHex, pcRequestCanonical(method, path, body, ts, nonce), sig) == false) {
+        return { ok: false, reason: "signature", error: "Incorrect request signature" };
+    }
+    if (seen != nil) { seen[nonce] = ts; }
+    return { ok: true };
+}
+
+// ---- 9) One-time passwords (HOTP/TOTP) and recovery --------------------------------------------------------
+
+// F: HOTP (RFC 4226 with HMAC-SHA256)
+fun pcHotp(secretHex, counter, digits) {
+    let d = 6;
+    if (digits != nil) { d = digits; }
+    let mac = pcHmacHex(secretHex, pcToHex(counter, 16));
+    let off = pcByteAt(mac, 31) % 16;
+    let bin = (pcByteAt(mac, off) % 128) * 16777216 + pcByteAt(mac, off + 1) * 65536 + pcByteAt(mac, off + 2) * 256 + pcByteAt(mac, off + 3);
+    let code = toString(bin % pow(10, d));
+    while (len(code) < d) { code = "0" + code; }
+    return code;
+}
+
+// F: TOTP (RFC 6238 with SHA256)
+fun pcTotp(secretHex, nowSec, step, digits) {
+    let s = 30;
+    if (step != nil) { s = step; }
+    return pcHotp(secretHex, floor(nowSec / s), digits);
+}
+
+// F: verify with a window ±window (compensates for clock drift) in constant time
+fun pcTotpVerify(secretHex, code, nowSec, window, digits) {
+    let w = 1;
+    if (window != nil) { w = window; }
+    let found = false;
+    let at = 0;
+    let o = 0 - w;
+    while (o <= w) {
+        if (sec.constantTimeEqual(pcTotp(secretHex, nowSec + o * 30, 30, digits), toString(code))) { found = true; at = o; }
+        o = o + 1;
+    }
+    return { ok: found, offset: at };
+}
+
+fun pcUrlEncode(s) {
+    let hex = sec.hexEncode(toString(s));
+    let keep = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_.~";
+    let out = "";
+    let i = 0;
+    while (i < len(hex) / 2) {
+        let b = pcByteAt(hex, i);
+        if (b < 128 and contains(keep, chr(b))) { out = out + chr(b); }
+        else { out = out + "%" + upper(pcToHex(b, 2)); }
+        i = i + 1;
+    }
+    return out;
+}
+
+// F: an otpauth:// link for authenticator apps (QR)
+fun pcOtpAuthUri(issuer, account, secretHex, opts) {
+    let digits = 6;
+    let period = 30;
+    if (opts != nil) {
+        if (has(opts, "digits")) { digits = opts["digits"]; }
+        if (has(opts, "period")) { period = opts["period"]; }
+    }
+    return "otpauth://totp/" + pcUrlEncode(issuer) + ":" + pcUrlEncode(account) + "?secret=" + pcBase32EncodeHex(secretHex)
+        + "&issuer=" + pcUrlEncode(issuer) + "&algorithm=SHA256&digits=" + toString(digits) + "&period=" + toString(period);
+}
+
+fun pcRecoveryNormalize(code) {
+    return replace(replace(upper(toString(code)), "-", ""), " ", "");
+}
+
+// F: one-time recovery codes; shown once, only the hash is stored
+fun pcRecoveryCodes(n) {
+    let codes = [];
+    let hashes = [];
+    let i = 0;
+    while (i < n) {
+        let c = "";
+        let j = 0;
+        while (j < 10) { c = c + charAt(PC_B32, pcRandomInt(32)); j = j + 1; }
+        push(codes, substr(c, 0, 5) + "-" + substr(c, 5, 5));
+        push(hashes, sec.sha256("pcrc1:" + c));
+        i = i + 1;
+    }
+    return { codes: codes, hashes: hashes };
+}
+
+// F: consume a recovery code: returns the remaining list (the code is used once)
+fun pcRecoveryVerify(code, hashes) {
+    let h = sec.sha256("pcrc1:" + pcRecoveryNormalize(code));
+    let remaining = [];
+    let hit = false;
+    let i = 0;
+    while (i < len(hashes)) {
+        if (hit == false and sec.constantTimeEqual(hashes[i], h)) { hit = true; }
+        else { push(remaining, hashes[i]); }
+        i = i + 1;
+    }
+    return { ok: hit, remaining: remaining };
+}
+
+// ---- 10) Secret sharing (Shamir) over GF(256) -------------------------------------------------------------------
+
+let PC_GF = { exp: [], log: [], ready: false };
+
+fun pcGfAdd(a, b) {
+    let r = 0;
+    let p = 1;
+    let i = 0;
+    while (i < 8) {
+        let ba = floor(a / p) % 2;
+        let bb = floor(b / p) % 2;
+        if (ba != bb) { r = r + p; }
+        p = p * 2;
+        i = i + 1;
+    }
+    return r;
+}
+
+fun pcGfInit() {
+    if (PC_GF["ready"]) { return nil; }
+    let i = 0;
+    while (i < 256) { push(PC_GF["log"], 0); i = i + 1; }
+    let x = 1;
+    i = 0;
+    while (i < 255) {
+        push(PC_GF["exp"], x);
+        PC_GF["log"][x] = i;
+        let two = x * 2;
+        if (two >= 256) { two = pcGfAdd(two - 256, 27); }
+        x = pcGfAdd(x, two);
+        i = i + 1;
+    }
+    PC_GF["ready"] = true;
+    return nil;
+}
+
+fun pcGfMul(a, b) {
+    if (a == 0 or b == 0) { return 0; }
+    return PC_GF["exp"][(PC_GF["log"][a] + PC_GF["log"][b]) % 255];
+}
+
+fun pcGfDiv(a, b) {
+    if (a == 0) { return 0; }
+    return PC_GF["exp"][(PC_GF["log"][a] - PC_GF["log"][b] + 255) % 255];
+}
+
+// F: split a secret (hex) into n shares; k are enough to recover, and fewer than k reveal nothing
+fun pcShamirSplit(secretHex, n, k) {
+    if (pcIsHex(secretHex) == false or len(secretHex) == 0) { return { ok: false, error: "The secret must be non-empty hex" }; }
+    if (k < 2 or n < k or n > 255) { return { ok: false, error: "need 2 <= k <= n <= 255" }; }
+    pcGfInit();
+    let nb = len(secretHex) / 2;
+    let ys = [];
+    let s = 0;
+    while (s < n) { push(ys, ""); s = s + 1; }
+    let b = 0;
+    while (b < nb) {
+        let coef = [pcByteAt(secretHex, b)];
+        let c = 1;
+        while (c < k) { push(coef, pcRandomInt(256)); c = c + 1; }
+        let xi = 1;
+        while (xi <= n) {
+            let y = 0;
+            let d = k - 1;
+            while (d >= 0) {
+                y = pcGfAdd(pcGfMul(y, xi), coef[d]);
+                d = d - 1;
+            }
+            ys[xi - 1] = ys[xi - 1] + pcToHex(y, 2);
+            xi = xi + 1;
+        }
+        b = b + 1;
+    }
+    let shares = [];
+    let i = 0;
+    while (i < n) { push(shares, pcToHex(i + 1, 2) + "-" + ys[i]); i = i + 1; }
+    return { ok: true, shares: shares, threshold: k };
+}
+
+// F: recover the secret from k or more shares (Lagrange at zero)
+fun pcShamirCombine(shares) {
+    if (len(shares) < 2) { return { ok: false, error: "at least two shares" }; }
+    pcGfInit();
+    let xs = [];
+    let yh = [];
+    let i = 0;
+    while (i < len(shares)) {
+        let p = split(shares[i], "-");
+        if (len(p) != 2 or pcIsHex(p[0]) == false or len(p[0]) != 2 or pcIsHex(p[1]) == false) { return { ok: false, error: "Corrupt share" }; }
+        let x = pcHexToNum(p[0]);
+        if (x == 0 or contains(xs, x)) { return { ok: false, error: "Duplicate or invalid share" }; }
+        if (len(yh) > 0 and len(p[1]) != len(yh[0])) { return { ok: false, error: "Share lengths differ" }; }
+        push(xs, x);
+        push(yh, p[1]);
+        i = i + 1;
+    }
+    let nb = len(yh[0]) / 2;
+    let out = "";
+    let b = 0;
+    while (b < nb) {
+        let acc = 0;
+        let j = 0;
+        while (j < len(xs)) {
+            let num = 1;
+            let den = 1;
+            let m = 0;
+            while (m < len(xs)) {
+                if (m != j) {
+                    num = pcGfMul(num, xs[m]);
+                    den = pcGfMul(den, pcGfAdd(xs[m], xs[j]));
+                }
+                m = m + 1;
+            }
+            acc = pcGfAdd(acc, pcGfMul(pcByteAt(yh[j], b), pcGfDiv(num, den)));
+            j = j + 1;
+        }
+        out = out + pcToHex(acc, 2);
+        b = b + 1;
+    }
+    return { ok: true, secretHex: out };
+}
