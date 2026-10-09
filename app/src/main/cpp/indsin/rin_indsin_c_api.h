@@ -98,6 +98,17 @@ RIN_API char* rin_indsin_session_tick(void* session);
 // Free with rin_free_string().
 RIN_API char* rin_indsin_session_update_source(void* session, const char* newSource);
 
+
+// ---- Media (rin_indsin_media.h): المضيف يُجيب على طلب "media" الذي أخرجه tap (pickMedia/uploadMedia).
+// picked: الملفات المختارة كمصفوفة JSON [{"path","name","mime","size","kind"}] (path نسبي لجذر المشروع).
+//   kind/multiple/maxMb: نفس قيم طلب pick (يُعاد التحقق منها هنا). append=1 يضيف للاختيار الحالي.
+// progress: status = uploading|done|error، progress 0..100، detail = ردّ الخادم (done) أو رسالة الخطأ.
+// كلاهما يعيد نفس غلاف tap ("changed":[...] + fabric). Free with rin_free_string().
+RIN_API char* rin_indsin_session_media_picked(void* session, const char* cell, const char* itemsJson,
+                                              const char* kind, int multiple, double maxMb, int append);
+RIN_API char* rin_indsin_session_media_progress(void* session, const char* cell, const char* status,
+                                                double progress, const char* detail);
+
 // Releases a session created by rin_indsin_session_create.
 RIN_API void rin_indsin_session_free(void* session);
 
