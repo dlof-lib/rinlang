@@ -14,8 +14,38 @@ import android.content.Context
  */
 object RinEngine {
 
+    /** null إذا حُمِّلت المكتبة الأصلية بنجاح؛ وإلا سبب الفشل (ABI غير مدعوم، ملف تالف...). */
+    @Volatile
+    var nativeLoadError: Throwable? = null
+        private set
+
+    val isNativeAvailable: Boolean get() = nativeLoadError == null
+
     init {
-        System.loadLibrary("rinengine")
+        // فشل التحميل لا يُسقط التطبيق عند أول لمس لـ RinEngine؛ تعيد الدوال العامة أدناه نتيجة خطأ واضحة.
+        try {
+            System.loadLibrary("rinengine")
+        } catch (t: Throwable) {
+            nativeLoadError = t
+            android.util.Log.e("RinEngine", "تعذّر تحميل المكتبة الأصلية rinengine", t)
+        }
+    }
+
+    private fun failureText(t: Throwable): String =
+        "[Engine error]: " + (t.message ?: t.javaClass.simpleName)
+
+    private fun failureResult(t: Throwable): RinExecutionResult =
+        RinExecutionResult(false, "", null, null, failureText(t), 0)
+
+    /** يشغّل استدعاءً أصلياً بحماية: أي استثناء Java/JNI يتحوّل إلى [fallback] بدل انهيار التطبيق. */
+    private inline fun <T> safeNative(fallback: (Throwable) -> T, block: () -> T): T {
+        nativeLoadError?.let { return fallback(it) }
+        return try {
+            block()
+        } catch (t: Throwable) {
+            if (t is OutOfMemoryError || t is StackOverflowError) android.util.Log.e("RinEngine", "native call failed", t)
+            fallback(t)
+        }
     }
 
     @Volatile
@@ -42,7 +72,8 @@ object RinEngine {
     fun currentBaseDir(): String = baseDir
 
     /** Lexes, parses and interprets [source]; returns everything the program printed. */
-    fun runSource(source: String): String = runSourceNative(source, baseDir)
+    fun runSource(source: String): String =
+        safeNative({ failureText(it) }) { runSourceNative(source, baseDir) }
 
     private external fun runSourceNative(source: String, baseDir: String): String
 
@@ -102,7 +133,7 @@ object RinEngine {
      * [runSource] is untouched and keeps working exactly as before; this is purely additive.
      */
     fun runSourceStructured(source: String): RinExecutionResult =
-        RinExecutionResult.parse(runSourceStructuredNative(source, baseDir))
+        safeNative({ failureResult(it) }) { RinExecutionResult.parse(runSourceStructuredNative(source, baseDir)) }
 
     private external fun runSourceStructuredNative(source: String, baseDir: String): String
 
@@ -131,7 +162,9 @@ object RinEngine {
      * untouched; this is purely additive.
      */
     fun runSourceStructuredStreaming(source: String, listener: RinStreamListener): RinExecutionResult =
-        RinExecutionResult.parse(runSourceStructuredStreamingNative(source, baseDir, listener))
+        safeNative({ failureResult(it) }) {
+            RinExecutionResult.parse(runSourceStructuredStreamingNative(source, baseDir, listener))
+        }
 
     private external fun runSourceStructuredStreamingNative(
         source: String,
@@ -157,7 +190,9 @@ object RinEngine {
         listener: RinStreamListener?,
         inputHandler: RinInputHandler?
     ): RinExecutionResult =
-        RinExecutionResult.parse(runSourceInteractiveNative(source, baseDir, listener, inputHandler))
+        safeNative({ failureResult(it) }) {
+            RinExecutionResult.parse(runSourceInteractiveNative(source, baseDir, listener, inputHandler))
+        }
 
     private external fun runSourceInteractiveNative(
         source: String,
@@ -181,7 +216,9 @@ object RinEngine {
     }
 
     fun runSourceAsFlow(source: String, timeoutMs: Long = 0L, listener: RinFlowListener? = null): RinFlowRunResult =
-        RinFlowRunResult.parse(runFlowNative(source, baseDir, timeoutMs, listener))
+        safeNative({ RinFlowRunResult.parse("{\"parseError\":\"" + failureText(it).replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", " ") + "\"}") }) {
+            RinFlowRunResult.parse(runFlowNative(source, baseDir, timeoutMs, listener))
+        }
 
     private external fun runFlowNative(source: String, baseDir: String, timeoutMs: Long, listener: RinFlowListener?): String
 
@@ -189,7 +226,7 @@ object RinEngine {
      *  `rin::flow::FlowSession::cancelFlag`); the flow only actually stops at the next `|>` stage
      *  boundary — same cooperative model [RinJobScheduler] already documents for whole-program
      *  timeouts. Returns false if the session id is unknown or already finished. */
-    fun cancelFlow(sessionId: String): Boolean = cancelFlowNative(sessionId)
+    fun cancelFlow(sessionId: String): Boolean = safeNative({ false }) { cancelFlowNative(sessionId) }
 
     private external fun cancelFlowNative(sessionId: String): Boolean
 
@@ -199,7 +236,9 @@ object RinEngine {
      *  (already pruned — the engine only keeps a bounded number of recent flow sessions — or never
      *  ran a `|>` chain at all). */
     fun replayFlow(previousSessionId: String, timeoutMs: Long = 0L, listener: RinFlowListener? = null): RinFlowRunResult =
-        RinFlowRunResult.parse(replayFlowNative(previousSessionId, timeoutMs, listener))
+        safeNative({ RinFlowRunResult.parse("{\"parseError\":\"" + failureText(it).replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", " ") + "\"}") }) {
+            RinFlowRunResult.parse(replayFlowNative(previousSessionId, timeoutMs, listener))
+        }
 
     private external fun replayFlowNative(previousSessionId: String, timeoutMs: Long, listener: RinFlowListener?): String
 
@@ -212,7 +251,8 @@ object RinEngine {
      * instead of throwing — callers should keep showing their last-good frame in that case
      * (see the Snag containment model in the Indsintime architecture doc).
      */
-    fun renderView(source: String, rootWidth: Int = 390): String = renderViewNative(source, rootWidth)
+    fun renderView(source: String, rootWidth: Int = 390): String =
+        safeNative({ errJson(it) }) { renderViewNative(source, rootWidth.coerceIn(1, 8192)) }
 
     private external fun renderViewNative(source: String, rootWidth: Int): String
 
@@ -226,7 +266,7 @@ object RinEngine {
      * root inside it.
      */
     fun renderContainerView(source: String, containerName: String, rootWidth: Int = 390): String =
-        renderContainerViewNative(source, containerName, rootWidth)
+        safeNative({ errJson(it) }) { renderContainerViewNative(source, containerName, rootWidth.coerceIn(1, 8192)) }
 
     private external fun renderContainerViewNative(source: String, containerName: String, rootWidth: Int): String
 
@@ -249,18 +289,24 @@ object RinEngine {
     //   ...when the preview is closed/backgrounded...
     //   session.close()
     class IndsinSession(source: String, rootWidth: Int = 390, containerName: String? = null) {
-        private var handle: Long =
-            if (containerName == null) indsinSessionCreateNative(source, rootWidth)
-            else indsinSessionCreateForContainerNative(source, containerName, rootWidth)
+        private var handle: Long = try {
+            if (nativeLoadError != null) 0L
+            else if (containerName == null) indsinSessionCreateNative(source, rootWidth.coerceIn(1, 8192))
+            else indsinSessionCreateForContainerNative(source, containerName, rootWidth.coerceIn(1, 8192))
+        } catch (t: Throwable) { 0L }
         private val lock = Any()
-        @Volatile private var closed = false
+        // مقبض صفري = فشل الإنشاء: الجلسة تُعدّ مغلقة فلا يصل أي نداء أصلي إلى مؤشر null.
+        @Volatile private var closed = handle == 0L
 
         /**
          * كل نداء أصلي يمرّ من هنا: القفل يمنع سباق close() مع tap()/tick() من خيطين مختلفين
          * (use-after-free على المؤشر الأصلي)، ومن أُغلقت جلسته يحصل على JSON خطأ آمن بدل انهيار.
          */
         private inline fun guarded(block: (Long) -> String): String =
-            synchronized(lock) { if (closed) CLOSED_SESSION_JSON else block(handle) }
+            synchronized(lock) {
+                if (closed) CLOSED_SESSION_JSON
+                else try { block(handle) } catch (t: Throwable) { errJson(t) }
+            }
 
         /** True once [close] ran; every call afterwards returns a `session closed` error envelope. */
         val isClosed: Boolean get() = closed
@@ -322,7 +368,7 @@ object RinEngine {
          * result will simply reflect it once one is.
          */
         fun setViewport(viewportHeight: Int) {
-            synchronized(lock) { if (!closed) indsinSessionSetViewportNative(handle, viewportHeight) }
+            synchronized(lock) { if (!closed) try { indsinSessionSetViewportNative(handle, viewportHeight.coerceIn(1, 20000)) } catch (_: Throwable) {} }
         }
 
         // ---- Design System v2 / Audit / Introspection (docs/indsin_expansion.md §8) ----
@@ -336,15 +382,19 @@ object RinEngine {
         fun statsJson(): String = guarded { indsinSessionStatsJsonNative(it) }
 
         /** Plain-text indented outline of the current Fabric (debug / CI logs). Empty once closed. */
-        fun outline(): String = synchronized(lock) { if (closed) "" else indsinSessionOutlineNative(handle) }
+        fun outline(): String = synchronized(lock) { if (closed) "" else try { indsinSessionOutlineNative(handle) } catch (_: Throwable) { "" } }
 
         /** Releases the native session. Safe to call more than once. */
         fun close() {
-            synchronized(lock) { if (!closed) { closed = true; indsinSessionFreeNative(handle) } }
+            synchronized(lock) { if (!closed) { closed = true; try { indsinSessionFreeNative(handle) } catch (_: Throwable) {} ; handle = 0L } }
         }
 
         protected fun finalize() { close() }
     }
+
+    private fun errJson(t: Throwable): String =
+        "{\"ok\":false,\"error\":\"" + (t.message ?: t.javaClass.simpleName)
+            .replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", " ") + "\",\"line\":0}"
 
     private const val CLOSED_SESSION_JSON = "{\"ok\":false,\"error\":\"session closed\"}"
 
