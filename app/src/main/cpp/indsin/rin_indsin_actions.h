@@ -21,6 +21,7 @@
 // rather than faked; see the architecture doc for the current honest status of each verb.
 #pragma once
 #include "rin_indsin_eval.h"
+#include "rin_indsin_media.h" // clearMedia()/removeMedia() -- pickMedia()/uploadMedia() live in Needle (need a host)
 #include "../rin_ast.h"
 #include <algorithm>
 #include <string>
@@ -112,6 +113,25 @@ inline ActionFn boolFlagAction(bool toValue) {
 }
 
 inline void ActionRegistry::registerBuiltins() {
+    // ---- Media (rin_indsin_media.h): الجزء الذي لا يحتاج مضيفاً. pickMedia/uploadMedia في Needle. ----
+    registerAction("clearMedia", [](const std::vector<rin::ExprPtr>& a, WarpScope& w) -> ActionOutcome {
+        ActionOutcome out;
+        auto v = a.empty() ? nullptr : std::dynamic_pointer_cast<rin::VariableExpr>(a[0]);
+        if (!v) { out.error = "clearMedia() needs a media-cell argument, e.g. clearMedia(photo)"; return out; }
+        out.recognized = true;
+        out.changedWarpNames = media::clearSelection(w, v->name);
+        return out;
+    });
+    registerAction("removeMedia", [](const std::vector<rin::ExprPtr>& a, WarpScope& w) -> ActionOutcome {
+        ActionOutcome out;
+        auto v = a.empty() ? nullptr : std::dynamic_pointer_cast<rin::VariableExpr>(a[0]);
+        if (!v) { out.error = "removeMedia() needs a media-cell argument, e.g. removeMedia(photos, 0)"; return out; }
+        out.recognized = true;
+        int idx = static_cast<int>(actionNumberArg(a, 1, w, 0));
+        if (!media::removeAt(w, v->name, idx, out.changedWarpNames))
+            out.error = "removeMedia(): index " + std::to_string(idx) + " is out of range";
+        return out;
+    });
     registerAction("increment", [](const std::vector<rin::ExprPtr>& a, WarpScope& w) -> ActionOutcome {
         ActionOutcome out;
         std::string cell = actionCellArg(a, 0, w);
