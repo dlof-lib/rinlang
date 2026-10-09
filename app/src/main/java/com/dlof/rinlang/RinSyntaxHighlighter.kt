@@ -334,6 +334,26 @@ object RinSyntaxHighlighter {
     )
 
     // ----------------------------------------------------------------------------------
+    // passkit (<passkit> tag language) — الألوان الرسمية: وسم=teal، سمة=أزرق فاتح، متغيّر=أصفر،
+    // قيمة=برتقالي، تعليق=أخضر، أقواس <>=كهرماني. المسار الاحتياطي (EditText)؛ المحرر الإنتاجي
+    // يلوّن في C++ (rin_passkit_highlight.h) بنفس الأنواع.
+    // ----------------------------------------------------------------------------------
+    private val passkitTags = listOf(
+        "passkit", "set", "print", "if", "else", "for", "assert", "email", "password", "apikey",
+        "link", "api", "sql", "input", "return", "import", "run", "call", "crypt", "token",
+        "otp", "db", "container"
+    )
+    private val passkitProfile = LangProfile(
+        keyword = Pattern.compile("(?<=</|<)(?:" + passkitTags.joinToString("|") + ")\\b"),
+        secondaryKeyword = Pattern.compile("\\b[A-Za-z_][A-Za-z0-9_.:-]*(?=\\s*=)"),
+        builtin = Pattern.compile("\\$[A-Za-z_][A-Za-z0-9_.]*|\\{[A-Za-z_][A-Za-z0-9_.\\[\\]-]*\\}"),
+        number = null,
+        tag = Pattern.compile("</?(?=[A-Za-z])|/?>"),
+        string = Pattern.compile("\"[^\"]*\"|'[^']*'"),
+        blockComment = Pattern.compile("<!--[\\s\\S]*?-->")
+    )
+
+    // ----------------------------------------------------------------------------------
     // CSS
     // ----------------------------------------------------------------------------------
     private val cssProfile = LangProfile(
@@ -396,6 +416,7 @@ object RinSyntaxHighlighter {
         "json" -> jsonProfile
         "sql" -> sqlProfile
         "sh", "bash" -> shellProfile
+        "passkit" -> passkitProfile
         "" -> rinProfile // ملفات بلا امتداد داخل التطبيق تُعامَل كملفات Rin افتراضياً
         else -> plainProfile
     }
