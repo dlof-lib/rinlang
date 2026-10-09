@@ -266,6 +266,13 @@ object FileIconResolver {
             return
         }
 
+        // 1.65) .passkit -> local shield icon (a <> tag language for email/passwords/API keys/encryption/databases),
+        //       instantly and with no network - same philosophy as .illust/.indsin above.
+        if (ext == "passkit") {
+            imageView.setImageResource(R.drawable.ic_passkit_file)
+            return
+        }
+
         // 1.7) .rdoc -> أيقونة Documentation Container المضمَّنة (صفحة + قوسا حاوية)، لا Iconify.
         if (ext == com.dlof.rinlang.store.DocumentationContainer.EXTENSION) {
             imageView.setImageResource(R.drawable.ic_doc_container_file)
