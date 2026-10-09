@@ -25,19 +25,28 @@ All are embedded, so imports work even without a `lib/` folder.
 Every function returns `{ok:true,...}` or `{ok:false,error}` and never crashes on bad input.
 Rin has no wall clock, so time-based functions take an explicit `nowSec`.
 
-## What is standard and what is a construction
+## What is standard
 
-Verified against official test vectors (see `tests/verification/passkit_features.rin`):
-HMAC-SHA256 (RFC 4231), HKDF (RFC 5869), PBKDF2-HMAC-SHA256, TOTP-SHA256 (RFC 6238), Base32 (RFC 4648).
+The engine now ships real primitives in C++ (`app/src/main/cpp/rin_crypto_aead.h`, no external dependency), checked against
+official vectors by `tools/test_crypto_aead.cpp` and by `tests/verification/passkit_features.rin`:
 
-Constructions (sound by design, but not a formal standard): `pcSeal`/`pcOpen` is a stream cipher built from
-HMAC-CTR plus an HMAC tag (encrypt-then-MAC) with per-message subkeys from HKDF. It is **not** AES-GCM or ChaCha20;
-do not rely on it where a specific standard is mandatory. `pkHash` is a salted, stretched HMAC chain: far better
-than bare sha256 but not a replacement for bcrypt/scrypt/argon2 on a high-risk production server.
+| Primitive | Native | Vectors |
+|---|---|---|
+| AES-128/192/256 + **GCM** | `sec.aesGcmSeal` / `sec.aesGcmOpen` | FIPS 197, NIST SP 800-38D |
+| **PBKDF2-HMAC-SHA256** | `sec.pbkdf2Sha256` | RFC 7914 |
+| **OS CSPRNG** (`/dev/urandom`) | `sec.randomToken` | — (replaced the old seeded Mersenne Twister) |
+| HMAC / HKDF / TOTP / Base32 | Rin on top of `sec.hmacSha256` | RFC 4231 / 5869 / 6238 / 4648 |
 
-## The 167-feature catalog
+- `pcSeal` / `pcOpen` are **AES-256-GCM** (format `pc2`). Old `pc1` data (HMAC-CTR) still opens, so nothing already stored breaks.
+- `pkHash` is **PBKDF2-HMAC-SHA256** with 600,000 iterations (format `pk2`). Old `pk1` hashes still verify and `pkNeedsRehash` flags them.
 
-[`docs/passkit-crypto-db.md`](passkit-crypto-db.md) lists every feature (F001 to F167) with the function or tag it
+Honest limits: AES uses lookup tables (not hardened against cache-timing attacks by a co-located attacker); keep one key
+under about 2^32 messages (rotate with the keyring); PBKDF2 is NIST-approved but not memory-hard, so for a high-risk server
+prefer bcrypt/scrypt/argon2; this code has not had an independent security audit.
+
+## The 185-feature catalog
+
+[`docs/passkit-crypto-db.md`](passkit-crypto-db.md) lists every feature (F001 to F185) with the function or tag it
 belongs to. It is generated from `tests/verification/passkit_features.rin`, where each line is a real check run on the
 real interpreter, so the count and the descriptions cannot drift from reality. Regenerate it with
 `python3 tools/gen_features_doc.py`.
@@ -64,6 +73,6 @@ From Rin: `passkitRun`, `passkitRunSource`, `passkitGet`, `passkitRegister`, `pa
 
 ## Tests
 
-`tests/verification/passkit.rin` (policy/strength/hashing), `tests/verification/passkit_features.rin` (167 features),
+`tests/verification/passkit.rin` (policy/strength/hashing), `tests/verification/passkit_features.rin` (185 features),
 `tests/verification/passkitlang.rin` (the library form of the language) and `examples/customlang/passkit/test.rin`
 (language + file linking).
