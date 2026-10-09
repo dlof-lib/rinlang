@@ -142,6 +142,7 @@ rin new myproj --template console   # مشروع جديد (rin.toml + src/main.r
 | 🖥️ النظام والويب | `syskit` · `httpkit` · `urlkit` · `router` · `logger` · `rinzip` |
 | 🔁 الحلقات والتفاعل | `loopkit` · `gridkit` · `movingmask` · `behaviorkit` |
 | 🎨 الواجهات | `colors` · `layout` · `rinxg` · `relyRIN` · `indsinweb` · `boat` |
+| 🔐 Passwords, crypto & databases | `passkit` · `passkitcrypt` · `passkitdb` · `passkitlang` (`.passkit` tag language) |
 | 🧬 صناعة اللغات | `langkit` · `lexkit` · `parsekit` · `astwalk` · `oglang` |
 
 ```rin
