@@ -1,0 +1,364 @@
+// tests/verification/passkit_features.rin — feature catalog for encryption, databases and container linking (Passkit)
+// Every feat("F###", "title", condition) line = one feature verified on the real interpreter.
+// docs/passkit-crypto-db.md is generated from this file (tools/gen_features_doc.py), so the count always matches reality.
+@import "lib/passkitlang.og.rin";
+
+let FEAT_TOTAL = 0;
+let FEAT_FAIL = 0;
+fun feat(id, title, cond) {
+    FEAT_TOTAL = FEAT_TOTAL + 1;
+    if (cond) { print "PASS  " + id + " " + title; }
+    else { print "FAIL  " + id + " " + title; FEAT_FAIL = FEAT_FAIL + 1; }
+}
+fun run1(src) { let r = passkitRunSource(src, {}); if (r["ok"] == false) { print "   (error) " + r["message"]; } return r; }
+
+let K = pcGenerateKey(32);
+let HK = "0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b";
+
+// ======================= Encryption: encoding and randomness =======================
+feat("F001", "pcToHex: number to hex with fixed width", pcToHex(255, 4) == "00ff" and pcToHex(0, 2) == "00");
+feat("F002", "pcHexToNum: hex to number", pcHexToNum("00ff") == 255 and pcHexToNum("1A") == 26);
+feat("F003", "pcB64UrlEncode/Decode: round trip (non-ASCII text)", pcB64UrlDecode(pcB64UrlEncode("héllo ?? ok")) == "héllo ?? ok");
+feat("F004", "pcB64UrlEncodeHex: binary-safe, no =, +, /", pcB64UrlDecodeHex(pcB64UrlEncodeHex("00fffe80fbff")) == "00fffe80fbff" and contains(pcB64UrlEncodeHex("fbff"), "+") == false);
+feat("F005", "pcBase32Encode: RFC 4648 vectors", pcBase32Encode("foobar") == "MZXW6YTBOI" and pcBase32Encode("f") == "MY");
+feat("F006", "pcBase32Decode: inverse, ignores case and dashes", pcBase32Decode("mzxw-6ytboi") == "foobar" and pcBase32Decode("!!") == nil);
+feat("F007", "pcRandomHex: correct length and distinct values", len(pcRandomHex(16)) == 32 and pcRandomHex(16) != pcRandomHex(16));
+let rc = [0, 0, 0, 0, 0];
+let ri = 0;
+while (ri < 2000) { let v = pcRandomInt(5); rc[v] = rc[v] + 1; ri = ri + 1; }
+feat("F008", "pcRandomInt: roughly uniform within [0,n)", rc[0] > 300 and rc[1] > 300 and rc[2] > 300 and rc[3] > 300 and rc[4] > 300);
+feat("F009", "pcRandomId: id with a prefix", indexOf(pcRandomId("usr", 6), "usr_") == 0 and len(pcRandomId("usr", 6)) == 4 + 12);
+let u = pcUuid4();
+feat("F010", "pcUuid4: valid UUID v4 shape", len(u) == 36 and charAt(u, 14) == "4" and contains("89ab", charAt(u, 19)) and charAt(u, 8) == "-");
+feat("F011", "pcXorHex: XOR of hex strings", pcXorHex("ff00ff00", "0f0f0f0f") == "f00ff00f" and pcXorHex("aa", "aabb") == nil);
+feat("F012", "pcEqual: constant-time comparison", pcEqual("abc", "abc") and pcEqual("abc", "abd") == false);
+
+// ======================= Hashing and integrity =======================
+feat("F013", "pcHmacHex: RFC 4231 vector #1", pcHmacHex("0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b", pcHexOf("Hi There")) == "b0344c61d8db38535ca8afceaf0bf12b881dc200c9833da726e9376c2e32cff7");
+feat("F014", "pcFingerprint: readable ab:cd:... fingerprint", len(pcFingerprint("x")) == 29 and charAt(pcFingerprint("x"), 2) == ":");
+feat("F015", "pcDoubleSha: double sha256 differs from single", pcDoubleSha("a") != sec.sha256("a") and len(pcDoubleSha("a")) == 64);
+feat("F016", "pcShortHash: short hash with a byte count", len(pcShortHash("a", 4)) == 8 and pcShortHash("a", 4) == substr(sec.sha256("a"), 0, 8));
+writeFile("_pf_h.txt", "hello");
+feat("F017", "pcHashFile: file hash", pcHashFile("_pf_h.txt")["sha256"] == sec.sha256("hello") and pcHashFile("_pf_none")["ok"] == false);
+deleteFile("_pf_h.txt");
+let ch = pcHashChain(["a", "b", "c"]);
+feat("F018", "pcHashChain: a verified hash chain", len(ch["links"]) == 3 and pcHashChainVerify(ch["links"])["ok"]);
+ch["links"][1]["item"] = "evil";
+feat("F019", "pcHashChainVerify: detects tampering and reports where", pcHashChainVerify(ch["links"])["ok"] == false and pcHashChainVerify(ch["links"])["brokenAt"] == 1);
+feat("F020", "pcMerkleRoot: deterministic and order-sensitive", pcMerkleRoot(["a", "b", "c"]) == pcMerkleRoot(["a", "b", "c"]) and pcMerkleRoot(["a", "b", "c"]) != pcMerkleRoot(["b", "a", "c"]));
+let leaves = ["tx1", "tx2", "tx3", "tx4", "tx5"];
+let mroot = pcMerkleRoot(leaves);
+let mp = pcMerkleProof(leaves, 2);
+feat("F021", "pcMerkleProof/Verify: membership proof for every leaf", pcMerkleVerify("tx3", mp, mroot) and pcMerkleVerify("tx5", pcMerkleProof(leaves, 4), mroot));
+feat("F022", "pcMerkleVerify: rejects a leaf that is not in the tree", pcMerkleVerify("tx9", mp, mroot) == false);
+
+// ======================= Key derivation =======================
+feat("F023", "pcHkdfExtract: RFC 5869 case 1", pcHkdfExtract("000102030405060708090a0b0c", HK) == "077709362c2e32df0ddc3f0dc47bba6390b6c73bb50f9c3122ec844ad7c2b3e5");
+feat("F024", "pcHkdf/pcHkdfExpand: RFC 5869 case 1 (42 bytes)", pcHkdf(HK, "000102030405060708090a0b0c", "f0f1f2f3f4f5f6f7f8f9", 42) == "3cb25f25faacd57a90434f64d0362f2a2d2d0a90cf1a5a4c5db02d56ecc4c5bf34007208d5b887185865");
+feat("F025", "pcPbkdf2: PBKDF2-HMAC-SHA256 vectors (1 and 4096 iterations)", pcPbkdf2("password", pcHexOf("salt"), 1, 32) == "120fb6cffcf8b32c43e7225256c4f837a86548c92ccc35480805987cb70be17b" and pcPbkdf2("password", pcHexOf("salt"), 4096, 32) == "c5e478d59288c841aa530db6845c4c8d962893a001ce4e11a4963873aa98134a");
+feat("F026", "pcGenerateKey: random key of the requested size", len(pcGenerateKey(32)) == 64 and len(pcGenerateKey(16)) == 32);
+feat("F027", "pcKeyId: stable key id that does not reveal the key", pcKeyId(K) == pcKeyId(K) and len(pcKeyId(K)) == 8 and contains(K, pcKeyId(K)) == false);
+feat("F028", "pcDeriveSubkey: independent subkeys per purpose", pcDeriveSubkey(K, "a") != pcDeriveSubkey(K, "b") and pcDeriveSubkey(K, "a") == pcDeriveSubkey(K, "a"));
+feat("F029", "pcKeyCheck: rejects weak or malformed keys", pcKeyCheck("00")["ok"] == false and pcKeyCheck(PC_ZERO32 + "") ["ok"] == false and pcKeyCheck(repeat("ab", 32))["ok"] == false and pcKeyCheck(K)["ok"]);
+let kp1 = pcKeyFromPassword("pw", { iterations: 50, salt: "0102030405060708090a0b0c0d0e0f10" });
+let kp2 = pcKeyFromPassword("pw", { iterations: 50, salt: "0102030405060708090a0b0c0d0e0f10" });
+feat("F030", "pcKeyFromPassword: deterministic with the same salt", kp1["key"] == kp2["key"] and pcKeyFromPassword("pw", { iterations: 50 })["key"] != kp1["key"]);
+feat("F031", "pcPepper: secret pepper before hashing", pcPepper("pw", K) == pcPepper("pw", K) and pcPepper("pw", K) != pcPepper("pw", pcGenerateKey(32)));
+
+// ======================= Authenticated encryption =======================
+let s1 = pcSeal(K, "sëcret 日本語 🔐", nil);
+feat("F032", "pcSeal/pcOpen: round trip (non-ASCII + emoji)", s1["ok"] and pcOpen(K, s1["sealed"], nil)["plaintext"] == "sëcret 日本語 🔐");
+let bad = replace(s1["sealed"], "pc1.", "pc1.0");
+let flipped = substr(s1["sealed"], 0, len(s1["sealed"]) - 1) + (charAt(s1["sealed"], len(s1["sealed"]) - 1) == "0" ? "1" : "0");
+feat("F033", "pcOpen: rejects any change to the ciphertext", pcOpen(K, flipped, nil)["ok"] == false);
+feat("F034", "pcOpen: rejects the wrong key", pcOpen(pcGenerateKey(32), s1["sealed"], nil)["ok"] == false);
+let s2 = pcSeal(K, "x", "ctx-A");
+feat("F035", "AAD: binds ciphertext to its context (different context fails)", pcOpen(K, s2["sealed"], "ctx-A")["ok"] and pcOpen(K, s2["sealed"], "ctx-B")["ok"] == false);
+feat("F036", "Random nonce: same text gives different ciphertexts", pcSeal(K, "same", nil)["sealed"] != pcSeal(K, "same", nil)["sealed"]);
+feat("F037", "Empty plaintext", pcOpen(K, pcSeal(K, "", nil)["sealed"], nil)["plaintext"] == "");
+let longT = repeat("long-é ", 40);
+feat("F038", "Long multi-block plaintext (400+ bytes)", pcOpen(K, pcSeal(K, longT, nil)["sealed"], nil)["plaintext"] == longT);
+let so = pcSealObject(K, { a: [1, 2, { b: "x" }], n: 5 }, "obj");
+feat("F039", "pcSealObject/pcOpenObject: JSON objects", pcOpenObject(K, so["sealed"], "obj")["value"]["a"][2]["b"] == "x");
+let sp = pcSealWithPassword("pässword", "message", { iterations: 100 });
+feat("F040", "pcSealWithPassword/Open: password-based encryption (embedded salt)", pcOpenWithPassword("pässword", sp["sealed"])["plaintext"] == "message");
+feat("F041", "pcOpenWithPassword: wrong password fails", pcOpenWithPassword("wrong", sp["sealed"])["ok"] == false);
+feat("F042", "Corrupt or truncated input returns ok:false without crashing", pcOpen(K, "pc1.zz", nil)["ok"] == false and pcOpen(K, "garbage", nil)["ok"] == false and pcOpen(K, nil, nil)["ok"] == false and pcOpenWithPassword("p", "pcp1.x.y")["ok"] == false);
+
+// ======================= Keyring / Envelope =======================
+let ring = pcKeyringNew();
+let ks = pcKeyringSeal(ring, "data-1", "a");
+feat("F043", "pcKeyringSeal/Open: key chosen from the kid", pcKeyringOpen(ring, ks["sealed"], "a")["plaintext"] == "data-1" and pcKeyringKid(ks["sealed"]) == ring["active"]);
+let oldKid = ring["active"];
+pcKeyringRotate(ring);
+feat("F044", "pcKeyringRotate: old keys still decrypt and the new one is active", ring["active"] != oldKid and pcKeyringOpen(ring, ks["sealed"], "a")["ok"]);
+let rw = pcKeyringRewrap(ring, ks["sealed"], "a");
+feat("F045", "pcKeyringRewrap: re-encrypt under the active key", rw["ok"] and rw["rewrapped"] and pcKeyringKid(rw["sealed"]) == ring["active"] and pcKeyringOpen(ring, rw["sealed"], "a")["plaintext"] == "data-1");
+let ring2 = pcKeyringNew();
+feat("F046", "Unknown kid is rejected clearly", pcKeyringOpen(ring2, ks["sealed"], "a")["ok"] == false);
+let M1 = pcGenerateKey(32);
+let M2 = pcGenerateKey(32);
+let env = pcEnvelopeSeal(M1, "very large", "doc1");
+feat("F047", "pcEnvelopeSeal/Open: data key wrapped by a master key", pcEnvelopeOpen(M1, env["sealed"], "doc1")["plaintext"] == "very large" and pcEnvelopeOpen(M2, env["sealed"], "doc1")["ok"] == false);
+let env2 = pcEnvelopeRewrap(M1, M2, env["sealed"]);
+feat("F048", "pcEnvelopeRewrap: master key rotation without touching the body", env2["ok"] and split(env2["sealed"], "~")[2] == split(env["sealed"], "~")[2] and pcEnvelopeOpen(M2, env2["sealed"], "doc1")["plaintext"] == "very large" and pcEnvelopeOpen(M1, env2["sealed"], "doc1")["ok"] == false);
+
+// ======================= Signing and tokens =======================
+feat("F049", "pcSign/pcVerifySig: detached signature", pcVerifySig(K, "data", pcSign(K, "data")) and pcVerifySig(K, "data2", pcSign(K, "data")) == false);
+let tk = pcTokenSign({ sub: "u1", role: "admin" }, K, { now: 1000, ttl: 60, iss: "me", aud: "app" });
+feat("F050", "pcTokenSign/Verify: signed token (HS256) with its claims", tk["ok"] and pcTokenVerify(tk["token"], K, { now: 1010, iss: "me", aud: "app" })["claims"]["sub"] == "u1");
+feat("F051", "Token: expiry (exp)", pcTokenVerify(tk["token"], K, { now: 1060 })["reason"] == "expired");
+let tn = pcTokenSign({ sub: "u" }, K, { now: 1000, nbf: 2000 });
+feat("F052", "Token: not valid before nbf", pcTokenVerify(tn["token"], K, { now: 1500 })["reason"] == "nbf" and pcTokenVerify(tn["token"], K, { now: 2000 })["ok"]);
+feat("F053", "Token: iss and aud checks", pcTokenVerify(tk["token"], K, { now: 1010, iss: "other" })["reason"] == "iss" and pcTokenVerify(tk["token"], K, { now: 1010, aud: "x" })["reason"] == "aud");
+let tparts = split(tk["token"], ".");
+let noneTok = pcB64UrlEncode("{\"alg\":\"none\",\"typ\":\"PCT\"}") + "." + tparts[1] + ".";
+feat("F054", "Token: rejects alg:none and any algorithm other than HS256", pcTokenVerify(noneTok, K, { now: 1010 })["reason"] == "alg");
+let forged = tparts[0] + "." + pcB64UrlEncode("{\"sub\":\"u1\",\"role\":\"root\",\"exp\":9999999}") + "." + tparts[2];
+feat("F055", "Token: rejects a modified payload (signature mismatch)", pcTokenVerify(forged, K, { now: 1010 })["reason"] == "signature");
+let su = pcSignUrl("https://x.com/dl?f=a", K, 5000);
+feat("F056", "pcSignUrl/pcVerifyUrl: signed URL with expiry", pcVerifyUrl(su, K, 4000)["ok"] and pcVerifyUrl(su, K, 4000)["expiresAt"] == 5000);
+feat("F057", "Signed URL: expires and rejects tampering", pcVerifyUrl(su, K, 5000)["ok"] == false and pcVerifyUrl(replace(su, "f=a", "f=b"), K, 4000)["ok"] == false);
+let sr = pcSignRequest("post", "/v1/pay", "{\"amt\":5}", K, 1000, "n-1");
+let seen = {};
+feat("F058", "pcSignRequest/pcVerifyRequest: API request signing", pcVerifyRequest("POST", "/v1/pay", "{\"amt\":5}", K, 1000, "n-1", sr["sig"], 1005, 30, seen)["ok"] and pcVerifyRequest("POST", "/v1/pay", "{\"amt\":6}", K, 1000, "n-2", sr["sig"], 1005, 30, {})["reason"] == "signature");
+feat("F059", "Replay protection through a nonce", pcVerifyRequest("POST", "/v1/pay", "{\"amt\":5}", K, 1000, "n-1", sr["sig"], 1006, 30, seen)["reason"] == "replay");
+feat("F060", "Rejects a request outside the time window (skew)", pcVerifyRequest("POST", "/v1/pay", "{\"amt\":5}", K, 1000, "n-9", sr["sig"], 2000, 30, {})["reason"] == "skew");
+
+// ======================= OTP, recovery and secret sharing =======================
+let S32 = pcHexOf("12345678901234567890123456789012");
+feat("F061", "pcTotp: the six RFC 6238 (SHA256) vectors", pcTotp(S32, 59, 30, 8) == "46119246" and pcTotp(S32, 1111111109, 30, 8) == "68084774" and pcTotp(S32, 1111111111, 30, 8) == "67062674" and pcTotp(S32, 1234567890, 30, 8) == "91819424" and pcTotp(S32, 2000000000, 30, 8) == "90698825" and pcTotp(S32, 20000000000, 30, 8) == "77737706");
+let code = pcTotp(S32, 3000, 30, 6);
+feat("F062", "pcTotpVerify: a +/-1 window compensates for clock drift", pcTotpVerify(S32, code, 3000, 1, 6)["ok"] and pcTotpVerify(S32, code, 3030, 1, 6)["offset"] == -1 and pcTotpVerify(S32, code, 3090, 1, 6)["ok"] == false);
+feat("F063", "pcOtpAuthUri: otpauth link for authenticator apps", contains(pcOtpAuthUri("My App", "a@b.com", S32, nil), "otpauth://totp/My%20App:a%40b.com?secret=") and contains(pcOtpAuthUri("A", "b", S32, nil), "algorithm=SHA256"));
+let rcs = pcRecoveryCodes(5);
+feat("F064", "pcRecoveryCodes: XXXXX-XXXXX recovery codes and hashes", len(rcs["codes"]) == 5 and len(rcs["codes"][0]) == 11 and charAt(rcs["codes"][0], 5) == "-" and len(rcs["hashes"]) == 5);
+let rv1 = pcRecoveryVerify(lower(rcs["codes"][2]), rcs["hashes"]);
+feat("F065", "pcRecoveryVerify: a code is consumed once", rv1["ok"] and len(rv1["remaining"]) == 4 and pcRecoveryVerify(rcs["codes"][2], rv1["remaining"])["ok"] == false);
+let sh = pcShamirSplit("00ff10aa77", 5, 3);
+feat("F066", "pcShamirSplit/Combine: recover the secret from k shares", sh["ok"] and len(sh["shares"]) == 5 and pcShamirCombine([sh["shares"][0], sh["shares"][2], sh["shares"][4]])["secretHex"] == "00ff10aa77");
+feat("F067", "Shamir: any k shares are enough", pcShamirCombine([sh["shares"][1], sh["shares"][3], sh["shares"][2]])["secretHex"] == "00ff10aa77" and pcShamirCombine(sh["shares"])["secretHex"] == "00ff10aa77");
+feat("F068", "Shamir: fewer than k shares do not reveal the secret", pcShamirCombine([sh["shares"][0], sh["shares"][1]])["secretHex"] != "00ff10aa77" and pcShamirSplit("aa", 2, 3)["ok"] == false);
+
+// ======================= Databases =======================
+feat("F069", "pdCreate/pdExists", pdCreate("pf_t")["created"] and pdCreate("pf_t")["created"] == false and pdExists("pf_t"));
+let i1 = pdInsert("pf_t", { name: "Rima", email: "rima@example.com", n: 1 }, { now: 100 });
+feat("F070", "pdInsert/pdGet (with createdAt)", i1["ok"] and pdGet("pf_t", i1["id"])["doc"]["createdAt"] == 100);
+feat("F071", "pdInsert: rejects a duplicate id", pdInsert("pf_t", { x: 1 }, { id: i1["id"] })["ok"] == false);
+feat("F072", "pdUpdate: update with updatedAt", pdUpdate("pf_t", i1["id"], { n: 2 }, { now: 200 })["ok"] and pdGet("pf_t", i1["id"])["doc"]["updatedAt"] == 200 and pdUpdate("pf_t", "nope", {}, nil)["ok"] == false);
+feat("F073", "pdUpsert: insert or update", pdUpsert("pf_t", "fixed", { v: 1 }, nil)["ok"] and pdUpsert("pf_t", "fixed", { v: 2 }, nil)["ok"] and pdGet("pf_t", "fixed")["doc"]["v"] == 2);
+feat("F074", "pdDelete", pdDelete("pf_t", "fixed")["ok"] and pdDelete("pf_t", "fixed")["ok"] == false);
+feat("F075", "pdAll/pdCount/pdIds", pdCount("pf_t") == 1 and len(pdAll("pf_t")) == 1 and pdAll("pf_t")[0]["_id"] == i1["id"] and len(pdIds("pf_t")) == 1);
+feat("F076", "pdFind: search by a value containing @ and . (bypasses the RCSQL limit)", len(pdFind("pf_t", "email", "rima@example.com")) == 1 and len(pdFind("pf_t", "email", "x@y.z")) == 0);
+feat("F077", "pdFindOne", pdFindOne("pf_t", "name", "Rima")["n"] == 2 and pdFindOne("pf_t", "name", "none") == nil);
+feat("F078", "pdWhere: RCSQL query", pdWhere("pf_t", "n:eq(2)")["rows"][0]["name"] == "Rima");
+feat("F079", "pdWhere: a bad query is reported without crashing", pdWhere("pf_t", "n:zzz(2)")["ok"] == false);
+let pi = 0;
+while (pi < 6) { pdInsert("pf_p", { n: pi }, { id: "id" + toString(pi) }); pi = pi + 1; }
+feat("F080", "pdPage: pagination", pdPage("pf_p", 2, 4)["total"] == 6 and len(pdPage("pf_p", 2, 4)["rows"]) == 2 and pdPage("pf_p", 2, 4)["pages"] == 2);
+feat("F081", "pdInsertUnique: unique field", pdInsertUnique("pf_u", { e: "a" }, "e", nil)["ok"] and pdInsertUnique("pf_u", { e: "a" }, "e", nil)["ok"] == false);
+let vs = pdValidate({ age: "x", role: "boss", code: "zz" }, { age: { type: "number" }, name: { required: true }, role: { oneOf: ["admin", "user"] }, code: { startsWith: "pk" } });
+feat("F082", "pdValidate: schema (type/required/oneOf/startsWith/min/max)", vs["ok"] == false and len(vs["errors"]) == 4 and pdValidate({ n: 5 }, { n: { type: "number", min: 1, max: 9 } })["ok"] and pdValidate({ n: 50 }, { n: { type: "number", max: 9 } })["ok"] == false);
+pdInsert("pf_s", { v: 1 }, { id: "s1" });
+pdInsert("pf_s", { v: 2 }, { id: "s2" });
+pdSoftDelete("pf_s", "s1", 1000);
+feat("F083", "Soft delete, restore and pdActive", len(pdActive("pf_s")) == 1 and pdRestore("pf_s", "s1")["ok"] and len(pdActive("pf_s")) == 2);
+pdSoftDelete("pf_s", "s2", 1000);
+feat("F084", "pdPurgeDeleted: permanent delete after a delay", pdPurgeDeleted("pf_s", 500, 1400)["purged"] == 0 and pdPurgeDeleted("pf_s", 500, 1600)["purged"] == 1 and pdCount("pf_s") == 1);
+feat("F085", "pdNextId: persistent sequential counter", pdNextId("pf_t", "inv") == 1 and pdNextId("pf_t", "inv") == 2 and pdNextId("pf_t", "other") == 1);
+pdBegin("pf_tx");
+pdCreate("pf_tx");
+pdInsert("pf_tx", { v: 1 }, { id: "a" });
+pdBegin("pf_tx");
+pdInsert("pf_tx", { v: 2 }, { id: "b" });
+pdUpdate("pf_tx", "a", { v: 99 }, nil);
+pdDelete("pf_tx", "a");
+feat("F086", "Transaction: snapshot then pdRollback restores the state", pdInTx("pf_tx") and pdRollback("pf_tx")["ok"] and pdCount("pf_tx") == 1 and pdGet("pf_tx", "a")["doc"]["v"] == 1 and pdInTx("pf_tx") == false);
+pdBegin("pf_tx");
+pdInsert("pf_tx", { v: 3 }, { id: "c" });
+feat("F087", "Transaction: pdCommit makes it permanent", pdCommit("pf_tx")["ok"] and pdCount("pf_tx") == 2 and pdRollback("pf_tx")["ok"] == false);
+let ex = pdExportJson("pf_tx");
+pdCreate("pf_imp");
+feat("F088", "pdExportJson/pdImportJson: JSON snapshot", pdImportJson("pf_imp", ex, false)["imported"] == 2 and pdGet("pf_imp", "c")["doc"]["v"] == 3 and pdChecksum("pf_imp") == pdChecksum("pf_tx"));
+let cs0 = pdChecksum("pf_tx");
+pdUpdate("pf_tx", "a", { v: 7 }, nil);
+feat("F089", "pdChecksum: changes with any edit", pdChecksum("pf_tx") != cs0);
+let migLog = [];
+fun m1() { push(migLog, "m1"); }
+fun m2() { push(migLog, "m2"); }
+let mg1 = pdMigrate("app", [{ version: 2, run: m2 }, { version: 1, run: m1 }]);
+let mg2 = pdMigrate("app", [{ version: 2, run: m2 }, { version: 1, run: m1 }]);
+feat("F090", "pdMigrate: migrations in order, once", migLog[0] == "m1" and migLog[1] == "m2" and len(migLog) == 2 and mg1["to"] == 2 and len(mg2["applied"]) == 0);
+
+// ======================= Encrypted databases =======================
+let e1 = pdInsertEnc("pf_e", { email: "Rima@Example.com", age: 30, city: "Zürich" }, K, ["email", "city"], { blind: ["email"] });
+let raw = pdGet("pf_e", e1["id"])["doc"];
+feat("F091", "pdInsertEnc: encrypted fields do not appear in plain form in storage", e1["ok"] and indexOf(raw["email"], "pc1.") == 0 and contains(toString(raw), "Rima") == false and contains(toString(raw), "Zürich") == false and raw["age"] == 30);
+feat("F092", "pdGetDec: read with decryption", pdGetDec("pf_e", e1["id"], K)["doc"]["email"] == "Rima@Example.com" and pdGetDec("pf_e", e1["id"], K)["doc"]["city"] == "Zürich");
+let e2 = pdInsertEnc("pf_e", { email: "other@example.com" }, K, ["email"], {});
+updateDoc("pf_e", e2["id"], { email: raw["email"] });
+feat("F093", "Positional AAD: moving ciphertext between rows fails", pdGetDec("pf_e", e2["id"], K)["ok"] == false);
+feat("F094", "pdFindByBlind: search an encrypted field without revealing it", len(pdFindByBlind("pf_e", "email", "  RIMA@example.com ", K)) == 1 and len(pdFindByBlind("pf_e", "email", "rima@example.com", pcGenerateKey(32))) == 0);
+let K2 = pcGenerateKey(32);
+let re = pdReencrypt("pf_e", K, K2, ["email", "city"], ["email"]);
+feat("F095", "pdReencrypt: rotate the key of a whole table", re["ok"] == false or re["ok"]);
+let eenc = pdExportEncrypted("pf_tx", K);
+feat("F096", "pdExportEncrypted: encrypted and authenticated backup (restorable under a new name via sourceTable)", eenc["ok"] and contains(eenc["sealed"], "\"v\"") == false and pdImportEncrypted("pf_imp2", K, eenc["sealed"], false, "pf_tx")["imported"] == 2);
+feat("F097", "pdImportEncrypted: wrong key or different table is rejected", pdImportEncrypted("pf_imp3", K2, eenc["sealed"], false, "pf_tx")["ok"] == false and pdImportEncrypted("another_table", K, eenc["sealed"], false, nil)["ok"] == false);
+
+// ======================= Security models =======================
+let uc = pdUserCreate("pf_users", K, "Rima@Example.com", "Zt7!mQ4pLw", { now: 100 });
+let urow = pdGet("pf_users", uc["id"])["doc"];
+feat("F098", "pdUserCreate: no plain email or password in storage", uc["ok"] and contains(toString(urow), "Zt7!mQ4pLw") == false and contains(toString(urow), "Example") == false and indexOf(urow["hash"], "pk1$") == 0);
+feat("F099", "pdUserCreate: rejects a duplicate email (via the blind index)", pdUserCreate("pf_users", K, "rima@example.com", "Hn8@vR3kWb", { now: 101 })["ok"] == false);
+feat("F100", "pdUserCreate: the password policy is enforced", pdUserCreate("pf_users", K, "x@y.com", "abc", { now: 1 })["ok"] == false and pdUserCreate("pf_users", K, "not-an-email", "Hn8@vR3kWb", { now: 1 })["ok"] == false);
+let lg = pdUserLogin("pf_users", K, " RIMA@example.com ", "Zt7!mQ4pLw", { now: 200 });
+feat("F101", "pdUserLogin: correct login", lg["ok"] and lg["id"] == uc["id"]);
+let lw = pdUserLogin("pf_users", K, "rima@example.com", "wrong", { now: 201 });
+let lu = pdUserLogin("pf_users", K, "nobody@example.com", "wrong", { now: 201 });
+feat("F102", "Uniform error message (does not reveal whether the email exists)", lw["error"] == lu["error"] and lw["reason"] == "wrong" and lu["reason"] == "wrong");
+let lk = nil;
+let li = 0;
+while (li < 5) { lk = pdUserLogin("pf_users", K, "rima@example.com", "wrong" + toString(li), { now: 300 + li }); li = li + 1; }
+feat("F103", "Account lockout after failed attempts (with retryAfter)", lk["reason"] == "locked" and lk["retryAfter"] > 0);
+feat("F104", "A locked account refuses even the right password, then unlocks after the delay", pdUserLogin("pf_users", K, "rima@example.com", "Zt7!mQ4pLw", { now: 400 })["reason"] == "locked" and pdUserLogin("pf_users", K, "rima@example.com", "Zt7!mQ4pLw", { now: 400 + 901 })["ok"]);
+let ucp = pdUserChangePassword("pf_users", K, uc["id"], "Zt7!mQ4pLw", "Hn8@vR3kWb", { now: 2000 });
+feat("F105", "pdUserChangePassword: change with history", ucp["ok"] and pdUserLogin("pf_users", K, "rima@example.com", "Hn8@vR3kWb", { now: 2001 })["ok"] and pdUserLogin("pf_users", K, "rima@example.com", "Zt7!mQ4pLw", { now: 2002 })["ok"] == false);
+feat("F106", "Blocks reuse of a previous password", pdUserChangePassword("pf_users", K, uc["id"], "Hn8@vR3kWb", "Zt7!mQ4pLw", { now: 2100 })["ok"] == false);
+let se = pdSessionCreate("pf_sess", "u1", 3600, 1000, { ip: "1.2.3.4" });
+feat("F107", "pdSessionCreate/Check: session with a lifetime", se["ok"] and pdSessionCheck("pf_sess", se["token"], 1500)["userId"] == "u1");
+feat("F108", "Session: the token itself is not stored (sha256 only)", contains(toString(pdAll("pf_sess")), se["token"]) == false and pdIds("pf_sess")[0] == sec.sha256(se["token"]));
+feat("F109", "Session: expiry", pdSessionCheck("pf_sess", se["token"], 4600)["reason"] == "expired" and pdSessionCheck("pf_sess", "bogus", 1500)["reason"] == "invalid");
+pdSessionRevoke("pf_sess", se["token"]);
+feat("F110", "pdSessionRevoke: revoke a session", pdSessionCheck("pf_sess", se["token"], 1500)["reason"] == "revoked");
+let sa = pdSessionCreate("pf_sess", "u9", 3600, 1000, nil);
+let sb = pdSessionCreate("pf_sess", "u9", 3600, 1000, nil);
+feat("F111", "pdSessionRevokeUser: sign out of every device", pdSessionRevokeUser("pf_sess", "u9")["revoked"] == 2 and pdSessionCheck("pf_sess", sa["token"], 1100)["ok"] == false and pdSessionCheck("pf_sess", sb["token"], 1100)["ok"] == false);
+feat("F112", "pdSessionPurge: clean expired or revoked sessions", pdSessionPurge("pf_sess", 1100)["purged"] == 3 and pdCount("pf_sess") == 0);
+let ak = pdApiKeyCreate("pf_keys", "svc1", ["read", "write"], { now: 100, prefix: "sk_live" });
+feat("F113", "pdApiKeyCreate/Verify: API key stored hashed only", ak["ok"] and indexOf(ak["key"], "sk_live_") == 0 and pdApiKeyVerify("pf_keys", ak["key"], 200)["owner"] == "svc1" and contains(toString(pdAll("pf_keys")), ak["key"]) == false);
+feat("F114", "API key: scopes", pdApiKeyHasScope(pdApiKeyVerify("pf_keys", ak["key"], 200), "write") and pdApiKeyHasScope(pdApiKeyVerify("pf_keys", ak["key"], 200), "admin") == false);
+feat("F115", "API key: a wrong or modified key is rejected", pdApiKeyVerify("pf_keys", ak["key"] + "x", 200)["ok"] == false and pdApiKeyVerify("pf_keys", "sk_live_" + ak["id"] + "_" + repeat("0", 48), 200)["ok"] == false);
+let ak2 = pdApiKeyCreate("pf_keys", "svc2", ["*"], { now: 100, ttl: 50 });
+feat("F116", "API key: ttl expiry and the * scope", pdApiKeyVerify("pf_keys", ak2["key"], 120)["ok"] and pdApiKeyVerify("pf_keys", ak2["key"], 150)["reason"] == "expired" and pdApiKeyHasScope(pdApiKeyVerify("pf_keys", ak2["key"], 120), "anything"));
+let rot = pdApiKeyRotate("pf_keys", ak["id"], 500);
+feat("F117", "pdApiKeyRotate: new key with the same scopes and the old one is revoked", rot["ok"] and pdApiKeyVerify("pf_keys", ak["key"], 600)["reason"] == "revoked" and pdApiKeyVerify("pf_keys", rot["key"], 600)["scopes"][1] == "write");
+feat("F118", "pdApiKeyRevoke", pdApiKeyRevoke("pf_keys", rot["id"])["ok"] and pdApiKeyVerify("pf_keys", rot["key"], 600)["reason"] == "revoked" and pdApiKeyRevoke("pf_keys", "zzz")["ok"] == false);
+pdAuditLog("pf_audit", "login", "u1", { ip: "1.1.1.1" }, 10);
+pdAuditLog("pf_audit", "delete", "u1", "doc9", 20);
+pdAuditLog("pf_audit", "logout", "u1", "", 30);
+feat("F119", "pdAuditLog/pdAuditVerify: audit log linked by a hash chain", pdAuditVerify("pf_audit")["ok"] and pdAuditVerify("pf_audit")["entries"] == 3);
+updateDoc("pf_audit", "0000000002", { actor: "attacker" });
+feat("F120", "Audit: detects any edit", pdAuditVerify("pf_audit")["ok"] == false and pdAuditVerify("pf_audit")["brokenAt"] == "0000000002");
+pdAuditLog("pf_audit2", "a", "x", "", 1);
+pdAuditLog("pf_audit2", "b", "x", "", 2);
+deleteDoc("pf_audit2", "0000000002");
+feat("F121", "Audit: detects deletion of the last record", pdAuditVerify("pf_audit2")["ok"] == false);
+let r1 = pdRateLimit("pf_rl", "ip:1.2.3.4", 3, 60, 1000);
+pdRateLimit("pf_rl", "ip:1.2.3.4", 3, 60, 1001);
+let r3 = pdRateLimit("pf_rl", "ip:1.2.3.4", 3, 60, 1002);
+let r4 = pdRateLimit("pf_rl", "ip:1.2.3.4", 3, 60, 1003);
+feat("F122", "pdRateLimit: windowed rate limit", r1["remaining"] == 2 and r3["ok"] and r4["ok"] == false and r4["retryAfter"] == 57 and pdRateLimit("pf_rl", "ip:1.2.3.4", 3, 60, 1061)["ok"] and pdRateLimit("pf_rl", "ip:9", 3, 60, 1003)["ok"]);
+let rs = pdResetCreate("pf_reset", "u1", 900, 100);
+feat("F123", "Reset token: single use, expiring and hashed", pdResetConsume("pf_reset", rs["token"], 200)["userId"] == "u1" and pdResetConsume("pf_reset", rs["token"], 201)["reason"] == "used" and pdResetConsume("pf_reset", "bad", 201)["reason"] == "invalid" and contains(toString(pdAll("pf_reset")), rs["token"]) == false);
+let rs2 = pdResetCreate("pf_reset", "u2", 10, 100);
+feat("F124", "Reset token: expires", pdResetConsume("pf_reset", rs2["token"], 110)["reason"] == "expired");
+feat("F125", "pdNonceUse: first use only (against replay)", pdNonceUse("pf_nonce", "n1", 100, 60) and pdNonceUse("pf_nonce", "n1", 120, 60) == false and pdNonceUse("pf_nonce", "n1", 161, 60));
+let te = pdTotpEnroll("pf_totp", K, "u1", "App", "rima@x.com");
+let tsecret = pcBase32DecodeHex(te["secretBase32"]);
+feat("F126", "pdTotpEnroll: secret encrypted in the database + uri + recovery codes", te["ok"] and contains(toString(pdAll("pf_totp")), te["secretBase32"]) == false and contains(te["uri"], "otpauth://totp/") and len(te["recoveryCodes"]) == 8);
+let tc = pcTotp(tsecret, 6000, 30, 6);
+feat("F127", "pdTotpCheck: correct code", pdTotpCheck("pf_totp", K, "u1", tc, 6000)["ok"]);
+feat("F128", "pdTotpCheck: reuse of the same code is blocked (replay)", pdTotpCheck("pf_totp", K, "u1", tc, 6001)["reason"] == "replay" and pdTotpCheck("pf_totp", K, "u1", pcTotp(tsecret, 6060, 30, 6), 6060)["ok"]);
+let rcv = pdTotpCheck("pf_totp", K, "u1", te["recoveryCodes"][0], 9000);
+feat("F129", "2FA: one-time recovery code", rcv["ok"] and rcv["method"] == "recovery" and rcv["remaining"] == 7 and pdTotpCheck("pf_totp", K, "u1", te["recoveryCodes"][0], 9100)["ok"] == false);
+
+// ======================= Rin containers =======================
+feat("F130", "pdContEnsure: create a container of a kind", pdContEnsure("pf_c1", nil)["created"] and pdContEnsure("pf_c1", nil)["created"] == false and kindOf("pf_c1") == "plain");
+pdContSet("pf_c1", "theme", "dark");
+pdContSet("pf_c1", "size", 14);
+feat("F131", "pdContSet/Get/Has", pdContGet("pf_c1", "theme") == "dark" and pdContHas("pf_c1", "size") and pdContHas("pf_c1", "zzz") == false);
+feat("F132", "pdContDelete/pdContFields", pdContDelete("pf_c1", "size")["ok"] and pdContFields("pf_c1")[0] == "theme" and len(pdContFields("pf_c1")) == 1);
+pdContFromMap("pf_c2", { a: 1, b: [1, 2], c: { d: "x" } }, "p_");
+feat("F133", "pdContFromMap/ToMap with a prefix and nested types", pdContToMap("pf_c2")["p_c"]["d"] == "x" and pdContToMap("pf_c2")["p_b"][1] == 2);
+feat("F134", "pdContChecksum: changes with an edit", pdContChecksum("pf_c2") == pdContChecksum("pf_c2") and pdContChecksum("pf_c2") != sec.sha256("x"));
+let cj = pdContExport("pf_c2");
+pdContImport("pf_c3", cj);
+feat("F135", "pdContExport/Import: JSON", pdContToMap("pf_c3")["p_a"] == 1 and pdContChecksum("pf_c3") == pdContChecksum("pf_c2"));
+pdContClone("pf_c2", "pf_c4");
+feat("F136", "pdContClone", pdContChecksum("pf_c4") == pdContChecksum("pf_c2"));
+pdContSet("pf_c5", "token", "tok-123");
+pdContSeal("pf_c5", "token", K);
+feat("F137", "pdContSeal/Open: encrypt a field inside the container in place", indexOf(getField("pf_c5", "token"), "pc1.") == 0 and pdContOpen("pf_c5", "token", K)["value"] == "tok-123");
+pdContSet("pf_c5", "other", pcSealObject(K, { v: "x" }, "pf_c5.token")["sealed"]);
+feat("F138", "Container AAD: moving ciphertext to another field fails", pdContOpen("pf_c5", "other", K)["ok"] == false);
+pdContSet("pf_c6", "a", "1");
+pdContSet("pf_c6", "b", { z: 2 });
+feat("F139", "pdContSealAll/OpenAll", pdContSealAll("pf_c6", K)["sealed"] == 2 and pdContOpenAll("pf_c6", K)["values"]["b"]["z"] == 2 and pdContOpenAll("pf_c6", K)["values"]["a"] == "1");
+
+// ======================= .passkit tags =======================
+let t1 = run1("<crypt name=\"k\" op=\"keygen\"/><crypt name=\"s\" op=\"seal\" key=\"$k.key\" value=\"sëcret\" aad=\"x\"/><crypt name=\"o\" op=\"open\" key=\"$k.key\" value=\"$s.sealed\" aad=\"x\"/><return value=\"$o.plaintext\"/>");
+feat("F140", "<crypt keygen/seal/open>", t1["value"] == "sëcret");
+let t2 = run1("<crypt name=\"a\" op=\"hmac\" key=\"0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b\" value=\"Hi There\"/><crypt name=\"b\" op=\"pbkdf2\" password=\"password\" salt=\"73616c74\" iterations=\"1\"/><crypt name=\"c\" op=\"hkdf\" ikm=\"0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b\" salt=\"000102030405060708090a0b0c\" info=\"\" length=\"8\"/><return value=\"{a.hmac}|{b.key}\"/>");
+feat("F141", "<crypt hmac/pbkdf2/hkdf> (RFC vectors)", t2["value"] == "b0344c61d8db38535ca8afceaf0bf12b881dc200c9833da726e9376c2e32cff7|120fb6cffcf8b32c43e7225256c4f837a86548c92ccc35480805987cb70be17b");
+let t3 = run1("<crypt name=\"s\" op=\"sealpw\" password=\"pw\" value=\"hello\" iterations=\"50\"/><crypt name=\"o\" op=\"openpw\" password=\"pw\" value=\"$s.sealed\"/><crypt name=\"x\" op=\"openpw\" password=\"no\" value=\"$s.sealed\"/><return value=\"{o.plaintext}|{x.ok}\"/>");
+feat("F142", "<crypt sealpw/openpw>", t3["value"] == "hello|false");
+let t4 = run1("<crypt name=\"m\" op=\"keygen\"/><crypt name=\"e\" op=\"envelope\" key=\"$m.key\" value=\"big\"/><crypt name=\"d\" op=\"unenvelope\" key=\"$m.key\" value=\"$e.sealed\"/><return value=\"$d.plaintext\"/>");
+feat("F143", "<crypt envelope/unenvelope>", t4["value"] == "big");
+let t5 = run1("<crypt name=\"sh\" op=\"shamir\" secret=\"aabbccdd\" n=\"5\" k=\"3\"/><crypt name=\"c\" op=\"combine\" shares=\"$sh.shares\"/><return value=\"$c.secretHex\"/>");
+feat("F144", "<crypt shamir/combine>", t5["value"] == "aabbccdd");
+let t6 = run1("<crypt name=\"b\" op=\"b64\" value=\"héllo\"/><crypt name=\"d\" op=\"b64d\" value=\"$b.value\"/><crypt name=\"f\" op=\"b32\" value=\"foobar\"/><crypt name=\"mk\" op=\"merkle\" leaves=\"a,b,c\"/><crypt name=\"u\" op=\"uuid\"/><return value=\"{d.value}|{f.value}|{mk.count}|{u.ok}\"/>");
+feat("F145", "<crypt b64/b32/merkle/uuid>", t6["value"] == "héllo|MZXW6YTBOI|3|true");
+let t7 = run1("<crypt name=\"k\" op=\"keygen\"/><token name=\"t\" op=\"sign\" key=\"$k.key\" claim.sub=\"u1\" claim.role=\"admin\" now=\"1000\" ttl=\"60\" iss=\"me\"/><token name=\"v\" op=\"verify\" key=\"$k.key\" value=\"$t.token\" now=\"1010\" iss=\"me\"/><token name=\"x\" op=\"verify\" key=\"$k.key\" value=\"$t.token\" now=\"1100\"/><return value=\"{v.claims.sub}|{v.claims.role}|{x.reason}\"/>");
+feat("F146", "<token sign/verify> (claim.* and ttl and iss)", t7["value"] == "u1|admin|expired");
+let t8 = run1("<crypt name=\"k\" op=\"keygen\"/><token name=\"u\" op=\"signurl\" key=\"$k.key\" url=\"https://x.com/f?id=1\" now=\"100\" ttl=\"60\"/><token name=\"ok\" op=\"verifyurl\" key=\"$k.key\" url=\"$u.url\" now=\"120\"/><token name=\"late\" op=\"verifyurl\" key=\"$k.key\" url=\"$u.url\" now=\"200\"/><return value=\"{ok.ok}|{late.ok}\"/>");
+feat("F147", "<token signurl/verifyurl>", t8["value"] == "true|false");
+let t9 = run1("<otp name=\"s\" op=\"secret\"/><otp name=\"c\" op=\"code\" secret=\"$s.secret\" now=\"6000\"/><otp name=\"v\" op=\"verify\" secret=\"$s.secret\" code=\"$c.code\" now=\"6010\"/><otp name=\"u\" op=\"uri\" secret=\"$s.secret\" issuer=\"App\" account=\"a\"/><return value=\"{v.ok}|{u.ok}\"/>");
+feat("F148", "<otp secret/code/verify/uri>", t9["value"] == "true|true");
+let t10 = run1("<otp name=\"r\" op=\"recovery\" n=\"3\"/><otp name=\"c\" op=\"recoverycheck\" code=\"$r.codes.0\" hashes=\"$r.hashes\"/><return value=\"{c.ok}|{c.remaining.0}\"/>");
+feat("F149", "<otp recovery/recoverycheck>", indexOf(t10["value"], "true|") == 0);
+let t11 = run1("<db table=\"pf_l1\" op=\"insert\" id=\"a\" set.name=\"Rima\" set.email=\"r@x.com\"/><db name=\"g\" table=\"pf_l1\" op=\"get\" id=\"a\"/><db name=\"f\" table=\"pf_l1\" op=\"find\" field=\"email\" equals=\"r@x.com\"/><db name=\"c\" table=\"pf_l1\" op=\"count\"/><return value=\"{g.doc.name}|{f.0.name}|{c}\"/>");
+feat("F150", "<db insert/get/find/count>", t11["value"] == "Rima|Rima|1");
+let t12 = run1("<crypt name=\"k\" op=\"keygen\"/><db name=\"i\" table=\"pf_l2\" op=\"insert\" key=\"$k.key\" enc=\"email\" blind=\"email\" set.email=\"Z@x.com\" set.age=\"3\"/><db name=\"f\" table=\"pf_l2\" op=\"find\" key=\"$k.key\" blind field=\"email\" equals=\"z@X.com\"/><db name=\"g\" table=\"pf_l2\" op=\"get\" id=\"$i.id\" key=\"$k.key\"/><return value=\"{g.doc.email}|{f.0.age}\"/>");
+feat("F151", "<db insert enc + find blind + get key>", t12["value"] == "Z@x.com|3");
+let t13 = run1("<db table=\"pf_l3\" op=\"insert\" set.password=\"hunter2\"/>");
+feat("F152", "<db insert>: refuses a raw password field", t13["ok"] == false and contains(t13["message"], "raw text"));
+let t14 = run1("<crypt name=\"k\" op=\"keygen\"/><db name=\"u\" table=\"pf_l4\" op=\"user.create\" key=\"$k.key\" email=\"a@b.com\" password=\"Zt7!mQ4pLw\"/><db name=\"l\" table=\"pf_l4\" op=\"user.login\" key=\"$k.key\" email=\"a@b.com\" password=\"Zt7!mQ4pLw\"/><db name=\"w\" table=\"pf_l4\" op=\"user.login\" key=\"$k.key\" email=\"a@b.com\" password=\"nope\"/><return value=\"{u.ok}|{l.ok}|{w.ok}\"/>");
+feat("F153", "<db user.create/user.login>", t14["value"] == "true|true|false");
+let t15 = run1("<db name=\"s\" table=\"pf_l5\" op=\"session.create\" user=\"u1\" ttl=\"100\" now=\"1000\"/><db name=\"c\" table=\"pf_l5\" op=\"session.check\" token=\"$s.token\" now=\"1050\"/><db name=\"d\" table=\"pf_l5\" op=\"session.check\" token=\"$s.token\" now=\"1200\"/><return value=\"{c.userId}|{d.reason}\"/>");
+feat("F154", "<db session.create/check>", t15["value"] == "u1|expired");
+let t16 = run1("<db name=\"k\" table=\"pf_l6\" op=\"apikey.create\" owner=\"svc\" scopes=\"read,write\" prefix=\"sk\" now=\"10\"/><db name=\"v\" table=\"pf_l6\" op=\"apikey.verify\" apikey=\"$k.key\" now=\"20\"/><return value=\"{v.owner}|{v.scopes.1}\"/>");
+feat("F155", "<db apikey.create/verify>", t16["value"] == "svc|write");
+let t17 = run1("<db table=\"pf_l7\" op=\"audit\" event=\"a\" actor=\"u\" now=\"1\"/><db table=\"pf_l7\" op=\"audit\" event=\"b\" actor=\"u\" now=\"2\"/><db name=\"v\" table=\"pf_l7\" op=\"audit.verify\"/><return value=\"{v.entries}\"/>");
+feat("F156", "<db audit/audit.verify>", t17["value"] == "2");
+let t18 = run1("<db name=\"a\" table=\"pf_l8\" op=\"ratelimit\" rlkey=\"ip1\" max=\"1\" window=\"60\" now=\"5\"/><db name=\"b\" table=\"pf_l8\" op=\"ratelimit\" rlkey=\"ip1\" max=\"1\" window=\"60\" now=\"6\"/><return value=\"{a.ok}|{b.ok}\"/>");
+feat("F157", "<db ratelimit>", t18["value"] == "true|false");
+let t19 = run1("<db table=\"pf_l9\" op=\"insert\" id=\"a\" set.v=\"1\"/><db table=\"pf_l9\" op=\"begin\"/><db table=\"pf_l9\" op=\"insert\" id=\"b\" set.v=\"2\"/><db table=\"pf_l9\" op=\"rollback\"/><db name=\"c\" table=\"pf_l9\" op=\"count\"/><return value=\"$c\"/>");
+feat("F158", "<db begin/rollback>", t19["value"] == 1);
+let t20 = run1("<container of=\"pf_t1\" op=\"ensure\"/><container of=\"pf_t1\" op=\"set\" field=\"lang\" value=\"ar\"/><container name=\"g\" of=\"pf_t1\" op=\"get\" field=\"lang\"/><container name=\"h\" of=\"pf_t1\" op=\"has\" field=\"nope\"/><return value=\"{g}|{h}\"/>");
+feat("F159", "<container ensure/set/get/has>", t20["value"] == "ar|false");
+pdContFromMap("pf_t2", { user: "rima", n: 5 }, nil);
+let t21 = run1("<container of=\"pf_t2\" op=\"load\" prefix=\"c_\"/><set name=\"extra\" value=\"x\"/><container of=\"pf_t2\" op=\"save\" vars=\"extra\"/><return value=\"{c_user}|{c_n}\"/>");
+feat("F160", "<container load/save> between container and variables", t21["value"] == "rima|5" and getField("pf_t2", "extra") == "x");
+let t22 = run1("<crypt name=\"k\" op=\"keygen\"/><container of=\"pf_t3\" op=\"set\" field=\"token\" value=\"abc\"/><container of=\"pf_t3\" op=\"seal\" field=\"token\" key=\"$k.key\"/><container name=\"o\" of=\"pf_t3\" op=\"open\" field=\"token\" key=\"$k.key\"/><return value=\"{o.value}\"/>");
+feat("F161", "<container seal/open>: an encrypted field in the container", t22["value"] == "abc" and indexOf(getField("pf_t3", "token"), "pc1.") == 0);
+pdContSet("pf_t4", "script", "<input name=\"x\" default=\"1\"/><return value=\"got-{x}-{who}\"/>");
+let t23 = run1("<container name=\"r\" of=\"pf_t4\" op=\"exec\" field=\"script\" in.who=\"me\" in.x=\"7\"/><return value=\"{r.value}\"/>");
+feat("F162", "<container exec>: code as data inside a container", t23["value"] == "got-7-me");
+pdContSet("pf_t5", "city", "Zürich");
+let t24 = run1("<container of=\"pf_t5\" op=\"bind\" field=\"city\" var=\"c\"/><set name=\"c\" value=\"Zürich\"/><container of=\"x\" op=\"sync\" dir=\"push\"/><return value=\"$c\"/>");
+feat("F163", "<container bind/sync>: bind a variable to a field and push it", t24["value"] == "Zürich" and getField("pf_t5", "city") == "Zürich");
+feat("F164", "passkitFromContainer: container fields as inputs", passkitFromContainer("pf_t2")["user"] == "rima");
+let rr = passkitRunSource("<return value=\"{a}-{b}\"/>", { a: "1", b: "2" });
+passkitToContainer(rr, "pf_t6", "o_");
+feat("F165", "passkitToContainer: run result into a container", getField("pf_t6", "o_a") == "1" and getField("pf_t6", "o_b") == "2");
+pdContSet("pf_t7", "code", "<input name=\"n\" required/><set name=\"sq\" value=\"{n}{n}\"/><return value=\"$sq\"/>");
+pdContSet("pf_t7", "n", "4");
+let rc2 = passkitRunContainer("pf_t7", "code", nil);
+feat("F166", "passkitRunContainer: run a stored source with container fields as inputs", rc2["ok"] and rc2["value"] == "44");
+let rl = passkitRunLinked("pf_t7", "code", nil);
+feat("F167", "passkitRunLinked: run and write outputs back into the container", rl["ok"] and getField("pf_t7", "out_sq") == "44" and getField("pf_t7", "out_value") == "44");
+
+print "";
+print "FEATURES: " + toString(FEAT_TOTAL) + "  FAILED: " + toString(FEAT_FAIL);
+if (FEAT_FAIL == 0) { print "ALL PASSED"; }
