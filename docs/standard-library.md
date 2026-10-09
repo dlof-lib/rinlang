@@ -95,6 +95,10 @@ Rin
 | `behaviorkit.og.rin` | مفهوم موحّد لبرمجة سلوك التفاعل. |
 | `movingmask.og.rin` | أقنعة متحركة فوق الحاويات والحلقات. |
 | `maskkit.og.rin` | أدوات تحقّق أقنعة (`mask_isValid`...). |
+| `passkit.og.rin` | Password kit: policies, strength/entropy, secure generation, salted hashing, lockout, reset tokens, redaction (see [`passkit.md`](./passkit.md)). |
+| `passkitcrypt.og.rin` | Encryption and signing: authenticated Seal/Open, HKDF/PBKDF2, keyrings, envelopes, signed tokens/URLs/requests, TOTP, Shamir. |
+| `passkitdb.og.rin` | Database and container layer over RCSQL: CRUD, transactions, encrypted fields, users, sessions, API keys, audit log, container linking. |
+| `passkitlang.og.rin` | The `<passkit>` tag language (`.passkit` files) as a library; links Rin, `.passkit` files and containers. |
 | `requirekit.og.rin` | عدّة الحقول/الاشتراطات الإلزامية. |
 | `validate.og.rin` | دوال تحقّق شائعة. |
 | `validate_plus.og.rin` | تحقّق إضافي. |
