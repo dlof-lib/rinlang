@@ -26,6 +26,10 @@ rin_run tests/verification/extra_natives2.rin
 | `sec.hexEncode(s)` / `sec.hexDecode(s)` | ترميز/فك Hex |
 | `sec.randomToken(bytes?)` | رمز عشوائي (hex) بطول `bytes` بايت (افتراضي 16)، عبر `std::random_device` |
 | `sec.constantTimeEqual(a, b)` | مقارنة نصّين بزمن ثابت (تفادي هجمات التوقيت عند مقارنة أسرار) |
+| `sec.aesGcmSeal(keyHex, nonceHex, plaintextHex, aadHex)` | AES-GCM (key 16/24/32 bytes, nonce exactly 12 bytes): returns hex of ciphertext + 16-byte tag (NIST SP 800-38D) |
+| `sec.aesGcmOpen(keyHex, nonceHex, ciphertextTagHex, aadHex)` | verifies the tag in constant time and returns the plaintext hex, or `nil` if authentication fails |
+| `sec.pbkdf2Sha256(password, saltHex, iterations, dkLen)` | PBKDF2-HMAC-SHA256 (RFC 8018), returns hex; iterations up to 10,000,000 |
+| `sec.randomToken(n)` | now reads the OS CSPRNG (`/dev/urandom`) instead of a seeded Mersenne Twister |
 | `sec.xorCipher(s, key)` | XOR بسيط قابل للعكس بنفس الاستدعاء — للتعتيم فقط، **ليس تشفيراً آمناً** |
 | `sec.rot13(s)` | ROT13 الكلاسيكي |
 | `sec.passwordStrength(s)` | `{score:0..4, length, hasUpper, hasLower, hasDigit, hasSymbol, feedback:[...]}` |
