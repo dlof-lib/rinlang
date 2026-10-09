@@ -46,6 +46,8 @@
 
 ## Encryption (`<crypt>`, `<token>`, `<otp>`)
 
+`seal`/`open` use **AES-256-GCM** (native engine primitive, NIST-verified) and `<password hash>` uses **PBKDF2-HMAC-SHA256** (600,000 iterations by default). Data written by older versions (`pc1`, `pk1`) still opens and verifies.
+
 ```xml
 <crypt name="k" op="keygen" />
 <crypt name="s" op="seal" key="$k.key" value="secret text" aad="invoice-17" />
