@@ -12,4 +12,6 @@
     <!-- تخزين دائم لحزم APK المُصدَّرة (سجل "تطبيقات Rin"، [RinAppsRegistry]) — filesDir/rin_apps/
          بدل cacheDir حتى تبقى متاحة للتثبيت/المشاركة حتى بعد تطهير النظام لملفات الكاش. -->
     <files-path name="rin_apps" path="rin_apps/" />
+    <!-- التقاط الكاميرا لـ indsin (pickMedia("camera")): IndsinMediaHost يكتب الملف المؤقت هنا ثم ينقله إلى media/. -->
+    <cache-path name="indsin_capture" path="indsin_capture/" />
 </paths>
