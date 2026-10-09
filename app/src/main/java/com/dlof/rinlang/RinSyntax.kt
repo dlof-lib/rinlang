@@ -15,16 +15,25 @@ object HighlightKind {
     const val COMMENT = 10
     const val TYPE = 11       // أنواع بيانات/كلمات حاوية مبنية داخلياً
     const val PREPROCESSOR = 12
+
+    // --- لغة passkit (13..19) — تطابق rinedit::HighlightKind في rin_editor_engine.h حرفياً ---
+    const val PK_BRACKET = 13    // < </ > />
+    const val PK_TAG = 14        // وسم passkit معروف
+    const val PK_ATTR = 15       // اسم سمة
+    const val PK_VARIABLE = 16   // $var و {var}
+    const val PK_CUSTOM_TAG = 17 // وسم غير معروف (قد يُسجَّل عبر passkitRegister)
+    const val PK_STRING = 18     // قيمة سمة
+    const val PK_COMMENT = 19    // <!-- ... -->
 }
 
 enum class SyntaxLanguage {
-    RIN, CPP, KOTLIN, JAVA, PYTHON, JS, HTML, CSS, JSON, SQL, SHELL, PLAIN;
+    RIN, CPP, KOTLIN, JAVA, PYTHON, JS, HTML, CSS, JSON, SQL, SHELL, PASSKIT, PLAIN;
 
     fun lineCommentPrefix(): String? = when (this) {
         RIN, CPP, KOTLIN, JAVA, JS -> "//"
         PYTHON, SHELL -> "#"
         SQL -> "--"
-        HTML, CSS, JSON, PLAIN -> null
+        HTML, CSS, JSON, PASSKIT, PLAIN -> null
     }
 
     companion object {
@@ -40,6 +49,7 @@ enum class SyntaxLanguage {
             "json" -> JSON
             "sql" -> SQL
             "sh", "bash" -> SHELL
+            "passkit" -> PASSKIT
             else -> PLAIN
         }
     }
@@ -64,6 +74,9 @@ object RinSyntax {
             SyntaxLanguage.JSON -> SimpleLexer.tokenizeLineComment(lines, setOf("true", "false", "null"), null, caseInsensitive = false)
             SyntaxLanguage.CSS -> CssLexer.tokenize(lines)
             SyntaxLanguage.HTML -> HtmlLexer.tokenize(lines)
+            // المحرر الإنتاجي يلوّن passkit في C++ (rin_passkit_highlight.h)؛ هذا المسار القديم
+            // (RinEditorEngine المُهمَل) يكتفي بتلوين الوسوم والسمات والتعليقات كـ XML.
+            SyntaxLanguage.PASSKIT -> HtmlLexer.tokenize(lines)
             SyntaxLanguage.PLAIN -> emptyList()
         }
     }
