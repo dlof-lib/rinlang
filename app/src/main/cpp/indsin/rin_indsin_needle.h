@@ -82,6 +82,15 @@ struct TapResult {
                                             // opening it is a host-app/JNI concern (same relationship
                                             // `exportedPath` has to the actual file write), same as
                                             // IndsinFabricView.kt's onOpenUrl on the Kotlin preview side.
+    // Media (rin_indsin_media.h): pickMedia()/uploadMedia() are *requests to the host* (system picker,
+    // multipart upload) -- exactly like openedUrl above. The host answers through
+    // rin_indsin_session_media_picked / _media_progress, which write the result into Warp cells.
+    bool mediaPick = false;
+    media::PickRequest pick;
+    bool mediaUpload = false;
+    media::UploadRequest upload;
+    bool mediaCancel = false;
+    std::string cancelCell;
 };
 
 // Link concepts (docs/link.md): true for an href value that names an external resource rather
@@ -219,6 +228,105 @@ inline TapResult executeHandlerExpr(const rin::ExprPtr& handlerExpr, const Stran
         // reload() falls straight through to the shared "report current route" below.
         result.navigated = true;
         result.route = nav->current();
+        return result;
+    }
+
+    // pickMedia("image", photo [, multiple [, maxMb]]) / uploadMedia(photo, "https://...", ["file"]):
+    // التحقق هنا، والتنفيذ الفعلي (المنتقي/الشبكة) عند المضيف عبر TapResult.pick / .upload.
+    if (callee == "pickMedia") {
+        auto cellVar = argExprs.size() > 1 ? std::dynamic_pointer_cast<rin::VariableExpr>(argExprs[1]) : nullptr;
+        if (argExprs.empty() || !cellVar) {
+            result.error = "pickMedia(kind, cell [, multiple [, maxMb]]) needs a kind and a media-cell name, e.g. pickMedia(\"image\", photo)";
+            return result;
+        }
+        media::PickRequest req;
+        std::string kindStr = evalAttrValue(argExprs[0], warp, nullptr).asString();
+        if (!media::parsePickKind(kindStr, req.kind, req.source)) {
+            result.error = "pickMedia(): unknown kind '" + kindStr + "' (use image, video, audio, file, any, camera or camera:video)";
+            return result;
+        }
+        req.cell = cellVar->name;
+        if (argExprs.size() > 2) {
+            std::string m = media::lower(evalAttrValue(argExprs[2], warp, nullptr).asString());
+            req.append = (m == "append");
+            req.multiple = req.append || (m == "true" || m == "1" || m == "multiple" || m == "yes");
+        }
+        if (argExprs.size() > 3) {
+            req.maxMb = evalAttrValue(argExprs[3], warp, nullptr).asNumber();
+            if (req.maxMb < 0) req.maxMb = 0;
+        }
+        if (req.source == "camera") req.multiple = false; // التقاط واحد في كل مرة (append يجمع عدة التقاطات)
+        if (argExprs.size() > 4) { // maxDim: 0 = بلا تصغير، وإلا 64..8192
+            double d = evalAttrValue(argExprs[4], warp, nullptr).asNumber();
+            req.maxDim = d <= 0 ? 0 : static_cast<int>(std::max(64.0, std::min(8192.0, d)));
+        }
+        if (argExprs.size() > 5) {
+            double q = evalAttrValue(argExprs[5], warp, nullptr).asNumber();
+            req.quality = static_cast<int>(std::max(1.0, std::min(100.0, q)));
+        }
+        media::seedCells(warp, req.cell);
+        result.mediaPick = true;
+        result.pick = req;
+        return result;
+    }
+    if (callee == "uploadMedia") {
+        auto cellVar = !argExprs.empty() ? std::dynamic_pointer_cast<rin::VariableExpr>(argExprs[0]) : nullptr;
+        if (!cellVar || argExprs.size() < 2) {
+            result.error = "uploadMedia(cell, url [, fieldName]) needs a media-cell name and an upload URL";
+            return result;
+        }
+        media::UploadRequest req;
+        req.cell = cellVar->name;
+        req.url = evalAttrValue(argExprs[1], warp, nullptr).asString();
+        if (argExprs.size() > 2) {
+            std::string f = evalAttrValue(argExprs[2], warp, nullptr).asString();
+            bool ok = !f.empty() && f.size() <= 64;
+            for (unsigned char ch : f) if (!(std::isalnum(ch) || ch == '_' || ch == '-' || ch == '[' || ch == ']')) ok = false;
+            if (!ok) { result.error = "uploadMedia(): invalid field name '" + f + "'"; return result; }
+            req.field = f;
+        }
+        std::string err;
+        if (argExprs.size() > 4) { // retries
+            double r5 = evalAttrValue(argExprs[4], warp, nullptr).asNumber();
+            req.retries = static_cast<int>(std::max(0.0, std::min(5.0, r5)));
+        }
+        if (argExprs.size() > 3) {
+            req.auth = evalAttrValue(argExprs[3], warp, nullptr).asString();
+            if (!media::validateAuth(req.auth, err)) { result.error = "uploadMedia(): " + err; return result; }
+        }
+        auto fail = [&](const std::string& msg) {
+            result.error = msg;
+            result.changedWarpNames = media::writeError(warp, req.cell, msg);
+            return result;
+        };
+        if (!media::validateUploadUrl(req.url, err)) return fail(err);
+        if (warp.has(req.cell + "_status") && warp.get(req.cell + "_status").asString() == "uploading")
+        { // لا نكتب error هنا: الرفع الجاري يجب أن يحتفظ بحالته (uploading)
+            result.error = "uploadMedia(): an upload for '" + req.cell + "' is already running";
+            return result;
+        }
+        std::vector<media::Item> items = media::itemsFromCell(warp, req.cell);
+        if (items.empty()) return fail("uploadMedia(): nothing selected in '" + req.cell + "' (call pickMedia first)");
+        req.itemsJson = media::itemsToJson(items);
+        result.changedWarpNames = media::applyProgress(warp, req.cell, "uploading", 0, "");
+        result.mediaUpload = true;
+        result.upload = req;
+        return result;
+    }
+
+    // cancelUpload(cell): يوقف رفعاً جارياً؛ يُبقي الاختيار ويعيد الحالة إلى picked.
+    if (callee == "cancelUpload") {
+        auto cellVar = !argExprs.empty() ? std::dynamic_pointer_cast<rin::VariableExpr>(argExprs[0]) : nullptr;
+        if (!cellVar) { result.error = "cancelUpload(cell) needs a media-cell name"; return result; }
+        media::seedCells(warp, cellVar->name);
+        if (warp.get(cellVar->name + "_status").asString() != "uploading") {
+            result.error = "cancelUpload(): no upload running for '" + cellVar->name + "'";
+            return result;
+        }
+        bool has = warp.get(cellVar->name + "_count").asNumber() > 0;
+        result.changedWarpNames = media::applyProgress(warp, cellVar->name, has ? "picked" : "idle", 0, "");
+        result.mediaCancel = true;
+        result.cancelCell = cellVar->name;
         return result;
     }
 
