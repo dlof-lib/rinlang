@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>أيقونات indsin — معرض</title>
+<style>
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
+--bg:#f6f6fb;--sf:#fff;--tx:#17171f;--mu:#6b6b7b;--bd:#e3e3ee;--ac:#5b4be0;--ac2:#ebe8ff}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#101015;--sf:#1a1a22;--tx:#f0f0f6;--mu:#9a9aae;--bd:#2c2c38;--ac:#8d7ffb;--ac2:#25214a}}
+:root[data-theme="dark"]{--bg:#101015;--sf:#1a1a22;--tx:#f0f0f6;--mu:#9a9aae;--bd:#2c2c38;--ac:#8d7ffb;--ac2:#25214a}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.5 system-ui,-apple-system,"Segoe UI",Tahoma,sans-serif}
+header{padding:18px 16px 8px;max-width:980px;margin:auto}
+h1{margin:0;font-size:22px}
+.sub{color:var(--mu);font-size:13px;margin-top:2px}
+.bar{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);padding:8px 16px;max-width:980px;margin:auto}
+input[type=search]{width:100%;padding:11px 14px;border-radius:12px;border:1px solid var(--bd);background:var(--sf);color:var(--tx);font:inherit}
+.chips{display:flex;gap:6px;overflow-x:auto;padding:8px 0 2px;scrollbar-width:none}
+.chip{flex:none;border:1px solid var(--bd);background:var(--sf);color:var(--tx);border-radius:99px;padding:5px 12px;font:inherit;font-size:13px;cursor:pointer}
+.chip[aria-pressed=true]{background:var(--ac);border-color:var(--ac);color:#fff}
+.ctl{display:flex;flex-wrap:wrap;gap:12px 18px;align-items:center;padding:8px 0;color:var(--mu);font-size:13px}
+.ctl label{display:flex;align-items:center;gap:6px}
+.ctl input[type=range]{width:90px}
+.ctl input[type=color]{width:30px;height:26px;border:none;background:none;padding:0}
+main{max-width:980px;margin:auto;padding:4px 16px 40px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(92px,1fr));gap:8px}
+.tile{background:var(--sf);border:1px solid var(--bd);border-radius:14px;padding:14px 4px 8px;display:flex;flex-direction:column;align-items:center;gap:8px;cursor:pointer;color:var(--tx);font:inherit}
+.tile:hover,.tile:focus-visible{border-color:var(--ac);outline:none}
+.tile b{font-weight:500;font-size:11px;color:var(--mu);direction:ltr;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:0 4px}
+.tile svg{display:block}
+h2{font-size:14px;color:var(--mu);margin:18px 2px 8px;font-weight:600}
+#sheet{position:fixed;inset:auto 0 0 0;background:var(--sf);border-top:1px solid var(--bd);border-radius:20px 20px 0 0;padding:16px 16px calc(16px + env(safe-area-inset-bottom,0px));box-shadow:0 -8px 30px #0003;transform:translateY(105%);transition:transform .2s;z-index:9;max-width:620px;margin:auto}
+#sheet.on{transform:none}
+.row{display:flex;gap:14px;align-items:center}
+#big{flex:none;width:96px;height:96px;border-radius:18px;background:var(--ac2);display:grid;place-items:center;color:var(--ac)}
+#nm{font-size:18px;font-weight:600;direction:ltr;text-align:right}
+#al{color:var(--mu);font-size:12px;direction:ltr;text-align:right}
+.btns{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+.btn{border:1px solid var(--bd);background:var(--bg);color:var(--tx);padding:8px 13px;border-radius:10px;font:inherit;font-size:13px;cursor:pointer}
+.btn.p{background:var(--ac);border-color:var(--ac);color:#fff}
+textarea{width:100%;margin-top:10px;height:92px;border-radius:10px;border:1px solid var(--bd);background:var(--bg);color:var(--tx);font:12px/1.4 ui-monospace,Menlo,monospace;direction:ltr;padding:8px}
+.x{margin-inline-start:auto;border:none;background:none;color:var(--mu);cursor:pointer;padding:4px}
+.empty{color:var(--mu);text-align:center;padding:40px 0}
+</style>
+</head>
+<body>
+<header><h1>أيقونات indsin</h1><div class="sub" id="sub"></div></header>
+<div class="bar">
+  <input id="q" type="search" placeholder="ابحث: home، arrow، ملف…" autocomplete="off">
+  <div class="chips" id="chips"></div>
+  <div class="ctl">
+    <label>الحجم <input id="sz" type="range" min="16" max="56" value="28"><span id="szv">28</span></label>
+    <label>السماكة <input id="sw" type="range" min="1" max="3" step=".25" value="2"><span id="swv">2</span></label>
+    <label>اللون <input id="co" type="color" value="#5b4be0"></label>
+    <label><input id="fl" type="checkbox"> مملوءة</label>
+  </div>
+</div>
+<main id="grid"></main>
+<div id="sheet" role="dialog" aria-label="تفاصيل الأيقونة">
+  <div class="row"><div id="big"></div><div><div id="nm"></div><div id="al"></div></div><button class="x" id="cl" aria-label="إغلاق">✕</button></div>
+  <div class="btns">
+    <button class="btn p" data-k="rin">نسخ كود Rin</button>
+    <button class="btn" data-k="svg">نسخ SVG</button>
+    <button class="btn" data-k="name">نسخ الاسم</button>
+  </div>
+  <textarea id="out" readonly hidden></textarea>
+</div>
+<script>
+var DATA=/*__DATA__*/null;
+var st={q:"",cat:"all",size:28,stroke:2,color:"#5b4be0",fill:false,sel:null};
+var $=function(i){return document.getElementById(i)};
+function svg(ic,size,stroke,color,fill){return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="'+size+'" height="'+size+'" fill="'+(fill&&ic[3]?color:'none')+'" stroke="'+color+'" stroke-width="'+stroke+'" stroke-linecap="round" stroke-linejoin="round"><path d="'+ic[2]+'"/></svg>'}
+function catName(id){for(var i=0;i<DATA.cats.length;i++)if(DATA.cats[i][0]==id)return DATA.cats[i][1];return id}
+function match(ic){
+  if(st.cat!="all"&&ic[1]!=st.cat)return false;
+  var q=st.q.trim().toLowerCase(); if(!q)return true;
+  if(ic[0].indexOf(q)>=0)return true;
+  for(var i=0;i<ic[4].length;i++)if(ic[4][i].indexOf(q)>=0)return true;
+  return false}
+function render(){
+  var g=$("grid"),h="",n=0,last="";
+  DATA.icons.forEach(function(ic,i){
+    if(!match(ic))return; n++;
+    if(st.cat=="all"&&!st.q&&ic[1]!=last){last=ic[1];h+=(n>1?'</div>':'')+'<h2>'+catName(last)+'</h2><div class="grid">'}
+    else if(n==1)h+='<div class="grid">';
+    h+='<button class="tile" data-i="'+i+'" title="'+ic[0]+'">'+svg(ic,st.size,st.stroke,st.color,st.fill)+'<b>'+ic[0]+'</b></button>'});
+  g.innerHTML=n?h+'</div>':'<div class="empty">لا توجد أيقونة بهذا الاسم</div>';
+  $("sub").textContent=DATA.icons.length+" أيقونة متجهية — شبكة 24×24 — "+n+" معروضة";
+  if(st.sel!=null)sheet(st.sel)}
+function sheet(i){
+  st.sel=i;var ic=DATA.icons[i];
+  $("big").innerHTML=svg(ic,56,st.stroke,"currentColor",st.fill);
+  $("nm").textContent=ic[0];
+  $("al").textContent=ic[4].length?"يقبل أيضاً: "+ic[4].join("، "):"";
+  $("out").hidden=true;$("sheet").classList.add("on")}
+function text(k){var ic=DATA.icons[st.sel];
+  if(k=="name")return ic[0];
+  if(k=="svg")return svg(ic,24,st.stroke,"currentColor",st.fill);
+  return '@view.Icon=icon_'+ic[0].replace(/-/g,"_")+'\n    icon="'+ic[0]+'";\n    size="lg";\n.end/view'}
+function copy(k){
+  var t=text(k),o=$("out");
+  function show(){o.hidden=false;o.value=t;o.focus();o.select()}
+  try{navigator.clipboard.writeText(t).then(function(){flash(k)},show)}catch(e){show()}}
+function flash(k){var b=document.querySelector('[data-k="'+k+'"]'),old=b.textContent;b.textContent="تم النسخ ✓";setTimeout(function(){b.textContent=old},1100)}
+(function init(){
+  var c='<button class="chip" aria-pressed="true" data-c="all">الكل</button>';
+  DATA.cats.forEach(function(x){c+='<button class="chip" aria-pressed="false" data-c="'+x[0]+'">'+x[1]+'</button>'});
+  $("chips").innerHTML=c;
+  $("chips").onclick=function(e){var b=e.target.closest(".chip");if(!b)return;st.cat=b.dataset.c;
+    [].forEach.call(document.querySelectorAll(".chip"),function(x){x.setAttribute("aria-pressed",x==b)});render()};
+  $("q").oninput=function(){st.q=this.value;render()};
+  $("sz").oninput=function(){st.size=+this.value;$("szv").textContent=this.value;render()};
+  $("sw").oninput=function(){st.stroke=+this.value;$("swv").textContent=this.value;render()};
+  $("co").oninput=function(){st.color=this.value;render()};
+  $("fl").onchange=function(){st.fill=this.checked;render()};
+  $("grid").onclick=function(e){var t=e.target.closest(".tile");if(t)sheet(+t.dataset.i)};
+  $("cl").onclick=function(){st.sel=null;$("sheet").classList.remove("on")};
+  document.querySelector(".btns").onclick=function(e){var b=e.target.closest("[data-k]");if(b&&st.sel!=null)copy(b.dataset.k)};
+  render()})();
+</script>
+</body>
+</html>
