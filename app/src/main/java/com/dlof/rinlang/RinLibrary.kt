@@ -30,12 +30,14 @@ data class BuiltinLibraryInfo(
     val sampleFunctions: String,
     /** أيقونة العرض في شاشة "المكتبات" — افتراضياً شارة "rin+" العامة؛ لبعض المكتبات
      *  أيقونة مخصّصة تعبّر عن فكرتها (مثل movingmask أدناه). */
-    val iconRes: Int = R.drawable.ic_rin_stack
+    val iconRes: Int = R.drawable.ic_rin_stack,
+    /** خلفية البلاطة خلف الأيقونة — الافتراضي التدرّج الأخضر؛ لمكتبات الذكاء الاصطناعي تدرّج مميّز لكل مكتبة. */
+    val tileRes: Int = R.drawable.bg_icon_gradient_green
 )
 
 /**
  * سجل مرجعي (يطابق `embeddedRinLibraries()` في rin_stdlib_libs.h) بالمكتبات القياسية
- * الاثنتين والعشرين المدمجة داخل المفسّر نفسه، وتعمل @import عليها فوراً على أي جهاز دون رفعها.
+ * المدمجة داخل المفسّر نفسه، وتعمل @import عليها فوراً على أي جهاز دون رفعها.
  * هذا السجل نصي فقط (للعرض والإدراج السريع في المحرر)، ولا يكرر شيفرة المكتبات نفسها.
  */
 object BuiltinLibraries {
@@ -190,6 +192,27 @@ object BuiltinLibraries {
             "lib/passkitdb.og.rin", "passkitdb",
             "Database and container layer for the Passkit family over RCSQL: CRUD, transactions, migrations, encrypted fields and blind index, users, sessions, API keys, hash-chained audit log, rate limit, 2FA and Rin container linking",
             "pdInsert • pdFind • pdInsertEnc • pdFindByBlind • pdUserCreate • pdUserLogin • pdSessionCreate • pdApiKeyCreate • pdAuditLog • pdContSeal"
+        ),
+        BuiltinLibraryInfo(
+            "lib/rindf.og.rin", "rindf",
+            "إطار بيانات (DataFrame) لتحليل البيانات: CSV بالاقتباس والأنواع، تصفية، فرز، تجميع، ربط، قيم مفقودة، ملخصات إحصائية",
+            "df_read_csv • df_filter • df_where • df_sort • df_groupby • df_join • df_describe • df_fill_mean • df_one_hot • df_to_matrix",
+            iconRes = R.drawable.ic_lib_rindf,
+            tileRes = R.drawable.bg_icon_gradient_teal
+        ),
+        BuiltinLibraryInfo(
+            "lib/rinml.og.rin", "rinml",
+            "تعلّم آلة بلغة Rin الخالصة: انحدار خطي/لوجستي، kNN، k-means، Naive Bayes، شجرة قرار، شبكة عصبية MLP، مصنّف نصوص عربي، مقاييس وتحقق متقاطع",
+            "ml_linreg_fit • ml_logreg_fit • ml_knn_fit • ml_kmeans_fit • ml_tree_fit • ml_mlp_init • ml_mlp_fit • ml_textnb_fit • ml_kfold • ml_save",
+            iconRes = R.drawable.ic_lib_rinml,
+            tileRes = R.drawable.bg_icon_gradient_violet
+        ),
+        BuiltinLibraryInfo(
+            "lib/rinai.og.rin", "rinai",
+            "مساحات عمل ذكاء اصطناعي داخل حاويات Rin: بيانات ونماذج وسجل تجارب، AutoML، أنابيب، حفظ/تحميل وجسر HTTP لنماذج مُستضافة",
+            "ai_workspace • ai_put_dataset • ai_auto_classify • ai_auto_regress • ai_put_model • ai_predict • ai_run_pipeline • ai_save_workspace • ai_remote_predict",
+            iconRes = R.drawable.ic_lib_rinai,
+            tileRes = R.drawable.bg_icon_gradient_indigo
         )
     )
 }
