@@ -14,6 +14,7 @@
 #include <unordered_map>
 #include <memory>
 #include <chrono>
+#include <cmath>
 
 namespace {
 char* dupToC(const std::string& s) {
@@ -357,8 +358,29 @@ RIN_API char* rin_indsin_session_hover(void* sessionPtr, double x, double y, int
 RIN_API char* rin_indsin_session_tick(void* sessionPtr) {
     auto* sess = static_cast<IndsinSession*>(sessionPtr);
     if (!sess || !sess->state.ok) return dupToC(sessionErrorJson(sess));
-    relayout(sess); // re-applies the Effects Engine at "now"; sess->animating reflects this tick
-    return dupToC(fabricEnvelope(sess, ",\"handled\":false,\"changed\":[]"));
+    // ساعة حيّة (docs/TIME.md): إن عرّف البرنامج `warp clock = time.ms();` تُحدَّث الخلية كل ثانية، فتُعاد
+    // تلقائياً كل خاصية تقرؤها (مثل text=time(clock, "HH:mm:ss")). المضيف يواصل النداء ما دام "ticking":true.
+    std::vector<std::string> changed;
+    bool ticking = false;
+    if (sess->state.warp.has("clock")) {
+        ticking = true;
+        SessionRinHost rinHost(sess);
+        const double sec = std::floor(std::chrono::duration<double, std::milli>(
+                               std::chrono::system_clock::now().time_since_epoch()).count() / 1000.0) * 1000.0;
+        const indsin::Value cur = sess->state.warp.get("clock");
+        if (cur.kind == indsin::Value::Kind::NUMBER && cur.number == sec) {
+            relayout(sess);
+        } else {
+            sess->state.warp.set("clock", indsin::Value::num(sec));
+            changed.push_back("clock");
+            applyWarpNames(sess, changed); // Shuttle -> hashes -> relayout
+        }
+    } else {
+        relayout(sess); // re-applies the Effects Engine at "now"; sess->animating reflects this tick
+    }
+    std::string extra = ",\"handled\":false" + changedJson(changed);
+    if (ticking) extra += ",\"ticking\":true";
+    return dupToC(fabricEnvelope(sess, extra));
 }
 
 RIN_API char* rin_indsin_session_update_source(void* sessionPtr, const char* newSource) {
