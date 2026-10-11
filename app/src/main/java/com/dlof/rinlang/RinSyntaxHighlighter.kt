@@ -73,7 +73,11 @@ object RinSyntaxHighlighter {
         // Living Variables (docs/living-variables.md)
         "stone", "gauge", "tape", "lens", "fuse", "bell", "trial", "undo", "redo", "rearm", "unbell", "abort",
         // base/accept (docs/base-accept.md): variables that help `if`, plus their actions
-        "base", "accept", "inc", "dec", "rebase", "rewind"
+        "base", "accept", "inc", "dec", "rebase", "rewind",
+        // pre/post (docs/pre-post.md): ما قبل / ما بعد — عقد انتقال حول الإسناد
+        "pre", "post",
+        // label/define (docs/label-define.md): تسمية وتعريف
+        "label", "define"
     )
 
     // كلمات لغة الحاويات/البيانات (data container language) - حساسة لحالة الأحرف كما في المحرّك.
