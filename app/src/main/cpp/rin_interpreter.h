@@ -273,6 +273,10 @@ struct LiveMeta {
     bool hasGoal = false; Value goal;                                // base ... to GOAL
     bool guarded = false; ExprPtr rule, fallback; bool strictAccept = false; // accept: شرط القبول + بديل else + strict
     long accepted = 0, rejected = 0; bool lastOk = true; Value refused;      // accept: العدّادات وآخر قيمة رُفضت
+    // ---- pre/post (docs/pre-post.md): عقد انتقال؛ يعيد استعمال strictAccept/accepted/rejected/lastOk/refused/scope أعلاه ----
+    bool gated = false; ExprPtr preRule, postRule;                           // شرط «قبل» (يُسأل قبل الكتابة) وشرط «بعد» (يُسأل بعد الكتابة)
+    bool named = false; std::string ident; Value metaLabel, metaAbout, metaUnit;  // label/define (docs/label-define.md): تسمية/وصف/وحدة
+    Value lastPre, lastPost;                                                  // آخر محاولة كتابة: القيمة قبلها والقيمة التي حاولت أن تضعها
 };
 
 struct Environment : std::enable_shared_from_this<Environment> {
@@ -1178,6 +1182,10 @@ public: // Rin 1.0: واجهة OOP الموسَّعة (يستدعيها Value::t
     Value liveApplyRange(const LiveMeta& m, const std::string& name, const Value& v, int line) const;
     // accept: يطبّق شرط القبول على القيمة المرشّحة. true = تُكتب `v` (قد تُستبدل ببديل else)؛ false = تُتجاهل (أو يُرمى E0049 في strict).
     bool liveCheckAccept(LiveMeta& m, const std::string& name, Value& v, int line, bool initial);
+    // pre/post: يقيّم شرطاً في نطاق التصريح، حيث old = القيمة السابقة وnew = المكتوبة، واسم المتغيّر = old (للـ pre) أو new (للـ post).
+    bool liveGateEval(LiveMeta& m, const ExprPtr& rule, const std::string& name, const Value& oldV, const Value& newV, bool asPost, int line);
+    // يسجّل رفض الانتقال (العدّادات + refused)؛ وفي strict يرمي E0051.
+    void liveGateRefuse(LiveMeta& m, const std::string& name, const Value& oldV, const Value& newV, bool post, int line);
     void liveFireBells(const std::shared_ptr<LiveMeta>& m, const Value& oldV, const Value& newV, int line);
     void liveJournal(Environment* owner, const std::string& name); // يلتقط (قيمة + بيانات وصفية) قبل أي تغيير داخل trial نشِطة
     bool livePropertyGet(const EnvPtr& env, const std::string& name, const std::string& prop, int line, Value& out);
