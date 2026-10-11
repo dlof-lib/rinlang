@@ -6717,6 +6717,7 @@ void Interpreter::registerNatives() {
     registerNativesExtra4(); // Rin 1.0: json./semver./pkg./cpp. (rin_extra_natives4.cpp)
     registerNativesExtra5(); // عائلة #: #sed #sum #diff #add #to #swap (rin_extra_natives5.cpp)
     registerNativesExtra6(); // make.video/audio/api/image.removeBg/ocr (rin_extra_natives6.cpp)
+    registerNativesExtra7(); // مفهوم time: time() و time.* (rin_extra_natives7.cpp، docs/TIME.md)
     registerNativesOop(); // Rin 1.0: oop.* — استبطان الأصناف والكائنات + أدوات OOP (rin_oop_natives.cpp)
     registerNativesInput(); // Rin 1.0: نماذج الإدخال (معاملة/تداخل/مُدقِّق النموذج) فوق input() — بعد oop.* لأنها تستدعيها (rin_input.cpp)
     registerNativesConditions(); // متغيّرات الشروط الموسّعة (rin_conditions.cpp)
@@ -9948,7 +9949,9 @@ std::string Interpreter::containerKeyForEnv(Environment* startEnv) const {
 // *نفس* الصنف بنفس الاسم (تُعامَل كتحديث تعريف عادي، بنفس سلوك classes[name] = ... الحالي)، فقط
 // تصادمه مع نوع كيان *مختلف*.
 bool Interpreter::nameCollides(const std::string& name, std::string& whatOut, bool includeExistingFunction) const {
-    if (natives.count(name)) { whatOut = "built-in function"; return true; }
+    // استثناء مقصود: `time` أصبحت دالة مدمجة جديدة (docs/TIME.md) وقد يكون في برامج موجودة `fun time()`/`class time`؛
+    // نسمح بتعريف المستخدم وتغلب في نطاقها (invokeCallee لا يحجبها بالأصلية) بدل كسر كودٍ كان يعمل.
+    if (natives.count(name) && name != "time") { whatOut = "built-in function"; return true; }
     if (classes.count(name)) { whatOut = "class"; return true; }
     if (includeExistingFunction && globals && globals->values.count(name)) {
         const Value& existing = globals->values.at(name);
@@ -10384,6 +10387,14 @@ Value Interpreter::invokeCallee(const std::string& callee, std::vector<Value>& a
 
     auto nativeIt = natives.find(callee);
     // صنف من المستخدم باسم Set يغلب المُنشئ/الدوال الأصلية Set / Set.* (توافق مع الكود الموجود).
+    // `time` / `time.*` أسماء أصلية جديدة: لا تحجب ما يعرّفه المستخدم نفسه (دالة/كائن/خريطة/صنف باسم time) في نطاقه.
+    if (nativeIt != natives.end() && (callee == "time" || callee.compare(0, 5, "time.") == 0)) {
+        Value userTime;
+        if ((env->get("time", userTime) && (userTime.type == Value::Type::FUNCTION || userTime.type == Value::Type::MAP ||
+                                            userTime.type == Value::Type::INSTANCE || userTime.type == Value::Type::SET)) ||
+            (callee == "time" && classes.count("time")))
+            nativeIt = natives.end();
+    }
     if (nativeIt != natives.end() && !(!classes.empty() && classes.count("Set") && (callee == "Set" || callee.compare(0, 4, "Set.") == 0))) {
         return nativeIt->second(args, line);
     }
@@ -12147,6 +12158,7 @@ bool Interpreter::livePropertyGet(const EnvPtr& env, const std::string& name, co
 #include "rin_extra_natives4.cpp"
 #include "rin_extra_natives5.cpp"
 #include "rin_extra_natives6.cpp" // make.video/audio/api/image/ocr (docs/MAKE_MEDIA.md)
+#include "rin_extra_natives7.cpp" // مفهوم time (docs/TIME.md)
 #include "rin_table.cpp" // توسعة الجدول: دوال اللغة الموجودة تفهم الجدول (انظر رأس الملف)
 #include "rin_conditions.cpp" // متغيّرات الشروط الموسّعة (docs/key_terms_and_builtins.md)
 #include "rin_env.cpp"   // ربط ملف .env (docs/env.md)
