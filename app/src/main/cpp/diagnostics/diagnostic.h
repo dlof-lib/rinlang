@@ -80,6 +80,8 @@ enum class Code {
     E0046_LiveMisuse,       // استعمال خاطئ: undo بلا tape، bell على lens، abort خارج trial، خاصية لا تخص هذا النوع
     E0047_BellLoop,         // جرس (bell) يعيد تفعيل نفسه بلا نهاية (عمق التداخل > 16)
     E0048_LetElseFallthrough, // let ... else { ... }: كتلة else انتهت دون مغادرة النطاق (return/break/continue/throw/abort)
+    E0049_AcceptRejected,   // accept ... strict: قيمة رفضها شرط القبول (أو القيمة الابتدائية لم تُقبل ولا بديل else)
+    E0050_BaseMisuse,       // base: inc/dec على غير رقم، أو rebase/rewind على متغيّر ليس base
 
     W0001_UnusedVariable,
     W0002_UnusedImport,
