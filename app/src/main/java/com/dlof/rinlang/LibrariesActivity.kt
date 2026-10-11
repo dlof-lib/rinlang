@@ -4,21 +4,27 @@ import android.app.AlertDialog
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.text.Editable
 import android.text.InputType
+import android.text.TextWatcher
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.EditText
 import android.widget.ImageView
+import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.dlof.rinlang.store.AccountActivity
 import com.dlof.rinlang.store.PublishPackageActivity
 import com.dlof.rinlang.store.RinStoreActivity
+import com.dlof.rinlang.widgets.IndsinIconView
+import com.dlof.rinlang.widgets.IndsinIcons
 import java.text.DateFormat
 import java.util.Date
 
@@ -48,6 +54,25 @@ class LibrariesActivity : RinBaseActivity() {
     private lateinit var userAdapter: UserLibraryAdapter
     private lateinit var tvHeroSubtitle: TextView
     private lateinit var tvLibrariesCountPill: TextView
+    private lateinit var builtinAdapter: BuiltinLibraryAdapter
+    private lateinit var cardFeatured: View
+    private lateinit var tvBuiltinCount: TextView
+    private lateinit var tvNoResults: View
+    private lateinit var llChips: LinearLayout
+    private lateinit var btnClearSearch: View
+
+    /** نص البحث الحالي وفئة الفلترة (null = الكل) — يطبَّقان على "مكتباتي" و"الجاهزة" معاً. */
+    private var query = ""
+    private var selectedCategory: LibCategory? = null
+    private val chips = mutableListOf<Pair<TextView, LibCategory?>>()
+    private var userLibraries: List<RinLibrary> = emptyList()
+
+    /** متصفّح الأيقونات يعيد سطر @view.Icon؛ نمرّره فوراً إلى المحرر كأي إدراج آخر. */
+    private val iconBrowserLauncher =
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+            val statement = result.data?.getStringExtra(EXTRA_IMPORT_STATEMENT)
+            if (result.resultCode == RESULT_OK && statement != null) finishWithImport(statement)
+        }
 
     private val importLibraryLauncher =
         registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -113,12 +138,21 @@ class LibrariesActivity : RinBaseActivity() {
         rvUserLibraries.layoutManager = LinearLayoutManager(this)
         rvUserLibraries.adapter = userAdapter
 
-        val builtinAdapter = BuiltinLibraryAdapter { info ->
+        builtinAdapter = BuiltinLibraryAdapter { info ->
             finishWithImport("@import \"${info.importPath}\";")
         }
         rvBuiltinLibraries.layoutManager = LinearLayoutManager(this)
         rvBuiltinLibraries.adapter = builtinAdapter
-        builtinAdapter.submit(BuiltinLibraries.all)
+
+        cardFeatured = findViewById(R.id.cardIconsFeatured)
+        tvBuiltinCount = findViewById(R.id.tvBuiltinCount)
+        tvNoResults = findViewById(R.id.tvLibrariesNoResults)
+        llChips = findViewById(R.id.llLibraryChips)
+        btnClearSearch = findViewById(R.id.btnClearLibrarySearch)
+        setupSearch()
+        buildChips()
+        setupFeaturedCard()
+        applyFilter()
 
         fabUploadLibrary.setOnClickListener {
             // نقبل .og.rin أو أي نص عادي، لأن أندرويد لا يربط MIME type رسمياً بهذا الامتداد المخصص.
@@ -150,10 +184,124 @@ class LibrariesActivity : RinBaseActivity() {
 
     private fun refresh() {
         val libraries = ProjectManager.listLibraries(project)
-        userAdapter.submit(libraries)
-        txtEmpty.visibility = if (libraries.isEmpty()) View.VISIBLE else View.GONE
+        userLibraries = libraries
         // حبّة العدّاد أعلى الشاشة: تعكس فوراً عدد مكتبات المستخدم لهذا المشروع دون فتح القائمة.
         tvLibrariesCountPill.text = libraries.size.toString()
+        applyFilter()
+    }
+
+    private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()
+
+    // ---- البحث والفلترة ------------------------------------------------------------------------
+
+    private fun setupSearch() {
+        val et = findViewById<EditText>(R.id.etLibrarySearch)
+        et.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+            override fun afterTextChanged(s: Editable?) {
+                query = s?.toString().orEmpty()
+                btnClearSearch.visibility = if (query.isEmpty()) View.GONE else View.VISIBLE
+                applyFilter()
+            }
+        })
+        btnClearSearch.setOnClickListener { et.setText("") }
+    }
+
+    private fun buildChips() {
+        llChips.removeAllViews()
+        chips.clear()
+        val entries = ArrayList<Pair<String, LibCategory?>>()
+        entries.add(Pair(getString(R.string.libs_filter_all), null))
+        for (c in LibCategory.values()) entries.add(Pair(getString(c.labelRes), c))
+        for ((label, cat) in entries) {
+            val chip = TextView(this).apply {
+                text = label
+                textSize = 13f
+                setPadding(dp(14), dp(7), dp(14), dp(7))
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
+                ).apply { marginEnd = dp(6) }
+                setOnClickListener {
+                    selectedCategory = cat
+                    updateChips()
+                    applyFilter()
+                }
+            }
+            chips.add(Pair(chip, cat))
+            llChips.addView(chip)
+        }
+        updateChips()
+    }
+
+    private fun updateChips() {
+        for ((chip, cat) in chips) {
+            val on = cat == selectedCategory
+            chip.isSelected = on
+            chip.setBackgroundResource(if (on) R.drawable.bg_lib_chip_selected else R.drawable.bg_filter_chip_unselected)
+            chip.setTextColor(
+                if (on) ContextCompat.getColor(this, android.R.color.white)
+                else ContextCompat.getColor(this, R.color.rin_on_toolbar)
+            )
+        }
+    }
+
+    /** يطبّق البحث + الفئة على "مكتباتي" و"الجاهزة"، ويُظهر البطاقة المميّزة عند عدم وجود بحث/فئة تستبعدها. */
+    private fun applyFilter() {
+        val q = query.trim().lowercase()
+        val cat = selectedCategory
+
+        // مكتباتي: بحث بالاسم فقط (الفئات خاصة بالمدمجة)
+        val mine = if (q.isEmpty()) userLibraries else userLibraries.filter { it.name.lowercase().contains(q) }
+        userAdapter.submit(mine)
+        txtEmpty.visibility = if (userLibraries.isEmpty() && q.isEmpty()) View.VISIBLE else View.GONE
+
+        val showFeatured = q.isEmpty() && (cat == null || cat == LibCategory.UI)
+        cardFeatured.visibility = if (showFeatured) View.VISIBLE else View.GONE
+
+        var list = BuiltinLibraries.all.filter { info ->
+            (cat == null || info.category == cat) &&
+                (q.isEmpty() || info.displayName.lowercase().contains(q) ||
+                    info.description.lowercase().contains(q) || info.sampleFunctions.lowercase().contains(q))
+        }
+        // البطاقة المميّزة تغني عن تكرار مكتبة الأيقونات في القائمة
+        if (showFeatured) list = list.filter { it.displayName != BuiltinLibraries.FEATURED }
+        builtinAdapter.submit(list)
+        tvBuiltinCount.text = getString(R.string.libs_builtin_count_format, list.size)
+        tvNoResults.visibility = if (list.isEmpty() && !showFeatured && mine.isEmpty()) View.VISIBLE else View.GONE
+    }
+
+    // ---- البطاقة المميّزة: مكتبة الأيقونات ------------------------------------------------------
+
+    private fun setupFeaturedCard() {
+        val openBrowser = View.OnClickListener {
+            iconBrowserLauncher.launch(
+                Intent(this, IconLibraryActivity::class.java)
+                    .putExtra(EXTRA_PROJECT_NAME, project.name)
+            )
+        }
+        cardFeatured.setOnClickListener(openBrowser)
+        findViewById<View>(R.id.btnOpenIconBrowser).setOnClickListener(openBrowser)
+        findViewById<View>(R.id.btnInsertIconsImport).setOnClickListener {
+            finishWithImport("@import \"lib/indsinicons.og.rin\";")
+        }
+
+        // معاينة حقيقية: ستّ أيقونات تُرسم من مسارات SVG نفسها التي تستعملها المكتبة
+        val data = runCatching { IndsinIcons.load(this) }.getOrNull() ?: return
+        findViewById<TextView>(R.id.tvFeaturedSubtitle).text =
+            getString(R.string.libs_featured_subtitle_format, data.icons.size)
+        val row = findViewById<LinearLayout>(R.id.rowFeaturedIcons)
+        row.removeAllViews()
+        for (name in listOf("home", "search", "heart", "settings", "bell", "rocket")) {
+            val icon = data.find(name) ?: continue
+            val v = IndsinIconView(this).apply {
+                setIcon(icon)
+                setIconColor(ContextCompat.getColor(this@LibrariesActivity, android.R.color.white))
+                importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+                layoutParams = LinearLayout.LayoutParams(0, dp(28), 1f)
+            }
+            row.addView(v)
+        }
     }
 
     private fun uploadLibrary(uri: Uri) {
@@ -314,10 +462,10 @@ private class BuiltinLibraryAdapter(
 
     class VH(view: View) : RecyclerView.ViewHolder(view) {
         val imgIcon: ImageView = view.findViewById(R.id.imgBuiltinIcon)
-        val tile: View = view.findViewById(R.id.viewBuiltinTile)
         val txtName: TextView = view.findViewById(R.id.txtBuiltinNameItem)
         val txtDescription: TextView = view.findViewById(R.id.txtBuiltinDescription)
         val txtFunctions: TextView = view.findViewById(R.id.txtBuiltinFunctions)
+        val txtCategory: TextView = view.findViewById(R.id.txtBuiltinCategory)
         val btnInsert: View = view.findViewById(R.id.btnInsertBuiltin)
     }
 
@@ -329,10 +477,10 @@ private class BuiltinLibraryAdapter(
     override fun onBindViewHolder(holder: VH, position: Int) {
         val info = items[position]
         holder.imgIcon.setImageResource(info.iconRes)
-        holder.tile.setBackgroundResource(info.tileRes)
         holder.txtName.text = info.importPath
         holder.txtDescription.text = info.description
         holder.txtFunctions.text = info.sampleFunctions
+        holder.txtCategory.setText(info.category.labelRes)
         holder.btnInsert.setOnClickListener { onInsert(info) }
     }
 
