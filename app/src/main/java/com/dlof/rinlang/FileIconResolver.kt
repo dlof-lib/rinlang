@@ -113,7 +113,7 @@ object FileIconResolver {
         "sql" to R.drawable.ic_lang_sql, "sh" to R.drawable.ic_lang_shell, "bash" to R.drawable.ic_lang_shell,
         "zip" to R.drawable.ic_lang_archive, "rar" to R.drawable.ic_lang_archive, "7z" to R.drawable.ic_lang_archive,
         "tar" to R.drawable.ic_lang_archive, "gz" to R.drawable.ic_lang_archive, "tgz" to R.drawable.ic_lang_archive,
-        "bz2" to R.drawable.ic_lang_archive, "xz" to R.drawable.ic_lang_archive, "rinproj" to R.drawable.ic_lang_archive,
+        "bz2" to R.drawable.ic_lang_archive, "xz" to R.drawable.ic_lang_archive, "rinproj" to R.drawable.ic_lang_archive, "rinpak" to R.drawable.ic_rinpak_file,
         "pdf" to R.drawable.ic_lang_pdf,
         "doc" to R.drawable.ic_lang_word, "docx" to R.drawable.ic_lang_word,
         "xls" to R.drawable.ic_lang_excel, "xlsx" to R.drawable.ic_lang_excel,
