@@ -89,6 +89,9 @@ RIN_API char* rin_indsin_session_hover(void* session, double x, double y, int en
 // host should schedule another tick; false means it's safe to stop the per-frame loop until the
 // next real interaction (tap/long-press/.../update_source) starts a fresh animation. Free with
 // rin_free_string().
+// ساعة حيّة (docs/TIME.md): إن عرّف المصدر `warp clock = time.ms();` فكل tick يحدّث الخلية `clock` عند تغيّر الثانية
+// ويعيد حساب كل خاصية تقرؤها (مثل text=time(clock, "HH:mm:ss"))، ويضيف الحقل "ticking":true (والمضيف يواصل النداء
+// ما دام true؛ يكفي نداء كل ثانية). "changed" يحوي "clock" عند حدوث تحديث.
 RIN_API char* rin_indsin_session_tick(void* session);
 
 // Re-parses `newSource` and diffs it against the session's existing Fabric in place (Shuttle),
