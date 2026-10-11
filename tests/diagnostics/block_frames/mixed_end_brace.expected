@@ -1,0 +1,13 @@
+error[E0011]: `@container` opened at line 1 without `{` must be closed with `.end/container` (or `.end;`), not `}`
+  --> mixed_end_brace.rin:3:1
+
+ 3 | }
+   | ^
+
+reason:
+  the block was opened in the `.end` style (no `{` on its header line)
+
+help:
+  either add `{` at the end of the `@container` header line, or close it with `.end/container`
+
+1 error emitted
