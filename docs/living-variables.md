@@ -111,4 +111,4 @@ trial { a = 0; fail(); } else { print "rolled back"; }
 `lens` بلا تخزين مؤقت · `trial` للمتغيرات فقط · مترجم `rinc` (Rin → C) لا يدعم هذه الصيغ بعد · لم تُختبر مع `export`.
 
 ## انظر أيضًا
-[`variables.md`](./variables.md) · [`errors.md`](./errors.md) · [`ERROR_SYSTEM.md`](./ERROR_SYSTEM.md) · `examples/living_variables_demo.rin` · [`base-accept.md`](./base-accept.md) (`base`/`accept`: متغيّران يخدمان `if`)
+[`variables.md`](./variables.md) · [`errors.md`](./errors.md) · [`ERROR_SYSTEM.md`](./ERROR_SYSTEM.md) · `examples/living_variables_demo.rin` · [`base-accept.md`](./base-accept.md) (`base`/`accept`: متغيّران يخدمان `if`) · [`pre-post.md`](./pre-post.md) (`pre`/`post`: ما قبل / ما بعد) · [`label-define.md`](./label-define.md) (`label`/`define`: تسمية وتعريف)
