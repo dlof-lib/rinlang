@@ -1,0 +1,13 @@
+error[E0011]: closing `}=c` does not match the opening name `b`
+  --> wrong_closing_name.rin:6:2
+
+ 6 | }=c;
+   |  ^
+
+reason:
+  `@container=b` was opened at line 4
+
+help:
+  use `}=b` instead
+
+1 error emitted
