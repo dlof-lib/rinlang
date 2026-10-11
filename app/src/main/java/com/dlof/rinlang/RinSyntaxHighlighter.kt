@@ -71,7 +71,9 @@ object RinSyntaxHighlighter {
         // Reckon (docs/RECKON.md): a two-line computed value; "where" is its filter clause.
         "reckon", "where",
         // Living Variables (docs/living-variables.md)
-        "stone", "gauge", "tape", "lens", "fuse", "bell", "trial", "undo", "redo", "rearm", "unbell", "abort"
+        "stone", "gauge", "tape", "lens", "fuse", "bell", "trial", "undo", "redo", "rearm", "unbell", "abort",
+        // base/accept (docs/base-accept.md): variables that help `if`, plus their actions
+        "base", "accept", "inc", "dec", "rebase", "rewind"
     )
 
     // كلمات لغة الحاويات/البيانات (data container language) - حساسة لحالة الأحرف كما في المحرّك.
