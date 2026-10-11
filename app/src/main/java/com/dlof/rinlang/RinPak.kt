@@ -29,7 +29,7 @@ import java.util.zip.ZipOutputStream
  * ├── META-INF/
  * │   ├── manifest.json         ← ثاني عنصر دائماً: الهوية + قائمة الملفات + SHA-256
  * │   ├── signature.json        ← اختياري (ثالث عنصر إن وُجد): توقيع Ed25519 على المانيفست
- * │   └── icon.png              ← اختياري
+ * │   └── icon.png              ← اختياري (PNG ≤ 512KB، بصمته SHA-256 في المانيفست فيغطيها التوقيع)
  * └── content/                  ← شجرة المشروع كما هي (main.rin, lib/, assets/...)
  * ```
  *
@@ -58,6 +58,10 @@ object RinPak {
     const val MAX_MANIFEST_BYTES = 8 * 1024 * 1024
     /** أقصى حجم لملف واحد داخل الحزمة. */
     const val MAX_FILE_BYTES = 64L * 1024L * 1024L
+    /** أقصى حجم لأيقونة الحزمة (PNG). */
+    const val MAX_ICON_BYTES = 512 * 1024
+    private val PNG_MAGIC = byteArrayOf(0x89.toByte(), 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A)
+    private val ID_REGEX = Regex("^[a-z0-9][a-z0-9._-]{0,63}$")
     private const val FIXED_ENTRY_TIME = 315532800000L // 1980-01-01 (أقل قيمة يدعمها ZIP)
 
     /** امتدادات مضغوطة أصلاً: تُخزَّن STORED بدل إعادة ضغطها. */
@@ -70,8 +74,22 @@ object RinPak {
 
     data class FileEntry(val path: String, val size: Long, val sha256: String)
 
+    /** سجل الأيقونة في المانيفست: يغطيها التوقيع عبر [sha256]. */
+    data class IconInfo(val path: String, val size: Int, val sha256: String)
+
+    enum class Level { INFO, MEDIUM, HIGH }
+
+    /** ملاحظة أمنية واحدة من [analyze]. [code] ثابت للآلة؛ [detail] نص قصير للعرض. */
+    data class Finding(val level: Level, val code: String, val detail: String = "")
+
+    /** نتيجة [analyze]: [risk] أعلى مستوى (INFO = منخفض)، و[incompatible] إن كانت الحزمة تتطلب Rin أحدث. */
+    data class Analysis(val risk: Level, val incompatible: Boolean, val findings: List<Finding>)
+
     /** بيانات وصفية اختيارية تُكتب في المانيفست. */
     data class PackMeta(
+        /** معرّف الحزمة المستقر ([a-z0-9._-]، حتى 64) — يبقى ثابتاً عبر الإصدارات. */
+        val id: String = "",
+        val tags: List<String> = emptyList(),
         val version: String = "",
         val description: String = "",
         val author: String = "",
@@ -100,11 +118,14 @@ object RinPak {
         val created: String,
         val files: List<FileEntry>,
         val root: String,
-        val hasIcon: Boolean,
+        val icon: IconInfo? = null,
         val meta: PackMeta = PackMeta(),
+        /** بايتات الأيقونة بعد التحقق من بصمتها (تُملأ في [inspect]/[extract]/[verify] فقط). */
+        val iconPng: ByteArray? = null,
         /** غير null فقط إذا كانت الحزمة موقّعة **وتحقق التوقيع** (التوقيع التالف يرمي استثناءً). */
         val signature: SignatureInfo? = null
     ) {
+        val hasIcon: Boolean get() = icon != null
         val fileCount: Int get() = files.size
         val totalBytes: Long get() = files.sumOf { it.size }
     }
@@ -135,6 +156,12 @@ object RinPak {
             .sortedBy { (_, rel) -> String(rel.toByteArray(Charsets.UTF_8), Charsets.ISO_8859_1) }
             .toList()
         if (items.none { it.second == ENTRY_POINT }) throw RinPakException("المشروع يفتقد $ENTRY_POINT")
+        if (iconPng != null) {
+            if (iconPng.size > MAX_ICON_BYTES) throw RinPakException("أيقونة الحزمة أكبر من 512KB")
+            if (iconPng.size < PNG_MAGIC.size || !iconPng.copyOfRange(0, PNG_MAGIC.size).contentEquals(PNG_MAGIC))
+                throw RinPakException("أيقونة الحزمة يجب أن تكون PNG")
+        }
+        if (meta.id.isNotEmpty() && !ID_REGEX.matches(meta.id)) throw RinPakException("معرّف الحزمة غير صالح: ${meta.id}")
 
         // مرحلة 1: SHA-256 + CRC32 + الحجم (CRC/الحجم مطلوبان لعناصر STORED).
         class Info(val file: File, val rel: String, val size: Long, val sha: String, val crc: Long)
@@ -156,7 +183,8 @@ object RinPak {
         val manifest = Manifest(
             name = name, type = typeId, entry = ENTRY_POINT, specVersion = SPEC_VERSION,
             generatorName = "RinStudio", generatorVersion = generatorVersion, created = createdIso,
-            files = entries, root = rootDigest(entries), hasIcon = iconPng != null, meta = meta
+            files = entries, root = rootDigest(entries), meta = meta,
+            icon = iconPng?.let { IconInfo(ENTRY_ICON, it.size, hex(MessageDigest.getInstance("SHA-256").digest(it))) }
         )
         checkCollisions(entries.map { it.path })
         entries.firstOrNull { it.size > MAX_FILE_BYTES }?.let { throw RinPakException("الملف أكبر من الحد المسموح: ${it.path}") }
@@ -212,10 +240,17 @@ object RinPak {
     fun inspect(input: InputStream): Manifest = corruptionGuard {
         ZipInputStream(input).use { zip ->
             val (manifest, bytes) = readHeader(zip)
-            // التوقيع (إن وُجد) هو العنصر الثالث؛ نقرؤه هنا فقط (الفحص لا يفك الملفات).
-            val third = zip.nextEntry
-            if (third != null && third.name == ENTRY_SIGNATURE) manifest.copy(signature = verifySignature(readLimited(zip, 64 * 1024), bytes))
-            else manifest
+            // التوقيع (إن وُجد) هو العنصر الثالث، ثم الأيقونة (إن أُعلنت)؛ نقرؤهما فقط (الفحص لا يفك الملفات).
+            var result = manifest
+            var next = zip.nextEntry
+            if (next != null && next.name == ENTRY_SIGNATURE) {
+                result = result.copy(signature = verifySignature(readLimited(zip, 64 * 1024), bytes))
+                next = zip.nextEntry
+            }
+            if (result.icon != null && next != null && next.name == ENTRY_ICON) {
+                result = result.copy(iconPng = readVerifiedIcon(zip, result.icon!!))
+            }
+            result
         }
     }
 
@@ -269,6 +304,7 @@ object RinPak {
             val seen = HashSet<String>()
             var total = 0L
             var count = 2
+            var iconSeen = false
             while (true) {
                 val entry = zip.nextEntry ?: break
                 if (++count > MAX_ENTRIES + 4) throw RinPakException("الحزمة تحتوي عدداً كبيراً جداً من العناصر")
@@ -278,7 +314,14 @@ object RinPak {
                     manifest = manifest.copy(signature = verifySignature(readLimited(zip, 64 * 1024), manifestBytes))
                     continue
                 }
-                if (name == ENTRY_ICON) { readLimited(zip, 2 * 1024 * 1024); continue }
+                if (name == ENTRY_ICON) {
+                    val decl = manifest.icon ?: throw RinPakException("الأيقونة غير معلنة في المانيفست")
+                    val expectedPos = if (manifest.signature != null) 4 else 3
+                    if (iconSeen || count != expectedPos) throw RinPakException("موضع الأيقونة غير صالح")
+                    iconSeen = true
+                    manifest = manifest.copy(iconPng = readVerifiedIcon(zip, decl))
+                    continue
+                }
                 if (!name.startsWith(CONTENT_ROOT)) throw RinPakException("عنصر غير متوقع خارج $CONTENT_ROOT: $name")
                 if (entry.isDirectory) continue
                 val rel = name.removePrefix(CONTENT_ROOT)
@@ -312,9 +355,18 @@ object RinPak {
             }
             val missing = expected.keys - seen
             if (missing.isNotEmpty()) throw RinPakException("ملفات مفقودة من الحزمة: ${missing.sorted().take(3).joinToString()}")
+            if (manifest.icon != null && !iconSeen) throw RinPakException("الأيقونة معلنة لكنها مفقودة")
             report(total, force = true)
             manifest
         } }
+    }
+
+    /** يقرأ عنصر الأيقونة الحالي ويتحقق من حجمه وبصمته مقابل سجل المانيفست (الذي يغطيه التوقيع). */
+    private fun readVerifiedIcon(zip: ZipInputStream, decl: IconInfo): ByteArray {
+        val bytes = readLimited(zip, MAX_ICON_BYTES)
+        if (bytes.size != decl.size || !hex(MessageDigest.getInstance("SHA-256").digest(bytes)).equals(decl.sha256, ignoreCase = true))
+            throw RinPakException("فشل التحقق من SHA-256 للأيقونة")
+        return bytes
     }
 
     private fun readHeader(zip: ZipInputStream): Pair<Manifest, ByteArray> {
@@ -392,8 +444,10 @@ object RinPak {
         put("contentRoot", CONTENT_ROOT)
         put("created", m.created)
         put("generator", JSONObject().put("name", m.generatorName).put("version", m.generatorVersion))
-        put("icon", if (m.hasIcon) ENTRY_ICON else JSONObject.NULL)
+        put("icon", m.icon?.let { JSONObject().put("path", it.path).put("size", it.size).put("sha256", it.sha256) } ?: JSONObject.NULL)
         val mt = m.meta
+        if (mt.id.isNotBlank()) put("id", mt.id)
+        if (mt.tags.isNotEmpty()) put("tags", JSONArray(mt.tags))
         if (mt.version.isNotBlank()) put("version", mt.version)
         if (mt.description.isNotBlank()) put("description", mt.description)
         if (mt.author.isNotBlank()) put("author", mt.author)
@@ -443,12 +497,22 @@ object RinPak {
         val root = integrity.optString("root").lowercase()
         if (root != rootDigest(files)) throw RinPakException("بصمة الجذر (root) لا تطابق قائمة الملفات")
         val gen = o.optJSONObject("generator")
+        val iconDecl: IconInfo? = if (!o.has("icon") || o.isNull("icon")) null else {
+            val io = o.optJSONObject("icon") ?: throw RinPakException("سجل الأيقونة غير صالح")
+            val sha = io.optString("sha256")
+            if (io.optString("path") != ENTRY_ICON || io.optInt("size", -1) !in 1..MAX_ICON_BYTES ||
+                !Regex("^[0-9a-fA-F]{64}$").matches(sha)) throw RinPakException("سجل الأيقونة غير صالح")
+            IconInfo(ENTRY_ICON, io.getInt("size"), sha.lowercase())
+        }
+        val pid = o.optString("id")
+        if (pid.isNotEmpty() && !ID_REGEX.matches(pid)) throw RinPakException("معرّف الحزمة غير صالح: $pid")
         return Manifest(
             name = o.optString("name", "RinProject"), type = o.optString("type", "free"), entry = entry,
             specVersion = version, generatorName = gen?.optString("name").orEmpty(),
             generatorVersion = gen?.optString("version").orEmpty(), created = o.optString("created"),
-            files = files, root = root, hasIcon = !o.isNull("icon") && o.has("icon"),
+            files = files, root = root, icon = iconDecl,
             meta = PackMeta(
+                id = pid, tags = strings(o.optJSONArray("tags")).take(16).map { it.take(32) },
                 version = o.optString("version"), description = o.optString("description").take(1000),
                 author = o.optString("author").take(128), license = o.optString("license").take(64),
                 minRinVersion = o.optString("minRinVersion"),
@@ -467,6 +531,74 @@ object RinPak {
             md.update("${it.path}\u0000${it.size}\u0000${it.sha256.lowercase()}\n".toByteArray(Charsets.UTF_8))
         }
         return hex(md.digest())
+    }
+
+    // ───────────────────────────── التحليل الأمني والإصدارات ─────────────────────────────
+
+    private val NATIVE_EXT = setOf("so", "dex", "exe", "dll", "dylib", "msi", "scr")
+    private val PACKAGE_EXT = setOf("apk", "jar", "aab", "xapk")
+    private val SCRIPT_EXT = setOf("sh", "bat", "cmd", "ps1", "vbs", "command")
+    private val SENSITIVE_PERMS = setOf(
+        "exec", "shell", "install", "sms", "contacts", "location", "camera", "microphone",
+        "accessibility", "overlay", "files-all", "phone", "calendar"
+    )
+    /** محارف تحكم باتجاه النص (RLO وأخواتها): تُستعمل لتزييف امتداد الملف ("photo\u202Egpj.exe"). */
+    private const val BIDI_CONTROLS = "\u202A\u202B\u202C\u202D\u202E\u2066\u2067\u2068\u2069"
+
+    private fun extOf(path: String): String = if (path.contains('.')) path.substringAfterLast('.').lowercase() else ""
+
+    /**
+     * تحليل أمني للمانيفست دون فك أي ملف. لا يمنع الاستيراد بنفسه (القرار للمستخدم) إلا عند
+     * [Analysis.incompatible]. يطابق analyze() في tools/rinpak.py.
+     */
+    fun analyze(m: Manifest, appVersion: String? = null): Analysis {
+        val f = ArrayList<Finding>()
+        fun pathsWith(exts: Set<String>): List<String> = m.files.map { it.path }.filter { extOf(it) in exts }
+        val native = pathsWith(NATIVE_EXT)
+        if (native.isNotEmpty()) f += Finding(Level.HIGH, "NATIVE_CODE", native.take(5).joinToString())
+        val pkgs = pathsWith(PACKAGE_EXT)
+        if (pkgs.isNotEmpty()) f += Finding(Level.MEDIUM, "EMBEDDED_PACKAGE", pkgs.take(5).joinToString())
+        val scripts = pathsWith(SCRIPT_EXT)
+        if (scripts.isNotEmpty()) f += Finding(Level.MEDIUM, "SHELL_SCRIPT", scripts.take(5).joinToString())
+        val spoof = m.files.firstOrNull { e -> e.path.any { it in BIDI_CONTROLS } }
+        if (spoof != null) f += Finding(Level.HIGH, "BIDI_SPOOF", spoof.path)
+        val perms = m.meta.permissions
+        val sensitive = perms.filter { it.lowercase() in SENSITIVE_PERMS }.sorted()
+        if (sensitive.isNotEmpty()) f += Finding(Level.MEDIUM, "SENSITIVE_PERMISSIONS", sensitive.joinToString())
+        else if (perms.isNotEmpty()) f += Finding(Level.INFO, "PERMISSIONS", perms.take(8).joinToString())
+        if (m.signature == null) f += Finding(Level.INFO, "UNSIGNED")
+        if (m.totalBytes > 128L * 1024L * 1024L) f += Finding(Level.INFO, "LARGE_PACKAGE")
+        val incompatible = appVersion != null && m.meta.minRinVersion.isNotBlank() && versionGt(m.meta.minRinVersion, appVersion)
+        if (incompatible) f += Finding(Level.HIGH, "NEWER_RIN_REQUIRED", m.meta.minRinVersion)
+        val top = f.maxOfOrNull { it.level } ?: Level.INFO
+        return Analysis(top, incompatible, f)
+    }
+
+    /** "1.2.3-beta" → [1, 2, 3]؛ الأجزاء غير الرقمية تُهمَل والأصفار الطرفية تُقصّ. */
+    fun parseVersion(v: String?): List<Int> {
+        val out = (v ?: "").split('.').map { part -> Regex("^\\d+").find(part.trim())?.value?.toIntOrNull() ?: 0 }.toMutableList()
+        while (out.isNotEmpty() && out.last() == 0) out.removeAt(out.size - 1)
+        return out
+    }
+
+    /** هل الإصدار [a] أحدث من [b]؟ ("1.10.0" > "1.9.9"، و"1.0" == "1.0.0"). */
+    fun versionGt(a: String?, b: String?): Boolean {
+        val x = parseVersion(a)
+        val y = parseVersion(b)
+        for (i in 0 until maxOf(x.size, y.size)) {
+            val p = x.getOrElse(i) { 0 }
+            val q = y.getOrElse(i) { 0 }
+            if (p != q) return p > q
+        }
+        return false
+    }
+
+    fun isValidId(id: String): Boolean = ID_REGEX.matches(id)
+
+    /** معرّف حزمة ثابت من الاسم ([a-z0-9-])؛ للأسماء غير اللاتينية (عربي مثلاً) يُشتق من SHA-256 للاسم. */
+    fun makeId(name: String): String {
+        val slug = name.lowercase().replace(Regex("[^a-z0-9]+"), "-").trim('-').take(48).trim('-')
+        return slug.ifEmpty { "project-" + hex(MessageDigest.getInstance("SHA-256").digest(name.toByteArray(Charsets.UTF_8))).take(8) }
     }
 
     // ───────────────────────────── أدوات ─────────────────────────────
