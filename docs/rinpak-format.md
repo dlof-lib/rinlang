@@ -28,17 +28,17 @@ MyApp.rinpak                         ← ZIP
 ├── META-INF/
 │   ├── manifest.json                [2] ثاني عنصر — الهوية + قائمة الملفات + SHA-256
 │   ├── signature.json               [3] (اختياري) توقيع Ed25519 على manifest.json
-│   └── icon.png                     (اختياري) صورة مصغّرة للمشروع
+│   └── icon.png                     (اختياري) PNG ≤ 512KB — بصمتها SHA-256 في المانيفست فيغطيها التوقيع
 └── content/                         شجرة المشروع كما هي، مرتبة بحسب بايتات UTF-8 للمسار
     ├── main.rin                     نقطة الدخول (إلزامية)
-    ├── project.og.urin              نوع المشروع
+    ├── project.og.urin              البيانات الوصفية للمشروع (انظر docs/project-og-urin.md)
     ├── lib/…                        المكتبات
     └── assets/…                     الصور والوسائط وأي ملفات ثنائية
 ```
 
 قواعد التكديس عند التصدير:
 
-1. `mimetype` أولاً، `manifest.json` ثانياً — ثم `signature.json` إن وُجد (ثالثاً حصراً) — ثم `icon.png` — ثم ملفات `content/`.
+1. `mimetype` أولاً، `manifest.json` ثانياً — ثم `signature.json` إن وُجد (ثالثاً حصراً) — ثم `icon.png` إن أُعلنت (مباشرة بعد ما سبق: الثالثة أو الرابعة) — ثم ملفات `content/`. أي موضع آخر للتوقيع/الأيقونة ⇒ رفض.
 2. المسارات بفاصل `/` فقط، نسبية، بلا `..` ولا `\` ولا `:` ولا مقاطع فارغة.
 3. **تُستثنى** الملفات/المجلدات المخفية (أي مقطع يبدأ بنقطة، مثل `.rin_state/`) وملف `rin.project.json` القديم و**الروابط الرمزية**.
 4. الضغط: `STORED` للامتدادات المضغوطة أصلاً (png/jpg/mp4/zip/woff2/…)، و`DEFLATED` لغيرها.
@@ -56,7 +56,8 @@ MyApp.rinpak                         ← ZIP
   "contentRoot": "content/",
   "created": "2026-10-11T12:10:40Z",
   "generator": { "name": "RinStudio", "version": "1.0.0" },
-  "icon": null,
+  "id": "my-app",
+  "icon": { "path": "META-INF/icon.png", "size": 8726, "sha256": "ab12…" },   // أو null
   "stats": { "files": 4, "bytes": 150 },
   "integrity": {
     "algorithm": "SHA-256",
@@ -68,7 +69,8 @@ MyApp.rinpak                         ← ZIP
 }
 ```
 
-- حقول وصفية اختيارية: `version`، `description`، `author`، `license`، `minRinVersion`، `permissions[]`، `dependencies[]` (تُعرض في معاينة الاستيراد).
+- حقول وصفية اختيارية: `id` (`[a-z0-9._-]` حتى 64، معرّف مستقر عبر الإصدارات)، `version`، `description`، `author`، `license`، `tags[]` (≤16)، `minRinVersion`، `permissions[]`، `dependencies[]` — تُعرض في معاينة الاستيراد، وتُملأ تلقائياً من `project.og.urin`.
+- **الأيقونة**: `icon` كائن `{path,size,sha256}`؛ تُتحقق بصمتها وحجمها وموضعها عند الفحص والفك (تعديلها يُرفض، ويغطيها التوقيع لأن المانيفست موقَّع).
 - `type` ∈ `container | table | ui | free | illust | html | html_js` (انظر `ProjectType`).
 - **`root`** = SHA-256 لسلسلة أسطر `"<path>\0<size>\0<sha256>\n"` مرتّبة بحسب بايتات UTF-8 للمسار.
 - المخطط الرسمي: `schemas/rinpak-manifest.schema.json`.
@@ -77,7 +79,23 @@ MyApp.rinpak                         ← ZIP
 - ≤ 10 000 عنصر، ≤ 64MB للملف الواحد، ≤ 256MB للمحتوى كله — تُفحص من المانيفست **قبل** الفك، وأثناء الفك أيضاً.
 - مسارات مرفوضة: مطلقة، `..`، `\`، `:`، مقاطع فارغة، محارف تحكم أو `<>"|?*`، مقطع ينتهي بنقطة/مسافة.
 - **تصادم الأسماء** بين الحروف الكبيرة والصغيرة (`Lib.rin` ≙ `lib.rin`) يُرفض لأنه يفسد الفك على ويندوز/macOS.
-- لا يُقبل عنصر غير معلن في المانيفست، ولا ملف معلن ومفقود.
+- لا يُقبل عنصر غير معلن في المانيفست، ولا ملف معلن ومفقود، ولا أيقونة غير معلنة أو معلنة ومفقودة.
+
+## التحليل الأمني (`analyze`)
+
+يُحسب من المانيفست وحده (دون فك أي ملف) ويظهر في معاينة الاستيراد:
+
+| الرمز | المستوى | المعنى |
+|---|---|---|
+| `NATIVE_CODE` | عالٍ | ملفات `.so/.dex/.exe/.dll/.dylib/.msi/.scr` |
+| `BIDI_SPOOF` | عالٍ | اسم ملف يحوي محارف اتجاه (RLO…) تُخفي الامتداد الحقيقي |
+| `NEWER_RIN_REQUIRED` | عالٍ + **يمنع الاستيراد** | `minRinVersion` أحدث من إصدار التطبيق |
+| `EMBEDDED_PACKAGE` | متوسط | `.apk/.jar/.aab/.xapk` |
+| `SHELL_SCRIPT` | متوسط | `.sh/.bat/.cmd/.ps1/.vbs` |
+| `SENSITIVE_PERMISSIONS` | متوسط | صلاحيات مثل `exec/shell/install/sms/contacts/location/camera/microphone/accessibility/overlay/files-all/phone/calendar` |
+| `UNSIGNED` / `PERMISSIONS` / `LARGE_PACKAGE` | معلومة | لا تُرفع بها درجة الخطر |
+
+درجة الخطر = أعلى مستوى. الحزمة **العالية** تحتاج تأكيداً ثانياً صريحاً في التطبيق. الأسماء العربية والرموز العادية لا تُنبِّه.
 
 ## التوقيع الرقمي (Ed25519)
 
@@ -91,6 +109,7 @@ MyApp.rinpak                         ← ZIP
 - **التوقيع الموجود وغير الصالح ⇒ رفض الاستيراد.** الحزمة غير الموقّعة تُقبل لكن المعاينة تحذّر «غير موقّعة».
 - التوقيع يثبت **السلامة وهوية المفتاح**، لا «الثقة»: قارن `keyId` بمفتاح الناشر المعروف. (حزمة مجرَّدة من توقيعها تبدو غير موقّعة — لذا لا تعتمد غياب التحذير كدليل ثقة.)
 - الأندرويد: مفتاح خاص بالجهاز يُنشأ عند أول تصدير داخل التخزين الخاص (`RinPakSigner`)، ويُوقَّع كل تصدير تلقائياً. المرجع: `rinpak.py keygen` ثم `pack --sign`.
+- **الثقة**: انظر «ثقة الناشر (TOFU)» أدناه (`RinPakTrust`: OWN / TRUSTED / KNOWN / NEW / KEY_CHANGED / SIGNATURE_REMOVED). التحليل الأمني أعلاه مستقل عنها ويظهر في المعاينة نفسها.
 
 ## 4) التصدير (المشروع → `.rinpak`)
 
@@ -109,7 +128,7 @@ MyApp.rinpak                         ← ZIP
 ```
 اختيار الملف / فتحه من مدير الملفات (alias: RinPakFileViewer)
    ──► الكشف: أول عنصر mimetype؟  نعم → RinPak | لا → .rinproj القديم
-   ──► inspect: قراءة أول 3 عناصر فقط ← حوار معاينة (الاسم، النوع، الملفات، الحجم، المؤلف، الصلاحيات، حالة التوقيع)
+   ──► inspect: قراءة أول 3–4 عناصر فقط (مانيفست + توقيع + أيقونة) ← حوار معاينة (الأيقونة، الاسم/الإصدار/المعرّف، الوصف، المؤلف، الوسوم، الصلاحيات، حالة التوقيع والثقة، التحليل الأمني، بصمة الجذر)
    ──► موافقة المستخدم
    ──► extract (يتحقق من التوقيع أيضاً) إلى مجلد مؤقت .import_*/ مع التحقق أثناء الفك:
          • ترتيب العناصر + mimetype + المانيفست وإصداره + root
@@ -117,7 +136,7 @@ MyApp.rinpak                         ← ZIP
          • مسار آمن داخل الجذر، حدود: 10 000 عنصر / 256MB
    ──► وجود main.rin
    ──► اسم فريد (MyApp, MyApp_2, …) ثم rename ذري إلى projects/
-   ──► كتابة project.og.urin بنوع المشروع
+   ──► project.og.urin: يُدمج مع المانيفست المتحقَّق منه (المانيفست يتقدّم) ويُكتب بالاسم النهائي
 ```
 
 أي فشل ⇒ يُحذف المجلد المؤقت ولا يظهر مشروع نصف مستورد. بنية المشروع المستورد على القرص تساوي محتوى `content/` حرفياً:
@@ -143,7 +162,12 @@ filesDir/projects/MyApp/
 
 ## 7) ربط الملف بالنظام
 
-- **أندرويد**: `<activity-alias android:name=".RinPakFileViewer">` في `AndroidManifest.xml` (VIEW على `*.rinpak` أو MIME `application/vnd.rin.pak`) ⇒ فتح الملف يعرض معاينة الاستيراد.
+- **أندرويد** (`AndroidManifest.xml`، أيقونة وتسمية الـalias هي ما يظهر في «فتح باستخدام»):
+  - `RinPakFileViewer`: `VIEW` على `*.rinpak` (أي MIME، `content://` أو `file://`) **و**على MIME `application/vnd.rin.pak` / `application/x-rinpak` (حين يخفي المزوّد اسم الملف).
+  - نفس الـalias `RinPakFileViewer` يستقبل أيضاً `SEND`/`SEND_MULTIPLE` ⇒ «مشاركة ← Rin» (يقبل `application/octet-stream` و`application/zip` لأن تطبيقات المحادثة تصنّف الامتدادات المجهولة هكذا؛ غير الحزم تُرفض برسالة واضحة). عند تعدد الملفات تُعالج الأولى.
+  - `RinPakLauncher`: أيقونة تطبيق «RinPak» مستقلة في قائمة التطبيقات (Adaptive + أحادية اللون) تفتح منتقي الحزم.
+  - داخل التطبيق: أيقونة `ic_rinpak_file` في الملفات والمشاريع؛ الضغط على `.rinpak` داخل مشروع يفتح المعاينة/الاستيراد؛ وبعد التصدير زر «مشاركة» (`FileProvider` + MIME الرسمي).
+  - ملاحظة: أيقونة الملف في **مدير ملفات خارجي** يقررها ذلك المدير بحسب MIME؛ التطبيق يضمن تسجيل النوع واسم/أيقونة التطبيق المرتبط به.
 - **لينكس**: `packaging/rinpak/rinpak-mime.xml`  •  **ويندوز**: `packaging/rinpak/rinpak.reg`  •  **macOS**: `packaging/rinpak/Info.plist.fragment.xml`.
 - الأيقونات: `assets/branding/rinpak/rinpak_file.{ico,icns}` (أيقونة الملف) و`rinpak.{ico,icns}` (أيقونة التطبيق).
 
@@ -162,7 +186,7 @@ filesDir/projects/MyApp/
 
 **ثقة الناشر (TOFU)** — التوقيع يثبت السلامة ومفتاحاً بعينه، لا هوية صاحبه. `RinPakTrust` يتذكّر المفتاح الذي وقّع كل حزمة استوردتها، ويحذّر عند: مفتاح مختلف لحزمة بنفس الاسم (`KEY_CHANGED`)، أو حزمة كانت موقّعة وصارت بلا توقيع (`SIGNATURE_REMOVED`)؛ ويميّز حزمتك أنت (`OWN`) والناشرين الموثوقين صراحةً (`TRUSTED`).
 
-**التصدير** — حوار بيانات وصفية (إصدار/مؤلف/وصف/رخصة؛ تُحفظ لكل مشروع خارج شجرته فلا تدخل الحزمة) ثم **مشاركة** عبر قائمة النظام (`FileProvider` + `ACTION_SEND` بنوع `application/vnd.rin.pak`) أو **حفظ في التنزيلات**.
+**التصدير** — حوار بيانات وصفية (إصدار/مؤلف/وصف/رخصة؛ تُحفظ في `project.og.urin` داخل المشروع فتنتقل معه ومع الحزمة، والمعرّف/الوسوم/الصلاحيات/الاعتماديات تؤخذ منه أيضاً، والأيقونة من `icon` أو الشعار الافتراضي) ثم **مشاركة** عبر قائمة النظام (`FileProvider` + `ACTION_SEND` بنوع `application/vnd.rin.pak`) أو **حفظ في التنزيلات**.
 
 **المتانة** — المجلدات المؤقتة `.import_*`/`.replaced_*` مخفية من قائمة المشاريع وتُكنَّس إن بقيت أكثر من ساعة بعد انقطاع؛ ملف مقطوع/تالف يعطي «الحزمة تالفة أو غير مكتملة» بدل رسالة JVM.
 
@@ -171,10 +195,11 @@ filesDir/projects/MyApp/
 ```bash
 python3 tools/rinpak.py keygen key.pem
 python3 tools/rinpak.py pack   MyApp -o MyApp.rinpak --type container --sign key.pem --version 1.0.0 --author "me"
-python3 tools/rinpak.py info   MyApp.rinpak
-python3 tools/rinpak.py verify MyApp.rinpak
+python3 tools/rinpak.py info   MyApp.rinpak [--app-version 1.0.0]   # يطبع التحليل الأمني أيضاً
+python3 tools/rinpak.py verify MyApp.rinpak --require-signature --trust 25cc1f60f722132c --max-risk medium --app-version 1.0.0
 python3 tools/rinpak.py unpack MyApp.rinpak out/
-python3 tests/rinpak_test.py        # 28 اختباراً: ترتيب، حتمية، عبث بالمحتوى، Zip Slip، تزوير root، التوقيع (تعديل/تبديل مفتاح/keyId/موضع)، التصادم، الروابط الرمزية…
+python3 tools/rinpak.py meta   MyApp --set version=1.1.0 --set tags=demo,ui      # تحرير project.og.urin
+python3 tests/rinpak_test.py        # ترتيب، حتمية، عبث بالمحتوى، Zip Slip، تزوير root، التوقيع، الأيقونة الموثّقة، التحليل الأمني، project.og.urin، سياسات verify…
 ```
 
 `tools/rinpak.py` مرجع بايثون لنفس القواعد المطبّقة في `app/src/main/java/com/dlof/rinlang/RinPak.kt`.
