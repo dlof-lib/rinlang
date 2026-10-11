@@ -848,7 +848,7 @@ static bool parseWithFormat(const std::string& textIn, const std::string& fmtIn,
     const std::string fmt = presetPattern(fmtIn, false);
     size_t i = 0;
     i64 Y = 1970; int Mo = 1, D = 1, H = 0, Mi = 0, S = 0, Ms = 0; int off = cx.nowOff; bool pm = false, hasMer = false, h12 = false, haveOff = false;
-    bool haveY = false, haveMo = false, haveD = false; bool unix = false; i64 unixV = 0; bool unixMs = false;
+    bool haveY = false, haveMo = false, haveD = false; bool isUnix = false; i64 unixV = 0; bool unixMs = false;
     auto readNum = [&](int minD, int maxD, i64& v) {
         size_t st = i; v = 0;
         while (i < text.size() && text[i] >= '0' && text[i] <= '9' && static_cast<int>(i - st) < maxD) { v = v * 10 + (text[i] - '0'); ++i; }
@@ -891,10 +891,10 @@ static bool parseWithFormat(const std::string& textIn, const std::string& fmtIn,
             size_t e = i; while (e < text.size() && text[e] != ' ') ++e;
             int zo; if (!parseZone(text.substr(i, e - i), cx.nowMs, zo)) return false; off = zo; haveOff = true; i = e;
         }
-        else if (k == "X" || k == "x") { if (!readNum(1, 18, v)) return false; unix = true; unixV = v; unixMs = (k == "x"); }
+        else if (k == "X" || k == "x") { if (!readNum(1, 18, v)) return false; isUnix = true; unixV = v; unixMs = (k == "x"); }
     }
     if (i != text.size()) return false;
-    if (unix) { out = {unixMs ? unixV : unixV * 1000, cx.nowOff}; return true; }
+    if (isUnix) { out = {unixMs ? unixV : unixV * 1000, cx.nowOff}; return true; }
     if (h12 || hasMer) { if (hasMer && pm && H < 12) H += 12; if (hasMer && !pm && H == 12) H = 0; }
     const Parts np = breakdown(cx.nowMs, cx.nowOff);
     if (!haveY) Y = np.year;
