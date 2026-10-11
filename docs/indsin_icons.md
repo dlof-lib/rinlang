@@ -43,3 +43,13 @@ ic_audit ic_register ic_validPath`. خيارات `opts`: `size color stroke fill
 ## الاختبارات
 `RIN_BIN=rin python3 tools/icons/test_icons.py` · `rin tests/indsin_icons_tests.rin` ·
 `g++ -std=c++17 -Iapp/src/main/cpp/indsin tools/test_indsin_icon_vectors.cpp`.
+
+## داخل تطبيق RinStudio
+- **مكتبة مدمجة:** `lib/indsinicons.og.rin` مضمَّنة في المفسّر (`rin_stdlib_libs.h`) فيعمل `@import "lib/indsinicons.og.rin";`
+  في أي مشروع دون رفع ملف. بعد أي تعديل: `python3 tools/icons/gen_indsin_icons.py && python3 tools/embed_indsinicons.py`.
+- **شاشة المكتبات (`LibrariesActivity`) بتصميم جديد:** بحث حيّ، شرائح فئات (واجهات/بيانات/لغات وأدوات/ألعاب وفيزياء/نظام وأمان)،
+  بطاقة مميّزة لمكتبة الأيقونات (معاينة ستّ أيقونات حقيقية + تصفّح + إدراج `@import`)، وحبّة فئة على كل مكتبة مدمجة.
+- **متصفّح الأيقونات (`IconLibraryActivity`):** شبكة 187 أيقونة تُرسم من مسارات SVG عبر `IndsinIconView`، بحث بالاسم أو البديل،
+  وتفاصيل مع «إدراج في الكود» (يُدرج سطر `@view.Icon` عند المؤشر).
+- **أيقونة المكتبة:** `res/drawable/ic_lib_indsinicons.xml` (شبكة 2×2 من البلاطات) و`assets/branding/indsinicons_icon.svg`.
+- لم يُبنَ APK هنا (لا Android SDK ولا مترجم Kotlin في بيئة العمل): تحقّق من البناء والشكل على جهاز قبل الإصدار.
