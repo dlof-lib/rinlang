@@ -1,0 +1,161 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rinlang.dev/schemas/rinpak-manifest-1.json",
+  "title": "RinPak manifest (META-INF/manifest.json)",
+  "type": "object",
+  "required": [
+    "format",
+    "specVersion",
+    "name",
+    "type",
+    "entry",
+    "contentRoot",
+    "integrity"
+  ],
+  "properties": {
+    "format": {
+      "const": "rinpak"
+    },
+    "specVersion": {
+      "const": 1
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "container",
+        "table",
+        "ui",
+        "free",
+        "illust",
+        "html",
+        "html_js"
+      ]
+    },
+    "entry": {
+      "const": "main.rin"
+    },
+    "contentRoot": {
+      "const": "content/"
+    },
+    "created": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "generator": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        }
+      }
+    },
+    "icon": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "const": "META-INF/icon.png"
+    },
+    "stats": {
+      "type": "object",
+      "properties": {
+        "files": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "bytes": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "integrity": {
+      "type": "object",
+      "required": [
+        "algorithm",
+        "root",
+        "files"
+      ],
+      "properties": {
+        "algorithm": {
+          "const": "SHA-256"
+        },
+        "root": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "files": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 10000,
+          "items": {
+            "type": "object",
+            "required": [
+              "path",
+              "size",
+              "sha256"
+            ],
+            "properties": {
+              "path": {
+                "type": "string",
+                "minLength": 1
+              },
+              "size": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 67108864
+              },
+              "sha256": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              }
+            }
+          }
+        }
+      }
+    },
+    "version": {
+      "type": "string",
+      "maxLength": 32
+    },
+    "description": {
+      "type": "string",
+      "maxLength": 1000
+    },
+    "author": {
+      "type": "string",
+      "maxLength": 128
+    },
+    "license": {
+      "type": "string",
+      "maxLength": 64
+    },
+    "minRinVersion": {
+      "type": "string"
+    },
+    "permissions": {
+      "type": "array",
+      "maxItems": 256,
+      "items": {
+        "type": "string",
+        "maxLength": 256
+      }
+    },
+    "dependencies": {
+      "type": "array",
+      "maxItems": 256,
+      "items": {
+        "type": "string",
+        "maxLength": 256
+      }
+    }
+  }
+}
