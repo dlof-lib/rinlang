@@ -59,6 +59,8 @@ data class RinLogLine(
 enum class ArtifactKind(val mime: String, @DrawableRes val icon: Int) {
     IMAGE_PNG("image/png", R.drawable.ic_log_image),
     ARCHIVE_ZIP("application/zip", R.drawable.ic_log_archive),
+    /** حزمة مشروع Rin (.rinpak) — MIME خاص كي لا يضيف MediaStore لاحقة .zip إلى اسم الملف. */
+    RINPAK("application/vnd.rin.pak", R.drawable.ic_rinpak_file),
     RIN_DOC("text/plain", R.drawable.ic_log_export),
     APK("application/vnd.android.package-archive", R.drawable.ic_log_export)
 }
