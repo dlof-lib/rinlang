@@ -392,7 +392,11 @@ struct ReckonStmt : Stmt { ReckonStmt() { stmtKind = StmtKind::ReckonStmt; }
 //   undo x [n]; redo x [n]; rearm x; unbell x; abort;     أفعال.
 // كلها additive بحت: برنامج Rin لا يستعملها يعمل حرفياً كما كان (كلفة صفر؛ انظر Interpreter::liveActive_).
 // ============================================================================
-enum class LiveKind { Stone, Gauge, Tape, Lens, Fuse };
+//   --- عائلة الشروط (docs/base-accept.md): متغيّران يخدمان if وما يشبهه ---
+//   base   x = v [to GOAL] [step N];      متغيّر بخط أساس: يتذكّر قيمته الأولى ويقيس البعد عنها (x.up/x.down/x.delta...).
+//   accept x = v if RULE [else FB] [strict];   متغيّر بحارس: لا تدخله إلا القيم التي يقبلها الشرط (x.ok/x.refused...).
+//   inc x [by n]; dec x [by n]; rebase x; rewind x;   أفعال base (inc/dec تعمل على أي متغيّر رقمي).
+enum class LiveKind { Stone, Gauge, Tape, Lens, Fuse, Base, Accept };
 struct LiveDeclStmt : Stmt { LiveDeclStmt() { stmtKind = StmtKind::LiveDeclStmt; }
     LiveKind kind = LiveKind::Stone;
     std::string name;
@@ -401,6 +405,11 @@ struct LiveDeclStmt : Stmt { LiveDeclStmt() { stmtKind = StmtKind::LiveDeclStmt;
     std::string rangeMode;    // gauge: "clamp" (افتراضي) | "strict" | "wrap"
     ExprPtr keep;             // tape/gauge: عمق الذاكرة (nullable؛ tape الافتراضي 10)
     ExprPtr burns;            // fuse: عدد القراءات قبل الاحتراق (nullable؛ الافتراضي 1)
+    ExprPtr goal;             // base: الهدف (to GOAL) — nullable
+    ExprPtr step;             // base: خطوة inc/dec الافتراضية (step N) — nullable = 1
+    ExprPtr rule;             // accept: شرط القبول (if RULE) — اسم المتغيّر نفسه يرى القيمة المرشّحة
+    ExprPtr fallback;         // accept: بديل عند الرفض (else FB) — nullable
+    bool strictAccept = false; // accept: الرفض خطأ E0049 بدل تجاهل الإسناد بصمت
 };
 struct BellStmt : Stmt { BellStmt() { stmtKind = StmtKind::BellStmt; }
     std::string target;
@@ -411,9 +420,9 @@ struct TrialStmt : Stmt { TrialStmt() { stmtKind = StmtKind::TrialStmt; }
     StmtPtr elseBranch;       // nullable: يُنفَّذ بعد التراجع إن فشلت التجربة أو أُجهضت
 };
 struct LiveActionStmt : Stmt { LiveActionStmt() { stmtKind = StmtKind::LiveActionStmt; }
-    std::string action;       // "undo" | "redo" | "rearm" | "unbell" | "abort"
+    std::string action;       // "undo" | "redo" | "rearm" | "unbell" | "abort" | "ban" | "inc" | "dec" | "rebase" | "rewind"
     std::string target;       // اسم المتغيّر (فارغ لـ abort)
-    ExprPtr count;            // undo/redo فقط (nullable = 1)
+    ExprPtr count;            // undo/redo/inc/dec فقط (nullable = 1، أو step الخاص بـ base)
 };
 
 struct BlockStmt : Stmt { BlockStmt() { stmtKind = StmtKind::BlockStmt; } std::vector<StmtPtr> statements; };
