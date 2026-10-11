@@ -169,8 +169,32 @@
                 <data android:scheme="file" />
                 <data android:mimeType="application/vnd.rin.pak" />
             </intent-filter>
+            <!-- «مشاركة» من أي تطبيق (واتساب/تيليجرام/بريد/Nearby Share/Drive…): كثير منها يرسل .rinpak بنوع
+                 octet-stream أو zip لا بنوعه الخاص؛ المحتوى يُفحص فعلياً (mimetype داخل الحزمة) والملف غير الصالح يُرفض. -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="application/vnd.rin.pak" />
+                <data android:mimeType="application/octet-stream" />
+                <data android:mimeType="application/zip" />
+            </intent-filter>
         </activity-alias>
 
+
+        <!-- أيقونة RinPak في قائمة تطبيقات الجهاز (مع الأيقونة المتجانسة): تفتح شاشة المشاريع وتعرض مباشرة
+             منتقي ملفات الحزم (.rinpak) لاستيرادها. هي alias لنفس ProjectsActivity، فلا تكرار للشيفرة. -->
+        <activity-alias
+            android:name=".RinPakLauncher"
+            android:targetActivity=".ProjectsActivity"
+            android:exported="true"
+            android:label="@string/rinpak_launcher_label"
+            android:icon="@mipmap/ic_rinpak_launcher"
+            android:roundIcon="@mipmap/ic_rinpak_launcher">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
 
         <activity
             android:name=".FilesActivity"
