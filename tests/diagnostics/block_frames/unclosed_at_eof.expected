@@ -1,0 +1,13 @@
+error[E0012]: `@container` opened with `{` at line 1 was never closed
+  --> unclosed_at_eof.rin:3:1
+
+ 3 | 
+   | ^
+
+reason:
+  the file ended while this block was still open
+
+help:
+  add a closing `}` for the `@container` block that starts at line 1
+
+1 error emitted
