@@ -234,14 +234,14 @@ class FilesActivity : RinBaseActivity() {
 
     private fun downloadProjectAsZip() {
         val mainHandler = Handler(Looper.getMainLooper())
-        val progressDialog = RinDownloadProgressDialog(this, "${project.name}.rinproj")
+        val progressDialog = RinDownloadProgressDialog(this, "${project.name}${ProjectManager.OFFICIAL_PROJECT_EXTENSION}")
         progressDialog.show()
 
         Thread {
             try {
                 val zipFile = ProjectManager.exportProject(this, project)
                 val artifact = RinArtifact(
-                    kind = ArtifactKind.ARCHIVE_ZIP,
+                    kind = ArtifactKind.RINPAK,
                     relPath = zipFile.name,
                     absoluteFile = zipFile,
                     sizeBytes = zipFile.length()
