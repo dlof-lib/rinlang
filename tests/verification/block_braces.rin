@@ -1,0 +1,45 @@
+// Block Frames: كل كتلة '@...' تُفتح بـ '{' على سطر الترويسة وتُغلق بـ '};' على طريقة C++ (و'}' وحدها أو '.end/x' القديم يعملان أيضاً)
+@Volume=shop {
+    @container=cart {
+        state total = 0;
+        fun add(n) { total = total + n; return total; }
+        @element.button=buy {
+            text = "Buy";
+        };
+        on.buy.click = add(5);
+    };
+
+    @container.data=cfg {
+        let currency = "USD";
+    };
+};
+
+// نفس الشكل القديم في نفس الملف — لا تعارض
+@container=legacy
+    let a = 1;
+.end/container=legacy
+
+@container {
+    let anon = 2;
+};
+
+.object("u1") {
+    name("Ali");
+};
+
+@loop=canvas {
+    width = 390;
+    @element.text=title {
+        text = "hi";
+    };
+};
+
+@container=bare {
+    let b = 3;
+}
+
+@container=named {
+    let c = 4;
+}=named;
+
+print "braces-ok";
