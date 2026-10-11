@@ -82,6 +82,7 @@ enum class Code {
     E0048_LetElseFallthrough, // let ... else { ... }: كتلة else انتهت دون مغادرة النطاق (return/break/continue/throw/abort)
     E0049_AcceptRejected,   // accept ... strict: قيمة رفضها شرط القبول (أو القيمة الابتدائية لم تُقبل ولا بديل else)
     E0050_BaseMisuse,       // base: inc/dec على غير رقم، أو rebase/rewind على متغيّر ليس base
+    E0051_ContractViolated, // pre/post ... strict: شرط «قبل» أو «بعد» كُذِّب (أو القيمة الابتدائية لا تحقّق شرط «بعد»)
 
     W0001_UnusedVariable,
     W0002_UnusedImport,
