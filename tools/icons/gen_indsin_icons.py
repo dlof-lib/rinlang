@@ -52,6 +52,9 @@ def gen_svgs():
            "icons": [{"name": n, "category": D.ICONS[n][0], "aliases": aliases_of(n),
                       "filled": n in D.FILLABLE, "path": D.ICONS[n][1]} for n in NAMES]}
     w(os.path.join(OUT, "icons.json"), json.dumps(idx, ensure_ascii=False, indent=1) + "\n")
+    # نسخة مضغوطة داخل assets التطبيق (يقرؤها IndsinIcons.kt في RinStudio)
+    w(os.path.join(ROOT, "app", "src", "main", "assets", "indsin-icons", "icons.json"),
+      json.dumps(idx, ensure_ascii=False, separators=(",", ":")) + "\n")
 
 # ------------------------------------------------------------------ مكتبة Rin
 RIN_HEAD = '''// ============================================================================
