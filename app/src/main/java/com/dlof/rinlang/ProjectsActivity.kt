@@ -41,7 +41,7 @@ class ProjectsActivity : RinBaseActivity() {
     private var sortedProjects: List<Project> = emptyList()
     private var searchQuery: String = ""
 
-    /** مستورد الحزمة الرسمية Rin Project (*.rinproj). */
+    /** مستورد حزمة مشروع Rin الرسمية RinPak (*.rinpak) — ويقبل .rinproj القديمة. */
     private val importProjectLauncher = registerForActivityResult(
         ActivityResultContracts.OpenDocument()
     ) { uri: Uri? ->
@@ -79,9 +79,10 @@ class ProjectsActivity : RinBaseActivity() {
         rvProjects.adapter = adapter
 
         fabNewProject.setOnClickListener { showCreateDialog() }
+        handleIncomingPackage(intent)
         findViewById<View>(R.id.btnProjectAlbums).setOnClickListener { startActivity(Intent(this, AlbumsActivity::class.java)) }
         findViewById<View>(R.id.btnProjectImport).setOnClickListener {
-            importProjectLauncher.launch(arrayOf(ProjectManager.OFFICIAL_PROJECT_MIME, "application/zip", "application/octet-stream", "*/*"))
+            importProjectLauncher.launch(arrayOf(ProjectManager.OFFICIAL_PROJECT_MIME, ProjectManager.LEGACY_PROJECT_MIME, "application/zip", "application/octet-stream", "*/*"))
         }
         findViewById<View>(R.id.btnProjectSort).setOnClickListener { anchor -> showSortMenu(anchor) }
 
@@ -95,6 +96,19 @@ class ProjectsActivity : RinBaseActivity() {
             }
             override fun afterTextChanged(s: android.text.Editable?) {}
         })
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleIncomingPackage(intent)
+    }
+
+    /** فتح ملف .rinpak من مدير الملفات/البريد/المحادثات (ACTION_VIEW عبر alias RinPakFileViewer). */
+    private fun handleIncomingPackage(intent: Intent?) {
+        val data = intent?.takeIf { it.action == Intent.ACTION_VIEW }?.data ?: return
+        intent.data = null // لا نعيد عرض الحوار عند تدوير الشاشة
+        importProject(data)
     }
 
     /** قائمة "ترتيب المشاريع" المنبثقة من رأس الشاشة: تكرار سريع لخيارات AppSettings.setProjectSort
@@ -169,7 +183,7 @@ class ProjectsActivity : RinBaseActivity() {
                 val file = ProjectManager.exportProject(this, project)
                 runOnUiThread {
                     val artifact = RinArtifact(
-                        kind = ArtifactKind.ARCHIVE_ZIP,
+                        kind = ArtifactKind.RINPAK,
                         relPath = file.name,
                         absoluteFile = file,
                         sizeBytes = file.length()
@@ -200,7 +214,23 @@ class ProjectsActivity : RinBaseActivity() {
     private fun importProject(uri: Uri) {
         try {
             val info = ProjectManager.inspectProjectPackage(this, uri)
-            val summary = "${info.name}\nالنوع: ${info.type.id}\nالملفات: ${info.fileCount}\nصيغة Rin Project v${info.formatVersion}"
+            val sizeKb = (info.totalBytes + 1023) / 1024
+            val summary = buildString {
+                append(info.name)
+                append("\nالنوع: ").append(info.type.id)
+                append("\nالملفات: ").append(info.fileCount)
+                if (!info.legacy) append(" (").append(sizeKb).append(" KB)")
+                if (info.version.isNotBlank()) append("\nالإصدار: ").append(info.version)
+                if (info.author.isNotBlank()) append("\nالمؤلف: ").append(info.author)
+                if (info.generator.isNotBlank()) append("\nأُنشئت بواسطة: ").append(info.generator)
+                if (info.permissions.isNotEmpty()) append("\nالصلاحيات: ").append(info.permissions.joinToString())
+                if (!info.legacy) append(
+                    if (info.signerKeyId != null) "\n🔏 موقّعة رقمياً — المفتاح ${info.signerKeyId} (التوقيع سليم)"
+                    else "\n⚠ غير موقّعة — لا يمكن التحقق من هوية المُنشئ"
+                )
+                append(if (info.legacy) "\nصيغة قديمة (.rinproj) — بلا بصمات تحقق"
+                       else "\nRinPak v${info.formatVersion} — تم التحقق من سلامة المانيفست")
+            }
             AlertDialog.Builder(this)
                 .setTitle(R.string.import_project_preview_title)
                 .setMessage(summary)
