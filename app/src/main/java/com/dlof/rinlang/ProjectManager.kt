@@ -111,7 +111,7 @@ object ProjectManager {
      * مجرد ملف داخل نفس المجلد. القراءة تبقى متوافقة مع المشاريع القديمة التي كُتب فيها هذا
      * الملف بصيغة "type=xxx" الخام قبل هذا التعديل.
      */
-    private const val PROJECT_META_FILE = "project.og.urin"
+    private const val PROJECT_META_FILE = RinProjectMeta.FILE_NAME
     /** الامتداد الرسمي لحزمة مشروع Rin القابلة للنقل: RinPak (انظر [RinPak] وdocs/rinpak-format.md). */
     const val OFFICIAL_PROJECT_EXTENSION = RinPak.EXTENSION
     const val OFFICIAL_PROJECT_MIME = RinPak.MIME
@@ -156,24 +156,31 @@ object ProjectManager {
     private fun readProjectType(dir: File): ProjectType {
         val metaFile = File(dir, PROJECT_META_FILE)
         if (!metaFile.isFile) return ProjectType.FREE
-        val typeId = TYPE_LINE_REGEX.find(metaFile.readText())?.groupValues?.get(1)
+        // المحلّل الرسمي (RinProjectMeta) يفهم v2 وv1 والصيغة الخام القديمة؛ وإن تعذّر نرجع للنمط القديم.
+        RinProjectMeta.read(dir)?.let { return it.type }
+        val typeId = runCatching { TYPE_LINE_REGEX.find(metaFile.readText())?.groupValues?.get(1) }.getOrNull()
         return ProjectType.fromId(typeId)
     }
+
+    /** بيانات المشروع الوصفية الكاملة (project.og.urin)، أو الافتراضية للمشاريع القديمة التي لا تملك الملف. */
+    fun readProjectMeta(project: Project): RinProjectMeta =
+        RinProjectMeta.read(project.dir) ?: RinProjectMeta.forNewProject(project.type, project.name)
+
+    /** يعدّل بيانات المشروع الوصفية (الإصدار، الوسوم، الصلاحيات...) ويحفظها. النوع والاسم لا يتغيران من هنا. */
+    fun updateProjectMeta(project: Project, change: (RinProjectMeta) -> RinProjectMeta): RinProjectMeta =
+        RinProjectMeta.update(project.dir, project.type, project.name) { change(it).copy(type = project.type, name = project.name) }
+
+    private fun appVersionName(context: Context): String = runCatching {
+        context.packageManager.getPackageInfo(context.packageName, 0).versionName
+    }.getOrNull().orEmpty().ifBlank { "1.0.0" }
 
     /**
      * يكتب/يحدّث [PROJECT_META_FILE] بنوع المشروع الحالي، بصيغة حاوية Rin مصغّرة (@container)
      * بدل سطر key=value خام: البيانات الوصفية للمشروع تُخزَّن الآن هي نفسها داخل حاوية، بنفس
      * منطق main.rin لمشاريع نوع Container.
      */
-    private fun writeProjectMeta(dir: File, type: ProjectType) {
-        File(dir, PROJECT_META_FILE).writeText(
-            "# بيانات وصفية لمشروع Rin — يُدار تلقائياً من التطبيق، لا تُعدّله يدوياً\n" +
-                "// نوع المشروع محفوظ داخل حاوية Rin (@container) وليس سطراً خاماً،\n" +
-                "// تماشياً مع بنية اللغة نفسها.\n" +
-                "@container=ProjectMeta\n" +
-                "    type=\"${type.id}\";\n" +
-                ".end/container\n"
-        )
+    private fun writeProjectMeta(dir: File, type: ProjectType, manifest: RinPak.Manifest? = null, name: String = dir.name) {
+        RinProjectMeta.ensure(dir, type, name, manifest)
     }
 
     /**
@@ -971,7 +978,8 @@ fun removeTodo(id) {
         require(!newDir.exists()) { "يوجد مشروع بهذا الاسم بالفعل" }
         val ok = project.dir.renameTo(newDir)
         require(ok) { "تعذّر إعادة تسمية المشروع" }
-        // ملف project.og.urin ينتقل تلقائياً مع المجلد، فيبقى النوع كما هو بعد إعادة التسمية.
+        // ملف project.og.urin ينتقل تلقائياً مع المجلد؛ نحدّث فيه الاسم فقط (المعرّف id يبقى ثابتاً).
+        runCatching { RinProjectMeta.update(newDir, project.type, newName.trim()) { it.copy(name = newName.trim()) } }
         return Project(newName.trim(), newDir, newDir.lastModified(), project.type)
     }
 
@@ -987,7 +995,7 @@ fun removeTodo(id) {
     private val audioExtensions = setOf("mp3", "wav", "ogg", "m4a", "flac", "aac", "opus")
     private val otherBinaryExtensions = setOf(
         "ttf", "otf", "woff", "woff2",
-        "zip", "rar", "7z", "apk", "jar",
+        "zip", "rar", "7z", "apk", "jar", "rinpak", "rinproj",
         "pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx"
     )
 
@@ -1375,7 +1383,18 @@ fun removeTodo(id) {
         val signerKeyId: String? = null,
         val version: String = "",
         val author: String = "",
-        val permissions: List<String> = emptyList()
+        val permissions: List<String> = emptyList(),
+        val id: String = "",
+        val description: String = "",
+        val license: String = "",
+        val tags: List<String> = emptyList(),
+        val minRinVersion: String = "",
+        /** أيقونة الحزمة (PNG) بعد التحقق من بصمتها، أو null. */
+        val iconPng: ByteArray? = null,
+        /** التحليل الأمني ([RinPak.analyze]) — null للصيغة القديمة. */
+        val analysis: RinPak.Analysis? = null,
+        /** بصمة الجذر SHA-256 لمحتوى الحزمة. */
+        val root: String = ""
     )
 
     /** يفكّ ضغط ZIP legacy داخل مشروع موجود. أبقيناه للتوافق فقط؛ الصيغة الرسمية هي .rinproj. */
@@ -1436,8 +1455,14 @@ fun removeTodo(id) {
         try {
             val name: String
             val type: ProjectType
+            var packManifest: RinPak.Manifest? = null
             if (isRinPak(resolver, uri)) {
                 val manifest = openPackage(resolver, uri).use { RinPak.extract(it, tempRoot, onProgress, isCancelled) }
+                // الحزمة التي تتطلب Rin أحدث لا تُثبَّت (قد تعتمد ميزات غير موجودة هنا).
+                require(!RinPak.analyze(manifest, appVersionName(context)).incompatible) {
+                    "الحزمة تتطلب Rin ${manifest.meta.minRinVersion} أو أحدث"
+                }
+                packManifest = manifest
                 name = manifest.name; type = ProjectType.fromId(manifest.type)
             } else {
                 val manifestText = extractProjectPackage(resolver, uri, tempRoot, requireManifest = true)
@@ -1470,7 +1495,8 @@ fun removeTodo(id) {
             }
             committed = true
             backup?.deleteRecursively()
-            writeProjectMeta(finalDir, type)
+            // المانيفست المتحقَّق منه يتقدّم على project.og.urin المضمَّن (انظر RinProjectMeta.withManifest).
+            writeProjectMeta(finalDir, type, packManifest, finalName)
             return Project(finalName, finalDir, finalDir.lastModified(), type)
         } finally {
             if (!committed && tempRoot.exists()) tempRoot.deleteRecursively()
@@ -1506,7 +1532,9 @@ fun removeTodo(id) {
                 hasManifest = true, legacy = false, totalBytes = m.totalBytes,
                 generator = "${m.generatorName} ${m.generatorVersion}".trim(),
                 signerKeyId = m.signature?.keyId, version = m.meta.version, author = m.meta.author,
-                permissions = m.meta.permissions
+                permissions = m.meta.permissions, id = m.meta.id, description = m.meta.description,
+                license = m.meta.license, tags = m.meta.tags, minRinVersion = m.meta.minRinVersion,
+                iconPng = m.iconPng, analysis = RinPak.analyze(m, appVersionName(context)), root = m.root
             )
         }
         val tempRoot = File(context.cacheDir, "rinpak_inspect_${System.currentTimeMillis()}_${(1000..9999).random()}")
@@ -1613,15 +1641,19 @@ fun removeTodo(id) {
         val packageFile = File(cacheDir, "${sanitizeProjectName(project.name)}$OFFICIAL_PROJECT_EXTENSION")
         if (packageFile.exists()) packageFile.delete()
         try {
+            val appVersion = appVersionName(context)
+            // الحقول التي لا يحررها حوار التصدير (id/وسوم/صلاحيات/اعتماديات/أدنى إصدار) تأتي من project.og.urin.
+            val pm = readProjectMeta(project)
+            val merged = (meta ?: loadPackMeta(context, project)).copy(
+                id = pm.id.takeIf { RinPak.isValidId(it) } ?: RinPak.makeId(project.name),
+                tags = pm.tags, permissions = pm.permissions, dependencies = pm.dependencies,
+                minRinVersion = pm.minRinVersion.ifBlank { appVersion }
+            )
             FileOutputStream(packageFile).use { out ->
-                val appVersion = runCatching {
-                    context.packageManager.getPackageInfo(context.packageName, 0).versionName
-                }.getOrNull().orEmpty().ifBlank { "1.0.0" }
                 RinPak.write(
                     sourceDir = project.dir, name = project.name, typeId = project.type.id, out = out,
-                    generatorVersion = appVersion,
-                    meta = (meta ?: loadPackMeta(context, project)).copy(minRinVersion = appVersion),
-                    signer = RinPakSigner.forDevice(context)
+                    generatorVersion = appVersion, iconPng = packIcon(context, project, pm),
+                    meta = merged, signer = RinPakSigner.forDevice(context)
                 )
             }
         } catch (t: Throwable) {
@@ -1631,7 +1663,20 @@ fun removeTodo(id) {
         return packageFile
     }
 
+    /**
+     * أيقونة الحزمة: PNG يحدّدها المشروع (حقل icon في project.og.urin) إن كانت صالحة، وإلا شعار RinPak
+     * المضمّن (res/raw/rinpak_pack_icon.png) فيحمل كل ملف مصدَّر هويته البصرية.
+     */
+    private fun packIcon(context: Context, project: Project, meta: RinProjectMeta): ByteArray? {
+        RinProjectMeta.resolveIcon(project.dir, meta.icon)?.let { f -> runCatching { return f.readBytes() } }
+        return runCatching {
+            context.resources.openRawResource(R.raw.rinpak_pack_icon).use { it.readBytes() }
+        }.getOrNull()?.takeIf { it.size <= RinPak.MAX_ICON_BYTES }
+    }
+
     // ───────── البيانات الوصفية للحزمة (الإصدار/المؤلف/الوصف/الرخصة) ─────────
+    // المصدر الأساسي الآن project.og.urin داخل المشروع (ينتقل مع المشروع ومع الحزمة)؛ ملف rinpak_meta/ القديم
+    // يبقى احتياطاً للقيم التي لم تُكتب بعد في project.og.urin.
     // تُحفظ خارج شجرة المشروع (filesDir/rinpak_meta/<اسم>.json) كي لا تدخل الحزمة ولا تظهر في شاشة الملفات.
 
     private fun packMetaFile(context: Context, project: Project): File =
@@ -1641,11 +1686,12 @@ fun removeTodo(id) {
     fun loadPackMeta(context: Context, project: Project): RinPak.PackMeta {
         val own = readMetaJson(packMetaFile(context, project))
         val shared = readMetaJson(File(File(context.filesDir, "rinpak_meta"), "_defaults.json"))
+        val pm = RinProjectMeta.read(project.dir)
         return RinPak.PackMeta(
-            version = own?.optString("version").orEmpty(),
-            description = own?.optString("description").orEmpty(),
-            author = (own?.optString("author") ?: shared?.optString("author")).orEmpty(),
-            license = (own?.optString("license") ?: shared?.optString("license")).orEmpty()
+            version = pm?.version.orEmpty().ifBlank { own?.optString("version").orEmpty() },
+            description = pm?.description.orEmpty().ifBlank { own?.optString("description").orEmpty() },
+            author = pm?.author.orEmpty().ifBlank { (own?.optString("author") ?: shared?.optString("author")).orEmpty() },
+            license = pm?.license.orEmpty().ifBlank { (own?.optString("license") ?: shared?.optString("license")).orEmpty() }
         )
     }
 
@@ -1655,6 +1701,13 @@ fun removeTodo(id) {
             .put("description", meta.description.trim().take(1000))
             .put("author", meta.author.trim().take(128))
             .put("license", meta.license.trim().take(64))
+        // يُحفظ أيضاً في project.og.urin حتى ينتقل مع المشروع (النسخ، التصدير، المشاركة).
+        runCatching {
+            updateProjectMeta(project) {
+                it.copy(version = o.optString("version"), description = o.optString("description"),
+                    author = o.optString("author"), license = o.optString("license"))
+            }
+        }
         runCatching {
             packMetaFile(context, project).writeText(o.toString(), Charsets.UTF_8)
             File(File(context.filesDir, "rinpak_meta"), "_defaults.json")
