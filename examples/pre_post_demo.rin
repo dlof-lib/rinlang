@@ -1,0 +1,21 @@
+// pre/post — ما قبل / ما بعد (docs/pre-post.md)
+// حساب بنكي: pre يحرس الخروج من الحالة، وpost يتحقق من الحالة الجديدة.
+
+pre status = "open" if old != "closed";                 // حساب مغلق لا يُفتح ثانية
+post balance = 100 if new >= 0 and old - new <= 500;    // لا سالب، ولا سحب أكثر من 500 دفعة واحدة
+
+fun withdraw(n) {
+  balance = balance - n;
+  if (!balance.ok) { print "refused withdraw " + str(n) + ", balance stays " + str(balance.pre); }
+  else { print "balance now " + str(balance); }
+}
+
+withdraw(30);     // balance now 70
+withdraw(500);    // refused (يهبط تحت الصفر)
+balance = 2000;   // رفع كبير مسموح (الشرط يحدّ السحب لا الإيداع)
+withdraw(600);    // refused (سحب أكثر من 500)
+withdraw(450);    // balance now 1550
+
+status = "closed";  print status;        // closed
+status = "open";    print status;        // closed  (محجوب: القديمة closed)
+print status.ok;                          // false
