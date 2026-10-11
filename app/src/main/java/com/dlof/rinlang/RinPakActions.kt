@@ -53,6 +53,9 @@ object RinPakActions {
         return when (intent.action) {
             Intent.ACTION_VIEW -> intent.data
             Intent.ACTION_SEND -> intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java) // minSdk 35
+            // مشاركة عدة ملفات: نعالج الأول فقط (حوار معاينة واحد).
+            Intent.ACTION_SEND_MULTIPLE ->
+                intent.getParcelableArrayListExtra(Intent.EXTRA_STREAM, Uri::class.java)?.firstOrNull()
             else -> null
         }
     }
