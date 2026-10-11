@@ -149,7 +149,8 @@
             android:targetActivity=".ProjectsActivity"
             android:exported="true"
             android:label="@string/rinpak_open_label"
-            android:icon="@drawable/ic_rinpak_file">
+            android:icon="@mipmap/ic_rinpak_launcher"
+            android:roundIcon="@mipmap/ic_rinpak_launcher">
             <intent-filter android:priority="10">
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
