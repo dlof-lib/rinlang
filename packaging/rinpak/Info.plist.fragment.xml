@@ -1,0 +1,24 @@
+<!-- macOS: ضع هذين المفتاحين داخل Info.plist للتطبيق، وانسخ rinpak_file.icns إلى Resources/ -->
+<key>UTExportedTypeDeclarations</key>
+<array>
+  <dict>
+    <key>UTTypeIdentifier</key><string>dev.rinlang.rinpak</string>
+    <key>UTTypeDescription</key><string>Rin Project Package</string>
+    <key>UTTypeConformsTo</key><array><string>public.zip-archive</string></array>
+    <key>UTTypeIconFile</key><string>rinpak_file.icns</string>
+    <key>UTTypeTagSpecification</key>
+    <dict>
+      <key>public.filename-extension</key><array><string>rinpak</string></array>
+      <key>public.mime-type</key><string>application/vnd.rin.pak</string>
+    </dict>
+  </dict>
+</array>
+<key>CFBundleDocumentTypes</key>
+<array>
+  <dict>
+    <key>CFBundleTypeName</key><string>Rin Project Package</string>
+    <key>CFBundleTypeRole</key><string>Editor</string>
+    <key>LSItemContentTypes</key><array><string>dev.rinlang.rinpak</string></array>
+    <key>CFBundleTypeIconFile</key><string>rinpak_file.icns</string>
+  </dict>
+</array>
