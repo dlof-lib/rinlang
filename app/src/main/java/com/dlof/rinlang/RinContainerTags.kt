@@ -321,6 +321,11 @@ object RinSnippets {
         Snippet("Media: صوت (make.audio)", "make.audio(\"sound.mp3\", {\"volume\": 80});\n$CURSOR_MARKER\n"),
         Snippet("Media: إزالة الخلفية (make.image.removeBg)", "let r = make.image.removeBg(\"photo.png\", \"photo.nobg.png\", {\"tolerance\": 12, \"trim\": true});\nprint r.ok;\n$CURSOR_MARKER\n"),
         Snippet("Media: قراءة النص (make.ocr)", "let o = make.ocr(\"scan.png\", {\"lang\": \"ara+eng\", \"enhance\": true});\nprint o.text;\n$CURSOR_MARKER\n"),
-        Snippet("Media: وحدة make بقدرات وسائط", "@make.(media_task)\n    kind task;\n    use image; use ocr; use io;\n    need image;\n    strict;\n    $CURSOR_MARKER\n.end/make=media_task\n")
+        Snippet("Media: وحدة make بقدرات وسائط", "@make.(media_task)\n    kind task;\n    use image; use ocr; use io;\n    need image;\n    strict;\n    $CURSOR_MARKER\n.end/make=media_task\n"),
+        Snippet("Time: الآن وتنسيق (time.format)", "let t = time();\nprint time(t, \"YYYY-MM-DD HH:mm\");\nprint time.format(t, \"long\", {\"lang\": \"ar\"});\n$CURSOR_MARKER\n"),
+        Snippet("Time: حساب وفروق (time.add / diff)", "let deadline = time.add(time(), 3, \"days\");\nprint time.diff(deadline, time(), \"hours\");\nprint time.ago(deadline, \"ar\");\n$CURSOR_MARKER\n"),
+        Snippet("Time: نص طبيعي (time.parse)", "let t = time.parse(\"tomorrow 14:30\");\nif (t != nil) { print t.iso; }\n$CURSOR_MARKER\n"),
+        Snippet("Time: قياس المدة (time.measure)", "let m = time.measure(fun() { return 1 + 1; });\nprint m.text;\n$CURSOR_MARKER\n"),
+        Snippet("Time: هجري ومناطق (hijri / zone)", "print time.hijri(time(), {\"lang\": \"ar\"}).text;\nprint time.zone(time(), \"Riyadh\").time;\n$CURSOR_MARKER\n")
     )
 }
