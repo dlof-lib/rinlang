@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">
+  <mime-type type="text/x-indsin">
+    <comment>indsin UI document</comment>
+    <comment xml:lang="ar">مستند واجهة indsin</comment>
+    <generic-icon name="text-x-generic"/>
+    <icon name="application-x-indsin"/>
+    <sub-class-of type="text/plain"/>
+    <glob pattern="*.indsin" weight="60"/>
+  </mime-type>
+</mime-info>
