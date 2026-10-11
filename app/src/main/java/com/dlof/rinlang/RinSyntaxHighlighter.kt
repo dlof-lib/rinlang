@@ -181,7 +181,9 @@ object RinSyntaxHighlighter {
         val string: Pattern? = defaultString,
         val tag: Pattern? = null,              // preprocessor / annotations / decorators / HTML tags
         val lineComment: Pattern? = null,
-        val blockComment: Pattern? = null
+        val blockComment: Pattern? = null,
+        val stringToken: Pattern? = null,      // enum/token values inside quotes (indsin) — drawn over the string colour
+        val stringColor: Pattern? = null       // colour literals (indsin) — drawn over the string colour
     )
 
     private val rinProfile = LangProfile(
@@ -195,6 +197,97 @@ object RinSyntaxHighlighter {
         string = rinString,
         tag = rinTag,
         lineComment = lineCommentSlash
+    )
+
+    // ----------------------------------------------------------------------------------
+    // indsin (.indsin) — UI documents: `@container=Name` / `@view.Kind=name ... .end/view`, attribute
+    // assignments (`padding="spacious";`, responsive `padding_md=24;`), design-token values, colours
+    // and lengths. Lists below are generated from the translator's catalogue
+    // (tools/indsin-object: `node scripts/gen_syntax.js`) so they cannot drift from the engine.
+    // Colour roles: structure tags = keyword · element kinds = secondary · attributes = style field ·
+    // names / token values = builtin · colours + lengths = number.
+    // ----------------------------------------------------------------------------------
+    // All 65 element kinds (64 built-ins + Custom) and their accepted tag aliases.
+    private val indsinKinds = listOf(
+        "Text", "Image", "Button", "Card", "Column", "Row", "Stack", "Divider",
+        "Header", "TopBar", "BottomBar", "Drawer", "Menu", "MenuItem", "Table", "TableRow",
+        "Video", "Audio", "WebView", "Scaffold", "Splash", "Banner", "Box", "Grid",
+        "Wrap", "Spacer", "Badge", "Progress", "Checkbox", "Switch", "Avatar", "Input",
+        "TextArea", "Dialog", "Tabs", "TabItem", "Tooltip", "Icon", "IconButton", "Object",
+        "Link", "Radio", "Slider", "Select", "List", "ListItem", "File", "Date",
+        "Time", "CodeEditor", "Calculator", "Search", "Tag", "Kbd", "Rating", "Skeleton",
+        "Spinner", "Steps", "StepItem", "Timeline", "TimelineItem", "Breadcrumb", "Pagination", "DonutChart",
+        "Custom", "breadcrumbs", "chip", "container", "datepicker", "donut", "dropdown", "element",
+        "filepicker", "frame", "key", "loader", "modal", "pager", "panel", "piechart",
+        "popup", "range", "searchbar", "sidebar", "step", "stepper", "textfield", "timelineevent",
+        "timepicker"
+    )
+    // Attributes understood by the indsin interpreter (a trailing _sm/_md/_lg/_xl responsive suffix is matched separately).
+    private val indsinAttributes = listOf(
+        "a11yLabel", "a11y_hint", "a11y_label", "accept", "active", "align", "alt", "anchor",
+        "ariaLabel", "autoplay", "background", "badge", "bg", "bold", "border", "borderColor",
+        "centerLabel", "checked", "closable", "color", "colors", "columns", "controls", "copyText",
+        "count", "current", "data", "date", "decorative", "delay", "desc", "description",
+        "dir", "direction", "disabled", "dismissible", "duration", "easing", "effect", "elevation",
+        "fit", "font", "fontWeight", "format", "gap", "glyph", "gradient", "group",
+        "header", "height", "href", "icon", "indeterminate", "index", "initials", "italic",
+        "items", "kind", "label", "labelSize", "lang", "layer", "letterSpacing", "lineHeight",
+        "loading", "loop", "margin", "markerSize", "max", "maxHeight", "maxLength", "maxLines",
+        "maxWidth", "max_height", "max_width", "message", "min", "minHeight", "minWidth", "min_height",
+        "min_width", "modal", "mono", "multiple", "muted", "name", "onChange", "onClose",
+        "onDoubleTap", "onHoverEnter", "onHoverExit", "onLongPress", "onSelect", "onSubmit", "onTap", "opacity",
+        "open", "options", "padding", "placeholder", "placement", "poster", "radius", "ratio",
+        "readonly", "removable", "rows", "scrim", "selected", "separator", "shadow", "size",
+        "sizing", "source", "sourceTag", "src", "stagger", "state", "step", "subtitle",
+        "text", "textAlign", "textColor", "text_align", "theme", "thickness", "title", "tone",
+        "total", "trend", "type", "underline", "url", "valign", "value", "variant",
+        "vertical", "visible", "visited", "weight", "width"
+    )
+    // Design-token / enum values highlighted when they are the whole content of a string.
+    private val indsinTokenValues = listOf(
+        "action", "auto", "back", "background", "body", "bold", "bottom", "bounce",
+        "bounceout", "caption", "center", "code", "comfortable", "compact", "contain", "cover",
+        "cubicin", "cubicinout", "cubicout", "custom", "danger", "dark", "display", "ease",
+        "easein", "easeinout", "easeout", "elastic", "elevated", "end", "error", "fade",
+        "fast", "fill", "filled", "forest", "ghost", "glass", "gradient", "grow",
+        "heading", "headline", "highcontrastdark", "highcontrastlight", "info", "instant", "italic", "label",
+        "large", "left", "lg", "light", "linear", "link", "ltr", "md",
+        "medium", "midnight", "neutral", "none", "normal", "ocean", "outline", "outlined",
+        "pill", "primary", "progress", "pulse", "right", "rose", "round", "rtl",
+        "secondary", "sepia", "shake", "sharp", "sine", "slate", "slideDown", "slideLeft",
+        "slideRight", "slideUp", "slow", "slower", "sm", "small", "soft", "spacious",
+        "spring", "start", "stretch", "subtitle", "success", "sunset", "surface", "title",
+        "tonal", "top", "underline", "warning", "xl", "xs"
+    )
+
+    private val indsinHexColor = "#(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{6})(?![\\w])"
+
+    private val indsinProfile = LangProfile(
+        // structure tags + the Rin core keywords/hash family that may appear in handlers and warps
+        keyword = Pattern.compile(
+            "@(?:view|container|import)\\b|\\.end/(?:view|container)\\b|" +
+                wordsPattern(rinCoreKeywords).pattern() + "|#[A-Za-z_][A-Za-z0-9_]*"
+        ),
+        secondaryKeyword = Pattern.compile(
+            "(?<=@view\\.)(?:" + indsinKinds.sortedByDescending { it.length }.joinToString("|") + ")(?![\\w.])"
+        ),
+        styleField = Pattern.compile(
+            "(?<![\\w.\"])(?:" + indsinAttributes.sortedByDescending { it.length }.joinToString("|") +
+                ")(?:_(?:sm|md|lg|xl))?(?=\\s*=(?!=))"
+        ),
+        // element / container names after `=` and the existing Rin builtins
+        builtin = Pattern.compile(
+            "(?<=@view\\.[A-Za-z0-9_.]{1,40}=)[A-Za-z_][\\w.\\-]*|(?<=@container=)[A-Za-z_][\\w.\\-]*|" +
+                wordsPattern(rinBuiltins).pattern()
+        ),
+        number = Pattern.compile("(?<![\\w.#])-?\\d+(?:\\.\\d+)?(?:px|dp|sp|pt|ms|s|%|vw|vh)?(?![\\w])"),
+        tag = Pattern.compile("\\{\\{[^}\\n]{1,80}\\}\\}"),
+        string = rinString,
+        // applied after strings so values inside quotes keep their own colour
+        stringToken = Pattern.compile("(?<=\")(?:" + indsinTokenValues.sortedByDescending { it.length }.joinToString("|") + ")(?=\")"),
+        stringColor = Pattern.compile("(?<=[\"=\\s(,])" + indsinHexColor + "|(?<=\")#(?:[0-9a-fA-F]{4}|[0-9a-fA-F]{3})(?=\")"),
+        lineComment = lineCommentSlash,
+        blockComment = Pattern.compile("/\\*[\\s\\S]*?\\*/")
     )
 
     // ----------------------------------------------------------------------------------
@@ -406,6 +499,7 @@ object RinSyntaxHighlighter {
     /** يحدّد ملف تعريف اللغة المناسب حسب امتداد الملف (بلا نقطة، بحروف صغيرة). */
     private fun profileFor(extension: String): LangProfile = when (extension.lowercase()) {
         "rin" -> rinProfile
+        "indsin" -> indsinProfile
         "c", "h", "cpp", "cc", "cxx", "hpp", "hh" -> cppProfile
         "kt", "kts" -> kotlinProfile
         "java" -> javaProfile
@@ -545,6 +639,8 @@ object RinSyntaxHighlighter {
         applyAll(profile.number, colors.number)
         applyAll(profile.tag, colors.tag)
         applyAll(profile.string, colors.string)
+        applyAll(profile.stringToken, colors.builtin)
+        applyAll(profile.stringColor, colors.number)
         applyAll(profile.lineComment, colors.comment, italic = true)
         applyAll(profile.blockComment, colors.comment, italic = true)
     }
