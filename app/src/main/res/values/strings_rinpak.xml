@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- نصوص RinPak على الجوال: التصدير/المشاركة، معاينة الاستيراد، الثقة بالناشر، التحقق، الاستبدال. -->
+<resources>
+    <string name="rinpak_export_dialog_title">تصدير حزمة RinPak</string>
+    <string name="rinpak_field_version">الإصدار (مثال 1.0.0)</string>
+    <string name="rinpak_field_author">المؤلف</string>
+    <string name="rinpak_field_description">وصف مختصر</string>
+    <string name="rinpak_field_license">الرخصة (مثال MIT)</string>
+    <string name="rinpak_export_share">مشاركة</string>
+    <string name="rinpak_export_save">حفظ في التنزيلات</string>
+    <string name="rinpak_share_chooser">مشاركة حزمة المشروع</string>
+    <string name="rinpak_preview_continue">متابعة…</string>
+    <string name="rinpak_preview_verify">تحقق فقط</string>
+    <string name="rinpak_warning_title">⚠ تحذير — حزمة مشبوهة</string>
+    <string name="rinpak_choice_import_new">استيراد كمشروع جديد</string>
+    <string name="rinpak_choice_replace">استبدال المشروع الحالي «%1$s»</string>
+    <string name="rinpak_choice_replace_confirm">استبدال</string>
+    <string name="rinpak_choice_import_trust">استيراد + الوثوق بهذا الناشر</string>
+    <string name="rinpak_replace_warning">سيُستبدل محتوى المشروع «%1$s» بالكامل بمحتوى الحزمة، ولا يمكن التراجع. هل تريد المتابعة؟</string>
+    <string name="rinpak_verify_ok">الحزمة سليمة: %1$d ملفاً — كل بصمات SHA-256 تطابق، والتوقيع (إن وُجد) صالح.</string>
+    <string name="rinpak_verify_fail">الحزمة غير سليمة</string>
+    <string name="rinpak_verify_legacy">الصيغة القديمة (.rinproj) لا تحوي بصمات تحقق؛ يُفحص محتواها أثناء الاستيراد فقط.</string>
+    <string name="rinpak_trust_unsigned">⚠ غير موقّعة — لا يمكن التحقق من هوية المُنشئ</string>
+    <string name="rinpak_trust_own">🔏 حزمتك أنت — موقّعة بمفتاح هذا الجهاز (%1$s)</string>
+    <string name="rinpak_trust_trusted">✅ ناشر موثوق%1$s — المفتاح %2$s</string>
+    <string name="rinpak_trust_known">🔏 موقّعة بنفس المفتاح الذي استوردتَ به هذه الحزمة سابقاً (%1$s)</string>
+    <string name="rinpak_trust_new">🔏 موقّعة بمفتاح جديد لم تره من قبل (%1$s) — التوقيع سليم لكنه لا يثبت هوية الناشر</string>
+    <string name="rinpak_trust_changed">⛔ تحذير: مفتاح التوقيع (%1$s) يختلف عن المفتاح الذي استوردتَ به حزمة بنفس الاسم سابقاً (%2$s). قد تكون حزمة منتحَلة — تابع فقط إن كنت واثقاً من المصدر.</string>
+    <string name="rinpak_trust_removed">⛔ تحذير: حزمة بنفس الاسم استوردتَها سابقاً موقّعة (%1$s)، وهذه الحزمة بلا توقيع. قد يكون التوقيع حُذف عمداً.</string>
+    <string name="rinpak_launcher_label">RinPak</string>
+</resources>
