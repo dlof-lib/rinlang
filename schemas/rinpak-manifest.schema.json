@@ -58,11 +58,34 @@
       }
     },
     "icon": {
-      "type": [
-        "string",
-        "null"
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "required": [
+            "path",
+            "size",
+            "sha256"
+          ],
+          "properties": {
+            "path": {
+              "const": "META-INF/icon.png"
+            },
+            "size": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 524288
+            },
+            "sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          }
+        }
       ],
-      "const": "META-INF/icon.png"
+      "description": "أيقونة PNG ≤ 512KB؛ بصمتها هنا فيغطيها التوقيع."
     },
     "stats": {
       "type": "object",
@@ -155,6 +178,19 @@
       "items": {
         "type": "string",
         "maxLength": 256
+      }
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$",
+      "description": "معرّف الحزمة المستقر عبر الإصدارات."
+    },
+    "tags": {
+      "type": "array",
+      "maxItems": 16,
+      "items": {
+        "type": "string",
+        "maxLength": 32
       }
     }
   }
