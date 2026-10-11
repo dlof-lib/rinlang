@@ -1,0 +1,21 @@
+// base_accept_if.rin — اختبار تحقّق: الطبقات معاً (let → if → base/accept)
+// thermostat: base يقيس البعد عن خط الأساس، وaccept يحرس المدخلات
+accept reading = 21 if reading > -50 and reading < 60;
+base target = 21 to 25 step 1;
+let log = [];
+for (let i = 0; i < 6; i = i + 1) {
+  inc target;
+  if (target.reached) { push(log, "reached"); }
+  else if (target.up) { push(log, "heating"); }
+  else { push(log, "idle"); }
+}
+print log;
+reading = 99; if (reading.ok) { print "good"; } else { print "bad reading kept at " + str(reading); }
+reading = 23; if (reading.ok and reading > target.base) { print "above base " + str(reading - target.base); }
+// accept + base على المتغيّر نفسه عبر lens/bell: حارس يُستعمل كشرط
+accept level = 1 if level >= 1 and level <= 3 strict;
+let bumps = 0;
+for (let i = 0; i < 5; i = i + 1) {
+  try { inc level; bumps = bumps + 1; } catch (e) { print e.code; break; }
+}
+print level; print bumps;
