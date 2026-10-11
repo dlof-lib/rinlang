@@ -232,51 +232,8 @@ class FilesActivity : RinBaseActivity() {
         }
     }
 
-    private fun downloadProjectAsZip() {
-        val mainHandler = Handler(Looper.getMainLooper())
-        val progressDialog = RinDownloadProgressDialog(this, "${project.name}${ProjectManager.OFFICIAL_PROJECT_EXTENSION}")
-        progressDialog.show()
-
-        Thread {
-            try {
-                val zipFile = ProjectManager.exportProject(this, project)
-                val artifact = RinArtifact(
-                    kind = ArtifactKind.RINPAK,
-                    relPath = zipFile.name,
-                    absoluteFile = zipFile,
-                    sizeBytes = zipFile.length()
-                )
-                mainHandler.post {
-                    RinDownloadManager.downloadToPublicDownloads(
-                        activity = this,
-                        artifact = artifact,
-                        onProgress = { copied, total -> progressDialog.updateProgress(copied, total) },
-                        onDone = { uri, error ->
-                            if (error != null || uri == null) {
-                                progressDialog.finishError(
-                                    getString(R.string.download_error_toast, error?.message ?: "?")
-                                )
-                                mainHandler.postDelayed({ progressDialog.dismiss() }, 1400)
-                                return@downloadToPublicDownloads
-                            }
-                            progressDialog.finishSuccess(getString(R.string.download_status_done))
-                            Toast.makeText(
-                                this,
-                                getString(R.string.download_done_toast, artifact.displayName),
-                                Toast.LENGTH_SHORT
-                            ).show()
-                            mainHandler.postDelayed({ progressDialog.dismiss() }, 800)
-                        }
-                    )
-                }
-            } catch (t: Throwable) {
-                mainHandler.post {
-                    progressDialog.finishError(getString(R.string.download_error_toast, t.message ?: "?"))
-                    mainHandler.postDelayed({ progressDialog.dismiss() }, 1400)
-                }
-            }
-        }.start()
-    }
+    /** تصدير المشروع كحزمة RinPak: حوار بيانات وصفية ثم مشاركة أو حفظ في التنزيلات ([RinPakActions]). */
+    private fun downloadProjectAsZip() = RinPakActions.startExport(this, project)
 
     override fun onResume() {
         super.onResume()
