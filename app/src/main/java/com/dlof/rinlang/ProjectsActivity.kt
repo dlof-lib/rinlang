@@ -82,8 +82,10 @@ class ProjectsActivity : RinBaseActivity() {
         handleIncomingPackage(intent)
         findViewById<View>(R.id.btnProjectAlbums).setOnClickListener { startActivity(Intent(this, AlbumsActivity::class.java)) }
         findViewById<View>(R.id.btnProjectImport).setOnClickListener {
-            importProjectLauncher.launch(arrayOf(ProjectManager.OFFICIAL_PROJECT_MIME, ProjectManager.LEGACY_PROJECT_MIME, "application/zip", "application/octet-stream", "*/*"))
+            pickPackage()
         }
+        // فُتح التطبيق من أيقونة RinPak في قائمة التطبيقات (alias RinPakLauncher): اعرض منتقي الحزم مباشرة.
+        if (savedInstanceState == null) handleLauncherIntent(intent)
         findViewById<View>(R.id.btnProjectSort).setOnClickListener { anchor -> showSortMenu(anchor) }
 
         // شريط البحث كان موجوداً بصرياً فقط بلا أي منطق خلفه — الكتابة فيه لم تكن تفعل شيئاً.
@@ -102,13 +104,29 @@ class ProjectsActivity : RinBaseActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         handleIncomingPackage(intent)
+        handleLauncherIntent(intent)
     }
 
-    /** فتح ملف .rinpak من مدير الملفات/البريد/المحادثات (ACTION_VIEW عبر alias RinPakFileViewer). */
+    private fun pickPackage() {
+        importProjectLauncher.launch(arrayOf(ProjectManager.OFFICIAL_PROJECT_MIME, ProjectManager.LEGACY_PROJECT_MIME, "application/zip", "application/octet-stream", "*/*"))
+    }
+
+    private fun handleLauncherIntent(intent: Intent?) {
+        if (intent?.action == Intent.ACTION_MAIN && intent.component?.className?.endsWith(".RinPakLauncher") == true) {
+            intent.action = null // مرة واحدة فقط (لا يتكرر مع تدوير الشاشة)
+            pickPackage()
+        }
+    }
+
+    /**
+     * استقبال ملف .rinpak من مدير الملفات/البريد/المحادثات: ACTION_VIEW (alias RinPakFileViewer) أو
+     * ACTION_SEND (زر «مشاركة» في أي تطبيق). الرابط يُنسخ ويُفحص في خيط خلفي ([importProject]).
+     */
     private fun handleIncomingPackage(intent: Intent?) {
-        val data = intent?.takeIf { it.action == Intent.ACTION_VIEW }?.data ?: return
-        intent.data = null // لا نعيد عرض الحوار عند تدوير الشاشة
-        importProject(data)
+        val uri = RinPakActions.incomingUri(intent) ?: return
+        intent?.data = null // لا نعيد عرض الحوار عند تدوير الشاشة
+        intent?.action = Intent.ACTION_MAIN
+        importProject(uri)
     }
 
     /** قائمة "ترتيب المشاريع" المنبثقة من رأس الشاشة: تكرار سريع لخيارات AppSettings.setProjectSort
@@ -177,32 +195,7 @@ class ProjectsActivity : RinBaseActivity() {
         }
     }
 
-    private fun exportProject(project: Project) {
-        Thread {
-            try {
-                val file = ProjectManager.exportProject(this, project)
-                runOnUiThread {
-                    val artifact = RinArtifact(
-                        kind = ArtifactKind.RINPAK,
-                        relPath = file.name,
-                        absoluteFile = file,
-                        sizeBytes = file.length()
-                    )
-                    RinDownloadManager.downloadToPublicDownloads(
-                        activity = this,
-                        artifact = artifact,
-                        onProgress = { _, _ -> },
-                        onDone = { _, error ->
-                            if (error == null) Toast.makeText(this, getString(R.string.export_project_success, file.name), Toast.LENGTH_LONG).show()
-                            else Toast.makeText(this, "${getString(R.string.export_project_error)}: ${error.message}", Toast.LENGTH_LONG).show()
-                        }
-                    )
-                }
-            } catch (t: Throwable) {
-                runOnUiThread { Toast.makeText(this, "${getString(R.string.export_project_error)}: ${t.message}", Toast.LENGTH_LONG).show() }
-            }
-        }.start()
-    }
+    private fun exportProject(project: Project) = RinPakActions.startExport(this, project)
 
     private fun openProject(project: Project) {
         val intent = Intent(this, FilesActivity::class.java)
@@ -210,44 +203,165 @@ class ProjectsActivity : RinBaseActivity() {
         startActivity(intent)
     }
 
-    /** يعرض معاينة الحزمة أولاً، ثم يثبتها داخل مكتبات المشاريع بعملية ذرية. */
+    /**
+     * استيراد حزمة مشروع على مراحل، كلها خارج خيط الواجهة (الحزم قد تبلغ مئات الميغابايت):
+     * نسخ الحزمة إلى ملف مؤقت ← فحص المانيفست والتوقيع ← معاينة + تقييم ثقة الناشر ← اختيار الإجراء
+     * (نسخة جديدة / استبدال / ثقة بالناشر / تحقق فقط) ← فك وتحقق كاملان ← تثبيت ذري.
+     */
     private fun importProject(uri: Uri) {
-        try {
-            val info = ProjectManager.inspectProjectPackage(this, uri)
-            val sizeKb = (info.totalBytes + 1023) / 1024
-            val summary = buildString {
-                append(info.name)
-                append("\nالنوع: ").append(info.type.id)
-                append("\nالملفات: ").append(info.fileCount)
-                if (!info.legacy) append(" (").append(sizeKb).append(" KB)")
-                if (info.version.isNotBlank()) append("\nالإصدار: ").append(info.version)
-                if (info.author.isNotBlank()) append("\nالمؤلف: ").append(info.author)
-                if (info.generator.isNotBlank()) append("\nأُنشئت بواسطة: ").append(info.generator)
-                if (info.permissions.isNotEmpty()) append("\nالصلاحيات: ").append(info.permissions.joinToString())
-                if (!info.legacy) append(
-                    if (info.signerKeyId != null) "\n🔏 موقّعة رقمياً — المفتاح ${info.signerKeyId} (التوقيع سليم)"
-                    else "\n⚠ غير موقّعة — لا يمكن التحقق من هوية المُنشئ"
-                )
-                append(if (info.legacy) "\nصيغة قديمة (.rinproj) — بلا بصمات تحقق"
-                       else "\nRinPak v${info.formatVersion} — تم التحقق من سلامة المانيفست")
-            }
-            AlertDialog.Builder(this)
-                .setTitle(R.string.import_project_preview_title)
-                .setMessage(summary)
-                .setPositiveButton(R.string.import_project_action) { _, _ ->
-                    try {
-                        val project = ProjectManager.importProjectPackage(this, uri)
-                        refresh()
-                        Toast.makeText(this, getString(R.string.import_project_success, project.name), Toast.LENGTH_LONG).show()
-                    } catch (t: Throwable) {
-                        Toast.makeText(this, "${getString(R.string.import_project_error)}: ${t.message}", Toast.LENGTH_LONG).show()
-                    }
+        val main = android.os.Handler(android.os.Looper.getMainLooper())
+        val progress = RinDownloadProgressDialog(this, RinPakActions.displayName(this, uri))
+        progress.show()
+        Thread {
+            var staged: java.io.File? = null
+            try {
+                staged = RinPakActions.stageIncoming(this, uri) { c, t -> main.post { progress.updateProgress(c, if (t > 0) t else c) } }
+                val stagedUri = Uri.fromFile(staged)
+                val info = ProjectManager.inspectProjectPackage(this, stagedUri)
+                val file = staged
+                main.post { progress.dismiss(); showImportPreview(file, stagedUri, info) }
+            } catch (t: Throwable) {
+                staged?.delete()
+                main.post {
+                    progress.dismiss()
+                    Toast.makeText(this, "${getString(R.string.import_project_error)}: ${t.message}", Toast.LENGTH_LONG).show()
                 }
-                .setNegativeButton(R.string.cancel, null)
-                .show()
-        } catch (t: Throwable) {
-            Toast.makeText(this, "${getString(R.string.import_project_error)}: ${t.message}", Toast.LENGTH_LONG).show()
+            }
+        }.start()
+    }
+
+    private fun showImportPreview(staged: java.io.File, stagedUri: Uri, info: ProjectManager.ProjectPackageInfo) {
+        val trust = RinPakActions.trust(this)
+        val assessment = trust.assess(info.name, info.signerKeyId, RinPakSigner.deviceKeyId(this))
+        val sizeKb = (info.totalBytes + 1023) / 1024
+        val summary = buildString {
+            append(info.name)
+            append("\nالنوع: ").append(info.type.id)
+            append("\nالملفات: ").append(info.fileCount)
+            if (!info.legacy) append(" (").append(sizeKb).append(" KB)")
+            if (info.version.isNotBlank()) append("\nالإصدار: ").append(info.version)
+            if (info.author.isNotBlank()) append("\nالمؤلف: ").append(info.author)
+            if (info.generator.isNotBlank()) append("\nأُنشئت بواسطة: ").append(info.generator)
+            if (info.permissions.isNotEmpty()) append("\nالصلاحيات: ").append(info.permissions.joinToString())
+            if (!info.legacy) append("\n").append(trustLine(assessment))
+            append(if (info.legacy) "\nصيغة قديمة (.rinproj) — بلا بصمات تحقق"
+                   else "\nRinPak v${info.formatVersion} — تم التحقق من سلامة المانيفست")
         }
+        AlertDialog.Builder(this)
+            .setTitle(if (assessment.isWarning) getString(R.string.rinpak_warning_title) else getString(R.string.import_project_preview_title))
+            .setMessage(summary)
+            .setCancelable(false)
+            .setPositiveButton(R.string.rinpak_preview_continue) { _, _ -> showImportChoices(staged, stagedUri, info, assessment) }
+            .setNeutralButton(R.string.rinpak_preview_verify) { _, _ -> verifyStaged(staged, stagedUri, info) }
+            .setNegativeButton(R.string.cancel) { _, _ -> staged.delete() }
+            .show()
+    }
+
+    private fun trustLine(a: RinPakTrust.Assessment): String = when (a.status) {
+        RinPakTrust.Status.UNSIGNED -> getString(R.string.rinpak_trust_unsigned)
+        RinPakTrust.Status.OWN -> getString(R.string.rinpak_trust_own, a.keyId)
+        RinPakTrust.Status.TRUSTED -> getString(R.string.rinpak_trust_trusted, a.label?.let { " ($it)" }.orEmpty(), a.keyId)
+        RinPakTrust.Status.KNOWN_SIGNER -> getString(R.string.rinpak_trust_known, a.keyId)
+        RinPakTrust.Status.NEW_SIGNER -> getString(R.string.rinpak_trust_new, a.keyId)
+        RinPakTrust.Status.KEY_CHANGED -> getString(R.string.rinpak_trust_changed, a.keyId, a.previousKeyId)
+        RinPakTrust.Status.SIGNATURE_REMOVED -> getString(R.string.rinpak_trust_removed, a.previousKeyId)
+    }
+
+    /** تحقق كامل بلا كتابة على القرص (SHA-256 لكل ملف + التوقيع) ثم العودة للمعاينة. */
+    private fun verifyStaged(staged: java.io.File, stagedUri: Uri, info: ProjectManager.ProjectPackageInfo) {
+        if (info.legacy) {
+            Toast.makeText(this, R.string.rinpak_verify_legacy, Toast.LENGTH_LONG).show()
+            showImportPreview(staged, stagedUri, info); return
+        }
+        val main = android.os.Handler(android.os.Looper.getMainLooper())
+        val progress = RinDownloadProgressDialog(this, staged.name)
+        progress.show()
+        Thread {
+            val result = runCatching {
+                staged.inputStream().buffered().use { RinPak.verify(it, { d, t -> main.post { progress.updateProgress(d, t) } }) }
+            }
+            main.post {
+                progress.dismiss()
+                val msg = result.fold(
+                    { getString(R.string.rinpak_verify_ok, it.fileCount) },
+                    { "${getString(R.string.rinpak_verify_fail)}: ${it.message}" }
+                )
+                AlertDialog.Builder(this)
+                    .setMessage(msg)
+                    .setCancelable(false)
+                    .setPositiveButton(android.R.string.ok) { _, _ -> showImportPreview(staged, stagedUri, info) }
+                    .show()
+            }
+        }.start()
+    }
+
+    private fun showImportChoices(
+        staged: java.io.File, stagedUri: Uri, info: ProjectManager.ProjectPackageInfo, a: RinPakTrust.Assessment
+    ) {
+        val exists = ProjectManager.projectExists(this, info.name)
+        val labels = ArrayList<String>()
+        val actions = ArrayList<() -> Unit>()
+        labels += getString(R.string.rinpak_choice_import_new)
+        actions += { runImport(staged, stagedUri, info, replace = false, trustPublisher = false) }
+        if (exists) {
+            labels += getString(R.string.rinpak_choice_replace, info.name)
+            actions += { confirmReplace(staged, stagedUri, info) }
+        }
+        if (!info.legacy && a.canTrust) {
+            labels += getString(R.string.rinpak_choice_import_trust)
+            actions += { runImport(staged, stagedUri, info, replace = false, trustPublisher = true) }
+        }
+        AlertDialog.Builder(this)
+            .setTitle(info.name)
+            .setItems(labels.toTypedArray()) { _, which -> actions[which]() }
+            .setNegativeButton(R.string.cancel) { _, _ -> staged.delete() }
+            .setCancelable(false)
+            .show()
+    }
+
+    private fun confirmReplace(staged: java.io.File, stagedUri: Uri, info: ProjectManager.ProjectPackageInfo) {
+        AlertDialog.Builder(this)
+            .setMessage(getString(R.string.rinpak_replace_warning, info.name))
+            .setCancelable(false)
+            .setPositiveButton(R.string.rinpak_choice_replace_confirm) { _, _ ->
+                runImport(staged, stagedUri, info, replace = true, trustPublisher = false)
+            }
+            .setNegativeButton(R.string.cancel) { _, _ -> staged.delete() }
+            .show()
+    }
+
+    private fun runImport(
+        staged: java.io.File, stagedUri: Uri, info: ProjectManager.ProjectPackageInfo,
+        replace: Boolean, trustPublisher: Boolean
+    ) {
+        val main = android.os.Handler(android.os.Looper.getMainLooper())
+        val progress = RinDownloadProgressDialog(this, staged.name)
+        progress.show()
+        Thread {
+            try {
+                val project = ProjectManager.importProjectPackage(
+                    this, stagedUri, replaceExisting = replace,
+                    onProgress = { d, t -> main.post { progress.updateProgress(d, t) } }
+                )
+                val trust = RinPakActions.trust(this)
+                trust.recordImport(info.name, info.signerKeyId)
+                if (trustPublisher && info.signerKeyId != null) {
+                    trust.trust(info.signerKeyId, info.author.ifBlank { info.name })
+                }
+                main.post {
+                    progress.dismiss()
+                    refresh()
+                    Toast.makeText(this, getString(R.string.import_project_success, project.name), Toast.LENGTH_LONG).show()
+                }
+            } catch (t: Throwable) {
+                main.post {
+                    progress.dismiss()
+                    Toast.makeText(this, "${getString(R.string.import_project_error)}: ${t.message}", Toast.LENGTH_LONG).show()
+                }
+            } finally {
+                staged.delete()
+            }
+        }.start()
     }
 
     /**
