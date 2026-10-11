@@ -1,0 +1,216 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "indsin",
+  "scopeName": "source.indsin",
+  "fileTypes": [
+    "indsin"
+  ],
+  "patterns": [
+    {
+      "include": "#comments"
+    },
+    {
+      "include": "#import"
+    },
+    {
+      "include": "#container-open"
+    },
+    {
+      "include": "#container-close"
+    },
+    {
+      "include": "#view-open"
+    },
+    {
+      "include": "#view-close"
+    },
+    {
+      "include": "#attribute"
+    },
+    {
+      "include": "#token-string"
+    },
+    {
+      "include": "#strings"
+    },
+    {
+      "include": "#colors"
+    },
+    {
+      "include": "#lengths"
+    },
+    {
+      "include": "#numbers"
+    },
+    {
+      "include": "#response-binding"
+    },
+    {
+      "include": "source.rin"
+    }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.double-slash.indsin",
+          "match": "//.*$"
+        },
+        {
+          "name": "comment.block.indsin",
+          "begin": "/\\*",
+          "end": "\\*/"
+        }
+      ]
+    },
+    "import": {
+      "match": "^\\s*(@import)\\s+(\"[^\"\\n]*\"|'[^'\\n]*')\\s*;?",
+      "captures": {
+        "1": {
+          "name": "keyword.control.import.indsin"
+        },
+        "2": {
+          "name": "string.quoted.double.indsin"
+        }
+      }
+    },
+    "container-open": {
+      "match": "^\\s*(@container)\\s*=\\s*([A-Za-z_][\\w.-]*)",
+      "captures": {
+        "1": {
+          "name": "keyword.control.container.indsin"
+        },
+        "2": {
+          "name": "entity.name.type.container.indsin"
+        }
+      }
+    },
+    "container-close": {
+      "match": "^\\s*(\\.end/container)\\b",
+      "captures": {
+        "1": {
+          "name": "keyword.control.end.indsin"
+        }
+      }
+    },
+    "view-open": {
+      "patterns": [
+        {
+          "match": "^\\s*(@view)(\\.)(timelineevent|TimelineItem|breadcrumbs|IconButton|CodeEditor|Calculator|Breadcrumb|Pagination|DonutChart|datepicker|filepicker|timepicker|BottomBar|container|searchbar|textfield|MenuItem|TableRow|Scaffold|Progress|Checkbox|TextArea|ListItem|Skeleton|StepItem|Timeline|dropdown|piechart|Divider|WebView|TabItem|Tooltip|Spinner|element|sidebar|stepper|Button|Column|Header|TopBar|Drawer|Splash|Banner|Spacer|Switch|Avatar|Dialog|Object|Slider|Select|Search|Rating|Custom|loader|Image|Stack|Table|Video|Audio|Badge|Input|Radio|Steps|donut|frame|modal|pager|panel|popup|range|Text|Card|Menu|Grid|Wrap|Tabs|Icon|Link|List|File|Date|Time|chip|step|Row|Box|Tag|Kbd|key)(?![\\w.])(?:\\s*(=)\\s*([A-Za-z_][\\w.-]*))?",
+          "captures": {
+            "1": {
+              "name": "keyword.control.view.indsin"
+            },
+            "2": {
+              "name": "punctuation.accessor.indsin"
+            },
+            "3": {
+              "name": "support.class.element.indsin"
+            },
+            "4": {
+              "name": "keyword.operator.assignment.indsin"
+            },
+            "5": {
+              "name": "entity.name.tag.view-name.indsin"
+            }
+          }
+        },
+        {
+          "match": "^\\s*(@view)(\\.)([A-Za-z_][\\w.]*)(?:\\s*(=)\\s*([A-Za-z_][\\w.-]*))?",
+          "captures": {
+            "1": {
+              "name": "keyword.control.view.indsin"
+            },
+            "2": {
+              "name": "punctuation.accessor.indsin"
+            },
+            "3": {
+              "name": "entity.name.type.custom-element.indsin"
+            },
+            "4": {
+              "name": "keyword.operator.assignment.indsin"
+            },
+            "5": {
+              "name": "entity.name.tag.view-name.indsin"
+            }
+          }
+        }
+      ]
+    },
+    "view-close": {
+      "match": "^\\s*(\\.end/view)\\b",
+      "captures": {
+        "1": {
+          "name": "keyword.control.end.indsin"
+        }
+      }
+    },
+    "attribute": {
+      "patterns": [
+        {
+          "match": "^\\s*(indeterminate|letterSpacing|onHoverEnter|borderColor|centerLabel|description|dismissible|onDoubleTap|onHoverExit|onLongPress|placeholder|a11y_label|background|decorative|fontWeight|lineHeight|markerSize|max_height|min_height|text_align|a11yLabel|a11y_hint|ariaLabel|direction|elevation|labelSize|maxHeight|maxLength|max_width|minHeight|min_width|placement|removable|separator|sourceTag|textAlign|textColor|thickness|underline|autoplay|closable|controls|copyText|disabled|duration|gradient|initials|maxLines|maxWidth|minWidth|multiple|onChange|onSelect|onSubmit|readonly|selected|subtitle|vertical|checked|columns|current|loading|message|onClose|opacity|options|padding|stagger|variant|visible|visited|accept|active|anchor|border|colors|easing|effect|format|header|height|italic|margin|poster|radius|shadow|sizing|source|valign|weight|align|badge|color|count|delay|glyph|group|index|items|label|layer|modal|muted|onTap|ratio|scrim|state|theme|title|total|trend|value|width|bold|data|date|desc|font|href|icon|kind|lang|loop|mono|name|open|rows|size|step|text|tone|type|alt|dir|fit|gap|max|min|src|url|bg)(_(?:sm|md|lg|xl))?(?=\\s*=(?!=))",
+          "captures": {
+            "1": {
+              "name": "variable.parameter.attribute.indsin"
+            },
+            "2": {
+              "name": "storage.modifier.responsive.indsin"
+            }
+          }
+        },
+        {
+          "match": "^\\s*([A-Za-z_][\\w]*?)(_(?:sm|md|lg|xl))?(?=\\s*=(?!=)\\s*[^=])",
+          "captures": {
+            "1": {
+              "name": "variable.other.property.indsin"
+            },
+            "2": {
+              "name": "storage.modifier.responsive.indsin"
+            }
+          }
+        }
+      ]
+    },
+    "token-string": {
+      "match": "(?<=\")(highcontrastlight|highcontrastdark|comfortable|background|cubicinout|slideRight|bounceout|easeinout|secondary|slideDown|slideLeft|underline|cubicout|elevated|gradient|headline|midnight|outlined|progress|spacious|subtitle|caption|compact|contain|cubicin|display|easeout|elastic|heading|instant|neutral|outline|primary|slideUp|stretch|success|surface|warning|action|bottom|bounce|center|custom|danger|easein|filled|forest|italic|linear|medium|normal|slower|spring|sunset|cover|error|ghost|glass|label|large|light|ocean|pulse|right|round|sepia|shake|sharp|slate|small|start|title|tonal|auto|back|body|bold|code|dark|ease|fade|fast|fill|grow|info|left|link|none|pill|rose|sine|slow|soft|end|ltr|rtl|top|lg|md|sm|xl|xs)(?=\")",
+      "name": "constant.language.token.indsin"
+    },
+    "strings": {
+      "patterns": [
+        {
+          "include": "source.rin#template-strings"
+        },
+        {
+          "include": "source.rin#strings"
+        }
+      ]
+    },
+    "colors": {
+      "patterns": [
+        {
+          "name": "constant.other.color.rgb-value.indsin",
+          "match": "(?<=[\"=\\s(,])#(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{6})(?![\\w])"
+        },
+        {
+          "name": "constant.other.color.rgb-value.indsin",
+          "match": "(?<=\")#(?:[0-9a-fA-F]{4}|[0-9a-fA-F]{3})(?=\")"
+        }
+      ]
+    },
+    "lengths": {
+      "name": "constant.numeric.length.indsin",
+      "match": "(?<![\\w.])-?\\d+(?:\\.\\d+)?(?:px|dp|sp|pt|ms|s|%|vw|vh)(?![\\w])"
+    },
+    "numbers": {
+      "patterns": [
+        {
+          "include": "source.rin#numbers"
+        }
+      ]
+    },
+    "response-binding": {
+      "name": "variable.other.binding.indsin",
+      "match": "\\{\\{\\s*[A-Za-z_][\\w.\\[\\]]*\\s*\\}\\}"
+    }
+  }
+}
