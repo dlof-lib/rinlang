@@ -178,7 +178,9 @@ private object RinLexer {
         "if", "else", "while", "for", "return", "break", "continue", "rinopen", "and", "or", "let",
         "fun", "text", "print", "show", "true", "false", "nil", "reckon", "where",
         // Living Variables (docs/living-variables.md): contextual words, highlighted like `reckon`.
-        "stone", "gauge", "tape", "lens", "fuse", "bell", "trial", "undo", "redo", "rearm", "unbell", "abort"
+        "stone", "gauge", "tape", "lens", "fuse", "bell", "trial", "undo", "redo", "rearm", "unbell", "abort",
+        // base/accept (docs/base-accept.md): variables that help `if`, plus their actions
+        "base", "accept", "inc", "dec", "rebase", "rewind"
     )
     // عائلة # (docs/hash-family.md)
     val hashKeywords = setOf("#for", "#while", "#return", "#in", "#to", "#do", "#done", "#ban", "#ignorance")
