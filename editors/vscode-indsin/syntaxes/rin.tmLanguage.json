@@ -263,14 +263,14 @@
       "comment": "Living Variables: stone/gauge/tape/lens/fuse declarations, bell, trial, undo/redo/rearm/unbell/abort. See docs/living-variables.md.",
       "patterns": [
         {
-          "match": "\\b(stone|gauge|tape|lens|fuse|bell)\\b\\s+([A-Za-z_][A-Za-z0-9_]*)",
+          "match": "\\b(stone|gauge|tape|lens|fuse|bell|base|accept)\\b\\s+([A-Za-z_][A-Za-z0-9_]*)",
           "captures": {
             "1": { "name": "keyword.control.living.rin" },
             "2": { "name": "variable.other.living.rin" }
           }
         },
         {
-          "match": "\\b(undo|redo|rearm|unbell)\\b\\s+([A-Za-z_][A-Za-z0-9_]*)",
+          "match": "\\b(undo|redo|rearm|unbell|inc|dec|rebase|rewind)\\b\\s+([A-Za-z_][A-Za-z0-9_]*)",
           "captures": {
             "1": { "name": "keyword.control.living.rin" },
             "2": { "name": "variable.other.living.rin" }
@@ -278,7 +278,7 @@
         },
         { "match": "\\b(trial)\\b(?=\\s*\\{)", "name": "keyword.control.living.rin" },
         { "match": "\\b(abort)\\b(?=\\s*;)", "name": "keyword.control.living.rin" },
-        { "match": "(?<=\\s)(within|burns)(?=\\s)", "name": "keyword.other.living.rin" }
+        { "match": "(?<=\\s)(within|burns|step)(?=\\s)", "name": "keyword.other.living.rin" }
       ]
     },
 
