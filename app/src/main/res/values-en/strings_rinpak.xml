@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- RinPak on mobile: export/share, import preview, publisher trust, verify, replace. -->
+<resources>
+    <string name="rinpak_export_dialog_title">Export RinPak package</string>
+    <string name="rinpak_field_version">Version (e.g. 1.0.0)</string>
+    <string name="rinpak_field_author">Author</string>
+    <string name="rinpak_field_description">Short description</string>
+    <string name="rinpak_field_license">License (e.g. MIT)</string>
+    <string name="rinpak_export_share">Share</string>
+    <string name="rinpak_export_save">Save to Downloads</string>
+    <string name="rinpak_share_chooser">Share project package</string>
+    <string name="rinpak_preview_continue">Continue…</string>
+    <string name="rinpak_preview_verify">Verify only</string>
+    <string name="rinpak_warning_title">⚠ Warning — suspicious package</string>
+    <string name="rinpak_choice_import_new">Import as a new project</string>
+    <string name="rinpak_choice_replace">Replace the existing project “%1$s”</string>
+    <string name="rinpak_choice_replace_confirm">Replace</string>
+    <string name="rinpak_choice_import_trust">Import and trust this publisher</string>
+    <string name="rinpak_replace_warning">The contents of project “%1$s” will be completely replaced by the package. This cannot be undone. Continue?</string>
+    <string name="rinpak_verify_ok">Package is intact: %1$d files — every SHA-256 hash matches and the signature (if any) is valid.</string>
+    <string name="rinpak_verify_fail">Package is not intact</string>
+    <string name="rinpak_verify_legacy">The legacy format (.rinproj) has no integrity hashes; its contents are only checked during import.</string>
+    <string name="rinpak_trust_unsigned">⚠ Unsigned — the creator\'s identity cannot be verified</string>
+    <string name="rinpak_trust_own">🔏 Your own package — signed with this device\'s key (%1$s)</string>
+    <string name="rinpak_trust_trusted">✅ Trusted publisher%1$s — key %2$s</string>
+    <string name="rinpak_trust_known">🔏 Signed with the same key you imported this package with before (%1$s)</string>
+    <string name="rinpak_trust_new">🔏 Signed with a new key you have not seen before (%1$s) — the signature is valid but does not prove the publisher\'s identity</string>
+    <string name="rinpak_trust_changed">⛔ Warning: the signing key (%1$s) differs from the key of a package with the same name you imported before (%2$s). It may be an impersonation — continue only if you trust the source.</string>
+    <string name="rinpak_trust_removed">⛔ Warning: a package with the same name you imported before was signed (%1$s), but this one is unsigned. The signature may have been stripped on purpose.</string>
+    <string name="rinpak_launcher_label">RinPak</string>
+</resources>
