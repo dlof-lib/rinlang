@@ -396,7 +396,13 @@ struct ReckonStmt : Stmt { ReckonStmt() { stmtKind = StmtKind::ReckonStmt; }
 //   base   x = v [to GOAL] [step N];      متغيّر بخط أساس: يتذكّر قيمته الأولى ويقيس البعد عنها (x.up/x.down/x.delta...).
 //   accept x = v if RULE [else FB] [strict];   متغيّر بحارس: لا تدخله إلا القيم التي يقبلها الشرط (x.ok/x.refused...).
 //   inc x [by n]; dec x [by n]; rebase x; rewind x;   أفعال base (inc/dec تعمل على أي متغيّر رقمي).
-enum class LiveKind { Stone, Gauge, Tape, Lens, Fuse, Base, Accept };
+//   --- pre/post (docs/pre-post.md): عقد انتقال حول الإسناد: ما قبل (يُسأل قبل الكتابة) وما بعد (يُسأل بعد الكتابة) ---
+//   pre  x = v if RULE [post RULE2] [strict];   حارس «قبل»: يرى القيمة القديمة (x = old) والمرشّحة (new)؛ إن كُذِّب الشرط لا تُكتب.
+//   post x = v if RULE [pre RULE2] [strict];    حارس «بعد»: يرى القيمة الجديدة (x = new) والقديمة (old)؛ إن كُذِّب الشرط يُتراجَع عنها.
+//   --- label/define (docs/label-define.md): متغيّران للتسمية والتعريف — بيانات وصفية لا تغيّر سلوك الإسناد ---
+//   label  x = v as TITLE [about TEXT] [unit TEXT];    تسمية: اسم عرض للمتغيّر (x.label) إلى جانب معرّفه الحقيقي (x.id).
+//   define x = v as TEXT  [label TITLE] [unit TEXT];   تعريف: وصف المتغيّر (x.about) ووحدته (x.unit)، وتسمية اختيارية.
+enum class LiveKind { Stone, Gauge, Tape, Lens, Fuse, Base, Accept, Pre, Post, Label, Define };
 struct LiveDeclStmt : Stmt { LiveDeclStmt() { stmtKind = StmtKind::LiveDeclStmt; }
     LiveKind kind = LiveKind::Stone;
     std::string name;
@@ -409,7 +415,9 @@ struct LiveDeclStmt : Stmt { LiveDeclStmt() { stmtKind = StmtKind::LiveDeclStmt;
     ExprPtr step;             // base: خطوة inc/dec الافتراضية (step N) — nullable = 1
     ExprPtr rule;             // accept: شرط القبول (if RULE) — اسم المتغيّر نفسه يرى القيمة المرشّحة
     ExprPtr fallback;         // accept: بديل عند الرفض (else FB) — nullable
-    bool strictAccept = false; // accept: الرفض خطأ E0049 بدل تجاهل الإسناد بصمت
+    bool strictAccept = false; // accept/pre/post: الرفض خطأ بدل تجاهل الإسناد بصمت (E0049 لـ accept، E0051 لـ pre/post)
+    ExprPtr metaLabel, metaAbout, metaUnit; // label/define: التسمية والوصف والوحدة (نصوص؛ nullable)
+    ExprPtr preRule, postRule; // pre/post: شرط «قبل» (x = القديمة) وشرط «بعد» (x = الجديدة)؛ كلاهما يرى old و new — يكفي واحد منهما
 };
 struct BellStmt : Stmt { BellStmt() { stmtKind = StmtKind::BellStmt; }
     std::string target;
