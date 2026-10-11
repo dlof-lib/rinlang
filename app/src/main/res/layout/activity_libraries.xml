@@ -117,6 +117,195 @@
                 android:orientation="vertical"
                 android:padding="8dp">
 
+            <!-- حقل بحث: يفلتر "مكتباتي" و"المكتبات الجاهزة" معاً أثناء الكتابة -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="46dp"
+                android:layout_marginTop="12dp"
+                android:layout_marginHorizontal="6dp"
+                android:background="@drawable/bg_search_field"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingHorizontal="14dp">
+
+                <ImageView
+                    android:layout_width="18dp"
+                    android:layout_height="18dp"
+                    android:src="@android:drawable/ic_menu_search"
+                    app:tint="@color/rin_editor_hint"
+                    android:contentDescription="@null" />
+
+                <EditText
+                    android:id="@+id/etLibrarySearch"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:layout_marginStart="10dp"
+                    android:background="@null"
+                    android:hint="@string/libs_search_hint"
+                    android:imeOptions="actionSearch"
+                    android:importantForAutofill="no"
+                    android:inputType="text"
+                    android:maxLines="1"
+                    android:textColor="@color/rin_on_toolbar"
+                    android:textColorHint="@color/rin_editor_hint"
+                    android:textSize="14sp" />
+
+                <ImageButton
+                    android:id="@+id/btnClearLibrarySearch"
+                    android:layout_width="28dp"
+                    android:layout_height="28dp"
+                    android:background="@null"
+                    android:contentDescription="@string/libs_clear_search"
+                    android:src="@android:drawable/ic_menu_close_clear_cancel"
+                    android:visibility="gone"
+                    app:tint="@color/rin_editor_hint" />
+            </LinearLayout>
+
+            <!-- شرائح الفئات: تُبنى برمجياً في LibrariesActivity.buildChips() -->
+            <HorizontalScrollView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:paddingHorizontal="6dp"
+                android:overScrollMode="never"
+                android:scrollbars="none">
+
+                <LinearLayout
+                    android:id="@+id/llLibraryChips"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal" />
+            </HorizontalScrollView>
+
+            <!-- البطاقة المميّزة: مكتبة الأيقونات (معاينة حقيقية لستّ أيقونات + تصفّح + إدراج @import) -->
+            <LinearLayout
+                android:id="@+id/cardIconsFeatured"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginHorizontal="6dp"
+                android:layout_marginTop="14dp"
+                android:background="@drawable/bg_featured_icons_card"
+                android:clickable="true"
+                android:focusable="true"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <FrameLayout
+                        android:layout_width="44dp"
+                        android:layout_height="44dp"
+                        android:layout_marginEnd="12dp">
+
+                        <View
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            android:background="@drawable/bg_hero_icon_ring" />
+
+                        <ImageView
+                            android:layout_width="24dp"
+                            android:layout_height="24dp"
+                            android:layout_gravity="center"
+                            android:src="@drawable/ic_lib_indsinicons"
+                            app:tint="@android:color/white"
+                            android:contentDescription="@null" />
+                    </FrameLayout>
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="@string/libs_featured_title"
+                            android:textColor="@android:color/white"
+                            android:textSize="17sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:id="@+id/tvFeaturedSubtitle"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="2dp"
+                            android:alpha="0.9"
+                            android:textColor="@android:color/white"
+                            android:textSize="12sp"
+                            tools:text="187 أيقونة متجهية" />
+                    </LinearLayout>
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/bg_hero_stat_pill"
+                        android:paddingHorizontal="10dp"
+                        android:paddingVertical="3dp"
+                        android:text="@string/libs_featured_badge"
+                        android:textColor="@android:color/white"
+                        android:textSize="10sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+
+                <!-- شريط معاينة: ستّ أيقونات حقيقية تُرسم من مسارات SVG (تُملأ في LibrariesActivity) -->
+                <LinearLayout
+                    android:id="@+id/rowFeaturedIcons"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="14dp"
+                    android:background="@drawable/bg_hero_stat_pill"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingHorizontal="8dp"
+                    android:paddingVertical="12dp" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="14dp"
+                    android:orientation="horizontal">
+
+                    <Button
+                        android:id="@+id/btnOpenIconBrowser"
+                        android:layout_width="0dp"
+                        android:layout_height="38dp"
+                        android:layout_weight="1"
+                        android:layout_marginEnd="8dp"
+                        android:minWidth="0dp"
+                        android:minHeight="0dp"
+                        android:insetTop="0dp"
+                        android:insetBottom="0dp"
+                        android:background="@drawable/bg_btn_white"
+                        android:text="@string/libs_icons_open"
+                        android:textAllCaps="false"
+                        android:textColor="@color/rin_accent"
+                        android:textSize="13sp"
+                        android:textStyle="bold" />
+
+                    <Button
+                        android:id="@+id/btnInsertIconsImport"
+                        android:layout_width="0dp"
+                        android:layout_height="38dp"
+                        android:layout_weight="1"
+                        android:minWidth="0dp"
+                        android:minHeight="0dp"
+                        android:insetTop="0dp"
+                        android:insetBottom="0dp"
+                        android:background="@drawable/bg_hero_stat_pill"
+                        android:text="@string/action_insert_import"
+                        android:textAllCaps="false"
+                        android:textColor="@android:color/white"
+                        android:textSize="13sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+            </LinearLayout>
+
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -328,6 +517,18 @@
                     android:textColor="@color/rin_on_toolbar"
                     android:textStyle="bold"
                     android:textSize="15sp" />
+
+                <TextView
+                    android:id="@+id/tvBuiltinCount"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:background="@drawable/bg_chip_meta"
+                    android:paddingHorizontal="9dp"
+                    android:paddingVertical="2dp"
+                    android:textColor="@color/rin_editor_hint"
+                    android:textSize="11sp"
+                    tools:text="30 مكتبة" />
             </LinearLayout>
 
             <TextView
@@ -344,6 +545,17 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:nestedScrollingEnabled="false" />
+
+            <TextView
+                android:id="@+id/tvLibrariesNoResults"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center"
+                android:padding="28dp"
+                android:text="@string/libs_no_results"
+                android:textColor="@color/rin_editor_hint"
+                android:textSize="13sp"
+                android:visibility="gone" />
 
             </LinearLayout>
         </LinearLayout>
