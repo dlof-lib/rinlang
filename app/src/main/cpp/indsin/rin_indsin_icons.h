@@ -17,6 +17,7 @@
 #pragma once
 #include <string>
 #include <unordered_map>
+#include "rin_indsin_iconpaths.h"   // مسارات SVG المتجهية (مُولَّدة من tools/icons/icons_def.py)
 
 namespace indsin {
 
@@ -45,6 +46,47 @@ struct IconRegistry {
         return it->second;
     }
     bool has(const std::string& name) const { return glyphs.count(name) != 0; }
+
+    // ---- الأيقونات المتجهية (SVG) ------------------------------------------------------------
+    // جدول مسارات حقيقي (شبكة 24x24، خط سماكته 2) لـ 187 أيقونة + أسماء بديلة. هذه واجهة بيانات:
+    // معاينة الويب (indsin_object.html) ومكتبة lib/indsinicons.og.rin تستهلكانها فعلاً الآن؛ أما
+    // الـrasterizer الأصلي فما زال بلا عملية رسم مسارات (FILL_RECT/STROKE_RECT/TEXT_RUN فقط)، فيبقى
+    // الرسم الأصلي على الرمز النصي (glyphs) إلى أن تُضاف عملية DrawOp للمسارات. vectorPath() هو ما
+    // ستقرؤه تلك العملية. لا يغيّر شيئاً من سلوك resolve()/has() القائم.
+    std::unordered_map<std::string, std::string> vectors;   // اسم -> d (يشمل ما سُجِّل وقت التشغيل)
+    bool vectorsLoaded = false;
+
+    void loadVectors() {
+        if (vectorsLoaded) return;
+        for (size_t i = 0; i < kIconVecCount; ++i) vectors[kIconVecs[i].name] = kIconVecs[i].path;
+        vectorsLoaded = true;
+    }
+    // canonicalName(): يحوّل الاسم البديل ("gear") إلى الأساسي ("settings")؛ يعيد "" إن لم يوجد.
+    std::string canonicalName(const std::string& name) {
+        loadVectors();
+        if (vectors.count(name)) return name;
+        for (size_t i = 0; i < kIconAliasCount; ++i)
+            if (name == kIconAliases[i].alias && vectors.count(kIconAliases[i].target)) return kIconAliases[i].target;
+        return "";
+    }
+    bool hasVector(const std::string& name) { return !canonicalName(name).empty(); }
+    // vectorPath(): قيمة d، أو "" إن لم توجد أيقونة بهذا الاسم.
+    std::string vectorPath(const std::string& name) {
+        std::string c = canonicalName(name);
+        return c.empty() ? std::string() : vectors[c];
+    }
+    // registerVector(): توسعة وقت التشغيل (آخر كتابة تفوز) — مقابل registerIcon للرمز النصي.
+    void registerVector(const std::string& name, const std::string& path) { loadVectors(); vectors[name] = path; }
+    // svg(): وسم <svg> كامل لأيقونة متجهية (currentColor افتراضياً)؛ "" إن لم توجد.
+    std::string svg(const std::string& name, int size = 24, const std::string& color = "currentColor", double stroke = 2.0) {
+        std::string d = vectorPath(name);
+        if (d.empty()) return std::string();
+        std::string st = std::to_string(stroke);
+        st.erase(st.find_last_not_of('0') + 1); if (!st.empty() && st.back() == '.') st.pop_back();
+        return "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" width=\"" + std::to_string(size) + "\" height=\"" +
+               std::to_string(size) + "\" fill=\"none\" stroke=\"" + color + "\" stroke-width=\"" + st +
+               "\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"" + d + "\"/></svg>";
+    }
 
     void registerBuiltins() {
         // Exactly the spec §18 list.
