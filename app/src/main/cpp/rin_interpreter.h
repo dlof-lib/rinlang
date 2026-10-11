@@ -268,6 +268,11 @@ struct LiveMeta {
     bool fused = false; long burns = 1, left = 1; bool burnt = false; Value armed; // fuse
     std::vector<Value> bells;                  // دوال الأجراس (Callable) بترتيب التسجيل
     long reads = 0, writes = 0;
+    // ---- عائلة الشروط (docs/base-accept.md) ----
+    bool based = false; Value baseVal; double step = 1;             // base: خط الأساس + خطوة inc/dec الافتراضية
+    bool hasGoal = false; Value goal;                                // base ... to GOAL
+    bool guarded = false; ExprPtr rule, fallback; bool strictAccept = false; // accept: شرط القبول + بديل else + strict
+    long accepted = 0, rejected = 0; bool lastOk = true; Value refused;      // accept: العدّادات وآخر قيمة رُفضت
 };
 
 struct Environment : std::enable_shared_from_this<Environment> {
@@ -1171,6 +1176,8 @@ public: // Rin 1.0: واجهة OOP الموسَّعة (يستدعيها Value::t
     Value liveRead(Environment* owner, const std::shared_ptr<LiveMeta>& m, const std::string& name, int line);
     Value liveAssign(Environment* owner, const std::string& name, Value v, int line);
     Value liveApplyRange(const LiveMeta& m, const std::string& name, const Value& v, int line) const;
+    // accept: يطبّق شرط القبول على القيمة المرشّحة. true = تُكتب `v` (قد تُستبدل ببديل else)؛ false = تُتجاهل (أو يُرمى E0049 في strict).
+    bool liveCheckAccept(LiveMeta& m, const std::string& name, Value& v, int line, bool initial);
     void liveFireBells(const std::shared_ptr<LiveMeta>& m, const Value& oldV, const Value& newV, int line);
     void liveJournal(Environment* owner, const std::string& name); // يلتقط (قيمة + بيانات وصفية) قبل أي تغيير داخل trial نشِطة
     bool livePropertyGet(const EnvPtr& env, const std::string& name, const std::string& prop, int line, Value& out);
