@@ -50,6 +50,8 @@ inline bool isImpureCallee(const std::string& name) {
         "openChat", "sendMessage", "setChatTyping", "setField", "setPath", "setState", "sqlDelete", "sqlUpdate",
         "logClear", "logSave", "fetchIcon", "fetchImage", "clcContainerOpen", "httpSetTimeout",
         "indsin.useTheme", "indsin.defineTheme", "indsin.registerTheme",
+        // time.* (docs/TIME.md): الباقي نقي (قراءة/حساب)؛ هذه تنتظر أو تنفّذ دالة أو تغيّر إعداداً عاماً.
+        "time.sleep", "time.measure", "time.config",
     };
     if (exact.count(name)) return true;
     static const char* prefixes[] = {"http", "net.", "fs.", "make.", "sec.", "cpp.", "Env.", "pkg.", "automation.",
