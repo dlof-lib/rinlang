@@ -1,19 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- حزمة مشروع Rin (.rinpak): ورقة خضراء بثلاث طبقات مكدّسة — محلية بلا شبكة. -->
+<!-- أيقونة نوع الملف .rinpak داخل التطبيق (قوائم الملفات): نفس صندوق أيقونة RinPak بلا خلفية. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="24dp"
-    android:height="24dp"
-    android:viewportWidth="24"
-    android:viewportHeight="24">
-    <path android:fillColor="#E6F2EA" android:strokeColor="#9CCBAC" android:strokeWidth="0.6"
-        android:pathData="M5.5,1.9 L14.6,1.9 L20.1,7.4 L20.1,20.9 C20.1,21.6 19.6,22.1 18.9,22.1 L5.5,22.1 C4.8,22.1 4.3,21.6 4.3,20.9 L4.3,3.1 C4.3,2.4 4.8,1.9 5.5,1.9 Z" />
-    <path android:fillColor="#C5E1CE" android:pathData="M14.6,1.9 L14.6,6.2 C14.6,6.9 15.1,7.4 15.8,7.4 L20.1,7.4 Z" />
-    <path android:fillColor="#CFE8D6" android:pathData="M12.2,16.3 L16.6,14.3 L12.2,12.3 L7.8,14.3 Z" />
-    <path android:fillColor="#8CC3A0" android:pathData="M7.8,14.3 L12.2,16.3 L16.6,14.3 L16.6,15.3 L12.2,17.3 L7.8,15.3 Z" />
-    <path android:fillColor="#559868" android:pathData="M7.8,12.2 L12.2,14.2 L16.6,12.2 L16.6,13.2 L12.2,15.2 L7.8,13.2 Z" />
-    <path android:fillColor="#EAF6EE" android:pathData="M12.2,12.1 L16.6,10.1 L12.2,8.1 L7.8,10.1 Z" />
-    <path android:fillColor="#3F7D54" android:pathData="M7.8,10.1 L12.2,12.1 L16.6,10.1 L16.6,11.1 L12.2,13.1 L7.8,11.1 Z" />
-    <path android:fillColor="#559868" android:pathData="M12.2,10.2 L14.1,9.3 L12.2,8.4 L10.3,9.3 Z" />
-    <path android:fillColor="#2F6B45"
-        android:pathData="M6.3,18.6 L17.5,18.6 C18,18.6 18.3,18.9 18.3,19.4 L18.3,20.2 C18.3,20.7 18,21 17.5,21 L6.3,21 C5.8,21 5.5,20.7 5.5,20.2 L5.5,19.4 C5.5,18.9 5.8,18.6 6.3,18.6 Z" />
+    android:width="22dp" android:height="24dp" android:viewportWidth="52" android:viewportHeight="60">
+    <group android:translateX="-28" android:translateY="-24">
+        <path android:fillColor="#8CC3A0" android:pathData="M30.00,40.00 L54.00,54.00 L54.00,82.00 L30.00,68.00 Z" />
+        <path android:fillColor="#3F7D54" android:pathData="M54.00,54.00 L78.00,40.00 L78.00,68.00 L54.00,82.00 Z" />
+        <path android:fillColor="#EAF6EE" android:pathData="M54.00,26.00 L78.00,40.00 L54.00,54.00 L30.00,40.00 Z" />
+        <path android:fillColor="#F4C34F" android:pathData="M62.64,31.04 L69.36,34.96 L45.36,48.96 L38.64,45.04 Z" />
+        <path android:fillColor="#D6A63A" android:pathData="M38.64,45.04 L45.36,48.96 L45.36,76.96 L38.64,73.04 Z" />
+        <path android:fillColor="#EAF6EE" android:pathData="M59.76,56.24 L63.36,54.14 L63.36,70.94 L59.76,73.04 Z" />
+        <path android:fillColor="#EAF6EE" android:pathData="M59.76,56.24 L70.80,49.80 L70.80,54.00 L59.76,60.44 Z" />
+        <path android:fillColor="#EAF6EE" android:pathData="M59.76,63.80 L70.80,57.36 L70.80,61.56 L59.76,68.00 Z" />
+        <path android:fillColor="#EAF6EE" android:pathData="M67.20,51.90 L70.80,49.80 L70.80,61.56 L67.20,63.66 Z" />
+        <path android:fillColor="#EAF6EE" android:pathData="M63.60,65.76 L67.20,63.66 L72.24,65.76 L68.64,67.86 Z" />
+    </group>
 </vector>
