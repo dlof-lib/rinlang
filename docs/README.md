@@ -9,6 +9,7 @@
 
 ### اللغة
 - [`syntax.md`](./syntax.md) — القواعد النحوية العامة (فواصل، كتل، عوامل).
+- [`block-frames.md`](./block-frames.md) — بداية الكتل ونهايتها: `{ }` أو `.end/…` وقواعد منع التعارض.
 - [`language-reference.md`](./language-reference.md) — المرجع الشامل وخريطة ترابط كل المفاهيم.
 - [`variables.md`](./variables.md) — `let`/`text`، مصفوفات، قواميس، نطاق.
 - [`template-strings.md`](./template-strings.md) — النصوص القالبية: `` `مرحباً ${name}` ``.
