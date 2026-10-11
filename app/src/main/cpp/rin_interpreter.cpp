@@ -11817,6 +11817,36 @@ Value Interpreter::liveApplyRange(const LiveMeta& m, const std::string& name, co
     return Value::num(std::min(std::max(x, m.lo), m.hi)); // clamp
 }
 
+bool Interpreter::liveCheckAccept(LiveMeta& m, const std::string& name, Value& v, int line, bool initial) {
+    EnvPtr scope = m.scope.lock();
+    if (!scope) throw liveErr(diag::Code::E0046_LiveMisuse, line, "accept `" + name + "` outlived the scope it was declared in");
+    // الشرط يُقيَّم في نطاق التصريح، واسم المتغيّر نفسه يشير إلى القيمة المرشّحة (لا إلى القيمة الحالية).
+    auto test = [&](const Value& cand) {
+        auto candEnv = std::make_shared<Environment>(scope);
+        candEnv->define(name, cand);
+        return evaluate(m.rule, candEnv);
+    };
+    if (test(v).isTruthy()) { m.accepted++; m.lastOk = true; return true; }
+    m.rejected++; m.lastOk = false; m.refused = v;
+    if (m.fallback) { // else VALUE: يحلّ محلّ القيمة المرفوضة، وعليه هو نفسه أن يمرّ من الشرط
+        auto candEnv = std::make_shared<Environment>(scope);
+        candEnv->define(name, v);
+        Value fb = copyForBinding(evaluate(m.fallback, candEnv));
+        if (!test(fb).isTruthy())
+            throw liveErr(diag::Code::E0049_AcceptRejected, line,
+                          "accept `" + name + "` rejected " + v.toDisplayString() + ", and its `else` fallback " + fb.toDisplayString() + " is rejected too",
+                          "the fallback must satisfy the same rule it stands in for");
+        v = fb;
+        return true;
+    }
+    if (m.strictAccept || initial)
+        throw liveErr(diag::Code::E0049_AcceptRejected, line,
+                      std::string(initial ? "the first value of accept `" : "accept `") + name + (initial ? "` was rejected: " : "` rejected ") + v.toDisplayString(),
+                      initial ? "give it a starting value its rule accepts, or add `else VALUE` as a fallback"
+                              : "drop `strict` to ignore rejected assignments quietly (check `" + name + ".ok` afterwards), or add `else VALUE` to substitute a value");
+    return false; // تجاهل صامت: تبقى القيمة القديمة، وx.ok تصير false
+}
+
 void Interpreter::liveJournal(Environment* owner, const std::string& name) {
     if (trialStack_.empty()) return;
     EnvPtr keep = owner->weak_from_this().lock();
@@ -11884,6 +11914,11 @@ Value Interpreter::liveAssign(Environment* owner, const std::string& name, Value
             throw liveErr(diag::Code::E0045_DerivedReadOnly, line, "cannot assign to `" + name + "`: it is a lens (computed from other variables)",
                           "change the variables `" + name + "` is computed from instead");
         if (m->ranged) v = liveApplyRange(*m, name, v, line);
+        if (m->guarded) liveJournal(owner, name); // العدّادات تتغيّر حتى عند الرفض: تُسجَّل قبلها كي يعيدها trial إلى حالها
+        if (m->guarded && !liveCheckAccept(*m, name, v, line, false)) { // accept: رُفضت القيمة => لا كتابة ولا جرس ولا تاريخ
+            auto cur = owner->values.find(name);
+            return cur != owner->values.end() ? cur->second : Value::nil();
+        }
     }
     liveJournal(owner, name); // قبل أي تغيير (قيمة + تاريخ tape)
     Value old;
@@ -11955,6 +11990,23 @@ void Interpreter::liveExecDecl(const std::shared_ptr<LiveDeclStmt>& s, const Env
             m->kind = "lens"; m->derived = true; m->expr = s->initializer; m->scope = env; v = Value::nil(); break;
         case LiveKind::Fuse:
             m->kind = "fuse"; m->fused = true; m->burns = evalCount(s->burns, "`burns`", 1); m->left = m->burns; m->armed = v; break;
+        case LiveKind::Base: { // عائلة الشروط: خط أساس يُقاس منه (docs/base-accept.md)
+            m->kind = "base"; m->based = true; m->baseVal = v;
+            if (s->step) {
+                m->step = evalNumber(s->step, "the `step`");
+                if (!std::isfinite(m->step) || m->step == 0)
+                    throw liveErr(diag::Code::E0050_BaseMisuse, s->line, "the `step` of base `" + s->name + "` must be a non-zero number, got " + liveNum(m->step),
+                                  "use `dec` to go down; the step itself is always the size of one move");
+            }
+            if (s->goal) { m->hasGoal = true; m->goal = evaluate(s->goal, env); }
+            break;
+        }
+        case LiveKind::Accept: { // عائلة الشروط: لا يدخل إلا ما يقبله الشرط (docs/base-accept.md)
+            m->kind = "accept"; m->guarded = true; m->rule = s->rule; m->fallback = s->fallback;
+            m->strictAccept = s->strictAccept; m->scope = env;
+            liveCheckAccept(*m, s->name, v, s->line, true); // القيمة الابتدائية تخضع للشرط نفسه (قد تُستبدل ببديل else)
+            break;
+        }
     }
     env->define(s->name, v);       // define() يمحو أي حياة سابقة بنفس الاسم في هذه البيئة
     env->live[s->name] = m;
@@ -12039,6 +12091,31 @@ void Interpreter::liveExecAction(const std::shared_ptr<LiveActionStmt>& s, const
     }
     std::shared_ptr<LiveMeta> m;
     { auto it = owner->live.find(s->target); if (it != owner->live.end()) m = it->second; }
+    // عائلة الشروط: inc/dec (على أي متغيّر رقمي، وتمرّ من كل حرّاسه) + rebase/rewind (base فقط).
+    if (s->action == "inc" || s->action == "dec") {
+        Value cur = owner->values[s->target];
+        if (cur.type != Value::Type::NUMBER)
+            throw liveErr(diag::Code::E0050_BaseMisuse, s->line, "`" + s->action + " " + s->target + "` needs a number, but `" + s->target + "` holds a " + cur.typeName(),
+                          "`inc` / `dec` move a numeric variable by a step (default 1, or the `step` of its base)");
+        double n = (m && m->based) ? m->step : 1;
+        if (s->count) {
+            Value c = evaluate(s->count, env);
+            if (c.type != Value::Type::NUMBER || !std::isfinite(c.number))
+                throw liveErr(diag::Code::E0050_BaseMisuse, s->line, "the amount of `" + s->action + " " + s->target + "` must be a finite number, got " + c.typeName());
+            n = c.number;
+        }
+        liveAssign(owner, s->target, Value::num(s->action == "inc" ? cur.number + n : cur.number - n), s->line);
+        return;
+    }
+    if (s->action == "rebase" || s->action == "rewind") {
+        if (!(m && m->based))
+            throw liveErr(diag::Code::E0050_BaseMisuse, s->line, "`" + s->action + " " + s->target + "` needs a base variable, but `" + s->target + "` is " +
+                          (m ? "a " + m->kind : std::string("a plain variable")),
+                          "declare it with `base " + s->target + " = ...;`");
+        if (s->action == "rebase") { m->baseVal = owner->values[s->target]; return; } // القيمة الحالية تصير خط الأساس الجديد
+        liveAssign(owner, s->target, m->baseVal, s->line);                            // الرجوع إلى خط الأساس (يمرّ من الحرّاس والأجراس)
+        return;
+    }
     auto need = [&](bool ok, const std::string& what) {
         if (!ok) throw liveErr(diag::Code::E0046_LiveMisuse, s->line,
                                "`" + s->action + " " + s->target + "` needs " + what + ", but `" + s->target + "` is " +
@@ -12084,7 +12161,9 @@ void Interpreter::liveExecAction(const std::shared_ptr<LiveActionStmt>& s, const
 bool Interpreter::livePropertyGet(const EnvPtr& env, const std::string& name, const std::string& prop, int line, Value& out) {
     static const std::unordered_set<std::string> props = {
         "kind", "reads", "writes", "bells", "vitals", "past", "undone", "canUndo", "canRedo", "keep",
-        "min", "max", "mode", "fill", "full", "empty", "left", "burnt"};
+        "min", "max", "mode", "fill", "full", "empty", "left", "burnt",
+        "base", "delta", "up", "down", "same", "changed", "goal", "reached", "togo", "progress", "step", // base
+        "ok", "accepted", "rejected", "refused"};                                                       // accept
     if (!props.count(prop)) return false;
     Environment* owner = findLiveOwner(env, name);
     if (!owner || owner->live.empty()) return false;
@@ -12122,6 +12201,41 @@ bool Interpreter::livePropertyGet(const EnvPtr& env, const std::string& name, co
     if (prop == "fill") { only(m->ranged, "gauge"); out = Value::num(cur.type == Value::Type::NUMBER ? (cur.number - m->lo) / (m->hi - m->lo) : 0); return true; }
     if (prop == "full") { only(m->ranged, "gauge"); out = Value::boolean_(cur.type == Value::Type::NUMBER && cur.number >= m->hi); return true; }
     if (prop == "empty"){ only(m->ranged, "gauge"); out = Value::boolean_(cur.type == Value::Type::NUMBER && cur.number <= m->lo); return true; }
+    // ---- base: خط أساس يُقاس منه (docs/base-accept.md) ----
+    auto numbers = [&](const char* what) {
+        if (cur.type != Value::Type::NUMBER || m->baseVal.type != Value::Type::NUMBER)
+            throw liveErr(diag::Code::E0050_BaseMisuse, line, "`" + name + "." + prop + "` " + what + ", but `" + name + "` or its base is not a number",
+                          "`" + prop + "` compares numbers; for other values use `" + name + ".same` / `" + name + ".changed`");
+    };
+    if (prop == "base")    { only(m->based, "base"); out = m->baseVal; return true; }
+    if (prop == "same")    { only(m->based, "base"); out = Value::boolean_(valuesEqual(cur, m->baseVal)); return true; }
+    if (prop == "changed") { only(m->based, "base"); out = Value::boolean_(!valuesEqual(cur, m->baseVal)); return true; }
+    if (prop == "delta")   { only(m->based, "base"); numbers("measures the distance from the base"); out = Value::num(cur.number - m->baseVal.number); return true; }
+    if (prop == "up")      { only(m->based, "base"); numbers("asks whether the value is above the base"); out = Value::boolean_(cur.number > m->baseVal.number); return true; }
+    if (prop == "down")    { only(m->based, "base"); numbers("asks whether the value is below the base"); out = Value::boolean_(cur.number < m->baseVal.number); return true; }
+    if (prop == "step")    { only(m->based, "base"); out = Value::num(m->step); return true; }
+    if (prop == "goal")    { only(m->based, "base"); out = m->hasGoal ? m->goal : Value::nil(); return true; }
+    if (prop == "reached") {
+        only(m->based, "base");
+        if (!m->hasGoal) { out = Value::boolean_(false); return true; }
+        if (cur.type == Value::Type::NUMBER && m->baseVal.type == Value::Type::NUMBER && m->goal.type == Value::Type::NUMBER)
+            out = Value::boolean_(m->goal.number >= m->baseVal.number ? cur.number >= m->goal.number : cur.number <= m->goal.number); // الاتجاه يحدّده خط الأساس
+        else out = Value::boolean_(valuesEqual(cur, m->goal));
+        return true;
+    }
+    if (prop == "togo" || prop == "progress") {
+        only(m->based && m->hasGoal, "base ... to GOAL");
+        if (cur.type != Value::Type::NUMBER || m->goal.type != Value::Type::NUMBER || m->baseVal.type != Value::Type::NUMBER)
+            throw liveErr(diag::Code::E0050_BaseMisuse, line, "`" + name + "." + prop + "` needs numbers (value, base and goal)");
+        double span = m->goal.number - m->baseVal.number;
+        out = Value::num(prop == "togo" ? m->goal.number - cur.number : (span == 0 ? 1.0 : (cur.number - m->baseVal.number) / span));
+        return true;
+    }
+    // ---- accept: حارس قبول (docs/base-accept.md) ----
+    if (prop == "ok")       { only(m->guarded, "accept"); out = Value::boolean_(m->lastOk); return true; }
+    if (prop == "accepted") { only(m->guarded, "accept"); out = Value::num(static_cast<double>(m->accepted)); return true; }
+    if (prop == "rejected") { only(m->guarded, "accept"); out = Value::num(static_cast<double>(m->rejected)); return true; }
+    if (prop == "refused")  { only(m->guarded, "accept"); out = m->refused; return true; }
     if (prop == "left")  { only(m->fused, "fuse"); out = Value::num(m->burnt ? 0 : static_cast<double>(m->left)); return true; }
     if (prop == "burnt") { only(m->fused, "fuse"); out = Value::boolean_(m->burnt); return true; }
     // vitals: خريطة بكل ما يخص هذا المتغيّر
@@ -12141,6 +12255,14 @@ bool Interpreter::livePropertyGet(const EnvPtr& env, const std::string& name, co
         put("keep", Value::num(static_cast<double>(m->keep)));
         put("past", Value::num(static_cast<double>(m->past.size())));
         put("undone", Value::num(static_cast<double>(m->future.size())));
+    }
+    if (m->based) {
+        put("base", m->baseVal); put("step", Value::num(m->step));
+        if (m->hasGoal) put("goal", m->goal);
+    }
+    if (m->guarded) {
+        put("accepted", Value::num(static_cast<double>(m->accepted))); put("rejected", Value::num(static_cast<double>(m->rejected)));
+        put("ok", Value::boolean_(m->lastOk)); if (m->strictAccept) put("strict", Value::boolean_(true));
     }
     if (m->fused) { put("burns", Value::num(static_cast<double>(m->burns))); put("left", Value::num(m->burnt ? 0 : static_cast<double>(m->left))); put("burnt", Value::boolean_(m->burnt)); }
     out = Value::makeMap(vm);
