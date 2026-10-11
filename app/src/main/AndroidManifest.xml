@@ -142,8 +142,15 @@
             android:exported="false"
             android:launchMode="singleTop" />
 
-        <!-- File association for .rinpak project packages (tap a .rinpak in any file manager / mail / chat
-             app → Rin shows the package preview and imports it). ProjectsActivity itself stays unexported. -->
+        <!-- RinPak file association. Tapping a .rinpak in any file manager / mail / chat app opens Rin's package
+             preview (identity, signature + publisher trust, security analysis, icon) and imports it after
+             confirmation. ProjectsActivity itself stays unexported; these aliases are the only public entry points.
+             The alias label + icon are what the system "Open with" / share chooser shows, i.e. the RinPak icon.
+               1) VIEW by path extension (any MIME, content:// or file://) — when the provider exposes the file name.
+               2) VIEW by MIME (application/vnd.rin.pak, legacy application/x-rinpak) — even when the name is opaque.
+               3) SEND / SEND_MULTIPLE ("Share → Rin"). Chat apps often label unknown extensions
+                  application/octet-stream (or application/zip), so those are accepted too; a file that is not a RinPak
+                  is rejected with a clear message in the preview step. -->
         <activity-alias
             android:name=".RinPakFileViewer"
             android:targetActivity=".ProjectsActivity"
@@ -161,13 +168,44 @@
                 <data android:pathPattern=".*\\.rinpak" />
                 <data android:pathPattern=".*\\..*\\.rinpak" />
                 <data android:pathPattern=".*\\..*\\..*\\.rinpak" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\.rinpak" />
             </intent-filter>
-            <intent-filter>
+            <intent-filter android:priority="10">
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:scheme="content" />
                 <data android:scheme="file" />
                 <data android:mimeType="application/vnd.rin.pak" />
+                <data android:mimeType="application/x-rinpak" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="application/vnd.rin.pak" />
+                <data android:mimeType="application/x-rinpak" />
+                <data android:mimeType="application/octet-stream" />
+                <data android:mimeType="application/zip" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="application/vnd.rin.pak" />
+                <data android:mimeType="application/x-rinpak" />
+                <data android:mimeType="application/octet-stream" />
+            </intent-filter>
+        </activity-alias>
+
+        <!-- Standalone "RinPak" app icon in the launcher (adaptive + monochrome for themed icons). Opens the
+             projects screen and then the package picker directly (ProjectsActivity.handleLauncherIntent). -->
+        <activity-alias
+            android:name=".RinPakLauncher"
+            android:targetActivity=".ProjectsActivity"
+            android:exported="true"
+            android:label="@string/rinpak_launcher_label"
+            android:icon="@mipmap/ic_rinpak_launcher">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity-alias>
 
