@@ -9,6 +9,9 @@
     <!-- حزم APK الناتجة عن ميزة "تصدير APK" ([RinApkExporter]) تُبنى داخل cacheDir/apk_export/؛
          هذا المسار مطلوب لتثبيت/مشاركة الحزمة عبر content:// Uri آمن. -->
     <cache-path name="apk_export" path="apk_export/" />
+    <!-- حزم RinPak المُصدَّرة ([ProjectManager.exportProject]) تُبنى في cacheDir/project_exports/؛
+         مطلوب لمشاركتها عبر قائمة المشاركة (ACTION_SEND) بـ content:// آمن. -->
+    <cache-path name="project_exports" path="project_exports/" />
     <!-- تخزين دائم لحزم APK المُصدَّرة (سجل "تطبيقات Rin"، [RinAppsRegistry]) — filesDir/rin_apps/
          بدل cacheDir حتى تبقى متاحة للتثبيت/المشاركة حتى بعد تطهير النظام لملفات الكاش. -->
     <files-path name="rin_apps" path="rin_apps/" />
