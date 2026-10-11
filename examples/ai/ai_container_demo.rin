@@ -1,0 +1,38 @@
+// ai_container_demo.rin — تحليل بيانات + تعلّم آلة داخل حاويات Rin
+//   rin run examples/ai/ai_container_demo.rin     (من جذر المستودع)
+@import "lib/rinai.og.rin";
+
+// 1) حاوية تفاعلية: تُعيد التدريب تلقائياً عند تغيّر الحالة (on update)
+@container=trainer
+    state version = 0;
+    state best = "none";
+    on init() { print "trainer جاهز"; }
+    on update(prev) {
+        let df = ai_get_dataset("demo", "flowers");
+        let res = ai_auto_classify(df, "kind", ["a", "b"], 3);
+        ai_put_model("demo", "clf", res["best"], {"leaderboard": df_to_records(res["leaderboard"])});
+        print "إعادة تدريب بعد تغيّر version: أفضل نموذج = " + res["best_name"];
+    }
+.end/container
+
+// 2) بيانات اصطناعية → DataFrame → مخزَّنة في حاوية جدول
+seed(1);
+let recs = [];
+let c = 0;
+let kinds = ["x", "y", "z"];
+while (c < 3) {
+    let i = 0;
+    while (i < 20) { push(recs, {"a": c * 3 + random(), "b": 9 - c * 3 + random(), "kind": kinds[c]}); i = i + 1; }
+    c = c + 1;
+}
+ai_put_dataset("demo", "flowers", df_from_records(recs));
+df_print(df_describe(ai_get_dataset("demo", "flowers")));
+
+// 3) تغيير الحالة يُطلق التدريب عبر الحاوية
+setState("trainer", "version", 1);
+
+// 4) تنبّؤ من النموذج المخزَّن في الحاوية
+print ai_predict("demo", "clf", {"a": 0.4, "b": 9.5});
+print ai_predict("demo", "clf", {"a": 6.5, "b": 3.5});
+ai_save_workspace("demo", "/tmp/demo_workspace.json");
+print "حُفظت مساحة العمل: /tmp/demo_workspace.json";
