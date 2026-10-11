@@ -14,6 +14,7 @@
       </match>
     </magic>
     <glob pattern="*.rinpak"/>
+    <alias type="application/x-rinpak"/>
     <sub-class-of type="application/zip"/>
   </mime-type>
 </mime-info>
