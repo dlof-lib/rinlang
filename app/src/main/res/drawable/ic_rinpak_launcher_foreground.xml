@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- أيقونة RinPak: طرد/صندوق ثلاثي الأبعاد بشريط تغليف أصفر وحرف R على الوجه — «مشروع Rin محزوم». المصدر: assets/branding/rinpak/rinpak_launcher_icon.svg -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
+    <path android:fillColor="#8CC3A0" android:pathData="M30.00,40.00 L54.00,54.00 L54.00,82.00 L30.00,68.00 Z" />
+    <path android:fillColor="#3F7D54" android:pathData="M54.00,54.00 L78.00,40.00 L78.00,68.00 L54.00,82.00 Z" />
+    <path android:fillColor="#EAF6EE" android:pathData="M54.00,26.00 L78.00,40.00 L54.00,54.00 L30.00,40.00 Z" />
+    <path android:fillColor="#F4C34F" android:pathData="M62.64,31.04 L69.36,34.96 L45.36,48.96 L38.64,45.04 Z" />
+    <path android:fillColor="#D6A63A" android:pathData="M38.64,45.04 L45.36,48.96 L45.36,76.96 L38.64,73.04 Z" />
+    <path android:fillColor="#EAF6EE" android:pathData="M59.76,56.24 L63.36,54.14 L63.36,70.94 L59.76,73.04 Z" />
+    <path android:fillColor="#EAF6EE" android:pathData="M59.76,56.24 L70.80,49.80 L70.80,54.00 L59.76,60.44 Z" />
+    <path android:fillColor="#EAF6EE" android:pathData="M59.76,63.80 L70.80,57.36 L70.80,61.56 L59.76,68.00 Z" />
+    <path android:fillColor="#EAF6EE" android:pathData="M67.20,51.90 L70.80,49.80 L70.80,61.56 L67.20,63.66 Z" />
+    <path android:fillColor="#EAF6EE" android:pathData="M63.60,65.76 L67.20,63.66 L72.24,65.76 L68.64,67.86 Z" />
+</vector>
