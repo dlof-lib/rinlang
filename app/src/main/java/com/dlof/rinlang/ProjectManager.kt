@@ -10,7 +10,6 @@ import java.io.File
 import java.io.FileOutputStream
 import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
-import java.util.zip.ZipOutputStream
 
 /**
  * يدير مشاريع Rin على تخزين التطبيق الخاص (filesDir/projects/<name>/...).
@@ -113,10 +112,12 @@ object ProjectManager {
      * الملف بصيغة "type=xxx" الخام قبل هذا التعديل.
      */
     private const val PROJECT_META_FILE = "project.og.urin"
-    /** الامتداد الرسمي لحزمة مشروع Rin القابلة للنقل. الحزمة ZIP معيارياً من الداخل، لكن
-     * .rinproj يميز مشروع Rin عن أي ZIP عادي ويمكن ربطه بالمحرر لاحقاً. */
-    const val OFFICIAL_PROJECT_EXTENSION = ".rinproj"
-    const val OFFICIAL_PROJECT_MIME = "application/vnd.rin.project+zip"
+    /** الامتداد الرسمي لحزمة مشروع Rin القابلة للنقل: RinPak (انظر [RinPak] وdocs/rinpak-format.md). */
+    const val OFFICIAL_PROJECT_EXTENSION = RinPak.EXTENSION
+    const val OFFICIAL_PROJECT_MIME = RinPak.MIME
+    /** الصيغة القديمة (ZIP + rin.project.json): تبقى مدعومة للاستيراد فقط، والتصدير دائماً RinPak. */
+    const val LEGACY_PROJECT_EXTENSION = ".rinproj"
+    const val LEGACY_PROJECT_MIME = "application/vnd.rin.project+zip"
     private const val PROJECT_MANIFEST = "rin.project.json"
     private const val PROJECT_FORMAT = "rin-project"
     private const val PROJECT_FORMAT_VERSION = 1
@@ -1364,7 +1365,16 @@ fun removeTodo(id) {
         val formatVersion: Int,
         val entry: String,
         val fileCount: Int,
-        val hasManifest: Boolean
+        val hasManifest: Boolean,
+        /** true إن كانت الحزمة بصيغة .rinproj القديمة (بلا بصمات تحقق). */
+        val legacy: Boolean = false,
+        val totalBytes: Long = 0L,
+        val generator: String = "",
+        /** معرّف مفتاح المُوقِّع إن كانت الحزمة موقّعة وصحيحة التوقيع، وإلا null. */
+        val signerKeyId: String? = null,
+        val version: String = "",
+        val author: String = "",
+        val permissions: List<String> = emptyList()
     )
 
     /** يفكّ ضغط ZIP legacy داخل مشروع موجود. أبقيناه للتوافق فقط؛ الصيغة الرسمية هي .rinproj. */
@@ -1401,7 +1411,7 @@ fun removeTodo(id) {
     }
 
     /**
-     * يستورد حزمة مشروع Rin الرسمية (.rinproj) كعملية ذرية:
+     * يستورد حزمة RinPak (.rinpak) — أو .rinproj القديمة — كعملية ذرية:
      * 1) يقرأ manifest، 2) يتحقق من الصيغة والمسارات، 3) يفكها في مجلد مؤقت،
      * 4) يكتب metadata المتوافق، 5) ينقل المجلد للمشاريع فقط بعد نجاح كل الفحوص.
      */
@@ -1413,36 +1423,61 @@ fun removeTodo(id) {
         tempRoot.mkdirs()
         var committed = false
         try {
-            val manifestText = extractProjectPackage(resolver, uri, tempRoot, requireManifest = true)
-            val info = parseProjectManifest(manifestText)
-            require(info.formatVersion == PROJECT_FORMAT_VERSION) {
-                "إصدار حزمة Rin غير مدعوم: ${info.formatVersion}"
+            val name: String
+            val type: ProjectType
+            if (isRinPak(resolver, uri)) {
+                val manifest = openPackage(resolver, uri).use { RinPak.extract(it, tempRoot) }
+                name = manifest.name; type = ProjectType.fromId(manifest.type)
+            } else {
+                val manifestText = extractProjectPackage(resolver, uri, tempRoot, requireManifest = true)
+                val info = parseProjectManifest(manifestText)
+                require(info.formatVersion == PROJECT_FORMAT_VERSION) {
+                    "إصدار حزمة Rin غير مدعوم: ${info.formatVersion}"
+                }
+                name = info.name; type = info.type
             }
             require(File(tempRoot, "main.rin").isFile) {
                 "الحزمة غير صالحة: الملف main.rin مفقود"
             }
 
-            val safeBase = sanitizeProjectName(requestedName?.trim().orEmpty().ifBlank { info.name.ifBlank { sourceName.removeSuffix(OFFICIAL_PROJECT_EXTENSION) } })
+            val safeBase = sanitizeProjectName(requestedName?.trim().orEmpty().ifBlank { name.ifBlank { sourceName } })
             val finalName = uniqueProjectName(context, safeBase)
             val finalDir = File(projectsRoot(context), finalName)
             require(!finalDir.exists()) { "يوجد مشروع بهذا الاسم بالفعل" }
             require(tempRoot.renameTo(finalDir)) { "تعذّر تثبيت المشروع المستورد" }
             committed = true
-            writeProjectMeta(finalDir, info.type)
-            return Project(finalName, finalDir, finalDir.lastModified(), info.type)
+            writeProjectMeta(finalDir, type)
+            return Project(finalName, finalDir, finalDir.lastModified(), type)
         } finally {
             if (!committed && tempRoot.exists()) tempRoot.deleteRecursively()
         }
     }
 
+    private fun openPackage(resolver: ContentResolver, uri: Uri): java.io.InputStream =
+        resolver.openInputStream(uri) ?: throw IllegalStateException("تعذّرت قراءة حزمة المشروع")
+
+    private fun isRinPak(resolver: ContentResolver, uri: Uri): Boolean =
+        openPackage(resolver, uri).use { RinPak.looksLikeRinPak(it) }
+
     /** يقرأ معلومات مشروع من .rinproj بدون تثبيته داخل مجلد المشاريع. */
     fun inspectProjectPackage(context: Context, uri: Uri): ProjectPackageInfo {
         val resolver = context.contentResolver
-        val tempRoot = File(context.cacheDir, "rinproj_inspect_${System.currentTimeMillis()}_${(1000..9999).random()}")
+        if (isRinPak(resolver, uri)) {
+            val m = openPackage(resolver, uri).use { RinPak.inspect(it) }
+            return ProjectPackageInfo(
+                name = sanitizeProjectName(m.name), type = ProjectType.fromId(m.type),
+                formatVersion = m.specVersion, entry = m.entry, fileCount = m.fileCount,
+                hasManifest = true, legacy = false, totalBytes = m.totalBytes,
+                generator = "${m.generatorName} ${m.generatorVersion}".trim(),
+                signerKeyId = m.signature?.keyId, version = m.meta.version, author = m.meta.author,
+                permissions = m.meta.permissions
+            )
+        }
+        val tempRoot = File(context.cacheDir, "rinpak_inspect_${System.currentTimeMillis()}_${(1000..9999).random()}")
         tempRoot.mkdirs()
         return try {
             val manifestText = extractProjectPackage(resolver, uri, tempRoot, requireManifest = true)
-            parseProjectManifest(manifestText)
+            parseProjectManifest(manifestText).copy(legacy = true)
         } finally {
             tempRoot.deleteRecursively()
         }
@@ -1517,7 +1552,7 @@ fun removeTodo(id) {
 
     /** اسم مشروع صالح للاستخدام كمجلد، مع إزالة الامتداد الرسمي إن ظهر في الاسم. */
     private fun sanitizeProjectName(raw: String): String {
-        val normalized = raw.trim().removeSuffix(OFFICIAL_PROJECT_EXTENSION)
+        val normalized = raw.trim().removeSuffix(OFFICIAL_PROJECT_EXTENSION).removeSuffix(LEGACY_PROJECT_EXTENSION)
             .replace(Regex("[^A-Za-z0-9_\\-\\u0600-\\u06FF ]"), "_")
             .replace(Regex("\\s+"), " ")
             .trim()
@@ -1533,40 +1568,29 @@ fun removeTodo(id) {
     }
 
     /**
-     * يصدر المشروع بصيغة Rin الرسمية .rinproj. الحزمة عبارة عن ZIP مع manifest ثابت الاسم
-     * `rin.project.json`; جميع المسارات داخل الحزمة نسبية وآمنة، وتبقى lib/ والأصول والمكتبات
-     * وأي ملفات ثنائية جزءاً من المشروع كما هي.
+     * يصدر المشروع بصيغة RinPak الرسمية (.rinpak): ZIP بترتيب ثابت — mimetype ثم
+     * META-INF/manifest.json (الهوية + SHA-256 لكل ملف) ثم content/ (شجرة المشروع). التفاصيل في
+     * docs/rinpak-format.md. الملفات المخفية (مثل .rin_state) لا تُصدَّر.
      */
     fun exportProject(context: Context, project: Project): File {
         val cacheDir = File(context.cacheDir, "project_exports").apply { mkdirs() }
         val packageFile = File(cacheDir, "${sanitizeProjectName(project.name)}$OFFICIAL_PROJECT_EXTENSION")
         if (packageFile.exists()) packageFile.delete()
-
-        val allFiles = project.dir.walkTopDown().filter { it.isFile }
-            .filter { it.name != PROJECT_MANIFEST && !it.path.contains("${File.separator}.") }
-            .toList()
-        val manifest = JSONObject().apply {
-            put("format", PROJECT_FORMAT)
-            put("formatVersion", PROJECT_FORMAT_VERSION)
-            put("name", project.name)
-            put("type", project.type.id)
-            put("entry", "main.rin")
-            put("fileCount", allFiles.size + 1)
-            put("rinStudio", "RinStudio")
-            put("createdFor", "Rin")
-        }
-
-        ZipOutputStream(BufferedOutputStream(FileOutputStream(packageFile))).use { zipOut ->
-            zipOut.putNextEntry(ZipEntry(PROJECT_MANIFEST))
-            zipOut.write(manifest.toString(2).toByteArray(Charsets.UTF_8))
-            zipOut.closeEntry()
-            for (file in allFiles) {
-                val relPath = file.relativeTo(project.dir).path.replace(File.separatorChar, '/')
-                require(sanitizeZipEntryPath(relPath) != null) { "مسار مشروع غير آمن: $relPath" }
-                zipOut.putNextEntry(ZipEntry(relPath))
-                file.inputStream().use { it.copyTo(zipOut) }
-                zipOut.closeEntry()
+        try {
+            FileOutputStream(packageFile).use { out ->
+                val appVersion = runCatching {
+                    context.packageManager.getPackageInfo(context.packageName, 0).versionName
+                }.getOrNull().orEmpty().ifBlank { "1.0.0" }
+                RinPak.write(
+                    sourceDir = project.dir, name = project.name, typeId = project.type.id, out = out,
+                    generatorVersion = appVersion,
+                    meta = RinPak.PackMeta(minRinVersion = appVersion),
+                    signer = RinPakSigner.forDevice(context)
+                )
             }
+        } catch (t: Throwable) {
+            packageFile.delete()
+            throw t
         }
         return packageFile
     }
