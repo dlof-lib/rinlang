@@ -1,0 +1,15 @@
+درجة الحرارة
+temp
+قراءة المستشعر الداخلي
+°C
+25
+سرعة المركبة
+speed
+km/h
+Speed 2 | desc
+{"id": "speed2", "label": "Speed 2", "about": "desc", "unit": nil, "value": 9}
+2
+nil
+LD
+temp 25->26
+26
