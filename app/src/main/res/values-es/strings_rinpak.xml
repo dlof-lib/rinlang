@@ -28,4 +28,16 @@
     <string name="rinpak_trust_changed">⛔ Advertencia: la clave de firma (%1$s) difiere de la de un paquete con el mismo nombre que importaste antes (%2$s). Podría ser una suplantación — continúa solo si confías en el origen.</string>
     <string name="rinpak_trust_removed">⛔ Advertencia: un paquete con el mismo nombre que importaste antes estaba firmado (%1$s), pero este no lo está. La firma pudo eliminarse a propósito.</string>
     <string name="rinpak_launcher_label">RinPak</string>
+    <!-- التحليل الأمني والهوية (RinPak.analyze) -->
+    <string name="rinpak_info_id">ID: %s</string>
+    <string name="rinpak_fingerprint">Huella: %s</string>
+    <string name="rinpak_find_native">⛔ Contiene código nativo: %s</string>
+    <string name="rinpak_find_bidi">⛔ Nombre de archivo disfrazado con dirección de texto: %s</string>
+    <string name="rinpak_find_package">⚠ Contiene paquetes de apps/Jar: %s</string>
+    <string name="rinpak_find_script">⚠ Contiene scripts de shell: %s</string>
+    <string name="rinpak_find_perms">⚠ Solicita permisos sensibles: %s</string>
+    <string name="rinpak_find_newer">⛔ Requiere Rin %s o superior: actualiza la app primero</string>
+    <string name="rinpak_risk_confirm_title">Paquete de alto riesgo</string>
+    <string name="rinpak_risk_confirm_message">Este paquete contiene elementos que podrían ser dañinos. Impórtalo solo si confías plenamente en su origen. ¿Continuar?</string>
+    <string name="rinpak_risk_confirm_yes">Importar bajo mi responsabilidad</string>
 </resources>
