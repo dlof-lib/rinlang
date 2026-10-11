@@ -11847,6 +11847,26 @@ bool Interpreter::liveCheckAccept(LiveMeta& m, const std::string& name, Value& v
     return false; // تجاهل صامت: تبقى القيمة القديمة، وx.ok تصير false
 }
 
+bool Interpreter::liveGateEval(LiveMeta& m, const ExprPtr& rule, const std::string& name, const Value& oldV, const Value& newV, bool asPost, int line) {
+    EnvPtr scope = m.scope.lock();
+    if (!scope) throw liveErr(diag::Code::E0046_LiveMisuse, line, std::string(asPost ? "post" : "pre") + " `" + name + "` outlived the scope it was declared in");
+    auto env = std::make_shared<Environment>(scope);
+    env->define("old", oldV);
+    env->define("new", newV);
+    env->define(name, asPost ? newV : oldV); // آخراً: لو سُمّي المتغيّر old أو new يغلب اسمه
+    return evaluate(rule, env).isTruthy();
+}
+
+void Interpreter::liveGateRefuse(LiveMeta& m, const std::string& name, const Value& oldV, const Value& newV, bool post, int line) {
+    m.rejected++; m.lastOk = false; m.refused = newV;
+    if (!m.strictAccept) return; // الصامت: تبقى القيمة القديمة، وx.ok تصير false
+    throw liveErr(diag::Code::E0051_ContractViolated, line,
+                  std::string(post ? "post" : "pre") + " `" + name + "`: " + (post ? "the new state" : "the change") + " " + oldV.toDisplayString() + " -> " + newV.toDisplayString() +
+                      (post ? " breaks its `post` rule" : " is not allowed by its `pre` rule"),
+                  post ? "the write was rolled back; drop `strict` to roll back quietly (check `" + name + ".ok` afterwards)"
+                       : "nothing was written; drop `strict` to ignore blocked writes quietly (check `" + name + ".ok` afterwards)");
+}
+
 void Interpreter::liveJournal(Environment* owner, const std::string& name) {
     if (trialStack_.empty()) return;
     EnvPtr keep = owner->weak_from_this().lock();
@@ -11920,10 +11940,31 @@ Value Interpreter::liveAssign(Environment* owner, const std::string& name, Value
             return cur != owner->values.end() ? cur->second : Value::nil();
         }
     }
-    liveJournal(owner, name); // قبل أي تغيير (قيمة + تاريخ tape)
+    liveJournal(owner, name); // قبل أي تغيير (قيمة + تاريخ tape + عدّادات pre/post حتى عند الرفض)
     Value old;
     { auto it = owner->values.find(name); if (it != owner->values.end()) old = it->second; }
     bool changed = !valuesEqual(old, v);
+    if (m && m->gated) { // pre/post (docs/pre-post.md)
+        m->lastPre = old; m->lastPost = v;
+        // «قبل»: يُسأل والعالم ما زال على القيمة القديمة؛ الجواب لا => لا كتابة ولا جرس ولا تاريخ
+        if (m->preRule && !liveGateEval(*m, m->preRule, name, old, v, false, line)) {
+            liveGateRefuse(*m, name, old, v, false, line);
+            return old;
+        }
+        // «بعد»: يُسأل والعالم يحمل القيمة الجديدة فعلاً (كتابة مؤقتة خام بلا خطّافات/روابط)؛ الجواب لا => تراجع كامل
+        if (m->postRule) {
+            owner->values[name] = v;
+            bool ok = false;
+            try { ok = liveGateEval(*m, m->postRule, name, old, v, true, line); }
+            catch (...) { owner->values[name] = old; throw; }
+            owner->values[name] = old; // الكتابة الحقيقية (مع خطّافات state/الروابط) تتمّ أدناه فقط عند النجاح
+            if (!ok) {
+                liveGateRefuse(*m, name, old, v, true, line);
+                return old;
+            }
+        }
+        m->accepted++; m->lastOk = true;
+    }
     if (m) {
         m->writes++;
         if (m->taped && changed) {
@@ -11999,6 +12040,31 @@ void Interpreter::liveExecDecl(const std::shared_ptr<LiveDeclStmt>& s, const Env
                                   "use `dec` to go down; the step itself is always the size of one move");
             }
             if (s->goal) { m->hasGoal = true; m->goal = evaluate(s->goal, env); }
+            break;
+        }
+        case LiveKind::Label:
+        case LiveKind::Define: { // تسمية وتعريف: بيانات وصفية بحتة، لا تمسّ الإسناد (docs/label-define.md)
+            m->kind = s->kind == LiveKind::Label ? "label" : "define"; m->named = true; m->ident = s->name;
+            auto text = [&](const ExprPtr& e, const char* what) -> Value {
+                if (!e) return Value::nil();
+                Value t = evaluate(e, env);
+                if (t.type != Value::Type::STRING)
+                    throw liveErr(diag::Code::E0004_InvalidType, s->line, std::string("the ") + what + " of `" + s->name + "` must be text, got " + t.typeName());
+                return t;
+            };
+            m->metaLabel = text(s->metaLabel, "label"); m->metaAbout = text(s->metaAbout, "description"); m->metaUnit = text(s->metaUnit, "unit");
+            break;
+        }
+        case LiveKind::Pre:
+        case LiveKind::Post: { // عقد انتقال: «قبل» يحرس الخروج من القيمة القديمة، «بعد» يتحقّق من الحالة الجديدة (docs/pre-post.md)
+            m->kind = s->kind == LiveKind::Pre ? "pre" : "post"; m->gated = true;
+            m->preRule = s->preRule; m->postRule = s->postRule; m->strictAccept = s->strictAccept; m->scope = env;
+            m->lastPost = v;
+            // القيمة الابتدائية ليست انتقالاً فلا تُسأل عنها «قبل»؛ أما «بعد» فتُسأل عنها بلا فرق (old = new)
+            if (m->postRule && !liveGateEval(*m, m->postRule, s->name, v, v, true, s->line))
+                throw liveErr(diag::Code::E0051_ContractViolated, s->line,
+                              "the first value of post `" + s->name + "` breaks its own `post` rule: " + v.toDisplayString(),
+                              "give it a starting value its `post` rule accepts (while checking the first value, `old` and `new` are the same value)");
             break;
         }
         case LiveKind::Accept: { // عائلة الشروط: لا يدخل إلا ما يقبله الشرط (docs/base-accept.md)
@@ -12163,7 +12229,8 @@ bool Interpreter::livePropertyGet(const EnvPtr& env, const std::string& name, co
         "kind", "reads", "writes", "bells", "vitals", "past", "undone", "canUndo", "canRedo", "keep",
         "min", "max", "mode", "fill", "full", "empty", "left", "burnt",
         "base", "delta", "up", "down", "same", "changed", "goal", "reached", "togo", "progress", "step", // base
-        "ok", "accepted", "rejected", "refused"};                                                       // accept
+        "ok", "accepted", "rejected", "refused",                                                        // accept (و pre/post)
+        "pre", "post", "label", "about", "unit", "id", "info"};                                                                                 // pre/post
     if (!props.count(prop)) return false;
     Environment* owner = findLiveOwner(env, name);
     if (!owner || owner->live.empty()) return false;
@@ -12232,10 +12299,30 @@ bool Interpreter::livePropertyGet(const EnvPtr& env, const std::string& name, co
         return true;
     }
     // ---- accept: حارس قبول (docs/base-accept.md) ----
-    if (prop == "ok")       { only(m->guarded, "accept"); out = Value::boolean_(m->lastOk); return true; }
-    if (prop == "accepted") { only(m->guarded, "accept"); out = Value::num(static_cast<double>(m->accepted)); return true; }
-    if (prop == "rejected") { only(m->guarded, "accept"); out = Value::num(static_cast<double>(m->rejected)); return true; }
-    if (prop == "refused")  { only(m->guarded, "accept"); out = m->refused; return true; }
+    if (prop == "ok")       { only(m->guarded || m->gated, "accept, pre or post"); out = Value::boolean_(m->lastOk); return true; }
+    if (prop == "accepted") { only(m->guarded || m->gated, "accept, pre or post"); out = Value::num(static_cast<double>(m->accepted)); return true; }
+    if (prop == "rejected") { only(m->guarded || m->gated, "accept, pre or post"); out = Value::num(static_cast<double>(m->rejected)); return true; }
+    if (prop == "refused")  { only(m->guarded || m->gated, "accept, pre or post"); out = m->refused; return true; }
+    // ---- label/define: تسمية وتعريف (docs/label-define.md) — خصائص صامتة على غير هذين النوعين كي لا تحجب أسماء طرق عادية ----
+    if (prop == "label" || prop == "about" || prop == "unit" || prop == "id" || prop == "info") {
+        if (!m->named) return false;
+        Value lbl = m->metaLabel.type == Value::Type::STRING ? m->metaLabel : Value::string(m->ident);
+        Value abt = m->metaAbout.type == Value::Type::STRING ? m->metaAbout : Value::string("");
+        if (prop == "label") out = lbl;
+        else if (prop == "about") out = abt;
+        else if (prop == "unit") out = m->metaUnit;
+        else if (prop == "id") out = Value::string(m->ident);
+        else {
+            auto vm = std::make_shared<MapData>();
+            auto put2 = [&](const char* k, Value v) { vm->push_back({Value::string(k), std::move(v)}); };
+            put2("id", Value::string(m->ident)); put2("label", lbl); put2("about", abt); put2("unit", m->metaUnit); put2("value", cur);
+            out = Value::makeMap(vm);
+        }
+        return true;
+    }
+    // ---- pre/post: آخر محاولة كتابة = (قبل ← بعد)؛ نجحت فـ x.post == x، أو رُفضت فـ x.pre == x و x.post هي المرفوضة (docs/pre-post.md) ----
+    if (prop == "pre")      { only(m->gated, "pre or post"); out = m->lastPre; return true; }
+    if (prop == "post")     { only(m->gated, "pre or post"); out = m->lastPost; return true; }
     if (prop == "left")  { only(m->fused, "fuse"); out = Value::num(m->burnt ? 0 : static_cast<double>(m->left)); return true; }
     if (prop == "burnt") { only(m->fused, "fuse"); out = Value::boolean_(m->burnt); return true; }
     // vitals: خريطة بكل ما يخص هذا المتغيّر
@@ -12263,6 +12350,17 @@ bool Interpreter::livePropertyGet(const EnvPtr& env, const std::string& name, co
     if (m->guarded) {
         put("accepted", Value::num(static_cast<double>(m->accepted))); put("rejected", Value::num(static_cast<double>(m->rejected)));
         put("ok", Value::boolean_(m->lastOk)); if (m->strictAccept) put("strict", Value::boolean_(true));
+    }
+    if (m->named) {
+        put("id", Value::string(m->ident));
+        put("label", m->metaLabel.type == Value::Type::STRING ? m->metaLabel : Value::string(m->ident));
+        put("about", m->metaAbout.type == Value::Type::STRING ? m->metaAbout : Value::string("")); put("unit", m->metaUnit);
+    }
+    if (m->gated) {
+        put("pre", m->lastPre); put("post", m->lastPost);
+        put("accepted", Value::num(static_cast<double>(m->accepted))); put("rejected", Value::num(static_cast<double>(m->rejected)));
+        put("ok", Value::boolean_(m->lastOk)); if (m->strictAccept) put("strict", Value::boolean_(true));
+        put("hasPre", Value::boolean_(m->preRule != nullptr)); put("hasPost", Value::boolean_(m->postRule != nullptr));
     }
     if (m->fused) { put("burns", Value::num(static_cast<double>(m->burns))); put("left", Value::num(m->burnt ? 0 : static_cast<double>(m->left))); put("burnt", Value::boolean_(m->burnt)); }
     out = Value::makeMap(vm);
