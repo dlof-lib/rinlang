@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Linux: sudo cp rinpak-mime.xml /usr/share/mime/packages/ && sudo update-mime-database /usr/share/mime -->
+<mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">
+  <mime-type type="application/vnd.rin.pak">
+    <comment>Rin project package</comment>
+    <comment xml:lang="ar">حزمة مشروع Rin</comment>
+    <icon name="application-vnd.rin.pak"/>
+    <!-- بصمة المحتوى: ZIP يبدأ بعنصر mimetype غير مضغوط -->
+    <magic priority="80">
+      <match type="string" value="PK&#x03;&#x04;" offset="0">
+        <match type="string" value="mimetype" offset="30">
+          <match type="string" value="application/vnd.rin.pak" offset="38"/>
+        </match>
+      </match>
+    </magic>
+    <glob pattern="*.rinpak"/>
+    <sub-class-of type="application/zip"/>
+  </mime-type>
+</mime-info>
