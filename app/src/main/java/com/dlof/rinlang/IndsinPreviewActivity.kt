@@ -295,6 +295,7 @@ class IndsinPreviewActivity : RinBaseActivity(), IndsinPreviewManager.Listener {
     override fun onDestroy() {
         super.onDestroy()
         stopEffectsTicking()
+        cancelClockTick()
         IndsinPreviewManager.detach(this)
     }
 
@@ -311,6 +312,27 @@ class IndsinPreviewActivity : RinBaseActivity(), IndsinPreviewManager.Listener {
         // means everything has settled and it's safe to stop (no idle polling loop otherwise).
         val animating = try { JSONObject(resultJson).optBoolean("animating", false) } catch (t: Throwable) { false }
         if (animating) startEffectsTicking() else stopEffectsTicking()
+        // ساعة time الحيّة (docs/TIME.md): "ticking":true يعني أن المصدر يعرّف `warp clock` فنكرّر tick كل ثانية.
+        val ticking = try { JSONObject(resultJson).optBoolean("ticking", false) } catch (t: Throwable) { false }
+        if (ticking && !animating) scheduleClockTick() else cancelClockTick()
+    }
+
+    // ---- ساعة time: tick واحد كل ثانية (لا حاجة لتردد الإطارات؛ الخلية clock بدقة الثانية) ----
+    private val clockHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private var clockTickScheduled = false
+    private val clockTickRunnable = Runnable {
+        clockTickScheduled = false
+        IndsinPreviewManager.tick() // نتيجته تعود عبر onFabricUpdated فتعيد الجدولة إن بقي "ticking"
+    }
+    private fun scheduleClockTick() {
+        if (clockTickScheduled) return
+        clockTickScheduled = true
+        clockHandler.postDelayed(clockTickRunnable, 1000L)
+    }
+    private fun cancelClockTick() {
+        if (!clockTickScheduled) return
+        clockTickScheduled = false
+        clockHandler.removeCallbacks(clockTickRunnable)
     }
 
     // ---- Effects Engine per-frame driver: a Choreographer callback that calls
