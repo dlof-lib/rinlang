@@ -1,6 +1,8 @@
 package com.dlof.rinlang
 
 import android.content.Intent
+import android.net.Uri
+import android.provider.OpenableColumns
 import android.os.Bundle
 import android.view.ContextThemeWrapper
 import android.view.View
@@ -143,7 +145,7 @@ class IndsinPreviewActivity : RinBaseActivity(), IndsinPreviewManager.Listener {
             }
         }
 
-        currentPageName = intent.getStringExtra(EXTRA_FILE_NAME)?.takeIf { it.isNotBlank() } ?: currentPageName
+        currentPageName = incomingFileName(intent) ?: currentPageName
         txtTitle.text = currentPageName
 
         // نسجّل كمستمع أولاً — قبل أي start() — حتى لا نفوّت أول إطار (سباق مع خيط الجلسة بالخلفية).
@@ -156,7 +158,7 @@ class IndsinPreviewActivity : RinBaseActivity(), IndsinPreviewManager.Listener {
         // لا نعيد التشغيل حتى لا نفقد حالة Warp (كعدّاد تم الضغط عليه)؛ نكتفي بإعادة رسم آخر إطار
         // معروف، وهو ما توفّره attach() أعلاه تلقائياً من الذاكرة المؤقتة.
         if (savedInstanceState == null) {
-            val incomingCode = intent.getStringExtra(EXTRA_CODE)
+            val incomingCode = readIncomingCode(intent)
             if (incomingCode != null) {
                 if (IndsinPreviewManager.isRunning) {
                     IndsinPreviewManager.start(incomingCode, currentDeviceWidth)
@@ -174,6 +176,49 @@ class IndsinPreviewActivity : RinBaseActivity(), IndsinPreviewManager.Listener {
         }
     }
 
+    // ---------------------------------------------------------------------------------------
+    // Opening a .indsin document from outside the app (file association — see the
+    // IndsinFileViewer activity-alias in AndroidManifest.xml).
+    // ---------------------------------------------------------------------------------------
+
+    /** Largest .indsin document accepted from another app, in bytes (guards memory use). */
+    private val maxExternalBytes = 2 * 1024 * 1024
+
+    private fun isExternalView(i: Intent): Boolean = i.action == Intent.ACTION_VIEW && i.data != null
+
+    /**
+     * The source to render. In-app launches pass [EXTRA_CODE]; an external ACTION_VIEW (a tapped
+     * .indsin file) is read from its document URI instead, and its extras are never trusted.
+     */
+    private fun readIncomingCode(i: Intent): String? {
+        if (!isExternalView(i)) return i.getStringExtra(EXTRA_CODE)
+        val uri = i.data ?: return null
+        return try {
+            contentResolver.openInputStream(uri)?.use { input ->
+                val bytes = input.readBytes()
+                if (bytes.size > maxExternalBytes) null else String(bytes, Charsets.UTF_8)
+            }
+        } catch (_: Exception) {
+            Toast.makeText(this, getString(R.string.indsin_link_open_failed, uri.toString()), Toast.LENGTH_SHORT).show()
+            null
+        }
+    }
+
+    /** Display name for the title bar and as the root page name (`main.rin` when unknown). */
+    private fun incomingFileName(i: Intent): String? {
+        if (!isExternalView(i)) return i.getStringExtra(EXTRA_FILE_NAME)?.takeIf { it.isNotBlank() }
+        val uri: Uri = i.data ?: return null
+        var name: String? = null
+        if (uri.scheme == "content") {
+            try {
+                contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c ->
+                    if (c.moveToFirst()) name = c.getString(0)
+                }
+            } catch (_: Exception) { }
+        }
+        return (name ?: uri.lastPathSegment?.substringAfterLast('/'))?.takeIf { it.isNotBlank() }
+    }
+
     /** يحوّل قيمة بكسل فعلية إلى dp — نفس وحدة rootWidth/viewportHeight الممرَّرة للمحرّك الأصلي. */
     private fun pxToDp(px: Int): Int = (px / resources.displayMetrics.density).toInt()
 
@@ -188,11 +233,11 @@ class IndsinPreviewActivity : RinBaseActivity(), IndsinPreviewManager.Listener {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        val code = intent.getStringExtra(EXTRA_CODE) ?: return
+        val code = readIncomingCode(intent) ?: return
         // A fresh "Run" from the editor restarts at the root page — any pages navigated into
         // during the previous session no longer apply.
         pageStack.clear()
-        currentPageName = intent.getStringExtra(EXTRA_FILE_NAME)?.takeIf { it.isNotBlank() } ?: "main.rin"
+        currentPageName = incomingFileName(intent) ?: "main.rin"
         txtTitle.text = currentPageName
         inspectorPanel.visibility = View.GONE
         fabricView.clearInspection()
