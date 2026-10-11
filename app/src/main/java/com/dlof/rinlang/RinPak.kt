@@ -209,22 +209,62 @@ object RinPak {
     } catch (e: Exception) { false }
 
     /** يقرأ ويتحقق من المانيفست فقط (أول عنصرين) دون فك الملفات. */
-    fun inspect(input: InputStream): Manifest = ZipInputStream(input).use { zip ->
-        val (manifest, bytes) = readHeader(zip)
-        // التوقيع (إن وُجد) هو العنصر الثالث؛ نقرؤه هنا فقط (الفحص لا يفك الملفات).
-        val third = zip.nextEntry
-        if (third != null && third.name == ENTRY_SIGNATURE) manifest.copy(signature = verifySignature(readLimited(zip, 64 * 1024), bytes))
-        else manifest
+    fun inspect(input: InputStream): Manifest = corruptionGuard {
+        ZipInputStream(input).use { zip ->
+            val (manifest, bytes) = readHeader(zip)
+            // التوقيع (إن وُجد) هو العنصر الثالث؛ نقرؤه هنا فقط (الفحص لا يفك الملفات).
+            val third = zip.nextEntry
+            if (third != null && third.name == ENTRY_SIGNATURE) manifest.copy(signature = verifySignature(readLimited(zip, 64 * 1024), bytes))
+            else manifest
+        }
+    }
+
+    /** يحوّل أعطال بنية ZIP (ملف مقطوع/تالف، CRC خاطئ) إلى رسالة عربية واضحة بدل رسالة JVM الإنجليزية. */
+    private inline fun <T> corruptionGuard(block: () -> T): T = try {
+        block()
+    } catch (e: java.util.zip.ZipException) {
+        throw RinPakException("الحزمة تالفة أو غير مكتملة (${e.message})")
+    } catch (e: java.io.EOFException) {
+        throw RinPakException("الحزمة مقطوعة — الملف غير مكتمل")
     }
 
     /**
      * يفك الحزمة داخل [dest] (مجلد فارغ تنشئه أنت) مع التحقق الكامل. عند أي خطأ يرمي
      * [RinPakException] ويترك [dest] لك لتحذفه (الاستيراد الذري يتم في ProjectManager).
      */
-    fun extract(input: InputStream, dest: File): Manifest {
-        val destRoot = dest.canonicalFile
-        return ZipInputStream(input).use { zip ->
+    fun extract(
+        input: InputStream,
+        dest: File,
+        onProgress: ((doneBytes: Long, totalBytes: Long) -> Unit)? = null,
+        isCancelled: (() -> Boolean)? = null
+    ): Manifest = process(input, dest, onProgress, isCancelled)
+
+    /**
+     * يتحقق من الحزمة تحققاً كاملاً (ترتيب، مانيفست، SHA-256 لكل ملف، التوقيع، الحدود) **دون كتابة أي ملف**
+     * على القرص — مناسب للجوال: لا يستهلك مساحة تخزين ولا يترك أثراً. يرمي [RinPakException] عند أي خلل.
+     */
+    fun verify(
+        input: InputStream,
+        onProgress: ((doneBytes: Long, totalBytes: Long) -> Unit)? = null,
+        isCancelled: (() -> Boolean)? = null
+    ): Manifest = process(input, null, onProgress, isCancelled)
+
+    /** المحرك المشترك لـ [extract] (dest != null) و[verify] (dest == null). */
+    private fun process(
+        input: InputStream,
+        dest: File?,
+        onProgress: ((doneBytes: Long, totalBytes: Long) -> Unit)?,
+        isCancelled: (() -> Boolean)?
+    ): Manifest {
+        val destRoot = dest?.canonicalFile
+        return corruptionGuard { ZipInputStream(input).use { zip ->
             var (manifest, manifestBytes) = readHeader(zip)
+            val declaredTotal = manifest.totalBytes
+            var lastReported = -1L
+            fun report(done: Long, force: Boolean = false) {
+                if (onProgress == null) return
+                if (force || done - lastReported >= PROGRESS_STEP) { lastReported = done; onProgress(done, declaredTotal) }
+            }
             val expected = manifest.files.associateBy { it.path }
             val seen = HashSet<String>()
             var total = 0L
@@ -246,20 +286,25 @@ object RinPak {
                 if (safe != rel) throw RinPakException("مسار غير قياسي: $name")
                 val meta = expected[safe] ?: throw RinPakException("ملف غير مُدرج في المانيفست: $safe")
                 if (!seen.add(safe)) throw RinPakException("عنصر مكرر: $safe")
-                val out = File(destRoot, safe).canonicalFile
-                if (!out.path.startsWith(destRoot.path + File.separator)) throw RinPakException("مسار خارج الجذر: $name")
-                out.parentFile?.mkdirs()
+                val target: OutputStream = if (destRoot != null) {
+                    val out = File(destRoot, safe).canonicalFile
+                    if (!out.path.startsWith(destRoot.path + File.separator)) throw RinPakException("مسار خارج الجذر: $name")
+                    out.parentFile?.mkdirs()
+                    BufferedOutputStream(FileOutputStream(out))
+                } else NULL_SINK
                 val md = MessageDigest.getInstance("SHA-256")
                 var size = 0L
-                BufferedOutputStream(FileOutputStream(out)).use { target ->
+                target.use { sink ->
                     val buf = ByteArray(DEFAULT_BUF)
                     while (true) {
+                        if (isCancelled?.invoke() == true) throw RinPakException("أُلغيت العملية")
                         val n = zip.read(buf)
                         if (n < 0) break
                         size += n; total += n
                         if (total > MAX_TOTAL_BYTES) throw RinPakException("حجم محتوى المشروع يتجاوز الحد المسموح")
                         if (size > meta.size) throw RinPakException("حجم الملف أكبر من المعلن: $safe")
-                        md.update(buf, 0, n); target.write(buf, 0, n)
+                        md.update(buf, 0, n); sink.write(buf, 0, n)
+                        report(total)
                     }
                 }
                 if (size != meta.size) throw RinPakException("حجم الملف لا يطابق المانيفست: $safe")
@@ -267,8 +312,9 @@ object RinPak {
             }
             val missing = expected.keys - seen
             if (missing.isNotEmpty()) throw RinPakException("ملفات مفقودة من الحزمة: ${missing.sorted().take(3).joinToString()}")
+            report(total, force = true)
             manifest
-        }
+        } }
     }
 
     private fun readHeader(zip: ZipInputStream): Pair<Manifest, ByteArray> {
@@ -436,6 +482,12 @@ object RinPak {
     }
 
     private const val DEFAULT_BUF = 16 * 1024
+    /** أقل زيادة (بايت) بين تقريرَي تقدّم متتاليين، كي لا نغرق خيط الواجهة بالإشعارات. */
+    private const val PROGRESS_STEP = 256L * 1024L
+    private val NULL_SINK = object : OutputStream() {
+        override fun write(b: Int) {}
+        override fun write(b: ByteArray, off: Int, len: Int) {}
+    }
 
     private fun readLimited(input: InputStream, limit: Int): ByteArray {
         val bos = ByteArrayOutputStream()
