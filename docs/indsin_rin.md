@@ -45,3 +45,6 @@ onColor(bg) mix(a,b,t) lighten(c,k) darken(c,k) isLight(c) themeScore(theme)`.
 `indsin/rin_indsin_rinbridge.h` (المضيف + فحص النقاء) · `indsin/rin_indsin_rinlib.h` (`indsin.*`) ·
 ربط في `pipeline` و`c_api` (جلسة دائمة) و`strand/shuttle/tokens/needle/actions/object`.
 الاختبار: `tests/tools/test_indsin_rin_bridge.cpp` · المثال: `examples/samples/indsin_rin_bridge_demo.rin`.
+
+## time
+دوال `time.*` النقية تعمل داخل الخصائص، وخلية `warp clock` ساعة حيّة تتجدد كل ثانية — انظر [`TIME.md`](./TIME.md#داخل-indsin-الواجهات).
