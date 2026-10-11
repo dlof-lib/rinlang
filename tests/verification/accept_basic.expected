@@ -1,0 +1,31 @@
+30
+true
+30
+false
+500
+2
+1
+rejected
+40
+true
+100
+false
+1
+100
+40
+false
+alice
+E0049
+alice
+E0049
+3
+5
+hp: 10 -> 15
+hp: 15 -> 3
+hp: 3 -> 20
+3
+3
+1
+accept
+{"kind": "accept", "reads": 1, "writes": 2, "bells": 1, "accepted": 3, "rejected": 1, "ok": true}
+no ok on plain
