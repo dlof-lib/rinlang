@@ -15,7 +15,7 @@
 → `enums.md` (`enum`) → `objects.md` (`class`/`struct`/`.object()`/`@Object`).
 
 وتتوسّع `let` نفسها في [`let-plus.md`](./let-plus.md) (تفكيك وحراسة وتبديل). بعدها [`living-variables.md`](./living-variables.md): المتغيرات الحيّة
-(`stone`/`gauge`/`tape`/`lens`/`fuse`/`bell`/`trial`) — إضافة اختيارية فوق `let`. ويخدم `if` نوعان إضافيان: [`base-accept.md`](./base-accept.md) (`base` مرجع يُقاس منه، `accept` حارس قبول).
+(`stone`/`gauge`/`tape`/`lens`/`fuse`/`bell`/`trial`) — إضافة اختيارية فوق `let`. ويخدم `if` نوعان إضافيان: [`base-accept.md`](./base-accept.md) (`base` مرجع يُقاس منه، `accept` حارس قبول) و[`pre-post.md`](./pre-post.md) (`pre` ما قبل الكتابة، `post` ما بعدها).
 
 هذه الستة تكفي وحدها لقراءة/كتابة أي برنامج Rin إجرائي عادي.
 
