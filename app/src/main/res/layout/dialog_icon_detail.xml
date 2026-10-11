@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- تفاصيل أيقونة: معاينة كبيرة، الاسم والأسماء البديلة، ومعاينة السطر الذي سيُدرَج في المحرر. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:gravity="center_horizontal"
+    android:orientation="vertical"
+    android:padding="20dp">
+
+    <FrameLayout
+        android:layout_width="96dp"
+        android:layout_height="96dp"
+        android:background="@drawable/bg_icon_preview_box">
+
+        <com.dlof.rinlang.widgets.IndsinIconView
+            android:id="@+id/iconBig"
+            android:layout_width="56dp"
+            android:layout_height="56dp"
+            android:layout_gravity="center"
+            android:importantForAccessibility="no" />
+    </FrameLayout>
+
+    <TextView
+        android:id="@+id/tvDetailName"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="14dp"
+        android:textColor="@color/rin_on_toolbar"
+        android:textDirection="ltr"
+        android:textSize="18sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/tvDetailAliases"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:textColor="@color/rin_editor_hint"
+        android:textSize="12sp" />
+
+    <TextView
+        android:id="@+id/tvDetailSnippet"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="14dp"
+        android:background="@drawable/bg_chip_meta"
+        android:fontFamily="monospace"
+        android:padding="12dp"
+        android:textColor="@color/syntax_builtin"
+        android:textDirection="ltr"
+        android:textSize="12sp" />
+</LinearLayout>
