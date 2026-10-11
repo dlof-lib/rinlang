@@ -30,18 +30,45 @@ data class BuiltinLibraryInfo(
     val sampleFunctions: String,
     /** أيقونة العرض في شاشة "المكتبات" — افتراضياً شارة "rin+" العامة؛ لبعض المكتبات
      *  أيقونة مخصّصة تعبّر عن فكرتها (مثل movingmask أدناه). */
-    val iconRes: Int = R.drawable.ic_rin_stack,
-    /** خلفية البلاطة خلف الأيقونة — الافتراضي التدرّج الأخضر؛ لمكتبات الذكاء الاصطناعي تدرّج مميّز لكل مكتبة. */
-    val tileRes: Int = R.drawable.bg_icon_gradient_green
-)
+    val iconRes: Int = R.drawable.ic_rin_stack
+) {
+    /** فئة الفلترة في شاشة "المكتبات" (مشتقّة من الاسم، فلا تتغيّر بنية السجل). */
+    val category: LibCategory get() = BuiltinLibraries.categoryOf(displayName)
+}
+
+/** فئات فلترة المكتبات المدمجة (شرائح أعلى شاشة "المكتبات"). */
+enum class LibCategory(val labelRes: Int) {
+    UI(R.string.libs_filter_ui),
+    DATA(R.string.libs_filter_data),
+    LANGUAGE(R.string.libs_filter_language),
+    GAMES(R.string.libs_filter_games),
+    SYSTEM(R.string.libs_filter_system)
+}
 
 /**
  * سجل مرجعي (يطابق `embeddedRinLibraries()` في rin_stdlib_libs.h) بالمكتبات القياسية
- * المدمجة داخل المفسّر نفسه، وتعمل @import عليها فوراً على أي جهاز دون رفعها.
+ * الاثنتين والعشرين المدمجة داخل المفسّر نفسه، وتعمل @import عليها فوراً على أي جهاز دون رفعها.
  * هذا السجل نصي فقط (للعرض والإدراج السريع في المحرر)، ولا يكرر شيفرة المكتبات نفسها.
  */
 object BuiltinLibraries {
+    /** اسم المكتبة المميّزة (بطاقتها الكبيرة أعلى الشاشة + متصفّح الأيقونات). */
+    const val FEATURED = "indsinicons"
+
+    fun categoryOf(displayName: String): LibCategory = when (displayName) {
+        "indsinicons", "inputkit", "rinxg" -> LibCategory.UI
+        "oglang", "ringo", "langkit", "astwalk", "envkit", "lexkit", "parsekit", "runkit", "bob" -> LibCategory.LANGUAGE
+        "movingmask", "physics" -> LibCategory.GAMES
+        "syskit", "ghpublish", "passkit", "passkitlang", "passkitcrypt", "passkitdb" -> LibCategory.SYSTEM
+        else -> LibCategory.DATA
+    }
+
     val all: List<BuiltinLibraryInfo> = listOf(
+        BuiltinLibraryInfo(
+            "lib/indsinicons.og.rin", "indsinicons",
+            "مكتبة أيقونات متجهية (SVG) لواجهات indsin: 187 أيقونة مرسومة على شبكة 24×24 مع بحث وأسماء بديلة وتوليد SVG جاهز",
+            "ic_svg • ic_search • ic_has • ic_snippet • ic_html • ic_dataUri • ic_sprite • ic_register • ic_audit",
+            iconRes = R.drawable.ic_lib_indsinicons
+        ),
         BuiltinLibraryInfo(
             "lib/math.og.rin", "math",
             "امتدادات رياضية فوق stdlib الأساسية",
@@ -192,27 +219,6 @@ object BuiltinLibraries {
             "lib/passkitdb.og.rin", "passkitdb",
             "Database and container layer for the Passkit family over RCSQL: CRUD, transactions, migrations, encrypted fields and blind index, users, sessions, API keys, hash-chained audit log, rate limit, 2FA and Rin container linking",
             "pdInsert • pdFind • pdInsertEnc • pdFindByBlind • pdUserCreate • pdUserLogin • pdSessionCreate • pdApiKeyCreate • pdAuditLog • pdContSeal"
-        ),
-        BuiltinLibraryInfo(
-            "lib/rindf.og.rin", "rindf",
-            "إطار بيانات (DataFrame) لتحليل البيانات: CSV بالاقتباس والأنواع، تصفية، فرز، تجميع، ربط، قيم مفقودة، ملخصات إحصائية",
-            "df_read_csv • df_filter • df_where • df_sort • df_groupby • df_join • df_describe • df_fill_mean • df_one_hot • df_to_matrix",
-            iconRes = R.drawable.ic_lib_rindf,
-            tileRes = R.drawable.bg_icon_gradient_teal
-        ),
-        BuiltinLibraryInfo(
-            "lib/rinml.og.rin", "rinml",
-            "تعلّم آلة بلغة Rin الخالصة: انحدار خطي/لوجستي، kNN، k-means، Naive Bayes، شجرة قرار، شبكة عصبية MLP، مصنّف نصوص عربي، مقاييس وتحقق متقاطع",
-            "ml_linreg_fit • ml_logreg_fit • ml_knn_fit • ml_kmeans_fit • ml_tree_fit • ml_mlp_init • ml_mlp_fit • ml_textnb_fit • ml_kfold • ml_save",
-            iconRes = R.drawable.ic_lib_rinml,
-            tileRes = R.drawable.bg_icon_gradient_violet
-        ),
-        BuiltinLibraryInfo(
-            "lib/rinai.og.rin", "rinai",
-            "مساحات عمل ذكاء اصطناعي داخل حاويات Rin: بيانات ونماذج وسجل تجارب، AutoML، أنابيب، حفظ/تحميل وجسر HTTP لنماذج مُستضافة",
-            "ai_workspace • ai_put_dataset • ai_auto_classify • ai_auto_regress • ai_put_model • ai_predict • ai_run_pipeline • ai_save_workspace • ai_remote_predict",
-            iconRes = R.drawable.ic_lib_rinai,
-            tileRes = R.drawable.bg_icon_gradient_indigo
         )
     )
 }
