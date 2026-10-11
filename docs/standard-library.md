@@ -132,3 +132,6 @@ Rin
 - [`storage.md`](./storage.md) — التخزين الدائم.
 - `app/src/main/cpp/rin_interpreter.cpp` (`registerNatives()`) — القائمة الكاملة
   الموثوقة لكل دالة أصلية مدمجة في المفسِّر.
+
+## الذكاء الاصطناعي وتحليل البيانات (RinML / RinDF / RinAI)
+`lib/rindf.og.rin` (إطار بيانات) · `lib/rinml.og.rin` (تعلّم آلة وشبكات عصبية) · `lib/rinai.og.rin` (مساحات عمل داخل الحاويات وAutoML). التفاصيل في [rinml.md](rinml.md).
