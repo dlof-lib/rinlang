@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- بلاطة أيقونة واحدة في شبكة المتصفّح. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_margin="4dp"
+    android:background="@drawable/bg_icon_tile"
+    android:clickable="true"
+    android:focusable="true"
+    android:gravity="center_horizontal"
+    android:orientation="vertical"
+    android:paddingHorizontal="4dp"
+    android:paddingTop="14dp"
+    android:paddingBottom="8dp">
+
+    <com.dlof.rinlang.widgets.IndsinIconView
+        android:id="@+id/iconView"
+        android:layout_width="30dp"
+        android:layout_height="30dp"
+        android:importantForAccessibility="no" />
+
+    <TextView
+        android:id="@+id/tvIconName"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:ellipsize="end"
+        android:gravity="center"
+        android:maxLines="1"
+        android:textColor="@color/rin_editor_hint"
+        android:textDirection="ltr"
+        android:textSize="10sp" />
+</LinearLayout>
