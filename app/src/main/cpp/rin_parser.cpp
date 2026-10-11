@@ -192,8 +192,11 @@ StmtPtr Parser::declaration() {
     if (check(TokenType::IDENT) && checkNext(TokenType::IDENT)) {
         const std::string& kw = peek().lexeme;
         if (kw == "stone" || kw == "gauge" || kw == "tape" || kw == "lens" || kw == "fuse") return liveDeclaration();
+        // عائلة الشروط (docs/base-accept.md): base/accept + inc/dec/rebase/rewind — كلها كلمات سياقية بنفس القاعدة.
+        if (kw == "base" || kw == "accept") return liveDeclaration();
         if (kw == "bell") return bellDeclaration();
-        if (kw == "undo" || kw == "redo" || kw == "rearm" || kw == "unbell") return liveActionStatement();
+        if (kw == "undo" || kw == "redo" || kw == "rearm" || kw == "unbell" ||
+            kw == "inc" || kw == "dec" || kw == "rebase" || kw == "rewind") return liveActionStatement();
     }
     if (check(TokenType::IDENT) && peek().lexeme == "trial" && checkNext(TokenType::LBRACE)) return trialStatement();
     if (check(TokenType::IDENT) && peek().lexeme == "abort" && checkNext(TokenType::SEMICOLON)) return liveActionStatement();
@@ -699,7 +702,8 @@ StmtPtr Parser::liveDeclaration() {
     st->name = name.lexeme;
     st->line = name.line;
     st->kind = kind == "stone" ? LiveKind::Stone : kind == "gauge" ? LiveKind::Gauge
-             : kind == "tape" ? LiveKind::Tape : kind == "lens" ? LiveKind::Lens : LiveKind::Fuse;
+             : kind == "tape" ? LiveKind::Tape : kind == "lens" ? LiveKind::Lens
+             : kind == "base" ? LiveKind::Base : kind == "accept" ? LiveKind::Accept : LiveKind::Fuse;
 
     if (match({TokenType::EQUAL})) {
         st->initializer = expression();
@@ -712,7 +716,12 @@ StmtPtr Parser::liveDeclaration() {
     }
 
     bool sawWithin = false;
-    while (check(TokenType::IDENT)) {
+    // accept يستعمل 'if' و'else' (كلمتان محجوزتان) كمُعدِّلين، فيُسمح بهما هنا لهذا النوع فقط.
+    auto atModifier = [&]() {
+        if (check(TokenType::IDENT)) return true;
+        return st->kind == LiveKind::Accept && (check(TokenType::IF) || check(TokenType::ELSE));
+    };
+    while (atModifier()) {
         const std::string mod = peek().lexeme;
         const Token modTok = peek();
         auto reject = [&](const std::string& why) {
@@ -732,7 +741,7 @@ StmtPtr Parser::liveDeclaration() {
             advance();
             st->hi = expression();
             sawWithin = true;
-        } else if (mod == "strict" || mod == "wrap") {
+        } else if ((mod == "strict" && st->kind != LiveKind::Accept) || mod == "wrap") {
             if (st->kind != LiveKind::Gauge) throw reject("only `gauge` has an out-of-range policy (strict/wrap)");
             if (!st->rangeMode.empty()) throw reject("a gauge takes only one of `strict` / `wrap`");
             advance();
@@ -746,6 +755,30 @@ StmtPtr Parser::liveDeclaration() {
             if (st->kind != LiveKind::Fuse) throw reject("only `fuse` burns after a number of reads");
             advance();
             st->burns = expression();
+        } else if (mod == "to") {
+            if (st->kind != LiveKind::Base) throw reject("only `base` has a goal (`to GOAL`); a gauge range is written `within A to B`");
+            if (st->goal) throw reject("a base takes only one goal");
+            advance();
+            st->goal = expression();
+        } else if (mod == "step") {
+            if (st->kind != LiveKind::Base) throw reject("only `base` has a default step for `inc` / `dec`");
+            if (st->step) throw reject("a base takes only one `step`");
+            advance();
+            st->step = expression();
+        } else if (mod == "if") {
+            if (st->kind != LiveKind::Accept) throw reject("only `accept` has an acceptance rule (`if RULE`)");
+            if (st->rule) throw reject("an accept takes only one rule; join conditions with `and` / `or`");
+            advance();
+            st->rule = expression();
+        } else if (mod == "else") {
+            if (st->kind != LiveKind::Accept) throw reject("only `accept` has a fallback (`else VALUE`)");
+            if (st->fallback) throw reject("an accept takes only one fallback");
+            advance();
+            st->fallback = expression();
+        } else if (mod == "strict") {
+            if (st->kind != LiveKind::Accept) throw reject("only `gauge` and `accept` have a strict mode");
+            advance();
+            st->strictAccept = true;
         } else {
             break; // ليس مُعدِّلاً: اتركه لـ consume(';') ليُبلِّغ الخطأ الطبيعي
         }
@@ -754,6 +787,17 @@ StmtPtr Parser::liveDeclaration() {
         throw errRich(diag::Code::E0012_MissingToken, peek(),
                       "gauge '" + name.lexeme + "' needs a range", "a gauge exists to keep a value inside a range",
                       "add `within <min> to <max>`, e.g. `gauge " + name.lexeme + " = 50 within 0 to 100;`", "'within'");
+    if (st->kind == LiveKind::Accept) {
+        if (!st->rule)
+            throw errRich(diag::Code::E0012_MissingToken, peek(),
+                          "accept '" + name.lexeme + "' needs an acceptance rule", "an accept exists to let in only the values its rule approves",
+                          "add `if <condition>` (the name `" + name.lexeme + "` stands for the candidate value), e.g. `accept " + name.lexeme + " = 20 if " + name.lexeme + " >= 0;`", "'if'");
+        if (st->strictAccept && st->fallback)
+            throw errRich(diag::Code::E0013_InvalidExpression, peek(),
+                          "accept '" + name.lexeme + "' cannot be both `strict` and have an `else` fallback",
+                          "`strict` turns a rejection into an error, while `else` replaces the rejected value",
+                          "keep only one of them", "");
+    }
     if (st->rangeMode.empty()) st->rangeMode = "clamp";
     consume(TokenType::SEMICOLON, "Expected ';' after '" + kind + "' declaration");
     return st;
@@ -814,6 +858,11 @@ StmtPtr Parser::liveActionStatement() {
     if (kw.lexeme != "abort") {
         st->target = consume(TokenType::IDENT, "Expected a variable name after '" + kw.lexeme + "'").lexeme;
         if ((kw.lexeme == "undo" || kw.lexeme == "redo") && !check(TokenType::SEMICOLON)) st->count = expression();
+        // inc/dec: `inc x;` | `inc x by 5;` | `inc x 5;` — الخطوة اختيارية (الافتراضي: step الخاص بـ base أو 1).
+        if ((kw.lexeme == "inc" || kw.lexeme == "dec") && !check(TokenType::SEMICOLON)) {
+            if (check(TokenType::IDENT) && peek().lexeme == "by") advance();
+            st->count = expression();
+        }
     }
     consume(TokenType::SEMICOLON, "Expected ';' after '" + kw.lexeme + "'");
     return st;
