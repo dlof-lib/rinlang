@@ -2,7 +2,9 @@ package com.dlof.rinlang
 
 import android.app.AlertDialog
 import android.content.Intent
+import android.graphics.BitmapFactory
 import android.graphics.Color
+import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.net.Uri
@@ -233,27 +235,65 @@ class ProjectsActivity : RinBaseActivity() {
     private fun showImportPreview(staged: java.io.File, stagedUri: Uri, info: ProjectManager.ProjectPackageInfo) {
         val trust = RinPakActions.trust(this)
         val assessment = trust.assess(info.name, info.signerKeyId, RinPakSigner.deviceKeyId(this))
+        val analysis = info.analysis
+        val incompatible = analysis?.incompatible == true
         val sizeKb = (info.totalBytes + 1023) / 1024
         val summary = buildString {
             append(info.name)
+            if (info.version.isNotBlank()) append("  v").append(info.version)
+            if (info.id.isNotBlank()) append("\n").append(getString(R.string.rinpak_info_id, info.id))
             append("\nالنوع: ").append(info.type.id)
             append("\nالملفات: ").append(info.fileCount)
             if (!info.legacy) append(" (").append(sizeKb).append(" KB)")
-            if (info.version.isNotBlank()) append("\nالإصدار: ").append(info.version)
+            if (info.description.isNotBlank()) append("\n").append(info.description)
             if (info.author.isNotBlank()) append("\nالمؤلف: ").append(info.author)
+            if (info.license.isNotBlank()) append("\nالرخصة: ").append(info.license)
+            if (info.tags.isNotEmpty()) append("\n#").append(info.tags.joinToString(" #"))
             if (info.generator.isNotBlank()) append("\nأُنشئت بواسطة: ").append(info.generator)
             if (info.permissions.isNotEmpty()) append("\nالصلاحيات: ").append(info.permissions.joinToString())
             if (!info.legacy) append("\n").append(trustLine(assessment))
+            // التحليل الأمني (RinPak.analyze): كود أصلي، سكربتات، انتحال اتجاه النص، صلاحيات حساسة، توافق الإصدار.
+            analysis?.findings?.forEach { f ->
+                val line = when (f.code) {
+                    "NATIVE_CODE" -> getString(R.string.rinpak_find_native, f.detail)
+                    "BIDI_SPOOF" -> getString(R.string.rinpak_find_bidi, f.detail)
+                    "EMBEDDED_PACKAGE" -> getString(R.string.rinpak_find_package, f.detail)
+                    "SHELL_SCRIPT" -> getString(R.string.rinpak_find_script, f.detail)
+                    "SENSITIVE_PERMISSIONS" -> getString(R.string.rinpak_find_perms, f.detail)
+                    "NEWER_RIN_REQUIRED" -> getString(R.string.rinpak_find_newer, f.detail)
+                    else -> null // ملاحظات INFO لا تحتاج تنبيهاً (غير موقّعة تظهر في سطر الثقة)
+                }
+                if (line != null) append("\n").append(line)
+            }
             append(if (info.legacy) "\nصيغة قديمة (.rinproj) — بلا بصمات تحقق"
-                   else "\nRinPak v${info.formatVersion} — تم التحقق من سلامة المانيفست")
+                   else "\nRinPak v${info.formatVersion} — تم التحقق من سلامة المانيفست\n" + getString(R.string.rinpak_fingerprint, info.root.take(12)))
         }
-        AlertDialog.Builder(this)
+        val builder = AlertDialog.Builder(this)
             .setTitle(if (assessment.isWarning) getString(R.string.rinpak_warning_title) else getString(R.string.import_project_preview_title))
             .setMessage(summary)
             .setCancelable(false)
-            .setPositiveButton(R.string.rinpak_preview_continue) { _, _ -> showImportChoices(staged, stagedUri, info, assessment) }
             .setNeutralButton(R.string.rinpak_preview_verify) { _, _ -> verifyStaged(staged, stagedUri, info) }
             .setNegativeButton(R.string.cancel) { _, _ -> staged.delete() }
+        // أيقونة الحزمة (موثّقة بالـSHA-256 داخل المانيفست) أو شعار RinPak الافتراضي.
+        val bmp = info.iconPng?.let { BitmapFactory.decodeByteArray(it, 0, it.size) }
+        if (bmp != null) builder.setIcon(BitmapDrawable(resources, bmp)) else builder.setIcon(R.drawable.ic_rinpak_file)
+        // الحزمة التي تتطلب Rin أحدث لا تُستورد (يبقى «تحقق فقط»)؛ والعالية الخطورة تحتاج تأكيداً ثانياً.
+        if (!incompatible) {
+            builder.setPositiveButton(R.string.rinpak_preview_continue) { _, _ ->
+                confirmRiskThen(analysis) { showImportChoices(staged, stagedUri, info, assessment) }
+            }
+        }
+        builder.show()
+    }
+
+    /** الحزم عالية الخطورة تحتاج تأكيداً ثانياً صريحاً قبل المتابعة. */
+    private fun confirmRiskThen(analysis: RinPak.Analysis?, action: () -> Unit) {
+        if (analysis == null || analysis.risk != RinPak.Level.HIGH) { action(); return }
+        AlertDialog.Builder(this)
+            .setTitle(R.string.rinpak_risk_confirm_title)
+            .setMessage(R.string.rinpak_risk_confirm_message)
+            .setPositiveButton(R.string.rinpak_risk_confirm_yes) { _, _ -> action() }
+            .setNegativeButton(R.string.cancel, null)
             .show()
     }
 
