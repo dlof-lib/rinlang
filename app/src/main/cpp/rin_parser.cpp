@@ -1557,6 +1557,7 @@ StmtPtr Parser::objectLiteralStatement(const Token& objectTok) {
     auto stmt = std::make_shared<ObjectLiteralStmt>();
     stmt->id = idTok.lexeme;
     stmt->line = objectTok.line;
+    FrameGuard frame(*this, openBraceIfSameLine(), objectTok.line);
     while (!checkClosingTag() && !isAtEnd()) {
         // container.();  -> يربط الكائن الحالي بسجل عام (لا يُضيف حقلاً باسم "container")
         if (check(TokenType::CONTAINER) && checkNext(TokenType::DOT) &&
@@ -2459,14 +2460,85 @@ std::string Parser::readOptionalName(const std::string& context) {
     throw RinError(std::move(d));
 }
 
+bool Parser::openBraceIfSameLine() {
+    // '{' تُعدّ فتحاً للكتلة فقط إن وقعت على نفس سطر نهاية الترويسة (K&R). '{' على سطر جديد تبقى
+    // عبارة عادية (كتلة محلية) داخل الشكل القديم — فلا يتغيّر معنى أي كود قديم.
+    if (current == 0 || !check(TokenType::LBRACE)) return false;
+    if (peek().line != previous().line) return false;
+    advance();
+    return true;
+}
+
 bool Parser::checkClosingTag() const {
     if (current >= tokens.size()) return false;
-    if (tokens[current].type != TokenType::DOT) return false;
-    if (current + 1 >= tokens.size()) return false;
-    return tokens[current + 1].type == TokenType::END;
+    bool dotEnd = tokens[current].type == TokenType::DOT && current + 1 < tokens.size() &&
+                  tokens[current + 1].type == TokenType::END;
+    if (!frames.empty()) {
+        // داخل كتلة: نُنهي الحلقة عند أي من الإغلاقين، ويقرّر consumeEndTag إن كان مطابقاً لأسلوب الفتح،
+        // فيُعطي المبرمج رسالة دقيقة بدل خطأ "Expected expression" عامّ حين يخلط الأسلوبين.
+        if (tokens[current].type == TokenType::RBRACE) return true;
+        return dotEnd;
+    }
+    return dotEnd;
 }
 
 void Parser::consumeEndTag(const std::string& expectedTag, int openLine, const std::string& openName) {
+    if (!frames.empty() && frames.back().brace) {
+        // كتلة أقواس: '@tag ... {  ...  }'  — الإغلاق '}' حصراً، مع تسمية تحقّق اختيارية '}=name'.
+        if (isAtEnd()) {
+            auto d = err(diag::Code::E0012_MissingToken, peek(),
+                         "`@" + expectedTag + "` opened with `{` at line " + std::to_string(openLine) +
+                         " was never closed");
+            d.diagnostic->withReason("the file ended while this block was still open")
+             .withHint("add a closing `}` for the `@" + expectedTag + "` block that starts at line " + std::to_string(openLine));
+            throw d;
+        }
+        if (!check(TokenType::RBRACE)) {
+            Token bad = peek();
+            auto d = err(diag::Code::E0011_UnexpectedToken, bad,
+                         "`@" + expectedTag + "` opened with `{` at line " + std::to_string(openLine) +
+                         " must be closed with `}`, not a `.end` tag");
+            d.diagnostic->withReason("a block opened with `{` and one opened without it use different closers; "
+                                     "mixing them is rejected so a block can never be closed by the wrong marker")
+             .withHint("replace the `.end/...` tag with `}`");
+            throw d;
+        }
+        advance(); // '}'
+        // ذيل C++ القياسي '};' (مثل class/struct): ';' اختيارية وتُستهلك فقط إن وقعت على نفس سطر '}'.
+        // الشكل الموصى به '};' ويبقى '}' وحدها صالحاً. تُعالَج بعد '=name' الاختياري أدناه أيضاً.
+        auto eatTrailingSemicolon = [&]() {
+            if (check(TokenType::SEMICOLON) && peek().line == previous().line) advance();
+        };
+        if (check(TokenType::EQUAL) && peek().line == previous().line) {
+            Token afterBrace = peek();
+            std::string closingName = readOptionalName("a closing brace (`}=name`)");
+            if (openName.empty() && !closingName.empty()) {
+                auto d = err(diag::Code::E0011_UnexpectedToken, afterBrace,
+                             "closing `}=" + closingName + "` specifies a name, but the opening `@" + expectedTag + "` has none");
+                d.diagnostic->withReason("`@" + expectedTag + "` was opened at line " + std::to_string(openLine) + " with no name")
+                 .withHint("remove `=" + closingName + "` or name the opening block");
+                throw d;
+            }
+            if (!closingName.empty() && closingName != openName) {
+                auto d = err(diag::Code::E0011_UnexpectedToken, afterBrace,
+                             "closing `}=" + closingName + "` does not match the opening name `" + openName + "`");
+                d.diagnostic->withReason("`@" + expectedTag + "=" + openName + "` was opened at line " + std::to_string(openLine))
+                 .withHint("use `}=" + openName + "` instead");
+                throw d;
+            }
+        }
+        eatTrailingSemicolon();
+        return;
+    }
+    if (check(TokenType::RBRACE)) {
+        Token bad = peek();
+        auto d = err(diag::Code::E0011_UnexpectedToken, bad,
+                     "`@" + expectedTag + "` opened at line " + std::to_string(openLine) +
+                     " without `{` must be closed with `.end/" + expectedTag + "` (or `.end;`), not `}`");
+        d.diagnostic->withReason("the block was opened in the `.end` style (no `{` on its header line)")
+         .withHint("either add `{` at the end of the `@" + expectedTag + "` header line, or close it with `.end/" + expectedTag + "`");
+        throw d;
+    }
     // كل رسائل الخطأ أدناه تذكر صراحةً السطر الذي فُتحت فيه الكتلة (openLine)، حتى في ملف كبير
     // بتعشيش عميق يعرف المبرمج فوراً أي '@' بالضبط لم يُغلق أو أُغلق بوسم خاطئ، بدل الاضطرار للبحث
     // يدوياً بين عشرات أسطر '.end/...' المتشابهة.
@@ -2547,6 +2619,7 @@ std::shared_ptr<ViewStmt> Parser::viewDeclaration() {
     s->kindTag = kindTok.lexeme;
     s->line = viewTok.line;
 
+    FrameGuard frame(*this, openBraceIfSameLine(), viewTok.line);
     while (!checkClosingTag() && !isAtEnd()) {
         // كتلة @view متداخلة -> ابن Strand
         if (check(TokenType::AT) && checkNext(TokenType::IDENT) &&
@@ -2600,6 +2673,7 @@ std::shared_ptr<ViewStmt> Parser::elementDeclaration() {
     s->kindTag = kindTok.lexeme;
     s->role = UiRole::ELEMENT;
     s->line = openTok.line;
+    FrameGuard frame(*this, openBraceIfSameLine(), openTok.line);
     while (!checkClosingTag() && !isAtEnd()) {
         if (check(TokenType::AT) && checkNext(TokenType::IDENT) && tokens[current + 1].lexeme == "element") {
             advance(); advance(); s->children.push_back(elementDeclaration()); continue;
@@ -2635,6 +2709,7 @@ std::shared_ptr<ViewStmt> Parser::loopCanvasDeclaration() {
         s->kindTag = "Column";
         s->name = readOptionalName("a `@loop` canvas");
     }
+    FrameGuard frame(*this, openBraceIfSameLine(), openTok.line);
     while (!checkClosingTag() && !isAtEnd()) {
         if (check(TokenType::AT) && checkNext(TokenType::IDENT) && tokens[current + 1].lexeme == "element") {
             advance(); advance(); s->children.push_back(elementDeclaration()); continue;
@@ -2712,6 +2787,7 @@ StmtPtr Parser::themeDeclaration() {
     s->name = nameTok.lexeme;
     s->line = themeTok.line;
 
+    FrameGuard frame(*this, openBraceIfSameLine(), themeTok.line);
     while (!checkClosingTag() && !isAtEnd()) {
         if (!check(TokenType::AT) && checkNext(TokenType::EQUAL)) {
             Token key = advance();
@@ -2835,6 +2911,7 @@ StmtPtr Parser::makeUnitBlock() {
     s->line = atTok.line;
     s->kind = ContainerKind::EVERYTHING;
 
+    FrameGuard frame(*this, openBraceIfSameLine(), atTok.line);
     while (!checkClosingTag() && !isAtEnd()) {
         if (check(TokenType::IDENT)) {
             std::string word = peek().lexeme;
@@ -2948,6 +3025,7 @@ StmtPtr Parser::atBlock() {
     PolicyAccumulator policyAccum;
     bool familyTag = isContainerFamilyTag(tag);
     bool groupTag = (tag == "Containers.Group");
+    FrameGuard frame(*this, openBraceIfSameLine(), atTok.line);
     while (!checkClosingTag() && !isAtEnd()) {
         if ((familyTag || groupTag) && tryParsePolicyDirective(policyAccum)) continue;
         auto st = declaration();
@@ -3134,6 +3212,7 @@ StmtPtr Parser::sectionBlock() {
     Token secTok = previous();
     std::string name = readOptionalName("a `Section` block");
     std::vector<StmtPtr> body;
+    FrameGuard frame(*this, openBraceIfSameLine(), secTok.line);
     while (!checkClosingTag() && !isAtEnd()) body.push_back(declaration());
     consumeEndTag("Section", secTok.line, name);
     auto s = std::make_shared<SectionStmt>();
@@ -3144,6 +3223,7 @@ StmtPtr Parser::sectionBlock() {
 StmtPtr Parser::translationsBlock() {
     Token tTok = previous();
     std::vector<StmtPtr> body;
+    FrameGuard frame(*this, openBraceIfSameLine(), tTok.line);
     while (!checkClosingTag() && !isAtEnd()) body.push_back(declaration());
     consumeEndTag("Translations", tTok.line, "");
     auto s = std::make_shared<TranslationsStmt>();
