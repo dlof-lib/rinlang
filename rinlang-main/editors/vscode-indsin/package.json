@@ -1,0 +1,64 @@
+{
+  "name": "indsin-language",
+  "displayName": "indsin — UI language support",
+  "description": "Syntax highlighting, snippets and file icon for indsin (.indsin) UI documents from the Rin language.",
+  "version": "1.0.0",
+  "publisher": "rinlang",
+  "license": "MIT",
+  "icon": "images/icon.png",
+  "engines": { "vscode": "^1.60.0" },
+  "categories": ["Programming Languages", "Snippets"],
+  "keywords": ["indsin", "rin", "ui", "layout", "syntax"],
+  "contributes": {
+    "languages": [
+      {
+        "id": "indsin",
+        "aliases": ["indsin", "Indsin"],
+        "extensions": [".indsin"],
+        "configuration": "./language-configuration.json",
+        "icon": { "light": "./images/file-icon.svg", "dark": "./images/file-icon.svg" }
+      },
+      {
+        "id": "rin-embedded",
+        "aliases": ["Rin (embedded grammar)"],
+        "extensions": []
+      }
+    ],
+    "grammars": [
+      { "language": "indsin", "scopeName": "source.indsin", "path": "./syntaxes/indsin.tmLanguage.json" },
+      { "scopeName": "source.rin", "path": "./syntaxes/rin.tmLanguage.json" }
+    ],
+    "snippets": [
+      { "language": "indsin", "path": "./snippets/indsin.code-snippets" }
+    ],
+    "configurationDefaults": {
+      "[indsin]": {
+        "editor.tabSize": 4,
+        "editor.insertSpaces": true,
+        "editor.semanticHighlighting.enabled": false
+      },
+      "editor.tokenColorCustomizations": {
+        "[*Dark*]": {
+          "textMateRules": [
+            { "scope": "support.class.element.indsin", "settings": { "foreground": "#F9E2AF", "fontStyle": "bold" } },
+            { "scope": "variable.parameter.attribute.indsin", "settings": { "foreground": "#89DCEB" } },
+            { "scope": "storage.modifier.responsive.indsin", "settings": { "foreground": "#F5C2E7" } },
+            { "scope": "constant.language.token.indsin", "settings": { "foreground": "#F2CDCD" } },
+            { "scope": "constant.other.color.rgb-value.indsin", "settings": { "foreground": "#F5C2E7" } },
+            { "scope": "entity.name.tag.view-name.indsin", "settings": { "foreground": "#94E2D5" } }
+          ]
+        },
+        "[*Light*]": {
+          "textMateRules": [
+            { "scope": "support.class.element.indsin", "settings": { "foreground": "#8A6D00", "fontStyle": "bold" } },
+            { "scope": "variable.parameter.attribute.indsin", "settings": { "foreground": "#00668C" } },
+            { "scope": "storage.modifier.responsive.indsin", "settings": { "foreground": "#A0348A" } },
+            { "scope": "constant.language.token.indsin", "settings": { "foreground": "#B33A3A" } },
+            { "scope": "constant.other.color.rgb-value.indsin", "settings": { "foreground": "#A0348A" } },
+            { "scope": "entity.name.tag.view-name.indsin", "settings": { "foreground": "#00796B" } }
+          ]
+        }
+      }
+    }
+  }
+}
