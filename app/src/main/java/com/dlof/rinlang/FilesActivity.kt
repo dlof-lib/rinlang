@@ -174,8 +174,27 @@ class FilesActivity : RinBaseActivity() {
         when {
             ProjectManager.isImageFile(file.name) || ProjectManager.isVideoFile(file.name) ->
                 openInMediaPreview(file)
+            // حزمة RinPak داخل المشروع: معاينة/استيراد داخل التطبيق (لا نص خام ولا تطبيق خارجي).
+            file.name.endsWith(RinPak.EXTENSION, ignoreCase = true) || file.name.endsWith(".rinproj", ignoreCase = true) ->
+                openRinPak(file)
             ProjectManager.isBinaryFile(file.name) -> openExternally(file)
             else -> openInEditor(file)
+        }
+    }
+
+    /** يمرّر ملف الحزمة إلى شاشة المشاريع (نفس مسار ACTION_VIEW الخارجي): معاينة ← تحقق ← استيراد. */
+    private fun openRinPak(file: RinFile) {
+        try {
+            val uri: Uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", file.file)
+            startActivity(
+                Intent(this, ProjectsActivity::class.java).apply {
+                    action = Intent.ACTION_VIEW
+                    data = uri
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+            )
+        } catch (e: Throwable) {
+            Toast.makeText(this, "${getString(R.string.file_open_error)}: ${e.message}", Toast.LENGTH_LONG).show()
         }
     }
 
