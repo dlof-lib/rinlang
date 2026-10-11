@@ -148,7 +148,13 @@ object RinSyntaxHighlighter {
         "container.make.barcode", "container.make.file", "container.artifact.info",
         "make.media.tools", "make.video", "make.video.info", "make.video.thumbnail", "make.video.stop",
         "make.audio", "make.audio.info", "make.audio.stop", "make.api", "make.api.download", "make.api.clearCache",
-        "make.image.removeBg", "make.image.text", "make.ocr"
+        "make.image.removeBg", "make.image.text", "make.ocr",
+        // مفهوم time (docs/TIME.md)
+        "time", "time.add", "time.after", "time.ago", "time.before", "time.between", "time.config", "time.daysIn",
+        "time.diff", "time.elapsed", "time.endOf", "time.format", "time.fromHijri", "time.hijri", "time.human",
+        "time.is", "time.isLeap", "time.max", "time.measure", "time.min", "time.ms", "time.now", "time.of",
+        "time.parse", "time.range", "time.same", "time.sleep", "time.span", "time.startOf", "time.stopwatch",
+        "time.sub", "time.unix", "time.utc", "time.valid", "time.zone", "time.zones"
     )
 
     // نص محاط بعلامتي تنصيص مع دعم التهريب (\" \\ \n ...) بنفس أسلوب rin_lexer.cpp::scanString.
