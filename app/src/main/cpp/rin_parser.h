@@ -142,6 +142,19 @@ private:
     StmtPtr viewPrintObjectStatement(); // view.print/object(expr);  (يُستدعى بعد استهلاك 'view' '.' 'print')
     StmtPtr logStatement(const Token& printTok); // print.log(...) / print.log.info/warn/error/debug(...)  (يُستدعى بعد استهلاك 'print' '.' 'log')
     StmtPtr imageStatement(const Token& printTok); // print.image(path, caption=, width=, if=)  (يُستدعى بعد استهلاك 'print' '.' 'image')
+    // ── إطارات الكتل (Block Frames) ─────────────────────────────────────────────────────────
+    // كل كتلة '@...'/'.object(...)' تفتح "إطاراً" يسجّل طريقة إغلاقها: brace=true إن فُتحت بـ '{' على
+    // نفس سطر الترويسة (تُغلق بـ '}')، وإلا الشكل القديم ('.end/x' أو '.end;'). تحديد الطريقة عند
+    // الفتح وحدها يمنع خلط الأسلوبين داخل كتلة واحدة ويمنع أي التباس مع '{ }' الخاصة بالدوال/الشروط.
+    struct BlockFrame { bool brace; int openLine; };
+    std::vector<BlockFrame> frames;
+    struct FrameGuard { // RAII: يضمن سحب الإطار حتى عند رمي خطأ نحوي (لا يبقى إطار يتيم بعد synchronize)
+        Parser& p; bool brace;
+        FrameGuard(Parser& parser, bool b, int line) : p(parser), brace(b) { p.frames.push_back({b, line}); }
+        ~FrameGuard() { p.frames.pop_back(); }
+        FrameGuard(const FrameGuard&) = delete; FrameGuard& operator=(const FrameGuard&) = delete;
+    };
+    bool openBraceIfSameLine();        // يستهلك '{' إن وقعت على نفس سطر آخر توكن في الترويسة، ويُرجع هل استُهلكت
     int loopDepth = 0; // >0 داخل جسم حلقة while؛ يُستخدم للتحقق من صحة break/continue وقت التحليل
     int goalDepth = 0; // >0 داخل جسم 'goal { .. }'؛ يُستخدم للتحقق من صحة 'achieve' وقت التحليل
     std::shared_ptr<BlockStmt> block();
@@ -153,7 +166,7 @@ private:
     // الاسم (مثلاً "a `@container` block", "an `@element` name", "a closing tag") حتى تحمل
     // رسالة الخطأ E0012 عند غياب الاسم بعد '=' سياقاً دقيقاً بدل رسالة عامة واحدة للجميع.
     std::string readOptionalName(const std::string& context = "this");
-    bool checkClosingTag() const;      // هل التوكن الحالي بداية ".end/..."
+    bool checkClosingTag() const;      // هل التوكن الحالي إغلاقٌ للإطار الحالي: ".end/..." (قديم) أو "}" (كتلة أقواس)
     void consumeEndTag(const std::string& expectedTag, int openLine, const std::string& openName = ""); // يستهلك ويتحقق من ".end/<expectedTag>" أو اختصارها ".end;"
 
     // RCS-1.0 §3.2 Lifecycle: on init/mount/update/destroy/error(params) { body }  (يُستدعى بعد
