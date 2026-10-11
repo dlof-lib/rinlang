@@ -18393,2297 +18393,534 @@ fun iwInfo() {
     };
 }
 )INDSINWEBOGRIN";
-static const char* kLib_rindf_og_rin = R"RINDFOGRIN(
+
+static const char* kLib_indsinicons_og_rin = R"INDSINICONSOGRIN(
 // ============================================================================
-//  lib/rindf.og.rin — RinDF: إطار بيانات (DataFrame) لتحليل البيانات
+// lib/indsinicons.og.rin — IndsinIcons: مكتبة أيقونات متجهية (SVG) لمحرّك indsin
+// ============================================================================
+// 187 أيقونة مرسومة من الصفر على شبكة 24×24 (خط سماكته 2، أطراف دائرية)، كل أيقونة مسار SVG
+// واحد. مكتوبة بالكامل بلغة Rin؛ تُولَّد البيانات من tools/icons/icons_def.py (لا تعدّلها يدوياً).
 //
-//  @version 1.0.0
-//  @category data
-//  @prefix df_
+//   @import "lib/indsinicons.og.rin";
 //
-//  التمثيل (قاموس عادي قابل للتحويل إلى JSON):
-//      {"names": ["a","b"], "cols": {"a": [1,2,3], "b": ["x","y","z"]}}
-//  تخزين عمودي: الإحصاءات والتحويلات على الأعمدة سريعة وبسيطة.
-//  القيمة المفقودة = nil.  كل الدوال "غير مدمِّرة": تعيد إطاراً جديداً.
+//   print ic_svg("home", nil);                                  // <svg ...> جاهز للصق في html=
+//   print ic_svg("heart", {"size": 32, "color": "#e11d48", "filled": true});
+//   print ic_has("gear");                                       // true  (اسم بديل لـ settings)
+//   print ic_search("arrow");                                   // كل الأيقونات التي تحوي arrow
+//   ic_register("my-logo", "brand", "M4 4H20V20H4Z");           // أيقونتك الخاصة
 //
-//  الإنشاء:     df_from_records · df_from_rows · df_from_map · df_parse_csv · df_read_csv
-//  الإخراج:     df_to_records · df_to_rows · df_to_csv · df_write_csv · df_format · df_print
-//  الاستكشاف:   df_shape · df_names · df_col · df_head · df_tail · df_describe · df_value_counts
-//  التحويل:     df_select · df_drop · df_rename · df_filter · df_where · df_with_col · df_map_col · df_sort
-//  التجميع:     df_groupby · df_groupby_multi · df_join
-//  القيم المفقودة: df_isna · df_dropna · df_fillna · df_fill_mean
-//  تحضير ML:    df_to_matrix · df_standardize · df_minmax · df_one_hot · df_encode_labels · df_corr
+// الأقسام (كل الدوال بادئتها ic_):
+//   1) الفهرس        ic_count · ic_names · ic_has · ic_resolve · ic_aliasesOf · ic_category
+//   2) الفئات        ic_categories · ic_categoryName · ic_byCategory
+//   3) البحث         ic_search
+//   4) التوليد       ic_path · ic_svg · ic_svgn · ic_html · ic_dataUri · ic_sprite · ic_symbol
+//   5) تكامل indsin  ic_snippet · ic_audit
+//   6) التوسعة       ic_register · ic_validPath
 //
-//  استيراد:  @import "lib/rindf.og.rin";
-//
-//  ملاحظة: كلمات مثل row / text / state / style كلمات سياقية في Rin — لا تبدأ عبارة بها
-//  كاسم متغيّر (استعملنا rec / rw / txt بدلاً منها).
+// ملاحظة: دوال Rin تتطلب عدداً مطابقاً من الوسائط؛ مرّر nil لـ opts الاختيارية.
+// خيارات opts: size (24) · color ("currentColor") · stroke (2) · filled (false) · title (nil) · class (nil)
 // ============================================================================
 
-// ---------------------------------------------------------------------------
-//  أدوات داخلية
-// ---------------------------------------------------------------------------
-fun df_is_missing_token(s) {
-    if (s == "" or s == "NA" or s == "N/A" or s == "null" or s == "NULL" or s == "NaN" or s == "nan" or s == "None") { return true; }
-    return false;
+let __ic_version = "1.0.0";
+
+let __ic = {
+    "activity": ["status", "M3 12H7L10 4L14 20L17 12H21"],
+    "align-center": ["design", "M4 6H20M7 10H17M4 14H20M7 18H17"],
+    "align-left": ["design", "M4 6H20M4 10H14M4 14H20M4 18H14"],
+    "align-right": ["design", "M4 6H20M10 10H20M4 14H20M10 18H20"],
+    "archive": ["files", "M4 4H20A1 1 0 0 1 21 5V8A1 1 0 0 1 20 9H4A1 1 0 0 1 3 8V5A1 1 0 0 1 4 4ZM5 9V19A1 1 0 0 0 6 20H18A1 1 0 0 0 19 19V9M10 13H14"],
+    "arrow-down": ["arrows", "M12 5V19M6 13L12 19L18 13"],
+    "arrow-down-left": ["arrows", "M17 7L7 17M7 8V17H16"],
+    "arrow-down-right": ["arrows", "M7 7L17 17M17 8V17H8"],
+    "arrow-left": ["arrows", "M19 12H5M11 6L5 12L11 18"],
+    "arrow-right": ["arrows", "M5 12H19M13 6L19 12L13 18"],
+    "arrow-up": ["arrows", "M12 19V5M6 11L12 5L18 11"],
+    "arrow-up-left": ["arrows", "M17 17L7 7M16 7H7V16"],
+    "arrow-up-right": ["arrows", "M7 17L17 7M8 7H17V16"],
+    "at-sign": ["comms", "M8 12A4 4 0 1 0 16 12A4 4 0 1 0 8 12ZM16 8V13A2.5 2.5 0 0 0 21 13V12A9 9 0 1 0 17 19.5"],
+    "award": ["status", "M6 9A6 6 0 1 0 18 9A6 6 0 1 0 6 9ZM8.5 14L7 21L12 18.5L17 21L15.5 14"],
+    "battery": ["design", "M4 7H18A2 2 0 0 1 20 9V15A2 2 0 0 1 18 17H4A2 2 0 0 1 2 15V9A2 2 0 0 1 4 7ZM22 11V13M6 10.5H14V13.5H6Z"],
+    "bell": ["status", "M6 10A6 6 0 0 1 18 10C18 14 19 16 20 17H4C5 16 6 14 6 10ZM10 20.5A2.2 2.2 0 0 0 14 20.5"],
+    "bell-off": ["status", "M6 10A6 6 0 0 1 18 10C18 14 19 16 20 17H4C5 16 6 14 6 10ZM10 20.5A2.2 2.2 0 0 0 14 20.5M4 4L20 20"],
+    "bold": ["design", "M7 4H13A4 4 0 0 1 13 12H7ZM7 12H14A4 4 0 0 1 14 20H7Z"],
+    "book": ["dev", "M3 5A1 1 0 0 1 4 4H10A2 2 0 0 1 12 6V20A2 2 0 0 0 10 19H4A1 1 0 0 1 3 18ZM21 5A1 1 0 0 0 20 4H14A2 2 0 0 0 12 6V20A2 2 0 0 1 14 19H20A1 1 0 0 0 21 18Z"],
+    "bookmark": ["status", "M6 4H18V21L12 17L6 21Z"],
+    "braces": ["dev", "M9 4C6.5 4 6 5 6 7V9C6 10.5 5 12 3.5 12C5 12 6 13.5 6 15V17C6 19 6.5 20 9 20M15 4C17.5 4 18 5 18 7V9C18 10.5 19 12 20.5 12C19 12 18 13.5 18 15V17C18 19 17.5 20 15 20"],
+    "bug": ["dev", "M12 8C14.5 8 16 9.5 16 12V15A4 4 0 0 1 8 15V12C8 9.5 9.5 8 12 8ZM9.5 6.5A2.5 2.5 0 0 1 14.5 6.5M8 12H4M16 12H20M8 16H4.5M16 16H19.5M8.5 9L5.5 6.5M15.5 9L18.5 6.5M12 12V19"],
+    "calendar": ["files", "M6 5H18A2 2 0 0 1 20 7V18A2 2 0 0 1 18 20H6A2 2 0 0 1 4 18V7A2 2 0 0 1 6 5ZM4 10H20M8 3V7M16 3V7"],
+    "camera": ["media", "M4 8H7L9 5H15L17 8H20A1 1 0 0 1 21 9V19A1 1 0 0 1 20 20H4A1 1 0 0 1 3 19V9A1 1 0 0 1 4 8ZM8.5 13.5A3.5 3.5 0 1 0 15.5 13.5A3.5 3.5 0 1 0 8.5 13.5Z"],
+    "cart": ["dev", "M3 4H6L8 15H18L20 7H7M8.2 19A1.3 1.3 0 1 0 10.8 19A1.3 1.3 0 1 0 8.2 19ZM15.7 19A1.3 1.3 0 1 0 18.3 19A1.3 1.3 0 1 0 15.7 19Z"],
+    "chart-bar": ["charts", "M5 11H7A1 1 0 0 1 8 12V19A1 1 0 0 1 7 20H5A1 1 0 0 1 4 19V12A1 1 0 0 1 5 11ZM11 4H13A1 1 0 0 1 14 5V19A1 1 0 0 1 13 20H11A1 1 0 0 1 10 19V5A1 1 0 0 1 11 4ZM17 8H19A1 1 0 0 1 20 9V19A1 1 0 0 1 19 20H17A1 1 0 0 1 16 19V9A1 1 0 0 1 17 8Z"],
+    "chart-line": ["charts", "M3 3V21H21M7 15L11 10L14 13L20 6"],
+    "chart-pie": ["charts", "M12 3A9 9 0 1 0 21 12H12ZM15 3.5A9 9 0 0 1 20.5 9H15Z"],
+    "check": ["actions", "M5 12.5L10 17.5L19 7"],
+    "check-circle": ["actions", "M3 12A9 9 0 1 0 21 12A9 9 0 1 0 3 12ZM8 12.5L11 15.5L16 9"],
+    "chevron-down": ["arrows", "M5 9L12 16L19 9"],
+    "chevron-left": ["arrows", "M15 5L8 12L15 19"],
+    "chevron-right": ["arrows", "M9 5L16 12L9 19"],
+    "chevron-up": ["arrows", "M5 15L12 8L19 15"],
+    "chevrons-down": ["arrows", "M6 5L12 11L18 5M6 13L12 19L18 13"],
+    "chevrons-left": ["arrows", "M11 6L5 12L11 18M19 6L13 12L19 18"],
+    "chevrons-right": ["arrows", "M13 6L19 12L13 18M5 6L11 12L5 18"],
+    "chevrons-up": ["arrows", "M6 11L12 5L18 11M6 19L12 13L18 19"],
+    "circle": ["charts", "M3 12A9 9 0 1 0 21 12A9 9 0 1 0 3 12Z"],
+    "clipboard": ["actions", "M7 5H17A2 2 0 0 1 19 7V19A2 2 0 0 1 17 21H7A2 2 0 0 1 5 19V7A2 2 0 0 1 7 5ZM9 5V4A1 1 0 0 1 10 3H14A1 1 0 0 1 15 4V5M9 12H15M9 16H13"],
+    "clock": ["files", "M3 12A9 9 0 1 0 21 12A9 9 0 1 0 3 12ZM12 7V12L15.5 14"],
+    "close": ["actions", "M6 6L18 18M18 6L6 18"],
+    "cloud": ["comms", "M7 18A4.5 4.5 0 0 1 6.5 9A6 6 0 0 1 18 8.5A4.8 4.8 0 0 1 17.5 18Z"],
+    "cloud-download": ["comms", "M7 17A4.5 4.5 0 0 1 6.5 8A6 6 0 0 1 18 7.5A4.8 4.8 0 0 1 18 17M12 12V20M9 17L12 20L15 17"],
+    "cloud-upload": ["comms", "M7 17A4.5 4.5 0 0 1 6.5 8A6 6 0 0 1 18 7.5A4.8 4.8 0 0 1 18 17M12 20V12M9 15L12 12L15 15"],
+    "code": ["dev", "M8 7L3 12L8 17M16 7L21 12L16 17M13.5 5L10.5 19"],
+    "coffee": ["dev", "M5 9H16V15A5 5 0 0 1 11 20H10A5 5 0 0 1 5 15ZM16 10H18A2.5 2.5 0 0 1 18 15H16M8 3C8 5 9.5 5 9.5 7M12 3C12 5 13.5 5 13.5 7"],
+    "compass": ["comms", "M3 12A9 9 0 1 0 21 12A9 9 0 1 0 3 12ZM15.5 8.5L13.5 13.5L8.5 15.5L10.5 10.5Z"],
+    "container": ["dev", "M7 5H4V19H7M17 5H20V19H17M10 8.5H14A1.5 1.5 0 0 1 15.5 10V14A1.5 1.5 0 0 1 14 15.5H10A1.5 1.5 0 0 1 8.5 14V10A1.5 1.5 0 0 1 10 8.5Z"],
+    "copy": ["actions", "M10 8H18A2 2 0 0 1 20 10V18A2 2 0 0 1 18 20H10A2 2 0 0 1 8 18V10A2 2 0 0 1 10 8ZM16 8V6A2 2 0 0 0 14 4H6A2 2 0 0 0 4 6V14A2 2 0 0 0 6 16H8"],
+    "corner-down-right": ["arrows", "M5 5V10A5 5 0 0 0 10 15H19M15 11L19 15L15 19"],
+    "cpu": ["dev", "M8 6H16A2 2 0 0 1 18 8V16A2 2 0 0 1 16 18H8A2 2 0 0 1 6 16V8A2 2 0 0 1 8 6ZM10.5 9.5H13.5A1 1 0 0 1 14.5 10.5V13.5A1 1 0 0 1 13.5 14.5H10.5A1 1 0 0 1 9.5 13.5V10.5A1 1 0 0 1 10.5 9.5ZM9 2V6M15 2V6M9 18V22M15 18V22M2 9H6M2 15H6M18 9H22M18 15H22"],
+    "credit-card": ["dev", "M5 5H19A2 2 0 0 1 21 7V17A2 2 0 0 1 19 19H5A2 2 0 0 1 3 17V7A2 2 0 0 1 5 5ZM3 10H21M7 15H11"],
+    "cursor": ["actions", "M5 3L19 11L12 13L10 20Z"],
+    "database": ["files", "M4 6C4 4.3 7.6 3 12 3C16.4 3 20 4.3 20 6C20 7.7 16.4 9 12 9C7.6 9 4 7.7 4 6ZM4 6V18C4 19.7 7.6 21 12 21C16.4 21 20 19.7 20 18V6M4 12C4 13.7 7.6 15 12 15C16.4 15 20 13.7 20 12"],
+    "download": ["actions", "M12 4V15M7 10L12 15L17 10M5 20H19"],
+    "droplet": ["design", "M12 3C12 3 5.5 10 5.5 14.5A6.5 6.5 0 0 0 18.5 14.5C18.5 10 12 3 12 3Z"],
+    "edit": ["actions", "M4 20L4 16L15 5L19 9L8 20ZM13 7L17 11"],
+    "error": ["status", "M15.67 3.13L20.87 8.33L20.87 15.67L15.67 20.87L8.33 20.87L3.13 15.67L3.13 8.33L8.33 3.13ZM12 8V13M12 16L12.01 16"],
+    "external-link": ["arrows", "M14 4H20V10M20 4L11 13M18 14V19A1 1 0 0 1 17 20H5A1 1 0 0 1 4 19V7A1 1 0 0 1 5 6H10"],
+    "eye": ["security", "M2 12C4.5 7.5 8 5.5 12 5.5C16 5.5 19.5 7.5 22 12C19.5 16.5 16 18.5 12 18.5C8 18.5 4.5 16.5 2 12ZM9 12A3 3 0 1 0 15 12A3 3 0 1 0 9 12Z"],
+    "eye-off": ["security", "M2 12C4.5 7.5 8 5.5 12 5.5C16 5.5 19.5 7.5 22 12C19.5 16.5 16 18.5 12 18.5C8 18.5 4.5 16.5 2 12ZM9 12A3 3 0 1 0 15 12A3 3 0 1 0 9 12ZM4 4L20 20"],
+    "fast-forward": ["media", "M3 6L11 12L3 18ZM12 6L20 12L12 18Z"],
+    "file": ["files", "M6 3H14L19 8V20A1 1 0 0 1 18 21H6A1 1 0 0 1 5 20V4A1 1 0 0 1 6 3ZM14 3V8H19"],
+    "file-code": ["files", "M6 3H14L19 8V20A1 1 0 0 1 18 21H6A1 1 0 0 1 5 20V4A1 1 0 0 1 6 3ZM14 3V8H19M10 13L8 15L10 17M14 13L16 15L14 17"],
+    "file-plus": ["files", "M6 3H14L19 8V20A1 1 0 0 1 18 21H6A1 1 0 0 1 5 20V4A1 1 0 0 1 6 3ZM14 3V8H19M12 12V18M9 15H15"],
+    "file-text": ["files", "M6 3H14L19 8V20A1 1 0 0 1 18 21H6A1 1 0 0 1 5 20V4A1 1 0 0 1 6 3ZM14 3V8H19M8.5 13H15.5M8.5 17H13"],
+    "film": ["media", "M6 3H18A2 2 0 0 1 20 5V19A2 2 0 0 1 18 21H6A2 2 0 0 1 4 19V5A2 2 0 0 1 6 3ZM4 8H8M4 12H8M4 16H8M16 8H20M16 12H20M16 16H20M8 3V21M16 3V21"],
+    "filter": ["actions", "M4 5H20L14 12.5V19L10 17V12.5Z"],
+    "flag": ["status", "M5 21V4M5 4H17L15 8.5L17 13H5"],
+    "folder": ["files", "M3 7A2 2 0 0 1 5 5H9.5L12 8H19A2 2 0 0 1 21 10V17A2 2 0 0 1 19 19H5A2 2 0 0 1 3 17Z"],
+    "folder-open": ["files", "M3 18V6.5A1.5 1.5 0 0 1 4.5 5H9L11.5 7.5H18A1.5 1.5 0 0 1 19.5 9V11M3 18L5.5 11.5H21.5L19 18.5A1.5 1.5 0 0 1 17.5 19.5H4.5A1.5 1.5 0 0 1 3 18Z"],
+    "function": ["dev", "M14 4C11 4 10 5.5 10 8V20M7 11H14M15 14L20 20M20 14L15 20"],
+    "gift": ["status", "M4 8H20A1 1 0 0 1 21 9V11A1 1 0 0 1 20 12H4A1 1 0 0 1 3 11V9A1 1 0 0 1 4 8ZM5 12V20H19V12M12 8V20M12 8C9 8 7.5 6.5 7.5 5.2A2 2 0 0 1 11 4.5C12 6 12 8 12 8M12 8C15 8 16.5 6.5 16.5 5.2A2 2 0 0 0 13 4.5C12 6 12 8 12 8"],
+    "git-branch": ["dev", "M6 3V15M3 18A3 3 0 1 0 9 18A3 3 0 1 0 3 18ZM15 6A3 3 0 1 0 21 6A3 3 0 1 0 15 6ZM18 9C18 14 14 18 9 18"],
+    "globe": ["comms", "M3 12A9 9 0 1 0 21 12A9 9 0 1 0 3 12ZM3 12H21M12 3C9 6 8 9 8 12C8 15 9 18 12 21C15 18 16 15 16 12C16 9 15 6 12 3Z"],
+    "graduation": ["dev", "M2 9L12 4L22 9L12 14ZM6 11.5V16C6 17.5 9 19 12 19C15 19 18 17.5 18 16V11.5M22 9V15"],
+    "grid": ["actions", "M5.5 4H9A1.5 1.5 0 0 1 10.5 5.5V9A1.5 1.5 0 0 1 9 10.5H5.5A1.5 1.5 0 0 1 4 9V5.5A1.5 1.5 0 0 1 5.5 4ZM15 4H18.5A1.5 1.5 0 0 1 20 5.5V9A1.5 1.5 0 0 1 18.5 10.5H15A1.5 1.5 0 0 1 13.5 9V5.5A1.5 1.5 0 0 1 15 4ZM5.5 13.5H9A1.5 1.5 0 0 1 10.5 15V18.5A1.5 1.5 0 0 1 9 20H5.5A1.5 1.5 0 0 1 4 18.5V15A1.5 1.5 0 0 1 5.5 13.5ZM15 13.5H18.5A1.5 1.5 0 0 1 20 15V18.5A1.5 1.5 0 0 1 18.5 20H15A1.5 1.5 0 0 1 13.5 18.5V15A1.5 1.5 0 0 1 15 13.5Z"],
+    "headphones": ["media", "M4 15V12A8 8 0 0 1 20 12V15M4.5 14H6A1.5 1.5 0 0 1 7.5 15.5V19A1.5 1.5 0 0 1 6 20.5H4.5A1.5 1.5 0 0 1 3 19V15.5A1.5 1.5 0 0 1 4.5 14ZM18 14H19.5A1.5 1.5 0 0 1 21 15.5V19A1.5 1.5 0 0 1 19.5 20.5H18A1.5 1.5 0 0 1 16.5 19V15.5A1.5 1.5 0 0 1 18 14Z"],
+    "heart": ["status", "M12 20L4.6 12.4A4.9 4.9 0 0 1 12 6.2A4.9 4.9 0 0 1 19.4 12.4Z"],
+    "help": ["status", "M3 12A9 9 0 1 0 21 12A9 9 0 1 0 3 12ZM9.5 9.5A2.6 2.6 0 0 1 14.6 10.2C14.6 12 12 12 12 14M12 17L12.01 17"],
+    "hexagon": ["charts", "M12 2.8L19.97 7.4L19.97 16.6L12 21.2L4.03 16.6L4.03 7.4Z"],
+    "history": ["files", "M6.86 5.87A8 8 0 1 0 14.74 4.48M18.26 3.06L14.74 4.48L16.52 7.84M12 8V12L15 14"],
+    "home": ["actions", "M3 11L12 4L21 11M5.5 9.5V20H18.5V9.5M10 20V14H14V20"],
+    "hourglass": ["files", "M6 3H18M6 21H18M7 3C7 8 10 10 12 12C14 14 17 16 17 21M17 3C17 8 14 10 12 12C10 14 7 16 7 21"],
+    "image": ["media", "M5 4H19A2 2 0 0 1 21 6V18A2 2 0 0 1 19 20H5A2 2 0 0 1 3 18V6A2 2 0 0 1 5 4ZM7 9.5A1.5 1.5 0 1 0 10 9.5A1.5 1.5 0 1 0 7 9.5ZM3.5 17L9 12L13 16L16 13L20.5 17.5"],
+    "inbox": ["files", "M3 13H8L9.5 16H14.5L16 13H21M3 13L6 5H18L21 13V19A1 1 0 0 1 20 20H4A1 1 0 0 1 3 19Z"],
+    "info": ["status", "M3 12A9 9 0 1 0 21 12A9 9 0 1 0 3 12ZM12 11V16M12 8L12.01 8"],
+    "italic": ["design", "M10 4H19M5 20H14M15 4L9 20"],
+    "key": ["security", "M4 15A4 4 0 1 0 12 15A4 4 0 1 0 4 15ZM11 12L20 3M16 7L19 10"],
+    "layers": ["dev", "M12 3L21 7.5L12 12L3 7.5ZM3 12L12 16.5L21 12M3 16.5L12 21L21 16.5"],
+    "layout": ["charts", "M5 3H19A2 2 0 0 1 21 5V19A2 2 0 0 1 19 21H5A2 2 0 0 1 3 19V5A2 2 0 0 1 5 3ZM3 9H21M9 9V21"],
+    "library": ["dev", "M4.5 4H7A1 1 0 0 1 8 5V19A1 1 0 0 1 7 20H4.5A1 1 0 0 1 3.5 19V5A1 1 0 0 1 4.5 4ZM10.5 4H13A1 1 0 0 1 14 5V19A1 1 0 0 1 13 20H10.5A1 1 0 0 1 9.5 19V5A1 1 0 0 1 10.5 4ZM16.2 6.5L20 5.5L22 18L18.2 19Z"],
+    "lightbulb": ["dev", "M9 18H15M10 21H14M12 3A6 6 0 0 0 8.5 14C9.3 14.7 9.5 15.5 9.5 16.5V18H14.5V16.5C14.5 15.5 14.7 14.7 15.5 14A6 6 0 0 0 12 3Z"],
+    "link": ["actions", "M10 14A4 4 0 0 0 15.7 14.3L18.7 11.3A4 4 0 0 0 13 5.6L12 6.6M14 10A4 4 0 0 0 8.3 9.7L5.3 12.7A4 4 0 0 0 11 18.4L12 17.4"],
+    "list": ["actions", "M9 6H20M9 12H20M9 18H20M4.5 6L4.51 6M4.5 12L4.51 12M4.5 18L4.51 18"],
+    "loader": ["actions", "M17 12L21 12M15.54 15.54L18.36 18.36M12 17L12 21M8.46 15.54L5.64 18.36M7 12L3 12M8.46 8.46L5.64 5.64M12 7L12 3M15.54 8.46L18.36 5.64"],
+    "lock": ["security", "M7 11H17A2 2 0 0 1 19 13V19A2 2 0 0 1 17 21H7A2 2 0 0 1 5 19V13A2 2 0 0 1 7 11ZM8 11V8A4 4 0 0 1 16 8V11M12 16L12.01 16"],
+    "login": ["arrows", "M10 8L15 12L10 16M15 12H3M13 4H19A1 1 0 0 1 20 5V19A1 1 0 0 1 19 20H13"],
+    "logout": ["arrows", "M9 4H5A1 1 0 0 0 4 5V19A1 1 0 0 0 5 20H9M16 8L21 12L16 16M21 12H9"],
+    "loop": ["dev", "M4.48 9.26A8 8 0 0 1 19.52 9.26M16.16 7.48L19.52 9.26L20.94 5.74M19.52 14.74A8 8 0 0 1 4.48 14.74M7.84 16.52L4.48 14.74L3.06 18.26"],
+    "mail": ["comms", "M5 5H19A2 2 0 0 1 21 7V17A2 2 0 0 1 19 19H5A2 2 0 0 1 3 17V7A2 2 0 0 1 5 5ZM3.5 7L12 13L20.5 7"],
+    "map-pin": ["comms", "M12 21C12 21 5 14.5 5 9.5A7 7 0 0 1 19 9.5C19 14.5 12 21 12 21ZM9.5 9.5A2.5 2.5 0 1 0 14.5 9.5A2.5 2.5 0 1 0 9.5 9.5Z"],
+    "maximize": ["arrows", "M4 9V4H9M15 4H20V9M20 15V20H15M9 20H4V15"],
+    "menu": ["actions", "M4 6H20M4 12H20M4 18H20"],
+    "menu-left": ["actions", "M4 7H20M4 12H13M4 17H17"],
+    "message": ["comms", "M5 4H19A2 2 0 0 1 21 6V15A2 2 0 0 1 19 17H11L6.5 20.5V17H5A2 2 0 0 1 3 15V6A2 2 0 0 1 5 4Z"],
+    "mic": ["media", "M12 3H12A3 3 0 0 1 15 6V11A3 3 0 0 1 12 14H12A3 3 0 0 1 9 11V6A3 3 0 0 1 12 3ZM5.5 11A6.5 6.5 0 0 0 18.5 11M12 17.5V21M9 21H15"],
+    "minimize": ["arrows", "M9 4V9H4M15 4V9H20M20 15H15V20M9 20V15H4"],
+    "minus": ["actions", "M5 12H19"],
+    "minus-circle": ["actions", "M3 12A9 9 0 1 0 21 12A9 9 0 1 0 3 12ZM8 12H16"],
+    "moon": ["design", "M20 14.5A8.5 8.5 0 1 1 9.5 4A6.5 6.5 0 0 0 20 14.5Z"],
+    "more": ["actions", "M5 12L5.01 12M12 12L12.01 12M19 12L19.01 12"],
+    "more-vertical": ["actions", "M12 5L12.01 5M12 12L12.01 12M12 19L12.01 19"],
+    "move": ["arrows", "M12 3V21M3 12H21M9 6L12 3L15 6M9 18L12 21L15 18M6 9L3 12L6 15M18 9L21 12L18 15"],
+    "music": ["media", "M9 18V6L20 4V16M4 18A2.5 2.5 0 1 0 9 18A2.5 2.5 0 1 0 4 18ZM15 16A2.5 2.5 0 1 0 20 16A2.5 2.5 0 1 0 15 16Z"],
+    "package": ["dev", "M12 3L20 7.5V16.5L12 21L4 16.5V7.5ZM4 7.5L12 12L20 7.5M12 12V21"],
+    "palette": ["design", "M12 3A9 9 0 0 0 12 21A2.5 2.5 0 0 0 14 17A2 2 0 0 1 16 15H18A3 3 0 0 0 21 12A9 9 0 0 0 12 3ZM7.5 11L7.51 11M10 7L10.01 7M14.5 7L14.51 7M17.5 10.5L17.51 10.5"],
+    "paperclip": ["actions", "M20 11L12 19A5 5 0 0 1 5 12L13.5 3.5A3.3 3.3 0 0 1 18.2 8.2L9.7 16.7A1.7 1.7 0 0 1 7.3 14.3L15 6.6"],
+    "pause": ["media", "M7 5H9A1 1 0 0 1 10 6V18A1 1 0 0 1 9 19H7A1 1 0 0 1 6 18V6A1 1 0 0 1 7 5ZM15 5H17A1 1 0 0 1 18 6V18A1 1 0 0 1 17 19H15A1 1 0 0 1 14 18V6A1 1 0 0 1 15 5Z"],
+    "phone": ["comms", "M5 4H9L11 9L8.5 10.5A11 11 0 0 0 13.5 15.5L15 13L20 15V19A1.5 1.5 0 0 1 18.5 20.5C10 20 4 14 3.5 5.5A1.5 1.5 0 0 1 5 4Z"],
+    "pin": ["status", "M9 4H15L14 10L17 13H7L10 10ZM12 13V21"],
+    "play": ["media", "M7 4.5L19 12L7 19.5Z"],
+    "plus": ["actions", "M12 5V19M5 12H19"],
+    "plus-circle": ["actions", "M3 12A9 9 0 1 0 21 12A9 9 0 1 0 3 12ZM12 8V16M8 12H16"],
+    "power": ["actions", "M12 3V12M7 6.5A8 8 0 1 0 17 6.5"],
+    "printer": ["actions", "M7 8V3H17V8M7 17H5A1 1 0 0 1 4 16V9A1 1 0 0 1 5 8H19A1 1 0 0 1 20 9V16A1 1 0 0 1 19 17H17M7 14H17V21H7Z"],
+    "qr": ["actions", "M4 3H9A1 1 0 0 1 10 4V9A1 1 0 0 1 9 10H4A1 1 0 0 1 3 9V4A1 1 0 0 1 4 3ZM15 3H20A1 1 0 0 1 21 4V9A1 1 0 0 1 20 10H15A1 1 0 0 1 14 9V4A1 1 0 0 1 15 3ZM4 14H9A1 1 0 0 1 10 15V20A1 1 0 0 1 9 21H4A1 1 0 0 1 3 20V15A1 1 0 0 1 4 14ZM14 14H17V17M21 14V14.01M14 21H17M21 17V21M17 21H21"],
+    "redo": ["arrows", "M15 14L20 9L15 4M20 9H9A5 5 0 0 0 9 19H14"],
+    "refresh": ["arrows", "M17.14 5.87A8 8 0 1 1 9.26 4.48M7.48 7.84L9.26 4.48L5.74 3.06"],
+    "repeat": ["media", "M4 11V10A3 3 0 0 1 7 7H19M16 4L19 7L16 10M20 13V14A3 3 0 0 1 17 17H5M8 14L5 17L8 20"],
+    "rewind": ["media", "M21 6L13 12L21 18ZM12 6L4 12L12 18Z"],
+    "rocket": ["dev", "M12 3C16 5 18 9 17 14L12 19L7 14C6 9 8 5 12 3ZM10.2 10A1.8 1.8 0 1 0 13.8 10A1.8 1.8 0 1 0 10.2 10ZM7.4 13L4.5 15.5V19L9.5 16.5M16.6 13L19.5 15.5V19L14.5 16.5M12 19.5V22"],
+    "rotate": ["arrows", "M6.86 5.87A8 8 0 1 0 14.74 4.48M18.26 3.06L14.74 4.48L16.52 7.84"],
+    "save": ["actions", "M6 4H16L20 8V18A2 2 0 0 1 18 20H6A2 2 0 0 1 4 18V6A2 2 0 0 1 6 4ZM8 4V9H15V4M8 20V14H16V20"],
+    "search": ["actions", "M4 10.5A6.5 6.5 0 1 0 17 10.5A6.5 6.5 0 1 0 4 10.5ZM15.5 15.5L20 20"],
+    "send": ["actions", "M21 3L3 10.5L10 13.5L13 21ZM10 13.5L21 3"],
+    "settings": ["actions", "M10.33 4.79L10.8 2.48L13.2 2.48L13.67 4.79L15.92 5.72L17.88 4.41L19.59 6.12L18.28 8.08L19.21 10.33L21.52 10.8L21.52 13.2L19.21 13.67L18.28 15.92L19.59 17.88L17.88 19.59L15.92 18.28L13.67 19.21L13.2 21.52L10.8 21.52L10.33 19.21L8.08 18.28L6.12 19.59L4.41 17.88L5.72 15.92L4.79 13.67L2.48 13.2L2.48 10.8L4.79 10.33L5.72 8.08L4.41 6.12L6.12 4.41L8.08 5.72ZM9.2 12A2.8 2.8 0 1 0 14.8 12A2.8 2.8 0 1 0 9.2 12Z"],
+    "share": ["actions", "M3.5 12A2.5 2.5 0 1 0 8.5 12A2.5 2.5 0 1 0 3.5 12ZM15.5 6A2.5 2.5 0 1 0 20.5 6A2.5 2.5 0 1 0 15.5 6ZM15.5 18A2.5 2.5 0 1 0 20.5 18A2.5 2.5 0 1 0 15.5 18ZM8.2 10.8L15.8 7.2M8.2 13.2L15.8 16.8"],
+    "share-out": ["actions", "M9 10H6V20H18V10H15M12 15V4M8 8L12 4L16 8"],
+    "shield": ["security", "M12 3L20 6V12C20 16.5 16.5 19.5 12 21C7.5 19.5 4 16.5 4 12V6Z"],
+    "shield-check": ["security", "M12 3L20 6V12C20 16.5 16.5 19.5 12 21C7.5 19.5 4 16.5 4 12V6ZM8.5 12L11 14.5L15.5 9.5"],
+    "shuffle": ["media", "M3 7H6C12 7 12 17 18 17H20M17 14L20 17L17 20M3 17H6C8 17 9.4 15.7 10.4 14.4M13.6 9.6C14.6 8.3 16 7 18 7H20M17 4L20 7L17 10"],
+    "sidebar": ["charts", "M5 4H19A2 2 0 0 1 21 6V18A2 2 0 0 1 19 20H5A2 2 0 0 1 3 18V6A2 2 0 0 1 5 4ZM9 4V20"],
+    "skip-next": ["media", "M6 5L15 12L6 19ZM18 5V19"],
+    "skip-prev": ["media", "M18 5L9 12L18 19ZM6 5V19"],
+    "sliders": ["actions", "M4 7H12M16 7H20M4 17H8M12 17H20M12 7A2 2 0 1 0 16 7A2 2 0 1 0 12 7ZM8 17A2 2 0 1 0 12 17A2 2 0 1 0 8 17Z"],
+    "smile": ["status", "M3 12A9 9 0 1 0 21 12A9 9 0 1 0 3 12ZM8 14A5 5 0 0 0 16 14M9 9.5L9.01 9.5M15 9.5L15.01 9.5"],
+    "sort": ["arrows", "M7 4V20M3 8L7 4L11 8M17 20V4M13 16L17 20L21 16"],
+    "sparkles": ["status", "M12 3C12.5 8 14 10.5 19 12C14 13.5 12.5 16 12 21C11.5 16 10 13.5 5 12C10 10.5 11.5 8 12 3ZM19 3V7M17 5H21"],
+    "square": ["charts", "M6 4H18A2 2 0 0 1 20 6V18A2 2 0 0 1 18 20H6A2 2 0 0 1 4 18V6A2 2 0 0 1 6 4Z"],
+    "star": ["status", "M12 3L14.47 9.1L21.04 9.56L15.99 13.8L17.58 20.19L12 16.7L6.42 20.19L8.01 13.8L2.96 9.56L9.53 9.1Z"],
+    "stop": ["media", "M7 5H17A2 2 0 0 1 19 7V17A2 2 0 0 1 17 19H7A2 2 0 0 1 5 17V7A2 2 0 0 1 7 5Z"],
+    "sun": ["design", "M8 12A4 4 0 1 0 16 12A4 4 0 1 0 8 12ZM19 12L21.5 12M16.95 16.95L18.72 18.72M12 19L12 21.5M7.05 16.95L5.28 18.72M5 12L2.5 12M7.05 7.05L5.28 5.28M12 5L12 2.5M16.95 7.05L18.72 5.28"],
+    "table": ["charts", "M5 4H19A2 2 0 0 1 21 6V18A2 2 0 0 1 19 20H5A2 2 0 0 1 3 18V6A2 2 0 0 1 5 4ZM3 9.5H21M3 14.5H21M9.5 9.5V20"],
+    "tag": ["status", "M4 4H12L21 13L13 21L4 12ZM8.5 8.5L8.51 8.5"],
+    "target": ["status", "M3 12A9 9 0 1 0 21 12A9 9 0 1 0 3 12ZM7 12A5 5 0 1 0 17 12A5 5 0 1 0 7 12ZM12 12L12.01 12"],
+    "terminal": ["dev", "M5 4H19A2 2 0 0 1 21 6V18A2 2 0 0 1 19 20H5A2 2 0 0 1 3 18V6A2 2 0 0 1 5 4ZM7 9L11 12L7 15M13 16H17"],
+    "thumbs-up": ["status", "M7 11V20H4V11ZM7 11L11 3A2 2 0 0 1 14 5L13 9H19A2 2 0 0 1 21 11.4L19.8 18.4A2 2 0 0 1 17.8 20H7"],
+    "toggle-off": ["actions", "M7 7H17A5 5 0 0 1 22 12V12A5 5 0 0 1 17 17H7A5 5 0 0 1 2 12V12A5 5 0 0 1 7 7ZM5 12A2.5 2.5 0 1 0 10 12A2.5 2.5 0 1 0 5 12Z"],
+    "toggle-on": ["actions", "M7 7H17A5 5 0 0 1 22 12V12A5 5 0 0 1 17 17H7A5 5 0 0 1 2 12V12A5 5 0 0 1 7 7ZM14 12A2.5 2.5 0 1 0 19 12A2.5 2.5 0 1 0 14 12Z"],
+    "trash": ["actions", "M4 7H20M9 7V4H15V7M6 7L7 20H17L18 7M10 11V16M14 11V16"],
+    "trending-down": ["charts", "M3 7L9 13L13 9L21 17M15 17H21V11"],
+    "trending-up": ["charts", "M3 17L9 11L13 15L21 7M15 7H21V13"],
+    "triangle": ["charts", "M12 4L21 19H3Z"],
+    "trophy": ["status", "M7 4H17V10A5 5 0 0 1 7 10ZM7 6H4V8A3 3 0 0 0 7 11M17 6H20V8A3 3 0 0 1 17 11M12 15V18M8 21H16M9.5 18H14.5"],
+    "type": ["design", "M5 7V5H19V7M12 5V19M9 19H15"],
+    "underline": ["design", "M6 4V11A6 6 0 0 0 18 11V4M4 21H20"],
+    "undo": ["arrows", "M9 14L4 9L9 4M4 9H15A5 5 0 0 1 15 19H10"],
+    "unlock": ["security", "M7 11H17A2 2 0 0 1 19 13V19A2 2 0 0 1 17 21H7A2 2 0 0 1 5 19V13A2 2 0 0 1 7 11ZM8 11V8A4 4 0 0 1 15.5 6.5M12 16L12.01 16"],
+    "upload": ["actions", "M12 15V4M7 9L12 4L17 9M5 20H19"],
+    "user": ["users", "M8 8A4 4 0 1 0 16 8A4 4 0 1 0 8 8ZM4 20C4 16 7.5 14 12 14C16.5 14 20 16 20 20"],
+    "user-circle": ["users", "M3 12A9 9 0 1 0 21 12A9 9 0 1 0 3 12ZM9 10A3 3 0 1 0 15 10A3 3 0 1 0 9 10ZM6.5 18.5C8 16 10 15 12 15C14 15 16 16 17.5 18.5"],
+    "user-plus": ["users", "M6 8A4 4 0 1 0 14 8A4 4 0 1 0 6 8ZM3 20C3 16.5 6 14.5 10 14.5C13 14.5 15 15.5 16 17M19 8V14M16 11H22"],
+    "users": ["users", "M5.5 8A3.5 3.5 0 1 0 12.5 8A3.5 3.5 0 1 0 5.5 8ZM2.5 19C2.5 16 5.5 14.5 9 14.5C12.5 14.5 15.5 16 15.5 19M15 4.6A3.5 3.5 0 0 1 15 11.4M17.5 14.7C20 15.3 21.5 16.8 21.5 19"],
+    "video": ["media", "M5 6H14A2 2 0 0 1 16 8V16A2 2 0 0 1 14 18H5A2 2 0 0 1 3 16V8A2 2 0 0 1 5 6ZM16 10.5L21 7.5V16.5L16 13.5"],
+    "view": ["dev", "M5 4H19A2 2 0 0 1 21 6V18A2 2 0 0 1 19 20H5A2 2 0 0 1 3 18V6A2 2 0 0 1 5 4ZM3 9H21M7 14H13M7 17H10"],
+    "volume": ["media", "M4 9.5H8L13 5V19L8 14.5H4ZM16.5 9A4 4 0 0 1 16.5 15M19 6.5A8 8 0 0 1 19 17.5"],
+    "volume-off": ["media", "M4 9.5H8L13 5V19L8 14.5H4ZM17 9.5L22 14.5M22 9.5L17 14.5"],
+    "wallet": ["dev", "M4 7A2 2 0 0 1 6 5H17V8M4 7V18A2 2 0 0 0 6 20H20V8H6A2 2 0 0 1 4 7ZM16 14L16.01 14"],
+    "warning": ["status", "M12 4L21 20H3ZM12 10V14M12 17L12.01 17"],
+    "wifi": ["comms", "M2.5 9A14 14 0 0 1 21.5 9M5.5 12.5A9.5 9.5 0 0 1 18.5 12.5M8.5 16A5 5 0 0 1 15.5 16M12 19.5L12.01 19.5"],
+    "x-circle": ["actions", "M3 12A9 9 0 1 0 21 12A9 9 0 1 0 3 12ZM9 9L15 15M15 9L9 15"],
+    "zap": ["status", "M13 3L5 14H11L10 21L19 9.5H13Z"],
+    "zoom-in": ["actions", "M4 10.5A6.5 6.5 0 1 0 17 10.5A6.5 6.5 0 1 0 4 10.5ZM15.5 15.5L20 20M10.5 8V13M8 10.5H13"],
+    "zoom-out": ["actions", "M4 10.5A6.5 6.5 0 1 0 17 10.5A6.5 6.5 0 1 0 4 10.5ZM15.5 15.5L20 20M8 10.5H13"]
+};
+
+let __icAlias = {
+    "add": "plus",
+    "alert": "warning",
+    "analytics": "chart-line",
+    "apps": "grid",
+    "attach": "paperclip",
+    "back": "arrow-left",
+    "bin": "trash",
+    "bolt": "zap",
+    "bookmarks": "bookmark",
+    "brightness": "sun",
+    "cancel": "close",
+    "chat": "message",
+    "cog": "settings",
+    "comment": "message",
+    "danger": "error",
+    "dark": "moon",
+    "dashboard": "layout",
+    "date": "calendar",
+    "debug": "bug",
+    "delete": "trash",
+    "disk": "save",
+    "dots": "more",
+    "down": "arrow-down",
+    "email": "mail",
+    "exit": "logout",
+    "favorite": "star",
+    "find": "search",
+    "fn": "function",
+    "gear": "settings",
+    "hamburger": "menu",
+    "hide": "eye-off",
+    "idea": "lightbulb",
+    "internet": "wifi",
+    "json": "braces",
+    "kebab": "more-vertical",
+    "lib": "library",
+    "light": "sun",
+    "light-bulb": "lightbulb",
+    "lightning": "zap",
+    "like": "thumbs-up",
+    "location": "map-pin",
+    "love": "heart",
+    "magic": "sparkles",
+    "magnifier": "search",
+    "microphone": "mic",
+    "movie": "film",
+    "mute": "volume-off",
+    "next": "arrow-right",
+    "notification": "bell",
+    "ok": "check",
+    "open": "external-link",
+    "password": "key",
+    "pencil": "edit",
+    "person": "user",
+    "photo": "image",
+    "picture": "image",
+    "pkg": "package",
+    "play-circle": "play",
+    "preferences": "settings",
+    "privacy": "shield",
+    "profile": "user-circle",
+    "question": "help",
+    "reload": "refresh",
+    "remove": "minus",
+    "show": "eye",
+    "signin": "login",
+    "sound": "volume",
+    "sparkle": "sparkles",
+    "stats": "chart-bar",
+    "sync": "refresh",
+    "time": "clock",
+    "ui": "view",
+    "up": "arrow-up",
+    "window": "view",
+    "world": "globe",
+    "x": "close"
+};
+
+let __icCats = [
+    ["actions", "إجراءات وواجهة", "Actions & UI"],
+    ["arrows", "أسهم وتنقّل", "Arrows & navigation"],
+    ["status", "حالة وتنبيه", "Status & alerts"],
+    ["security", "أمان", "Security"],
+    ["users", "مستخدمون", "Users"],
+    ["comms", "تواصل وشبكة", "Communication & network"],
+    ["media", "وسائط", "Media"],
+    ["files", "ملفات وبيانات", "Files & data"],
+    ["dev", "مطوّرون وRin", "Developer & Rin"],
+    ["charts", "مخططات وتخطيط", "Charts & layout"],
+    ["design", "تصميم ونص", "Design & text"]
+];
+
+// ---- 1) الفهرس ----------------------------------------------------------------------------
+fun ic_version() { return __ic_version; }
+fun ic_count() { return len(keys(__ic)); }
+fun ic_names() { return sort(keys(__ic)); }
+
+// ic_resolve(name) -> الاسم الأساسي (يقبل الأسماء البديلة وأي حالة أحرف) أو nil إن لم يوجد.
+fun ic_resolve(name) {
+    if (name == nil) { return nil; }
+    let n = lower(trim(str(name)));
+    if (has(__ic, n)) { return n; }
+    if (has(__icAlias, n)) { return __icAlias[n]; }
+    return nil;
 }
+fun ic_has(name) { return ic_resolve(name) != nil; }
 
-fun df_is_numeric_text(s) {
-    return regexTest(trim(s), "^-?[0-9]+([.][0-9]+)?$");
-}
-
-fun df_infer(s) {
-    if (df_is_missing_token(trim(s))) { return nil; }
-    if (df_is_numeric_text(s)) { return toNumber(trim(s)); }
-    return s;
-}
-
-fun df_rnd(x, d) {
-    let p = pow(10, d);
-    return round(x * p) / p;
-}
-
-fun df_rows_count(df) {
-    if (len(df["names"]) == 0) { return 0; }
-    return len(df["cols"][df["names"][0]]);
-}
-
-fun df_isnum(v) { return type(v) == "number"; }
-
-fun df_numeric_values(arr) {
-    let o = [];
+fun ic_aliasesOf(name) {
+    let n = ic_resolve(name);
+    let out = [];
+    if (n == nil) { return out; }
+    let ks = sort(keys(__icAlias));
     let i = 0;
-    while (i < len(arr)) { if (df_isnum(arr[i])) { push(o, arr[i]); } i = i + 1; }
-    return o;
-}
-
-// ---------------------------------------------------------------------------
-//  الإنشاء
-// ---------------------------------------------------------------------------
-fun df_new(names) {
-    let cols = {};
-    let i = 0;
-    while (i < len(names)) { cols[names[i]] = []; i = i + 1; }
-    return {"names": deepCopy(names), "cols": cols};
-}
-
-// {name: array, ...} — الترتيب = ترتيب المفاتيح
-fun df_from_map(m) {
-    let names = keys(m);
-    let cols = {};
-    let i = 0;
-    while (i < len(names)) { cols[names[i]] = deepCopy(m[names[i]]); i = i + 1; }
-    return {"names": names, "cols": cols};
-}
-
-// header = أسماء الأعمدة ؛ rows = مصفوفة صفوف
-fun df_from_rows(header, rows) {
-    let df = df_new(header);
-    let r = 0;
-    while (r < len(rows)) {
-        let j = 0;
-        while (j < len(header)) {
-            let v = nil;
-            if (j < len(rows[r])) { v = rows[r][j]; }
-            push(df["cols"][header[j]], v);
-            j = j + 1;
-        }
-        r = r + 1;
+    while (i < len(ks)) {
+        if (__icAlias[ks[i]] == n) { push(out, ks[i]); }
+        i = i + 1;
     }
-    return df;
+    return out;
 }
 
-// مصفوفة قواميس — الأعمدة = اتحاد المفاتيح بترتيب الظهور
-fun df_from_records(recs) {
-    let names = [];
-    let seen = {};
+fun ic_category(name) {
+    let n = ic_resolve(name);
+    if (n == nil) { return nil; }
+    return __ic[n][0];
+}
+
+// ---- 2) الفئات ----------------------------------------------------------------------------
+fun ic_categories() {
+    let out = [];
     let i = 0;
-    while (i < len(recs)) {
-        let ks = keys(recs[i]);
+    while (i < len(__icCats)) { push(out, __icCats[i][0]); i = i + 1; }
+    return out;
+}
+// ic_categoryName(cat, lang) -> الاسم المعروض ("ar" أو "en")؛ يعيد المعرّف نفسه إن لم تكن الفئة معروفة.
+fun ic_categoryName(cat, lang) {
+    let i = 0;
+    while (i < len(__icCats)) {
+        if (__icCats[i][0] == cat) {
+            if (lang == "en") { return __icCats[i][2]; }
+            return __icCats[i][1];
+        }
+        i = i + 1;
+    }
+    return cat;
+}
+fun ic_byCategory(cat) {
+    let out = [];
+    let ks = ic_names();
+    let i = 0;
+    while (i < len(ks)) {
+        if (__ic[ks[i]][0] == cat) { push(out, ks[i]); }
+        i = i + 1;
+    }
+    return out;
+}
+
+// ---- 3) البحث -----------------------------------------------------------------------------
+// ic_search(q) -> أسماء أساسية يحوي اسمها أو أحد أسمائها البديلة النص q (بلا حساسية لحالة الأحرف).
+fun ic_search(q) {
+    let out = [];
+    let needle = lower(trim(str(q)));
+    // مرّة واحدة على الأسماء البديلة (لا مرور كامل لكل أيقونة): الأيقونات التي أحد بدائلها يطابق
+    let viaAlias = {};
+    if (needle != "") {
+        let aks = keys(__icAlias);
         let k = 0;
-        while (k < len(ks)) {
-            if (!has(seen, ks[k])) { seen[ks[k]] = true; push(names, ks[k]); }
+        while (k < len(aks)) {
+            if (contains(aks[k], needle)) { viaAlias[__icAlias[aks[k]]] = true; }
             k = k + 1;
         }
-        i = i + 1;
     }
-    let df = df_new(names);
-    i = 0;
-    while (i < len(recs)) {
-        let j = 0;
-        while (j < len(names)) {
-            let v = nil;
-            if (has(recs[i], names[j])) { v = recs[i][names[j]]; }
-            push(df["cols"][names[j]], v);
-            j = j + 1;
-        }
-        i = i + 1;
-    }
-    return df;
-}
-
-// محلّل CSV حقيقي: يدعم الاقتباس "..." والفواصل/الأسطر داخل الحقول و "" للهروب.
-// يعيد مصفوفة صفوف من النصوص الخام.
-fun df_csv_rows(txt, delim) {
-    let chars = utf8ToArray(txt);
-    let rows = [];
-    let cur = [];
-    let field = "";
-    let inq = false;
+    let ks = ic_names();
     let i = 0;
-    let n = len(chars);
-    while (i < n) {
-        let ch = chars[i];
-        if (inq) {
-            if (ch == "\"") {
-                if (i + 1 < n and chars[i + 1] == "\"") { field = field + "\""; i = i + 1; }
-                else { inq = false; }
-            } else { field = field + ch; }
-        } else {
-            if (ch == "\"") { inq = true; }
-            else {
-                if (ch == delim) { push(cur, field); field = ""; }
-                else {
-                    if (ch == "\n") {
-                        push(cur, field); field = "";
-                        push(rows, cur); cur = [];
-                    } else {
-                        if (ch != "\r") { field = field + ch; }
-                    }
-                }
-            }
-        }
-        i = i + 1;
-    }
-    if (field != "" or len(cur) > 0) { push(cur, field); push(rows, cur); }
-    return rows;
-}
-
-// أول صف = الرأس. الأنواع تُستنتَج (رقم / نص / nil للمفقود).
-fun df_parse_csv(txt, delim) {
-    let rows = df_csv_rows(txt, delim);
-    if (len(rows) == 0) { return df_new([]); }
-    let header = [];
-    let j = 0;
-    while (j < len(rows[0])) { push(header, trim(rows[0][j])); j = j + 1; }
-    let df = df_new(header);
-    let r = 1;
-    while (r < len(rows)) {
-        if (!(len(rows[r]) == 1 and trim(rows[r][0]) == "")) {
-            j = 0;
-            while (j < len(header)) {
-                let v = nil;
-                if (j < len(rows[r])) { v = df_infer(rows[r][j]); }
-                push(df["cols"][header[j]], v);
-                j = j + 1;
-            }
-        }
-        r = r + 1;
-    }
-    return df;
-}
-
-fun df_read_csv(path) { return df_parse_csv(readFile(path), ","); }
-
-// ---------------------------------------------------------------------------
-//  الإخراج
-// ---------------------------------------------------------------------------
-fun df_record(df, i) {
-    let rec = {};
-    let j = 0;
-    while (j < len(df["names"])) { rec[df["names"][j]] = df["cols"][df["names"][j]][i]; j = j + 1; }
-    return rec;
-}
-
-fun df_to_records(df) {
-    let o = [];
-    let n = df_rows_count(df);
-    let i = 0;
-    while (i < n) { push(o, df_record(df, i)); i = i + 1; }
-    return o;
-}
-
-// صفوف القيم فقط (بلا رأس)
-fun df_to_rows(df) {
-    let o = [];
-    let n = df_rows_count(df);
-    let i = 0;
-    while (i < n) {
-        let rw = [];
-        let j = 0;
-        while (j < len(df["names"])) { push(rw, df["cols"][df["names"][j]][i]); j = j + 1; }
-        push(o, rw);
-        i = i + 1;
-    }
-    return o;
-}
-
-fun df_csv_escape(v) {
-    if (v == nil) { return ""; }
-    let s = str(v);
-    if (contains(s, ",") or contains(s, "\"") or contains(s, "\n")) {
-        return "\"" + replace(s, "\"", "\"\"") + "\"";
-    }
-    return s;
-}
-
-fun df_to_csv(df) {
-    let lines = [];
-    let hd = [];
-    let j = 0;
-    while (j < len(df["names"])) { push(hd, df_csv_escape(df["names"][j])); j = j + 1; }
-    push(lines, join(hd, ","));
-    let rows = df_to_rows(df);
-    let i = 0;
-    while (i < len(rows)) {
-        let cells = [];
-        j = 0;
-        while (j < len(rows[i])) { push(cells, df_csv_escape(rows[i][j])); j = j + 1; }
-        push(lines, join(cells, ","));
-        i = i + 1;
-    }
-    return join(lines, "\n") + "\n";
-}
-
-fun df_write_csv(df, path) {
-    writeFile(path, df_to_csv(df));
-    return path;
-}
-
-// جدول نصّي منسَّق (أول maxRows صفّ)
-fun df_format(df, maxRows) {
-    let names = df["names"];
-    let n = df_rows_count(df);
-    let shown = n;
-    if (shown > maxRows) { shown = maxRows; }
-    let cells = [];
-    let hd = [];
-    let j = 0;
-    while (j < len(names)) { push(hd, names[j]); j = j + 1; }
-    push(cells, hd);
-    let i = 0;
-    while (i < shown) {
-        let rw = [];
-        j = 0;
-        while (j < len(names)) {
-            let v = df["cols"][names[j]][i];
-            if (v == nil) { push(rw, "nil"); }
-            else { if (df_isnum(v)) { push(rw, str(df_rnd(v, 4))); } else { push(rw, str(v)); } }
-            j = j + 1;
-        }
-        push(cells, rw);
-        i = i + 1;
-    }
-    let widths = [];
-    j = 0;
-    while (j < len(names)) {
-        let w = 0;
-        i = 0;
-        while (i < len(cells)) { let l = utf8Len(cells[i][j]); if (l > w) { w = l; } i = i + 1; }
-        push(widths, w);
-        j = j + 1;
-    }
-    let lines = [];
-    i = 0;
-    while (i < len(cells)) {
-        let parts = [];
-        j = 0;
-        while (j < len(names)) {
-            let c = cells[i][j];
-            let pad = widths[j] - utf8Len(c);
-            push(parts, c + repeat(" ", pad));
-            j = j + 1;
-        }
-        push(lines, join(parts, " | "));
-        if (i == 0) {
-            let seps = [];
-            j = 0;
-            while (j < len(names)) { push(seps, repeat("-", widths[j])); j = j + 1; }
-            push(lines, join(seps, "-+-"));
-        }
-        i = i + 1;
-    }
-    if (n > shown) { push(lines, "... (" + str(n - shown) + " more rows)"); }
-    push(lines, "[" + str(n) + " rows x " + str(len(names)) + " columns]");
-    return join(lines, "\n");
-}
-
-fun df_print(df) { print df_format(df, 20); return df; }
-
-// ---------------------------------------------------------------------------
-//  الاستكشاف
-// ---------------------------------------------------------------------------
-fun df_shape(df) { return [df_rows_count(df), len(df["names"])]; }
-fun df_names(df) { return deepCopy(df["names"]); }
-fun df_has(df, name) { return has(df["cols"], name); }
-
-fun df_col(df, name) {
-    if (!has(df["cols"], name)) { fail("df_col: العمود غير موجود: " + str(name)); }
-    return df["cols"][name];
-}
-
-fun df_take(df, idx) {
-    let out = df_new(df["names"]);
-    let j = 0;
-    while (j < len(df["names"])) {
-        let nm = df["names"][j];
-        let i = 0;
-        while (i < len(idx)) { push(out["cols"][nm], df["cols"][nm][idx[i]]); i = i + 1; }
-        j = j + 1;
-    }
-    return out;
-}
-
-fun df_slice(df, a, b) {
-    let n = df_rows_count(df);
-    if (b > n) { b = n; }
-    let idx = [];
-    let i = a;
-    while (i < b) { push(idx, i); i = i + 1; }
-    return df_take(df, idx);
-}
-
-fun df_head(df, n) { return df_slice(df, 0, n); }
-fun df_tail(df, n) {
-    let total = df_rows_count(df);
-    let a = total - n;
-    if (a < 0) { a = 0; }
-    return df_slice(df, a, total);
-}
-
-// ---------------------------------------------------------------------------
-//  إحصاءات
-// ---------------------------------------------------------------------------
-fun df_sorted_nums(arr) { return sort(df_numeric_values(arr)); }
-
-// تقسيم خطي (مثل numpy.percentile) — q بين 0 و 1
-fun df_quantile(arr, q) {
-    let s = df_sorted_nums(arr);
-    let n = len(s);
-    if (n == 0) { return nil; }
-    if (n == 1) { return s[0]; }
-    let pos = q * (n - 1);
-    let lo = floor(pos);
-    let hi = ceil(pos);
-    return s[lo] + (s[hi] - s[lo]) * (pos - lo);
-}
-
-fun df_agg(arr, how) {
-    let nums = df_numeric_values(arr);
-    if (how == "count") { let c = 0; let i = 0; while (i < len(arr)) { if (arr[i] != nil) { c = c + 1; } i = i + 1; } return c; }
-    if (how == "first") { if (len(arr) == 0) { return nil; } return arr[0]; }
-    if (how == "last") { if (len(arr) == 0) { return nil; } return arr[len(arr) - 1]; }
-    if (len(nums) == 0) { return nil; }
-    let s = 0;
-    let i2 = 0;
-    while (i2 < len(nums)) { s = s + nums[i2]; i2 = i2 + 1; }
-    if (how == "sum") { return s; }
-    let mean = s / len(nums);
-    if (how == "mean") { return mean; }
-    if (how == "median") { return df_quantile(nums, 0.5); }
-    if (how == "min") { return df_quantile(nums, 0); }
-    if (how == "max") { return df_quantile(nums, 1); }
-    if (how == "var" or how == "std") {
-        let v = 0;
-        i2 = 0;
-        while (i2 < len(nums)) { let d = nums[i2] - mean; v = v + d * d; i2 = i2 + 1; }
-        v = v / len(nums);
-        if (how == "var") { return v; }
-        return sqrt(v);
-    }
-    fail("df_agg: دالة تجميع غير معروفة: " + str(how));
-}
-
-fun df_is_numeric_col(arr) {
-    let seenNum = false;
-    let i = 0;
-    while (i < len(arr)) {
-        if (arr[i] != nil) {
-            if (!df_isnum(arr[i])) { return false; }
-            seenNum = true;
-        }
-        i = i + 1;
-    }
-    return seenNum;
-}
-
-// ملخّص الأعمدة الرقمية: إطار بيانات صفوفه = الأعمدة
-fun df_describe(df) {
-    let out = df_new(["column", "count", "mean", "std", "min", "q25", "median", "q75", "max"]);
-    let j = 0;
-    while (j < len(df["names"])) {
-        let nm = df["names"][j];
-        let c = df["cols"][nm];
-        if (df_is_numeric_col(c)) {
-            push(out["cols"]["column"], nm);
-            push(out["cols"]["count"], df_agg(c, "count"));
-            push(out["cols"]["mean"], df_agg(c, "mean"));
-            push(out["cols"]["std"], df_agg(c, "std"));
-            push(out["cols"]["min"], df_agg(c, "min"));
-            push(out["cols"]["q25"], df_quantile(c, 0.25));
-            push(out["cols"]["median"], df_agg(c, "median"));
-            push(out["cols"]["q75"], df_quantile(c, 0.75));
-            push(out["cols"]["max"], df_agg(c, "max"));
-        }
-        j = j + 1;
-    }
-    return out;
-}
-
-// ---------------------------------------------------------------------------
-//  الفرز (ترتيب مستقر بدمج الفهارس — يدعم الأرقام والنصوص، و nil في النهاية)
-// ---------------------------------------------------------------------------
-fun df_merge_idx(a, b, ks, desc) {
-    let o = [];
-    let i = 0;
-    let j = 0;
-    while (i < len(a) and j < len(b)) {
-        let ka = ks[a[i]];
-        let kb = ks[b[j]];
-        let takeA = true;
-        if (desc) { if (kb > ka) { takeA = false; } }
-        else { if (kb < ka) { takeA = false; } }
-        if (takeA) { push(o, a[i]); i = i + 1; } else { push(o, b[j]); j = j + 1; }
-    }
-    while (i < len(a)) { push(o, a[i]); i = i + 1; }
-    while (j < len(b)) { push(o, b[j]); j = j + 1; }
-    return o;
-}
-
-fun df_msort_idx(idx, ks, desc) {
-    if (len(idx) <= 1) { return idx; }
-    let mid = floor(len(idx) / 2);
-    return df_merge_idx(df_msort_idx(slice(idx, 0, mid), ks, desc), df_msort_idx(slice(idx, mid, len(idx)), ks, desc), ks, desc);
-}
-
-// يحوّل قيم العمود إلى مفاتيح رقمية قابلة للمقارنة (النصوص → رتبة أبجدية، nil → أكبر/أصغر قيمة)
-fun df_sort_keys(arr, desc) {
-    let allNum = true;
-    let i = 0;
-    while (i < len(arr)) { if (arr[i] != nil and !df_isnum(arr[i])) { allNum = false; } i = i + 1; }
-    let ks = [];
-    let big = 1000000000000000;
-    let tail = big;
-    if (desc) { tail = 0 - big; }
-    if (allNum) {
-        i = 0;
-        while (i < len(arr)) { if (arr[i] == nil) { push(ks, tail); } else { push(ks, arr[i]); } i = i + 1; }
-        return ks;
-    }
-    let strs = [];
-    i = 0;
-    while (i < len(arr)) { if (arr[i] != nil) { push(strs, str(arr[i])); } i = i + 1; }
-    let uniq = {};
-    let ul = [];
-    i = 0;
-    while (i < len(strs)) { if (!has(uniq, strs[i])) { uniq[strs[i]] = true; push(ul, strs[i]); } i = i + 1; }
-    let sorted = sort(ul);
-    let rank = {};
-    i = 0;
-    while (i < len(sorted)) { rank[sorted[i]] = i; i = i + 1; }
-    i = 0;
-    while (i < len(arr)) { if (arr[i] == nil) { push(ks, tail); } else { push(ks, rank[str(arr[i])]); } i = i + 1; }
-    return ks;
-}
-
-fun df_sort(df, name, desc) {
-    let c = df_col(df, name);
-    let ks = df_sort_keys(c, desc);
-    let idx = [];
-    let i = 0;
-    while (i < len(c)) { push(idx, i); i = i + 1; }
-    return df_take(df, df_msort_idx(idx, ks, desc));
-}
-
-// ---------------------------------------------------------------------------
-//  التحويل
-// ---------------------------------------------------------------------------
-fun df_select(df, names) {
-    let out = df_new(names);
-    let j = 0;
-    while (j < len(names)) { out["cols"][names[j]] = deepCopy(df_col(df, names[j])); j = j + 1; }
-    return out;
-}
-
-fun df_drop(df, names) {
-    let keep = [];
-    let j = 0;
-    while (j < len(df["names"])) {
-        let drop = false;
-        let k = 0;
-        while (k < len(names)) { if (names[k] == df["names"][j]) { drop = true; } k = k + 1; }
-        if (!drop) { push(keep, df["names"][j]); }
-        j = j + 1;
-    }
-    return df_select(df, keep);
-}
-
-fun df_rename(df, oldName, newName) {
-    let out = {"names": [], "cols": {}};
-    let j = 0;
-    while (j < len(df["names"])) {
-        let nm = df["names"][j];
-        let tgt = nm;
-        if (nm == oldName) { tgt = newName; }
-        push(out["names"], tgt);
-        out["cols"][tgt] = deepCopy(df["cols"][nm]);
-        j = j + 1;
-    }
-    return out;
-}
-
-// fn(record) -> bool
-fun df_filter(df, fn) {
-    let idx = [];
-    let n = df_rows_count(df);
-    let i = 0;
-    while (i < n) { if (fn(df_record(df, i))) { push(idx, i); } i = i + 1; }
-    return df_take(df, idx);
-}
-
-// df_where(df, "age", ">=", 18) — العوامل: == != > >= < <=   (المقارنة غير الرقمية: == و != فقط)
-fun df_where(df, name, op, value) {
-    let c = df_col(df, name);
-    let idx = [];
-    let i = 0;
-    while (i < len(c)) {
-        let v = c[i];
-        let ok = false;
-        if (op == "==") { ok = (v == value); }
-        else { if (op == "!=") { ok = (v != value); }
-        else { if (v != nil and df_isnum(v) and df_isnum(value)) {
-            if (op == ">") { ok = (v > value); }
-            if (op == ">=") { ok = (v >= value); }
-            if (op == "<") { ok = (v < value); }
-            if (op == "<=") { ok = (v <= value); }
-        } } }
-        if (ok) { push(idx, i); }
-        i = i + 1;
-    }
-    return df_take(df, idx);
-}
-
-// يضيف/يستبدل عموداً: values مصفوفة بطول الصفوف، أو دالة fn(record)
-fun df_with_col(df, name, values) {
-    let out = {"names": deepCopy(df["names"]), "cols": deepCopy(df["cols"])};
-    let n = df_rows_count(df);
-    let vals = [];
-    if (isFunction(values)) {
-        let i = 0;
-        while (i < n) { push(vals, values(df_record(df, i))); i = i + 1; }
-    } else { vals = deepCopy(values); }
-    if (!has(out["cols"], name)) { push(out["names"], name); }
-    out["cols"][name] = vals;
-    return out;
-}
-
-fun df_map_col(df, name, fn) {
-    let c = df_col(df, name);
-    let vals = [];
-    let i = 0;
-    while (i < len(c)) { push(vals, fn(c[i])); i = i + 1; }
-    return df_with_col(df, name, vals);
-}
-
-fun df_unique(df, name) {
-    let c = df_col(df, name);
-    let seen = {};
-    let o = [];
-    let i = 0;
-    while (i < len(c)) {
-        let k = str(c[i]);
-        if (!has(seen, k)) { seen[k] = true; push(o, c[i]); }
-        i = i + 1;
-    }
-    return o;
-}
-
-// إطار [value, count] مرتَّب تنازلياً
-fun df_value_counts(df, name) {
-    let c = df_col(df, name);
-    let counts = {};
-    let order = [];
-    let i = 0;
-    while (i < len(c)) {
-        let k = str(c[i]);
-        if (!has(counts, k)) { counts[k] = 0; push(order, c[i]); }
-        counts[k] = counts[k] + 1;
-        i = i + 1;
-    }
-    let out = df_new(["value", "count"]);
-    i = 0;
-    while (i < len(order)) { push(out["cols"]["value"], order[i]); push(out["cols"]["count"], counts[str(order[i])]); i = i + 1; }
-    return df_sort(out, "count", true);
-}
-
-// ---------------------------------------------------------------------------
-//  التجميع والربط
-// ---------------------------------------------------------------------------
-fun df_group_index(df, keyCol) {
-    let kc = df_col(df, keyCol);
-    let groups = {};
-    let order = [];
-    let i = 0;
-    while (i < len(kc)) {
-        let k = str(kc[i]);
-        if (!has(groups, k)) { groups[k] = {"key": kc[i], "idx": []}; push(order, k); }
-        push(groups[k]["idx"], i);
-        i = i + 1;
-    }
-    return {"groups": groups, "order": order};
-}
-
-// df_groupby(df, "city", "price", "mean") → [city, price_mean]
-fun df_groupby(df, keyCol, valueCol, how) {
-    let g = df_group_index(df, keyCol);
-    let vc = df_col(df, valueCol);
-    let out = df_new([keyCol, valueCol + "_" + how]);
-    let i = 0;
-    while (i < len(g["order"])) {
-        let grp = g["groups"][g["order"][i]];
-        let vals = df_pick(vc, grp["idx"]);
-        push(out["cols"][keyCol], grp["key"]);
-        push(out["cols"][valueCol + "_" + how], df_agg(vals, how));
+    while (i < len(ks)) {
+        let hit = needle == "" or contains(ks[i], needle) or contains(__ic[ks[i]][0], needle) or has(viaAlias, ks[i]);
+        if (hit) { push(out, ks[i]); }
         i = i + 1;
     }
     return out;
 }
 
-fun df_pick(a, idx) {
-    let o = [];
+// ---- 4) التوليد ---------------------------------------------------------------------------
+fun __ic_opt(opts, key, fallback) {
+    if (opts == nil) { return fallback; }
+    if (has(opts, key)) {
+        let v = opts[key];
+        if (v != nil) { return v; }
+    }
+    return fallback;
+}
+fun __ic_attr(s) {
+    // تهريب قيم الخصائص داخل علامات الاقتباس
+    return replace(replace(replace(replace(str(s), "&", "&amp;"), "\"", "&quot;"), "<", "&lt;"), ">", "&gt;");
+}
+
+// ic_path(name) -> قيمة d للمسار ("" إن لم توجد الأيقونة).
+fun ic_path(name) {
+    let n = ic_resolve(name);
+    if (n == nil) { return ""; }
+    return __ic[n][1];
+}
+
+// ic_svg(name, opts) -> وسم <svg> كامل. الاسم المجهول يعطي أيقونة "help" (علامة استفهام مرئية)
+// بدل فراغ صامت — نفس فلسفة سجل الأيقونات في المحرّك (rin_indsin_icons.h). تحقّق بـ ic_has قبلها.
+fun ic_svg(name, opts) {
+    let n = ic_resolve(name);
+    let missing = n == nil;
+    if (missing) { n = "help"; }
+    let size = __ic_opt(opts, "size", 24);
+    let color = __ic_opt(opts, "color", "currentColor");
+    let stroke = __ic_opt(opts, "stroke", 2);
+    let filled = __ic_opt(opts, "filled", false);
+    let title = __ic_opt(opts, "title", nil);
+    let cls = __ic_opt(opts, "class", nil);
+    let fill = "none";
+    if (filled) { fill = __ic_attr(color); }
+    let s = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" width=\"" + str(size) + "\" height=\"" + str(size) + "\"";
+    s = s + " fill=\"" + fill + "\" stroke=\"" + __ic_attr(color) + "\" stroke-width=\"" + str(stroke) + "\"";
+    s = s + " stroke-linecap=\"round\" stroke-linejoin=\"round\"";
+    if (cls != nil) { s = s + " class=\"" + __ic_attr(cls) + "\""; }
+    if (missing) { s = s + " data-missing=\"" + __ic_attr(name) + "\""; }
+    if (title != nil) { s = s + " role=\"img\" aria-label=\"" + __ic_attr(title) + "\">" + "<title>" + __ic_attr(title) + "</title>"; }
+    else { s = s + " aria-hidden=\"true\">"; }
+    return s + "<path d=\"" + __ic[n][1] + "\"/></svg>";
+}
+// ic_svgn(name, size, color) -> اختصار للحالة الشائعة.
+fun ic_svgn(name, size, color) { return ic_svg(name, {"size": size, "color": color}); }
+
+// ic_html(name, opts) -> <span> مضمَّن بحجم نصّي (1em) يرث لون الخط؛ مناسب لـ html= في WebView.
+fun ic_html(name, opts) {
+    let size = __ic_opt(opts, "size", 24);
+    let o = {"size": size, "color": __ic_opt(opts, "color", "currentColor"), "stroke": __ic_opt(opts, "stroke", 2),
+             "filled": __ic_opt(opts, "filled", false), "title": __ic_opt(opts, "title", nil), "class": nil};
+    return "<span style=\"display:inline-flex;vertical-align:middle;width:" + str(size) + "px;height:" + str(size) + "px\">" + ic_svg(name, o) + "</span>";
+}
+
+// ic_dataUri(name, opts) -> رابط data: يصلح لـ src= أو background-image (اللون يجب أن يكون صريحاً لا currentColor).
+fun ic_dataUri(name, opts) {
+    let s = ic_svg(name, opts);
+    s = replace(s, "%", "%25");
+    s = replace(s, "#", "%23");
+    s = replace(s, "<", "%3C");
+    s = replace(s, ">", "%3E");
+    s = replace(s, "\"", "'");
+    return "data:image/svg+xml;charset=utf-8," + s;
+}
+
+// ic_symbol(name) -> <symbol id="ic-NAME"> واحد؛ ic_sprite(names) -> sprite لمجموعة أسماء (أو كل الأيقونات إن مرّرت nil).
+fun ic_symbol(name) {
+    let n = ic_resolve(name);
+    if (n == nil) { return ""; }
+    return "<symbol id=\"ic-" + n + "\" viewBox=\"0 0 24 24\"><path d=\"" + __ic[n][1] + "\"/></symbol>";
+}
+fun ic_sprite(names) {
+    let list = names;
+    if (list == nil) { list = ic_names(); }
+    let s = "<svg xmlns=\"http://www.w3.org/2000/svg\" style=\"display:none\" aria-hidden=\"true\">";
     let i = 0;
-    while (i < len(idx)) { push(o, a[idx[i]]); i = i + 1; }
-    return o;
+    while (i < len(list)) { s = s + ic_symbol(list[i]); i = i + 1; }
+    return s + "</svg>";
 }
 
-// df_groupby_multi(df, "city", {"price": "mean", "qty": "sum"})
-fun df_groupby_multi(df, keyCol, spec) {
-    let g = df_group_index(df, keyCol);
-    let cols = keys(spec);
-    let names = [keyCol];
-    let j = 0;
-    while (j < len(cols)) { push(names, cols[j] + "_" + spec[cols[j]]); j = j + 1; }
-    let out = df_new(names);
-    let i = 0;
-    while (i < len(g["order"])) {
-        let grp = g["groups"][g["order"][i]];
-        push(out["cols"][keyCol], grp["key"]);
-        j = 0;
-        while (j < len(cols)) {
-            let vals = df_pick(df_col(df, cols[j]), grp["idx"]);
-            push(out["cols"][cols[j] + "_" + spec[cols[j]]], df_agg(vals, spec[cols[j]]));
-            j = j + 1;
-        }
-        i = i + 1;
+// ---- 5) تكامل indsin ----------------------------------------------------------------------
+// ic_snippet(name, opts) -> سطر indsin جاهز:  @view.Icon icon="home" size="lg"
+// opts (اختياري): size ("sm"/"lg"/رقم) · color
+fun ic_snippet(name, opts) {
+    let n = ic_resolve(name);
+    if (n == nil) { n = str(name); }
+    let s = "@view.Icon=icon_" + replace(n, "-", "_") + "\n    icon=\"" + n + "\";";
+    let size = __ic_opt(opts, "size", nil);
+    if (size != nil) {
+        if (type(size) == "string") { s = s + "\n    size=\"" + size + "\";"; } else { s = s + "\n    size=" + str(size) + ";"; }
     }
-    return out;
+    let color = __ic_opt(opts, "color", nil);
+    if (color != nil) { s = s + "\n    color=\"" + str(color) + "\";"; }
+    return s + "\n.end/view";
 }
 
-// ربط على عمود مفتاح مشترك: how = "inner" | "left"
-fun df_join(a, b, key, how) {
-    let bIndex = {};
-    let bk = df_col(b, key);
-    let i = 0;
-    while (i < len(bk)) {
-        let k = str(bk[i]);
-        if (!has(bIndex, k)) { bIndex[k] = []; }
-        push(bIndex[k], i);
-        i = i + 1;
-    }
-    let bExtra = [];
-    let j = 0;
-    while (j < len(b["names"])) { if (b["names"][j] != key) { push(bExtra, b["names"][j]); } j = j + 1; }
-    let names = deepCopy(a["names"]);
-    j = 0;
-    while (j < len(bExtra)) {
-        let nm = bExtra[j];
-        if (has(a["cols"], nm)) { nm = nm + "_right"; }
-        push(names, nm);
-        j = j + 1;
-    }
-    let out = df_new(names);
-    let ak = df_col(a, key);
-    i = 0;
-    while (i < len(ak)) {
-        let matches = [];
-        if (has(bIndex, str(ak[i]))) { matches = bIndex[str(ak[i])]; }
-        let reps = len(matches);
-        if (reps == 0 and how == "left") { reps = 1; }
-        let m = 0;
-        while (m < reps) {
-            j = 0;
-            while (j < len(a["names"])) { push(out["cols"][a["names"][j]], a["cols"][a["names"][j]][i]); j = j + 1; }
-            j = 0;
-            while (j < len(bExtra)) {
-                let oname = names[len(a["names"]) + j];
-                if (len(matches) > 0) { push(out["cols"][oname], b["cols"][bExtra[j]][matches[m]]); }
-                else { push(out["cols"][oname], nil); }
-                j = j + 1;
-            }
-            m = m + 1;
-        }
-        i = i + 1;
-    }
-    return out;
-}
-
-// ---------------------------------------------------------------------------
-//  القيم المفقودة
-// ---------------------------------------------------------------------------
-fun df_isna(df) {
-    let o = {};
-    let j = 0;
-    while (j < len(df["names"])) {
-        let c = df["cols"][df["names"][j]];
-        let k = 0;
-        let i = 0;
-        while (i < len(c)) { if (c[i] == nil) { k = k + 1; } i = i + 1; }
-        o[df["names"][j]] = k;
-        j = j + 1;
-    }
-    return o;
-}
-
-fun df_dropna(df) {
-    let idx = [];
-    let n = df_rows_count(df);
-    let i = 0;
-    while (i < n) {
-        let ok = true;
-        let j = 0;
-        while (j < len(df["names"])) { if (df["cols"][df["names"][j]][i] == nil) { ok = false; } j = j + 1; }
-        if (ok) { push(idx, i); }
-        i = i + 1;
-    }
-    return df_take(df, idx);
-}
-
-fun df_fillna(df, name, value) {
-    let c = df_col(df, name);
-    let vals = [];
-    let i = 0;
-    while (i < len(c)) { if (c[i] == nil) { push(vals, value); } else { push(vals, c[i]); } i = i + 1; }
-    return df_with_col(df, name, vals);
-}
-
-fun df_fill_mean(df, name) { return df_fillna(df, name, df_agg(df_col(df, name), "mean")); }
-
-// ---------------------------------------------------------------------------
-//  تحضير للتعلّم الآلي
-// ---------------------------------------------------------------------------
-// مصفوفة صفوف من الأعمدة المختارة (جاهزة لـ rinml). تفشل إن وُجدت قيمة غير رقمية.
-fun df_to_matrix(df, names) {
-    let n = df_rows_count(df);
-    let M = [];
-    let i = 0;
-    while (i < n) {
-        let rw = [];
-        let j = 0;
-        while (j < len(names)) {
-            let v = df_col(df, names[j])[i];
-            if (!df_isnum(v)) { fail("df_to_matrix: قيمة غير رقمية/مفقودة في العمود '" + names[j] + "' عند الصف " + str(i)); }
-            push(rw, v);
-            j = j + 1;
-        }
-        push(M, rw);
-        i = i + 1;
-    }
-    return M;
-}
-
-fun df_standardize(df, names) {
-    let out = df;
-    let j = 0;
-    while (j < len(names)) {
-        let c = df_numeric_values(df_col(df, names[j]));
-        let m = df_agg(c, "mean");
-        let s = df_agg(c, "std");
-        if (s == nil or s == 0) { s = 1; }
-        let src = df_col(df, names[j]);
-        let vals = [];
-        let i = 0;
-        while (i < len(src)) { if (src[i] == nil) { push(vals, nil); } else { push(vals, (src[i] - m) / s); } i = i + 1; }
-        out = df_with_col(out, names[j], vals);
-        j = j + 1;
-    }
-    return out;
-}
-
-fun df_minmax(df, names) {
-    let out = df;
-    let j = 0;
-    while (j < len(names)) {
-        let src = df_col(df, names[j]);
-        let lo = df_agg(src, "min");
-        let hi = df_agg(src, "max");
-        let span = hi - lo;
-        if (span == 0) { span = 1; }
-        let vals = [];
-        let i = 0;
-        while (i < len(src)) { if (src[i] == nil) { push(vals, nil); } else { push(vals, (src[i] - lo) / span); } i = i + 1; }
-        out = df_with_col(out, names[j], vals);
-        j = j + 1;
-    }
-    return out;
-}
-
-// يستبدل عمود فئات بأعمدة 0/1 باسم  col_value
-fun df_one_hot(df, name) {
-    let cats = df_unique(df, name);
-    let src = df_col(df, name);
-    let out = df_drop(df, [name]);
-    let k = 0;
-    while (k < len(cats)) {
-        let vals = [];
-        let i = 0;
-        while (i < len(src)) { if (src[i] == cats[k]) { push(vals, 1); } else { push(vals, 0); } i = i + 1; }
-        out = df_with_col(out, name + "_" + str(cats[k]), vals);
-        k = k + 1;
-    }
-    return out;
-}
-
-// يحوّل فئات العمود إلى أرقام 0..k-1 — يعيد {"df": ..., "classes": [...]}
-fun df_encode_labels(df, name) {
-    let cats = df_unique(df, name);
-    let src = df_col(df, name);
-    let vals = [];
-    let i = 0;
-    while (i < len(src)) {
-        let k = 0;
-        while (k < len(cats)) { if (cats[k] == src[i]) { push(vals, k); } k = k + 1; }
-        i = i + 1;
-    }
-    return {"df": df_with_col(df, name, vals), "classes": cats};
-}
-
-// ارتباط بيرسون بين عمودين رقميين
-fun df_corr(df, a, b) {
-    let x = df_col(df, a);
-    let y = df_col(df, b);
-    let n = 0;
-    let sx = 0; let sy = 0;
-    let i = 0;
-    while (i < len(x)) {
-        if (df_isnum(x[i]) and df_isnum(y[i])) { sx = sx + x[i]; sy = sy + y[i]; n = n + 1; }
-        i = i + 1;
-    }
-    if (n == 0) { return nil; }
-    let mx = sx / n; let my = sy / n;
-    let sxy = 0; let sxx = 0; let syy = 0;
-    i = 0;
-    while (i < len(x)) {
-        if (df_isnum(x[i]) and df_isnum(y[i])) {
-            let dx = x[i] - mx; let dy = y[i] - my;
-            sxy = sxy + dx * dy; sxx = sxx + dx * dx; syy = syy + dy * dy;
-        }
-        i = i + 1;
-    }
-    if (sxx == 0 or syy == 0) { return 0; }
-    return sxy / sqrt(sxx * syy);
-}
-
-// مصفوفة ارتباط كإطار بيانات (عمود "column" + عمود لكل اسم)
-fun df_corr_matrix(df, names) {
-    let hd = concat(["column"], names);
-    let out = df_new(hd);
+// ic_audit(names) -> {ok, known:[...], unknown:[...]}  يفحص قائمة أسماء أيقونات قبل استعمالها في واجهة.
+fun ic_audit(names) {
+    let known = [];
+    let unknown = [];
     let i = 0;
     while (i < len(names)) {
-        push(out["cols"]["column"], names[i]);
-        let j = 0;
-        while (j < len(names)) { push(out["cols"][names[j]], df_corr(df, names[i], names[j])); j = j + 1; }
+        if (ic_has(names[i])) { push(known, ic_resolve(names[i])); } else { push(unknown, names[i]); }
         i = i + 1;
     }
-    return out;
+    return {"ok": len(unknown) == 0, "known": known, "unknown": unknown};
 }
-)RINDFOGRIN";
-static const char* kLib_rinml_og_rin = R"RINMLOGRIN(
-// ============================================================================
-//  lib/rinml.og.rin — RinML: تعلّم آلة وذكاء اصطناعي خالص بلغة Rin
-//
-//  @version 1.0.0
-//  @category ai
-//  @prefix nd_ / ml_
-//
-//  المحتوى:
-//    nd_*  جبر خطي ودوال عددية آمنة (dot, solve, softmax, ...)
-//    ml_*  تحضير بيانات (split / scalers / one-hot / k-fold)
-//          نماذج: انحدار خطي/ريدج، لوجستي، kNN، k-means، Naive Bayes، شجرة قرار،
-//                 شبكة عصبية متعددة الطبقات (MLP) بالانتشار العكسي، مصنّف نصوص (Naive Bayes)
-//          مقاييس: accuracy / confusion / precision / recall / f1 / mse / rmse / mae / r2
-//          حفظ/تحميل: ml_save / ml_load (JSON)
-//
-//  كل النماذج قواميس بحقل "type" (قابلة للتحويل إلى JSON وللتخزين داخل @container).
-//  استيراد:  @import "lib/rinml.og.rin";
-//
-//  قيود المفسِّر التي صُمِّمت حولها: لا وسائط اختيارية (عدد الوسائط ثابت)، و`<` للأرقام فقط،
-//  و`round` بوسيط واحد، و`ln(0)` يرمي خطأ — لذلك نستعمل nd_round / nd_ln الآمنتين.
-// ============================================================================
 
-// ---------------------------------------------------------------------------
-//  nd_: دوال عددية ومتجهات ومصفوفات
-// ---------------------------------------------------------------------------
-fun nd_pi() { return 3.141592653589793; }
-
-fun nd_clip(x, lo, hi) {
-    if (x < lo) { return lo; }
-    if (x > hi) { return hi; }
-    return x;
-}
-
-fun nd_round(x, d) {
-    let p = pow(10, d);
-    return round(x * p) / p;
-}
-
-// exp/ln آمنتان: لا inf ولا خطأ عند الصفر.
-fun nd_exp(x) { return exp(nd_clip(x, -60, 60)); }
-fun nd_ln(x) {
-    if (x < 0.000000000001) { return ln(0.000000000001); }
-    return ln(x);
-}
-
-fun nd_sigmoid(x) { return 1 / (1 + nd_exp(0 - x)); }
-fun nd_tanh(x) {
-    let e = nd_exp(2 * x);
-    return (e - 1) / (e + 1);
-}
-fun nd_relu(x) {
-    if (x > 0) { return x; }
-    return 0;
-}
-
-fun nd_zeros(n) {
-    let o = [];
-    let i = 0;
-    while (i < n) { push(o, 0); i = i + 1; }
-    return o;
-}
-
-fun nd_fill(n, v) {
-    let o = [];
-    let i = 0;
-    while (i < n) { push(o, v); i = i + 1; }
-    return o;
-}
-
-fun nd_seq(n) {
-    let o = [];
-    let i = 0;
-    while (i < n) { push(o, i); i = i + 1; }
-    return o;
-}
-
-fun nd_dot(a, b) {
-    let s = 0;
-    let i = 0;
-    let n = len(a);
-    while (i < n) { s = s + a[i] * b[i]; i = i + 1; }
-    return s;
-}
-
-fun nd_vadd(a, b) {
-    let o = [];
-    let i = 0;
-    while (i < len(a)) { push(o, a[i] + b[i]); i = i + 1; }
-    return o;
-}
-
-fun nd_vsub(a, b) {
-    let o = [];
-    let i = 0;
-    while (i < len(a)) { push(o, a[i] - b[i]); i = i + 1; }
-    return o;
-}
-
-fun nd_vscale(a, k) {
-    let o = [];
-    let i = 0;
-    while (i < len(a)) { push(o, a[i] * k); i = i + 1; }
-    return o;
-}
-
-fun nd_norm(a) { return sqrt(nd_dot(a, a)); }
-
-fun nd_dist(a, b) {
-    let s = 0;
-    let i = 0;
-    while (i < len(a)) { let d = a[i] - b[i]; s = s + d * d; i = i + 1; }
-    return sqrt(s);
-}
-
-fun nd_sum(a) {
-    let s = 0;
-    let i = 0;
-    while (i < len(a)) { s = s + a[i]; i = i + 1; }
-    return s;
-}
-
-fun nd_mean(a) {
-    if (len(a) == 0) { return 0; }
-    return nd_sum(a) / len(a);
-}
-
-fun nd_var(a) {
-    if (len(a) == 0) { return 0; }
-    let m = nd_mean(a);
-    let s = 0;
-    let i = 0;
-    while (i < len(a)) { let d = a[i] - m; s = s + d * d; i = i + 1; }
-    return s / len(a);
-}
-
-fun nd_std(a) { return sqrt(nd_var(a)); }
-
-fun nd_minv(a) {
-    let m = a[0];
-    let i = 1;
-    while (i < len(a)) { if (a[i] < m) { m = a[i]; } i = i + 1; }
-    return m;
-}
-
-fun nd_maxv(a) {
-    let m = a[0];
-    let i = 1;
-    while (i < len(a)) { if (a[i] > m) { m = a[i]; } i = i + 1; }
-    return m;
-}
-
-fun nd_argmax(a) {
-    let bi = 0;
-    let i = 1;
-    while (i < len(a)) { if (a[i] > a[bi]) { bi = i; } i = i + 1; }
-    return bi;
-}
-
-fun nd_argmin(a) {
-    let bi = 0;
-    let i = 1;
-    while (i < len(a)) { if (a[i] < a[bi]) { bi = i; } i = i + 1; }
-    return bi;
-}
-
-fun nd_softmax(a) {
-    let m = nd_maxv(a);
-    let e = [];
-    let i = 0;
-    let s = 0;
-    while (i < len(a)) { let v = nd_exp(a[i] - m); push(e, v); s = s + v; i = i + 1; }
-    let o = [];
-    i = 0;
-    while (i < len(e)) { push(o, e[i] / s); i = i + 1; }
-    return o;
-}
-
-// أعمدة/صفوف
-fun nd_col(M, j) {
-    let o = [];
-    let i = 0;
-    while (i < len(M)) { push(o, M[i][j]); i = i + 1; }
-    return o;
-}
-
-fun nd_transpose(M) {
-    if (len(M) == 0) { return []; }
-    let o = [];
-    let j = 0;
-    while (j < len(M[0])) { push(o, nd_col(M, j)); j = j + 1; }
-    return o;
-}
-
-fun nd_matvec(M, v) {
-    let o = [];
-    let i = 0;
-    while (i < len(M)) { push(o, nd_dot(M[i], v)); i = i + 1; }
-    return o;
-}
-
-fun nd_matmul(A, B) {
-    let Bt = nd_transpose(B);
-    let o = [];
-    let i = 0;
-    while (i < len(A)) {
-        let rw = [];
-        let j = 0;
-        while (j < len(Bt)) { push(rw, nd_dot(A[i], Bt[j])); j = j + 1; }
-        push(o, rw);
-        i = i + 1;
-    }
-    return o;
-}
-
-// يحلّ A·x = b بطريقة غاوس-جوردان مع محورية جزئية. يعيد nil إن كانت المصفوفة شاذّة.
-fun nd_solve(A, b) {
-    let n = len(A);
-    let M = [];
-    let i = 0;
-    while (i < n) {
-        let rw = [];
-        let j = 0;
-        while (j < n) { push(rw, A[i][j]); j = j + 1; }
-        push(rw, b[i]);
-        push(M, rw);
-        i = i + 1;
-    }
-    let c = 0;
-    while (c < n) {
-        let p = c;
-        let r = c + 1;
-        while (r < n) { if (abs(M[r][c]) > abs(M[p][c])) { p = r; } r = r + 1; }
-        if (abs(M[p][c]) < 0.000000000001) { return nil; }
-        let tmp = M[c]; M[c] = M[p]; M[p] = tmp;
-        let pv = M[c][c];
-        let k = c;
-        while (k <= n) { M[c][k] = M[c][k] / pv; k = k + 1; }
-        r = 0;
-        while (r < n) {
-            if (r != c) {
-                let f = M[r][c];
-                if (f != 0) {
-                    k = c;
-                    while (k <= n) { M[r][k] = M[r][k] - f * M[c][k]; k = k + 1; }
-                }
-            }
-            r = r + 1;
-        }
-        c = c + 1;
-    }
-    let x = [];
-    i = 0;
-    while (i < n) { push(x, M[i][n]); i = i + 1; }
-    return x;
-}
-
-// قيم فريدة بترتيب الظهور (تعمل مع الأرقام والنصوص).
-fun nd_unique(a) {
-    let seen = {};
-    let o = [];
-    let i = 0;
-    while (i < len(a)) {
-        let k = str(a[i]);
-        if (!has(seen, k)) { seen[k] = true; push(o, a[i]); }
-        i = i + 1;
-    }
-    return o;
-}
-
-fun nd_index_of(a, v) {
-    let i = 0;
-    while (i < len(a)) { if (a[i] == v) { return i; } i = i + 1; }
-    return -1;
-}
-
-// خلط Fisher–Yates (يستخدم seed(n) العام للتكرارية).
-fun nd_shuffle(a) {
-    let o = [];
-    let i = 0;
-    while (i < len(a)) { push(o, a[i]); i = i + 1; }
-    i = len(o) - 1;
-    while (i > 0) {
-        let j = floor(random() * (i + 1));
-        let t = o[i]; o[i] = o[j]; o[j] = t;
-        i = i - 1;
-    }
-    return o;
-}
-
-fun nd_take(a, idx) {
-    let o = [];
-    let i = 0;
-    while (i < len(idx)) { push(o, a[idx[i]]); i = i + 1; }
-    return o;
-}
-
-// ---------------------------------------------------------------------------
-//  تحضير البيانات
-// ---------------------------------------------------------------------------
-// يعيد {Xtr, ytr, Xte, yte}. testRatio مثل 0.2 ؛ sd بذرة التكرارية.
-fun ml_train_test_split(X, y, testRatio, sd) {
-    seed(sd);
-    let idx = nd_shuffle(nd_seq(len(X)));
-    let nTest = floor(len(X) * testRatio);
-    if (nTest < 1) { nTest = 1; }
-    let teIdx = slice(idx, 0, nTest);
-    let trIdx = slice(idx, nTest, len(X));
-    return {
-        "Xtr": nd_take(X, trIdx), "ytr": nd_take(y, trIdx),
-        "Xte": nd_take(X, teIdx), "yte": nd_take(y, teIdx)
-    };
-}
-
-// معايرة قياسية (z-score): يعيد {type, mu, sd}
-fun ml_scaler_fit(X) {
-    let d = len(X[0]);
-    let mu = [];
-    let sd = [];
-    let j = 0;
-    while (j < d) {
-        let c = nd_col(X, j);
-        let s = nd_std(c);
-        if (s < 0.000000000001) { s = 1; }
-        push(mu, nd_mean(c));
-        push(sd, s);
-        j = j + 1;
-    }
-    return {"type": "scaler", "mu": mu, "sd": sd};
-}
-
-fun ml_scaler_row(sc, x) {
-    let o = [];
-    let j = 0;
-    while (j < len(x)) { push(o, (x[j] - sc["mu"][j]) / sc["sd"][j]); j = j + 1; }
-    return o;
-}
-
-fun ml_scaler_transform(sc, X) {
-    let o = [];
-    let i = 0;
-    while (i < len(X)) { push(o, ml_scaler_row(sc, X[i])); i = i + 1; }
-    return o;
-}
-
-// معايرة min-max إلى [0,1]
-fun ml_minmax_fit(X) {
-    let d = len(X[0]);
-    let lo = [];
-    let hi = [];
-    let j = 0;
-    while (j < d) {
-        let c = nd_col(X, j);
-        push(lo, nd_minv(c));
-        let h = nd_maxv(c);
-        if (h - lo[j] < 0.000000000001) { h = lo[j] + 1; }
-        push(hi, h);
-        j = j + 1;
-    }
-    return {"type": "minmax", "lo": lo, "hi": hi};
-}
-
-fun ml_minmax_transform(sc, X) {
-    let o = [];
-    let i = 0;
-    while (i < len(X)) {
-        let rw = [];
-        let j = 0;
-        while (j < len(X[i])) { push(rw, (X[i][j] - sc["lo"][j]) / (sc["hi"][j] - sc["lo"][j])); j = j + 1; }
-        push(o, rw);
-        i = i + 1;
-    }
-    return o;
-}
-
-// ترميز فئات إلى one-hot: يعيد {classes, matrix}
-fun ml_onehot(labels) {
-    let classes = nd_unique(labels);
-    let m = [];
-    let i = 0;
-    while (i < len(labels)) {
-        let rw = nd_zeros(len(classes));
-        rw[nd_index_of(classes, labels[i])] = 1;
-        push(m, rw);
-        i = i + 1;
-    }
-    return {"classes": classes, "matrix": m};
-}
-
-// ---------------------------------------------------------------------------
-//  الانحدار الخطي (حل مغلق + ريدج) و SGD
-// ---------------------------------------------------------------------------
-// lambda = 0 → OLS ؛ lambda > 0 → Ridge (لا يُعاقَب الحدّ الثابت)
-fun ml_linreg_fit(X, y, lambda) {
-    let n = len(X);
-    let d = len(X[0]);
-    let A = [];
-    let r = 0;
-    while (r <= d) { push(A, nd_zeros(d + 1)); r = r + 1; }
-    let b = nd_zeros(d + 1);
-    let i = 0;
-    while (i < n) {
-        let xa = concat([1], X[i]);
-        let p = 0;
-        while (p <= d) {
-            b[p] = b[p] + xa[p] * y[i];
-            let q = 0;
-            while (q <= d) { A[p][q] = A[p][q] + xa[p] * xa[q]; q = q + 1; }
-            p = p + 1;
-        }
-        i = i + 1;
-    }
-    let k = 1;
-    while (k <= d) { A[k][k] = A[k][k] + lambda; k = k + 1; }
-    let w = nd_solve(A, b);
-    if (w == nil) { return nil; }
-    return {"type": "linreg", "b": w[0], "w": slice(w, 1, d + 1)};
-}
-
-// انحدار بالتدرّج (batch GD) — يُنصَح بمعايرة X أولاً.
-fun ml_linreg_sgd(X, y, lr, epochs) {
-    let n = len(X);
-    let d = len(X[0]);
-    let w = nd_zeros(d);
-    let b = 0;
-    let e = 0;
-    while (e < epochs) {
-        let gw = nd_zeros(d);
-        let gb = 0;
-        let i = 0;
-        while (i < n) {
-            let err = nd_dot(w, X[i]) + b - y[i];
-            let j = 0;
-            while (j < d) { gw[j] = gw[j] + err * X[i][j]; j = j + 1; }
-            gb = gb + err;
-            i = i + 1;
-        }
-        let j2 = 0;
-        while (j2 < d) { w[j2] = w[j2] - lr * gw[j2] / n; j2 = j2 + 1; }
-        b = b - lr * gb / n;
-        e = e + 1;
-    }
-    return {"type": "linreg", "b": b, "w": w};
-}
-
-// ---------------------------------------------------------------------------
-//  الانحدار اللوجستي الثنائي (y ∈ {0,1})
-// ---------------------------------------------------------------------------
-fun ml_logreg_fit(X, y, lr, epochs, lambda) {
-    let n = len(X);
-    let d = len(X[0]);
-    let w = nd_zeros(d);
-    let b = 0;
-    let e = 0;
-    while (e < epochs) {
-        let gw = nd_zeros(d);
-        let gb = 0;
-        let i = 0;
-        while (i < n) {
-            let err = nd_sigmoid(nd_dot(w, X[i]) + b) - y[i];
-            let j = 0;
-            while (j < d) { gw[j] = gw[j] + err * X[i][j]; j = j + 1; }
-            gb = gb + err;
-            i = i + 1;
-        }
-        let j2 = 0;
-        while (j2 < d) { w[j2] = w[j2] - lr * (gw[j2] / n + lambda * w[j2]); j2 = j2 + 1; }
-        b = b - lr * gb / n;
-        e = e + 1;
-    }
-    return {"type": "logreg", "b": b, "w": w};
-}
-
-fun ml_logreg_proba(m, x) { return nd_sigmoid(nd_dot(m["w"], x) + m["b"]); }
-
-// ---------------------------------------------------------------------------
-//  k أقرب جيران (تصنيف "class" أو انحدار "reg")
-// ---------------------------------------------------------------------------
-fun ml_knn_fit(X, y, k, mode) {
-    return {"type": "knn", "X": X, "y": y, "k": k, "mode": mode};
-}
-
-fun ml_knn_predict(m, x) {
-    let n = len(m["X"]);
-    let dists = [];
-    let i = 0;
-    while (i < n) { push(dists, nd_dist(m["X"][i], x)); i = i + 1; }
-    let k = m["k"];
-    if (k > n) { k = n; }
-    let used = nd_fill(n, false);
-    let picked = [];
-    let t = 0;
-    while (t < k) {
-        let bi = -1;
-        i = 0;
-        while (i < n) {
-            if (!used[i]) {
-                if (bi == -1) { bi = i; }
-                else { if (dists[i] < dists[bi]) { bi = i; } }
-            }
-            i = i + 1;
-        }
-        used[bi] = true;
-        push(picked, m["y"][bi]);
-        t = t + 1;
-    }
-    if (m["mode"] == "reg") { return nd_mean(picked); }
-    let counts = {};
-    let best = picked[0];
-    let bestC = 0;
-    i = 0;
-    while (i < len(picked)) {
-        let key = str(picked[i]);
-        if (!has(counts, key)) { counts[key] = 0; }
-        counts[key] = counts[key] + 1;
-        if (counts[key] > bestC) { bestC = counts[key]; best = picked[i]; }
-        i = i + 1;
-    }
-    return best;
-}
-
-// ---------------------------------------------------------------------------
-//  k-means (تهيئة k-means++)
-// ---------------------------------------------------------------------------
-fun ml_kmeans_nearest(centroids, x) {
-    let bi = 0;
-    let bd = nd_dist(centroids[0], x);
-    let c = 1;
-    while (c < len(centroids)) {
-        let d = nd_dist(centroids[c], x);
-        if (d < bd) { bd = d; bi = c; }
-        c = c + 1;
-    }
-    return bi;
-}
-
-fun ml_kmeans_fit(X, k, iters, sd) {
-    seed(sd);
-    let n = len(X);
-    let d = len(X[0]);
-    let cent = [];
-    push(cent, deepCopy(X[floor(random() * n)]));
-    while (len(cent) < k) {
-        let w = [];
-        let tot = 0;
-        let i = 0;
-        while (i < n) {
-            let c = ml_kmeans_nearest(cent, X[i]);
-            let dd = nd_dist(cent[c], X[i]);
-            push(w, dd * dd);
-            tot = tot + dd * dd;
-            i = i + 1;
-        }
-        let r = random() * tot;
-        let acc = 0;
-        let pick = n - 1;
-        i = 0;
-        while (i < n) {
-            acc = acc + w[i];
-            if (acc >= r) { pick = i; break; }
-            i = i + 1;
-        }
-        push(cent, deepCopy(X[pick]));
-    }
-    let labels = nd_fill(n, -1);
-    let it = 0;
-    while (it < iters) {
-        let changed = false;
-        let i2 = 0;
-        while (i2 < n) {
-            let c2 = ml_kmeans_nearest(cent, X[i2]);
-            if (c2 != labels[i2]) { labels[i2] = c2; changed = true; }
-            i2 = i2 + 1;
-        }
-        if (!changed) { break; }
-        let sums = [];
-        let cnt = nd_zeros(k);
-        let c3 = 0;
-        while (c3 < k) { push(sums, nd_zeros(d)); c3 = c3 + 1; }
-        i2 = 0;
-        while (i2 < n) {
-            let l = labels[i2];
-            sums[l] = nd_vadd(sums[l], X[i2]);
-            cnt[l] = cnt[l] + 1;
-            i2 = i2 + 1;
-        }
-        c3 = 0;
-        while (c3 < k) {
-            if (cnt[c3] > 0) { cent[c3] = nd_vscale(sums[c3], 1 / cnt[c3]); }
-            c3 = c3 + 1;
-        }
-        it = it + 1;
-    }
-    let inertia = 0;
-    let i3 = 0;
-    while (i3 < n) {
-        let dd2 = nd_dist(cent[labels[i3]], X[i3]);
-        inertia = inertia + dd2 * dd2;
-        i3 = i3 + 1;
-    }
-    return {"type": "kmeans", "k": k, "centroids": cent, "labels": labels, "inertia": inertia};
-}
-
-fun ml_kmeans_predict(m, x) { return ml_kmeans_nearest(m["centroids"], x); }
-
-// ---------------------------------------------------------------------------
-//  Gaussian Naive Bayes
-// ---------------------------------------------------------------------------
-fun ml_nb_fit(X, y) {
-    let classes = nd_unique(y);
-    let d = len(X[0]);
-    let priors = [];
-    let means = [];
-    let vars = [];
-    let c = 0;
-    while (c < len(classes)) {
-        let rows = [];
-        let i = 0;
-        while (i < len(X)) { if (y[i] == classes[c]) { push(rows, X[i]); } i = i + 1; }
-        push(priors, len(rows) / len(X));
-        let mu = [];
-        let vr = [];
-        let j = 0;
-        while (j < d) {
-            let col = nd_col(rows, j);
-            push(mu, nd_mean(col));
-            push(vr, nd_var(col) + 0.000001);
-            j = j + 1;
-        }
-        push(means, mu);
-        push(vars, vr);
-        c = c + 1;
-    }
-    return {"type": "nb", "classes": classes, "priors": priors, "means": means, "vars": vars};
-}
-
-fun ml_nb_scores(m, x) {
-    let out = [];
-    let c = 0;
-    while (c < len(m["classes"])) {
-        let s = nd_ln(m["priors"][c]);
-        let j = 0;
-        while (j < len(x)) {
-            let v = m["vars"][c][j];
-            let dx = x[j] - m["means"][c][j];
-            s = s - 0.5 * nd_ln(2 * nd_pi() * v) - dx * dx / (2 * v);
-            j = j + 1;
-        }
-        push(out, s);
-        c = c + 1;
-    }
-    return out;
-}
-
-fun ml_nb_predict(m, x) { return m["classes"][nd_argmax(ml_nb_scores(m, x))]; }
-
-// ---------------------------------------------------------------------------
-//  شجرة قرار (CART، معيار Gini) للتصنيف
-// ---------------------------------------------------------------------------
-fun ml_gini(labels) {
-    let n = len(labels);
-    if (n == 0) { return 0; }
-    let counts = {};
-    let i = 0;
-    while (i < n) {
-        let k = str(labels[i]);
-        if (!has(counts, k)) { counts[k] = 0; }
-        counts[k] = counts[k] + 1;
-        i = i + 1;
-    }
-    let g = 1;
-    let ks = keys(counts);
-    i = 0;
-    while (i < len(ks)) { let p = counts[ks[i]] / n; g = g - p * p; i = i + 1; }
-    return g;
-}
-
-fun ml_majority(labels) {
-    let counts = {};
-    let best = labels[0];
-    let bestC = 0;
-    let i = 0;
-    while (i < len(labels)) {
-        let k = str(labels[i]);
-        if (!has(counts, k)) { counts[k] = 0; }
-        counts[k] = counts[k] + 1;
-        if (counts[k] > bestC) { bestC = counts[k]; best = labels[i]; }
-        i = i + 1;
-    }
-    return best;
-}
-
-fun ml_tree_build(X, y, depth, maxDepth, minSamples) {
-    let n = len(y);
-    let g = ml_gini(y);
-    if (g == 0 or depth >= maxDepth or n < minSamples) {
-        return {"leaf": true, "label": ml_majority(y), "n": n};
-    }
-    let bestGain = 0;
-    let bestF = -1;
-    let bestT = 0;
-    let d = len(X[0]);
-    let f = 0;
-    while (f < d) {
-        let vals = sort(nd_unique(nd_col(X, f)));
-        let cands = [];
-        let step = 1;
-        if (len(vals) > 33) { step = floor(len(vals) / 32); }
-        let v = 0;
-        while (v + 1 < len(vals)) {
-            push(cands, (vals[v] + vals[v + 1]) / 2);
-            v = v + step;
-        }
-        let c = 0;
-        while (c < len(cands)) {
-            let t = cands[c];
-            let ly = [];
-            let ry = [];
-            let i = 0;
-            while (i < n) {
-                if (X[i][f] <= t) { push(ly, y[i]); } else { push(ry, y[i]); }
-                i = i + 1;
-            }
-            if (len(ly) > 0 and len(ry) > 0) {
-                let gain = g - (len(ly) / n) * ml_gini(ly) - (len(ry) / n) * ml_gini(ry);
-                if (gain > bestGain) { bestGain = gain; bestF = f; bestT = t; }
-            }
-            c = c + 1;
-        }
-        f = f + 1;
-    }
-    if (bestF == -1) { return {"leaf": true, "label": ml_majority(y), "n": n}; }
-    let LX = []; let Ly = []; let RX = []; let Ry = [];
-    let i2 = 0;
-    while (i2 < n) {
-        if (X[i2][bestF] <= bestT) { push(LX, X[i2]); push(Ly, y[i2]); }
-        else { push(RX, X[i2]); push(Ry, y[i2]); }
-        i2 = i2 + 1;
-    }
-    return {
-        "leaf": false, "f": bestF, "t": bestT, "n": n,
-        "l": ml_tree_build(LX, Ly, depth + 1, maxDepth, minSamples),
-        "r": ml_tree_build(RX, Ry, depth + 1, maxDepth, minSamples)
-    };
-}
-
-fun ml_tree_fit(X, y, maxDepth, minSamples) {
-    return {"type": "tree", "root": ml_tree_build(X, y, 0, maxDepth, minSamples)};
-}
-
-fun ml_tree_predict(m, x) {
-    let node = m["root"];
-    while (!node["leaf"]) {
-        if (x[node["f"]] <= node["t"]) { node = node["l"]; } else { node = node["r"]; }
-    }
-    return node["label"];
-}
-
-// ---------------------------------------------------------------------------
-//  الشبكة العصبية متعددة الطبقات (MLP) — انتشار عكسي + SGD
-//    sizes   مثل [2, 4, 1]
-//    act     الطبقات المخفية: "tanh" | "relu" | "sigmoid"
-//    outAct  الخرج: "linear" (انحدار) | "sigmoid" (ثنائي) | "softmax" (متعدد الفئات)
-//  الخسارة تُطابق دالة الخرج (MSE / BCE / CE) فتكون delta = out - target.
-// ---------------------------------------------------------------------------
-fun ml_mlp_init(sizes, act, outAct, sd) {
-    seed(sd);
-    let W = [];
-    let B = [];
-    let l = 0;
-    while (l + 1 < len(sizes)) {
-        let nin = sizes[l];
-        let nout = sizes[l + 1];
-        let lim = sqrt(6 / (nin + nout));
-        let M = [];
-        let i = 0;
-        while (i < nout) {
-            let rw = [];
-            let j = 0;
-            while (j < nin) { push(rw, (random() * 2 - 1) * lim); j = j + 1; }
-            push(M, rw);
-            i = i + 1;
-        }
-        push(W, M);
-        push(B, nd_zeros(nout));
-        l = l + 1;
-    }
-    return {"type": "mlp", "sizes": sizes, "act": act, "out": outAct, "W": W, "B": B, "loss": 0};
-}
-
-fun ml_act(name, z) {
-    if (name == "relu") { return nd_relu(z); }
-    if (name == "sigmoid") { return nd_sigmoid(z); }
-    return nd_tanh(z);
-}
-
-fun ml_act_grad(name, a) {
-    if (name == "relu") { if (a > 0) { return 1; } return 0; }
-    if (name == "sigmoid") { return a * (1 - a); }
-    return 1 - a * a;
-}
-
-// يعيد قائمة تنشيطات كل الطبقات (الأولى = المدخل، الأخيرة = الخرج)
-fun ml_mlp_forward(m, x) {
-    let acts = [x];
-    let a = x;
-    let L = len(m["W"]);
-    let l = 0;
-    while (l < L) {
-        let z = nd_vadd(nd_matvec(m["W"][l], a), m["B"][l]);
-        let nxt = [];
-        let i = 0;
-        if (l == L - 1) {
-            if (m["out"] == "softmax") { nxt = nd_softmax(z); }
-            else {
-                while (i < len(z)) {
-                    if (m["out"] == "sigmoid") { push(nxt, nd_sigmoid(z[i])); } else { push(nxt, z[i]); }
-                    i = i + 1;
-                }
-            }
-        } else {
-            while (i < len(z)) { push(nxt, ml_act(m["act"], z[i])); i = i + 1; }
-        }
-        push(acts, nxt);
-        a = nxt;
-        l = l + 1;
-    }
-    return acts;
-}
-
-// يدرّب النموذج في مكانه ويعيده. Y = مصفوفة متجهات هدف (استعمل ml_onehot للفئات).
-fun ml_mlp_fit(m, X, Y, lr, epochs) {
-    let L = len(m["W"]);
-    let n = len(X);
-    let e = 0;
-    while (e < epochs) {
-        let order = nd_shuffle(nd_seq(n));
-        let loss = 0;
-        let s = 0;
-        while (s < n) {
-            let idx = order[s];
-            let acts = ml_mlp_forward(m, X[idx]);
-            let out = acts[L];
-            let delta = nd_vsub(out, Y[idx]);
-            let q = 0;
-            while (q < len(delta)) { loss = loss + delta[q] * delta[q]; q = q + 1; }
-            let l = L - 1;
-            while (l >= 0) {
-                let prev = acts[l];
-                let nextDelta = nil;
-                if (l > 0) {
-                    nextDelta = nd_zeros(len(prev));
-                    let j = 0;
-                    while (j < len(prev)) {
-                        let sacc = 0;
-                        let i = 0;
-                        while (i < len(delta)) { sacc = sacc + m["W"][l][i][j] * delta[i]; i = i + 1; }
-                        nextDelta[j] = sacc * ml_act_grad(m["act"], prev[j]);
-                        j = j + 1;
-                    }
-                }
-                let i2 = 0;
-                while (i2 < len(delta)) {
-                    let j2 = 0;
-                    while (j2 < len(prev)) {
-                        m["W"][l][i2][j2] = m["W"][l][i2][j2] - lr * delta[i2] * prev[j2];
-                        j2 = j2 + 1;
-                    }
-                    m["B"][l][i2] = m["B"][l][i2] - lr * delta[i2];
-                    i2 = i2 + 1;
-                }
-                if (l > 0) { delta = nextDelta; }
-                l = l - 1;
-            }
-            s = s + 1;
-        }
-        m["loss"] = loss / n;
-        e = e + 1;
-    }
-    return m;
-}
-
-fun ml_mlp_output(m, x) {
-    let acts = ml_mlp_forward(m, x);
-    return acts[len(acts) - 1];
-}
-
-// خرج واحد sigmoid → فئة 0/1 ؛ خرج واحد linear → القيمة ؛ عدة مخارج → فهرس الأكبر
-fun ml_mlp_predict(m, x) {
-    let o = ml_mlp_output(m, x);
-    if (len(o) == 1) {
-        if (m["out"] == "sigmoid") { if (o[0] >= 0.5) { return 1; } return 0; }
-        return o[0];
-    }
-    return nd_argmax(o);
-}
-
-// ---------------------------------------------------------------------------
-//  مصنّف نصوص (Multinomial Naive Bayes) — يدعم العربية عبر tokenizeWords/arabicNormalize
-// ---------------------------------------------------------------------------
-fun ml_tokens(txt) {
-    let t = lower(arabicNormalize(str(txt)));
-    return tokenizeWords(t);
-}
-
-fun ml_textnb_fit(docs, labels) {
-    let classes = nd_unique(labels);
-    let counts = {};
-    let totals = {};
-    let docsPer = {};
-    let vocab = {};
-    let c = 0;
-    while (c < len(classes)) {
-        let k = str(classes[c]);
-        counts[k] = {};
-        totals[k] = 0;
-        docsPer[k] = 0;
-        c = c + 1;
-    }
-    let i = 0;
-    while (i < len(docs)) {
-        let k2 = str(labels[i]);
-        docsPer[k2] = docsPer[k2] + 1;
-        let toks = ml_tokens(docs[i]);
-        let t = 0;
-        while (t < len(toks)) {
-            let w = toks[t];
-            vocab[w] = true;
-            if (!has(counts[k2], w)) { counts[k2][w] = 0; }
-            counts[k2][w] = counts[k2][w] + 1;
-            totals[k2] = totals[k2] + 1;
-            t = t + 1;
-        }
-        i = i + 1;
-    }
-    return {
-        "type": "textnb", "classes": classes, "counts": counts, "totals": totals,
-        "docs": docsPer, "n": len(docs), "vocab": len(keys(vocab))
-    };
-}
-
-fun ml_textnb_scores(m, txt) {
-    let toks = ml_tokens(txt);
-    let out = [];
-    let c = 0;
-    while (c < len(m["classes"])) {
-        let k = str(m["classes"][c]);
-        let s = nd_ln(m["docs"][k] / m["n"]);
-        let t = 0;
-        while (t < len(toks)) {
-            let cnt = 0;
-            if (has(m["counts"][k], toks[t])) { cnt = m["counts"][k][toks[t]]; }
-            s = s + nd_ln((cnt + 1) / (m["totals"][k] + m["vocab"]));
-            t = t + 1;
-        }
-        push(out, s);
-        c = c + 1;
-    }
-    return out;
-}
-
-fun ml_textnb_predict(m, txt) { return m["classes"][nd_argmax(ml_textnb_scores(m, txt))]; }
-
-// ---------------------------------------------------------------------------
-//  واجهة موحّدة: ml_predict / ml_predict_all  (حسب حقل type)
-// ---------------------------------------------------------------------------
-fun ml_predict(m, x) {
-    let t = m["type"];
-    if (t == "linreg") { return nd_dot(m["w"], x) + m["b"]; }
-    if (t == "logreg") { if (ml_logreg_proba(m, x) >= 0.5) { return 1; } return 0; }
-    if (t == "knn") { return ml_knn_predict(m, x); }
-    if (t == "kmeans") { return ml_kmeans_predict(m, x); }
-    if (t == "nb") { return ml_nb_predict(m, x); }
-    if (t == "tree") { return ml_tree_predict(m, x); }
-    if (t == "mlp") { return ml_mlp_predict(m, x); }
-    if (t == "textnb") { return ml_textnb_predict(m, x); }
-    fail("ml_predict: نوع نموذج غير معروف: " + str(t));
-}
-
-fun ml_predict_all(m, X) {
-    let o = [];
-    let i = 0;
-    while (i < len(X)) { push(o, ml_predict(m, X[i])); i = i + 1; }
-    return o;
-}
-
-// ---------------------------------------------------------------------------
-//  المقاييس
-// ---------------------------------------------------------------------------
-fun ml_accuracy(yt, yp) {
-    if (len(yt) == 0) { return 0; }
-    let ok = 0;
-    let i = 0;
-    while (i < len(yt)) { if (yt[i] == yp[i]) { ok = ok + 1; } i = i + 1; }
-    return ok / len(yt);
-}
-
-// يعيد {labels, matrix} — الصفوف = الحقيقي، الأعمدة = المتوقَّع
-fun ml_confusion(yt, yp) {
-    let labels = sort(nd_unique(concat(yt, yp)));
-    let M = [];
-    let i = 0;
-    while (i < len(labels)) { push(M, nd_zeros(len(labels))); i = i + 1; }
-    i = 0;
-    while (i < len(yt)) {
-        let r = nd_index_of(labels, yt[i]);
-        let c = nd_index_of(labels, yp[i]);
-        M[r][c] = M[r][c] + 1;
-        i = i + 1;
-    }
-    return {"labels": labels, "matrix": M};
-}
-
-fun ml_precision(yt, yp, pos) {
-    let tp = 0; let fp = 0;
-    let i = 0;
-    while (i < len(yt)) {
-        if (yp[i] == pos) { if (yt[i] == pos) { tp = tp + 1; } else { fp = fp + 1; } }
-        i = i + 1;
-    }
-    if (tp + fp == 0) { return 0; }
-    return tp / (tp + fp);
-}
-
-fun ml_recall(yt, yp, pos) {
-    let tp = 0; let fneg = 0;
-    let i = 0;
-    while (i < len(yt)) {
-        if (yt[i] == pos) { if (yp[i] == pos) { tp = tp + 1; } else { fneg = fneg + 1; } }
-        i = i + 1;
-    }
-    if (tp + fneg == 0) { return 0; }
-    return tp / (tp + fneg);
-}
-
-fun ml_f1(yt, yp, pos) {
-    let p = ml_precision(yt, yp, pos);
-    let r = ml_recall(yt, yp, pos);
-    if (p + r == 0) { return 0; }
-    return 2 * p * r / (p + r);
-}
-
-fun ml_mse(yt, yp) {
-    let s = 0;
-    let i = 0;
-    while (i < len(yt)) { let d = yt[i] - yp[i]; s = s + d * d; i = i + 1; }
-    return s / len(yt);
-}
-
-fun ml_rmse(yt, yp) { return sqrt(ml_mse(yt, yp)); }
-
-fun ml_mae(yt, yp) {
-    let s = 0;
-    let i = 0;
-    while (i < len(yt)) { s = s + abs(yt[i] - yp[i]); i = i + 1; }
-    return s / len(yt);
-}
-
-fun ml_r2(yt, yp) {
-    let m = nd_mean(yt);
-    let ssr = 0;
-    let sst = 0;
-    let i = 0;
-    while (i < len(yt)) {
-        let a = yt[i] - yp[i];
-        let b = yt[i] - m;
-        ssr = ssr + a * a;
-        sst = sst + b * b;
-        i = i + 1;
-    }
-    if (sst == 0) { return 0; }
-    return 1 - ssr / sst;
-}
-
-// ---------------------------------------------------------------------------
-//  تحقّق متقاطع k-fold
-//    fitFn(Xtr, ytr) -> model ، metricFn(yte, ypred) -> رقم
-//    مثال:  ml_kfold(X, y, 5, 1, fun(a,b){ return ml_nb_fit(a,b); }, ml_accuracy)
-// ---------------------------------------------------------------------------
-fun ml_kfold(X, y, k, sd, fitFn, metricFn) {
-    seed(sd);
-    let idx = nd_shuffle(nd_seq(len(X)));
-    let n = len(X);
-    let scores = [];
-    let f = 0;
-    while (f < k) {
-        let lo = floor(n * f / k);
-        let hi = floor(n * (f + 1) / k);
-        let teIdx = slice(idx, lo, hi);
-        let trIdx = concat(slice(idx, 0, lo), slice(idx, hi, n));
-        let model = fitFn(nd_take(X, trIdx), nd_take(y, trIdx));
-        let preds = ml_predict_all(model, nd_take(X, teIdx));
-        push(scores, metricFn(nd_take(y, teIdx), preds));
-        f = f + 1;
-    }
-    return {"scores": scores, "mean": nd_mean(scores), "std": nd_std(scores)};
-}
-
-// ---------------------------------------------------------------------------
-//  حفظ/تحميل النماذج (JSON)
-// ---------------------------------------------------------------------------
-fun ml_save(m, path) {
-    writeFile(path, jsonEncode(m));
-    return path;
-}
-
-fun ml_load(path) { return jsonDecode(readFile(path)); }
-)RINMLOGRIN";
-static const char* kLib_rinai_og_rin = R"RINAIOGRIN(
-// ============================================================================
-//  lib/rinai.og.rin — RinAI: مساحة عمل ذكاء اصطناعي داخل حاويات Rin (@container)
-//
-//  @version 1.0.0
-//  @category ai
-//  @prefix ai_
-//
-//  تربط rindf (تحليل البيانات) + rinml (التعلّم الآلي) بنظام الحاويات:
-//    • مساحة العمل  = حاوية kind=data  اسمها ws   (تحمل النماذج + سجلّ التجارب + فهرس البيانات)
-//    • كل مجموعة بيانات = حاوية kind=table  اسمها  <ws>__ds_<name>  (حقل records)
-//    • النماذج تُخزَّن كـ "حزمة" bundle قابلة للتحويل إلى JSON (نموذج + معايِر + أسماء الميزات)
-//
-//  مساحة العمل:   ai_workspace · ai_put_dataset · ai_get_dataset · ai_datasets
-//  النماذج:        ai_put_model · ai_get_model · ai_models · ai_predict · ai_bundle_predict
-//  التجارب:        ai_log · ai_experiments
-//  AutoML:         ai_auto_classify · ai_auto_regress
-//  خطوط الأنابيب:  ai_run_pipeline
-//  الحفظ/التحميل:  ai_save_workspace · ai_load_workspace
-//  خدمة بعيدة:     ai_remote_predict   (POST JSON إلى أي نموذج مُستضاف: Docker / FastAPI / ...)
-//
-//  استيراد:  @import "lib/rinai.og.rin";   (يستورد rindf و rinml تلقائياً)
-// ============================================================================
-@import "lib/rindf.og.rin";
-@import "lib/rinml.og.rin";
-
-// ---------------------------------------------------------------------------
-//  مساحة العمل
-// ---------------------------------------------------------------------------
-// ينشئ المساحة إن لم تكن موجودة (وإلا يعيد اسمها). آمن للاستدعاء المتكرر.
-fun ai_workspace(ws) {
-    container.ensure("data", ws);
-    if (!container.has(ws, "datasets")) { container.set(ws, "datasets", []); }
-    if (!container.has(ws, "models")) { container.set(ws, "models", []); }
-    if (!container.has(ws, "log")) { container.set(ws, "log", []); }
-    return ws;
-}
-
-fun ai_ds_name(ws, name) { return ws + "__ds_" + name; }
-
-fun ai_list_add(ws, field, name) {
-    let cur = container.get(ws, field);
-    let i = 0;
-    while (i < len(cur)) { if (cur[i] == name) { return false; } i = i + 1; }
-    push(cur, name);
-    container.set(ws, field, cur);
-    return true;
-}
-
-// ---------------------------------------------------------------------------
-//  مجموعات البيانات (DataFrame <-> حاوية جدول)
-// ---------------------------------------------------------------------------
-fun ai_put_dataset(ws, name, df) {
-    ai_workspace(ws);
-    let tbl = ai_ds_name(ws, name);
-    container.ensure("table", tbl);
-    container.set(tbl, "records", df_to_records(df));
-    ai_list_add(ws, "datasets", name);
-    return tbl;
-}
-
-fun ai_get_dataset(ws, name) {
-    let tbl = ai_ds_name(ws, name);
-    if (!container.exists(tbl)) { fail("ai_get_dataset: لا توجد مجموعة بيانات باسم '" + name + "' في '" + ws + "'"); }
-    return df_from_records(container.get(tbl, "records"));
-}
-
-fun ai_datasets(ws) { return deepCopy(container.get(ws, "datasets")); }
-
-// ---------------------------------------------------------------------------
-//  حزم النماذج (bundle): نموذج + ميزات + معايِر + فئات
-// ---------------------------------------------------------------------------
-// أدنى حزمة: ai_make_bundle(model, features, scaler, classes) — scaler/classes يمكن أن تكون nil
-fun ai_make_bundle(model, features, scaler, classes) {
-    return {"type": "bundle", "model": model, "features": features, "scaler": scaler, "classes": classes};
-}
-
-fun ai_put_model(ws, name, bundle, metrics) {
-    ai_workspace(ws);
-    container.set(ws, "model_" + name, {"bundle": bundle, "metrics": metrics, "t": now()});
-    ai_list_add(ws, "models", name);
-    return name;
-}
-
-fun ai_get_model(ws, name) {
-    if (!container.has(ws, "model_" + name)) { fail("ai_get_model: لا يوجد نموذج باسم '" + name + "' في '" + ws + "'"); }
-    return deepCopy(container.get(ws, "model_" + name)["bundle"]);
-}
-
-fun ai_models(ws) { return deepCopy(container.get(ws, "models")); }
-
-fun ai_model_metrics(ws, name) { return deepCopy(container.get(ws, "model_" + name)["metrics"]); }
-
-// تنبّؤ من سجلّ (قاموس بأسماء الميزات) — يطبّق المعايرة ويحوّل فهرس الفئة إلى تسمية
-fun ai_bundle_predict(b, rec) {
-    let x = [];
-    let j = 0;
-    while (j < len(b["features"])) { push(x, rec[b["features"][j]]); j = j + 1; }
-    if (b["scaler"] != nil) { x = ml_scaler_row(b["scaler"], x); }
-    let p = ml_predict(b["model"], x);
-    if (b["model"]["type"] == "mlp" and b["classes"] != nil and len(b["classes"]) > 0) { return b["classes"][p]; }
-    return p;
-}
-
-fun ai_predict(ws, name, rec) { return ai_bundle_predict(ai_get_model(ws, name), rec); }
-
-// ---------------------------------------------------------------------------
-//  سجلّ التجارب
-// ---------------------------------------------------------------------------
-fun ai_log(ws, event) {
-    ai_workspace(ws);
-    let cur = container.get(ws, "log");
-    event["t"] = now();
-    push(cur, event);
-    container.set(ws, "log", cur);
-    return len(cur);
-}
-
-fun ai_experiments(ws) { return deepCopy(container.get(ws, "log")); }
-
-// ---------------------------------------------------------------------------
-//  AutoML خفيف: يجرّب عدّة نماذج على نفس التقسيم ويعيد لوحة ترتيب + أفضل حزمة
-// ---------------------------------------------------------------------------
-fun ai_auto_classify(df, target, features, sd) {
-    let X = df_to_matrix(df, features);
-    let y = deepCopy(df_col(df, target));
-    let sp = ml_train_test_split(X, y, 0.25, sd);
-    let sc = ml_scaler_fit(sp["Xtr"]);
-    let Xtr = ml_scaler_transform(sc, sp["Xtr"]);
-    let Xte = ml_scaler_transform(sc, sp["Xte"]);
-    let oh = ml_onehot(sp["ytr"]);
-    let classes = ml_onehot(y)["classes"];
-    let board = df_new(["model", "accuracy"]);
-    let bundles = {};
-
-    let knn = ml_knn_fit(Xtr, sp["ytr"], 5, "class");
-    let nb = ml_nb_fit(Xtr, sp["ytr"]);
-    let tr = ml_tree_fit(Xtr, sp["ytr"], 5, 2);
-    let cand = {"knn": knn, "naive_bayes": nb, "tree": tr};
-    let names = ["knn", "naive_bayes", "tree"];
-
-    // شبكة عصبية softmax
-    let nCls = len(classes);
-    let net = ml_mlp_init([len(features), 8, nCls], "tanh", "softmax", sd);
-    let Ytr = [];
-    let i = 0;
-    while (i < len(sp["ytr"])) {
-        let t = nd_zeros(nCls);
-        t[nd_index_of(classes, sp["ytr"][i])] = 1;
-        push(Ytr, t);
-        i = i + 1;
-    }
-    ml_mlp_fit(net, Xtr, Ytr, 0.05, 120);
-    cand["mlp"] = net;
-    push(names, "mlp");
-
-    i = 0;
-    while (i < len(names)) {
-        let m = cand[names[i]];
-        let raw = ml_predict_all(m, Xte);
-        let pred = raw;
-        if (m["type"] == "mlp") {
-            pred = [];
-            let q = 0;
-            while (q < len(raw)) { push(pred, classes[raw[q]]); q = q + 1; }
-        }
-        push(board["cols"]["model"], names[i]);
-        push(board["cols"]["accuracy"], ml_accuracy(sp["yte"], pred));
-        bundles[names[i]] = ai_make_bundle(m, features, sc, classes);
-        i = i + 1;
-    }
-    board = df_sort(board, "accuracy", true);
-    let bestName = board["cols"]["model"][0];
-    return {"leaderboard": board, "best_name": bestName, "best": bundles[bestName], "bundles": bundles, "task": "classification"};
-}
-
-fun ai_auto_regress(df, target, features, sd) {
-    let X = df_to_matrix(df, features);
-    let y = deepCopy(df_col(df, target));
-    let sp = ml_train_test_split(X, y, 0.25, sd);
-    let sc = ml_scaler_fit(sp["Xtr"]);
-    let Xtr = ml_scaler_transform(sc, sp["Xtr"]);
-    let Xte = ml_scaler_transform(sc, sp["Xte"]);
-    let board = df_new(["model", "rmse", "r2"]);
-    let bundles = {};
-    let cand = {};
-    let names = [];
-
-    let ols = ml_linreg_fit(Xtr, sp["ytr"], 0);
-    if (ols != nil) { cand["linear"] = ols; push(names, "linear"); }
-    let rdg = ml_linreg_fit(Xtr, sp["ytr"], 1);
-    if (rdg != nil) { cand["ridge"] = rdg; push(names, "ridge"); }
-    cand["knn"] = ml_knn_fit(Xtr, sp["ytr"], 5, "reg");
-    push(names, "knn");
-
-    let i = 0;
-    while (i < len(names)) {
-        let pred = ml_predict_all(cand[names[i]], Xte);
-        push(board["cols"]["model"], names[i]);
-        push(board["cols"]["rmse"], ml_rmse(sp["yte"], pred));
-        push(board["cols"]["r2"], ml_r2(sp["yte"], pred));
-        bundles[names[i]] = ai_make_bundle(cand[names[i]], features, sc, nil);
-        i = i + 1;
-    }
-    board = df_sort(board, "r2", true);
-    let bestName = board["cols"]["model"][0];
-    return {"leaderboard": board, "best_name": bestName, "best": bundles[bestName], "bundles": bundles, "task": "regression"};
-}
-
-// ---------------------------------------------------------------------------
-//  خطوط الأنابيب: steps = [{"name": "clean", "fn": fun(x){...}}, ...]
-//  كل خطوة تأخذ ناتج السابقة؛ يُسجَّل اسم كل خطوة وعدد الصفوف (إن كانت إطار بيانات) في سجلّ المساحة.
-// ---------------------------------------------------------------------------
-fun ai_run_pipeline(ws, steps, input) {
-    ai_workspace(ws);
-    let cur = input;
-    let trace = [];
-    let i = 0;
-    while (i < len(steps)) {
-        let fn = steps[i]["fn"];
-        cur = fn(cur);
-        let info = {"step": steps[i]["name"]};
-        if (type(cur) == "map" and has(cur, "names") and has(cur, "cols")) {
-            info["rows"] = df_rows_count(cur);
-            info["cols"] = len(cur["names"]);
-        }
-        push(trace, info);
-        i = i + 1;
-    }
-    ai_log(ws, {"event": "pipeline", "trace": trace});
-    return cur;
-}
-
-// ---------------------------------------------------------------------------
-//  الحفظ / التحميل (ملف JSON واحد لمساحة العمل كاملة)
-// ---------------------------------------------------------------------------
-fun ai_save_workspace(ws, path) {
-    let dsNames = container.get(ws, "datasets");
-    let datasets = {};
-    let i = 0;
-    while (i < len(dsNames)) {
-        datasets[dsNames[i]] = container.get(ai_ds_name(ws, dsNames[i]), "records");
-        i = i + 1;
-    }
-    let mNames = container.get(ws, "models");
-    let models = {};
-    i = 0;
-    while (i < len(mNames)) { models[mNames[i]] = container.get(ws, "model_" + mNames[i]); i = i + 1; }
-    writeFile(path, jsonEncode({"rinai": 1, "workspace": ws, "datasets": datasets, "models": models, "log": container.get(ws, "log")}));
-    return path;
-}
-
-fun ai_load_workspace(ws, path) {
-    let data = jsonDecode(readFile(path));
-    ai_workspace(ws);
-    let dk = keys(data["datasets"]);
-    let i = 0;
-    while (i < len(dk)) { ai_put_dataset(ws, dk[i], df_from_records(data["datasets"][dk[i]])); i = i + 1; }
-    let mk = keys(data["models"]);
-    i = 0;
-    while (i < len(mk)) {
-        let entry = data["models"][mk[i]];
-        container.set(ws, "model_" + mk[i], entry);
-        ai_list_add(ws, "models", mk[i]);
-        i = i + 1;
-    }
-    container.set(ws, "log", data["log"]);
-    return ws;
+// ---- 6) التوسعة ---------------------------------------------------------------------------
+// ic_validPath(d) -> true إن كان المسار مبنياً من الأوامر المدعومة (M L H V C A Z) والأرقام فقط.
+fun ic_validPath(d) {
+    if (type(d) != "string" or len(d) < 3) { return false; }
+    return regexTest(d, "^[MLHVCAZ0-9 .,\\-]+$") and regexTest(d, "^M");
 }
 
-// ---------------------------------------------------------------------------
-//  جسر الخدمات البعيدة (نموذج داخل Docker/خادم): POST JSON ويعيد {ok, status, json, error}
-//  لا يرمي عند فشل الشبكة؛ افحص result["ok"].
-// ---------------------------------------------------------------------------
-fun ai_remote_predict(url, payload) {
-    let r = httpRequest("POST", url, {"Content-Type": "application/json"}, jsonEncode(payload));
-    return {"ok": r["ok"], "status": r["status"], "json": r["json"], "error": r["error"]};
+// ic_register(name, category, d) -> الاسم المسجَّل. أيقونتك تدخل البحث والفئات مثل المدمجة؛
+// إعادة تسجيل اسم موجود تستبدله (آخر كتابة تفوز)، كما في registerIcon في سجل المحرّك.
+fun ic_register(name, category, d) {
+    let n = lower(trim(str(name)));
+    if (!regexTest(n, "^[a-z][a-z0-9-]{0,47}$")) { fail("ic_register: اسم غير صالح " + json.stringify(name) + " (أحرف صغيرة وأرقام و - فقط)"); }
+    if (!ic_validPath(d)) { fail("ic_register: مسار SVG غير صالح للأيقونة " + n); }
+    __ic[n] = [category, d];
+    return n;
 }
-)RINAIOGRIN";
+)INDSINICONSOGRIN";
 
 inline const std::unordered_map<std::string, std::string>& embeddedRinLibraries() {
     static const std::unordered_map<std::string, std::string> libs = {
@@ -20716,6 +18953,7 @@ inline const std::unordered_map<std::string, std::string>& embeddedRinLibraries(
         {"lib/syskit.og.rin", kLib_syskit_og_rin},
         {"lib/requirekit.og.rin", kLib_requirekit_og_rin},
         {"lib/physics.og.rin", kLib_physics_og_rin},
+        {"lib/indsinicons.og.rin", kLib_indsinicons_og_rin},
         {"lib/passkitlang.og.rin", kLib_passkitlang_og_rin},
         {"lib/passkitdb.og.rin", kLib_passkitdb_og_rin},
         {"lib/passkitcrypt.og.rin", kLib_passkitcrypt_og_rin},
@@ -20725,9 +18963,6 @@ inline const std::unordered_map<std::string, std::string>& embeddedRinLibraries(
         {"lib/packkit.og.rin", kLib_packkit_og_rin},
         {"lib/wesscode.og.rin", kLib_wesscode_og_rin},
         {"lib/indsinweb.og.rin", kLib_indsinweb_og_rin},
-        {"lib/rinai.og.rin", kLib_rinai_og_rin},
-        {"lib/rinml.og.rin", kLib_rinml_og_rin},
-        {"lib/rindf.og.rin", kLib_rindf_og_rin},
     };
     return libs;
 }
