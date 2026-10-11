@@ -18393,6 +18393,2297 @@ fun iwInfo() {
     };
 }
 )INDSINWEBOGRIN";
+static const char* kLib_rindf_og_rin = R"RINDFOGRIN(
+// ============================================================================
+//  lib/rindf.og.rin — RinDF: إطار بيانات (DataFrame) لتحليل البيانات
+//
+//  @version 1.0.0
+//  @category data
+//  @prefix df_
+//
+//  التمثيل (قاموس عادي قابل للتحويل إلى JSON):
+//      {"names": ["a","b"], "cols": {"a": [1,2,3], "b": ["x","y","z"]}}
+//  تخزين عمودي: الإحصاءات والتحويلات على الأعمدة سريعة وبسيطة.
+//  القيمة المفقودة = nil.  كل الدوال "غير مدمِّرة": تعيد إطاراً جديداً.
+//
+//  الإنشاء:     df_from_records · df_from_rows · df_from_map · df_parse_csv · df_read_csv
+//  الإخراج:     df_to_records · df_to_rows · df_to_csv · df_write_csv · df_format · df_print
+//  الاستكشاف:   df_shape · df_names · df_col · df_head · df_tail · df_describe · df_value_counts
+//  التحويل:     df_select · df_drop · df_rename · df_filter · df_where · df_with_col · df_map_col · df_sort
+//  التجميع:     df_groupby · df_groupby_multi · df_join
+//  القيم المفقودة: df_isna · df_dropna · df_fillna · df_fill_mean
+//  تحضير ML:    df_to_matrix · df_standardize · df_minmax · df_one_hot · df_encode_labels · df_corr
+//
+//  استيراد:  @import "lib/rindf.og.rin";
+//
+//  ملاحظة: كلمات مثل row / text / state / style كلمات سياقية في Rin — لا تبدأ عبارة بها
+//  كاسم متغيّر (استعملنا rec / rw / txt بدلاً منها).
+// ============================================================================
+
+// ---------------------------------------------------------------------------
+//  أدوات داخلية
+// ---------------------------------------------------------------------------
+fun df_is_missing_token(s) {
+    if (s == "" or s == "NA" or s == "N/A" or s == "null" or s == "NULL" or s == "NaN" or s == "nan" or s == "None") { return true; }
+    return false;
+}
+
+fun df_is_numeric_text(s) {
+    return regexTest(trim(s), "^-?[0-9]+([.][0-9]+)?$");
+}
+
+fun df_infer(s) {
+    if (df_is_missing_token(trim(s))) { return nil; }
+    if (df_is_numeric_text(s)) { return toNumber(trim(s)); }
+    return s;
+}
+
+fun df_rnd(x, d) {
+    let p = pow(10, d);
+    return round(x * p) / p;
+}
+
+fun df_rows_count(df) {
+    if (len(df["names"]) == 0) { return 0; }
+    return len(df["cols"][df["names"][0]]);
+}
+
+fun df_isnum(v) { return type(v) == "number"; }
+
+fun df_numeric_values(arr) {
+    let o = [];
+    let i = 0;
+    while (i < len(arr)) { if (df_isnum(arr[i])) { push(o, arr[i]); } i = i + 1; }
+    return o;
+}
+
+// ---------------------------------------------------------------------------
+//  الإنشاء
+// ---------------------------------------------------------------------------
+fun df_new(names) {
+    let cols = {};
+    let i = 0;
+    while (i < len(names)) { cols[names[i]] = []; i = i + 1; }
+    return {"names": deepCopy(names), "cols": cols};
+}
+
+// {name: array, ...} — الترتيب = ترتيب المفاتيح
+fun df_from_map(m) {
+    let names = keys(m);
+    let cols = {};
+    let i = 0;
+    while (i < len(names)) { cols[names[i]] = deepCopy(m[names[i]]); i = i + 1; }
+    return {"names": names, "cols": cols};
+}
+
+// header = أسماء الأعمدة ؛ rows = مصفوفة صفوف
+fun df_from_rows(header, rows) {
+    let df = df_new(header);
+    let r = 0;
+    while (r < len(rows)) {
+        let j = 0;
+        while (j < len(header)) {
+            let v = nil;
+            if (j < len(rows[r])) { v = rows[r][j]; }
+            push(df["cols"][header[j]], v);
+            j = j + 1;
+        }
+        r = r + 1;
+    }
+    return df;
+}
+
+// مصفوفة قواميس — الأعمدة = اتحاد المفاتيح بترتيب الظهور
+fun df_from_records(recs) {
+    let names = [];
+    let seen = {};
+    let i = 0;
+    while (i < len(recs)) {
+        let ks = keys(recs[i]);
+        let k = 0;
+        while (k < len(ks)) {
+            if (!has(seen, ks[k])) { seen[ks[k]] = true; push(names, ks[k]); }
+            k = k + 1;
+        }
+        i = i + 1;
+    }
+    let df = df_new(names);
+    i = 0;
+    while (i < len(recs)) {
+        let j = 0;
+        while (j < len(names)) {
+            let v = nil;
+            if (has(recs[i], names[j])) { v = recs[i][names[j]]; }
+            push(df["cols"][names[j]], v);
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    return df;
+}
+
+// محلّل CSV حقيقي: يدعم الاقتباس "..." والفواصل/الأسطر داخل الحقول و "" للهروب.
+// يعيد مصفوفة صفوف من النصوص الخام.
+fun df_csv_rows(txt, delim) {
+    let chars = utf8ToArray(txt);
+    let rows = [];
+    let cur = [];
+    let field = "";
+    let inq = false;
+    let i = 0;
+    let n = len(chars);
+    while (i < n) {
+        let ch = chars[i];
+        if (inq) {
+            if (ch == "\"") {
+                if (i + 1 < n and chars[i + 1] == "\"") { field = field + "\""; i = i + 1; }
+                else { inq = false; }
+            } else { field = field + ch; }
+        } else {
+            if (ch == "\"") { inq = true; }
+            else {
+                if (ch == delim) { push(cur, field); field = ""; }
+                else {
+                    if (ch == "\n") {
+                        push(cur, field); field = "";
+                        push(rows, cur); cur = [];
+                    } else {
+                        if (ch != "\r") { field = field + ch; }
+                    }
+                }
+            }
+        }
+        i = i + 1;
+    }
+    if (field != "" or len(cur) > 0) { push(cur, field); push(rows, cur); }
+    return rows;
+}
+
+// أول صف = الرأس. الأنواع تُستنتَج (رقم / نص / nil للمفقود).
+fun df_parse_csv(txt, delim) {
+    let rows = df_csv_rows(txt, delim);
+    if (len(rows) == 0) { return df_new([]); }
+    let header = [];
+    let j = 0;
+    while (j < len(rows[0])) { push(header, trim(rows[0][j])); j = j + 1; }
+    let df = df_new(header);
+    let r = 1;
+    while (r < len(rows)) {
+        if (!(len(rows[r]) == 1 and trim(rows[r][0]) == "")) {
+            j = 0;
+            while (j < len(header)) {
+                let v = nil;
+                if (j < len(rows[r])) { v = df_infer(rows[r][j]); }
+                push(df["cols"][header[j]], v);
+                j = j + 1;
+            }
+        }
+        r = r + 1;
+    }
+    return df;
+}
+
+fun df_read_csv(path) { return df_parse_csv(readFile(path), ","); }
+
+// ---------------------------------------------------------------------------
+//  الإخراج
+// ---------------------------------------------------------------------------
+fun df_record(df, i) {
+    let rec = {};
+    let j = 0;
+    while (j < len(df["names"])) { rec[df["names"][j]] = df["cols"][df["names"][j]][i]; j = j + 1; }
+    return rec;
+}
+
+fun df_to_records(df) {
+    let o = [];
+    let n = df_rows_count(df);
+    let i = 0;
+    while (i < n) { push(o, df_record(df, i)); i = i + 1; }
+    return o;
+}
+
+// صفوف القيم فقط (بلا رأس)
+fun df_to_rows(df) {
+    let o = [];
+    let n = df_rows_count(df);
+    let i = 0;
+    while (i < n) {
+        let rw = [];
+        let j = 0;
+        while (j < len(df["names"])) { push(rw, df["cols"][df["names"][j]][i]); j = j + 1; }
+        push(o, rw);
+        i = i + 1;
+    }
+    return o;
+}
+
+fun df_csv_escape(v) {
+    if (v == nil) { return ""; }
+    let s = str(v);
+    if (contains(s, ",") or contains(s, "\"") or contains(s, "\n")) {
+        return "\"" + replace(s, "\"", "\"\"") + "\"";
+    }
+    return s;
+}
+
+fun df_to_csv(df) {
+    let lines = [];
+    let hd = [];
+    let j = 0;
+    while (j < len(df["names"])) { push(hd, df_csv_escape(df["names"][j])); j = j + 1; }
+    push(lines, join(hd, ","));
+    let rows = df_to_rows(df);
+    let i = 0;
+    while (i < len(rows)) {
+        let cells = [];
+        j = 0;
+        while (j < len(rows[i])) { push(cells, df_csv_escape(rows[i][j])); j = j + 1; }
+        push(lines, join(cells, ","));
+        i = i + 1;
+    }
+    return join(lines, "\n") + "\n";
+}
+
+fun df_write_csv(df, path) {
+    writeFile(path, df_to_csv(df));
+    return path;
+}
+
+// جدول نصّي منسَّق (أول maxRows صفّ)
+fun df_format(df, maxRows) {
+    let names = df["names"];
+    let n = df_rows_count(df);
+    let shown = n;
+    if (shown > maxRows) { shown = maxRows; }
+    let cells = [];
+    let hd = [];
+    let j = 0;
+    while (j < len(names)) { push(hd, names[j]); j = j + 1; }
+    push(cells, hd);
+    let i = 0;
+    while (i < shown) {
+        let rw = [];
+        j = 0;
+        while (j < len(names)) {
+            let v = df["cols"][names[j]][i];
+            if (v == nil) { push(rw, "nil"); }
+            else { if (df_isnum(v)) { push(rw, str(df_rnd(v, 4))); } else { push(rw, str(v)); } }
+            j = j + 1;
+        }
+        push(cells, rw);
+        i = i + 1;
+    }
+    let widths = [];
+    j = 0;
+    while (j < len(names)) {
+        let w = 0;
+        i = 0;
+        while (i < len(cells)) { let l = utf8Len(cells[i][j]); if (l > w) { w = l; } i = i + 1; }
+        push(widths, w);
+        j = j + 1;
+    }
+    let lines = [];
+    i = 0;
+    while (i < len(cells)) {
+        let parts = [];
+        j = 0;
+        while (j < len(names)) {
+            let c = cells[i][j];
+            let pad = widths[j] - utf8Len(c);
+            push(parts, c + repeat(" ", pad));
+            j = j + 1;
+        }
+        push(lines, join(parts, " | "));
+        if (i == 0) {
+            let seps = [];
+            j = 0;
+            while (j < len(names)) { push(seps, repeat("-", widths[j])); j = j + 1; }
+            push(lines, join(seps, "-+-"));
+        }
+        i = i + 1;
+    }
+    if (n > shown) { push(lines, "... (" + str(n - shown) + " more rows)"); }
+    push(lines, "[" + str(n) + " rows x " + str(len(names)) + " columns]");
+    return join(lines, "\n");
+}
+
+fun df_print(df) { print df_format(df, 20); return df; }
+
+// ---------------------------------------------------------------------------
+//  الاستكشاف
+// ---------------------------------------------------------------------------
+fun df_shape(df) { return [df_rows_count(df), len(df["names"])]; }
+fun df_names(df) { return deepCopy(df["names"]); }
+fun df_has(df, name) { return has(df["cols"], name); }
+
+fun df_col(df, name) {
+    if (!has(df["cols"], name)) { fail("df_col: العمود غير موجود: " + str(name)); }
+    return df["cols"][name];
+}
+
+fun df_take(df, idx) {
+    let out = df_new(df["names"]);
+    let j = 0;
+    while (j < len(df["names"])) {
+        let nm = df["names"][j];
+        let i = 0;
+        while (i < len(idx)) { push(out["cols"][nm], df["cols"][nm][idx[i]]); i = i + 1; }
+        j = j + 1;
+    }
+    return out;
+}
+
+fun df_slice(df, a, b) {
+    let n = df_rows_count(df);
+    if (b > n) { b = n; }
+    let idx = [];
+    let i = a;
+    while (i < b) { push(idx, i); i = i + 1; }
+    return df_take(df, idx);
+}
+
+fun df_head(df, n) { return df_slice(df, 0, n); }
+fun df_tail(df, n) {
+    let total = df_rows_count(df);
+    let a = total - n;
+    if (a < 0) { a = 0; }
+    return df_slice(df, a, total);
+}
+
+// ---------------------------------------------------------------------------
+//  إحصاءات
+// ---------------------------------------------------------------------------
+fun df_sorted_nums(arr) { return sort(df_numeric_values(arr)); }
+
+// تقسيم خطي (مثل numpy.percentile) — q بين 0 و 1
+fun df_quantile(arr, q) {
+    let s = df_sorted_nums(arr);
+    let n = len(s);
+    if (n == 0) { return nil; }
+    if (n == 1) { return s[0]; }
+    let pos = q * (n - 1);
+    let lo = floor(pos);
+    let hi = ceil(pos);
+    return s[lo] + (s[hi] - s[lo]) * (pos - lo);
+}
+
+fun df_agg(arr, how) {
+    let nums = df_numeric_values(arr);
+    if (how == "count") { let c = 0; let i = 0; while (i < len(arr)) { if (arr[i] != nil) { c = c + 1; } i = i + 1; } return c; }
+    if (how == "first") { if (len(arr) == 0) { return nil; } return arr[0]; }
+    if (how == "last") { if (len(arr) == 0) { return nil; } return arr[len(arr) - 1]; }
+    if (len(nums) == 0) { return nil; }
+    let s = 0;
+    let i2 = 0;
+    while (i2 < len(nums)) { s = s + nums[i2]; i2 = i2 + 1; }
+    if (how == "sum") { return s; }
+    let mean = s / len(nums);
+    if (how == "mean") { return mean; }
+    if (how == "median") { return df_quantile(nums, 0.5); }
+    if (how == "min") { return df_quantile(nums, 0); }
+    if (how == "max") { return df_quantile(nums, 1); }
+    if (how == "var" or how == "std") {
+        let v = 0;
+        i2 = 0;
+        while (i2 < len(nums)) { let d = nums[i2] - mean; v = v + d * d; i2 = i2 + 1; }
+        v = v / len(nums);
+        if (how == "var") { return v; }
+        return sqrt(v);
+    }
+    fail("df_agg: دالة تجميع غير معروفة: " + str(how));
+}
+
+fun df_is_numeric_col(arr) {
+    let seenNum = false;
+    let i = 0;
+    while (i < len(arr)) {
+        if (arr[i] != nil) {
+            if (!df_isnum(arr[i])) { return false; }
+            seenNum = true;
+        }
+        i = i + 1;
+    }
+    return seenNum;
+}
+
+// ملخّص الأعمدة الرقمية: إطار بيانات صفوفه = الأعمدة
+fun df_describe(df) {
+    let out = df_new(["column", "count", "mean", "std", "min", "q25", "median", "q75", "max"]);
+    let j = 0;
+    while (j < len(df["names"])) {
+        let nm = df["names"][j];
+        let c = df["cols"][nm];
+        if (df_is_numeric_col(c)) {
+            push(out["cols"]["column"], nm);
+            push(out["cols"]["count"], df_agg(c, "count"));
+            push(out["cols"]["mean"], df_agg(c, "mean"));
+            push(out["cols"]["std"], df_agg(c, "std"));
+            push(out["cols"]["min"], df_agg(c, "min"));
+            push(out["cols"]["q25"], df_quantile(c, 0.25));
+            push(out["cols"]["median"], df_agg(c, "median"));
+            push(out["cols"]["q75"], df_quantile(c, 0.75));
+            push(out["cols"]["max"], df_agg(c, "max"));
+        }
+        j = j + 1;
+    }
+    return out;
+}
+
+// ---------------------------------------------------------------------------
+//  الفرز (ترتيب مستقر بدمج الفهارس — يدعم الأرقام والنصوص، و nil في النهاية)
+// ---------------------------------------------------------------------------
+fun df_merge_idx(a, b, ks, desc) {
+    let o = [];
+    let i = 0;
+    let j = 0;
+    while (i < len(a) and j < len(b)) {
+        let ka = ks[a[i]];
+        let kb = ks[b[j]];
+        let takeA = true;
+        if (desc) { if (kb > ka) { takeA = false; } }
+        else { if (kb < ka) { takeA = false; } }
+        if (takeA) { push(o, a[i]); i = i + 1; } else { push(o, b[j]); j = j + 1; }
+    }
+    while (i < len(a)) { push(o, a[i]); i = i + 1; }
+    while (j < len(b)) { push(o, b[j]); j = j + 1; }
+    return o;
+}
+
+fun df_msort_idx(idx, ks, desc) {
+    if (len(idx) <= 1) { return idx; }
+    let mid = floor(len(idx) / 2);
+    return df_merge_idx(df_msort_idx(slice(idx, 0, mid), ks, desc), df_msort_idx(slice(idx, mid, len(idx)), ks, desc), ks, desc);
+}
+
+// يحوّل قيم العمود إلى مفاتيح رقمية قابلة للمقارنة (النصوص → رتبة أبجدية، nil → أكبر/أصغر قيمة)
+fun df_sort_keys(arr, desc) {
+    let allNum = true;
+    let i = 0;
+    while (i < len(arr)) { if (arr[i] != nil and !df_isnum(arr[i])) { allNum = false; } i = i + 1; }
+    let ks = [];
+    let big = 1000000000000000;
+    let tail = big;
+    if (desc) { tail = 0 - big; }
+    if (allNum) {
+        i = 0;
+        while (i < len(arr)) { if (arr[i] == nil) { push(ks, tail); } else { push(ks, arr[i]); } i = i + 1; }
+        return ks;
+    }
+    let strs = [];
+    i = 0;
+    while (i < len(arr)) { if (arr[i] != nil) { push(strs, str(arr[i])); } i = i + 1; }
+    let uniq = {};
+    let ul = [];
+    i = 0;
+    while (i < len(strs)) { if (!has(uniq, strs[i])) { uniq[strs[i]] = true; push(ul, strs[i]); } i = i + 1; }
+    let sorted = sort(ul);
+    let rank = {};
+    i = 0;
+    while (i < len(sorted)) { rank[sorted[i]] = i; i = i + 1; }
+    i = 0;
+    while (i < len(arr)) { if (arr[i] == nil) { push(ks, tail); } else { push(ks, rank[str(arr[i])]); } i = i + 1; }
+    return ks;
+}
+
+fun df_sort(df, name, desc) {
+    let c = df_col(df, name);
+    let ks = df_sort_keys(c, desc);
+    let idx = [];
+    let i = 0;
+    while (i < len(c)) { push(idx, i); i = i + 1; }
+    return df_take(df, df_msort_idx(idx, ks, desc));
+}
+
+// ---------------------------------------------------------------------------
+//  التحويل
+// ---------------------------------------------------------------------------
+fun df_select(df, names) {
+    let out = df_new(names);
+    let j = 0;
+    while (j < len(names)) { out["cols"][names[j]] = deepCopy(df_col(df, names[j])); j = j + 1; }
+    return out;
+}
+
+fun df_drop(df, names) {
+    let keep = [];
+    let j = 0;
+    while (j < len(df["names"])) {
+        let drop = false;
+        let k = 0;
+        while (k < len(names)) { if (names[k] == df["names"][j]) { drop = true; } k = k + 1; }
+        if (!drop) { push(keep, df["names"][j]); }
+        j = j + 1;
+    }
+    return df_select(df, keep);
+}
+
+fun df_rename(df, oldName, newName) {
+    let out = {"names": [], "cols": {}};
+    let j = 0;
+    while (j < len(df["names"])) {
+        let nm = df["names"][j];
+        let tgt = nm;
+        if (nm == oldName) { tgt = newName; }
+        push(out["names"], tgt);
+        out["cols"][tgt] = deepCopy(df["cols"][nm]);
+        j = j + 1;
+    }
+    return out;
+}
+
+// fn(record) -> bool
+fun df_filter(df, fn) {
+    let idx = [];
+    let n = df_rows_count(df);
+    let i = 0;
+    while (i < n) { if (fn(df_record(df, i))) { push(idx, i); } i = i + 1; }
+    return df_take(df, idx);
+}
+
+// df_where(df, "age", ">=", 18) — العوامل: == != > >= < <=   (المقارنة غير الرقمية: == و != فقط)
+fun df_where(df, name, op, value) {
+    let c = df_col(df, name);
+    let idx = [];
+    let i = 0;
+    while (i < len(c)) {
+        let v = c[i];
+        let ok = false;
+        if (op == "==") { ok = (v == value); }
+        else { if (op == "!=") { ok = (v != value); }
+        else { if (v != nil and df_isnum(v) and df_isnum(value)) {
+            if (op == ">") { ok = (v > value); }
+            if (op == ">=") { ok = (v >= value); }
+            if (op == "<") { ok = (v < value); }
+            if (op == "<=") { ok = (v <= value); }
+        } } }
+        if (ok) { push(idx, i); }
+        i = i + 1;
+    }
+    return df_take(df, idx);
+}
+
+// يضيف/يستبدل عموداً: values مصفوفة بطول الصفوف، أو دالة fn(record)
+fun df_with_col(df, name, values) {
+    let out = {"names": deepCopy(df["names"]), "cols": deepCopy(df["cols"])};
+    let n = df_rows_count(df);
+    let vals = [];
+    if (isFunction(values)) {
+        let i = 0;
+        while (i < n) { push(vals, values(df_record(df, i))); i = i + 1; }
+    } else { vals = deepCopy(values); }
+    if (!has(out["cols"], name)) { push(out["names"], name); }
+    out["cols"][name] = vals;
+    return out;
+}
+
+fun df_map_col(df, name, fn) {
+    let c = df_col(df, name);
+    let vals = [];
+    let i = 0;
+    while (i < len(c)) { push(vals, fn(c[i])); i = i + 1; }
+    return df_with_col(df, name, vals);
+}
+
+fun df_unique(df, name) {
+    let c = df_col(df, name);
+    let seen = {};
+    let o = [];
+    let i = 0;
+    while (i < len(c)) {
+        let k = str(c[i]);
+        if (!has(seen, k)) { seen[k] = true; push(o, c[i]); }
+        i = i + 1;
+    }
+    return o;
+}
+
+// إطار [value, count] مرتَّب تنازلياً
+fun df_value_counts(df, name) {
+    let c = df_col(df, name);
+    let counts = {};
+    let order = [];
+    let i = 0;
+    while (i < len(c)) {
+        let k = str(c[i]);
+        if (!has(counts, k)) { counts[k] = 0; push(order, c[i]); }
+        counts[k] = counts[k] + 1;
+        i = i + 1;
+    }
+    let out = df_new(["value", "count"]);
+    i = 0;
+    while (i < len(order)) { push(out["cols"]["value"], order[i]); push(out["cols"]["count"], counts[str(order[i])]); i = i + 1; }
+    return df_sort(out, "count", true);
+}
+
+// ---------------------------------------------------------------------------
+//  التجميع والربط
+// ---------------------------------------------------------------------------
+fun df_group_index(df, keyCol) {
+    let kc = df_col(df, keyCol);
+    let groups = {};
+    let order = [];
+    let i = 0;
+    while (i < len(kc)) {
+        let k = str(kc[i]);
+        if (!has(groups, k)) { groups[k] = {"key": kc[i], "idx": []}; push(order, k); }
+        push(groups[k]["idx"], i);
+        i = i + 1;
+    }
+    return {"groups": groups, "order": order};
+}
+
+// df_groupby(df, "city", "price", "mean") → [city, price_mean]
+fun df_groupby(df, keyCol, valueCol, how) {
+    let g = df_group_index(df, keyCol);
+    let vc = df_col(df, valueCol);
+    let out = df_new([keyCol, valueCol + "_" + how]);
+    let i = 0;
+    while (i < len(g["order"])) {
+        let grp = g["groups"][g["order"][i]];
+        let vals = df_pick(vc, grp["idx"]);
+        push(out["cols"][keyCol], grp["key"]);
+        push(out["cols"][valueCol + "_" + how], df_agg(vals, how));
+        i = i + 1;
+    }
+    return out;
+}
+
+fun df_pick(a, idx) {
+    let o = [];
+    let i = 0;
+    while (i < len(idx)) { push(o, a[idx[i]]); i = i + 1; }
+    return o;
+}
+
+// df_groupby_multi(df, "city", {"price": "mean", "qty": "sum"})
+fun df_groupby_multi(df, keyCol, spec) {
+    let g = df_group_index(df, keyCol);
+    let cols = keys(spec);
+    let names = [keyCol];
+    let j = 0;
+    while (j < len(cols)) { push(names, cols[j] + "_" + spec[cols[j]]); j = j + 1; }
+    let out = df_new(names);
+    let i = 0;
+    while (i < len(g["order"])) {
+        let grp = g["groups"][g["order"][i]];
+        push(out["cols"][keyCol], grp["key"]);
+        j = 0;
+        while (j < len(cols)) {
+            let vals = df_pick(df_col(df, cols[j]), grp["idx"]);
+            push(out["cols"][cols[j] + "_" + spec[cols[j]]], df_agg(vals, spec[cols[j]]));
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    return out;
+}
+
+// ربط على عمود مفتاح مشترك: how = "inner" | "left"
+fun df_join(a, b, key, how) {
+    let bIndex = {};
+    let bk = df_col(b, key);
+    let i = 0;
+    while (i < len(bk)) {
+        let k = str(bk[i]);
+        if (!has(bIndex, k)) { bIndex[k] = []; }
+        push(bIndex[k], i);
+        i = i + 1;
+    }
+    let bExtra = [];
+    let j = 0;
+    while (j < len(b["names"])) { if (b["names"][j] != key) { push(bExtra, b["names"][j]); } j = j + 1; }
+    let names = deepCopy(a["names"]);
+    j = 0;
+    while (j < len(bExtra)) {
+        let nm = bExtra[j];
+        if (has(a["cols"], nm)) { nm = nm + "_right"; }
+        push(names, nm);
+        j = j + 1;
+    }
+    let out = df_new(names);
+    let ak = df_col(a, key);
+    i = 0;
+    while (i < len(ak)) {
+        let matches = [];
+        if (has(bIndex, str(ak[i]))) { matches = bIndex[str(ak[i])]; }
+        let reps = len(matches);
+        if (reps == 0 and how == "left") { reps = 1; }
+        let m = 0;
+        while (m < reps) {
+            j = 0;
+            while (j < len(a["names"])) { push(out["cols"][a["names"][j]], a["cols"][a["names"][j]][i]); j = j + 1; }
+            j = 0;
+            while (j < len(bExtra)) {
+                let oname = names[len(a["names"]) + j];
+                if (len(matches) > 0) { push(out["cols"][oname], b["cols"][bExtra[j]][matches[m]]); }
+                else { push(out["cols"][oname], nil); }
+                j = j + 1;
+            }
+            m = m + 1;
+        }
+        i = i + 1;
+    }
+    return out;
+}
+
+// ---------------------------------------------------------------------------
+//  القيم المفقودة
+// ---------------------------------------------------------------------------
+fun df_isna(df) {
+    let o = {};
+    let j = 0;
+    while (j < len(df["names"])) {
+        let c = df["cols"][df["names"][j]];
+        let k = 0;
+        let i = 0;
+        while (i < len(c)) { if (c[i] == nil) { k = k + 1; } i = i + 1; }
+        o[df["names"][j]] = k;
+        j = j + 1;
+    }
+    return o;
+}
+
+fun df_dropna(df) {
+    let idx = [];
+    let n = df_rows_count(df);
+    let i = 0;
+    while (i < n) {
+        let ok = true;
+        let j = 0;
+        while (j < len(df["names"])) { if (df["cols"][df["names"][j]][i] == nil) { ok = false; } j = j + 1; }
+        if (ok) { push(idx, i); }
+        i = i + 1;
+    }
+    return df_take(df, idx);
+}
+
+fun df_fillna(df, name, value) {
+    let c = df_col(df, name);
+    let vals = [];
+    let i = 0;
+    while (i < len(c)) { if (c[i] == nil) { push(vals, value); } else { push(vals, c[i]); } i = i + 1; }
+    return df_with_col(df, name, vals);
+}
+
+fun df_fill_mean(df, name) { return df_fillna(df, name, df_agg(df_col(df, name), "mean")); }
+
+// ---------------------------------------------------------------------------
+//  تحضير للتعلّم الآلي
+// ---------------------------------------------------------------------------
+// مصفوفة صفوف من الأعمدة المختارة (جاهزة لـ rinml). تفشل إن وُجدت قيمة غير رقمية.
+fun df_to_matrix(df, names) {
+    let n = df_rows_count(df);
+    let M = [];
+    let i = 0;
+    while (i < n) {
+        let rw = [];
+        let j = 0;
+        while (j < len(names)) {
+            let v = df_col(df, names[j])[i];
+            if (!df_isnum(v)) { fail("df_to_matrix: قيمة غير رقمية/مفقودة في العمود '" + names[j] + "' عند الصف " + str(i)); }
+            push(rw, v);
+            j = j + 1;
+        }
+        push(M, rw);
+        i = i + 1;
+    }
+    return M;
+}
+
+fun df_standardize(df, names) {
+    let out = df;
+    let j = 0;
+    while (j < len(names)) {
+        let c = df_numeric_values(df_col(df, names[j]));
+        let m = df_agg(c, "mean");
+        let s = df_agg(c, "std");
+        if (s == nil or s == 0) { s = 1; }
+        let src = df_col(df, names[j]);
+        let vals = [];
+        let i = 0;
+        while (i < len(src)) { if (src[i] == nil) { push(vals, nil); } else { push(vals, (src[i] - m) / s); } i = i + 1; }
+        out = df_with_col(out, names[j], vals);
+        j = j + 1;
+    }
+    return out;
+}
+
+fun df_minmax(df, names) {
+    let out = df;
+    let j = 0;
+    while (j < len(names)) {
+        let src = df_col(df, names[j]);
+        let lo = df_agg(src, "min");
+        let hi = df_agg(src, "max");
+        let span = hi - lo;
+        if (span == 0) { span = 1; }
+        let vals = [];
+        let i = 0;
+        while (i < len(src)) { if (src[i] == nil) { push(vals, nil); } else { push(vals, (src[i] - lo) / span); } i = i + 1; }
+        out = df_with_col(out, names[j], vals);
+        j = j + 1;
+    }
+    return out;
+}
+
+// يستبدل عمود فئات بأعمدة 0/1 باسم  col_value
+fun df_one_hot(df, name) {
+    let cats = df_unique(df, name);
+    let src = df_col(df, name);
+    let out = df_drop(df, [name]);
+    let k = 0;
+    while (k < len(cats)) {
+        let vals = [];
+        let i = 0;
+        while (i < len(src)) { if (src[i] == cats[k]) { push(vals, 1); } else { push(vals, 0); } i = i + 1; }
+        out = df_with_col(out, name + "_" + str(cats[k]), vals);
+        k = k + 1;
+    }
+    return out;
+}
+
+// يحوّل فئات العمود إلى أرقام 0..k-1 — يعيد {"df": ..., "classes": [...]}
+fun df_encode_labels(df, name) {
+    let cats = df_unique(df, name);
+    let src = df_col(df, name);
+    let vals = [];
+    let i = 0;
+    while (i < len(src)) {
+        let k = 0;
+        while (k < len(cats)) { if (cats[k] == src[i]) { push(vals, k); } k = k + 1; }
+        i = i + 1;
+    }
+    return {"df": df_with_col(df, name, vals), "classes": cats};
+}
+
+// ارتباط بيرسون بين عمودين رقميين
+fun df_corr(df, a, b) {
+    let x = df_col(df, a);
+    let y = df_col(df, b);
+    let n = 0;
+    let sx = 0; let sy = 0;
+    let i = 0;
+    while (i < len(x)) {
+        if (df_isnum(x[i]) and df_isnum(y[i])) { sx = sx + x[i]; sy = sy + y[i]; n = n + 1; }
+        i = i + 1;
+    }
+    if (n == 0) { return nil; }
+    let mx = sx / n; let my = sy / n;
+    let sxy = 0; let sxx = 0; let syy = 0;
+    i = 0;
+    while (i < len(x)) {
+        if (df_isnum(x[i]) and df_isnum(y[i])) {
+            let dx = x[i] - mx; let dy = y[i] - my;
+            sxy = sxy + dx * dy; sxx = sxx + dx * dx; syy = syy + dy * dy;
+        }
+        i = i + 1;
+    }
+    if (sxx == 0 or syy == 0) { return 0; }
+    return sxy / sqrt(sxx * syy);
+}
+
+// مصفوفة ارتباط كإطار بيانات (عمود "column" + عمود لكل اسم)
+fun df_corr_matrix(df, names) {
+    let hd = concat(["column"], names);
+    let out = df_new(hd);
+    let i = 0;
+    while (i < len(names)) {
+        push(out["cols"]["column"], names[i]);
+        let j = 0;
+        while (j < len(names)) { push(out["cols"][names[j]], df_corr(df, names[i], names[j])); j = j + 1; }
+        i = i + 1;
+    }
+    return out;
+}
+)RINDFOGRIN";
+static const char* kLib_rinml_og_rin = R"RINMLOGRIN(
+// ============================================================================
+//  lib/rinml.og.rin — RinML: تعلّم آلة وذكاء اصطناعي خالص بلغة Rin
+//
+//  @version 1.0.0
+//  @category ai
+//  @prefix nd_ / ml_
+//
+//  المحتوى:
+//    nd_*  جبر خطي ودوال عددية آمنة (dot, solve, softmax, ...)
+//    ml_*  تحضير بيانات (split / scalers / one-hot / k-fold)
+//          نماذج: انحدار خطي/ريدج، لوجستي، kNN، k-means، Naive Bayes، شجرة قرار،
+//                 شبكة عصبية متعددة الطبقات (MLP) بالانتشار العكسي، مصنّف نصوص (Naive Bayes)
+//          مقاييس: accuracy / confusion / precision / recall / f1 / mse / rmse / mae / r2
+//          حفظ/تحميل: ml_save / ml_load (JSON)
+//
+//  كل النماذج قواميس بحقل "type" (قابلة للتحويل إلى JSON وللتخزين داخل @container).
+//  استيراد:  @import "lib/rinml.og.rin";
+//
+//  قيود المفسِّر التي صُمِّمت حولها: لا وسائط اختيارية (عدد الوسائط ثابت)، و`<` للأرقام فقط،
+//  و`round` بوسيط واحد، و`ln(0)` يرمي خطأ — لذلك نستعمل nd_round / nd_ln الآمنتين.
+// ============================================================================
+
+// ---------------------------------------------------------------------------
+//  nd_: دوال عددية ومتجهات ومصفوفات
+// ---------------------------------------------------------------------------
+fun nd_pi() { return 3.141592653589793; }
+
+fun nd_clip(x, lo, hi) {
+    if (x < lo) { return lo; }
+    if (x > hi) { return hi; }
+    return x;
+}
+
+fun nd_round(x, d) {
+    let p = pow(10, d);
+    return round(x * p) / p;
+}
+
+// exp/ln آمنتان: لا inf ولا خطأ عند الصفر.
+fun nd_exp(x) { return exp(nd_clip(x, -60, 60)); }
+fun nd_ln(x) {
+    if (x < 0.000000000001) { return ln(0.000000000001); }
+    return ln(x);
+}
+
+fun nd_sigmoid(x) { return 1 / (1 + nd_exp(0 - x)); }
+fun nd_tanh(x) {
+    let e = nd_exp(2 * x);
+    return (e - 1) / (e + 1);
+}
+fun nd_relu(x) {
+    if (x > 0) { return x; }
+    return 0;
+}
+
+fun nd_zeros(n) {
+    let o = [];
+    let i = 0;
+    while (i < n) { push(o, 0); i = i + 1; }
+    return o;
+}
+
+fun nd_fill(n, v) {
+    let o = [];
+    let i = 0;
+    while (i < n) { push(o, v); i = i + 1; }
+    return o;
+}
+
+fun nd_seq(n) {
+    let o = [];
+    let i = 0;
+    while (i < n) { push(o, i); i = i + 1; }
+    return o;
+}
+
+fun nd_dot(a, b) {
+    let s = 0;
+    let i = 0;
+    let n = len(a);
+    while (i < n) { s = s + a[i] * b[i]; i = i + 1; }
+    return s;
+}
+
+fun nd_vadd(a, b) {
+    let o = [];
+    let i = 0;
+    while (i < len(a)) { push(o, a[i] + b[i]); i = i + 1; }
+    return o;
+}
+
+fun nd_vsub(a, b) {
+    let o = [];
+    let i = 0;
+    while (i < len(a)) { push(o, a[i] - b[i]); i = i + 1; }
+    return o;
+}
+
+fun nd_vscale(a, k) {
+    let o = [];
+    let i = 0;
+    while (i < len(a)) { push(o, a[i] * k); i = i + 1; }
+    return o;
+}
+
+fun nd_norm(a) { return sqrt(nd_dot(a, a)); }
+
+fun nd_dist(a, b) {
+    let s = 0;
+    let i = 0;
+    while (i < len(a)) { let d = a[i] - b[i]; s = s + d * d; i = i + 1; }
+    return sqrt(s);
+}
+
+fun nd_sum(a) {
+    let s = 0;
+    let i = 0;
+    while (i < len(a)) { s = s + a[i]; i = i + 1; }
+    return s;
+}
+
+fun nd_mean(a) {
+    if (len(a) == 0) { return 0; }
+    return nd_sum(a) / len(a);
+}
+
+fun nd_var(a) {
+    if (len(a) == 0) { return 0; }
+    let m = nd_mean(a);
+    let s = 0;
+    let i = 0;
+    while (i < len(a)) { let d = a[i] - m; s = s + d * d; i = i + 1; }
+    return s / len(a);
+}
+
+fun nd_std(a) { return sqrt(nd_var(a)); }
+
+fun nd_minv(a) {
+    let m = a[0];
+    let i = 1;
+    while (i < len(a)) { if (a[i] < m) { m = a[i]; } i = i + 1; }
+    return m;
+}
+
+fun nd_maxv(a) {
+    let m = a[0];
+    let i = 1;
+    while (i < len(a)) { if (a[i] > m) { m = a[i]; } i = i + 1; }
+    return m;
+}
+
+fun nd_argmax(a) {
+    let bi = 0;
+    let i = 1;
+    while (i < len(a)) { if (a[i] > a[bi]) { bi = i; } i = i + 1; }
+    return bi;
+}
+
+fun nd_argmin(a) {
+    let bi = 0;
+    let i = 1;
+    while (i < len(a)) { if (a[i] < a[bi]) { bi = i; } i = i + 1; }
+    return bi;
+}
+
+fun nd_softmax(a) {
+    let m = nd_maxv(a);
+    let e = [];
+    let i = 0;
+    let s = 0;
+    while (i < len(a)) { let v = nd_exp(a[i] - m); push(e, v); s = s + v; i = i + 1; }
+    let o = [];
+    i = 0;
+    while (i < len(e)) { push(o, e[i] / s); i = i + 1; }
+    return o;
+}
+
+// أعمدة/صفوف
+fun nd_col(M, j) {
+    let o = [];
+    let i = 0;
+    while (i < len(M)) { push(o, M[i][j]); i = i + 1; }
+    return o;
+}
+
+fun nd_transpose(M) {
+    if (len(M) == 0) { return []; }
+    let o = [];
+    let j = 0;
+    while (j < len(M[0])) { push(o, nd_col(M, j)); j = j + 1; }
+    return o;
+}
+
+fun nd_matvec(M, v) {
+    let o = [];
+    let i = 0;
+    while (i < len(M)) { push(o, nd_dot(M[i], v)); i = i + 1; }
+    return o;
+}
+
+fun nd_matmul(A, B) {
+    let Bt = nd_transpose(B);
+    let o = [];
+    let i = 0;
+    while (i < len(A)) {
+        let rw = [];
+        let j = 0;
+        while (j < len(Bt)) { push(rw, nd_dot(A[i], Bt[j])); j = j + 1; }
+        push(o, rw);
+        i = i + 1;
+    }
+    return o;
+}
+
+// يحلّ A·x = b بطريقة غاوس-جوردان مع محورية جزئية. يعيد nil إن كانت المصفوفة شاذّة.
+fun nd_solve(A, b) {
+    let n = len(A);
+    let M = [];
+    let i = 0;
+    while (i < n) {
+        let rw = [];
+        let j = 0;
+        while (j < n) { push(rw, A[i][j]); j = j + 1; }
+        push(rw, b[i]);
+        push(M, rw);
+        i = i + 1;
+    }
+    let c = 0;
+    while (c < n) {
+        let p = c;
+        let r = c + 1;
+        while (r < n) { if (abs(M[r][c]) > abs(M[p][c])) { p = r; } r = r + 1; }
+        if (abs(M[p][c]) < 0.000000000001) { return nil; }
+        let tmp = M[c]; M[c] = M[p]; M[p] = tmp;
+        let pv = M[c][c];
+        let k = c;
+        while (k <= n) { M[c][k] = M[c][k] / pv; k = k + 1; }
+        r = 0;
+        while (r < n) {
+            if (r != c) {
+                let f = M[r][c];
+                if (f != 0) {
+                    k = c;
+                    while (k <= n) { M[r][k] = M[r][k] - f * M[c][k]; k = k + 1; }
+                }
+            }
+            r = r + 1;
+        }
+        c = c + 1;
+    }
+    let x = [];
+    i = 0;
+    while (i < n) { push(x, M[i][n]); i = i + 1; }
+    return x;
+}
+
+// قيم فريدة بترتيب الظهور (تعمل مع الأرقام والنصوص).
+fun nd_unique(a) {
+    let seen = {};
+    let o = [];
+    let i = 0;
+    while (i < len(a)) {
+        let k = str(a[i]);
+        if (!has(seen, k)) { seen[k] = true; push(o, a[i]); }
+        i = i + 1;
+    }
+    return o;
+}
+
+fun nd_index_of(a, v) {
+    let i = 0;
+    while (i < len(a)) { if (a[i] == v) { return i; } i = i + 1; }
+    return -1;
+}
+
+// خلط Fisher–Yates (يستخدم seed(n) العام للتكرارية).
+fun nd_shuffle(a) {
+    let o = [];
+    let i = 0;
+    while (i < len(a)) { push(o, a[i]); i = i + 1; }
+    i = len(o) - 1;
+    while (i > 0) {
+        let j = floor(random() * (i + 1));
+        let t = o[i]; o[i] = o[j]; o[j] = t;
+        i = i - 1;
+    }
+    return o;
+}
+
+fun nd_take(a, idx) {
+    let o = [];
+    let i = 0;
+    while (i < len(idx)) { push(o, a[idx[i]]); i = i + 1; }
+    return o;
+}
+
+// ---------------------------------------------------------------------------
+//  تحضير البيانات
+// ---------------------------------------------------------------------------
+// يعيد {Xtr, ytr, Xte, yte}. testRatio مثل 0.2 ؛ sd بذرة التكرارية.
+fun ml_train_test_split(X, y, testRatio, sd) {
+    seed(sd);
+    let idx = nd_shuffle(nd_seq(len(X)));
+    let nTest = floor(len(X) * testRatio);
+    if (nTest < 1) { nTest = 1; }
+    let teIdx = slice(idx, 0, nTest);
+    let trIdx = slice(idx, nTest, len(X));
+    return {
+        "Xtr": nd_take(X, trIdx), "ytr": nd_take(y, trIdx),
+        "Xte": nd_take(X, teIdx), "yte": nd_take(y, teIdx)
+    };
+}
+
+// معايرة قياسية (z-score): يعيد {type, mu, sd}
+fun ml_scaler_fit(X) {
+    let d = len(X[0]);
+    let mu = [];
+    let sd = [];
+    let j = 0;
+    while (j < d) {
+        let c = nd_col(X, j);
+        let s = nd_std(c);
+        if (s < 0.000000000001) { s = 1; }
+        push(mu, nd_mean(c));
+        push(sd, s);
+        j = j + 1;
+    }
+    return {"type": "scaler", "mu": mu, "sd": sd};
+}
+
+fun ml_scaler_row(sc, x) {
+    let o = [];
+    let j = 0;
+    while (j < len(x)) { push(o, (x[j] - sc["mu"][j]) / sc["sd"][j]); j = j + 1; }
+    return o;
+}
+
+fun ml_scaler_transform(sc, X) {
+    let o = [];
+    let i = 0;
+    while (i < len(X)) { push(o, ml_scaler_row(sc, X[i])); i = i + 1; }
+    return o;
+}
+
+// معايرة min-max إلى [0,1]
+fun ml_minmax_fit(X) {
+    let d = len(X[0]);
+    let lo = [];
+    let hi = [];
+    let j = 0;
+    while (j < d) {
+        let c = nd_col(X, j);
+        push(lo, nd_minv(c));
+        let h = nd_maxv(c);
+        if (h - lo[j] < 0.000000000001) { h = lo[j] + 1; }
+        push(hi, h);
+        j = j + 1;
+    }
+    return {"type": "minmax", "lo": lo, "hi": hi};
+}
+
+fun ml_minmax_transform(sc, X) {
+    let o = [];
+    let i = 0;
+    while (i < len(X)) {
+        let rw = [];
+        let j = 0;
+        while (j < len(X[i])) { push(rw, (X[i][j] - sc["lo"][j]) / (sc["hi"][j] - sc["lo"][j])); j = j + 1; }
+        push(o, rw);
+        i = i + 1;
+    }
+    return o;
+}
+
+// ترميز فئات إلى one-hot: يعيد {classes, matrix}
+fun ml_onehot(labels) {
+    let classes = nd_unique(labels);
+    let m = [];
+    let i = 0;
+    while (i < len(labels)) {
+        let rw = nd_zeros(len(classes));
+        rw[nd_index_of(classes, labels[i])] = 1;
+        push(m, rw);
+        i = i + 1;
+    }
+    return {"classes": classes, "matrix": m};
+}
+
+// ---------------------------------------------------------------------------
+//  الانحدار الخطي (حل مغلق + ريدج) و SGD
+// ---------------------------------------------------------------------------
+// lambda = 0 → OLS ؛ lambda > 0 → Ridge (لا يُعاقَب الحدّ الثابت)
+fun ml_linreg_fit(X, y, lambda) {
+    let n = len(X);
+    let d = len(X[0]);
+    let A = [];
+    let r = 0;
+    while (r <= d) { push(A, nd_zeros(d + 1)); r = r + 1; }
+    let b = nd_zeros(d + 1);
+    let i = 0;
+    while (i < n) {
+        let xa = concat([1], X[i]);
+        let p = 0;
+        while (p <= d) {
+            b[p] = b[p] + xa[p] * y[i];
+            let q = 0;
+            while (q <= d) { A[p][q] = A[p][q] + xa[p] * xa[q]; q = q + 1; }
+            p = p + 1;
+        }
+        i = i + 1;
+    }
+    let k = 1;
+    while (k <= d) { A[k][k] = A[k][k] + lambda; k = k + 1; }
+    let w = nd_solve(A, b);
+    if (w == nil) { return nil; }
+    return {"type": "linreg", "b": w[0], "w": slice(w, 1, d + 1)};
+}
+
+// انحدار بالتدرّج (batch GD) — يُنصَح بمعايرة X أولاً.
+fun ml_linreg_sgd(X, y, lr, epochs) {
+    let n = len(X);
+    let d = len(X[0]);
+    let w = nd_zeros(d);
+    let b = 0;
+    let e = 0;
+    while (e < epochs) {
+        let gw = nd_zeros(d);
+        let gb = 0;
+        let i = 0;
+        while (i < n) {
+            let err = nd_dot(w, X[i]) + b - y[i];
+            let j = 0;
+            while (j < d) { gw[j] = gw[j] + err * X[i][j]; j = j + 1; }
+            gb = gb + err;
+            i = i + 1;
+        }
+        let j2 = 0;
+        while (j2 < d) { w[j2] = w[j2] - lr * gw[j2] / n; j2 = j2 + 1; }
+        b = b - lr * gb / n;
+        e = e + 1;
+    }
+    return {"type": "linreg", "b": b, "w": w};
+}
+
+// ---------------------------------------------------------------------------
+//  الانحدار اللوجستي الثنائي (y ∈ {0,1})
+// ---------------------------------------------------------------------------
+fun ml_logreg_fit(X, y, lr, epochs, lambda) {
+    let n = len(X);
+    let d = len(X[0]);
+    let w = nd_zeros(d);
+    let b = 0;
+    let e = 0;
+    while (e < epochs) {
+        let gw = nd_zeros(d);
+        let gb = 0;
+        let i = 0;
+        while (i < n) {
+            let err = nd_sigmoid(nd_dot(w, X[i]) + b) - y[i];
+            let j = 0;
+            while (j < d) { gw[j] = gw[j] + err * X[i][j]; j = j + 1; }
+            gb = gb + err;
+            i = i + 1;
+        }
+        let j2 = 0;
+        while (j2 < d) { w[j2] = w[j2] - lr * (gw[j2] / n + lambda * w[j2]); j2 = j2 + 1; }
+        b = b - lr * gb / n;
+        e = e + 1;
+    }
+    return {"type": "logreg", "b": b, "w": w};
+}
+
+fun ml_logreg_proba(m, x) { return nd_sigmoid(nd_dot(m["w"], x) + m["b"]); }
+
+// ---------------------------------------------------------------------------
+//  k أقرب جيران (تصنيف "class" أو انحدار "reg")
+// ---------------------------------------------------------------------------
+fun ml_knn_fit(X, y, k, mode) {
+    return {"type": "knn", "X": X, "y": y, "k": k, "mode": mode};
+}
+
+fun ml_knn_predict(m, x) {
+    let n = len(m["X"]);
+    let dists = [];
+    let i = 0;
+    while (i < n) { push(dists, nd_dist(m["X"][i], x)); i = i + 1; }
+    let k = m["k"];
+    if (k > n) { k = n; }
+    let used = nd_fill(n, false);
+    let picked = [];
+    let t = 0;
+    while (t < k) {
+        let bi = -1;
+        i = 0;
+        while (i < n) {
+            if (!used[i]) {
+                if (bi == -1) { bi = i; }
+                else { if (dists[i] < dists[bi]) { bi = i; } }
+            }
+            i = i + 1;
+        }
+        used[bi] = true;
+        push(picked, m["y"][bi]);
+        t = t + 1;
+    }
+    if (m["mode"] == "reg") { return nd_mean(picked); }
+    let counts = {};
+    let best = picked[0];
+    let bestC = 0;
+    i = 0;
+    while (i < len(picked)) {
+        let key = str(picked[i]);
+        if (!has(counts, key)) { counts[key] = 0; }
+        counts[key] = counts[key] + 1;
+        if (counts[key] > bestC) { bestC = counts[key]; best = picked[i]; }
+        i = i + 1;
+    }
+    return best;
+}
+
+// ---------------------------------------------------------------------------
+//  k-means (تهيئة k-means++)
+// ---------------------------------------------------------------------------
+fun ml_kmeans_nearest(centroids, x) {
+    let bi = 0;
+    let bd = nd_dist(centroids[0], x);
+    let c = 1;
+    while (c < len(centroids)) {
+        let d = nd_dist(centroids[c], x);
+        if (d < bd) { bd = d; bi = c; }
+        c = c + 1;
+    }
+    return bi;
+}
+
+fun ml_kmeans_fit(X, k, iters, sd) {
+    seed(sd);
+    let n = len(X);
+    let d = len(X[0]);
+    let cent = [];
+    push(cent, deepCopy(X[floor(random() * n)]));
+    while (len(cent) < k) {
+        let w = [];
+        let tot = 0;
+        let i = 0;
+        while (i < n) {
+            let c = ml_kmeans_nearest(cent, X[i]);
+            let dd = nd_dist(cent[c], X[i]);
+            push(w, dd * dd);
+            tot = tot + dd * dd;
+            i = i + 1;
+        }
+        let r = random() * tot;
+        let acc = 0;
+        let pick = n - 1;
+        i = 0;
+        while (i < n) {
+            acc = acc + w[i];
+            if (acc >= r) { pick = i; break; }
+            i = i + 1;
+        }
+        push(cent, deepCopy(X[pick]));
+    }
+    let labels = nd_fill(n, -1);
+    let it = 0;
+    while (it < iters) {
+        let changed = false;
+        let i2 = 0;
+        while (i2 < n) {
+            let c2 = ml_kmeans_nearest(cent, X[i2]);
+            if (c2 != labels[i2]) { labels[i2] = c2; changed = true; }
+            i2 = i2 + 1;
+        }
+        if (!changed) { break; }
+        let sums = [];
+        let cnt = nd_zeros(k);
+        let c3 = 0;
+        while (c3 < k) { push(sums, nd_zeros(d)); c3 = c3 + 1; }
+        i2 = 0;
+        while (i2 < n) {
+            let l = labels[i2];
+            sums[l] = nd_vadd(sums[l], X[i2]);
+            cnt[l] = cnt[l] + 1;
+            i2 = i2 + 1;
+        }
+        c3 = 0;
+        while (c3 < k) {
+            if (cnt[c3] > 0) { cent[c3] = nd_vscale(sums[c3], 1 / cnt[c3]); }
+            c3 = c3 + 1;
+        }
+        it = it + 1;
+    }
+    let inertia = 0;
+    let i3 = 0;
+    while (i3 < n) {
+        let dd2 = nd_dist(cent[labels[i3]], X[i3]);
+        inertia = inertia + dd2 * dd2;
+        i3 = i3 + 1;
+    }
+    return {"type": "kmeans", "k": k, "centroids": cent, "labels": labels, "inertia": inertia};
+}
+
+fun ml_kmeans_predict(m, x) { return ml_kmeans_nearest(m["centroids"], x); }
+
+// ---------------------------------------------------------------------------
+//  Gaussian Naive Bayes
+// ---------------------------------------------------------------------------
+fun ml_nb_fit(X, y) {
+    let classes = nd_unique(y);
+    let d = len(X[0]);
+    let priors = [];
+    let means = [];
+    let vars = [];
+    let c = 0;
+    while (c < len(classes)) {
+        let rows = [];
+        let i = 0;
+        while (i < len(X)) { if (y[i] == classes[c]) { push(rows, X[i]); } i = i + 1; }
+        push(priors, len(rows) / len(X));
+        let mu = [];
+        let vr = [];
+        let j = 0;
+        while (j < d) {
+            let col = nd_col(rows, j);
+            push(mu, nd_mean(col));
+            push(vr, nd_var(col) + 0.000001);
+            j = j + 1;
+        }
+        push(means, mu);
+        push(vars, vr);
+        c = c + 1;
+    }
+    return {"type": "nb", "classes": classes, "priors": priors, "means": means, "vars": vars};
+}
+
+fun ml_nb_scores(m, x) {
+    let out = [];
+    let c = 0;
+    while (c < len(m["classes"])) {
+        let s = nd_ln(m["priors"][c]);
+        let j = 0;
+        while (j < len(x)) {
+            let v = m["vars"][c][j];
+            let dx = x[j] - m["means"][c][j];
+            s = s - 0.5 * nd_ln(2 * nd_pi() * v) - dx * dx / (2 * v);
+            j = j + 1;
+        }
+        push(out, s);
+        c = c + 1;
+    }
+    return out;
+}
+
+fun ml_nb_predict(m, x) { return m["classes"][nd_argmax(ml_nb_scores(m, x))]; }
+
+// ---------------------------------------------------------------------------
+//  شجرة قرار (CART، معيار Gini) للتصنيف
+// ---------------------------------------------------------------------------
+fun ml_gini(labels) {
+    let n = len(labels);
+    if (n == 0) { return 0; }
+    let counts = {};
+    let i = 0;
+    while (i < n) {
+        let k = str(labels[i]);
+        if (!has(counts, k)) { counts[k] = 0; }
+        counts[k] = counts[k] + 1;
+        i = i + 1;
+    }
+    let g = 1;
+    let ks = keys(counts);
+    i = 0;
+    while (i < len(ks)) { let p = counts[ks[i]] / n; g = g - p * p; i = i + 1; }
+    return g;
+}
+
+fun ml_majority(labels) {
+    let counts = {};
+    let best = labels[0];
+    let bestC = 0;
+    let i = 0;
+    while (i < len(labels)) {
+        let k = str(labels[i]);
+        if (!has(counts, k)) { counts[k] = 0; }
+        counts[k] = counts[k] + 1;
+        if (counts[k] > bestC) { bestC = counts[k]; best = labels[i]; }
+        i = i + 1;
+    }
+    return best;
+}
+
+fun ml_tree_build(X, y, depth, maxDepth, minSamples) {
+    let n = len(y);
+    let g = ml_gini(y);
+    if (g == 0 or depth >= maxDepth or n < minSamples) {
+        return {"leaf": true, "label": ml_majority(y), "n": n};
+    }
+    let bestGain = 0;
+    let bestF = -1;
+    let bestT = 0;
+    let d = len(X[0]);
+    let f = 0;
+    while (f < d) {
+        let vals = sort(nd_unique(nd_col(X, f)));
+        let cands = [];
+        let step = 1;
+        if (len(vals) > 33) { step = floor(len(vals) / 32); }
+        let v = 0;
+        while (v + 1 < len(vals)) {
+            push(cands, (vals[v] + vals[v + 1]) / 2);
+            v = v + step;
+        }
+        let c = 0;
+        while (c < len(cands)) {
+            let t = cands[c];
+            let ly = [];
+            let ry = [];
+            let i = 0;
+            while (i < n) {
+                if (X[i][f] <= t) { push(ly, y[i]); } else { push(ry, y[i]); }
+                i = i + 1;
+            }
+            if (len(ly) > 0 and len(ry) > 0) {
+                let gain = g - (len(ly) / n) * ml_gini(ly) - (len(ry) / n) * ml_gini(ry);
+                if (gain > bestGain) { bestGain = gain; bestF = f; bestT = t; }
+            }
+            c = c + 1;
+        }
+        f = f + 1;
+    }
+    if (bestF == -1) { return {"leaf": true, "label": ml_majority(y), "n": n}; }
+    let LX = []; let Ly = []; let RX = []; let Ry = [];
+    let i2 = 0;
+    while (i2 < n) {
+        if (X[i2][bestF] <= bestT) { push(LX, X[i2]); push(Ly, y[i2]); }
+        else { push(RX, X[i2]); push(Ry, y[i2]); }
+        i2 = i2 + 1;
+    }
+    return {
+        "leaf": false, "f": bestF, "t": bestT, "n": n,
+        "l": ml_tree_build(LX, Ly, depth + 1, maxDepth, minSamples),
+        "r": ml_tree_build(RX, Ry, depth + 1, maxDepth, minSamples)
+    };
+}
+
+fun ml_tree_fit(X, y, maxDepth, minSamples) {
+    return {"type": "tree", "root": ml_tree_build(X, y, 0, maxDepth, minSamples)};
+}
+
+fun ml_tree_predict(m, x) {
+    let node = m["root"];
+    while (!node["leaf"]) {
+        if (x[node["f"]] <= node["t"]) { node = node["l"]; } else { node = node["r"]; }
+    }
+    return node["label"];
+}
+
+// ---------------------------------------------------------------------------
+//  الشبكة العصبية متعددة الطبقات (MLP) — انتشار عكسي + SGD
+//    sizes   مثل [2, 4, 1]
+//    act     الطبقات المخفية: "tanh" | "relu" | "sigmoid"
+//    outAct  الخرج: "linear" (انحدار) | "sigmoid" (ثنائي) | "softmax" (متعدد الفئات)
+//  الخسارة تُطابق دالة الخرج (MSE / BCE / CE) فتكون delta = out - target.
+// ---------------------------------------------------------------------------
+fun ml_mlp_init(sizes, act, outAct, sd) {
+    seed(sd);
+    let W = [];
+    let B = [];
+    let l = 0;
+    while (l + 1 < len(sizes)) {
+        let nin = sizes[l];
+        let nout = sizes[l + 1];
+        let lim = sqrt(6 / (nin + nout));
+        let M = [];
+        let i = 0;
+        while (i < nout) {
+            let rw = [];
+            let j = 0;
+            while (j < nin) { push(rw, (random() * 2 - 1) * lim); j = j + 1; }
+            push(M, rw);
+            i = i + 1;
+        }
+        push(W, M);
+        push(B, nd_zeros(nout));
+        l = l + 1;
+    }
+    return {"type": "mlp", "sizes": sizes, "act": act, "out": outAct, "W": W, "B": B, "loss": 0};
+}
+
+fun ml_act(name, z) {
+    if (name == "relu") { return nd_relu(z); }
+    if (name == "sigmoid") { return nd_sigmoid(z); }
+    return nd_tanh(z);
+}
+
+fun ml_act_grad(name, a) {
+    if (name == "relu") { if (a > 0) { return 1; } return 0; }
+    if (name == "sigmoid") { return a * (1 - a); }
+    return 1 - a * a;
+}
+
+// يعيد قائمة تنشيطات كل الطبقات (الأولى = المدخل، الأخيرة = الخرج)
+fun ml_mlp_forward(m, x) {
+    let acts = [x];
+    let a = x;
+    let L = len(m["W"]);
+    let l = 0;
+    while (l < L) {
+        let z = nd_vadd(nd_matvec(m["W"][l], a), m["B"][l]);
+        let nxt = [];
+        let i = 0;
+        if (l == L - 1) {
+            if (m["out"] == "softmax") { nxt = nd_softmax(z); }
+            else {
+                while (i < len(z)) {
+                    if (m["out"] == "sigmoid") { push(nxt, nd_sigmoid(z[i])); } else { push(nxt, z[i]); }
+                    i = i + 1;
+                }
+            }
+        } else {
+            while (i < len(z)) { push(nxt, ml_act(m["act"], z[i])); i = i + 1; }
+        }
+        push(acts, nxt);
+        a = nxt;
+        l = l + 1;
+    }
+    return acts;
+}
+
+// يدرّب النموذج في مكانه ويعيده. Y = مصفوفة متجهات هدف (استعمل ml_onehot للفئات).
+fun ml_mlp_fit(m, X, Y, lr, epochs) {
+    let L = len(m["W"]);
+    let n = len(X);
+    let e = 0;
+    while (e < epochs) {
+        let order = nd_shuffle(nd_seq(n));
+        let loss = 0;
+        let s = 0;
+        while (s < n) {
+            let idx = order[s];
+            let acts = ml_mlp_forward(m, X[idx]);
+            let out = acts[L];
+            let delta = nd_vsub(out, Y[idx]);
+            let q = 0;
+            while (q < len(delta)) { loss = loss + delta[q] * delta[q]; q = q + 1; }
+            let l = L - 1;
+            while (l >= 0) {
+                let prev = acts[l];
+                let nextDelta = nil;
+                if (l > 0) {
+                    nextDelta = nd_zeros(len(prev));
+                    let j = 0;
+                    while (j < len(prev)) {
+                        let sacc = 0;
+                        let i = 0;
+                        while (i < len(delta)) { sacc = sacc + m["W"][l][i][j] * delta[i]; i = i + 1; }
+                        nextDelta[j] = sacc * ml_act_grad(m["act"], prev[j]);
+                        j = j + 1;
+                    }
+                }
+                let i2 = 0;
+                while (i2 < len(delta)) {
+                    let j2 = 0;
+                    while (j2 < len(prev)) {
+                        m["W"][l][i2][j2] = m["W"][l][i2][j2] - lr * delta[i2] * prev[j2];
+                        j2 = j2 + 1;
+                    }
+                    m["B"][l][i2] = m["B"][l][i2] - lr * delta[i2];
+                    i2 = i2 + 1;
+                }
+                if (l > 0) { delta = nextDelta; }
+                l = l - 1;
+            }
+            s = s + 1;
+        }
+        m["loss"] = loss / n;
+        e = e + 1;
+    }
+    return m;
+}
+
+fun ml_mlp_output(m, x) {
+    let acts = ml_mlp_forward(m, x);
+    return acts[len(acts) - 1];
+}
+
+// خرج واحد sigmoid → فئة 0/1 ؛ خرج واحد linear → القيمة ؛ عدة مخارج → فهرس الأكبر
+fun ml_mlp_predict(m, x) {
+    let o = ml_mlp_output(m, x);
+    if (len(o) == 1) {
+        if (m["out"] == "sigmoid") { if (o[0] >= 0.5) { return 1; } return 0; }
+        return o[0];
+    }
+    return nd_argmax(o);
+}
+
+// ---------------------------------------------------------------------------
+//  مصنّف نصوص (Multinomial Naive Bayes) — يدعم العربية عبر tokenizeWords/arabicNormalize
+// ---------------------------------------------------------------------------
+fun ml_tokens(txt) {
+    let t = lower(arabicNormalize(str(txt)));
+    return tokenizeWords(t);
+}
+
+fun ml_textnb_fit(docs, labels) {
+    let classes = nd_unique(labels);
+    let counts = {};
+    let totals = {};
+    let docsPer = {};
+    let vocab = {};
+    let c = 0;
+    while (c < len(classes)) {
+        let k = str(classes[c]);
+        counts[k] = {};
+        totals[k] = 0;
+        docsPer[k] = 0;
+        c = c + 1;
+    }
+    let i = 0;
+    while (i < len(docs)) {
+        let k2 = str(labels[i]);
+        docsPer[k2] = docsPer[k2] + 1;
+        let toks = ml_tokens(docs[i]);
+        let t = 0;
+        while (t < len(toks)) {
+            let w = toks[t];
+            vocab[w] = true;
+            if (!has(counts[k2], w)) { counts[k2][w] = 0; }
+            counts[k2][w] = counts[k2][w] + 1;
+            totals[k2] = totals[k2] + 1;
+            t = t + 1;
+        }
+        i = i + 1;
+    }
+    return {
+        "type": "textnb", "classes": classes, "counts": counts, "totals": totals,
+        "docs": docsPer, "n": len(docs), "vocab": len(keys(vocab))
+    };
+}
+
+fun ml_textnb_scores(m, txt) {
+    let toks = ml_tokens(txt);
+    let out = [];
+    let c = 0;
+    while (c < len(m["classes"])) {
+        let k = str(m["classes"][c]);
+        let s = nd_ln(m["docs"][k] / m["n"]);
+        let t = 0;
+        while (t < len(toks)) {
+            let cnt = 0;
+            if (has(m["counts"][k], toks[t])) { cnt = m["counts"][k][toks[t]]; }
+            s = s + nd_ln((cnt + 1) / (m["totals"][k] + m["vocab"]));
+            t = t + 1;
+        }
+        push(out, s);
+        c = c + 1;
+    }
+    return out;
+}
+
+fun ml_textnb_predict(m, txt) { return m["classes"][nd_argmax(ml_textnb_scores(m, txt))]; }
+
+// ---------------------------------------------------------------------------
+//  واجهة موحّدة: ml_predict / ml_predict_all  (حسب حقل type)
+// ---------------------------------------------------------------------------
+fun ml_predict(m, x) {
+    let t = m["type"];
+    if (t == "linreg") { return nd_dot(m["w"], x) + m["b"]; }
+    if (t == "logreg") { if (ml_logreg_proba(m, x) >= 0.5) { return 1; } return 0; }
+    if (t == "knn") { return ml_knn_predict(m, x); }
+    if (t == "kmeans") { return ml_kmeans_predict(m, x); }
+    if (t == "nb") { return ml_nb_predict(m, x); }
+    if (t == "tree") { return ml_tree_predict(m, x); }
+    if (t == "mlp") { return ml_mlp_predict(m, x); }
+    if (t == "textnb") { return ml_textnb_predict(m, x); }
+    fail("ml_predict: نوع نموذج غير معروف: " + str(t));
+}
+
+fun ml_predict_all(m, X) {
+    let o = [];
+    let i = 0;
+    while (i < len(X)) { push(o, ml_predict(m, X[i])); i = i + 1; }
+    return o;
+}
+
+// ---------------------------------------------------------------------------
+//  المقاييس
+// ---------------------------------------------------------------------------
+fun ml_accuracy(yt, yp) {
+    if (len(yt) == 0) { return 0; }
+    let ok = 0;
+    let i = 0;
+    while (i < len(yt)) { if (yt[i] == yp[i]) { ok = ok + 1; } i = i + 1; }
+    return ok / len(yt);
+}
+
+// يعيد {labels, matrix} — الصفوف = الحقيقي، الأعمدة = المتوقَّع
+fun ml_confusion(yt, yp) {
+    let labels = sort(nd_unique(concat(yt, yp)));
+    let M = [];
+    let i = 0;
+    while (i < len(labels)) { push(M, nd_zeros(len(labels))); i = i + 1; }
+    i = 0;
+    while (i < len(yt)) {
+        let r = nd_index_of(labels, yt[i]);
+        let c = nd_index_of(labels, yp[i]);
+        M[r][c] = M[r][c] + 1;
+        i = i + 1;
+    }
+    return {"labels": labels, "matrix": M};
+}
+
+fun ml_precision(yt, yp, pos) {
+    let tp = 0; let fp = 0;
+    let i = 0;
+    while (i < len(yt)) {
+        if (yp[i] == pos) { if (yt[i] == pos) { tp = tp + 1; } else { fp = fp + 1; } }
+        i = i + 1;
+    }
+    if (tp + fp == 0) { return 0; }
+    return tp / (tp + fp);
+}
+
+fun ml_recall(yt, yp, pos) {
+    let tp = 0; let fneg = 0;
+    let i = 0;
+    while (i < len(yt)) {
+        if (yt[i] == pos) { if (yp[i] == pos) { tp = tp + 1; } else { fneg = fneg + 1; } }
+        i = i + 1;
+    }
+    if (tp + fneg == 0) { return 0; }
+    return tp / (tp + fneg);
+}
+
+fun ml_f1(yt, yp, pos) {
+    let p = ml_precision(yt, yp, pos);
+    let r = ml_recall(yt, yp, pos);
+    if (p + r == 0) { return 0; }
+    return 2 * p * r / (p + r);
+}
+
+fun ml_mse(yt, yp) {
+    let s = 0;
+    let i = 0;
+    while (i < len(yt)) { let d = yt[i] - yp[i]; s = s + d * d; i = i + 1; }
+    return s / len(yt);
+}
+
+fun ml_rmse(yt, yp) { return sqrt(ml_mse(yt, yp)); }
+
+fun ml_mae(yt, yp) {
+    let s = 0;
+    let i = 0;
+    while (i < len(yt)) { s = s + abs(yt[i] - yp[i]); i = i + 1; }
+    return s / len(yt);
+}
+
+fun ml_r2(yt, yp) {
+    let m = nd_mean(yt);
+    let ssr = 0;
+    let sst = 0;
+    let i = 0;
+    while (i < len(yt)) {
+        let a = yt[i] - yp[i];
+        let b = yt[i] - m;
+        ssr = ssr + a * a;
+        sst = sst + b * b;
+        i = i + 1;
+    }
+    if (sst == 0) { return 0; }
+    return 1 - ssr / sst;
+}
+
+// ---------------------------------------------------------------------------
+//  تحقّق متقاطع k-fold
+//    fitFn(Xtr, ytr) -> model ، metricFn(yte, ypred) -> رقم
+//    مثال:  ml_kfold(X, y, 5, 1, fun(a,b){ return ml_nb_fit(a,b); }, ml_accuracy)
+// ---------------------------------------------------------------------------
+fun ml_kfold(X, y, k, sd, fitFn, metricFn) {
+    seed(sd);
+    let idx = nd_shuffle(nd_seq(len(X)));
+    let n = len(X);
+    let scores = [];
+    let f = 0;
+    while (f < k) {
+        let lo = floor(n * f / k);
+        let hi = floor(n * (f + 1) / k);
+        let teIdx = slice(idx, lo, hi);
+        let trIdx = concat(slice(idx, 0, lo), slice(idx, hi, n));
+        let model = fitFn(nd_take(X, trIdx), nd_take(y, trIdx));
+        let preds = ml_predict_all(model, nd_take(X, teIdx));
+        push(scores, metricFn(nd_take(y, teIdx), preds));
+        f = f + 1;
+    }
+    return {"scores": scores, "mean": nd_mean(scores), "std": nd_std(scores)};
+}
+
+// ---------------------------------------------------------------------------
+//  حفظ/تحميل النماذج (JSON)
+// ---------------------------------------------------------------------------
+fun ml_save(m, path) {
+    writeFile(path, jsonEncode(m));
+    return path;
+}
+
+fun ml_load(path) { return jsonDecode(readFile(path)); }
+)RINMLOGRIN";
+static const char* kLib_rinai_og_rin = R"RINAIOGRIN(
+// ============================================================================
+//  lib/rinai.og.rin — RinAI: مساحة عمل ذكاء اصطناعي داخل حاويات Rin (@container)
+//
+//  @version 1.0.0
+//  @category ai
+//  @prefix ai_
+//
+//  تربط rindf (تحليل البيانات) + rinml (التعلّم الآلي) بنظام الحاويات:
+//    • مساحة العمل  = حاوية kind=data  اسمها ws   (تحمل النماذج + سجلّ التجارب + فهرس البيانات)
+//    • كل مجموعة بيانات = حاوية kind=table  اسمها  <ws>__ds_<name>  (حقل records)
+//    • النماذج تُخزَّن كـ "حزمة" bundle قابلة للتحويل إلى JSON (نموذج + معايِر + أسماء الميزات)
+//
+//  مساحة العمل:   ai_workspace · ai_put_dataset · ai_get_dataset · ai_datasets
+//  النماذج:        ai_put_model · ai_get_model · ai_models · ai_predict · ai_bundle_predict
+//  التجارب:        ai_log · ai_experiments
+//  AutoML:         ai_auto_classify · ai_auto_regress
+//  خطوط الأنابيب:  ai_run_pipeline
+//  الحفظ/التحميل:  ai_save_workspace · ai_load_workspace
+//  خدمة بعيدة:     ai_remote_predict   (POST JSON إلى أي نموذج مُستضاف: Docker / FastAPI / ...)
+//
+//  استيراد:  @import "lib/rinai.og.rin";   (يستورد rindf و rinml تلقائياً)
+// ============================================================================
+@import "lib/rindf.og.rin";
+@import "lib/rinml.og.rin";
+
+// ---------------------------------------------------------------------------
+//  مساحة العمل
+// ---------------------------------------------------------------------------
+// ينشئ المساحة إن لم تكن موجودة (وإلا يعيد اسمها). آمن للاستدعاء المتكرر.
+fun ai_workspace(ws) {
+    container.ensure("data", ws);
+    if (!container.has(ws, "datasets")) { container.set(ws, "datasets", []); }
+    if (!container.has(ws, "models")) { container.set(ws, "models", []); }
+    if (!container.has(ws, "log")) { container.set(ws, "log", []); }
+    return ws;
+}
+
+fun ai_ds_name(ws, name) { return ws + "__ds_" + name; }
+
+fun ai_list_add(ws, field, name) {
+    let cur = container.get(ws, field);
+    let i = 0;
+    while (i < len(cur)) { if (cur[i] == name) { return false; } i = i + 1; }
+    push(cur, name);
+    container.set(ws, field, cur);
+    return true;
+}
+
+// ---------------------------------------------------------------------------
+//  مجموعات البيانات (DataFrame <-> حاوية جدول)
+// ---------------------------------------------------------------------------
+fun ai_put_dataset(ws, name, df) {
+    ai_workspace(ws);
+    let tbl = ai_ds_name(ws, name);
+    container.ensure("table", tbl);
+    container.set(tbl, "records", df_to_records(df));
+    ai_list_add(ws, "datasets", name);
+    return tbl;
+}
+
+fun ai_get_dataset(ws, name) {
+    let tbl = ai_ds_name(ws, name);
+    if (!container.exists(tbl)) { fail("ai_get_dataset: لا توجد مجموعة بيانات باسم '" + name + "' في '" + ws + "'"); }
+    return df_from_records(container.get(tbl, "records"));
+}
+
+fun ai_datasets(ws) { return deepCopy(container.get(ws, "datasets")); }
+
+// ---------------------------------------------------------------------------
+//  حزم النماذج (bundle): نموذج + ميزات + معايِر + فئات
+// ---------------------------------------------------------------------------
+// أدنى حزمة: ai_make_bundle(model, features, scaler, classes) — scaler/classes يمكن أن تكون nil
+fun ai_make_bundle(model, features, scaler, classes) {
+    return {"type": "bundle", "model": model, "features": features, "scaler": scaler, "classes": classes};
+}
+
+fun ai_put_model(ws, name, bundle, metrics) {
+    ai_workspace(ws);
+    container.set(ws, "model_" + name, {"bundle": bundle, "metrics": metrics, "t": now()});
+    ai_list_add(ws, "models", name);
+    return name;
+}
+
+fun ai_get_model(ws, name) {
+    if (!container.has(ws, "model_" + name)) { fail("ai_get_model: لا يوجد نموذج باسم '" + name + "' في '" + ws + "'"); }
+    return deepCopy(container.get(ws, "model_" + name)["bundle"]);
+}
+
+fun ai_models(ws) { return deepCopy(container.get(ws, "models")); }
+
+fun ai_model_metrics(ws, name) { return deepCopy(container.get(ws, "model_" + name)["metrics"]); }
+
+// تنبّؤ من سجلّ (قاموس بأسماء الميزات) — يطبّق المعايرة ويحوّل فهرس الفئة إلى تسمية
+fun ai_bundle_predict(b, rec) {
+    let x = [];
+    let j = 0;
+    while (j < len(b["features"])) { push(x, rec[b["features"][j]]); j = j + 1; }
+    if (b["scaler"] != nil) { x = ml_scaler_row(b["scaler"], x); }
+    let p = ml_predict(b["model"], x);
+    if (b["model"]["type"] == "mlp" and b["classes"] != nil and len(b["classes"]) > 0) { return b["classes"][p]; }
+    return p;
+}
+
+fun ai_predict(ws, name, rec) { return ai_bundle_predict(ai_get_model(ws, name), rec); }
+
+// ---------------------------------------------------------------------------
+//  سجلّ التجارب
+// ---------------------------------------------------------------------------
+fun ai_log(ws, event) {
+    ai_workspace(ws);
+    let cur = container.get(ws, "log");
+    event["t"] = now();
+    push(cur, event);
+    container.set(ws, "log", cur);
+    return len(cur);
+}
+
+fun ai_experiments(ws) { return deepCopy(container.get(ws, "log")); }
+
+// ---------------------------------------------------------------------------
+//  AutoML خفيف: يجرّب عدّة نماذج على نفس التقسيم ويعيد لوحة ترتيب + أفضل حزمة
+// ---------------------------------------------------------------------------
+fun ai_auto_classify(df, target, features, sd) {
+    let X = df_to_matrix(df, features);
+    let y = deepCopy(df_col(df, target));
+    let sp = ml_train_test_split(X, y, 0.25, sd);
+    let sc = ml_scaler_fit(sp["Xtr"]);
+    let Xtr = ml_scaler_transform(sc, sp["Xtr"]);
+    let Xte = ml_scaler_transform(sc, sp["Xte"]);
+    let oh = ml_onehot(sp["ytr"]);
+    let classes = ml_onehot(y)["classes"];
+    let board = df_new(["model", "accuracy"]);
+    let bundles = {};
+
+    let knn = ml_knn_fit(Xtr, sp["ytr"], 5, "class");
+    let nb = ml_nb_fit(Xtr, sp["ytr"]);
+    let tr = ml_tree_fit(Xtr, sp["ytr"], 5, 2);
+    let cand = {"knn": knn, "naive_bayes": nb, "tree": tr};
+    let names = ["knn", "naive_bayes", "tree"];
+
+    // شبكة عصبية softmax
+    let nCls = len(classes);
+    let net = ml_mlp_init([len(features), 8, nCls], "tanh", "softmax", sd);
+    let Ytr = [];
+    let i = 0;
+    while (i < len(sp["ytr"])) {
+        let t = nd_zeros(nCls);
+        t[nd_index_of(classes, sp["ytr"][i])] = 1;
+        push(Ytr, t);
+        i = i + 1;
+    }
+    ml_mlp_fit(net, Xtr, Ytr, 0.05, 120);
+    cand["mlp"] = net;
+    push(names, "mlp");
+
+    i = 0;
+    while (i < len(names)) {
+        let m = cand[names[i]];
+        let raw = ml_predict_all(m, Xte);
+        let pred = raw;
+        if (m["type"] == "mlp") {
+            pred = [];
+            let q = 0;
+            while (q < len(raw)) { push(pred, classes[raw[q]]); q = q + 1; }
+        }
+        push(board["cols"]["model"], names[i]);
+        push(board["cols"]["accuracy"], ml_accuracy(sp["yte"], pred));
+        bundles[names[i]] = ai_make_bundle(m, features, sc, classes);
+        i = i + 1;
+    }
+    board = df_sort(board, "accuracy", true);
+    let bestName = board["cols"]["model"][0];
+    return {"leaderboard": board, "best_name": bestName, "best": bundles[bestName], "bundles": bundles, "task": "classification"};
+}
+
+fun ai_auto_regress(df, target, features, sd) {
+    let X = df_to_matrix(df, features);
+    let y = deepCopy(df_col(df, target));
+    let sp = ml_train_test_split(X, y, 0.25, sd);
+    let sc = ml_scaler_fit(sp["Xtr"]);
+    let Xtr = ml_scaler_transform(sc, sp["Xtr"]);
+    let Xte = ml_scaler_transform(sc, sp["Xte"]);
+    let board = df_new(["model", "rmse", "r2"]);
+    let bundles = {};
+    let cand = {};
+    let names = [];
+
+    let ols = ml_linreg_fit(Xtr, sp["ytr"], 0);
+    if (ols != nil) { cand["linear"] = ols; push(names, "linear"); }
+    let rdg = ml_linreg_fit(Xtr, sp["ytr"], 1);
+    if (rdg != nil) { cand["ridge"] = rdg; push(names, "ridge"); }
+    cand["knn"] = ml_knn_fit(Xtr, sp["ytr"], 5, "reg");
+    push(names, "knn");
+
+    let i = 0;
+    while (i < len(names)) {
+        let pred = ml_predict_all(cand[names[i]], Xte);
+        push(board["cols"]["model"], names[i]);
+        push(board["cols"]["rmse"], ml_rmse(sp["yte"], pred));
+        push(board["cols"]["r2"], ml_r2(sp["yte"], pred));
+        bundles[names[i]] = ai_make_bundle(cand[names[i]], features, sc, nil);
+        i = i + 1;
+    }
+    board = df_sort(board, "r2", true);
+    let bestName = board["cols"]["model"][0];
+    return {"leaderboard": board, "best_name": bestName, "best": bundles[bestName], "bundles": bundles, "task": "regression"};
+}
+
+// ---------------------------------------------------------------------------
+//  خطوط الأنابيب: steps = [{"name": "clean", "fn": fun(x){...}}, ...]
+//  كل خطوة تأخذ ناتج السابقة؛ يُسجَّل اسم كل خطوة وعدد الصفوف (إن كانت إطار بيانات) في سجلّ المساحة.
+// ---------------------------------------------------------------------------
+fun ai_run_pipeline(ws, steps, input) {
+    ai_workspace(ws);
+    let cur = input;
+    let trace = [];
+    let i = 0;
+    while (i < len(steps)) {
+        let fn = steps[i]["fn"];
+        cur = fn(cur);
+        let info = {"step": steps[i]["name"]};
+        if (type(cur) == "map" and has(cur, "names") and has(cur, "cols")) {
+            info["rows"] = df_rows_count(cur);
+            info["cols"] = len(cur["names"]);
+        }
+        push(trace, info);
+        i = i + 1;
+    }
+    ai_log(ws, {"event": "pipeline", "trace": trace});
+    return cur;
+}
+
+// ---------------------------------------------------------------------------
+//  الحفظ / التحميل (ملف JSON واحد لمساحة العمل كاملة)
+// ---------------------------------------------------------------------------
+fun ai_save_workspace(ws, path) {
+    let dsNames = container.get(ws, "datasets");
+    let datasets = {};
+    let i = 0;
+    while (i < len(dsNames)) {
+        datasets[dsNames[i]] = container.get(ai_ds_name(ws, dsNames[i]), "records");
+        i = i + 1;
+    }
+    let mNames = container.get(ws, "models");
+    let models = {};
+    i = 0;
+    while (i < len(mNames)) { models[mNames[i]] = container.get(ws, "model_" + mNames[i]); i = i + 1; }
+    writeFile(path, jsonEncode({"rinai": 1, "workspace": ws, "datasets": datasets, "models": models, "log": container.get(ws, "log")}));
+    return path;
+}
+
+fun ai_load_workspace(ws, path) {
+    let data = jsonDecode(readFile(path));
+    ai_workspace(ws);
+    let dk = keys(data["datasets"]);
+    let i = 0;
+    while (i < len(dk)) { ai_put_dataset(ws, dk[i], df_from_records(data["datasets"][dk[i]])); i = i + 1; }
+    let mk = keys(data["models"]);
+    i = 0;
+    while (i < len(mk)) {
+        let entry = data["models"][mk[i]];
+        container.set(ws, "model_" + mk[i], entry);
+        ai_list_add(ws, "models", mk[i]);
+        i = i + 1;
+    }
+    container.set(ws, "log", data["log"]);
+    return ws;
+}
+
+// ---------------------------------------------------------------------------
+//  جسر الخدمات البعيدة (نموذج داخل Docker/خادم): POST JSON ويعيد {ok, status, json, error}
+//  لا يرمي عند فشل الشبكة؛ افحص result["ok"].
+// ---------------------------------------------------------------------------
+fun ai_remote_predict(url, payload) {
+    let r = httpRequest("POST", url, {"Content-Type": "application/json"}, jsonEncode(payload));
+    return {"ok": r["ok"], "status": r["status"], "json": r["json"], "error": r["error"]};
+}
+)RINAIOGRIN";
 
 inline const std::unordered_map<std::string, std::string>& embeddedRinLibraries() {
     static const std::unordered_map<std::string, std::string> libs = {
@@ -18434,6 +20725,9 @@ inline const std::unordered_map<std::string, std::string>& embeddedRinLibraries(
         {"lib/packkit.og.rin", kLib_packkit_og_rin},
         {"lib/wesscode.og.rin", kLib_wesscode_og_rin},
         {"lib/indsinweb.og.rin", kLib_indsinweb_og_rin},
+        {"lib/rinai.og.rin", kLib_rinai_og_rin},
+        {"lib/rinml.og.rin", kLib_rinml_og_rin},
+        {"lib/rindf.og.rin", kLib_rindf_og_rin},
     };
     return libs;
 }
