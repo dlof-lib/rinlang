@@ -1077,6 +1077,7 @@ private:
     void registerNativesExtra(); // rin_extra_natives.cpp — Rin 1.0 additions (core helpers + container API)
     void registerNativesExtra5(); // rin_extra_natives5.cpp — عائلة # (#sed #sum #diff #add #to #swap)
     void registerNativesExtra6(); // rin_extra_natives6.cpp — make.video/audio/api/image.removeBg/ocr (docs/MAKE_MEDIA.md)
+    void registerNativesExtra7(); // rin_extra_natives7.cpp — مفهوم time (docs/TIME.md)
     void registerNativesEnv();   // rin_env.cpp — Env.load/get/require/... لربط Rin بملف .env (docs/env.md)
     void registerNativesConditions(); // rin_conditions.cpp — متغيّرات الشروط الموسّعة (notNil/present/oneOf/inRange/matches/...) (docs/key_terms_and_builtins.md)
     void registerNativesSet();    // rin_set.cpp — نوع Set الأساسي: Set(...) و Set.* + جعل len/contains/has/remove/sum/... تفهمه (docs/set.md)
