@@ -180,7 +180,11 @@ private object RinLexer {
         // Living Variables (docs/living-variables.md): contextual words, highlighted like `reckon`.
         "stone", "gauge", "tape", "lens", "fuse", "bell", "trial", "undo", "redo", "rearm", "unbell", "abort",
         // base/accept (docs/base-accept.md): variables that help `if`, plus their actions
-        "base", "accept", "inc", "dec", "rebase", "rewind"
+        "base", "accept", "inc", "dec", "rebase", "rewind",
+        // pre/post (docs/pre-post.md): ما قبل / ما بعد — عقد انتقال حول الإسناد
+        "pre", "post",
+        // label/define (docs/label-define.md): تسمية وتعريف
+        "label", "define"
     )
     // عائلة # (docs/hash-family.md)
     val hashKeywords = setOf("#for", "#while", "#return", "#in", "#to", "#do", "#done", "#ban", "#ignorance")
