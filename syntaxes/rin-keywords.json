@@ -75,7 +75,13 @@
     "unbell",
     "abort",
     "within",
-    "burns"
+    "burns",
+    "base",
+    "accept",
+    "inc",
+    "dec",
+    "rebase",
+    "rewind"
   ],
   "storage": [
     "let",
