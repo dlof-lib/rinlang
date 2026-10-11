@@ -28,4 +28,16 @@
     <string name="rinpak_trust_changed">⛔ تحذير: مفتاح التوقيع (%1$s) يختلف عن المفتاح الذي استوردتَ به حزمة بنفس الاسم سابقاً (%2$s). قد تكون حزمة منتحَلة — تابع فقط إن كنت واثقاً من المصدر.</string>
     <string name="rinpak_trust_removed">⛔ تحذير: حزمة بنفس الاسم استوردتَها سابقاً موقّعة (%1$s)، وهذه الحزمة بلا توقيع. قد يكون التوقيع حُذف عمداً.</string>
     <string name="rinpak_launcher_label">RinPak</string>
+    <!-- التحليل الأمني والهوية (RinPak.analyze) -->
+    <string name="rinpak_info_id">المعرّف: %s</string>
+    <string name="rinpak_fingerprint">البصمة: %s</string>
+    <string name="rinpak_find_native">⛔ يحتوي كوداً أصلياً: %s</string>
+    <string name="rinpak_find_bidi">⛔ اسم ملف مموَّه باتجاه النص: %s</string>
+    <string name="rinpak_find_package">⚠ يحتوي حزم تطبيقات/Jar: %s</string>
+    <string name="rinpak_find_script">⚠ يحتوي سكربتات تشغيل: %s</string>
+    <string name="rinpak_find_perms">⚠ يطلب صلاحيات حساسة: %s</string>
+    <string name="rinpak_find_newer">⛔ تتطلب Rin %s أو أحدث — حدّث التطبيق أولاً</string>
+    <string name="rinpak_risk_confirm_title">حزمة عالية الخطورة</string>
+    <string name="rinpak_risk_confirm_message">تحتوي هذه الحزمة على عناصر قد تكون ضارة. لا تستوردها إلا إن كنت تثق بمصدرها تماماً. هل تتابع؟</string>
+    <string name="rinpak_risk_confirm_yes">استيراد على مسؤوليتي</string>
 </resources>
