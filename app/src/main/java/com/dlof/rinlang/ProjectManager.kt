@@ -136,7 +136,8 @@ object ProjectManager {
 
     fun listProjects(context: Context): List<Project> {
         val root = projectsRoot(context)
-        return (root.listFiles { f -> f.isDirectory } ?: emptyArray())
+        // المجلدات المخفية (.import_* مؤقتة أثناء الاستيراد، .replaced_* نسخة احتياطية أثناء الاستبدال) ليست مشاريع.
+        return (root.listFiles { f -> f.isDirectory && !f.name.startsWith(".") } ?: emptyArray())
             .map { Project(it.name, it, it.lastModified(), readProjectType(it)) }
             .sortedByDescending { it.lastModified }
     }
@@ -1415,10 +1416,20 @@ fun removeTodo(id) {
      * 1) يقرأ manifest، 2) يتحقق من الصيغة والمسارات، 3) يفكها في مجلد مؤقت،
      * 4) يكتب metadata المتوافق، 5) ينقل المجلد للمشاريع فقط بعد نجاح كل الفحوص.
      */
-    fun importProjectPackage(context: Context, uri: Uri, requestedName: String? = null): Project {
+    fun importProjectPackage(
+        context: Context,
+        uri: Uri,
+        requestedName: String? = null,
+        /** true: إن وُجد مشروع بنفس الاسم يُستبدل (بعد نجاح الفك والتحقق فقط) بدل إنشاء نسخة `_2`. */
+        replaceExisting: Boolean = false,
+        onProgress: ((doneBytes: Long, totalBytes: Long) -> Unit)? = null,
+        isCancelled: (() -> Boolean)? = null
+    ): Project {
         val resolver = context.contentResolver
         val sourceName = queryDisplayName(resolver, uri) ?: "project$OFFICIAL_PROJECT_EXTENSION"
-        val tempRoot = File(projectsRoot(context), ".import_${System.currentTimeMillis()}_${(1000..9999).random()}")
+        val root = projectsRoot(context)
+        sweepStaleTemp(root)
+        val tempRoot = File(root, ".import_${System.currentTimeMillis()}_${(1000..9999).random()}")
         require(!tempRoot.exists()) { "تعذّر إنشاء مساحة استيراد مؤقتة" }
         tempRoot.mkdirs()
         var committed = false
@@ -1426,7 +1437,7 @@ fun removeTodo(id) {
             val name: String
             val type: ProjectType
             if (isRinPak(resolver, uri)) {
-                val manifest = openPackage(resolver, uri).use { RinPak.extract(it, tempRoot) }
+                val manifest = openPackage(resolver, uri).use { RinPak.extract(it, tempRoot, onProgress, isCancelled) }
                 name = manifest.name; type = ProjectType.fromId(manifest.type)
             } else {
                 val manifestText = extractProjectPackage(resolver, uri, tempRoot, requireManifest = true)
@@ -1441,17 +1452,42 @@ fun removeTodo(id) {
             }
 
             val safeBase = sanitizeProjectName(requestedName?.trim().orEmpty().ifBlank { name.ifBlank { sourceName } })
-            val finalName = uniqueProjectName(context, safeBase)
-            val finalDir = File(projectsRoot(context), finalName)
-            require(!finalDir.exists()) { "يوجد مشروع بهذا الاسم بالفعل" }
-            require(tempRoot.renameTo(finalDir)) { "تعذّر تثبيت المشروع المستورد" }
+            val replacing = replaceExisting && File(root, safeBase).isDirectory
+            val finalName = if (replacing) safeBase else uniqueProjectName(context, safeBase)
+            val finalDir = File(root, finalName)
+
+            // الاستبدال: المشروع القديم يُنقل جانباً أولاً، فإن فشل التثبيت يُعاد كما كان — لا فقدان بيانات.
+            var backup: File? = null
+            if (replacing) {
+                backup = File(root, ".replaced_${System.currentTimeMillis()}_${(1000..9999).random()}")
+                require(finalDir.renameTo(backup)) { "تعذّر استبدال المشروع الحالي" }
+            } else {
+                require(!finalDir.exists()) { "يوجد مشروع بهذا الاسم بالفعل" }
+            }
+            if (!tempRoot.renameTo(finalDir)) {
+                backup?.renameTo(finalDir)
+                throw IllegalStateException("تعذّر تثبيت المشروع المستورد")
+            }
             committed = true
+            backup?.deleteRecursively()
             writeProjectMeta(finalDir, type)
             return Project(finalName, finalDir, finalDir.lastModified(), type)
         } finally {
             if (!committed && tempRoot.exists()) tempRoot.deleteRecursively()
         }
     }
+
+    /** يحذف بقايا استيراد/استبدال انقطع (انهيار أو قتل التطبيق) أقدم من ساعة. */
+    private fun sweepStaleTemp(root: File) {
+        val cutoff = System.currentTimeMillis() - 60L * 60L * 1000L
+        root.listFiles { f -> f.isDirectory && (f.name.startsWith(".import_") || f.name.startsWith(".replaced_")) }
+            ?.filter { it.lastModified() < cutoff }
+            ?.forEach { it.deleteRecursively() }
+    }
+
+    /** هل يوجد مشروع بهذا الاسم (بعد التنظيف)؟ — لعرض خيار «استبدال» في معاينة الاستيراد. */
+    fun projectExists(context: Context, name: String): Boolean =
+        File(projectsRoot(context), sanitizeProjectName(name)).isDirectory
 
     private fun openPackage(resolver: ContentResolver, uri: Uri): java.io.InputStream =
         resolver.openInputStream(uri) ?: throw IllegalStateException("تعذّرت قراءة حزمة المشروع")
@@ -1572,7 +1608,7 @@ fun removeTodo(id) {
      * META-INF/manifest.json (الهوية + SHA-256 لكل ملف) ثم content/ (شجرة المشروع). التفاصيل في
      * docs/rinpak-format.md. الملفات المخفية (مثل .rin_state) لا تُصدَّر.
      */
-    fun exportProject(context: Context, project: Project): File {
+    fun exportProject(context: Context, project: Project, meta: RinPak.PackMeta? = null): File {
         val cacheDir = File(context.cacheDir, "project_exports").apply { mkdirs() }
         val packageFile = File(cacheDir, "${sanitizeProjectName(project.name)}$OFFICIAL_PROJECT_EXTENSION")
         if (packageFile.exists()) packageFile.delete()
@@ -1584,7 +1620,7 @@ fun removeTodo(id) {
                 RinPak.write(
                     sourceDir = project.dir, name = project.name, typeId = project.type.id, out = out,
                     generatorVersion = appVersion,
-                    meta = RinPak.PackMeta(minRinVersion = appVersion),
+                    meta = (meta ?: loadPackMeta(context, project)).copy(minRinVersion = appVersion),
                     signer = RinPakSigner.forDevice(context)
                 )
             }
@@ -1594,6 +1630,40 @@ fun removeTodo(id) {
         }
         return packageFile
     }
+
+    // ───────── البيانات الوصفية للحزمة (الإصدار/المؤلف/الوصف/الرخصة) ─────────
+    // تُحفظ خارج شجرة المشروع (filesDir/rinpak_meta/<اسم>.json) كي لا تدخل الحزمة ولا تظهر في شاشة الملفات.
+
+    private fun packMetaFile(context: Context, project: Project): File =
+        File(File(context.filesDir, "rinpak_meta").apply { mkdirs() }, sanitizeProjectName(project.name) + ".json")
+
+    /** آخر بيانات وصفية استُخدمت لهذا المشروع؛ المؤلف والرخصة يُستعاران من آخر تصدير لأي مشروع إن لم يُحفظ شيء. */
+    fun loadPackMeta(context: Context, project: Project): RinPak.PackMeta {
+        val own = readMetaJson(packMetaFile(context, project))
+        val shared = readMetaJson(File(File(context.filesDir, "rinpak_meta"), "_defaults.json"))
+        return RinPak.PackMeta(
+            version = own?.optString("version").orEmpty(),
+            description = own?.optString("description").orEmpty(),
+            author = (own?.optString("author") ?: shared?.optString("author")).orEmpty(),
+            license = (own?.optString("license") ?: shared?.optString("license")).orEmpty()
+        )
+    }
+
+    fun savePackMeta(context: Context, project: Project, meta: RinPak.PackMeta) {
+        val o = JSONObject()
+            .put("version", meta.version.trim().take(32))
+            .put("description", meta.description.trim().take(1000))
+            .put("author", meta.author.trim().take(128))
+            .put("license", meta.license.trim().take(64))
+        runCatching {
+            packMetaFile(context, project).writeText(o.toString(), Charsets.UTF_8)
+            File(File(context.filesDir, "rinpak_meta"), "_defaults.json")
+                .writeText(JSONObject().put("author", o.optString("author")).put("license", o.optString("license")).toString(), Charsets.UTF_8)
+        }
+    }
+
+    private fun readMetaJson(f: File): JSONObject? =
+        if (f.isFile) runCatching { JSONObject(f.readText(Charsets.UTF_8)) }.getOrNull() else null
 
     /** اسم قديم للتوافق: أصبح exportProject هو API الرسمي، لكن الاسم السابق يستمر بالعمل. */
     fun exportProjectAsZip(context: Context, project: Project): File = exportProject(context, project)
