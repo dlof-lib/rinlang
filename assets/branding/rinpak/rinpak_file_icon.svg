@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label=".rinpak file">
+  <title>.rinpak file</title>
+  <defs>
+    <linearGradient id="page" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFFFFF"/><stop offset="1" stop-color="#E6F2EA"/></linearGradient>
+    <linearGradient id="tag" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#6AAE80"/><stop offset="1" stop-color="#2F6B45"/></linearGradient>
+  </defs>
+  <path d="M112 40h200l112 112v296a24 24 0 0 1-24 24H112a24 24 0 0 1-24-24V64a24 24 0 0 1 24-24z" fill="url(#page)" stroke="#9CCBAC" stroke-width="6" stroke-linejoin="round"/>
+  <path d="M312 40v88a24 24 0 0 0 24 24h88z" fill="#C5E1CE" stroke="#9CCBAC" stroke-width="6" stroke-linejoin="round"/>
+  <g transform="translate(0,52)">
+  <!-- three stacked layers: the packed project -->
+  <g stroke-linejoin="round">
+    <path d="M256 196 l92 -42 -92 -42 -92 42z" fill="#CFE8D6" transform="translate(0,88)"/>
+    <path d="M164 154 l92 42 92 -42 v22 l-92 42 -92 -42z" fill="#8CC3A0" transform="translate(0,88)"/>
+    <path d="M256 196 l92 -42 -92 -42 -92 42z" fill="#8CC3A0" transform="translate(0,44)"/>
+    <path d="M164 154 l92 42 92 -42 v22 l-92 42 -92 -42z" fill="#559868" transform="translate(0,44)"/>
+    <path d="M256 196 l92 -42 -92 -42 -92 42z" fill="#EAF6EE" transform="translate(0,0)"/>
+    <path d="M164 154 l92 42 92 -42 v22 l-92 42 -92 -42z" fill="#3F7D54" transform="translate(0,0)"/>
+    <path d="M256 150 l40 -18 -40 -18 -40 18z" fill="#559868" transform="translate(0,0)"/>
+  </g></g>
+  <rect x="88" y="372" width="336" height="76" rx="22" fill="url(#tag)"/>
+  <text x="256" y="424" text-anchor="middle" font-family="'Segoe UI','SF Pro Display','Helvetica Neue',Roboto,'DejaVu Sans',Arial,sans-serif" font-size="46" font-weight="700" letter-spacing="1" fill="#FFFFFF">.rinpak</text>
+</svg>
