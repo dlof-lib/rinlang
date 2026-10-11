@@ -81,7 +81,11 @@
     "inc",
     "dec",
     "rebase",
-    "rewind"
+    "rewind",
+    "pre",
+    "post",
+    "label",
+    "define"
   ],
   "storage": [
     "let",
