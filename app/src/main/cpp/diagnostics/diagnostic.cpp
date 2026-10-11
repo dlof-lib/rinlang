@@ -54,6 +54,7 @@ std::string codeString(Code c) {
         case Code::E0048_LetElseFallthrough:     return "E0048";
         case Code::E0049_AcceptRejected:         return "E0049";
         case Code::E0050_BaseMisuse:             return "E0050";
+        case Code::E0051_ContractViolated:       return "E0051";
 
         case Code::W0001_UnusedVariable:         return "W0001";
         case Code::W0002_UnusedImport:           return "W0002";
@@ -119,6 +120,7 @@ std::string codeName(Code c) {
         case Code::E0048_LetElseFallthrough:     return "LetElseFallthrough";
         case Code::E0049_AcceptRejected:         return "AcceptRejected";
         case Code::E0050_BaseMisuse:             return "BaseMisuse";
+        case Code::E0051_ContractViolated:       return "ContractViolated";
 
         case Code::W0001_UnusedVariable:         return "UnusedVariable";
         case Code::W0002_UnusedImport:           return "UnusedImport";
