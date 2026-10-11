@@ -1,5 +1,0 @@
-# Add under `vendor/grammars/` handling in the linguist repo (grammars.yml), pointing at the
-# repository that publishes syntaxes/indsin.tmLanguage.json (and syntaxes/rin.tmLanguage.json,
-# which it includes via `source.rin`):
-https://github.com/<owner>/<repo>:
-- source.indsin
