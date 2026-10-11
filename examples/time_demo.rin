@@ -1,0 +1,16 @@
+// time_demo.rin — جولة سريعة في مفهوم time (docs/TIME.md)
+time.config({lang: "ar", digits: "arabic"});
+let now = time();
+print time(now, "long");
+print time.hijri(now).text;
+
+let deadline = time.parse("بعد 3 أيام");
+print time.ago(deadline);                              // بعد 3 أيام
+print time.diff(deadline, now, "hours");
+
+print time.startOf(now, "month").date;
+print time.zone(now, "Riyadh").time;
+print time.span("1h30m").long;
+
+let m = time.measure(fun() { time.sleep(50); return "done"; });
+print m.result;
