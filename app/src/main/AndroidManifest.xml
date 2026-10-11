@@ -142,6 +142,36 @@
             android:exported="false"
             android:launchMode="singleTop" />
 
+        <!-- File association for .rinpak project packages (tap a .rinpak in any file manager / mail / chat
+             app → Rin shows the package preview and imports it). ProjectsActivity itself stays unexported. -->
+        <activity-alias
+            android:name=".RinPakFileViewer"
+            android:targetActivity=".ProjectsActivity"
+            android:exported="true"
+            android:label="@string/rinpak_open_label"
+            android:icon="@drawable/ic_rinpak_file">
+            <intent-filter android:priority="10">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="content" />
+                <data android:scheme="file" />
+                <data android:mimeType="*/*" />
+                <data android:host="*" />
+                <data android:pathPattern=".*\\.rinpak" />
+                <data android:pathPattern=".*\\..*\\.rinpak" />
+                <data android:pathPattern=".*\\..*\\..*\\.rinpak" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="content" />
+                <data android:scheme="file" />
+                <data android:mimeType="application/vnd.rin.pak" />
+            </intent-filter>
+        </activity-alias>
+
+
         <activity
             android:name=".FilesActivity"
             android:exported="false" />
