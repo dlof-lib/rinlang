@@ -194,6 +194,10 @@ StmtPtr Parser::declaration() {
         if (kw == "stone" || kw == "gauge" || kw == "tape" || kw == "lens" || kw == "fuse") return liveDeclaration();
         // عائلة الشروط (docs/base-accept.md): base/accept + inc/dec/rebase/rewind — كلها كلمات سياقية بنفس القاعدة.
         if (kw == "base" || kw == "accept") return liveDeclaration();
+        // pre/post (docs/pre-post.md): ما قبل / ما بعد — عقد انتقال حول الإسناد، كلمتان سياقيتان بنفس القاعدة.
+        if (kw == "pre" || kw == "post") return liveDeclaration();
+        // label/define (docs/label-define.md): تسمية وتعريف — كلمتان سياقيتان بنفس القاعدة.
+        if (kw == "label" || kw == "define") return liveDeclaration();
         if (kw == "bell") return bellDeclaration();
         if (kw == "undo" || kw == "redo" || kw == "rearm" || kw == "unbell" ||
             kw == "inc" || kw == "dec" || kw == "rebase" || kw == "rewind") return liveActionStatement();
@@ -703,7 +707,11 @@ StmtPtr Parser::liveDeclaration() {
     st->line = name.line;
     st->kind = kind == "stone" ? LiveKind::Stone : kind == "gauge" ? LiveKind::Gauge
              : kind == "tape" ? LiveKind::Tape : kind == "lens" ? LiveKind::Lens
-             : kind == "base" ? LiveKind::Base : kind == "accept" ? LiveKind::Accept : LiveKind::Fuse;
+             : kind == "base" ? LiveKind::Base : kind == "accept" ? LiveKind::Accept
+             : kind == "pre" ? LiveKind::Pre : kind == "post" ? LiveKind::Post
+             : kind == "label" ? LiveKind::Label : kind == "define" ? LiveKind::Define : LiveKind::Fuse;
+    const bool isMeta = st->kind == LiveKind::Label || st->kind == LiveKind::Define;
+    const bool isGate = st->kind == LiveKind::Pre || st->kind == LiveKind::Post;
 
     if (match({TokenType::EQUAL})) {
         st->initializer = expression();
@@ -719,6 +727,7 @@ StmtPtr Parser::liveDeclaration() {
     // accept يستعمل 'if' و'else' (كلمتان محجوزتان) كمُعدِّلين، فيُسمح بهما هنا لهذا النوع فقط.
     auto atModifier = [&]() {
         if (check(TokenType::IDENT)) return true;
+        if (st->kind == LiveKind::Pre || st->kind == LiveKind::Post) return check(TokenType::IF);
         return st->kind == LiveKind::Accept && (check(TokenType::IF) || check(TokenType::ELSE));
     };
     while (atModifier()) {
@@ -729,7 +738,18 @@ StmtPtr Parser::liveDeclaration() {
                            "'" + mod + "' cannot be used with '" + kind + "'", why,
                            "remove `" + mod + "` or pick the variable kind that supports it", "");
         };
-        if (mod == "within") {
+        if (isMeta && (mod == "as" || mod == "label" || mod == "about" || mod == "unit")) {
+            // as: الحقل الأساسي لنوعه (label ← التسمية، define ← الوصف)؛ والباقي حقول مساعدة من الجهة الأخرى
+            const bool isLabel = st->kind == LiveKind::Label;
+            ExprPtr* slot = nullptr;
+            if (mod == "as") slot = isLabel ? &st->metaLabel : &st->metaAbout;
+            else if (mod == "label") { if (isLabel) throw reject("`label x = v as TITLE` already takes the title with `as`"); slot = &st->metaLabel; }
+            else if (mod == "about") { if (!isLabel) throw reject("`define x = v as TEXT` already takes the description with `as`"); slot = &st->metaAbout; }
+            else slot = &st->metaUnit;
+            if (*slot) throw reject("`" + mod + "` is given twice");
+            advance();
+            *slot = expression();
+        } else if (mod == "within") {
             if (st->kind != LiveKind::Gauge) throw reject("only `gauge` has a range (`within A to B`)");
             advance();
             st->lo = expression();
@@ -741,7 +761,7 @@ StmtPtr Parser::liveDeclaration() {
             advance();
             st->hi = expression();
             sawWithin = true;
-        } else if ((mod == "strict" && st->kind != LiveKind::Accept) || mod == "wrap") {
+        } else if ((mod == "strict" && st->kind != LiveKind::Accept && !isGate) || mod == "wrap") {
             if (st->kind != LiveKind::Gauge) throw reject("only `gauge` has an out-of-range policy (strict/wrap)");
             if (!st->rangeMode.empty()) throw reject("a gauge takes only one of `strict` / `wrap`");
             advance();
@@ -765,8 +785,21 @@ StmtPtr Parser::liveDeclaration() {
             if (st->step) throw reject("a base takes only one `step`");
             advance();
             st->step = expression();
+        } else if (mod == "if" && isGate) { // pre/post: `if` يكتب شرط نوعه (pre → قبل، post → بعد)
+            ExprPtr& slot = st->kind == LiveKind::Pre ? st->preRule : st->postRule;
+            if (slot) throw reject("a " + kind + " takes only one `if` rule; join conditions with `and` / `or`");
+            advance();
+            slot = expression();
+        } else if ((mod == "pre" || mod == "post") && isGate) { // الشرط الثاني: الجهة المقابلة
+            const bool isPreMod = mod == "pre";
+            if ((isPreMod && st->kind == LiveKind::Pre) || (!isPreMod && st->kind == LiveKind::Post))
+                throw reject("`" + kind + " ... if RULE` already is the " + mod + " rule; the extra clause must be the opposite side (`" + (isPreMod ? "post" : "pre") + " RULE`)");
+            ExprPtr& slot = isPreMod ? st->preRule : st->postRule;
+            if (slot) throw reject("this declaration already has a `" + mod + "` rule");
+            advance();
+            slot = expression();
         } else if (mod == "if") {
-            if (st->kind != LiveKind::Accept) throw reject("only `accept` has an acceptance rule (`if RULE`)");
+            if (st->kind != LiveKind::Accept) throw reject("only `accept`, `pre` and `post` have a rule (`if RULE`)");
             if (st->rule) throw reject("an accept takes only one rule; join conditions with `and` / `or`");
             advance();
             st->rule = expression();
@@ -776,7 +809,7 @@ StmtPtr Parser::liveDeclaration() {
             advance();
             st->fallback = expression();
         } else if (mod == "strict") {
-            if (st->kind != LiveKind::Accept) throw reject("only `gauge` and `accept` have a strict mode");
+            if (st->kind != LiveKind::Accept && !isGate) throw reject("only `gauge`, `accept`, `pre` and `post` have a strict mode");
             advance();
             st->strictAccept = true;
         } else {
@@ -797,6 +830,22 @@ StmtPtr Parser::liveDeclaration() {
                           "accept '" + name.lexeme + "' cannot be both `strict` and have an `else` fallback",
                           "`strict` turns a rejection into an error, while `else` replaces the rejected value",
                           "keep only one of them", "");
+    }
+    if (isMeta && !(st->kind == LiveKind::Label ? st->metaLabel : st->metaAbout))
+        throw errRich(diag::Code::E0012_MissingToken, peek(),
+                      kind + " '" + name.lexeme + "' needs " + (st->kind == LiveKind::Label ? "a title" : "a description"),
+                      st->kind == LiveKind::Label ? "a `label` gives the variable a display name (its real identifier stays `" + name.lexeme + "`)"
+                                                  : "a `define` records what the variable means",
+                      "add `as \"...\"`, e.g. `" + kind + " " + name.lexeme + " = 0 as \"...\";`", "'as'");
+    if (isGate) {
+        const bool isPre = st->kind == LiveKind::Pre;
+        if (!(isPre ? st->preRule : st->postRule))
+            throw errRich(diag::Code::E0012_MissingToken, peek(),
+                          std::string(isPre ? "pre" : "post") + " '" + name.lexeme + "' needs a rule",
+                          isPre ? "a `pre` variable asks a question BEFORE every write: may the value change at all?"
+                                : "a `post` variable asks a question AFTER every write: is the new state acceptable?",
+                          "add `if <condition>` (inside it `old` is the previous value, `new` the written one, and `" + name.lexeme + "` is the " +
+                          (isPre ? "old" : "new") + " one), e.g. `" + kind + " " + name.lexeme + " = 0 if " + (isPre ? "old" : "new") + " >= 0;`", "'if'");
     }
     if (st->rangeMode.empty()) st->rangeMode = "clamp";
     consume(TokenType::SEMICOLON, "Expected ';' after '" + kind + "' declaration");
