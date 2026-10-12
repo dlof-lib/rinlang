@@ -387,6 +387,14 @@ void Lexer::scanNumber() {
         advance();
         while (isdigit((unsigned char)peek())) advance();
     }
+    // الصيغة العلمية: 1e18 · 2.5E-3 · 4e+2 — تُستهلك فقط إن تبعها رقم فعلاً (فلا تتأثر الأسماء بعد الأرقام)
+    if (peek() == 'e' || peek() == 'E') {
+        size_t save = current;
+        advance();
+        if (peek() == '+' || peek() == '-') advance();
+        if (isdigit((unsigned char)peek())) { while (isdigit((unsigned char)peek())) advance(); }
+        else current = save;
+    }
     std::string text = src.substr(start, current - start);
     Token t;
     t.type = TokenType::NUMBER;
