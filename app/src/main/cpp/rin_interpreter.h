@@ -45,7 +45,8 @@ using ArrayData = std::vector<Value>;
 using ArrayPtr = std::shared_ptr<ArrayData>;
 
 // قاموس (map): قائمة أزواج (key, value) تحافظ على ترتيب الإدخال؛ المقارنة بالقيمة عبر valuesEqual.
-using MapData = std::vector<std::pair<Value, Value>>;
+// يُعرَّف MapData الكامل بعد Value مباشرة (يحتاج Value كاملة النوع لأجل فهرس التجزئة الكسول).
+struct MapData;
 using MapPtr = std::shared_ptr<MapData>;
 
 // مجموعة (set): عناصر فريدة بحسب valuesEqual (مقارنة تركيبية) مع حفظ ترتيب الإدراج؛ تُمرَّر بالمرجع
@@ -86,6 +87,45 @@ struct Value {
     }
     std::string toDisplayString() const;
     std::string typeName() const;
+};
+
+// محتوى القاموس: قائمة أزواج (key, value) بترتيب الإدخال (نفس السلوك السابق حرفياً، ويرث std::vector
+// فكل الشيفرة القديمة تعمل كما هي) + فهرس تجزئة "كسول" للمفاتيح البدائية (رقم/نص/منطقي/nil).
+//  - find(key): O(1) تقريباً للمفتاح البدائي حين size() >= kIndexThreshold، وإلا مسح خطّي بـ valuesEqual.
+//  - append(key, value): إضافة مفتاح جديد مع إبقاء الفهرس صالحاً (لا إعادة بناء).
+//  - أي تعديل آخر يغيّر الحجم (push_back/erase/clear...) يُسقط الفهرس تلقائياً: يُعاد بناؤه عند أول بحث
+//    لاحق (O(n) مرة واحدة). أما حذف عنصر فمرّ عبر eraseAt() الذي يُسقط الفهرس صراحةً.
+//  - عند الفهرس المتقادم يتحقق find() من المفتاح الفعلي في الموضع، فلا يعيد أبداً عنصراً خاطئاً.
+// الشرح الكامل: docs/runtime.md
+struct MapData : std::vector<std::pair<Value, Value>> {
+    using Base = std::vector<std::pair<Value, Value>>;
+    static constexpr size_t kIndexThreshold = 12;
+    static constexpr size_t npos = static_cast<size_t>(-1);
+
+    MapData() = default;
+    MapData(std::initializer_list<value_type> il) : Base(il) {}
+    MapData(const Base& b) : Base(b) {}
+    MapData(Base&& b) noexcept : Base(std::move(b)) {}
+    MapData(const MapData& o) : Base(static_cast<const Base&>(o)) {}   // الفهرس لا يُنسخ
+    MapData(MapData&& o) noexcept : Base(std::move(static_cast<Base&>(o))) { o.dropIndex(); }
+    MapData& operator=(const MapData& o) { if (this != &o) { Base::operator=(static_cast<const Base&>(o)); dropIndex(); } return *this; }
+    MapData& operator=(MapData&& o) noexcept { if (this != &o) { Base::operator=(std::move(static_cast<Base&>(o))); dropIndex(); o.dropIndex(); } return *this; }
+    MapData& operator=(const Base& o) { Base::operator=(o); dropIndex(); return *this; }
+    MapData& operator=(Base&& o) noexcept { Base::operator=(std::move(o)); dropIndex(); return *this; }
+
+    size_t findIndex(const Value& key) const;          // npos إن لم يوجد
+    Value* findValue(const Value& key) { size_t i = findIndex(key); return i == npos ? nullptr : &(*this)[i].second; }
+    const Value* findValue(const Value& key) const { size_t i = findIndex(key); return i == npos ? nullptr : &(*this)[i].second; }
+    void append(const Value& key, const Value& value);  // المفتاح غير موجود (يضمن المستدعي ذلك عبر findIndex)
+    void put(const Value& key, const Value& value);     // إدراج أو استبدال
+    void eraseAt(size_t i) { erase(begin() + static_cast<std::ptrdiff_t>(i)); dropIndex(); }
+    void dropIndex() const { idxValid_ = false; pidx_.clear(); }
+
+private:
+    mutable std::unordered_map<std::string, size_t> pidx_;
+    mutable size_t idxN_ = 0;
+    mutable bool idxValid_ = false;
+    void rebuildIndex() const;
 };
 
 // محتوى المجموعة: items بترتيب الإدراج + فهرس تجزئة للقيم "البدائية" (رقم/نص/منطقي/nil) فيصبح
@@ -1098,6 +1138,12 @@ private:
 
     void execute(const StmtPtr& stmt, EnvPtr env);
     void executeBlock(const std::vector<StmtPtr>& statements, EnvPtr env);
+    // مسار التنفيذ السريع: return/break/continue تُنقَل كقيمة Flow بدل استثناءات C++ (الاستثناء يكلّف
+    // عشرات الميكروثواني لكل return، وهو ما كان يجعل fib(25) تأخذ 7 ثوانٍ). execute()/executeBlock()
+    // أعلاه تبقى كما هي لكل المستدعين القدامى وتُحوّل Flow إلى نفس الاستثناءات القديمة.
+    enum class Flow { None, Return, Break, Continue };
+    Flow exec(const StmtPtr& stmt, EnvPtr env, Value& ret);
+    Flow execBlockFlow(const std::vector<StmtPtr>& statements, EnvPtr env, Value& ret);
     Value evaluate(const ExprPtr& expr, EnvPtr env);
     Value callFunction(const std::shared_ptr<Callable>& fn, std::vector<Value>& args, int line);
 
@@ -1172,6 +1218,7 @@ public: // Rin 1.0: واجهة OOP الموسَّعة (يستدعيها Value::t
     void letExecPattern(const std::shared_ptr<LetPatternStmt>& s, const EnvPtr& env);
     Value letPatternAssign(const std::shared_ptr<PatternAssignExpr>& e, const EnvPtr& env);
     // ---- المتغيرات الحيّة (Living Variables) — التنفيذ في آخر rin_interpreter.cpp ----
+    bool tryAppendInPlace(const std::shared_ptr<AssignExpr>& e, const EnvPtr& env); // s = s + <نص/متغيّر> بلا نسخ النص كاملاً (docs/runtime.md)
     bool liveActive_ = false;                 // false => كلفة صفر على كل قراءة/إسناد (لا يصير true إلا عند أول استعمال)
     struct TrialEntry { EnvPtr env; std::string name; Value oldValue; std::shared_ptr<LiveMeta> metaSnapshot; };
     std::vector<std::vector<TrialEntry>> trialStack_; // سجل تراجع لكل trial نشِطة (الأعمق في النهاية)
@@ -1327,7 +1374,16 @@ private:
     // لأي try/catch اعتراضه أبداً (على خلاف RinError)، فيُسقِط التطبيق بالكامل (أو عملية الاختبار
     // خارج أندرويد) بدل رسالة خطأ Rin واضحة وقابلة للاستمرار. الحد أدناه محافظ (يعمل بأمان حتى مع
     // مكدّسات صغيرة نسبياً كما في بعض خيوط أندرويد)، ويكفي لأي تكرار عملي (fibonacci، إلخ).
-    static constexpr int kMaxCallDepth = 300;
+    // حدّ عمق استدعاء الدوال. الافتراضي 300 آمن لأي خيط بمكدّس صغير (أندرويد)؛ مضيف يملك مكدّساً كبيراً
+    // (rin CLI يشغّل المفسِّر على خيط بمكدّس 1GB) يرفعه عبر setDefaultMaxCallDepth() قبل إنشاء المفسِّر،
+    // أو عبر setMaxCallDepth() لمثيل واحد. التجاوز يُنتج RinError عادياً (E0035) لا segfault.
+    static inline int defaultMaxCallDepth_ = 300;
+    int maxCallDepth_ = defaultMaxCallDepth_;
+public:
+    static void setDefaultMaxCallDepth(int d) { if (d > 0) defaultMaxCallDepth_ = d; }
+    void setMaxCallDepth(int d) { if (d > 0) maxCallDepth_ = d; }
+    int maxCallDepth() const { return maxCallDepth_; }
+private:
     int callDepth = 0;
     // ---- Execution budget (Live Preview infinite-loop protection; see setExecutionBudget()) ----
     long long execBudget_ = 0;  // 0 = unlimited (unchanged default behavior for every existing caller)
