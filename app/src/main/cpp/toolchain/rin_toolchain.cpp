@@ -206,7 +206,7 @@ size_t Optimizer::optimize(Chunk& c) {
     return changes;
 }
 static bool writeU32(std::ofstream& f,uint32_t x){f.write(reinterpret_cast<const char*>(&x),4);return !!f;}
-static bool readU32(std::ifstream& f,uint32_t& x){f.read(reinterpret_cast<char*>(&x),4);return !!f;}
+static bool readU32(std::istream& f,uint32_t& x){f.read(reinterpret_cast<char*>(&x),4);return !!f;}
 bool writeBytecode(const Chunk& c,const std::string& path){
     std::ofstream f(path,std::ios::binary); if(!f)return false;
     f.write("RBC1",4); if(!writeU32(f,(uint32_t)c.constants.size())||!writeU32(f,(uint32_t)c.code.size()))return false;
@@ -214,12 +214,20 @@ bool writeBytecode(const Chunk& c,const std::string& path){
     for(auto&i:c.code){if(!writeU32(f,(uint32_t)i.op)||!writeU32(f,(uint32_t)i.operand)||!writeU32(f,(uint32_t)i.line))return false;}
     return !!f;
 }
-bool readBytecode(Chunk& c,const std::string& path){
-    std::ifstream f(path,std::ios::binary); if(!f)return false;char magic[4];f.read(magic,4);if(std::string(magic,4)!="RBC1")return false;
+bool readBytecodeStream(Chunk& c,std::istream& f){
+    char magic[4];f.read(magic,4);if(!f||std::string(magic,4)!="RBC1")return false;
     uint32_t nc=0,ni=0;if(!readU32(f,nc)||!readU32(f,ni))return false;c=Chunk{};
-    for(uint32_t i=0;i<nc;++i){uint32_t n=0;if(!readU32(f,n))return false;std::string s(n,'\0');f.read(s.data(),n);if(!f)return false;c.constants.push_back(std::move(s));}
+    for(uint32_t i=0;i<nc;++i){uint32_t n=0;if(!readU32(f,n))return false;if(n>(1u<<28))return false;std::string s(n,'\0');f.read(s.data(),n);if(!f)return false;c.constants.push_back(std::move(s));}
     for(uint32_t i=0;i<ni;++i){uint32_t op=0,arg=0,line=0;if(!readU32(f,op)||!readU32(f,arg)||!readU32(f,line))return false;c.code.push_back({(Op)op,(int)arg,(int)line});}
     return true;
+}
+bool readBytecode(Chunk& c,const std::string& path){
+    std::ifstream f(path,std::ios::binary); if(!f)return false;
+    return readBytecodeStream(c,f);
+}
+bool readBytecodeFromMemory(Chunk& c,const std::string& bytes){
+    std::istringstream f(bytes,std::ios::binary);
+    return readBytecodeStream(c,f);
 }
 
 BytecodeVM::Result BytecodeVM::run(const Chunk&c){
@@ -235,7 +243,7 @@ BytecodeVM::Result BytecodeVM::run(const Chunk&c){
         auto in=c.code[ip++];
         switch(in.op){
             case Op::Halt:return r;
-            case Op::Constant:{auto v=c.constants[in.operand];stack_.push_back(v.size()>2&&v[1]==':'?v.substr(2):v);break;}
+            case Op::Constant:{auto v=c.constants[in.operand];if(v.size()>2&&v[0]=='n'&&v[1]==':'){double d;if(number(v.substr(2),d)){stack_.push_back(value(d));break;}}stack_.push_back(v.size()>2&&v[1]==':'?v.substr(2):v);break;}
             case Op::Nil:stack_.push_back("nil");break;case Op::True:stack_.push_back("true");break;case Op::False:stack_.push_back("false");break;
             case Op::Load:{auto k=c.constants[in.operand].substr(5);stack_.push_back(globals_.count(k)?globals_[k]:"nil");break;}
             case Op::Store:{auto v=pop();auto k=c.constants[in.operand].substr(5);globals_[k]=v;stack_.push_back(v);break;}
