@@ -67,14 +67,8 @@ Value newArray(ArrayData items = {}) { return Value::makeArray(std::make_shared<
 Value newMap(MapData items = {}) { return Value::makeMap(std::make_shared<MapData>(std::move(items))); }
 
 // ------------------------------------------------------------------ map utils
-const Value* mapFind(const MapData& m, const Value& key) {
-    for (const auto& kv : m) if (valuesEqual(kv.first, key)) return &kv.second;
-    return nullptr;
-}
-void mapSet(MapData& m, const Value& key, const Value& value) {
-    for (auto& kv : m) if (valuesEqual(kv.first, key)) { kv.second = value; return; }
-    m.push_back({key, value});
-}
+const Value* mapFind(const MapData& m, const Value& key) { return m.findValue(key); }
+void mapSet(MapData& m, const Value& key, const Value& value) { m.put(key, value); }
 
 Value deepCopyValue(const Value& v, int depth = 0) {
     if (depth > 200) return v;
