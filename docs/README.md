@@ -26,6 +26,8 @@
 - [`boat.md`](./boat.md)
 
 ### بيئة التشغيل
+- [`runtime.md`](./runtime.md) — **المرجع الرسمي لوقت التشغيل**: البنية، نموذج التنفيذ، الضمانات، التحسينات، التضمين.
+- [`runtime-hardening.md`](./runtime-hardening.md) — سجل تقوية المفسِّر.
 - [`standard-library.md`](./standard-library.md) — دوال جاهزة (`lib/*.og.rin`).
 - [`errors.md`](./errors.md) و[`ERROR_SYSTEM.md`](./ERROR_SYSTEM.md) — نظام التشخيص.
 - [`storage.md`](./storage.md) — تخزين دائم.
