@@ -3,24 +3,34 @@
 // ============================================================================
 //  rin_ava prog.rin -o prog      ← يحوّل برنامج Rin إلى ملف تنفيذي مستقل
 //
-//  لا لغة جديدة هنا: التحقق يتم بمحلّل Rin الأصلي (`rin check`) والتنفيذ بمفسّر
-//  Rin الأصلي نفسه. rin_ava مجرد "سائق" (driver) كما في g++: يحلّل الخيارات،
-//  يشغّل المراحل بالترتيب، ويعرض الأخطاء بصيغة  file:line: error: message.
+//  لا لغة جديدة هنا: التحقق يتم بمحلّل Rin الأصلي (`rin check`) والتنفيذ بمحرّكات Rin
+//  الأصلية نفسها. rin_ava مجرد "سائق" (driver) كما في g++: يحلّل الخيارات، يشغّل المراحل
+//  بالترتيب، ويعرض الأخطاء بصيغة  file:line: error: message.
 //
 //  المراحل:
 //    1) فحص  : `rin check`  (نفس lexer/parser الحقيقيين)            [-fsyntax-only يتوقف هنا]
-//    2) بناء : الخلفية الافتراضية "bundle": نسخة من runtime `rin` + البرنامج مُضمَّناً
-//              (دلالات مطابقة 100% للمفسّر، لا تحتاج مترجم C على جهاز البناء)
-//              الخلفية "native" (-fnative / -S / -c): rinc → C → cc (للمجموعة المدعومة فقط)
+//       تحليل: `rin analyze` (SemanticAnalyzer + TypeChecker)        [-fanalyze]
+//    2) بناء : حسب الخلفية (backend) — كلها تشترك في نفس الواجهة:
+//         interp (الافتراضية) : نسخة من runtime `rin` + البرنامج مُضمَّناً → المفسّر
+//                               rin_interpreter.cpp (دلالات مطابقة 100%، بلا مترجم C)
+//         vm                  : `rin bytecode` ← بايتكود RBC1 مُضمَّن → toolchain/BytecodeVM
+//         native              : rinc → C → cc (المجموعة المدعومة من rinc فقط)
+//         engine              : يبني المفسّر نفسه من مصدره (rin_interpreter.cpp وأخواته)
+//                               مع البرنامج مُضمَّناً — تنفيذي مستقل لا يحتاج `rin` أصلاً
+//         auto                : native إن أمكن وإلا interp
 //
 //  المتطلبات: C++17 + POSIX (Linux / macOS / WSL / MSYS2). بلا أي مكتبة خارجية.
 // ============================================================================
 #include <algorithm>
+#include <chrono>
+#include <filesystem>
 #include <cerrno>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <functional>
+#include <map>
 #include <fstream>
 #include <iostream>
 #include <regex>
@@ -32,6 +42,7 @@
 #include <sys/stat.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#include "rin_vm.h"
 #if defined(__APPLE__)
 #include <mach-o/dyld.h>
 #endif
@@ -42,7 +53,9 @@
 
 namespace {
 
-const char kMagic[9] = "RINAVAP1";  // يجب أن يطابق cli/linux/src/rin_ava_payload.h
+// يجب أن تطابق cli/linux/src/rin_ava_payload.h
+const char kMagic[9]   = "RINAVAP1";  // v1: [name \0 source]            ← المفسّر
+const char kMagicV2[9] = "RINAVAP2";  // v2: [kind name \0 data]  kind: S مصدر / B بايتكود
 
 // ---------------------------------------------------------------- لغة الرسائل
 bool g_ar = false;
@@ -192,18 +205,22 @@ void removeTree(const std::string& d) {
 // ---------------------------------------------------------------- الخيارات
 struct Opts {
     std::string input, output, forcedLang;
+    std::string vmMode = "image";  // خلفية vm: image (كاملة، افتراضية) | bytecode (نواة سريعة) | auto
+    std::string backend;           // "" = غير محدد؛ interp | vm | native | engine | go | auto
     bool compileOnly = false;      // -c
     bool emitC = false;            // -S
     bool syntaxOnly = false;       // -fsyntax-only
-    bool native = false;           // -fnative
+    bool analyze = false;          // -fanalyze  (rin analyze: SemanticAnalyzer + TypeChecker)
+    bool listBackends = false;     // --list-backends
     bool verbose = false;          // -v
     bool dryRun = false;           // -###
     bool saveTemps = false;        // -save-temps
     bool noWarn = false;           // -w
     bool werror = false;           // -Werror
     int colorMode = -1;            // -1 auto, 0 never, 1 always
-    std::string cc, rinc, runtime, engine;
-    std::vector<std::string> ccFlags;   // تُمرَّر لمترجم C في الخلفية native فقط
+    int jobs = 0;                  // -jN (0 = عدد أنوية المعالج)
+    std::string cc, rinc, runtime, engine, cacheDir, goRuntime, goSrc;
+    std::vector<std::string> ccFlags;   // تُمرَّر لمترجم C/C++ في الخلفيتين native وengine
     std::vector<std::string> libs;      // -lNAME / -LDIR (بالترتيب)
     std::vector<std::string> inputs;
 };
@@ -221,21 +238,41 @@ void printHelp() {
 "Options:\n"
 "  -o <file>          Place the output into <file> (default: a.out)\n"
 "  -fsyntax-only      Check the program with Rin's real parser and stop\n"
-"  -fnative           Use the native backend (rinc -> C -> cc) instead of bundling\n"
-"  -S                 Emit the generated C source (implies -fnative)\n"
-"  -c                 Compile to an object file (implies -fnative)\n"
-"  -O0 -O1 -O2 -O3 -Os -Ofast -g   Passed to the C compiler (native backend only)\n"
+"  -fanalyze          Also run Rin's semantic analyzer + type checker (rin analyze)\n"
+"  -S                 Emit assembly-like output: C (native), bytecode listing (vm), wrapper C++ (engine)\n"
+"  -c                 Compile only: object file (native) or .rbc bytecode file (vm)\n"
+"  -O0 -O1 -O2 -O3 -Os -Ofast -g   C/C++ compiler flags (native/engine); -O1+ also optimizes vm bytecode\n"
 "  -I<dir> -D<m> -U<m> -L<dir> -l<lib> -static -pthread -m<opt> -f<opt>\n"
-"                     Passed to the C compiler (native backend only)\n"
+"                     Passed to the C/C++ compiler (native and engine backends only)\n"
 "  -x rin             Treat the input as Rin source whatever its extension\n"
-"  -save-temps        Keep intermediate files (generated C) in the current directory\n"
+"  -save-temps        Keep intermediate files (generated C / C++ / bytecode) in the current directory\n"
 "  -v                 Show the commands being run\n"
 "  -###               Show the commands without running them\n"
 "  -w                 Suppress warnings        -Werror   Treat warnings as errors\n"
 "  -Wall -Wextra -pedantic -std=... -pipe   Accepted and ignored (g++ compatibility)\n"
 "  -fdiagnostics-color=[auto|always|never]\n"
-"  --cc=<cc>  --rinc=<path>  --runtime=<rin>  --engine-src=<dir>\n"
-"                     Choose tools explicitly (also RIN_AVA_CC / RIN_AVA_RINC / RIN_AVA_RUNTIME)\n"
+"\n"
+"Backends (-fbackend=NAME or --backend=NAME):\n"
+"  interp   (default) copy of the `rin` runtime + your program -> the real interpreter\n"
+"                     (rin_interpreter.cpp). Accepts every valid Rin program; no C compiler needed.\n"
+"  vm                 VM image (rin_vm library): your program + every @import resolved at build time\n"
+"                     in ONE self-contained image, run by the full engine -> complete language, instant build.\n"
+"                     -fvm-bytecode: strict fast path (`rin bytecode` -> BytecodeVM, core subset only)\n"
+"                     -fvm-auto:     bytecode when the program compiles to it (no imports), else the image\n"
+"  native             rinc -> C -> cc (the subset rinc can translate; fastest output)\n"
+"  engine             build the interpreter engine itself from source (needs a C++ compiler + zlib)\n"
+"                     with the program embedded: a standalone binary that does not need `rin`\n"
+"  go                 gorin's embedded Go interpreter (gorin/cmd/rin) + your program: a standalone binary\n"
+"                     that needs neither `rin` nor a C compiler (core language subset; checked with --check)\n"
+"  auto               native when rinc accepts the program, otherwise interp (or go if only gorin exists)\n"
+"  Shortcuts: -fnative -finterp (-fbundle) -fvm -fvm-bytecode -fvm-auto -fengine -fgo -fauto\n"
+"\n"
+"Tools (also via environment):\n"
+"  --runtime=<rin>   RIN_AVA_RUNTIME     --rinc=<path>  RIN_AVA_RINC     --cc=<cc>  RIN_AVA_CC\n"
+"  --engine-src=<dir> RIN_AVA_ENGINE_SRC (app/src/main/cpp)   --engine-cache=<dir> RIN_AVA_CACHE   -jN\n"
+"  RIN_AVA_RINVM=<rinvm>  (VM runtime preferred by -fvm when found next to rin_ava)\n"
+"  --go-runtime=<gorin-embedded> RIN_AVA_GORIN   --gorin-src=<dir> RIN_AVA_GORIN_SRC (built with `go build` if no binary)\n"
+"  --list-backends    Show which backends are usable on this machine\n"
 "  --version  -dumpversion  -dumpmachine  --help\n"
 "\n"
 "Environment: RIN_AVA_LANG=ar for Arabic messages, NO_COLOR to disable colors.\n"
@@ -292,20 +329,25 @@ void announce(const Opts& o, const std::vector<std::string>& cmd) {
 }
 
 // ---------------------------------------------------------------- الحمولة (bundle)
-bool bundle(const std::string& runtimePath, const std::string& displayName, const std::string& source,
+// kind: 'S' مصدر (يُكتب بتخطيط v1 المتوافق مع كل runtime سابق) أو 'B' بايتكود (v2).
+bool bundle(const std::string& runtimePath, char kind, const std::string& displayName, const std::string& data,
             const std::string& outPath, std::string& err) {
     std::string rt;
     if (!readFile(runtimePath, rt)) { err = std::string(T("cannot read runtime: ", "تعذّر قراءة runtime: ")) + runtimePath; return false; }
     // لا تُلحِق مرتين إن كان runtime نفسه ناتج rin_ava
-    if (rt.size() >= 16 && std::memcmp(rt.data() + rt.size() - 8, kMagic, 8) == 0) {
+    if (rt.size() >= 16 && (std::memcmp(rt.data() + rt.size() - 8, kMagic, 8) == 0 ||
+                            std::memcmp(rt.data() + rt.size() - 8, kMagicV2, 8) == 0)) {
         err = T("runtime already contains a program", "الـ runtime يحوي برنامجاً مُضمَّناً بالفعل");
         return false;
     }
-    std::string payload = displayName; payload.push_back('\0'); payload += source;
+    const bool v2 = kind != 'S';
+    std::string payload;
+    if (v2) payload.push_back(kind);
+    payload += displayName; payload.push_back('\0'); payload += data;
     std::string trailer(16, '\0');
     uint64_t len = payload.size();
     for (int i = 0; i < 8; ++i) trailer[i] = static_cast<char>((len >> (8 * i)) & 0xff);
-    std::memcpy(&trailer[8], kMagic, 8);
+    std::memcpy(&trailer[8], v2 ? kMagicV2 : kMagic, 8);
 
     std::string tmp = outPath + ".rin_ava_tmp";
     {
@@ -357,15 +399,668 @@ std::string defaultMachine() {
 #endif
 }
 
+// ---------------------------------------------------------------- خلفية engine: مصدر المحرّك
+// نفس ملفات cli/linux/CMakeLists.txt التي يُبنى منها `rin` (بلا الطرفية وRinPM)، لذا أي تعديل
+// على المفسّر في app/src/main/cpp ينعكس هنا تلقائياً دون نسخ أي كود.
+const char* const kEngineSources[] = {
+    "rin_lexer.cpp", "rin_parser.cpp", "rin_make.cpp", "rin_container_sql.cpp", "rin_artifact.cpp",
+    "rin_interpreter.cpp", "rin_http.cpp", "rin_c_api.cpp", "indsin/rin_indsin_c_api.cpp",
+    "toolchain/rin_toolchain.cpp",
+    "binfmt/elf_format.cpp", "binfmt/ar_format.cpp", "binfmt/pe_format.cpp", "binfmt/macho_format.cpp",
+    "binfmt/coff_obj.cpp", "loader_ui/library_loader_ui.cpp",
+    "diagnostics/diagnostic.cpp", "diagnostics/source_manager.cpp", "diagnostics/diagnostic_engine.cpp",
+    "diagnostics/diagnostic_renderer.cpp",
+    "clc/clc_container.cpp", "clc/clc_compress.cpp", "clc/clc_security.cpp", "clc/clc_rin_opt.cpp",
+    "clc/clc_zip_import.cpp", "clc/sha256.cpp",
+};
+
+bool isEngineDir(const std::string& d) {
+    return !d.empty() && fileExists(d + "/rin_interpreter.cpp") && fileExists(d + "/rin_lexer.cpp") &&
+           fileExists(d + "/rin_parser.cpp");
+}
+
+std::string findEngineSrc(const std::string& explicitDir, const std::string& selfDir) {
+    if (!explicitDir.empty()) return explicitDir;
+    if (const char* e = std::getenv("RIN_AVA_ENGINE_SRC")) if (*e) return e;
+    std::vector<std::string> c = {
+        selfDir + "/../../../app/src/main/cpp",   // cli/linux/build → جذر المستودع
+        selfDir + "/../../app/src/main/cpp",
+        selfDir + "/../app/src/main/cpp",
+        selfDir + "/../share/rin/engine", selfDir + "/../lib/rin/engine",
+        "app/src/main/cpp", "../app/src/main/cpp", "../../app/src/main/cpp"};
+    if (const char* h = std::getenv("RIN_HOME")) { c.push_back(std::string(h) + "/engine"); c.push_back(std::string(h) + "/app/src/main/cpp"); }
+    for (auto& d : c) if (isEngineDir(d)) { char rp[4096]; return ::realpath(d.c_str(), rp) ? std::string(rp) : d; }
+    return "";
+}
+
+// بصمة شجرة المصدر (أحدث mtime + العدد): أي تعديل على المحرّك يُبطل ذاكرة الكائنات تلقائياً.
+std::string treeStamp(const std::string& dir) {
+    namespace fs = std::filesystem;
+    long long newest = 0; size_t n = 0;
+    std::error_code ec;
+    for (fs::recursive_directory_iterator it(dir, fs::directory_options::skip_permission_denied, ec), end; !ec && it != end; it.increment(ec)) {
+        if (!it->is_regular_file(ec)) continue;
+        auto ext = it->path().extension().string();
+        if (ext != ".cpp" && ext != ".h" && ext != ".hpp") continue;
+        auto t = fs::last_write_time(it->path(), ec);
+        long long v = static_cast<long long>(std::chrono::duration_cast<std::chrono::seconds>(t.time_since_epoch()).count());
+        if (v > newest) newest = v;
+        ++n;
+    }
+    return std::to_string(newest) + "-" + std::to_string(n);
+}
+
+std::string hashHex(const std::string& s) {  // FNV-1a 64 — يكفي لتسمية مجلد ذاكرة مؤقتة
+    uint64_t h = 1469598103934665603ULL;
+    for (unsigned char c : s) { h ^= c; h *= 1099511628211ULL; }
+    char b[24]; std::snprintf(b, sizeof(b), "%016llx", static_cast<unsigned long long>(h));
+    return b;
+}
+
+bool mkdirs(const std::string& path) {
+    std::error_code ec;
+    std::filesystem::create_directories(path, ec);
+    return !ec || std::filesystem::is_directory(path);
+}
+
+std::string cacheRoot(const Opts& o) {
+    if (!o.cacheDir.empty()) return o.cacheDir;
+    if (const char* e = std::getenv("RIN_AVA_CACHE")) if (*e) return e;
+    if (const char* x = std::getenv("XDG_CACHE_HOME")) if (*x) return std::string(x) + "/rin_ava";
+    if (const char* h = std::getenv("HOME")) if (*h) return std::string(h) + "/.cache/rin_ava";
+    return "/tmp/rin_ava_cache";
+}
+
+// يشغّل عدة أوامر بالتوازي (حتى jobs في آنٍ واحد). كل أمر يكتب خرجه في ملف سجل.
+// يرجع -1 عند النجاح الكامل، أو فهرس أول أمر فشل.
+struct Job { std::vector<std::string> argv; std::string log; };
+int runParallel(const std::vector<Job>& jobs, int maxJobs, bool verbose) {
+    std::map<pid_t, size_t> running;
+    size_t next = 0; int failed = -1;
+    auto launch = [&](size_t i) {
+        if (verbose) std::cerr << tag() << " " << joinCmd(jobs[i].argv) << "\n";
+        pid_t pid = ::fork();
+        if (pid == 0) {
+            int fd = ::open(jobs[i].log.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
+            if (fd >= 0) { ::dup2(fd, 1); ::dup2(fd, 2); ::close(fd); }
+            std::vector<char*> av;
+            for (auto& a : jobs[i].argv) av.push_back(const_cast<char*>(a.c_str()));
+            av.push_back(nullptr);
+            ::execvp(av[0], av.data());
+            ::_exit(127);
+        }
+        if (pid > 0) running[pid] = i; else if (failed < 0) failed = static_cast<int>(i);
+    };
+    while ((next < jobs.size() && failed < 0) || !running.empty()) {
+        while (failed < 0 && next < jobs.size() && static_cast<int>(running.size()) < maxJobs) launch(next++);
+        if (running.empty()) break;
+        int st = 0; pid_t done = ::wait(&st);
+        if (done < 0) break;
+        auto it = running.find(done);
+        if (it == running.end()) continue;
+        bool ok = WIFEXITED(st) && WEXITSTATUS(st) == 0;
+        if (!ok && failed < 0) failed = static_cast<int>(it->second);
+        running.erase(it);
+    }
+    return failed;
+}
+
+std::string cxxLiteralBytes(const std::string& data) {
+    std::string o = "{";
+    char b[8]; int col = 0;
+    for (unsigned char c : data) {
+        int n = std::snprintf(b, sizeof(b), "%u,", c);
+        o.append(b, static_cast<size_t>(n));
+        if ((col += n) > 100) { o += '\n'; col = 0; }
+    }
+    return o + "0}";  // بايت صفري ختامي حتى لا تكون المصفوفة فارغة أبداً
+}
+
+// main() للتنفيذي المستقل: نفس سلوك `rin file.rin args…` (runSource في cli/linux/src/main.cpp).
+std::string engineWrapper(const std::string& name, const std::string& source) {
+    std::string w =
+"// Auto-generated by rin_ava (engine backend) — do not edit\n"
+"#include \"rin_lexer.h\"\n#include \"rin_parser.h\"\n#include \"rin_interpreter.h\"\n"
+"#include \"diagnostics/diagnostic_renderer.h\"\n#include \"diagnostics/source_manager.h\"\n"
+"#include <iostream>\n#include <string>\n#include <vector>\n\n";
+    w += "static const unsigned char kRinSrc[] = " + cxxLiteralBytes(source) + ";\n";
+    w += "static const char* kRinName = ";
+    std::string q = "\"";
+    for (char c : name) { if (c == '"' || c == '\\') q += '\\'; if (c == '\n') continue; q += c; }
+    w += q + "\";\n";
+    w +=
+"\nint main(int argc, char** argv) {\n"
+"    std::string source(reinterpret_cast<const char*>(kRinSrc), sizeof(kRinSrc) - 1);\n"
+"    std::string sourceName = kRinName;\n"
+"    std::vector<std::string> args;\n"
+"    for (int i = 1; i < argc; ++i) args.emplace_back(argv[i]);\n"
+"    rin::Interpreter interp;\n"
+"    interp.setProgramArgs(args);\n"
+"    try {\n"
+"        rin::Lexer lexer(source, sourceName);\n"
+"        auto tokens = lexer.scanTokens();\n"
+"        rin::Parser parser(tokens, sourceName);\n"
+"        auto statements = parser.parse();\n"
+"        interp.setSourceFile(sourceName);\n"
+"        std::string out = interp.run(statements);\n"
+"        std::cout << out;\n"
+"        return interp.hadError() ? 1 : 0;\n"
+"    } catch (rin::RinError& e) {\n"
+"        if (e.diagnostic) std::cerr << \"\\n\" << rin::diag::renderPlain(*e.diagnostic, rin::diag::globalSourceManager());\n"
+"        else std::cerr << \"\\n[rin] error in \" << sourceName << \" at line \" << e.line << \": \" << e.message << \"\\n\";\n"
+"        return 1;\n"
+"    } catch (std::exception& e) {\n"
+"        std::cerr << \"\\n[rin] internal error: \" << e.what() << \"\\n\";\n"
+"        return 1;\n"
+"    }\n"
+"}\n";
+    return w;
+}
+
 }  // namespace
 
+// ============================================================================
+//  الخلفيات (backends)
+// ============================================================================
+namespace {
+
+struct Ctx {
+    Opts o;
+    std::string source, runtime, rincPath, selfDir, base;
+};
+
+std::string rtOrDefault(const Ctx& c) { return c.runtime.empty() ? "rin" : c.runtime; }
+
+int fail(const std::string& msg) {
+    std::cerr << tag() << " " << errWord() << " " << msg << "\n";
+    return 1;
+}
+
+std::string firstLines(const std::string& text, size_t n) {
+    std::istringstream ss(text); std::string l, r; size_t i = 0;
+    std::vector<std::string> all;
+    while (std::getline(ss, l)) all.push_back(l);
+    for (i = all.size() > n ? all.size() - n : 0; i < all.size(); ++i) r += all[i] + "\n";
+    return r;
+}
+
+std::string pickCxx(const Opts& o) {
+    std::string cxx;
+    if (const char* e = std::getenv("RIN_AVA_CXX")) cxx = e;
+    if (cxx.empty() && !o.cc.empty()) {  // استنتاج مرافق مترجم C المُختار
+        cxx = o.cc;
+        auto rep = [&](const char* a, const char* b) {
+            size_t p = cxx.rfind(a);
+            if (p != std::string::npos && p + std::strlen(a) == cxx.size()) cxx.replace(p, std::strlen(a), b);
+        };
+        if (cxx == o.cc) { rep("gcc", "g++"); }
+        if (cxx == o.cc) { rep("clang", "clang++"); }
+        if (cxx == o.cc) { rep("cc", "c++"); }
+    }
+    if (cxx.empty()) for (const char* n : {"c++", "g++", "clang++"}) if (!findInPath(n).empty()) { cxx = n; break; }
+    return cxx.empty() ? "c++" : cxx;
+}
+
+bool hasOptFlag(const std::vector<std::string>& f) {
+    for (auto& x : f) if (x.rfind("-O", 0) == 0) return true;
+    return false;
+}
+// آخر -O<n> مُعطى: يحدّد هل نُحسّن البايتكود (O0 أو لا شيء = لا).
+bool wantsOptimize(const std::vector<std::string>& f) {
+    std::string last;
+    for (auto& x : f) if (x.rfind("-O", 0) == 0) last = x;
+    return !last.empty() && last != "-O0" && last != "-O";
+}
+
+// ---------------------------------------------------------------- interp
+int buildInterp(Ctx& c) {
+    Opts& o = c.o;
+    std::string out = o.output.empty() ? "a.out" : o.output;
+    if (!o.dryRun) warnImports(o, o.input, c.source);
+    announce(o, {"<bundle:interp>", rtOrDefault(c), "+", o.input, "->", out});
+    if (o.dryRun) return 0;
+    std::string err;
+    if (!bundle(c.runtime, 'S', baseName(o.input), c.source, out, err)) return fail(err);
+    return 0;
+}
+
+// ---------------------------------------------------------------- vm (بايتكود)
+int buildVmBytecode(Ctx& c) {
+    Opts& o = c.o;
+    std::string tmp = o.dryRun ? "/tmp/rin_ava.DRYRUN" : makeTempDir();
+    if (tmp.empty()) return fail(T("cannot create a temporary directory", "تعذّر إنشاء مجلد مؤقت"));
+    auto cleanup = [&]() { if (!o.dryRun) removeTree(tmp); };
+
+    char rp[4096];
+    std::string absInput = ::realpath(o.input.c_str(), rp) ? std::string(rp) : o.input;
+    std::string rbc = tmp + "/" + c.base + ".rbc";
+    std::vector<std::string> cmd = {rtOrDefault(c), "bytecode", absInput};
+    bool listing = o.emitC;   // -S: قائمة التعليمات (disassembly)
+    if (!listing) { cmd.push_back("--out"); cmd.push_back(rbc); }
+    if (wantsOptimize(o.ccFlags)) cmd.push_back("--optimize");
+    announce(o, cmd);
+    std::string out;
+    if (!o.dryRun) {
+        int rc = runCmd(cmd, "", true, &out);
+        if (rc != 0) {
+            printDiagnostics(out, o.input, c.source);
+            std::cerr << tag() << " " << T("hint: the vm backend supports only Rin's core subset; try the default backend (interp) or -fauto",
+                                            "تلميح: خلفية vm تدعم نواة اللغة فقط؛ جرّب الخلفية الافتراضية (interp) أو -fauto") << "\n";
+            cleanup();
+            return 1;
+        }
+    }
+    if (listing) {
+        std::string dest = o.output.empty() ? c.base + ".rbc.txt" : o.output;
+        if (!o.dryRun) {
+            if (dest == "-") std::cout << out;
+            else { std::ofstream f(dest, std::ios::binary); f << out; if (!f) { cleanup(); return fail(dest + ": " + std::strerror(errno)); } }
+        }
+        cleanup();
+        return 0;
+    }
+    std::string bytes;
+    if (!o.dryRun && !readFile(rbc, bytes)) { cleanup(); return fail(T("rin did not produce a bytecode file", "لم ينتج rin ملف البايتكود")); }
+    if (o.saveTemps && !o.dryRun) { std::ofstream f(c.base + ".rbc", std::ios::binary); f << bytes; }
+    int rc = 0;
+    if (o.compileOnly) {   // -c: ملف .rbc فقط (يُنفَّذ لاحقاً بـ `rin vm` أو يُضمَّن)
+        std::string dest = o.output.empty() ? c.base + ".rbc" : o.output;
+        if (!o.dryRun) { std::ofstream f(dest, std::ios::binary); f << bytes; if (!f) rc = fail(dest + ": " + std::strerror(errno)); }
+    } else {
+        std::string dest = o.output.empty() ? "a.out" : o.output;
+        announce(o, {"<bundle:vm>", rtOrDefault(c), "+", c.base + ".rbc", "->", dest});
+        if (!o.dryRun) {
+            std::string err;
+            if (!bundle(c.runtime, 'B', baseName(o.input), bytes, dest, err)) rc = fail(err);
+        }
+    }
+    cleanup();
+    return rc;
+}
+
+// ---------------------------------------------------------------- vm: صورة rin_vm (كاملة)
+// tryBytecode: يحاول `rin bytecode` أولاً (إن نجح وبلا استيرادات يُضمَّن البايتكود السريع)، وإلا المحرّك الكامل.
+int buildVmImage(Ctx& c, bool tryBytecode) {
+    Opts& o = c.o;
+    std::string bytes;
+    bool useBytecode = false;
+    if (tryBytecode && rin_vm::scanImports(c.source).empty() && !c.runtime.empty() && !o.dryRun) {
+        std::string tmp = makeTempDir();
+        if (!tmp.empty()) {
+            char rp[4096];
+            std::string absInput = ::realpath(o.input.c_str(), rp) ? std::string(rp) : o.input;
+            std::string rbc = tmp + "/" + c.base + ".rbc", out;
+            std::vector<std::string> cmd = {rtOrDefault(c), "bytecode", absInput, "--out", rbc};
+            if (wantsOptimize(o.ccFlags)) cmd.push_back("--optimize");
+            announce(o, cmd);
+            if (runCmd(cmd, "", true, &out) == 0 && readFile(rbc, bytes) && !bytes.empty()) useBytecode = true;
+            removeTree(tmp);
+        }
+        if (!useBytecode && !o.noWarn)
+            std::cerr << tag() << " " << T("note: program is outside the bytecode subset; using the full-engine VM image",
+                                            "ملاحظة: البرنامج خارج نواة البايتكود؛ سيُستخدم VM الكامل (المحرّك)") << "\n";
+    }
+    if (o.dryRun) { announce(o, {"<vm-image>", o.input, "->", o.output.empty() ? "a.out" : o.output}); return 0; }
+    rin_vm::Image im = rin_vm::build(baseName(o.input), o.input, c.source, useBytecode ? bytes : std::string());
+    if (!im.unresolved.empty() && !o.noWarn) {
+        std::string l; for (auto& u : im.unresolved) l += (l.empty() ? "" : ", ") + u;
+        std::cerr << paint(o.input + ":", "1") << " " << warnWord() << " "
+                  << T("not found at build time (embedded library or package, resolved at run time): ",
+                       "لم يُعثَر عليها وقت البناء (مكتبة مدمجة أو حزمة؛ تُحلّ وقت التشغيل): ") << l << "\n";
+        if (o.werror) return 1;
+    }
+    std::string image = rin_vm::serialize(im);
+    if (o.emitC) {   // -S: وصف الصورة
+        std::string dest = o.output.empty() ? c.base + ".rvm.txt" : o.output;
+        std::string d = rin_vm::describe(im);
+        if (dest == "-") { std::cout << d; return 0; }
+        return rin_vm::writeFile(dest, d) ? 0 : fail(dest + ": " + std::strerror(errno));
+    }
+    if (o.compileOnly) {   // -c: ملف .rvm يُنفَّذ بـ `rin image`
+        std::string dest = o.output.empty() ? c.base + ".rvm" : o.output;
+        return rin_vm::writeFile(dest, image) ? 0 : fail(dest + ": " + std::strerror(errno));
+    }
+    std::string dest = o.output.empty() ? "a.out" : o.output;
+    // runtime الصورة: rinvm (الآلة الافتراضية الكاملة، أصغر) إن وُجدت بجوار rin_ava/RIN_AVA_RINVM، وإلا rin
+    std::string vmrt = findTool("rinvm", "", "RIN_AVA_RINVM", c.selfDir);
+    if (vmrt.empty()) vmrt = c.runtime;
+    announce(o, {"<bundle:vm-image>", vmrt, "+", c.base + ".rvm", "->", dest});
+    std::string err;
+    if (!bundle(vmrt, 'M', baseName(o.input), image, dest, err)) return fail(err);
+    return 0;
+}
+
+int buildVm(Ctx& c) {
+    const std::string& m = c.o.vmMode;
+    if (m == "bytecode") return buildVmBytecode(c);
+    return buildVmImage(c, m == "auto");
+}
+
+// ---------------------------------------------------------------- native (rinc → C → cc)
+// soft=true: لا تطبع أخطاء؛ تُرجع السبب في why (للاختيار التلقائي auto).
+int buildNative(Ctx& c, bool soft, std::string* why) {
+    Opts& o = c.o;
+    auto bail = [&](const std::string& reason, const std::string& raw = "") {
+        if (soft) { if (why) *why = reason; return 1; }
+        if (!raw.empty()) printDiagnostics(raw, o.input, c.source);
+        else std::cerr << tag() << " " << errWord() << " " << reason << "\n";
+        return 1;
+    };
+    if (c.rincPath.empty() && !o.dryRun) {
+        if (soft) { if (why) *why = T("rinc not found", "rinc غير موجود"); return 1; }
+        std::cerr << tag() << " " << fatalWord() << " "
+                  << T("cannot find 'rinc' (needed by the native backend). Set RIN_AVA_RINC or use --rinc=<path>",
+                       "تعذّر إيجاد 'rinc' (مطلوب للخلفية native). اضبط RIN_AVA_RINC أو استخدم --rinc=<path>")
+                  << "\n";
+        return 1;
+    }
+    std::string tmp = o.dryRun ? "/tmp/rin_ava.DRYRUN" : makeTempDir();
+    if (tmp.empty()) return bail(T("cannot create a temporary directory", "تعذّر إنشاء مجلد مؤقت"));
+    auto cleanup = [&]() { if (!o.dryRun) removeTree(tmp); };
+
+    char rp[4096];
+    std::string absInput = ::realpath(o.input.c_str(), rp) ? std::string(rp) : o.input;
+    std::vector<std::string> rcmd = {c.rincPath.empty() ? "rinc" : c.rincPath, absInput, "--emit-c-only", "--no-embed-fallback"};
+    announce(o, rcmd);
+    std::string cfile = tmp + "/" + c.base + ".c";
+    if (!o.dryRun) {
+        std::string out;
+        int rc = runCmd(rcmd, tmp, true, &out);
+        if (rc != 0) {
+            std::string r = firstLines(out, 1);
+            cleanup();
+            if (!soft) {
+                printDiagnostics(out, o.input, c.source);
+                std::cerr << tag() << " " << T("hint: the default backend accepts every valid Rin program; use -finterp (or -fauto)",
+                                                "تلميح: الخلفية الافتراضية تقبل كل برنامج Rin صالح؛ استخدم -finterp (أو -fauto)") << "\n";
+                return 1;
+            }
+            if (why) *why = r;
+            return 1;
+        }
+        if (!fileExists(cfile)) { cleanup(); return bail(T("rinc did not produce a C file", "لم ينتج rinc ملف C")); }
+    }
+
+    if (o.emitC) {
+        std::string dest = o.output.empty() ? c.base + ".c" : o.output;
+        if (!o.dryRun) {
+            std::string cs; readFile(cfile, cs);
+            if (dest == "-") std::cout << cs;
+            else { std::ofstream f(dest, std::ios::binary); f << cs; if (!f) { cleanup(); return bail(dest + ": " + std::strerror(errno)); } }
+        }
+        cleanup();
+        return 0;
+    }
+
+    std::string cc = o.cc;
+    if (cc.empty()) {
+        for (const char* n : {"cc", "gcc", "clang"}) if (!findInPath(n).empty()) { cc = n; break; }
+        if (cc.empty()) cc = "cc";
+    }
+    std::vector<std::string> ccmd = {cc};
+    if (!hasOptFlag(o.ccFlags)) ccmd.push_back("-O0");
+    if (o.compileOnly) ccmd.push_back("-c");
+    for (auto& f : o.ccFlags) ccmd.push_back(f);
+    std::string out = o.output.empty() ? (o.compileOnly ? c.base + ".o" : "a.out") : o.output;
+    ccmd.push_back("-o"); ccmd.push_back(out);
+    ccmd.push_back(cfile);
+    if (!o.compileOnly) { for (auto& l : o.libs) ccmd.push_back(l); ccmd.push_back("-lm"); }
+    announce(o, ccmd);
+    int rc = 0;
+    if (!o.dryRun) {
+        std::string log;
+        rc = runCmd(ccmd, "", soft, soft ? &log : nullptr);
+        if (o.saveTemps) { std::string cs; readFile(cfile, cs); std::ofstream f(c.base + ".c", std::ios::binary); f << cs; }
+        if (rc != 0 && soft && why) *why = T("the C compiler failed", "فشل مترجم C");
+    }
+    cleanup();
+    if (rc != 0) {
+        if (!soft) std::cerr << tag() << " " << errWord() << " " << T("the C backend failed (use -save-temps to inspect the generated C)",
+                                                                  "فشلت خلفية C (استخدم -save-temps لفحص كود C المولَّد)") << "\n";
+        return 1;
+    }
+    return 0;
+}
+
+// ---------------------------------------------------------------- engine (المحرّك من المصدر)
+int buildEngine(Ctx& c) {
+    Opts& o = c.o;
+    if (o.compileOnly) return fail(T("-c is not supported by the engine backend (use -S to get the wrapper C++, or omit -c)",
+                                     "-c غير مدعوم في خلفية engine (استخدم -S للحصول على ملف C++ المُغلِّف أو احذف -c)"));
+    std::string eng = findEngineSrc(o.engine, c.selfDir);
+    if (eng.empty() && !o.dryRun) {
+        std::cerr << tag() << " " << fatalWord() << " "
+                  << T("cannot find the Rin engine sources (rin_interpreter.cpp, rin_lexer.cpp, rin_parser.cpp). "
+                       "Pass --engine-src=<repo>/app/src/main/cpp or set RIN_AVA_ENGINE_SRC",
+                       "تعذّر إيجاد مصدر محرّك Rin (rin_interpreter.cpp وrin_lexer.cpp وrin_parser.cpp). "
+                       "مرّر --engine-src=<repo>/app/src/main/cpp أو اضبط RIN_AVA_ENGINE_SRC")
+                  << "\n";
+        return 1;
+    }
+    if (eng.empty()) eng = "<engine-src>";
+    std::string cxx = pickCxx(o);
+    if (!o.dryRun && findInPath(cxx).empty() && !isExec(cxx)) return fail(std::string(T("no C++ compiler found: ", "لا يوجد مترجم C++: ")) + cxx);
+
+    std::string wrapper = engineWrapper(baseName(o.input), c.source);
+    if (o.emitC) {   // -S: ملف C++ المُغلِّف فقط
+        std::string dest = o.output.empty() ? c.base + ".engine.cpp" : o.output;
+        if (o.dryRun) return 0;
+        if (dest == "-") { std::cout << wrapper; return 0; }
+        std::ofstream f(dest, std::ios::binary); f << wrapper;
+        return f ? 0 : fail(dest + ": " + std::strerror(errno));
+    }
+
+    std::string tmp = o.dryRun ? "/tmp/rin_ava.DRYRUN" : makeTempDir();
+    if (tmp.empty()) return fail(T("cannot create a temporary directory", "تعذّر إنشاء مجلد مؤقت"));
+    auto cleanup = [&]() { if (!o.dryRun) removeTree(tmp); };
+
+    std::vector<std::string> flags = {"-std=c++17"};
+    if (!hasOptFlag(o.ccFlags)) flags.push_back("-O2");
+    for (auto& f : o.ccFlags) flags.push_back(f);
+    flags.push_back("-w");           // تحذيرات المحرّك ليست من شأن مستخدم rin_ava
+    flags.push_back("-I" + eng);
+
+    std::string flagStr; for (auto& f : flags) flagStr += f + " ";
+    std::string cacheSub = cacheRoot(o) + "/engine-" + hashHex(eng + "|" + cxx + "|" + flagStr + "|" + (o.dryRun ? "" : treeStamp(eng)));
+    if (!o.dryRun && !mkdirs(cacheSub)) { cleanup(); return fail(std::string(T("cannot create cache directory: ", "تعذّر إنشاء مجلد الذاكرة المؤقتة: ")) + cacheSub); }
+
+    std::string wsrc = tmp + "/" + c.base + ".engine.cpp", wobj = tmp + "/" + c.base + ".engine.o";
+    if (!o.dryRun) { std::ofstream f(wsrc, std::ios::binary); f << wrapper; }
+
+    std::vector<Job> jobs; std::vector<std::pair<std::string, std::string>> renames;  // part → final
+    std::vector<std::string> objs;
+    size_t cached = 0;
+    for (const char* rel : kEngineSources) {
+        std::string src = eng + "/" + rel, safe = rel;
+        std::replace(safe.begin(), safe.end(), '/', '_');
+        std::string obj = cacheSub + "/" + safe + ".o";
+        objs.push_back(obj);
+        if (!o.dryRun && fileExists(obj)) { ++cached; continue; }
+        if (!o.dryRun && !fileExists(src)) { cleanup(); return fail(std::string(T("missing engine source: ", "ملف مصدر المحرّك مفقود: ")) + src); }
+        std::vector<std::string> cmd = {cxx}; for (auto& f : flags) cmd.push_back(f);
+        cmd.push_back("-c"); cmd.push_back(src); cmd.push_back("-o"); cmd.push_back(obj + ".part");
+        jobs.push_back({cmd, tmp + "/" + safe + ".log"});
+        renames.push_back({obj + ".part", obj});
+    }
+    {
+        std::vector<std::string> cmd = {cxx}; for (auto& f : flags) cmd.push_back(f);
+        cmd.push_back("-c"); cmd.push_back(wsrc); cmd.push_back("-o"); cmd.push_back(wobj);
+        jobs.push_back({cmd, tmp + "/wrapper.log"});
+    }
+
+    int nj = o.jobs > 0 ? o.jobs : static_cast<int>(::sysconf(_SC_NPROCESSORS_ONLN));
+    if (nj < 1) nj = 1;
+    if (o.dryRun) {
+        for (auto& j : jobs) announce(o, j.argv);
+    } else {
+        if (jobs.size() > 1 && !o.noWarn)
+            std::cerr << tag() << " " << T("building the engine: ", "بناء المحرّك: ") << (jobs.size() - 1) << " "
+                      << T("source file(s) to compile, ", "ملف مصدر للترجمة، ") << cached << " "
+                      << T("cached (first build is slow; later builds reuse the cache)", "من الذاكرة (أول بناء بطيء؛ التالية تعيد استخدامها)") << "\n";
+        int bad = runParallel(jobs, nj, o.verbose);
+        if (bad >= 0) {
+            std::string log; readFile(jobs[bad].log, log);
+            std::cerr << tag() << " " << errWord() << " " << T("C++ compilation failed: ", "فشلت ترجمة C++: ") << jobs[bad].argv[jobs[bad].argv.size() - 1] << "\n"
+                      << firstLines(log, 30);
+            for (auto& r : renames) ::remove(r.first.c_str());
+            cleanup();
+            return 1;
+        }
+        for (auto& r : renames) if (::rename(r.first.c_str(), r.second.c_str()) != 0) { cleanup(); return fail(std::string(T("cannot store object: ", "تعذّر حفظ الكائن: ")) + r.second); }
+    }
+
+    std::string out = o.output.empty() ? "a.out" : o.output;
+    std::vector<std::string> lcmd = {cxx};
+    for (auto& f : o.ccFlags) if (f == "-static" || f == "-pthread" || f == "-s" || f == "-pie" || f == "-no-pie" || f == "-rdynamic" || f.rfind("-m", 0) == 0) lcmd.push_back(f);
+    lcmd.push_back("-o"); lcmd.push_back(out);
+    lcmd.push_back(wobj);
+    for (auto& ob : objs) lcmd.push_back(ob);
+    for (auto& l : o.libs) lcmd.push_back(l);
+    lcmd.push_back("-lz"); lcmd.push_back("-ldl"); lcmd.push_back("-lpthread"); lcmd.push_back("-lm");
+    announce(o, lcmd);
+    int rc = 0;
+    if (!o.dryRun) {
+        std::string log;
+        rc = runCmd(lcmd, "", true, &log);
+        if (rc != 0) std::cerr << firstLines(log, 30);
+        if (o.saveTemps) { std::ofstream f(c.base + ".engine.cpp", std::ios::binary); f << wrapper; }
+    }
+    cleanup();
+    if (rc != 0) return fail(T("linking the engine failed (is zlib's development package installed?)", "فشل ربط المحرّك (هل حزمة تطوير zlib مثبّتة؟)"));
+    return 0;
+}
+
+// ---------------------------------------------------------------- go (مفسّر Go المدمج في gorin)
+bool isGorinDir(const std::string& d) { return !d.empty() && fileExists(d + "/go.mod") && fileExists(d + "/cmd/rin/main.go"); }
+
+std::string findGorinSrc(const Opts& o, const std::string& selfDir) {
+    if (!o.goSrc.empty()) return o.goSrc;
+    if (const char* e = std::getenv("RIN_AVA_GORIN_SRC")) if (*e) return e;
+    std::vector<std::string> c = {selfDir + "/../../../gorin", selfDir + "/../../gorin", selfDir + "/../gorin",
+                                  selfDir + "/../share/rin/gorin", "gorin", "../gorin", "../../gorin"};
+    if (const char* h = std::getenv("RIN_HOME")) c.push_back(std::string(h) + "/gorin");
+    for (auto& d : c) if (isGorinDir(d)) { char rp[4096]; return ::realpath(d.c_str(), rp) ? std::string(rp) : d; }
+    return "";
+}
+
+// يحدّد ملف مفسّر Go التنفيذي: صريح ← بيئة ← بجوار rin_ava ← RIN_HOME ← PATH ← بناؤه من gorin/ بـ `go build` (مع ذاكرة).
+// build=false: لا يبني (للقوائم/الاستعلام فقط). يرجع "" إن تعذّر.
+std::string resolveGoRuntime(const Opts& o, const std::string& selfDir, bool build, std::string* why) {
+    std::string r = findTool("gorin-embedded", o.goRuntime, "RIN_AVA_GORIN", selfDir);
+    if (r.empty()) r = findTool("rin-go", "", nullptr, selfDir);
+    if (!r.empty()) return r;
+    std::string src = findGorinSrc(o, selfDir);
+    if (src.empty()) { if (why) *why = T("gorin-embedded binary not found and no gorin/ sources (use --go-runtime= or --gorin-src=)", "لا يوجد gorin-embedded ولا مصدر gorin/ (استخدم --go-runtime= أو --gorin-src=)"); return ""; }
+    if (findInPath("go").empty()) { if (why) *why = T("the Go toolchain ('go') is not installed", "أدوات Go ('go') غير مثبّتة"); return ""; }
+    std::string dir = cacheRoot(o) + "/gorin-" + hashHex(src + "|" + treeStamp(src));
+    std::string bin = dir + "/gorin-embedded";
+    if (isExec(bin)) return bin;
+    if (!build) { if (why) *why = T("not built yet (will be built with `go build` on first use)", "لم يُبنَ بعد (سيُبنى بـ `go build` عند أول استخدام)"); return ""; }
+    if (!mkdirs(dir)) { if (why) *why = T("cannot create cache directory", "تعذّر إنشاء مجلد الذاكرة المؤقتة"); return ""; }
+    if (!o.noWarn) std::cerr << tag() << " " << T("building the Go interpreter (first use only): ", "بناء مفسّر Go (أول استخدام فقط): ") << src << "\n";
+    std::vector<std::string> cmd = {"go", "build", "-o", bin + ".part", "./cmd/rin"};
+    if (o.verbose) std::cerr << tag() << " " << joinCmd(cmd) << "\n";
+    std::string out;
+    int rc = runCmd(cmd, src, true, &out);
+    if (rc != 0 || !fileExists(bin + ".part")) { if (why) *why = std::string("go build failed:\n") + firstLines(out, 20); ::remove((bin + ".part").c_str()); return ""; }
+    ::chmod((bin + ".part").c_str(), 0755);
+    if (::rename((bin + ".part").c_str(), bin.c_str()) != 0) { if (why) *why = T("cannot store the built binary", "تعذّر حفظ الملف المبني"); return ""; }
+    return bin;
+}
+
+int buildGo(Ctx& c) {
+    Opts& o = c.o;
+    std::string why;
+    std::string gort = o.dryRun ? std::string("gorin-embedded") : resolveGoRuntime(o, c.selfDir, true, &why);
+    if (gort.empty()) {
+        std::cerr << tag() << " " << fatalWord() << " " << T("cannot use the go backend: ", "تعذّر استخدام خلفية go: ") << why << "\n";
+        return 1;
+    }
+    // فحص توافق البرنامج مع محرك Go نفسه (نواة اللغة فقط): يفشل مبكراً بدل الفشل وقت التشغيل
+    {
+        std::vector<std::string> cmd = {gort, "--check", o.input};
+        announce(o, cmd);
+        if (!o.dryRun) {
+            std::string out;
+            int rc = runCmd(cmd, "", true, &out);
+            if (rc != 0) {
+                printDiagnostics(out, o.input, c.source);
+                std::cerr << tag() << " " << T("hint: the Go engine supports only Rin's core subset; use the default backend (interp)",
+                                                "تلميح: محرك Go يدعم نواة اللغة فقط؛ استخدم الخلفية الافتراضية (interp)") << "\n";
+                return 1;
+            }
+        }
+    }
+    std::string out = o.output.empty() ? "a.out" : o.output;
+    if (!o.dryRun) warnImports(o, o.input, c.source);
+    announce(o, {"<bundle:go>", gort, "+", o.input, "->", out});
+    if (o.dryRun) return 0;
+    std::string err;
+    if (!bundle(gort, 'S', baseName(o.input), c.source, out, err)) return fail(err);
+    return 0;
+}
+
+// ---------------------------------------------------------------- تحليل دلالي/أنواع (rin analyze)
+int runAnalyze(Ctx& c) {
+    Opts& o = c.o;
+    std::vector<std::string> cmd = {rtOrDefault(c), "analyze", o.input};
+    announce(o, cmd);
+    if (o.dryRun) return 0;
+    std::string out;
+    int rc = runCmd(cmd, "", true, &out);
+    if (rc == 127 || rc == 126 || rc == -1) return fail(std::string(T("failed to run: ", "تعذّر التشغيل: ")) + joinCmd(cmd));
+    bool failed = rc != 0 || out.find("FAILED") != std::string::npos;
+    // الأسطر التشخيصية فقط (بلا عناوين الملخّص)
+    std::istringstream ss(out); std::string l; bool any = false;
+    while (std::getline(ss, l)) {
+        if (l.empty() || l.rfind("Rin Toolchain Analysis", 0) == 0 || l.rfind("semantic:", 0) == 0 || l.rfind("types:", 0) == 0) continue;
+        std::cerr << o.input << ": " << (failed ? errWord() : warnWord()) << " " << l << "\n";
+        any = true;
+    }
+    if (failed) { if (!any) std::cerr << o.input << ": " << errWord() << " " << T("analysis failed", "فشل التحليل") << "\n"; return 1; }
+    if (any && o.werror) return 1;
+    return 0;
+}
+
+// ---------------------------------------------------------------- --list-backends
+int listBackends(Ctx& c) {
+    Opts& o = c.o;
+    auto row = [&](const char* name, bool ok, const std::string& what) {
+        std::cout << "  " << (ok ? paint("[ok]", "1;32") : paint("[--]", "1;31")) << " " << name;
+        for (size_t i = std::strlen(name); i < 8; ++i) std::cout << ' ';
+        std::cout << what << "\n";
+    };
+    std::string cc = o.cc;
+    if (cc.empty()) for (const char* n : {"cc", "gcc", "clang"}) if (!findInPath(n).empty()) { cc = n; break; }
+    std::string cxx = pickCxx(o);
+    std::string eng = findEngineSrc(o.engine, c.selfDir);
+    bool cxxOk = !findInPath(cxx).empty() || isExec(cxx);
+    std::cout << "rin_ava " << RIN_AVA_VERSION << "\n";
+    row("interp", !c.runtime.empty(), "rin_interpreter.cpp via runtime: " + (c.runtime.empty() ? std::string("(rin not found)") : c.runtime) + "  [default]");
+    row("vm", !c.runtime.empty(), "rin_vm image (full engine + bundled imports); -fvm-bytecode for the BytecodeVM fast path");
+    row("native", !c.rincPath.empty() && !cc.empty(), "rinc: " + (c.rincPath.empty() ? std::string("(not found)") : c.rincPath) + "  cc: " + (cc.empty() ? std::string("(not found)") : cc));
+    row("engine", !eng.empty() && cxxOk, "sources: " + (eng.empty() ? std::string("(not found; use --engine-src)") : eng) + "  c++: " + (cxxOk ? cxx : std::string("(not found)")));
+    {
+        std::string why, gr = resolveGoRuntime(o, c.selfDir, false, &why);
+        std::string gs = findGorinSrc(o, c.selfDir);
+        bool ok = !gr.empty() || (!gs.empty() && !findInPath("go").empty());
+        row("go", ok, gr.empty() ? (ok ? "gorin/ sources at " + gs + " (built on first use)" : why) : "gorin-embedded: " + gr);
+    }
+    row("auto", !c.runtime.empty() || !c.rincPath.empty(), "native when rinc accepts the program, otherwise interp");
+    return 0;
+}
+
+}  // namespace
+
+// ============================================================================
 int main(int argc, char** argv) {
     {
         const char* l = std::getenv("RIN_AVA_LANG");
         const char* lg = std::getenv("LANG");
         g_ar = (l && std::strncmp(l, "ar", 2) == 0) || (!l && lg && std::strncmp(lg, "ar", 2) == 0);
     }
-    Opts o;
+    Ctx ctx;
+    Opts& o = ctx.o;
     std::vector<std::string> args(argv + 1, argv + argc);
     bool endOpts = false;
 
@@ -375,6 +1070,20 @@ int main(int argc, char** argv) {
             std::exit(1);
         }
         out = args[++i];
+    };
+    auto setBackend = [&](const std::string& b) -> bool {
+        static const std::map<std::string, std::string> alias = {
+            {"interp", "interp"}, {"interpreter", "interp"}, {"bundle", "interp"}, {"rin", "interp"},
+            {"vm", "vm"}, {"bytecode", "vm"}, {"native", "native"}, {"rinc", "native"}, {"c", "native"},
+            {"engine", "engine"}, {"embed", "engine"}, {"go", "go"}, {"gorin", "go"}, {"auto", "auto"}};
+        auto it = alias.find(b);
+        if (it == alias.end()) {
+            std::cerr << tag() << " " << errWord() << " " << T("unknown backend '", "خلفية غير معروفة '") << b
+                      << T("' (expected interp, vm, native, engine, go or auto)", "' (المتوقع interp أو vm أو native أو engine أو go أو auto)") << "\n";
+            return false;
+        }
+        o.backend = it->second;
+        return true;
     };
 
     for (size_t i = 0; i < args.size(); ++i) {
@@ -398,8 +1107,21 @@ int main(int argc, char** argv) {
         else if (a == "-###") o.dryRun = true;
         else if (a == "-save-temps") o.saveTemps = true;
         else if (a == "-fsyntax-only") o.syntaxOnly = true;
-        else if (a == "-fnative") o.native = true;
-        else if (a == "-fno-native" || a == "-fbundle") o.native = false;
+        else if (a == "-fanalyze" || a == "-Wanalyze") o.analyze = true;
+        else if (a == "-fno-analyze") o.analyze = false;
+        else if (a == "-fnative") { if (!setBackend("native")) return 1; }
+        else if (a == "-finterp" || a == "-fbundle" || a == "-fno-native") { if (!setBackend("interp")) return 1; }
+        else if (a == "-fvm") { if (!setBackend("vm")) return 1; o.vmMode = "image"; }
+        else if (a == "-fvm-bytecode") { if (!setBackend("vm")) return 1; o.vmMode = "bytecode"; }
+        else if (a == "-fvm-auto") { if (!setBackend("vm")) return 1; o.vmMode = "auto"; }
+        else if (a.rfind("--vm-mode=", 0) == 0) { o.vmMode = a.substr(10); if (o.vmMode != "image" && o.vmMode != "bytecode" && o.vmMode != "auto") { std::cerr << tag() << " " << errWord() << " " << T("--vm-mode expects image, bytecode or auto", "--vm-mode يقبل image أو bytecode أو auto") << "\n"; return 1; } }
+        else if (a == "-fengine") { if (!setBackend("engine")) return 1; }
+        else if (a == "-fgo") { if (!setBackend("go")) return 1; }
+        else if (a == "-fauto") { if (!setBackend("auto")) return 1; }
+        else if (a.rfind("-fbackend=", 0) == 0) { if (!setBackend(a.substr(10))) return 1; }
+        else if (a.rfind("--backend=", 0) == 0) { if (!setBackend(a.substr(10))) return 1; }
+        else if (a == "--backend") { needArg(i, a, v); if (!setBackend(v)) return 1; }
+        else if (a == "--list-backends") o.listBackends = true;
         else if (a == "-w") o.noWarn = true;
         else if (a == "-Werror") o.werror = true;
         else if (a == "-pipe" || a == "-pedantic" || a == "-ansi" || a.rfind("-W", 0) == 0 || a.rfind("-std=", 0) == 0) { /* مقبول ومتجاهَل */ }
@@ -414,6 +1136,12 @@ int main(int argc, char** argv) {
         else if (a.rfind("--rinc=", 0) == 0) o.rinc = a.substr(7);
         else if (a.rfind("--runtime=", 0) == 0) o.runtime = a.substr(10);
         else if (a.rfind("--engine-src=", 0) == 0) o.engine = a.substr(13);
+        else if (a.rfind("--go-runtime=", 0) == 0) o.goRuntime = a.substr(13);
+        else if (a.rfind("--gorin-src=", 0) == 0) o.goSrc = a.substr(12);
+        else if (a.rfind("--engine-cache=", 0) == 0) o.cacheDir = a.substr(15);
+        else if (a.rfind("--jobs=", 0) == 0) o.jobs = std::atoi(a.c_str() + 7);
+        else if (a.rfind("-j", 0) == 0 && a.size() > 2 && std::isdigit(static_cast<unsigned char>(a[2]))) o.jobs = std::atoi(a.c_str() + 2);
+        else if (a == "-j") { needArg(i, a, v); o.jobs = std::atoi(v.c_str()); }
         else if (a == "-I" || a == "-D" || a == "-U" || a == "-L" || a == "-l") {
             needArg(i, a, v);
             if (a == "-L" || a == "-l") o.libs.push_back(a + v); else o.ccFlags.push_back(a + v);
@@ -440,9 +1168,21 @@ int main(int argc, char** argv) {
     if (o.verbose) { std::cerr << tag() << " "; printVersion(); }
     if (const char* e = std::getenv("RIN_AVA_CC")) if (o.cc.empty()) o.cc = e;
 
-    if (o.emitC || o.compileOnly) o.native = true;
+    ctx.selfDir = exeDir(argv[0]);
+    ctx.runtime = findTool("rin", o.runtime, "RIN_AVA_RUNTIME", ctx.selfDir);
+    ctx.rincPath = findTool("rinc", o.rinc, "RIN_AVA_RINC", ctx.selfDir);
+    if (o.listBackends) return listBackends(ctx);
+
+    // الخلفية الفعلية: -S/-c بلا خلفية صريحة = native (السلوك الأصلي)
+    if (o.backend.empty()) o.backend = (o.emitC || o.compileOnly) ? "native" : "interp";
     if (o.emitC && o.compileOnly) {
         std::cerr << tag() << " " << errWord() << " " << T("-S and -c cannot be combined", "لا يمكن الجمع بين -S و -c") << "\n";
+        return 1;
+    }
+    if (o.backend == "interp" && (o.emitC || o.compileOnly)) {
+        std::cerr << tag() << " " << errWord() << " "
+                  << T("-S/-c do not apply to the interp backend (use -fnative, -fvm or -fengine)",
+                       "-S/-c لا تنطبق على خلفية interp (استخدم -fnative أو -fvm أو -fengine)") << "\n";
         return 1;
     }
 
@@ -468,28 +1208,30 @@ int main(int argc, char** argv) {
                        "نوع ملف غير معروف (المتوقع .rin؛ استخدم -x rin للإجبار)") << "\n";
         return 1;
     }
-    std::string source;
-    if (!readFile(o.input, source)) {
+    if (!readFile(o.input, ctx.source)) {
         std::cerr << tag() << " " << errWord() << " " << o.input << ": " << std::strerror(errno) << "\n"
                   << tag() << " " << fatalWord() << " " << T("no input files", "لا توجد ملفات إدخال") << "\n"
                   << T("compilation terminated.", "تم إنهاء البناء.") << "\n";
         return 1;
     }
+    ctx.base = stem(o.input);
 
-    const std::string selfDir = exeDir(argv[0]);
-    const std::string runtime = findTool("rin", o.runtime, "RIN_AVA_RUNTIME", selfDir);
-    const std::string rincPath = findTool("rinc", o.rinc, "RIN_AVA_RINC", selfDir);
-
-    // ---------------------------------------------------------- المرحلة 1: الفحص
-    if (runtime.empty() && !o.dryRun) {
-        std::cerr << tag() << " " << fatalWord() << " "
-                  << T("cannot find the Rin runtime ('rin'). Install it next to rin_ava, set RIN_AVA_RUNTIME, or use --runtime=<path>",
-                       "تعذّر إيجاد runtime Rin ('rin'). ثبّته بجانب rin_ava أو اضبط RIN_AVA_RUNTIME أو استخدم --runtime=<path>")
-                  << "\n";
-        return 1;
-    }
-    {
-        std::vector<std::string> cmd = {runtime.empty() ? "rin" : runtime, "check", o.input, "--format=short"};
+    // ---------------------------------------------------------- المرحلة 1: الفحص (+ التحليل)
+    // native/engine لا يحتاجان `rin` للبناء نفسه؛ فإن غاب نتخطى الفحص بتحذير بدل الفشل.
+    const bool runtimeOptional = o.backend == "native" || o.backend == "engine" || o.backend == "go" || o.backend == "auto";
+    if (ctx.runtime.empty() && !o.dryRun) {
+        if (!runtimeOptional || o.analyze || o.syntaxOnly) {
+            std::cerr << tag() << " " << fatalWord() << " "
+                      << T("cannot find the Rin runtime ('rin'). Install it next to rin_ava, set RIN_AVA_RUNTIME, or use --runtime=<path>",
+                           "تعذّر إيجاد runtime Rin ('rin'). ثبّته بجانب rin_ava أو اضبط RIN_AVA_RUNTIME أو استخدم --runtime=<path>")
+                      << "\n";
+            return 1;
+        }
+        if (!o.noWarn)
+            std::cerr << tag() << " " << warnWord() << " "
+                      << T("rin runtime not found: skipping the syntax check", "runtime ‏rin غير موجود: تخطّي فحص الصياغة") << "\n";
+    } else {
+        std::vector<std::string> cmd = {rtOrDefault(ctx), "check", o.input, "--format=short"};
         announce(o, cmd);
         if (!o.dryRun) {
             std::string out;
@@ -499,105 +1241,39 @@ int main(int argc, char** argv) {
                 return 1;
             }
             if (rc != 0) {
-                printDiagnostics(out, o.input, source);
+                printDiagnostics(out, o.input, ctx.source);
                 std::cerr << T("compilation terminated.", "تم إنهاء البناء.") << "\n";
                 return 1;
             }
+        }
+        if (o.analyze) {
+            if (runAnalyze(ctx) != 0) { std::cerr << T("compilation terminated.", "تم إنهاء البناء.") << "\n"; return 1; }
         }
     }
     if (o.syntaxOnly) return 0;
 
     // ---------------------------------------------------------- المرحلة 2: البناء
-    const std::string base = stem(o.input);
+    if (o.backend == "interp") return buildInterp(ctx);
+    if (o.backend == "vm") return buildVm(ctx);
+    if (o.backend == "engine") return buildEngine(ctx);
+    if (o.backend == "go") return buildGo(ctx);
+    if (o.backend == "native") return buildNative(ctx, false, nullptr);
 
-    if (!o.native) {
-        std::string out = o.output.empty() ? "a.out" : o.output;
-        if (!o.dryRun) warnImports(o, o.input, source);
-        std::vector<std::string> plan = {"<bundle>", runtime.empty() ? "rin" : runtime, "+", o.input, "->", out};
-        announce(o, plan);
-        if (o.dryRun) return 0;
-        std::string err;
-        if (!bundle(runtime, baseName(o.input), source, out, err)) {
-            std::cerr << tag() << " " << errWord() << " " << err << "\n";
-            return 1;
+    // auto: native إن قبله rinc وبُني، وإلا المفسّر (دلالات كاملة)
+    {
+        std::string why;
+        if (buildNative(ctx, true, &why) == 0) return 0;
+        if (!o.noWarn)
+            std::cerr << tag() << " " << T("note: native backend not used (", "ملاحظة: لم تُستخدم الخلفية native (")
+                      << (why.empty() ? std::string("unsupported") : why) << T("); using the interpreter", ")؛ سيُستخدم المفسّر") << "\n";
+        if (ctx.runtime.empty() && !o.dryRun) {
+            // لا runtime C++: جرّب مفسّر Go إن وُجد (تنفيذي مستقل بنواة اللغة)
+            std::string gw; if (!resolveGoRuntime(o, ctx.selfDir, false, &gw).empty() || !findGorinSrc(o, ctx.selfDir).empty()) {
+                if (!o.noWarn) std::cerr << tag() << " " << T("note: rin runtime not found; trying the Go engine", "ملاحظة: runtime ‏rin غير موجود؛ تجربة محرك Go") << "\n";
+                return buildGo(ctx);
+            }
+            return fail(T("cannot find the Rin runtime ('rin') for the interpreter fallback", "تعذّر إيجاد runtime ‏rin للرجوع إلى المفسّر"));
         }
-        return 0;
+        return buildInterp(ctx);
     }
-
-    // الخلفية native: rinc → C → cc
-    if (rincPath.empty() && !o.dryRun) {
-        std::cerr << tag() << " " << fatalWord() << " "
-                  << T("cannot find 'rinc' (needed by -fnative/-S/-c). Set RIN_AVA_RINC or use --rinc=<path>",
-                       "تعذّر إيجاد 'rinc' (مطلوب لـ -fnative/-S/-c). اضبط RIN_AVA_RINC أو استخدم --rinc=<path>")
-                  << "\n";
-        return 1;
-    }
-    std::string tmp = o.dryRun ? "/tmp/rin_ava.DRYRUN" : makeTempDir();
-    if (tmp.empty()) { std::cerr << tag() << " " << errWord() << " " << T("cannot create a temporary directory", "تعذّر إنشاء مجلد مؤقت") << "\n"; return 1; }
-    auto cleanup = [&]() { if (!o.dryRun) removeTree(tmp); };
-
-    char rp[4096];
-    std::string absInput = ::realpath(o.input.c_str(), rp) ? std::string(rp) : o.input;
-    std::vector<std::string> rcmd = {rincPath.empty() ? "rinc" : rincPath, absInput, "--emit-c-only", "--no-embed-fallback"};
-    announce(o, rcmd);
-    std::string cfile = tmp + "/" + base + ".c";
-    if (!o.dryRun) {
-        std::string out;
-        int rc = runCmd(rcmd, tmp, true, &out);
-        if (rc != 0) {
-            printDiagnostics(out, o.input, source);
-            std::cerr << tag() << " " << T("hint: the default backend accepts every valid Rin program; drop -fnative/-S/-c",
-                                            "تلميح: الخلفية الافتراضية تقبل كل برنامج Rin صالح؛ احذف -fnative/-S/-c") << "\n";
-            cleanup();
-            return 1;
-        }
-        if (!fileExists(cfile)) {
-            std::cerr << tag() << " " << errWord() << " " << T("rinc did not produce a C file", "لم ينتج rinc ملف C") << "\n";
-            cleanup();
-            return 1;
-        }
-    }
-
-    if (o.emitC) {
-        std::string dest = o.output.empty() ? base + ".c" : o.output;
-        if (!o.dryRun) {
-            std::string c; readFile(cfile, c);
-            if (dest == "-") std::cout << c;
-            else { std::ofstream f(dest, std::ios::binary); f << c; if (!f) { std::cerr << tag() << " " << errWord() << " " << dest << ": " << std::strerror(errno) << "\n"; cleanup(); return 1; } }
-        }
-        cleanup();
-        return 0;
-    }
-
-    std::string cc = o.cc;
-    if (cc.empty()) {
-        for (const char* n : {"cc", "gcc", "clang"}) if (!findInPath(n).empty()) { cc = n; break; }
-        if (cc.empty()) cc = "cc";
-    }
-    std::vector<std::string> ccmd = {cc};
-    bool hasOpt = false;
-    for (auto& f : o.ccFlags) { if (f.rfind("-O", 0) == 0) hasOpt = true; }
-    if (!hasOpt) ccmd.push_back("-O0");
-    if (o.compileOnly) ccmd.push_back("-c");
-    for (auto& f : o.ccFlags) ccmd.push_back(f);
-    std::string out = o.output.empty() ? (o.compileOnly ? base + ".o" : "a.out") : o.output;
-    ccmd.push_back("-o"); ccmd.push_back(out);
-    ccmd.push_back(cfile);
-    if (!o.compileOnly) { for (auto& l : o.libs) ccmd.push_back(l); ccmd.push_back("-lm"); }
-    announce(o, ccmd);
-    int rc = 0;
-    if (!o.dryRun) {
-        rc = runCmd(ccmd, "", false, nullptr);
-        if (o.saveTemps) {
-            std::string c; readFile(cfile, c);
-            std::ofstream f(base + ".c", std::ios::binary); f << c;
-        }
-    }
-    cleanup();
-    if (rc != 0) {
-        std::cerr << tag() << " " << errWord() << " " << T("the C backend failed (use -save-temps to inspect the generated C)",
-                                                         "فشلت خلفية C (استخدم -save-temps لفحص كود C المولَّد)") << "\n";
-        return 1;
-    }
-    return 0;
 }
