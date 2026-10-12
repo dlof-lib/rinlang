@@ -1,0 +1,8 @@
+let m = {};
+let i = 0;
+while (i < 20000) { m[i] = i * 2; i = i + 1; }
+let s = 0;
+i = 0;
+while (i < 20000) { s = s + m[i]; i = i + 1; }
+print s;
+print len(m);
