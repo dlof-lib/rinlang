@@ -601,6 +601,10 @@ public:
     // يحدّد جذر حقيقي على القرص تُبنى فوقه كل مسارات file/save/installation/writeFile/readFile...
     // (مثلاً مجلد التطبيق الخاص على أندرويد عبر context.filesDir). فارغ = المجلد الحالي (CWD).
     void setBasePath(const std::string& path) { basePath = path; }
+    // ملفات افتراضية للاستيراد (تُملأ من صورة rin_vm/.rvm): مفتاحها مسار المكتبة كما يحسبه @import
+    // (lib/<name>.og.rin للأسماء العارية، أو المسار المكتوب حرفياً). تُفحَص قبل القرص، فيعمل تنفيذي
+    // مستقل بلا ملفات مرافقة. فارغة افتراضياً فلا أثر على أي استدعاء سابق.
+    void setVirtualFiles(std::unordered_map<std::string, std::string> files) { virtualFiles_ = std::move(files); }
 
     // ---- Live streaming (Rin Run Queue + Code Output 2.0 — انظر jni_bridge.cpp) ----
     // [sink] اختياري، غير مفعّل افتراضياً، لذا [run] يتصرف حرفياً كما كان قبله متى لم يُضبط أي sink
@@ -774,6 +778,7 @@ public:
 
 private:
     std::vector<std::string> programArgs_;
+    std::unordered_map<std::string, std::string> virtualFiles_;
     EnvPtr globals;
     std::ostringstream output;
     std::string sourceFile = "<input>"; // نظام Diagnostics — انظر setSourceFile() أعلاه
