@@ -6532,7 +6532,7 @@ void Interpreter::registerNatives() {
         const Value& collection = a[0];
         const Value& needle = a[1];
         if (collection.type == Value::Type::MAP) {
-            for (const auto& kv : *collection.map) if (valuesEqual(kv.first, needle)) return Value::boolean_(true);
+            if (collection.map->findIndex(needle) != MapData::npos) return Value::boolean_(true);
             return Value::boolean_(false);
         }
         if (collection.type == Value::Type::ARRAY) {
@@ -6546,9 +6546,8 @@ void Interpreter::registerNatives() {
     natives["remove"] = [](std::vector<Value>& a, int line) -> Value {
         expectArgs("remove", a, 2, line);
         if (a[0].type != Value::Type::MAP) throw diagErr(diag::Code::E0004_InvalidType, line, "'remove' expects a map");
-        for (auto it = a[0].map->begin(); it != a[0].map->end(); ++it) {
-            if (valuesEqual(it->first, a[1])) { a[0].map->erase(it); return Value::boolean_(true); }
-        }
+        size_t at = a[0].map->findIndex(a[1]);
+        if (at != MapData::npos) { a[0].map->eraseAt(at); return Value::boolean_(true); }
         return Value::boolean_(false);
     };
 
@@ -8036,11 +8035,34 @@ std::string Interpreter::run(const std::vector<StmtPtr>& statements) {
     return output.str();
 }
 
+Interpreter::Flow Interpreter::execBlockFlow(const std::vector<StmtPtr>& statements, EnvPtr env, Value& ret) {
+    for (const auto& s : statements) {
+        Flow f = exec(s, env, ret);
+        if (f != Flow::None) return f;
+    }
+    return Flow::None;
+}
+
+// الواجهة القديمة لكل المستدعين الذين لا يفهمون Flow: تحوّل الإشارة إلى الاستثناء نفسه الذي كان يُرمى
+// دائماً (ReturnSignal/BreakSignal/ContinueSignal)، فيبقى سلوكهم بلا أي تغيير. المسار السريع (بلا
+// استثناءات) يستخدمه callFunction والحلقات/الشروط داخل exec() مباشرة.
 void Interpreter::executeBlock(const std::vector<StmtPtr>& statements, EnvPtr env) {
-    for (const auto& s : statements) execute(s, env);
+    Value ret;
+    Flow f = execBlockFlow(statements, env, ret);
+    if (f == Flow::Return) throw ReturnSignal{ret};
+    if (f == Flow::Break) throw BreakSignal{};
+    if (f == Flow::Continue) throw ContinueSignal{};
 }
 
 void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
+    Value ret;
+    Flow f = exec(stmt, env, ret);
+    if (f == Flow::Return) throw ReturnSignal{ret};
+    if (f == Flow::Break) throw BreakSignal{};
+    if (f == Flow::Continue) throw ContinueSignal{};
+}
+
+Interpreter::Flow Interpreter::exec(const StmtPtr& stmt, EnvPtr env, Value& ret) {
     // Live Preview infinite-loop protection (see setExecutionBudget()): every statement --
     // including each pass through a while/for body, since the loop's body is itself executed via
     // this same execute() -- counts against the budget. execBudget_ == 0 (the default for every
@@ -8051,15 +8073,17 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
     }
     switch (stmt->stmtKind) {
     case StmtKind::ExpressionStmt: { auto s = std::static_pointer_cast<ExpressionStmt>(stmt);
+        if (s->expr && s->expr->exprKind == ExprKind::Assign &&
+            tryAppendInPlace(std::static_pointer_cast<AssignExpr>(s->expr), env)) return Flow::None;
         evaluate(s->expr, env);
-        return;
+        return Flow::None;
     }
     case StmtKind::PrintStmt: { auto s = std::static_pointer_cast<PrintStmt>(stmt);
         // if= : بوابة تنفيذ كاملة — عند falsy، لا يُقيَّم أي شيء آخر إطلاقاً (لا exprs ولا أي سمة
         // أخرى)، فيبقى أمر print معطَّلاً تماماً بلا أي أثر جانبي، تماماً كأنه لم يُكتب أصلاً.
         if (s->ifCond) {
             Value condVal = evaluate(s->ifCond, env);
-            if (!condVal.isTruthy()) return;
+            if (!condVal.isTruthy()) return Flow::None;
         }
 
         std::string sep = " ";
@@ -8179,7 +8203,7 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
         for (long long i = 0; i < times; i++) {
             output << prefix << content << end;
         }
-        return;
+        return Flow::None;
     }
     // print.log(...) / print.log.info/warn/error/debug(...) -> نظام Log منظَّم (انظر LogStmt في
     // rin_ast.h وLogEntry في rin_interpreter.h). كل استدعاء يبني LogEntry كاملاً (Time/Level/
@@ -8191,7 +8215,7 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
         // if= : نفس دلالة print تماماً — عند falsy، لا شيء يُقيَّم إطلاقاً ولا يُنشأ أي سجلّ.
         if (s->ifCond) {
             Value condVal = evaluate(s->ifCond, env);
-            if (!condVal.isTruthy()) return;
+            if (!condVal.isTruthy()) return Flow::None;
         }
 
         std::string sep = " ";
@@ -8260,7 +8284,7 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
         output << icon << "[" << upperLevel << "] ";
         if (!label.empty()) output << "[" << label << "] ";
         output << message << "\n";
-        return;
+        return Flow::None;
     }
     // print.image(path, caption=, width=, if=) -> صورة فعلية مُضمَّنة في كونسول تطبيق أندرويد
     // (انظر PrintImageStmt في rin_ast.h وRinConsoleFormatter.kt/RinJobAdapter.kt). على عكس أي أمر
@@ -8273,7 +8297,7 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
         // if= : نفس دلالة print/print.log تماماً — عند falsy لا شيء يُقيَّم إطلاقاً ولا يُطبع سطر.
         if (s->ifCond) {
             Value condVal = evaluate(s->ifCond, env);
-            if (!condVal.isTruthy()) return;
+            if (!condVal.isTruthy()) return Flow::None;
         }
 
         Value pathVal = evaluate(s->path, env);
@@ -8329,7 +8353,7 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
         output << ")";
         if (!caption.empty()) output << " \u2014 " << caption;
         output << "\n";
-        return;
+        return Flow::None;
     }
     // @view...=name ... .end/view -- Indsintime UI markup. Not executable code (no side effect on
     // env/output), but observed via viewReachedCb_ if a caller registered one: this is how a
@@ -8338,13 +8362,13 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
     // Live Preview caller having to guess by re-scanning the AST statically afterward.
     case StmtKind::ViewStmt: { auto s = std::static_pointer_cast<ViewStmt>(stmt);
         if (viewReachedCb_) viewReachedCb_(s);
-        return;
+        return Flow::None;
     }
     // Container-owned UI event binding: behavior is registered/consumed by the Indsin bridge.
     // It is intentionally side-effect free here so normal Rin execution remains deterministic.
     case StmtKind::UiBindingStmt: { auto s = std::static_pointer_cast<UiBindingStmt>(stmt);
         (void)s;
-        return;
+        return Flow::None;
     }
     case StmtKind::LetStmt: { auto s = std::static_pointer_cast<LetStmt>(stmt);
         Value v = Value::nil();
@@ -8352,26 +8376,26 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
         if (s->elseBlock && v.type == Value::Type::NIL) letRunElse(s->elseBlock, env, s->line, "`" + s->name + "` was nil");
         if (!s->typeName.empty()) checkDeclaredType(v, s->typeName, "variable `" + s->name + "`", s->line);
         env->define(s->name, v);
-        return;
+        return Flow::None;
     }
     // let+ (docs/let-plus.md): let [a, b] = ...; | let {x, y} = ...; | let a = 1, b = 2;
-    case StmtKind::LetPatternStmt: letExecPattern(std::static_pointer_cast<LetPatternStmt>(stmt), env); return;
+    case StmtKind::LetPatternStmt: letExecPattern(std::static_pointer_cast<LetPatternStmt>(stmt), env); return Flow::None;
     case StmtKind::LetGroupStmt: {
         for (auto& item : std::static_pointer_cast<LetGroupStmt>(stmt)->items) execute(item, env);
-        return;
+        return Flow::None;
     }
     // المتغيرات الحيّة (Living Variables): stone/gauge/tape/lens/fuse + bell + trial + undo/redo/rearm/unbell/abort
-    case StmtKind::LiveDeclStmt:   liveExecDecl(std::static_pointer_cast<LiveDeclStmt>(stmt), env); return;
-    case StmtKind::BellStmt:       liveExecBell(std::static_pointer_cast<BellStmt>(stmt), env); return;
-    case StmtKind::TrialStmt:      liveExecTrial(std::static_pointer_cast<TrialStmt>(stmt), env); return;
-    case StmtKind::LiveActionStmt: liveExecAction(std::static_pointer_cast<LiveActionStmt>(stmt), env); return;
+    case StmtKind::LiveDeclStmt:   liveExecDecl(std::static_pointer_cast<LiveDeclStmt>(stmt), env); return Flow::None;
+    case StmtKind::BellStmt:       liveExecBell(std::static_pointer_cast<BellStmt>(stmt), env); return Flow::None;
+    case StmtKind::TrialStmt:      liveExecTrial(std::static_pointer_cast<TrialStmt>(stmt), env); return Flow::None;
+    case StmtKind::LiveActionStmt: liveExecAction(std::static_pointer_cast<LiveActionStmt>(stmt), env); return Flow::None;
     // OOP: class/struct declaration -> تسجيل/استبدال تعريفها في classes (انظر registerClassStmt).
     // نفس الفلسفة تماماً كـ FunctionStmt أدناه: يُسجَّل أيضاً عبر hoisting في run()/
     // callTopLevelFunction لأجل استخدام على مستوى أعلى/وراثة أمامية (forward reference)، وهنا مرة
     // أخرى لأجل تعريفات محلية داخل دالة/كتلة (لا تُحصَد hoisting، بنفس سلوك 'fun' محلية تماماً).
     case StmtKind::ClassStmt: { auto s = std::static_pointer_cast<ClassStmt>(stmt);
         registerClassStmt(s);
-        return;
+        return Flow::None;
     }
     // OOP: enum declaration -> يُعرَّف كمتغيّر عادي من نوع map يضم كل الحالات (انظر تعليق EnumStmt
     // في rin_ast.h)؛ لا حاجة لأي سجل داخلي جديد، فقط map عادية يصل إليها GetExpr كأي map أخرى.
@@ -8386,7 +8410,7 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
             m->push_back({Value::string(c.name), Value::makeMap(caseMap)});
         }
         env->define(s->name, Value::makeMap(m));
-        return;
+        return Flow::None;
     }
     // reckon name(collection) [where cond] |> fn() ...;  --  see docs/RECKON.md and ReckonStmt in
     // rin_ast.h. Semantically sugar for exactly the loop+if pattern it replaces: walk `collection`
@@ -8420,7 +8444,7 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
             current = invokeCallee(stage->callee, args, stage->line, env);
         }
         env->define(s->name, current);
-        return;
+        return Flow::None;
     }
     // warp name = expr;  --  Indsintime's reactive global-state declaration (rin_indsin_pipeline.h /
     // rin_indsin_needle.h read these back out via exportGlobals()/callTopLevelFunction). Previously
@@ -8434,16 +8458,15 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
         Value v = Value::nil();
         if (s->initializer) v = evaluate(s->initializer, env);
         env->define(s->name, v);
-        return;
+        return Flow::None;
     }
     case StmtKind::BlockStmt: { auto s = std::static_pointer_cast<BlockStmt>(stmt);
         auto blockEnv = std::make_shared<Environment>(env);
-        executeBlock(s->statements, blockEnv);
-        return;
+        return execBlockFlow(s->statements, blockEnv, ret);
     }
     case StmtKind::TryCatchStmt: { auto s = std::static_pointer_cast<TryCatchStmt>(stmt);
         try {
-            execute(s->tryBranch, env);
+            return exec(s->tryBranch, env, ret);
         } catch (ThrowSignal& ex) {
             auto catchEnv = std::make_shared<Environment>(env);
             if (!s->catchName.empty()) {
@@ -8453,7 +8476,7 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
                 err->push_back({Value::string("line"), Value::num(ex.line)});
                 catchEnv->define(s->catchName, Value::makeMap(err));
             }
-            execute(s->catchBranch, catchEnv);
+            return exec(s->catchBranch, catchEnv, ret);
         } catch (RinError& ex) {
             auto catchEnv = std::make_shared<Environment>(env);
             if (!s->catchName.empty()) {
@@ -8463,9 +8486,9 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
                 if (ex.diagnostic) err->push_back({Value::string("code"), Value::string(diag::codeString(ex.diagnostic->code))});
                 catchEnv->define(s->catchName, Value::makeMap(err));
             }
-            execute(s->catchBranch, catchEnv);
+            return exec(s->catchBranch, catchEnv, ret);
         }
-        return;
+        return Flow::None;
     }
     case StmtKind::ThrowStmt: { auto s = std::static_pointer_cast<ThrowStmt>(stmt);
         Value v = s->value ? evaluate(s->value, env) : Value::nil();
@@ -8473,26 +8496,29 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
     }
     case StmtKind::IfStmt: { auto s = std::static_pointer_cast<IfStmt>(stmt);
         if (evaluate(s->condition, env).isTruthy()) {
-            execute(s->thenBranch, env);
+            return exec(s->thenBranch, env, ret);
         } else if (s->elseBranch) {
-            execute(s->elseBranch, env);
+            return exec(s->elseBranch, env, ret);
         }
-        return;
+        return Flow::None;
     }
     case StmtKind::WhileStmt: { auto s = std::static_pointer_cast<WhileStmt>(stmt);
         bool broke = false;
         while (evaluate(s->condition, env).isTruthy()) {
+            Flow f = Flow::None;
             try {
-                execute(s->body, env);
+                f = exec(s->body, env, ret);
             } catch (BreakSignal&) {
                 broke = true;
                 break;
             } catch (ContinueSignal&) {
                 continue;
             }
+            if (f == Flow::Return) return f;
+            if (f == Flow::Break) { broke = true; break; }
         }
         if (!broke && s->doneBlock) execute(s->doneBlock, env); // #done { } — انتهت الحلقة طبيعياً
-        return;
+        return Flow::None;
     }
     // for (initializer; condition; increment) body -> حلقة for على طراز C (إضافة جديدة additive بحتة)
     // initializer يُنفَّذ مرة واحدة داخل بيئة (Environment) جديدة خاصة بالحلقة كلها، بحيث يبقى أي
@@ -8513,8 +8539,11 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
             // against, so a loop body with no closures behaves exactly as before.
             auto iterEnv = std::make_shared<Environment>(env);
             iterEnv->values = forEnv->values;
+            Flow bodyFlow = Flow::None;
             try {
-                execute(s->body, iterEnv);
+                bodyFlow = exec(s->body, iterEnv, ret);
+                if (bodyFlow == Flow::Return) return bodyFlow;
+                if (bodyFlow == Flow::Break) throw BreakSignal{}; // مسار واحد موحَّد للخروج مع نشر المتغيّرات
             } catch (BreakSignal&) {
                 // Propagate any in-body mutation of the loop variable(s) before breaking, in case
                 // code after the loop (or the loop condition were it re-checked) relies on it --
@@ -8539,7 +8568,7 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
             if (s->increment) evaluate(s->increment, forEnv);
         }
         if (!broke && s->doneBlock) execute(s->doneBlock, env); // #done { } — انتهت الحلقة طبيعياً
-        return;
+        return Flow::None;
     }
     // for (let NAME in iterable) { body } -> حلقة تكرار حقيقية (انظر ForInStmt في rin_ast.h).
     // iterable تُقيَّم مرة واحدة فقط قبل الحلقة (كأي حلقة for/foreach في أي لغة حقيقية). كل تكرار
@@ -8585,7 +8614,9 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
                 iterEnv->define(s->varName, item);
             }
             try {
-                execute(s->body, iterEnv);
+                Flow bodyFlow = exec(s->body, iterEnv, ret);
+                if (bodyFlow == Flow::Return) return bodyFlow;
+                if (bodyFlow == Flow::Break) { broke = true; break; }
             } catch (BreakSignal&) {
                 broke = true;
                 break;
@@ -8594,18 +8625,17 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
             }
         }
         if (!broke && s->doneBlock) execute(s->doneBlock, env); // #done { } — انتهت الحلقة طبيعياً
-        return;
+        return Flow::None;
     }
     // plus.condition (condition) { trueBranch } / { falseBranch } -> شرط ثلاثي عام: يقيّم condition
     // مرة واحدة، وينفّذ إحدى الكتلتين (كل كتلة تنفَّذ عبر execute(BlockStmt) العادية، أي تحصل على
     // بيئة/نطاق (Environment) خاص بها تماماً كأي كتلة {} أخرى في اللغة).
     case StmtKind::PlusConditionStmt: { auto s = std::static_pointer_cast<PlusConditionStmt>(stmt);
         if (evaluate(s->condition, env).isTruthy()) {
-            execute(s->trueBranch, env);
+            return exec(s->trueBranch, env, ret);
         } else {
-            execute(s->falseBranch, env);
+            return exec(s->falseBranch, env, ret);
         }
-        return;
     }
     // match (subject) { case v1, v2 { .. } case v3 { .. } [else { .. }] } -> مطابقة أنماط (انظر
     // MatchStmt في rin_ast.h). subject يُقيَّم مرة واحدة فقط؛ لكل case بالترتيب، نقارن subject بكل
@@ -8623,14 +8653,14 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
             if (matched) {
                 auto caseEnv = std::make_shared<Environment>(env);
                 executeBlock(mc.body->statements, caseEnv);
-                return;
+                return Flow::None;
             }
         }
         if (s->elseBranch) {
             auto elseEnv = std::make_shared<Environment>(env);
             executeBlock(s->elseBranch->statements, elseEnv);
         }
-        return;
+        return Flow::None;
     }
     // achieve expr; / achieve; -> ينهي أقرب كتلة goal {..} محيطة (انظر GoalExpr/AchieveStmt في
     // rin_ast.h وevaluate(GoalExpr) أدناه الذي يلتقط هذه الإشارة). الفحص وقت التحليل (Parser::
@@ -8661,7 +8691,7 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
         v.type = Value::Type::FUNCTION;
         v.function = callable;
         env->define(s->name, v);
-        return;
+        return Flow::None;
     }
 
     // RCS-1.0 §3.2 Lifecycle: 'on init/mount/update/destroy/error(...) { .. }' لا يُنفَّذ جسمها
@@ -8672,7 +8702,7 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
     // تُعرَّف بها أي state/fun أخرى بداخلها) -- إن ظهرت خارج أي حاوية (containerStack فارغة)، لا
     // شيء يحدث (تُسجَّل بلا مفتاح صالح فتبقى ميتة عملياً، بلا أي خطأ لأن هذا امتداد إضافي بحت).
     case StmtKind::LifecycleHookStmt: { auto s = std::static_pointer_cast<LifecycleHookStmt>(stmt);
-        if (containerStack.empty()) return;
+        if (containerStack.empty()) return Flow::None;
         auto callable = std::make_shared<Callable>();
         callable->declaration = s->asFunction;
         callable->closure = env;
@@ -8683,7 +8713,7 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
         else if (s->hook == "update") hooks.update = v;
         else if (s->hook == "destroy") hooks.destroy = v;
         else if (s->hook == "error") hooks.error = v;
-        return;
+        return Flow::None;
     }
 
     // RCS-1.0 §3.3 State: 'state IDENT = expr;' -- يُعرَّف الاسم في بيئة الحاوية تماماً كـ `let`
@@ -8697,7 +8727,7 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
         if (s->initializer) v = evaluate(s->initializer, env);
         env->define(s->name, v);
         if (!containerStack.empty()) containerStateNames[containerStack.back()].insert(s->name);
-        return;
+        return Flow::None;
     }
 
     // RCS-1.0 §3.5 Tree (Phase 2): 'slot IDENT;' -- توثيق بنيوي بحت (انظر SlotDeclStmt في
@@ -8705,7 +8735,7 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
     // slotsOf. خارج أي حاوية (containerStack فارغة) لا شيء يحدث -- امتداد إضافي بحت، لا خطأ.
     case StmtKind::SlotDeclStmt: { auto s = std::static_pointer_cast<SlotDeclStmt>(stmt);
         if (!containerStack.empty()) containerSlots[containerStack.back()].push_back(s->name);
-        return;
+        return Flow::None;
     }
 
     // RCS-1.0 §3.14 Dependency (Phase 3): 'requires A, B;' -- فحص إلزامي فوري (لا خيار لتعطيله):
@@ -8724,7 +8754,7 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
                 throw d;
             }
         }
-        return;
+        return Flow::None;
     }
 
     // RCS-1.0 §3.6 Events: 'on.event "name"(...) { .. }' -- تُسجَّل فقط (لا تُنفَّذ فوراً)، بنفس
@@ -8733,13 +8763,13 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
     // أو أي حفيد إن استُخدمت 'emit ... bubbles;'). خارج أي حاوية (containerStack فارغة) لا شيء
     // يحدث -- امتداد إضافي بحت، لا خطأ.
     case StmtKind::EventHandlerStmt: { auto s = std::static_pointer_cast<EventHandlerStmt>(stmt);
-        if (containerStack.empty()) return;
+        if (containerStack.empty()) return Flow::None;
         auto callable = std::make_shared<Callable>();
         callable->declaration = s->asFunction;
         callable->closure = env;
         Value v; v.type = Value::Type::FUNCTION; v.function = callable;
         eventHandlers[containerStack.back()].push_back({s->nameExpr ? evaluate(s->nameExpr, env).toDisplayString() : s->eventName, v});
-        return;
+        return Flow::None;
     }
 
     // RCS-1.0 §3.6 Events: 'emit "name", payload; [bubbles]' -- يصعد ابتداءً من أب الحاوية التي
@@ -8771,19 +8801,20 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
             if (!s->bubbles) break; // الأب المباشر فقط افتراضياً
             current = parentKey; // 'bubbles': استمرار صعوداً للجدّ التالي
         }
-        return;
+        return Flow::None;
     }
 
     case StmtKind::ReturnStmt: { auto s = std::static_pointer_cast<ReturnStmt>(stmt);
         Value v = Value::nil();
         if (s->value) v = evaluate(s->value, env);
-        throw ReturnSignal{v};
+        ret = std::move(v);
+        return Flow::Return;
     }
     case StmtKind::BreakStmt: {
-        throw BreakSignal{};
+        return Flow::Break;
     }
     case StmtKind::ContinueStmt: {
-        throw ContinueSignal{};
+        return Flow::Continue;
     }
 
     // ---- لغة الحاويات/البيانات ----
@@ -8795,7 +8826,7 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
             throw diagErr(diag::Code::E0004_InvalidType, s->line, "'" + s->name + "' من نوع text ويجب أن تكون قيمته نصاً (string)");
         }
         env->define(s->name, v);
-        return;
+        return Flow::None;
     }
 
     case StmtKind::ContainerStmt: { auto s = std::static_pointer_cast<ContainerStmt>(stmt);
@@ -8909,7 +8940,7 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
         currentFilePath = savedFilePath;
 
         output << "✅ .end/" << tag << (s->name.empty() ? "" : (" (" + s->name + ")")) << "\n";
-        return;
+        return Flow::None;
     }
 
     case StmtKind::ImportStmt: { auto s = std::static_pointer_cast<ImportStmt>(stmt);
@@ -9016,7 +9047,7 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
             cached.fromCache = true;
             importUI.finish(cached);
             output << "↺ @import: \"" << libPath << "\" مستورَدة مسبقاً بالفعل (تم تجاهل التكرار)\n";
-            return;
+            return Flow::None;
         }
 
         importUI.stage(loaderui::LoadStage::Reading);
@@ -9118,7 +9149,7 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
         output << (fromEmbedded ? "📦" : "📥") << " @import: تم استيراد \"" << libPath << "\""
                << (s->alias.empty() ? "" : (" باسم '" + s->alias + "'"))
                << (fromEmbedded ? " (مكتبة مدمجة)" : " (من القرص)") << "\n";
-        return;
+        return Flow::None;
     }
 
     // Modules: 'import { a, b, c } from "path";' -- نفس آلية حلّ/تنفيذ '@import' أعلاه بالضبط
@@ -9285,7 +9316,7 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
             output << s->names[i];
         }
         output << " من \"" << libPath << "\"" << (fromEmbedded ? " (مكتبة مدمجة)" : " (من القرص)") << "\n";
-        return;
+        return Flow::None;
     }
 
     case StmtKind::ContainerGroupStmt: { auto s = std::static_pointer_cast<ContainerGroupStmt>(stmt);
@@ -9347,7 +9378,7 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
             output << "]";
         }
         output << "\n";
-        return;
+        return Flow::None;
     }
 
     case StmtKind::VolumeStmt: { auto s = std::static_pointer_cast<VolumeStmt>(stmt);
@@ -9399,7 +9430,7 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
             output << "]";
         }
         output << "\n";
-        return;
+        return Flow::None;
     }
 
     case StmtKind::SectionStmt: { auto s = std::static_pointer_cast<SectionStmt>(stmt);
@@ -9414,14 +9445,14 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
             if (!sectionEnvs.count(s->name)) sectionOrder.push_back(s->name);
             sectionEnvs[s->name] = sectionEnv;
         }
-        return;
+        return Flow::None;
     }
 
     case StmtKind::TranslationsStmt: { auto s = std::static_pointer_cast<TranslationsStmt>(stmt);
         output << "🌐 Translations\n";
         executeBlock(s->body, env);
         output << "◽ .end/Translations\n";
-        return;
+        return Flow::None;
     }
 
     case StmtKind::TranslationStmt: { auto s = std::static_pointer_cast<TranslationStmt>(stmt);
@@ -9429,7 +9460,7 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
         const std::string text = s->textExpr ? evaluate(s->textExpr, env).toDisplayString() : s->text;
         translations[lang] = text;
         output << "🌍 translation [" << lang << "] = \"" << text << "\"\n";
-        return;
+        return Flow::None;
     }
 
     case StmtKind::LinkIdDeclStmt: { auto s = std::static_pointer_cast<LinkIdDeclStmt>(stmt);
@@ -9438,7 +9469,7 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
         const std::string& cur = containerStack.back();
         linkIdToContainer[s->id] = cur;
         output << "🏷️ link.id=\"" << s->id << "\" -> " << cur << "\n";
-        return;
+        return Flow::None;
     }
 
     case StmtKind::ObjectLiteralStmt: { auto s = std::static_pointer_cast<ObjectLiteralStmt>(stmt);
@@ -9454,7 +9485,7 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
         }
         output << "🧩 .object(\"" << s->id << "\") -> " << objVal.toDisplayString()
                << (s->linkToContainer ? "  (🔗 container.())" : "") << "\n";
-        return;
+        return Flow::None;
     }
 
     case StmtKind::ViewPrintObjectStmt: { auto s = std::static_pointer_cast<ViewPrintObjectStmt>(stmt);
@@ -9486,7 +9517,7 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
             output << "🖼️ │ " << objVal.toDisplayString() << "\n";
         }
         output << "🖼️ └─\n";
-        return;
+        return Flow::None;
     }
 
     case StmtKind::LinkStmt: { auto s = std::static_pointer_cast<LinkStmt>(stmt);
@@ -9504,19 +9535,19 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
             throw diagErr(diag::Code::E0014_InvalidContainer, s->line, "لا يمكن تنفيذ link: '" + target + "' غير معرَّف كحاوية أو كمجموعة (Containers.Group)");
         }
         output << "🔗 link -> " << target << (byId ? (" (id=\"" + s->byId + "\")") : "") << (isGroup ? " (Containers.Group)" : "") << "\n";
-        return;
+        return Flow::None;
     }
 
     case StmtKind::TyingStmt: { auto s = std::static_pointer_cast<TyingStmt>(stmt);
         bool isGroup = copyTargetIntoCurrentContainer(s->target, s->line);
         output << "🪢 tying <-> " << s->target << (isGroup ? " (Containers.Group)" : "") << "\n";
-        return;
+        return Flow::None;
     }
 
     case StmtKind::MergeStmt: { auto s = std::static_pointer_cast<MergeStmt>(stmt);
         bool isGroup = copyTargetIntoCurrentContainer(s->target, s->line);
         output << "🧬 merge <- " << s->target << (isGroup ? " (Containers.Group)" : "") << "\n";
-        return;
+        return Flow::None;
     }
 
     case StmtKind::InstallationStmt: { auto s = std::static_pointer_cast<InstallationStmt>(stmt);
@@ -9550,7 +9581,7 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
             appendInstalledIndex(s->target, relPath, s->simplified);
             output << "🗜️ installation (zip): " << s->target << " -> " << relPath
                    << " (" << zip.size() << " بايت، " << entries.size() << " عنصر)\n";
-            return;
+            return Flow::None;
         }
 
         if (isContainer) {
@@ -9576,7 +9607,7 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
         if (!relPath.empty()) output << " -> " << relPath << " (تم الحفظ فعلياً على القرص، قابل للتحميل لاحقاً عبر loadInstalled(\"" << s->target << "\"))";
         else output << " (تسجيل اسم فقط، بلا بيانات حاوية مرتبطة به)";
         output << "\n";
-        return;
+        return Flow::None;
     }
 
     case StmtKind::SaveStmt: { auto s = std::static_pointer_cast<SaveStmt>(stmt);
@@ -9600,7 +9631,7 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
             std::string png = buildTablePng(key);
             writeRealFile(rawPath, png, s->line, "save (png)");
             output << "🖼️ save (png) -> " << rawPath << " (" << png.size() << " بايت)\n";
-            return;
+            return Flow::None;
         }
 
         // table.save/csv|json|md|html|txt : تصدير نصي حقيقي للصفوف الحالية (نفس مبدأ png: للجدول فقط)
@@ -9613,7 +9644,7 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
             std::string text = tableExport(key, s->format, s->line);
             writeRealFile(rawPath, text, s->line, "save (" + s->format + ")");
             output << "📄 save (" << s->format << ") -> " << rawPath << " (" << text.size() << " بايت)\n";
-            return;
+            return Flow::None;
         }
 
         // save format=zip : يعمل لجميع المفاهيم (أي نوع حاوية)، ويُغلِّف نسخة حاوية واحدة كأرشيف zip.
@@ -9630,7 +9661,7 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
             std::string zip = buildZipArchive(entries);
             writeRealFile(rawPath, zip, s->line, "save (zip)");
             output << "🗜️ save (zip) -> " << rawPath << " (" << zip.size() << " بايت، " << entries.size() << " عنصر)\n";
-            return;
+            return Flow::None;
         }
 
         std::string rawPath;
@@ -9643,13 +9674,13 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
 
         output << "💾 save" << (s->simplified ? " (simplified)" : "") << " -> " << rawPath
                << " (تم الحفظ فعلياً على القرص، " << doc.size() << " بايت)\n";
-        return;
+        return Flow::None;
     }
 
     case StmtKind::FileStmt: { auto s = std::static_pointer_cast<FileStmt>(stmt);
         currentFilePath = evaluate(s->path, env).toDisplayString();
         output << "📄 file path = \"" << currentFilePath << "\"\n";
-        return;
+        return Flow::None;
     }
 
     case StmtKind::RouteStmt: { auto s = std::static_pointer_cast<RouteStmt>(stmt);
@@ -9678,7 +9709,7 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
         apiRoutes[containerStack.back()].push_back(route);
 
         output << "🌐 route [" << route.method << " " << route.path << "] -> " << statusVal.toDisplayString() << "\n";
-        return;
+        return Flow::None;
     }
 
     case StmtKind::RowStmt: { auto s = std::static_pointer_cast<RowStmt>(stmt);
@@ -9692,7 +9723,7 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
         }
         tableRowsOf(containerStack.back())->push_back(cells);
         output << "▦ row -> " << cells.toDisplayString() << "\n";
-        return;
+        return Flow::None;
     }
 
     case StmtKind::StyleStmt: { auto s = std::static_pointer_cast<StyleStmt>(stmt);
@@ -9715,7 +9746,7 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
         }
         containerStyles[containerStack.back()] = v.str;
         output << "🎨 style -> " << v.str << "\n";
-        return;
+        return Flow::None;
     }
 
     case StmtKind::DocumentStmt: { auto s = std::static_pointer_cast<DocumentStmt>(stmt);
@@ -9749,10 +9780,11 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
         notifyWatchers(containerName, idVal.str, fieldsVal, updated ? "update" : "insert", s->line);
         output << (updated ? "🔄 document (تحديث) -> " : "🧾 document (إدراج) -> ")
                << idVal.str << " = " << fieldsVal.toDisplayString() << "\n";
-        return;
+        return Flow::None;
     }
     default: break;
     }
+    return Flow::None;
 }
 
 bool Interpreter::copyTargetIntoCurrentContainer(const std::string& target, int line) {
@@ -9880,6 +9912,43 @@ void Interpreter::fireLifecycleHook(const std::string& containerKey, const Value
 }
 
 // انظر إعلانها في rin_interpreter.h للشرح الكامل.
+// تحسين: العبارة  s = s + <تعبير>  (كعبارة مستقلة، حيث لا تُستعمل قيمة الإسناد) حين s نص عادي:
+// بدل نسخ النص كاملاً مرتين لكل تكرار (O(n²) في الحلقات الكبيرة) نُلحق مباشرة في مكانه (O(1) مُستهلَك).
+// تُطبَّق فقط حين لا يمكن لتقييم الطرف الأيمن أن يغيّر s (حرفي/متغيّر/جمع منها)، ولا توجد متغيّرات حيّة،
+// وs ليس حقلاً في حاوية (لئلا نتجاوز on update/الروابط) — وإلا يرجع false فيُنفَّذ المسار الأصلي بلا تغيير.
+static bool appendRhsPure(const Expr* x, int depth = 0) {
+    if (!x || depth > 8) return false;
+    switch (x->exprKind) {
+        case ExprKind::Literal:
+        case ExprKind::Variable: return true;
+        case ExprKind::Binary: {
+            auto b = static_cast<const BinaryExpr*>(x);
+            return b->op == TokenType::PLUS && appendRhsPure(b->left.get(), depth + 1) && appendRhsPure(b->right.get(), depth + 1);
+        }
+        default: return false;
+    }
+}
+
+bool Interpreter::tryAppendInPlace(const std::shared_ptr<AssignExpr>& e, const EnvPtr& env) {
+    if (liveActive_ || !e->value || e->value->exprKind != ExprKind::Binary) return false;
+    auto b = static_cast<BinaryExpr*>(e->value.get());
+    if (b->op != TokenType::PLUS || !b->left || b->left->exprKind != ExprKind::Variable) return false;
+    if (static_cast<VariableExpr*>(b->left.get())->name != e->name) return false;
+    if (!appendRhsPure(b->right.get())) return false;
+    Environment* owner = nullptr;
+    Value* slot = nullptr;
+    for (Environment* cur = env.get(); cur; cur = cur->parent.get()) {
+        auto it = cur->values.find(e->name);
+        if (it != cur->values.end()) { owner = cur; slot = &it->second; break; }
+    }
+    if (!owner || slot->type != Value::Type::STRING) return false;
+    for (auto& kv : containers) if (kv.second.get() == owner) return false;
+    Value r = evaluate(b->right, env);
+    if (slot->type != Value::Type::STRING) return false; // دفاعي (لا يحدث مع طرف أيمن نقي)
+    slot->str += r.toDisplayString();
+    return true;
+}
+
 void Interpreter::assignStateAware(Environment* owner, const std::string& name, const Value& newValue, int line) {
     // يبحث عن الحاوية التي تملك بيئة owner فعلاً (نفس المؤشر بالضبط) -- بحث خطي مقبول التكلفة
     // لعدد الحاويات المتوقَّع في مفسّر Rin، ولا يُنفَّذ إطلاقاً إن لم تكن owner بيئة حاوية أصلاً
@@ -10300,9 +10369,9 @@ Value Interpreter::callFunction(const std::shared_ptr<Callable>& fn, std::vector
     // خطأ برمجي شائع جداً، وليس فقط سيناريو هجوم) تُسبِّب Stack Overflow حقيقياً في مكدّس C++ الأصلي
     // (segmentation fault لا يمكن لأي try/catch اعتراضه)، فيُسقِط التطبيق كاملاً. الآن يُحوَّل هذا إلى
     // RinError عادي وقابل للعرض في الكونسول، تماماً كأي خطأ Rin آخر.
-    if (callDepth >= kMaxCallDepth) {
+    if (callDepth >= maxCallDepth_) {
         auto d = diagErr(diag::Code::E0035_RuntimeError, line,
-                     "maximum function call depth exceeded (" + std::to_string(kMaxCallDepth) + ")");
+                     "maximum function call depth exceeded (" + std::to_string(maxCallDepth_) + ")");
         d.diagnostic->withReason("this is almost always unbounded recursion (a missing base case)")
          .withHint("check that every recursive path in this function eventually returns without calling itself again");
         throw d;
@@ -10327,7 +10396,16 @@ Value Interpreter::callFunction(const std::shared_ptr<Callable>& fn, std::vector
         callEnv->define(fn->declaration->params[i], bound);
     }
     try {
-        executeBlock(fn->declaration->body->statements, callEnv);
+        Value fastRet;
+        Flow fl = execBlockFlow(fn->declaration->body->statements, callEnv, fastRet);
+        if (fl == Flow::Return) {
+            if (!fn->declaration->returnType.empty())
+                checkDeclaredType(fastRet, fn->declaration->returnType,
+                                   "return value of `" + fn->declaration->name + "`", line);
+            return fastRet;
+        }
+        if (fl == Flow::Break) throw BreakSignal{};
+        if (fl == Flow::Continue) throw ContinueSignal{};
     } catch (ReturnSignal& r) {
         if (!fn->declaration->returnType.empty()) {
             checkDeclaredType(r.value, fn->declaration->returnType,
@@ -10396,7 +10474,19 @@ Value Interpreter::invokeCallee(const std::string& callee, std::vector<Value>& a
             nativeIt = natives.end();
     }
     if (nativeIt != natives.end() && !(!classes.empty() && classes.count("Set") && (callee == "Set" || callee.compare(0, 4, "Set.") == 0))) {
-        return nativeIt->second(args, line);
+        // حاجز الاستثناءات: أي استثناء C++ قياسي يهرب من دالة أصلية (std::bad_alloc من طلب ضخم، std::out_of_range،
+        // std::length_error، ...) كان يصل إلى أعلى المستوى كـ "خطأ داخلي" ويقتل البرنامج حتى لو كان النداء داخل
+        // try/catch. الآن يتحوّل إلى RinError عادي قابل للالتقاط، وإشارات اللغة (RinError/ThrowSignal/Return...)
+        // ليست std::exception فتمرّ كما هي.
+        try {
+            return nativeIt->second(args, line);
+        } catch (const std::bad_alloc&) {
+            throw errWithReason(diag::Code::E0035_RuntimeError, line, "out of memory in `" + callee + "`",
+                                "the requested size is too large to allocate");
+        } catch (const std::exception& ex) {
+            throw errWithReason(diag::Code::E0035_RuntimeError, line, "internal error in `" + callee + "`: " + ex.what(),
+                                "a built-in function failed on these arguments");
+        }
     }
 
     // OOP: ClassName(args...) -> إنشاء كائن جديد (instantiateClass)، بنفس صياغة نداء دالة عادية
@@ -10822,11 +10912,7 @@ Value Interpreter::evaluate(const ExprPtr& expr, EnvPtr env) {
         for (auto& entry : e->entries) {
             Value key = evaluate(entry.key, env);
             Value val = evaluate(entry.value, env);
-            bool replaced = false;
-            for (auto& kv : *m) {
-                if (valuesEqual(kv.first, key)) { kv.second = val; replaced = true; break; }
-            }
-            if (!replaced) m->push_back({key, val});
+            m->put(key, val);
         }
         return Value::makeMap(m);
     }
@@ -10848,9 +10934,7 @@ Value Interpreter::evaluate(const ExprPtr& expr, EnvPtr env) {
             return (*obj.array)[static_cast<size_t>(i)];
         }
         if (obj.type == Value::Type::MAP) {
-            for (auto& kv : *obj.map) {
-                if (valuesEqual(kv.first, idx)) return kv.second;
-            }
+            if (const Value* hit = obj.map->findValue(idx)) return *hit;
             return Value::nil();
         }
         if (obj.type == Value::Type::STRING) {
@@ -10901,10 +10985,7 @@ Value Interpreter::evaluate(const ExprPtr& expr, EnvPtr env) {
             return val;
         }
         if (obj.type == Value::Type::MAP) {
-            for (auto& kv : *obj.map) {
-                if (valuesEqual(kv.first, idx)) { kv.second = val; return val; }
-            }
-            obj.map->push_back({idx, val});
+            obj.map->put(idx, val);
             return val;
         }
         if (obj.type == Value::Type::INSTANCE && hasMagic(obj, "__setitem__")) {
