@@ -1,0 +1,18 @@
+let s = "";
+let i = 0;
+while (i < 5) { s = s + "ab"; i = i + 1; }
+print s; print len(s);
+let n = "n=";
+n = n + 42; n = n + "|" + 1 + 2; n = n + true; n = n + nil;
+print n;
+let t = "x";
+t = t + t; t = t + t; print t;
+let a = "A"; let b = a;
+a = a + "1"; print a; print b;
+fun grow(p) { p = p + "!"; return p; }
+let g = "hi"; let h = grow(g); print g; print h;
+let outer = "o";
+fun addOuter() { outer = outer + "+"; }
+addOuter(); addOuter(); print outer;
+let q = 1; q = q + 2; print q;
+let z = "k"; let w = (z = z + "j"); print w; print z;
