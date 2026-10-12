@@ -1,0 +1,12 @@
+ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad
+aGVsbG8=
+hello
+36
+["1", "22", "333"]
+true
+3
+
+true
+caught: gorin: module 'hashlib' has no attribute 'nope'
+caught: gorin: unknown service: time
+caught: gorin: unauthorized
