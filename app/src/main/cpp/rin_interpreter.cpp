@@ -8976,7 +8976,11 @@ Interpreter::Flow Interpreter::exec(const StmtPtr& stmt, EnvPtr env, Value& ret)
         bool fromEmbedded = (libIt != embedded.end());
 
         std::string source;
-        if (fromEmbedded) {
+        auto virtIt = virtualFiles_.find(libPath);
+        if (virtIt == virtualFiles_.end()) virtIt = virtualFiles_.find(rawPath);
+        if (virtIt != virtualFiles_.end()) {
+            source = virtIt->second;   // ملف مُضمَّن في صورة rin_vm (له الأولوية على القرص)
+        } else if (fromEmbedded) {
             source = libIt->second;
         } else {
             // 2) وإلا: مكتبة/ملف فعلي على القرص (نسبةً إلى basePath، أي مجلد المشروع الحالي)،
@@ -9183,7 +9187,11 @@ Interpreter::Flow Interpreter::exec(const StmtPtr& stmt, EnvPtr env, Value& ret)
         bool fromEmbedded = (libIt != embedded.end());
 
         std::string source;
-        if (fromEmbedded) {
+        auto virtIt = virtualFiles_.find(libPath);
+        if (virtIt == virtualFiles_.end()) virtIt = virtualFiles_.find(rawPath);
+        if (virtIt != virtualFiles_.end()) {
+            source = virtIt->second;   // ملف مُضمَّن في صورة rin_vm
+        } else if (fromEmbedded) {
             source = libIt->second;
         } else {
             std::ifstream in(resolvePath(libPath), std::ios::binary);
