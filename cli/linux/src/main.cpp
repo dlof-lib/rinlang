@@ -31,6 +31,8 @@
 #include "pkg/cli_pkg.h"
 #include "toolchain/rin_toolchain.h"
 #include "terminal/rin_terminal.h"
+#include "rin_ava_payload.h"
+#include "rin_vm.h"
 
 #include <iostream>
 #include <fstream>
@@ -750,7 +752,56 @@ static bool parseRuntimeLimit(const std::string& a, const char* flag, long long 
     return true;
 }
 
+// ---------------------------------------------------------------------------
+// صورة RVM (rin_vm): تُنفَّذ إما ببايتكود (آلة toolchain) أو بالمحرّك الكامل مع ملفات الاستيراد الافتراضية
+// ---------------------------------------------------------------------------
+static int runImageBytes(const std::string& bytes, const std::vector<std::string>& progArgs) {
+    rin_vm::Image im; std::string err;
+    if (!rin_vm::deserialize(bytes, im, &err)) { std::cerr << "[rin] صورة VM غير صالحة: " << err << "\n"; return 1; }
+    if (!im.bytecode.empty()) {
+        rin::toolchain::Chunk chunk;
+        if (!rin::toolchain::readBytecodeFromMemory(chunk, im.bytecode)) { std::cerr << "[rin] بايتكود الصورة تالف\n"; return 1; }
+        rin::toolchain::BytecodeVM vm;
+        auto r = vm.run(chunk);
+        std::cout << r.output;
+        if (!r.ok) { std::cerr << r.diagnostics.renderText(); return 1; }
+        return 0;
+    }
+    rin::Interpreter interp;
+    interp.setProgramArgs(progArgs);
+    std::unordered_map<std::string, std::string> vf(im.files.begin(), im.files.end());
+    interp.setVirtualFiles(std::move(vf));
+    return runSource(im.main, im.name, interp) ? 0 : 1;
+}
+
 static int realMain(int argc, char** argv) {
+    // RIN_AVA: إن كان هذا الملف التنفيذي ناتجاً عن rin_ava (برنامج Rin مُلحَق في نهايته) فشغّله
+    // مباشرة، وكل وسائط سطر الأوامر تذهب للبرنامج كما هي (دون تفسير خيارات rin).
+    // الحمولة نوعان: مصدر ← المفسّر (rin_interpreter.cpp)، أو بايتكود ← آلة toolchain/BytecodeVM.
+    // الملف التنفيذي العادي لا يحمل المقطع الختامي فيتجاوز هذا الفرع دون أي تغيير في السلوك.
+    {
+        rin_ava::Payload pl;
+        if (rin_ava::readSelfPayloadEx(argc > 0 ? argv[0] : nullptr, pl)) {
+            if (pl.kind == rin_ava::kKindBytecode) {
+                rin::toolchain::Chunk chunk;
+                if (!rin::toolchain::readBytecodeFromMemory(chunk, pl.data)) {
+                    std::cerr << "[rin_ava] بايتكود مُضمَّن تالف: " << pl.name << "\n";
+                    return 1;
+                }
+                rin::toolchain::BytecodeVM vm;
+                auto r = vm.run(chunk);
+                std::cout << r.output;
+                if (!r.ok) { std::cerr << r.diagnostics.renderText(); return 1; }
+                return 0;
+            }
+            std::vector<std::string> avaArgs;
+            for (int i = 1; i < argc; ++i) avaArgs.emplace_back(argv[i]);
+            if (pl.kind == rin_ava::kKindImage) return runImageBytes(pl.data, avaArgs);
+            rin::Interpreter interp;
+            interp.setProgramArgs(avaArgs);
+            return runSource(pl.data, pl.name, interp) ? 0 : 1;
+        }
+    }
     while (argc >= 2) {
         std::string a = argv[1];
         long long n = 0;
@@ -834,6 +885,12 @@ static int realMain(int argc, char** argv) {
         if (cmd == "bytecode") return cmdBytecode(rest, false);
         if (cmd == "vm") return cmdBytecode(rest, true);
         if (cmd == "toolchain-new") return cmdToolchainNew(rest);
+        if (cmd == "image") {   // rin image prog.rvm [args…]  — ينفّذ صورة VM
+            if (rest.empty()) { std::cerr << "rin image: يلزم ملف .rvm (أنشئه بـ rin_vm pack أو rin_ava -fvm -c)\n"; return 2; }
+            std::string bytes;
+            if (!readFile(rest[0], bytes)) { std::cerr << "rin image: تعذّر فتح '" << rest[0] << "'\n"; return 2; }
+            return runImageBytes(bytes, std::vector<std::string>(rest.begin() + 1, rest.end()));
+        }
 
         if (cmd == "check" && !rest.empty()) {
             rin::diag::OutputFormat fmt = rin::diag::OutputFormat::Plain;
