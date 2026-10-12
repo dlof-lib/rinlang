@@ -3,6 +3,7 @@
 #include "rin_lexer.h"
 #include "rin_parser.h"
 #include <cstdint>
+#include <istream>
 #include <string>
 #include <vector>
 #include <unordered_map>
@@ -124,6 +125,9 @@ public:
 
 bool writeBytecode(const Chunk&, const std::string& path);
 bool readBytecode(Chunk&, const std::string& path);
+bool readBytecodeStream(Chunk&, std::istream&);
+// يقرأ بايتكود RBC1 من ذاكرة (يُستخدم لتنفيذيات rin_ava ذات الخلفية vm).
+bool readBytecodeFromMemory(Chunk&, const std::string& bytes);
 
 class BytecodeVM {
 public:
