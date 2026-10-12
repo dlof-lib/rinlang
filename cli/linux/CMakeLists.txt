@@ -85,4 +85,10 @@ target_link_libraries(rin PRIVATE ZLIB::ZLIB ${CMAKE_DL_LIBS})  # dlopen لجس�
 
 set_target_properties(rin PROPERTIES OUTPUT_NAME "rin")
 
-install(TARGETS rin RUNTIME DESTINATION bin)
+# RIN_AVA — أداة بناء بواجهة g++ (rin_ava prog.rin -o prog). سائق مستقل بلا اعتماديات خارجية؛
+# يفحص بـ `rin check` ويبني تنفيذياً بنسخ rin + إلحاق البرنامج (انظر src/rin_ava_payload.h).
+add_executable(rin_ava ${CMAKE_CURRENT_SOURCE_DIR}/../rin_ava/src/rin_ava.cpp)
+target_include_directories(rin_ava PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+set_target_properties(rin_ava PROPERTIES OUTPUT_NAME "rin_ava")
+
+install(TARGETS rin rin_ava RUNTIME DESTINATION bin)
