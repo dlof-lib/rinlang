@@ -1,0 +1,19 @@
+class Animal {
+    let name = "x";
+    fun init(n) { self.name = n; }
+    fun speak() { return self.name + " makes a sound"; }
+}
+class Dog extends Animal {
+    fun speak() { return self.name + " barks"; }
+}
+let a = Animal("Cat");
+let d = Dog("Rex");
+print a.speak();
+print d.speak();
+class Counter {
+    let value = 0;
+    fun inc() { self.value = self.value + 1; return self.value; }
+}
+let c = Counter();
+c.inc(); c.inc();
+print c.value;
