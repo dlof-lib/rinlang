@@ -20,5 +20,6 @@ cmake -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build -- -j"$(nproc 2>/dev/null || echo 4)"
 
 echo
-echo "[rin] تم البناء بنجاح: build/rin"
+echo "[rin] تم البناء بنجاح: build/rin  build/rin_ava  build/rinc"
+[ -x build/gorin-embedded ] && echo "[rin] مفسّر Go (خلفية rin_ava -fgo): build/gorin-embedded" || echo "[rin] gorin-embedded لم يُبنَ (يلزم Go) — خلفية -fgo اختيارية"
 echo "[rin] لتثبيته عالمياً (اختياري):  sudo cmake --install build"
