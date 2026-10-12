@@ -46,6 +46,51 @@ bool SetData::primKey(const Value& v, std::string& key) {
     }
 }
 
+// ============================ MapData ============================
+// فهرس القاموس (انظر تعريف MapData في rin_interpreter.h). المفتاح البدائي يُرمَّز بنفس SetData::primKey
+// (نفس دلالة valuesEqual: لا مساواة بين أنواع مختلفة، -0 == +0، وNaN لا يُفهرَس أبداً).
+
+void MapData::rebuildIndex() const {
+    pidx_.clear();
+    pidx_.reserve(size() * 2);
+    std::string k;
+    for (size_t i = 0; i < size(); i++) {
+        if (SetData::primKey((*this)[i].first, k)) pidx_.emplace(k, i); // emplace لا يستبدل: يبقى أول تكرار (كالمسح الخطّي)
+    }
+    idxN_ = size();
+    idxValid_ = true;
+}
+
+size_t MapData::findIndex(const Value& key) const {
+    const size_t n = size();
+    std::string k;
+    if (n >= kIndexThreshold && SetData::primKey(key, k)) {
+        for (int attempt = 0; attempt < 2; attempt++) {
+            if (!idxValid_ || idxN_ != n) rebuildIndex();
+            auto it = pidx_.find(k);
+            if (it == pidx_.end()) return npos;                       // فهرس صالح بحجم مطابق: غياب مؤكَّد
+            if (it->second < n && valuesEqual((*this)[it->second].first, key)) return it->second;
+            dropIndex();                                              // فهرس متقادم (تعديل مباشر للأزواج) → أعد البناء مرة
+        }
+    }
+    for (size_t i = 0; i < n; i++) if (valuesEqual((*this)[i].first, key)) return i;
+    return npos;
+}
+
+void MapData::append(const Value& key, const Value& value) {
+    push_back({key, value});
+    if (idxValid_ && idxN_ + 1 == size()) {
+        std::string k;
+        if (SetData::primKey(key, k)) pidx_.emplace(k, size() - 1);
+        idxN_ = size();
+    }
+}
+
+void MapData::put(const Value& key, const Value& value) {
+    size_t i = findIndex(key);
+    if (i != npos) (*this)[i].second = value; else append(key, value);
+}
+
 void SetData::reindex() const {
     pidx.clear();
     comp.clear();
