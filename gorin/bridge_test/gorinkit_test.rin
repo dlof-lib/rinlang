@@ -1,0 +1,14 @@
+@import "lib/gorinkit.og.rin";
+gorin_connect("http://127.0.0.1:8799", "SECRET");
+print gorin_hash("sha256", "abc");
+print gorin_base64Encode("hello");
+print gorin_base64Decode("aGVsbG8=");
+print len(gorin_uuid());
+print gorin_regexFindAll("[0-9]+", "a1b22c333");
+print gorin_regexMatch("^a", "abc");
+let r = gorin_run("print 1 + 2;", 0, 0, 2000);
+print r["stdout"]; print r["ok"];
+try { gorin_hash("nope", "x"); } catch (e) { print "caught: " + e["message"]; }
+try { gorin_time(); } catch (e) { print "caught: " + e["message"]; }
+gorin_connect("http://127.0.0.1:8799", "WRONG");
+try { gorin_uuid(); } catch (e) { print "caught: " + e["message"]; }
