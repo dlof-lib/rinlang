@@ -107,6 +107,7 @@ Rin
 | الوحدة | الوصف |
 |---|---|
 | `httpkit.og.rin` | مساعدات حول طلبات HTTP (انظر [`http.md`](./http.md) للدوال الأصلية الكاملة). |
+| `gorinkit.og.rin` | جسر إلى بوابة **gorin** (طبقة Go فوق المحرك): `gorin_hash`/`gorin_hmac`/`gorin_base64Encode`/`gorin_uuid`/`gorin_regex*`/`gorin_fetch`/`gorin_run`… ترمي `throw` برسالة تبدأ بـ `gorin:` عند الفشل. انظر `gorin/README.md`. |
 | `urlkit.og.rin` | تحليل روابط (`scheme`...). |
 | `router.og.rin` | مطابقة مسارات بسيطة. |
 | `archivekit.og.rin` | إنشاء ملفات أرشيف/ضغط حقيقية بلغة Rin خالصة. |
