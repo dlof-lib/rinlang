@@ -80,7 +80,7 @@ add_executable(rin
     src/pkg/cli_pkg.cpp
 )
 
-target_include_directories(rin PRIVATE ${RIN_CORE_DIR})
+target_include_directories(rin PRIVATE ${RIN_CORE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/../rin_vm/include)
 target_link_libraries(rin PRIVATE ZLIB::ZLIB ${CMAKE_DL_LIBS})  # dlopen لجسر cpp.* (Rin 1.0)
 
 set_target_properties(rin PROPERTIES OUTPUT_NAME "rin")
@@ -88,7 +88,64 @@ set_target_properties(rin PROPERTIES OUTPUT_NAME "rin")
 # RIN_AVA — أداة بناء بواجهة g++ (rin_ava prog.rin -o prog). سائق مستقل بلا اعتماديات خارجية؛
 # يفحص بـ `rin check` ويبني تنفيذياً بنسخ rin + إلحاق البرنامج (انظر src/rin_ava_payload.h).
 add_executable(rin_ava ${CMAKE_CURRENT_SOURCE_DIR}/../rin_ava/src/rin_ava.cpp)
-target_include_directories(rin_ava PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+target_include_directories(rin_ava PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src ${CMAKE_CURRENT_SOURCE_DIR}/../rin_vm/include)
 set_target_properties(rin_ava PROPERTIES OUTPUT_NAME "rin_ava")
 
-install(TARGETS rin rin_ava RUNTIME DESTINATION bin)
+# خلفية go في rin_ava: مفسّر Go المدمج (gorin/cmd/rin) كملف gorin-embedded بجوار rin وrin_ava.
+# اختياري تماماً: إن لم يوجد Go (أو فشل بناؤه) يستمر البناء وتبقى بقية الخلفيات تعمل؛
+# وrin_ava نفسه يستطيع بناءه عند أول استخدام لـ -fgo إن وُجد go ومصدر gorin/.
+find_program(GO_EXECUTABLE go)
+set(GORIN_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../../gorin)
+if (GO_EXECUTABLE AND EXISTS ${GORIN_DIR}/go.mod)
+    add_custom_target(gorin_embedded ALL
+        COMMAND sh -c "'${GO_EXECUTABLE}' build -o '${CMAKE_CURRENT_BINARY_DIR}/gorin-embedded' ./cmd/rin || echo 'rin_ava: gorin-embedded skipped (go build failed)'"
+        WORKING_DIRECTORY ${GORIN_DIR}
+        COMMENT "Building gorin-embedded (Go interpreter for rin_ava -fgo)"
+        VERBATIM)
+    install(PROGRAMS ${CMAKE_CURRENT_BINARY_DIR}/gorin-embedded DESTINATION bin OPTIONAL)
+endif()
+
+# rinc — المترجم الأصلي (Rin → C): مطلوب لخلفية native/auto في rin_ava. ملف واحد بلا اعتماديات؛
+# يوضع بجوار rin_ava فيجده تلقائياً.
+add_executable(rinc ${CMAKE_CURRENT_SOURCE_DIR}/../../compiler/rinc.cpp)
+set_target_properties(rinc PROPERTIES OUTPUT_NAME "rinc")
+
+# rin_vm — أداة حزم صور VM (rin_vm pack/info/unpack) فوق مكتبة cli/rin_vm/include/rin_vm.h
+add_executable(rin_vm ${CMAKE_CURRENT_SOURCE_DIR}/../rin_vm/src/rin_vm_tool.cpp)
+target_include_directories(rin_vm PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../rin_vm/include)
+
+# rinvm — آلة Rin الافتراضية الكاملة: المحرّك الكامل + مكتبة rin_vm في ملف واحد صغير (بلا طرفية/RinPM).
+# تشغّل صور .rvm وتحزمها، وتصلح runtime لـ rin_ava -fvm (rin_ava يفضّلها على rin إن وُجدت بجواره).
+add_executable(rinvm
+    ${CMAKE_CURRENT_SOURCE_DIR}/../rin_vm/src/rinvm_main.cpp
+    ${RIN_CORE_DIR}/rin_lexer.cpp
+    ${RIN_CORE_DIR}/rin_parser.cpp
+    ${RIN_CORE_DIR}/rin_make.cpp
+    ${RIN_CORE_DIR}/rin_container_sql.cpp
+    ${RIN_CORE_DIR}/rin_artifact.cpp
+    ${RIN_CORE_DIR}/rin_interpreter.cpp
+    ${RIN_CORE_DIR}/toolchain/rin_toolchain.cpp
+    ${RIN_CORE_DIR}/binfmt/elf_format.cpp
+    ${RIN_CORE_DIR}/binfmt/ar_format.cpp
+    ${RIN_CORE_DIR}/binfmt/pe_format.cpp
+    ${RIN_CORE_DIR}/binfmt/macho_format.cpp
+    ${RIN_CORE_DIR}/binfmt/coff_obj.cpp
+    ${RIN_CORE_DIR}/loader_ui/library_loader_ui.cpp
+    ${RIN_CORE_DIR}/rin_http.cpp
+    ${RIN_CORE_DIR}/rin_c_api.cpp
+    ${RIN_CORE_DIR}/indsin/rin_indsin_c_api.cpp
+    ${RIN_CORE_DIR}/diagnostics/diagnostic.cpp
+    ${RIN_CORE_DIR}/diagnostics/source_manager.cpp
+    ${RIN_CORE_DIR}/diagnostics/diagnostic_engine.cpp
+    ${RIN_CORE_DIR}/diagnostics/diagnostic_renderer.cpp
+    ${RIN_CORE_DIR}/clc/clc_container.cpp
+    ${RIN_CORE_DIR}/clc/clc_compress.cpp
+    ${RIN_CORE_DIR}/clc/clc_security.cpp
+    ${RIN_CORE_DIR}/clc/clc_rin_opt.cpp
+    ${RIN_CORE_DIR}/clc/clc_zip_import.cpp
+    ${RIN_CORE_DIR}/clc/sha256.cpp
+)
+target_include_directories(rinvm PRIVATE ${RIN_CORE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/src ${CMAKE_CURRENT_SOURCE_DIR}/../rin_vm/include)
+target_link_libraries(rinvm PRIVATE ZLIB::ZLIB ${CMAKE_DL_LIBS})
+
+install(TARGETS rin rin_ava rinc rin_vm rinvm RUNTIME DESTINATION bin)
