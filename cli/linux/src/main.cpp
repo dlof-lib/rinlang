@@ -31,7 +31,6 @@
 #include "pkg/cli_pkg.h"
 #include "toolchain/rin_toolchain.h"
 #include "terminal/rin_terminal.h"
-#include "rin_ava_payload.h"
 
 #include <iostream>
 #include <fstream>
@@ -752,19 +751,6 @@ static bool parseRuntimeLimit(const std::string& a, const char* flag, long long 
 }
 
 static int realMain(int argc, char** argv) {
-    // RIN_AVA: إن كان هذا الملف التنفيذي ناتجاً عن rin_ava (برنامج Rin مُلحَق في نهايته) فشغّله
-    // مباشرة بنفس المفسّر، وكل وسائط سطر الأوامر تذهب للبرنامج كما هي (دون تفسير خيارات rin).
-    // الملف التنفيذي العادي لا يحمل المقطع الختامي فيتجاوز هذا الفرع دون أي تغيير في السلوك.
-    {
-        std::string avaSource, avaName;
-        if (rin_ava::readSelfPayload(argc > 0 ? argv[0] : nullptr, avaSource, avaName)) {
-            std::vector<std::string> avaArgs;
-            for (int i = 1; i < argc; ++i) avaArgs.emplace_back(argv[i]);
-            rin::Interpreter interp;
-            interp.setProgramArgs(avaArgs);
-            return runSource(avaSource, avaName, interp) ? 0 : 1;
-        }
-    }
     while (argc >= 2) {
         std::string a = argv[1];
         long long n = 0;
