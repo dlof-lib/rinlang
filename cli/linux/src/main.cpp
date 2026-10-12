@@ -44,6 +44,7 @@
 #include <cstdlib>
 #include <cstdio>
 #include <unistd.h>
+#include <pthread.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
 #include <dirent.h>
@@ -218,7 +219,8 @@ void printUsage() {
         "  rin                                     الطرفية التفاعلية (rin terminal --help)\n"
         "  rin terminal [-i file] [-e code] [...]  الطرفية التفاعلية الكاملة (أو rin repl / rin shell)\n"
         "  rin indsin <file.rin> [--width N] [--dump]  تشغيل واجهة indsin داخل الطرفية\n"
-        "  rin --version | -v ، --help | -h\n";
+        "  rin --version | -v ، --help | -h\n"
+        "  rin [--max-depth=N] [--budget=N] file.rin   حدود وقت التشغيل (docs/runtime.md)\n";
 }
 
 // ---------------------------------------------------------------------------
@@ -700,7 +702,64 @@ int cmdDoctor() {
 
 } // namespace
 
+static int realMain(int argc, char** argv);
+
+namespace {
+struct MainArgs { int argc; char** argv; int rc; };
+void* mainThreadEntry(void* p) {
+    auto* a = static_cast<MainArgs*>(p);
+    a->rc = realMain(a->argc, a->argv);
+    return nullptr;
+}
+} // namespace
+
+// المفسِّر شجري (tree-walking) وكل استدعاء Rin يستهلك عدة إطارات C++؛ مكدّس العملية الافتراضي (8MB) لا
+// يسمح إلا بمئات المستويات. لذا يعمل البرنامج كله على خيط بمكدّس افتراضي ضخم (1GB، ذاكرة افتراضية لا
+// تُحجز فعلياً إلا عند الاستخدام) ويُرفع حدّ عمق الاستدعاء من 300 إلى 10000 — فتعمل الدوال التكرارية
+// العميقة المشروعة، ويبقى تجاوز الحدّ خطأ Rin عادياً (E0035) لا انهياراً. فشل إنشاء الخيط => تشغيل مباشر.
 int main(int argc, char** argv) {
+    MainArgs args{argc, argv, 0};
+    pthread_attr_t attr;
+    pthread_t th;
+    rin::Interpreter::setDefaultMaxCallDepth(10000);
+    if (pthread_attr_init(&attr) == 0 &&
+        pthread_attr_setstacksize(&attr, static_cast<size_t>(1) << 30) == 0 &&
+        pthread_create(&th, &attr, mainThreadEntry, &args) == 0) {
+        pthread_join(th, nullptr);
+        return args.rc;
+    }
+    rin::Interpreter::setDefaultMaxCallDepth(300); // لا خيط كبير => الحدّ الآمن للمكدّس العادي
+    return realMain(argc, argv);
+}
+
+// حدود وقت التشغيل المرنة (docs/runtime.md §3): تُعطى قبل اسم الملف فقط، فلا تلتبس بوسائط البرنامج.
+//   rin --max-depth=N file.rin   حد عمق الاستدعاء (الافتراضي 10000، الأقصى 50000)
+//   rin --budget=N    file.rin   سقف عدد العبارات المنفَّذة (حماية من الحلقات اللانهائية؛ 0 = بلا حد)
+static long long g_runtimeBudget = 0;
+static bool parseRuntimeLimit(const std::string& a, const char* flag, long long lo, long long hi, long long& out) {
+    std::string pre = std::string(flag) + "=";
+    if (a.rfind(pre, 0) != 0) return false;
+    std::string v = a.substr(pre.size());
+    char* end = nullptr;
+    long long n = std::strtoll(v.c_str(), &end, 10);
+    if (v.empty() || *end != '\0' || n < lo || n > hi) {
+        std::cerr << "rin: قيمة غير صالحة للخيار " << flag << " (المسموح " << lo << ".." << hi << ")\n";
+        std::exit(2);
+    }
+    out = n;
+    return true;
+}
+
+static int realMain(int argc, char** argv) {
+    while (argc >= 2) {
+        std::string a = argv[1];
+        long long n = 0;
+        if (parseRuntimeLimit(a, "--max-depth", 1, 50000, n)) rin::Interpreter::setDefaultMaxCallDepth(static_cast<int>(n));
+        else if (parseRuntimeLimit(a, "--budget", 0, 1000000000000LL, n)) g_runtimeBudget = n;
+        else break;
+        for (int i = 1; i + 1 < argc; ++i) argv[i] = argv[i + 1];
+        --argc;
+    }
     // --allow-native: يفعّل جسر C++ (cpp.*) لهذا التشغيل فقط (Rin 1.0). قرار المستخدم لا الكود.
     {
         int w = 1;
@@ -814,6 +873,7 @@ int main(int argc, char** argv) {
     }
 
     rin::Interpreter interp;
+    if (g_runtimeBudget > 0) interp.setExecutionBudget(g_runtimeBudget);
     interp.setProgramArgs(rest);
     bool ok = runSource(source, sourceName, interp);
     return ok ? 0 : 1;
