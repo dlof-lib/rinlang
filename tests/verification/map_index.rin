@@ -1,0 +1,26 @@
+let m = {};
+let i = 0;
+while (i < 40) { m[i] = i * i; i = i + 1; }
+print len(m);
+print m[0]; print m[17]; print m[39]; print m[40];
+m["1"] = "str-one";
+print m[1]; print m["1"];
+m[0 - 0] = "zero";
+print m[0];
+print has(m, 5); print has(m, 500);
+print remove(m, 5); print has(m, 5); print remove(m, 5);
+m[5] = "back";
+print m[5]; print len(m);
+print remove(m, 0); m["new"] = 1; print m["new"]; print m[0]; print m[1]; print len(m);
+m[7] = "seven"; print m[7]; print len(m);
+let k = 0;
+while (k < 20) { remove(m, k); k = k + 1; }
+print len(m); print m[19]; print m[20]; print m["1"];
+m[20] = "twenty!"; print m[20];
+let d = {a: 1, "a": 2, b: 3, c: 4, "b": 5};
+print len(d); print d["a"]; print d["b"]; print d["c"]; print d["zz"];
+let big = {};
+let j = 0;
+while (j < 100) { big["k" + j] = j; j = j + 1; }
+print big["k0"]; print big["k99"]; print big["k100"]; print len(big);
+big["k50"] = "x"; print big["k50"]; print len(big);
