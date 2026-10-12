@@ -43,6 +43,31 @@ func New(out io.Writer) *Interp {
 	return in
 }
 
+// SetProgramArgs يعرّف المتغير العام `args` (مصفوفة نصوص) كما يفعل المحرك الأصلي لوسائط سطر الأوامر
+// بعد اسم الملف. يُستدعى قبل Run.
+func (in *Interp) SetProgramArgs(a []string) {
+	items := make([]Value, len(a))
+	for i, x := range a {
+		items[i] = x
+	}
+	in.global.define("args", &Array{Items: items})
+}
+
+// Check يحلّل المصدر فقط (بلا تنفيذ). يعيد *RinError عند خطأ لغوي/نحوي أو ميزة لا يدعمها هذا المحرك.
+func Check(src string) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			if x, ok := r.(*RinError); ok {
+				err = x
+				return
+			}
+			panic(r)
+		}
+	}()
+	Parse(src)
+	return nil
+}
+
 // Run يحلّل وينفّذ المصدر. يعيد *RinError عند أي خطأ (تحليل أو تشغيل).
 func (in *Interp) Run(src string) (err error) {
 	defer func() {
