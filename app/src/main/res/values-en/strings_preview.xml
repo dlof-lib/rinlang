@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="preview_live">● Live</string>
+    <string name="preview_reload">Refresh</string>
+    <string name="preview_close">Close</string>
+    <string name="preview_error">Error</string>
+</resources>
