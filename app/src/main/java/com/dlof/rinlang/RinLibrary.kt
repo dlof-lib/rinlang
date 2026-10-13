@@ -55,7 +55,7 @@ object BuiltinLibraries {
     const val FEATURED = "indsinicons"
 
     fun categoryOf(displayName: String): LibCategory = when (displayName) {
-        "indsinicons", "inputkit", "rinxg" -> LibCategory.UI
+        "indsinicons", "inputkit", "rinxg", "previewkit" -> LibCategory.UI
         "oglang", "ringo", "langkit", "astwalk", "envkit", "lexkit", "parsekit", "runkit", "bob" -> LibCategory.LANGUAGE
         "movingmask", "physics" -> LibCategory.GAMES
         "syskit", "ghpublish", "passkit", "passkitlang", "passkitcrypt", "passkitdb" -> LibCategory.SYSTEM
@@ -219,6 +219,11 @@ object BuiltinLibraries {
             "lib/passkitdb.og.rin", "passkitdb",
             "Database and container layer for the Passkit family over RCSQL: CRUD, transactions, migrations, encrypted fields and blind index, users, sessions, API keys, hash-chained audit log, rate limit, 2FA and Rin container linking",
             "pdInsert • pdFind • pdInsertEnc • pdFindByBlind • pdUserCreate • pdUserLogin • pdSessionCreate • pdApiKeyCreate • pdAuditLog • pdContSeal"
+        ),
+        BuiltinLibraryInfo(
+            "lib/previewkit.og.rin", "previewkit",
+            "معاينة حيّة لملفات PDF وMarkdown وTypeScript/JavaScript/JSON: توليد صفحة HTML (ثيم عربي/إنجليزي، وضع داكن، هيكل الملف)، استخراج نص PDF (Flate/ObjStm/ToUnicode/عربي RTL)، تلوين الكود وتشخيص الأقواس، ومراقبة الملف وإعادة التوليد تلقائياً عند أي تعديل",
+            "pvRun • pvPreview • pvRender • pvLive • pvPollOnce • pvPdfText • pvPdfInfo • pvTsOutline • pvDetect"
         )
     )
 }
