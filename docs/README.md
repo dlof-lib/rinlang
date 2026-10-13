@@ -39,6 +39,7 @@
 - [`MAKE_UNIT.md`](./MAKE_UNIT.md) — `@make.(name)`، سياسة القدرات (`use`/`need`/`allow`/`deny`/`strict`).
 - [`MAKE_MEDIA.md`](./MAKE_MEDIA.md) — `make.video` `make.audio` `make.api` `make.image.removeBg` `make.ocr`: فيديو وصوت وAPI وإزالة الخلفية وقراءة النص.
 - [`TIME.md`](./TIME.md) — `time()` و`time.*`: لحظات وتنسيق ونصوص طبيعية وحساب وفروق ومناطق وتقويم هجري ومدد.
+- [`previewkit.md`](./previewkit.md) — مكتبة `previewkit`: معاينة حيّة لملفات PDF وMarkdown وTypeScript/JavaScript/JSON (تلوين، هيكل، فحص، استخراج نص PDF عربي/RTL).
 - [`rinflow.md`](./rinflow.md) — طبقة تنفيذ التدفّق المهيكل.
 
 ### الواجهة
