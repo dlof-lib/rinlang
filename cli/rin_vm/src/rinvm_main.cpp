@@ -20,11 +20,15 @@
 #include "diagnostics/source_manager.h"
 #include "toolchain/rin_toolchain.h"
 
+#include <cstdlib>
+#include <cstring>
 #include <iostream>
 #include <string>
 #include <vector>
 
 namespace {
+
+bool g_useInterp = false;
 
 bool runSource(const std::string& source, const std::string& name, rin::Interpreter& interp) {
     try {
@@ -56,6 +60,7 @@ int runImage(const rin_vm::Image& im, const std::vector<std::string>& args) {
         return 0;
     }
     rin::Interpreter interp;
+    interp.setEngineVM(!g_useInterp);   // RinVM هو المحرّك الافتراضي لـ rinvm
     interp.setProgramArgs(args);
     interp.setVirtualFiles(std::unordered_map<std::string, std::string>(im.files.begin(), im.files.end()));
     return runSource(im.main, im.name, interp) ? 0 : 1;
@@ -66,7 +71,8 @@ int usage() {
                  "  rinvm prog.rvm [args…]            run an image\n"
                  "  rinvm prog.rin [args…]            pack in memory (bundles @import) and run\n"
                  "  rinvm pack prog.rin [-o out.rvm]  create an image\n"
-                 "  rinvm info prog.rvm               show an image\n";
+                 "  rinvm info prog.rvm               show an image\n"
+                 "  rinvm --interp prog.rin           run on the tree interpreter instead of RinVM\n";
     return 2;
 }
 
@@ -91,6 +97,11 @@ int main(int argc, char** argv) {
             std::cerr << "[rinvm] unsupported payload kind\n";
             return 1;
         }
+    }
+    if (argc >= 2 && std::strcmp(argv[1], "--interp") == 0) {   // المحرّك الشجري القديم للمقارنة
+        g_useInterp = true;
+        for (int i = 1; i + 1 < argc; ++i) argv[i] = argv[i + 1];
+        --argc;
     }
     if (argc < 2) return usage();
     std::string cmd = argv[1];
