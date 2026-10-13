@@ -189,7 +189,7 @@ fun relyInline(s) {
     while (true) {
         let p = indexOf(x, "[");
         if (p < 0) { break; }
-        let a = indexOf(x, "](", p + 1);
+        let a = relyFind(x, "](", p + 1);
         if (a < 0) { break; }
         let e = relyFind(x, ")", a + 2);
         if (e < 0) { break; }
