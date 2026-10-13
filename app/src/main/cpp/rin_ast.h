@@ -508,6 +508,9 @@ struct FunctionStmt : Stmt { FunctionStmt() { stmtKind = StmtKind::FunctionStmt;
     bool isFinal = false;      // final fun: لا يجوز إعادة تعريفها في صنف فرعي
     bool isOverride = false;   // override fun: يجب أن تُعيد تعريف دالة موجودة في الأب
     int accessorKind = 0;      // 0 = دالة عادية، 1 = getter (get name() {...})، 2 = setter (set name(v) {...})
+    // ---- RinVM: بايتكود متن الدالة (rin_vm.h)، يُملأ كسولاً عند أول نداء؛ لا يغيّر أي سلوك موجود ----
+    mutable std::shared_ptr<void> vmProto;
+    mutable bool vmProtoTicks = false;
 };
 
 // ---- OOP: class / struct / enum declarations (additive language layer) ----
