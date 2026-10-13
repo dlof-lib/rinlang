@@ -1032,7 +1032,7 @@ fun removeTodo(id) {
     fun listEntries(project: Project, relDir: String): Pair<List<RinFolder>, List<RinFile>> {
         val dir = resolveDir(project, relDir)
         val prefix = if (relDir.isBlank()) "" else "${relDir.trim('/')}/"
-        val children = (dir.listFiles() ?: emptyArray()).filter { it.name != ".rin_state" } // حالة حاويات الويب المحفوظة
+        val children = (dir.listFiles() ?: emptyArray()).filter { it.name != ".rin_state" && it.name != ".rin_preview" } // حالة حاويات الويب المحفوظة
         val folders = children.filter { it.isDirectory }
             .map { RinFolder(it.name, "$prefix${it.name}", it, it.lastModified()) }
             .sortedByDescending { it.lastModified }
