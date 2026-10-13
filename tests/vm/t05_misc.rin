@@ -1,0 +1,25 @@
+print "a", "b" sep="-" end="!\n";
+print "x" upper=true;
+print "pad" width=8 align="right";
+print "LOW" lower=true;
+print "lv" level="info" label="L";
+print "rep" repeat=2;
+print [1,[2,3]] pretty=true;
+print "cond" if=false;
+print "shown" if=true;
+let s = "ab"; s = s + "cd"; s = s + 1; print s;
+let [a, b] = [1, 2]; [a, b] = [b, a]; print a, b;
+let {x, y = 7} = {x: 1}; print x, y;
+let v = nil; 
+fun lw() { let w = v else { print "else"; return 0; }; return 1; }
+print lw();
+print "after";
+print.log.info("hello", label="T");
+@container=Demo
+let k = 1;
+fun twice(x) { return x * 2; }
+print "in container", twice(k);
+.end/container
+print container("Demo", "k");
+let t: Number = 5; print t;
+print typeof(3), len("abc");
