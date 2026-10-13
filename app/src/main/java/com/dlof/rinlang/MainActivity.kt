@@ -989,7 +989,18 @@ class MainActivity : RinBaseActivity() {
         openHtmlPage(logic)
     }
 
+    /** Run على ملف .md/.pdf/.ts…: يفتح المعاينة الحيّة (lib/previewkit) بدل تشغيل برنامج Rin. */
+    private fun openFilePreviewIfApplicable(): Boolean {
+        val file = currentProjectFile ?: return false
+        if (!FilePreviewActivity.isPreviewable(file.name)) return false
+        if (hasSaveTarget()) saveSilently()
+        val project = currentProject ?: return false
+        FilePreviewActivity.start(this, project.name, file.relPath)
+        return true
+    }
+
     private fun runProgram() {
+        if (openFilePreviewIfApplicable()) return
         if (runHtmlProjectIfApplicable()) return
         val source = editCode.text.toString()
         if (AppSettings.isClearConsoleOnRun(this)) { RinJobScheduler.clear(); RinTerminal.clear() }
