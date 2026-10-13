@@ -26,6 +26,7 @@
 #include "rin_lexer.h"
 #include "rin_parser.h"
 #include "rin_interpreter.h"
+#include "rin_bcvm.h"
 #include "diagnostics/diagnostic_renderer.h"
 #include "diagnostics/source_manager.h"
 #include "pkg/cli_pkg.h"
@@ -210,7 +211,8 @@ void printUsage() {
         "  rin check <file> [--format=plain|short|json|lsp]\n"
         "  rin analyze <file>                      semantic analyzer + type checker\n"
         "  rin bytecode <file> [--optimize] [--out file.rbc]  compile/disassemble bytecode\n"
-        "  rin vm <file>                           execute Rin bytecode VM\n"
+        "  rin vm <file> [--disasm] [--stats]      run on RinVM (real bytecode VM)\n"
+        "  rin --vm <file>                         run any program on RinVM\n"
         "  rin toolchain-new <name>                generate a complete toolchain project skeleton\n"
         "  rin test [dir]                         تشغيل اختبارات .rin\n"
         "  rin fmt <file> [--write]               إعادة محاذاة المسافات البادئة\n"
@@ -719,6 +721,45 @@ void* mainThreadEntry(void* p) {
 // يسمح إلا بمئات المستويات. لذا يعمل البرنامج كله على خيط بمكدّس افتراضي ضخم (1GB، ذاكرة افتراضية لا
 // تُحجز فعلياً إلا عند الاستخدام) ويُرفع حدّ عمق الاستدعاء من 300 إلى 10000 — فتعمل الدوال التكرارية
 // العميقة المشروعة، ويبقى تجاوز الحدّ خطأ Rin عادياً (E0035) لا انهياراً. فشل إنشاء الخيط => تشغيل مباشر.
+static long long g_runtimeBudget = 0;
+// rin vm file.rin [--disasm] [--stats] [args...] : ينفّذ البرنامج على RinVM الحقيقية (آلة بايتكود كاملة).
+int cmdRealVM(const std::vector<std::string>& args) {
+    std::string file; bool disasm = false, stats = false, noRun = false;
+    std::vector<std::string> prog;
+    for (auto& a : args) {
+        if (a == "--disasm") disasm = true;
+        else if (a == "--stats") stats = true;
+        else if (a == "--no-run") noRun = true;
+        else if (file.empty()) file = a;
+        else prog.push_back(a);
+    }
+    if (file.empty()) { std::cerr << "rin vm: يلزم ملف .rin  [--disasm] [--stats] [--no-run]\n"; return 2; }
+    std::string source;
+    if (!readFile(file, source)) { std::cerr << "rin vm: تعذّر فتح الملف '" << file << "'\n"; return 2; }
+    rin::Interpreter interp;
+    interp.setEngineVM(true);
+    if (g_runtimeBudget > 0) interp.setExecutionBudget(g_runtimeBudget);
+    interp.setProgramArgs(prog);
+    if (disasm) {
+        try {
+            rin::Lexer lexer(source, file);
+            auto tokens = lexer.scanTokens();
+            rin::Parser parser(tokens, file);
+            auto ast = parser.parse();
+            std::cout << interp.vmDisassembleProgram(ast);
+        } catch (std::exception& e) { std::cerr << "rin vm: " << e.what() << "\n"; return 1; }
+        if (noRun) return 0;
+    }
+    bool ok = noRun ? true : runSource(source, file, interp);
+    if (stats) {
+        if (auto* st = interp.vmStats())
+            std::cerr << "[vm] instructions=" << st->instructions << " calls=" << st->calls
+                      << " nestedRuns=" << st->nestedRuns << " compiled=" << st->compiled
+                      << " delegated=" << st->delegated << "\n";
+    }
+    return ok ? 0 : 1;
+}
+
 int main(int argc, char** argv) {
     MainArgs args{argc, argv, 0};
     pthread_attr_t attr;
@@ -737,7 +778,6 @@ int main(int argc, char** argv) {
 // حدود وقت التشغيل المرنة (docs/runtime.md §3): تُعطى قبل اسم الملف فقط، فلا تلتبس بوسائط البرنامج.
 //   rin --max-depth=N file.rin   حد عمق الاستدعاء (الافتراضي 10000، الأقصى 50000)
 //   rin --budget=N    file.rin   سقف عدد العبارات المنفَّذة (حماية من الحلقات اللانهائية؛ 0 = بلا حد)
-static long long g_runtimeBudget = 0;
 static bool parseRuntimeLimit(const std::string& a, const char* flag, long long lo, long long hi, long long& out) {
     std::string pre = std::string(flag) + "=";
     if (a.rfind(pre, 0) != 0) return false;
@@ -807,6 +847,8 @@ static int realMain(int argc, char** argv) {
         long long n = 0;
         if (parseRuntimeLimit(a, "--max-depth", 1, 50000, n)) rin::Interpreter::setDefaultMaxCallDepth(static_cast<int>(n));
         else if (parseRuntimeLimit(a, "--budget", 0, 1000000000000LL, n)) g_runtimeBudget = n;
+        else if (a == "--vm" || a == "--engine=vm") ::setenv("RIN_ENGINE", "vm", 1);
+        else if (a == "--interp" || a == "--engine=interp") ::unsetenv("RIN_ENGINE");
         else break;
         for (int i = 1; i + 1 < argc; ++i) argv[i] = argv[i + 1];
         --argc;
@@ -883,7 +925,8 @@ static int realMain(int argc, char** argv) {
         if (cmd == "doctor") return cmdDoctor();
         if (cmd == "analyze") return cmdAnalyze(rest);
         if (cmd == "bytecode") return cmdBytecode(rest, false);
-        if (cmd == "vm") return cmdBytecode(rest, true);
+        if (cmd == "vm") return cmdRealVM(rest);
+        if (cmd == "vm-legacy") return cmdBytecode(rest, true);
         if (cmd == "toolchain-new") return cmdToolchainNew(rest);
         if (cmd == "image") {   // rin image prog.rvm [args…]  — ينفّذ صورة VM
             if (rest.empty()) { std::cerr << "rin image: يلزم ملف .rvm (أنشئه بـ rin_vm pack أو rin_ava -fvm -c)\n"; return 2; }
