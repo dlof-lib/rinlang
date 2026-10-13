@@ -1,0 +1,13 @@
+stone pi = 3.14;
+try { pi = 3; } catch (e) { print "stone err"; }
+gauge hp = 50 within 0 to 100;
+hp = 150; print hp;
+tape t = 1;
+t = 2; t = 3; undo t; print t;
+lens dbl = pi * 2;
+print dbl;
+trial { hp = 10; abort; } else { print "rolled back", hp; }
+let q = 5; bell q (old, new) { print "bell", old, new; }
+q = 6;
+fun lv() { gauge g = 5 within 0 to 10; g = 20; return g; }
+print lv();
