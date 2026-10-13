@@ -29,6 +29,8 @@
 
 namespace rin {
 
+namespace vm { struct State; struct RunState; struct Proto; struct Stats; } // RinVM (rin_bcvm.h)
+
 struct Environment;
 using EnvPtr = std::shared_ptr<Environment>;
 
@@ -776,6 +778,18 @@ public:
     // دائماً فتُصبح "args" = [] (توافقية خلفية كاملة لأي مستدعٍ لا يستخدم هذه الميزة).
     void setProgramArgs(std::vector<std::string> args) { programArgs_ = std::move(args); }
 
+    // ---- RinVM: آلة Rin الافتراضية (rin_bcvm.h / rin_bcvm_exec.cpp) ----
+    // عند التفعيل تُترجَم كل كتلة/عبارة/تعبير إلى بايتكود وتُنفَّذ على الآلة الافتراضية بدل المرور الشجري؛
+    // الدلالات متطابقة (راجع docs/vm.md). الافتراضي: معطَّل (المفسِّر الشجري كما كان). يمكن التفعيل أيضاً
+    // بمتغير البيئة RIN_ENGINE=vm عند أول run().
+    void setEngineVM(bool on) { vmEnabled_ = on; }
+    bool engineVM() const { return vmEnabled_; }
+    // إحصاءات الآلة (nullptr إن لم تُستخدم بعد) ومفكّك لبرنامج كامل (يترجم دون تنفيذ).
+    const rin::vm::Stats* vmStats() const;
+    std::string vmDisassembleProgram(const std::vector<StmtPtr>& program);
+    // يُفرغ كاش البايتكود (بعد تعديل شجرة AST خارجياً مثلاً).
+    void vmFlushCache();
+
 private:
     std::vector<std::string> programArgs_;
     std::unordered_map<std::string, std::string> virtualFiles_;
@@ -1141,6 +1155,13 @@ private:
     void registerNativesExtra3(); // rin_extra_natives3.cpp — Rin 1.0 additions (net.* بشبكة حقيقية + container.* إضافية)
     void registerNativesExtra2(); // rin_extra_natives2.cpp — Rin 1.0 additions (sec./file./net./log./automation. + container extras)
 
+    // ---- RinVM (التنفيذ في rin_bcvm_exec.cpp) ----
+    bool vmEnabled_ = false;
+    std::shared_ptr<rin::vm::State> vm_;
+    const Stmt* vmDirectStmt_ = nullptr;   // عبارة مفوَّضة الآن للـ runtime: exec() التالي لها لا يُعاد توجيهه للآلة
+    std::shared_ptr<rin::vm::State> vmState();
+    struct VmFrame; struct VmHandler; struct VmLoopMark;
+    Value evaluateTree(const ExprPtr& expr, EnvPtr env); // المسار الشجري الأصلي لـ evaluate
     void execute(const StmtPtr& stmt, EnvPtr env);
     void executeBlock(const std::vector<StmtPtr>& statements, EnvPtr env);
     // مسار التنفيذ السريع: return/break/continue تُنقَل كقيمة Flow بدل استثناءات C++ (الاستثناء يكلّف
@@ -1149,6 +1170,16 @@ private:
     enum class Flow { None, Return, Break, Continue };
     Flow exec(const StmtPtr& stmt, EnvPtr env, Value& ret);
     Flow execBlockFlow(const std::vector<StmtPtr>& statements, EnvPtr env, Value& ret);
+    Flow vmRunBlock(const std::vector<StmtPtr>& statements, EnvPtr env, Value& ret);
+    Flow vmRunStmt(const StmtPtr& stmt, EnvPtr env, Value& ret);
+    Value vmRunExpr(const ExprPtr& expr, EnvPtr env);
+    Flow vmExecute(const std::shared_ptr<rin::vm::Proto>& proto, EnvPtr env, Value& ret);
+    Flow vmLoop(rin::vm::RunState& rs, Value& ret);
+    // يشغّل Proto (بنفس اتفاقية Flow) ويعيد القيمة الناتجة لبروتو تعبير.
+    std::shared_ptr<rin::vm::Proto> vmBlockProto(const std::vector<StmtPtr>& statements);
+    std::shared_ptr<rin::vm::Proto> vmFunctionProto(const std::shared_ptr<FunctionStmt>& decl);
+    Value vmBinary(int op, Value& l, Value& r, int line);
+    void vmEnterCall(rin::vm::RunState& rs, const std::shared_ptr<Callable>& fn, std::vector<Value>& args, int line);
     Value evaluate(const ExprPtr& expr, EnvPtr env);
     Value callFunction(const std::shared_ptr<Callable>& fn, std::vector<Value>& args, int line);
 
