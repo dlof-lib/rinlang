@@ -2332,6 +2332,41 @@ void Interpreter::registerNatives() {
         }
         return Value::string(out);
     };
+    // zlibInflate(data, maxBytes?) -> نص البايتات المفكوكة، أو nil إن كانت البيانات تالفة/تجاوزت السقف.
+    // على عكس zlibInflateRaw أعلاه لا تحتاج معرفة الحجم الأصلي مسبقاً — وهذا ما تحتاجه الصيغ التي لا
+    // تخزّنه (PDF /FlateDecode، PNG IDAT، HTTP gzip...). تكتشف تلقائياً تغليف zlib (RFC 1950) أو gzip
+    // (RFC 1952) عبر inflateInit2(15+32)؛ ولا تقبل DEFLATE الخام (استخدم zlibInflateRaw لذلك).
+    // maxBytes (افتراضي 64MB، أقصى 512MB) حماية من قنابل الضغط. تُرجع nil بدل رمي خطأ كي تتحمّل
+    // المكتبات ملفات تالفة جزئياً (مثل PDF فيه تدفّق مقطوع) دون أن يتوقف السكربت كله.
+    natives["zlibInflate"] = [](std::vector<Value>& a, int line) -> Value {
+        if (a.empty() || a.size() > 2) {
+            throw diagErr(diag::Code::E0004_InvalidType, line, "'zlibInflate' يتوقّع (data) أو (data, maxBytes)");
+        }
+        std::string input = asString(a[0], "zlibInflate", line);
+        double maxD = 64.0 * 1024 * 1024;
+        if (a.size() == 2) maxD = asNumber(a[1], "zlibInflate", line);
+        if (maxD < 1) maxD = 1;
+        if (maxD > 512.0 * 1024 * 1024) maxD = 512.0 * 1024 * 1024;
+        const size_t maxOut = static_cast<size_t>(maxD);
+        z_stream strm{};
+        if (inflateInit2(&strm, 15 + 32) != Z_OK) return Value::nil();
+        strm.next_in = reinterpret_cast<Bytef*>(const_cast<char*>(input.data()));
+        strm.avail_in = static_cast<uInt>(input.size());
+        std::string out;
+        char chunk[16384];
+        int ret = Z_OK;
+        while (ret != Z_STREAM_END) {
+            strm.next_out = reinterpret_cast<Bytef*>(chunk);
+            strm.avail_out = sizeof(chunk);
+            ret = inflate(&strm, Z_NO_FLUSH);
+            if (ret != Z_OK && ret != Z_STREAM_END) { inflateEnd(&strm); return Value::nil(); }
+            out.append(chunk, sizeof(chunk) - strm.avail_out);
+            if (out.size() > maxOut) { inflateEnd(&strm); return Value::nil(); }
+            if (ret == Z_OK && strm.avail_in == 0 && strm.avail_out != 0) { inflateEnd(&strm); return Value::nil(); }
+        }
+        inflateEnd(&strm);
+        return Value::string(out);
+    };
     // ---- CLC (Rin Compact Library Container، .rcl) — natives خام فوق مكتبة clc:: (clc/) ----
     // نفس فكرة crc32/zlibDeflateRaw أعلاه بالضبط: هذه natives رقيقة تستدعي مباشرة دوال مكتبة C++
     // مستقلة (هنا clc::) بلا أي تكرار لمنطقها. انظر clc/clc_container.h ودليل التكامل الأصلي
