@@ -2332,41 +2332,6 @@ void Interpreter::registerNatives() {
         }
         return Value::string(out);
     };
-    // zlibInflate(data, maxBytes?) -> نص البايتات المفكوكة، أو nil إن كانت البيانات تالفة/تجاوزت السقف.
-    // على عكس zlibInflateRaw أعلاه لا تحتاج معرفة الحجم الأصلي مسبقاً — وهذا ما تحتاجه الصيغ التي لا
-    // تخزّنه (PDF /FlateDecode، PNG IDAT، HTTP gzip...). تكتشف تلقائياً تغليف zlib (RFC 1950) أو gzip
-    // (RFC 1952) عبر inflateInit2(15+32)؛ ولا تقبل DEFLATE الخام (استخدم zlibInflateRaw لذلك).
-    // maxBytes (افتراضي 64MB، أقصى 512MB) حماية من قنابل الضغط. تُرجع nil بدل رمي خطأ كي تتحمّل
-    // المكتبات ملفات تالفة جزئياً (مثل PDF فيه تدفّق مقطوع) دون أن يتوقف السكربت كله.
-    natives["zlibInflate"] = [](std::vector<Value>& a, int line) -> Value {
-        if (a.empty() || a.size() > 2) {
-            throw diagErr(diag::Code::E0004_InvalidType, line, "'zlibInflate' يتوقّع (data) أو (data, maxBytes)");
-        }
-        std::string input = asString(a[0], "zlibInflate", line);
-        double maxD = 64.0 * 1024 * 1024;
-        if (a.size() == 2) maxD = asNumber(a[1], "zlibInflate", line);
-        if (maxD < 1) maxD = 1;
-        if (maxD > 512.0 * 1024 * 1024) maxD = 512.0 * 1024 * 1024;
-        const size_t maxOut = static_cast<size_t>(maxD);
-        z_stream strm{};
-        if (inflateInit2(&strm, 15 + 32) != Z_OK) return Value::nil();
-        strm.next_in = reinterpret_cast<Bytef*>(const_cast<char*>(input.data()));
-        strm.avail_in = static_cast<uInt>(input.size());
-        std::string out;
-        char chunk[16384];
-        int ret = Z_OK;
-        while (ret != Z_STREAM_END) {
-            strm.next_out = reinterpret_cast<Bytef*>(chunk);
-            strm.avail_out = sizeof(chunk);
-            ret = inflate(&strm, Z_NO_FLUSH);
-            if (ret != Z_OK && ret != Z_STREAM_END) { inflateEnd(&strm); return Value::nil(); }
-            out.append(chunk, sizeof(chunk) - strm.avail_out);
-            if (out.size() > maxOut) { inflateEnd(&strm); return Value::nil(); }
-            if (ret == Z_OK && strm.avail_in == 0 && strm.avail_out != 0) { inflateEnd(&strm); return Value::nil(); }
-        }
-        inflateEnd(&strm);
-        return Value::string(out);
-    };
     // ---- CLC (Rin Compact Library Container، .rcl) — natives خام فوق مكتبة clc:: (clc/) ----
     // نفس فكرة crc32/zlibDeflateRaw أعلاه بالضبط: هذه natives رقيقة تستدعي مباشرة دوال مكتبة C++
     // مستقلة (هنا clc::) بلا أي تكرار لمنطقها. انظر clc/clc_container.h ودليل التكامل الأصلي
@@ -7982,6 +7947,7 @@ bool Interpreter::callTopLevelFunction(const std::vector<StmtPtr>& program,
 
 std::string Interpreter::run(const std::vector<StmtPtr>& statements) {
     CurrentInterpGuard interpGuard(this); // Rin 1.0: لأجل __str__ داخل Value::toDisplayString
+    if (!vmEnabled_) { const char* eng = std::getenv("RIN_ENGINE"); if (eng && std::string(eng) == "vm") vmEnabled_ = true; } // RinVM
     g_diagFile = sourceFile; // مزامنة نظام Diagnostics: الدوال الحرة/lambdas تستخدم g_diagFile
     loadInstalledIndex(); // يحمّل أسماء أي تثبيتات فعلية سابقة على نفس basePath (استمرارية عبر التشغيلات)
     importedPaths.clear(); // كل تشغيل جديد يبدأ بسجل @import نظيف (لا يرث استيرادات تشغيل سابق)
@@ -8071,6 +8037,7 @@ std::string Interpreter::run(const std::vector<StmtPtr>& statements) {
 }
 
 Interpreter::Flow Interpreter::execBlockFlow(const std::vector<StmtPtr>& statements, EnvPtr env, Value& ret) {
+    if (vmEnabled_) return vmRunBlock(statements, std::move(env), ret); // RinVM
     for (const auto& s : statements) {
         Flow f = exec(s, env, ret);
         if (f != Flow::None) return f;
@@ -8098,6 +8065,10 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
 }
 
 Interpreter::Flow Interpreter::exec(const StmtPtr& stmt, EnvPtr env, Value& ret) {
+    if (vmEnabled_) { // RinVM: كل عبارة تمرّ على الآلة؛ العبارة المفوَّضة نفسها تُنفَّذ هنا مباشرة مرة واحدة
+        if (vmDirectStmt_ == stmt.get()) vmDirectStmt_ = nullptr;
+        else return vmRunStmt(stmt, std::move(env), ret);
+    }
     // Live Preview infinite-loop protection (see setExecutionBudget()): every statement --
     // including each pass through a while/for body, since the loop's body is itself executed via
     // this same execute() -- counts against the budget. execBudget_ == 0 (the default for every
@@ -10718,6 +10689,11 @@ Value Interpreter::doLibraryImportUrl(std::vector<Value>& args, int line, const 
 }
 
 Value Interpreter::evaluate(const ExprPtr& expr, EnvPtr env) {
+    if (vmEnabled_) return vmRunExpr(expr, std::move(env)); // RinVM
+    return evaluateTree(expr, std::move(env));
+}
+
+Value Interpreter::evaluateTree(const ExprPtr& expr, EnvPtr env) {
     switch (expr->exprKind) {
     case ExprKind::Literal: { auto e = std::static_pointer_cast<LiteralExpr>(expr);
         switch (e->kind) {
@@ -12519,3 +12495,5 @@ bool Interpreter::livePropertyGet(const EnvPtr& env, const std::string& name, co
 
 // ---- Rin 1.0: محرّك نماذج الإدخال (مفسِّر + مترجم + منفِّذ مخصّص لـ input) — انظر rin_input.h ----
 #include "rin_input.cpp"
+#include "rin_bcvm_compiler.cpp" // RinVM: مترجم AST -> بايتكود + مفكّك
+#include "rin_bcvm_exec.cpp"     // RinVM: حلقة التنفيذ
