@@ -6020,7 +6020,7 @@ fun relyInline(s) {
     while (true) {
         let p = indexOf(x, "[");
         if (p < 0) { break; }
-        let a = indexOf(x, "](", p + 1);
+        let a = relyFind(x, "](", p + 1);
         if (a < 0) { break; }
         let e = relyFind(x, ")", a + 2);
         if (e < 0) { break; }
@@ -18922,6 +18922,2414 @@ fun ic_register(name, category, d) {
 }
 )INDSINICONSOGRIN";
 
+static const char* kLib_previewkit_og_rin = R"PREVIEWKITOGRIN(// ============================================================================
+//  lib/previewkit.og.rin — PreviewKit: تشغيل ومعاينة حيّة لملفات PDF / Markdown / TypeScript
+//
+//  استيراد:
+//    @import "lib/previewkit.og.rin";
+//    @import "lib/previewkit.og.rin" as pv;
+//
+//  مكتبة Rin خالصة (بلا JavaScript/Kotlin داخلها) فوق natives موجودة في المفسّر:
+//    readFile/writeFile/fileExists، fs.hash (كشف التغيّر)، automation.sleepMs (حلقة المراقبة)،
+//    regexFindAll/regexGroups/regexReplace (محلّلات سريعة)، zlibInflate (فك ضغط PDF — جديد)،
+//    utf8Len/detectScript/jsonDecode. تُخرج صفحة HTML كاملة قياسية تُعرض في WebView/متصفح.
+//
+//  الأنواع المدعومة (يُكشف النوع من الامتداد، وPDF أيضاً من التوقيع "%PDF-"):
+//    • Markdown (.md/.markdown)  → HTML عبر relyRIN + فهرس عناوين جانبي وإحصاءات
+//    • PDF (.pdf)                → استخراج النص فعلياً (تدفّقات Flate، object streams، خطوط Type0 +
+//                                  ToUnicode كالعربية، ترميز WinAnsi) + بيانات الوثيقة + تبويب
+//                                  "الأصل" يعرض الـ PDF نفسه عبر عارض المتصفح عند تمرير embedSrc
+//    • TypeScript/JavaScript (.ts .tsx .mts .cts .js .jsx .mjs .cjs) و .json
+//                                → تلوين صياغي حقيقي، هيكل الملف (class/interface/type/enum/function/
+//                                  const + أعضاء الأصناف)، قائمة الاستيرادات، وفحص أقواس/نصوص غير مغلقة
+//    • أي ملف نصي آخر (.rin .kt .java .c .cpp .py .go .rs .css .html .xml .yml .sh ...) → عرض كود ملوّن
+//
+//  الاستخدام السريع:
+//    let r = pvPreview("notes.md", "notes.preview.html", {live: true});   // يكتب الصفحة
+//    print r;                                                             // {ok, kind, output, bytes, ms, stamp}
+//    pvLive("main.ts", "main.preview.html", {intervalMs: 800, maxTicks: 300});  // معاينة حيّة بالمراقبة
+//
+//  الحلقة الحيّة تعمل بطريقتين معاً: (1) pvLive/pvTick يراقبان بصمة الملف ويعيدان توليد HTML عند أي
+//  تعديل، (2) الصفحة الناتجة بخيار live:true تُحدّث نفسها (meta refresh + حفظ موضع التمرير) فتظهر
+//  التعديلات في العارض دون تدخّل.
+//
+//  ملاحظة لغوية: لا نفي بـ "!"؛ المقارنات الصريحة x == false، كبقية lib/*.og.rin.
+//  حدود صريحة: لا تشغيل لشيفرة TypeScript (لا يوجد native لتنفيذ عمليات خارجية)؛ المعاينة = تلوين +
+//  هيكل + فحص. استخراج PDF يعيد النص لا الرسم: للمعاينة البصرية استخدم تبويب "الأصل".
+// ============================================================================
+
+@import "lib/relyRIN.og.rin";
+
+// ---- 1) أدوات عامة ----------------------------------------------------------
+
+fun pvEsc(s) { return relyEscape(toString(s)); }
+
+fun pvBaseName(path) {
+    let p = replace(path, "\\", "/");
+    let i = lastIndexOf(p, "/");
+    if (i < 0) { return p; }
+    return substr(p, i + 1);
+}
+
+fun pvExt(path) {
+    let b = pvBaseName(path);
+    let i = lastIndexOf(b, ".");
+    if (i < 0) { return ""; }
+    return lower(substr(b, i + 1));
+}
+
+fun pvStartsWith(s, p) {
+    if (len(s) < len(p)) { return false; }
+    return substr(s, 0, len(p)) == p;
+}
+
+// عدد مرّات ظهور ch في s
+fun pvCountChar(s, ch) {
+    return len(s) - len(replace(s, ch, ""));
+}
+
+fun pvFmtBytes(n) {
+    if (n < 1024) { return toString(n) + " B"; }
+    if (n < 1048576) { return toString(round(n / 102.4) / 10) + " KB"; }
+    return toString(round(n / 104857.6) / 10) + " MB";
+}
+
+// ---- 2) كشف النوع ------------------------------------------------------------
+
+fun pvKindOfExt(ext) {
+    if (ext == "md" or ext == "markdown" or ext == "mdown" or ext == "mkd") { return "markdown"; }
+    if (ext == "pdf") { return "pdf"; }
+    if (ext == "ts" or ext == "tsx" or ext == "mts" or ext == "cts") { return "typescript"; }
+    if (ext == "js" or ext == "jsx" or ext == "mjs" or ext == "cjs") { return "javascript"; }
+    if (ext == "json" or ext == "jsonc" or ext == "webmanifest") { return "json"; }
+    return "code";
+}
+
+// النوع من المسار + (اختياري) بايتات الملف: توقيع %PDF- يغلب الامتداد
+fun pvDetect(path, bytes) {
+    if (type(bytes) == "string" and len(bytes) >= 5) {
+        if (substr(bytes, 0, 5) == "%PDF-") { return "pdf"; }
+    }
+    return pvKindOfExt(pvExt(path));
+}
+
+fun pvSupported() {
+    return {
+        "markdown": ["md", "markdown", "mdown", "mkd"],
+        "pdf": ["pdf"],
+        "typescript": ["ts", "tsx", "mts", "cts"],
+        "javascript": ["js", "jsx", "mjs", "cjs"],
+        "json": ["json", "jsonc", "webmanifest"],
+        "code": ["rin", "kt", "java", "c", "cpp", "h", "go", "rs", "py", "sh", "css", "html", "xml", "yml", "yaml", "toml", "..."]
+    };
+}
+
+// ---- 3) النصوص (عربي/إنجليزي) -------------------------------------------------
+
+fun pvLabels(lang) {
+    if (lang == "en") {
+        return {
+            "file": "File", "kind": "Type", "size": "Size", "lines": "Lines", "words": "Words",
+            "pages": "Pages", "outline": "Outline", "imports": "Imports", "problems": "Problems",
+            "noProblems": "No problems found", "original": "Original", "text": "Extracted text",
+            "live": "Live", "toc": "Contents", "reading": "min read", "encrypted": "This PDF is encrypted; text cannot be extracted.",
+            "noText": "No extractable text on this page (scanned image or unsupported font).",
+            "info": "Document", "title": "Title", "author": "Author", "producer": "Producer",
+            "created": "Created", "images": "Images", "fonts": "Fonts", "version": "Version",
+            "page": "Page", "tooBig": "File too large for syntax highlighting; shown as plain text.",
+            "missing": "File not found", "empty": "(empty file)", "chars": "Characters",
+            "functions": "Functions", "classes": "Types", "unmapped": "unmapped glyphs",
+            "invalidJson": "Invalid JSON", "validJson": "Valid JSON"
+        };
+    }
+    return {
+        "file": "الملف", "kind": "النوع", "size": "الحجم", "lines": "الأسطر", "words": "الكلمات",
+        "pages": "الصفحات", "outline": "هيكل الملف", "imports": "الاستيرادات", "problems": "المشاكل",
+        "noProblems": "لا توجد مشاكل", "original": "الأصل", "text": "النص المستخرج",
+        "live": "حيّ", "toc": "المحتويات", "reading": "د للقراءة", "encrypted": "ملف PDF مشفّر؛ تعذّر استخراج النص.",
+        "noText": "لا نص قابل للاستخراج في هذه الصفحة (صورة ممسوحة أو خط غير مدعوم).",
+        "info": "الوثيقة", "title": "العنوان", "author": "المؤلف", "producer": "المُنتِج",
+        "created": "تاريخ الإنشاء", "images": "الصور", "fonts": "الخطوط", "version": "الإصدار",
+        "page": "صفحة", "tooBig": "الملف كبير جداً للتلوين؛ يُعرض كنص عادي.",
+        "missing": "الملف غير موجود", "empty": "(ملف فارغ)", "chars": "الأحرف",
+        "functions": "الدوال", "classes": "الأنواع", "unmapped": "رموز غير مُعيَّنة",
+        "invalidJson": "JSON غير صالح", "validJson": "JSON صالح"
+    };
+}
+
+fun pvKindLabel(kind, lang) {
+    if (kind == "markdown") { return "Markdown"; }
+    if (kind == "pdf") { return "PDF"; }
+    if (kind == "typescript") { return "TypeScript"; }
+    if (kind == "javascript") { return "JavaScript"; }
+    if (kind == "json") { return "JSON"; }
+    if (lang == "en") { return "Code"; }
+    return "كود";
+}
+
+// ---- 4) الثيم والـ CSS ---------------------------------------------------------
+
+fun pvThemeDefault() {
+    let t = relyThemeDefault();
+    t["lang"] = "ar";
+    t["live"] = false;
+    t["intervalSec"] = 2;
+    t["codeFont"] = "ui-monospace, SFMono-Regular, 'Cascadia Code', Consolas, monospace";
+    t["dark"] = "auto";
+    return t;
+}
+
+fun pvTheme(overrides) {
+    let t = pvThemeDefault();
+    if (type(overrides) != "map") { return t; }
+    let ks = keys(overrides);
+    let i = 0;
+    while (i < len(ks)) {
+        t[ks[i]] = overrides[ks[i]];
+        i = i + 1;
+    }
+    return t;
+}
+
+fun pvCss(t) {
+    let acc = pvEsc(t["accent"]);
+    let css = "<style>\n" +
+    ":root{--bg:" + t["bg"] + ";--fg:" + t["text"] + ";--muted:" + t["muted"] + ";--accent:" + acc + ";--accent2:" + t["accent2"] + ";--bd:" + t["border"] + ";--code:" + t["codeBg"] + ";--card:" + t["cardBg"] + ";--link:" + t["link"] + ";--r:" + t["radius"] + ";" +
+    "--k:#8250df;--ty:#0a7ea4;--s:#0a7d4a;--n:#b35900;--c:#6e7781;--f:#1f5fbf;--d:#bf3989;--p:#0550ae;--err:#cf222e;--ok:#1a7f37;}\n";
+    let darkVars = "--bg:#0f1115;--fg:#e6e8eb;--muted:#9aa3ad;--bd:#272b33;--code:#161a21;--card:#14181f;--link:#6aa6ff;--k:#c4a0ff;--ty:#5ad1f0;--s:#7ee2a8;--n:#ffb86b;--c:#8b949e;--f:#79b8ff;--d:#ff8ac6;--p:#7cc0ff;--err:#ff7b72;--ok:#56d364;";
+    if (t["dark"] == "auto") {
+        css = css + "@media (prefers-color-scheme:dark){:root{" + darkVars + "}}\n";
+    }
+    if (t["dark"] == "on") {
+        css = css + ":root{" + darkVars + "}\n";
+    }
+    css = css +
+    "*{box-sizing:border-box}html,body{margin:0;padding:0;background:var(--bg);color:var(--fg)}\n" +
+    "body{font-family:" + t["font"] + ";line-height:1.7}\n" +
+    ".pv-top{position:sticky;top:0;z-index:5;display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;padding:10px 18px;background:var(--card);border-bottom:1px solid var(--bd)}\n" +
+    ".pv-name{font-weight:700;font-size:1.02rem;direction:ltr;unicode-bidi:isolate}\n" +
+    ".pv-badge{font-size:.78rem;padding:2px 10px;border-radius:999px;background:var(--accent);color:#fff}\n" +
+    ".pv-meta{font-size:.82rem;color:var(--muted)}\n" +
+    ".pv-live{margin-inline-start:auto;font-size:.78rem;color:var(--ok)}.pv-live:before{content:'';display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--ok);margin-inline-end:6px;animation:pvp 1.4s infinite}\n" +
+    "@keyframes pvp{50%{opacity:.25}}\n" +
+    ".pv-wrap{display:flex;align-items:flex-start;gap:0;max-width:1400px;margin:0 auto}\n" +
+    ".pv-side{position:sticky;top:52px;flex:0 0 260px;max-height:calc(100vh - 52px);overflow:auto;padding:18px 14px;border-inline-end:1px solid var(--bd);font-size:.88rem}\n" +
+    ".pv-side h4{margin:0 0 8px;font-size:.78rem;letter-spacing:.04em;color:var(--muted)}\n" +
+    ".pv-side a{display:block;color:var(--fg);text-decoration:none;padding:2px 6px;border-radius:6px}.pv-side a:hover{background:var(--code)}\n" +
+    ".pv-side .l2{padding-inline-start:16px}.pv-side .l3{padding-inline-start:28px}.pv-side .l4{padding-inline-start:40px}\n" +
+    ".pv-main{flex:1;min-width:0}\n" +
+    ".pv-md{max-width:" + t["maxWidth"] + ";margin:0 auto;padding:28px 24px 72px}\n" +
+    ".pv-md h1{font-size:2rem;line-height:1.2;margin:0 0 18px;padding-bottom:12px;border-bottom:2px solid var(--accent)}\n" +
+    ".pv-md h2{font-size:1.5rem;margin-top:30px;padding-bottom:6px;border-bottom:1px solid var(--bd)}.pv-md h3{font-size:1.2rem;margin-top:24px}\n" +
+    ".pv-md a{color:var(--link);text-decoration:none}.pv-md a:hover{text-decoration:underline}\n" +
+    ".rely-code{background:var(--code);border:1px solid var(--bd);border-radius:var(--r);padding:14px;overflow:auto;direction:ltr;text-align:left;font-family:" + t["codeFont"] + ";font-size:.9em}\n" +
+    ".rely-inline-code{background:var(--code);border-radius:6px;padding:2px 6px;font-family:" + t["codeFont"] + "}\n" +
+    ".rely-quote{margin:16px 0;padding:10px 16px;border-inline-start:4px solid var(--accent);background:var(--code);border-radius:var(--r)}\n" +
+    ".rely-table{width:100%;border-collapse:collapse;margin:16px 0}.rely-table th,.rely-table td{border:1px solid var(--bd);padding:8px 10px;text-align:start}.rely-table th{background:var(--code)}\n" +
+    ".rely-hr{border:0;border-top:1px solid var(--bd);margin:26px 0}.rely-media{display:block;max-width:100%;margin:16px auto;border-radius:var(--r);overflow:hidden}.rely-media img,.rely-media video{display:block;width:100%;height:auto}\n" +
+    ".rely-youtube{position:relative;width:100%;aspect-ratio:16/9;background:#000;border-radius:var(--r);overflow:hidden;margin:18px 0}.rely-youtube iframe{position:absolute;inset:0;width:100%;height:100%;border:0}\n" +
+    ".rely-card{background:var(--card);border:1px solid var(--bd);border-radius:var(--r);padding:16px;margin:16px 0}.rely-task{list-style:none}\n" +
+    ".pv-code{display:flex;direction:ltr;font-family:" + t["codeFont"] + ";font-size:.86rem;line-height:1.55;background:var(--code);border-bottom:1px solid var(--bd);overflow:auto}\n" +
+    ".pv-code pre{margin:0;padding:14px 0}.pv-gut{color:var(--muted);text-align:right;padding:14px 12px!important;user-select:none;border-inline-end:1px solid var(--bd);position:sticky;left:0;background:var(--code)}\n" +
+    ".pv-src{padding:14px 18px!important;flex:1;tab-size:4;white-space:pre}\n" +
+    ".tk-k{color:var(--k)}.tk-t{color:var(--ty)}.tk-s{color:var(--s)}.tk-n{color:var(--n)}.tk-c{color:var(--c);font-style:italic}.tk-f{color:var(--f)}.tk-d{color:var(--d)}.tk-p{color:var(--p)}.tk-r{color:var(--d)}\n" +
+    ".pv-chips{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 12px}.pv-chip{font-size:.74rem;padding:1px 8px;border-radius:999px;border:1px solid var(--bd);direction:ltr}\n" +
+    ".pv-side a.pv-ol,.pv-ol{display:flex;gap:8px;align-items:baseline;direction:ltr;text-align:left;padding:1px 4px;border-radius:6px;font-size:.84rem}.pv-ol:hover{background:var(--code)}\n" +
+    ".pv-ol i{font-style:normal;font-size:.68rem;color:#fff;border-radius:4px;padding:0 5px;background:var(--accent)}.pv-ol b{font-weight:600}.pv-ol em{margin-inline-start:auto;color:var(--muted);font-style:normal;font-size:.72rem}\n" +
+    ".pv-ol.m{padding-inline-start:18px}.pv-ol.m i{background:var(--muted)}\n" +
+    ".pv-diag{padding:10px 18px;font-size:.86rem;direction:ltr;text-align:left}.pv-diag .e{color:var(--err)}.pv-diag .ok{color:var(--ok)}\n" +
+    ".pv-pdf{max-width:920px;margin:0 auto;padding:22px 20px 70px}\n" +
+    ".pv-page{background:var(--card);border:1px solid var(--bd);border-radius:var(--r);margin:0 0 18px;padding:18px 24px;box-shadow:0 1px 4px rgba(0,0,0,.05)}\n" +
+    ".pv-pn{font-size:.75rem;color:var(--muted);margin-bottom:8px}.pv-page p{margin:2px 0}.pv-page p.gap{margin-top:14px}\n" +
+    ".pv-empty{color:var(--muted);font-style:italic}.pv-info{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:8px;margin-bottom:18px}\n" +
+    ".pv-info div{background:var(--card);border:1px solid var(--bd);border-radius:var(--r);padding:8px 12px;font-size:.84rem;overflow-wrap:anywhere}.pv-info small{display:block;color:var(--muted);font-size:.7rem}\n" +
+    ".pv-tabs input{position:absolute;opacity:0;pointer-events:none}.pv-tabbar{display:flex;gap:6px;padding:12px 20px 0;border-bottom:1px solid var(--bd)}\n" +
+    ".pv-tabbar label{cursor:pointer;padding:7px 16px;border-radius:10px 10px 0 0;font-size:.88rem;color:var(--muted)}\n" +
+    "#pv-t1:checked~.pv-tabbar label[for=pv-t1],#pv-t2:checked~.pv-tabbar label[for=pv-t2]{background:var(--accent);color:#fff}\n" +
+    ".pv-panel{display:none}#pv-t1:checked~.pv-panels .p1,#pv-t2:checked~.pv-panels .p2{display:block}.pv-orig{width:100%;height:calc(100vh - 110px);border:0;display:block}\n" +
+    "@media(max-width:820px){.pv-wrap{display:block}.pv-side{position:static;max-height:none;border-inline-end:0;border-bottom:1px solid var(--bd)}}\n" +
+    "</style>\n";
+    return css;
+}
+
+// سكربت صغير يحفظ موضع التمرير بين تحديثات الصفحة الحيّة (لا يؤثر على غير الحيّة)
+fun pvLiveScript() {
+    return "<script>try{var k='pv:'+location.pathname;var y=sessionStorage.getItem(k);if(y){window.scrollTo(0,+y)}" +
+        "addEventListener('scroll',function(){try{sessionStorage.setItem(k,String(scrollY))}catch(e){}})}catch(e){}</script>";
+}
+
+// الغلاف: شريط علوي + (اختياري) جانب + المحتوى. meta: مصفوفة نصوص صغيرة تُعرض بجانب الاسم.
+fun pvShell(title, badge, meta, sideHtml, mainHtml, theme) {
+    let t = pvTheme(theme);
+    let lang = t["lang"];
+    let lb = pvLabels(lang);
+    let dir = "rtl";
+    if (lang == "en") { dir = "ltr"; }
+    let head = "<!doctype html><html lang=\"" + pvEsc(lang) + "\" dir=\"" + dir + "\"><head><meta charset=\"utf-8\">" +
+        "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>" + pvEsc(title) + " — PreviewKit</title>";
+    if (t["live"] == true) {
+        head = head + "<meta http-equiv=\"refresh\" content=\"" + toString(t["intervalSec"]) + "\">";
+    }
+    head = head + pvCss(t) + "</head><body>";
+    let top = "<header class=\"pv-top\"><span class=\"pv-name\">" + pvEsc(title) + "</span><span class=\"pv-badge\">" + pvEsc(badge) + "</span>";
+    let i = 0;
+    while (i < len(meta)) {
+        top = top + "<span class=\"pv-meta\">" + pvEsc(meta[i]) + "</span>";
+        i = i + 1;
+    }
+    if (t["live"] == true) { top = top + "<span class=\"pv-live\">" + pvEsc(lb["live"]) + "</span>"; }
+    top = top + "</header>";
+    let body = "";
+    if (sideHtml != "") {
+        body = "<div class=\"pv-wrap\"><aside class=\"pv-side\">" + sideHtml + "</aside><main class=\"pv-main\">" + mainHtml + "</main></div>";
+    } else {
+        body = "<main class=\"pv-main\">" + mainHtml + "</main>";
+    }
+    let tail = "";
+    if (t["live"] == true) { tail = pvLiveScript(); }
+    return head + top + body + tail + "</body></html>";
+}
+
+fun pvErrorPage(path, message, theme) {
+    let t = pvTheme(theme);
+    let main = "<div class=\"pv-md\"><h1>" + pvEsc(message) + "</h1><p dir=\"ltr\"><code>" + pvEsc(path) + "</code></p></div>";
+    return pvShell(pvBaseName(path), "!", [], "", main, theme);
+}
+
+// ---- 5) Markdown ---------------------------------------------------------------
+
+// يضيف id="pv-hN" لكل <h1..h6> الناتجة عن relyRenderMarkdown (بالترتيب نفسه) لروابط الفهرس.
+// عناوين الأكواد تخرج مُهرَّبة (&lt;h1&gt;) فلا تتأثر.
+fun pvAddHeadingIds(html) {
+    let parts = split(html, "<h");
+    let out = [parts[0]];
+    let n = 0;
+    let i = 1;
+    while (i < len(parts)) {
+        let p = parts[i];
+        let ok = false;
+        if (len(p) >= 2) {
+            let d = charAt(p, 0);
+            if (indexOf("123456", d) >= 0 and charAt(p, 1) == ">") { ok = true; }
+        }
+        if (ok) {
+            n = n + 1;
+            push(out, substr(p, 0, 1) + " id=\"pv-h" + toString(n) + "\"" + substr(p, 1));
+        } else {
+            push(out, p);
+        }
+        i = i + 1;
+    }
+    return join(out, "<h");
+}
+
+// عناوين المستند [{level, title}] بنفس منطق relyRenderMarkdown (خارج أسوار ```)
+fun pvMdHeadings(md) {
+    let lines = relyLineArray(md);
+    let res = [];
+    let inCode = false;
+    let i = 0;
+    while (i < len(lines)) {
+        let line = trim(lines[i]);
+        if (pvStartsWith(line, "```")) {
+            inCode = (inCode == false);
+            i = i + 1;
+            continue;
+        }
+        if (inCode) { i = i + 1; continue; }
+        let level = relyHeadingLevel(line);
+        if (level > 0 and level <= 6) {
+            if (len(line) == level or charAt(line, level) == " ") {
+                let title = relyStripHeading(line, level);
+                title = regexReplace(title, "\\[([^\\]]*)\\]\\([^)]*\\)", "$1");
+                title = regexReplace(title, "[*_`]", "");
+                push(res, {"level": level, "title": trim(title)});
+            }
+        }
+        i = i + 1;
+    }
+    return res;
+}
+
+fun pvMdWords(md) {
+    return len(regexFindAll(md, "[^\\s]+"));
+}
+
+// يعيد {ok, kind:"markdown", html, headings, words, lines}
+fun pvRenderMarkdown(md, theme, name) {
+    let t = pvTheme(theme);
+    let lb = pvLabels(t["lang"]);
+    let heads = pvMdHeadings(md);
+    let words = pvMdWords(md);
+    let body = pvAddHeadingIds(relyRenderMarkdown(md));
+    let side = "";
+    if (len(heads) > 0) {
+        let parts = ["<h4>" + pvEsc(lb["toc"]) + "</h4>"];
+        let i = 0;
+        while (i < len(heads)) {
+            let h = heads[i];
+            let lv = h["level"];
+            if (lv > 4) { lv = 4; }
+            push(parts, "<a class=\"l" + toString(lv) + "\" href=\"#pv-h" + toString(i + 1) + "\">" + pvEsc(h["title"]) + "</a>");
+            i = i + 1;
+        }
+        side = join(parts, "");
+    }
+    let mins = ceil(words / 200);
+    if (mins < 1) { mins = 1; }
+    let lines = len(split(replace(md, "\r\n", "\n"), "\n"));
+    let meta = [toString(words) + " " + lb["words"], toString(mins) + " " + lb["reading"], toString(len(heads)) + " #"];
+    let main = "<article class=\"pv-md\" dir=\"auto\">" + body + "</article>";
+    let html = pvShell(name, "Markdown", meta, side, main, theme);
+    return {"ok": true, "kind": "markdown", "html": html, "headings": len(heads), "words": words, "lines": lines};
+}
+
+// ---- 6) المُرمِّز (tokenizer) للكود: TypeScript/JavaScript/JSON وعائلة C/Rin/Python... -------------
+
+fun pvWordSet(list) {
+    let m = {};
+    let i = 0;
+    while (i < len(list)) {
+        m[list[i]] = true;
+        i = i + 1;
+    }
+    return m;
+}
+
+fun pvKeywordsFor(lang) {
+    if (lang == "typescript" or lang == "javascript") {
+        return split("abstract as asserts async await break case catch class const continue debugger declare default delete do else enum export extends false finally for from function get if implements import in infer instanceof interface is keyof let namespace new null of override private protected public readonly return satisfies set static super switch this throw true try type typeof undefined var void while with yield module require unique accessor out global", " ");
+    }
+    if (lang == "json") { return ["true", "false", "null"]; }
+    if (lang == "rin") {
+        return split("fun let if else while for in return break continue print show true false nil and or class struct enum import export try recover finally match when otherwise container view element loop make create run set new this self extends implements", " ");
+    }
+    if (lang == "kt") {
+        return split("fun val var if else when while for in return break continue class object interface enum data sealed open override abstract private public protected internal import package is as try catch finally throw null true false this super companion init by lateinit const suspend inline", " ");
+    }
+    if (lang == "py") {
+        return split("def class if elif else while for in return break continue import from as try except finally raise with lambda pass yield None True False and or not is global nonlocal async await del assert", " ");
+    }
+    if (lang == "go") {
+        return split("func var const type struct interface map chan if else for range switch case default return break continue go defer import package select nil true false fallthrough goto", " ");
+    }
+    if (lang == "rs") {
+        return split("fn let mut const static struct enum impl trait use mod pub crate self Self super if else match while for in loop return break continue as ref move async await dyn where type unsafe true false", " ");
+    }
+    // C / C++ / Java / وغيرها
+    return split("if else while for do switch case default return break continue class struct enum union interface public private protected static final const void new delete this null nullptr true false try catch finally throw throws import package using namespace template typename virtual override extends implements abstract inline extern typedef sizeof include define", " ");
+}
+
+fun pvTypesFor(lang) {
+    if (lang == "typescript") {
+        return split("string number boolean any unknown never object symbol bigint void null undefined Array Promise Record Partial Required Readonly Pick Omit Exclude Extract ReturnType Parameters Map Set WeakMap Date Error RegExp Function Object String Number Boolean", " ");
+    }
+    if (lang == "javascript") {
+        return split("Array Promise Map Set WeakMap Date Error RegExp Function Object String Number Boolean Symbol BigInt JSON Math Intl", " ");
+    }
+    if (lang == "kt") { return split("Int Long Short Byte Float Double Boolean Char String Unit Any Nothing List Map Set Array", " "); }
+    if (lang == "go") { return split("int int8 int16 int32 int64 uint uint8 uint16 uint32 uint64 float32 float64 string bool byte rune error any", " "); }
+    if (lang == "rs") { return split("i8 i16 i32 i64 i128 isize u8 u16 u32 u64 u128 usize f32 f64 bool char str String Vec Option Result Box", " "); }
+    if (lang == "py") { return split("int float str bool list dict set tuple bytes object type", " "); }
+    return split("int long short char float double bool boolean byte string String size_t uint8_t uint32_t int32_t int64_t", " ");
+}
+
+// تُحدَّد لغة التلوين من الامتداد
+fun pvLangOfExt(ext) {
+    if (ext == "ts" or ext == "tsx" or ext == "mts" or ext == "cts") { return "typescript"; }
+    if (ext == "js" or ext == "jsx" or ext == "mjs" or ext == "cjs") { return "javascript"; }
+    if (ext == "json" or ext == "jsonc" or ext == "webmanifest") { return "json"; }
+    if (ext == "rin") { return "rin"; }
+    if (ext == "kt" or ext == "kts") { return "kt"; }
+    if (ext == "py") { return "py"; }
+    if (ext == "go") { return "go"; }
+    if (ext == "rs") { return "rs"; }
+    return "c";
+}
+
+fun pvHashComments(lang) {
+    return lang == "py";
+}
+
+// يُعيد نمط regex للتجزئة. ترتيب البدائل مهم (الأولى المطابقة تفوز):
+// تعليق سطر، تعليق كتلة، نص "..."، نص '...'، قالب `...`، رقم، معرّف، مُزخرِف @x،
+// [سياق + regex literal]، مسافات، أي رمز مفرد.
+fun pvTokenRegex(hash) {
+    let re = "";
+    if (hash) { re = "#[^\\n]*|"; }
+    re = re + "//[^\\n]*|/\\*[\\s\\S]*?\\*/|\"(?:\\\\.|[^\"\\\\\\n])*\"|'(?:\\\\.|[^'\\\\\\n])*'|`(?:\\\\[\\s\\S]|[^`\\\\])*`" +
+        "|0[xX][0-9a-fA-F_]+n?|0[bB][01_]+n?|0[oO][0-7_]+n?|(?:\\d[\\d_]*\\.?[\\d_]*|\\.\\d[\\d_]*)(?:[eE][+-]?\\d+)?n?" +
+        "|[A-Za-z_$][\\w$]*|@[A-Za-z_$][\\w$.]*" +
+        "|[=(,:\\[!&|?{};]\\s*/(?![*/])(?:\\\\.|\\[(?:\\\\.|[^\\]\\\\\\n])*\\]|[^/\\\\\\n\\[])+/[a-z]*" +
+        "|\\s+|\\S";
+    return re;
+}
+
+// تصنيف أولي للرمز: c تعليق، s نص، t قالب، r regex، n رقم، i معرّف، d مُزخرِف، w مسافة، p رمز، u نص يونيكود
+fun pvTokenize(src, lang) {
+    let hash = pvHashComments(lang);
+    let raw = regexFindAll(src, pvTokenRegex(hash));
+    let tt = [];
+    let ts = [];
+    let tl = [];
+    let line = 1;
+    let i = 0;
+    let n = len(raw);
+    while (i < n) {
+        let s = raw[i];
+        let c = charAt(s, 0);
+        let kind = "p";
+        let o = ord(c);
+        if (o >= 128) {
+            // بايتات UTF-8: تُدمَج المتتالية في رمز واحد كي لا تُقسَم محارف متعددة البايتات بين أوسمة
+            let last = len(tt) - 1;
+            if (last >= 0) {
+                if (tt[last] == "u") {
+                    ts[last] = ts[last] + s;
+                    i = i + 1;
+                    continue;
+                }
+            }
+            kind = "u";
+        } else if (c == "/" and len(s) > 1 and (charAt(s, 1) == "/" or charAt(s, 1) == "*")) {
+            kind = "c";
+        } else if (c == "#" and hash) {
+            kind = "c";
+        } else if (c == "\"" or c == "'") {
+            if (len(s) >= 2 and charAt(s, len(s) - 1) == c) { kind = "s"; } else { kind = "p"; }
+        } else if (c == "`") {
+            if (len(s) >= 2) { kind = "t"; } else { kind = "p"; }
+        } else if (c == "@" and len(s) > 1) {
+            kind = "d";
+        } else if (indexOf("0123456789", c) >= 0) {
+            kind = "n";
+        } else if (c == "." and len(s) > 1) {
+            kind = "n";
+        } else if (c == "_" or c == "$" or (o >= 65 and o <= 90) or (o >= 97 and o <= 122)) {
+            kind = "i";
+        } else if (o <= 32) {
+            kind = "w";
+        } else if (len(s) > 1) {
+            // [سياق + مسافات + /regex/flags]: يُفصَل إلى رمز سياق + مسافة + regex
+            push(tt, "p"); push(ts, c); push(tl, line);
+            let rest = substr(s, 1);
+            let rr = trim(rest);
+            let wsLen = len(rest) - len(rr);
+            // trim يزيل الجانبين؛ regex لا ينتهي بمسافة فنحسب البادئة فقط
+            let lead = 0;
+            while (lead < len(rest) and ord(charAt(rest, lead)) <= 32) { lead = lead + 1; }
+            if (lead > 0) {
+                let wsTok = substr(rest, 0, lead);
+                push(tt, "w"); push(ts, wsTok); push(tl, line);
+                line = line + pvCountChar(wsTok, "\n");
+            }
+            push(tt, "r"); push(ts, substr(rest, lead)); push(tl, line);
+            i = i + 1;
+            continue;
+        }
+        push(tt, kind);
+        push(ts, s);
+        push(tl, line);
+        if (kind == "c" or kind == "t" or kind == "w" or kind == "u") {
+            line = line + pvCountChar(s, "\n");
+        }
+        i = i + 1;
+    }
+    return {"tt": tt, "ts": ts, "tl": tl};
+}
+
+// فهرس أقرب رمز مهمّ (ليس مسافة/تعليق) بعد/قبل الفهرس i؛ -1 إن لم يوجد
+fun pvNextSig(tt, i) {
+    let j = i + 1;
+    while (j < len(tt)) {
+        if (tt[j] != "w" and tt[j] != "c") { return j; }
+        j = j + 1;
+    }
+    return -1;
+}
+
+// تصنيف ثانٍ للمعرّفات: k كلمة مفتاحية، t نوع، f استدعاء/تعريف دالة، C اسم صنف (PascalCase)، i عادي
+fun pvClassifyIdents(tk, lang) {
+    let kw = pvWordSet(pvKeywordsFor(lang));
+    let ty = pvWordSet(pvTypesFor(lang));
+    let tt = tk["tt"];
+    let ts = tk["ts"];
+    let cls = [];
+    let n = len(tt);
+    let i = 0;
+    while (i < n) {
+        let k = "";
+        if (tt[i] == "i") {
+            let s = ts[i];
+            if (has(kw, s)) {
+                k = "k";
+            } else if (has(ty, s)) {
+                k = "t";
+            } else {
+                let j = pvNextSig(tt, i);
+                let nxt = "";
+                if (j >= 0) { nxt = ts[j]; }
+                let o = ord(charAt(s, 0));
+                if (nxt == "(" and lang != "json") {
+                    k = "f";
+                } else if (o >= 65 and o <= 90 and len(s) > 1 and lang != "json") {
+                    k = "t";
+                }
+            }
+        } else if (tt[i] == "s" and lang == "json") {
+            let j2 = pvNextSig(tt, i);
+            if (j2 >= 0) {
+                if (ts[j2] == ":") { k = "f"; }
+            }
+        } else if (tt[i] == "s" and (lang == "typescript" or lang == "javascript")) {
+            // مفاتيح الكائنات "key": تُعرَض كخاصية
+            let j3 = pvNextSig(tt, i);
+            if (j3 >= 0) {
+                if (ts[j3] == ":") { k = "p"; }
+            }
+        }
+        push(cls, k);
+        i = i + 1;
+    }
+    tk["cls"] = cls;
+    return tk;
+}
+
+// ---- 7) هيكل ملف TypeScript/JavaScript + الاستيرادات + التشخيص (من الرموز لا من أسطر) -----------
+
+fun pvIsModifier(s) {
+    return s == "export" or s == "default" or s == "declare" or s == "abstract" or s == "async" or s == "public" or s == "private" or s == "protected" or s == "static" or s == "readonly" or s == "override" or s == "get" or s == "set" or s == "accessor";
+}
+
+// قائمة فهارس الرموز المهمّة فقط
+fun pvSigIndexes(tt) {
+    let sig = [];
+    let i = 0;
+    while (i < len(tt)) {
+        if (tt[i] != "w" and tt[i] != "c") { push(sig, i); }
+        i = i + 1;
+    }
+    return sig;
+}
+
+// هل بعد "=" عند الفهرس (في sig) تعبير دالة/سهم؟
+fun pvLooksLikeFunctionInit(ts, tt, sig, k) {
+    // k فهرس "=" داخل sig
+    let j = k + 1;
+    let depth = 0;
+    let steps = 0;
+    if (j >= len(sig)) { return false; }
+    if (ts[sig[j]] == "async") { j = j + 1; }
+    if (j >= len(sig)) { return false; }
+    if (ts[sig[j]] == "function") { return true; }
+    while (j < len(sig) and steps < 80) {
+        let s = ts[sig[j]];
+        let ty = tt[sig[j]];
+        if (ty == "p") {
+            if (s == "(" or s == "[" or s == "{") { depth = depth + 1; }
+            if (s == ")" or s == "]" or s == "}") { depth = depth - 1; }
+            if (depth < 0) { return false; }
+            if (depth == 0 and s == ";") { return false; }
+            if (depth == 0 and s == "=" and j + 1 < len(sig)) {
+                if (ts[sig[j + 1]] == ">") { return true; }
+            }
+        }
+        j = j + 1;
+        steps = steps + 1;
+    }
+    return false;
+}
+
+// أول رمز غير مسافة بعد فهرس k في sig (نص فارغ إن لم يوجد)
+fun pvSigText(ts, sig, k) {
+    if (k < 0 or k >= len(sig)) { return ""; }
+    return ts[sig[k]];
+}
+
+// يعيد {outline:[{kind,name,line,depth}], imports:[modules], problems:[{line,msg}], counts:{...}}
+//   kind: class interface enum namespace type function const let var method property
+//   depth: 0 = أعلى مستوى، 1 = عضو داخل class/interface
+fun pvAnalyzeCode(tk, lang) {
+    let tt = tk["tt"];
+    let ts = tk["ts"];
+    let tl = tk["tl"];
+    let sig = pvSigIndexes(tt);
+    let outline = [];
+    let imports = [];
+    let problems = [];
+    let frames = [];       // أطر الأقواس المعقوفة: kind = block | class | iface | enum | ns
+    let pstack = [];       // توازن ( [ { : {ch, line}
+    let isCode = (lang == "typescript" or lang == "javascript");
+    let pending = "";      // نوع الإطار الذي سيفتحه أقرب "{"
+    let lastDecor = -100;
+    let k = 0;
+    while (k < len(sig)) {
+        let idx = sig[k];
+        let ty = tt[idx];
+        let s = ts[idx];
+        let line = tl[idx];
+
+        // ---- تشخيصات الأقواس والنصوص غير المغلقة ----
+        if (ty == "p") {
+            if (s == "(" or s == "[" or s == "{") {
+                push(pstack, {"ch": s, "line": line});
+            } else if (s == ")" or s == "]" or s == "}") {
+                if (len(pstack) == 0) {
+                    push(problems, {"line": line, "msg": "Unmatched '" + s + "'"});
+                } else {
+                    let top = pstack[len(pstack) - 1];
+                    pop(pstack);
+                    let want = "(";
+                    if (s == "]") { want = "["; }
+                    if (s == "}") { want = "{"; }
+                    if (top["ch"] != want) {
+                        push(problems, {"line": line, "msg": "Mismatched '" + s + "' (opened '" + top["ch"] + "' at line " + toString(top["line"]) + ")"});
+                    }
+                }
+            } else if (s == "\"" or s == "'" or s == "`") {
+                push(problems, {"line": line, "msg": "Unterminated string literal (" + s + ")"});
+            } else if (s == "/") {
+                if (idx + 1 < len(tt)) {
+                    if (tt[idx + 1] == "p" and ts[idx + 1] == "*") {
+                        push(problems, {"line": line, "msg": "Unterminated block comment"});
+                    }
+                }
+            }
+        }
+
+        if (isCode) {
+            let top2 = "";
+            if (len(frames) > 0) { top2 = frames[len(frames) - 1]["kind"]; }
+            if (ty == "d") { lastDecor = k; }
+            if (ty == "p" and s == "{") {
+                if (pending != "") {
+                    push(frames, {"kind": pending, "line": line});
+                    pending = "";
+                } else {
+                    push(frames, {"kind": "block", "line": line});
+                }
+            } else if (ty == "p" and s == "}") {
+                if (len(frames) > 0) { pop(frames); }
+            } else if (ty == "p" and s == ";" and pending != "") {
+                pending = "";
+            } else if (ty == "i") {
+                let atTop = (len(frames) == 0 or top2 == "ns");
+                let prev = pvSigText(ts, sig, k - 1);
+                let stmtStart = (k == 0 or prev == "{" or prev == ";" or prev == "}");
+                if (atTop) {
+                    if (s == "import") {
+                        let m = k + 1;
+                        let limit = 0;
+                        while (m < len(sig) and limit < 80) {
+                            if (tt[sig[m]] == "s") {
+                                push(imports, substr(ts[sig[m]], 1, len(ts[sig[m]]) - 2));
+                                break;
+                            }
+                            if (ts[sig[m]] == ";") { break; }
+                            m = m + 1;
+                            limit = limit + 1;
+                        }
+                    } else if (s == "class" or s == "interface" or s == "enum" or s == "namespace" or s == "module" or s == "function") {
+                        let nm = k + 1;
+                        if (pvSigText(ts, sig, nm) == "*") { nm = nm + 1; }
+                        if (nm < len(sig)) {
+                            let isName = (tt[sig[nm]] == "i" or tt[sig[nm]] == "s");
+                            // "function"/"class" كتعبير (بعد = ( , : return) ليست تصريحاً
+                            let isDecl = true;
+                            if (prev == "=" or prev == "(" or prev == "," or prev == ":" or prev == "return" or prev == "?") { isDecl = false; }
+                            if (s == "class" and prev == "<") { isDecl = false; }
+                            if (isName and isDecl) {
+                                let kindName = s;
+                                if (s == "module") { kindName = "namespace"; }
+                                push(outline, {"kind": kindName, "name": ts[sig[nm]], "line": line, "depth": 0});
+                                if (s == "class") { pending = "class"; }
+                                if (s == "interface") { pending = "iface"; }
+                                if (s == "enum") { pending = "enum"; }
+                                if (s == "namespace" or s == "module") { pending = "ns"; }
+                            }
+                        }
+                    } else if (s == "type") {
+                        let n1 = pvSigText(ts, sig, k + 1);
+                        let n2 = pvSigText(ts, sig, k + 2);
+                        if (k + 1 < len(sig)) {
+                            if (tt[sig[k + 1]] == "i" and (n2 == "=" or n2 == "<")) {
+                                push(outline, {"kind": "type", "name": n1, "line": line, "depth": 0});
+                            }
+                        }
+                    } else if (s == "const" or s == "let" or s == "var") {
+                        if (k + 1 < len(sig)) {
+                            if (tt[sig[k + 1]] == "i") {
+                                let scan = k + 2;
+                                let lim = 0;
+                                let found = -1;
+                                let dd = 0;
+                                while (scan < len(sig) and lim < 80) {
+                                    let q = ts[sig[scan]];
+                                    if (tt[sig[scan]] == "p") {
+                                        if (q == "(" or q == "[" or q == "{" or q == "<") { dd = dd + 1; }
+                                        if (q == ")" or q == "]" or q == "}" or q == ">") { dd = dd - 1; }
+                                        if (dd == 0 and q == "=") { found = scan; break; }
+                                        if (dd < 0 or (dd == 0 and q == ";")) { break; }
+                                    }
+                                    scan = scan + 1;
+                                    lim = lim + 1;
+                                }
+                                let kindName2 = s;
+                                if (found >= 0) {
+                                    if (pvLooksLikeFunctionInit(ts, tt, sig, found)) { kindName2 = "function"; }
+                                }
+                                push(outline, {"kind": kindName2, "name": ts[sig[k + 1]], "line": line, "depth": 0});
+                            }
+                        }
+                    }
+                } else if (top2 == "class" or top2 == "iface") {
+                    let decorated = (prev == ")" and k - lastDecor < 12);
+                    if (stmtStart or decorated or tt[sig[k - 1]] == "d") {
+                        // تخطّي المُعدِّلات: public static async ... ثم الاسم
+                        let m2 = k;
+                        let guard = 0;
+                        while (m2 < len(sig) and guard < 8) {
+                            let cur = ts[sig[m2]];
+                            let nx = pvSigText(ts, sig, m2 + 1);
+                            if (pvIsModifier(cur) and nx != "(" and nx != ":" and nx != "=" and nx != ";" and nx != "?" and nx != "<") {
+                                m2 = m2 + 1;
+                            } else {
+                                break;
+                            }
+                            guard = guard + 1;
+                        }
+                        if (m2 < len(sig)) {
+                            let star = 0;
+                            if (ts[sig[m2]] == "*") { m2 = m2 + 1; }
+                            if (m2 < len(sig)) {
+                                if (tt[sig[m2]] == "i") {
+                                    let nmText = ts[sig[m2]];
+                                    let after = pvSigText(ts, sig, m2 + 1);
+                                    if (after == "(" or after == "<") {
+                                        push(outline, {"kind": "method", "name": nmText, "line": tl[sig[m2]], "depth": 1});
+                                    } else if (after == ":" or after == "=" or after == "?" or after == "!" or after == ";") {
+                                        push(outline, {"kind": "property", "name": nmText, "line": tl[sig[m2]], "depth": 1});
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        k = k + 1;
+    }
+    let ps = 0;
+    while (ps < len(pstack)) {
+        push(problems, {"line": pstack[ps]["line"], "msg": "Unclosed '" + pstack[ps]["ch"] + "'"});
+        ps = ps + 1;
+    }
+    let nf = 0;
+    let nc = 0;
+    let oi = 0;
+    while (oi < len(outline)) {
+        let kd = outline[oi]["kind"];
+        if (kd == "function" or kd == "method") { nf = nf + 1; }
+        if (kd == "class" or kd == "interface" or kd == "enum" or kd == "type") { nc = nc + 1; }
+        oi = oi + 1;
+    }
+    return {"outline": outline, "imports": imports, "problems": problems, "functions": nf, "types": nc};
+}
+
+// ---- 8) عرض الكود ---------------------------------------------------------------
+
+fun pvKindTag(kind) {
+    if (kind == "class") { return "class"; }
+    if (kind == "interface") { return "iface"; }
+    if (kind == "namespace") { return "ns"; }
+    if (kind == "function") { return "fn"; }
+    if (kind == "method") { return "fn"; }
+    if (kind == "property") { return "prop"; }
+    return kind;
+}
+
+fun pvHighlightHtml(tk) {
+    let tt = tk["tt"];
+    let ts = tk["ts"];
+    let cls = tk["cls"];
+    let parts = [];
+    let i = 0;
+    while (i < len(tt)) {
+        let ty = tt[i];
+        let s = relyEscape(ts[i]);
+        let c = "";
+        if (ty == "c") { c = "tk-c"; }
+        else if (ty == "s" or ty == "t") { c = "tk-s"; }
+        else if (ty == "r") { c = "tk-r"; }
+        else if (ty == "n") { c = "tk-n"; }
+        else if (ty == "d") { c = "tk-d"; }
+        else if (ty == "i") {
+            if (cls[i] == "k") { c = "tk-k"; }
+            else if (cls[i] == "t") { c = "tk-t"; }
+            else if (cls[i] == "f") { c = "tk-f"; }
+        } else if (ty == "s" ) { c = "tk-s"; }
+        if (ty == "s" and cls[i] == "p") { c = "tk-p"; }
+        if (ty == "s" and cls[i] == "f") { c = "tk-p"; }
+        if (c == "") { push(parts, s); }
+        else { push(parts, "<span class=\"" + c + "\">" + s + "</span>"); }
+        i = i + 1;
+    }
+    return join(parts, "");
+}
+
+fun pvGutter(lines) {
+    let nums = [];
+    let i = 1;
+    while (i <= lines) {
+        push(nums, toString(i));
+        i = i + 1;
+    }
+    return join(nums, "\n");
+}
+
+fun pvOutlineHtml(an, lb) {
+    let out = [];
+    if (len(an["imports"]) > 0) {
+        push(out, "<h4>" + pvEsc(lb["imports"]) + "</h4><div class=\"pv-chips\">");
+        let i = 0;
+        while (i < len(an["imports"]) and i < 60) {
+            push(out, "<span class=\"pv-chip\">" + pvEsc(an["imports"][i]) + "</span>");
+            i = i + 1;
+        }
+        push(out, "</div>");
+    }
+    push(out, "<h4>" + pvEsc(lb["outline"]) + "</h4>");
+    if (len(an["outline"]) == 0) {
+        push(out, "<div class=\"pv-meta\">—</div>");
+    }
+    let j = 0;
+    while (j < len(an["outline"]) and j < 400) {
+        let o = an["outline"][j];
+        let cl = "pv-ol";
+        if (o["depth"] > 0) { cl = "pv-ol m"; }
+        push(out, "<a class=\"" + cl + "\" href=\"#L" + toString(o["line"]) + "\" style=\"text-decoration:none;color:inherit\"><i>" + pvEsc(pvKindTag(o["kind"])) + "</i><b>" + pvEsc(o["name"]) + "</b><em>" + toString(o["line"]) + "</em></a>");
+        j = j + 1;
+    }
+    return join(out, "");
+}
+
+fun pvDiagHtml(problems, lb) {
+    if (len(problems) == 0) {
+        return "<div class=\"pv-diag\"><span class=\"ok\">✓ " + pvEsc(lb["noProblems"]) + "</span></div>";
+    }
+    let out = ["<div class=\"pv-diag\"><b>" + pvEsc(lb["problems"]) + " (" + toString(len(problems)) + ")</b>"];
+    let i = 0;
+    while (i < len(problems) and i < 50) {
+        push(out, "<div class=\"e\">L" + toString(problems[i]["line"]) + ": " + pvEsc(problems[i]["msg"]) + "</div>");
+        i = i + 1;
+    }
+    push(out, "</div>");
+    return join(out, "");
+}
+
+// يعيد {ok, kind, html, lines, problems, outline, imports}
+fun pvRenderCode(src, ext, kind, theme, name) {
+    let t = pvTheme(theme);
+    let lb = pvLabels(t["lang"]);
+    let lang = pvLangOfExt(ext);
+    if (kind == "typescript" or kind == "javascript") { lang = kind; }
+    if (kind == "json") { lang = "json"; }
+    let txt = replace(src, "\r\n", "\n");
+    let lines = len(split(txt, "\n"));
+    let notice = "";
+    let an = {"outline": [], "imports": [], "problems": [], "functions": 0, "types": 0};
+    let codeHtml = "";
+    if (len(txt) > 400000) {
+        codeHtml = relyEscape(txt);
+        notice = "<div class=\"pv-diag\">" + pvEsc(lb["tooBig"]) + "</div>";
+    } else {
+        let tk = pvTokenize(txt, lang);
+        tk = pvClassifyIdents(tk, lang);
+        codeHtml = pvHighlightHtml(tk);
+        an = pvAnalyzeCode(tk, lang);
+    }
+    if (lang == "json") {
+        let probs = [];
+        let trimmed = trim(txt);
+        if (trimmed != "") {
+            let parsed = jsonDecode(trimmed);
+            let c0 = charAt(trimmed, 0);
+            if (type(parsed) == "string" and (c0 == "{" or c0 == "[")) {
+                probs = [{"line": 1, "msg": lb["invalidJson"]}];
+            }
+        }
+        // مشاكل التوازن من المُحلّل تبقى، ونضيف حكم jsonDecode
+        let ai = 0;
+        while (ai < len(probs)) { push(an["problems"], probs[ai]); ai = ai + 1; }
+    }
+    let body = "";
+    if (trim(txt) == "") {
+        body = "<div class=\"pv-diag\">" + pvEsc(lb["empty"]) + "</div>";
+    } else {
+        body = notice + pvDiagHtml(an["problems"], lb) +
+            "<div class=\"pv-code\"><pre class=\"pv-gut\">" + pvGutter(lines) + "</pre><pre class=\"pv-src\"><code>" + codeHtml + "</code></pre></div>";
+    }
+    let side = "";
+    if (kind == "typescript" or kind == "javascript") { side = pvOutlineHtml(an, lb); }
+    let meta = [toString(lines) + " " + lb["lines"], pvFmtBytes(len(src))];
+    if (an["functions"] > 0) { push(meta, toString(an["functions"]) + " " + lb["functions"]); }
+    if (an["types"] > 0) { push(meta, toString(an["types"]) + " " + lb["classes"]); }
+    if (len(an["problems"]) > 0) { push(meta, toString(len(an["problems"])) + " " + lb["problems"]); }
+    let html = pvShell(name, pvKindLabel(kind, t["lang"]), meta, side, body, theme);
+    return {"ok": true, "kind": kind, "html": html, "lines": lines, "problems": len(an["problems"]),
+            "outline": an["outline"], "imports": an["imports"], "functions": an["functions"], "types": an["types"]};
+}
+
+// ---- 9) PDF: محلّل أجسام + استخراج نص --------------------------------------------------------
+//  يعمل على بايتات الملف مباشرة. الدعم: ملفات PDF 1.x بجداول xref أو xref streams، object streams،
+//  تدفّقات FlateDecode (عبر native zlibInflate)، الصفحات بترتيب شجرة /Pages، موارد الخطوط الموروثة،
+//  خطوط بسيطة (WinAnsi/Latin-1) وخطوط Type0 مع ToUnicode (CMap: bfchar/bfrange).
+//  غير مدعوم (يُبلَّغ عنه بوضوح بدل التخمين): التشفير، LZW/ASCII85 كتدفّق وحيد، الصور الممسوحة (لا OCR).
+
+fun pvHexDigit(c) {
+    return indexOf("0123456789abcdef", lower(c));
+}
+
+fun pvHexToNum(h) {
+    let n = 0;
+    let i = 0;
+    while (i < len(h)) {
+        let d = pvHexDigit(charAt(h, i));
+        if (d < 0) { d = 0; }
+        n = n * 16 + d;
+        i = i + 1;
+    }
+    return n;
+}
+
+// نقطة ترميز -> بايتات UTF-8 (chr يقبل 0..255 فقط)
+fun pvUtf8(cp) {
+    if (cp < 128) { return chr(cp); }
+    if (cp < 2048) { return chr(192 + floor(cp / 64)) + chr(128 + cp % 64); }
+    if (cp < 65536) { return chr(224 + floor(cp / 4096)) + chr(128 + floor(cp / 64) % 64) + chr(128 + cp % 64); }
+    return chr(240 + floor(cp / 262144)) + chr(128 + floor(cp / 4096) % 64) + chr(128 + floor(cp / 64) % 64) + chr(128 + cp % 64);
+}
+
+// سلسلة سداسية عشرية لـ UTF-16BE -> UTF-8 (مع الأزواج البديلة surrogate)
+fun pvUtf16HexToUtf8(hex) {
+    let out = [];
+    let i = 0;
+    while (i + 4 <= len(hex)) {
+        let u = pvHexToNum(substr(hex, i, 4));
+        i = i + 4;
+        if (u >= 55296 and u <= 56319 and i + 4 <= len(hex)) {
+            let lo = pvHexToNum(substr(hex, i, 4));
+            if (lo >= 56320 and lo <= 57343) {
+                u = 65536 + (u - 55296) * 1024 + (lo - 56320);
+                i = i + 4;
+            }
+        }
+        if (u > 0) { push(out, pvUtf8(u)); }
+    }
+    return join(out, "");
+}
+
+fun pvCp1252Extra() {
+    return [8364, 0, 8218, 402, 8222, 8230, 8224, 8225, 710, 8240, 352, 8249, 338, 0, 381, 0,
+            0, 8216, 8217, 8220, 8221, 8226, 8211, 8212, 732, 8482, 353, 8250, 339, 0, 382, 376];
+}
+
+// بايت واحد من خط بسيط (WinAnsi ≈ Windows-1252) -> UTF-8
+fun pvWinAnsi(b, extra) {
+    if (b >= 32 and b < 127) { return chr(b); }
+    if (b == 9 or b == 10 or b == 13) { return " "; }
+    if (b >= 160) { return pvUtf8(b); }
+    if (b >= 128 and b < 160) {
+        let cp = extra[b - 128];
+        if (cp > 0) { return pvUtf8(cp); }
+    }
+    return "";
+}
+
+// ---- فك سلاسل PDF النصية ----
+
+fun pvPdfLiteral(tok) {
+    // tok يشمل القوسين الخارجيين
+    let inner = substr(tok, 1, len(tok) - 2);
+    if (indexOf(inner, "\\") < 0) { return inner; }
+    let out = [];
+    let i = 0;
+    let n = len(inner);
+    while (i < n) {
+        let c = charAt(inner, i);
+        if (c != "\\") {
+            push(out, c);
+            i = i + 1;
+            continue;
+        }
+        i = i + 1;
+        if (i >= n) { break; }
+        let d = charAt(inner, i);
+        if (d == "n") { push(out, "\n"); i = i + 1; }
+        else if (d == "r") { push(out, "\r"); i = i + 1; }
+        else if (d == "t") { push(out, "\t"); i = i + 1; }
+        else if (d == "b") { push(out, chr(8)); i = i + 1; }
+        else if (d == "f") { push(out, chr(12)); i = i + 1; }
+        else if (d == "\n") { i = i + 1; }
+        else if (d == "\r") {
+            i = i + 1;
+            if (i < n) { if (charAt(inner, i) == "\n") { i = i + 1; } }
+        }
+        else if (indexOf("01234567", d) >= 0) {
+            let v = 0;
+            let cnt = 0;
+            while (i < n and cnt < 3) {
+                let o = indexOf("01234567", charAt(inner, i));
+                if (o < 0) { break; }
+                v = v * 8 + o;
+                i = i + 1;
+                cnt = cnt + 1;
+            }
+            push(out, chr(v % 256));
+        }
+        else { push(out, d); i = i + 1; }
+    }
+    return join(out, "");
+}
+
+fun pvPdfHexString(tok) {
+    let h = regexReplace(substr(tok, 1, len(tok) - 2), "\\s", "");
+    if (len(h) % 2 == 1) { h = h + "0"; }
+    let out = [];
+    let i = 0;
+    while (i < len(h)) {
+        push(out, chr(pvHexToNum(substr(h, i, 2))));
+        i = i + 2;
+    }
+    return join(out, "");
+}
+
+// نص من قيمة سلسلة PDF (للبيانات الوصفية): دعم UTF-16BE بعلامة BOM
+fun pvPdfTextValue(tok) {
+    let raw = "";
+    if (charAt(tok, 0) == "(") { raw = pvPdfLiteral(tok); } else { raw = pvPdfHexString(tok); }
+    if (len(raw) >= 2) {
+        if (ord(charAt(raw, 0)) == 254 and ord(charAt(raw, 1)) == 255) {
+            let hex = [];
+            let i = 2;
+            while (i + 1 < len(raw)) {
+                let hi = ord(charAt(raw, i));
+                let lo = ord(charAt(raw, i + 1));
+                push(hex, padStart(toHex(hi), 2, "0") + padStart(toHex(lo), 2, "0"));
+                i = i + 2;
+            }
+            return pvUtf16HexToUtf8(join(hex, ""));
+        }
+    }
+    // PDFDocEncoding ≈ Latin-1 لمعظم الحالات
+    let out = [];
+    let j = 0;
+    while (j < len(raw)) {
+        let b = ord(charAt(raw, j));
+        if (b >= 128) { push(out, pvUtf8(b)); } else { push(out, charAt(raw, j)); }
+        j = j + 1;
+    }
+    return join(out, "");
+}
+
+// ---- تحميل الأجسام ----
+
+// يعيد {"ok", "objs": {"12": {"d": dictText, "s": rawStream|nil, "os": bool}}, "count"}
+fun pvPdfLoad(data) {
+    let objs = {};
+    let chunks = split(data, "endobj");
+    let i = 0;
+    let count = 0;
+    while (i < len(chunks)) {
+        let ch = chunks[i];
+        let m = regexGroups(ch, "(\\d+)\\s+(\\d+)\\s+obj");
+        if (len(m) == 3) {
+            let p = indexOf(ch, m[0]);
+            let body = substr(ch, p + len(m[0]));
+            let dict = body;
+            let stream = nil;
+            let sp = indexOf(body, "stream");
+            if (sp >= 0) {
+                let before = substr(body, 0, sp);
+                // "stream" الحقيقية تلي نهاية القاموس ">>" (قد تفصلها مسافات)
+                if (len(regexFindAll(before, ">>\\s*$")) > 0) {
+                    dict = before;
+                    let st = sp + 6;
+                    let c1 = substr(body, st, 1);
+                    if (c1 == "\r") {
+                        st = st + 1;
+                        if (substr(body, st, 1) == "\n") { st = st + 1; }
+                    } else if (c1 == "\n") {
+                        st = st + 1;
+                    }
+                    let rest = substr(body, st);
+                    let ep = lastIndexOf(rest, "endstream");
+                    if (ep >= 0) { stream = substr(rest, 0, ep); } else { stream = rest; }
+                }
+            }
+            objs[m[1]] = {"d": dict, "s": stream, "os": false};
+            count = count + 1;
+        }
+        i = i + 1;
+    }
+    return {"objs": objs, "count": count};
+}
+
+// ASCII85 (Adobe) -> بايتات. يقبل البادئة <~ واللاحقة ~> والمسافات. nil عند محرف غير صالح.
+fun pvAscii85(s) {
+    let src = regexReplace(s, "\\s", "");
+    if (len(src) >= 2) { if (substr(src, 0, 2) == "<~") { src = substr(src, 2); } }
+    let e = indexOf(src, "~>");
+    if (e >= 0) { src = substr(src, 0, e); }
+    let out = [];
+    let grp = [];
+    let i = 0;
+    while (i < len(src)) {
+        let c = charAt(src, i);
+        i = i + 1;
+        if (c == "z" and len(grp) == 0) {
+            push(out, chr(0) + chr(0) + chr(0) + chr(0));
+            continue;
+        }
+        let o = ord(c);
+        if (o < 33 or o > 117) { return nil; }
+        push(grp, o - 33);
+        if (len(grp) == 5) {
+            let v = (((grp[0] * 85 + grp[1]) * 85 + grp[2]) * 85 + grp[3]) * 85 + grp[4];
+            push(out, chr(floor(v / 16777216) % 256) + chr(floor(v / 65536) % 256) + chr(floor(v / 256) % 256) + chr(v % 256));
+            grp = [];
+        }
+    }
+    let n = len(grp);
+    if (n > 1) {
+        let k = n;
+        while (k < 5) { push(grp, 84); k = k + 1; }
+        let v2 = (((grp[0] * 85 + grp[1]) * 85 + grp[2]) * 85 + grp[3]) * 85 + grp[4];
+        let all4 = chr(floor(v2 / 16777216) % 256) + chr(floor(v2 / 65536) % 256) + chr(floor(v2 / 256) % 256) + chr(v2 % 256);
+        push(out, substr(all4, 0, n - 1));
+    }
+    return join(out, "");
+}
+
+fun pvAsciiHex(s) {
+    let h = regexReplace(s, "[\\s>]", "");
+    return pvPdfHexString("<" + h + ">");
+}
+
+// أسماء الفلاتر بالترتيب: /Filter /A أو /Filter [/A /B]
+fun pvPdfFilters(d) {
+    let arr = regexGroups(d, "/Filter\\s*\\[([^\\]]*)\\]");
+    let src = "";
+    if (len(arr) == 2) { src = arr[1]; }
+    else {
+        let one = regexGroups(d, "/Filter\\s*(/[A-Za-z0-9]+)");
+        if (len(one) == 2) { src = one[1]; }
+    }
+    return regexFindAll(src, "/[A-Za-z0-9]+");
+}
+
+// يفكّ تدفّق جسم عبر سلسلة فلاتره: nil إن كان فلتر غير مدعوم (LZW/RunLength/Crypt/صور DCT...) أو تالفاً
+fun pvPdfStream(obj) {
+    if (type(obj["s"]) != "string") { return nil; }
+    let d = obj["d"];
+    let data = obj["s"];
+    let fl = pvPdfFilters(d);
+    let i = 0;
+    while (i < len(fl)) {
+        let f = fl[i];
+        if (f == "/FlateDecode" or f == "/Fl") {
+            if (len(regexFindAll(d, "/Predictor\\s+(?:1[0-5])")) > 0) { return nil; }
+            data = zlibInflate(data);
+            if (type(data) != "string") { return nil; }
+        } else if (f == "/ASCII85Decode" or f == "/A85") {
+            data = pvAscii85(data);
+            if (type(data) != "string") { return nil; }
+        } else if (f == "/ASCIIHexDecode" or f == "/AHx") {
+            data = pvAsciiHex(data);
+        } else {
+            return nil;
+        }
+        i = i + 1;
+    }
+    return data;
+}
+
+// يضيف أجسام /ObjStm (الأجسام المضغوطة داخل تدفّق) إلى objs
+fun pvPdfExpandObjStms(objs) {
+    let ks = keys(objs);
+    let i = 0;
+    while (i < len(ks)) {
+        let o = objs[ks[i]];
+        if (len(regexFindAll(o["d"], "/Type\\s*/ObjStm")) > 0) {
+            let dec = pvPdfStream(o);
+            if (type(dec) == "string") {
+                let nm = regexGroups(o["d"], "/N\\s+(\\d+)");
+                let fm = regexGroups(o["d"], "/First\\s+(\\d+)");
+                if (len(nm) == 2 and len(fm) == 2) {
+                    let n = toNumber(nm[1]);
+                    let first = toNumber(fm[1]);
+                    let nums = regexFindAll(substr(dec, 0, first), "\\d+");
+                    let j = 0;
+                    while (j < n and j * 2 + 1 < len(nums)) {
+                        let onum = nums[j * 2];
+                        let off = toNumber(nums[j * 2 + 1]);
+                        let endOff = len(dec) - first;
+                        if (j + 1 < n and (j + 1) * 2 + 1 < len(nums)) { endOff = toNumber(nums[(j + 1) * 2 + 1]); }
+                        if (has(objs, onum) == false) {
+                            objs[onum] = {"d": substr(dec, first + off, endOff - off), "s": nil, "os": true};
+                        }
+                        j = j + 1;
+                    }
+                }
+            }
+        }
+        i = i + 1;
+    }
+    return objs;
+}
+
+// مراجع "N G R" داخل نص -> مصفوفة أرقام الأجسام (نصوص)
+fun pvPdfRefs(src) {
+    let all = regexFindAll(src, "\\d+\\s+\\d+\\s+R\\b");
+    let out = [];
+    let i = 0;
+    while (i < len(all)) {
+        push(out, regexGroups(all[i], "(\\d+)")[1]);
+        i = i + 1;
+    }
+    return out;
+}
+
+fun pvPdfRefOf(dict, key) {
+    let m = regexGroups(dict, "/" + key + "\\s+(\\d+)\\s+\\d+\\s+R\\b");
+    if (len(m) == 2) { return m[1]; }
+    return "";
+}
+
+// ---- CMap (ToUnicode) ----
+
+fun pvHexTokens(s) {
+    // "<0041> <0042>" -> ["0041","0042"]
+    let all = regexFindAll(s, "<[0-9A-Fa-f\\s]*>");
+    let out = [];
+    let i = 0;
+    while (i < len(all)) {
+        push(out, regexReplace(substr(all[i], 1, len(all[i]) - 2), "\\s", ""));
+        i = i + 1;
+    }
+    return out;
+}
+
+fun pvParseCMap(src, defaultLen) {
+    let codeLen = defaultLen;
+    let cs = regexGroups(src, "begincodespacerange\\s*<([0-9A-Fa-f]+)>");
+    if (len(cs) == 2) { codeLen = floor(len(cs[1]) / 2); }
+    if (codeLen < 1) { codeLen = 1; }
+    let map = {};
+    let ranges = [];
+    let parts = split(src, "beginbfchar");
+    let i = 1;
+    while (i < len(parts)) {
+        let sec = split(parts[i], "endbfchar")[0];
+        let hx = pvHexTokens(sec);
+        let j = 0;
+        while (j + 1 < len(hx)) {
+            map[toString(pvHexToNum(hx[j]))] = pvUtf16HexToUtf8(hx[j + 1]);
+            j = j + 2;
+        }
+        i = i + 1;
+    }
+    let rparts = split(src, "beginbfrange");
+    let r = 1;
+    while (r < len(rparts)) {
+        let sec2 = split(rparts[r], "endbfrange")[0];
+        let items = regexFindAll(sec2, "<[0-9A-Fa-f\\s]*>\\s*<[0-9A-Fa-f\\s]*>\\s*(?:<[0-9A-Fa-f\\s]*>|\\[[^\\]]*\\])");
+        let k = 0;
+        while (k < len(items)) {
+            let it = items[k];
+            let hx2 = pvHexTokens(it);
+            if (len(hx2) >= 3) {
+                let lo = pvHexToNum(hx2[0]);
+                let hi = pvHexToNum(hx2[1]);
+                if (indexOf(it, "[") >= 0) {
+                    let c = lo;
+                    let q = 2;
+                    while (c <= hi and q < len(hx2)) {
+                        map[toString(c)] = pvUtf16HexToUtf8(hx2[q]);
+                        c = c + 1;
+                        q = q + 1;
+                    }
+                } else {
+                    let dst = hx2[2];
+                    let prefix = "";
+                    let lastUnit = pvHexToNum(dst);
+                    if (len(dst) > 4) {
+                        prefix = substr(dst, 0, len(dst) - 4);
+                        lastUnit = pvHexToNum(substr(dst, len(dst) - 4, 4));
+                    }
+                    if (hi - lo <= 512) {
+                        let c2 = lo;
+                        while (c2 <= hi) {
+                            map[toString(c2)] = pvUtf16HexToUtf8(prefix + padStart(toHex(lastUnit + (c2 - lo)), 4, "0"));
+                            c2 = c2 + 1;
+                        }
+                    } else {
+                        push(ranges, [lo, hi, prefix, lastUnit]);
+                    }
+                }
+            }
+            k = k + 1;
+        }
+        r = r + 1;
+    }
+    return {"len": codeLen, "map": map, "ranges": ranges};
+}
+
+fun pvCMapLookup(cm, code) {
+    let key = toString(code);
+    if (has(cm["map"], key)) { return cm["map"][key]; }
+    let i = 0;
+    while (i < len(cm["ranges"])) {
+        let rg = cm["ranges"][i];
+        if (code >= rg[0] and code <= rg[1]) {
+            return pvUtf16HexToUtf8(rg[2] + padStart(toHex(rg[3] + (code - rg[0])), 4, "0"));
+        }
+        i = i + 1;
+    }
+    return nil;
+}
+
+// المحتوى بين قوسين مربعين متوازنين يبدأ عند الفهرس start (حيث s[start] == "[")
+fun pvBracketBlock(s, start) {
+    let depth = 0;
+    let i = start;
+    let n = len(s);
+    while (i < n) {
+        let c = charAt(s, i);
+        if (c == "[") { depth = depth + 1; }
+        else if (c == "]") {
+            depth = depth - 1;
+            if (depth == 0) { return substr(s, start + 1, i - start - 1); }
+        }
+        i = i + 1;
+    }
+    return substr(s, start + 1);
+}
+
+// نص مصفوفة /Key [...] أو /Key N 0 R من قاموس (nil إن غابت)
+fun pvPdfArrayValue(doc, d, key) {
+    let inl = regexFindAll(d, "/" + key + "\\s*\\[");
+    if (len(inl) > 0) {
+        let p = indexOf(d, inl[0]);
+        return pvBracketBlock(d, p + len(inl[0]) - 1);
+    }
+    let ref = pvPdfRefOf(d, key);
+    if (ref != "" and has(doc["objs"], ref)) {
+        let od = doc["objs"][ref]["d"];
+        let p2 = indexOf(od, "[");
+        if (p2 >= 0) { return pvBracketBlock(od, p2); }
+    }
+    return nil;
+}
+
+// عرض الرموز: خريطة code -> عرض (1/1000 em) + العرض الافتراضي
+fun pvPdfWidths(doc, d, type0) {
+    let w = {};
+    let dw = 500;
+    if (type0) {
+        let desc = regexGroups(d, "/DescendantFonts\\s*\\[\\s*(\\d+)\\s+\\d+\\s+R");
+        let dd = "";
+        if (len(desc) == 2 and has(doc["objs"], desc[1])) { dd = doc["objs"][desc[1]]["d"]; }
+        else {
+            let dref = pvPdfRefOf(d, "DescendantFonts");
+            if (dref != "" and has(doc["objs"], dref)) {
+                let r2 = pvPdfRefs(doc["objs"][dref]["d"]);
+                if (len(r2) > 0 and has(doc["objs"], r2[0])) { dd = doc["objs"][r2[0]]["d"]; }
+            }
+        }
+        if (dd == "") { return {"w": w, "dw": 1000}; }
+        let dwm = regexGroups(dd, "/DW\\s+(\\d+)");
+        dw = 1000;
+        if (len(dwm) == 2) { dw = toNumber(dwm[1]); }
+        let wa = pvPdfArrayValue(doc, dd, "W");
+        if (type(wa) == "string") {
+            let toks = regexFindAll(wa, "\\[[^\\]]*\\]|-?\\d+\\.?\\d*");
+            let i = 0;
+            while (i < len(toks)) {
+                let c0 = pvNum(toks[i]);
+                if (type(c0) != "number") { i = i + 1; continue; }
+                if (i + 1 >= len(toks)) { break; }
+                let nx = toks[i + 1];
+                if (charAt(nx, 0) == "[") {
+                    let ws = regexFindAll(nx, "-?\\d+\\.?\\d*");
+                    let k = 0;
+                    while (k < len(ws)) {
+                        w[toString(c0 + k)] = toNumber(ws[k]);
+                        k = k + 1;
+                    }
+                    i = i + 2;
+                } else {
+                    if (i + 2 >= len(toks)) { break; }
+                    let c1 = pvNum(nx);
+                    let wv = pvNum(toks[i + 2]);
+                    if (type(c1) == "number" and type(wv) == "number") {
+                        let c = c0;
+                        while (c <= c1 and c - c0 < 4096) {
+                            w[toString(c)] = wv;
+                            c = c + 1;
+                        }
+                    }
+                    i = i + 3;
+                }
+            }
+        }
+        return {"w": w, "dw": dw};
+    }
+    let fc = regexGroups(d, "/FirstChar\\s+(\\d+)");
+    let wa2 = pvPdfArrayValue(doc, d, "Widths");
+    if (len(fc) == 2 and type(wa2) == "string") {
+        let first = toNumber(fc[1]);
+        let ws2 = regexFindAll(wa2, "-?\\d+\\.?\\d*");
+        let k2 = 0;
+        while (k2 < len(ws2)) {
+            w[toString(first + k2)] = toNumber(ws2[k2]);
+            k2 = k2 + 1;
+        }
+    }
+    return {"w": w, "dw": dw};
+}
+
+// معلومات خط: {"cm": cmap|nil, "type0": bool}
+fun pvPdfFontInfo(doc, fontNum, cache) {
+    if (has(cache, fontNum)) { return cache[fontNum]; }
+    let info = {"cm": nil, "type0": false, "w": {}, "dw": 500};
+    if (has(doc["objs"], fontNum)) {
+        let d = doc["objs"][fontNum]["d"];
+        if (len(regexFindAll(d, "/Subtype\\s*/Type0")) > 0) { info["type0"] = true; }
+        let wd = pvPdfWidths(doc, d, info["type0"]);
+        info["w"] = wd["w"];
+        info["dw"] = wd["dw"];
+        if (info["type0"] == false) {
+            // جدول سريع للأحرف ASCII المطبوعة: الحرف نفسه -> عرضه (مسار سريع في pvPdfDecodeShown)
+            let wc = {};
+            let ci = 32;
+            while (ci < 127) {
+                let key0 = toString(ci);
+                if (has(wd["w"], key0)) { wc[chr(ci)] = wd["w"][key0]; } else { wc[chr(ci)] = wd["dw"]; }
+                ci = ci + 1;
+            }
+            info["wc"] = wc;
+        }
+        let tu = pvPdfRefOf(d, "ToUnicode");
+        if (tu != "" and has(doc["objs"], tu)) {
+            let dec = pvPdfStream(doc["objs"][tu]);
+            if (type(dec) == "string") {
+                let dl = 1;
+                if (info["type0"]) { dl = 2; }
+                info["cm"] = pvParseCMap(dec, dl);
+            }
+        }
+    }
+    cache[fontNum] = info;
+    return info;
+}
+
+// ---- موارد الصفحة (الخطوط) ----
+
+// قاموس اسم الخط -> رقم الجسم، من نص موارد (قاموس مباشر أو مرجع)
+fun pvPdfFontMap(doc, resText) {
+    let fm = {};
+    let fontDict = "";
+    let inl = regexGroups(resText, "/Font\\s*<<([\\s\\S]*?)>>");
+    if (len(inl) == 2) { fontDict = inl[1]; }
+    else {
+        let ref = pvPdfRefOf(resText, "Font");
+        if (ref != "" and has(doc["objs"], ref)) { fontDict = doc["objs"][ref]["d"]; }
+    }
+    if (fontDict == "") { return fm; }
+    let pairs = regexFindAll(fontDict, "/[^\\s/\\[\\]()<>]+\\s+\\d+\\s+\\d+\\s+R\\b");
+    let i = 0;
+    while (i < len(pairs)) {
+        let nm = regexGroups(pairs[i], "(/[^\\s/\\[\\]()<>]+)\\s+(\\d+)\\s+\\d+\\s+R");
+        if (len(nm) == 3) { fm[nm[1]] = nm[2]; }
+        i = i + 1;
+    }
+    return fm;
+}
+
+// نص الموارد لصفحة: مباشر، أو مرجع، مع وراثة من الأب
+fun pvPdfResources(doc, pageNum, depth) {
+    if (depth > 12 or has(doc["objs"], pageNum) == false) { return ""; }
+    let d = doc["objs"][pageNum]["d"];
+    let ri = regexGroups(d, "/Resources\\s*(<<[\\s\\S]*>>)");
+    let ref = pvPdfRefOf(d, "Resources");
+    if (ref != "" and has(doc["objs"], ref)) { return doc["objs"][ref]["d"]; }
+    if (len(ri) == 2) { return ri[1]; }
+    let par = pvPdfRefOf(d, "Parent");
+    if (par != "") { return pvPdfResources(doc, par, depth + 1); }
+    return "";
+}
+
+// ---- ترتيب الصفحات ----
+
+fun pvPdfCollectPages(doc, num, out, seen, depth) {
+    if (depth > 40 or has(doc["objs"], num) == false) { return out; }
+    if (has(seen, num)) { return out; }
+    seen[num] = true;
+    let d = doc["objs"][num]["d"];
+    let isPages = len(regexFindAll(d, "/Type\\s*/Pages\\b")) > 0;
+    let kids = regexGroups(d, "/Kids\\s*\\[([^\\]]*)\\]");
+    if (isPages or len(kids) == 2) {
+        if (len(kids) == 2) {
+            let refs = pvPdfRefs(kids[1]);
+            let i = 0;
+            while (i < len(refs)) {
+                out = pvPdfCollectPages(doc, refs[i], out, seen, depth + 1);
+                i = i + 1;
+            }
+        }
+        return out;
+    }
+    push(out, num);
+    return out;
+}
+
+fun pvPdfPageList(doc, data) {
+    let roots = regexFindAll(data, "/Root\\s+\\d+\\s+\\d+\\s+R");
+    let pages = [];
+    if (len(roots) > 0) {
+        let rootNum = regexGroups(roots[len(roots) - 1], "/Root\\s+(\\d+)")[1];
+        if (has(doc["objs"], rootNum)) {
+            let pr = pvPdfRefOf(doc["objs"][rootNum]["d"], "Pages");
+            if (pr != "") { pages = pvPdfCollectPages(doc, pr, [], {}, 0); }
+        }
+    }
+    if (len(pages) == 0) {
+        // احتياطي: كل جسم /Type /Page بترتيب رقمه
+        let ks = keys(doc["objs"]);
+        let nums = [];
+        let i = 0;
+        while (i < len(ks)) {
+            if (len(regexFindAll(doc["objs"][ks[i]]["d"], "/Type\\s*/Page\\b")) > 0) { push(nums, toNumber(ks[i])); }
+            i = i + 1;
+        }
+        nums = sort(nums);
+        let j = 0;
+        while (j < len(nums)) {
+            push(pages, toString(nums[j]));
+            j = j + 1;
+        }
+    }
+    return pages;
+}
+
+// ---- استخراج نص صفحة من تدفّق المحتوى ----
+
+fun pvPdfContentRegex() {
+    return "\\((?:\\\\[\\s\\S]|[^\\\\()]|\\((?:\\\\[\\s\\S]|[^\\\\()])*\\))*\\)|<[0-9A-Fa-f\\s]*>|<<|>>|\\[|\\]|/[^\\s/\\[\\]()<>{}%]*|[-+]?(?:\\d+\\.?\\d*|\\.\\d+)|[A-Za-z'\"*]+";
+}
+
+fun pvAbs(x) {
+    if (x < 0) { return 0 - x; }
+    return x;
+}
+
+// يفكّ بايتات سلسلة معروضة حسب الخط -> {text, unmapped}
+fun pvPdfDecodeShown(raw, finfo, extra) {
+    let out = [];
+    let unmapped = 0;
+    let adv = 0;
+    let n = len(raw);
+    let cm = finfo["cm"];
+    // مسار سريع: خط بسيط بلا ToUnicode ونص ASCII مطبوع فقط -> النص كما هو، والعرض من جدول الحرف
+    if (type(cm) != "map" and finfo["type0"] == false and has(finfo, "wc")) {
+        if (n > 0 and regexTest(raw, "^[ -~]+$")) {
+            let wc = finfo["wc"];
+            let cs = utf8ToArray(raw);
+            let a2 = 0;
+            let k = 0;
+            while (k < n) { a2 = a2 + wc[cs[k]]; k = k + 1; }
+            return {"text": raw, "unmapped": 0, "adv": a2};
+        }
+    }
+    let wm = finfo["w"];
+    let dw = finfo["dw"];
+    let cl = 1;
+    if (type(cm) == "map") { cl = cm["len"]; }
+    else if (finfo["type0"]) { cl = 2; }
+    let i = 0;
+    while (i + cl <= n) {
+        let code = 0;
+        let q = 0;
+        while (q < cl) {
+            code = code * 256 + ord(charAt(raw, i + q));
+            q = q + 1;
+        }
+        let key = toString(code);
+        if (has(wm, key)) { adv = adv + wm[key]; } else { adv = adv + dw; }
+        if (type(cm) == "map") {
+            let u = pvCMapLookup(cm, code);
+            if (type(u) == "string") { push(out, u); } else { unmapped = unmapped + 1; }
+        } else if (finfo["type0"]) {
+            unmapped = unmapped + 1;
+        } else {
+            push(out, pvWinAnsi(code, extra));
+        }
+        i = i + cl;
+    }
+    return {"text": join(out, ""), "unmapped": unmapped, "adv": adv};
+}
+
+// رقم من رمز PDF أو nil (toNumber يرمي خطأً على غير الأرقام)
+fun pvNum(tok) {
+    if (type(tok) != "string") { return nil; }
+    if (regexTest(tok, "^[-+]?(?:\\d+\\.?\\d*|\\.\\d+)$") == false) { return nil; }
+    let s = tok;
+    if (substr(s, 0, 1) == "+") { s = substr(s, 1); }
+    if (substr(s, len(s) - 1, 1) == ".") { s = s + "0"; }
+    return toNumber(s);
+}
+
+// هل السطر يميني-يساري في الغالب؟ (عربي/عبري/سريانية بحسب بايت البداية في UTF-8)
+fun pvIsRtlDominant(s) {
+    let cs = utf8ToArray(s);
+    let rtl = 0;
+    let latin = 0;
+    let i = 0;
+    while (i < len(cs)) {
+        let o = ord(cs[i]);
+        if (o >= 214 and o <= 223) { rtl = rtl + 1; }
+        else if ((o >= 65 and o <= 90) or (o >= 97 and o <= 122)) { latin = latin + 1; }
+        i = i + 1;
+    }
+    return rtl > 0 and rtl >= latin;
+}
+
+// يعكس مصفوفة عناصر نصية (كل عنصر يبقى كما هو)
+fun pvReverseParts(parts) {
+    let out = [];
+    let i = len(parts) - 1;
+    while (i >= 0) {
+        push(out, parts[i]);
+        i = i - 1;
+    }
+    return out;
+}
+
+// وضع إنهاء السطر: 1 إن كان فيه ReversedChars، 2 إن فيه RTL بلا ActualText (رسم بصري)، وإلا 0
+fun pvLineMode(parts, lineMode, hasAct) {
+    if (lineMode == 1) { return 1; }
+    if (pvHasRtl(join(parts, ""))) { return 2; }
+    return 0;
+}
+
+fun pvIsAlnumByte(o) {
+    return (o >= 48 and o <= 57) or (o >= 65 and o <= 90) or (o >= 97 and o <= 122);
+}
+
+// سطر بصري (رُسم يساراً->يميناً) فيه RTL: يُحوَّل إلى الترتيب المنطقي: عكس العناصر كلها ثم إعادة عكس
+// مقاطع اللاتيني/الأرقام (بما بينها من مسافات/ترقيم داخلي) لتبقى مقروءة. العناصر الذرّية (عناقيد ActualText)
+// تُعكَس كوحدة واحدة فلا تنقلب حروفها الداخلية.
+fun pvVisualToLogical(parts) {
+    let els = [];
+    let i = 0;
+    while (i < len(parts)) {
+        let p = parts[i];
+        if (len(p) > 0 and ord(charAt(p, 0)) == 1) { push(els, substr(p, 1)); }
+        else {
+            let cs = utf8ToArray(p);
+            let k = 0;
+            while (k < len(cs)) { push(els, cs[k]); k = k + 1; }
+        }
+        i = i + 1;
+    }
+    let rev = pvReverseParts(els);
+    let out = [];
+    let j = 0;
+    let n = len(rev);
+    while (j < n) {
+        let e = rev[j];
+        if (len(e) == 1 and pvIsAlnumByte(ord(e))) {
+            let runEnd = j;
+            let k2 = j;
+            while (k2 < n) {
+                let ek = rev[k2];
+                if (len(ek) == 1 and pvIsAlnumByte(ord(ek))) { runEnd = k2; k2 = k2 + 1; }
+                else if (len(ek) == 1 and indexOf(" .,:/_'-%", ek) >= 0) { k2 = k2 + 1; }
+                else { break; }
+            }
+            let run = [];
+            let m = runEnd;
+            while (m >= j) { push(run, rev[m]); m = m - 1; }
+            push(out, join(run, ""));
+            j = runEnd + 1;
+        } else {
+            push(out, e);
+            j = j + 1;
+        }
+    }
+    return join(out, "");
+}
+
+// يُنهي سطراً. mode: 0 عادي، 1 ReversedChars (مقاطع معكوسة -> تُعكَس الكلمات)، 2 بصري خام (RTL بلا ActualText)
+fun pvFinishLine(parts, mode) {
+    if (mode == 2) {
+        let s2 = pvVisualToLogical(parts);
+        return trim(regexReplace(s2, "[ \\t]{2,}", " "));
+    }
+    let s = join(parts, "");
+    s = replace(s, chr(1), "");
+    s = trim(regexReplace(s, "[ \\t]{2,}", " "));
+    if (mode == 0 or s == "") { return s; }
+    if (pvIsRtlDominant(s) == false) { return s; }
+    let words = split(s, " ");
+    let out = [];
+    let i = len(words) - 1;
+    while (i >= 0) {
+        let w = words[i];
+        if (regexTest(w, "^(?:[.,;:!?)(]|،|؛|؟)+$") and len(out) > 0) {
+            out[len(out) - 1] = out[len(out) - 1] + w;
+        } else {
+            push(out, w);
+        }
+        i = i - 1;
+    }
+    return join(out, " ");
+}
+
+// هل في النص محارف RTL (عربي/عبري/سريانية، وأشكال العرض FB50–FEFF)؟
+fun pvHasRtl(s) {
+    let cs = utf8ToArray(s);
+    let i = 0;
+    while (i < len(cs)) {
+        let o = ord(cs[i]);
+        if (o >= 214 and o <= 223) { return true; }
+        if (o == 239 and len(cs[i]) >= 2) {
+            let o2 = ord(charAt(cs[i], 1));
+            if (o2 == 173 or o2 == 174 or o2 == 175 or o2 == 183 or o2 == 184 or o2 == 185 or o2 == 186 or o2 == 187 or o2 == 188 or o2 == 189) { return true; }
+        }
+        i = i + 1;
+    }
+    return false;
+}
+
+// يرتّب مقاطع سطر (كل مقطع {x0, x1, e, t, atom}) بحسب x ثم يبني النص المنطقي:
+//  1) ترتيب بصري (يسار->يمين) مهما كان ترتيب الإصدار في التدفق
+//  2) مسافة بين مقطعين متتاليين إن زادت الفجوة الفعلية (من عروض الخطوط) عن 0.18 em
+//  3) سطر فيه RTL: عكس بصري->منطقي (يُعاد عكس مقاطع اللاتيني والأرقام)
+fun pvFinishChunks(chunks) {
+    let n = len(chunks);
+    if (n == 0) { return ""; }
+    // فرز إدراجي مستقر حسب x0
+    let ord2 = [];
+    let i = 0;
+    while (i < n) {
+        let c = chunks[i];
+        let j = len(ord2);
+        push(ord2, c);
+        while (j > 0 and ord2[j - 1]["x0"] > c["x0"]) {
+            ord2[j] = ord2[j - 1];
+            j = j - 1;
+        }
+        ord2[j] = c;
+        i = i + 1;
+    }
+    let parts = [];
+    let all = [];
+    let k = 0;
+    while (k < n) {
+        let cc = ord2[k];
+        if (k > 0) {
+            let pv = ord2[k - 1];
+            let gap = cc["x0"] - pv["x1"];
+            let endsSp = len(pv["t"]) > 0 and substr(pv["t"], len(pv["t"]) - 1, 1) == " ";
+            let startsSp = len(cc["t"]) > 0 and substr(cc["t"], 0, 1) == " ";
+            if (gap > pv["e"] * 0.18 and endsSp == false and startsSp == false) { push(parts, " "); push(all, " "); }
+        }
+        if (cc["atom"]) { push(parts, chr(1) + cc["t"]); } else { push(parts, cc["t"]); }
+        push(all, cc["t"]);
+        k = k + 1;
+    }
+    let s = "";
+    if (pvHasRtl(join(all, ""))) { s = pvVisualToLogical(parts); }
+    else { s = replace(join(parts, ""), chr(1), ""); }
+    return trim(regexReplace(s, "[ \\t]{2,}", " "));
+}
+
+// يستخرج أسطر نص صفحة -> {"lines": [..], "unmapped": n}. سطر فارغ "" = فاصل فقرة.
+//  • مصفوفة التحويل CTM + مصفوفة النص تُتابَع، فيُحدَّد السطر من y الفعلي في الجهاز
+//  • عروض الخطوط (/Widths و/W) تُحسَب لموضع نهاية كل مقطع، فالمسافات من الفجوات لا من تخمين
+//  • /ActualText يُفضَّل على فك الرموز (يعالج Chrome/Skia والعناقيد)، والـ RTL يُرتَّب بصرياً ثم يُحوَّل منطقياً
+fun pvPdfPageText(doc, pageNum, fontCache) {
+    let d = doc["objs"][pageNum]["d"];
+    let refs = [];
+    let cr = regexGroups(d, "/Contents\\s*\\[([^\\]]*)\\]");
+    if (len(cr) == 2) { refs = pvPdfRefs(cr[1]); }
+    else {
+        let one = pvPdfRefOf(d, "Contents");
+        if (one != "") {
+            if (has(doc["objs"], one)) {
+                let od = doc["objs"][one];
+                if (type(od["s"]) != "string" and len(regexFindAll(od["d"], "^\\s*\\[")) > 0) { refs = pvPdfRefs(od["d"]); }
+                else { refs = [one]; }
+            }
+        }
+    }
+    let content = [];
+    let i = 0;
+    while (i < len(refs)) {
+        if (has(doc["objs"], refs[i])) {
+            let dec = pvPdfStream(doc["objs"][refs[i]]);
+            if (type(dec) == "string") { push(content, dec); }
+        }
+        i = i + 1;
+    }
+    let stream = join(content, "\n");
+    let fm = pvPdfFontMap(doc, pvPdfResources(doc, pageNum, 0));
+    let extra = pvCp1252Extra();
+    let toks = regexFindAll(stream, pvPdfContentRegex());
+    let lines = [];
+    let chunks = [];
+    let noFont = {"cm": nil, "type0": false, "w": {}, "dw": 500};
+    let curFont = noFont;
+    let fsz = 12;
+    let sc = 1;
+    let lastY = nil;
+    let tlmX = 0;
+    let tlmY = 0;
+    let tmA = 1;
+    let tmD = 1;
+    let curX = 0;
+    let ctm = [1, 0, 0, 1, 0, 0];
+    let ctmStack = [];
+    let operands = [];
+    let inArr = false;
+    let arr = [];
+    let unmapped = 0;
+    let mc = [];
+    let actDepth = 0;
+    let actChunk = nil;
+    let inDict = false;
+    let wantActual = false;
+    let dictActual = nil;
+    let n = len(toks);
+    let t = 0;
+    while (t < n) {
+        let tok = toks[t];
+        let c = charAt(tok, 0);
+        t = t + 1;
+        if (tok == "<<") { inDict = true; dictActual = nil; wantActual = false; continue; }
+        if (tok == ">>") { inDict = false; continue; }
+        if (inDict) {
+            if (tok == "/ActualText") { wantActual = true; }
+            else if (wantActual and (c == "(" or c == "<")) {
+                dictActual = pvPdfTextValue(tok);
+                wantActual = false;
+            }
+            continue;
+        }
+        if (tok == "[") { inArr = true; arr = []; continue; }
+        if (tok == "]") {
+            inArr = false;
+            push(operands, arr);
+            continue;
+        }
+        if (c == "(" or c == "<" or c == "/" or c == "-" or c == "+" or c == "." or indexOf("0123456789", c) >= 0) {
+            if (inArr) { push(arr, tok); } else { push(operands, tok); }
+            continue;
+        }
+        let op = tok;
+        let no = len(operands);
+        let hscale = pvAbs(ctm[0]);
+        if (hscale == 0) { hscale = 1; }
+        let vscale = pvAbs(ctm[3]);
+        if (vscale == 0) { vscale = pvAbs(ctm[1]); }
+        if (vscale == 0) { vscale = 1; }
+        let esz = fsz * sc;
+        if (op == "BMC" or op == "BDC") {
+            let isAct = false;
+            if (op == "BDC" and type(dictActual) == "string") {
+                isAct = true;
+                if (actDepth == 0) { actChunk = {"x0": nil, "x1": 0, "e": esz * hscale, "t": dictActual, "atom": true}; }
+                actDepth = actDepth + 1;
+            }
+            push(mc, isAct);
+            dictActual = nil;
+        } else if (op == "EMC") {
+            if (len(mc) > 0) {
+                let wasAct = mc[len(mc) - 1];
+                pop(mc);
+                if (wasAct) {
+                    actDepth = actDepth - 1;
+                    if (actDepth == 0 and type(actChunk) == "map") {
+                        if (actChunk["x0"] == nil) { actChunk["x0"] = curX; actChunk["x1"] = curX; }
+                        push(chunks, actChunk);
+                        actChunk = nil;
+                    }
+                }
+            }
+        } else if (op == "Tf") {
+            if (no >= 2) {
+                let fname = operands[no - 2];
+                if (type(fname) == "string") {
+                    if (has(fm, fname)) { curFont = pvPdfFontInfo(doc, fm[fname], fontCache); }
+                    else { curFont = noFont; }
+                }
+                let sz = pvNum(operands[no - 1]);
+                if (type(sz) == "number") { if (sz != 0) { fsz = pvAbs(sz); } }
+            }
+        } else if (op == "Tj" or op == "'" or op == "\"" or op == "TJ") {
+            if (op == "'" or op == "\"") {
+                if (len(chunks) > 0) { push(lines, pvFinishChunks(chunks)); chunks = []; }
+            }
+            // عناصر العرض: سلاسل أو (للـ TJ) سلاسل وتعديلات رقمية
+            let items = [];
+            if (no >= 1) {
+                if (op == "TJ") { if (type(operands[no - 1]) == "array") { items = operands[no - 1]; } }
+                else { items = [operands[no - 1]]; }
+            }
+            let q = 0;
+            while (q < len(items)) {
+                let e = items[q];
+                q = q + 1;
+                if (type(e) != "string") { continue; }
+                let ec = charAt(e, 0);
+                if (ec == "(" or ec == "<") {
+                    let raw = "";
+                    if (ec == "(") { raw = pvPdfLiteral(e); } else { raw = pvPdfHexString(e); }
+                    let dr = pvPdfDecodeShown(raw, curFont, extra);
+                    let x0 = curX;
+                    curX = curX + dr["adv"] / 1000 * esz * hscale;
+                    if (actDepth > 0) {
+                        if (type(actChunk) == "map") {
+                            if (actChunk["x0"] == nil) { actChunk["x0"] = x0; }
+                            actChunk["x1"] = curX;
+                        }
+                    } else {
+                        push(chunks, {"x0": x0, "x1": curX, "e": esz * hscale, "t": dr["text"], "atom": false});
+                        unmapped = unmapped + dr["unmapped"];
+                    }
+                } else {
+                    let adj = pvNum(e);
+                    if (type(adj) == "number") { curX = curX - adj / 1000 * esz * hscale; }
+                }
+            }
+        } else if (op == "BT") {
+            tlmX = 0;
+            tlmY = 0;
+            tmA = 1;
+            tmD = 1;
+            sc = 1;
+        } else if (op == "q") {
+            push(ctmStack, [ctm[0], ctm[1], ctm[2], ctm[3], ctm[4], ctm[5]]);
+        } else if (op == "Q") {
+            if (len(ctmStack) > 0) {
+                ctm = ctmStack[len(ctmStack) - 1];
+                pop(ctmStack);
+            }
+        } else if (op == "cm") {
+            if (no >= 6) {
+                let m0 = pvNum(operands[no - 6]);
+                let m1 = pvNum(operands[no - 5]);
+                let m2 = pvNum(operands[no - 4]);
+                let m3 = pvNum(operands[no - 3]);
+                let m4 = pvNum(operands[no - 2]);
+                let m5 = pvNum(operands[no - 1]);
+                if (type(m0) == "number" and type(m1) == "number" and type(m2) == "number" and type(m3) == "number" and type(m4) == "number" and type(m5) == "number") {
+                    ctm = [m0 * ctm[0] + m1 * ctm[2], m0 * ctm[1] + m1 * ctm[3],
+                           m2 * ctm[0] + m3 * ctm[2], m2 * ctm[1] + m3 * ctm[3],
+                           m4 * ctm[0] + m5 * ctm[2] + ctm[4], m4 * ctm[1] + m5 * ctm[3] + ctm[5]];
+                }
+            }
+        } else if (op == "Td" or op == "TD" or op == "Tm") {
+            let okPos = false;
+            if (op == "Tm") {
+                if (no >= 6) {
+                    let ma = pvNum(operands[no - 6]);
+                    let md = pvNum(operands[no - 3]);
+                    let ne = pvNum(operands[no - 2]);
+                    let nf = pvNum(operands[no - 1]);
+                    if (type(ma) == "number" and type(md) == "number" and type(ne) == "number" and type(nf) == "number") {
+                        tmA = ma;
+                        tmD = md;
+                        sc = pvAbs(ma);
+                        if (sc == 0) { sc = pvAbs(md); }
+                        if (sc == 0) { sc = 1; }
+                        tlmX = ne;
+                        tlmY = nf;
+                        okPos = true;
+                    }
+                }
+            } else if (no >= 2) {
+                let dx = pvNum(operands[no - 2]);
+                let dy = pvNum(operands[no - 1]);
+                if (type(dx) == "number" and type(dy) == "number") {
+                    tlmX = tlmX + dx * tmA;
+                    tlmY = tlmY + dy * tmD;
+                    okPos = true;
+                }
+            }
+            if (okPos) {
+                let esz2 = fsz * sc;
+                let devX = ctm[0] * tlmX + ctm[2] * tlmY + ctm[4];
+                let devY = ctm[1] * tlmX + ctm[3] * tlmY + ctm[5];
+                if (lastY != nil and actDepth == 0) {
+                    let dyAbs = pvAbs(devY - lastY);
+                    if (dyAbs > esz2 * vscale * 0.6) {
+                        if (len(chunks) > 0) { push(lines, pvFinishChunks(chunks)); chunks = []; }
+                        if (dyAbs > esz2 * vscale * 1.9) { push(lines, ""); }
+                    }
+                }
+                curX = devX;
+                if (actDepth == 0) { lastY = devY; }
+            }
+        } else if (op == "T*") {
+            if (len(chunks) > 0) { push(lines, pvFinishChunks(chunks)); chunks = []; }
+        }
+        operands = [];
+    }
+    if (len(chunks) > 0) { push(lines, pvFinishChunks(chunks)); }
+    let clean = [];
+    let li = 0;
+    while (li < len(lines)) {
+        let ln = trim(regexReplace(lines[li], " ((?:[.,;:!?)]|،|؛|؟))", "$1"));
+        if (ln == "") {
+            if (len(clean) > 0) {
+                if (clean[len(clean) - 1] != "") { push(clean, ""); }
+            }
+        } else {
+            push(clean, ln);
+        }
+        li = li + 1;
+    }
+    if (len(clean) > 0) {
+        if (clean[len(clean) - 1] == "") { pop(clean); }
+    }
+    return {"lines": clean, "unmapped": unmapped};
+}
+
+// ---- بيانات الوثيقة ----
+
+fun pvPdfMeta(doc, data) {
+    let meta = {"title": "", "author": "", "producer": "", "created": "", "version": ""};
+    let hv = regexGroups(substr(data, 0, 16), "%PDF-(\\d\\.\\d)");
+    if (len(hv) == 2) { meta["version"] = hv[1]; }
+    let infos = regexFindAll(data, "/Info\\s+\\d+\\s+\\d+\\s+R");
+    if (len(infos) > 0) {
+        let inum = regexGroups(infos[len(infos) - 1], "/Info\\s+(\\d+)")[1];
+        if (has(doc["objs"], inum)) {
+            let d = doc["objs"][inum]["d"];
+            let valRe = "\\s*(\\((?:\\\\[\\s\\S]|[^\\\\)])*\\)|<[0-9A-Fa-f]*>)";
+            let keysM = ["Title", "Author", "Producer", "CreationDate"];
+            let outK = ["title", "author", "producer", "created"];
+            let i = 0;
+            while (i < len(keysM)) {
+                let g = regexGroups(d, "/" + keysM[i] + valRe);
+                if (len(g) == 2) { meta[outK[i]] = pvPdfTextValue(g[1]); }
+                i = i + 1;
+            }
+        }
+    }
+    let cd = meta["created"];
+    let dm = regexGroups(cd, "D:(\\d{4})(\\d{2})?(\\d{2})?");
+    if (len(dm) >= 2) {
+        let ymd = dm[1];
+        if (len(dm) >= 3 and dm[2] != "") { ymd = ymd + "-" + dm[2]; }
+        if (len(dm) >= 4 and dm[3] != "") { ymd = ymd + "-" + dm[3]; }
+        meta["created"] = ymd;
+    }
+    return meta;
+}
+
+// يحلّل ملف PDF كاملاً -> {ok, error?, pages:[{num, lines, unmapped}], meta, encrypted, images, fonts, version}
+fun pvPdfAnalyze(data) {
+    if (len(data) < 8 or substr(data, 0, 5) != "%PDF-") {
+        return {"ok": false, "error": "not a PDF file", "pages": []};
+    }
+    let doc = pvPdfLoad(data);
+    doc["objs"] = pvPdfExpandObjStms(doc["objs"]);
+    let encrypted = len(regexFindAll(data, "/Encrypt\\s+\\d+\\s+\\d+\\s+R|/Encrypt\\s*<<")) > 0;
+    let meta = pvPdfMeta(doc, data);
+    let images = 0;
+    let fonts = 0;
+    let ks = keys(doc["objs"]);
+    let i = 0;
+    while (i < len(ks)) {
+        let dd = doc["objs"][ks[i]]["d"];
+        if (len(regexFindAll(dd, "/Subtype\\s*/Image")) > 0) { images = images + 1; }
+        if (len(regexFindAll(dd, "/Type\\s*/Font\\b")) > 0) { fonts = fonts + 1; }
+        i = i + 1;
+    }
+    let pagesOut = [];
+    if (encrypted == false) {
+        let list = pvPdfPageList(doc, data);
+        let cache = {};
+        let p = 0;
+        while (p < len(list)) {
+            let pt = pvPdfPageText(doc, list[p], cache);
+            push(pagesOut, {"num": p + 1, "obj": list[p], "lines": pt["lines"], "unmapped": pt["unmapped"]});
+            p = p + 1;
+        }
+    }
+    return {"ok": true, "encrypted": encrypted, "meta": meta, "pages": pagesOut, "images": images,
+            "fonts": fonts, "objects": doc["count"], "version": meta["version"]};
+}
+
+// نص PDF كاملاً (صفحة بعد صفحة، فاصل \f بين الصفحات) من مسار ملف
+fun pvPdfText(path) {
+    if (fileExists(path) == false) { return ""; }
+    let a = pvPdfAnalyze(readFile(path));
+    let out = [];
+    let i = 0;
+    while (i < len(a["pages"])) {
+        push(out, join(a["pages"][i]["lines"], "\n"));
+        i = i + 1;
+    }
+    return join(out, "\n" + chr(12) + "\n");
+}
+
+fun pvPdfInfo(path) {
+    if (fileExists(path) == false) { return {"ok": false, "error": "file not found"}; }
+    let a = pvPdfAnalyze(readFile(path));
+    if (a["ok"] == false) { return a; }
+    a["pageCount"] = len(a["pages"]);
+    let chars = 0;
+    let i = 0;
+    while (i < len(a["pages"])) {
+        chars = chars + utf8Len(join(a["pages"][i]["lines"], ""));
+        i = i + 1;
+    }
+    a["chars"] = chars;
+    a["pages"] = nil;
+    return a;
+}
+
+// ---- 10) عرض PDF ---------------------------------------------------------------------------
+
+fun pvInfoCell(label, value) {
+    if (value == "") { return ""; }
+    return "<div><small>" + pvEsc(label) + "</small>" + pvEsc(value) + "</div>";
+}
+
+// يعيد {ok, kind:"pdf", html, pages, chars, encrypted, ...}
+fun pvRenderPdf(data, theme, name) {
+    let t = pvTheme(theme);
+    let lb = pvLabels(t["lang"]);
+    let a = pvPdfAnalyze(data);
+    if (a["ok"] == false) {
+        return {"ok": false, "kind": "pdf", "error": a["error"], "html": pvErrorPage(name, a["error"], theme)};
+    }
+    let info = "<div class=\"pv-info\">" +
+        pvInfoCell(lb["title"], a["meta"]["title"]) + pvInfoCell(lb["author"], a["meta"]["author"]) +
+        pvInfoCell(lb["producer"], a["meta"]["producer"]) + pvInfoCell(lb["created"], a["meta"]["created"]) +
+        pvInfoCell(lb["version"], a["version"]) + pvInfoCell(lb["fonts"], toString(a["fonts"])) +
+        pvInfoCell(lb["images"], toString(a["images"])) + "</div>";
+    let body = [info];
+    let chars = 0;
+    let unmapped = 0;
+    if (a["encrypted"]) {
+        push(body, "<p class=\"pv-empty\">" + pvEsc(lb["encrypted"]) + "</p>");
+    }
+    let i = 0;
+    while (i < len(a["pages"])) {
+        let pg = a["pages"][i];
+        push(body, "<section class=\"pv-page\" id=\"p" + toString(pg["num"]) + "\"><div class=\"pv-pn\">" + pvEsc(lb["page"]) + " " + toString(pg["num"]) + " / " + toString(len(a["pages"])) + "</div>");
+        if (len(pg["lines"]) == 0) {
+            push(body, "<p class=\"pv-empty\">" + pvEsc(lb["noText"]) + "</p>");
+        }
+        let j = 0;
+        let gap = false;
+        while (j < len(pg["lines"])) {
+            let ln = pg["lines"][j];
+            if (ln == "") { gap = true; }
+            else {
+                let cl = "";
+                if (gap) { cl = " class=\"gap\""; }
+                push(body, "<p dir=\"auto\"" + cl + ">" + pvEsc(ln) + "</p>");
+                chars = chars + utf8Len(ln);
+                gap = false;
+            }
+            j = j + 1;
+        }
+        unmapped = unmapped + pg["unmapped"];
+        push(body, "</section>");
+        i = i + 1;
+    }
+    let textPanel = "<div class=\"pv-pdf\">" + join(body, "") + "</div>";
+    let main = textPanel;
+    let embed = "";
+    if (type(theme) == "map") {
+        if (has(theme, "embedSrc")) { embed = theme["embedSrc"]; }
+    }
+    if (embed != "") {
+        main = "<div class=\"pv-tabs\"><input type=\"radio\" name=\"pvtab\" id=\"pv-t1\" checked><input type=\"radio\" name=\"pvtab\" id=\"pv-t2\">" +
+            "<div class=\"pv-tabbar\"><label for=\"pv-t1\">" + pvEsc(lb["original"]) + "</label><label for=\"pv-t2\">" + pvEsc(lb["text"]) + "</label></div>" +
+            "<div class=\"pv-panels\"><div class=\"pv-panel p1\"><object class=\"pv-orig\" data=\"" + pvEsc(embed) + "\" type=\"application/pdf\"><p class=\"pv-empty\">" + pvEsc(embed) + "</p></object></div>" +
+            "<div class=\"pv-panel p2\">" + textPanel + "</div></div></div>";
+    }
+    let meta = [toString(len(a["pages"])) + " " + lb["pages"], pvFmtBytes(len(data)), toString(chars) + " " + lb["chars"]];
+    if (unmapped > 0) { push(meta, toString(unmapped) + " " + lb["unmapped"]); }
+    let html = pvShell(name, "PDF", meta, "", main, theme);
+    return {"ok": true, "kind": "pdf", "html": html, "pageCount": len(a["pages"]), "chars": chars,
+            "encrypted": a["encrypted"], "unmapped": unmapped, "meta": a["meta"], "images": a["images"], "fonts": a["fonts"]};
+}
+
+// ---- 11) الواجهة العامة: التوليد + الحفظ + المراقبة الحيّة --------------------------------------
+
+// يولّد الصفحة لملف موجود. opts (اختياري، كلها اختيارية): lang "ar"|"en"، live، intervalSec،
+// accent/bg/... (ثيم relyRIN)، embedSrc (مسار نسبي لعرض PDF الأصلي)، kind (فرض النوع).
+// يعيد {ok, kind, html, ...خاص بالنوع} أو {ok:false, error}
+fun pvRender(path, opts) {
+    if (fileExists(path) == false) {
+        return {"ok": false, "error": "file not found: " + path, "kind": "missing",
+                "html": pvErrorPage(path, pvLabels(pvTheme(opts)["lang"])["missing"], opts)};
+    }
+    let bytes = readFile(path);
+    let kind = pvDetect(path, bytes);
+    if (type(opts) == "map") {
+        if (has(opts, "kind")) { kind = opts["kind"]; }
+    }
+    let name = pvBaseName(path);
+    let ext = pvExt(path);
+    if (kind == "markdown") { return pvRenderMarkdown(bytes, opts, name); }
+    if (kind == "pdf") { return pvRenderPdf(bytes, opts, name); }
+    return pvRenderCode(bytes, ext, kind, opts, name);
+}
+
+// يولّد من نص مباشرة (بلا ملف): pvRenderText("markdown"|"typescript"|..., src, opts)
+fun pvRenderText(kind, src, opts) {
+    let ext = "txt";
+    if (kind == "typescript") { ext = "ts"; }
+    if (kind == "javascript") { ext = "js"; }
+    if (kind == "json") { ext = "json"; }
+    if (kind == "markdown") { return pvRenderMarkdown(src, opts, "preview.md"); }
+    if (kind == "pdf") { return pvRenderPdf(src, opts, "preview.pdf"); }
+    return pvRenderCode(src, ext, kind, opts, "preview." + ext);
+}
+
+// بصمة سريعة لمحتوى الملف (CRC32): تتغيّر عند أي تعديل
+fun pvStamp(path) {
+    if (fileExists(path) == false) { return "missing"; }
+    return fs.hash(path, "crc32");
+}
+
+// يولّد ويكتب الصفحة إلى outPath. يعيد {ok, kind, output, bytes, ms, stamp, ...}
+fun pvPreview(path, outPath, opts) {
+    let t0 = now();
+    let r = pvRender(path, opts);
+    writeFile(outPath, r["html"]);
+    r["output"] = outPath;
+    r["bytes"] = len(r["html"]);
+    r["ms"] = now() - t0;
+    r["stamp"] = pvStamp(path);
+    r["source"] = path;
+    r["html"] = nil;
+    return r;
+}
+
+// خطوة مراقبة واحدة غير حاجبة: يقارن بصمة path بـ state.stamp؛ إن تغيّرت يعيد التوليد.
+// state أولي: nil أو {}. يعيد {changed, state, result}. مناسب لحلقات المضيف (أندرويد/واجهة).
+fun pvPollOnce(path, outPath, opts, state) {
+    let st = state;
+    if (type(st) != "map") { st = {"stamp": "", "runs": 0}; }
+    let stamp = pvStamp(path);
+    if (stamp == st["stamp"] and fileExists(outPath)) {
+        return {"changed": false, "state": st, "result": nil};
+    }
+    let res = pvPreview(path, outPath, opts);
+    st["stamp"] = stamp;
+    st["runs"] = st["runs"] + 1;
+    return {"changed": true, "state": st, "result": res};
+}
+
+// مراقبة حيّة حاجبة: تولّد أولاً ثم تفحص الملف كل intervalMs وتعيد التوليد عند أي تغيّر.
+// opts إضافية: intervalMs (افتراضي 1000، 50..60000)، maxTicks (افتراضي 600 فحصاً)،
+// onUpdate: دالة fun(result) تُستدعى بعد كل توليد (الأول أيضاً)، stopWhenMissing (افتراضي true).
+// تنتهي عند maxTicks أو اختفاء الملف. يعيد {ok, runs, ticks, last}
+fun pvLive(path, outPath, opts) {
+    let o = opts;
+    if (type(o) != "map") { o = {}; }
+    let interval = 1000;
+    if (has(o, "intervalMs")) { interval = o["intervalMs"]; }
+    if (interval < 50) { interval = 50; }
+    if (interval > 60000) { interval = 60000; }
+    let maxTicks = 600;
+    if (has(o, "maxTicks")) { maxTicks = o["maxTicks"]; }
+    let page = {};
+    let pk = keys(o);
+    let ki = 0;
+    while (ki < len(pk)) {
+        let key = pk[ki];
+        if (key != "intervalMs" and key != "maxTicks" and key != "onUpdate" and key != "stopWhenMissing") { page[key] = o[key]; }
+        ki = ki + 1;
+    }
+    if (has(page, "live") == false) { page["live"] = true; }
+    if (has(page, "intervalSec")) {
+        // يُحتفظ بما حدّده المستخدم
+    } else {
+        page["intervalSec"] = max(1, ceil(interval / 1000));
+    }
+    let state = {"stamp": "", "runs": 0};
+    let last = nil;
+    let ticks = 0;
+    while (ticks < maxTicks) {
+        if (fileExists(path) == false) {
+            if (has(o, "stopWhenMissing")) {
+                if (o["stopWhenMissing"] == false) {
+                    automation.sleepMs(interval);
+                    ticks = ticks + 1;
+                    continue;
+                }
+            }
+            break;
+        }
+        let step = pvPollOnce(path, outPath, page, state);
+        state = step["state"];
+        if (step["changed"]) {
+            last = step["result"];
+            if (has(o, "onUpdate")) {
+                let cb = o["onUpdate"];
+                cb(last);
+            }
+        }
+        ticks = ticks + 1;
+        if (ticks < maxTicks) { automation.sleepMs(interval); }
+    }
+    return {"ok": true, "runs": state["runs"], "ticks": ticks, "last": last};
+}
+
+// "تشغيل" ملف بسطر واحد: يولّد معاينة بجوار الملف (name.preview.html) ويعيد الملخص.
+fun pvRun(path, opts) {
+    let out = path + ".preview.html";
+    if (type(opts) == "map") {
+        if (has(opts, "output")) { out = opts["output"]; }
+    }
+    return pvPreview(path, out, opts);
+}
+
+fun pvInfo() {
+    return {
+        "name": "previewkit",
+        "version": "1.0.0",
+        "description": "Live preview for PDF, Markdown and TypeScript/JavaScript/JSON/code files — pure Rin",
+        "kinds": pvSupported(),
+        "api": ["pvRun", "pvPreview", "pvRender", "pvRenderText", "pvLive", "pvPollOnce", "pvStamp",
+                "pvDetect", "pvSupported", "pvPdfText", "pvPdfInfo", "pvTsOutline", "pvInfo"]
+    };
+}
+
+// واجهات مساعدة سريعة --------------------------------------------------------------
+
+// هيكل ملف TS/JS كمصفوفة {kind,name,line,depth} (من النص)
+fun pvTsOutline(src, lang) {
+    let l = "typescript";
+    if (lang == "js" or lang == "javascript") { l = "javascript"; }
+    let tk = pvTokenize(replace(src, "\r\n", "\n"), l);
+    tk = pvClassifyIdents(tk, l);
+    return pvAnalyzeCode(tk, l);
+}
+)PREVIEWKITOGRIN";
+
 inline const std::unordered_map<std::string, std::string>& embeddedRinLibraries() {
     static const std::unordered_map<std::string, std::string> libs = {
         {"lib/math.og.rin", kLib_math_og_rin},
@@ -18963,6 +21371,7 @@ inline const std::unordered_map<std::string, std::string>& embeddedRinLibraries(
         {"lib/packkit.og.rin", kLib_packkit_og_rin},
         {"lib/wesscode.og.rin", kLib_wesscode_og_rin},
         {"lib/indsinweb.og.rin", kLib_indsinweb_og_rin},
+        {"lib/previewkit.og.rin", kLib_previewkit_og_rin},
     };
     return libs;
 }
