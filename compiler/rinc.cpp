@@ -123,7 +123,7 @@ static const std::unordered_set<std::string> kInterpreterOnlyNatives = {
     "offChat","onChat","openChat","pendingMigrations","publish","queryDocs","queryOneDoc",
     "relatedDocs","rollbackMigration","rollbackTransaction","runMigration","sectionNames",
     "sectionVars","sendMessage","setChatTyping","streamReply","subscribe","tokenType","tokens",
-    "unsubscribe","unwatch","updateDoc","validateDoc","watch","zlibDeflateRaw","zlibInflateRaw"
+    "unsubscribe","unwatch","updateDoc","validateDoc","watch","zlibDeflateRaw","zlibInflate","zlibInflateRaw"
 };
 
 class Lexer {
