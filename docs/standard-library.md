@@ -48,6 +48,7 @@ Rin
 | `ringo.og.rin` | "Ringo": ترميز خفيف بوسوم `[tag]` يُصيَّر HTML أو نص. |
 | `rinxg.og.rin` | "RinXG": لغة تصريحية لتصميم واجهات الويب فوق Rin. |
 | `relyRIN.og.rin` | جسر Markdown/وسائط/معاينة حيّة بلغة Rin. |
+| `previewkit.og.rin` | معاينة حيّة لـ PDF / Markdown / TypeScript / JavaScript / JSON وكود عام (انظر `previewkit.md`). |
 | `indsinweb.og.rin` | WebView والروابط لـ indsin: روابط آمنة، تضمين يوتيوب/Vimeo، `html=` آمن، مولّد عنصر `WebView` (انظر [`indsinweb.md`](./indsinweb.md)). |
 
 ### بيانات وبِنى
