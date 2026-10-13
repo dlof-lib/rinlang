@@ -267,7 +267,7 @@ private object RinLexer {
         "uuid", "validateDoc", "values", "variance", "volumeContainerCount", "volumeContainers",
         "volumeHasContainer", "volumeMembers", "volumeNames", "volumeParent", "volumePath",
         "volumeSnapshot", "volumeVars", "watch", "weightedMean", "writeFile", "zlibDeflateRaw",
-        "zlibInflateRaw", "zscore"
+        "zlibInflate", "zlibInflateRaw", "zscore"
     )
     // <rin-keywords:end>
 
