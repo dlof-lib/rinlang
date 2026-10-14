@@ -83,4 +83,6 @@
     <string name="settings_project_sort">ترتيب حسب</string>
 
 <string name="settings_language_current">العربية 🇸🇾</string><string name="language_picker_title">اختيار اللغة</string><string name="language_picker_subtitle">اختر لغة وبلد الواجهة</string><string name="language_picker_search">ابحث عن لغة أو بلد…</string><string name="language_picker_applied">تم تطبيق %1$s</string><string name="language_group_arabic">العربية • الدول العربية</string><string name="language_group_english">English • English-speaking countries</string><string name="language_group_spanish">Español • Países hispanohablantes</string>
+    <string name="settings_container_style">Container block style</string>
+    <string name="settings_container_style_hint">Draw a thin colored guide line and color the opening and closing tags per container type.</string>
 </resources>
