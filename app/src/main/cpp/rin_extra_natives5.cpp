@@ -20,6 +20,7 @@
 #include <cmath>
 #include <cstdint>
 #include <regex>
+#include <unordered_set>
 
 namespace rin {
 namespace extra5 {
@@ -251,6 +252,98 @@ void Interpreter::registerNativesExtra5() {
         std::vector<Value> out;
         out.reserve(static_cast<size_t>(count));
         for (long i = 0; i < static_cast<long>(count); ++i) out.push_back(Value::num(from + step * static_cast<double>(i)));
+        return A5(std::move(out));
+    };
+
+    // ------------------------------------------------------------------------------------------
+    //  دوال الحلقات (Loops v3 — docs/loops.md): يستدعيها المحلل النحوي عند تفكيك صيغ each الجديدة
+    //  (downto / sorted / sorted by / unique). تعمل على نسخة: لا تعدّل المصفوفة الأصلية أبداً.
+    // ------------------------------------------------------------------------------------------
+    // #downto(from, to[, step]) — عدّ تنازلي شامل للطرفين؛ فارغ إن كان from < to (بخلاف #to الذي يعكس الاتجاه)
+    natives["#downto"] = [](Args& a, int line) -> Value {
+        argc5("#downto", a, 2, 3, line);
+        for (auto& v : a)
+            if (v.type != Value::Type::NUMBER || std::isnan(v.number))
+                throw err5(line, "'downto' (A downto B [step C]) needs numbers; found `" + v.typeName() + "`");
+        double from = a[0].number, to = a[1].number;
+        double mag = a.size() == 3 ? std::fabs(a[2].number) : 1.0;
+        if (mag == 0.0) throw diagErr(diag::Code::E0007_InvalidArguments, line, "'downto': the step cannot be 0");
+        if (from < to) return A5({});
+        double count = std::floor((from - to) / mag + 1e-9) + 1.0;
+        if (count > 10000000.0)
+            throw diagErr(diag::Code::E0035_RuntimeError, line, "'downto': the range would hold more than 10,000,000 items");
+        std::vector<Value> out;
+        out.reserve(static_cast<size_t>(count));
+        for (long i = 0; i < static_cast<long>(count); ++i) out.push_back(Value::num(from - mag * static_cast<double>(i)));
+        return A5(std::move(out));
+    };
+
+    // عناصر أي مكرَّر مدعوم كنسخة جديدة (مصفوفة / نص -> حروف / قاموس -> مفاتيح / مجموعة)
+    static auto loopItems = [](const char* fn, const Value& v, int line) -> std::vector<Value> {
+        std::vector<Value> out;
+        if (v.type == Value::Type::ARRAY) out = *v.array;
+        else if (v.type == Value::Type::STRING) { for (char c : v.str) out.push_back(Value::string(std::string(1, c))); }
+        else if (v.type == Value::Type::MAP) { for (auto& kv : *v.map) out.push_back(kv.first); }
+        else if (v.type == Value::Type::SET) { if (v.set) out = v.set->items; }
+        else throw err5(line, std::string("`each ... ") + fn + "` needs an array, string, map or set; found `" + v.typeName() + "`");
+        return out;
+    };
+    // تحقّق أن كل المفاتيح أرقام أو كلها نصوص (لا خلط) — يُرجع 1=أرقام 2=نصوص 0=فارغ
+    static auto keyKind = [](const char* fn, const std::vector<Value>& ks, int line) -> int {
+        int kind = 0;
+        for (auto& k : ks) {
+            int c = k.type == Value::Type::NUMBER ? 1 : k.type == Value::Type::STRING ? 2 : -1;
+            if (c < 0 || (kind && c != kind))
+                throw diagErr(diag::Code::E0035_RuntimeError, line,
+                              std::string("`") + fn + "` needs every item/key to be a number or every one a string (no mixing, no other types)");
+            kind = c;
+        }
+        return kind;
+    };
+    // #sorted(items[, desc]) — ترتيب ثابت (stable) على نسخة
+    natives["#sorted"] = [](Args& a, int line) -> Value {
+        argc5("#sorted", a, 1, 2, line);
+        auto items = loopItems("sorted", a[0], line);
+        bool desc = a.size() == 2 && a[1].isTruthy();
+        int kind = keyKind("sorted", items, line);
+        if (kind == 1) std::stable_sort(items.begin(), items.end(), [desc](const Value& x, const Value& y) { return desc ? x.number > y.number : x.number < y.number; });
+        else if (kind == 2) std::stable_sort(items.begin(), items.end(), [desc](const Value& x, const Value& y) { return desc ? x.str > y.str : x.str < y.str; });
+        return A5(std::move(items));
+    };
+    // #sortby(items, keys[, desc]) — ترتيب العناصر بحسب مصفوفة مفاتيح موازية (key = تعبير بعد sorted by)
+    natives["#sortby"] = [](Args& a, int line) -> Value {
+        argc5("#sortby", a, 2, 3, line);
+        auto items = loopItems("sorted by", a[0], line);
+        if (a[1].type != Value::Type::ARRAY || a[1].array->size() != items.size())
+            throw err5(line, "'sorted by' internal error: keys do not match items");
+        const auto& ks = *a[1].array;
+        bool desc = a.size() == 3 && a[2].isTruthy();
+        int kind = keyKind("sorted by", ks, line);
+        std::vector<size_t> idx(items.size());
+        for (size_t i = 0; i < idx.size(); ++i) idx[i] = i;
+        if (kind == 1) std::stable_sort(idx.begin(), idx.end(), [&](size_t x, size_t y) { return desc ? ks[x].number > ks[y].number : ks[x].number < ks[y].number; });
+        else if (kind == 2) std::stable_sort(idx.begin(), idx.end(), [&](size_t x, size_t y) { return desc ? ks[x].str > ks[y].str : ks[x].str < ks[y].str; });
+        std::vector<Value> out;
+        out.reserve(items.size());
+        for (size_t i : idx) out.push_back(items[i]);
+        return A5(std::move(out));
+    };
+    // #unique(items) — يحذف التكرار ويحفظ ترتيب أول ظهور (أرقام/نصوص بتجزئة O(n)، وغيرها بـ valuesEqual)
+    natives["#unique"] = [](Args& a, int line) -> Value {
+        argc5("#unique", a, 1, 1, line);
+        auto items = loopItems("unique", a[0], line);
+        std::vector<Value> out;
+        std::unordered_set<double> seenNum;
+        std::unordered_set<std::string> seenStr;
+        for (auto& v : items) {
+            if (v.type == Value::Type::NUMBER) { if (seenNum.insert(v.number).second) out.push_back(v); }
+            else if (v.type == Value::Type::STRING) { if (seenStr.insert(v.str).second) out.push_back(v); }
+            else {
+                bool dup = false;
+                for (auto& o : out) if (valuesEqual(o, v)) { dup = true; break; }
+                if (!dup) out.push_back(v);
+            }
+        }
         return A5(std::move(out));
     };
 
