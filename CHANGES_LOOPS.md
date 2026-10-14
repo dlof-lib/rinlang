@@ -33,3 +33,12 @@ tests/loops 5/5 على `rin run` و`rin --vm` · rintests 83/83 · wesscode 42/4
 الملفات: `rin_parser.cpp|.h` (تفكيك)، و`rin_ast.h` (`ForStmt::freshIterScope`)، و`rin_interpreter.cpp` (فرع ForStmt: تنفيذ الجسم في forEnv مباشرة
 عندما لا توجد closures). RinVM لم يُعدَّل. اختبار: `tests/loops/loops_for.rin`. `/=` تبقى `!=` كما هي في اللغة.
 التحقق (g++ لينكس): tests/loops 10/10 على `rin run` و`rin --vm` · rintests 83/83 · wesscode 42/42 · tests/vm تطابق 5/5 · verification 57/63 (فروقات let_err_* المعروفة).
+
+## قوالب الحلقات `@tmpl`
+`@tmpl name(params[=default]) [as vars] <ترويسة حلقة>;|{ جسم افتراضي }` ثم `@name(args) [as vars] { body }`. قالب كتلة: `@tmpl name(..) as i, j { ... @body ... }`.
+تعمل مع كل أنواع الحلقات وفي التعابير (`[@t(xs) yield e]`, `sum @t(xs) yield e`) وتتركّب (قالب يستعمل قالباً) بلا تعديل في المفسّر أو RinVM:
+مرحلة توكنات `Parser::expandLoopTemplates` تُنفَّذ مرة في بداية `parse()`/`parseCollectingDiagnostics()` ولا تعمل أصلاً إن لم يوجد `@tmpl`.
+الملفات: `rin_parser.cpp|.h` (قسم `@tmpl` في آخر الملف) · `docs/loop-templates.md` · `docs/loops.md` · `tests/loops/loops_tmpl.rin|.expected` ·
+`syntaxes/rin.tmLanguage.json` (تلوين) · `editor/rin_editor_tools.h` (قالبا `tmpl` و`tmplb`).
+التحقق (g++ لينكس، بناء `cli/linux`): tests/loops 11/11 على `rin run` و`rin --vm` · rintests 83/83 · wesscode 42/42 · tests/vm تطابق 5/5 · tests/editor 98/98.
+لم يُشغَّل: tests/verification، بناء APK/الويب/Kotlin. الحدود: القالب خاص بالملف (لا يعبر `@import`) وغير معزول الأسماء.
