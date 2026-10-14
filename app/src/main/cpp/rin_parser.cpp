@@ -15,6 +15,22 @@ const Token& Parser::previous() const { return tokens[current - 1]; }
 const Token& Parser::advance() { if (!isAtEnd()) current++; return previous(); }
 bool Parser::check(TokenType type) const { return !isAtEnd() && peek().type == type; }
 
+// Rin For+: هل عند الموضع i معامل مركّب `op=` أو `++`/`--` ملتصقان (يُعالَجان في assignment() لا في term/factor)؟
+// kind: 1 = op=  ، 2 = ++/-- متبوعة بنهاية تعبير ( ) ; , } { أو نهاية الملف ). المعامل التالي المسافة (a - -b) لا يُلتقط.
+static int rinCompoundAhead(const std::vector<Token>& t, size_t i) {
+    if (i + 1 >= t.size()) return 0;
+    const Token& a = t[i]; const Token& b = t[i + 1];
+    if (a.line != b.line || a.endCol != b.col) return 0;
+    if (b.type == TokenType::EQUAL &&
+        (a.type == TokenType::PLUS || a.type == TokenType::MINUS || a.type == TokenType::STAR || a.type == TokenType::SLASH || a.type == TokenType::PERCENT))
+        return 1;
+    if (a.type == b.type && (a.type == TokenType::PLUS || a.type == TokenType::MINUS)) {
+        TokenType n = i + 2 < t.size() ? t[i + 2].type : TokenType::END_OF_FILE;
+        if (n == TokenType::RPAREN || n == TokenType::SEMICOLON || n == TokenType::COMMA || n == TokenType::RBRACE || n == TokenType::LBRACE || n == TokenType::END_OF_FILE) return 2;
+    }
+    return 0;
+}
+
 bool Parser::checkNext(TokenType type) const {
     if (isAtEnd()) return false;
     if (current + 1 >= tokens.size()) return false;
@@ -2019,7 +2035,16 @@ StmtPtr Parser::forStatement() {
         exitLoop();
         return buildEach(h, body, forTok.line, lim);
     }
-    consume(TokenType::LPAREN, "Expected '(' after 'for'");
+    // Rin For+: for let i = 0; i < n; i++ { ... }  — C-style بلا أقواس (الجسم كتلة { })
+    const size_t scanFrom = current;
+    bool parenless = false;
+    if (!check(TokenType::LPAREN)) {
+        if (check(TokenType::SEMICOLON)) parenless = true;
+        else if (check(TokenType::LET) && current + 2 < tokens.size() && tokens[current + 1].type == TokenType::IDENT &&
+                 (tokens[current + 2].type == TokenType::EQUAL || tokens[current + 2].type == TokenType::COMMA || tokens[current + 2].type == TokenType::COLON)) parenless = true;
+        else if (check(TokenType::IDENT) && checkNext(TokenType::EQUAL)) parenless = true;
+    }
+    if (!parenless) consume(TokenType::LPAREN, "Expected '(' after 'for'");
 
     // for (let NAME in iterable) { body } -> ForInStmt (انظر rin_ast.h). يجب فحصه *قبل* مسار
     // C-style أدناه: 'let' + IDENT + IDENT("in") تحديداً (نظرة ثلاث خطوات للأمام) يُميِّزه عن
@@ -2086,8 +2111,16 @@ StmtPtr Parser::forStatement() {
     consume(TokenType::SEMICOLON, "Expected ';' after 'for' loop condition");
 
     ExprPtr increment = nullptr;
-    if (!check(TokenType::RPAREN)) increment = expression();
-    consume(TokenType::RPAREN, "Expected ')' after 'for' clauses");
+    if (!check(TokenType::RPAREN) && !(parenless && check(TokenType::LBRACE))) {
+        increment = expression();
+        if (check(TokenType::COMMA)) { // for (...; ...; i++, j--)  — عدّة خطوات تزايد تُنفَّذ بالترتيب
+            auto many = std::make_shared<ArrayExpr>(); many->line = forTok.line;
+            many->elements.push_back(increment);
+            while (match({TokenType::COMMA})) many->elements.push_back(expression());
+            increment = many;
+        }
+    }
+    if (!parenless) consume(TokenType::RPAREN, "Expected ')' after 'for' clauses");
 
     ExprPtr lim = limitClause();
     enterLoop();
@@ -2100,6 +2133,7 @@ StmtPtr Parser::forStatement() {
     stmt->increment = increment;
     stmt->body = body;
     stmt->line = forTok.line;
+    stmt->freshIterScope = tokensMayCapture(scanFrom, current); // بلا closures => مسار سريع في المفسّر
     attachDoneBlock(stmt->doneBlock);
     return finishLoop(stmt, lim);
 }
@@ -3605,6 +3639,30 @@ ExprPtr Parser::assignment() {
         c->condition = expr; c->whenTrue = whenTrue; c->whenFalse = whenFalse; c->line = q.line;
         expr = c;
     }
+    // Rin For+: x += e  -= *= /= %=  و x++ / x--  (حلّ في المحلل إلى  x = x op e  — يعمل على المفسّر وRinVM)
+    TokenType cOp = TokenType::EQUAL; bool isCompound = false, isIncDec = false;
+    { int ck = rinCompoundAhead(tokens, current); if (ck == 1) { isCompound = true; cOp = tokens[current].type; } else if (ck == 2) { isIncDec = true; cOp = tokens[current].type; } }
+    if ((isCompound || isIncDec) && (std::dynamic_pointer_cast<VariableExpr>(expr) || std::dynamic_pointer_cast<IndexExpr>(expr) || std::dynamic_pointer_cast<GetExpr>(expr))) {
+        Token opTok = advance();
+        if (!isSimpleTarget(expr))
+            throw errRich(diag::Code::E0003_InvalidAssignment, opTok, "compound assignment needs a simple target",
+                          "`a op= b` and `a++` read and write the target, so the target must have no side effects (it is evaluated twice)",
+                          "use a variable, `arr[i]`, or `obj.field` with plain names/numbers; otherwise write `t = f(); t op= b;`");
+        ExprPtr rhs;
+        if (isIncDec) { advance(); { auto one = std::make_shared<LiteralExpr>(); one->kind = LiteralExpr::Kind::NUMBER; one->number = 1; one->line = opTok.line; rhs = one; } }
+        else { advance(); rhs = assignment(); } // '='
+        auto bin = std::make_shared<BinaryExpr>();
+        bin->left = expr; bin->op = cOp; bin->right = rhs; bin->line = opTok.line;
+        ExprPtr value = bin;
+        if (auto var = std::dynamic_pointer_cast<VariableExpr>(expr)) {
+            auto as = std::make_shared<AssignExpr>(); as->name = var->name; as->value = value; as->line = opTok.line; return as;
+        }
+        if (auto idx = std::dynamic_pointer_cast<IndexExpr>(expr)) {
+            auto set = std::make_shared<IndexSetExpr>(); set->object = idx->object; set->index = idx->index; set->value = value; set->line = opTok.line; return set;
+        }
+        auto get = std::dynamic_pointer_cast<GetExpr>(expr);
+        auto set = std::make_shared<SetExpr>(); set->object = get->object; set->name = get->name; set->value = value; set->line = opTok.line; return set;
+    }
     if (match({TokenType::EQUAL})) {
         Token eq = previous();
         auto value = assignment();
@@ -3781,7 +3839,7 @@ ExprPtr Parser::comparison() {
 
 ExprPtr Parser::term() {
     auto expr = factor();
-    while (match({TokenType::PLUS, TokenType::MINUS})) {
+    while (!rinCompoundAhead(tokens, current) && match({TokenType::PLUS, TokenType::MINUS})) {
         auto op = previous().type;
         auto right = factor();
         auto b = std::make_shared<BinaryExpr>();
@@ -3793,7 +3851,7 @@ ExprPtr Parser::term() {
 
 ExprPtr Parser::factor() {
     auto expr = unary();
-    while (match({TokenType::STAR, TokenType::SLASH, TokenType::PERCENT})) {
+    while (!rinCompoundAhead(tokens, current) && match({TokenType::STAR, TokenType::SLASH, TokenType::PERCENT})) {
         auto op = previous().type;
         auto right = unary();
         auto b = std::make_shared<BinaryExpr>();
@@ -4891,6 +4949,33 @@ ExprPtr Parser::mapComprehension() {
     auto g = std::make_shared<GoalExpr>(); g->line = line;
     g->body = lBlock({lLet(acc, std::make_shared<MapExpr>(), line), loop, ach}, line);
     return g;
+}
+
+
+// ============================================================================
+// Rin For+ — i++ / i-- / += -= *= /= %= ، ‎for بلا أقواس، عدّة خطوات تزايد، وحلقة for سريعة بلا closures.
+// ============================================================================
+bool Parser::tokensMayCapture(size_t from, size_t to) const {
+    for (size_t k = from; k < to && k < tokens.size(); ++k) {
+        const Token& t = tokens[k];
+        if (t.type == TokenType::FUN) return true;
+        if (t.type == TokenType::IDENT) {
+            const std::string& w = t.lexeme;
+            if (w == "bell" || w == "on" || w == "hook" || w == "defer" || w == "spawn" || w == "async" || w == "thread" ||
+                w == "after" || w == "watch" || w == "trial" || w == "onload" || w == "onunload")
+                return true;
+        }
+    }
+    return false;
+}
+
+bool Parser::isSimpleTarget(const ExprPtr& e) const {
+    if (!e) return false;
+    if (std::dynamic_pointer_cast<VariableExpr>(e) || std::dynamic_pointer_cast<LiteralExpr>(e)) return true;
+    if (auto g = std::dynamic_pointer_cast<GetExpr>(e)) return isSimpleTarget(g->object);
+    if (auto ix = std::dynamic_pointer_cast<IndexExpr>(e)) return isSimpleTarget(ix->object) && isSimpleTarget(ix->index);
+    if (auto b = std::dynamic_pointer_cast<BinaryExpr>(e)) return isSimpleTarget(b->left) && isSimpleTarget(b->right);
+    return false;
 }
 
 } // namespace rin
