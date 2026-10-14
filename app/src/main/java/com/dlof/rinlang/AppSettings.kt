@@ -51,6 +51,7 @@ object AppSettings {
         const val AUTOCOMPLETE = "autocomplete"
         const val AUTO_CLOSE = "auto_close_brackets"
         const val AUTO_INDENT = "auto_indent"
+        const val SYNTAX_FONT_STYLES = "syntax_font_styles"
 
         const val SAVE_ON_PAUSE = "save_on_pause"
         const val AUTO_SAVE_DELAY = "auto_save_delay_ms"
@@ -84,6 +85,7 @@ object AppSettings {
         Key.AUTOCOMPLETE to true,
         Key.AUTO_CLOSE to true,
         Key.AUTO_INDENT to true,
+        Key.SYNTAX_FONT_STYLES to true,
         Key.SAVE_ON_PAUSE to true,
         Key.CONFIRM_EXIT to false,
         Key.FORMAT_ON_SAVE to false,
@@ -153,6 +155,8 @@ object AppSettings {
     fun isAutocomplete(context: Context) = getBoolean(context, Key.AUTOCOMPLETE)
     fun isAutoCloseBrackets(context: Context) = getBoolean(context, Key.AUTO_CLOSE)
     fun isAutoIndent(context: Context) = getBoolean(context, Key.AUTO_INDENT)
+    /** خط مميّز لكل مفهوم (عريض للكلمات المفتاحية/الأنواع، مائل للتعليقات/المعدِّلات/التسميات). */
+    fun isSyntaxFontStyles(context: Context) = getBoolean(context, Key.SYNTAX_FONT_STYLES)
 
     // ---- الحفظ ----------------------------------------------------------------------------
 
