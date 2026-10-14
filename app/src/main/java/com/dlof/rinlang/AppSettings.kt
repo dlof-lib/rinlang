@@ -52,6 +52,7 @@ object AppSettings {
         const val AUTO_CLOSE = "auto_close_brackets"
         const val AUTO_INDENT = "auto_indent"
         const val SYNTAX_FONT_STYLES = "syntax_font_styles"
+        const val CONTAINER_STYLE = "container_block_style"
 
         const val SAVE_ON_PAUSE = "save_on_pause"
         const val AUTO_SAVE_DELAY = "auto_save_delay_ms"
@@ -86,6 +87,7 @@ object AppSettings {
         Key.AUTO_CLOSE to true,
         Key.AUTO_INDENT to true,
         Key.SYNTAX_FONT_STYLES to true,
+        Key.CONTAINER_STYLE to true,
         Key.SAVE_ON_PAUSE to true,
         Key.CONFIRM_EXIT to false,
         Key.FORMAT_ON_SAVE to false,
@@ -143,6 +145,7 @@ object AppSettings {
     }
 
     fun isShowWhitespace(context: Context) = getBoolean(context, Key.SHOW_WHITESPACE)
+    fun isContainerStyle(context: Context) = getBoolean(context, Key.CONTAINER_STYLE)
     fun isCurrentLineHighlight(context: Context) = getBoolean(context, Key.CURRENT_LINE)
     fun isSmoothCursor(context: Context) = getBoolean(context, Key.SMOOTH_CURSOR)
 
