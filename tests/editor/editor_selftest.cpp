@@ -65,6 +65,19 @@ int main(int argc, char** argv) {
     CHECK(isKind(e, 2, "body", HighlightKind::TemplateKw), "@body kw");
     CHECK(!isKind(e, 3, "tmpl", HighlightKind::TemplateKw), "let tmpl stays ident");
 
+    // الرموز: مقارنة، فواصل، تدفق، أقواس بالعمق
+    e.setText("let r = f(a[0], (b)) != 3 and x >= 1;\nlet v = xs |> g;\nlet w = ok ? 1 : 2;\nlet z = a + b;\n}\n");
+    CHECK(isKind(e, 0, "!=", HighlightKind::Compare), "compare !=");
+    CHECK(isKind(e, 0, ">=", HighlightKind::Compare), "compare >=");
+    CHECK(isKind(e, 0, "and", HighlightKind::Compare), "logic and");
+    CHECK(isKind(e, 0, ",", HighlightKind::Punct), "comma punct");
+    CHECK(isKind(e, 0, ";", HighlightKind::Punct), "semicolon punct");
+    CHECK(isKind(e, 0, "(", HighlightKind::Bracket0), "bracket depth0");
+    CHECK(isKind(e, 1, "|>", HighlightKind::Flow), "pipe flow");
+    CHECK(isKind(e, 2, "?", HighlightKind::Flow), "ternary flow");
+    CHECK(isKind(e, 3, "+", HighlightKind::Operator), "plus operator");
+    CHECK(isKind(e, 4, "}", HighlightKind::Error), "unmatched closer");
+
     // مفاهيم دلالية
     e.setText("class Point {\n    fun area(a) { return a; }\n}\nlet p = Point();\nlet MAX_SIZE = 10;\nif (true) { print p.x + MAX_SIZE; } else { print nil; }\n"
               "try {\n    throw 1;\n} catch (err) {\n    print err;\n}\nlet s = Set.of(1);\ncontainer.pipe;\n");
