@@ -417,6 +417,45 @@ inline void classifyTemplates(const std::vector<rin::Token>& t, std::vector<High
             kinds[i] = kinds[i + 1] = HighlightKind::Template;
 }
 
+
+// ---------------------------------------------------------------------------------------
+// الرموز: مقارنة/منطق · فواصل خافتة · تدفّق (|> ?) · أقواس ملوّنة بالعمق (3 ألوان بالتناوب)
+// قوس إغلاق بلا فتح (أو غير مطابق) يُصنَّف Error. يُشغَّل آخراً ولا يمسّ إلا توكنات الرموز.
+// ---------------------------------------------------------------------------------------
+inline void classifyPunctuation(const std::vector<rin::Token>& t, std::vector<HighlightKind>& kinds) {
+    using namespace detail;
+    const size_t n = t.size();
+    if (kinds.size() != n) return;
+    std::vector<size_t> stack;
+    for (size_t i = 0; i < n; ++i) {
+        switch (t[i].type) {
+            case TT::EQUAL_EQUAL: case TT::BANG_EQUAL: case TT::LESS: case TT::LESS_EQUAL:
+            case TT::GREATER: case TT::GREATER_EQUAL: case TT::NOT_SAME: case TT::COPY_OF: case TT::BANG:
+                kinds[i] = HighlightKind::Compare; break;
+            case TT::AND: case TT::OR:
+                kinds[i] = HighlightKind::Compare; break;
+            case TT::COMMA: case TT::SEMICOLON: case TT::COLON: case TT::DOT:
+                if (kinds[i] == HighlightKind::Operator) kinds[i] = HighlightKind::Punct;
+                break;
+            case TT::PIPE: case TT::QUESTION:
+                kinds[i] = HighlightKind::Flow; break;
+            case TT::LPAREN: case TT::LBRACKET: case TT::LBRACE: {
+                static const HighlightKind lv[3] = {HighlightKind::Bracket0, HighlightKind::Bracket1, HighlightKind::Bracket2};
+                kinds[i] = lv[stack.size() % 3];
+                stack.push_back(i);
+                break;
+            }
+            case TT::RPAREN: case TT::RBRACKET: case TT::RBRACE: {
+                TT want = t[i].type == TT::RPAREN ? TT::LPAREN : t[i].type == TT::RBRACKET ? TT::LBRACKET : TT::LBRACE;
+                if (!stack.empty() && t[stack.back()].type == want) { kinds[i] = kinds[stack.back()]; stack.pop_back(); }
+                else kinds[i] = HighlightKind::Error;
+                break;
+            }
+            default: break;
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------------------
 // 2) نطاقات الطيّ
 // ---------------------------------------------------------------------------------------
