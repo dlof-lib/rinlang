@@ -60,6 +60,10 @@ enum class HighlightKind {
     Label = 24,        // تسمية حلقة outer: و break outer
     Class = 25,        // أسماء الأصناف (class X) وكل استخدام لها، و Set/Env
     Property = 26,     // عضو بعد النقطة: obj.name (بلا نداء)
+    // --- قوالب الحلقات @tmpl (27..29) — تطابق HighlightKind في RinSyntax.kt حرفياً ---
+    Template = 27,     // اسم القالب في التعريف `@tmpl name(` وكل استعمال `@name(` (مع علامة @)
+    TemplateKw = 28,   // `@tmpl` و `@body`
+    Parameter = 29,    // معاملات القالب وأسماء `as` وكل ظهور لها داخل جسم القالب
 };
 
 // لغة التلوين/التشخيص للمستند الحالي. الافتراضي Rin (السلوك القديم لكل الامتدادات)؛ فقط
