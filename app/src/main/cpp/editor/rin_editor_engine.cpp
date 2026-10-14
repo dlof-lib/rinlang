@@ -6,6 +6,7 @@
 #include "../diagnostics/diagnostic.h"
 #include "../diagnostics/diagnostic_engine.h"
 #include "rin_passkit_highlight.h"
+#include "rin_editor_tools.h"
 #include <algorithm>
 #include <chrono>
 #include <unordered_map>
@@ -627,6 +628,11 @@ static HighlightKind kindForToken(rin::TokenType t) {
         case TT::SIMPLIFIED: case TT::SAVE: case TT::FILE_KW: case TT::END:
         case TT::PIPE_KW:
             return HighlightKind::Type;
+        case TT::TRUE: case TT::FALSE: case TT::NIL:
+            return HighlightKind::Constant;
+        case TT::IF: case TT::ELSE: case TT::WHILE: case TT::FOR:
+        case TT::RETURN: case TT::BREAK: case TT::CONTINUE:
+            return HighlightKind::Control;
         default:
             // كل الكلمات المحجوزة الأخرى (let/if/while/fun/return/break/continue/...)
             return HighlightKind::Keyword;
@@ -712,16 +718,24 @@ std::vector<HighlightSpan> EditorEngine::computeHighlights() const {
     try {
         rin::Lexer lexer(source);
         std::vector<rin::Token> tokens = lexer.scanTokens();
+        // الكلمات السياقية للحلقات (each/repeat/where/yield/...) تصل من rin::Lexer كمعرِّفات عادية؛
+        // نحسب نوع كل توكن أولاً ثم نمرّر المصنِّف السياقي (rin_editor_tools.h) ليُعيد تصنيفها.
+        std::vector<HighlightKind> kinds(tokens.size());
         for (size_t i = 0; i < tokens.size(); ++i) {
-            const rin::Token& tok = tokens[i];
-            if (tok.type == rin::TokenType::END_OF_FILE) continue;
-            HighlightKind kind = kindForToken(tok.type);
-            if (kind == HighlightKind::Ident && i + 1 < tokens.size() &&
+            kinds[i] = kindForToken(tokens[i].type);
+            if (kinds[i] == HighlightKind::Ident && i + 1 < tokens.size() &&
                 tokens[i + 1].type == rin::TokenType::LPAREN) {
                 // معرِّف متبوع مباشرة بقوس فتح: نمط استدعاء دالة — يُلوَّن بلون مميّز
                 // (نفس أسلوب المحررات الاحترافية مثل VS Code Dark+).
-                kind = HighlightKind::Call;
+                kinds[i] = HighlightKind::Call;
             }
+        }
+        tools::classifyLoopContext(tokens, kinds);
+        tools::classifyConcepts(tokens, kinds);
+        for (size_t i = 0; i < tokens.size(); ++i) {
+            const rin::Token& tok = tokens[i];
+            if (tok.type == rin::TokenType::END_OF_FILE) continue;
+            HighlightKind kind = kinds[i];
             if (kind == HighlightKind::Default) continue;
             int line0 = tok.line - 1;
             if (line0 < 0 || line0 >= (int)lines_.size()) continue;
@@ -771,6 +785,15 @@ std::vector<std::string> EditorEngine::collectSuggestions(const std::string& pre
         if (!prefixLower.empty() && !startsWithPrefix(kw)) continue;
         if (kw == prefix) continue;
         if (std::find(keywordMatches.begin(), keywordMatches.end(), kw) == keywordMatches.end()) keywordMatches.push_back(kw);
+    }
+    // الكلمات السياقية للحلقات (each/repeat/where/yield/...): ليست محجوزة في rin::Lexer لكنها
+    // جزء من اللغة، فتُقترح للإكمال في ملفات Rin فقط.
+    if (language_ == EditorLanguage::Rin) {
+        for (const std::string& kw : tools::contextualCompletionWords()) {
+            if (!prefixLower.empty() && !startsWithPrefix(kw)) continue;
+            if (kw == prefix) continue;
+            if (std::find(keywordMatches.begin(), keywordMatches.end(), kw) == keywordMatches.end()) keywordMatches.push_back(kw);
+        }
     }
     std::sort(keywordMatches.begin(), keywordMatches.end());
 
@@ -901,6 +924,104 @@ std::vector<EditorDiagnostic> EditorEngine::computeDiagnostics() const {
         // نص غير صالح نحويًا مؤقتًا أثناء الكتابة بطريقة لم نتوقّعها — لا نُعطِّل الواجهة.
     }
     return out;
+}
+
+// --- أدوات احترافية ------------------------------------------------------------------------
+
+namespace {
+bool scanTokensSafe(const std::string& src, std::vector<rin::Token>& out) {
+    try {
+        rin::Lexer lexer(src);
+        out = lexer.scanTokens();
+        return true;
+    } catch (...) {
+        return false; // نص غير صالح مؤقتاً أثناء الكتابة
+    }
+}
+} // namespace
+
+std::vector<std::pair<int, int>> EditorEngine::computeFoldRanges() const {
+    std::vector<std::pair<int, int>> out;
+    if (language_ != EditorLanguage::Rin) return out;
+    std::vector<rin::Token> toks;
+    if (!scanTokensSafe(getText(), toks)) return out;
+    for (const auto& r : tools::computeFoldRanges(toks)) {
+        if (r.startLine >= 0 && r.endLine < (int)lines_.size()) out.push_back({r.startLine, r.endLine});
+    }
+    return out;
+}
+
+std::vector<EditorEngine::OutlineItem> EditorEngine::computeOutline() const {
+    std::vector<OutlineItem> out;
+    if (language_ != EditorLanguage::Rin) return out;
+    std::vector<rin::Token> toks;
+    if (!scanTokensSafe(getText(), toks)) return out;
+    for (const auto& s : tools::computeOutline(toks)) {
+        if (s.line < 0 || s.line >= (int)lines_.size()) continue;
+        out.push_back({s.line, s.col, (int)s.kind, s.name});
+    }
+    return out;
+}
+
+bool EditorEngine::reindentDocument(int indentWidth) {
+    if (language_ != EditorLanguage::Rin) return false;
+    std::vector<rin::Token> toks;
+    if (!scanTokensSafe(getText(), toks)) return false; // لا نُعيد المحاذاة على نص غير صالح
+    int width = std::max(1, std::min(8, indentWidth));
+    std::vector<std::string> next = tools::reindentLines(lines_, toks, std::string((size_t)width, ' '));
+    if (next == lines_) return false;
+
+    // يحفظ موضع المؤشر نسبةً لبداية نص سطره (وليس بالعمود الخام) ليبقى في نفس الكلمة.
+    Position c = cursor_;
+    auto lead = [](const std::string& s) { size_t i = 0; while (i < s.size() && (s[i] == ' ' || s[i] == '\t')) ++i; return (int)i; };
+    int offsetInText = std::max(0, c.col - lead(lines_[c.line]));
+    int newCol = lead(next[c.line]) + offsetInText;
+
+    std::string joined;
+    for (size_t i = 0; i < next.size(); ++i) { if (i) joined += '\n'; joined += next[i]; }
+    int lastLine = (int)lines_.size() - 1;
+    replaceRange(0, 0, lastLine, (int)lines_[lastLine].size(), joined); // سجلّ تراجع واحد
+    setCursor(c.line, std::min(newCol, (int)lines_[c.line].size()), false);
+    return true;
+}
+
+bool EditorEngine::isSnippetTrigger(const std::string& word) { return tools::findSnippet(word) != nullptr; }
+
+std::string EditorEngine::snippetTitle(const std::string& word) {
+    const tools::Snippet* sn = tools::findSnippet(word);
+    return sn ? std::string(sn->title) : std::string();
+}
+
+bool EditorEngine::expandSnippetAtCursor() {
+    if (language_ != EditorLanguage::Rin || hasSel_) return false;
+    const std::string& ln = lines_[cursor_.line];
+    int end = cursor_.col, start = end;
+    while (start > 0) {
+        unsigned char ch = (unsigned char)ln[start - 1];
+        if (std::isalnum(ch) || ch == '_') --start; else break;
+    }
+    if (start == end) return false;
+    // لا نوسّع داخل كلمة أطول متصلة بنقطة (obj.each) ولا بعد let/fun (اسم متغير/دالة).
+    if (start > 0 && ln[start - 1] == '.') return false;
+    const tools::Snippet* sn = tools::findSnippet(ln.substr(start, end - start));
+    if (!sn) return false;
+    {
+        std::string before = ln.substr(0, start);
+        size_t e = before.find_last_not_of(" \t");
+        if (e != std::string::npos) {
+            size_t b = before.find_last_of(" \t", e);
+            std::string prevWord = before.substr(b == std::string::npos ? 0 : b + 1, e - (b == std::string::npos ? 0 : b + 1) + 1);
+            if (prevWord == "let" || prevWord == "fun") return false;
+        }
+    }
+    std::string baseIndent = leadingWhitespace(ln);
+    int relLine = 0, caretCol = 0;
+    std::string body = tools::expandSnippetText(*sn, baseIndent, &relLine, &caretCol);
+    int sl = cursor_.line;
+    replaceRange(sl, start, sl, end, body);
+    if (relLine == 0) caretCol += start; // أول سطر يبدأ من عمود بداية الكلمة
+    setCursor(sl + relLine, std::min(caretCol, (int)lines_[sl + relLine].size()), false);
+    return true;
 }
 
 } // namespace rinedit
