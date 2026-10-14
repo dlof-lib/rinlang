@@ -534,6 +534,8 @@ inline const std::vector<Snippet>& snippets() {
         {"loopu",    "loop until ($0) {\n    \n}",                      "حلقة حتى يتحقق الشرط"},
         {"loopl",    "loop limit $0 {\n    \n}",                        "حلقة بسقف أمان"},
         {"retry",    "retry $0 as attempt {\n    \n}",                  "إعادة المحاولة عند الفشل"},
+        {"tmpl",     "@tmpl $0(xs) each x in xs;",                      "قالب حلقة قابل لإعادة الاستخدام (@name(args) { ... })"},
+        {"tmplb",    "@tmpl $0(xs) as x {\n    each x in xs {\n        @body\n    }\n}", "قالب حلقة كتلة مع @body"},
         {"nobreak",  "nobreak {\n    $0\n}",                           "يُنفَّذ إن انتهت الحلقة دون break"},
         {"label",    "outer: each $0 in  {\n    \n}",                  "حلقة مسمّاة (break outer / continue outer)"},
         {"comp",     "[each x in $0 where  yield x]",                   "تجميع نتائج في مصفوفة"},
