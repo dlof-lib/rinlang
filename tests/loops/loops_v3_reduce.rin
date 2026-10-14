@@ -1,0 +1,41 @@
+let xs = [3, 1, 4, 1, 5];
+print sum each x in xs yield x;
+print sum each x in xs where x > 1 yield x * x;
+print product each x in [1, 2, 3, 4] yield x;
+print count each x in xs where x == 1;
+print count each x in xs yield x > 2;
+print avg each x in [2, 4, 6] yield x;
+let e = avg each x in [] yield x;
+print e == nil;
+print min each x in xs;
+print max each x in xs;
+print max each w in ["bb", "a", "ccc"] yield len(w);
+print any each x in xs where x > 4;
+print any each x in xs where x > 9;
+print any each x in xs yield x == 4;
+print all each x in xs yield x > 0;
+print all each x in xs yield x > 1;
+print first each x in xs where x > 3;
+let none = first each x in xs where x > 9;
+print none == nil;
+print last each x in xs where x < 5;
+print sum each a, b in [1, 2] zip [10, 20] yield a * b;
+print sum each x in 1 to 100 take 10 yield x;
+print (sum each x in xs yield x) + 1;
+print count each a, b in [1, 2, 3] cross [1, 2] where a + b == 3;
+// map comprehension
+let m = {each w in ["a", "bb", "ccc"] yield w : len(w)};
+print m["bb"] + m["ccc"];
+print len(keys(m));
+let sq = {each i in 1 to 3 yield "k" + i : i * i};
+print sq["k3"];
+let odd = {each i in 1 to 6 where i % 2 == 1 yield i : "odd"};
+print len(keys(odd));
+// words stay ordinary names
+let sum = 10; let count = 20;
+print sum + count;
+print max(3, 9);
+// reducers inside functions and loops
+fun total(rows) { return sum each r in rows yield r[0] * r[1]; }
+print total([[2, 3], [4, 5]]);
+each k in 1 to 2 { print sum each j in 1 to k yield j; }
