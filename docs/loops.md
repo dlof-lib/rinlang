@@ -93,3 +93,63 @@ let table   = [each a in [1, 2] yield [each b in [10, 20] yield a * b]];
   (`let loop = 1;` و`repeat("ab", 2)` يعملان).
 - مع `each x, i` الشكل القاموس يعطي (مفتاح، قيمة) وغيره (عنصر، فهرس).
 - الاختبارات: `tests/loops/*.rin` (+ `.expected`)، وتمر على المحرّكين: `rin run` و`rin --vm`.
+
+
+---
+
+# Loops v3 — حلقات بقوة Python وأكثر
+
+كلها additive وتُفكَّك في المحلل (تعمل على المفسّر الشجري وRinVM وأندرويد والويب). اختبارات: `tests/loops/loops_v3_*.rin`.
+
+## مرشّحات التيار (بالترتيب المكتوب، وتُجمَع مع `where`)
+```rin
+each x in xs skip 1 take 3 { ... }          // تخطَّ 1 ثم خذ 3
+each x in xs where x % 2 == 0 take 2 { }    // أول عنصرين زوجيين
+each x in xs until x > 7 { ... }            // توقّف عند أول عنصر يحقق الشرط
+each x in xs while x < 8 { ... }            // استمر ما دام الشرط صحيحاً
+```
+`take`/`until`/`while` توقف الحلقة بـ `break` (فلا يُنفَّذ `nobreak` بعدها). `skip`/`take` يجب أن يكونا عدداً صحيحاً غير سالب.
+
+## تحويل المصدر
+```rin
+each x in xs sorted { }                      // تصاعدي (على نسخة؛ الأصل لا يتغير)
+each x in xs sorted desc { }                 // تنازلي
+each p in people sorted by p["age"] desc { } // بمفتاح (متغيّر واحد عادي)
+each x in xs unique { }                      // حذف التكرار بترتيب أول ظهور
+each x in nested flat { }                    // فرد مستوى واحد
+each x in a chain b chain c { }              // وصل عدة مصفوفات
+each i in 10 downto 1 step 3 { }             // عدّ تنازلي (فارغ إن كان الأول أصغر)
+```
+`sorted` يتطلب عناصر/مفاتيح كلها أرقام أو كلها نصوص. تعمل على المصفوفات والنصوص والقواميس (مفاتيح) والمجموعات.
+
+## أنماط جديدة (واحد فقط في الحلقة، مع by/window/every/zip)
+```rin
+each a, b in xs cross ys { }     // ضرب ديكارتي في حلقة واحدة (break يخرج من الكل)
+each a, b in xs pairs { }        // (xs[0],xs[1]) (xs[1],xs[2]) ...
+each x, i in xs from 1 { }       // الفهرس يبدأ من 1
+```
+
+## `nobreak { }` — مثل for..else
+اسم مقروء لـ `#done { }`: يُنفَّذ فقط إن انتهت الحلقة دون `break`. يعمل مع كل أنواع الحلقات.
+```rin
+each n in nums { if (n % 2 == 1) { break; } } nobreak { print "كلها زوجية"; }
+```
+
+## تعابير الاختزال
+`sum` `product` `count` `avg` `min` `max` `any` `all` `first` `last` ثم `each ... [where ..] [yield e]`:
+```rin
+sum each x in xs where x > 1 yield x * x
+count each x in xs where x == 1            // yield اختياري
+max each w in words yield len(w)
+any each x in xs where x > 4               // يتوقف عند أول تحقق
+all each x in xs yield x > 0               // yield إلزامي
+first each x in xs where x > 3             // nil إن لم يوجد
+avg each x in [] yield x                   // nil إن كانت فارغة
+```
+`yield` اختياري حيث يكون العنصر نفسه هو القيمة (مع متغيّر واحد). كلمات سياقية: تبقى أسماء عادية.
+
+## قاموس مفهوم
+```rin
+let lens = {each w in words yield w : len(w)};
+let odd  = {each i in 1 to 6 where i % 2 == 1 yield i : "odd"};
+```
