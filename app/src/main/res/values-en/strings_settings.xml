@@ -78,4 +78,6 @@
     <string name="settings_keep_screen_on_hint">Prevent the screen from turning off while using the editor.</string>
     <string name="settings_project_sort">Sort by</string>
 <string name="settings_language_current">English 🇺🇸</string><string name="language_picker_title">Choose language</string><string name="language_picker_subtitle">Choose a language and country</string><string name="language_picker_search">Search a language or country…</string><string name="language_picker_applied">Applied %1$s</string><string name="language_group_arabic">Arabic • Arab countries</string><string name="language_group_english">English • English-speaking countries</string><string name="language_group_spanish">Español • Spanish-speaking countries</string>
+    <string name="settings_container_style">Container block style</string>
+    <string name="settings_container_style_hint">Draw a thin colored guide line and color the opening and closing tags per container type.</string>
 </resources>
