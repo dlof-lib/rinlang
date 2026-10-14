@@ -13,6 +13,7 @@
 #include <string>
 #include <vector>
 #include <deque>
+#include <utility>
 #include <cstdint>
 
 // تصريح أمامي فقط (بلا #include لملف diagnostic.h كامل) حتى يبقى هذا الرأس خفيفًا ومستقلاً عن
@@ -51,6 +52,14 @@ enum class HighlightKind {
     PkCustomTag = 17,  // وسم غير معروف (قد يُسجَّل عبر passkitRegister)
     PkString = 18,     // قيمة سمة
     PkComment = 19,    // <!-- ... -->
+    // --- مفاهيم لغة Rin الدلالية (20..26) — تطابق HighlightKind في RinSyntax.kt حرفياً ---
+    Constant = 20,     // true/false/nil وثوابت MAX_SIZE بأحرف كبيرة
+    FunctionDef = 21,  // اسم الدالة بعد fun
+    Control = 22,      // if/else/while/for/return/break/continue/each/repeat/loop/retry/try/catch/throw/nobreak
+    Modifier = 23,     // معدِّلات الحلقات: where/yield/by/window/skip/take/sorted/... و when/unless وعوامل sum/count..
+    Label = 24,        // تسمية حلقة outer: و break outer
+    Class = 25,        // أسماء الأصناف (class X) وكل استخدام لها، و Set/Env
+    Property = 26,     // عضو بعد النقطة: obj.name (بلا نداء)
 };
 
 // لغة التلوين/التشخيص للمستند الحالي. الافتراضي Rin (السلوك القديم لكل الامتدادات)؛ فقط
@@ -177,6 +186,21 @@ public:
     // أخطاء/تحذيرات الصياغة الملتقَطة (بدل التوقف عند أول خطأ)، لرسم خط أحمر متعرّج تحتها في
     // المحرر أثناء الكتابة. لا يُشغِّل المُفسِّر (interpreter) إطلاقًا — انظر تعليق EditorDiagnostic.
     std::vector<EditorDiagnostic> computeDiagnostics() const;
+
+    // --- أدوات احترافية (انظر rin_editor_tools.h) ---
+    // نطاقات الطيّ: {startLine, endLine} صفرية؛ endLine شاملة ولا تشمل سطر القوس الختامي.
+    std::vector<std::pair<int, int>> computeFoldRanges() const;
+    // هيكل الملف: دوال/أصناف/متغيرات علوية/تسميات حلقات. kind: 0 دالة، 1 صنف، 2 متغير، 3 تسمية.
+    struct OutlineItem { int line; int col; int kind; std::string name; };
+    std::vector<OutlineItem> computeOutline() const;
+    // إعادة محاذاة المستند كاملاً حسب عمق الأقواس (أمر تراجع واحد). يُرجع true إن تغيّر النص.
+    bool reindentDocument(int indentWidth);
+    // يوسّع قالباً (snippet) إذا كانت الكلمة المنتهية عند المؤشر تطابق اسم قالب. يُرجع true عند التوسيع.
+    bool expandSnippetAtCursor();
+    // هل [word] اسم قالب؟ (لتمييز الاقتراحات في الواجهة)
+    static bool isSnippetTrigger(const std::string& word);
+    // عنوان وصفي للقالب (فارغ إن لم يوجد)
+    static std::string snippetTitle(const std::string& word);
 
 private:
     EditorLanguage language_ = EditorLanguage::Rin;
