@@ -281,4 +281,12 @@
     <color name="syntax_bracket0">#FFD76A</color>
     <color name="syntax_bracket1">#E49BFF</color>
     <color name="syntax_bracket2">#6FB7FF</color>
+
+    <!-- ستايل كتل الحاويات في المحرر (ظلال أسطع تلائم الخلفية الداكنة). -->
+    <color name="container_accent_core">#C586F0</color>
+    <color name="container_accent_pipe">#4DD0C0</color>
+    <color name="container_accent_data">#6FB7FF</color>
+    <color name="container_accent_api">#7FE08F</color>
+    <color name="container_accent_io">#FFA95C</color>
+    <color name="container_accent_group">#E6C260</color>
 </resources>
