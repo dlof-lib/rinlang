@@ -456,6 +456,9 @@ struct ForStmt : Stmt { ForStmt() { stmtKind = StmtKind::ForStmt; }
     ExprPtr increment;   // may be null
     StmtPtr body;
     StmtPtr doneBlock;   // #done { ... } — يُنفَّذ إذا انتهت الحلقة طبيعياً (لا break)؛ nullable
+    // Rin For+: false = المحلل أثبت أن الحلقة لا تُنشئ closures (لا fun/bell/hooks...)، فيُنفَّذ الجسم في forEnv
+    // مباشرة بلا نسخ بيئة لكل دورة (أسرع). الافتراضي true = السلوك القديم الآمن (per-iteration scope).
+    bool freshIterScope = true;
 };
 // for (let NAME in iterable) { body } -> حلقة تكرار حقيقية (لم تكن موجودة سابقاً؛ الوسيلة الوحيدة
 // للتكرار على مصفوفة/قاموس كانت for القياسية على طراز C مع فهرس عددي يدوي). iterable: مصفوفة (كل
