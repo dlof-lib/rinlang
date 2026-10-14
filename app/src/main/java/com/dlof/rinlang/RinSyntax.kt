@@ -37,6 +37,13 @@ object HighlightKind {
     const val TEMPLATE = 27      // اسم القالب (تعريف واستعمال @name()
     const val TEMPLATE_KW = 28   // @tmpl و @body
     const val PARAMETER = 29     // معاملات القالب
+    // --- الرموز (30..35) — تطابق rinedit::HighlightKind في rin_editor_engine.h حرفياً ---
+    const val COMPARE = 30       // == != < > <= >= =/= =/ ! و and/or
+    const val PUNCT = 31         // , ; : .
+    const val FLOW = 32          // |> و ?
+    const val BRACKET0 = 33      // أقواس بالتناوب حسب العمق
+    const val BRACKET1 = 34
+    const val BRACKET2 = 35
 }
 
 enum class SyntaxLanguage {
