@@ -33,6 +33,10 @@ object HighlightKind {
     const val LABEL = 24         // تسمية حلقة outer: و break outer
     const val CLASS = 25         // أسماء الأصناف و Set/Env
     const val PROPERTY = 26      // obj.name
+    // --- قوالب الحلقات @tmpl (27..29) — تطابق rinedit::HighlightKind في rin_editor_engine.h حرفياً ---
+    const val TEMPLATE = 27      // اسم القالب (تعريف واستعمال @name()
+    const val TEMPLATE_KW = 28   // @tmpl و @body
+    const val PARAMETER = 29     // معاملات القالب
 }
 
 enum class SyntaxLanguage {
@@ -322,7 +326,24 @@ private object RinLexer {
                     c == '@' -> {
                         val start = i; i++
                         while (i < n && (text[i].isLetterOrDigit() || text[i] == '_' || text[i] == '.')) i++
-                        out.add(hl(li, start, i, HighlightKind.AT))
+                        val word = text.substring(start, i)
+                        when {
+                            // @tmpl name(params) / @body — قوالب الحلقات (المحرك الأصلي يلوّن المعاملات أيضاً)
+                            word == "@tmpl" || word == "@body" -> {
+                                out.add(hl(li, start, i, HighlightKind.TEMPLATE_KW))
+                                if (word == "@tmpl") {
+                                    var j = i
+                                    while (j < n && text[j] == ' ') j++
+                                    var e = j
+                                    while (e < n && (text[e].isLetterOrDigit() || text[e] == '_')) e++
+                                    if (e > j) { out.add(hl(li, j, e, HighlightKind.TEMPLATE)); i = e }
+                                }
+                            }
+                            // استعمال @name(...) — اسم متبوع مباشرة بقوس (لا توجّه @container ونحوها قوساً)
+                            i < n && text[i] == '(' && word.length > 1 && !word.contains('.') ->
+                                out.add(hl(li, start, i, HighlightKind.TEMPLATE))
+                            else -> out.add(hl(li, start, i, HighlightKind.AT))
+                        }
                     }
                     c == '.' && text.startsWith(".end", i) -> {
                         val start = i; i += 4
