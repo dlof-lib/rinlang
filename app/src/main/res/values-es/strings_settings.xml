@@ -78,4 +78,6 @@
     <string name="settings_keep_screen_on_hint">Evita que la pantalla se apague mientras usas el editor.</string>
     <string name="settings_project_sort">Ordenar por</string>
 <string name="settings_language_current">Español 🇪🇸</string><string name="language_picker_title">Elegir idioma</string><string name="language_picker_subtitle">Elige idioma y país</string><string name="language_picker_search">Buscar idioma o país…</string><string name="language_picker_applied">Aplicado: %1$s</string><string name="language_group_arabic">العربية • Países árabes</string><string name="language_group_english">English • Países anglófonos</string><string name="language_group_spanish">Español • Países hispanohablantes</string>
+    <string name="settings_container_style">Estilo de bloques contenedor</string>
+    <string name="settings_container_style_hint">Dibuja una línea guía fina y colorea las etiquetas de apertura y cierre según el tipo de contenedor.</string>
 </resources>
