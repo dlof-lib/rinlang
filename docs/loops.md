@@ -153,3 +153,20 @@ avg each x in [] yield x                   // nil إن كانت فارغة
 let lens = {each w in words yield w : len(w)};
 let odd  = {each i in 1 to 6 where i % 2 == 1 yield i : "odd"};
 ```
+
+
+---
+
+# إضافات من تحديث Loops (distinct وضرب ديكارتي متعدد المصادر)
+
+```rin
+each n in [3, 1, 3, 2, 1] distinct { print n; }            // أول ظهور لكل قيمة (1 و"1" مختلفان)
+each w in words distinct on (w[0]) { print w; }             // بمفتاح؛ إلزامي مع أنماط التفكيك
+each n in xs where n > 5 distinct take 3 { ... }            // بالترتيب المكتوب مع where/skip/take
+print [each n in [4, 4, 5] distinct yield n * 2];           // يعمل في التجميع أيضاً
+each x in [1, 2], y in ["a", "b"] { print x + y; }          // ضرب ديكارتي لأي عدد مصادر بحلقة واحدة
+each a in "ab", b in "cd", c in [1, 2] where c > 1 { ... }  // break/continue/where تعمل كالمعتاد
+```
+`distinct` مرحلة تيار مثل `skip/take/where` تُنفَّذ بترتيب كتابتها. الضرب المتعدد يقبل أسماء عادية فقط
+(لا فهرس ولا أنماط ولا `from` ولا by/window/every/zip/cross/pairs) والمصادر مصفوفات أو نصوص.
+الاختبارات: `tests/loops/loops_distinct.rin` و`loops_pro.rin`.
