@@ -45,3 +45,12 @@
   Bold Italic: تسميات الحلقات وأسماء القوالب · Light Italic: التعليقات · Regular: النصوص والمعرّفات والخصائص.
 - الشكل: `@tmpl/@body` داخل «حبة» مستديرة شفافة بلون الكلمة (حبة واحدة تشمل `@` و`tmpl`)، واسم القالب بخط سفلي ناعم.
 - يتبع إعداد `syntax_font_styles` (معطَّلاً: Regular للكل). وإن تعذّر تحميل أي خط يعود الرسم للنمط الاصطناعي السابق. لم يُبنَ Kotlin/الموارد هنا.
+
+## شكل الرموز (operators / punctuation / brackets)
+- ستة أنواع تلوين جديدة (30..35) في `rin_editor_engine.h` و`HighlightKind`: `Compare` (`== != < > <= >= =/= =/ !` و`and`/`or`) ·
+  `Punct` (`, ; : .` خافتة) · `Flow` (`|>` و`?`) · `Bracket0/1/2` (أقواس `() [] {}` بثلاثة ألوان بالتناوب حسب العمق). رموز الحساب `+ - * / % =` تبقى `Operator` وصار لها لون.
+- `classifyPunctuation` (rin_editor_tools.h) تعمل آخر مصنِّف: قوس إغلاق بلا فتح أو غير مطابق يُصنَّف `Error` (أحمر). محلل Kotlin الاحتياطي يلوّن `OPERATOR`.
+- الخط: ثلاثة خطوط JetBrains Mono **بـ ligatures** (`res/font/rin_sym_medium|semibold|bold.ttf`): الحساب Medium، المقارنة SemiBold، التدفق Bold.
+  `==` `!=` `<=` `>=` `|>` `=/=` تُرسم كرمز واحد بعرض خليتين بالضبط (`fontFeatureSettings = "calt, liga"` لهذه الامتدادات فقط). الأقواس Medium، والفواصل Regular.
+- ألوان جديدة: `syntax_operator` `syntax_compare` `syntax_punct` `syntax_flow` `syntax_bracket0/1/2` (فاتح وداكن).
+- اختبار المحرر 115/115. لم يُبنَ Kotlin/الموارد هنا.
