@@ -118,6 +118,7 @@ std::vector<StmtPtr> Parser::parse() {
 }
 
 StmtPtr Parser::declaration() {
+    if (auto lv2 = loopsV2Statement()) return lv2; // each / repeat / loop / retry / name: loop
     // Modules: 'export let/fun/class/struct/enum ...' -- 'export' كلمة سياقية غير محجوزة (نفس
     // أسلوب class/struct/enum أدناه بالضبط)، مُميَّزة بالنظر خطوة إضافية للأمام: يجب أن يتبعها
     // مباشرة LET أو FUN أو IDENT("class"/"struct"/"enum") تحديداً، وإلا فهي مجرد اسم متغيّر/دالة
@@ -869,9 +870,10 @@ StmtPtr Parser::bellDeclaration() {
                       "a bell is told what the value was and what it became", "use `bell x (old, new) { ... }`", "");
     consume(TokenType::LBRACE, "Expected '{' before bell body");
     int savedLoopDepth = loopDepth, savedGoalDepth = goalDepth;
+    auto savedLS_ = std::move(loopStack); auto savedLB_ = std::move(labels); loopStack.clear(); labels.clear();
     loopDepth = 0; goalDepth = 0;
     auto body = block();
-    loopDepth = savedLoopDepth; goalDepth = savedGoalDepth;
+    loopDepth = savedLoopDepth; goalDepth = savedGoalDepth; loopStack = std::move(savedLS_); labels = std::move(savedLB_);
     auto fn = std::make_shared<FunctionStmt>();
     fn->name = "bell " + target.lexeme;
     fn->params = params;
@@ -943,11 +945,12 @@ StmtPtr Parser::lifecycleHookDeclaration() {
     // نفس حماية loopDepth/goalDepth الموجودة في functionDeclaration(): جسم الخُطّاف يبدأ سياق حلقة/هدف
     // جديداً من الصفر (break/continue/achieve بداخله لا تُعتبر صالحة إلا بحلقة/goal داخل الخُطّاف نفسه).
     int savedLoopDepth = loopDepth;
+    auto savedLS_ = std::move(loopStack); auto savedLB_ = std::move(labels); loopStack.clear(); labels.clear();
     int savedGoalDepth = goalDepth;
     loopDepth = 0;
     goalDepth = 0;
     auto body = block();
-    loopDepth = savedLoopDepth;
+    loopDepth = savedLoopDepth; loopStack = std::move(savedLS_); labels = std::move(savedLB_);
     goalDepth = savedGoalDepth;
 
     auto fn = std::make_shared<FunctionStmt>();
@@ -1053,11 +1056,12 @@ StmtPtr Parser::eventHandlerDeclaration() {
     consume(TokenType::RPAREN, "Expected ')' after event handler parameters");
     consume(TokenType::LBRACE, "Expected '{' before event handler body 'on.event \"" + nameTok.lexeme + "\"'");
     int savedLoopDepth = loopDepth;
+    auto savedLS_ = std::move(loopStack); auto savedLB_ = std::move(labels); loopStack.clear(); labels.clear();
     int savedGoalDepth = goalDepth;
     loopDepth = 0;
     goalDepth = 0;
     auto body = block();
-    loopDepth = savedLoopDepth;
+    loopDepth = savedLoopDepth; loopStack = std::move(savedLS_); labels = std::move(savedLB_);
     goalDepth = savedGoalDepth;
 
     auto fn = std::make_shared<FunctionStmt>();
@@ -1156,11 +1160,12 @@ StmtPtr Parser::functionDeclaration() {
     // نصياً داخل حلقة while أو goal خارجية لا يجب أن تُعتبر صالحة إلا إذا كانت هناك حلقة/goal أخرى
     // داخل الدالة نفسها.
     int savedLoopDepth = loopDepth;
+    auto savedLS_ = std::move(loopStack); auto savedLB_ = std::move(labels); loopStack.clear(); labels.clear();
     int savedGoalDepth = goalDepth;
     loopDepth = 0;
     goalDepth = 0;
     auto body = block();
-    loopDepth = savedLoopDepth;
+    loopDepth = savedLoopDepth; loopStack = std::move(savedLS_); labels = std::move(savedLB_);
     goalDepth = savedGoalDepth;
     auto fn = std::make_shared<FunctionStmt>();
     fn->name = name.lexeme;
@@ -1505,14 +1510,14 @@ StmtPtr Parser::rinopenStatement() {
     ExprPtr condition = expression();
     consume(TokenType::RPAREN, "Expected ')' after rinopen condition");
     consume(TokenType::LBRACE, "Expected '{' before rinopen body");
-    loopDepth++;
+    enterLoop();
     auto body = block();
-    loopDepth--;
+    exitLoop();
     auto st = std::make_shared<WhileStmt>();
     st->condition = condition;
     st->body = body;
     st->line = tok.line;
-    return st;
+    return finishLoop(st);
 }
 
 StmtPtr Parser::objectFieldStatement() {
@@ -1912,15 +1917,15 @@ StmtPtr Parser::keyConditionStatement(bool asElseIf) {
 
     // ---- loops ----
     if (term == "while" || term == "until") {
-        loopDepth++;
+        enterLoop();
         auto body = statement();
-        loopDepth--;
+        exitLoop();
         auto w = std::make_shared<WhileStmt>();
         w->condition = condition;
         w->body = body;
         attachDoneBlock(w->doneBlock);
         w->line = line;
-        return w;
+        return finishLoop(w);
     }
 
     // ---- branches ----
@@ -1986,14 +1991,15 @@ StmtPtr Parser::whileStatement() {
     consume(TokenType::LPAREN, "Expected '(' after 'while'");
     auto condition = expression();
     consume(TokenType::RPAREN, "Expected ')' after while condition");
-    loopDepth++;
+    ExprPtr lim = limitClause();
+    enterLoop();
     auto body = statement();
-    loopDepth--;
+    exitLoop();
     auto stmt = std::make_shared<WhileStmt>();
     stmt->condition = condition;
     stmt->body = body;
     attachDoneBlock(stmt->doneBlock);
-    return stmt;
+    return finishLoop(stmt, lim);
 }
 
 // for (initializer; condition; increment) body
@@ -2005,6 +2011,14 @@ StmtPtr Parser::whileStatement() {
 // محصوراً ضمن بيئة (Environment) خاصة بالحلقة كلها، تماماً كسلوك for القياسي في اللغات المشابهة.
 StmtPtr Parser::forStatement() {
     Token forTok = previous(); // 'for'
+    if (!check(TokenType::LPAREN) && atEachForm(current - 1, true)) { // for x in xs { }  — صياغة بلا أقواس = each
+        EachHdr h = parseEachHdr();
+        ExprPtr lim = limitClause();
+        enterLoop();
+        auto body = statement();
+        exitLoop();
+        return buildEach(h, body, forTok.line, lim);
+    }
     consume(TokenType::LPAREN, "Expected '(' after 'for'");
 
     // for (let NAME in iterable) { body } -> ForInStmt (انظر rin_ast.h). يجب فحصه *قبل* مسار
@@ -2023,16 +2037,17 @@ StmtPtr Parser::forStatement() {
             checkPatternDuplicates(pat, letTok);
             auto iterable = maybeHashRange(expression());
             consume(TokenType::RPAREN, "Expected ')' after 'for...in' iterable");
-            loopDepth++;
+            ExprPtr lim = limitClause();
+            enterLoop();
             auto body = statement();
-            loopDepth--;
+            exitLoop();
             auto stmt = std::make_shared<ForInStmt>();
             stmt->pattern = std::make_shared<LetPattern>(std::move(pat));
             stmt->iterable = iterable;
             stmt->body = body;
             stmt->line = forTok.line;
             attachDoneBlock(stmt->doneBlock);
-            return stmt;
+            return finishLoop(stmt, lim);
         }
         current = save;
     }
@@ -2044,16 +2059,17 @@ StmtPtr Parser::forStatement() {
         advance(); // 'in'
         auto iterable = maybeHashRange(expression());
         consume(TokenType::RPAREN, "Expected ')' after 'for...in' iterable");
-        loopDepth++;
+        ExprPtr lim = limitClause();
+        enterLoop();
         auto body = statement();
-        loopDepth--;
+        exitLoop();
         auto stmt = std::make_shared<ForInStmt>();
         stmt->varName = nameTok.lexeme;
         stmt->iterable = iterable;
         stmt->body = body;
         stmt->line = forTok.line;
         attachDoneBlock(stmt->doneBlock);
-        return stmt;
+        return finishLoop(stmt, lim);
     }
 
     StmtPtr initializer = nullptr;
@@ -2073,9 +2089,10 @@ StmtPtr Parser::forStatement() {
     if (!check(TokenType::RPAREN)) increment = expression();
     consume(TokenType::RPAREN, "Expected ')' after 'for' clauses");
 
-    loopDepth++;
+    ExprPtr lim = limitClause();
+    enterLoop();
     auto body = statement();
-    loopDepth--;
+    exitLoop();
 
     auto stmt = std::make_shared<ForStmt>();
     stmt->initializer = initializer;
@@ -2084,7 +2101,7 @@ StmtPtr Parser::forStatement() {
     stmt->body = body;
     stmt->line = forTok.line;
     attachDoneBlock(stmt->doneBlock);
-    return stmt;
+    return finishLoop(stmt, lim);
 }
 
 // plus.condition (condition) { trueBranch } / { falseBranch }
@@ -2170,9 +2187,9 @@ StmtPtr Parser::hashStatement() {
 // (فتعمل continue بالضبط كما في do-while الحقيقية: تنتقل إلى فحص الشرط، لا إلى أول الجسم).
 StmtPtr Parser::hashDoStatement() {
     Token doTok = advance(); // #do
-    loopDepth++;
+    enterLoop();
     auto body = statement();
-    loopDepth--;
+    exitLoop();
     if (!check(TokenType::WHILE))
         throw errRich(diag::Code::E0012_MissingToken, peek(), "expected '#while' after the '#do' body",
                       "a do-loop is written `#do { ... } #while (condition);`",
@@ -2195,7 +2212,7 @@ StmtPtr Parser::hashDoStatement() {
     auto st = std::make_shared<ForStmt>();
     st->initializer = init; st->condition = orExpr; st->increment = inc; st->body = body; st->line = doTok.line;
     attachDoneBlock(st->doneBlock);
-    return st;
+    return finishLoop(st);
 }
 
 // #ban x;  #ban x, y;  -> يمنع الكتابة على متغيّرات موجودة (E0043) | #ban x = expr; -> يعلن متغيّراً ممنوع التعديل.
@@ -2327,6 +2344,8 @@ StmtPtr Parser::breakStatement() {
                        "`break` appears at a point where no loop is open",
                        "move this `break` inside a loop body, or remove it if it was left over from "
                        "refactoring");
+    if (check(TokenType::IDENT) && checkNext(TokenType::SEMICOLON) ) return labeledJump(true, tok);
+    if (check(TokenType::IDENT) && !labels.empty() && peek().lexeme != "when" && peek().lexeme != "unless") return labeledJump(true, tok);
     ExprPtr guard = trailingGuard(); // break when (c);
     consume(TokenType::SEMICOLON, "Expected ';' after 'break'");
     auto stmt = std::make_shared<BreakStmt>();
@@ -2344,6 +2363,8 @@ StmtPtr Parser::continueStatement() {
                        "`rinopen` loop body; this `continue` appears at a point where no loop is open",
                        "move this `continue` inside a loop body, or remove it if it was left over "
                        "from refactoring");
+    if (check(TokenType::IDENT) && checkNext(TokenType::SEMICOLON) ) return labeledJump(false, tok);
+    if (check(TokenType::IDENT) && !labels.empty() && peek().lexeme != "when" && peek().lexeme != "unless") return labeledJump(false, tok);
     ExprPtr guard = trailingGuard(); // continue unless (c);
     consume(TokenType::SEMICOLON, "Expected ';' after 'continue'");
     auto stmt = std::make_shared<ContinueStmt>();
@@ -3950,11 +3971,12 @@ ExprPtr Parser::primary() {
         }
         consume(TokenType::LBRACE, "Expected '{' before function body");
         int savedLoopDepth = loopDepth;
+    auto savedLS_ = std::move(loopStack); auto savedLB_ = std::move(labels); loopStack.clear(); labels.clear();
         int savedGoalDepth = goalDepth;
         loopDepth = 0;
         goalDepth = 0;
         auto body = block();
-        loopDepth = savedLoopDepth;
+        loopDepth = savedLoopDepth; loopStack = std::move(savedLS_); labels = std::move(savedLB_);
         goalDepth = savedGoalDepth;
         auto fn = std::make_shared<FunctionStmt>();
         fn->name = ""; // anonymous
@@ -4000,6 +4022,11 @@ ExprPtr Parser::primary() {
         Token start = previous();
         auto arr = std::make_shared<ArrayExpr>();
         arr->line = start.line;
+        if (atEachForm(current)) {
+            auto comp = eachComprehension();
+            consume(TokenType::RBRACKET, "Expected ']' after array comprehension");
+            return comp;
+        }
         if (!check(TokenType::RBRACKET)) {
             do {
                 arr->elements.push_back(expression());
@@ -4051,6 +4078,500 @@ ExprPtr Parser::primary() {
                   "check for a missing operand — a stray operator, an extra comma, or an unmatched "
                   "closing bracket right before this token are the most common causes",
                   "a literal, variable, '(', '[', or '{'");
+}
+
+
+// ============================================================================
+// Loops v2 — each / repeat / loop / retry / labels (`outer:` + `break outer;`) / `limit N` / [each ... => e]
+// كلها تفكيك (desugaring) إلى WhileStmt/ForStmt/ForInStmt/BlockStmt/IfStmt الموجودة، فتعمل بلا أي تعديل
+// على المفسّر الشجري أو RinVM. انظر docs/loops.md.
+// ============================================================================
+namespace {
+using SP = std::shared_ptr<Stmt>;
+ExprPtr lNum(double v, int line) { auto l = std::make_shared<LiteralExpr>(); l->kind = LiteralExpr::Kind::NUMBER; l->number = v; l->line = line; return l; }
+ExprPtr lStr(const std::string& v, int line) { auto l = std::make_shared<LiteralExpr>(); l->kind = LiteralExpr::Kind::STRING; l->str = v; l->line = line; return l; }
+ExprPtr lBool(bool v, int line) { auto l = std::make_shared<LiteralExpr>(); l->kind = LiteralExpr::Kind::BOOL; l->boolean = v; l->line = line; return l; }
+ExprPtr lVar(const std::string& n, int line) { auto v = std::make_shared<VariableExpr>(); v->name = n; v->line = line; return v; }
+ExprPtr lBin(ExprPtr a, TokenType op, ExprPtr b, int line) { auto e = std::make_shared<BinaryExpr>(); e->left = a; e->op = op; e->right = b; e->line = line; return e; }
+ExprPtr lAssign(const std::string& n, ExprPtr v, int line) { auto e = std::make_shared<AssignExpr>(); e->name = n; e->value = v; e->line = line; return e; }
+ExprPtr lCall(const std::string& f, std::vector<ExprPtr> args, int line) { auto c = std::make_shared<CallExpr>(); c->callee = f; c->args = std::move(args); c->line = line; return c; }
+StmtPtr lLet(const std::string& n, ExprPtr init, int line) { auto s = std::make_shared<LetStmt>(); s->name = n; s->initializer = init; s->line = line; return s; }
+StmtPtr lExpr(ExprPtr e, int line) { auto s = std::make_shared<ExpressionStmt>(); s->expr = e; s->line = line; return s; }
+StmtPtr lIf(ExprPtr c, StmtPtr t, StmtPtr e, int line) { auto s = std::make_shared<IfStmt>(); s->condition = c; s->thenBranch = t; s->elseBranch = e; s->line = line; return s; }
+std::shared_ptr<BlockStmt> lBlock(std::vector<StmtPtr> v, int line) { auto b = std::make_shared<BlockStmt>(); b->statements = std::move(v); b->line = line; return b; }
+StmtPtr lThrow(ExprPtr e, int line) { auto s = std::make_shared<ThrowStmt>(); s->value = e; s->line = line; return s; }
+ExprPtr lUnaryNot(ExprPtr e, int line) { auto n = std::make_shared<UnaryExpr>(); n->op = TokenType::BANG; n->right = e; n->line = line; return n; }
+std::shared_ptr<LogicalExpr> lLogicalAnd(ExprPtr a, ExprPtr b) { auto l = std::make_shared<LogicalExpr>(); l->left = a; l->op = TokenType::AND; l->right = b; l->line = a->line; return l; }
+StmtPtr lBreak(int line) { auto s = std::make_shared<BreakStmt>(); s->line = line; return s; }
+StmtPtr lContinue(int line) { auto s = std::make_shared<ContinueStmt>(); s->line = line; return s; }
+StmtPtr asBlock(StmtPtr s, int line) {
+    if (s && s->stmtKind == StmtKind::BlockStmt) return s;
+    std::vector<StmtPtr> v; if (s) v.push_back(s);
+    return lBlock(std::move(v), line);
+}
+// يُرجع مرجع جسم الحلقة القابل للتعديل (نفس الـ AST الذي بُني للتو)
+StmtPtr* loopBodySlot(const StmtPtr& loop) {
+    if (loop->stmtKind == StmtKind::WhileStmt) return &std::static_pointer_cast<WhileStmt>(loop)->body;
+    if (loop->stmtKind == StmtKind::ForStmt) return &std::static_pointer_cast<ForStmt>(loop)->body;
+    if (loop->stmtKind == StmtKind::ForInStmt) return &std::static_pointer_cast<ForInStmt>(loop)->body;
+    return nullptr;
+}
+} // namespace
+
+void Parser::enterLoop() {
+    loopDepth++;
+    LoopCtx c; c.depth = loopDepth;
+    if (!pendingLabel.empty()) {
+        c.label = pendingLabel; c.flag = "#j" + std::to_string(loopSeq++);
+        LabelInfo li; li.name = pendingLabel; li.flag = c.flag; li.depth = loopDepth;
+        labels.push_back(li);
+        pendingLabel.clear();
+    }
+    loopStack.push_back(c);
+}
+
+void Parser::exitLoop() {
+    loopDepth--;
+    if (loopStack.empty()) return;
+    LoopCtx c = loopStack.back();
+    loopStack.pop_back();
+    if (!c.label.empty()) {
+        for (size_t i = labels.size(); i-- > 0;) if (labels[i].flag == c.flag) { c.label = c.label; labels.erase(labels.begin() + i); break; }
+    }
+    doneStack.push_back(c);
+}
+
+// يُستدعى بعد اكتمال الحلقة (بما فيها #done): يضيف حدّ الأمان والعلامات ونقل break/continue ذوات الأسماء.
+StmtPtr Parser::finishLoop(StmtPtr loop, ExprPtr limit) {
+    if (doneStack.empty()) return loop;
+    LoopCtx c = doneStack.back();
+    doneStack.pop_back();
+    int line = loop->line;
+    std::vector<StmtPtr> out;
+    if (!c.label.empty() && labelFlagUsed.count(c.flag)) out.push_back(lLet(c.flag, lNum(0, line), line));
+    if (limit) {
+        const std::string cnt = "#lc" + std::to_string(loopSeq++);
+        out.push_back(lLet(cnt, lNum(0, line), line));
+        if (auto* slot = loopBodySlot(loop)) {
+            auto tick = lExpr(lAssign(cnt, lBin(lVar(cnt, line), TokenType::PLUS, lNum(1, line), line), line), line);
+            auto msg = lBin(lStr("loop limit exceeded: more than ", line), TokenType::PLUS, limit, line);
+            msg = lBin(msg, TokenType::PLUS, lStr(" iterations", line), line);
+            auto guard = lIf(lBin(lVar(cnt, line), TokenType::GREATER, limit, line), lBlock({lThrow(msg, line)}, line), nullptr, line);
+            *slot = lBlock({tick, guard, *slot}, line);
+        }
+    }
+    out.push_back(loop);
+    for (auto& p : c.props) {
+        auto f = [&]() { return lVar(p.flag, line); };
+        if (c.depth - 1 == p.targetDepth) { // الأب المباشر هو الحلقة المسمّاة
+            if (p.kind & 1) out.push_back(lIf(lBin(f(), TokenType::EQUAL_EQUAL, lNum(1, line), line), lBlock({lBreak(line)}, line), nullptr, line));
+            if (p.kind & 2) out.push_back(lIf(lBin(f(), TokenType::EQUAL_EQUAL, lNum(2, line), line),
+                                              lBlock({lExpr(lAssign(p.flag, lNum(0, line), line), line), lContinue(line)}, line), nullptr, line));
+        } else {
+            out.push_back(lIf(lBin(f(), TokenType::BANG_EQUAL, lNum(0, line), line), lBlock({lBreak(line)}, line), nullptr, line));
+        }
+    }
+    if (out.size() == 1) return loop;
+    auto b = lBlock(std::move(out), line);
+    return b;
+}
+
+// limit N  (بين رأس الحلقة وجسمها)، يُميَّز عن عبارة جسم تبدأ باسم limit.
+ExprPtr Parser::limitClause() {
+    if (!(check(TokenType::IDENT) && peek().lexeme == "limit")) return nullptr;
+    size_t k = current + 1;
+    if (k >= tokens.size()) return nullptr;
+    bool ok = false;
+    if (tokens[k].type == TokenType::NUMBER) ok = true;
+    else if (tokens[k].type == TokenType::IDENT && k + 1 < tokens.size() && tokens[k + 1].type == TokenType::LBRACE) ok = true;
+    else if (tokens[k].type == TokenType::LPAREN) {
+        int d = 0; size_t j = k;
+        for (; j < tokens.size(); ++j) {
+            if (tokens[j].type == TokenType::LPAREN) d++;
+            else if (tokens[j].type == TokenType::RPAREN && --d == 0) break;
+        }
+        ok = j + 1 < tokens.size() && tokens[j + 1].type == TokenType::LBRACE;
+    }
+    if (!ok) return nullptr;
+    advance(); // limit
+    if (check(TokenType::NUMBER)) { Token t = advance(); return lNum(t.number, t.line); }
+    if (check(TokenType::IDENT)) { Token t = advance(); return lVar(t.lexeme, t.line); }
+    consume(TokenType::LPAREN, "Expected '(' after 'limit'");
+    auto e = expression();
+    consume(TokenType::RPAREN, "Expected ')' after limit expression");
+    return e;
+}
+
+// break L; / continue L;
+StmtPtr Parser::labeledJump(bool isBreak, const Token& tok) {
+    Token lab = advance();
+    int idx = -1;
+    for (size_t i = labels.size(); i-- > 0;) if (labels[i].name == lab.lexeme) { idx = (int)i; break; }
+    if (idx < 0)
+        throw errRich(diag::Code::E0011_UnexpectedToken, lab, "unknown loop label '" + lab.lexeme + "'",
+                      "`" + std::string(isBreak ? "break" : "continue") + " " + lab.lexeme + "` can only name a loop that encloses it in the same function",
+                      "label an enclosing loop first:  `" + lab.lexeme + ": for (...) { ... }`");
+    ExprPtr guard = trailingGuard();
+    consume(TokenType::SEMICOLON, std::string("Expected ';' after '") + (isBreak ? "break" : "continue") + " label'");
+    LabelInfo li = labels[idx];
+    StmtPtr jump;
+    if (li.depth == loopDepth) {
+        jump = isBreak ? lBreak(tok.line) : lContinue(tok.line);
+    } else {
+        labelFlagUsed.insert(li.flag);
+        for (int k = li.depth; k < loopDepth; ++k) {
+            auto& ps = loopStack[k].props;
+            bool found = false;
+            for (auto& p : ps) if (p.flag == li.flag) { p.kind |= (isBreak ? 1 : 2); found = true; }
+            if (!found) ps.push_back({li.flag, li.depth, isBreak ? 1 : 2});
+        }
+        jump = lBlock({lExpr(lAssign(li.flag, lNum(isBreak ? 1 : 2, tok.line), tok.line), tok.line), lBreak(tok.line)}, tok.line);
+    }
+    return guarded(jump, guard);
+}
+
+// `(`...`)` متوازنة تبدأ عند at ويتبعها '{' أو كلمة سياقية من الحلقات
+bool Parser::atLoopForm(size_t at) const {
+    if (at >= tokens.size()) return false;
+    if (tokens[at].type == TokenType::LBRACE) return true;
+    if (tokens[at].type == TokenType::IDENT && (tokens[at].lexeme == "limit" || tokens[at].lexeme == "as")) return true;
+    return false;
+}
+
+StmtPtr Parser::loopsV2Statement() {
+    if (!check(TokenType::IDENT)) return nullptr;
+    const Token kwTok = peek();
+    const std::string& kw = kwTok.lexeme;
+    int line = kwTok.line;
+    auto closeParen = [&](size_t from) -> size_t { // index of matching ')' for '(' at from
+        int d = 0;
+        for (size_t j = from; j < tokens.size(); ++j) {
+            if (tokens[j].type == TokenType::LPAREN) d++;
+            else if (tokens[j].type == TokenType::RPAREN && --d == 0) return j;
+        }
+        return tokens.size();
+    };
+
+    // ---- label:  name: <loop> ----
+    if (checkNext(TokenType::COLON) && current + 2 < tokens.size()) {
+        const Token& nx = tokens[current + 2];
+        bool loopish = nx.type == TokenType::FOR || nx.type == TokenType::WHILE || nx.type == TokenType::RINOPEN ||
+                       (nx.type == TokenType::IDENT && (nx.lexeme == "each" || nx.lexeme == "repeat" || nx.lexeme == "loop" ||
+                        nx.lexeme == "retry" || nx.lexeme == "#do" || nx.lexeme == "#while" || nx.lexeme == "#for"));
+        if (loopish) {
+            advance(); advance(); // name ':'
+            pendingLabel = kw;
+            StmtPtr st = declaration();
+            pendingLabel.clear();
+            return st;
+        }
+    }
+
+    // ---- loop { } / loop (cond) { } / loop until (cond) { } ----
+    if (kw == "loop") {
+        if (checkNext(TokenType::LBRACE) || (current + 1 < tokens.size() && tokens[current + 1].type == TokenType::IDENT && tokens[current + 1].lexeme == "limit" && !(current + 2 < tokens.size() && tokens[current + 2].type == TokenType::EQUAL))) {
+            advance();
+            ExprPtr lim = limitClause();
+            consume(TokenType::LBRACE, "Expected '{' after 'loop'");
+            enterLoop();
+            auto body = block();
+            exitLoop();
+            auto w = std::make_shared<WhileStmt>();
+            w->condition = lBool(true, line); w->body = body; w->line = line;
+            attachDoneBlock(w->doneBlock);
+            return finishLoop(w, lim);
+        }
+        bool until = current + 2 < tokens.size() && tokens[current + 1].type == TokenType::IDENT && tokens[current + 1].lexeme == "until" && tokens[current + 2].type == TokenType::LPAREN;
+        size_t lp = until ? current + 2 : current + 1;
+        if (lp < tokens.size() && tokens[lp].type == TokenType::LPAREN) {
+            size_t rp = closeParen(lp);
+            if (rp + 1 < tokens.size() && atLoopForm(rp + 1) && tokens[rp + 1].lexeme != "as") {
+                advance(); if (until) advance();
+                consume(TokenType::LPAREN, "Expected '(' after 'loop'");
+                auto cond = expression();
+                consume(TokenType::RPAREN, "Expected ')' after loop condition");
+                if (until) { auto n = std::make_shared<UnaryExpr>(); n->op = TokenType::BANG; n->right = cond; n->line = line; cond = n; }
+                ExprPtr lim = limitClause();
+                enterLoop();
+                auto body = statement();
+                exitLoop();
+                auto w = std::make_shared<WhileStmt>();
+                w->condition = cond; w->body = body; w->line = line;
+                attachDoneBlock(w->doneBlock);
+                return finishLoop(w, lim);
+            }
+        }
+        return nullptr;
+    }
+
+    // ---- repeat N [as i] [limit M] { } ----
+    if (kw == "repeat") {
+        size_t k = current + 1;
+        bool isForm = false;
+        if (k < tokens.size()) {
+            if (tokens[k].type == TokenType::NUMBER) isForm = k + 1 < tokens.size() && atLoopForm(k + 1);
+            else if (tokens[k].type == TokenType::IDENT) isForm = k + 1 < tokens.size() && (tokens[k + 1].type == TokenType::LBRACE || (tokens[k + 1].type == TokenType::IDENT && (tokens[k + 1].lexeme == "as" || tokens[k + 1].lexeme == "times")));
+            else if (tokens[k].type == TokenType::LPAREN) { size_t rp = closeParen(k); isForm = rp + 1 < tokens.size() && atLoopForm(rp + 1); }
+        }
+        if (!isForm) return nullptr;
+        advance(); // repeat
+        ExprPtr count;
+        if (check(TokenType::NUMBER)) { Token t = advance(); count = lNum(t.number, t.line);
+            if (t.number < 0 || t.number != (double)(long long)t.number)
+                throw errRich(diag::Code::E0013_InvalidExpression, t, "`repeat` needs a non-negative integer count",
+                              "the count of a `repeat` loop is the number of executions", "use a whole number such as `repeat 5 { ... }`"); }
+        else if (check(TokenType::IDENT)) { Token t = advance(); count = lVar(t.lexeme, t.line); }
+        else { consume(TokenType::LPAREN, "Expected '(' after 'repeat'"); count = expression(); consume(TokenType::RPAREN, "Expected ')' after repeat count"); }
+        if (check(TokenType::IDENT) && peek().lexeme == "times") advance();
+        std::string idx = "#ri" + std::to_string(loopSeq++);
+        if (check(TokenType::IDENT) && peek().lexeme == "as") { advance(); idx = consume(TokenType::IDENT, "Expected index name after 'as'").lexeme; }
+        ExprPtr lim = limitClause();
+        const std::string n = "#rn" + std::to_string(loopSeq++);
+        enterLoop();
+        auto body = statement();
+        exitLoop();
+        auto f = std::make_shared<ForStmt>();
+        f->initializer = lLet(idx, lNum(0, line), line);
+        f->condition = lBin(lVar(idx, line), TokenType::LESS, lVar(n, line), line);
+        f->increment = lAssign(idx, lBin(lVar(idx, line), TokenType::PLUS, lNum(1, line), line), line);
+        f->body = body; f->line = line;
+        attachDoneBlock(f->doneBlock);
+        StmtPtr loop = finishLoop(f, lim);
+        std::vector<StmtPtr> out;
+        out.push_back(lLet(n, count, line));
+        auto badL = std::make_shared<LogicalExpr>(); badL->left = lUnaryNot(lCall("isInt", {lVar(n, line)}, line), line); badL->op = TokenType::OR; badL->right = lBin(lVar(n, line), TokenType::LESS, lNum(0, line), line); badL->line = line; ExprPtr bad = badL;
+        out.push_back(lIf(bad, lBlock({lThrow(lStr("repeat count must be a non-negative integer", line), line)}, line), nullptr, line));
+        out.push_back(loop);
+        return lBlock(std::move(out), line);
+    }
+
+    // ---- retry N [as n] { body } [#done { }]  — يكرّر الجسم حتى ينجح (بلا throw)؛ بعد N محاولة يُعاد رمي الخطأ الأخير ----
+    if (kw == "retry") {
+        size_t k = current + 1;
+        bool isForm = false;
+        if (k < tokens.size()) {
+            if (tokens[k].type == TokenType::NUMBER) isForm = k + 1 < tokens.size() && atLoopForm(k + 1);
+            else if (tokens[k].type == TokenType::IDENT) isForm = k + 1 < tokens.size() && (tokens[k + 1].type == TokenType::LBRACE || (tokens[k + 1].type == TokenType::IDENT && tokens[k + 1].lexeme == "as"));
+            else if (tokens[k].type == TokenType::LPAREN) { size_t rp = closeParen(k); isForm = rp + 1 < tokens.size() && atLoopForm(rp + 1); }
+        }
+        if (!isForm) return nullptr;
+        advance();
+        ExprPtr count;
+        if (check(TokenType::NUMBER)) { Token t = advance(); count = lNum(t.number, t.line); }
+        else if (check(TokenType::IDENT)) { Token t = advance(); count = lVar(t.lexeme, t.line); }
+        else { consume(TokenType::LPAREN, "Expected '('"); count = expression(); consume(TokenType::RPAREN, "Expected ')'"); }
+        std::string att = "#ra" + std::to_string(loopSeq++);
+        if (check(TokenType::IDENT) && peek().lexeme == "as") { advance(); att = consume(TokenType::IDENT, "Expected attempt name after 'as'").lexeme; }
+        const std::string id = std::to_string(loopSeq++);
+        const std::string n = "#rn" + id, okv = "#rok" + id, err = "#rer" + id, cnt = "#rc" + id;
+        consume(TokenType::LBRACE, "Expected '{' after 'retry'");
+        enterLoop();
+        auto body = block();
+        exitLoop();
+        // for (let att = 1; !ok; att = att + 1) { try { body; ok = true; } catch (e) { err = e; if (att >= n) throw e; } }
+        auto tc = std::make_shared<TryCatchStmt>();
+        tc->line = line;
+        body->statements.push_back(lExpr(lAssign(okv, lBool(true, line), line), line));
+        tc->tryBranch = body;
+        tc->catchName = "#re" + id;
+        tc->catchBranch = lBlock({lIf(lBin(lVar(att, line), TokenType::GREATER_EQUAL, lVar(n, line), line),
+                                       lBlock({lThrow(([&]() { auto ix = std::make_shared<IndexExpr>(); ix->object = lVar(tc->catchName, line); ix->index = lStr("value", line); ix->line = line; return ExprPtr(ix); })(), line)}, line), nullptr, line)}, line);
+        auto f = std::make_shared<ForStmt>();
+        f->initializer = lLet(att, lNum(1, line), line);
+        f->condition = lUnaryNot(lVar(okv, line), line);
+        f->increment = lAssign(att, lBin(lVar(att, line), TokenType::PLUS, lNum(1, line), line), line);
+        f->body = lBlock({tc}, line); f->line = line;
+        StmtPtr loop = finishLoop(f);
+        return lBlock({lLet(n, count, line), lLet(okv, lBool(false, line), line), loop}, line);
+    }
+
+    // ---- each [let] x [, i] in ITER [where C] [reversed] [limit N] { }  /  each [a, b] in ... / each {k} in ... ----
+    if (kw == "each") {
+        if (!atEachForm(current)) return nullptr;
+        advance(); // each
+        EachHdr h = parseEachHdr();
+        ExprPtr lim = limitClause();
+        enterLoop();
+        auto body = statement();
+        exitLoop();
+        return buildEach(h, body, line, lim);
+    }
+    return nullptr;
+}
+
+bool Parser::atEachForm(size_t at, bool forKw) const {
+    size_t k = at + 1;
+    if (at >= tokens.size() || k >= tokens.size()) return false;
+    if (forKw ? tokens[at].type != TokenType::FOR : (tokens[at].type != TokenType::IDENT || tokens[at].lexeme != "each")) return false;
+    if (tokens[k].type == TokenType::LET) k++;
+    if (k < tokens.size() && tokens[k].type == TokenType::IDENT) {
+        size_t j = k + 1;
+        if (j + 2 < tokens.size() && tokens[j].type == TokenType::COMMA && tokens[j + 1].type == TokenType::IDENT) j += 2;
+        return j < tokens.size() && tokens[j].type == TokenType::IDENT && tokens[j].lexeme == "in";
+    }
+    if (k < tokens.size() && (tokens[k].type == TokenType::LBRACKET || tokens[k].type == TokenType::LBRACE)) {
+        int d = 0; size_t j = k;
+        for (; j < tokens.size(); ++j) {
+            auto t = tokens[j].type;
+            if (t == TokenType::LBRACKET || t == TokenType::LBRACE) d++;
+            else if ((t == TokenType::RBRACKET || t == TokenType::RBRACE) && --d == 0) break;
+        }
+        return j + 1 < tokens.size() && tokens[j + 1].type == TokenType::IDENT && tokens[j + 1].lexeme == "in";
+    }
+    return false;
+}
+
+// بعد 'each' (و'let' الاختيارية): الأسماء/النمط، in، المكرَّر، ثم معدِّلات where / reversed بأي ترتيب
+Parser::EachHdr Parser::parseEachHdr() {
+    EachHdr h;
+    if (check(TokenType::LET)) advance();
+    if (check(TokenType::LBRACKET) || check(TokenType::LBRACE)) {
+        Token open = peek();
+        LetPattern pat = letPattern();
+        checkPatternDuplicates(pat, open);
+        h.pat = std::make_shared<LetPattern>(std::move(pat));
+    } else {
+        h.v1 = consume(TokenType::IDENT, "Expected loop variable after 'each'").lexeme;
+        if (match({TokenType::COMMA})) h.v2 = consume(TokenType::IDENT, "Expected second loop variable").lexeme;
+    }
+    advance(); // 'in'
+    h.iter = maybeHashRange(expression());
+    for (;;) {
+        if (check(TokenType::IDENT) && peek().lexeme == "where") {
+            advance();
+            ExprPtr c = expression();
+            h.where = h.where ? std::static_pointer_cast<Expr>(lLogicalAnd(h.where, c)) : c;
+        } else if (check(TokenType::IDENT) && peek().lexeme == "reversed") {
+            Token t = advance();
+            h.iter = lCall("reverse", {h.iter}, t.line);
+        } else if (check(TokenType::IDENT) && (peek().lexeme == "by" || peek().lexeme == "window" || peek().lexeme == "every") && h.mode == 0) {
+            Token t = advance();
+            h.mode = t.lexeme == "by" ? 1 : (t.lexeme == "window" ? 3 : 4);
+            h.line = t.line;
+            if (check(TokenType::NUMBER)) { Token n = advance(); h.arg = lNum(n.number, n.line); }
+            else if (check(TokenType::IDENT)) { Token n = advance(); h.arg = lVar(n.lexeme, n.line); }
+            else { consume(TokenType::LPAREN, "Expected a number, name or '(' after '" + t.lexeme + "'"); h.arg = expression(); consume(TokenType::RPAREN, "Expected ')'"); }
+        } else if (check(TokenType::IDENT) && peek().lexeme == "zip" && h.mode == 0) {
+            Token t = advance();
+            h.mode = 2; h.line = t.line;
+            h.iter2 = expression();
+        } else break;
+    }
+    if (h.mode && h.pat)
+        throw errRich(diag::Code::E0013_InvalidExpression, peek(), "destructuring patterns cannot be combined with by/window/every/zip",
+                      "these modes hand out whole chunks or pairs of values", "use plain names:  `each a, b in xs zip ys { ... }`");
+    if (h.mode == 2 && h.v2.empty())
+        throw errRich(diag::Code::E0012_MissingToken, peek(), "`zip` needs two loop variables",
+                      "each round takes one item from each list", "write `each a, b in xs zip ys { ... }`", "second variable");
+    return h;
+}
+
+// يبني ForInStmt (+ تغليف العدّاد عند وجود متغيّرين) ثم يمرّرها عبر finishLoop
+StmtPtr Parser::buildEach(EachHdr& h, StmtPtr body, int line, ExprPtr lim) {
+    auto f = std::make_shared<ForInStmt>();
+    f->line = line;
+    StmtPtr inner = body;
+    if (h.where) inner = lIf(h.where, body, nullptr, line);
+    std::vector<StmtPtr> pre;
+    if (h.mode) {
+        const std::string id = std::to_string(loopSeq++);
+        const std::string it = "#ei" + id, it2 = "#ej" + id, n = "#en" + id, k = "#ek" + id, st = "#es" + id;
+        auto idx = [&](const std::string& o, const std::string& i) { auto x = std::make_shared<IndexExpr>(); x->object = lVar(o, line); x->index = lVar(i, line); x->line = line; return ExprPtr(x); };
+        auto plus = [&](ExprPtr a, ExprPtr b) { return lBin(a, TokenType::PLUS, b, line); };
+        auto isSeq = [&](const std::string& v) { auto o = std::make_shared<LogicalExpr>(); o->left = lCall("isArray", {lVar(v, line)}, line); o->op = TokenType::OR; o->right = lCall("isString", {lVar(v, line)}, line); o->line = line; return lUnaryNot(o, line); };
+        const char* what = h.mode == 1 ? "by" : h.mode == 2 ? "zip" : h.mode == 3 ? "window" : "every";
+        std::string msg = std::string("`each ... ") + what + "` needs an array or a string";
+        pre.push_back(lLet(it, h.iter, line));
+        pre.push_back(lIf(isSeq(it), lBlock({lThrow(lStr(msg, line), line)}, line), nullptr, line));
+        ExprPtr nExpr = lCall("len", {lVar(it, line)}, line);
+        if (h.mode == 2) {
+            pre.push_back(lLet(it2, h.iter2, line));
+            pre.push_back(lIf(isSeq(it2), lBlock({lThrow(lStr(msg, line), line)}, line), nullptr, line));
+            auto cnd = std::make_shared<ConditionalExpr>();
+            ExprPtr l2 = lCall("len", {lVar(it2, line)}, line);
+            cnd->condition = lBin(nExpr, TokenType::LESS, l2, line); cnd->whenTrue = lCall("len", {lVar(it, line)}, line); cnd->whenFalse = lCall("len", {lVar(it2, line)}, line); cnd->line = line;
+            nExpr = cnd;
+        }
+        pre.push_back(lLet(n, nExpr, line));
+        if (h.arg) {
+            pre.push_back(lLet(st, h.arg, line));
+            auto bad = std::make_shared<LogicalExpr>();
+            bad->left = lUnaryNot(lCall("isInt", {lVar(st, line)}, line), line); bad->op = TokenType::OR; bad->right = lBin(lVar(st, line), TokenType::LESS, lNum(1, line), line); bad->line = line;
+            pre.push_back(lIf(bad, lBlock({lThrow(lStr(std::string("`") + what + "` needs a positive integer", line), line)}, line), nullptr, line));
+        }
+        std::vector<StmtPtr> bodyStmts;
+        ExprPtr cond, step;
+        auto chunk = [&]() { return lCall("slice", {lVar(it, line), lVar(k, line), plus(lVar(k, line), lVar(st, line))}, line); };
+        if (h.mode == 1) {
+            cond = lBin(lVar(k, line), TokenType::LESS, lVar(n, line), line); step = lVar(st, line);
+            bodyStmts.push_back(lLet(h.v1, chunk(), line));
+            if (!h.v2.empty()) bodyStmts.push_back(lLet(h.v2, lBin(lVar(k, line), TokenType::SLASH, lVar(st, line), line), line));
+        } else if (h.mode == 3) {
+            cond = lBin(plus(lVar(k, line), lVar(st, line)), TokenType::LESS_EQUAL, lVar(n, line), line); step = lNum(1, line);
+            bodyStmts.push_back(lLet(h.v1, chunk(), line));
+            if (!h.v2.empty()) bodyStmts.push_back(lLet(h.v2, lVar(k, line), line));
+        } else if (h.mode == 4) {
+            cond = lBin(lVar(k, line), TokenType::LESS, lVar(n, line), line); step = lVar(st, line);
+            bodyStmts.push_back(lLet(h.v1, idx(it, k), line));
+            if (!h.v2.empty()) bodyStmts.push_back(lLet(h.v2, lVar(k, line), line));
+        } else {
+            cond = lBin(lVar(k, line), TokenType::LESS, lVar(n, line), line); step = lNum(1, line);
+            bodyStmts.push_back(lLet(h.v1, idx(it, k), line));
+            bodyStmts.push_back(lLet(h.v2, idx(it2, k), line));
+        }
+        bodyStmts.push_back(inner);
+        auto fs = std::make_shared<ForStmt>();
+        fs->initializer = lLet(k, lNum(0, line), line);
+        fs->condition = cond;
+        fs->increment = lAssign(k, plus(lVar(k, line), step), line);
+        fs->body = lBlock(std::move(bodyStmts), line); fs->line = line;
+        attachDoneBlock(fs->doneBlock);
+        StmtPtr loop = finishLoop(fs, lim);
+        pre.push_back(loop);
+        return lBlock(std::move(pre), line);
+    }
+    if (!h.v2.empty()) {
+        const std::string id = std::to_string(loopSeq++);
+        const std::string it = "#ei" + id, n = "#en" + id, e = "#ee" + id;
+        pre.push_back(lLet(it, h.iter, line));
+        pre.push_back(lLet(n, lNum(-1, line), line));
+        auto idxE = std::make_shared<IndexExpr>(); idxE->object = lVar(it, line); idxE->index = lVar(e, line); idxE->line = line;
+        auto cond = std::make_shared<ConditionalExpr>();
+        cond->condition = lCall("isMap", {lVar(it, line)}, line); cond->whenTrue = idxE; cond->whenFalse = lVar(n, line); cond->line = line;
+        f->varName = e;
+        f->iterable = lVar(it, line);
+        f->body = lBlock({lExpr(lAssign(n, lBin(lVar(n, line), TokenType::PLUS, lNum(1, line), line), line), line),
+                          lLet(h.v1, lVar(e, line), line), lLet(h.v2, cond, line), inner}, line);
+    } else {
+        f->varName = h.v1; f->pattern = h.pat; f->iterable = h.iter; f->body = inner;
+    }
+    attachDoneBlock(f->doneBlock);
+    StmtPtr loop = finishLoop(f, lim);
+    if (pre.empty()) return loop;
+    pre.push_back(loop);
+    return lBlock(std::move(pre), line);
+}
+
+// [each x in xs where c yield expr]  ->  goal { let acc = []; each ... { push(acc, expr); } achieve acc; }
+ExprPtr Parser::eachComprehension() {
+    Token kwTok = advance(); // each
+    int line = kwTok.line;
+    EachHdr h = parseEachHdr();
+    if (!(check(TokenType::IDENT) && peek().lexeme == "yield"))
+        throw errRich(diag::Code::E0012_MissingToken, peek(), "expected 'yield' in an `each` comprehension",
+                      "an array comprehension is written `[each x in xs where cond yield expr]`",
+                      "add `yield <expression>` before the closing `]`", "'yield'");
+    advance();
+    enterLoop();
+    ExprPtr val = expression();
+    exitLoop();
+    const std::string acc = "#ac" + std::to_string(loopSeq++);
+    auto push = lExpr(lCall("push", {lVar(acc, line), val}, line), line);
+    StmtPtr loop = buildEach(h, push, line, nullptr);
+    auto ach = std::make_shared<AchieveStmt>(); ach->value = lVar(acc, line); ach->line = line;
+    auto g = std::make_shared<GoalExpr>(); g->line = line;
+    g->body = lBlock({lLet(acc, std::make_shared<ArrayExpr>(), line), loop, ach}, line);
+    return g;
 }
 
 } // namespace rin
