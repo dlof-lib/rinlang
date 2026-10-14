@@ -116,6 +116,14 @@ class RinCodeEditorView @JvmOverloads constructor(
     private val colorType = ContextCompat.getColor(context, R.color.syntax_container_keyword) // بنفسجي
     private val colorPreprocessor = ContextCompat.getColor(context, R.color.syntax_make_directive) // بنفسجي
     private val colorDefault = ContextCompat.getColor(context, R.color.rin_editor_text)
+    // مفاهيم Rin الدلالية (HighlightKind 20..26)
+    private val colorControl = ContextCompat.getColor(context, R.color.syntax_control)
+    private val colorConstant = ContextCompat.getColor(context, R.color.syntax_constant)
+    private val colorFunctionDef = ContextCompat.getColor(context, R.color.syntax_function_def)
+    private val colorModifier = ContextCompat.getColor(context, R.color.syntax_modifier)
+    private val colorLabel = ContextCompat.getColor(context, R.color.syntax_label)
+    private val colorClass = ContextCompat.getColor(context, R.color.syntax_class)
+    private val colorProperty = ContextCompat.getColor(context, R.color.syntax_property)
     // ألوان passkit الرسمية (colors.xml / values-night) — تُستخدَم فقط لأنواع التلوين 13..19.
     private val colorPkBracket = ContextCompat.getColor(context, R.color.passkit_bracket)
     private val colorPkTag = ContextCompat.getColor(context, R.color.passkit_tag)
@@ -871,6 +879,7 @@ class RinCodeEditorView @JvmOverloads constructor(
         baseline: Float
     ) {
         if (lineText.isEmpty()) return
+        val styled = AppSettings.isSyntaxFontStyles(context) // مرة لكل سطر (SharedPreferences مخزّنة في الذاكرة)
         if (spans.isNullOrEmpty()) {
             textPaint.color = colorDefault
             canvas.drawText(lineText, startX, baseline, textPaint)
@@ -891,8 +900,10 @@ class RinCodeEditorView @JvmOverloads constructor(
             }
             if (to > from) {
                 textPaint.color = colorForKind(h.kind)
+                applyFontStyle(h.kind, styled)
                 canvas.drawText(lineText, from, to, cursorX, baseline, textPaint)
                 cursorX += textPaint.measureText(lineText, from, to)
+                resetFontStyle()
             }
             cursor = h.endCol
         }
@@ -922,6 +933,29 @@ class RinCodeEditorView @JvmOverloads constructor(
         canvas.drawPath(path, paint)
     }
 
+    /** نمط الخط لكل مفهوم: عريض للكلمات المفتاحية/التحكّم/الأنواع/الأصناف/تعريف الدوال والوسوم،
+     *  مائل للتعليقات والمعدِّلات والتسميات. يُنفَّذ بـ isFakeBoldText + textSkewX (لا خط بديل) حتى تبقى
+     *  عروض الأحرف مطابقة تماماً لعرض الخلية — فلا ينحرف المؤشر ولا التحديد ولا مواضع الأخطاء. */
+    private fun applyFontStyle(kind: Int, styled: Boolean) {
+        if (!styled) { resetFontStyle(); return }
+        val bold: Boolean
+        val italic: Boolean
+        when (kind) {
+            HighlightKind.KEYWORD, HighlightKind.CONTROL, HighlightKind.TYPE, HighlightKind.CLASS,
+            HighlightKind.FUNCTION_DEF, HighlightKind.AT, HighlightKind.PREPROCESSOR -> { bold = true; italic = false }
+            HighlightKind.LABEL -> { bold = true; italic = true }
+            HighlightKind.COMMENT, HighlightKind.PK_COMMENT, HighlightKind.MODIFIER -> { bold = false; italic = true }
+            else -> { bold = false; italic = false }
+        }
+        textPaint.isFakeBoldText = bold
+        textPaint.textSkewX = if (italic) -0.22f else 0f
+    }
+
+    private fun resetFontStyle() {
+        textPaint.isFakeBoldText = false
+        textPaint.textSkewX = 0f
+    }
+
     private fun colorForKind(kind: Int): Int = when (kind) {
         HighlightKind.KEYWORD -> colorKeyword
         HighlightKind.STRING -> colorString
@@ -932,6 +966,13 @@ class RinCodeEditorView @JvmOverloads constructor(
         HighlightKind.COMMENT -> colorComment
         HighlightKind.TYPE -> colorType
         HighlightKind.PREPROCESSOR -> colorPreprocessor
+        HighlightKind.CONTROL -> colorControl
+        HighlightKind.CONSTANT -> colorConstant
+        HighlightKind.FUNCTION_DEF -> colorFunctionDef
+        HighlightKind.MODIFIER -> colorModifier
+        HighlightKind.LABEL -> colorLabel
+        HighlightKind.CLASS -> colorClass
+        HighlightKind.PROPERTY -> colorProperty
         HighlightKind.PK_BRACKET -> colorPkBracket
         HighlightKind.PK_TAG -> colorPkTag
         HighlightKind.PK_CUSTOM_TAG -> colorPkCustomTag
@@ -1492,6 +1533,19 @@ class RinCodeEditorView @JvmOverloads constructor(
     fun indentSelection() { engine.indentSelection(); afterEngineMutation() }
     fun unindentSelection() { engine.unindentSelection(); afterEngineMutation() }
     fun checkBracketBalance(): Int = engine.checkBracketBalance()
+
+    /** إعادة محاذاة المستند كاملاً (Format Document). true إن تغيّر النص. */
+    fun formatDocument(indentWidth: Int = 4): Boolean {
+        val changed = engine.reindentDocument(indentWidth)
+        if (changed) afterEngineMutation()
+        return changed
+    }
+
+    /** هيكل الملف (دوال/أصناف/متغيرات/تسميات) لقائمة "الانتقال إلى". */
+    fun getOutline(): List<RinNativeEditor.OutlineItem> = engine.getOutline()
+
+    /** نطاقات الطيّ الصالحة حالياً. */
+    fun getFoldRanges(): List<RinNativeEditor.FoldRange> = engine.getFoldRanges()
     fun lineCount(): Int = engine.lineCount()
 
     /** موضع المؤشر الحالي (1-based للعرض) وطول التحديد الحالي إن وُجد — لشريط الحالة. */
@@ -1810,6 +1864,10 @@ class RinCodeEditorView @JvmOverloads constructor(
     private fun applySuggestion(suggestion: String, wordStartCol: Int) {
         val cur = engine.getCursor()
         engine.replaceRange(cur.line, wordStartCol, cur.line, cur.col, suggestion)
+        // each/repeat/retry/loop/... تتحوّل إلى قالب كامل بجسم وموضع مؤشر جاهز للكتابة.
+        if (suggestionLanguage == SyntaxLanguage.RIN && RinNativeEditor.isSnippetTrigger(suggestion)) {
+            engine.expandSnippetAtCursor()
+        }
         dismissSuggestionPopup()
         afterEngineMutation()
     }
