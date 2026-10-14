@@ -24,6 +24,15 @@ object HighlightKind {
     const val PK_CUSTOM_TAG = 17 // وسم غير معروف (قد يُسجَّل عبر passkitRegister)
     const val PK_STRING = 18     // قيمة سمة
     const val PK_COMMENT = 19    // <!-- ... -->
+
+    // --- مفاهيم Rin الدلالية (20..26) — تطابق rinedit::HighlightKind في rin_editor_engine.h حرفياً ---
+    const val CONSTANT = 20      // true/false/nil وثوابت MAX_SIZE
+    const val FUNCTION_DEF = 21  // اسم الدالة بعد fun
+    const val CONTROL = 22       // if/else/while/for/return/break/continue/each/repeat/loop/retry/try/catch/throw
+    const val MODIFIER = 23      // where/yield/by/window/skip/take/sorted/... و when/unless
+    const val LABEL = 24         // تسمية حلقة outer: و break outer
+    const val CLASS = 25         // أسماء الأصناف و Set/Env
+    const val PROPERTY = 26      // obj.name
 }
 
 enum class SyntaxLanguage {
@@ -202,6 +211,8 @@ private object RinLexer {
         "struct", "interface", "trait", "enum", "extends", "implements", "uses", "instanceof",
         "abstract", "final", "override", "static", "protected", "get", "set", "self", "super", "when",
         "otherwise", "unless", "elif", "elseif", "ifnot", "until", "match", "case", "goal", "achieve", "item",
+        // حلقات Rin v2 (docs/loops.md)
+        "each", "loop", "retry", "reversed", "yield", "distinct",
         // أنواع/مساحات أسماء أساسية: Set (docs/set.md) و Env (docs/env.md)
         "Set", "Env"
     )
