@@ -33,3 +33,11 @@
 - الخط (يتبع إعداد `syntax_font_styles`): `@tmpl/@body` **عريض** برتقالي محروق (داكن: برتقالي فاتح) · اسم القالب/الاستعمال **عريض مائل** نيلي (داكن: بنفسجي فاتح) · المعاملات *مائلة* بنّية.
 - `colors.xml` و`values-night/colors.xml`: `syntax_template` `syntax_template_kw` `syntax_parameter`. `RinCodeEditorView.kt`: لون ونمط لكل نوع.
 - اختبار المحرر 105/105 (g++). لم يُبنَ Kotlin/XML هنا.
+
+## خط احترافي لـ `@tmpl`
+- خطّان حقيقيان مضمَّنان: **JetBrains Mono NL** عريض مائل (`res/font/rin_tmpl_bold_italic.ttf`) لـ `@tmpl`/`@body` واسم القالب،
+  ومائل (`res/font/rin_tmpl_italic.ttf`) للمعاملات — بدل التشويه الاصطناعي (`isFakeBoldText`+skew). النسخة NL بلا ligatures،
+  وعرض الحرف 0.6em كالخط الأحادي. الرخصة OFL في `assets/licenses/JetBrainsMono-OFL.txt`.
+- الرسم في `RinCodeEditorView.drawTemplateToken`: كل حرف في خليته (x = بداية + i × charWidth) فيبقى المؤشر والتحديد وعلامات الأخطاء مضبوطة.
+- الشكل: `@tmpl`/`@body` داخل «حبة» مستديرة شفافة بلون الكلمة (حبة واحدة تشمل `@` و`tmpl`)، واسم القالب بخط سفلي ناعم.
+- يتبع إعداد `syntax_font_styles`؛ وإن تعذّر تحميل الخط يعود تلقائياً للنمط السابق. لم يُبنَ Kotlin/الموارد هنا.
