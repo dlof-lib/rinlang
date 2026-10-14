@@ -13,3 +13,10 @@
 ## التحقق
 tests/loops 5/5 على `rin run` و`rin --vm` · rintests 83/83 · wesscode 42/42 · verification 57/63
 (الستة `let_err_*` تعرض الخطأ نفسه بصيغة كاملة بدل الرمز — لا علاقة بالتعديل). بُني على سطح المكتب (g++)؛ لم يُبنَ APK.
+
+## Loops v3 (إضافة)
+`skip/take/until/while` · `sorted [by KEY] [desc]` · `unique` · `flat` · `chain` · `downto` · `cross` · `pairs` · `from N` · `nobreak {}` ·
+اختزالات `sum/product/count/avg/min/max/any/all/first/last each ...` · قاموس مفهوم `{each x in xs yield k : v}`.
+الملفات: `rin_parser.cpp|.h` (تفكيك) و`rin_extra_natives5.cpp` (دوال `#downto #sorted #sortby #unique`). المفسّر وRinVM لم يُعدَّلا.
+التحقق (g++ على لينكس): tests/loops 7/7 على `rin run` و`rin --vm` · rintests 83/83 · wesscode 42/42 · tests/vm تطابق 5/5.
+لم تُشغَّل: tests/verification، بناء APK/الويب. الأداء لم يتغيّر.
