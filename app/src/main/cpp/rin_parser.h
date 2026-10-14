@@ -1,5 +1,7 @@
 #pragma once
 #include <unordered_set>
+#include <map>
+#include <memory>
 #include "rin_common.h"
 #include "rin_ast.h"
 #include "diagnostics/diagnostic.h"
@@ -164,6 +166,14 @@ private:
     std::vector<LabelInfo> labels;
     std::string pendingLabel;
     int loopSeq = 0;
+    // ---- قوالب الحلقات @tmpl (docs/loop-templates.md): تفكيك على مستوى التوكنات قبل التحليل النحوي ----
+    struct LoopTmpl;
+    std::map<std::string, std::shared_ptr<LoopTmpl>> tmpls;
+    bool tmplDone = false;
+    void expandLoopTemplates();
+    std::vector<Token> expandTmplStream(const std::vector<Token>& in, int depth);
+    size_t tmplParseDef(const std::vector<Token>& in, size_t i);
+    size_t tmplExpandUse(const LoopTmpl& t, const std::vector<Token>& in, size_t i, std::vector<Token>& out, int depth);
     void enterLoop();
     void exitLoop();
     StmtPtr finishLoop(StmtPtr loop, ExprPtr limit = nullptr);
