@@ -171,6 +171,81 @@ object RinContainerTags {
         return regions
     }
 
+    /**
+     * عائلة الحاوية لأغراض "ستايل الحاوية" البصري في المحرر (لون الشريط الجانبي والشارة).
+     * التصنيف بصري بحت ولا يؤثر على التحليل/الطيّ/المطابقة.
+     */
+    enum class ContainerFamily { CORE, PIPE, DATA, API, IO, GROUP }
+
+    /** كتلة حاوية واحدة للرسم. [startLine]/[endLine] 0-based. [closed] false = وسم لم يُغلق بعد
+     *  (كود قيد الكتابة) فيمتد حتى آخر سطر. [indent] عدد المسافات البادئة لسطر الفتح، و[tagCols]
+     *  عرض كلمة الوسم (`@container.api`) بالأعمدة لرسم الشارة خلفها. [depth] عمق تعشيش الحاويات
+     *  فقط (الحاويات داخل حاويات)، بدون عدّ @view/@element/@loop. */
+    data class ContainerBlock(
+        val startLine: Int,
+        val endLine: Int,
+        val depth: Int,
+        val family: ContainerFamily,
+        val indent: Int,
+        val tagCols: Int,
+        val closed: Boolean
+    )
+
+    /** يصنّف وسماً قانونياً (من [closingTagFor]) إلى عائلة حاوية، أو null إن لم يكن حاوية
+     *  (@view/@element/@loop/@theme تبقى خارج ستايل الحاويات عمداً). */
+    fun containerFamilyOf(tag: String): ContainerFamily? = when (tag) {
+        "container", "container.block", "block", "container.portal", "portal",
+        "container.sticker", "sticker", "container.chatbot", "chatbot",
+        "container.aukt", "AUKT" -> ContainerFamily.CORE
+        "container.pipe", "pipe" -> ContainerFamily.PIPE
+        "container.data", "container.table", "container.doc", "container.object",
+        "container.open/object", "Object", "object", "data" -> ContainerFamily.DATA
+        "container.api", "api" -> ContainerFamily.API
+        "container.import", "container.everything", "Everything", "container.make",
+        "make", "Rin.make" -> ContainerFamily.IO
+        "Containers.Group", "Volume", "Section", "Translations" -> ContainerFamily.GROUP
+        else -> null
+    }
+
+    /**
+     * يبني كتل الحاويات فقط (بما فيها غير المغلقة حتى نهاية الملف) لرسم ستايل الحاوية. بنفس
+     * خوارزمية المكدّس في [buildFoldRegions] لكن يتتبّع كل الوسوم (للمطابقة الصحيحة) ويُصدر
+     * الحاويات وحدها. آمن مع كود غير مكتمل: `.end/` اليتيم يُتجاهل.
+     */
+    fun buildContainerBlocks(text: String): List<ContainerBlock> {
+        data class Open(val tag: String, val family: ContainerFamily?, val line: Int, val indent: Int, val tagCols: Int, val depth: Int)
+        val stack = ArrayDeque<Open>()
+        val blocks = mutableListOf<ContainerBlock>()
+        val lines = text.lines()
+        for (index in lines.indices) {
+            val raw = lines[index]
+            val trimmed = raw.trim()
+            val closingName = closingTagNameIn(trimmed)
+            if (closingName != null) {
+                if (stack.isNotEmpty() && stack.last().tag == closingName) {
+                    val open = stack.removeLast()
+                    val fam = open.family
+                    if (fam != null && index > open.line) {
+                        blocks.add(ContainerBlock(open.line, index, open.depth, fam, open.indent, open.tagCols, true))
+                    }
+                }
+                continue
+            }
+            val tag = closingTagFor(trimmed) ?: continue
+            val fam = containerFamilyOf(tag)
+            val depth = stack.count { it.family != null }
+            val indent = raw.length - raw.trimStart().length
+            val tagCols = trimmed.substringBefore('=').trimEnd().length
+            stack.addLast(Open(tag, fam, index, indent, tagCols, depth))
+        }
+        val last = lines.lastIndex
+        for (open in stack) {
+            val fam = open.family ?: continue
+            if (last > open.line) blocks.add(ContainerBlock(open.line, last, open.depth, fam, open.indent, open.tagCols, false))
+        }
+        return blocks
+    }
+
     /** نص عرض أدقّ من الوسم القانوني (canonical) المستخدَم للمطابقة فقط — مثال: "@view.Column=root"
      *  يُعطي "view.Column" هنا بدل "view" الموحَّد الذي يُرجعه [closingTagFor] (صحيح للمطابقة لكن
      *  أقل فائدة للعرض، إذ يفقد الـKind الفعلي). عرض بحت، لا يُستخدَم في أي فحص/مطابقة. */
