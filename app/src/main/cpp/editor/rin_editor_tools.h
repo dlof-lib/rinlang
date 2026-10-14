@@ -17,6 +17,7 @@
 
 #include <algorithm>
 #include <cstring>
+#include <cctype>
 #include <string>
 #include <unordered_set>
 #include <vector>
@@ -341,6 +342,79 @@ inline void classifyConcepts(const std::vector<rin::Token>& t, std::vector<Highl
         // ثابت بأحرف كبيرة MAX_SIZE (وليس نداءً ولا عضواً)
         if (!afterDot && kinds[i] == HighlightKind::Ident && isAllCapsConstant(w)) kinds[i] = HighlightKind::Constant;
     }
+}
+
+
+// ---------------------------------------------------------------------------------------
+// قوالب الحلقات: @tmpl name(params) ... ثم @name(args) — يُشغَّل بعد classifyConcepts ويتجاوز تصنيفها
+//   @tmpl / @body  -> TemplateKw      اسم القالب (تعريفاً واستعمالاً مع @) -> Template
+//   معاملات القالب وأسماء `as` وظهورها داخل الجسم -> Parameter
+// ---------------------------------------------------------------------------------------
+inline void classifyTemplates(const std::vector<rin::Token>& t, std::vector<HighlightKind>& kinds) {
+    using namespace detail;
+    const size_t n = t.size();
+    if (kinds.size() != n) return;
+    auto nameLike = [&](size_t i) {
+        if (i >= n || t[i].type == TT::STRING || t[i].type == TT::NUMBER || t[i].lexeme.empty()) return false;
+        unsigned char ch = (unsigned char)t[i].lexeme[0];
+        return std::isalpha(ch) || ch == '_' || ch >= 0x80;
+    };
+    auto match = [&](size_t open) -> size_t {
+        int d = 0;
+        for (size_t i = open; i < n; ++i) {
+            TT y = t[i].type;
+            if (y == TT::LPAREN || y == TT::LBRACKET || y == TT::LBRACE) d++;
+            else if (y == TT::RPAREN || y == TT::RBRACKET || y == TT::RBRACE) { if (--d == 0) return i; }
+        }
+        return n;
+    };
+    std::unordered_set<std::string> names;
+    for (size_t i = 0; i + 3 < n; ++i) {
+        if (t[i].type != TT::AT || !isIdentTok(t, i + 1, "tmpl") || !nameLike(i + 2) || t[i + 3].type != TT::LPAREN) continue;
+        kinds[i] = kinds[i + 1] = HighlightKind::TemplateKw;
+        kinds[i + 2] = HighlightKind::Template;
+        names.insert(t[i + 2].lexeme);
+        size_t close = match(i + 3);
+        if (close >= n) continue;
+        std::unordered_set<std::string> params;
+        int depth = 0; bool expectName = true;
+        for (size_t j = i + 4; j < close; ++j) {
+            TT y = t[j].type;
+            if (y == TT::LPAREN || y == TT::LBRACKET || y == TT::LBRACE) depth++;
+            else if (y == TT::RPAREN || y == TT::RBRACKET || y == TT::RBRACE) depth--;
+            else if (depth == 0 && y == TT::COMMA) { expectName = true; continue; }
+            if (depth == 0 && expectName && nameLike(j)) { kinds[j] = HighlightKind::Parameter; params.insert(t[j].lexeme); }
+            expectName = false;
+        }
+        size_t k = close + 1;
+        if (isIdentTok(t, k, "as")) {                       // as x, i
+            kinds[k] = HighlightKind::Modifier;
+            for (++k; k < n && (nameLike(k) || t[k].type == TT::COMMA); ++k)
+                if (t[k].type != TT::COMMA && t[k].type != TT::LBRACE) { kinds[k] = HighlightKind::Parameter; params.insert(t[k].lexeme); }
+        }
+        size_t end = k;                                     // نهاية التعريف: } للكتلة، أو ; / } الجسم الافتراضي
+        if (k < n && t[k].type == TT::LBRACE) end = match(k);
+        else {
+            size_t j = k;
+            while (j < n) {
+                if (t[j].type == TT::LPAREN || t[j].type == TT::LBRACKET) { j = match(j); if (j >= n) break; ++j; continue; }
+                if (t[j].type == TT::SEMICOLON) { end = j; break; }
+                if (t[j].type == TT::LBRACE) { end = match(j); break; }
+                ++j;
+            }
+            if (j >= n) end = n - 1;
+        }
+        for (size_t j = close + 1; j <= end && j < n; ++j) {
+            if (t[j].type == TT::AT && isIdentTok(t, j + 1, "body")) { kinds[j] = kinds[j + 1] = HighlightKind::TemplateKw; ++j; continue; }
+            if (t[j].type == TT::IDENT && params.count(t[j].lexeme) && !(j > 0 && t[j - 1].type == TT::DOT) &&
+                (kinds[j] == HighlightKind::Ident || kinds[j] == HighlightKind::Call || kinds[j] == HighlightKind::Modifier))
+                kinds[j] = HighlightKind::Parameter;
+        }
+    }
+    for (size_t i = 0; i + 2 < n; ++i)                      // الاستعمالات @name(
+        if (t[i].type == TT::AT && nameLike(i + 1) && t[i + 2].type == TT::LPAREN && names.count(t[i + 1].lexeme) &&
+            kinds[i] != HighlightKind::TemplateKw)
+            kinds[i] = kinds[i + 1] = HighlightKind::Template;
 }
 
 // ---------------------------------------------------------------------------------------
