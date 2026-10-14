@@ -20,3 +20,10 @@ tests/loops 5/5 على `rin run` و`rin --vm` · rintests 83/83 · wesscode 42/4
 الملفات: `rin_parser.cpp|.h` (تفكيك) و`rin_extra_natives5.cpp` (دوال `#downto #sorted #sortby #unique`). المفسّر وRinVM لم يُعدَّلا.
 التحقق (g++ على لينكس): tests/loops 7/7 على `rin run` و`rin --vm` · rintests 83/83 · wesscode 42/42 · tests/vm تطابق 5/5.
 لم تُشغَّل: tests/verification، بناء APK/الويب. الأداء لم يتغيّر.
+
+## دمج تحديث rinlang-loops-changed
+محلل الحلقات في الأرشيف الجديد فرعٌ مواز ينقصه ما في v3 (`nobreak`/`downto`/`cross`/`pairs`/الاختزالات/`from`) فلم يُستبدل،
+وإنما نُقلت ميزتاه إلى محلل v3: `distinct [on (key)]` (مرحلة تيار) و`each x in xs, y in ys` (rin_parser.cpp|.h)، مع
+`RinSyntax.kt` و`syntaxes/rin-keywords.json` وتوثيق واختبارَي `loops_distinct` و`loops_pro`.
+التحقق (g++، مفسّر `rin` مبني محلياً): tests/loops 9/9 على `rin run` و`rin --vm` · rintests 83/83 · wesscode 42/42.
+لم يُشغَّل: tests/verification وبناء APK/الويب.
