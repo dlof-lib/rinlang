@@ -1,4 +1,5 @@
 #pragma once
+#include <unordered_set>
 #include "rin_common.h"
 #include "rin_ast.h"
 #include "diagnostics/diagnostic.h"
@@ -155,6 +156,27 @@ private:
         FrameGuard(const FrameGuard&) = delete; FrameGuard& operator=(const FrameGuard&) = delete;
     };
     bool openBraceIfSameLine();        // يستهلك '{' إن وقعت على نفس سطر آخر توكن في الترويسة، ويُرجع هل استُهلكت
+    // ---- Loops v2 (docs/loops.md): each / repeat / loop / retry / labels / limit — كلها تفكيك لعقد موجودة ----
+    struct LoopProp { std::string flag; int targetDepth; int kind; };
+    struct LoopCtx { int depth = 0; std::string label, flag; std::vector<LoopProp> props; };
+    struct LabelInfo { std::string name, flag; int depth; bool needFlag = false; };
+    std::vector<LoopCtx> loopStack, doneStack;
+    std::vector<LabelInfo> labels;
+    std::string pendingLabel;
+    int loopSeq = 0;
+    void enterLoop();
+    void exitLoop();
+    StmtPtr finishLoop(StmtPtr loop, ExprPtr limit = nullptr);
+    ExprPtr limitClause();
+    StmtPtr loopsV2Statement();   // each / repeat / loop / retry / label: — nullptr إن لم تكن العبارة منها
+    StmtPtr labeledJump(bool isBreak, const Token& tok);
+    ExprPtr eachComprehension();  // [each x in xs where c => expr]
+    bool atLoopForm(size_t at) const;
+    bool atEachForm(size_t at, bool forKw = false) const;
+    struct EachHdr { std::string v1, v2; std::shared_ptr<LetPattern> pat; ExprPtr iter, where; int mode = 0; ExprPtr arg, iter2; int line = 0; }; // mode: 1=by 2=zip 3=window 4=every
+    EachHdr parseEachHdr();
+    StmtPtr buildEach(EachHdr& h, StmtPtr body, int line, ExprPtr lim);
+    std::unordered_set<std::string> labelFlagUsed;
     int loopDepth = 0; // >0 داخل جسم حلقة while؛ يُستخدم للتحقق من صحة break/continue وقت التحليل
     int goalDepth = 0; // >0 داخل جسم 'goal { .. }'؛ يُستخدم للتحقق من صحة 'achieve' وقت التحليل
     std::shared_ptr<BlockStmt> block();
