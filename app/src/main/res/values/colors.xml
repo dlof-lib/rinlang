@@ -331,4 +331,13 @@
     <color name="passkit_variable">#7A5C00</color>
     <color name="passkit_string">#A3411F</color>
     <color name="passkit_comment">#3F7A2A</color>
+
+    <!-- أنماط/مفاهيم دلالية للمحرر (HighlightKind 20..26) -->
+    <color name="syntax_control">#C2185B</color>
+    <color name="syntax_constant">#0277BD</color>
+    <color name="syntax_function_def">#7A5C00</color>
+    <color name="syntax_modifier">#3F6FC4</color>
+    <color name="syntax_label">#00796B</color>
+    <color name="syntax_class">#00796B</color>
+    <color name="syntax_property">#455A64</color>
 </resources>
