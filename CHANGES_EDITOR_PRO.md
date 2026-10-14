@@ -34,10 +34,14 @@
 - `colors.xml` و`values-night/colors.xml`: `syntax_template` `syntax_template_kw` `syntax_parameter`. `RinCodeEditorView.kt`: لون ونمط لكل نوع.
 - اختبار المحرر 105/105 (g++). لم يُبنَ Kotlin/XML هنا.
 
-## خط احترافي لـ `@tmpl`
-- خطّان حقيقيان مضمَّنان: **JetBrains Mono NL** عريض مائل (`res/font/rin_tmpl_bold_italic.ttf`) لـ `@tmpl`/`@body` واسم القالب،
-  ومائل (`res/font/rin_tmpl_italic.ttf`) للمعاملات — بدل التشويه الاصطناعي (`isFakeBoldText`+skew). النسخة NL بلا ligatures،
-  وعرض الحرف 0.6em كالخط الأحادي. الرخصة OFL في `assets/licenses/JetBrainsMono-OFL.txt`.
-- الرسم في `RinCodeEditorView.drawTemplateToken`: كل حرف في خليته (x = بداية + i × charWidth) فيبقى المؤشر والتحديد وعلامات الأخطاء مضبوطة.
-- الشكل: `@tmpl`/`@body` داخل «حبة» مستديرة شفافة بلون الكلمة (حبة واحدة تشمل `@` و`tmpl`)، واسم القالب بخط سفلي ناعم.
-- يتبع إعداد `syntax_font_styles`؛ وإن تعذّر تحميل الخط يعود تلقائياً للنمط السابق. لم يُبنَ Kotlin/الموارد هنا.
+## خط مناسب لكل مفهوم (عائلة JetBrains Mono NL)
+- تسعة ملفات `res/font/rin_code_*.ttf` (regular · medium · semibold · bold · extrabold · italic · medium_italic · bold_italic · light_italic)
+  تحلّ محلّ `rin_tmpl_bold_italic.ttf` و`rin_tmpl_italic.ttf` (احذفهما). الرخصة OFL في `assets/licenses/JetBrainsMono-OFL.txt`.
+  النسخة NL بلا ligatures، وعرض الحرف 0.6em في كل الأوزان، والمحرر كله يرسم بالعائلة نفسها (الخط الأساسي Regular) فيبقى
+  عرض الخلية والمؤشر والتحديد وعلامات الأخطاء مضبوطة بلا رسم حرف بحرف.
+- الوزن/النمط لكل مفهوم (`RinCodeEditorView.codeFontFor`):
+  Bold: `if/each/return`… والأنواع والأصناف · ExtraBold: اسم الدالة بعد `fun` و`@tmpl/@body` · SemiBold: `let/fun/class` والثوابت و`@` ·
+  Medium: النداءات `f()` والأرقام والأخطاء · Italic: المعدِّلات `where/yield/sorted` · Medium Italic: معاملات القالب ·
+  Bold Italic: تسميات الحلقات وأسماء القوالب · Light Italic: التعليقات · Regular: النصوص والمعرّفات والخصائص.
+- الشكل: `@tmpl/@body` داخل «حبة» مستديرة شفافة بلون الكلمة (حبة واحدة تشمل `@` و`tmpl`)، واسم القالب بخط سفلي ناعم.
+- يتبع إعداد `syntax_font_styles` (معطَّلاً: Regular للكل). وإن تعذّر تحميل أي خط يعود الرسم للنمط الاصطناعي السابق. لم يُبنَ Kotlin/الموارد هنا.
