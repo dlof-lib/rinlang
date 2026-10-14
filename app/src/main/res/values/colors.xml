@@ -340,4 +340,8 @@
     <color name="syntax_label">#00796B</color>
     <color name="syntax_class">#00796B</color>
     <color name="syntax_property">#455A64</color>
+    <!-- قوالب الحلقات @tmpl: اسم القالب (عريض مائل) · @tmpl/@body (عريض) · المعاملات (مائل) -->
+    <color name="syntax_template">#3949AB</color>
+    <color name="syntax_template_kw">#D84315</color>
+    <color name="syntax_parameter">#8D5524</color>
 </resources>
