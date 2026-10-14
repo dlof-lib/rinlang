@@ -83,6 +83,7 @@ class SettingsActivity : RinBaseActivity() {
             ),
             Row.Toggle(key.SHOW_WHITESPACE, R.string.settings_whitespace, R.string.settings_whitespace_hint),
             Row.Toggle(key.CURRENT_LINE, R.string.settings_current_line, R.string.settings_current_line_hint),
+            Row.Toggle(key.CONTAINER_STYLE, R.string.settings_container_style, R.string.settings_container_style_hint),
             Row.Toggle(key.SMOOTH_CURSOR, R.string.settings_smooth_cursor, R.string.settings_smooth_cursor_hint),
 
             Row.Section(R.string.settings_assist_section_title),
