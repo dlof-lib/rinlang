@@ -2,6 +2,7 @@
 #include "diagnostics/diagnostic_engine.h"
 #include "diagnostics/source_manager.h"
 #include <algorithm>
+#include <cctype>
 #include <unordered_set>
 #include <functional>
 
@@ -114,6 +115,14 @@ void Parser::synchronize() {
 
 std::vector<StmtPtr> Parser::parseCollectingDiagnostics(diag::DiagnosticEngine& engine) {
     std::vector<StmtPtr> statements;
+    try {
+        expandLoopTemplates();
+    } catch (RinError& e) {
+        if (e.diagnostic) engine.emit(*e.diagnostic);
+        else engine.emit(diag::Diagnostic(diag::Code::E0010_ParserError, e.message,
+                                           diag::SourceLocation::point(file, e.line, 1)));
+        return statements;
+    }
     while (!isAtEnd()) {
         try {
             statements.push_back(declaration());
@@ -129,6 +138,7 @@ std::vector<StmtPtr> Parser::parseCollectingDiagnostics(diag::DiagnosticEngine& 
 
 std::vector<StmtPtr> Parser::parse() {
     std::vector<StmtPtr> statements;
+    expandLoopTemplates();
     while (!isAtEnd()) statements.push_back(declaration());
     return statements;
 }
@@ -4977,5 +4987,368 @@ bool Parser::isSimpleTarget(const ExprPtr& e) const {
     if (auto b = std::dynamic_pointer_cast<BinaryExpr>(e)) return isSimpleTarget(b->left) && isSimpleTarget(b->right);
     return false;
 }
+
+
+// =====================================================================================
+// @tmpl — قوالب الحلقات (docs/loop-templates.md)
+//
+//   @tmpl evens(xs) each x in xs where x % 2 == 0;          // قالب ترويسة: يُعرَّف مرة واحدة
+//   @evens(nums) { print x; }                                // ويُستعمل مع أي مجموعة
+//   @evens(nums) as n { print n; }                           // as = إعادة تسمية متغيّر الحلقة
+//   @tmpl grid(r, c) as i, j { each i in 1 to r { each j in 1 to c { @body } } }   // قالب كتلة
+//
+// يُنفَّذ كمرحلة توكنات قبل Parser::declaration(): تُحذف تعريفات @tmpl من التيار وتُستبدل
+// الاستعمالات @name(args) بتوكنات القالب بعد التعويض. لذلك يعمل مع كل أنواع الحلقات
+// (each/for/while/loop/repeat/retry/limit/labels) وفي التعابير [@t(xs) yield e] و sum @t(xs) yield e،
+// ولا يحتاج أي تعديل في المفسّر أو RinVM. برنامج بلا @tmpl لا يُمَسّ إطلاقاً.
+// =====================================================================================
+struct Parser::LoopTmpl {
+    struct Param { std::string name; std::vector<Token> def; bool hasDef = false; };
+    std::string name;
+    std::vector<Param> params;
+    std::vector<std::string> exposed;   // متغيّرات الحلقة القابلة لإعادة التسمية بـ `as`
+    std::vector<Token> body;            // ترويسة الحلقة (قالب ترويسة) أو الكتلة كاملة {..} (قالب كتلة)
+    std::vector<Token> defBody;         // جسم افتراضي {..} لقالب الترويسة (اختياري)
+    bool block = false;
+    Token at;
+};
+
+namespace {
+bool tIsWord(const Token& t, const char* w) { return t.type == TokenType::IDENT && t.lexeme == w; }
+// اسم قالب: أي كلمة (حتى لو كانت كلمة محجوزة في سياق آخر مثل show)
+bool tNameLike(const Token& t) {
+    if (t.type == TokenType::STRING || t.type == TokenType::NUMBER || t.lexeme.empty()) return false;
+    unsigned char c = (unsigned char)t.lexeme[0];
+    return std::isalpha(c) || c == '_' || c >= 0x80;
+}
+bool tOpen(const Token& t) { return t.type == TokenType::LPAREN || t.type == TokenType::LBRACKET || t.type == TokenType::LBRACE; }
+bool tClose(const Token& t) { return t.type == TokenType::RPAREN || t.type == TokenType::RBRACKET || t.type == TokenType::RBRACE; }
+// فهرس القوس المقابل للقوس المفتوح عند open، أو npos.
+size_t tMatch(const std::vector<Token>& v, size_t open) {
+    int d = 0;
+    for (size_t i = open; i < v.size(); i++) {
+        if (v[i].type == TokenType::END_OF_FILE) return std::string::npos;
+        if (tOpen(v[i])) d++;
+        else if (tClose(v[i])) { d--; if (d == 0) return i; }
+    }
+    return std::string::npos;
+}
+Token tMake(const Token& like, TokenType ty, const char* lex) {
+    Token t = like; t.type = ty; t.lexeme = lex; t.number = 0; t.tpl = false; return t;
+}
+bool tReserved(const std::string& n) {
+    static const std::unordered_set<std::string> r = {"tmpl", "body", "import", "view", "element", "container",
+        "Containers", "make", "loop", "Volume", "volume", "link", "portal", "route", "object", "install"};
+    return r.count(n) > 0;
+}
+} // namespace
+
+void Parser::expandLoopTemplates() {
+    if (tmplDone) return;
+    tmplDone = true;
+    bool any = false;
+    for (size_t i = 0; i + 1 < tokens.size(); i++)
+        if (tokens[i].type == TokenType::AT && tIsWord(tokens[i + 1], "tmpl")) { any = true; break; }
+    if (!any) return;
+    std::vector<Token> in = tokens;
+    tokens = expandTmplStream(in, 0);
+    current = 0;
+}
+
+std::vector<Token> Parser::expandTmplStream(const std::vector<Token>& in, int depth) {
+    if (depth > 64)
+        throw errRich(diag::Code::E0010_ParserError, in.empty() ? Token{} : in.front(),
+                      "loop template expansion is too deep",
+                      "a @tmpl keeps expanding into a use of itself (directly or through another template)",
+                      "remove the recursive @name(...) call from the template body");
+    std::vector<Token> out;
+    size_t i = 0;
+    while (i < in.size()) {
+        const Token& t = in[i];
+        if (t.type == TokenType::AT && i + 1 < in.size() && tNameLike(in[i + 1])) {
+            const std::string& nm = in[i + 1].lexeme;
+            if (nm == "tmpl") { i = tmplParseDef(in, i); continue; }
+            auto it = tmpls.find(nm);
+            if (it != tmpls.end() && i + 2 < in.size() && in[i + 2].type == TokenType::LPAREN) {
+                i = tmplExpandUse(*it->second, in, i, out, depth);
+                continue;
+            }
+        }
+        out.push_back(t);
+        i++;
+    }
+    return out;
+}
+
+size_t Parser::tmplParseDef(const std::vector<Token>& in, size_t i) {
+    const Token& atTok = in[i];
+    size_t k = i + 2;
+    const char* usage = "usage: @tmpl name(params) each x in xs where cond;   then   @name(args) { body }";
+    if (k >= in.size() || !tNameLike(in[k]))
+        throw errRich(diag::Code::E0010_ParserError, k < in.size() ? in[k] : atTok,
+                      "Expected a template name after '@tmpl'", "", usage);
+    auto tm = std::make_shared<LoopTmpl>();
+    tm->name = in[k].lexeme; tm->at = atTok;
+    const Token& nameTok = in[k];
+    if (tReserved(tm->name))
+        throw errRich(diag::Code::E0010_ParserError, nameTok, "'" + tm->name + "' cannot be used as a template name",
+                      "it is already a Rin '@' keyword", "choose another name, e.g. @tmpl my" + tm->name + "(...)");
+    if (tmpls.count(tm->name))
+        throw errRich(diag::Code::E0010_ParserError, nameTok, "template '" + tm->name + "' is already defined", "", "use a different name");
+    k++;
+    if (k >= in.size() || in[k].type != TokenType::LPAREN)
+        throw errRich(diag::Code::E0010_ParserError, k < in.size() ? in[k] : nameTok,
+                      "Expected '(' after template name '" + tm->name + "'", "", usage);
+    size_t pc = tMatch(in, k);
+    if (pc == std::string::npos)
+        throw err(diag::Code::E0010_ParserError, in[k], "Unterminated parameter list of template '" + tm->name + "'");
+    // معاملات: name  |  name = default
+    {
+        std::vector<std::vector<Token>> segs; std::vector<Token> cur; int d = 0;
+        for (size_t j = k + 1; j < pc; j++) {
+            if (tOpen(in[j])) d++; else if (tClose(in[j])) d--;
+            if (d == 0 && in[j].type == TokenType::COMMA) { segs.push_back(cur); cur.clear(); continue; }
+            cur.push_back(in[j]);
+        }
+        if (!cur.empty() || !segs.empty()) segs.push_back(cur);
+        bool seenDef = false;
+        for (auto& s : segs) {
+            if (s.empty() || s[0].type != TokenType::IDENT)
+                throw err(diag::Code::E0010_ParserError, s.empty() ? in[k] : s[0], "Template parameters must be plain names");
+            LoopTmpl::Param p; p.name = s[0].lexeme;
+            for (auto& q : tm->params) if (q.name == p.name)
+                throw err(diag::Code::E0010_ParserError, s[0], "Duplicate template parameter '" + p.name + "'");
+            if (s.size() > 1) {
+                if (s[1].type != TokenType::EQUAL || s.size() < 3)
+                    throw err(diag::Code::E0010_ParserError, s[1], "Expected '= default' after template parameter '" + p.name + "'");
+                p.hasDef = true; p.def.assign(s.begin() + 2, s.end()); seenDef = true;
+            } else if (seenDef) {
+                throw err(diag::Code::E0010_ParserError, s[0], "Parameter '" + p.name + "' without a default cannot follow one with a default");
+            }
+            tm->params.push_back(std::move(p));
+        }
+    }
+    k = pc + 1;
+    // as x, i  — أسماء المتغيّرات المكشوفة صراحةً (اختياري؛ تُستنتج تلقائياً من ترويسة each/for/repeat/retry)
+    bool explicitExposed = false;
+    if (k < in.size() && tIsWord(in[k], "as")) {
+        k++;
+        while (true) {
+            if (k >= in.size() || in[k].type != TokenType::IDENT)
+                throw err(diag::Code::E0010_ParserError, k < in.size() ? in[k] : atTok, "Expected a variable name after 'as' in @tmpl");
+            tm->exposed.push_back(in[k].lexeme); k++;
+            if (k < in.size() && in[k].type == TokenType::COMMA) { k++; continue; }
+            break;
+        }
+        explicitExposed = true;
+    }
+    if (k < in.size() && in[k].type == TokenType::LBRACE) {          // قالب كتلة
+        size_t m = tMatch(in, k);
+        if (m == std::string::npos) throw err(diag::Code::E0010_ParserError, in[k], "Unterminated body of template '" + tm->name + "'");
+        tm->block = true;
+        tm->body.assign(in.begin() + k, in.begin() + m + 1);
+        k = m + 1;
+        bool hasHole = false;
+        for (size_t j = 0; j + 1 < tm->body.size(); j++)
+            if (tm->body[j].type == TokenType::AT && tIsWord(tm->body[j + 1], "body")) hasHole = true;
+        if (!hasHole)
+            throw errRich(diag::Code::E0010_ParserError, nameTok, "block template '" + tm->name + "' has no @body hole",
+                          "a template written as { ... } must say where the caller's body goes",
+                          "put @body inside the innermost loop, e.g. @tmpl " + tm->name + "(xs) { each x in xs { @body } }");
+    } else {                                                        // قالب ترويسة
+        size_t j = k;
+        while (j < in.size()) {
+            const Token& tk = in[j];
+            if (tk.type == TokenType::END_OF_FILE) break;
+            if (tk.type == TokenType::LPAREN || tk.type == TokenType::LBRACKET) {
+                size_t m = tMatch(in, j);
+                if (m == std::string::npos) throw err(diag::Code::E0010_ParserError, tk, "Unbalanced bracket in template '" + tm->name + "'");
+                j = m + 1; continue;
+            }
+            if (tk.type == TokenType::LBRACE || tk.type == TokenType::SEMICOLON) break;
+            j++;
+        }
+        if (j >= in.size() || in[j].type == TokenType::END_OF_FILE)
+            throw errRich(diag::Code::E0010_ParserError, nameTok, "template '" + tm->name + "' is not terminated",
+                          "a header template ends with ';' or with a default body { ... }", usage);
+        if (j == k)
+            throw errRich(diag::Code::E0010_ParserError, nameTok, "template '" + tm->name + "' has an empty loop header", "", usage);
+        tm->body.assign(in.begin() + k, in.begin() + j);
+        if (in[j].type == TokenType::LBRACE) {
+            size_t m = tMatch(in, j);
+            if (m == std::string::npos) throw err(diag::Code::E0010_ParserError, in[j], "Unterminated default body of template '" + tm->name + "'");
+            tm->defBody.assign(in.begin() + j, in.begin() + m + 1);
+            k = m + 1;
+        } else {
+            k = j + 1;
+        }
+    }
+    if (k < in.size() && in[k].type == TokenType::SEMICOLON) k++;
+    // استنتاج المتغيّرات المكشوفة من ترويسة الحلقة
+    if (!explicitExposed && !tm->block) {
+        const auto& b = tm->body;
+        size_t s = (b.size() >= 2 && b[0].type == TokenType::IDENT && b[1].type == TokenType::COLON) ? 2 : 0;  // label:
+        bool forLike = s < b.size() && (tIsWord(b[s], "each") || b[s].lexeme == "for") &&
+                       !(s + 1 < b.size() && b[s + 1].type == TokenType::LPAREN);
+        if (forLike) {
+            // each x, i in xs   |   each x in xs, y in ys  (مصادر متعددة)
+            size_t j = s + 1;
+            while (j < b.size()) {
+                for (; j < b.size() && !tIsWord(b[j], "in"); j++)
+                    if (b[j].type == TokenType::IDENT) tm->exposed.push_back(b[j].lexeme);
+                if (j >= b.size()) break;
+                j++;                                   // 'in'
+                while (j < b.size() && b[j].type != TokenType::COMMA) {
+                    if (b[j].type == TokenType::LPAREN || b[j].type == TokenType::LBRACKET) {
+                        size_t m = tMatch(b, j); if (m == std::string::npos) { j = b.size(); break; } j = m;
+                    }
+                    j++;
+                }
+                if (j < b.size()) j++;                 // ','
+            }
+        } else {
+            for (size_t j = s; j < b.size(); j++) {
+                if (b[j].type == TokenType::LPAREN || b[j].type == TokenType::LBRACKET) {
+                    size_t m = tMatch(b, j); if (m == std::string::npos) break; j = m; continue;
+                }
+                if (tIsWord(b[j], "as") && j + 1 < b.size() && b[j + 1].type == TokenType::IDENT) {
+                    tm->exposed.push_back(b[j + 1].lexeme); break;
+                }
+            }
+        }
+    }
+    tmpls[tm->name] = tm;
+    return k;
+}
+
+size_t Parser::tmplExpandUse(const LoopTmpl& t, const std::vector<Token>& in, size_t i, std::vector<Token>& out, int depth) {
+    const Token& atTok = in[i];
+    size_t open = i + 2;
+    size_t close = tMatch(in, open);
+    if (close == std::string::npos)
+        throw err(diag::Code::E0010_ParserError, in[open], "Unterminated argument list in @" + t.name + "(...)");
+    // 1) الوسائط
+    std::vector<std::vector<Token>> args; {
+        std::vector<Token> cur; int d = 0; bool any = false;
+        for (size_t j = open + 1; j < close; j++) {
+            any = true;
+            if (tOpen(in[j])) d++; else if (tClose(in[j])) d--;
+            if (d == 0 && in[j].type == TokenType::COMMA) {
+                if (cur.empty()) throw err(diag::Code::E0010_ParserError, in[j], "Empty argument in @" + t.name + "(...)");
+                args.push_back(cur); cur.clear(); continue;
+            }
+            cur.push_back(in[j]);
+        }
+        if (any) {
+            if (cur.empty()) throw err(diag::Code::E0010_ParserError, in[close], "Empty argument in @" + t.name + "(...)");
+            args.push_back(cur);
+        }
+    }
+    if (args.size() > t.params.size())
+        throw err(diag::Code::E0010_ParserError, atTok, "template '" + t.name + "' takes " + std::to_string(t.params.size()) +
+                  " argument(s) but " + std::to_string(args.size()) + " were given");
+    for (size_t p = args.size(); p < t.params.size(); p++) {
+        if (!t.params[p].hasDef)
+            throw errRich(diag::Code::E0010_ParserError, atTok, "missing argument '" + t.params[p].name + "' for template '" + t.name + "'",
+                          "", "give a value, or add a default in the definition: " + t.params[p].name + " = ...");
+        args.push_back(t.params[p].def);
+    }
+    size_t k = close + 1;
+    // 2) as a, b
+    std::map<std::string, std::string> rename;
+    if (k < in.size() && tIsWord(in[k], "as")) {
+        std::vector<std::string> names; k++;
+        while (true) {
+            if (k >= in.size() || in[k].type != TokenType::IDENT)
+                throw err(diag::Code::E0010_ParserError, k < in.size() ? in[k] : atTok, "Expected a variable name after 'as'");
+            names.push_back(in[k].lexeme); k++;
+            if (k < in.size() && in[k].type == TokenType::COMMA) { k++; continue; }
+            break;
+        }
+        if (names.size() > t.exposed.size()) {
+            std::string have;
+            for (size_t q = 0; q < t.exposed.size(); q++) have += (q ? ", " : "") + t.exposed[q];
+            throw errRich(diag::Code::E0010_ParserError, atTok,
+                          "template '" + t.name + "' exposes " + std::to_string(t.exposed.size()) + " loop variable(s) but 'as' names " + std::to_string(names.size()),
+                          t.exposed.empty() ? "this template has no renamable loop variable" : "renamable variables: " + have,
+                          t.exposed.empty() ? "declare them in the definition: @tmpl " + t.name + "(...) as x ..." : "");
+        }
+        for (size_t q = 0; q < names.size(); q++) rename[t.exposed[q]] = names[q];
+    }
+    // 3) جسم الاستعمال (قوالب الكتلة)
+    std::vector<Token> useBody; bool hasUseBody = false;
+    if (t.block) {
+        if (k < in.size() && in[k].type == TokenType::LBRACE) {
+            size_t m = tMatch(in, k);
+            if (m == std::string::npos) throw err(diag::Code::E0010_ParserError, in[k], "Unterminated body after @" + t.name + "(...)");
+            useBody.assign(in.begin() + k, in.begin() + m + 1); k = m + 1; hasUseBody = true;
+        } else {
+            useBody = {tMake(atTok, TokenType::LBRACE, "{"), tMake(atTok, TokenType::RBRACE, "}")};
+            if (k < in.size() && in[k].type == TokenType::SEMICOLON) k++;
+        }
+    }
+    (void)hasUseBody;
+    // 4) التعويض
+    std::map<std::string, size_t> pidx;
+    for (size_t p = 0; p < t.params.size(); p++) pidx[t.params[p].name] = p;
+    std::vector<Token> E;
+    const auto& b = t.body;
+    for (size_t j = 0; j < b.size(); j++) {
+        const Token& tk = b[j];
+        bool afterDot = j > 0 && b[j - 1].type == TokenType::DOT;
+        if (t.block && tk.type == TokenType::AT && j + 1 < b.size() && tIsWord(b[j + 1], "body")) {
+            E.insert(E.end(), useBody.begin(), useBody.end());
+            j++;
+            if (j + 1 < b.size() && b[j + 1].type == TokenType::SEMICOLON) j++;
+            continue;
+        }
+        if (tk.type == TokenType::IDENT && !afterDot) {
+            auto pi = pidx.find(tk.lexeme);
+            if (pi != pidx.end()) {
+                const auto& a = args[pi->second];
+                bool raw = a.size() == 1 || (j > 0 && tIsWord(b[j - 1], "in"));
+                if (!raw) E.push_back(tMake(a.front(), TokenType::LPAREN, "("));
+                E.insert(E.end(), a.begin(), a.end());
+                if (!raw) E.push_back(tMake(a.back(), TokenType::RPAREN, ")"));
+                continue;
+            }
+            auto ri = rename.find(tk.lexeme);
+            if (ri != rename.end()) { Token c = tk; c.lexeme = ri->second; E.push_back(c); continue; }
+        }
+        E.push_back(tk);
+    }
+    // 5) قالب الترويسة: الجسم الافتراضي إن لم يُكتب جسم
+    if (!t.block) {
+        size_t j = k; int stop = 0; // 1=جسم موجود  2=نهاية عبارة  3=سياق تعبير
+        while (j < in.size()) {
+            const Token& tk = in[j];
+            if (tk.type == TokenType::END_OF_FILE) { stop = 2; break; }
+            if (tk.type == TokenType::LPAREN || tk.type == TokenType::LBRACKET) {
+                size_t m = tMatch(in, j); if (m == std::string::npos) break; j = m + 1; continue;
+            }
+            if (tk.type == TokenType::LBRACE) { stop = 1; break; }
+            if (tIsWord(tk, "yield")) { stop = 3; break; }
+            if (tk.type == TokenType::SEMICOLON || tk.type == TokenType::RBRACE) { stop = 2; break; }
+            if (tk.type == TokenType::RPAREN || tk.type == TokenType::RBRACKET) { stop = 3; break; }
+            j++;
+        }
+        // سياق التعبير (مثل `count @t(xs);` أو `[@t(xs)]`): لا جسم افتراضي ولا خطأ
+        bool stmtStart = i == 0 || in[i - 1].type == TokenType::SEMICOLON || in[i - 1].type == TokenType::RBRACE ||
+                         in[i - 1].type == TokenType::LBRACE || in[i - 1].type == TokenType::COLON ||
+                         in[i - 1].type == TokenType::RPAREN;
+        if (stop == 2 && stmtStart) {
+            if (t.defBody.empty())
+                throw errRich(diag::Code::E0010_ParserError, atTok, "template '" + t.name + "' needs a loop body",
+                              "it has no default body", "write @" + t.name + "(...) { ... }  or give the template one: @tmpl " + t.name + "(...) each x in xs { ... }");
+            E.insert(E.end(), in.begin() + k, in.begin() + j);
+            E.insert(E.end(), t.defBody.begin(), t.defBody.end());
+            k = (j < in.size() && in[j].type == TokenType::SEMICOLON) ? j + 1 : j;
+        }
+    }
+    auto res = expandTmplStream(E, depth + 1);
+    out.insert(out.end(), res.begin(), res.end());
+    return k;
+}
+
 
 } // namespace rin
