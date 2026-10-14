@@ -129,6 +129,14 @@ class RinCodeEditorView @JvmOverloads constructor(
     private val colorTemplate = ContextCompat.getColor(context, R.color.syntax_template)
     private val colorTemplateKw = ContextCompat.getColor(context, R.color.syntax_template_kw)
     private val colorParameter = ContextCompat.getColor(context, R.color.syntax_parameter)
+    // الرموز (HighlightKind 30..35)
+    private val colorOperator = ContextCompat.getColor(context, R.color.syntax_operator)
+    private val colorCompare = ContextCompat.getColor(context, R.color.syntax_compare)
+    private val colorPunct = ContextCompat.getColor(context, R.color.syntax_punct)
+    private val colorFlow = ContextCompat.getColor(context, R.color.syntax_flow)
+    private val colorBracket0 = ContextCompat.getColor(context, R.color.syntax_bracket0)
+    private val colorBracket1 = ContextCompat.getColor(context, R.color.syntax_bracket1)
+    private val colorBracket2 = ContextCompat.getColor(context, R.color.syntax_bracket2)
     // ---- عائلة خطوط الكود: JetBrains Mono NL (OFL، بلا ligatures، عرض الحرف 0.6em لكل الأوزان) ----
     // كل مفهوم دلالي له وزنه ونمطه الحقيقي (لا تشويه اصطناعي). العرض ثابت في كل الأوزان فتبقى الخلايا
     // والمؤشر والتحديد وعلامات الأخطاء مضبوطة. إن تعذّر تحميل الخطوط يعود الرسم للنمط الاصطناعي السابق.
@@ -143,13 +151,18 @@ class RinCodeEditorView @JvmOverloads constructor(
     private val fontMediumItalic = loadCodeFont(R.font.rin_code_medium_italic)
     private val fontBoldItalic = loadCodeFont(R.font.rin_code_bold_italic)
     private val fontLightItalic = loadCodeFont(R.font.rin_code_light_italic)
+    // خطوط الرموز: JetBrains Mono (بـ ligatures) — == != <= >= |> =/= تُرسم كرمز واحد بعرض خليتين بالضبط
+    private val symMedium = loadCodeFont(R.font.rin_sym_medium) ?: fontMedium
+    private val symSemiBold = loadCodeFont(R.font.rin_sym_semibold) ?: fontSemiBold
+    private val symBold = loadCodeFont(R.font.rin_sym_bold) ?: fontBold
     private val codeFontsReady = listOf(fontRegular, fontMedium, fontSemiBold, fontBold, fontExtraBold,
         fontItalic, fontMediumItalic, fontBoldItalic, fontLightItalic).all { it != null }
 
     /** الخط المناسب لكل مفهوم:
      *  كلمات التحكم/الأنواع/الأصناف Bold · تعريف الدالة ExtraBold · الكلمات المفتاحية/الثوابت/@ SemiBold · النداءات/الأرقام Medium ·
      *  المعدِّلات Italic · المعاملات Medium Italic · التسميات وأسماء القوالب Bold Italic · @tmpl/@body ExtraBold ·
-     *  التعليقات Light Italic · النصوص/المعرّفات/الخصائص Regular. */
+     *  التعليقات Light Italic · النصوص/المعرّفات/الخصائص/الفواصل Regular · الأقواس Medium ·
+     *  الرموز (+ - = / == != <= >= |> ?) بخط ligatures: Medium للحساب، SemiBold للمقارنة، Bold للتدفق. */
     private fun codeFontFor(kind: Int): android.graphics.Typeface? = when (kind) {
         HighlightKind.CONTROL, HighlightKind.TYPE, HighlightKind.CLASS -> fontBold
         HighlightKind.FUNCTION_DEF, HighlightKind.TEMPLATE_KW -> fontExtraBold
@@ -159,6 +172,10 @@ class RinCodeEditorView @JvmOverloads constructor(
         HighlightKind.PARAMETER -> fontMediumItalic
         HighlightKind.LABEL, HighlightKind.TEMPLATE -> fontBoldItalic
         HighlightKind.COMMENT, HighlightKind.PK_COMMENT -> fontLightItalic
+        HighlightKind.OPERATOR -> symMedium
+        HighlightKind.COMPARE -> symSemiBold
+        HighlightKind.FLOW -> symBold
+        HighlightKind.BRACKET0, HighlightKind.BRACKET1, HighlightKind.BRACKET2 -> fontMedium
         else -> fontRegular
     }
 
@@ -978,8 +995,11 @@ class RinCodeEditorView @JvmOverloads constructor(
                     textPaint.typeface = face
                     textPaint.isFakeBoldText = false
                     textPaint.textSkewX = 0f
+                    val ligFace = face === symMedium || face === symSemiBold || face === symBold
+                    if (ligFace) textPaint.fontFeatureSettings = "calt, liga"
                     canvas.drawText(lineText, from, to, cursorX, baseline, textPaint)
                     val w = textPaint.measureText(lineText, from, to)
+                    if (ligFace) textPaint.fontFeatureSettings = null
                     textPaint.typeface = fontRegular
                     if (h.kind == HighlightKind.TEMPLATE) drawTemplateUnderline(canvas, cursorX, baseline, to - from, textPaint.color)
                     cursorX += w
@@ -1063,6 +1083,13 @@ class RinCodeEditorView @JvmOverloads constructor(
         HighlightKind.TEMPLATE -> colorTemplate
         HighlightKind.TEMPLATE_KW -> colorTemplateKw
         HighlightKind.PARAMETER -> colorParameter
+        HighlightKind.OPERATOR -> colorOperator
+        HighlightKind.COMPARE -> colorCompare
+        HighlightKind.PUNCT -> colorPunct
+        HighlightKind.FLOW -> colorFlow
+        HighlightKind.BRACKET0 -> colorBracket0
+        HighlightKind.BRACKET1 -> colorBracket1
+        HighlightKind.BRACKET2 -> colorBracket2
         HighlightKind.PK_BRACKET -> colorPkBracket
         HighlightKind.PK_TAG -> colorPkTag
         HighlightKind.PK_CUSTOM_TAG -> colorPkCustomTag
