@@ -733,6 +733,7 @@ std::vector<HighlightSpan> EditorEngine::computeHighlights() const {
         tools::classifyLoopContext(tokens, kinds);
         tools::classifyConcepts(tokens, kinds);
         tools::classifyTemplates(tokens, kinds);
+        tools::classifyPunctuation(tokens, kinds);
         for (size_t i = 0; i < tokens.size(); ++i) {
             const rin::Token& tok = tokens[i];
             if (tok.type == rin::TokenType::END_OF_FILE) continue;
