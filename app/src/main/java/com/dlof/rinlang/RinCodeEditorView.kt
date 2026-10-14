@@ -124,6 +124,10 @@ class RinCodeEditorView @JvmOverloads constructor(
     private val colorLabel = ContextCompat.getColor(context, R.color.syntax_label)
     private val colorClass = ContextCompat.getColor(context, R.color.syntax_class)
     private val colorProperty = ContextCompat.getColor(context, R.color.syntax_property)
+    // قوالب الحلقات @tmpl (HighlightKind 27..29)
+    private val colorTemplate = ContextCompat.getColor(context, R.color.syntax_template)
+    private val colorTemplateKw = ContextCompat.getColor(context, R.color.syntax_template_kw)
+    private val colorParameter = ContextCompat.getColor(context, R.color.syntax_parameter)
     // ألوان passkit الرسمية (colors.xml / values-night) — تُستخدَم فقط لأنواع التلوين 13..19.
     private val colorPkBracket = ContextCompat.getColor(context, R.color.passkit_bracket)
     private val colorPkTag = ContextCompat.getColor(context, R.color.passkit_tag)
@@ -943,7 +947,9 @@ class RinCodeEditorView @JvmOverloads constructor(
         when (kind) {
             HighlightKind.KEYWORD, HighlightKind.CONTROL, HighlightKind.TYPE, HighlightKind.CLASS,
             HighlightKind.FUNCTION_DEF, HighlightKind.AT, HighlightKind.PREPROCESSOR -> { bold = true; italic = false }
-            HighlightKind.LABEL -> { bold = true; italic = true }
+            HighlightKind.LABEL, HighlightKind.TEMPLATE -> { bold = true; italic = true }
+            HighlightKind.TEMPLATE_KW -> { bold = true; italic = false }
+            HighlightKind.PARAMETER -> { bold = false; italic = true }
             HighlightKind.COMMENT, HighlightKind.PK_COMMENT, HighlightKind.MODIFIER -> { bold = false; italic = true }
             else -> { bold = false; italic = false }
         }
@@ -973,6 +979,9 @@ class RinCodeEditorView @JvmOverloads constructor(
         HighlightKind.LABEL -> colorLabel
         HighlightKind.CLASS -> colorClass
         HighlightKind.PROPERTY -> colorProperty
+        HighlightKind.TEMPLATE -> colorTemplate
+        HighlightKind.TEMPLATE_KW -> colorTemplateKw
+        HighlightKind.PARAMETER -> colorParameter
         HighlightKind.PK_BRACKET -> colorPkBracket
         HighlightKind.PK_TAG -> colorPkTag
         HighlightKind.PK_CUSTOM_TAG -> colorPkCustomTag
