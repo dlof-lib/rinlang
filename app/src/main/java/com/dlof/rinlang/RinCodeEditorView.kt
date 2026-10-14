@@ -179,6 +179,191 @@ class RinCodeEditorView @JvmOverloads constructor(
         else -> fontRegular
     }
 
+    // --- ستايل كتل الحاويات (@container.* / Containers.Group / Section / make ...) ------------------
+    // مظهر هادئ: خط إرشاد رأسي رفيع بلون العائلة بزاويتي ┌ └، ووسم الفتح/الإغلاق بلون العائلة مع
+    // خط شعري تحت وسم الفتح. بلا تعبئة ولا كبسولات. الكتلة غير المغلقة (قيد الكتابة) تمتد للنهاية بخط أخفّ وبلا زاوية سفلية.
+    // بصري بحت: لا يمسّ النص/الطيّ/IME. يُعطَّل من الإعدادات (CONTAINER_STYLE).
+    private val containerPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val containerRect = android.graphics.RectF()
+    private var containerBlocks: List<RinContainerTags.ContainerBlock> = emptyList()
+    /** سطر 0-based -> الكتل التي تغطّيه من الخارجية أولاً ثم الأعمق. */
+    private var containerBlocksByLine: Map<Int, List<RinContainerTags.ContainerBlock>> = emptyMap()
+
+    private fun containerAccent(family: RinContainerTags.ContainerFamily): Int = ContextCompat.getColor(
+        context,
+        when (family) {
+            RinContainerTags.ContainerFamily.CORE -> R.color.container_accent_core
+            RinContainerTags.ContainerFamily.PIPE -> R.color.container_accent_pipe
+            RinContainerTags.ContainerFamily.DATA -> R.color.container_accent_data
+            RinContainerTags.ContainerFamily.API -> R.color.container_accent_api
+            RinContainerTags.ContainerFamily.IO -> R.color.container_accent_io
+            RinContainerTags.ContainerFamily.GROUP -> R.color.container_accent_group
+        }
+    )
+    private val containerAccentCache = HashMap<RinContainerTags.ContainerFamily, Int>()
+    private fun accentOf(family: RinContainerTags.ContainerFamily): Int =
+        containerAccentCache.getOrPut(family) { containerAccent(family) }
+
+    private fun recomputeContainerBlocks(text: String) {
+        val blocks = RinContainerTags.buildContainerBlocks(text).sortedWith(compareBy({ it.startLine }, { it.depth }))
+        val byLine = HashMap<Int, ArrayList<RinContainerTags.ContainerBlock>>()
+        for (b in blocks) for (l in b.startLine..b.endLine) byLine.getOrPut(l) { ArrayList(2) }.add(b)
+        for (list in byLine.values) list.sortBy { it.depth }
+        containerBlocks = blocks
+        containerBlocksByLine = byLine
+    }
+
+    /** يرسم خط الحاوية للسطر [line] الذي يبدأ عند [y] (قبل النص): خط رأسي رفيع بلون العائلة
+     *  بزاويتين ┌ عند الفتح و└ عند الإغلاق. بلا تعبئة خلفية — مظهر هادئ يشبه خطوط الإرشاد
+     *  (guides) في IDEs الاحترافية. الكتلة غير المغلقة تُرسم بخط متقطّع وبلا زاوية سفلية. */
+    private fun drawContainerBands(canvas: Canvas, line: Int, y: Float) {
+        val blocks = containerBlocksByLine[line] ?: return
+        val density = resources.displayMetrics.density
+        val stroke = max(1f, density * 1.3f)
+        val tick = charWidth * 0.45f // زاوية قصيرة تشير نحو الوسم
+        containerPaint.style = Paint.Style.STROKE
+        containerPaint.strokeWidth = stroke
+        containerPaint.strokeCap = Paint.Cap.ROUND
+        for (b in blocks) {
+            val x0 = paddingLeft + b.indent * charWidth
+            val lx = x0 - charWidth * 0.6f
+            val isFirst = line == b.startLine
+            val folded = isFirst && line in foldedStartLines
+            val isLast = (line == b.endLine && b.closed) || folded
+            val bottom = y + lineHeight
+            val mid = y + lineHeight / 2f
+            containerPaint.color = accentOf(b.family)
+            containerPaint.alpha = if (b.closed) 170 else 100
+            val top = if (isFirst) mid else y
+            val bot = if (isLast) mid else bottom
+            if (bot > top) canvas.drawLine(lx, top, lx, bot, containerPaint)
+            // زاوية ┌ / └ بالمنتصف الرأسي لسطر الفتح/الإغلاق، تشير نحو النص
+            if (isFirst || isLast) canvas.drawLine(lx, mid, lx + tick, mid, containerPaint)
+            // علامة نقطة صغيرة بنهاية الخط عند الطيّ، توحي بأن الكتلة مطويّة لا مغلقة فقط
+            if (folded) {
+                containerPaint.style = Paint.Style.FILL
+                canvas.drawCircle(lx, mid, stroke * 1.4f, containerPaint)
+                containerPaint.style = Paint.Style.STROKE
+            }
+        }
+        containerPaint.style = Paint.Style.FILL
+    }
+
+    /** يغطّي نصاً مرسوماً بلون خلفية المحرر (مع الحفاظ على تظليل السطر الحالي) تمهيداً لإعادة رسمه
+     *  بنمط الحاوية. لا يُستدعى أبداً على سطر فيه تحديد حتى لا يمحو لون التحديد. */
+    private fun coverCells(canvas: Canvas, rect: android.graphics.RectF, radius: Float, onCurrentLine: Boolean) {
+        containerPaint.style = Paint.Style.FILL
+        containerPaint.color = ContextCompat.getColor(context, R.color.rin_editor_bg)
+        containerPaint.alpha = 255
+        canvas.drawRoundRect(rect, radius, radius, containerPaint)
+        if (onCurrentLine && AppSettings.isCurrentLineHighlight(context)) {
+            canvas.drawRoundRect(rect, radius, radius, currentLinePaint)
+        }
+    }
+
+    /** يرسم [text] من [from] إلى [to] بخط [face] ولون [color] ابتداءً من عمود [col]. إن مُرّر [gradientTo]
+     *  يُرسَم النص بتدرّج أفقي من [color] إلى [gradientTo] على عرض المقطع (زخرفة بلا تغيير لعرض الخلايا). */
+    private fun drawStyledRun(
+        canvas: Canvas, text: String, from: Int, to: Int, col: Int, baseline: Float,
+        color: Int, face: android.graphics.Typeface?, gradientTo: Int? = null
+    ) {
+        if (to <= from) return
+        val savedColor = textPaint.color
+        val savedFace = textPaint.typeface
+        val x = paddingLeft + col * charWidth
+        textPaint.color = color
+        textPaint.typeface = face ?: savedFace
+        if (gradientTo != null) {
+            textPaint.shader = android.graphics.LinearGradient(
+                x, 0f, x + (to - from) * charWidth, 0f, color, gradientTo, android.graphics.Shader.TileMode.CLAMP
+            )
+        }
+        canvas.drawText(text, from, to, x, baseline, textPaint)
+        textPaint.shader = null
+        textPaint.color = savedColor
+        textPaint.typeface = savedFace
+    }
+
+    /** درجة قريبة من لون العائلة (إزاحة Hue بنحو 38°) لنهاية تدرّج كلمة الحاوية. */
+    private val containerAltCache = HashMap<Int, Int>()
+    private fun accentAlt(accent: Int): Int = containerAltCache.getOrPut(accent) {
+        val hsv = FloatArray(3)
+        Color.colorToHSV(accent, hsv)
+        hsv[0] = (hsv[0] + 38f) % 360f
+        Color.HSVToColor(Color.alpha(accent), hsv)
+    }
+
+    /** نهاية الكلمة الأساسية للوسم (قبل أول '.' لاحقة النوع): "container" في container.pipe. */
+    private fun mainWordEnd(text: String, from: Int, limit: Int): Int {
+        val dot = text.indexOf('.', from)
+        return if (dot in from until limit) dot else limit
+    }
+
+    /** سطر فتح الحاوية (يُستدعى بعد رسم النص) بأسلوب هادئ: الوسم (`@container.pipe`) بلون العائلة:
+     *  الـ"@" ExtraBold، وكلمة `container` مزخرفة بتدرّج لوني (لون العائلة ← درجة مزاحة الـHue) بوزن
+     *  ExtraBold، ولاحقة النوع (`.pipe`) Medium؛ وتحته خط شعري يتلاشى تدريجياً، و"=" بلون الترقيم الباهت، واسم
+     *  الحاوية SemiBold بلون نص المحرر. بلا كبسولات ولا تعبئة. تُغطّى الكلمات بلون الخلفية ثم تُعاد
+     *  بنفس عرض الخلايا (لا انزياح للمؤشر/التحديد). `.object("..")` تكتفي بالخط الجانبي. */
+    private fun drawContainerBadge(canvas: Canvas, line: Int, lineText: String, y: Float, baseline: Float, onCurrentLine: Boolean) {
+        val b = containerBlocksByLine[line]?.firstOrNull { it.startLine == line } ?: return
+        val from = b.indent
+        val tagEnd = (b.indent + b.tagCols).coerceAtMost(lineText.length)
+        if (from >= tagEnd || lineText[from] == '.') return
+        val density = resources.displayMetrics.density
+        val accent = accentOf(b.family)
+        val end = lineText.trimEnd().length
+        val x = paddingLeft + from * charWidth
+        val trim = density * 1.5f
+        containerRect.set(x, y + trim, paddingLeft + end * charWidth, y + lineHeight - trim)
+        coverCells(canvas, containerRect, 0f, onCurrentLine)
+
+        var col = from
+        if (lineText[from] == '@') {
+            drawStyledRun(canvas, lineText, from, from + 1, col, baseline, accent, fontExtraBold ?: fontBold)
+            col++
+        }
+        val mainEnd = mainWordEnd(lineText, col, tagEnd)
+        drawStyledRun(canvas, lineText, col, mainEnd, col, baseline, accent, fontExtraBold ?: fontBold, accentAlt(accent))
+        drawStyledRun(canvas, lineText, mainEnd, tagEnd, mainEnd, baseline, accent, fontMedium)
+        if (tagEnd < end && lineText[tagEnd] == '=') {
+            drawStyledRun(canvas, lineText, tagEnd, tagEnd + 1, tagEnd, baseline, colorPunct, fontRegular)
+            drawStyledRun(canvas, lineText, tagEnd + 1, end, tagEnd + 1, baseline, colorDefault, fontSemiBold)
+        } else if (tagEnd < end) {
+            drawStyledRun(canvas, lineText, tagEnd, end, tagEnd, baseline, colorDefault, fontRegular)
+        }
+
+        // خط شعري تحت الوسم
+        containerPaint.style = Paint.Style.STROKE
+        containerPaint.strokeWidth = max(1f, density * 1f)
+        containerPaint.strokeCap = Paint.Cap.ROUND
+        containerPaint.color = accent
+        val ux2 = paddingLeft + tagEnd * charWidth
+        containerPaint.shader = android.graphics.LinearGradient(
+            x, 0f, ux2, 0f, (accent and 0x00FFFFFF) or (200 shl 24), accent and 0x00FFFFFF, android.graphics.Shader.TileMode.CLAMP
+        )
+        val uy = y + lineHeight - trim - containerPaint.strokeWidth
+        canvas.drawLine(x, uy, ux2, uy, containerPaint)
+        containerPaint.shader = null
+        containerPaint.style = Paint.Style.FILL
+    }
+
+    /** سطر الإغلاق `.end/<tag>`: `.end/` بلون الترقيم الباهت والوسم بلون العائلة Medium، بلا زخارف —
+     *  يكفي الخط الجانبي (└) ولون الوسم لربط الإغلاق بالفتح. */
+    private fun drawContainerClosing(canvas: Canvas, line: Int, lineText: String, y: Float, baseline: Float, onCurrentLine: Boolean) {
+        val b = containerBlocksByLine[line]?.firstOrNull { it.endLine == line && it.closed } ?: return
+        val start = lineText.length - lineText.trimStart().length
+        val end = lineText.trimEnd().length
+        if (end <= start + 5 || !lineText.startsWith(".end/", start)) return
+        val trim = resources.displayMetrics.density * 1.5f
+        containerRect.set(paddingLeft + start * charWidth, y + trim, paddingLeft + end * charWidth, y + lineHeight - trim)
+        coverCells(canvas, containerRect, 0f, onCurrentLine)
+        drawStyledRun(canvas, lineText, start, start + 5, start, baseline, colorPunct, fontRegular)
+        val accent = accentOf(b.family)
+        val mainEnd = mainWordEnd(lineText, start + 5, end)
+        drawStyledRun(canvas, lineText, start + 5, mainEnd, start + 5, baseline, accent, fontBold, accentAlt(accent))
+        drawStyledRun(canvas, lineText, mainEnd, end, mainEnd, baseline, accent, fontMedium)
+    }
+
     private val tmplPillPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val tmplPillRect = android.graphics.RectF()
     private val tmplUnderlinePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -386,6 +571,7 @@ class RinCodeEditorView @JvmOverloads constructor(
         }
         foldRegions = regions
         foldedStartLines.retainAll(regions.keys)
+        recomputeContainerBlocks(text)
         recomputeVisibleLines()
     }
 
@@ -839,11 +1025,15 @@ class RinCodeEditorView @JvmOverloads constructor(
         val bracketInfo = if (AppSettings.isBracketMatching(context)) cachedBracketInfo else null
         val showWhitespace = AppSettings.isShowWhitespace(context)
         val clip = canvas.clipBounds
+        val containerStyleOn = AppSettings.isContainerStyle(context)
 
         var y = paddingTop.toFloat()
         for (line in visibleLines) {
             val lineText = engine.getLine(line)
             val baseline = y - ascent
+
+            // ستايل كتل الحاويات (أسفل كل شيء: السطر الحالي والتحديد والنص تُرسم فوقه)
+            if (containerStyleOn) drawContainerBands(canvas, line, y)
 
             // تظليل السطر الحالي
             if (line == cur.line && !sel.hasSelection && AppSettings.isCurrentLineHighlight(context)) {
@@ -886,6 +1076,11 @@ class RinCodeEditorView @JvmOverloads constructor(
 
             // النص الملوَّن نحويًا
             drawHighlightedLine(canvas, lineText, if (AppSettings.isSyntaxHighlighting(context)) highlightsByLine[line] else null, paddingLeft.toFloat(), baseline)
+            if (containerStyleOn && !(sel.hasSelection && line in sel.start.line..sel.end.line)) {
+                val onCur = line == cur.line && !sel.hasSelection
+                drawContainerBadge(canvas, line, lineText, y, baseline, onCur)
+                drawContainerClosing(canvas, line, lineText, y, baseline, onCur)
+            }
 
             // علامات المسافات (للأسطر الظاهرة فقط، حتى لا يكلّف الملف الكبير رسمًا لا يراه أحد)
             if (showWhitespace && lineText.isNotEmpty() && y + lineHeight >= clip.top && y <= clip.bottom) {
