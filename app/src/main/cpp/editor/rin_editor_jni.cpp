@@ -279,4 +279,55 @@ Java_com_dlof_rinlang_RinNativeEditor_nativeGetDiagnosticsPacked(JNIEnv* env, jc
     return arr;
 }
 
+// --- أدوات احترافية (rin_editor_tools.h) ------------------------------------------------
+
+// نطاقات الطيّ مسطّحة: [startLine, endLine] * N (صفرية، لا أعمدة فلا تحويل بايت/حرف).
+JNIEXPORT jintArray JNICALL
+Java_com_dlof_rinlang_RinNativeEditor_nativeGetFoldRangesFlat(JNIEnv* env, jclass, jlong handle) {
+    auto ranges = handleToEngine(handle)->computeFoldRanges();
+    std::vector<jint> flat;
+    flat.reserve(ranges.size() * 2);
+    for (const auto& r : ranges) { flat.push_back(r.first); flat.push_back(r.second); }
+    return toIntArray(env, flat);
+}
+
+// هيكل الملف: "line:col:kind:name" لكل عنصر (name قد يحوي ':' فيُقسَّم بحدّ أقصى 4 أجزاء).
+JNIEXPORT jobjectArray JNICALL
+Java_com_dlof_rinlang_RinNativeEditor_nativeGetOutlinePacked(JNIEnv* env, jclass, jlong handle) {
+    auto items = handleToEngine(handle)->computeOutline();
+    jclass stringClass = env->FindClass("java/lang/String");
+    jobjectArray arr = env->NewObjectArray((jsize)items.size(), stringClass, nullptr);
+    for (size_t i = 0; i < items.size(); ++i) {
+        std::string packed = std::to_string(items[i].line) + ":" + std::to_string(items[i].col) + ":" +
+                             std::to_string(items[i].kind) + ":" + items[i].name;
+        jstring s = utf8ToJstring(env, packed);
+        env->SetObjectArrayElement(arr, (jsize)i, s);
+        env->DeleteLocalRef(s);
+    }
+    return arr;
+}
+
+JNIEXPORT jboolean JNICALL
+Java_com_dlof_rinlang_RinNativeEditor_nativeReindentDocument(JNIEnv*, jclass, jlong handle, jint width) {
+    return handleToEngine(handle)->reindentDocument(width) ? JNI_TRUE : JNI_FALSE;
+}
+
+// يوسّع قالباً عند المؤشر؛ يُرجع null إن لم تكن الكلمة قالباً، وإلا موضع المؤشر الجديد.
+JNIEXPORT jintArray JNICALL
+Java_com_dlof_rinlang_RinNativeEditor_nativeExpandSnippet(JNIEnv* env, jclass, jlong handle) {
+    EditorEngine* e = handleToEngine(handle);
+    if (!e->expandSnippetAtCursor()) return nullptr;
+    return cursorArray(env, e->getCursor());
+}
+
+JNIEXPORT jboolean JNICALL
+Java_com_dlof_rinlang_RinNativeEditor_nativeIsSnippetTrigger(JNIEnv* env, jclass, jstring word) {
+    return EditorEngine::isSnippetTrigger(jstringToUtf8(env, word)) ? JNI_TRUE : JNI_FALSE;
+}
+
+JNIEXPORT jstring JNICALL
+Java_com_dlof_rinlang_RinNativeEditor_nativeSnippetTitle(JNIEnv* env, jclass, jstring word) {
+    return utf8ToJstring(env, EditorEngine::snippetTitle(jstringToUtf8(env, word)));
+}
+
 } // extern "C"
