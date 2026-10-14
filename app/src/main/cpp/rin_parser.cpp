@@ -2135,8 +2135,8 @@ StmtPtr Parser::plusConditionStatement() {
 
 // #done { ... } اختيارية بعد while/for/for-in/#do: تُنفَّذ إن انتهت الحلقة طبيعياً (دون break/#done;).
 void Parser::attachDoneBlock(StmtPtr& done) {
-    if (check(TokenType::IDENT) && peek().lexeme == "#done" && checkNext(TokenType::LBRACE)) {
-        advance(); // #done
+    if (check(TokenType::IDENT) && (peek().lexeme == "#done" || peek().lexeme == "nobreak") && checkNext(TokenType::LBRACE)) {
+        advance(); // #done / nobreak (بديل مقروء، مثل else في for..else بلغة Python)
         advance(); // {
         done = block();
     }
@@ -2144,10 +2144,10 @@ void Parser::attachDoneBlock(StmtPtr& done) {
 
 // A #to B [step C] داخل for (let i in ...) -> نداء #to(A, B[, C]) (مدى شامل للطرفين).
 ExprPtr Parser::maybeHashRange(ExprPtr first) {
-    if (!(check(TokenType::IDENT) && (peek().lexeme == "to" || peek().lexeme == "#to"))) return first;
+    if (!(check(TokenType::IDENT) && (peek().lexeme == "to" || peek().lexeme == "#to" || peek().lexeme == "downto"))) return first;
     Token toTok = advance();
     auto call = std::make_shared<CallExpr>();
-    call->callee = "#to";
+    call->callee = toTok.lexeme == "downto" ? "#downto" : "#to"; // downto: عدّ تنازلي فقط (فارغ إن كان الطرف الأول أصغر)
     call->line = toTok.line;
     call->args.push_back(first);
     call->args.push_back(expression());
@@ -3924,6 +3924,7 @@ ExprPtr Parser::call() {
 }
 
 ExprPtr Parser::primary() {
+    if (atReducer(current)) return reduceComprehension(); // sum each x in xs yield e  (Loops v3)
     if (match({TokenType::FALSE})) {
         auto e = std::make_shared<LiteralExpr>();
         e->kind = LiteralExpr::Kind::BOOL; e->boolean = false; return e;
@@ -4039,6 +4040,11 @@ ExprPtr Parser::primary() {
         Token start = previous();
         auto map = std::make_shared<MapExpr>();
         map->line = start.line;
+        if (atEachForm(current)) { // {each x in xs yield key: value}  (Loops v3)
+            auto comp = mapComprehension();
+            consume(TokenType::RBRACE, "Expected '}' after map comprehension");
+            return comp;
+        }
         if (!check(TokenType::RBRACE)) {
             do {
                 if (check(TokenType::RBRACE)) break; // allow trailing comma
@@ -4421,7 +4427,11 @@ bool Parser::atEachForm(size_t at, bool forKw) const {
     return false;
 }
 
-// بعد 'each' (و'let' الاختيارية): الأسماء/النمط، in، المكرَّر، ثم معدِّلات where / reversed بأي ترتيب
+// بعد 'each' (و'let' الاختيارية): الأسماء/النمط، in، المكرَّر، ثم معدِّلات بأي ترتيب (Loops v3):
+//   تحويلات المصدر : reversed · sorted [by KEY] [desc] · unique · flat · chain XS
+//   مرشّحات التيار : where C · skip N · take N · until C · while C   (تُطبَّق بالترتيب المكتوب)
+//   أنماط (واحد فقط): by N · window N · every N · zip YS · cross YS · pairs
+//   فهرس           : from N  (بداية الفهرس مع متغيّرين)
 Parser::EachHdr Parser::parseEachHdr() {
     EachHdr h;
     if (check(TokenType::LET)) advance();
@@ -4436,33 +4446,118 @@ Parser::EachHdr Parser::parseEachHdr() {
     }
     advance(); // 'in'
     h.iter = maybeHashRange(expression());
+    // عدد/اسم/(تعبير) بعد كلمة المعدِّل — نفس قاعدة by/window/every القديمة
+    auto countArg = [&](const std::string& kw) -> ExprPtr {
+        if (check(TokenType::NUMBER)) { Token n = advance(); return lNum(n.number, n.line); }
+        if (check(TokenType::IDENT)) { Token n = advance(); return lVar(n.lexeme, n.line); }
+        consume(TokenType::LPAREN, "Expected a number, name or '(' after '" + kw + "'");
+        ExprPtr e = expression();
+        consume(TokenType::RPAREN, "Expected ')'");
+        return e;
+    };
+    // الكلمة التالية معدِّل فعلاً لا بداية جسم/عبارة (مثل نداء take(...) أو إسناد)؟
+    auto nextIsCountArg = [&]() {
+        if (current + 1 >= tokens.size()) return false;
+        auto t = tokens[current + 1].type;
+        return t == TokenType::NUMBER || t == TokenType::IDENT || t == TokenType::LPAREN;
+    };
+    auto flagWordOk = [&]() { // sorted/unique/flat/pairs: ليست متبوعة بـ ( أو . أو =
+        if (current + 1 >= tokens.size()) return true;
+        auto t = tokens[current + 1].type;
+        return t != TokenType::LPAREN && t != TokenType::DOT && t != TokenType::EQUAL;
+    };
+    auto oneMode = [&](const Token& t) {
+        if (h.mode != 0)
+            throw errRich(diag::Code::E0013_InvalidExpression, t, "only one of `by` / `window` / `every` / `zip` / `cross` / `pairs` per loop",
+                          "each of them changes what one round hands you, so two cannot be combined",
+                          "use one mode per loop (nest another `each` for the second one)");
+    };
     for (;;) {
-        if (check(TokenType::IDENT) && peek().lexeme == "where") {
+        const bool isWhileKw = check(TokenType::WHILE);
+        if (!check(TokenType::IDENT) && !isWhileKw) break;
+        const std::string w = peek().lexeme;
+        if (!isWhileKw && w == "where") {
             advance();
-            ExprPtr c = expression();
-            h.where = h.where ? std::static_pointer_cast<Expr>(lLogicalAnd(h.where, c)) : c;
-        } else if (check(TokenType::IDENT) && peek().lexeme == "reversed") {
+            h.stages.push_back({0, expression()});
+        } else if (!isWhileKw && w == "reversed") {
             Token t = advance();
             h.iter = lCall("reverse", {h.iter}, t.line);
-        } else if (check(TokenType::IDENT) && (peek().lexeme == "by" || peek().lexeme == "window" || peek().lexeme == "every") && h.mode == 0) {
+        } else if (!isWhileKw && w == "sorted" && flagWordOk()) {
             Token t = advance();
+            ExprPtr key;
+            if (check(TokenType::IDENT) && peek().lexeme == "by") { advance(); key = expression(); }
+            bool desc = false;
+            if (check(TokenType::IDENT) && (peek().lexeme == "desc" || peek().lexeme == "descending")) { advance(); desc = true; }
+            if (!key) {
+                h.iter = lCall("#sorted", {h.iter, lBool(desc, t.line)}, t.line);
+            } else {
+                if (h.pat)
+                    throw errRich(diag::Code::E0013_InvalidExpression, t, "`sorted by` needs a plain loop variable, not a pattern",
+                                  "the key expression is evaluated once per item using the loop variable's name",
+                                  "write `each p in people sorted by p[\"age\"] { ... }`");
+                // iter := goal { let src = <iter>; let keys = []; for (v1 in src) push(keys, KEY); achieve #sortby(src, keys, desc); }
+                const std::string id = std::to_string(loopSeq++);
+                const std::string src = "#ss" + id, ks = "#sk" + id;
+                auto fi = std::make_shared<ForInStmt>();
+                fi->line = t.line; fi->varName = h.v1; fi->iterable = lVar(src, t.line);
+                fi->body = lBlock({lExpr(lCall("push", {lVar(ks, t.line), key}, t.line), t.line)}, t.line);
+                auto ach = std::make_shared<AchieveStmt>();
+                ach->value = lCall("#sortby", {lVar(src, t.line), lVar(ks, t.line), lBool(desc, t.line)}, t.line); ach->line = t.line;
+                auto g = std::make_shared<GoalExpr>(); g->line = t.line;
+                g->body = lBlock({lLet(src, h.iter, t.line), lLet(ks, std::make_shared<ArrayExpr>(), t.line), fi, ach}, t.line);
+                h.iter = g;
+            }
+        } else if (!isWhileKw && w == "unique" && flagWordOk()) {
+            Token t = advance();
+            h.iter = lCall("#unique", {h.iter}, t.line);
+        } else if (!isWhileKw && w == "flat" && flagWordOk()) {
+            Token t = advance();
+            h.iter = lCall("flatten", {h.iter}, t.line);
+        } else if (!isWhileKw && w == "chain" && !checkNext(TokenType::LPAREN) && !checkNext(TokenType::EQUAL)) {
+            Token t = advance();
+            h.iter = lCall("concat", {h.iter, expression()}, t.line);
+        } else if (!isWhileKw && (w == "skip" || w == "take") && nextIsCountArg()) {
+            Token t = advance();
+            h.stages.push_back({w == "skip" ? 1 : 2, countArg(w), t.line});
+        } else if (!isWhileKw && w == "until") {
+            advance();
+            h.stages.push_back({3, expression()});
+        } else if (isWhileKw) {
+            advance();
+            h.stages.push_back({4, expression()});
+        } else if (!isWhileKw && w == "from" && nextIsCountArg()) {
+            Token t = advance();
+            h.from = countArg(w); h.line = t.line;
+        } else if (!isWhileKw && (w == "by" || w == "window" || w == "every")) {
+            Token t = advance();
+            oneMode(t);
             h.mode = t.lexeme == "by" ? 1 : (t.lexeme == "window" ? 3 : 4);
             h.line = t.line;
-            if (check(TokenType::NUMBER)) { Token n = advance(); h.arg = lNum(n.number, n.line); }
-            else if (check(TokenType::IDENT)) { Token n = advance(); h.arg = lVar(n.lexeme, n.line); }
-            else { consume(TokenType::LPAREN, "Expected a number, name or '(' after '" + t.lexeme + "'"); h.arg = expression(); consume(TokenType::RPAREN, "Expected ')'"); }
-        } else if (check(TokenType::IDENT) && peek().lexeme == "zip" && h.mode == 0) {
+            h.arg = countArg(t.lexeme);
+        } else if (!isWhileKw && (w == "zip" || w == "cross")) {
             Token t = advance();
-            h.mode = 2; h.line = t.line;
+            oneMode(t);
+            h.mode = w == "zip" ? 2 : 5; h.line = t.line;
             h.iter2 = expression();
+        } else if (!isWhileKw && w == "pairs" && flagWordOk()) {
+            Token t = advance();
+            oneMode(t);
+            h.mode = 6; h.line = t.line;
         } else break;
     }
     if (h.mode && h.pat)
-        throw errRich(diag::Code::E0013_InvalidExpression, peek(), "destructuring patterns cannot be combined with by/window/every/zip",
+        throw errRich(diag::Code::E0013_InvalidExpression, peek(), "destructuring patterns cannot be combined with by/window/every/zip/cross/pairs",
                       "these modes hand out whole chunks or pairs of values", "use plain names:  `each a, b in xs zip ys { ... }`");
-    if (h.mode == 2 && h.v2.empty())
-        throw errRich(diag::Code::E0012_MissingToken, peek(), "`zip` needs two loop variables",
-                      "each round takes one item from each list", "write `each a, b in xs zip ys { ... }`", "second variable");
+    if ((h.mode == 2 || h.mode == 5 || h.mode == 6) && h.v2.empty()) {
+        const char* what = h.mode == 2 ? "zip" : h.mode == 5 ? "cross" : "pairs";
+        throw errRich(diag::Code::E0012_MissingToken, peek(), std::string("`") + what + "` needs two loop variables",
+                      h.mode == 6 ? "each round hands out two neighbouring items" : "each round takes one item from each side",
+                      std::string("write `each a, b in xs ") + what + (h.mode == 6 ? "" : " ys") + " { ... }`", "second variable");
+    }
+    if (h.from && (h.v2.empty() || h.mode || h.pat))
+        throw errRich(diag::Code::E0013_InvalidExpression, peek(), "`from` needs exactly two loop variables and no mode",
+                      "it sets where the index (second variable) starts counting",
+                      "write `each x, i in xs from 1 { ... }`");
     return h;
 }
 
@@ -4470,27 +4565,61 @@ Parser::EachHdr Parser::parseEachHdr() {
 StmtPtr Parser::buildEach(EachHdr& h, StmtPtr body, int line, ExprPtr lim) {
     auto f = std::make_shared<ForInStmt>();
     f->line = line;
-    StmtPtr inner = body;
-    if (h.where) inner = lIf(h.where, body, nullptr, line);
     std::vector<StmtPtr> pre;
+    // ---- مراحل التيار (where/skip/take/until/while) بالترتيب المكتوب: تُلفّ من الأخيرة إلى الأولى ----
+    std::vector<std::string> cntVar(h.stages.size()), nVar(h.stages.size());
+    for (size_t i = 0; i < h.stages.size(); ++i) {
+        if (h.stages[i].kind != 1 && h.stages[i].kind != 2) continue;
+        const std::string id = std::to_string(loopSeq++);
+        nVar[i] = "#sn" + id; cntVar[i] = "#sc" + id;
+        const int ln = h.stages[i].line ? h.stages[i].line : line;
+        const char* nm = h.stages[i].kind == 1 ? "skip" : "take";
+        pre.push_back(lLet(nVar[i], h.stages[i].e, ln));
+        auto bad = std::make_shared<LogicalExpr>();
+        bad->left = lUnaryNot(lCall("isInt", {lVar(nVar[i], ln)}, ln), ln); bad->op = TokenType::OR;
+        bad->right = lBin(lVar(nVar[i], ln), TokenType::LESS, lNum(0, ln), ln); bad->line = ln;
+        pre.push_back(lIf(bad, lBlock({lThrow(lStr(std::string("`") + nm + "` needs a non-negative integer", ln), ln)}, ln), nullptr, ln));
+        pre.push_back(lLet(cntVar[i], lNum(0, ln), ln));
+    }
+    StmtPtr inner = body;
+    for (size_t i = h.stages.size(); i-- > 0;) {
+        const Stage& sg = h.stages[i];
+        const int ln = sg.line ? sg.line : line;
+        auto inc = [&]() { return lExpr(lAssign(cntVar[i], lBin(lVar(cntVar[i], ln), TokenType::PLUS, lNum(1, ln), ln), ln), ln); };
+        switch (sg.kind) {
+        case 0: inner = lIf(sg.e, inner, nullptr, ln); break;
+        case 1: inner = lIf(lBin(lVar(cntVar[i], ln), TokenType::LESS, lVar(nVar[i], ln), ln), lBlock({inc()}, ln), inner, ln); break;
+        case 2: inner = lBlock({lIf(lBin(lVar(cntVar[i], ln), TokenType::GREATER_EQUAL, lVar(nVar[i], ln), ln), lBlock({lBreak(ln)}, ln), nullptr, ln), inc(), inner}, ln); break;
+        case 3: inner = lBlock({lIf(sg.e, lBlock({lBreak(ln)}, ln), nullptr, ln), inner}, ln); break;
+        default: inner = lBlock({lIf(lUnaryNot(sg.e, ln), lBlock({lBreak(ln)}, ln), nullptr, ln), inner}, ln); break;
+        }
+    }
     if (h.mode) {
         const std::string id = std::to_string(loopSeq++);
         const std::string it = "#ei" + id, it2 = "#ej" + id, n = "#en" + id, k = "#ek" + id, st = "#es" + id;
         auto idx = [&](const std::string& o, const std::string& i) { auto x = std::make_shared<IndexExpr>(); x->object = lVar(o, line); x->index = lVar(i, line); x->line = line; return ExprPtr(x); };
+        auto idxE = [&](const std::string& o, ExprPtr i) { auto x = std::make_shared<IndexExpr>(); x->object = lVar(o, line); x->index = i; x->line = line; return ExprPtr(x); };
         auto plus = [&](ExprPtr a, ExprPtr b) { return lBin(a, TokenType::PLUS, b, line); };
         auto isSeq = [&](const std::string& v) { auto o = std::make_shared<LogicalExpr>(); o->left = lCall("isArray", {lVar(v, line)}, line); o->op = TokenType::OR; o->right = lCall("isString", {lVar(v, line)}, line); o->line = line; return lUnaryNot(o, line); };
-        const char* what = h.mode == 1 ? "by" : h.mode == 2 ? "zip" : h.mode == 3 ? "window" : "every";
+        const char* what = h.mode == 1 ? "by" : h.mode == 2 ? "zip" : h.mode == 3 ? "window" : h.mode == 4 ? "every" : h.mode == 5 ? "cross" : "pairs";
         std::string msg = std::string("`each ... ") + what + "` needs an array or a string";
         pre.push_back(lLet(it, h.iter, line));
         pre.push_back(lIf(isSeq(it), lBlock({lThrow(lStr(msg, line), line)}, line), nullptr, line));
         ExprPtr nExpr = lCall("len", {lVar(it, line)}, line);
-        if (h.mode == 2) {
+        if (h.mode == 2 || h.mode == 5) {
             pre.push_back(lLet(it2, h.iter2, line));
             pre.push_back(lIf(isSeq(it2), lBlock({lThrow(lStr(msg, line), line)}, line), nullptr, line));
+        }
+        if (h.mode == 2) {
             auto cnd = std::make_shared<ConditionalExpr>();
             ExprPtr l2 = lCall("len", {lVar(it2, line)}, line);
             cnd->condition = lBin(nExpr, TokenType::LESS, l2, line); cnd->whenTrue = lCall("len", {lVar(it, line)}, line); cnd->whenFalse = lCall("len", {lVar(it2, line)}, line); cnd->line = line;
             nExpr = cnd;
+        } else if (h.mode == 5) {
+            pre.push_back(lLet(st, lCall("len", {lVar(it2, line)}, line), line)); // عرض الضرب الديكارتي
+            nExpr = lBin(nExpr, TokenType::STAR, lVar(st, line), line);
+        } else if (h.mode == 6) {
+            nExpr = lBin(nExpr, TokenType::MINUS, lNum(1, line), line);
         }
         pre.push_back(lLet(n, nExpr, line));
         if (h.arg) {
@@ -4514,6 +4643,14 @@ StmtPtr Parser::buildEach(EachHdr& h, StmtPtr body, int line, ExprPtr lim) {
             cond = lBin(lVar(k, line), TokenType::LESS, lVar(n, line), line); step = lVar(st, line);
             bodyStmts.push_back(lLet(h.v1, idx(it, k), line));
             if (!h.v2.empty()) bodyStmts.push_back(lLet(h.v2, lVar(k, line), line));
+        } else if (h.mode == 5) { // cross: k يمرّ على 0..(n1*n2)-1  ->  (xs[k div n2], ys[k mod n2])
+            cond = lBin(lVar(k, line), TokenType::LESS, lVar(n, line), line); step = lNum(1, line);
+            bodyStmts.push_back(lLet(h.v1, idxE(it, lCall("floor", {lBin(lVar(k, line), TokenType::SLASH, lVar(st, line), line)}, line)), line));
+            bodyStmts.push_back(lLet(h.v2, idxE(it2, lBin(lVar(k, line), TokenType::PERCENT, lVar(st, line), line)), line));
+        } else if (h.mode == 6) { // pairs: (xs[k], xs[k+1])
+            cond = lBin(lVar(k, line), TokenType::LESS, lVar(n, line), line); step = lNum(1, line);
+            bodyStmts.push_back(lLet(h.v1, idx(it, k), line));
+            bodyStmts.push_back(lLet(h.v2, idxE(it, plus(lVar(k, line), lNum(1, line))), line));
         } else {
             cond = lBin(lVar(k, line), TokenType::LESS, lVar(n, line), line); step = lNum(1, line);
             bodyStmts.push_back(lLet(h.v1, idx(it, k), line));
@@ -4534,7 +4671,7 @@ StmtPtr Parser::buildEach(EachHdr& h, StmtPtr body, int line, ExprPtr lim) {
         const std::string id = std::to_string(loopSeq++);
         const std::string it = "#ei" + id, n = "#en" + id, e = "#ee" + id;
         pre.push_back(lLet(it, h.iter, line));
-        pre.push_back(lLet(n, lNum(-1, line), line));
+        pre.push_back(lLet(n, h.from ? lBin(h.from, TokenType::MINUS, lNum(1, line), line) : lNum(-1, line), line));
         auto idxE = std::make_shared<IndexExpr>(); idxE->object = lVar(it, line); idxE->index = lVar(e, line); idxE->line = line;
         auto cond = std::make_shared<ConditionalExpr>();
         cond->condition = lCall("isMap", {lVar(it, line)}, line); cond->whenTrue = idxE; cond->whenFalse = lVar(n, line); cond->line = line;
@@ -4571,6 +4708,114 @@ ExprPtr Parser::eachComprehension() {
     auto ach = std::make_shared<AchieveStmt>(); ach->value = lVar(acc, line); ach->line = line;
     auto g = std::make_shared<GoalExpr>(); g->line = line;
     g->body = lBlock({lLet(acc, std::make_shared<ArrayExpr>(), line), loop, ach}, line);
+    return g;
+}
+
+
+// ---- Loops v3: تعابير الاختزال والقواميس — كلها تفكيك إلى goal { ...حلقة... achieve } كالفهم القديم ----
+bool Parser::atReducer(size_t at) const {
+    if (at + 1 >= tokens.size() || tokens[at].type != TokenType::IDENT) return false;
+    const std::string& w = tokens[at].lexeme;
+    if (!(w == "sum" || w == "product" || w == "count" || w == "avg" || w == "min" || w == "max" ||
+          w == "any" || w == "all" || w == "first" || w == "last")) return false;
+    return atEachForm(at + 1);
+}
+
+ExprPtr Parser::reduceComprehension() {
+    Token kindTok = advance();
+    const std::string kind = kindTok.lexeme;
+    Token kwTok = advance(); // each
+    int line = kwTok.line;
+    EachHdr h = parseEachHdr();
+    ExprPtr val;
+    const bool hasYield = check(TokenType::IDENT) && peek().lexeme == "yield";
+    enterLoop();
+    if (hasYield) { advance(); val = expression(); }
+    exitLoop();
+    const bool needsVal = kind != "count" && kind != "any";
+    if (!val) {
+        if (kind == "all")
+            throw errRich(diag::Code::E0012_MissingToken, peek(), "`all each ...` needs `yield <condition>`",
+                          "`all` checks a condition on every item", "write `all each x in xs yield x > 0`", "'yield'");
+        if (needsVal) {
+            if (!h.v2.empty() || h.pat)
+                throw errRich(diag::Code::E0012_MissingToken, peek(), "`" + kind + " each ...` needs `yield <value>` here",
+                              "with two variables or a pattern there is no single item to use",
+                              "add `yield <expression>`", "'yield'");
+            val = lVar(h.v1, line);
+        }
+    }
+    const std::string id = std::to_string(loopSeq++);
+    const std::string acc = "#rc" + id, has = "#rh" + id, tmp = "#rv" + id;
+    auto nilLit = [&]() { auto l = std::make_shared<LiteralExpr>(); l->kind = LiteralExpr::Kind::NIL; l->line = line; return ExprPtr(l); };
+    auto setAcc = [&](ExprPtr e) { return lExpr(lAssign(acc, e, line), line); };
+    auto accV = [&]() { return lVar(acc, line); };
+    auto inc = [&](const std::string& v) { return lExpr(lAssign(v, lBin(lVar(v, line), TokenType::PLUS, lNum(1, line), line), line), line); };
+    std::vector<StmtPtr> head;
+    StmtPtr bodyS;
+    ExprPtr result = accV();
+    if (kind == "sum")      { head.push_back(lLet(acc, lNum(0, line), line)); bodyS = setAcc(lBin(accV(), TokenType::PLUS, val, line)); }
+    else if (kind == "product") { head.push_back(lLet(acc, lNum(1, line), line)); bodyS = setAcc(lBin(accV(), TokenType::STAR, val, line)); }
+    else if (kind == "count") {
+        head.push_back(lLet(acc, lNum(0, line), line));
+        bodyS = val ? lIf(val, lBlock({inc(acc)}, line), nullptr, line) : inc(acc);
+    } else if (kind == "avg") {
+        head.push_back(lLet(acc, lNum(0, line), line)); head.push_back(lLet(has, lNum(0, line), line));
+        bodyS = lBlock({setAcc(lBin(accV(), TokenType::PLUS, val, line)), inc(has)}, line);
+        auto c = std::make_shared<ConditionalExpr>();
+        c->condition = lBin(lVar(has, line), TokenType::EQUAL_EQUAL, lNum(0, line), line);
+        c->whenTrue = nilLit(); c->whenFalse = lBin(accV(), TokenType::SLASH, lVar(has, line), line); c->line = line;
+        result = c;
+    } else if (kind == "min" || kind == "max") {
+        head.push_back(lLet(acc, nilLit(), line)); head.push_back(lLet(has, lNum(0, line), line));
+        auto better = std::make_shared<LogicalExpr>();
+        better->left = lBin(lVar(has, line), TokenType::EQUAL_EQUAL, lNum(0, line), line); better->op = TokenType::OR;
+        better->right = lBin(lVar(tmp, line), kind == "min" ? TokenType::LESS : TokenType::GREATER, accV(), line); better->line = line;
+        bodyS = lBlock({lLet(tmp, val, line),
+                        lIf(better, lBlock({setAcc(lVar(tmp, line)), lExpr(lAssign(has, lNum(1, line), line), line)}, line), nullptr, line)}, line);
+    } else if (kind == "any") {
+        head.push_back(lLet(acc, lBool(false, line), line));
+        StmtPtr hit = lBlock({setAcc(lBool(true, line)), lBreak(line)}, line);
+        bodyS = val ? lIf(val, hit, nullptr, line) : hit;
+    } else if (kind == "all") {
+        head.push_back(lLet(acc, lBool(true, line), line));
+        bodyS = lIf(lUnaryNot(val, line), lBlock({setAcc(lBool(false, line)), lBreak(line)}, line), nullptr, line);
+    } else if (kind == "first") {
+        head.push_back(lLet(acc, nilLit(), line));
+        bodyS = lBlock({setAcc(val), lBreak(line)}, line);
+    } else { // last
+        head.push_back(lLet(acc, nilLit(), line));
+        bodyS = setAcc(val);
+    }
+    StmtPtr loop = buildEach(h, bodyS, line, nullptr);
+    auto ach = std::make_shared<AchieveStmt>(); ach->value = result; ach->line = line;
+    auto g = std::make_shared<GoalExpr>(); g->line = line;
+    head.push_back(loop); head.push_back(ach);
+    g->body = lBlock(std::move(head), line);
+    return g;
+}
+
+ExprPtr Parser::mapComprehension() {
+    Token kwTok = advance(); // each
+    int line = kwTok.line;
+    EachHdr h = parseEachHdr();
+    if (!(check(TokenType::IDENT) && peek().lexeme == "yield"))
+        throw errRich(diag::Code::E0012_MissingToken, peek(), "expected 'yield' in a map comprehension",
+                      "a map comprehension is written `{each x in xs where cond yield key: value}`",
+                      "add `yield <key>: <value>` before the closing `}`", "'yield'");
+    advance();
+    enterLoop();
+    ExprPtr key = expression();
+    consume(TokenType::COLON, "Expected ':' between key and value in a map comprehension");
+    ExprPtr value = expression();
+    exitLoop();
+    const std::string acc = "#mc" + std::to_string(loopSeq++);
+    auto set = std::make_shared<IndexSetExpr>();
+    set->object = lVar(acc, line); set->index = key; set->value = value; set->line = line;
+    StmtPtr loop = buildEach(h, lExpr(set, line), line, nullptr);
+    auto ach = std::make_shared<AchieveStmt>(); ach->value = lVar(acc, line); ach->line = line;
+    auto g = std::make_shared<GoalExpr>(); g->line = line;
+    g->body = lBlock({lLet(acc, std::make_shared<MapExpr>(), line), loop, ach}, line);
     return g;
 }
 
