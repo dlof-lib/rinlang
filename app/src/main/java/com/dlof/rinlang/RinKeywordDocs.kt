@@ -46,7 +46,18 @@ object RinKeywordDocs {
         "file" to "يشير إلى ملف أو يبدأ عملية متعلّقة بملف (بعد '.' غالبًا كاسم خاصية/دالة).",
         "end" to "يُغلق أقرب كتلة/وسم مفتوح (غالبًا بالصيغة '.end/اسم_الوسم').",
         "pipe" to "container.pipe — خط أنابيب لمعالجة/إحصاء البيانات ضمن حاوية.",
-        "text" to "يشير إلى نوع بيانات نصّي أو كتلة نص ضمن بنية الحاوية."
+        "text" to "يشير إلى نوع بيانات نصّي أو كتلة نص ضمن بنية الحاوية.",
+
+        // --- كلمات الحلقات السياقية (Loops v2/v3) — تبقى أسماء عادية خارج ترويسة الحلقة ---
+        "each" to "تكرار على أي شيء: each x, i in xs where c reversed { ... }. يدعم where/skip/take/sorted/unique/by/window/zip.",
+        "repeat" to "تكرار عدد ثابت: repeat 5 as i { ... } (الفهرس من 0).",
+        "loop" to "حلقة بسيطة: loop { ... break when (c); } أو loop until (c) { ... } أو loop limit N { ... }.",
+        "retry" to "يعيد تنفيذ الجسم عند أي throw حتى N مرات: retry 5 as attempt { ... }.",
+        "limit" to "سقف أمان لعدد الدورات على أي حلقة: while (c) limit 1000 { ... }.",
+        "where" to "مرشّح داخل each: each n in xs where n > 0 { ... }.",
+        "yield" to "قيمة العنصر في تعبيرات التجميع: [each x in xs yield x * 2].",
+        "distinct" to "يتخطّى المكرَّر: each n in xs distinct { ... } أو distinct on (n[0]) بمفتاح.",
+        "nobreak" to "كتلة تُنفَّذ فقط إن انتهت الحلقة دون break (مثل for..else)."
     )
 
     /** يعيد نص التوثيق للكلمة [word]، أو null إن لم تكن كلمة محجوزة موثَّقة (بما فيها أي كلمة
