@@ -1,0 +1,18 @@
+try { while (true) limit 5 { } } catch (e) { print e["message"]; }
+try { loop limit 3 { } } catch (e) { print e["message"]; }
+let n = 0;
+while (n < 3) limit 100 { n = n + 1; }
+print "n=" + n;
+try { each x in [1, 2, 3, 4] limit 2 { print "x" + x; } } catch (e) { print e["message"]; }
+// retry: re-run the body until it succeeds
+let tries = 0;
+retry 5 as a {
+    tries = tries + 1;
+    if (a < 3) { throw "flaky"; }
+}
+print "tries=" + tries;
+try { retry 2 { throw "always"; } } catch (e) { print "gave up: " + e["message"]; }
+// comprehension
+print [each x in [1, 2, 3, 4] where x % 2 == 0 yield x * x];
+print [each x, i in ["a", "b"] yield i + x];
+print [each a in [1, 2] yield [each b in [10, 20] yield a * b]];
