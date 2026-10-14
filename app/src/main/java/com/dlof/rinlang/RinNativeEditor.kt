@@ -64,6 +64,17 @@ class RinNativeEditor {
         @JvmStatic private external fun nativeGetSuggestions(handle: Long, prefix: String, maxResults: Int): Array<String>
         @JvmStatic private external fun nativeLineStartPosition(handle: Long, oneBasedLine: Int): IntArray
         @JvmStatic private external fun nativeGetDiagnosticsPacked(handle: Long): Array<String>
+        @JvmStatic private external fun nativeGetFoldRangesFlat(handle: Long): IntArray
+        @JvmStatic private external fun nativeGetOutlinePacked(handle: Long): Array<String>
+        @JvmStatic private external fun nativeReindentDocument(handle: Long, width: Int): Boolean
+        @JvmStatic private external fun nativeExpandSnippet(handle: Long): IntArray?
+        @JvmStatic private external fun nativeIsSnippetTrigger(word: String): Boolean
+        @JvmStatic private external fun nativeSnippetTitle(word: String): String
+
+        /** هل [word] اسم قالب (snippet) مثل each/repeat/retry/loop؟ */
+        fun isSnippetTrigger(word: String): Boolean = nativeIsSnippetTrigger(word)
+        /** وصف عربي قصير للقالب، أو "" إن لم يكن قالباً. */
+        fun snippetTitle(word: String): String = nativeSnippetTitle(word)
 
         /** يحوّل فهرس-حرف UTF-16 (Kotlin/Java) داخل [line] إلى إزاحة-بايت UTF-8 (المحرك C++). */
         fun charIndexToByteOffset(line: String, charIndex: Int): Int {
@@ -295,4 +306,39 @@ class RinNativeEditor {
         }
         return out
     }
+
+    // --- أدوات احترافية: طيّ، هيكل، إعادة محاذاة، قوالب ---------------------------------
+
+    /** نطاق طيّ: سطور صفرية، [endLine] شاملة ولا تشمل سطر القوس الختامي. */
+    data class FoldRange(val startLine: Int, val endLine: Int)
+
+    /** عنصر في هيكل الملف. [kind]: [OutlineKind]. العمود فهرس-حرف UTF-16. */
+    data class OutlineItem(val line: Int, val col: Int, val kind: Int, val name: String)
+
+    object OutlineKind { const val FUNCTION = 0; const val CLASS = 1; const val VARIABLE = 2; const val LABEL = 3 }
+
+    fun getFoldRanges(): List<FoldRange> {
+        val flat = nativeGetFoldRangesFlat(requireHandle())
+        return (0 until flat.size / 2).map { FoldRange(flat[it * 2], flat[it * 2 + 1]) }
+    }
+
+    fun getOutline(): List<OutlineItem> {
+        val out = ArrayList<OutlineItem>()
+        for (p in nativeGetOutlinePacked(requireHandle())) {
+            val parts = p.split(":", limit = 4)
+            if (parts.size < 4) continue
+            val line = parts[0].toIntOrNull() ?: continue
+            val byteCol = parts[1].toIntOrNull() ?: continue
+            val kind = parts[2].toIntOrNull() ?: continue
+            out.add(OutlineItem(line, byteToChar(line, byteCol), kind, parts[3]))
+        }
+        return out
+    }
+
+    /** يعيد محاذاة المستند كاملاً حسب عمق الأقواس (أمر تراجع واحد). false إن لم يتغيّر شيء أو كان النص غير صالح نحوياً. */
+    fun reindentDocument(indentWidth: Int = 4): Boolean = nativeReindentDocument(requireHandle(), indentWidth)
+
+    /** يوسّع القالب المنتهي عند المؤشر (each/repeat/...)؛ يُرجع موضع المؤشر الجديد أو null. */
+    fun expandSnippetAtCursor(): Pos? =
+        nativeExpandSnippet(requireHandle())?.let { Pos(it[0], byteToChar(it[0], it[1])) }
 }
