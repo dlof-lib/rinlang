@@ -52,6 +52,19 @@ int main(int argc, char** argv) {
     CHECK(isKind(e, 1, "each", HighlightKind::Control), "multi-source each");
     CHECK(e.expandSnippetAtCursor() == false, "no snippet without word");
 
+    // قوالب الحلقات @tmpl: كلمات القالب، الاسم، المعاملات، الاستعمال
+    e.setText("@tmpl evens(xs, k = 2) as x each x in xs where x % k == 0;\n"
+              "@evens(nums) { print x; }\n"
+              "@tmpl grid(r) as i { each i in 1 to r { @body } }\n"
+              "let tmpl = 1;\n");
+    CHECK(isKind(e, 0, "tmpl", HighlightKind::TemplateKw), "tmpl kw");
+    CHECK(isKind(e, 0, "evens", HighlightKind::Template), "tmpl name def");
+    CHECK(isKind(e, 0, "xs", HighlightKind::Parameter), "tmpl param");
+    CHECK(isKind(e, 0, "k", HighlightKind::Parameter), "tmpl param default");
+    CHECK(isKind(e, 1, "evens", HighlightKind::Template), "tmpl use");
+    CHECK(isKind(e, 2, "body", HighlightKind::TemplateKw), "@body kw");
+    CHECK(!isKind(e, 3, "tmpl", HighlightKind::TemplateKw), "let tmpl stays ident");
+
     // مفاهيم دلالية
     e.setText("class Point {\n    fun area(a) { return a; }\n}\nlet p = Point();\nlet MAX_SIZE = 10;\nif (true) { print p.x + MAX_SIZE; } else { print nil; }\n"
               "try {\n    throw 1;\n} catch (err) {\n    print err;\n}\nlet s = Set.of(1);\ncontainer.pipe;\n");
