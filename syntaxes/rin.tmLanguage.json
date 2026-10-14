@@ -664,6 +664,18 @@
           "name": "keyword.control.loop.rin"
         },
         {
+          "match": "(@)(tmpl)\\s+([A-Za-z_]\\w*)",
+          "captures": {
+            "1": { "name": "keyword.control.loop.rin" },
+            "2": { "name": "keyword.control.loop.rin" },
+            "3": { "name": "entity.name.function.template.rin" }
+          }
+        },
+        {
+          "match": "(@)(body)\\b",
+          "name": "keyword.control.loop.rin"
+        },
+        {
           "match": "(?<=\\}\\s)\\b(nobreak)\\b(?=\\s*\\{)",
           "name": "keyword.control.loop.rin"
         },
