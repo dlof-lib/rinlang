@@ -1,0 +1,11 @@
+loop limit exceeded: more than 5 iterations
+loop limit exceeded: more than 3 iterations
+n=3
+x1
+x2
+loop limit exceeded: more than 2 iterations
+tries=3
+gave up: always
+[4, 16]
+["0a", "1b"]
+[[10, 20], [20, 40]]
