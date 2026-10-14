@@ -8543,8 +8543,12 @@ Interpreter::Flow Interpreter::exec(const StmtPtr& stmt, EnvPtr env, Value& ret)
             // loop ends) -- matches modern-language `for` semantics (JS `let`, Swift, Kotlin,
             // Rust). forEnv itself stays the single "live" environment condition/increment run
             // against, so a loop body with no closures behaves exactly as before.
-            auto iterEnv = std::make_shared<Environment>(env);
-            iterEnv->values = forEnv->values;
+            // Rin For+: بلا closures في الحلقة (s->freshIterScope == false) نُنفّذ الجسم في forEnv نفسها —
+            // لا make_shared<Environment> ولا نسخ map ولا نشر عكسي لكل دورة. السلوك المرئي مطابق تماماً.
+            const bool fresh = s->freshIterScope;
+            std::shared_ptr<Environment> iterEnv;
+            if (fresh) { iterEnv = std::make_shared<Environment>(env); iterEnv->values = forEnv->values; }
+            else iterEnv = forEnv;
             Flow bodyFlow = Flow::None;
             try {
                 bodyFlow = exec(s->body, iterEnv, ret);
@@ -8554,7 +8558,7 @@ Interpreter::Flow Interpreter::exec(const StmtPtr& stmt, EnvPtr env, Value& ret)
                 // Propagate any in-body mutation of the loop variable(s) before breaking, in case
                 // code after the loop (or the loop condition were it re-checked) relies on it --
                 // mirrors the propagation done after a normal iteration below.
-                for (auto& kv : iterEnv->values) {
+                if (fresh) for (auto& kv : iterEnv->values) {
                     if (forEnv->values.count(kv.first)) forEnv->values[kv.first] = kv.second;
                 }
                 broke = true;
@@ -8568,7 +8572,7 @@ Interpreter::Flow Interpreter::exec(const StmtPtr& stmt, EnvPtr env, Value& ret)
             // forEnv, so the condition/increment clauses still observe it -- without this, mutating
             // the loop variable from inside the body would appear to silently do nothing once the
             // iteration ends.
-            for (auto& kv : iterEnv->values) {
+            if (fresh) for (auto& kv : iterEnv->values) {
                 if (forEnv->values.count(kv.first)) forEnv->values[kv.first] = kv.second;
             }
             if (s->increment) evaluate(s->increment, forEnv);
