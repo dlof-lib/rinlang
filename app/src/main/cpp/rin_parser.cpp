@@ -4446,6 +4446,14 @@ Parser::EachHdr Parser::parseEachHdr() {
     }
     advance(); // 'in'
     h.iter = maybeHashRange(expression());
+    // each x in xs, y in ys  — ضرب ديكارتي بحلقة واحدة (مثل itertools.product): break/continue تعمل كالمعتاد
+    while (check(TokenType::COMMA) && current + 2 < tokens.size() && tokens[current + 1].type == TokenType::IDENT &&
+           tokens[current + 2].type == TokenType::IDENT && tokens[current + 2].lexeme == "in") {
+        advance();
+        std::string nm = advance().lexeme;
+        advance(); // in
+        h.extra.push_back({nm, maybeHashRange(expression())});
+    }
     // عدد/اسم/(تعبير) بعد كلمة المعدِّل — نفس قاعدة by/window/every القديمة
     auto countArg = [&](const std::string& kw) -> ExprPtr {
         if (check(TokenType::NUMBER)) { Token n = advance(); return lNum(n.number, n.line); }
@@ -4507,6 +4515,15 @@ Parser::EachHdr Parser::parseEachHdr() {
                 g->body = lBlock({lLet(src, h.iter, t.line), lLet(ks, std::make_shared<ArrayExpr>(), t.line), fi, ach}, t.line);
                 h.iter = g;
             }
+        } else if (!isWhileKw && w == "distinct" && flagWordOk()) { // distinct  /  distinct on (expr)
+            Token t = advance();
+            ExprPtr key;
+            if (check(TokenType::IDENT) && peek().lexeme == "on" && checkNext(TokenType::LPAREN)) {
+                advance(); advance();
+                key = expression();
+                consume(TokenType::RPAREN, "Expected ')' after 'distinct on (...)'");
+            }
+            h.stages.push_back({5, key, t.line});
         } else if (!isWhileKw && w == "unique" && flagWordOk()) {
             Token t = advance();
             h.iter = lCall("#unique", {h.iter}, t.line);
@@ -4545,6 +4562,14 @@ Parser::EachHdr Parser::parseEachHdr() {
             h.mode = 6; h.line = t.line;
         } else break;
     }
+    for (const Stage& sg : h.stages)
+        if (sg.kind == 5 && !sg.e && h.pat)
+            throw errRich(diag::Code::E0013_InvalidExpression, peek(), "`distinct` needs a key when the loop variable is a pattern",
+                          "a destructuring pattern has no single value to compare", "write `distinct on (a)` using one of the pattern names");
+    if (!h.extra.empty() && (h.mode || h.pat || !h.v2.empty() || h.from))
+        throw errRich(diag::Code::E0013_InvalidExpression, peek(), "a multi-source `each x in xs, y in ys` takes plain names only",
+                      "the product form cannot be mixed with an index variable, patterns, `from` or by/window/every/zip/cross/pairs",
+                      "use one name per source:  `each x in xs, y in ys { ... }`");
     if (h.mode && h.pat)
         throw errRich(diag::Code::E0013_InvalidExpression, peek(), "destructuring patterns cannot be combined with by/window/every/zip/cross/pairs",
                       "these modes hand out whole chunks or pairs of values", "use plain names:  `each a, b in xs zip ys { ... }`");
@@ -4569,6 +4594,12 @@ StmtPtr Parser::buildEach(EachHdr& h, StmtPtr body, int line, ExprPtr lim) {
     // ---- مراحل التيار (where/skip/take/until/while) بالترتيب المكتوب: تُلفّ من الأخيرة إلى الأولى ----
     std::vector<std::string> cntVar(h.stages.size()), nVar(h.stages.size());
     for (size_t i = 0; i < h.stages.size(); ++i) {
+        if (h.stages[i].kind == 5) { // distinct: خريطة "المفاتيح المرئية" لكل حلقة
+            const std::string id = std::to_string(loopSeq++);
+            cntVar[i] = "#sd" + id; nVar[i] = "#dk" + id;
+            pre.push_back(lLet(cntVar[i], std::make_shared<MapExpr>(), h.stages[i].line ? h.stages[i].line : line));
+            continue;
+        }
         if (h.stages[i].kind != 1 && h.stages[i].kind != 2) continue;
         const std::string id = std::to_string(loopSeq++);
         nVar[i] = "#sn" + id; cntVar[i] = "#sc" + id;
@@ -4590,9 +4621,52 @@ StmtPtr Parser::buildEach(EachHdr& h, StmtPtr body, int line, ExprPtr lim) {
         case 0: inner = lIf(sg.e, inner, nullptr, ln); break;
         case 1: inner = lIf(lBin(lVar(cntVar[i], ln), TokenType::LESS, lVar(nVar[i], ln), ln), lBlock({inc()}, ln), inner, ln); break;
         case 2: inner = lBlock({lIf(lBin(lVar(cntVar[i], ln), TokenType::GREATER_EQUAL, lVar(nVar[i], ln), ln), lBlock({lBreak(ln)}, ln), nullptr, ln), inc(), inner}, ln); break;
+        case 5: { // أول ظهور لكل مفتاح فقط؛ المفتاح الافتراضي type:str(قيمة) فيُميَّز 1 عن "1"
+            ExprPtr key = sg.e;
+            if (!key) key = lBin(lBin(lCall("type", {lVar(h.v1, ln)}, ln), TokenType::PLUS, lStr(":", ln), ln), TokenType::PLUS, lCall("str", {lVar(h.v1, ln)}, ln), ln);
+            auto mark = std::make_shared<IndexSetExpr>(); mark->object = lVar(cntVar[i], ln); mark->index = lVar(nVar[i], ln); mark->value = lBool(true, ln); mark->line = ln;
+            inner = lBlock({lLet(nVar[i], key, ln),
+                            lIf(lCall("has", {lVar(cntVar[i], ln), lVar(nVar[i], ln)}, ln), lBlock({lContinue(ln)}, ln), nullptr, ln),
+                            lExpr(mark, ln), inner}, ln);
+            break; }
         case 3: inner = lBlock({lIf(sg.e, lBlock({lBreak(ln)}, ln), nullptr, ln), inner}, ln); break;
         default: inner = lBlock({lIf(lUnaryNot(sg.e, ln), lBlock({lBreak(ln)}, ln), nullptr, ln), inner}, ln); break;
         }
+    }
+    if (!h.extra.empty()) { // ضرب ديكارتي لأي عدد من المصادر بحلقة for واحدة (آخر مصدر يدور أسرع)
+        const std::string id = std::to_string(loopSeq++);
+        const std::string k = "#ek" + id, tot = "#et" + id;
+        std::vector<std::pair<std::string, ExprPtr>> srcs; srcs.push_back({h.v1, h.iter});
+        for (auto& e : h.extra) srcs.push_back(e);
+        size_t m = srcs.size();
+        auto lenV = [&](size_t j) { return lCall("len", {lVar("#ei" + id + "_" + std::to_string(j), line)}, line); };
+        for (size_t j = 0; j < m; ++j) {
+            const std::string iv = "#ei" + id + "_" + std::to_string(j);
+            pre.push_back(lLet(iv, srcs[j].second, line));
+            auto o = std::make_shared<LogicalExpr>();
+            o->left = lCall("isArray", {lVar(iv, line)}, line); o->op = TokenType::OR; o->right = lCall("isString", {lVar(iv, line)}, line); o->line = line;
+            pre.push_back(lIf(lUnaryNot(o, line), lBlock({lThrow(lStr("`each x in xs, y in ys` needs arrays or strings", line), line)}, line), nullptr, line));
+        }
+        ExprPtr total = lenV(0);
+        for (size_t j = 1; j < m; ++j) total = lBin(total, TokenType::STAR, lenV(j), line);
+        pre.push_back(lLet(tot, total, line));
+        std::vector<StmtPtr> bs;
+        for (size_t j = 0; j < m; ++j) {
+            ExprPtr stride = lNum(1, line);
+            for (size_t q = j + 1; q < m; ++q) stride = lBin(stride, TokenType::STAR, lenV(q), line);
+            ExprPtr pos = lBin(lCall("floor", {lBin(lVar(k, line), TokenType::SLASH, stride, line)}, line), TokenType::PERCENT, lenV(j), line);
+            auto ix = std::make_shared<IndexExpr>(); ix->object = lVar("#ei" + id + "_" + std::to_string(j), line); ix->index = pos; ix->line = line;
+            bs.push_back(lLet(srcs[j].first, ix, line));
+        }
+        bs.push_back(inner);
+        auto fs = std::make_shared<ForStmt>();
+        fs->initializer = lLet(k, lNum(0, line), line);
+        fs->condition = lBin(lVar(k, line), TokenType::LESS, lVar(tot, line), line);
+        fs->increment = lAssign(k, lBin(lVar(k, line), TokenType::PLUS, lNum(1, line), line), line);
+        fs->body = lBlock(std::move(bs), line); fs->line = line;
+        attachDoneBlock(fs->doneBlock);
+        pre.push_back(finishLoop(fs, lim));
+        return lBlock(std::move(pre), line);
     }
     if (h.mode) {
         const std::string id = std::to_string(loopSeq++);
