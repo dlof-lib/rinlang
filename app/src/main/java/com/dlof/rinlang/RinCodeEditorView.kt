@@ -34,6 +34,7 @@ import android.widget.LinearLayout
 import android.widget.PopupWindow
 import android.widget.TextView
 import androidx.core.content.ContextCompat
+import androidx.core.content.res.ResourcesCompat
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
@@ -128,6 +129,51 @@ class RinCodeEditorView @JvmOverloads constructor(
     private val colorTemplate = ContextCompat.getColor(context, R.color.syntax_template)
     private val colorTemplateKw = ContextCompat.getColor(context, R.color.syntax_template_kw)
     private val colorParameter = ContextCompat.getColor(context, R.color.syntax_parameter)
+    // خطوط قوالب الحلقات: JetBrains Mono NL (OFL، بلا ligatures، عرض الحرف 0.6em كالخط الأحادي) —
+    // عريض مائل حقيقي (لا تشويه اصطناعي). تُرسَم الحروف خلية بخلية فيبقى المؤشر والتحديد مضبوطين.
+    private val fontTmplBoldItalic: android.graphics.Typeface? =
+        try { ResourcesCompat.getFont(context, R.font.rin_tmpl_bold_italic) } catch (e: Exception) { null }
+    private val fontTmplItalic: android.graphics.Typeface? =
+        try { ResourcesCompat.getFont(context, R.font.rin_tmpl_italic) } catch (e: Exception) { null }
+    private val tmplPillPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val tmplPillRect = android.graphics.RectF()
+    private val tmplUnderlinePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        strokeWidth = resources.displayMetrics.density * 1.2f
+        strokeCap = Paint.Cap.ROUND
+    }
+
+    private fun isTemplateKind(kind: Int) =
+        kind == HighlightKind.TEMPLATE || kind == HighlightKind.TEMPLATE_KW || kind == HighlightKind.PARAMETER
+
+    /** يرسم توكن قالب بخط حقيقي: @tmpl/@body داخل "حبة" مستديرة بلون الكلمة، واسم القالب عريض مائل بخط
+     *  سفلي ناعم، والمعاملات مائلة. كل حرف في خليته (x = بداية + i × charWidth) فلا ينحرف شيء. */
+    private fun drawTemplateToken(
+        canvas: Canvas, lineText: String, from: Int, to: Int, x: Float, baseline: Float,
+        kind: Int, pillTo: Int
+    ) {
+        val face = (if (kind == HighlightKind.PARAMETER) fontTmplItalic else fontTmplBoldItalic) ?: return
+        val color = textPaint.color
+        val fm = textPaint.fontMetrics
+        if (kind == HighlightKind.TEMPLATE_KW && pillTo > from) {          // حبة خلف @tmpl كاملة
+            val pad = charWidth * 0.18f
+            tmplPillPaint.color = color
+            tmplPillPaint.alpha = 38
+            tmplPillRect.set(x - pad, baseline + fm.ascent * 0.92f, x + (pillTo - from) * charWidth + pad, baseline + fm.descent * 0.9f)
+            canvas.drawRoundRect(tmplPillRect, charWidth * 0.35f, charWidth * 0.35f, tmplPillPaint)
+        }
+        val saved = textPaint.typeface
+        textPaint.typeface = face
+        textPaint.isFakeBoldText = false
+        textPaint.textSkewX = 0f
+        for (i in from until to) canvas.drawText(lineText, i, i + 1, x + (i - from) * charWidth, baseline, textPaint)
+        textPaint.typeface = saved
+        if (kind == HighlightKind.TEMPLATE) {                               // خط سفلي ناعم تحت اسم القالب
+            tmplUnderlinePaint.color = color
+            tmplUnderlinePaint.alpha = 140
+            val y = baseline + fm.descent * 0.55f
+            canvas.drawLine(x, y, x + (to - from) * charWidth, y, tmplUnderlinePaint)
+        }
+    }
     // ألوان passkit الرسمية (colors.xml / values-night) — تُستخدَم فقط لأنواع التلوين 13..19.
     private val colorPkBracket = ContextCompat.getColor(context, R.color.passkit_bracket)
     private val colorPkTag = ContextCompat.getColor(context, R.color.passkit_tag)
@@ -893,7 +939,8 @@ class RinCodeEditorView @JvmOverloads constructor(
         val sorted = spans.sortedBy { it.startCol }
         var cursor = 0
         var cursorX = startX
-        for (h in sorted) {
+        var pillSkipUntil = -1 // نهاية حبة @tmpl المرسومة مسبقاً (@ و tmpl امتدادان متجاوران)
+        for ((idx, h) in sorted.withIndex()) {
             val from = h.startCol.coerceIn(0, lineText.length)
             val to = h.endCol.coerceIn(0, lineText.length)
             val gapFrom = cursor.coerceIn(0, lineText.length)
@@ -904,10 +951,25 @@ class RinCodeEditorView @JvmOverloads constructor(
             }
             if (to > from) {
                 textPaint.color = colorForKind(h.kind)
-                applyFontStyle(h.kind, styled)
-                canvas.drawText(lineText, from, to, cursorX, baseline, textPaint)
-                cursorX += textPaint.measureText(lineText, from, to)
-                resetFontStyle()
+                if (styled && isTemplateKind(h.kind) && (if (h.kind == HighlightKind.PARAMETER) fontTmplItalic else fontTmplBoldItalic) != null) {
+                    var pillTo = 0
+                    if (h.kind == HighlightKind.TEMPLATE_KW && from >= pillSkipUntil) {
+                        pillTo = to
+                        var k = idx + 1
+                        while (k < sorted.size && sorted[k].kind == HighlightKind.TEMPLATE_KW && sorted[k].startCol == pillTo) {
+                            pillTo = sorted[k].endCol.coerceIn(0, lineText.length); k++
+                        }
+                        pillSkipUntil = pillTo
+                    }
+                    drawTemplateToken(canvas, lineText, from, to, cursorX, baseline, h.kind, pillTo)
+                    resetFontStyle()
+                    cursorX += textPaint.measureText(lineText, from, to)
+                } else {
+                    applyFontStyle(h.kind, styled)
+                    canvas.drawText(lineText, from, to, cursorX, baseline, textPaint)
+                    cursorX += textPaint.measureText(lineText, from, to)
+                    resetFontStyle()
+                }
             }
             cursor = h.endCol
         }
