@@ -352,4 +352,12 @@
     <color name="syntax_bracket0">#B7791F</color>
     <color name="syntax_bracket1">#A23DAD</color>
     <color name="syntax_bracket2">#1976D2</color>
+
+    <!-- ستايل كتل الحاويات في المحرر (شريط جانبي + خلفية + شارة الوسم). ست عائلات بألوان متمايزة. -->
+    <color name="container_accent_core">#7B3FC4</color>
+    <color name="container_accent_pipe">#00897B</color>
+    <color name="container_accent_data">#1E6FD9</color>
+    <color name="container_accent_api">#2E9E4F</color>
+    <color name="container_accent_io">#E0701A</color>
+    <color name="container_accent_group">#B8860B</color>
 </resources>
