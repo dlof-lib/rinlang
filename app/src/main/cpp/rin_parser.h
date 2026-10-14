@@ -173,10 +173,10 @@ private:
     ExprPtr eachComprehension();  // [each x in xs where c => expr]
     bool atLoopForm(size_t at) const;
     bool atEachForm(size_t at, bool forKw = false) const;
-    // Loops v3: مراحل التيار بالترتيب المكتوب — kind: 0=where 1=skip 2=take 3=until 4=while
+    // Loops v3: مراحل التيار بالترتيب المكتوب — kind: 0=where 1=skip 2=take 3=until 4=while 5=distinct (e = المفتاح أو null)
     struct Stage { int kind; ExprPtr e; int line = 0; };
     // mode: 1=by 2=zip 3=window 4=every 5=cross 6=pairs ؛ from = بداية الفهرس مع متغيّرين
-    struct EachHdr { std::string v1, v2; std::shared_ptr<LetPattern> pat; ExprPtr iter; std::vector<Stage> stages; int mode = 0; ExprPtr arg, iter2, from; int line = 0; };
+    struct EachHdr { std::string v1, v2; std::shared_ptr<LetPattern> pat; ExprPtr iter; std::vector<Stage> stages; std::vector<std::pair<std::string, ExprPtr>> extra; /* each x in xs, y in ys */ int mode = 0; ExprPtr arg, iter2, from; int line = 0; };
     ExprPtr reduceComprehension(); // sum/product/count/avg/min/max/any/all/first/last each x in xs [where c] [yield e]
     ExprPtr mapComprehension();    // {each x in xs yield key: value}
     bool atReducer(size_t at) const;
