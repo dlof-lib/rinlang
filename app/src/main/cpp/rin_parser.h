@@ -173,6 +173,8 @@ private:
     ExprPtr eachComprehension();  // [each x in xs where c => expr]
     bool atLoopForm(size_t at) const;
     bool atEachForm(size_t at, bool forKw = false) const;
+    bool tokensMayCapture(size_t from, size_t to) const; // Rin For+: هل في [from,to) ما قد ينشئ closure؟
+    bool isSimpleTarget(const ExprPtr& e) const;         // هدف += / ++ بلا آثار جانبية (يُقيَّم مرتين)
     // Loops v3: مراحل التيار بالترتيب المكتوب — kind: 0=where 1=skip 2=take 3=until 4=while 5=distinct (e = المفتاح أو null)
     struct Stage { int kind; ExprPtr e; int line = 0; };
     // mode: 1=by 2=zip 3=window 4=every 5=cross 6=pairs ؛ from = بداية الفهرس مع متغيّرين
