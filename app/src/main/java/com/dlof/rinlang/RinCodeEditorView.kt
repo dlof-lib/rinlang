@@ -63,7 +63,7 @@ class RinCodeEditorView @JvmOverloads constructor(
     // --- إعداد الرسم ---------------------------------------------------
 
     private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        typeface = android.graphics.Typeface.MONOSPACE
+        typeface = loadCodeFont(R.font.rin_code_regular) ?: android.graphics.Typeface.MONOSPACE
         textSize = spToPx(AppSettings.DEFAULT_FONT_SIZE_SP) // يُستبدَل فورًا بالقيمة المحفوظة عبر applyStoredEditorSettings()، ويبقى هذا فقط توافقًا مبدئيًا قبل أول تطبيق للإعدادات
         color = ContextCompat.getColor(context, R.color.rin_editor_text)
         isSubpixelText = true
@@ -129,12 +129,39 @@ class RinCodeEditorView @JvmOverloads constructor(
     private val colorTemplate = ContextCompat.getColor(context, R.color.syntax_template)
     private val colorTemplateKw = ContextCompat.getColor(context, R.color.syntax_template_kw)
     private val colorParameter = ContextCompat.getColor(context, R.color.syntax_parameter)
-    // خطوط قوالب الحلقات: JetBrains Mono NL (OFL، بلا ligatures، عرض الحرف 0.6em كالخط الأحادي) —
-    // عريض مائل حقيقي (لا تشويه اصطناعي). تُرسَم الحروف خلية بخلية فيبقى المؤشر والتحديد مضبوطين.
-    private val fontTmplBoldItalic: android.graphics.Typeface? =
-        try { ResourcesCompat.getFont(context, R.font.rin_tmpl_bold_italic) } catch (e: Exception) { null }
-    private val fontTmplItalic: android.graphics.Typeface? =
-        try { ResourcesCompat.getFont(context, R.font.rin_tmpl_italic) } catch (e: Exception) { null }
+    // ---- عائلة خطوط الكود: JetBrains Mono NL (OFL، بلا ligatures، عرض الحرف 0.6em لكل الأوزان) ----
+    // كل مفهوم دلالي له وزنه ونمطه الحقيقي (لا تشويه اصطناعي). العرض ثابت في كل الأوزان فتبقى الخلايا
+    // والمؤشر والتحديد وعلامات الأخطاء مضبوطة. إن تعذّر تحميل الخطوط يعود الرسم للنمط الاصطناعي السابق.
+    private fun loadCodeFont(id: Int): android.graphics.Typeface? =
+        try { ResourcesCompat.getFont(context, id) } catch (e: Exception) { null }
+    private val fontRegular = loadCodeFont(R.font.rin_code_regular)
+    private val fontMedium = loadCodeFont(R.font.rin_code_medium)
+    private val fontSemiBold = loadCodeFont(R.font.rin_code_semibold)
+    private val fontBold = loadCodeFont(R.font.rin_code_bold)
+    private val fontExtraBold = loadCodeFont(R.font.rin_code_extrabold)
+    private val fontItalic = loadCodeFont(R.font.rin_code_italic)
+    private val fontMediumItalic = loadCodeFont(R.font.rin_code_medium_italic)
+    private val fontBoldItalic = loadCodeFont(R.font.rin_code_bold_italic)
+    private val fontLightItalic = loadCodeFont(R.font.rin_code_light_italic)
+    private val codeFontsReady = listOf(fontRegular, fontMedium, fontSemiBold, fontBold, fontExtraBold,
+        fontItalic, fontMediumItalic, fontBoldItalic, fontLightItalic).all { it != null }
+
+    /** الخط المناسب لكل مفهوم:
+     *  كلمات التحكم/الأنواع/الأصناف Bold · تعريف الدالة ExtraBold · الكلمات المفتاحية/الثوابت/@ SemiBold · النداءات/الأرقام Medium ·
+     *  المعدِّلات Italic · المعاملات Medium Italic · التسميات وأسماء القوالب Bold Italic · @tmpl/@body ExtraBold ·
+     *  التعليقات Light Italic · النصوص/المعرّفات/الخصائص Regular. */
+    private fun codeFontFor(kind: Int): android.graphics.Typeface? = when (kind) {
+        HighlightKind.CONTROL, HighlightKind.TYPE, HighlightKind.CLASS -> fontBold
+        HighlightKind.FUNCTION_DEF, HighlightKind.TEMPLATE_KW -> fontExtraBold
+        HighlightKind.KEYWORD, HighlightKind.CONSTANT, HighlightKind.AT, HighlightKind.PREPROCESSOR -> fontSemiBold
+        HighlightKind.CALL, HighlightKind.NUMBER, HighlightKind.ERROR -> fontMedium
+        HighlightKind.MODIFIER -> fontItalic
+        HighlightKind.PARAMETER -> fontMediumItalic
+        HighlightKind.LABEL, HighlightKind.TEMPLATE -> fontBoldItalic
+        HighlightKind.COMMENT, HighlightKind.PK_COMMENT -> fontLightItalic
+        else -> fontRegular
+    }
+
     private val tmplPillPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val tmplPillRect = android.graphics.RectF()
     private val tmplUnderlinePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -142,37 +169,23 @@ class RinCodeEditorView @JvmOverloads constructor(
         strokeCap = Paint.Cap.ROUND
     }
 
-    private fun isTemplateKind(kind: Int) =
-        kind == HighlightKind.TEMPLATE || kind == HighlightKind.TEMPLATE_KW || kind == HighlightKind.PARAMETER
-
-    /** يرسم توكن قالب بخط حقيقي: @tmpl/@body داخل "حبة" مستديرة بلون الكلمة، واسم القالب عريض مائل بخط
-     *  سفلي ناعم، والمعاملات مائلة. كل حرف في خليته (x = بداية + i × charWidth) فلا ينحرف شيء. */
-    private fun drawTemplateToken(
-        canvas: Canvas, lineText: String, from: Int, to: Int, x: Float, baseline: Float,
-        kind: Int, pillTo: Int
-    ) {
-        val face = (if (kind == HighlightKind.PARAMETER) fontTmplItalic else fontTmplBoldItalic) ?: return
-        val color = textPaint.color
+    /** "حبة" مستديرة شفافة خلف @tmpl/@body بلون الكلمة (حبة واحدة تشمل @ و tmpl). */
+    private fun drawTemplatePill(canvas: Canvas, x: Float, baseline: Float, cells: Int, color: Int) {
         val fm = textPaint.fontMetrics
-        if (kind == HighlightKind.TEMPLATE_KW && pillTo > from) {          // حبة خلف @tmpl كاملة
-            val pad = charWidth * 0.18f
-            tmplPillPaint.color = color
-            tmplPillPaint.alpha = 38
-            tmplPillRect.set(x - pad, baseline + fm.ascent * 0.92f, x + (pillTo - from) * charWidth + pad, baseline + fm.descent * 0.9f)
-            canvas.drawRoundRect(tmplPillRect, charWidth * 0.35f, charWidth * 0.35f, tmplPillPaint)
-        }
-        val saved = textPaint.typeface
-        textPaint.typeface = face
-        textPaint.isFakeBoldText = false
-        textPaint.textSkewX = 0f
-        for (i in from until to) canvas.drawText(lineText, i, i + 1, x + (i - from) * charWidth, baseline, textPaint)
-        textPaint.typeface = saved
-        if (kind == HighlightKind.TEMPLATE) {                               // خط سفلي ناعم تحت اسم القالب
-            tmplUnderlinePaint.color = color
-            tmplUnderlinePaint.alpha = 140
-            val y = baseline + fm.descent * 0.55f
-            canvas.drawLine(x, y, x + (to - from) * charWidth, y, tmplUnderlinePaint)
-        }
+        val pad = charWidth * 0.18f
+        tmplPillPaint.color = color
+        tmplPillPaint.alpha = 38
+        tmplPillRect.set(x - pad, baseline + fm.ascent * 0.92f, x + cells * charWidth + pad, baseline + fm.descent * 0.9f)
+        canvas.drawRoundRect(tmplPillRect, charWidth * 0.35f, charWidth * 0.35f, tmplPillPaint)
+    }
+
+    /** خط سفلي ناعم تحت اسم القالب. */
+    private fun drawTemplateUnderline(canvas: Canvas, x: Float, baseline: Float, cells: Int, color: Int) {
+        val fm = textPaint.fontMetrics
+        tmplUnderlinePaint.color = color
+        tmplUnderlinePaint.alpha = 140
+        val y = baseline + fm.descent * 0.55f
+        canvas.drawLine(x, y, x + cells * charWidth, y, tmplUnderlinePaint)
     }
     // ألوان passkit الرسمية (colors.xml / values-night) — تُستخدَم فقط لأنواع التلوين 13..19.
     private val colorPkBracket = ContextCompat.getColor(context, R.color.passkit_bracket)
@@ -951,25 +964,31 @@ class RinCodeEditorView @JvmOverloads constructor(
             }
             if (to > from) {
                 textPaint.color = colorForKind(h.kind)
-                if (styled && isTemplateKind(h.kind) && (if (h.kind == HighlightKind.PARAMETER) fontTmplItalic else fontTmplBoldItalic) != null) {
-                    var pillTo = 0
+                val face = if (styled && codeFontsReady) codeFontFor(h.kind) else null
+                if (face != null) {
                     if (h.kind == HighlightKind.TEMPLATE_KW && from >= pillSkipUntil) {
-                        pillTo = to
+                        var pillTo = to
                         var k = idx + 1
                         while (k < sorted.size && sorted[k].kind == HighlightKind.TEMPLATE_KW && sorted[k].startCol == pillTo) {
                             pillTo = sorted[k].endCol.coerceIn(0, lineText.length); k++
                         }
                         pillSkipUntil = pillTo
+                        drawTemplatePill(canvas, cursorX, baseline, pillTo - from, textPaint.color)
                     }
-                    drawTemplateToken(canvas, lineText, from, to, cursorX, baseline, h.kind, pillTo)
-                    resetFontStyle()
-                    cursorX += textPaint.measureText(lineText, from, to)
+                    textPaint.typeface = face
+                    textPaint.isFakeBoldText = false
+                    textPaint.textSkewX = 0f
+                    canvas.drawText(lineText, from, to, cursorX, baseline, textPaint)
+                    val w = textPaint.measureText(lineText, from, to)
+                    textPaint.typeface = fontRegular
+                    if (h.kind == HighlightKind.TEMPLATE) drawTemplateUnderline(canvas, cursorX, baseline, to - from, textPaint.color)
+                    cursorX += w
                 } else {
                     applyFontStyle(h.kind, styled)
                     canvas.drawText(lineText, from, to, cursorX, baseline, textPaint)
                     cursorX += textPaint.measureText(lineText, from, to)
-                    resetFontStyle()
                 }
+                resetFontStyle()
             }
             cursor = h.endCol
         }
