@@ -27,3 +27,9 @@ tests/loops 5/5 على `rin run` و`rin --vm` · rintests 83/83 · wesscode 42/4
 `RinSyntax.kt` و`syntaxes/rin-keywords.json` وتوثيق واختبارَي `loops_distinct` و`loops_pro`.
 التحقق (g++، مفسّر `rin` مبني محلياً): tests/loops 9/9 على `rin run` و`rin --vm` · rintests 83/83 · wesscode 42/42.
 لم يُشغَّل: tests/verification وبناء APK/الويب.
+
+## Rin For+ (حلقة for على طراز Rin)
+`i++`/`i--` و`+= -= *= %=` (تعبيرات عامة في المحلل) · `for` بلا أقواس · عدّة خطوات تزايد `i++, j--` · مسار سريع بلا closures.
+الملفات: `rin_parser.cpp|.h` (تفكيك)، و`rin_ast.h` (`ForStmt::freshIterScope`)، و`rin_interpreter.cpp` (فرع ForStmt: تنفيذ الجسم في forEnv مباشرة
+عندما لا توجد closures). RinVM لم يُعدَّل. اختبار: `tests/loops/loops_for.rin`. `/=` تبقى `!=` كما هي في اللغة.
+التحقق (g++ لينكس): tests/loops 10/10 على `rin run` و`rin --vm` · rintests 83/83 · wesscode 42/42 · tests/vm تطابق 5/5 · verification 57/63 (فروقات let_err_* المعروفة).
