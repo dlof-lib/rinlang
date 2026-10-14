@@ -344,4 +344,12 @@
     <color name="syntax_template">#3949AB</color>
     <color name="syntax_template_kw">#D84315</color>
     <color name="syntax_parameter">#8D5524</color>
+    <!-- الرموز: حساب · مقارنة/منطق · فواصل خافتة · تدفّق |> ? · أقواس ملوّنة بالعمق (3 مستويات بالتناوب) -->
+    <color name="syntax_operator">#006C84</color>
+    <color name="syntax_compare">#7B3FA0</color>
+    <color name="syntax_punct">#8A93A3</color>
+    <color name="syntax_flow">#558B2F</color>
+    <color name="syntax_bracket0">#B7791F</color>
+    <color name="syntax_bracket1">#A23DAD</color>
+    <color name="syntax_bracket2">#1976D2</color>
 </resources>
