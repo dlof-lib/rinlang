@@ -24,3 +24,12 @@
 - `AppSettings.kt`: مفتاح `syntax_font_styles` (افتراضياً مفعّل، بلا واجهة تبديل بعد).
 - `syntaxes/rin.tmLanguage.json`: نفس المفاهيم لـ VS Code (`loops-and-concepts`).
 - اختبار المحرر 90/90. لم يُبنَ Kotlin/XML/JNI هنا.
+
+## ستايل قوالب الحلقات `@tmpl` في المحرر
+- ثلاثة أنواع تلوين جديدة (27..29) في `rin_editor_engine.h` و`HighlightKind` (RinSyntax.kt):
+  `TemplateKw` (`@tmpl` و`@body`) · `Template` (اسم القالب في التعريف وكل استعمال `@name(` مع علامة `@`) · `Parameter` (معاملات القالب وأسماء `as` وكل ظهور لها داخل جسم القالب).
+- `classifyTemplates` (rin_editor_tools.h) تُشغَّل بعد `classifyConcepts`: تقرأ التعريفات أولاً فتلوّن الاستعمال ولو سبق التعريف،
+  و`let tmpl = 1;` يبقى معرِّفاً عادياً. محلل Kotlin الاحتياطي يلوّن `@tmpl/@body` واسم القالب و`@name(`.
+- الخط (يتبع إعداد `syntax_font_styles`): `@tmpl/@body` **عريض** برتقالي محروق (داكن: برتقالي فاتح) · اسم القالب/الاستعمال **عريض مائل** نيلي (داكن: بنفسجي فاتح) · المعاملات *مائلة* بنّية.
+- `colors.xml` و`values-night/colors.xml`: `syntax_template` `syntax_template_kw` `syntax_parameter`. `RinCodeEditorView.kt`: لون ونمط لكل نوع.
+- اختبار المحرر 105/105 (g++). لم يُبنَ Kotlin/XML هنا.
