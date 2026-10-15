@@ -1,0 +1,910 @@
+{
+  "_comment": "توثيق يدوي دقيق (تم التحقق من كل مدخل من تنفيذه في app/src/main/cpp). المولّد gen_intellisense_data.py يدمجه مع الدوال المدمجة المستخرجة تلقائياً. params = أسماء المعاملات بالترتيب؛ [اسم] = اختياري.",
+  "functions": {
+    "len": {
+      "params": [
+        "value"
+      ],
+      "ret": "number",
+      "doc": "طول نص أو مصفوفة أو قاموس (عدد العناصر). النص يُقاس بالبايت."
+    },
+    "push": {
+      "params": [
+        "array",
+        "item"
+      ],
+      "ret": "number",
+      "doc": "يُلحق عنصراً بنهاية المصفوفة (يعدّلها في مكانها) ويعيد الطول الجديد."
+    },
+    "pop": {
+      "params": [
+        "array"
+      ],
+      "ret": "any",
+      "doc": "يزيل آخر عنصر من المصفوفة ويعيده. خطأ إن كانت فارغة."
+    },
+    "sort": {
+      "params": [
+        "array"
+      ],
+      "ret": "array",
+      "doc": "يرتّب مصفوفة أرقام أو نصوص تصاعدياً في مكانها ويعيدها."
+    },
+    "reverse": {
+      "params": [
+        "value"
+      ],
+      "ret": "string | array",
+      "doc": "يعكس نصاً (حسب الحروف) أو مصفوفة ويعيد نسخة معكوسة."
+    },
+    "upper": {
+      "params": [
+        "text"
+      ],
+      "ret": "string",
+      "doc": "يحوّل الأحرف اللاتينية إلى كبيرة."
+    },
+    "lower": {
+      "params": [
+        "text"
+      ],
+      "ret": "string",
+      "doc": "يحوّل الأحرف اللاتينية إلى صغيرة."
+    },
+    "trim": {
+      "params": [
+        "text"
+      ],
+      "ret": "string",
+      "doc": "يزيل الفراغات (مسافة/Tab/سطر جديد) من طرفي النص."
+    },
+    "split": {
+      "params": [
+        "text",
+        "separator"
+      ],
+      "ret": "array",
+      "doc": "يقسم النص إلى مصفوفة عند كل فاصل. فاصل فارغ = حرف حرف."
+    },
+    "join": {
+      "params": [
+        "array",
+        "separator"
+      ],
+      "ret": "string",
+      "doc": "يدمج عناصر المصفوفة في نص واحد بالفاصل المعطى."
+    },
+    "replace": {
+      "params": [
+        "text",
+        "from",
+        "to"
+      ],
+      "ret": "string",
+      "doc": "يستبدل كل ظهور للنص from بالنص to."
+    },
+    "substr": {
+      "params": [
+        "text",
+        "start",
+        "[length]"
+      ],
+      "ret": "string",
+      "doc": "جزء من النص يبدأ عند start وبطول length (أو حتى النهاية)."
+    },
+    "slice": {
+      "params": [
+        "value",
+        "from",
+        "[to]"
+      ],
+      "ret": "string | array",
+      "doc": "شريحة من نص أو مصفوفة من from حتى to (غير شاملة)."
+    },
+    "concat": {
+      "params": [
+        "...arrays"
+      ],
+      "ret": "array",
+      "doc": "يدمج مصفوفات (وعناصر مفردة) في مصفوفة جديدة."
+    },
+    "flatten": {
+      "params": [
+        "array",
+        "[depth]"
+      ],
+      "ret": "array",
+      "doc": "يسطّح المصفوفات المتداخلة (العمق الافتراضي 1، وسالب = كامل)."
+    },
+    "contains": {
+      "params": [
+        "haystack",
+        "needle"
+      ],
+      "ret": "boolean",
+      "doc": "هل يحتوي النص على نص فرعي، أو المصفوفة على عنصر؟"
+    },
+    "indexOf": {
+      "params": [
+        "text",
+        "sub"
+      ],
+      "ret": "number",
+      "doc": "موضع أول ظهور للنص الفرعي، أو -1 إن لم يوجد."
+    },
+    "has": {
+      "params": [
+        "collection",
+        "item"
+      ],
+      "ret": "boolean",
+      "doc": "هل المفتاح موجود في القاموس، أو العنصر في المصفوفة؟"
+    },
+    "remove": {
+      "params": [
+        "map",
+        "key"
+      ],
+      "ret": "boolean",
+      "doc": "يحذف مفتاحاً من قاموس؛ يعيد true إن كان موجوداً."
+    },
+    "keys": {
+      "params": [
+        "map"
+      ],
+      "ret": "array",
+      "doc": "مصفوفة بمفاتيح القاموس."
+    },
+    "values": {
+      "params": [
+        "map"
+      ],
+      "ret": "array",
+      "doc": "مصفوفة بقيم القاموس."
+    },
+    "charAt": {
+      "params": [
+        "text",
+        "index"
+      ],
+      "ret": "string",
+      "doc": "الحرف عند الفهرس المعطى (من 0). خطأ إن خرج عن النطاق."
+    },
+    "repeat": {
+      "params": [
+        "text",
+        "count"
+      ],
+      "ret": "string",
+      "doc": "يكرّر النص count مرة. (غير حلقة repeat الكلمة المفتاحية.)"
+    },
+    "abs": {
+      "params": [
+        "number"
+      ],
+      "ret": "number",
+      "doc": "القيمة المطلقة."
+    },
+    "floor": {
+      "params": [
+        "number"
+      ],
+      "ret": "number",
+      "doc": "أكبر عدد صحيح ≤ القيمة."
+    },
+    "ceil": {
+      "params": [
+        "number"
+      ],
+      "ret": "number",
+      "doc": "أصغر عدد صحيح ≥ القيمة."
+    },
+    "round": {
+      "params": [
+        "number"
+      ],
+      "ret": "number",
+      "doc": "التقريب لأقرب عدد صحيح."
+    },
+    "sqrt": {
+      "params": [
+        "number"
+      ],
+      "ret": "number",
+      "doc": "الجذر التربيعي."
+    },
+    "pow": {
+      "params": [
+        "base",
+        "exponent"
+      ],
+      "ret": "number",
+      "doc": "base مرفوعاً للقوة exponent."
+    },
+    "min": {
+      "params": [
+        "a",
+        "b"
+      ],
+      "ret": "number",
+      "doc": "الأصغر بين رقمين."
+    },
+    "max": {
+      "params": [
+        "a",
+        "b"
+      ],
+      "ret": "number",
+      "doc": "الأكبر بين رقمين."
+    },
+    "clamp": {
+      "params": [
+        "value",
+        "low",
+        "high"
+      ],
+      "ret": "number",
+      "doc": "يحصر القيمة داخل [low, high]. يقبل أيضاً مصفوفة أرقام."
+    },
+    "random": {
+      "params": [],
+      "ret": "number",
+      "doc": "رقم عشوائي في [0, 1). للتكرار القابل للإعادة استخدم seed(n)."
+    },
+    "sum": {
+      "params": [
+        "numbers"
+      ],
+      "ret": "number",
+      "doc": "مجموع مصفوفة أرقام."
+    },
+    "mean": {
+      "params": [
+        "numbers"
+      ],
+      "ret": "number",
+      "doc": "المتوسط الحسابي لمصفوفة أرقام."
+    },
+    "median": {
+      "params": [
+        "numbers"
+      ],
+      "ret": "number",
+      "doc": "الوسيط لمصفوفة أرقام."
+    },
+    "variance": {
+      "params": [
+        "numbers"
+      ],
+      "ret": "number",
+      "doc": "التباين لمصفوفة أرقام."
+    },
+    "stddev": {
+      "params": [
+        "numbers"
+      ],
+      "ret": "number",
+      "doc": "الانحراف المعياري لمصفوفة أرقام."
+    },
+    "count": {
+      "params": [
+        "numbers"
+      ],
+      "ret": "number",
+      "doc": "عدد عناصر مصفوفة أرقام (إحصائية)."
+    },
+    "range": {
+      "params": [
+        "numbers"
+      ],
+      "ret": "number",
+      "doc": "المدى الإحصائي = أكبر قيمة − أصغر قيمة. (ليست توليد متتالية.)"
+    },
+    "any": {
+      "params": [
+        "array"
+      ],
+      "ret": "boolean",
+      "doc": "true إن كان أي عنصر في المصفوفة «صحيحاً» منطقياً."
+    },
+    "all": {
+      "params": [
+        "array"
+      ],
+      "ret": "boolean",
+      "doc": "true إن كانت كل عناصر المصفوفة «صحيحة» منطقياً."
+    },
+    "type": {
+      "params": [
+        "value"
+      ],
+      "ret": "string",
+      "doc": "اسم نوع القيمة كنص."
+    },
+    "toNumber": {
+      "params": [
+        "value"
+      ],
+      "ret": "number",
+      "doc": "يحوّل نصاً إلى رقم (يعيد الرقم كما هو)."
+    },
+    "toString": {
+      "params": [
+        "value"
+      ],
+      "ret": "string",
+      "doc": "يحوّل أي قيمة إلى نص."
+    },
+    "str": {
+      "params": [
+        "value"
+      ],
+      "ret": "string",
+      "doc": "مرادف toString."
+    },
+    "isNil": {
+      "params": [
+        "value"
+      ],
+      "ret": "boolean",
+      "doc": "هل القيمة nil؟"
+    },
+    "isNumber": {
+      "params": [
+        "value"
+      ],
+      "ret": "boolean",
+      "doc": "هل القيمة رقم؟"
+    },
+    "isString": {
+      "params": [
+        "value"
+      ],
+      "ret": "boolean",
+      "doc": "هل القيمة نص؟"
+    },
+    "isArray": {
+      "params": [
+        "value"
+      ],
+      "ret": "boolean",
+      "doc": "هل القيمة مصفوفة؟"
+    },
+    "isMap": {
+      "params": [
+        "value"
+      ],
+      "ret": "boolean",
+      "doc": "هل القيمة قاموس؟"
+    },
+    "isFunction": {
+      "params": [
+        "value"
+      ],
+      "ret": "boolean",
+      "doc": "هل القيمة دالة؟"
+    },
+    "readFile": {
+      "params": [
+        "path"
+      ],
+      "ret": "string",
+      "doc": "يقرأ ملفاً نصياً كاملاً. خطأ إن لم يوجد."
+    },
+    "writeFile": {
+      "params": [
+        "path",
+        "content"
+      ],
+      "ret": "boolean",
+      "doc": "يكتب (أو يستبدل) ملفاً بالمحتوى المعطى."
+    },
+    "now": {
+      "params": [],
+      "ret": "number",
+      "doc": "الوقت الحالي بالميلي ثانية من ساعة رتيبة (monotonic) — لقياس المدد لا للتاريخ."
+    },
+    "assert": {
+      "params": [
+        "condition",
+        "[message]"
+      ],
+      "ret": "boolean",
+      "doc": "يرمي خطأ «assertion failed» إن لم يتحقق الشرط."
+    },
+    "assertEq": {
+      "params": [
+        "actual",
+        "expected",
+        "[message]"
+      ],
+      "ret": "boolean",
+      "doc": "يرمي خطأ إن اختلفت القيمتان."
+    },
+    "fail": {
+      "params": [
+        "[message]"
+      ],
+      "ret": "never",
+      "doc": "يرمي خطأ تشغيل فوراً بالرسالة المعطاة."
+    },
+    "input": {
+      "params": [
+        "[prompt]"
+      ],
+      "ret": "any",
+      "doc": "يطلب إدخالاً من المستخدم (يقبل خيارات متقدمة؛ انظر docs/input.md)."
+    },
+    "inputNumber": {
+      "params": [
+        "prompt"
+      ],
+      "ret": "number",
+      "doc": "يطلب رقماً من المستخدم ويعيد السؤال عند الإدخال الخاطئ."
+    },
+    "Set.of": {
+      "params": [
+        "...items"
+      ],
+      "ret": "Set",
+      "doc": "ينشئ مجموعة؛ كل وسيط عنصر دائماً (حتى لو كان مصفوفة)."
+    },
+    "Set.from": {
+      "params": [
+        "iterable"
+      ],
+      "ret": "Set",
+      "doc": "ينشئ مجموعة من مصفوفة أو مجموعة أو قاموس (مفاتيحه) أو نص (أحرفه)."
+    },
+    "Set.size": {
+      "params": [
+        "set"
+      ],
+      "ret": "number",
+      "doc": "عدد عناصر المجموعة."
+    },
+    "Set.len": {
+      "params": [
+        "set"
+      ],
+      "ret": "number",
+      "doc": "عدد عناصر المجموعة."
+    },
+    "Set.length": {
+      "params": [
+        "set"
+      ],
+      "ret": "number",
+      "doc": "عدد عناصر المجموعة."
+    },
+    "Set.isEmpty": {
+      "params": [
+        "set"
+      ],
+      "ret": "boolean",
+      "doc": "هل المجموعة فارغة؟"
+    },
+    "Set.empty": {
+      "params": [
+        "set"
+      ],
+      "ret": "boolean",
+      "doc": "هل المجموعة فارغة؟"
+    },
+    "Set.has": {
+      "params": [
+        "set",
+        "item"
+      ],
+      "ret": "boolean",
+      "doc": "هل العنصر موجود في المجموعة؟"
+    },
+    "Set.contains": {
+      "params": [
+        "set",
+        "item"
+      ],
+      "ret": "boolean",
+      "doc": "هل العنصر موجود في المجموعة؟"
+    },
+    "Set.hasAll": {
+      "params": [
+        "set",
+        "items"
+      ],
+      "ret": "boolean",
+      "doc": "هل كل عناصر المُدخل موجودة؟"
+    },
+    "Set.hasAny": {
+      "params": [
+        "set",
+        "items"
+      ],
+      "ret": "boolean",
+      "doc": "هل أي عنصر من المُدخل موجود؟"
+    },
+    "Set.add": {
+      "params": [
+        "set",
+        "item"
+      ],
+      "ret": "boolean",
+      "doc": "يضيف عنصراً (في المكان)؛ true إن كان جديداً."
+    },
+    "Set.addAll": {
+      "params": [
+        "set",
+        "items"
+      ],
+      "ret": "number",
+      "doc": "يضيف عدة عناصر في المكان؛ يعيد عدد الجديد منها فعلاً."
+    },
+    "Set.remove": {
+      "params": [
+        "set",
+        "item"
+      ],
+      "ret": "boolean",
+      "doc": "يحذف عنصراً في المكان؛ true إن كان موجوداً."
+    },
+    "Set.removeAll": {
+      "params": [
+        "set",
+        "items"
+      ],
+      "ret": "number",
+      "doc": "يحذف عدة عناصر في المكان؛ يعيد عدد المحذوف."
+    },
+    "Set.retain": {
+      "params": [
+        "set",
+        "items"
+      ],
+      "ret": "number",
+      "doc": "يُبقي فقط ما يوجد أيضاً في المُدخل (تقاطع في المكان)؛ يعيد عدد المحذوف."
+    },
+    "Set.clear": {
+      "params": [
+        "set"
+      ],
+      "ret": "number",
+      "doc": "يفرّغ المجموعة؛ يعيد عدد ما حُذف."
+    },
+    "Set.pop": {
+      "params": [
+        "set"
+      ],
+      "ret": "any",
+      "doc": "يزيل ويعيد أقدم عنصر أُدرج. خطأ إن كانت فارغة."
+    },
+    "Set.union": {
+      "params": [
+        "set",
+        "...others"
+      ],
+      "ret": "Set",
+      "doc": "اتحاد المجموعة مع أخرى أو أكثر؛ يعيد مجموعة جديدة."
+    },
+    "Set.intersect": {
+      "params": [
+        "set",
+        "...others"
+      ],
+      "ret": "Set",
+      "doc": "تقاطع المجموعة مع أخرى أو أكثر؛ يعيد مجموعة جديدة."
+    },
+    "Set.intersection": {
+      "params": [
+        "set",
+        "...others"
+      ],
+      "ret": "Set",
+      "doc": "تقاطع المجموعة مع أخرى أو أكثر؛ يعيد مجموعة جديدة."
+    },
+    "Set.diff": {
+      "params": [
+        "set",
+        "...others"
+      ],
+      "ret": "Set",
+      "doc": "الفرق: عناصر المجموعة غير الموجودة في الأخريات؛ مجموعة جديدة."
+    },
+    "Set.difference": {
+      "params": [
+        "set",
+        "...others"
+      ],
+      "ret": "Set",
+      "doc": "الفرق: عناصر المجموعة غير الموجودة في الأخريات؛ مجموعة جديدة."
+    },
+    "Set.symDiff": {
+      "params": [
+        "set",
+        "other"
+      ],
+      "ret": "Set",
+      "doc": "الفرق المتناظر: العناصر الموجودة في إحدى المجموعتين فقط."
+    },
+    "Set.isSubset": {
+      "params": [
+        "set",
+        "other"
+      ],
+      "ret": "boolean",
+      "doc": "هل هذه المجموعة جزء من الأخرى؟"
+    },
+    "Set.isSuperset": {
+      "params": [
+        "set",
+        "other"
+      ],
+      "ret": "boolean",
+      "doc": "هل تحتوي هذه المجموعة كل عناصر الأخرى؟"
+    },
+    "Set.isDisjoint": {
+      "params": [
+        "set",
+        "other"
+      ],
+      "ret": "boolean",
+      "doc": "هل لا يوجد أي عنصر مشترك؟"
+    },
+    "Set.equals": {
+      "params": [
+        "set",
+        "other"
+      ],
+      "ret": "boolean",
+      "doc": "تساوٍ بلا اعتبار للترتيب."
+    },
+    "Set.toArray": {
+      "params": [
+        "set"
+      ],
+      "ret": "array",
+      "doc": "مصفوفة بالعناصر بترتيب الإدراج."
+    },
+    "Set.copy": {
+      "params": [
+        "set"
+      ],
+      "ret": "Set",
+      "doc": "نسخة مستقلة من المجموعة."
+    },
+    "Set.clone": {
+      "params": [
+        "set"
+      ],
+      "ret": "Set",
+      "doc": "نسخة مستقلة من المجموعة."
+    },
+    "Set.sorted": {
+      "params": [
+        "set"
+      ],
+      "ret": "array",
+      "doc": "مصفوفة مرتّبة (كل العناصر أرقام أو كلها نصوص)."
+    },
+    "Set.join": {
+      "params": [
+        "set",
+        "[separator]"
+      ],
+      "ret": "string",
+      "doc": "يدمج العناصر في نص (الفاصل الافتراضي «,»)."
+    },
+    "Set.first": {
+      "params": [
+        "set"
+      ],
+      "ret": "any",
+      "doc": "أول عنصر أُدرج، أو nil إن كانت فارغة."
+    },
+    "Set.last": {
+      "params": [
+        "set"
+      ],
+      "ret": "any",
+      "doc": "آخر عنصر أُدرج، أو nil إن كانت فارغة."
+    },
+    "Set.min": {
+      "params": [
+        "set"
+      ],
+      "ret": "any",
+      "doc": "أصغر عنصر. خطأ إن كانت فارغة."
+    },
+    "Set.max": {
+      "params": [
+        "set"
+      ],
+      "ret": "any",
+      "doc": "أكبر عنصر. خطأ إن كانت فارغة."
+    },
+    "Set.sum": {
+      "params": [
+        "set"
+      ],
+      "ret": "number",
+      "doc": "مجموع العناصر (أرقام فقط)."
+    },
+    "Set.map": {
+      "params": [
+        "set",
+        "fn"
+      ],
+      "ret": "Set",
+      "doc": "يطبّق الدالة على كل عنصر؛ مجموعة جديدة بالنتائج."
+    },
+    "Set.filter": {
+      "params": [
+        "set",
+        "fn"
+      ],
+      "ret": "Set",
+      "doc": "يُبقي العناصر التي تُرجع فيها الدالة قيمة صحيحة؛ مجموعة جديدة."
+    },
+    "Set.each": {
+      "params": [
+        "set",
+        "fn"
+      ],
+      "ret": "nil",
+      "doc": "ينفّذ الدالة على كل عنصر."
+    },
+    "Set.forEach": {
+      "params": [
+        "set",
+        "fn"
+      ],
+      "ret": "nil",
+      "doc": "ينفّذ الدالة على كل عنصر."
+    },
+    "Set.some": {
+      "params": [
+        "set",
+        "fn"
+      ],
+      "ret": "boolean",
+      "doc": "هل تحقق الشرط عنصر واحد على الأقل؟"
+    },
+    "Set.any": {
+      "params": [
+        "set",
+        "fn"
+      ],
+      "ret": "boolean",
+      "doc": "هل تحقق الشرط عنصر واحد على الأقل؟"
+    },
+    "Set.every": {
+      "params": [
+        "set",
+        "fn"
+      ],
+      "ret": "boolean",
+      "doc": "هل تحقق الشرط كل العناصر؟"
+    },
+    "Set.all": {
+      "params": [
+        "set",
+        "fn"
+      ],
+      "ret": "boolean",
+      "doc": "هل تحقق الشرط كل العناصر؟"
+    },
+    "Set.reduce": {
+      "params": [
+        "set",
+        "fn",
+        "[initial]"
+      ],
+      "ret": "any",
+      "doc": "يختزل العناصر بدالة (acc, item). بلا قيمة ابتدائية يبدأ بأول عنصر؛ خطأ إن كانت فارغة."
+    },
+    "Env.load": {
+      "params": [
+        "[path]",
+        "[override]"
+      ],
+      "ret": "map",
+      "doc": "يقرأ ملف .env (الافتراضي «.env») ويضبط متغيّرات العملية؛ يعيد قاموس ما طُبّق. غيابه لا يرمي خطأ."
+    },
+    "Env.parse": {
+      "params": [
+        "text"
+      ],
+      "ret": "map",
+      "doc": "يحلّل نص .env إلى قاموس بلا أي أثر جانبي."
+    },
+    "Env.get": {
+      "params": [
+        "key",
+        "[default]"
+      ],
+      "ret": "string",
+      "doc": "قيمة المتغيّر نصاً، أو default (الافتراضي nil)."
+    },
+    "Env.require": {
+      "params": [
+        "key"
+      ],
+      "ret": "string",
+      "doc": "كـ get لكن يرمي E0007 إن لم يوجد."
+    },
+    "Env.has": {
+      "params": [
+        "key"
+      ],
+      "ret": "boolean",
+      "doc": "هل المتغيّر موجود؟"
+    },
+    "Env.set": {
+      "params": [
+        "key",
+        "value"
+      ],
+      "ret": "any",
+      "doc": "يضبط متغيّراً على العملية فقط (لا يكتب الملف)."
+    },
+    "Env.unset": {
+      "params": [
+        "key"
+      ],
+      "ret": "any",
+      "doc": "يحذف متغيّراً من العملية فقط."
+    },
+    "Env.all": {
+      "params": [],
+      "ret": "map",
+      "doc": "كل بيئة العملية (قاموس). لا تطبعه: يكشف كل الأسرار."
+    },
+    "Env.loaded": {
+      "params": [],
+      "ret": "array",
+      "doc": "أسماء المفاتيح التي حمّلها Env.load."
+    },
+    "Env.int": {
+      "params": [
+        "key",
+        "[default]"
+      ],
+      "ret": "number",
+      "doc": "يقرأ المتغيّر كـعدد صحيح مع قيمة افتراضية؛ قيمة غير صالحة ← E0005."
+    },
+    "Env.float": {
+      "params": [
+        "key",
+        "[default]"
+      ],
+      "ret": "number",
+      "doc": "يقرأ المتغيّر كـعدد عشري مع قيمة افتراضية؛ قيمة غير صالحة ← E0005."
+    },
+    "Env.bool": {
+      "params": [
+        "key",
+        "[default]"
+      ],
+      "ret": "boolean",
+      "doc": "يقرأ المتغيّر كـمنطقي (true/false/1/0/yes/no/on/off) مع قيمة افتراضية؛ قيمة غير صالحة ← E0005."
+    },
+    "Env.list": {
+      "params": [
+        "key",
+        "[default]"
+      ],
+      "ret": "array",
+      "doc": "يقرأ المتغيّر كـقائمة مع قيمة افتراضية؛ قيمة غير صالحة ← E0005."
+    }
+  },
+  "namespaces": {
+    "Set": "مجموعة قيم فريدة (docs/set.md): Set.of/from ثم add/has/union...",
+    "Env": "متغيرات البيئة وملفات .env (docs/env.md): Env.get/has/load/require...",
+    "container": "عمليات على الحاويات والبيانات: container.avg / childrenOf / clone ...",
+    "file": "عمليات الملفات.",
+    "net": "الشبكة (HTTP وغيرها).",
+    "sec": "الأمان والتشفير.",
+    "log": "التسجيل (logging).",
+    "automation": "أدوات الأتمتة: batch/chain/retry/timeIt ...",
+    "artifact": "معلومات الحزم (artifact)."
+  }
+}
