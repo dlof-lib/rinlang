@@ -1,0 +1,10 @@
+channel47 1.0
+kind    = "package"
+name    = "my.pack"
+version = "0.1.0-beta.1"
+files   = ["main.rin", "assets/icon.png"]
+permissions = ["storage.read"]
+
+table deps(name: text, version: text)
+  "rin.math", "^1.2.0"
+end
