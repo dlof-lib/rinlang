@@ -1,0 +1,21 @@
+// print font attrs: bold italic underline strike dim reverse blink color bg
+// (خرج الاختبار العادي بلا أكواد لأن المخرجات ليست طرفية؛ للتحقق من الأكواد شغّل بـ FORCE_COLOR=1 وقارن بـ print_fonts.ansi.expected)
+print "bold" bold=true;
+print "all" bold=true italic=true underline=true strike=true dim=true reverse=true blink=true;
+print "color" color="tomato" bg="#112233";
+print "off" bold=false italic=false;
+print "padded" bold=true upper=true width=12 align="center";
+let on = true;
+print "var", "flag" bold=on color="red" sep=" | ";
+print "cond" bold=1 == 2;
+
+@tmpl h1(w = 16) style bold=true underline=true color="gold" width=w align="center";
+print "Title" @h1();
+@tmpl warn(msg) print msg level="warn" bold=true;
+@warn("careful");
+@tmpl card(t) print {
+    t @h1(10);
+    "body" italic=true;
+}
+@card("Card");
+try { print "x" color=5; } catch (e) { print "bad color rejected"; }
