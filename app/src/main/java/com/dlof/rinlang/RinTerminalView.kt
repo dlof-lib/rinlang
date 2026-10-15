@@ -11,9 +11,11 @@ import android.text.Spannable
 import android.text.SpannableStringBuilder
 import android.text.TextPaint
 import android.text.method.LinkMovementMethod
+import android.text.style.BackgroundColorSpan
 import android.text.style.ClickableSpan
 import android.text.style.ForegroundColorSpan
 import android.text.style.StyleSpan
+import android.text.style.UnderlineSpan
 import android.util.AttributeSet
 import android.view.Gravity
 import android.view.KeyEvent
@@ -380,6 +382,7 @@ class RinTerminalView @JvmOverloads constructor(
                 if (n == null || n < 1) RinTerminal.system(context.getString(R.string.terminal_goto_usage), TermRole.ERROR)
                 else onGoToLine?.invoke(n)
             }
+            "ocr" -> runOcr(arg)
             "share" -> shareTranscript()
             "copy" -> copyTranscript()
             "stop", "cancel" -> {
@@ -391,6 +394,59 @@ class RinTerminalView @JvmOverloads constructor(
             }
         }
     }
+
+    /**
+     * `ocr <صورة> [--lang ara+eng] [--psm N] [--enhance] [--min N]`: لا منطق OCR جديد هنا — يُبنى استدعاء الدالة
+     * الموجودة `make.image.text` ويُشغَّل بالمسار نفسه لأي أمر في الـ terminal (نفس الأمان والأخطاء الواضحة).
+     * النص يُطبع كما هو بـ Unicode، وسطر الثقة يُلوَّن بـ `colorAnsi` (أخضر ≥80، أصفر ≥50، أحمر دون ذلك).
+     */
+    private fun runOcr(arg: String) {
+        val source = ocrSource(arg)
+        if (source == null) {
+            RinTerminal.system(context.getString(R.string.terminal_ocr_usage), TermRole.ERROR)
+            return
+        }
+        val accepted = onExecuteRequested?.invoke(source) {} ?: false
+        if (!accepted) RinTerminal.system(context.getString(R.string.job_queue_full_toast), TermRole.ERROR)
+    }
+
+    /** مصدر Rin لأمر ocr، أو null إن كانت المعاملات غير صالحة (تُفحص قبل أن تدخل نص الشيفرة). */
+    private fun ocrSource(arg: String): String? {
+        var path: String? = null
+        val opts = ArrayList<String>()
+        val tokens = OCR_TOKEN.findAll(arg).map { m -> m.groups[1]?.value ?: m.groups[2]?.value ?: m.value }.toList()
+        var i = 0
+        fun value(pattern: Regex): String? = tokens.getOrNull(++i)?.takeIf { pattern.matches(it) }
+        while (i < tokens.size) {
+            when (val t = tokens[i]) {
+                "--lang", "-l" -> opts.add("\"lang\": " + rinString(value(OCR_LANG) ?: return null))
+                "--psm" -> opts.add("\"psm\": " + (value(OCR_NUMBER) ?: return null))
+                "--min" -> opts.add("\"minConfidence\": " + (value(OCR_NUMBER) ?: return null))
+                "--enhance" -> opts.add("\"enhance\": true")
+                else -> if (t.startsWith("--") || path != null) return null else path = t
+            }
+            i++
+        }
+        val file = path ?: return null
+        val dim = "\"#6e7681\""
+        return """
+            let r = make.image.text(${rinString(file)}, {${opts.joinToString(", ")}});
+            if (r.ok) {
+                print r.text;
+                let tone = "#f85149";
+                if (r.confidence >= 50) { tone = "#d29922"; }
+                if (r.confidence >= 80) { tone = "#3fb950"; }
+                print colorAnsi("confidence ", $dim) + colorAnsi(r.confidence + "%", tone) + colorAnsi("  ·  " + r.wordCount + " words  ·  " + r.lang, $dim);
+            } else {
+                print colorAnsi(r.error, "#f85149");
+            }
+        """.trimIndent()
+    }
+
+    /** حرفية نص Rin آمنة: تُهرَّب `\` و`"` و`$` (استيفاء) والأسطر. */
+    private fun rinString(s: String): String =
+        "\"" + s.replace("\\", "\\\\").replace("\"", "\\\"").replace("$", "\\$")
+            .replace("\r", "\\r").replace("\n", "\\n") + "\""
 
     // ---- تاريخ الأوامر المحفوظ بين الجلسات ----
 
@@ -498,19 +554,19 @@ class RinTerminalView @JvmOverloads constructor(
                     val color = colorFor(line.kind)
                     val errLine = line.errorLine
                     if (errLine != null) {
-                        sb.link(line.text, ERROR_RED) { onGoToLine?.invoke(errLine) }
+                        sb.link(RinAnsi.strip(line.text), ERROR_RED) { onGoToLine?.invoke(errLine) }
                     } else if (line.answerFrom in 0..line.text.length) {
-                        sb.span(line.text.substring(0, line.answerFrom), color)
-                        sb.span(line.text.substring(line.answerFrom), ANSWER_BLUE, bold = true)
+                        sb.ansi(line.text.substring(0, line.answerFrom), color)
+                        sb.span(RinAnsi.strip(line.text.substring(line.answerFrom)), ANSWER_BLUE, bold = true)
                     } else {
-                        sb.span(line.text, color)
+                        sb.ansi(line.text, color)
                     }
                 }
             }
             sb.append('\n')
         }
         // السطر الجاري (غالباً نص سؤال ينتظر جواباً) + مؤشر كتابة أثناء الانتظار.
-        sb.span(snap.partial, FG)
+        sb.ansi(snap.partial, FG)
         if (deliver != null) sb.span("▋", ACCENT)
         return sb
     }
@@ -524,6 +580,21 @@ class RinTerminalView @JvmOverloads constructor(
         append(text)
         setSpan(ForegroundColorSpan(color), start, length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
         if (bold) setSpan(StyleSpan(Typeface.BOLD), start, length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+    }
+
+    /**
+     * نص فيه أكواد ANSI (مثل `colorAnsi`) يُرسم بألوانه؛ ما بلا لون صريح يأخذ [default].
+     * المقاطع تمرّ على [span] نفسها، ويُضاف الخط المائل/التسطير/الخلفية فقط حين تُطلب.
+     */
+    private fun SpannableStringBuilder.ansi(text: String, default: Int) {
+        for (run in RinAnsi.parse(text)) {
+            val start = length
+            span(run.text, run.fg ?: default, run.bold)
+            if (length == start) continue
+            run.bg?.let { setSpan(BackgroundColorSpan(it), start, length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE) }
+            if (run.italic) setSpan(StyleSpan(Typeface.ITALIC), start, length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+            if (run.underline) setSpan(UnderlineSpan(), start, length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+        }
     }
 
     /** نص قابل للنقر بلون ثابت وتحته خط (لا لون الرابط الافتراضي). */
@@ -567,15 +638,20 @@ class RinTerminalView @JvmOverloads constructor(
         const val KEY_HISTORY = "history"
         const val HISTORY_SEP = "\u0001"
 
+        /** رموز أمر ocr: نص بين "..." أو '...' (مسارات فيها مسافات) أو كلمة عادية. */
+        val OCR_TOKEN = Regex("\"([^\"]*)\"|'([^']*)'|\\S+")
+        val OCR_NUMBER = Regex("\\d{1,6}")
+        val OCR_LANG = Regex("[A-Za-z0-9_+]{1,64}")
+
         /** `!!` أو `!N` فقط (لا يلتبس مع نفي Rin `!flag`). */
         val HISTORY_REF = Regex("^!(!|\\d+)$")
 
         /** الأوامر الأساسية تُقترح بالإكمال؛ البدائل (cls/vars/cancel/?) تُقبل عند الكتابة فقط. */
         val SHELL_COMMANDS = listOf(
-            "help", "run", "stop", "clear", "history", "version", "reset", "session", "grep", "goto", "share", "copy",
+            "help", "run", "stop", "clear", "history", "version", "reset", "session", "grep", "goto", "ocr", "share", "copy",
             "cls", "vars", "cancel", "?"
         )
-        val COMMANDS_WITH_ARG = setOf("grep", "goto")
+        val COMMANDS_WITH_ARG = setOf("grep", "goto", "ocr")
         val ALIAS_ONLY = setOf("cls", "vars", "cancel")
 
         // الterminal داكن دائماً (مثل أي terminal) بغضّ النظر عن سمة التطبيق.
