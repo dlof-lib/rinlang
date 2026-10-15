@@ -223,6 +223,7 @@ void printUsage() {
         "  rin                                     الطرفية التفاعلية (rin terminal --help)\n"
         "  rin terminal [-i file] [-e code] [...]  الطرفية التفاعلية الكاملة (أو rin repl / rin shell)\n"
         "  rin indsin <file.rin> [--width N] [--dump]  تشغيل واجهة indsin داخل الطرفية\n"
+        "  rin img <image> [--mode half|braille|shade|ascii] [--width N]  عرض صورة بحروف Unicode في الطرفية\n"
         "  rin --version | -v ، --help | -h\n"
         "  rin [--max-depth=N] [--budget=N] file.rin   حدود وقت التشغيل (docs/runtime.md)\n";
 }
@@ -902,6 +903,9 @@ static int realMain(int argc, char** argv) {
         // rin indsin <file.rin> [--width N] [--dump|--plain]: واجهة indsin تُعرَض داخل الطرفية نفسها
         // (نصف-كتل ملوّنة + فأرة + تحميل حيّ) — لا نافذة ولا Android.
         if (cmd == "indsin") return rin::terminal::runIndsinCommand(rest);
+
+        // rin img <image> [...]: يعرض صورة في الطرفية بحروف Unicode (نصف-كتل ▀ / براي ⣿ / ظلال ░▒▓█).
+        if (cmd == "img" || cmd == "image") return rin::terminal::runImgCommand(rest);
 
         if (cmd == "terminal" || cmd == "repl" || cmd == "shell") {
             rin::terminal::Options topt;
