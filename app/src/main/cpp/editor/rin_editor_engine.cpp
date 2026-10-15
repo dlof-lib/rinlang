@@ -987,6 +987,64 @@ bool EditorEngine::reindentDocument(int indentWidth) {
     return true;
 }
 
+// ---------------------------------------------------------------------------------------
+// IntelliSense
+// ---------------------------------------------------------------------------------------
+
+static const intel::Env& intelEnv() {
+    static const intel::Env env = [] {
+        intel::Env e;
+        std::unordered_set<std::string> seen;
+        for (const std::string& k : rin::keywordList()) if (seen.insert(k).second) e.keywords.push_back(k);
+        // كلمات اللغة السياقية: كائنية + تحكّم + حلقات (ليست كلها محجوزة في rin::Lexer)
+        for (const char* k : {"class", "struct", "interface", "trait", "enum", "extends", "implements", "uses", "instanceof",
+                              "abstract", "final", "override", "static", "public", "private", "protected", "get", "set",
+                              "self", "super", "try", "catch", "throw", "match", "case", "when", "otherwise", "unless",
+                              "elif", "elseif", "ifnot", "until", "goal", "achieve"})
+            if (seen.insert(k).second) e.contextual.push_back(k);
+        for (const std::string& k : tools::contextualCompletionWords()) if (seen.insert(k).second) e.contextual.push_back(k);
+        for (const tools::Snippet& s : tools::snippets()) e.snippets.push_back({s.trigger, s.title});
+        return e;
+    }();
+    return env;
+}
+
+intel::CompletionResult EditorEngine::complete(bool explicitInvoke, int maxResults) const {
+    intel::CompletionResult res;
+    if (hasSel_) return res;
+    if (language_ == EditorLanguage::Passkit) {
+        // passkit ليس Rin: نلفّ الإكمال القديم (وسوم + معرّفات) في عناصر
+        const std::string& ln = lines_[(size_t)cursor_.line];
+        int ws = cursor_.col;
+        while (ws > 0 && passkit::isIdentChar((unsigned char)ln[(size_t)ws - 1])) --ws;
+        std::string prefix = ln.substr((size_t)ws, (size_t)(cursor_.col - ws));
+        if (prefix.empty() && !explicitInvoke) return res;
+        res.startCol = ws; res.endCol = cursor_.col;
+        std::unordered_set<std::string> tags;
+        for (const std::string& t : passkit::tagNames()) tags.insert(t);
+        for (const std::string& s : collectSuggestions(prefix, maxResults)) {
+            intel::CompletionItem it; it.label = s; it.insertText = s;
+            it.kind = tags.count(s) ? intel::Kind::Tag : intel::Kind::Word;
+            for (size_t i = 0; i < prefix.size() && i < s.size(); ++i) it.matchPos.push_back((int)i);
+            res.items.push_back(std::move(it));
+        }
+        return res;
+    }
+    return intel::complete(lines_, cursor_.line, cursor_.col, intelEnv(), explicitInvoke, maxResults);
+}
+
+intel::SignatureHelp EditorEngine::signatureHelp() const {
+    if (language_ == EditorLanguage::Passkit) return {};
+    return intel::signatureHelp(lines_, cursor_.line, cursor_.col);
+}
+
+intel::SymbolInfo EditorEngine::describeAt(int line, int col) const {
+    if (language_ == EditorLanguage::Passkit) return {};
+    return intel::describe(lines_, line, col);
+}
+
+void EditorEngine::recordCompletionUse(const std::string& label) { intel::recordUse(label); }
+
 bool EditorEngine::isSnippetTrigger(const std::string& word) { return tools::findSnippet(word) != nullptr; }
 
 std::string EditorEngine::snippetTitle(const std::string& word) {
