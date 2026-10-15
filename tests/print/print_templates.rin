@@ -1,0 +1,53 @@
+// print templates: @tmpl name(params) print|style|text — قوالب الطباعة الخطية والتنسيقية
+
+// 1) سطر طباعة: يقبل سمات إضافية عند الاستعمال
+@tmpl hello(name) print `Hello ${name}!`;
+@hello("rin");
+@hello("loops") upper=true;
+
+// 2) style: مجموعة سمات تنسيق قابلة لإعادة الاستعمال (مع معاملات وقيم افتراضية)
+@tmpl title(w = 30) style width=w align="center" upper=true;
+print "report" @title();
+print "wide" @title(40) label="X";
+
+// 3) سطر + style
+@tmpl ok(msg) print msg level="success";
+@ok("done") @title(20);
+
+// 4) قالب خطي (عدة أسطر) مع شرط if= داخل السطر
+@tmpl receipt(shop, total) print {
+    `=== ${shop} ===` width=24 align="center";
+    "Total", total sep=" : ";
+    "thanks" if=total > 10;
+}
+@receipt("Rin Cafe", 25);
+@receipt("Rin Cafe", 5) upper=true;
+
+// 5) text: تعبير نصي قابل للاستعمال في أي مكان
+@tmpl money(x) text `$${x}`;
+@tmpl tag(s) text "[" + s + "]";
+print @tag("a") + @tag("b");
+let price = 5;
+print @tag(`cost ${price}`);
+print @money(3);
+
+// 6) داخل حلقة ودالة، وبلا تسرّب للمتغيرات
+let name = "outer";
+each n in ["x", "y"] { @hello(n); }
+fun f(a, b) { @receipt(a, b); }
+f("F", 11);
+print name;
+
+// 7) ترتيب المعاملات المتقاطع لا يكسر الربط
+@tmpl swap(a, b) print a, b;
+let a = 1; let b = 2;
+@swap(b, a);
+print a, b;
+
+// 8) قالب يستعمل قالباً آخر
+@tmpl banner(t) print @tag(t) @title(20);
+@banner("hi");
+
+// 9) قوالب الحلقات القديمة لم تتأثر
+@tmpl evens(xs) each x in xs where x % 2 == 0;
+@evens([1, 2, 3, 4]) { print x; }
