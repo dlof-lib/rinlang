@@ -272,6 +272,15 @@ inline std::vector<Rgb> resample(const Img& s, int dw, int dh) {
     return out;
 }
 inline float luma(const Rgb& c) { return (0.2126f * c.r + 0.7152f * c.g + 0.0722f * c.b) / 255.f; }
+// مدى السطوع الفعلي (المئين 1%..99%) لشدّ التباين في أنماط النص (shade/ascii/braille): صورة سماء فاتحة لا تتحول إلى كتلة واحدة
+inline void lumaRange(const std::vector<Rgb>& g, float& lo, float& hi) {
+    std::vector<float> v; v.reserve(g.size());
+    for (auto& c : g) v.push_back(luma(c));
+    std::sort(v.begin(), v.end());
+    lo = v[(size_t)((v.size() - 1) * 0.01)]; hi = v[(size_t)((v.size() - 1) * 0.99)];
+    if (hi - lo < 0.04f) { lo = v.front(); hi = std::max(v.back(), lo + 1e-3f); if (hi - lo < 0.04f) { lo = 0.f; hi = 1.f; } }
+}
+inline float stretch(float l, float lo, float hi) { l = (l - lo) / (hi - lo); return l < 0 ? 0 : (l > 1 ? 1 : l); }
 inline int c8(float v) { return v < 0 ? 0 : (v > 255 ? 255 : (int)(v + 0.5f)); }
 inline int to256(const Rgb& c) {
     int r = c8(c.r), g = c8(c.g), b = c8(c.b);
@@ -321,13 +330,14 @@ inline std::string render(const Img& img, int cols, std::string mode, bool inver
         int dw = cols * 2;
         int dh = std::max(4, (int)std::lround((double)img.h * dw / img.w)); dh = (dh + 3) / 4 * 4;
         auto g = resample(img, dw, dh);
-        double mean = 0; for (auto& c : g) mean += luma(c); mean /= g.size();
+        float lo, hi; lumaRange(g, lo, hi);
+        double mean = 0; for (auto& c : g) mean += stretch(luma(c), lo, hi); mean /= g.size();
         static const int bit[2][4] = {{1, 2, 4, 64}, {8, 16, 32, 128}};
         for (int y = 0; y < dh; y += 4) {
             for (int x = 0; x < dw; x += 2) {
                 int bits = 0;
                 for (int dx = 0; dx < 2; dx++) for (int dy = 0; dy < 4; dy++) {
-                    bool on = luma(g[(size_t)(y + dy) * dw + x + dx]) > mean;
+                    bool on = stretch(luma(g[(size_t)(y + dy) * dw + x + dx]), lo, hi) > mean;
                     if (invert) on = !on;
                     if (on) bits |= bit[dx][dy];
                 }
@@ -342,11 +352,12 @@ inline std::string render(const Img& img, int cols, std::string mode, bool inver
     bool shade = mode == "shade";
     int dh = std::max(1, (int)std::lround((double)img.h * cols / img.w * 0.5));
     auto g = resample(img, cols, dh);
+    float lo, hi; lumaRange(g, lo, hi);
     static const char* ramp = " .:-=+*#%@";
     static const char* sh[5] = {" ", "\xE2\x96\x91", "\xE2\x96\x92", "\xE2\x96\x93", "\xE2\x96\x88"};  // ░▒▓█
     for (int y = 0; y < dh; y++) {
         for (int x = 0; x < cols; x++) {
-            float l = lumaCh(luma(g[(size_t)y * cols + x]));
+            float l = lumaCh(stretch(luma(g[(size_t)y * cols + x]), lo, hi));
             if (shade) out += sh[std::min(4, (int)(l * 5))];
             else out += ramp[std::min(9, (int)(l * 10))];
         }
