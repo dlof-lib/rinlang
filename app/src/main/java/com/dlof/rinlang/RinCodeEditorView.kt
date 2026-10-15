@@ -851,7 +851,8 @@ class RinCodeEditorView @JvmOverloads constructor(
             updateSuggestionPopup()
             dismissHoverDoc()
         } else {
-            dismissSuggestionPopup()
+            intelliPopup.dismiss()
+            updateSignatureHelp()
         }
         updateDiagnosticPopup()
         // requestLayout() يعيد تشغيل onMeasure (ومسح المستند بالكامل)؛ لا داعٍ له إطلاقًا عند
@@ -1764,6 +1765,7 @@ class RinCodeEditorView @JvmOverloads constructor(
     // --- مفاتيح فعلية (لوحة مفاتيح خارجية): أسهم + Tab كإضافة للمسار الذكي عبر IME -----
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
+        if (handleIntelliKey(keyCode, event)) return true
         val cur = engine.getCursor()
         when (keyCode) {
             KeyEvent.KEYCODE_DPAD_LEFT -> {
@@ -2053,139 +2055,102 @@ class RinCodeEditorView @JvmOverloads constructor(
         return sb.toString()
     }
 
-    // --- إكمال تلقائي (Autocomplete) — نافذة اقتراحات حقيقية مبنية على [RinNativeEditor.collectSuggestions] ---
+    // --- IntelliSense احترافي: إكمال سياقي + توقيع الدالة (محرك C++: rin_intellisense.h) ---------
 
-    private var suggestionPopup: PopupWindow? = null
-    private val maxSuggestionRows = 6
-
-    /** (بادئة الكلمة قبل المؤشر مباشرة، عمود-حرف بداية تلك الكلمة على سطر المؤشر) أو null إن لا كلمة جارية. */
-    private fun currentWordPrefix(): Pair<String, Int>? {
-        if (engine.getSelection().hasSelection) return null
-        val cur = engine.getCursor()
-        val lineText = engine.getLine(cur.line)
-        val col = cur.col.coerceIn(0, lineText.length)
-        fun isWordChar(c: Char) = c.isLetter() || c.isDigit() || c == '_'
-        var start = col
-        while (start > 0 && isWordChar(lineText[start - 1])) start--
-        if (start == col) return null
-        val prefix = lineText.substring(start, col)
-        return prefix to start
-    }
-
-    /** لغة ملف المحرر الحالية لأغراض الإكمال التلقائي (تتبع [setLanguage]؛ الافتراضي Rin). */
+    /** لغة ملف المحرر الحالية (تتبع [setLanguage]؛ الافتراضي Rin). */
     private var suggestionLanguage: SyntaxLanguage = SyntaxLanguage.RIN
 
-    /**
-     * أسماء الدوال المبنية في Rin (input / inputNumber / toNumber / ...) المطابقة لـ [prefix]. محرك
-     * الإكمال الأصلي يقترح الكلمات المحجوزة ومعرّفات المستند فقط، فكانت الدوال المبنية لا تُقترح أبداً.
-     * تُؤخذ من القائمة المولَّدة من المحرك نفسه (RinSyntax) فلا تنفصل عنه. بادئة من حرفين فأكثر.
-     */
-    private fun builtinSuggestions(prefix: String): List<String> {
-        if (suggestionLanguage != SyntaxLanguage.RIN || prefix.length < 2) return emptyList()
-        val p = prefix.lowercase()
-        return RinSyntax.keywordsFor(SyntaxLanguage.RIN)
-            .filter { it.length > prefix.length && it.lowercase().startsWith(p) }
-            .sorted()
+    private val intelliPopup: RinCompletionPopup by lazy {
+        RinCompletionPopup(this, colorDefault, colorKeyword, ::completionKindColor, ::applyCompletion)
     }
 
-    private fun updateSuggestionPopup() {
-        if (!AppSettings.isAutocomplete(context) || !hasFocus() || !isAttachedToWindow) { dismissSuggestionPopup(); return }
-        val (prefix, wordStartCol) = currentWordPrefix() ?: run { dismissSuggestionPopup(); return }
-        val base = engine.collectSuggestions(prefix, maxSuggestionRows)
-        val suggestions = if (base.size >= maxSuggestionRows) base
-        else (base + builtinSuggestions(prefix).filter { it !in base }).take(maxSuggestionRows)
-        if (suggestions.isEmpty()) { dismissSuggestionPopup(); return }
-        showSuggestionPopup(suggestions, wordStartCol)
+    /** لون شارة كل نوع اقتراح — من نفس لوحة ألوان التلوين النحوي فيبقى الشكل متسقاً. */
+    private fun completionKindColor(kind: Int): Int = when (kind) {
+        RinNativeEditor.CompletionKind.KEYWORD -> colorKeyword
+        RinNativeEditor.CompletionKind.FUNCTION, RinNativeEditor.CompletionKind.METHOD -> colorCall
+        RinNativeEditor.CompletionKind.VARIABLE -> Color.parseColor("#3B82F6")
+        RinNativeEditor.CompletionKind.CONSTANT -> colorConstant
+        RinNativeEditor.CompletionKind.CLASS, RinNativeEditor.CompletionKind.ENUM, RinNativeEditor.CompletionKind.INTERFACE -> colorClass
+        RinNativeEditor.CompletionKind.SNIPPET -> colorControl
+        RinNativeEditor.CompletionKind.NAMESPACE, RinNativeEditor.CompletionKind.MODULE -> colorType
+        RinNativeEditor.CompletionKind.PROPERTY, RinNativeEditor.CompletionKind.ENUM_MEMBER -> colorProperty
+        RinNativeEditor.CompletionKind.TEMPLATE, RinNativeEditor.CompletionKind.TAG -> colorTemplate
+        RinNativeEditor.CompletionKind.LABEL -> colorLabel
+        RinNativeEditor.CompletionKind.PARAMETER -> colorParameter
+        else -> Color.parseColor("#6B7785")
     }
 
-    private fun buildSuggestionRow(text: String, onPick: () -> Unit): TextView = TextView(context).apply {
-        this.text = text
-        typeface = android.graphics.Typeface.MONOSPACE
-        setTextColor(colorDefault)
-        textSize = 14f
-        val padH = (12 * resources.displayMetrics.density).toInt()
-        val padV = (8 * resources.displayMetrics.density).toInt()
-        setPadding(padH, padV, padH, padV)
-        isClickable = true
-        isFocusable = false
-        setOnClickListener { onPick() }
-    }
-
-    private fun showSuggestionPopup(suggestions: List<String>, wordStartCol: Int) {
+    /** موضع على الشاشة لعمود [col] من سطر المؤشر. */
+    private fun anchorForCol(col: Int): RinCompletionPopup.Anchor {
         val cur = engine.getCursor()
-        val container = LinearLayout(context).apply {
-            orientation = LinearLayout.VERTICAL
-            background = GradientDrawable().apply {
-                setColor(Color.parseColor("#2A2D31"))
-                cornerRadius = 8 * resources.displayMetrics.density
-                setStroke((resources.displayMetrics.density).toInt().coerceAtLeast(1), Color.parseColor("#454A50"))
-            }
-        }
-        for (s in suggestions) {
-            container.addView(buildSuggestionRow(s) { applySuggestion(s, wordStartCol) })
-        }
-
-        val popup = suggestionPopup ?: PopupWindow(
-            container, LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT
-        ).apply {
-            isOutsideTouchable = false
-            isFocusable = false
-            elevation = 12f
-            suggestionPopup = this
-        }
-        popup.contentView = container
-
-        // قياس مبدئي للقائمة قبل وضعها، حتى نعرف عرضها/ارتفاعها الفعليين ونُبقيها كاملة داخل
-        // حدود الشاشة — سابقًا لم يكن هناك أي تثبيت لهذا، فكانت القائمة تخرج جزئيًا (أو كليًا) عن
-        // يمين الشاشة عند اقتراح كلمة قرب نهاية سطر طويل، أو تظهر أسفل المؤشر مباشرة بلا تحقق من
-        // وجود مساحة كافية، فتقع خلف لوحة المفاتيح ولا تُرى إطلاقًا أثناء الكتابة الفعلية. هذا هو
-        // أصل شكوى "المقترحات".
-        container.measure(
-            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
-            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
-        )
-        val popupWidth = container.measuredWidth
-        val popupHeight = container.measuredHeight
-
         val loc = IntArray(2)
         getLocationOnScreen(loc)
         val lineText = engine.getLine(cur.line)
-        val cursorLocalX = paddingLeft + textPaint.measureText(lineText, 0, wordStartCol.coerceIn(0, lineText.length))
-        val cursorLocalY = yOfLine(cur.line)
-
-        val dm = resources.displayMetrics
-        val screenWidth = dm.widthPixels
-        val screenHeight = dm.heightPixels
-
-        val rawX = (loc[0] + cursorLocalX).toInt()
-        val screenX = rawX.coerceIn(0, (screenWidth - popupWidth).coerceAtLeast(0))
-
-        val belowY = loc[1] + cursorLocalY + lineHeight.roundToInt()
-        val aboveY = loc[1] + cursorLocalY - popupHeight
-        // اعرض أسفل المؤشر إن وُجدت مساحة كافية، وإلا أعلاه (مثال: المؤشر على سطر قريب من أسفل
-        // الشاشة حيث تكون لوحة المفاتيح مفتوحة وتُغطّي المساحة تحته).
-        val screenY = if (belowY + popupHeight <= screenHeight) belowY else aboveY.coerceAtLeast(0)
-
-        if (popup.isShowing) {
-            popup.update(screenX, screenY, -1, -1)
-        } else {
-            popup.showAtLocation(this, Gravity.NO_GRAVITY, screenX, screenY)
-        }
+        val x = loc[0] + paddingLeft + textPaint.measureText(lineText, 0, col.coerceIn(0, lineText.length))
+        val top = loc[1] + yOfLine(cur.line)
+        return RinCompletionPopup.Anchor(x.toInt(), top, top + lineHeight.roundToInt())
     }
 
-    private fun applySuggestion(suggestion: String, wordStartCol: Int) {
+    /** يُستدعى بعد كل تعديل نصّي: يحدّث قائمة الاقتراحات وتلميح التوقيع. */
+    private fun updateSuggestionPopup() {
+        if (!AppSettings.isAutocomplete(context) || !hasFocus() || !isAttachedToWindow) { dismissSuggestionPopup(); return }
+        val res = engine.complete(explicitInvoke = false)
+        if (res == null) intelliPopup.dismiss() else intelliPopup.show(res, anchorForCol(res.startCol))
+        updateSignatureHelp()
+    }
+
+    /** Ctrl+Space: إكمال صريح (يسمح ببادئة فارغة). متاح للاستدعاء من شريط الأدوات أيضاً. */
+    fun triggerCompletion() {
+        if (!hasFocus() || !isAttachedToWindow) return
+        val res = engine.complete(explicitInvoke = true)
+        if (res == null) intelliPopup.dismiss() else intelliPopup.show(res, anchorForCol(res.startCol))
+        updateSignatureHelp()
+    }
+
+    /** تلميح توقيع الدالة التي يقف المؤشر داخل استدعائها (يتبع المؤشر أيضاً دون تعديل نصّي). */
+    private fun updateSignatureHelp() {
+        if (!AppSettings.isAutocomplete(context) || !hasFocus() || !isAttachedToWindow ||
+            engine.getSelection().hasSelection) { intelliPopup.dismissSignature(); return }
+        val info = engine.signatureHelp()
+        if (info == null) { intelliPopup.dismissSignature(); return }
+        intelliPopup.showSignature(info, anchorForCol(engine.getCursor().col))
+    }
+
+    /** يُدرج الاقتراح المختار: يستبدل النص المطابق، يضع المؤشر داخل الأقواس، ويوسّع القوالب. */
+    private fun applyCompletion(res: RinNativeEditor.CompletionResult, item: RinNativeEditor.CompletionItem) {
         val cur = engine.getCursor()
-        engine.replaceRange(cur.line, wordStartCol, cur.line, cur.col, suggestion)
-        // each/repeat/retry/loop/... تتحوّل إلى قالب كامل بجسم وموضع مؤشر جاهز للكتابة.
-        if (suggestionLanguage == SyntaxLanguage.RIN && RinNativeEditor.isSnippetTrigger(suggestion)) {
+        val end = max(res.endCol, cur.col)
+        val after = engine.replaceRange(cur.line, res.startCol, cur.line, end, item.insertText)
+        engine.recordCompletionUse(item.label)
+        if (item.snippet && suggestionLanguage == SyntaxLanguage.RIN && RinNativeEditor.isSnippetTrigger(item.insertText)) {
             engine.expandSnippetAtCursor()
+        } else if (item.cursorBack > 0) {
+            engine.setCursor(after.line, (after.col - item.cursorBack).coerceAtLeast(0), false)
         }
-        dismissSuggestionPopup()
         afterEngineMutation()
     }
 
     private fun dismissSuggestionPopup() {
-        suggestionPopup?.let { if (it.isShowing) it.dismiss() }
+        intelliPopup.dismissAll()
+    }
+
+    /** معالجة مفاتيح القائمة المفتوحة (أسهم/Tab/Enter/Esc) وCtrl+Space. true إن استُهلك المفتاح. */
+    private fun handleIntelliKey(keyCode: Int, event: KeyEvent): Boolean {
+        if (keyCode == KeyEvent.KEYCODE_SPACE && event.isCtrlPressed) { triggerCompletion(); return true }
+        if (intelliPopup.isShowing) {
+            when (keyCode) {
+                KeyEvent.KEYCODE_DPAD_DOWN -> { intelliPopup.moveSelection(1); return true }
+                KeyEvent.KEYCODE_DPAD_UP -> { intelliPopup.moveSelection(-1); return true }
+                KeyEvent.KEYCODE_TAB -> { if (intelliPopup.accept()) return true }
+                KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_NUMPAD_ENTER ->
+                    // Enter يقبل الاقتراح فقط بعد أن حرّك المستخدم التحديد؛ وإلا يبقى سطراً جديداً عادياً
+                    if (intelliPopup.userNavigated && intelliPopup.accept()) return true
+                KeyEvent.KEYCODE_ESCAPE -> { intelliPopup.dismissAll(); return true }
+            }
+        } else if (keyCode == KeyEvent.KEYCODE_ESCAPE && intelliPopup.isSignatureShowing) {
+            intelliPopup.dismissSignature(); return true
+        }
+        return false
     }
 
     // --- تشخيص أخطاء الصياغة الحي — تلميح نصّي عند وقوف المؤشر داخل نطاق خطأ/تحذير ---------
@@ -2197,7 +2162,7 @@ class RinCodeEditorView @JvmOverloads constructor(
      *  وجود تحديد نشط (قد يغطّي التلميح ما يحدّده المستخدم) ولا فوق قائمة الإكمال التلقائي معًا. */
     private fun updateDiagnosticPopup() {
         if (!AppSettings.isLiveDiagnostics(context) || !hasFocus() || !isAttachedToWindow ||
-            engine.getSelection().hasSelection || suggestionPopup?.isShowing == true
+            engine.getSelection().hasSelection || intelliPopup.isShowing
         ) {
             dismissDiagnosticPopup(); return
         }
@@ -2279,10 +2244,19 @@ class RinCodeEditorView @JvmOverloads constructor(
      *  [word] فارغة (لا كلمة عند نقطة اللمس) أو ليست كلمة محجوزة موثَّقة. يُستدعى من
      *  onLongPress/onDoubleTap بعد [selectWordAt] مباشرة. */
     private fun showHoverDocIfKeyword(word: String?) {
-        val doc = word?.let { RinKeywordDocs.lookup(it) }
+        // IntelliSense أولاً (متغيرات/دوال المستخدم مع تعليقاتها، الدوال المدمجة، الكلمات المحجوزة)،
+        // ثم التوثيق الثابت القديم كاحتياط.
+        val sel = engine.getSelection()
+        val symbol = if (word == null) null else try { engine.describeAt(sel.start.line, sel.start.col + 1) } catch (_: Throwable) { null }
+        val doc = when {
+            symbol != null && (symbol.doc.isNotEmpty() || symbol.signature.isNotEmpty()) ->
+                (if (symbol.signature.isNotEmpty()) symbol.signature else symbol.name) +
+                    (if (symbol.doc.isNotEmpty()) "\n" + symbol.doc else "")
+            else -> word?.let { RinKeywordDocs.lookup(it)?.let { d -> "$it — $d" } }
+        }
         if (doc == null) { dismissHoverDoc(); return }
         val label = TextView(context).apply {
-            text = "$word — $doc"
+            text = doc
             setTextColor(colorDefault)
             textSize = 12.5f
             val padH = (12 * resources.displayMetrics.density).toInt()
