@@ -259,6 +259,7 @@ struct PrintStmt : Stmt { PrintStmt() { stmtKind = StmtKind::PrintStmt; }
     ExprPtr lower;   // nullptr = افتراضي false
     ExprPtr width;   // nullptr = بلا حشو
     ExprPtr align;   // nullptr = افتراضي "left" (فقط له معنى مع width)
+    ExprPtr fx;      // nullptr = بلا تنسيق خط؛ وإلا استدعاء __fxcode(bold,italic,underline,strike,dim,reverse,blink,color,bg) → أكواد SGR
 };
 // print.log(...);  |  print.log.info(...);  |  print.log.warn(...);  |  print.log.error(...);  |  print.log.debug(...);
 // نظام Log منظَّم (structured logging)، إضافة مستقلة تماماً عن print العادي أعلاه (لا تُعدِّل أي
