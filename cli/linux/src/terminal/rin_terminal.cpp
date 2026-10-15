@@ -1735,7 +1735,7 @@ private:
                 return out;
             }
             std::string cmd = trimmed.substr(1, sp - 1);
-            if (cmd == "load" || cmd == "run" || cmd == "save" || cmd == "cd" || cmd == "edit" || cmd == "ls" || cmd == "source" || cmd == "tree" || cmd == "indsin" || cmd == "test") {
+            if (cmd == "load" || cmd == "run" || cmd == "save" || cmd == "cd" || cmd == "edit" || cmd == "ls" || cmd == "source" || cmd == "tree" || cmd == "indsin" || cmd == "test" || cmd == "ocr") {
                 size_t ws = pre.find_last_of(' ');
                 std::string partial = pre.substr(ws + 1);
                 addFiles(partial, toU32(pre.substr(0, ws + 1)).size());
@@ -2051,6 +2051,7 @@ private:
             {"test",     ":test [مجلد]",             "تشغيل tests/*.rin (كلٌّ في مفسّر نظيف)",        "run tests/*.rin (each in a clean interpreter)"},
             {"tree",     ":tree [مسار]",             "شجرة ملفات",                                   "file tree"},
             {"indsin",   ":indsin [ملف] [--width N] [--dump]", "تشغيل واجهة indsin داخل الطرفية (فأرة + تحميل حيّ)", "run an indsin UI inside the terminal (mouse + live reload)"},
+            {"ocr",      ":ocr <صورة> [--lang ara+eng] [--psm N] [--enhance] [--min N]", "طباعة النص المكتوب داخل صورة (Unicode) — نفس make.image.text", "print the text inside an image (Unicode) — same as make.image.text"},
             {"session",  ":session",                 "معلومات الجلسة",                               "session info"},
             {"version",  ":version",                 "إصدار Rin",                                    "Rin version"},
         };
@@ -2091,6 +2092,7 @@ private:
         if (cmd == "test") return cmdTest(arg);
         if (cmd == "tree") return cmdTree(arg);
         if (cmd == "indsin") return cmdIndsin(arg);
+        if (cmd == "ocr") return cmdOcr(arg);
         if (cmd == "load" || cmd == "run" || cmd == "source") {
             if (arg.empty()) { err(tr("الاستخدام: :load <ملف.rin>", "usage: :load <file.rin>")); return; }
             bool r = loadFile(arg); lastOk_ = r; if (!r) failures_++; return;
@@ -2614,6 +2616,101 @@ private:
         println(style_.bold() + dir + style_.reset());
         int count = 0;
         treeRec(dir, "", 1, count);
+    }
+
+    // :ocr — يطبع النص المقروء من صورة. لا منطق OCR هنا: يستدعي الدالة الموجودة make.image.text
+    // (docs/MAKE_MEDIA.md) عبر المفسّر نفسه، ويطبع حقل text كما هو بـ Unicode (عربي/لاتيني) بلا أي ترميز إضافي.
+    static std::string rinStr(const std::string& s) {
+        std::string o = "\"";
+        for (char c : s) {
+            if (c == '\\' || c == '"' || c == '$') { o += '\\'; o += c; }
+            else if (c == '\n') o += "\\n";
+            else if (c == '\r') o += "\\r";
+            else o += c;
+        }
+        return o + "\"";
+    }
+    // نص قادم من صورة غير موثوق: نُسقط ESC وأحرف التحكم (C0/C1) حتى لا يحقن تسلسلات طرفية، ونُبقي \n و\t.
+    static std::string safeUnicode(const std::string& in) {
+        std::string o;
+        for (size_t i = 0; i < in.size(); ++i) {
+            unsigned char c = static_cast<unsigned char>(in[i]);
+            if (c == '\n' || c == '\t') { o += static_cast<char>(c); continue; }
+            if (c < 0x20 || c == 0x7f) continue;
+            if (c == 0xC2 && i + 1 < in.size() && static_cast<unsigned char>(in[i + 1]) >= 0x80 && static_cast<unsigned char>(in[i + 1]) <= 0x9f) { ++i; continue; }
+            o += static_cast<char>(c);
+        }
+        return o;
+    }
+    void cmdOcr(const std::string& arg) {
+        std::string path, lang, psm, minConf;
+        bool enhance = false, bad = false;
+        std::vector<std::string> tok;
+        {   // تقسيم يحترم "..." و '...' (مسارات فيها مسافات)
+            std::string cur; char q = 0; bool has = false;
+            for (char c : arg) {
+                if (q) { if (c == q) q = 0; else cur += c; }
+                else if (c == '"' || c == '\'') { q = c; has = true; }
+                else if (c == ' ' || c == '\t') { if (has || !cur.empty()) tok.push_back(cur); cur.clear(); has = false; }
+                else cur += c;
+            }
+            if (has || !cur.empty()) tok.push_back(cur);
+        }
+        for (size_t i = 0; i < tok.size(); ++i) {
+            const std::string& t = tok[i];
+            auto val = [&](std::string& dst) { if (i + 1 < tok.size()) dst = tok[++i]; else bad = true; };
+            if (t == "--lang" || t == "-l") val(lang);
+            else if (t == "--psm") val(psm);
+            else if (t == "--min") val(minConf);
+            else if (t == "--enhance") enhance = true;
+            else if (!t.empty() && t[0] == '-' && path.empty() && t.size() > 1 && t[1] == '-') bad = true;
+            else if (path.empty()) path = t;
+            else bad = true;
+        }
+        auto isNum = [](const std::string& s) { return !s.empty() && s.size() <= 6 && s.find_first_not_of("0123456789") == std::string::npos; };
+        auto isLang = [](const std::string& s) { return !s.empty() && s.size() <= 64 && s.find_first_not_of("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_+") == std::string::npos; };
+        if (path.empty() || bad || (!psm.empty() && !isNum(psm)) || (!minConf.empty() && !isNum(minConf)) || (!lang.empty() && !isLang(lang))) {
+            err(tr("الاستخدام: :ocr <صورة> [--lang ara+eng] [--psm N] [--enhance] [--min N]", "usage: :ocr <image> [--lang ara+eng] [--psm N] [--enhance] [--min N]"));
+            lastOk_ = false; return;
+        }
+        path = expandTilde(path);
+        if (path[0] != '/') { char b[4096]; if (::getcwd(b, sizeof(b))) path = std::string(b) + "/" + path; }
+        std::string opts = "{";
+        if (!lang.empty()) opts += "\"lang\": " + rinStr(lang) + ", ";
+        if (!psm.empty()) opts += "\"psm\": " + psm + ", ";
+        if (!minConf.empty()) opts += "\"minConfidence\": " + minConf + ", ";
+        if (enhance) opts += "\"enhance\": true, ";
+        opts += "}";
+        rin::Value v; std::string e;
+        if (!evalSilently("make.image.text(" + rinStr(path) + ", " + opts + ")", v, e)) {
+            print(style_.red() + e + style_.reset() + (e.empty() || e.back() != '\n' ? "\n" : "")); lastOk_ = false; failures_++; return;
+        }
+        auto field = [&](const char* k) -> const rin::Value* {
+            if (v.type != rin::Value::Type::MAP || !v.map) return nullptr;
+            for (const auto& kv : *v.map) if (kv.first.type == rin::Value::Type::STRING && kv.first.str == k) return &kv.second;
+            return nullptr;
+        };
+        const rin::Value* okv = field("ok");
+        if (!okv || !okv->isTruthy()) {
+            const rin::Value* ev = field("error");
+            err(ev ? safeUnicode(ev->toDisplayString()) : tr("فشلت قراءة النص", "text extraction failed"));
+            lastOk_ = false; failures_++; return;
+        }
+        const rin::Value* tv = field("text");
+        std::string text = tv ? safeUnicode(tv->toDisplayString()) : "";
+        ensureLineStart();
+        if (text.empty()) {
+            const rin::Value* wv = field("warning");
+            info(wv ? safeUnicode(wv->toDisplayString()) : tr("لم يُعثر على نص", "no text found"));
+        } else {
+            println(text);
+            const rin::Value* cv = field("confidence");
+            const rin::Value* lv = field("lang");
+            const rin::Value* nv = field("wordCount");
+            info(std::string(tr("الثقة ", "confidence ")) + (cv ? cv->toDisplayString() : "?") + "%  ·  " + (nv ? nv->toDisplayString() : "?") + tr(" كلمة", " words") +
+                 (lv ? "  ·  " + safeUnicode(lv->toDisplayString()) : ""));
+        }
+        lastOk_ = true;
     }
 
     void cmdIndsin(const std::string& arg) {
