@@ -959,6 +959,8 @@ Interpreter::Flow Interpreter::vmLoop(vm::RunState& rs, Value& ret) {
             throw diagErr(static_cast<diag::Code>(in.c), in.b, P->strs[static_cast<size_t>(in.a)]);
         case Op::PrintEmit: {
             auto s = std::static_pointer_cast<PrintStmt>(P->stmts[static_cast<size_t>(in.a)]);
+            std::string fxCode;
+            if (s->fx) { if (stack.back().type == Value::Type::STRING) fxCode = stack.back().str; stack.pop_back(); }
             long long times = 1;
             if (s->repeatN) times = static_cast<long long>(stack.back().number), stack.pop_back();
             std::string label;
@@ -1003,6 +1005,7 @@ Interpreter::Flow Interpreter::vmLoop(vm::RunState& rs, Value& ret) {
                 else if (level == "debug") prefix = "\U0001F41E ";
             }
             if (s->label) prefix += "[" + label + "] ";
+            if (!fxCode.empty()) content = "\x1b[" + fxCode + "m" + content + "\x1b[0m";
             for (long long i = 0; i < times; i++) output << prefix << content << end;
             break;
         }
