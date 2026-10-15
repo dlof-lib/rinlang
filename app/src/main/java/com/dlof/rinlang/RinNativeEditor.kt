@@ -68,6 +68,10 @@ class RinNativeEditor {
         @JvmStatic private external fun nativeGetOutlinePacked(handle: Long): Array<String>
         @JvmStatic private external fun nativeReindentDocument(handle: Long, width: Int): Boolean
         @JvmStatic private external fun nativeExpandSnippet(handle: Long): IntArray?
+        @JvmStatic private external fun nativeComplete(handle: Long, explicitInvoke: Boolean, maxResults: Int): Array<String>?
+        @JvmStatic private external fun nativeSignatureHelp(handle: Long): String?
+        @JvmStatic private external fun nativeDescribe(handle: Long, line: Int, byteCol: Int): String?
+        @JvmStatic private external fun nativeRecordCompletionUse(label: String)
         @JvmStatic private external fun nativeIsSnippetTrigger(word: String): Boolean
         @JvmStatic private external fun nativeSnippetTitle(word: String): String
 
@@ -341,4 +345,83 @@ class RinNativeEditor {
     /** يوسّع القالب المنتهي عند المؤشر (each/repeat/...)؛ يُرجع موضع المؤشر الجديد أو null. */
     fun expandSnippetAtCursor(): Pos? =
         nativeExpandSnippet(requireHandle())?.let { Pos(it[0], byteToChar(it[0], it[1])) }
+
+    // --- IntelliSense (rin_intellisense.h) -----------------------------------------------
+
+    /** نوع الاقتراح — يطابق intel::Kind في C++ بالترتيب. */
+    object CompletionKind {
+        const val KEYWORD = 0; const val FUNCTION = 1; const val METHOD = 2; const val VARIABLE = 3; const val CONSTANT = 4
+        const val CLASS = 5; const val SNIPPET = 6; const val NAMESPACE = 7; const val PROPERTY = 8; const val TEMPLATE = 9
+        const val LABEL = 10; const val PARAMETER = 11; const val TAG = 12; const val MODULE = 13; const val WORD = 14
+        const val ENUM = 15; const val ENUM_MEMBER = 16; const val INTERFACE = 17
+    }
+
+    /** مصدر الإكمال: يطابق intel::Trigger. */
+    object CompletionTrigger { const val NONE = 0; const val MEMBER = 1; const val AT = 2; const val HASH = 3; const val IMPORT_PATH = 4 }
+
+    /** اقتراح واحد. [matchPos] مواضع الحروف المطابقة داخل [label] (فهارس UTF-16). [cursorBack] بالحروف. */
+    class CompletionItem(
+        val kind: Int, val label: String, val insertText: String, val detail: String, val doc: String,
+        val cursorBack: Int, val snippet: Boolean, val matchPos: IntArray
+    )
+
+    /** نتيجة الإكمال: [startCol]..[endCol] (فهارس حروف على سطر المؤشر) هو النص الذي يُستبدَل. */
+    class CompletionResult(val startCol: Int, val endCol: Int, val trigger: Int, val items: List<CompletionItem>)
+
+    class SignatureInfo(val kind: Int, val name: String, val ret: String, val doc: String, val active: Int, val params: List<String>)
+
+    class SymbolDoc(val name: String, val kindName: String, val signature: String, val doc: String, val defLine: Int, val defCol: Int)
+
+    /**
+     * إكمال سياقي عند المؤشر. null إن لم يتوفر شيء (تحديد/تعليق/نص/موضع تسمية...).
+     * [explicitInvoke] = Ctrl+Space (يسمح ببادئة فارغة).
+     */
+    fun complete(explicitInvoke: Boolean = false, maxResults: Int = 60): CompletionResult? {
+        val packed = try { nativeComplete(requireHandle(), explicitInvoke, maxResults) } catch (t: Throwable) {
+            android.util.Log.w("RinNativeEditor", "complete failed", t); null
+        } ?: return null
+        if (packed.size < 2) return null
+        val header = packed[0].split('\u001F')
+        if (header.size < 3) return null
+        val cursorLine = getCursor().line
+        val lineText = clampedLineText(cursorLine)
+        val startCol = byteOffsetToCharIndex(lineText, header[0].toIntOrNull() ?: return null)
+        val endCol = byteOffsetToCharIndex(lineText, header[1].toIntOrNull() ?: return null)
+        val trigger = header[2].toIntOrNull() ?: 0
+        val items = ArrayList<CompletionItem>(packed.size - 1)
+        for (i in 1 until packed.size) {
+            val f = packed[i].split('\u001F', limit = 8)
+            if (f.size < 8) continue
+            val label = f[1]
+            val insert = f[2]
+            val backBytes = f[5].toIntOrNull() ?: 0
+            // cursorBack بالبايت في C++؛ الحروف المرجوعة دائماً ASCII (')' أو '"') فالقيمتان متطابقتان.
+            val pos = if (f[7].isEmpty()) IntArray(0)
+                      else f[7].split(',').mapNotNull { it.toIntOrNull() }.map { byteOffsetToCharIndex(label, it) }.toIntArray()
+            items.add(CompletionItem(f[0].toIntOrNull() ?: 0, label, insert, f[3], f[4], backBytes, f[6] == "1", pos))
+        }
+        return if (items.isEmpty()) null else CompletionResult(startCol, endCol, trigger, items)
+    }
+
+    /** توقيع الدالة التي يقف المؤشر داخل استدعائها (أو null). */
+    fun signatureHelp(): SignatureInfo? {
+        val raw = try { nativeSignatureHelp(requireHandle()) } catch (t: Throwable) { null } ?: return null
+        val f = raw.split('\u001F', limit = 6)
+        if (f.size < 6) return null
+        val params = if (f[5].isEmpty()) emptyList() else f[5].split('\u001E')
+        return SignatureInfo(f[0].toIntOrNull() ?: 0, f[1], f[2], f[3], f[4].toIntOrNull() ?: 0, params)
+    }
+
+    /** توثيق الرمز عند ([line], [col]) — للضغط الطويل/hover. */
+    fun describeAt(line: Int, col: Int): SymbolDoc? {
+        val raw = try { nativeDescribe(requireHandle(), line, charToByte(line, col)) } catch (t: Throwable) { null } ?: return null
+        val f = raw.split('\u001F', limit = 6)
+        if (f.size < 6) return null
+        return SymbolDoc(f[0], f[1], f[2], f[3], f[4].toIntOrNull() ?: -1, f[5].toIntOrNull() ?: -1)
+    }
+
+    /** يسجّل قبول اقتراح ليصعد في الترتيب لاحقاً. */
+    fun recordCompletionUse(label: String) {
+        try { nativeRecordCompletionUse(label) } catch (_: Throwable) {}
+    }
 }
