@@ -1309,6 +1309,315 @@ std::string renderRows(Frame& f, int from, int n, const ColorMode& cm, const std
     return out;
 }
 
+// ============================================================================
+//  IMG — عرض صورة داخل الطرفية بحروف Unicode (`:img` و `rin img`)
+// ============================================================================
+//  فكّ الصورة يتم عبر ImageMagick (نفس أداة المحرّك لـ make.ocr/removeBg) بمصفوفة argv مباشرة بلا shell،
+//  وتُعرَّف الصورة من بايتاتها لا من امتدادها (فملف SVG/MVG متنكّر لا يُنفَّذ). ثم نرسمها بأحد الأنماط:
+//    half    نصف-كتلة ▀ بلونين (24-bit أو 256) — الأدق ألواناً وهو الافتراضي مع الألوان
+//    braille نقاط براي ⣿ (2×4 لكل خانة) — الأدق تفصيلاً وهو الافتراضي بلا ألوان
+//    shade   تدرّج كتل ░▒▓█
+//    ascii   ASCII صرف (للطرفيات التي ليست UTF-8)
+// تقسيم وسائط يحترم علامات الاقتباس ("my file.png" أو 'my file.png') والهروب بـ \ قبل مسافة/اقتباس.
+std::vector<std::string> splitArgsQuoted(const std::string& s) {
+    std::vector<std::string> out;
+    std::string cur;
+    bool have = false;
+    char q = 0;
+    for (size_t i = 0; i < s.size(); ++i) {
+        char c = s[i];
+        if (q) {
+            if (c == q) q = 0; else cur += c;
+        } else if (c == '"' || c == '\'') {
+            q = c; have = true;
+        } else if (c == '\\' && i + 1 < s.size() && (s[i + 1] == ' ' || s[i + 1] == '"' || s[i + 1] == '\'')) {
+            cur += s[++i]; have = true;
+        } else if (c == ' ' || c == '\t') {
+            if (have || !cur.empty()) { out.push_back(cur); cur.clear(); have = false; }
+        } else { cur += c; have = true; }
+    }
+    if (have || !cur.empty()) out.push_back(cur);
+    return out;
+}
+
+struct ImgArgs {
+    std::string path;
+    int width = 0;            // 0 = عرض الطرفية (حتى 100)
+    std::string mode;         // فارغ = تلقائي
+    bool plain = false;       // بلا ألوان
+    bool invert = false;      // عكس السطوع (للأنماط أحادية اللون)
+    bool help = false;
+};
+
+bool parseImgArgs(const std::vector<std::string>& args, ImgArgs& o, std::string& err) {
+    for (size_t i = 0; i < args.size(); ++i) {
+        const std::string& a = args[i];
+        if (a == "--help" || a == "-h") o.help = true;
+        else if ((a == "--width" || a == "-w") && i + 1 < args.size()) {
+            char* end = nullptr; long v = std::strtol(args[i + 1].c_str(), &end, 10);
+            if (!end || *end || v < 8 || v > 400) { err = std::string("--width: ") + tr("رقم من 8 إلى 400", "a number from 8 to 400"); return false; }
+            o.width = static_cast<int>(v); ++i;
+        }
+        else if ((a == "--mode" || a == "-m") && i + 1 < args.size()) {
+            o.mode = args[++i];
+            if (o.mode != "half" && o.mode != "braille" && o.mode != "shade" && o.mode != "ascii") {
+                err = std::string("--mode: ") + tr("half | braille | shade | ascii", "half | braille | shade | ascii"); return false;
+            }
+        }
+        else if (a == "--plain" || a == "-p") o.plain = true;
+        else if (a == "--invert" || a == "-i") o.invert = true;
+        else if (a == "--width" || a == "-w" || a == "--mode" || a == "-m") { err = a + std::string(": ") + tr("يحتاج قيمة", "needs a value"); return false; }
+        else if (!a.empty() && a[0] == '-' && a.size() > 1) { err = std::string(tr("خيار غير معروف: ", "unknown option: ")) + a; return false; }
+        else if (o.path.empty()) o.path = expandTilde(a);
+        else { err = tr("صورة واحدة فقط في كل أمر", "only one image per command"); return false; }
+    }
+    return true;
+}
+
+void printImgUsage(std::FILE* f) {
+    std::fputs(tr(
+        "الاستخدام: :img <صورة> [خيارات]      (أو من الشل:  rin img <صورة> [خيارات])\n"
+        "  --width, -w N     عرض الرسم بالأعمدة (الافتراضي: عرض الطرفية حتى 100)\n"
+        "  --mode, -m M      half (نصف-كتل ملوّنة) · braille (نقاط براي) · shade (ظلال ░▒▓█) · ascii\n"
+        "  --plain, -p       بلا ألوان (يصير braille الافتراضي)\n"
+        "  --invert, -i      عكس السطوع في الأنماط أحادية اللون (لطرفية فاتحة الخلفية)\n"
+        "الصيغ: png jpg gif bmp webp tiff — يحتاج ImageMagick:  sudo apt install imagemagick\n",
+        "usage: :img <image> [options]      (or from the shell:  rin img <image> [options])\n"
+        "  --width, -w N     drawing width in columns (default: terminal width, up to 100)\n"
+        "  --mode, -m M      half (colored half-blocks) · braille (braille dots) · shade (░▒▓█) · ascii\n"
+        "  --plain, -p       no colors (braille becomes the default)\n"
+        "  --invert, -i      flip brightness in monochrome modes (for light-background terminals)\n"
+        "formats: png jpg gif bmp webp tiff — requires ImageMagick:  sudo apt install imagemagick\n"), f);
+}
+
+bool localeIsUtf8Free() {
+    for (const char* v : {"LC_ALL", "LC_CTYPE", "LANG"}) {
+        const char* e = std::getenv(v);
+        if (e && *e) {
+            std::string s = e;
+            for (auto& c : s) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+            return s.find("utf-8") != std::string::npos || s.find("utf8") != std::string::npos;
+        }
+    }
+    return true;
+}
+
+bool detectTruecolor() {
+    const char* ct = std::getenv("COLORTERM");
+    const char* tm = std::getenv("TERM");
+    return !(std::getenv("RIN_TRUECOLOR") && std::strcmp(std::getenv("RIN_TRUECOLOR"), "0") == 0) &&
+           !(tm && (std::strcmp(tm, "linux") == 0 || std::strcmp(tm, "vt100") == 0)) &&
+           !(ct == nullptr && tm && std::strstr(tm, "256color") != nullptr && std::strstr(tm, "xterm-256color") == nullptr);
+}
+
+std::string findTool(const char* name) {
+    const char* p = std::getenv("PATH");
+    std::string path = p ? p : "/usr/bin:/bin";
+    size_t i = 0;
+    while (i <= path.size()) {
+        size_t c = path.find(':', i);
+        std::string dir = path.substr(i, c == std::string::npos ? std::string::npos : c - i);
+        if (dir.empty()) dir = ".";
+        std::string full = dir + "/" + name;
+        if (::access(full.c_str(), X_OK) == 0) return full;
+        if (c == std::string::npos) break;
+        i = c + 1;
+    }
+    return "";
+}
+
+// يشغّل argv مباشرة (بلا shell) ويلتقط stdout. يعيد false عند فشل/مهلة/تجاوز الحجم.
+bool runCapture(const std::vector<std::string>& argv, std::string& out, int timeoutMs, size_t maxBytes, std::string& err) {
+    int pfd[2];
+    if (::pipe(pfd) != 0) { err = std::strerror(errno); return false; }
+    pid_t pid = ::fork();
+    if (pid < 0) { err = std::strerror(errno); ::close(pfd[0]); ::close(pfd[1]); return false; }
+    if (pid == 0) {
+        ::dup2(pfd[1], STDOUT_FILENO);
+        ::close(pfd[0]); ::close(pfd[1]);
+        int dn = ::open("/dev/null", O_RDWR);
+        if (dn >= 0) { ::dup2(dn, STDIN_FILENO); ::dup2(dn, STDERR_FILENO); if (dn > 2) ::close(dn); }
+        std::vector<char*> av;
+        for (const auto& s : argv) av.push_back(const_cast<char*>(s.c_str()));
+        av.push_back(nullptr);
+        ::execvp(av[0], av.data());
+        ::_exit(127);
+    }
+    ::close(pfd[1]);
+    auto deadline = Clock::now() + std::chrono::milliseconds(timeoutMs);
+    bool killed = false;
+    char buf[65536];
+    for (;;) {
+        int remain = static_cast<int>(std::chrono::duration_cast<std::chrono::milliseconds>(deadline - Clock::now()).count());
+        if (remain <= 0) { err = tr("انتهت المهلة", "timed out"); killed = true; break; }
+        pollfd p{pfd[0], POLLIN, 0};
+        int r = ::poll(&p, 1, remain);
+        if (r < 0 && errno == EINTR) continue;
+        if (r <= 0) continue;
+        ssize_t n = ::read(pfd[0], buf, sizeof(buf));
+        if (n < 0 && errno == EINTR) continue;
+        if (n <= 0) break;
+        out.append(buf, static_cast<size_t>(n));
+        if (out.size() > maxBytes) { err = tr("ناتج أكبر من المتوقع", "output larger than expected"); killed = true; break; }
+    }
+    ::close(pfd[0]);
+    if (killed) ::kill(pid, SIGKILL);
+    int status = 0;
+    ::waitpid(pid, &status, 0);
+    if (killed) return false;
+    if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) { err = tr("فشل تشغيل الأداة", "tool failed"); return false; }
+    return true;
+}
+
+// يعرّف الصيغة من البايتات (لا من الامتداد). يعيد coder لـ ImageMagick أو "" إن لم تكن صورة نقطية مدعومة.
+std::string sniffImageCoder(const std::string& path) {
+    std::ifstream f(path, std::ios::binary);
+    unsigned char h[16] = {0};
+    if (!f) return "";
+    f.read(reinterpret_cast<char*>(h), sizeof(h));
+    size_t n = static_cast<size_t>(f.gcount());
+    if (n >= 8 && h[0] == 0x89 && h[1] == 'P' && h[2] == 'N' && h[3] == 'G') return "png";
+    if (n >= 3 && h[0] == 0xFF && h[1] == 0xD8 && h[2] == 0xFF) return "jpeg";
+    if (n >= 4 && std::memcmp(h, "GIF8", 4) == 0) return "gif";
+    if (n >= 2 && h[0] == 'B' && h[1] == 'M') return "bmp";
+    if (n >= 12 && std::memcmp(h, "RIFF", 4) == 0 && std::memcmp(h + 8, "WEBP", 4) == 0) return "webp";
+    if (n >= 4 && ((h[0] == 'I' && h[1] == 'I' && h[2] == 42 && h[3] == 0) || (h[0] == 'M' && h[1] == 'M' && h[2] == 0 && h[3] == 42))) return "tiff";
+    return "";
+}
+
+struct ImgPixels { int w = 0, h = 0; std::vector<uint8_t> rgb; };
+
+// يفكّ الصورة ويصغّرها إلى شبكة pw×ph (إن كانت ph = 0 تُحسب بنسبة الأبعاد × aspect، ويُقرَّب لمضاعف rowMul).
+bool loadImagePixels(const std::string& path, int pw, double aspect, int rowMul, int maxRows, ImgPixels& out, std::string& err) {
+    struct stat st;
+    if (::stat(path.c_str(), &st) != 0) { err = path + ": " + std::strerror(errno); return false; }
+    if (S_ISDIR(st.st_mode)) { err = path + ": " + tr("مجلد وليس صورة", "is a directory, not an image"); return false; }
+    std::string coder = sniffImageCoder(path);
+    if (coder.empty()) { err = tr("الملف ليس صورة نقطية مدعومة (png / jpg / webp / gif / bmp / tiff)", "not a supported raster image (png / jpg / webp / gif / bmp / tiff)"); return false; }
+    std::string tool = !findTool("magick").empty() ? "magick" : (!findTool("convert").empty() ? "convert" : "");
+    if (tool.empty()) { err = tr("يحتاج ImageMagick — ثبّته: sudo apt install imagemagick", "requires ImageMagick — install: sudo apt install imagemagick"); return false; }
+    std::string spec = coder + ":" + path + ((coder == "gif" || coder == "tiff" || coder == "webp") ? "[0]" : "");
+
+    std::string sizeOut, e;
+    if (!runCapture({tool, spec, "-auto-orient", "-format", "%w %h", "info:"}, sizeOut, 30000, 4096, e)) { err = std::string(tr("تعذّر قراءة الصورة", "could not read the image")) + (e.empty() ? "" : " (" + e + ")"); return false; }
+    int iw = 0, ih = 0;
+    if (std::sscanf(sizeOut.c_str(), "%d %d", &iw, &ih) != 2 || iw <= 0 || ih <= 0) { err = tr("أبعاد الصورة غير صالحة", "invalid image dimensions"); return false; }
+
+    int ph = static_cast<int>(std::lround(static_cast<double>(ih) / iw * pw * aspect));
+    if (ph < 1) ph = 1;
+    if (ph % rowMul) ph += rowMul - ph % rowMul;
+    if (ph > maxRows) {
+        int clamped = maxRows - maxRows % rowMul;
+        pw = std::max(1, static_cast<int>(std::lround(static_cast<double>(pw) * clamped / ph)));
+        ph = clamped;
+    }
+    std::string geo = std::to_string(pw) + "x" + std::to_string(ph) + "!";
+    std::string raw;
+    if (!runCapture({tool, spec, "-auto-orient", "-background", "white", "-flatten", "-colorspace", "sRGB", "-resize", geo, "-depth", "8", "rgb:-"},
+                    raw, 60000, static_cast<size_t>(pw) * ph * 3 + 64, e)) { err = std::string(tr("فشل تصغير الصورة", "failed to scale the image")) + (e.empty() ? "" : " (" + e + ")"); return false; }
+    if (raw.size() < static_cast<size_t>(pw) * ph * 3) { err = tr("بيانات الصورة ناقصة", "image data incomplete"); return false; }
+    out.w = pw; out.h = ph;
+    out.rgb.assign(raw.begin(), raw.begin() + static_cast<long>(pw) * ph * 3);
+    return true;
+}
+
+void appendUtf8(std::string& s, unsigned cp) {
+    if (cp < 0x80) s += static_cast<char>(cp);
+    else if (cp < 0x800) { s += static_cast<char>(0xC0 | (cp >> 6)); s += static_cast<char>(0x80 | (cp & 0x3F)); }
+    else { s += static_cast<char>(0xE0 | (cp >> 12)); s += static_cast<char>(0x80 | ((cp >> 6) & 0x3F)); s += static_cast<char>(0x80 | (cp & 0x3F)); }
+}
+
+inline int lumOf(const uint8_t* p) { return (299 * p[0] + 587 * p[1] + 114 * p[2]) / 1000; }
+
+struct ImgRender { std::string text; int rows = 0; std::string mode; };
+
+// يرسم الصورة كنص. يعيد false مع err عند الفشل.
+bool renderImage(const ImgArgs& a, bool color, bool truecolor, bool utf8, int termWidth, ImgRender& res, std::string& err) {
+    std::string mode = a.mode;
+    if (mode.empty()) mode = !utf8 ? "ascii" : (color ? "half" : "braille");
+    if (!utf8 && mode != "ascii") mode = "ascii";
+    int W = a.width > 0 ? a.width : std::min(termWidth, 100);
+    if (W < 8) W = 8;
+
+    ImgPixels im;
+    const int maxRows = 1600;
+    if (mode == "half")         { if (!loadImagePixels(a.path, W, 1.0, 2, maxRows, im, err)) return false; }
+    else if (mode == "braille") { if (!loadImagePixels(a.path, W * 2, 1.0, 4, maxRows, im, err)) return false; }
+    else                        { if (!loadImagePixels(a.path, W, 0.5, 1, maxRows, im, err)) return false; }
+
+    auto px = [&](int x, int y) { return &im.rgb[(static_cast<size_t>(y) * im.w + x) * 3]; };
+    auto bright = [&](int x, int y) { int l = lumOf(px(x, y)); return a.invert ? 255 - l : l; };
+    std::string o;
+    auto fgOf = [&](const uint8_t* p) { return sgrColor(true, RGB{p[0], p[1], p[2]}, truecolor); };
+    auto bgOf = [&](const uint8_t* p) { return sgrColor(false, RGB{p[0], p[1], p[2]}, truecolor); };
+
+    if (mode == "half") {
+        for (int y = 0; y < im.h; y += 2) {
+            int y2 = std::min(y + 1, im.h - 1);
+            std::string prevFg, prevBg;
+            for (int x = 0; x < im.w; ++x) {
+                const uint8_t* t = px(x, y); const uint8_t* b = px(x, y2);
+                if (color) {
+                    std::string fg = fgOf(t), bg = bgOf(b);
+                    if (fg != prevFg) { o += fg; prevFg = fg; }
+                    if (bg != prevBg) { o += bg; prevBg = bg; }
+                    o += "\xE2\x96\x80";   // ▀
+                } else {
+                    bool tt = bright(x, y) > 127, bb = bright(x, y2) > 127;
+                    o += tt ? (bb ? "\xE2\x96\x88" : "\xE2\x96\x80") : (bb ? "\xE2\x96\x84" : " ");   // █ ▀ ▄
+                }
+            }
+            if (color) o += "\x1b[0m";
+            else { size_t e = o.find_last_not_of(' '); o.erase(e == std::string::npos ? 0 : e + 1); }
+            o += "\n"; ++res.rows;
+        }
+    } else if (mode == "braille") {
+        long sum = 0;
+        for (int y = 0; y < im.h; ++y) for (int x = 0; x < im.w; ++x) sum += bright(x, y);
+        int thr = static_cast<int>(sum / std::max(1, im.w * im.h));
+        static const int bitOf[4][2] = {{0x01, 0x08}, {0x02, 0x10}, {0x04, 0x20}, {0x40, 0x80}};
+        for (int y = 0; y < im.h; y += 4) {
+            std::string line, prevFg;
+            for (int x = 0; x < im.w; x += 2) {
+                int bits = 0, n = 0, r = 0, g = 0, bl = 0, cr = 0, cg = 0, cb = 0, cn = 0;
+                for (int dy = 0; dy < 4; ++dy) for (int dx = 0; dx < 2; ++dx) {
+                    int xx = std::min(x + dx, im.w - 1), yy = std::min(y + dy, im.h - 1);
+                    const uint8_t* p = px(xx, yy);
+                    cr += p[0]; cg += p[1]; cb += p[2]; ++cn;
+                    if (bright(xx, yy) > thr) { bits |= bitOf[dy][dx]; r += p[0]; g += p[1]; bl += p[2]; ++n; }
+                }
+                if (color) {
+                    uint8_t c[3];
+                    if (n) { c[0] = static_cast<uint8_t>(r / n); c[1] = static_cast<uint8_t>(g / n); c[2] = static_cast<uint8_t>(bl / n); }
+                    else   { c[0] = static_cast<uint8_t>(cr / cn); c[1] = static_cast<uint8_t>(cg / cn); c[2] = static_cast<uint8_t>(cb / cn); }
+                    std::string fg = fgOf(c);
+                    if (fg != prevFg) { line += fg; prevFg = fg; }
+                }
+                appendUtf8(line, 0x2800u + static_cast<unsigned>(bits));
+            }
+            if (color) line += "\x1b[0m";
+            o += line + "\n"; ++res.rows;
+        }
+    } else {   // shade / ascii
+        static const char* const shades[5] = {" ", "\xE2\x96\x91", "\xE2\x96\x92", "\xE2\x96\x93", "\xE2\x96\x88"};   // ░ ▒ ▓ █
+        static const char ramp[] = " .:-=+*#%@";
+        for (int y = 0; y < im.h; ++y) {
+            std::string line, prevFg;
+            for (int x = 0; x < im.w; ++x) {
+                int l = bright(x, y);
+                if (color) { std::string fg = fgOf(px(x, y)); if (fg != prevFg) { line += fg; prevFg = fg; } }
+                if (mode == "shade") line += shades[std::min(4, l * 5 / 256)];
+                else line += ramp[std::min(9, l * 10 / 256)];
+            }
+            if (color) line += "\x1b[0m";
+            else { size_t e = line.find_last_not_of(' '); line.erase(e == std::string::npos ? 0 : e + 1); }
+            o += line + "\n"; ++res.rows;
+        }
+    }
+    res.text = o; res.mode = mode;
+    return true;
+}
+
 struct IndsinArgs {
     std::string path;
     int width = 0;      // 0 = تلقائي من عرض الطرفية
@@ -1735,7 +2044,7 @@ private:
                 return out;
             }
             std::string cmd = trimmed.substr(1, sp - 1);
-            if (cmd == "load" || cmd == "run" || cmd == "save" || cmd == "cd" || cmd == "edit" || cmd == "ls" || cmd == "source" || cmd == "tree" || cmd == "indsin" || cmd == "test" || cmd == "ocr") {
+            if (cmd == "load" || cmd == "run" || cmd == "save" || cmd == "cd" || cmd == "edit" || cmd == "ls" || cmd == "source" || cmd == "tree" || cmd == "indsin" || cmd == "test" || cmd == "ocr" || cmd == "img") {
                 size_t ws = pre.find_last_of(' ');
                 std::string partial = pre.substr(ws + 1);
                 addFiles(partial, toU32(pre.substr(0, ws + 1)).size());
@@ -2052,6 +2361,7 @@ private:
             {"tree",     ":tree [مسار]",             "شجرة ملفات",                                   "file tree"},
             {"indsin",   ":indsin [ملف] [--width N] [--dump]", "تشغيل واجهة indsin داخل الطرفية (فأرة + تحميل حيّ)", "run an indsin UI inside the terminal (mouse + live reload)"},
             {"ocr",      ":ocr <صورة> [--lang ara+eng] [--psm N] [--enhance] [--min N]", "طباعة النص المكتوب داخل صورة (Unicode) — نفس make.image.text", "print the text inside an image (Unicode) — same as make.image.text"},
+            {"img",      ":img <صورة> [--mode half|braille|shade|ascii] [--width N]", "عرض صورة بحروف Unicode داخل الطرفية", "show an image with Unicode characters"},
             {"session",  ":session",                 "معلومات الجلسة",                               "session info"},
             {"version",  ":version",                 "إصدار Rin",                                    "Rin version"},
         };
@@ -2093,6 +2403,7 @@ private:
         if (cmd == "tree") return cmdTree(arg);
         if (cmd == "indsin") return cmdIndsin(arg);
         if (cmd == "ocr") return cmdOcr(arg);
+        if (cmd == "img") return cmdImg(arg);
         if (cmd == "load" || cmd == "run" || cmd == "source") {
             if (arg.empty()) { err(tr("الاستخدام: :load <ملف.rin>", "usage: :load <file.rin>")); return; }
             bool r = loadFile(arg); lastOk_ = r; if (!r) failures_++; return;
@@ -2618,6 +2929,27 @@ private:
         treeRec(dir, "", 1, count);
     }
 
+    // :img — يعرض صورة بحروف Unicode (التفاصيل: docs/terminal.md).
+    void cmdImg(const std::string& arg) {
+        ImgArgs ia; std::string e;
+        if (!parseImgArgs(splitArgsQuoted(arg), ia, e)) { err(e); lastOk_ = false; return; }
+        if (ia.help || ia.path.empty()) {
+            ensureLineStart();
+            std::fflush(stdout);
+            printImgUsage(stdout);
+            atLineStart_ = true;
+            lastOk_ = ia.help;
+            return;
+        }
+        ImgRender r;
+        bool color = style_.on && !ia.plain;
+        if (!renderImage(ia, color, detectTruecolor(), utf8_, termCols(), r, e)) { err(std::string("img: ") + e); lastOk_ = false; failures_++; return; }
+        ensureLineStart();
+        print(r.text);
+        atLineStart_ = true;
+        lastOk_ = true;
+    }
+
     // :ocr — يطبع النص المقروء من صورة. لا منطق OCR هنا: يستدعي الدالة الموجودة make.image.text
     // (docs/MAKE_MEDIA.md) عبر المفسّر نفسه، ويطبع حقل text كما هو بـ Unicode (عربي/لاتيني) بلا أي ترميز إضافي.
     static std::string rinStr(const std::string& s) {
@@ -2845,6 +3177,20 @@ int runIndsinCommand(const std::vector<std::string>& args) {
     const char* term = std::getenv("TERM");
     st.on = ::isatty(STDOUT_FILENO) && std::getenv("NO_COLOR") == nullptr && term && std::strcmp(term, "dumb") != 0;
     return runIndsin(ia, st, true);
+}
+
+int runImgCommand(const std::vector<std::string>& args) {
+    if (const char* l = std::getenv("RIN_LANG")) g_english = std::strncmp(l, "en", 2) == 0;
+    ImgArgs ia; std::string e;
+    if (!parseImgArgs(args, ia, e)) { std::fprintf(stderr, "rin img: %s\n", e.c_str()); return 2; }
+    if (ia.help) { printImgUsage(stdout); return 0; }
+    if (ia.path.empty()) { printImgUsage(stderr); return 2; }
+    const char* term = std::getenv("TERM");
+    bool color = !ia.plain && ::isatty(STDOUT_FILENO) && std::getenv("NO_COLOR") == nullptr && term && std::strcmp(term, "dumb") != 0;
+    ImgRender r;
+    if (!renderImage(ia, color, detectTruecolor(), localeIsUtf8Free(), termCols(), r, e)) { std::fprintf(stderr, "rin img: %s\n", e.c_str()); return 1; }
+    std::fwrite(r.text.data(), 1, r.text.size(), stdout);
+    return 0;
 }
 
 int run(const Options& optIn) {
