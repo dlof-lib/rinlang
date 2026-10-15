@@ -35,6 +35,13 @@
 #include <cstdint>
 #include <unordered_map>
 #include <regex> // regexTest/regexFind/regexFindAll/regexReplace/regexSplit/regexGroups (معالجة نصوص متقدمة)
+#ifdef _WIN32
+#include <io.h>
+#define rin_isatty _isatty
+#else
+#include <unistd.h>
+#define rin_isatty isatty
+#endif
 #include <zlib.h> // zlibDeflateRaw/zlibInflateRaw (ضغط DEFLATE حقيقي متوافق مع صيغة ZIP method=8)
 
 // ---- توافق ويندوز/POSIX لـ stat()/mkdir() ----------------------------------
@@ -3009,6 +3016,33 @@ void Interpreter::registerNatives() {
         std::ostringstream buf;
         buf << "\x1b[38;2;" << (int)c.r << ";" << (int)c.g << ";" << (int)c.b << "m" << text << "\x1b[0m";
         return Value::string(buf.str());
+    };
+
+    // __fxcode(bold, italic, underline, strike, dim, reverse, blink, color, bg) -> أكواد SGR مفصولة بـ ';' (أو "" بلا تنسيق).
+    // يستعمله print عبر سمات bold=/italic=/underline=/strike=/dim=/reverse=/blink=/color=/bg= (docs/print-fonts.md).
+    // التنسيق يُفعَّل فقط حين يكون الخرج طرفية (isatty) أو FORCE_COLOR=1، ويُعطَّل بـ NO_COLOR — فلا تتلوّث الملفات/الأنابيب/كونسول أندرويد بأكواد خام.
+    natives["__fxcode"] = [parseColorArg](std::vector<Value>& a, int line) -> Value {
+        expectArgs("__fxcode", a, 9, line);
+        const char* force = std::getenv("FORCE_COLOR");
+        bool on = (force && *force && std::strcmp(force, "0") != 0) ? true
+                : (std::getenv("NO_COLOR") ? false : rin_isatty(1) != 0);
+        static const char* flagCode[7] = {"1", "3", "4", "9", "2", "7", "5"};
+        static const char* flagName[7] = {"bold", "italic", "underline", "strike", "dim", "reverse", "blink"};
+        std::string code;
+        auto add = [&](const std::string& c) { if (!code.empty()) code += ";"; code += c; };
+        for (int i = 0; i < 7; i++)
+            if (a[i].type != Value::Type::NIL && a[i].isTruthy()) add(flagCode[i]);
+        for (int i = 7; i < 9; i++) {
+            if (a[i].type == Value::Type::NIL) continue;
+            const char* nm = i == 7 ? "color" : "bg";
+            if (a[i].type == Value::Type::BOOL && !a[i].isTruthy()) continue;
+            if (a[i].type != Value::Type::STRING)
+                throw diagErr(diag::Code::E0004_InvalidType, line, std::string("'print': '") + nm + "' يجب أن يكون نصاً (اسم لون أو #rrggbb)، لكن وُجد نوع " + a[i].typeName());
+            rincolor::Color c = parseColorArg(a[i], std::string("print ") + nm, line);
+            add(std::string(i == 7 ? "38" : "48") + ";2;" + std::to_string((int)c.r) + ";" + std::to_string((int)c.g) + ";" + std::to_string((int)c.b));
+        }
+        (void)flagName;
+        return Value::string(on ? code : std::string());
     };
 
     // pattern(shape, size, symbol?, color?) -> بديل جاهز عن حلقات for المتداخلة (i,j) التي
@@ -8205,6 +8239,10 @@ Interpreter::Flow Interpreter::exec(const StmtPtr& stmt, EnvPtr env, Value& ret)
                 throw diagErr(diag::Code::E0035_RuntimeError, stmt->line, "'print': 'repeat' يجب ألا يكون سالباً");
             }
             times = static_cast<long long>(rv.number);
+        }
+        if (s->fx) {   // سمات الخط (bold/italic/color/...): تُطبَّق على المحتوى بعد upper/width/align
+            Value fv = evaluate(s->fx, env);
+            if (fv.type == Value::Type::STRING && !fv.str.empty()) content = "\x1b[" + fv.str + "m" + content + "\x1b[0m";
         }
         for (long long i = 0; i < times; i++) {
             output << prefix << content << end;
