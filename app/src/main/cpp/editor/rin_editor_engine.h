@@ -15,6 +15,7 @@
 #include <deque>
 #include <utility>
 #include <cstdint>
+#include "rin_intellisense.h"
 
 // تصريح أمامي فقط (بلا #include لملف diagnostic.h كامل) حتى يبقى هذا الرأس خفيفًا ومستقلاً عن
 // تفاصيل نظام Diagnostics؛ التعريف الكامل يُستخدَم فقط داخل rin_editor_engine.cpp.
@@ -191,6 +192,18 @@ public:
     // الظاهرة فعلاً في المستند الحالي (متغيرات/دوال عرَّفها المستخدم) — الكلمات المحجوزة أولاً
     // ثم المعرِّفات، وكلٌّ منها مُرتَّب أبجديًا؛ لا يقترح prefix نفسه إن كان مطابقًا تمامًا لوحده.
     std::vector<std::string> collectSuggestions(const std::string& prefix, int maxResults) const;
+
+    // --- IntelliSense احترافي (انظر rin_intellisense.h) ---
+    // إكمال سياقي عند المؤشر: أعضاء، @tags، #words، وحدات @import، متغيرات النطاق، دوال/أصناف المستخدم،
+    // الدوال المدمجة، قوالب، كلمات المستند — بترتيب ضبابي ذكي. فارغ إن كان هناك تحديد أو داخل تعليق/نص.
+    // [explicitInvoke] = Ctrl+Space (يسمح ببادئة فارغة). في passkit يلفّ collectSuggestions القديم.
+    intel::CompletionResult complete(bool explicitInvoke, int maxResults) const;
+    // توقيع الدالة التي يقف المؤشر داخل استدعائها + المعامل النشط.
+    intel::SignatureHelp signatureHelp() const;
+    // توثيق الرمز عند (line, col) — للـ hover/quick-doc.
+    intel::SymbolInfo describeAt(int line, int col) const;
+    // يسجّل قبول اقتراح (الأكثر قبولاً يصعد في الترتيب لاحقاً).
+    static void recordCompletionUse(const std::string& label);
 
     // --- تشخيص أخطاء حي (live diagnostics) ---
     // يشغِّل rin::Lexer ثم rin::Parser::parseCollectingDiagnostics() على النص الحالي ويُرجع كل
