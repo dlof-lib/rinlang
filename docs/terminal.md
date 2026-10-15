@@ -23,7 +23,7 @@ printf '1 + 2\n' | rin terminal --batch   # وضع غير تفاعلي (يعيد
 - **Ctrl-C** أثناء تشغيل برنامج يوقفه والحالة محفوظة (ضغطتان: خروج فوري). `input()` يعمل داخل الطرفية.
 
 ## الأوامر (`:help` داخل الطرفية)
-`:load :reload :save :edit :vars :type :time -n N :check :history :keywords :set :pkg :sh :cd :pwd :ls :ocr :session :reset :clear :version :quit`
+`:load :reload :save :edit :vars :type :time -n N :check :history :keywords :set :pkg :sh :cd :pwd :ls :ocr :img :session :reset :clear :version :quit`
 وكلمات `exit` / `quit` / `help` / `clear` تعمل كما هي ما لم تعرّف متغيراً بنفس الاسم.
 
 ## المشاريع
@@ -58,6 +58,19 @@ rin indsin ملف.rin [...]           # الأمر نفسه من الشل مبا
 - **لوحة المفاتيح**: `q`/Esc خروج، `r` إعادة تحميل، `+`/`-` عرض الواجهة (يعيد الجلسة)، الأسهم/PgUp/PgDn/Home/End تمرير، `s` يحفظ PNG.
 - **تحميل حيّ**: حفظ الملف في أي محرّر يحدّث العرض (Shuttle) مع بقاء الحالة.
 - حدود: طلبات الوسائط (`pickMedia`/`uploadMedia`) تحتاج منتقي ملفات المضيف فتظهر رسالة في الشريط؛ النص العربي يعتمد على bidi في الطرفية نفسها.
+
+## عرض صورة بحروف Unicode
+```
+:img صورة.png                          # الأنسب تلقائياً: نصف-كتل ملوّنة، أو braille إن لم تتوفر ألوان
+:img "صورة بمسافة.jpg" --width 60      # عرض بالأعمدة (8–400؛ الافتراضي عرض الطرفية حتى 100)
+:img logo.png --mode braille           # نقاط براي ⣿ — أدق تفصيلاً
+:img logo.png --mode shade --invert    # ظلال ░▒▓█ (--invert لطرفية فاتحة الخلفية)
+rin img logo.png --plain > logo.txt    # من الشل: بلا ألوان، مناسب للحفظ أو الأنابيب
+```
+- الأنماط: `half` (▀ بلونين، 24-bit أو 256 تلقائياً) · `braille` (2×4 نقطة لكل خانة) · `shade` · `ascii` (للطرفيات غير UTF-8).
+- يعتمد النمط الافتراضي على الألوان: `half` معها، و`braille` بدونها (أنبوب، `NO_COLOR`، `--plain`).
+- الصيغ: png jpg gif bmp webp tiff (الإطار الأول للمتحركة). تُعرَّف الصيغة من محتوى الملف لا من امتداده، فملف SVG بامتداد png يُرفض.
+- يحتاج ImageMagick (`sudo apt install imagemagick`) ويُشغَّل بلا shell. رموز الخروج لـ `rin img`: 0 نجاح · 1 فشل · 2 وسائط خاطئة.
 
 ## بيئة
 `RIN_HISTFILE`، `RIN_TERMINAL_RC` (أو `~/.config/rin/terminal.rc`: أوامر `:` تُنفَّذ عند البدء)، `RIN_LANG=en`، `RIN_THEME=light`، `NO_COLOR`.
