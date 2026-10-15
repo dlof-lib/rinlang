@@ -16,6 +16,7 @@
 //    #swap(arr, i, j) | #swap(a, b)        |  تبديل عنصرين في مكانهما / إرجاع [b, a]
 // ============================================================================
 #include "rin_interpreter.h"
+#include "rin_termimg.h"
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
@@ -165,6 +166,34 @@ static size_t swapIndex(const Value& idx, size_t n, int line) {
 
 void Interpreter::registerNativesExtra5() {
     using namespace extra5;
+
+    // imageText(path [, cols=60 [, mode="blocks" [, invert=false [, color=nil]]]]) -> نص الصورة (أسطر مفصولة بـ \n) للطباعة في الطرفية.
+    // mode: blocks (= half، كما في `:img`) | ansi256 | shade | ascii | braille . color: true/false/nil(تلقائي: طرفية أو FORCE_COLOR).
+    // docs/print-image-terminal.md
+    natives["imageText"] = [this](Args& a, int line) -> Value {
+        argc5("imageText", a, 1, 5, line);
+        if (a[0].type != Value::Type::STRING) throw err5(line, "'imageText': image path must be text");
+        int cols = 60;
+        if (a.size() > 1 && a[1].type != Value::Type::NIL) {
+            if (a[1].type != Value::Type::NUMBER || a[1].number < 1) throw err5(line, "'imageText': cols must be a number >= 1");
+            cols = (int)a[1].number;
+        }
+        std::string mode = "blocks";
+        if (a.size() > 2 && a[2].type != Value::Type::NIL) {
+            if (a[2].type != Value::Type::STRING) throw err5(line, "'imageText': mode must be text");
+            mode = a[2].str;
+            if (mode == "half") mode = "blocks";
+            if (mode != "blocks" && mode != "ansi256" && mode != "shade" && mode != "ascii" && mode != "braille")
+                throw err5(line, "'imageText': unknown mode \"" + mode + "\" (blocks/half, ansi256, shade, ascii, braille)");
+        }
+        bool invert = a.size() > 3 && a[3].type != Value::Type::NIL && a[3].isTruthy();
+        int color = -1;
+        if (a.size() > 4 && a[4].type != Value::Type::NIL) color = a[4].isTruthy() ? 1 : 0;
+        termimg::Img img; std::string e;
+        if (!termimg::decodeFile(resolvePath(a[0].str, line), img, e))
+            throw diagErr(diag::Code::E0036_IOFailure, line, "'imageText': " + e + " (" + a[0].str + ")");
+        return Value::string(termimg::render(img, cols, mode, invert, color));
+    };
 
     natives["#sed"] = [](Args& a, int line) -> Value {
         argc5("#sed", a, 2, 4, line);
