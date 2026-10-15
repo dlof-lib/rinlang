@@ -68,9 +68,9 @@ class RinTerminalBuffer(
                 TermRole.CONT -> sb.append("… ")
                 else -> Unit
             }
-            sb.append(l.text).append('\n')
+            sb.append(RinAnsi.strip(l.text)).append('\n')
         }
-        if (partial.isNotEmpty()) sb.append(partial).append('\n')
+        if (partial.isNotEmpty()) sb.append(RinAnsi.strip(partial.toString())).append('\n')
         return sb.toString().trimEnd('\n')
     }
 
@@ -217,7 +217,8 @@ class RinTerminalBuffer(
         val hits = ArrayList<String>()
         for ((i, l) in lines.withIndex()) {
             if (l.role == TermRole.COMMAND || l.role == TermRole.CONT) continue
-            if (l.text.contains(pattern, ignoreCase = true)) hits.add("${i + 1}: ${l.text}")
+            val plain = RinAnsi.strip(l.text)
+            if (plain.contains(pattern, ignoreCase = true)) hits.add("${i + 1}: $plain")
         }
         return if (hits.size > limit) hits.takeLast(limit) else hits
     }
@@ -256,9 +257,11 @@ class RinTerminalBuffer(
     private fun commitPartial(role: TermRole, answerFrom: Int) {
         val s = partial.toString()
         partial.setLength(0)
-        val kind = if (role == TermRole.OUTPUT) kindOf(s) else LogKind.PLAIN
+        // التصنيف ورقم سطر الخطأ على النص بلا أكواد الألوان؛ الخام يبقى في السطر ليرسمه الـ view.
+        val plain = RinAnsi.strip(s)
+        val kind = if (role == TermRole.OUTPUT) kindOf(plain) else LogKind.PLAIN
         val errLine = if (role == TermRole.OUTPUT && !jobIsRepl) {
-            ERROR_LINE_RE.find(s)?.groupValues?.get(1)?.toIntOrNull()
+            ERROR_LINE_RE.find(plain)?.groupValues?.get(1)?.toIntOrNull()
         } else null
         addLine(TermLine(s, role, kind, answerFrom, errLine))
     }
