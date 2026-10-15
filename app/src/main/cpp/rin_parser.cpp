@@ -1653,8 +1653,12 @@ StmtPtr Parser::printStatement() {
         stmt->exprs.push_back(pipeline());
     }
     static const std::unordered_set<std::string> printAttrs = {
-        "sep", "level", "label", "repeat", "pretty", "upper", "lower", "width", "align"
+        "sep", "level", "label", "repeat", "pretty", "upper", "lower", "width", "align",
+        "bold", "italic", "underline", "strike", "dim", "reverse", "blink", "color", "bg"   // تنسيق الخط (docs/print-fonts.md)
     };
+    static const char* fxNames[9] = {"bold", "italic", "underline", "strike", "dim", "reverse", "blink", "color", "bg"};
+    ExprPtr fxArgs[9];
+    bool anyFx = false;
     std::unordered_set<std::string> seen;
     for (;;) {
         std::string attr;
@@ -1686,6 +1690,16 @@ StmtPtr Parser::printStatement() {
         else if (attr == "lower") stmt->lower = value;
         else if (attr == "width") stmt->width = value;
         else if (attr == "align") stmt->align = value;
+        else for (int fi = 0; fi < 9; fi++) if (attr == fxNames[fi]) { fxArgs[fi] = value; anyFx = true; }
+    }
+    if (anyFx) {   // تنسيق الخط: يُجمَّع في استدعاء واحد لـ __fxcode (يُطبَّق بعد upper/width/align، فلا يُفسد الحشو)
+        auto call = std::make_shared<CallExpr>();
+        call->callee = "__fxcode"; call->line = tok.line;
+        for (int fi = 0; fi < 9; fi++) {
+            if (fxArgs[fi]) call->args.push_back(fxArgs[fi]);
+            else { auto nl = std::make_shared<LiteralExpr>(); nl->kind = LiteralExpr::Kind::NIL; nl->line = tok.line; call->args.push_back(nl); }
+        }
+        stmt->fx = call;
     }
     consume(TokenType::SEMICOLON, "Expected ';' after print statement");
     stmt->line = tok.line;
@@ -5010,6 +5024,10 @@ struct Parser::LoopTmpl {
     std::vector<Token> body;            // ترويسة الحلقة (قالب ترويسة) أو الكتلة كاملة {..} (قالب كتلة)
     std::vector<Token> defBody;         // جسم افتراضي {..} لقالب الترويسة (اختياري)
     bool block = false;
+    // قوالب الطباعة (docs/print-templates.md): 0 = قالب حلقة · 1 = سطر print · 2 = أسطر متعددة print { }
+    //                                           3 = style (سمات print) · 4 = text (تعبير نصي)
+    int kind = 0;
+    std::vector<std::vector<Token>> lines;  // kind 2: كل سطر = قيم print + سماتها (بلا ';')
     Token at;
 };
 
@@ -5129,6 +5147,56 @@ size_t Parser::tmplParseDef(const std::vector<Token>& in, size_t i) {
         }
     }
     k = pc + 1;
+    // ---- قوالب الطباعة: print / print { } / style / text (تُسجَّل ويُعاد بلا المرور بمسار قوالب الحلقات) ----
+    if (k < in.size() && (in[k].type == TokenType::PRINT || in[k].lexeme == "style" || in[k].lexeme == "text")) {
+        const Token& kw = in[k];
+        const char* pusage = "usage: @tmpl name(p) print `..${p}..` [attrs];  |  @tmpl name(p) print { line; line; }  |  "
+                             "@tmpl name(args) style width=40 align=\"center\";  |  @tmpl name(p) text expr;";
+        tm->kind = kw.type == TokenType::PRINT ? 1 : (kw.lexeme == "style" ? 3 : 4);
+        k++;
+        auto scanEnd = [&](size_t from) {       // أول ';' على العمق 0 (يتخطّى الأقواس)
+            size_t j = from;
+            while (j < in.size()) {
+                const Token& tk = in[j];
+                if (tk.type == TokenType::END_OF_FILE) break;
+                if (tOpen(tk)) {
+                    size_t m = tMatch(in, j);
+                    if (m == std::string::npos) throw err(diag::Code::E0010_ParserError, tk, "Unbalanced bracket in template '" + tm->name + "'");
+                    j = m + 1; continue;
+                }
+                if (tk.type == TokenType::SEMICOLON) break;
+                j++;
+            }
+            if (j >= in.size() || in[j].type != TokenType::SEMICOLON)
+                throw errRich(diag::Code::E0010_ParserError, nameTok, "template '" + tm->name + "' is not terminated",
+                              "a print/style/text template ends with ';'", pusage);
+            return j;
+        };
+        if (tm->kind == 1 && k < in.size() && in[k].type == TokenType::LBRACE) {     // print { سطر; سطر; }
+            size_t m = tMatch(in, k);
+            if (m == std::string::npos) throw err(diag::Code::E0010_ParserError, in[k], "Unterminated body of template '" + tm->name + "'");
+            tm->kind = 2;
+            std::vector<Token> cur; int d = 0;
+            for (size_t j = k + 1; j < m; j++) {
+                if (tOpen(in[j])) d++; else if (tClose(in[j])) d--;
+                if (d == 0 && in[j].type == TokenType::SEMICOLON) { if (!cur.empty()) tm->lines.push_back(cur); cur.clear(); continue; }
+                cur.push_back(in[j]);
+            }
+            if (!cur.empty()) tm->lines.push_back(cur);
+            if (tm->lines.empty())
+                throw errRich(diag::Code::E0010_ParserError, nameTok, "template '" + tm->name + "' has no lines", "", pusage);
+            k = m + 1;
+            if (k < in.size() && in[k].type == TokenType::SEMICOLON) k++;
+        } else {
+            size_t j = scanEnd(k);
+            if (j == k)
+                throw errRich(diag::Code::E0010_ParserError, nameTok, "template '" + tm->name + "' has an empty body", "", pusage);
+            tm->body.assign(in.begin() + k, in.begin() + j);
+            k = j + 1;
+        }
+        tmpls[tm->name] = tm;
+        return k;
+    }
     // as x, i  — أسماء المتغيّرات المكشوفة صراحةً (اختياري؛ تُستنتج تلقائياً من ترويسة each/for/repeat/retry)
     bool explicitExposed = false;
     if (k < in.size() && tIsWord(in[k], "as")) {
@@ -5254,6 +5322,84 @@ size_t Parser::tmplExpandUse(const LoopTmpl& t, const std::vector<Token>& in, si
         args.push_back(t.params[p].def);
     }
     size_t k = close + 1;
+    // ---- قوالب الطباعة (kind != 0) ----
+    if (t.kind != 0) {
+        static int printTmplSeq = 0;
+        auto T = [&](TokenType ty, const char* lex) { return tMake(atTok, ty, lex); };
+        std::vector<Token> E;
+        if (t.kind == 3) {                       // style: استبدال المعاملات بالتوكنات ثم الإدراج داخل عبارة print
+            std::map<std::string, size_t> pidx;
+            for (size_t p = 0; p < t.params.size(); p++) pidx[t.params[p].name] = p;
+            const auto& b = t.body;
+            for (size_t j = 0; j < b.size(); j++) {
+                const Token& tk = b[j];
+                bool afterDot = j > 0 && b[j - 1].type == TokenType::DOT;
+                auto pi = (tk.type == TokenType::IDENT && !afterDot) ? pidx.find(tk.lexeme) : pidx.end();
+                if (pi != pidx.end()) {
+                    const auto& a = args[pi->second];
+                    bool raw = a.size() == 1;
+                    if (!raw) E.push_back(T(TokenType::LPAREN, "("));
+                    E.insert(E.end(), a.begin(), a.end());
+                    if (!raw) E.push_back(T(TokenType::RPAREN, ")"));
+                } else E.push_back(tk);
+            }
+        } else if (t.kind == 4) {                // text: ‎(fun(p..) { return EXPR; })(args..)  — معزول، ويدعم `${p}` داخل القوالب
+            E.push_back(T(TokenType::LPAREN, "(")); E.push_back(T(TokenType::FUN, "fun")); E.push_back(T(TokenType::LPAREN, "("));
+            for (size_t p = 0; p < t.params.size(); p++) {
+                if (p) E.push_back(T(TokenType::COMMA, ","));
+                Token pt = T(TokenType::IDENT, t.params[p].name.c_str()); E.push_back(pt);
+            }
+            E.push_back(T(TokenType::RPAREN, ")")); E.push_back(T(TokenType::LBRACE, "{")); E.push_back(T(TokenType::RETURN, "return"));
+            E.insert(E.end(), t.body.begin(), t.body.end());
+            E.push_back(T(TokenType::SEMICOLON, ";")); E.push_back(T(TokenType::RBRACE, "}")); E.push_back(T(TokenType::RPAREN, ")"));
+            E.push_back(T(TokenType::LPAREN, "("));
+            for (size_t p = 0; p < args.size(); p++) {
+                if (p) E.push_back(T(TokenType::COMMA, ","));
+                E.push_back(T(TokenType::LPAREN, "(")); E.insert(E.end(), args[p].begin(), args[p].end()); E.push_back(T(TokenType::RPAREN, ")"));
+            }
+            E.push_back(T(TokenType::RPAREN, ")"));
+        } else {                                 // print / print { } : عبارات print داخل كتلة معزولة تربط المعاملات بـ let
+            // سمات إضافية بعد الاستعمال (حتى ';') تُلحق بكل سطر: @t(a) upper=true @box();
+            size_t j = k;
+            while (j < in.size()) {
+                const Token& tk = in[j];
+                if (tk.type == TokenType::END_OF_FILE || tk.type == TokenType::SEMICOLON || tk.type == TokenType::RBRACE) break;
+                if (tOpen(tk)) { size_t m = tMatch(in, j); if (m == std::string::npos) break; j = m + 1; continue; }
+                j++;
+            }
+            std::vector<Token> extra(in.begin() + k, in.begin() + j);
+            k = (j < in.size() && in[j].type == TokenType::SEMICOLON) ? j + 1 : j;
+            bool bind = !t.params.empty();
+            if (bind) {
+                int id = printTmplSeq++;
+                std::vector<std::string> tmp;
+                E.push_back(T(TokenType::LBRACE, "{"));
+                for (size_t p = 0; p < args.size(); p++) {
+                    tmp.push_back("__ptmp" + std::to_string(id) + "_" + std::to_string(p));
+                    E.push_back(T(TokenType::LET, "let")); E.push_back(T(TokenType::IDENT, tmp.back().c_str()));
+                    E.push_back(T(TokenType::EQUAL, "="));
+                    E.push_back(T(TokenType::LPAREN, "(")); E.insert(E.end(), args[p].begin(), args[p].end()); E.push_back(T(TokenType::RPAREN, ")"));
+                    E.push_back(T(TokenType::SEMICOLON, ";"));
+                }
+                for (size_t p = 0; p < t.params.size(); p++) {
+                    E.push_back(T(TokenType::LET, "let")); E.push_back(T(TokenType::IDENT, t.params[p].name.c_str()));
+                    E.push_back(T(TokenType::EQUAL, "=")); E.push_back(T(TokenType::IDENT, tmp[p].c_str()));
+                    E.push_back(T(TokenType::SEMICOLON, ";"));
+                }
+            }
+            auto emitLine = [&](const std::vector<Token>& line) {
+                E.push_back(T(TokenType::PRINT, "print"));
+                E.insert(E.end(), line.begin(), line.end());
+                E.insert(E.end(), extra.begin(), extra.end());
+                E.push_back(T(TokenType::SEMICOLON, ";"));
+            };
+            if (t.kind == 1) emitLine(t.body); else for (auto& ln : t.lines) emitLine(ln);
+            if (bind) E.push_back(T(TokenType::RBRACE, "}"));
+        }
+        auto res = expandTmplStream(E, depth + 1);
+        out.insert(out.end(), res.begin(), res.end());
+        return k;
+    }
     // 2) as a, b
     std::map<std::string, std::string> rename;
     if (k < in.size() && tIsWord(in[k], "as")) {
