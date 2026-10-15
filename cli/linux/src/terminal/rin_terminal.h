@@ -45,6 +45,10 @@ void printUsage();
 // `rin indsin <ملف.rin> [--width N] [--dump|--plain]`: يشغّل واجهة indsin داخل الطرفية مباشرة.
 int runIndsinCommand(const std::vector<std::string>& args);
 
+// `rin img <صورة> [--width N] [--mode half|braille|shade|ascii] [--plain] [--invert]`: يعرض صورة بحروف Unicode
+// (نصف-كتل ملوّنة أو نقاط براي أو ظلال) عبر ImageMagick. يعيد 0 نجاحاً؛ 1 فشل؛ 2 وسائط خاطئة.
+int runImgCommand(const std::vector<std::string>& args);
+
 // الحلقة الرئيسية. تعيد رمز الخروج (0 نجاح؛ 1 إن فشل أمر في الوضع غير التفاعلي).
 int run(const Options& opt);
 
