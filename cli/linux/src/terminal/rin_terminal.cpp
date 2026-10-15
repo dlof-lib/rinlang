@@ -3035,12 +3035,27 @@ private:
             const rin::Value* wv = field("warning");
             info(wv ? safeUnicode(wv->toDisplayString()) : tr("لم يُعثر على نص", "no text found"));
         } else {
-            println(text);
+            // تنسيق: إطار خفيف بعنوان اسم الملف، التفاف عند عرض الطرفية (يحفظ الفقرات)، ثم سطر معلومات.
             const rin::Value* cv = field("confidence");
             const rin::Value* lv = field("lang");
             const rin::Value* nv = field("wordCount");
-            info(std::string(tr("الثقة ", "confidence ")) + (cv ? cv->toDisplayString() : "?") + "%  ·  " + (nv ? nv->toDisplayString() : "?") + tr(" كلمة", " words") +
-                 (lv ? "  ·  " + safeUnicode(lv->toDisplayString()) : ""));
+            std::string base = path.substr(path.find_last_of('/') + 1);
+            int cols = std::max(20, termCols());
+            int inner = cols - 4;
+            auto bar = [&](int n) { std::string r; for (int i = 0; i < n; ++i) r += sym("─", "-"); return r; };
+            U32 title = clipWidth(toU32(" " + base + " "), std::max(4, cols - 6), true);
+            int tw = strWidth(title);
+            println(style_.dim() + sym("┌─", "+-") + style_.reset() + style_.cyan() + toUtf8(title) + style_.reset() + style_.dim() + bar(std::max(0, cols - 3 - tw)) + style_.reset());
+            while (!text.empty() && (text.back() == '\n' || text.back() == ' ')) text.pop_back();
+            for (const U32& ln : wrapText(toU32(text), inner, false)) {
+                std::string l = toUtf8(ln);
+                while (!l.empty() && (l.back() == ' ' || l.back() == '\t')) l.pop_back();
+                println(style_.dim() + sym("│", "|") + style_.reset() + (l.empty() ? "" : " " + l));
+            }
+            std::string meta = std::string(" ") + tr("الثقة ", "confidence ") + (cv ? cv->toDisplayString() : "?") + "% · " + (nv ? nv->toDisplayString() : "?") + tr(" كلمة", " words") +
+                               (lv ? " · " + safeUnicode(lv->toDisplayString()) : "") + " ";
+            U32 mu = clipWidth(toU32(meta), std::max(4, cols - 6), true);
+            println(style_.dim() + sym("└─", "+-") + toUtf8(mu) + bar(std::max(0, cols - 3 - strWidth(mu))) + style_.reset());
         }
         lastOk_ = true;
     }
