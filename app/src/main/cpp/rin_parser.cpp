@@ -1775,7 +1775,8 @@ StmtPtr Parser::logStatement(const Token& printTok) {
 StmtPtr Parser::imageStatement(const Token& printTok) {
     auto stmt = std::make_shared<PrintImageStmt>();
     consume(TokenType::LPAREN, "Expected '(' after 'print.image'");
-    static const std::unordered_set<std::string> imgAttrs = {"caption", "width"};
+    static const std::unordered_set<std::string> imgAttrs = {"caption", "width", "mode", "cols", "invert", "color"};
+    ExprPtr tMode, tCols, tInvert, tColor;
     std::unordered_set<std::string> seenAttrs;
     bool havePath = false;
     if (!check(TokenType::RPAREN)) {
@@ -1803,6 +1804,10 @@ StmtPtr Parser::imageStatement(const Token& printTok) {
                 if (attr == "if") stmt->ifCond = value;
                 else if (attr == "caption") stmt->caption = value;
                 else if (attr == "width") stmt->width = value;
+                else if (attr == "mode") tMode = value;
+                else if (attr == "cols") tCols = value;
+                else if (attr == "invert") tInvert = value;
+                else if (attr == "color") tColor = value;
             } else {
                 if (havePath) {
                     throw errRich(diag::Code::E0016_InvalidProperty, printTok,
@@ -1829,6 +1834,24 @@ StmtPtr Parser::imageStatement(const Token& printTok) {
     consume(TokenType::RPAREN, "Expected ')' after 'print.image' arguments");
     consume(TokenType::SEMICOLON, "Expected ';' after 'print.image' statement");
     stmt->line = printTok.line;
+    if (tMode || tCols || tInvert || tColor) {
+        // طباعة الصورة كنص في الطرفية (docs/print-image-terminal.md): تُفكَّك إلى print عادي لنداء imageText —
+        // فتعمل على المفسّر وRinVM بلا عقدة جديدة. التعليق (caption) يُطبع في سطر تحتها.
+        auto nilLit = [&]() { auto l = std::make_shared<LiteralExpr>(); l->kind = LiteralExpr::Kind::NIL; l->line = printTok.line; return ExprPtr(l); };
+        auto call = std::make_shared<CallExpr>();
+        call->callee = "imageText"; call->line = printTok.line;
+        call->args = {stmt->path, tCols ? tCols : nilLit(), tMode ? tMode : nilLit(), tInvert ? tInvert : nilLit(), tColor ? tColor : nilLit()};
+        auto ps = std::make_shared<PrintStmt>();
+        ps->line = printTok.line;
+        ps->exprs.push_back(call);
+        if (stmt->caption) {
+            ps->exprs.push_back(stmt->caption);
+            auto nl = std::make_shared<LiteralExpr>(); nl->kind = LiteralExpr::Kind::STRING; nl->str = "\n"; nl->line = printTok.line;
+            ps->sep = nl;
+        }
+        ps->ifCond = stmt->ifCond;
+        return ps;
+    }
     return stmt;
 }
 
