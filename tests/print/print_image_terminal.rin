@@ -1,0 +1,33 @@
+// print.image(path, mode=, cols=, invert=, color=) — طباعة الصور كنص في الطرفية
+let d = "tests/print/img/";
+print.image(d + "pattern.png", mode="ascii", cols=48);
+print.image(d + "pattern.png", mode="shade", cols=24, caption="shade 24 cols");
+print.image(d + "pattern.png", mode="braille", cols=24);
+print.image(d + "pattern.png", mode="ascii", cols=24, invert=true);
+
+// كل الصيغ تعطي الناتج نفسه: PNG عادي / Adam7 / BMP / PPM
+let ref = imageText(d + "pattern.png", 32, "ascii");
+each f in ["pattern_adam7.png", "pattern_rgb.bmp", "pattern.ppm"] {
+    print f + " same as png: " + (imageText(d + f, 32, "ascii") == ref);
+}
+// أنماط الألوان الأخرى تُفك وتُرسم (غامق/وسط/فاتح)
+each f in ["pattern_gray.png", "pattern_pal.png", "pattern_alpha.png", "gradient16.png"] {
+    print f + " lines: " + len(split(imageText(d + f, 16, "shade"), "\n"));
+}
+print.image(d + "gradient16.png", mode="ascii", cols=16);
+print.image(d + "pattern_alpha.png", mode="shade", cols=16, color=false);
+
+// blocks: بألوان 24-بت (color=true يفرضها)، وبلا ألوان يتحول إلى تدرج رمادي
+let b = imageText(d + "pattern.png", 12, "blocks", false, true);
+print "blocks has ansi: " + contains(b, "38;2;") + " rows: " + len(split(b, "\n"));
+print "ansi256 has 38;5: " + contains(imageText(d + "pattern.png", 12, "ansi256", false, true), "38;5;");
+print imageText(d + "pattern.png", 12, "blocks", false, false);
+
+// if= وأخطاء واضحة
+print.image(d + "pattern.png", mode="ascii", cols=8, if=false);
+try { imageText(d + "pattern.png", 10, "nope"); } catch (e) { print "bad mode rejected"; }
+try { imageText(d + "missing.png"); } catch (e) { print "missing file rejected"; }
+
+// مع قوالب الطباعة
+@tmpl logo(p, n = 16) print.image(d + p, mode="shade", cols=n, color=false);
+@logo("pattern.png", 12);
