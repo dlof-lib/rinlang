@@ -1,0 +1,511 @@
+// channel47 — قارئ لغة وصف البيانات والإعدادات (.ch47) داخل Rin. المواصفة: docs/channel47.md
+// الاستعمال:  @import "lib/channel47.og.rin";   let r = c47_try(text);   if (r.ok) { print c47_get(r.value, "net.timeout", 30); }
+// الخطأ: c47_parse ترمي قاموس {code, message, line, col}؛ c47_try تُرجع {ok:false, error:{...}} بدلها.
+// ملاحظات: الأعداد مزدوجة الدقة (ints فوق 2^53 تفقد دقتها)؛ التواريخ والأوقات تُرجَع نصوص ISO؛ الجداول مصفوفات قواميس.
+
+fun c47_fail(p, code, msg) {
+    let line = 1; let col = 1; let k = 0;
+    while (k < p["i"] and k < p["n"]) {
+        if (charAt(p["s"], k) == "\n") { line = line + 1; col = 1; } else { col = col + 1; }
+        k = k + 1;
+    }
+    throw {"code": code, "message": msg, "line": line, "col": col};
+}
+fun c47_peek(p) { if (p["i"] >= p["n"]) { return ""; } return charAt(p["s"], p["i"]); }
+fun c47_peekAt(p, k) { let j = p["i"] + k; if (j >= p["n"]) { return ""; } return charAt(p["s"], j); }
+fun c47_isDigit(ch) { if (ch == "") { return false; } return contains("0123456789", ch); }
+fun c47_isKeyStart(ch) {
+    if (ch == "") { return false; }
+    if (ord(ch) >= 128) { return true; }
+    return contains("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_", ch);
+}
+fun c47_isKeyChar(ch) { return c47_isKeyStart(ch) or c47_isDigit(ch) or ch == "-"; }
+fun c47_isTok(ch) {
+    if (ch == "") { return false; }
+    return c47_isKeyStart(ch) and ord(ch) < 128 or c47_isDigit(ch) or ch == "+" or ch == "-" or ch == "." or ch == ":";
+}
+fun c47_starts(s, pre) { return len(s) >= len(pre) and substr(s, 0, len(pre)) == pre; }
+fun c47_ends(s, suf) { return len(s) >= len(suf) and substr(s, len(s) - len(suf)) == suf; }
+fun c47_adv(p, k) { p["i"] = p["i"] + k; }
+
+fun c47_ws(p) { while (c47_peek(p) == " " or c47_peek(p) == "\t") { c47_adv(p, 1); } }
+fun c47_comment(p) { if (c47_peek(p) == "#") { while (p["i"] < p["n"] and c47_peek(p) != "\n") { c47_adv(p, 1); } } }
+fun c47_blank(p) {
+    while (p["i"] < p["n"]) {
+        let c = c47_peek(p);
+        if (c == " " or c == "\t" or c == "\n" or c == "\r") { c47_adv(p, 1); }
+        else { if (c == "#") { c47_comment(p); } else { return nil; } }
+    }
+}
+fun c47_eol(p) {
+    c47_ws(p); c47_comment(p);
+    if (p["i"] < p["n"]) {
+        if (c47_peek(p) == "\n" or c47_peek(p) == "\r") { c47_adv(p, 1); }
+        else { c47_fail(p, "C47010", "صياغة غير متوقعة بعد نهاية العبارة: " + c47_peek(p)); }
+    }
+}
+fun c47_expect(p, ch) {
+    if (c47_peek(p) != ch) { c47_fail(p, "C47010", "متوقع «" + ch + "»"); }
+    c47_adv(p, 1);
+}
+
+// ── نصوص ──
+fun c47_hexval(ch) { let k = indexOf("0123456789abcdef", lower(ch)); return k; }
+fun c47_utf8(cp) {
+    if (cp < 128) { return bytesFromArray([cp]); }
+    if (cp < 2048) { return bytesFromArray([192 + floor(cp / 64), 128 + cp % 64]); }
+    if (cp < 65536) { return bytesFromArray([224 + floor(cp / 4096), 128 + floor(cp / 64) % 64, 128 + cp % 64]); }
+    return bytesFromArray([240 + floor(cp / 262144), 128 + floor(cp / 4096) % 64, 128 + floor(cp / 64) % 64, 128 + cp % 64]);
+}
+fun c47_string(p, q) {
+    let start = p["i"];
+    let triple = c47_peekAt(p, 1) == q and c47_peekAt(p, 2) == q;
+    if (triple) { c47_adv(p, 3); if (c47_peek(p) == "\n") { c47_adv(p, 1); } } else { c47_adv(p, 1); }
+    let esc = {"n": "\n", "t": "\t", "r": "\r", "\"": "\"", "\\": "\\", "0": chr(0), "b": chr(8), "f": chr(12)};
+    let out = "";
+    while (true) {
+        if (p["i"] >= p["n"]) { p["i"] = start; c47_fail(p, "C47020", "نص غير منتهٍ"); }
+        let c = c47_peek(p);
+        if (triple) {
+            if (c == q and c47_peekAt(p, 1) == q and c47_peekAt(p, 2) == q) { c47_adv(p, 3); return out; }
+        } else {
+            if (c == q) { c47_adv(p, 1); return out; }
+            if (c == "\n") { p["i"] = start; c47_fail(p, "C47020", "نص غير منتهٍ"); }
+        }
+        if (q == "\"" and c == "\\") {
+            let e = c47_peekAt(p, 1);
+            if (has(esc, e)) { out = out + esc[e]; c47_adv(p, 2); }
+            else {
+                if (e == "u" and c47_peekAt(p, 2) == "{") {
+                    let j = p["i"] + 3; let cp = 0; let nd = 0;
+                    while (j < p["n"] and charAt(p["s"], j) != "}") {
+                        let h = c47_hexval(charAt(p["s"], j));
+                        if (h < 0 or nd >= 6) { c47_fail(p, "C47023", "رمز هروب غير صالح \\u{"); }
+                        cp = cp * 16 + h; nd = nd + 1; j = j + 1;
+                    }
+                    if (j >= p["n"] or nd == 0 or cp > 1114111 or (cp >= 55296 and cp <= 57343)) { c47_fail(p, "C47023", "رمز هروب غير صالح \\u{"); }
+                    out = out + c47_utf8(cp); p["i"] = j + 1;
+                } else { c47_fail(p, "C47023", "رمز هروب غير صالح \\" + e); }
+            }
+        } else { out = out + c; c47_adv(p, 1); }
+    }
+}
+
+// ── مفاتيح ──
+fun c47_keyseg(p) {
+    let c = c47_peek(p);
+    if (c == "\"" or c == "'") { return c47_string(p, c); }
+    if (!c47_isKeyStart(c)) { c47_fail(p, "C47010", "اسم مفتاح غير صالح"); }
+    let st = p["i"];
+    while (c47_isKeyChar(c47_peek(p))) { c47_adv(p, 1); }
+    return substr(p["s"], st, p["i"] - st);
+}
+fun c47_keypath(p) {
+    let segs = [c47_keyseg(p)];
+    while (c47_peek(p) == ".") { c47_adv(p, 1); push(segs, c47_keyseg(p)); }
+    return segs;
+}
+
+// ── تواريخ وأرقام ──
+fun c47_digits(s, a, b) { let k = a; while (k < b) { if (!c47_isDigit(charAt(s, k))) { return false; } k = k + 1; } return true; }
+fun c47_num(s, a, b) { return toNumber(substr(s, a, b - a)); }
+fun c47_validDate(s) {
+    if (len(s) != 10 or charAt(s, 4) != "-" or charAt(s, 7) != "-") { return false; }
+    if (!c47_digits(s, 0, 4) or !c47_digits(s, 5, 7) or !c47_digits(s, 8, 10)) { return false; }
+    let y = c47_num(s, 0, 4); let m = c47_num(s, 5, 7); let d = c47_num(s, 8, 10);
+    if (m < 1 or m > 12 or d < 1 or y < 1) { return false; }
+    let dim = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+    let leap = (y % 4 == 0 and y % 100 != 0) or y % 400 == 0;
+    let mx = dim[m - 1];
+    if (m == 2 and leap) { mx = 29; }
+    return d <= mx;
+}
+fun c47_validTime(s) {
+    // HH:MM[:SS[.f{1,9}]]
+    let n = len(s);
+    if (n < 5 or charAt(s, 2) != ":" or !c47_digits(s, 0, 2) or !c47_digits(s, 3, 5)) { return false; }
+    if (c47_num(s, 0, 2) > 23 or c47_num(s, 3, 5) > 59) { return false; }
+    if (n == 5) { return true; }
+    if (n < 8 or charAt(s, 5) != ":" or !c47_digits(s, 6, 8) or c47_num(s, 6, 8) > 59) { return false; }
+    if (n == 8) { return true; }
+    if (charAt(s, 8) != "." or n < 10 or n > 17 or !c47_digits(s, 9, n)) { return false; }
+    return true;
+}
+fun c47_validDateTime(s) {
+    if (len(s) < 16 or charAt(s, 10) != "T") { return false; }
+    if (!c47_validDate(substr(s, 0, 10))) { return false; }
+    let rest = substr(s, 11);
+    let tz = "";
+    if (c47_ends(rest, "Z")) { rest = substr(rest, 0, len(rest) - 1); }
+    else {
+        let k = len(rest) - 6;
+        if (k > 0 and (charAt(rest, k) == "+" or charAt(rest, k) == "-")) {
+            tz = substr(rest, k); rest = substr(rest, 0, k);
+            if (charAt(tz, 3) != ":" or !c47_digits(tz, 1, 3) or !c47_digits(tz, 4, 6)) { return false; }
+            if (c47_num(tz, 1, 3) > 23 or c47_num(tz, 4, 6) > 59) { return false; }
+        }
+    }
+    return c47_validTime(rest);
+}
+// يُرجع نوع الرقم "int"/"float" أو "" إن لم يكن رقماً صالحاً؛ والقيمة في out["v"]
+fun c47_number(tok, out) {
+    let sign = 1; let s = tok;
+    if (c47_starts(s, "+") or c47_starts(s, "-")) { if (c47_starts(s, "-")) { sign = -1; } s = substr(s, 1); }
+    if (len(s) == 0) { return ""; }
+    let base = 10;
+    if (c47_starts(s, "0x") and sign == 1 and len(tok) == len(s)) { base = 16; }
+    if (c47_starts(s, "0o") and sign == 1 and len(tok) == len(s)) { base = 8; }
+    if (c47_starts(s, "0b") and sign == 1 and len(tok) == len(s)) { base = 2; }
+    let k = 0; let v = 0;
+    if (base != 10) {
+        s = substr(s, 2);
+        if (len(s) == 0 or c47_starts(s, "_") or c47_ends(s, "_") or contains(s, "__")) { return ""; }
+        while (k < len(s)) {
+            let ch = charAt(s, k);
+            if (ch != "_") {
+                let h = c47_hexval(ch);
+                if (h < 0 or h >= base) { return ""; }
+                v = v * base + h;
+            }
+            k = k + 1;
+        }
+        out["v"] = v; return "int";
+    }
+    // عشري: int[.frac][e[+-]exp] مع _ بين الأرقام فقط
+    let isFloat = false; let part = 0; let seenDigit = false; let prev = "";
+    let cleaned = "";
+    let intLen = 0; let first = "";
+    while (k < len(s)) {
+        let ch = charAt(s, k);
+        if (c47_isDigit(ch)) { cleaned = cleaned + ch; seenDigit = true; if (part == 0) { if (intLen == 0) { first = ch; } intLen = intLen + 1; } }
+        else {
+            if (ch == "_") { if (!c47_isDigit(prev) or !c47_isDigit(c47_at(s, k + 1))) { return ""; } }
+            else {
+                if (ch == "." and part == 0 and seenDigit and c47_isDigit(c47_at(s, k + 1))) { part = 1; isFloat = true; cleaned = cleaned + "."; }
+                else {
+                    if ((ch == "e" or ch == "E") and part < 2 and seenDigit) {
+                        part = 2; isFloat = true; cleaned = cleaned + "e";
+                        let n1 = c47_at(s, k + 1);
+                        if (n1 == "+" or n1 == "-") { cleaned = cleaned + n1; k = k + 1; }
+                        if (!c47_isDigit(c47_at(s, k + 1))) { return ""; }
+                    } else { return ""; }
+                }
+            }
+        }
+        prev = ch; k = k + 1;
+    }
+    if (!seenDigit) { return ""; }
+    if (intLen > 1 and first == "0") { return ""; }
+    out["v"] = sign * toNumber(cleaned);
+    if (isFloat) { return "float"; }
+    if (abs(out["v"]) > 9223372036854775807) { return ""; }
+    return "int";
+}
+fun c47_at(s, k) { if (k < 0 or k >= len(s)) { return ""; } return charAt(s, k); }
+
+// ── قيم ──
+// كل قيمة تضبط p["kind"] ∈ text,int,float,bool,nil,date,time,datetime,array,object (وp["elems"] لأنواع عناصر المصفوفة)
+fun c47_value(p, inTable) {
+    let c = c47_peek(p);
+    if (c == "") { c47_fail(p, "C47010", "نهاية الملف حيث تُنتظر قيمة"); }
+    if (c == "\"" or c == "'") { p["kind"] = "text"; return c47_string(p, c); }
+    if (c == "[") { return c47_array(p); }
+    if (c == "{") { return c47_object(p); }
+    if (!c47_isTok(c)) { c47_fail(p, "C47010", "«" + c + "» حيث تُنتظر قيمة"); }
+    let st = p["i"];
+    while (c47_isTok(c47_peek(p))) { c47_adv(p, 1); }
+    let tok = substr(p["s"], st, p["i"] - st);
+    if (tok == "true") { p["kind"] = "bool"; return true; }
+    if (tok == "false") { p["kind"] = "bool"; return false; }
+    if (tok == "nil") { p["kind"] = "nil"; return nil; }
+    if (tok == "_" and inTable) { p["kind"] = "default"; return nil; }
+    p["i"] = st;
+    let n = len(tok);
+    let looksDate = n >= 10 and charAt(tok, 4) == "-" and c47_digits(tok, 0, 4);
+    if (looksDate) {
+        if (n == 10) { if (c47_validDate(tok)) { p["kind"] = "date"; c47_adv(p, n); return tok; } }
+        else { if (c47_validDateTime(tok)) { p["kind"] = "datetime"; c47_adv(p, n); return tok; } }
+        c47_fail(p, "C47022", "تاريخ/وقت غير صالح «" + tok + "»");
+    }
+    if (n >= 5 and charAt(tok, 2) == ":") {
+        if (c47_validTime(tok)) { p["kind"] = "time"; c47_adv(p, n); return tok; }
+        c47_fail(p, "C47022", "تاريخ/وقت غير صالح «" + tok + "»");
+    }
+    let out = {};
+    let kind = c47_number(tok, out);
+    if (kind != "") { p["kind"] = kind; c47_adv(p, n); return out["v"]; }
+    if (c47_isDigit(charAt(tok, 0)) or ((charAt(tok, 0) == "-" or charAt(tok, 0) == "+") and n > 1 and c47_isDigit(charAt(tok, 1)))) {
+        c47_fail(p, "C47024", "رقم غير صالح «" + tok + "»");
+    }
+    c47_fail(p, "C47021", "قيمة غير معروفة «" + tok + "» — النصوص تُكتب بين علامتي اقتباس");
+}
+fun c47_array(p) {
+    c47_adv(p, 1);
+    let out = []; let kinds = [];
+    while (true) {
+        c47_blank(p);
+        if (c47_peek(p) == "]") { c47_adv(p, 1); p["kind"] = "array"; p["elems"] = kinds; return out; }
+        push(out, c47_value(p, false)); push(kinds, p["kind"]);
+        c47_blank(p);
+        if (c47_peek(p) == ",") { c47_adv(p, 1); }
+        else { if (c47_peek(p) != "]") { c47_fail(p, "C47010", "متوقع «,» أو «]» في المصفوفة"); } }
+    }
+}
+fun c47_object(p) {
+    c47_adv(p, 1);
+    let out = {};
+    while (true) {
+        c47_blank(p);
+        if (c47_peek(p) == "}") { c47_adv(p, 1); p["kind"] = "object"; return out; }
+        let segs = c47_keypath(p);
+        if (len(segs) != 1) { c47_fail(p, "C47010", "مفتاح منقّط داخل كائن مضمَّن"); }
+        if (has(out, segs[0])) { c47_fail(p, "C47013", "المفتاح «" + segs[0] + "» مكرر"); }
+        c47_ws(p); c47_expect(p, "="); c47_ws(p);
+        let v = c47_value(p, false);
+        out[segs[0]] = v;
+        c47_blank(p);
+        if (c47_peek(p) == ",") { c47_adv(p, 1); }
+        else { if (c47_peek(p) != "}") { c47_fail(p, "C47010", "متوقع «,» أو «}» في الكائن"); } }
+    }
+}
+
+// ── جداول ──
+fun c47_kindOk(kind, typ) {
+    if (typ == "any") { return true; }
+    if (typ == "float") { return kind == "int" or kind == "float"; }
+    return kind == typ;
+}
+fun c47_cellOk(p, col, kind) {
+    if (kind == "nil") { return col["nullable"]; }
+    if (col["array"]) {
+        if (kind != "array") { return false; }
+        let i = 0;
+        while (i < len(p["elems"])) { if (!c47_kindOk(p["elems"][i], col["type"])) { return false; } i = i + 1; }
+        return true;
+    }
+    return c47_kindOk(kind, col["type"]);
+}
+fun c47_columns(p) {
+    c47_expect(p, "(");
+    let cols = []; let seen = {};
+    let types = ["text", "int", "float", "bool", "date", "time", "datetime", "any"];
+    while (true) {
+        c47_blank(p);
+        if (c47_peek(p) == ")") { c47_adv(p, 1); return cols; }
+        let name = c47_keyseg(p);
+        if (has(seen, name)) { c47_fail(p, "C47031", "عمود مكرر «" + name + "»"); }
+        seen[name] = true;
+        c47_ws(p); c47_expect(p, ":"); c47_ws(p);
+        let st = p["i"];
+        while (c47_isKeyChar(c47_peek(p))) { c47_adv(p, 1); }
+        let typ = substr(p["s"], st, p["i"] - st);
+        if (!contains(types, typ)) { c47_fail(p, "C47030", "نوع عمود غير معروف «" + typ + "»"); }
+        let col = {"name": name, "type": typ, "array": false, "nullable": false, "has_default": false, "default": nil};
+        if (c47_peek(p) == "[" and c47_peekAt(p, 1) == "]") { col["array"] = true; c47_adv(p, 2); }
+        if (c47_peek(p) == "?") { col["nullable"] = true; c47_adv(p, 1); }
+        c47_ws(p);
+        if (c47_peek(p) == "=") {
+            c47_adv(p, 1); c47_ws(p);
+            let dv = c47_value(p, false);
+            if (!c47_cellOk(p, col, p["kind"])) { c47_fail(p, "C47042", "القيمة الافتراضية لا تطابق نوع العمود «" + name + "»"); }
+            col["has_default"] = true; col["default"] = dv;
+        }
+        push(cols, col);
+        c47_blank(p);
+        if (c47_peek(p) == ",") { c47_adv(p, 1); }
+        else { if (c47_peek(p) != ")") { c47_fail(p, "C47010", "متوقع «,» أو «)» في تعريف الأعمدة"); } }
+    }
+}
+fun c47_table(p) {
+    let start = p["i"];
+    c47_adv(p, 5); c47_ws(p);
+    let segs = c47_keypath(p);
+    c47_ws(p);
+    let cols = c47_columns(p);
+    c47_eol(p);
+    let rows = [];
+    while (true) {
+        c47_blank(p);
+        if (p["i"] >= p["n"]) { p["i"] = start; c47_fail(p, "C47043", "جدول بلا end"); }
+        if (c47_peekAt(p, 0) == "e" and c47_peekAt(p, 1) == "n" and c47_peekAt(p, 2) == "d" and !c47_isKeyChar(c47_peekAt(p, 3))) {
+            c47_adv(p, 3); c47_eol(p);
+            return {"segs": segs, "rows": rows};
+        }
+        let rowAt = p["i"]; let cells = []; let kinds = []; let elems = []; let ats = [];
+        while (true) {
+            c47_ws(p);
+            push(ats, p["i"]);
+            push(cells, c47_value(p, true)); push(kinds, p["kind"]);
+            if (p["kind"] == "array") { push(elems, p["elems"]); } else { push(elems, []); }
+            c47_ws(p);
+            if (c47_peek(p) == ",") {
+                c47_adv(p, 1); c47_ws(p);
+                if (c47_peek(p) == "\n" or c47_peek(p) == "#" or c47_peek(p) == "\r" or c47_peek(p) == "") { c47_blank(p); }
+            } else { break; }
+        }
+        c47_eol(p);
+        if (len(cells) > len(cols)) { p["i"] = rowAt; c47_fail(p, "C47040", "الصف فيه " + str(len(cells)) + " خلية والجدول " + str(len(cols)) + " أعمدة"); }
+        let rw = {}; let k = 0;
+        while (k < len(cols)) {
+            let col = cols[k]; let v = nil;
+            if (k < len(cells) and kinds[k] != "default") {
+                p["elems"] = elems[k];
+                if (!c47_cellOk(p, col, kinds[k])) { p["i"] = ats[k]; c47_fail(p, "C47042", "العمود «" + col["name"] + "» يتوقع " + col["type"] + " لكن القيمة " + kinds[k]); }
+                v = cells[k];
+            } else {
+                if (col["has_default"]) { v = col["default"]; }
+                else {
+                    if (!col["nullable"]) { p["i"] = rowAt; c47_fail(p, "C47041", "خلية ناقصة للعمود «" + col["name"] + "»"); }
+                }
+            }
+            rw[col["name"]] = v;
+            k = k + 1;
+        }
+        push(rows, rw);
+    }
+}
+
+// ── المستند ──
+fun c47_pj(path) { return join(path, "\n"); }
+fun c47_walk(p, path) {
+    let node = p["root"]; let k = 0;
+    while (k < len(path)) {
+        let seg = path[k];
+        let pre = c47_pj(slice(path, 0, k + 1));
+        if (!has(node, seg)) { node[seg] = {}; }
+        else {
+            if (type(node[seg]) != "map" or has(p["frozen"], pre)) { c47_fail(p, "C47011", "المسار «" + join(slice(path, 0, k + 1), ".") + "» ليس قسماً قابلاً للتوسعة"); }
+        }
+        node = node[seg];
+        k = k + 1;
+    }
+    return node;
+}
+fun c47_cat(a, b) { let out = []; let i = 0; while (i < len(a)) { push(out, a[i]); i = i + 1; } i = 0; while (i < len(b)) { push(out, b[i]); i = i + 1; } return out; }
+fun c47_parse(src) {
+    let s = replace(src, "\r\n", "\n");
+    let p = {"s": s, "i": 0, "n": len(s), "root": {}, "frozen": {}, "explicit": {}, "kind": "", "elems": []};
+    let cur = [];
+    c47_blank(p);
+    if (c47_starts(substr(s, p["i"]), "channel47 ") ) {
+        let st = p["i"]; c47_adv(p, 10); c47_ws(p);
+        let v0 = p["i"];
+        while (c47_isDigit(c47_peek(p)) or c47_peek(p) == ".") { c47_adv(p, 1); }
+        let ver = substr(s, v0, p["i"] - v0);
+        if (len(ver) == 0 or charAt(ver, 0) != "1") { p["i"] = st; c47_fail(p, "C47002", "إصدار channel47 غير مدعوم: " + ver); }
+        c47_eol(p);
+    }
+    while (true) {
+        c47_blank(p);
+        if (p["i"] >= p["n"]) { return p["root"]; }
+        let at = p["i"]; let c = c47_peek(p);
+        if (c == "[") {
+            if (c47_peekAt(p, 1) == "[") { c47_fail(p, "C47014", "مصفوفة الأقسام [[...]] غير مدعومة؛ استعمل table"); }
+            c47_adv(p, 1); c47_ws(p);
+            let path = c47_keypath(p); c47_ws(p); c47_expect(p, "]"); c47_eol(p);
+            let key = c47_pj(path);
+            if (has(p["explicit"], key) or has(p["frozen"], key)) { p["i"] = at; c47_fail(p, "C47012", "القسم «" + join(path, ".") + "» معرَّف مسبقاً"); }
+            c47_walk(p, path);
+            p["explicit"][key] = true; cur = path;
+        } else {
+            let isTable = c47_starts(substr(s, p["i"]), "table") and (c47_peekAt(p, 5) == " " or c47_peekAt(p, 5) == "\t");
+            if (isTable) {
+                let q = p["i"] + 5;
+                while (q < p["n"] and (charAt(s, q) == " " or charAt(s, q) == "\t")) { q = q + 1; }
+                if (q < p["n"] and (charAt(s, q) == "=" or charAt(s, q) == "\n")) { isTable = false; }
+            }
+            if (isTable) {
+                let t = c47_table(p);
+                let full = c47_cat(cur, t["segs"]);
+                let parent = c47_walk(p, slice(full, 0, len(full) - 1));
+                let last = full[len(full) - 1];
+                if (has(parent, last)) { p["i"] = at; c47_fail(p, "C47013", "المفتاح «" + join(full, ".") + "» مكرر"); }
+                parent[last] = t["rows"]; p["frozen"][c47_pj(full)] = true;
+            } else {
+                let segs = c47_keypath(p);
+                let full = c47_cat(cur, segs);
+                c47_ws(p); c47_expect(p, "="); c47_ws(p);
+                let parent = c47_walk(p, slice(full, 0, len(full) - 1));
+                let last = full[len(full) - 1];
+                if (has(parent, last)) { p["i"] = at; c47_fail(p, "C47013", "المفتاح «" + join(full, ".") + "» مكرر"); }
+                let v = c47_value(p, false);
+                parent[last] = v;
+                if (p["kind"] == "object") { p["frozen"][c47_pj(full)] = true; }
+                c47_eol(p);
+            }
+        }
+    }
+}
+fun c47_try(src) {
+    try { return {"ok": true, "value": c47_parse(src), "error": nil}; }
+    catch (e) {
+        let ev = e.value;
+        if (type(ev) == "map") { return {"ok": false, "value": nil, "error": ev}; }
+        return {"ok": false, "value": nil, "error": {"code": "E-RUNTIME", "message": e.message, "line": e.line, "col": 0}};
+    }
+}
+
+// ── أدوات ──
+fun c47_get(doc, path, defaultValue) {
+    let segs = split(path, "."); let node = doc; let i = 0;
+    while (i < len(segs)) {
+        if (type(node) != "map" or !has(node, segs[i])) { return defaultValue; }
+        node = node[segs[i]]; i = i + 1;
+    }
+    return node;
+}
+fun c47_has(doc, path) { let miss = {}; return c47_get(doc, path, miss) != miss; }
+fun c47_merge(a, b) {
+    if (type(a) != "map" or type(b) != "map") { return b; }
+    let out = {}; let ks = keys(a); let i = 0;
+    while (i < len(ks)) { out[ks[i]] = a[ks[i]]; i = i + 1; }
+    ks = keys(b); i = 0;
+    while (i < len(ks)) {
+        if (has(out, ks[i]) and type(out[ks[i]]) == "map" and type(b[ks[i]]) == "map") { out[ks[i]] = c47_merge(out[ks[i]], b[ks[i]]); }
+        else { out[ks[i]] = b[ks[i]]; }
+        i = i + 1;
+    }
+    return out;
+}
+
+// ── التحقق من بيان مكتبة/حزمة/أداة (يُرجع مصفوفة مشاكل {level, code, path}) ──
+fun c47_isSemver(v) {
+    if (type(v) != "string") { return false; }
+    let core = v;
+    let cut = indexOf(core, "+"); if (cut >= 0) { core = substr(core, 0, cut); }
+    cut = indexOf(core, "-"); if (cut >= 0) { core = substr(core, 0, cut); }
+    let parts = split(core, ".");
+    if (len(parts) != 3) { return false; }
+    let i = 0;
+    while (i < 3) {
+        let x = parts[i];
+        if (len(x) == 0 or !c47_digits(x, 0, len(x)) or (len(x) > 1 and charAt(x, 0) == "0")) { return false; }
+        i = i + 1;
+    }
+    return true;
+}
+fun c47_isId(v) {
+    if (type(v) != "string" or len(v) == 0 or len(v) > 64) { return false; }
+    let ok = "abcdefghijklmnopqrstuvwxyz0123456789"; let i = 0;
+    if (!contains(ok, charAt(v, 0))) { return false; }
+    while (i < len(v)) { if (!contains(ok + "._-", charAt(v, i))) { return false; } i = i + 1; }
+    return true;
+}
+fun c47_check(doc, kind) {
+    let issues = [];
+    let k = kind;
+    if (k == nil) { k = c47_get(doc, "kind", nil); }
+    if (k == nil) { push(issues, {"level": "error", "code": "C47050", "path": "kind"}); return issues; }
+    let req = {"library": ["name", "version", "entry"], "package": ["name", "version"], "tool": ["name", "version", "bin"]};
+    if (!has(req, k)) { push(issues, {"level": "error", "code": "C47054", "path": "kind"}); return issues; }
+    let i = 0;
+    while (i < len(req[k])) {
+        let key = req[k][i];
+        if (!has(doc, key)) { push(issues, {"level": "error", "code": "C47050", "path": key}); }
+        else { if (type(doc[key]) != "string") { push(issues, {"level": "error", "code": "C47051", "path": key}); } }
+        i = i + 1;
+    }
+    if (has(doc, "name") and type(doc["name"]) == "string" and !c47_isId(doc["name"])) { push(issues, {"level": "error", "code": "C47052", "path": "name"}); }
+    if (has(doc, "version") and type(doc["version"]) == "string" and !c47_isSemver(doc["version"])) { push(issues, {"level": "error", "code": "C47052", "path": "version"}); }
+    return issues;
+}
