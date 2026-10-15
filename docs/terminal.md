@@ -23,7 +23,7 @@ printf '1 + 2\n' | rin terminal --batch   # وضع غير تفاعلي (يعيد
 - **Ctrl-C** أثناء تشغيل برنامج يوقفه والحالة محفوظة (ضغطتان: خروج فوري). `input()` يعمل داخل الطرفية.
 
 ## الأوامر (`:help` داخل الطرفية)
-`:load :reload :save :edit :vars :type :time -n N :check :history :keywords :set :pkg :sh :cd :pwd :ls :session :reset :clear :version :quit`
+`:load :reload :save :edit :vars :type :time -n N :check :history :keywords :set :pkg :sh :cd :pwd :ls :ocr :session :reset :clear :version :quit`
 وكلمات `exit` / `quit` / `help` / `clear` تعمل كما هي ما لم تعرّف متغيراً بنفس الاسم.
 
 ## المشاريع
@@ -36,6 +36,15 @@ printf '1 + 2\n' | rin terminal --batch   # وضع غير تفاعلي (يعيد
 ```
 `:new` يدخل المجلد الجديد تلقائياً. `:run` بلا وسائط يشغّل `src/main.rin` (ومشروع الواجهة يُفتح في indsin).
 `:test` يشغّل كل `tests/*.rin`، كلٌّ في مفسّر **نظيف**، وينجح الملف إن لم يُطلق خطأ ولم يطبع `FAIL`.
+
+## طباعة نص صورة (`:ocr`)
+```
+:ocr صورة.png [--lang ara+eng] [--psm N] [--enhance] [--min N]
+:ocr "مسار فيه مسافات.png"
+```
+يطبع النص المقروء من الصورة بـ Unicode كما هو (عربي/لاتيني)، ثم سطراً خافتاً: الثقة · عدد الكلمات · اللغة.
+لا منطق OCR جديد: الأمر يستدعي الدالة الموجودة `make.image.text` (انظر `docs/MAKE_MEDIA.md`) داخل المفسّر نفسه، فنفس الأدوات (tesseract) ونفس شروط الأمان والأخطاء الواضحة (أداة/لغة مفقودة).
+تُحذف أحرف التحكم (ESC وC0/C1) من النص الخارج حتى لا تحقن الصورة تسلسلات طرفية؛ يبقى `\n` و`\t`. العربية تحتاج `tesseract-ocr-ara`.
 
 ## indsin داخل الطرفية
 ```
