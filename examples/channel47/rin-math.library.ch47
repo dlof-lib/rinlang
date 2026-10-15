@@ -1,0 +1,29 @@
+channel47 1.0
+# بيان مكتبة Rin
+
+kind        = "library"
+name        = "rin.math"
+version     = "1.2.0"
+description = "دوال رياضية وإحصائية لـ Rin"
+license     = "MIT"
+entry       = "math.og.rin"
+stable      = true
+released    = 2026-10-15
+authors     = ["Rin Team"]
+keywords    = ["math", "stats", "رياضيات"]
+exports     = ["sum", "avg", "median"]
+
+table deps(name: text, version: text, optional: bool = false)
+  "rin.core",  "^1.0.0"
+  "rin.stats", "~0.4.0", true
+end
+
+[build]
+ratio    = 0.75
+size     = 1_048_576
+mask     = 0xFF
+built_at = 2026-10-15T09:30:00+03:00
+note     = """
+سطر أول
+سطر ثانٍ
+"""
