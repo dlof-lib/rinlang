@@ -367,6 +367,7 @@ private:
             emit(Op::CheckNum, str("'print': 'repeat' يجب أن يكون رقماً، لكن وُجد نوع "), L);
             emit(Op::CheckRepeat, L);
         }
+        if (s->fx) expr(s->fx);   // سمات الخط: آخر قيمة على المكدس
         emit(Op::PrintEmit, stmtRef(s));
         if (jIf >= 0) patchHere(jIf);
     }
