@@ -83,3 +83,7 @@ rin img logo.png --plain > logo.txt    # من الشل: بلا ألوان، من
 
 ## الاختبار
 `RIN_BIN=./build/rin tests/terminal/run.sh` (جلستان دفعيتان مقارنتان بملف متوقَّع، وفحوص pty حقيقية تشمل نقرات فأرة على واجهة indsin).
+
+## RinStudio
+طرفية RinStudio تدعم `ocr <صورة> [--lang ara+eng] [--psm N] [--enhance] [--min N]` (نفس `make.image.text`)، وتعرض ألوان ANSI
+(`colorAnsi` وغيرها) فوق Unicode؛ التفاصيل في `CHANGES_TERMINAL_UNICODE.md`.
