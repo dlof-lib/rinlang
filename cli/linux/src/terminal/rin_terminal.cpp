@@ -3052,10 +3052,21 @@ private:
                 while (!l.empty() && (l.back() == ' ' || l.back() == '\t')) l.pop_back();
                 println(style_.dim() + sym("│", "|") + style_.reset() + (l.empty() ? "" : " " + l));
             }
-            std::string meta = std::string(" ") + tr("الثقة ", "confidence ") + (cv ? cv->toDisplayString() : "?") + "% · " + (nv ? nv->toDisplayString() : "?") + tr(" كلمة", " words") +
-                               (lv ? " · " + safeUnicode(lv->toDisplayString()) : "") + " ";
-            U32 mu = clipWidth(toU32(meta), std::max(4, cols - 6), true);
-            println(style_.dim() + sym("└─", "+-") + toUtf8(mu) + bar(std::max(0, cols - 3 - strWidth(mu))) + style_.reset());
+            // الثقة بألوان Style الموجودة: ≥80 أخضر، ≥50 أصفر، غير ذلك أحمر (الإطار والباقي خافتان كما هما).
+            const std::string conf = cv ? cv->toDisplayString() : "?";
+            const double pct = cv ? std::atof(conf.c_str()) : 0.0;
+            const std::string tone = pct >= 80 ? style_.green() : pct >= 50 ? style_.yellow() : style_.red();
+            const std::string confLabel = std::string(tr("الثقة ", "confidence "));
+            const std::string confValue = conf + "%";
+            const std::string metaRest = std::string(" · ") + (nv ? nv->toDisplayString() : "?") + tr(" كلمة", " words") +
+                                         (lv ? " · " + safeUnicode(lv->toDisplayString()) : "") + " ";
+            U32 mu = clipWidth(toU32(" " + confLabel + confValue + metaRest), std::max(4, cols - 6), true);
+            const std::string shown = toUtf8(mu);
+            // التلوين يُطبَّق فقط إن لم يُقتطع السطر (الاقتطاع يحدث في عرض ضيق جداً)، وإلا يُطبع خافتاً كاملاً.
+            const std::string colored = shown == " " + confLabel + confValue + metaRest
+                ? " " + confLabel + style_.reset() + tone + confValue + style_.reset() + style_.dim() + metaRest
+                : shown;
+            println(style_.dim() + sym("└─", "+-") + colored + bar(std::max(0, cols - 3 - strWidth(mu))) + style_.reset());
         }
         lastOk_ = true;
     }
