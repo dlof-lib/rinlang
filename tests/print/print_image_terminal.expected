@@ -36,10 +36,10 @@ pattern_gray.png lines: 4
 pattern_pal.png lines: 4
 pattern_alpha.png lines: 4
 gradient16.png lines: 4
-  .::-==++*##%@@
-  .::-==++*##%@@
-  .::-==++*##%@@
-  .::-==++*##%@@
+  .::-==+**#%%@@
+  .::-==+**#%%@@
+  .::-==+**#%%@@
+  .::-==+**#%%@@
                 
 ░░░▓▓███▒▒▒▒▒░  
    ░░░▒▒▓▓▓▓▓███
@@ -47,10 +47,10 @@ gradient16.png lines: 4
 blocks has ansi: true rows: 3
 ansi256 has 38;5: true
 ░░▓▓██▒▒▒▒  
-  ▒▒▓▓▒▒▓▓▒▒
-    ▒██▓  ░░
+  ▒▒▓▓▒▓▓▓▒▒
+    ▓██▓ ░░░
 bad mode rejected
 missing file rejected
 ░░▓▓██▒▒▒▒  
-  ▒▒▓▓▒▒▓▓▒▒
-    ▒██▓  ░░
+  ▒▒▓▓▒▓▓▓▒▒
+    ▓██▓ ░░░
