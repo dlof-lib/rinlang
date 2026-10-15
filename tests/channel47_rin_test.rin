@@ -1,0 +1,56 @@
+// اختبارات قارئ channel47 في Rin — التشغيل من جذر المشروع: rin_run tests/channel47_rin_test.rin
+@import "lib/channel47.og.rin";
+let passed = 0; let failed = 0;
+fun check(name, cond) {
+    if (cond) { passed = passed + 1; } else { failed = failed + 1; print "FAIL: " + name; }
+}
+fun codeOf(src) { let r = c47_try(src); if (r.ok) { return "none"; } return r.error.code; }
+
+// قيم
+let v = c47_parse("a = \"x\\n\\u{41}\"\nb = 'raw\\n'\nc = 1_000\nd = -7\ne = 0xff\nf = 0b101\ng = 0o17\nh = 1.5e3\ni = true\nk = nil\n");
+check("string+escape", v["a"] == "x\nA"); check("literal", v["b"] == "raw\\n");
+check("underscore int", v["c"] == 1000); check("neg", v["d"] == -7); check("hex", v["e"] == 255);
+check("bin", v["f"] == 5); check("oct", v["g"] == 15); check("float exp", v["h"] == 1500); check("bool", v["i"] == true); check("nil", v["k"] == nil);
+check("leap bad", codeOf("a = 2026-02-29\n") == "C47022"); check("leap ok", c47_try("a = 2028-02-29\n").ok);
+let dt = c47_parse("a = 2026-10-15\nb = 09:30:15.5\nc = 2026-10-15T09:30:00+03:00\n");
+check("date", dt["a"] == "2026-10-15"); check("time", dt["b"] == "09:30:15.5"); check("datetime", dt["c"] == "2026-10-15T09:30:00+03:00");
+let ml = c47_parse("s = \"\"\"\nx\n  y\"\"\"\nl = [1,\n 2, # c\n [3, \"a\"], {k = 1},\n]\n");
+check("multiline", ml["s"] == "x\n  y"); check("array", len(ml["l"]) == 4 and ml["l"][2][1] == "a" and ml["l"][3]["k"] == 1);
+let sc = c47_parse("[a.b]\nx.y = 1\n[\"م ف\"]\nمفتاح = 2\n");
+check("sections", sc["a"]["b"]["x"]["y"] == 1); check("arabic key", sc["م ف"]["مفتاح"] == 2);
+check("header+crlf", c47_parse("channel47 1.0\r\na = 1\r\n")["a"] == 1);
+
+// جداول
+let t = c47_parse("table t(n: text, v: int = 5, o: bool?)\n  \"a\", 1, true\n  \"b\"\n  \"c\", _, false\n  \"d\",\n    9\nend\n")["t"];
+check("table rows", len(t) == 4); check("table default", t[1]["v"] == 5 and t[1]["o"] == nil); check("table _", t[2]["v"] == 5 and t[2]["o"] == false); check("table continuation", t[3]["v"] == 9);
+check("key named table", c47_parse("table = 5\n")["table"] == 5);
+check("date col rejects text", codeOf("table t(d: date)\n \"2026-10-15\"\nend\n") == "C47042");
+check("date col accepts date", c47_try("table t(d: date)\n 2026-10-15\nend\n").ok);
+check("float col takes int", c47_try("table t(x: float)\n 3\nend\n").ok);
+check("array col", c47_try("table t(x: int[])\n [1, 2]\nend\n").ok and codeOf("table t(x: int[])\n [1, \"a\"]\nend\n") == "C47042");
+
+// أخطاء
+let errs = {"C47010": "a = \nb", "C47011": "a = 1\n[a.b]\n", "C47012": "[a]\n[a]\n", "C47013": "a = 1\na = 2\n", "C47014": "[[a]]\n",
+ "C47020": "a = \"x\n", "C47021": "a = hello\n", "C47022": "a = 2026-13-01\n", "C47023": "a = \"\\q\"\n", "C47024": "a = 007\n",
+ "C47030": "table t(a: str)\nend\n", "C47031": "table t(a: int, a: int)\nend\n", "C47040": "table t(a: int)\n 1, 2\nend\n",
+ "C47041": "table t(a: int)\n _\nend\n", "C47042": "table t(a: int)\n \"x\"\nend\n", "C47043": "table t(a: int)\n 1\n", "C47002": "channel47 2.0\n"};
+let ks = keys(errs); let i = 0;
+while (i < len(ks)) { check("error " + ks[i], codeOf(errs[ks[i]]) == ks[i]); i = i + 1; }
+let pe = c47_try("a = 1\nb = oops\n").error; check("position", pe["line"] == 2 and pe["col"] == 5);
+check("frozen inline", codeOf("a = {x = 1}\n[a]\n") == "C47012");
+
+// أدوات
+let m = c47_merge(c47_parse("[x]\na = 1\nb = [1]\n"), c47_parse("[x]\nb = [2]\nc = 3\n"));
+check("merge", m["x"]["a"] == 1 and m["x"]["b"][0] == 2 and m["x"]["c"] == 3);
+check("get", c47_get(m, "x.c", 0) == 3 and c47_get(m, "x.zz", "d") == "d"); check("has", c47_has(m, "x.a") and !c47_has(m, "x.q"));
+
+// أمثلة وبيانات
+let lib = c47_parse(readFile("examples/channel47/rin-math.library.ch47"));
+check("example library", lib["name"] == "rin.math" and lib["stable"] == true and len(lib["deps"]) == 2 and lib["deps"][1]["optional"] == true and lib["build"]["size"] == 1048576);
+check("example valid", len(c47_check(lib, nil)) == 0);
+let tool = c47_parse(readFile("examples/channel47/rin-fmt.tool.ch47"));
+check("example tool", len(tool["commands"]) == 3 and tool["commands"][1]["aliases"] == [] and tool["commands"][0]["since"] == "2026-01-10");
+check("check tool", len(c47_check(tool, nil)) == 0);
+check("check bad", len(c47_check({"kind": "library", "name": "Bad Name", "version": "1.0"}, nil)) == 3);
+check("check no kind", c47_check({}, nil)[0]["code"] == "C47050");
+print "channel47 (Rin): passed " + str(passed) + ", failed " + str(failed);
