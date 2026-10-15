@@ -330,4 +330,90 @@ Java_com_dlof_rinlang_RinNativeEditor_nativeSnippetTitle(JNIEnv* env, jclass, js
     return utf8ToJstring(env, EditorEngine::snippetTitle(jstringToUtf8(env, word)));
 }
 
+// --- IntelliSense (rin_intellisense.h) ---------------------------------------------------
+// الحزم النصية تستخدم الفاصل U+001F بين الحقول (لا يظهر في أي نص مولَّد) و U+001E بين عناصر القوائم.
+
+namespace {
+const char kFS = '\x1F';
+const char kRS = '\x1E';
+
+jobjectArray toStringArray(JNIEnv* env, const std::vector<std::string>& v) {
+    jclass stringClass = env->FindClass("java/lang/String");
+    jobjectArray arr = env->NewObjectArray((jsize)v.size(), stringClass, nullptr);
+    for (size_t i = 0; i < v.size(); ++i) {
+        jstring js = utf8ToJstring(env, v[i]);
+        env->SetObjectArrayElement(arr, (jsize)i, js);
+        env->DeleteLocalRef(js);
+    }
+    env->DeleteLocalRef(stringClass);
+    return arr;
+}
+} // namespace
+
+// العنصر 0: "startCol\x1FendCol\x1Ftrigger"؛ ثم عنصر لكل اقتراح:
+// "kind\x1Flabel\x1FinsertText\x1Fdetail\x1Fdoc\x1FcursorBack\x1Fflags\x1FmatchPos(,)"
+JNIEXPORT jobjectArray JNICALL
+Java_com_dlof_rinlang_RinNativeEditor_nativeComplete(JNIEnv* env, jclass, jlong handle, jboolean explicitInvoke, jint maxResults) {
+    EditorEngine* e = handleToEngine(handle);
+    if (e == nullptr) return nullptr;
+    rinedit::intel::CompletionResult r = e->complete(explicitInvoke == JNI_TRUE, maxResults);
+    std::vector<std::string> out;
+    out.reserve(r.items.size() + 1);
+    out.push_back(std::to_string(r.startCol) + kFS + std::to_string(r.endCol) + kFS + std::to_string((int)r.trigger));
+    for (const auto& it : r.items) {
+        std::string pos;
+        for (size_t i = 0; i < it.matchPos.size(); ++i) { if (i) pos += ','; pos += std::to_string(it.matchPos[i]); }
+        std::string row = std::to_string((int)it.kind);
+        row += kFS; row += it.label;
+        row += kFS; row += it.insertText;
+        row += kFS; row += it.detail;
+        row += kFS; row += it.doc;
+        row += kFS; row += std::to_string(it.cursorBack);
+        row += kFS; row += std::to_string(it.snippet ? 1 : 0);
+        row += kFS; row += pos;
+        out.push_back(std::move(row));
+    }
+    return toStringArray(env, out);
+}
+
+// "kind\x1Fname\x1Fret\x1Fdoc\x1Factive\x1Fparam1\x1Eparam2..." أو null
+JNIEXPORT jstring JNICALL
+Java_com_dlof_rinlang_RinNativeEditor_nativeSignatureHelp(JNIEnv* env, jclass, jlong handle) {
+    EditorEngine* e = handleToEngine(handle);
+    if (e == nullptr) return nullptr;
+    rinedit::intel::SignatureHelp sh = e->signatureHelp();
+    if (!sh.valid) return nullptr;
+    std::string params;
+    for (size_t i = 0; i < sh.params.size(); ++i) { if (i) params += kRS; params += sh.params[i]; }
+    std::string row = std::to_string(sh.kind);
+    row += kFS; row += sh.name;
+    row += kFS; row += sh.ret;
+    row += kFS; row += sh.doc;
+    row += kFS; row += std::to_string(sh.active);
+    row += kFS; row += params;
+    return utf8ToJstring(env, row);
+}
+
+// "name\x1FkindName\x1Fsignature\x1Fdoc\x1FdefLine\x1FdefCol" أو null
+JNIEXPORT jstring JNICALL
+Java_com_dlof_rinlang_RinNativeEditor_nativeDescribe(JNIEnv* env, jclass, jlong handle, jint line, jint col) {
+    EditorEngine* e = handleToEngine(handle);
+    if (e == nullptr) return nullptr;
+    rinedit::intel::SymbolInfo si = e->describeAt(line, col);
+    if (!si.valid) return nullptr;
+    std::string row = si.name;
+    row += kFS; row += si.kindName;
+    row += kFS; row += si.signature;
+    row += kFS; row += si.doc;
+    row += kFS; row += std::to_string(si.defLine);
+    row += kFS; row += std::to_string(si.defCol);
+    return utf8ToJstring(env, row);
+}
+
+JNIEXPORT void JNICALL
+Java_com_dlof_rinlang_RinNativeEditor_nativeRecordCompletionUse(JNIEnv* env, jclass, jstring label) {
+    EditorEngine::recordCompletionUse(jstringToUtf8(env, label));
+}
+
+
 } // extern "C"
