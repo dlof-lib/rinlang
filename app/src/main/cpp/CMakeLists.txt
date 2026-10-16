@@ -1,6 +1,9 @@
 cmake_minimum_required(VERSION 3.22.1)
 project("rinengine")
 
+# مجلد مصدر طرفية Linux نسبةً إلى app/src/main/cpp (جذر المستودع أربع مستويات فوقه).
+set(RIN_LINUX_TERMINAL_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../../../cli/linux/src/terminal")
+
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
@@ -150,7 +153,13 @@ add_executable(
         clc/clc_rin_opt.cpp
         clc/clc_zip_import.cpp
         clc/sha256.cpp
+        # طرفية Linux (rin terminal) مُضمَّنة في المحرّر: نفس Session المستعملة في `rin terminal` على لينكس
+        # (cli/linux/src/terminal/rin_terminal.cpp) مبنيّة بالعلم RIN_TERMINAL_EMBED (بدون :pkg) + جسر JNI.
+        ${RIN_LINUX_TERMINAL_DIR}/rin_terminal.cpp
+        terminal/rin_terminal_jni.cpp
 )
+target_compile_definitions(rinengine PRIVATE RIN_TERMINAL_EMBED=1)
+target_include_directories(rinengine PRIVATE ${RIN_LINUX_TERMINAL_DIR})
 
 find_library(log-lib log)
 # libz.so + zlib.h جزء أصيل من NDK sysroot على كل ABI (لا حاجة لتحميل/توريد أي مصدر خارجي) —
