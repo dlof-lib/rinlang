@@ -14,6 +14,8 @@
 // ============================================================================
 #pragma once
 
+#include <functional>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -48,6 +50,40 @@ int runIndsinCommand(const std::vector<std::string>& args);
 // `rin img <صورة> [--width N] [--mode half|braille|shade|ascii] [--plain] [--invert]`: يعرض صورة بحروف Unicode
 // (نصف-كتل ملوّنة أو نقاط براي أو ظلال) عبر ImageMagick. يعيد 0 نجاحاً؛ 1 فشل؛ 2 وسائط خاطئة.
 int runImgCommand(const std::vector<std::string>& args);
+
+// ---------------------------------------------------------------------------
+// EmbeddedTerminal — نفس جلسة `rin terminal` (مفسّر دائم الحالة + أوامر `:`) لكن بلا tty:
+// تُغذّى سطراً بسطر وتُسلِّم مخرجاتها وطلبات input() عبر دوال. تستعملها طرفية محرّر RinStudio
+// على أندرويد عبر JNI (app/src/main/cpp/terminal/rin_terminal_jni.cpp). خيط واحد في كل مرة.
+// لا تعمل فيها :sh و:edit و:pkg و:indsin (تحتاج شلاً/tty) — تُرجع رسالة خطأ واضحة.
+// ---------------------------------------------------------------------------
+struct EmbedConfig {
+    std::string cwd;        // مجلد الجلسة الابتدائي (مجلد المشروع)؛ :cd يغيّره داخل الجلسة فقط
+    bool english = false;   // لغة رسائل الجلسة
+};
+
+class EmbeddedTerminal {
+public:
+    enum class Result { Ok, Failed, NeedMore, Quit };
+    using OutputFn = std::function<void(const std::string&)>;
+    using InputFn = std::function<bool(const std::string& prompt, std::string& answer)>;   // false = أُلغي الإدخال
+
+    explicit EmbeddedTerminal(const EmbedConfig& cfg);
+    ~EmbeddedTerminal();
+    EmbeddedTerminal(const EmbeddedTerminal&) = delete;
+    EmbeddedTerminal& operator=(const EmbeddedTerminal&) = delete;
+
+    // سطر واحد؛ NeedMore = المدخل ناقص (قوس/نص مفتوح) فأرسل السطر التالي.
+    Result feed(const std::string& line, const OutputFn& out, const InputFn& in);
+    void cancelPending();
+    bool continuing() const;
+    void reset();                                   // جلسة جديدة (يمسح كل المتغيرات)
+    std::vector<std::string> variableNames();       // ما عرّفه المستخدم في الجلسة
+
+private:
+    struct Impl;
+    std::unique_ptr<Impl> impl_;
+};
 
 // الحلقة الرئيسية. تعيد رمز الخروج (0 نجاح؛ 1 إن فشل أمر في الوضع غير التفاعلي).
 int run(const Options& opt);
