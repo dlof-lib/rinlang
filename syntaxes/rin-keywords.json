@@ -59,7 +59,20 @@
     "where"
   ],
   "hash": [
-    "#sed", "#for", "#in", "#done", "#while", "#sum", "#do", "#swap", "#return", "#diff", "#add", "#ban", "#to", "#ignorance"
+    "#sed",
+    "#for",
+    "#in",
+    "#done",
+    "#while",
+    "#sum",
+    "#do",
+    "#swap",
+    "#return",
+    "#diff",
+    "#add",
+    "#ban",
+    "#to",
+    "#ignorance"
   ],
   "living": [
     "stone",
@@ -747,7 +760,11 @@
     "zlibDeflateRaw",
     "zlibInflate",
     "zlibInflateRaw",
-    "zscore"
+    "zscore",
+    "printImage",
+    "imageText",
+    "imageAnsi",
+    "imageInfo"
   ],
   "natives": [
     "Env.all",
