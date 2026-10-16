@@ -318,6 +318,13 @@ int main(int argc, char** argv) {
         auto* b = find(r, "bold");
         CHECK(b && b->kind == intel::Kind::Property && b->insertText == "bold=true", "print attr bold=true");
         CHECK(r.items[0].label == "bold", "bold ranks first among print attrs");
+        Doc di("print.image(\"a.png\", mo|");
+        auto ri = di.comp();
+        auto* mi = find(ri, "mode");
+        CHECK(mi && mi->insertText == "mode=\"blocks\"", "print.image attr mode");
+        Doc dj("print.image(\"a.png\", co|");
+        auto rj = dj.comp();
+        CHECK(find(rj, "cols") != nullptr, "print.image attr cols");
         Doc d2("print \"x\" col|");
         auto r2 = d2.comp();
         auto* c = find(r2, "color");
