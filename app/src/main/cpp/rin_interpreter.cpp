@@ -6754,6 +6754,7 @@ void Interpreter::registerNatives() {
     registerNativesOop(); // Rin 1.0: oop.* — استبطان الأصناف والكائنات + أدوات OOP (rin_oop_natives.cpp)
     registerNativesInput(); // Rin 1.0: نماذج الإدخال (معاملة/تداخل/مُدقِّق النموذج) فوق input() — بعد oop.* لأنها تستدعيها (rin_input.cpp)
     registerNativesConditions(); // متغيّرات الشروط الموسّعة (rin_conditions.cpp)
+    registerNativesImage(); // printImage/imageAnsi/imageInfo (rin_image_ansi.cpp)
     registerNativesEnv();   // ربط .env: Env.* (rin_env.cpp)
     registerNativesSet();   // نوع Set الأساسي: Set(...) و Set.* وتوسعة len/contains/has/remove/sum... (rin_set.cpp) — أخيراً كي تلفّ ما سبقها
 }
@@ -12523,6 +12524,7 @@ bool Interpreter::livePropertyGet(const EnvPtr& env, const std::string& name, co
 #include "rin_extra_natives7.cpp" // مفهوم time (docs/TIME.md)
 #include "rin_table.cpp" // توسعة الجدول: دوال اللغة الموجودة تفهم الجدول (انظر رأس الملف)
 #include "rin_conditions.cpp" // متغيّرات الشروط الموسّعة (docs/key_terms_and_builtins.md)
+#include "rin_image_ansi.cpp" // صور داخل الـ terminal كنص (docs/image-terminal.md)
 #include "rin_env.cpp"   // ربط ملف .env (docs/env.md)
 #include "rin_set.cpp"   // نوع Set الأساسي (docs/set.md)
 #include "rin_expr_host.cpp" // واجهة التقييم المعزول لـ indsin (docs/indsin_rin.md)
