@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="terminal_help_native">Linux terminal commands (persistent native session):\n  :help        full list of : commands (:load :vars :type :time :check :ocr :img :cd :ls ...)\n  :ocr &lt;image&gt;  print the text found in an image\n  :img &lt;image&gt;  show an image with Unicode characters (needs ImageMagick, Linux only)\n  native on    run all code in the native session (real state); native off to go back\n:sh, :edit, :pkg and :indsin are not available here. The native engine cannot be interrupted.</string>
+    <string name="terminal_native_unavailable">The native Linux terminal is not available in this build.</string>
+    <string name="terminal_native_busy">The native session is busy or a program is running — wait for it to finish (it cannot be interrupted).</string>
+    <string name="terminal_native_on">native: on — all code runs in the native Linux terminal session</string>
+    <string name="terminal_native_off">native: off — code runs in the regular REPL (: commands still work)</string>
+</resources>
