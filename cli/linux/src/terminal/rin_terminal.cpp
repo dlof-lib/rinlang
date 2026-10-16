@@ -11,7 +11,9 @@
 #include "diagnostics/diagnostic_renderer.h"
 #include "diagnostics/diagnostic_engine.h"
 #include "diagnostics/source_manager.h"
-#include "../pkg/cli_pkg.h"
+#ifndef RIN_TERMINAL_EMBED
+#include "../pkg/cli_pkg.h"   // غير مُضمَّن في بناء أندرويد (RinPM يعمل من سطر أوامر لينكس فقط)
+#endif
 #include "indsin/rin_indsin_c_api.h"
 
 #include <algorithm>
@@ -1374,8 +1376,8 @@ bool parseImgArgs(const std::vector<std::string>& args, ImgArgs& o, std::string&
     return true;
 }
 
-void printImgUsage(std::FILE* f) {
-    std::fputs(tr(
+std::string imgUsageText() {
+    return std::string(tr(
         "الاستخدام: :img <صورة> [خيارات]      (أو من الشل:  rin img <صورة> [خيارات])\n"
         "  --width, -w N     عرض الرسم بالأعمدة (الافتراضي: عرض الطرفية حتى 100)\n"
         "  --mode, -m M      half (نصف-كتل ملوّنة) · braille (نقاط براي) · shade (ظلال ░▒▓█) · ascii\n"
@@ -1387,8 +1389,9 @@ void printImgUsage(std::FILE* f) {
         "  --mode, -m M      half (colored half-blocks) · braille (braille dots) · shade (░▒▓█) · ascii\n"
         "  --plain, -p       no colors (braille becomes the default)\n"
         "  --invert, -i      flip brightness in monochrome modes (for light-background terminals)\n"
-        "formats: png jpg gif bmp webp tiff — requires ImageMagick:  sudo apt install imagemagick\n"), f);
+        "formats: png jpg gif bmp webp tiff — requires ImageMagick:  sudo apt install imagemagick\n"));
 }
+void printImgUsage(std::FILE* f) { std::fputs(imgUsageText().c_str(), f); }
 
 bool localeIsUtf8Free() {
     for (const char* v : {"LC_ALL", "LC_CTYPE", "LANG"}) {
@@ -1874,7 +1877,56 @@ public:
         return code;
     }
 
+    // ---------- واجهة التضمين (انظر EmbeddedTerminal) ----------
+    enum class Feed { Ok, Failed, NeedMore, Quit };
+
+    void setOutputSink(std::function<void(const std::string&)> out) { outSink_ = std::move(out); }
+
+    void enableEmbedded(const std::string& cwd) {
+        embedded_ = true;
+        outSink_ = [](const std::string&) {};   // لا يكتب أبداً في stdout قبل أن يضبط feed() المستقبِل الحقيقي
+        sessionCwd_ = cwd;
+        // المحرر يرسم ألوان ANSI (RinAnsi) وUnicode دائماً: لا tty ولا locale على أندرويد فنفرضهما هنا.
+        style_.on = opt_.color && std::getenv("NO_COLOR") == nullptr;
+        style_.c256 = true;
+        utf8_ = true;
+        resetInterpreter();   // لإعادة تركيب مزوّد الإدخال بعد تفعيل الوضع
+    }
+
+    // يستقبل سطراً واحداً كما في loopBatch: يجمع الأسطر الناقصة (أقواس/نصوص) حتى يكتمل المدخل ثم ينفّذه.
+    Feed feedLine(std::string line, std::function<bool(const std::string&, std::string&)> in) {
+        inputFn_ = std::move(in);
+        char saved[4096];
+        bool haveSaved = ::getcwd(saved, sizeof(saved)) != nullptr;
+        if (!sessionCwd_.empty()) (void)!::chdir(sessionCwd_.c_str());
+        Feed result = feedLineInner(std::move(line));
+        char now[4096];
+        if (::getcwd(now, sizeof(now))) sessionCwd_ = now;   // :cd يغيّر مجلد الجلسة لا مجلد التطبيق
+        if (haveSaved) (void)!::chdir(saved);
+        inputFn_ = nullptr;
+        return result;
+    }
+    void cancelPending() { acc_.clear(); }
+    bool continuing() const { return !acc_.empty(); }
+    void resetSession() { acc_.clear(); resetInterpreter(); accepted_.clear(); lastOk_ = true; }
+    std::vector<std::string> sessionVarNames() { std::vector<std::string> v; for (const auto& kv : interp_->exportGlobals()) if (!baseline_.count(kv.first)) v.push_back(kv.first); return v; }
+
 private:
+    Feed feedLineInner(std::string line) {
+        if (!line.empty() && line.back() == '\r') line.pop_back();
+        acc_.push_back(line);
+        std::string source = joinLines(acc_, "\n");
+        bool isCommand = acc_.size() == 1 && startsWith(ltrim(line), ":");
+        if (!isCommand && analyze(toU32(source)).needsMore()) return Feed::NeedMore;
+        acc_.clear();
+        std::string entry = trim(source);
+        if (entry.empty()) return Feed::Ok;
+        lastOk_ = true;
+        processEntry(entry);
+        if (quit_) { quit_ = false; return Feed::Quit; }
+        return lastOk_ ? Feed::Ok : Feed::Failed;
+    }
+
     Options opt_;
     Style style_;
     EditorConfig editorCfg_;
@@ -1901,6 +1953,12 @@ private:
     bool quit_ = false;
     int exitCode_ = 0;
     Clock::time_point started_ = Clock::now();
+    // ---- وضع التضمين (EmbeddedTerminal): لا tty ولا stdout ----
+    bool embedded_ = false;
+    std::function<void(const std::string&)> outSink_;
+    std::function<bool(const std::string&, std::string&)> inputFn_;
+    std::vector<std::string> acc_;        // أسطر متعددة الأسطر قيد التجميع (مثل loopBatch)
+    std::string sessionCwd_;
 
     // ---------- مساعدات ----------
     static bool localeIsUtf8() {
@@ -1930,8 +1988,8 @@ private:
 
     void print(const std::string& s) {
         if (s.empty()) return;
-        std::fwrite(s.data(), 1, s.size(), stdout);
-        std::fflush(stdout);
+        if (outSink_) outSink_(s);   // مضمَّن (أندرويد): المخرجات تذهب للتطبيق لا إلى stdout
+        else { std::fwrite(s.data(), 1, s.size(), stdout); std::fflush(stdout); }
         atLineStart_ = s.back() == '\n';
     }
     void println(const std::string& s) { print(s + "\n"); }
@@ -1955,6 +2013,7 @@ private:
 
     void resetInterpreter() {
         interp_ = std::make_unique<rin::Interpreter>();
+        if (embedded_) interp_->setInputProvider([this](const std::string& prompt, std::string& answer) { return inputFn_ ? inputFn_(prompt, answer) : false; });
         underscoreDefined_ = false;
         baseline_.clear();
         for (const auto& kv : interp_->exportGlobals()) baseline_.insert(kv.first);
@@ -2421,7 +2480,13 @@ private:
         if (cmd == "history") return cmdHistory(arg);
         if (cmd == "keywords") return cmdKeywords();
         if (cmd == "set") return cmdSet(arg);
+#ifndef RIN_TERMINAL_EMBED
         if (cmd == "pkg") { std::vector<std::string> a = splitWords(arg); int rc = rinpm::cli::run(a, RIN_VERSION_STRING); lastOk_ = rc == 0; return; }
+#endif
+        if (embedded_ && (cmd == "sh" || cmd == "edit" || cmd == "pkg" || cmd == "indsin")) {
+            err(std::string(":") + cmd + " — " + tr("غير متاح داخل المحرر (استعمل طرفية لينكس)", "not available inside the editor (use the Linux terminal)"));
+            lastOk_ = false; return;
+        }
         if (cmd == "sh") { if (arg.empty()) { err(tr("الاستخدام: :sh <أمر>", "usage: :sh <command>")); return; } int rc = std::system(arg.c_str()); lastOk_ = rc == 0; atLineStart_ = true; return; }
         if (cmd == "cd") {
             std::string target = arg.empty() ? (std::getenv("HOME") ? std::getenv("HOME") : "/") : expandTilde(arg);
@@ -2510,6 +2575,7 @@ private:
     }
 
     void cmdEdit(const std::string& arg) {
+        if (embedded_) { err(std::string(":edit — ") + tr("غير متاح داخل المحرر (استعمل طرفية لينكس)", "not available inside the editor (use the Linux terminal)")); lastOk_ = false; return; }
         std::string path;
         bool temp = arg.empty();
         if (temp) {
@@ -2935,8 +3001,7 @@ private:
         if (!parseImgArgs(splitArgsQuoted(arg), ia, e)) { err(e); lastOk_ = false; return; }
         if (ia.help || ia.path.empty()) {
             ensureLineStart();
-            std::fflush(stdout);
-            printImgUsage(stdout);
+            print(imgUsageText());
             atLineStart_ = true;
             lastOk_ = ia.help;
             return;
@@ -3204,6 +3269,39 @@ int runIndsinCommand(const std::vector<std::string>& args) {
     st.on = ::isatty(STDOUT_FILENO) && std::getenv("NO_COLOR") == nullptr && term && std::strcmp(term, "dumb") != 0;
     return runIndsin(ia, st, true);
 }
+
+// ---------------------------------------------------------------------------
+// EmbeddedTerminal — نفس جلسة `rin terminal` لكن بلا tty: المخرجات والإدخال عبر دوال (JNI في أندرويد).
+// ---------------------------------------------------------------------------
+struct EmbeddedTerminal::Impl {
+    std::unique_ptr<Session> s;
+};
+
+EmbeddedTerminal::EmbeddedTerminal(const EmbedConfig& cfg) : impl_(new Impl) {
+    g_english = cfg.english;
+    Options o;
+    o.forceBatch = true; o.color = true; o.useHistory = false; o.banner = false;
+    o.highlight = false; o.hints = false; o.autoprint = true;
+    impl_->s.reset(new Session(o));
+    impl_->s->enableEmbedded(cfg.cwd);
+}
+EmbeddedTerminal::~EmbeddedTerminal() = default;
+
+EmbeddedTerminal::Result EmbeddedTerminal::feed(const std::string& line, const OutputFn& out, const InputFn& in) {
+    impl_->s->setOutputSink(out ? out : OutputFn([](const std::string&) {}));
+    Session::Feed r = impl_->s->feedLine(line, in);
+    impl_->s->setOutputSink([](const std::string&) {});
+    switch (r) {
+        case Session::Feed::Ok: return Result::Ok;
+        case Session::Feed::Failed: return Result::Failed;
+        case Session::Feed::NeedMore: return Result::NeedMore;
+        default: return Result::Quit;
+    }
+}
+void EmbeddedTerminal::cancelPending() { impl_->s->cancelPending(); }
+bool EmbeddedTerminal::continuing() const { return impl_->s->continuing(); }
+void EmbeddedTerminal::reset() { impl_->s->resetSession(); }
+std::vector<std::string> EmbeddedTerminal::variableNames() { return impl_->s->sessionVarNames(); }
 
 int runImgCommand(const std::vector<std::string>& args) {
     if (const char* l = std::getenv("RIN_LANG")) g_english = std::strncmp(l, "en", 2) == 0;
