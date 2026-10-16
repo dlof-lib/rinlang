@@ -832,6 +832,7 @@ inline std::string textBefore(const std::string& line, int col) { return line.su
 
 struct Context {
     enum Pos { Stmt, Expr, Operand, DeclName, ClassOnly, Label, Member, At, Hash, ImportPath, TmplKind, None } pos = None;
+    bool inPrintImage = false;          // داخل print.image(...): تُقترح mode/cols/invert/color/caption
     bool inPrint = false;               // داخل عبارة print/show أو ترويسة @tmpl print|style: تُقترح سماتها
     std::string prefix;
     int startCol = 0, endCol = 0;
@@ -876,6 +877,29 @@ inline bool inPrintStatement(const std::vector<Tok>& t, int ci) {
     return false;
 }
 
+struct PrintAttr { const char* name; const char* doc; const char* value; };
+
+// داخل print.image( ... ) أو imageText( ... ): معاملات مسمّاة خاصة بالصور
+inline bool inPrintImageCall(const std::vector<Tok>& t, int ci) {
+    int commas = 0;
+    int o = enclosingCallOpen(t, ci, commas);
+    if (o < 1) return false;
+    if (t[o - 1].s == "image" && o >= 3 && t[o - 2].s == "." && t[o - 3].s == "print") return true;
+    return false;
+}
+
+inline const std::vector<PrintAttr>& printImageAttrs() {
+    static const std::vector<PrintAttr> v = {
+        {"mode", "نمط الرسم: blocks|half|ansi256|shade|ascii|braille. مثال: mode=\"braille\"", "\"blocks\""},
+        {"cols", "عدد الأعمدة (افتراضي 60، حتى 400). مثال: cols=40", ""},
+        {"invert", "قلب الفاتح/الغامق في shade/ascii/braille (invert=true)", "true"},
+        {"color", "true يفرض الألوان · false يمنعها · الافتراضي تلقائي", "true"},
+        {"caption", "سطر تحت الصورة. مثال: caption=\"Rin\"", "\"\""},
+        {"if", "شرط: لا تُطبع الصورة إلا إن تحقق", ""},
+    };
+    return v;
+}
+
 // بعد ترويسة قالب: @tmpl name(params) |  → print / style / text
 inline bool afterTmplHeader(const std::vector<Tok>& t, int ci) {
     if (ci < 1 || t[ci - 1].s != ")") return false;
@@ -889,7 +913,6 @@ inline bool afterTmplHeader(const std::vector<Tok>& t, int ci) {
     return false;
 }
 
-struct PrintAttr { const char* name; const char* doc; const char* value; };
 inline const std::vector<PrintAttr>& printAttrs() {
     static const std::vector<PrintAttr> v = {
         {"bold", "غامق (bold=true)", "true"}, {"italic", "مائل (italic=true)", "true"},
@@ -1008,6 +1031,7 @@ inline Context classifyContext(const std::vector<std::string>& lines, int curLin
 
     if (afterTmplHeader(t, ci) && (!p1 || p1->line == curLine)) { cx.pos = Context::TmplKind; return cx; }
     cx.inPrint = inPrintStatement(t, ci);
+    cx.inPrintImage = inPrintImageCall(t, ci);
 
     // الموضع: بداية عبارة؟ تعبير؟ بعد معامل؟
     auto firstOnLine = [&]() { return !p1 || p1->line < curLine; };
@@ -1249,6 +1273,14 @@ inline CompletionResult complete(const std::vector<std::string>& lines, int curL
         const bool stmt = cx.pos == Context::Stmt, expr = cx.pos == Context::Expr, operand = cx.pos == Context::Operand;
         const bool inClassBody = !an.enclosingClass.empty() && !an.inFunction;
 
+        if (cx.inPrintImage && (operand || expr)) {
+            for (const PrintAttr& pa : printImageAttrs()) {
+                CompletionItem it; it.label = pa.name; it.insertText = std::string(pa.name) + "=" + pa.value;
+                it.kind = Kind::Property; it.detail = "سمة print.image"; it.doc = pa.doc;
+                it.cursorBack = (pa.value[0] == '"') ? 1 : 0;
+                pushItem(res, std::move(it), q, 44, seen);
+            }
+        }
         if (cx.inPrint && operand) {
             for (const PrintAttr& pa : printAttrs()) {
                 CompletionItem it; it.label = pa.name; it.insertText = std::string(pa.name) + "=" + pa.value;
