@@ -894,6 +894,42 @@
       ],
       "ret": "array",
       "doc": "يقرأ المتغيّر كـقائمة مع قيمة افتراضية؛ قيمة غير صالحة ← E0005."
+    },
+    "printImage": {
+      "params": [
+        "path",
+        "[width]",
+        "[mode]"
+      ],
+      "ret": "nil",
+      "doc": "يطبع صورة (PNG/JPEG/BMP/GIF) في الـ terminal كنص. width = عدد الأعمدة، mode = auto|color|blocks|ascii."
+    },
+    "imageAnsi": {
+      "params": [
+        "path",
+        "[width]",
+        "[mode]"
+      ],
+      "ret": "string",
+      "doc": "نفس printImage لكن يعيد النص (لحفظه أو طباعته لاحقاً) بدل طباعته."
+    },
+    "imageInfo": {
+      "params": [
+        "path"
+      ],
+      "ret": "map",
+      "doc": "معلومات الصورة: {width, height, channels, format}."
+    },
+    "imageText": {
+      "params": [
+        "path",
+        "[cols]",
+        "[mode]",
+        "[invert]",
+        "[color]"
+      ],
+      "ret": "string",
+      "doc": "يحوّل صورة (PNG/PPM/BMP، وJPEG/GIF/WebP عبر ImageMagick) إلى نص للطرفية. mode: blocks|ansi256|shade|ascii|braille. للطباعة المباشرة استخدم print.image(...)."
     }
   },
   "namespaces": {
