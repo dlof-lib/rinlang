@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="terminal_help_native">أوامر طرفية Linux (جلسة أصلية دائمة الحالة):\n  :help        قائمة أوامر : كاملة (:load :vars :type :time :check :ocr :img :cd :ls …)\n  :ocr &lt;صورة&gt;  طباعة النص المكتوب داخل صورة\n  :img &lt;صورة&gt;  عرض صورة بحروف Unicode (يحتاج ImageMagick على لينكس فقط)\n  native on    كل الشيفرة تعمل في الجلسة الأصلية (حالة حقيقية)، و native off للعودة\nلا تعمل هنا :sh و :edit و :pkg و :indsin. المحرّك الأصلي لا يقبل المقاطعة.</string>
+    <string name="terminal_native_unavailable">طرفية Linux الأصلية غير متاحة في هذا البناء.</string>
+    <string name="terminal_native_busy">الجلسة الأصلية مشغولة أو يعمل برنامج الآن — انتظر انتهاءه (لا يمكن مقاطعته).</string>
+    <string name="terminal_native_on">native: مُفعَّل — كل الشيفرة تعمل في جلسة طرفية Linux الأصلية</string>
+    <string name="terminal_native_off">native: متوقف — الشيفرة تعمل في الـ REPL المعتاد (أوامر : ما زالت تعمل)</string>
+</resources>
