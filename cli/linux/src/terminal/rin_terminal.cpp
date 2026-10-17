@@ -2,6 +2,7 @@
 //  rin terminal — التنفيذ. انظر rin_terminal.h وdocs/terminal.md
 // ============================================================================
 #include "rin_terminal.h"
+#include "rin_terminal_xcmds.h"   // 50 extra commands: $ cat / $ cp *.rin ~/ / $ seq 1:10 ...
 
 #include "rin_version.h"
 #include "rin_lexer.h"
@@ -1916,7 +1917,7 @@ private:
         if (!line.empty() && line.back() == '\r') line.pop_back();
         acc_.push_back(line);
         std::string source = joinLines(acc_, "\n");
-        bool isCommand = acc_.size() == 1 && startsWith(ltrim(line), ":");
+        bool isCommand = acc_.size() == 1 && xcmds::isCommandLine(line);
         if (!isCommand && analyze(toU32(source)).needsMore()) return Feed::NeedMore;
         acc_.clear();
         std::string entry = trim(source);
@@ -2063,7 +2064,7 @@ private:
         for (const auto& line : splitLines(content)) {
             std::string t = trim(line);
             if (t.empty() || t[0] == '#' || startsWith(t, "//")) continue;
-            if (t[0] == ':') handleCommand(t.substr(1));
+            if (xcmds::isCommandLine(t)) handleCommand(xcmds::commandBody(t));
         }
     }
 
@@ -2092,25 +2093,26 @@ private:
         };
 
         // أوامر :
-        if (!trimmed.empty() && trimmed[0] == ':') {
-            size_t sp = trimmed.find(' ');
+        if (!trimmed.empty() && (trimmed[0] == ':' || trimmed[0] == '$')) {
+            size_t bo = trimmed.find_first_not_of(" \t", 1);
+            if (bo == std::string::npos) bo = trimmed.size();
+            std::string body = trimmed.substr(bo);
+            size_t sp = body.find(' ');
             if (sp == std::string::npos) {
-                std::string w = trimmed.substr(1);
-                for (const auto& c : commandNames()) if (startsWith(c, w)) out.push_back(":" + c);
+                for (const auto& c : commandNames()) if (startsWith(c, body)) out.push_back(trimmed.substr(0, bo) + c);
                 std::sort(out.begin(), out.end());
-                start = static_cast<size_t>(pre.size() - trimmed.size());  // بداية ':' (بايتات = أحرف لأن ASCII قبلها)
                 start = toU32(pre.substr(0, pre.size() - trimmed.size())).size();
                 return out;
             }
-            std::string cmd = trimmed.substr(1, sp - 1);
-            if (cmd == "load" || cmd == "run" || cmd == "save" || cmd == "cd" || cmd == "edit" || cmd == "ls" || cmd == "source" || cmd == "tree" || cmd == "indsin" || cmd == "test" || cmd == "ocr" || cmd == "img") {
+            std::string cmd = body.substr(0, sp);
+            if (xcmds::takesFiles(cmd) || cmd == "load" || cmd == "run" || cmd == "save" || cmd == "cd" || cmd == "edit" || cmd == "ls" || cmd == "source" || cmd == "tree" || cmd == "indsin" || cmd == "test" || cmd == "ocr" || cmd == "img") {
                 size_t ws = pre.find_last_of(' ');
                 std::string partial = pre.substr(ws + 1);
                 addFiles(partial, toU32(pre.substr(0, ws + 1)).size());
                 return out;
             }
             if (cmd == "set") {
-                std::string rest = trim(trimmed.substr(sp + 1));
+                std::string rest = trim(body.substr(sp + 1));
                 if (rest.find(' ') == std::string::npos) {
                     for (const auto& s : settings()) if (startsWith(std::string(s.name), rest)) out.push_back(s.name);
                     start = toU32(pre).size() - toU32(rest).size();
@@ -2118,7 +2120,7 @@ private:
                 }
             }
             if (cmd == "help") {
-                std::string rest = trim(trimmed.substr(sp + 1));
+                std::string rest = trim(body.substr(sp + 1));
                 for (const auto& c : commandNames()) if (startsWith(c, rest)) out.push_back(c);
                 start = toU32(pre).size() - toU32(rest).size();
                 return out;
@@ -2193,7 +2195,7 @@ private:
             acc.push_back(line);
             std::string source = joinLines(acc, "\n");
             Analysis a = analyze(toU32(source));
-            bool isCommand = acc.size() == 1 && startsWith(ltrim(line), ":");
+            bool isCommand = acc.size() == 1 && xcmds::isCommandLine(line);
             if (!isCommand && a.needsMore()) continue;
             acc.clear();
             std::string entry = trim(source);
@@ -2211,7 +2213,7 @@ private:
             if (!line.empty() && line.back() == '\r') line.pop_back();
             acc.push_back(line);
             std::string source = joinLines(acc, "\n");
-            bool isCommand = acc.size() == 1 && startsWith(ltrim(line), ":");
+            bool isCommand = acc.size() == 1 && xcmds::isCommandLine(line);
             if (!isCommand && analyze(toU32(source)).needsMore()) continue;
             acc.clear();
             std::string entry = trim(source);
@@ -2229,7 +2231,7 @@ private:
         if (entry == "exit" || entry == "quit") { quit_ = true; return; }
         if (entry == "help" && !userDefined("help")) { cmdHelp(""); return; }
         if (entry == "clear" && !userDefined("clear")) { cmdClear(); return; }
-        if (entry[0] == ':') { handleCommand(entry.substr(1)); return; }
+        if (xcmds::isCommandLine(entry)) { handleCommand(xcmds::commandBody(entry)); return; }
         if (entry == "!!" || (entry[0] == '!' && entry.size() > 1 && std::isdigit(static_cast<unsigned char>(entry[1])))) {
             std::string re;
             if (entry == "!!") { if (history_.items.size() < 2) { err(tr("لا يوجد أمر سابق", "no previous command")); return; } re = history_.items[history_.items.size() - 2]; }
@@ -2240,7 +2242,7 @@ private:
             }
             println(style_.dim() + "↻ " + style_.reset() + re);
             entry = re;
-            if (!entry.empty() && entry[0] == ':') { handleCommand(entry.substr(1)); return; }
+            if (!entry.empty() && xcmds::isCommandLine(entry)) { handleCommand(xcmds::commandBody(entry)); return; }
         }
         execEntry(entry, false);
     }
@@ -2392,7 +2394,7 @@ private:
     // ---------- الأوامر ----------
     struct Cmd { const char* name; const char* usage; const char* ar; const char* en; };
     static const std::vector<Cmd>& commands() {
-        static const std::vector<Cmd> c = {
+        static const std::vector<Cmd> base = {
             {"help",     ":help [أمر|keys]",        "المساعدة (أو شرح أمر / الاختصارات)",            "help (or a command / key bindings)"},
             {"quit",     ":quit",                    "خروج (أو :exit / :q / Ctrl-D)",                 "exit (also :exit / :q / Ctrl-D)"},
             {"clear",    ":clear",                   "مسح الشاشة",                                   "clear the screen"},
@@ -2424,6 +2426,11 @@ private:
             {"session",  ":session",                 "معلومات الجلسة",                               "session info"},
             {"version",  ":version",                 "إصدار Rin",                                    "Rin version"},
         };
+        static const std::vector<Cmd> c = [] {
+            std::vector<Cmd> v = base;
+            for (const auto& x : xcmds::specs()) v.push_back({x.name, x.usage, x.desc, x.desc});   // English only
+            return v;
+        }();
         return c;
     }
     static std::vector<std::string> commandNames() {
@@ -2446,7 +2453,7 @@ private:
     }
 
     void handleCommand(const std::string& raw) {
-        std::string line = trim(raw);
+        std::string line = xcmds::expandAlias(trim(raw));
         size_t sp = line.find_first_of(" \t");
         std::string cmd = sp == std::string::npos ? line : line.substr(0, sp);
         std::string arg = sp == std::string::npos ? "" : trim(line.substr(sp + 1));
@@ -2498,6 +2505,15 @@ private:
         if (cmd == "ls") return cmdLs(arg);
         if (cmd == "session") return cmdSession();
         if (cmd == "version") { println(std::string("Rin ") + RIN_VERSION_STRING); return; }
+        if (xcmds::isCommand(cmd)) {
+            xcmds::Io io;
+            io.out = [this](const std::string& t) { print(t); };
+            io.err = [this](const std::string& m) { ensureLineStart(); err(m); };
+            int rc = 0;
+            xcmds::run(cmd, arg, io, rc);
+            if (rc != 0) { lastOk_ = false; failures_++; }
+            return;
+        }
         err(std::string(tr("أمر غير معروف: :", "unknown command: :")) + cmd + "   " + tr("(جرّب :help)", "(try :help)"));
         lastOk_ = false;
     }
@@ -2541,7 +2557,7 @@ private:
             return;
         }
         if (!arg.empty()) {
-            std::string a = arg[0] == ':' ? arg.substr(1) : arg;
+            std::string a = (arg[0] == ':' || arg[0] == '$') ? trim(arg.substr(1)) : arg;
             for (const auto& c : commands()) if (a == c.name) {
                 println("  " + style_.cyan() + c.usage + style_.reset());
                 println(std::string("    ") + tr(c.ar, c.en));
@@ -2550,12 +2566,20 @@ private:
             err(std::string(tr("لا يوجد أمر بهذا الاسم: ", "no such command: ")) + a);
             return;
         }
-        println(std::string("  ") + style_.bold() + tr("اكتب شيفرة Rin مباشرة، أو أمراً يبدأ بـ ':'", "Type Rin code directly, or a command starting with ':'") + style_.reset());
+        println(std::string("  ") + style_.bold() + tr("اكتب شيفرة Rin مباشرة، أو أمراً يبدأ بـ ':' أو '$'", "Type Rin code directly, or a command starting with ':' or '$'") + style_.reset());
         println("");
         for (const auto& c : commands()) {
+            if (xcmds::isCommand(c.name)) continue;
             std::string u = c.usage;
             int pad = std::max(1, 26 - strWidth(u));
             println("  " + style_.cyan() + u + style_.reset() + std::string(static_cast<size_t>(pad), ' ') + tr(c.ar, c.en));
+        }
+        println("");
+        println(std::string("  ") + style_.bold() + "Extra commands (50) - start with '$' or ':'  |  * globs  |  ~/ home  |  A:B ranges  |  '...' = repeatable" + style_.reset());
+        for (const auto& x : xcmds::specs()) {
+            std::string u = x.usage;
+            int pad = std::max(1, 26 - strWidth(u));
+            println("  " + style_.cyan() + u + style_.reset() + std::string(static_cast<size_t>(pad), ' ') + x.desc);
         }
         println("");
         info(std::string("  ") + tr("أمثلة: 1 + 2   |   let x = 5;   |   x * 2   |   fun f(a) {   |   !!", "examples: 1 + 2   |   let x = 5;   |   x * 2   |   fun f(a) {   |   !!"));
