@@ -389,6 +389,12 @@ class RinTerminalView @JvmOverloads constructor(
         updateMode()
     }
 
+    /** سطر أمر لطرفية Linux الأصلية: يبدأ بـ `:` أو بـ `$` متبوعاً باسم أمر (مثل `$ cp *.rin ~/`). */
+    private fun isCommandLine(line: String): Boolean {
+        val t = line.trimStart()
+        return t.startsWith(":") || DOLLAR_CMD.containsMatchIn(t)
+    }
+
     /**
      * يوجّه [line] إلى جلسة طرفية Linux الأصلية ([RinNativeTerminal]) عندما: هناك أمر ناقص فيها، أو يبدأ السطر
      * بـ `:`، أو وضع `native on` فعّال. يعيد true إن تولّت الأمر (حتى لو رفضته برسالة)، وfalse ليكمل المسار
@@ -396,7 +402,7 @@ class RinTerminalView @JvmOverloads constructor(
      */
     private fun routeToNative(line: String, nativeContinuing: Boolean): Boolean {
         if (RinTerminal.repl.isContinuing) return false
-        val isColon = line.trimStart().startsWith(":")
+        val isColon = isCommandLine(line)   // `:cmd …` or `$ cmd …`
         if (!nativeContinuing && !isColon && !RinNativeTerminal.nativeMode) return false
         if (!RinNativeTerminal.isAvailable()) {
             if (!nativeContinuing && !isColon) return false   // native on لكن المكتبة غير متاحة: عُد إلى الـ REPL
@@ -839,6 +845,9 @@ class RinTerminalView @JvmOverloads constructor(
 
         /** `!!` أو `!N` فقط (لا يلتبس مع نفي Rin `!flag`). */
         val HISTORY_REF = Regex("^!(!|\\d+)$")
+
+        /** `$ cmd` / `$cmd` — أوامر طرفية Linux الإضافية (الـ 50 أمراً). */
+        val DOLLAR_CMD = Regex("^\\$\\s*[A-Za-z?]")
 
         /** الأوامر الأساسية تُقترح بالإكمال؛ البدائل (cls/vars/cancel/?) تُقبل عند الكتابة فقط. */
         val SHELL_COMMANDS = listOf(
