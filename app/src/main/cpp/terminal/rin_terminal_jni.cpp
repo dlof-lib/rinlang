@@ -109,6 +109,11 @@ Java_com_dlof_rinlang_RinNativeTerminal_nativeFeed(JNIEnv* env, jobject, jlong h
 }
 
 JNIEXPORT void JNICALL
+Java_com_dlof_rinlang_RinNativeTerminal_nativeSetColumns(JNIEnv*, jobject, jlong handle, jint cols) {
+    if (auto* t = term(handle)) t->setColumns(static_cast<int>(cols));
+}
+
+JNIEXPORT void JNICALL
 Java_com_dlof_rinlang_RinNativeTerminal_nativeCancelPending(JNIEnv*, jobject, jlong handle) {
     if (auto* t = term(handle)) t->cancelPending();
 }
