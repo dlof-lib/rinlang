@@ -400,6 +400,13 @@ class RinTerminalView @JvmOverloads constructor(
      * بـ `:`، أو وضع `native on` فعّال. يعيد true إن تولّت الأمر (حتى لو رفضته برسالة)، وfalse ليكمل المسار
      * القديم (الـ REPL). أمر ناقص في الـ REPL القديم له الأولوية فلا يُخطَف منه سطر المتابعة.
      */
+    /** عدد أعمدة الأحرف التي تتسع لها الشاشة (الخط أحادي المسافة). 0 إن لم يُقَس بعد (قبل أول تخطيط). */
+    private fun measureColumns(): Int {
+        val usable = screen.width - screen.paddingLeft - screen.paddingRight
+        val cell = screen.paint.measureText("M")
+        return if (usable > 0 && cell > 0f) (usable / cell).toInt().coerceIn(20, 200) else 0
+    }
+
     private fun routeToNative(line: String, nativeContinuing: Boolean): Boolean {
         if (RinTerminal.repl.isContinuing) return false
         val isColon = isCommandLine(line)   // `:cmd …` or `$ cmd …`
@@ -414,6 +421,7 @@ class RinTerminalView @JvmOverloads constructor(
             RinTerminal.system(context.getString(R.string.terminal_native_busy), TermRole.ERROR)
             return true
         }
+        RinNativeTerminal.columns = measureColumns()
         RinTerminal.echo(line, if (nativeContinuing) TermRole.CONT else TermRole.COMMAND)
         if (!nativeContinuing) {
             RinTerminal.remember(line.trim())
