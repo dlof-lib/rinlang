@@ -18,6 +18,13 @@ rm -rf "$tmp"
 if [ "$pactual" == "$(cat project_session.expected)" ]; then echo "PASS project_session"; else
   echo "FAIL project_session"; diff <(echo "$pactual") project_session.expected | head -30; status=1; fi
 
+echo "== extra commands ($ cat / $ cp / $ seq ... ) =="
+xtmp="$(mktemp -d)"
+xactual="$(cd "$xtmp" && RIN_LANG=en "$RIN_BIN" terminal --batch --no-color --no-history --no-banner < "$OLDPWD/xcmds_session.in" 2>&1)"
+rm -rf "$xtmp"
+if [ "$xactual" == "$(cat xcmds_session.expected)" ]; then echo "PASS xcmds_session"; else
+  echo "FAIL xcmds_session"; diff <(echo "$xactual") xcmds_session.expected | head -30; status=1; fi
+
 echo "== img (:img و rin img) =="
 if (command -v magick >/dev/null 2>&1 || command -v convert >/dev/null 2>&1) && python3 -c "import PIL" 2>/dev/null; then
   itmp="$(mktemp -d)"
