@@ -4,7 +4,7 @@ project("rinengine")
 # مجلد مصدر طرفية Linux نسبةً إلى app/src/main/cpp (جذر المستودع أربع مستويات فوقه).
 set(RIN_LINUX_TERMINAL_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../../../cli/linux/src/terminal")
 
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Desktop QR backend. Android uses the Kotlin/ZXing bridge instead.
