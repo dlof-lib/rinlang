@@ -26,7 +26,7 @@ if [ "$xactual" == "$(cat xcmds_session.expected)" ]; then echo "PASS xcmds_sess
   echo "FAIL xcmds_session"; diff <(echo "$xactual") xcmds_session.expected | head -30; status=1; fi
 
 echo "== img (:img و rin img) =="
-if (command -v magick >/dev/null 2>&1 || command -v convert >/dev/null 2>&1) && python3 -c "import PIL" 2>/dev/null; then
+if python3 -c "import PIL" 2>/dev/null; then   # المفكّك مدمج: لا حاجة لـ ImageMagick
   itmp="$(mktemp -d)"
   python3 - "$itmp/two colors.png" <<'PY'
 import sys
@@ -48,10 +48,25 @@ PY
   printf '<svg xmlns="http://www.w3.org/2000/svg"/>' > "$itmp/fake.png"
   RIN_LANG=en "$RIN_BIN" img "$itmp/fake.png" >/dev/null 2>&1; [ $? -eq 1 ] || { echo "FAIL img fake png not rejected"; img_ok=0; }
   RIN_LANG=en "$RIN_BIN" img "$itmp/two colors.png" -m nope >/dev/null 2>&1; [ $? -eq 2 ] || { echo "FAIL img bad mode exit code"; img_ok=0; }
+  # 4) بلا أي أداة خارجية (PATH فارغ): png و jpg يُرسمان بالمفكّك المدمج، وwebp يفشل برمز 1 ورسالة واضحة
+  python3 - "$itmp" <<'PY'
+import sys
+from PIL import Image
+img = Image.new('RGB', (40, 40), (255, 255, 255))
+for y in range(20, 40):
+    for x in range(40): img.putpixel((x, y), (255, 0, 0))
+img.save(sys.argv[1] + "/p.jpg", quality=95, subsampling=0)
+img.save(sys.argv[1] + "/p.webp")
+PY
+  got="$(env PATH=/nonexistent RIN_LANG=en "$RIN_BIN" img "$itmp/two colors.png" -w 10 2>/dev/null | head -1)"
+  [ "$got" == "⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿" ] || { echo "FAIL png without external tools (got: $got)"; img_ok=0; }
+  got="$(env PATH=/nonexistent RIN_LANG=en "$RIN_BIN" img "$itmp/p.jpg" -w 10 2>/dev/null | head -1)"
+  [ "$got" == "⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿" ] || { echo "FAIL jpg without external tools (got: $got)"; img_ok=0; }
+  env PATH=/nonexistent RIN_LANG=en "$RIN_BIN" img "$itmp/p.webp" >/dev/null 2>&1; [ $? -eq 1 ] || { echo "FAIL webp without ImageMagick should exit 1"; img_ok=0; }
   rm -rf "$itmp"
   if [ $img_ok -eq 1 ]; then echo "PASS img"; else status=1; fi
 else
-  echo "SKIP img (يحتاج ImageMagick و python3-pil)"
+  echo "SKIP img (يحتاج python3-pil لتوليد الصور)"
 fi
 
 echo "== interactive (pty) =="
