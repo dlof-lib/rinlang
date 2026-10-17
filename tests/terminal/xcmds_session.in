@@ -29,3 +29,25 @@ $ unalias ll
 $ rm -rf /
 $ cat missing.txt
 $ help seq
+$ calc 2*(3+4)^2 / sqrt(16)
+$ calc 1/0
+$ conv 255 -t 2
+$ factor 360
+$ primes 1:20
+$ gcd -l 4 6
+$ md5 -e abc
+$ sha1 -e abc
+$ tr a-z A-Z -e "hello"
+$ replace hello bye -e "hello world"
+$ wordfreq -n 1 -e "a b a"
+$ urlencode -e "a b"
+$ hex -e Hi
+$ timestamp 0 -u
+$ cal 2 2024
+$ datediff 2026-10-17 2027-01-01
+$ numfmt 1536
+$ diff fruits.txt fruits.txt
+$ exists -f fruits.txt
+$ comm -12 fruits.txt fruits.txt
+$ yes hi -n 2
+$ false
