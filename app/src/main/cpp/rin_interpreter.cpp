@@ -1,3 +1,4 @@
+#include <utility>
 #include "rin_interpreter.h"
 #include "rin_version.h"
 #include "rin_make.h"
@@ -8071,8 +8072,8 @@ std::string Interpreter::run(const std::vector<StmtPtr>& statements) {
     return output.str();
 }
 
-Interpreter::Flow Interpreter::execBlockFlow(const std::vector<StmtPtr>& statements, EnvPtr env, Value& ret) {
-    if (vmEnabled_) return vmRunBlock(statements, std::move(env), ret); // RinVM
+Interpreter::Flow Interpreter::execBlockFlow(const std::vector<StmtPtr>& statements, const EnvPtr& env, Value& ret) {
+    if (vmEnabled_) return vmRunBlock(statements, env, ret); // RinVM
     for (const auto& s : statements) {
         Flow f = exec(s, env, ret);
         if (f != Flow::None) return f;
@@ -8099,7 +8100,7 @@ void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
     if (f == Flow::Continue) throw ContinueSignal{};
 }
 
-Interpreter::Flow Interpreter::exec(const StmtPtr& stmt, EnvPtr env, Value& ret) {
+Interpreter::Flow Interpreter::exec(const StmtPtr& stmt, const EnvPtr& env, Value& ret) {
     if (vmEnabled_) { // RinVM: كل عبارة تمرّ على الآلة؛ العبارة المفوَّضة نفسها تُنفَّذ هنا مباشرة مرة واحدة
         if (vmDirectStmt_ == stmt.get()) vmDirectStmt_ = nullptr;
         else return vmRunStmt(stmt, std::move(env), ret);
@@ -10241,6 +10242,49 @@ Value Interpreter::evaluateSuperGet(const std::string& name, const EnvPtr& env, 
                          "method called `" + name + "`");
 }
 
+// ---------------------------------------------------------------------------------------------
+// مسار سريع للتعابير العددية الصرفة (C++23).
+// Value ثقيلة (~150 بايت: نص + 5 مؤشرات ذكية) وكل عملية ثنائية كانت تبني وتهدم قيمتين كاملتين.
+// هذه الدالة تقيّم، بلا أي أثر جانبي وبلا بناء Value، تعبيراً مكوَّناً فقط من: أرقام حرفية + متغيّرات
+// تحمل أعداداً + (+ - * / %) متداخلة. أي شيء آخر (نص، كائن، قسمة على صفر، متغيّر حيّ، تحميل عوامل
+// مُعرَّفة من المستخدم...) يعيد false فيُكمل evaluate() المسار الأصلي حرفياً، فتبقى الرسائل والدلالات
+// كما هي بالضبط. لا تغيّر السلوك المرصود إطلاقاً، فقط تُسرّعه.
+// ---------------------------------------------------------------------------------------------
+static bool fastNumeric(const Expr* x, Environment* env, double& out, int depth = 0) noexcept {
+    if (depth > 64) return false;
+    switch (x->exprKind) {
+        case ExprKind::Literal: {
+            auto* l = static_cast<const LiteralExpr*>(x);
+            if (l->kind != LiteralExpr::Kind::NUMBER) return false;
+            out = l->number;
+            return true;
+        }
+        case ExprKind::Variable: {
+            auto* v = static_cast<const VariableExpr*>(x);
+            const Value* f = env->lookup(v->name);
+            if (!f || f->type != Value::Type::NUMBER) return false;
+            out = f->number;
+            return true;
+        }
+        case ExprKind::Binary: {
+            auto* b = static_cast<const BinaryExpr*>(x);
+            if (b->op != TokenType::PLUS && b->op != TokenType::MINUS && b->op != TokenType::STAR &&
+                b->op != TokenType::SLASH && b->op != TokenType::PERCENT) return false;
+            double l, r;
+            if (!fastNumeric(b->left.get(), env, l, depth + 1) || !fastNumeric(b->right.get(), env, r, depth + 1)) return false;
+            switch (b->op) {
+                case TokenType::PLUS:  out = l + r; return true;
+                case TokenType::MINUS: out = l - r; return true;
+                case TokenType::STAR:  out = l * r; return true;
+                case TokenType::SLASH:   if (r == 0) return false; out = l / r; return true;
+                case TokenType::PERCENT: if (r == 0) return false; out = std::fmod(l, r); return true;
+                default: std::unreachable();
+            }
+        }
+        default: return false;
+    }
+}
+
 Value Interpreter::copyForBinding(const Value& v) const {
     if (v.type == Value::Type::INSTANCE && v.instance && v.instance->isStruct) {
         auto copy = std::make_shared<InstanceData>();
@@ -10441,6 +10485,7 @@ Value Interpreter::callFunction(const std::shared_ptr<Callable>& fn, std::vector
     CurrentInterpGuard interpGuard(this); // Rin 1.0: لأجل __str__ داخل Value::toDisplayString
 
     auto callEnv = std::make_shared<Environment>(fn->closure);
+    callEnv->values.reserve(args.size() + 2); // يتفادى إعادة التجزئة (rehash) أثناء ربط المعاملات
     for (size_t i = 0; i < args.size(); i++) {
         // struct بدلالة قيمة: كل استدعاء دالة/method يستقبل نسخته الخاصة من أي وسيط struct (انظر
         // copyForBinding) — بلا أي تغيير على class/array/map/الأنواع البدائية (تبقى مرجعية كالمعتاد).
@@ -10450,7 +10495,7 @@ Value Interpreter::callFunction(const std::shared_ptr<Callable>& fn, std::vector
             checkDeclaredType(bound, fn->declaration->paramTypes[i],
                                "parameter `" + fn->declaration->params[i] + "` of `" + fn->declaration->name + "`", line);
         }
-        callEnv->define(fn->declaration->params[i], bound);
+        callEnv->define(fn->declaration->params[i], std::move(bound));
     }
     try {
         Value fastRet;
@@ -10731,12 +10776,12 @@ Value Interpreter::doLibraryImportUrl(std::vector<Value>& args, int line, const 
     return executeLibraryContainerBytes(bytes, url, line, env);
 }
 
-Value Interpreter::evaluate(const ExprPtr& expr, EnvPtr env) {
-    if (vmEnabled_) return vmRunExpr(expr, std::move(env)); // RinVM
-    return evaluateTree(expr, std::move(env));
+Value Interpreter::evaluate(const ExprPtr& expr, const EnvPtr& env) {
+    if (vmEnabled_) return vmRunExpr(expr, env); // RinVM
+    return evaluateTree(expr, env);
 }
 
-Value Interpreter::evaluateTree(const ExprPtr& expr, EnvPtr env) {
+Value Interpreter::evaluateTree(const ExprPtr& expr, const EnvPtr& env) {
     switch (expr->exprKind) {
     case ExprKind::Literal: { auto e = std::static_pointer_cast<LiteralExpr>(expr);
         switch (e->kind) {
@@ -10766,11 +10811,9 @@ Value Interpreter::evaluateTree(const ExprPtr& expr, EnvPtr env) {
                 if (lit != liveOwner->live.end()) return liveRead(liveOwner, lit->second, e->name, e->line);
             }
         }
-        Value v;
-        if (!env->get(e->name, v)) {
-            throw undefinedVariableErr(e->name, e->line, env);
-        }
-        return v;
+        // lookup بلا نسخة وسيطة: نسخة واحدة فقط من القيمة (كانت get() تنسخ إلى out ثم تُعاد).
+        if (const Value* found = env->lookup(e->name)) return *found;
+        throw undefinedVariableErr(e->name, e->line, env);
     }
     case ExprKind::Assign: { auto e = std::static_pointer_cast<AssignExpr>(expr);
         Value v = evaluate(e->value, env);
@@ -10839,6 +10882,25 @@ Value Interpreter::evaluateTree(const ExprPtr& expr, EnvPtr env) {
         if (e->op == TokenType::BANG) return Value::boolean_(!right.isTruthy());
     }
     case ExprKind::Binary: { auto e = std::static_pointer_cast<BinaryExpr>(expr);
+        if (!liveActive_) { // المتغيرات الحيّة لها دلالات قراءة خاصة (lens/fuse/عدّادات) فلا تُختصر
+            double fl, fr;
+            if (fastNumeric(e->left.get(), env.get(), fl) && fastNumeric(e->right.get(), env.get(), fr)) {
+                switch (e->op) {
+                    case TokenType::PLUS:          return Value::num(fl + fr);
+                    case TokenType::MINUS:         return Value::num(fl - fr);
+                    case TokenType::STAR:          return Value::num(fl * fr);
+                    case TokenType::SLASH:         if (fr != 0) return Value::num(fl / fr); break;
+                    case TokenType::PERCENT:       if (fr != 0) return Value::num(std::fmod(fl, fr)); break;
+                    case TokenType::LESS:          return Value::boolean_(fl < fr);
+                    case TokenType::LESS_EQUAL:    return Value::boolean_(fl <= fr);
+                    case TokenType::GREATER:       return Value::boolean_(fl > fr);
+                    case TokenType::GREATER_EQUAL: return Value::boolean_(fl >= fr);
+                    case TokenType::EQUAL_EQUAL:   return Value::boolean_(fl == fr);
+                    case TokenType::BANG_EQUAL:    return Value::boolean_(fl != fr);
+                    default: break;
+                }
+            }
+        }
         Value left = evaluate(e->left, env);
         Value right = evaluate(e->right, env);
         switch (e->op) {
