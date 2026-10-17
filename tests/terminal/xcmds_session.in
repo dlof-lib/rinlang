@@ -1,0 +1,31 @@
+:sh printf 'banana\napple\ncherry\napple\n' > fruits.txt
+$ cat -n fruits.txt
+$ cat fruits.txt -r 2:3
+$ head -n 1 fruits.txt
+$ tail -1 fruits.txt
+$ wc fruits.txt
+$ grep -n apple fruits.txt
+$ sort -u fruits.txt
+$ uniq -c -e "a\na\nb"
+$ cut -d , -f 2:3 -e "x,y,z"
+$ seq 1…10:3
+$ seq -s , 3:1
+$ echo -e "a\tb" *.txt
+$ mkdir -p d/e
+$ cp *.txt d
+$ find . -name *.txt
+$ mv d/fruits.txt d/f2.txt
+$ cmp fruits.txt d/f2.txt
+$ rm -r d
+$ sha256 -e abc
+$ crc32 -e 123456789
+$ base64 -e hello
+$ base64 -d -e aGVsbG8=
+$ rev -e abc
+$ upper -e abc
+$ alias ll='cat -n'
+$ ll fruits.txt -r 1:1
+$ unalias ll
+$ rm -rf /
+$ cat missing.txt
+$ help seq
