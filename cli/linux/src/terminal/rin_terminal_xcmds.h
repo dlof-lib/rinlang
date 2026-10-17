@@ -322,7 +322,7 @@ struct Ctx {
             if (a == "--") { endOpts = true; continue; }
             bool numeric = a.find_first_not_of("0123456789", 1) == std::string::npos;
             if (numeric && std::strchr(vals, 'n')) { val['n'] = a.substr(1); continue; }
-            if (std::isdigit(static_cast<unsigned char>(a[1]))) { pos.push_back(a); continue; }  // negative number / range
+            if (std::isdigit(static_cast<unsigned char>(a[1])) && !std::strchr(bools, a[1]) && !std::strchr(vals, a[1])) { pos.push_back(a); continue; }  // negative number / range
             for (size_t k = 1; k < a.size(); ++k) {
                 char f = a[k];
                 if (std::strchr(bools, f)) fl.insert(f);
@@ -1410,8 +1410,9 @@ inline int cmdDirs(Ctx& c) {
 // registry
 // ----------------------------------------------------------------------------
 struct Entry { Spec spec; Fn fn; };
+inline const std::vector<Entry>& registry2();   // batch 2: rin_terminal_xcmds2.h
 inline const std::vector<Entry>& registry() {
-    static const std::vector<Entry> r = {
+    static const std::vector<Entry> base = {
         {{"cat",      "$ cat [-n] [-r A:B] <file…>",                  "print files (-n number lines, -r line range A:B)", true}, cmdCat},
         {{"head",     "$ head [-n N] <file…>",                        "first N lines (default 10)", true}, cmdHead},
         {{"tail",     "$ tail [-n N] <file…>",                        "last N lines (default 10)", true}, cmdTail},
@@ -1463,6 +1464,11 @@ inline const std::vector<Entry>& registry() {
         {{"popd",     "$ popd",                                       "return to the directory on top of the stack", false}, cmdPopd},
         {{"dirs",     "$ dirs [-c]",                                  "show the directory stack (-c: clear)", false}, cmdDirs},
     };
+    static const std::vector<Entry> r = [] {
+        std::vector<Entry> v = base;
+        for (const auto& e : registry2()) v.push_back(e);
+        return v;
+    }();
     return r;
 }
 inline const std::vector<Spec>& specs() {
@@ -1516,3 +1522,5 @@ inline bool run(const std::string& name, const std::string& arg, const Io& io, i
 }  // namespace xcmds
 }  // namespace terminal
 }  // namespace rin
+
+#include "rin_terminal_xcmds2.h"   // batch 2 (50 more commands)
