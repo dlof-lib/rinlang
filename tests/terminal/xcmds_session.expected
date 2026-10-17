@@ -1,0 +1,37 @@
+     1	banana
+     2	apple
+     3	cherry
+     4	apple
+apple
+cherry
+banana
+apple
+       4       4      26 fruits.txt
+2:apple
+4:apple
+apple
+banana
+cherry
+      2 a
+      1 b
+y,z
+1
+4
+7
+10
+3,2,1
+a	b fruits.txt
+./d/fruits.txt
+./fruits.txt
+files are identical
+ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad  -e
+cbf43926  -e
+aGVsbG8=
+hello
+cba
+ABC
+     1	banana
+rm: refusing to remove '/'
+cat: missing.txt: No such file or directory
+  $ seq A:B[:STEP]   |   $ seq [first [step]] last
+    print a sequence of numbers (-s SEP)
