@@ -35,3 +35,41 @@ rm: refusing to remove '/'
 cat: missing.txt: No such file or directory
   $ seq A:B[:STEP]   |   $ seq [first [step]] last
     print a sequence of numbers (-s SEP)
+24.5
+calc: division by zero
+11111111
+360: 2 2 2 3 3 5
+2
+3
+5
+7
+11
+13
+17
+19
+12
+900150983cd24fb0d6963f7d28e17f72  -e
+a9993e364706816aba3e25717850c26c9cd0d89d  -e
+HELLO
+bye world
+      2 a
+a%20b
+4869
+1970-01-01 00:00:00 UTC
+   February 2024
+Su Mo Tu We Th Fr Sa
+             1  2  3
+ 4  5  6  7  8  9 10
+11 12 13 14 15 16 17
+18 19 20 21 22 23 24
+25 26 27 28 29
+76 days
+1.5K
+files are identical
+true   fruits.txt
+banana
+apple
+cherry
+apple
+hi
+hi
