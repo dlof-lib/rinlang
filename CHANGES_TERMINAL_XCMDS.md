@@ -1,11 +1,14 @@
-# 50 أمراً جديداً للطرفية (لينكس + RinStudio)
+# 100 أمر جديد للطرفية (لينكس + RinStudio)
 
 الأسلوب: `$ أمر … ` (أو `:`)، `*` توسيع ملفات، `~/` المنزل، `A:B` / `A…B` مدى. النصوص كلها إنجليزية.
 
-**الأوامر (50):** cat head tail wc grep find mkdir rmdir rm cp mv touch stat du realpath basename dirname echo sort uniq tac rev nl upper lower cut cmp sha256 base64 hexdump crc32 env export unset date whoami hostname uname which uptime free nproc df seq sleep alias unalias pushd popd dirs
+**الدفعة 1 (50):** cat head tail wc grep find mkdir rmdir rm cp mv touch stat du realpath basename dirname echo sort uniq tac rev nl upper lower cut cmp sha256 base64 hexdump crc32 env export unset date whoami hostname uname which uptime free nproc df seq sleep alias unalias pushd popd dirs
+
+**الدفعة 2 (50):** ll ln chmod readlink file mktemp exists tee append split diff comm paste tr fold replace trim shuf wordfreq count rot13 md5 sha1 urlencode urldecode hex unhex ascii conv calc factor primes fib gcd rand uuid timestamp cal datediff id ps cpuinfo mounts printenv yes true false term path numfmt
 
 ## الملفات
-- **جديد** `cli/linux/src/terminal/rin_terminal_xcmds.h` — header-only (POSIX + std)، لا CMake جديد ولا مكتبات؛ لا يشغّل أي عملية خارجية فيعمل على أندرويد كما هو.
+- **جديد** `cli/linux/src/terminal/rin_terminal_xcmds2.h` — الدفعة الثانية (يُضمَّن تلقائياً من `rin_terminal_xcmds.h`، فلا تغيير في CMake).
+- **جديد** `cli/linux/src/terminal/rin_terminal_xcmds.h` — الدفعة 1 + header-only (POSIX + std)، لا CMake جديد ولا مكتبات؛ لا يشغّل أي عملية خارجية فيعمل على أندرويد كما هو.
 - **معدَّل** `cli/linux/src/terminal/rin_terminal.cpp` — `$` كبادئة أمر (تشغيل/متابعة الأسطر/الإكمال/rc)، دمج الأوامر في `commands()` و`:help`، `alias`، وفشل الأمر يُحتسب في رمز خروج `--batch`.
 - **معدَّل** `app/src/main/java/com/dlof/rinlang/RinTerminalView.kt` — أسطر `$ cmd` تُوجَّه للجلسة الأصلية كأسطر `:`.
 - **معدَّل** `res/values{,-ar,-en,-es}/strings_terminal_native.xml` — سطر مساعدة (إنجليزي).
