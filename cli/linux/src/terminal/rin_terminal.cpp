@@ -2575,7 +2575,7 @@ private:
             println("  " + style_.cyan() + u + style_.reset() + std::string(static_cast<size_t>(pad), ' ') + tr(c.ar, c.en));
         }
         println("");
-        println(std::string("  ") + style_.bold() + "Extra commands (50) - start with '$' or ':'  |  * globs  |  ~/ home  |  A:B ranges  |  '...' = repeatable" + style_.reset());
+        println(std::string("  ") + style_.bold() + "Extra commands (" + std::to_string(xcmds::specs().size()) + ") - start with '$' or ':'  |  * globs  |  ~/ home  |  A:B ranges  |  '...' = repeatable" + style_.reset());
         for (const auto& x : xcmds::specs()) {
             std::string u = x.usage;
             int pad = std::max(1, 26 - strWidth(u));
