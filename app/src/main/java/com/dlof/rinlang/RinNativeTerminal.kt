@@ -40,6 +40,9 @@ object RinNativeTerminal {
     @Volatile private var handle = 0L
     @Volatile private var linkOk: Boolean? = null
 
+    /** عرض شاشة الـ terminal بالأعمدة (تقيسه [RinTerminalView])؛ يُطبَّق قبل كل أمر ليعرف `:img` و`:ocr` عرض الهاتف. 0 = تلقائي. */
+    @Volatile var columns: Int = 0
+
     /** وضع الجلسة الأصلية الكاملة: كل سطر شيفرة (لا الأوامر المدمجة في الـ terminal) يمرّ بها. */
     @Volatile var nativeMode: Boolean = false
 
@@ -110,6 +113,7 @@ object RinNativeTerminal {
                         RinTerminal.onAnswer(answer)
                         answer
                     }
+                    nativeSetColumns(handle, columns)
                     status = nativeFeed(handle, line, listener, input)
                 }
             } catch (t: Throwable) {
@@ -144,6 +148,7 @@ object RinNativeTerminal {
         listener: RinEngine.RinStreamListener?,
         inputHandler: RinEngine.RinInputHandler?
     ): Int
+    private external fun nativeSetColumns(handle: Long, cols: Int)
     private external fun nativeCancelPending(handle: Long)
     private external fun nativeContinuing(handle: Long): Boolean
     private external fun nativeVariables(handle: Long): String
