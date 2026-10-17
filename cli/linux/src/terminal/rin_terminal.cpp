@@ -2,6 +2,8 @@
 //  rin terminal — التنفيذ. انظر rin_terminal.h وdocs/terminal.md
 // ============================================================================
 #include "rin_terminal.h"
+#include <atomic>
+#include "rin_imgdec.h"   // مفكّك صور مدمج (png/jpeg/gif/bmp): :img لا يحتاج ImageMagick لهذه الصيغ
 #include "rin_terminal_xcmds.h"   // 50 extra commands: $ cat / $ cp *.rin ~/ / $ seq 1:10 ...
 
 #include "rin_version.h"
@@ -496,7 +498,11 @@ struct RawMode {
     ~RawMode() { disable(); }
 };
 
+// عدد الأعمدة الذي يفرضه التطبيق المضمِّن (RinStudio): لا tty هناك فنأخذه من قياس واجهة الطرفية. 0 = غير مفروض.
+std::atomic<int> g_forcedCols{0};
+
 int termCols() {
+    if (int f = g_forcedCols.load(); f > 0) return f;
     winsize ws;
     if (::ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == 0 && ws.ws_col > 0) return ws.ws_col;
     const char* c = std::getenv("COLUMNS");
@@ -1315,7 +1321,8 @@ std::string renderRows(Frame& f, int from, int n, const ColorMode& cm, const std
 // ============================================================================
 //  IMG — عرض صورة داخل الطرفية بحروف Unicode (`:img` و `rin img`)
 // ============================================================================
-//  فكّ الصورة يتم عبر ImageMagick (نفس أداة المحرّك لـ make.ocr/removeBg) بمصفوفة argv مباشرة بلا shell،
+//  فكّ الصورة: png/jpeg/gif/bmp بالمفكّك المدمج rin_imgdec.h (بلا أدوات خارجية، يعمل على أندرويد)؛ webp/tiff عبر ImageMagick
+//  إن وُجد (بمصفوفة argv مباشرة بلا shell)،
 //  وتُعرَّف الصورة من بايتاتها لا من امتدادها (فملف SVG/MVG متنكّر لا يُنفَّذ). ثم نرسمها بأحد الأنماط:
 //    half    نصف-كتلة ▀ بلونين (24-bit أو 256) — الأدق ألواناً وهو الافتراضي مع الألوان
 //    braille نقاط براي ⣿ (2×4 لكل خانة) — الأدق تفصيلاً وهو الافتراضي بلا ألوان
@@ -1384,13 +1391,13 @@ std::string imgUsageText() {
         "  --mode, -m M      half (نصف-كتل ملوّنة) · braille (نقاط براي) · shade (ظلال ░▒▓█) · ascii\n"
         "  --plain, -p       بلا ألوان (يصير braille الافتراضي)\n"
         "  --invert, -i      عكس السطوع في الأنماط أحادية اللون (لطرفية فاتحة الخلفية)\n"
-        "الصيغ: png jpg gif bmp webp tiff — يحتاج ImageMagick:  sudo apt install imagemagick\n",
+        "الصيغ: png jpg gif bmp (مدمجة بلا أدوات خارجية) · webp tiff تحتاج ImageMagick\n",
         "usage: :img <image> [options]      (or from the shell:  rin img <image> [options])\n"
         "  --width, -w N     drawing width in columns (default: terminal width, up to 100)\n"
         "  --mode, -m M      half (colored half-blocks) · braille (braille dots) · shade (░▒▓█) · ascii\n"
         "  --plain, -p       no colors (braille becomes the default)\n"
         "  --invert, -i      flip brightness in monochrome modes (for light-background terminals)\n"
-        "formats: png jpg gif bmp webp tiff — requires ImageMagick:  sudo apt install imagemagick\n"));
+        "formats: png jpg gif bmp (built in, no external tools) · webp tiff need ImageMagick\n"));
 }
 void printImgUsage(std::FILE* f) { std::fputs(imgUsageText().c_str(), f); }
 
@@ -1492,36 +1499,65 @@ std::string sniffImageCoder(const std::string& path) {
 struct ImgPixels { int w = 0, h = 0; std::vector<uint8_t> rgb; };
 
 // يفكّ الصورة ويصغّرها إلى شبكة pw×ph (إن كانت ph = 0 تُحسب بنسبة الأبعاد × aspect، ويُقرَّب لمضاعف rowMul).
+// png/jpeg/gif/bmp: بالمفكّك المدمج (rin_imgdec.h) بلا أي أداة خارجية، وهذا ما يعمل على أندرويد.
+// webp/tiff (أو ملف تعذّر على المدمج): ImageMagick إن وُجد، وإلا رسالة واضحة.
 bool loadImagePixels(const std::string& path, int pw, double aspect, int rowMul, int maxRows, ImgPixels& out, std::string& err) {
     struct stat st;
     if (::stat(path.c_str(), &st) != 0) { err = path + ": " + std::strerror(errno); return false; }
     if (S_ISDIR(st.st_mode)) { err = path + ": " + tr("مجلد وليس صورة", "is a directory, not an image"); return false; }
     std::string coder = sniffImageCoder(path);
     if (coder.empty()) { err = tr("الملف ليس صورة نقطية مدعومة (png / jpg / webp / gif / bmp / tiff)", "not a supported raster image (png / jpg / webp / gif / bmp / tiff)"); return false; }
-    std::string tool = !findTool("magick").empty() ? "magick" : (!findTool("convert").empty() ? "convert" : "");
-    if (tool.empty()) { err = tr("يحتاج ImageMagick — ثبّته: sudo apt install imagemagick", "requires ImageMagick — install: sudo apt install imagemagick"); return false; }
-    std::string spec = coder + ":" + path + ((coder == "gif" || coder == "tiff" || coder == "webp") ? "[0]" : "");
 
+    // الهندسة المشتركة: من أبعاد الصورة إلى شبكة gw×gh
+    auto geometry = [&](int iw, int ih, int& gw, int& gh) {
+        gw = pw;
+        gh = static_cast<int>(std::lround(static_cast<double>(ih) / iw * gw * aspect));
+        if (gh < 1) gh = 1;
+        if (gh % rowMul) gh += rowMul - gh % rowMul;
+        if (gh > maxRows) {
+            int clamped = maxRows - maxRows % rowMul;
+            gw = std::max(1, static_cast<int>(std::lround(static_cast<double>(gw) * clamped / gh)));
+            gh = clamped;
+        }
+    };
+
+    // 1) المفكّك المدمج
+    std::string builtinErr;
+    if (coder == "png" || coder == "jpeg" || coder == "gif" || coder == "bmp") {
+        rin::imgdec::Image src;
+        if (rin::imgdec::decodeFile(path, src, builtinErr)) {
+            int gw, gh;
+            geometry(src.w, src.h, gw, gh);
+            rin::imgdec::resizeToRgb(src, gw, gh, out.rgb);
+            out.w = gw; out.h = gh;
+            return true;
+        }
+    } else {
+        builtinErr = coder + tr(" لا يفكّه المفكّك المدمج", " is not handled by the built-in decoder");
+    }
+
+    // 2) احتياطي: ImageMagick (webp/tiff، أو ملف غريب لم يفكّه المدمج)
+    std::string tool = !findTool("magick").empty() ? "magick" : (!findTool("convert").empty() ? "convert" : "");
+    if (tool.empty()) {
+        if (coder == "webp" || coder == "tiff")
+            err = std::string(tr("صيغة ", "the ")) + coder + tr(" تحتاج ImageMagick (غير متوفر) — حوّل الصورة إلى png أو jpg", " format needs ImageMagick (not available) — convert the image to png or jpg");
+        else err = builtinErr;
+        return false;
+    }
+    std::string spec = coder + ":" + path + ((coder == "gif" || coder == "tiff" || coder == "webp") ? "[0]" : "");
     std::string sizeOut, e;
-    if (!runCapture({tool, spec, "-auto-orient", "-format", "%w %h", "info:"}, sizeOut, 30000, 4096, e)) { err = std::string(tr("تعذّر قراءة الصورة", "could not read the image")) + (e.empty() ? "" : " (" + e + ")"); return false; }
+    if (!runCapture({tool, spec, "-auto-orient", "-format", "%w %h", "info:"}, sizeOut, 30000, 4096, e)) { err = !builtinErr.empty() ? builtinErr : std::string(tr("تعذّر قراءة الصورة", "could not read the image")); return false; }
     int iw = 0, ih = 0;
     if (std::sscanf(sizeOut.c_str(), "%d %d", &iw, &ih) != 2 || iw <= 0 || ih <= 0) { err = tr("أبعاد الصورة غير صالحة", "invalid image dimensions"); return false; }
-
-    int ph = static_cast<int>(std::lround(static_cast<double>(ih) / iw * pw * aspect));
-    if (ph < 1) ph = 1;
-    if (ph % rowMul) ph += rowMul - ph % rowMul;
-    if (ph > maxRows) {
-        int clamped = maxRows - maxRows % rowMul;
-        pw = std::max(1, static_cast<int>(std::lround(static_cast<double>(pw) * clamped / ph)));
-        ph = clamped;
-    }
-    std::string geo = std::to_string(pw) + "x" + std::to_string(ph) + "!";
+    int gw, gh;
+    geometry(iw, ih, gw, gh);
+    std::string geo = std::to_string(gw) + "x" + std::to_string(gh) + "!";
     std::string raw;
     if (!runCapture({tool, spec, "-auto-orient", "-background", "white", "-flatten", "-colorspace", "sRGB", "-resize", geo, "-depth", "8", "rgb:-"},
-                    raw, 60000, static_cast<size_t>(pw) * ph * 3 + 64, e)) { err = std::string(tr("فشل تصغير الصورة", "failed to scale the image")) + (e.empty() ? "" : " (" + e + ")"); return false; }
-    if (raw.size() < static_cast<size_t>(pw) * ph * 3) { err = tr("بيانات الصورة ناقصة", "image data incomplete"); return false; }
-    out.w = pw; out.h = ph;
-    out.rgb.assign(raw.begin(), raw.begin() + static_cast<long>(pw) * ph * 3);
+                    raw, 60000, static_cast<size_t>(gw) * gh * 3 + 64, e)) { err = std::string(tr("فشل تصغير الصورة", "failed to scale the image")) + (e.empty() ? "" : " (" + e + ")"); return false; }
+    if (raw.size() < static_cast<size_t>(gw) * gh * 3) { err = tr("بيانات الصورة ناقصة", "image data incomplete"); return false; }
+    out.w = gw; out.h = gh;
+    out.rgb.assign(raw.begin(), raw.begin() + static_cast<long>(gw) * gh * 3);
     return true;
 }
 
@@ -3161,6 +3197,7 @@ private:
     }
 
     void cmdIndsin(const std::string& arg) {
+        if (embedded_) { err(std::string(":indsin — ") + tr("غير متاح داخل المحرر (استعمل طرفية لينكس)", "not available inside the editor (use the Linux terminal)")); lastOk_ = false; return; }
         IndsinArgs ia; std::string e;
         std::vector<std::string> words = splitWords(arg);
         if (!parseIndsinArgs(words, ia, e)) { err(e); lastOk_ = false; return; }
@@ -3322,6 +3359,7 @@ EmbeddedTerminal::Result EmbeddedTerminal::feed(const std::string& line, const O
         default: return Result::Quit;
     }
 }
+void EmbeddedTerminal::setColumns(int cols) { g_forcedCols.store(cols >= 20 && cols <= 400 ? cols : 0); }
 void EmbeddedTerminal::cancelPending() { impl_->s->cancelPending(); }
 bool EmbeddedTerminal::continuing() const { return impl_->s->continuing(); }
 void EmbeddedTerminal::reset() { impl_->s->resetSession(); }
