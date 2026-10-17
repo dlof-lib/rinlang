@@ -72,7 +72,7 @@ rin img logo.png --plain > logo.txt    # من الشل: بلا ألوان، من
 - الصيغ: png jpg gif bmp webp tiff (الإطار الأول للمتحركة). تُعرَّف الصيغة من محتوى الملف لا من امتداده، فملف SVG بامتداد png يُرفض.
 - يحتاج ImageMagick (`sudo apt install imagemagick`) ويُشغَّل بلا shell. رموز الخروج لـ `rin img`: 0 نجاح · 1 فشل · 2 وسائط خاطئة.
 
-## 50 أمراً إضافياً (`$ …`)
+## 100 أمر إضافي (`$ …`)
 أوامر نظام وملفات ونصوص مبنيّة داخل الطرفية نفسها (بلا تشغيل أي برنامج خارجي)، فتعمل **بالمثل في لينكس وفي RinStudio**. الأسلوب:
 ```
 $ cat -n main.rin            # يبدأ الأمر بـ $   (أو بـ : كما قبل — $ ls == :ls)
@@ -93,6 +93,21 @@ $ alias ll='cat -n'          # ثم:  $ ll main.rin
 | تجزئة وترميز | `sha256 base64 hexdump crc32` |
 | نظام وبيئة | `env export unset date whoami hostname uname which uptime free nproc df` |
 | أدوات | `seq sleep alias unalias pushd popd dirs` |
+
+**الدفعة الثانية (50 أمراً أخرى):**
+
+| المجموعة | الأوامر |
+|---|---|
+| ملفات | `ll ln chmod readlink file mktemp exists tee append split` |
+| نصوص | `diff comm paste tr fold replace trim shuf wordfreq count rot13` |
+| تجزئة وترميز | `md5 sha1 urlencode urldecode hex unhex ascii conv` |
+| رياضيات | `calc factor primes fib gcd rand uuid` |
+| وقت | `timestamp cal datediff` |
+| نظام | `id ps cpuinfo mounts printenv yes true false term path numfmt` |
+
+أمثلة: `$ calc 2*(3+4)^2 / sqrt(16)` · `$ conv 255 -t 2` · `$ replace -i old new *.rin` · `$ diff a.rin b.rin` · `$ cal 10 2026` · `$ timestamp "2026-10-17 12:00:00" -u` · `$ ll -h ~/` · `$ chmod u+x run.sh`.
+`replace -i` يعدّل الملفات في مكانها؛ `tee`/`append` تكتبان نصاً في ملف (بديل `echo > file`)؛ `diff` حتى 3000 سطر؛ `calc` يدعم `+ - * / % ^ ( )` و`sqrt sin cos tan ln log exp abs floor ceil round pow min max pi e`.
+الكود في `rin_terminal_xcmds.h` (الدفعة 1) و`rin_terminal_xcmds2.h` (الدفعة 2).
 
 ملاحظات: `rm` يرفض `/` ومجلد المنزل و`.`/`..`؛ `grep -E` تعبير منتظم، وبدونه بحث نصي؛ `find` يستعمل `-name/-iname/-type f|d/-maxdepth`؛ `sleep` حتى 300 ثانية؛ `seq` حتى 100000 عنصر؛ الملفات الأكبر من 64MiB تُرفض. ملف `terminal.rc` يقبل أسطر `$` أيضاً. الكود في `cli/linux/src/terminal/rin_terminal_xcmds.h`.
 في RinStudio يلزم البادئة `$` (أو `:`) فتذهب للجلسة الأصلية؛ أمر `grep` بلا بادئة يبقى أمر السجل القديم في المحرر.
