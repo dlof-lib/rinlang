@@ -63,6 +63,10 @@ add_library(
         clc/sha256.cpp
         # المحرر الأصلي هنا C++17 ومربوط عبر JNI، ويستخدم rin::Lexer الحقيقي من نفس مصدر اللغة
         # لتلوين Rin وإكمالها، بحيث لا توجد نسخة ثانية من قواعد اللغة داخل واجهة Android.
+        # طرفية Linux (rin terminal) مُضمَّنة في المحرّر: نفس Session المستعملة في `rin terminal` على لينكس
+        # (cli/linux/src/terminal/rin_terminal.cpp) مبنيّة بالعلم RIN_TERMINAL_EMBED (بدون :pkg) + جسر JNI.
+        ${RIN_LINUX_TERMINAL_DIR}/rin_terminal.cpp
+        terminal/rin_terminal_jni.cpp
 )
 
 # rinc: مترجم Rin الأصلي (native compiler) — هدف مستقل تماماً عن مكتبة rinengine
@@ -153,13 +157,9 @@ add_executable(
         clc/clc_rin_opt.cpp
         clc/clc_zip_import.cpp
         clc/sha256.cpp
-        # طرفية Linux (rin terminal) مُضمَّنة في المحرّر: نفس Session المستعملة في `rin terminal` على لينكس
-        # (cli/linux/src/terminal/rin_terminal.cpp) مبنيّة بالعلم RIN_TERMINAL_EMBED (بدون :pkg) + جسر JNI.
-        ${RIN_LINUX_TERMINAL_DIR}/rin_terminal.cpp
-        terminal/rin_terminal_jni.cpp
 )
 target_compile_definitions(rinengine PRIVATE RIN_TERMINAL_EMBED=1)
-target_include_directories(rinengine PRIVATE ${RIN_LINUX_TERMINAL_DIR})
+target_include_directories(rinengine PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${RIN_LINUX_TERMINAL_DIR})
 
 find_library(log-lib log)
 # libz.so + zlib.h جزء أصيل من NDK sysroot على كل ABI (لا حاجة لتحميل/توريد أي مصدر خارجي) —
