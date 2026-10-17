@@ -72,6 +72,31 @@ rin img logo.png --plain > logo.txt    # من الشل: بلا ألوان، من
 - الصيغ: png jpg gif bmp webp tiff (الإطار الأول للمتحركة). تُعرَّف الصيغة من محتوى الملف لا من امتداده، فملف SVG بامتداد png يُرفض.
 - يحتاج ImageMagick (`sudo apt install imagemagick`) ويُشغَّل بلا shell. رموز الخروج لـ `rin img`: 0 نجاح · 1 فشل · 2 وسائط خاطئة.
 
+## 50 أمراً إضافياً (`$ …`)
+أوامر نظام وملفات ونصوص مبنيّة داخل الطرفية نفسها (بلا تشغيل أي برنامج خارجي)، فتعمل **بالمثل في لينكس وفي RinStudio**. الأسلوب:
+```
+$ cat -n main.rin            # يبدأ الأمر بـ $   (أو بـ : كما قبل — $ ls == :ls)
+$ cp *.rin ~/                # *  ?  [..] تُوسَّع (glob)، و ~/ هو مجلد المنزل
+$ seq 1:10        $ seq 1…10:3         # المدى A:B أو A…B  (… للتكرار/المدى)
+$ cat main.rin -r 5:12       $ cut -d , -f 2:4 data.csv
+$ grep -rn "let" . | ...     # لا أنابيب: كل أمر مستقل، ويقبل -e "نص" بدل الملف
+$ alias ll='cat -n'          # ثم:  $ ll main.rin
+```
+النصوص المُقتبسة `"…"` و`'…'` تمنع التوسيع؛ `$VAR` و`${VAR}` تُوسَّع من البيئة؛ `\` للهروب. `$ help <أمر>` أو `:help` يعرضان الاستخدام. جميع نصوص هذه الأوامر ومخرجاتها بالإنجليزية.
+
+| المجموعة | الأوامر |
+|---|---|
+| قراءة | `cat head tail wc` |
+| بحث | `grep find` |
+| ملفات ومجلدات | `mkdir rmdir rm cp mv touch stat du realpath basename dirname` |
+| نصوص | `echo sort uniq tac rev nl upper lower cut cmp` |
+| تجزئة وترميز | `sha256 base64 hexdump crc32` |
+| نظام وبيئة | `env export unset date whoami hostname uname which uptime free nproc df` |
+| أدوات | `seq sleep alias unalias pushd popd dirs` |
+
+ملاحظات: `rm` يرفض `/` ومجلد المنزل و`.`/`..`؛ `grep -E` تعبير منتظم، وبدونه بحث نصي؛ `find` يستعمل `-name/-iname/-type f|d/-maxdepth`؛ `sleep` حتى 300 ثانية؛ `seq` حتى 100000 عنصر؛ الملفات الأكبر من 64MiB تُرفض. ملف `terminal.rc` يقبل أسطر `$` أيضاً. الكود في `cli/linux/src/terminal/rin_terminal_xcmds.h`.
+في RinStudio يلزم البادئة `$` (أو `:`) فتذهب للجلسة الأصلية؛ أمر `grep` بلا بادئة يبقى أمر السجل القديم في المحرر.
+
 ## بيئة
 `RIN_HISTFILE`، `RIN_TERMINAL_RC` (أو `~/.config/rin/terminal.rc`: أوامر `:` تُنفَّذ عند البدء)، `RIN_LANG=en`، `RIN_THEME=light`، `NO_COLOR`.
 
