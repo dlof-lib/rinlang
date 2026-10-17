@@ -6,10 +6,11 @@
 //   g++ -std=c++17 -DRIN_TERMINAL_EMBED -Iapp/src/main/cpp -Icli/linux/src -Icli/linux/src/terminal \
 //       tests/terminal/embed_harness.cpp cli/linux/src/terminal/rin_terminal.cpp <engine .o files> -lz -ldl -o embed_harness
 // التشغيل:
-//   printf 'let x = 40;\n:vars\n:cd ..\n:pwd\n' | ./embed_harness /path/to/project
+//   printf 'let x = 40;\n:vars\n:cd ..\n:pwd\n' | ./embed_harness /path/to/project [columns]
 // مشغّل اختبار على جهاز التطوير لـ EmbeddedTerminal (نفس ما يستدعيه JNI)
 #include "terminal/rin_terminal.h"
 #include <cstdio>
+#include <cstdlib>
 #include <iostream>
 #include <string>
 #include <unistd.h>
@@ -18,6 +19,7 @@ static const char* nm(EmbeddedTerminal::Result r){ switch(r){case EmbeddedTermin
 int main(int argc, char** argv) {
     EmbedConfig cfg; cfg.cwd = argv[1]; cfg.english = true;
     EmbeddedTerminal t(cfg);
+    if (argc > 2) t.setColumns(std::atoi(argv[2]));   // اختياري: عرض الشاشة بالأعمدة (يحدّد عرض :img الافتراضي)
     char start[4096]; getcwd(start, sizeof start);
     std::string line;
     while (std::getline(std::cin, line)) {
