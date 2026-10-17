@@ -75,6 +75,7 @@ public:
 
     // سطر واحد؛ NeedMore = المدخل ناقص (قوس/نص مفتوح) فأرسل السطر التالي.
     Result feed(const std::string& line, const OutputFn& out, const InputFn& in);
+    void setColumns(int cols);                      // عرض الشاشة بالأعمدة (20–400؛ 0 = تلقائي) لأوامر مثل :img و:ocr
     void cancelPending();
     bool continuing() const;
     void reset();                                   // جلسة جديدة (يمسح كل المتغيرات)
