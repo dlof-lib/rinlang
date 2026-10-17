@@ -12,6 +12,7 @@
 #include "rin_candle.h" // rin::CandleRegistry — طبقة id-to-id غير محدودة فوق mask/id مباشرة، انظر docs/candle.md
 #include "rin_container_sql.h" // rin::sql — RIN CONTAINER SQL (RCSQL): محلّل استعلام /  : & () # فقط، انظر sqlViews/sqlExecute أدناه
                                           // وربطها الفعلي مع @import في rin_interpreter.cpp.
+#include <string_view>
 #include <sstream>
 #include <iostream>
 #include <unordered_map>
@@ -321,24 +322,48 @@ struct LiveMeta {
     Value lastPre, lastPost;                                                  // آخر محاولة كتابة: القيمة قبلها والقيمة التي حاولت أن تضعها
 };
 
+// C++20/23: تجزئة "شفّافة" (heterogeneous lookup) — البحث بـ std::string_view / const char* بلا إنشاء
+// std::string مؤقّتة (تخصيص ذاكرة) لكل قراءة متغيّر. السلوك الدلالي مطابق تماماً لـ unordered_map العادية.
+struct StringHash {
+    using is_transparent = void;
+    size_t operator()(std::string_view s) const noexcept { return std::hash<std::string_view>{}(s); }
+    size_t operator()(const std::string& s) const noexcept { return std::hash<std::string_view>{}(s); }
+    size_t operator()(const char* s) const noexcept { return std::hash<std::string_view>{}(s); }
+};
+using ValueMap = std::unordered_map<std::string, Value, StringHash, std::equal_to<>>;
+
 struct Environment : std::enable_shared_from_this<Environment> {
-    std::unordered_map<std::string, Value> values;
+    ValueMap values;
     std::unordered_map<std::string, std::shared_ptr<LiveMeta>> live; // المتغيرات الحيّة فقط (غالباً فارغة)
     EnvPtr parent;
     explicit Environment(EnvPtr parentEnv = nullptr) : parent(std::move(parentEnv)) {}
 
     // إعادة التعريف (let جديدة/معامل دالة) بنفس الاسم في نفس البيئة تُنهي حياة المتغيّر الحيّ السابق.
     void define(const std::string& name, const Value& v) { values[name] = v; if (!live.empty()) live.erase(name); }
+    void define(const std::string& name, Value&& v) { values[name] = std::move(v); if (!live.empty()) live.erase(name); }
+
+    // بحث بلا نسخ: يعيد مؤشراً إلى القيمة في أقرب نطاق يعرّف الاسم، أو nullptr. تكراري (بلا عودية)
+    // فلا يكبر مكدّس C++ مع عمق سلسلة النطاقات، ولا كلفة نداء إضافي لكل مستوى.
+    [[nodiscard]] Value* lookup(std::string_view name) noexcept {
+        for (Environment* e = this; e; e = e->parent.get()) {
+            auto it = e->values.find(name);
+            if (it != e->values.end()) return &it->second;
+        }
+        return nullptr;
+    }
+    [[nodiscard]] const Value* lookup(std::string_view name) const noexcept {
+        for (const Environment* e = this; e; e = e->parent.get()) {
+            auto it = e->values.find(name);
+            if (it != e->values.end()) return &it->second;
+        }
+        return nullptr;
+    }
     bool assign(const std::string& name, const Value& v) {
-        auto it = values.find(name);
-        if (it != values.end()) { it->second = v; return true; }
-        if (parent) return parent->assign(name, v);
+        if (Value* p = lookup(name)) { *p = v; return true; }
         return false;
     }
     bool get(const std::string& name, Value& out) {
-        auto it = values.find(name);
-        if (it != values.end()) { out = it->second; return true; }
-        if (parent) return parent->get(name, out);
+        if (const Value* p = lookup(name)) { out = *p; return true; }
         return false;
     }
 
@@ -716,7 +741,7 @@ public:
     // (globals has none) and does not mutate anything.
     std::unordered_map<std::string, Value> exportGlobals() const {
         std::unordered_map<std::string, Value> out;
-        if (globals) out = globals->values;
+        if (globals) out.insert(globals->values.begin(), globals->values.end());
         return out;
     }
 
@@ -728,7 +753,7 @@ public:
     std::unordered_map<std::string, Value> exportContainerGlobals(const std::string& containerName) const {
         auto it = containers.find(containerName);
         if (it == containers.end() || !it->second) return {};
-        return it->second->values;
+        return std::unordered_map<std::string, Value>(it->second->values.begin(), it->second->values.end());
     }
 
     // ---- Indsin <-> Rin: واجهة التقييم المعزول (rin_expr_host.cpp) ----
@@ -1162,15 +1187,15 @@ private:
     const Stmt* vmDirectStmt_ = nullptr;   // عبارة مفوَّضة الآن للـ runtime: exec() التالي لها لا يُعاد توجيهه للآلة
     std::shared_ptr<rin::vm::State> vmState();
     struct VmFrame; struct VmHandler; struct VmLoopMark;
-    Value evaluateTree(const ExprPtr& expr, EnvPtr env); // المسار الشجري الأصلي لـ evaluate
+    Value evaluateTree(const ExprPtr& expr, const EnvPtr& env); // المسار الشجري الأصلي لـ evaluate
     void execute(const StmtPtr& stmt, EnvPtr env);
     void executeBlock(const std::vector<StmtPtr>& statements, EnvPtr env);
     // مسار التنفيذ السريع: return/break/continue تُنقَل كقيمة Flow بدل استثناءات C++ (الاستثناء يكلّف
     // عشرات الميكروثواني لكل return، وهو ما كان يجعل fib(25) تأخذ 7 ثوانٍ). execute()/executeBlock()
     // أعلاه تبقى كما هي لكل المستدعين القدامى وتُحوّل Flow إلى نفس الاستثناءات القديمة.
     enum class Flow { None, Return, Break, Continue };
-    Flow exec(const StmtPtr& stmt, EnvPtr env, Value& ret);
-    Flow execBlockFlow(const std::vector<StmtPtr>& statements, EnvPtr env, Value& ret);
+    Flow exec(const StmtPtr& stmt, const EnvPtr& env, Value& ret);
+    Flow execBlockFlow(const std::vector<StmtPtr>& statements, const EnvPtr& env, Value& ret);
     Flow vmRunBlock(const std::vector<StmtPtr>& statements, EnvPtr env, Value& ret);
     Flow vmRunStmt(const StmtPtr& stmt, EnvPtr env, Value& ret);
     Value vmRunExpr(const ExprPtr& expr, EnvPtr env);
@@ -1181,7 +1206,7 @@ private:
     std::shared_ptr<rin::vm::Proto> vmFunctionProto(const std::shared_ptr<FunctionStmt>& decl);
     Value vmBinary(int op, Value& l, Value& r, int line);
     void vmEnterCall(rin::vm::RunState& rs, const std::shared_ptr<Callable>& fn, std::vector<Value>& args, int line);
-    Value evaluate(const ExprPtr& expr, EnvPtr env);
+    Value evaluate(const ExprPtr& expr, const EnvPtr& env);
     Value callFunction(const std::shared_ptr<Callable>& fn, std::vector<Value>& args, int line);
 
     // ---- OOP: class/struct/enum runtime (rin_interpreter.cpp) ----
