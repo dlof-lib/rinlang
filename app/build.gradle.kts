@@ -61,7 +61,7 @@ android {
 
         externalNativeBuild {
             cmake {
-                cppFlags("-std=c++17")
+                cppFlags("-std=c++23")
                 // صفحات ذاكرة 16KB (مطلوب لأجهزة Android 15+ ولـ Google Play عند targetSdk 35+).
                 arguments("-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON")
             }
