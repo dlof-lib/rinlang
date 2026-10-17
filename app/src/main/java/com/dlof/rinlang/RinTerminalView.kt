@@ -854,6 +854,15 @@ class RinTerminalView @JvmOverloads constructor(
         /** `!!` أو `!N` فقط (لا يلتبس مع نفي Rin `!flag`). */
         val HISTORY_REF = Regex("^!(!|\\d+)$")
 
+        /** رموز معاملات ocr: "نص بين اقتباسين مزدوجين" (مجموعة 1) أو 'مفردين' (مجموعة 2) أو كلمة بلا مسافات. */
+        val OCR_TOKEN = Regex("\"([^\"]*)\"|'([^']*)'|\\S+")
+
+        /** رمز لغة tesseract: eng أو eng+ara (أحرف وأرقام و _ و + فقط، فلا تدخل نص Rin شيفرةً). */
+        val OCR_LANG = Regex("^[A-Za-z0-9_+]{2,40}$")
+
+        /** رقم صحيح غير سالب (psm / min). */
+        val OCR_NUMBER = Regex("^\\d{1,3}$")
+
         /** `$ cmd` / `$cmd` — أوامر طرفية Linux الإضافية (الـ 50 أمراً). */
         val DOLLAR_CMD = Regex("^\\$\\s*[A-Za-z?]")
 
