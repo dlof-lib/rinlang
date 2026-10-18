@@ -35,6 +35,7 @@
 #include "rin_ava_payload.h"
 #include "rin_vm.h"
 
+#include <chrono>
 #include <iostream>
 #include <fstream>
 #include <sstream>
@@ -207,7 +208,7 @@ void printUsage() {
         "  rin pkg <command> [...]                RinPM: مدير حزم Rin (rin pkg --help)\n"
         "  rin --allow-native file.rin            تفعيل جسر C++ (cpp.*) لهذا التشغيل\n"
         "  rin build [file] [-o out] [--release]  بناء تنفيذي أصلي (عبر rinc)\n"
-        "  rin run [file] [--import-progress]     تشغيل برنامج Rin (شريط تحميل حي لـ @import)\n"
+        "  rin run [file] [--import-progress] [--time]  تشغيل برنامج Rin (شريط تحميل لـ @import، --time يعرض زمن التشغيل)\n"
         "  rin check <file> [--format=plain|short|json|lsp]\n"
         "  rin analyze <file>                      semantic analyzer + type checker\n"
         "  rin bytecode <file> [--optimize] [--out file.rbc]  compile/disassemble bytecode\n"
@@ -375,13 +376,21 @@ int cmdBuild(const std::vector<std::string>& args) {
     (void)release; // rinc الحالي لا يميّز release/debug بعد؛ محجوز للتوسعة القادمة دون كسر الواجهة
 
     std::cout << "[rin build] " << rinc << " " << file << " -o " << out << "\n";
+    auto buildT0 = std::chrono::steady_clock::now();
     int rc = runSubprocess(cmd);
+    double buildSecs = std::chrono::duration<double>(std::chrono::steady_clock::now() - buildT0).count();
     if (rc == 127 || rc == -1) {
         std::cerr << "rin build: تعذّر إيجاد/تشغيل rinc. تأكد من تثبيته بجانب rin أو في PATH\n";
         return 1;
     }
-    if (rc == 0) {
-        std::cout << "[rin build] تم بنجاح: " << out << "\n";
+    {
+        // ملخّص Task::Build: الأمر الفرعي (rinc) يكتب في نفس الطرفية فلا يصلح مؤشر حي هنا؛
+        // نعرض النتيجة الحقيقية: الزمن المقاس وحجم الناتج الفعلي.
+        std::string text = out;
+        struct stat st{};
+        if (rc == 0 && ::stat(out.c_str(), &st) == 0) text += "  \xC2\xB7  " + rin::loaderui::formatBytes(static_cast<unsigned long long>(st.st_size));
+        if (rc != 0) text = "rinc exit " + std::to_string(rc);
+        rin::loaderui::report(std::cout, rin::loaderui::profileFor(rin::loaderui::Task::Build), rc == 0, text, buildSecs);
     }
     return rc;
 }
@@ -392,8 +401,10 @@ int cmdBuild(const std::vector<std::string>& args) {
 int cmdRun(const std::vector<std::string>& args) {
     std::string file;
     bool importProgress = false;
+    bool showTime = false;
     for (auto& a : args) {
         if (a == "--import-progress") importProgress = true;
+        else if (a == "--time") showTime = true;
         else if (!a.empty() && a[0] != '-') file = a;
     }
     if (file.empty()) {
@@ -413,7 +424,14 @@ int cmdRun(const std::vector<std::string>& args) {
     // --import-progress اختياري تماماً: بدونه السلوك مطابق تماماً لما كان عليه قبل هذه الميزة
     // (لا شريط تحميل، لا أي فرق في الناتج). راجع rin::loaderui في app/src/main/cpp/loader_ui/.
     if (importProgress) interp.setImportUIMode(rin::loaderui::Mode::Verbose);
+    auto runT0 = std::chrono::steady_clock::now();
     bool ok = runSource(source, file, interp);
+    if (showTime) {
+        // Task::Run: ملخّص الزمن الفعلي على stderr (لا يلوّث ناتج البرنامج على stdout).
+        rin::loaderui::report(std::cerr, rin::loaderui::profileFor(rin::loaderui::Task::Run), ok,
+            file + (ok ? "  finished" : "  failed"),
+            std::chrono::duration<double>(std::chrono::steady_clock::now() - runT0).count());
+    }
     return ok ? 0 : 1;
 }
 
@@ -452,18 +470,42 @@ int cmdTest(const std::string& dirArg) {
     }
 
     int passed = 0, failed = 0;
+    // مؤشر Task::Test: بما أن الاختبار يعيد توجيه std::cout مؤقتاً لالتقاط ناتجه، نكتب الشريط
+    // على دفق مستقل مربوط بالمخرج الحقيقي (fd=1) كي لا يختلط به ولا بالناتج الملتقَط.
+    std::ostream real(std::cout.rdbuf());
+    rin::loaderui::ProgressBar bar(real, rin::loaderui::profileFor(rin::loaderui::Task::Test), files.size(), /*fd=*/1);
+    using Glyph = rin::loaderui::ProgressBar::Glyph;
+    std::string failureLogs;   // ناتج الاختبارات الفاشلة: يُطبع بعد إغلاق الشريط (سطر الشريط لا يتحمّل متعدد الأسطر)
     for (auto& f : files) {
+        bar.setStatus(f);
+        auto t0 = std::chrono::steady_clock::now();
         std::string source;
-        if (!readFile(f, source)) { ++failed; std::cout << "FAIL  " << f << " (تعذّر القراءة)\n"; continue; }
+        if (!readFile(f, source)) {
+            ++failed;
+            bar.note(Glyph::Fail, "FAIL  " + f + " (تعذّر القراءة)");
+            bar.advance();
+            continue;
+        }
         rin::Interpreter interp;
         std::ostringstream captured;
         auto* oldBuf = std::cout.rdbuf(captured.rdbuf());
+        auto* oldErr = std::cerr.rdbuf(captured.rdbuf());   // أخطاء التحليل تُلتقط أيضاً فلا تشوّه الشريط
         bool ok = runSource(source, f, interp, /*printOutput=*/true);
+        std::cerr.rdbuf(oldErr);
         std::cout.rdbuf(oldBuf);
-        if (ok) { ++passed; std::cout << "PASS  " << f << "\n"; }
-        else { ++failed; std::cout << "FAIL  " << f << "\n" << captured.str(); }
+        std::string took = rin::loaderui::formatDuration(
+            std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count());
+        if (ok) { ++passed; bar.note(Glyph::Ok, "PASS  " + f + "  (" + took + ")"); }
+        else {
+            ++failed;
+            bar.note(Glyph::Fail, "FAIL  " + f + "  (" + took + ")");
+            if (!captured.str().empty()) failureLogs += "\n--- " + f + " ---\n" + captured.str();
+        }
+        bar.advance();
     }
-    std::cout << "\n" << passed << " ناجح، " << failed << " فاشل، من " << files.size() << " ملف\n";
+    bar.finish(failed == 0, std::to_string(passed) + " ناجح، " + std::to_string(failed) + " فاشل، من " +
+                            std::to_string(files.size()) + " ملف");
+    if (!failureLogs.empty()) std::cout << failureLogs;
     return failed == 0 ? 0 : 1;
 }
 
@@ -557,7 +599,23 @@ int cmdFmt(const std::vector<std::string>& args) {
         return 1;
     }
 
+    auto fmtT0 = std::chrono::steady_clock::now();
     std::string formatted = reindent(source);
+    {
+        // ملخّص Task::Format على stderr كي لا يلوّث الناتج المنسَّق على stdout (rin fmt file > out).
+        std::istringstream a(source), b(formatted);
+        std::string la, lb;
+        unsigned long long total = 0, changed = 0;
+        while (true) {
+            bool ga = static_cast<bool>(std::getline(a, la)), gb = static_cast<bool>(std::getline(b, lb));
+            if (!ga && !gb) break;
+            ++total;
+            if (!ga || !gb || la != lb) ++changed;
+        }
+        double secs = std::chrono::duration<double>(std::chrono::steady_clock::now() - fmtT0).count();
+        rin::loaderui::report(std::cerr, rin::loaderui::profileFor(rin::loaderui::Task::Format), true,
+            file + "  \xC2\xB7  " + std::to_string(changed) + " of " + std::to_string(total) + " lines " + (write ? "reformatted" : "would change"), secs);
+    }
     if (write) {
         if (!writeFile(file, formatted)) {
             std::cerr << "rin fmt: تعذّر الكتابة إلى '" << file << "'\n";
@@ -599,8 +657,11 @@ int cmdAnalyze(const std::vector<std::string>& args) {
     if (!loadAstForToolchain(args[0], ast)) return 1;
     rin::toolchain::SemanticAnalyzer semantic;
     rin::toolchain::TypeChecker types;
+    rin::loaderui::Spinner spin(std::cout, rin::loaderui::profileFor(rin::loaderui::Task::Check), "semantic + types  " + args[0]);
     auto sr=semantic.analyze(ast);
     auto tr=types.check(ast);
+    if (sr.diagnostics.hasErrors() || tr.diagnostics.hasErrors()) spin.fail("issues found");
+    else spin.succeed("no issues");
     std::cout << "Rin Toolchain Analysis\n";
     std::cout << "semantic: " << (sr.diagnostics.hasErrors() ? "FAILED" : "OK") << "\n";
     std::cout << sr.diagnostics.renderText();
@@ -656,6 +717,22 @@ int cmdToolchainNew(const std::vector<std::string>& args) {
 // ---------------------------------------------------------------------------
 // rin clean
 // ---------------------------------------------------------------------------
+// يعدّ الملفات والبايتات تحت مجلد (بلا اتباع الروابط الرمزية).
+void countTree(const std::string& dir, unsigned long long& files, unsigned long long& bytes) {
+    DIR* d = opendir(dir.c_str());
+    if (!d) return;
+    while (struct dirent* e = readdir(d)) {
+        std::string n = e->d_name;
+        if (n == "." || n == "..") continue;
+        std::string p = dir + "/" + n;
+        struct stat st{};
+        if (::lstat(p.c_str(), &st) != 0) continue;
+        if (S_ISDIR(st.st_mode)) countTree(p, files, bytes);
+        else { ++files; bytes += static_cast<unsigned long long>(st.st_size); }
+    }
+    closedir(d);
+}
+
 int cmdClean() {
     std::string root = findProjectRoot();
     std::string buildDir = root.empty() ? "build" : root + "/build";
@@ -663,9 +740,16 @@ int cmdClean() {
         std::cout << "rin clean: لا يوجد شيء لحذفه (" << buildDir << " غير موجود)\n";
         return 0;
     }
+    // الكمية الحقيقية المحذوفة (عدد الملفات والحجم) تُحسب قبل الحذف.
+    unsigned long long cleanFiles = 0, cleanBytes = 0;
+    countTree(buildDir, cleanFiles, cleanBytes);
+    rin::loaderui::Spinner spin(std::cout, rin::loaderui::profileFor(rin::loaderui::Task::Clean), buildDir);
+    auto t0 = std::chrono::steady_clock::now();
     std::vector<std::string> cmd = {"rm", "-rf", buildDir};
     int rc = runSubprocess(cmd);
-    if (rc == 0) std::cout << "rin clean: تم حذف " << buildDir << "\n";
+    (void)t0;
+    if (rc == 0) spin.succeed("removed " + std::to_string(cleanFiles) + " files \xC2\xB7 " + rin::loaderui::formatBytes(cleanBytes));
+    else spin.fail("rm failed (exit " + std::to_string(rc) + ")");
     return rc;
 }
 
@@ -680,20 +764,30 @@ bool commandExists(const std::string& name) {
 
 int cmdDoctor() {
     std::cout << "Rin Doctor — فحص بيئة التطوير\n\n";
-    std::cout << "✓ rin CLI  (v" << kVersion << ")\n";
+    using Glyph = rin::loaderui::ProgressBar::Glyph;
+    rin::loaderui::ProgressBar bar(std::cout, rin::loaderui::profileFor(rin::loaderui::Task::Doctor), 5);
+    bar.note(Glyph::Ok, std::string("rin CLI  (v") + kVersion + ")");
+    bar.advance();
 
+    bar.setStatus("rinc");
     std::string rinc = findRinc();
     bool rincOk = fileExists(rinc) || commandExists("rinc");
-    std::cout << (rincOk ? "✓" : "✗") << " rinc (Native Compiler) — " << (rincOk ? rinc : "غير موجود في PATH ولا بجانب rin") << "\n";
+    bar.note(rincOk ? Glyph::Ok : Glyph::Fail, std::string("rinc (Native Compiler) — ") + (rincOk ? rinc : "غير موجود في PATH ولا بجانب rin"));
+    bar.advance();
 
+    bar.setStatus("cc / gcc / clang");
     bool ccOk = commandExists("cc") || commandExists("gcc") || commandExists("clang");
-    std::cout << (ccOk ? "✓" : "✗") << " مترجم C على النظام (مطلوب لـrinc: cc/gcc/clang)\n";
+    bar.note(ccOk ? Glyph::Ok : Glyph::Fail, "مترجم C على النظام (مطلوب لـrinc: cc/gcc/clang)");
+    bar.advance();
 
     const char* home = std::getenv("RIN_HOME");
-    std::cout << (home ? "✓" : "✗") << " RIN_HOME — " << (home ? home : "غير مضبوط") << "\n";
+    bar.note(home ? Glyph::Ok : Glyph::Fail, std::string("RIN_HOME — ") + (home ? home : "غير مضبوط"));
+    bar.advance();
 
     std::string root = findProjectRoot();
-    std::cout << (!root.empty() ? "✓" : "✗") << " مشروع Rin حالي — " << (root.empty() ? "لا يوجد rin.toml في المسار الحالي" : root) << "\n";
+    bar.note(!root.empty() ? Glyph::Ok : Glyph::Fail, std::string("مشروع Rin حالي — ") + (root.empty() ? "لا يوجد rin.toml في المسار الحالي" : root));
+    bar.advance();
+    bar.finish(rincOk && ccOk, rincOk && ccOk ? "environment ready" : "environment incomplete");
 
     std::cout << "\nما هو مدعوم فعلياً في هذا التوزيع:\n"
               << "  ✓ المفسّر (rin run / REPL)\n"
