@@ -24,6 +24,22 @@ printf '1 + 2\n' | rin terminal --batch   # وضع غير تفاعلي (يعيد
 
 ## الأوامر (`:help` داخل الطرفية)
 `:load :reload :save :edit :vars :type :time -n N :check :history :keywords :set :pkg :sh :cd :pwd :ls :ocr :img :session :reset :clear :version :quit`
+
+### `:set` — إعدادات الطرفية
+
+| الصيغة | المعنى |
+|---|---|
+| `:set` | جدول كل الإعدادات (القيمة الحالية، `*` = معدَّلة عن الافتراضي، الوصف) |
+| `:set <خيار>` أو `<خيار>?` | تفاصيل خيار (القيم المسموحة والافتراضي) |
+| `:set <خيار> <قيمة>` أو `<خيار>=<قيمة>` | تعيين (`on/off/true/false/yes/no/1/0/toggle`) |
+| `:set no<خيار>` / `<خيار>!` | إيقاف / تبديل |
+| `:set theme light hints off noautoprint` | عدّة تعيينات في سطر واحد (تُتحقَّق كلها قبل تطبيق أي منها) |
+| `:set reset [خيار]` | استرجاع الافتراضي |
+| `:set save` | حفظ القيم المعدَّلة في `terminal.rc` (كتلة مُدارة، لا تمسّ بقية الملف) فتُطبَّق عند كل بدء |
+
+الخيارات: `color highlight hints autoprint timing(auto|on|off) indent theme(dark|light)`.
+الخيار الخاطئ يعيد اقتراح "هل تقصد؟". إن لم تدعم الطرفية الألوان (ليست tty أو `NO_COLOR`) تُحفَظ القيمة المطلوبة ويُنبَّه أنها غير فعّالة الآن.
+
 وكلمات `exit` / `quit` / `help` / `clear` تعمل كما هي ما لم تعرّف متغيراً بنفس الاسم.
 
 ## المشاريع
@@ -142,3 +158,15 @@ native off                # العودة للـ REPL المعتاد (أوامر 
 ## RinStudio
 طرفية RinStudio تدعم `ocr <صورة> [--lang ara+eng] [--psm N] [--enhance] [--min N]` (نفس `make.image.text`)، وتعرض ألوان ANSI
 (`colorAnsi` وغيرها) فوق Unicode؛ التفاصيل في `CHANGES_TERMINAL_UNICODE.md`.
+
+### أوامر `$` المتقدمة (الدفعة 3)
+
+`$ bigfiles` `$ recent` `$ dupes` `$ empty` `$ loc` `$ todo` — استكشاف الملفات · `$ trash` `$ backup` `$ sync` `$ rename` — أمان ونسخ · `$ json` `$ csv` `$ stats` `$ context` `$ verify` — بيانات.
+أمثلة: `$ sync . ~/backup` · `$ trash old.rin ~/tmp` · `$ rename '(.*)\.txt' '$1.rin' *.txt` · `$ json ~/cfg.json server.port` · `$ csv ~/sales.csv -n 20` · `$ stats -e "3 1 4 1 5" -h`.
+تفاصيل في `CHANGES_TERMINAL_XCMDS.md`.
+
+### الدفعة 4 — 500 أمر إضافي
+`$ convert 5 kg lb` وعشرات الاختصارات (`km2mi`، `c2f`…) · نصوص (`camel`، `slugify`، `levenshtein`، `roman`، `morse`…) · ترميز/هاش (`base58`، `sha512`، `hmac`، `crc16`، `luhn`…) · ألوان (`hex2rgb`، `contrast`…) · شبكة (`cidr`، `urlparse`…) · رياضيات وإحصاء ومالية (`fact`، `stdev`، `percentile`، `loan`، `rpn`…) · تواريخ (`age`، `workdays`، `hijri`، `easter`…) · مولّدات (`dice`، `password`، `ulid`…) · ملفات (`tree`، `eol`، `fixeol`، `magic`، `sums`…) · أدوات Rin (`rinlint`، `rinblocks`، `rinids`…) · بيانات (`csv2json`، `csvsort`، `jsonkeys`، `spark`…). التفاصيل في `CHANGES_TERMINAL_XCMDS.md`.
+
+## الهوية: Rin Shell و Rin Toolbox
+الطرفية اسمها الرسمي **Rin Shell**، ومكتبة أوامرها المدمجة **Rin Toolbox** (615 أمراً في 13 عائلة). `:about` يعرض الشعار والإصدار، و`:toolbox` يعرض العائلات (`:toolbox math` يسرد أوامر عائلة). الأيقونات في `assets/branding/shell/`، والتفاصيل في `CHANGES_TERMINAL_BRAND.md`.
