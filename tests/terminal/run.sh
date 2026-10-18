@@ -25,6 +25,20 @@ rm -rf "$xtmp"
 if [ "$xactual" == "$(cat xcmds_session.expected)" ]; then echo "PASS xcmds_session"; else
   echo "FAIL xcmds_session"; diff <(echo "$xactual") xcmds_session.expected | head -30; status=1; fi
 
+echo "== advanced commands, batch 3 ($ json / $ csv / $ sync ~/ ...) =="
+x3tmp="$(mktemp -d)"; mkdir -p "$x3tmp/home" "$x3tmp/work"
+x3actual="$(cd "$x3tmp/work" && HOME="$x3tmp/home" XDG_DATA_HOME= RIN_LANG=en "$RIN_BIN" terminal --batch --no-color --no-history --no-banner < "$OLDPWD/xcmds3_session.in" 2>&1 | sed -E -e "s#$x3tmp#<TMP>#g" -e 's/\.bak-[0-9]{8}-[0-9]{6}/.bak-STAMP/' -e 's/[0-9]{8}-[0-9]{6}-[0-9]+-/ID-/')"
+rm -rf "$x3tmp"
+if [ "$x3actual" == "$(cat xcmds3_session.expected)" ]; then echo "PASS xcmds3_session"; else
+  echo "FAIL xcmds3_session"; diff <(echo "$x3actual") xcmds3_session.expected | head -30; status=1; fi
+
+echo "== batch 4 (units, text, hashes, math, dates, Rin tools ...) =="
+x4tmp="$(mktemp -d)"
+x4actual="$(cd "$x4tmp" && RIN_LANG=en "$RIN_BIN" terminal --batch --no-color --no-history --no-banner < "$OLDPWD/xcmds4_session.in" 2>&1 | sed -E "s#$x4tmp#<TMP>#g")"
+rm -rf "$x4tmp"
+if [ "$x4actual" == "$(cat xcmds4_session.expected)" ]; then echo "PASS xcmds4_session"; else
+  echo "FAIL xcmds4_session"; diff <(echo "$x4actual") xcmds4_session.expected | head -30; status=1; fi
+
 echo "== img (:img و rin img) =="
 if python3 -c "import PIL" 2>/dev/null; then   # المفكّك مدمج: لا حاجة لـ ImageMagick
   itmp="$(mktemp -d)"
