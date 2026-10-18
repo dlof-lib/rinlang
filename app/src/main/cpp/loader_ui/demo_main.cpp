@@ -3,7 +3,7 @@
 // عرض توضيحي مستقل: يحاكي ما سيحدث لاحقاً عند ربط هذه الوحدة بـ @import
 // الفعلي في rin_interpreter.cpp، لكن بدون أي اعتماد عليه. يبني بأمر واحد:
 //
-//   g++ -std=c++17 -o loader_ui_demo library_loader_ui.cpp demo_main.cpp
+//   g++ -std=c++17 -pthread -o loader_ui_demo library_loader_ui.cpp demo_main.cpp
 //
 // ويُشغَّل: ./loader_ui_demo
 // ============================================================================
@@ -85,7 +85,50 @@ static void simulateFailedImport(std::shared_ptr<ILoadSink> sink, const std::str
     session.finish(LoadOutcome{false, false, false, "module not found: `" + name + "`"});
 }
 
-int main() {
+// معرض كل أنواع المؤشرات: ./loader_ui_demo --gallery
+static int gallery() {
+    std::cout << "=== Progress bars (BarStyle) ===\n\n";
+    for (const auto& name : barStyleNames()) {
+        BarStyle bs; parseBarStyle(name, bs);
+        IndicatorStyle st; st.bar = bs;
+        ProgressBar bar(std::cout, name, 4, st);
+        for (int i = 0; i < 4; ++i) { bar.setStatus("step " + std::to_string(i + 1)); sleepMs(260); bar.advance(); }
+        bar.finish(true, name + " done");
+    }
+    std::cout << "\n=== Spinners (SpinnerStyle, indeterminate) ===\n\n";
+    for (const auto& name : spinnerStyleNames()) {
+        SpinnerStyle ss; parseSpinnerStyle(name, ss);
+        IndicatorStyle st; st.spinner = ss;
+        Spinner sp(std::cout, "spinner: " + name, st);
+        sleepMs(900);
+        sp.succeed(name);
+    }
+    return 0;
+}
+
+// معرض أنواع الأوامر: كل نوع بهويّته (فعل/وحدة/لون/شكل/ETA/سرعة): ./loader_ui_demo --tasks
+static int tasks() {
+    struct T { Task t; const char* item; int total; int ms; };
+    const T list[] = {
+        {Task::Install, "http 1.2.0",  8,  330}, {Task::Test,   "math_test.rin", 12, 240},
+        {Task::Build,   "linking",     6,  420}, {Task::Check,  "app/main.rin", 14, 200},
+        {Task::Format,  "src/ui.rin",  5,  500}, {Task::Clean,  "build/obj",    9, 280},
+        {Task::Doctor,  "rinc",        5,  520},
+    };
+    for (const auto& x : list) {
+        ProgressBar bar(std::cout, profileFor(x.t), x.total);
+        for (int i = 0; i < x.total; ++i) { bar.setStatus(std::string(x.item) + " " + std::to_string(i + 1)); sleepMs(x.ms); bar.advance(); }
+        bar.finish(true, profileFor(x.t).verb + " complete");
+    }
+    Spinner sp(std::cout, profileFor(Task::Run), "main.rin");
+    sleepMs(1200);
+    sp.succeed("finished");
+    return 0;
+}
+
+int main(int argc, char** argv) {
+    if (argc > 1 && std::string(argv[1]) == "--tasks") return tasks();
+    if (argc > 1 && std::string(argv[1]) == "--gallery") return gallery();
     std::cout << "=== Verbose mode (ConsoleBarSink) ===\n\n";
     auto verbose = makeSink(Mode::Verbose, std::cout);
 
@@ -94,6 +137,22 @@ int main() {
     simulateCompositeImport(verbose, "rin.ui", {"core", "layout", "paint", "widgets"});
     std::cout << "\n";
     simulateFailedImport(verbose, "not_a_real_lib");
+
+    std::cout << "\n=== ProgressBar (multi-step: package install) ===\n\n";
+    {
+        const char* pkgs[] = {"http 1.2.0", "json 0.9.4", "router 2.0.1"};
+        const char* phases[] = {"downloading", "verifying", "unpacking"};
+        ProgressBar bar(std::cout, "Installing", 3);
+        for (const char* p : pkgs) {
+            for (const char* ph : phases) {
+                bar.setStatus(std::string(p) + " \xC2\xB7 " + ph);
+                sleepMs(350);
+            }
+            bar.note(ProgressBar::Glyph::Ok, std::string(p) + "  downloaded");
+            bar.advance();
+        }
+        bar.finish(true, "3 packages ready");
+    }
 
     std::cout << "\n=== Quiet/Silent mode (SilentSink) ===\n";
     auto quiet = makeSink(Mode::Quiet, std::cout);
