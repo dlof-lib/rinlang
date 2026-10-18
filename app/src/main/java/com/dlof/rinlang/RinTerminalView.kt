@@ -734,7 +734,7 @@ class RinTerminalView @JvmOverloads constructor(
         val sb = SpannableStringBuilder()
         if (snap.lines.isEmpty() && snap.partial.isEmpty()) {
             sb.span("Rin", ACCENT, bold = true)
-            sb.span(" ▸ terminal\n", WHITE, bold = true)
+            sb.span(" Shell\n", WHITE, bold = true)
             sb.span("─────────────────────\n", BORDER)
             sb.span(context.getString(R.string.terminal_welcome), DIM, italic = true)
             return sb
