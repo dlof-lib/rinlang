@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="Rin Shell">
+  <title>Rin Shell</title>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1F1B3A"/><stop offset="1" stop-color="#0E0D1B"/></linearGradient>
+    <linearGradient id="chev" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#B39BFF"/><stop offset="1" stop-color="#7C5CFF"/></linearGradient>
+    <linearGradient id="cur" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#46E08F"/><stop offset="1" stop-color="#1E9E63"/></linearGradient>
+  </defs>
+  <rect x="32" y="32" width="448" height="448" rx="104" fill="url(#bg)" stroke="#3A3470" stroke-width="6"/>
+  <path d="M32 138h448" stroke="#2B2656" stroke-width="4"/>
+  <circle cx="96" cy="86" r="14" fill="#FF5F57"/><circle cx="140" cy="86" r="14" fill="#FEBC2E"/><circle cx="184" cy="86" r="14" fill="#28C840"/>
+  <path d="M134 214 L228 288 L134 362" fill="none" stroke="url(#chev)" stroke-width="46" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="262" y="338" width="128" height="40" rx="20" fill="url(#cur)"/>
+  <rect x="266" y="236" width="150" height="18" rx="9" fill="#3A3566"/>
+  <rect x="266" y="270" width="96" height="18" rx="9" fill="#2C2850"/>
+</svg>
