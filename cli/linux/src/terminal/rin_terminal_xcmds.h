@@ -1,5 +1,5 @@
 // ============================================================================
-//  rin terminal — 50 extra commands (header-only, POSIX + std only).
+//  rin terminal — extra commands (batch 1: 50; batch 2: rin_terminal_xcmds2.h; batch 3: rin_terminal_xcmds3.h) (header-only, POSIX + std only).
 //
 //  Shared by the Linux terminal (`rin terminal`) and RinStudio (the embedded
 //  terminal compiled into librinengine.so). No process is spawned: every
@@ -580,7 +580,7 @@ inline std::string expandAlias(const std::string& line) {
 // ============================================================================
 //  THE 50 COMMANDS
 // ============================================================================
-using Fn = int (*)(Ctx&);
+using Fn = std::function<int(Ctx&)>;   // std::function: batch 4+ registers table-driven (capturing) commands
 
 // ---- 1-4: reading -----------------------------------------------------------
 inline int cmdCat(Ctx& c) {
@@ -1411,6 +1411,8 @@ inline int cmdDirs(Ctx& c) {
 // ----------------------------------------------------------------------------
 struct Entry { Spec spec; Fn fn; };
 inline const std::vector<Entry>& registry2();   // batch 2: rin_terminal_xcmds2.h
+inline const std::vector<Entry>& registry3();   // batch 3: rin_terminal_xcmds3.h
+inline const std::vector<Entry>& registry4();   // batch 4: rin_terminal_xcmds4.h .. xcmds7.h
 inline const std::vector<Entry>& registry() {
     static const std::vector<Entry> base = {
         {{"cat",      "$ cat [-n] [-r A:B] <file…>",                  "print files (-n number lines, -r line range A:B)", true}, cmdCat},
@@ -1467,6 +1469,8 @@ inline const std::vector<Entry>& registry() {
     static const std::vector<Entry> r = [] {
         std::vector<Entry> v = base;
         for (const auto& e : registry2()) v.push_back(e);
+        for (const auto& e : registry3()) v.push_back(e);
+        for (const auto& e : registry4()) v.push_back(e);
         return v;
     }();
     return r;
@@ -1524,3 +1528,5 @@ inline bool run(const std::string& name, const std::string& arg, const Io& io, i
 }  // namespace rin
 
 #include "rin_terminal_xcmds2.h"   // batch 2 (50 more commands)
+#include "rin_terminal_xcmds3.h"   // batch 3 (15 advanced commands)
+#include "rin_terminal_xcmds7.h"   // batch 4 (500 commands; pulls in xcmds4..6)
