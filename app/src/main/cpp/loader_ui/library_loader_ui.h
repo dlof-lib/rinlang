@@ -27,6 +27,7 @@
 #pragma once
 
 #include <cstddef>
+#include <functional>
 #include <iosfwd>
 #include <memory>
 #include <string>
@@ -166,7 +167,15 @@ IndicatorStyle styleFromEnv();   // يقرأ RIN_PROGRESS_BAR / RIN_PROGRESS_SPI
 //   Doctor   "Diagnosing"  checks  أخضر فاتح pulse + dots
 //   Run      "Running"             بنفسجي  slide   + line
 // ----------------------------------------------------------------------------
-enum class Task { Generic, Install, Test, Build, Check, Format, Clean, Doctor, Run };
+//   Load     "Loading"     files   سماوي فاتح dots  + line     (:load / :source / :reload)
+//   Eval     "Evaluating"          لافندر  arrow   + line     (شيفرة تُكتب مباشرة في الطرفية)
+//   Project  "Scaffolding" files   أخضر هادئ bounce + segments (:new / :init)
+//   Image    "Rendering"           وردي    dots    + block    (:img / :ocr / :indsin)
+//   Files    "Processing"  files   بيج     line    + shade    ($ cp mv rm find grep du ...)
+//   Hash     "Hashing"     files   ذهبي    bounce  + block    ($ sha256 md5 crc32 ...)
+//   Bench    "Benchmarking" runs   أحمر برتقالي pulse + dots   (:time -n N)
+enum class Task { Generic, Install, Test, Build, Check, Format, Clean, Doctor, Run,
+                  Load, Eval, Project, Image, Files, Hash, Bench };
 
 struct TaskProfile {
     std::string verb;          // "Installing"
@@ -178,6 +187,11 @@ struct TaskProfile {
     bool rate = false;         // عرض السرعة (وحدة/ثانية)
 };
 TaskProfile profileFor(Task task);   // RIN_PROGRESS_BAR / RIN_PROGRESS_SPINNER تتغلّب على النمط الافتراضي للنوع
+
+// أي نوع أمر ينتمي إليه أمر الطرفية؟ (الاسم بلا ':' أو '$'): load→Load، run→Run، test→Test، check→Check،
+// new/init→Project، img/ocr/indsin→Image، time→Bench، pkg→Install، cp/mv/rm/find/grep/du/...→Files،
+// sha256/md5/crc32/...→Hash. أي اسم آخر => Generic ("Working").
+Task taskForCommand(const std::string& commandName);
 
 // "412ms" / "1.4s" / "1m 05s" — مدة مقروءة موحّدة لكل العارضات.
 std::string formatDuration(double seconds);
@@ -294,6 +308,62 @@ void report(std::ostream& out, const TaskProfile& profile, bool ok, const std::s
 
 // 48230 -> "47.1 KB" — أحجام مقروءة موحّدة.
 std::string formatBytes(unsigned long long bytes);
+
+// ----------------------------------------------------------------------------
+// RunIndicator — مؤشر حيّ مرتبط بتشغيل كود Rin الفعلي (أو أي أمر طرفية بطيء).
+//
+//   RunIndicator ind(std::cout, profileFor(Task::Run), "main.rin", /*fd=*/1);
+//   interp.setStreamSink([&](const std::string& c) { ind.emit(c, [](const std::string& s) { std::cout << s; }); });
+//   interp.setImportUISink(ind.importSink());   // يعرض الاستيراد الجاري فعلاً: "importing rin.ui · Parsing"
+//   interp.setInputProvider(ind.inputProvider()); // input() يوقف المؤشر أثناء السؤال
+//   interp.run(stmts);
+//   ind.stop();
+//
+// يعرض:  ⠋ Running  main.rin · importing rin.ui · 12 lines  1.4s   Ctrl-C to stop
+//
+// قواعده (كلها لمنع الضجيج، فلا شيء يظهر في التشغيلات السريعة):
+//   * لا يظهر قبل مرور `delaySec` (0.35s افتراضياً) — `1 + 2` في الطرفية لا يرمش أبداً.
+//   * لا يُرسم إلا والبرنامج صامت (≥150ms منذ آخر مخرجات) ويختفي فوراً عند أي مخرجات؛ فلا يتشابك مع الناتج.
+//   * emit() و pause()/resume() تتشاركان قفلاً مع خيط الرسم: لا سباق على الطرفية.
+//   * ليس طرفية حقيقية (pipe/ملف/CI/NO_COLOR الخ) أو RIN_PROGRESS=plain => active() = false وكل شيء
+//     no-op: emit() يستدعي الكاتب مباشرة بلا أي تغيير في الناتج.
+//   * الأرقام حقيقية: المدة من steady_clock، عدد الأسطر مما أخرجه البرنامج فعلاً، والاستيراد من LoadSession.
+// ----------------------------------------------------------------------------
+class RunIndicator {
+public:
+    struct Options {
+        double delaySec = 0.35;          // لا شيء يظهر قبل هذه المدة
+        std::string hint;                // نص باهت في آخر السطر (مثلاً "Ctrl-C to stop")؛ يظهر بعد 2 ثانية
+        bool forceInactive = false;      // يعطّله صراحةً (مثلاً حين يرسم مؤشراً آخر)
+    };
+    RunIndicator(std::ostream& out, const TaskProfile& profile, std::string target, int fd, const Options& opts);
+    RunIndicator(std::ostream& out, const TaskProfile& profile, std::string target, int fd = -1);
+    ~RunIndicator();
+    RunIndicator(const RunIndicator&) = delete;
+    RunIndicator& operator=(const RunIndicator&) = delete;
+
+    bool active() const;                        // هل سيُرسم أي شيء فعلاً؟
+    bool wasShown() const;                      // هل ظهر المؤشر مرة واحدة على الأقل؟
+    void setTarget(const std::string& target);  // ما يُشغَّل الآن
+    void setDetail(const std::string& detail);  // تفصيل اختياري ("" يمسحه)
+
+    // يمرّر مخرجات البرنامج عبر writer مع إخفاء المؤشر قبلها بأمان. استدعِه من stream sink/دوال الكتابة.
+    void emit(const std::string& chunk, const std::function<void(const std::string&)>& writer);
+    void pause();    // يمسح السطر ويوقف الرسم (قبل أي كتابة خارجية أو قراءة إدخال)
+    void resume();
+
+    // adapter لأحداث @import: يحدّث التفصيل بالمكتبة والمرحلة الجارية فعلياً.
+    std::shared_ptr<ILoadSink> importSink();
+    // مزوّد إدخال يوقف المؤشر أثناء السؤال ثم يعيده. يقرأ من stdin كما يفعل المحرك افتراضياً.
+    std::function<bool(const std::string&, std::string&)> inputProvider();
+
+    double elapsed() const;
+    void stop();     // يُنهي الرسم ويمسح السطر (آمن مراراً)
+
+    struct Impl;   // تفصيل داخلي (مكشوف للتصريح فقط)
+private:
+    std::shared_ptr<Impl> impl_;
+};
 
 // ----------------------------------------------------------------------------
 // LoadSession — واجهة الاستخدام من جهة المُفسِّر/RinPM. RAII: تستدعي onBegin
