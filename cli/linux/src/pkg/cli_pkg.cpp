@@ -9,6 +9,7 @@
 #include "auth.h"
 #include "errors.h"
 #include "sha256.h"
+#include "loader_ui/library_loader_ui.h"
 
 #include <iostream>
 #include <sstream>
@@ -17,6 +18,7 @@
 #include <cstdlib>
 #include <algorithm>
 #include <memory>
+#include <chrono>
 #include <map>
 #include <set>
 
@@ -106,35 +108,69 @@ int doInstallLike(bool forceFresh, bool offline, const std::string& singlePkgFil
     Resolver resolver(regs.all, /*currentRinVersion=*/"1.0.0", /*currentPlatform=*/"linux");
 
     printResolutionHeader();
-    std::cout << "Resolving dependencies...\n";
-
     ResolveResult result;
-    try {
-        result = resolver.resolve(m, /*includeDev=*/true);
-    } catch (const RinPackageError& e) {
-        std::cerr << "\xE2\x9C\x97 " << e.kind() << ":\n\n" << e.what() << "\n";
-        return static_cast<int>(e.exitCode());
-    }
-
-    for (auto& pkg : result.packages) {
-        std::cout << "\xE2\x9C\x93 " << pkg.name << " " << pkg.version.toString() << "\n";
-    }
-
-    std::cout << "\nInstalling packages...\n";
-    for (auto& pkg : result.packages) {
-        Registry* reg = nullptr;
-        for (Registry* r : regs.all) {
-            auto avail = r->availableVersions(pkg.name);
-            if (std::find(avail.begin(), avail.end(), pkg.version) != avail.end()) { reg = r; break; }
-        }
-        if (!reg) reg = regs.all.front();
+    {
+        // مؤشر غير محدَّد المدة: حل التبعيات قد يتصل بالسجل فلا نعرف طوله مسبقاً.
+        auto resolveProfile = rin::loaderui::profileFor(rin::loaderui::Task::Install);
+        resolveProfile.verb = "Resolving";
+        rin::loaderui::Spinner spin(std::cout, resolveProfile, "dependencies");
         try {
-            package::installer::installResolvedPackage(pkg, *reg, regs.cache, offline);
+            result = resolver.resolve(m, /*includeDev=*/true);
         } catch (const RinPackageError& e) {
-            std::cerr << "\xE2\x9C\x97 " << e.kind() << ": " << e.what() << "\n";
+            spin.fail("Resolution failed");
+            std::cerr << "\xE2\x9C\x97 " << e.kind() << ":\n\n" << e.what() << "\n";
             return static_cast<int>(e.exitCode());
         }
-        std::cout << "\xE2\x9C\x93 " << pkg.name << "\n";
+        spin.succeed("Resolved " + std::to_string(result.packages.size()) +
+                     (result.packages.size() == 1 ? " package" : " packages"));
+    }
+
+    std::cout << "\n";
+    {
+        // مؤشر تقدّم حقيقي: كل مرحلة تأتي فعلياً من المثبِّت (cached/downloading/verifying/unpacking)،
+        // والعدّاد = حزم أُنجزت فعلاً. في pipe/CI يتحوّل تلقائياً إلى سطر نظيف لكل حزمة.
+        using rin::loaderui::ProgressBar;
+        ProgressBar bar(std::cout, rin::loaderui::profileFor(rin::loaderui::Task::Install), result.packages.size());
+        std::size_t fresh = 0, cachedCount = 0;
+        for (auto& pkg : result.packages) {
+            Registry* reg = nullptr;
+            for (Registry* r : regs.all) {
+                auto avail = r->availableVersions(pkg.name);
+                if (std::find(avail.begin(), avail.end(), pkg.version) != avail.end()) { reg = r; break; }
+            }
+            if (!reg) reg = regs.all.front();
+            const std::string label = pkg.name + " " + pkg.version.toString();
+            bool wasCached = false;
+            bool didDownload = false;
+            auto t0 = std::chrono::steady_clock::now();
+            bar.setStatus(label);
+            try {
+                package::installer::installResolvedPackage(pkg, *reg, regs.cache, offline,
+                    [&](const char* phase) {
+                        if (std::string(phase) == "cached") wasCached = true;
+                        if (std::string(phase) == "downloading") didDownload = true;
+                        bar.setStatus(label + " \xC2\xB7 " + phase);
+                    });
+            } catch (const RinPackageError& e) {
+                bar.note(ProgressBar::Glyph::Fail, label + "  " + e.kind());
+                bar.finish(false, "Install failed");
+                std::cerr << e.what() << "\n";
+                return static_cast<int>(e.exitCode());
+            }
+            double secs = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+            if (wasCached) {
+                ++cachedCount;
+                bar.note(ProgressBar::Glyph::Skip, label + "  cached");
+            } else {
+                ++fresh;
+                bar.note(ProgressBar::Glyph::Ok, label + "  " + (didDownload ? "downloaded" : "installed") +
+                         " \xC2\xB7 " + rin::loaderui::formatDuration(secs));
+            }
+            bar.advance();
+        }
+        std::string summary = std::to_string(result.packages.size()) + (result.packages.size() == 1 ? " package" : " packages") +
+                              " ready (" + std::to_string(fresh) + " installed, " + std::to_string(cachedCount) + " cached)";
+        bar.finish(true, summary);
     }
 
     Lockfile lock;
