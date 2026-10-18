@@ -1,0 +1,8 @@
+// Set inside json.stringify and oop.hash (previously: invalid JSON / hash ignored the contents)
+let s = Set([1, 2, 3]);
+let t = Set([3, 2, 1]);
+let u = Set([1, 2, 4]);
+print json.stringify({"a": s});
+print json.stringify(Set([]));
+print oop.hash(s) == oop.hash(t);
+print oop.hash(s) == oop.hash(u);
