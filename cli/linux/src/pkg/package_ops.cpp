@@ -39,12 +39,15 @@ void validatePackageDirectory(const std::string& dir, std::vector<std::string>& 
 
 namespace installer {
 
-void installResolvedPackage(const ResolvedPackage& pkg, Registry& reg, const Cache& cache, bool offline) {
+void installResolvedPackage(const ResolvedPackage& pkg, Registry& reg, const Cache& cache, bool offline,
+                            const PhaseCallback& onPhase) {
+    auto phase = [&](const char* p) { if (onPhase) onPhase(p); };
     const std::string& name = pkg.name;
     std::string version = pkg.version.toString();
     const std::string& expectedChecksum = pkg.meta.checksum;
 
     if (cache.isInstalledAndValid(name, version, expectedChecksum)) {
+        phase("cached");
         return; // موجودة وصالحة مسبقاً: لا إعادة تنزيل (قسم 17)
     }
 
@@ -57,6 +60,7 @@ void installResolvedPackage(const ResolvedPackage& pkg, Registry& reg, const Cac
                 "package not available in offline cache: `" + name + "@" + version + "`",
                 ExitCode::PackageNotFound);
         }
+        phase("downloading");
         if (!reg.downloadPackage(name, version, archivePath)) {
             throw RinPackageNotFound("could not download `" + name + "@" + version + "` from registry `" +
                                       reg.sourceLabel() + "`");
@@ -64,6 +68,7 @@ void installResolvedPackage(const ResolvedPackage& pkg, Registry& reg, const Cac
     }
 
     // التحقق الأمني: لا نثق بأي حزمة قبل مطابقة بصمتها فعلياً (قسم 10).
+    phase("verifying");
     std::string actualChecksum;
     if (!sha256HexOfFile(archivePath, actualChecksum)) {
         throw RinChecksumError("could not read downloaded archive to verify checksum: `" + archivePath + "`");
@@ -77,6 +82,7 @@ void installResolvedPackage(const ResolvedPackage& pkg, Registry& reg, const Cac
         throw RinChecksumError(msg);
     }
 
+    phase("unpacking");
     std::string installDir = cache.installDir(name, version);
     unpackArchive(archivePath, installDir);
 
