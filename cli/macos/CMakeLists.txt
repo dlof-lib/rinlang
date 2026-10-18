@@ -61,7 +61,8 @@ add_executable(rin
 )
 
 target_include_directories(rin PRIVATE ${RIN_CORE_DIR})
-target_link_libraries(rin PRIVATE ZLIB::ZLIB ${CMAKE_DL_LIBS})  # dlopen لجسر cpp.* (Rin 1.0)
+find_package(Threads REQUIRED)  # خيط تحريك مؤشر التقدّم (loader_ui::ProgressBar)
+target_link_libraries(rin PRIVATE Threads::Threads ZLIB::ZLIB ${CMAKE_DL_LIBS})  # dlopen لجسر cpp.* (Rin 1.0)
 
 set_target_properties(rin PROPERTIES OUTPUT_NAME "rin")
 
