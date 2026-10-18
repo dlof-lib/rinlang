@@ -4,6 +4,7 @@
 #include "rin_terminal.h"
 #include <atomic>
 #include "rin_imgdec.h"   // مفكّك صور مدمج (png/jpeg/gif/bmp): :img لا يحتاج ImageMagick لهذه الصيغ
+#include "rin_terminal_brand.h"   // Rin Shell / Rin Toolbox: official names + logo
 #include "rin_terminal_xcmds.h"   // 50 extra commands: $ cat / $ cp *.rin ~/ / $ seq 1:10 ...
 
 #include "rin_version.h"
@@ -1892,6 +1893,7 @@ public:
         utf8_ = localeIsUtf8();
         editorCfg_.highlight = o.highlight && style_.on;
         editorCfg_.hints = o.hints && style_.on;
+        reqColor_ = o.color; reqHighlight_ = o.highlight; reqHints_ = o.hints;
         autoprint_ = o.autoprint;
         timing_ = o.timing;
         history_.persist = o.useHistory && interactive_;
@@ -1973,6 +1975,8 @@ private:
     bool autoprint_ = true;
     std::string timing_ = "auto";
     bool indent_ = true;
+    // القيم "المطلوبة" من المستخدم (تُعرَض وتُحفَظ)؛ الفعلية = المطلوبة && الطرفية تدعم الألوان (style_.on).
+    bool reqColor_ = true, reqHighlight_ = true, reqHints_ = true;
 
     std::unique_ptr<rin::Interpreter> interp_;
     bool underscoreDefined_ = false;
@@ -2067,15 +2071,126 @@ private:
     }
 
     // ---------- الواجهة ----------
-    void printBanner() {
+    // ---------- الهوية: Rin Shell ----------
+    std::string brandPurple() const { return style_.fg(style_.dark ? 141 : 91, 5); }
+    std::string brandGreen() const { return style_.fg(style_.dark ? 78 : 29, 2); }
+    std::string shortCwd() const {
+        char buf[4096];
+        std::string d = ::getcwd(buf, sizeof(buf)) ? buf : ".";
+        if (const char* h = std::getenv("HOME")) { std::string hs = h; if (!hs.empty() && hs != "/" && startsWith(d, hs)) d = "~" + d.substr(hs.size()); }
+        return d;
+    }
+    std::vector<std::string> logoLines(int& width) const {
+        if (style_.on && utf8_) { width = brand::logoColorWidth(); return brand::logoColor(style_.c256); }
+        width = brand::logoMonoWidth();
+        return brand::logoMono(utf8_);
+    }
+    size_t commandTotal() const { return xcmds::registry().size(); }
+    std::string labelled(const std::string& label, const std::string& text) const {
+        return style_.cyan() + label + std::string(static_cast<size_t>(std::max(1, 9 - static_cast<int>(label.size()))), ' ') + style_.reset() + text;
+    }
+    // side-by-side: logo on the left, `info` on the right (starting at logo row `firstRow`)
+    void printLogoWithInfo(const std::vector<std::string>& info, int firstRow) {
+        int lw = 0;
+        auto logo = logoLines(lw);
+        size_t rows = std::max(logo.size(), info.size() + static_cast<size_t>(firstRow));
+        for (size_t i = 0; i < rows; ++i) {
+            std::string left = i < logo.size() ? logo[i] : std::string(static_cast<size_t>(lw), ' ');
+            if (i < logo.size() && !style_.on) left += std::string(static_cast<size_t>(std::max(0, lw - strWidth(logo[i]))), ' ');
+            std::string right = (static_cast<int>(i) >= firstRow && i - static_cast<size_t>(firstRow) < info.size()) ? info[i - static_cast<size_t>(firstRow)] : "";
+            println("  " + left + "   " + right);
+        }
+    }
+    std::vector<std::string> brandInfo(bool detailed) const {
         std::string v = opt_.version.empty() ? RIN_VERSION_STRING : opt_.version;
-        std::string line1 = std::string("  Rin ") + v + "  " + sym("·", "-") + "  " + tr("طرفية تفاعلية", "interactive terminal");
+        std::vector<std::string> info;
+        info.push_back(style_.bold() + brandPurple() + brand::kShell + style_.reset() + "  " + style_.dim() + "v" + v + style_.reset());
+        info.push_back(style_.dim() + tr(brand::kShellAr, brand::kShellEn) + style_.reset());
+        std::string rule; for (int i = 0; i < 38; ++i) rule += sym("─", "-");
+        info.push_back(style_.dim() + rule + style_.reset());
+        info.push_back(style_.cyan() + "Toolbox  " + style_.reset() + brandGreen() + std::to_string(commandTotal()) + style_.reset() + " " + tr("أمراً", "commands") + "  " + style_.dim() + sym("·", "|") + style_.reset() + "  $ cmd … ~/");
+        info.push_back(labelled("Shell", ":help  " + std::string(sym("·", "|")) + "  :about  " + sym("·", "|") + "  :toolbox  " + sym("·", "|") + "  :set"));
+        info.push_back(labelled("Keys", std::string("Tab ") + tr("إكمال", "complete") + "  " + sym("·", "|") + "  Ctrl-R " + tr("بحث", "search") + "  " + sym("·", "|") + "  Ctrl-D " + tr("خروج", "exit")));
+        info.push_back(labelled("Session", std::string(style_.dark ? "dark" : "light") + " " + tr("سمة", "theme") + "  " + sym("·", "|") + "  " + shortCwd()));
+        if (detailed) {
+            info.push_back("");
+            info.push_back(labelled("Colors", std::string(style_.on ? (style_.c256 ? "256" : "16") : "off") + "   Unicode " + (utf8_ ? "on" : "off")));
+            info.push_back(labelled("Toolbox", tr(brand::kToolboxAr, brand::kToolboxEn)));
+        }
+        return info;
+    }
+    void printBanner() {
+        if (style_.on && !embedded_) print(brand::windowTitle(""));               // tab / window title = Rin Shell
         println("");
-        println(style_.bold() + style_.green() + line1 + style_.reset());
-        std::string line2 = std::string("  :help ") + tr("للمساعدة", "for help") + "  " + sym("·", "|") + "  Tab " + tr("إكمال", "complete") +
-                            "  " + sym("·", "|") + "  Ctrl-R " + tr("بحث", "search") + "  " + sym("·", "|") + "  Ctrl-D " + tr("خروج", "exit");
-        info(line2);
+        if (termCols() >= 68) {
+            printLogoWithInfo(brandInfo(false), 2);
+        } else {                                                                      // narrow terminal: no logo
+            std::string v = opt_.version.empty() ? RIN_VERSION_STRING : opt_.version;
+            println(std::string("  ") + style_.bold() + brandPurple() + brand::kShell + style_.reset() + "  " + style_.dim() + "v" + v + "  " + sym("·", "-") + "  " + std::to_string(commandTotal()) + " " + tr("أمراً", "commands") + style_.reset());
+            info(std::string("  :help ") + tr("للمساعدة", "for help") + "  " + sym("·", "|") + "  Tab " + tr("إكمال", "complete") + "  " + sym("·", "|") + "  Ctrl-D " + tr("خروج", "exit"));
+        }
         println("");
+    }
+    void cmdAbout() {
+        println("");
+        printLogoWithInfo(brandInfo(true), 1);
+        println("");
+        println("  " + style_.dim() + tr("اكتب :toolbox لعرض عائلات الأوامر، و:help لكل الأوامر.", "Type :toolbox for the command families, :help for every command.") + style_.reset());
+    }
+    void cmdToolbox(const std::string& argIn) {
+        std::string arg = xcmds::lowerStr(trim(argIn));
+        const auto& all = xcmds::registry();
+        const auto& fams = xcmds::toolFamilies();
+        const auto& b4 = xcmds::registry4();
+        size_t core = all.size() >= b4.size() ? all.size() - b4.size() : 0;
+        auto sample = [&](size_t from, size_t count, size_t n) {
+            std::string o;
+            for (size_t i = 0; i < count && i < n; ++i) { if (i) o += ' '; o += all[from + i].spec.name; }
+            if (count > n) o += " …";
+            return o;
+        };
+        if (arg.empty()) {
+            println("");
+            println("  " + style_.bold() + brandPurple() + brand::kToolbox + style_.reset() + "  " + style_.dim() + sym("·", "-") + " " + tr(brand::kToolboxAr, brand::kToolboxEn) + "  " + sym("·", "-") + "  " + std::to_string(all.size()) + " " + tr("أمراً", "commands") + style_.reset());
+            println("");
+            auto row = [&](const std::string& key, const std::string& title, size_t count, size_t from) {
+                std::string k = key; k.resize(12, ' ');
+                std::string t = title; t.resize(26, ' ');
+                std::string n = std::to_string(count); while (n.size() < 4) n = " " + n;
+                println("  " + style_.cyan() + k + style_.reset() + t + brandGreen() + n + style_.reset() + "  " + style_.dim() + sample(from, count, 7) + style_.reset());
+            };
+            row("core", "Core: files, text, system", core, 0);
+            for (const auto& f : fams) row(f.key, f.title, f.count, core + f.start);
+            println("");
+            println("  " + style_.dim() + tr(":toolbox <عائلة> يعرض كل أوامرها، مثال  :toolbox math   |   :help <أمر> للشرح", ":toolbox <family> lists all its commands, e.g.  :toolbox math   |   :help <command> for details") + style_.reset());
+            return;
+        }
+        size_t from = 0, count = 0; std::string title;
+        std::vector<std::string> hits;
+        auto consider = [&](const std::string& key, const std::string& t, size_t f, size_t n) {
+            if (key == arg) { hits.assign(1, key); from = f; count = n; title = t; return true; }
+            if (startsWith(key, arg)) { hits.push_back(key); if (hits.size() == 1) { from = f; count = n; title = t; } }
+            return false;
+        };
+        if (!consider("core", "Core: files, text, system", 0, core))
+            for (const auto& f : fams) if (consider(f.key, f.title, core + f.start, f.count)) break;
+        if (hits.size() > 1) {
+            std::string l; for (const auto& h : hits) l += (l.empty() ? "" : ", ") + h;
+            err(std::string(tr("اسم غامض: ", "ambiguous family: ")) + argIn + "   (" + l + ")"); lastOk_ = false; return;
+        }
+        if (count == 0) { err(std::string(tr("عائلة غير معروفة: ", "unknown family: ")) + argIn + "   " + tr("(جرّب :toolbox)", "(try :toolbox)")); lastOk_ = false; return; }
+        println("");
+        println("  " + style_.bold() + brandPurple() + title + style_.reset() + "  " + style_.dim() + std::to_string(count) + " " + tr("أمراً", "commands") + style_.reset());
+        println("");
+        size_t w = 0; for (size_t i = 0; i < count; ++i) w = std::max(w, std::string(all[from + i].spec.name).size());
+        size_t cols = static_cast<size_t>(std::max(1, (termCols() - 2) / static_cast<int>(w + 2)));
+        for (size_t i = 0; i < count; i += cols) {
+            std::string line = "  ";
+            for (size_t j = i; j < std::min(count, i + cols); ++j) { std::string nm = all[from + j].spec.name; nm.resize(w + 2, ' '); line += style_.cyan() + nm + style_.reset(); }
+            println(line);
+        }
+        println("");
+        println("  " + style_.dim() + tr(":help <أمر> يشرح أي أمر", ":help <command> explains any command") + style_.reset());
     }
 
     std::string promptMain(int& width) const {
@@ -2148,12 +2263,34 @@ private:
                 return out;
             }
             if (cmd == "set") {
-                std::string rest = trim(body.substr(sp + 1));
-                if (rest.find(' ') == std::string::npos) {
-                    for (const auto& s : settings()) if (startsWith(std::string(s.name), rest)) out.push_back(s.name);
-                    start = toU32(pre).size() - toU32(rest).size();
-                    return out;
+                // إكمال :set — الكلمة الأخيرة فقط: بعد اسم خيار تُقترح قيمه (on/off/auto/dark/light/toggle)،
+                // وإلا أسماء الخيارات وصيغة no<خيار> للخيارات المنطقية.
+                std::string rest = ltrim(body.substr(sp + 1));
+                size_t ws = rest.find_last_of(' ');
+                std::string last = ws == std::string::npos ? rest : rest.substr(ws + 1);
+                std::string prevWord;
+                if (ws != std::string::npos) {
+                    auto pw = splitWords(rest.substr(0, ws));
+                    if (!pw.empty()) prevWord = pw.back();
                 }
+                if (const Setting* ps = findSetting(prevWord)) {
+                    std::string vals = std::string(ps->values) + "|toggle";
+                    size_t pos = 0;
+                    while (pos <= vals.size()) {
+                        size_t bar = vals.find('|', pos);
+                        std::string v = vals.substr(pos, bar == std::string::npos ? std::string::npos : bar - pos);
+                        if (startsWith(v, last)) out.push_back(v);
+                        if (bar == std::string::npos) break;
+                        pos = bar + 1;
+                    }
+                } else {
+                    for (const auto& st : settings()) {
+                        if (startsWith(std::string(st.name), last)) out.push_back(st.name);
+                        if (isBoolSetting(st.name) && startsWith("no" + std::string(st.name), last) && last.size() >= 2) out.push_back("no" + std::string(st.name));
+                    }
+                }
+                start = toU32(pre).size() - toU32(last).size();
+                return out;
             }
             if (cmd == "help") {
                 std::string rest = trim(body.substr(sp + 1));
@@ -2446,6 +2583,8 @@ private:
             {"history",  ":history [N|clear|بحث]",   "عرض/بحث/مسح التاريخ (و !! و !N)",              "show/search/clear history (and !! / !N)"},
             {"keywords", ":keywords",                "الكلمات المحجوزة في اللغة",                     "language keywords"},
             {"set",      ":set [خيار قيمة]",         "عرض/تغيير إعدادات الطرفية",                    "show/change terminal settings"},
+            {"about",    ":about",                   "عن Rin Shell: الاسم والإصدار والشعار",           "about Rin Shell: name, version, logo"},
+            {"toolbox",  ":toolbox [عائلة]",          "Rin Toolbox: عائلات الأوامر المدمجة (مثال :toolbox math)", "Rin Toolbox: the built-in command families (e.g. :toolbox math)"},
             {"pkg",      ":pkg <أمر>",               "مدير الحزم RinPM من داخل الجلسة",              "RinPM package manager from inside the session"},
             {"sh",       ":sh <أمر>",                "تنفيذ أمر شل",                                 "run a shell command"},
             {"cd",       ":cd [مسار]",               "تغيير المجلد الحالي",                          "change directory"},
@@ -2523,6 +2662,8 @@ private:
         if (cmd == "history") return cmdHistory(arg);
         if (cmd == "keywords") return cmdKeywords();
         if (cmd == "set") return cmdSet(arg);
+        if (cmd == "about") { cmdAbout(); return; }
+        if (cmd == "toolbox") { cmdToolbox(arg); return; }
 #ifndef RIN_TERMINAL_EMBED
         if (cmd == "pkg") { std::vector<std::string> a = splitWords(arg); int rc = rinpm::cli::run(a, RIN_VERSION_STRING); lastOk_ = rc == 0; return; }
 #endif
@@ -3230,31 +3371,220 @@ private:
         return false;
     }
 
+    // ======================================================================
+    //  :set — إعدادات الطرفية (احترافي)
+    //  :set                      جدول مجمَّع (القيمة الحالية، * = معدَّلة عن الافتراضي، الوصف)
+    //  :set <خيار>  |  <خيار>?   تفاصيل خيار واحد (القيم المسموحة + الافتراضي)
+    //  :set <خيار> <قيمة>        أو  <خيار>=<قيمة>   (on/off/true/false/yes/no/1/0/toggle)
+    //  :set no<خيار>             إيقاف  |  <خيار>!  تبديل
+    //  :set reset [خيار]         استرجاع الافتراضي    |  :set save  حفظ في ملف rc  |  :set --help
+    //  يمكن جمع عدّة تعيينات في سطر واحد:  :set theme light hints off noautoprint
+    // ======================================================================
+    static bool parseBoolWord(const std::string& v, bool& out) {
+        if (v == "on" || v == "1" || v == "true" || v == "yes" || v == "y") { out = true; return true; }
+        if (v == "off" || v == "0" || v == "false" || v == "no" || v == "n") { out = false; return true; }
+        return false;
+    }
+    static const Setting* findSetting(const std::string& name) {
+        for (const auto& st : settings()) if (name == st.name) return &st;
+        return nullptr;
+    }
+    static std::string defaultOf(const std::string& name) {
+        if (name == "timing") return "auto";
+        if (name == "theme") return "dark";
+        return "on";
+    }
+    static bool isBoolSetting(const std::string& name) {
+        return name == "color" || name == "highlight" || name == "hints" || name == "autoprint" || name == "indent";
+    }
+    std::string settingValue(const std::string& k) const {
+        auto yn = [](bool b) { return std::string(b ? "on" : "off"); };
+        if (k == "color") return yn(reqColor_);
+        if (k == "highlight") return yn(reqHighlight_);
+        if (k == "hints") return yn(reqHints_);
+        if (k == "autoprint") return yn(autoprint_);
+        if (k == "timing") return timing_;
+        if (k == "indent") return yn(indent_);
+        if (k == "theme") return style_.dark ? "dark" : "light";
+        return "";
+    }
+    // يطبّق قيمة صالحة (تُتحقَّق قبل الاستدعاء). يعيد ملاحظة تحذيرية إن لم تسرِ القيمة كما طُلبت.
+    std::string applySetting(const std::string& k, const std::string& v) {
+        bool b = (v == "on");
+        std::string note;
+        if (k == "color") {
+            reqColor_ = b;
+            bool can = ::isatty(STDOUT_FILENO) && std::getenv("NO_COLOR") == nullptr;
+            style_.on = b && can;
+            if (b && !can) note = tr("مطلوب، لكن المخرج ليس طرفية (أو NO_COLOR مضبوط) فلا تظهر الألوان الآن", "requested, but output is not a terminal (or NO_COLOR is set) so colors are inactive now");
+            editorCfg_.highlight = reqHighlight_ && style_.on;
+            editorCfg_.hints = reqHints_ && style_.on;
+        }
+        else if (k == "highlight") { reqHighlight_ = b; editorCfg_.highlight = b && style_.on; if (b && !style_.on) note = tr("لن يظهر حتى تُفعَّل الألوان", "inactive until colors are available"); }
+        else if (k == "hints")     { reqHints_ = b;     editorCfg_.hints = b && style_.on;     if (b && !style_.on) note = tr("لن يظهر حتى تُفعَّل الألوان", "inactive until colors are available"); }
+        else if (k == "autoprint") autoprint_ = b;
+        else if (k == "indent")    indent_ = b;
+        else if (k == "timing")    timing_ = v;
+        else if (k == "theme")     style_.dark = (v == "dark");
+        return note;
+    }
+    // أقرب اسم خيار (مسافة تحرير ≤ 2 أو بادئة) لاقتراح "هل تقصد؟".
+    static std::string suggestSetting(const std::string& bad) {
+        std::string best; size_t bestD = 3;
+        for (const auto& st : settings()) {
+            std::string n = st.name;
+            if (startsWith(n, bad) || startsWith(bad, n)) return n;
+            std::vector<size_t> prev(n.size() + 1), cur(n.size() + 1);
+            for (size_t j = 0; j <= n.size(); j++) prev[j] = j;
+            for (size_t i = 1; i <= bad.size(); i++) {
+                cur[0] = i;
+                for (size_t j = 1; j <= n.size(); j++)
+                    cur[j] = std::min({prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (bad[i - 1] == n[j - 1] ? 0 : 1)});
+                std::swap(prev, cur);
+            }
+            if (prev[n.size()] < bestD) { bestD = prev[n.size()]; best = n; }
+        }
+        return best;
+    }
+    std::string colorValue(const std::string& v) const {
+        if (v == "on") return style_.green() + v + style_.reset();
+        if (v == "off") return style_.red() + v + style_.reset();
+        return style_.cyan() + v + style_.reset();
+    }
+    static std::string padRight(const std::string& s, size_t w) { return s.size() >= w ? s : s + std::string(w - s.size(), ' '); }
+
+    void showSettingsTable() {
+        println(style_.bold() + tr("إعدادات الطرفية", "Terminal settings") + style_.reset());
+        println(style_.dim() + "  " + std::string(60, '-') + style_.reset());
+        int changed = 0;
+        for (const auto& st : settings()) {
+            std::string k = st.name, v = settingValue(k);
+            bool mod = v != defaultOf(k);
+            if (mod) changed++;
+            println("  " + style_.cyan() + padRight(k, 10) + style_.reset() + " " + padRight(v, 6).replace(0, v.size(), colorValue(v)) +
+                    (mod ? style_.yellow() + "*" + style_.reset() : " ") + " " + style_.dim() + padRight(st.values, 12) + " " + tr(st.ar, st.en) +
+                    ((k == "highlight" || k == "hints") && v == "on" && !style_.on ? std::string("  [") + tr("غير فعّال: الألوان متوقفة", "inactive: colors are off") + "]" : std::string()) + style_.reset());
+        }
+        println(style_.dim() + "  " + std::string(60, '-') + style_.reset());
+        info(std::string("  ") + (changed ? "* " + std::string(tr("معدَّل عن الافتراضي", "differs from default")) + "  ·  " : "") +
+             tr(":set <خيار> <قيمة>  ·  :set reset  ·  :set save  ·  :set --help", ":set <opt> <value>  ·  :set reset  ·  :set save  ·  :set --help"));
+    }
+    void showSettingDetail(const std::string& k) {
+        const Setting* st = findSetting(k);
+        std::string v = settingValue(k);
+        println("  " + style_.cyan() + style_.bold() + k + style_.reset() + " = " + colorValue(v) + (v != defaultOf(k) ? style_.yellow() + "  *" + style_.reset() : ""));
+        info(std::string("    ") + tr(st->ar, st->en));
+        info(std::string("    ") + tr("القيم: ", "values: ") + st->values + "   " + tr("الافتراضي: ", "default: ") + defaultOf(k));
+    }
+    void showSetHelp() {
+        println(style_.bold() + ":set" + style_.reset() + " — " + tr("عرض/تغيير إعدادات الطرفية", "show/change terminal settings"));
+        info(std::string("  :set                        ") + tr("جدول كل الإعدادات", "table of all settings"));
+        info(std::string("  :set <opt>  |  <opt>?       ") + tr("تفاصيل خيار", "details of one option"));
+        info(std::string("  :set <opt> <value>          ") + tr("أو <opt>=<value> — on/off/true/false/yes/no/1/0/toggle", "or <opt>=<value> — on/off/true/false/yes/no/1/0/toggle"));
+        info(std::string("  :set no<opt>  |  <opt>!     ") + tr("إيقاف / تبديل (للخيارات on|off)", "turn off / toggle (on|off options)"));
+        info(std::string("  :set reset [opt]            ") + tr("استرجاع الافتراضي", "restore defaults"));
+        info(std::string("  :set save                   ") + tr("حفظ الحالية في ملف rc ليُطبَّق عند كل بدء", "persist current values to the rc file (applied at every start)"));
+        info(std::string("  :set theme light hints off  ") + tr("عدّة تعيينات في سطر واحد", "several assignments in one line"));
+    }
+
+    void saveSettings() {
+        std::string p = rcPath();
+        if (p.empty()) { err(tr("لا يوجد مسار rc (HOME غير مضبوط)", "no rc path (HOME is not set)")); return; }
+        const std::string kBegin = "# >>> rin :set (managed) >>>", kEnd = "# <<< rin :set <<<";
+        std::string old; readFileAll(p, old);
+        std::string kept; bool skipping = false;
+        for (const auto& line : splitLines(old)) {
+            std::string t = trim(line);
+            if (t == kBegin) { skipping = true; continue; }
+            if (t == kEnd) { skipping = false; continue; }
+            if (!skipping) kept += line + "\n";
+        }
+        while (!kept.empty() && kept.back() == '\n' && kept.size() > 1 && kept[kept.size() - 2] == '\n') kept.pop_back();
+        std::string block = kBegin + "\n";
+        for (const auto& st : settings()) {
+            std::string v = settingValue(st.name);
+            if (v != defaultOf(st.name)) block += std::string(":set ") + st.name + " " + v + "\n";
+        }
+        block += kEnd + "\n";
+        auto slash = p.find_last_of('/');
+        if (slash != std::string::npos && slash > 0) mkdirP(p.substr(0, slash));
+        std::FILE* f = std::fopen(p.c_str(), "wb");
+        if (!f) { err(std::string(tr("تعذّرت الكتابة إلى ", "cannot write to ")) + p); return; }
+        std::string out = kept + (kept.empty() || kept.back() == '\n' ? "" : "\n") + block;
+        std::fwrite(out.data(), 1, out.size(), f);
+        std::fclose(f);
+        ok(std::string(sym("✓ ", "")) + tr("حُفظت الإعدادات في ", "settings saved to ") + p);
+    }
+
     void cmdSet(const std::string& arg) {
         auto words = splitWords(arg);
-        if (words.empty()) {
-            auto yn = [](bool b) { return b ? "on" : "off"; };
-            println(std::string("  color      ") + yn(style_.on));
-            println(std::string("  highlight  ") + yn(editorCfg_.highlight));
-            println(std::string("  hints      ") + yn(editorCfg_.hints));
-            println(std::string("  autoprint  ") + yn(autoprint_));
-            println(std::string("  timing     ") + timing_);
-            println(std::string("  indent     ") + yn(indent_));
-            println(std::string("  theme      ") + (style_.dark ? "dark" : "light"));
+        if (words.empty() || (words.size() == 1 && words[0] == "all")) { showSettingsTable(); return; }
+        if (words[0] == "--help" || words[0] == "-h" || words[0] == "help") { showSetHelp(); return; }
+        if (words[0] == "save") { saveSettings(); return; }
+        if (words[0] == "reset") {
+            if (words.size() == 1) {
+                for (const auto& st : settings()) applySetting(st.name, defaultOf(st.name));
+                ok(std::string(sym("✓ ", "")) + tr("أُعيدت كل الإعدادات إلى الافتراضي", "all settings restored to defaults"));
+                return;
+            }
+            for (size_t i = 1; i < words.size(); i++) {
+                if (!findSetting(words[i])) { err(std::string(tr("خيار غير معروف: ", "unknown option: ")) + words[i]); lastOk_ = false; return; }
+                applySetting(words[i], defaultOf(words[i]));
+                ok(std::string(sym("✓ ", "")) + words[i] + " = " + settingValue(words[i]) + "  (" + tr("افتراضي", "default") + ")");
+            }
             return;
         }
-        if (words.size() < 2) { err(tr("الاستخدام: :set <خيار> <قيمة>", "usage: :set <option> <value>")); return; }
-        const std::string& k = words[0]; const std::string& v = words[1];
-        bool b = false;
-        if (k == "color" && parseOnOff(v, b)) { style_.on = b && ::isatty(STDOUT_FILENO); }
-        else if (k == "highlight" && parseOnOff(v, b)) editorCfg_.highlight = b && style_.on;
-        else if (k == "hints" && parseOnOff(v, b)) editorCfg_.hints = b && style_.on;
-        else if (k == "autoprint" && parseOnOff(v, b)) autoprint_ = b;
-        else if (k == "indent" && parseOnOff(v, b)) indent_ = b;
-        else if (k == "timing" && (v == "auto" || v == "on" || v == "off")) timing_ = v;
-        else if (k == "theme" && (v == "dark" || v == "light")) style_.dark = (v == "dark");
-        else { err(tr("خيار أو قيمة غير صالحة (جرّب :set بلا وسائط)", "invalid option or value (try :set with no args)")); return; }
-        ok(std::string(sym("✓ ", "")) + k + " = " + v);
+        // تحليل متتابع: يُتحقَّق من كل التعيينات أولاً (كلها أو لا شيء) ثم تُطبَّق.
+        struct Op { std::string key, value; bool show = false; };
+        std::vector<Op> ops;
+        for (size_t i = 0; i < words.size(); i++) {
+            std::string w = words[i], k, v; bool haveVal = false;
+            auto eq = w.find('=');
+            if (eq != std::string::npos) { k = w.substr(0, eq); v = w.substr(eq + 1); haveVal = true; }
+            else if (!w.empty() && w.back() == '?') { k = w.substr(0, w.size() - 1); }
+            else if (!w.empty() && w.back() == '!') { k = w.substr(0, w.size() - 1); v = "toggle"; haveVal = true; }
+            else if (!findSetting(w) && w.size() > 2 && startsWith(w, "no") && findSetting(w.substr(2)) && isBoolSetting(w.substr(2))) { k = w.substr(2); v = "off"; haveVal = true; }
+            else {
+                k = w;
+                if (const Setting* ks = findSetting(k); ks && i + 1 < words.size()) {
+                    const std::string& nx = words[i + 1];
+                    // القيمة التالية تُستهلَك ما لم تكن اسم خيار آخر (إلا إن كانت من القيم المسموحة لهذا الخيار، مثل on/off/auto).
+                    bool nextIsOtherKey = findSetting(nx) &&
+                                          (std::string("|") + ks->values + "|").find("|" + nx + "|") == std::string::npos;
+                    if (!nextIsOtherKey && !(nx.size() > 2 && startsWith(nx, "no") && findSetting(nx.substr(2)))) { v = nx; haveVal = true; i++; }
+                }
+            }
+            const Setting* st = findSetting(k);
+            if (!st) {
+                std::string sg = suggestSetting(k);
+                err(std::string(tr("خيار غير معروف: ", "unknown option: ")) + k + (sg.empty() ? "" : std::string("   ") + tr("هل تقصد: ", "did you mean: ") + sg + "?") +
+                    "   " + tr("(جرّب :set)", "(try :set)"));
+                lastOk_ = false; return;
+            }
+            if (!haveVal) { ops.push_back({k, "", true}); continue; }
+            std::string val = v;
+            if (isBoolSetting(k)) {
+                bool bv;
+                if (val == "toggle") val = settingValue(k) == "on" ? "off" : "on";
+                else if (parseBoolWord(val, bv)) val = bv ? "on" : "off";
+                else { err(k + ": " + tr("القيمة يجب أن تكون ", "value must be ") + "on|off|toggle  (" + tr("وصلت: ", "got: ") + v + ")"); lastOk_ = false; return; }
+            } else if (k == "timing") {
+                if (val == "toggle") val = settingValue(k) == "off" ? "auto" : (settingValue(k) == "auto" ? "on" : "off");
+                else if (!(val == "auto" || val == "on" || val == "off")) { err(k + ": " + tr("القيمة يجب أن تكون ", "value must be ") + "auto|on|off  (" + tr("وصلت: ", "got: ") + v + ")"); lastOk_ = false; return; }
+            } else if (k == "theme") {
+                if (val == "toggle") val = settingValue(k) == "dark" ? "light" : "dark";
+                else if (!(val == "dark" || val == "light")) { err(k + ": " + tr("القيمة يجب أن تكون ", "value must be ") + "dark|light  (" + tr("وصلت: ", "got: ") + v + ")"); lastOk_ = false; return; }
+            }
+            ops.push_back({k, val, false});
+        }
+        for (const auto& op : ops) {
+            if (op.show) { showSettingDetail(op.key); continue; }
+            std::string before = settingValue(op.key);
+            std::string note = applySetting(op.key, op.value);
+            std::string after = settingValue(op.key);
+            ok(std::string(sym("✓ ", "")) + op.key + " = " + after + (before != after ? std::string("   (") + tr("كان: ", "was: ") + before + ")" : std::string("   (") + tr("بلا تغيير", "unchanged") + ")"));
+            if (!note.empty()) println(style_.yellow() + "  ! " + note + style_.reset());
+        }
     }
 };
 
