@@ -170,3 +170,10 @@ native off                # العودة للـ REPL المعتاد (أوامر 
 
 ## الهوية: Rin Shell و Rin Toolbox
 الطرفية اسمها الرسمي **Rin Shell**، ومكتبة أوامرها المدمجة **Rin Toolbox** (615 أمراً في 13 عائلة). `:about` يعرض الشعار والإصدار، و`:toolbox` يعرض العائلات (`:toolbox math` يسرد أوامر عائلة). الأيقونات في `assets/branding/shell/`، والتفاصيل في `CHANGES_TERMINAL_BRAND.md`.
+
+
+## مؤشرات التشغيل والتحميل (حسب نوع الأمر)
+أثناء أي تشغيل يطول (> ~0.35s) على طرفية حقيقية يظهر سطر حيّ بهويّة نوع الأمر:
+`⠋ Loading  slow.rin · importing rin.ui · Parsing · 2 lines  1.1s`. يختفي عند أي مخرجات وعند `input()`، ويعرض المكتبة
+الجارية فعلاً. `:test` و`:time -n N` يرسمان شريط تقدّم (عدّاد + ETA + سرعة). التعطيل: `RIN_PROGRESS=plain`.
+التفاصيل: `CHANGES_RUN_INDICATOR.md`.
