@@ -425,7 +425,24 @@ int cmdRun(const std::vector<std::string>& args) {
     // (لا شريط تحميل، لا أي فرق في الناتج). راجع rin::loaderui في app/src/main/cpp/loader_ui/.
     if (importProgress) interp.setImportUIMode(rin::loaderui::Mode::Verbose);
     auto runT0 = std::chrono::steady_clock::now();
-    bool ok = runSource(source, file, interp);
+    // Task::Run — مؤشر حيّ مرتبط بالتشغيل الفعلي. يظهر فقط للتشغيلات الأطول من ~0.35s وعلى طرفية حقيقية
+    // (stderr tty) والبرنامج صامت، ويختفي عند أي مخرجات/input()، ويعرض الاستيراد الجاري. خارج الطرفية
+    // (pipe/ملف/CI)، أو مع --import-progress (شريطه الخاص)، أو حين stdin ليس طرفية: لا يُفعَّل وتبقى
+    // المسارات القديمة كما كانت حرفياً (بما فيها طباعة الناتج دفعة واحدة).
+    rin::loaderui::RunIndicator::Options runOpts;
+    runOpts.hint = "Ctrl-C to stop";
+    runOpts.forceInactive = importProgress || !isatty(fileno(stdin));
+    rin::loaderui::RunIndicator runInd(std::cerr, rin::loaderui::profileFor(rin::loaderui::Task::Run), file, /*fd=*/2, runOpts);
+    const bool liveRun = runInd.active();
+    if (liveRun) {
+        interp.setStreamSink([&runInd](const std::string& chunk) {
+            runInd.emit(chunk, [](const std::string& s) { std::cout << s << std::flush; });
+        });
+        interp.setImportUISink(runInd.importSink());
+        interp.setInputProvider(runInd.inputProvider());
+    }
+    bool ok = runSource(source, file, interp, /*printOutput=*/!liveRun);
+    runInd.stop();
     if (showTime) {
         // Task::Run: ملخّص الزمن الفعلي على stderr (لا يلوّث ناتج البرنامج على stdout).
         rin::loaderui::report(std::cerr, rin::loaderui::profileFor(rin::loaderui::Task::Run), ok,
