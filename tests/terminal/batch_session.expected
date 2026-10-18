@@ -22,7 +22,7 @@ number  18
   f  function
   x  number  6
 => 3
-✓ timing = off
+✓ timing = off   (was: auto)
 error[E0012]: Expected variable name after 'let'
   --> <check>:1:5
 
