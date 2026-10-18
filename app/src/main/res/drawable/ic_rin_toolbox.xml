@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Rin Toolbox icon (same drawing as assets/branding/shell/rin-toolbox.svg) -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp"
+    android:height="48dp"
+    android:viewportWidth="512"
+    android:viewportHeight="512">
+    <path android:fillColor="#6A47E6"
+        android:pathData="M136,32 L376,32 A104,104 0 0 1 480,136 L480,376 A104,104 0 0 1 376,480 L136,480 A104,104 0 0 1 32,376 L32,136 A104,104 0 0 1 136,32 Z" />
+    <path android:strokeColor="#FFFFFF" android:strokeWidth="26" android:strokeLineCap="round"
+        android:pathData="M190,190 L190,160 A36,36 0 0 1 226,124 L286,124 A36,36 0 0 1 322,160 L322,190" />
+    <path android:fillColor="#F1ECFF"
+        android:pathData="M134,186 L378,186 A38,38 0 0 1 416,224 L416,374 A38,38 0 0 1 378,412 L134,412 A38,38 0 0 1 96,374 L96,224 A38,38 0 0 1 134,186 Z" />
+    <path android:fillColor="#B9A8FF" android:pathData="M96,268 L416,268 L416,284 L96,284 Z" />
+    <path android:fillColor="#2FBF71"
+        android:pathData="M240,248 L272,248 A14,14 0 0 1 286,262 L286,290 A14,14 0 0 1 272,304 L240,304 A14,14 0 0 1 226,290 L226,262 A14,14 0 0 1 240,248 Z" />
+    <path android:strokeColor="#4527C9" android:strokeWidth="22" android:strokeLineCap="round" android:strokeLineJoin="round"
+        android:pathData="M146,338 L190,362 L146,386" />
+    <path android:fillColor="#4527C9"
+        android:pathData="M223,372 L267,372 A9,9 0 0 1 267,390 L223,390 A9,9 0 0 1 223,372 Z" />
+</vector>
